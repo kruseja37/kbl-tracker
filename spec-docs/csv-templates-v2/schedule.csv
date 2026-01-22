@@ -1,0 +1,2 @@
+gameId,seasonId,gameNumber,awayTeamId,homeTeamId,awayTeam,homeTeam,awayScore,homeScore,awayStartingPitcher,homeStartingPitcher,stadiumId,datePlayed,duration,status,isPostseason,seriesType,notes
+1,1,1,8,2,Yankees,Blue Jays,,,R. Oswalt,G. Qualita,2,,pending,FALSE,,

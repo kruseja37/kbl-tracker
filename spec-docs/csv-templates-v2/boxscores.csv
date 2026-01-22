@@ -1,0 +1,3 @@
+boxscoreId,gameId,seasonId,playerId,playerName,teamId,teamName,side,battingOrder,position,AB,R,H,HR,RBI,BB,SO,AVG,pitchingOrder,IP,H_allowed,R_allowed,ER,BB_allowed,SO_pitched,HR_allowed,ERA,decision,notes
+1,1,1,1,Example Batter,8,Yankees,away,1,SS,4,1,2,1,2,0,1,.500,,,,,,,,,W,
+2,1,1,2,Example Pitcher,8,Yankees,away,,SP,,,,,,,,,1,7.0,5,2,2,1,8,0,2.57,W,Starting pitcher

@@ -1,0 +1,9 @@
+teamId,name,abbreviation,conference,division,stadiumId,primaryColor,secondaryColor,textColor,ownerPlayerId,managerName,isActive
+1,Angels,LAA,AL,West,1,#BA0021,#003263,#FFFFFF,,Mike Scioscia,TRUE
+2,Blue Jays,TOR,AL,East,2,#134A8E,#E8291C,#FFFFFF,,John Gibbons,TRUE
+3,Giants,SF,NL,West,3,#FD5A1E,#27251F,#FFFFFF,,Bruce Bochy,TRUE
+4,Indians,CLE,AL,Central,4,#E50022,#00385D,#FFFFFF,,Terry Francona,TRUE
+5,Mets,NYM,NL,East,5,#002D72,#FF5910,#FFFFFF,,Buck Showalter,TRUE
+6,Twins,MIN,AL,Central,6,#002B5C,#D31145,#FFFFFF,,Rocco Baldelli,TRUE
+7,White Sox,CWS,AL,Central,7,#27251F,#C4CED4,#FFFFFF,,Tony La Russa,TRUE
+8,Yankees,NYY,AL,East,8,#003087,#C4CED3,#FFFFFF,,Aaron Boone,TRUE

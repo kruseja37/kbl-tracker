@@ -1,0 +1,2 @@
+rosterId,seasonId,playerId,teamId,playerName,teamName,lineupPosition,isStarter,isBench,joinDate,leaveDate,salary,notes
+1,1,1,1,Example Player,Angels,1,TRUE,FALSE,2024-01-01,,,Header row example - delete this row
