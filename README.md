@@ -1,73 +1,74 @@
-# React + TypeScript + Vite
+# KBL Tracker
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A comprehensive baseball game tracker for Super Mega Baseball 4 (SMB4), designed to track statistics, Fame events, and player performance across games and seasons.
 
-Currently, two official plugins are available:
+## Features
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+- **At-Bat Tracking**: Record every at-bat with detailed outcomes (hits, walks, strikeouts, etc.)
+- **Fame System**: Track memorable moments (Fame Bonuses ⭐) and embarrassing moments (Fame Boners 💀)
+- **Live Stats**: Real-time statistics combining season totals with current game performance
+- **Game Persistence**: Games auto-save and can be recovered after page refresh
+- **Season Aggregation**: Stats automatically roll up from games to season totals
 
-## React Compiler
+## Tech Stack
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+- **Frontend**: React 19 + TypeScript
+- **Build Tool**: Vite
+- **Storage**: IndexedDB (client-side persistence)
+- **Backend**: Supabase (optional, for cloud sync)
 
-## Expanding the ESLint configuration
+## Getting Started
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+```bash
+# Install dependencies
+npm install
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+# Start development server
+npm run dev
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+# Build for production
+npm run build
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+## Project Structure
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
 ```
+kbl-tracker/
+├── src/
+│   ├── components/GameTracker/  # Main game tracking UI
+│   ├── hooks/                   # React hooks (Fame detection, persistence, stats)
+│   ├── utils/                   # Storage and calculation utilities
+│   ├── types/                   # TypeScript type definitions
+│   └── tests/                   # Test files
+├── spec-docs/                   # Detailed specifications
+│   ├── SPEC_INDEX.md           # Start here for documentation
+│   ├── archive/                # Superseded specs
+│   └── data/                   # CSV data and templates
+└── reference-docs/              # External reference materials
+```
+
+## Documentation
+
+See `spec-docs/SPEC_INDEX.md` for a complete guide to the specification documents.
+
+Key specs:
+- `STAT_TRACKING_ARCHITECTURE_SPEC.md` - How stats flow from at-bat → game → season
+- `FAME_SYSTEM_TRACKING.md` - Fame bonus/boner event system
+- `KBL_XHD_TRACKER_MASTER_SPEC_v3.md` - Comprehensive master specification
+
+## Development
+
+```bash
+# Type check
+npx tsc --noEmit
+
+# Lint
+npm run lint
+
+# Preview production build
+npm run preview
+```
+
+## License
+
+Private project.
