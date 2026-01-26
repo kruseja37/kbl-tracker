@@ -6,6 +6,7 @@
 
 import type { LineupState } from '../../types/game';
 import { MOJO_STATES, type MojoLevel } from '../../engines/mojoEngine';
+import { FITNESS_STATES, type FitnessState } from '../../engines/fitnessEngine';
 
 interface LineupPanelProps {
   lineupState: LineupState;
@@ -16,6 +17,8 @@ interface LineupPanelProps {
   teamId: string;
   // Mojo levels by player ID (defaults to 0 if not provided)
   playerMojoLevels?: Record<string, MojoLevel>;
+  // Fitness states by player ID (defaults to FIT if not provided)
+  playerFitnessStates?: Record<string, FitnessState>;
 }
 
 // Mojo indicator colors per level
@@ -51,6 +54,23 @@ function MojoBadge({ level }: { level: MojoLevel }) {
   );
 }
 
+function FitnessBadge({ state }: { state: FitnessState }) {
+  const fitnessInfo = FITNESS_STATES[state];
+  return (
+    <div
+      style={{
+        ...fitnessStyles.badge,
+        color: fitnessInfo.color,
+        backgroundColor: `${fitnessInfo.color}20`,
+        borderColor: fitnessInfo.color,
+      }}
+      title={`Fitness: ${fitnessInfo.displayName}`}
+    >
+      {fitnessInfo.emoji}
+    </div>
+  );
+}
+
 export default function LineupPanel({
   lineupState,
   isOpen,
@@ -59,6 +79,7 @@ export default function LineupPanel({
   onPlayerClick,
   teamId,
   playerMojoLevels = {},
+  playerFitnessStates = {},
 }: LineupPanelProps) {
   if (!isOpen) return null;
 
@@ -70,6 +91,11 @@ export default function LineupPanel({
   // Get mojo level for a player (default to 0)
   const getMojoLevel = (playerId: string): MojoLevel => {
     return playerMojoLevels[playerId] ?? 0;
+  };
+
+  // Get fitness state for a player (default to FIT)
+  const getFitnessState = (playerId: string): FitnessState => {
+    return playerFitnessStates[playerId] ?? 'FIT';
   };
 
   return (
@@ -102,8 +128,11 @@ export default function LineupPanel({
                 <span style={styles.position}>{player.position}</span>
               </div>
 
-              {/* Mojo Indicator */}
-              <MojoBadge level={getMojoLevel(player.playerId)} />
+              {/* Mojo & Fitness Indicators */}
+              <div style={{ display: 'flex', gap: '4px' }}>
+                <MojoBadge level={getMojoLevel(player.playerId)} />
+                <FitnessBadge state={getFitnessState(player.playerId)} />
+              </div>
 
               {/* Entry info for subs */}
               {!player.isStarter && (
@@ -129,7 +158,10 @@ export default function LineupPanel({
             >
               <span style={styles.name}>{lineupState.currentPitcher.playerName}</span>
               <span style={styles.position}>P</span>
-              <MojoBadge level={getMojoLevel(lineupState.currentPitcher.playerId)} />
+              <div style={{ display: 'flex', gap: '4px', marginLeft: 'auto' }}>
+                <MojoBadge level={getMojoLevel(lineupState.currentPitcher.playerId)} />
+                <FitnessBadge state={getFitnessState(lineupState.currentPitcher.playerId)} />
+              </div>
             </div>
           </div>
         )}
@@ -157,6 +189,18 @@ const mojoStyles: Record<string, React.CSSProperties> = {
     fontWeight: 600,
     minWidth: '28px',
     textAlign: 'center',
+  },
+};
+
+const fitnessStyles: Record<string, React.CSSProperties> = {
+  badge: {
+    fontSize: '11px',
+    padding: '2px 5px',
+    borderRadius: '4px',
+    fontWeight: 600,
+    minWidth: '24px',
+    textAlign: 'center',
+    border: '1px solid',
   },
 };
 
