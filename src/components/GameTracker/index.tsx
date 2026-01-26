@@ -52,6 +52,11 @@ import { SeasonLeaderboardsPanel } from './SeasonLeaderboards';
 import { PlayerCardModal } from './PlayerCard';
 import LineupPanel from './LineupPanel';
 import { SeasonSummaryModal } from './SeasonSummary';
+import InningEndSummary from './InningEndSummary';
+import PitcherExitPrompt from './PitcherExitPrompt';
+import WalkoffCelebration from './WalkoffCelebration';
+import type { WalkoffResult } from '../../utils/walkoffDetector';
+import { detectWalkoff, getWalkoffFameBonus } from '../../utils/walkoffDetector';
 import { PlayerNameWithMorale } from './PlayerNameWithMorale';
 import { MOJO_STATES, type MojoLevel } from '../../engines/mojoEngine';
 import { FITNESS_STATES, type FitnessState } from '../../engines/fitnessEngine';
@@ -305,6 +310,41 @@ export default function GameTracker({ onGameEnd }: GameTrackerProps = {}) {
 
   // Lineup Panel state
   const [showLineupPanel, setShowLineupPanel] = useState(false);
+
+  // ============================================
+  // INNING END SUMMARY STATE
+  // Per Ralph Framework S-B011
+  // ============================================
+  const [showInningEndSummary, setShowInningEndSummary] = useState(false);
+  const [halfInningRuns, setHalfInningRuns] = useState(0);
+  const [halfInningHits, setHalfInningHits] = useState(0);
+  // Data captured at inning flip for display
+  interface InningEndData {
+    inning: number;
+    halfInning: HalfInning;
+    teamName: string;
+    runs: number;
+    hits: number;
+    lob: number;
+  }
+  const [inningEndData, setInningEndData] = useState<InningEndData | null>(null);
+
+  // ============================================
+  // PITCHER EXIT PROMPT STATE
+  // Per Ralph Framework S-B012
+  // ============================================
+  const [showPitcherExitPrompt, setShowPitcherExitPrompt] = useState(false);
+  // Track which thresholds have been acknowledged for each pitcher
+  // Key: pitcherId, Value: highest threshold shown (85, 100, 115)
+  const [acknowledgedPitchThresholds, setAcknowledgedPitchThresholds] = useState<Record<string, number>>({});
+  const PITCH_THRESHOLDS = [85, 100, 115] as const;
+
+  // ============================================
+  // WALKOFF CELEBRATION STATE
+  // Per Ralph Framework S-B016
+  // ============================================
+  const [showWalkoffCelebration, setShowWalkoffCelebration] = useState(false);
+  const [walkoffResult, setWalkoffResult] = useState<WalkoffResult | null>(null);
 
   // Player Mojo and Fitness state (manually adjustable)
   // Key: playerId, Value: MojoLevel (-2 to 2)
@@ -1092,7 +1132,89 @@ export default function GameTracker({ onGameEnd }: GameTrackerProps = {}) {
     return false;
   }, []);
 
-  // Flip inning
+  // Calculate LOB from current base state
+  const calculateLOB = useCallback(() => {
+    let lob = 0;
+    if (bases.first) lob++;
+    if (bases.second) lob++;
+    if (bases.third) lob++;
+    return lob;
+  }, [bases]);
+
+  // Actually perform the inning flip (called after summary closes)
+  const performInningFlip = useCallback(() => {
+    setOuts(0);
+    setBases(createEmptyBases());
+    setInningStrikeouts(0);  // Reset strikeout counter for new half-inning
+    setConsecutiveHRCount(0); // Reset consecutive HR count
+    setLastHRBatterId(null);  // Reset last HR batter
+    // Reset per-inning pitch tracking for Immaculate Inning detection
+    setCurrentInningPitches({ pitches: 0, strikeouts: 0, pitcherId: '' });
+    // Reset half-inning stats for next half
+    setHalfInningRuns(0);
+    setHalfInningHits(0);
+    if (halfInning === 'TOP') {
+      setHalfInning('BOTTOM');
+    } else {
+      setHalfInning('TOP');
+      setInning(i => i + 1);
+    }
+  }, [halfInning]);
+
+  // Handle inning end summary close
+  const handleInningEndSummaryClose = useCallback(() => {
+    setShowInningEndSummary(false);
+    setInningEndData(null);
+    // Now actually flip the inning
+    performInningFlip();
+  }, [performInningFlip]);
+
+  // ============================================
+  // PITCHER EXIT PROMPT HANDLERS
+  // Per Ralph Framework S-B012
+  // ============================================
+  // Check if pitcher has crossed a new threshold
+  const checkPitcherFatigue = useCallback((pitcherId: string, pitchCount: number) => {
+    const acknowledgedThreshold = acknowledgedPitchThresholds[pitcherId] || 0;
+
+    // Find the highest threshold crossed that hasn't been acknowledged
+    for (let i = PITCH_THRESHOLDS.length - 1; i >= 0; i--) {
+      const threshold = PITCH_THRESHOLDS[i];
+      if (pitchCount >= threshold && threshold > acknowledgedThreshold) {
+        setShowPitcherExitPrompt(true);
+        return; // Only show one prompt at a time
+      }
+    }
+  }, [acknowledgedPitchThresholds]);
+
+  // Handle "Keep In" - acknowledge current threshold
+  const handleKeepPitcherIn = useCallback(() => {
+    const pitcherId = getCurrentPitcherId();
+    const stats = pitcherGameStats.get(pitcherId);
+    const pitchCount = stats?.pitchCount || 0;
+
+    // Find highest crossed threshold to acknowledge
+    let highestCrossed = 0;
+    for (const threshold of PITCH_THRESHOLDS) {
+      if (pitchCount >= threshold) {
+        highestCrossed = threshold;
+      }
+    }
+
+    setAcknowledgedPitchThresholds(prev => ({
+      ...prev,
+      [pitcherId]: highestCrossed,
+    }));
+    setShowPitcherExitPrompt(false);
+  }, [getCurrentPitcherId, pitcherGameStats]);
+
+  // Handle "Make Change" - open pitching change modal
+  const handlePitcherExitChange = useCallback(() => {
+    setShowPitcherExitPrompt(false);
+    setPendingSubType('PITCH_CHANGE');
+  }, []);
+
+  // Flip inning - shows summary first, then flips when closed
   const flipInning = useCallback(() => {
     // Check if game should end BEFORE flipping
     const gameEnds = checkGameEnd(inning, halfInning, awayScore, homeScore);
@@ -1109,20 +1231,20 @@ export default function GameTracker({ onGameEnd }: GameTrackerProps = {}) {
       return;
     }
 
-    setOuts(0);
-    setBases(createEmptyBases());
-    setInningStrikeouts(0);  // Reset strikeout counter for new half-inning
-    setConsecutiveHRCount(0); // Reset consecutive HR count
-    setLastHRBatterId(null);  // Reset last HR batter
-    // Reset per-inning pitch tracking for Immaculate Inning detection
-    setCurrentInningPitches({ pitches: 0, strikeouts: 0, pitcherId: '' });
-    if (halfInning === 'TOP') {
-      setHalfInning('BOTTOM');
-    } else {
-      setHalfInning('TOP');
-      setInning(i => i + 1);
-    }
-  }, [halfInning, inning, awayScore, homeScore, checkGameEnd, handleEndGame]);
+    // Capture stats for the inning end summary
+    const teamName = halfInning === 'TOP' ? awayTeamName : homeTeamName;
+    const lob = calculateLOB();
+
+    setInningEndData({
+      inning,
+      halfInning,
+      teamName,
+      runs: halfInningRuns,
+      hits: halfInningHits,
+      lob,
+    });
+    setShowInningEndSummary(true);
+  }, [halfInning, inning, awayScore, homeScore, awayTeamName, homeTeamName, checkGameEnd, handleEndGame, calculateLOB, halfInningRuns, halfInningHits]);
 
   // Add outs and check for inning end
   const addOuts = (numOuts: number) => {
@@ -1136,6 +1258,9 @@ export default function GameTracker({ onGameEnd }: GameTrackerProps = {}) {
 
   // Score a run
   const scoreRun = (runnerId: string) => {
+    // Track runs for half-inning summary
+    setHalfInningRuns(r => r + 1);
+
     if (halfInning === 'TOP') {
       setAwayScore(s => {
         const newAwayScore = s + 1;
@@ -1776,6 +1901,8 @@ export default function GameTracker({ onGameEnd }: GameTrackerProps = {}) {
       else if (result === '2B') stats.doubles++;
       else if (result === '3B') stats.triples++;
       else if (result === 'HR') stats.hr++;
+      // Track for half-inning summary
+      setHalfInningHits(h => h + 1);
     }
 
     if (['K', 'KL'].includes(result)) {
@@ -1964,6 +2091,13 @@ export default function GameTracker({ onGameEnd }: GameTrackerProps = {}) {
 
     // Update accumulated pitcher stats BEFORE detection
     updatePitcherStats(result, totalOutsToAdd, runsOnThisPlay, basesLoaded);
+
+    // Check pitcher fatigue thresholds
+    const pitcherId = getCurrentPitcherId();
+    const currentPitcherStats = pitcherGameStats.get(pitcherId);
+    if (currentPitcherStats && currentPitcherStats.pitchCount >= 85) {
+      checkPitcherFatigue(pitcherId, currentPitcherStats.pitchCount);
+    }
 
     // ============================================
     // FAME AUTO-DETECTION
@@ -2182,6 +2316,52 @@ export default function GameTracker({ onGameEnd }: GameTrackerProps = {}) {
       halfInning === 'BOTTOM' &&
       finalHomeScore > finalAwayScore &&
       homeScore <= awayScore;
+
+    // ============================================
+    // WALKOFF CELEBRATION (Per Ralph Framework S-B016)
+    // ============================================
+    if (isWalkoff) {
+      // Use walkoffDetector utility for consistent walkoff data
+      const walkoffData = detectWalkoff(
+        {
+          batterId: currentBatter.id,
+          batterName: currentBatter.name,
+          outcome: result,
+          runsScored: actualRbiCount > 0 ? actualRbiCount : 1, // At least 1 run scores on walkoff
+        },
+        {
+          inning,
+          halfInning,
+          homeScore,
+          awayScore,
+          homeTeamId,
+          isGameOver: false,
+        }
+      );
+
+      if (walkoffData.isWalkoff) {
+        setWalkoffResult(walkoffData);
+        setShowWalkoffCelebration(true);
+
+        // Add walkoff Fame bonus for hero
+        const fameBonus = getWalkoffFameBonus(walkoffData);
+        addFameEvent({
+          id: `${gameId}_walkoff_${Date.now()}`,
+          gameId,
+          playerId: currentBatter.id,
+          playerName: currentBatter.name,
+          playerTeam: homeTeamId,
+          eventType: result === 'HR' ? 'WALK_OFF_HR' : 'WALK_OFF',
+          fameType: 'bonus',
+          fameValue: fameBonus,
+          description: `Walk-off ${result === 'HR' ? 'home run' : 'hit'} to win the game!`,
+          inning,
+          halfInning,
+          timestamp: Date.now(),
+          autoDetected: true,
+        });
+      }
+    }
 
     const clutchEvent: ClutchEventInput = {
       gameId,
@@ -3077,6 +3257,60 @@ export default function GameTracker({ onGameEnd }: GameTrackerProps = {}) {
         <FameToastContainer
           toasts={fameToasts}
           onDismiss={dismissFameToast}
+        />
+      )}
+
+      {/* Inning End Summary - Per Ralph Framework S-B011 */}
+      {inningEndData && (
+        <InningEndSummary
+          isOpen={showInningEndSummary}
+          onClose={handleInningEndSummaryClose}
+          inning={inningEndData.inning}
+          halfInning={inningEndData.halfInning}
+          teamName={inningEndData.teamName}
+          runs={inningEndData.runs}
+          hits={inningEndData.hits}
+          lob={inningEndData.lob}
+        />
+      )}
+
+      {/* Pitcher Exit Prompt - Per Ralph Framework S-B012 */}
+      {(() => {
+        const pitcherId = getCurrentPitcherId();
+        const stats = pitcherGameStats.get(pitcherId);
+        if (!stats || !showPitcherExitPrompt) return null;
+        const outsRecorded = stats.outsRecorded || 0;
+        const fullInnings = Math.floor(outsRecorded / 3);
+        const partialOuts = outsRecorded % 3;
+        const ipDisplay = partialOuts > 0 ? `${fullInnings}.${partialOuts}` : `${fullInnings}.0`;
+        return (
+          <PitcherExitPrompt
+            isOpen={showPitcherExitPrompt}
+            onClose={() => setShowPitcherExitPrompt(false)}
+            onKeepIn={handleKeepPitcherIn}
+            onChangePitcher={handlePitcherExitChange}
+            pitcherName={stats.pitcherName}
+            pitchCount={stats.pitchCount}
+            ip={ipDisplay}
+            hits={stats.hitsAllowed}
+            runs={stats.runsAllowed}
+            strikeouts={stats.strikeoutsThrown}
+            walks={stats.walksAllowed}
+          />
+        );
+      })()}
+
+      {/* Walkoff Celebration - Per Ralph Framework S-B016 */}
+      {walkoffResult && showWalkoffCelebration && (
+        <WalkoffCelebration
+          walkoff={walkoffResult}
+          homeTeamName={homeTeamName}
+          homeScore={homeScore}
+          awayScore={awayScore}
+          onDismiss={() => {
+            setShowWalkoffCelebration(false);
+            setWalkoffResult(null);
+          }}
         />
       )}
 

@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Routes, Route, useSearchParams, useNavigate } from 'react-router-dom';
 import NavigationHeader from './components/NavigationHeader';
 import MainMenu from './pages/MainMenu';
@@ -144,17 +145,113 @@ function RetirementsWrapper() {
   );
 }
 
+// Sample free agents for demonstration
+const DEMO_FREE_AGENTS = [
+  {
+    playerId: 'fa_001',
+    playerName: 'Marcus Sullivan',
+    position: 'CF',
+    age: 28,
+    overall: 'A-',
+    salary: 8500000,
+    isPitcher: false,
+    power: 72,
+    contact: 81,
+    speed: 88,
+    lastSeasonWAR: 3.2,
+  },
+  {
+    playerId: 'fa_002',
+    playerName: 'Jake Morrison',
+    position: 'SP',
+    age: 31,
+    overall: 'B+',
+    salary: 12000000,
+    isPitcher: true,
+    velocity: 84,
+    junk: 78,
+    accuracy: 82,
+    lastSeasonWAR: 2.8,
+  },
+  {
+    playerId: 'fa_003',
+    playerName: 'Carlos Reyes',
+    position: '1B',
+    age: 26,
+    overall: 'B+',
+    salary: 4200000,
+    isPitcher: false,
+    power: 85,
+    contact: 68,
+    speed: 42,
+    lastSeasonWAR: 1.9,
+  },
+  {
+    playerId: 'fa_004',
+    playerName: 'Tyrone Williams',
+    position: 'SS',
+    age: 24,
+    overall: 'B',
+    salary: 3100000,
+    isPitcher: false,
+    power: 58,
+    contact: 74,
+    speed: 79,
+    lastSeasonWAR: 1.4,
+  },
+  {
+    playerId: 'fa_005',
+    playerName: 'Mike Patterson',
+    position: 'RP',
+    age: 29,
+    overall: 'B+',
+    salary: 5500000,
+    isPitcher: true,
+    velocity: 91,
+    junk: 65,
+    accuracy: 76,
+    lastSeasonWAR: 1.1,
+  },
+];
+
 // Wrapper for FreeAgencyHub
 function FreeAgencyWrapper() {
   const navigate = useNavigate();
+  const [freeAgents, setFreeAgents] = useState(DEMO_FREE_AGENTS);
+  const [capSpace, setCapSpace] = useState(50000000);
+  const [signedPlayers, setSignedPlayers] = useState<string[]>([]);
+  const [currentRound, setCurrentRound] = useState(1);
+
+  const handleSignPlayer = (playerId: string) => {
+    const player = freeAgents.find(fa => fa.playerId === playerId);
+    if (!player) return;
+
+    // Update state
+    setSignedPlayers(prev => [...prev, playerId]);
+    setCapSpace(prev => prev - player.salary);
+    setFreeAgents(prev => prev.filter(fa => fa.playerId !== playerId));
+
+    // Show confirmation (in production, this would use a toast)
+    console.log(`[Free Agency] Signed ${player.playerName} for $${(player.salary / 1000000).toFixed(1)}M`);
+    alert(`Signed ${player.playerName} to your team for $${(player.salary / 1000000).toFixed(1)}M/year!`);
+  };
+
+  const handleContinue = () => {
+    if (currentRound < 3) {
+      setCurrentRound(prev => prev + 1);
+    } else {
+      navigate('/offseason');
+    }
+  };
+
   return (
     <FreeAgencyHub
-      freeAgents={[]}
-      currentRound={1}
+      freeAgents={freeAgents}
+      currentRound={currentRound}
       totalRounds={3}
-      capSpace={50000000}
-      onSignPlayer={() => {}}
-      onContinue={() => navigate('/offseason')}
+      capSpace={capSpace}
+      onSignPlayer={handleSignPlayer}
+      onContinue={handleContinue}
     />
   );
 }

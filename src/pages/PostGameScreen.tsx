@@ -1,7 +1,8 @@
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import { useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import { getTeam } from '../data/playerDatabase';
 import { generateHeadline, generateSubheadline, getHeadlineToneColor } from '../utils/headlineGenerator';
+import BoxScoreView from '../components/BoxScoreView';
 
 /**
  * PostGameScreen - Comprehensive post-game summary
@@ -38,6 +39,7 @@ interface PlayerOfGame {
 export default function PostGameScreen() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
+  const [showBoxScore, setShowBoxScore] = useState(false);
 
   // Get game data from URL params
   const awayTeamId = searchParams.get('away') || 'sirloins';
@@ -447,6 +449,26 @@ export default function PostGameScreen() {
           ))}
         </div>
 
+        {/* Action Buttons */}
+        <div style={{ display: 'flex', gap: '1rem', marginBottom: '1rem' }}>
+          <button
+            style={{
+              ...styles.continueButton,
+              flex: 1,
+              backgroundColor: '#475569',
+            }}
+            onClick={() => setShowBoxScore(true)}
+            onMouseOver={(e) => {
+              e.currentTarget.style.backgroundColor = '#64748b';
+            }}
+            onMouseOut={(e) => {
+              e.currentTarget.style.backgroundColor = '#475569';
+            }}
+          >
+            📊 View Box Score
+          </button>
+        </div>
+
         {/* Continue Button */}
         <button
           style={styles.continueButton}
@@ -463,6 +485,99 @@ export default function PostGameScreen() {
           Continue to Season
         </button>
       </div>
+
+      {/* Box Score Modal */}
+      {showBoxScore && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.8)',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'flex-start',
+          padding: '2rem',
+          overflowY: 'auto',
+          zIndex: 1000,
+        }} onClick={() => setShowBoxScore(false)}>
+          <div onClick={(e) => e.stopPropagation()} style={{ maxWidth: '900px', width: '100%' }}>
+            <BoxScoreView
+              data={{
+                awayTeamName,
+                homeTeamName,
+                // Parse box score data from URL params or use mock data
+                awayBatters: (() => {
+                  try {
+                    const param = searchParams.get('awayBatters');
+                    if (param) return JSON.parse(decodeURIComponent(param));
+                  } catch { /* ignore */ }
+                  return topBatters
+                    .filter(b => b.teamId === awayTeamId)
+                    .map((b, i) => ({
+                      playerId: `away-${i}`,
+                      name: b.name,
+                      position: 'IF',
+                      ab: 4,
+                      r: 1,
+                      h: parseInt(b.stats.split('-')[0]) || 1,
+                      rbi: parseInt(b.stats.match(/(\d+) RBI/)?.[1] || '0'),
+                      bb: 0,
+                      k: 0,
+                    }));
+                })(),
+                homeBatters: (() => {
+                  try {
+                    const param = searchParams.get('homeBatters');
+                    if (param) return JSON.parse(decodeURIComponent(param));
+                  } catch { /* ignore */ }
+                  return topBatters
+                    .filter(b => b.teamId === homeTeamId)
+                    .map((b, i) => ({
+                      playerId: `home-${i}`,
+                      name: b.name,
+                      position: 'IF',
+                      ab: 4,
+                      r: 1,
+                      h: parseInt(b.stats.split('-')[0]) || 1,
+                      rbi: parseInt(b.stats.match(/(\d+) RBI/)?.[1] || '0'),
+                      bb: 0,
+                      k: 0,
+                    }));
+                })(),
+                awayPitchers: topPitchers
+                  .filter(p => p.teamId === awayTeamId)
+                  .map((p, i) => ({
+                    playerId: `away-p-${i}`,
+                    name: p.name,
+                    ip: p.stats.match(/(\d+\.?\d*) IP/)?.[1] || '0',
+                    h: parseInt(p.stats.match(/(\d+) H/)?.[1] || '0'),
+                    r: parseInt(p.stats.match(/(\d+) R/)?.[1] || '0'),
+                    er: parseInt(p.stats.match(/(\d+) ER/)?.[1] || '0'),
+                    bb: parseInt(p.stats.match(/(\d+) BB/)?.[1] || '0'),
+                    k: parseInt(p.stats.match(/(\d+) K/)?.[1] || '0'),
+                    decision: p.decision,
+                  })),
+                homePitchers: topPitchers
+                  .filter(p => p.teamId === homeTeamId)
+                  .map((p, i) => ({
+                    playerId: `home-p-${i}`,
+                    name: p.name,
+                    ip: p.stats.match(/(\d+\.?\d*) IP/)?.[1] || '0',
+                    h: parseInt(p.stats.match(/(\d+) H/)?.[1] || '0'),
+                    r: parseInt(p.stats.match(/(\d+) R/)?.[1] || '0'),
+                    er: parseInt(p.stats.match(/(\d+) ER/)?.[1] || '0'),
+                    bb: parseInt(p.stats.match(/(\d+) BB/)?.[1] || '0'),
+                    k: parseInt(p.stats.match(/(\d+) K/)?.[1] || '0'),
+                    decision: p.decision,
+                  })),
+              }}
+              onClose={() => setShowBoxScore(false)}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

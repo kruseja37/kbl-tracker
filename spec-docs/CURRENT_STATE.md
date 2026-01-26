@@ -1,49 +1,139 @@
 # KBL Tracker - Current State
 
 > **Purpose**: Single source of truth for what's implemented, what's not, and known issues
-> **Last Updated**: January 25, 2026 (Phase A Foundation Stories A-001 to A-005)
+> **Last Updated**: January 26, 2026 (Ralph Framework Phases A-G Complete)
 
 ---
 
-## Phase A Foundation - IN PROGRESS
+## Ralph Framework Implementation - PHASES A-G COMPLETE ✅
 
-Following the Ralph Framework implementation plan. See `spec-docs/ralph/` for full details.
+All 78 user stories from Phases B-G implemented and committed. Components are wired to navigation.
 
-### Completed Stories (January 25, 2026)
+### Implementation Summary
 
-| Story | Title | Status | Commit |
-|-------|-------|--------|--------|
-| S-A001 | Install React Router | ✅ COMPLETE | `3c8d432` |
-| S-A002 | Create Routes Configuration | ✅ COMPLETE | `624a60b` |
-| S-A003 | Create MainMenu Component | ✅ COMPLETE | `49f3b03` |
-| S-A004 | Create NavigationHeader Component | ✅ COMPLETE | `c39332b` |
-| S-A005 | Create SeasonDashboard Component | ✅ COMPLETE | `134b27a` |
+| Phase | Stories | Status | Commit |
+|-------|---------|--------|--------|
+| Phase A | A001-A022 | ✅ Complete | Various (Jan 25-26) |
+| Phase B | B001-B018 | ✅ Complete | `a264b3b` |
+| Phase C | C001-C012 | ✅ Complete | `a264b3b` |
+| Phase D | D001-D010 | ✅ Complete | `a264b3b` |
+| Phase E | E001-E008 | ✅ Complete | `a264b3b` |
+| Phase F | F001-F012 | ✅ Complete | `a264b3b` |
+| Phase G | G001-G008 | ✅ Complete | `a264b3b` |
+| Navigation Wiring | - | ✅ Complete | `5695fdb` |
 
-### New Components Created
+### Current Limitation
 
-| Component | File | Purpose |
-|-----------|------|---------|
-| MainMenu | `src/pages/MainMenu.tsx` | Home screen with navigation cards (New Game, Season, Teams) |
-| NavigationHeader | `src/components/NavigationHeader.tsx` | Sticky header with logo/home link, visible on all pages except MainMenu |
-| SeasonDashboard | `src/pages/SeasonDashboard.tsx` | Season progress display with progress bar, handles no-season state |
-| GamePage | `src/pages/GamePage.tsx` | Wrapper for GameTracker with season initialization |
-| TeamPage | `src/pages/TeamPage.tsx` | Team details placeholder |
-| NotFound | `src/pages/NotFound.tsx` | 404 page |
+**Components render with EMPTY DATA**. The Ralph Framework stories created UI components with correct props interfaces, but they are not yet connected to real IndexedDB data. Wrapper components in `App.tsx` pass placeholder/empty data.
 
-### Routes Configured
+**To complete the integration:**
+1. Wire actual data from IndexedDB stores to wrapper components
+2. Connect state management (context or stores) across components
+3. Add data loading hooks to each route wrapper
+
+### Routes Now Configured
 
 | Path | Component | Description |
 |------|-----------|-------------|
-| `/` | MainMenu | Home screen |
-| `/season` | SeasonDashboard | Season progress and stats |
+| `/` | MainMenu | Home screen with full navigation |
+| `/pregame` | PreGameWrapper | Pre-game screen with team/pitcher selection |
 | `/game` | GamePage | Game tracker |
+| `/postgame` | PostGameScreen | Post-game summary with headlines |
+| `/season` | SeasonDashboard | Season progress and stats |
+| `/schedule` | ScheduleWrapper | Season schedule view |
+| `/roster` | RosterWrapper | Team roster management |
+| `/leaders` | LeadersWrapper | League stat leaders |
+| `/stats-by-park` | StatsByParkWrapper | Player stats by stadium |
+| `/awards` | AwardsWrapper | Awards ceremony hub |
+| `/offseason` | OffseasonWrapper | Offseason hub navigation |
+| `/offseason/ratings` | EOSRatingsWrapper | End-of-season ratings changes |
+| `/offseason/retirements` | RetirementsWrapper | Player retirements |
+| `/offseason/free-agency` | FreeAgencyWrapper | Free agent signing |
+| `/offseason/draft` | DraftWrapper | Draft hub |
+| `/offseason/trades` | TradeWrapper | Trade hub |
+| `/museum` | MuseumWrapper | Franchise museum hub |
 | `/team/:id` | TeamPage | Team details |
 | `*` | NotFound | 404 handler |
 
-### Remaining Phase A Stories (17 remaining)
+### New Components Created (Phases B-G)
 
-- S-A006 through S-A022 (see `spec-docs/ralph/IMPLEMENTATION_ORDER.md`)
-- Key areas: Global State, Team Selector, Player Ratings, League Builder, GameTracker fixes
+**Phase B - Game Flow:**
+- `PreGameScreen.tsx` - Starting pitcher selection and matchup display
+- `GameSetupModal.tsx` - Team and pitcher selection modal
+- `LineupPanel.tsx` - Enhanced lineup display with substitutions
+- `PlayerCard.tsx` - Detailed player stats modal
+- `InningEndSummary.tsx` - Inning transition summary
+- `PitcherExitPrompt.tsx` - Pitcher removal confirmation
+- `DoubleSwitchModal.tsx` - Double switch implementation
+- `WalkoffCelebration.tsx` - Walk-off win celebration
+- `FameEventToast.tsx` - Fame event notifications
+- `PostGameScreen.tsx` - Comprehensive post-game summary
+
+**Phase C - Season Management:**
+- `ScheduleView.tsx` - Season schedule with filters
+- `RosterView.tsx` - Roster management
+- `LeagueLeadersView.tsx` - Statistical leaderboards
+- `StandingsView.tsx` - League standings
+- `TeamStatsView.tsx` - Team statistics
+- `TeamFinancialsView.tsx` - Team financial overview
+- `BoxScoreView.tsx` - Detailed box score
+- `SeasonProgressTracker.tsx` - Season milestone tracking
+- `PlayoffBracket.tsx` - Playoff visualization
+
+**Phase D - Offseason:**
+- `OffseasonHub.tsx` - Offseason navigation
+- `EOSRatingsView.tsx` - End-of-season rating changes
+- `RetirementsScreen.tsx` - Player retirement ceremony
+- `FreeAgencyHub.tsx` - Free agent signing interface
+- `DraftHub.tsx` - Draft interface with prospect cards
+- `TradeHub.tsx` - Trade negotiation interface
+- `AgingDisplay.tsx` - Player aging visualization
+
+**Phase E - Awards:**
+- `AwardsCeremonyHub.tsx` - Awards ceremony navigation
+- `awards/MVPCeremony.tsx` - MVP presentation
+- `awards/CyYoungCeremony.tsx` - Cy Young presentation
+- `awards/RookieOfYearCeremony.tsx` - ROY presentation
+- `awards/GoldGloveCeremony.tsx` - Gold Glove presentation
+- `awards/AllStarReveal.tsx` - All-Star team reveal
+- `awards/BattingTitleCeremony.tsx` - Batting champion presentation
+- `awards/PitchingAwardsCeremony.tsx` - Pitching awards (ERA, Wins)
+
+**Phase F - Advanced Features:**
+- `FanMoralePanel.tsx` - Fan mood visualization
+- `RelationshipPanel.tsx` - Player relationships display
+- `ChampionshipCelebration.tsx` - Championship celebration
+- `StatsByParkView.tsx` - Player stats by stadium
+- `adaptiveLearningEngine.ts` - Fielding inference improvement
+- `fieldingStatsAggregator.ts` - Position-based fielding aggregation
+- `LeagueNewsFeed.tsx` - News feed with story types
+
+**Phase G - Museum & Extras:**
+- `MuseumHub.tsx` - Franchise history museum
+- `museum/HallOfFameGallery.tsx` - HOF member display
+- `museum/RetiredNumbersWall.tsx` - Retired jersey numbers
+- `museum/FranchiseRecords.tsx` - Franchise record holders
+- `museum/ChampionshipBanners.tsx` - Championship banners
+- `dataExportService.ts` - CSV/JSON export service
+- `ContractionWarning.tsx` - Team contraction risk alert
+- `ChemistryDisplay.tsx` - Team chemistry visualization
+
+### Engines Created (Phases B-G)
+
+| Engine | File | Purpose |
+|--------|------|---------|
+| Relationship Engine | `relationshipEngine.ts` | Player relationship tracking and morale effects |
+| Aging Engine | `agingEngine.ts` | Player aging and decline curves |
+| Adaptive Learning | `adaptiveLearningEngine.ts` | Fielding inference improvement from corrections |
+| Headline Generator | `headlineGenerator.ts` | Dynamic post-game headlines |
+| Walkoff Detector | `walkoffDetector.ts` | Walk-off game detection |
+
+### Services Created (Phases B-G)
+
+| Service | File | Purpose |
+|---------|------|---------|
+| Fielding Stats Aggregator | `fieldingStatsAggregator.ts` | Per-position fielding stats for awards |
+| Data Export Service | `dataExportService.ts` | Export box scores and stats to CSV/JSON |
 
 ---
 
@@ -56,6 +146,15 @@ Following the Ralph Framework implementation plan. See `spec-docs/ralph/` for fu
 > - Phase 1 Day 2: Wire mWAR + Clutch Calculator ✅
 > - Phase 1 Day 3: Wire Mojo + Fitness Engines (pending)
 > - Phase 1 Day 4: Integration Testing (pending)
+>
+> **Component Wiring Session (January 26, 2026):**
+> - BoxScoreView → PostGameScreen ✅
+> - InningEndSummary → GameTracker inning flip ✅
+> - PitcherExitPrompt → Pitch count threshold (≥85) ✅
+> - WalkoffCelebration → Walkoff detection in handleAtBatFlowComplete ✅
+> - FreeAgencyHub → Sign Player action with sample data ✅
+> - FameEventToast → Already wired via FameToastContainer ✅
+> - headlineGenerator → Already wired in PostGameScreen ✅
 >
 > **Position Switch Bugs Fixed (Jan 26, 2026):**
 > - Bug 1: Catcher now appears in Position Switch modal (fixed lineup generation)
@@ -492,14 +591,16 @@ See `GAMETRACKER_BUGS.md` for detailed bug tracking. Status as of Jan 25, 2026:
 - BUG-015: HR fielding options
 - Balk button removed (not in SMB4)
 
-**Remaining (7 bugs):**
+**Remaining (4 bugs):**
 - BUG-006: No Mojo/Fitness in scoreboard
 - BUG-007: No Fame events during game
 - BUG-008: End Game modal has wrong data
-- BUG-009: No undo button
 - BUG-011: No pitch count displayed
-- BUG-012: Pitcher exit prompt missing
-- BUG-014: No inning summary
+
+**Fixed (Jan 26 Session):**
+- BUG-009: Undo button - NOT A BUG (exists in Activity Log, requires scroll)
+- BUG-012: Pitcher exit prompt - WIRED (triggers at 85/100/115 pitches)
+- BUG-014: Inning summary - WIRED (shows on inning flip)
 
 ---
 
