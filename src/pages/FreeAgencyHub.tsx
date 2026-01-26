@@ -30,12 +30,20 @@ interface FreeAgent {
   lastSeasonWAR: number;
 }
 
+interface ContractOffer {
+  playerId: string;
+  playerName: string;
+  position: string;
+  salary: number;
+  years: number;
+}
+
 interface FreeAgencyHubProps {
   freeAgents: FreeAgent[];
   currentRound: number;
   totalRounds: number;
   capSpace: number;
-  onSignPlayer: (playerId: string) => void;
+  onSignPlayer: (playerId: string, years: number) => void;
   onContinue: () => void;
 }
 
@@ -51,6 +59,8 @@ export default function FreeAgencyHub({
 }: FreeAgencyHubProps) {
   const [sortField, setSortField] = useState<SortField>('war');
   const [filterPosition, setFilterPosition] = useState<string>('all');
+  const [contractOffer, setContractOffer] = useState<ContractOffer | null>(null);
+  const [selectedYears, setSelectedYears] = useState<number>(1);
 
   const positions = useMemo(() => {
     const posSet = new Set(freeAgents.map((fa) => fa.position));
@@ -90,6 +100,29 @@ export default function FreeAgencyHub({
   };
 
   const canAfford = (salary: number): boolean => salary <= capSpace;
+
+  const openContractModal = (fa: FreeAgent) => {
+    setContractOffer({
+      playerId: fa.playerId,
+      playerName: fa.playerName,
+      position: fa.position,
+      salary: fa.salary,
+      years: 1,
+    });
+    setSelectedYears(1);
+  };
+
+  const closeContractModal = () => {
+    setContractOffer(null);
+    setSelectedYears(1);
+  };
+
+  const confirmSigning = () => {
+    if (contractOffer) {
+      onSignPlayer(contractOffer.playerId, selectedYears);
+      closeContractModal();
+    }
+  };
 
   return (
     <div style={styles.container}>
@@ -206,7 +239,7 @@ export default function FreeAgencyHub({
                   ...styles.signButton,
                   ...(canAfford(fa.salary) ? {} : styles.signButtonDisabled),
                 }}
-                onClick={() => onSignPlayer(fa.playerId)}
+                onClick={() => openContractModal(fa)}
                 disabled={!canAfford(fa.salary)}
               >
                 {canAfford(fa.salary) ? 'Sign Player' : 'Over Budget'}
@@ -224,6 +257,61 @@ export default function FreeAgencyHub({
       <button style={styles.continueButton} onClick={onContinue}>
         {currentRound < totalRounds ? 'End Round' : 'Continue to Draft'}
       </button>
+
+      {/* Contract Offer Modal */}
+      {contractOffer && (
+        <div style={styles.modalOverlay} onClick={closeContractModal}>
+          <div style={styles.modalContent} onClick={(e) => e.stopPropagation()}>
+            <h2 style={styles.modalTitle}>Contract Offer</h2>
+
+            <div style={styles.modalPlayerInfo}>
+              <span style={styles.modalPlayerName}>{contractOffer.playerName}</span>
+              <span style={styles.modalPlayerPosition}>{contractOffer.position}</span>
+            </div>
+
+            <div style={styles.contractDetails}>
+              <div style={styles.contractRow}>
+                <span style={styles.contractLabel}>Annual Salary:</span>
+                <span style={styles.contractValue}>{formatSalary(contractOffer.salary)}</span>
+              </div>
+
+              <div style={styles.contractRow}>
+                <span style={styles.contractLabel}>Contract Length:</span>
+                <div style={styles.yearsSelector}>
+                  {[1, 2, 3, 4, 5].map((year) => (
+                    <button
+                      key={year}
+                      style={{
+                        ...styles.yearButton,
+                        ...(selectedYears === year ? styles.yearButtonSelected : {}),
+                      }}
+                      onClick={() => setSelectedYears(year)}
+                    >
+                      {year}yr
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div style={styles.contractRow}>
+                <span style={styles.contractLabel}>Total Value:</span>
+                <span style={styles.contractTotal}>
+                  {formatSalary(contractOffer.salary * selectedYears)}
+                </span>
+              </div>
+            </div>
+
+            <div style={styles.modalActions}>
+              <button style={styles.cancelButton} onClick={closeContractModal}>
+                Cancel
+              </button>
+              <button style={styles.confirmButton} onClick={confirmSigning}>
+                Confirm Signing
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -436,6 +524,121 @@ const styles: Record<string, React.CSSProperties> = {
     borderRadius: '8px',
     color: '#fff',
     fontSize: '1rem',
+    fontWeight: 700,
+    cursor: 'pointer',
+  },
+  // Modal styles
+  modalOverlay: {
+    position: 'fixed',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.75)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 1000,
+  },
+  modalContent: {
+    backgroundColor: '#1e293b',
+    borderRadius: '16px',
+    padding: '32px',
+    maxWidth: '400px',
+    width: '90%',
+    border: '1px solid #334155',
+  },
+  modalTitle: {
+    margin: '0 0 24px 0',
+    fontSize: '1.5rem',
+    fontWeight: 900,
+    color: '#fff',
+    textAlign: 'center',
+  },
+  modalPlayerInfo: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: '4px',
+    marginBottom: '24px',
+    paddingBottom: '16px',
+    borderBottom: '1px solid #334155',
+  },
+  modalPlayerName: {
+    fontSize: '1.25rem',
+    fontWeight: 700,
+    color: '#fff',
+  },
+  modalPlayerPosition: {
+    fontSize: '0.875rem',
+    color: '#94a3b8',
+  },
+  contractDetails: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '16px',
+    marginBottom: '24px',
+  },
+  contractRow: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  contractLabel: {
+    fontSize: '0.875rem',
+    color: '#94a3b8',
+  },
+  contractValue: {
+    fontSize: '1.125rem',
+    fontWeight: 700,
+    color: '#fbbf24',
+  },
+  contractTotal: {
+    fontSize: '1.25rem',
+    fontWeight: 900,
+    color: '#22c55e',
+  },
+  yearsSelector: {
+    display: 'flex',
+    gap: '8px',
+  },
+  yearButton: {
+    padding: '8px 12px',
+    backgroundColor: '#0f172a',
+    border: '1px solid #334155',
+    borderRadius: '6px',
+    color: '#94a3b8',
+    fontSize: '0.875rem',
+    fontWeight: 600,
+    cursor: 'pointer',
+  },
+  yearButtonSelected: {
+    backgroundColor: '#3b82f6',
+    borderColor: '#3b82f6',
+    color: '#fff',
+  },
+  modalActions: {
+    display: 'flex',
+    gap: '12px',
+    justifyContent: 'flex-end',
+  },
+  cancelButton: {
+    padding: '12px 24px',
+    backgroundColor: 'transparent',
+    border: '1px solid #334155',
+    borderRadius: '8px',
+    color: '#94a3b8',
+    fontSize: '0.875rem',
+    fontWeight: 600,
+    cursor: 'pointer',
+  },
+  confirmButton: {
+    padding: '12px 24px',
+    background: 'linear-gradient(135deg, #22c55e 0%, #16a34a 100%)',
+    border: 'none',
+    borderRadius: '8px',
+    color: '#fff',
+    fontSize: '0.875rem',
     fontWeight: 700,
     cursor: 'pointer',
   },

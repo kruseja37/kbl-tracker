@@ -34,6 +34,7 @@ import ManualPlayerInput from './components/ManualPlayerInput';
 
 import { getTeam } from './data/playerDatabase';
 import { getAllCustomPlayers, deleteCustomPlayer } from './utils/customPlayerStorage';
+import { logFASigning } from './utils/transactionStorage';
 
 // Wrapper to handle URL params for PreGameScreen
 function PreGameWrapper() {
@@ -359,7 +360,7 @@ function FreeAgencyWrapper() {
   const [signedPlayers, setSignedPlayers] = useState<string[]>([]);
   const [currentRound, setCurrentRound] = useState(1);
 
-  const handleSignPlayer = (playerId: string) => {
+  const handleSignPlayer = (playerId: string, years: number) => {
     const player = freeAgents.find(fa => fa.playerId === playerId);
     if (!player) return;
 
@@ -368,9 +369,17 @@ function FreeAgencyWrapper() {
     setCapSpace(prev => prev - player.salary);
     setFreeAgents(prev => prev.filter(fa => fa.playerId !== playerId));
 
-    // Show confirmation (in production, this would use a toast)
-    console.log(`[Free Agency] Signed ${player.playerName} for $${(player.salary / 1000000).toFixed(1)}M`);
-    alert(`Signed ${player.playerName} to your team for $${(player.salary / 1000000).toFixed(1)}M/year!`);
+    // Log the transaction
+    logFASigning(
+      1, // Current season - in production, get from GlobalState
+      player.playerId,
+      player.playerName,
+      null, // Old team (FA has no team)
+      'user-team', // New team - in production, get from GlobalState
+      player.salary
+    ).then(() => {
+      console.log(`[Free Agency] Signed ${player.playerName} for ${years}yr / $${(player.salary * years / 1000000).toFixed(1)}M total`);
+    });
   };
 
   const handleContinue = () => {
