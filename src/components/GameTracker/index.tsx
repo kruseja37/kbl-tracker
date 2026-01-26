@@ -2506,6 +2506,24 @@ export default function GameTracker() {
         leverageIndex={currentLeverageIndex}
       />
 
+      {/* Pitcher Info Bar */}
+      {(() => {
+        const pitcherId = getCurrentPitcherId();
+        const stats = pitcherGameStats.get(pitcherId);
+        const pitcherName = stats?.pitcherName || lineupState.currentPitcher?.playerName || 'Unknown';
+        const pitchCount = stats?.pitchCount ?? 0;
+        return (
+          <div style={styles.pitcherBar}>
+            <span style={styles.pitcherBarLabel}>PITCHING:</span>
+            <span style={styles.pitcherBarName}>{pitcherName}</span>
+            <span style={styles.pitcherBarDivider}>|</span>
+            <span style={styles.pitcherBarPitches}>
+              Pitches: <strong>{pitchCount}</strong>
+            </span>
+          </div>
+        );
+      })()}
+
       <div style={styles.mainContent}>
         <div style={styles.leftPanel}>
           <Diamond bases={bases} onBaseClick={handleBaseClick} />
@@ -2876,6 +2894,32 @@ const styles: Record<string, React.CSSProperties> = {
     backgroundColor: '#1a1a2e',
     minHeight: '100vh',
     color: '#fff',
+  },
+  pitcherBar: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    backgroundColor: '#111827',
+    padding: '8px 12px',
+    borderRadius: '8px',
+    marginBottom: '12px',
+    fontSize: '13px',
+  },
+  pitcherBarLabel: {
+    color: '#6b7280',
+    fontSize: '10px',
+    letterSpacing: '0.5px',
+    fontWeight: 600,
+  },
+  pitcherBarName: {
+    color: '#e5e7eb',
+    fontWeight: 600,
+  },
+  pitcherBarDivider: {
+    color: '#374151',
+  },
+  pitcherBarPitches: {
+    color: '#9ca3af',
   },
   mainContent: {
     display: 'flex',
