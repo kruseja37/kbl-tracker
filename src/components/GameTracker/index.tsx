@@ -50,6 +50,7 @@ import { WARPanel } from './WARDisplay';
 import { CareerPanel } from './CareerDisplay';
 import { SeasonLeaderboardsPanel } from './SeasonLeaderboards';
 import { PlayerCardModal } from './PlayerCard';
+import LineupPanel from './LineupPanel';
 import { SeasonSummaryModal } from './SeasonSummary';
 import { PlayerNameWithMorale } from './PlayerNameWithMorale';
 import { useFameDetection, type PlayerStats as FamePlayerStats } from '../../hooks/useFameDetection';
@@ -284,6 +285,9 @@ export default function GameTracker() {
 
   // Season Summary modal state
   const [seasonSummaryOpen, setSeasonSummaryOpen] = useState(false);
+
+  // Lineup Panel state
+  const [showLineupPanel, setShowLineupPanel] = useState(false);
 
   // Toggle Fame toast notifications
   const toggleFameToasts = useCallback(() => {
@@ -2578,6 +2582,12 @@ export default function GameTracker() {
           <span>📻 ACTIVITY LOG</span>
           <div style={{ display: 'flex', gap: '8px' }}>
             <button
+              style={styles.undoButton}
+              onClick={() => setShowLineupPanel(true)}
+            >
+              📋 Lineup
+            </button>
+            <button
               style={{
                 ...styles.undoButton,
                 opacity: undoStack.length === 0 ? 0.4 : 1,
@@ -2842,6 +2852,16 @@ export default function GameTracker() {
         isOpen={seasonSummaryOpen}
         onClose={() => setSeasonSummaryOpen(false)}
         onPlayerClick={handlePlayerClick}
+      />
+
+      {/* Lineup Panel */}
+      <LineupPanel
+        lineupState={lineupState}
+        isOpen={showLineupPanel}
+        onClose={() => setShowLineupPanel(false)}
+        halfInning={halfInning}
+        onPlayerClick={handlePlayerClick}
+        teamId={halfInning === 'TOP' ? awayTeamId : homeTeamId}
       />
     </div>
   );
