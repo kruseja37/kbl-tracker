@@ -312,15 +312,20 @@ This is often overlooked but critical for accurate fielding stats:
 
 ### Dropped Third Strike (D3K) - Complete Scenarios
 
-The D3K is a complex play with multiple possible outcomes:
+The D3K is a complex play with multiple possible outcomes. The ball may be fielded by the **Catcher (default)**, **Pitcher** (comeback near mound), or **Third Baseman** (ball deflected toward foul territory).
 
-| Scenario | Batter Outcome | Catcher Credit | 1B Credit | Batter Stats | Event Type |
+| Scenario | Batter Outcome | Fielder Credit | 1B Credit | Batter Stats | Event Type |
 |----------|----------------|----------------|-----------|--------------|------------|
-| D3K → thrown out at 1B | Out | Assist | Putout | K (strikeout) | Normal out |
+| D3K → thrown out at 1B | Out | Assist (C/P/3B) | Putout | K (strikeout) | Normal out |
 | D3K → safe on Wild Pitch | Reaches 1B | - | - | K + WP | Wild Pitch |
 | D3K → safe on Passed Ball | Reaches 1B | - | - | K + PB | Passed Ball |
-| D3K → safe on Throwing Error | Reaches 1B | Error | - | K + E | Throwing Error |
-| D3K → safe (1B error on catch) | Reaches 1B | Assist | Error | K + E | Fielding Error |
+| D3K → safe on Throwing Error | Reaches 1B | Error (C/P/3B) | - | K + E | Throwing Error |
+| D3K → safe (1B error on catch) | Reaches 1B | Assist (C/P/3B) | Error | K + E | Fielding Error |
+
+**Fielders Who Can Handle D3K:**
+- **Catcher (C)** - Default, most common scenario
+- **Pitcher (P)** - Ball deflects near mound, pitcher fields and throws to 1B
+- **Third Baseman (3B)** - Ball deflects toward foul territory on third base side
 
 **Key Points:**
 - Batter ALWAYS gets credited with a strikeout, even when reaching safely
@@ -330,12 +335,13 @@ The D3K is a complex play with multiple possible outcomes:
 
 **UI Flow for D3K:**
 1. User selects D3K as result
-2. System asks: "Batter thrown out at first?"
-3. If YES: Record C assist, 1B putout, K for batter
-4. If NO: System asks: "What allowed batter to reach?"
+2. System asks: "Who fielded the ball?" → **[Catcher] [Pitcher] [3B]** (default: Catcher)
+3. System asks: "Batter thrown out at first?"
+4. If YES: Record fielder assist, 1B putout, K for batter
+5. If NO: System asks: "What allowed batter to reach?"
    - Wild Pitch (charged to pitcher)
    - Passed Ball (charged to catcher, not an error)
-   - Throwing Error by Catcher
+   - Throwing Error by fielder
    - Fielding Error by 1B
 
 ---

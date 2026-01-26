@@ -5,10 +5,17 @@
 > **Based On**: FanGraphs methodology (wOBA, wRAA, Batting Runs) adapted for SMB4
 > **Integration**: Works with EOS Salary Percentile system (Master Spec Section 10)
 >
+> **⚠️ IMPORTANT - SMB4 Calibration**: The code (`bwarCalculator.ts`) uses **SMB4-calibrated values** that differ from MLB baselines shown in this spec. This is intentional. See `ADAPTIVE_STANDARDS_ENGINE_SPEC.md` for the calibration system. Key differences:
+> - wOBA Scale: 1.7821 (SMB4) vs 1.226 (MLB)
+> - League wOBA: 0.329 (SMB4) vs 0.320 (MLB)
+> - Replacement Runs/600PA: -12.0 (SMB4) vs -17.5 (MLB)
+> - All wOBA weights are SMB4-calibrated
+>
 > **Related Specs**:
 > - `FWAR_CALCULATION_SPEC.md` - Fielding WAR calculations
 > - `RWAR_CALCULATION_SPEC.md` - Baserunning WAR calculations (TBD)
 > - `PWAR_CALCULATION_SPEC.md` - Pitching WAR calculations (TBD)
+> - `ADAPTIVE_STANDARDS_ENGINE_SPEC.md` - SMB4 calibration system
 
 ---
 
@@ -254,14 +261,90 @@ Batting Runs = wRAA with **park and league adjustments** applied.
 
 ### Park Factor Adjustment
 
-SMB4 stadiums may have different run-scoring environments. If we track park factors:
+> **See STADIUM_ANALYTICS_SPEC.md** for complete park factor system including dynamic calculation, handedness splits, spray charts, and stadium records.
+
+Park factors adjust a player's stats based on their home stadium. Players in hitter-friendly parks get less credit; players in pitcher-friendly parks get more credit.
+
+#### Park Factor Sources
+
+Park factors come from the Stadium Analytics system:
 
 ```javascript
-function applyParkFactor(wRAA, parkFactor, plateAppearances, leagueRunsPerPA) {
+// From STADIUM_ANALYTICS_SPEC.md
+interface ParkFactors {
+  overall: number;           // Composite factor (0.85-1.15 typical)
+  runs: number;              // Run scoring factor
+  homeRuns: number;          // HR factor
+  leftHandedHR: number;      // LHB HR factor
+  rightHandedHR: number;     // RHB HR factor
+  leftHandedAVG: number;     // LHB batting average factor
+  rightHandedAVG: number;    // RHB batting average factor
+  confidence: 'LOW' | 'MEDIUM' | 'HIGH';
+}
+```
+
+#### Handedness-Aware Park Adjustment
+
+Different parks affect LHB and RHB differently (e.g., short porch in right hurts LHP but helps LHB):
+
+```javascript
+function getEffectiveParkFactor(
+  stadium: Stadium,
+  batterHand: 'L' | 'R'
+): number {
+  const pf = stadium.parkFactors;
+
+  // Use handedness-specific factor, blended with overall
+  const handedFactor = batterHand === 'L'
+    ? (pf.leftHandedHR + pf.leftHandedAVG) / 2
+    : (pf.rightHandedHR + pf.rightHandedAVG) / 2;
+
+  // Blend: 60% handedness-specific, 40% overall
+  return (handedFactor * 0.6) + (pf.runs * 0.4);
+}
+
+function applyParkFactor(
+  wRAA: number,
+  player: Player,
+  seasonStats: SeasonStats,
+  leagueRunsPerPA: number
+): number {
+  const homeStadium = getHomeStadium(player.teamId);
+  const parkFactor = getEffectiveParkFactor(homeStadium, player.bats);
+
+  // Only adjust home plate appearances
+  const homePA = seasonStats.homePA;
+  const roadPA = seasonStats.roadPA;
+
   // Park factor > 1.0 = hitter's park (reduce credit)
   // Park factor < 1.0 = pitcher's park (increase credit)
-  const parkAdjustment = (leagueRunsPerPA - (parkFactor * leagueRunsPerPA)) * plateAppearances;
+  const parkAdjustment = (leagueRunsPerPA - (parkFactor * leagueRunsPerPA)) * homePA;
+
   return wRAA + parkAdjustment;
+}
+```
+
+#### Multi-Team Player Adjustments
+
+Players traded mid-season need weighted park adjustments:
+
+```javascript
+function applyMultiTeamParkFactor(
+  wRAA: number,
+  player: Player,
+  stints: TeamStint[],
+  leagueRunsPerPA: number
+): number {
+  let totalAdjustment = 0;
+
+  for (const stint of stints) {
+    const stadium = getHomeStadium(stint.teamId);
+    const parkFactor = getEffectiveParkFactor(stadium, player.bats);
+    const stintAdjustment = (leagueRunsPerPA - (parkFactor * leagueRunsPerPA)) * stint.homePA;
+    totalAdjustment += stintAdjustment;
+  }
+
+  return wRAA + totalAdjustment;
 }
 ```
 
@@ -276,13 +359,46 @@ function applyLeagueAdjustment(battingRuns, playerLeagueRunsPerPA, overallLeague
 }
 ```
 
-### Simplified Batting Runs (No Park Factors)
-
-For SMB4, we may initially skip park factors:
+### Complete Batting Runs Calculation
 
 ```javascript
-function calculateBattingRuns(playerWOBA, plateAppearances) {
-  // Simplified: Batting Runs ≈ wRAA when no park/league adjustments
+function calculateBattingRuns(
+  player: Player,
+  seasonStats: SeasonStats,
+  leagueContext: LeagueContext
+): number {
+  // Step 1: Calculate raw wRAA
+  const wRAA = calculateWRAA(seasonStats.wOBA, seasonStats.PA);
+
+  // Step 2: Apply park factor adjustment (if stadium data available)
+  const homeStadium = getHomeStadium(player.teamId);
+  let battingRuns = wRAA;
+
+  if (homeStadium.parkFactors.confidence !== 'LOW') {
+    battingRuns = applyParkFactor(wRAA, player, seasonStats, leagueContext.runsPerPA);
+  }
+
+  // Step 3: Apply league adjustment (if multiple leagues)
+  if (leagueContext.hasMultipleLeagues) {
+    battingRuns = applyLeagueAdjustment(
+      battingRuns,
+      leagueContext.playerLeagueRunsPerPA,
+      leagueContext.overallRunsPerPA,
+      seasonStats.PA
+    );
+  }
+
+  return battingRuns;
+}
+```
+
+### Simplified Batting Runs (Early Seasons)
+
+Before sufficient park factor data exists (< 30 home games), use simplified calculation:
+
+```javascript
+function calculateBattingRunsSimplified(playerWOBA, plateAppearances) {
+  // No park/league adjustments until confidence is MEDIUM or HIGH
   return calculateWRAA(playerWOBA, plateAppearances);
 }
 ```

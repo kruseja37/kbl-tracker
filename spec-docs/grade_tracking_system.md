@@ -92,8 +92,8 @@ User goes to SMB4, makes the change to the player, and observes the new grade.
 ║  • MVP Weight Factor: 0.8 → 0.7                              ║
 ║  • Ratings Adj Factor (Positive): 0.4 → 0.3                  ║
 ║  • Ratings Adj Factor (Negative): 5 → 7                      ║
-║  • Clutch Multiplier: 0.8× → 0.7×                            ║
-║  • Choke Multiplier: 1.3× → 1.4×                             ║
+║  • Clutch Multiplier: 0.8× → 0.75×                           ║
+║  • Choke Multiplier: 1.3× → 1.35×                            ║
 ║                                                               ║
 ║  All calculations have been updated.                          ║
 ║                                                               ║

@@ -1,5 +1,9 @@
 # KBL XHD Tracker - Fame System & Random Events
 
+> **DEPRECATION NOTICE (January 2026)**: This file is archived. For authoritative Fame values, see `SPECIAL_EVENTS_SPEC.md`.
+> Some values in this document are outdated (e.g., Robbery was listed as +1.5/+2.5 but is now +1).
+> **SPECIAL_EVENTS_SPEC.md is the authoritative source for all Fame Bonus/Boner values.**
+
 > **Related Spec**: For detailed Fame Bonus/Boner event definitions and values, see `SPECIAL_EVENTS_SPEC.md`
 > **SMB4 Reference**: See `SMB4_GAME_MECHANICS.md` for game-specific limitations
 

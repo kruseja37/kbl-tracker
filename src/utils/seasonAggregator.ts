@@ -3,6 +3,7 @@
  * Per STAT_TRACKING_ARCHITECTURE_SPEC.md - Phase 3: Season Stats Aggregation
  *
  * Aggregates completed game stats into season totals.
+ * Now integrates with milestone detection (MILESTONE_SYSTEM_SPEC.md)
  */
 
 import type { PersistedGameState } from './gameStorage';
@@ -19,6 +20,11 @@ import {
   type PlayerSeasonPitching,
   type PlayerSeasonFielding,
 } from './seasonStorage';
+import {
+  aggregateGameWithMilestones,
+  type MilestoneAggregationResult,
+} from './milestoneAggregator';
+import type { MilestoneConfig } from './milestoneDetector';
 
 // Default season ID if none is set
 const DEFAULT_SEASON_ID = 'season-1';
@@ -27,29 +33,106 @@ const DEFAULT_SEASON_NAME = 'Season 1';
 const DEFAULT_TOTAL_GAMES = 162;
 
 /**
+ * Result returned from game aggregation including milestone detection
+ */
+export interface GameAggregationResult {
+  milestones: MilestoneAggregationResult | null;
+  success: boolean;
+  error?: string;
+}
+
+/**
+ * Options for game aggregation
+ */
+export interface GameAggregationOptions {
+  seasonId?: string;
+  detectMilestones?: boolean;
+  milestoneConfig?: MilestoneConfig;
+  // Franchise tracking options
+  franchiseId?: string;           // Required for franchise firsts/leaders
+  currentGame?: number;           // Game number in season (for leader tracking activation)
+  currentSeason?: number;         // Season number (1 = first season)
+}
+
+/**
  * Aggregate a completed game's stats into the season totals
+ * Now includes milestone detection for season and career stats
+ *
+ * @param gameState - The completed game state to aggregate
+ * @param options - Aggregation options including season, milestone, and franchise settings
  */
 export async function aggregateGameToSeason(
   gameState: PersistedGameState,
-  seasonId: string = DEFAULT_SEASON_ID
-): Promise<void> {
-  // Ensure season exists
-  await getOrCreateSeason(seasonId, DEFAULT_SEASON_NUMBER, DEFAULT_SEASON_NAME, DEFAULT_TOTAL_GAMES);
+  options: GameAggregationOptions = {}
+): Promise<GameAggregationResult> {
+  const {
+    seasonId = DEFAULT_SEASON_ID,
+    detectMilestones = true,
+    milestoneConfig,
+    franchiseId,
+    currentGame,
+    currentSeason,
+  } = options;
+  try {
+    // Ensure season exists
+    await getOrCreateSeason(seasonId, DEFAULT_SEASON_NUMBER, DEFAULT_SEASON_NAME, DEFAULT_TOTAL_GAMES);
 
-  // Aggregate batting stats for all players
-  await aggregateBattingStats(gameState, seasonId);
+    // Aggregate batting stats for all players
+    await aggregateBattingStats(gameState, seasonId);
 
-  // Aggregate pitching stats for all pitchers
-  await aggregatePitchingStats(gameState, seasonId);
+    // Aggregate pitching stats for all pitchers
+    await aggregatePitchingStats(gameState, seasonId);
 
-  // Aggregate fielding stats for all players
-  await aggregateFieldingStats(gameState, seasonId);
+    // Aggregate fielding stats for all players
+    await aggregateFieldingStats(gameState, seasonId);
 
-  // Aggregate Fame events
-  await aggregateFameEvents(gameState, seasonId);
+    // Aggregate Fame events from gameplay
+    await aggregateFameEvents(gameState, seasonId);
 
-  // Increment season game count
-  await incrementSeasonGames(seasonId);
+    // Increment season game count
+    await incrementSeasonGames(seasonId);
+
+    // Run milestone detection if enabled
+    let milestones: MilestoneAggregationResult | null = null;
+    if (detectMilestones) {
+      milestones = await aggregateGameWithMilestones(
+        gameState,
+        seasonId,
+        milestoneConfig,
+        { franchiseId, currentGame, currentSeason }
+      );
+
+      // Log milestone achievements for debugging/analytics
+      if (milestones.seasonMilestones.length > 0 || milestones.careerMilestones.length > 0) {
+        console.log(
+          `[Milestones] Game ${gameState.gameId}: ` +
+          `${milestones.seasonMilestones.length} season, ` +
+          `${milestones.careerMilestones.length} career milestones detected`
+        );
+      }
+
+      // Log franchise events
+      if (milestones.franchiseFirsts.length > 0 || milestones.franchiseLeaderEvents.length > 0) {
+        console.log(
+          `[Franchise] Game ${gameState.gameId}: ` +
+          `${milestones.franchiseFirsts.length} firsts, ` +
+          `${milestones.franchiseLeaderEvents.length} leader changes`
+        );
+      }
+    }
+
+    return {
+      milestones,
+      success: true,
+    };
+  } catch (error) {
+    console.error('[SeasonAggregator] Failed to aggregate game:', error);
+    return {
+      milestones: null,
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error during aggregation',
+    };
+  }
 }
 
 /**
@@ -231,3 +314,18 @@ export async function getCurrentSeasonId(): Promise<string> {
   await getOrCreateSeason(DEFAULT_SEASON_ID, DEFAULT_SEASON_NUMBER, DEFAULT_SEASON_NAME, DEFAULT_TOTAL_GAMES);
   return DEFAULT_SEASON_ID;
 }
+
+/**
+ * Aggregate game and get just the milestone results
+ * Convenience function when you only care about milestones
+ */
+export async function getGameMilestones(
+  gameState: PersistedGameState,
+  seasonId: string = DEFAULT_SEASON_ID,
+  milestoneConfig?: MilestoneConfig
+): Promise<MilestoneAggregationResult> {
+  return aggregateGameWithMilestones(gameState, seasonId, milestoneConfig);
+}
+
+// Re-export milestone types for consumers
+export type { MilestoneAggregationResult, MilestoneConfig };

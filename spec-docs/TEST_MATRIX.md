@@ -132,7 +132,7 @@ BB, IBB, HBP, 1B, 2B, 3B, HR, K, KL, GO, FO, LO, PO, DP, SF, SAC, FC, E
 ### When to Prompt
 | Result | Runner | Advancement | Requires Inference |
 |--------|--------|-------------|-------------------|
-| BB/IBB/HBP | R1 | TO_3B | Yes (SB/WP/PB/E/BALK) |
+| BB/IBB/HBP | R1 | TO_3B | Yes (SB/WP/PB/E) |
 | BB/IBB/HBP | R1 | SCORED | Yes |
 | BB/IBB/HBP | R2 (not forced) | SCORED | Yes |
 | 1B | R1 | SCORED | Yes (likely E) |
@@ -142,7 +142,7 @@ BB, IBB, HBP, 1B, 2B, 3B, HR, K, KL, GO, FO, LO, PO, DP, SF, SAC, FC, E
 - WP: Wild Pitch
 - PB: Passed Ball
 - E: Error
-- BALK: Balk
+*(Note: BALK removed - not in SMB4)*
 
 ---
 

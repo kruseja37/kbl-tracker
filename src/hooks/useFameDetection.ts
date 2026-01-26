@@ -18,7 +18,7 @@ import {
 // Per FAN_HAPPINESS_SPEC.md Section 4
 // ============================================
 
-interface PlayerStats {
+export interface PlayerStats {
   playerId: string;
   playerName: string;
   teamId: string;
@@ -28,11 +28,12 @@ interface PlayerStats {
   strikeouts: number;
   walks: number;
   atBats: number;
-  runnersLeftOnBase: number;  // NEW: For LOB_KING detection
-  gidp: number;               // NEW: For MULTIPLE_GIDP detection
-  totalHits: number;          // NEW: For FIVE_HIT_GAME detection
-  isPinchHitter: boolean;     // NEW: For PINCH_HIT_HR detection
-  battingOrderPosition: number; // NEW: For LEADOFF_HR detection
+  runnersLeftOnBase: number;  // For LOB_KING detection
+  gidp: number;               // For MULTIPLE_GIDP detection
+  totalHits: number;          // For multi-hit game detection (3, 4, 5, 6 hits)
+  totalRBI: number;           // NEW: For multi-RBI game detection (5, 8, 10 RBI)
+  isPinchHitter: boolean;     // For PINCH_HIT_HR detection
+  battingOrderPosition: number; // For LEADOFF_HR detection
   // Pitching stats for current game
   runsAllowed: number;
   hitsAllowed: number;
@@ -43,14 +44,21 @@ interface PlayerStats {
   consecutiveHRsAllowed: number;
   pitchCount: number;
   isStarter: boolean;
-  inningsComplete: number;    // NEW: For complete game detection
-  strikeoutsThrown: number;   // NEW: For K game detection
-  firstInningRuns: number;    // NEW: For FIRST_INNING_DISASTER
-  basesLoadedWalks: number;   // NEW: For WALKED_IN_RUN
-  basesReachedViaError: number; // NEW: For perfect game detection (any runner reaching on error breaks it)
+  inningsComplete: number;    // For complete game detection
+  strikeoutsThrown: number;   // For K game detection
+  firstInningRuns: number;    // For FIRST_INNING_DISASTER
+  basesLoadedWalks: number;   // For WALKED_IN_RUN
+  basesReachedViaError: number; // For perfect game detection (any runner reaching on error breaks it)
   // Fielding
   errors: number;
-  outfieldAssistsAtHome: number; // NEW: For THROW_OUT_AT_HOME
+  outfieldAssistsAtHome: number; // For THROW_OUT_AT_HOME
+}
+
+// Per-inning pitch tracking (for Immaculate Inning detection)
+interface InningPitchData {
+  pitches: number;
+  strikeouts: number;
+  pitcherId: string;
 }
 
 interface GameContext {
@@ -64,11 +72,16 @@ interface GameContext {
   scheduledInnings: number;
   maxDeficitOvercome: number;  // For comeback detection
   lastHRBatterId: string | null;  // For back-to-back HR detection
-  consecutiveHRCount: number;  // NEW: For B2B2B HR detection
-  isFirstAtBatOfGame: boolean; // NEW: For leadoff HR
-  leadChanges: number;         // NEW: For tracking go-ahead situations
-  previousLeadTeam: 'away' | 'home' | 'tie'; // NEW: For go-ahead detection
-  maxLeadBlown: { away: number; home: number }; // NEW: For blown lead detection
+  consecutiveHRCount: number;  // For B2B2B HR detection
+  isFirstAtBatOfGame: boolean; // For leadoff HR
+  leadChanges: number;         // For tracking go-ahead situations
+  previousLeadTeam: 'away' | 'home' | 'tie'; // For go-ahead detection
+  maxLeadBlown: { away: number; home: number }; // For blown lead detection
+  // Per-inning tracking for Immaculate Inning detection
+  currentInningPitches?: InningPitchData;
+  // Leverage Index for Fame weighting (0.1-10.0, 1.0 = average)
+  // Higher LI = higher-stakes situation = more Fame credit/blame
+  leverageIndex?: number;
 }
 
 interface DetectionResult {
@@ -167,7 +180,10 @@ export function useFameDetection({
         batterName,
         teamId,
         true,
-        description
+        description,
+        undefined, // secondaryPlayerId
+        undefined, // secondaryPlayerName
+        context.leverageIndex // LI for Fame weighting
       );
 
       return { event, message };
@@ -207,7 +223,10 @@ export function useFameDetection({
       playerStats.playerName,
       playerStats.teamId,
       true,
-      'Hit for the cycle!'
+      'Hit for the cycle!',
+      undefined,
+      undefined,
+      context.leverageIndex
     );
 
     return {
@@ -246,7 +265,10 @@ export function useFameDetection({
       playerStats.playerName,
       playerStats.teamId,
       true,
-      `${hrCount}-HR game!`
+      `${hrCount}-HR game!`,
+      undefined,
+      undefined,
+      context.leverageIndex
     );
 
     return {
@@ -286,7 +308,10 @@ export function useFameDetection({
       currentBatterName,
       teamId,
       true,
-      'Back-to-back home runs!'
+      'Back-to-back home runs!',
+      undefined,
+      undefined,
+      context.leverageIndex
     );
 
     return {
@@ -323,7 +348,10 @@ export function useFameDetection({
       playerStats.playerName,
       playerStats.teamId,
       true,
-      `${kCount} strikeouts - ${eventType === 'PLATINUM_SOMBRERO' ? 'Platinum' : 'Golden'} Sombrero!`
+      `${kCount} strikeouts - ${eventType === 'PLATINUM_SOMBRERO' ? 'Platinum' : 'Golden'} Sombrero!`,
+      undefined,
+      undefined,
+      context.leverageIndex
     );
 
     return {
@@ -360,7 +388,10 @@ export function useFameDetection({
       pitcherStats.playerName,
       pitcherStats.teamId,
       true,
-      `Gave up ${runs} runs - Meltdown!`
+      `Gave up ${runs} runs - Meltdown!`,
+      undefined,
+      undefined,
+      context.leverageIndex
     );
 
     return {
@@ -407,7 +438,10 @@ export function useFameDetection({
       pitcherStats.playerName,
       pitcherStats.teamId,
       true,
-      isPerfect ? 'PERFECT GAME!' : 'NO-HITTER!'
+      isPerfect ? 'PERFECT GAME!' : 'NO-HITTER!',
+      undefined,
+      undefined,
+      context.leverageIndex
     );
 
     return {
@@ -442,7 +476,10 @@ export function useFameDetection({
       pitcherStats.playerName,
       pitcherStats.teamId,
       true,
-      'Gave up back-to-back-to-back home runs!'
+      'Gave up back-to-back-to-back home runs!',
+      undefined,
+      undefined,
+      context.leverageIndex
     );
 
     return {
@@ -481,7 +518,10 @@ export function useFameDetection({
         batterName,
         teamId,
         true,
-        'Thrown out stretching at 3B'
+        'Thrown out stretching at 3B',
+        undefined,
+        undefined,
+        context.leverageIndex
       );
 
       return {
@@ -521,7 +561,10 @@ export function useFameDetection({
       batterName,
       teamId,
       true,
-      'Grand Slam!'
+      'Grand Slam!',
+      undefined,
+      undefined,
+      context.leverageIndex
     );
 
     return {
@@ -556,7 +599,10 @@ export function useFameDetection({
       batterName,
       teamId,
       true,
-      'Leadoff home run!'
+      'Leadoff home run!',
+      undefined,
+      undefined,
+      context.leverageIndex
     );
 
     return {
@@ -589,7 +635,10 @@ export function useFameDetection({
       batterStats.playerName,
       batterStats.teamId,
       true,
-      'Pinch hit home run!'
+      'Pinch hit home run!',
+      undefined,
+      undefined,
+      context.leverageIndex
     );
 
     return {
@@ -631,7 +680,10 @@ export function useFameDetection({
       batterName,
       teamId,
       true,
-      'Go-ahead home run!'
+      'Go-ahead home run!',
+      undefined,
+      undefined,
+      context.leverageIndex
     );
 
     return {
@@ -663,12 +715,321 @@ export function useFameDetection({
       batterStats.playerName,
       batterStats.teamId,
       true,
-      `${batterStats.totalHits}-hit game!`
+      `${batterStats.totalHits}-hit game!`,
+      undefined,
+      undefined,
+      context.leverageIndex
     );
 
     return {
       event,
       message: `🔥 ${batterStats.playerName} has ${batterStats.totalHits} HITS tonight!`
+    };
+  }, [settings.enabled]);
+
+  // ============================================
+  // MULTI-HIT GAME DETECTION (3, 4, 6 hits)
+  // 5 hits is handled by detectFiveHitGame above
+  // ============================================
+  const detectMultiHitGame = useCallback((
+    context: GameContext,
+    batterStats: PlayerStats
+  ): DetectionResult | null => {
+    if (!settings.enabled) return null;
+    const hits = batterStats.totalHits;
+
+    // Skip if not at a threshold we care about
+    if (hits < 3 || hits === 5) return null;  // 5 handled separately
+
+    let eventType: FameEventType;
+    if (hits >= 6) eventType = 'SIX_HIT_GAME';
+    else if (hits === 4) eventType = 'FOUR_HIT_GAME';
+    else if (hits === 3) eventType = 'THREE_HIT_GAME';
+    else return null;
+
+    const key = createEventKey(eventType, batterStats.playerId, 0);
+    if (isAlreadyDetected(key)) return null;
+    markDetected(key);
+
+    const event = createFameEvent(
+      context.gameId,
+      context.inning,
+      context.halfInning,
+      eventType,
+      batterStats.playerId,
+      batterStats.playerName,
+      batterStats.teamId,
+      true,
+      `${hits}-hit game!`,
+      undefined,
+      undefined,
+      context.leverageIndex
+    );
+
+    return {
+      event,
+      message: hits >= 6
+        ? `🔥🔥 ${batterStats.playerName} has ${hits} HITS - INCREDIBLE!`
+        : `⚾ ${batterStats.playerName} has ${hits} hits tonight!`
+    };
+  }, [settings.enabled]);
+
+  // ============================================
+  // MULTI-RBI GAME DETECTION (5, 8, 10 RBI)
+  // ============================================
+  const detectMultiRBIGame = useCallback((
+    context: GameContext,
+    batterStats: PlayerStats
+  ): DetectionResult | null => {
+    if (!settings.enabled) return null;
+    const rbi = batterStats.totalRBI;
+
+    if (rbi < 5) return null;
+
+    let eventType: FameEventType;
+    if (rbi >= 10) eventType = 'TEN_RBI_GAME';
+    else if (rbi >= 8) eventType = 'EIGHT_RBI_GAME';
+    else eventType = 'FIVE_RBI_GAME';
+
+    const key = createEventKey(eventType, batterStats.playerId, 0);
+    if (isAlreadyDetected(key)) return null;
+    markDetected(key);
+
+    const event = createFameEvent(
+      context.gameId,
+      context.inning,
+      context.halfInning,
+      eventType,
+      batterStats.playerId,
+      batterStats.playerName,
+      batterStats.teamId,
+      true,
+      `${rbi}-RBI game!`,
+      undefined,
+      undefined,
+      context.leverageIndex
+    );
+
+    return {
+      event,
+      message: rbi >= 10
+        ? `🏆 HISTORIC! ${batterStats.playerName} has ${rbi} RBI tonight!`
+        : rbi >= 8
+        ? `💪 ${batterStats.playerName} has ${rbi} RBI - DOMINANT!`
+        : `💥 ${batterStats.playerName} has ${rbi} RBI!`
+    };
+  }, [settings.enabled]);
+
+  // ============================================
+  // TITANIUM SOMBRERO DETECTION (6K)
+  // Extension of sombrero detection for extra innings
+  // ============================================
+  const detectTitaniumSombrero = useCallback((
+    context: GameContext,
+    batterStats: PlayerStats
+  ): DetectionResult | null => {
+    if (!settings.enabled) return null;
+    if (batterStats.strikeouts < 6) return null;
+
+    const key = createEventKey('TITANIUM_SOMBRERO', batterStats.playerId, 0);
+    if (isAlreadyDetected(key)) return null;
+    markDetected(key);
+
+    const event = createFameEvent(
+      context.gameId,
+      context.inning,
+      context.halfInning,
+      'TITANIUM_SOMBRERO',
+      batterStats.playerId,
+      batterStats.playerName,
+      batterStats.teamId,
+      true,
+      `6 strikeouts - TITANIUM Sombrero!`,
+      undefined,
+      undefined,
+      context.leverageIndex
+    );
+
+    return {
+      event,
+      message: `💀💀 TITANIUM SOMBRERO! ${batterStats.playerName} strikes out for the 6th time!`
+    };
+  }, [settings.enabled]);
+
+  // ============================================
+  // COMPLETE GAME / SHUTOUT DETECTION
+  // ============================================
+  const detectCompleteGameShutout = useCallback((
+    context: GameContext,
+    pitcherStats: PlayerStats
+  ): DetectionResult | null => {
+    if (!settings.enabled) return null;
+    if (!context.isGameOver) return null;
+    if (!pitcherStats.isStarter) return null;
+
+    // Must have pitched complete game (9+ innings of outs)
+    const minOuts = context.scheduledInnings * 3;
+    if (pitcherStats.outs < minOuts) return null;
+
+    // Check for shutout (no runs allowed)
+    const isShutout = pitcherStats.runsAllowed === 0;
+    const eventType: FameEventType = isShutout ? 'SHUTOUT' : 'COMPLETE_GAME';
+
+    const key = createEventKey(eventType, pitcherStats.playerId, 0);
+    if (isAlreadyDetected(key)) return null;
+    markDetected(key);
+
+    const event = createFameEvent(
+      context.gameId,
+      context.inning,
+      context.halfInning,
+      eventType,
+      pitcherStats.playerId,
+      pitcherStats.playerName,
+      pitcherStats.teamId,
+      true,
+      isShutout ? 'Complete Game Shutout!' : 'Complete Game!',
+      undefined,
+      undefined,
+      context.leverageIndex
+    );
+
+    return {
+      event,
+      message: isShutout
+        ? `⭐ SHUTOUT! ${pitcherStats.playerName} throws a complete game shutout!`
+        : `💪 Complete Game! ${pitcherStats.playerName} goes the distance!`
+    };
+  }, [settings.enabled]);
+
+  // ============================================
+  // MADDUX DETECTION (CGSO with < pitch threshold)
+  // A Maddux is a CGSO on fewer than a certain pitch count
+  // Default threshold: 100 pitches (or scaled for shorter seasons)
+  // ============================================
+  const detectMaddux = useCallback((
+    context: GameContext,
+    pitcherStats: PlayerStats,
+    pitchThreshold: number = 100  // Default MLB threshold
+  ): DetectionResult | null => {
+    if (!settings.enabled) return null;
+    if (!context.isGameOver) return null;
+    if (!pitcherStats.isStarter) return null;
+
+    // Must have pitched complete game
+    const minOuts = context.scheduledInnings * 3;
+    if (pitcherStats.outs < minOuts) return null;
+
+    // Must be a shutout
+    if (pitcherStats.runsAllowed > 0) return null;
+
+    // Must be under pitch threshold
+    if (pitcherStats.pitchCount >= pitchThreshold) return null;
+
+    const key = createEventKey('MADDUX', pitcherStats.playerId, 0);
+    if (isAlreadyDetected(key)) return null;
+    markDetected(key);
+
+    const event = createFameEvent(
+      context.gameId,
+      context.inning,
+      context.halfInning,
+      'MADDUX',
+      pitcherStats.playerId,
+      pitcherStats.playerName,
+      pitcherStats.teamId,
+      true,
+      `Maddux! CGSO on ${pitcherStats.pitchCount} pitches!`,
+      undefined,
+      undefined,
+      context.leverageIndex
+    );
+
+    return {
+      event,
+      message: `🎯 MADDUX! ${pitcherStats.playerName} throws a CGSO on just ${pitcherStats.pitchCount} pitches!`
+    };
+  }, [settings.enabled]);
+
+  // ============================================
+  // IMMACULATE INNING DETECTION (3K on exactly 9 pitches)
+  // ============================================
+  const detectImmaculateInning = useCallback((
+    context: GameContext,
+    pitcherStats: PlayerStats
+  ): DetectionResult | null => {
+    if (!settings.enabled) return null;
+    if (!context.currentInningPitches) return null;
+    if (context.outs !== 3) return null;  // Only check at end of half-inning
+
+    const { pitches, strikeouts, pitcherId } = context.currentInningPitches;
+
+    // Immaculate Inning: exactly 9 pitches, 3 strikeouts
+    if (pitches !== 9 || strikeouts !== 3) return null;
+    if (pitcherId !== pitcherStats.playerId) return null;
+
+    const key = createEventKey('IMMACULATE_INNING', pitcherStats.playerId, context.inning);
+    if (isAlreadyDetected(key)) return null;
+    markDetected(key);
+
+    const event = createFameEvent(
+      context.gameId,
+      context.inning,
+      context.halfInning,
+      'IMMACULATE_INNING',
+      pitcherStats.playerId,
+      pitcherStats.playerName,
+      pitcherStats.teamId,
+      true,
+      'Immaculate Inning! 9 pitches, 3 strikeouts!',
+      undefined,
+      undefined,
+      context.leverageIndex
+    );
+
+    return {
+      event,
+      message: `⚡⚡⚡ IMMACULATE INNING! ${pitcherStats.playerName} - 9 pitches, 3 strikeouts!`
+    };
+  }, [settings.enabled]);
+
+  // ============================================
+  // BACK-TO-BACK-TO-BACK HR DETECTION (for batters)
+  // Team event when 3 consecutive batters hit HRs
+  // ============================================
+  const detectBackToBackToBackHR = useCallback((
+    context: GameContext,
+    batterId: string,
+    batterName: string,
+    teamId: string,
+    result: AtBatResult
+  ): DetectionResult | null => {
+    if (!settings.enabled) return null;
+    if (result !== 'HR') return null;
+    if (context.consecutiveHRCount < 3) return null;
+
+    const key = createEventKey('BACK_TO_BACK_TO_BACK_HR', teamId, context.inning);
+    if (isAlreadyDetected(key)) return null;
+    markDetected(key);
+
+    const event = createFameEvent(
+      context.gameId,
+      context.inning,
+      context.halfInning,
+      'BACK_TO_BACK_TO_BACK_HR',
+      batterId,
+      batterName,
+      teamId,
+      true,
+      'Back-to-back-to-back home runs!',
+      undefined,
+      undefined,
+      context.leverageIndex
+    );
+
+    return {
+      event,
+      message: `💣💣💣 BACK-TO-BACK-TO-BACK HOME RUNS! ${batterName} makes it THREE in a row!`
     };
   }, [settings.enabled]);
 
@@ -696,7 +1057,10 @@ export function useFameDetection({
       pitcherStats.playerName,
       pitcherStats.teamId,
       true,
-      'Struck out the side!'
+      'Struck out the side!',
+      undefined,
+      undefined,
+      context.leverageIndex
     );
 
     return {
@@ -731,7 +1095,10 @@ export function useFameDetection({
       pitcherStats.playerName,
       pitcherStats.teamId,
       true,
-      `${k} strikeout game!`
+      `${k} strikeout game!`,
+      undefined,
+      undefined,
+      context.leverageIndex
     );
 
     return {
@@ -766,7 +1133,10 @@ export function useFameDetection({
       batterStats.playerName,
       batterStats.teamId,
       true,
-      'Hat Trick (3 strikeouts)'
+      'Hat Trick (3 strikeouts)',
+      undefined,
+      undefined,
+      context.leverageIndex
     );
 
     return {
@@ -798,7 +1168,10 @@ export function useFameDetection({
       batterStats.playerName,
       batterStats.teamId,
       true,
-      `Left ${batterStats.runnersLeftOnBase} runners on base`
+      `Left ${batterStats.runnersLeftOnBase} runners on base`,
+      undefined,
+      undefined,
+      context.leverageIndex
     );
 
     return {
@@ -830,7 +1203,10 @@ export function useFameDetection({
       batterStats.playerName,
       batterStats.teamId,
       true,
-      `${batterStats.gidp} double plays hit into`
+      `${batterStats.gidp} double plays hit into`,
+      undefined,
+      undefined,
+      context.leverageIndex
     );
 
     return {
@@ -862,7 +1238,10 @@ export function useFameDetection({
       pitcherStats.playerName,
       pitcherStats.teamId,
       true,
-      `Gave up ${pitcherStats.firstInningRuns} runs in the 1st`
+      `Gave up ${pitcherStats.firstInningRuns} runs in the 1st`,
+      undefined,
+      undefined,
+      context.leverageIndex
     );
 
     return {
@@ -903,7 +1282,10 @@ export function useFameDetection({
       teamName,
       winningTeamId,
       true,
-      `Comeback victory from ${deficit}-run deficit!`
+      `Comeback victory from ${deficit}-run deficit!`,
+      undefined,
+      undefined,
+      context.leverageIndex
     );
 
     return {
@@ -995,14 +1377,26 @@ export function useFameDetection({
     const fiveHitGame = detectFiveHitGame(context, batterStats);
     if (fiveHitGame) detectedResults.push(fiveHitGame);
 
+    // Check 3, 4, 6 hit games (5 handled above)
+    const multiHitGame = detectMultiHitGame(context, batterStats);
+    if (multiHitGame) detectedResults.push(multiHitGame);
+
+    // Check multi-RBI games (5, 8, 10 RBI)
+    const multiRBIGame = detectMultiRBIGame(context, batterStats);
+    if (multiRBIGame) detectedResults.push(multiRBIGame);
+
     // ========== BATTER SHAME EVENTS ==========
     // Check hat trick (3 K) - only if exactly 3
     const hatTrick = detectHatTrick(context, batterStats);
     if (hatTrick) detectedResults.push(hatTrick);
 
-    // Check sombrero (4+ K)
+    // Check sombrero (4+ K) - Note: Titanium Sombrero (6K) handled at end of game
     const sombrero = detectSombrero(context, batterStats);
     if (sombrero) detectedResults.push(sombrero);
+
+    // Check Titanium Sombrero (6K) - typically in extra inning games
+    const titaniumSombrero = detectTitaniumSombrero(context, batterStats);
+    if (titaniumSombrero) detectedResults.push(titaniumSombrero);
 
     // Check LOB King
     const lobKing = detectLOBKing(context, batterStats);
@@ -1029,11 +1423,25 @@ export function useFameDetection({
     if (context.outs === 3 && inningStrikeouts >= 3) {
       const strikeOutSide = detectStrikeOutSide(context, pitcherStats, inningStrikeouts);
       if (strikeOutSide) detectedResults.push(strikeOutSide);
+
+      // Check Immaculate Inning (3K on exactly 9 pitches)
+      const immaculateInning = detectImmaculateInning(context, pitcherStats);
+      if (immaculateInning) detectedResults.push(immaculateInning);
     }
 
     // Check high K game
     const highKGame = detectHighKGame(context, pitcherStats);
     if (highKGame) detectedResults.push(highKGame);
+
+    // ========== MULTI-HR BATTING TEAM EVENTS ==========
+    // Check back-to-back-to-back HR (team event)
+    if (result === 'HR' && context.consecutiveHRCount >= 3) {
+      const b2b2bHR = detectBackToBackToBackHR(
+        context, batterStats.playerId, batterStats.playerName,
+        batterStats.teamId, result
+      );
+      if (b2b2bHR) detectedResults.push(b2b2bHR);
+    }
 
     // Notify for each detected event
     if (settings.showToasts && onFameDetected) {
@@ -1054,15 +1462,20 @@ export function useFameDetection({
     detectCycle,
     detectMultiHR,
     detectFiveHitGame,
+    detectMultiHitGame,
+    detectMultiRBIGame,
     detectHatTrick,
     detectSombrero,
+    detectTitaniumSombrero,
     detectLOBKing,
     detectMultipleGIDP,
     detectMeltdown,
     detectConsecutiveHRAllowed,
     detectFirstInningDisaster,
     detectStrikeOutSide,
-    detectHighKGame
+    detectHighKGame,
+    detectImmaculateInning,
+    detectBackToBackToBackHR
   ]);
 
   // ============================================
@@ -1071,16 +1484,37 @@ export function useFameDetection({
   // ============================================
   const checkEndGameFame = useCallback((
     context: GameContext,
-    allPitchers: PlayerStats[]
+    allPitchers: PlayerStats[],
+    pitchThreshold: number = 100  // For Maddux detection
   ): DetectionResult[] => {
     if (!settings.enabled) return [];
 
     const detectedResults: DetectionResult[] = [];
 
-    // Check for no-hitter/perfect game
+    // Check pitching achievements for each pitcher
     for (const pitcher of allPitchers) {
+      // Check for no-hitter/perfect game (most prestigious)
       const noHitter = detectNoHitter(context, pitcher);
-      if (noHitter) detectedResults.push(noHitter);
+      if (noHitter) {
+        detectedResults.push(noHitter);
+        // If perfect game, don't also credit Maddux/CGSO separately
+        if (noHitter.event.eventType === 'PERFECT_GAME') continue;
+      }
+
+      // Check for Maddux (CGSO under pitch threshold) - only if not no-hitter
+      if (!noHitter) {
+        const maddux = detectMaddux(context, pitcher, pitchThreshold);
+        if (maddux) {
+          detectedResults.push(maddux);
+          continue; // Maddux implies CGSO, don't double credit
+        }
+      }
+
+      // Check for Complete Game / Shutout (if not already detected above)
+      if (!noHitter) {
+        const cgso = detectCompleteGameShutout(context, pitcher);
+        if (cgso) detectedResults.push(cgso);
+      }
     }
 
     // Notify for each detected event
@@ -1089,7 +1523,7 @@ export function useFameDetection({
     }
 
     return detectedResults;
-  }, [settings.enabled, settings.showToasts, onFameDetected, detectNoHitter]);
+  }, [settings.enabled, settings.showToasts, onFameDetected, detectNoHitter, detectMaddux, detectCompleteGameShutout]);
 
   return {
     // Main detection functions
@@ -1105,16 +1539,23 @@ export function useFameDetection({
     detectCycle,
     detectMultiHR,
     detectFiveHitGame,
+    detectMultiHitGame,
+    detectMultiRBIGame,
     detectBackToBackHR,
+    detectBackToBackToBackHR,
     detectHatTrick,
     detectSombrero,
+    detectTitaniumSombrero,
     detectLOBKing,
     detectMultipleGIDP,
     detectMeltdown,
     detectFirstInningDisaster,
     detectStrikeOutSide,
     detectHighKGame,
+    detectImmaculateInning,
     detectNoHitter,
+    detectCompleteGameShutout,
+    detectMaddux,
     detectConsecutiveHRAllowed,
     detectBatterOutStretching,
     detectComebackWin

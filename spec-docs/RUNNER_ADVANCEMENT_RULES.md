@@ -619,10 +619,8 @@ function validateRunnerOutcomes(result, bases, outcomes) {
 | Event | Runners | Auto-Advancement |
 |-------|---------|------------------|
 | Walk/HBP/IBB | Forced runners | R1→2B, R2→3B (if R1 forced), R3→Home (if loaded) |
-| Balk | All runners | Each runner +1 base |
 | Ground Rule Double | All runners | Each runner +2 bases |
 | Home Run | All runners | All score |
-| Catcher Interference | Forced runners | Same as walk |
 
 ### 10.2 Events with OPTIONAL Advancement (User Choice)
 
@@ -635,27 +633,150 @@ function validateRunnerOutcomes(result, bases, outcomes) {
 | Fly Out | Tagged runners | Hold or advance |
 | Error | All runners | May get extra bases |
 
-### 10.3 UI Decision Tree
+### 10.3 Force Situations
+
+Force situations occur when a runner MUST advance because another runner (or the batter) is taking their base. On walks and HBP, the batter is awarded first base, creating a chain of forces.
+
+#### Force Detection Function
+
+```typescript
+/**
+ * Determines if a runner is forced to advance.
+ * A forced runner CANNOT hold - they MUST advance to the next base.
+ *
+ * @param base - The base the runner is currently on (1, 2, or 3)
+ * @param runners - Object indicating which bases are occupied
+ * @param event - The event type (WALK, HBP, IBB, 1B, 2B, etc.)
+ * @returns boolean - true if the runner is forced, false otherwise
+ */
+function isForced(base: number, runners: { first: boolean; second: boolean; third: boolean }, event: string): boolean {
+  // Walk/HBP/IBB: Batter is awarded 1B, creating force chain
+  if (event === 'WALK' || event === 'HBP' || event === 'IBB' || event === 'BB') {
+    // R1 is always forced (batter takes 1B)
+    if (base === 1 && runners.first) return true;
+    // R2 is forced only if R1 exists (chain: Batter → R1 → R2)
+    if (base === 2 && runners.first && runners.second) return true;
+    // R3 is forced only if R1 AND R2 exist (chain: Batter → R1 → R2 → R3)
+    if (base === 3 && runners.first && runners.second && runners.third) return true;
+  }
+
+  // Single (1B): Batter takes 1B, same force chain as walk
+  if (event === '1B') {
+    if (base === 1 && runners.first) return true;
+    if (base === 2 && runners.first && runners.second) return true;
+    if (base === 3 && runners.first && runners.second && runners.third) return true;
+  }
+
+  // Double (2B): Batter takes 2B, R1 and R2 must vacate
+  if (event === '2B') {
+    if (base === 1 && runners.first) return true;  // R1 must advance past 2B
+    if (base === 2 && runners.second) return true; // R2 must vacate for batter
+  }
+
+  // Triple (3B): Batter takes 3B, all runners must vacate
+  if (event === '3B') {
+    if (base === 1 && runners.first) return true;
+    if (base === 2 && runners.second) return true;
+    if (base === 3 && runners.third) return true;
+  }
+
+  return false;
+}
+```
+
+#### Force Situation Examples
+
+| Event | Base State | R1 Forced? | R2 Forced? | R3 Forced? |
+|-------|------------|------------|------------|------------|
+| WALK  | R1         | YES        | -          | -          |
+| WALK  | R2         | -          | NO (1B empty) | -       |
+| WALK  | R1+R2      | YES        | YES        | -          |
+| WALK  | R1+R3      | YES        | -          | NO (2B empty) |
+| WALK  | R2+R3      | -          | NO         | NO         |
+| WALK  | Loaded     | YES        | YES        | YES        |
+| 1B    | R1         | YES        | -          | -          |
+| 2B    | R1         | YES        | -          | -          |
+| 2B    | R2         | -          | YES        | -          |
+
+### 10.4 Runner Advancement Options Logic
+
+```typescript
+/**
+ * Returns the valid advancement options for a runner.
+ * Forced runners do NOT get a "Hold" option - they auto-advance.
+ *
+ * @param base - The base the runner is on (1, 2, or 3)
+ * @param runners - Current base state
+ * @param event - The event type
+ * @returns Array of valid options, or 'AUTO' for forced advancement
+ */
+function getRunnerAdvancementOptions(
+  base: number,
+  runners: { first: boolean; second: boolean; third: boolean },
+  event: string
+): string[] | 'AUTO' {
+  // Check if this runner is forced
+  if (isForced(base, runners, event)) {
+    // Forced runners auto-advance - no user choice needed
+    // Return 'AUTO' to indicate the UI should not show options
+    return 'AUTO';
+  }
+
+  // Non-forced runners get options based on event type
+  if (event === 'WALK' || event === 'HBP' || event === 'IBB' || event === 'BB') {
+    // Non-forced runners on walk can hold or advance
+    if (base === 2) return ['HELD', 'TO_3B'];
+    if (base === 3) return ['HELD', 'SCORED']; // Can attempt to score (rare)
+  }
+
+  if (event === '1B') {
+    if (base === 2) return ['HELD', 'TO_3B', 'SCORED', 'OUT'];
+    if (base === 3) return ['HELD', 'SCORED', 'OUT'];
+  }
+
+  if (event === '2B') {
+    // Only R3 can hold on a double (R1/R2 are forced)
+    if (base === 3) return ['HELD', 'SCORED', 'OUT'];
+  }
+
+  // Default for fly outs, ground outs, etc.
+  return ['HELD', 'ADVANCED', 'SCORED', 'OUT'];
+}
+```
+
+### 10.5 UI Decision Tree
 
 ```typescript
 function getAdvancementUI(eventType, baseState, runnerPosition) {
-  // AUTOMATIC - no UI needed
+  // Get the runners object
+  const runners = {
+    first: baseState.includes('R1') || baseState.first,
+    second: baseState.includes('R2') || baseState.second,
+    third: baseState.includes('R3') || baseState.third
+  };
+
+  // AUTOMATIC - no UI needed (HR, GRD)
   if (isAutoAdvance(eventType, baseState, runnerPosition)) {
     return { type: 'AUTO', destination: calculateAutoDestination() };
   }
 
-  // FORCED - limited options
-  if (isForced(eventType, baseState, runnerPosition)) {
+  // FORCED - auto-advance, no "Hold" option
+  if (isForced(runnerPosition, runners, eventType)) {
+    // Calculate the forced destination
+    const destination = runnerPosition === 1 ? '2B' :
+                        runnerPosition === 2 ? '3B' : 'HOME';
     return {
       type: 'FORCED',
-      options: getForceOptions() // Excludes "HELD"
+      destination: destination,
+      message: `Runner auto-advances to ${destination} (forced)`
     };
   }
 
-  // OPTIONAL - full options
+  // OPTIONAL - show advancement options (includes "HELD")
+  const options = getRunnerAdvancementOptions(runnerPosition, runners, eventType);
   return {
     type: 'OPTIONAL',
-    options: ['HELD', 'ADVANCED', 'SCORED', 'OUT']
+    options: options
   };
 }
 ```
@@ -666,8 +787,9 @@ function getAdvancementUI(eventType, baseState, runnerPosition) {
 
 ### Bug 1: Walk with R1 allows "Held 1B"
 **Seen in:** Screenshot showing BB with Mantle on 1B, "Held 1B" selected
-**Fix:** Remove "Held" option for R1 on BB/IBB/HBP when R1 exists
-**Status:** ⚠️ Needs fix
+**Fix:** Added `isForced()` function and `getRunnerAdvancementOptions()` logic in Section 10.3-10.5.
+       Forced runners now auto-advance with no "Hold" option shown in UI.
+**Status:** ✅ FIXED - See Section 10.3 "Force Situations"
 
 ### Bug 2: Need to audit all other scenarios
 **TODO:** Systematically test each base state × result combination
@@ -681,7 +803,7 @@ function getAdvancementUI(eventType, baseState, runnerPosition) {
 
 | Result | Empty | R1 | R2 | R3 | R1R2 | R1R3 | R2R3 | Loaded |
 |--------|-------|----|----|----|----- |------|------|--------|
-| BB/HBP | ✅ | ⚠️ BUG | ? | ? | ? | ? | ? | ? |
+| BB/HBP | ✅ | ✅ FIXED | ? | ? | ? | ? | ? | ? |
 | 1B | ✅ | ? | ? | ? | ? | ? | ? | ? |
 | 2B | ✅ | ? | ? | ? | ? | ? | ? | ? |
 | 3B | ✅ | ? | ? | ? | ? | ? | ? | ? |
@@ -757,11 +879,13 @@ USER INPUT NEEDED:
 NOT IN SMB4 (do not implement):
 ├── BALK
 ├── Catcher Interference
-├── Infield Fly Rule
 └── Obstruction
+
+IN SMB4 (implement):
+└── Infield Fly Rule (IFR) - Called with R1+R2 or loaded, <2 outs
 ```
 
 ---
 
-*Last Updated: January 22, 2026*
-*Version: 2.0 - Added WP/PB, SB, Balk, Error, Special Situations*
+*Last Updated: January 24, 2026*
+*Version: 2.1 - Added force validation logic (isForced function), fixed Walk/HBP force advancement bug*

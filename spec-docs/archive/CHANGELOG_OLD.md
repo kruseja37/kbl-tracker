@@ -2,6 +2,39 @@
 
 ## [Unreleased]
 
+### January 22, 2026 - SMB4 Baselines & Adaptive Standards Engine
+
+#### 📊 Data & Baselines
+
+**SMB4 Season Baselines Calculated**
+- Extracted raw stats from 16 screenshots (8 teams × pitching + batting)
+- Calculated league-wide totals: 2,791.3 IP, 10,994 PA, 1,277 R, 2,958 H
+- Rate stats: AVG .288, OBP .329, ERA 4.04, K/9 6.71
+- Linear weights (Jester method): rOut=0.1525, wOBAscale=1.7821
+- FIP constant: 3.28
+- Pitching pace: 122.7 pitches/9 IP (Maddux threshold <85 confirmed elite)
+
+**Opportunity-Based Scaling System**
+- Refactored game-count scaling to include innings-per-game
+- Formula: `opportunityFactor = (games × innings) / (162 × 9)`
+- 50g × 9inn = 0.309 factor; 50g × 7inn = 0.240 factor
+- All counting stat thresholds now scale by opportunity factor
+- Rate stats (ERA, AVG) don't scale - already normalized
+
+**Innings-Adjusted Milestones**
+- Quality Start: 6 IP → 4.67 IP (7-inning games)
+- Quality Start max ER: 3 → 2 (7-inning games)
+- Maddux: <100 NP → <66 NP (7-inning games)
+- Complete game: 9 IP → 7 IP (scales with game length)
+
+#### 🔧 Fixes
+
+**CURRENT_STATE.md Accuracy**
+- Fixed incorrect status showing persistence as "❌ None"
+- Updated to reflect Phases 1-4 COMPLETE (IndexedDB, game recovery, season stats)
+
+---
+
 ### January 21, 2026 - Baseball Rules Implementation
 
 #### 🔴 Critical Fixes

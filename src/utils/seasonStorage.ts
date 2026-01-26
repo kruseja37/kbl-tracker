@@ -653,3 +653,105 @@ export function formatIP(outsRecorded: number): string {
   const partial = outsRecorded % 3;
   return `${full}.${partial}`;
 }
+
+// ============================================
+// ALIASES FOR HOOK COMPATIBILITY
+// ============================================
+
+/**
+ * Get all batting stats for a season (alias for getSeasonBattingStats)
+ */
+export const getAllBattingStats = getSeasonBattingStats;
+
+/**
+ * Get all pitching stats for a season (alias for getSeasonPitchingStats)
+ */
+export const getAllPitchingStats = getSeasonPitchingStats;
+
+/**
+ * Get all fielding stats for a season
+ */
+export async function getAllFieldingStats(seasonId: string): Promise<PlayerSeasonFielding[]> {
+  const db = await initSeasonDatabase();
+
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(STORES.PLAYER_SEASON_FIELDING, 'readonly');
+    const store = transaction.objectStore(STORES.PLAYER_SEASON_FIELDING);
+    const index = store.index('seasonId');
+    const request = index.getAll(seasonId);
+
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => resolve(request.result || []);
+  });
+}
+
+/**
+ * Get season metadata by ID
+ */
+export async function getSeasonMetadata(seasonId: string): Promise<SeasonMetadata | null> {
+  const db = await initSeasonDatabase();
+
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(STORES.SEASON_METADATA, 'readonly');
+    const store = transaction.objectStore(STORES.SEASON_METADATA);
+    const request = store.get(seasonId);
+
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => resolve(request.result || null);
+  });
+}
+
+// ============================================
+// DERIVED STATS FOR LEADERBOARDS
+// ============================================
+
+export interface BattingDerived {
+  avg: number;
+  obp: number;
+  slg: number;
+  ops: number;
+}
+
+export interface PitchingDerived {
+  era: number;
+  whip: number;
+  ip: string;
+}
+
+export interface FieldingDerived {
+  fieldingPct: number;
+}
+
+/**
+ * Calculate derived batting stats from raw counting stats
+ */
+export function calculateBattingDerived(stats: PlayerSeasonBatting): BattingDerived {
+  return {
+    avg: calcBattingAvg(stats),
+    obp: calcOBP(stats),
+    slg: calcSLG(stats),
+    ops: calcOPS(stats),
+  };
+}
+
+/**
+ * Calculate derived pitching stats from raw counting stats
+ */
+export function calculatePitchingDerived(stats: PlayerSeasonPitching): PitchingDerived {
+  return {
+    era: calcERA(stats),
+    whip: calcWHIP(stats),
+    ip: formatIP(stats.outsRecorded),
+  };
+}
+
+/**
+ * Calculate derived fielding stats from raw counting stats
+ */
+export function calculateFieldingDerived(stats: PlayerSeasonFielding): FieldingDerived {
+  const totalChances = stats.putouts + stats.assists + stats.errors;
+  const fieldingPct = totalChances === 0 ? 0 : (stats.putouts + stats.assists) / totalChances;
+  return {
+    fieldingPct,
+  };
+}

@@ -9,6 +9,16 @@ interface ScoreboardProps {
   halfInning: HalfInning;
   outs: number;
   gameNumber: number;
+  leverageIndex?: number;  // LI from engines/leverageCalculator
+}
+
+// Get LI category and color
+function getLIDisplay(li: number): { category: string; color: string; emoji: string } {
+  if (li >= 5.0) return { category: 'EXTREME', color: '#ef4444', emoji: '🔥' };
+  if (li >= 2.5) return { category: 'HIGH', color: '#f97316', emoji: '⚠️' };
+  if (li >= 1.5) return { category: 'CLUTCH', color: '#eab308', emoji: '⚡' };
+  if (li >= 0.85) return { category: 'MEDIUM', color: '#22c55e', emoji: '' };
+  return { category: 'LOW', color: '#6b7280', emoji: '' };
 }
 
 export default function Scoreboard({
@@ -19,8 +29,10 @@ export default function Scoreboard({
   inning,
   halfInning,
   outs,
-  gameNumber
+  gameNumber,
+  leverageIndex = 1.0,
 }: ScoreboardProps) {
+  const liDisplay = getLIDisplay(leverageIndex);
   return (
     <div style={styles.container}>
       {/* Game Info */}
@@ -51,7 +63,7 @@ export default function Scoreboard({
         </div>
       </div>
 
-      {/* Outs */}
+      {/* Outs and Leverage Index Row */}
       <div style={styles.outsRow}>
         <span style={styles.outsLabel}>OUTS:</span>
         {[0, 1, 2].map(i => (
@@ -65,6 +77,19 @@ export default function Scoreboard({
             ●
           </span>
         ))}
+
+        {/* Leverage Index Display */}
+        <div style={styles.liContainer}>
+          <span style={styles.liLabel}>LI:</span>
+          <span style={{ ...styles.liValue, color: liDisplay.color }}>
+            {liDisplay.emoji}{leverageIndex.toFixed(2)}
+          </span>
+          {leverageIndex >= 1.5 && (
+            <span style={{ ...styles.liCategory, color: liDisplay.color }}>
+              {liDisplay.category}
+            </span>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -133,5 +158,27 @@ const styles: Record<string, React.CSSProperties> = {
   },
   outDot: {
     fontSize: '16px',
+  },
+  liContainer: {
+    display: 'flex',
+    alignItems: 'center',
+    marginLeft: 'auto',
+    gap: '4px',
+  },
+  liLabel: {
+    fontSize: '11px',
+    color: '#888',
+  },
+  liValue: {
+    fontSize: '14px',
+    fontWeight: 'bold',
+  },
+  liCategory: {
+    fontSize: '10px',
+    fontWeight: 'bold',
+    padding: '1px 4px',
+    borderRadius: '3px',
+    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+    marginLeft: '2px',
   },
 };

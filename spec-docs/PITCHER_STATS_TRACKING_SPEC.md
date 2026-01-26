@@ -237,7 +237,220 @@ function recordRunScored(
 }
 ```
 
-### 4.2 Earned Run Summary
+### 4.2 First Inning Runs (Starters Only)
+
+For starting pitchers, we separately track runs allowed in the first inning for performance analysis.
+
+#### 4.2.1 Initialization Sequence (CRITICAL)
+
+Starting pitchers **MUST** be initialized before the first at-bat occurs. The initialization
+sequence establishes the three conditions required for first inning runs tracking:
+
+```
+isStarter && entryInning === 1 && gameState.inning === 1
+```
+
+**Required Initialization Sequence:**
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                        GAME START SEQUENCE                              │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│  1. GAME START EVENT                                                    │
+│     └─> Triggered when user starts new game                             │
+│                                                                         │
+│  2. INITIALIZE STARTING PITCHERS (BEFORE any at-bats)                   │
+│     ├─> Create PitcherGameStats for home starter                        │
+│     │   • isStarter = true                                              │
+│     │   • entryInning = 1                                               │
+│     │   • entryOuts = 0                                                 │
+│     │   • firstInningRuns = 0                                           │
+│     │                                                                   │
+│     └─> Create PitcherGameStats for away starter                        │
+│         • isStarter = true                                              │
+│         • entryInning = 1                                               │
+│         • entryOuts = 0                                                 │
+│         • firstInningRuns = 0                                           │
+│                                                                         │
+│  3. FIRST AT-BAT BEGINS                                                 │
+│     └─> Now tracking is active with all conditions met                  │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+**Code Example - Correct Initialization:**
+
+```typescript
+function initializeGame(gameConfig: GameConfig): GameState {
+  const gameState: GameState = {
+    inning: 1,
+    halfInning: 'TOP',
+    outs: 0,
+    // ... other game state
+  };
+
+  // CRITICAL: Initialize starting pitchers BEFORE first at-bat
+  const homePitcherStats = initializeStartingPitcher(
+    gameConfig.homeStartingPitcher,
+    'home',
+    gameState
+  );
+
+  const awayPitcherStats = initializeStartingPitcher(
+    gameConfig.awayStartingPitcher,
+    'away',
+    gameState
+  );
+
+  return gameState;
+}
+
+function initializeStartingPitcher(
+  pitcher: Pitcher,
+  team: 'home' | 'away',
+  gameState: GameState
+): PitcherGameStats {
+  // Validate: Must be inning 1 with 0 outs
+  if (gameState.inning !== 1 || gameState.outs !== 0) {
+    throw new Error(
+      `Starting pitcher must be initialized at start of game. ` +
+      `Current state: inning ${gameState.inning}, outs ${gameState.outs}`
+    );
+  }
+
+  return {
+    pitcherId: pitcher.id,
+    pitcherName: pitcher.name,
+    team: team,
+
+    // CRITICAL: These three fields enable first inning tracking
+    isStarter: true,
+    entryInning: 1,
+    entryOuts: 0,
+
+    // Initialize all counting stats
+    outsRecorded: 0,
+    hits: 0,
+    runsAllowed: 0,
+    earnedRuns: 0,
+    walks: 0,
+    intentionalWalks: 0,
+    strikeouts: 0,
+    hitByPitch: 0,
+    homeRuns: 0,
+    wildPitches: 0,
+    pitchCount: 0,
+    battersFaced: 0,
+
+    // Starter-specific (initialized to 0)
+    firstInningRuns: 0,
+    basesReachedViaError: 0,
+
+    // Other fields...
+    inheritedRunners: 0,
+    inheritedRunnersScored: 0,
+    bequeathedRunners: 0,
+    bequeathedRunnersScored: 0,
+    enteredInSaveSituation: false,
+    leadLostDuringAppearance: false,
+    finishedGame: false,
+    immaculateInnings: []
+  };
+}
+```
+
+#### 4.2.2 Error Case: Delayed Initialization
+
+If pitcher initialization is delayed until after the first at-bat, first inning runs
+tracking will **silently fail** because the conditions cannot be properly established.
+
+**What Happens If Initialization Is Delayed:**
+
+```typescript
+// WRONG: Initializing after first at-bat has started
+function handleFirstAtBat(event: AtBatEvent, gameState: GameState) {
+  // ERROR: Pitcher doesn't exist yet!
+  const pitcher = getPitcherStats(event.pitcherId);
+  if (!pitcher) {
+    // Late initialization - this is WRONG
+    pitcher = {
+      isStarter: true,
+      entryInning: gameState.inning,  // Might be > 1 if runs scored
+      // ...
+    };
+  }
+}
+
+// If a run scores before initialization:
+// - gameState.inning might already be > 1 (if scoring advanced innings)
+// - entryInning will be set incorrectly
+// - firstInningRuns will never increment because condition fails
+```
+
+**Detection of Initialization Errors:**
+
+```typescript
+function validatePitcherInitialization(
+  pitcher: PitcherGameStats,
+  gameState: GameState
+): void {
+  // Check: If this is supposed to be a starter, verify timing
+  if (pitcher.isStarter) {
+    if (pitcher.entryInning !== 1) {
+      console.error(
+        `INITIALIZATION ERROR: Starting pitcher ${pitcher.pitcherName} ` +
+        `has entryInning=${pitcher.entryInning}. ` +
+        `First inning runs tracking will be incorrect.`
+      );
+    }
+    if (pitcher.entryOuts !== 0) {
+      console.error(
+        `INITIALIZATION ERROR: Starting pitcher ${pitcher.pitcherName} ` +
+        `has entryOuts=${pitcher.entryOuts}. ` +
+        `Pitcher should enter with 0 outs.`
+      );
+    }
+  }
+}
+```
+
+#### 4.2.3 First Inning Runs Recording
+
+Once properly initialized, first inning runs are tracked as follows:
+
+```typescript
+function recordRunScored(
+  runner: Runner,
+  gameState: GameState,
+  responsiblePitcher: PitcherGameStats
+) {
+  responsiblePitcher.runsAllowed += 1;
+
+  // Track first inning runs for starters
+  // IMPORTANT: Only increment when ALL THREE conditions are true:
+  // 1. Pitcher is a starter (isStarter === true)
+  // 2. Pitcher entered in inning 1 (entryInning === 1)
+  // 3. Current game inning is still inning 1 (gameState.inning === 1)
+  if (responsiblePitcher.isStarter &&
+      responsiblePitcher.entryInning === 1 &&
+      gameState.inning === 1) {
+    responsiblePitcher.firstInningRuns += 1;
+  }
+
+  // ... ER attribution continues below
+}
+```
+
+> **Implementation Note**: The `inning === 1` check is critical. Without it, ALL runs
+> against starters would be counted as "first inning runs," which would produce incorrect
+> statistics. This was fixed in the January 2026 implementation audit.
+
+> **Initialization Note**: The `entryInning === 1` check validates that the pitcher
+> was properly initialized as a starter before the game began. If initialization
+> was delayed, this check will fail and first inning runs won't be tracked.
+
+### 4.3 Earned Run Summary
 
 > **Full ER/UER logic is in INHERITED_RUNNERS_SPEC.md**
 
@@ -828,6 +1041,10 @@ interface PitcherGameStats {
   pitchCount: number;
   battersFaced: number;
 
+  // Starter-specific tracking
+  firstInningRuns: number;       // Runs allowed in the 1st inning only (starters only)
+  basesReachedViaError: number;  // Runners who reached via error (for perfect game detection)
+
   // Decision
   decision?: 'W' | 'L' | 'ND';
   save?: boolean;
@@ -960,6 +1177,26 @@ When pitching change occurs:
 2. This spec captures outgoing pitcher's final stats
 3. INHERITED_RUNNERS_SPEC tracks runner ownership
 
+### 12.6 Current Pitcher Tracking
+
+The `lineupState.currentPitcher` field tracks the **actual** pitcher currently on the mound after any substitutions:
+
+```typescript
+function getCurrentPitcherId(): string {
+  // CORRECT: Use lineupState.currentPitcher if set (after substitution)
+  if (lineupState.currentPitcher) {
+    return lineupState.currentPitcher.playerId;
+  }
+  // Fallback: Use default pitcher IDs for starting pitchers
+  return halfInning === 'TOP' ? 'home_pitcher' : 'away_pitcher';
+}
+```
+
+> **Implementation Note**: When a pitching change occurs, `lineupState.currentPitcher` is
+> updated with the new pitcher's information. All subsequent stat accumulation uses this
+> value to correctly attribute stats to the relief pitcher rather than the starter.
+> This was fixed in the January 2026 implementation audit.
+
 ---
 
 ## Appendix: Quick Reference
@@ -999,5 +1236,5 @@ When pitching change occurs:
 
 ---
 
-*Last Updated: January 22, 2026*
-*Version: 1.0 - Initial creation*
+*Last Updated: January 24, 2026*
+*Version: 1.2 - Added explicit initialization sequence documentation for first inning runs tracking (Section 4.2.1-4.2.3)*

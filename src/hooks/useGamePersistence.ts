@@ -63,6 +63,13 @@ interface PitcherGameStats {
   inningsComplete: number;
 }
 
+// Per-inning pitch tracking for Immaculate Inning detection
+interface InningPitchData {
+  pitches: number;
+  strikeouts: number;
+  pitcherId: string;
+}
+
 // Game state that the hook tracks
 export interface GameStateForPersistence {
   gameId: string;
@@ -87,6 +94,8 @@ export interface GameStateForPersistence {
   maxDeficitAway: number;
   maxDeficitHome: number;
   activityLog: string[];
+  // Per-inning pitch tracking (for Immaculate Inning detection)
+  currentInningPitches?: InningPitchData;
 }
 
 export interface UseGamePersistenceOptions {

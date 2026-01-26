@@ -47,6 +47,54 @@ export default function PinchHitterModal({
   // Position options - includes P because pitchers CAN pinch hit in SMB4
   const positions: Position[] = ['P', 'C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF', 'DH'];
 
+  // Validate defensive alignment after pinch hit (BUG-001 fix)
+  const validateDefensiveAlignment = (): string[] => {
+    const validationErrors: string[] = [];
+    const defensivePositions: Position[] = ['P', 'C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF'];
+
+    // Build post-sub position map: position -> player name
+    const positionMap = new Map<Position, string>();
+
+    // Add all current lineup players except the one being replaced
+    for (const player of lineupState.lineup) {
+      if (player.playerId !== currentBatterId && player.position !== 'DH') {
+        if (positionMap.has(player.position)) {
+          // This shouldn't happen if existing lineup is valid, but check anyway
+          validationErrors.push(
+            `Current lineup error: ${player.position} already has ${positionMap.get(player.position)}`
+          );
+        } else {
+          positionMap.set(player.position, player.playerName);
+        }
+      }
+    }
+
+    // Add the pinch hitter at their new fielding position
+    if (selectedPH && fieldingPosition !== 'DH') {
+      if (positionMap.has(fieldingPosition)) {
+        validationErrors.push(
+          `Position conflict: ${fieldingPosition} is already occupied by ${positionMap.get(fieldingPosition)}. ` +
+          `Either choose a different position for ${selectedPH.playerName}, or make a defensive substitution first.`
+        );
+      } else {
+        positionMap.set(fieldingPosition, selectedPH.playerName);
+      }
+    }
+
+    // Check for missing defensive positions (unless going to DH)
+    if (fieldingPosition !== 'DH') {
+      for (const pos of defensivePositions) {
+        if (!positionMap.has(pos)) {
+          validationErrors.push(
+            `Missing position: No one will be playing ${pos}. Consider a defensive substitution to fill this position.`
+          );
+        }
+      }
+    }
+
+    return validationErrors;
+  };
+
   const handleConfirm = () => {
     const newErrors: string[] = [];
 
@@ -60,6 +108,13 @@ export default function PinchHitterModal({
     }
 
     if (!selectedPH) return;
+
+    // Validate defensive alignment (BUG-001 fix)
+    const alignmentErrors = validateDefensiveAlignment();
+    if (alignmentErrors.length > 0) {
+      setErrors(alignmentErrors);
+      return;
+    }
 
     const event: PinchHitterEvent = {
       eventType: 'PINCH_HIT',

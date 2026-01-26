@@ -115,9 +115,12 @@ The traditional 13/3/2 values remain robust approximations.
 |--------|-----------|-------------|
 | Excellent | < 3.00 | Elite pitcher |
 | Great | 3.00-3.50 | Above average |
-| Average | 3.50-4.00 | League average |
-| Below Avg | 4.00-4.50 | Below average |
-| Poor | > 4.50 | Struggling |
+| Above Average | 3.50-4.00 | Better than league average |
+| Average | 4.00-4.50 | Around league average (4.04) |
+| Below Average | 4.50-5.00 | Below league average |
+| Poor | > 5.00 | Struggling |
+
+> **Note**: League average FIP is ~4.04 (SMB4 calibrated), so 4.00-4.50 represents "average" performance.
 
 ### JavaScript Implementation
 
@@ -149,7 +152,7 @@ FIP_Constant = lgERA - (((13 × lgHR) + (3 × (lgBB + lgHBP)) - (2 × lgK)) / lg
 
 ### Typical Values
 
-The FIP constant typically ranges from **3.10 to 3.20** in MLB. For quick calculations, using 3.10 as a default is acceptable.
+The FIP constant typically ranges from **3.10 to 3.20** in MLB. For generic examples in this spec, **3.15** is used. However, the actual SMB4 implementation uses **3.28** (calibrated from SMB4 league data per `ADAPTIVE_STANDARDS_ENGINE_SPEC.md`).
 
 ### JavaScript Implementation
 
@@ -369,7 +372,10 @@ function calculatePWAR(pitcherStats, leagueStats, seasonConfig) {
   const rawWAR = winsAboveReplacementPer9 * (IP / 9);
 
   // Step 7: Apply leverage multiplier (relievers only)
-  const isReliever = gamesStarted === 0 || (gamesStarted / gamesAppeared) < 0.5;
+  // Role thresholds: starter >= 80% starts, reliever <= 20% starts, else swingman
+  const starterShare = gamesStarted / gamesAppeared;
+  const role = starterShare >= 0.8 ? 'starter' : starterShare <= 0.2 ? 'reliever' : 'swingman';
+  const isReliever = role === 'reliever';
   const leverageMultiplier = getLeverageMultiplier(averageLeverageIndex, isReliever);
   const adjustedWAR = rawWAR * leverageMultiplier;
 
@@ -576,7 +582,7 @@ const avgStarterStats = {
 | Basic pWAR | ✅ Yes | Using simplified RPW |
 | Starter/Reliever split | ✅ Yes | GS and G tracked |
 | Leverage adjustment | ⚠️ Partial | Need LI tracking |
-| Park adjustment | ❌ Later | Requires park factor data |
+| Park adjustment | ⚠️ Specified | See STADIUM_ANALYTICS_SPEC.md (NOT YET IMPLEMENTED in code) |
 
 ### Simplified pWAR (Phase 1)
 
@@ -601,7 +607,65 @@ function getDefaultLeverageIndex(gamesStarted, gamesAppeared, saves = 0) {
 1. **Shorter games**: SMB4 games are shorter, so IP accumulation differs
 2. **No IFFB tracking**: Use standard FIP, not ifFIP (infield flies as strikeouts)
 3. **Simplified leverage**: Use save-based estimation until full tracking
-4. **No park factors**: Assume neutral park until data collected
+
+### Park Factor Adjustments for Pitchers
+
+> **See STADIUM_ANALYTICS_SPEC.md** for complete park factor system.
+
+Pitchers benefit from park adjustments just like batters. A pitcher in a hitter-friendly park gets more credit; a pitcher in a pitcher-friendly park gets less credit.
+
+```javascript
+function applyPitcherParkFactor(
+  pitcher: Player,
+  rawFIP: number,
+  seasonStats: PitcherSeasonStats
+): number {
+  const homeStadium = getHomeStadium(pitcher.teamId);
+  const pf = homeStadium.parkFactors;
+
+  // Only adjust if we have confident park factor data
+  if (pf.confidence === 'LOW') {
+    return rawFIP;  // Use raw FIP until data is available
+  }
+
+  // For FIP, primarily adjust based on HR factor
+  // since FIP is K, BB, HR based
+  const hrFactor = pf.homeRuns;
+
+  // Adjust home innings only
+  const homeIP = seasonStats.homeIP;
+  const totalIP = seasonStats.IP;
+  const homeRatio = homeIP / totalIP;
+
+  // If park inflates HRs (hrFactor > 1.0), reduce FIP penalty
+  // If park suppresses HRs (hrFactor < 1.0), increase FIP penalty
+  const adjustment = (1.0 - hrFactor) * 0.5;  // Scale the adjustment
+
+  return rawFIP - (adjustment * homeRatio);
+}
+```
+
+For ERA-based analysis (run environment):
+
+```javascript
+function getParkAdjustedERA(
+  pitcher: Player,
+  rawERA: number,
+  homeIP: number,
+  totalIP: number
+): number {
+  const homeStadium = getHomeStadium(pitcher.teamId);
+  const runsFactor = homeStadium.parkFactors.runs;
+
+  if (homeStadium.parkFactors.confidence === 'LOW') {
+    return rawERA;
+  }
+
+  const homeRatio = homeIP / totalIP;
+
+  // Adjust: if park inflates runs, give pitcher credit
+  return rawERA / ((runsFactor - 1.0) * homeRatio + 1.0);
+}
 
 ---
 

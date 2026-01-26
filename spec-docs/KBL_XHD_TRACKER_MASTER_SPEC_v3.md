@@ -1,4 +1,4 @@
-# KBL XHD Tracker - Master Specification Document v3.7
+# KBL XHD Tracker - Master Specification Document v3.8
 
 > **Related Specifications**:
 >
@@ -17,10 +17,14 @@
 > - `INHERITED_RUNNERS_SPEC.md` - Inherited runner responsibility tracking
 > - `PITCH_COUNT_TRACKING_SPEC.md` - Pitch count per-AB and game totals
 > - `SUBSTITUTION_FLOW_SPEC.md` - PH/PR/defensive sub/pitching change flows
+> - `MOJO_FITNESS_SYSTEM_SPEC.md` - **Mojo levels, Fitness states, stat splits, Fame integration**
 >
 > **Special Events & Fame**:
 > - `SPECIAL_EVENTS_SPEC.md` - Fame Bonus/Boner events (nut shot, TOOTBLAN, etc.)
 > - `fame_and_events_system.md` - Fame system, All-Star voting, random events
+>
+> **Season & Playoffs**:
+> - `PLAYOFF_SYSTEM_SPEC.md` - **Playoff bracket, exhibition mode, standalone series, clutch multipliers**
 >
 > **SMB4 Reference**:
 > - `SMB4_GAME_MECHANICS.md` - ⭐ Central reference for what IS/ISN'T in SMB4
@@ -52,7 +56,7 @@
 19. [Data Architecture & Core Models](#19-data-architecture--core-models)
 20. [Undo & Reset Features](#20-undo--reset-features)
 21. [Grade Derivation Formula](#21-grade-derivation-formula)
-22. [Fan Happiness System](#22-fan-happiness-system)
+22. [Fan Morale System](#22-fan-happiness-system)
 23. [Personality System](#23-personality-system)
 24. [Museum & Historical Data](#24-museum--historical-data)
 25. [In-Season Trade System](#25-in-season-trade-system)
@@ -246,15 +250,17 @@ async function postGameFlow(gameResult) {
     team.chemistry = calculateTeamChemistry(team);
   }
 
-  // 2.5 Update fan happiness
+  // 2.5 Update fan morale
   for (const team of [homeTeam, awayTeam]) {
-    updateFanHappiness(team, gameResult);
+    updateFanMorale(team, gameResult);
     checkContractionWarning(team);  // Show warning if < 30
   }
 
-  // 2.6 Check for random event trigger
-  if (shouldTriggerRandomEvent(gameNumber)) {
-    await triggerRandomEvent();
+  // 2.6 Check for AI-driven narrative event
+  // (Replaces old random event system - see NARRATIVE_SYSTEM_SPEC.md §10)
+  const narrativeEvent = await checkForNarrativeEvent(gameState);
+  if (narrativeEvent) {
+    await displayNarrativeEvent(narrativeEvent);
   }
 
   // ═══════════════════════════════════════════════════════════════
@@ -332,7 +338,7 @@ async function triggerAllStarBreak() {
   for (const player of allStars) {
     const trait = assignAllStarTrait(player);  // 70% positive, 30% negative
     player.awards.push({ type: 'ALL_STAR', season: currentSeason });
-    updateFanHappiness(player.team, { event: 'ALL_STAR_SELECTION', player });
+    updateFanMorale(player.team, { event: 'ALL_STAR_SELECTION', player });
 
     logTransaction('ALL_STAR_SELECTED', { playerId: player.id, trait });
   }
@@ -410,8 +416,8 @@ async function applyAwardEffects(award) {
     player.fame = Math.min(5, player.fame + award.fameBonus);
   }
 
-  // Update fan happiness
-  updateFanHappiness(player.team, { event: 'AWARD_WON', award });
+  // Update fan morale
+  updateFanMorale(player.team, { event: 'AWARD_WON', award });
 
   // Record in player awards
   player.awards.push({ type: award.type, season: currentSeason });
@@ -589,7 +595,7 @@ The Awards Ceremony is a multi-screen flow that presents end-of-season awards in
 │                                                                             │
 │  😬 PENALTIES:                                                              │
 │  • Choker trait applied                                                     │
-│  • -5 Fan Happiness (Red Sox)                                               │
+│  • -5 Fan Morale (Red Sox)                                               │
 │  • Salary expected to drop significantly                                    │
 │                                                                             │
 │                              [Next: Summary →]                              │
@@ -646,7 +652,7 @@ The Awards Ceremony is a multi-screen flow that presents end-of-season awards in
 │                                                                             │
 │  ⚡ REWARDS:                                                                │
 │  • +5 to team's EOS adjustment bonus pool                                   │
-│  • +5 Fan Happiness                                                         │
+│  • +5 Fan Morale                                                         │
 │                                                                             │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -1048,6 +1054,51 @@ After protecting one player, assign the remaining 11 players to dice values 2-12
 - Sorts players by salary (highest = safest positions at 2/12, 3/11, etc.)
 - Lowest salary players get assigned to 6, 7, 8 (most likely to leave)
 
+**Morale & Jersey Sales Modifiers:**
+
+Before rolling, each player's effective dice slot is modified by their happiness and popularity:
+
+```javascript
+function getEffectiveDiceSlot(player, assignedSlot) {
+  let modifier = 0;
+
+  // Happiness modifier (-2 to +2)
+  if (player.happiness >= 80) modifier += 2;       // Very happy: wants to stay
+  else if (player.happiness >= 60) modifier += 1;  // Happy
+  else if (player.happiness <= 20) modifier -= 2;  // Miserable: wants out
+  else if (player.happiness <= 40) modifier -= 1;  // Unhappy
+
+  // Jersey Sales modifier (-2 to +2) - fans love them, they feel valued
+  if (player.jerseySalesIndex >= 80) modifier += 2;      // Superstar
+  else if (player.jerseySalesIndex >= 65) modifier += 1; // Star
+  else if (player.jerseySalesIndex <= 19) modifier -= 2; // Cold
+  else if (player.jerseySalesIndex <= 34) modifier -= 1; // Low
+
+  // Shift toward edges (2 or 12) = LESS likely to match rolled dice
+  // Shift toward middle (6, 7, 8) = MORE likely to leave
+  const effectiveSlot = Math.max(2, Math.min(12, assignedSlot - modifier));
+
+  return effectiveSlot;
+}
+```
+
+| Factor | Condition | Modifier | Effect |
+|--------|-----------|----------|--------|
+| **Happiness** | ≥80 (Very Happy) | +2 | Shifts away from middle |
+| | 60-79 (Happy) | +1 | Slightly safer |
+| | 40-59 | 0 | No change |
+| | 21-39 (Unhappy) | -1 | Slightly riskier |
+| | ≤20 (Miserable) | -2 | Shifts toward middle |
+| **Jersey Sales** | ≥80 (Superstar) | +2 | "Fans love me here" |
+| | 65-79 (Star) | +1 | Popular with fans |
+| | 35-64 | 0 | No change |
+| | 20-34 (Low) | -1 | "Nobody cares about me" |
+| | ≤19 (Cold) | -2 | Wants fresh start |
+
+**Example**: Star player (Jersey Sales 75, Happiness 65) assigned to slot 6:
+- Happiness +1, Jersey Sales +1 = +2 total modifier
+- Effective slot: 6 - 2 = 4 (much less likely to match!)
+
 ---
 
 ### Step 3: Roll the Dice!
@@ -1444,7 +1495,7 @@ After both FA rounds complete:
 │  ───────────────────                                                        │
 │  The Kansas City Athletics are in danger of folding.                        │
 │                                                                             │
-│  Fan Happiness: 18 (Critical - below 30 threshold)                          │
+│  Fan Morale: 18 (Critical - below 30 threshold)                          │
 │  Seasons Below 30: 3 consecutive                                            │
 │  Contraction Probability: 70%                                               │
 │                                                                             │
@@ -1534,7 +1585,7 @@ After both FA rounds complete:
 │  Roster: 26/26 (Full)                                                       │
 │  Salary: $82.4M (3rd highest)                                               │
 │  Expected WAR: 42.3 (1st)                                                   │
-│  Fan Happiness: 78 (Very Happy)                                             │
+│  Fan Morale: 78 (Very Happy)                                             │
 │                                                                             │
 │  ⚠️ LEAGUE NOTICES                                                          │
 │  • Dodgers over salary cap - must trade before Season 5                     │
@@ -1746,8 +1797,8 @@ async function crownChampion(team) {
   const wsMVP = calculateWorldSeriesMVP(season.playoffGames);
   wsMVP.awards.push({ type: 'WORLD_SERIES_MVP', season: currentSeason });
 
-  // Massive fan happiness boost
-  updateFanHappiness(team, { event: 'CHAMPIONSHIP', amount: 25 });
+  // Massive fan morale boost
+  updateFanMorale(team, { event: 'CHAMPIONSHIP', amount: 25 });
 
   // Update dynasty tracking
   updateDynastyStatus(team);
@@ -1875,7 +1926,7 @@ async function crownChampion(team) {
 │                                                                             │
 │  ⚡ REWARDS:                                                                │
 │  • +3.0 Fame (World Series MVP)                                             │
-│  • +25 Fan Happiness (Championship!)                                        │
+│  • +25 Fan Morale (Championship!)                                        │
 │  • Moment recorded to Museum                                                │
 │                                                                             │
 │                         [Celebrate! 🎊]                                     │
@@ -2004,9 +2055,9 @@ async function triggerOffseason() {
   // ═══════════════════════════════════════════════════════════════
 
   for (const team of getAllTeams()) {
-    if (team.fanHappiness < 30) {
+    if (team.fanMorale < 30) {
       const contractionRoll = Math.random();
-      const contractionThreshold = getContractionProbability(team.fanHappiness);
+      const contractionThreshold = getContractionProbability(team.fanMorale);
 
       if (contractionRoll < contractionThreshold) {
         await contractTeam(team);
@@ -2035,20 +2086,20 @@ async function triggerOffseason() {
 
 ```javascript
 function checkContractionWarning(team) {
-  if (team.fanHappiness < 30 && !team.contractionWarningShown) {
+  if (team.fanMorale < 30 && !team.contractionWarningShown) {
     showWarning({
       title: "⚠️ FRANCHISE IN DANGER",
-      message: `${team.name} fan happiness is critically low (${team.fanHappiness}).`,
+      message: `${team.name} fan morale is critically low (${team.fanMorale}).`,
       subtext: "If happiness remains below 30 at end of season, the team may be contracted.",
-      severity: team.fanHappiness < 15 ? 'CRITICAL' : 'WARNING'
+      severity: team.fanMorale < 15 ? 'CRITICAL' : 'WARNING'
     });
 
     team.contractionWarningShown = true;
-    logTransaction('CONTRACTION_WARNING', { team: team.id, happiness: team.fanHappiness });
+    logTransaction('CONTRACTION_WARNING', { team: team.id, happiness: team.fanMorale });
   }
 
   // Reset warning flag if happiness recovers
-  if (team.fanHappiness >= 30) {
+  if (team.fanMorale >= 30) {
     team.contractionWarningShown = false;
   }
 }
@@ -2115,14 +2166,14 @@ async function executeTrade(trade) {
     team2.cash += cash.toTeam2 || 0;
   }
 
-  // 5. Calculate fan happiness impact
+  // 5. Calculate fan morale impact
   for (const player of playersFromTeam1) {
-    updateFanHappiness(team1, { event: 'PLAYER_TRADED_AWAY', player });
-    updateFanHappiness(team2, { event: 'PLAYER_ACQUIRED', player });
+    updateFanMorale(team1, { event: 'PLAYER_TRADED_AWAY', player });
+    updateFanMorale(team2, { event: 'PLAYER_ACQUIRED', player });
   }
   for (const player of playersFromTeam2) {
-    updateFanHappiness(team2, { event: 'PLAYER_TRADED_AWAY', player });
-    updateFanHappiness(team1, { event: 'PLAYER_ACQUIRED', player });
+    updateFanMorale(team2, { event: 'PLAYER_TRADED_AWAY', player });
+    updateFanMorale(team1, { event: 'PLAYER_ACQUIRED', player });
   }
 
   // 6. Activate revenge game storylines
@@ -2269,11 +2320,19 @@ Each team has a dedicated management page with tabs:
 | Player | Name |
 | Grade | Current SMB grade (S through D) |
 | **Salary** | Current salary in millions |
-| Mojo | -3 to +3 (affects in-game performance) |
+| Mojo | -2 to +2 (5 levels: Rattled/Tense/Normal/Locked In/Jacked) |
 | Fitness | Categorical (Hurt/Weak/Strained/Well/Fit/Juiced) |
 | Actions | Edit button |
 
 ### STADIUM Tab
+
+> **Full Specification**: See **STADIUM_ANALYTICS_SPEC.md** for complete details on:
+> - Dynamic park factor calculation from game data
+> - Per-stat breakdowns (HR, 2B, 3B, K, BB) by batter handedness
+> - Spray chart tracking system (integrates with FIELD_ZONE_INPUT_SPEC.md)
+> - Stadium records and historical tracking
+> - WAR integration (BWAR_CALCULATION_SPEC.md, PWAR_CALCULATION_SPEC.md)
+> - Game simulation integration (GAME_SIMULATION_SPEC.md)
 
 Comprehensive stadium tracking with spray charts and park factors.
 
@@ -2524,7 +2583,7 @@ The in-game tracker is designed for **speed and minimal cognitive load** while p
 2. **Minimal Taps** - Most at-bats require only 2-3 taps
 3. **Auto-Advance** - Lineup automatically advances; outs auto-flip innings
 4. **Real-Time Feedback** - Clutch/choke/fame events shown as they're logged
-5. **Forgiving** - Undo last 10 actions; score override available
+5. **Forgiving** - Undo last 20 operations; score override available
 
 ### Time Budget Per Game
 
@@ -2550,6 +2609,20 @@ const GameState = {
   isPlayoff: false,
   playoffSeries: null,  // { round: 'NLCS', gameInSeries: 3, teamAWins: 1, teamBWins: 1 }
 
+  // Game Mode (for standalone games outside franchise)
+  gameMode: 'FRANCHISE',  // 'FRANCHISE' | 'EXHIBITION' | 'PLAYOFF_SERIES'
+  standaloneSeriesConfig: null, // { length: 7, currentGame: 3, teamAWins: 2, teamBWins: 0 }
+
+  // Game Timer (tracks real-world duration)
+  timer: {
+    startedAt: '2024-06-18T19:15:00Z',  // ISO timestamp when game tracking began
+    endedAt: null,                       // Filled when game ends
+    totalPausedMs: 0,                    // Accumulates paused time
+    pausedAt: null,                      // If currently paused, when pause began
+    durationMs: null,                    // Calculated on game end: (endedAt - startedAt) - totalPausedMs
+    durationFormatted: null              // e.g., "1:42:35" (1 hour, 42 min, 35 sec)
+  },
+
   // Teams
   awayTeam: { id: 'yankees', name: 'Yankees', manager: 'Boone' },
   homeTeam: { id: 'giants', name: 'Giants', manager: 'Kapler' },
@@ -2574,12 +2647,21 @@ const GameState = {
   },
 
   // Lineups (set at game start, updated on substitutions)
+  // Includes Mojo/Fitness for stat split tracking
   awayLineup: [
-    { order: 1, playerId: 'judge', position: 'RF', enteredGame: 1 },
-    { order: 2, playerId: 'stanton', position: 'DH', enteredGame: 1 },
-    // ... 9 batters
+    { order: 1, playerId: 'judge', position: 'RF', enteredGame: 1,
+      mojo: 2, fitness: 'FIT' },        // Jacked (+2), Fit
+    { order: 2, playerId: 'stanton', position: 'DH', enteredGame: 1,
+      mojo: 0, fitness: 'WELL' },       // Normal, Well
+    // ... 9 batters with mojo (-2 to +2) and fitness state
   ],
-  homeLineup: [/* same structure */],
+  homeLineup: [/* same structure with mojo/fitness */],
+
+  // Mojo/Fitness tracking for stat splits
+  mojoFitnessLog: [
+    // Tracks any mid-game changes (rare but possible)
+    { playerId: 'judge', inning: 5, oldMojo: 1, newMojo: 2, reason: 'Clutch HR' },
+  ],
 
   // Current Batting Order Position
   awayBattingOrder: 4,  // Judge(1), Stanton(2), Rizzo(3), now Torres(4) due up
@@ -2643,7 +2725,7 @@ const GameState = {
     // ... last 10 shown in compact form, tap for full narrative
   ],
 
-  // Undo Stack (last 10 actions)
+  // Undo Stack (last 20 operations)
   undoStack: [/* full state snapshots for reverting */]
 };
 ```
@@ -2692,38 +2774,51 @@ function updateSituationalContext(state) {
 ## Pre-Game Setup Screen
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│  GAME 47: Yankees @ Giants | Oracle Park                        │
-│  PRE-GAME SETUP                                    June 18th    │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                 │
-│  AWAY: YANKEES                    HOME: GIANTS                  │
-│  ┌─────────────────────────────┐  ┌─────────────────────────────┐
-│  │ 1. [Judge ▼]        RF     │  │ 1. [Yastrzemski ▼]   RF    │
-│  │ 2. [Stanton ▼]      DH     │  │ 2. [Pederson ▼]      LF    │
-│  │ 3. [Rizzo ▼]        1B     │  │ 3. [Flores ▼]        1B    │
-│  │ 4. [Torres ▼]       2B     │  │ 4. [Conforto ▼]      DH    │
-│  │ 5. [Volpe ▼]        SS     │  │ 5. [Estrada ▼]       2B    │
-│  │ 6. [Cabrera ▼]      3B     │  │ 6. [Crawford ▼]      SS    │
-│  │ 7. [Hicks ▼]        CF     │  │ 7. [Longoria ▼]      3B    │
-│  │ 8. [Trevino ▼]      C      │  │ 8. [Bart ▼]          C     │
-│  │ 9. [Kiner-Falefa ▼] LF     │  │ 9. [Slater ▼]        CF    │
-│  └─────────────────────────────┘  └─────────────────────────────┘
-│                                                                 │
-│  STARTING PITCHERS                                              │
-│  Away: [Cole ▼]                   Home: [Simmons ▼]             │
-│                                                                 │
-│  GAME SETTINGS:                                                 │
-│  ☐ Day Game  ☑ Night Game                                       │
-│                                                                 │
-│  📰 TODAY'S STORYLINES:                                         │
-│  • 🔥 Judge faces former rival Simmons (career .412 vs him)     │
-│  • 🎯 Mays 2 HR away from 500 career                            │
-│  • ⚔️ RIVALRY GAME - Giants vs Yankees (1.5x intensity)         │
-│                                                                 │
-│                    [Start Game]                                 │
-└─────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────────────┐
+│  GAME 47: Yankees @ Giants | Oracle Park                                      │
+│  PRE-GAME SETUP                                               June 18th       │
+├──────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  AWAY: YANKEES                              HOME: GIANTS                     │
+│  ┌────────────────────────────────────────┐ ┌────────────────────────────────────────┐
+│  │ #  Player       Pos  Mojo    Fitness   │ │ #  Player       Pos  Mojo    Fitness   │
+│  │ 1. [Judge ▼]    RF   [🔥+2]  [Fit ▼]   │ │ 1. [Yastrzemski]RF   [😐 0]  [Well ▼]  │
+│  │ 2. [Stanton ▼]  DH   [😐 0]  [Well ▼]  │ │ 2. [Pederson ▼] LF   [🔥+1]  [Fit ▼]   │
+│  │ 3. [Rizzo ▼]    1B   [😰-1]  [Fit ▼]   │ │ 3. [Flores ▼]   1B   [😐 0]  [Strained]│
+│  │ 4. [Torres ▼]   2B   [😐 0]  [Juiced💉]│ │ 4. [Conforto ▼] DH   [😰-2]  [Weak ▼]  │
+│  │ 5. [Volpe ▼]    SS   [🔥+1]  [Fit ▼]   │ │ 5. [Estrada ▼]  2B   [😐 0]  [Well ▼]  │
+│  │ 6. [Cabrera ▼]  3B   [😐 0]  [Well ▼]  │ │ 6. [Crawford ▼] SS   [😐 0]  [Fit ▼]   │
+│  │ 7. [Hicks ▼]    CF   [😐 0]  [Strained]│ │ 7. [Longoria ▼] 3B   [😐 0]  [Well ▼]  │
+│  │ 8. [Trevino ▼]  C    [😐 0]  [Fit ▼]   │ │ 8. [Bart ▼]     C    [🔥+1]  [Fit ▼]   │
+│  │ 9. [K-Falefa ▼] LF   [😐 0]  [Well ▼]  │ │ 9. [Slater ▼]   CF   [😐 0]  [Fit ▼]   │
+│  └────────────────────────────────────────┘ └────────────────────────────────────────┘
+│                                                                              │
+│  ⚠️ ALERTS:                                                                  │
+│  • Torres is JUICED 💉 - Fame penalties apply (-50% credit, -1 per game)     │
+│  • Conforto is RATTLED 😰 (-2) - Hardest mojo to escape                      │
+│                                                                              │
+│  STARTING PITCHERS                                                           │
+│  Away: [Cole ▼]        [🔥+1] [Fit]     Home: [Simmons ▼]   [😐 0] [Well]    │
+│                                                                              │
+│  GAME SETTINGS:                                                              │
+│  ☐ Day Game  ☑ Night Game                                                    │
+│                                                                              │
+│  📰 TODAY'S STORYLINES:                                                      │
+│  • 🔥 Judge faces former rival Simmons (career .412 vs him)                  │
+│  • 🎯 Mays 2 HR away from 500 career                                         │
+│  • ⚔️ RIVALRY GAME - Giants vs Yankees (1.5x intensity)                      │
+│                                                                              │
+│                         [Start Game]                                         │
+└──────────────────────────────────────────────────────────────────────────────┘
 ```
+
+**Mojo/Fitness Entry Notes:**
+- **Mojo dropdown**: Rattled (-2), Tense (-1), Normal (0), Locked In (+1), Jacked (+2)
+- **Fitness dropdown**: Juiced, Fit, Well, Strained, Weak, Hurt
+- Defaults pulled from previous game's ending state (if available)
+- **JUICED alert** warns user of Fame penalties before game starts
+- **RATTLED alert** reminds user this is the hardest mojo state to escape
+- Tap any Mojo/Fitness cell to quick-edit; changes logged for stat splits
 
 ---
 
@@ -2731,19 +2826,19 @@ function updateSituationalContext(state) {
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│  GAME 47: Yankees @ Giants                              [Box Score] [Menu]  │
-│  Top 5th | 1 Out | NYY 3 - SF 4                                             │
+│  GAME 47: Yankees @ Giants                    ⏱️ 1:12:45  [Box Score] [Menu]  │
+│  Top 5th | 1 Out | NYY 3 - SF 4                  [⏸ Pause]                   │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                                                                             │
 │  ┌─────────────────┐    ┌─────────────────────────────────────────────────┐ │
 │  │    DIAMOND      │    │  CURRENT AT-BAT                                 │ │
 │  │                 │    │                                                 │ │
 │  │       [2B]      │    │  Batter: Aaron Judge 🏆MVP (1-2, HR)  ← Auto    │ │
-│  │      ● Torres   │    │  Pitcher: Mike Simmons (62 pitches)   ← Auto    │ │
-│  │                 │    │                                                 │ │
-│  │  [3B]     [1B]  │    │  Situation: RISP, 1 Out, Down 1       ← Auto    │ │
-│  │   ○        ●    │    │  ⚠️ CLUTCH SITUATION                            │ │
-│  │          Rizzo  │    │                                                 │ │
+│  │      ● Torres   │    │          🔥 Jacked (+2) | Fit         ← Mojo/Fit│ │
+│  │                 │    │  Pitcher: Mike Simmons (62 pitches)   ← Auto    │ │
+│  │  [3B]     [1B]  │    │                                                 │ │
+│  │   ○        ●    │    │  Situation: RISP, 1 Out, Down 1       ← Auto    │ │
+│  │          Rizzo  │    │  ⚠️ CLUTCH SITUATION                            │ │
 │  │                 │    │  RESULT:                                        │ │
 │  │      [HOME]     │    │  ┌────┐┌────┐┌────┐┌────┐┌────┐┌────┐┌────┐    │ │
 │  └─────────────────┘    │  │ 1B ││ 2B ││ 3B ││ HR ││ BB ││IBB ││ K  │    │ │
@@ -2758,7 +2853,7 @@ function updateSituationalContext(state) {
 │                                                                             │
 │  ┌────────────────────────────────────────────────────────────────────────┐ │
 │  │ [Pitching Change] [Pinch Hitter] [Pinch Runner] [Def Sub] [Steal]      │ │
-│  │ [Wild Pitch] [Passed Ball] [Pickoff] [Balk] [⭐ Special Events ▼]      │ │
+│  │ [Wild Pitch] [Passed Ball] [Pickoff] [⭐ Special Events ▼]             │ │
 │  └────────────────────────────────────────────────────────────────────────┘ │
 │                                                                             │
 │  ┌────────────────────────────────────────────────────────────────────────┐ │
@@ -2780,6 +2875,7 @@ function updateSituationalContext(state) {
 **Key Features:**
 - Diamond shows runners with names
 - Batter/Pitcher auto-populated from lineup order
+- **Mojo/Fitness displayed under batter name** - tap to quick-edit mid-game
 - Situation auto-detected and displayed
 - "CLUTCH SITUATION" badge when applicable
 - Due Up shows next 3 batters
@@ -2787,8 +2883,9 @@ function updateSituationalContext(state) {
 - [Full View] expands to complete play-by-play narrative
 - Tap activity log entry to undo
 - Smart defaults for fielder inference (override with one tap)
+- **JUICED warning** shown when batter is Juiced (Fame penalty reminder)
 - Optional 7+ Pitch At-Bat tracking for plate discipline
-- [⭐ Special Events] dropdown for: Robbed HR, Star Play, Killed Pitcher, Nut Shot, TOOTBLAN, Balk
+- [⭐ Special Events] dropdown for: Robbed HR, Star Play, Killed Pitcher, Nut Shot, TOOTBLAN
 
 **Special Events Dropdown Menu:**
 ```
@@ -2801,9 +2898,77 @@ function updateSituationalContext(state) {
 │ 🎯 Caught Come-Backer           │
 │ 🤦 TOOTBLAN                     │
 │ 😵 Nut Shot                     │
-│ ⚠️ Balk                         │
 │ 🎯 Runner Thrown Out            │
+│ 📊 Update Mojo/Fitness          │  ← NEW: Mid-game condition updates
 └─────────────────────────────────┘
+```
+
+---
+
+## Mid-Game Mojo/Fitness Updates
+
+While Mojo/Fitness is primarily set pre-game, mid-game updates capture significant shifts that affect stat splits tracking.
+
+**When to Update Mid-Game:**
+- Player gets hot after a big hit (Mojo upgrade)
+- Player visibly rattled after costly error (Mojo downgrade)
+- Fitness change due to minor injury or fatigue (rare)
+
+**Quick Update Flow:**
+```
+┌───────────────────────────────────────────────────────────────────────────┐
+│  📊 UPDATE MOJO/FITNESS                                                   │
+├───────────────────────────────────────────────────────────────────────────┤
+│                                                                           │
+│  Select Player: [Rizzo ▼]                                                 │
+│                                                                           │
+│  Current State:  😰 Tense (-1)  |  Fit                                    │
+│                                                                           │
+│  UPDATE MOJO:                                                             │
+│  ┌──────┐ ┌──────┐ ┌──────┐ ┌──────┐ ┌──────┐                            │
+│  │😰 -2 │ │😰 -1 │ │😐  0 │ │🔥 +1 │ │🔥 +2 │                            │
+│  │Rattld│ │Tense │ │Normal│ │LckdIn│ │Jacked│                            │
+│  └──────┘ └──────┘ └──────┘ └──────┘ └──────┘                            │
+│              ▲ current                                                    │
+│                                                                           │
+│  UPDATE FITNESS:                                                          │
+│  ┌──────┐ ┌──────┐ ┌──────┐ ┌──────┐ ┌──────┐ ┌──────┐                   │
+│  │💉    │ │Fit   │ │Well  │ │Strnd │ │Weak  │ │Hurt  │                   │
+│  │Juiced│ │100%  │ │ 95%  │ │ 85%  │ │ 70%  │ │  0%  │                   │
+│  └──────┘ └──────┘ └──────┘ └──────┘ └──────┘ └──────┘                   │
+│              ▲ current                                                    │
+│                                                                           │
+│  Reason (optional): [Clutch double sparked confidence    ]                │
+│                                                                           │
+│                    [Cancel]  [Apply Update]                               │
+└───────────────────────────────────────────────────────────────────────────┘
+```
+
+**Stat Split Context:**
+Every plate appearance records the batter's current Mojo/Fitness state at time of PA. This enables analysis like:
+- "Batting .340 when Locked In vs .180 when Rattled"
+- "OPS 1.200 when Juiced (12 PA) vs .780 when Fit (150 PA)"
+
+**PA Context Capture (Automatic):**
+```javascript
+const paContext = {
+  batterId: 'rizzo',
+  mojo: -1,           // Tense at time of this PA
+  fitness: 'FIT',     // Fit at time of this PA
+  result: '2B',
+  // ... other PA data
+};
+
+// Later aggregated into MojoFitnessSplits for player card display
+```
+
+**Activity Log Entry for Mojo Change:**
+```
+┌──────────────────────────────────────────────────────────────────┐
+│ 📊 MOJO UPDATE: Rizzo                                            │
+│ Tense (-1) → Locked In (+1) after clutch double                  │
+│ "He's feeling it now!"                                           │
+└──────────────────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -3114,6 +3279,77 @@ function updateStadiumHRRecords(stadiumId, hrData) {
     ...hrData
   });
 }
+
+/**
+ * VALIDATION: HR distance must exceed fence distance for the given direction
+ * Returns error if distance is impossibly short for that part of the park
+ */
+function validateHRDistance(distance: number, direction: string, stadiumId: string): ValidationResult {
+  const stadium = getStadium(stadiumId);
+
+  // Map direction to fence dimension
+  const directionToFence = {
+    'Left': 'leftField',
+    'Left-Center': 'leftCenter',
+    'Center': 'center',
+    'Right-Center': 'rightCenter',
+    'Right': 'rightField'
+  };
+
+  const fenceKey = directionToFence[direction];
+  const fenceDistance = stadium.dimensions[fenceKey]?.distance || 330;
+
+  // HR must clear the fence - minimum is fence distance + small buffer
+  const MIN_CLEARANCE = 5;  // Must clear by at least 5 feet
+  const minValidDistance = fenceDistance + MIN_CLEARANCE;
+
+  if (distance < minValidDistance) {
+    return {
+      valid: false,
+      error: `Invalid HR distance: ${distance} ft is shorter than the ${direction} fence (${fenceDistance} ft). ` +
+             `Minimum valid distance: ${minValidDistance} ft.`,
+      suggestion: `Did you mean ${minValidDistance + 10} ft?`
+    };
+  }
+
+  // Warn for suspiciously long distances
+  const MAX_REASONABLE = 550;
+  if (distance > MAX_REASONABLE) {
+    return {
+      valid: true,
+      warning: `${distance} ft is an unusually long HR. Please confirm this is correct.`
+    };
+  }
+
+  return { valid: true };
+}
+
+interface ValidationResult {
+  valid: boolean;
+  error?: string;
+  warning?: string;
+  suggestion?: string;
+}
+```
+
+**HR Distance Validation UI:**
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  ❌ INVALID HR DISTANCE                                         │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  You entered: 295 ft to Left Field                              │
+│                                                                 │
+│  ⚠️ This stadium's left field fence is 339 ft.                  │
+│  A home run must clear the fence!                               │
+│                                                                 │
+│  Minimum valid distance: 344 ft                                 │
+│                                                                 │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │ [Change to 344 ft]  [Re-enter Distance]  [Not a HR]     │   │
+│  └─────────────────────────────────────────────────────────┘   │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -3503,7 +3739,13 @@ function updateStadiumHRRecords(stadiumId, hrData) {
 │  RESULT: Dropped Third Strike (D3K)                             │
 ├─────────────────────────────────────────────────────────────────┤
 │                                                                 │
-│  Strikeout but catcher dropped the ball!                        │
+│  Strikeout but the ball got away!                               │
+│                                                                 │
+│  WHO FIELDED THE BALL?                                          │
+│  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐                │
+│  │ Catcher (C) │ │ Pitcher (P) │ │ 3B          │                │
+│  │  (default)  │ │(near mound) │ │(foul side)  │                │
+│  └─────────────┘ └─────────────┘ └─────────────┘                │
 │                                                                 │
 │  BATTER RESULT:                                                 │
 │  ┌──────────────────────────┐ ┌──────────────────────────┐      │
@@ -3516,14 +3758,14 @@ function updateStadiumHRRecords(stadiumId, hrData) {
 │  • Batter: +1 K (strikeout still counts)                        │
 │  • Batter: Reached on D3K (baserunner, no hit)                  │
 │  • Simmons: +1 K (pitcher gets strikeout credit)                │
-│  • Bart (C): +1 E (error on catcher - passed ball on K)         │
-│  • Bart (C): -1.0 Choke (dropped third strike)                  │
+│  • Fielder: +1 E (error on throw/handling)                      │
+│  • Fielder: -1.0 Choke (dropped third strike)                   │
 │                                                                 │
 │  [If OUT (thrown out at 1B)]                                    │
 │  ⚡ AUTO-LOGGED:                                                │
 │  • Batter: +1 K (strikeout)                                     │
 │  • Simmons: +1 K                                                │
-│  • Bart (C): Recovery - threw out runner                        │
+│  • Fielder: +1 Assist, 1B: +1 Putout                            │
 │  • No error charged (made the play)                             │
 │                                                                 │
 │  ⚠️ ELIGIBILITY CHECK (auto-verified):                         │
@@ -3538,6 +3780,11 @@ function updateStadiumHRRecords(stadiumId, hrData) {
 │                    [Confirm D3K]                                │
 └─────────────────────────────────────────────────────────────────┘
 ```
+
+**D3K Fielder Options:**
+- **Catcher (C)** - Default, most common. Ball drops near home plate.
+- **Pitcher (P)** - Ball deflects back toward mound, pitcher fields and throws to 1B.
+- **Third Baseman (3B)** - Ball deflects toward foul territory on third base side, 3B recovers.
 
 ---
 
@@ -3840,27 +4087,9 @@ These events are accessible via [Menu] → Special Events, or can be logged afte
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-### Balk
+### ~~Balk~~ (REMOVED - Not in SMB4)
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│  ⚠️ BALK                                                        │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                 │
-│  PITCHER:                                                       │
-│  [Simmons - Giants ▼]                                           │
-│                                                                 │
-│  RUNNER ADVANCEMENT:                                            │
-│  Torres (was on 2B): [To 3B ●]                                  │
-│  Rizzo (was on 1B):  [To 2B ●]                                  │
-│                                                                 │
-│  ⚡ AUTO-LOGGED:                                                │
-│  • Simmons: -0.5 Choke (balk)                                   │
-│  • [If run scores]: -1.5 Choke (balk allows run)                │
-│                                                                 │
-│                    [Confirm]                                    │
-└─────────────────────────────────────────────────────────────────┘
-```
+> **Note:** Balk modal removed. SMB4 does not have balk mechanics.
 
 ### Runner Thrown Out (Defensive Play)
 
@@ -3927,7 +4156,7 @@ Automatically triggers when a player reaches a career milestone (500 HR, 3000 hi
 │                                                                 │
 │  ⚡ BONUSES AWARDED:                                            │
 │  • +5.0 Fame (Epic Career Milestone!)                           │
-│  • +10 Fan Happiness                                            │
+│  • +10 Fan Morale                                            │
 │  • Moment recorded to Museum                                    │
 │                                                                 │
 │                    [Celebrate! 🎉]                              │
@@ -3972,7 +4201,7 @@ For special single-game accomplishments:
 │                                                                 │
 │  ⚡ BONUSES AWARDED:                                            │
 │  • +3.0 Fame (Cycle!)                                           │
-│  • +6 Fan Happiness                                             │
+│  • +6 Fan Morale                                             │
 │  • Moment recorded to Museum                                    │
 │                                                                 │
 │                    [Incredible! 🎉]                             │
@@ -4360,7 +4589,8 @@ Tap any entry in the Activity Log to undo:
 
 ### Undo Stack Rules
 
-- Last 10 actions stored
+- **Maximum 20 operations** stored (undo/redo combined)
+- Stack clears on game save or navigation away from game
 - Each undo reverts complete game state
 - Undone actions shown with strikethrough in Activity Log
 - Can re-do by entering the action again
@@ -4945,6 +5175,31 @@ function isCloseGame(scoreDifferential) {
 | | Walking in a run | -1 |
 | **Embarrassing** | Struck out on intentional walk pitchout | -2 |
 | | Thrown out at home by outfielder | -1 |
+| **Juiced (PED Stigma)** | Every game played while Juiced | -1 |
+| | Achievement while Juiced | 50% Fame credit |
+| | Milestone/record while Juiced | -1 additional |
+
+## Juiced Fitness Fame Penalty ("PED Watch")
+
+> **Key Insight**: Juiced is RARE in SMB4. Most players never reach it. A star might hit Juiced 2-3 times per season max. Every instance gets scrutinized.
+
+**Per-Game Penalty**: Every game played while Juiced = **-1 Fame Boner**
+
+| Achievement While Juiced | Normal Fame | Juiced Fame (50%) | Notes |
+|--------------------------|-------------|-------------------|-------|
+| Home Run | +0 | +0 | No Fame bonus normally |
+| Multi-HR Game | +1 | +0.5 | Tainted achievement |
+| Cycle | +2 | +1 | Reduced credit |
+| Walk-off | +2 | +1 | Still clutch, but tainted |
+| 10+ K (pitcher) | +1 | +0.5 | "Juiced to the gills" |
+| CGSO | +2 | +1 | Reduced credit |
+| Perfect Game | +5 | +2.5 | Still amazing, but asterisk |
+
+> **Note**: The -1 Fame Boner for playing while Juiced is applied ON TOP of the 50% achievement reduction.
+
+**Tracking**: See `MOJO_FITNESS_SYSTEM_SPEC.md` for complete implementation.
+
+**Narrative Integration**: Beat reporters will note "suspiciously healthy" players and fans will question achievements.
 
 ## Two-Way Player Fame Safeguard
 
@@ -4958,11 +5213,110 @@ Two-way players don't get Fame bonuses for hits (expected to hit well):
 
 ---
 
+## Jersey Sales Index (Popularity Indicator)
+
+Jersey Sales is a **derived metric** representing a player's marketability and fan appeal. It's calculated from performance, fame, and personality - higher = more popular with fans.
+
+### Formula
+
+```javascript
+function calculateJerseySalesIndex(player) {
+  // Component 1: Net Fame (base marketability)
+  // Normalized to 0-100 scale, where 0 Fame = 50, range is roughly -10 to +15
+  const fameScore = Math.max(0, Math.min(100, 50 + (player.netFame * 3.33)));
+
+  // Component 2: Performance vs Expectation
+  // Above expectation = more exciting, below = less marketable
+  const expectedWAR = getExpectedWARFromSalary(player);
+  const actualWAR = player.seasonStats.fullSeason.war;
+  const performanceRatio = actualWAR / Math.max(expectedWAR, 0.5);
+  const performanceScore = Math.max(0, Math.min(100, performanceRatio * 50));
+
+  // Component 3: Personality Modifier
+  const personalityModifiers = {
+    'JOLLY': 1.3,      // Fan favorite, beloved
+    'NORMAL': 1.0,     // Baseline
+    'TIMID': 0.9,      // Less visible, shy
+    'EGOTISTICAL': 0.85,  // Polarizing, some hate them
+    'DROOPY': 0.7,     // Downer, not exciting
+    'RELAXED': 1.1     // Chill, likeable
+  };
+  const personalityMod = personalityModifiers[player.personality] || 1.0;
+
+  // Combine with weights: Fame (50%) + Performance (30%) + Personality (20%)
+  const rawScore = (fameScore * 0.50) + (performanceScore * 0.30);
+  const adjustedScore = rawScore * personalityMod;
+
+  // Bonus for being on a winning team (+10% if team is playoff-bound)
+  const teamBonus = player.team?.isPlayoffContender ? 1.10 : 1.0;
+
+  return Math.round(adjustedScore * teamBonus);
+}
+```
+
+### Jersey Sales Rankings
+
+| Tier | Index Range | Description |
+|------|-------------|-------------|
+| 🌟 Superstar | 80+ | League-wide icon, jerseys everywhere |
+| ⭐ Star | 65-79 | Popular player, strong sales |
+| 📈 Rising | 50-64 | Growing fanbase, potential star |
+| 📊 Average | 35-49 | Moderate appeal |
+| 📉 Low | 20-34 | Limited marketability |
+| ❄️ Cold | 0-19 | Fans don't care |
+
+### Uses
+
+- **Leaderboard**: Display "Jersey Sales Leaders" in team/league stats
+- **Player Card**: Show jersey sales tier as popularity indicator
+- **Narrative**: Beat reporters mention jersey sales for popular players
+- **Fun Stat**: "Mays leads the league in jersey sales despite just .250 avg"
+- **Player Morale**: Directly affects player happiness (see below)
+- **Retention**: Higher jersey sales = happier player = more likely to stay
+
+### Jersey Sales → Player Morale
+
+High jersey sales make players feel valued and appreciated by fans, boosting morale:
+
+```javascript
+function getJerseySalesHappinessBonus(jerseySalesIndex) {
+  // Jersey sales index is 0-100
+  // Returns happiness modifier from -10 to +15
+  if (jerseySalesIndex >= 80) return +15;  // Superstar: "Fans love me!"
+  if (jerseySalesIndex >= 65) return +10;  // Star: "I'm popular here"
+  if (jerseySalesIndex >= 50) return +5;   // Rising: "Fans are noticing me"
+  if (jerseySalesIndex >= 35) return 0;    // Average: Neutral
+  if (jerseySalesIndex >= 20) return -5;   // Low: "Nobody cares about me"
+  return -10;                               // Cold: "I'm invisible here"
+}
+```
+
+### Jersey Sales → FA Retention
+
+During offseason free agency, jersey sales affect the dice roll modifier:
+
+| Jersey Sales Tier | Retention Modifier | Effect |
+|-------------------|-------------------|--------|
+| 🌟 Superstar (80+) | +2 to roll | Much more likely to stay |
+| ⭐ Star (65-79) | +1 to roll | More likely to stay |
+| 📈 Rising (50-64) | 0 | No modifier |
+| 📊 Average (35-49) | 0 | No modifier |
+| 📉 Low (20-34) | -1 to roll | More likely to leave |
+| ❄️ Cold (0-19) | -2 to roll | Much more likely to leave |
+
+**Example**: Player assigned to dice slot 6 (16.7% leave chance). They have 85 jersey sales (Superstar), so +2 modifier. Effective slot becomes 8 (13.9% leave chance). Combined with high happiness, they're much more likely to stay.
+
+### Update Frequency
+
+Recalculated every 5 games (at game numbers 5, 10, 15, 20, etc.) to smooth out fluctuations.
+
+---
+
 # 8. All-Star Voting
 
 ## Timing
 
-All-Star break triggers at **60% of games played** in the season.
+All-Star break triggers at **60% of games played** in the season: `Math.round(totalGames × 0.60)`.
 
 Example: 40-game season -> All-Star break after Game 24.
 
@@ -5382,7 +5736,7 @@ function applyAllStarTrait(player, trait) {
 |  • 22 players selected to All-Star team                           |
 |  • 22 traits awarded (15 positive, 7 negative)                    |
 |  • 3 trait replacements made                                      |
-|  • Willie Mays earns All-Star MVP (+4 Fan Happiness)              |
+|  • Willie Mays earns All-Star MVP (+4 Fan Morale)              |
 |                                                                   |
 |           [RETURN TO REGULAR SEASON]                              |
 |                                                                   |
@@ -5432,8 +5786,8 @@ async function triggerAllStarBreak() {
     // Record award
     player.awards.push({ type: 'ALL_STAR', season: currentSeason });
 
-    // Update fan happiness
-    updateFanHappiness(getTeam(player.currentTeam), {
+    // Update fan morale
+    updateFanMorale(getTeam(player.currentTeam), {
       event: 'ALL_STAR_SELECTION',
       player
     });
@@ -5496,7 +5850,7 @@ async function triggerAllStarBreak() {
 
   // Award ASG MVP
   mvp.awards.push({ type: 'ALL_STAR_MVP', season: currentSeason });
-  updateFanHappiness(getTeam(mvp.currentTeam), {
+  updateFanMorale(getTeam(mvp.currentTeam), {
     event: 'ALL_STAR_MVP',
     player: mvp,
     amount: 4
@@ -5573,7 +5927,7 @@ function generateAllStarHighlights(rosters, mvp) {
 - Random **positive** trait
 - +15% salary bonus
 - +1 Fame
-- +10 Fan Happiness
+- +10 Fan Morale
 - **NO ratings boosts**
 
 **Runners-up (2nd and 3rd):**
@@ -5598,7 +5952,7 @@ function generateAllStarHighlights(rosters, mvp) {
 - Random **positive** trait
 - +15% salary bonus
 - +1 Fame
-- +8 Fan Happiness
+- +8 Fan Morale
 - **NO ratings boosts**
 
 **Runners-up (2nd and 3rd):**
@@ -5667,7 +6021,7 @@ function calculateCyYoungVoting(pitchers, season) {
 
 **Reward:**
 - +5 to Fielding rating
-- +4 Fan Happiness (per winner on team)
+- +4 Fan Morale (per winner on team)
 - **NO arm bonus**
 
 **Platinum Glove** (highest fWAR among Gold Glove winners): Recognition only.
@@ -5685,7 +6039,7 @@ function calculateCyYoungVoting(pitchers, season) {
 **Reward:**
 - +3 Power
 - +3 Contact
-- +4 Fan Happiness (per winner on team)
+- +4 Fan Morale (per winner on team)
 - **NO trait** (too many winners per season would inflate league)
 
 ---
@@ -5696,7 +6050,7 @@ Same as MVP criteria, filtered to rookies only.
 
 **Winner Reward:**
 - Random trait (70% positive, 30% negative)
-- +6 Fan Happiness
+- +6 Fan Morale
 - **NO ratings boosts**
 
 **No runner-up award.**
@@ -5713,12 +6067,12 @@ Same as MVP criteria, filtered to rookies only.
 
 **Winner Reward:**
 - **Clutch trait** added (or replace existing trait if at 2)
-- +5 Fan Happiness
+- +5 Fan Morale
 - **NO ratings boosts**
 
 **Runner-up:**
 - Random trait (70% positive, 30% negative)
-- +2 Fan Happiness
+- +2 Fan Morale
 
 ---
 
@@ -5740,7 +6094,7 @@ Player must be in **bottom 25% of salary at their position** (low-paid players o
 
 **Reward:**
 - Random **positive** trait
-- +5 Fan Happiness (great story for fans)
+- +5 Fan Morale (great story for fans)
 - **NO ratings boosts**
 
 ---
@@ -5757,7 +6111,7 @@ Player started <50% of team games.
 
 **Reward:**
 - **Pinch Perfect** OR **Utility** trait (manager's choice)
-- +3 Fan Happiness
+- +3 Fan Morale
 - **NO ratings boosts**
 
 ---
@@ -5769,7 +6123,7 @@ Player started <50% of team games.
 | mWAR | 60% |
 | Team overperformance vs Team Salary Expectation | 40% |
 
-**Uses Team Salary Expectation System** (see Section 12) - the same position-based salary percentile system used for fan happiness. This creates alignment: the same expectations that determine fan happiness also determine Manager of the Year.
+**Uses Team Salary Expectation System** (see Section 12) - the same position-based salary percentile system used for fan morale. This creates alignment: the same expectations that determine fan morale also determine Manager of the Year.
 
 ```javascript
 function calculateManagerOfYearScore(team, allPlayers, season) {
@@ -5796,7 +6150,7 @@ function calculateManagerOfYearScore(team, allPlayers, season) {
 
 **Reward:**
 - +5 to manager's team bonus pool for EOS adjustments
-- +5 Fan Happiness
+- +5 Fan Morale
 
 ---
 
@@ -5832,7 +6186,7 @@ Player who underperformed the most against **salary-based expectations at their 
 
 **Penalty:**
 - **Choker trait** added
-- -5 Fan Happiness
+- -5 Fan Morale
 
 ---
 
@@ -5868,7 +6222,7 @@ function getComebackPlayerCandidates(players, currentSeason, lastSeason) {
 
 **Reward:**
 - **Clutch trait** added
-- +5 Fan Happiness (great story for fans)
+- +5 Fan Morale (great story for fans)
 
 ---
 
@@ -6051,36 +6405,153 @@ function calculateEOSAdjustments(player, allPlayers, seasonLength) {
 
 ---
 
-# 11. Random Events
+# 11. AI-Driven Event Generation
+
+> **⚠️ REPLACES OLD RANDOM EVENTS SYSTEM**
+> The old dice-roll random events have been replaced by context-aware AI generation.
+> See **NARRATIVE_SYSTEM_SPEC.md §10** for full implementation.
 
 ## Overview
 
-~20 random events are scheduled (hidden) at season start, triggering automatically between games.
+Instead of ~20 pre-scheduled random events, the AI analyzes team context (morale, relationships, performance trends, personality dynamics) and generates narratively coherent events that feel like they emerge from the story.
 
-## Event Categories (20 Events)
+## Key Differences from Old System
 
-| # | Category | Description |
-|---|----------|-------------|
-| 1 | Random Trait (any) | Add random trait (70% positive, 30% negative) |
-| 2 | Random Good Trait | Add random positive trait |
-| 3 | Random Bad Trait | Add random negative trait |
-| 4 | Random Secondary Position | Gain secondary position |
-| 5 | Random Primary Position | Change primary position |
-| 6 | Chosen Secondary Position | Player chooses new secondary |
-| 7 | Down 10 in Random Category | -10 to random rating |
-| 8 | Up 10 in Random Category | +10 to random rating |
-| 9 | Change Personality | New chemistry personality |
-| 10 | Change Stadium | Team gets new stadium |
-| 11 | Random Batting Stance/Arm Angle | Cosmetic change |
-| 12 | Trade | Player traded to random team |
-| 13 | Injury | Player injured for X games |
-| 14 | Hot Streak | +5/+5 ratings for 10 games |
-| 15 | Cold Streak | -5/-5 ratings for 10 games |
-| 16 | Veteran Mentor | Young player gets +3 to one rating |
-| 17 | Rivalry Ignited | Two players become rivals (+2 Fame vs each other) |
-| 18 | Fan Favorite | +2 Fame immediately, +1 Fame per milestone rest of season |
-| 19 | Media Villain | -2 Fame immediately, extra Fame Boner scrutiny |
-| 20 | Manager Fired | Team's manager replaced |
+| Old Approach | New Approach |
+|--------------|--------------|
+| Dice roll determines event type | AI selects event based on context |
+| Random player selection | Player selection based on morale, relationships, performance |
+| Events feel disconnected | Events connect to existing narrative threads |
+| No memory | Events plant seeds for future callbacks |
+| Fixed probability | Probability scales with drama (stretch run, playoff race) |
+
+## Event Categories (AI-Generated)
+
+All old event types are still possible, but now require appropriate context:
+
+### Player-Level Events
+
+| Event Type | AI Trigger Context | Possible Consequences |
+|------------|-------------------|----------------------|
+| **Trait Emergence** | 10+ games of consistent behavior pattern | `traitChanges` |
+| **Personality Shift** | Major life event (award, trade, mentorship, trauma) | `personalityChanges`, `moraleChanges` |
+| **Relationship Formation** | Compatible players + shared experience | `relationshipChanges`, `moraleChanges` |
+| **Relationship Evolution** | Existing relationship + triggering event | `relationshipChanges`, `moraleChanges` |
+| **Injury** | LOW_STAMINA fitness + heavy usage pattern | `injuries`, `moraleChanges` |
+| **Hot/Cold Streak** | 3+ games of consistent Mojo state | `statChanges` (temporary) |
+| **Trade Rumor** | Low morale + poor performance + bad team fit | `moraleChanges` |
+| **Fan Favorite** | High jersey sales + positive personality | `moraleChanges`, Fame bonus |
+| **Media Villain** | Controversy + EGOTISTICAL personality | `moraleChanges`, Fame boner |
+| **Mentor Event** | MENTOR_PROTEGE relationship active | `moraleChanges`, `traitChanges` |
+| **Rivalry Event** | RIVALS relationship active | `moraleChanges`, `statChanges` |
+| **Clubhouse Incident** | Multiple low-morale players + toxic chemistry | `moraleChanges`, `relationshipChanges` |
+| **Breakthrough Moment** | Young player + mentor support + recent struggles | `statChanges`, `traitChanges` |
+
+### Rating & Development Events
+
+| Event Type | AI Trigger Context | Possible Consequences |
+|------------|-------------------|----------------------|
+| **Rating Boost (+10)** | Exceptional performance streak, training montage | `statChanges` (specific stat) |
+| **Rating Drop (-10)** | Prolonged slump, confidence crisis | `statChanges` (specific stat) |
+| **All Stats Boost (+5)** | Career breakthrough, new technique | `statChanges` (ALL) |
+| **All Stats Drop (-5)** | Personal issues, decline begins | `statChanges` (ALL) |
+| **Fountain of Youth** | Veteran defying age, new training regimen | `specialEffects` (age adjustment) |
+| **Second Wind** | Veteran comeback, restored peak ratings | `specialEffects` (restore peak) |
+
+### Position & Skill Events
+
+| Event Type | AI Trigger Context | Possible Consequences |
+|------------|-------------------|----------------------|
+| **Position Change (Primary)** | Manager experimentation, injury adaptation | `positionChanges` |
+| **Position Gained (Secondary)** | Spring training work, emergency fill-in | `positionChanges` |
+| **Position Lost (Secondary)** | Disuse, age-related decline | `positionChanges` |
+| **Pitch Added** | Pitcher develops new pitch | `pitchChanges` |
+| **Pitch Lost** | Pitcher loses effectiveness on pitch | `pitchChanges` |
+
+#### Position Classification Thresholds
+
+**Primary Position Detection:**
+- Player's primary position = position played in ≥50% of games
+- If no position reaches 50%, player classified as **Utility Fielder**
+
+**Secondary Position Loss:**
+- Triggers after 15 consecutive games without appearing at position, OR
+- <5% of season games played at that position
+
+### Team-Level Events
+
+| Event Type | AI Trigger Context | Possible Consequences |
+|------------|-------------------|----------------------|
+| **Manager Fired** | 15+ games below expectation, scandal | `teamChanges` (MANAGER_FIRED) |
+| **Manager Hired** | After firing, new direction | `teamChanges` (MANAGER_HIRED) |
+| **Stadium Change** | Relocation, new construction | `teamChanges` (STADIUM_CHANGE) |
+| **Manager Pressure** | Close to expectation line, hot seat | `moraleChanges` (team-wide) |
+
+### Cosmetic & Fun Events
+
+| Event Type | AI Trigger Context | Possible Consequences |
+|------------|-------------------|----------------------|
+| **Batting Stance Change** | New approach at plate | `cosmeticChanges` |
+| **Arm Angle Change** | Pitching mechanics adjustment | `cosmeticChanges` |
+| **Facial Hair Change** | Random, superstition | `cosmeticChanges` |
+| **Silly Accessory** | Clubhouse prank, bet lost | `cosmeticChanges`, Fame boner (-0.5) |
+| **Cool Accessory** | Style statement, sponsor deal | `cosmeticChanges`, Fame bonus (+0.5) |
+| **Name Change** | Legal name change (boy first, girl last) | `cosmeticChanges`, Fame bonus (+1) |
+
+### Special/Compound Events
+
+| Event Type | AI Trigger Context | Possible Consequences |
+|------------|-------------------|----------------------|
+| **Wild Card** | Random chaos | `specialEffects` (two events) |
+| **Redemption Arc** | Negative clutch rating, comeback story | `specialEffects` (2× clutch multiplier) |
+| **Heel Turn** | Popular player controversy | `specialEffects` (Fame boners + POW boost) |
+
+### Farm-Specific Events
+
+| Event Type | AI Trigger Context | Possible Consequences |
+|------------|-------------------|----------------------|
+| **Prospect Blocked Frustration** | Veteran blocking path | `moraleChanges` |
+| **Cross-Level Mentor Formed** | MLB player mentoring prospect | `relationshipChanges` |
+| **Cross-Level Romantic** | Romance across levels | `relationshipChanges` |
+| **Farm Rivalry Heats Up** | Prospects competing for spot | `relationshipChanges`, `moraleChanges` |
+| **Prospect Proving Doubters** | Passed-over player excelling | `statChanges`, `moraleChanges` |
+| **Callup Recommendation** | AI suggests call-up with narrative reason | Recommendation only |
+| **Senddown Recommendation** | AI suggests send-down with narrative reason | Recommendation only |
+
+> **Full Consequence Schema**: See `NARRATIVE_SYSTEM_SPEC.md` §10.4 for complete JSON schema including `moraleChanges`, `statChanges`, `traitChanges`, `positionChanges`, `pitchChanges`, `injuries`, `teamChanges`, `cosmeticChanges`, and `specialEffects`.
+
+## Integration Points
+
+```javascript
+// Called after each game
+async function checkForNarrativeEvent(gameState) {
+  if (!shouldAttemptEventGeneration(gameState)) {
+    return null;
+  }
+
+  const context = buildEventGenerationContext(gameState);
+  const event = await claudeAPI.generateEvent(context);
+
+  if (event && validateGeneratedEvent(event, context)) {
+    await applyGeneratedEvent(event, gameState);
+    await generateBeatReporterCoverage(event);
+    return event;
+  }
+
+  return null;
+}
+```
+
+## Event Seeding
+
+The AI isn't generating from nothing - it receives "seeds" based on:
+- Strained relationships that might break
+- Low morale players who might act out
+- Compatible players without relationships
+- Mojo streaks that might crystallize into traits
+- Mentor/protege opportunities
+
+> **Full Specification**: See `NARRATIVE_SYSTEM_SPEC.md` §10 for complete prompt engineering, validation rules, and application logic.
 
 ---
 
@@ -6095,7 +6566,7 @@ Dynamic salary system based on ratings, performance, position, and traits.
 - Real-time updates when triggers occur
 - Position matters (C/SS more valuable than corner OF)
 - Traits affect salary (tiered impact)
-- Fan happiness tied to payroll expectations
+- Fan morale tied to payroll expectations
 - No salary cap, but soft cap affects fan pressure
 
 ## Complete Salary Formula
@@ -6123,22 +6594,24 @@ function calculateSalary(player, seasonStats, expectations, isNewTeam) {
 
 ## Base Salary from Ratings
 
-### Position Player Weights
+### Position Player Weights (3:3:2:1:1 Ratio)
 
-| Rating | Weight |
-|--------|--------|
-| Power | 40% |
-| Contact | 30% |
-| Speed | 10% |
-| Fielding | 10% |
-| Arm | 10% |
+> **Per SALARY_SYSTEM_SPEC.md**: Statistical analysis shows Power and Contact are equally dominant, Speed is secondary, Fielding/Arm are tertiary.
+
+| Rating | Weight | Ratio |
+|--------|--------|-------|
+| Power | 30% | 3/10 |
+| Contact | 30% | 3/10 |
+| Speed | 20% | 2/10 |
+| Fielding | 10% | 1/10 |
+| Arm | 10% | 1/10 |
 
 ```javascript
 function calculatePositionPlayerBaseSalary(player) {
   const weightedRating = (
-    player.ratings.power * 0.40 +
+    player.ratings.power * 0.30 +
     player.ratings.contact * 0.30 +
-    player.ratings.speed * 0.10 +
+    player.ratings.speed * 0.20 +
     player.ratings.fielding * 0.10 +
     player.ratings.arm * 0.10
   );
@@ -6147,13 +6620,15 @@ function calculatePositionPlayerBaseSalary(player) {
 }
 ```
 
-### Pitcher Weights
+### Pitcher Weights (1:1:1 Ratio - Equal)
 
-| Rating | Weight |
-|--------|--------|
-| Velocity | 35% |
-| Junk | 35% |
-| Accuracy | 30% |
+> **Per SALARY_SYSTEM_SPEC.md**: Statistical analysis showed equal weighting has highest correlation (0.9694) with MLB WAR.
+
+| Rating | Weight | Ratio |
+|--------|--------|-------|
+| Velocity | 33.3% | 1/3 |
+| Junk | 33.3% | 1/3 |
+| Accuracy | 33.3% | 1/3 |
 
 ## Position Multipliers
 
@@ -6258,7 +6733,7 @@ Each point of fame = +/-3% salary (capped +/-30%).
 
 ## Team Salary Expectation System
 
-Team expectations are now calculated using **Position-Based Salary Percentiles** - the same system used for EOS adjustments. This creates full alignment across player evaluation, team expectations, fan happiness, and manager performance.
+Team expectations are now calculated using **Position-Based Salary Percentiles** - the same system used for EOS adjustments. This creates full alignment across player evaluation, team expectations, fan morale, and manager performance.
 
 ### Core Concept
 
@@ -6343,12 +6818,12 @@ function calculateWeightedTeamExpectation(team, allPlayers) {
 }
 ```
 
-## Fan Happiness System
+## Fan Morale System
 
-Fan happiness is now calculated using **Team Salary Expectation** - fans expect wins proportional to positional investment.
+Fan morale is now calculated using **Team Salary Expectation** - fans expect wins proportional to positional investment.
 
 ```javascript
-function calculateFanHappiness(team, season, allPlayers) {
+function calculateFanMorale(team, season, allPlayers) {
   let happiness = 50;  // Neutral start
 
   // Use new position-based salary expectation
@@ -6410,7 +6885,7 @@ function calculateFanHappiness(team, season, allPlayers) {
 - Amplifier: 1.0x
 - Happiness Impact: +1 point → **Neutral fans**
 
-### Fan Happiness Thresholds
+### Fan Morale Thresholds
 
 | Happiness | Status | Effects |
 |-----------|--------|---------|
@@ -6459,7 +6934,7 @@ Phase 6: HALL OF FAME (Eligible retired players inducted)
     ↓
 Phase 7: FREE AGENCY (2 rounds, protect 1, dice roll, salary-based swaps)
     ↓
-Phase 8: EXPANSION/CONTRACTION (Add/remove teams based on Fan Happiness)
+Phase 8: EXPANSION/CONTRACTION (Add/remove teams based on Fan Morale)
     ↓
 Phase 9: DRAFT (Fill roster gaps, reverse expected WAR order)
     ↓
@@ -6748,7 +7223,7 @@ function autoSelectReturnPlayer(eligiblePlayers) {
 
 ### Contraction
 
-Teams with Fan Happiness < 30 face contraction risk (probability-based):
+Teams with Fan Morale < 30 face contraction risk (probability-based):
 
 | Happiness | Base Probability |
 |-----------|------------------|
@@ -7072,7 +7547,14 @@ const PlayerSchema = {
   nickname: null,                      // Auto-generated or user-set
   nicknameSource: null,                // 'auto' | 'user' | null
   nicknameEarnedSeason: null,          // When nickname was earned
+
+  // AUTO-NICKNAME TRIGGERS:
+  // - 'The Ace': ERA < 3.00 with 10+ starts
+  // - 'Mr. October': Playoff BA > .350
+  // - 'Captain': Team captain designation
+  // - 'The Wizard': Fielding rating ≥A- with 0 errors in 20+ games
   age: 28,                             // Current age
+  gender: 'M',                         // 'M' | 'F' - for pronoun generation
   bats: 'R',                           // R | L | S (switch)
   throws: 'R',                         // R | L
 
@@ -7138,6 +7620,60 @@ const PlayerSchema = {
     { personality: 'JOLLY', season: 1 },
     { personality: 'COMPETITIVE', season: 2, reason: 'WON_CHAMPIONSHIP' }
   ],
+
+  // ═══════════════════════════════════════════════════════════════
+  // PLAYER MORALE & MARKETABILITY
+  // ═══════════════════════════════════════════════════════════════
+  morale: 62,                          // 0-99 scale, displayed as superscript
+  moraleHistory: [                     // Track morale changes for debugging
+    {
+      season: 4,
+      game: 45,
+      event: 'CALLED_UP',
+      change: +15,
+      oldValue: 47,
+      newValue: 62,
+      timestamp: '2024-06-15T19:30:00Z'
+    }
+  ],
+  moraleFactors: {                     // Current contributors (recalculated)
+    personalityBaseline: 50,           // From personality type
+    teamSuccess: +5,                   // From team winning
+    personalPerformance: +8,           // WAR vs salary expectation (dynamic)
+    jerseySales: +3,                   // Popularity impact
+    playingTime: 0,                    // Starter vs bench
+    awards: +5,                        // Recent awards
+    recentTrade: 0,                    // Trade impact (fades over time)
+    farmMovement: 0,                   // Call-up/send-down
+    mojoStreak: 0,                     // 3+ games Locked In or Rattled
+    relationships: +6                  // Net effect from active relationships
+  },
+  jerseySalesIndex: 72,                // Calculated popularity metric (0-100)
+
+  // ═══════════════════════════════════════════════════════════════
+  // RELATIONSHIPS
+  // ═══════════════════════════════════════════════════════════════
+  relationships: [
+    {
+      relationshipId: 'rel_001',       // Reference to full relationship object
+      type: 'BEST_FRIENDS',
+      partnerPlayerId: 'player_456',
+      role: 'EQUAL',                   // 'MENTOR' | 'PROTEGE' | 'BULLY' | 'VICTIM' | 'CRUSHER' | 'TARGET' | 'EQUAL'
+      isPublic: true,                  // Has been leaked by beat reporter
+      status: 'ACTIVE'                 // 'ACTIVE' | 'ENDED' | 'STRAINED'
+    }
+  ],
+  formerRelationships: [               // For revenge arc tracking
+    {
+      relationshipId: 'rel_002',
+      type: 'ROMANTIC',
+      partnerPlayerId: 'player_789',
+      role: 'EQUAL',
+      endReason: 'TRADE',
+      endedSeason: 3,
+      formerTeamId: 'team_giants'
+    }
+  ]
 
   // ═══════════════════════════════════════════════════════════════
   // SALARY & CONTRACT
@@ -7399,10 +7935,10 @@ const TeamSchema = {
   },
 
   // ═══════════════════════════════════════════════════════════════
-  // FAN HAPPINESS
+  // FAN MORALE
   // ═══════════════════════════════════════════════════════════════
-  fanHappiness: 75,                    // 0-100 scale
-  fanHappinessHistory: [
+  fanMorale: 75,                    // 0-100 scale
+  fanMoraleHistory: [
     { gameNumber: 10, happiness: 68, event: 'LOST_STREAK' },
     { gameNumber: 25, happiness: 75, event: 'ALL_STAR_SELECTION' }
   ],
@@ -7649,7 +8185,7 @@ function areGeographicRivals(team1Id, team2Id) {
 
 ## Undo Feature
 
-Always available during play entry. Stack maintains last 10 actions.
+Always available during play entry. Stack maintains last 20 operations.
 
 ## Reset Season Feature
 
@@ -7743,29 +8279,31 @@ function calculatePitcherGrade(ratings) {
   if (avgRating >= 55) return 'B';
   if (avgRating >= 49) return 'B-';
   if (avgRating >= 43) return 'C+';
-  if (avgRating >= 25) return 'C';
+  if (avgRating >= 34) return 'C';
   if (avgRating >= 32) return 'C-';
-  if (avgRating >= 34) return 'D+';
+  if (avgRating >= 25) return 'D+';
   return 'D';
 }
 ```
 
 ### Pitcher Grade Thresholds Summary
 
-| Grade | Score Range | Mean |
-|-------|-------------|------|
-| S | 87-93 | 89 |
-| A+ | 79-87 | 84 |
-| A | 66-81 | 76 |
-| A- | 65-79 | 71 |
-| B+ | 57-72 | 67 |
-| B | 55-66 | 60 |
-| B- | 49-61 | 54 |
-| C+ | 43-53 | 49 |
-| C | 25-48 | 42 |
-| C- | 32-40 | 38 |
-| D+ | 34-37 | 35 |
-| D | <25 | 23 |
+| Grade | Threshold | Score Range | Mean |
+|-------|-----------|-------------|------|
+| S | >= 87 | 87-100 | 89 |
+| A+ | >= 79 | 79-86 | 82 |
+| A | >= 66 | 66-78 | 72 |
+| A- | >= 65 | 65 | 65 |
+| B+ | >= 57 | 57-64 | 60 |
+| B | >= 55 | 55-56 | 55 |
+| B- | >= 49 | 49-54 | 51 |
+| C+ | >= 43 | 43-48 | 45 |
+| C | >= 34 | 34-42 | 38 |
+| C- | >= 32 | 32-33 | 32 |
+| D+ | >= 25 | 25-31 | 28 |
+| D | < 25 | 0-24 | 12 |
+
+*Note: Thresholds must be evaluated in descending order (S first, D last) for correct grade assignment.*
 
 ## gradeWeight Column (from SMB4 data)
 
@@ -7869,21 +8407,21 @@ function generateFictionalPlayer(targetGrade, position, namesDatabase) {
 
 ---
 
-# 22. Fan Happiness System
+# 22. Fan Morale System
 
 ## Overview
 
-Fan happiness is a 0-100 metric that updates dynamically throughout the season based on performance, milestones, awards, and roster moves. It affects Free Agency attraction and determines contraction risk.
+Fan morale is a 0-100 metric that updates dynamically throughout the season based on performance, milestones, awards, and roster moves. It affects Free Agency attraction and determines contraction risk.
 
-## Fan Happiness Dashboard UI
+## Fan Morale Dashboard UI
 
-Accessible anytime from Team Menu → Fan Happiness:
+Accessible anytime from Team Menu → Fan Morale:
 
 ### Main Dashboard
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│  💚 FAN HAPPINESS - SAN FRANCISCO GIANTS                                    │
+│  💚 FAN MORALE - SAN FRANCISCO GIANTS                                    │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                                                                             │
 │  CURRENT HAPPINESS: 78 / 100                                                │
@@ -8003,7 +8541,7 @@ Accessible anytime from Team Menu → Fan Happiness:
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│  📊 LEAGUE FAN HAPPINESS RANKINGS                                           │
+│  📊 LEAGUE FAN MORALE RANKINGS                                           │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                                                                             │
 │  RANK  TEAM              HAPPINESS   STATUS         TREND                   │
@@ -8344,7 +8882,7 @@ function applyPayrollAmplifierToAward(baseEffect, payrollPercentile, isPositive)
 ## Applying Milestone Effects
 
 ```javascript
-function applyMilestoneToFanHappiness(team, milestone, payrollPercentile) {
+function applyMilestoneToFanMorale(team, milestone, payrollPercentile) {
   let effect = 0;
 
   for (const category of Object.values(MILESTONE_HAPPINESS_EFFECTS)) {
@@ -8371,10 +8909,10 @@ function applyMilestoneToFanHappiness(team, milestone, payrollPercentile) {
 }
 ```
 
-## Fan Happiness Display
+## Fan Morale Display
 
 ```javascript
-function getFanHappinessDisplay(happiness, recentMilestones) {
+function getFanMoraleDisplay(happiness, recentMilestones) {
   const emoji = happiness >= 80 ? '😍' :
                 happiness >= 60 ? '😊' :
                 happiness >= 40 ? '😐' :
@@ -8503,9 +9041,676 @@ function calculateGreatestScore(player) {
 
 ### 3. League Records
 
+#### Standard Records
 - Career records (HR, Hits, RBI, Wins, K, Saves)
 - Single-season records
 - Single-game records
+
+#### Oddity Records
+
+Fun "against the odds" achievements that add character to the franchise:
+
+| Record | Description | Threshold | Tracked By |
+|--------|-------------|-----------|------------|
+| **Shortest Homer** | Shortest HR distance hit | Any HR | HR distance (stadium analytics) |
+| **Slowest Triple** | Triple by player with lowest Speed rating | Any 3B | Speed rating at time of play |
+| **Weakest Homer** | HR by player with lowest Power rating | Min 100 PA | Power rating at time of play |
+| **Flukiest Homer** | HR by player with lowest Contact rating | Min 100 PA | Contact rating at time of play |
+| **Marathon Game** | Most pitches thrown in a single game (team total) | Any game | Pitch count tracking |
+| **Efficient CG** | Fewest pitches in a complete game by a starter | CG only | Pitch count + CG flag |
+| **Speedster Strikeout King** | Most Ks in a season by a speedster | Speed ≥ 90 | Season K total + Speed rating |
+| **Power Outage** | Most AB without a HR by a power hitter | Power ≥ 70 | AB counter reset on HR |
+| **Contact Hitter Homer Spree** | Most HRs in a season by lowest Power player | Min 20 HR (scaled) | Season HR + Power rating |
+| **Meatball Maestro** | Pitcher win despite most hits allowed | Win + most H | Hits allowed in winning decision |
+| **Wild Thing** | Pitcher win despite most walks in a game | Win + most BB | Walks issued in winning decision |
+| **Untouchable Loss** | Fewest hits allowed while getting a loss | SP Loss | Hits allowed in losing decision |
+| **Trevor Hoffman Save** | Most saves while giving up an earned run | Save + ER ≥ 1 | Saves with earned runs |
+| **Slow-poke Steal** | Stolen base by player with lowest Speed rating | Any SB | Speed rating at time of steal |
+| **Error Machine Win** | Team win despite most errors in a game | Win + errors | Team errors in win |
+| **Comeback from the Dead** | Largest deficit overcome to win | Any win | Max deficit during game |
+| **Blown Lead of Shame** | Largest lead blown in a loss | Any loss | Max lead during game |
+| **Sho-Hey!** | Highest OPS with lowest fielding WAR | Season-end | OPS ÷ fWAR ratio |
+| **Flailing Fielder** | Most missed leaping catches (diving/jumping) in a season | Season-end | Failed spectacular attempt counter |
+
+**Tracking Logic (In-Game):**
+
+```typescript
+// ========================================
+// ODDITY RECORD TRACKER
+// ========================================
+
+interface OddityRecordCandidate {
+  recordType: OddityRecordType;
+  playerId: string;
+  value: number;
+  ratingSnapshot: PlayerRatings;  // Ratings at time of achievement
+  gameId: string;
+  season: number;
+  context: string;  // Narrative-friendly description
+}
+
+interface OddityRecords {
+  shortestHomer: OddityRecordCandidate | null;
+  slowestTriple: OddityRecordCandidate | null;
+  weakestHomer: OddityRecordCandidate | null;
+  flukiestHomer: OddityRecordCandidate | null;
+  marathonGame: OddityRecordCandidate | null;
+  efficientCG: OddityRecordCandidate | null;
+  speedsterStrikeoutKing: OddityRecordCandidate | null;
+  powerOutage: OddityRecordCandidate | null;
+  contactHitterHomerSpree: OddityRecordCandidate | null;
+  meatballMaestro: OddityRecordCandidate | null;
+  wildThing: OddityRecordCandidate | null;
+  untouchableLoss: OddityRecordCandidate | null;
+  trevorHoffmanSave: OddityRecordCandidate | null;
+  slowPokeSteal: OddityRecordCandidate | null;
+  errorMachineWin: OddityRecordCandidate | null;
+  comebackFromDead: OddityRecordCandidate | null;
+  blownLeadOfShame: OddityRecordCandidate | null;
+  shoHey: OddityRecordCandidate | null;
+  flailingFielder: OddityRecordCandidate | null;
+}
+
+// ========================================
+// REAL-TIME TRACKERS (during game)
+// ========================================
+
+interface GameOddityState {
+  // Deficit/Lead tracking
+  maxDeficit: { team: TeamId; deficit: number; inning: number };
+  maxLead: { team: TeamId; lead: number; inning: number };
+
+  // Pitch tracking
+  totalPitches: { home: number; away: number };
+
+  // Error tracking
+  errors: { home: number; away: number };
+
+  // Pitcher tracking (per pitcher)
+  pitcherStats: Map<string, {
+    hitsAllowed: number;
+    walksIssued: number;
+    earnedRuns: number;
+    inningsPitched: number;
+    isStarter: boolean;
+  }>;
+}
+
+// Called on every play
+function updateGameOddityState(
+  state: GameOddityState,
+  play: PlayResult,
+  gameState: GameState
+): void {
+  // Update score differential tracking
+  const scoreDiff = gameState.homeScore - gameState.awayScore;
+
+  if (scoreDiff < 0 && Math.abs(scoreDiff) > state.maxDeficit.deficit) {
+    state.maxDeficit = {
+      team: 'home',
+      deficit: Math.abs(scoreDiff),
+      inning: gameState.inning
+    };
+  }
+  if (scoreDiff > 0 && scoreDiff > state.maxLead.lead) {
+    state.maxLead = {
+      team: 'home',
+      lead: scoreDiff,
+      inning: gameState.inning
+    };
+  }
+  // Mirror for away team...
+
+  // Track pitcher stats
+  if (play.pitcherId) {
+    const stats = state.pitcherStats.get(play.pitcherId) || createEmptyPitcherStats();
+    if (play.result === 'HIT') stats.hitsAllowed++;
+    if (play.result === 'WALK') stats.walksIssued++;
+    stats.earnedRuns += play.earnedRuns || 0;
+    state.pitcherStats.set(play.pitcherId, stats);
+  }
+
+  // Track errors
+  if (play.error) {
+    state.errors[play.fieldingTeam]++;
+  }
+}
+
+// ========================================
+// PLAY-BY-PLAY ODDITY CHECKS
+// ========================================
+
+function checkPlayOddities(
+  play: PlayResult,
+  batter: Player,
+  pitcher: Player,
+  records: OddityRecords,
+  seasonStats: SeasonStats
+): OddityRecordCandidate[] {
+  const candidates: OddityRecordCandidate[] = [];
+
+  // SHORTEST HOMER
+  if (play.result === 'HOME_RUN' && play.distance) {
+    if (!records.shortestHomer || play.distance < records.shortestHomer.value) {
+      candidates.push({
+        recordType: 'SHORTEST_HOMER',
+        playerId: batter.id,
+        value: play.distance,
+        ratingSnapshot: snapshotRatings(batter),
+        context: `${play.distance} ft shot barely cleared the wall`
+      });
+    }
+  }
+
+  // SLOWEST TRIPLE
+  if (play.result === 'TRIPLE') {
+    if (!records.slowestTriple || batter.ratings.speed < records.slowestTriple.value) {
+      candidates.push({
+        recordType: 'SLOWEST_TRIPLE',
+        playerId: batter.id,
+        value: batter.ratings.speed,
+        ratingSnapshot: snapshotRatings(batter),
+        context: `${batter.ratings.speed} Speed somehow legged out a triple`
+      });
+    }
+  }
+
+  // WEAKEST HOMER (min 100 PA)
+  if (play.result === 'HOME_RUN' && seasonStats.getPA(batter.id) >= 100) {
+    if (!records.weakestHomer || batter.ratings.power < records.weakestHomer.value) {
+      candidates.push({
+        recordType: 'WEAKEST_HOMER',
+        playerId: batter.id,
+        value: batter.ratings.power,
+        ratingSnapshot: snapshotRatings(batter),
+        context: `${batter.ratings.power} Power defied physics`
+      });
+    }
+  }
+
+  // FLUKIEST HOMER (min 100 PA)
+  if (play.result === 'HOME_RUN' && seasonStats.getPA(batter.id) >= 100) {
+    if (!records.flukiestHomer || batter.ratings.contact < records.flukiestHomer.value) {
+      candidates.push({
+        recordType: 'FLUKIEST_HOMER',
+        playerId: batter.id,
+        value: batter.ratings.contact,
+        ratingSnapshot: snapshotRatings(batter),
+        context: `${batter.ratings.contact} Contact - even a blind squirrel...`
+      });
+    }
+  }
+
+  // SLOW-POKE STEAL
+  if (play.result === 'STOLEN_BASE') {
+    const runner = play.runner;
+    if (!records.slowPokeSteal || runner.ratings.speed < records.slowPokeSteal.value) {
+      candidates.push({
+        recordType: 'SLOW_POKE_STEAL',
+        playerId: runner.id,
+        value: runner.ratings.speed,
+        ratingSnapshot: snapshotRatings(runner),
+        context: `${runner.ratings.speed} Speed stole a bag - catcher must be napping`
+      });
+    }
+  }
+
+  // FLAILING FIELDER - Track missed diving/jumping catch attempts
+  // This is tracked per-play but accumulated per-season (see season tracker below)
+  if (play.fieldingAttempt?.type === 'DIVING' || play.fieldingAttempt?.type === 'JUMPING') {
+    if (play.fieldingAttempt.result === 'MISSED') {
+      // Increment fielder's missed spectacular attempt counter
+      updateFlailingFielderTracker(play.fielder.id);
+    }
+  }
+
+  return candidates;
+}
+
+// ========================================
+// END-OF-GAME ODDITY CHECKS
+// ========================================
+
+function checkEndOfGameOddities(
+  gameResult: GameResult,
+  oddityState: GameOddityState,
+  records: OddityRecords
+): OddityRecordCandidate[] {
+  const candidates: OddityRecordCandidate[] = [];
+  const winner = gameResult.winner;
+  const loser = gameResult.loser;
+
+  // MARATHON GAME
+  const totalPitches = oddityState.totalPitches.home + oddityState.totalPitches.away;
+  if (!records.marathonGame || totalPitches > records.marathonGame.value) {
+    candidates.push({
+      recordType: 'MARATHON_GAME',
+      playerId: null,  // Team record
+      value: totalPitches,
+      context: `${totalPitches} pitches - absolute slugfest`
+    });
+  }
+
+  // EFFICIENT CG
+  const starterPitches = gameResult.starterPitchCount;
+  if (gameResult.completeGame && starterPitches) {
+    if (!records.efficientCG || starterPitches < records.efficientCG.value) {
+      candidates.push({
+        recordType: 'EFFICIENT_CG',
+        playerId: gameResult.startingPitcherId,
+        value: starterPitches,
+        context: `${starterPitches} pitch complete game - Maddux'd it`
+      });
+    }
+  }
+
+  // MEATBALL MAESTRO - Win with most hits allowed
+  const winningPitchers = gameResult.pitchersWithDecision.filter(p => p.decision === 'W');
+  for (const wp of winningPitchers) {
+    const stats = oddityState.pitcherStats.get(wp.id);
+    if (stats && stats.hitsAllowed > 0) {
+      if (!records.meatballMaestro || stats.hitsAllowed > records.meatballMaestro.value) {
+        candidates.push({
+          recordType: 'MEATBALL_MAESTRO',
+          playerId: wp.id,
+          value: stats.hitsAllowed,
+          ratingSnapshot: snapshotRatings(wp),
+          context: `Won while giving up ${stats.hitsAllowed} hits - bend don't break`
+        });
+      }
+    }
+  }
+
+  // WILD THING - Win with most walks issued
+  for (const wp of winningPitchers) {
+    const stats = oddityState.pitcherStats.get(wp.id);
+    if (stats && stats.walksIssued > 0) {
+      if (!records.wildThing || stats.walksIssued > records.wildThing.value) {
+        candidates.push({
+          recordType: 'WILD_THING',
+          playerId: wp.id,
+          value: stats.walksIssued,
+          ratingSnapshot: snapshotRatings(wp),
+          context: `Won despite ${stats.walksIssued} walks - lived dangerously`
+        });
+      }
+    }
+  }
+
+  // UNTOUCHABLE LOSS - Fewest hits allowed in a loss (SP only)
+  const losingStarter = gameResult.pitchersWithDecision.find(
+    p => p.decision === 'L' && p.isStarter
+  );
+  if (losingStarter) {
+    const stats = oddityState.pitcherStats.get(losingStarter.id);
+    if (stats) {
+      // Lower is "better" (worse luck) - initialize with Infinity
+      if (!records.untouchableLoss || stats.hitsAllowed < records.untouchableLoss.value) {
+        candidates.push({
+          recordType: 'UNTOUCHABLE_LOSS',
+          playerId: losingStarter.id,
+          value: stats.hitsAllowed,
+          ratingSnapshot: snapshotRatings(losingStarter),
+          context: `Lost despite allowing only ${stats.hitsAllowed} hits - no run support`
+        });
+      }
+    }
+  }
+
+  // TREVOR HOFFMAN SAVE - Save with earned run(s)
+  const saver = gameResult.pitchersWithDecision.find(p => p.decision === 'SV');
+  if (saver) {
+    const stats = oddityState.pitcherStats.get(saver.id);
+    if (stats && stats.earnedRuns >= 1) {
+      // Track career saves with ER - accumulates over season
+      const currentCount = records.trevorHoffmanSave?.value || 0;
+      candidates.push({
+        recordType: 'TREVOR_HOFFMAN_SAVE',
+        playerId: saver.id,
+        value: currentCount + 1,  // Increment counter
+        ratingSnapshot: snapshotRatings(saver),
+        context: `Save #${currentCount + 1} while allowing an earned run - gutsy`
+      });
+    }
+  }
+
+  // ERROR MACHINE WIN
+  const winnerErrors = oddityState.errors[winner];
+  if (winnerErrors > 0) {
+    if (!records.errorMachineWin || winnerErrors > records.errorMachineWin.value) {
+      candidates.push({
+        recordType: 'ERROR_MACHINE_WIN',
+        playerId: null,  // Team record
+        value: winnerErrors,
+        context: `Won despite ${winnerErrors} errors - offense covered for defense`
+      });
+    }
+  }
+
+  // COMEBACK FROM THE DEAD
+  const winnerDeficit = oddityState.maxDeficit[winner];
+  if (winnerDeficit > 0) {
+    if (!records.comebackFromDead || winnerDeficit > records.comebackFromDead.value) {
+      candidates.push({
+        recordType: 'COMEBACK_FROM_DEAD',
+        playerId: null,  // Team record
+        value: winnerDeficit,
+        context: `Came back from ${winnerDeficit} runs down - never say die`
+      });
+    }
+  }
+
+  // BLOWN LEAD OF SHAME
+  const loserLead = oddityState.maxLead[loser];
+  if (loserLead > 0) {
+    if (!records.blownLeadOfShame || loserLead > records.blownLeadOfShame.value) {
+      candidates.push({
+        recordType: 'BLOWN_LEAD_OF_SHAME',
+        playerId: null,  // Team record
+        value: loserLead,
+        context: `Blew a ${loserLead} run lead - that's gonna sting`
+      });
+    }
+  }
+
+  return candidates;
+}
+
+// ========================================
+// SEASON-END ODDITY CHECKS
+// ========================================
+
+function checkSeasonEndOddities(
+  seasonStats: SeasonStats,
+  records: OddityRecords,
+  seasonLength: number
+): OddityRecordCandidate[] {
+  const candidates: OddityRecordCandidate[] = [];
+  const scaledHRThreshold = Math.round(20 * (seasonLength / 162));  // Scale for season length
+
+  // SPEEDSTER STRIKEOUT KING - Most Ks by 90+ Speed player
+  const speedsters = seasonStats.batters.filter(b => b.ratings.speed >= 90);
+  for (const player of speedsters) {
+    const ks = seasonStats.getStrikeouts(player.id);
+    if (!records.speedsterStrikeoutKing || ks > records.speedsterStrikeoutKing.value) {
+      candidates.push({
+        recordType: 'SPEEDSTER_STRIKEOUT_KING',
+        playerId: player.id,
+        value: ks,
+        ratingSnapshot: snapshotRatings(player),
+        context: `${ks} Ks with ${player.ratings.speed} Speed - all that speed, can't make contact`
+      });
+    }
+  }
+
+  // POWER OUTAGE - Most AB without HR by 70+ Power player
+  const powerHitters = seasonStats.batters.filter(b => b.ratings.power >= 70);
+  for (const player of powerHitters) {
+    const abWithoutHR = seasonStats.getABsSinceLastHR(player.id);
+    if (abWithoutHR > 0) {  // Only if they have AB but no HR
+      if (!records.powerOutage || abWithoutHR > records.powerOutage.value) {
+        candidates.push({
+          recordType: 'POWER_OUTAGE',
+          playerId: player.id,
+          value: abWithoutHR,
+          ratingSnapshot: snapshotRatings(player),
+          context: `${abWithoutHR} AB without a HR despite ${player.ratings.power} Power - slump city`
+        });
+      }
+    }
+  }
+
+  // CONTACT HITTER HOMER SPREE - Most HRs by lowest Power player (min 20 HR scaled)
+  const qualifyingHitters = seasonStats.batters.filter(
+    b => seasonStats.getHomeRuns(b.id) >= scaledHRThreshold
+  );
+  if (qualifyingHitters.length > 0) {
+    // Sort by Power ascending to find lowest
+    qualifyingHitters.sort((a, b) => a.ratings.power - b.ratings.power);
+    const lowestPowerSlugger = qualifyingHitters[0];
+    const hrs = seasonStats.getHomeRuns(lowestPowerSlugger.id);
+
+    if (!records.contactHitterHomerSpree ||
+        lowestPowerSlugger.ratings.power < records.contactHitterHomerSpree.ratingSnapshot.power) {
+      candidates.push({
+        recordType: 'CONTACT_HITTER_HOMER_SPREE',
+        playerId: lowestPowerSlugger.id,
+        value: hrs,
+        ratingSnapshot: snapshotRatings(lowestPowerSlugger),
+        context: `${hrs} HRs with only ${lowestPowerSlugger.ratings.power} Power - launch angle wizard`
+      });
+    }
+  }
+
+  // SHO-HEY! - Highest OPS with lowest fWAR
+  // Find players with positive OPS and negative/low fWAR
+  const shoHeyCandidates = seasonStats.batters.filter(b => {
+    const ops = seasonStats.getOPS(b.id);
+    const fwar = seasonStats.getFWAR(b.id);
+    return ops > 0.700 && fwar < 0;  // Good bat, bad glove
+  });
+
+  if (shoHeyCandidates.length > 0) {
+    // Calculate OPS / |fWAR| ratio (higher OPS with more negative fWAR = worse ratio = more oddity)
+    shoHeyCandidates.sort((a, b) => {
+      const ratioA = seasonStats.getOPS(a.id) / Math.abs(seasonStats.getFWAR(a.id) || 0.01);
+      const ratioB = seasonStats.getOPS(b.id) / Math.abs(seasonStats.getFWAR(b.id) || 0.01);
+      return ratioB - ratioA;  // Higher ratio = more extreme oddity
+    });
+
+    const shoHeyWinner = shoHeyCandidates[0];
+    const ops = seasonStats.getOPS(shoHeyWinner.id);
+    const fwar = seasonStats.getFWAR(shoHeyWinner.id);
+
+    candidates.push({
+      recordType: 'SHO_HEY',
+      playerId: shoHeyWinner.id,
+      value: ops,  // Store OPS as value
+      ratingSnapshot: snapshotRatings(shoHeyWinner),
+      context: `${ops.toFixed(3)} OPS but ${fwar.toFixed(1)} fWAR - DH in waiting`
+    });
+  }
+
+  // FLAILING FIELDER - Most missed diving/jumping catches in a season
+  const flailingCandidates = seasonStats.fielders.filter(f => {
+    const missedSpectaculars = seasonStats.getMissedSpectacularAttempts(f.id);
+    return missedSpectaculars >= 5;  // Min 5 missed attempts to qualify
+  });
+
+  if (flailingCandidates.length > 0) {
+    // Sort by most missed attempts
+    flailingCandidates.sort((a, b) => {
+      return seasonStats.getMissedSpectacularAttempts(b.id) -
+             seasonStats.getMissedSpectacularAttempts(a.id);
+    });
+
+    const flailingWinner = flailingCandidates[0];
+    const missedCount = seasonStats.getMissedSpectacularAttempts(flailingWinner.id);
+
+    if (!records.flailingFielder || missedCount > records.flailingFielder.value) {
+      candidates.push({
+        recordType: 'FLAILING_FIELDER',
+        playerId: flailingWinner.id,
+        value: missedCount,
+        ratingSnapshot: snapshotRatings(flailingWinner),
+        context: `${missedCount} missed diving/jumping catches - A for effort, F for execution`
+      });
+    }
+  }
+
+  return candidates;
+}
+
+// ========================================
+// POWER OUTAGE SPECIAL TRACKER
+// ========================================
+
+// Power Outage needs special tracking - AB counter resets on HR
+interface PowerOutageTracker {
+  playerAbWithoutHr: Map<string, number>;  // playerId -> AB since last HR
+}
+
+function updatePowerOutageTracker(
+  tracker: PowerOutageTracker,
+  play: PlayResult,
+  batter: Player
+): void {
+  if (batter.ratings.power < 70) return;  // Only track 70+ Power
+
+  const current = tracker.playerAbWithoutHr.get(batter.id) || 0;
+
+  if (play.result === 'HOME_RUN') {
+    // Reset counter on HR
+    tracker.playerAbWithoutHr.set(batter.id, 0);
+  } else if (play.isAtBat) {
+    // Increment on any AB that's not a HR
+    tracker.playerAbWithoutHr.set(batter.id, current + 1);
+  }
+}
+
+// ========================================
+// FLAILING FIELDER SPECIAL TRACKER
+// ========================================
+
+// Tracks missed diving/jumping catch attempts per player per season
+interface FlailingFielderTracker {
+  missedSpectacularAttempts: Map<string, number>;  // playerId -> missed diving/jumping catches
+}
+
+function updateFlailingFielderTracker(
+  tracker: FlailingFielderTracker,
+  play: PlayResult
+): void {
+  // Only track diving or jumping catch attempts that failed
+  if (play.fieldingAttempt?.type === 'DIVING' || play.fieldingAttempt?.type === 'JUMPING') {
+    if (play.fieldingAttempt.result === 'MISSED') {
+      const fielderId = play.fielder.id;
+      const current = tracker.missedSpectacularAttempts.get(fielderId) || 0;
+      tracker.missedSpectacularAttempts.set(fielderId, current + 1);
+    }
+  }
+}
+
+// Integration with fielding system - detect spectacular attempt types
+function categorizeFieldingAttempt(play: PlayResult): 'DIVING' | 'JUMPING' | 'NORMAL' {
+  // Diving: typically on line drives or ground balls requiring horizontal extension
+  // Jumping: typically on high line drives or balls at the wall
+  // This integrates with FIELDING_SYSTEM_SPEC.md play recording
+
+  if (play.fieldingAttempt?.isDiving) return 'DIVING';
+  if (play.fieldingAttempt?.isJumping) return 'JUMPING';
+
+  // Infer from ball trajectory and fielder position
+  if (play.ballTrajectory === 'LINE_DRIVE' && play.distanceFromFielder > 10) {
+    return play.ballHeight === 'HIGH' ? 'JUMPING' : 'DIVING';
+  }
+
+  return 'NORMAL';
+}
+```
+
+**Display:**
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  ODDITY RECORDS                                                 │
+├─────────────────────────────────────────────────────────────────┤
+│  🎯 Shortest Homer                                              │
+│     285 ft - Tiny McSmallhit (Beewolves) - S3 Game 42          │
+│     "Barely cleared the RF wall at Micro Park"                  │
+│                                                                 │
+│  🐢 Slowest Triple                                              │
+│     Speed: 12 - Sluggo Molasses (Moose) - S2 Game 89           │
+│     "Ball rattled around forever in deep CF"                    │
+│                                                                 │
+│  💪 Weakest Homer                                               │
+│     Power: 18 - Speedy NoMuscle (Jacks) - S4 Game 15           │
+│     "Wind was REALLY blowing out that day"                      │
+│                                                                 │
+│  🎲 Flukiest Homer                                              │
+│     Contact: 22 - Whiffy McSwinghard (Sirloins) - S1 Game 67   │
+│     "Even a blind squirrel finds a nut"                         │
+│                                                                 │
+│  ⏱️ Marathon Game                                               │
+│     387 pitches - Overdogs vs Freebooters - S3 Game 112        │
+│     "14-inning slugfest"                                        │
+│                                                                 │
+│  ⚡ Efficient CG                                                │
+│     62 pitches - Greg Maddux Jr (Nemesis) - S2 Game 44         │
+│     "Maddux'd the Maddux"                                       │
+│                                                                 │
+│  🏃 Speedster Strikeout King                                    │
+│     187 Ks - Zippy NoContact (Herbisaurs) - S3                 │
+│     Speed: 95 - "All that speed, can't make contact"            │
+│                                                                 │
+│  🔌 Power Outage                                                │
+│     312 AB without HR - Slugger McWhiff (Moonstars) - S2       │
+│     Power: 78 - "The drought continues..."                      │
+│                                                                 │
+│  🎱 Contact Hitter Homer Spree                                  │
+│     28 HRs - Slappy McGee (Buzzards) - S4                      │
+│     Power: 34 - "Launch angle wizard"                           │
+│                                                                 │
+│  🍖 Meatball Maestro                                            │
+│     W with 14 H allowed - Lucky McSurvivor (Jacks) - S2 G55    │
+│     "Bend don't break (somehow)"                                │
+│                                                                 │
+│  🌪️ Wild Thing                                                  │
+│     W with 9 BB - Ricky Vaughn (Sawteeth) - S1 Game 78         │
+│     "Lived dangerously and won"                                 │
+│                                                                 │
+│  😭 Untouchable Loss                                            │
+│     L with 1 H allowed - Unlucky Pete (Nemesis) - S3 Game 12   │
+│     "Zero run support - thanks offense"                         │
+│                                                                 │
+│  😅 Trevor Hoffman Save                                         │
+│     47 saves with ER - Shaky McCloser (Freebooters) - Career   │
+│     "Gets it done... eventually"                                │
+│                                                                 │
+│  🐌 Slow-poke Steal                                             │
+│     Speed: 8 - Sluggo Molasses (Moose) - S2 Game 102           │
+│     "Catcher must've been napping"                              │
+│                                                                 │
+│  🧈 Error Machine Win                                           │
+│     W with 6 errors - Blunders (Grapplers) - S4 Game 33        │
+│     "Offense covered for the defense"                           │
+│                                                                 │
+│  🧟 Comeback from the Dead                                      │
+│     Won after being down 9 - Overdogs - S2 Game 144            │
+│     "Never say die"                                             │
+│                                                                 │
+│  💀 Blown Lead of Shame                                         │
+│     Blew 11 run lead - Hot Corners - S3 Game 67                │
+│     "That's gonna leave a mark"                                 │
+│                                                                 │
+│  ⚾ Sho-Hey!                                                    │
+│     .892 OPS / -1.8 fWAR - Batto McButterfingers (Jacks) - S4  │
+│     "DH in waiting"                                             │
+│                                                                 │
+│  🤸 Flailing Fielder                                            │
+│     23 missed - Divey McFaceplant (Sawteeth) - S3              │
+│     "A for effort, F for execution"                             │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Qualifying Rules:**
+- **Weakest/Flukiest Homer**: Player must have 100+ PA that season (prevents one-AB wonders)
+- **Efficient CG**: Must be a true complete game (9+ innings, pitcher went the distance)
+- **Speedster Strikeout King**: Player must have 90+ Speed rating
+- **Power Outage**: Player must have 70+ Power rating; resets when HR is hit
+- **Contact Hitter Homer Spree**: Min 20 HR (scaled for season length); tracks lowest Power to reach threshold
+- **Untouchable Loss**: Starting pitcher only (reliever losses don't count)
+- **Trevor Hoffman Save**: Accumulates over career; tracks saves where ER ≥ 1
+- **Sho-Hey!**: Season-end calculation; requires OPS > .700 and fWAR < 0
+- **Flailing Fielder**: Min 5 missed diving/jumping attempts; season-end calculation
+- All records show the player's rating AT THE TIME of the achievement (not current rating)
+
+**Narrative Integration:**
+These records feed into the Narrative System (NARRATIVE_SYSTEM_SPEC.md) - beat reporters love writing about oddity achievements:
+- *"Against all odds, the 18-power Speedy NoMuscle just went deep!"*
+- *"Sluggo Molasses, the league's slowest player, just legged out a TRIPLE!"*
+- *"Zippy NoContact leads the league in strikeouts despite being the fastest player in the game. Maybe slow down and see the ball?"*
+- *"Batto McButterfingers is mashing at an .892 OPS but his glove is costing his team nearly 2 wins. DH candidate?"*
+- *"Divey McFaceplant leads the league in missed spectacular catches. You gotta admire the hustle, even if the results aren't there."*
 
 ### 4. Championship History
 
@@ -8562,7 +9767,10 @@ Players display **award emblems** throughout the app to acknowledge their achiev
 | Rookie of the Year | 🌟 ROY | Top rookie |
 | Reliever of the Year | 🔥 ROTY | Best reliever |
 | Gold Glove | 🧤 GG | Defensive excellence |
+| Platinum Glove | 🥇 PG | Best of Gold Glove winners |
+| Booger Glove | 🤢 BG | Worst fielder (shame award) |
 | Silver Slugger | ⚾ SS | Best hitter at position |
+| Bench Player of Year | 🪑 BP | Top reserve player |
 | Kara Kawaguchi | 💎 KK | Best value player |
 | Comeback Player | 🔄 CB | Bounce-back season |
 | Manager of the Year | 📋 MOY | Best manager |
@@ -9053,10 +10261,10 @@ function calculateEOSAdjustment(player) {
 }
 ```
 
-### Fan Happiness
+### Fan Morale
 
 ```javascript
-// Trade impact on fan happiness
+// Trade impact on fan morale
 const TRADE_HAPPINESS_EFFECTS = {
   // Acquiring team
   ACQUIRE_STAR: {
@@ -10364,8 +11572,8 @@ const TRANSACTION_TYPES = {
     description: 'Official rival changed',
     data: ['teamId', 'oldRival', 'newRival', 'score']
   },
-  FAN_HAPPINESS_CHANGE: {
-    description: 'Fan happiness updated',
+  FAN_MORALE_CHANGE: {
+    description: 'Fan morale updated',
     data: ['teamId', 'oldHappiness', 'newHappiness', 'event']
   },
   CONTRACTION_WARNING: {
@@ -10486,7 +11694,7 @@ function generateTransactionId() {
 |  │                                                                |
 |  ├─ NICKNAME_EARNED: Duke Snider earned "The Duke"                |
 |  │                                                                |
-|  └─ FAN_HAPPINESS_CHANGE: Dodgers 72 → 65 (-7)                    |
+|  └─ FAN_MORALE_CHANGE: Dodgers 72 → 65 (-7)                    |
 |                                                                   |
 |  Jun 14, 9:15 PM - Game 44                                        |
 |  ├─ GAME_COMPLETE: Giants 5, Cubs 3                               |
@@ -10539,6 +11747,1539 @@ function getPlayersAtPosition(position, allPlayers = null) {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// PRONOUN HELPERS (for beat reporter narrative generation)
+// ═══════════════════════════════════════════════════════════════
+
+/**
+ * Returns pronouns for a player based on their gender field
+ * Used by beat reporters and narrative generation
+ */
+function getPronouns(player) {
+  const isFemale = player.gender === 'F';
+  return {
+    subject: isFemale ? 'she' : 'he',           // "She hit a home run"
+    object: isFemale ? 'her' : 'him',           // "The pitch fooled her"
+    possessive: isFemale ? 'her' : 'his',       // "Her batting average"
+    reflexive: isFemale ? 'herself' : 'himself' // "She proved herself"
+  };
+}
+
+/**
+ * Template-friendly pronoun replacement
+ * Usage: fillPronouns("{{SUBJECT}} drove in {{POSSESSIVE}} 100th RBI", player)
+ * Result: "She drove in her 100th RBI" or "He drove in his 100th RBI"
+ */
+function fillPronouns(template, player) {
+  const p = getPronouns(player);
+  return template
+    .replace(/\{\{SUBJECT\}\}/gi, match => match === match.toUpperCase() ? capitalize(p.subject) : p.subject)
+    .replace(/\{\{OBJECT\}\}/gi, match => match === match.toUpperCase() ? capitalize(p.object) : p.object)
+    .replace(/\{\{POSSESSIVE\}\}/gi, match => match === match.toUpperCase() ? capitalize(p.possessive) : p.possessive)
+    .replace(/\{\{REFLEXIVE\}\}/gi, match => match === match.toUpperCase() ? capitalize(p.reflexive) : p.reflexive);
+}
+
+function capitalize(str) {
+  return str.charAt(0).toUpperCase() + str.slice(1);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// PLAYER HAPPINESS & MORALE
+// ═══════════════════════════════════════════════════════════════
+
+/**
+ * Calculate player happiness from multiple factors
+ * Updated at end of each game and end of season
+ */
+function calculatePlayerHappiness(player, team, season) {
+  let happiness = 50;  // Neutral baseline
+  const factors = {};
+
+  // Factor 1: Team Success (+/- 15 max)
+  const teamWinPct = team.wins / (team.wins + team.losses);
+  factors.teamSuccess = Math.round((teamWinPct - 0.5) * 30);  // -15 to +15
+  happiness += factors.teamSuccess;
+
+  // Factor 2: Personal Performance vs Expectation (+/- 15 max)
+  const expectedWAR = getExpectedWARFromSalary(player);
+  const actualWAR = player.seasonStats?.fullSeason?.war || 0;
+  const performanceRatio = actualWAR / Math.max(expectedWAR, 0.5);
+  factors.personalPerformance = Math.round(Math.max(-15, Math.min(15, (performanceRatio - 1) * 15)));
+  happiness += factors.personalPerformance;
+
+  // Factor 3: Jersey Sales / Popularity (+/- 15 max)
+  const jerseySales = player.jerseySalesIndex || 50;
+  factors.jerseySales = Math.round((jerseySales - 50) * 0.3);  // -15 to +15
+  happiness += factors.jerseySales;
+
+  // Factor 4: Playing Time (+/- 10 max)
+  const gamesStarted = player.seasonStats?.gamesStarted || 0;
+  const totalGames = season.currentGameNumber || 1;
+  const startPct = gamesStarted / totalGames;
+  factors.playingTime = startPct >= 0.8 ? 5 : startPct >= 0.5 ? 0 : startPct >= 0.2 ? -5 : -10;
+  happiness += factors.playingTime;
+
+  // Factor 5: Recent Awards (+5 per award this season)
+  const recentAwards = (player.awards || []).filter(a => a.season === season.seasonNumber).length;
+  factors.awards = Math.min(15, recentAwards * 5);
+  happiness += factors.awards;
+
+  // Factor 6: Recent Trade (-10 if traded this season, fades over time)
+  const wasTradedThisSeason = player.formerTeams?.some(
+    t => t.departedSeason === season.seasonNumber
+  );
+  factors.recentTrade = wasTradedThisSeason ? -10 : 0;
+  happiness += factors.recentTrade;
+
+  // Factor 7: Personality baseline modifier
+  const personalityMods = {
+    'JOLLY': +10,      // Always happy
+    'DROOPY': -10,     // Always down
+    'RELAXED': +5,     // Easy-going
+    'COMPETITIVE': 0,  // Neutral
+    'TIMID': -5,       // Anxious
+    'EGOTISTICAL': -5, // Never satisfied
+    'TOUGH': 0         // Neutral
+  };
+  factors.personality = personalityMods[player.personality] || 0;
+  happiness += factors.personality;
+
+  // Clamp to 0-100
+  happiness = Math.max(0, Math.min(100, Math.round(happiness)));
+
+  // Store factors for debugging/display
+  player.happinessFactors = factors;
+  player.happiness = happiness;
+
+  return happiness;
+}
+
+/**
+ * Get happiness tier for display
+ */
+function getHappinessTier(happiness) {
+  if (happiness >= 80) return { tier: 'ECSTATIC', emoji: '😄', color: 'green' };
+  if (happiness >= 60) return { tier: 'HAPPY', emoji: '🙂', color: 'lightgreen' };
+  if (happiness >= 40) return { tier: 'NEUTRAL', emoji: '😐', color: 'yellow' };
+  if (happiness >= 20) return { tier: 'UNHAPPY', emoji: '😕', color: 'orange' };
+  return { tier: 'MISERABLE', emoji: '😠', color: 'red' };
+}
+
+/**
+ * Get morale display format (superscript with color)
+ * Example: "Mike Trout⁷⁸" in green
+ */
+function getMoraleDisplay(player) {
+  const morale = player.morale ?? 50;
+  const superscript = toSuperscript(morale);
+  const color = getMoraleColor(morale);
+  return { superscript, color, value: morale };
+}
+
+function getMoraleColor(morale) {
+  if (morale >= 75) return 'green';     // Thriving
+  if (morale >= 50) return 'yellow';    // Content
+  if (morale >= 25) return 'orange';    // Unhappy
+  return 'red';                          // Miserable
+}
+
+function toSuperscript(num) {
+  const superscriptDigits = ['⁰','¹','²','³','⁴','⁵','⁶','⁷','⁸','⁹'];
+  return String(Math.min(99, Math.max(0, num)))
+    .split('')
+    .map(d => superscriptDigits[parseInt(d)])
+    .join('');
+}
+
+// ═══════════════════════════════════════════════════════════════
+// PERSONALITY-SPECIFIC REACTION ENGINE
+// ═══════════════════════════════════════════════════════════════
+
+/**
+ * Personality-specific morale reactions to events.
+ * Each personality responds differently to the same event.
+ */
+const PERSONALITY_REACTIONS = {
+  // Event: SENT_DOWN (demoted to farm system)
+  SENT_DOWN: {
+    COMPETITIVE: { morale: +5, special: null },           // Motivated to prove self
+    RELAXED: { morale: -10, special: null },
+    DROOPY: { morale: -20, special: 'RETIREMENT_CHECK_50' }, // 50% chance retires
+    JOLLY: { morale: -15, special: null },
+    TOUGH: { morale: -5, special: null },                 // Accepts it stoically
+    TIMID: { morale: -25, special: null },                // Crushed
+    EGOTISTICAL: { morale: -30, special: null }           // Humiliated
+  },
+
+  // Event: CALLED_UP (promoted from farm system)
+  CALLED_UP: {
+    COMPETITIVE: { morale: +10, special: null },
+    RELAXED: { morale: +15, special: null },
+    DROOPY: { morale: +20, special: null },               // Hope restored!
+    JOLLY: { morale: +15, special: null },
+    TOUGH: { morale: +10, special: null },
+    TIMID: { morale: +20, special: null },                // Validated!
+    EGOTISTICAL: { morale: +10, special: null }
+  },
+
+  // Event: BENCHED (healthy but not starting)
+  BENCHED: {
+    COMPETITIVE: { morale: +3, special: null },           // Chip on shoulder
+    RELAXED: { morale: -5, special: null },
+    DROOPY: { morale: -15, special: null },
+    JOLLY: { morale: -10, special: null },
+    TOUGH: { morale: 0, special: null },                  // Understands team needs
+    TIMID: { morale: -15, special: null },
+    EGOTISTICAL: { morale: -25, special: null }           // Outraged
+  },
+
+  // Event: TRADE_TO_CONTENDER
+  TRADE_TO_CONTENDER: {
+    COMPETITIVE: { morale: +15, special: null },          // Wants to win
+    RELAXED: { morale: +5, special: null },
+    DROOPY: { morale: +10, special: null },
+    JOLLY: { morale: +5, special: null },
+    TOUGH: { morale: +10, special: null },
+    TIMID: { morale: +15, special: null },                // Safe, winning team
+    EGOTISTICAL: { morale: +5, special: null }
+  },
+
+  // Event: TRADE_TO_REBUILDER
+  TRADE_TO_REBUILDER: {
+    COMPETITIVE: { morale: -20, special: null },          // Hates losing
+    RELAXED: { morale: -5, special: null },               // Whatever
+    DROOPY: { morale: -15, special: null },
+    JOLLY: { morale: -10, special: null },
+    TOUGH: { morale: -5, special: null },
+    TIMID: { morale: -10, special: null },
+    EGOTISTICAL: { morale: +10, special: null }           // Gets to be THE star!
+  },
+
+  // Event: TEAMMATE_OUTPERFORMS (higher-rated teammate excels)
+  TEAMMATE_OUTPERFORMS: {
+    COMPETITIVE: { morale: +5, special: null },           // Pushed to improve
+    RELAXED: { morale: 0, special: null },
+    DROOPY: { morale: -5, special: null },
+    JOLLY: { morale: +5, special: null },                 // Happy for them
+    TOUGH: { morale: 0, special: null },
+    TIMID: { morale: -10, special: null },                // Insecure
+    EGOTISTICAL: { morale: -15, special: 'JEALOUSY_TRIGGER' }  // May trigger jealousy
+  },
+
+  // Event: WON_AWARD
+  WON_AWARD: {
+    COMPETITIVE: { morale: +10, special: null },
+    RELAXED: { morale: +5, special: null },
+    DROOPY: { morale: +15, special: null },               // Finally recognized!
+    JOLLY: { morale: +8, special: null },
+    TOUGH: { morale: +5, special: null },
+    TIMID: { morale: +15, special: null },                // Validated
+    EGOTISTICAL: { morale: +5, special: null }            // Expected it
+  },
+
+  // Event: SNUBBED_FOR_AWARD (top 3, didn't win)
+  SNUBBED_FOR_AWARD: {
+    COMPETITIVE: { morale: -10, special: null },          // Robbed!
+    RELAXED: { morale: -2, special: null },
+    DROOPY: { morale: -10, special: null },
+    JOLLY: { morale: -5, special: null },
+    TOUGH: { morale: -3, special: null },
+    TIMID: { morale: -8, special: null },
+    EGOTISTICAL: { morale: -20, special: null }           // Outraged
+  },
+
+  // Event: MOJO_STREAK_RATTLED (3+ consecutive games ending Rattled)
+  MOJO_STREAK_RATTLED: {
+    COMPETITIVE: { morale: -5, special: null },
+    RELAXED: { morale: -3, special: null },
+    DROOPY: { morale: -10, special: null },
+    JOLLY: { morale: -5, special: null },
+    TOUGH: { morale: -2, special: null },                 // Shrugs it off
+    TIMID: { morale: -12, special: null },                // Spiraling
+    EGOTISTICAL: { morale: -8, special: null }
+  },
+
+  // Event: MOJO_STREAK_LOCKED_IN (3+ consecutive games ending Locked In)
+  MOJO_STREAK_LOCKED_IN: {
+    COMPETITIVE: { morale: +8, special: null },
+    RELAXED: { morale: +5, special: null },
+    DROOPY: { morale: +10, special: null },
+    JOLLY: { morale: +8, special: null },
+    TOUGH: { morale: +5, special: null },
+    TIMID: { morale: +10, special: null },
+    EGOTISTICAL: { morale: +6, special: null }
+  },
+
+  // Event: PLAYING_BEHIND_BETTER_PLAYER (bench player behind starter)
+  PLAYING_BEHIND_BETTER_PLAYER: {
+    COMPETITIVE: { morale: +3, special: null },           // Motivated to take job
+    RELAXED: { morale: -2, special: null },
+    DROOPY: { morale: -8, special: null },
+    JOLLY: { morale: -3, special: null },
+    TOUGH: { morale: 0, special: null },
+    TIMID: { morale: -10, special: null },
+    EGOTISTICAL: { morale: 0, special: null }             // "I'm the real star"
+  },
+
+  // Event: CONTRACT_EXTENSION
+  CONTRACT_EXTENSION: {
+    COMPETITIVE: { morale: +8, special: null },
+    RELAXED: { morale: +10, special: null },              // Loves stability
+    DROOPY: { morale: +12, special: null },
+    JOLLY: { morale: +10, special: null },
+    TOUGH: { morale: +8, special: null },
+    TIMID: { morale: +15, special: null },                // Security!
+    EGOTISTICAL: { morale: +5, special: null }
+  },
+
+  // Event: CONTRACT_REJECTED (lowballed or extension denied)
+  CONTRACT_REJECTED: {
+    COMPETITIVE: { morale: -10, special: null },
+    RELAXED: { morale: -8, special: null },
+    DROOPY: { morale: -15, special: null },
+    JOLLY: { morale: -10, special: null },
+    TOUGH: { morale: -8, special: null },
+    TIMID: { morale: -18, special: null },                // Devastated
+    EGOTISTICAL: { morale: -20, special: null }           // Insulted
+  }
+};
+
+/**
+ * Apply personality-specific morale change
+ * @returns {{ moraleChange: number, specialEvent: string|null }}
+ */
+function applyPersonalityReaction(player, eventType) {
+  const personality = player.personality || 'RELAXED';
+  const reaction = PERSONALITY_REACTIONS[eventType]?.[personality];
+
+  if (!reaction) {
+    console.warn(`No reaction defined for ${personality} to ${eventType}`);
+    return { moraleChange: 0, specialEvent: null };
+  }
+
+  // Apply volatility multiplier based on personality
+  const volatility = getPersonalityVolatility(personality);
+  const adjustedMorale = Math.round(reaction.morale * volatility);
+
+  // Update player morale
+  const oldMorale = player.morale ?? 50;
+  player.morale = Math.max(0, Math.min(99, oldMorale + adjustedMorale));
+
+  // Log the change
+  player.moraleHistory = player.moraleHistory || [];
+  player.moraleHistory.push({
+    season: getCurrentSeason(),
+    game: getCurrentGame(),
+    event: eventType,
+    change: adjustedMorale,
+    oldValue: oldMorale,
+    newValue: player.morale,
+    timestamp: new Date().toISOString()
+  });
+
+  // Handle special events
+  if (reaction.special) {
+    handleSpecialReaction(player, reaction.special);
+  }
+
+  return { moraleChange: adjustedMorale, specialEvent: reaction.special };
+}
+
+/**
+ * Personality volatility - how much morale swings
+ */
+function getPersonalityVolatility(personality) {
+  const volatilityMap = {
+    EGOTISTICAL: 1.3,    // High volatility - ego bruises easily
+    COMPETITIVE: 1.3,    // High volatility - cares deeply about outcomes
+    RELAXED: 1.0,        // Normal
+    TIMID: 1.0,          // Normal
+    JOLLY: 1.0,          // Normal
+    TOUGH: 0.7,          // Low volatility - stoic, hard to move
+    DROOPY: 0.7          // Low volatility - perpetually low, ceiling limited
+  };
+  return volatilityMap[personality] || 1.0;
+}
+
+/**
+ * Handle special reactions (retirement checks, jealousy triggers, etc.)
+ */
+function handleSpecialReaction(player, specialType) {
+  if (specialType === 'RETIREMENT_CHECK_50') {
+    if (Math.random() < 0.5) {
+      triggerSurpriseRetirement(player, 'DEMOTION_DESPAIR');
+    }
+  }
+
+  if (specialType === 'JEALOUSY_TRIGGER') {
+    // May create a JEALOUS relationship with the outperforming teammate
+    const target = findOutperformingTeammate(player);
+    if (target && Math.random() < 0.3) {
+      createRelationship(player.id, target.id, 'JEALOUS');
+    }
+  }
+}
+
+/**
+ * Dynamic performance impact - scales with contract size
+ * Big contracts = big swings (both directions)
+ */
+function getDynamicPerformanceImpact(player) {
+  const expectedWAR = getExpectedWARFromSalary(player);
+  const actualWAR = player.seasonStats?.fullSeason?.war || 0;
+  const delta = actualWAR - expectedWAR;
+  const salary = player.salary || 1;
+
+  // Scale impact by contract size - bigger contracts = bigger swings
+  // 0.5x at $1M, 1.0x at $10M, 2.0x at $30M+
+  const contractMultiplier = Math.min(2.0, 0.5 + (salary / 20));
+
+  // Base impact: +/- 3 per 0.5 WAR delta, scaled by contract
+  const rawImpact = (delta / 0.5) * 3;
+  return Math.round(Math.max(-20, Math.min(20, rawImpact * contractMultiplier)));
+}
+
+/**
+ * Morale decay toward personality baseline
+ * Called once per week of game time
+ */
+function decayMoraleTowardBaseline(player) {
+  const baseline = getPersonalityBaseline(player.personality);
+  const current = player.morale ?? 50;
+
+  if (current === baseline) return;
+
+  // Move 1 point toward baseline
+  const direction = current > baseline ? -1 : 1;
+  player.morale = current + direction;
+}
+
+function getPersonalityBaseline(personality) {
+  const baselines = {
+    JOLLY: 60,        // Naturally happy (50 + 10)
+    RELAXED: 55,      // Easy-going (50 + 5)
+    COMPETITIVE: 50,  // Neutral
+    TOUGH: 50,        // Neutral
+    TIMID: 45,        // Anxious (50 - 5)
+    EGOTISTICAL: 45,  // Never satisfied (50 - 5)
+    DROOPY: 40        // Always down (50 - 10)
+  };
+  return baselines[personality] || 50;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// PLAYER RELATIONSHIP SYSTEM
+// ═══════════════════════════════════════════════════════════════
+
+/**
+ * Relationship types and their morale effects
+ */
+const RelationshipType = {
+  // Romantic relationships (can be same-team, cross-team, or with non-player)
+  DATING: 'DATING',               // Dating (any gender combo, mostly M/F)
+  MARRIED: 'MARRIED',             // Married (evolved from DATING or starts married to non-player)
+  DIVORCED: 'DIVORCED',           // Formerly married (persists for narrative)
+
+  // Other relationships
+  BEST_FRIENDS: 'BEST_FRIENDS',   // Tight bond
+  MENTOR_PROTEGE: 'MENTOR_PROTEGE', // Veteran guiding young player
+  RIVALS: 'RIVALS',               // Competitive tension
+  BULLY_VICTIM: 'BULLY_VICTIM',   // Toxic dynamic
+  JEALOUS: 'JEALOUS',             // One-sided envy
+  CRUSH: 'CRUSH'                  // Unrequited
+};
+
+/**
+ * Gender pairing probabilities for romantic relationships
+ * Same-sex relationships are less common but fully supported
+ */
+const ROMANTIC_GENDER_DISTRIBUTION = {
+  OPPOSITE_SEX: 0.90,             // 90% M/F pairings
+  SAME_SEX: 0.10                  // 10% M/M or F/F pairings
+};
+
+/**
+ * Non-player spouse (for players who marry outside the league)
+ */
+interface NonPlayerSpouse {
+  id: string;
+  name: string;
+  gender: 'M' | 'F';
+  occupation: string;             // "Model", "Teacher", "Lawyer", etc.
+  // No stats - just narrative flavor
+}
+
+/**
+ * Relationship schema
+ */
+const RelationshipSchema = {
+  id: 'rel_001',
+  type: 'DATING',                 // RelationshipType
+  playerA: 'player_123',          // Primary player
+  playerB: 'player_456',          // Secondary player (or null if non-player spouse)
+  nonPlayerPartner: null,         // NonPlayerSpouse object if playerB is null
+  strength: 7,                    // 1-10 intensity
+  startedSeason: 2,
+  startedGame: 45,
+  isPublic: false,                // Has beat reporter leaked this?
+  isReal: true,                   // False = rumor only (5-10% of leaks)
+  status: 'ACTIVE',               // 'ACTIVE' | 'ENDED' | 'STRAINED'
+  endReason: null,                // 'BREAKUP' | 'TRADE' | 'RETIREMENT' | 'FIGHT' | 'DIVORCE'
+  endedSeason: null,
+  formerTeammates: false,         // True if relationship formed on same team, now separated
+
+  // Cross-team tracking
+  isCrossTeam: false,             // True if players on different teams
+  playerATeam: 'team_001',        // For cross-team matchup detection
+  playerBTeam: 'team_001',        // For cross-team matchup detection
+
+  // Marriage tracking
+  marriageDate: null,             // Game number when married (null if dating)
+  priorLastName: null,            // Original last name before marriage
+  nameChanged: false,             // True if player took spouse's name
+
+  // Children (for married couples)
+  children: []                    // Array of Child objects
+};
+
+/**
+ * Child schema (for married players)
+ * Children provide home game LI boosts - family in the stands!
+ */
+interface Child {
+  name: string;
+  birthSeason: number;
+  birthGame: number;
+  gender: 'M' | 'F';
+}
+
+/**
+ * Home game family LI modifier
+ * Players with non-player spouses or children get boosted at home
+ */
+const HOME_FAMILY_LI_CONFIG = {
+  NON_PLAYER_SPOUSE: 1.1,         // 1.1× LI at home if married to non-player
+  PER_CHILD: 0.1,                 // +0.1× per child (additive)
+  MAX_CHILD_BONUS: 0.5            // Cap at +0.5 (5 kids max effect)
+};
+
+function getFamilyHomeLIModifier(player, isHomeGame) {
+  if (!isHomeGame) return 1.0;
+
+  let modifier = 1.0;
+
+  // Check for non-player spouse
+  const marriage = getActiveRelationship(player, 'MARRIED');
+  if (marriage && marriage.nonPlayerPartner) {
+    modifier = HOME_FAMILY_LI_CONFIG.NON_PLAYER_SPOUSE;  // 1.1×
+
+    // Add child bonus
+    const childCount = marriage.children?.length || 0;
+    if (childCount > 0) {
+      const childBonus = Math.min(
+        childCount * HOME_FAMILY_LI_CONFIG.PER_CHILD,
+        HOME_FAMILY_LI_CONFIG.MAX_CHILD_BONUS
+      );
+      modifier += childBonus;  // e.g., 1.1 + 0.3 = 1.4× for 3 kids
+    }
+  }
+
+  return modifier;
+}
+
+/**
+ * Relationship limits per player per season
+ */
+const RELATIONSHIP_LIMITS = {
+  DATING: 1,                      // Can only date one person
+  MARRIED: 1,                     // Can only be married to one person
+  DIVORCED: 3,                    // Track up to 3 ex-spouses for narrative
+  BEST_FRIENDS: 2,
+  MENTOR_PROTEGE: 1,              // Can be mentor OR protege, not both
+  RIVALS: 2,
+  BULLY_VICTIM: 1,                // Can be bully OR victim
+  JEALOUS: 2,
+  CRUSH: 1
+};
+
+/**
+ * Relationship formation requirements
+ */
+/**
+ * Scale game requirements based on season length
+ * All game requirements should use these scaled values
+ */
+function scaleForSeasonLength(baseGames, context) {
+  // Base values assume 162-game season
+  // Scale proportionally for shorter seasons
+  const scaleFactor = context.season.totalGames / 162;
+  return Math.max(1, Math.round(baseGames * scaleFactor));
+}
+
+// Pre-calculated scaled values (call scaleForSeasonLength at season start)
+const SCALED_REQUIREMENTS = {
+  DATING_SAME_TEAM: 12,           // Base: 20 games together → ~12 for short season
+  DATING_CROSS_TEAM: 1,           // Love at first sight! Just need to face each other once
+  BEST_FRIENDS: 25,               // Base: 40 games together → ~25 for short season
+  MARRIAGE_MIN_DATING: 25,        // Base: 40 games dating → ~25 for short season
+  MENTOR_PROTEGE: 15              // Base: 25 games together → ~15 for short season
+};
+
+const RELATIONSHIP_REQUIREMENTS = {
+  // ═══════════════════════════════════════════════════════════════
+  // DATING - Can be same-team, cross-team, or with non-player
+  // ═══════════════════════════════════════════════════════════════
+  DATING: {
+    requirements: [
+      // Gender check: 90% opposite-sex, 10% same-sex
+      { type: 'gender_compatible', check: (a, b) => {
+        if (a.gender !== b.gender) return true;  // Always allow opposite-sex
+        return Math.random() < ROMANTIC_GENDER_DISTRIBUTION.SAME_SEX;  // 10% same-sex
+      }},
+      { type: 'age_within_10_years', check: (a, b) => Math.abs(a.age - b.age) <= 10 },
+      { type: 'both_single', check: (a, b) =>
+        !hasActiveRelationship(a, 'DATING') && !hasActiveRelationship(a, 'MARRIED') &&
+        !hasActiveRelationship(b, 'DATING') && !hasActiveRelationship(b, 'MARRIED')
+      },
+      // For same-team: need time together (scaled for season length)
+      // For cross-team: LOVE AT FIRST SIGHT - just need to face each other once!
+      { type: 'have_interacted', check: (a, b) => {
+        if (a.teamId === b.teamId) {
+          return getGamesTogether(a, b) >= SCALED_REQUIREMENTS.DATING_SAME_TEAM;
+        }
+        return getGamesAgainst(a, b) >= SCALED_REQUIREMENTS.DATING_CROSS_TEAM;  // 1 game = love at first sight!
+      }}
+    ],
+    baseChance: 0.02,  // 2% per season per eligible pair
+    modifiers: {
+      sameTeam: { check: (a, b) => a.teamId === b.teamId, mult: 3.0 },  // Same-team much more likely
+      bothHighFame: { check: (a, b) => a.fame >= 4 && b.fame >= 4, mult: 1.5 },
+      similarPersonality: { check: (a, b) => a.personality === b.personality, mult: 1.3 },
+      bothYoung: { check: (a, b) => a.age <= 26 && b.age <= 26, mult: 1.2 },
+      sameSex: { check: (a, b) => a.gender === b.gender, mult: 0.3 },  // Less common but possible
+      loveAtFirstSight: { check: (a, b) => a.teamId !== b.teamId && getGamesAgainst(a, b) === 1, mult: 0.5 }  // Rare but memorable
+    }
+  },
+
+  // ═══════════════════════════════════════════════════════════════
+  // MARRIED - Evolves from DATING (or can start married to non-player)
+  // ═══════════════════════════════════════════════════════════════
+  MARRIED: {
+    requirements: [
+      // Must be currently dating
+      { type: 'currently_dating', check: (a, b) => {
+        const datingRel = getRelationshipBetween(a, b, 'DATING');
+        return datingRel && datingRel.status === 'ACTIVE';
+      }},
+      // Must have dated long enough (scaled for season length)
+      { type: 'dated_long_enough', check: (a, b) => {
+        const datingRel = getRelationshipBetween(a, b, 'DATING');
+        if (!datingRel) return false;
+        const gamesSinceDating = getCurrentGame() - datingRel.startedGame;
+        return gamesSinceDating >= SCALED_REQUIREMENTS.MARRIAGE_MIN_DATING;
+      }},
+      { type: 'relationship_strong', check: (a, b) => {
+        const datingRel = getRelationshipBetween(a, b, 'DATING');
+        return datingRel && datingRel.strength >= 7;  // Strong relationship
+      }}
+    ],
+    baseChance: 0.15,  // 15% per season for eligible dating couples
+    modifiers: {
+      bothOlder: { check: (a, b) => a.age >= 28 && b.age >= 28, mult: 1.5 },
+      datedMultipleSeasons: { check: (a, b) => {
+        const datingRel = getRelationshipBetween(a, b, 'DATING');
+        return datingRel && (getCurrentSeason() - datingRel.startedSeason >= 2);
+      }, mult: 2.0 },
+      bothJolly: { check: (a, b) => a.personality === 'JOLLY' && b.personality === 'JOLLY', mult: 1.5 }
+    }
+  },
+
+  // ═══════════════════════════════════════════════════════════════
+  // NON-PLAYER MARRIAGE - Player marries someone outside the league
+  // ═══════════════════════════════════════════════════════════════
+  MARRIED_NON_PLAYER: {
+    requirements: [
+      { type: 'player_single', check: (a) =>
+        !hasActiveRelationship(a, 'DATING') && !hasActiveRelationship(a, 'MARRIED')
+      },
+      { type: 'not_too_young', check: (a) => a.age >= 22 }
+    ],
+    baseChance: 0.03,  // 3% per season for eligible single players
+    modifiers: {
+      olderPlayer: { check: (a) => a.age >= 28, mult: 1.5 },
+      highFame: { check: (a) => a.fame >= 4, mult: 1.3 },  // Famous players attract partners
+      jollyPersonality: { check: (a) => a.personality === 'JOLLY', mult: 1.2 }
+    }
+  },
+
+  BEST_FRIENDS: {
+    requirements: [
+      { type: 'same_team', check: (a, b) => a.teamId === b.teamId },
+      { type: 'played_together', check: (a, b) => getGamesTogether(a, b) >= SCALED_REQUIREMENTS.BEST_FRIENDS },
+      { type: 'compatible_personality', check: (a, b) => arePersonalitiesCompatible(a.personality, b.personality) }
+    ],
+    baseChance: 0.05,
+    modifiers: {
+      samePosition: { check: (a, b) => a.position === b.position, mult: 1.5 },
+      bothJolly: { check: (a, b) => a.personality === 'JOLLY' && b.personality === 'JOLLY', mult: 2.0 },
+      bothTough: { check: (a, b) => a.personality === 'TOUGH' && b.personality === 'TOUGH', mult: 1.5 },
+      sharedAdversity: { check: (a, b) => sharedLosingStreak(a, b), mult: 1.8 }
+    }
+  },
+
+  MENTOR_PROTEGE: {
+    requirements: [
+      { type: 'same_team', check: (a, b) => a.teamId === b.teamId },
+      { type: 'same_position_family', check: (a, b) => samePositionFamily(a.position, b.position) },
+      { type: 'age_gap_8_plus', check: (a, b) => Math.abs(a.age - b.age) >= 8 },
+      { type: 'veteran_grade_B_or_higher', check: (a, b) => (a.age > b.age ? a : b).grade >= 'B-' },
+      { type: 'rookie_in_first_3_seasons', check: (a, b) => (a.age < b.age ? a : b).seasonsPlayed <= 3 },
+      { type: 'same_personality_or_compatible', check: (a, b) => a.personality === b.personality || canMentor(a, b) }
+    ],
+    baseChance: 0.08,
+    modifiers: {
+      veteranJolly: { check: (a, b) => getVeteran(a, b).personality === 'JOLLY', mult: 1.5 },
+      veteranTough: { check: (a, b) => getVeteran(a, b).personality === 'TOUGH', mult: 1.3 },
+      rookieTimid: { check: (a, b) => getRookie(a, b).personality === 'TIMID', mult: 1.5 }
+    }
+  },
+
+  RIVALS: {
+    requirements: [
+      { type: 'same_team', check: (a, b) => a.teamId === b.teamId },
+      { type: 'same_position', check: (a, b) => a.position === b.position },
+      { type: 'competitive_personalities', check: (a, b) =>
+        ['COMPETITIVE', 'EGOTISTICAL'].includes(a.personality) ||
+        ['COMPETITIVE', 'EGOTISTICAL'].includes(b.personality) }
+    ],
+    baseChance: 0.06,
+    modifiers: {
+      oneStarterOneBench: { check: (a, b) => a.isStarter !== b.isStarter, mult: 2.0 },
+      similarGrade: { check: (a, b) => gradeDistance(a.grade, b.grade) <= 1, mult: 1.5 },
+      bothEgotistical: { check: (a, b) => a.personality === 'EGOTISTICAL' && b.personality === 'EGOTISTICAL', mult: 2.0 }
+    }
+  },
+
+  BULLY_VICTIM: {
+    requirements: [
+      { type: 'same_team', check: (a, b) => a.teamId === b.teamId },
+      { type: 'bully_personality', check: (a, b) => ['EGOTISTICAL', 'TOUGH'].includes(a.personality) },
+      { type: 'victim_personality', check: (a, b) => ['TIMID', 'DROOPY'].includes(b.personality) },
+      { type: 'bully_higher_grade', check: (a, b) => gradeToNumber(a.grade) > gradeToNumber(b.grade) }
+    ],
+    baseChance: 0.03,
+    modifiers: {
+      bullyHighFame: { check: (a, b) => a.fame >= 4, mult: 1.5 },
+      victimRookie: { check: (a, b) => b.seasonsPlayed <= 2, mult: 1.8 },
+      toxicClubhouse: { check: (a, b) => getTeamMorale(a.teamId) < 40, mult: 1.5 }
+    }
+  },
+
+  JEALOUS: {
+    requirements: [
+      { type: 'same_team', check: (a, b) => a.teamId === b.teamId },
+      { type: 'jealous_player_egotistical', check: (a, b) => a.personality === 'EGOTISTICAL' },
+      { type: 'target_outperforming', check: (a, b) => b.jerseySalesIndex > a.jerseySalesIndex || b.seasonWAR > a.seasonWAR }
+    ],
+    baseChance: 0.04,
+    modifiers: {
+      jerseyGapLarge: { check: (a, b) => b.jerseySalesIndex > a.jerseySalesIndex * 1.5, mult: 2.0 },
+      targetLowerGrade: { check: (a, b) => gradeToNumber(b.grade) < gradeToNumber(a.grade), mult: 2.5 },
+      jealousPlayerBenched: { check: (a, b) => !a.isStarter, mult: 1.5 }
+    }
+  },
+
+  CRUSH: {
+    requirements: [
+      { type: 'opposite_gender', check: (a, b) => a.gender !== b.gender },
+      { type: 'same_team', check: (a, b) => a.teamId === b.teamId },
+      { type: 'crusher_single', check: (a, b) => !hasActiveRelationship(a, 'ROMANTIC') },
+      { type: 'target_unavailable', check: (a, b) => hasActiveRelationship(b, 'ROMANTIC') || !isInterested(b, a) }
+    ],
+    baseChance: 0.03,
+    modifiers: {
+      crusherTimid: { check: (a, b) => a.personality === 'TIMID', mult: 1.5 },
+      targetHighFame: { check: (a, b) => b.fame >= 4, mult: 1.5 }
+    }
+  }
+};
+
+/**
+ * Ongoing morale effects from active relationships
+ */
+const RELATIONSHIP_MORALE_EFFECTS = {
+  // ═══════════════════════════════════════════════════════════════
+  // DATING - Moderate morale boost, painful breakups
+  // ═══════════════════════════════════════════════════════════════
+  DATING: {
+    ongoing: { playerA: +8, playerB: +8 },
+    onTrade: { remaining: -15, traded: -10 },    // Separated by trade
+    onBreakup: { initiator: -5, dumped: -20 },
+    // Cross-team dating: morale boost when playing each other
+    onFacingPartner: { playerA: +5, playerB: +5 }
+  },
+
+  // ═══════════════════════════════════════════════════════════════
+  // MARRIED - Stronger morale effects than dating
+  // ═══════════════════════════════════════════════════════════════
+  MARRIED: {
+    ongoing: { playerA: +12, playerB: +12 },    // Stronger than dating
+    onMarriage: { playerA: +20, playerB: +20 }, // Wedding day boost
+    onAnniversary: { playerA: +5, playerB: +5 }, // Each season anniversary
+    onTrade: { remaining: -20, traded: -15 },   // Worse than dating
+    // Cross-team marriage: even bigger boost when facing spouse
+    onFacingSpouse: { playerA: +8, playerB: +8 }
+  },
+
+  // ═══════════════════════════════════════════════════════════════
+  // DIVORCED - Severe morale hit, potential revenge arc
+  // ═══════════════════════════════════════════════════════════════
+  DIVORCED: {
+    ongoing: { playerA: 0, playerB: 0 },        // No ongoing effect (it's over)
+    onDivorce: { initiator: -15, dumped: -35 }, // Much worse than dating breakup
+    onDivorceAnnounced: { playerA: -10, playerB: -10 },  // Public embarrassment
+    // Creates revenge arc when facing ex-spouse
+    onFacingExSpouse: { playerA: -3, playerB: -3 },  // Uncomfortable
+    // Personality-specific divorce reactions
+    personalityModifiers: {
+      DROOPY: { dumpedMult: 1.5 },              // Droopy takes it harder
+      EGOTISTICAL: { initiatorMult: 0.5 },     // Egotistical bounces back
+      COMPETITIVE: { revengeBoost: +5 }         // Competitive gets motivated
+    }
+  },
+
+  // ═══════════════════════════════════════════════════════════════
+  // NON-PLAYER SPOUSE - Similar to player marriage but no LI effects
+  // ═══════════════════════════════════════════════════════════════
+  MARRIED_NON_PLAYER: {
+    ongoing: { player: +10 },                   // Stable home life
+    onMarriage: { player: +15 },
+    onDivorce: { player: -25 },                 // Still hurts
+    onChildBorn: { player: +10 }                // Future expansion?
+  },
+
+  BEST_FRIENDS: {
+    ongoing: { playerA: +5, playerB: +5 },
+    onTrade: { remaining: -10, traded: -8 }
+  },
+
+  MENTOR_PROTEGE: {
+    ongoing: { mentor: +3, protege: +6 },
+    onProtegeSuccess: { mentor: +10, protege: +5 },
+    onMentorRetires: { protege: -8 }
+  },
+
+  RIVALS: {
+    ongoing: { playerA: -2, playerB: -2 },
+    onRivalOutperforms: { loser: -8, winner: +5 },
+    onResolution: { playerA: +10, playerB: +10 }  // Becomes BEST_FRIENDS
+  },
+
+  BULLY_VICTIM: {
+    ongoing: { bully: +2, victim: -12 },
+    onBullyTraded: { victim: +15 },
+    onVictimStandsUp: { bully: -10, victim: +20 }  // Rare event
+  },
+
+  JEALOUS: {
+    ongoing: { jealous: -8, target: 0 },
+    onTargetTraded: { jealous: +10 },
+    onJealousOutperforms: { jealous: +15 }
+  },
+
+  CRUSH: {
+    ongoing: { crusher: -3, target: 0 },
+    onCrushBecomesRomantic: { crusher: +20 },
+    onCrushStartsDatingOther: { crusher: -15 }
+  }
+};
+
+/**
+ * Apply ongoing relationship morale effects
+ * Called at end of each game
+ */
+function applyRelationshipMoraleEffects(player) {
+  const relationships = getPlayerRelationships(player.id);
+  let totalEffect = 0;
+
+  for (const rel of relationships) {
+    if (rel.status !== 'ACTIVE') continue;
+    if (!rel.isReal && !rel.isPublic) continue;  // Unconfirmed rumors don't affect morale
+
+    const effects = RELATIONSHIP_MORALE_EFFECTS[rel.type];
+    if (!effects?.ongoing) continue;
+
+    const isPlayerA = rel.playerA === player.id;
+    const roleKey = getRoleKey(rel.type, isPlayerA);
+    const effect = effects.ongoing[roleKey] || 0;
+
+    // Scale by relationship strength (1-10)
+    const scaledEffect = Math.round(effect * (rel.strength / 10));
+    totalEffect += scaledEffect;
+  }
+
+  // Apply capped total effect
+  const cappedEffect = Math.max(-20, Math.min(15, totalEffect));
+  player.morale = Math.max(0, Math.min(99, (player.morale ?? 50) + cappedEffect));
+}
+
+// ═══════════════════════════════════════════════════════════════
+// MARRIAGE SYSTEM
+// ═══════════════════════════════════════════════════════════════
+
+/**
+ * Process marriage between two players (or player + non-player)
+ */
+function processMarriage(playerA, playerB, isNonPlayer = false) {
+  // End the DATING relationship
+  const datingRel = getRelationshipBetween(playerA, playerB, 'DATING');
+  if (datingRel) {
+    datingRel.status = 'ENDED';
+    datingRel.endReason = 'MARRIED';
+  }
+
+  // Create MARRIED relationship
+  const marriageRel = {
+    id: generateRelationshipId(),
+    type: 'MARRIED',
+    playerA: playerA.id,
+    playerB: isNonPlayer ? null : playerB.id,
+    nonPlayerPartner: isNonPlayer ? playerB : null,  // playerB is NonPlayerSpouse object
+    strength: 10,  // Marriages start at max strength
+    startedSeason: getCurrentSeason(),
+    startedGame: getCurrentGame(),
+    marriageDate: getCurrentGame(),
+    isPublic: true,  // Marriages are always public
+    isReal: true,
+    status: 'ACTIVE',
+    isCrossTeam: !isNonPlayer && playerA.teamId !== playerB.teamId,
+    playerATeam: playerA.teamId,
+    playerBTeam: isNonPlayer ? null : playerB.teamId,
+    priorLastName: null,
+    nameChanged: false
+  };
+
+  // Handle name change
+  applyMarriageNameChange(playerA, playerB, marriageRel, isNonPlayer);
+
+  // Apply morale effects
+  const effects = isNonPlayer
+    ? RELATIONSHIP_MORALE_EFFECTS.MARRIED_NON_PLAYER
+    : RELATIONSHIP_MORALE_EFFECTS.MARRIED;
+
+  applyMoraleChange(playerA, effects.onMarriage.playerA || effects.onMarriage.player, 'MARRIAGE');
+  if (!isNonPlayer) {
+    applyMoraleChange(playerB, effects.onMarriage.playerB, 'MARRIAGE');
+  }
+
+  // Add Fame bonus for marriage
+  addFameEvent(playerA, +1, `Married ${isNonPlayer ? playerB.name : playerB.lastName}`);
+  if (!isNonPlayer) {
+    addFameEvent(playerB, +1, `Married ${playerA.lastName}`);
+  }
+
+  // Log transaction
+  logTransaction('MARRIAGE', {
+    playerA: playerA.id,
+    playerB: isNonPlayer ? playerB.name : playerB.id,
+    isNonPlayer,
+    isCrossTeam: marriageRel.isCrossTeam
+  });
+
+  return marriageRel;
+}
+
+/**
+ * Apply name change on marriage
+ *
+ * Rules:
+ * - Opposite-sex marriage: Woman takes husband's last name
+ * - Same-sex marriage: Player with lower season WAR takes spouse's last name
+ * - Non-player marriage: Player keeps their name (spouse takes theirs)
+ */
+function applyMarriageNameChange(playerA, playerB, marriageRel, isNonPlayer) {
+  if (isNonPlayer) {
+    // Non-player spouse takes player's name (no player name change)
+    return;
+  }
+
+  let nameTaker = null;
+  let nameGiver = null;
+
+  if (playerA.gender !== playerB.gender) {
+    // Opposite-sex: woman takes husband's name
+    if (playerA.gender === 'F') {
+      nameTaker = playerA;
+      nameGiver = playerB;
+    } else {
+      nameTaker = playerB;
+      nameGiver = playerA;
+    }
+  } else {
+    // Same-sex: lower WAR takes higher WAR's name
+    if (playerA.seasonWAR <= playerB.seasonWAR) {
+      nameTaker = playerA;
+      nameGiver = playerB;
+    } else {
+      nameTaker = playerB;
+      nameGiver = playerA;
+    }
+  }
+
+  // Store prior name and apply change
+  marriageRel.priorLastName = nameTaker.lastName;
+  marriageRel.nameChanged = true;
+  nameTaker.lastName = nameGiver.lastName;
+  nameTaker.priorLastName = marriageRel.priorLastName;  // Store on player too
+
+  logTransaction('NAME_CHANGE_MARRIAGE', {
+    playerId: nameTaker.id,
+    fromName: marriageRel.priorLastName,
+    toName: nameGiver.lastName,
+    reason: 'MARRIAGE'
+  });
+
+  // Fame bonus for name change (memorable)
+  addFameEvent(nameTaker, +0.5, `Now ${nameTaker.firstName} ${nameTaker.lastName}`);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// DIVORCE SYSTEM
+// ═══════════════════════════════════════════════════════════════
+
+/**
+ * Process divorce between married players
+ */
+function processDivorce(playerA, playerB, initiator, isNonPlayer = false) {
+  const marriageRel = getRelationshipBetween(playerA, playerB, 'MARRIED');
+  if (!marriageRel) return null;
+
+  // End the MARRIED relationship
+  marriageRel.status = 'ENDED';
+  marriageRel.endReason = 'DIVORCE';
+  marriageRel.endedSeason = getCurrentSeason();
+
+  // Create DIVORCED relationship (for narrative tracking and revenge arcs)
+  const divorcedRel = {
+    id: generateRelationshipId(),
+    type: 'DIVORCED',
+    playerA: playerA.id,
+    playerB: isNonPlayer ? null : playerB.id,
+    nonPlayerPartner: isNonPlayer ? playerB : null,
+    startedSeason: getCurrentSeason(),
+    startedGame: getCurrentGame(),
+    isPublic: true,
+    isReal: true,
+    status: 'ACTIVE',  // DIVORCED relationships stay "active" for tracking
+    isCrossTeam: marriageRel.isCrossTeam,
+    playerATeam: playerA.teamId,
+    playerBTeam: isNonPlayer ? null : playerB?.teamId,
+    priorLastName: marriageRel.priorLastName,
+    nameChanged: marriageRel.nameChanged,
+    initiatorId: initiator?.id || (isNonPlayer ? null : 'NON_PLAYER'),
+    marriageLength: getCurrentGame() - marriageRel.marriageDate
+  };
+
+  // Determine who got "dumped"
+  const isPlayerAInitiator = initiator?.id === playerA.id;
+  const isPlayerBInitiator = !isNonPlayer && initiator?.id === playerB.id;
+
+  // Apply morale effects
+  const effects = RELATIONSHIP_MORALE_EFFECTS.DIVORCED;
+  const personalityMods = effects.personalityModifiers;
+
+  // PlayerA morale
+  let playerAMorale = isPlayerAInitiator ? effects.onDivorce.initiator : effects.onDivorce.dumped;
+  if (!isPlayerAInitiator && personalityMods[playerA.personality]?.dumpedMult) {
+    playerAMorale = Math.round(playerAMorale * personalityMods[playerA.personality].dumpedMult);
+  }
+  if (isPlayerAInitiator && personalityMods[playerA.personality]?.initiatorMult) {
+    playerAMorale = Math.round(playerAMorale * personalityMods[playerA.personality].initiatorMult);
+  }
+  applyMoraleChange(playerA, playerAMorale, 'DIVORCE');
+
+  // PlayerB morale (if player)
+  if (!isNonPlayer) {
+    let playerBMorale = isPlayerBInitiator ? effects.onDivorce.initiator : effects.onDivorce.dumped;
+    if (!isPlayerBInitiator && personalityMods[playerB.personality]?.dumpedMult) {
+      playerBMorale = Math.round(playerBMorale * personalityMods[playerB.personality].dumpedMult);
+    }
+    if (isPlayerBInitiator && personalityMods[playerB.personality]?.initiatorMult) {
+      playerBMorale = Math.round(playerBMorale * personalityMods[playerB.personality].initiatorMult);
+    }
+    applyMoraleChange(playerB, playerBMorale, 'DIVORCE');
+  }
+
+  // Revert name change if applicable
+  if (marriageRel.nameChanged && marriageRel.priorLastName) {
+    revertMarriageNameChange(playerA, playerB, marriageRel);
+  }
+
+  // Fame boner for divorce (public embarrassment)
+  addFameEvent(playerA, -1, 'Divorce announced');
+  if (!isNonPlayer) {
+    addFameEvent(playerB, -1, 'Divorce announced');
+  }
+
+  // Log transaction
+  logTransaction('DIVORCE', {
+    playerA: playerA.id,
+    playerB: isNonPlayer ? playerB.name : playerB.id,
+    initiator: initiator?.id || 'NON_PLAYER',
+    isNonPlayer,
+    marriageLength: divorcedRel.marriageLength
+  });
+
+  return divorcedRel;
+}
+
+/**
+ * Revert name change after divorce
+ * Player can choose to keep married name or revert (we default to revert)
+ */
+function revertMarriageNameChange(playerA, playerB, marriageRel) {
+  // Figure out who changed their name
+  const nameTaker = playerA.priorLastName ? playerA : playerB;
+
+  if (nameTaker && nameTaker.priorLastName) {
+    const marriedName = nameTaker.lastName;
+    nameTaker.lastName = nameTaker.priorLastName;
+    nameTaker.priorLastName = null;
+
+    logTransaction('NAME_CHANGE_DIVORCE', {
+      playerId: nameTaker.id,
+      fromName: marriedName,
+      toName: nameTaker.lastName,
+      reason: 'DIVORCE'
+    });
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// CROSS-TEAM ROMANTIC MATCHUP DETECTION
+// ═══════════════════════════════════════════════════════════════
+
+/**
+ * Check if today's game has any cross-team romantic matchups
+ * Called during pre-game to set up LI boosts and narratives
+ */
+function detectCrossTeamRomanticMatchups(homeTeam, awayTeam) {
+  const matchups = [];
+
+  const allRomantic = getAllActiveRelationships()
+    .filter(r => ['DATING', 'MARRIED', 'DIVORCED'].includes(r.type) && r.isCrossTeam);
+
+  for (const rel of allRomantic) {
+    const playerA = getPlayer(rel.playerA);
+    const playerB = rel.playerB ? getPlayer(rel.playerB) : null;
+
+    if (!playerB) continue;  // Non-player spouse
+
+    // Check if one is on home team, other on away team
+    const aOnHome = playerA.teamId === homeTeam.id;
+    const aOnAway = playerA.teamId === awayTeam.id;
+    const bOnHome = playerB.teamId === homeTeam.id;
+    const bOnAway = playerB.teamId === awayTeam.id;
+
+    if ((aOnHome && bOnAway) || (aOnAway && bOnHome)) {
+      matchups.push({
+        relationship: rel,
+        playerA,
+        playerB,
+        type: rel.type,
+        narrativeAngle: getRomanticMatchupNarrative(rel)
+      });
+    }
+  }
+
+  return matchups;
+}
+
+function getRomanticMatchupNarrative(rel) {
+  switch (rel.type) {
+    case 'DATING':
+      return 'LOVERS_RIVALRY';      // Dating couple on opposite teams
+    case 'MARRIED':
+      return 'MARRIED_OPPONENTS';   // Spouses facing off
+    case 'DIVORCED':
+      return 'EX_SPOUSE_REVENGE';   // Awkward/revenge game
+    default:
+      return null;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// REVENGE ARC SYSTEM
+// ═══════════════════════════════════════════════════════════════
+
+/**
+ * Revenge arc triggers when relationships end badly and players face former partners
+ */
+const REVENGE_ARC_TRIGGERS = {
+  // Former romantic partner (breakup or trade)
+  SCORNED_LOVER: {
+    sourceRelType: 'ROMANTIC',
+    endReasons: ['BREAKUP', 'TRADE'],
+    liMultiplier: 1.5,            // 50% boost to Leverage Index
+    moraleOnGoodPerformance: +10,
+    moraleOnPoorPerformance: -8,
+    narrativeTag: 'REVENGE_EX'
+  },
+
+  // Former best friend (trade or falling out)
+  ESTRANGED_FRIEND: {
+    sourceRelType: 'BEST_FRIENDS',
+    endReasons: ['TRADE', 'FIGHT'],
+    liMultiplier: 1.25,
+    moraleOnGoodPerformance: +8,
+    moraleOnPoorPerformance: -5,
+    narrativeTag: 'PROVE_WRONG'
+  },
+
+  // Former protege facing old mentor
+  SURPASSED_MENTOR: {
+    sourceRelType: 'MENTOR_PROTEGE',
+    role: 'protege',
+    endReasons: ['TRADE', 'MENTOR_RETIRED', 'PROTEGE_SURPASSED'],
+    liMultiplier: 1.3,
+    moraleOnGoodPerformance: +12,
+    moraleOnPoorPerformance: -6,
+    narrativeTag: 'STUDENT_TEACHER'
+  },
+
+  // Facing former bully
+  VICTIM_REVENGE: {
+    sourceRelType: 'BULLY_VICTIM',
+    role: 'victim',
+    liMultiplier: 1.75,           // Huge motivation
+    moraleOnGoodPerformance: +15,
+    moraleOnPoorPerformance: -10,
+    narrativeTag: 'SWEET_REVENGE'
+  },
+
+  // Bully facing former victim who improved
+  BULLY_CONFRONTED: {
+    sourceRelType: 'BULLY_VICTIM',
+    role: 'bully',
+    liMultiplier: 0.9,            // Slight penalty - uncomfortable
+    moraleOnGoodPerformance: +3,
+    moraleOnPoorPerformance: -12,
+    narrativeTag: 'TABLES_TURNED'
+  }
+};
+
+/**
+ * Check if a game has any revenge arcs
+ * @returns {Array} Active revenge contexts for the game
+ */
+function getRevengeArcsForGame(homeTeam, awayTeam) {
+  const arcs = [];
+  const allPlayers = [...homeTeam.roster, ...awayTeam.roster];
+
+  for (const player of allPlayers) {
+    const formerRelationships = getFormerRelationships(player.id);
+
+    for (const rel of formerRelationships) {
+      // Find if former partner is on opposing team
+      const partnerId = rel.playerA === player.id ? rel.playerB : rel.playerA;
+      const partner = allPlayers.find(p => p.id === partnerId);
+
+      if (!partner) continue;
+      if (player.teamId === partner.teamId) continue;  // Still on same team
+
+      // Check if this qualifies for a revenge arc
+      for (const [arcType, config] of Object.entries(REVENGE_ARC_TRIGGERS)) {
+        if (rel.type !== config.sourceRelType) continue;
+        if (config.endReasons && !config.endReasons.includes(rel.endReason)) continue;
+        if (config.role) {
+          const isCorrectRole = (config.role === 'protege' && rel.playerB === player.id) ||
+                               (config.role === 'mentor' && rel.playerA === player.id) ||
+                               (config.role === 'victim' && rel.playerB === player.id) ||
+                               (config.role === 'bully' && rel.playerA === player.id);
+          if (!isCorrectRole) continue;
+        }
+
+        arcs.push({
+          type: arcType,
+          player: player,
+          formerPartner: partner,
+          relationship: rel,
+          config: config
+        });
+      }
+    }
+  }
+
+  return arcs;
+}
+
+/**
+ * Apply revenge arc LI modifier
+ * Integrated into LEVERAGE_INDEX_SPEC.md calculations
+ */
+function getRevengeArcLIModifier(batterId, pitcherId, gameRevengeArcs) {
+  let modifier = 1.0;
+
+  for (const arc of gameRevengeArcs) {
+    // Check if batter or pitcher is part of this revenge arc
+    if (arc.player.id === batterId || arc.player.id === pitcherId) {
+      modifier = Math.max(modifier, arc.config.liMultiplier);
+    }
+  }
+
+  return modifier;
+}
+
+/**
+ * Apply revenge arc morale effect after plate appearance
+ */
+function applyRevengeArcMoraleEffect(player, wasSuccessful, gameRevengeArcs) {
+  const playerArcs = gameRevengeArcs.filter(arc => arc.player.id === player.id);
+
+  for (const arc of playerArcs) {
+    const moraleChange = wasSuccessful
+      ? arc.config.moraleOnGoodPerformance
+      : arc.config.moraleOnPoorPerformance;
+
+    applyMoraleChange(player, moraleChange, `REVENGE_${arc.type}`);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// BEAT REPORTER RELATIONSHIP LEAKS
+// ═══════════════════════════════════════════════════════════════
+
+/**
+ * Beat reporter leak system
+ * Relationships are hidden until leaked, with 5-10% chance of false rumors
+ */
+const LEAK_CONFIG = {
+  baseLeakChance: 0.15,           // 15% chance per game to leak something
+  falseRumorChance: 0.08,         // 8% of leaks are false
+  strengthThreshold: 5,           // Relationships with strength 5+ more likely to leak
+  publicFigureBonus: 1.5          // High-fame players more likely to be leaked about
+};
+
+/**
+ * Check for relationship leaks (called end of each game)
+ */
+function checkForRelationshipLeaks(team) {
+  if (Math.random() > LEAK_CONFIG.baseLeakChance) return null;
+
+  const privateRelationships = getAllTeamRelationships(team.id)
+    .filter(rel => !rel.isPublic && rel.status === 'ACTIVE');
+
+  if (privateRelationships.length === 0) return null;
+
+  // Weight by strength and fame
+  const weighted = privateRelationships.map(rel => {
+    const playerA = getPlayer(rel.playerA);
+    const playerB = getPlayer(rel.playerB);
+    const fameBonus = (playerA.fame >= 4 || playerB.fame >= 4) ? LEAK_CONFIG.publicFigureBonus : 1.0;
+    const strengthBonus = rel.strength >= LEAK_CONFIG.strengthThreshold ? 1.5 : 1.0;
+    return { rel, weight: fameBonus * strengthBonus };
+  });
+
+  // Pick one to leak
+  const leaked = weightedRandomPick(weighted);
+  if (!leaked) return null;
+
+  // Determine if this is a true leak or false rumor
+  const isFalseRumor = Math.random() < LEAK_CONFIG.falseRumorChance;
+
+  leaked.rel.isPublic = true;
+
+  if (isFalseRumor) {
+    leaked.rel.isReal = false;
+    // False rumors don't affect morale and won't trigger trade warnings
+  }
+
+  return {
+    relationship: leaked.rel,
+    isFalseRumor: isFalseRumor,
+    narrative: generateLeakNarrative(leaked.rel, isFalseRumor)
+  };
+}
+
+/**
+ * Trade warning system - shows relationship impacts
+ * Only shows REAL relationships, not unconfirmed rumors
+ */
+function getRelationshipTradeWarnings(player, team) {
+  const warnings = [];
+  const relationships = getPlayerRelationships(player.id)
+    .filter(rel => rel.isReal && rel.status === 'ACTIVE');
+
+  for (const rel of relationships) {
+    const partnerId = rel.playerA === player.id ? rel.playerB : rel.playerA;
+    const partner = getPlayer(partnerId);
+
+    if (partner.teamId !== team.id) continue;  // Partner not on same team
+
+    const effects = RELATIONSHIP_MORALE_EFFECTS[rel.type];
+
+    if (rel.type === 'ROMANTIC') {
+      warnings.push({
+        severity: 'HIGH',
+        icon: '💔',
+        message: `Trading ${player.name} will hurt ${partner.name}'s morale (-15). They are dating.`,
+        moraleImpact: { [partnerId]: -15, [player.id]: -10 },
+        isPublic: rel.isPublic
+      });
+    }
+
+    if (rel.type === 'BEST_FRIENDS') {
+      warnings.push({
+        severity: 'MEDIUM',
+        icon: '👥',
+        message: `${player.name} and ${partner.name} are best friends. Both will be affected.`,
+        moraleImpact: { [partnerId]: -10, [player.id]: -8 },
+        isPublic: rel.isPublic
+      });
+    }
+
+    if (rel.type === 'MENTOR_PROTEGE') {
+      const isMentor = rel.playerA === player.id;
+      warnings.push({
+        severity: 'MEDIUM',
+        icon: '🎓',
+        message: isMentor
+          ? `${player.name} is mentoring ${partner.name}. Trade may stunt development.`
+          : `${player.name} is being mentored by ${partner.name}. Will lose guidance.`,
+        moraleImpact: { [partnerId]: isMentor ? -8 : -5, [player.id]: isMentor ? -5 : -8 },
+        isPublic: rel.isPublic
+      });
+    }
+
+    if (rel.type === 'BULLY_VICTIM') {
+      const isBully = rel.playerA === player.id;
+      if (isBully) {
+        warnings.push({
+          severity: 'POSITIVE',
+          icon: '😌',
+          message: `Trading ${player.name} will relieve ${partner.name}, who has been bullied. (+15 morale)`,
+          moraleImpact: { [partnerId]: +15 },
+          isPublic: rel.isPublic
+        });
+      }
+    }
+
+    if (rel.type === 'RIVALS') {
+      warnings.push({
+        severity: 'LOW',
+        icon: '⚔️',
+        message: `${player.name} and ${partner.name} are rivals. Trading may reduce clubhouse tension.`,
+        moraleImpact: { [partnerId]: +3 },  // Slight relief
+        isPublic: rel.isPublic
+      });
+    }
+
+    if (rel.type === 'CRUSH') {
+      const hasCrush = rel.playerA === player.id;
+      if (!hasCrush) {  // Trading the object of someone's crush
+        warnings.push({
+          severity: 'LOW',
+          icon: '💭',
+          message: `${partner.name} has an unrequited crush on ${player.name}. May be affected.`,
+          moraleImpact: { [partnerId]: -5 },
+          isPublic: rel.isPublic
+        });
+      }
+    }
+  }
+
+  return warnings;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// RELATIONSHIP NARRATIVES (AI-DRIVEN)
+// ═══════════════════════════════════════════════════════════════
+
+const RELATIONSHIP_NARRATIVES = {
+  ROMANTIC_FORMED: [
+    "{playerA} and {playerB} have been spotted together around town. Sources confirm the two {team} players are dating.",
+    "Love in the clubhouse! {playerA} and {playerB} are officially an item, per team sources."
+  ],
+
+  ROMANTIC_BREAKUP: [
+    "Trouble in the {team} clubhouse: {playerA} and {playerB} have reportedly split. This could get awkward.",
+    "{playerA} and {playerB} are no longer together, and teammates say the tension is palpable."
+  ],
+
+  ROMANTIC_RUMOR_FALSE: [
+    "Despite rumors, sources close to {playerA} and {playerB} deny any romantic involvement. 'They're just friends.'",
+    "The {team} front office addressed speculation about {playerA} and {playerB}: 'There's nothing there.'"
+  ],
+
+  MENTOR_PROTEGE_FORMED: [
+    "Veteran {mentor} has taken {protege} under {{POSSESSIVE}} wing. '{protege} reminds me of myself at that age,' {mentor} said.",
+    "{protege} credits {mentor} for {{POSSESSIVE}} rapid development: 'Everything I know, I learned from {{OBJECT}}.'"
+  ],
+
+  BULLY_EXPOSED: [
+    "Anonymous sources say {bully} has been making life difficult for {victim} in the clubhouse. Management is aware.",
+    "Not all is well with the {team}: {victim} has reportedly requested a trade to escape a toxic situation."
+  ],
+
+  JEALOUSY_ERUPTS: [
+    "{jealous} threw {{POSSESSIVE}} bat in frustration after seeing {target}'s jersey sales numbers. 'That should be me,' {{SUBJECT}} was overheard saying.",
+    "Sources say {jealous} has been cold to {target} lately. The rising popularity has created friction."
+  ],
+
+  RIVALS_RECONCILE: [
+    "Former rivals {playerA} and {playerB} have buried the hatchet. 'We push each other,' {playerA} said. 'That's what winners do.'",
+    "The {team} clubhouse is healthier than ever. {playerA} and {playerB}, once at each other's throats, are now inseparable."
+  ],
+
+  REVENGE_ARC_PREVIEW: [
+    "Tonight marks the first time {player} faces {{POSSESSIVE}} former team since the {event}. All eyes will be on {{OBJECT}}.",
+    "{player} has circled this date on {{POSSESSIVE}} calendar. 'I've got something to prove,' {{SUBJECT}} said."
+  ],
+
+  REVENGE_ARC_SUCCESS: [
+    "{player} delivered when it mattered most against {{POSSESSIVE}} former team. A statement performance.",
+    "Revenge is sweet: {player} dominated in {{POSSESSIVE}} return to {stadium}."
+  ],
+
+  REVENGE_ARC_FAILURE: [
+    "The much-anticipated revenge game didn't go as planned for {player}. {{SUBJECT}} went 0-for-4 against {{POSSESSIVE}} former team.",
+    "{player}'s return to {stadium} was forgettable. Sometimes the pressure is too much."
+  ]
+};
+
+/**
+ * Generate narrative for a relationship event
+ */
+function generateRelationshipNarrative(eventType, relationship, extraContext = {}) {
+  const templates = RELATIONSHIP_NARRATIVES[eventType];
+  if (!templates || templates.length === 0) return null;
+
+  const template = templates[Math.floor(Math.random() * templates.length)];
+  const playerA = getPlayer(relationship.playerA);
+  const playerB = getPlayer(relationship.playerB);
+
+  let narrative = template
+    .replace(/{playerA}/g, playerA.name)
+    .replace(/{playerB}/g, playerB.name)
+    .replace(/{team}/g, getTeamName(playerA.teamId))
+    .replace(/{mentor}/g, playerA.age > playerB.age ? playerA.name : playerB.name)
+    .replace(/{protege}/g, playerA.age < playerB.age ? playerA.name : playerB.name)
+    .replace(/{bully}/g, playerA.name)
+    .replace(/{victim}/g, playerB.name)
+    .replace(/{jealous}/g, playerA.name)
+    .replace(/{target}/g, playerB.name);
+
+  // Apply pronoun templates for playerA
+  narrative = fillPronouns(narrative, playerA);
+
+  // Apply extra context
+  for (const [key, value] of Object.entries(extraContext)) {
+    narrative = narrative.replace(new RegExp(`{${key}}`, 'g'), value);
+  }
+
+  return narrative;
+}
+
+// ═══════════════════════════════════════════════════════════════
 // TEAM ACCESS
 // ═══════════════════════════════════════════════════════════════
 
@@ -10553,6 +13294,76 @@ function getAllTeams() {
 function getTeamName(teamId) {
   const team = getTeam(teamId);
   return team ? team.name : 'Unknown Team';
+}
+
+// ═══════════════════════════════════════════════════════════════
+// GAME TIMER FUNCTIONS
+// ═══════════════════════════════════════════════════════════════
+
+function startGameTimer(gameState) {
+  gameState.timer = {
+    startedAt: new Date().toISOString(),
+    endedAt: null,
+    totalPausedMs: 0,
+    pausedAt: null,
+    durationMs: null,
+    durationFormatted: null
+  };
+}
+
+function pauseGameTimer(gameState) {
+  if (!gameState.timer.pausedAt) {
+    gameState.timer.pausedAt = new Date().toISOString();
+  }
+}
+
+function resumeGameTimer(gameState) {
+  if (gameState.timer.pausedAt) {
+    const pauseStart = new Date(gameState.timer.pausedAt);
+    const pauseEnd = new Date();
+    gameState.timer.totalPausedMs += (pauseEnd - pauseStart);
+    gameState.timer.pausedAt = null;
+  }
+}
+
+function endGameTimer(gameState) {
+  // Auto-resume if paused
+  if (gameState.timer.pausedAt) {
+    resumeGameTimer(gameState);
+  }
+
+  gameState.timer.endedAt = new Date().toISOString();
+  const start = new Date(gameState.timer.startedAt);
+  const end = new Date(gameState.timer.endedAt);
+  gameState.timer.durationMs = (end - start) - gameState.timer.totalPausedMs;
+  gameState.timer.durationFormatted = formatDuration(gameState.timer.durationMs);
+}
+
+function formatDuration(ms) {
+  const totalSeconds = Math.floor(ms / 1000);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+
+  if (hours > 0) {
+    return `${hours}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+  }
+  return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+}
+
+function getCurrentGameDuration(gameState) {
+  if (!gameState.timer.startedAt) return '0:00';
+
+  const start = new Date(gameState.timer.startedAt);
+  const now = new Date();
+  let elapsed = now - start - gameState.timer.totalPausedMs;
+
+  // If currently paused, don't count time since pause
+  if (gameState.timer.pausedAt) {
+    elapsed -= (now - new Date(gameState.timer.pausedAt));
+  }
+
+  return formatDuration(elapsed);
 }
 ```
 
@@ -11121,14 +13932,15 @@ All other traits can apply to both pitchers and position players.
 | 1.0 | Initial master spec |
 | 2.0 | Expanded clutch triggers, fitness categories, POG, traits, All-Star voting, grade factors |
 | 3.0 | Integrated all v2 corrections + Salary System + Complete Offseason System (Retirements, Free Agency, Draft) + Hall of Fame + Retired Numbers + Real-time Expectations Tracker + Voting Normalization + Bust/Comeback Awards + Two-Way Fame Safeguard + High-Payroll Amplifier |
-| **3.1** | **Added: Grade Derivation Formula (Section 21) + Complete Fan Happiness System with milestone/award effects and season-length scaling (Section 22) + Hidden Personality System with year-over-year changes (Section 23) + Museum & Historical Data structure (Section 24) + Cy Young Runner-Up award + Negative career/season milestones + Salary-based FA swaps (+/-5%) + Pitcher hitting bonus + Revised trait tiers per Billy Yank guide + Contracted team → expansion draft flow + Paper bag indicator for furious fans** |
+| **3.1** | **Added: Grade Derivation Formula (Section 21) + Complete Fan Morale System with milestone/award effects and season-length scaling (Section 22) + Hidden Personality System with year-over-year changes (Section 23) + Museum & Historical Data structure (Section 24) + Cy Young Runner-Up award + Negative career/season milestones + Salary-based FA swaps (+/-5%) + Pitcher hitting bonus + Revised trait tiers per Billy Yank guide + Contracted team → expansion draft flow + Paper bag indicator for furious fans** |
 | **3.2** | **MAJOR: Replaced Grade Factor with Position-Based Salary Percentile system for EOS adjustments** - Players are now compared to positional salary peers, and WAR is compared to positional WAR peers. High-paid players at their position have small upside/large downside; low-paid have large upside/small downside. **Also added:** Complete award rewards with happiness values + salary bonuses for all awards. MVP/Cy Young winners now get +15% salary bonus, +1 Fame. ROTY has runner-up (+2 happiness). ROY has NO runner-up. Kara Kawaguchi Award updated to salary-based eligibility (bottom 25% at position). Bust of the Year updated to salary-based (top 50% at position who underperforms). Manager of Year expectation changed from grade-based to salary-based. Auto-distribute EOS points within rating categories. |
-| **3.3** | **Team Salary Expectation System:** Added comprehensive team expectations based on average position-based salary percentile. Teams with higher-paid players at each position are expected to win more. This system now drives: (1) Fan Happiness calculations, (2) Manager of the Year criteria, (3) Contraction risk assessment. **Also:** Silver Slugger changed to +3 Power/+3 Contact with NO trait (prevents league inflation). Comeback Player now requires negative EOS last season + positive EOS this season (true comeback story). Added position weights for optional enhanced team expectations (CF now 1.15, higher than corner OF). |
+| **3.3** | **Team Salary Expectation System:** Added comprehensive team expectations based on average position-based salary percentile. Teams with higher-paid players at each position are expected to win more. This system now drives: (1) Fan Morale calculations, (2) Manager of the Year criteria, (3) Contraction risk assessment. **Also:** Silver Slugger changed to +3 Power/+3 Contact with NO trait (prevents league inflation). Comeback Player now requires negative EOS last season + positive EOS this season (true comeback story). Added position weights for optional enhanced team expectations (CF now 1.15, higher than corner OF). |
 | **3.4** | **Award Emblems System:** Added comprehensive emblem system to display player awards throughout the app. Emblems (🏆MVP, 🧤GG, ⭐AS, etc.) appear on in-game tracking screens, team rosters, player cards, and museum. Shows career awards with counts for multi-year winners. Added emblem priority order for space-limited displays. Added Award History tab to Museum for season-by-season award lookup. |
 | **3.5** | **MAJOR: Complete Narrative Systems (Section 26):** Added **Fictional Calendar System** - Opening Day March 28, games mapped to fictional dates through Sept 29, special dates for All-Star Break/Trade Deadline/Playoffs. Added **Rivalries System** - Player vs Former Team (1.0x impact, 3-season duration), Official Rivals (1.5x impact, calculated mid-season from H2H, playoff history, FA poaching), Player vs Player rivalries from incidents (HBP, walk-offs, award snubs). Added **Storylines & Headlines Generator** - Auto-generated pregame storylines (revenge games, milestone chases, comeback watch) and postgame headlines (walk-offs, no-hitters, milestones, collapses). Added **Nickname System** - Auto-generated nicknames from triggers (Mr. October, The Ace, The Wizard, Captain, etc.) with user override option. Added **Legacy Tracking** - Franchise Cornerstone, Icon, Legend; Dynasty tracking; Homegrown vs Acquired roster composition. Added **Memorable Moments Log** - Tiered moments (Legendary/Epic/Rare/Memorable/Infamous) with retention periods, "Remember When..." feature, player career highlights. Added **Team Chemistry System** - Personality-based synergies and friction affecting clutch performance and FA departure risk. |
-| **3.6** | **MAJOR: In-Season Trade System (Section 25):** Complete trade execution system with anytime trades + Trade Deadline prompt at July 31 (65% through season). **Split Stats Tracking** - Player stats tracked before/after trade with full season accumulation; displays show stats by team with date ranges. **Trade Impact Integration** - WAR attributed to team where earned; awards use full season stats; EOS adjustments apply to current team; fan happiness affected by acquiring/losing players (+8 for star acquisition, -10 for losing fan favorite). **Trade Storylines** - Revenge game tracking for traded players (3 seasons), auto-generated headlines for trades and revenge games. **Trade History** - Season trade log and player career trade history in Museum. **ALSO: Reduced Legacy Thresholds** for faster franchise progression - Cornerstone now 2 seasons/5 WAR, Icon now 3 seasons/10 WAR/1 award, Legend now 5 seasons/18 WAR/2 awards. Added award counting logic (MVP/CY=1, every 2 All-Stars=1, Championship MVP=1). |
+| **3.6** | **MAJOR: In-Season Trade System (Section 25):** Complete trade execution system with anytime trades + Trade Deadline prompt at July 31 (65% through season). **Split Stats Tracking** - Player stats tracked before/after trade with full season accumulation; displays show stats by team with date ranges. **Trade Impact Integration** - WAR attributed to team where earned; awards use full season stats; EOS adjustments apply to current team; fan morale affected by acquiring/losing players (+8 for star acquisition, -10 for losing fan favorite). **Trade Storylines** - Revenge game tracking for traded players (3 seasons), auto-generated headlines for trades and revenge games. **Trade History** - Season trade log and player career trade history in Museum. **ALSO: Reduced Legacy Thresholds** for faster franchise progression - Cornerstone now 2 seasons/5 WAR, Icon now 3 seasons/10 WAR/1 award, Legend now 5 seasons/18 WAR/2 awards. Added award counting logic (MVP/CY=1, every 2 All-Stars=1, Championship MVP=1). |
 | **3.7** | **MAJOR: Comprehensive Audit & Remediation** - Addressed 68 issues across the spec. **NEW Section 0: App Flow & Main Game Loop** - Complete execution flow showing WHEN every system runs. Season state machine (Setup → Pre-Season → Regular Season → All-Star Break → Post-Deadline → Playoffs → Offseason). Pre-game, during-game, and post-game flows. All narrative checks (nicknames, legacy, chemistry, rivalries) now run after EVERY game. Trade deadline triggers at 65% of games. Contraction warning system with real-time alerts when happiness < 30. **NEW Section 19: Core Data Models** - Complete Player, Team, and Season object schemas with all fields documented. Geographic rivalry mapping. SeasonEvents schema for personality changes. **NEW Section 27: Transaction Log & Audit Trail** - Full audit system with 25+ transaction types, logging function, and display UI. **NEW Section 28: Helper Functions Library** - Implementations for all 18+ previously undefined functions including: getPlayer(), getAllPlayers(), getTeamName(), getCurrentGameDate(), recalculateRateStats(), getSalaryPercentileAtPosition(), getWARPercentileAtPosition(), calculateAdjustmentPoints(), isOfficialRival(), getPlayerRivalry(), getHeadToHead(), getPlayoffHistoryScore(), getFAPoachingScore(), checkMilestone(), getMilestoneText(), isExpired(), identifyMemorableMoments(), initializeEmptyStats(), weightedRandom(), getSeasonEvents(), isTradeWindowOpen(). **User Decisions Incorporated:** Trade deadline uses 65% game count trigger. All checks run after every game. Chemistry is narrative-only (no stat impact). Team MVP grants Cornerstone designation. All-Star voting uses existing algorithm. Playoff format is user-configurable. Droopy = 90% retirement probability (not guaranteed). Salary bonuses apply immediately when award is won. Contraction shows real-time warning but only executes at end of season. formerTeams updates on ANY team change. |
+| **3.8** | **Mojo/Fitness In-Game Tracker Integration:** Added MOJO_FITNESS_SYSTEM_SPEC.md reference to Related Specifications. **GameState structure** now includes mojo/fitness per lineup slot + mojoFitnessLog for mid-game changes. **Pre-Game Setup Screen** redesigned with Mojo and Fitness columns for each lineup position (dropdowns for all 5 Mojo levels and 6 Fitness states) + JUICED/RATTLED warning alerts. **Main In-Game Tracker Screen** now displays current batter's Mojo/Fitness under batter name (tap to quick-edit). **NEW: Mid-Game Mojo/Fitness Updates section** - Quick-update flow accessible from Special Events menu, captures PA context for stat splits, logs changes to activity feed. **Oddity Records** - Added 19 "against the odds" achievement records with tracking logic (Speedster Strikeout King, Power Outage, Contact Hitter Homer Spree, Meatball Maestro, Wild Thing, Untouchable Loss, Trevor Hoffman Save, Slow-poke Steal, Error Machine Win, Comeback from the Dead, Blown Lead of Shame, Sho-Hey!, Flailing Fielder, and more). |
 
 ---
 
-*End of Master Specification Document v3.7*
+*End of Master Specification Document v3.8*

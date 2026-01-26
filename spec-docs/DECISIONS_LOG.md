@@ -5,6 +5,69 @@
 
 ---
 
+## January 2026
+
+### 2026-01-25: SMB4 UI Cleanup - Removed Balk Button
+
+**Context**: User manual testing revealed Balk button was still present in GameTracker despite balks not being possible in SMB4.
+
+**Decision**: Remove BALK from event buttons entirely.
+
+**Rationale**:
+- SMB4 does not have balks as a game mechanic
+- "Too many throws over" IS possible but is not a balk
+- The button was creating confusion and wasting UI space
+- Per SMB4_GAME_MECHANICS.md - only real baseball rules that SMB4 implements should have buttons
+
+**Files Changed**:
+- `src/components/GameTracker/AtBatButtons.tsx` - Removed 'BALK' from eventButtons array
+
+---
+
+### 2026-01-25: Added Position Switch Feature
+
+**Context**: User feedback that there was no way to change a defensive player's position without first removing them from the game (Def Sub → new player at new position).
+
+**Decision**: Add POS_SWITCH event type allowing position swaps between players on field.
+
+**Rationale**:
+- In baseball, managers can move players to different positions without substitution
+- Example: Move SS to 2B and 2B to SS (defensive realignment)
+- This is common for defensive positioning based on batter handedness or late-game situations
+
+**Files Created/Changed**:
+- `src/types/game.ts` - Added 'POS_SWITCH' to GameEvent, PositionSwitchEvent interface
+- `src/components/GameTracker/PositionSwitchModal.tsx` - New modal component
+- `src/components/GameTracker/AtBatButtons.tsx` - Added "Pos Switch" button
+- `src/components/GameTracker/index.tsx` - Wired up modal
+
+---
+
+### 2026-01-25: Day 3 Spec Contradiction Resolution
+
+**Context**: NFL audit identified 5 spec contradictions that appeared to conflict but actually represented intentional dual-purpose systems.
+
+**Decisions** (per user):
+
+1. **Mojo Jacked (WAR 0.90x vs Stat 1.18x)**: **Keep both** - These serve different purposes. The 0.90x WAR credit is for attribution (luck factor), while 1.18x stat boost is for simulated performance.
+
+2. **Juiced Fitness (Fame 0.5x vs Stat 1.20x)**: **Keep both** - Fame credit (0.5x) applies to all games as PED stigma, stat boost (1.20x) primarily for simulated games. Clarifying note added to spec.
+
+3. **Strained Fitness (WAR 1.10x vs Fame 1.15x)**: **Use both values** - Different contexts. WAR credit 1.10x for stat attribution, Fame credit 1.15x for achievement recognition ("playing through pain").
+
+4. **Rattled Mojo (Clutch 1.30x vs WAR 1.15x)**: **Use both values** - Clutch 1.30x applies to leverage-weighted situations, WAR 1.15x for general attribution. Both reward overcoming adversity.
+
+5. **FIP Constant (3.10 vs 3.15)**: **Use 3.15 for spec examples** - Updated PWAR_CALCULATION_SPEC.md. Actual SMB4 implementation uses 3.28 (calibrated from league data per ADAPTIVE_STANDARDS_ENGINE_SPEC.md).
+
+**Rationale**: The apparent contradictions are intentional design - a nuanced system where stat performance, WAR attribution, Fame recognition, and clutch evaluation each have their own appropriate modifiers.
+
+**Implications**:
+- Clarifying notes added to MOJO_FITNESS_SYSTEM_SPEC.md
+- FIP constant guidance updated in PWAR_CALCULATION_SPEC.md
+- MASTER_SPEC_ERRATA.md should be updated to mark these as resolved
+
+---
+
 ## January 2025
 
 ### 2025-01-21: Adaptive Learning Architecture

@@ -36,6 +36,12 @@ const specialPlaysForOuts: SpecialPlayType[] = ['Routine', 'Diving', 'Wall Catch
 // Special plays for hits - "Clean" means no fielding attempt, others indicate an attempt was made
 const specialPlaysForHits: SpecialPlayType[] = ['Clean', 'Diving', 'Leaping', 'Robbery Attempt'];
 
+// Special plays for HRs - ball cleared the fence (BUG-015 fix)
+// "Over Fence" = ball went over the wall cleanly (default for HRs)
+// "Robbery Attempt" = fielder tried to catch it at the wall but failed
+// "Wall Scraper" = ball barely cleared the wall
+const specialPlaysForHR: SpecialPlayType[] = ['Over Fence', 'Robbery Attempt', 'Wall Scraper'];
+
 // DP Types
 const dpTypes = ['6-4-3', '4-6-3', '5-4-3', '3-6-3', '6-3', '4-3', '1-6-3', 'Other'];
 
@@ -79,7 +85,16 @@ export default function AtBatFlow({ result: initialResult, bases, batterName, ou
   const [showFieldingModal, setShowFieldingModal] = useState(false);
   const [fieldingData, setFieldingData] = useState<FieldingData | null>(null);
 
-  // Auto-correction logic: FO with runner scoring from 3rd (and < 2 outs) = SF
+  // Helper to count runner outs from outcomes
+  const countRunnerOuts = (outcomes: typeof runnerOutcomes): number => {
+    let count = 0;
+    if (outcomes.first && outcomes.first.startsWith('OUT_')) count++;
+    if (outcomes.second && outcomes.second.startsWith('OUT_')) count++;
+    if (outcomes.third && outcomes.third.startsWith('OUT_')) count++;
+    return count;
+  };
+
+  // Auto-correction logic
   const checkAutoCorrection = (newOutcomes: typeof runnerOutcomes) => {
     // FO → SF: If runner from 3rd scores on a fly out with less than 2 outs, it's a sac fly
     if (initialResult === 'FO' && outs < 2 && bases.third && newOutcomes.third === 'SCORED') {
@@ -91,18 +106,36 @@ export default function AtBatFlow({ result: initialResult, bases, batterName, ou
       setResult('FO');
       setAutoCorrection(null);
     }
-    // GO → SAC: If runner advances on ground out with less than 2 outs and runner was on 1st/2nd
-    // This is more of a suggestion since SAC intent matters
+    // GO → DP: If GO with a runner out, and total outs = 2, it's a double play (BUG-003 fix)
     else if (initialResult === 'GO' && outs < 2) {
-      const runnerAdvanced =
-        (bases.first && (newOutcomes.first === 'TO_2B' || newOutcomes.first === 'TO_3B' || newOutcomes.first === 'SCORED')) ||
-        (bases.second && (newOutcomes.second === 'TO_3B' || newOutcomes.second === 'SCORED')) ||
-        (bases.third && newOutcomes.third === 'SCORED');
+      const runnerOutsCount = countRunnerOuts(newOutcomes);
 
-      if (runnerAdvanced && result !== 'SAC') {
-        // Don't auto-correct GO to SAC, but show a hint
-        setAutoCorrection('Tip: If this was an intentional sacrifice bunt, use SAC instead');
-      } else if (!runnerAdvanced) {
+      // If a runner is out, and we'd record 2 total outs (batter + runner), auto-correct to DP
+      if (runnerOutsCount >= 1) {
+        // GO = batter out (1) + runner out (1) = 2 outs recorded = DP
+        setResult('DP');
+        setAutoCorrection('Auto-corrected to Double Play (2 outs recorded: batter + runner)');
+      }
+      // If no runner outs but runner advances, suggest SAC (but don't auto-correct)
+      else {
+        const runnerAdvanced =
+          (bases.first && (newOutcomes.first === 'TO_2B' || newOutcomes.first === 'TO_3B' || newOutcomes.first === 'SCORED')) ||
+          (bases.second && (newOutcomes.second === 'TO_3B' || newOutcomes.second === 'SCORED')) ||
+          (bases.third && newOutcomes.third === 'SCORED');
+
+        if (runnerAdvanced && result !== 'SAC') {
+          // Don't auto-correct GO to SAC, but show a hint
+          setAutoCorrection('Tip: If this was an intentional sacrifice bunt, use SAC instead');
+        } else if (!runnerAdvanced) {
+          setAutoCorrection(null);
+        }
+      }
+    }
+    // If user selected GO but it was auto-corrected to DP, and they remove runner outs, revert to GO
+    else if (initialResult === 'GO' && result === 'DP') {
+      const runnerOutsCount = countRunnerOuts(newOutcomes);
+      if (runnerOutsCount === 0) {
+        setResult('GO');
         setAutoCorrection(null);
       }
     }
@@ -547,9 +580,12 @@ export default function AtBatFlow({ result: initialResult, bases, batterName, ou
   // AUTO-DEFAULT SPECIAL PLAY FOR HITS
   // ============================================
   useEffect(() => {
-    // For hits, default to "Clean" (no fielding attempt)
+    // For HRs, default to "Over Fence" (ball cleared the wall - BUG-015 fix)
+    // For other hits, default to "Clean" (no fielding attempt)
     // For outs, default to "Routine"
-    if (['1B', '2B', '3B', 'HR'].includes(result) && specialPlay === null) {
+    if (result === 'HR' && specialPlay === null) {
+      setSpecialPlay('Over Fence');
+    } else if (['1B', '2B', '3B'].includes(result) && specialPlay === null) {
       setSpecialPlay('Clean');
     } else if (['FO', 'LO', 'GO', 'PO'].includes(result) && specialPlay === null) {
       setSpecialPlay('Routine');
@@ -639,7 +675,7 @@ export default function AtBatFlow({ result: initialResult, bases, batterName, ou
       hrDistance: hrDistance ? parseInt(hrDistance) : null,
       specialPlay: fieldingData?.playType === 'diving' ? 'Diving' :
                    fieldingData?.playType === 'wall' ? 'Wall Catch' :
-                   fieldingData?.playType === 'jumping' ? 'Leaping' :
+                   fieldingData?.playType === 'leaping' ? 'Leaping' :
                    fieldingData?.playType === 'charging' ? 'Running' :
                    specialPlay,
       savedRun: fieldingData?.savedRun || savedRun,
@@ -805,14 +841,15 @@ export default function AtBatFlow({ result: initialResult, bases, batterName, ou
           </div>
         )}
 
-        {/* Special Play - different options for hits vs outs */}
+        {/* Special Play - different options for hits vs outs vs HRs */}
         {needsSpecialPlay && (
           <div style={styles.section}>
             <div style={styles.sectionLabel}>
-              {isHitResult ? 'FIELDING ATTEMPT?' : 'SPECIAL PLAY?'}
+              {result === 'HR' ? 'HOW DID IT CLEAR?' : isHitResult ? 'FIELDING ATTEMPT?' : 'SPECIAL PLAY?'}
             </div>
             <div style={styles.buttonRow}>
-              {(isHitResult ? specialPlaysForHits : specialPlaysForOuts).map(play => (
+              {/* Use HR-specific options for home runs (BUG-015 fix) */}
+              {(result === 'HR' ? specialPlaysForHR : isHitResult ? specialPlaysForHits : specialPlaysForOuts).map(play => (
                 <button
                   key={play}
                   style={{
@@ -839,10 +876,16 @@ export default function AtBatFlow({ result: initialResult, bases, batterName, ou
                 </label>
               </div>
             )}
-            {/* Hint for hits when fielding attempt is selected */}
-            {isHitResult && specialPlay && specialPlay !== 'Clean' && (
+            {/* Hint for hits when fielding attempt is selected (not HRs) */}
+            {isHitResult && result !== 'HR' && specialPlay && specialPlay !== 'Clean' && (
               <div style={styles.fieldingHint}>
                 Fielder will be credited with a fielding chance
+              </div>
+            )}
+            {/* Hint for HRs when robbery attempt is selected */}
+            {result === 'HR' && specialPlay === 'Robbery Attempt' && (
+              <div style={styles.fieldingHint}>
+                Fielder attempted to rob the home run at the wall
               </div>
             )}
           </div>

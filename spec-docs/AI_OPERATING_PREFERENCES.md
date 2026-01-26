@@ -45,17 +45,81 @@
 Always reason from first principles unless explicitly told otherwise. Break problems down to their fundamental truths and build solutions from there, rather than relying on assumptions or analogies.
 
 ### 2. The Negative Feedback Loop (NFL)
-Assume failure until proven otherwise. After any code, logic, task completion, or documentation:
+Assume failure until proven otherwise. The NFL has **three tiers** of verification:
 
+#### Tier 1: Code-Level NFL (After every implementation)
 1. **Actively try to disprove success** - Attempt to break, falsify, or find gaps in what was just created
 2. **Test edge cases** - Identify boundary conditions, unusual inputs, and failure modes
 3. **Verify assumptions** - Question every assumption made during implementation
 4. **Document findings** - Record what was tested and what passed/failed
 5. **Iterate until unfalsifiable** - Only stop when you cannot find any way to disprove correctness
 
+#### Tier 2: Data Flow NFL (After every feature)
+Verify the complete pipeline works end-to-end:
+
+```
+┌─────────┐    ┌──────────┐    ┌────────────┐    ┌─────────┐
+│   UI    │───▶│  Storage │───▶│ Calculator │───▶│ Display │
+│ (Input) │    │ (Persist)│    │  (Process) │    │ (Output)│
+└─────────┘    └──────────┘    └────────────┘    └─────────┘
+```
+
+Ask these questions:
+1. ✅ **UI exists to collect data?** - Can users input this data?
+2. ✅ **Data persists to storage?** - Does it survive browser refresh?
+3. ✅ **Calculator is called with real data?** - Not orphaned/unused?
+4. ✅ **Result is displayed somewhere?** - Users can see the output?
+5. ✅ **E2E test passes?** - Input → Refresh → See calculated result?
+
+**WARNING**: A calculator that exists but is never called is an ORPHAN. A data type collected but not persisted is LOST. Both are bugs the Tier 1 NFL won't catch.
+
+#### Tier 3: Spec-to-Implementation Audit (Periodic deep audit)
+Compare EVERY spec document against actual implementation to find:
+- **Missing features** - Spec'd but not implemented at all
+- **Partial features** - Started but incomplete
+- **Orphaned code** - Implemented but not connected
+- **Spec/code mismatches** - Different values, logic, or behavior
+
+**Audit Process (use parallel agents for speed):**
+
+1. **For each major system**, spawn an agent to:
+   ```
+   Read: [SPEC_FILE].md
+   Search: src/ for related implementation files
+   Compare: What spec says vs what code does
+   Report: Gaps in structured format
+   ```
+
+2. **Gap format**:
+   ```
+   FEATURE: [name]
+   SPEC SAYS: [requirement]
+   IMPLEMENTATION: [what exists or "MISSING"]
+   PRIORITY: HIGH/MEDIUM/LOW
+   ```
+
+3. **Audit all integration points**:
+   - Does UI call the engine?
+   - Does engine read from storage?
+   - Does result display in UI?
+   - Is data persisted?
+
+4. **Compile findings** into FEATURE_WISHLIST.md with:
+   - Total count by priority
+   - Detailed tables per system
+   - HIGH priority items for immediate action
+
+**When to run Tier 3 audit:**
+- Before starting a new sprint/phase
+- When user reports "missing" features
+- After any major refactor
+- At least once per week during active development
+
 **Do not declare completion until:**
-- The NFL has been exhausted, OR
-- The user explicitly permits moving on with stones "unturned"
+- Tier 1 NFL has been exhausted (code works correctly)
+- Tier 2 NFL confirms data flows end-to-end
+- Tier 3 audit has been run if starting/ending a major phase
+- OR the user explicitly permits moving on with stones "unturned"
 
 ### 3. Scope Discipline
 - **Default to thoroughness** - Complete tasks to their full scope as requested
@@ -63,11 +127,38 @@ Assume failure until proven otherwise. After any code, logic, task completion, o
 - **Ask before changing objectives** - Always confirm with the user before modifying task parameters, even if you believe a change is beneficial
 
 ### 4. Completion Protocol
-Before declaring any task "complete" or "successful":
+
+**MANDATORY END-OF-DAY CHECKPOINT** (Do NOT skip this):
+
+Before declaring ANY implementation day "complete", you MUST run all 3 NFL tiers:
+
+```
+┌────────────────────────────────────────────────────────────────┐
+│  END-OF-DAY NFL CHECKPOINT                                     │
+├────────────────────────────────────────────────────────────────┤
+│  □ Tier 1: Try to BREAK the code (edge cases, null inputs)     │
+│  □ Tier 2: Verify FULL pipeline: UI → Storage → Calc → Display │
+│  □ Tier 3: Compare implementation against SPEC requirements    │
+├────────────────────────────────────────────────────────────────┤
+│  Only after ALL THREE pass can you mark day as complete.       │
+│  If ANY tier fails, day status = PARTIAL, document gaps.       │
+└────────────────────────────────────────────────────────────────┘
+```
+
+**Tier 2 is the most commonly skipped** - always ask:
+1. Does UI collect this data? → WHERE?
+2. Does data persist to storage? → PROVE IT (show the write call)
+3. Does calculator consume stored data? → SHOW THE IMPORT
+4. Does result display in UI? → WHERE IS IT RENDERED?
+
+If you cannot answer all 4 with specific file:line references, Tier 2 FAILS.
+
+**Before declaring any task "complete" or "successful":**
 1. State what was accomplished
-2. State what NFL steps were performed
+2. State what NFL steps were performed (all 3 tiers for end-of-day)
 3. State any remaining uncertainties or untested areas
-4. Ask the user to confirm before marking as done
+4. If any tier failed, explicitly state "Day X: PARTIAL" not "COMPLETE"
+5. Ask the user to confirm before marking as done
 
 ### 5. Documentation Protocol
 When creating or updating documentation:
@@ -246,10 +337,11 @@ When you encounter something in the Master Spec that differs from our newer indi
 
 ### 11.3 Practical Example
 
-**Master Spec says**: Robbery = +1 Fame Bonus
-**SPECIAL_EVENTS_SPEC.md says**: Robbery = +1.5 Fame Bonus (+2.5 for grand slam robbery)
-
-**Correct action**: Follow SPECIAL_EVENTS_SPEC.md. The refined spec has more nuance (grand slam bonus) and was deliberately set higher after considering the difficulty and impact of the play.
+**RESOLVED CONFLICT (January 2026):**
+- Previous conflict: Master Spec said +1, SPECIAL_EVENTS_SPEC.md said +1.5 (+2.5 for grand slam)
+- **Decision**: Robbery = **+1 Fame** (same for all robbery types)
+- **Rationale**: The difficulty of the catch is similar regardless of runners on base. The extra runners only affect RBIs prevented, not the fielder's Fame for the spectacular play.
+- **SPECIAL_EVENTS_SPEC.md is authoritative** and now reflects this value consistently.
 
 ### 11.4 Orphaned Concept Mining
 
@@ -321,3 +413,104 @@ When performing hands-on testing:
 - Chrome tools interact with user's actual browser
 - Always close modals/clean up after testing
 - Take screenshots at key verification points for evidence
+
+---
+
+## 13. GameTracker Design Philosophy
+
+### 13.1 Non-User-Intensive Design Principle
+
+**Core Philosophy**: The GameTracker should be as non-user-intensive as possible by leveraging inferential logic based on real baseball gameplay intuition.
+
+The user watches and plays the game - they shouldn't be constantly interrupted to record obvious events. The system should:
+
+1. **Infer what it can** from existing play-by-play data
+2. **Prompt only when uncertain** (and make prompts easy to dismiss or confirm)
+3. **Never ask the obvious** - if baseball logic dictates the outcome, don't ask
+
+### 13.2 Detection Tiers
+
+| Tier | User Effort | When to Use | Examples |
+|------|-------------|-------------|----------|
+| **Auto-Detect** | None | Determinable from data | Cycle, no-hitter, blown save, milestones |
+| **Prompt-Detect** | 1 click (Y/N) | System suspects, needs confirmation | Web gem, TOOTBLAN, robbery |
+| **Manual Entry** | Multiple clicks | Cannot infer, user initiates | Nut shot, killed pitcher |
+
+### 13.3 Implementation Guidelines
+
+When implementing detection logic:
+
+1. **Baseball Intuition First**: What would a knowledgeable fan expect?
+   - 4+ pitches thrown at runner = likely nut shot? Prompt.
+   - Fly out in deep zone with diving catch animation → likely web gem? Prompt.
+   - Pitcher faces minimum batters through 5 → detect no-hitter progress automatically.
+
+2. **Confidence Thresholds**:
+   - High confidence (>90%) → Auto-detect, no prompt
+   - Medium confidence (50-90%) → Prompt with suggestion
+   - Low confidence (<50%) → Don't prompt, leave to manual entry
+
+3. **Minimal Disruption**:
+   - Prompts should be dismissible with one tap
+   - Group related prompts (don't ask 3 questions in a row)
+   - Remember user preferences for prompt frequency
+
+### 13.4 Related Spec Docs
+
+- `DETECTION_FUNCTIONS_IMPLEMENTATION.md` - Technical implementation
+- `FAME_SYSTEM_TRACKING.md` - Fame events and triggers
+- `SPECIAL_EVENTS_SPEC.md` - Event definitions
+
+---
+
+## 14. Spec File Verification Protocol
+
+### 13.1 The Problem
+Audit reports and session logs can document resolutions WITHOUT actually applying changes to source spec files. This creates a false sense of completion where documentation says "resolved" but the actual specs remain unchanged.
+
+**Example (January 2026):** NFL audit documented 11 "resolved" minor issues, but verification revealed only 1 was actually applied to spec files. The other 10 existed only in the audit report.
+
+### 13.2 Write-to-Source-First Rule
+When a decision is made or issue is resolved:
+
+1. **Update the actual spec file FIRST**
+2. **Then update audit reports/logs SECOND**
+3. Audit reports describe what WAS done, not what SHOULD be done
+
+### 13.3 Verification Steps
+After documenting any fix in an audit report or session log:
+
+1. **Grep/search the actual spec file** for the old value
+2. **Confirm the new value is present** in the spec file
+3. **Don't mark resolved** until verified in source
+
+```bash
+# Example verification
+grep -n "every 5-7 games" spec-docs/*.md  # Should return nothing if fixed
+grep -n "every 5 games" spec-docs/KBL_XHD_TRACKER_MASTER_SPEC_v3.md  # Should find the fix
+```
+
+### 13.4 Post-Audit NFL Check
+Before closing any audit or resolution pass:
+
+1. Run verification pass on ALL "resolved" items
+2. For each resolution, confirm the change exists in the actual spec file
+3. Items only in audit report (not in specs) must be applied or re-opened
+
+### 13.5 Red Flags
+Be suspicious when:
+- Resolution only mentions "updated audit report" without spec file changes
+- No file paths listed for where the fix was applied
+- Grep for old value still finds matches in spec files
+- Resolution describes what "should" happen vs what "was" done
+
+### 13.6 Accountability
+When resolving issues across multiple files:
+
+| Document Type | Purpose | Trust Level |
+|---------------|---------|-------------|
+| Actual spec files (*_SPEC.md) | Source of truth | HIGH - This is what matters |
+| Audit reports | Track what was done | MEDIUM - Verify against specs |
+| Session logs | Historical record | LOW - Just notes, not authority |
+
+**The spec file is the only thing that matters.** If the spec file doesn't have the fix, it's not fixed.

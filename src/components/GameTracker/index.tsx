@@ -16,10 +16,13 @@ import type {
   PinchHitterEvent,
   PinchRunnerEvent,
   DefensiveSubEvent,
+  PositionSwitchEvent,
   Position,
   FameEvent,
   FameEventType,
   FameAutoDetectionSettings,
+  FieldingData,
+  Direction,
 } from '../../types/game';
 import {
   createEmptyBases,
@@ -40,39 +43,81 @@ import PitchingChangeModal from './PitchingChangeModal';
 import PinchHitterModal from './PinchHitterModal';
 import PinchRunnerModal from './PinchRunnerModal';
 import DefensiveSubModal from './DefensiveSubModal';
+import PositionSwitchModal from './PositionSwitchModal';
 import { FameEventModal, QuickFameButtons } from './FameEventModal';
 import { FamePanel, FameToastContainer, EndGameFameSummary } from './FameDisplay';
-import { useFameDetection } from '../../hooks/useFameDetection';
+import { WARPanel } from './WARDisplay';
+import { CareerPanel } from './CareerDisplay';
+import { SeasonLeaderboardsPanel } from './SeasonLeaderboards';
+import { PlayerCardModal } from './PlayerCard';
+import { SeasonSummaryModal } from './SeasonSummary';
+import { PlayerNameWithMorale } from './PlayerNameWithMorale';
+import { useFameDetection, type PlayerStats as FamePlayerStats } from '../../hooks/useFameDetection';
 import { useGamePersistence, type GameStateForPersistence } from '../../hooks/useGamePersistence';
 import { aggregateGameToSeason } from '../../utils/seasonAggregator';
+import { getOrCreateSeason } from '../../utils/seasonStorage';
+import type { PersistedGameState } from '../../utils/gameStorage';
 import { useLiveStats, toGameBattingStats, toGamePitchingStats } from '../../hooks/useLiveStats';
 import { formatAvg, formatERA, formatBatterGameLine, formatPitcherGameLine } from '../../utils/liveStatsCalculator';
+import {
+  logAtBatEvent,
+  logFieldingEvent,
+  createGameHeader,
+  completeGame,
+  markGameAggregated,
+  markAggregationFailed,
+  type AtBatEvent as EventLogAtBat,
+  type FieldingEvent as EventLogFielding,
+  type RunnerState,
+  type RunnerInfo,
+  type FameEventRecord,
+  type BallInPlayData,
+} from '../../utils/eventLog';
+import {
+  calculateLeverageIndex,
+  isClutchSituation,
+  type LeverageGameState,
+} from '../../utils/mojoSystem';
+import { useClutchCalculations, type ClutchEventInput } from '../../hooks/useClutchCalculations';
+import { useMWARCalculations, detectDecisionType, evaluatePinchHitterOutcome, type ManagerDecisionInput } from '../../hooks/useMWARCalculations';
 
-// Demo lineup data (will be replaced with real data)
+// Team lineup generation - uses real player database
 // NOTE: In SMB4, pitchers bat - no DH. Pitcher is in the lineup at position 9.
-const demoLineup = [
-  { id: '1', name: 'Willie Mays', position: 'CF' as const, grade: 'A+', jerseyNumber: 24 },
-  { id: '2', name: 'Hank Aaron', position: 'RF' as const, grade: 'A', jerseyNumber: 44 },
-  { id: '3', name: 'Mickey Mantle', position: 'LF' as const, grade: 'A', jerseyNumber: 7 },
-  { id: '4', name: 'Ted Williams', position: '3B' as const, grade: 'A+', jerseyNumber: 9 },
-  { id: '5', name: 'Lou Gehrig', position: '1B' as const, grade: 'A', jerseyNumber: 4 },
-  { id: '6', name: 'Joe DiMaggio', position: '2B' as const, grade: 'A-', jerseyNumber: 5 },
-  { id: '7', name: 'Roberto Clemente', position: 'SS' as const, grade: 'A-', jerseyNumber: 21 },
-  { id: '8', name: 'Johnny Bench', position: 'C' as const, grade: 'B+', jerseyNumber: 5 },
-  { id: '9', name: 'Nolan Ryan', position: 'P' as const, grade: 'A', jerseyNumber: 34 },
-];
+import {
+  generateTeamLineup,
+  generateTeamBench,
+  getTeamRotation,
+  type GameLineupSlot,
+  type GameBenchPlayer,
+} from '../../data/playerDatabase';
 
-// Demo bench players
-const demoBench: BenchPlayer[] = [
-  { playerId: 'b1', playerName: 'Sandy Koufax', positions: ['P'], isAvailable: true, batterHand: 'L' },
-  { playerId: 'b2', playerName: 'Bob Gibson', positions: ['P'], isAvailable: true, batterHand: 'R' },
-  { playerId: 'b3', playerName: 'Mariano Rivera', positions: ['P'], isAvailable: true, batterHand: 'R' },
-  { playerId: 'b4', playerName: 'Rickey Henderson', positions: ['LF', 'CF'], isAvailable: true, batterHand: 'R' },
-  { playerId: 'b5', playerName: 'Brooks Robinson', positions: ['3B', '1B'], isAvailable: true, batterHand: 'R' },
-  { playerId: 'b6', playerName: 'Ozzie Smith', positions: ['SS', '2B'], isAvailable: true, batterHand: 'S' },
-  { playerId: 'b7', playerName: 'Carlton Fisk', positions: ['C'], isAvailable: true, batterHand: 'R' },
-  { playerId: 'b8', playerName: 'Ernie Banks', positions: ['SS', '1B'], isAvailable: true, batterHand: 'R' },
-];
+// Default teams for testing - Sirloins vs Beewolves
+const DEFAULT_AWAY_TEAM = 'sirloins';
+const DEFAULT_HOME_TEAM = 'beewolves';
+
+// Generate lineups from database
+function getTeamLineupData(teamId: string): { lineup: GameLineupSlot[]; bench: GameBenchPlayer[] } {
+  const rotation = getTeamRotation(teamId);
+  const startingPitcherId = rotation[0]?.id;
+  return {
+    lineup: generateTeamLineup(teamId, startingPitcherId),
+    bench: generateTeamBench(teamId, startingPitcherId),
+  };
+}
+
+// Get default lineups (Away = Sirloins, Home = Beewolves)
+const awayData = getTeamLineupData(DEFAULT_AWAY_TEAM);
+const homeData = getTeamLineupData(DEFAULT_HOME_TEAM);
+
+// Use away team as the "current" team for now (batting first)
+const demoLineup = awayData.lineup;
+const demoBench: BenchPlayer[] = awayData.bench.map(p => ({
+  playerId: p.playerId,
+  playerName: p.playerName,
+  positions: p.positions,
+  isAvailable: p.isAvailable,
+  batterHand: p.batterHand,
+}));
 
 // Create initial lineup state from demo data
 function createInitialLineupState(): LineupState {
@@ -212,7 +257,7 @@ export default function GameTracker() {
   const [substitutionHistory, setSubstitutionHistory] = useState<SubstitutionEvent[]>([]);
 
   // Pending substitution modals
-  const [pendingSubType, setPendingSubType] = useState<'PITCH_CHANGE' | 'PINCH_HIT' | 'PINCH_RUN' | 'DEF_SUB' | null>(null);
+  const [pendingSubType, setPendingSubType] = useState<'PITCH_CHANGE' | 'PINCH_HIT' | 'PINCH_RUN' | 'DEF_SUB' | 'POS_SWITCH' | null>(null);
 
   // Undo stack
   const [undoStack, setUndoStack] = useState<string[]>([]);
@@ -226,6 +271,19 @@ export default function GameTracker() {
   const [fameModalOpen, setFameModalOpen] = useState(false);
   // Fame settings with toggle functions
   const [fameSettings, setFameSettings] = useState<FameAutoDetectionSettings>(DEFAULT_FAME_SETTINGS);
+
+  // Player Card modal state
+  const [playerCardOpen, setPlayerCardOpen] = useState(false);
+  const [selectedPlayer, setSelectedPlayer] = useState<{ playerId: string; playerName: string; teamId: string } | null>(null);
+
+  // Handler to open player card when clicking on a player in leaderboards
+  const handlePlayerClick = useCallback((playerId: string, playerName: string, teamId: string) => {
+    setSelectedPlayer({ playerId, playerName, teamId });
+    setPlayerCardOpen(true);
+  }, []);
+
+  // Season Summary modal state
+  const [seasonSummaryOpen, setSeasonSummaryOpen] = useState(false);
 
   // Toggle Fame toast notifications
   const toggleFameToasts = useCallback(() => {
@@ -253,6 +311,25 @@ export default function GameTracker() {
   const [maxDeficitHome, setMaxDeficitHome] = useState(0);  // Max runs home team trailed by
 
   // ============================================
+  // PER-INNING PITCH TRACKING (for Immaculate Inning detection)
+  // Per MILESTONE_SYSTEM_SPEC.md - Immaculate Inning = 3K on exactly 9 pitches
+  // ============================================
+  interface InningPitchData {
+    pitches: number;
+    strikeouts: number;
+    pitcherId: string;
+  }
+  const [currentInningPitches, setCurrentInningPitches] = useState<InningPitchData>({
+    pitches: 0,
+    strikeouts: 0,
+    pitcherId: ''
+  });
+
+  // Event log sequence counter (for bulletproof data integrity)
+  const [eventSequence, setEventSequence] = useState(0);
+  const [gameHeaderCreated, setGameHeaderCreated] = useState(false);
+
+  // ============================================
   // PITCHER GAME STATS (Accumulated per game)
   // Per STAT_TRACKING_ARCHITECTURE_SPEC.md
   // ============================================
@@ -266,19 +343,30 @@ export default function GameTracker() {
     return initialMap;
   });
 
-  // Get current pitcher based on half inning
+  // Get current pitcher based on half inning and lineup state
   const getCurrentPitcherId = useCallback(() => {
+    // Use actual current pitcher from lineup state if available (updated by pitching changes)
+    // Fall back to default IDs if no pitcher tracked yet
+    if (lineupState.currentPitcher) {
+      return lineupState.currentPitcher.playerId;
+    }
     // When TOP of inning, home team is pitching; when BOTTOM, away team is pitching
     return halfInning === 'TOP' ? 'home_pitcher' : 'away_pitcher';
-  }, [halfInning]);
+  }, [halfInning, lineupState.currentPitcher]);
 
   // Initialize Fame detection hook
+  // Note: We don't use onFameDetected callback because we explicitly capture
+  // and handle results where checkForFameEvents is called (avoiding duplicates)
   const fameDetection = useFameDetection({
-    settings: fameSettings,
-    onFameDetected: (result) => {
-      addFameEvent(result.event);
-    }
+    settings: fameSettings
   });
+
+  // ============================================
+  // CLUTCH & MWAR CALCULATIONS (Day 2 Wire-up)
+  // Per IMPLEMENTATION_PLAN.md v5 - Day 2
+  // ============================================
+  const clutchCalculations = useClutchCalculations();
+  const mwarCalculations = useMWARCalculations();
 
   // ============================================
   // GAME PERSISTENCE (Phase 2)
@@ -291,8 +379,15 @@ export default function GameTracker() {
   const [showRecoveryPrompt, setShowRecoveryPrompt] = useState(false);
 
   // Check for saved game on mount
+  // BUG FIX: Only set hasAttemptedRestore AFTER checking hasSavedGame
+  // Previously it was set before the check, causing the prompt to never show
   useEffect(() => {
-    if (hasAttemptedRestore.current || gamePersistence.isLoading) return;
+    // Wait until loading is complete
+    if (gamePersistence.isLoading) return;
+    // Only attempt once
+    if (hasAttemptedRestore.current) return;
+
+    // Now that loading is done, we can check and set the flag
     hasAttemptedRestore.current = true;
 
     if (gamePersistence.hasSavedGame) {
@@ -325,12 +420,13 @@ export default function GameTracker() {
       maxDeficitAway,
       maxDeficitHome,
       activityLog,
+      currentInningPitches,
     };
   }, [
     gameId, inning, halfInning, outs, homeScore, awayScore, bases,
     currentBatterIndex, atBatCount, awayTeamId, homeTeamId, awayTeamName, homeTeamName,
     playerStats, pitcherGameStats, fameEvents, lastHRBatterId, consecutiveHRCount,
-    inningStrikeouts, maxDeficitAway, maxDeficitHome, activityLog
+    inningStrikeouts, maxDeficitAway, maxDeficitHome, activityLog, currentInningPitches
   ]);
 
   // Auto-save when key game state changes
@@ -368,6 +464,10 @@ export default function GameTracker() {
       setMaxDeficitAway(savedState.maxDeficitAway);
       setMaxDeficitHome(savedState.maxDeficitHome);
       setActivityLog(savedState.activityLog);
+      // Restore per-inning pitch tracking (if present in saved state)
+      if (savedState.currentInningPitches) {
+        setCurrentInningPitches(savedState.currentInningPitches);
+      }
 
       // Add recovery message to log
       setActivityLog(prev => [`📂 Game restored from save`, ...prev.slice(0, 9)]);
@@ -460,9 +560,30 @@ export default function GameTracker() {
     result: AtBatResult,
     outsOnPlay: number,
     runsScored: number,
-    basesLoaded: boolean
+    basesLoaded: boolean,
+    pitchesThisAtBat?: number  // Optional: for precise pitch tracking (Immaculate Inning detection)
   ) => {
     const pitcherId = getCurrentPitcherId();
+
+    // Update per-inning pitch tracking
+    const isStrikeout = result === 'K' || result === 'KL' || result === 'D3K';
+    if (pitchesThisAtBat !== undefined) {
+      setCurrentInningPitches(prev => ({
+        pitches: prev.pitches + pitchesThisAtBat,
+        strikeouts: prev.strikeouts + (isStrikeout ? 1 : 0),
+        pitcherId: pitcherId
+      }));
+    } else {
+      // When pitch count not provided, just track strikeouts for the inning
+      // This allows detecting "struck out the side" even without exact pitch counts
+      if (isStrikeout) {
+        setCurrentInningPitches(prev => ({
+          ...prev,
+          strikeouts: prev.strikeouts + 1,
+          pitcherId: pitcherId
+        }));
+      }
+    }
 
     setPitcherGameStats(prev => {
       const newMap = new Map(prev);
@@ -534,17 +655,15 @@ export default function GameTracker() {
       // Track runs allowed
       updated.runsAllowed += runsScored;
 
-      // Track first inning runs
-      if (stats.isStarter && stats.entryInning === 1) {
-        // This is simplified - would need to track which inning we're in
-        // For now, just track all runs for starter
+      // Track first inning runs (only count if we're actually in inning 1)
+      if (stats.isStarter && stats.entryInning === 1 && inning === 1) {
         updated.firstInningRuns += runsScored;
       }
 
       newMap.set(pitcherId, updated);
       return newMap;
     });
-  }, [getCurrentPitcherId]);
+  }, [getCurrentPitcherId, inning]);
 
   // Open Fame modal with optional pre-selected event type
   const openFameModal = useCallback((eventType?: FameEventType) => {
@@ -606,6 +725,21 @@ export default function GameTracker() {
     halfInning,
     bases
   );
+
+  // Calculate current Leverage Index for display
+  // Per LEVERAGE_INDEX_SPEC.md - LI measures game state importance
+  const currentLeverageIndex = calculateLeverageIndex({
+    inning,
+    halfInning,
+    outs: outs as 0 | 1 | 2,
+    runners: {
+      first: !!bases.first,
+      second: !!bases.second,
+      third: !!bases.third,
+    },
+    homeScore,
+    awayScore,
+  });
 
   // Infield Fly Rule is in effect when:
   // 1. Less than 2 outs
@@ -673,8 +807,13 @@ export default function GameTracker() {
       outfieldAssistsAtHome: 0
     }));
 
-    // Run end-game Fame detection
-    fameDetection.checkEndGameFame(gameContext, allPitchers);
+    // Run end-game Fame detection and capture results
+    const endGameFameResults = fameDetection.checkEndGameFame(gameContext, allPitchers as unknown as FamePlayerStats[]);
+
+    // Explicitly add end-game Fame events to state
+    endGameFameResults.forEach(detection => {
+      addFameEvent(detection.event);
+    });
 
     // Check for comeback win (team-level)
     // Use the winning team's max deficit they overcame
@@ -682,17 +821,45 @@ export default function GameTracker() {
     if (winningTeamDeficit >= 3) {
       const winningTeamId = awayScore > homeScore ? awayTeamId : homeTeamId;
       const winningTeamName = awayScore > homeScore ? awayTeamName : homeTeamName;
-      fameDetection.detectComebackWin(gameContext, winningTeamId, winningTeamName);
+      const comebackResult = fameDetection.detectComebackWin(gameContext, winningTeamId, winningTeamName);
+      if (comebackResult) {
+        addFameEvent(comebackResult.event);
+      }
     }
 
     // Archive completed game and clear saved state
     const persistedState = buildPersistenceState();
     gamePersistence.archiveGame(persistedState, { away: awayScore, home: homeScore });
 
-    // Aggregate game stats into season totals (Phase 3)
-    aggregateGameToSeason(persistedState).catch(err => {
-      console.error('Failed to aggregate game stats to season:', err);
-    });
+    // ============================================
+    // EVENT LOG: Mark game complete and aggregate (Phase 4)
+    // Per STAT_TRACKING_ARCHITECTURE_SPEC.md
+    // ============================================
+    (async () => {
+      try {
+        // Mark game as complete in event log
+        await completeGame(gameId, { away: awayScore, home: homeScore }, inning);
+        console.log('[EventLog] Game marked complete:', gameId);
+
+        // Aggregate game stats into season totals (Phase 3)
+        await aggregateGameToSeason(persistedState as unknown as PersistedGameState);
+        console.log('[EventLog] Season aggregation successful');
+
+        // Mark as aggregated in event log
+        await markGameAggregated(gameId);
+        console.log('[EventLog] Game marked as aggregated:', gameId);
+      } catch (err) {
+        const errorMsg = err instanceof Error ? err.message : 'Unknown error';
+        console.error('[EventLog] Failed to complete game processing:', errorMsg);
+
+        // Mark aggregation as failed (will retry on next startup)
+        try {
+          await markAggregationFailed(gameId, errorMsg);
+        } catch (markErr) {
+          console.error('[EventLog] Failed to mark aggregation failure:', markErr);
+        }
+      }
+    })();
 
     // Open the end-game Fame summary
     setEndGameFameSummaryOpen(true);
@@ -700,7 +867,7 @@ export default function GameTracker() {
     gameId, inning, halfInning, outs, awayScore, homeScore, bases,
     maxDeficitAway, maxDeficitHome, lastHRBatterId, consecutiveHRCount,
     pitcherGameStats, fameDetection, awayTeamId, homeTeamId, awayTeamName, homeTeamName,
-    gamePersistence, buildPersistenceState
+    gamePersistence, buildPersistenceState, addFameEvent
   ]);
 
   // Check if game should end based on score and inning
@@ -752,6 +919,8 @@ export default function GameTracker() {
     setInningStrikeouts(0);  // Reset strikeout counter for new half-inning
     setConsecutiveHRCount(0); // Reset consecutive HR count
     setLastHRBatterId(null);  // Reset last HR batter
+    // Reset per-inning pitch tracking for Immaculate Inning detection
+    setCurrentInningPitches({ pitches: 0, strikeouts: 0, pitcherId: '' });
     if (halfInning === 'TOP') {
       setHalfInning('BOTTOM');
     } else {
@@ -803,6 +972,13 @@ export default function GameTracker() {
   const getPlayerIdByPosition = (position: Position): string | null => {
     const player = lineupState.lineup.find(p => p.position === position);
     return player?.playerId || null;
+  };
+
+  // Find full player info by defensive position (for fielding event logging)
+  const getPlayerByPosition = (position: Position): { playerId: string; playerName: string } | null => {
+    const player = lineupState.lineup.find(p => p.position === position);
+    if (!player) return null;
+    return { playerId: player.playerId, playerName: player.playerName };
   };
 
   // Credit fielding stats (putout, assist)
@@ -997,6 +1173,349 @@ export default function GameTracker() {
     };
   };
 
+  // ============================================
+  // EVENT LOG HELPERS
+  // Per STAT_TRACKING_ARCHITECTURE_SPEC.md Phase 4
+  // ============================================
+
+  // Convert current bases to RunnerState for event logging
+  const buildRunnerState = useCallback((): RunnerState => {
+    const toRunnerInfo = (runner: Runner | null, pitcherId: string): RunnerInfo | null => {
+      if (!runner) return null;
+      return {
+        runnerId: runner.playerId,
+        runnerName: runner.playerName,
+        responsiblePitcherId: runner.inheritedFrom || pitcherId,
+      };
+    };
+    const currentPitcherId = getCurrentPitcherId();
+    return {
+      first: toRunnerInfo(bases.first, currentPitcherId),
+      second: toRunnerInfo(bases.second, currentPitcherId),
+      third: toRunnerInfo(bases.third, currentPitcherId),
+    };
+  }, [bases, getCurrentPitcherId]);
+
+  // Helper: Map result and playType to ball trajectory for BallInPlayData
+  const mapPlayTypeToTrajectory = (result: AtBatResult, playType: string): 'ground' | 'line' | 'fly' | 'popup' | 'bunt' => {
+    if (['GO', 'DP', 'FC', 'SAC'].includes(result)) return 'ground';
+    if (['FO', 'SF'].includes(result)) return 'fly';
+    if (result === 'LO') return 'line';
+    if (result === 'PO') return 'popup';
+    // For hits, infer from playType or default
+    if (playType === 'diving' || playType === 'charging') return 'ground';
+    if (playType === 'wall' || playType === 'leaping') return 'fly';
+    return 'line'; // Default for hits
+  };
+
+  // Helper: Map direction to field zone number
+  const mapDirectionToZone = (direction: Direction | null | undefined): number => {
+    if (!direction) return 3; // Default to center
+    const zoneMap: Record<string, number> = {
+      'Left': 1,
+      'Left-Center': 2,
+      'Center': 3,
+      'Right-Center': 4,
+      'Right': 5,
+    };
+    return zoneMap[direction] || 3;
+  };
+
+  // Helper: Map FieldingData.playType to FieldingEvent.difficulty
+  const mapPlayTypeToDifficulty = (playType: string): 'routine' | 'likely' | '50-50' | 'unlikely' | 'spectacular' => {
+    const difficultyMap: Record<string, 'routine' | 'likely' | '50-50' | 'unlikely' | 'spectacular'> = {
+      'routine': 'routine',
+      'charging': 'likely',
+      'running': 'likely',
+      'sliding': '50-50',
+      'diving': 'unlikely',
+      'leaping': 'unlikely',
+      'over_shoulder': 'unlikely',
+      'wall': 'spectacular',
+      'robbed_hr': 'spectacular',
+    };
+    return difficultyMap[playType] || 'routine';
+  };
+
+  // Create game header on first at-bat (lazy initialization)
+  const ensureGameHeaderCreated = useCallback(async () => {
+    if (gameHeaderCreated) return;
+
+    const seasonId = 'season-2026'; // Would come from game setup
+    try {
+      // BUG-004/BUG-005 FIX: Ensure season exists before creating game
+      // This creates the season if it doesn't exist, making WAR/leaderboards work
+      await getOrCreateSeason(
+        seasonId,
+        1, // seasonNumber
+        '2026 Season', // seasonName
+        48 // totalGames (SMB4 default season length)
+      );
+      console.log('[Season] Season ensured:', seasonId);
+
+      await createGameHeader({
+        gameId,
+        seasonId,
+        date: Date.now(),
+        awayTeamId,
+        awayTeamName,
+        homeTeamId,
+        homeTeamName,
+        finalScore: null,
+        finalInning: 9,
+        isComplete: false,
+      });
+      setGameHeaderCreated(true);
+      console.log('[EventLog] Game header created:', gameId);
+    } catch (err) {
+      console.error('[EventLog] Failed to create game header:', err);
+    }
+  }, [gameId, gameHeaderCreated, awayTeamId, awayTeamName, homeTeamId, homeTeamName]);
+
+  // Log an at-bat event to the event log
+  const logAtBatToEventLog = useCallback(async (
+    result: AtBatResult,
+    rbiCount: number,
+    runsScored: number,
+    outsAfter: number,
+    runnersAfter: RunnerState,
+    awayScoreAfter: number,
+    homeScoreAfter: number,
+    detectedFameEvents: FameEvent[],
+    fieldingData?: FieldingData,
+    direction?: Direction | null
+  ) => {
+    // Ensure game header exists
+    await ensureGameHeaderCreated();
+
+    const newSequence = eventSequence + 1;
+    setEventSequence(newSequence);
+
+    const currentPitcherId = getCurrentPitcherId();
+    const pitcherStats = pitcherGameStats.get(currentPitcherId);
+    const currentTeamId = halfInning === 'TOP' ? awayTeamId : homeTeamId;
+    const pitcherTeamId = halfInning === 'TOP' ? homeTeamId : awayTeamId;
+
+    // Build runner state BEFORE the at-bat
+    const runnersBefore = buildRunnerState();
+
+    // Calculate leverage index using centralized mojoSystem
+    const leverageGameState: LeverageGameState = {
+      inning,
+      halfInning,
+      outs: outs as 0 | 1 | 2,
+      runners: {
+        first: !!bases.first,
+        second: !!bases.second,
+        third: !!bases.third,
+      },
+      homeScore,
+      awayScore,
+    };
+    const leverageIndex = calculateLeverageIndex(leverageGameState);
+
+    // Calculate win probability (simplified)
+    const winProbBefore = calculateSimpleWinProbability(inning, halfInning, awayScore, homeScore);
+    const winProbAfter = calculateSimpleWinProbability(
+      outsAfter >= 3 ? inning + (halfInning === 'TOP' ? 0 : 1) : inning,
+      outsAfter >= 3 ? (halfInning === 'TOP' ? 'BOTTOM' : 'TOP') : halfInning,
+      awayScoreAfter,
+      homeScoreAfter
+    );
+
+    // WPA from batting team's perspective
+    const isHomeBatting = halfInning === 'BOTTOM';
+    const wpa = isHomeBatting
+      ? winProbAfter - winProbBefore
+      : winProbBefore - winProbAfter;
+
+    // Convert Fame events to records
+    const fameEventRecords: FameEventRecord[] = detectedFameEvents.map(fe => ({
+      eventType: fe.eventType,
+      fameType: fe.fameType,
+      fameValue: fe.fameValue,
+      playerId: fe.playerId,
+      playerName: fe.playerName,
+      description: fe.description || '',
+    }));
+
+    const atBatEvent: EventLogAtBat = {
+      eventId: `${gameId}_${newSequence}`,
+      gameId,
+      sequence: newSequence,
+      timestamp: Date.now(),
+
+      // Who
+      batterId: currentBatter.id,
+      batterName: currentBatter.name,
+      batterTeamId: currentTeamId,
+      pitcherId: pitcherStats?.pitcherId || currentPitcherId,
+      pitcherName: pitcherStats?.pitcherName || 'Unknown',
+      pitcherTeamId,
+
+      // Result
+      result,
+      rbiCount,
+      runsScored,
+
+      // Situation BEFORE
+      inning,
+      halfInning,
+      outs,
+      runners: runnersBefore,
+      awayScore,
+      homeScore,
+
+      // Situation AFTER
+      outsAfter: outsAfter >= 3 ? 0 : outsAfter,
+      runnersAfter,
+      awayScoreAfter,
+      homeScoreAfter,
+
+      // Calculated metrics
+      leverageIndex,
+      winProbabilityBefore: winProbBefore,
+      winProbabilityAfter: winProbAfter,
+      wpa,
+
+      // Ball in play data from fielding modal
+      ballInPlay: fieldingData ? {
+        trajectory: mapPlayTypeToTrajectory(result, fieldingData.playType),
+        zone: mapDirectionToZone(direction),
+        velocity: 'medium' as const, // Default - could be enhanced with exit velocity tracking
+        fielderIds: [fieldingData.primaryFielder, ...fieldingData.assistChain.map(a => a.position)],
+        primaryFielderId: fieldingData.primaryFielder,
+      } : null,
+
+      // Fame events
+      fameEvents: fameEventRecords,
+
+      // Flags
+      isLeadoff: atBatCount === 0 || outs === 0, // Simplified - first batter or first of inning
+      isClutch: isClutchSituation(leverageIndex),
+      isWalkOff: halfInning === 'BOTTOM' && homeScoreAfter > awayScoreAfter && homeScore <= awayScore,
+    };
+
+    try {
+      await logAtBatEvent(atBatEvent);
+      console.log(`[EventLog] Logged at-bat #${newSequence}: ${currentBatter.name} - ${result}`);
+
+      // Log fielding event if fielding data was captured
+      // This persists detailed fielding data for fWAR calculation
+      if (fieldingData) {
+        const fieldingTeamId = halfInning === 'TOP' ? homeTeamId : awayTeamId;
+
+        // Determine play type for the fielding event
+        const isError = fieldingData.playType === 'error' || ['E', 'ROE'].includes(result);
+        const isDP = result === 'DP';
+        const isOutfieldAssist = fieldingData.assistChain.some(a =>
+          ['LF', 'CF', 'RF'].includes(a.position)
+        ) && ['GO', 'OUT_HOME', 'OUT_3B', 'OUT_2B'].includes(result);
+
+        // Look up actual player from lineup by position
+        const fielderInfo = getPlayerByPosition(fieldingData.primaryFielder);
+
+        const fieldingEvent: EventLogFielding = {
+          fieldingEventId: `${gameId}_${newSequence}_fielding`,
+          gameId,
+          atBatEventId: atBatEvent.eventId,
+          sequence: newSequence,
+
+          // Use actual player info from lineup lookup, fallback to position if not found
+          playerId: fielderInfo?.playerId || fieldingData.primaryFielder,
+          playerName: fielderInfo?.playerName || fieldingData.primaryFielder,
+          position: fieldingData.primaryFielder,
+          teamId: fieldingTeamId,  // Team that made the defensive play
+
+          playType: isError ? 'error' :
+                    isDP ? 'double_play_pivot' :
+                    isOutfieldAssist ? 'outfield_assist' :
+                    fieldingData.assistChain.length > 0 ? 'assist' : 'putout',
+          difficulty: mapPlayTypeToDifficulty(fieldingData.playType),
+
+          ballInPlay: atBatEvent.ballInPlay || {
+            trajectory: mapPlayTypeToTrajectory(result, fieldingData.playType),
+            zone: mapDirectionToZone(direction),
+            velocity: 'medium',
+            fielderIds: [fieldingData.primaryFielder],
+            primaryFielderId: fieldingData.primaryFielder,
+          },
+
+          success: !isError,
+          runsPreventedOrAllowed: fieldingData.savedRun ? 1 : isError ? -1 : 0,
+        };
+
+        try {
+          await logFieldingEvent(fieldingEvent);
+          console.log(`[EventLog] Logged fielding event: ${fieldingData.primaryFielder} - ${fieldingEvent.playType}`);
+        } catch (fieldingErr) {
+          console.error('[EventLog] Failed to log fielding event:', fieldingErr);
+        }
+      }
+    } catch (err) {
+      console.error('[EventLog] Failed to log at-bat:', err);
+    }
+  }, [
+    ensureGameHeaderCreated, eventSequence, gameId, getCurrentPitcherId,
+    pitcherGameStats, halfInning, awayTeamId, homeTeamId, buildRunnerState,
+    inning, outs, bases, awayScore, homeScore, currentBatter, atBatCount,
+    mapPlayTypeToDifficulty, mapPlayTypeToTrajectory, mapDirectionToZone, getPlayerByPosition
+  ]);
+
+  // ============================================
+  // NOTE: Leverage Index calculation has been moved to ../../utils/mojoSystem.ts
+  // Import: calculateLeverageIndex, isClutchSituation, LeverageGameState
+  // ============================================
+
+  // ============================================
+  // WIN PROBABILITY CALCULATION
+  // Improved model based on empirical baseball data
+  // ============================================
+  const calculateSimpleWinProbability = (
+    inn: number, half: HalfInning, away: number, home: number
+  ): number => {
+    // Score differential from home team perspective
+    const diff = home - away;
+
+    // Calculate "half-innings remaining"
+    // In TOP of inning N: home has N-1 complete + will bat in N = remaining includes current
+    // In BOTTOM of inning N: away is done, home is currently batting
+    let halfInningsRemaining: number;
+    if (half === 'TOP') {
+      // After this half, there will be (9-inn)*2 + 1 (current bottom) + remaining tops
+      halfInningsRemaining = Math.max(0, (9 - inn) * 2 + 1);
+    } else {
+      // Home is batting, away has no more at-bats this inning
+      halfInningsRemaining = Math.max(0, (9 - inn) * 2);
+    }
+
+    // Per-run win probability shift (diminishes with more innings remaining)
+    // With many innings left, each run matters less; close to end, each run is huge
+    const runsPerWinPct = halfInningsRemaining > 0
+      ? 0.15 / Math.sqrt(halfInningsRemaining / 2 + 1)
+      : 0.35; // End of game: each run is ~35% swing
+
+    // Base probability adjustment
+    let prob = 0.5 + (diff * runsPerWinPct);
+
+    // Home field advantage in walkoff situations
+    if (half === 'BOTTOM' && inn >= 9 && diff <= 0) {
+      // Home team has a better chance when they can walk it off
+      prob += 0.05;
+    }
+
+    // Game is over check (shouldn't reach here but just in case)
+    if (inn >= 9 && half === 'BOTTOM' && home > away) {
+      return 1.0; // Home won
+    }
+    if (inn >= 9 && half === 'TOP' && away > home && outs === 3) {
+      return 0.0; // Away won (home perspective)
+    }
+
+    // Clamp to [0.01, 0.99]
+    return Math.max(0.01, Math.min(0.99, Math.round(prob * 100) / 100));
+  };
+
   // Handle at-bat result selection
   const handleResultSelect = (result: AtBatResult) => {
     saveStateForUndo();
@@ -1015,6 +1534,26 @@ export default function GameTracker() {
         `${currentBatter.name} strikes out${result === 'KL' ? ' looking' : ''}.`,
         ...prev.slice(0, 9)
       ]);
+
+      // Log strikeout to event log
+      const emptyRunnersAfter: RunnerState = { first: null, second: null, third: null };
+      logAtBatToEventLog(
+        result,
+        0, // rbi
+        0, // runs scored
+        outs + 1, // outs after
+        emptyRunnersAfter,
+        awayScore,
+        homeScore,
+        []
+      ).catch(err => console.error('[EventLog] Async K logging failed:', err));
+
+      // Update pitcher stats for strikeout
+      updatePitcherStats(result, 1, 0, false);
+
+      // Increment at-bat count
+      setAtBatCount(prev => prev + 1);
+
       addOuts(1);
       advanceBatter();
       return;
@@ -1116,11 +1655,41 @@ export default function GameTracker() {
           flowState.batterOutAdvancing.putoutBy,
           flowState.batterOutAdvancing.assistBy
         );
-        // TODO: Fame tracking - Aggressive baserunning that failed = -1 Fame Boner
+        // Fame tracking - Aggressive baserunning that failed = -1 Fame Boner
         // This is NOT a TOOTBLAN (per SPECIAL_EVENTS_SPEC: "Thrown out stretching a double
         // to triple (aggressive, not stupid)" is explicitly NOT a TOOTBLAN)
-        // When Fame system is implemented:
-        // addFameEvent(currentBatter.id, 'BONER', -1, 'Thrown out stretching hit');
+        // Determine target base from hit type
+        const outAtBase = result === '1B' ? '2B' as const :
+                          result === '2B' ? '3B' as const : 'HOME' as const;
+        const hitType = result as '1B' | '2B' | '3B';
+        const fameContext = {
+          gameId,
+          inning,
+          halfInning,
+          outs,
+          score: { away: awayScore, home: homeScore },
+          bases,
+          isGameOver: false,
+          scheduledInnings: 9,
+          maxDeficitOvercome: 0,
+          lastHRBatterId: null,
+          consecutiveHRCount: 0,
+          isFirstAtBatOfGame: false,
+          leadChanges: 0,
+          previousLeadTeam: 'tie' as const,
+          maxLeadBlown: { away: 0, home: 0 }
+        };
+        const outStretchingResult = fameDetection.detectBatterOutStretching(
+          fameContext,
+          currentBatter.id,
+          currentBatter.name,
+          halfInning === 'TOP' ? awayTeamId : homeTeamId,
+          hitType,
+          outAtBase
+        );
+        if (outStretchingResult) {
+          addFameEvent(outStretchingResult.event);
+        }
       }
     }
 
@@ -1224,6 +1793,7 @@ export default function GameTracker() {
       runnersLeftOnBase: 0,  // Would track per-game LOB
       gidp: 0,               // Would track GIDP count
       totalHits: stats.h,
+      totalRBI: stats.rbi,
       isPinchHitter: false,  // Would check from lineup state
       battingOrderPosition: currentBatterIndex + 1,
       runsAllowed: 0,
@@ -1261,6 +1831,7 @@ export default function GameTracker() {
       runnersLeftOnBase: 0,
       gidp: 0,
       totalHits: 0,
+      totalRBI: 0,
       isPinchHitter: false,
       battingOrderPosition: 9,
       // USE ACCUMULATED STATS (these persist across at-bats!)
@@ -1285,6 +1856,23 @@ export default function GameTracker() {
     // Build game context
     // For mid-game detection, use current batting team's deficit
     const currentTeamDeficit = halfInning === 'TOP' ? maxDeficitAway : maxDeficitHome;
+
+    // Calculate Leverage Index for Fame weighting
+    // Per LEVERAGE_INDEX_SPEC.md: Higher LI = higher-stakes situation = more Fame credit/blame
+    const leverageGameStateForFame: LeverageGameState = {
+      inning,
+      halfInning,
+      outs: outs as 0 | 1 | 2,
+      runners: {
+        first: !!bases.first,
+        second: !!bases.second,
+        third: !!bases.third,
+      },
+      homeScore,
+      awayScore,
+    };
+    const currentLeverageIndex = calculateLeverageIndex(leverageGameStateForFame);
+
     const gameContext = {
       gameId,
       inning,
@@ -1300,19 +1888,27 @@ export default function GameTracker() {
       isFirstAtBatOfGame: atBatCount === 0,
       leadChanges: 0,
       previousLeadTeam: (awayScore > homeScore ? 'away' : homeScore > awayScore ? 'home' : 'tie') as 'away' | 'home' | 'tie',
-      maxLeadBlown: { away: 0, home: 0 }
+      maxLeadBlown: { away: 0, home: 0 },
+      leverageIndex: currentLeverageIndex, // Pass LI for Fame weighting
     };
 
-    // Run fame detection
-    fameDetection.checkForFameEvents(
+    // Run fame detection and capture results
+    // Note: The onFameDetected callback also fires via the hook, but we capture
+    // results explicitly here for event log integration and belt-and-suspenders reliability
+    const fameDetectionResults = fameDetection.checkForFameEvents(
       gameContext,
-      batterStatsForFame,
+      batterStatsForFame as unknown as FamePlayerStats,
       pitcherStatsForFame,
       result,
       actualRbiCount,
       basesLoaded,
       inningStrikeouts
     );
+
+    // Explicitly add detected Fame events to state (callback should also fire, but be explicit)
+    fameDetectionResults.forEach(detection => {
+      addFameEvent(detection.event);
+    });
 
     // Track HR for back-to-back detection
     if (result === 'HR') {
@@ -1334,6 +1930,100 @@ export default function GameTracker() {
 
     // Increment at-bat count
     setAtBatCount(prev => prev + 1);
+
+    // ============================================
+    // LOG AT-BAT TO EVENT LOG (Phase 4)
+    // Per STAT_TRACKING_ARCHITECTURE_SPEC.md
+    // ============================================
+    // Calculate final state for event log
+    const finalOuts = outs + totalOutsToAdd;
+    const finalAwayScore = halfInning === 'TOP' ? awayScore + runsOnThisPlay : awayScore;
+    const finalHomeScore = halfInning === 'BOTTOM' ? homeScore + runsOnThisPlay : homeScore;
+
+    // Build runners after state (from newBases)
+    const runnersAfter: RunnerState = {
+      first: newBases.first ? {
+        runnerId: newBases.first.playerId,
+        runnerName: newBases.first.playerName,
+        responsiblePitcherId: newBases.first.inheritedFrom || getCurrentPitcherId(),
+      } : null,
+      second: newBases.second ? {
+        runnerId: newBases.second.playerId,
+        runnerName: newBases.second.playerName,
+        responsiblePitcherId: newBases.second.inheritedFrom || getCurrentPitcherId(),
+      } : null,
+      third: newBases.third ? {
+        runnerId: newBases.third.playerId,
+        runnerName: newBases.third.playerName,
+        responsiblePitcherId: newBases.third.inheritedFrom || getCurrentPitcherId(),
+      } : null,
+    };
+
+    // Get Fame events that were just detected (captured from fameDetection above)
+    const detectedFameEvents: FameEvent[] = fameDetectionResults.map(r => r.event);
+
+    // Log to event log asynchronously (don't block UI)
+    // Pass fieldingData to persist detailed fielding info for fWAR calculation
+    logAtBatToEventLog(
+      result,
+      actualRbiCount,
+      runsOnThisPlay,
+      finalOuts,
+      runnersAfter,
+      finalAwayScore,
+      finalHomeScore,
+      detectedFameEvents,
+      flowState.fieldingData,  // Fielding data from FieldingModal
+      flowState.direction       // Direction for zone mapping
+    ).catch(err => console.error('[EventLog] Async logging failed:', err));
+
+    // ============================================
+    // CLUTCH ATTRIBUTION (Day 2 Wire-up)
+    // Per CLUTCH_ATTRIBUTION_SPEC.md
+    // Records clutch value for batter based on LI-weighted performance
+    // ============================================
+    const isWalkoff = finalOuts < 3 &&
+      inning >= 9 &&
+      halfInning === 'BOTTOM' &&
+      finalHomeScore > finalAwayScore &&
+      homeScore <= awayScore;
+
+    const clutchEvent: ClutchEventInput = {
+      gameId,
+      playerId: currentBatter.id,
+      playerName: currentBatter.name,
+      teamId: currentTeamId,
+      role: 'batter',
+      result,
+      direction: flowState.direction ?? undefined,
+      exitType: flowState.exitType ?? undefined,
+      rbiCount: actualRbiCount,
+      isWalkoff,
+      fieldingData: flowState.fieldingData ?? undefined,
+      gameState: {
+        inning,
+        halfInning,
+        outs,
+        runners: {
+          first: !!bases.first,
+          second: !!bases.second,
+          third: !!bases.third,
+        },
+        homeScore,
+        awayScore,
+      },
+    };
+    clutchCalculations.recordClutchEvent(clutchEvent);
+
+    // Also record clutch for pitcher (opposing perspective)
+    const pitcherClutchEvent: ClutchEventInput = {
+      ...clutchEvent,
+      playerId: currentPitcherId,
+      playerName: accumulatedPitcherStats?.pitcherName || 'Pitcher',
+      teamId: halfInning === 'TOP' ? homeTeamId : awayTeamId,
+      role: 'pitcher',
+    };
+    clutchCalculations.recordClutchEvent(pitcherClutchEvent);
 
     advanceBatter();
     setPendingResult(null);
@@ -1469,6 +2159,9 @@ export default function GameTracker() {
       case 'DEF_SUB':
         setPendingSubType('DEF_SUB');
         break;
+      case 'POS_SWITCH':
+        setPendingSubType('POS_SWITCH');
+        break;
       default:
         break;
     }
@@ -1505,6 +2198,29 @@ export default function GameTracker() {
       });
     }
 
+    // Initialize pitcher stats for new pitchers
+    if (event.eventType === 'PITCH_CHANGE') {
+      const pc = event as PitchingChangeEvent;
+      setPitcherGameStats((prev) => {
+        const newMap = new Map(prev);
+        if (!newMap.has(pc.incomingPitcherId)) {
+          // Determine team based on which half of inning (home pitches in TOP, away in BOTTOM)
+          const teamId = halfInning === 'TOP' ? homeTeamId : awayTeamId;
+          newMap.set(
+            pc.incomingPitcherId,
+            createInitialPitcherStats(
+              pc.incomingPitcherId,
+              pc.incomingPitcherName,
+              teamId,
+              false, // Not a starter
+              inning // Entry inning
+            )
+          );
+        }
+        return newMap;
+      });
+    }
+
     // Add to history
     setSubstitutionHistory((prev) => [...prev, event]);
 
@@ -1534,10 +2250,72 @@ export default function GameTracker() {
         logEntry = `Defensive sub: ${ds.substitutions.map((s) => `${s.playerInName} for ${s.playerOutName} at ${s.position}`).join(', ')}`;
         break;
       }
+      case 'POS_SWITCH': {
+        const ps = event as PositionSwitchEvent;
+        logEntry = `Position switch: ${ps.switches.map((s) => `${s.playerName} ${s.fromPosition} → ${s.toPosition}`).join(', ')}`;
+        break;
+      }
     }
 
     if (logEntry) {
       setActivityLog((prev) => [logEntry, ...prev.slice(0, 9)]);
+    }
+
+    // ============================================
+    // MWAR DECISION TRACKING (Day 2 Wire-up)
+    // Per MWAR_CALCULATION_SPEC.md - Track manager decisions
+    // ============================================
+    // Map substitution event types to mWAR decision types
+    const decisionTypeMap: Record<string, 'pitching_change' | 'pinch_hitter' | 'pinch_runner' | 'defensive_sub' | null> = {
+      'PITCH_CHANGE': 'pitching_change',
+      'PINCH_HIT': 'pinch_hitter',
+      'PINCH_RUN': 'pinch_runner',
+      'DEF_SUB': 'defensive_sub',
+      'POS_SWITCH': null, // Position switches don't count as decisions
+    };
+
+    const decisionType = decisionTypeMap[event.eventType];
+    if (decisionType) {
+      // Determine manager ID (using team ID for now)
+      const managerId = halfInning === 'TOP' ? awayTeamId : homeTeamId;
+
+      // Get involved players
+      let involvedPlayers: string[] = [];
+      if (event.eventType === 'PITCH_CHANGE') {
+        const pc = event as PitchingChangeEvent;
+        involvedPlayers = [pc.incomingPitcherId, pc.outgoingPitcherId];
+      } else if (event.eventType === 'PINCH_HIT') {
+        const ph = event as PinchHitterEvent;
+        involvedPlayers = [ph.pinchHitterId, ph.replacedPlayerId];
+      } else if (event.eventType === 'PINCH_RUN') {
+        const pr = event as PinchRunnerEvent;
+        involvedPlayers = [pr.pinchRunnerId, pr.replacedPlayerId];
+      } else if (event.eventType === 'DEF_SUB') {
+        const ds = event as DefensiveSubEvent;
+        involvedPlayers = ds.substitutions.flatMap((s) => [s.playerInId, s.playerOutId]);
+      }
+
+      const mwarDecisionInput: ManagerDecisionInput = {
+        decisionType,
+        gameId,
+        managerId,
+        gameState: {
+          inning,
+          halfInning,
+          outs,
+          runners: {
+            first: !!bases.first,
+            second: !!bases.second,
+            third: !!bases.third,
+          },
+          homeScore,
+          awayScore,
+        },
+        involvedPlayers,
+        notes: logEntry,
+      };
+
+      mwarCalculations.recordDecision(mwarDecisionInput);
     }
 
     // Update bases if pinch runner (replace runner reference)
@@ -1721,6 +2499,7 @@ export default function GameTracker() {
         halfInning={halfInning}
         outs={outs}
         gameNumber={1}
+        leverageIndex={currentLeverageIndex}
       />
 
       <div style={styles.mainContent}>
@@ -1731,7 +2510,8 @@ export default function GameTracker() {
             <div style={styles.dueUpLabel}>DUE UP:</div>
             {getDueUp().map((player, i) => (
               <div key={player.id} style={styles.dueUpPlayer}>
-                {currentBatterIndex + i + 2}. {player.name}
+                {currentBatterIndex + i + 2}.{' '}
+                <PlayerNameWithMorale name={player.name} />
               </div>
             ))}
           </div>
@@ -1742,7 +2522,8 @@ export default function GameTracker() {
             <div style={styles.atBatHeader}>CURRENT AT-BAT</div>
 
             <div style={styles.batterName}>
-              #{currentBatter.jerseyNumber} {currentBatter.name}
+              #{currentBatter.jerseyNumber}{' '}
+              <PlayerNameWithMorale name={currentBatter.name} />
             </div>
             <div style={styles.batterInfo}>
               {currentBatter.position} | {currentBatter.grade} |{' '}
@@ -1875,6 +2656,18 @@ export default function GameTracker() {
         />
       )}
 
+      {pendingSubType === 'POS_SWITCH' && (
+        <PositionSwitchModal
+          lineupState={lineupState}
+          inning={inning}
+          halfInning={halfInning}
+          outs={outs}
+          gameId="demo-game"
+          onComplete={handleSubstitutionComplete}
+          onCancel={() => setPendingSubType(null)}
+        />
+      )}
+
       {/* ============================================ */}
       {/* FAME SYSTEM UI                              */}
       {/* Per FAN_HAPPINESS_SPEC.md                   */}
@@ -1892,6 +2685,57 @@ export default function GameTracker() {
           />
         </div>
       )}
+
+      {/* ============================================ */}
+      {/* WAR DISPLAY                                 */}
+      {/* Per BWAR_CALCULATION_SPEC.md, PWAR_CALCULATION_SPEC.md */}
+      {/* ============================================ */}
+      <div style={{ marginTop: '12px' }}>
+        <WARPanel defaultTab="total" />
+      </div>
+
+      {/* ============================================ */}
+      {/* SEASON LEADERBOARDS                         */}
+      {/* Per IMPLEMENTATION_PLAN.md v3 - Day 7       */}
+      {/* ============================================ */}
+      <div style={{ marginTop: '12px' }}>
+        <SeasonLeaderboardsPanel defaultTab="batting" onPlayerClick={handlePlayerClick} />
+      </div>
+
+      {/* ============================================ */}
+      {/* CAREER STATS DISPLAY                        */}
+      {/* Per IMPLEMENTATION_PLAN.md v3 - Day 5/6     */}
+      {/* ============================================ */}
+      <div style={{ marginTop: '12px' }}>
+        <CareerPanel defaultTab="batting" />
+      </div>
+
+      {/* ============================================ */}
+      {/* SEASON SUMMARY BUTTON                       */}
+      {/* Per IMPLEMENTATION_PLAN.md v3 - Day 8       */}
+      {/* ============================================ */}
+      <div style={{ marginTop: '12px' }}>
+        <button
+          onClick={() => setSeasonSummaryOpen(true)}
+          style={{
+            width: '100%',
+            padding: '12px 16px',
+            borderRadius: '8px',
+            backgroundColor: '#374151',
+            color: '#f3f4f6',
+            border: '1px solid #4b5563',
+            cursor: 'pointer',
+            fontWeight: 600,
+            fontSize: '0.875rem',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '8px',
+          }}
+        >
+          View Season Summary
+        </button>
+      </div>
 
       {/* Quick Fame Buttons */}
       <div style={{ marginTop: '12px' }}>
@@ -1952,6 +2796,27 @@ export default function GameTracker() {
         awayTeamId={awayTeamId}
         homeTeamId={homeTeamId}
         winner={null} // Would be set when game ends
+      />
+
+      {/* Player Card Modal */}
+      {selectedPlayer && (
+        <PlayerCardModal
+          isOpen={playerCardOpen}
+          playerId={selectedPlayer.playerId}
+          playerName={selectedPlayer.playerName}
+          teamId={selectedPlayer.teamId}
+          onClose={() => {
+            setPlayerCardOpen(false);
+            setSelectedPlayer(null);
+          }}
+        />
+      )}
+
+      {/* Season Summary Modal */}
+      <SeasonSummaryModal
+        isOpen={seasonSummaryOpen}
+        onClose={() => setSeasonSummaryOpen(false)}
+        onPlayerClick={handlePlayerClick}
       />
     </div>
   );

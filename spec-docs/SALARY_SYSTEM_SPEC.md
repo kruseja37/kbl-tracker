@@ -1,4 +1,4 @@
-# KBL XHD Tracker - Salary System Specification v2
+# KBL XHD Tracker - Salary System Specification v3
 
 ## Overview
 
@@ -9,7 +9,7 @@ The salary system adds economic depth to roster management. Player salaries refl
 - Real-time updates when triggers occur (traits, fame, performance)
 - Position matters (C/SS more valuable than corner OF)
 - Traits affect salary (tiered impact)
-- Fan happiness tied to payroll expectations
+- Fan morale tied to payroll expectations
 - No salary cap, but soft cap affects fan pressure
 
 ---
@@ -56,16 +56,21 @@ function calculateSalary(player, seasonStats = null, expectations = null, isNewT
 
 ### Position Player Ratings
 
-**Corrected weights** (Power is single rating, not L/R split):
+**3:3:2:1:1 Weight Ratio** (Power:Contact:Speed:Fielding:Arm)
+
+This ratio reflects the real-world correlation between ratings and player value.
+Power and Contact are equally dominant, Speed is secondary, Fielding and Arm are tertiary.
 
 ```javascript
 function calculatePositionPlayerBaseSalary(player) {
+  // 3:3:2:1:1 ratio normalized to sum to 1.0
+  // Total parts = 3+3+2+1+1 = 10
   const weights = {
-    power: 0.40,      // Most important for salary
-    contact: 0.30,    // Second most important
-    speed: 0.10,
-    fielding: 0.10,
-    arm: 0.10
+    power: 0.30,      // 3/10 - tied for most important
+    contact: 0.30,    // 3/10 - tied for most important
+    speed: 0.20,      // 2/10 - secondary importance
+    fielding: 0.10,   // 1/10 - tertiary
+    arm: 0.10         // 1/10 - tertiary
   };
 
   const weightedRating = (
@@ -84,14 +89,19 @@ function calculatePositionPlayerBaseSalary(player) {
 
 ### Pitcher Ratings
 
-Pitchers valued on pitching ratings only (unless two-way):
+**1:1:1 Weight Ratio** (Velocity:Junk:Accuracy)
+
+Pitchers valued on pitching ratings only (unless two-way). Statistical analysis
+showed that a simple average (equal weighting) has the highest correlation (0.9694)
+with actual pitcher performance.
 
 ```javascript
 function calculatePitcherBaseSalary(player) {
+  // 1:1:1 ratio - simple average
   const weights = {
-    velocity: 0.35,
-    junk: 0.35,
-    accuracy: 0.30
+    velocity: 1/3,    // Equal weight
+    junk: 1/3,        // Equal weight
+    accuracy: 1/3     // Equal weight
   };
 
   const weightedRating = (
@@ -104,9 +114,108 @@ function calculatePitcherBaseSalary(player) {
 }
 ```
 
+### Pitchers Who Can Hit (SMB4 Specific)
+
+In SMB4, pitchers bat. A pitcher with good batting ratings commands a premium,
+but not as much as a true two-way player who plays in the field.
+
+```javascript
+function calculatePitcherWithBattingSalary(player) {
+  const pitcherSalary = calculatePitcherBaseSalary(player);
+
+  // Calculate batting contribution (using same 3:3:2:1:1 weights)
+  const battingRating = (
+    player.ratings.power * 0.30 +
+    player.ratings.contact * 0.30 +
+    player.ratings.speed * 0.20 +
+    player.ratings.fielding * 0.10 +
+    player.ratings.arm * 0.10
+  );
+
+  // Tiered batting bonus based on offensive ability
+  let battingBonus = 1.0;
+  if (battingRating >= 70) {
+    battingBonus = 1.50;  // +50% - elite hitting pitcher (rare!)
+  } else if (battingRating >= 55) {
+    battingBonus = 1.25;  // +25% - good hitting pitcher
+  } else if (battingRating >= 40) {
+    battingBonus = 1.10;  // +10% - competent hitter
+  }
+  // Below 40: no bonus (typical pitcher who can't hit)
+
+  return pitcherSalary * battingBonus;
+}
+```
+
+### DH-Aware Pitcher Batting Bonus
+
+The batting bonus for non-two-way pitchers is adjusted based on Designated Hitter
+rules. This accounts for:
+
+1. **League DH Rules** - Some leagues use DH (pitchers never bat), some don't
+2. **Rotation Factor** - Even without DH, pitchers only bat when they start (~25% of games)
+
+**Key Principle**: Two-way players ALWAYS get full batting bonus because they
+play in the field on days they don't pitch. Regular pitchers get reduced bonus.
+
+```javascript
+const PITCHER_ROTATION_FACTOR = 0.25;  // Pitchers bat ~1/4 of team games
+
+function calculateDHAwareBattingBonus(battingRatings, dhContext) {
+  // Get full unadjusted bonus
+  const fullBonus = getFullPitcherBattingBonus(battingRatings);
+
+  // No bonus earned? No adjustment needed
+  if (fullBonus <= 1.0) return 1.0;
+
+  // Two-way players ALWAYS get full bonus
+  if (dhContext?.isTwoWay) return fullBonus;
+
+  // Calculate how often pitcher bats:
+  // (1 - dhPercentage) × ROTATION_FACTOR
+  // 0% DH league: 1.0 × 0.25 = 0.25 (bat 25% of games)
+  // 50% split:    0.5 × 0.25 = 0.125 (bat 12.5% of games)
+  // 100% DH:      0.0 × 0.25 = 0.0 (never bat)
+  const battingMultiplier = (1 - dhContext.effectiveDHPercentage) * PITCHER_ROTATION_FACTOR;
+
+  // Apply to bonus portion only
+  // Formula: 1 + (fullBonus - 1) × battingMultiplier
+  return 1 + (fullBonus - 1) * battingMultiplier;
+}
+```
+
+**Example Calculations:**
+
+| Pitcher Type | Full Bonus | DH% | Multiplier | Adjusted Bonus |
+|--------------|------------|-----|------------|----------------|
+| Contact 45, No DH league | +10% (1.10) | 0% | 0.25 | +2.5% (1.025) |
+| Contact 45, 50% Split | +10% (1.10) | 50% | 0.125 | +1.25% (1.0125) |
+| Contact 45, Universal DH | +10% (1.10) | 100% | 0.0 | +0% (1.0) |
+| Contact 55, No DH league | +25% (1.25) | 0% | 0.25 | +6.25% (1.0625) |
+| Contact 70+, No DH league | +50% (1.50) | 0% | 0.25 | +12.5% (1.125) |
+| Two-Way (any) | +50% (1.50) | Any | 1.0 | +50% (1.50) |
+
+**League Configuration:**
+
+```javascript
+interface LeagueData {
+  id: string;
+  name: string;
+  usesDesignatedHitter: boolean;  // true = AL-style, false = NL-style
+}
+
+// Season-level override
+type DHOverride = 'league_rules' | 'universal' | 'none';
+
+// 'league_rules': Use each league's DH setting (default)
+// 'universal': All teams use DH (pitchers never bat)
+// 'none': No teams use DH (pitchers always bat when starting)
+```
+
 ### Two-Way Player Ratings
 
-Two-way players are extremely valuable - combine both:
+True two-way players (pitch AND play a position in the field) are extremely rare
+and valuable. They get both salaries combined with a 25% premium.
 
 ```javascript
 function calculateTwoWayBaseSalary(player) {
@@ -114,6 +223,7 @@ function calculateTwoWayBaseSalary(player) {
   const pitcherSalary = calculatePitcherBaseSalary(player);
 
   // Two-way premium: not just additive, multiplicative bonus
+  // Reflects the roster flexibility and matchup advantages
   const combinedSalary = (positionSalary + pitcherSalary) * 1.25;
 
   return combinedSalary;
@@ -127,6 +237,18 @@ function calculateBaseRatingSalary(player) {
   if (player.primaryPosition === 'TWO-WAY') {
     return calculateTwoWayBaseSalary(player);
   } else if (isPitcher(player.primaryPosition)) {
+    // Check if this pitcher has notable batting ability
+    const battingRating = (
+      player.ratings.power * 0.30 +
+      player.ratings.contact * 0.30 +
+      player.ratings.speed * 0.20 +
+      player.ratings.fielding * 0.10 +
+      player.ratings.arm * 0.10
+    );
+
+    if (battingRating >= 40) {
+      return calculatePitcherWithBattingSalary(player);
+    }
     return calculatePitcherBaseSalary(player);
   } else {
     return calculatePositionPlayerBaseSalary(player);
@@ -391,6 +513,150 @@ function calculateFameModifier(player) {
 
 ---
 
+## True Value Calculation
+
+**True Value** answers: "What would this player's salary be if the season started today,
+given their actual performance this season relative to peers at their position?"
+
+This is the core calculation for:
+- **Fan Favorite detection** (outperforming contract the most)
+- **Scapegoat detection** (underperforming contract the most)
+- **Trade value assessment** (what should we pay for this player?)
+- **End-of-season ratings adjustments** (did they earn a raise?)
+
+### Core Concept
+
+```
+True Value = What their salary SHOULD be based on actual performance
+Contract Value = What they're actually being paid (opening day salary)
+Value Delta = True Value - Contract Value
+
+If Value Delta > 0: Player is a BARGAIN (underpaid, beloved)
+If Value Delta < 0: Player is OVERPAID (underperforming contract)
+```
+
+### Expected WAR from Salary (Inverse Calculation)
+
+Given a player's salary, what WAR should they produce?
+
+```javascript
+function getExpectedWARFromSalary(salary, position, leagueContext) {
+  // Get position-specific replacement level and peer data
+  const positionPeers = leagueContext.playersByPosition[position];
+  const positionAvgSalary = average(positionPeers.map(p => p.salary));
+  const positionAvgWAR = average(positionPeers.map(p => p.seasonWAR));
+
+  // Linear relationship: salary premium = WAR premium
+  // A player paid 2x average should produce 2x average WAR
+  const salaryRatio = salary / positionAvgSalary;
+  const expectedWAR = positionAvgWAR * salaryRatio;
+
+  // Floor at replacement level (0 WAR)
+  return Math.max(0, expectedWAR);
+}
+```
+
+### Position-Relative True Value
+
+True Value compares a player ONLY to peers at their position.
+A $10M shortstop producing 3 WAR is more valuable than a $10M first baseman
+producing 3 WAR, because shortstops are harder to find.
+
+```javascript
+function calculateTrueValue(player, seasonStats, leagueContext) {
+  const position = player.detectedPosition || player.primaryPosition;
+  const actualWAR = seasonStats.war.total;
+
+  // Get peer pool for this position (with merging for small pools)
+  const peerPool = getPositionPeerPool(position, leagueContext.allPlayers);
+
+  // Calculate position percentiles
+  const warsAtPosition = peerPool.map(p => p.seasonWAR).sort((a, b) => a - b);
+  const salariesAtPosition = peerPool.map(p => p.salary).sort((a, b) => a - b);
+
+  // Find player's WAR percentile among position peers
+  const warPercentile = getPercentile(actualWAR, warsAtPosition);
+
+  // True Value = salary at that same percentile among position peers
+  const trueValue = getValueAtPercentile(warPercentile, salariesAtPosition);
+
+  return {
+    trueValue,
+    contractValue: player.salary,
+    valueDelta: trueValue - player.salary,
+    warPercentile,
+    position,
+    peerPoolSize: peerPool.length
+  };
+}
+
+function getPositionPeerPool(position, allPlayers) {
+  const MIN_POOL_SIZE = 6;
+
+  // Direct position matches
+  let pool = allPlayers.filter(p => p.detectedPosition === position);
+
+  // Merge with similar positions if pool too small
+  if (pool.length < MIN_POOL_SIZE) {
+    const mergeGroups = {
+      'CP': ['CP', 'RP'],
+      'RP': ['RP', 'CP'],
+      'SP/RP': ['SP/RP', 'SP', 'RP'],
+      '1B': ['1B', '3B'],
+      '3B': ['3B', '1B'],
+      '2B': ['2B', 'SS'],
+      'SS': ['SS', '2B'],
+      'LF': ['LF', 'RF', 'CF'],
+      'RF': ['RF', 'LF', 'CF'],
+      'CF': ['CF', 'LF', 'RF'],
+      'UTIL': ['UTIL', 'BENCH'],
+      'BENCH': ['BENCH', 'UTIL'],
+    };
+
+    const positionsToInclude = mergeGroups[position] || [position];
+    pool = allPlayers.filter(p => positionsToInclude.includes(p.detectedPosition));
+  }
+
+  return pool;
+}
+```
+
+### Value Delta for Fan Favorite / Scapegoat
+
+```javascript
+function calculateValueDelta(player, seasonStats, leagueContext) {
+  const { trueValue, contractValue, valueDelta, warPercentile } =
+    calculateTrueValue(player, seasonStats, leagueContext);
+
+  // Normalize to percentage of contract
+  const valueOverContract = (valueDelta / contractValue) * 100;
+
+  return {
+    trueValue,
+    contractValue,
+    valueDelta,           // Raw $ difference
+    valueOverContract,    // Percentage over/under contract
+    warPercentile,
+
+    // Classifications
+    isBargain: valueDelta > contractValue * 0.25,      // >25% underpaid
+    isOverpaid: valueDelta < contractValue * -0.25,   // >25% overpaid
+    isGrosslyOverpaid: valueDelta < contractValue * -0.50, // >50% overpaid
+  };
+}
+```
+
+### True Value Examples
+
+| Player | Position | Salary | Actual WAR | Position Avg WAR | Position Avg Salary | True Value | Delta |
+|--------|----------|--------|------------|------------------|---------------------|------------|-------|
+| Rookie Star | SS | $1.2M | 3.5 | 2.0 | $8.0M | $14.0M | +$12.8M |
+| Bargain Vet | CF | $4.0M | 2.8 | 1.8 | $6.5M | $10.1M | +$6.1M |
+| Overpaid Star | 1B | $28.0M | 1.5 | 2.2 | $12.0M | $8.2M | -$19.8M |
+| Fair Contract | 3B | $15.0M | 2.5 | 2.5 | $14.0M | $14.0M | $0M |
+
+---
+
 ## Personality Modifier (Free Agency Only)
 
 Only applies when joining a new team:
@@ -457,12 +723,12 @@ function handleAllStarTraitChange(player, oldTrait, newTrait) {
 
 ---
 
-## Fan Happiness System
+## Fan Morale System
 
-### Fan Happiness Calculation
+### Fan Morale Calculation
 
 ```javascript
-function calculateFanHappiness(team, season) {
+function calculateFanMorale(team, season) {
   let happiness = 50;  // Start neutral (0-100 scale)
 
   // Payroll expectations
@@ -474,7 +740,7 @@ function calculateFanHappiness(team, season) {
   const performanceDelta = actualWinPct - expectedWinPct;
 
   // HIGH PAYROLL AMPLIFIER: Top payroll teams get amplified unhappiness
-  // A top-25% payroll team underperforming loses MORE fan happiness
+  // A top-25% payroll team underperforming loses MORE fan morale
   let amplifier = 1.0;
   if (payrollPercentile >= 0.75 && performanceDelta < 0) {
     amplifier = 1.5;  // 50% worse for high-payroll underperformers
@@ -525,7 +791,7 @@ function getExpectedWinPctFromPayroll(payrollPercentile) {
 }
 ```
 
-### Fan Happiness Thresholds
+### Fan Morale Thresholds
 
 | Happiness | Status | Effects |
 |-----------|--------|---------|
@@ -540,7 +806,7 @@ function getExpectedWinPctFromPayroll(payrollPercentile) {
 
 ```javascript
 function checkManagerFireRisk(team, season) {
-  const happiness = calculateFanHappiness(team, season);
+  const happiness = calculateFanMorale(team, season);
   const gamesPlayed = team.wins + team.losses;
   const minGamesForFire = Math.floor(season.config.gamesPerTeam * 0.25);
 
@@ -564,7 +830,7 @@ function fireManager(team) {
   team.manager = generateInterimManager();
 
   // Happiness boost
-  team.fanHappiness = Math.min(100, team.fanHappiness + 15);
+  team.fanMorale = Math.min(100, team.fanMorale + 15);
 
   return {
     firedManager,
@@ -582,13 +848,13 @@ function fireManager(team) {
 
 ```javascript
 function checkContractionRisk(team, season) {
-  const finalHappiness = calculateFanHappiness(team, season);
+  const finalHappiness = calculateFanMorale(team, season);
 
   if (finalHappiness >= 10) {
     return { atRisk: false };
   }
 
-  // Fan happiness below 10 = contraction risk
+  // Fan morale below 10 = contraction risk
   return {
     atRisk: true,
     currentHappiness: finalHappiness,
@@ -622,7 +888,7 @@ function checkContractionRecovery(team, offseasonMoves) {
     if (loss.wasOverpaid) happinessGain += 3;
   }
 
-  const newHappiness = team.fanHappiness + happinessGain;
+  const newHappiness = team.fanMorale + happinessGain;
 
   if (newHappiness >= 10) {
     return {
@@ -895,16 +1161,29 @@ function calculateROI(player, seasonStats) {
 
 | Component | Impact |
 |-----------|--------|
-| **Base Ratings** | Power 40%, Contact 30%, Speed/Field/Arm 10% each |
-| **Position** | C +15%, SS +12%, CF +8%, 1B -8%, DH -12% |
+| **Position Player Ratings** | 3:3:2:1:1 ratio (Power 30%, Contact 30%, Speed 20%, Fielding 10%, Arm 10%) |
+| **Pitcher Ratings** | 1:1:1 ratio (Velocity 33%, Junk 33%, Accuracy 33%) |
+| **Pitchers Who Hit** | +10% to +50% bonus based on batting rating (40+ threshold) |
+| **Two-Way Players** | (Position Salary + Pitcher Salary) × 1.25 premium |
+| **Position Multiplier** | C +15%, SS +12%, CF +8%, 1B -8%, DH -12% |
 | **Age** | Rookie 70%, Prime 100%, Peak 110%, Twilight 70% |
 | **Traits** | Elite +10%, Good +5%, Minor +2% (inverse for negative) |
 | **Performance** | +/-10% per WAR vs expectations (capped +/-50%) |
 | **Fame** | +/-3% per fame point (capped +/-30%) |
 | **Personality** | Egotistical +15%, Timid -15% (FA only) |
-| **Fan Happiness** | Payroll sets expectations, affects manager/contraction |
+| **True Value** | Position-relative comparison: what salary their actual WAR commands |
+| **Fan Morale** | Payroll sets expectations, affects manager/contraction |
 | **Expansion** | 2 position + 2 pitchers per team, replacement level only |
+
+### Key Calculations
+
+| Metric | Formula | Use Case |
+|--------|---------|----------|
+| **Expected WAR** | `(Salary / PositionAvgSalary) × PositionAvgWAR` | Pre-season expectations |
+| **True Value** | Salary at player's WAR percentile among position peers | In-season valuation |
+| **Value Delta** | `True Value - Contract Value` | Fan Favorite / Scapegoat detection |
+| **ROI** | `WAR / Salary` | Best/Worst value leaderboards |
 
 ---
 
-*End of Salary System Specification v2*
+*End of Salary System Specification v3*

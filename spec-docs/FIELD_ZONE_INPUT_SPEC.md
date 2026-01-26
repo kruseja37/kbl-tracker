@@ -39,7 +39,7 @@ Zone-based input captures all three in **one tap**:
 | Principle | Implementation |
 |-----------|---------------|
 | **Speed** | Single tap captures location |
-| **Accuracy** | 24 zones (18 fair + 7 foul) balance precision vs complexity |
+| **Accuracy** | 25 zones (18 fair + 7 foul) balance precision vs complexity |
 | **Intuitive** | Visual field matches real baseball positions |
 | **Forgiving** | Tap anywhere, system finds nearest zone |
 | **Complete** | Covers all playable territory including foul ground |
@@ -48,9 +48,9 @@ Zone-based input captures all three in **one tap**:
 
 ## 2. Zone Definitions
 
-### 2.1 The 24-Zone System
+### 2.1 The 25-Zone System
 
-The field is divided into **24 zones** covering fair territory AND foul territory:
+The field is divided into **25 zones** covering fair territory AND foul territory:
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
@@ -780,6 +780,8 @@ function getFielderSuggestions(zoneId) {
 
 ## 8. Spray Chart Generation
 
+> **See STADIUM_ANALYTICS_SPEC.md** for stadium-level spray chart tracking, aggregation, and visualization.
+
 ### 8.1 Zone-to-Spray-Point Mapping
 
 Each zone tap converts to a spray chart point with slight randomization:
@@ -823,6 +825,139 @@ function createSprayChartEntry(zoneId, batterHand, result, exitType) {
     isHit: ['single', 'double', 'triple', 'HR'].includes(result),
     isHR: result === 'HR'
   };
+}
+```
+
+### 8.2 Stadium Spray Chart Integration
+
+Zone data feeds into both player spray charts AND stadium spray charts:
+
+```javascript
+/**
+ * Create batted ball event for stadium analytics
+ * Maps our 25-zone system to STADIUM_ANALYTICS_SPEC spray zones
+ */
+function createStadiumBattedBallEvent(
+  zoneId: string,
+  gameContext: GameContext,
+  batterHand: 'L' | 'R',
+  result: string,
+  exitType: string
+): BattedBallEvent {
+  const zoneData = getZoneData(zoneId, batterHand);
+  const sprayPoint = generateSprayPoint(zoneId);
+
+  // Map our zones to stadium analytics spray zones
+  const stadiumZone = mapToStadiumSprayZone(zoneId);
+
+  return {
+    gameId: gameContext.gameId,
+    inning: gameContext.inning,
+    batterId: gameContext.batterId,
+    pitcherId: gameContext.pitcherId,
+    batterHandedness: batterHand,
+
+    // Location
+    zone: stadiumZone,           // Stadium spray zone (7 zones)
+    inputZone: zoneId,           // Our 25-zone ID for detail
+    distance: estimateDistance(zoneId, result),
+    angle: estimateAngle(zoneId),
+
+    // Outcome
+    outcome: mapResultToOutcome(result),
+    outType: exitType === 'Ground Ball' ? 'GROUND' :
+             exitType === 'Line Drive' ? 'LINE' :
+             exitType === 'Fly Ball' ? 'FLY' : 'POP',
+
+    // Coordinates for visualization
+    x: sprayPoint.x,
+    y: sprayPoint.y
+  };
+}
+
+/**
+ * Map 25-zone system to 7 stadium spray zones
+ */
+function mapToStadiumSprayZone(zoneId: string): SprayZone {
+  const ZONE_TO_SPRAY_ZONE = {
+    // Left line
+    Z04: 'LEFT_LINE', Z17: 'LEFT_LINE', F03: 'LEFT_LINE', F04: 'LEFT_LINE', F05: 'LEFT_LINE',
+
+    // Left field
+    Z07: 'LEFT_FIELD', Z12: 'LEFT_FIELD',
+
+    // Left-center
+    Z11: 'LEFT_CENTER', Z16: 'LEFT_CENTER',
+
+    // Center
+    Z00: 'CENTER', Z06: 'CENTER', Z10: 'CENTER', Z15: 'CENTER',
+
+    // Right-center
+    Z02: 'RIGHT_CENTER', Z03: 'RIGHT_CENTER', Z09: 'RIGHT_CENTER', Z14: 'RIGHT_CENTER',
+
+    // Right field
+    Z05: 'RIGHT_FIELD', Z08: 'RIGHT_FIELD',
+
+    // Right line
+    Z01: 'RIGHT_LINE', Z13: 'RIGHT_LINE', F00: 'RIGHT_LINE', F01: 'RIGHT_LINE', F02: 'RIGHT_LINE',
+
+    // Catcher foul - map to center for simplicity
+    F06: 'CENTER'
+  };
+
+  return ZONE_TO_SPRAY_ZONE[zoneId] || 'CENTER';
+}
+
+/**
+ * Estimate HR distance from zone (for stadium records)
+ */
+function estimateDistance(zoneId: string, result: string): number {
+  if (result !== 'HR') return 0;
+
+  // Base distances for HR zones (wall zones)
+  const HR_DISTANCES = {
+    Z13: 330,  // RF wall - shorter
+    Z14: 375,  // RCF wall
+    Z15: 400,  // CF wall - deepest
+    Z16: 375,  // LCF wall
+    Z17: 340,  // LF wall
+  };
+
+  const base = HR_DISTANCES[zoneId] || 370;
+
+  // Add randomness for variety (±30 feet)
+  return base + Math.floor((Math.random() - 0.3) * 60);
+}
+```
+
+### 8.3 Post-Play Stadium Update
+
+After each batted ball is recorded:
+
+```javascript
+/**
+ * Called after recording a batted ball play
+ * Updates both player and stadium spray charts
+ */
+async function recordBattedBallToStadium(
+  stadiumId: string,
+  event: BattedBallEvent
+): Promise<void> {
+  // From STADIUM_ANALYTICS_SPEC.md
+  const stadium = await getStadium(stadiumId);
+
+  // Add to spray chart
+  recordBattedBall(stadium, event);
+
+  // Check for stadium records (HR distance, etc.)
+  if (event.outcome === 'HOME_RUN') {
+    await checkHRDistanceRecord(stadium, event);
+  }
+
+  // Recalculate park factors if needed
+  if (shouldRecalculateParkFactors(stadium)) {
+    await updateParkFactors(stadium);
+  }
 }
 ```
 

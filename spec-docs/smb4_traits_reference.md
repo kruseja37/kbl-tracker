@@ -217,3 +217,42 @@ Each trait is tied to a Chemistry type. Trait potency depends on how many player
 - Cannot gain both positive and negative versions of same trait type
 - Elite pitch traits only for pitchers
 - Zone/pitch type traits only for batters
+
+---
+
+## Trait Interaction Rules
+
+> **Added January 23, 2026** to resolve NFL Audit Issue 2.22
+
+### How Conflicting Traits Interact
+
+When two players with "opposing" traits face each other (e.g., Stealer vs Pick Officer), traits apply **independently** to their respective owners:
+
+| Situation | Trait A (Runner) | Trait B (Pitcher) | Result |
+|-----------|------------------|-------------------|--------|
+| Steal attempt | Stealer (+speed) | Pick Officer (-steal speed) | Both effects apply, partially canceling |
+| Steal attempt | Stealer (+speed) | None | Runner gets full Stealer bonus |
+| Steal attempt | None | Pick Officer | Runner suffers full Pick Officer penalty |
+
+**Rule: Traits are ADDITIVE, not canceling.**
+
+### Math Example: Stealer vs Pick Officer (Tier 2 vs Tier 2)
+```
+Base steal speed: 100
+Stealer bonus: ×2 → 200 effective speed
+Pick Officer penalty: ×2 reduction → 200 / 2 = 100 effective speed
+
+Result: Both Tier 2 traits → net effect ~neutral (back to baseline)
+```
+
+### Edge Cases
+
+| Opposing Traits | Resolution |
+|----------------|------------|
+| Specialist (same-hand penalty) vs RBI Hero (clutch bonus) | Both apply independently |
+| Mind Gamer (-ACC to pitcher) vs K Collector (+VEL/JNK) | Both apply; pitcher has worse ACC but better stuff |
+| First Pitch Slayer vs First Pitch Prayer | Impossible - same player can't have both |
+| Cannon Arm vs Noodle Arm | Impossible - same player can't have both |
+
+### Key Principle
+SMB4 traits modify the individual player's capabilities. When Player A's trait affects Player B, it's applied as a modifier to Player B's action - but Player B's own traits also apply. **No trait is ever "nullified" - all applicable modifiers stack.**

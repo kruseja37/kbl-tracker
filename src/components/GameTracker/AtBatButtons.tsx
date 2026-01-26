@@ -40,13 +40,13 @@ const resultButtons: { result: AtBatResult; label: string; color: string }[][] =
   ],
 ];
 
+// Note: BALK removed - not possible in SMB4 (too many throws over IS possible though)
 const eventButtons: { event: GameEvent; label: string; color: string }[] = [
   { event: 'SB', label: 'Steal', color: '#26A69A' },
   { event: 'CS', label: 'CS', color: '#EF5350' },
   { event: 'WP', label: 'WP', color: '#AB47BC' },
   { event: 'PB', label: 'PB', color: '#AB47BC' },
   { event: 'PK', label: 'Pickoff', color: '#EF5350' },
-  { event: 'BALK', label: 'Balk', color: '#FFA726' },
 ];
 
 const subButtons: { event: GameEvent; label: string }[] = [
@@ -54,6 +54,7 @@ const subButtons: { event: GameEvent; label: string }[] = [
   { event: 'PINCH_HIT', label: 'Pinch Hitter' },
   { event: 'PINCH_RUN', label: 'Pinch Runner' },
   { event: 'DEF_SUB', label: 'Def Sub' },
+  { event: 'POS_SWITCH', label: 'Pos Switch' },
 ];
 
 export default function AtBatButtons({ onResult, onEvent, disabled, outs, bases }: AtBatButtonsProps) {
@@ -61,10 +62,12 @@ export default function AtBatButtons({ onResult, onEvent, disabled, outs, bases 
   // (With 2 outs, batter can run even if 1st is occupied)
   const isD3KAvailable = !bases.first || outs === 2;
 
+  // Check if there are runners on base (needed for multiple validations)
+  const hasRunners = !!(bases.first || bases.second || bases.third);
+
   // SAC (Sacrifice Bunt) requires:
   // 1. Less than 2 outs - batter out ends inning, runner can't advance
   // 2. Runners on base - can't sacrifice to advance nobody
-  const hasRunners = !!(bases.first || bases.second || bases.third);
   const isSACAvailable = outs < 2 && hasRunners;
 
   // SF (Sacrifice Fly) not available with 2 outs - catch is 3rd out, runner can't tag up to score
@@ -137,20 +140,31 @@ export default function AtBatButtons({ onResult, onEvent, disabled, outs, bases 
       {/* Event Buttons */}
       <div style={styles.sectionLabel}>EVENTS:</div>
       <div style={styles.buttonRow}>
-        {eventButtons.map(({ event, label, color }) => (
-          <button
-            key={event}
-            style={{
-              ...styles.eventButton,
-              backgroundColor: color,
-              opacity: disabled ? 0.5 : 1,
-            }}
-            onClick={() => onEvent(event)}
-            disabled={disabled}
-          >
-            {label}
-          </button>
-        ))}
+        {eventButtons.map(({ event, label, color }) => {
+          // Runner-dependent events require runners on base (BUG-013 fix)
+          // SB, CS, WP, PB, PK (Pickoff), BALK all require runners
+          const requiresRunners = ['SB', 'CS', 'WP', 'PB', 'PK', 'BALK'].includes(event);
+          const isEventDisabled = disabled || (requiresRunners && !hasRunners);
+          const tooltip = requiresRunners && !hasRunners
+            ? `${label} requires runners on base`
+            : undefined;
+
+          return (
+            <button
+              key={event}
+              style={{
+                ...styles.eventButton,
+                backgroundColor: color,
+                opacity: isEventDisabled ? 0.3 : 1,
+              }}
+              onClick={() => onEvent(event)}
+              disabled={isEventDisabled}
+              title={tooltip}
+            >
+              {label}
+            </button>
+          );
+        })}
       </div>
 
       {/* Substitution Buttons */}

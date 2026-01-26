@@ -67,10 +67,39 @@ Since this is for video games, the following real-baseball scenarios are **OUT O
 
 ### User Interaction Model
 
-- **User is the source of truth** - They watch the game and input what happened
-- **No automatic detection** - App doesn't watch the game
-- **User selects all outcomes** - Runner advancement, hit type, etc.
-- **User can override** - RBI count can be manually adjusted
+**Core Principle: Non-User-Intensive Tracking Through Inferential Logic**
+
+The GameTracker should minimize user input burden by leveraging inferential logic based on real baseball gameplay intuition. The goal is to make tracking feel natural and automatic.
+
+#### Detection Philosophy
+
+1. **Auto-Detection** (no user input needed):
+   - Events determinable from play-by-play context (cycle, no-hitter, perfect game, immaculate inning)
+   - Statistical milestones (career HRs, season hits, etc.)
+   - Mechanical events (blown saves, GIDP, etc.)
+
+2. **Prompt-Detection** (system suggests, user confirms):
+   - Events the system suspects but cannot be certain (web gems, TOOTBLAN, robbery, nut shot)
+   - System calculates probability and prompts user only when warranted
+   - Example: Fly out in deep zone with high fielder difficulty → "Was that a Web Gem? 🌟"
+
+3. **Manual Entry** (rare, user-initiated):
+   - Edge cases the system cannot detect
+   - Quick buttons available (🥜 Nut Shot, 💥 Killed Pitcher, 🤦 TOOTBLAN, ⭐ Web Gem)
+   - Full Fame Event Modal for comprehensive manual entry
+
+#### Input Hierarchy (Preference Order)
+
+1. **Infer automatically** when baseball logic makes outcome clear
+2. **Prompt for confirmation** when system has reasonable suspicion
+3. **Ask only when necessary** for genuinely ambiguous situations
+4. **Manual entry as fallback** for edge cases
+
+#### User Override
+
+- User can always override any auto-detected or prompted event
+- RBI count, fielder assignments, Fame events can be manually adjusted
+- User is final authority, system provides intelligent defaults
 
 ---
 

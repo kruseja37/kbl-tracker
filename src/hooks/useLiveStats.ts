@@ -170,44 +170,56 @@ export function useLiveStats(options: UseLiveStatsOptions = {}): UseLiveStatsRet
 /**
  * Convert playerStats from GameTracker to GameBattingStats format.
  * This bridges the existing GameTracker state to the live stats system.
+ *
+ * Accepts either full naming (plateAppearances) or short naming (pa)
  */
 export function toGameBattingStats(playerStats: {
-  odlcli: string;
-  plateAppearances: number;
-  atBats: number;
-  hits: number;
-  singles: number;
-  doubles: number;
-  triples: number;
-  homeRuns: number;
-  rbi: number;
-  runs: number;
-  walks: number;
-  strikeouts: number;
-  hitByPitch: number;
-  sacFlies: number;
-  sacBunts: number;
-  stolenBases: number;
-  caughtStealing: number;
+  // Accept either naming convention
+  odlcli?: string;
+  pa?: number;
+  plateAppearances?: number;
+  ab?: number;
+  atBats?: number;
+  h?: number;
+  hits?: number;
+  singles?: number;
+  doubles?: number;
+  triples?: number;
+  hr?: number;
+  homeRuns?: number;
+  rbi?: number;
+  r?: number;
+  runs?: number;
+  bb?: number;
+  walks?: number;
+  k?: number;
+  strikeouts?: number;
+  hitByPitch?: number;
+  sacFlies?: number;
+  sacBunts?: number;
+  sb?: number;
+  stolenBases?: number;
+  cs?: number;
+  caughtStealing?: number;
 }): GameBattingStats {
   return {
-    odlcli: playerStats.odlcli,
-    plateAppearances: playerStats.plateAppearances,
-    atBats: playerStats.atBats,
-    hits: playerStats.hits,
-    singles: playerStats.singles,
-    doubles: playerStats.doubles,
-    triples: playerStats.triples,
-    homeRuns: playerStats.homeRuns,
-    rbi: playerStats.rbi,
-    runs: playerStats.runs,
-    walks: playerStats.walks,
-    strikeouts: playerStats.strikeouts,
-    hitByPitch: playerStats.hitByPitch,
-    sacFlies: playerStats.sacFlies,
-    sacBunts: playerStats.sacBunts,
-    stolenBases: playerStats.stolenBases,
-    caughtStealing: playerStats.caughtStealing,
+    odlcli: playerStats.odlcli ?? '',
+    plateAppearances: playerStats.plateAppearances ?? playerStats.pa ?? 0,
+    atBats: playerStats.atBats ?? playerStats.ab ?? 0,
+    hits: playerStats.hits ?? playerStats.h ?? 0,
+    singles: playerStats.singles ?? 0,
+    doubles: playerStats.doubles ?? 0,
+    triples: playerStats.triples ?? 0,
+    homeRuns: playerStats.homeRuns ?? playerStats.hr ?? 0,
+    rbi: playerStats.rbi ?? 0,
+    runs: playerStats.runs ?? playerStats.r ?? 0,
+    walks: playerStats.walks ?? playerStats.bb ?? 0,
+    strikeouts: playerStats.strikeouts ?? playerStats.k ?? 0,
+    hitByPitch: playerStats.hitByPitch ?? 0,
+    sacFlies: playerStats.sacFlies ?? 0,
+    sacBunts: playerStats.sacBunts ?? 0,
+    stolenBases: playerStats.stolenBases ?? playerStats.sb ?? 0,
+    caughtStealing: playerStats.caughtStealing ?? playerStats.cs ?? 0,
   };
 }
 

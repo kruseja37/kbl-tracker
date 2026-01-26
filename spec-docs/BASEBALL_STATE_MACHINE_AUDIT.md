@@ -22,7 +22,7 @@ The KBL XHD Tracker should function like a chess engine - every move must be leg
 | R2 | If R1 | TO_3B, SCORED*, HELD (if not forced), OUT_3B, OUT_HOME |
 | R3 | If loaded | SCORED, HELD (if not forced), OUT_HOME |
 
-*Requires extra event inference (SB, WP, PB, E, BALK)
+*Requires extra event inference (SB, WP, PB, E)
 
 #### Single (1B)
 - **Batter**: Goes to 1B
@@ -159,7 +159,7 @@ The KBL XHD Tracker should function like a chess engine - every move must be leg
 7. ❌ R1 HELD on single (must vacate for batter)
 
 ### IMPROBABLE (Require Inference)
-1. ⚠️ R1 → 3B on walk → Requires SB, WP, PB, E, or BALK
+1. ⚠️ R1 → 3B on walk → Requires SB, WP, PB, or E
 2. ⚠️ R1 → HOME on walk → Requires extra event
 3. ⚠️ R2 → HOME on walk (not forced) → Requires extra event
 4. ⚠️ R1 → HOME on single → Likely requires E
@@ -176,7 +176,8 @@ The KBL XHD Tracker should function like a chess engine - every move must be leg
 | WP | Wild Pitch | Pitcher throws ball catcher can't handle |
 | PB | Passed Ball | Catcher fails to catch catchable pitch |
 | E | Error | Fielder misplays allowing extra advancement |
-| BALK | Balk | Pitcher commits balk, runners advance one base |
+
+> **Note:** BALK is not in SMB4 and has been removed from this list.
 
 ### When to Prompt for Extra Event
 ```

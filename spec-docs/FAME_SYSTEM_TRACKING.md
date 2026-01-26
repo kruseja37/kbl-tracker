@@ -29,7 +29,7 @@ The Fame system tracks memorable moments (Fame Bonuses ⭐) and embarrassing mom
 | EndGameFameSummary | `src/components/GameTracker/FameDisplay.tsx` | Post-game summary modal |
 | At-bat detection wiring | `src/components/GameTracker/index.tsx` | Auto-detection after each AB |
 | Game-end auto-detection | `src/components/GameTracker/index.tsx` | Infers game end from score/inning |
-| FAN_HAPPINESS_SPEC.md | `spec-docs/FAN_HAPPINESS_SPEC.md` | Documentation updated |
+| FAN_MORALE_SYSTEM_SPEC.md | `spec-docs/FAN_MORALE_SYSTEM_SPEC.md` | Documentation updated |
 
 ---
 

@@ -218,7 +218,7 @@ UBR (Ultimate Base Running) measures the value a player adds through baserunning
 
 - Taking extra bases on hits (1st→3rd on single, scoring from 2nd on single)
 - Advancing on fly balls (tagging up)
-- Advancing on wild pitches, passed balls, balks
+- Advancing on wild pitches, passed balls
 - Being thrown out trying to advance
 
 ### UBR Events and Run Values
@@ -495,7 +495,7 @@ interface RunnerAdvancement {
   wasThrown: boolean;          // Thrown out trying?
 
   // Context
-  onPlay: 'single' | 'double' | 'flyout' | 'groundout' | 'wp' | 'pb' | 'balk';
+  onPlay: 'single' | 'double' | 'flyout' | 'groundout' | 'wp' | 'pb';  // Note: BALK removed - not in SMB4
 }
 ```
 

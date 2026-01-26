@@ -2,7 +2,7 @@
 
 > **Purpose**: Define the architecture for tracking statistics from at-bat → game → season → career
 > **Related Specs**: PITCHER_STATS_TRACKING_SPEC.md, KBL_XHD_TRACKER_MASTER_SPEC_v3.md §Database Structure
-> **Current State**: Phases 1-3 implemented; Phase 4 (career tracking) pending
+> **Current State**: Phases 1-4 implemented; Phase 5 (multi-season, career, export) pending
 
 ---
 
@@ -260,7 +260,10 @@ When an at-bat completes:
 ```typescript
 function processAtBatEvent(event: AtBatEvent, gameState: GameState): void {
   const batterStats = gameState.playerStats.get(event.batterId);
-  const pitcherStats = gameState.playerStats.get(event.pitcherId);
+
+  // IMPORTANT: Get pitcher using currentPitcher tracking (not fixed IDs)
+  const pitcherId = getCurrentPitcherId(); // Uses lineupState.currentPitcher
+  const pitcherStats = gameState.playerStats.get(pitcherId);
 
   // Always increment PA
   batterStats.pa += 1;
@@ -305,7 +308,52 @@ function processAtBatEvent(event: AtBatEvent, gameState: GameState): void {
 }
 ```
 
-### 3.2 Game → Season Aggregation
+### 3.2 Pitcher Stats Initialization on Substitution
+
+When a pitching change occurs, the new pitcher must have their stats entry initialized **before** any at-bats are recorded against them:
+
+```typescript
+function handleSubstitutionComplete(event: SubstitutionEvent): void {
+  if (event.eventType === 'PITCH_CHANGE') {
+    const pc = event as PitchingChangeEvent;
+
+    setPitcherGameStats((prev) => {
+      const newMap = new Map(prev);
+
+      // CRITICAL: Initialize stats for new pitcher if not already present
+      if (!newMap.has(pc.incomingPitcherId)) {
+        const teamId = halfInning === 'TOP' ? homeTeamId : awayTeamId;
+        newMap.set(pc.incomingPitcherId,
+          createInitialPitcherStats(
+            pc.incomingPitcherId,
+            pc.incomingPitcherName,
+            teamId,
+            false,  // isStarter = false for relievers
+            inning  // entryInning = current inning
+          )
+        );
+      }
+      return newMap;
+    });
+
+    // Also update lineupState.currentPitcher for stat attribution
+    setLineupState((prev) => ({
+      ...prev,
+      currentPitcher: {
+        playerId: pc.incomingPitcherId,
+        playerName: pc.incomingPitcherName,
+        // ... other fields
+      }
+    }));
+  }
+}
+```
+
+> **Implementation Note**: Without this initialization, stats for relief pitchers would not
+> accumulate because the `pitcherGameStats` Map would have no entry for them. This was fixed
+> in the January 2026 implementation audit. See SUBSTITUTION_FLOW_SPEC.md §6.4 for details.
+
+### 3.3 Game → Season Aggregation
 
 When a game ends:
 
@@ -347,7 +395,7 @@ function finalizeGame(gameState: GameState, seasonStats: SeasonStats): void {
 }
 ```
 
-### 3.3 Season → Career Aggregation
+### 3.4 Season → Career Aggregation
 
 When a season ends:
 
@@ -442,11 +490,15 @@ document.addEventListener('visibilitychange', () => {
 2. ✅ Add `PitcherGameStats` map that accumulates across at-bats
 3. ✅ Pass accumulated stats to Fame detection (not rebuilt stats)
 4. ✅ Add localStorage backup for game recovery
+5. ✅ Initialize pitcher stats on substitution (January 2026 fix)
+6. ✅ Track `currentPitcher` via lineupState for accurate stat attribution
 
 **Implementation:**
 - `PitcherGameStats` interface in `GameTracker/index.tsx`
 - `pitcherGameStats` Map state with `updatePitcherStats()` function
 - Stats accumulate on each at-bat completion
+- `handleSubstitutionComplete()` initializes new pitcher's stats entry
+- `getCurrentPitcherId()` uses `lineupState.currentPitcher` after substitutions
 
 ### 5.2 Phase 2: Game Persistence ✅ COMPLETED
 
@@ -472,7 +524,18 @@ document.addEventListener('visibilitychange', () => {
 - `src/utils/liveStatsCalculator.ts` - Merge season + game stats
 - `src/hooks/useLiveStats.ts` - Real-time stats during gameplay
 
-### 5.4 Phase 4: Multi-Season & Export (PENDING)
+### 5.4 Phase 4: Event Log & Data Integrity ✅ COMPLETED
+
+1. ✅ Event log system for bulletproof data preservation
+2. ✅ Full situational context capture (enables WAR, Clutch, Leverage recalculation)
+3. ✅ Aggregation status tracking with retry logic
+4. ✅ Startup integrity check and automatic recovery
+
+**Implementation:**
+- `src/utils/eventLog.ts` - Event log database and operations
+- `src/hooks/useDataIntegrity.ts` - Startup integrity check and recovery
+
+### 5.5 Phase 5: Multi-Season & Export (PENDING)
 
 1. Career tracking
 2. Historical queries
@@ -481,13 +544,116 @@ document.addEventListener('visibilitychange', () => {
 
 ---
 
-## 6. Live Stats Display System
+## 6. Event Log System (Data Integrity)
 
 ### 6.1 Overview
 
-The live stats system provides real-time statistics during gameplay by merging stored season stats with current game stats. This enables displaying up-to-the-moment stats like "Season AVG + this game = Live AVG" without any database writes during gameplay.
+The event log captures every at-bat with full situational context, enabling:
+- Complete game reconstruction (box scores)
+- Full season stat recalculation from raw events
+- Advanced metrics recalculation (WAR, Clutch, Leverage, WPA)
+- Fame event recalculation
+- Recovery from any crash or write failure
 
 ### 6.2 Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                   DURING GAMEPLAY                            │
+│  logAtBatEvent() called IMMEDIATELY after each at-bat       │
+│  Full situational context captured (not debounced)          │
+│  Pitching appearances tracked for inherited runners         │
+│  Fielding events tracked for FWAR                           │
+└─────────────────────────────────────────────────────────────┘
+                              ↓
+┌─────────────────────────────────────────────────────────────┐
+│                     GAME END                                 │
+│  1. completeGame() marks game as finished                   │
+│  2. aggregateGameToSeason() writes to season stats          │
+│  3. markGameAggregated() only on SUCCESS                    │
+│  If step 2 fails → game remains aggregated: false           │
+└─────────────────────────────────────────────────────────────┘
+                              ↓
+┌─────────────────────────────────────────────────────────────┐
+│                   APP STARTUP                                │
+│  useDataIntegrity hook checks for:                          │
+│  - Unaggregated games (aggregated === false)                │
+│  - Games with aggregation errors                            │
+│  - Incomplete games                                         │
+│  Automatically re-runs aggregation for failed games         │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### 6.3 What Gets Captured Per At-Bat
+
+```typescript
+interface AtBatEvent {
+  // WHO
+  batterId, batterName, batterTeamId
+  pitcherId, pitcherName, pitcherTeamId
+
+  // RESULT
+  result: AtBatResult    // '1B', 'K', 'HR', etc.
+  rbiCount, runsScored
+
+  // SITUATION BEFORE (for Leverage Index, Clutch)
+  inning, halfInning, outs
+  runners: { first, second, third }  // with responsible pitcher IDs
+  awayScore, homeScore
+
+  // SITUATION AFTER (for WPA)
+  outsAfter, runnersAfter
+  awayScoreAfter, homeScoreAfter
+
+  // CALCULATED (stored for efficiency, can recalculate)
+  leverageIndex, winProbabilityBefore, winProbabilityAfter, wpa
+
+  // FIELDING
+  ballInPlay: { trajectory, zone, velocity, fielderIds }
+
+  // FAME
+  fameEvents: FameEventRecord[]
+
+  // FLAGS
+  isLeadoff, isClutch, isWalkOff
+}
+```
+
+### 6.4 Storage Cost
+
+- ~500 bytes per at-bat
+- ~70 at-bats per game
+- **~35KB per game**
+- 162-game season = **~5.7MB** (very manageable)
+
+### 6.5 What This Enables
+
+| Feature | Without Event Log | With Event Log |
+|---------|-------------------|----------------|
+| Box scores | ❌ Only summary | ✅ Full game reconstruction |
+| Season rebuild | ❌ Must track manually | ✅ Recalculate from events |
+| WAR recalculation | ❌ Lost context | ✅ Full situational data |
+| Clutch/Leverage | ❌ Lost context | ✅ Before/after state |
+| WPA | ❌ Lost context | ✅ Win probability delta |
+| Fame recovery | ❌ Lost events | ✅ All events preserved |
+| Crash recovery | ❌ Data lost | ✅ Re-aggregate on startup |
+
+### 6.6 Key Files
+
+| File | Purpose |
+|------|---------|
+| `src/utils/eventLog.ts` | Event log database, write/read operations, box score generation |
+| `src/hooks/useDataIntegrity.ts` | Startup integrity check, automatic recovery |
+
+---
+
+## 7. Live Stats Display System
+
+### 7.1 Overview
+
+The live stats system provides real-time statistics during gameplay by merging stored season stats with current game stats. This enables displaying up-to-the-moment stats like "Season AVG + this game = Live AVG" without any database writes during gameplay.
+
+### 7.2 Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -510,14 +676,14 @@ The live stats system provides real-time statistics during gameplay by merging s
 └─────────────────────────────────────────────────────────────┘
 ```
 
-### 6.3 Key Files
+### 7.3 Key Files
 
 | File | Purpose |
 |------|---------|
 | `src/utils/liveStatsCalculator.ts` | Pure functions to merge season + game stats |
 | `src/hooks/useLiveStats.ts` | React hook that loads season stats and exposes merge functions |
 
-### 6.4 Usage in GameTracker
+### 7.4 Usage in GameTracker
 
 ```typescript
 // Hook loads season stats once at game start
@@ -536,7 +702,7 @@ const getPitcherLivePitching = (pitcherId: string) => {
 };
 ```
 
-### 6.5 Live Stats Interfaces
+### 7.5 Live Stats Interfaces
 
 ```typescript
 interface LiveBattingStats {
@@ -572,7 +738,7 @@ interface LivePitchingStats {
 }
 ```
 
-### 6.6 Formatting Helpers
+### 7.6 Formatting Helpers
 
 ```typescript
 // Display batting average: ".285" or "---" for no ABs
@@ -588,7 +754,7 @@ formatBatterGameLine(stats: LiveBattingStats): string
 formatPitcherGameLine(stats: LivePitchingStats): string
 ```
 
-### 6.7 Performance Characteristics
+### 7.7 Performance Characteristics
 
 - **Memory**: ~1KB per player with season history (negligible)
 - **Load time**: Single IndexedDB read at game start (~10-50ms)
@@ -597,9 +763,9 @@ formatPitcherGameLine(stats: LivePitchingStats): string
 
 ---
 
-## 7. Impact on Fame System
+## 8. Impact on Fame System
 
-### 7.1 What Changes
+### 8.1 What Changes
 
 | Detection | Before | After |
 |-----------|--------|-------|
@@ -609,7 +775,7 @@ formatPitcherGameLine(stats: LivePitchingStats): string
 | Cycle | Hit order not tracked | `batterStats.hitOrder` array |
 | Maddux | Pitch count not persisted | `pitcherStats.pitchCount` (accumulated) |
 
-### 7.2 Detection Context Update
+### 8.2 Detection Context Update
 
 ```typescript
 // BEFORE: Stats rebuilt fresh
@@ -626,7 +792,7 @@ const pitcherStats = gameState.playerStats.get(currentPitcherId);
 
 ---
 
-## 8. Implementation Priority
+## 9. Implementation Priority
 
 ### Immediate (Fix Fame Detection)
 
@@ -656,7 +822,7 @@ const pitcherStats = gameState.playerStats.get(currentPitcherId);
 
 ---
 
-## 9. Related Specs
+## 10. Related Specs
 
 | Spec | Relationship |
 |------|--------------|
@@ -668,4 +834,4 @@ const pitcherStats = gameState.playerStats.get(currentPitcherId);
 ---
 
 *Last Updated: January 22, 2026*
-*Version: 2.0 - Phases 1-3 implemented, Live Stats system added*
+*Version: 3.1 - Added pitcher stats initialization on substitution, currentPitcher tracking documentation*

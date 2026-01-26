@@ -277,7 +277,7 @@ const isInfieldFlyRule = outs < 2 && bases.first && bases.second;
 | WP (Wild Pitch) | ✅ | Has flow |
 | PB (Passed Ball) | ✅ | Has flow |
 | PK (Pickoff) | ✅ | Has flow |
-| BALK | ✅ | Has flow |
+| ~~BALK~~ | ❌ | NOT IN SMB4 - removed |
 | PITCH_CHANGE | ⚠️ | Needs implementation |
 | PINCH_HIT | ⚠️ | Needs implementation |
 | PINCH_RUN | ⚠️ | Needs implementation |

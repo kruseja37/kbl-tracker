@@ -81,14 +81,17 @@ Mojo is a fluctuating mood stat that affects performance. **This is critical for
 
 ### Mojo Levels (High to Low)
 
-| Level | Description | Effect |
-|-------|-------------|--------|
-| **Jacked** | Peak performance, rarely achieved | Huge bonuses |
-| **On Fire** | Sustained excellence | Excellent bonuses |
-| **Locked In** | Having a great day | Increased stats |
-| **Normal** | Default starting state | Baseline |
-| **Tense** | Struggling | Decreased stats |
-| **Rattled** | Sustained failure | Significant penalties |
+**Mojo uses a 5-level scale from -2 to +2:**
+
+| Level | Value | Enum | Description | Effect |
+|-------|-------|------|-------------|--------|
+| **Jacked** | +2 | VERY_HIGH | Peak performance, rarely achieved | Huge bonuses (~+15-20%) |
+| **Locked In** | +1 | HIGH | Having a great game | Good bonuses (~+8-10%) |
+| **Normal** | 0 | NEUTRAL | Default starting state | Baseline |
+| **Tense** | -1 | LOW | Struggling | Decreased stats (~-8-10%) |
+| **Rattled** | -2 | VERY_LOW | Sustained failure, hard to escape | Significant penalties (~-15-20%) |
+
+> **Note**: "Locked In" is the +1 Mojo state. It may also be referred to as "On Fire" in some contexts - they are the same level. The system uses 5 levels total, not 6.
 
 ### Mojo Triggers
 

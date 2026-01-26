@@ -266,9 +266,10 @@ function getInningMultiplier(inning, halfInning) {
 
   let mult = inningMult[Math.min(inning, 9)] || 2.0;
 
-  // Bottom of 9th (or later) with home team batting = walk-off potential
-  if (inning >= 9 && halfInning === 'BOTTOM') {
-    mult *= 1.3;
+  // Bottom of 9th (or later) with home team batting AND tied/trailing = walk-off potential
+  // NOTE: Must also check scoreDiff <= 0 (tied or trailing) per Appendix implementation
+  if (inning >= 9 && halfInning === 'BOTTOM' && scoreDiff <= 0) {
+    mult *= 1.4;
   }
 
   return mult;
@@ -287,7 +288,8 @@ function getScoreDampener(scoreDiff, inning) {
   if (absDiff === 0) return 1.0;  // Tie game
   if (absDiff === 1) return 0.95;
   if (absDiff === 2) return 0.85;
-  if (absDiff === 3) return 0.65 + (0.15 * Math.min(inning, 9) / 9);
+  // 3-run deficit: scale from 0.60 (early) to 0.72 (late)
+  if (absDiff === 3) return 0.60 + (0.12 * Math.min(inning, 9) / 9);
 
   return 0.5;
 }
@@ -520,7 +522,9 @@ function getInningMultiplierSMB4(inning, totalInnings, halfInning) {
 
   // Final inning
   let mult = 1.8;
-  if (halfInning === 'BOTTOM') mult *= 1.3;  // Walk-off potential
+  // Walk-off potential: only when tied or trailing in bottom of final inning
+  // NOTE: This simplified version doesn't have scoreDiff access, see full implementation in Appendix
+  if (halfInning === 'BOTTOM') mult *= 1.4;
 
   return mult;
 }
@@ -535,7 +539,36 @@ function getInningMultiplierSMB4(inning, totalInnings, halfInning) {
 | Outs | ✅ Tracked | 0-2 |
 | Runners | ✅ Tracked | Base state |
 | Score | ✅ Tracked | Home/Away |
-| **LI calculation** | ✅ Ready | Can implement now |
+| **LI calculation** | ✅ **IMPLEMENTED** | January 2026 |
+
+### Implementation Status (January 2026)
+
+The full Leverage Index calculation has been implemented in `useFameDetection.ts`:
+
+```typescript
+// Implemented in useFameDetection.ts
+export const getLeverageIndex = (gameContext: {
+  inning: number;
+  outs: number;
+  runners: { first: boolean; second: boolean; third: boolean };
+  homeScore: number;
+  awayScore: number;
+  halfInning: 'TOP' | 'BOTTOM';
+  totalInnings?: number;
+}): number => {
+  // Uses BASE_OUT_LI lookup table
+  // Applies inning multipliers (late innings = higher leverage)
+  // Applies score dampener (blowouts = reduced leverage)
+  // Clamps result to [0.1, 10.0] range
+};
+```
+
+**Key implementation details:**
+- BASE_OUT_LI lookup table with 8 base states × 3 out states
+- Inning multiplier scales from 0.75 (early) to 2.0+ (9th inning)
+- Walk-off potential adds 1.4× boost in bottom of final inning when trailing/tied
+- Score dampener reduces leverage in blowouts (5+ run differential = 0.25× or less)
+- Win probability calculation also implemented using LI
 
 ### What This Enables
 
@@ -543,6 +576,298 @@ function getInningMultiplierSMB4(inning, totalInnings, halfInning) {
 2. **Proportional clutch values** - More important moments = bigger rewards/penalties
 3. **Accurate reliever pWAR** - Real gmLI instead of save-based estimation
 4. **Net Clutch Rating** - Feeds directly into All-Star/Award voting
+
+---
+
+## 10.5 Revenge Arc LI Modifier
+
+> **⚠️ FUTURE FEATURE**: The Revenge Arc LI modifier is fully specified below but NOT YET IMPLEMENTED in code. This is a planned enhancement for the narrative system.
+
+When players face former teammates with whom they had significant relationships (romantic breakup, mentor/protege, bully/victim), their emotional investment increases the situation's importance.
+
+### Revenge Arc Types and Modifiers
+
+| Arc Type | Source Relationship | LI Multiplier | Description |
+|----------|---------------------|---------------|-------------|
+| **SCORNED_LOVER** | ROMANTIC (ended) | 1.5× | Facing ex after breakup or trade |
+| **ESTRANGED_FRIEND** | BEST_FRIENDS (ended) | 1.25× | Former best friend on opposing team |
+| **SURPASSED_MENTOR** | MENTOR_PROTEGE | 1.3× | Protege facing former mentor |
+| **VICTIM_REVENGE** | BULLY_VICTIM | 1.75× | Victim facing former bully |
+| **BULLY_CONFRONTED** | BULLY_VICTIM | 0.9× | Bully facing improved former victim |
+
+### Implementation
+
+```typescript
+/**
+ * Apply revenge arc modifier to base LI
+ * Called during LI calculation for any PA
+ */
+function getRevengeArcModifier(
+  batterId: string,
+  pitcherId: string,
+  gameRevengeArcs: RevengeArc[]
+): number {
+  let modifier = 1.0;
+
+  for (const arc of gameRevengeArcs) {
+    // Check if current batter or pitcher is part of this revenge arc
+    const isInvolved = arc.player.id === batterId || arc.player.id === pitcherId;
+    const isFacingFormerPartner =
+      (arc.player.id === batterId && arc.formerPartner.id === pitcherId) ||
+      (arc.player.id === pitcherId && arc.formerPartner.id === batterId);
+
+    if (isInvolved && isFacingFormerPartner) {
+      // Use highest modifier if multiple arcs apply
+      modifier = Math.max(modifier, arc.config.liMultiplier);
+    }
+  }
+
+  return modifier;
+}
+
+// Integration with main LI calculation
+function calculateLeverageIndexWithContext(gameContext, batterId, pitcherId) {
+  const baseLI = getLeverageIndex(gameContext);
+  const revengeArcs = getRevengeArcsForGame(gameContext.homeTeam, gameContext.awayTeam);
+  const revengeModifier = getRevengeArcModifier(batterId, pitcherId, revengeArcs);
+
+  return Math.min(10.0, baseLI * revengeModifier);  // Cap at 10.0
+}
+```
+
+### Morale Effects from Revenge Situations
+
+After each PA in a revenge arc context:
+
+| Outcome | Morale Change (Revenge Player) |
+|---------|-------------------------------|
+| Success (hit, RBI, K as pitcher) | +10 to +15 (varies by arc type) |
+| Failure (K, GIDP, hit allowed) | -6 to -12 (varies by arc type) |
+
+### Narrative Integration
+
+Beat reporters generate special commentary when revenge arcs are active:
+
+- **Pre-game**: "Tonight marks the first time {player} faces {formerPartner} since the {event}."
+- **During**: "The tension is palpable as {player} steps in against {formerPartner}."
+- **Post-success**: "Revenge is sweet. {player} delivered when it mattered most."
+- **Post-failure**: "The much-anticipated showdown didn't go as planned for {player}."
+
+> **Cross-Reference**: See `KBL_XHD_TRACKER_MASTER_SPEC_v3.md` §REVENGE_ARC_SYSTEM for full relationship system integration.
+
+---
+
+## 10.6 Cross-Team Romantic Matchup LI Modifier
+
+> **⚠️ FUTURE FEATURE**: The Romantic Matchup LI modifier is fully specified below but NOT YET IMPLEMENTED in code. This is a planned enhancement for the narrative system.
+
+When players face their romantic partner (dating, married) or ex-spouse on the opposing team, the emotional stakes are elevated. This creates memorable moments and narrative opportunities.
+
+### Romantic Matchup Types and Modifiers
+
+| Matchup Type | Relationship Status | LI Multiplier | Morale Effect |
+|--------------|---------------------|---------------|---------------|
+| **LOVERS_RIVALRY** | DATING (active) | 1.3× | +5 both on success |
+| **MARRIED_OPPONENTS** | MARRIED (active) | 1.4× | +8 both on success |
+| **EX_SPOUSE_REVENGE** | DIVORCED | 1.6× | +12 winner, -8 loser |
+
+### Implementation
+
+```typescript
+/**
+ * Cross-team romantic matchup types
+ */
+const ROMANTIC_MATCHUP_CONFIG = {
+  LOVERS_RIVALRY: {
+    relTypes: ['DATING'],
+    liMultiplier: 1.3,
+    moraleOnSuccess: { both: +5 },
+    narrativeTag: 'LOVERS_SHOWDOWN'
+  },
+  MARRIED_OPPONENTS: {
+    relTypes: ['MARRIED'],
+    liMultiplier: 1.4,
+    moraleOnSuccess: { both: +8 },
+    moraleOnFailure: { both: -3 },  // Both sad when one struggles
+    narrativeTag: 'SPOUSE_SHOWDOWN'
+  },
+  EX_SPOUSE_REVENGE: {
+    relTypes: ['DIVORCED'],
+    liMultiplier: 1.6,
+    moraleOnSuccess: { winner: +12 },
+    moraleOnFailure: { loser: -8 },
+    narrativeTag: 'EX_SHOWDOWN'
+  }
+};
+
+/**
+ * Get romantic matchup modifier for current PA
+ */
+function getRomanticMatchupModifier(
+  batterId: string,
+  pitcherId: string,
+  gameRomanticMatchups: RomanticMatchup[]
+): number {
+  let modifier = 1.0;
+
+  for (const matchup of gameRomanticMatchups) {
+    const { playerA, playerB, type } = matchup;
+
+    // Check if batter/pitcher are the romantic pair
+    const isPairInvolved =
+      (playerA.id === batterId && playerB.id === pitcherId) ||
+      (playerA.id === pitcherId && playerB.id === batterId);
+
+    if (isPairInvolved) {
+      const config = ROMANTIC_MATCHUP_CONFIG[matchup.narrativeAngle];
+      if (config) {
+        modifier = Math.max(modifier, config.liMultiplier);
+      }
+    }
+  }
+
+  return modifier;
+}
+
+/**
+ * Home game family LI modifier
+ * Players married to non-players get boosted at home (family in the stands!)
+ * Additional boost for each child
+ */
+const HOME_FAMILY_LI_CONFIG = {
+  NON_PLAYER_SPOUSE: 1.1,         // 1.1× LI at home if married to non-player
+  PER_CHILD: 0.1,                 // +0.1× per child (additive)
+  MAX_CHILD_BONUS: 0.5            // Cap at +0.5 (5 kids max effect)
+};
+
+function getFamilyHomeLIModifier(player, isHomeGame) {
+  if (!isHomeGame) return 1.0;
+
+  let modifier = 1.0;
+
+  // Check for non-player spouse
+  const marriage = getActiveRelationship(player, 'MARRIED');
+  if (marriage && marriage.nonPlayerPartner) {
+    modifier = HOME_FAMILY_LI_CONFIG.NON_PLAYER_SPOUSE;  // 1.1×
+
+    // Add child bonus (+0.1 per kid, max +0.5)
+    const childCount = marriage.children?.length || 0;
+    if (childCount > 0) {
+      const childBonus = Math.min(
+        childCount * HOME_FAMILY_LI_CONFIG.PER_CHILD,
+        HOME_FAMILY_LI_CONFIG.MAX_CHILD_BONUS
+      );
+      modifier += childBonus;  // e.g., 1.1 + 0.3 = 1.4× for 3 kids
+    }
+  }
+
+  return modifier;
+}
+
+/**
+ * Enhanced LI calculation including ALL relationship modifiers
+ */
+function calculateLeverageIndexWithAllModifiers(
+  gameContext,
+  batterId,
+  pitcherId
+) {
+  const baseLI = getLeverageIndex(gameContext);
+  const batter = getPlayer(batterId);
+  const pitcher = getPlayer(pitcherId);
+
+  // Get all relationship-based modifiers
+  const revengeArcs = getRevengeArcsForGame(gameContext.homeTeam, gameContext.awayTeam);
+  const romanticMatchups = detectCrossTeamRomanticMatchups(gameContext.homeTeam, gameContext.awayTeam);
+
+  const revengeModifier = getRevengeArcModifier(batterId, pitcherId, revengeArcs);
+  const romanticModifier = getRomanticMatchupModifier(batterId, pitcherId, romanticMatchups);
+
+  // Home game family bonus (non-player spouse + kids)
+  const isHomeGame = gameContext.halfInning === 'BOTTOM';
+  const batterFamilyMod = isHomeGame ? getFamilyHomeLIModifier(batter, true) : 1.0;
+  const pitcherFamilyMod = !isHomeGame ? getFamilyHomeLIModifier(pitcher, true) : 1.0;
+
+  // Relationship modifiers use highest (don't stack with each other)
+  const relationshipModifier = Math.max(revengeModifier, romanticModifier);
+
+  // Family modifier stacks with relationship modifier
+  const familyModifier = Math.max(batterFamilyMod, pitcherFamilyMod);
+
+  // Final calculation: base × relationship × family
+  const finalLI = baseLI * relationshipModifier * familyModifier;
+
+  return Math.min(10.0, finalLI);  // Cap at 10.0
+}
+```
+
+### Narrative Integration
+
+Beat reporters generate special commentary for romantic matchups:
+
+**LOVERS_RIVALRY (Dating)**:
+- Pre-game: "{playerA} and {playerB}, currently dating, will be on opposite sides tonight."
+- During PA: "Must be awkward at the dinner table after this one."
+- Post-success: "Love conquers all? {player} just dominated their partner."
+
+**MARRIED_OPPONENTS (Married)**:
+- Pre-game: "In a unique twist, {playerA} faces spouse {playerB} tonight."
+- During PA: "The {lastName} household will have some interesting conversations."
+- Post-success: "Marriage counseling might be needed after that at-bat."
+
+**EX_SPOUSE_REVENGE (Divorced)**:
+- Pre-game: "The fallout continues. {playerA} faces ex-spouse {playerB} for the first time since the divorce."
+- During PA: "The tension is thick as former spouses lock eyes."
+- Post-success: "Living well is the best revenge, and {player} is living very well right now."
+
+> **Cross-Reference**: See `KBL_XHD_TRACKER_MASTER_SPEC_v3.md` §MARRIAGE_SYSTEM for full marriage/divorce mechanics.
+
+---
+
+## 10.7 Family Home Game LI Modifier
+
+> **⚠️ FUTURE FEATURE**: The Family Home Game LI modifier is fully specified below but NOT YET IMPLEMENTED in code. This is a planned enhancement for the narrative system.
+
+Players married to non-players (spouses outside the league) get an LI boost at home games - their family is in the stands cheering them on! This makes home games feel more meaningful for players with families.
+
+### Family LI Modifiers
+
+| Family Situation | Home Game LI Modifier |
+|------------------|----------------------|
+| **Married to non-player** | 1.1× base |
+| **+ 1 child** | 1.2× base |
+| **+ 2 children** | 1.3× base |
+| **+ 3 children** | 1.4× base |
+| **+ 4 children** | 1.5× base |
+| **+ 5+ children** | 1.6× base (capped) |
+
+### Example Calculation
+
+```
+Base LI: 2.5 (bases loaded, 2 outs, tie game)
+Player: Juan Martinez (married to non-player wife, 2 kids)
+Location: Home game (bottom of inning)
+
+Family Modifier: 1.1 (spouse) + 0.2 (2 kids) = 1.3×
+Final LI: 2.5 × 1.3 = 3.25
+```
+
+### Narrative Integration
+
+Beat reporters can reference family in home game coverage:
+- "With his wife Maria and their two kids watching from the family section, Martinez steps up in a huge spot."
+- "You can see the extra motivation when the family's in the stands."
+- "This ballpark means a little more to {player} - it's where his kids learned to love the game."
+
+### Child Birth Events
+
+Children are born through AI-driven events. Requirements:
+- Player must be married (to player or non-player)
+- Marriage must be 20+ games old
+- 5% chance per season for eligible married players
+- Each birth adds morale boost (+10) and creates narrative moment
+
+> **Note**: This only applies to non-player spouses. When both spouses are players, they don't get the home game family bonus (since the spouse is on the field, not in the stands!).
 
 ---
 
@@ -728,5 +1053,5 @@ module.exports = { getLeverageIndex, calculateClutchValue, encodeBaseState };
 
 ---
 
-*Last Updated: January 2026*
-*Version: 1.0*
+*Last Updated: January 22, 2026*
+*Version: 1.1 - Implementation status updated, core LI calculation now fully implemented in useFameDetection.ts*

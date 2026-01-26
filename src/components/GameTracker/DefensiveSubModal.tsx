@@ -79,9 +79,62 @@ export default function DefensiveSubModal({
     setPendingSubs(pendingSubs.filter((_, i) => i !== index));
   };
 
+  // Validate defensive alignment after substitutions (BUG-001, BUG-002 fix)
+  const validateDefensiveAlignment = (): string[] => {
+    const validationErrors: string[] = [];
+    const defensivePositions: Position[] = ['P', 'C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF'];
+
+    // Build the post-sub position map: position -> player name
+    const positionMap = new Map<Position, string>();
+
+    // First, add all current lineup players (except those being subbed out)
+    for (const player of lineupState.lineup) {
+      const isBeingSubbedOut = pendingSubs.some(sub => sub.playerOut.playerId === player.playerId);
+      if (!isBeingSubbedOut && player.position !== 'DH') {
+        // Check for duplicate before adding
+        if (positionMap.has(player.position)) {
+          validationErrors.push(
+            `Duplicate position: ${player.position} has both ${positionMap.get(player.position)} and ${player.playerName}`
+          );
+        } else {
+          positionMap.set(player.position, player.playerName);
+        }
+      }
+    }
+
+    // Add the incoming players at their new positions
+    for (const sub of pendingSubs) {
+      if (sub.position !== 'DH') {
+        if (positionMap.has(sub.position)) {
+          validationErrors.push(
+            `Duplicate position: ${sub.position} will have both ${positionMap.get(sub.position)} and ${sub.playerIn.playerName}`
+          );
+        } else {
+          positionMap.set(sub.position, sub.playerIn.playerName);
+        }
+      }
+    }
+
+    // Check for missing defensive positions
+    for (const pos of defensivePositions) {
+      if (!positionMap.has(pos)) {
+        validationErrors.push(`Missing position: No one assigned to ${pos}`);
+      }
+    }
+
+    return validationErrors;
+  };
+
   const handleConfirm = () => {
     if (pendingSubs.length === 0) {
       setErrors(['Please add at least one substitution']);
+      return;
+    }
+
+    // Validate defensive alignment before confirming (BUG-001, BUG-002 fix)
+    const alignmentErrors = validateDefensiveAlignment();
+    if (alignmentErrors.length > 0) {
+      setErrors(alignmentErrors);
       return;
     }
 

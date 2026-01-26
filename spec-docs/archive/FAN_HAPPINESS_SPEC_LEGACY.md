@@ -1,10 +1,14 @@
-# Fan Happiness System Specification
+# Fan Morale System Specification
 
-> **Purpose**: Define the complete Fan Happiness system including player Fame tracking and team-level happiness calculation
+> **DEPRECATION NOTICE (January 2026)**: This file is archived. For authoritative Fame values, see `SPECIAL_EVENTS_SPEC.md`.
+> Some values in this document are outdated (e.g., Robbery listed as +1.5/+2.5 but is now +1).
+> **SPECIAL_EVENTS_SPEC.md is the authoritative source for all Fame Bonus/Boner values.**
+
+> **Purpose**: Define the complete Fan Morale system including player Fame tracking and team-level happiness calculation
 > **Related Specs**:
-> - `SPECIAL_EVENTS_SPEC.md` - Fame Bonus/Boner event definitions
-> - `fame_and_events_system.md` - Fame in awards/voting
-> - `KBL_XHD_TRACKER_MASTER_SPEC_v3.md` §22 - Team Fan Happiness UI
+> - `SPECIAL_EVENTS_SPEC.md` - Fame Bonus/Boner event definitions (AUTHORITATIVE)
+> - `fame_and_events_system.md` - Fame in awards/voting (DEPRECATED)
+> - `KBL_XHD_TRACKER_MASTER_SPEC_v3.md` §22 - Team Fan Morale UI
 > - `LEVERAGE_INDEX_SPEC.md` - LI-weighted clutch (separate from Fame)
 > **SMB4 Reference**: `SMB4_GAME_MECHANICS.md`
 
@@ -18,8 +22,8 @@
 4. [Auto-Detection Rules](#4-auto-detection-rules)
 5. [Manual Fame Recording](#5-manual-fame-recording)
 6. [In-Game Fame Display](#6-in-game-fame-display)
-7. [Team Fan Happiness](#7-team-fan-happiness)
-8. [Fan Happiness Effects](#8-fan-happiness-effects)
+7. [Team Fan Morale](#7-team-fan-happiness)
+8. [Fan Morale Effects](#8-fan-happiness-effects)
 9. [Data Schema](#9-data-schema)
 10. [UI Components](#10-ui-components)
 11. [Implementation Phases](#11-implementation-phases)
@@ -30,12 +34,12 @@
 
 ### 1.1 Two-Layer System
 
-The Fan Happiness system operates at two levels:
+The Fan Morale system operates at two levels:
 
 | Layer | Scope | Updates | Purpose |
 |-------|-------|---------|---------|
 | **Player Fame** | Per-player | During games | Track memorable moments, narrative standing |
-| **Team Fan Happiness** | Per-team | After games/season events | Fan satisfaction, affects FA/contraction |
+| **Team Fan Morale** | Per-team | After games/season events | Fan satisfaction, affects FA/contraction |
 
 ### 1.2 Key Principles
 
@@ -482,12 +486,12 @@ T9: Willie Mays: Walk-off single! ⭐ (+1 Fame)
 
 ---
 
-## 7. Team Fan Happiness
+## 7. Team Fan Morale
 
 ### 7.1 Calculation Formula
 
 ```typescript
-function calculateTeamFanHappiness(team: Team, season: Season): number {
+function calculateTeamFanMorale(team: Team, season: Season): number {
   const baseHappiness = 50;
 
   // 1. Performance vs Expectations (max ±30)
@@ -571,7 +575,7 @@ function getPayrollMultiplier(salaryPercentile: number): number {
 | Bust of the Year | -5 | |
 | High-paid underperformer | -5 to -15 | Based on salary vs performance |
 
-### 7.5 Fan Happiness Thresholds
+### 7.5 Fan Morale Thresholds
 
 | Range | Status | Effect |
 |-------|--------|--------|
@@ -602,7 +606,7 @@ function getContractionProbability(happiness: number, consecutiveSeasonsBelow30:
 
 ---
 
-## 8. Fan Happiness Effects
+## 8. Fan Morale Effects
 
 ### 8.1 Free Agency
 
@@ -610,12 +614,12 @@ function getContractionProbability(happiness: number, consecutiveSeasonsBelow30:
 function calculateFAAttraction(team: Team, player: FreeAgent): number {
   let baseAttraction = calculateBaseAttraction(team, player);
 
-  // Fan Happiness modifier
-  if (team.fanHappiness >= 70) {
+  // Fan Morale modifier
+  if (team.fanMorale >= 70) {
     baseAttraction *= 1.10;  // +10% for happy fans
-  } else if (team.fanHappiness < 30) {
+  } else if (team.fanMorale < 30) {
     baseAttraction *= 0.85;  // -15% for dismal
-  } else if (team.fanHappiness < 40) {
+  } else if (team.fanMorale < 40) {
     baseAttraction *= 0.90;  // -10% for unhappy
   }
 
@@ -625,17 +629,17 @@ function calculateFAAttraction(team: Team, player: FreeAgent): number {
 
 ### 8.2 Season Narrative
 
-Fan Happiness generates narrative text for season summaries:
+Fan Morale generates narrative text for season summaries:
 
 ```typescript
 function generateFanNarrative(team: Team): string {
-  if (team.fanHappiness >= 85) {
+  if (team.fanMorale >= 85) {
     return `${team.name} fans are ecstatic! This has been a season to remember.`;
-  } else if (team.fanHappiness >= 70) {
+  } else if (team.fanMorale >= 70) {
     return `${team.name} fans are happy with the team's performance.`;
-  } else if (team.fanHappiness >= 50) {
+  } else if (team.fanMorale >= 50) {
     return `${team.name} fans have mixed feelings about the season.`;
-  } else if (team.fanHappiness >= 30) {
+  } else if (team.fanMorale >= 30) {
     return `${team.name} fans are frustrated and demanding changes.`;
   } else {
     return `${team.name} fans have all but given up. Attendance is at rock bottom.`;
@@ -783,10 +787,10 @@ interface PlayerSeasonFame {
 }
 ```
 
-### 9.4 Team Fan Happiness
+### 9.4 Team Fan Morale
 
 ```typescript
-interface TeamFanHappiness {
+interface TeamFanMorale {
   teamId: string;
   seasonId: string;
 
@@ -859,35 +863,46 @@ GameTracker/
 
 ## 11. Implementation Phases
 
-### Phase 1: In-Game Fame Tracking (Current Priority)
+### Phase 1: In-Game Fame Tracking ✅ COMPLETE
 
-**Status: 🔜 Ready to Implement**
+**Status: ✅ Implemented (January 2026)**
 
-| Component | Description | Priority |
-|-----------|-------------|----------|
-| `FameEvent` types | Add to game.ts | HIGH |
-| `FameEventModal` | Manual event recording | HIGH |
-| Auto-detection | Walk-off, cycle, multi-HR, etc. | HIGH |
-| `FameToast` | Toast notifications | MEDIUM |
-| `FamePanel` | Game Fame display | MEDIUM |
-| Activity log integration | Fame in log entries | MEDIUM |
+| Component | Description | Status |
+|-----------|-------------|--------|
+| `FameEvent` types | Add to game.ts | ✅ Done |
+| `FameEventModal` | Manual event recording | ✅ Done |
+| Auto-detection hook | `useFameDetection.ts` | ✅ Done |
+| Detection wiring | `checkForFameEvents()` results captured | ✅ Done |
+| `FameToast` | Toast notifications | ✅ Done |
+| `FamePanel` | Game Fame display | ✅ Done |
+| Activity log integration | Fame in log entries | ✅ Done |
 
-**Dependencies**: None (uses existing game state)
+**Implementation Details:**
+- `checkForFameEvents()` called after each at-bat, results captured and added to `fameEvents` state
+- `checkEndGameFame()` called at game completion for no-hitter/perfect game detection
+- `detectComebackWin()` called at game completion for comeback victories
+- `detectBatterOutStretching()` triggered when batter thrown out advancing
+- All detected Fame events immediately added to state via `addFameEvent()`
+- Toast notifications shown when `fameSettings.showToasts` is enabled
 
-### Phase 2: End-of-Game Summary
+### Phase 2: End-of-Game Summary ✅ COMPLETE
 
-**Status: 🔜 After Phase 1**
+**Status: ✅ Implemented (January 2026)**
 
-| Component | Description | Priority |
-|-----------|-------------|----------|
-| `EndGameFameSummary` | Recap modal | MEDIUM |
-| Fame history export | Include in game data | MEDIUM |
+| Component | Description | Status |
+|-----------|-------------|--------|
+| `EndGameFameSummary` | Recap modal | ✅ Done |
+| Fame history export | Included in game persistence | ✅ Done |
+| End-game detection | No-hitter, perfect game, comeback | ✅ Done |
 
-**Dependencies**: Phase 1
+**Implementation Details:**
+- `EndGameFameSummary` component displays all Fame events from the game
+- Fame events persisted with game data via `gameStorage.ts`
+- End-game achievements detected via `checkEndGameFame()` in `handleEndGame()`
 
 ### Phase 3: Season Fame Aggregation
 
-**Status: ⏸️ Requires Data Persistence**
+**Status: ⏸️ Requires Multi-Season System**
 
 | Component | Description | Priority |
 |-----------|-------------|----------|
@@ -896,14 +911,14 @@ GameTracker/
 
 **Dependencies**: Data persistence system
 
-### Phase 4: Team Fan Happiness
+### Phase 4: Team Fan Morale
 
 **Status: ⏸️ Requires Data Persistence + Season System**
 
 | Component | Description | Priority |
 |-----------|-------------|----------|
 | Team happiness calculation | Full formula | LOW |
-| Fan Happiness dashboard | Per master spec UI | LOW |
+| Fan Morale dashboard | Per master spec UI | LOW |
 | FA attraction modifier | Integrate with FA system | LOW |
 | Contraction system | Risk calculation | LOW |
 

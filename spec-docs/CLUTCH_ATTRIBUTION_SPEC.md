@@ -797,6 +797,93 @@ function getGamePlayoffContext(game) {
 
 ---
 
+## 9.5 Clutch Trigger Stacking Rules
+
+### The Stacking Question
+
+Can multiple clutch triggers apply to the same event? For example:
+- Walk-off HR (+3) that's also a Grand Slam (+2) in the World Series
+
+### Stacking Rule: ADDITIVE Within Categories, HIGHEST ONLY Across Categories
+
+Clutch triggers fall into categories. Within a category, only the **highest** value applies. Across categories, values **stack**.
+
+### Trigger Categories
+
+| Category | Triggers | Rule |
+|----------|----------|------|
+| **Walk-off** | Walk-off single (+2), Walk-off XBH (+2), Walk-off HR (+3) | HIGHEST ONLY |
+| **RBI Situation** | Go-ahead RBI (+1), 2-out RBI (+1), Bases loaded hit (+1) | HIGHEST ONLY |
+| **Special Hit** | Grand Slam (+2) | STACKS with walk-off |
+| **Count** | Hit on 0-2 (+1) | STACKS |
+| **Playoff** | Round multiplier (1.25-2.0×), Elimination (+0.5), Clinch (+0.25) | ADDITIVE |
+
+### Stacking Examples
+
+**Example 1: Walk-off Grand Slam**
+```javascript
+// Walk-off HR: +3 (walk-off category)
+// Grand Slam: +2 (special hit category - STACKS)
+// Total: +5 base clutch value
+```
+
+**Example 2: Walk-off Single with 0-2 count**
+```javascript
+// Walk-off single: +2 (walk-off category)
+// Hit on 0-2: +1 (count category - STACKS)
+// Total: +3 base clutch value
+```
+
+**Example 3: Bases Loaded, 2-out RBI (NOT walk-off)**
+```javascript
+// Bases loaded hit: +1 (RBI situation category)
+// 2-out RBI: +1 (same category - HIGHEST ONLY)
+// Total: +1 base clutch value (NOT +2)
+```
+
+**Example 4: World Series Game 7 Walk-off Grand Slam**
+```javascript
+// Base clutch: +5 (walk-off + grand slam)
+// LI: ~10.8 (bases loaded, 9th, tie)
+// sqrt(LI): 3.29
+// Playoff: 2.0 (WS) + 0.5 (elimination) + 0.25 (clinch) = 2.75×
+// Final: 5 × 3.29 × 2.75 = +45.2 clutch points
+```
+
+### Implementation
+
+```typescript
+function calculateClutchTriggers(event: PlayEvent): number {
+  let clutchValue = 0;
+
+  // Category: Walk-off (highest only)
+  if (event.isWalkOff) {
+    if (event.result === 'HR') clutchValue = Math.max(clutchValue, 3);
+    else if (['2B', '3B'].includes(event.result)) clutchValue = Math.max(clutchValue, 2);
+    else clutchValue = Math.max(clutchValue, 2); // single, walk, etc.
+  }
+
+  // Category: RBI Situation (highest only) - only if NOT walk-off
+  if (!event.isWalkOff && event.isCloseGame) {
+    let rbiSituationValue = 0;
+    if (event.goAheadRBI && event.inning >= 7) rbiSituationValue = Math.max(rbiSituationValue, 1);
+    if (event.twoOutRBI) rbiSituationValue = Math.max(rbiSituationValue, 1);
+    if (event.basesLoadedHit) rbiSituationValue = Math.max(rbiSituationValue, 1);
+    clutchValue += rbiSituationValue;
+  }
+
+  // Category: Special Hit (STACKS)
+  if (event.isGrandSlam) clutchValue += 2;
+
+  // Category: Count (STACKS)
+  if (event.hitOn0_2Count && event.isCloseGame) clutchValue += 1;
+
+  return clutchValue;
+}
+```
+
+---
+
 ## 10. Net Clutch Rating
 
 ### Accumulation Formula

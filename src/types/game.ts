@@ -10,11 +10,12 @@ export type AtBatResult =
   | '1B' | '2B' | '3B' | 'HR' | 'BB' | 'IBB' | 'K' | 'KL'
   | 'GO' | 'FO' | 'LO' | 'PO' | 'DP' | 'SF' | 'SAC' | 'HBP' | 'E' | 'FC' | 'D3K';
 
-export type GameEvent = 'SB' | 'CS' | 'WP' | 'PB' | 'PK' | 'BALK' | 'PITCH_CHANGE' | 'PINCH_HIT' | 'PINCH_RUN' | 'DEF_SUB';
+export type GameEvent = 'SB' | 'CS' | 'WP' | 'PB' | 'PK' | 'BALK' | 'PITCH_CHANGE' | 'PINCH_HIT' | 'PINCH_RUN' | 'DEF_SUB' | 'POS_SWITCH';
 // Special play types for outs and hits
 // For outs: Routine, Diving, Wall Catch, Running, Leaping
 // For hits: Clean (no fielding attempt), Diving, Leaping, Robbery Attempt
-export type SpecialPlayType = 'Routine' | 'Diving' | 'Wall Catch' | 'Running' | 'Leaping' | 'Clean' | 'Robbery Attempt';
+// For HRs: Over Fence (default), Robbery Attempt, Wall Scraper (BUG-015)
+export type SpecialPlayType = 'Routine' | 'Diving' | 'Wall Catch' | 'Running' | 'Leaping' | 'Clean' | 'Robbery Attempt' | 'Over Fence' | 'Wall Scraper';
 export type RunnerOutcome = 'SCORED' | 'TO_3B' | 'TO_2B' | 'HELD' | 'OUT_HOME' | 'OUT_3B' | 'OUT_2B';
 
 // Extra event types for inferred advancement events
@@ -32,14 +33,26 @@ export interface ExtraEvent {
 // FIELDING TYPES - Per FIELDING_SYSTEM_SPEC.md
 // ============================================
 
-export type PlayType = 'routine' | 'diving' | 'jumping' | 'wall' | 'charging' |
-                       'barehanded' | 'error' | 'robbed_hr' | 'failed_robbery';
-export type ErrorType = 'fielding' | 'throwing' | 'missed_catch' | 'collision';
+export type PlayType = 'routine' | 'diving' | 'leaping' | 'wall' | 'charging' |
+                       'running' | 'sliding' | 'over_shoulder' |
+                       'error' | 'robbed_hr' | 'failed_robbery';
+export type ErrorType = 'fielding' | 'throwing' | 'mental' | 'missed_catch' | 'collision';
 export type D3KOutcome = 'OUT' | 'WP' | 'PB' | 'E_CATCHER' | 'E_1B';
+export type DepthType = 'shallow' | 'infield' | 'outfield' | 'deep';
+export type AssistType = 'infield' | 'outfield' | 'relay' | 'cutoff';
+export type DPRole = 'started' | 'turned' | 'completed' | 'unassisted';
+
+export interface ErrorContext {
+  allowedRun: boolean;
+  wasRoutine: boolean;
+  wasDifficult: boolean;
+}
 
 export interface AssistChainEntry {
   position: Position;
   playerId?: string;
+  assistType?: AssistType;
+  targetBase?: '1B' | '2B' | '3B' | 'HOME';
 }
 
 export interface FieldingData {
@@ -47,10 +60,17 @@ export interface FieldingData {
   primaryFielder: Position;
   playType: PlayType;
   errorType?: ErrorType;
+  errorContext?: ErrorContext;
+
+  // Batted ball depth (per FIELDING_SYSTEM_SPEC.md)
+  depth?: DepthType;
 
   // Assist chain (for DPs, relay throws, etc.)
   assistChain: AssistChainEntry[];
   putoutPosition: Position;
+
+  // DP role tracking (for fWAR credit assignment)
+  dpRole?: DPRole;
 
   // Inference tracking
   inferredFielder: Position;
@@ -285,13 +305,25 @@ export interface DoubleSwitchEvent extends BaseSubstitutionEvent {
   newPositionPlayerBattingOrder: number;
 }
 
+// Position Switch Event - swap positions without removing players
+export interface PositionSwitchEvent extends BaseSubstitutionEvent {
+  eventType: 'POS_SWITCH';
+  switches: {
+    playerId: string;
+    playerName: string;
+    fromPosition: Position;
+    toPosition: Position;
+  }[];
+}
+
 // Union type for all substitution events
 export type SubstitutionEvent =
   | PinchHitterEvent
   | PinchRunnerEvent
   | DefensiveSubEvent
   | PitchingChangeEvent
-  | DoubleSwitchEvent;
+  | DoubleSwitchEvent
+  | PositionSwitchEvent;
 
 // Game substitution history
 export interface GameSubstitutions {
@@ -505,6 +537,21 @@ export function applySubstitution(
       }
       break;
     }
+
+    case 'POS_SWITCH': {
+      const psEvent = event as PositionSwitchEvent;
+      // Position switch - just change positions, don't remove players
+      for (const sw of psEvent.switches) {
+        const lineupIdx = newState.lineup.findIndex(p => p.playerId === sw.playerId);
+        if (lineupIdx !== -1) {
+          newState.lineup[lineupIdx] = {
+            ...newState.lineup[lineupIdx],
+            position: sw.toPosition,
+          };
+        }
+      }
+      break;
+    }
   }
 
   return newState;
@@ -544,7 +591,13 @@ export type FameEventType =
   | 'BACK_TO_BACK_HR'
   | 'BACK_TO_BACK_TO_BACK_HR' // NEW: 3 consecutive HRs
   | 'CLUTCH_GRAND_SLAM'
-  | 'FIVE_HIT_GAME'         // NEW: 5+ hits in a game
+  | 'THREE_HIT_GAME'        // 3 hits in a game
+  | 'FOUR_HIT_GAME'         // 4 hits in a game
+  | 'FIVE_HIT_GAME'         // 5+ hits in a game
+  | 'SIX_HIT_GAME'          // 6+ hits in a game (rare)
+  | 'FIVE_RBI_GAME'         // 5+ RBI in a game
+  | 'EIGHT_RBI_GAME'        // 8+ RBI in a game
+  | 'TEN_RBI_GAME'          // 10+ RBI in a game (historic)
   // Pitching Excellence
   | 'NO_HITTER'
   | 'PERFECT_GAME'
@@ -573,9 +626,63 @@ export type FameEventType =
   | 'COMEBACK_WIN_7'        // NEW: Overcome 7+ run deficit (epic)
   | 'COMEBACK_HERO'
   | 'RALLY_STARTER'
-  // Milestones
+  // Single-Game Milestones
   | 'FIRST_CAREER'
   | 'CAREER_MILESTONE'
+  // Season Milestones - Batting
+  | 'SEASON_40_HR'
+  | 'SEASON_45_HR'
+  | 'SEASON_55_HR'
+  | 'SEASON_160_HITS'
+  | 'SEASON_120_RBI'
+  | 'SEASON_40_SB'
+  | 'SEASON_80_SB'
+  | 'SEASON_400_BA'           // .400 batting average
+  | 'SEASON_TRIPLE_CROWN'     // Lead league in AVG, HR, RBI
+  // Season Milestones - Batting Clubs
+  | 'CLUB_15_15'              // 15 HR + 15 SB
+  | 'CLUB_20_20'              // 20 HR + 20 SB
+  | 'CLUB_25_25'              // 25 HR + 25 SB
+  | 'CLUB_30_30'              // 30 HR + 30 SB
+  | 'CLUB_40_40'              // 40 HR + 40 SB
+  // Season Milestones - Pitching
+  | 'SEASON_15_WINS'
+  | 'SEASON_20_WINS'
+  | 'SEASON_25_WINS'
+  | 'SEASON_235_K'
+  | 'SEASON_SUB_2_ERA'        // ERA < 2.00
+  | 'SEASON_SUB_1_5_ERA'      // ERA < 1.50
+  | 'SEASON_40_SAVES'
+  | 'SEASON_PITCHING_TRIPLE_CROWN'  // Lead league in W, K, ERA
+  // Career Milestones - Batting (tiered)
+  | 'CAREER_HR_TIER'          // Generic - use fameValue for tier
+  | 'CAREER_HITS_TIER'
+  | 'CAREER_RBI_TIER'
+  | 'CAREER_RUNS_TIER'
+  | 'CAREER_SB_TIER'
+  | 'CAREER_DOUBLES_TIER'
+  | 'CAREER_BB_TIER'
+  | 'CAREER_GRAND_SLAMS_TIER'
+  // Career Milestones - Pitching (tiered)
+  | 'CAREER_WINS_TIER'
+  | 'CAREER_K_TIER'
+  | 'CAREER_SAVES_TIER'
+  | 'CAREER_IP_TIER'
+  | 'CAREER_SHUTOUTS_TIER'
+  | 'CAREER_CG_TIER'
+  | 'CAREER_NO_HITTERS_TIER'
+  | 'CAREER_PERFECT_GAMES_TIER'
+  // Career Milestones - Aggregate
+  | 'CAREER_WAR_TIER'
+  // Career Milestones - WAR Components
+  | 'CAREER_BWAR_TIER'    // Batting WAR
+  | 'CAREER_PWAR_TIER'    // Pitching WAR
+  | 'CAREER_FWAR_TIER'    // Fielding WAR
+  | 'CAREER_RWAR_TIER'    // Baserunning WAR
+  | 'CAREER_GAMES_TIER'
+  | 'CAREER_ALL_STARS_TIER'
+  | 'CAREER_MVPS_TIER'
+  | 'CAREER_CY_YOUNGS_TIER'
   // ============================================
   // BONERS (negative Fame)
   // ============================================
@@ -617,7 +724,29 @@ export type FameEventType =
   | 'PICKED_OFF_END_INNING'
   | 'BATTER_OUT_STRETCHING'
   // Position Player Pitching Failures
-  | 'PP_GAVE_UP_RUNS';
+  | 'PP_GAVE_UP_RUNS'
+  // Season Negative Milestones - Batting
+  | 'SEASON_200_K_BATTER'     // 200+ strikeouts
+  | 'SEASON_250_K_BATTER'     // 250+ strikeouts
+  | 'SEASON_SUB_200_BA'       // BA < .200 (Mendoza line fail)
+  | 'SEASON_30_GIDP'          // 30+ GIDP
+  | 'SEASON_20_ERRORS'        // 20+ errors
+  // Season Negative Milestones - Pitching
+  | 'SEASON_20_LOSSES'
+  | 'SEASON_6_ERA'            // ERA 6.00+
+  | 'SEASON_100_BB'           // 100+ walks issued
+  | 'SEASON_20_BLOWN_SAVES'
+  | 'SEASON_40_HR_ALLOWED'
+  // Career Negative Milestones (tiered)
+  | 'CAREER_K_BATTER_TIER'    // Career strikeouts (batter)
+  | 'CAREER_GIDP_TIER'
+  | 'CAREER_CS_TIER'          // Caught stealing
+  | 'CAREER_LOSSES_TIER'
+  | 'CAREER_BLOWN_SAVES_TIER'
+  | 'CAREER_WILD_PITCHES_TIER'
+  | 'CAREER_HBP_PITCHER_TIER'
+  | 'CAREER_ERRORS_TIER'
+  | 'CAREER_PASSED_BALLS_TIER';
 
 // Fame values for each event type
 export const FAME_VALUES: Record<FameEventType, number> = {
@@ -650,7 +779,13 @@ export const FAME_VALUES: Record<FameEventType, number> = {
   BACK_TO_BACK_HR: 0.5,
   BACK_TO_BACK_TO_BACK_HR: 1.5,
   CLUTCH_GRAND_SLAM: 1,
+  THREE_HIT_GAME: 0.25,
+  FOUR_HIT_GAME: 0.5,
   FIVE_HIT_GAME: 1,
+  SIX_HIT_GAME: 2,
+  FIVE_RBI_GAME: 0.5,
+  EIGHT_RBI_GAME: 2,
+  TEN_RBI_GAME: 4,
   // Pitching Excellence
   NO_HITTER: 3,
   PERFECT_GAME: 5,
@@ -679,9 +814,61 @@ export const FAME_VALUES: Record<FameEventType, number> = {
   COMEBACK_WIN_7: 3,
   COMEBACK_HERO: 1,
   RALLY_STARTER: 1,
-  // Milestones
+  // Single-Game Milestones
   FIRST_CAREER: 0.5,
   CAREER_MILESTONE: 1,
+  // Season Milestones - Batting
+  SEASON_40_HR: 2.5,
+  SEASON_45_HR: 4,
+  SEASON_55_HR: 6,
+  SEASON_160_HITS: 2,
+  SEASON_120_RBI: 2.5,
+  SEASON_40_SB: 1.5,
+  SEASON_80_SB: 4,
+  SEASON_400_BA: 6,
+  SEASON_TRIPLE_CROWN: 8,
+  // Season Milestones - Batting Clubs
+  CLUB_15_15: 0.5,
+  CLUB_20_20: 1,
+  CLUB_25_25: 2,
+  CLUB_30_30: 3.5,
+  CLUB_40_40: 6,
+  // Season Milestones - Pitching
+  SEASON_15_WINS: 1.5,
+  SEASON_20_WINS: 3,
+  SEASON_25_WINS: 5,
+  SEASON_235_K: 2.5,
+  SEASON_SUB_2_ERA: 3,
+  SEASON_SUB_1_5_ERA: 5,
+  SEASON_40_SAVES: 2.5,
+  SEASON_PITCHING_TRIPLE_CROWN: 6,
+  // Career Milestones - variable based on tier (base values, multiplied by tier)
+  CAREER_HR_TIER: 1,
+  CAREER_HITS_TIER: 1,
+  CAREER_RBI_TIER: 1,
+  CAREER_RUNS_TIER: 1,
+  CAREER_SB_TIER: 1,
+  CAREER_DOUBLES_TIER: 1,
+  CAREER_BB_TIER: 1,
+  CAREER_GRAND_SLAMS_TIER: 1,
+  CAREER_WINS_TIER: 1,
+  CAREER_K_TIER: 1,
+  CAREER_SAVES_TIER: 1,
+  CAREER_IP_TIER: 1,
+  CAREER_SHUTOUTS_TIER: 1,
+  CAREER_CG_TIER: 1,
+  CAREER_NO_HITTERS_TIER: 2,
+  CAREER_PERFECT_GAMES_TIER: 5,
+  CAREER_WAR_TIER: 1,
+  // WAR Components
+  CAREER_BWAR_TIER: 1,
+  CAREER_PWAR_TIER: 1,
+  CAREER_FWAR_TIER: 1.5,   // Higher base - harder to accumulate
+  CAREER_RWAR_TIER: 2,     // Highest base - hardest to accumulate
+  CAREER_GAMES_TIER: 1,
+  CAREER_ALL_STARS_TIER: 1,
+  CAREER_MVPS_TIER: 2,
+  CAREER_CY_YOUNGS_TIER: 2,
   // ============================================
   // BONERS (negative values)
   // ============================================
@@ -723,7 +910,29 @@ export const FAME_VALUES: Record<FameEventType, number> = {
   PICKED_OFF_END_INNING: -1,
   BATTER_OUT_STRETCHING: -1,
   // Position Player Pitching Failures
-  PP_GAVE_UP_RUNS: -1
+  PP_GAVE_UP_RUNS: -1,
+  // Season Negative Milestones - Batting
+  SEASON_200_K_BATTER: -1,
+  SEASON_250_K_BATTER: -2,
+  SEASON_SUB_200_BA: -2,
+  SEASON_30_GIDP: -1,
+  SEASON_20_ERRORS: -1,
+  // Season Negative Milestones - Pitching
+  SEASON_20_LOSSES: -1.5,
+  SEASON_6_ERA: -1.5,
+  SEASON_100_BB: -1,
+  SEASON_20_BLOWN_SAVES: -2,
+  SEASON_40_HR_ALLOWED: -1.5,
+  // Career Negative Milestones (tiered - base values, multiplied by tier)
+  CAREER_K_BATTER_TIER: -0.5,
+  CAREER_GIDP_TIER: -0.5,
+  CAREER_CS_TIER: -0.5,
+  CAREER_LOSSES_TIER: -0.5,
+  CAREER_BLOWN_SAVES_TIER: -0.5,
+  CAREER_WILD_PITCHES_TIER: -0.5,
+  CAREER_HBP_PITCHER_TIER: -0.5,
+  CAREER_ERRORS_TIER: -0.5,
+  CAREER_PASSED_BALLS_TIER: -0.5
 };
 
 // Human-readable labels for Fame events
@@ -754,7 +963,13 @@ export const FAME_EVENT_LABELS: Record<FameEventType, string> = {
   BACK_TO_BACK_HR: 'Back-to-Back HR',
   BACK_TO_BACK_TO_BACK_HR: 'Back-to-Back-to-Back HR',
   CLUTCH_GRAND_SLAM: 'Clutch Grand Slam',
+  THREE_HIT_GAME: '3-Hit Game',
+  FOUR_HIT_GAME: '4-Hit Game',
   FIVE_HIT_GAME: '5-Hit Game',
+  SIX_HIT_GAME: '6-Hit Game',
+  FIVE_RBI_GAME: '5-RBI Game',
+  EIGHT_RBI_GAME: '8-RBI Game',
+  TEN_RBI_GAME: '10-RBI Game',
   // Pitching Excellence
   NO_HITTER: 'No-Hitter',
   PERFECT_GAME: 'Perfect Game',
@@ -786,6 +1001,60 @@ export const FAME_EVENT_LABELS: Record<FameEventType, string> = {
   // Milestones
   FIRST_CAREER: 'First Career Event',
   CAREER_MILESTONE: 'Career Milestone',
+  // Season Milestones - Batting
+  SEASON_40_HR: '40 Home Run Season',
+  SEASON_45_HR: '45 Home Run Season',
+  SEASON_55_HR: '55+ Home Run Season',
+  SEASON_160_HITS: '160 Hit Season',
+  SEASON_120_RBI: '120 RBI Season',
+  SEASON_40_SB: '40 Stolen Base Season',
+  SEASON_80_SB: '80 Stolen Base Season',
+  SEASON_400_BA: '.400 Batting Average',
+  SEASON_TRIPLE_CROWN: 'Triple Crown',
+  // Season Milestones - Batting Clubs
+  CLUB_15_15: '15-15 Club',
+  CLUB_20_20: '20-20 Club',
+  CLUB_25_25: '25-25 Club',
+  CLUB_30_30: '30-30 Club',
+  CLUB_40_40: '40-40 Club',
+  // Season Milestones - Pitching
+  SEASON_15_WINS: '15-Win Season',
+  SEASON_20_WINS: '20-Win Season',
+  SEASON_25_WINS: '25-Win Season',
+  SEASON_235_K: '235 Strikeout Season',
+  SEASON_SUB_2_ERA: 'Sub-2.00 ERA Season',
+  SEASON_SUB_1_5_ERA: 'Sub-1.50 ERA Season',
+  SEASON_40_SAVES: '40-Save Season',
+  SEASON_PITCHING_TRIPLE_CROWN: 'Pitching Triple Crown',
+  // Career Milestones - Batting
+  CAREER_HR_TIER: 'Career Home Run Milestone',
+  CAREER_HITS_TIER: 'Career Hits Milestone',
+  CAREER_RBI_TIER: 'Career RBI Milestone',
+  CAREER_RUNS_TIER: 'Career Runs Milestone',
+  CAREER_SB_TIER: 'Career Stolen Base Milestone',
+  CAREER_DOUBLES_TIER: 'Career Doubles Milestone',
+  CAREER_BB_TIER: 'Career Walk Milestone',
+  CAREER_GRAND_SLAMS_TIER: 'Career Grand Slam Milestone',
+  // Career Milestones - Pitching
+  CAREER_WINS_TIER: 'Career Wins Milestone',
+  CAREER_K_TIER: 'Career Strikeout Milestone',
+  CAREER_SAVES_TIER: 'Career Saves Milestone',
+  CAREER_IP_TIER: 'Career Innings Pitched Milestone',
+  CAREER_SHUTOUTS_TIER: 'Career Shutouts Milestone',
+  CAREER_CG_TIER: 'Career Complete Games Milestone',
+  CAREER_NO_HITTERS_TIER: 'Career No-Hitter Milestone',
+  CAREER_PERFECT_GAMES_TIER: 'Career Perfect Game Milestone',
+  // Career Milestones - Aggregate
+  CAREER_WAR_TIER: 'Career WAR Milestone',
+  // WAR Components
+  CAREER_BWAR_TIER: 'Career Batting WAR Milestone',
+  CAREER_PWAR_TIER: 'Career Pitching WAR Milestone',
+  CAREER_FWAR_TIER: 'Career Fielding WAR Milestone',
+  CAREER_RWAR_TIER: 'Career Baserunning WAR Milestone',
+  CAREER_GAMES_TIER: 'Career Games Played Milestone',
+  CAREER_ALL_STARS_TIER: 'Career All-Star Milestone',
+  CAREER_MVPS_TIER: 'Career MVP Milestone',
+  CAREER_CY_YOUNGS_TIER: 'Career Cy Young Milestone',
   // Strikeout Shame
   HAT_TRICK: 'Hat Trick (3 K)',
   GOLDEN_SOMBRERO: 'Golden Sombrero (4 K)',
@@ -824,7 +1093,29 @@ export const FAME_EVENT_LABELS: Record<FameEventType, string> = {
   PICKED_OFF_END_INNING: 'Picked Off to End Inning',
   BATTER_OUT_STRETCHING: 'Thrown Out Stretching',
   // Position Player Pitching Failures
-  PP_GAVE_UP_RUNS: 'Position Player Gave Up Runs'
+  PP_GAVE_UP_RUNS: 'Position Player Gave Up Runs',
+  // Season Negative Milestones - Batting
+  SEASON_200_K_BATTER: '200 Strikeout Season',
+  SEASON_250_K_BATTER: '250 Strikeout Season',
+  SEASON_SUB_200_BA: 'Sub-.200 Batting Average',
+  SEASON_30_GIDP: '30 GIDP Season',
+  SEASON_20_ERRORS: '20 Error Season',
+  // Season Negative Milestones - Pitching
+  SEASON_20_LOSSES: '20-Loss Season',
+  SEASON_6_ERA: '6.00+ ERA Season',
+  SEASON_100_BB: '100 Walk Season (Pitcher)',
+  SEASON_20_BLOWN_SAVES: '20 Blown Saves Season',
+  SEASON_40_HR_ALLOWED: '40 HR Allowed Season',
+  // Career Negative Milestones
+  CAREER_K_BATTER_TIER: 'Career Strikeout Milestone (Batter)',
+  CAREER_GIDP_TIER: 'Career GIDP Milestone',
+  CAREER_CS_TIER: 'Career Caught Stealing Milestone',
+  CAREER_LOSSES_TIER: 'Career Losses Milestone',
+  CAREER_BLOWN_SAVES_TIER: 'Career Blown Saves Milestone',
+  CAREER_WILD_PITCHES_TIER: 'Career Wild Pitches Milestone',
+  CAREER_HBP_PITCHER_TIER: 'Career HBP Milestone (Pitcher)',
+  CAREER_ERRORS_TIER: 'Career Errors Milestone',
+  CAREER_PASSED_BALLS_TIER: 'Career Passed Balls Milestone'
 };
 
 // Fame attribution target - who gets credited/blamed
@@ -858,7 +1149,13 @@ export const FAME_TARGET: Record<FameEventType, FameTarget> = {
   BACK_TO_BACK_HR: 'player',
   BACK_TO_BACK_TO_BACK_HR: 'team',
   CLUTCH_GRAND_SLAM: 'player',
+  THREE_HIT_GAME: 'player',
+  FOUR_HIT_GAME: 'player',
   FIVE_HIT_GAME: 'player',
+  SIX_HIT_GAME: 'player',
+  FIVE_RBI_GAME: 'player',
+  EIGHT_RBI_GAME: 'player',
+  TEN_RBI_GAME: 'player',
   // Pitching - pitcher
   NO_HITTER: 'pitcher',
   PERFECT_GAME: 'pitcher',
@@ -890,6 +1187,60 @@ export const FAME_TARGET: Record<FameEventType, FameTarget> = {
   // Milestones
   FIRST_CAREER: 'player',
   CAREER_MILESTONE: 'player',
+  // Season Milestones - Batting
+  SEASON_40_HR: 'player',
+  SEASON_45_HR: 'player',
+  SEASON_55_HR: 'player',
+  SEASON_160_HITS: 'player',
+  SEASON_120_RBI: 'player',
+  SEASON_40_SB: 'player',
+  SEASON_80_SB: 'player',
+  SEASON_400_BA: 'player',
+  SEASON_TRIPLE_CROWN: 'player',
+  // Season Milestones - Batting Clubs
+  CLUB_15_15: 'player',
+  CLUB_20_20: 'player',
+  CLUB_25_25: 'player',
+  CLUB_30_30: 'player',
+  CLUB_40_40: 'player',
+  // Season Milestones - Pitching
+  SEASON_15_WINS: 'pitcher',
+  SEASON_20_WINS: 'pitcher',
+  SEASON_25_WINS: 'pitcher',
+  SEASON_235_K: 'pitcher',
+  SEASON_SUB_2_ERA: 'pitcher',
+  SEASON_SUB_1_5_ERA: 'pitcher',
+  SEASON_40_SAVES: 'pitcher',
+  SEASON_PITCHING_TRIPLE_CROWN: 'pitcher',
+  // Career Milestones - Batting
+  CAREER_HR_TIER: 'player',
+  CAREER_HITS_TIER: 'player',
+  CAREER_RBI_TIER: 'player',
+  CAREER_RUNS_TIER: 'player',
+  CAREER_SB_TIER: 'player',
+  CAREER_DOUBLES_TIER: 'player',
+  CAREER_BB_TIER: 'player',
+  CAREER_GRAND_SLAMS_TIER: 'player',
+  // Career Milestones - Pitching
+  CAREER_WINS_TIER: 'pitcher',
+  CAREER_K_TIER: 'pitcher',
+  CAREER_SAVES_TIER: 'pitcher',
+  CAREER_IP_TIER: 'pitcher',
+  CAREER_SHUTOUTS_TIER: 'pitcher',
+  CAREER_CG_TIER: 'pitcher',
+  CAREER_NO_HITTERS_TIER: 'pitcher',
+  CAREER_PERFECT_GAMES_TIER: 'pitcher',
+  // Career Milestones - Aggregate
+  CAREER_WAR_TIER: 'player',
+  // WAR Components
+  CAREER_BWAR_TIER: 'player',       // Position players
+  CAREER_PWAR_TIER: 'pitcher',      // Pitchers only
+  CAREER_FWAR_TIER: 'player',       // All players can field
+  CAREER_RWAR_TIER: 'player',       // All players can run bases
+  CAREER_GAMES_TIER: 'player',
+  CAREER_ALL_STARS_TIER: 'player',
+  CAREER_MVPS_TIER: 'player',
+  CAREER_CY_YOUNGS_TIER: 'pitcher',
   // Strikeout Shame
   HAT_TRICK: 'player',
   GOLDEN_SOMBRERO: 'player',
@@ -928,7 +1279,29 @@ export const FAME_TARGET: Record<FameEventType, FameTarget> = {
   PICKED_OFF_END_INNING: 'player',
   BATTER_OUT_STRETCHING: 'player',
   // PP Pitching Failures
-  PP_GAVE_UP_RUNS: 'pitcher'
+  PP_GAVE_UP_RUNS: 'pitcher',
+  // Season Negative Milestones - Batting
+  SEASON_200_K_BATTER: 'player',
+  SEASON_250_K_BATTER: 'player',
+  SEASON_SUB_200_BA: 'player',
+  SEASON_30_GIDP: 'player',
+  SEASON_20_ERRORS: 'fielder',
+  // Season Negative Milestones - Pitching
+  SEASON_20_LOSSES: 'pitcher',
+  SEASON_6_ERA: 'pitcher',
+  SEASON_100_BB: 'pitcher',
+  SEASON_20_BLOWN_SAVES: 'pitcher',
+  SEASON_40_HR_ALLOWED: 'pitcher',
+  // Career Negative Milestones
+  CAREER_K_BATTER_TIER: 'player',
+  CAREER_GIDP_TIER: 'player',
+  CAREER_CS_TIER: 'player',
+  CAREER_LOSSES_TIER: 'pitcher',
+  CAREER_BLOWN_SAVES_TIER: 'pitcher',
+  CAREER_WILD_PITCHES_TIER: 'pitcher',
+  CAREER_HBP_PITCHER_TIER: 'pitcher',
+  CAREER_ERRORS_TIER: 'fielder',
+  CAREER_PASSED_BALLS_TIER: 'fielder'
 };
 
 // Fame event record
@@ -953,6 +1326,9 @@ export interface FameEvent {
   autoDetected: boolean;
   description?: string;
   relatedPlayId?: string;
+
+  // Performance context (for weighting adjustments)
+  leverageIndex?: number;  // Situation criticality (0.1-10.0, 1.0 = average)
 
   // For events involving multiple players
   secondaryPlayerId?: string;
@@ -1021,8 +1397,22 @@ export function createFameEvent(
   autoDetected: boolean,
   description?: string,
   secondaryPlayerId?: string,
-  secondaryPlayerName?: string
+  secondaryPlayerName?: string,
+  leverageIndex?: number  // Optional LI for adjusting Fame in clutch situations
 ): FameEvent {
+  // Base fame value from event type
+  let fameValue = FAME_VALUES[eventType];
+
+  // Apply Leverage Index adjustment if provided
+  // Per LEVERAGE_INDEX_SPEC.md: LI > 1.0 amplifies fame, LI < 1.0 reduces it
+  // Use square root to dampen extreme values (LI can go up to 10.0)
+  if (leverageIndex !== undefined && leverageIndex > 0) {
+    const liMultiplier = Math.sqrt(leverageIndex);
+    fameValue = fameValue * liMultiplier;
+    // Round to 2 decimal places
+    fameValue = Math.round(fameValue * 100) / 100;
+  }
+
   return {
     id: `fame_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
     gameId,
@@ -1030,7 +1420,7 @@ export function createFameEvent(
     halfInning,
     timestamp: Date.now(),
     eventType,
-    fameValue: FAME_VALUES[eventType],
+    fameValue,
     fameType: FAME_VALUES[eventType] > 0 ? 'bonus' : 'boner',
     playerId,
     playerName,
@@ -1038,7 +1428,8 @@ export function createFameEvent(
     autoDetected,
     description,
     secondaryPlayerId,
-    secondaryPlayerName
+    secondaryPlayerName,
+    leverageIndex,
   };
 }
 

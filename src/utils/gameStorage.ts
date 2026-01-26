@@ -6,7 +6,7 @@
  */
 
 const DB_NAME = 'kbl-tracker';
-const DB_VERSION = 1;
+const DB_VERSION = 2;  // Bumped from 1 - existing DBs may be at version 2
 
 // Store names
 const STORES = {

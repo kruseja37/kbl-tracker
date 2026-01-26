@@ -1,53 +1,23 @@
 import { useState, useEffect } from 'react';
-import type { Position, AtBatResult, Direction, ExitType, Bases } from '../../types/game';
+import type {
+  Position,
+  AtBatResult,
+  Direction,
+  ExitType,
+  Bases,
+  PlayType,
+  ErrorType,
+  D3KOutcome,
+  DepthType,
+  AssistType,
+  DPRole,
+  ErrorContext,
+  AssistChainEntry,
+  FieldingData,
+} from '../../types/game';
 
-// ============================================
-// TYPES - Per FIELDING_SYSTEM_SPEC.md
-// ============================================
-
-export type PlayType = 'routine' | 'diving' | 'jumping' | 'wall' | 'charging' |
-                       'barehanded' | 'error' | 'robbed_hr' | 'failed_robbery';
-export type ErrorType = 'fielding' | 'throwing' | 'missed_catch' | 'collision';
-export type D3KOutcome = 'OUT' | 'WP' | 'PB' | 'E_CATCHER' | 'E_1B';
-
-export interface AssistChainEntry {
-  position: Position;
-  playerId?: string;
-}
-
-export interface FieldingData {
-  // Primary fielding
-  primaryFielder: Position;
-  playType: PlayType;
-  errorType?: ErrorType;
-
-  // Assist chain (for DPs, relay throws, etc.)
-  assistChain: AssistChainEntry[];
-  putoutPosition: Position;
-
-  // Inference tracking
-  inferredFielder: Position;
-  wasOverridden: boolean;
-
-  // Edge cases
-  infieldFlyRule: boolean;
-  ifrBallCaught: boolean | null;
-  groundRuleDouble: boolean;
-  badHopEvent: boolean;
-
-  // D3K tracking
-  d3kEvent: boolean;
-  d3kOutcome: D3KOutcome | null;
-
-  // SMB4 specific
-  nutshotEvent: boolean;
-  comebackerInjury: boolean;
-  robberyAttempted: boolean;
-  robberyFailed: boolean;
-
-  // Fame/clutch triggers
-  savedRun: boolean;
-}
+// Re-export types for consumers that import from FieldingModal
+export type { PlayType, ErrorType, D3KOutcome, DepthType, AssistType, DPRole, ErrorContext, AssistChainEntry, FieldingData };
 
 // ============================================
 // FIELDER INFERENCE MATRICES
@@ -176,9 +146,18 @@ export default function FieldingModal({
   // State
   const [primaryFielder, setPrimaryFielder] = useState<Position | null>(inferredFielder);
   const [playType, setPlayType] = useState<PlayType>('routine');
-  const [_errorType, _setErrorType] = useState<ErrorType | null>(null); // Reserved for future error type selection
+  const [errorType, setErrorType] = useState<ErrorType | null>(null);
   const [dpChain, setDpChain] = useState<string | null>(result === 'DP' && direction ? DP_CHAINS[direction] : null);
   const [savedRun, setSavedRun] = useState(false);
+
+  // New Day 4 fields
+  const [depth, setDepth] = useState<DepthType | null>(null);
+  const [dpRole, setDpRole] = useState<DPRole | null>(null);
+  const [errorContext, setErrorContext] = useState<ErrorContext>({
+    allowedRun: false,
+    wasRoutine: false,
+    wasDifficult: false,
+  });
 
   // Edge cases
   const [infieldFlyRule, setInfieldFlyRule] = useState(false);
@@ -238,6 +217,9 @@ export default function FieldingModal({
   // Show star play options for outs
   const showPlayType = ['GO', 'FO', 'LO', 'PO'].includes(result);
 
+  // Show error options when: Result = E (error)
+  const showErrorOptions = result === 'E';
+
   // ============================================
   // POSITIONS FOR SELECTION
   // ============================================
@@ -247,10 +229,31 @@ export default function FieldingModal({
   const playTypes: { value: PlayType; label: string }[] = [
     { value: 'routine', label: 'Routine' },
     { value: 'diving', label: 'Diving' },
-    { value: 'jumping', label: 'Leaping' },
+    { value: 'leaping', label: 'Leaping' },
     { value: 'wall', label: 'Wall Catch' },
     { value: 'charging', label: 'Charging' },
-    { value: 'barehanded', label: 'Barehanded' },
+    { value: 'running', label: 'Running' },
+    { value: 'sliding', label: 'Sliding' },
+    { value: 'over_shoulder', label: 'Over-shoulder' },
+  ];
+  const depthOptions: { value: DepthType; label: string }[] = [
+    { value: 'shallow', label: 'Shallow' },
+    { value: 'infield', label: 'Infield' },
+    { value: 'outfield', label: 'Outfield' },
+    { value: 'deep', label: 'Deep' },
+  ];
+  const dpRoleOptions: { value: DPRole; label: string }[] = [
+    { value: 'started', label: 'Started' },
+    { value: 'turned', label: 'Turned' },
+    { value: 'completed', label: 'Completed' },
+    { value: 'unassisted', label: 'Unassisted' },
+  ];
+  const errorTypeOptions: { value: ErrorType; label: string }[] = [
+    { value: 'fielding', label: 'Fielding' },
+    { value: 'throwing', label: 'Throwing' },
+    { value: 'mental', label: 'Mental' },
+    { value: 'missed_catch', label: 'Missed Catch' },
+    { value: 'collision', label: 'Collision' },
   ];
 
   // ============================================
@@ -264,9 +267,20 @@ export default function FieldingModal({
       '1': 'P', '2': 'C', '3': '1B', '4': '2B', '5': '3B', '6': 'SS', '7': 'LF', '8': 'CF', '9': 'RF'
     };
 
+    // Determine assist type based on position
+    const getAssistType = (posNum: string): AssistType => {
+      // Outfield positions: 7 (LF), 8 (CF), 9 (RF)
+      if (['7', '8', '9'].includes(posNum)) return 'outfield';
+      // Infield positions: 1-6
+      return 'infield';
+    };
+
     const parts = dpString.split('-');
     // All but last are assists, last is putout
-    return parts.slice(0, -1).map(num => ({ position: posMap[num] }));
+    return parts.slice(0, -1).map(num => ({
+      position: posMap[num],
+      assistType: getAssistType(num),
+    }));
   };
 
   const getPutoutFromDP = (dpString: string | null): Position => {
@@ -290,10 +304,17 @@ export default function FieldingModal({
     const fieldingData: FieldingData = {
       primaryFielder,
       playType,
-      errorType: playType === 'error' ? (_errorType || 'fielding') : undefined,
+      errorType: playType === 'error' ? (errorType || 'fielding') : undefined,
+      errorContext: playType === 'error' ? errorContext : undefined,
+
+      // Depth (Day 4)
+      depth: depth || undefined,
 
       assistChain: showDPChain ? buildAssistChain(dpChain) : [],
       putoutPosition: showDPChain ? getPutoutFromDP(dpChain) : primaryFielder,
+
+      // DP Role (Day 4)
+      dpRole: showDPChain ? (dpRole || undefined) : undefined,
 
       inferredFielder: inferredFielder || primaryFielder,
       wasOverridden: primaryFielder !== inferredFielder,
@@ -359,6 +380,26 @@ export default function FieldingModal({
           </div>
         </div>
 
+        {/* Depth Selection (Day 4) */}
+        <div style={styles.section}>
+          <div style={styles.sectionLabel}>DEPTH:</div>
+          <div style={styles.buttonRow}>
+            {depthOptions.map(d => (
+              <button
+                key={d.value}
+                style={{
+                  ...styles.optionButton,
+                  backgroundColor: depth === d.value ? '#4CAF50' : '#333',
+                  color: depth === d.value ? '#000' : '#fff',
+                }}
+                onClick={() => setDepth(d.value)}
+              >
+                {d.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
         {/* DP Chain Selection */}
         {showDPChain && (
           <div style={styles.section}>
@@ -375,6 +416,28 @@ export default function FieldingModal({
                   onClick={() => setDpChain(type)}
                 >
                   {type}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* DP Role Selection (Day 4) */}
+        {showDPChain && (
+          <div style={styles.section}>
+            <div style={styles.sectionLabel}>YOUR ROLE IN DP:</div>
+            <div style={styles.buttonRow}>
+              {dpRoleOptions.map(role => (
+                <button
+                  key={role.value}
+                  style={{
+                    ...styles.optionButton,
+                    backgroundColor: dpRole === role.value ? '#4CAF50' : '#333',
+                    color: dpRole === role.value ? '#000' : '#fff',
+                  }}
+                  onClick={() => setDpRole(role.value)}
+                >
+                  {role.label}
                 </button>
               ))}
             </div>
@@ -402,7 +465,7 @@ export default function FieldingModal({
             </div>
 
             {/* Saved Run Toggle for star plays */}
-            {['diving', 'wall', 'jumping'].includes(playType) && (
+            {['diving', 'wall', 'leaping'].includes(playType) && (
               <div style={styles.checkboxRow}>
                 <label style={styles.checkbox}>
                   <input
@@ -414,6 +477,60 @@ export default function FieldingModal({
                 </label>
               </div>
             )}
+          </div>
+        )}
+
+        {/* Error Type and Context (Day 4) */}
+        {showErrorOptions && (
+          <div style={styles.section}>
+            <div style={styles.sectionLabel}>ERROR TYPE:</div>
+            <div style={styles.buttonRow}>
+              {errorTypeOptions.map(et => (
+                <button
+                  key={et.value}
+                  style={{
+                    ...styles.optionButton,
+                    backgroundColor: errorType === et.value ? '#f44336' : '#333',
+                    color: errorType === et.value ? '#fff' : '#fff',
+                  }}
+                  onClick={() => setErrorType(et.value)}
+                >
+                  {et.label}
+                </button>
+              ))}
+            </div>
+
+            <div style={{ ...styles.sectionLabel, marginTop: '12px' }}>ERROR CONTEXT:</div>
+            <div style={styles.checkboxRow}>
+              <label style={styles.checkbox}>
+                <input
+                  type="checkbox"
+                  checked={errorContext.allowedRun}
+                  onChange={e => setErrorContext({ ...errorContext, allowedRun: e.target.checked })}
+                />
+                Allowed a run to score (1.5x penalty)
+              </label>
+            </div>
+            <div style={styles.checkboxRow}>
+              <label style={styles.checkbox}>
+                <input
+                  type="checkbox"
+                  checked={errorContext.wasRoutine}
+                  onChange={e => setErrorContext({ ...errorContext, wasRoutine: e.target.checked, wasDifficult: e.target.checked ? false : errorContext.wasDifficult })}
+                />
+                Was a routine play (1.2x penalty)
+              </label>
+            </div>
+            <div style={styles.checkboxRow}>
+              <label style={styles.checkbox}>
+                <input
+                  type="checkbox"
+                  checked={errorContext.wasDifficult}
+                  onChange={e => setErrorContext({ ...errorContext, wasDifficult: e.target.checked, wasRoutine: e.target.checked ? false : errorContext.wasRoutine })}
+                />
+                Was a difficult play (0.7x reduced penalty)
+              </label>
+            </div>
           </div>
         )}
 

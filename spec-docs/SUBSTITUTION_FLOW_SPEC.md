@@ -372,6 +372,51 @@ interface PitchingChangeEvent {
 }
 ```
 
+### 6.4 Pitcher Stats Initialization ✅ IMPLEMENTED
+
+When a pitching change is processed in `handleSubstitutionComplete()`:
+
+```typescript
+// 1. Apply substitution to lineup state
+const newLineupState = applySubstitution(lineupState, event, inning);
+// This sets lineupState.currentPitcher to the new pitcher
+
+// 2. Initialize pitcher stats for new pitcher in pitcherGameStats Map
+if (event.eventType === 'PITCH_CHANGE') {
+  const pc = event as PitchingChangeEvent;
+  setPitcherGameStats((prev) => {
+    const newMap = new Map(prev);
+    if (!newMap.has(pc.incomingPitcherId)) {
+      // Team determined by which half of inning (home pitches in TOP)
+      const teamId = halfInning === 'TOP' ? homeTeamId : awayTeamId;
+      newMap.set(
+        pc.incomingPitcherId,
+        createInitialPitcherStats(
+          pc.incomingPitcherId,
+          pc.incomingPitcherName,
+          teamId,
+          false,  // isStarter = false for relievers
+          inning  // entryInning for tracking
+        )
+      );
+    }
+    return newMap;
+  });
+}
+```
+
+**Why This Matters:**
+- `pitcherGameStats` Map accumulates stats across all at-bats
+- New pitchers need an entry BEFORE their first at-bat
+- `isStarter: false` ensures relievers are categorized correctly
+- `entryInning` enables "first inning disaster" tracking for starters only
+- `getCurrentPitcherId()` now uses `lineupState.currentPitcher` instead of fixed IDs
+
+**Integration with STAT_TRACKING_ARCHITECTURE_SPEC.md:**
+- Pitcher stats persist in game state (Phase 2)
+- Stats aggregate to season totals on game completion (Phase 3)
+- Enables proper no-hitter/perfect game detection (needs full-game accumulation)
+
 ---
 
 ## 7. Double Switch

@@ -97,6 +97,23 @@ function calculateOverperformanceWAR(team, season) {
 }
 ```
 
+### Overperformance Attribution Breakdown
+
+Team overperformance (actual wins - expected wins) is attributed as follows:
+
+| Attribution | Percentage | Rationale |
+|-------------|------------|-----------|
+| **Manager** | 30% | Strategic decisions, player usage, game management |
+| **Unattributed (Luck/Variance)** | 70% | Close game variance, clutch hitting variance, sequencing, injury luck |
+
+**Why 70% is unattributed:**
+- Baseball has significant randomness in close games (coin-flip outcomes)
+- Run sequencing luck can swing 5-10 wins per season
+- This is consistent with MLB sabermetric consensus that manager impact is limited
+- The remaining 70% is intentionally NOT redistributed to player WAR (to avoid double-counting)
+
+**Important:** The unattributed portion does NOT get assigned to players. Player WAR is calculated independently from individual performance. Overperformance attribution is a separate accounting for team-level variance.
+
 ---
 
 ## 3. In-Game Decision Tracking

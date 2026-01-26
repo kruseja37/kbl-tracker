@@ -1,15 +1,48 @@
 # KBL Tracker - Current State
 
 > **Purpose**: Single source of truth for what's implemented, what's not, and known issues
-> **Last Updated**: January 22, 2026
+> **Last Updated**: January 26, 2026 (IMPL_PLAN_v5 Day 2 + Position Switch bugs fixed)
+
+---
+
+> ✅ **BUILD STATUS: PASSING**
+>
+> `npm run build` → Exit 0 (as of January 26, 2026)
+>
+> **IMPLEMENTATION PLAN v5** is now active.
+> - Phase 1 Day 1: Wire fWAR + rWAR to useWARCalculations ✅
+> - Phase 1 Day 2: Wire mWAR + Clutch Calculator ✅
+> - Phase 1 Day 3: Wire Mojo + Fitness Engines (pending)
+> - Phase 1 Day 4: Integration Testing (pending)
+>
+> **Position Switch Bugs Fixed (Jan 26, 2026):**
+> - Bug 1: Catcher now appears in Position Switch modal (fixed lineup generation)
+> - Bug 2: Auto-swap feature - system auto-adds reverse swap when moving to occupied position
+>
+> **Previous Plan v3 completed** (Days 1-11):
+> - Day 1: Fixed 42 TypeScript build errors
+> - Day 2: Wired WARDisplay to UI
+> - Day 3: Resolved 5 spec contradictions
+> - Day 4: Added fWAR-relevant fields to FieldingModal
+> - Day 5: Verified Career Aggregation Pipeline, created CareerDisplay component
+> - Day 6: Created PlayerCard component with full stats, wired to UI
+> - Day 7: Created SeasonLeaderboards with player click to open PlayerCard
+> - Day 8: Created SeasonSummary modal with all leaderboard categories
+> - Day 9: Fixed remaining spec issues (LEVERAGE, PWAR, BWAR docs)
+> - Day 10: Integration testing - all 267+ tests pass
+> - Day 11: Salary display BLOCKED - data model lacks player ratings
+>
+> See SESSION_LOG.md for detailed work log.
 
 ---
 
 > ⚠️ **AI SESSION START PROTOCOL**
 >
 > **BEFORE doing any work**, also read:
-> - `AI_OPERATING_PREFERENCES.md` - Core operating principles (NFL, scope discipline, completion protocol, etc.)
+> - `AI_OPERATING_PREFERENCES.md` - Core operating principles (NFL with 3 tiers, scope discipline, etc.)
 > - `SESSION_LOG.md` - What happened in previous sessions
+> - `IMPLEMENTATION_PLAN_v2.md` - The active implementation plan
+> - `FEATURE_WISHLIST.md` - Known gaps to address
 >
 > These files contain critical context for how to work on this project.
 
@@ -65,6 +98,7 @@
 | Pinch Runner | ✅ Complete | PinchRunnerModal with pitcher responsibility inheritance |
 | Defensive Sub | ✅ Complete | DefensiveSubModal supports multiple subs |
 | Pitching Change | ✅ Complete | PitchingChangeModal with pitch count, inherited runners |
+| Position Switch | ✅ Complete | PositionSwitchModal - swap positions without removing players |
 | Double Switch | ⚠️ Spec only | Not yet implemented |
 | Lineup State | ✅ Complete | LineupState tracks current lineup, bench, used players |
 | Undo support | ✅ Complete | Lineup state included in undo stack |
@@ -73,24 +107,357 @@
 
 *None currently*
 
+### Data Persistence & Stats - IMPLEMENTED ✅
+
+| Feature | Status | Notes |
+|---------|--------|-------|
+| IndexedDB game storage | ✅ Complete | `gameStorage.ts` - saves current game, archives completed |
+| Game recovery on refresh | ✅ Complete | `useGamePersistence.ts` - auto-load, recovery prompt |
+| Season stats aggregation | ✅ Complete | `seasonStorage.ts`, `seasonAggregator.ts` |
+| Live stats display | ✅ Complete | `useLiveStats.ts` - season + current game merged |
+| Event log system | ✅ Complete | `eventLog.ts` - bulletproof data with situational context |
+| Data integrity checks | ✅ Complete | `useDataIntegrity.ts` - startup recovery, retry logic |
+| Fame detection | ✅ Complete | `useFameDetection.ts` - triggers from accumulated stats |
+| **Fielding events** | ✅ Complete | `eventLog.ts` - FieldingModal → FIELDING_EVENTS store (fixed Jan 24) |
+| **Leverage per at-bat** | ✅ Complete | `AtBatEvent.leverageIndex` stored per at-bat |
+
+See `STAT_TRACKING_ARCHITECTURE_SPEC.md` for full architecture (Phases 1-4 implemented).
+
+**Day 1 v2 Fix (Jan 24, 2026)**: Connected FieldingModal to IndexedDB persistence. Rich fielding data (play type, difficulty, assist chains) now persists to `fieldingEvents` store for fWAR calculation.
+
+### WAR Calculation Engines - IMPLEMENTED ✅ (Day 1-2 Sprint)
+
+| Feature | Status | Notes |
+|---------|--------|-------|
+| bWAR Types | ✅ Complete | `types/war.ts` - All interfaces, SMB4 baselines |
+| bWAR Calculator | ✅ Complete | `engines/bwarCalculator.ts` - wOBA, wRAA, replacement runs |
+| pWAR Calculator | ✅ Complete | `engines/pwarCalculator.ts` - FIP, starter/reliever split, leverage |
+| fWAR Calculator | ✅ Complete | `engines/fwarCalculator.ts` - Per-play values, positional adjustment |
+| rWAR Calculator | ✅ Complete | `engines/rwarCalculator.ts` - wSB, UBR, wGDP |
+| Unified Index | ✅ Complete | `engines/index.ts` - calculateTotalWAR, getTotalWARTier |
+| All Tests | ✅ Complete | `war-verify.mjs` - 24/24 tests passing |
+| Transaction Logging | ✅ Complete | `transactionStorage.ts` - 30+ event types |
+| Career Storage | ✅ Updated | WAR fields added to career batting/pitching |
+| **WAR Hook** | ✅ Complete | `hooks/useWARCalculations.ts` - Bridge to seasonStorage (Day 2) |
+| **WAR Display** | ✅ Complete | `components/GameTracker/WARDisplay.tsx` - Leaderboards, badges (Day 2) |
+| **fWAR Integration** | ✅ Complete | `useWARCalculations.ts` - calculateFWARFromStats wired (IMPL_PLAN_v5 Day 1) |
+| **rWAR Integration** | ✅ Complete | `useWARCalculations.ts` - calculateRWARSimplified wired (IMPL_PLAN_v5 Day 1) |
+| **Total WAR** | ✅ Complete | Position: bWAR+fWAR+rWAR; Pitcher: pWAR+(bWAR×0.1) |
+
+**Day 2 v2 Fix (Jan 25, 2026)**: Connected bWAR/pWAR calculators to real persisted season data via `useWARCalculations` hook. Created display components for WAR leaderboards.
+
+**Day 1 IMPL_PLAN_v5 (Jan 26, 2026)**: Connected fWAR and rWAR calculators to useWARCalculations hook. Added conversion functions, state maps, getters, and total WAR calculation combining all components.
+
+**Day 2 IMPL_PLAN_v5 (Jan 26, 2026)**: Wired Clutch and mWAR systems to UI:
+- Added "Clutch" tab to WARPanel (`WARDisplay.tsx`) with ClutchLeaderboard component
+- Wired `useClutchCalculations` hook into GameTracker - records clutch events for both batter and pitcher after each at-bat
+- Wired `useMWARCalculations` hook into GameTracker - records manager decisions (pitching changes, pinch hitters, etc.) for mWAR tracking
+- Browser tested: Clutch tab appears and displays "No clutch data yet" until at-bats are recorded
+
+**SMB4 Baselines Used (from ADAPTIVE_STANDARDS_ENGINE_SPEC.md):**
+- League wOBA: 0.329, wOBA Scale: 1.7821
+- League FIP: 4.04, FIP constant: 3.28
+- Replacement Level: -12.0 runs per 600 PA (batters), 0.12/0.03 (starter/reliever)
+- **WAR Runs Per Win: 10 × (seasonGames / 162)** — e.g., 50 games = 3.09 RPW
+- SB value: +0.20, CS value: -0.45, break-even: 69%
+
+> ⚠️ **Note**: The 17.87 "runsPerWin" in ADAPTIVE_STANDARDS is for run environment analysis (Pythagorean expectation), NOT for WAR. See SESSION_LOG "CRITICAL BUG FIX" entry.
+
+**WAR Component Summary:**
+- **bWAR**: wOBA → wRAA → replacement adjustment → park factor → WAR
+- **pWAR**: FIP → runs prevented above replacement → WAR (with leverage)
+- **fWAR**: per-play runs × position modifier × difficulty → positional adjustment → WAR
+- **rWAR**: BsR (wSB + UBR + wGDP) / runsPerWin
+
+### Day 3 Sprint - Leverage/Clutch/mWAR - IMPLEMENTED ✅
+
+| Feature | Status | Notes |
+|---------|--------|-------|
+| Leverage Index Calculator | ✅ Complete | `engines/leverageCalculator.ts` - BASE_OUT_LI table, inning/score modifiers |
+| gmLI for Relievers | ✅ Complete | Accumulator pattern, gmLI → leverage multiplier |
+| Clutch Calculator | ✅ Complete | `engines/clutchCalculator.ts` - Multi-participant attribution |
+| Contact Quality | ✅ Complete | Exit type → CQ mapping, playoff multipliers |
+| Net Clutch Rating | ✅ Complete | Per-player accumulation, tier system |
+| mWAR Calculator | ✅ Complete | `engines/mwarCalculator.ts` - Decision tracking, evaluation |
+| Manager Decision Types | ✅ Complete | 12 decision types, auto-detect + user-prompted |
+| Team Overperformance | ✅ Complete | Salary-based expectation, 30% manager credit |
+| All Tests | ✅ Complete | `leverage-clutch-mwar-verify.mjs` - 21/21 passing |
+| LI UI Integration | ✅ Complete | Scoreboard displays LI with color-coded categories |
+
+**Key Calculations:**
+- **Leverage Index**: LI = BASE_OUT_LI × inningMult × walkoffBoost × scoreDamp (range: 0.1 - 10.0)
+- **Clutch Value**: baseValue × √LI × playoffMultiplier
+- **mWAR**: (decisionWAR × 0.60) + (overperformanceWAR × 0.40)
+- **gmLI → Leverage Multiplier**: (gmLI + 1) / 2
+
+**UI Integration:**
+- Scoreboard component now displays live LI with color coding
+- Categories: LOW (gray), MEDIUM (green), CLUTCH (yellow), HIGH (orange), EXTREME (red 🔥)
+- CLUTCH badge still appears in at-bat card when LI ≥ 1.5
+
+### Day 4 Sprint - Fame Engine & Detection Functions - IMPLEMENTED ✅
+
+| Feature | Status | Notes |
+|---------|--------|-------|
+| Fame Engine | ✅ Complete | `engines/fameEngine.ts` - LI weighting, fame tiers |
+| Career Milestones | ✅ Complete | 20+ career stat thresholds (HR, Hits, Wins, etc.) |
+| Season Milestones | ✅ Complete | Season achievements, clubs (20/20, 30/30, etc.) |
+| First Career Detection | ✅ Complete | First hit, HR, RBI, win, save, K |
+| Detection Functions | ✅ Complete | `engines/detectionFunctions.ts` - prompt/manual detection |
+| Prompt Detection | ✅ Complete | Web Gem, Robbery, TOOTBLAN, Nut Shot, etc. |
+| Blown Save Detection | ✅ Complete | Save opportunity tracking |
+| Triple Play Detection | ✅ Complete | Regular and unassisted |
+| Position Player Pitching | ✅ Complete | Clean innings, strikeouts, runs allowed |
+| Fielding Errors | ✅ Complete | Dropped fly, booted grounder, wrong base |
+| All Tests | ✅ Complete | `fame-detection-verify.cjs` - 25/25 passing |
+
+**Key Calculations:**
+- **Fame Value**: baseFame × √LI × playoffMultiplier
+- **LI Multiplier**: √LI (LI=4 → 2×, LI=9 → 3×)
+- **Fame Tiers**: Notorious (-30), Villain, Disliked, Unknown, Known, Fan Favorite, Star, Superstar, Legend (50+)
+- **Save Opportunity**: Lead ≤3 OR tying run on base/at bat, 7th inning or later
+
+**Milestone Threshold Architecture (Runtime Scaling):**
+- **MLB Baseline Thresholds** are stored in code (40 HR, 200 hits, etc.) - These create meaning
+- **MilestoneConfig** holds franchise settings: `gamesPerSeason`, `inningsPerGame`
+- **Runtime Scaling** via `scaleMilestoneThreshold()` in fameEngine.ts
+- **Scaling Types**:
+  - `'opportunity'`: games × innings (gamesPerSeason/162 × inningsPerGame/9)
+    - Used for: HR, hits, RBI, SB, pitcher K, walks, errors, WAR, etc.
+    - Rationale: More innings per game = more plate appearances/chances
+  - `'per-game'`: season length only (gamesPerSeason / 162)
+    - Used for: Wins, losses, saves, blown saves, complete games, games played
+    - Rationale: Max 1 per game regardless of game length
+  - `'none'`: No scaling
+    - Used for: Awards (All-Star, MVP, Cy Young) - 1 per season max
+- **Rate stats** (BA, ERA) use same thresholds as MLB (no scaling needed)
+- **Example - 32g/9inn season**: 40 HR MLB × (32/162 × 9/9) = 40 × 0.198 = 8 HR threshold
+- **Example - 32g/7inn season**: 40 HR MLB × (32/162 × 7/9) = 40 × 0.154 = 6 HR threshold
+
+**Existing UI Integration:**
+- FameEventModal for manual Fame entry (all event types)
+- QuickFameButtons for common events (Nut Shot, TOOTBLAN, Web Gem, etc.)
+- FamePanel for in-game Fame display
+- Toast notifications for auto-detected events
+- EndGameFameSummary for post-game
+
+**Design Philosophy Documented:**
+- Updated `REQUIREMENTS.md` - User Interaction Model section rewritten
+- Updated `AI_OPERATING_PREFERENCES.md` - Added Section 13 "GameTracker Design Philosophy"
+- Detection Tiers: Auto-Detect (no input), Prompt-Detect (1-click), Manual Entry (rare)
+
+### Day 5 Sprint - Mojo/Fitness/Salary Engines - IMPLEMENTED ✅
+
+| Feature | Status | Notes |
+|---------|--------|-------|
+| Mojo Engine | ✅ Complete | `engines/mojoEngine.ts` - 5-level scale, triggers, effects |
+| Mojo Stat Multipliers | ✅ Complete | 0.82 (Rattled) to 1.18 (Jacked) |
+| Mojo Triggers | ✅ Complete | 20+ events with situational amplification |
+| Mojo Carryover | ✅ Complete | 30% carries between games |
+| Fitness Engine | ✅ Complete | `engines/fitnessEngine.ts` - 6 states, decay, recovery |
+| Fitness Stat Multipliers | ✅ Complete | 0.00 (Hurt) to 1.20 (Juiced) |
+| Fitness Decay/Recovery | ✅ Complete | Position-specific rates, trait modifiers |
+| Injury Risk | ✅ Complete | Based on fitness state, position, age, traits |
+| Juiced Status | ✅ Complete | Extended rest requirements, cooldown, PED stigma |
+| Salary Calculator | ✅ Complete | `engines/salaryCalculator.ts` - base + modifiers |
+| Position Player Weights | ✅ Complete | 3:3:2:1:1 (Power 30%, Contact 30%, Speed 20%, Fielding 10%, Arm 10%) |
+| Pitcher Weights | ✅ Complete | 1:1:1 (equal 33.3% each) |
+| Position Multipliers | ✅ Complete | C +15%, SS +12%, CF +8%, 1B -8%, DH -12% |
+| Trait Modifiers | ✅ Complete | Elite ±10%, Good ±5%, Minor ±2% |
+| Pitcher Batting Bonus | ✅ Complete | ≥70 = +50%, ≥55 = +25%, ≥40 = +10% |
+| Two-Way Player Handling | ✅ Complete | (Position + Pitcher) × 1.25 premium |
+| True Value | ✅ Complete | Position-relative percentile approach |
+| Trade Matching | ✅ Complete | Salary-based swap requirements |
+| Draft Budget | ✅ Complete | Retirements + releases + standings bonus |
+| All Tests | ✅ Complete | `mojo-fitness-salary-verify.cjs` - 45/45 passing |
+
+**Key Calculations:**
+- **Mojo Stat Multiplier**: 0.82 + (0.09 × (mojo + 2)) → 0.82 to 1.18
+- **Mojo Amplification**: tieGameLate × playoff × basesLoaded × rispTwoOuts (multiplicative)
+- **Mojo Carryover**: nextStartMojo = round(endMojo × 0.3)
+- **Fitness Stat Multiplier**: JUICED 1.20, FIT 1.00, WELL 0.95, STRAINED 0.85, WEAK 0.70, HURT 0
+- **Position Player Rating**: power×0.30 + contact×0.30 + speed×0.20 + fielding×0.10 + arm×0.10
+- **Pitcher Rating**: (velocity + junk + accuracy) / 3
+- **Base Salary**: (weightedRating / 100)^2.5 × $50M × positionMult × traitMod
+- **Final Salary**: baseSalary × ageFactor × performanceMod × fameMod × personalityMod
+- **True Value**: WAR percentile among position peers → salary percentile mapping
+
+**Fame/WAR Integration:**
+- Mojo Fame Modifier: Rattled +30%, Jacked -20%
+- Fitness Fame Modifier: Juiced -50% (PED stigma), Weak +25% (gutsy)
+- Mojo WAR Multiplier: Rattled +15%, Jacked -10%
+- Fitness WAR Multiplier: Juiced -15%, Weak +20%
+
+### Day 6 Sprint - Fan Morale/Narrative Engines - IMPLEMENTED ✅
+
+| Feature | Status | Notes |
+|---------|--------|-------|
+| Fan Morale Engine | ✅ Complete | `engines/fanMoraleEngine.ts` - 7 states, event-driven |
+| Fan State Thresholds | ✅ Complete | EUPHORIC (90-99) → HOSTILE (0-9) |
+| Morale Events | ✅ Complete | 30+ event types with base impacts |
+| Performance Multipliers | ✅ Complete | VASTLY_EXCEEDING (±50%) to VASTLY_UNDER (±50%) |
+| Timing Multipliers | ✅ Complete | EARLY (0.5×) to PLAYOFF_RACE (2.0×) |
+| Morale Drift | ✅ Complete | Natural regression toward baseline (0.03/day) |
+| Momentum System | ✅ Complete | 50% amplification for streaks |
+| Trade Scrutiny | ✅ Complete | 14-game window with verdicts |
+| Contraction Risk | ✅ Complete | Morale (30%) + Financial (40%) + Performance (30%) |
+| Narrative Engine | ✅ Complete | `engines/narrativeEngine.ts` - beat reporter templates |
+| Reporter Personalities | ✅ Complete | 10 personalities with weighted distribution |
+| 80/20 Alignment | ✅ Complete | 80% on-brand, 20% off-brand |
+| Story Types | ✅ Complete | TRADE, GAME_RECAP, MILESTONE, etc. |
+| Heat Levels | ✅ Complete | COLD (0.5×) to EXPLOSIVE (1.5×) |
+| Claude API Ready | ✅ Complete | Placeholder for drop-in integration |
+| Reporter Reliability | ✅ Complete | 65-95% accuracy by personality, retractions |
+| All Tests | ✅ Complete | `fan-morale-narrative-verify.cjs` - 73/73 passing |
+
+**Key Calculations:**
+- **Fan State**: Derived from morale value (0-99) via FAN_STATE_THRESHOLDS
+- **Morale Change**: baseImpact × performanceMult × timingMult × momentumMult
+- **Performance Classification**: Compare win% vs expected (from salary-based projection)
+- **Trade Verdict**: Compare acquired player WAR vs traded player WAR over 14 games
+- **Contraction Risk**: (morale × 0.30) + (financial × 0.40) + (performance × 0.30)
+
+**Beat Reporter System:**
+- **Personality Weights**: BALANCED 20%, OPTIMIST 15%, DRAMATIC 12%, PESSIMIST 10%, ANALYTICAL 10%
+- **Secondary Weights**: HOMER 8%, CONTRARIAN 8%, INSIDER 7%, OLD_SCHOOL 5%, HOT_TAKE 5%
+- **Alignment Rate**: 80% personality-aligned, 20% off-brand
+- **Story Morale Impact**: Derived from personality alignment × heat level
+
+**Reporter Reliability System:**
+- **Accuracy Rates**: INSIDER 95%, ANALYTICAL 92%, BALANCED 90%, OLD_SCHOOL 88%, OPTIMIST/PESSIMIST 85%, HOMER 80%, DRAMATIC 78%, CONTRARIAN 75%, HOT_TAKE 65%
+- **Confidence Levels**: CONFIRMED (≥90%), LIKELY (≥80%), SOURCES_SAY (≥70%), RUMORED (≥50%), SPECULATING (<50%)
+- **Inaccuracy Types**: PREMATURE (jumped gun), EXAGGERATED (overstated), MISATTRIBUTED (wrong player), FABRICATED (bad source), OUTDATED (situation changed)
+- **Retractions**: Severe errors on high-stakes topics always need retraction; minor errors ~30% chance noticed
+- **Credibility Hits**: FABRICATED -15, PREMATURE -10, MISATTRIBUTED -5, EXAGGERATED -3, OUTDATED -1
+
+### Day 5 (IMPL PLAN v3) - Career Aggregation Pipeline - VERIFIED ✅
+
+| Feature | Status | Notes |
+|---------|--------|-------|
+| Career Storage | ✅ Complete | `careerStorage.ts` - PlayerCareerBatting/Pitching/Fielding |
+| Career Aggregation | ✅ Complete | `milestoneAggregator.ts` - Game → Career via aggregateGameWithMilestones |
+| Career Queries | ✅ Complete | getAllCareerBatting(), getAllCareerPitching(), getCareerStats() |
+| Season End Processing | ✅ Complete | `seasonEndProcessor.ts` - MVP/Ace/Legacy detection |
+| Career Milestone Detection | ✅ Complete | `milestoneDetector.ts` - Tiered thresholds with scaling |
+| Career Stats Hook | ✅ Complete | `useCareerStats.ts` - Hook for UI components |
+| Career Display Component | ✅ Created | `CareerDisplay.tsx` - Leaderboards (not yet rendered) |
+
+**Data Flow:**
+1. `index.tsx` line 796 → `aggregateGameToSeason()` at game end
+2. `seasonAggregator.ts` → `aggregateGameWithMilestones()`
+3. `milestoneAggregator.ts` → `aggregateGameToCareerBatting()` / `Pitching()`
+4. Career milestones detected via `checkAndProcessCareerBattingMilestones()`
+
+**Tier 4 Spec Audit Results:**
+- ✅ Career batting interface matches spec (20+ fields)
+- ✅ Career pitching interface matches spec (25+ fields)
+- ✅ Scaling factors match spec (128/162 = 0.79, 6/9 = 0.67)
+- ✅ WAR component milestones (bWAR, pWAR, fWAR, rWAR) tiered correctly
+
 ### Features - NOT IMPLEMENTED ❌
 
 | Feature | Status | Priority |
 |---------|--------|----------|
-| Data persistence | ❌ None | HIGH - All data lost on refresh |
-| Fielding data persistence | ❌ None | HIGH - Fielding data captured but not stored |
-| Pitcher stats tracking | ⚠️ Spec complete | MEDIUM - See PITCHER_STATS_TRACKING_SPEC.md |
 | Double Switch | ⚠️ Spec only | LOW - Modal not implemented yet |
-| Fielding stats aggregation | ❌ None | MEDIUM - PO, A, E, Fld% calculations |
-| Multi-game tracking | ❌ None | LOW - Single game only |
-| Walk-off detection | ❌ None | LOW - Game doesn't end automatically |
 | Box score export | ❌ None | FUTURE |
+| Spray chart visualization | ❌ Spec only | FUTURE - Uses fielding data |
+| Shift toggle | ❌ Spec only | FUTURE - Modifies inference |
+| Career Display Rendered | ⚠️ Component exists | DAY 6-7 - Wire to UI |
+| **Salary Display in PlayerCard** | ⚠️ Blocked | Engine ready, UI ready, **missing player ratings data model** |
+
+### Blocked Feature: Salary Display (Day 11)
+
+**Status**: Engine fully implemented, UI components ready, blocked on data model.
+
+**What Exists:**
+- `engines/salaryCalculator.ts` (1196 lines) - Complete per SALARY_SYSTEM_SPEC.md
+- `components/GameTracker/SalaryDisplay.tsx` - All display variants
+- `components/GameTracker/PlayerCard.tsx` - Wired to show salary section
+
+**What's Missing:**
+Per SALARY_SYSTEM_SPEC.md Section 2 (Base Salary from Ratings), salary requires:
+- **Position players**: power, contact, speed, fielding, arm (3:3:2:1:1 weight)
+- **Pitchers**: velocity, junk, accuracy (1:1:1 weight)
+
+Current data model (`LineupPlayer`, `PlayerSeasonBatting`, etc.) has NO ratings fields.
+
+**To Complete:**
+1. Add `PlayerRatings` storage (IndexedDB or localStorage)
+2. Add ratings input during game setup or player creation
+3. Wire ratings to `calculateSalaryWithBreakdown()` in PlayerCard
+
+---
+
+## NFL Audit Status (January 24, 2026)
+
+### Latest Audit: Days 1-5 Engine Implementation
+
+A comprehensive NFL audit of engine implementations revealed critical issues in salaryCalculator.ts that have now been fixed.
+
+**Salary Calculator Issues Found & Fixed:**
+
+| Issue | Spec Requirement | Was Implemented | Status |
+|-------|-----------------|-----------------|--------|
+| Batter rating weights | 3:3:2:1:1 | 40/30/10/10/10 | ✅ Fixed |
+| Pitcher rating weights | 1:1:1 (equal) | 35/35/30 | ✅ Fixed |
+| Position multipliers | C: +15%, SS: +12%, etc. | Missing | ✅ Added |
+| Trait modifiers | Elite ±10%, Good ±5% | Missing | ✅ Added |
+| Pitcher batting bonus | ≥70 = +50%, etc. | Missing | ✅ Added |
+| Two-way player handling | (Pos + Pitch) × 1.25 | Missing | ✅ Added |
+| True Value calculation | Position-relative percentile | Simple ROI | ✅ Rewrote |
+
+**All Tests Passing:**
+- mojo-fitness-salary-verify.cjs: 45/45 ✅
+- bwar-verify.mjs: All passing ✅
+- war-verify.mjs: All passing ✅
+- leverage-clutch-mwar-verify.mjs: All passing ✅
+- fame-detection-verify.cjs: All passing ✅
+- TypeScript compilation: Clean ✅
+
+### Previous Audit (January 23, 2026)
+
+See `NFL_AUDIT_REPORT.md` for full details of the spec-level audit.
+
+**Summary:**
+- **73 total issues** identified across 43 spec files
+- **Critical Issues:** 7 resolved, 4 remaining (detection functions need implementation)
+- **Major Issues:** 5 resolved, 17 remaining
+
+**Key Resolutions:**
+- ✅ Roster size standardized: 22-man
+- ✅ Mojo range standardized: -2 to +2 (5 levels)
+- ✅ "Locked In" = HIGH (+1 Mojo) display name
+- ✅ ADAPTIVE_STANDARDS_ENGINE: Using SMB4 static baselines (MVP decision)
+- ✅ ~45 detection functions documented in `DETECTION_FUNCTIONS_IMPLEMENTATION.md`
+- ✅ Pitcher grade thresholds corrected
+
+**New Documentation:**
+- `NFL_AUDIT_REPORT.md` - Full audit with issue tracking
+- `DETECTION_FUNCTIONS_IMPLEMENTATION.md` - All detection functions cataloged
 
 ---
 
 ## Known Bugs
 
-*None currently known after testing session*
+See `GAMETRACKER_BUGS.md` for detailed bug tracking. Status as of Jan 25, 2026:
+
+**Fixed (8 bugs):**
+- BUG-001/002: Position validation in subs
+- BUG-003: GO→DP auto-correction
+- BUG-004/005: WAR/Season loading
+- BUG-010: Morale superscripts
+- BUG-013: Disable impossible events
+- BUG-015: HR fielding options
+- Balk button removed (not in SMB4)
+
+**Remaining (7 bugs):**
+- BUG-006: No Mojo/Fitness in scoreboard
+- BUG-007: No Fame events during game
+- BUG-008: End Game modal has wrong data
+- BUG-009: No undo button
+- BUG-011: No pitch count displayed
+- BUG-012: Pitcher exit prompt missing
+- BUG-014: No inning summary
 
 ---
 

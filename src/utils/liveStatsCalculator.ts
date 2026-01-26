@@ -145,12 +145,11 @@ export function emptySeasonBatting(playerId: string, seasonId: string): PlayerSe
     sacBunts: 0,
     stolenBases: 0,
     caughtStealing: 0,
-    groundOuts: 0,
-    flyOuts: 0,
     gidp: 0,
     fameBonuses: 0,
     fameBoners: 0,
     fameNet: 0,
+    lastUpdated: Date.now(),
   };
 }
 
@@ -174,8 +173,10 @@ export function emptySeasonPitching(playerId: string, seasonId: string): PlayerS
     walksAllowed: 0,
     strikeouts: 0,
     homeRunsAllowed: 0,
-    hitBatsmen: 0,
+    hitBatters: 0,
     wildPitches: 0,
+    balks: 0,
+    blownSaves: 0,
     qualityStarts: 0,
     completeGames: 0,
     shutouts: 0,
@@ -184,6 +185,7 @@ export function emptySeasonPitching(playerId: string, seasonId: string): PlayerS
     fameBonuses: 0,
     fameBoners: 0,
     fameNet: 0,
+    lastUpdated: Date.now(),
   };
 }
 

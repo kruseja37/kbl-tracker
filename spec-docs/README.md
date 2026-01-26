@@ -1,85 +1,127 @@
-# KBL XHD Tracker - Specification Documents
+# KBL Tracker - Specification Documents
 
-This folder contains all specification, design, and implementation documentation for the KBL XHD Tracker application.
+> **Last Updated**: January 24, 2026
 
-## Quick Navigation
+---
 
-### 🔴 Start Here (Core Docs)
+## 🚨 START HERE
+
+### For AI Sessions
+
+**Read these files IN ORDER before doing any work:**
+
+1. **`CURRENT_STATE.md`** - What's implemented, what's not
+2. **`AI_OPERATING_PREFERENCES.md`** - How to work on this project (NFL process, etc.)
+3. **`IMPLEMENTATION_PLAN.md`** - The active 14-day sprint plan (Data-Flow-First methodology)
+4. **`FEATURE_WISHLIST.md`** - 124 known gaps from spec-to-implementation audit
+
+### Critical Context
+
+- **IMPLEMENTATION_PLAN.md is the active plan** - Uses Data-Flow-First methodology
+- **Original "completed" days are being re-evaluated** - Many engines are orphaned
+- **124 gaps identified** - See FEATURE_WISHLIST.md for full audit results
+
+---
+
+## 📁 Document Categories
+
+### Session Management (Check Every Session)
 
 | Document | Purpose |
 |----------|---------|
-| [MASTER_BASEBALL_RULES_AND_LOGIC.md](./MASTER_BASEBALL_RULES_AND_LOGIC.md) | **Source of truth** for baseball rules |
-| [IMPLEMENTATION_GUIDE.md](./IMPLEMENTATION_GUIDE.md) | **How features are built** - code examples, tests |
-| [TRACKER_LOGIC_AUDIT.md](./TRACKER_LOGIC_AUDIT.md) | **What's implemented** - status of each rule |
-| [CHANGELOG.md](./CHANGELOG.md) | **What changed** - history of updates |
+| `CURRENT_STATE.md` | What's implemented now |
+| `SESSION_LOG.md` | Work session history |
+| `IMPLEMENTATION_PLAN.md` | Active sprint plan |
+| `FEATURE_WISHLIST.md` | Known gaps and missing features |
+| `AI_OPERATING_PREFERENCES.md` | How AI should work on this project |
+| `DECISIONS_LOG.md` | Key design decisions |
 
-### 📋 Specifications
-
-| Document | Purpose |
-|----------|---------|
-| KBL_XHD_TRACKER_MASTER_SPEC_v3.md | Full application specification |
-| SALARY_SYSTEM_SPEC_v2.md | Player salary and contract system |
-| MASTER_SPEC_CORRECTIONS_v2.md | Corrections to original spec |
-
-### 🎮 Game Systems
+### Master Reference
 
 | Document | Purpose |
 |----------|---------|
-| fame_and_events_system.md | Fame points and random events |
-| grade_tracking_system.md | Player grade progression |
-| offseason_system_design_v2.md | Off-season mechanics |
+| `KBL_XHD_TRACKER_MASTER_SPEC_v3.md` | Comprehensive spec (idea bank, not source of truth for implementation) |
+| `MASTER_SPEC_ERRATA.md` | Corrections to master spec |
+
+### Core Game Logic Specs
+
+| Document | Purpose |
+|----------|---------|
+| `BASEBALL_STATE_MACHINE_AUDIT.md` | Game state transitions |
+| `MASTER_BASEBALL_RULES_AND_LOGIC.md` | Baseball rules reference |
+| `RUNNER_ADVANCEMENT_RULES.md` | Base running logic |
+| `SUBSTITUTION_FLOW_SPEC.md` | Player substitutions |
+| `FIELDING_SYSTEM_SPEC.md` | Fielding mechanics |
+
+### WAR Calculation Specs
+
+| Document | Purpose |
+|----------|---------|
+| `ADAPTIVE_STANDARDS_ENGINE_SPEC.md` | League baselines, replacement level |
+| `BWAR_CALCULATION_SPEC.md` | Batting WAR |
+| `PWAR_CALCULATION_SPEC.md` | Pitching WAR |
+| `FWAR_CALCULATION_SPEC.md` | Fielding WAR |
+| `RWAR_CALCULATION_SPEC.md` | Baserunning WAR |
+| `MWAR_CALCULATION_SPEC.md` | Manager WAR |
+| `LEVERAGE_INDEX_SPEC.md` | Leverage calculation |
+| `CLUTCH_ATTRIBUTION_SPEC.md` | Clutch situations |
+
+### Game System Specs
+
+| Document | Purpose |
+|----------|---------|
+| `FAME_SYSTEM_TRACKING.md` | Fame implementation status |
+| `SPECIAL_EVENTS_SPEC.md` | Special game events |
+| `MILESTONE_SYSTEM_SPEC.md` | Career milestones |
+| `MOJO_FITNESS_SYSTEM_SPEC.md` | Mojo/Fitness/PED systems |
+| `SALARY_SYSTEM_SPEC.md` | Player salary calculations |
+| `FAN_MORALE_SYSTEM_SPEC.md` | Fan morale engine |
+| `NARRATIVE_SYSTEM_SPEC.md` | Beat reporter system |
+| `OFFSEASON_SYSTEM_SPEC.md` | Off-season mechanics |
+| `TRADE_SYSTEM_SPEC.md` | Trade system |
+| `FRANCHISE_MODE_SPEC.md` | Multi-franchise saves |
+| `PLAYOFF_SYSTEM_SPEC.md` | Playoffs and brackets |
+
+### Statistics Specs
+
+| Document | Purpose |
+|----------|---------|
+| `STAT_TRACKING_ARCHITECTURE_SPEC.md` | 4-layer stat system |
+| `PITCHER_STATS_TRACKING_SPEC.md` | Pitching stats |
+| `INHERITED_RUNNERS_SPEC.md` | ER attribution |
+| `PITCH_COUNT_TRACKING_SPEC.md` | Pitch counts |
+| `EOS_RATINGS_ADJUSTMENT_SPEC.md` | End-of-season ratings |
+
+### Reference Materials
+
+| Document | Purpose |
+|----------|---------|
+| `SMB4_GAME_REFERENCE.md` | SMB4 mechanics reference |
+| `smb4_traits_reference.md` | SMB4 player traits |
+| `REQUIREMENTS.md` | User requirements |
+| `TEST_MATRIX.md` | Testing strategy |
 
 ---
 
-## Recent Updates
+## 📦 Archive Folder
 
-### January 21, 2026
+The `archive/` folder contains superseded documents. **DO NOT use these as source of truth.**
 
-Completed implementation of critical baseball rules:
-
-1. ✅ **Force Out Third Out Rule** - No runs score when 3rd out is force out
-2. ✅ **Fielder's Choice Flow** - User selects which runner was out
-3. ✅ **Tag-Up Context** - Fly outs require tag-up for advancement
-4. ✅ **SAC Validation** - Requires runners on base
-5. ✅ **Hit Type Stats** - Tracks 1B, 2B, 3B separately
-6. ✅ **IFR Indicator** - Shows when Infield Fly Rule is in effect
-
-See [IMPLEMENTATION_GUIDE.md](./IMPLEMENTATION_GUIDE.md) for full details.
+Archived items include:
+- Old implementation plans (v1)
+- Old feature roadmaps
+- Superseded spec versions (v1, v2)
+- Historical audit reports
 
 ---
 
-## Document Relationships
+## 📊 Data Folder
 
-```
-MASTER_BASEBALL_RULES_AND_LOGIC.md  (What the rules ARE)
-            ↓
-    TRACKER_LOGIC_AUDIT.md          (What we've implemented)
-            ↓
-    IMPLEMENTATION_GUIDE.md         (HOW we implemented it)
-            ↓
-        CHANGELOG.md                (WHEN we made changes)
-```
+The `data/` folder contains:
+- CSV templates for database schemas
+- SMB4 baseline data
+- Player/team data files
 
 ---
 
-## For New Developers
-
-1. **Read** `MASTER_BASEBALL_RULES_AND_LOGIC.md` to understand baseball rules
-2. **Check** `TRACKER_LOGIC_AUDIT.md` to see implementation status
-3. **Reference** `IMPLEMENTATION_GUIDE.md` for code examples
-4. **Update** `CHANGELOG.md` when making changes
-
----
-
-## Data Files
-
-| File | Purpose |
-|------|---------|
-| all_players_combined.csv | Player data |
-| all_teams_combined.csv | Team data |
-| names_database.json | Name generation |
-| smb4_traits_reference.md | Player traits reference |
-
----
-
-*Last updated: January 21, 2026*
+*For detailed spec index, see `SPEC_INDEX.md`*

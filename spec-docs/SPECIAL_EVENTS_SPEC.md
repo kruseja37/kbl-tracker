@@ -39,7 +39,7 @@ Special events are memorable, unusual, or noteworthy occurrences that go beyond 
 Fame is a **narrative reputation system** that impacts:
 - **All-Star Voting**: 6.67% of formula (within Traditional/Milestone/Narrative bucket)
 - **MVP/Cy Young/Awards**: 5% narrative component
-- **Team Fan Happiness**: Aggregate team Fame affects fan narrative (see future spec)
+- **Team Fan Morale**: Aggregate team Fame affects fan narrative (see future spec)
 
 **Net Fame** = Total Fame Bonuses - Total Fame Boners
 
@@ -445,7 +445,7 @@ interface RobberyEvent {
 }
 ```
 
-**Fame Bonus:** +1.5 Fame for fielder (+2.5 if grand slam robbery)
+**Fame Bonus:** +1 Fame for fielder (same for grand slam robbery - the difficulty is similar, just more runners on base)
 
 ---
 
@@ -660,10 +660,40 @@ interface RallyKillerEvent {
   runnersInScoringPosition: number;  // On 2B or 3B
   outs: number;  // Was it 2nd out (not as bad) or 3rd out?
   inning: number;
+  wasClutchSituation: boolean;  // Late game, close score
 }
 ```
 
-**Fame Boner:** -1 if stranded 2+ RISP with 3rd out (memorable failure)
+**Fame Boner Conditions (Tiered):**
+
+| Condition | Fame | Rationale |
+|-----------|------|-----------|
+| Standard: 3rd out with 2+ RISP | -1 | Memorable failure |
+| Aggravated: K or DP/GIDP with 2+ RISP in 7th+ inning, close game | -2 | Choked in clutch |
+
+```typescript
+function calculateRallyKillerFame(event: RallyKillerEvent): number {
+  // Only a Rally Killer if 3rd out with RISP
+  if (event.outs !== 3 || event.runnersInScoringPosition < 2) {
+    return 0;  // Not a Rally Killer
+  }
+
+  let boners = -1;  // Base penalty
+
+  // Aggravated conditions: clutch choke
+  const aggravated =
+    event.wasClutchSituation &&
+    event.inning >= 7 &&
+    ['K', 'DP', 'GIDP'].includes(event.howEnded);
+
+  if (aggravated) {
+    boners = -2;  // Double shame for clutch K/DP
+  }
+
+  return boners;
+}
+```
+
 *Note: Statistical failure already captured via LI - this is narrative only*
 
 ---
@@ -1522,7 +1552,7 @@ function generateWeeklyNarrative(events: SpecialEvent[]): string[] {
 | **Killed Pitcher** | Pitcher hit by batted ball | +3 Batter, (+1 Pitcher if stays) | ❌ Manual |
 | **TOOTBLAN** | Boneheaded baserunning out | -1 Fame Boner | ❌ Manual |
 | **Web Gem** | Spectacular defensive play | +0.75 Fame (fielder) | ❌ Manual |
-| **Robbery** | HR-saving catch | +1.5 Fame (fielder) | ❌ Manual |
+| **Robbery** | HR-saving catch | +1 Fame (fielder) | ❌ Manual |
 | **Walk-Off** | Game-ending hit | +1 Fame Bonus | ✅ Auto |
 | **Comeback Win** | Won after 4+ run deficit | +1 Fame Bonus (heroes) | ✅ Auto |
 | **Cycle** | 1B, 2B, 3B, HR same game | +3.0 Fame | ✅ Auto |
@@ -1622,21 +1652,22 @@ Clutch situations are already captured via Leverage Index (LI) in the mWAR syste
 Fame only affects:
 - All-Star voting (6.67% of formula)
 - MVP/Cy Young (5% narrative component)
-- Team Fan Happiness (aggregate team Fame - future spec)
+- Team Fan Morale (aggregate team Fame - future spec)
 
 **Gold Glove uses fWAR + LI-weighted clutch plays, NOT Fame.**
 
 Do NOT add Clutch+ bonuses to special events - that would be double-counting since LI already weights clutch plays appropriately in mWAR.
 
-### Future: Team Fan Happiness
+### Future: Team Fan Morale
 
 Team-level Fame could influence fan narrative:
 - Teams with high aggregate Fame = exciting, fan-favorite team
 - Teams with lots of Fame Boners = "lovable losers" or "frustrating to watch"
 - Could affect attendance, merchandise (if we track that), offseason narratives
-- **Spec TBD** - will be covered in a future Fan Happiness system doc
+- **Spec TBD** - will be covered in a future Fan Morale system doc
 
 ---
 
-*Last Updated: January 22, 2026*
+*Last Updated: January 24, 2026*
+*Version: 3.3 - Robbery Fame standardized to +1 for all types (no grand slam bonus); resolved internal inconsistencies*
 *Version: 3.2 - Killed Pitcher Fame increased from +1 to +3 for batter (reflects significant tactical impact on Mojo/Fitness)*

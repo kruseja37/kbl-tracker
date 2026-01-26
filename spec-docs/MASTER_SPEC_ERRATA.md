@@ -299,10 +299,10 @@ function autoDistributeAdjustments(player, adjustments) {
 
 ---
 
-## 4. FAN HAPPINESS SYSTEM (REFINED)
+## 4. FAN MORALE SYSTEM (REFINED)
 
 ```javascript
-const FAN_HAPPINESS_CONFIG = {
+const FAN_MORALE_CONFIG = {
   // Starting point
   BASE_HAPPINESS: 50,
 
@@ -338,8 +338,8 @@ const FAN_HAPPINESS_CONFIG = {
   CONTRACTION_RISK_THRESHOLD: 10
 };
 
-function calculateFanHappiness(team, season) {
-  let happiness = FAN_HAPPINESS_CONFIG.BASE_HAPPINESS;
+function calculateFanMorale(team, season) {
+  let happiness = FAN_MORALE_CONFIG.BASE_HAPPINESS;
 
   // 1. Payroll vs Performance
   const payrollPercentile = getPayrollPercentile(team, season);
@@ -348,45 +348,45 @@ function calculateFanHappiness(team, season) {
   const performanceDelta = actualWinPct - expectedWinPct;
 
   // Determine amplifier
-  let amplifier = FAN_HAPPINESS_CONFIG.AMPLIFIERS.NORMAL;
+  let amplifier = FAN_MORALE_CONFIG.AMPLIFIERS.NORMAL;
   if (performanceDelta < 0) {
     if (payrollPercentile >= 0.75) {
-      amplifier = FAN_HAPPINESS_CONFIG.AMPLIFIERS.TOP_25_UNDERPERFORM;
+      amplifier = FAN_MORALE_CONFIG.AMPLIFIERS.TOP_25_UNDERPERFORM;
     } else if (payrollPercentile >= 0.50) {
-      amplifier = FAN_HAPPINESS_CONFIG.AMPLIFIERS.UPPER_HALF_UNDERPERFORM;
+      amplifier = FAN_MORALE_CONFIG.AMPLIFIERS.UPPER_HALF_UNDERPERFORM;
     }
   }
 
   // Apply performance modifier with amplifier
-  const performanceModifier = (performanceDelta * 10) * FAN_HAPPINESS_CONFIG.WIN_PCT_MODIFIER * amplifier;
+  const performanceModifier = (performanceDelta * 10) * FAN_MORALE_CONFIG.WIN_PCT_MODIFIER * amplifier;
   happiness += performanceModifier;
 
   // 2. Championship/Playoff modifiers
   if (season.champion === team.id) {
-    happiness += FAN_HAPPINESS_CONFIG.CHAMPIONSHIP_BONUS;
+    happiness += FAN_MORALE_CONFIG.CHAMPIONSHIP_BONUS;
   } else if (season.playoffTeams.includes(team.id)) {
-    happiness += FAN_HAPPINESS_CONFIG.PLAYOFF_APPEARANCE;
+    happiness += FAN_MORALE_CONFIG.PLAYOFF_APPEARANCE;
   }
 
   // 3. Last place penalty
   if (isLastPlace(team, season)) {
-    happiness += FAN_HAPPINESS_CONFIG.LAST_PLACE_PENALTY;
+    happiness += FAN_MORALE_CONFIG.LAST_PLACE_PENALTY;
     if (payrollPercentile >= 0.75) {
-      happiness += FAN_HAPPINESS_CONFIG.LAST_PLACE_HIGH_PAYROLL_PENALTY;
+      happiness += FAN_MORALE_CONFIG.LAST_PLACE_HIGH_PAYROLL_PENALTY;
     }
   }
 
   // 4. Player movement modifiers (from offseason)
   const departedStars = getDepartedStars(team, season);
-  happiness += departedStars.traded * FAN_HAPPINESS_CONFIG.STAR_PLAYER_TRADE;
-  happiness += departedStars.beloved * FAN_HAPPINESS_CONFIG.BELOVED_PLAYER_DEPARTURE;
+  happiness += departedStars.traded * FAN_MORALE_CONFIG.STAR_PLAYER_TRADE;
+  happiness += departedStars.beloved * FAN_MORALE_CONFIG.BELOVED_PLAYER_DEPARTURE;
 
   // Clamp to 0-100
   return Math.max(0, Math.min(100, Math.round(happiness)));
 }
 ```
 
-### Fan Happiness Effects
+### Fan Morale Effects
 
 | Happiness | Status | Effects |
 |-----------|--------|---------|
@@ -655,15 +655,15 @@ Destination: Random team via dice roll
 
 ## 8. FREE AGENCY SALARY MATCHING (NOT GRADE)
 
-**CRITICAL:** Free agency swaps use **salary matching (+/-5%)**, not grades.
+**CRITICAL:** Free agency swaps use **salary matching (+/-10%)**, not grades.
 
 ```javascript
 function calculateSwapRequirement(outgoingPlayer, receivingRecord, sendingRecord) {
   const outgoingSalary = outgoingPlayer.currentSalary;
 
-  // Salary must match within +/-5%
-  const minSalary = outgoingSalary * 0.95;
-  const maxSalary = outgoingSalary * 1.05;
+  // Salary must match within +/-10%
+  const minSalary = outgoingSalary * 0.90;
+  const maxSalary = outgoingSalary * 1.10;
 
   // Record comparison only affects WHO SELECTS, not grade matching
   // Better team receiving = worse team gets to choose who they send
@@ -683,9 +683,9 @@ function validateSwap(outgoingPlayers, incomingPlayer) {
   const totalOutgoingSalary = outgoingPlayers.reduce((sum, p) => sum + p.currentSalary, 0);
   const incomingSalary = incomingPlayer.currentSalary;
 
-  // Must be within +/-5%
-  const minAllowed = incomingSalary * 0.95;
-  const maxAllowed = incomingSalary * 1.05;
+  // Must be within +/-10%
+  const minAllowed = incomingSalary * 0.90;
+  const maxAllowed = incomingSalary * 1.10;
 
   return totalOutgoingSalary >= minAllowed && totalOutgoingSalary <= maxAllowed;
 }
@@ -699,7 +699,7 @@ function validateSwap(outgoingPlayers, incomingPlayer) {
 +---------------------------------------------------------------------------+
 |  Incoming: Riley Reliable (SP, B) - Salary: $6.2M                          |
 |                                                                            |
-|  Required return salary: $5.89M - $6.51M (+/-5%)                           |
+|  Required return salary: $5.58M - $6.82M (+/-10%)                           |
 |                                                                            |
 |  ELIGIBLE PLAYERS TO SEND:                                                 |
 |  [Select one or more to match salary]                                      |
@@ -709,7 +709,7 @@ function validateSwap(outgoingPlayers, incomingPlayer) {
 |  ☐ John Smoltz     SP    $8.5M     (Would exceed max)                      |
 |  ☐ Greg Maddux     SP    $12.2M    (Would exceed max)                      |
 |                                                                            |
-|  Selected total: $6.3M (within $5.89M - $6.51M range)                      |
+|  Selected total: $6.3M (within $5.58M - $6.82M range)                      |
 |                                                                            |
 |  [CONFIRM SWAP: Mark Wohlers + Steve Avery → Giants]                       |
 +---------------------------------------------------------------------------+
@@ -793,9 +793,9 @@ function calculateGreatestScore(player) {
 
 ---
 
-## 10. FAN HAPPINESS: MILESTONE & AWARD EFFECTS
+## 10. FAN MORALE: MILESTONE & AWARD EFFECTS
 
-Fan happiness is affected by memorable moments throughout the season—both positive and negative. Fans remember the highs and can't forget the lows.
+Fan morale is affected by memorable moments throughout the season—both positive and negative. Fans remember the highs and can't forget the lows.
 
 ### Season Length Scaling
 
@@ -1183,7 +1183,7 @@ function applyPayrollAmplifierToAward(baseEffect, payrollPercentile, isPositiveE
 // ============================================
 // APPLYING MILESTONE EFFECTS
 // ============================================
-function applyMilestoneToFanHappiness(team, milestone, payrollPercentile) {
+function applyMilestoneToFanMorale(team, milestone, payrollPercentile) {
   let effect = 0;
 
   // Find the milestone effect
@@ -1213,9 +1213,9 @@ function applyMilestoneToFanHappiness(team, milestone, payrollPercentile) {
 }
 
 // ============================================
-// FAN HAPPINESS UI WITH MILESTONE TRACKING
+// FAN MORALE UI WITH MILESTONE TRACKING
 // ============================================
-function getFanHappinessDisplay(happiness, recentMilestones) {
+function getFanMoraleDisplay(happiness, recentMilestones) {
   const emoji = happiness >= 80 ? '😍' :
                 happiness >= 60 ? '😊' :
                 happiness >= 40 ? '😐' :
@@ -1256,7 +1256,7 @@ function getFanHappinessDisplay(happiness, recentMilestones) {
 |                                                   |
 |  Barry Bonds hits his 500th CAREER HOME RUN!     |
 |                                                   |
-|  Fan Happiness: +10 😍                            |
+|  Fan Morale: +10 😍                            |
 |  (Payroll bonus: +50% - cheap team overperforms) |
 +--------------------------------------------------+
 ```
@@ -1268,7 +1268,7 @@ function getFanHappinessDisplay(happiness, recentMilestones) {
 |                                                   |
 |  Giants have now lost 15 STRAIGHT GAMES          |
 |                                                   |
-|  Fan Happiness: -5 😠                             |
+|  Fan Morale: -5 😠                             |
 |  (Payroll amplifier: +50% - high payroll shame)  |
 |                                                   |
 |  🛍️ Fans spotted wearing paper bags...            |
@@ -1278,7 +1278,7 @@ function getFanHappinessDisplay(happiness, recentMilestones) {
 **Season-End Summary:**
 ```
 +---------------------------------------------------------------------------+
-|  SEASON 4 FAN HAPPINESS SUMMARY - Giants                                   |
+|  SEASON 4 FAN MORALE SUMMARY - Giants                                   |
 +---------------------------------------------------------------------------+
 |  Starting Happiness: 50                                                    |
 |  Final Happiness: 72 😊 HAPPY                                              |
@@ -1443,13 +1443,13 @@ function displayCyYoungResults(results, team) {
 1. **Contracted teams** → Auto-select 4 players for expansion draft, remainder to draft pool or retire
 2. **Grade formula** → Derived from SMB4 data for fictional player generation
 3. **EOS Adjustments** → User can allocate or auto-distribute based on WAR type
-4. **Fan Happiness** → Refined with high-payroll amplifiers, clear thresholds
+4. **Fan Morale** → Refined with high-payroll amplifiers, clear thresholds
 5. **Pitcher Salary** → Includes hitting bonus (especially for Two-Way)
 6. **Trait Tiers** → Revised per Billy Yank strategic analysis
 7. **Personalities** → Hidden, random, can change year-over-year
-8. **FA Swaps** → Salary matching (+/-5%), not grade matching
+8. **FA Swaps** → Salary matching (+/-10%), not grade matching
 9. **Museum** → Central historical hub with 50 Greatest using MVP formula
-10. **Milestone Effects** → Complete system for positive AND negative milestones affecting fan happiness:
+10. **Milestone Effects** → Complete system for positive AND negative milestones affecting fan morale:
     - Single-game positive (walk-offs, no-hitters, perfect games)
     - Single-game negative (getting no-hit, blown saves, blowout losses)
     - Season positive (50+ HR, 20+ wins, clinching playoff)

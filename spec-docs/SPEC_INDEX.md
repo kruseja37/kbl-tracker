@@ -1,18 +1,35 @@
 # KBL Tracker Specification Index
 
 > **Purpose**: Help AI assistants quickly find the right documentation
-> **Last Updated**: 2026-01-22
+> **Last Updated**: 2026-01-24
 
 ---
 
 ## 🚨 READ THIS FIRST
+
+### For New AI Sessions
+**Read these files IN ORDER:**
+
+1. **`CURRENT_STATE.md`** - What's implemented, what's not
+2. **`AI_OPERATING_PREFERENCES.md`** - How to work (3-tier NFL process)
+3. **`IMPLEMENTATION_PLAN.md`** - Active 14-day sprint (Data-Flow-First)
+4. **`FEATURE_WISHLIST.md`** - 124 known gaps to address
+
+### Critical Context
+- **124 gaps identified** in spec-to-implementation audit
+- **Many engines are orphaned** (calculators exist but aren't connected)
+- **Data-Flow-First methodology** - Build pipeline before features
+
+---
 
 Before making changes, identify which spec owns the feature:
 
 | If working on... | Read this spec FIRST |
 |-----------------|---------------------|
 | Stat tracking, persistence, IndexedDB | `STAT_TRACKING_ARCHITECTURE_SPEC.md` |
-| Fame bonuses/boners, detection logic | `FAME_SYSTEM_TRACKING.md` + `FAN_HAPPINESS_SPEC.md` |
+| Fame bonuses/boners, detection logic | `FAME_SYSTEM_TRACKING.md` + `FAN_MORALE_SYSTEM_SPEC.md` |
+| Career milestones, milestone Fame | `MILESTONE_SYSTEM_SPEC.md` |
+| League baselines, replacement level, WAR context | `ADAPTIVE_STANDARDS_ENGINE_SPEC.md` |
 | Pitcher stats, earned runs, inherited runners | `PITCHER_STATS_TRACKING_SPEC.md` + `INHERITED_RUNNERS_SPEC.md` |
 | WAR calculations | `BWAR_CALCULATION_SPEC.md`, `PWAR_CALCULATION_SPEC.md`, etc. |
 | Fielding, errors, defensive stats | `FIELDING_SYSTEM_SPEC.md` |
@@ -21,7 +38,16 @@ Before making changes, identify which spec owns the feature:
 | Runner advancement, scoring | `RUNNER_ADVANCEMENT_RULES.md` |
 | End-of-season ratings | `EOS_RATINGS_ADJUSTMENT_SPEC.md` |
 | Salary/contracts | `SALARY_SYSTEM_SPEC.md` |
-| Off-season mechanics | `OFFSEASON_SYSTEM_SPEC.md` |
+| Off-season mechanics, awards | `OFFSEASON_SYSTEM_SPEC.md` |
+| Save slots, multiple leagues | `FRANCHISE_MODE_SPEC.md` |
+| Skip/simulate games, batch sim | `GAME_SIMULATION_SPEC.md` |
+| Trade system, draft swaps | `TRADE_SYSTEM_SPEC.md` |
+| Fan morale, dynamic happiness | `FAN_MORALE_SYSTEM_SPEC.md` |
+| Beat reporters, AI storytelling | `NARRATIVE_SYSTEM_SPEC.md` |
+| Park factors, spray charts, stadium records | `STADIUM_ANALYTICS_SPEC.md` |
+| Ball-in-play zones, spray input | `FIELD_ZONE_INPUT_SPEC.md` + `STADIUM_ANALYTICS_SPEC.md` |
+| Mojo, Fitness, PED stigma, performance weighting | `MOJO_FITNESS_SYSTEM_SPEC.md` |
+| Playoffs, bracket, exhibition games, standalone series | `PLAYOFF_SYSTEM_SPEC.md` |
 
 ---
 
@@ -66,12 +92,14 @@ spec-docs/
 | Spec | Purpose | Status |
 |------|---------|--------|
 | `FAME_SYSTEM_TRACKING.md` | Implementation status, bugs | **PRIMARY** |
-| `FAN_HAPPINESS_SPEC.md` | Event types, values, rules | Reference |
+| `MILESTONE_SYSTEM_SPEC.md` | Career milestones, Fame integration | **PLANNING** |
+| `FAN_MORALE_SYSTEM_SPEC.md` | Event types, values, rules | Reference |
 | `SPECIAL_EVENTS_SPEC.md` | Special game events | Active |
 
 ### WAR Calculations
 | Spec | Component |
 |------|-----------|
+| `ADAPTIVE_STANDARDS_ENGINE_SPEC.md` | League baselines, replacement level | **FOUNDATIONAL** |
 | `BWAR_CALCULATION_SPEC.md` | Batting WAR |
 | `PWAR_CALCULATION_SPEC.md` | Pitching WAR |
 | `FWAR_CALCULATION_SPEC.md` | Fielding WAR |
@@ -87,23 +115,31 @@ spec-docs/
 | `LEVERAGE_INDEX_SPEC.md` | Leverage calculation |
 
 ### Game Systems
-| Spec | Purpose |
-|------|---------|
-| `SALARY_SYSTEM_SPEC.md` | Player contracts & salary |
-| `OFFSEASON_SYSTEM_SPEC.md` | Off-season mechanics |
-| `EOS_RATINGS_ADJUSTMENT_SPEC.md` | End-of-season rating changes |
+| Spec | Purpose | Status |
+|------|---------|--------|
+| `SALARY_SYSTEM_SPEC.md` | Player contracts & salary | Active |
+| `OFFSEASON_SYSTEM_SPEC.md` | Off-season mechanics, awards | Active |
+| `EOS_RATINGS_ADJUSTMENT_SPEC.md` | End-of-season rating changes | Active |
+| `FRANCHISE_MODE_SPEC.md` | Multi-franchise save slots | **PLANNING** |
+| `GAME_SIMULATION_SPEC.md` | Skip/simulate games, park factors | Active |
+| `TRADE_SYSTEM_SPEC.md` | In-season & offseason trades | Active |
+| `FAN_MORALE_SYSTEM_SPEC.md` | Dynamic fan morale, event tracking | Active |
+| `NARRATIVE_SYSTEM_SPEC.md` | Beat reporters, AI storytelling, player quotes | Active |
+| `STADIUM_ANALYTICS_SPEC.md` | Park factors, spray charts, stadium records | Active |
+| `MOJO_FITNESS_SYSTEM_SPEC.md` | Mojo levels, Fitness states, PED stigma, recovery | Active |
+| `PLAYOFF_SYSTEM_SPEC.md` | Playoffs, brackets, exhibition mode, standalone series | Active |
 
 ### Session & Operations
 | Spec | Purpose |
 |------|---------|
-| `CURRENT_STATE.md` | What's implemented now |
+| `CURRENT_STATE.md` | **START HERE** - What's implemented now |
+| `AI_OPERATING_PREFERENCES.md` | AI behavior guidelines (3-tier NFL) |
+| `IMPLEMENTATION_PLAN.md` | Active 14-day sprint plan |
+| `FEATURE_WISHLIST.md` | 124 known gaps from audit |
 | `SESSION_LOG.md` | Work session history |
-| `CHANGELOG.md` | Feature changes |
 | `DECISIONS_LOG.md` | Design decisions |
-| `AI_OPERATING_PREFERENCES.md` | AI behavior guidelines |
 | `REQUIREMENTS.md` | User requirements |
 | `TEST_MATRIX.md` | Testing strategy |
-| `TRACKER_LOGIC_AUDIT.md` | Implementation audit |
 
 ### Reference Materials
 | Spec | Purpose |
@@ -125,9 +161,12 @@ spec-docs/
 | Feature | Implementation File |
 |---------|---------------------|
 | Game state persistence | `src/utils/gameStorage.ts` |
+| Event log (data integrity) | `src/utils/eventLog.ts`, `src/hooks/useDataIntegrity.ts` |
 | Season stats | `src/utils/seasonStorage.ts`, `src/hooks/useSeasonStats.ts` |
 | Live stats display | `src/utils/liveStatsCalculator.ts`, `src/hooks/useLiveStats.ts` |
 | Fame detection | `src/hooks/useFameDetection.ts` |
+| Franchise tracking | `src/utils/franchiseStorage.ts` |
+| Milestone aggregation | `src/utils/milestoneAggregator.ts` |
 | Fame UI | `src/components/GameTracker/FameDisplay.tsx` |
 | At-bat flow | `src/components/GameTracker/AtBatFlow.tsx` |
 | Main game tracker | `src/components/GameTracker/index.tsx` |
@@ -163,4 +202,12 @@ Files in `archive/` are superseded. See `archive/README.md` for what replaced th
 
 ---
 
-*This index updated: 2026-01-22 (post-cleanup)*
+### Data Files
+| File | Purpose |
+|------|---------|
+| `data/smb4_season_baselines_raw.md` | Raw + calculated SMB4 baseline data (source for ADAPTIVE_STANDARDS_ENGINE_SPEC) |
+| `data/csv-templates-v2/` | Database schema templates |
+
+---
+
+*This index updated: 2026-01-24 (Cleaned up for Implementation Plan v2)*
