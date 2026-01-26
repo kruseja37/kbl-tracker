@@ -9,6 +9,7 @@
  */
 
 import { useState, useMemo } from 'react';
+import type { TradeWarning } from '../../engines/relationshipEngine';
 
 interface Player {
   playerId: string;
@@ -35,6 +36,7 @@ interface TradeProposalBuilderProps {
     receivingPlayerIds: string[]
   ) => void;
   onCancel: () => void;
+  getTradeWarnings?: (playerId: string) => TradeWarning[];
 }
 
 export default function TradeProposalBuilder({
@@ -43,6 +45,7 @@ export default function TradeProposalBuilder({
   salaryMatchRequired,
   onProposeTrade,
   onCancel,
+  getTradeWarnings,
 }: TradeProposalBuilderProps) {
   const [selectedTeamId, setSelectedTeamId] = useState<string>(
     otherTeams[0]?.teamId || ''
@@ -59,6 +62,17 @@ export default function TradeProposalBuilder({
     () => userTeam.roster.filter((p) => sendingIds.has(p.playerId)),
     [userTeam.roster, sendingIds]
   );
+
+  // Calculate relationship warnings for players being sent
+  const tradeWarnings = useMemo(() => {
+    if (!getTradeWarnings) return [];
+    const warnings: TradeWarning[] = [];
+    sendingPlayers.forEach((p) => {
+      const playerWarnings = getTradeWarnings(p.playerId);
+      warnings.push(...playerWarnings);
+    });
+    return warnings;
+  }, [sendingPlayers, getTradeWarnings]);
 
   const receivingPlayers = useMemo(
     () => selectedTeam?.roster.filter((p) => receivingIds.has(p.playerId)) || [],
@@ -251,6 +265,26 @@ export default function TradeProposalBuilder({
           Salaries must be within {Math.round(salaryMatchRequired * 100)}% of each other
         </div>
       </div>
+
+      {/* Relationship Warnings */}
+      {tradeWarnings.length > 0 && (
+        <div style={styles.warningsContainer}>
+          <div style={styles.warningsHeader}>
+            <span style={styles.warningsIcon}>⚠️</span>
+            <span style={styles.warningsTitle}>Relationship Impact</span>
+          </div>
+          <div style={styles.warningsList}>
+            {tradeWarnings.map((warning, idx) => (
+              <div key={idx} style={styles.warningItem}>
+                <span style={styles.warningText}>{warning.description}</span>
+                <span style={styles.warningMorale}>
+                  {warning.moraleImpact} morale
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Submit Button */}
       <button
@@ -476,5 +510,49 @@ const styles: Record<string, React.CSSProperties> = {
     background: '#334155',
     color: '#64748b',
     cursor: 'not-allowed',
+  },
+  warningsContainer: {
+    maxWidth: '500px',
+    margin: '0 auto 24px',
+    padding: '16px',
+    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+    border: '1px solid rgba(239, 68, 68, 0.3)',
+    borderRadius: '12px',
+  },
+  warningsHeader: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    marginBottom: '12px',
+  },
+  warningsIcon: {
+    fontSize: '1.25rem',
+  },
+  warningsTitle: {
+    fontSize: '0.9375rem',
+    fontWeight: 700,
+    color: '#ef4444',
+  },
+  warningsList: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '8px',
+  },
+  warningItem: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: '8px 12px',
+    backgroundColor: 'rgba(0, 0, 0, 0.2)',
+    borderRadius: '8px',
+  },
+  warningText: {
+    fontSize: '0.875rem',
+    color: '#fca5a5',
+  },
+  warningMorale: {
+    fontSize: '0.8125rem',
+    fontWeight: 600,
+    color: '#ef4444',
   },
 };
