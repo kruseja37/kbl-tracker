@@ -442,4 +442,156 @@ Phase G: Polish & History   [8 Stories]   ~6-8 hours
 
 ---
 
+# GAP CLOSURE PHASE (Insert Before Phase G)
+
+> **Added**: January 26, 2026
+> **Source**: GAPS_MASTER.md, STORIES_GAP_CLOSERS.md, STORIES_WIRING.md
+> **Purpose**: Close identified gaps before polish phase
+
+---
+
+## Gap.0 - CRITICAL Data Blockers (Do First)
+
+| Priority | Story ID | Closes Gap | Title | Est. |
+|----------|----------|------------|-------|------|
+| P0 | NEW-006 | GAP-001 | Player Ratings Storage | 2h |
+| P0 | NEW-007 | GAP-003 | Unified Player Database | 4h |
+| P0 | NEW-008 | GAP-004 | Data Integration Layer | 6h |
+| P0 | WIRE-014 | GAP-021 | Wire LeagueBuilder | 1.5h |
+| P0 | WIRE-015 | GAP-022 | Wire PlayerRatingsForm | 1h |
+
+**Checkpoint Gap.0**: Player ratings stored, custom players work, data flows to components
+
+---
+
+## Gap.1 - Offseason Completeness (Critical Flow)
+
+| Priority | Story ID | Closes Gap | Title | Est. |
+|----------|----------|------------|-------|------|
+| P0 | NEW-001 | GAP-002 | Sign Free Agent Action | 2h |
+| P0 | NEW-002 | GAP-038 | Spring Training Phase | 2h |
+| P0 | NEW-003 | GAP-039 | Schedule Generation Phase | 1.5h |
+| P1 | NEW-016 | GAP-050 | Enforce Offseason Phase Order | 1h |
+
+**Checkpoint Gap.1**: Complete offseason flow works end-to-end
+
+---
+
+## Gap.2 - Quick Wins: Wiring (Parallel Work)
+
+These are existing components that just need import/render:
+
+| Priority | Story ID | Closes Gap | Component | Est. |
+|----------|----------|------------|-----------|------|
+| P1 | WIRE-001 | GAP-005 | BoxScoreView | 45m |
+| P1 | WIRE-002 | GAP-006 | StandingsView | 45m |
+| P1 | WIRE-004 | GAP-009 | FanMoralePanel | 45m |
+| P1 | WIRE-007 | GAP-012 | SeasonProgressTracker | 45m |
+| P1 | WIRE-011 | GAP-018 | LeagueNewsFeed | 30m |
+| P1 | WIRE-019 | GAP-026 | transactionStorage | 30m |
+| P1 | WIRE-020 | GAP-027 | fieldingStatsAggregator | 30m |
+| P1 | WIRE-021 | GAP-028 | dataExportService | 30m |
+
+**Checkpoint Gap.2**: 8 orphaned components now functional (~5 hours)
+
+---
+
+## Gap.3 - Bug Fixes
+
+| Priority | Story ID | Closes Gap | Bug | Est. |
+|----------|----------|------------|-----|------|
+| P1 | NEW-009 | GAP-031 | Fix Exit Type Double Entry | 1h |
+| P1 | NEW-010 | GAP-032 | Make Player Names Clickable | 1h |
+| P1 | NEW-011 | GAP-033 | Display Team Names in Scoreboard | 30m |
+| P1 | NEW-012 | GAP-034 | Add Lineup Access Panel | 1.5h |
+
+**Checkpoint Gap.3**: GameTracker UX improved
+
+---
+
+## Gap.4 - Engine Wiring
+
+| Priority | Story ID | Closes Gap | Engine | Est. |
+|----------|----------|------------|--------|------|
+| P1 | NEW-013 | GAP-041 | Wire Relationship Engine | 2h |
+| P1 | NEW-014 | GAP-042 | Wire Aging Engine | 2h |
+| P1 | NEW-015 | GAP-046 | Wire Beat Reporter to Fan Morale | 1h |
+| P1 | WIRE-023 | GAP-030 | Wire Adaptive Learning Engine | 2h |
+
+**Checkpoint Gap.4**: Engines driving gameplay
+
+---
+
+## Gap.5 - Awards & Offseason Components
+
+| Priority | Story ID | Closes Gap | Components | Est. |
+|----------|----------|------------|------------|------|
+| P1 | WIRE-017 | GAP-024 | Awards Components (9) | 3h |
+| P1 | WIRE-018 | GAP-025 | Offseason Components (6) | 3h |
+
+**Checkpoint Gap.5**: Awards ceremony and offseason fully wired
+
+---
+
+## Gap.6 - Farm System (New Feature)
+
+| Priority | Story ID | Closes Gap | Feature | Est. |
+|----------|----------|------------|---------|------|
+| P1 | NEW-004 | GAP-040 | Farm System Roster View | 3h |
+| P1 | NEW-005 | GAP-040 | Call Up Player Mid-Season | 2h |
+| P1 | NEW-017 | GAP-051 | Create Farm System State | 2h |
+
+**Checkpoint Gap.6**: Farm system basics functional
+
+---
+
+## Gap.7 - Lower Priority Wiring (P2)
+
+| Priority | Story ID | Closes Gap | Component | Est. |
+|----------|----------|------------|-----------|------|
+| P2 | WIRE-005 | GAP-010 | PlayoffBracket | 1h |
+| P2 | WIRE-006 | GAP-011 | ChampionshipCelebration | 1h |
+| P2 | WIRE-008 | GAP-014 | SalaryDisplay | 1h |
+| P2 | WIRE-009 | GAP-015 | RelationshipPanel | 1h |
+| P2 | WIRE-010 | GAP-016 | AgingDisplay | 1h |
+| P2 | WIRE-012 | GAP-019 | ChemistryDisplay | 1h |
+| P2 | WIRE-013 | GAP-020 | ContractionWarning | 45m |
+| P2 | WIRE-016 | GAP-023 | Museum Components (4) | 2h |
+| P2 | WIRE-022 | GAP-029 | traitPools | 30m |
+| P2 | NEW-018 | GAP-065 | IndexedDB Backup/Restore | 2h |
+
+**Checkpoint Gap.7**: All orphaned components wired
+
+---
+
+## Gap Closure Phase Summary
+
+| Sub-Phase | Stories | Est. Hours |
+|-----------|---------|------------|
+| Gap.0 - Critical Data | 5 | 14.5h |
+| Gap.1 - Offseason | 4 | 6.5h |
+| Gap.2 - Quick Wins | 8 | 5h |
+| Gap.3 - Bug Fixes | 4 | 4h |
+| Gap.4 - Engine Wiring | 4 | 7h |
+| Gap.5 - Component Groups | 2 | 6h |
+| Gap.6 - Farm System | 3 | 7h |
+| Gap.7 - Lower Priority | 10 | 12h |
+| **TOTAL** | **40** | **~62h** |
+
+---
+
+## Recommended Execution Order
+
+1. **Gap.0** (Critical blockers) - Do FIRST
+2. **Gap.1** (Offseason flow) - Complete flow works
+3. **Gap.2** (Quick wins) - Easy parallel wins
+4. **Gap.3** (Bug fixes) - UX improvements
+5. **Gap.4** (Engines) - Systems come alive
+6. **Gap.5** (Component groups) - Awards/Offseason complete
+7. **Phase G** (Polish) - Original Phase G
+8. **Gap.6** (Farm) - New feature
+9. **Gap.7** (Lower priority) - Nice to have
+
+---
+
 *Update this document as stories complete. Track actual vs estimated times for better future planning.*

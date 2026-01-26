@@ -8,6 +8,100 @@
 
 ---
 
+## Session: January 26, 2026 (Post-Midnight) - Gap Extraction & Story Generation ✅
+
+### What Was Accomplished
+
+**1. Created GAPS_MASTER.md - Single Source of Truth for All Gaps**
+
+Extracted and consolidated all gaps from:
+- AUDIT_REPORT.md (orphaned code, TODOs)
+- COHESION_REPORT.md (journey gaps, data flow gaps, state gaps, edge cases)
+- CURRENT_STATE.md (NOT IMPLEMENTED / PARTIAL items)
+- GAMETRACKER_BUGS.md (remaining bugs)
+- FEATURE_WISHLIST.md (spec vs implementation gaps)
+
+**Result: 66 unique gaps identified and categorized**
+- 16 CRITICAL gaps
+- 55 IMPORTANT gaps
+- 25 MINOR gaps
+
+Categories:
+- Orphaned Components: 44
+- Orphaned Services: 4
+- Bugs: 7
+- Missing Features: 17
+- Data Gaps: 8
+- State Gaps: 5
+- TODOs in Code: 11
+- Edge Cases: 10
+
+**2. Created STORIES_GAP_CLOSERS.md - 18 User Stories**
+
+New stories written in Ralph Framework format for gaps without existing stories:
+- NEW-001: Sign Free Agent Action (P0)
+- NEW-002: Spring Training Phase (P0)
+- NEW-003: Schedule Generation Phase (P0)
+- NEW-004: Farm System Roster View (P1)
+- NEW-005: Call Up Player Mid-Season (P1)
+- NEW-006: Player Ratings Storage (P0)
+- NEW-007: Unified Player Database (P0)
+- NEW-008: Data Integration Layer (P0)
+- NEW-009 through NEW-018: Bug fixes and engine wiring
+
+**3. Created STORIES_WIRING.md - 23 Wiring Stories**
+
+Quick-win stories to wire existing orphaned components:
+- WIRE-001 through WIRE-023
+- 2 P0 stories (LeagueBuilder, PlayerRatingsForm)
+- 13 P1 stories (BoxScoreView, StandingsView, FanMoralePanel, etc.)
+- 8 P2 stories (Museum, Playoffs, etc.)
+
+Estimated effort: ~28 hours for all wiring stories
+
+**4. Updated IMPLEMENTATION_ORDER.md**
+
+Added new "Gap Closure Phase" section with 7 sub-phases:
+- Gap.0: Critical Data Blockers (5 stories, 14.5h)
+- Gap.1: Offseason Completeness (4 stories, 6.5h)
+- Gap.2: Quick Wins Wiring (8 stories, 5h)
+- Gap.3: Bug Fixes (4 stories, 4h)
+- Gap.4: Engine Wiring (4 stories, 7h)
+- Gap.5: Awards & Offseason Components (2 stories, 6h)
+- Gap.6: Farm System (3 stories, 7h)
+- Gap.7: Lower Priority (10 stories, 12h)
+
+**Total: 40 gap closure stories, ~62 hours estimated**
+
+### Files Created/Modified
+
+1. `spec-docs/GAPS_MASTER.md` - NEW (single source of truth for all gaps)
+2. `spec-docs/STORIES_GAP_CLOSERS.md` - NEW (18 user stories)
+3. `spec-docs/STORIES_WIRING.md` - NEW (23 wiring stories)
+4. `spec-docs/ralph/IMPLEMENTATION_ORDER.md` - UPDATED (added Gap Closure Phase)
+
+### Key Decisions Made
+
+1. **Gap numbering**: GAP-001 through GAP-066 for easy reference
+2. **Story numbering**: NEW-001+ for gap closers, WIRE-001+ for wiring
+3. **Priority assignment**: P0 for critical blockers, P1 for important features, P2 for polish
+4. **Implementation order**: Gap.0 (data) before Gap.1 (offseason) before original Phase G
+
+### Next Steps
+
+1. Start with Gap.0 (Critical Data Blockers):
+   - NEW-006: Player Ratings Storage
+   - NEW-007: Unified Player Database
+   - WIRE-014: Wire LeagueBuilder
+   - WIRE-015: Wire PlayerRatingsForm
+
+2. Then Gap.1 (Offseason Flow):
+   - NEW-001: Sign Free Agent Action
+   - NEW-002: Spring Training Phase
+   - NEW-003: Schedule Generation Phase
+
+---
+
 ## Session: January 26, 2026 (Late Late Night) - Roster Management Improvements ✅
 
 ### What Was Accomplished
