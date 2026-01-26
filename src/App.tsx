@@ -1,4 +1,5 @@
 import { Routes, Route } from 'react-router-dom';
+import NavigationHeader from './components/NavigationHeader';
 import MainMenu from './pages/MainMenu';
 import GamePage from './pages/GamePage';
 import SeasonPage from './pages/SeasonPage';
@@ -7,13 +8,16 @@ import NotFound from './pages/NotFound';
 
 function App() {
   return (
-    <Routes>
-      <Route path="/" element={<MainMenu />} />
-      <Route path="/season" element={<SeasonPage />} />
-      <Route path="/game" element={<GamePage />} />
-      <Route path="/team/:id" element={<TeamPage />} />
-      <Route path="*" element={<NotFound />} />
-    </Routes>
+    <>
+      <NavigationHeader />
+      <Routes>
+        <Route path="/" element={<MainMenu />} />
+        <Route path="/season" element={<SeasonPage />} />
+        <Route path="/game" element={<GamePage />} />
+        <Route path="/team/:id" element={<TeamPage />} />
+        <Route path="*" element={<NotFound />} />
+      </Routes>
+    </>
   );
 }
 
