@@ -95,6 +95,7 @@ import {
   generateTeamLineup,
   generateTeamBench,
   getTeamRotation,
+  getTeam,
   type GameLineupSlot,
   type GameBenchPlayer,
 } from '../../data/playerDatabase';
@@ -371,11 +372,11 @@ export default function GameTracker({ onGameEnd }: GameTrackerProps = {}) {
   // Game ID for Fame events (would come from game setup in full implementation)
   const gameId = 'demo-game';
 
-  // Team identifiers
-  const awayTeamId = 'away';
-  const homeTeamId = 'home';
-  const awayTeamName = 'AWAY';
-  const homeTeamName = 'HOME';
+  // Team identifiers - get actual team names from database (GAP-033)
+  const awayTeamId = DEFAULT_AWAY_TEAM;
+  const homeTeamId = DEFAULT_HOME_TEAM;
+  const awayTeamName = getTeam(DEFAULT_AWAY_TEAM)?.name || 'Away';
+  const homeTeamName = getTeam(DEFAULT_HOME_TEAM)?.name || 'Home';
 
   // Fame auto-detection tracking state
   const [lastHRBatterId, setLastHRBatterId] = useState<string | null>(null);
