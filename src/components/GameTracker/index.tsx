@@ -2521,7 +2521,15 @@ export default function GameTracker() {
           <div style={styles.atBatCard}>
             <div style={styles.atBatHeader}>CURRENT AT-BAT</div>
 
-            <div style={styles.batterName}>
+            <div
+              style={{ ...styles.batterName, cursor: 'pointer' }}
+              onClick={() => handlePlayerClick(
+                currentBatter.id,
+                currentBatter.name,
+                halfInning === 'TOP' ? awayTeamId : homeTeamId
+              )}
+              title="Click to view player stats"
+            >
               #{currentBatter.jerseyNumber}{' '}
               <PlayerNameWithMorale name={currentBatter.name} />
             </div>
