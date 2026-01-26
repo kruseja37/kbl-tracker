@@ -1,8 +1,9 @@
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { getTeam } from '../data/playerDatabase';
 import { generateHeadline, generateSubheadline, getHeadlineToneColor } from '../utils/headlineGenerator';
 import BoxScoreView from '../components/BoxScoreView';
+import { exportBoxScore } from '../services/dataExportService';
 
 /**
  * PostGameScreen - Comprehensive post-game summary
@@ -129,6 +130,54 @@ export default function PostGameScreen() {
   const handleContinue = () => {
     navigate('/season');
   };
+
+  // Handler for exporting box score data
+  const handleExportBoxScore = useCallback((format: 'csv' | 'json') => {
+    const gameId = searchParams.get('gameId') || `game_${Date.now()}`;
+    const date = new Date().toISOString().split('T')[0];
+
+    // Build box score data from available info
+    const boxScoreData = {
+      gameId,
+      date,
+      homeTeam: homeTeamName,
+      awayTeam: awayTeamName,
+      homeScore,
+      awayScore,
+      innings,
+      homePlayers: topBatters
+        .filter(b => b.teamId === homeTeamId)
+        .map(b => ({
+          playerId: `home_${b.name.replace(/\s+/g, '_')}`,
+          playerName: b.name,
+          position: 'IF',
+          ab: parseInt(b.stats.split('-')[1]?.split(',')[0] || '4'),
+          r: b.stats.includes('R') ? 1 : 0,
+          h: parseInt(b.stats.split('-')[0] || '1'),
+          rbi: parseInt(b.stats.match(/(\d+) RBI/)?.[1] || '0'),
+          bb: 0,
+          so: 0,
+          avg: 0.000,
+        })),
+      awayPlayers: topBatters
+        .filter(b => b.teamId === awayTeamId)
+        .map(b => ({
+          playerId: `away_${b.name.replace(/\s+/g, '_')}`,
+          playerName: b.name,
+          position: 'IF',
+          ab: parseInt(b.stats.split('-')[1]?.split(',')[0] || '4'),
+          r: b.stats.includes('R') ? 1 : 0,
+          h: parseInt(b.stats.split('-')[0] || '1'),
+          rbi: parseInt(b.stats.match(/(\d+) RBI/)?.[1] || '0'),
+          bb: 0,
+          so: 0,
+          avg: 0.000,
+        })),
+    };
+
+    exportBoxScore(boxScoreData, format);
+    console.log(`[PostGame] Exported box score as ${format.toUpperCase()}`);
+  }, [searchParams, homeTeamName, awayTeamName, homeScore, awayScore, innings, topBatters, homeTeamId, awayTeamId]);
 
   // Styles matching the app's dark theme
   const styles = {
@@ -466,6 +515,46 @@ export default function PostGameScreen() {
             }}
           >
             📊 View Box Score
+          </button>
+        </div>
+
+        {/* Export Buttons */}
+        <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
+          <button
+            style={{
+              ...styles.continueButton,
+              flex: 1,
+              backgroundColor: '#334155',
+              fontSize: '0.875rem',
+              padding: '0.75rem',
+            }}
+            onClick={() => handleExportBoxScore('csv')}
+            onMouseOver={(e) => {
+              e.currentTarget.style.backgroundColor = '#475569';
+            }}
+            onMouseOut={(e) => {
+              e.currentTarget.style.backgroundColor = '#334155';
+            }}
+          >
+            📥 Export CSV
+          </button>
+          <button
+            style={{
+              ...styles.continueButton,
+              flex: 1,
+              backgroundColor: '#334155',
+              fontSize: '0.875rem',
+              padding: '0.75rem',
+            }}
+            onClick={() => handleExportBoxScore('json')}
+            onMouseOver={(e) => {
+              e.currentTarget.style.backgroundColor = '#475569';
+            }}
+            onMouseOut={(e) => {
+              e.currentTarget.style.backgroundColor = '#334155';
+            }}
+          >
+            📥 Export JSON
           </button>
         </div>
 
