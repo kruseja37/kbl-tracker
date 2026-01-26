@@ -120,12 +120,33 @@ export function inferFielderEnhanced(
 interface FieldingModalProps {
   result: AtBatResult;
   direction: Direction | null;
-  exitType: ExitType | null;
+  exitType: ExitType | null;  // Optional: if not provided, will be inferred or selected in modal
   bases: Bases;
   outs: number;
-  onComplete: (fieldingData: FieldingData) => void;
+  onComplete: (fieldingData: FieldingData, selectedExitType?: ExitType) => void;
   onCancel: () => void;
 }
+
+// Infer exit type from result for deterministic cases
+function inferExitType(result: AtBatResult): ExitType | null {
+  switch (result) {
+    case 'GO':
+    case 'DP':
+    case 'FC':
+      return 'Ground';
+    case 'FO':
+    case 'SF':
+      return 'Fly Ball';
+    case 'LO':
+      return 'Line Drive';
+    case 'PO':
+      return 'Pop Up';
+    default:
+      return null; // Hits (1B, 2B, 3B) and errors need user selection
+  }
+}
+
+const EXIT_TYPES: ExitType[] = ['Ground', 'Line Drive', 'Fly Ball', 'Pop Up'];
 
 // ============================================
 // COMPONENT
@@ -134,14 +155,25 @@ interface FieldingModalProps {
 export default function FieldingModal({
   result,
   direction,
-  exitType,
+  exitType: propExitType,
   bases,
   outs,
   onComplete,
   onCancel,
 }: FieldingModalProps) {
+  // Exit type: use prop, or infer from result, or let user select
+  const inferredExitType = inferExitType(result);
+  const initialExitType = propExitType ?? inferredExitType;
+  const [selectedExitType, setSelectedExitType] = useState<ExitType | null>(initialExitType);
+
+  // Show exit type selector only for hits (1B, 2B, 3B) where it's not deterministic
+  const needsExitTypeSelection = ['1B', '2B', '3B'].includes(result) && !propExitType;
+
+  // Use the effective exit type for fielder inference
+  const effectiveExitType = selectedExitType ?? propExitType ?? inferredExitType;
+
   // Inferred fielder (calculated once)
-  const inferredFielder = inferFielderEnhanced(result, direction, exitType);
+  const inferredFielder = inferFielderEnhanced(result, direction, effectiveExitType);
 
   // State
   const [primaryFielder, setPrimaryFielder] = useState<Position | null>(inferredFielder);
@@ -174,13 +206,13 @@ export default function FieldingModal({
   const [robberyAttempted, setRobberyAttempted] = useState(false);
   const [robberyFailed, setRobberyFailed] = useState(false);
 
-  // Update inferred fielder when inputs change
+  // Update inferred fielder when exit type changes
   useEffect(() => {
-    const newInferred = inferFielderEnhanced(result, direction, exitType);
+    const newInferred = inferFielderEnhanced(result, direction, effectiveExitType);
     if (newInferred && !primaryFielder) {
       setPrimaryFielder(newInferred);
     }
-  }, [result, direction, exitType]);
+  }, [result, direction, effectiveExitType]);
 
   // ============================================
   // CONTEXTUAL VISIBILITY RULES
@@ -335,7 +367,8 @@ export default function FieldingModal({
       savedRun,
     };
 
-    onComplete(fieldingData);
+    // Pass the selected exit type back if it was selected in the modal
+    onComplete(fieldingData, selectedExitType ?? undefined);
   };
 
   const canSubmit = (): boolean => {
@@ -343,6 +376,8 @@ export default function FieldingModal({
     if (showD3KOptions && !d3kOutcome) return false;
     if (infieldFlyRule && ifrBallCaught === null) return false;
     if (showDPChain && !dpChain) return false;
+    // Require exit type selection for hits
+    if (needsExitTypeSelection && !selectedExitType) return false;
     return true;
   };
 
@@ -354,6 +389,28 @@ export default function FieldingModal({
           <span style={styles.title}>Fielding Details</span>
           <button style={styles.cancelBtn} onClick={onCancel}>✕</button>
         </div>
+
+        {/* Exit Type Selection (for hits only) */}
+        {needsExitTypeSelection && (
+          <div style={styles.section}>
+            <div style={styles.sectionLabel}>HOW DID IT LEAVE THE BAT?</div>
+            <div style={styles.buttonRow}>
+              {EXIT_TYPES.map(type => (
+                <button
+                  key={type}
+                  style={{
+                    ...styles.optionButton,
+                    backgroundColor: selectedExitType === type ? '#4CAF50' : '#333',
+                    color: selectedExitType === type ? '#000' : '#fff',
+                  }}
+                  onClick={() => setSelectedExitType(type)}
+                >
+                  {type}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Primary Fielder Selection */}
         <div style={styles.section}>

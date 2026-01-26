@@ -349,7 +349,9 @@ export default function AtBatFlow({ result: initialResult, bases, batterName, ou
 
   // Determine what step we're on based on what's filled in
   const needsDirection = requiresBallInPlayData(result);
-  const needsExitType = requiresBallInPlayData(result);
+  // Exit type is now handled in FieldingModal for hits, and auto-inferred for outs
+  // So we no longer require it in the AtBatFlow for outs
+  const needsExitType = false; // Exit type moved to FieldingModal (S-A022)
   const needsFielder = isOut(result) && !['K', 'KL'].includes(result);
   const needsHRDistance = result === 'HR';
   const needsDPType = result === 'DP';
@@ -622,7 +624,7 @@ export default function AtBatFlow({ result: initialResult, bases, batterName, ou
   // Check if basic inputs are ready (before fielding modal)
   const canProceedToFielding = (): boolean => {
     if (needsDirection && !direction) return false;
-    if (needsExitType && !exitType) return false;
+    // Exit type is now collected in FieldingModal, not here
     if (needsHRDistance && !hrDistance) return false;
     if (needsDPType && !dpType) return false;
 
