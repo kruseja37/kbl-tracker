@@ -1,11 +1,20 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { getActiveSeason } from '../utils/seasonStorage';
 import type { SeasonMetadata } from '../utils/seasonStorage';
+import LeagueNewsFeed, { type NewsStory } from '../components/LeagueNewsFeed';
+import { TEAMS } from '../data/playerDatabase';
 
 export default function SeasonDashboard() {
   const [season, setSeason] = useState<SeasonMetadata | null>(null);
   const [loading, setLoading] = useState(true);
+  const [newsStories, setNewsStories] = useState<NewsStory[]>([]);
+
+  // Convert TEAMS to format expected by LeagueNewsFeed
+  const teamsForNews = useMemo(() =>
+    Object.values(TEAMS).map(t => ({ teamId: t.id, teamName: t.name })),
+    []
+  );
 
   useEffect(() => {
     async function loadSeason() {
@@ -180,7 +189,7 @@ export default function SeasonDashboard() {
         </div>
 
         {/* Season Navigation */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-8">
           <Link to="/schedule" className="p-4 bg-slate-800/50 hover:bg-slate-800 rounded-lg text-center transition-colors">
             <div className="text-2xl mb-2">📅</div>
             <div className="text-white font-semibold text-sm">Schedule</div>
@@ -198,6 +207,14 @@ export default function SeasonDashboard() {
             <div className="text-white font-semibold text-sm">Museum</div>
           </Link>
         </div>
+
+        {/* League News Feed */}
+        <LeagueNewsFeed
+          stories={newsStories}
+          teams={teamsForNews}
+          onPlayerClick={(playerId) => console.log('[NewsFeed] Player clicked:', playerId)}
+          onTeamClick={(teamId) => console.log('[NewsFeed] Team clicked:', teamId)}
+        />
       </div>
     </div>
   );
