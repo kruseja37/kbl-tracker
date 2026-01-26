@@ -1,14 +1,31 @@
 import { useEffect, useState, useMemo } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { getActiveSeason } from '../utils/seasonStorage';
 import type { SeasonMetadata } from '../utils/seasonStorage';
 import LeagueNewsFeed, { type NewsStory } from '../components/LeagueNewsFeed';
+import StandingsView from '../components/StandingsView';
 import { TEAMS } from '../data/playerDatabase';
 
+// Type for standings data
+interface TeamStanding {
+  teamId: string;
+  teamName: string;
+  wins: number;
+  losses: number;
+  runsScored: number;
+  runsAllowed: number;
+  streak: { type: 'W' | 'L'; count: number };
+  lastTenWins: number;
+  homeRecord: { wins: number; losses: number };
+  awayRecord: { wins: number; losses: number };
+}
+
 export default function SeasonDashboard() {
+  const navigate = useNavigate();
   const [season, setSeason] = useState<SeasonMetadata | null>(null);
   const [loading, setLoading] = useState(true);
   const [newsStories, setNewsStories] = useState<NewsStory[]>([]);
+  const [standings, setStandings] = useState<TeamStanding[]>([]);
 
   // Convert TEAMS to format expected by LeagueNewsFeed
   const teamsForNews = useMemo(() =>
@@ -206,6 +223,18 @@ export default function SeasonDashboard() {
             <div className="text-2xl mb-2">🏛️</div>
             <div className="text-white font-semibold text-sm">Museum</div>
           </Link>
+        </div>
+
+        {/* League Standings */}
+        <div className="mb-8">
+          <h2 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+            <span>🏆</span> Standings
+          </h2>
+          <StandingsView
+            standings={standings}
+            onTeamClick={(teamId) => navigate(`/team/${teamId}`)}
+            compact={true}
+          />
         </div>
 
         {/* League News Feed */}
