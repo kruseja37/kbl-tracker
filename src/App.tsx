@@ -77,18 +77,32 @@ function formatSalary(amount: number): string {
   return `$${(amount / 1000).toFixed(0)}K`;
 }
 
+// Team filter options
+const TEAM_FILTERS = [
+  { value: 'all', label: 'All Players' },
+  { value: 'sirloins', label: 'Sirloins' },
+  { value: 'beewolves', label: 'Beewolves' },
+  { value: 'my-team', label: 'Custom Players' },
+];
+
 // Wrapper for RosterView - loads custom players from storage
 function RosterWrapper() {
   const navigate = useNavigate();
   const [players, setPlayers] = useState<ReturnType<typeof getAllCustomPlayers>>([]);
+  const [selectedTeam, setSelectedTeam] = useState<string>('all');
 
   // Load players on mount
   useEffect(() => {
     setPlayers(getAllCustomPlayers());
   }, []);
 
+  // Filter players by team
+  const filteredPlayers = selectedTeam === 'all'
+    ? players
+    : players.filter(p => p.teamId === selectedTeam);
+
   // Convert CustomPlayer to RosterPlayer format (extended with salary)
-  const rosterPlayers = players.map(p => ({
+  const rosterPlayers = filteredPlayers.map(p => ({
     playerId: p.id,
     playerName: p.name,
     position: p.isPitcher ? 'SP' : p.position,
@@ -97,24 +111,53 @@ function RosterWrapper() {
     bats: p.bats,
     throws: p.throws,
     // Ratings
-    power: p.batterRatings.power,
-    contact: p.batterRatings.contact,
-    speed: p.batterRatings.speed,
+    power: p.batterRatings?.power,
+    contact: p.batterRatings?.contact,
+    speed: p.batterRatings?.speed,
     velocity: p.pitcherRatings?.velocity,
     junk: p.pitcherRatings?.junk,
     accuracy: p.pitcherRatings?.accuracy,
     // Extended fields
     salary: p.salary || 0,
     overall: p.overall,
-    originalTeamId: p.originalTeamId,
+    originalTeamId: p.teamId !== 'my-team' ? p.teamId : undefined,
   }));
 
   // Calculate total roster salary
   const totalSalary = rosterPlayers.reduce((sum, p) => sum + (p.salary || 0), 0);
 
+  // Get display name for selected team
+  const teamDisplayName = TEAM_FILTERS.find(t => t.value === selectedTeam)?.label || 'Roster';
+
   return (
     <div style={{ minHeight: '100vh', background: 'linear-gradient(180deg, #0f172a 0%, #1e293b 100%)' }}>
       <div style={{ maxWidth: '800px', margin: '0 auto', padding: '20px' }}>
+        {/* Team Filter */}
+        <div style={{ marginBottom: '16px' }}>
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+            {TEAM_FILTERS.map(team => (
+              <button
+                key={team.value}
+                onClick={() => setSelectedTeam(team.value)}
+                style={{
+                  padding: '8px 16px',
+                  background: selectedTeam === team.value
+                    ? 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)'
+                    : '#1e293b',
+                  border: selectedTeam === team.value ? '2px solid #60a5fa' : '2px solid #334155',
+                  borderRadius: '8px',
+                  color: selectedTeam === team.value ? '#fff' : '#94a3b8',
+                  fontSize: '0.875rem',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                }}
+              >
+                {team.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
           <button
             onClick={() => navigate('/add-player')}
@@ -131,7 +174,7 @@ function RosterWrapper() {
           >
             + Add Player
           </button>
-          {players.length > 0 && (
+          {filteredPlayers.length > 0 && (
             <div style={{ textAlign: 'right' }}>
               <div style={{ fontSize: '0.75rem', color: '#64748b', textTransform: 'uppercase' }}>Total Payroll</div>
               <div style={{ fontSize: '1.25rem', fontWeight: 700, color: '#fbbf24' }}>{formatSalary(totalSalary)}</div>
@@ -141,7 +184,7 @@ function RosterWrapper() {
       </div>
       <RosterView
         players={rosterPlayers}
-        teamName="My Team Roster"
+        teamName={teamDisplayName}
         showRatings={true}
       />
     </div>

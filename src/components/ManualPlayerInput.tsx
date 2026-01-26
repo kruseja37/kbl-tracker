@@ -1,5 +1,5 @@
 import { useState, useRef, useMemo, useEffect } from 'react';
-import { getAllPlayers, type PlayerData } from '../data/playerDatabase';
+import { getAllPlayers, type PlayerData, type Gender, type PlayerRole, type PitcherRole, type PlayerTraits, TEAMS } from '../data/playerDatabase';
 import type { Position, BatterHand } from '../types/game';
 import {
   saveCustomPlayer,
@@ -100,7 +100,7 @@ export default function ManualPlayerInput({ onSuccess, onCancel }: ManualPlayerI
   // All players from database for autocomplete
   const allPlayers = useMemo(() => getAllPlayers(), []);
 
-  // Form state
+  // Form state - basic info
   const [name, setName] = useState('');
   const [position, setPosition] = useState<Position>('SS');
   const [secondaryPosition, setSecondaryPosition] = useState<Position | undefined>();
@@ -111,6 +111,16 @@ export default function ManualPlayerInput({ onSuccess, onCancel }: ManualPlayerI
   const [overall, setOverall] = useState<string>('B');
   const [batterRatings, setBatterRatings] = useState(DEFAULT_BATTER_RATINGS);
   const [pitcherRatings, setPitcherRatings] = useState(DEFAULT_PITCHER_RATINGS);
+
+  // Form state - additional fields from database
+  const [gender, setGender] = useState<Gender>('M');
+  const [role, setRole] = useState<PlayerRole>('STARTER');
+  const [pitcherRole, setPitcherRole] = useState<PitcherRole | undefined>();
+  const [chemistry, setChemistry] = useState<string>('DIS');
+  const [traits, setTraits] = useState<PlayerTraits>({});
+  const [arsenal, setArsenal] = useState<string[] | undefined>();
+
+  // UI state
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
@@ -168,12 +178,23 @@ export default function ManualPlayerInput({ onSuccess, onCancel }: ManualPlayerI
     setThrows(player.throws);
     setAge(player.age);
     setOverall(player.overall);
+
+    // Ratings
     if (player.batterRatings) {
       setBatterRatings(player.batterRatings);
     }
     if (player.pitcherRatings) {
       setPitcherRatings(player.pitcherRatings);
     }
+
+    // Additional fields from database
+    setGender(player.gender);
+    setRole(player.role);
+    setPitcherRole(player.pitcherRole);
+    setChemistry(player.chemistry);
+    setTraits(player.traits);
+    setArsenal(player.arsenal);
+
     setShowSuggestions(false);
     setError(null);
   };
@@ -246,19 +267,40 @@ export default function ManualPlayerInput({ onSuccess, onCancel }: ManualPlayerI
     const player: CustomPlayer = {
       id: generatePlayerId(),
       name: name.trim(),
-      teamId: 'my-team', // All players go to "My Team"
-      position,
-      secondaryPosition,
+      teamId: selectedPlayer?.teamId || 'my-team', // Keep original team if imported
+
+      // Demographics
+      age,
+      gender,
       bats,
       throws: throws_,
+
+      // Position info
+      position,
+      secondaryPosition,
       isPitcher,
-      age,
+      pitcherRole: isPitcher ? pitcherRole : undefined,
+      role,
+
+      // Ratings
       overall,
       batterRatings,
       pitcherRatings: isPitcher ? pitcherRatings : undefined,
+
+      // Chemistry and traits
+      chemistry,
+      traits,
+
+      // Arsenal
+      arsenal: isPitcher ? arsenal : undefined,
+
+      // Salary
       salary: calculatedSalary,
+
+      // Source tracking
       sourcePlayerId: selectedPlayer?.id,
       originalTeamId: selectedPlayer?.teamId,
+
       createdAt: Date.now(),
     };
 

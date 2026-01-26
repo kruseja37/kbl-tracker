@@ -2,10 +2,11 @@
  * Custom Player Storage
  *
  * Persists user-created players to localStorage.
- * All players go to "My Team" roster (no team selection needed).
+ * Players can be imported from the database or created manually.
  */
 
 import type { Position, BatterHand } from '../types/game';
+import type { Gender, PlayerRole, PitcherRole, PlayerTraits } from '../data/playerDatabase';
 
 const STORAGE_KEY = 'kbl-custom-players';
 
@@ -14,14 +15,23 @@ export type ThrowHand = 'L' | 'R';
 export interface CustomPlayer {
   id: string;
   name: string;
-  teamId: string; // Always 'my-team' for roster players
-  position: Position;
-  secondaryPosition?: Position;
+  teamId: string; // 'my-team' or original team ID if imported
+
+  // Demographics
+  age: number;
+  gender: Gender;
   bats: BatterHand;
   throws: ThrowHand;
+
+  // Position info
+  position: Position;
+  secondaryPosition?: Position;
   isPitcher: boolean;
-  age: number;
-  overall?: string; // Letter grade: S, A+, A, A-, B+, B, B-, C+, C, C-, D+, D
+  pitcherRole?: PitcherRole; // SP, RP, CP, SP/RP
+  role: PlayerRole; // STARTER, BENCH, ROTATION, BULLPEN
+
+  // Ratings
+  overall: string; // Letter grade: S, A+, A, A-, B+, B, B-, C+, C, C-, D+, D
   batterRatings: {
     power: number;
     contact: number;
@@ -34,11 +44,21 @@ export interface CustomPlayer {
     junk: number;
     accuracy: number;
   };
+
+  // Chemistry and traits
+  chemistry: string; // SPI, DIS, CMP, SCH, CRA
+  traits: PlayerTraits;
+
+  // Arsenal (for pitchers)
+  arsenal?: string[];
+
   // Salary (auto-calculated)
   salary: number;
+
   // Source tracking (if imported from database)
   sourcePlayerId?: string; // Original player ID from database
   originalTeamId?: string; // Team they came from in the database
+
   createdAt: number;
 }
 
