@@ -2560,8 +2560,16 @@ export default function GameTracker() {
         <div style={styles.activityHeader}>
           <span>📻 ACTIVITY LOG</span>
           <div style={{ display: 'flex', gap: '8px' }}>
-            <button style={styles.undoButton} onClick={handleUndo} disabled={undoStack.length === 0}>
-              ↩ Undo
+            <button
+              style={{
+                ...styles.undoButton,
+                opacity: undoStack.length === 0 ? 0.4 : 1,
+                cursor: undoStack.length === 0 ? 'not-allowed' : 'pointer',
+              }}
+              onClick={handleUndo}
+              disabled={undoStack.length === 0}
+            >
+              ↩ Undo {undoStack.length > 0 && `(${undoStack.length})`}
             </button>
             <button
               style={{ ...styles.undoButton, backgroundColor: '#4CAF50', color: '#000' }}
