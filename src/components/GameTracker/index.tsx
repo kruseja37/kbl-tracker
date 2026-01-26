@@ -2491,8 +2491,8 @@ export default function GameTracker() {
       )}
 
       <Scoreboard
-        awayName="AWAY"
-        homeName="HOME"
+        awayName={awayTeamName}
+        homeName={homeTeamName}
         awayScore={awayScore}
         homeScore={homeScore}
         inning={inning}
