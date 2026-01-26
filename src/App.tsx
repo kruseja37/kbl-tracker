@@ -39,7 +39,7 @@ import LeagueBuilder from './components/LeagueBuilder';
 
 import { getTeam } from './data/playerDatabase';
 import { getAllCustomPlayers, deleteCustomPlayer } from './utils/customPlayerStorage';
-import { logFASigning } from './utils/transactionStorage';
+import { logFASigning, logTrade } from './utils/transactionStorage';
 
 // Wrapper to handle URL params for PreGameScreen
 function PreGameWrapper() {
@@ -424,16 +424,56 @@ function DraftWrapper() {
   );
 }
 
-// Wrapper for TradeHub
+// Wrapper for TradeHub - includes transaction logging for completed trades
 function TradeWrapper() {
   const navigate = useNavigate();
+  const [completedTrades, setCompletedTrades] = useState<{
+    tradeId: string;
+    otherTeamId: string;
+    otherTeamName: string;
+    sentPlayers: { playerId: string; playerName: string }[];
+    receivedPlayers: { playerId: string; playerName: string }[];
+    completedAt: Date;
+  }[]>([]);
+
+  // Handler for when a trade is executed (would be called from trade proposal flow)
+  const handleTradeExecuted = (
+    team1: string,
+    team2: string,
+    playersFromTeam1: { playerId: string; playerName: string }[],
+    playersFromTeam2: { playerId: string; playerName: string }[]
+  ) => {
+    // Log the transaction
+    logTrade(
+      1, // Current season - in production, get from GlobalState
+      null, // Offseason trade
+      team1,
+      team2,
+      playersFromTeam1.map(p => p.playerId),
+      playersFromTeam2.map(p => p.playerId)
+    ).then(() => {
+      console.log(`[Trade Hub] Trade executed: ${playersFromTeam1.length} players ↔ ${playersFromTeam2.length} players`);
+    });
+
+    // Update local state
+    const newTrade = {
+      tradeId: `trade_${Date.now()}`,
+      otherTeamId: team2,
+      otherTeamName: team2,
+      sentPlayers: playersFromTeam1,
+      receivedPlayers: playersFromTeam2,
+      completedAt: new Date(),
+    };
+    setCompletedTrades(prev => [...prev, newTrade]);
+  };
+
   return (
     <TradeHub
       pendingTrades={[]}
-      completedTrades={[]}
+      completedTrades={completedTrades}
       userTeamName="My Team"
-      onNewTrade={() => {}}
-      onViewTrade={() => {}}
+      onNewTrade={() => console.log('[Trade Hub] New trade requested')}
+      onViewTrade={(tradeId) => console.log('[Trade Hub] View trade:', tradeId)}
       onContinue={() => navigate('/offseason')}
     />
   );
