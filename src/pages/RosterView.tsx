@@ -63,7 +63,7 @@ interface RosterViewProps {
   showRatings?: boolean;
 }
 
-type PlayerGroup = 'catchers' | 'infielders' | 'outfielders' | 'starters' | 'relievers';
+type PlayerGroup = 'positionPlayers' | 'pitchers';
 
 export default function RosterView({
   players,
@@ -72,30 +72,25 @@ export default function RosterView({
   onDeletePlayer,
   showRatings = false,
 }: RosterViewProps) {
-  // Group players by position type
+  // Group players: Position Players and Pitchers, sorted by salary descending
   const groupedPlayers = useMemo(() => {
     const groups: Record<PlayerGroup, RosterPlayer[]> = {
-      catchers: [],
-      infielders: [],
-      outfielders: [],
-      starters: [],
-      relievers: [],
+      positionPlayers: [],
+      pitchers: [],
     };
 
     players.forEach((player) => {
       const pos = player.position.toUpperCase();
-      if (pos === 'C') {
-        groups.catchers.push(player);
-      } else if (['1B', '2B', '3B', 'SS'].includes(pos)) {
-        groups.infielders.push(player);
-      } else if (['LF', 'CF', 'RF', 'OF', 'DH'].includes(pos)) {
-        groups.outfielders.push(player);
-      } else if (pos === 'SP') {
-        groups.starters.push(player);
-      } else if (['RP', 'CL'].includes(pos)) {
-        groups.relievers.push(player);
+      if (['SP', 'RP', 'CL', 'P'].includes(pos)) {
+        groups.pitchers.push(player);
+      } else {
+        groups.positionPlayers.push(player);
       }
     });
+
+    // Sort each group by salary descending
+    groups.positionPlayers.sort((a, b) => (b.salary || 0) - (a.salary || 0));
+    groups.pitchers.sort((a, b) => (b.salary || 0) - (a.salary || 0));
 
     return groups;
   }, [players]);
@@ -246,19 +241,13 @@ export default function RosterView({
   );
 
   const groupLabels: Record<PlayerGroup, string> = {
-    catchers: 'Catchers',
-    infielders: 'Infielders',
-    outfielders: 'Outfielders',
-    starters: 'Starting Pitchers',
-    relievers: 'Relief Pitchers',
+    positionPlayers: 'Position Players',
+    pitchers: 'Pitchers',
   };
 
   const groupIcons: Record<PlayerGroup, string> = {
-    catchers: '🧤',
-    infielders: '⚾',
-    outfielders: '🏃',
-    starters: '💪',
-    relievers: '🔥',
+    positionPlayers: '⚾',
+    pitchers: '💪',
   };
 
   return (
@@ -269,42 +258,32 @@ export default function RosterView({
       </div>
 
       {/* Position Players */}
-      {(['catchers', 'infielders', 'outfielders'] as PlayerGroup[]).map((group) => {
-        const groupPlayers = groupedPlayers[group];
-        if (groupPlayers.length === 0) return null;
-
-        return (
-          <div key={group} style={styles.group}>
-            <div style={styles.groupHeader}>
-              <span style={styles.groupIcon}>{groupIcons[group]}</span>
-              <span style={styles.groupLabel}>{groupLabels[group]}</span>
-              <span style={styles.groupCount}>{groupPlayers.length}</span>
-            </div>
-            <div style={styles.playerList}>
-              {groupPlayers.map(renderBatterRow)}
-            </div>
+      {groupedPlayers.positionPlayers.length > 0 && (
+        <div style={styles.group}>
+          <div style={styles.groupHeader}>
+            <span style={styles.groupIcon}>{groupIcons.positionPlayers}</span>
+            <span style={styles.groupLabel}>{groupLabels.positionPlayers}</span>
+            <span style={styles.groupCount}>{groupedPlayers.positionPlayers.length}</span>
           </div>
-        );
-      })}
+          <div style={styles.playerList}>
+            {groupedPlayers.positionPlayers.map(renderBatterRow)}
+          </div>
+        </div>
+      )}
 
       {/* Pitchers */}
-      {(['starters', 'relievers'] as PlayerGroup[]).map((group) => {
-        const groupPlayers = groupedPlayers[group];
-        if (groupPlayers.length === 0) return null;
-
-        return (
-          <div key={group} style={styles.group}>
-            <div style={styles.groupHeader}>
-              <span style={styles.groupIcon}>{groupIcons[group]}</span>
-              <span style={styles.groupLabel}>{groupLabels[group]}</span>
-              <span style={styles.groupCount}>{groupPlayers.length}</span>
-            </div>
-            <div style={styles.playerList}>
-              {groupPlayers.map(renderPitcherRow)}
-            </div>
+      {groupedPlayers.pitchers.length > 0 && (
+        <div style={styles.group}>
+          <div style={styles.groupHeader}>
+            <span style={styles.groupIcon}>{groupIcons.pitchers}</span>
+            <span style={styles.groupLabel}>{groupLabels.pitchers}</span>
+            <span style={styles.groupCount}>{groupedPlayers.pitchers.length}</span>
           </div>
-        );
-      })}
+          <div style={styles.playerList}>
+            {groupedPlayers.pitchers.map(renderPitcherRow)}
+          </div>
+        </div>
+      )}
 
       {players.length === 0 && (
         <div style={styles.empty}>No players on roster</div>

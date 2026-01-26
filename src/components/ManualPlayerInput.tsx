@@ -664,35 +664,13 @@ export default function ManualPlayerInput({ onSuccess, onCancel }: ManualPlayerI
           {/* Divider */}
           <div className="border-t-2 border-dashed border-slate-700/50" />
 
-          {/* SECTION: Team Role & Chemistry */}
+          {/* SECTION: Chemistry & Traits */}
           <div className="space-y-4">
             <div className="flex items-center gap-2 mb-3">
               <div className="w-1 h-5 bg-violet-500" />
               <span className="text-xs font-bold text-slate-500 uppercase tracking-widest">
-                Role & Chemistry
+                {isPitcher ? 'Pitcher Info & Chemistry' : 'Chemistry & Traits'}
               </span>
-            </div>
-
-            {/* Role */}
-            <div>
-              <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">
-                Team Role
-              </label>
-              <div className="flex gap-1.5 flex-wrap">
-                {ROLE_OPTIONS.filter(r => r.forPitcher === isPitcher).map((opt) => (
-                  <button
-                    key={opt.value}
-                    onClick={() => setRole(opt.value)}
-                    className={`px-4 py-2 text-sm font-bold border-2 transition-all ${
-                      role === opt.value
-                        ? 'bg-emerald-500/20 border-emerald-500 text-emerald-400'
-                        : 'bg-slate-800 border-slate-700 text-slate-400 hover:border-slate-600'
-                    }`}
-                  >
-                    {opt.label}
-                  </button>
-                ))}
-              </div>
             </div>
 
             {/* Pitcher Role (only for pitchers) */}

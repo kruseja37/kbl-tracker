@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Routes, Route, useSearchParams, useNavigate } from 'react-router-dom';
+import { Routes, Route, useSearchParams, useNavigate, useLocation } from 'react-router-dom';
 import NavigationHeader from './components/NavigationHeader';
 import MainMenu from './pages/MainMenu';
 import GamePage from './pages/GamePage';
@@ -88,13 +88,14 @@ const TEAM_FILTERS = [
 // Wrapper for RosterView - loads custom players from storage
 function RosterWrapper() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [players, setPlayers] = useState<ReturnType<typeof getAllCustomPlayers>>([]);
   const [selectedTeam, setSelectedTeam] = useState<string>('all');
 
-  // Load players on mount
+  // Load players on mount and whenever the location changes (e.g., returning from add-player)
   useEffect(() => {
     setPlayers(getAllCustomPlayers());
-  }, []);
+  }, [location.key]);
 
   // Filter players by team
   const filteredPlayers = selectedTeam === 'all'
