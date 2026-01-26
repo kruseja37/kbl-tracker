@@ -95,3 +95,25 @@ export type SeasonPhase =
   | 'POST_DEADLINE'
   | 'PLAYOFFS'
   | 'OFFSEASON';
+
+// Player ratings (0-99 scale)
+export interface BatterRatings {
+  power: number;
+  contact: number;
+  speed: number;
+  fielding: number;
+  arm: number;
+}
+
+export interface PitcherRatings {
+  velocity: number;
+  junk: number;
+  accuracy: number;
+}
+
+export interface PlayerRatings {
+  playerId: string;
+  batterRatings: BatterRatings;
+  pitcherRatings?: PitcherRatings;
+  isPitcher: boolean;
+}
