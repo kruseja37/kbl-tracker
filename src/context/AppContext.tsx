@@ -1,4 +1,5 @@
-import { createContext, useContext, useState, useCallback, type ReactNode } from 'react';
+import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from 'react';
+import { loadAppState, saveAppState } from './appStateStorage';
 
 // Types
 export interface AppState {
@@ -19,7 +20,6 @@ export interface AppContextValue extends AppState {
   setSelectedTeam: (teamId: string | null) => void;
   setCurrentSeason: (seasonId: string | null) => void;
   updatePreferences: (prefs: Partial<AppPreferences>) => void;
-  setHydrated: (hydrated: boolean) => void;
 }
 
 // Default values
@@ -48,6 +48,28 @@ interface AppProviderProps {
 export function AppProvider({ children }: AppProviderProps) {
   const [state, setState] = useState<AppState>(defaultState);
 
+  // Hydrate state from storage on mount
+  useEffect(() => {
+    const persisted = loadAppState();
+    setState({
+      selectedTeamId: persisted.selectedTeamId,
+      currentSeasonId: persisted.currentSeasonId,
+      preferences: persisted.preferences,
+      isHydrated: true,
+    });
+  }, []);
+
+  // Persist state changes to storage
+  useEffect(() => {
+    if (state.isHydrated) {
+      saveAppState({
+        selectedTeamId: state.selectedTeamId,
+        currentSeasonId: state.currentSeasonId,
+        preferences: state.preferences,
+      });
+    }
+  }, [state.selectedTeamId, state.currentSeasonId, state.preferences, state.isHydrated]);
+
   const setSelectedTeam = useCallback((teamId: string | null) => {
     setState(prev => ({ ...prev, selectedTeamId: teamId }));
   }, []);
@@ -63,16 +85,11 @@ export function AppProvider({ children }: AppProviderProps) {
     }));
   }, []);
 
-  const setHydrated = useCallback((hydrated: boolean) => {
-    setState(prev => ({ ...prev, isHydrated: hydrated }));
-  }, []);
-
   const value: AppContextValue = {
     ...state,
     setSelectedTeam,
     setCurrentSeason,
     updatePreferences,
-    setHydrated,
   };
 
   return (
