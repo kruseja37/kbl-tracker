@@ -143,7 +143,7 @@ export default function SeasonDashboard() {
         </div>
 
         {/* Quick Actions */}
-        <div className="grid sm:grid-cols-2 gap-4">
+        <div className="grid sm:grid-cols-2 gap-4 mb-8">
           <Link
             to="/game"
             className="group relative block overflow-hidden"
@@ -162,7 +162,7 @@ export default function SeasonDashboard() {
           </Link>
 
           <Link
-            to="/team/select"
+            to="/roster"
             className="group relative block overflow-hidden"
           >
             <div className="absolute inset-0 bg-gradient-to-r from-slate-700 to-slate-600 skew-x-[-2deg] scale-x-[1.02] transition-all duration-300 group-hover:scale-x-[1.04]" />
@@ -171,11 +171,31 @@ export default function SeasonDashboard() {
             <div className="relative flex items-center gap-4 px-6 py-5">
               <div className="text-3xl">👥</div>
               <div>
-                <div className="font-bold text-white text-lg">Teams</div>
-                <div className="text-slate-300/70 text-sm">Manage rosters</div>
+                <div className="font-bold text-white text-lg">Roster</div>
+                <div className="text-slate-300/70 text-sm">Manage players</div>
               </div>
               <div className="ml-auto text-white/80 text-xl group-hover:translate-x-2 transition-transform">→</div>
             </div>
+          </Link>
+        </div>
+
+        {/* Season Navigation */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <Link to="/schedule" className="p-4 bg-slate-800/50 hover:bg-slate-800 rounded-lg text-center transition-colors">
+            <div className="text-2xl mb-2">📅</div>
+            <div className="text-white font-semibold text-sm">Schedule</div>
+          </Link>
+          <Link to="/leaders" className="p-4 bg-slate-800/50 hover:bg-slate-800 rounded-lg text-center transition-colors">
+            <div className="text-2xl mb-2">🏆</div>
+            <div className="text-white font-semibold text-sm">Leaders</div>
+          </Link>
+          <Link to="/awards" className="p-4 bg-slate-800/50 hover:bg-slate-800 rounded-lg text-center transition-colors">
+            <div className="text-2xl mb-2">🏅</div>
+            <div className="text-white font-semibold text-sm">Awards</div>
+          </Link>
+          <Link to="/museum" className="p-4 bg-slate-800/50 hover:bg-slate-800 rounded-lg text-center transition-colors">
+            <div className="text-2xl mb-2">🏛️</div>
+            <div className="text-white font-semibold text-sm">Museum</div>
           </Link>
         </div>
       </div>
