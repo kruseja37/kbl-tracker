@@ -25,17 +25,14 @@ interface OffseasonHubProps {
 }
 
 const OFFSEASON_PHASES: OffseasonPhase[] = [
-  { id: 1, name: 'Awards Ceremony', description: 'Celebrate season achievements', route: '/offseason/awards' },
-  { id: 2, name: 'End of Season Ratings', description: 'Review player development', route: '/offseason/eos-ratings' },
+  { id: 1, name: 'Awards Ceremony', description: 'Celebrate season achievements', route: '/awards' },
+  { id: 2, name: 'End of Season Ratings', description: 'Review player development', route: '/offseason/ratings' },
   { id: 3, name: 'Retirements', description: 'Honor retiring players', route: '/offseason/retirements' },
-  { id: 4, name: 'FA Protection', description: 'Protect one player from FA', route: '/offseason/fa-protection' },
-  { id: 5, name: 'Free Agency Round 1', description: 'Sign available players', route: '/offseason/free-agency/1' },
-  { id: 6, name: 'Free Agency Round 2', description: 'Second wave signings', route: '/offseason/free-agency/2' },
-  { id: 7, name: 'Free Agency Round 3', description: 'Final free agent signings', route: '/offseason/free-agency/3' },
-  { id: 8, name: 'Draft', description: 'Select prospects for farm system', route: '/offseason/draft' },
-  { id: 9, name: 'Trade Period', description: 'Make trades with other teams', route: '/offseason/trades' },
-  { id: 10, name: 'Spring Training', description: 'Set opening day roster', route: '/offseason/spring-training' },
-  { id: 11, name: 'Schedule Release', description: 'View new season schedule', route: '/offseason/schedule' },
+  { id: 4, name: 'Free Agency', description: 'Sign available players', route: '/offseason/free-agency' },
+  { id: 5, name: 'Draft', description: 'Select prospects for farm system', route: '/offseason/draft' },
+  { id: 6, name: 'Trade Period', description: 'Make trades with other teams', route: '/offseason/trades' },
+  { id: 7, name: 'Spring Training', description: 'Set opening day roster', route: '/offseason/spring-training' },
+  { id: 8, name: 'Schedule Generation', description: 'Generate new season schedule', route: '/offseason/schedule-gen' },
 ];
 
 export default function OffseasonHub({
