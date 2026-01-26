@@ -8,6 +8,77 @@
 
 ---
 
+## Session: January 26, 2026 - Wiring Stories Implementation
+
+### What Was Accomplished
+
+Implemented 6 wiring stories from `STORIES_WIRING.md` to connect orphaned components:
+
+| Story | Description | Commit |
+|-------|-------------|--------|
+| WIRE-014 | Wire LeagueBuilder to MainMenu | `d4b90a7` |
+| WIRE-015 | Wire PlayerRatingsForm to ManualPlayerInput | Already implemented |
+| WIRE-011 | Wire LeagueNewsFeed to SeasonDashboard | `59de984` |
+| WIRE-019 | Wire transactionStorage to TradeHub | `fefe25d` |
+| WIRE-020 | Wire fieldingStatsAggregator to GoldGlove | `ca8697d` |
+| WIRE-021 | Wire dataExportService to PostGameScreen | `0ab445d` |
+
+### Key Changes Made
+
+**App.tsx:**
+- Added `/league-builder` route with LeagueBuilderWrapper
+- Added `/awards/goldglove` route with GoldGloveWrapper
+- Added useMemo import
+- Imported LeagueBuilder, GoldGloveAwards, getGoldGloveCandidates
+- Imported logTrade from transactionStorage
+- Updated AwardsWrapper to navigate to individual award routes
+- Updated TradeWrapper with trade logging and state management
+
+**SeasonDashboard.tsx:**
+- Added LeagueNewsFeed component at bottom
+- Added newsStories state and teamsForNews memoized array
+- Player/team click handlers wired (console log for now)
+
+**PostGameScreen.tsx:**
+- Added Export CSV and Export JSON buttons
+- Added handleExportBoxScore callback using dataExportService
+- Builds box score data from available game info
+
+**MainMenu.tsx:**
+- Added "NEW LEAGUE" navigation item in extraItems array
+- Points to `/league-builder` route
+
+### Build Status
+
+All builds pass (Exit 0). No TypeScript errors.
+
+### Files Modified
+
+1. `src/App.tsx` - Routes and wrappers for LeagueBuilder, GoldGlove, Trade
+2. `src/pages/SeasonDashboard.tsx` - LeagueNewsFeed integration
+3. `src/pages/PostGameScreen.tsx` - Export buttons
+4. `src/pages/MainMenu.tsx` - New League navigation
+
+### Updated Documentation
+
+- `spec-docs/CURRENT_STATE.md` - Added Wiring Stories Session section
+- `spec-docs/SESSION_LOG.md` - This entry
+
+### Remaining Work
+
+P0 wiring stories complete. P1 remaining:
+- WIRE-001: BoxScoreView (already partially done)
+- WIRE-002: StandingsView
+- WIRE-003: TeamStatsView
+- WIRE-004: FanMoralePanel
+- WIRE-007: SeasonProgressTracker
+- WIRE-008: SalaryDisplay (blocked on ratings)
+- WIRE-017: Awards Components
+- WIRE-018: Offseason Components
+- WIRE-023: adaptiveLearningEngine
+
+---
+
 ## Session: January 26, 2026 (Post-Midnight) - Gap Extraction & Story Generation ✅
 
 ### What Was Accomplished

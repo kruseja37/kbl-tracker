@@ -9,31 +9,31 @@
 
 ## Story Index
 
-| Story ID | Closes Gap | Component | Location | Priority | Size |
-|----------|------------|-----------|----------|----------|------|
-| WIRE-001 | GAP-005 | BoxScoreView | PostGameScreen | P1 | Small |
-| WIRE-002 | GAP-006 | StandingsView | SeasonDashboard | P1 | Small |
-| WIRE-003 | GAP-007 | TeamStatsView | TeamPage | P1 | Small |
-| WIRE-004 | GAP-009 | FanMoralePanel | GameTracker | P1 | Small |
-| WIRE-005 | GAP-010 | PlayoffBracket | SeasonDashboard | P2 | Small |
-| WIRE-006 | GAP-011 | ChampionshipCelebration | PostGameScreen | P2 | Small |
-| WIRE-007 | GAP-012 | SeasonProgressTracker | SeasonDashboard | P1 | Small |
-| WIRE-008 | GAP-014 | SalaryDisplay | PlayerCard | P1 | Small |
-| WIRE-009 | GAP-015 | RelationshipPanel | PlayerCard | P2 | Small |
-| WIRE-010 | GAP-016 | AgingDisplay | PlayerCard | P2 | Small |
-| WIRE-011 | GAP-018 | LeagueNewsFeed | SeasonDashboard | P1 | Small |
-| WIRE-012 | GAP-019 | ChemistryDisplay | RosterView | P2 | Small |
-| WIRE-013 | GAP-020 | ContractionWarning | SeasonDashboard | P2 | Small |
-| WIRE-014 | GAP-021 | LeagueBuilder | MainMenu | P0 | Medium |
-| WIRE-015 | GAP-022 | PlayerRatingsForm | ManualPlayerInput | P0 | Small |
-| WIRE-016 | GAP-023 | Museum Components | MuseumHub | P2 | Medium |
-| WIRE-017 | GAP-024 | Awards Components | AwardsCeremonyHub | P1 | Medium |
-| WIRE-018 | GAP-025 | Offseason Components | OffseasonHub | P1 | Medium |
-| WIRE-019 | GAP-026 | transactionStorage | FreeAgencyHub, TradeHub | P1 | Small |
-| WIRE-020 | GAP-027 | fieldingStatsAggregator | AwardsHub | P1 | Small |
-| WIRE-021 | GAP-028 | dataExportService | PostGameScreen | P1 | Small |
-| WIRE-022 | GAP-029 | traitPools | TraitLotteryWheel | P2 | Small |
-| WIRE-023 | GAP-030 | adaptiveLearningEngine | FieldingModal | P1 | Medium |
+| Story ID | Closes Gap | Component | Location | Priority | Size | Status |
+|----------|------------|-----------|----------|----------|------|--------|
+| WIRE-001 | GAP-005 | BoxScoreView | PostGameScreen | P1 | Small | ✅ Done (prior) |
+| WIRE-002 | GAP-006 | StandingsView | SeasonDashboard | P1 | Small | Pending |
+| WIRE-003 | GAP-007 | TeamStatsView | TeamPage | P1 | Small | Pending |
+| WIRE-004 | GAP-009 | FanMoralePanel | GameTracker | P1 | Small | Pending |
+| WIRE-005 | GAP-010 | PlayoffBracket | SeasonDashboard | P2 | Small | Pending |
+| WIRE-006 | GAP-011 | ChampionshipCelebration | PostGameScreen | P2 | Small | Pending |
+| WIRE-007 | GAP-012 | SeasonProgressTracker | SeasonDashboard | P1 | Small | Pending |
+| WIRE-008 | GAP-014 | SalaryDisplay | PlayerCard | P1 | Small | Blocked |
+| WIRE-009 | GAP-015 | RelationshipPanel | PlayerCard | P2 | Small | Pending |
+| WIRE-010 | GAP-016 | AgingDisplay | PlayerCard | P2 | Small | Pending |
+| WIRE-011 | GAP-018 | LeagueNewsFeed | SeasonDashboard | P1 | Small | ✅ Done |
+| WIRE-012 | GAP-019 | ChemistryDisplay | RosterView | P2 | Small | Pending |
+| WIRE-013 | GAP-020 | ContractionWarning | SeasonDashboard | P2 | Small | Pending |
+| WIRE-014 | GAP-021 | LeagueBuilder | MainMenu | P0 | Medium | ✅ Done |
+| WIRE-015 | GAP-022 | PlayerRatingsForm | ManualPlayerInput | P0 | Small | ✅ Done (prior) |
+| WIRE-016 | GAP-023 | Museum Components | MuseumHub | P2 | Medium | Pending |
+| WIRE-017 | GAP-024 | Awards Components | AwardsCeremonyHub | P1 | Medium | Pending |
+| WIRE-018 | GAP-025 | Offseason Components | OffseasonHub | P1 | Medium | Pending |
+| WIRE-019 | GAP-026 | transactionStorage | FreeAgencyHub, TradeHub | P1 | Small | ✅ Done |
+| WIRE-020 | GAP-027 | fieldingStatsAggregator | AwardsHub | P1 | Small | ✅ Done |
+| WIRE-021 | GAP-028 | dataExportService | PostGameScreen | P1 | Small | ✅ Done |
+| WIRE-022 | GAP-029 | traitPools | TraitLotteryWheel | P2 | Small | Pending |
+| WIRE-023 | GAP-030 | adaptiveLearningEngine | FieldingModal | P1 | Medium | Pending |
 
 ---
 

@@ -250,6 +250,46 @@ All 18 gap closure stories from `STORIES_GAP_CLOSERS.md` implemented and committ
 
 ---
 
+## Wiring Stories Session (January 26, 2026) - IN PROGRESS
+
+Implementing stories from `STORIES_WIRING.md` to connect orphaned components.
+
+### Stories Completed
+
+| Story | Gap | Title | Commit |
+|-------|-----|-------|--------|
+| WIRE-014 | GAP-021 | Wire LeagueBuilder to MainMenu | `d4b90a7` |
+| WIRE-015 | GAP-022 | Wire PlayerRatingsForm to ManualPlayerInput | Already complete |
+| WIRE-011 | GAP-018 | Wire LeagueNewsFeed to SeasonDashboard | `59de984` |
+| WIRE-019 | GAP-026 | Wire transactionStorage to TradeHub | `fefe25d` |
+| WIRE-020 | GAP-027 | Wire fieldingStatsAggregator to GoldGlove | `ca8697d` |
+| WIRE-021 | GAP-028 | Wire dataExportService to PostGameScreen | `0ab445d` |
+
+### New Routes Added
+
+| Path | Component | Description |
+|------|-----------|-------------|
+| `/league-builder` | LeagueBuilderWrapper | Create new league/season |
+| `/awards/goldglove` | GoldGloveWrapper | Gold Glove awards presentation |
+
+### Key Changes
+
+- **MainMenu**: Added "NEW LEAGUE" navigation item pointing to `/league-builder`
+- **SeasonDashboard**: Now includes LeagueNewsFeed at bottom (empty until stories are generated)
+- **AwardsWrapper**: Now navigates to `/awards/:awardId` for individual award presentations
+- **TradeWrapper**: Now logs trades to transactionStorage when executed
+- **PostGameScreen**: Added Export CSV and Export JSON buttons for box score data
+
+### Remaining Wiring Stories
+
+| Priority | Remaining | Notes |
+|----------|-----------|-------|
+| P0 | 0 | ✅ All P0 complete |
+| P1 | 8 | WIRE-001, 002, 003, 004, 007, 008, 017, 018, 023 |
+| P2 | 8 | Lower priority |
+
+---
+
 ## Project Overview
 
 **What is this?**: A baseball stat-tracking application designed for **Super Mega Baseball 4 (SMB4)**, a video game with unique mechanics. This distinction matters because:
