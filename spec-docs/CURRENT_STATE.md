@@ -1,7 +1,7 @@
 # KBL Tracker - Current State
 
 > **Purpose**: Single source of truth for what's implemented, what's not, and known issues
-> **Last Updated**: January 26, 2026 (Ralph Framework Phases A-G Complete)
+> **Last Updated**: January 26, 2026 (Gap Closure Session Complete)
 
 ---
 
@@ -195,6 +195,58 @@ All 78 user stories from Phases B-G implemented and committed. Components are wi
 > - `FEATURE_WISHLIST.md` - Known gaps to address
 >
 > These files contain critical context for how to work on this project.
+
+---
+
+## Gap Closure Session (January 26, 2026) - COMPLETE ✅
+
+All 18 gap closure stories from `STORIES_GAP_CLOSERS.md` implemented and committed.
+
+### Stories Completed
+
+| Story | Gap | Title | Commit |
+|-------|-----|-------|--------|
+| NEW-001 | GAP-002 | Sign Free Agent Action | P0 |
+| NEW-002 | GAP-038 | Spring Training Phase | P0 |
+| NEW-003 | GAP-039 | Schedule Generation Phase | P0 |
+| NEW-006 | GAP-001 | Player Ratings Storage | P0 |
+| NEW-007 | GAP-003 | Unified Player Database | P0 |
+| NEW-008 | GAP-004 | Data Integration Layer | P0 |
+| NEW-009 | GAP-031 | Fix Exit Type Double Entry | P1 |
+| NEW-010 | GAP-032 | Make Player Names Clickable | P1 |
+| NEW-011 | GAP-033 | Display Team Names in Scoreboard | P1 |
+| NEW-012 | GAP-034 | Add Lineup Access Panel | P1 (already implemented) |
+| NEW-013 | GAP-041 | Wire Relationship Engine | P1 |
+| NEW-014 | GAP-042 | Wire Aging Engine | P1 |
+| NEW-015 | GAP-046 | Wire Beat Reporter to Fan Morale | P1 |
+| NEW-016 | GAP-050 | Enforce Offseason Phase Order | P1 |
+| NEW-017 | GAP-051 | Create Farm System State | P1 |
+| NEW-018 | GAP-065 | Add IndexedDB Backup/Restore | P2 |
+
+### New Files Created
+
+**Storage Layer:**
+- `src/utils/relationshipStorage.ts` - IndexedDB for player relationships
+- `src/utils/farmStorage.ts` - IndexedDB for farm system rosters
+- `src/utils/backupRestore.ts` - Full IndexedDB backup/restore utility
+
+**React Hooks:**
+- `src/hooks/useRelationshipData.ts` - Relationship queries and trade warnings
+- `src/hooks/useAgingData.ts` - Player aging calculations
+- `src/hooks/useNarrativeMorale.ts` - Wire narrative engine to fan morale
+- `src/hooks/useOffseasonPhase.ts` - Offseason phase progression state
+
+**Components:**
+- `src/components/AgingBadge.tsx` - Career phase and retirement probability display
+
+### Key Integrations
+
+- **Relationship → Trade**: Trade warnings show in TradeProposalBuilder when trading players with relationships
+- **Narrative → Morale**: Beat reporter stories now affect fan morale via `publishStory()`
+- **Aging → Retirement**: Career phase badges and retirement probability on player cards
+- **Offseason → Phases**: Sequential phase completion enforced via hook
+- **Farm → Roster**: Separate farm roster tracking (AAA/AA/A levels)
+- **Backup → All DBs**: Export/import all 7 KBL databases to JSON
 
 ---
 
