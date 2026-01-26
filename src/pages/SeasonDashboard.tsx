@@ -4,6 +4,7 @@ import { getActiveSeason } from '../utils/seasonStorage';
 import type { SeasonMetadata } from '../utils/seasonStorage';
 import LeagueNewsFeed, { type NewsStory } from '../components/LeagueNewsFeed';
 import StandingsView from '../components/StandingsView';
+import SeasonProgressTracker from '../components/SeasonProgressTracker';
 import { TEAMS } from '../data/playerDatabase';
 
 // Type for standings data
@@ -90,6 +91,16 @@ export default function SeasonDashboard() {
           <h1 className="text-3xl sm:text-4xl font-black text-white tracking-tight">
             {season.seasonName}
           </h1>
+        </div>
+
+        {/* Season Progress Tracker (Compact) */}
+        <div className="mb-6">
+          <SeasonProgressTracker
+            gamesPlayed={season.gamesPlayed}
+            totalGames={season.totalGames}
+            phase={season.status === 'active' ? 'regular' : 'offseason'}
+            compact={true}
+          />
         </div>
 
         {/* Main Progress Card */}
