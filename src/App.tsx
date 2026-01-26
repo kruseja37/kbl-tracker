@@ -25,6 +25,7 @@ import RetirementsScreen from './pages/RetirementsScreen';
 import FreeAgencyHub from './pages/FreeAgencyHub';
 import DraftHub from './pages/DraftHub';
 import TradeHub from './pages/TradeHub';
+import SpringTrainingHub from './pages/SpringTrainingHub';
 
 // Museum
 import MuseumHub from './pages/MuseumHub';
@@ -434,6 +435,27 @@ function TradeWrapper() {
   );
 }
 
+// Demo data for Spring Training
+const DEMO_SPRING_TRAINING_PLAYERS = [
+  { playerId: 'st1', playerName: 'Jake Hammer', position: 'SS', age: 22, isPitcher: false, power: 65, contact: 72, speed: 78 },
+  { playerId: 'st2', playerName: 'Mike Power', position: '1B', age: 28, isPitcher: false, power: 88, contact: 70, speed: 45 },
+  { playerId: 'st3', playerName: 'Tom Swift', position: 'CF', age: 34, isPitcher: false, power: 55, contact: 68, speed: 72 },
+  { playerId: 'st4', playerName: 'Ace Fireball', position: 'SP', age: 26, isPitcher: true, velocity: 92, junk: 65, accuracy: 78 },
+  { playerId: 'st5', playerName: 'Old Reliable', position: 'RP', age: 38, isPitcher: true, velocity: 75, junk: 82, accuracy: 85 },
+];
+
+// Wrapper for SpringTrainingHub
+function SpringTrainingWrapper() {
+  const navigate = useNavigate();
+  return (
+    <SpringTrainingHub
+      players={DEMO_SPRING_TRAINING_PLAYERS}
+      teamName="My Team"
+      onComplete={() => navigate('/offseason/schedule-gen')}
+    />
+  );
+}
+
 // Wrapper for MuseumHub
 function MuseumWrapper() {
   const navigate = useNavigate();
@@ -482,6 +504,7 @@ function App() {
         <Route path="/offseason/free-agency" element={<FreeAgencyWrapper />} />
         <Route path="/offseason/draft" element={<DraftWrapper />} />
         <Route path="/offseason/trades" element={<TradeWrapper />} />
+        <Route path="/offseason/spring-training" element={<SpringTrainingWrapper />} />
 
         {/* Museum */}
         <Route path="/museum" element={<MuseumWrapper />} />
