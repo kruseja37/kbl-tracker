@@ -53,6 +53,7 @@ import { PlayerCardModal } from './PlayerCard';
 import LineupPanel from './LineupPanel';
 import { SeasonSummaryModal } from './SeasonSummary';
 import { PlayerNameWithMorale } from './PlayerNameWithMorale';
+import { MOJO_STATES, type MojoLevel } from '../../engines/mojoEngine';
 import { useFameDetection, type PlayerStats as FamePlayerStats } from '../../hooks/useFameDetection';
 import { useGamePersistence, type GameStateForPersistence } from '../../hooks/useGamePersistence';
 import { aggregateGameToSeason } from '../../utils/seasonAggregator';
@@ -2567,6 +2568,34 @@ export default function GameTracker() {
             <div style={styles.batterInfo}>
               {currentBatter.position} | {currentBatter.grade} |{' '}
               {playerStats[currentBatter.id].h}-{playerStats[currentBatter.id].ab}
+              {/* Batter Mojo Badge */}
+              {(() => {
+                const mojoLevel: MojoLevel = 0; // Default mojo - would come from mojo tracking state
+                const mojoState = MOJO_STATES[mojoLevel];
+                const mojoColors: Record<MojoLevel, string> = {
+                  [-2]: '#ef4444',
+                  [-1]: '#f97316',
+                  [0]: '#6b7280',
+                  [1]: '#22c55e',
+                  [2]: '#3b82f6',
+                };
+                return (
+                  <span
+                    style={{
+                      marginLeft: '8px',
+                      padding: '2px 6px',
+                      fontSize: '11px',
+                      fontWeight: 600,
+                      borderRadius: '4px',
+                      color: mojoColors[mojoLevel],
+                      backgroundColor: `${mojoColors[mojoLevel]}20`,
+                    }}
+                    title={`Mojo: ${mojoState.displayName}`}
+                  >
+                    {mojoState.emoji}
+                  </span>
+                );
+              })()}
             </div>
 
             <div style={styles.badges}>
