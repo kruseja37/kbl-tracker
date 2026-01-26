@@ -1,5 +1,5 @@
-import { useState, useRef } from 'react';
-import { TEAMS } from '../data/playerDatabase';
+import { useState, useRef, useMemo, useEffect } from 'react';
+import { getAllPlayers, type PlayerData } from '../data/playerDatabase';
 import type { Position, BatterHand } from '../types/game';
 import {
   saveCustomPlayer,
@@ -8,6 +8,10 @@ import {
   type ThrowHand,
   type CustomPlayer,
 } from '../utils/customPlayerStorage';
+import {
+  calculateSalary,
+  type PlayerForSalary,
+} from '../engines/salaryCalculator';
 
 interface ManualPlayerInputProps {
   onSuccess?: (player: CustomPlayer) => void;
@@ -53,21 +57,132 @@ const DEFAULT_PITCHER_RATINGS = {
   accuracy: 50,
 };
 
+// Format salary for display
+function formatSalary(amount: number): string {
+  if (amount >= 1000000) {
+    return `$${(amount / 1000000).toFixed(2)}M`;
+  }
+  return `$${(amount / 1000).toFixed(0)}K`;
+}
+
+// Map game Position type to salary calculator PlayerPosition type
+function mapToSalaryPosition(position: Position, isPitcher: boolean): 'SP' | 'RP' | 'C' | 'SS' | 'CF' | '2B' | '3B' | 'RF' | 'LF' | '1B' | 'DH' {
+  if (isPitcher) return 'SP';
+  // Position 'P' shouldn't appear for non-pitchers, but handle it just in case
+  if (position === 'P') return 'SP';
+  return position as 'C' | 'SS' | 'CF' | '2B' | '3B' | 'RF' | 'LF' | '1B' | 'DH';
+}
+
+// Calculate salary from player data
+function computeSalary(
+  isPitcher: boolean,
+  batterRatings: typeof DEFAULT_BATTER_RATINGS,
+  pitcherRatings: typeof DEFAULT_PITCHER_RATINGS | undefined,
+  age: number,
+  position: Position
+): number {
+  const playerForSalary: PlayerForSalary = {
+    id: 'temp',
+    name: 'temp',
+    isPitcher,
+    primaryPosition: mapToSalaryPosition(position, isPitcher),
+    ratings: isPitcher
+      ? { velocity: pitcherRatings?.velocity || 50, junk: pitcherRatings?.junk || 50, accuracy: pitcherRatings?.accuracy || 50 }
+      : batterRatings,
+    battingRatings: isPitcher ? batterRatings : undefined,
+    age,
+    fame: 0,
+  };
+  return calculateSalary(playerForSalary);
+}
+
 export default function ManualPlayerInput({ onSuccess, onCancel }: ManualPlayerInputProps) {
+  // All players from database for autocomplete
+  const allPlayers = useMemo(() => getAllPlayers(), []);
+
+  // Form state
   const [name, setName] = useState('');
-  const [teamId, setTeamId] = useState('');
   const [position, setPosition] = useState<Position>('SS');
+  const [secondaryPosition, setSecondaryPosition] = useState<Position | undefined>();
   const [isPitcher, setIsPitcher] = useState(false);
   const [bats, setBats] = useState<BatterHand>('R');
   const [throws_, setThrows] = useState<ThrowHand>('R');
+  const [age, setAge] = useState(25);
+  const [overall, setOverall] = useState<string>('B');
   const [batterRatings, setBatterRatings] = useState(DEFAULT_BATTER_RATINGS);
   const [pitcherRatings, setPitcherRatings] = useState(DEFAULT_PITCHER_RATINGS);
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
 
+  // Autocomplete state
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [selectedPlayer, setSelectedPlayer] = useState<PlayerData | null>(null);
+  const [highlightedIndex, setHighlightedIndex] = useState(-1);
+
   const nameInputRef = useRef<HTMLInputElement>(null);
-  const teams = Object.values(TEAMS);
+  const suggestionsRef = useRef<HTMLDivElement>(null);
+
+  // Filter players based on input
+  const suggestions = useMemo(() => {
+    if (!name || name.length < 2) return [];
+    const lowerName = name.toLowerCase();
+    return allPlayers
+      .filter(p => p.name.toLowerCase().includes(lowerName))
+      .slice(0, 8); // Limit to 8 suggestions
+  }, [name, allPlayers]);
+
+  // Calculate salary in real-time
+  const calculatedSalary = useMemo(() => {
+    return computeSalary(isPitcher, batterRatings, isPitcher ? pitcherRatings : undefined, age, position);
+  }, [isPitcher, batterRatings, pitcherRatings, age, position]);
+
+  // Show suggestions when typing and there are matches
+  useEffect(() => {
+    if (suggestions.length > 0 && !selectedPlayer) {
+      setShowSuggestions(true);
+    } else {
+      setShowSuggestions(false);
+    }
+  }, [suggestions, selectedPlayer]);
+
+  // Handle clicking outside to close suggestions
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (suggestionsRef.current && !suggestionsRef.current.contains(e.target as Node)) {
+        setShowSuggestions(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // Select a player from suggestions (import from database)
+  const handleSelectPlayer = (player: PlayerData) => {
+    setSelectedPlayer(player);
+    setName(player.name);
+    setPosition(player.primaryPosition);
+    setSecondaryPosition(player.secondaryPosition);
+    setIsPitcher(player.isPitcher);
+    setBats(player.bats);
+    setThrows(player.throws);
+    setAge(player.age);
+    setOverall(player.overall);
+    if (player.batterRatings) {
+      setBatterRatings(player.batterRatings);
+    }
+    if (player.pitcherRatings) {
+      setPitcherRatings(player.pitcherRatings);
+    }
+    setShowSuggestions(false);
+    setError(null);
+  };
+
+  // Clear selected player and allow manual entry
+  const handleClearSelection = () => {
+    setSelectedPlayer(null);
+    // Keep the name but allow editing
+  };
 
   const handlePositionChange = (pos: Position, pitcher: boolean) => {
     setPosition(pos);
@@ -84,11 +199,38 @@ export default function ManualPlayerInput({ onSuccess, onCancel }: ManualPlayerI
     setPitcherRatings(prev => ({ ...prev, [field]: numValue }));
   };
 
+  const handleNameChange = (value: string) => {
+    setName(value);
+    setError(null);
+    // If they change the name after selecting, clear the selection
+    if (selectedPlayer && value !== selectedPlayer.name) {
+      setSelectedPlayer(null);
+    }
+    setHighlightedIndex(-1);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (!showSuggestions || suggestions.length === 0) return;
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setHighlightedIndex(prev => Math.min(prev + 1, suggestions.length - 1));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setHighlightedIndex(prev => Math.max(prev - 1, 0));
+    } else if (e.key === 'Enter' && highlightedIndex >= 0) {
+      e.preventDefault();
+      handleSelectPlayer(suggestions[highlightedIndex]);
+    } else if (e.key === 'Escape') {
+      setShowSuggestions(false);
+    }
+  };
+
   const handleSubmit = () => {
     const playerData: Partial<CustomPlayer> = {
       name: name.trim(),
-      teamId,
       position,
+      age,
     };
 
     const validation = validatePlayer(playerData);
@@ -104,13 +246,19 @@ export default function ManualPlayerInput({ onSuccess, onCancel }: ManualPlayerI
     const player: CustomPlayer = {
       id: generatePlayerId(),
       name: name.trim(),
-      teamId,
+      teamId: 'my-team', // All players go to "My Team"
       position,
+      secondaryPosition,
       bats,
       throws: throws_,
       isPitcher,
+      age,
+      overall,
       batterRatings,
       pitcherRatings: isPitcher ? pitcherRatings : undefined,
+      salary: calculatedSalary,
+      sourcePlayerId: selectedPlayer?.id,
+      originalTeamId: selectedPlayer?.teamId,
       createdAt: Date.now(),
     };
 
@@ -126,8 +274,6 @@ export default function ManualPlayerInput({ onSuccess, onCancel }: ManualPlayerI
     }, 300);
   };
 
-  const selectedTeam = teamId ? TEAMS[teamId] : null;
-
   if (showSuccess) {
     return (
       <div className="min-h-[400px] flex items-center justify-center bg-slate-950 p-8">
@@ -141,8 +287,9 @@ export default function ManualPlayerInput({ onSuccess, onCancel }: ManualPlayerI
               />
             </svg>
           </div>
-          <h3 className="text-xl font-bold text-white mb-2">Player Created!</h3>
-          <p className="text-slate-400">{name} has been added to {selectedTeam?.name || 'the roster'}</p>
+          <h3 className="text-xl font-bold text-white mb-2">Player Added!</h3>
+          <p className="text-slate-400">{name} has been added to your roster</p>
+          <p className="text-amber-400 font-bold mt-2">{formatSalary(calculatedSalary)}</p>
         </div>
       </div>
     );
@@ -156,16 +303,17 @@ export default function ManualPlayerInput({ onSuccess, onCancel }: ManualPlayerI
         <div className="bg-gradient-to-r from-amber-700 via-amber-600 to-amber-700 px-4 py-3 flex items-center justify-between">
           <div>
             <h2 className="text-lg font-black text-white uppercase tracking-wide drop-shadow-md">
-              New Player Card
+              {selectedPlayer ? 'Import Player' : 'New Player Card'}
             </h2>
-            <p className="text-xs text-amber-200/80 font-medium">Custom Roster Entry</p>
+            <p className="text-xs text-amber-200/80 font-medium">
+              {selectedPlayer ? `From ${selectedPlayer.teamId}` : 'Search database or create new'}
+            </p>
           </div>
-          {selectedTeam && (
-            <div
-              className="w-10 h-10 rounded-full border-2 border-white/30 shadow-lg"
-              style={{ backgroundColor: selectedTeam.primaryColor }}
-            />
-          )}
+          {/* Salary Display */}
+          <div className="text-right">
+            <div className="text-xs text-amber-200/60 uppercase tracking-wide">Salary</div>
+            <div className="text-lg font-black text-white">{formatSalary(calculatedSalary)}</div>
+          </div>
         </div>
 
         {/* Card Body */}
@@ -179,44 +327,94 @@ export default function ManualPlayerInput({ onSuccess, onCancel }: ManualPlayerI
               </span>
             </div>
 
-            {/* Name Input */}
-            <div>
+            {/* Name Input with Autocomplete */}
+            <div className="relative" ref={suggestionsRef}>
               <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">
                 Player Name *
               </label>
-              <input
-                ref={nameInputRef}
-                type="text"
-                value={name}
-                onChange={(e) => {
-                  setName(e.target.value);
-                  setError(null);
-                }}
-                placeholder="Enter player name..."
-                className="w-full bg-slate-800 border-2 border-slate-700 focus:border-amber-500 px-4 py-3 text-white text-lg font-bold placeholder:text-slate-600 placeholder:font-normal focus:outline-none transition-colors"
-              />
+              <div className="relative">
+                <input
+                  ref={nameInputRef}
+                  type="text"
+                  value={name}
+                  onChange={(e) => handleNameChange(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  onFocus={() => suggestions.length > 0 && !selectedPlayer && setShowSuggestions(true)}
+                  placeholder="Start typing to search players..."
+                  className="w-full bg-slate-800 border-2 border-slate-700 focus:border-amber-500 px-4 py-3 text-white text-lg font-bold placeholder:text-slate-600 placeholder:font-normal focus:outline-none transition-colors"
+                />
+                {selectedPlayer && (
+                  <button
+                    onClick={handleClearSelection}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white"
+                    title="Clear selection"
+                  >
+                    <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                    </svg>
+                  </button>
+                )}
+              </div>
+
+              {/* Autocomplete Suggestions */}
+              {showSuggestions && suggestions.length > 0 && (
+                <div className="absolute z-50 w-full mt-1 bg-slate-800 border-2 border-amber-500/50 rounded-lg shadow-xl max-h-64 overflow-y-auto">
+                  {suggestions.map((player, idx) => (
+                    <button
+                      key={player.id}
+                      onClick={() => handleSelectPlayer(player)}
+                      className={`w-full px-4 py-3 text-left flex items-center justify-between hover:bg-slate-700 transition-colors ${
+                        idx === highlightedIndex ? 'bg-slate-700' : ''
+                      }`}
+                    >
+                      <div>
+                        <div className="text-white font-bold">{player.name}</div>
+                        <div className="text-xs text-slate-400">
+                          {player.primaryPosition} · {player.teamId} · Age {player.age}
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-amber-400 text-sm font-bold">{player.overall}</div>
+                        {player.batterRatings && !player.isPitcher && (
+                          <div className="text-xs text-slate-500">
+                            POW {player.batterRatings.power} · CON {player.batterRatings.contact}
+                          </div>
+                        )}
+                        {player.pitcherRatings && (
+                          <div className="text-xs text-slate-500">
+                            VEL {player.pitcherRatings.velocity} · JNK {player.pitcherRatings.junk}
+                          </div>
+                        )}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
 
-            {/* Team Select */}
+            {/* Selected Player Badge */}
+            {selectedPlayer && (
+              <div className="bg-emerald-900/30 border border-emerald-500/50 rounded px-3 py-2 flex items-center gap-2">
+                <svg className="w-4 h-4 text-emerald-400" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                </svg>
+                <span className="text-sm text-emerald-400">Importing from database - all attributes loaded</span>
+              </div>
+            )}
+
+            {/* Age Input */}
             <div>
               <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">
-                Team *
+                Age
               </label>
-              <select
-                value={teamId}
-                onChange={(e) => {
-                  setTeamId(e.target.value);
-                  setError(null);
-                }}
-                className="w-full bg-slate-800 border-2 border-slate-700 focus:border-amber-500 px-4 py-3 text-white font-medium focus:outline-none transition-colors appearance-none cursor-pointer"
-              >
-                <option value="">Select team...</option>
-                {teams.map((team) => (
-                  <option key={team.id} value={team.id}>
-                    {team.name}
-                  </option>
-                ))}
-              </select>
+              <input
+                type="number"
+                min={18}
+                max={50}
+                value={age}
+                onChange={(e) => setAge(Math.min(50, Math.max(18, parseInt(e.target.value, 10) || 25)))}
+                className="w-24 bg-slate-800 border-2 border-slate-700 focus:border-amber-500 px-4 py-2 text-white font-bold focus:outline-none transition-colors"
+              />
             </div>
 
             {/* Position Grid */}
@@ -438,7 +636,7 @@ export default function ManualPlayerInput({ onSuccess, onCancel }: ManualPlayerI
                 Saving...
               </span>
             ) : (
-              'Create Player'
+              `Add to Roster • ${formatSalary(calculatedSalary)}`
             )}
           </button>
         </div>

@@ -40,6 +40,19 @@ interface RosterPlayer {
   velocity?: number;
   junk?: number;
   accuracy?: number;
+  // Salary
+  salary?: number;
+  overall?: string;
+  originalTeamId?: string;
+}
+
+// Format salary for display
+function formatSalary(amount: number | undefined): string {
+  if (!amount) return '-';
+  if (amount >= 1000000) {
+    return `$${(amount / 1000000).toFixed(1)}M`;
+  }
+  return `$${(amount / 1000).toFixed(0)}K`;
 }
 
 interface RosterViewProps {
@@ -104,34 +117,45 @@ export default function RosterView({
       <div style={styles.playerInfo}>
         <div style={styles.position}>{player.position}</div>
         <div style={styles.playerDetails}>
-          <span style={styles.playerName}>{player.playerName}</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={styles.playerName}>{player.playerName}</span>
+            {player.overall && (
+              <span style={styles.overallBadge}>{player.overall}</span>
+            )}
+          </div>
           <span style={styles.playerMeta}>
             {player.bats}/{player.throws} • Age {player.age}
+            {player.originalTeamId && ` • from ${player.originalTeamId}`}
           </span>
         </div>
       </div>
-      {showRatings ? (
-        <div style={styles.ratings}>
-          <span style={styles.rating}>POW {player.power || '-'}</span>
-          <span style={styles.rating}>CON {player.contact || '-'}</span>
-          <span style={styles.rating}>SPD {player.speed || '-'}</span>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+        {showRatings ? (
+          <div style={styles.ratings}>
+            <span style={styles.rating}>POW {player.power || '-'}</span>
+            <span style={styles.rating}>CON {player.contact || '-'}</span>
+            <span style={styles.rating}>SPD {player.speed || '-'}</span>
+          </div>
+        ) : (
+          <div style={styles.stats}>
+            <span style={styles.stat}>
+              <span style={styles.statValue}>{formatAvg(player.avg)}</span>
+              <span style={styles.statLabel}>AVG</span>
+            </span>
+            <span style={styles.stat}>
+              <span style={styles.statValue}>{player.hr ?? '-'}</span>
+              <span style={styles.statLabel}>HR</span>
+            </span>
+            <span style={styles.stat}>
+              <span style={styles.statValue}>{player.rbi ?? '-'}</span>
+              <span style={styles.statLabel}>RBI</span>
+            </span>
+          </div>
+        )}
+        <div style={styles.salaryDisplay}>
+          {formatSalary(player.salary)}
         </div>
-      ) : (
-        <div style={styles.stats}>
-          <span style={styles.stat}>
-            <span style={styles.statValue}>{formatAvg(player.avg)}</span>
-            <span style={styles.statLabel}>AVG</span>
-          </span>
-          <span style={styles.stat}>
-            <span style={styles.statValue}>{player.hr ?? '-'}</span>
-            <span style={styles.statLabel}>HR</span>
-          </span>
-          <span style={styles.stat}>
-            <span style={styles.statValue}>{player.rbi ?? '-'}</span>
-            <span style={styles.statLabel}>RBI</span>
-          </span>
-        </div>
-      )}
+      </div>
     </div>
   );
 
@@ -144,43 +168,54 @@ export default function RosterView({
       <div style={styles.playerInfo}>
         <div style={styles.position}>{player.position}</div>
         <div style={styles.playerDetails}>
-          <span style={styles.playerName}>{player.playerName}</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={styles.playerName}>{player.playerName}</span>
+            {player.overall && (
+              <span style={styles.overallBadge}>{player.overall}</span>
+            )}
+          </div>
           <span style={styles.playerMeta}>
             {player.throws} • Age {player.age}
+            {player.originalTeamId && ` • from ${player.originalTeamId}`}
           </span>
         </div>
       </div>
-      {showRatings ? (
-        <div style={styles.ratings}>
-          <span style={styles.rating}>VEL {player.velocity || '-'}</span>
-          <span style={styles.rating}>JNK {player.junk || '-'}</span>
-          <span style={styles.rating}>ACC {player.accuracy || '-'}</span>
-        </div>
-      ) : (
-        <div style={styles.stats}>
-          <span style={styles.stat}>
-            <span style={styles.statValue}>
-              {player.wins ?? 0}-{player.losses ?? 0}
-            </span>
-            <span style={styles.statLabel}>W-L</span>
-          </span>
-          <span style={styles.stat}>
-            <span style={styles.statValue}>{formatEra(player.era)}</span>
-            <span style={styles.statLabel}>ERA</span>
-          </span>
-          {player.position === 'RP' || player.position === 'CL' ? (
+      <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+        {showRatings ? (
+          <div style={styles.ratings}>
+            <span style={styles.rating}>VEL {player.velocity || '-'}</span>
+            <span style={styles.rating}>JNK {player.junk || '-'}</span>
+            <span style={styles.rating}>ACC {player.accuracy || '-'}</span>
+          </div>
+        ) : (
+          <div style={styles.stats}>
             <span style={styles.stat}>
-              <span style={styles.statValue}>{player.saves ?? 0}</span>
-              <span style={styles.statLabel}>SV</span>
+              <span style={styles.statValue}>
+                {player.wins ?? 0}-{player.losses ?? 0}
+              </span>
+              <span style={styles.statLabel}>W-L</span>
             </span>
-          ) : (
             <span style={styles.stat}>
-              <span style={styles.statValue}>{player.strikeouts ?? '-'}</span>
-              <span style={styles.statLabel}>K</span>
+              <span style={styles.statValue}>{formatEra(player.era)}</span>
+              <span style={styles.statLabel}>ERA</span>
             </span>
-          )}
+            {player.position === 'RP' || player.position === 'CL' ? (
+              <span style={styles.stat}>
+                <span style={styles.statValue}>{player.saves ?? 0}</span>
+                <span style={styles.statLabel}>SV</span>
+              </span>
+            ) : (
+              <span style={styles.stat}>
+                <span style={styles.statValue}>{player.strikeouts ?? '-'}</span>
+                <span style={styles.statLabel}>K</span>
+              </span>
+            )}
+          </div>
+        )}
+        <div style={styles.salaryDisplay}>
+          {formatSalary(player.salary)}
         </div>
-      )}
+      </div>
     </div>
   );
 
@@ -383,5 +418,20 @@ const styles: Record<string, React.CSSProperties> = {
     padding: '40px 20px',
     textAlign: 'center',
     color: '#64748b',
+  },
+  overallBadge: {
+    fontSize: '0.6875rem',
+    fontWeight: 700,
+    color: '#fbbf24',
+    padding: '2px 6px',
+    backgroundColor: 'rgba(251, 191, 36, 0.15)',
+    borderRadius: '4px',
+  },
+  salaryDisplay: {
+    fontSize: '0.875rem',
+    fontWeight: 700,
+    color: '#22c55e',
+    minWidth: '70px',
+    textAlign: 'right' as const,
   },
 };

@@ -69,6 +69,14 @@ function ScheduleWrapper() {
   );
 }
 
+// Format salary for display
+function formatSalary(amount: number): string {
+  if (amount >= 1000000) {
+    return `$${(amount / 1000000).toFixed(2)}M`;
+  }
+  return `$${(amount / 1000).toFixed(0)}K`;
+}
+
 // Wrapper for RosterView - loads custom players from storage
 function RosterWrapper() {
   const navigate = useNavigate();
@@ -79,12 +87,13 @@ function RosterWrapper() {
     setPlayers(getAllCustomPlayers());
   }, []);
 
-  // Convert CustomPlayer to RosterPlayer format
+  // Convert CustomPlayer to RosterPlayer format (extended with salary)
   const rosterPlayers = players.map(p => ({
     playerId: p.id,
     playerName: p.name,
     position: p.isPitcher ? 'SP' : p.position,
-    age: 25, // Default age since CustomPlayer doesn't have it
+    secondaryPosition: p.secondaryPosition,
+    age: p.age || 25,
     bats: p.bats,
     throws: p.throws,
     // Ratings
@@ -94,31 +103,45 @@ function RosterWrapper() {
     velocity: p.pitcherRatings?.velocity,
     junk: p.pitcherRatings?.junk,
     accuracy: p.pitcherRatings?.accuracy,
+    // Extended fields
+    salary: p.salary || 0,
+    overall: p.overall,
+    originalTeamId: p.originalTeamId,
   }));
+
+  // Calculate total roster salary
+  const totalSalary = rosterPlayers.reduce((sum, p) => sum + (p.salary || 0), 0);
 
   return (
     <div style={{ minHeight: '100vh', background: 'linear-gradient(180deg, #0f172a 0%, #1e293b 100%)' }}>
       <div style={{ maxWidth: '800px', margin: '0 auto', padding: '20px' }}>
-        <button
-          onClick={() => navigate('/add-player')}
-          style={{
-            marginBottom: '16px',
-            padding: '12px 24px',
-            background: 'linear-gradient(135deg, #22c55e 0%, #16a34a 100%)',
-            border: 'none',
-            borderRadius: '8px',
-            color: '#fff',
-            fontSize: '0.875rem',
-            fontWeight: 700,
-            cursor: 'pointer',
-          }}
-        >
-          + Add Player
-        </button>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+          <button
+            onClick={() => navigate('/add-player')}
+            style={{
+              padding: '12px 24px',
+              background: 'linear-gradient(135deg, #22c55e 0%, #16a34a 100%)',
+              border: 'none',
+              borderRadius: '8px',
+              color: '#fff',
+              fontSize: '0.875rem',
+              fontWeight: 700,
+              cursor: 'pointer',
+            }}
+          >
+            + Add Player
+          </button>
+          {players.length > 0 && (
+            <div style={{ textAlign: 'right' }}>
+              <div style={{ fontSize: '0.75rem', color: '#64748b', textTransform: 'uppercase' }}>Total Payroll</div>
+              <div style={{ fontSize: '1.25rem', fontWeight: 700, color: '#fbbf24' }}>{formatSalary(totalSalary)}</div>
+            </div>
+          )}
+        </div>
       </div>
       <RosterView
         players={rosterPlayers}
-        teamName="My Team"
+        teamName="My Team Roster"
         showRatings={true}
       />
     </div>

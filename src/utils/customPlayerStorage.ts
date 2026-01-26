@@ -2,6 +2,7 @@
  * Custom Player Storage
  *
  * Persists user-created players to localStorage.
+ * All players go to "My Team" roster (no team selection needed).
  */
 
 import type { Position, BatterHand } from '../types/game';
@@ -13,11 +14,14 @@ export type ThrowHand = 'L' | 'R';
 export interface CustomPlayer {
   id: string;
   name: string;
-  teamId: string;
+  teamId: string; // Always 'my-team' for roster players
   position: Position;
+  secondaryPosition?: Position;
   bats: BatterHand;
   throws: ThrowHand;
   isPitcher: boolean;
+  age: number;
+  overall?: string; // Letter grade: S, A+, A, A-, B+, B, B-, C+, C, C-, D+, D
   batterRatings: {
     power: number;
     contact: number;
@@ -30,6 +34,11 @@ export interface CustomPlayer {
     junk: number;
     accuracy: number;
   };
+  // Salary (auto-calculated)
+  salary: number;
+  // Source tracking (if imported from database)
+  sourcePlayerId?: string; // Original player ID from database
+  originalTeamId?: string; // Team they came from in the database
   createdAt: number;
 }
 
@@ -96,16 +105,17 @@ export function generatePlayerId(): string {
 
 /**
  * Validate player data
+ * Note: teamId is no longer required - all players go to "My Team"
  */
 export function validatePlayer(player: Partial<CustomPlayer>): { valid: boolean; error?: string } {
   if (!player.name?.trim()) {
     return { valid: false, error: 'Player name is required' };
   }
-  if (!player.teamId) {
-    return { valid: false, error: 'Team is required' };
-  }
   if (!player.position) {
     return { valid: false, error: 'Position is required' };
+  }
+  if (player.age !== undefined && (player.age < 18 || player.age > 50)) {
+    return { valid: false, error: 'Age must be between 18 and 50' };
   }
   return { valid: true };
 }
