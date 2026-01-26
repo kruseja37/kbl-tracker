@@ -2509,7 +2509,16 @@ export default function GameTracker() {
           <div style={styles.dueUp}>
             <div style={styles.dueUpLabel}>DUE UP:</div>
             {getDueUp().map((player, i) => (
-              <div key={player.id} style={styles.dueUpPlayer}>
+              <div
+                key={player.id}
+                style={{ ...styles.dueUpPlayer, cursor: 'pointer' }}
+                onClick={() => handlePlayerClick(
+                  player.id,
+                  player.name,
+                  halfInning === 'TOP' ? awayTeamId : homeTeamId
+                )}
+                title="Click to view player stats"
+              >
                 {currentBatterIndex + i + 2}.{' '}
                 <PlayerNameWithMorale name={player.name} />
               </div>
