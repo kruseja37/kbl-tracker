@@ -43,6 +43,59 @@ const THROWS_OPTIONS: { value: ThrowHand; label: string }[] = [
   { value: 'L', label: 'Left' },
 ];
 
+const OVERALL_GRADES = ['S', 'A+', 'A', 'A-', 'B+', 'B', 'B-', 'C+', 'C', 'C-', 'D+', 'D'];
+
+const CHEMISTRY_OPTIONS: { value: string; label: string; abbrev: string }[] = [
+  { value: 'DIS', label: 'Disciplined', abbrev: 'DIS' },
+  { value: 'SPI', label: 'Spirited', abbrev: 'SPI' },
+  { value: 'CRA', label: 'Crafty', abbrev: 'CRA' },
+  { value: 'CMP', label: 'Competitive', abbrev: 'CMP' },
+  { value: 'SCH', label: 'Scrappy', abbrev: 'SCH' },
+];
+
+const ROLE_OPTIONS: { value: PlayerRole; label: string; forPitcher: boolean }[] = [
+  { value: 'STARTER', label: 'Starter', forPitcher: false },
+  { value: 'BENCH', label: 'Bench', forPitcher: false },
+  { value: 'ROTATION', label: 'Rotation', forPitcher: true },
+  { value: 'BULLPEN', label: 'Bullpen', forPitcher: true },
+];
+
+const PITCHER_ROLE_OPTIONS: { value: PitcherRole; label: string }[] = [
+  { value: 'SP', label: 'Starting Pitcher (SP)' },
+  { value: 'RP', label: 'Relief Pitcher (RP)' },
+  { value: 'CP', label: 'Closer (CP)' },
+  { value: 'SP/RP', label: 'Two-Way (SP/RP)' },
+];
+
+const PITCH_TYPES: { value: string; label: string }[] = [
+  { value: '4F', label: '4-Seam Fastball' },
+  { value: '2F', label: '2-Seam Fastball' },
+  { value: 'CF', label: 'Cutter' },
+  { value: 'CB', label: 'Curveball' },
+  { value: 'SL', label: 'Slider' },
+  { value: 'CH', label: 'Changeup' },
+  { value: 'FK', label: 'Forkball' },
+  { value: 'SB', label: 'Screwball' },
+];
+
+const TRAIT_OPTIONS = [
+  // Batting Traits
+  'POW vs RHP', 'POW vs LHP', 'CON vs RHP', 'CON vs LHP',
+  'Fastball Hitter', 'Bad Ball Hitter', 'First Pitch Slayer',
+  'Big Hack', 'Little Hack', 'Clutch', 'RBI Hero',
+  'Bunter', 'Base Jogger', 'Stealer', 'Sprinter',
+  // Fielding Traits
+  'Dive Wizard', 'Magic Hands', 'Butter Fingers',
+  'Wild Thrower', 'Noodle Arm', 'Utility',
+  // Pitching Traits
+  'Elite 4F', 'Elite 2F', 'Elite CB', 'Elite FK',
+  'K Collector', 'BB Prone', 'Falls Behind',
+  'Easy Jumps', 'Pick Officer', 'Specialist',
+  // Mental Traits
+  'Mind Gamer', 'Stimulated', 'Volatile',
+  'Injury Prone', 'High Pitch', 'Pinch Perfect', 'Slow Poke',
+];
+
 const DEFAULT_BATTER_RATINGS = {
   power: 50,
   contact: 50,
@@ -530,6 +583,199 @@ export default function ManualPlayerInput({ onSuccess, onCancel }: ManualPlayerI
                 </div>
               </div>
             </div>
+
+            {/* Gender and Overall Row */}
+            <div className="grid grid-cols-2 gap-4">
+              {/* Gender */}
+              <div>
+                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">
+                  Gender
+                </label>
+                <div className="flex gap-1.5">
+                  {(['M', 'F'] as Gender[]).map((g) => (
+                    <button
+                      key={g}
+                      onClick={() => setGender(g)}
+                      className={`flex-1 px-3 py-2 text-sm font-bold border-2 transition-all ${
+                        gender === g
+                          ? 'bg-violet-500/20 border-violet-500 text-violet-400'
+                          : 'bg-slate-800 border-slate-700 text-slate-400 hover:border-slate-600'
+                      }`}
+                    >
+                      {g === 'M' ? 'Male' : 'Female'}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Overall Grade */}
+              <div>
+                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">
+                  Overall
+                </label>
+                <select
+                  value={overall}
+                  onChange={(e) => setOverall(e.target.value)}
+                  className="w-full bg-slate-800 border-2 border-slate-700 focus:border-amber-500 px-3 py-2 text-white font-bold focus:outline-none transition-colors"
+                >
+                  {OVERALL_GRADES.map((grade) => (
+                    <option key={grade} value={grade}>{grade}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* Secondary Position */}
+            <div>
+              <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">
+                Secondary Position (Optional)
+              </label>
+              <div className="grid grid-cols-6 sm:grid-cols-11 gap-1.5">
+                <button
+                  onClick={() => setSecondaryPosition(undefined)}
+                  className={`px-2 py-2 text-sm font-bold border-2 transition-all ${
+                    !secondaryPosition
+                      ? 'bg-slate-600 border-slate-500 text-slate-300'
+                      : 'bg-slate-800 border-slate-700 text-slate-400 hover:border-slate-600'
+                  }`}
+                >
+                  None
+                </button>
+                {POSITIONS.filter(p => p.value !== position || p.isPitcher !== isPitcher).map((pos) => {
+                  const isSelected = secondaryPosition === pos.value;
+                  return (
+                    <button
+                      key={`sec-${pos.label}`}
+                      onClick={() => setSecondaryPosition(pos.value)}
+                      className={`px-2 py-2 text-sm font-bold border-2 transition-all ${
+                        isSelected
+                          ? 'bg-slate-600 border-slate-500 text-slate-300'
+                          : 'bg-slate-800 border-slate-700 text-slate-400 hover:border-slate-600'
+                      }`}
+                    >
+                      {pos.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+
+          {/* Divider */}
+          <div className="border-t-2 border-dashed border-slate-700/50" />
+
+          {/* SECTION: Team Role & Chemistry */}
+          <div className="space-y-4">
+            <div className="flex items-center gap-2 mb-3">
+              <div className="w-1 h-5 bg-violet-500" />
+              <span className="text-xs font-bold text-slate-500 uppercase tracking-widest">
+                Role & Chemistry
+              </span>
+            </div>
+
+            {/* Role */}
+            <div>
+              <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">
+                Team Role
+              </label>
+              <div className="flex gap-1.5 flex-wrap">
+                {ROLE_OPTIONS.filter(r => r.forPitcher === isPitcher).map((opt) => (
+                  <button
+                    key={opt.value}
+                    onClick={() => setRole(opt.value)}
+                    className={`px-4 py-2 text-sm font-bold border-2 transition-all ${
+                      role === opt.value
+                        ? 'bg-emerald-500/20 border-emerald-500 text-emerald-400'
+                        : 'bg-slate-800 border-slate-700 text-slate-400 hover:border-slate-600'
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Pitcher Role (only for pitchers) */}
+            {isPitcher && (
+              <div>
+                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">
+                  Pitcher Role
+                </label>
+                <div className="flex gap-1.5 flex-wrap">
+                  {PITCHER_ROLE_OPTIONS.map((opt) => (
+                    <button
+                      key={opt.value}
+                      onClick={() => setPitcherRole(opt.value)}
+                      className={`px-4 py-2 text-sm font-bold border-2 transition-all ${
+                        pitcherRole === opt.value
+                          ? 'bg-orange-500/20 border-orange-500 text-orange-400'
+                          : 'bg-slate-800 border-slate-700 text-slate-400 hover:border-slate-600'
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Chemistry */}
+            <div>
+              <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">
+                Chemistry Type
+              </label>
+              <div className="grid grid-cols-5 gap-1.5">
+                {CHEMISTRY_OPTIONS.map((opt) => (
+                  <button
+                    key={opt.value}
+                    onClick={() => setChemistry(opt.value)}
+                    className={`px-2 py-2 text-xs font-bold border-2 transition-all ${
+                      chemistry === opt.value
+                        ? 'bg-pink-500/20 border-pink-500 text-pink-400'
+                        : 'bg-slate-800 border-slate-700 text-slate-400 hover:border-slate-600'
+                    }`}
+                    title={opt.label}
+                  >
+                    {opt.abbrev}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Traits */}
+            <div>
+              <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">
+                Traits (Optional)
+              </label>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs text-slate-500 mb-1">Trait 1</label>
+                  <select
+                    value={traits.trait1 || ''}
+                    onChange={(e) => setTraits(prev => ({ ...prev, trait1: e.target.value || undefined }))}
+                    className="w-full bg-slate-800 border border-slate-700 focus:border-amber-500 px-3 py-2 text-white text-sm focus:outline-none transition-colors"
+                  >
+                    <option value="">None</option>
+                    {TRAIT_OPTIONS.map((t) => (
+                      <option key={t} value={t}>{t}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-500 mb-1">Trait 2</label>
+                  <select
+                    value={traits.trait2 || ''}
+                    onChange={(e) => setTraits(prev => ({ ...prev, trait2: e.target.value || undefined }))}
+                    className="w-full bg-slate-800 border border-slate-700 focus:border-amber-500 px-3 py-2 text-white text-sm focus:outline-none transition-colors"
+                  >
+                    <option value="">None</option>
+                    {TRAIT_OPTIONS.map((t) => (
+                      <option key={t} value={t}>{t}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </div>
           </div>
 
           {/* Divider */}
@@ -620,6 +866,45 @@ export default function ManualPlayerInput({ onSuccess, onCancel }: ManualPlayerI
                     </div>
                   ))}
                 </div>
+              </div>
+
+              {/* Arsenal Section */}
+              <div className="mt-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <div className="w-1 h-5 bg-cyan-500" />
+                  <span className="text-xs font-bold text-slate-500 uppercase tracking-widest">
+                    Pitch Arsenal
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-4 gap-2">
+                  {PITCH_TYPES.map((pitch) => {
+                    const isSelected = arsenal?.includes(pitch.value);
+                    return (
+                      <button
+                        key={pitch.value}
+                        onClick={() => {
+                          if (isSelected) {
+                            setArsenal(prev => prev?.filter(p => p !== pitch.value) || []);
+                          } else {
+                            setArsenal(prev => [...(prev || []), pitch.value]);
+                          }
+                        }}
+                        className={`px-2 py-2 text-xs font-bold border-2 transition-all ${
+                          isSelected
+                            ? 'bg-cyan-500/20 border-cyan-500 text-cyan-400'
+                            : 'bg-slate-800 border-slate-700 text-slate-400 hover:border-slate-600'
+                        }`}
+                        title={pitch.label}
+                      >
+                        {pitch.value}
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className="text-xs text-slate-500 mt-2">
+                  Selected: {arsenal?.length || 0} pitches
+                </p>
               </div>
             </>
           )}

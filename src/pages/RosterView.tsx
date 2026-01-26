@@ -59,6 +59,7 @@ interface RosterViewProps {
   players: RosterPlayer[];
   teamName: string;
   onPlayerClick?: (playerId: string) => void;
+  onDeletePlayer?: (playerId: string) => void;
   showRatings?: boolean;
 }
 
@@ -68,6 +69,7 @@ export default function RosterView({
   players,
   teamName,
   onPlayerClick,
+  onDeletePlayer,
   showRatings = false,
 }: RosterViewProps) {
   // Group players by position type
@@ -155,6 +157,18 @@ export default function RosterView({
         <div style={styles.salaryDisplay}>
           {formatSalary(player.salary)}
         </div>
+        {onDeletePlayer && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onDeletePlayer(player.playerId);
+            }}
+            style={styles.deleteButton}
+            title="Remove player"
+          >
+            ✕
+          </button>
+        )}
       </div>
     </div>
   );
@@ -215,6 +229,18 @@ export default function RosterView({
         <div style={styles.salaryDisplay}>
           {formatSalary(player.salary)}
         </div>
+        {onDeletePlayer && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onDeletePlayer(player.playerId);
+            }}
+            style={styles.deleteButton}
+            title="Remove player"
+          >
+            ✕
+          </button>
+        )}
       </div>
     </div>
   );
@@ -433,5 +459,19 @@ const styles: Record<string, React.CSSProperties> = {
     color: '#22c55e',
     minWidth: '70px',
     textAlign: 'right' as const,
+  },
+  deleteButton: {
+    width: '28px',
+    height: '28px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'transparent',
+    border: '1px solid #475569',
+    borderRadius: '4px',
+    color: '#94a3b8',
+    fontSize: '0.75rem',
+    cursor: 'pointer',
+    transition: 'all 0.15s ease',
   },
 };

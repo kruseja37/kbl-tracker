@@ -33,7 +33,7 @@ import MuseumHub from './pages/MuseumHub';
 import ManualPlayerInput from './components/ManualPlayerInput';
 
 import { getTeam } from './data/playerDatabase';
-import { getAllCustomPlayers } from './utils/customPlayerStorage';
+import { getAllCustomPlayers, deleteCustomPlayer } from './utils/customPlayerStorage';
 
 // Wrapper to handle URL params for PreGameScreen
 function PreGameWrapper() {
@@ -129,6 +129,14 @@ function RosterWrapper() {
   // Get display name for selected team
   const teamDisplayName = TEAM_FILTERS.find(t => t.value === selectedTeam)?.label || 'Roster';
 
+  // Handle player deletion
+  const handleDeletePlayer = (playerId: string) => {
+    if (window.confirm('Are you sure you want to remove this player from your roster?')) {
+      deleteCustomPlayer(playerId);
+      setPlayers(getAllCustomPlayers()); // Refresh the list
+    }
+  };
+
   return (
     <div style={{ minHeight: '100vh', background: 'linear-gradient(180deg, #0f172a 0%, #1e293b 100%)' }}>
       <div style={{ maxWidth: '800px', margin: '0 auto', padding: '20px' }}>
@@ -186,6 +194,7 @@ function RosterWrapper() {
         players={rosterPlayers}
         teamName={teamDisplayName}
         showRatings={true}
+        onDeletePlayer={handleDeletePlayer}
       />
     </div>
   );
