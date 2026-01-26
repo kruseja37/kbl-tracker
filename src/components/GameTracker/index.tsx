@@ -55,6 +55,7 @@ import { SeasonSummaryModal } from './SeasonSummary';
 import InningEndSummary from './InningEndSummary';
 import PitcherExitPrompt from './PitcherExitPrompt';
 import WalkoffCelebration from './WalkoffCelebration';
+import FanMoralePanel from '../FanMoralePanel';
 import type { WalkoffResult } from '../../utils/walkoffDetector';
 import { detectWalkoff, getWalkoffFameBonus } from '../../utils/walkoffDetector';
 import { PlayerNameWithMorale } from './PlayerNameWithMorale';
@@ -368,6 +369,10 @@ export default function GameTracker({ onGameEnd }: GameTrackerProps = {}) {
   }, []);
   const [endGameFameSummaryOpen, setEndGameFameSummaryOpen] = useState(false);
   const [preSelectedFameEvent, setPreSelectedFameEvent] = useState<FameEventType | undefined>(undefined);
+
+  // Fan morale state (would be loaded from team data in full implementation)
+  const [fanMorale, setFanMorale] = useState(60); // Default: CONTENT
+  const [moraleTrend, setMoraleTrend] = useState<'rising' | 'falling' | 'stable'>('stable');
 
   // Game ID for Fame events (would come from game setup in full implementation)
   const gameId = 'demo-game';
@@ -3160,6 +3165,18 @@ export default function GameTracker({ onGameEnd }: GameTrackerProps = {}) {
           />
         </div>
       )}
+
+      {/* ============================================ */}
+      {/* FAN MORALE PANEL                            */}
+      {/* Per Ralph Framework S-C013 / WIRE-004       */}
+      {/* ============================================ */}
+      <div style={{ marginTop: '12px' }}>
+        <FanMoralePanel
+          morale={fanMorale}
+          trend={moraleTrend}
+          compact={true}
+        />
+      </div>
 
       {/* ============================================ */}
       {/* WAR DISPLAY                                 */}
