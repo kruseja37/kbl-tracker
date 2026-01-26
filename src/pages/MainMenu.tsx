@@ -25,6 +25,7 @@ const offseasonItems: NavItem[] = [
 ];
 
 const extraItems: NavItem[] = [
+  { path: '/league-builder', icon: '🏗️', label: 'NEW LEAGUE', sublabel: 'Start fresh season', color: 'teal' },
   { path: '/awards', icon: '🏅', label: 'AWARDS', sublabel: 'Ceremonies', color: 'yellow' },
   { path: '/museum', icon: '🏛️', label: 'MUSEUM', sublabel: 'Hall of Fame', color: 'indigo' },
 ];

@@ -34,6 +34,9 @@ import MuseumHub from './pages/MuseumHub';
 // Player Management
 import ManualPlayerInput from './components/ManualPlayerInput';
 
+// League Management
+import LeagueBuilder from './components/LeagueBuilder';
+
 import { getTeam } from './data/playerDatabase';
 import { getAllCustomPlayers, deleteCustomPlayer } from './utils/customPlayerStorage';
 import { logFASigning } from './utils/transactionStorage';
@@ -497,6 +500,20 @@ function MuseumWrapper() {
   );
 }
 
+// Wrapper for LeagueBuilder
+function LeagueBuilderWrapper() {
+  const navigate = useNavigate();
+  return (
+    <LeagueBuilder
+      onSuccess={(leagueId) => {
+        console.log(`[League Builder] Created league: ${leagueId}`);
+        navigate('/season');
+      }}
+      onCancel={() => navigate('/')}
+    />
+  );
+}
+
 function App() {
   return (
     <>
@@ -533,6 +550,9 @@ function App() {
 
         {/* Museum */}
         <Route path="/museum" element={<MuseumWrapper />} />
+
+        {/* League Builder */}
+        <Route path="/league-builder" element={<LeagueBuilderWrapper />} />
 
         {/* Team */}
         <Route path="/team/:id" element={<TeamPage />} />
