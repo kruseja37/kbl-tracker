@@ -8,6 +8,62 @@
 
 ---
 
+## Session: January 26, 2026 (Continued) - Wiring Stories Completion
+
+### What Was Accomplished
+
+Continued implementing wiring stories from `STORIES_WIRING.md`:
+
+| Story | Description | Commit |
+|-------|-------------|--------|
+| WIRE-002 | Wire StandingsView to SeasonDashboard | `dd46be5` |
+| WIRE-004 | Wire FanMoralePanel to GameTracker | `5f3819e` |
+| WIRE-007 | Wire SeasonProgressTracker to SeasonDashboard | `66efc9f` |
+| WIRE-003 | Wire TeamStatsView to TeamPage | `edfb8b2` |
+| WIRE-017 | Wire Awards Components to AwardsCeremonyHub | `5b042f5` |
+| WIRE-018 | Wire Offseason Components to OffseasonHub | `7f81b37` |
+| WIRE-023 | Wire adaptiveLearningEngine to FieldingModal | `3eb94cb` |
+
+### Key Changes Made
+
+**TeamPage.tsx:**
+- Enhanced from stub to full page with TeamStatsView
+- Added team lookup from TEAMS database
+- Placeholder stats for now (zeros)
+- Added header with team name, chemistry, home park
+- Added placeholder sections for Roster and Recent Games
+
+**App.tsx:**
+- Added 6 new awards routes: /leaders, /silverslugger, /mvp, /cyyoung, /roy, /summary
+- Added wrappers for each award component with placeholder data
+- All awards navigate to next in ceremony flow
+
+**OffseasonHub.tsx:**
+- Updated OFFSEASON_PHASES routes to match existing App.tsx routes
+- Reduced from 11 phases to 8 (removed separate FA rounds, FA protection)
+- Awards now points to /awards (main hub)
+
+**FieldingModal.tsx:**
+- Imported recordFieldingEvent from adaptiveLearningEngine
+- Added buildHitZone helper function
+- Added recordFieldingForLearning export for parent component to call
+
+**SeasonDashboard.tsx:**
+- Added StandingsView with compact mode
+- Added SeasonProgressTracker
+
+**GameTracker/index.tsx:**
+- Added FanMoralePanel in compact mode
+
+### Session Summary
+
+**Total Wiring Stories Completed This Session:** 7 more (13 total across both sessions)
+**Total Wiring Stories Done:** 15 of 23 (65%)
+**Remaining P1:** 1 (WIRE-008 blocked on player ratings)
+**Remaining P2:** 7
+
+---
+
 ## Session: January 26, 2026 - Wiring Stories Implementation
 
 ### What Was Accomplished
