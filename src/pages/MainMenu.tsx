@@ -1,6 +1,17 @@
-import { Link } from 'react-router-dom';
+import { useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import GameSetupModal from '../components/GameSetupModal';
 
 export default function MainMenu() {
+  const navigate = useNavigate();
+  const [showGameSetup, setShowGameSetup] = useState(false);
+
+  const handleGameSetupConfirm = (awayTeamId: string, homeTeamId: string) => {
+    setShowGameSetup(false);
+    // Navigate to pregame with team IDs as URL params
+    navigate(`/pregame?away=${awayTeamId}&home=${homeTeamId}`);
+  };
+
   return (
     <div className="min-h-screen bg-slate-950 relative overflow-hidden">
       {/* Stadium light glow effects */}
@@ -52,9 +63,9 @@ export default function MainMenu() {
         <div className="w-full max-w-lg space-y-4 px-4">
 
           {/* New Game - Primary action */}
-          <Link
-            to="/game"
-            className="group relative block w-full overflow-hidden"
+          <button
+            onClick={() => setShowGameSetup(true)}
+            className="group relative block w-full overflow-hidden text-left"
           >
             {/* Card background with diagonal cut */}
             <div className="absolute inset-0 bg-gradient-to-r from-blue-600 to-blue-500 skew-x-[-2deg] scale-x-[1.02] transition-all duration-300 group-hover:scale-x-[1.04] group-hover:skew-x-[-3deg]" />
@@ -75,7 +86,7 @@ export default function MainMenu() {
                 →
               </div>
             </div>
-          </Link>
+          </button>
 
           {/* Season */}
           <Link
@@ -134,6 +145,13 @@ export default function MainMenu() {
         </div>
 
       </div>
+
+      {/* Game Setup Modal */}
+      <GameSetupModal
+        isOpen={showGameSetup}
+        onClose={() => setShowGameSetup(false)}
+        onConfirm={handleGameSetupConfirm}
+      />
     </div>
   );
 }
