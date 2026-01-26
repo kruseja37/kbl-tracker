@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Routes, Route, useSearchParams, useNavigate, useLocation } from 'react-router-dom';
 import NavigationHeader from './components/NavigationHeader';
 import MainMenu from './pages/MainMenu';
@@ -17,6 +17,8 @@ import StatsByParkView from './pages/StatsByParkView';
 
 // Awards
 import AwardsCeremonyHub from './pages/AwardsCeremonyHub';
+import GoldGloveAwards from './components/awards/GoldGloveAwards';
+import { getGoldGloveCandidates } from './services/fieldingStatsAggregator';
 
 // Offseason
 import OffseasonHub from './pages/OffseasonHub';
@@ -246,10 +248,55 @@ function AwardsWrapper() {
   const navigate = useNavigate();
   return (
     <AwardsCeremonyHub
-      onNavigateToAward={() => {}}
+      onNavigateToAward={(awardId) => navigate(`/awards/${awardId}`)}
       completedAwards={[]}
       onSkipToSummary={() => navigate('/season')}
       seasonYear={2026}
+    />
+  );
+}
+
+// Wrapper for GoldGloveAwards - pulls data from fieldingStatsAggregator
+function GoldGloveWrapper() {
+  const navigate = useNavigate();
+  const seasonId = 'season_2026'; // In production, get from GlobalState
+
+  // Positions to get Gold Glove candidates for
+  const positions = ['C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF', 'P'];
+
+  // Get winners from fielding stats aggregator
+  const winners = useMemo(() => {
+    return positions.map(position => {
+      const candidates = getGoldGloveCandidates(seasonId, position, 10);
+      if (candidates.length === 0) {
+        // No data - return placeholder
+        return {
+          playerId: `placeholder_${position}`,
+          playerName: 'No Qualifying Players',
+          teamName: '-',
+          position,
+          fwar: 0,
+        };
+      }
+      const winner = candidates[0];
+      const posStats = winner.positionStats.find(ps => ps.position === position);
+      return {
+        playerId: winner.playerId,
+        playerName: winner.playerName,
+        teamName: winner.teamId || 'Unknown',
+        position,
+        fwar: posStats?.uzr || 0,
+        defensiveRunsSaved: posStats ? Math.round((posStats.putouts + posStats.assists - posStats.errors) / 10) : 0,
+        fieldingPct: posStats?.fieldingPct,
+      };
+    });
+  }, [seasonId]);
+
+  return (
+    <GoldGloveAwards
+      winners={winners}
+      onContinue={() => navigate('/awards/silverslugger')}
+      onPlayerClick={(playerId) => console.log('[GoldGlove] Player clicked:', playerId)}
     />
   );
 }
@@ -577,6 +624,7 @@ function App() {
 
         {/* Awards */}
         <Route path="/awards" element={<AwardsWrapper />} />
+        <Route path="/awards/goldglove" element={<GoldGloveWrapper />} />
 
         {/* Offseason */}
         <Route path="/offseason" element={<OffseasonWrapper />} />
