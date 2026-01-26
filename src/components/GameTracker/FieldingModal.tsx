@@ -15,9 +15,62 @@ import type {
   AssistChainEntry,
   FieldingData,
 } from '../../types/game';
+import { recordFieldingEvent, type FieldingEvent } from '../../engines/adaptiveLearningEngine';
 
 // Re-export types for consumers that import from FieldingModal
 export type { PlayType, ErrorType, D3KOutcome, DepthType, AssistType, DPRole, ErrorContext, AssistChainEntry, FieldingData };
+
+// ============================================
+// ADAPTIVE LEARNING INTEGRATION
+// Per adaptiveLearningEngine - record fielding events for inference improvement
+// ============================================
+
+/**
+ * Build a hitZone string from direction and depth for adaptive learning.
+ * Examples: 'CF-deep', 'SS-hole', 'LF-line'
+ */
+function buildHitZone(direction: Direction | null, depth: DepthType | null, position: Position): string {
+  if (!direction) return `${position}-range`;
+
+  const directionMap: Record<Direction, string> = {
+    'Left': 'LF',
+    'Left-Center': 'LC',
+    'Center': 'CF',
+    'Right-Center': 'RC',
+    'Right': 'RF',
+  };
+
+  const depthSuffix = depth ? `-${depth}` : '';
+  return `${directionMap[direction]}${depthSuffix}`;
+}
+
+/**
+ * Record a fielding event for adaptive learning.
+ * Call this from the parent component after fielding modal completes.
+ */
+export function recordFieldingForLearning(
+  gameId: string,
+  fielderId: string,
+  inferredFielder: Position | null,
+  actualFielder: Position,
+  direction: Direction | null,
+  depth: DepthType | null
+): void {
+  const hitZone = buildHitZone(direction, depth, actualFielder);
+
+  const event: FieldingEvent = {
+    eventId: `${gameId}_${Date.now()}`,
+    gameId,
+    hitZone,
+    predictedFielder: inferredFielder || actualFielder,
+    actualFielder,
+    playerId: fielderId,
+    position: actualFielder,
+    timestamp: Date.now(),
+  };
+
+  recordFieldingEvent(event);
+}
 
 // ============================================
 // FIELDER INFERENCE MATRICES
