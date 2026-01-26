@@ -1,4 +1,5 @@
 import { Link, useLocation } from 'react-router-dom';
+import TeamSelector from './TeamSelector';
 
 export default function NavigationHeader() {
   const location = useLocation();
@@ -34,8 +35,11 @@ export default function NavigationHeader() {
           </div>
         </Link>
 
-        {/* Right side - breadcrumb / status */}
+        {/* Right side - team selector and breadcrumb */}
         <div className="flex items-center gap-4">
+          {/* Team Selector */}
+          <TeamSelector />
+
           {/* Current section indicator */}
           <div className="flex items-center gap-2 text-sm">
             <div className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse" />
