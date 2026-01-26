@@ -14,21 +14,21 @@ import type { TeamData, Chemistry } from '../playerDatabase';
 export const MOOSE: TeamData = {
   id: 'moose',
   name: 'Moose',
-  homePark: 'Red Rock Park',  // TBD - need to verify from screenshots
+  homePark: 'Stade Royale',  // Verified from screenshot
   chemistry: 'SPIRITED',
-  primaryColor: '#8B4513',  // Brown
-  secondaryColor: '#FFD700',  // Gold
-  rosterIds: [],  // To be populated
+  primaryColor: '#8B4513',  // Brown/Tan
+  secondaryColor: '#FFFFFF',  // White
+  rosterIds: [],
   leagueId: 'sml-super'
 };
 
 export const HERBISAURS: TeamData = {
   id: 'herbisaurs',
   name: 'Herbisaurs',
-  homePark: 'Sakura Hills',  // Need to verify
+  homePark: 'Parque Jardineros',  // Verified from screenshot
   chemistry: 'SPIRITED',
   primaryColor: '#228B22',  // Forest Green
-  secondaryColor: '#FFD700',  // Gold
+  secondaryColor: '#FFA500',  // Orange (verified)
   rosterIds: [],
   leagueId: 'sml-super'
 };
@@ -36,10 +36,10 @@ export const HERBISAURS: TeamData = {
 export const WILD_PIGS: TeamData = {
   id: 'wild-pigs',
   name: 'Wild Pigs',
-  homePark: "Founder's Field",
+  homePark: "Founder's Field",  // Verified from screenshot
   chemistry: 'FIERY',
   primaryColor: '#800080',  // Purple
-  secondaryColor: '#FFD700',  // Yellow
+  secondaryColor: '#FFD700',  // Yellow/Gold
   rosterIds: [],
   leagueId: 'sml-super'
 };
@@ -47,10 +47,10 @@ export const WILD_PIGS: TeamData = {
 export const FREEBOOTERS: TeamData = {
   id: 'freebooters',
   name: 'Freebooters',
-  homePark: "Founder's Field",  // Verified from screenshot
-  chemistry: 'SCHOLARLY',  // Based on Stockton Brickhouse
-  primaryColor: '#8B0000',  // Dark Red
-  secondaryColor: '#FFD700',  // Gold
+  homePark: 'Lafayette Corner',  // Verified from Team Visuals screenshot
+  chemistry: 'SCHOLARLY',
+  primaryColor: '#FF4500',  // Orange
+  secondaryColor: '#000000',  // Black
   rosterIds: [],
   leagueId: 'sml-super'
 };
@@ -58,10 +58,10 @@ export const FREEBOOTERS: TeamData = {
 export const HOT_CORNERS: TeamData = {
   id: 'hot-corners',
   name: 'Hot Corners',
-  homePark: 'TBD',
-  chemistry: 'FIERY',
-  primaryColor: '#FF4500',  // Orange Red
-  secondaryColor: '#000000',  // Black
+  homePark: 'Golden Field',  // Verified from screenshot
+  chemistry: 'SCHOLARLY',  // Based on player chemistry
+  primaryColor: '#8B0000',  // Dark Red/Maroon
+  secondaryColor: '#FFD700',  // Gold/Yellow
   rosterIds: [],
   leagueId: 'sml-super'
 };
@@ -73,7 +73,7 @@ export const HOT_CORNERS: TeamData = {
 export const SIRLOINS: TeamData = {
   id: 'sirloins',
   name: 'Sirloins',
-  homePark: 'Apple Field',
+  homePark: 'Apple Field',  // TBD - verify from screenshot
   chemistry: 'SPIRITED',
   primaryColor: '#CC0000',  // Red
   secondaryColor: '#FFFFFF',  // White
@@ -84,10 +84,10 @@ export const SIRLOINS: TeamData = {
 export const MOONSTARS: TeamData = {
   id: 'moonstars',
   name: 'Moonstars',
-  homePark: 'TBD',
+  homePark: 'Big Sky Park',  // Verified from screenshot
   chemistry: 'CRAFTY',
-  primaryColor: '#191970',  // Midnight Blue
-  secondaryColor: '#C0C0C0',  // Silver
+  primaryColor: '#87CEEB',  // Sky Blue
+  secondaryColor: '#FFFFFF',  // White
   rosterIds: [],
   leagueId: 'sml-super'
 };
@@ -95,10 +95,10 @@ export const MOONSTARS: TeamData = {
 export const BLOWFISH: TeamData = {
   id: 'blowfish',
   name: 'Blowfish',
-  homePark: 'TBD',
+  homePark: 'Swagger Center',  // Verified from screenshot
   chemistry: 'DISCIPLINED',
-  primaryColor: '#00CED1',  // Dark Turquoise
-  secondaryColor: '#FF69B4',  // Hot Pink
+  primaryColor: '#40E0D0',  // Turquoise
+  secondaryColor: '#FFD700',  // Gold/Yellow
   rosterIds: [],
   leagueId: 'sml-super'
 };
@@ -106,10 +106,10 @@ export const BLOWFISH: TeamData = {
 export const SAWTEETH: TeamData = {
   id: 'sawteeth',
   name: 'Sawteeth',
-  homePark: 'TBD',
+  homePark: 'El Viejo Stadium',  // Verified from screenshot
   chemistry: 'GRITTY',
-  primaryColor: '#2F4F4F',  // Dark Slate Gray
-  secondaryColor: '#FF6347',  // Tomato
+  primaryColor: '#00CED1',  // Cyan/Turquoise
+  secondaryColor: '#FF6347',  // Orange-Red
   rosterIds: [],
   leagueId: 'sml-super'
 };
@@ -117,10 +117,10 @@ export const SAWTEETH: TeamData = {
 export const SAND_CATS: TeamData = {
   id: 'sand-cats',
   name: 'Sand Cats',
-  homePark: 'TBD',
+  homePark: 'Sakura Hills',  // Verified from screenshot
   chemistry: 'CRAFTY',
-  primaryColor: '#F4A460',  // Sandy Brown
-  secondaryColor: '#8B4513',  // Saddle Brown
+  primaryColor: '#FFD700',  // Gold/Yellow
+  secondaryColor: '#FFFFFF',  // White
   rosterIds: [],
   leagueId: 'sml-super'
 };
@@ -132,10 +132,10 @@ export const SAND_CATS: TeamData = {
 export const WIDELOADS: TeamData = {
   id: 'wideloads',
   name: 'Wideloads',
-  homePark: 'TBD',
+  homePark: 'The Corral',  // Verified from screenshot
   chemistry: 'GRITTY',
-  primaryColor: '#FF8C00',  // Dark Orange
-  secondaryColor: '#000000',  // Black
+  primaryColor: '#4B0082',  // Indigo/Purple
+  secondaryColor: '#FFFFFF',  // White
   rosterIds: [],
   leagueId: 'sml-mega'
 };
@@ -143,10 +143,10 @@ export const WIDELOADS: TeamData = {
 export const PLATYPI: TeamData = {
   id: 'platypi',
   name: 'Platypi',
-  homePark: 'TBD',
+  homePark: 'Colonial Plaza',  // Verified from screenshot
   chemistry: 'CRAFTY',
-  primaryColor: '#008080',  // Teal
-  secondaryColor: '#FFA500',  // Orange
+  primaryColor: '#800020',  // Burgundy/Maroon
+  secondaryColor: '#FFD700',  // Gold/Yellow
   rosterIds: [],
   leagueId: 'sml-mega'
 };
@@ -154,10 +154,10 @@ export const PLATYPI: TeamData = {
 export const BEEWOLVES: TeamData = {
   id: 'beewolves',
   name: 'Beewolves',
-  homePark: 'Emerald Diamond',
-  chemistry: 'CRAFTY',
-  primaryColor: '#008B8B',  // Dark Cyan
-  secondaryColor: '#FFD700',  // Gold
+  homePark: 'Emerald Diamond',  // TBD - verify from screenshot
+  chemistry: 'COMPETITIVE',
+  primaryColor: '#4169E1',  // Royal Blue
+  secondaryColor: '#FFFFFF',  // White
   rosterIds: [],
   leagueId: 'sml-mega'
 };
@@ -165,10 +165,10 @@ export const BEEWOLVES: TeamData = {
 export const GRAPPLERS: TeamData = {
   id: 'grapplers',
   name: 'Grapplers',
-  homePark: 'TBD',
+  homePark: 'Bingata Bowl',  // Verified from screenshot
   chemistry: 'GRITTY',
-  primaryColor: '#800000',  // Maroon
-  secondaryColor: '#FFD700',  // Gold
+  primaryColor: '#FF4500',  // Orange-Red
+  secondaryColor: '#008B8B',  // Teal
   rosterIds: [],
   leagueId: 'sml-mega'
 };
@@ -176,7 +176,7 @@ export const GRAPPLERS: TeamData = {
 export const HEATERS: TeamData = {
   id: 'heaters',
   name: 'Heaters',
-  homePark: 'TBD',
+  homePark: 'Red Rock Park',  // Verified from screenshot
   chemistry: 'FIERY',
   primaryColor: '#FF0000',  // Red
   secondaryColor: '#FFFFFF',  // White
@@ -191,10 +191,10 @@ export const HEATERS: TeamData = {
 export const OVERDOGS: TeamData = {
   id: 'overdogs',
   name: 'Overdogs',
-  homePark: 'TBD',
+  homePark: 'Motor Yard',  // Verified from screenshot
   chemistry: 'SPIRITED',
-  primaryColor: '#4169E1',  // Royal Blue
-  secondaryColor: '#FFFFFF',  // White
+  primaryColor: '#FFD700',  // Gold/Yellow
+  secondaryColor: '#000000',  // Black
   rosterIds: [],
   leagueId: 'sml-mega'
 };
@@ -202,10 +202,10 @@ export const OVERDOGS: TeamData = {
 export const BUZZARDS: TeamData = {
   id: 'buzzards',
   name: 'Buzzards',
-  homePark: 'TBD',
+  homePark: 'Shaka Sports Turf',  // Verified from screenshot
   chemistry: 'GRITTY',
-  primaryColor: '#2F4F4F',  // Dark Slate Gray
-  secondaryColor: '#B22222',  // Firebrick
+  primaryColor: '#006400',  // Forest Green
+  secondaryColor: '#FFD700',  // Gold
   rosterIds: [],
   leagueId: 'sml-mega'
 };
@@ -213,10 +213,10 @@ export const BUZZARDS: TeamData = {
 export const CROCODONS: TeamData = {
   id: 'crocodons',
   name: 'Crocodons',
-  homePark: 'TBD',
+  homePark: "Whacker's Wheel",  // Verified from screenshot
   chemistry: 'DISCIPLINED',
   primaryColor: '#006400',  // Dark Green
-  secondaryColor: '#FFD700',  // Gold
+  secondaryColor: '#FFFFFF',  // White
   rosterIds: [],
   leagueId: 'sml-mega'
 };
@@ -224,10 +224,10 @@ export const CROCODONS: TeamData = {
 export const NEMESIS: TeamData = {
   id: 'nemesis',
   name: 'Nemesis',
-  homePark: 'TBD',
+  homePark: 'Tiger Den',  // Verified from screenshot
   chemistry: 'DISCIPLINED',
-  primaryColor: '#000000',  // Black
-  secondaryColor: '#FF0000',  // Red
+  primaryColor: '#800080',  // Purple
+  secondaryColor: '#FFFFFF',  // White
   rosterIds: [],
   leagueId: 'sml-mega'
 };
@@ -235,10 +235,10 @@ export const NEMESIS: TeamData = {
 export const JACKS: TeamData = {
   id: 'jacks',
   name: 'Jacks',
-  homePark: 'TBD',
+  homePark: 'Battery Bay',  // Verified from screenshot
   chemistry: 'CRAFTY',
-  primaryColor: '#800080',  // Purple
-  secondaryColor: '#00FF00',  // Lime
+  primaryColor: '#FFFFFF',  // White
+  secondaryColor: '#FFD700',  // Gold
   rosterIds: [],
   leagueId: 'sml-mega'
 };
