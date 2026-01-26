@@ -1,7 +1,49 @@
 # KBL Tracker - Current State
 
 > **Purpose**: Single source of truth for what's implemented, what's not, and known issues
-> **Last Updated**: January 26, 2026 (IMPL_PLAN_v5 Day 2 + Position Switch bugs fixed)
+> **Last Updated**: January 25, 2026 (Phase A Foundation Stories A-001 to A-005)
+
+---
+
+## Phase A Foundation - IN PROGRESS
+
+Following the Ralph Framework implementation plan. See `spec-docs/ralph/` for full details.
+
+### Completed Stories (January 25, 2026)
+
+| Story | Title | Status | Commit |
+|-------|-------|--------|--------|
+| S-A001 | Install React Router | ✅ COMPLETE | `3c8d432` |
+| S-A002 | Create Routes Configuration | ✅ COMPLETE | `624a60b` |
+| S-A003 | Create MainMenu Component | ✅ COMPLETE | `49f3b03` |
+| S-A004 | Create NavigationHeader Component | ✅ COMPLETE | `c39332b` |
+| S-A005 | Create SeasonDashboard Component | ✅ COMPLETE | `134b27a` |
+
+### New Components Created
+
+| Component | File | Purpose |
+|-----------|------|---------|
+| MainMenu | `src/pages/MainMenu.tsx` | Home screen with navigation cards (New Game, Season, Teams) |
+| NavigationHeader | `src/components/NavigationHeader.tsx` | Sticky header with logo/home link, visible on all pages except MainMenu |
+| SeasonDashboard | `src/pages/SeasonDashboard.tsx` | Season progress display with progress bar, handles no-season state |
+| GamePage | `src/pages/GamePage.tsx` | Wrapper for GameTracker with season initialization |
+| TeamPage | `src/pages/TeamPage.tsx` | Team details placeholder |
+| NotFound | `src/pages/NotFound.tsx` | 404 page |
+
+### Routes Configured
+
+| Path | Component | Description |
+|------|-----------|-------------|
+| `/` | MainMenu | Home screen |
+| `/season` | SeasonDashboard | Season progress and stats |
+| `/game` | GamePage | Game tracker |
+| `/team/:id` | TeamPage | Team details |
+| `*` | NotFound | 404 handler |
+
+### Remaining Phase A Stories (17 remaining)
+
+- S-A006 through S-A022 (see `spec-docs/ralph/IMPLEMENTATION_ORDER.md`)
+- Key areas: Global State, Team Selector, Player Ratings, League Builder, GameTracker fixes
 
 ---
 
