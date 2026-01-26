@@ -13,7 +13,7 @@ import type { Position, BatterHand } from '../types/game';
 
 export type ThrowHand = 'L' | 'R';
 export type Gender = 'M' | 'F';
-export type Chemistry = 'SPIRITED' | 'CRAFTY' | 'DISCIPLINED' | 'FIERY' | 'GRITTY';
+export type Chemistry = 'SPIRITED' | 'CRAFTY' | 'DISCIPLINED' | 'FIERY' | 'GRITTY' | 'SCHOLARLY' | 'COMPETITIVE';
 export type PlayerRole = 'STARTER' | 'BENCH' | 'ROTATION' | 'BULLPEN';
 export type PitcherRole = 'SP' | 'RP' | 'CP' | 'SP/RP';
 
