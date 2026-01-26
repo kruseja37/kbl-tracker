@@ -26,6 +26,7 @@ import FreeAgencyHub from './pages/FreeAgencyHub';
 import DraftHub from './pages/DraftHub';
 import TradeHub from './pages/TradeHub';
 import SpringTrainingHub from './pages/SpringTrainingHub';
+import ScheduleGenerationHub from './pages/ScheduleGenerationHub';
 
 // Museum
 import MuseumHub from './pages/MuseumHub';
@@ -456,6 +457,29 @@ function SpringTrainingWrapper() {
   );
 }
 
+// Demo teams for schedule generation
+const DEMO_TEAMS = [
+  { teamId: 'sirloins', teamName: 'Sirloins' },
+  { teamId: 'beewolves', teamName: 'Beewolves' },
+  { teamId: 'blowfish', teamName: 'Blowfish' },
+  { teamId: 'overdogs', teamName: 'Overdogs' },
+];
+
+// Wrapper for ScheduleGenerationHub
+function ScheduleGenerationWrapper() {
+  const navigate = useNavigate();
+  return (
+    <ScheduleGenerationHub
+      teams={DEMO_TEAMS}
+      currentSeason={1}
+      onStartSeason={(schedule, seasonLength) => {
+        console.log(`[Schedule Gen] Created ${schedule.length} games, ${seasonLength} per team`);
+        navigate('/season');
+      }}
+    />
+  );
+}
+
 // Wrapper for MuseumHub
 function MuseumWrapper() {
   const navigate = useNavigate();
@@ -505,6 +529,7 @@ function App() {
         <Route path="/offseason/draft" element={<DraftWrapper />} />
         <Route path="/offseason/trades" element={<TradeWrapper />} />
         <Route path="/offseason/spring-training" element={<SpringTrainingWrapper />} />
+        <Route path="/offseason/schedule-gen" element={<ScheduleGenerationWrapper />} />
 
         {/* Museum */}
         <Route path="/museum" element={<MuseumWrapper />} />
