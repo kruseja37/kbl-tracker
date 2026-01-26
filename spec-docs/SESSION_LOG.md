@@ -8,6 +8,63 @@
 
 ---
 
+## Session: January 26, 2026 (Late Late Night) - Roster Management Improvements ✅
+
+### What Was Accomplished
+
+**1. ManualPlayerInput - All Player Fields Added**
+
+Added complete player customization to the form:
+- Gender (Male/Female/Non-Binary)
+- Overall grade (S through D scale)
+- Secondary position
+- Chemistry (SPI, DIS, CMP, SCH, CRA)
+- Traits (2 slots with dropdown)
+- Arsenal (for pitchers, multi-select pitch types)
+- Pitcher Role (SP, RP, CP, SP/RP) - kept separate from Team Role
+
+**2. RosterView - Delete Functionality & Improved Grouping**
+
+- Added delete button with confirmation dialog
+- Changed grouping from 5 categories to 2: Position Players and Pitchers
+- Added salary descending sort within each group
+- Removed Team Role (Starter/Bench) designation per user request
+
+**3. Navigation Reload Fix**
+
+- Added `useLocation` hook with `location.key` dependency
+- Roster now reloads when navigating back from add-player page
+
+**4. Salary Calculation**
+
+- Salary auto-calculates from ratings in the form
+- Uses `calculateSalary` from `salaryCalculator.ts`
+- Position type mapping between game/salary interfaces
+
+### Commits Made
+
+1. `9f27617` - "Add all player customization fields and delete functionality"
+2. `8382169` - "Simplify roster grouping and fix salary display"
+
+### Known Gap Identified
+
+**Custom roster is disconnected from game's player database system**. Players added via ManualPlayerInput go to localStorage (`kbl-custom-players`), but the game uses a different player system. Proposed solution is a "League Builder" to properly integrate teams and players, but user deferred for gap analysis first.
+
+### Build Status
+
+```
+npm run build → Exit 0 (verified)
+Working tree clean
+```
+
+### Pending Work
+
+1. **Gap Analysis** - User running Cowork gap analysis
+2. **League Builder** - Deferred until after gap analysis
+3. **Data Integration** - Connect custom roster to game system
+
+---
+
 ## Session: January 26, 2026 (Late Night) - Ralph Framework Phases B-G Implementation ✅
 
 ### What Was Accomplished

@@ -160,6 +160,15 @@ All 78 user stories from Phases B-G implemented and committed. Components are wi
 > - Bug 1: Catcher now appears in Position Switch modal (fixed lineup generation)
 > - Bug 2: Auto-swap feature - system auto-adds reverse swap when moving to occupied position
 >
+> **Roster Management Session (January 26, 2026):**
+> - ManualPlayerInput wired to route `/add-player` ✅
+> - All player fields added: gender, overall, secondary position, chemistry, traits, arsenal ✅
+> - RosterView delete functionality added ✅
+> - Roster grouped by Position Players/Pitchers, sorted by salary descending ✅
+> - Removed Team Role (Starter/Bench) designation from form ✅
+> - Added location.key dependency for roster reload on navigation ✅
+> - Salary calculation wired to form (auto-calculates from ratings) ✅
+>
 > **Previous Plan v3 completed** (Days 1-11):
 > - Day 1: Fixed 42 TypeScript build errors
 > - Day 2: Wired WARDisplay to UI

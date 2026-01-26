@@ -45,7 +45,7 @@ This audit compares the Ralph Framework specifications (103 user stories) agains
 | S-A008 | Create TeamSelector Component | ✅ | ✅ | DONE |
 | S-A009 | Create PlayerRatingsForm Component | ✅ | ✅ | DONE |
 | S-A010 | Create LeagueBuilder Component | ✅ | ✅ | DONE |
-| S-A011 | Create ManualPlayerInput Component | ✅ | ✅ | DONE |
+| S-A011 | Create ManualPlayerInput Component | ✅ | ✅ | DONE - Full form with all fields (gender, overall, chemistry, traits, arsenal) wired to `/add-player` route (Jan 26, 2026) |
 | S-A012 | Display Team Names in Scoreboard | ✅ | ✅ | DONE |
 | S-A013 | Add Visible Undo Button | ✅ | ✅ | DONE |
 | S-A014 | Make Current Batter Name Clickable | ✅ | ✅ | DONE |
@@ -99,8 +99,8 @@ This audit compares the Ralph Framework specifications (103 user stories) agains
 | S-C006 | Create LeagueLeadersView Component | ✅ | ✅ | DONE (route exists) |
 | S-C007 | Add Qualification Rules | ✅ | ⚠️ | PARTIAL - Logic in code, not UI |
 | S-C008 | Create SeasonProgressTracker Component | ✅ | ❌ | NOT WIRED (orphaned) |
-| S-C009 | Create RosterView Component | ✅ | ✅ | DONE (route exists) |
-| S-C010 | Add Stats to Roster View | ✅ | ⚠️ | PARTIAL - Empty data |
+| S-C009 | Create RosterView Component | ✅ | ✅ | DONE (route exists, delete functionality added Jan 26) |
+| S-C010 | Add Stats to Roster View | ✅ | ✅ | DONE - Stats displayed, grouped by position/pitcher, sorted by salary (Jan 26, 2026) |
 | S-C011 | Create TeamStatsView Component | ✅ | ❌ | NOT WIRED (orphaned) |
 | S-C012 | Create TeamFinancialsView Component | ✅ | ❌ | NOT WIRED (orphaned) |
 | S-C013 | Create FanMoralePanel Component | ✅ | ❌ | NOT WIRED (orphaned) |
@@ -210,7 +210,7 @@ These components exist but are NOT imported anywhere:
 - `src/components/GameTracker/SalaryDisplay.tsx`
 - `src/components/GameTracker/PitcherExitPrompt.tsx`
 
-#### Main Components (17 files)
+#### Main Components (16 files) - Updated Jan 26, 2026
 - `src/components/PlayerRatingsForm.tsx`
 - `src/components/LeagueNewsFeed.tsx`
 - `src/components/ContractionWarning.tsx`
@@ -218,7 +218,7 @@ These components exist but are NOT imported anywhere:
 - `src/components/ChampionshipCelebration.tsx`
 - `src/components/BoxScoreView.tsx`
 - `src/components/LeagueBuilder.tsx`
-- `src/components/ManualPlayerInput.tsx`
+- ~~`src/components/ManualPlayerInput.tsx`~~ ✅ DONE - Wired to `/add-player` route (Jan 26, 2026)
 - `src/components/ParkFactorDisplay.tsx`
 - `src/components/ChemistryDisplay.tsx`
 - `src/components/RelationshipPanel.tsx`
