@@ -1,9 +1,11 @@
 /**
  * Lineup Panel Component
- * Shows all 9 batting order positions with player names and defensive positions
+ * Shows all 9 batting order positions with player names, defensive positions,
+ * and Mojo/Fitness indicators.
  */
 
 import type { LineupState } from '../../types/game';
+import { MOJO_STATES, type MojoLevel } from '../../engines/mojoEngine';
 
 interface LineupPanelProps {
   lineupState: LineupState;
@@ -12,6 +14,41 @@ interface LineupPanelProps {
   halfInning: 'TOP' | 'BOTTOM';
   onPlayerClick?: (playerId: string, playerName: string, teamId: string) => void;
   teamId: string;
+  // Mojo levels by player ID (defaults to 0 if not provided)
+  playerMojoLevels?: Record<string, MojoLevel>;
+}
+
+// Mojo indicator colors per level
+const MOJO_COLORS: Record<MojoLevel, string> = {
+  [-2]: '#ef4444', // red - Rattled
+  [-1]: '#f97316', // orange - Tense
+  [0]: '#6b7280',  // gray - Normal
+  [1]: '#22c55e',  // green - Locked In
+  [2]: '#3b82f6',  // blue - Jacked
+};
+
+const MOJO_BG_COLORS: Record<MojoLevel, string> = {
+  [-2]: 'rgba(239, 68, 68, 0.15)',
+  [-1]: 'rgba(249, 115, 22, 0.15)',
+  [0]: 'rgba(107, 114, 128, 0.15)',
+  [1]: 'rgba(34, 197, 94, 0.15)',
+  [2]: 'rgba(59, 130, 246, 0.15)',
+};
+
+function MojoBadge({ level }: { level: MojoLevel }) {
+  const state = MOJO_STATES[level];
+  return (
+    <div
+      style={{
+        ...mojoStyles.badge,
+        color: MOJO_COLORS[level],
+        backgroundColor: MOJO_BG_COLORS[level],
+      }}
+      title={`Mojo: ${state.displayName}`}
+    >
+      {state.emoji}
+    </div>
+  );
 }
 
 export default function LineupPanel({
@@ -21,6 +58,7 @@ export default function LineupPanel({
   halfInning,
   onPlayerClick,
   teamId,
+  playerMojoLevels = {},
 }: LineupPanelProps) {
   if (!isOpen) return null;
 
@@ -28,6 +66,11 @@ export default function LineupPanel({
   const sortedLineup = [...lineupState.lineup]
     .filter(p => p.battingOrder >= 1 && p.battingOrder <= 9)
     .sort((a, b) => a.battingOrder - b.battingOrder);
+
+  // Get mojo level for a player (default to 0)
+  const getMojoLevel = (playerId: string): MojoLevel => {
+    return playerMojoLevels[playerId] ?? 0;
+  };
 
   return (
     <div style={styles.overlay} onClick={onClose}>
@@ -59,6 +102,9 @@ export default function LineupPanel({
                 <span style={styles.position}>{player.position}</span>
               </div>
 
+              {/* Mojo Indicator */}
+              <MojoBadge level={getMojoLevel(player.playerId)} />
+
               {/* Entry info for subs */}
               {!player.isStarter && (
                 <div style={styles.subBadge}>
@@ -83,6 +129,7 @@ export default function LineupPanel({
             >
               <span style={styles.name}>{lineupState.currentPitcher.playerName}</span>
               <span style={styles.position}>P</span>
+              <MojoBadge level={getMojoLevel(lineupState.currentPitcher.playerId)} />
             </div>
           </div>
         )}
@@ -102,6 +149,17 @@ export default function LineupPanel({
   );
 }
 
+const mojoStyles: Record<string, React.CSSProperties> = {
+  badge: {
+    fontSize: '12px',
+    padding: '2px 6px',
+    borderRadius: '4px',
+    fontWeight: 600,
+    minWidth: '28px',
+    textAlign: 'center',
+  },
+};
+
 const styles: Record<string, React.CSSProperties> = {
   overlay: {
     position: 'fixed',
@@ -119,7 +177,7 @@ const styles: Record<string, React.CSSProperties> = {
     backgroundColor: '#1a1f2e',
     borderRadius: '12px',
     border: '1px solid #374151',
-    width: '320px',
+    width: '340px',
     maxHeight: '80vh',
     overflow: 'auto',
   },
@@ -152,7 +210,7 @@ const styles: Record<string, React.CSSProperties> = {
   row: {
     display: 'flex',
     alignItems: 'center',
-    gap: '12px',
+    gap: '10px',
     padding: '10px 12px',
     backgroundColor: '#1f2937',
     borderRadius: '8px',
