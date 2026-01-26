@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Routes, Route, useSearchParams, useNavigate } from 'react-router-dom';
 import NavigationHeader from './components/NavigationHeader';
 import MainMenu from './pages/MainMenu';
@@ -29,7 +29,11 @@ import TradeHub from './pages/TradeHub';
 // Museum
 import MuseumHub from './pages/MuseumHub';
 
+// Player Management
+import ManualPlayerInput from './components/ManualPlayerInput';
+
 import { getTeam } from './data/playerDatabase';
+import { getAllCustomPlayers } from './utils/customPlayerStorage';
 
 // Wrapper to handle URL params for PreGameScreen
 function PreGameWrapper() {
@@ -65,12 +69,69 @@ function ScheduleWrapper() {
   );
 }
 
-// Wrapper for RosterView
+// Wrapper for RosterView - loads custom players from storage
 function RosterWrapper() {
+  const navigate = useNavigate();
+  const [players, setPlayers] = useState<ReturnType<typeof getAllCustomPlayers>>([]);
+
+  // Load players on mount
+  useEffect(() => {
+    setPlayers(getAllCustomPlayers());
+  }, []);
+
+  // Convert CustomPlayer to RosterPlayer format
+  const rosterPlayers = players.map(p => ({
+    playerId: p.id,
+    playerName: p.name,
+    position: p.isPitcher ? 'SP' : p.position,
+    age: 25, // Default age since CustomPlayer doesn't have it
+    bats: p.bats,
+    throws: p.throws,
+    // Ratings
+    power: p.batterRatings.power,
+    contact: p.batterRatings.contact,
+    speed: p.batterRatings.speed,
+    velocity: p.pitcherRatings?.velocity,
+    junk: p.pitcherRatings?.junk,
+    accuracy: p.pitcherRatings?.accuracy,
+  }));
+
   return (
-    <RosterView
-      players={[]}
-      teamName="My Team"
+    <div style={{ minHeight: '100vh', background: 'linear-gradient(180deg, #0f172a 0%, #1e293b 100%)' }}>
+      <div style={{ maxWidth: '800px', margin: '0 auto', padding: '20px' }}>
+        <button
+          onClick={() => navigate('/add-player')}
+          style={{
+            marginBottom: '16px',
+            padding: '12px 24px',
+            background: 'linear-gradient(135deg, #22c55e 0%, #16a34a 100%)',
+            border: 'none',
+            borderRadius: '8px',
+            color: '#fff',
+            fontSize: '0.875rem',
+            fontWeight: 700,
+            cursor: 'pointer',
+          }}
+        >
+          + Add Player
+        </button>
+      </div>
+      <RosterView
+        players={rosterPlayers}
+        teamName="My Team"
+        showRatings={true}
+      />
+    </div>
+  );
+}
+
+// Wrapper for ManualPlayerInput - add player page
+function AddPlayerWrapper() {
+  const navigate = useNavigate();
+  return (
+    <ManualPlayerInput
+      onSuccess={() => navigate('/roster')}
+      onCancel={() => navigate('/roster')}
     />
   );
 }
@@ -322,6 +383,7 @@ function App() {
         <Route path="/season" element={<SeasonDashboard />} />
         <Route path="/schedule" element={<ScheduleWrapper />} />
         <Route path="/roster" element={<RosterWrapper />} />
+        <Route path="/add-player" element={<AddPlayerWrapper />} />
         <Route path="/leaders" element={<LeadersWrapper />} />
         <Route path="/stats-by-park" element={<StatsByParkWrapper />} />
 
