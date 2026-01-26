@@ -18,6 +18,12 @@ import StatsByParkView from './pages/StatsByParkView';
 // Awards
 import AwardsCeremonyHub from './pages/AwardsCeremonyHub';
 import GoldGloveAwards from './components/awards/GoldGloveAwards';
+import SilverSluggerAwards from './components/awards/SilverSluggerAwards';
+import LeagueLeadersAward from './components/awards/LeagueLeadersAward';
+import MVPReveal from './components/awards/MVPReveal';
+import CyYoungReveal from './components/awards/CyYoungReveal';
+import ROYReveal from './components/awards/ROYReveal';
+import AwardsSummary from './components/awards/AwardsSummary';
 import { getGoldGloveCandidates } from './services/fieldingStatsAggregator';
 
 // Offseason
@@ -297,6 +303,161 @@ function GoldGloveWrapper() {
       winners={winners}
       onContinue={() => navigate('/awards/silverslugger')}
       onPlayerClick={(playerId) => console.log('[GoldGlove] Player clicked:', playerId)}
+    />
+  );
+}
+
+// Wrapper for SilverSluggerAwards
+function SilverSluggerWrapper() {
+  const navigate = useNavigate();
+
+  // Placeholder winners - will be populated from storage in production
+  const winners = useMemo(() => {
+    const positions = ['C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF', 'DH'];
+    return positions.map(position => ({
+      playerId: `placeholder_${position}`,
+      playerName: 'No Qualifying Players',
+      teamName: '-',
+      position,
+      avg: 0,
+      hr: 0,
+      rbi: 0,
+      ops: 0,
+    }));
+  }, []);
+
+  return (
+    <SilverSluggerAwards
+      winners={winners}
+      onContinue={() => navigate('/awards/mvp')}
+      onPlayerClick={(playerId) => console.log('[SilverSlugger] Player clicked:', playerId)}
+    />
+  );
+}
+
+// Wrapper for LeagueLeadersAward
+function LeagueLeadersWrapper2() {
+  const navigate = useNavigate();
+
+  // Placeholder data
+  const placeholderLeader = {
+    playerId: 'placeholder',
+    playerName: 'No Data',
+    teamName: '-',
+    value: 0,
+  };
+
+  return (
+    <LeagueLeadersAward
+      battingLeaders={{
+        avg: placeholderLeader,
+        hr: placeholderLeader,
+        rbi: placeholderLeader,
+      }}
+      pitchingLeaders={{
+        era: placeholderLeader,
+        wins: placeholderLeader,
+        strikeouts: placeholderLeader,
+      }}
+      onContinue={() => navigate('/awards/goldglove')}
+      onPlayerClick={(playerId) => console.log('[Leaders] Player clicked:', playerId)}
+    />
+  );
+}
+
+// Wrapper for MVPReveal
+function MVPWrapper() {
+  const navigate = useNavigate();
+
+  const winner = useMemo(() => ({
+    playerId: 'placeholder_mvp',
+    playerName: 'No MVP Selected',
+    teamName: '-',
+    position: 'N/A',
+    totalWar: 0,
+    bwar: 0,
+    fwar: 0,
+    rwar: 0,
+    seasonStats: {
+      avg: 0,
+      hr: 0,
+      rbi: 0,
+      runs: 0,
+      sb: 0,
+    },
+  }), []);
+
+  return (
+    <MVPReveal
+      winner={winner}
+      onContinue={() => navigate('/awards/cyyoung')}
+      onPlayerClick={(playerId) => console.log('[MVP] Player clicked:', playerId)}
+    />
+  );
+}
+
+// Wrapper for CyYoungReveal
+function CyYoungWrapper() {
+  const navigate = useNavigate();
+
+  const winner = useMemo(() => ({
+    playerId: 'placeholder_cyyoung',
+    playerName: 'No Cy Young Selected',
+    teamName: '-',
+    pwar: 0,
+    wins: 0,
+    losses: 0,
+    era: 0,
+    strikeouts: 0,
+    ip: 0,
+    whip: 0,
+  }), []);
+
+  return (
+    <CyYoungReveal
+      winner={winner}
+      onContinue={() => navigate('/awards/roy')}
+      onPlayerClick={(playerId) => console.log('[CyYoung] Player clicked:', playerId)}
+    />
+  );
+}
+
+// Wrapper for ROYReveal
+function ROYWrapper() {
+  const navigate = useNavigate();
+
+  const winner = useMemo(() => ({
+    playerId: 'placeholder_roy',
+    playerName: 'No ROY Selected',
+    teamName: '-',
+    age: 0,
+    isPitcher: false,
+    bwar: 0,
+    avg: 0,
+    hr: 0,
+    rbi: 0,
+    sb: 0,
+  }), []);
+
+  return (
+    <ROYReveal
+      winner={winner}
+      onContinue={() => navigate('/awards/summary')}
+      onPlayerClick={(playerId) => console.log('[ROY] Player clicked:', playerId)}
+    />
+  );
+}
+
+// Wrapper for AwardsSummary
+function AwardsSummaryWrapper() {
+  const navigate = useNavigate();
+
+  return (
+    <AwardsSummary
+      winners={[]}
+      totalFameAwarded={0}
+      onPlayerClick={(playerId) => console.log('[Summary] Player clicked:', playerId)}
+      onFinish={() => navigate('/offseason')}
     />
   );
 }
@@ -624,7 +785,13 @@ function App() {
 
         {/* Awards */}
         <Route path="/awards" element={<AwardsWrapper />} />
+        <Route path="/awards/leaders" element={<LeagueLeadersWrapper2 />} />
         <Route path="/awards/goldglove" element={<GoldGloveWrapper />} />
+        <Route path="/awards/silverslugger" element={<SilverSluggerWrapper />} />
+        <Route path="/awards/mvp" element={<MVPWrapper />} />
+        <Route path="/awards/cyyoung" element={<CyYoungWrapper />} />
+        <Route path="/awards/roy" element={<ROYWrapper />} />
+        <Route path="/awards/summary" element={<AwardsSummaryWrapper />} />
 
         {/* Offseason */}
         <Route path="/offseason" element={<OffseasonWrapper />} />
