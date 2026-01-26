@@ -27,7 +27,7 @@ interface AtBatFlowProps {
 }
 
 const directions: Direction[] = ['Left', 'Left-Center', 'Center', 'Right-Center', 'Right'];
-const exitTypes: ExitType[] = ['Ground', 'Line Drive', 'Fly Ball', 'Pop Up'];
+// Exit type selection moved to FieldingModal (GAP-031)
 const positions: Position[] = ['P', 'C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF'];
 
 // Special plays for outs (fielder made the play)
@@ -760,27 +760,7 @@ export default function AtBatFlow({ result: initialResult, bases, batterName, ou
           </div>
         )}
 
-        {/* Exit Type Selection */}
-        {needsExitType && (
-          <div style={styles.section}>
-            <div style={styles.sectionLabel}>EXIT TYPE:</div>
-            <div style={styles.buttonRow}>
-              {exitTypes.map(type => (
-                <button
-                  key={type}
-                  style={{
-                    ...styles.optionButton,
-                    backgroundColor: exitType === type ? '#4CAF50' : '#333',
-                    color: exitType === type ? '#000' : '#fff',
-                  }}
-                  onClick={() => setExitType(type)}
-                >
-                  {type}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
+        {/* Exit Type Selection - Removed: now handled in FieldingModal (GAP-031) */}
 
         {/* HR Distance */}
         {needsHRDistance && (
