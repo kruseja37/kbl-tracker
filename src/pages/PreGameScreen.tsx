@@ -1,27 +1,62 @@
 /**
  * PreGameScreen - Shows matchup info before game starts
- * Per S-B001
+ * Per S-B001, S-B002
  */
 
 import { useNavigate } from 'react-router-dom';
-import { getTeam } from '../data/playerDatabase';
+import { getTeam, getTeamRotation, type PlayerData } from '../data/playerDatabase';
+
+interface PitcherStats {
+  wins: number;
+  losses: number;
+  era: number;
+}
 
 interface PreGameScreenProps {
   awayTeamId: string;
   homeTeamId: string;
+  awayStarterId?: string;  // If not provided, uses first in rotation
+  homeStarterId?: string;  // If not provided, uses first in rotation
   stadiumName?: string;
   onStartGame: () => void;
+}
+
+// Get pitcher season stats (placeholder - returns default for new season)
+function getPitcherStats(_pitcherId: string): PitcherStats {
+  // TODO: Wire to actual season storage when available
+  return { wins: 0, losses: 0, era: 0.00 };
+}
+
+// Format ERA with 2 decimal places
+function formatERA(era: number): string {
+  return era.toFixed(2);
 }
 
 export default function PreGameScreen({
   awayTeamId,
   homeTeamId,
+  awayStarterId,
+  homeStarterId,
   stadiumName = 'Home Stadium',
   onStartGame,
 }: PreGameScreenProps) {
   const navigate = useNavigate();
   const awayTeam = getTeam(awayTeamId);
   const homeTeam = getTeam(homeTeamId);
+
+  // Get starting pitchers
+  const awayRotation = getTeamRotation(awayTeamId);
+  const homeRotation = getTeamRotation(homeTeamId);
+
+  const awayStarter: PlayerData | undefined = awayStarterId
+    ? awayRotation.find(p => p.id === awayStarterId)
+    : awayRotation[0];
+  const homeStarter: PlayerData | undefined = homeStarterId
+    ? homeRotation.find(p => p.id === homeStarterId)
+    : homeRotation[0];
+
+  const awayPitcherStats = awayStarter ? getPitcherStats(awayStarter.id) : null;
+  const homePitcherStats = homeStarter ? getPitcherStats(homeStarter.id) : null;
 
   const handleStartGame = () => {
     onStartGame();
@@ -60,6 +95,47 @@ export default function PreGameScreen({
           <div style={styles.teamLabel}>HOME</div>
           <div style={styles.teamName}>{homeTeam?.name || homeTeamId}</div>
           <div style={styles.teamRecord}>--</div>
+        </div>
+      </div>
+
+      {/* Pitching Matchup */}
+      <div style={styles.pitchingSection}>
+        <div style={styles.pitchingHeader}>STARTING PITCHERS</div>
+        <div style={styles.pitchersContainer}>
+          {/* Away Starter */}
+          <div style={styles.pitcherCard}>
+            <div style={styles.pitcherName}>{awayStarter?.name || 'TBD'}</div>
+            {awayPitcherStats && (
+              <div style={styles.pitcherStats}>
+                <span style={styles.statRecord}>
+                  {awayPitcherStats.wins}-{awayPitcherStats.losses}
+                </span>
+                <span style={styles.statDivider}>|</span>
+                <span style={styles.statEra}>
+                  {formatERA(awayPitcherStats.era)} ERA
+                </span>
+              </div>
+            )}
+          </div>
+
+          {/* VS */}
+          <div style={styles.pitcherVs}>vs</div>
+
+          {/* Home Starter */}
+          <div style={styles.pitcherCard}>
+            <div style={styles.pitcherName}>{homeStarter?.name || 'TBD'}</div>
+            {homePitcherStats && (
+              <div style={styles.pitcherStats}>
+                <span style={styles.statRecord}>
+                  {homePitcherStats.wins}-{homePitcherStats.losses}
+                </span>
+                <span style={styles.statDivider}>|</span>
+                <span style={styles.statEra}>
+                  {formatERA(homePitcherStats.era)} ERA
+                </span>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -158,5 +234,60 @@ const styles: Record<string, React.CSSProperties> = {
     cursor: 'pointer',
     marginTop: '24px',
     transition: 'background-color 0.2s',
+  },
+  pitchingSection: {
+    marginTop: '16px',
+    textAlign: 'center',
+  },
+  pitchingHeader: {
+    color: '#64748b',
+    fontSize: '11px',
+    letterSpacing: '1.5px',
+    fontWeight: 600,
+    marginBottom: '12px',
+  },
+  pitchersContainer: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '24px',
+  },
+  pitcherCard: {
+    backgroundColor: '#1e293b',
+    padding: '16px 24px',
+    borderRadius: '8px',
+    border: '1px solid #334155',
+    minWidth: '180px',
+    textAlign: 'center',
+  },
+  pitcherName: {
+    color: '#e2e8f0',
+    fontSize: '18px',
+    fontWeight: 600,
+    marginBottom: '8px',
+  },
+  pitcherStats: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '8px',
+  },
+  statRecord: {
+    color: '#94a3b8',
+    fontSize: '14px',
+    fontWeight: 500,
+  },
+  statDivider: {
+    color: '#475569',
+    fontSize: '14px',
+  },
+  statEra: {
+    color: '#94a3b8',
+    fontSize: '14px',
+  },
+  pitcherVs: {
+    color: '#475569',
+    fontSize: '16px',
+    fontWeight: 600,
   },
 };
