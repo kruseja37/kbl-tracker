@@ -54,6 +54,7 @@ import LineupPanel from './LineupPanel';
 import { SeasonSummaryModal } from './SeasonSummary';
 import { PlayerNameWithMorale } from './PlayerNameWithMorale';
 import { MOJO_STATES, type MojoLevel } from '../../engines/mojoEngine';
+import { FITNESS_STATES, type FitnessState } from '../../engines/fitnessEngine';
 import { useFameDetection, type PlayerStats as FamePlayerStats } from '../../hooks/useFameDetection';
 import { useGamePersistence, type GameStateForPersistence } from '../../hooks/useGamePersistence';
 import { aggregateGameToSeason } from '../../utils/seasonAggregator';
@@ -2513,6 +2514,9 @@ export default function GameTracker() {
         const stats = pitcherGameStats.get(pitcherId);
         const pitcherName = stats?.pitcherName || lineupState.currentPitcher?.playerName || 'Unknown';
         const pitchCount = stats?.pitchCount ?? 0;
+        // Get pitcher fitness state (default to FIT)
+        const pitcherFitness: FitnessState = 'FIT'; // TODO: Wire to actual fitness tracking
+        const fitnessInfo = FITNESS_STATES[pitcherFitness];
         return (
           <div style={styles.pitcherBar}>
             <span style={styles.pitcherBarLabel}>PITCHING:</span>
@@ -2520,6 +2524,17 @@ export default function GameTracker() {
             <span style={styles.pitcherBarDivider}>|</span>
             <span style={styles.pitcherBarPitches}>
               Pitches: <strong>{pitchCount}</strong>
+            </span>
+            <span style={styles.pitcherBarDivider}>|</span>
+            <span
+              style={{
+                ...styles.pitcherFitnessBadge,
+                color: fitnessInfo.color,
+                backgroundColor: `${fitnessInfo.color}20`,
+              }}
+              title={`Fitness: ${fitnessInfo.displayName}`}
+            >
+              {fitnessInfo.emoji} {fitnessInfo.displayName}
             </span>
           </div>
         );
@@ -2949,6 +2964,13 @@ const styles: Record<string, React.CSSProperties> = {
   },
   pitcherBarPitches: {
     color: '#9ca3af',
+  },
+  pitcherFitnessBadge: {
+    fontSize: '11px',
+    fontWeight: 600,
+    padding: '2px 6px',
+    borderRadius: '4px',
+    marginLeft: '4px',
   },
   mainContent: {
     display: 'flex',
