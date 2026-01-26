@@ -1,15 +1,15 @@
 /**
  * GameSetupModal - Configure matchup before starting a game
- * Per S-B003
+ * Per S-B003, S-B004
  */
 
-import { useState } from 'react';
-import { getAllTeams, type TeamData } from '../data/playerDatabase';
+import { useState, useEffect } from 'react';
+import { getAllTeams, getTeamRotation, type TeamData, type PlayerData } from '../data/playerDatabase';
 
 interface GameSetupModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onConfirm: (awayTeamId: string, homeTeamId: string) => void;
+  onConfirm: (awayTeamId: string, homeTeamId: string, awayPitcherId?: string, homePitcherId?: string) => void;
 }
 
 export default function GameSetupModal({
@@ -20,16 +20,48 @@ export default function GameSetupModal({
   const teams = getAllTeams();
   const [awayTeamId, setAwayTeamId] = useState<string>('');
   const [homeTeamId, setHomeTeamId] = useState<string>('');
+  const [awayPitcherId, setAwayPitcherId] = useState<string>('');
+  const [homePitcherId, setHomePitcherId] = useState<string>('');
+
+  // Get rotation pitchers for selected teams
+  const awayRotation: PlayerData[] = awayTeamId ? getTeamRotation(awayTeamId) : [];
+  const homeRotation: PlayerData[] = homeTeamId ? getTeamRotation(homeTeamId) : [];
+
+  // Auto-select first pitcher when team is selected (or when rotation is available)
+  useEffect(() => {
+    if (awayTeamId && awayRotation.length > 0 && !awayPitcherId) {
+      setAwayPitcherId(awayRotation[0].id);
+    }
+  }, [awayTeamId, awayRotation, awayPitcherId]);
+
+  useEffect(() => {
+    if (homeTeamId && homeRotation.length > 0 && !homePitcherId) {
+      setHomePitcherId(homeRotation[0].id);
+    }
+  }, [homeTeamId, homeRotation, homePitcherId]);
+
+  // Reset pitcher selection when team changes
+  const handleAwayTeamChange = (teamId: string) => {
+    setAwayTeamId(teamId);
+    setAwayPitcherId(''); // Reset pitcher - useEffect will auto-select first
+  };
+
+  const handleHomeTeamChange = (teamId: string) => {
+    setHomeTeamId(teamId);
+    setHomePitcherId(''); // Reset pitcher - useEffect will auto-select first
+  };
 
   if (!isOpen) return null;
 
   const handleConfirm = () => {
-    if (awayTeamId && homeTeamId) {
-      onConfirm(awayTeamId, homeTeamId);
+    if (awayTeamId && homeTeamId && awayPitcherId && homePitcherId) {
+      onConfirm(awayTeamId, homeTeamId, awayPitcherId, homePitcherId);
     }
   };
 
-  const canConfirm = awayTeamId && homeTeamId && awayTeamId !== homeTeamId;
+  // Per S-B004 AC-3: Must have both teams AND both pitchers selected
+  const canConfirm = awayTeamId && homeTeamId && awayTeamId !== homeTeamId &&
+                     awayPitcherId && homePitcherId;
 
   return (
     <div style={styles.overlay} onClick={onClose}>
@@ -50,7 +82,7 @@ export default function GameSetupModal({
             <select
               style={styles.select}
               value={awayTeamId}
-              onChange={(e) => setAwayTeamId(e.target.value)}
+              onChange={(e) => handleAwayTeamChange(e.target.value)}
             >
               <option value="">Select team...</option>
               {teams.map((team: TeamData) => (
@@ -60,6 +92,24 @@ export default function GameSetupModal({
               ))}
             </select>
           </div>
+
+          {/* Away Pitcher - only show when team selected */}
+          {awayTeamId && awayRotation.length > 0 && (
+            <div style={styles.pitcherGroup}>
+              <label style={styles.pitcherLabel}>⚾ STARTING PITCHER</label>
+              <select
+                style={styles.pitcherSelect}
+                value={awayPitcherId}
+                onChange={(e) => setAwayPitcherId(e.target.value)}
+              >
+                {awayRotation.map((pitcher: PlayerData) => (
+                  <option key={pitcher.id} value={pitcher.id}>
+                    {pitcher.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
 
           {/* VS Indicator */}
           <div style={styles.vsIndicator}>@</div>
@@ -70,7 +120,7 @@ export default function GameSetupModal({
             <select
               style={styles.select}
               value={homeTeamId}
-              onChange={(e) => setHomeTeamId(e.target.value)}
+              onChange={(e) => handleHomeTeamChange(e.target.value)}
             >
               <option value="">Select team...</option>
               {teams.map((team: TeamData) => (
@@ -80,6 +130,24 @@ export default function GameSetupModal({
               ))}
             </select>
           </div>
+
+          {/* Home Pitcher - only show when team selected */}
+          {homeTeamId && homeRotation.length > 0 && (
+            <div style={styles.pitcherGroup}>
+              <label style={styles.pitcherLabel}>⚾ STARTING PITCHER</label>
+              <select
+                style={styles.pitcherSelect}
+                value={homePitcherId}
+                onChange={(e) => setHomePitcherId(e.target.value)}
+              >
+                {homeRotation.map((pitcher: PlayerData) => (
+                  <option key={pitcher.id} value={pitcher.id}>
+                    {pitcher.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
         </div>
 
         {/* Same team warning */}
@@ -224,5 +292,35 @@ const styles: Record<string, React.CSSProperties> = {
     border: 'none',
     borderRadius: '8px',
     cursor: 'pointer',
+  },
+  // Pitcher selection styles (S-B004)
+  pitcherGroup: {
+    width: '100%',
+    marginTop: '-8px',
+    paddingLeft: '16px',
+    borderLeft: '2px solid #334155',
+    marginLeft: '8px',
+  },
+  pitcherLabel: {
+    display: 'block',
+    color: '#64748b',
+    fontSize: '10px',
+    letterSpacing: '0.5px',
+    marginBottom: '6px',
+    fontWeight: 500,
+  },
+  pitcherSelect: {
+    width: '100%',
+    padding: '10px 14px',
+    fontSize: '14px',
+    backgroundColor: '#0f172a',
+    color: '#e2e8f0',
+    border: '1px solid #334155',
+    borderRadius: '6px',
+    cursor: 'pointer',
+    appearance: 'none',
+    backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%2364748b' viewBox='0 0 16 16'%3E%3Cpath d='M8 11L3 6h10l-5 5z'/%3E%3C/svg%3E")`,
+    backgroundRepeat: 'no-repeat',
+    backgroundPosition: 'right 12px center',
   },
 };

@@ -231,7 +231,22 @@ const createInitialPitcherStats = (
   inningsComplete: 0,
 });
 
-export default function GameTracker() {
+// Props interface for GameTracker
+interface GameTrackerProps {
+  onGameEnd?: (data: {
+    awayTeamId: string;
+    homeTeamId: string;
+    awayScore: number;
+    homeScore: number;
+    innings: number;
+    isWalkoff: boolean;
+    topBatters: Array<{ name: string; stats: string; teamId: string }>;
+    topPitchers: Array<{ name: string; stats: string; decision: 'W' | 'L' | 'S' | 'H' | null; teamId: string }>;
+    playerOfGame: { name: string; teamId: string; stats: string; fameBonus: number } | null;
+  }) => void;
+}
+
+export default function GameTracker({ onGameEnd }: GameTrackerProps = {}) {
   // Game state
   const [inning, setInning] = useState(1);
   const [halfInning, setHalfInning] = useState<HalfInning>('TOP');
@@ -290,6 +305,21 @@ export default function GameTracker() {
 
   // Lineup Panel state
   const [showLineupPanel, setShowLineupPanel] = useState(false);
+
+  // Player Mojo and Fitness state (manually adjustable)
+  // Key: playerId, Value: MojoLevel (-2 to 2)
+  const [playerMojoLevels, setPlayerMojoLevels] = useState<Record<string, MojoLevel>>({});
+  // Key: playerId, Value: FitnessState
+  const [playerFitnessStates, setPlayerFitnessStates] = useState<Record<string, FitnessState>>({});
+
+  // Callbacks to adjust mojo/fitness from LineupPanel
+  const handleMojoChange = useCallback((playerId: string, newLevel: MojoLevel) => {
+    setPlayerMojoLevels(prev => ({ ...prev, [playerId]: newLevel }));
+  }, []);
+
+  const handleFitnessChange = useCallback((playerId: string, newState: FitnessState) => {
+    setPlayerFitnessStates(prev => ({ ...prev, [playerId]: newState }));
+  }, []);
 
   // Toggle Fame toast notifications
   const toggleFameToasts = useCallback(() => {
@@ -869,11 +899,170 @@ export default function GameTracker() {
 
     // Open the end-game Fame summary
     setEndGameFameSummaryOpen(true);
+
+    // ============================================
+    // Calculate top performers for PostGameScreen
+    // ============================================
+    if (onGameEnd) {
+      // Build batter stats by combining playerStats with demoLineup for names
+      // Both away and home lineups are stored in demoLineup for now (away team)
+      // and awayData/homeData for home team
+      const allBatterStats: Array<{
+        playerId: string;
+        name: string;
+        teamId: string;
+        hits: number;
+        atBats: number;
+        rbi: number;
+        runs: number;
+        hrs: number;
+        doubles: number;
+        triples: number;
+        walks: number;
+        score: number;
+      }> = [];
+
+      // Get batters from demoLineup (tracks all players with stats)
+      // In the current implementation, demoLineup contains away team players
+      demoLineup.forEach(player => {
+        const stats = playerStats[player.id];
+        if (stats && stats.ab > 0) {
+          allBatterStats.push({
+            playerId: player.id,
+            name: player.name,
+            teamId: awayTeamId,
+            hits: stats.h,
+            atBats: stats.ab,
+            rbi: stats.rbi,
+            runs: stats.r,
+            hrs: stats.hr,
+            doubles: stats.doubles,
+            triples: stats.triples,
+            walks: stats.bb,
+            score: stats.h + (stats.hr * 2) + (stats.rbi * 1.5) + (stats.r * 0.5),
+          });
+        }
+      });
+
+      // Also check lineup state for home team players (current lineup)
+      lineupState.lineup.forEach((player: LineupPlayer) => {
+        // Skip if already added from demoLineup
+        if (allBatterStats.some(b => b.playerId === player.playerId)) return;
+        const stats = playerStats[player.playerId];
+        if (stats && stats.ab > 0) {
+          allBatterStats.push({
+            playerId: player.playerId,
+            name: player.playerName,
+            teamId: homeTeamId,
+            hits: stats.h,
+            atBats: stats.ab,
+            rbi: stats.rbi,
+            runs: stats.r,
+            hrs: stats.hr,
+            doubles: stats.doubles,
+            triples: stats.triples,
+            walks: stats.bb,
+            score: stats.h + (stats.hr * 2) + (stats.rbi * 1.5) + (stats.r * 0.5),
+          });
+        }
+      });
+
+      // Sort by performance score
+      allBatterStats.sort((a, b) => b.score - a.score);
+
+      // Top 3 batters
+      const topBatters = allBatterStats.slice(0, 3).map(b => {
+        const extras: string[] = [];
+        if (b.hrs > 0) extras.push(`${b.hrs} HR`);
+        if (b.doubles > 0) extras.push(`${b.doubles} 2B`);
+        if (b.triples > 0) extras.push(`${b.triples} 3B`);
+        const statsLine = `${b.hits}-${b.atBats}${b.rbi > 0 ? `, ${b.rbi} RBI` : ''}${extras.length > 0 ? `, ${extras.join(', ')}` : ''}`;
+        return { name: b.name, stats: statsLine, teamId: b.teamId };
+      });
+
+      // Get pitcher stats
+      const allPitcherStats = Array.from(pitcherGameStats.values())
+        .map(p => ({
+          pitcherId: p.pitcherId,
+          name: p.pitcherName,
+          teamId: p.teamId,
+          ip: (p.outsRecorded / 3).toFixed(1),
+          outsRecorded: p.outsRecorded,
+          er: p.runsAllowed, // Using runs as ER approximation
+          hits: p.hitsAllowed,
+          walks: p.walksAllowed,
+          k: p.strikeoutsThrown,
+          isStarter: p.isStarter,
+        }))
+        .filter(p => p.outsRecorded > 0);
+
+      // Determine W/L/S for pitchers
+      const winningTeamId = awayScore > homeScore ? awayTeamId : homeTeamId;
+      const losingTeamId = awayScore > homeScore ? homeTeamId : awayTeamId;
+
+      // Find winning pitcher (starter or first reliever for winning team with good stats)
+      const winningTeamPitchers = allPitcherStats.filter(p => p.teamId === winningTeamId);
+      const losingTeamPitchers = allPitcherStats.filter(p => p.teamId === losingTeamId);
+
+      // Simple logic: Starter who pitched 5+ IP and team won gets W, last pitcher for loser with earned runs gets L
+      const winnerStarter = winningTeamPitchers.find(p => p.isStarter && p.outsRecorded >= 15);
+      const loserStarter = losingTeamPitchers.find(p => p.isStarter);
+
+      const topPitchers = allPitcherStats.slice(0, 3).map(p => {
+        let decision: 'W' | 'L' | 'S' | 'H' | null = null;
+        if (winnerStarter && p.pitcherId === winnerStarter.pitcherId) decision = 'W';
+        else if (loserStarter && p.pitcherId === loserStarter.pitcherId) decision = 'L';
+
+        const statsLine = `${p.ip} IP, ${p.er} ER, ${p.k} K`;
+        return { name: p.name, stats: statsLine, decision, teamId: p.teamId };
+      });
+
+      // Determine Player of the Game (highest performing batter or a dominant pitcher)
+      let playerOfGame: { name: string; teamId: string; stats: string; fameBonus: number } | null = null;
+
+      // Check for dominant pitcher (7+ IP, 0-1 ER)
+      const dominantPitcher = allPitcherStats.find(p => p.outsRecorded >= 21 && p.er <= 1);
+      if (dominantPitcher) {
+        playerOfGame = {
+          name: dominantPitcher.name,
+          teamId: dominantPitcher.teamId,
+          stats: `${dominantPitcher.ip} IP, ${dominantPitcher.er} ER, ${dominantPitcher.k} K`,
+          fameBonus: 2,
+        };
+      } else if (allBatterStats.length > 0) {
+        const topBatterData = allBatterStats[0];
+        const extras: string[] = [];
+        if (topBatterData.hrs > 0) extras.push(`${topBatterData.hrs} HR`);
+        if (topBatterData.doubles > 0) extras.push(`${topBatterData.doubles} 2B`);
+        playerOfGame = {
+          name: topBatterData.name,
+          teamId: topBatterData.teamId,
+          stats: `${topBatterData.hits}-${topBatterData.atBats}, ${topBatterData.rbi} RBI, ${topBatterData.runs} R${extras.length > 0 ? ', ' + extras.join(', ') : ''}`,
+          fameBonus: 2,
+        };
+      }
+
+      // Detect walkoff: home team wins in bottom of 9th+ with go-ahead run
+      const isWalkoffWin = halfInning === 'BOTTOM' && inning >= 9 && homeScore > awayScore;
+
+      // Call the callback with game end data
+      onGameEnd({
+        awayTeamId,
+        homeTeamId,
+        awayScore,
+        homeScore,
+        innings: inning,
+        isWalkoff: isWalkoffWin,
+        topBatters,
+        topPitchers,
+        playerOfGame,
+      });
+    }
   }, [
     gameId, inning, halfInning, outs, awayScore, homeScore, bases,
     maxDeficitAway, maxDeficitHome, lastHRBatterId, consecutiveHRCount,
     pitcherGameStats, fameDetection, awayTeamId, homeTeamId, awayTeamName, homeTeamName,
-    gamePersistence, buildPersistenceState, addFameEvent
+    gamePersistence, buildPersistenceState, addFameEvent, onGameEnd, playerStats, lineupState
   ]);
 
   // Check if game should end based on score and inning
@@ -2517,10 +2706,18 @@ export default function GameTracker() {
         // Get pitcher fitness state (default to FIT)
         const pitcherFitness: FitnessState = 'FIT'; // TODO: Wire to actual fitness tracking
         const fitnessInfo = FITNESS_STATES[pitcherFitness];
+        // Get pitcher's team ID (opposite of batting team)
+        const pitcherTeamId = halfInning === 'TOP' ? homeTeamId : awayTeamId;
         return (
           <div style={styles.pitcherBar}>
             <span style={styles.pitcherBarLabel}>PITCHING:</span>
-            <span style={styles.pitcherBarName}>{pitcherName}</span>
+            <span
+              style={{ ...styles.pitcherBarName, cursor: 'pointer' }}
+              onClick={() => handlePlayerClick(pitcherId, pitcherName, pitcherTeamId)}
+              title="Click to view player stats"
+            >
+              {pitcherName}
+            </span>
             <span style={styles.pitcherBarDivider}>|</span>
             <span style={styles.pitcherBarPitches}>
               Pitches: <strong>{pitchCount}</strong>
@@ -2924,6 +3121,10 @@ export default function GameTracker() {
         halfInning={halfInning}
         onPlayerClick={handlePlayerClick}
         teamId={halfInning === 'TOP' ? awayTeamId : homeTeamId}
+        playerMojoLevels={playerMojoLevels}
+        playerFitnessStates={playerFitnessStates}
+        onMojoChange={handleMojoChange}
+        onFitnessChange={handleFitnessChange}
       />
     </div>
   );

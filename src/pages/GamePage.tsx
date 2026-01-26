@@ -1,11 +1,44 @@
+import { useNavigate } from 'react-router-dom';
 import GameTracker from '../components/GameTracker';
 import { useDataIntegrity } from '../hooks/useDataIntegrity';
 import { getOrCreateSeason } from '../utils/seasonStorage';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 
 export default function GamePage() {
+  const navigate = useNavigate();
   const dataIntegrity = useDataIntegrity();
   const [seasonReady, setSeasonReady] = useState(false);
+
+  // Handle game end - navigate to PostGameScreen with game data
+  const handleGameEnd = useCallback((data: {
+    awayTeamId: string;
+    homeTeamId: string;
+    awayScore: number;
+    homeScore: number;
+    innings: number;
+    isWalkoff: boolean;
+    topBatters: Array<{ name: string; stats: string; teamId: string }>;
+    topPitchers: Array<{ name: string; stats: string; decision: 'W' | 'L' | 'S' | 'H' | null; teamId: string }>;
+    playerOfGame: { name: string; teamId: string; stats: string; fameBonus: number } | null;
+  }) => {
+    // Build URL params for PostGameScreen
+    const params = new URLSearchParams({
+      away: data.awayTeamId,
+      home: data.homeTeamId,
+      awayScore: data.awayScore.toString(),
+      homeScore: data.homeScore.toString(),
+      innings: data.innings.toString(),
+      walkoff: data.isWalkoff.toString(),
+      topBatters: encodeURIComponent(JSON.stringify(data.topBatters)),
+      topPitchers: encodeURIComponent(JSON.stringify(data.topPitchers)),
+    });
+
+    if (data.playerOfGame) {
+      params.set('pog', encodeURIComponent(JSON.stringify(data.playerOfGame)));
+    }
+
+    navigate(`/postgame?${params.toString()}`);
+  }, [navigate]);
 
   useEffect(() => {
     async function ensureSeason() {
@@ -96,7 +129,7 @@ export default function GamePage() {
         </div>
       )}
 
-      <GameTracker />
+      <GameTracker onGameEnd={handleGameEnd} />
     </div>
   );
 }

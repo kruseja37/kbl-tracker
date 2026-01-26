@@ -9,7 +9,7 @@
  * - Career totals
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useSeasonStats, type BattingLeaderEntry, type PitchingLeaderEntry } from '../../hooks/useSeasonStats';
 import { useWARCalculations, formatWAR, getWARColor, type PlayerBWAR, type PlayerPWAR } from '../../hooks/useWARCalculations';
 import { useCareerStats, type CareerBattingLeader, type CareerPitchingLeader } from '../../hooks/useCareerStats';
@@ -47,6 +47,9 @@ interface PlayerCardProps {
 }
 
 interface PlayerFullStats {
+  // Player base data from database
+  playerData: PlayerData | null;
+
   // Season batting
   seasonBatting: (PlayerSeasonBatting & {
     avg: number;
@@ -125,91 +128,121 @@ function toSalaryFormat(player: PlayerData, fame: number): PlayerForSalary {
 export function PlayerCard({ playerId, playerName, teamId, onClose }: PlayerCardProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [stats, setStats] = useState<PlayerFullStats | null>(null);
-  const { getPlayerBWAR, getPlayerPWAR, seasonGames } = useWARCalculations();
+  const warCalculations = useWARCalculations();
 
-  const loadPlayerStats = useCallback(async () => {
-    setIsLoading(true);
-    try {
-      // Load season stats
-      const [allBatting, allPitching, careerData] = await Promise.all([
-        getAllBattingStats('season-1'),
-        getAllPitchingStats('season-1'),
-        getCareerStats(playerId),
-      ]);
-
-      // Find this player's stats
-      const batting = allBatting.find(b => b.playerId === playerId);
-      const pitching = allPitching.find(p => p.playerId === playerId);
-
-      // Get WAR data
-      const bwar = getPlayerBWAR(playerId);
-      const pwar = getPlayerPWAR(playerId);
-
-      // Calculate derived stats
-      const seasonBatting = batting ? {
-        ...batting,
-        ...calculateBattingDerived(batting),
-      } : null;
-
-      const seasonPitching = pitching ? {
-        ...pitching,
-        ...calculatePitchingDerived(pitching),
-        ip: pitching.outsRecorded / 3,
-      } : null;
-
-      // Calculate total WAR
-      let totalWAR = 0;
-      if (bwar) totalWAR += bwar.bWAR;
-      if (pwar) totalWAR += pwar.pWAR;
-
-      // Get fame from season batting (fame is tracked there)
-      const fameTotal = batting?.fameNet ?? 0;
-      const fameTierData = getFameTier(fameTotal);
-
-      // Calculate salary if player ratings are available in database
-      // Look up by ID first, then fall back to name match
-      let estimatedSalary: number | null = null;
-      const playerData = getPlayer(playerId) || getPlayerByName(playerName);
-      if (playerData) {
-        const salaryPlayer = toSalaryFormat(playerData, fameTotal);
-
-        // Build DH context for salary calculation
-        // This adjusts pitcher batting bonus based on league DH rules
-        initializeDefaultLeagues();  // Ensure default leagues exist
-        const teams = getAllTeams();
-        const leagues = getLeagues();
-        const seasonConfig = getSeasonDHConfig();
-        const dhContext = buildDHContext(
-          { isTwoWay: salaryPlayer.isTwoWay },
-          teams,
-          leagues,
-          seasonConfig
-        );
-
-        estimatedSalary = calculateSalary(salaryPlayer, undefined, undefined, false, dhContext);
-      }
-
-      setStats({
-        seasonBatting,
-        seasonPitching,
-        bwar,
-        pwar,
-        totalWAR,
-        career: careerData,
-        fameTier: fameTierData.label,
-        fameTotal,
-        estimatedSalary,
-      });
-    } catch (err) {
-      console.error('[PlayerCard] Failed to load stats:', err);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [playerId, getPlayerBWAR, getPlayerPWAR]);
-
+  // Load stats when player changes or when WAR calculations finish loading
   useEffect(() => {
+    // Wait for WAR calculations to finish loading before loading player stats
+    if (warCalculations.isLoading) {
+      return;
+    }
+
+    const loadPlayerStats = async () => {
+      setIsLoading(true);
+      try {
+        // First, get player base data from database (this is synchronous)
+        const playerData = getPlayer(playerId) || getPlayerByName(playerName) || null;
+
+        // Load season stats - these may fail or return empty if no games played
+        let allBatting: PlayerSeasonBatting[] = [];
+        let allPitching: PlayerSeasonPitching[] = [];
+        let careerData: CareerStats | null = null;
+
+        try {
+          // Load season stats (not career - career DB may not be initialized)
+          allBatting = await getAllBattingStats('season-1');
+          allPitching = await getAllPitchingStats('season-1');
+          // Skip career stats for now - can hang if DB version mismatch
+          careerData = null;
+        } catch (dbErr) {
+          console.warn('[PlayerCard] Could not load season stats (may be new season):', dbErr);
+        }
+
+        // Find this player's stats
+        const batting = allBatting.find(b => b.playerId === playerId);
+        const pitching = allPitching.find(p => p.playerId === playerId);
+
+        // Get WAR data - now warCalculations is guaranteed to be loaded
+        const bwar = warCalculations.getPlayerBWAR(playerId);
+        const pwar = warCalculations.getPlayerPWAR(playerId);
+
+        // Calculate derived stats
+        const seasonBatting = batting ? {
+          ...batting,
+          ...calculateBattingDerived(batting),
+        } : null;
+
+        const seasonPitching = pitching ? {
+          ...pitching,
+          ...calculatePitchingDerived(pitching),
+          ip: pitching.outsRecorded / 3,
+        } : null;
+
+        // Calculate total WAR
+        let totalWAR = 0;
+        if (bwar) totalWAR += bwar.bWAR;
+        if (pwar) totalWAR += pwar.pWAR;
+
+        // Get fame from season batting (fame is tracked there)
+        const fameTotal = batting?.fameNet ?? 0;
+        const fameTierData = getFameTier(fameTotal);
+
+        // Calculate salary if player ratings are available in database
+        let estimatedSalary: number | null = null;
+        if (playerData) {
+          const salaryPlayer = toSalaryFormat(playerData, fameTotal);
+
+          // Build DH context for salary calculation
+          // This adjusts pitcher batting bonus based on league DH rules
+          initializeDefaultLeagues();  // Ensure default leagues exist
+          const teams = getAllTeams();
+          const leagues = getLeagues();
+          const seasonConfig = getSeasonDHConfig();
+          const dhContext = buildDHContext(
+            { isTwoWay: salaryPlayer.isTwoWay },
+            teams,
+            leagues,
+            seasonConfig
+          );
+
+          estimatedSalary = calculateSalary(salaryPlayer, undefined, undefined, false, dhContext);
+        }
+
+        setStats({
+          playerData,
+          seasonBatting,
+          seasonPitching,
+          bwar,
+          pwar,
+          totalWAR,
+          career: careerData,
+          fameTier: fameTierData.label,
+          fameTotal,
+          estimatedSalary,
+        });
+      } catch (err) {
+        console.error('[PlayerCard] Failed to load stats:', err);
+        // Still set stats with at least playerData if available
+        const playerData = getPlayer(playerId) || getPlayerByName(playerName) || null;
+        setStats({
+          playerData,
+          seasonBatting: null,
+          seasonPitching: null,
+          bwar: null,
+          pwar: null,
+          totalWAR: 0,
+          career: null,
+          fameTier: 'Unknown',
+          fameTotal: 0,
+          estimatedSalary: null,
+        });
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
     loadPlayerStats();
-  }, [loadPlayerStats]);
+  }, [playerId, playerName, warCalculations.isLoading]); // Re-run when WAR finishes loading
 
   if (isLoading) {
     return (
@@ -358,6 +391,59 @@ export function PlayerCard({ playerId, playerName, teamId, onClose }: PlayerCard
         </div>
       )}
 
+      {/* Player Base Ratings - Show when no season stats exist */}
+      {stats.playerData && !stats.seasonBatting && !stats.seasonPitching && (
+        <div style={styles.section}>
+          <div style={styles.sectionTitle}>Player Ratings</div>
+          {stats.playerData.isPitcher && stats.playerData.pitcherRatings ? (
+            <>
+              <div style={styles.ratingsRow}>
+                <RatingItem label="VEL" value={stats.playerData.pitcherRatings.velocity} />
+                <RatingItem label="JNK" value={stats.playerData.pitcherRatings.junk} />
+                <RatingItem label="ACC" value={stats.playerData.pitcherRatings.accuracy} />
+              </div>
+              <div style={styles.arsenalRow}>
+                <span style={styles.arsenalLabel}>Arsenal:</span>
+                <span style={styles.arsenalValue}>{stats.playerData.arsenal?.join(', ') || '—'}</span>
+              </div>
+              {stats.playerData.batterRatings && (
+                <div style={styles.batterRatingsSubsection}>
+                  <div style={styles.subsectionLabel}>Batting Ratings</div>
+                  <div style={styles.ratingsRow}>
+                    <RatingItem label="POW" value={stats.playerData.batterRatings.power} size="small" />
+                    <RatingItem label="CON" value={stats.playerData.batterRatings.contact} size="small" />
+                    <RatingItem label="SPD" value={stats.playerData.batterRatings.speed} size="small" />
+                  </div>
+                </div>
+              )}
+            </>
+          ) : stats.playerData.batterRatings ? (
+            <>
+              <div style={styles.ratingsRow}>
+                <RatingItem label="POW" value={stats.playerData.batterRatings.power} />
+                <RatingItem label="CON" value={stats.playerData.batterRatings.contact} />
+                <RatingItem label="SPD" value={stats.playerData.batterRatings.speed} />
+                <RatingItem label="FLD" value={stats.playerData.batterRatings.fielding} />
+                <RatingItem label="ARM" value={stats.playerData.batterRatings.arm} />
+              </div>
+            </>
+          ) : null}
+          <div style={styles.positionRow}>
+            <span style={styles.posLabel}>Position:</span>
+            <span style={styles.posValue}>
+              {stats.playerData.primaryPosition}
+              {stats.playerData.secondaryPosition && ` / ${stats.playerData.secondaryPosition}`}
+            </span>
+            <span style={styles.batsThrows}>
+              {stats.playerData.bats}/{stats.playerData.throws}
+            </span>
+          </div>
+          <div style={styles.noStatsNotice}>
+            No season stats recorded yet
+          </div>
+        </div>
+      )}
+
       {/* Career Totals */}
       {stats.career && (
         <div style={styles.section}>
@@ -405,6 +491,37 @@ function StatItem({ label, value }: { label: string; value: string | number }) {
     <div style={styles.statItem}>
       <span style={styles.statLabel}>{label}</span>
       <span style={styles.statValue}>{value}</span>
+    </div>
+  );
+}
+
+/**
+ * Rating item for displaying player base ratings with color coding
+ */
+function RatingItem({ label, value, size = 'normal' }: { label: string; value: number; size?: 'normal' | 'small' }) {
+  const getRatingColor = (rating: number): string => {
+    if (rating >= 90) return '#22c55e'; // Elite - green
+    if (rating >= 75) return '#3b82f6'; // Great - blue
+    if (rating >= 60) return '#f59e0b'; // Good - amber
+    if (rating >= 45) return '#9ca3af'; // Average - gray
+    return '#ef4444'; // Below average - red
+  };
+
+  const isSmall = size === 'small';
+  return (
+    <div style={{
+      ...styles.ratingItem,
+      padding: isSmall ? '4px 8px' : '8px 12px',
+    }}>
+      <span style={{
+        ...styles.ratingLabel,
+        fontSize: isSmall ? '0.5rem' : '0.625rem',
+      }}>{label}</span>
+      <span style={{
+        ...styles.ratingValue,
+        color: getRatingColor(value),
+        fontSize: isSmall ? '0.875rem' : '1.125rem',
+      }}>{value}</span>
     </div>
   );
 }
@@ -636,6 +753,88 @@ const styles: Record<string, React.CSSProperties> = {
   modalContent: {
     maxHeight: '90vh',
     overflow: 'auto',
+  },
+  // Rating display styles
+  ratingsRow: {
+    display: 'flex',
+    gap: '8px',
+    marginBottom: '12px',
+    justifyContent: 'center',
+  },
+  ratingItem: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    backgroundColor: '#111827',
+    borderRadius: '6px',
+    minWidth: '48px',
+  },
+  ratingLabel: {
+    color: '#6b7280',
+    textTransform: 'uppercase',
+    letterSpacing: '0.05em',
+  },
+  ratingValue: {
+    fontWeight: 700,
+  },
+  arsenalRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    marginBottom: '12px',
+    paddingLeft: '4px',
+  },
+  arsenalLabel: {
+    fontSize: '0.75rem',
+    color: '#6b7280',
+  },
+  arsenalValue: {
+    fontSize: '0.875rem',
+    color: '#d1d5db',
+    fontFamily: 'monospace',
+  },
+  batterRatingsSubsection: {
+    marginTop: '8px',
+    paddingTop: '8px',
+    borderTop: '1px solid #374151',
+  },
+  subsectionLabel: {
+    fontSize: '0.625rem',
+    color: '#6b7280',
+    textTransform: 'uppercase',
+    letterSpacing: '0.05em',
+    marginBottom: '8px',
+    textAlign: 'center',
+  },
+  positionRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    marginBottom: '8px',
+    paddingLeft: '4px',
+  },
+  posLabel: {
+    fontSize: '0.75rem',
+    color: '#6b7280',
+  },
+  posValue: {
+    fontSize: '0.875rem',
+    color: '#f3f4f6',
+    fontWeight: 500,
+  },
+  batsThrows: {
+    fontSize: '0.75rem',
+    color: '#9ca3af',
+    marginLeft: 'auto',
+  },
+  noStatsNotice: {
+    fontSize: '0.75rem',
+    color: '#6b7280',
+    fontStyle: 'italic',
+    textAlign: 'center',
+    paddingTop: '8px',
+    borderTop: '1px solid #374151',
+    marginTop: '8px',
   },
 };
 

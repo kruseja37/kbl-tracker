@@ -6,10 +6,18 @@ export default function MainMenu() {
   const navigate = useNavigate();
   const [showGameSetup, setShowGameSetup] = useState(false);
 
-  const handleGameSetupConfirm = (awayTeamId: string, homeTeamId: string) => {
+  const handleGameSetupConfirm = (
+    awayTeamId: string,
+    homeTeamId: string,
+    awayPitcherId?: string,
+    homePitcherId?: string
+  ) => {
     setShowGameSetup(false);
-    // Navigate to pregame with team IDs as URL params
-    navigate(`/pregame?away=${awayTeamId}&home=${homeTeamId}`);
+    // Navigate to pregame with team and pitcher IDs as URL params
+    let url = `/pregame?away=${awayTeamId}&home=${homeTeamId}`;
+    if (awayPitcherId) url += `&awayPitcher=${awayPitcherId}`;
+    if (homePitcherId) url += `&homePitcher=${homePitcherId}`;
+    navigate(url);
   };
 
   return (
