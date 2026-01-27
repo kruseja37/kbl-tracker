@@ -1,5 +1,9 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Routes, Route, useSearchParams, useNavigate, useLocation } from 'react-router-dom';
+
+// Global styles
+import './styles/global.css';
+
 import NavigationHeader from './components/NavigationHeader';
 import MainMenu from './pages/MainMenu';
 import GamePage from './pages/GamePage';

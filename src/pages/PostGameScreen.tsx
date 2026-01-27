@@ -27,23 +27,18 @@ interface ChampionshipData {
  * PostGameScreen - Comprehensive post-game summary
  * Per Ralph Framework S-B006, S-B007, S-B008, S-B018
  *
- * Shows:
- * - Generated headline with reporter byline
- * - Final score with winner highlighted
- * - Top performers (batters and pitchers)
- * - Player of the Game with Fame bonus
- * - Continue to Season button
+ * Styled with SNES retro aesthetic (SMB4 colors)
  */
 
 interface TopBatter {
   name: string;
-  stats: string; // e.g., "3-4, 2 RBI, HR"
+  stats: string;
   teamId: string;
 }
 
 interface TopPitcher {
   name: string;
-  stats: string; // e.g., "W, 7 IP, 2 ER, 8 K"
+  stats: string;
   decision: 'W' | 'L' | 'S' | 'H' | null;
   teamId: string;
 }
@@ -90,7 +85,7 @@ export default function PostGameScreen() {
   const winner = useMemo(() => {
     if (awayScore > homeScore) return 'away';
     if (homeScore > awayScore) return 'home';
-    return null; // Tie (shouldn't happen in baseball)
+    return null;
   }, [awayScore, homeScore]);
 
   const winningTeamName = winner === 'away' ? awayTeamName : homeTeamName;
@@ -101,7 +96,6 @@ export default function PostGameScreen() {
       const battersParam = searchParams.get('topBatters');
       if (battersParam) return JSON.parse(decodeURIComponent(battersParam));
     } catch { /* ignore parse errors */ }
-    // Default mock data if not provided
     return [
       { name: 'Player A', stats: '2-4, 2 RBI, HR', teamId: awayTeamId },
       { name: 'Player B', stats: '3-5, R, 2B', teamId: homeTeamId },
@@ -113,7 +107,6 @@ export default function PostGameScreen() {
       const pitchersParam = searchParams.get('topPitchers');
       if (pitchersParam) return JSON.parse(decodeURIComponent(pitchersParam));
     } catch { /* ignore parse errors */ }
-    // Default mock data if not provided
     return [
       { name: 'Starter A', stats: 'W, 6 IP, 2 ER, 5 K', decision: 'W', teamId: awayTeamId },
       { name: 'Closer B', stats: 'S, 1 IP, 0 ER, 2 K', decision: 'S', teamId: homeTeamId },
@@ -125,7 +118,6 @@ export default function PostGameScreen() {
       const pogParam = searchParams.get('pog');
       if (pogParam) return JSON.parse(decodeURIComponent(pogParam));
     } catch { /* ignore parse errors */ }
-    // Default mock data if not provided
     return {
       name: 'Star Player',
       teamId: winner === 'away' ? awayTeamId : homeTeamId,
@@ -166,7 +158,6 @@ export default function PostGameScreen() {
     const gameId = searchParams.get('gameId') || `game_${Date.now()}`;
     const date = new Date().toISOString().split('T')[0];
 
-    // Build box score data from available info
     const boxScoreData = {
       gameId,
       date,
@@ -209,506 +200,309 @@ export default function PostGameScreen() {
     console.log(`[PostGame] Exported box score as ${format.toUpperCase()}`);
   }, [searchParams, homeTeamName, awayTeamName, homeScore, awayScore, innings, topBatters, homeTeamId, awayTeamId]);
 
-  // Styles matching the app's dark theme
-  const styles = {
-    container: {
-      minHeight: '100vh',
-      background: 'linear-gradient(180deg, #0f172a 0%, #1e293b 100%)',
-      padding: '2rem',
-      color: '#fff',
-    },
-    content: {
-      maxWidth: '800px',
-      margin: '0 auto',
-    },
-    header: {
-      textAlign: 'center' as const,
-      marginBottom: '2rem',
-    },
-    title: {
-      fontSize: '1.5rem',
-      fontWeight: 600,
-      color: '#94a3b8',
-      textTransform: 'uppercase' as const,
-      letterSpacing: '0.2em',
-      marginBottom: '0.5rem',
-    },
-    winnerBanner: {
-      fontSize: '2.5rem',
-      fontWeight: 800,
-      color: '#fbbf24',
-      marginBottom: '0.5rem',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      gap: '0.75rem',
-    },
-    walkoffTag: {
-      fontSize: '1rem',
-      backgroundColor: '#dc2626',
-      color: '#fff',
-      padding: '0.25rem 0.75rem',
-      borderRadius: '9999px',
-      fontWeight: 600,
-    },
-    scoreCard: {
-      display: 'grid',
-      gridTemplateColumns: '1fr auto 1fr',
-      gap: '1rem',
-      alignItems: 'center',
-      backgroundColor: 'rgba(30, 41, 59, 0.8)',
-      padding: '1.5rem',
-      borderRadius: '12px',
-      marginBottom: '2rem',
-      border: '1px solid rgba(148, 163, 184, 0.2)',
-    },
-    teamScore: {
-      textAlign: 'center' as const,
-    },
-    teamName: {
-      fontSize: '1.25rem',
-      fontWeight: 600,
-      marginBottom: '0.25rem',
-    },
-    score: {
-      fontSize: '3rem',
-      fontWeight: 800,
-    },
-    scoreDivider: {
-      fontSize: '1.5rem',
-      color: '#64748b',
-      fontWeight: 300,
-    },
-    section: {
-      backgroundColor: 'rgba(30, 41, 59, 0.6)',
-      borderRadius: '12px',
-      padding: '1.25rem',
-      marginBottom: '1.5rem',
-      border: '1px solid rgba(148, 163, 184, 0.15)',
-    },
-    sectionTitle: {
-      fontSize: '0.875rem',
-      fontWeight: 600,
-      color: '#94a3b8',
-      textTransform: 'uppercase' as const,
-      letterSpacing: '0.1em',
-      marginBottom: '0.75rem',
-      display: 'flex',
-      alignItems: 'center',
-      gap: '0.5rem',
-    },
-    playerRow: {
-      display: 'flex',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      padding: '0.5rem 0',
-      borderBottom: '1px solid rgba(148, 163, 184, 0.1)',
-    },
-    playerName: {
-      fontWeight: 600,
-      color: '#e2e8f0',
-    },
-    playerStats: {
-      color: '#94a3b8',
-      fontSize: '0.875rem',
-    },
-    decisionBadge: {
-      display: 'inline-block',
-      padding: '0.125rem 0.5rem',
-      borderRadius: '4px',
-      fontSize: '0.75rem',
-      fontWeight: 700,
-      marginRight: '0.5rem',
-    },
-    pogCard: {
-      background: 'linear-gradient(135deg, rgba(251, 191, 36, 0.15) 0%, rgba(245, 158, 11, 0.05) 100%)',
-      border: '2px solid rgba(251, 191, 36, 0.4)',
-      borderRadius: '12px',
-      padding: '1.5rem',
-      marginBottom: '1.5rem',
-      textAlign: 'center' as const,
-    },
-    pogTitle: {
-      fontSize: '0.75rem',
-      fontWeight: 600,
-      color: '#fbbf24',
-      textTransform: 'uppercase' as const,
-      letterSpacing: '0.2em',
-      marginBottom: '0.5rem',
-    },
-    pogName: {
-      fontSize: '1.75rem',
-      fontWeight: 800,
-      color: '#fff',
-      marginBottom: '0.25rem',
-    },
-    pogStats: {
-      color: '#cbd5e1',
-      marginBottom: '0.75rem',
-    },
-    fameBadge: {
-      display: 'inline-flex',
-      alignItems: 'center',
-      gap: '0.25rem',
-      backgroundColor: 'rgba(34, 197, 94, 0.2)',
-      color: '#22c55e',
-      padding: '0.25rem 0.75rem',
-      borderRadius: '9999px',
-      fontWeight: 600,
-      fontSize: '0.875rem',
-    },
-    continueButton: {
-      width: '100%',
-      padding: '1rem',
-      fontSize: '1.125rem',
-      fontWeight: 700,
-      backgroundColor: '#3b82f6',
-      color: '#fff',
-      border: 'none',
-      borderRadius: '8px',
-      cursor: 'pointer',
-      transition: 'all 0.2s',
-      textTransform: 'uppercase' as const,
-      letterSpacing: '0.1em',
-    },
-    extraInnings: {
-      fontSize: '0.875rem',
-      color: '#94a3b8',
-    },
-    headlineCard: {
-      backgroundColor: 'rgba(15, 23, 42, 0.9)',
-      borderRadius: '12px',
-      padding: '1.5rem',
-      marginBottom: '1.5rem',
-      border: '1px solid rgba(148, 163, 184, 0.2)',
-      textAlign: 'center' as const,
-    },
-    headlineText: {
-      fontSize: '1.5rem',
-      fontWeight: 700,
-      color: '#fff',
-      marginBottom: '0.75rem',
-      lineHeight: 1.3,
-    },
-    byline: {
-      fontSize: '0.875rem',
-      color: '#64748b',
-      fontStyle: 'italic' as const,
-    },
-    reporterName: {
-      color: '#94a3b8',
-      fontWeight: 500,
-    },
-  };
-
-  const getDecisionStyle = (decision: TopPitcher['decision']) => {
+  const getDecisionBadgeClass = (decision: TopPitcher['decision']) => {
     switch (decision) {
-      case 'W':
-        return { ...styles.decisionBadge, backgroundColor: '#22c55e', color: '#fff' };
-      case 'L':
-        return { ...styles.decisionBadge, backgroundColor: '#ef4444', color: '#fff' };
-      case 'S':
-        return { ...styles.decisionBadge, backgroundColor: '#3b82f6', color: '#fff' };
-      case 'H':
-        return { ...styles.decisionBadge, backgroundColor: '#8b5cf6', color: '#fff' };
-      default:
-        return styles.decisionBadge;
+      case 'W': return 'bg-retro-green-bright text-white';
+      case 'L': return 'bg-retro-red text-white';
+      case 'S': return 'bg-retro-blue text-white';
+      case 'H': return 'bg-purple-500 text-white';
+      default: return '';
     }
   };
 
   // Show championship celebration if this was the championship-winning game
   if (championshipData && !showChampionship) {
-    // Automatically show celebration on first render for championship game
     return (
       <ChampionshipCelebration
         data={championshipData}
         onDismiss={() => setShowChampionship(true)}
         onSaveToHistory={() => {
           console.log('[PostGame] Championship saved to history');
-          // In a real implementation, this would save to franchise history storage
         }}
       />
     );
   }
 
   return (
-    <div style={styles.container}>
-      <div style={styles.content}>
-        {/* Header */}
-        <div style={styles.header}>
-          <div style={styles.title}>Final</div>
-          <div style={styles.winnerBanner}>
-            {winningTeamName} Win!
-            {isWalkoff && <span style={styles.walkoffTag}>WALKOFF!</span>}
+    <div className="min-h-screen bg-retro-green relative overflow-hidden">
+      {/* Background layers */}
+      <div className="bg-field-stripes absolute inset-0" />
+      <div className="bg-scanlines absolute inset-0 pointer-events-none z-50" />
+      <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-black/30 pointer-events-none" />
+
+      <div className="relative z-10 max-w-3xl mx-auto px-4 py-8">
+        {/* Header Card - FINAL */}
+        <div className="retro-card mb-6">
+          <div className="retro-header-gold">
+            <div className="flex items-center justify-center gap-2">
+              <span className="font-pixel text-retro-navy text-xs">⚾ FINAL</span>
+              {innings > 9 && (
+                <span className="bg-retro-navy text-retro-gold font-pixel text-[0.5rem] px-2 py-0.5">
+                  {innings} INN
+                </span>
+              )}
+            </div>
           </div>
-          {innings > 9 && (
-            <div style={styles.extraInnings}>({innings} innings)</div>
-          )}
+          <div className="retro-body p-6 text-center">
+            <h1 className="font-pixel text-retro-blue text-xl mb-2" style={{ textShadow: '2px 2px 0 #c41e3a' }}>
+              {winningTeamName} WIN!
+            </h1>
+            {isWalkoff && (
+              <span className="inline-block font-pixel text-[0.6rem] bg-retro-red text-white px-3 py-1 animate-blink">
+                WALKOFF!
+              </span>
+            )}
+          </div>
         </div>
 
-        {/* Headline */}
-        <div style={styles.headlineCard}>
-          <div style={{
-            ...styles.headlineText,
-            color: getHeadlineToneColor(headline.tone),
-          }}>
-            {headline.text}
+        {/* Headline Card */}
+        <div className="retro-card mb-6">
+          <div className="retro-header-blue">
+            <span className="font-pixel text-white text-xs">📰 HEADLINE</span>
           </div>
-          <div style={styles.byline}>
-            — <span style={styles.reporterName}>{headline.reporter}</span>, KBL Sports
+          <div className="retro-body p-4 text-center">
+            <div
+              className="font-bold text-lg text-retro-navy mb-2"
+              style={{ color: getHeadlineToneColor(headline.tone) }}
+            >
+              {headline.text}
+            </div>
+            <div className="text-sm text-gray-600 italic">
+              — <span className="font-medium text-retro-blue">{headline.reporter}</span>, KBL Sports
+            </div>
           </div>
         </div>
 
         {/* Score Card */}
-        <div style={styles.scoreCard}>
-          <div style={styles.teamScore}>
-            <div style={{
-              ...styles.teamName,
-              color: winner === 'away' ? '#fbbf24' : '#e2e8f0',
-            }}>
-              {awayTeamName}
-            </div>
-            <div style={{
-              ...styles.score,
-              color: winner === 'away' ? '#fbbf24' : '#e2e8f0',
-            }}>
-              {awayScore}
-            </div>
+        <div className="retro-card mb-6">
+          <div className="retro-header-blue">
+            <span className="font-pixel text-white text-xs">SCORE</span>
           </div>
-          <div style={styles.scoreDivider}>@</div>
-          <div style={styles.teamScore}>
-            <div style={{
-              ...styles.teamName,
-              color: winner === 'home' ? '#fbbf24' : '#e2e8f0',
-            }}>
-              {homeTeamName}
-            </div>
-            <div style={{
-              ...styles.score,
-              color: winner === 'home' ? '#fbbf24' : '#e2e8f0',
-            }}>
-              {homeScore}
+          <div className="retro-body p-4">
+            <div className="grid grid-cols-3 gap-4 items-center">
+              {/* Away Team */}
+              <div className={`text-center p-4 border-2 ${winner === 'away' ? 'border-retro-gold bg-retro-gold/10' : 'border-retro-blue'}`}>
+                <div className={`font-bold mb-1 ${winner === 'away' ? 'text-retro-gold' : 'text-retro-navy'}`}>
+                  {awayTeamName}
+                </div>
+                <div className={`font-pixel text-3xl ${winner === 'away' ? 'text-retro-gold' : 'text-retro-blue'}`}>
+                  {awayScore}
+                </div>
+              </div>
+
+              {/* VS Divider */}
+              <div className="text-center">
+                <span className="font-pixel text-retro-blue text-lg">@</span>
+              </div>
+
+              {/* Home Team */}
+              <div className={`text-center p-4 border-2 ${winner === 'home' ? 'border-retro-gold bg-retro-gold/10' : 'border-retro-blue'}`}>
+                <div className={`font-bold mb-1 ${winner === 'home' ? 'text-retro-gold' : 'text-retro-navy'}`}>
+                  {homeTeamName}
+                </div>
+                <div className={`font-pixel text-3xl ${winner === 'home' ? 'text-retro-gold' : 'text-retro-blue'}`}>
+                  {homeScore}
+                </div>
+              </div>
             </div>
           </div>
         </div>
 
         {/* Player of the Game */}
         {playerOfGame && (
-          <div style={styles.pogCard}>
-            <div style={styles.pogTitle}>Player of the Game</div>
-            <div style={styles.pogName}>{playerOfGame.name}</div>
-            <div style={styles.pogStats}>{playerOfGame.stats}</div>
-            <div style={styles.fameBadge}>
-              ⭐ +{playerOfGame.fameBonus} Fame
+          <div className="retro-card mb-6" style={{ border: '3px solid #d4a017' }}>
+            <div className="retro-header-gold">
+              <div className="flex items-center justify-center gap-2">
+                <span>⭐</span>
+                <span className="font-pixel text-retro-navy text-xs">PLAYER OF THE GAME</span>
+                <span>⭐</span>
+              </div>
+            </div>
+            <div className="retro-body p-6 text-center bg-gradient-to-b from-retro-gold/10 to-transparent">
+              <div className="font-pixel text-retro-blue text-lg mb-2" style={{ textShadow: '1px 1px 0 #d4a017' }}>
+                {playerOfGame.name}
+              </div>
+              <div className="text-retro-navy mb-3">{playerOfGame.stats}</div>
+              <div className="inline-flex items-center gap-1 bg-retro-green text-white font-pixel text-[0.6rem] px-3 py-1 border-2 border-retro-green-bright">
+                ⭐ +{playerOfGame.fameBonus} FAME
+              </div>
             </div>
           </div>
         )}
 
         {/* Top Batters */}
-        <div style={styles.section}>
-          <div style={styles.sectionTitle}>
-            <span>🏏</span> Top Batters
+        <div className="retro-card mb-6">
+          <div className="retro-header-blue">
+            <span className="font-pixel text-white text-xs">🏏 TOP BATTERS</span>
           </div>
-          {topBatters.map((batter, i) => (
-            <div key={i} style={{
-              ...styles.playerRow,
-              borderBottom: i === topBatters.length - 1 ? 'none' : styles.playerRow.borderBottom,
-            }}>
-              <span style={styles.playerName}>{batter.name}</span>
-              <span style={styles.playerStats}>{batter.stats}</span>
-            </div>
-          ))}
+          <div className="retro-body p-2">
+            {topBatters.map((batter, i) => (
+              <div
+                key={i}
+                className={`flex justify-between items-center p-3 bg-white border-2 border-retro-blue ${i < topBatters.length - 1 ? 'mb-1' : ''}`}
+              >
+                <span className="font-bold text-retro-navy">{batter.name}</span>
+                <span className="text-sm text-gray-600 font-mono">{batter.stats}</span>
+              </div>
+            ))}
+          </div>
         </div>
 
         {/* Top Pitchers */}
-        <div style={styles.section}>
-          <div style={styles.sectionTitle}>
-            <span>⚾</span> Pitching
+        <div className="retro-card mb-6">
+          <div className="retro-header-red">
+            <span className="font-pixel text-white text-xs">⚾ PITCHING</span>
           </div>
-          {topPitchers.map((pitcher, i) => (
-            <div key={i} style={{
-              ...styles.playerRow,
-              borderBottom: i === topPitchers.length - 1 ? 'none' : styles.playerRow.borderBottom,
-            }}>
-              <span style={styles.playerName}>
-                {pitcher.decision && (
-                  <span style={getDecisionStyle(pitcher.decision)}>
-                    {pitcher.decision}
-                  </span>
-                )}
-                {pitcher.name}
-              </span>
-              <span style={styles.playerStats}>{pitcher.stats}</span>
-            </div>
-          ))}
+          <div className="retro-body p-2">
+            {topPitchers.map((pitcher, i) => (
+              <div
+                key={i}
+                className={`flex justify-between items-center p-3 bg-white border-2 border-retro-blue ${i < topPitchers.length - 1 ? 'mb-1' : ''}`}
+              >
+                <div className="flex items-center gap-2">
+                  {pitcher.decision && (
+                    <span className={`font-pixel text-[0.5rem] px-2 py-0.5 ${getDecisionBadgeClass(pitcher.decision)}`}>
+                      {pitcher.decision}
+                    </span>
+                  )}
+                  <span className="font-bold text-retro-navy">{pitcher.name}</span>
+                </div>
+                <span className="text-sm text-gray-600 font-mono">{pitcher.stats}</span>
+              </div>
+            ))}
+          </div>
         </div>
 
         {/* Action Buttons */}
-        <div style={{ display: 'flex', gap: '1rem', marginBottom: '1rem' }}>
+        <div className="space-y-3">
+          {/* Box Score Button */}
           <button
-            style={{
-              ...styles.continueButton,
-              flex: 1,
-              backgroundColor: '#475569',
-            }}
             onClick={() => setShowBoxScore(true)}
-            onMouseOver={(e) => {
-              e.currentTarget.style.backgroundColor = '#64748b';
-            }}
-            onMouseOut={(e) => {
-              e.currentTarget.style.backgroundColor = '#475569';
-            }}
+            className="retro-btn w-full bg-retro-navy text-white hover:bg-retro-blue-dark py-3"
           >
-            📊 View Box Score
+            <span className="font-pixel text-xs">📊 VIEW BOX SCORE</span>
+          </button>
+
+          {/* Export Buttons */}
+          <div className="grid grid-cols-2 gap-3">
+            <button
+              onClick={() => handleExportBoxScore('csv')}
+              className="retro-btn bg-gray-600 text-white hover:bg-gray-700 py-2"
+            >
+              <span className="font-pixel text-[0.6rem]">📥 EXPORT CSV</span>
+            </button>
+            <button
+              onClick={() => handleExportBoxScore('json')}
+              className="retro-btn bg-gray-600 text-white hover:bg-gray-700 py-2"
+            >
+              <span className="font-pixel text-[0.6rem]">📥 EXPORT JSON</span>
+            </button>
+          </div>
+
+          {/* Continue Button */}
+          <button
+            onClick={handleContinue}
+            className="retro-btn retro-btn-blue w-full py-4 group"
+          >
+            <span className="font-pixel text-sm flex items-center justify-center gap-2">
+              CONTINUE TO SEASON
+              <span className="group-hover:translate-x-1 transition-transform animate-blink">▶</span>
+            </span>
           </button>
         </div>
-
-        {/* Export Buttons */}
-        <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
-          <button
-            style={{
-              ...styles.continueButton,
-              flex: 1,
-              backgroundColor: '#334155',
-              fontSize: '0.875rem',
-              padding: '0.75rem',
-            }}
-            onClick={() => handleExportBoxScore('csv')}
-            onMouseOver={(e) => {
-              e.currentTarget.style.backgroundColor = '#475569';
-            }}
-            onMouseOut={(e) => {
-              e.currentTarget.style.backgroundColor = '#334155';
-            }}
-          >
-            📥 Export CSV
-          </button>
-          <button
-            style={{
-              ...styles.continueButton,
-              flex: 1,
-              backgroundColor: '#334155',
-              fontSize: '0.875rem',
-              padding: '0.75rem',
-            }}
-            onClick={() => handleExportBoxScore('json')}
-            onMouseOver={(e) => {
-              e.currentTarget.style.backgroundColor = '#475569';
-            }}
-            onMouseOut={(e) => {
-              e.currentTarget.style.backgroundColor = '#334155';
-            }}
-          >
-            📥 Export JSON
-          </button>
-        </div>
-
-        {/* Continue Button */}
-        <button
-          style={styles.continueButton}
-          onClick={handleContinue}
-          onMouseOver={(e) => {
-            e.currentTarget.style.backgroundColor = '#2563eb';
-            e.currentTarget.style.transform = 'translateY(-2px)';
-          }}
-          onMouseOut={(e) => {
-            e.currentTarget.style.backgroundColor = '#3b82f6';
-            e.currentTarget.style.transform = 'translateY(0)';
-          }}
-        >
-          Continue to Season
-        </button>
       </div>
 
       {/* Box Score Modal */}
       {showBoxScore && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          backgroundColor: 'rgba(0, 0, 0, 0.8)',
-          display: 'flex',
-          justifyContent: 'center',
-          alignItems: 'flex-start',
-          padding: '2rem',
-          overflowY: 'auto',
-          zIndex: 1000,
-        }} onClick={() => setShowBoxScore(false)}>
-          <div onClick={(e) => e.stopPropagation()} style={{ maxWidth: '900px', width: '100%' }}>
-            <BoxScoreView
-              data={{
-                awayTeamName,
-                homeTeamName,
-                // Parse box score data from URL params or use mock data
-                awayBatters: (() => {
-                  try {
-                    const param = searchParams.get('awayBatters');
-                    if (param) return JSON.parse(decodeURIComponent(param));
-                  } catch { /* ignore */ }
-                  return topBatters
-                    .filter(b => b.teamId === awayTeamId)
-                    .map((b, i) => ({
-                      playerId: `away-${i}`,
-                      name: b.name,
-                      position: 'IF',
-                      ab: 4,
-                      r: 1,
-                      h: parseInt(b.stats.split('-')[0]) || 1,
-                      rbi: parseInt(b.stats.match(/(\d+) RBI/)?.[1] || '0'),
-                      bb: 0,
-                      k: 0,
-                    }));
-                })(),
-                homeBatters: (() => {
-                  try {
-                    const param = searchParams.get('homeBatters');
-                    if (param) return JSON.parse(decodeURIComponent(param));
-                  } catch { /* ignore */ }
-                  return topBatters
-                    .filter(b => b.teamId === homeTeamId)
-                    .map((b, i) => ({
-                      playerId: `home-${i}`,
-                      name: b.name,
-                      position: 'IF',
-                      ab: 4,
-                      r: 1,
-                      h: parseInt(b.stats.split('-')[0]) || 1,
-                      rbi: parseInt(b.stats.match(/(\d+) RBI/)?.[1] || '0'),
-                      bb: 0,
-                      k: 0,
-                    }));
-                })(),
-                awayPitchers: topPitchers
-                  .filter(p => p.teamId === awayTeamId)
-                  .map((p, i) => ({
-                    playerId: `away-p-${i}`,
-                    name: p.name,
-                    ip: p.stats.match(/(\d+\.?\d*) IP/)?.[1] || '0',
-                    h: parseInt(p.stats.match(/(\d+) H/)?.[1] || '0'),
-                    r: parseInt(p.stats.match(/(\d+) R/)?.[1] || '0'),
-                    er: parseInt(p.stats.match(/(\d+) ER/)?.[1] || '0'),
-                    bb: parseInt(p.stats.match(/(\d+) BB/)?.[1] || '0'),
-                    k: parseInt(p.stats.match(/(\d+) K/)?.[1] || '0'),
-                    decision: p.decision,
-                  })),
-                homePitchers: topPitchers
-                  .filter(p => p.teamId === homeTeamId)
-                  .map((p, i) => ({
-                    playerId: `home-p-${i}`,
-                    name: p.name,
-                    ip: p.stats.match(/(\d+\.?\d*) IP/)?.[1] || '0',
-                    h: parseInt(p.stats.match(/(\d+) H/)?.[1] || '0'),
-                    r: parseInt(p.stats.match(/(\d+) R/)?.[1] || '0'),
-                    er: parseInt(p.stats.match(/(\d+) ER/)?.[1] || '0'),
-                    bb: parseInt(p.stats.match(/(\d+) BB/)?.[1] || '0'),
-                    k: parseInt(p.stats.match(/(\d+) K/)?.[1] || '0'),
-                    decision: p.decision,
-                  })),
-              }}
-              onClose={() => setShowBoxScore(false)}
-            />
+        <div
+          className="fixed inset-0 bg-black/80 flex justify-center items-start p-8 overflow-y-auto z-[1000]"
+          onClick={() => setShowBoxScore(false)}
+        >
+          <div onClick={(e) => e.stopPropagation()} className="max-w-[900px] w-full">
+            <div className="retro-card">
+              <div className="retro-header-blue flex items-center justify-between">
+                <span className="font-pixel text-white text-xs">📊 BOX SCORE</span>
+                <button
+                  onClick={() => setShowBoxScore(false)}
+                  className="text-white hover:text-retro-gold transition-colors"
+                >
+                  ✕
+                </button>
+              </div>
+              <div className="retro-body p-4">
+                <BoxScoreView
+                  data={{
+                    awayTeamName,
+                    homeTeamName,
+                    awayBatters: (() => {
+                      try {
+                        const param = searchParams.get('awayBatters');
+                        if (param) return JSON.parse(decodeURIComponent(param));
+                      } catch { /* ignore */ }
+                      return topBatters
+                        .filter(b => b.teamId === awayTeamId)
+                        .map((b, i) => ({
+                          playerId: `away-${i}`,
+                          name: b.name,
+                          position: 'IF',
+                          ab: 4,
+                          r: 1,
+                          h: parseInt(b.stats.split('-')[0]) || 1,
+                          rbi: parseInt(b.stats.match(/(\d+) RBI/)?.[1] || '0'),
+                          bb: 0,
+                          k: 0,
+                        }));
+                    })(),
+                    homeBatters: (() => {
+                      try {
+                        const param = searchParams.get('homeBatters');
+                        if (param) return JSON.parse(decodeURIComponent(param));
+                      } catch { /* ignore */ }
+                      return topBatters
+                        .filter(b => b.teamId === homeTeamId)
+                        .map((b, i) => ({
+                          playerId: `home-${i}`,
+                          name: b.name,
+                          position: 'IF',
+                          ab: 4,
+                          r: 1,
+                          h: parseInt(b.stats.split('-')[0]) || 1,
+                          rbi: parseInt(b.stats.match(/(\d+) RBI/)?.[1] || '0'),
+                          bb: 0,
+                          k: 0,
+                        }));
+                    })(),
+                    awayPitchers: topPitchers
+                      .filter(p => p.teamId === awayTeamId)
+                      .map((p, i) => ({
+                        playerId: `away-p-${i}`,
+                        name: p.name,
+                        ip: p.stats.match(/(\d+\.?\d*) IP/)?.[1] || '0',
+                        h: parseInt(p.stats.match(/(\d+) H/)?.[1] || '0'),
+                        r: parseInt(p.stats.match(/(\d+) R/)?.[1] || '0'),
+                        er: parseInt(p.stats.match(/(\d+) ER/)?.[1] || '0'),
+                        bb: parseInt(p.stats.match(/(\d+) BB/)?.[1] || '0'),
+                        k: parseInt(p.stats.match(/(\d+) K/)?.[1] || '0'),
+                        decision: p.decision,
+                      })),
+                    homePitchers: topPitchers
+                      .filter(p => p.teamId === homeTeamId)
+                      .map((p, i) => ({
+                        playerId: `home-p-${i}`,
+                        name: p.name,
+                        ip: p.stats.match(/(\d+\.?\d*) IP/)?.[1] || '0',
+                        h: parseInt(p.stats.match(/(\d+) H/)?.[1] || '0'),
+                        r: parseInt(p.stats.match(/(\d+) R/)?.[1] || '0'),
+                        er: parseInt(p.stats.match(/(\d+) ER/)?.[1] || '0'),
+                        bb: parseInt(p.stats.match(/(\d+) BB/)?.[1] || '0'),
+                        k: parseInt(p.stats.match(/(\d+) K/)?.[1] || '0'),
+                        decision: p.decision,
+                      })),
+                  }}
+                  onClose={() => setShowBoxScore(false)}
+                />
+              </div>
+            </div>
           </div>
         </div>
       )}
