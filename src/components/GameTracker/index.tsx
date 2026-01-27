@@ -764,6 +764,7 @@ export default function GameTracker({ onGameEnd }: GameTrackerProps = {}) {
         position: currentBatterFromLineup.position,
         grade: 'A', // Grade not tracked in lineup state
         jerseyNumber: 0, // Jersey not tracked in lineup state
+        batterHand: demoLineup.find(p => p.id === currentBatterFromLineup.playerId)?.batterHand || ('R' as const),
       }
     : demoLineup[currentBatterIndex];
 
@@ -3065,6 +3066,7 @@ export default function GameTracker({ onGameEnd }: GameTrackerProps = {}) {
           result={pendingResult}
           bases={bases}
           batterName={currentBatter.name}
+          batterHand={currentBatter.batterHand || 'R'}
           outs={outs}
           onComplete={handleAtBatFlowComplete}
           onCancel={() => setPendingResult(null)}

@@ -9741,6 +9741,7 @@ export interface GameLineupSlot {
   position: Position;
   grade: string;
   jerseyNumber: number;
+  batterHand?: BatterHand;
 }
 
 /**
@@ -9851,6 +9852,7 @@ export function generateTeamLineup(teamId: string, startingPitcherId?: string): 
     position: p.primaryPosition,
     grade: p.overall,
     jerseyNumber: idx + 1,  // Placeholder - would need real jersey numbers
+    batterHand: p.bats,
   }));
 
   // Add pitcher at position 9
@@ -9860,6 +9862,7 @@ export function generateTeamLineup(teamId: string, startingPitcherId?: string): 
     position: 'P',
     grade: startingPitcher.overall,
     jerseyNumber: 9,
+    batterHand: startingPitcher.bats,
   });
 
   return gameLineup;

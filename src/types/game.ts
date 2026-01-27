@@ -62,6 +62,10 @@ export interface FieldingData {
   errorType?: ErrorType;
   errorContext?: ErrorContext;
 
+  // Zone-based input (per FIELD_ZONE_INPUT_SPEC.md)
+  zoneId?: string;
+  foulOut?: boolean;  // Ball caught in foul territory (PO/FO/LO in foul zone)
+
   // Batted ball depth (per FIELDING_SYSTEM_SPEC.md)
   depth?: DepthType;
 

@@ -14,8 +14,11 @@ import type {
   ErrorContext,
   AssistChainEntry,
   FieldingData,
+  BatterHand,
 } from '../../types/game';
 import { recordFieldingEvent, type FieldingEvent } from '../../engines/adaptiveLearningEngine';
+import FieldZoneInput from './FieldZoneInput';
+import { type ZoneTapResult, getDepthFromZone } from '../../data/fieldZones';
 
 // Re-export types for consumers that import from FieldingModal
 export type { PlayType, ErrorType, D3KOutcome, DepthType, AssistType, DPRole, ErrorContext, AssistChainEntry, FieldingData };
@@ -176,6 +179,7 @@ interface FieldingModalProps {
   exitType: ExitType | null;  // Optional: if not provided, will be inferred or selected in modal
   bases: Bases;
   outs: number;
+  batterHand?: BatterHand;  // For zone-based input (defaults to 'R')
   onComplete: (fieldingData: FieldingData, selectedExitType?: ExitType) => void;
   onCancel: () => void;
 }
@@ -211,6 +215,7 @@ export default function FieldingModal({
   exitType: propExitType,
   bases,
   outs,
+  batterHand = 'R',
   onComplete,
   onCancel,
 }: FieldingModalProps) {
@@ -227,6 +232,9 @@ export default function FieldingModal({
 
   // Inferred fielder (calculated once)
   const inferredFielder = inferFielderEnhanced(result, direction, effectiveExitType);
+
+  // Zone-based input state (FIELD_ZONE_INPUT_SPEC.md)
+  const [selectedZoneId, setSelectedZoneId] = useState<string | null>(null);
 
   // State
   const [primaryFielder, setPrimaryFielder] = useState<Position | null>(inferredFielder);
@@ -266,6 +274,30 @@ export default function FieldingModal({
       setPrimaryFielder(newInferred);
     }
   }, [result, direction, effectiveExitType]);
+
+  // Track whether the selected zone is in foul territory
+  const [isFoulZone, setIsFoulZone] = useState(false);
+
+  // Handle zone selection from FieldZoneInput
+  const handleZoneSelect = (zoneResult: ZoneTapResult, fielder: Position) => {
+    setSelectedZoneId(zoneResult.zoneId);
+    setPrimaryFielder(fielder);
+    setIsFoulZone(zoneResult.isFoul);
+
+    // Map zone depth to FieldingModal DepthType
+    const zoneDepthStr = zoneResult.depth;
+    const depthMap: Record<string, DepthType> = {
+      'infield': 'infield',
+      'shallow': 'shallow',
+      'medium': 'outfield',
+      'deep': 'deep',
+      'foul_shallow': 'shallow',
+      'foul_medium': 'outfield',
+      'foul_deep': 'deep',
+      'foul_catcher': 'shallow',
+    };
+    setDepth(depthMap[zoneDepthStr] || null);
+  };
 
   // ============================================
   // CONTEXTUAL VISIBILITY RULES
@@ -392,6 +424,10 @@ export default function FieldingModal({
       errorType: playType === 'error' ? (errorType || 'fielding') : undefined,
       errorContext: playType === 'error' ? errorContext : undefined,
 
+      // Zone-based input (FIELD_ZONE_INPUT_SPEC.md)
+      zoneId: selectedZoneId || undefined,
+      foulOut: isFoulZone && ['PO', 'FO', 'LO'].includes(result) ? true : undefined,
+
       // Depth (Day 4)
       depth: depth || undefined,
 
@@ -441,6 +477,16 @@ export default function FieldingModal({
         <div style={styles.header}>
           <span style={styles.title}>Fielding Details</span>
           <button style={styles.cancelBtn} onClick={onCancel}>✕</button>
+        </div>
+
+        {/* Zone-Based Field Input (FIELD_ZONE_INPUT_SPEC.md) */}
+        <div style={styles.section}>
+          <div style={styles.sectionLabel}>WHERE DID THE BALL GO?</div>
+          <FieldZoneInput
+            batterHand={batterHand}
+            onZoneSelect={handleZoneSelect}
+            selectedZone={selectedZoneId}
+          />
         </div>
 
         {/* Exit Type Selection (for hits only) */}
@@ -882,7 +928,7 @@ const styles: Record<string, React.CSSProperties> = {
     borderRadius: '12px',
     padding: '16px',
     width: '100%',
-    maxWidth: '500px',
+    maxWidth: '700px',
     border: '1px solid #444',
   },
   header: {

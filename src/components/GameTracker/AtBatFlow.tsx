@@ -21,6 +21,7 @@ interface AtBatFlowProps {
   result: AtBatResult;
   bases: Bases;
   batterName: string;
+  batterHand?: 'L' | 'R' | 'S';
   outs: number;
   onComplete: (flowState: AtBatFlowState) => void;
   onCancel: () => void;
@@ -45,7 +46,7 @@ const specialPlaysForHR: SpecialPlayType[] = ['Over Fence', 'Robbery Attempt', '
 // DP Types
 const dpTypes = ['6-4-3', '4-6-3', '5-4-3', '3-6-3', '6-3', '4-3', '1-6-3', 'Other'];
 
-export default function AtBatFlow({ result: initialResult, bases, batterName, outs, onComplete, onCancel }: AtBatFlowProps) {
+export default function AtBatFlow({ result: initialResult, bases, batterName, batterHand = 'R', outs, onComplete, onCancel }: AtBatFlowProps) {
   // Track the current result (can be auto-corrected based on runner outcomes)
   const [result, setResult] = useState<AtBatResult>(initialResult);
   const [autoCorrection, setAutoCorrection] = useState<string | null>(null);
@@ -1164,6 +1165,7 @@ export default function AtBatFlow({ result: initialResult, bases, batterName, ou
           exitType={exitType}
           bases={bases}
           outs={outs}
+          batterHand={batterHand}
           onComplete={handleFieldingComplete}
           onCancel={() => setShowFieldingModal(false)}
         />
