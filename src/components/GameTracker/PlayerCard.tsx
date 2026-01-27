@@ -29,8 +29,9 @@ import {
   getSalaryTier,
   calculateSimpleROI,
   getROITierDisplay,
-  calculateSalary,
+  calculateSalaryWithBreakdown,
   type PlayerForSalary,
+  type SalaryBreakdown,
 } from '../../engines/salaryCalculator';
 import { getPlayer, getPlayerByName, getAllTeams, type PlayerData } from '../../data/playerDatabase';
 import { buildDHContext, getLeagues, getSeasonDHConfig, initializeDefaultLeagues } from '../../utils/leagueConfig';
@@ -85,6 +86,7 @@ interface PlayerFullStats {
 
   // Salary (estimated based on ratings + performance)
   estimatedSalary: number | null;
+  salaryBreakdown: SalaryBreakdown | null;
 }
 
 // ============================================
@@ -147,6 +149,7 @@ export function PlayerCard({
   });
   const [isLoading, setIsLoading] = useState(true);
   const [stats, setStats] = useState<PlayerFullStats | null>(null);
+  const [showSalaryBreakdown, setShowSalaryBreakdown] = useState(false);
   const warCalculations = useWARCalculations();
 
   // Load stats when player changes or when WAR calculations finish loading
@@ -208,6 +211,7 @@ export function PlayerCard({
 
         // Calculate salary if player ratings are available in database
         let estimatedSalary: number | null = null;
+        let salaryBreakdown: SalaryBreakdown | null = null;
         if (playerData) {
           const salaryPlayer = toSalaryFormat(playerData, fameTotal);
 
@@ -224,7 +228,8 @@ export function PlayerCard({
             seasonConfig
           );
 
-          estimatedSalary = calculateSalary(salaryPlayer, undefined, undefined, false, dhContext);
+          salaryBreakdown = calculateSalaryWithBreakdown(salaryPlayer, undefined, undefined, false, dhContext);
+          estimatedSalary = salaryBreakdown.finalSalary;
         }
 
         setStats({
@@ -238,6 +243,7 @@ export function PlayerCard({
           fameTier: fameTierData.label,
           fameTotal,
           estimatedSalary,
+          salaryBreakdown,
         });
       } catch (err) {
         console.error('[PlayerCard] Failed to load stats:', err);
@@ -254,6 +260,7 @@ export function PlayerCard({
           fameTier: 'Unknown',
           fameTotal: 0,
           estimatedSalary: null,
+          salaryBreakdown: null,
         });
       } finally {
         setIsLoading(false);
@@ -336,25 +343,88 @@ export function PlayerCard({
 
       {/* Salary Section - Requires player ratings per spec */}
       {stats.estimatedSalary !== null ? (
-        <div style={styles.salarySection}>
-          <span style={styles.salaryLabel}>Est. Value:</span>
-          <span style={{ ...styles.salaryValue, color: getSalaryColor(stats.estimatedSalary) }}>
-            {formatSalary(stats.estimatedSalary)}
-          </span>
-          <span style={styles.salaryTier}>{getSalaryTier(stats.estimatedSalary)}</span>
-          {stats.totalWAR > 0 && (
-            <span style={{
-              ...styles.roiBadge,
-              color: calculateSimpleROI(stats.estimatedSalary, stats.totalWAR).roiTier === 'ELITE_VALUE' ||
-                     calculateSimpleROI(stats.estimatedSalary, stats.totalWAR).roiTier === 'GREAT_VALUE'
-                ? '#22c55e'
-                : calculateSimpleROI(stats.estimatedSalary, stats.totalWAR).roiTier === 'BUST' ||
-                  calculateSimpleROI(stats.estimatedSalary, stats.totalWAR).roiTier === 'POOR_VALUE'
-                ? '#ef4444'
-                : '#f59e0b'
-            }}>
-              {getROITierDisplay(calculateSimpleROI(stats.estimatedSalary, stats.totalWAR).roiTier)}
+        <div style={styles.salaryContainer}>
+          <div
+            style={styles.salarySection}
+            onClick={() => stats.salaryBreakdown && setShowSalaryBreakdown(!showSalaryBreakdown)}
+          >
+            <span style={styles.salaryLabel}>Est. Value:</span>
+            <span style={{ ...styles.salaryValue, color: getSalaryColor(stats.estimatedSalary) }}>
+              {formatSalary(stats.estimatedSalary)}
             </span>
+            <span style={styles.salaryTier}>{getSalaryTier(stats.estimatedSalary)}</span>
+            {stats.totalWAR > 0 && (
+              <span style={{
+                ...styles.roiBadge,
+                color: calculateSimpleROI(stats.estimatedSalary, stats.totalWAR).roiTier === 'ELITE_VALUE' ||
+                       calculateSimpleROI(stats.estimatedSalary, stats.totalWAR).roiTier === 'GREAT_VALUE'
+                  ? '#22c55e'
+                  : calculateSimpleROI(stats.estimatedSalary, stats.totalWAR).roiTier === 'BUST' ||
+                    calculateSimpleROI(stats.estimatedSalary, stats.totalWAR).roiTier === 'POOR_VALUE'
+                  ? '#ef4444'
+                  : '#f59e0b'
+              }}>
+                {getROITierDisplay(calculateSimpleROI(stats.estimatedSalary, stats.totalWAR).roiTier)}
+              </span>
+            )}
+            {stats.salaryBreakdown && (
+              <span style={styles.expandIcon}>{showSalaryBreakdown ? '▼' : '▶'}</span>
+            )}
+          </div>
+          {/* Expandable Salary Breakdown */}
+          {showSalaryBreakdown && stats.salaryBreakdown && (
+            <div style={styles.salaryBreakdown}>
+              <div style={styles.breakdownRow}>
+                <span>Base (from ratings)</span>
+                <span>{formatSalary(stats.salaryBreakdown.baseSalary)}</span>
+              </div>
+              {stats.salaryBreakdown.positionMultiplier !== 1.0 && (
+                <div style={styles.breakdownRow}>
+                  <span>Position</span>
+                  <span style={{ color: stats.salaryBreakdown.positionMultiplier > 1 ? '#22c55e' : '#ef4444' }}>
+                    ×{stats.salaryBreakdown.positionMultiplier.toFixed(2)}
+                  </span>
+                </div>
+              )}
+              {stats.salaryBreakdown.traitModifier !== 1.0 && (
+                <div style={styles.breakdownRow}>
+                  <span>Traits</span>
+                  <span style={{ color: stats.salaryBreakdown.traitModifier > 1 ? '#22c55e' : '#ef4444' }}>
+                    ×{stats.salaryBreakdown.traitModifier.toFixed(2)}
+                  </span>
+                </div>
+              )}
+              {stats.salaryBreakdown.ageFactor !== 1.0 && (
+                <div style={styles.breakdownRow}>
+                  <span>Age</span>
+                  <span style={{ color: stats.salaryBreakdown.ageFactor > 1 ? '#22c55e' : '#ef4444' }}>
+                    ×{stats.salaryBreakdown.ageFactor.toFixed(2)}
+                  </span>
+                </div>
+              )}
+              {stats.salaryBreakdown.performanceModifier !== 1.0 && (
+                <div style={styles.breakdownRow}>
+                  <span>Performance</span>
+                  <span style={{ color: stats.salaryBreakdown.performanceModifier > 1 ? '#22c55e' : '#ef4444' }}>
+                    ×{stats.salaryBreakdown.performanceModifier.toFixed(2)}
+                  </span>
+                </div>
+              )}
+              {stats.salaryBreakdown.fameModifier !== 1.0 && (
+                <div style={styles.breakdownRow}>
+                  <span>Fame</span>
+                  <span style={{ color: stats.salaryBreakdown.fameModifier > 1 ? '#22c55e' : '#ef4444' }}>
+                    ×{stats.salaryBreakdown.fameModifier.toFixed(2)}
+                  </span>
+                </div>
+              )}
+              <div style={styles.breakdownFinal}>
+                <span>Final Salary</span>
+                <span style={{ color: getSalaryColor(stats.salaryBreakdown.finalSalary) }}>
+                  {formatSalary(stats.salaryBreakdown.finalSalary)}
+                </span>
+              </div>
+            </div>
           )}
         </div>
       ) : (
@@ -701,15 +771,18 @@ const styles: Record<string, React.CSSProperties> = {
     color: '#6b7280',
     fontSize: '0.75rem',
   },
+  salaryContainer: {
+    marginBottom: '16px',
+  },
   salarySection: {
     display: 'flex',
     alignItems: 'center',
     gap: '8px',
-    marginBottom: '16px',
     padding: '8px 12px',
     backgroundColor: '#111827',
     borderRadius: '6px',
     flexWrap: 'wrap',
+    cursor: 'pointer',
   },
   salaryLabel: {
     color: '#9ca3af',
@@ -729,7 +802,35 @@ const styles: Record<string, React.CSSProperties> = {
     padding: '2px 6px',
     borderRadius: '4px',
     backgroundColor: 'rgba(255,255,255,0.1)',
+  },
+  expandIcon: {
     marginLeft: 'auto',
+    color: '#6b7280',
+    fontSize: '0.625rem',
+  },
+  salaryBreakdown: {
+    marginTop: '8px',
+    padding: '10px 12px',
+    backgroundColor: '#0f172a',
+    borderRadius: '6px',
+    border: '1px solid #1e293b',
+  },
+  breakdownRow: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    fontSize: '0.75rem',
+    color: '#9ca3af',
+    padding: '3px 0',
+  },
+  breakdownFinal: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    fontSize: '0.875rem',
+    fontWeight: 600,
+    color: '#f3f4f6',
+    padding: '6px 0 0 0',
+    marginTop: '6px',
+    borderTop: '1px solid #1e293b',
   },
   salaryPlaceholder: {
     fontSize: '0.75rem',

@@ -18,7 +18,7 @@
 | WIRE-005 | GAP-010 | PlayoffBracket | SeasonDashboard | P2 | Small | ✅ Done |
 | WIRE-006 | GAP-011 | ChampionshipCelebration | PostGameScreen | P2 | Small | ✅ Done |
 | WIRE-007 | GAP-012 | SeasonProgressTracker | SeasonDashboard | P1 | Small | ✅ Done |
-| WIRE-008 | GAP-014 | SalaryDisplay | PlayerCard | P1 | Small | Blocked |
+| WIRE-008 | GAP-014 | SalaryDisplay | PlayerCard | P1 | Small | ✅ Done |
 | WIRE-009 | GAP-015 | RelationshipPanel | PlayerCard | P2 | Small | ✅ Done |
 | WIRE-010 | GAP-016 | AgingDisplay | PlayerCard | P2 | Small | ✅ Done |
 | WIRE-011 | GAP-018 | LeagueNewsFeed | SeasonDashboard | P1 | Small | ✅ Done |
@@ -996,15 +996,13 @@
 
 ## Blocked Wiring
 
-| Story | Blocked By |
-|-------|------------|
-| WIRE-008 (SalaryDisplay) | Needs player ratings - requires database to have ratings |
+*No blocked stories remaining.*
 
 ## Completion Status (Updated Jan 26, 2026)
 
-**22 of 23 stories COMPLETE (96%)**
+**23 of 23 stories COMPLETE (100%)**
 
-Only WIRE-008 (SalaryDisplay) remains blocked on player ratings availability.
+All wiring stories complete! Player database now has full ratings for all 506 players, enabling salary calculation in PlayerCard.
 
 ---
 

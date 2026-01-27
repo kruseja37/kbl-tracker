@@ -293,25 +293,25 @@ All 18 gap closure stories from `STORIES_GAP_CLOSERS.md` implemented and committ
 
 Implemented stories from `STORIES_WIRING.md` to connect orphaned components.
 
-### Stories Completed (22 of 23)
+### Stories Completed (23 of 23) ✅
 
 | Story | Gap | Title | Status |
 |-------|-----|-------|--------|
-| WIRE-001 | GAP-005 | BoxScoreView → PostGameScreen | ✅ Done (prior) |
+| WIRE-001 | GAP-005 | BoxScoreView → PostGameScreen | ✅ Done |
 | WIRE-002 | GAP-006 | StandingsView → SeasonDashboard | ✅ Done |
 | WIRE-003 | GAP-007 | TeamStatsView → TeamPage | ✅ Done |
 | WIRE-004 | GAP-009 | FanMoralePanel → GameTracker | ✅ Done |
 | WIRE-005 | GAP-010 | PlayoffBracket → SeasonDashboard | ✅ Done |
 | WIRE-006 | GAP-011 | ChampionshipCelebration → PostGameScreen | ✅ Done |
 | WIRE-007 | GAP-012 | SeasonProgressTracker → SeasonDashboard | ✅ Done |
-| WIRE-008 | GAP-014 | SalaryDisplay → PlayerCard | ⚠️ Blocked |
+| WIRE-008 | GAP-014 | SalaryDisplay → PlayerCard | ✅ Done |
 | WIRE-009 | GAP-015 | RelationshipPanel → PlayerCard | ✅ Done |
 | WIRE-010 | GAP-016 | AgingDisplay → PlayerCard | ✅ Done |
 | WIRE-011 | GAP-018 | LeagueNewsFeed → SeasonDashboard | ✅ Done |
 | WIRE-012 | GAP-019 | ChemistryDisplay → RosterView | ✅ Done |
 | WIRE-013 | GAP-020 | ContractionWarning → SeasonDashboard | ✅ Done |
 | WIRE-014 | GAP-021 | LeagueBuilder → MainMenu | ✅ Done |
-| WIRE-015 | GAP-022 | PlayerRatingsForm → ManualPlayerInput | ✅ Done (prior) |
+| WIRE-015 | GAP-022 | PlayerRatingsForm → ManualPlayerInput | ✅ Done |
 | WIRE-016 | GAP-023 | Museum Components → MuseumHub | ✅ Done |
 | WIRE-017 | GAP-024 | Awards Components → AwardsCeremonyHub | ✅ Done |
 | WIRE-018 | GAP-025 | Offseason Components → OffseasonHub | ✅ Done |
@@ -336,14 +336,14 @@ Implemented stories from `STORIES_WIRING.md` to connect orphaned components.
 
 - **SeasonDashboard**: PlayoffBracket (conditional, shows during playoffs), ContractionWarning
 - **PostGameScreen**: ChampionshipCelebration (shows after championship win)
-- **PlayerCard**: RelationshipPanel, AgingDisplay
+- **PlayerCard**: RelationshipPanel, AgingDisplay, SalaryDisplay (using salaryCalculator)
 - **RosterView**: ChemistryDisplay with expandable toggle
 - **MuseumHub**: HallOfFameGallery, RetiredNumbersWall, FranchiseRecords, ChampionshipBanners
 - **TraitLotteryWheel**: getWeightedTraitPool from traitPools.ts
 
-### Remaining
+### Status
 
-Only **WIRE-008 (SalaryDisplay)** blocked - needs player ratings in the database to calculate salary
+**All 23 wiring stories COMPLETE.** Player database now has full ratings for all 506 players, enabling salary calculation in PlayerCard.
 
 ---
 
@@ -662,28 +662,23 @@ See `STAT_TRACKING_ARCHITECTURE_SPEC.md` for full architecture (Phases 1-4 imple
 | Spray chart visualization | ❌ Spec only | FUTURE - Uses fielding data |
 | Shift toggle | ❌ Spec only | FUTURE - Modifies inference |
 | Career Display Rendered | ⚠️ Component exists | DAY 6-7 - Wire to UI |
-| **Salary Display in PlayerCard** | ⚠️ Blocked | Engine ready, UI ready, **missing player ratings data model** |
+| **Salary Display in PlayerCard** | ✅ Complete | Engine + UI wired, player database has ratings |
 
-### Blocked Feature: Salary Display (Day 11)
+### Salary Display - RESOLVED ✅
 
-**Status**: Engine fully implemented, UI components ready, blocked on data model.
+**Status**: Fully implemented and working.
 
-**What Exists:**
+**What's Implemented:**
 - `engines/salaryCalculator.ts` (1196 lines) - Complete per SALARY_SYSTEM_SPEC.md
-- `components/GameTracker/SalaryDisplay.tsx` - All display variants
-- `components/GameTracker/PlayerCard.tsx` - Wired to show salary section
+- `components/GameTracker/SalaryDisplay.tsx` - All display variants available
+- `components/GameTracker/PlayerCard.tsx` - Shows salary with tier and ROI badge
+- `data/playerDatabase.ts` - 506 players with full ratings (batterRatings, pitcherRatings)
 
-**What's Missing:**
-Per SALARY_SYSTEM_SPEC.md Section 2 (Base Salary from Ratings), salary requires:
-- **Position players**: power, contact, speed, fielding, arm (3:3:2:1:1 weight)
-- **Pitchers**: velocity, junk, accuracy (1:1:1 weight)
-
-Current data model (`LineupPlayer`, `PlayerSeasonBatting`, etc.) has NO ratings fields.
-
-**To Complete:**
-1. Add `PlayerRatings` storage (IndexedDB or localStorage)
-2. Add ratings input during game setup or player creation
-3. Wire ratings to `calculateSalaryWithBreakdown()` in PlayerCard
+**How It Works:**
+1. PlayerCard receives playerId from game lineup
+2. `getPlayer(playerId)` retrieves PlayerData with batterRatings/pitcherRatings
+3. `calculateSalary()` computes salary from ratings per SALARY_SYSTEM_SPEC.md
+4. Salary displayed with tier (Supermax, Elite, etc.) and ROI badge when WAR available
 
 ---
 
