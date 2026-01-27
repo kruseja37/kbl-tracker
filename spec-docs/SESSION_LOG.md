@@ -8,6 +8,51 @@
 
 ---
 
+## Session: January 27, 2026 - Commit Cleanup + Mojo/Fitness Wiring (Impl Plan v5 Day 3)
+
+### What Was Accomplished
+
+**Commit Cleanup (uncommitted changes from Jan 26):**
+- Committed UI/UX redesign across 13 files (MainMenu, PostGameScreen, RosterView, SeasonDashboard, PlayerCard, NavigationHeader, TraitLotteryWheel, global styles/theme, tailwind config, spec docs)
+- Committed FieldZoneInput component + fieldZones data + batterHand threading (7 files)
+
+**Implementation Plan v5 Day 3 — Wire Mojo + Fitness Engines:**
+- Created `src/hooks/useMojoState.ts` — manages per-player mojo state during game, fires triggers after at-bat events
+- Created `src/hooks/useFitnessState.ts` — manages per-player fitness state (defaults to FIT, read-only during game)
+- Wired both hooks into `GameTracker/index.tsx`:
+  - After each at-bat: batter mojo, pitcher mojo, and fielder mojo (on error/great play) triggers fire
+  - Mojo situation includes inning, outs, runners, score diff, playoff flag
+- Updated `Scoreboard.tsx` — added batter + pitcher mojo badges with emoji/color
+- Updated pitcher info bar — mojo badge shows when non-Normal, fitness badge now from hook (was hardcoded FIT)
+- Updated `PlayerCard.tsx` and `PlayerCardModal` — show mojo level + fitness state with multipliers
+- **BUG-006 FIXED**: Mojo/Fitness now visible in scoreboard
+
+### Commits This Session
+
+| Commit | Description |
+|--------|-------------|
+| `6c5614f` | feat: Redesign UI/UX across major screens with SMB4 retro-modern theme |
+| `8bf4da0` | feat: Add field zone input and batterHand threading for fielding inference |
+| `cfdb286` | feat: Wire Mojo and Fitness engines to GameTracker UI (Impl Plan v5 Day 3) |
+
+### Build Status
+- `npm run build` → Exit 0 ✅ (all commits verified)
+
+### Files Created
+- `src/hooks/useMojoState.ts` — Mojo state management hook
+- `src/hooks/useFitnessState.ts` — Fitness state management hook
+
+### Files Modified
+- `src/components/GameTracker/index.tsx` — Hook wiring, mojo recording after at-bats, Scoreboard + PlayerCard props
+- `src/components/GameTracker/Scoreboard.tsx` — Mojo display row with badges
+- `src/components/GameTracker/PlayerCard.tsx` — Mojo + fitness display section, modal prop threading
+
+### Next Steps
+- Implementation Plan v5 Day 4: Integration Testing
+- Remaining bugs: BUG-007 (Fame events), BUG-008 (End Game modal), BUG-011 (pitch count display)
+
+---
+
 ## Session: January 26, 2026 (Late) - Complete SML Player Database
 
 ### What Was Accomplished

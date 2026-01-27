@@ -139,13 +139,23 @@ All 78 user stories from Phases B-G implemented and committed. Components are wi
 
 > ✅ **BUILD STATUS: PASSING**
 >
-> `npm run build` → Exit 0 (as of January 26, 2026)
+> `npm run build` → Exit 0 (as of January 27, 2026)
 >
 > **IMPLEMENTATION PLAN v5** is now active.
 > - Phase 1 Day 1: Wire fWAR + rWAR to useWARCalculations ✅
 > - Phase 1 Day 2: Wire mWAR + Clutch Calculator ✅
-> - Phase 1 Day 3: Wire Mojo + Fitness Engines (pending)
+> - Phase 1 Day 3: Wire Mojo + Fitness Engines ✅
 > - Phase 1 Day 4: Integration Testing (pending)
+>
+> **Mojo/Fitness Wiring Session (January 27, 2026):**
+> - useMojoState hook created - manages per-player mojo during gameplay ✅
+> - useFitnessState hook created - manages per-player fitness state ✅
+> - Mojo triggers fire after each at-bat (batter, pitcher, fielder) ✅
+> - Scoreboard displays batter + pitcher mojo badges ✅
+> - Pitcher info bar shows mojo badge when non-Normal ✅
+> - Pitcher info bar fitness badge wired to hook (was hardcoded to FIT) ✅
+> - PlayerCard/PlayerCardModal show mojo + fitness with multipliers ✅
+> - BUG-006 (No Mojo/Fitness in scoreboard) FIXED ✅
 >
 > **Component Wiring Session (January 26, 2026):**
 > - BoxScoreView → PostGameScreen ✅
@@ -733,19 +743,19 @@ See `NFL_AUDIT_REPORT.md` for full details of the spec-level audit.
 
 ## Known Bugs
 
-See `GAMETRACKER_BUGS.md` for detailed bug tracking. Status as of Jan 25, 2026:
+See `GAMETRACKER_BUGS.md` for detailed bug tracking. Status as of Jan 27, 2026:
 
-**Fixed (8 bugs):**
+**Fixed (9 bugs):**
 - BUG-001/002: Position validation in subs
 - BUG-003: GO→DP auto-correction
 - BUG-004/005: WAR/Season loading
+- BUG-006: Mojo/Fitness in scoreboard (Jan 27 - hooks + UI wired)
 - BUG-010: Morale superscripts
 - BUG-013: Disable impossible events
 - BUG-015: HR fielding options
 - Balk button removed (not in SMB4)
 
-**Remaining (4 bugs):**
-- BUG-006: No Mojo/Fitness in scoreboard
+**Remaining (3 bugs):**
 - BUG-007: No Fame events during game
 - BUG-008: End Game modal has wrong data
 - BUG-011: No pitch count displayed
