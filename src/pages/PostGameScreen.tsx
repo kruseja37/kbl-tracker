@@ -3,7 +3,25 @@ import { useState, useMemo, useCallback } from 'react';
 import { getTeam } from '../data/playerDatabase';
 import { generateHeadline, generateSubheadline, getHeadlineToneColor } from '../utils/headlineGenerator';
 import BoxScoreView from '../components/BoxScoreView';
+import ChampionshipCelebration from '../components/ChampionshipCelebration';
 import { exportBoxScore } from '../services/dataExportService';
+
+// Championship data type
+interface ChampionshipData {
+  year: number;
+  teamId: string;
+  teamName: string;
+  teamColor?: string;
+  opponentId: string;
+  opponentName: string;
+  seriesResult: string;
+  mvp: {
+    playerId: string;
+    playerName: string;
+    statLine: string;
+  };
+  championships: number;
+}
 
 /**
  * PostGameScreen - Comprehensive post-game summary
@@ -41,6 +59,18 @@ export default function PostGameScreen() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const [showBoxScore, setShowBoxScore] = useState(false);
+  const [showChampionship, setShowChampionship] = useState(false);
+
+  // Check if this is a championship-winning game
+  const isChampionshipGame = searchParams.get('championship') === 'true';
+  const championshipData: ChampionshipData | null = useMemo(() => {
+    if (!isChampionshipGame) return null;
+    try {
+      const champParam = searchParams.get('champData');
+      if (champParam) return JSON.parse(decodeURIComponent(champParam));
+    } catch { /* ignore */ }
+    return null;
+  }, [isChampionshipGame, searchParams]);
 
   // Get game data from URL params
   const awayTeamId = searchParams.get('away') || 'sirloins';
@@ -385,6 +415,21 @@ export default function PostGameScreen() {
         return styles.decisionBadge;
     }
   };
+
+  // Show championship celebration if this was the championship-winning game
+  if (championshipData && !showChampionship) {
+    // Automatically show celebration on first render for championship game
+    return (
+      <ChampionshipCelebration
+        data={championshipData}
+        onDismiss={() => setShowChampionship(true)}
+        onSaveToHistory={() => {
+          console.log('[PostGame] Championship saved to history');
+          // In a real implementation, this would save to franchise history storage
+        }}
+      />
+    );
+  }
 
   return (
     <div style={styles.container}>

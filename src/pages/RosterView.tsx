@@ -8,9 +8,21 @@
  * - Grouped by type (Catchers, Infielders, Outfielders, Pitchers)
  * - Key stats per player
  * - Click opens PlayerCard
+ * - ChemistryDisplay shows team chemistry score
  */
 
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
+import ChemistryDisplay from '../components/ChemistryDisplay';
+
+// Types for chemistry pairings
+interface PlayerPairing {
+  player1Id: string;
+  player1Name: string;
+  player2Id: string;
+  player2Name: string;
+  chemistryBonus: number;
+  relationshipType?: string;
+}
 
 interface RosterPlayer {
   playerId: string;
@@ -61,6 +73,10 @@ interface RosterViewProps {
   onPlayerClick?: (playerId: string) => void;
   onDeletePlayer?: (playerId: string) => void;
   showRatings?: boolean;
+  chemistryScore?: number;
+  topPairings?: PlayerPairing[];
+  worstPairings?: PlayerPairing[];
+  showChemistry?: boolean;
 }
 
 type PlayerGroup = 'positionPlayers' | 'pitchers';
@@ -71,7 +87,12 @@ export default function RosterView({
   onPlayerClick,
   onDeletePlayer,
   showRatings = false,
+  chemistryScore = 70,
+  topPairings = [],
+  worstPairings = [],
+  showChemistry = false,
 }: RosterViewProps) {
+  const [isChemistryExpanded, setIsChemistryExpanded] = useState(false);
   // Group players: Position Players and Pitchers, sorted by salary descending
   const groupedPlayers = useMemo(() => {
     const groups: Record<PlayerGroup, RosterPlayer[]> = {
@@ -256,6 +277,29 @@ export default function RosterView({
         <h1 style={styles.title}>{teamName} Roster</h1>
         <div style={styles.count}>{players.length} players</div>
       </div>
+
+      {/* Team Chemistry Section */}
+      {showChemistry && (
+        <div style={{ marginBottom: '24px' }}>
+          <button
+            onClick={() => setIsChemistryExpanded(!isChemistryExpanded)}
+            style={styles.chemistryToggle}
+          >
+            <span>⚗️</span>
+            <span>Team Chemistry: {chemistryScore}/100</span>
+            <span>{isChemistryExpanded ? '▼' : '▶'}</span>
+          </button>
+          {isChemistryExpanded && (
+            <ChemistryDisplay
+              teamName={teamName}
+              chemistryScore={chemistryScore}
+              topPairings={topPairings}
+              worstPairings={worstPairings}
+              onPlayerClick={onPlayerClick}
+            />
+          )}
+        </div>
+      )}
 
       {/* Position Players */}
       {groupedPlayers.positionPlayers.length > 0 && (
@@ -452,5 +496,20 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: '0.75rem',
     cursor: 'pointer',
     transition: 'all 0.15s ease',
+  },
+  chemistryToggle: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '10px',
+    width: '100%',
+    padding: '12px 16px',
+    backgroundColor: '#1e293b',
+    border: '1px solid #334155',
+    borderRadius: '8px',
+    color: '#e2e8f0',
+    fontSize: '0.9375rem',
+    fontWeight: 600,
+    cursor: 'pointer',
+    marginBottom: '12px',
   },
 };

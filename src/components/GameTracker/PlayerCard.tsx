@@ -34,6 +34,9 @@ import {
 } from '../../engines/salaryCalculator';
 import { getPlayer, getPlayerByName, getAllTeams, type PlayerData } from '../../data/playerDatabase';
 import { buildDHContext, getLeagues, getSeasonDHConfig, initializeDefaultLeagues } from '../../utils/leagueConfig';
+import RelationshipPanel from '../RelationshipPanel';
+import AgingDisplay from '../AgingDisplay';
+import type { Relationship } from '../../engines/relationshipEngine';
 
 // ============================================
 // TYPES
@@ -44,6 +47,9 @@ interface PlayerCardProps {
   playerName: string;
   teamId: string;
   onClose?: () => void;
+  relationships?: Relationship[];
+  getPlayerName?: (id: string) => string;
+  onPlayerClick?: (playerId: string) => void;
 }
 
 interface PlayerFullStats {
@@ -125,7 +131,20 @@ function toSalaryFormat(player: PlayerData, fame: number): PlayerForSalary {
 // PLAYER CARD COMPONENT
 // ============================================
 
-export function PlayerCard({ playerId, playerName, teamId, onClose }: PlayerCardProps) {
+export function PlayerCard({
+  playerId,
+  playerName,
+  teamId,
+  onClose,
+  relationships = [],
+  getPlayerName: getPlayerNameFn,
+  onPlayerClick,
+}: PlayerCardProps) {
+  // Default getPlayerName function if not provided
+  const resolvePlayerName = getPlayerNameFn || ((id: string) => {
+    const player = getPlayer(id);
+    return player?.name || id;
+  });
   const [isLoading, setIsLoading] = useState(true);
   const [stats, setStats] = useState<PlayerFullStats | null>(null);
   const warCalculations = useWARCalculations();
@@ -476,6 +495,31 @@ export function PlayerCard({ playerId, playerName, teamId, onClose }: PlayerCard
               </span>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Aging Display */}
+      {stats.playerData && (
+        <div style={styles.section}>
+          <div style={styles.sectionTitle}>Age & Career Phase</div>
+          <AgingDisplay
+            age={stats.playerData.age}
+            fame={stats.fameTotal}
+            compact={false}
+            showRetirementRisk={true}
+          />
+        </div>
+      )}
+
+      {/* Relationships Panel */}
+      {relationships.length > 0 && (
+        <div style={styles.section}>
+          <RelationshipPanel
+            playerId={playerId}
+            relationships={relationships}
+            getPlayerName={resolvePlayerName}
+            onPlayerClick={onPlayerClick}
+          />
         </div>
       )}
     </div>

@@ -5,7 +5,36 @@ import type { SeasonMetadata } from '../utils/seasonStorage';
 import LeagueNewsFeed, { type NewsStory } from '../components/LeagueNewsFeed';
 import StandingsView from '../components/StandingsView';
 import SeasonProgressTracker from '../components/SeasonProgressTracker';
+import PlayoffBracket from '../components/PlayoffBracket';
+import ContractionWarning from '../components/ContractionWarning';
 import { TEAMS } from '../data/playerDatabase';
+
+// Types for playoff bracket
+interface TeamSeed {
+  teamId: string;
+  teamName: string;
+  seed: number;
+  record?: { wins: number; losses: number };
+}
+
+interface MatchupSeries {
+  id: string;
+  round: 'wildcard' | 'division' | 'championship' | 'finals';
+  team1?: TeamSeed;
+  team2?: TeamSeed;
+  team1Wins: number;
+  team2Wins: number;
+  winnerId?: string;
+  gamesToWin: number;
+}
+
+// Types for contraction warning
+interface RiskFactor {
+  factor: string;
+  value: number | string;
+  threshold: number | string;
+  isCritical: boolean;
+}
 
 // Type for standings data
 interface TeamStanding {
@@ -27,6 +56,10 @@ export default function SeasonDashboard() {
   const [loading, setLoading] = useState(true);
   const [newsStories, setNewsStories] = useState<NewsStory[]>([]);
   const [standings, setStandings] = useState<TeamStanding[]>([]);
+  const [isPlayoffs, setIsPlayoffs] = useState(false);
+  const [playoffMatchups, setPlayoffMatchups] = useState<MatchupSeries[]>([]);
+  const [teamMorale, setTeamMorale] = useState(75); // Default healthy morale
+  const [contractionRiskFactors, setContractionRiskFactors] = useState<RiskFactor[]>([]);
 
   // Convert TEAMS to format expected by LeagueNewsFeed
   const teamsForNews = useMemo(() =>
@@ -92,6 +125,15 @@ export default function SeasonDashboard() {
             {season.seasonName}
           </h1>
         </div>
+
+        {/* Contraction Warning - Show when morale is low */}
+        <ContractionWarning
+          teamMorale={teamMorale}
+          riskFactors={contractionRiskFactors}
+          contractionThreshold={30}
+          onDismiss={() => console.log('[SeasonDashboard] Contraction warning dismissed')}
+          onLearnMore={() => navigate('/help/morale')}
+        />
 
         {/* Season Progress Tracker (Compact) */}
         <div className="mb-6">
@@ -235,6 +277,20 @@ export default function SeasonDashboard() {
             <div className="text-white font-semibold text-sm">Museum</div>
           </Link>
         </div>
+
+        {/* Playoff Bracket - Show during playoffs */}
+        {isPlayoffs && playoffMatchups.length > 0 && (
+          <div className="mb-8 bg-slate-800/50 rounded-xl p-4">
+            <PlayoffBracket
+              matchups={playoffMatchups}
+              teamCount={playoffMatchups.length >= 7 ? 8 : 4}
+              onMatchupClick={(matchupId) => {
+                console.log('[SeasonDashboard] Matchup clicked:', matchupId);
+                navigate(`/playoffs/${matchupId}`);
+              }}
+            />
+          </div>
+        )}
 
         {/* League Standings */}
         <div className="mb-8">

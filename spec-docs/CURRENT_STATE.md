@@ -289,43 +289,61 @@ All 18 gap closure stories from `STORIES_GAP_CLOSERS.md` implemented and committ
 
 ---
 
-## Wiring Stories Session (January 26, 2026) - IN PROGRESS
+## Wiring Stories Session (January 26, 2026) - COMPLETE ✅
 
-Implementing stories from `STORIES_WIRING.md` to connect orphaned components.
+Implemented stories from `STORIES_WIRING.md` to connect orphaned components.
 
-### Stories Completed
+### Stories Completed (22 of 23)
 
-| Story | Gap | Title | Commit |
+| Story | Gap | Title | Status |
 |-------|-----|-------|--------|
-| WIRE-014 | GAP-021 | Wire LeagueBuilder to MainMenu | `d4b90a7` |
-| WIRE-015 | GAP-022 | Wire PlayerRatingsForm to ManualPlayerInput | Already complete |
-| WIRE-011 | GAP-018 | Wire LeagueNewsFeed to SeasonDashboard | `59de984` |
-| WIRE-019 | GAP-026 | Wire transactionStorage to TradeHub | `fefe25d` |
-| WIRE-020 | GAP-027 | Wire fieldingStatsAggregator to GoldGlove | `ca8697d` |
-| WIRE-021 | GAP-028 | Wire dataExportService to PostGameScreen | `0ab445d` |
+| WIRE-001 | GAP-005 | BoxScoreView → PostGameScreen | ✅ Done (prior) |
+| WIRE-002 | GAP-006 | StandingsView → SeasonDashboard | ✅ Done |
+| WIRE-003 | GAP-007 | TeamStatsView → TeamPage | ✅ Done |
+| WIRE-004 | GAP-009 | FanMoralePanel → GameTracker | ✅ Done |
+| WIRE-005 | GAP-010 | PlayoffBracket → SeasonDashboard | ✅ Done |
+| WIRE-006 | GAP-011 | ChampionshipCelebration → PostGameScreen | ✅ Done |
+| WIRE-007 | GAP-012 | SeasonProgressTracker → SeasonDashboard | ✅ Done |
+| WIRE-008 | GAP-014 | SalaryDisplay → PlayerCard | ⚠️ Blocked |
+| WIRE-009 | GAP-015 | RelationshipPanel → PlayerCard | ✅ Done |
+| WIRE-010 | GAP-016 | AgingDisplay → PlayerCard | ✅ Done |
+| WIRE-011 | GAP-018 | LeagueNewsFeed → SeasonDashboard | ✅ Done |
+| WIRE-012 | GAP-019 | ChemistryDisplay → RosterView | ✅ Done |
+| WIRE-013 | GAP-020 | ContractionWarning → SeasonDashboard | ✅ Done |
+| WIRE-014 | GAP-021 | LeagueBuilder → MainMenu | ✅ Done |
+| WIRE-015 | GAP-022 | PlayerRatingsForm → ManualPlayerInput | ✅ Done (prior) |
+| WIRE-016 | GAP-023 | Museum Components → MuseumHub | ✅ Done |
+| WIRE-017 | GAP-024 | Awards Components → AwardsCeremonyHub | ✅ Done |
+| WIRE-018 | GAP-025 | Offseason Components → OffseasonHub | ✅ Done |
+| WIRE-019 | GAP-026 | transactionStorage → TradeHub | ✅ Done |
+| WIRE-020 | GAP-027 | fieldingStatsAggregator → AwardsHub | ✅ Done |
+| WIRE-021 | GAP-028 | dataExportService → PostGameScreen | ✅ Done |
+| WIRE-022 | GAP-029 | traitPools → TraitLotteryWheel | ✅ Done |
+| WIRE-023 | GAP-030 | adaptiveLearningEngine → FieldingModal | ✅ Done |
 
-### New Routes Added
+### Routes Added
 
 | Path | Component | Description |
 |------|-----------|-------------|
 | `/league-builder` | LeagueBuilderWrapper | Create new league/season |
 | `/awards/goldglove` | GoldGloveWrapper | Gold Glove awards presentation |
+| `/museum/hof` | HallOfFameWrapper | Hall of Fame gallery |
+| `/museum/retired` | RetiredNumbersWrapper | Retired numbers wall |
+| `/museum/records` | FranchiseRecordsWrapper | Franchise records display |
+| `/museum/championships` | ChampionshipBannersWrapper | Championship banners |
 
-### Key Changes
+### Key Components Wired (January 26 Final Session)
 
-- **MainMenu**: Added "NEW LEAGUE" navigation item pointing to `/league-builder`
-- **SeasonDashboard**: Now includes LeagueNewsFeed at bottom (empty until stories are generated)
-- **AwardsWrapper**: Now navigates to `/awards/:awardId` for individual award presentations
-- **TradeWrapper**: Now logs trades to transactionStorage when executed
-- **PostGameScreen**: Added Export CSV and Export JSON buttons for box score data
+- **SeasonDashboard**: PlayoffBracket (conditional, shows during playoffs), ContractionWarning
+- **PostGameScreen**: ChampionshipCelebration (shows after championship win)
+- **PlayerCard**: RelationshipPanel, AgingDisplay
+- **RosterView**: ChemistryDisplay with expandable toggle
+- **MuseumHub**: HallOfFameGallery, RetiredNumbersWall, FranchiseRecords, ChampionshipBanners
+- **TraitLotteryWheel**: getWeightedTraitPool from traitPools.ts
 
-### Remaining Wiring Stories
+### Remaining
 
-| Priority | Remaining | Notes |
-|----------|-----------|-------|
-| P0 | 0 | ✅ All P0 complete |
-| P1 | 8 | WIRE-001, 002, 003, 004, 007, 008, 017, 018, 023 |
-| P2 | 8 | Lower priority |
+Only **WIRE-008 (SalaryDisplay)** blocked - needs player ratings in the database to calculate salary
 
 ---
 

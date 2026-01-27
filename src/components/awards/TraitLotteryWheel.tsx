@@ -7,15 +7,34 @@
  * - Trait pool by tier (S/A/B/C)
  * - Result reveal with description
  * - Apply button to confirm
+ * - Wired to traitPools.ts for trait data (WIRE-022)
  */
 
 import { useState, useEffect, useRef } from 'react';
+import { type Trait as TraitData, getWeightedTraitPool } from '../../data/traitPools';
 
+// Re-export helper function for consumers who want to generate trait pools
+export { getWeightedTraitPool };
+
+// Local trait interface (subset of TraitData for component use)
 interface Trait {
   id: string;
   name: string;
   description: string;
   tier: 'S' | 'A' | 'B' | 'C';
+}
+
+/**
+ * Helper to get traits for a player based on position type
+ * Uses weighted trait pool from traitPools.ts
+ */
+export function getTraitsForLottery(isPitcher: boolean, poolSize: number = 12): Trait[] {
+  return getWeightedTraitPool(isPitcher, poolSize).map(t => ({
+    id: t.id,
+    name: t.name,
+    description: t.description,
+    tier: t.tier,
+  }));
 }
 
 interface TraitLotteryWheelProps {

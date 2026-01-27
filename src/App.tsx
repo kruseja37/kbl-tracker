@@ -38,6 +38,10 @@ import ScheduleGenerationHub from './pages/ScheduleGenerationHub';
 
 // Museum
 import MuseumHub from './pages/MuseumHub';
+import HallOfFameGallery from './components/museum/HallOfFameGallery';
+import RetiredNumbersWall from './components/museum/RetiredNumbersWall';
+import FranchiseRecords from './components/museum/FranchiseRecords';
+import ChampionshipBanners from './components/museum/ChampionshipBanners';
 
 // Player Management
 import ManualPlayerInput from './components/ManualPlayerInput';
@@ -748,6 +752,55 @@ function MuseumWrapper() {
   );
 }
 
+// Wrapper for Hall of Fame Gallery
+function HallOfFameWrapper() {
+  const navigate = useNavigate();
+  return (
+    <HallOfFameGallery
+      members={[]}
+      onMemberClick={(playerId) => navigate(`/player/${playerId}`)}
+      onBack={() => navigate('/museum')}
+    />
+  );
+}
+
+// Wrapper for Retired Numbers Wall
+function RetiredNumbersWrapper() {
+  const navigate = useNavigate();
+  return (
+    <RetiredNumbersWall
+      numbers={[]}
+      onNumberClick={(playerId) => navigate(`/player/${playerId}`)}
+      onBack={() => navigate('/museum')}
+    />
+  );
+}
+
+// Wrapper for Franchise Records
+function FranchiseRecordsWrapper() {
+  const navigate = useNavigate();
+  return (
+    <FranchiseRecords
+      records={[]}
+      onPlayerClick={(playerId) => navigate(`/player/${playerId}`)}
+      onBack={() => navigate('/museum')}
+    />
+  );
+}
+
+// Wrapper for Championship Banners
+function ChampionshipBannersWrapper() {
+  const navigate = useNavigate();
+  return (
+    <ChampionshipBanners
+      championships={[]}
+      onBannerClick={(seasonId) => navigate(`/season/${seasonId}`)}
+      onMvpClick={(playerId) => navigate(`/player/${playerId}`)}
+      onBack={() => navigate('/museum')}
+    />
+  );
+}
+
 // Wrapper for LeagueBuilder
 function LeagueBuilderWrapper() {
   const navigate = useNavigate();
@@ -805,6 +858,10 @@ function App() {
 
         {/* Museum */}
         <Route path="/museum" element={<MuseumWrapper />} />
+        <Route path="/museum/hof" element={<HallOfFameWrapper />} />
+        <Route path="/museum/retired" element={<RetiredNumbersWrapper />} />
+        <Route path="/museum/records" element={<FranchiseRecordsWrapper />} />
+        <Route path="/museum/championships" element={<ChampionshipBannersWrapper />} />
 
         {/* League Builder */}
         <Route path="/league-builder" element={<LeagueBuilderWrapper />} />
