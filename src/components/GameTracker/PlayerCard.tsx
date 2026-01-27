@@ -7,7 +7,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useSeasonStats, type BattingLeaderEntry, type PitchingLeaderEntry } from '../../hooks/useSeasonStats';
-import { useWARCalculations, formatWAR, getWARColor, type PlayerBWAR, type PlayerPWAR } from '../../hooks/useWARCalculations';
+import { useWARCalculations, formatWAR, getWARColor, adjustWARForCondition, type PlayerBWAR, type PlayerPWAR } from '../../hooks/useWARCalculations';
 import { useCareerStats, type CareerBattingLeader, type CareerPitchingLeader } from '../../hooks/useCareerStats';
 import {
   getAllBattingStats,
@@ -179,6 +179,9 @@ export function PlayerCard({
         let totalWAR = 0;
         if (bwar) totalWAR += bwar.bWAR;
         if (pwar) totalWAR += pwar.pWAR;
+        // Apply mojo/fitness condition adjustment to WAR
+        // Per MOJO_FITNESS_SYSTEM_SPEC.md Section 5.1
+        totalWAR = adjustWARForCondition(totalWAR, mojoLevel, fitnessStateProp);
 
         const fameTotal = batting?.fameNet ?? 0;
         const fameTierData = getFameTier(fameTotal);

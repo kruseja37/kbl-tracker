@@ -7,6 +7,8 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
+import { type MojoLevel, getMojoWARMultiplier } from '../engines/mojoEngine';
+import { type FitnessState, getFitnessWARMultiplier } from '../engines/fitnessEngine';
 import {
   getSeasonBattingStats,
   getSeasonPitchingStats,
@@ -566,4 +568,30 @@ export function getWARTier(war: number, seasonGames: number): string {
   if (scaledWAR >= 1.0) return 'Starter';
   if (scaledWAR >= 0.0) return 'Replacement';
   return 'Below Replacement';
+}
+
+/**
+ * Adjust WAR for current Mojo/Fitness condition.
+ * Per MOJO_FITNESS_SYSTEM_SPEC.md Section 5.1:
+ * - Rattled/Tense mojo → WAR bonus (harder conditions = more credit)
+ * - Locked In/Jacked mojo → WAR penalty (easier conditions = less credit)
+ * - Juiced fitness → WAR penalty (-15%)
+ * - Strained/Weak fitness → WAR bonus (gutsy performance)
+ *
+ * NOTE: This applies the CURRENT mojo/fitness as a multiplier to total WAR.
+ * Per-game mojo/fitness tracking for weighted aggregation is a future enhancement.
+ */
+export function adjustWARForCondition(
+  baseWAR: number,
+  mojo?: MojoLevel,
+  fitness?: FitnessState,
+): number {
+  let adjusted = baseWAR;
+  if (mojo !== undefined) {
+    adjusted *= getMojoWARMultiplier(mojo);
+  }
+  if (fitness !== undefined) {
+    adjusted *= getFitnessWARMultiplier(fitness);
+  }
+  return Math.round(adjusted * 100) / 100;
 }

@@ -861,7 +861,10 @@ export default function GameTracker({ onGameEnd }: GameTrackerProps = {}) {
       isFirstAtBatOfGame: false,
       leadChanges: 0,
       previousLeadTeam: (awayScore > homeScore ? 'away' : homeScore > awayScore ? 'home' : 'tie') as 'away' | 'home' | 'tie',
-      maxLeadBlown: { away: 0, home: 0 }
+      maxLeadBlown: { away: 0, home: 0 },
+      // End-game pitcher mojo/fitness (for CG, shutout, no-hitter, Maddux)
+      pitcherMojo: mojoState.getPlayerMojo(getCurrentPitcherId()).level,
+      pitcherFitness: fitnessState.getPlayerFitness(getCurrentPitcherId()).state,
     };
 
     // Build pitcher stats for end-game detection FROM ACCUMULATED GAME STATS
@@ -2235,6 +2238,12 @@ export default function GameTracker({ onGameEnd }: GameTrackerProps = {}) {
       previousLeadTeam: (awayScore > homeScore ? 'away' : homeScore > awayScore ? 'home' : 'tie') as 'away' | 'home' | 'tie',
       maxLeadBlown: { away: 0, home: 0 },
       leverageIndex: currentLeverageIndex, // Pass LI for Fame weighting
+      // Mojo/Fitness context for Fame adjustment
+      // Per MOJO_FITNESS_SYSTEM_SPEC.md Section 4.2-4.3
+      batterMojo: mojoState.getPlayerMojo(currentBatter.id).level,
+      batterFitness: fitnessState.getPlayerFitness(currentBatter.id).state,
+      pitcherMojo: mojoState.getPlayerMojo(getCurrentPitcherId()).level,
+      pitcherFitness: fitnessState.getPlayerFitness(getCurrentPitcherId()).state,
     };
 
     // Run fame detection and capture results

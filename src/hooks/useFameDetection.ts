@@ -12,6 +12,8 @@ import {
   createFameEvent,
   DEFAULT_FAME_SETTINGS
 } from '../types/game';
+import type { MojoLevel } from '../engines/mojoEngine';
+import type { FitnessState } from '../engines/fitnessEngine';
 
 // ============================================
 // FAME AUTO-DETECTION HOOK
@@ -82,6 +84,13 @@ interface GameContext {
   // Leverage Index for Fame weighting (0.1-10.0, 1.0 = average)
   // Higher LI = higher-stakes situation = more Fame credit/blame
   leverageIndex?: number;
+  // Current batter mojo/fitness for Fame adjustment
+  // Per MOJO_FITNESS_SYSTEM_SPEC.md Section 4.2-4.3
+  batterMojo?: MojoLevel;
+  batterFitness?: FitnessState;
+  // Current pitcher mojo/fitness for Fame adjustment
+  pitcherMojo?: MojoLevel;
+  pitcherFitness?: FitnessState;
 }
 
 interface DetectionResult {
@@ -183,7 +192,9 @@ export function useFameDetection({
         description,
         undefined, // secondaryPlayerId
         undefined, // secondaryPlayerName
-        context.leverageIndex // LI for Fame weighting
+        context.leverageIndex,
+        context.batterMojo,
+        context.batterFitness
       );
 
       return { event, message };
@@ -226,7 +237,9 @@ export function useFameDetection({
       'Hit for the cycle!',
       undefined,
       undefined,
-      context.leverageIndex
+      context.leverageIndex,
+      context.batterMojo,
+      context.batterFitness
     );
 
     return {
@@ -268,7 +281,9 @@ export function useFameDetection({
       `${hrCount}-HR game!`,
       undefined,
       undefined,
-      context.leverageIndex
+      context.leverageIndex,
+      context.batterMojo,
+      context.batterFitness
     );
 
     return {
@@ -311,7 +326,9 @@ export function useFameDetection({
       'Back-to-back home runs!',
       undefined,
       undefined,
-      context.leverageIndex
+      context.leverageIndex,
+      context.batterMojo,
+      context.batterFitness
     );
 
     return {
@@ -351,7 +368,9 @@ export function useFameDetection({
       `${kCount} strikeouts - ${eventType === 'PLATINUM_SOMBRERO' ? 'Platinum' : 'Golden'} Sombrero!`,
       undefined,
       undefined,
-      context.leverageIndex
+      context.leverageIndex,
+      context.batterMojo,
+      context.batterFitness
     );
 
     return {
@@ -391,7 +410,9 @@ export function useFameDetection({
       `Gave up ${runs} runs - Meltdown!`,
       undefined,
       undefined,
-      context.leverageIndex
+      context.leverageIndex,
+      context.pitcherMojo,
+      context.pitcherFitness
     );
 
     return {
@@ -441,7 +462,9 @@ export function useFameDetection({
       isPerfect ? 'PERFECT GAME!' : 'NO-HITTER!',
       undefined,
       undefined,
-      context.leverageIndex
+      context.leverageIndex,
+      context.pitcherMojo,
+      context.pitcherFitness
     );
 
     return {
@@ -479,7 +502,9 @@ export function useFameDetection({
       'Gave up back-to-back-to-back home runs!',
       undefined,
       undefined,
-      context.leverageIndex
+      context.leverageIndex,
+      context.pitcherMojo,
+      context.pitcherFitness
     );
 
     return {
@@ -521,7 +546,9 @@ export function useFameDetection({
         'Thrown out stretching at 3B',
         undefined,
         undefined,
-        context.leverageIndex
+        context.leverageIndex,
+        context.batterMojo,
+        context.batterFitness
       );
 
       return {
@@ -564,7 +591,9 @@ export function useFameDetection({
       'Grand Slam!',
       undefined,
       undefined,
-      context.leverageIndex
+      context.leverageIndex,
+      context.batterMojo,
+      context.batterFitness
     );
 
     return {
@@ -602,7 +631,9 @@ export function useFameDetection({
       'Leadoff home run!',
       undefined,
       undefined,
-      context.leverageIndex
+      context.leverageIndex,
+      context.batterMojo,
+      context.batterFitness
     );
 
     return {
@@ -638,7 +669,9 @@ export function useFameDetection({
       'Pinch hit home run!',
       undefined,
       undefined,
-      context.leverageIndex
+      context.leverageIndex,
+      context.batterMojo,
+      context.batterFitness
     );
 
     return {
@@ -683,7 +716,9 @@ export function useFameDetection({
       'Go-ahead home run!',
       undefined,
       undefined,
-      context.leverageIndex
+      context.leverageIndex,
+      context.batterMojo,
+      context.batterFitness
     );
 
     return {
@@ -718,7 +753,9 @@ export function useFameDetection({
       `${batterStats.totalHits}-hit game!`,
       undefined,
       undefined,
-      context.leverageIndex
+      context.leverageIndex,
+      context.batterMojo,
+      context.batterFitness
     );
 
     return {
@@ -763,7 +800,9 @@ export function useFameDetection({
       `${hits}-hit game!`,
       undefined,
       undefined,
-      context.leverageIndex
+      context.leverageIndex,
+      context.batterMojo,
+      context.batterFitness
     );
 
     return {
@@ -807,7 +846,9 @@ export function useFameDetection({
       `${rbi}-RBI game!`,
       undefined,
       undefined,
-      context.leverageIndex
+      context.leverageIndex,
+      context.batterMojo,
+      context.batterFitness
     );
 
     return {
@@ -847,7 +888,9 @@ export function useFameDetection({
       `6 strikeouts - TITANIUM Sombrero!`,
       undefined,
       undefined,
-      context.leverageIndex
+      context.leverageIndex,
+      context.batterMojo,
+      context.batterFitness
     );
 
     return {
@@ -891,7 +934,9 @@ export function useFameDetection({
       isShutout ? 'Complete Game Shutout!' : 'Complete Game!',
       undefined,
       undefined,
-      context.leverageIndex
+      context.leverageIndex,
+      context.pitcherMojo,
+      context.pitcherFitness
     );
 
     return {
@@ -942,7 +987,9 @@ export function useFameDetection({
       `Maddux! CGSO on ${pitcherStats.pitchCount} pitches!`,
       undefined,
       undefined,
-      context.leverageIndex
+      context.leverageIndex,
+      context.pitcherMojo,
+      context.pitcherFitness
     );
 
     return {
@@ -984,7 +1031,9 @@ export function useFameDetection({
       'Immaculate Inning! 9 pitches, 3 strikeouts!',
       undefined,
       undefined,
-      context.leverageIndex
+      context.leverageIndex,
+      context.pitcherMojo,
+      context.pitcherFitness
     );
 
     return {
@@ -1024,7 +1073,9 @@ export function useFameDetection({
       'Back-to-back-to-back home runs!',
       undefined,
       undefined,
-      context.leverageIndex
+      context.leverageIndex,
+      context.batterMojo,
+      context.batterFitness
     );
 
     return {
@@ -1060,7 +1111,9 @@ export function useFameDetection({
       'Struck out the side!',
       undefined,
       undefined,
-      context.leverageIndex
+      context.leverageIndex,
+      context.pitcherMojo,
+      context.pitcherFitness
     );
 
     return {
@@ -1098,7 +1151,9 @@ export function useFameDetection({
       `${k} strikeout game!`,
       undefined,
       undefined,
-      context.leverageIndex
+      context.leverageIndex,
+      context.pitcherMojo,
+      context.pitcherFitness
     );
 
     return {
@@ -1136,7 +1191,9 @@ export function useFameDetection({
       'Hat Trick (3 strikeouts)',
       undefined,
       undefined,
-      context.leverageIndex
+      context.leverageIndex,
+      context.batterMojo,
+      context.batterFitness
     );
 
     return {
@@ -1171,7 +1228,9 @@ export function useFameDetection({
       `Left ${batterStats.runnersLeftOnBase} runners on base`,
       undefined,
       undefined,
-      context.leverageIndex
+      context.leverageIndex,
+      context.batterMojo,
+      context.batterFitness
     );
 
     return {
@@ -1206,7 +1265,9 @@ export function useFameDetection({
       `${batterStats.gidp} double plays hit into`,
       undefined,
       undefined,
-      context.leverageIndex
+      context.leverageIndex,
+      context.batterMojo,
+      context.batterFitness
     );
 
     return {
@@ -1241,7 +1302,9 @@ export function useFameDetection({
       `Gave up ${pitcherStats.firstInningRuns} runs in the 1st`,
       undefined,
       undefined,
-      context.leverageIndex
+      context.leverageIndex,
+      context.pitcherMojo,
+      context.pitcherFitness
     );
 
     return {

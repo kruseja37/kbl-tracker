@@ -1,5 +1,8 @@
 // Game State Types - Per Master Spec Section 4
 
+import { type MojoLevel, getMojoFameModifier } from '../engines/mojoEngine';
+import { type FitnessState, getFitnessFameModifier } from '../engines/fitnessEngine';
+
 export type HalfInning = 'TOP' | 'BOTTOM';
 export type Direction = 'Left' | 'Left-Center' | 'Center' | 'Right-Center' | 'Right';
 export type ExitType = 'Ground' | 'Line Drive' | 'Fly Ball' | 'Pop Up';
@@ -1402,7 +1405,9 @@ export function createFameEvent(
   description?: string,
   secondaryPlayerId?: string,
   secondaryPlayerName?: string,
-  leverageIndex?: number  // Optional LI for adjusting Fame in clutch situations
+  leverageIndex?: number,  // Optional LI for adjusting Fame in clutch situations
+  playerMojo?: MojoLevel,  // Player's current mojo for Fame adjustment
+  playerFitness?: FitnessState,  // Player's current fitness for Fame adjustment
 ): FameEvent {
   // Base fame value from event type
   let fameValue = FAME_VALUES[eventType];
@@ -1413,9 +1418,25 @@ export function createFameEvent(
   if (leverageIndex !== undefined && leverageIndex > 0) {
     const liMultiplier = Math.sqrt(leverageIndex);
     fameValue = fameValue * liMultiplier;
-    // Round to 2 decimal places
-    fameValue = Math.round(fameValue * 100) / 100;
   }
+
+  // Apply Mojo modifier if provided
+  // Per MOJO_FITNESS_SYSTEM_SPEC.md Section 4.2:
+  // Rattled (+30%), Tense (+15%), Normal (1x), Locked In (-10%), Jacked (-20%)
+  // Worse mojo = MORE fame credit (overcoming adversity)
+  if (playerMojo !== undefined) {
+    fameValue = fameValue * getMojoFameModifier(playerMojo);
+  }
+
+  // Apply Fitness modifier if provided
+  // Per MOJO_FITNESS_SYSTEM_SPEC.md Section 4.3:
+  // Juiced (50% credit - PED stigma), Strained (+15%), Weak (+25%)
+  if (playerFitness !== undefined) {
+    fameValue = fameValue * getFitnessFameModifier(playerFitness);
+  }
+
+  // Round to 2 decimal places after all multipliers
+  fameValue = Math.round(fameValue * 100) / 100;
 
   return {
     id: `fame_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
