@@ -59,8 +59,10 @@ import FanMoralePanel from '../FanMoralePanel';
 import type { WalkoffResult } from '../../utils/walkoffDetector';
 import { detectWalkoff, getWalkoffFameBonus } from '../../utils/walkoffDetector';
 import { PlayerNameWithMorale } from './PlayerNameWithMorale';
-import { MOJO_STATES, type MojoLevel } from '../../engines/mojoEngine';
+import { MOJO_STATES, type MojoLevel, type GameSituation } from '../../engines/mojoEngine';
 import { FITNESS_STATES, type FitnessState } from '../../engines/fitnessEngine';
+import { useMojoState } from '../../hooks/useMojoState';
+import { useFitnessState } from '../../hooks/useFitnessState';
 import { useFameDetection, type PlayerStats as FamePlayerStats } from '../../hooks/useFameDetection';
 import { useGamePersistence, type GameStateForPersistence } from '../../hooks/useGamePersistence';
 import { aggregateGameToSeason } from '../../utils/seasonAggregator';
@@ -449,6 +451,13 @@ export default function GameTracker({ onGameEnd }: GameTrackerProps = {}) {
   // ============================================
   const clutchCalculations = useClutchCalculations();
   const mwarCalculations = useMWARCalculations();
+
+  // ============================================
+  // MOJO & FITNESS STATE (Day 3 Wire-up)
+  // Per IMPLEMENTATION_PLAN.md v5 - Day 3
+  // ============================================
+  const mojoState = useMojoState();
+  const fitnessState = useFitnessState();
 
   // ============================================
   // GAME PERSISTENCE (Phase 2)
@@ -2407,6 +2416,66 @@ export default function GameTracker({ onGameEnd }: GameTrackerProps = {}) {
     };
     clutchCalculations.recordClutchEvent(pitcherClutchEvent);
 
+    // ============================================
+    // MOJO RECORDING (Day 3 Wire-up)
+    // Record mojo changes for batter, pitcher, and fielder
+    // ============================================
+    const mojoSituation: GameSituation = {
+      inning,
+      isBottom: halfInning === 'BOTTOM',
+      outs,
+      runnersOn: [
+        ...(bases.first ? [1] : []),
+        ...(bases.second ? [2] : []),
+        ...(bases.third ? [3] : []),
+      ],
+      scoreDiff: homeScore - awayScore,
+      isPlayoff: false, // TODO: Wire playoff detection when available
+    };
+
+    // Batter mojo
+    mojoState.recordBatterMojo(
+      currentBatter.id,
+      gameId,
+      result,
+      actualRbiCount,
+      mojoSituation
+    );
+
+    // Pitcher mojo
+    const currentPitcherIdForMojo = getCurrentPitcherId();
+    mojoState.recordPitcherMojo(
+      currentPitcherIdForMojo,
+      gameId,
+      result,
+      mojoSituation,
+    );
+
+    // Fielder mojo (on errors or great plays)
+    if (flowState.fieldingData) {
+      const fd = flowState.fieldingData;
+      const isError = fd.playType === 'error';
+      const isGreatPlay = fd.playType === 'diving' || fd.playType === 'leaping' || fd.playType === 'robbed_hr';
+      if (isError || isGreatPlay) {
+        const fielderId = fd.primaryFielder;
+        if (fielderId) {
+          // Find the player ID for this position from the lineup
+          const fielderInLineup = lineupState.lineup.find(
+            l => l.position === fielderId
+          );
+          if (fielderInLineup) {
+            mojoState.recordFielderMojo(
+              fielderInLineup.playerId,
+              gameId,
+              isError,
+              isGreatPlay,
+              mojoSituation
+            );
+          }
+        }
+      }
+    }
+
     advanceBatter();
     setPendingResult(null);
   };
@@ -2882,6 +2951,10 @@ export default function GameTracker({ onGameEnd }: GameTrackerProps = {}) {
         outs={outs}
         gameNumber={1}
         leverageIndex={currentLeverageIndex}
+        batterMojo={mojoState.getPlayerMojo(currentBatter.id).level}
+        batterName={currentBatter.name}
+        pitcherMojo={mojoState.getPlayerMojo(getCurrentPitcherId()).level}
+        pitcherName={pitcherGameStats.get(getCurrentPitcherId())?.pitcherName || lineupState.currentPitcher?.playerName}
       />
 
       {/* Pitcher Info Bar */}
@@ -2890,9 +2963,9 @@ export default function GameTracker({ onGameEnd }: GameTrackerProps = {}) {
         const stats = pitcherGameStats.get(pitcherId);
         const pitcherName = stats?.pitcherName || lineupState.currentPitcher?.playerName || 'Unknown';
         const pitchCount = stats?.pitchCount ?? 0;
-        // Get pitcher fitness state (default to FIT)
-        const pitcherFitness: FitnessState = 'FIT'; // TODO: Wire to actual fitness tracking
-        const fitnessInfo = FITNESS_STATES[pitcherFitness];
+        // Get pitcher fitness state from hook (defaults to FIT)
+        const pitcherFitnessData = fitnessState.getPlayerFitness(pitcherId);
+        const fitnessInfo = pitcherFitnessData.definition;
         // Get pitcher's team ID (opposite of batting team)
         const pitcherTeamId = halfInning === 'TOP' ? homeTeamId : awayTeamId;
         return (
@@ -2920,6 +2993,27 @@ export default function GameTracker({ onGameEnd }: GameTrackerProps = {}) {
             >
               {fitnessInfo.emoji} {fitnessInfo.displayName}
             </span>
+            {/* Pitcher Mojo Badge */}
+            {(() => {
+              const pitcherMojoInfo = mojoState.getPlayerMojo(pitcherId);
+              const mojoColor = MOJO_STATES[pitcherMojoInfo.level].name === 'NORMAL' ? '#888' :
+                pitcherMojoInfo.level > 0 ? '#22c55e' : '#ef4444';
+              return pitcherMojoInfo.level !== 0 ? (
+                <>
+                  <span style={styles.pitcherBarDivider}>|</span>
+                  <span
+                    style={{
+                      ...styles.pitcherFitnessBadge,
+                      color: mojoColor,
+                      backgroundColor: `${mojoColor}20`,
+                    }}
+                    title={`Mojo: ${pitcherMojoInfo.state.displayName}`}
+                  >
+                    {pitcherMojoInfo.state.emoji} {pitcherMojoInfo.state.displayName}
+                  </span>
+                </>
+              ) : null;
+            })()}
           </div>
         );
       })()}
@@ -3357,6 +3451,8 @@ export default function GameTracker({ onGameEnd }: GameTrackerProps = {}) {
             setPlayerCardOpen(false);
             setSelectedPlayer(null);
           }}
+          mojoLevel={mojoState.getPlayerMojo(selectedPlayer.playerId).level}
+          fitnessState={fitnessState.getPlayerFitness(selectedPlayer.playerId).state}
         />
       )}
 

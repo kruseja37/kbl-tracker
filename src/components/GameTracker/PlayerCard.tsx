@@ -34,6 +34,8 @@ import { buildDHContext, getLeagues, getSeasonDHConfig, initializeDefaultLeagues
 import RelationshipPanel from '../RelationshipPanel';
 import AgingDisplay from '../AgingDisplay';
 import type { Relationship } from '../../engines/relationshipEngine';
+import { MOJO_STATES, getMojoColor, type MojoLevel } from '../../engines/mojoEngine';
+import { FITNESS_STATES, type FitnessState } from '../../engines/fitnessEngine';
 
 // ============================================
 // TYPES
@@ -47,6 +49,8 @@ interface PlayerCardProps {
   relationships?: Relationship[];
   getPlayerName?: (id: string) => string;
   onPlayerClick?: (playerId: string) => void;
+  mojoLevel?: import('../../engines/mojoEngine').MojoLevel;
+  fitnessState?: import('../../engines/fitnessEngine').FitnessState;
 }
 
 interface PlayerFullStats {
@@ -121,6 +125,8 @@ export function PlayerCard({
   relationships = [],
   getPlayerName: getPlayerNameFn,
   onPlayerClick,
+  mojoLevel,
+  fitnessState: fitnessStateProp,
 }: PlayerCardProps) {
   const resolvePlayerName = getPlayerNameFn || ((id: string) => {
     const player = getPlayer(id);
@@ -320,6 +326,40 @@ export function PlayerCard({
           </span>
           <span className="text-xs text-gray-500">({stats.fameTier})</span>
         </div>
+
+        {/* Mojo & Fitness */}
+        {(mojoLevel !== undefined || fitnessStateProp) && (
+          <div className="flex items-center gap-3 bg-white p-2 border-2 border-retro-blue">
+            {mojoLevel !== undefined && (
+              <div className="flex items-center gap-1">
+                <span className="font-pixel text-[0.6rem] text-gray-500">MOJO</span>
+                <span
+                  className="font-bold text-sm"
+                  style={{ color: getMojoColor(mojoLevel) }}
+                >
+                  {MOJO_STATES[mojoLevel].emoji} {MOJO_STATES[mojoLevel].displayName}
+                </span>
+                <span className="text-xs text-gray-400">
+                  ({MOJO_STATES[mojoLevel].statMultiplier.toFixed(2)}x)
+                </span>
+              </div>
+            )}
+            {fitnessStateProp && (
+              <div className="flex items-center gap-1">
+                <span className="font-pixel text-[0.6rem] text-gray-500">FITNESS</span>
+                <span
+                  className="font-bold text-sm"
+                  style={{ color: FITNESS_STATES[fitnessStateProp].color }}
+                >
+                  {FITNESS_STATES[fitnessStateProp].emoji} {FITNESS_STATES[fitnessStateProp].displayName}
+                </span>
+                <span className="text-xs text-gray-400">
+                  ({FITNESS_STATES[fitnessStateProp].multiplier.toFixed(2)}x)
+                </span>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Salary Section */}
         {stats.estimatedSalary !== null ? (
@@ -640,9 +680,11 @@ interface PlayerCardModalProps {
   playerName: string;
   teamId: string;
   onClose: () => void;
+  mojoLevel?: MojoLevel;
+  fitnessState?: FitnessState;
 }
 
-export function PlayerCardModal({ isOpen, playerId, playerName, teamId, onClose }: PlayerCardModalProps) {
+export function PlayerCardModal({ isOpen, playerId, playerName, teamId, onClose, mojoLevel, fitnessState: fitnessStateProp }: PlayerCardModalProps) {
   if (!isOpen) return null;
 
   return (
@@ -656,6 +698,8 @@ export function PlayerCardModal({ isOpen, playerId, playerName, teamId, onClose 
           playerName={playerName}
           teamId={teamId}
           onClose={onClose}
+          mojoLevel={mojoLevel}
+          fitnessState={fitnessStateProp}
         />
       </div>
     </div>

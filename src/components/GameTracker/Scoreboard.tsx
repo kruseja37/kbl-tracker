@@ -1,4 +1,6 @@
 import type { HalfInning } from '../../types/game';
+import type { MojoLevel } from '../../engines/mojoEngine';
+import { MOJO_STATES, getMojoColor } from '../../engines/mojoEngine';
 
 interface ScoreboardProps {
   awayName: string;
@@ -10,6 +12,10 @@ interface ScoreboardProps {
   outs: number;
   gameNumber: number;
   leverageIndex?: number;  // LI from engines/leverageCalculator
+  batterMojo?: MojoLevel;
+  batterName?: string;
+  pitcherMojo?: MojoLevel;
+  pitcherName?: string;
 }
 
 // Get LI category and color
@@ -31,6 +37,10 @@ export default function Scoreboard({
   outs,
   gameNumber,
   leverageIndex = 1.0,
+  batterMojo,
+  batterName,
+  pitcherMojo,
+  pitcherName,
 }: ScoreboardProps) {
   const liDisplay = getLIDisplay(leverageIndex);
   return (
@@ -91,6 +101,42 @@ export default function Scoreboard({
           )}
         </div>
       </div>
+
+      {/* Batter/Pitcher Mojo Row */}
+      {(batterMojo !== undefined || pitcherMojo !== undefined) && (
+        <div style={styles.mojoRow}>
+          {batterMojo !== undefined && (
+            <div style={styles.mojoItem}>
+              <span style={styles.mojoLabel}>BAT:</span>
+              <span style={styles.mojoPlayerName}>{batterName || '?'}</span>
+              <span
+                style={{
+                  ...styles.mojoBadge,
+                  color: getMojoColor(batterMojo),
+                  backgroundColor: `${getMojoColor(batterMojo)}20`,
+                }}
+              >
+                {MOJO_STATES[batterMojo].emoji} {MOJO_STATES[batterMojo].displayName}
+              </span>
+            </div>
+          )}
+          {pitcherMojo !== undefined && (
+            <div style={{ ...styles.mojoItem, marginLeft: 'auto' }}>
+              <span style={styles.mojoLabel}>PIT:</span>
+              <span style={styles.mojoPlayerName}>{pitcherName || '?'}</span>
+              <span
+                style={{
+                  ...styles.mojoBadge,
+                  color: getMojoColor(pitcherMojo),
+                  backgroundColor: `${getMojoColor(pitcherMojo)}20`,
+                }}
+              >
+                {MOJO_STATES[pitcherMojo].emoji} {MOJO_STATES[pitcherMojo].displayName}
+              </span>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -180,5 +226,38 @@ const styles: Record<string, React.CSSProperties> = {
     borderRadius: '3px',
     backgroundColor: 'rgba(0, 0, 0, 0.3)',
     marginLeft: '2px',
+  },
+  mojoRow: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: '6px',
+    paddingTop: '6px',
+    borderTop: '1px solid #1e3a5f',
+    gap: '8px',
+  },
+  mojoItem: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '4px',
+  },
+  mojoLabel: {
+    fontSize: '10px',
+    color: '#666',
+    fontWeight: 'bold',
+  },
+  mojoPlayerName: {
+    fontSize: '11px',
+    color: '#aaa',
+    maxWidth: '70px',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap' as const,
+  },
+  mojoBadge: {
+    fontSize: '10px',
+    fontWeight: 'bold',
+    padding: '1px 5px',
+    borderRadius: '4px',
   },
 };
