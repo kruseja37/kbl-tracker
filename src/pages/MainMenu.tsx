@@ -2,37 +2,68 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import GameSetupModal from '../components/GameSetupModal';
 
+/**
+ * MainMenu - Super Mega Baseball 4 Inspired Design
+ * Bold red/white/blue palette, italic sporty typography,
+ * strong drop shadows, clean modern-retro aesthetic
+ */
+
 interface NavItem {
   path: string;
-  icon: string;
   label: string;
   sublabel: string;
-  color: string;
+  accent?: 'red' | 'blue' | 'gold';
 }
 
 const seasonItems: NavItem[] = [
-  { path: '/season', icon: '📊', label: 'DASHBOARD', sublabel: 'Season overview', color: 'amber' },
-  { path: '/schedule', icon: '📅', label: 'SCHEDULE', sublabel: 'View games', color: 'blue' },
-  { path: '/roster', icon: '👥', label: 'ROSTER', sublabel: 'Manage players', color: 'emerald' },
-  { path: '/leaders', icon: '🏆', label: 'LEADERS', sublabel: 'League stats', color: 'purple' },
+  { path: '/season', label: 'DASHBOARD', sublabel: 'Season Overview', accent: 'blue' },
+  { path: '/schedule', label: 'SCHEDULE', sublabel: 'View Games', accent: 'blue' },
+  { path: '/roster', label: 'ROSTER', sublabel: 'Manage Players', accent: 'blue' },
+  { path: '/leaders', label: 'LEADERS', sublabel: 'League Stats', accent: 'gold' },
 ];
 
 const offseasonItems: NavItem[] = [
-  { path: '/offseason', icon: '🔄', label: 'OFFSEASON HUB', sublabel: 'Between seasons', color: 'orange' },
-  { path: '/offseason/free-agency', icon: '✍️', label: 'FREE AGENCY', sublabel: 'Sign players', color: 'green' },
-  { path: '/offseason/draft', icon: '🎯', label: 'DRAFT', sublabel: 'Pick prospects', color: 'cyan' },
-  { path: '/offseason/trades', icon: '🔀', label: 'TRADES', sublabel: 'Make deals', color: 'red' },
+  { path: '/offseason', label: 'OFFSEASON', sublabel: 'Between Seasons', accent: 'red' },
+  { path: '/offseason/free-agency', label: 'FREE AGENCY', sublabel: 'Sign Players', accent: 'red' },
+  { path: '/offseason/draft', label: 'DRAFT', sublabel: 'Pick Prospects', accent: 'red' },
+  { path: '/offseason/trades', label: 'TRADES', sublabel: 'Make Deals', accent: 'red' },
 ];
 
 const extraItems: NavItem[] = [
-  { path: '/league-builder', icon: '🏗️', label: 'NEW LEAGUE', sublabel: 'Start fresh season', color: 'teal' },
-  { path: '/awards', icon: '🏅', label: 'AWARDS', sublabel: 'Ceremonies', color: 'yellow' },
-  { path: '/museum', icon: '🏛️', label: 'MUSEUM', sublabel: 'Hall of Fame', color: 'indigo' },
+  { path: '/league-builder', label: 'NEW LEAGUE', sublabel: 'Start Fresh', accent: 'gold' },
+  { path: '/awards', label: 'AWARDS', sublabel: 'Ceremonies', accent: 'gold' },
+  { path: '/museum', label: 'MUSEUM', sublabel: 'Hall of Fame', accent: 'gold' },
 ];
+
+// SMB4-inspired color palette
+const colors = {
+  // Primary colors
+  red: '#e31837',
+  redDark: '#b8132c',
+  redLight: '#ff3050',
+  blue: '#1e4d8c',
+  blueDark: '#143660',
+  blueLight: '#2a6bc4',
+  // Accent
+  gold: '#f4b942',
+  goldDark: '#d9a030',
+  // Neutrals
+  white: '#ffffff',
+  offWhite: '#f5f5f5',
+  gray: '#8a9199',
+  grayDark: '#4a5568',
+  navy: '#1a2332',
+  navyDark: '#0f1620',
+  // Field
+  grassGreen: '#3d8b40',
+  grassDark: '#2d6830',
+  dirt: '#8b6040',
+};
 
 export default function MainMenu() {
   const navigate = useNavigate();
   const [showGameSetup, setShowGameSetup] = useState(false);
+  const [hoveredItem, setHoveredItem] = useState<string | null>(null);
 
   const handleGameSetupConfirm = (
     awayTeamId: string,
@@ -47,117 +78,206 @@ export default function MainMenu() {
     navigate(url);
   };
 
-  const renderNavItem = (item: NavItem) => (
-    <Link
-      key={item.path}
-      to={item.path}
-      className={`group relative block w-full overflow-hidden`}
-    >
-      <div className={`absolute inset-0 bg-gradient-to-r from-slate-800 to-slate-700 skew-x-[-2deg] scale-x-[1.02] border-l-4 border-${item.color}-400 transition-all duration-300 group-hover:scale-x-[1.04] group-hover:border-l-[6px]`} />
-      <div className={`absolute inset-0 bg-gradient-to-r from-${item.color}-400/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300`} />
-      <div className="relative flex items-center justify-between px-4 py-3 sm:px-6 sm:py-4">
-        <div className="flex items-center gap-3">
-          <div className="text-2xl">{item.icon}</div>
-          <div>
-            <div className="font-bold text-white text-base tracking-wide">{item.label}</div>
-            <div className="text-slate-400 text-xs">{item.sublabel}</div>
+  const getAccentColors = (accent: 'red' | 'blue' | 'gold' = 'blue') => {
+    switch (accent) {
+      case 'red':
+        return { bg: colors.red, hover: colors.redLight, dark: colors.redDark };
+      case 'gold':
+        return { bg: colors.gold, hover: '#ffc94d', dark: colors.goldDark };
+      default:
+        return { bg: colors.blue, hover: colors.blueLight, dark: colors.blueDark };
+    }
+  };
+
+  // SMB4 style card component
+  const MenuCard = ({
+    item,
+    isButton = false,
+    onClick,
+    isPrimary = false,
+  }: {
+    item: NavItem;
+    isButton?: boolean;
+    onClick?: () => void;
+    isPrimary?: boolean;
+  }) => {
+    const isHovered = hoveredItem === item.path;
+    const accentColors = getAccentColors(item.accent);
+
+    const content = (
+      <div
+        style={{
+          ...styles.card,
+          ...(isPrimary ? styles.cardPrimary : {}),
+          transform: isHovered ? 'translateY(-2px) scale(1.01)' : 'none',
+        }}
+        onMouseEnter={() => setHoveredItem(item.path)}
+        onMouseLeave={() => setHoveredItem(null)}
+      >
+        {/* Main card body */}
+        <div style={{
+          ...styles.cardInner,
+          background: isPrimary
+            ? `linear-gradient(135deg, ${colors.red} 0%, ${colors.redDark} 100%)`
+            : `linear-gradient(135deg, ${colors.navy} 0%, ${colors.navyDark} 100%)`,
+          borderLeft: isPrimary ? 'none' : `4px solid ${accentColors.bg}`,
+        }}>
+          {/* Accent stripe */}
+          {isPrimary && (
+            <div style={styles.accentStripe} />
+          )}
+
+          <div style={styles.cardContent}>
+            <div style={styles.cardTextGroup}>
+              <span style={{
+                ...styles.cardLabel,
+                ...(isPrimary ? styles.cardLabelPrimary : {}),
+              }}>
+                {item.label}
+              </span>
+              <span style={{
+                ...styles.cardSublabel,
+                ...(isPrimary ? styles.cardSublabelPrimary : {}),
+              }}>
+                {item.sublabel}
+              </span>
+            </div>
+
+            <div style={{
+              ...styles.cardArrow,
+              opacity: isHovered ? 1 : 0.5,
+              transform: isHovered ? 'translateX(4px)' : 'none',
+            }}>
+              ▶
+            </div>
           </div>
         </div>
-        <div className={`text-slate-400 text-xl group-hover:translate-x-2 group-hover:text-${item.color}-400 transition-all duration-300`}>
-          →
-        </div>
-      </div>
-    </Link>
-  );
 
-  return (
-    <div className="min-h-screen bg-slate-950 relative overflow-hidden">
-      {/* Background effects */}
-      <div className="absolute top-0 left-1/4 w-96 h-96 bg-blue-500/20 rounded-full blur-[120px] -translate-y-1/2" />
-      <div className="absolute top-0 right-1/4 w-96 h-96 bg-amber-500/15 rounded-full blur-[120px] -translate-y-1/2" />
-
-      <div className="absolute inset-0 opacity-[0.03]">
-        <div className="absolute inset-0" style={{
-          backgroundImage: `repeating-linear-gradient(
-            -45deg,
-            transparent,
-            transparent 40px,
-            white 40px,
-            white 41px
-          )`
+        {/* Drop shadow layer */}
+        <div style={{
+          ...styles.cardShadow,
+          opacity: isHovered ? 0.4 : 0.2,
         }} />
       </div>
+    );
+
+    if (isButton) {
+      return (
+        <button onClick={onClick} style={styles.buttonReset}>
+          {content}
+        </button>
+      );
+    }
+
+    return (
+      <Link to={item.path} style={styles.linkReset}>
+        {content}
+      </Link>
+    );
+  };
+
+  return (
+    <div style={styles.container}>
+      {/* Stadium background */}
+      <div style={styles.stadiumBg}>
+        {/* Sky gradient */}
+        <div style={styles.sky} />
+        {/* Crowd/stands hint */}
+        <div style={styles.stands} />
+        {/* Field */}
+        <div style={styles.field} />
+        {/* Dirt infield */}
+        <div style={styles.infield} />
+      </div>
+
+      {/* Subtle noise texture */}
+      <div style={styles.noiseOverlay} />
 
       {/* Main content */}
-      <div className="relative z-10 flex flex-col items-center min-h-screen px-4 py-8">
+      <div style={styles.content}>
 
-        {/* Logo Section - Compact */}
-        <div className="mb-8 text-center">
-          <div className="relative inline-block mb-4">
-            <div className="absolute inset-0 bg-amber-400/30 rounded-full blur-xl scale-150" />
-            <div className="relative text-5xl drop-shadow-2xl">⚾</div>
+        {/* Logo / Title */}
+        <div style={styles.logoContainer}>
+          <div style={styles.logoInner}>
+            {/* SUPER MEGA style top text */}
+            <div style={styles.logoTop}>
+              <span style={styles.logoSuper}>KRUSE</span>
+              <span style={styles.logoMega}>BASEBALL</span>
+            </div>
+            {/* BASEBALL 4 style main text */}
+            <div style={styles.logoMain}>
+              <span style={styles.logoBaseball}>LEAGUE</span>
+              <div style={styles.logoNumberBox}>
+                <span style={styles.logoNumber}>⚾</span>
+              </div>
+            </div>
+            {/* Tagline */}
+            <div style={styles.logoTagline}>STAT TRACKER</div>
           </div>
-          <h1 className="font-black text-3xl sm:text-4xl tracking-tight">
-            <span className="text-white">KBL</span>
-            <span className="text-blue-400 ml-2">TRACKER</span>
-          </h1>
         </div>
 
-        {/* Navigation Grid */}
-        <div className="w-full max-w-2xl space-y-6 px-4">
+        {/* Menu sections */}
+        <div style={styles.menuContainer}>
 
-          {/* New Game - Primary */}
-          <button
-            onClick={() => setShowGameSetup(true)}
-            className="group relative block w-full overflow-hidden text-left"
-          >
-            <div className="absolute inset-0 bg-gradient-to-r from-blue-600 to-blue-500 skew-x-[-2deg] scale-x-[1.02] transition-all duration-300 group-hover:scale-x-[1.04] group-hover:skew-x-[-3deg]" />
-            <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent" />
-            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700" />
-            <div className="relative flex items-center justify-between px-6 py-5">
-              <div className="flex items-center gap-4">
-                <div className="text-3xl">🎮</div>
-                <div>
-                  <div className="font-bold text-white text-xl tracking-wide">NEW GAME</div>
-                  <div className="text-blue-100/70 text-sm">Start tracking a match</div>
-                </div>
+          {/* NEW GAME - Primary CTA */}
+          <div style={styles.primarySection}>
+            <MenuCard
+              item={{ path: '/new-game', label: 'NEW GAME', sublabel: 'Start Tracking a Match', accent: 'red' }}
+              isButton
+              isPrimary
+              onClick={() => setShowGameSetup(true)}
+            />
+          </div>
+
+          {/* Two-column layout for sections */}
+          <div style={styles.sectionsGrid}>
+
+            {/* Left column - Season */}
+            <div style={styles.section}>
+              <div style={styles.sectionHeader}>
+                <span style={styles.sectionTitle}>SEASON</span>
+                <div style={styles.sectionLine} />
               </div>
-              <div className="text-white/80 text-2xl group-hover:translate-x-2 transition-transform duration-300">→</div>
+              <div style={styles.sectionCards}>
+                {seasonItems.map(item => (
+                  <MenuCard key={item.path} item={item} />
+                ))}
+              </div>
             </div>
-          </button>
 
-          {/* Season Section */}
-          <div>
-            <h2 className="text-slate-500 text-xs font-bold tracking-widest uppercase mb-3 px-2">Season</h2>
-            <div className="space-y-2">
-              {seasonItems.map(renderNavItem)}
+            {/* Right column - Offseason */}
+            <div style={styles.section}>
+              <div style={styles.sectionHeader}>
+                <span style={styles.sectionTitle}>OFFSEASON</span>
+                <div style={{...styles.sectionLine, background: colors.red}} />
+              </div>
+              <div style={styles.sectionCards}>
+                {offseasonItems.map(item => (
+                  <MenuCard key={item.path} item={item} />
+                ))}
+              </div>
             </div>
+
           </div>
 
-          {/* Offseason Section */}
-          <div>
-            <h2 className="text-slate-500 text-xs font-bold tracking-widest uppercase mb-3 px-2">Offseason</h2>
-            <div className="space-y-2">
-              {offseasonItems.map(renderNavItem)}
+          {/* Extras row */}
+          <div style={styles.extrasSection}>
+            <div style={styles.sectionHeader}>
+              <span style={styles.sectionTitle}>EXTRAS</span>
+              <div style={{...styles.sectionLine, background: colors.gold}} />
             </div>
-          </div>
-
-          {/* Extras Section */}
-          <div>
-            <h2 className="text-slate-500 text-xs font-bold tracking-widest uppercase mb-3 px-2">Extras</h2>
-            <div className="space-y-2">
-              {extraItems.map(renderNavItem)}
+            <div style={styles.extrasGrid}>
+              {extraItems.map(item => (
+                <MenuCard key={item.path} item={item} />
+              ))}
             </div>
           </div>
 
         </div>
 
         {/* Footer */}
-        <div className="mt-8 text-center">
-          <div className="inline-flex items-center gap-2 px-4 py-2 bg-slate-900/80 border border-slate-700/50 rounded-full">
-            <div className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse" />
-            <span className="text-slate-500 text-xs font-medium tracking-wide">READY TO PLAY</span>
-          </div>
+        <div style={styles.footer}>
+          <span style={styles.footerText}>SELECT AN OPTION TO CONTINUE</span>
         </div>
 
       </div>
@@ -169,4 +289,345 @@ export default function MainMenu() {
       />
     </div>
   );
+}
+
+// ============================================
+// STYLES - SMB4 Retro-Modern Aesthetic
+// ============================================
+
+const styles: Record<string, React.CSSProperties> = {
+  container: {
+    minHeight: '100vh',
+    position: 'relative',
+    overflow: 'hidden',
+    fontFamily: '"Segoe UI", "Roboto", "Arial Black", sans-serif',
+    background: colors.navyDark,
+  },
+
+  // Stadium background layers
+  stadiumBg: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
+  sky: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: '40%',
+    background: `linear-gradient(180deg,
+      #87CEEB 0%,
+      #b8d4e8 60%,
+      #d4e4f0 100%
+    )`,
+  },
+  stands: {
+    position: 'absolute',
+    top: '25%',
+    left: 0,
+    right: 0,
+    height: '25%',
+    background: `linear-gradient(180deg,
+      ${colors.grayDark} 0%,
+      ${colors.navy} 100%
+    )`,
+    opacity: 0.6,
+  },
+  field: {
+    position: 'absolute',
+    top: '40%',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    background: `linear-gradient(180deg,
+      ${colors.grassGreen} 0%,
+      ${colors.grassDark} 100%
+    )`,
+  },
+  infield: {
+    position: 'absolute',
+    top: '50%',
+    left: '50%',
+    width: '80%',
+    height: '50%',
+    transform: 'translateX(-50%)',
+    background: `radial-gradient(ellipse at center top,
+      ${colors.dirt} 0%,
+      transparent 60%
+    )`,
+    opacity: 0.4,
+  },
+
+  noiseOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    opacity: 0.03,
+    background: `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E")`,
+    pointerEvents: 'none',
+  },
+
+  content: {
+    position: 'relative',
+    zIndex: 10,
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    padding: '24px 16px',
+    minHeight: '100vh',
+  },
+
+  // Logo styles - SMB4 inspired
+  logoContainer: {
+    marginBottom: '32px',
+  },
+  logoInner: {
+    textAlign: 'center',
+  },
+  logoTop: {
+    display: 'flex',
+    justifyContent: 'center',
+    gap: '8px',
+    marginBottom: '-4px',
+  },
+  logoSuper: {
+    fontSize: '1.1rem',
+    fontWeight: 800,
+    fontStyle: 'italic',
+    color: colors.white,
+    textShadow: `2px 2px 0 ${colors.navyDark}`,
+    letterSpacing: '2px',
+  },
+  logoMega: {
+    fontSize: '1.1rem',
+    fontWeight: 800,
+    fontStyle: 'italic',
+    color: colors.white,
+    textShadow: `2px 2px 0 ${colors.navyDark}`,
+    letterSpacing: '2px',
+  },
+  logoMain: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '12px',
+  },
+  logoBaseball: {
+    fontSize: '3rem',
+    fontWeight: 900,
+    fontStyle: 'italic',
+    color: colors.white,
+    textShadow: `
+      3px 3px 0 ${colors.red},
+      6px 6px 0 ${colors.navyDark}
+    `,
+    letterSpacing: '-1px',
+  },
+  logoNumberBox: {
+    background: colors.red,
+    padding: '4px 12px',
+    transform: 'skewX(-8deg)',
+    boxShadow: `4px 4px 0 ${colors.navyDark}`,
+  },
+  logoNumber: {
+    fontSize: '2.5rem',
+    display: 'block',
+    transform: 'skewX(8deg)',
+  },
+  logoTagline: {
+    fontSize: '0.9rem',
+    fontWeight: 700,
+    fontStyle: 'italic',
+    color: colors.gold,
+    textShadow: `1px 1px 0 ${colors.navyDark}`,
+    letterSpacing: '4px',
+    marginTop: '4px',
+  },
+
+  // Menu container
+  menuContainer: {
+    width: '100%',
+    maxWidth: '800px',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '24px',
+  },
+
+  primarySection: {
+    marginBottom: '8px',
+  },
+
+  sectionsGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(2, 1fr)',
+    gap: '24px',
+  },
+
+  section: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '8px',
+  },
+
+  sectionHeader: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '12px',
+    marginBottom: '8px',
+  },
+  sectionTitle: {
+    fontSize: '0.85rem',
+    fontWeight: 800,
+    fontStyle: 'italic',
+    color: colors.white,
+    textShadow: `1px 1px 0 ${colors.navyDark}`,
+    letterSpacing: '2px',
+    whiteSpace: 'nowrap',
+  },
+  sectionLine: {
+    flex: 1,
+    height: '3px',
+    background: colors.blue,
+    borderRadius: '2px',
+  },
+
+  sectionCards: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '6px',
+  },
+
+  extrasSection: {
+    marginTop: '8px',
+  },
+  extrasGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(3, 1fr)',
+    gap: '8px',
+  },
+
+  // Card styles
+  card: {
+    position: 'relative',
+    cursor: 'pointer',
+    transition: 'transform 0.15s ease',
+  },
+  cardPrimary: {
+    // handled inline
+  },
+  cardInner: {
+    position: 'relative',
+    borderRadius: '4px',
+    overflow: 'hidden',
+  },
+  accentStripe: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    width: '40%',
+    height: '100%',
+    background: `linear-gradient(135deg, transparent 0%, rgba(255,255,255,0.1) 100%)`,
+  },
+  cardContent: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: '12px 16px',
+    position: 'relative',
+    zIndex: 1,
+  },
+  cardTextGroup: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '2px',
+  },
+  cardLabel: {
+    fontSize: '0.9rem',
+    fontWeight: 800,
+    fontStyle: 'italic',
+    color: colors.white,
+    letterSpacing: '1px',
+    textShadow: '1px 1px 0 rgba(0,0,0,0.3)',
+  },
+  cardLabelPrimary: {
+    fontSize: '1.3rem',
+  },
+  cardSublabel: {
+    fontSize: '0.65rem',
+    fontWeight: 500,
+    color: colors.gray,
+    letterSpacing: '0.5px',
+  },
+  cardSublabelPrimary: {
+    color: 'rgba(255,255,255,0.7)',
+    fontSize: '0.75rem',
+  },
+  cardArrow: {
+    fontSize: '0.8rem',
+    color: colors.white,
+    transition: 'all 0.15s ease',
+  },
+  cardShadow: {
+    position: 'absolute',
+    top: '4px',
+    left: '4px',
+    right: '-4px',
+    bottom: '-4px',
+    background: colors.navyDark,
+    borderRadius: '4px',
+    zIndex: -1,
+    transition: 'opacity 0.15s ease',
+  },
+
+  // Footer
+  footer: {
+    marginTop: 'auto',
+    paddingTop: '32px',
+  },
+  footerText: {
+    fontSize: '0.7rem',
+    fontWeight: 600,
+    fontStyle: 'italic',
+    color: colors.gray,
+    letterSpacing: '2px',
+    textShadow: '1px 1px 0 rgba(0,0,0,0.5)',
+  },
+
+  // Reset styles
+  buttonReset: {
+    background: 'none',
+    border: 'none',
+    padding: 0,
+    cursor: 'pointer',
+    width: '100%',
+    textAlign: 'left',
+    font: 'inherit',
+  },
+  linkReset: {
+    textDecoration: 'none',
+    color: 'inherit',
+    display: 'block',
+  },
+};
+
+// Add responsive styles via media query
+const mediaStyles = document.createElement('style');
+mediaStyles.textContent = `
+  @media (max-width: 640px) {
+    .smb4-sections-grid {
+      grid-template-columns: 1fr !important;
+    }
+    .smb4-extras-grid {
+      grid-template-columns: 1fr !important;
+    }
+  }
+`;
+if (!document.head.querySelector('style[data-smb4-menu]')) {
+  mediaStyles.setAttribute('data-smb4-menu', 'true');
+  document.head.appendChild(mediaStyles);
 }
