@@ -73,7 +73,7 @@ export const HOT_CORNERS: TeamData = {
 export const SIRLOINS: TeamData = {
   id: 'sirloins',
   name: 'Sirloins',
-  homePark: 'Apple Field',  // TBD - verify from screenshot
+  homePark: 'Apple Field',  // Verified from screenshot
   chemistry: 'SPIRITED',
   primaryColor: '#CC0000',  // Red
   secondaryColor: '#FFFFFF',  // White
@@ -154,10 +154,10 @@ export const PLATYPI: TeamData = {
 export const BEEWOLVES: TeamData = {
   id: 'beewolves',
   name: 'Beewolves',
-  homePark: 'Emerald Diamond',  // TBD - verify from screenshot
+  homePark: 'Emerald Diamond',  // Verified from screenshot
   chemistry: 'COMPETITIVE',
-  primaryColor: '#4169E1',  // Royal Blue
-  secondaryColor: '#FFFFFF',  // White
+  primaryColor: '#008B8B',  // Teal/Cyan
+  secondaryColor: '#FFD700',  // Yellow/Gold
   rosterIds: [],
   leagueId: 'sml-mega'
 };

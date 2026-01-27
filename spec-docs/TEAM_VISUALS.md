@@ -52,11 +52,12 @@
 ### Boss Division (Super Conference)
 
 #### Sirloins
-- **Logo**: Steak/meat themed (TBD)
+- **Logo**: Animated steak character with bat holding green leaf, "SIRLOINS" text
 - **Primary Color**: #CC0000 (Red)
 - **Secondary Color**: #FFFFFF (White)
-- **Home Park**: Apple Field (TBD - needs verification)
-- **Verified**: No
+- **Home Park**: Apple Field
+- **Team Style**: Extreme Power Hitters
+- **Verified**: Yes
 
 #### Moonstars
 - **Logo**: Crescent moon with star, "Moonstars" script
@@ -105,12 +106,12 @@
 - **Verified**: Yes
 
 #### Beewolves
-- **Logo**: Bee/wolf hybrid (TBD)
-- **Primary Color**: #4169E1 (Royal Blue)
-- **Secondary Color**: #FFFFFF (White)
-- **Home Park**: Emerald Diamond (TBD - needs verification)
-- **Chemistry**: COMPETITIVE
-- **Verified**: No
+- **Logo**: Aggressive yellow bee in teal diamond shape with "Beewolves" script
+- **Primary Color**: #008B8B (Teal/Cyan)
+- **Secondary Color**: #FFD700 (Yellow/Gold)
+- **Home Park**: Emerald Diamond
+- **Team Style**: Balanced
+- **Verified**: Yes
 
 #### Grapplers
 - **Logo**: Orange octopus with "GRAPPLERS" text
@@ -176,14 +177,14 @@
 | Founder's Field | Wild Pigs | Yes |
 | Lafayette Corner | Freebooters | Yes |
 | Golden Field | Hot Corners | Yes |
-| Apple Field | Sirloins | No |
+| Apple Field | Sirloins | Yes |
 | Big Sky Park | Moonstars | Yes |
 | Swagger Center | Blowfish | Yes |
 | El Viejo Stadium | Sawteeth | Yes |
 | Sakura Hills | Sand Cats | Yes |
 | The Corral | Wideloads | Yes |
 | Colonial Plaza | Platypi | Yes |
-| Emerald Diamond | Beewolves | No |
+| Emerald Diamond | Beewolves | Yes |
 | Bingata Bowl | Grapplers | Yes |
 | Red Rock Park | Heaters | Yes |
 | Motor Yard | Overdogs | Yes |
@@ -196,8 +197,8 @@
 
 ## Extraction Progress
 
-### SML Teams: 18/20 verified (90%)
-- **Unverified**: Sirloins, Beewolves (need Team Visuals screenshots)
+### SML Teams: 20/20 verified (100%)
+- All teams verified with logos, colors, and home parks
 
 ### MLB Teams: 0/30 verified (0%)
 - **TODO**: Extract from MLB screenshots
