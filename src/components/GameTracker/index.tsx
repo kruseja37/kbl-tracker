@@ -59,7 +59,7 @@ import FanMoralePanel from '../FanMoralePanel';
 import type { WalkoffResult } from '../../utils/walkoffDetector';
 import { detectWalkoff, getWalkoffFameBonus } from '../../utils/walkoffDetector';
 import { PlayerNameWithMorale } from './PlayerNameWithMorale';
-import { MOJO_STATES, type MojoLevel, type GameSituation } from '../../engines/mojoEngine';
+import { MOJO_STATES, type MojoLevel } from '../../engines/mojoEngine';
 import { FITNESS_STATES, type FitnessState } from '../../engines/fitnessEngine';
 import { useMojoState } from '../../hooks/useMojoState';
 import { useFitnessState } from '../../hooks/useFitnessState';
@@ -350,20 +350,11 @@ export default function GameTracker({ onGameEnd }: GameTrackerProps = {}) {
   const [showWalkoffCelebration, setShowWalkoffCelebration] = useState(false);
   const [walkoffResult, setWalkoffResult] = useState<WalkoffResult | null>(null);
 
-  // Player Mojo and Fitness state (manually adjustable)
-  // Key: playerId, Value: MojoLevel (-2 to 2)
-  const [playerMojoLevels, setPlayerMojoLevels] = useState<Record<string, MojoLevel>>({});
-  // Key: playerId, Value: FitnessState
-  const [playerFitnessStates, setPlayerFitnessStates] = useState<Record<string, FitnessState>>({});
-
-  // Callbacks to adjust mojo/fitness from LineupPanel
-  const handleMojoChange = useCallback((playerId: string, newLevel: MojoLevel) => {
-    setPlayerMojoLevels(prev => ({ ...prev, [playerId]: newLevel }));
-  }, []);
-
-  const handleFitnessChange = useCallback((playerId: string, newState: FitnessState) => {
-    setPlayerFitnessStates(prev => ({ ...prev, [playerId]: newState }));
-  }, []);
+  // Mojo/Fitness: User-controlled only. Hooks manage the Map state;
+  // these callbacks delegate to the hooks so LineupPanel edits are
+  // reflected everywhere (Scoreboard, PlayerCard, pitcher bar, etc.)
+  // NOTE: mojoState / fitnessState hooks are instantiated below (line ~459)
+  // and are referenced in handleMojoChange / handleFitnessChange via closure.
 
   // Toggle Fame toast notifications
   const toggleFameToasts = useCallback(() => {
@@ -458,6 +449,15 @@ export default function GameTracker({ onGameEnd }: GameTrackerProps = {}) {
   // ============================================
   const mojoState = useMojoState();
   const fitnessState = useFitnessState();
+
+  // Callbacks to adjust mojo/fitness from LineupPanel (delegates to hooks)
+  const handleMojoChange = useCallback((playerId: string, newLevel: MojoLevel) => {
+    mojoState.setPlayerMojo(playerId, newLevel);
+  }, [mojoState.setPlayerMojo]);
+
+  const handleFitnessChange = useCallback((playerId: string, newState: FitnessState) => {
+    fitnessState.setPlayerFitness(playerId, newState);
+  }, [fitnessState.setPlayerFitness]);
 
   // ============================================
   // GAME PERSISTENCE (Phase 2)
@@ -2416,65 +2416,8 @@ export default function GameTracker({ onGameEnd }: GameTrackerProps = {}) {
     };
     clutchCalculations.recordClutchEvent(pitcherClutchEvent);
 
-    // ============================================
-    // MOJO RECORDING (Day 3 Wire-up)
-    // Record mojo changes for batter, pitcher, and fielder
-    // ============================================
-    const mojoSituation: GameSituation = {
-      inning,
-      isBottom: halfInning === 'BOTTOM',
-      outs,
-      runnersOn: [
-        ...(bases.first ? [1] : []),
-        ...(bases.second ? [2] : []),
-        ...(bases.third ? [3] : []),
-      ],
-      scoreDiff: homeScore - awayScore,
-      isPlayoff: false, // TODO: Wire playoff detection when available
-    };
-
-    // Batter mojo
-    mojoState.recordBatterMojo(
-      currentBatter.id,
-      gameId,
-      result,
-      actualRbiCount,
-      mojoSituation
-    );
-
-    // Pitcher mojo
-    const currentPitcherIdForMojo = getCurrentPitcherId();
-    mojoState.recordPitcherMojo(
-      currentPitcherIdForMojo,
-      gameId,
-      result,
-      mojoSituation,
-    );
-
-    // Fielder mojo (on errors or great plays)
-    if (flowState.fieldingData) {
-      const fd = flowState.fieldingData;
-      const isError = fd.playType === 'error';
-      const isGreatPlay = fd.playType === 'diving' || fd.playType === 'leaping' || fd.playType === 'robbed_hr';
-      if (isError || isGreatPlay) {
-        const fielderId = fd.primaryFielder;
-        if (fielderId) {
-          // Find the player ID for this position from the lineup
-          const fielderInLineup = lineupState.lineup.find(
-            l => l.position === fielderId
-          );
-          if (fielderInLineup) {
-            mojoState.recordFielderMojo(
-              fielderInLineup.playerId,
-              gameId,
-              isError,
-              isGreatPlay,
-              mojoSituation
-            );
-          }
-        }
-      }
-    }
+    // Mojo/Fitness: User-controlled only (set via in-game roster view).
+    // No automatic mojo changes after at-bats.
 
     advanceBatter();
     setPendingResult(null);
@@ -3063,9 +3006,8 @@ export default function GameTracker({ onGameEnd }: GameTrackerProps = {}) {
               {playerStats[currentBatter.id].h}-{playerStats[currentBatter.id].ab}
               {/* Batter Mojo Badge */}
               {(() => {
-                const mojoLevel: MojoLevel = 0; // Default mojo - would come from mojo tracking state
-                const mojoState = MOJO_STATES[mojoLevel];
-                const mojoColors: Record<MojoLevel, string> = {
+                const batterMojoInfo = mojoState.getPlayerMojo(currentBatter.id);
+                const batterMojoColors: Record<MojoLevel, string> = {
                   [-2]: '#ef4444',
                   [-1]: '#f97316',
                   [0]: '#6b7280',
@@ -3080,12 +3022,12 @@ export default function GameTracker({ onGameEnd }: GameTrackerProps = {}) {
                       fontSize: '11px',
                       fontWeight: 600,
                       borderRadius: '4px',
-                      color: mojoColors[mojoLevel],
-                      backgroundColor: `${mojoColors[mojoLevel]}20`,
+                      color: batterMojoColors[batterMojoInfo.level],
+                      backgroundColor: `${batterMojoColors[batterMojoInfo.level]}20`,
                     }}
-                    title={`Mojo: ${mojoState.displayName}`}
+                    title={`Mojo: ${batterMojoInfo.state.displayName}`}
                   >
-                    {mojoState.emoji}
+                    {batterMojoInfo.state.emoji}
                   </span>
                 );
               })()}
@@ -3471,8 +3413,8 @@ export default function GameTracker({ onGameEnd }: GameTrackerProps = {}) {
         halfInning={halfInning}
         onPlayerClick={handlePlayerClick}
         teamId={halfInning === 'TOP' ? awayTeamId : homeTeamId}
-        playerMojoLevels={playerMojoLevels}
-        playerFitnessStates={playerFitnessStates}
+        playerMojoLevels={Object.fromEntries(mojoState.playerMojo)}
+        playerFitnessStates={Object.fromEntries(fitnessState.playerFitness)}
         onMojoChange={handleMojoChange}
         onFitnessChange={handleFitnessChange}
       />
