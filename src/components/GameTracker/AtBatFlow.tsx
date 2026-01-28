@@ -626,7 +626,7 @@ export default function AtBatFlow({ result: initialResult, bases, batterName, ba
   const canProceedToFielding = (): boolean => {
     if (needsDirection && !direction) return false;
     // Exit type is now collected in FieldingModal, not here
-    if (needsHRDistance && !hrDistance) return false;
+    if (needsHRDistance && (!hrDistance || parseInt(hrDistance) < 250 || parseInt(hrDistance) > 550)) return false;
     if (needsDPType && !dpType) return false;
 
     // Can't proceed while waiting for extra event explanation
@@ -770,10 +770,33 @@ export default function AtBatFlow({ result: initialResult, bases, batterName, ba
             <input
               type="number"
               value={hrDistance}
-              onChange={e => setHrDistance(e.target.value)}
+              onChange={e => {
+                const val = e.target.value;
+                // Allow empty (user clearing field) or valid range
+                if (val === '' || (parseInt(val) >= 0 && parseInt(val) <= 550)) {
+                  setHrDistance(val);
+                }
+              }}
+              min={250}
+              max={550}
               placeholder="e.g., 420"
-              style={styles.input}
+              style={{
+                ...styles.input,
+                ...(hrDistance && (parseInt(hrDistance) < 250 || parseInt(hrDistance) > 550)
+                  ? { borderColor: '#ef4444', color: '#ef4444' }
+                  : {}),
+              }}
             />
+            {hrDistance && parseInt(hrDistance) < 250 && (
+              <div style={{ color: '#ef4444', fontSize: '11px', marginTop: '4px' }}>
+                Min HR distance: 250 ft
+              </div>
+            )}
+            {hrDistance && parseInt(hrDistance) > 550 && (
+              <div style={{ color: '#ef4444', fontSize: '11px', marginTop: '4px' }}>
+                Max HR distance: 550 ft
+              </div>
+            )}
           </div>
         )}
 

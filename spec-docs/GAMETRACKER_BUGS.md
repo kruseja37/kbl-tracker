@@ -84,25 +84,25 @@
 
 ---
 
-### BUG-007: Player Names Not Clickable
+### BUG-007: Player Names Not Clickable ✅ FIXED
 **Description**: Player names in the game tracker (current batter, due up, etc.) are not clickable.
 
 **Expected**: Clicking a player name should open PlayerCard with their stats.
 
 **Location**: `src/components/GameTracker/index.tsx`
 
-**Fix Required**: Wrap player name displays with onClick handler to open PlayerCard modal.
+**Status**: FIXED — Current batter (line 3001-3012), due up players (line 2980-2992), and pitcher name (line 2926-2932) all have onClick handlers that open PlayerCard modal.
 
 ---
 
-### BUG-008: Team Names Not Shown in Scoreboard
+### BUG-008: Team Names Not Shown in Scoreboard ✅ FIXED
 **Description**: Team names are not populated in scoreboard in GameTracker.
 
 **Expected**: Should show "Sirloins vs Beewolves" or similar.
 
 **Location**: `src/components/GameTracker/Scoreboard.tsx`
 
-**Fix Required**: Pass team names to Scoreboard component and display them.
+**Status**: FIXED — Team names are loaded from `getTeam()` database lookup (index.tsx:376-377) and passed as `awayName`/`homeName` props to Scoreboard.
 
 ---
 
@@ -153,17 +153,14 @@ function getMoraleDisplay(player) {
 
 ## Medium Priority Bugs (Validation Issues)
 
-### BUG-011: HR Distance Allows Invalid Values
+### BUG-011: HR Distance Allows Invalid Values ✅ FIXED
 **Description**: It's possible to enter a HR distance that's less than wall distance (e.g., 200 feet).
 
 **Expected**: Should validate HR distance is realistic (minimum 250-300 ft depending on direction).
 
 **Location**: `src/components/GameTracker/AtBatFlow.tsx`
 
-**Fix Required**:
-1. Add min/max validation for HR distance
-2. Consider direction (RF line ~315ft, CF ~400ft)
-3. Show warning for unrealistic values
+**Status**: FIXED — Added min=250/max=550 validation. Input rejects out-of-range values, shows red error messages, and `canProceedToFielding()` blocks submission with invalid distances.
 
 ---
 

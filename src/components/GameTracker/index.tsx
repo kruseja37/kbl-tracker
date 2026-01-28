@@ -686,6 +686,25 @@ export default function GameTracker({ onGameEnd }: GameTrackerProps = {}) {
       // Always increment batters faced
       updated.battersFaced += 1;
 
+      // Increment pitch count
+      // Use exact count if provided, otherwise estimate based on result
+      if (pitchesThisAtBat !== undefined) {
+        updated.pitchCount += pitchesThisAtBat;
+      } else {
+        // Reasonable estimates per at-bat result when exact count not tracked
+        const estimatedPitches: Record<string, number> = {
+          'K': 4, 'KL': 4, 'D3K': 4,  // Strikeouts average ~4 pitches
+          'BB': 5, 'IBB': 4,           // Walks average ~5 pitches
+          'HBP': 2,                     // HBP usually early in count
+          '1B': 3, '2B': 3, '3B': 3, 'HR': 3, // Hits average ~3
+          'GO': 3, 'FO': 3, 'LO': 3, 'PO': 2, // Outs average ~3
+          'DP': 3, 'FC': 3,            // Double plays/FC ~3
+          'SF': 3, 'SAC': 3,           // Sac fly/bunt ~3
+          'E': 3,                       // Error ~3
+        };
+        updated.pitchCount += estimatedPitches[result] ?? 3;
+      }
+
       // Update based on result
       switch (result) {
         case '1B':
