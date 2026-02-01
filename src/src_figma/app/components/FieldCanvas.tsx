@@ -16,7 +16,7 @@
  * All distances in feet, then scaled to SVG units.
  */
 
-import { useCallback, useMemo } from 'react';
+import { useCallback, useMemo, createContext, useContext } from 'react';
 
 // ============================================
 // TYPES
@@ -53,6 +53,13 @@ export interface FieldCanvasProps {
   onFieldClick?: (coord: FieldCoordinate, isFoul: boolean) => void;
   children?: React.ReactNode;
   className?: string;
+  /**
+   * Zoom level for the field view (0-1)
+   * 0 = full field view (shows fence and stands)
+   * 1 = maximum infield zoom (shows just the diamond)
+   * Default: 0.3 (balanced view showing infield prominently but fence visible)
+   */
+  zoomLevel?: number;
 }
 
 // ============================================
@@ -63,50 +70,150 @@ export interface FieldCanvasProps {
 const BASE_DISTANCE = 90; // ft between bases
 const PITCHER_DISTANCE = 60.5; // ft from home to rubber front
 
-// Fence distances (typical MLB park)
+// Fence distances (typical MLB park) - logical values, visually compressed
 const FENCE_LF = 330; // Left field line
 const FENCE_CF = 400; // Center field
 const FENCE_RF = 330; // Right field line
 const FENCE_LCF = 380; // Left-center gap
 const FENCE_RCF = 380; // Right-center gap
 
-// Stands depth - smaller zone just behind fence for HR landing spots
+// Stands depth - zone behind fence for HR landing spots
 // Wall scraper: just over fence (~0-10ft in)
-// Deep HR: ~15-25ft into stands
-// Bomb: 25ft+ (will appear at back of stands)
-// Reduced from 50ft to 25ft on 2026-02-01 to zoom in on the infield
-const STANDS_DEPTH = 25; // ft of stands behind fence - compact zone for larger infield
+// Deep HR: ~10-25ft into stands
+// Bomb: 25ft+ (back of stands, 440ft+ HRs)
+const STANDS_DEPTH = 40; // ft of stands behind fence - allows 440ft+ bombs
+
+// Foul territory width (narrowed for iPad view)
+const FOUL_TERRITORY_WIDTH = 20; // ft visible along foul lines
 
 // ============================================
-// SVG GEOMETRY
+// SVG GEOMETRY - "Little League" Style
 // ============================================
 
-// SVG dimensions - field rotates 45° so horizontal span = vertical span * sqrt(2)
-// For a 400ft CF fence, the foul lines at 330ft create horizontal span of ~467ft each side
-// Total horizontal need: ~934ft worth of space (330 * sqrt(2) * 2)
-// Updated 2026-02-01: Increased from 1200x800 to 1600x1000 for larger infield visibility
-// This gives ~30% more space so runners don't hide behind fielders
+// SVG dimensions - wider for iPad horizontal view
 const SVG_WIDTH = 1600;
-const SVG_HEIGHT = 1000;
+const SVG_HEIGHT = 900; // Shorter height = wider aspect ratio
 
-// Home plate position in SVG (bottom center, with margin for batter/catcher/buttons)
+// Home plate position in SVG (bottom center)
 const HOME_SVG_X = SVG_WIDTH / 2;
-const HOME_SVG_Y = SVG_HEIGHT - 75; // 75px from bottom for catcher/batter/UI (increased for larger canvas)
+const HOME_SVG_Y = SVG_HEIGHT - 60; // Closer to bottom edge
 
-// Scale: how many SVG units per foot
-// We need to fit the rotated field - the diagonal distance to CF is 400ft
-// After 45° rotation, this becomes the vertical distance
-// The foul lines at 330ft become horizontal at 330 * cos(45) = 233ft from center
-// So we need ~466ft horizontal span, but we only have SVG_WIDTH
-// Scale based on fitting the field width-wise (more constraining)
-const MAX_HORIZONTAL_FEET = 350; // Maximum horizontal extent (half-width in field coords after rotation)
-const HORIZONTAL_SCALE = (SVG_WIDTH / 2 - 20) / (MAX_HORIZONTAL_FEET * Math.SQRT1_2);
-const VERTICAL_SCALE = (HOME_SVG_Y - 20) / (FENCE_CF + STANDS_DEPTH);
-// Use the smaller scale to ensure everything fits, then BOOST by 15% for larger infield
-// This keeps the fence visible while making the infield more prominent
-const BASE_SCALE = Math.min(HORIZONTAL_SCALE, VERTICAL_SCALE);
-const INFIELD_ZOOM_BOOST = 1.15; // 15% larger infield - balanced to keep fence visible
-const SCALE = BASE_SCALE * INFIELD_ZOOM_BOOST;
+// ============================================
+// NON-LINEAR SCALING (Little League Effect)
+// ============================================
+//
+// The key to making the infield appear larger is using non-linear scaling:
+// - Infield (0-130ft): Gets MORE pixels per foot (expanded)
+// - Outfield (130-400ft): Gets FEWER pixels per foot (compressed)
+//
+// We use a power curve: scaledDist = dist^power * factor
+// With power < 1, closer distances expand and farther distances compress.
+
+const INFIELD_BOUNDARY = 130; // ft - edge of infield dirt arc
+const MAX_FIELD_DIST = FENCE_CF + STANDS_DEPTH; // Maximum distance to render
+
+// Non-linear scaling exponent (0.7 = significant compression of outfield)
+// Lower values = more infield emphasis, higher = more linear
+const DISTANCE_POWER = 0.7;
+
+// Calculate how much vertical SVG space we have for the field
+const AVAILABLE_HEIGHT = HOME_SVG_Y - 40; // Leave margin at top
+
+// Pre-calculate the scaled max distance for normalization
+const SCALED_MAX = Math.pow(MAX_FIELD_DIST, DISTANCE_POWER);
+
+// Linear scale that would fit max distance in available height
+const LINEAR_SCALE = AVAILABLE_HEIGHT / SCALED_MAX;
+
+/**
+ * Apply non-linear distance scaling (Little League effect)
+ * Distances near home get more pixels, distances near fence get fewer.
+ */
+function scaleDistance(distFeet: number): number {
+  if (distFeet <= 0) return 0;
+  // Power scaling: closer = expanded, farther = compressed
+  return Math.pow(distFeet, DISTANCE_POWER) * LINEAR_SCALE;
+}
+
+/**
+ * Reverse the non-linear scaling (for click detection)
+ */
+function unscaleDistance(scaledDist: number): number {
+  if (scaledDist <= 0) return 0;
+  return Math.pow(scaledDist / LINEAR_SCALE, 1 / DISTANCE_POWER);
+}
+
+// Legacy SCALE constant for any remaining linear calculations
+const SCALE = AVAILABLE_HEIGHT / MAX_FIELD_DIST;
+
+// ============================================
+// VIEW BOX CONTEXT (for child positioning)
+// ============================================
+
+/**
+ * ViewBox parameters for dynamic zoom
+ */
+export interface ViewBoxParams {
+  x: number;      // left edge in SVG units
+  y: number;      // top edge in SVG units
+  width: number;  // visible width in SVG units
+  height: number; // visible height in SVG units
+}
+
+/**
+ * Context to provide viewBox info to children for correct positioning
+ */
+export const ViewBoxContext = createContext<ViewBoxParams>({
+  x: 0,
+  y: 0,
+  width: SVG_WIDTH,
+  height: SVG_HEIGHT,
+});
+
+/**
+ * Hook to get current viewBox parameters
+ */
+export function useViewBox(): ViewBoxParams {
+  return useContext(ViewBoxContext);
+}
+
+/**
+ * Convert SVG coordinates to visible percentage position (accounting for viewBox zoom).
+ * This is what children should use to position themselves when viewBox changes.
+ *
+ * @param svgX - X coordinate in SVG units
+ * @param svgY - Y coordinate in SVG units
+ * @param viewBox - Current viewBox parameters
+ * @returns percentage positions (0-100) for left/top CSS
+ */
+export function svgToViewBoxPercent(
+  svgX: number,
+  svgY: number,
+  viewBox: ViewBoxParams
+): { leftPercent: number; topPercent: number } {
+  // Transform from SVG coords to viewBox-relative coords
+  const relX = svgX - viewBox.x;
+  const relY = svgY - viewBox.y;
+
+  // Convert to percentage of visible area
+  const leftPercent = (relX / viewBox.width) * 100;
+  const topPercent = (relY / viewBox.height) * 100;
+
+  return { leftPercent, topPercent };
+}
+
+/**
+ * Convert normalized (0-1) coordinates to visible percentage (accounting for viewBox).
+ * Convenience function combining normalizedToSvg and svgToViewBoxPercent.
+ */
+export function normalizedToViewBoxPercent(
+  normX: number,
+  normY: number,
+  viewBox: ViewBoxParams
+): { leftPercent: number; topPercent: number } {
+  const svg = normalizedToSvg(normX, normY);
+  return svgToViewBoxPercent(svg.svgX, svg.svgY, viewBox);
+}
 
 // ============================================
 // COORDINATE CONVERSION FUNCTIONS
@@ -114,40 +221,80 @@ const SCALE = BASE_SCALE * INFIELD_ZOOM_BOOST;
 
 /**
  * Convert baseball field coordinates (feet from home) to SVG coordinates
+ * Uses NON-LINEAR scaling for "Little League" effect:
+ * - Infield appears larger (more pixels per foot)
+ * - Outfield appears compressed (fewer pixels per foot)
+ *
  * Baseball coords: home at (0,0), right foul line = +X, left foul line = +Y
  * We rotate 45° CCW so second base (90,90) points straight up on screen
  */
 function fieldToSvg(fieldX: number, fieldY: number): { svgX: number; svgY: number } {
-  // Rotate 45° counter-clockwise:
-  // x' = x*cos(45) - y*sin(45)
-  // y' = x*sin(45) + y*cos(45)
-  const cos45 = Math.SQRT1_2; // 1/√2
+  // Calculate distance from home plate
+  const dist = Math.sqrt(fieldX * fieldX + fieldY * fieldY);
+
+  if (dist < 0.001) {
+    // At home plate
+    return { svgX: HOME_SVG_X, svgY: HOME_SVG_Y };
+  }
+
+  // Get angle in field coordinates (0° = RF line, 90° = LF line)
+  const angle = Math.atan2(fieldY, fieldX);
+
+  // Apply non-linear distance scaling
+  const scaledDist = scaleDistance(dist);
+
+  // Rotate 45° counter-clockwise for screen display
+  // In rotated coords: positive X = toward RF, positive Y = toward CF
+  const cos45 = Math.SQRT1_2;
   const sin45 = Math.SQRT1_2;
 
-  const rotX = fieldX * cos45 - fieldY * sin45;
-  const rotY = fieldX * sin45 + fieldY * cos45;
+  // Direction unit vector in field coords
+  const dirX = fieldX / dist;
+  const dirY = fieldY / dist;
 
-  // Scale and position: rotY points up (toward CF), rotX points right (toward RF)
-  const svgX = HOME_SVG_X + rotX * SCALE;
-  const svgY = HOME_SVG_Y - rotY * SCALE; // SVG Y is inverted
+  // Rotate direction
+  const rotDirX = dirX * cos45 - dirY * sin45;
+  const rotDirY = dirX * sin45 + dirY * cos45;
+
+  // Apply scaled distance
+  const svgX = HOME_SVG_X + rotDirX * scaledDist;
+  const svgY = HOME_SVG_Y - rotDirY * scaledDist; // SVG Y is inverted
 
   return { svgX, svgY };
 }
 
 /**
  * Convert SVG coordinates back to field coordinates
+ * Reverses the non-linear scaling
  */
 function svgToField(svgX: number, svgY: number): { fieldX: number; fieldY: number } {
-  // Reverse the transformation
-  const rotX = (svgX - HOME_SVG_X) / SCALE;
-  const rotY = (HOME_SVG_Y - svgY) / SCALE;
+  // Get offset from home plate in SVG coords
+  const offsetX = svgX - HOME_SVG_X;
+  const offsetY = HOME_SVG_Y - svgY; // Un-invert Y
+
+  const scaledDist = Math.sqrt(offsetX * offsetX + offsetY * offsetY);
+
+  if (scaledDist < 0.001) {
+    return { fieldX: 0, fieldY: 0 };
+  }
+
+  // Un-scale the distance
+  const dist = unscaleDistance(scaledDist);
+
+  // Get direction in rotated coords
+  const rotDirX = offsetX / scaledDist;
+  const rotDirY = offsetY / scaledDist;
 
   // Rotate 45° clockwise to get back to field coords
   const cos45 = Math.SQRT1_2;
   const sin45 = Math.SQRT1_2;
 
-  const fieldX = rotX * cos45 + rotY * sin45;
-  const fieldY = -rotX * sin45 + rotY * cos45;
+  const dirX = rotDirX * cos45 + rotDirY * sin45;
+  const dirY = -rotDirX * sin45 + rotDirY * cos45;
+
+  // Apply original distance
+  const fieldX = dirX * dist;
+  const fieldY = dirY * dist;
 
   return { fieldX, fieldY };
 }
@@ -418,8 +565,36 @@ export function FieldCanvas({
   onFieldClick,
   children,
   className = '',
+  zoomLevel = 0,
 }: FieldCanvasProps) {
-  const viewBox = `0 0 ${SVG_WIDTH} ${SVG_HEIGHT}`;
+  // Simple CSS-based zoom approach
+  // Instead of changing viewBox (which breaks overlay alignment),
+  // we use CSS transform: scale() on the entire container.
+  // This zooms SVG + children overlay together uniformly.
+  //
+  // zoomLevel 0 = no zoom (scale 1.0)
+  // zoomLevel 1 = max zoom (scale ~1.5, centered on infield)
+
+  // Calculate scale and translation based on zoomLevel
+  const zoomConfig = useMemo(() => {
+    // At zoomLevel 0: scale=1.0, no translation
+    // At zoomLevel 1: scale=1.05, very modest zoom keeping full field visible
+    // Keep scale minimal so CF home run area stays accessible
+    // Using 1.05 instead of 1.1 to prevent clipping at CF
+    const scale = 1 + zoomLevel * 0.05; // 1.0 to 1.05 (very subtle zoom)
+
+    // With transformOrigin: 'center bottom', scaling up pushes top content up
+    // Apply negative translateY to pull expanded content back into view
+    // At scale 1.05, top extends by 5% of container, but we're centered so it's ~2.5% each way
+    // Small negative translation to keep top visible
+    const translateY = zoomLevel * -1.5; // -1.5% at max zoom
+
+    return { scale, translateY };
+  }, [zoomLevel]);
+
+  // Fixed viewBox - never changes, keeps coordinate system stable
+  const viewBox: ViewBoxParams = { x: 0, y: 0, width: SVG_WIDTH, height: SVG_HEIGHT };
+  const viewBoxString = `0 0 ${SVG_WIDTH} ${SVG_HEIGHT}`;
 
   const handleClick = useCallback(
     (e: React.MouseEvent<SVGSVGElement>) => {
@@ -430,6 +605,8 @@ export function FieldCanvas({
       const clickX = e.clientX - rect.left;
       const clickY = e.clientY - rect.top;
 
+      // With CSS transform zoom, the SVG still uses its original coordinate system
+      // The browser handles the transform, so we just convert normally
       const svgX = (clickX / rect.width) * SVG_WIDTH;
       const svgY = (clickY / rect.height) * SVG_HEIGHT;
 
@@ -520,9 +697,27 @@ export function FieldCanvas({
   }, []);
 
   return (
-    <div className={`relative ${className}`} style={{ width: '100%', height: '100%' }}>
+    <div
+      className={`relative ${className}`}
+      style={{
+        width: '100%',
+        height: '100%',
+        overflow: 'hidden', // Hide overflowing content when zoomed
+      }}
+    >
+      {/* Inner container with CSS transform for zoom */}
+      {/* Both SVG and children overlay are inside, so they zoom together */}
+      <div
+        style={{
+          width: '100%',
+          height: '100%',
+          transform: `scale(${zoomConfig.scale}) translateY(${zoomConfig.translateY}%)`,
+          transformOrigin: 'center bottom', // Zoom from home plate area
+          transition: 'transform 0.3s ease-out', // Smooth zoom animation
+        }}
+      >
       <svg
-        viewBox={viewBox}
+        viewBox={viewBoxString}
         preserveAspectRatio="xMidYMax meet"
         onClick={handleClick}
         className="cursor-crosshair w-full h-full"
@@ -713,13 +908,18 @@ export function FieldCanvas({
       </svg>
 
       {/* Children overlay (fielders, runners, etc.) - positioned over the SVG */}
+      {/* INSIDE the zoom container so they scale with the field */}
+      {/* ViewBoxContext provides viewBox params for coordinate conversion */}
       {children && (
-        <div className="absolute inset-0 pointer-events-none">
-          <div className="relative w-full h-full pointer-events-auto">
-            {children}
+        <ViewBoxContext.Provider value={viewBox}>
+          <div className="absolute inset-0 pointer-events-none">
+            <div className="relative w-full h-full pointer-events-auto">
+              {children}
+            </div>
           </div>
-        </div>
+        </ViewBoxContext.Provider>
       )}
+      </div>{/* End of zoom container */}
     </div>
   );
 }
