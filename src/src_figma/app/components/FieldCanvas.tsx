@@ -102,8 +102,11 @@ const HOME_SVG_Y = SVG_HEIGHT - 75; // 75px from bottom for catcher/batter/UI (i
 const MAX_HORIZONTAL_FEET = 350; // Maximum horizontal extent (half-width in field coords after rotation)
 const HORIZONTAL_SCALE = (SVG_WIDTH / 2 - 20) / (MAX_HORIZONTAL_FEET * Math.SQRT1_2);
 const VERTICAL_SCALE = (HOME_SVG_Y - 20) / (FENCE_CF + STANDS_DEPTH);
-// Use the smaller scale to ensure everything fits
-const SCALE = Math.min(HORIZONTAL_SCALE, VERTICAL_SCALE);
+// Use the smaller scale to ensure everything fits, then BOOST by 40% for larger infield
+// This means some outfield/stands will be clipped but the infield is much more visible
+const BASE_SCALE = Math.min(HORIZONTAL_SCALE, VERTICAL_SCALE);
+const INFIELD_ZOOM_BOOST = 1.4; // 40% larger infield
+const SCALE = BASE_SCALE * INFIELD_ZOOM_BOOST;
 
 // ============================================
 // COORDINATE CONVERSION FUNCTIONS

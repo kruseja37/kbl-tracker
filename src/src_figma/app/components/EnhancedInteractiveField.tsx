@@ -150,52 +150,66 @@ function inferContextualButtons(ctx: PlayContext | null): SpecialEventType[] {
   // 7+ Pitch is ALWAYS available (no pitch tracking, user knows)
   buttons.push('SEVEN_PLUS_PITCH_AB');
 
-  if (!ctx) return buttons;
+  if (!ctx) {
+    console.log('[ContextualButtons] No context, returning only 7+ PITCH');
+    return buttons;
+  }
+
+  console.log('[ContextualButtons] Inferring from context:', {
+    playType: ctx.playType,
+    firstFielder: ctx.firstFielder,
+    ballLocationY: ctx.ballLocationY?.toFixed(2),
+    throwSequence: ctx.throwSequence,
+    runnerOut: ctx.runnerOut,
+    throwTarget: ctx.throwTarget,
+  });
 
   const isOutfielder = [7, 8, 9].includes(ctx.firstFielder ?? 0);
-  const isDeepFly = ctx.ballLocationY !== null && ctx.ballLocationY > 0.8;
-  const isWallCatch = ctx.ballLocationY !== null && ctx.ballLocationY > 0.95;
+  const isInfielder = [1, 2, 3, 4, 5, 6].includes(ctx.firstFielder ?? 0);
+  const isDeepFly = ctx.ballLocationY !== null && ctx.ballLocationY > 0.7; // Lowered from 0.8
+  const isWallCatch = ctx.ballLocationY !== null && ctx.ballLocationY > 0.9; // Lowered from 0.95
 
-  // FO/LO at wall (y > 0.95) → ROBBERY (HR denied)
-  if (['FO', 'LO'].includes(ctx.playType ?? '') && isOutfielder && isWallCatch) {
-    buttons.push('ROBBERY');
+  // FO/LO by outfielder → offer both ROBBERY and WEB GEM
+  // Let the user decide which applies based on what they saw
+  if (['FO', 'LO'].includes(ctx.playType ?? '') && isOutfielder) {
+    if (isWallCatch) {
+      buttons.push('ROBBERY');
+      buttons.push('WEB_GEM');
+    } else if (isDeepFly) {
+      buttons.push('WEB_GEM');
+    }
   }
-  // FO/LO deep (0.8 < y ≤ 0.95) → WEB GEM (spectacular catch)
-  else if (['FO', 'LO'].includes(ctx.playType ?? '') && isOutfielder && isDeepFly) {
+
+  // Any fly ball to outfield deep enough could be a web gem
+  // Even if play type isn't exactly FO/LO (might be FC, etc.)
+  if (isOutfielder && isDeepFly && !buttons.includes('WEB_GEM')) {
     buttons.push('WEB_GEM');
   }
 
-  // Pitcher comebacker (first fielder = 1, GO/FC) → KILLED / NUTSHOT
-  if (ctx.firstFielder === 1 && ['GO', 'FC'].includes(ctx.playType ?? '')) {
+  // Pitcher involvement (first fielder = 1) → KILLED / NUTSHOT options
+  // Any groundball/FC to pitcher could be a comebacker
+  if (ctx.firstFielder === 1) {
     buttons.push('KILLED_PITCHER');
     buttons.push('NUT_SHOT');
   }
 
-  // Strikeout sequence (2-3 or 2-3-3) → offer K type selection
-  if (ctx.firstFielder === 2 && ctx.playType === 'K') {
-    // These are strikeout type options, not special events
-    // Handled separately in the strikeout flow
-  }
-
-  // Runner out on same play → TOOTBLAN
-  if (ctx.runnerOut) {
+  // Any out play → offer TOOTBLAN option (user knows if baserunning was bad)
+  if (['FO', 'LO', 'GO', 'FC'].includes(ctx.playType ?? '')) {
     buttons.push('TOOTBLAN');
   }
 
-  // Deep fly + throw to base → runner tried to tag, TOOTBLAN
-  if (isOutfielder && isDeepFly && ctx.throwTarget !== null) {
-    // Check if target was a base (2B=4, 3B=5, HP=2)
-    if ([2, 4, 5].includes(ctx.throwTarget)) {
-      buttons.push('TOOTBLAN');
-    }
+  // Runner out on same play → definitely show TOOTBLAN
+  if (ctx.runnerOut && !buttons.includes('TOOTBLAN')) {
+    buttons.push('TOOTBLAN');
   }
 
-  // Infield hit options (y < 0.4)
-  if (ctx.playType === '1B' && ctx.ballLocationY !== null && ctx.ballLocationY < 0.4) {
+  // Infield hit options (any hit in infield area)
+  if (ctx.playType === '1B' && ctx.ballLocationY !== null && ctx.ballLocationY < 0.5) {
     buttons.push('BEAT_THROW');
     buttons.push('BUNT');
   }
 
+  console.log('[ContextualButtons] Inferred buttons:', buttons);
   return buttons;
 }
 
