@@ -71,10 +71,11 @@ const FENCE_LCF = 380; // Left-center gap
 const FENCE_RCF = 380; // Right-center gap
 
 // Stands depth - smaller zone just behind fence for HR landing spots
-// Wall scraper: just over fence (~0-20ft in)
-// Deep HR: ~30-50ft into stands
-// Bomb: 50ft+ (will appear at back of stands)
-const STANDS_DEPTH = 50; // ft of stands behind fence - compact zone
+// Wall scraper: just over fence (~0-10ft in)
+// Deep HR: ~15-25ft into stands
+// Bomb: 25ft+ (will appear at back of stands)
+// Reduced from 50ft to 25ft on 2026-02-01 to zoom in on the infield
+const STANDS_DEPTH = 25; // ft of stands behind fence - compact zone for larger infield
 
 // ============================================
 // SVG GEOMETRY

@@ -11,7 +11,7 @@
  * the enhanced coordinate system from Phase 1.
  */
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useDrop } from 'react-dnd';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -1210,6 +1210,17 @@ export function EnhancedInteractiveField({
 
   // Phase 5B: Full play context for contextual button inference (southern foul territory buttons)
   const [lastPlayContext, setLastPlayContext] = useState<PlayContext | null>(null);
+
+  // Phase 5B: Auto-dismiss contextual buttons after timeout
+  // This useEffect triggers a re-render to hide buttons after CONTEXTUAL_BUTTONS_TIMEOUT
+  useEffect(() => {
+    if (lastPlayContext) {
+      const timer = setTimeout(() => {
+        setLastPlayContext(null);
+      }, CONTEXTUAL_BUTTONS_TIMEOUT);
+      return () => clearTimeout(timer);
+    }
+  }, [lastPlayContext]);
 
   // Modal state
   const [showPlayTypeModal, setShowPlayTypeModal] = useState(false);
