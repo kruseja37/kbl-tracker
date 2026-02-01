@@ -1374,6 +1374,9 @@ export function EnhancedInteractiveField({
       timestamp: Date.now(),
     };
 
+    console.log('[completePlay] Setting playContext:', playContext);
+    console.log('[completePlay] inferredPlayType:', inferredPlayType);
+    console.log('[completePlay] playData:', playData);
     setLastPlayContext(playContext);
 
     onPlayComplete(playData);
