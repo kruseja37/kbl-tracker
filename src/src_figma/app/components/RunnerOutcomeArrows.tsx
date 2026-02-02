@@ -454,43 +454,53 @@ export function RunnerOutcomeArrows({
         <OutMarker position={RUNNER_START_POSITIONS.third} />
       )}
 
-      {/* DRAGGABLE RUNNERS */}
-      {/* Batter */}
-      <DraggableRunner
-        runnerId="batter"
-        position={RUNNER_START_POSITIONS.batter}
-        destination={outcomes.batter.to}
-        onDragStart={() => handleDragStart('batter')}
-        onDragEnd={handleDragEnd}
-      />
+      {/* DRAGGABLE RUNNERS - Shown at their DESTINATION positions */}
+      {/* Per design: runners should be shown where they're advancing TO */}
 
-      {/* R1 */}
-      {outcomes.first && bases.first && (
+      {/* Batter - show at destination (if not out) */}
+      {outcomes.batter.to !== 'out' && (
+        <DraggableRunner
+          runnerId="batter"
+          position={DESTINATION_POSITIONS[outcomes.batter.to]}
+          destination={outcomes.batter.to}
+          onDragStart={() => handleDragStart('batter')}
+          onDragEnd={handleDragEnd}
+        />
+      )}
+
+      {/* R1 - show at destination (if not out) */}
+      {outcomes.first && bases.first && outcomes.first.to !== 'out' && (
         <DraggableRunner
           runnerId="first"
-          position={RUNNER_START_POSITIONS.first}
+          position={outcomes.first.to === 'first'
+            ? DESTINATION_POSITIONS.first
+            : DESTINATION_POSITIONS[outcomes.first.to as Exclude<BaseId, 'out'>]}
           destination={outcomes.first.to}
           onDragStart={() => handleDragStart('first')}
           onDragEnd={handleDragEnd}
         />
       )}
 
-      {/* R2 */}
-      {outcomes.second && bases.second && (
+      {/* R2 - show at destination (if not out) */}
+      {outcomes.second && bases.second && outcomes.second.to !== 'out' && (
         <DraggableRunner
           runnerId="second"
-          position={RUNNER_START_POSITIONS.second}
+          position={outcomes.second.to === 'second'
+            ? DESTINATION_POSITIONS.second
+            : DESTINATION_POSITIONS[outcomes.second.to as Exclude<BaseId, 'out'>]}
           destination={outcomes.second.to}
           onDragStart={() => handleDragStart('second')}
           onDragEnd={handleDragEnd}
         />
       )}
 
-      {/* R3 */}
-      {outcomes.third && bases.third && (
+      {/* R3 - show at destination (if not out) */}
+      {outcomes.third && bases.third && outcomes.third.to !== 'out' && (
         <DraggableRunner
           runnerId="third"
-          position={RUNNER_START_POSITIONS.third}
+          position={outcomes.third.to === 'third'
+            ? DESTINATION_POSITIONS.third
+            : DESTINATION_POSITIONS[outcomes.third.to as Exclude<BaseId, 'out'>]}
           destination={outcomes.third.to}
           onDragStart={() => handleDragStart('third')}
           onDragEnd={handleDragEnd}

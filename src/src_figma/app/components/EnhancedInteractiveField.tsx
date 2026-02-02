@@ -1700,22 +1700,12 @@ export function EnhancedInteractiveField({
       return null;
     }
 
-    // GT-014: Use proximity-based detection with depth consideration
-    // Deeper hits (outfield) tend to be extra-base hits
-    // But we also consider x-position for left/right
+    // FIXED: Per design feedback - batter should be dragged to a BASE ZONE, not outfield.
+    // The drop zones are at specific positions (matching DropZoneHighlight positions).
+    // Use PURE proximity detection - find which base zone is closest.
+    // The BatterReachedPopup will then ask HOW they reached that base.
 
-    // For deep outfield (y > 0.7): Triple territory
-    if (position.y > 0.7) {
-      return '3B';
-    }
-
-    // For medium outfield (0.5 < y <= 0.7): Double territory
-    if (position.y > 0.5) {
-      return '2B';
-    }
-
-    // For infield/shallow outfield (y <= 0.5): Use proximity to bases
-    // Calculate distance to each base position
+    // Calculate distance to each base drop zone
     // NOTE: Uses local BASE_POSITIONS defined above with '1B', '2B', '3B' keys
     const distances = {
       '1B': Math.sqrt(
