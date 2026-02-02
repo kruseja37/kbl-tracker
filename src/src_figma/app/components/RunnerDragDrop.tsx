@@ -10,14 +10,15 @@
 
 import { useState, useCallback } from 'react';
 import { useDrag, useDrop } from 'react-dnd';
-import { normalizedToSvg, BASE_POSITIONS } from './FieldCanvas';
+import {
+  normalizedToSvg,
+  BASE_POSITIONS,
+  useViewBox,
+  svgToViewBoxPercent,
+} from './FieldCanvas';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type DndRef = any; // React-dnd connector refs compatibility
-
-// SVG dimensions must match FieldCanvas
-const SVG_WIDTH = 1600;
-const SVG_HEIGHT = 1000;
 
 // ============================================
 // TYPES
@@ -100,6 +101,9 @@ interface RunnerIconProps {
 }
 
 function RunnerIcon({ base, onDragStart, onDragEnd }: RunnerIconProps) {
+  // Get current viewBox from context (for dynamic zoom support)
+  const viewBox = useViewBox();
+
   const [{ isDragging }, drag] = useDrag(() => ({
     type: ItemTypes.RUNNER,
     item: (): DragItem => {
@@ -116,10 +120,14 @@ function RunnerIcon({ base, onDragStart, onDragEnd }: RunnerIconProps) {
 
   const position = RUNNER_POSITIONS[base];
 
-  // Convert to percentage using the same coordinate system as FieldCanvas
+  // Convert to percentage using viewBox-aware coordinate system
   const svgCoords = normalizedToSvg(position.x, position.y);
-  const left = `${(svgCoords.svgX / SVG_WIDTH) * 100}%`;
-  const top = `${(svgCoords.svgY / SVG_HEIGHT) * 100}%`;
+  const { leftPercent, topPercent } = svgToViewBoxPercent(svgCoords.svgX, svgCoords.svgY, viewBox);
+  const left = `${leftPercent}%`;
+  const top = `${topPercent}%`;
+
+  // Baseball-style runner icon with chalkboard aesthetic
+  const baseLabel = base === 'first' ? '1' : base === 'second' ? '2' : '3';
 
   return (
     <div
@@ -129,38 +137,46 @@ function RunnerIcon({ base, onDragStart, onDragEnd }: RunnerIconProps) {
       }`}
       style={{ left, top }}
     >
+      {/* Runner icon - baseball player silhouette style */}
       <div
-        className={`rounded-full flex items-center justify-center font-bold transition-transform ${
-          isDragging ? 'scale-110' : 'hover:scale-105'
+        className={`flex items-center justify-center font-black transition-transform ${
+          isDragging ? 'scale-125' : 'hover:scale-110'
         }`}
         style={{
-          backgroundColor: '#FFD700',
-          borderColor: '#B8860B',
+          // Baseball diamond shape (rotated square)
+          backgroundColor: '#C4A853',
+          borderColor: '#8B7355',
           borderWidth: 'max(2px, 0.15cqw)',
           borderStyle: 'solid',
-          color: '#000',
-          width: 'max(20px, 1.8cqw)',
-          height: 'max(20px, 1.8cqw)',
-          fontSize: 'max(8px, 0.6cqw)',
-          boxShadow: '2px 2px 0px 0px rgba(0,0,0,0.3)',
+          color: '#1a1a1a',
+          width: 'max(22px, 2cqw)',
+          height: 'max(22px, 2cqw)',
+          fontSize: 'max(11px, 0.8cqw)',
+          boxShadow: '3px 3px 0px 0px rgba(0,0,0,0.5)',
+          borderRadius: '4px',
+          transform: 'rotate(45deg)',
         }}
       >
-        R
+        <span style={{ transform: 'rotate(-45deg)' }}>
+          {baseLabel}
+        </span>
       </div>
       {/* Base label below runner */}
       <div
         className="absolute left-1/2 transform -translate-x-1/2"
         style={{
-          bottom: 'max(-10px, -0.8cqw)',
-          fontSize: 'max(6px, 0.4cqw)',
-          color: 'white',
+          bottom: 'max(-12px, -0.9cqw)',
+          fontSize: 'max(7px, 0.5cqw)',
+          color: '#C4A853',
           fontWeight: 'bold',
-          backgroundColor: 'rgba(0,0,0,0.5)',
-          padding: '0 max(2px, 0.15cqw)',
+          backgroundColor: '#1a1a1a',
+          padding: '1px max(3px, 0.2cqw)',
           borderRadius: '2px',
+          border: '1px solid #C4A853',
+          letterSpacing: '0.5px',
         }}
       >
-        {base === 'first' ? '1B' : base === 'second' ? '2B' : '3B'}
+        R{baseLabel}
       </div>
     </div>
   );
@@ -178,6 +194,9 @@ interface DropZoneProps {
 }
 
 function DropZone({ base, outcome, onDrop, visible }: DropZoneProps) {
+  // Get current viewBox from context (for dynamic zoom support)
+  const viewBox = useViewBox();
+
   const [{ isOver, canDrop }, drop] = useDrop(() => ({
     accept: ItemTypes.RUNNER,
     drop: (item: DragItem) => {
@@ -199,10 +218,11 @@ function DropZone({ base, outcome, onDrop, visible }: DropZoneProps) {
   if (!visible) return null;
 
   const position = DROP_ZONES[base][outcome];
-  // Convert using the same coordinate system as FieldCanvas
+  // Convert using viewBox-aware coordinate system
   const svgCoords = normalizedToSvg(position.x, position.y);
-  const left = `${(svgCoords.svgX / SVG_WIDTH) * 100}%`;
-  const top = `${(svgCoords.svgY / SVG_HEIGHT) * 100}%`;
+  const { leftPercent, topPercent } = svgToViewBoxPercent(svgCoords.svgX, svgCoords.svgY, viewBox);
+  const left = `${leftPercent}%`;
+  const top = `${topPercent}%`;
 
   const isSafe = outcome === 'safe';
   const bgColor = isSafe ? '#4CAF50' : '#DD0000';

@@ -203,45 +203,57 @@ function DraggableRunner({
 
   const isOut = destination === 'out';
   const isBatter = runnerId === 'batter';
-  const bgColor = isOut ? '#DD0000' : isBatter ? '#4169E1' : '#FFD700';
   const label = isBatter ? 'B' : runnerId === 'first' ? '1' : runnerId === 'second' ? '2' : '3';
+
+  // Chalkboard-style colors
+  const bgColor = isOut ? '#B71C1C' : isBatter ? '#1565C0' : '#C4A853';
+  const borderColor = isOut ? '#FF5252' : '#C4A853';
+  const textColor = isOut ? '#FFCDD2' : isBatter ? '#BBDEFB' : '#1a1a1a';
 
   return (
     <div
       ref={drag as DndRef}
       className={`absolute transform -translate-x-1/2 -translate-y-1/2
                   cursor-grab active:cursor-grabbing z-30
-                  ${isDragging ? 'opacity-50 scale-110' : 'hover:scale-105'}
+                  ${isDragging ? 'opacity-50 scale-125' : 'hover:scale-110'}
                   transition-transform`}
       style={{
         left: `${leftPercent}%`,
         top: `${topPercent}%`,
       }}
     >
+      {/* Diamond-shaped runner icon for chalkboard aesthetic */}
       <div
-        className="rounded-full flex items-center justify-center font-bold
-                   border-2 border-white shadow-[2px_2px_0px_0px_rgba(0,0,0,0.3)]"
+        className="flex items-center justify-center font-black
+                   shadow-[3px_3px_0px_0px_rgba(0,0,0,0.5)]"
         style={{
           backgroundColor: bgColor,
+          borderColor: borderColor,
+          borderWidth: 'max(2px, 0.15cqw)',
+          borderStyle: 'solid',
           width: 'max(24px, 2cqw)',
           height: 'max(24px, 2cqw)',
-          fontSize: 'max(10px, 0.8cqw)',
-          color: isOut || isBatter ? 'white' : 'black',
+          fontSize: 'max(11px, 0.85cqw)',
+          color: textColor,
+          borderRadius: '4px',
+          transform: 'rotate(45deg)',
         }}
       >
-        {label}
+        <span style={{ transform: 'rotate(-45deg)' }}>{label}</span>
       </div>
       {/* Destination label */}
       <div
         className="absolute left-1/2 transform -translate-x-1/2 whitespace-nowrap"
         style={{
-          top: 'calc(100% + 2px)',
+          top: 'calc(100% + 4px)',
           fontSize: 'max(8px, 0.5cqw)',
-          color: isOut ? '#DD0000' : '#4CAF50',
+          color: isOut ? '#FF5252' : '#C4A853',
           fontWeight: 'bold',
-          backgroundColor: 'rgba(0,0,0,0.7)',
-          padding: '1px 4px',
-          borderRadius: '2px',
+          backgroundColor: '#1a1a1a',
+          padding: '2px 6px',
+          borderRadius: '3px',
+          border: `1px solid ${isOut ? '#FF5252' : '#C4A853'}`,
+          letterSpacing: '0.5px',
         }}
       >
         {isOut ? 'OUT' : `→${destination.toUpperCase()}`}

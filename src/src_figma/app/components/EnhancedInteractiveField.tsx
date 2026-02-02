@@ -976,50 +976,67 @@ interface LeftFoulButtonsProps {
 }
 
 function LeftFoulButtons({ onQuickResult, onHomeRun, onStrikeout }: LeftFoulButtonsProps) {
-  const btnBase = 'border-[2px] px-2 py-1 text-[10px] font-bold hover:scale-105 active:scale-95 transition-transform shadow-[2px_2px_0px_0px_rgba(0,0,0,0.3)]';
-  // K/Ꝅ buttons are larger and more prominent per spec (w-14 h-14)
-  const strikeoutBtnBase = 'w-14 h-14 border-4 border-white text-xl font-bold hover:scale-105 active:scale-95 transition-transform shadow-[3px_3px_0px_0px_rgba(0,0,0,0.3)]';
+  // Chalkboard-style button base - retro baseball aesthetic
+  const btnBase = `
+    border-2 border-[#C4A853] rounded-md
+    px-3 py-1.5 text-xs font-bold uppercase tracking-wide
+    hover:scale-105 active:scale-95 transition-all
+    shadow-[3px_3px_0px_0px_rgba(0,0,0,0.4)]
+    bg-gradient-to-b from-[rgba(255,255,255,0.1)] to-transparent
+  `;
+
+  // K/Ꝅ buttons - larger, prominent strikeout buttons
+  const strikeoutBtnBase = `
+    w-12 h-12 rounded-lg
+    border-3 border-[#C4A853]
+    text-xl font-black
+    hover:scale-105 active:scale-95 transition-all
+    shadow-[4px_4px_0px_0px_rgba(0,0,0,0.5)]
+    bg-gradient-to-b from-[#B22222] to-[#8B0000]
+    text-[#FFE4B5]
+  `;
 
   return (
-    <div className="flex flex-col gap-1">
+    <div className="flex flex-col gap-1.5 p-2 bg-[#1a1a1a]/80 rounded-lg border border-[#C4A853]/30">
       {/* K/Ꝅ PERMANENT BUTTONS - Per spec: bottom left, always visible */}
-      <div className="flex gap-1 mb-1">
+      <div className="flex gap-1.5 mb-1">
         <button
           onClick={() => onStrikeout(false)}
-          className={`bg-[#DD0000] text-white ${strikeoutBtnBase}`}
+          className={strikeoutBtnBase}
           title="Strikeout Swinging"
         >
           K
         </button>
         <button
           onClick={() => onStrikeout(true)}
-          className={`bg-[#DD0000] text-white ${strikeoutBtnBase}`}
+          className={`${strikeoutBtnBase} [text-decoration:line-through]`}
           title="Strikeout Looking"
+          style={{ textDecorationColor: '#C4A853', textDecorationThickness: '3px' }}
         >
-          Ꝅ
+          K
         </button>
       </div>
       {/* Other result buttons */}
       <button
         onClick={() => onQuickResult('BB')}
-        className={`bg-[#4CAF50] border-white text-white ${btnBase}`}
+        className={`${btnBase} bg-[#2E7D32] text-[#E8F5E9] border-[#4CAF50]`}
         title="Walk (Base on Balls)"
       >
         BB
       </button>
       <button
         onClick={() => onQuickResult('HBP')}
-        className={`bg-[#FF9800] border-white text-black ${btnBase}`}
+        className={`${btnBase} bg-[#E65100] text-[#FFF3E0] border-[#FF9800]`}
         title="Hit By Pitch"
       >
         HBP
       </button>
       <button
         onClick={onHomeRun}
-        className={`bg-[#FFD700] border-white text-black ${btnBase}`}
+        className={`${btnBase} bg-[#5D4037] text-[#FFD700] border-[#C4A853]`}
         title="Home Run"
       >
-        HR
+        ⚾ HR
       </button>
     </div>
   );
@@ -1034,44 +1051,52 @@ interface RightFoulButtonsProps {
 }
 
 function RightFoulButtons({ onSpecialEvent }: RightFoulButtonsProps) {
-  const btnBase = 'border-[2px] px-1.5 py-1 text-[9px] font-bold hover:scale-105 active:scale-95 transition-transform shadow-[2px_2px_0px_0px_rgba(0,0,0,0.3)] flex items-center gap-0.5';
+  // Chalkboard-style circular buttons for special events
+  const btnBase = `
+    w-9 h-9 rounded-full
+    border-2 border-[#C4A853]
+    flex items-center justify-center
+    text-base
+    hover:scale-110 active:scale-95 transition-all
+    shadow-[2px_2px_0px_0px_rgba(0,0,0,0.4)]
+  `;
 
   return (
-    <div className="flex flex-col gap-1">
+    <div className="flex flex-col gap-1.5 p-1.5 bg-[#1a1a1a]/80 rounded-lg border border-[#C4A853]/30">
       <button
         onClick={() => onSpecialEvent('NUT_SHOT')}
-        className={`bg-[#795548] border-[#FFD700] text-white ${btnBase}`}
+        className={`${btnBase} bg-[#5D4037]`}
         title="Nut Shot (+1 Fame)"
       >
-        <span>🥜</span>
+        🥜
       </button>
       <button
         onClick={() => onSpecialEvent('KILLED_PITCHER')}
-        className={`bg-[#FF5722] border-[#FFD700] text-white ${btnBase}`}
+        className={`${btnBase} bg-[#BF360C]`}
         title="Killed Pitcher (+3 Fame)"
       >
-        <span>💥</span>
+        💥
       </button>
       <button
         onClick={() => onSpecialEvent('TOOTBLAN')}
-        className={`bg-[#E91E63] border-[#FFD700] text-white ${btnBase}`}
+        className={`${btnBase} bg-[#880E4F]`}
         title="TOOTBLAN (-3 Fame)"
       >
-        <span>🤦</span>
+        🤦
       </button>
       <button
         onClick={() => onSpecialEvent('WEB_GEM')}
-        className={`bg-[#4169E1] border-[#FFD700] text-white ${btnBase}`}
+        className={`${btnBase} bg-[#1565C0]`}
         title="Web Gem (+1 Fame)"
       >
-        <span>⭐</span>
+        ⭐
       </button>
       <button
         onClick={() => onSpecialEvent('SEVEN_PLUS_PITCH_AB')}
-        className={`bg-[#2196F3] border-white text-white ${btnBase}`}
+        className={`${btnBase} bg-[#0277BD]`}
         title="7+ Pitch At-Bat"
       >
-        <span>7️⃣</span>
+        7️⃣
       </button>
     </div>
   );
@@ -1098,15 +1123,21 @@ function BehindHomeButtons({
   undoCount = 0,
   onUndo,
 }: BehindHomeButtonsProps) {
-  const btnBase = 'border-[2px] px-3 py-1.5 text-[10px] font-bold hover:scale-105 active:scale-95 transition-transform shadow-[2px_2px_0px_0px_rgba(0,0,0,0.3)]';
+  // Chalkboard button style
+  const btnBase = `
+    border-2 border-[#C4A853] rounded-md
+    px-4 py-2 text-xs font-bold uppercase tracking-wide
+    hover:scale-105 active:scale-95 transition-all
+    shadow-[3px_3px_0px_0px_rgba(0,0,0,0.4)]
+  `;
 
   return (
-    <div className="flex gap-2 items-center">
+    <div className="flex gap-2 items-center p-2 bg-[#1a1a1a]/80 rounded-lg border border-[#C4A853]/30">
       {/* Undo button */}
       {onUndo && undoCount > 0 && (
         <button
           onClick={onUndo}
-          className={`bg-[#607D8B] border-white text-white ${btnBase}`}
+          className={`${btnBase} bg-[#37474F] text-[#B0BEC5] border-[#546E7A]`}
           title={`Undo last action (${undoCount} available)`}
         >
           ↩ {undoCount}
@@ -1115,24 +1146,24 @@ function BehindHomeButtons({
       {/* Reset button */}
       <button
         onClick={onReset}
-        className={`bg-[#808080] border-white text-white ${btnBase}`}
+        className={`${btnBase} bg-[#424242] text-[#BDBDBD] border-[#616161]`}
         title="Reset current play"
       >
-        RESET
+        ✕ RESET
       </button>
       {/* Classify button */}
       {canClassify && onClassify && (
         <button
           onClick={onClassify}
           disabled={isClassifying}
-          className={`border-white text-white ${btnBase} ${
+          className={`${btnBase} ${
             isClassifying
-              ? 'bg-[#FF6600] animate-pulse cursor-wait'
-              : 'bg-[#DD0000] hover:bg-[#FF0000]'
+              ? 'bg-[#E65100] text-white animate-pulse cursor-wait'
+              : 'bg-gradient-to-b from-[#C62828] to-[#B71C1C] text-[#FFCDD2] hover:from-[#D32F2F] hover:to-[#C62828]'
           }`}
           title="Classify the current play"
         >
-          {isClassifying ? '...' : 'CLASSIFY'}
+          {isClassifying ? '...' : '▶ CLASSIFY'}
         </button>
       )}
     </div>
@@ -3243,10 +3274,13 @@ export function EnhancedInteractiveField({
           <button
             onClick={handleEndAtBat}
             className="absolute bottom-4 left-1/2 -translate-x-1/2 z-40
-                       bg-[#4CAF50] border-4 border-white px-6 py-3
-                       text-white text-sm font-bold
-                       hover:bg-[#45a049] active:scale-95 transition-all
-                       shadow-[4px_4px_0px_0px_rgba(0,0,0,0.3)]"
+                       bg-gradient-to-b from-[#2E7D32] to-[#1B5E20]
+                       border-3 border-[#C4A853] rounded-lg
+                       px-8 py-3
+                       text-[#E8F5E9] text-sm font-bold uppercase tracking-wide
+                       hover:from-[#388E3C] hover:to-[#2E7D32]
+                       active:scale-95 transition-all
+                       shadow-[4px_4px_0px_0px_rgba(0,0,0,0.5)]"
           >
             ✓ END AT-BAT
           </button>
@@ -3265,10 +3299,14 @@ export function EnhancedInteractiveField({
             {/* Next At-Bat button to clear state and start fresh */}
             <button
               onClick={startNextAtBat}
-              className="mt-2 w-full bg-[#3366FF] border-2 border-white px-4 py-2
-                         text-white text-xs font-bold
-                         hover:bg-[#4477FF] active:scale-95 transition-all
-                         shadow-[3px_3px_0px_0px_rgba(0,0,0,0.3)]"
+              className="mt-2 w-full
+                         bg-gradient-to-b from-[#1565C0] to-[#0D47A1]
+                         border-2 border-[#C4A853] rounded-md
+                         px-4 py-2.5
+                         text-[#BBDEFB] text-xs font-bold uppercase tracking-wide
+                         hover:from-[#1976D2] hover:to-[#1565C0]
+                         active:scale-95 transition-all
+                         shadow-[3px_3px_0px_0px_rgba(0,0,0,0.4)]"
             >
               NEXT AT-BAT →
             </button>
