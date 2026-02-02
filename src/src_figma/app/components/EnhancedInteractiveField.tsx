@@ -1716,6 +1716,7 @@ export function EnhancedInteractiveField({
 
     // For infield/shallow outfield (y <= 0.5): Use proximity to bases
     // Calculate distance to each base position
+    // NOTE: Uses local BASE_POSITIONS defined above with '1B', '2B', '3B' keys
     const distances = {
       '1B': Math.sqrt(
         Math.pow(position.x - BASE_POSITIONS['1B'].x, 2) +
@@ -2449,6 +2450,8 @@ export function EnhancedInteractiveField({
   }, []);
 
   // GT-007: Handle quick result buttons (BB, K, HBP, etc.)
+  // UPDATED: Now uses Play Lifecycle - BB/HBP go to RUNNER_OUTCOMES
+  // K/KL now handled by handleStrikeout instead
   const handleQuickResult = useCallback((resultType: QuickResultType) => {
     // Map quick result to play data
     const playData: PlayData = {
@@ -2457,71 +2460,71 @@ export function EnhancedInteractiveField({
       spraySector: 'CF', // Default
     };
 
-    // Track play type for contextual buttons
-    let inferredPlayType: PlayContext['playType'] = null;
-    let firstFielder: number | null = null;
-
     switch (resultType) {
       case 'BB':
         playData.type = 'hit';
         playData.hitType = '1B';
-        inferredPlayType = '1B';
-        console.log('[QuickResult] Walk (BB)');
-        break;
+        console.log('[QuickResult] Walk (BB) → RUNNER_OUTCOMES');
+        // Use Play Lifecycle - set lastClassifiedPlay and runnerOutcomes
+        setLastClassifiedPlay(playData);
+        const bbDefaults = calculateWalkDefaults(gameSituation.bases);
+        setRunnerOutcomes(bbDefaults);
+        console.log('[QuickResult] BB runner defaults:', bbDefaults);
+        return; // Exit early - don't call onPlayComplete
+
       case 'IBB':
         playData.type = 'hit';
         playData.hitType = '1B';
-        inferredPlayType = '1B';
-        console.log('[QuickResult] Intentional Walk (IBB)');
-        break;
+        console.log('[QuickResult] Intentional Walk (IBB) → RUNNER_OUTCOMES');
+        setLastClassifiedPlay(playData);
+        const ibbDefaults = calculateWalkDefaults(gameSituation.bases);
+        setRunnerOutcomes(ibbDefaults);
+        console.log('[QuickResult] IBB runner defaults:', ibbDefaults);
+        return;
+
+      case 'HBP':
+        playData.type = 'hit';
+        playData.hitType = '1B';
+        console.log('[QuickResult] Hit By Pitch (HBP) → RUNNER_OUTCOMES');
+        setLastClassifiedPlay(playData);
+        const hbpDefaults = calculateWalkDefaults(gameSituation.bases);
+        setRunnerOutcomes(hbpDefaults);
+        console.log('[QuickResult] HBP runner defaults:', hbpDefaults);
+        return;
+
       case 'K':
+        // K now handled by handleStrikeout, but keep as fallback
         playData.type = 'out';
         playData.outType = 'K';
         playData.fieldingSequence = [2]; // Catcher
-        inferredPlayType = 'K';
-        firstFielder = 2;
-        console.log('[QuickResult] Strikeout Swinging (K)');
-        break;
+        console.log('[QuickResult] Strikeout Swinging (K) → RUNNER_OUTCOMES');
+        setLastClassifiedPlay(playData);
+        const kDefaults = calculateRunnerDefaults(playData, gameSituation.bases, gameSituation.outs);
+        setRunnerOutcomes(kDefaults);
+        return;
+
       case 'KL':
+        // KL now handled by handleStrikeout, but keep as fallback
         playData.type = 'out';
         playData.outType = 'K';
         playData.fieldingSequence = [2]; // Catcher
-        inferredPlayType = 'K';
-        firstFielder = 2;
-        console.log('[QuickResult] Strikeout Looking (Ꝅ)');
-        break;
+        console.log('[QuickResult] Strikeout Looking (Ꝅ) → RUNNER_OUTCOMES');
+        setLastClassifiedPlay(playData);
+        const klDefaults = calculateRunnerDefaults(playData, gameSituation.bases, gameSituation.outs);
+        setRunnerOutcomes(klDefaults);
+        return;
+
       case 'D3K':
         playData.type = 'out';
         playData.outType = 'K';
         playData.fieldingSequence = [2, 3]; // Catcher to 1B
-        inferredPlayType = 'K';
-        firstFielder = 2;
-        console.log('[QuickResult] Dropped 3rd Strike (D3K)');
-        break;
-      case 'HBP':
-        playData.type = 'hit';
-        playData.hitType = '1B';
-        inferredPlayType = '1B';
-        console.log('[QuickResult] Hit By Pitch (HBP)');
-        break;
+        console.log('[QuickResult] Dropped 3rd Strike (D3K) → RUNNER_OUTCOMES');
+        setLastClassifiedPlay(playData);
+        const d3kDefaults = calculateD3KDefaults(gameSituation.bases, gameSituation.outs);
+        setRunnerOutcomes(d3kDefaults);
+        return;
     }
-
-    // FIX: Set lastPlayContext so contextual buttons appear for quick results too
-    const playContext: PlayContext = {
-      playType: inferredPlayType,
-      firstFielder,
-      ballLocationY: null, // Quick results don't have ball location
-      throwSequence: playData.fieldingSequence || [],
-      runnerOut: false,
-      throwTarget: null,
-      timestamp: Date.now(),
-    };
-    console.log('[QuickResult] Setting playContext:', playContext);
-    setLastPlayContext(playContext);
-
-    onPlayComplete(playData);
-    handleReset();
-  }, [onPlayComplete, handleReset]);
+  }, [gameSituation.bases, gameSituation.outs]);
 
   // ============================================
   // NEW: Strikeout handler using Play Lifecycle
