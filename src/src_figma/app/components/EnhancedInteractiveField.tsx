@@ -56,6 +56,37 @@ import {
   OutTypeContent,
   HRDistanceContent,
 } from './SidePanel';
+import {
+  BatterReachedPopup,
+  type BatterReachedOption,
+} from './BatterReachedPopup';
+import {
+  ModifierButtonBar,
+  type ModifierId,
+} from './ModifierButtonBar';
+import {
+  InjuryPrompt,
+  type InjuryResult,
+  type MojoResult,
+} from './InjuryPrompt';
+import {
+  StarPlaySubtypePopup,
+  type StarPlaySubtype,
+} from './StarPlaySubtypePopup';
+import {
+  ErrorTypePopup,
+  type ErrorType,
+} from './ErrorTypePopup';
+import {
+  calculateRunnerDefaults,
+  calculateWalkDefaults,
+  calculateFieldersChoiceDefaults,
+  calculateD3KDefaults,
+  type RunnerDefaults,
+  type RunnerOutcome,
+} from './runnerDefaults';
+import { RunnerOutcomesDisplay } from './RunnerOutcomesDisplay';
+import { RunnerOutcomeArrows } from './RunnerOutcomeArrows';
 
 // ============================================
 // TYPES
@@ -77,10 +108,10 @@ interface FieldPosition {
 }
 
 export type HitType = '1B' | '2B' | '3B' | 'HR';
-export type OutType = 'GO' | 'FO' | 'LO' | 'DP' | 'TP' | 'K' | 'FC' | 'SAC';
+export type OutType = 'GO' | 'FO' | 'LO' | 'PO' | 'DP' | 'TP' | 'K' | 'FC' | 'SAC' | 'SF';
 
 export interface PlayData {
-  type: 'hit' | 'out' | 'hr' | 'foul_out' | 'foul_ball';
+  type: 'hit' | 'out' | 'hr' | 'foul_out' | 'foul_ball' | 'error';
   hitType?: HitType;
   outType?: OutType;
   fieldingSequence: number[]; // Position numbers in sequence (e.g., [6, 4, 3])
@@ -91,6 +122,10 @@ export interface PlayData {
   hrDistance?: number;
   hrType?: string;
   spraySector?: string;
+  /** Error type (FIELDING, THROWING, MENTAL) - only for type: 'error' */
+  errorType?: ErrorType;
+  /** Position number of fielder who made the error */
+  errorFielder?: number;
 }
 
 export type SpecialEventType =
@@ -266,6 +301,13 @@ export interface EnhancedInteractiveFieldProps {
   fielderBorderColors?: [string, string];
   /** Player names for each position (keyed by position number) */
   playerNames?: Record<number, string>;
+  /**
+   * Zoom level for the field view (0-1)
+   * 0 = full field view (shows fence and stands)
+   * 1 = maximum infield zoom (shows just the diamond)
+   * Default: 0 (full field view)
+   */
+  zoomLevel?: number;
 }
 
 // Re-export RunnerMoveData for consumers
@@ -920,6 +962,188 @@ interface ContextualButton {
 // GT-007: Quick result type for non-ball-in-play outcomes
 export type QuickResultType = 'BB' | 'IBB' | 'K' | 'KL' | 'HBP' | 'D3K';
 
+// ============================================
+// LEFT FOUL ZONE: Result Buttons (BB, K, HBP, HR)
+// Per GAME_TRACKER_IMPLEMENTATION_ADDENDUM.md:
+// K/Ꝅ are PERMANENT buttons that trigger Play Lifecycle
+// ============================================
+
+interface LeftFoulButtonsProps {
+  onQuickResult: (resultType: QuickResultType) => void;
+  onHomeRun: () => void;
+  /** NEW: Strikeout handler using Play Lifecycle (K/Ꝅ → RUNNER_OUTCOMES) */
+  onStrikeout: (looking: boolean) => void;
+}
+
+function LeftFoulButtons({ onQuickResult, onHomeRun, onStrikeout }: LeftFoulButtonsProps) {
+  const btnBase = 'border-[2px] px-2 py-1 text-[10px] font-bold hover:scale-105 active:scale-95 transition-transform shadow-[2px_2px_0px_0px_rgba(0,0,0,0.3)]';
+  // K/Ꝅ buttons are larger and more prominent per spec (w-14 h-14)
+  const strikeoutBtnBase = 'w-14 h-14 border-4 border-white text-xl font-bold hover:scale-105 active:scale-95 transition-transform shadow-[3px_3px_0px_0px_rgba(0,0,0,0.3)]';
+
+  return (
+    <div className="flex flex-col gap-1">
+      {/* K/Ꝅ PERMANENT BUTTONS - Per spec: bottom left, always visible */}
+      <div className="flex gap-1 mb-1">
+        <button
+          onClick={() => onStrikeout(false)}
+          className={`bg-[#DD0000] text-white ${strikeoutBtnBase}`}
+          title="Strikeout Swinging"
+        >
+          K
+        </button>
+        <button
+          onClick={() => onStrikeout(true)}
+          className={`bg-[#DD0000] text-white ${strikeoutBtnBase}`}
+          title="Strikeout Looking"
+        >
+          Ꝅ
+        </button>
+      </div>
+      {/* Other result buttons */}
+      <button
+        onClick={() => onQuickResult('BB')}
+        className={`bg-[#4CAF50] border-white text-white ${btnBase}`}
+        title="Walk (Base on Balls)"
+      >
+        BB
+      </button>
+      <button
+        onClick={() => onQuickResult('HBP')}
+        className={`bg-[#FF9800] border-white text-black ${btnBase}`}
+        title="Hit By Pitch"
+      >
+        HBP
+      </button>
+      <button
+        onClick={onHomeRun}
+        className={`bg-[#FFD700] border-white text-black ${btnBase}`}
+        title="Home Run"
+      >
+        HR
+      </button>
+    </div>
+  );
+}
+
+// ============================================
+// RIGHT FOUL ZONE: Special Event Buttons
+// ============================================
+
+interface RightFoulButtonsProps {
+  onSpecialEvent: (eventType: SpecialEventType) => void;
+}
+
+function RightFoulButtons({ onSpecialEvent }: RightFoulButtonsProps) {
+  const btnBase = 'border-[2px] px-1.5 py-1 text-[9px] font-bold hover:scale-105 active:scale-95 transition-transform shadow-[2px_2px_0px_0px_rgba(0,0,0,0.3)] flex items-center gap-0.5';
+
+  return (
+    <div className="flex flex-col gap-1">
+      <button
+        onClick={() => onSpecialEvent('NUT_SHOT')}
+        className={`bg-[#795548] border-[#FFD700] text-white ${btnBase}`}
+        title="Nut Shot (+1 Fame)"
+      >
+        <span>🥜</span>
+      </button>
+      <button
+        onClick={() => onSpecialEvent('KILLED_PITCHER')}
+        className={`bg-[#FF5722] border-[#FFD700] text-white ${btnBase}`}
+        title="Killed Pitcher (+3 Fame)"
+      >
+        <span>💥</span>
+      </button>
+      <button
+        onClick={() => onSpecialEvent('TOOTBLAN')}
+        className={`bg-[#E91E63] border-[#FFD700] text-white ${btnBase}`}
+        title="TOOTBLAN (-3 Fame)"
+      >
+        <span>🤦</span>
+      </button>
+      <button
+        onClick={() => onSpecialEvent('WEB_GEM')}
+        className={`bg-[#4169E1] border-[#FFD700] text-white ${btnBase}`}
+        title="Web Gem (+1 Fame)"
+      >
+        <span>⭐</span>
+      </button>
+      <button
+        onClick={() => onSpecialEvent('SEVEN_PLUS_PITCH_AB')}
+        className={`bg-[#2196F3] border-white text-white ${btnBase}`}
+        title="7+ Pitch At-Bat"
+      >
+        <span>7️⃣</span>
+      </button>
+    </div>
+  );
+}
+
+// ============================================
+// BEHIND HOME: Game Control Buttons
+// ============================================
+
+interface BehindHomeButtonsProps {
+  onReset: () => void;
+  onClassify?: () => void;
+  canClassify?: boolean;
+  isClassifying?: boolean;
+  undoCount?: number;
+  onUndo?: () => void;
+}
+
+function BehindHomeButtons({
+  onReset,
+  onClassify,
+  canClassify = false,
+  isClassifying = false,
+  undoCount = 0,
+  onUndo,
+}: BehindHomeButtonsProps) {
+  const btnBase = 'border-[2px] px-3 py-1.5 text-[10px] font-bold hover:scale-105 active:scale-95 transition-transform shadow-[2px_2px_0px_0px_rgba(0,0,0,0.3)]';
+
+  return (
+    <div className="flex gap-2 items-center">
+      {/* Undo button */}
+      {onUndo && undoCount > 0 && (
+        <button
+          onClick={onUndo}
+          className={`bg-[#607D8B] border-white text-white ${btnBase}`}
+          title={`Undo last action (${undoCount} available)`}
+        >
+          ↩ {undoCount}
+        </button>
+      )}
+      {/* Reset button */}
+      <button
+        onClick={onReset}
+        className={`bg-[#808080] border-white text-white ${btnBase}`}
+        title="Reset current play"
+      >
+        RESET
+      </button>
+      {/* Classify button */}
+      {canClassify && onClassify && (
+        <button
+          onClick={onClassify}
+          disabled={isClassifying}
+          className={`border-white text-white ${btnBase} ${
+            isClassifying
+              ? 'bg-[#FF6600] animate-pulse cursor-wait'
+              : 'bg-[#DD0000] hover:bg-[#FF0000]'
+          }`}
+          title="Classify the current play"
+        >
+          {isClassifying ? '...' : 'CLASSIFY'}
+        </button>
+      )}
+    </div>
+  );
+}
+
+// ============================================
+// LEGACY: QuickButtons (now split into zones above)
+// Kept for backwards compatibility during transition
+// ============================================
+
 interface QuickButtonsProps {
   onSpecialEvent: (eventType: SpecialEventType) => void;
   onHomeRun: () => void;
@@ -937,6 +1161,8 @@ interface QuickButtonsProps {
   strikeoutType?: 'K' | 'D3K' | null;
   /** Was there a runner out on the play (non-DP)? */
   hadRunnerOut?: boolean;
+  /** Compact mode for vertical layout in foul territory */
+  compact?: boolean;
 }
 
 function QuickButtons({
@@ -949,6 +1175,7 @@ function QuickButtons({
   wasInfieldHit,
   strikeoutType,
   hadRunnerOut,
+  compact = false,
 }: QuickButtonsProps) {
   // Build contextual buttons based on last play
   const contextualButtons: ContextualButton[] = [];
@@ -1113,42 +1340,47 @@ function QuickButtons({
     title: 'Tough at-bat (7+ pitches)',
   });
 
+  // Button base classes - smaller in compact mode
+  const btnBase = compact
+    ? 'border-[2px] px-2 py-1 text-[9px] font-bold hover:scale-105 transition-transform shadow-[1px_1px_0px_0px_rgba(0,0,0,0.3)]'
+    : 'border-[2px] px-3 py-1.5 text-[10px] font-bold hover:scale-105 transition-transform shadow-[2px_2px_0px_0px_rgba(0,0,0,0.3)]';
+
   return (
-    <div className="space-y-1.5">
+    <div className={compact ? 'space-y-1' : 'space-y-1.5'}>
       {/* GT-007: Primary action buttons for non-ball-in-play outcomes */}
       {onQuickResult && (
-        <div className="flex flex-wrap gap-1 justify-center">
+        <div className={compact ? 'flex flex-col gap-1' : 'flex flex-wrap gap-1 justify-center'}>
           <button
             onClick={() => onQuickResult('BB')}
-            className="bg-[#4CAF50] border-[2px] border-white px-3 py-1.5 text-[10px] font-bold text-white hover:scale-105 transition-transform shadow-[2px_2px_0px_0px_rgba(0,0,0,0.3)]"
+            className={`bg-[#4CAF50] border-white text-white ${btnBase}`}
             title="Walk (Base on Balls)"
           >
             BB
           </button>
           <button
             onClick={() => onQuickResult('K')}
-            className="bg-[#DD0000] border-[2px] border-white px-3 py-1.5 text-[10px] font-bold text-white hover:scale-105 transition-transform shadow-[2px_2px_0px_0px_rgba(0,0,0,0.3)]"
+            className={`bg-[#DD0000] border-white text-white ${btnBase}`}
             title="Strikeout Swinging"
           >
             K
           </button>
           <button
             onClick={() => onQuickResult('KL')}
-            className="bg-[#8B0000] border-[2px] border-white px-3 py-1.5 text-[10px] font-bold text-white hover:scale-105 transition-transform shadow-[2px_2px_0px_0px_rgba(0,0,0,0.3)]"
+            className={`bg-[#8B0000] border-white text-white ${btnBase}`}
             title="Strikeout Looking"
           >
             Ꝅ
           </button>
           <button
             onClick={() => onQuickResult('HBP')}
-            className="bg-[#FF9800] border-[2px] border-white px-3 py-1.5 text-[10px] font-bold text-black hover:scale-105 transition-transform shadow-[2px_2px_0px_0px_rgba(0,0,0,0.3)]"
+            className={`bg-[#FF9800] border-white text-black ${btnBase}`}
             title="Hit By Pitch"
           >
             HBP
           </button>
           <button
             onClick={onHomeRun}
-            className="bg-[#FFD700] border-[2px] border-white px-3 py-1.5 text-[10px] font-bold text-black hover:scale-105 transition-transform shadow-[2px_2px_0px_0px_rgba(0,0,0,0.3)]"
+            className={`bg-[#FFD700] border-white text-black ${btnBase}`}
             title="Home Run"
           >
             HR
@@ -1157,13 +1389,17 @@ function QuickButtons({
       )}
 
       {/* Contextual buttons for special events */}
-      <div className="flex flex-wrap gap-1.5 justify-center">
+      <div className={compact ? 'flex flex-col gap-1' : 'flex flex-wrap gap-1.5 justify-center'}>
         {contextualButtons.map((btn) => (
           <button
             key={btn.id}
             onClick={() => onSpecialEvent(btn.id)}
             disabled={!btn.enabled}
-            className={`border-[2px] px-2 py-1 text-[9px] font-bold transition-transform shadow-[2px_2px_0px_0px_rgba(0,0,0,0.3)] flex items-center gap-0.5 ${
+            className={`border-[2px] font-bold transition-transform flex items-center gap-0.5 ${
+              compact
+                ? 'px-2 py-1 text-[8px] shadow-[1px_1px_0px_0px_rgba(0,0,0,0.3)]'
+                : 'px-2 py-1 text-[9px] shadow-[2px_2px_0px_0px_rgba(0,0,0,0.3)]'
+            } ${
               btn.enabled
                 ? 'hover:scale-105'
                 : 'opacity-50 cursor-not-allowed'
@@ -1176,7 +1412,7 @@ function QuickButtons({
             title={btn.title}
           >
             <span>{btn.emoji}</span>
-            <span>{btn.label}</span>
+            {!compact && <span>{btn.label}</span>}
           </button>
         ))}
 
@@ -1184,11 +1420,15 @@ function QuickButtons({
         {!onQuickResult && (
           <button
             onClick={onHomeRun}
-            className="bg-[#FFD700] border-[2px] border-white px-2 py-1 text-[9px] font-bold text-black hover:scale-105 transition-transform shadow-[2px_2px_0px_0px_rgba(0,0,0,0.3)] flex items-center gap-0.5"
+            className={`bg-[#FFD700] border-[2px] border-white font-bold text-black hover:scale-105 transition-transform flex items-center gap-0.5 ${
+              compact
+                ? 'px-2 py-1 text-[8px] shadow-[1px_1px_0px_0px_rgba(0,0,0,0.3)]'
+                : 'px-2 py-1 text-[9px] shadow-[2px_2px_0px_0px_rgba(0,0,0,0.3)]'
+            }`}
             title="Home Run (quick entry)"
           >
             <span>💣</span>
-            <span>HR</span>
+            {!compact && <span>HR</span>}
           </button>
         )}
       </div>
@@ -1208,6 +1448,7 @@ export function EnhancedInteractiveField({
   onRunnerMove,
   fielderBorderColors = ['#E8E8D8', '#E8E8D8'],
   playerNames = {},
+  zoomLevel = 0,
 }: EnhancedInteractiveFieldProps) {
   // Play state
   const [placedFielders, setPlacedFielders] = useState<PlacedFielderState[]>([]);
@@ -1260,6 +1501,24 @@ export function EnhancedInteractiveField({
   // GT-009: HR location prompt state - prompts for HR location before distance
   const [showHRLocationPrompt, setShowHRLocationPrompt] = useState(false);
 
+  // NEW: BatterReachedPopup state - shows when batter is dragged to a base
+  // Per GAME_TRACKER_IMPLEMENTATION_ADDENDUM.md: This comes BEFORE HitTypeContent
+  const [showBatterReachedPopup, setShowBatterReachedPopup] = useState(false);
+  const [batterReachedBase, setBatterReachedBase] = useState<'1B' | '2B' | '3B' | null>(null);
+
+  // NEW: Error flow state
+  // Flow: BatterReachedPopup "E" → Ball location → Tap fielder → ErrorTypePopup
+  const [pendingError, setPendingError] = useState(false);
+  const [awaitingErrorFielder, setAwaitingErrorFielder] = useState(false);
+  const [errorFielder, setErrorFielder] = useState<FielderData | null>(null);
+  const [showErrorTypePopup, setShowErrorTypePopup] = useState(false);
+
+  // ============================================
+  // RUNNER OUTCOME STATE (per GAME_TRACKER_IMPLEMENTATION_ADDENDUM.md)
+  // ============================================
+  // Pre-calculated defaults that user can adjust before End At-Bat
+  const [runnerOutcomes, setRunnerOutcomes] = useState<RunnerDefaults | null>(null);
+
   // Classification state
   const [classificationResult, setClassificationResult] = useState<ClassificationResult | null>(null);
   const [pendingPrompts, setPendingPrompts] = useState<SpecialEventPrompt[]>([]);
@@ -1277,6 +1536,42 @@ export function EnhancedInteractiveField({
 
   // GT-015: Auto-inference confirmation toast
   const [inferenceToast, setInferenceToast] = useState<string | null>(null);
+
+  // ============================================
+  // NEW STATE: Play Lifecycle (per GAME_TRACKER_IMPLEMENTATION_ADDENDUM.md)
+  // ============================================
+  // These enable the RUNNER_OUTCOMES and MODIFIERS_ACTIVE phases
+  const [lastClassifiedPlay, setLastClassifiedPlay] = useState<PlayData | null>(null);
+  const [playCommitted, setPlayCommitted] = useState(false);
+  const [atBatComplete, setAtBatComplete] = useState(false);
+  const [activeModifiers, setActiveModifiers] = useState<Set<ModifierId>>(new Set());
+  /** Which modifiers are available based on the current play type */
+  const [enabledModifiers, setEnabledModifiers] = useState<Set<ModifierId>>(new Set());
+  const [pendingInjuryPrompt, setPendingInjuryPrompt] = useState<'KP' | 'NUT' | null>(null);
+  /** Show StarPlaySubtypePopup for WG/ROB modifier */
+  const [showStarPlayPopup, setShowStarPlayPopup] = useState(false);
+  /** Is the current star play a robbery (for ROB modifier)? */
+  const [isStarPlayRobbery, setIsStarPlayRobbery] = useState(false);
+
+  // ============================================
+  // UIPHASE DERIVATION (per GAME_TRACKER_IMPLEMENTATION_ADDENDUM.md)
+  // ============================================
+  // DO NOT store phase separately - derive from existing state
+  type UIPhase =
+    | 'AWAITING_INPUT'      // No drag in progress, no panels open
+    | 'DRAGGING'            // Any drag in progress
+    | 'TAP_SEQUENCE'        // Fielder dropped, building throw chain
+    | 'CLASSIFYING'         // Any panel is open (hit/out/HR)
+    | 'RUNNER_OUTCOMES'     // Play classified, adjusting runners
+    | 'MODIFIERS_ACTIVE';   // Runners done, modifiers enabled
+
+  const getUIPhase = useCallback((): UIPhase => {
+    if (showHitTypeModal || showOutTypeModal || showHRDistanceModal) return 'CLASSIFYING';
+    if (placedFielders.length > 0 && !lastClassifiedPlay) return 'TAP_SEQUENCE';
+    if (lastClassifiedPlay && !playCommitted) return 'RUNNER_OUTCOMES';
+    if (playCommitted && !atBatComplete) return 'MODIFIERS_ACTIVE';
+    return 'AWAITING_INPUT';
+  }, [showHitTypeModal, showOutTypeModal, showHRDistanceModal, placedFielders.length, lastClassifiedPlay, playCommitted, atBatComplete]);
 
   // Build fielders from fieldPositions prop
   const fielders: FielderData[] = Object.values(FIELDER_POSITIONS).map((pos) => {
@@ -1333,12 +1628,16 @@ export function EnhancedInteractiveField({
 
     // Phase 5B: Build full PlayContext for contextual button inference
     // This enables the southern foul territory buttons to appear based on play type
+    // Map all out types - some like DP/TP/SAC map to GO since they're ground ball variations
     const playTypeMap: Record<string, PlayContext['playType']> = {
       'FO': 'FO',
       'LO': 'LO',
       'GO': 'GO',
       'FC': 'FC',
       'K': 'K',
+      'DP': 'GO',  // Double play = ground out variant
+      'TP': 'GO',  // Triple play = ground out variant
+      'SAC': 'GO', // Sacrifice = ground out variant
     };
 
     const hitTypeMap: Record<string, PlayContext['playType']> = {
@@ -1535,14 +1834,15 @@ export function EnhancedInteractiveField({
       }
     }
 
-    // NEW FLOW: If no fielder sequence, this is a HIT - show ball landing prompt
-    // Per GAMETRACKER_DRAGDROP_SPEC.md: Batter drag to base → "Touch where ball landed"
+    // NEW FLOW per GAME_TRACKER_IMPLEMENTATION_ADDENDUM.md:
+    // Batter drag to base → BatterReachedPopup (NOT directly to HitTypeContent)
+    // BatterReachedPopup shows: BB, IBB, HBP, 1B, E, FC, D3K
     if (throwSequence.length === 0) {
       const destinationBase = determineBatterBase(position);
       if (destinationBase) {
-        // This is a hit - show ball landing prompt
-        setPendingBatterBase(destinationBase);
-        setShowBallLandingPrompt(true);
+        // Show BatterReachedPopup - user selects HOW batter reached
+        setBatterReachedBase(destinationBase);
+        setShowBatterReachedPopup(true);
         return;
       }
     }
@@ -1589,13 +1889,20 @@ export function EnhancedInteractiveField({
     setShowPlayTypeModal(true);
   }, [ballLocation, throwSequence, gameSituation, onPlayComplete, completePlay, determineBatterBase]);
 
-  // Handle ball location tap (after ball landing prompt for hits)
+  // Handle ball location tap (after ball landing prompt for hits or errors)
   const handleBallLocationTap = useCallback((position: FieldCoordinate) => {
     // Store the ball location
     setBallLocation(position);
     setShowBallLandingPrompt(false);
 
-    // Now show hit type modal with the captured location
+    // ERROR FLOW: If pending error, show fielder tap prompt instead of hit type
+    if (pendingError) {
+      console.log('[BallLocationTap] Error flow - waiting for fielder tap');
+      setAwaitingErrorFielder(true);
+      return;
+    }
+
+    // NORMAL HIT FLOW: Show hit type modal with the captured location
     // The batter position was stored when they were dragged
     // Use classifier to help suggest hit type
     const result = classifyPlay({
@@ -1620,7 +1927,7 @@ export function EnhancedInteractiveField({
     // Show hit type modal
     setPendingPlayType('hit');
     setShowHitTypeModal(true);
-  }, [batterPosition, gameSituation]);
+  }, [batterPosition, gameSituation, pendingError]);
 
   // Handle ball landing prompt cancel - inline reset to avoid dependency issues
   const handleBallLandingCancel = useCallback(() => {
@@ -1643,9 +1950,109 @@ export function EnhancedInteractiveField({
     setCurrentPromptIndex(0);
   }, []);
 
-  // Handle fielder click (add to throw sequence)
+  // ============================================
+  // NEW: Handle BatterReachedPopup selection
+  // Per GAME_TRACKER_IMPLEMENTATION_ADDENDUM.md:
+  // - BB/IBB/HBP/D3K: No ball location needed → RUNNER_OUTCOMES
+  // - 1B/2B/3B/E/FC: Ball in play → show ball location prompt → HitTypeContent
+  // ============================================
+  const handleBatterReachedSelect = useCallback((option: BatterReachedOption) => {
+    setShowBatterReachedPopup(false);
+
+    console.log(`[BatterReached] Selected: ${option}, base: ${batterReachedBase}`);
+
+    switch (option) {
+      case 'BB':
+      case 'IBB':
+      case 'HBP':
+        // Walk/HBP - No ball in play, go directly to RUNNER_OUTCOMES
+        {
+          const playData: PlayData = {
+            type: 'hit', // Walks are treated as reaching base
+            hitType: '1B',
+            fieldingSequence: [],
+            ballLocation: undefined,
+            batterLocation: batterPosition || undefined,
+            spraySector: 'CF',
+          };
+          console.log(`[BatterReached] ${option} - no ball in play, setting lastClassifiedPlay`);
+          setLastClassifiedPlay(playData);
+          // Calculate runner defaults for walk (only forced runners advance)
+          const defaults = calculateWalkDefaults(gameSituation.bases);
+          setRunnerOutcomes(defaults);
+          console.log('[BatterReached] Runner defaults:', defaults);
+          setBatterReachedBase(null);
+        }
+        break;
+
+      case 'D3K':
+        // Dropped third strike - technically a strikeout but batter reached
+        {
+          const playData: PlayData = {
+            type: 'out', // Still counts as strikeout
+            outType: 'K',
+            fieldingSequence: [2, 3], // Catcher to 1B (batter safe)
+            ballLocation: undefined,
+            batterLocation: batterPosition || undefined,
+            spraySector: 'CF',
+          };
+          console.log(`[BatterReached] D3K - setting lastClassifiedPlay`);
+          setLastClassifiedPlay(playData);
+          // Calculate runner defaults for D3K
+          const defaults = calculateD3KDefaults(gameSituation.bases, gameSituation.outs);
+          setRunnerOutcomes(defaults);
+          console.log('[BatterReached] D3K runner defaults:', defaults);
+          setBatterReachedBase(null);
+        }
+        break;
+
+      case '1B':
+      case '2B':
+      case '3B':
+        // Base hit - ball was in play, need location
+        // Show ball landing prompt, then HitTypeContent
+        setPendingBatterBase(batterReachedBase);
+        setShowBallLandingPrompt(true);
+        break;
+
+      case 'E':
+        // Error - ball was in play, need location, then fielder tap, then error type
+        // Flow: Ball location → Tap fielder → ErrorTypePopup → RUNNER_OUTCOMES
+        setPendingBatterBase(batterReachedBase);
+        setPendingError(true);
+        setShowBallLandingPrompt(true);
+        break;
+
+      case 'FC':
+        // Fielder's choice - ball was in play, batter safe, runner out
+        // Need ball location
+        setPendingBatterBase(batterReachedBase);
+        setShowBallLandingPrompt(true);
+        // TODO: Set flag to show which runner was out
+        break;
+    }
+  }, [batterPosition, batterReachedBase]);
+
+  // Handle BatterReachedPopup cancel
+  const handleBatterReachedCancel = useCallback(() => {
+    setShowBatterReachedPopup(false);
+    setBatterReachedBase(null);
+    // Reset batter position since they cancelled
+    setBatterPosition(null);
+  }, []);
+
+  // Handle fielder click (add to throw sequence OR attribute error)
   const handleFielderClick = useCallback(
     (fielder: FielderData) => {
+      // Error flow: If awaiting error fielder, capture it and show ErrorTypePopup
+      if (awaitingErrorFielder) {
+        console.log('[handleFielderClick] Error attributed to:', fielder.name, `(#${fielder.positionNumber})`);
+        setErrorFielder(fielder);
+        setAwaitingErrorFielder(false);
+        setShowErrorTypePopup(true);
+        return;
+      }
+
       // Only allow clicking to add to sequence if there's already a placed fielder
       if (placedFielders.length === 0) return;
 
@@ -1656,7 +2063,7 @@ export function EnhancedInteractiveField({
       const newSequence = [...throwSequence, fielder];
       setThrowSequence(newSequence);
     },
-    [placedFielders.length, throwSequence]
+    [placedFielders.length, throwSequence, awaitingErrorFielder]
   );
 
   // Get sequence number for a fielder
@@ -1713,68 +2120,108 @@ export function EnhancedInteractiveField({
 
   // Handle hit type selection
   // GT-006: Handle hit type selection with optional trajectory
+  // UPDATED: Now uses Play Lifecycle - sets lastClassifiedPlay → RUNNER_OUTCOMES
   const handleHitTypeSelect = useCallback(
     (hitType: HitType, trajectory?: HitTrajectory) => {
       setShowHitTypeModal(false);
 
-      if (batterPosition) {
-        const isFoul = isFoulTerritory(batterPosition.x, batterPosition.y);
-        const foulType = isFoul ? getFoulType(batterPosition.x, batterPosition.y) : undefined;
-        const sector = getSpraySector(batterPosition.x, batterPosition.y);
+      // Use batter position, ball location, or first fielder as effective location
+      const effectiveLocation = batterPosition || ballLocation || placedFielders[0]?.position;
 
-        const playData: PlayData = {
-          type: 'hit',
-          hitType,
-          fieldingSequence: throwSequence.map((f) => f.positionNumber),
-          ballLocation: ballLocation || batterPosition,
-          batterLocation: batterPosition,
-          isFoul,
-          foulType: foulType ?? undefined,
-          spraySector: sector.sector,
-        };
-
-        // Log trajectory for spray chart analysis (if needed for future use)
-        if (trajectory) {
-          console.log(`[Hit] ${hitType} - ${trajectory} ball to ${sector.sector}`);
-        }
-
-        // Hits can still have fielding sequences (e.g., single with throw home)
-        completePlay(playData);
-        handleReset();
+      if (!effectiveLocation) {
+        console.warn('[handleHitTypeSelect] No location available for hit');
+        // Reset state manually since handleReset isn't available here
+        setPlacedFielders([]);
+        setThrowSequence([]);
+        setBatterPosition(null);
+        setBallLocation(null);
+        return;
       }
+
+      const isFoul = isFoulTerritory(effectiveLocation.x, effectiveLocation.y);
+      const foulType = isFoul ? getFoulType(effectiveLocation.x, effectiveLocation.y) : undefined;
+      const sector = getSpraySector(effectiveLocation.x, effectiveLocation.y);
+
+      const playData: PlayData = {
+        type: 'hit',
+        hitType,
+        fieldingSequence: throwSequence.map((f) => f.positionNumber),
+        ballLocation: effectiveLocation,
+        batterLocation: batterPosition || effectiveLocation,
+        isFoul,
+        foulType: foulType ?? undefined,
+        spraySector: sector.sector,
+      };
+
+      // Log trajectory for spray chart analysis (if needed for future use)
+      if (trajectory) {
+        console.log(`[Hit] ${hitType} - ${trajectory} ball to ${sector.sector}`);
+      }
+
+      // NEW: Use Play Lifecycle - set lastClassifiedPlay instead of completePlay
+      // This triggers RUNNER_OUTCOMES phase. Data persists on End At-Bat.
+      console.log('[handleHitTypeSelect] Setting lastClassifiedPlay for RUNNER_OUTCOMES');
+      setLastClassifiedPlay(playData);
+
+      // Calculate runner defaults for hit
+      const defaults = calculateRunnerDefaults(playData, gameSituation.bases, gameSituation.outs);
+      setRunnerOutcomes(defaults);
+      console.log('[handleHitTypeSelect] Runner defaults:', defaults);
+      // Note: Don't call handleReset - field state cleared on startNextAtBat
     },
-    [batterPosition, ballLocation, throwSequence, completePlay]
+    [batterPosition, ballLocation, throwSequence, placedFielders, gameSituation.bases, gameSituation.outs]
   );
 
   // Handle out type selection
+  // UPDATED: Now uses Play Lifecycle - sets lastClassifiedPlay → RUNNER_OUTCOMES
   const handleOutTypeSelect = useCallback(
     (outType: OutType) => {
       setShowOutTypeModal(false);
 
-      if (batterPosition) {
-        const isFoul = isFoulTerritory(batterPosition.x, batterPosition.y);
-        const foulType = isFoul ? getFoulType(batterPosition.x, batterPosition.y) : undefined;
-        const sector = getSpraySector(batterPosition.x, batterPosition.y);
+      // GT-004 FIX: Handle fielder-only out recording (no batter position needed)
+      // Use first placed fielder position as ball location if no batter/ball location
+      const effectiveLocation = batterPosition || ballLocation || placedFielders[0]?.position;
 
-        const playData: PlayData = {
-          type: 'out',
-          outType,
-          fieldingSequence: throwSequence.map((f) => f.positionNumber),
-          ballLocation: ballLocation || batterPosition,
-          batterLocation: batterPosition,
-          isFoul,
-          foulType: foulType ?? undefined,
-          spraySector: sector.sector,
-        };
+      // Build play data - works even without batter position
+      const playData: PlayData = {
+        type: 'out',
+        outType,
+        fieldingSequence: throwSequence.map((f) => f.positionNumber),
+        ballLocation: effectiveLocation,
+        batterLocation: batterPosition || undefined,
+        spraySector: effectiveLocation
+          ? getSpraySector(effectiveLocation.x, effectiveLocation.y).sector
+          : 'CF',
+      };
 
-        completePlay(playData);
-        handleReset();
+      // Add foul territory info if we have a location
+      if (effectiveLocation) {
+        const isFoul = isFoulTerritory(effectiveLocation.x, effectiveLocation.y);
+        if (isFoul) {
+          playData.isFoul = true;
+          const foulType = getFoulType(effectiveLocation.x, effectiveLocation.y);
+          if (foulType) {
+            playData.foulType = foulType;
+          }
+        }
       }
+
+      // NEW: Use Play Lifecycle - set lastClassifiedPlay instead of completePlay
+      // This triggers RUNNER_OUTCOMES phase. Data persists on End At-Bat.
+      console.log('[handleOutTypeSelect] Setting lastClassifiedPlay for RUNNER_OUTCOMES:', outType);
+      setLastClassifiedPlay(playData);
+
+      // Calculate runner defaults for out
+      const defaults = calculateRunnerDefaults(playData, gameSituation.bases, gameSituation.outs);
+      setRunnerOutcomes(defaults);
+      console.log('[handleOutTypeSelect] Runner defaults:', defaults);
+      // Note: Don't call handleReset - field state cleared on startNextAtBat
     },
-    [batterPosition, ballLocation, throwSequence, completePlay]
+    [batterPosition, ballLocation, throwSequence, placedFielders, gameSituation.bases, gameSituation.outs]
   );
 
   // Handle HR distance submission
+  // UPDATED: Now uses Play Lifecycle - sets lastClassifiedPlay → RUNNER_OUTCOMES
   const handleHRDistance = useCallback(
     (distance: number) => {
       if (pendingHRData) {
@@ -1790,14 +2237,21 @@ export function EnhancedInteractiveField({
           spraySector: sector.sector,
         };
 
-        // HR has no fielding sequence - direct call
-        onPlayComplete(playData);
-        handleReset();
+        // NEW: Use Play Lifecycle - set lastClassifiedPlay instead of onPlayComplete
+        // This triggers RUNNER_OUTCOMES phase. Data persists on End At-Bat.
+        console.log('[handleHRDistance] Setting lastClassifiedPlay for RUNNER_OUTCOMES');
+        setLastClassifiedPlay(playData);
+
+        // Calculate runner defaults for HR (everyone scores)
+        const defaults = calculateRunnerDefaults(playData, gameSituation.bases, gameSituation.outs);
+        setRunnerOutcomes(defaults);
+        console.log('[handleHRDistance] Runner defaults:', defaults);
+        // Note: Don't call handleReset - field state cleared on startNextAtBat
       }
       setShowHRDistanceModal(false);
       setPendingHRData(null);
     },
-    [pendingHRData, onPlayComplete]
+    [pendingHRData, gameSituation.bases, gameSituation.outs]
   );
 
   // Reset state (but keep lastPlay* context for contextual buttons)
@@ -1821,27 +2275,24 @@ export function EnhancedInteractiveField({
     setPendingBatterBase(null);
     // GT-009: Reset HR location prompt state
     setShowHRLocationPrompt(false);
+    // Reset error-related state
+    setPendingError(false);
+    setAwaitingErrorFielder(false);
+    setErrorFielder(null);
+    setShowErrorTypePopup(false);
+    // Reset BatterReachedPopup state
+    setShowBatterReachedPopup(false);
+    setBatterReachedBase(null);
     // NOTE: lastPlay* state is intentionally NOT reset here
     // so contextual buttons can attribute events to previous play
     // They are cleared individually when the user taps a contextual button
     // or when a new play is completed (overwriting the previous context)
   }, []);
 
+  // Actual classification logic (extracted for animation timing)
   // GT-002 FIX: Wire CLASSIFY button to actually use the classifier
   // GT-003 FIX: Route to appropriate modal based on context (skip PlayTypeModal)
   // GT-004 FIX: Enable fielder-only out recording
-  const handleClassifyPlay = useCallback(() => {
-    // Show "CLASSIFYING..." animation briefly before processing
-    setIsClassifying(true);
-
-    // Use setTimeout to show the animation for 200ms before classification
-    setTimeout(() => {
-      setIsClassifying(false);
-      performClassification();
-    }, 200);
-  }, []);
-
-  // Actual classification logic (extracted for animation timing)
   const performClassification = useCallback(() => {
     // Get ball location - use placed fielder position or batter position
     const effectiveBallLocation = ballLocation || (placedFielders[0]?.position);
@@ -1919,6 +2370,18 @@ export function EnhancedInteractiveField({
     }
   }, [batterPosition, ballLocation, throwSequence, placedFielders, gameSituation, completePlay]);
 
+  // Wrapper with animation timing
+  const handleClassifyPlay = useCallback(() => {
+    // Show "CLASSIFYING..." animation briefly before processing
+    setIsClassifying(true);
+
+    // Use setTimeout to show the animation for 200ms before classification
+    setTimeout(() => {
+      setIsClassifying(false);
+      performClassification();
+    }, 200);
+  }, [performClassification]);
+
   // Determine if we can classify
   const canClassify = batterPosition !== null || placedFielders.length > 0;
 
@@ -1994,46 +2457,477 @@ export function EnhancedInteractiveField({
       spraySector: 'CF', // Default
     };
 
+    // Track play type for contextual buttons
+    let inferredPlayType: PlayContext['playType'] = null;
+    let firstFielder: number | null = null;
+
     switch (resultType) {
       case 'BB':
         playData.type = 'hit';
         playData.hitType = '1B';
-        // Log as walk - in real impl, would have separate BB type
+        inferredPlayType = '1B';
         console.log('[QuickResult] Walk (BB)');
         break;
       case 'IBB':
         playData.type = 'hit';
         playData.hitType = '1B';
+        inferredPlayType = '1B';
         console.log('[QuickResult] Intentional Walk (IBB)');
         break;
       case 'K':
         playData.type = 'out';
         playData.outType = 'K';
         playData.fieldingSequence = [2]; // Catcher
+        inferredPlayType = 'K';
+        firstFielder = 2;
         console.log('[QuickResult] Strikeout Swinging (K)');
         break;
       case 'KL':
         playData.type = 'out';
         playData.outType = 'K';
         playData.fieldingSequence = [2]; // Catcher
+        inferredPlayType = 'K';
+        firstFielder = 2;
         console.log('[QuickResult] Strikeout Looking (Ꝅ)');
         break;
       case 'D3K':
         playData.type = 'out';
         playData.outType = 'K';
         playData.fieldingSequence = [2, 3]; // Catcher to 1B
+        inferredPlayType = 'K';
+        firstFielder = 2;
         console.log('[QuickResult] Dropped 3rd Strike (D3K)');
         break;
       case 'HBP':
         playData.type = 'hit';
         playData.hitType = '1B';
+        inferredPlayType = '1B';
         console.log('[QuickResult] Hit By Pitch (HBP)');
         break;
     }
 
+    // FIX: Set lastPlayContext so contextual buttons appear for quick results too
+    const playContext: PlayContext = {
+      playType: inferredPlayType,
+      firstFielder,
+      ballLocationY: null, // Quick results don't have ball location
+      throwSequence: playData.fieldingSequence || [],
+      runnerOut: false,
+      throwTarget: null,
+      timestamp: Date.now(),
+    };
+    console.log('[QuickResult] Setting playContext:', playContext);
+    setLastPlayContext(playContext);
+
     onPlayComplete(playData);
     handleReset();
   }, [onPlayComplete, handleReset]);
+
+  // ============================================
+  // NEW: Strikeout handler using Play Lifecycle
+  // Per GAME_TRACKER_IMPLEMENTATION_ADDENDUM.md:
+  // K/Ꝅ tap → IMMEDIATELY create play record → RUNNER_OUTCOMES
+  // ============================================
+  const handleStrikeout = useCallback((looking: boolean) => {
+    const playData: PlayData = {
+      type: 'out',
+      outType: 'K',
+      fieldingSequence: [2], // Catcher
+      spraySector: 'CF',
+    };
+
+    console.log(`[Strikeout] ${looking ? 'Looking (Ꝅ)' : 'Swinging (K)'}`);
+
+    // Set lastClassifiedPlay - this triggers RUNNER_OUTCOMES phase
+    // Data is NOT persisted yet - that happens on End At-Bat
+    setLastClassifiedPlay(playData);
+
+    // Calculate runner defaults for strikeout (runners hold)
+    const defaults = calculateRunnerDefaults(playData, gameSituation.bases, gameSituation.outs);
+    setRunnerOutcomes(defaults);
+    console.log('[Strikeout] Runner defaults:', defaults);
+
+    // Clear any existing field state
+    setPlacedFielders([]);
+    setThrowSequence([]);
+    setBatterPosition(null);
+    setBallLocation(null);
+  }, [gameSituation.bases, gameSituation.outs]);
+
+  // ============================================
+  // NEW: End At-Bat handler - THIS IS WHEN DATA PERSISTS
+  // Per GAME_TRACKER_IMPLEMENTATION_ADDENDUM.md:
+  // 1. Create undo snapshot BEFORE persist
+  // 2. Persist play to game state
+  // 3. Mark play as committed
+  // 4. Enable applicable modifier buttons
+  // ============================================
+  const handleEndAtBat = useCallback(() => {
+    if (!lastClassifiedPlay) {
+      console.warn('[EndAtBat] No classified play to commit');
+      return;
+    }
+
+    console.log('[EndAtBat] Committing play:', lastClassifiedPlay);
+
+    // 1. TODO: Create undo snapshot BEFORE changes (requires undo system integration)
+    // undoSystem.snapshot({ description: getPlayDescription(lastClassifiedPlay), gameState: {...} });
+
+    // 2. Persist play to game state via onPlayComplete callback
+    onPlayComplete(lastClassifiedPlay);
+
+    // 3. Mark play as committed - this transitions to MODIFIERS_ACTIVE phase
+    setPlayCommitted(true);
+
+    // 4. Calculate enabled modifiers based on play type
+    const enabledMods = new Set<ModifierId>();
+
+    // 7+ pitch is ALWAYS available
+    enabledMods.add('7+');
+
+    const firstFielder = lastClassifiedPlay.fieldingSequence?.[0];
+    const ballY = lastClassifiedPlay.ballLocation?.y;
+    const isOut = lastClassifiedPlay.type === 'out' || lastClassifiedPlay.type === 'foul_out';
+    const isHit = lastClassifiedPlay.type === 'hit';
+    const isSingle = lastClassifiedPlay.hitType === '1B';
+    const isInfieldHit = isHit && isSingle && ballY !== undefined && ballY < 0.5;
+
+    // KP/NUT available when:
+    // - There's a single in the infield (1B hit with ballLocation.y < 0.5), OR
+    // - The pitcher is the first fielder (position 1)
+    if (isInfieldHit || firstFielder === 1) {
+      enabledMods.add('KP');
+      enabledMods.add('NUT');
+    }
+
+    // WG available anytime a fielder makes a play for an out (infielders AND outfielders)
+    if (isOut && firstFielder !== undefined) {
+      enabledMods.add('WG');
+    }
+
+    // ROB available for outfield catches at y > 0.95 (wall catch)
+    if (isOut && [7, 8, 9].includes(firstFielder ?? 0) && ballY !== undefined && ballY > 0.95) {
+      enabledMods.add('ROB');
+    }
+
+    // TOOTBLAN available if there are runners on base
+    if (gameSituation.bases.first || gameSituation.bases.second || gameSituation.bases.third) {
+      enabledMods.add('TOOTBLAN');
+    }
+
+    // BT/BUNT available for infield singles
+    if (isInfieldHit) {
+      enabledMods.add('BT');
+      enabledMods.add('BUNT');
+    }
+
+    console.log('[EndAtBat] Enabled modifiers:', [...enabledMods]);
+    setEnabledModifiers(enabledMods);
+
+    // Clear active modifiers from previous play
+    setActiveModifiers(new Set());
+
+    // 5. Set play context for contextual buttons (legacy system - will be replaced)
+    const playContext: PlayContext = {
+      playType: lastClassifiedPlay.outType === 'K' ? 'K' :
+                lastClassifiedPlay.hitType ? lastClassifiedPlay.hitType as PlayContext['playType'] :
+                lastClassifiedPlay.outType as PlayContext['playType'],
+      firstFielder: firstFielder ?? null,
+      ballLocationY: ballY ?? null,
+      throwSequence: lastClassifiedPlay.fieldingSequence || [],
+      runnerOut: false,
+      throwTarget: null,
+      timestamp: Date.now(),
+    };
+    setLastPlayContext(playContext);
+
+  }, [lastClassifiedPlay, onPlayComplete, gameSituation.bases]);
+
+  // ============================================
+  // NEW: Handle modifier button tap
+  // Per GAME_TRACKER_IMPLEMENTATION_ADDENDUM.md:
+  // - KP/NUT are mutually exclusive (selecting one disables the other)
+  // - KP shows InjuryPrompt immediately
+  // - NUT shows MojoPrompt immediately
+  // - WG shows StarPlaySubtypePopup
+  // ============================================
+  const handleModifierTap = useCallback((modifierId: ModifierId) => {
+    // Check if blocked by mutual exclusivity
+    if (modifierId === 'KP' && activeModifiers.has('NUT')) {
+      console.log('[ModifierTap] KP blocked - NUT already selected');
+      return;
+    }
+    if (modifierId === 'NUT' && activeModifiers.has('KP')) {
+      console.log('[ModifierTap] NUT blocked - KP already selected');
+      return;
+    }
+
+    console.log(`[ModifierTap] Tapped: ${modifierId}`);
+
+    // Add to active modifiers
+    setActiveModifiers(prev => new Set([...prev, modifierId]));
+
+    // Handle specific modifier flows
+    switch (modifierId) {
+      case 'KP':
+        // IMMEDIATELY show InjuryPrompt
+        // Record +3.0 Fame to batter (handled in prompt completion)
+        setPendingInjuryPrompt('KP');
+        break;
+
+      case 'NUT':
+        // IMMEDIATELY show MojoPrompt
+        // Record +1.0 Fame to batter (handled in prompt completion)
+        setPendingInjuryPrompt('NUT');
+        break;
+
+      case 'WG':
+        // Show StarPlaySubtypePopup
+        // WG applies to FIRST fielder in sequence
+        console.log('[ModifierTap] WG - showing StarPlaySubtypePopup');
+        setIsStarPlayRobbery(false);
+        setShowStarPlayPopup(true);
+        break;
+
+      case 'ROB':
+        // HR Robbery - show StarPlaySubtypePopup with robbery flag
+        // ROB applies to first fielder, gets +1.5 Fame instead of +1.0
+        console.log('[ModifierTap] ROB - showing StarPlaySubtypePopup (robbery)');
+        setIsStarPlayRobbery(true);
+        setShowStarPlayPopup(true);
+        break;
+
+      case '7+':
+        // 7+ pitch at-bat - just record it
+        console.log('[ModifierTap] 7+ pitch at-bat recorded');
+        break;
+
+      case 'BT':
+        // Beat throw
+        console.log('[ModifierTap] Beat throw recorded');
+        break;
+
+      case 'BUNT':
+        // Bunt hit
+        console.log('[ModifierTap] Bunt recorded');
+        break;
+
+      case 'TOOTBLAN':
+        // TOOTBLAN - baserunning blunder
+        console.log('[ModifierTap] TOOTBLAN recorded');
+        break;
+    }
+
+    // Notify parent of special event
+    if (onSpecialEvent) {
+      const eventTypeMap: Record<ModifierId, SpecialEventType | null> = {
+        'KP': 'KILLED_PITCHER',
+        'NUT': 'NUT_SHOT',
+        'WG': 'WEB_GEM',
+        'ROB': 'ROBBERY',
+        'BT': 'BEAT_THROW',
+        'BUNT': 'BUNT',
+        'TOOTBLAN': 'TOOTBLAN',
+        '7+': 'SEVEN_PLUS_PITCH_AB',
+      };
+
+      const eventType = eventTypeMap[modifierId];
+      if (eventType) {
+        onSpecialEvent({
+          eventType,
+          fielderPosition: lastClassifiedPlay?.fieldingSequence?.[0],
+          fielderName: lastClassifiedPlay?.fieldingSequence?.[0]
+            ? playerNames[lastClassifiedPlay.fieldingSequence[0]]
+            : undefined,
+        });
+      }
+    }
+  }, [activeModifiers, lastClassifiedPlay, onSpecialEvent, playerNames]);
+
+  // ============================================
+  // NEW: Handle InjuryPrompt completion (KP or NUT)
+  // ============================================
+  const handleInjuryPromptComplete = useCallback((result: InjuryResult | MojoResult) => {
+    console.log('[InjuryPrompt] Complete:', result, 'Type:', pendingInjuryPrompt);
+
+    if (pendingInjuryPrompt === 'KP') {
+      const injuryResult = result as InjuryResult;
+      if (injuryResult.stayedIn) {
+        console.log('[KP] Pitcher stayed in game');
+      } else {
+        console.log('[KP] Pitcher left game with severity:', injuryResult.severity);
+        // TODO: Trigger substitution flow if pitcher left
+      }
+    } else if (pendingInjuryPrompt === 'NUT') {
+      const mojoResult = result as MojoResult;
+      console.log('[NUT] Mojo impact:', mojoResult.mojoImpact);
+      // TODO: Apply mojo change to pitcher
+    }
+
+    // Clear the prompt
+    setPendingInjuryPrompt(null);
+  }, [pendingInjuryPrompt]);
+
+  // Handle InjuryPrompt cancel
+  const handleInjuryPromptCancel = useCallback(() => {
+    console.log('[InjuryPrompt] Cancelled');
+    // Remove the modifier from active since they cancelled
+    if (pendingInjuryPrompt) {
+      setActiveModifiers(prev => {
+        const next = new Set(prev);
+        next.delete(pendingInjuryPrompt as ModifierId);
+        return next;
+      });
+    }
+    setPendingInjuryPrompt(null);
+  }, [pendingInjuryPrompt]);
+
+  // ============================================
+  // NEW: Handle StarPlaySubtypePopup selection (WG or ROB)
+  // ============================================
+  const handleStarPlaySelect = useCallback((subtype: StarPlaySubtype) => {
+    const firstFielderPos = lastClassifiedPlay?.fieldingSequence?.[0];
+    const firstFielderName = firstFielderPos ? playerNames[firstFielderPos] : 'Unknown';
+    const fameValue = isStarPlayRobbery ? 1.5 : 1.0;
+    const eventType = isStarPlayRobbery ? 'ROBBERY' : 'WEB_GEM';
+
+    console.log(`[StarPlay] ${eventType} - ${subtype} by ${firstFielderName} (#${firstFielderPos}), +${fameValue} Fame`);
+
+    // Notify parent of the special event with subtype details
+    if (onSpecialEvent) {
+      onSpecialEvent({
+        eventType: eventType as SpecialEventType,
+        fielderPosition: firstFielderPos,
+        fielderName: firstFielderName,
+      });
+    }
+
+    // Close the popup
+    setShowStarPlayPopup(false);
+    setIsStarPlayRobbery(false);
+  }, [lastClassifiedPlay, playerNames, isStarPlayRobbery, onSpecialEvent]);
+
+  // Handle StarPlaySubtypePopup cancel
+  const handleStarPlayCancel = useCallback(() => {
+    console.log('[StarPlay] Cancelled');
+    // Remove the modifier from active since they cancelled
+    const modToRemove = isStarPlayRobbery ? 'ROB' : 'WG';
+    setActiveModifiers(prev => {
+      const next = new Set(prev);
+      next.delete(modToRemove as ModifierId);
+      return next;
+    });
+    setShowStarPlayPopup(false);
+    setIsStarPlayRobbery(false);
+  }, [isStarPlayRobbery]);
+
+  // ============================================
+  // ErrorTypePopup handlers
+  // ============================================
+  const handleErrorTypeSelect = useCallback((errorType: ErrorType) => {
+    if (!errorFielder) {
+      console.warn('[ErrorType] No error fielder set');
+      return;
+    }
+
+    console.log(`[ErrorType] ${errorType} error by ${errorFielder.name} (#${errorFielder.positionNumber})`);
+
+    // Create the play data for an error
+    const playData: PlayData = {
+      type: 'error',
+      fieldingSequence: [errorFielder.positionNumber],
+      ballLocation: ballLocation || batterPosition || { x: 0.5, y: 0.5 },
+      batterLocation: batterPosition || { x: 0.5, y: 0.5 },
+      isFoul: false,
+      errorType: errorType,
+      errorFielder: errorFielder.positionNumber,
+    };
+
+    // Set the classified play for runner outcomes
+    setLastClassifiedPlay(playData);
+
+    // Calculate runner defaults for error (batter reaches, runners advance)
+    const defaults = calculateRunnerDefaults(playData, gameSituation.bases, gameSituation.outs);
+    setRunnerOutcomes(defaults);
+    console.log('[ErrorType] Runner defaults:', defaults);
+
+    // Clear error state
+    setShowErrorTypePopup(false);
+    setPendingError(false);
+    setErrorFielder(null);
+
+    // Note: Don't call completePlay here - wait for End At-Bat
+    console.log('[ErrorType] → RUNNER_OUTCOMES phase');
+  }, [errorFielder, ballLocation, batterPosition, gameSituation.bases, gameSituation.outs]);
+
+  const handleErrorTypeCancel = useCallback(() => {
+    console.log('[ErrorType] Cancelled');
+    setShowErrorTypePopup(false);
+    setPendingError(false);
+    setAwaitingErrorFielder(false);
+    setErrorFielder(null);
+    // Reset batter position since they cancelled the whole flow
+    setBatterPosition(null);
+    setBatterReachedBase(null);
+  }, []);
+
+  // ============================================
+  // NEW: Start next at-bat - clears all state for new batter
+  // ============================================
+  const startNextAtBat = useCallback(() => {
+    // Clear all play lifecycle state
+    setLastClassifiedPlay(null);
+    setPlayCommitted(false);
+    setAtBatComplete(false);
+    setActiveModifiers(new Set());
+    setEnabledModifiers(new Set());
+    setPendingInjuryPrompt(null);
+
+    // Clear field state
+    setPlacedFielders([]);
+    setThrowSequence([]);
+    setBatterPosition(null);
+    setBallLocation(null);
+
+    // Clear modals
+    setShowPlayTypeModal(false);
+    setShowHitTypeModal(false);
+    setShowOutTypeModal(false);
+    setShowHRDistanceModal(false);
+    setShowSpecialEventPrompt(false);
+    setShowBallLandingPrompt(false);
+    setShowHRLocationPrompt(false);
+
+    // Clear classification state
+    setClassificationResult(null);
+    setPendingPrompts([]);
+    setCurrentPromptIndex(0);
+    setPendingBatterBase(null);
+    setPendingPlayType(null);
+    setPendingHRData(null);
+
+    // Clear error-related state
+    setPendingError(false);
+    setAwaitingErrorFielder(false);
+    setErrorFielder(null);
+    setShowErrorTypePopup(false);
+
+    // Clear star play state
+    setShowStarPlayPopup(false);
+    setIsStarPlayRobbery(false);
+
+    // Clear BatterReachedPopup state
+    setShowBatterReachedPopup(false);
+    setBatterReachedBase(null);
+
+    // Clear runner outcomes state
+    setRunnerOutcomes(null);
+
+    // Clear context (hides contextual buttons)
+    setLastPlayContext(null);
+
+    console.log('[startNextAtBat] Ready for new batter');
+  }, []);
 
   // Determine ball marker type
   const ballMarkerType = batterPosition
@@ -2063,6 +2957,7 @@ export function EnhancedInteractiveField({
             showStands={true}
             shadeFoulTerritory={true}
             className="w-full h-full"
+            zoomLevel={zoomLevel}
           >
           {/* Story 10: Drop zone highlights during batter drag */}
           {isDraggingBatter && (
@@ -2144,10 +3039,21 @@ export function EnhancedInteractiveField({
           )}
 
           {/* Draggable baserunners with safe/out drop zones */}
-          {onRunnerMove && (
+          {/* Only show during normal play (not RUNNER_OUTCOMES phase) */}
+          {onRunnerMove && getUIPhase() !== 'RUNNER_OUTCOMES' && (
             <RunnerDragDrop
               bases={gameSituation.bases}
               onRunnerMove={onRunnerMove}
+            />
+          )}
+
+          {/* Runner Outcome Arrows - During RUNNER_OUTCOMES phase */}
+          {/* Shows arrows for default outcomes, allows drag-to-adjust */}
+          {getUIPhase() === 'RUNNER_OUTCOMES' && runnerOutcomes && (
+            <RunnerOutcomeArrows
+              outcomes={runnerOutcomes}
+              onOutcomeChange={setRunnerOutcomes}
+              bases={gameSituation.bases}
             />
           )}
         </FieldCanvas>
@@ -2189,6 +3095,26 @@ export function EnhancedInteractiveField({
         )}
 
         {/* Phase 2: Side Panels in Foul Territory */}
+
+        {/* NEW: BatterReachedPopup - shows BEFORE HitTypeContent */}
+        {/* Per GAME_TRACKER_IMPLEMENTATION_ADDENDUM.md: */}
+        {/* Batter drag → BatterReachedPopup → (conditional) → HitTypeContent */}
+        {showBatterReachedPopup && batterReachedBase && (
+          <BatterReachedPopup
+            targetBase={batterReachedBase}
+            gameState={{
+              outs: gameSituation.outs,
+              runners: {
+                first: gameSituation.bases.first,
+                second: gameSituation.bases.second,
+                third: gameSituation.bases.third,
+              },
+            }}
+            onSelect={handleBatterReachedSelect}
+            onCancel={handleBatterReachedCancel}
+          />
+        )}
+
         {/* Left Panel - Hit Type Selection (LF foul territory) */}
         <SidePanel
           side="left"
@@ -2203,6 +3129,8 @@ export function EnhancedInteractiveField({
             onSelect={(hitType) => {
               handleHitTypeSelect(hitType);
               setShowHitTypeModal(false);
+              // Reset after play is recorded - keeps contextual state for buttons
+              handleReset();
             }}
             spraySector={batterPosition ? getSpraySector(batterPosition.x, batterPosition.y).sector : undefined}
             inferredBase={batterPosition ? determineBatterBase(batterPosition) || undefined : undefined}
@@ -2223,8 +3151,12 @@ export function EnhancedInteractiveField({
             onSelect={(outType) => {
               handleOutTypeSelect(outType);
               setShowOutTypeModal(false);
+              // Reset after play is recorded - keeps contextual state for buttons
+              handleReset();
             }}
             fieldingSequence={throwSequence.map((f) => f.positionNumber)}
+            outs={gameSituation.outs}
+            bases={gameSituation.bases}
           />
         </SidePanel>
 
@@ -2254,75 +3186,131 @@ export function EnhancedInteractiveField({
             />
           )}
         </SidePanel>
-      </div>
 
-      {/* Phase 5B: Contextual buttons in southern foul territory - appear after play completion */}
-      {/* These buttons auto-dismiss after 3 seconds and show based on inference logic */}
-      {lastPlayContext && (Date.now() - lastPlayContext.timestamp < CONTEXTUAL_BUTTONS_TIMEOUT) && (
-        <div className="flex-shrink-0 bg-[#1a1a1a]/80 border-t-2 border-[#C4A853] px-4 py-2">
-          <div className="flex flex-wrap justify-center gap-2">
-            {inferContextualButtons(lastPlayContext).map((eventType) => (
-              <button
-                key={eventType}
-                onClick={() => {
-                  handleContextualEvent(eventType);
-                  // Clear context after selection to hide buttons
-                  setLastPlayContext(null);
-                }}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-[#FF6600] hover:bg-[#FF8800] border-2 border-[#C4A853] text-white text-[11px] font-bold rounded-md shadow-[2px_2px_0px_0px_rgba(0,0,0,0.3)] active:scale-95 transition-all"
-              >
-                <span>{getEventEmoji(eventType)}</span>
-                <span>{getEventLabel(eventType)}</span>
-              </button>
-            ))}
-            {/* Dismiss button */}
+        {/* ============================================ */}
+        {/* THREE-ZONE FOUL TERRITORY BUTTON LAYOUT */}
+        {/* ============================================ */}
+
+        {/* LEFT FOUL ZONE: Result Buttons (BB, K, HBP, HR) */}
+        <div className="absolute bottom-16 left-2 z-30">
+          <LeftFoulButtons
+            onQuickResult={handleQuickResult}
+            onHomeRun={handleQuickHomeRun}
+            onStrikeout={handleStrikeout}
+          />
+        </div>
+
+        {/* RIGHT FOUL ZONE: Special Event Buttons (🥜 💥 🤦 ⭐ 7️⃣) */}
+        <div className="absolute bottom-16 right-2 z-30">
+          <RightFoulButtons
+            onSpecialEvent={handleContextualEvent}
+          />
+        </div>
+
+        {/* BEHIND HOME ZONE: Game Controls (RESET, CLASSIFY, UNDO) */}
+        <div className="absolute bottom-2 left-1/2 -translate-x-1/2 z-30">
+          <BehindHomeButtons
+            onReset={handleReset}
+            onClassify={canClassify ? handleClassifyPlay : undefined}
+            canClassify={canClassify}
+            isClassifying={isClassifying}
+          />
+        </div>
+
+        {/* RUNNER OUTCOMES HINT BANNER - Per GAME_TRACKER_IMPLEMENTATION_ADDENDUM.md */}
+        {/* Top center hint for user during RUNNER_OUTCOMES phase */}
+        {getUIPhase() === 'RUNNER_OUTCOMES' && (
+          <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50
+                          bg-black/80 px-4 py-2 rounded text-white text-xs
+                          border border-[#C4A853]">
+            <span className="text-[#C4A853] font-bold">RUNNER OUTCOMES</span>
+            <span className="ml-2">Drag to adjust</span>
+            <span className="mx-1">•</span>
+            <span>Tap END AT-BAT when correct</span>
+          </div>
+        )}
+
+        {/* RUNNER OUTCOMES DISPLAY - Per GAME_TRACKER_IMPLEMENTATION_ADDENDUM.md */}
+        {/* Shows calculated runner defaults in RUNNER_OUTCOMES phase */}
+        {/* User can adjust before tapping End At-Bat */}
+        {getUIPhase() === 'RUNNER_OUTCOMES' && runnerOutcomes && (
+          <div className="absolute top-16 right-4 z-40 max-w-xs">
+            <RunnerOutcomesDisplay
+              outcomes={runnerOutcomes}
+              onOutcomeChange={setRunnerOutcomes}
+              playType={lastClassifiedPlay?.type || 'unknown'}
+            />
+          </div>
+        )}
+
+        {/* END AT-BAT BUTTON - Per GAME_TRACKER_IMPLEMENTATION_ADDENDUM.md */}
+        {/* Visible in RUNNER_OUTCOMES phase (lastClassifiedPlay !== null && !playCommitted) */}
+        {/* ALWAYS shows - even if no runners on base */}
+        {getUIPhase() === 'RUNNER_OUTCOMES' && (
+          <button
+            onClick={handleEndAtBat}
+            className="absolute bottom-4 left-1/2 -translate-x-1/2 z-40
+                       bg-[#4CAF50] border-4 border-white px-6 py-3
+                       text-white text-sm font-bold
+                       hover:bg-[#45a049] active:scale-95 transition-all
+                       shadow-[4px_4px_0px_0px_rgba(0,0,0,0.3)]"
+          >
+            ✓ END AT-BAT
+          </button>
+        )}
+
+        {/* MODIFIER BUTTON BAR - Per GAME_TRACKER_IMPLEMENTATION_ADDENDUM.md */}
+        {/* Visible in MODIFIERS_ACTIVE phase (after End At-Bat tapped) */}
+        {/* Bottom right, modifiers do NOT auto-dismiss */}
+        {getUIPhase() === 'MODIFIERS_ACTIVE' && (
+          <div className="absolute bottom-4 right-4 z-40">
+            <ModifierButtonBar
+              enabledModifiers={enabledModifiers}
+              activeModifiers={activeModifiers}
+              onModifierTap={handleModifierTap}
+            />
+            {/* Next At-Bat button to clear state and start fresh */}
             <button
-              onClick={() => setLastPlayContext(null)}
-              className="px-2 py-1.5 bg-[#666] hover:bg-[#888] border-2 border-[#999] text-white text-[10px] font-bold rounded-md active:scale-95 transition-all"
+              onClick={startNextAtBat}
+              className="mt-2 w-full bg-[#3366FF] border-2 border-white px-4 py-2
+                         text-white text-xs font-bold
+                         hover:bg-[#4477FF] active:scale-95 transition-all
+                         shadow-[3px_3px_0px_0px_rgba(0,0,0,0.3)]"
             >
-              ✕
+              NEXT AT-BAT →
             </button>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* Action buttons area - fixed at bottom, outside field canvas */}
-      <div className="flex-shrink-0 bg-[#333] px-2 py-2 space-y-2">
-        {/* Contextual Quick Buttons for special events (legacy - keeping for fallback) */}
-        <QuickButtons
-          onSpecialEvent={handleContextualEvent}
-          onHomeRun={handleQuickHomeRun}
-          onQuickResult={handleQuickResult}
-          webGemFielderName={lastPlayFirstFielder?.name}
-          lastPlayBallY={lastPlayBallLocation?.y}
-          lastPlayFirstFielder={lastPlayFirstFielder?.positionNumber}
-          wasInfieldHit={lastPlayWasInfieldHit}
-          strikeoutType={lastPlayStrikeoutType}
-          hadRunnerOut={lastPlayHadRunnerOut}
-        />
-
-        {/* Control buttons */}
-        <div className="flex gap-2">
-          <button
-            onClick={handleReset}
-            className="flex-1 bg-[#808080] border-[3px] border-white px-3 py-1.5 text-white text-[10px] font-bold hover:bg-[#999999] active:scale-95 transition-transform shadow-[3px_3px_0px_0px_rgba(0,0,0,0.3)]"
-          >
-            RESET
-          </button>
-          {canClassify && (
-            <button
-              onClick={handleClassifyPlay}
-              disabled={isClassifying}
-              className={`flex-1 border-[3px] border-white px-3 py-1.5 text-white text-[10px] font-bold transition-all shadow-[3px_3px_0px_0px_rgba(0,0,0,0.3)] ${
-                isClassifying
-                  ? 'bg-[#FF6600] animate-pulse cursor-wait'
-                  : 'bg-[#DD0000] hover:bg-[#FF0000] active:scale-95'
-              }`}
-            >
-              {isClassifying ? 'CLASSIFYING...' : 'CLASSIFY'}
-            </button>
-          )}
-        </div>
+        {/* Phase 5B: Contextual buttons - appear ABOVE behind-home zone after play completion */}
+        {/* These buttons auto-dismiss after 3 seconds via useEffect that clears lastPlayContext */}
+        {lastPlayContext !== null && (
+          <div className="absolute bottom-16 left-1/2 -translate-x-1/2 z-40 bg-[#1a1a1a]/90 border-2 border-[#C4A853] rounded-lg px-4 py-2 shadow-lg">
+            <div className="flex flex-wrap justify-center gap-2">
+              {inferContextualButtons(lastPlayContext).map((eventType) => (
+                <button
+                  key={eventType}
+                  onClick={() => {
+                    handleContextualEvent(eventType);
+                    // Clear context after selection to hide buttons
+                    setLastPlayContext(null);
+                  }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-[#FF6600] hover:bg-[#FF8800] border-2 border-[#C4A853] text-white text-[11px] font-bold rounded-md shadow-[2px_2px_0px_0px_rgba(0,0,0,0.3)] active:scale-95 transition-all"
+                >
+                  <span>{getEventEmoji(eventType)}</span>
+                  <span>{getEventLabel(eventType)}</span>
+                </button>
+              ))}
+              {/* Dismiss button */}
+              <button
+                onClick={() => setLastPlayContext(null)}
+                className="px-2 py-1.5 bg-[#666] hover:bg-[#888] border-2 border-[#999] text-white text-[10px] font-bold rounded-md active:scale-95 transition-all"
+              >
+                ✕
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Play Type Modal */}
@@ -2359,6 +3347,41 @@ export function EnhancedInteractiveField({
               handleReset();
             }
           }}
+        />
+      )}
+
+      {/* InjuryPrompt - KP (Killed Pitcher) or NUT (Nut Shot) flow */}
+      {/* Per GAME_TRACKER_IMPLEMENTATION_ADDENDUM.md: Shows IMMEDIATELY when modifier tapped */}
+      {pendingInjuryPrompt && (
+        <InjuryPrompt
+          type={pendingInjuryPrompt}
+          pitcherName={playerNames[1] || 'Pitcher'}
+          onComplete={handleInjuryPromptComplete}
+          onCancel={handleInjuryPromptCancel}
+        />
+      )}
+
+      {/* StarPlaySubtypePopup - WG (Web Gem) or ROB (Robbery) flow */}
+      {/* Shows subtype options: DIVING, SLIDING, LEAPING, OVER_SHOULDER, RUNNING, WALL */}
+      {showStarPlayPopup && lastClassifiedPlay?.fieldingSequence?.[0] && (
+        <StarPlaySubtypePopup
+          fielderName={playerNames[lastClassifiedPlay.fieldingSequence[0]] || 'Fielder'}
+          fielderPosition={lastClassifiedPlay.fieldingSequence[0]}
+          isRobbery={isStarPlayRobbery}
+          onSelect={handleStarPlaySelect}
+          onCancel={handleStarPlayCancel}
+        />
+      )}
+
+      {/* ErrorTypePopup - Error attribution flow */}
+      {/* User selects "E" → taps ball location → taps fielder → this popup */}
+      {/* Error types: FIELDING, THROWING, MENTAL */}
+      {showErrorTypePopup && errorFielder && (
+        <ErrorTypePopup
+          fielderName={errorFielder.name}
+          fielderPosition={errorFielder.positionNumber}
+          onSelect={handleErrorTypeSelect}
+          onCancel={handleErrorTypeCancel}
         />
       )}
     </div>
