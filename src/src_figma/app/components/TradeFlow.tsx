@@ -213,6 +213,61 @@ export function TradeFlow({ seasonId, onComplete }: TradeFlowProps) {
   // Trade History
   const [completedTrades, setCompletedTrades] = useState<Array<Trade & { date: string; tradeNumber: number }>>([]);
 
+  // Helper functions that don't depend on teams data - defined before early return
+  const formatSalary = useCallback((amount: number): string => {
+    return `$${(amount / 1000000).toFixed(1)}M`;
+  }, []);
+
+  const clearTrade = useCallback(() => {
+    setSelectedTeam1Players(new Set());
+    setSelectedTeam2Players(new Set());
+    setSelectedTeam3Players(new Set());
+    setCurrentTrade(null);
+    setBeatReporterWarnings([]);
+    setAIResponse(null);
+    setAICounter(null);
+  }, []);
+
+  // Save completed trade to storage - must be defined before early return to satisfy hooks rules
+  const handleTradeComplete = useCallback(async () => {
+    if (!currentTrade) return;
+
+    try {
+      // Build trade data matching the Trade interface
+      // team1Receives = players coming FROM team2 (what team1 gets)
+      // team2Receives = players coming FROM team1 (what team2 gets)
+      const team1Receives = currentTrade.team2Players.map(p => p.id);
+      const team2Receives = currentTrade.team1Players.map(p => p.id);
+
+      // Save to IndexedDB
+      await addNewTrade({
+        team1Id: currentTrade.team1Id,
+        team2Id: currentTrade.team2Id,
+        team1Receives,
+        team2Receives,
+        proposedBy: 'USER',
+        status: 'ACCEPTED',
+        executedAt: Date.now(),
+      });
+
+      // Add to local completed trades list
+      setCompletedTrades(prev => [...prev, {
+        ...currentTrade,
+        date: new Date().toLocaleDateString(),
+        tradeNumber: prev.length + 1,
+      }]);
+
+      // Clear and return to builder
+      clearTrade();
+      setCurrentScreen("trade-builder");
+    } catch (error) {
+      console.error('[TradeFlow] Failed to save trade:', error);
+      // Still clear and continue even if save fails
+      clearTrade();
+      setCurrentScreen("trade-builder");
+    }
+  }, [currentTrade, addNewTrade, clearTrade]);
+
   // Show loading state
   if (isLoading) {
     return (
@@ -351,60 +406,6 @@ export function TradeFlow({ seasonId, onComplete }: TradeFlowProps) {
       }
     }
     setCurrentScreen("ai-response");
-  };
-
-  const clearTrade = () => {
-    setSelectedTeam1Players(new Set());
-    setSelectedTeam2Players(new Set());
-    setSelectedTeam3Players(new Set());
-    setCurrentTrade(null);
-    setBeatReporterWarnings([]);
-    setAIResponse(null);
-    setAICounter(null);
-  };
-
-  // Save completed trade to storage
-  const handleTradeComplete = useCallback(async () => {
-    if (!currentTrade) return;
-
-    try {
-      // Build trade data matching the Trade interface
-      // team1Receives = players coming FROM team2 (what team1 gets)
-      // team2Receives = players coming FROM team1 (what team2 gets)
-      const team1Receives = currentTrade.team2Players.map(p => p.id);
-      const team2Receives = currentTrade.team1Players.map(p => p.id);
-
-      // Save to IndexedDB
-      await addNewTrade({
-        team1Id: currentTrade.team1Id,
-        team2Id: currentTrade.team2Id,
-        team1Receives,
-        team2Receives,
-        proposedBy: 'USER',
-        status: 'ACCEPTED',
-        executedAt: Date.now(),
-      });
-
-      // Add to local completed trades list
-      setCompletedTrades(prev => [...prev, {
-        ...currentTrade,
-        date: new Date().toLocaleDateString(),
-        tradeNumber: prev.length + 1,
-      }]);
-
-      // Clear and return to builder
-      clearTrade();
-      setCurrentScreen("trade-builder");
-    } catch (error) {
-      console.error('[TradeFlow] Failed to save trade:', error);
-      // Still clear and continue even if save fails
-      clearTrade();
-      setCurrentScreen("trade-builder");
-    }
-  }, [currentTrade, addNewTrade]);
-
-  const formatSalary = (amount: number): string => {
-    return `$${(amount / 1000000).toFixed(1)}M`;
   };
 
   return (

@@ -729,3 +729,171 @@ export async function clearAllLeagueBuilderData(): Promise<void> {
     tx.onerror = () => reject(tx.error);
   });
 }
+
+// ============================================
+// SMB4 DATABASE SEEDING
+// ============================================
+
+import { TEAMS as SMB4_TEAMS, PLAYERS as SMB4_PLAYERS, type PlayerData, type TeamData } from '../data/playerDatabase';
+
+/**
+ * Chemistry code to full chemistry name mapping
+ */
+const CHEMISTRY_MAP: Record<string, Chemistry> = {
+  'SPI': 'Spirited',
+  'DIS': 'Disciplined',
+  'CMP': 'Competitive',
+  'SCH': 'Scholarly',
+  'CRA': 'Crafty',
+  'SPIRITED': 'Spirited',
+  'DISCIPLINED': 'Disciplined',
+  'COMPETITIVE': 'Competitive',
+  'SCHOLARLY': 'Scholarly',
+  'CRAFTY': 'Crafty',
+  'FIERY': 'Competitive',  // Map FIERY to Competitive
+  'GRITTY': 'Competitive', // Map GRITTY to Competitive
+};
+
+/**
+ * Convert SMB4 PlayerData to League Builder Player format
+ */
+function convertPlayer(player: PlayerData): Omit<Player, 'createdDate' | 'lastModified'> {
+  // Split name into first/last
+  const nameParts = player.name.split(' ');
+  const firstName = nameParts[0] || 'Unknown';
+  const lastName = nameParts.slice(1).join(' ') || player.id;
+
+  // Map chemistry code to full name
+  const chemistry = CHEMISTRY_MAP[player.chemistry] || CHEMISTRY_MAP[player.chemistry.toUpperCase()] || 'Competitive';
+
+  // Determine position for League Builder format
+  let primaryPosition: Position = player.primaryPosition as Position;
+  if (player.isPitcher && player.pitcherRole) {
+    // Map pitcher role to position
+    if (player.pitcherRole === 'CP') {
+      primaryPosition = 'CP';
+    } else if (player.pitcherRole === 'RP') {
+      primaryPosition = 'RP';
+    } else if (player.pitcherRole === 'SP/RP') {
+      primaryPosition = 'SP/RP';
+    } else {
+      primaryPosition = 'SP';
+    }
+  }
+
+  // Determine roster status based on role
+  let rosterStatus: RosterStatus = 'MLB';
+  if (player.role === 'BENCH' || player.role === 'BULLPEN') {
+    rosterStatus = 'MLB';
+  }
+
+  return {
+    id: player.id,
+    firstName,
+    lastName,
+    gender: player.gender,
+    age: player.age,
+    bats: player.bats,
+    throws: player.throws,
+    primaryPosition,
+    secondaryPosition: player.secondaryPosition as Position | undefined,
+    // Batting ratings (default to 50 if not present)
+    power: player.batterRatings?.power ?? 50,
+    contact: player.batterRatings?.contact ?? 50,
+    speed: player.batterRatings?.speed ?? 50,
+    fielding: player.batterRatings?.fielding ?? 50,
+    arm: player.batterRatings?.arm ?? 50,
+    // Pitching ratings (default to 50 if not present)
+    velocity: player.pitcherRatings?.velocity ?? 50,
+    junk: player.pitcherRatings?.junk ?? 50,
+    accuracy: player.pitcherRatings?.accuracy ?? 50,
+    arsenal: (player.arsenal as PitchType[]) || [],
+    overallGrade: player.overall as Grade,
+    trait1: player.traits.trait1,
+    trait2: player.traits.trait2,
+    personality: 'Competitive', // Default personality
+    chemistry,
+    morale: 75, // Default morale
+    mojo: 'Normal',
+    fame: 0,
+    salary: 1.0, // Default salary in millions
+    currentTeamId: player.teamId === 'free-agent' ? null : player.teamId,
+    rosterStatus,
+    isCustom: false,
+    sourceDatabase: 'SMB4',
+  };
+}
+
+/**
+ * Convert SMB4 TeamData to League Builder Team format
+ */
+function convertTeam(team: TeamData): Omit<Team, 'createdDate' | 'lastModified'> {
+  // Extract location and nickname from team name
+  // Most teams are just a nickname (e.g., "Sirloins", "Beewolves")
+  const name = team.name;
+
+  return {
+    id: team.id,
+    name: team.name,
+    abbreviation: team.id.substring(0, 3).toUpperCase(),
+    location: '', // SMB4 teams don't have locations
+    nickname: name,
+    colors: {
+      primary: team.primaryColor,
+      secondary: team.secondaryColor,
+    },
+    stadium: team.homePark,
+    leagueIds: team.leagueId ? [team.leagueId] : [],
+  };
+}
+
+/**
+ * Seed the League Builder database with SMB4 teams and players
+ * @param clearExisting - If true, clears existing data before seeding
+ * @returns Object with counts of seeded teams and players
+ */
+export async function seedFromSMB4Database(clearExisting = true): Promise<{ teams: number; players: number }> {
+  const db = await initLeagueBuilderDatabase();
+
+  if (clearExisting) {
+    // Clear existing teams and players only (preserve leagues, rules, rosters)
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction([STORES.GLOBAL_TEAMS, STORES.GLOBAL_PLAYERS], 'readwrite');
+      tx.objectStore(STORES.GLOBAL_TEAMS).clear();
+      tx.objectStore(STORES.GLOBAL_PLAYERS).clear();
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  }
+
+  let teamCount = 0;
+  let playerCount = 0;
+
+  // Seed teams (excluding free-agent pool)
+  for (const teamData of Object.values(SMB4_TEAMS)) {
+    if (teamData.id === 'free-agent') continue; // Skip free agent pool
+
+    const team = convertTeam(teamData);
+    await saveTeam(team);
+    teamCount++;
+  }
+
+  // Seed players
+  for (const playerData of Object.values(SMB4_PLAYERS)) {
+    const player = convertPlayer(playerData);
+    await savePlayer(player);
+    playerCount++;
+  }
+
+  console.log(`[LeagueBuilder] Seeded ${teamCount} teams and ${playerCount} players from SMB4 database`);
+
+  return { teams: teamCount, players: playerCount };
+}
+
+/**
+ * Check if the database has been seeded with SMB4 data
+ */
+export async function isSMB4DatabaseSeeded(): Promise<boolean> {
+  const players = await getAllPlayers();
+  return players.some(p => p.sourceDatabase === 'SMB4');
+}

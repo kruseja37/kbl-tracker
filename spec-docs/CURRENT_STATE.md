@@ -1,7 +1,7 @@
 # KBL Tracker - Current State
 
 > **Purpose**: Single source of truth for what's implemented, what's not, and known issues
-> **Last Updated**: February 3, 2026 (Phase 0-2 Complete)
+> **Last Updated**: February 3, 2026 (League Builder Integration Complete)
 
 ---
 
@@ -72,6 +72,30 @@ src/src_figma/__tests__/statCalculations/
 - **Hooks**: 8/8 covered
 - **Target Tests**: 3000+ (up from 1800+)
 - **Target Test Files**: 120+ (up from 55+)
+
+---
+
+## Recent Fixes (February 3, 2026 Continuation)
+
+### League Builder Integration Complete ✅
+
+**Exhibition and Franchise modes now use League Builder data:**
+- ✅ Removed all hardcoded dummy teams/players from Exhibition mode
+- ✅ Removed MOCK_TEAMS arrays from Franchise mode
+- ✅ Added league selection step to Exhibition flow
+- ✅ Both modes load teams/players from IndexedDB via useLeagueBuilderData hook
+- ✅ SMB4 database seeding available in League Builder (20 teams, 506 players)
+
+**Files Updated:**
+- `ExhibitionGame.tsx` - Complete rewrite with league→team→lineup flow
+- `FranchiseSetup.tsx` - Uses League Builder leagues and teams
+- `leagueBuilderStorage.ts` - Added `seedFromSMB4Database()`, `isSMB4DatabaseSeeded()`
+- `useLeagueBuilderData.ts` - Exports seeding functions
+
+### TradeFlow React Hooks Fix
+- Fixed "Rendered more hooks than during previous render" error
+- Cause: Early return before useCallback hooks
+- Fix: Moved all useCallback definitions before the `if (isLoading)` return
 
 ---
 

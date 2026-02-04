@@ -31,6 +31,8 @@ import {
   getTeamRoster,
   saveTeamRoster,
   deleteTeamRoster,
+  seedFromSMB4Database,
+  isSMB4DatabaseSeeded,
   type LeagueTemplate,
   type Team,
   type Player,
@@ -101,6 +103,10 @@ export interface UseLeagueBuilderDataReturn {
   getRoster: (teamId: string) => Promise<TeamRoster | null>;
   updateRoster: (roster: TeamRoster) => Promise<TeamRoster>;
   removeRoster: (teamId: string) => Promise<void>;
+
+  // SMB4 Database Seeding
+  seedSMB4Data: (clearExisting?: boolean) => Promise<{ teams: number; players: number }>;
+  isSMB4Seeded: () => Promise<boolean>;
 
   // Utility
   refresh: () => Promise<void>;
@@ -380,6 +386,29 @@ export function useLeagueBuilderData(): UseLeagueBuilderDataReturn {
     }
   }, []);
 
+  // ============================================
+  // SMB4 DATABASE SEEDING
+  // ============================================
+
+  const seedSMB4Data = useCallback(async (clearExisting = true) => {
+    try {
+      setIsLoading(true);
+      const result = await seedFromSMB4Database(clearExisting);
+      await refresh();
+      return result;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to seed SMB4 data';
+      setError(message);
+      throw err;
+    } finally {
+      setIsLoading(false);
+    }
+  }, [refresh]);
+
+  const isSMB4Seeded = useCallback(async () => {
+    return isSMB4DatabaseSeeded();
+  }, []);
+
   return {
     // State
     leagues,
@@ -419,6 +448,10 @@ export function useLeagueBuilderData(): UseLeagueBuilderDataReturn {
     getRoster,
     updateRoster,
     removeRoster,
+
+    // SMB4 Database Seeding
+    seedSMB4Data,
+    isSMB4Seeded,
 
     // Utility
     refresh,

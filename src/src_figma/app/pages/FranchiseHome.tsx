@@ -3179,15 +3179,15 @@ function LeagueLeadersContent() {
                         <div className="text-[10px] text-[#E8E8D8] font-bold">{leader.value}</div>
                       </div>
                       <div className="text-[8px] text-[#E8E8D8]/70 text-left">
-                        {battingData[leader.stat as keyof typeof battingData][0].player} (
-                        {battingData[leader.stat as keyof typeof battingData][0].team})
+                        {battingData[leader.stat as keyof typeof battingData]?.[0]?.player ?? 'N/A'} (
+                        {battingData[leader.stat as keyof typeof battingData]?.[0]?.team ?? 'N/A'})
                       </div>
                     </button>
                     
                     {expandedBattingStat === leader.stat && (
                       <div className="bg-[#4A6844] border-[3px] border-[#5A8352] border-t-0 p-2">
                         <div className="text-[7px] text-[#E8E8D8] font-bold mb-1">TOP 5</div>
-                        {battingData[leader.stat as keyof typeof battingData].map((player, pIndex) => (
+                        {(battingData[leader.stat as keyof typeof battingData] ?? []).map((player, pIndex) => (
                           <div 
                             key={pIndex} 
                             className="flex justify-between items-center py-1 border-b border-[#5A8352] last:border-b-0"
@@ -3232,15 +3232,15 @@ function LeagueLeadersContent() {
                         <div className="text-[10px] text-[#E8E8D8] font-bold">{leader.value}</div>
                       </div>
                       <div className="text-[8px] text-[#E8E8D8]/70 text-left">
-                        {pitchingData[leader.stat as keyof typeof pitchingData][0].player} (
-                        {pitchingData[leader.stat as keyof typeof pitchingData][0].team})
+                        {pitchingData[leader.stat as keyof typeof pitchingData]?.[0]?.player ?? 'N/A'} (
+                        {pitchingData[leader.stat as keyof typeof pitchingData]?.[0]?.team ?? 'N/A'})
                       </div>
                     </button>
-                    
+
                     {expandedPitchingStat === leader.stat && (
                       <div className="bg-[#4A6844] border-[3px] border-[#5A8352] border-t-0 p-2">
                         <div className="text-[7px] text-[#E8E8D8] font-bold mb-1">TOP 5</div>
-                        {pitchingData[leader.stat as keyof typeof pitchingData].map((player, pIndex) => (
+                        {(pitchingData[leader.stat as keyof typeof pitchingData] ?? []).map((player, pIndex) => (
                           <div 
                             key={pIndex} 
                             className="flex justify-between items-center py-1 border-b border-[#5A8352] last:border-b-0"

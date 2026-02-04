@@ -1,10 +1,46 @@
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router";
-import { Database, Users, User, Folder, Shuffle, Settings, ArrowLeft, Loader2 } from "lucide-react";
+import { Database, Users, User, Folder, Shuffle, Settings, ArrowLeft, Loader2, Download, CheckCircle } from "lucide-react";
 import { useLeagueBuilderData } from "../../hooks/useLeagueBuilderData";
 
 export function LeagueBuilder() {
   const navigate = useNavigate();
-  const { leagues, teams, players, rulesPresets, isLoading, error } = useLeagueBuilderData();
+  const { leagues, teams, players, rulesPresets, isLoading, error, seedSMB4Data, isSMB4Seeded } = useLeagueBuilderData();
+
+  const [isSeeding, setIsSeeding] = useState(false);
+  const [seedResult, setSeedResult] = useState<{ teams: number; players: number } | null>(null);
+  const [isAlreadySeeded, setIsAlreadySeeded] = useState(false);
+
+  // Check if already seeded on mount
+  useEffect(() => {
+    isSMB4Seeded().then(setIsAlreadySeeded);
+  }, [isSMB4Seeded, players]);
+
+  const handleSeedDatabase = async () => {
+    if (isSeeding) return;
+
+    const confirmed = window.confirm(
+      'This will import all SMB4 teams and players into the League Builder database.\n\n' +
+      'Any existing teams and players will be REPLACED.\n\n' +
+      'Continue?'
+    );
+
+    if (!confirmed) return;
+
+    setIsSeeding(true);
+    setSeedResult(null);
+
+    try {
+      const result = await seedSMB4Data(true);
+      setSeedResult(result);
+      setIsAlreadySeeded(true);
+    } catch (err) {
+      console.error('Failed to seed database:', err);
+      alert('Failed to import SMB4 database. Check console for details.');
+    } finally {
+      setIsSeeding(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-[#2d3d2f] text-[#E8E8D8] p-8">
@@ -20,6 +56,58 @@ export function LeagueBuilder() {
           <div className="bg-[#5A8352] border-[6px] border-[#E8E8D8] px-8 py-3 shadow-[6px_6px_0px_0px_rgba(0,0,0,0.8)]">
             <h1 className="text-2xl font-bold text-[#E8E8D8] tracking-wider" style={{ textShadow: '2px 2px 4px rgba(0,0,0,0.8)' }}>LEAGUE BUILDER</h1>
           </div>
+        </div>
+
+        {/* SMB4 Database Import Banner */}
+        <div className="bg-[#556B55] border-[4px] border-[#C4A853] p-4 mb-8 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)]">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <Database className="w-6 h-6 text-[#C4A853]" />
+              <div>
+                <div className="text-sm font-bold text-[#E8E8D8]">SMB4 Player Database</div>
+                <div className="text-xs text-[#E8E8D8]/70">
+                  {isAlreadySeeded
+                    ? `✓ Loaded: ${teams.length} teams, ${players.length} players`
+                    : 'Import real SMB4 teams and players'}
+                </div>
+              </div>
+            </div>
+
+            <button
+              onClick={handleSeedDatabase}
+              disabled={isSeeding}
+              className={`flex items-center gap-2 px-6 py-3 border-4 font-bold text-sm transition-all active:scale-95 shadow-[3px_3px_0px_0px_rgba(0,0,0,0.8)] ${
+                isSeeding
+                  ? 'bg-[#4A6844] border-[#E8E8D8]/30 text-[#E8E8D8]/50 cursor-wait'
+                  : isAlreadySeeded
+                    ? 'bg-[#4A6844] border-[#5A8352] text-[#E8E8D8] hover:bg-[#5A8352]'
+                    : 'bg-[#C4A853] border-[#E8E8D8] text-[#1A1A1A] hover:bg-[#D4B863]'
+              }`}
+            >
+              {isSeeding ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  IMPORTING...
+                </>
+              ) : isAlreadySeeded ? (
+                <>
+                  <CheckCircle className="w-4 h-4" />
+                  REIMPORT
+                </>
+              ) : (
+                <>
+                  <Download className="w-4 h-4" />
+                  IMPORT SMB4 DATA
+                </>
+              )}
+            </button>
+          </div>
+
+          {seedResult && (
+            <div className="mt-3 pt-3 border-t border-[#E8E8D8]/30 text-xs text-[#4CAF50]">
+              ✓ Successfully imported {seedResult.teams} teams and {seedResult.players} players!
+            </div>
+          )}
         </div>
 
         {/* Module Cards Grid */}

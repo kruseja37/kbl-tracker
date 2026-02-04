@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useNavigate } from "react-router";
-import { ArrowLeft, Check, Gamepad2 } from "lucide-react";
+import { ArrowLeft, Check, Gamepad2, Loader2, AlertCircle } from "lucide-react";
+import { useLeagueBuilderData, type LeagueTemplate, type Team } from "../../hooks/useLeagueBuilderData";
 
 interface FranchiseConfig {
   league: string | null;
@@ -81,71 +82,21 @@ const INITIAL_CONFIG: FranchiseConfig = {
   franchiseName: "Dynasty League Season 1",
 };
 
-const LEAGUES = [
-  {
-    id: "kbl",
-    name: "KRUSE BASEBALL LEAGUE",
-    teams: 16,
-    conferences: 2,
-    divisions: 4,
-    rules: "Standard Season",
-    structure: [
-      { name: "American League", divisions: ["AL East (4)", "AL West (4)"] },
-      { name: "National League", divisions: ["NL East (4)", "NL West (4)"] },
-    ],
-  },
-  {
-    id: "summer",
-    name: "SUMMER LEAGUE",
-    teams: 8,
-    conferences: 0,
-    divisions: 2,
-    rules: "Quick Play",
-    structure: [],
-  },
-  {
-    id: "championship",
-    name: "CHAMPIONSHIP SERIES",
-    teams: 4,
-    conferences: 0,
-    divisions: 0,
-    rules: "Standard Season",
-    structure: [],
-  },
-];
-
-const MOCK_TEAMS = {
-  alEast: [
-    { id: "nyy", name: "YANKEES", abbr: "NYY", logo: "⚾" },
-    { id: "bos", name: "RED SOX", abbr: "BOS", logo: "⚾" },
-    { id: "tbr", name: "RAYS", abbr: "TBR", logo: "⚾" },
-    { id: "bal", name: "ORIOLES", abbr: "BAL", logo: "⚾" },
-  ],
-  alWest: [
-    { id: "laa", name: "ANGELS", abbr: "LAA", logo: "⚾" },
-    { id: "tex", name: "RANGERS", abbr: "TEX", logo: "⚾" },
-    { id: "sea", name: "MARINERS", abbr: "SEA", logo: "⚾" },
-    { id: "oak", name: "ATHLETICS", abbr: "OAK", logo: "⚾" },
-  ],
-  nlEast: [
-    { id: "nym", name: "METS", abbr: "NYM", logo: "⚾" },
-    { id: "phi", name: "PHILLIES", abbr: "PHI", logo: "⚾" },
-    { id: "atl", name: "BRAVES", abbr: "ATL", logo: "⚾" },
-    { id: "mia", name: "MARLINS", abbr: "MIA", logo: "⚾" },
-  ],
-  nlWest: [
-    { id: "sfg", name: "GIANTS", abbr: "SFG", logo: "⚾" },
-    { id: "lad", name: "DODGERS", abbr: "LAD", logo: "⚾" },
-    { id: "sdp", name: "PADRES", abbr: "SDP", logo: "⚾" },
-    { id: "ari", name: "D-BACKS", abbr: "ARI", logo: "⚾" },
-  ],
-};
-
 export function FranchiseSetup() {
   const navigate = useNavigate();
+  const { leagues, teams, isLoading, error } = useLeagueBuilderData();
   const [currentStep, setCurrentStep] = useState(1);
   const [config, setConfig] = useState<FranchiseConfig>(INITIAL_CONFIG);
   const [expandedLeague, setExpandedLeague] = useState<string | null>(null);
+
+  // Get teams that belong to the selected league
+  const leagueTeams = useMemo(() => {
+    if (!config.league) return [];
+    const selectedLeague = leagues.find(l => l.id === config.league);
+    if (!selectedLeague) return [];
+    // Filter teams that are in the selected league's teamIds array
+    return teams.filter(t => selectedLeague.teamIds?.includes(t.id));
+  }, [config.league, leagues, teams]);
 
   const totalSteps = 6;
 
@@ -247,12 +198,39 @@ export function FranchiseSetup() {
 
         {/* Content */}
         <div className="p-8 min-h-[400px] max-h-[60vh] overflow-y-auto">
-          {currentStep === 1 && <Step1SelectLeague config={config} setConfig={setConfig} expandedLeague={expandedLeague} setExpandedLeague={setExpandedLeague} />}
-          {currentStep === 2 && <Step2SeasonSettings config={config} setConfig={setConfig} />}
-          {currentStep === 3 && <Step3PlayoffSettings config={config} setConfig={setConfig} />}
-          {currentStep === 4 && <Step4TeamControl config={config} setConfig={setConfig} />}
-          {currentStep === 5 && <Step5RosterMode config={config} setConfig={setConfig} />}
-          {currentStep === 6 && <Step6Confirm config={config} setConfig={setConfig} jumpToStep={jumpToStep} />}
+          {isLoading ? (
+            <div className="flex items-center justify-center h-64">
+              <Loader2 className="w-8 h-8 animate-spin text-[#C4A853]" />
+              <span className="ml-3 text-[#E8E8D8]">Loading leagues...</span>
+            </div>
+          ) : error ? (
+            <div className="flex flex-col items-center justify-center h-64 text-center">
+              <AlertCircle className="w-8 h-8 text-[#DD0000] mb-3" />
+              <p className="text-[#DD0000] mb-2">Failed to load leagues</p>
+              <p className="text-xs text-[#E8E8D8]/70">{error}</p>
+            </div>
+          ) : leagues.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-64 text-center">
+              <AlertCircle className="w-8 h-8 text-[#C4A853] mb-3" />
+              <p className="text-[#E8E8D8] mb-2">No leagues found</p>
+              <p className="text-xs text-[#E8E8D8]/70 mb-4">Create a league in League Builder first</p>
+              <button
+                onClick={() => navigate("/league-builder")}
+                className="px-6 py-3 bg-[#C4A853] border-4 border-[#E8E8D8] text-[#4A6A42] font-bold text-sm hover:bg-[#B59A4A] transition-all"
+              >
+                GO TO LEAGUE BUILDER
+              </button>
+            </div>
+          ) : (
+            <>
+              {currentStep === 1 && <Step1SelectLeague config={config} setConfig={setConfig} expandedLeague={expandedLeague} setExpandedLeague={setExpandedLeague} leagues={leagues} teams={teams} />}
+              {currentStep === 2 && <Step2SeasonSettings config={config} setConfig={setConfig} />}
+              {currentStep === 3 && <Step3PlayoffSettings config={config} setConfig={setConfig} />}
+              {currentStep === 4 && <Step4TeamControl config={config} setConfig={setConfig} leagueTeams={leagueTeams} />}
+              {currentStep === 5 && <Step5RosterMode config={config} setConfig={setConfig} />}
+              {currentStep === 6 && <Step6Confirm config={config} setConfig={setConfig} jumpToStep={jumpToStep} leagues={leagues} leagueTeams={leagueTeams} />}
+            </>
+          )}
         </div>
 
         {/* Footer */}
@@ -308,23 +286,36 @@ function Step1SelectLeague({
   setConfig,
   expandedLeague,
   setExpandedLeague,
+  leagues,
+  teams,
 }: {
   config: FranchiseConfig;
   setConfig: (config: FranchiseConfig) => void;
   expandedLeague: string | null;
   setExpandedLeague: (id: string | null) => void;
+  leagues: LeagueTemplate[];
+  teams: Team[];
 }) {
+  const navigate = useNavigate();
+
   const selectLeague = (leagueId: string) => {
-    const league = LEAGUES.find((l) => l.id === leagueId);
+    const league = leagues.find((l) => l.id === leagueId);
     if (league) {
+      // Get teams count for this league
+      const leagueTeamCount = teams.filter(t => league.teamIds?.includes(t.id)).length;
       setConfig({
         ...config,
         league: leagueId,
         leagueDetails: {
           name: league.name,
-          teams: league.teams,
-          conferences: league.conferences,
-          divisions: league.divisions,
+          teams: leagueTeamCount || league.teamIds?.length || 0,
+          conferences: league.conferences?.length || 0,
+          divisions: league.divisions?.length || 0,
+        },
+        // Reset team selection when league changes
+        teams: {
+          ...config.teams,
+          selectedTeams: [],
         },
       });
     }
@@ -336,9 +327,12 @@ function Step1SelectLeague({
       <p className="text-xs text-[#E8E8D8]/70 mb-6">Choose the league template for your franchise</p>
 
       <div className="space-y-4">
-        {LEAGUES.map((league) => {
+        {leagues.map((league) => {
           const isSelected = config.league === league.id;
           const isExpanded = expandedLeague === league.id;
+          const leagueTeamCount = teams.filter(t => league.teamIds?.includes(t.id)).length;
+          const conferenceCount = league.conferences?.length || 0;
+          const divisionCount = league.divisions?.length || 0;
 
           return (
             <div
@@ -360,24 +354,27 @@ function Step1SelectLeague({
                 </button>
 
                 <div className="flex-1">
-                  <h3 className="text-sm font-bold text-[#E8E8D8] mb-2" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>{league.name}</h3>
+                  <h3 className="text-sm font-bold text-[#E8E8D8] mb-2" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>{league.name.toUpperCase()}</h3>
                   <div className="h-[1px] bg-[#E8E8D8]/30 mb-2" />
                   <p className="text-xs text-[#E8E8D8]/70 mb-1" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.2)' }}>
-                    {league.teams} teams
-                    {league.conferences > 0 && ` • ${league.conferences} conferences`}
-                    {league.divisions > 0 && ` • ${league.divisions} divisions`}
+                    {leagueTeamCount || league.teamIds?.length || 0} teams
+                    {conferenceCount > 0 && ` • ${conferenceCount} conferences`}
+                    {divisionCount > 0 && ` • ${divisionCount} divisions`}
                   </p>
-                  <p className="text-xs text-[#C4A853]" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>Default rules: {league.rules}</p>
+                  {league.description && (
+                    <p className="text-xs text-[#C4A853]" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>{league.description}</p>
+                  )}
 
-                  {league.structure.length > 0 && isExpanded && (
+                  {/* Show conferences/divisions if expanded */}
+                  {isExpanded && (league.conferences?.length || 0) > 0 && (
                     <div className="mt-4 space-y-3 animate-in fade-in duration-300">
-                      {league.structure.map((conf) => (
-                        <div key={conf.name}>
+                      {league.conferences?.map((conf) => (
+                        <div key={conf.id}>
                           <p className="text-xs text-[#E8E8D8] font-bold mb-1" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>{conf.name}</p>
                           <div className="ml-4 space-y-1">
-                            {conf.divisions.map((div) => (
-                              <p key={div} className="text-[10px] text-[#E8E8D8]/70" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.2)' }}>
-                                ├─ {div}
+                            {league.divisions?.filter(d => d.conferenceId === conf.id).map((div) => (
+                              <p key={div.id} className="text-[10px] text-[#E8E8D8]/70" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.2)' }}>
+                                ├─ {div.name} ({div.teamIds?.length || 0} teams)
                               </p>
                             ))}
                           </div>
@@ -385,9 +382,27 @@ function Step1SelectLeague({
                       ))}
                     </div>
                   )}
+
+                  {/* Show teams list if expanded and no conferences */}
+                  {isExpanded && (league.conferences?.length || 0) === 0 && (league.teamIds?.length || 0) > 0 && (
+                    <div className="mt-4 animate-in fade-in duration-300">
+                      <p className="text-xs text-[#E8E8D8] font-bold mb-2" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>Teams in this league:</p>
+                      <div className="grid grid-cols-3 gap-2">
+                        {teams.filter(t => league.teamIds?.includes(t.id)).map(team => (
+                          <div key={team.id} className="flex items-center gap-2">
+                            <div
+                              className="w-3 h-3 rounded-full border border-[#E8E8D8]/30"
+                              style={{ backgroundColor: team.colors?.primary || '#666' }}
+                            />
+                            <span className="text-[10px] text-[#E8E8D8]/70">{team.name}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
 
-                {league.structure.length > 0 && (
+                {((league.conferences?.length || 0) > 0 || (league.teamIds?.length || 0) > 0) && (
                   <button
                     onClick={() => setExpandedLeague(isExpanded ? null : league.id)}
                     className="text-[#E8E8D8]/50 hover:text-[#E8E8D8] text-xs"
@@ -400,7 +415,11 @@ function Step1SelectLeague({
           );
         })}
 
-        <button className="w-full border-4 border-dashed border-[#E8E8D8]/30 p-4 text-[#E8E8D8]/50 hover:text-[#E8E8D8] hover:border-[#E8E8D8]/50 transition-all text-xs" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.2)' }}>
+        <button
+          onClick={() => navigate("/league-builder/leagues?new=true")}
+          className="w-full border-4 border-dashed border-[#E8E8D8]/30 p-4 text-[#E8E8D8]/50 hover:text-[#E8E8D8] hover:border-[#E8E8D8]/50 transition-all text-xs"
+          style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.2)' }}
+        >
           [+] Create New League in League Builder
         </button>
       </div>
@@ -833,12 +852,12 @@ function Step3PlayoffSettings({
 function Step4TeamControl({
   config,
   setConfig,
+  leagueTeams,
 }: {
   config: FranchiseConfig;
   setConfig: (config: FranchiseConfig) => void;
+  leagueTeams: Team[];
 }) {
-  const allTeams = [...MOCK_TEAMS.alEast, ...MOCK_TEAMS.alWest, ...MOCK_TEAMS.nlEast, ...MOCK_TEAMS.nlWest];
-
   const toggleTeam = (teamId: string) => {
     const isSelected = config.teams.selectedTeams.includes(teamId);
     const newSelected = isSelected
@@ -859,7 +878,7 @@ function Step4TeamControl({
       ...config,
       teams: {
         ...config.teams,
-        selectedTeams: allTeams.map((t) => t.id),
+        selectedTeams: leagueTeams.map((t) => t.id),
       },
     });
   };
@@ -875,7 +894,8 @@ function Step4TeamControl({
   };
 
   const selectRandom = () => {
-    const randomTeam = allTeams[Math.floor(Math.random() * allTeams.length)];
+    if (leagueTeams.length === 0) return;
+    const randomTeam = leagueTeams[Math.floor(Math.random() * leagueTeams.length)];
     setConfig({
       ...config,
       teams: {
@@ -886,7 +906,17 @@ function Step4TeamControl({
   };
 
   const selectedCount = config.teams.selectedTeams.length;
-  const aiCount = allTeams.length - selectedCount;
+  const aiCount = leagueTeams.length - selectedCount;
+
+  if (leagueTeams.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center h-64 text-center">
+        <AlertCircle className="w-8 h-8 text-[#C4A853] mb-3" />
+        <p className="text-[#E8E8D8] mb-2">No teams in selected league</p>
+        <p className="text-xs text-[#E8E8D8]/70">Add teams to this league in League Builder first</p>
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -896,7 +926,7 @@ function Step4TeamControl({
       </p>
 
       {/* Quick Select */}
-      <div className="bg-[#4A6A42] border-4 border-[#E8E8D8] p-3 mb-6 flex gap-2">
+      <div className="bg-[#4A6A42] border-4 border-[#E8E8D8] p-3 mb-6 flex gap-2 flex-wrap">
         <span className="text-xs text-[#E8E8D8]/70" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.2)' }}>QUICK SELECT:</span>
         <button onClick={selectAll} className="text-xs text-[#C4A853] hover:text-[#C4A853]" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>
           [Select All]
@@ -909,107 +939,14 @@ function Step4TeamControl({
         </button>
       </div>
 
-      {/* American League */}
+      {/* Teams Grid */}
       <div className="mb-6">
         <div className="h-[2px] bg-[#E8E8D8] mb-2" />
-        <p className="text-sm text-[#E8E8D8] font-bold mb-2 tracking-wider" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>AMERICAN LEAGUE</p>
+        <p className="text-sm text-[#E8E8D8] font-bold mb-2 tracking-wider" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>LEAGUE TEAMS</p>
         <div className="h-[2px] bg-[#E8E8D8] mb-4" />
 
-        {/* AL East */}
-        <p className="text-xs text-[#E8E8D8]/70 mb-3" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.2)' }}>AL EAST</p>
-        <div className="grid grid-cols-4 gap-3 mb-6">
-          {MOCK_TEAMS.alEast.map((team) => {
-            const isSelected = config.teams.selectedTeams.includes(team.id);
-            return (
-              <button
-                key={team.id}
-                onClick={() => toggleTeam(team.id)}
-                className={`relative border-4 p-4 text-center transition-all ${
-                  isSelected
-                    ? "border-[#C4A853] bg-[#C4A853]/10 scale-102"
-                    : "border-[#E8E8D8] bg-[#4A6A42] hover:border-[#C4A853]"
-                }`}
-              >
-                {isSelected && (
-                  <div className="absolute top-1 right-1 w-5 h-5 bg-[#C4A853] rounded-full flex items-center justify-center">
-                    <Check className="w-3 h-3 text-[#4A6A42]" />
-                  </div>
-                )}
-                <div className="text-3xl mb-2">{team.logo}</div>
-                <div className="text-xs font-bold text-[#E8E8D8] mb-1" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>{team.name}</div>
-                <div className="text-[10px] text-[#E8E8D8]/50" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.2)' }}>{team.abbr}</div>
-              </button>
-            );
-          })}
-        </div>
-
-        {/* AL West */}
-        <p className="text-xs text-[#E8E8D8]/70 mb-3" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.2)' }}>AL WEST</p>
-        <div className="grid grid-cols-4 gap-3 mb-6">
-          {MOCK_TEAMS.alWest.map((team) => {
-            const isSelected = config.teams.selectedTeams.includes(team.id);
-            return (
-              <button
-                key={team.id}
-                onClick={() => toggleTeam(team.id)}
-                className={`relative border-4 p-4 text-center transition-all ${
-                  isSelected
-                    ? "border-[#C4A853] bg-[#C4A853]/10 scale-102"
-                    : "border-[#E8E8D8] bg-[#4A6A42] hover:border-[#C4A853]"
-                }`}
-              >
-                {isSelected && (
-                  <div className="absolute top-1 right-1 w-5 h-5 bg-[#C4A853] rounded-full flex items-center justify-center">
-                    <Check className="w-3 h-3 text-[#4A6A42]" />
-                  </div>
-                )}
-                <div className="text-3xl mb-2">{team.logo}</div>
-                <div className="text-xs font-bold text-[#E8E8D8] mb-1" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>{team.name}</div>
-                <div className="text-[10px] text-[#E8E8D8]/50" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.2)' }}>{team.abbr}</div>
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* National League */}
-      <div className="mb-6">
-        <div className="h-[2px] bg-[#E8E8D8] mb-2" />
-        <p className="text-sm text-[#E8E8D8] font-bold mb-2 tracking-wider" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>NATIONAL LEAGUE</p>
-        <div className="h-[2px] bg-[#E8E8D8] mb-4" />
-
-        {/* NL East */}
-        <p className="text-xs text-[#E8E8D8]/70 mb-3" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.2)' }}>NL EAST</p>
-        <div className="grid grid-cols-4 gap-3 mb-6">
-          {MOCK_TEAMS.nlEast.map((team) => {
-            const isSelected = config.teams.selectedTeams.includes(team.id);
-            return (
-              <button
-                key={team.id}
-                onClick={() => toggleTeam(team.id)}
-                className={`relative border-4 p-4 text-center transition-all ${
-                  isSelected
-                    ? "border-[#C4A853] bg-[#C4A853]/10 scale-102"
-                    : "border-[#E8E8D8] bg-[#4A6A42] hover:border-[#C4A853]"
-                }`}
-              >
-                {isSelected && (
-                  <div className="absolute top-1 right-1 w-5 h-5 bg-[#C4A853] rounded-full flex items-center justify-center">
-                    <Check className="w-3 h-3 text-[#4A6A42]" />
-                  </div>
-                )}
-                <div className="text-3xl mb-2">{team.logo}</div>
-                <div className="text-xs font-bold text-[#E8E8D8] mb-1" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>{team.name}</div>
-                <div className="text-[10px] text-[#E8E8D8]/50" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.2)' }}>{team.abbr}</div>
-              </button>
-            );
-          })}
-        </div>
-
-        {/* NL West */}
-        <p className="text-xs text-[#E8E8D8]/70 mb-3" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.2)' }}>NL WEST</p>
         <div className="grid grid-cols-4 gap-3">
-          {MOCK_TEAMS.nlWest.map((team) => {
+          {leagueTeams.map((team) => {
             const isSelected = config.teams.selectedTeams.includes(team.id);
             return (
               <button
@@ -1026,9 +963,22 @@ function Step4TeamControl({
                     <Check className="w-3 h-3 text-[#4A6A42]" />
                   </div>
                 )}
-                <div className="text-3xl mb-2">{team.logo}</div>
-                <div className="text-xs font-bold text-[#E8E8D8] mb-1" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>{team.name}</div>
-                <div className="text-[10px] text-[#E8E8D8]/50" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.2)' }}>{team.abbr}</div>
+                {/* Team color icon */}
+                <div
+                  className="w-10 h-10 mx-auto mb-2 rounded-full border-2 border-[#E8E8D8]/30"
+                  style={{ backgroundColor: team.colors?.primary || '#666' }}
+                >
+                  {team.colors?.secondary && (
+                    <div
+                      className="w-full h-full rounded-full"
+                      style={{
+                        background: `linear-gradient(135deg, transparent 50%, ${team.colors.secondary} 50%)`,
+                      }}
+                    />
+                  )}
+                </div>
+                <div className="text-xs font-bold text-[#E8E8D8] mb-1 truncate" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>{team.name.toUpperCase()}</div>
+                <div className="text-[10px] text-[#E8E8D8]/50" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.2)' }}>{team.abbreviation}</div>
               </button>
             );
           })}
@@ -1047,7 +997,8 @@ function Step4TeamControl({
                 {" "}
                 (
                 {config.teams.selectedTeams
-                  .map((id) => allTeams.find((t) => t.id === id)?.name)
+                  .map((id) => leagueTeams.find((t) => t.id === id)?.name)
+                  .filter(Boolean)
                   .join(", ")}
                 )
               </span>
@@ -1340,13 +1291,16 @@ function Step6Confirm({
   config,
   setConfig,
   jumpToStep,
+  leagues,
+  leagueTeams,
 }: {
   config: FranchiseConfig;
   setConfig: (config: FranchiseConfig) => void;
   jumpToStep: (step: number) => void;
+  leagues: LeagueTemplate[];
+  leagueTeams: Team[];
 }) {
-  const allTeams = [...MOCK_TEAMS.alEast, ...MOCK_TEAMS.alWest, ...MOCK_TEAMS.nlEast, ...MOCK_TEAMS.nlWest];
-  const selectedTeams = allTeams.filter((t) => config.teams.selectedTeams.includes(t.id));
+  const selectedTeams = leagueTeams.filter((t) => config.teams.selectedTeams.includes(t.id));
 
   return (
     <div>
@@ -1439,8 +1393,11 @@ function Step6Confirm({
             <div className="flex gap-2 mb-2">
               {selectedTeams.slice(0, 4).map((team) => (
                 <div key={team.id} className="bg-[#1A3A12] border-2 border-[#E8E8D8]/30 p-2 text-center">
-                  <div className="text-xl mb-1">{team.logo}</div>
-                  <div className="text-[9px] text-[#E8E8D8]" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>{team.abbr}</div>
+                  <div
+                    className="w-8 h-8 mx-auto mb-1 rounded-full border-2 border-[#E8E8D8]/30"
+                    style={{ backgroundColor: team.colors?.primary || '#666' }}
+                  />
+                  <div className="text-[9px] text-[#E8E8D8]" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>{team.abbreviation}</div>
                 </div>
               ))}
               {selectedTeams.length > 4 && (
@@ -1452,7 +1409,7 @@ function Step6Confirm({
               {selectedTeams.length > 1 ? "s" : ""}
             </p>
             <p className="text-xs text-[#E8E8D8]/50" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.2)' }}>
-              {allTeams.length - selectedTeams.length} AI-controlled teams
+              {leagueTeams.length - selectedTeams.length} AI-controlled teams
             </p>
           </div>
 

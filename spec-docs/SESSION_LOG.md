@@ -6,6 +6,64 @@
 > **IMPORTANT**: This log is for *what happened* during sessions. For *how things work*,
 > see the relevant SPEC docs. Finalized logic should be PROMOTED to specs, not left here.
 
+## Session: February 3, 2026 (Continuation) - League Builder Integration
+
+### What Was Accomplished
+
+- ✅ Fixed TradeFlow.tsx React hooks violation (Trades tab was blank)
+  - Root cause: Early return before useCallback hooks
+  - Fix: Moved `formatSalary`, `clearTrade`, `handleTradeComplete` before the `if (isLoading)` return
+
+- ✅ Added SMB4 database seeding to League Builder
+  - Created `seedFromSMB4Database()` and `isSMB4DatabaseSeeded()` in `leagueBuilderStorage.ts`
+  - Added "Import SMB4 Database" button to LeagueBuilder.tsx
+  - Successfully imports 20 teams and 506 players from `playerDatabase.ts`
+
+- ✅ Updated FranchiseSetup.tsx to use League Builder data
+  - Removed hardcoded `MOCK_TEAMS` arrays
+  - Added `useLeagueBuilderData` hook integration
+  - Step 1 shows real leagues from IndexedDB
+  - Step 4 team grid shows teams with correct colors
+  - Step 6 confirmation uses real league/team data
+
+- ✅ Updated ExhibitionGame.tsx for League Builder integration
+  - Added new "league" step before team selection
+  - Teams dropdown populated from selected league's teamIds
+  - Player rosters loaded using `currentTeamId` field
+  - Converted League Builder Player types to TeamRoster Player/Pitcher types
+
+### Decisions Made
+- **League selection added to Exhibition flow**: Users now select league first, then teams
+- **Player linkage via currentTeamId**: Players filtered by `currentTeamId === teamId`
+
+### NFL Results
+- Tier 1 (Build): ✅ `npm run build` exits 0
+- Tier 2 (Data Flow): ✅ League → Teams → Players data flows end-to-end
+- Tier 3 (Spec Alignment): ✅ Types match LeagueBuilder storage interfaces
+- **Day Status**: COMPLETE
+
+### Bugs Found/Fixed
+- TradeFlow React hooks violation causing blank Trades tab - FIXED
+
+### Files Modified
+- `src/src_figma/app/components/TradeFlow.tsx` - Moved useCallback hooks before early return
+- `src/utils/leagueBuilderStorage.ts` - Added SMB4 seeding functions
+- `src/src_figma/hooks/useLeagueBuilderData.ts` - Exported seedSMB4Data, isSMB4Seeded
+- `src/src_figma/app/pages/LeagueBuilder.tsx` - Added import banner UI
+- `src/src_figma/app/pages/FranchiseSetup.tsx` - Complete rewrite to use League Builder data
+- `src/src_figma/app/pages/ExhibitionGame.tsx` - Complete rewrite with league selection step
+
+### Browser Verification Results
+- ✅ Exhibition: League selection → Team dropdowns show real SMB4 teams → Lineup shows real players
+- ✅ Franchise: League selection → Team grid shows 8 teams with colors
+
+### Key Context for Next Session
+- User created "Test League" with 8 SMB4 teams
+- Exhibition and Franchise modes now fully integrated with League Builder
+- Dummy/hardcoded data has been removed from both modes
+
+---
+
 ## Session: February 3, 2026 (Late Night) - Phase 2 Complete
 
 ### What Was Accomplished
