@@ -59,7 +59,7 @@
 
   /* Fonts */
   --font-pixel: "Press Start 2P", "Courier New", monospace;
-  --font-body: "Segoe UI", system-ui, -apple-system, sans-serif;
+  --font-body: "Press Start 2P", monospace;  /* Retro pixel font everywhere */
   --font-mono: "SF Mono", "Monaco", "Inconsolata", monospace;
 
   /* Shadows */

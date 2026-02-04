@@ -1,7 +1,7 @@
 import { useEffect, useState, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { getActiveSeason } from '../utils/seasonStorage';
-import type { SeasonMetadata } from '../utils/seasonStorage';
+import { getActiveSeason, calculateStandings } from '../utils/seasonStorage';
+import type { SeasonMetadata, TeamStanding as StorageTeamStanding } from '../utils/seasonStorage';
 import LeagueNewsFeed, { type NewsStory } from '../components/LeagueNewsFeed';
 import StandingsView from '../components/StandingsView';
 import SeasonProgressTracker from '../components/SeasonProgressTracker';
@@ -67,17 +67,36 @@ export default function SeasonDashboard() {
   );
 
   useEffect(() => {
-    async function loadSeason() {
+    async function loadSeasonData() {
       try {
+        // Load season metadata
         const activeSeason = await getActiveSeason();
         setSeason(activeSeason);
+
+        // Load standings from completed games
+        if (activeSeason) {
+          const standingsData = await calculateStandings(activeSeason.seasonId);
+          // Convert to the format expected by StandingsView
+          setStandings(standingsData.map(s => ({
+            teamId: s.teamId,
+            teamName: s.teamName,
+            wins: s.wins,
+            losses: s.losses,
+            runsScored: s.runsScored,
+            runsAllowed: s.runsAllowed,
+            streak: s.streak,
+            lastTenWins: s.lastTenWins,
+            homeRecord: s.homeRecord,
+            awayRecord: s.awayRecord,
+          })));
+        }
       } catch (err) {
-        console.error('[SeasonDashboard] Failed to load season:', err);
+        console.error('[SeasonDashboard] Failed to load season data:', err);
       } finally {
         setLoading(false);
       }
     }
-    loadSeason();
+    loadSeasonData();
   }, []);
 
   if (loading) {

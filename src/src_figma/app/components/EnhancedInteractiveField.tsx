@@ -27,6 +27,8 @@ import {
   isInStands,
   FIELDER_POSITIONS,
   svgToNormalized,
+  SVG_WIDTH,
+  SVG_HEIGHT,
 } from './FieldCanvas';
 import {
   FielderIcon,
@@ -49,6 +51,7 @@ import {
   RunnerDragDrop,
   type RunnerMoveData,
   type BaseId,
+  type RunnerPlayType,
 } from './RunnerDragDrop';
 import {
   SidePanel,
@@ -82,15 +85,61 @@ import {
   calculateWalkDefaults,
   calculateFieldersChoiceDefaults,
   calculateD3KDefaults,
+  calculateStolenBaseDefaults,
   type RunnerDefaults,
   type RunnerOutcome,
+  type RunnerEventType,
 } from './runnerDefaults';
 import { RunnerOutcomesDisplay } from './RunnerOutcomesDisplay';
 import { RunnerOutcomeArrows } from './RunnerOutcomeArrows';
+import {
+  ActionSelector,
+  type PrimaryAction,
+  type OtherAction,
+} from './ActionSelector';
+import {
+  inferFielder,
+  inferExitTypeFromResult,
+  inferDirection,
+  getSuggestedDPChain,
+  type ExitType,
+  type Direction,
+  type PlayDifficulty,
+} from './fielderInference';
+import { recordFieldingEvent } from '../engines/adaptiveLearningEngine';
+import {
+  calculateLeverageIndex,
+  getLICategory,
+  isClutchSituation,
+  type GameStateForLI,
+  type LIResult,
+} from '../../../engines/leverageCalculator';
+import {
+  calculateFame,
+  type FameResult,
+} from '../../../engines/fameEngine';
+import {
+  OutcomeButtons,
+  type HitOutcome,
+  type OutOutcome,
+} from './OutcomeButtons';
 
 // ============================================
 // TYPES
 // ============================================
+
+/**
+ * Flow Step - tracks which step of the 5-step UX flow we're in
+ * Per GAMETRACKER_UI_DESIGN.md
+ */
+type FlowStep =
+  | 'IDLE'              // Step 1: Waiting for HIT/OUT/OTHER selection
+  | 'HIT_LOCATION'      // Step 2 (HIT): Waiting for field click
+  | 'OUT_FIELDING'      // Step 2 (OUT): Waiting for fielder drag + sequence
+  | 'HIT_OUTCOME'       // Step 3 (HIT): Showing hit outcome buttons
+  | 'OUT_OUTCOME'       // Step 3 (OUT): Showing out outcome buttons
+  | 'RUNNER_CONFIRM'    // Step 4: Confirming runner outcomes
+  | 'END_CONFIRM';      // Step 5: End at-bat confirmation
 
 interface GameSituation {
   outs: number;
@@ -108,12 +157,15 @@ interface FieldPosition {
 }
 
 export type HitType = '1B' | '2B' | '3B' | 'HR';
-export type OutType = 'GO' | 'FO' | 'LO' | 'PO' | 'DP' | 'TP' | 'K' | 'FC' | 'SAC' | 'SF';
+export type OutType = 'GO' | 'FO' | 'LO' | 'PO' | 'FLO' | 'DP' | 'TP' | 'K' | 'KL' | 'FC' | 'SAC' | 'SF';
+
+export type WalkType = 'BB' | 'IBB' | 'HBP';
 
 export interface PlayData {
-  type: 'hit' | 'out' | 'hr' | 'foul_out' | 'foul_ball' | 'error';
+  type: 'hit' | 'out' | 'hr' | 'foul_out' | 'foul_ball' | 'error' | 'walk';
   hitType?: HitType;
   outType?: OutType;
+  walkType?: WalkType;
   fieldingSequence: number[]; // Position numbers in sequence (e.g., [6, 4, 3])
   ballLocation?: FieldCoordinate;
   batterLocation?: FieldCoordinate;
@@ -126,6 +178,113 @@ export interface PlayData {
   errorType?: ErrorType;
   /** Position number of fielder who made the error */
   errorFielder?: number;
+  /**
+   * Runner outcomes - where each runner ends up after the play
+   * This captures user adjustments made during RUNNER_CONFIRM step
+   * CRITICAL: This field MUST be populated for proper stat tracking
+   */
+  runnerOutcomes?: RunnerDefaults;
+
+  // ============================================
+  // ADVANCED METRICS FIELDS (per INFERENTIAL_LOGIC_GAP_ANALYSIS.md)
+  // ============================================
+
+  /**
+   * How the ball left the bat - inferred from result or location
+   * Used for fielding metrics (UZR, OAA) and spray chart analysis
+   */
+  exitType?: 'Ground' | 'Line Drive' | 'Fly Ball' | 'Pop Up';
+
+  /**
+   * Play difficulty rating based on location and fielder
+   * Used for fielding value calculations
+   */
+  playDifficulty?: 'routine' | 'likely' | 'difficult' | 'impossible';
+
+  /**
+   * Spray direction from batter's perspective
+   * More granular than spraySector for hitting analysis
+   */
+  sprayDirection?: 'Left' | 'Left-Center' | 'Center' | 'Right-Center' | 'Right';
+
+  /**
+   * System's predicted fielder (before user selection)
+   * Used for adaptive learning and inference improvement
+   */
+  inferredFielder?: number;
+
+  /**
+   * Whether user overrode the system's inference
+   * Used for adaptive learning - if true, system was wrong
+   */
+  wasOverridden?: boolean;
+
+  /**
+   * Confidence level of the inference (0-1)
+   * Higher = more certain about fielder prediction
+   */
+  inferenceConfidence?: number;
+
+  /**
+   * For double plays: the DP notation (e.g., '6-4-3')
+   */
+  dpType?: string;
+
+  // ============================================
+  // LEVERAGE INDEX & FAME CONTEXT (per LEVERAGE_INDEX_SPEC.md)
+  // ============================================
+
+  /**
+   * Leverage Index at time of play (0.1-10.0)
+   * Used for LI-weighted Fame calculations
+   * Formula: baseFame × √LI × playoffMultiplier
+   */
+  leverageIndex?: number;
+
+  /**
+   * LI category for quick classification
+   * LOW (<0.85), MEDIUM (0.85-2.0), HIGH (2.0-5.0), EXTREME (>5.0)
+   */
+  leverageCategory?: 'LOW' | 'MEDIUM' | 'HIGH' | 'EXTREME';
+
+  /**
+   * Game situation snapshot at time of play
+   * Required for LI calculation and clutch/choke tracking
+   */
+  gameSituation?: {
+    inning: number;
+    isTop: boolean;
+    outs: number;
+    bases: { first: boolean; second: boolean; third: boolean };
+    homeScore: number;
+    awayScore: number;
+  };
+
+  /**
+   * Whether this was a clutch situation (LI >= 1.5)
+   */
+  isClutchSituation?: boolean;
+
+  /**
+   * Playoff context for Fame multiplier
+   */
+  playoffContext?: {
+    isPlayoffs: boolean;
+    round?: 'wild_card' | 'division_series' | 'championship_series' | 'world_series';
+    isEliminationGame?: boolean;
+    isClinchGame?: boolean;
+  };
+
+  /**
+   * Calculated Fame value for this play (if applicable)
+   * Already weighted by LI and playoff multipliers
+   */
+  fameValue?: number;
+
+  /**
+   * Fame event type for special events (WEB_GEM, ROBBERY, etc.)
+   */
+  fameEventType?: string;
 }
 
 export type SpecialEventType =
@@ -147,6 +306,22 @@ export interface SpecialEventData {
   fielderName?: string;
   batterId?: string;
   runnerId?: string;
+
+  // ============================================
+  // LEVERAGE INDEX & FAME CONTEXT
+  // Per LEVERAGE_INDEX_SPEC.md and SPECIAL_EVENTS_SPEC.md
+  // ============================================
+
+  /** Leverage Index at time of event (0.1-10.0) */
+  leverageIndex?: number;
+  /** LI category: LOW, MEDIUM, HIGH, EXTREME */
+  leverageCategory?: 'LOW' | 'MEDIUM' | 'HIGH' | 'EXTREME';
+  /** Whether this was a clutch situation (LI >= 1.5) */
+  isClutchSituation?: boolean;
+  /** Calculated Fame value (base × √LI × playoffMultiplier) */
+  fameValue?: number;
+  /** Base Fame value before LI weighting */
+  baseFame?: number;
 }
 
 // ============================================
@@ -296,8 +471,13 @@ export interface EnhancedInteractiveFieldProps {
   fieldPositions: FieldPosition[];
   onPlayComplete: (playData: PlayData) => void;
   onSpecialEvent?: (event: SpecialEventData) => void;
-  /** Handler for runner movements (SB, CS, WP, PB, etc.) */
+  /** Handler for single runner movements (SB, CS, WP, PB, etc.) */
   onRunnerMove?: (data: RunnerMoveData) => void;
+  /** Handler for batch runner movements (SB/CS/PK/TBL with multiple runners) */
+  onBatchRunnerMove?: (
+    movements: Array<{ from: 'first' | 'second' | 'third'; to: 'second' | 'third' | 'home' | 'out'; outcome: 'safe' | 'out' }>,
+    playType: string
+  ) => void;
   fielderBorderColors?: [string, string];
   /** Player names for each position (keyed by position number) */
   playerNames?: Record<number, string>;
@@ -345,9 +525,7 @@ function FieldDropZone({ children, onFielderDrop, onBatterDrop, onBatterDragChan
 
           // GT-001 FIX: Use same coordinate conversion as FielderIcon
           // Convert screen coords to SVG coords, then to normalized
-          // Updated 2026-02-01 to match FieldCanvas (1600x1000)
-          const SVG_WIDTH = 1600;
-          const SVG_HEIGHT = 1000;
+          // Uses SVG_WIDTH and SVG_HEIGHT imported from FieldCanvas (single source of truth)
           const svgX = (relX / rect.width) * SVG_WIDTH;
           const svgY = (relY / rect.height) * SVG_HEIGHT;
           const position = svgToNormalized(svgX, svgY);
@@ -425,9 +603,7 @@ function BallLandingPromptOverlay({ onLocationTap, onCancel, destinationBase }: 
     setTapPosition({ x: relX, y: relY });
 
     // GT-001 FIX: Use same coordinate conversion as FielderIcon
-    // Updated 2026-02-01 to match FieldCanvas (1600x1000)
-    const SVG_WIDTH = 1600;
-    const SVG_HEIGHT = 1000;
+    // Uses SVG_WIDTH and SVG_HEIGHT imported from FieldCanvas (single source of truth)
     const svgX = (relX / rect.width) * SVG_WIDTH;
     const svgY = (relY / rect.height) * SVG_HEIGHT;
     const position = svgToNormalized(svgX, svgY);
@@ -514,9 +690,7 @@ function HRLocationPromptOverlay({ onLocationTap, onCancel }: HRLocationPromptPr
     setTapPosition({ x: relX, y: relY });
 
     // Use same coordinate conversion as other overlays
-    // Updated 2026-02-01 to match FieldCanvas (1600x1000)
-    const SVG_WIDTH = 1600;
-    const SVG_HEIGHT = 1000;
+    // Uses SVG_WIDTH and SVG_HEIGHT imported from FieldCanvas (single source of truth)
     const svgX = (relX / rect.width) * SVG_WIDTH;
     const svgY = (relY / rect.height) * SVG_HEIGHT;
     const position = svgToNormalized(svgX, svgY);
@@ -1477,10 +1651,17 @@ export function EnhancedInteractiveField({
   onPlayComplete,
   onSpecialEvent,
   onRunnerMove,
+  onBatchRunnerMove,
   fielderBorderColors = ['#E8E8D8', '#E8E8D8'],
   playerNames = {},
   zoomLevel = 0,
 }: EnhancedInteractiveFieldProps) {
+  // ============================================
+  // NEW 5-STEP FLOW STATE (per GAMETRACKER_UI_DESIGN.md)
+  // ============================================
+  const [flowStep, setFlowStep] = useState<FlowStep>('IDLE');
+  const [activeAction, setActiveAction] = useState<PrimaryAction | null>(null);
+
   // Play state
   const [placedFielders, setPlacedFielders] = useState<PlacedFielderState[]>([]);
   const [throwSequence, setThrowSequence] = useState<FielderData[]>([]);
@@ -1576,6 +1757,8 @@ export function EnhancedInteractiveField({
   const [playCommitted, setPlayCommitted] = useState(false);
   const [atBatComplete, setAtBatComplete] = useState(false);
   const [activeModifiers, setActiveModifiers] = useState<Set<ModifierId>>(new Set());
+  /** Track pending runner event type (SB/CS/PK/TBL) - at-bat continues after these */
+  const [pendingRunnerEvent, setPendingRunnerEvent] = useState<RunnerEventType | null>(null);
   /** Which modifiers are available based on the current play type */
   const [enabledModifiers, setEnabledModifiers] = useState<Set<ModifierId>>(new Set());
   const [pendingInjuryPrompt, setPendingInjuryPrompt] = useState<'KP' | 'NUT' | null>(null);
@@ -1633,13 +1816,141 @@ export function EnhancedInteractiveField({
       setLastPlayBallLocation(null);
     }
 
+    // ============================================
+    // INFERENCE & ADVANCED METRICS ENRICHMENT
+    // Per INFERENTIAL_LOGIC_GAP_ANALYSIS.md
+    // ============================================
+
+    // Enrich PlayData with inferred fields if not already set
+    const enrichedPlayData = { ...playData };
+
+    if (location) {
+      // Infer exit type if not provided
+      if (!enrichedPlayData.exitType) {
+        const resultType = playData.outType || playData.hitType || '';
+        const inferred = inferExitTypeFromResult(resultType);
+        if (inferred) {
+          enrichedPlayData.exitType = inferred;
+        } else {
+          // Use location-based inference for hits
+          const isOut = playData.type === 'out';
+          if (location.y < 0.35) {
+            enrichedPlayData.exitType = isOut ? 'Line Drive' : 'Ground';
+          } else if (location.y < 0.6) {
+            enrichedPlayData.exitType = 'Line Drive';
+          } else {
+            enrichedPlayData.exitType = 'Fly Ball';
+          }
+        }
+      }
+
+      // Infer spray direction
+      if (!enrichedPlayData.sprayDirection) {
+        const sector = getSpraySector(location.x, location.y);
+        enrichedPlayData.sprayDirection = inferDirection(sector);
+      }
+
+      // Run fielder inference for learning
+      const inferenceResult = inferFielder(location, {
+        resultType: playData.outType || playData.hitType,
+        exitType: enrichedPlayData.exitType as ExitType,
+        isOut: playData.type === 'out',
+      });
+
+      // Set inference fields
+      enrichedPlayData.inferredFielder = inferenceResult.inferredFielder;
+      enrichedPlayData.inferenceConfidence = inferenceResult.confidence;
+      enrichedPlayData.playDifficulty = inferenceResult.difficulty;
+
+      // Check if user overrode the inference
+      const actualFirstFielder = playData.fieldingSequence[0];
+      if (actualFirstFielder) {
+        enrichedPlayData.wasOverridden = actualFirstFielder !== inferenceResult.inferredFielder;
+
+        // Calculate LI context BEFORE recording (so it's included in learning data)
+        let liContext: {
+          leverageIndex: number;
+          leverageCategory: 'LOW' | 'MEDIUM' | 'HIGH' | 'EXTREME';
+          isClutchSituation: boolean;
+          gameSituation?: {
+            inning: number;
+            isTop: boolean;
+            outs: number;
+            bases: { first: boolean; second: boolean; third: boolean };
+            homeScore: number;
+            awayScore: number;
+          };
+        } | undefined = undefined;
+
+        if (gameSituation) {
+          try {
+            const gameStateForLI: GameStateForLI = {
+              inning: gameSituation.inning,
+              halfInning: gameSituation.isTop ? 'TOP' : 'BOTTOM',
+              outs: (gameSituation.outs as 0 | 1 | 2) || 0,
+              runners: {
+                first: gameSituation.bases.first,
+                second: gameSituation.bases.second,
+                third: gameSituation.bases.third,
+              },
+              homeScore: 0,
+              awayScore: 0,
+            };
+
+            const liResult = calculateLeverageIndex(gameStateForLI);
+            liContext = {
+              leverageIndex: liResult.leverageIndex,
+              leverageCategory: liResult.category,
+              isClutchSituation: isClutchSituation(liResult.leverageIndex),
+              gameSituation: {
+                inning: gameSituation.inning,
+                isTop: gameSituation.isTop,
+                outs: gameSituation.outs,
+                bases: { ...gameSituation.bases },
+                homeScore: 0,
+                awayScore: 0,
+              },
+            };
+
+            // Also set on enrichedPlayData here (will be set again later but ensures it's available)
+            enrichedPlayData.leverageIndex = liResult.leverageIndex;
+            enrichedPlayData.leverageCategory = liResult.category;
+            enrichedPlayData.isClutchSituation = liContext.isClutchSituation;
+          } catch (e) {
+            console.warn('[completePlay] Failed to calculate LI for adaptive learning:', e);
+          }
+        }
+
+        // Record for adaptive learning (with LI context)
+        if (enrichedPlayData.exitType) {
+          try {
+            recordFieldingEvent(
+              `game_${Date.now()}`, // TODO: Get actual game ID
+              location,
+              enrichedPlayData.exitType as ExitType,
+              inferenceResult.inferredFielder,
+              actualFirstFielder,
+              liContext
+            );
+          } catch (e) {
+            console.warn('[completePlay] Failed to record for adaptive learning:', e);
+          }
+        }
+      }
+    }
+
+    // Track DP type if applicable
+    const seq = enrichedPlayData.fieldingSequence;
+    const notation = seq.join('-');
+    if (playData.outType === 'DP' && seq.length >= 3) {
+      enrichedPlayData.dpType = notation;
+    }
+
     // Track if this was an infield hit (for beat throw / bunt buttons)
     const isInfieldHit = playData.type === 'hit' && location !== undefined && location.y < 0.4;
     setLastPlayWasInfieldHit(isInfieldHit ?? false);
 
     // Track if this was a strikeout sequence (2-3 = K, 2-3-3 = D3K)
-    const seq = playData.fieldingSequence;
-    const notation = seq.join('-');
     if (notation === '2-3') {
       setLastPlayStrikeoutType('K');
     } else if (notation === '2-3-3') {
@@ -1706,11 +2017,70 @@ export function EnhancedInteractiveField({
 
     console.log('[completePlay] Setting playContext:', playContext);
     console.log('[completePlay] inferredPlayType:', inferredPlayType);
-    console.log('[completePlay] playData:', playData);
     setLastPlayContext(playContext);
 
-    onPlayComplete(playData);
-  }, [throwSequence, onPlayComplete]);
+    // ============================================
+    // LEVERAGE INDEX & FAME CALCULATION
+    // Per LEVERAGE_INDEX_SPEC.md and SPECIAL_EVENTS_SPEC.md
+    // ============================================
+
+    // Calculate LI from current game situation (if not already calculated for adaptive learning)
+    if (gameSituation && !enrichedPlayData.leverageIndex) {
+      try {
+        // Convert gameSituation to LI format
+        const gameStateForLI: GameStateForLI = {
+          inning: gameSituation.inning,
+          halfInning: gameSituation.isTop ? 'TOP' : 'BOTTOM',
+          outs: (gameSituation.outs as 0 | 1 | 2) || 0,
+          runners: {
+            first: gameSituation.bases.first,
+            second: gameSituation.bases.second,
+            third: gameSituation.bases.third,
+          },
+          // Note: Scores not in current gameSituation, using 0-0 for now
+          // TODO: Add score tracking to gameSituation
+          homeScore: 0,
+          awayScore: 0,
+        };
+
+        const liResult = calculateLeverageIndex(gameStateForLI);
+
+        // Enrich PlayData with LI context
+        enrichedPlayData.leverageIndex = liResult.leverageIndex;
+        enrichedPlayData.leverageCategory = liResult.category;
+        enrichedPlayData.isClutchSituation = isClutchSituation(liResult.leverageIndex);
+
+        console.log('[completePlay] LI calculated:', {
+          leverageIndex: liResult.leverageIndex,
+          category: liResult.category,
+          isClutchSituation: enrichedPlayData.isClutchSituation,
+        });
+      } catch (e) {
+        console.warn('[completePlay] Failed to calculate LI:', e);
+      }
+    }
+
+    // Store game situation snapshot (if not already set)
+    if (gameSituation && !enrichedPlayData.gameSituation) {
+      enrichedPlayData.gameSituation = {
+        inning: gameSituation.inning,
+        isTop: gameSituation.isTop,
+        outs: gameSituation.outs,
+        bases: { ...gameSituation.bases },
+        homeScore: 0,
+        awayScore: 0,
+      };
+    }
+
+    // Note: Fame calculation for special events (WEB_GEM, ROBBERY, etc.)
+    // happens when the user clicks those buttons in the contextual UI,
+    // not here. This just provides the LI context for those calculations.
+
+    console.log('[completePlay] enrichedPlayData:', enrichedPlayData);
+
+    // Pass the enriched play data with all inference fields populated
+    onPlayComplete(enrichedPlayData);
+  }, [throwSequence, gameSituation, onPlayComplete]);
 
   // GT-014 FIX: Determine base using proximity to visual drop zone positions
   // These match the DropZoneHighlight positions shown during batter drag
@@ -1770,6 +2140,12 @@ export function EnhancedInteractiveField({
   // Handle fielder drop (ball fielded location)
   const handleFielderDrop = useCallback(
     (fielder: FielderData, position: FieldCoordinate) => {
+      // NEW 5-STEP FLOW: Only allow fielder drops in OUT_FIELDING step
+      if (flowStep !== 'OUT_FIELDING') {
+        console.log('[handleFielderDrop] Ignored - not in OUT_FIELDING step');
+        return;
+      }
+
       // Add to placed fielders with sequence number 1
       setPlacedFielders([{ fielder, position, sequenceNumber: 1 }]);
       // Start throw sequence
@@ -1785,11 +2161,17 @@ export function EnhancedInteractiveField({
         setShowFadingBall(false);
       }, 1000);
     },
-    []
+    [flowStep]
   );
 
-  // Handle batter drop (hit location) - now uses classifier for inference
+  // Handle batter drop (hit location) - DISABLED in new 5-step flow
+  // The new flow uses HIT_LOCATION click overlay instead of batter drag
   const handleBatterDrop = useCallback((position: FieldCoordinate) => {
+    // NEW 5-STEP FLOW: Batter drag is disabled
+    console.log('[handleBatterDrop] Disabled in new 5-step flow - use HIT button + click instead');
+    return;
+
+    // Legacy code below - kept for reference but unreachable
     setBatterPosition(position);
 
     // Use classifier to determine play type
@@ -1988,16 +2370,18 @@ export function EnhancedInteractiveField({
       case 'IBB':
       case 'HBP':
         // Walk/HBP - No ball in play, go directly to RUNNER_OUTCOMES
+        // FIX: BUG-001/002/003 - Walks must use type: 'walk' NOT type: 'hit'
+        // This routes to recordWalk() which correctly tracks PA without AB or H
         {
           const playData: PlayData = {
-            type: 'hit', // Walks are treated as reaching base
-            hitType: '1B',
+            type: 'walk',
+            walkType: option as WalkType,
             fieldingSequence: [],
             ballLocation: undefined,
             batterLocation: batterPosition || undefined,
             spraySector: 'CF',
           };
-          console.log(`[BatterReached] ${option} - no ball in play, setting lastClassifiedPlay`);
+          console.log(`[BatterReached] ${option} - walk type, setting lastClassifiedPlay`);
           setLastClassifiedPlay(playData);
           // Calculate runner defaults for walk (only forced runners advance)
           const defaults = calculateWalkDefaults(gameSituation.bases);
@@ -2268,7 +2652,10 @@ export function EnhancedInteractiveField({
         const defaults = calculateRunnerDefaults(playData, gameSituation.bases, gameSituation.outs);
         setRunnerOutcomes(defaults);
         console.log('[handleHRDistance] Runner defaults:', defaults);
-        // Note: Don't call handleReset - field state cleared on startNextAtBat
+
+        // Transition to RUNNER_CONFIRM step
+        setFlowStep('RUNNER_CONFIRM');
+        console.log('[handleHRDistance] → RUNNER_CONFIRM');
       }
       setShowHRDistanceModal(false);
       setPendingHRData(null);
@@ -2278,6 +2665,10 @@ export function EnhancedInteractiveField({
 
   // Reset state (but keep lastPlay* context for contextual buttons)
   const handleReset = useCallback(() => {
+    // Reset 5-step flow state
+    setFlowStep('IDLE');
+    setActiveAction(null);
+    // Reset field state
     setPlacedFielders([]);
     setThrowSequence([]);
     setBatterPosition(null);
@@ -2470,6 +2861,170 @@ export function EnhancedInteractiveField({
     console.log('[HRLocation] HR location tapped:', position, 'Type:', hrType);
   }, []);
 
+  // ============================================
+  // NEW 5-STEP FLOW HANDLERS (per GAMETRACKER_UI_DESIGN.md)
+  // ============================================
+
+  /**
+   * Step 1 Handler: HIT selected
+   * Transitions to HIT_LOCATION step to capture where ball was hit
+   */
+  const handleHitAction = useCallback(() => {
+    console.log('[Flow] HIT selected → HIT_LOCATION');
+    setFlowStep('HIT_LOCATION');
+    setActiveAction('HIT');
+    // Reset any previous play state
+    setPlacedFielders([]);
+    setThrowSequence([]);
+    setBallLocation(null);
+  }, []);
+
+  /**
+   * Step 1 Handler: OUT selected
+   * Transitions to OUT_FIELDING step to capture fielding sequence
+   */
+  const handleOutAction = useCallback(() => {
+    console.log('[Flow] OUT selected → OUT_FIELDING');
+    setFlowStep('OUT_FIELDING');
+    setActiveAction('OUT');
+    // Reset any previous play state
+    setPlacedFielders([]);
+    setThrowSequence([]);
+    setBallLocation(null);
+  }, []);
+
+  /**
+   * Step 3 Handler: HIT outcome selected
+   * Receives selected hit type and modifiers, then transitions to runner confirmation
+   */
+  const handleHitOutcome = useCallback((outcome: HitOutcome) => {
+    console.log('[Flow] HIT outcome selected:', outcome);
+
+    // Build play data from outcome
+    const playData: PlayData = {
+      type: outcome.type === 'HR' ? 'hr' : 'hit',
+      hitType: outcome.type,
+      fieldingSequence: placedFielders.map(pf => pf.fielder.positionNumber),
+      ballLocation: ballLocation || undefined,
+      spraySector: ballLocation ? getSpraySector(ballLocation.x, ballLocation.y).sector : undefined,
+    };
+
+    // Check for special events
+    if (outcome.specialEvents.includes('KP')) {
+      onSpecialEvent?.({ eventType: 'KILLED_PITCHER' });
+    }
+    if (outcome.specialEvents.includes('NUT')) {
+      onSpecialEvent?.({ eventType: 'NUT_SHOT' });
+    }
+
+    // Handle HR - needs distance input
+    if (outcome.type === 'HR') {
+      setPendingHRData({
+        location: ballLocation || { x: 0.5, y: 1.0 },
+        hrType: 'deep',
+      });
+      setShowHRDistanceModal(true);
+      return;
+    }
+
+    // Calculate runner defaults and transition to confirmation
+    setLastClassifiedPlay(playData);
+    const defaults = calculateRunnerDefaults(playData, gameSituation.bases, gameSituation.outs);
+    setRunnerOutcomes(defaults);
+    setFlowStep('RUNNER_CONFIRM');
+    console.log('[Flow] → RUNNER_CONFIRM with defaults:', defaults);
+  }, [ballLocation, placedFielders, gameSituation, onSpecialEvent]);
+
+  /**
+   * Step 3 Handler: OUT outcome selected
+   * Receives selected out type and modifiers, then transitions to runner confirmation
+   */
+  const handleOutOutcome = useCallback((outcome: OutOutcome) => {
+    console.log('[Flow] OUT outcome selected:', outcome);
+
+    // Build play data from outcome
+    const playData: PlayData = {
+      type: 'out',
+      outType: outcome.type,
+      fieldingSequence: placedFielders.map(pf => pf.fielder.positionNumber),
+      ballLocation: ballLocation || undefined,
+      spraySector: ballLocation ? getSpraySector(ballLocation.x, ballLocation.y).sector : undefined,
+    };
+
+    // Handle foul out
+    if (outcome.type === 'FLO') {
+      playData.type = 'foul_out';
+      playData.isFoul = true;
+    }
+
+    // Check for special events
+    if (outcome.specialEvents.includes('WEB')) {
+      onSpecialEvent?.({ eventType: 'WEB_GEM' });
+    }
+
+    // Handle error modifier
+    if (outcome.modifiers.includes('E')) {
+      playData.type = 'error';
+    }
+
+    // Calculate runner defaults and transition to confirmation
+    setLastClassifiedPlay(playData);
+    const defaults = calculateRunnerDefaults(playData, gameSituation.bases, gameSituation.outs);
+    setRunnerOutcomes(defaults);
+    setFlowStep('RUNNER_CONFIRM');
+    console.log('[Flow] → RUNNER_CONFIRM with defaults:', defaults);
+  }, [ballLocation, placedFielders, gameSituation, onSpecialEvent]);
+
+  /**
+   * Handler: Go back from outcome selection to location/fielding
+   */
+  const handleOutcomeBack = useCallback(() => {
+    if (activeAction === 'HIT') {
+      setFlowStep('HIT_LOCATION');
+    } else if (activeAction === 'OUT') {
+      setFlowStep('OUT_FIELDING');
+    } else {
+      setFlowStep('IDLE');
+      setActiveAction(null);
+    }
+  }, [activeAction]);
+
+  /**
+   * Handler: Field clicked during HIT_LOCATION step
+   * Captures ball location and transitions to HIT_OUTCOME
+   */
+  const handleHitLocationClick = useCallback((position: FieldCoordinate) => {
+    if (flowStep !== 'HIT_LOCATION') return;
+
+    console.log('[Flow] Hit location clicked:', position);
+    setBallLocation(position);
+
+    // Check if HR (in stands)
+    if (isInStands(position.y)) {
+      const hrType = classifyHomeRun(position.y);
+      setPendingHRData({ location: position, hrType });
+      setShowHRDistanceModal(true);
+      return;
+    }
+
+    // Transition to outcome selection
+    setFlowStep('HIT_OUTCOME');
+  }, [flowStep]);
+
+  /**
+   * Handler: Fielder dropped during OUT_FIELDING step
+   * Transitions to OUT_OUTCOME after ADVANCE is clicked
+   */
+  const handleOutAdvance = useCallback(() => {
+    if (flowStep !== 'OUT_FIELDING') return;
+    if (placedFielders.length === 0) {
+      console.log('[Flow] Cannot advance - no fielders placed');
+      return;
+    }
+    console.log('[Flow] OUT fielding complete, advancing to outcome');
+    setFlowStep('OUT_OUTCOME');
+  }, [flowStep, placedFielders]);
+
   // GT-007: Handle quick result buttons (BB, K, HBP, etc.)
   // UPDATED: Now uses Play Lifecycle - BB/HBP go to RUNNER_OUTCOMES
   // K/KL now handled by handleStrikeout instead
@@ -2483,8 +3038,10 @@ export function EnhancedInteractiveField({
 
     switch (resultType) {
       case 'BB':
-        playData.type = 'hit';
-        playData.hitType = '1B';
+        // FIX: BUG-001 - Walks must use type: 'walk' NOT type: 'hit'
+        // This routes to recordWalk() which correctly tracks PA without AB or H
+        playData.type = 'walk';
+        playData.walkType = 'BB';
         console.log('[QuickResult] Walk (BB) → RUNNER_OUTCOMES');
         // Use Play Lifecycle - set lastClassifiedPlay and runnerOutcomes
         setLastClassifiedPlay(playData);
@@ -2494,8 +3051,9 @@ export function EnhancedInteractiveField({
         return; // Exit early - don't call onPlayComplete
 
       case 'IBB':
-        playData.type = 'hit';
-        playData.hitType = '1B';
+        // FIX: BUG-003 - IBB must use type: 'walk' NOT type: 'hit'
+        playData.type = 'walk';
+        playData.walkType = 'IBB';
         console.log('[QuickResult] Intentional Walk (IBB) → RUNNER_OUTCOMES');
         setLastClassifiedPlay(playData);
         const ibbDefaults = calculateWalkDefaults(gameSituation.bases);
@@ -2504,8 +3062,9 @@ export function EnhancedInteractiveField({
         return;
 
       case 'HBP':
-        playData.type = 'hit';
-        playData.hitType = '1B';
+        // FIX: BUG-002 - HBP must use type: 'walk' NOT type: 'hit'
+        playData.type = 'walk';
+        playData.walkType = 'HBP';
         console.log('[QuickResult] Hit By Pitch (HBP) → RUNNER_OUTCOMES');
         setLastClassifiedPlay(playData);
         const hbpDefaults = calculateWalkDefaults(gameSituation.bases);
@@ -2546,6 +3105,103 @@ export function EnhancedInteractiveField({
         return;
     }
   }, [gameSituation.bases, gameSituation.outs]);
+
+  /**
+   * Step 1 Handler: OTHER action selected (BB, IBB, HBP, D3K, SB, CS, PK, TBL, PB, WP, E)
+   * These bypass the location/fielding steps and go directly to runner outcomes
+   */
+  const handleOtherAction = useCallback((action: OtherAction) => {
+    console.log('[Flow] OTHER action selected:', action);
+    setActiveAction('OTHER');
+
+    // Most OTHER actions map to the existing handleQuickResult logic
+    // Route through existing handlers where available
+    switch (action) {
+      case 'BB':
+      case 'IBB':
+      case 'HBP':
+        handleQuickResult(action);
+        setFlowStep('RUNNER_CONFIRM');
+        break;
+      case 'D3K':
+        // D3K has special handling - needs catcher/1B selection
+        // For now, route to existing flow
+        handleQuickResult('D3K' as QuickResultType);
+        setFlowStep('RUNNER_CONFIRM');
+        break;
+      case 'WP':
+      case 'PB':
+        // Wild Pitch / Passed Ball - all runners advance one base
+        // These events don't end the at-bat
+        console.log('[Flow] All runners advance event:', action);
+        if (onRunnerMove) {
+          const bases = gameSituation.bases;
+          // Advance R3 to home
+          if (bases.third) {
+            onRunnerMove({ from: 'third', to: 'home', outcome: 'safe', playType: action as 'WP' | 'PB' });
+          }
+          // Advance R2 to third
+          if (bases.second) {
+            onRunnerMove({ from: 'second', to: 'third', outcome: 'safe', playType: action as 'WP' | 'PB' });
+          }
+          // Advance R1 to second
+          if (bases.first) {
+            onRunnerMove({ from: 'first', to: 'second', outcome: 'safe', playType: action as 'WP' | 'PB' });
+          }
+        }
+        // Stay in IDLE - at-bat continues
+        setFlowStep('IDLE');
+        setActiveAction(null);
+        break;
+      case 'SB':
+      case 'CS':
+      case 'PK':
+      case 'TBL':
+        // Stolen Base / Caught Stealing / Pickoff / TOOTBLAN
+        // FIX: BUG-006 - Show runner outcome modal so user can choose which runner and outcomes
+        // Instead of auto-advancing, calculate defaults and show RUNNER_CONFIRM modal
+        console.log('[Flow] Runner event:', action, '- showing runner outcome modal');
+        {
+          const bases = gameSituation.bases;
+          // Calculate runner defaults using new function
+          const runnerEventDefaults = calculateStolenBaseDefaults(
+            action as RunnerEventType,
+            bases
+          );
+
+          // Create a minimal PlayData for this runner event
+          // The batter stays at bat, so we use a special type
+          const runnerPlayData: PlayData = {
+            type: 'out', // For CS/PK/TBL - runner is out; for SB this is ignored
+            outType: 'CS' as OutType, // Caught stealing - closest out type
+            fieldingSequence: [],
+            spraySector: 'CF',
+          };
+
+          // Store the runner event type for handleEndAtBat to process correctly
+          setLastClassifiedPlay(runnerPlayData);
+          setRunnerOutcomes(runnerEventDefaults);
+
+          // Store the runner event type so we know how to process it
+          setPendingRunnerEvent(action as RunnerEventType);
+
+          // Show runner outcome modal
+          setFlowStep('RUNNER_CONFIRM');
+          console.log('[Flow] → RUNNER_CONFIRM with runner event defaults:', runnerEventDefaults);
+        }
+        break;
+      case 'E':
+        // Error - start error flow
+        console.log('[Flow] Error selected - starting error flow');
+        setPendingError(true);
+        setAwaitingErrorFielder(true);
+        setFlowStep('OUT_FIELDING'); // Use fielding step to capture error fielder
+        break;
+      default:
+        setFlowStep('IDLE');
+        setActiveAction(null);
+    }
+  }, [handleQuickResult, onRunnerMove]);
 
   // ============================================
   // NEW: Strikeout handler using Play Lifecycle
@@ -2593,79 +3249,102 @@ export function EnhancedInteractiveField({
     }
 
     console.log('[EndAtBat] Committing play:', lastClassifiedPlay);
+    console.log('[EndAtBat] Runner outcomes:', runnerOutcomes);
+    console.log('[EndAtBat] Pending runner event:', pendingRunnerEvent);
 
-    // 1. TODO: Create undo snapshot BEFORE changes (requires undo system integration)
-    // undoSystem.snapshot({ description: getPlayDescription(lastClassifiedPlay), gameState: {...} });
+    // Check if this is a runner event (SB/CS/PK/TBL) - at-bat continues
+    const isRunnerEvent = pendingRunnerEvent !== null;
 
-    // 2. Persist play to game state via onPlayComplete callback
-    onPlayComplete(lastClassifiedPlay);
+    if (isRunnerEvent && runnerOutcomes) {
+      // For runner events, use batch update to process all runners atomically
+      // This prevents race conditions when multiple runners move
+      console.log('[EndAtBat] Processing runner event:', pendingRunnerEvent);
 
-    // 3. Mark play as committed - this transitions to MODIFIERS_ACTIVE phase
-    setPlayCommitted(true);
+      // Collect all runner movements
+      const movements: Array<{ from: 'first' | 'second' | 'third'; to: 'second' | 'third' | 'home' | 'out'; outcome: 'safe' | 'out' }> = [];
+      const runnerKeys: ('first' | 'second' | 'third')[] = ['first', 'second', 'third'];
 
-    // 4. Calculate enabled modifiers based on play type
-    const enabledMods = new Set<ModifierId>();
+      for (const base of runnerKeys) {
+        const outcome = runnerOutcomes[base];
+        if (outcome && outcome.from !== 'batter') {
+          // Check if runner actually moved or is out
+          const isSafe = outcome.to !== 'out';
+          const stayedAtBase = outcome.from === outcome.to;
 
-    // 7+ pitch is ALWAYS available
-    enabledMods.add('7+');
+          // Only add movement if runner moved to a different base OR was out
+          if (!stayedAtBase || !isSafe) {
+            const toBase = outcome.to as 'second' | 'third' | 'home' | 'out';
+            console.log(`[EndAtBat] Runner movement: ${outcome.from} → ${toBase} (${isSafe ? 'safe' : 'out'})`);
 
-    const firstFielder = lastClassifiedPlay.fieldingSequence?.[0];
-    const ballY = lastClassifiedPlay.ballLocation?.y;
-    const isOut = lastClassifiedPlay.type === 'out' || lastClassifiedPlay.type === 'foul_out';
-    const isHit = lastClassifiedPlay.type === 'hit';
-    const isSingle = lastClassifiedPlay.hitType === '1B';
-    const isInfieldHit = isHit && isSingle && ballY !== undefined && ballY < 0.5;
+            movements.push({
+              from: outcome.from as 'first' | 'second' | 'third',
+              to: toBase,
+              outcome: isSafe ? 'safe' : 'out',
+            });
+          } else {
+            console.log(`[EndAtBat] Runner holds: ${outcome.from} stays at ${outcome.to}`);
+          }
+        }
+      }
 
-    // KP/NUT available when:
-    // - There's a single in the infield (1B hit with ballLocation.y < 0.5), OR
-    // - The pitcher is the first fielder (position 1)
-    if (isInfieldHit || firstFielder === 1) {
-      enabledMods.add('KP');
-      enabledMods.add('NUT');
+      // Use batch handler if available, otherwise fall back to individual calls
+      if (onBatchRunnerMove && movements.length > 0) {
+        console.log('[EndAtBat] Using batch runner move for', movements.length, 'movements');
+        onBatchRunnerMove(movements, pendingRunnerEvent);
+      } else if (onRunnerMove) {
+        // Fallback: process in reverse order (third, second, first) to avoid conflicts
+        console.log('[EndAtBat] Fallback: processing movements individually in reverse order');
+        const sortedMovements = [...movements].sort((a, b) => {
+          const order = { third: 0, second: 1, first: 2 };
+          return order[a.from] - order[b.from];
+        });
+        for (const move of sortedMovements) {
+          const playType = pendingRunnerEvent === 'PK' ? 'PICK' :
+                          pendingRunnerEvent === 'TBL' ? 'ADV' :
+                          pendingRunnerEvent as RunnerPlayType;
+          onRunnerMove({
+            from: move.from,
+            to: move.to === 'out' ? move.from : move.to,
+            outcome: move.outcome,
+            playType,
+          });
+        }
+      }
+
+      // At-bat continues after runner event - just reset flow state
+      console.log('[EndAtBat] Runner event processed, at-bat continues');
+    } else {
+      // Regular at-bat completion - persist to game state
+      // CRITICAL: Include runnerOutcomes so user adjustments are persisted!
+      const completePlayData: PlayData = {
+        ...lastClassifiedPlay,
+        runnerOutcomes: runnerOutcomes || undefined,
+      };
+      console.log('[EndAtBat] Complete play data with runner outcomes:', completePlayData);
+      onPlayComplete(completePlayData);
+      console.log('[EndAtBat] Play committed, resetting for next at-bat');
     }
 
-    // WG available anytime a fielder makes a play for an out (infielders AND outfielders)
-    if (isOut && firstFielder !== undefined) {
-      enabledMods.add('WG');
-    }
+    // Reset 5-step flow state
+    setFlowStep('IDLE');
+    setActiveAction(null);
+    setPendingRunnerEvent(null);
 
-    // ROB available for outfield catches at y > 0.95 (wall catch)
-    if (isOut && [7, 8, 9].includes(firstFielder ?? 0) && ballY !== undefined && ballY > 0.95) {
-      enabledMods.add('ROB');
-    }
+    // Clear all play state
+    setLastClassifiedPlay(null);
+    setPlayCommitted(false);
+    setRunnerOutcomes(null);
+    setPlacedFielders([]);
+    setThrowSequence([]);
+    setBatterPosition(null);
+    setBallLocation(null);
 
-    // TOOTBLAN available if there are runners on base
-    if (gameSituation.bases.first || gameSituation.bases.second || gameSituation.bases.third) {
-      enabledMods.add('TOOTBLAN');
-    }
+    // Clear any modals
+    setShowHRDistanceModal(false);
+    setPendingHRData(null);
 
-    // BT/BUNT available for infield singles
-    if (isInfieldHit) {
-      enabledMods.add('BT');
-      enabledMods.add('BUNT');
-    }
-
-    console.log('[EndAtBat] Enabled modifiers:', [...enabledMods]);
-    setEnabledModifiers(enabledMods);
-
-    // Clear active modifiers from previous play
-    setActiveModifiers(new Set());
-
-    // 5. Set play context for contextual buttons (legacy system - will be replaced)
-    const playContext: PlayContext = {
-      playType: lastClassifiedPlay.outType === 'K' ? 'K' :
-                lastClassifiedPlay.hitType ? lastClassifiedPlay.hitType as PlayContext['playType'] :
-                lastClassifiedPlay.outType as PlayContext['playType'],
-      firstFielder: firstFielder ?? null,
-      ballLocationY: ballY ?? null,
-      throwSequence: lastClassifiedPlay.fieldingSequence || [],
-      runnerOut: false,
-      throwTarget: null,
-      timestamp: Date.now(),
-    };
-    setLastPlayContext(playContext);
-
-  }, [lastClassifiedPlay, onPlayComplete, gameSituation.bases]);
+    console.log('[EndAtBat] Ready for next at-bat');
+  }, [lastClassifiedPlay, onPlayComplete, runnerOutcomes, pendingRunnerEvent, onRunnerMove, onBatchRunnerMove]);
 
   // ============================================
   // NEW: Handle modifier button tap
@@ -2812,17 +3491,46 @@ export function EnhancedInteractiveField({
   const handleStarPlaySelect = useCallback((subtype: StarPlaySubtype) => {
     const firstFielderPos = lastClassifiedPlay?.fieldingSequence?.[0];
     const firstFielderName = firstFielderPos ? playerNames[firstFielderPos] : 'Unknown';
-    const fameValue = isStarPlayRobbery ? 1.5 : 1.0;
     const eventType = isStarPlayRobbery ? 'ROBBERY' : 'WEB_GEM';
 
-    console.log(`[StarPlay] ${eventType} - ${subtype} by ${firstFielderName} (#${firstFielderPos}), +${fameValue} Fame`);
+    // Calculate LI-weighted Fame value
+    // Per SPECIAL_EVENTS_SPEC.md: ROBBERY = +1.5, WEB_GEM = +1.0 base fame
+    const baseFame = isStarPlayRobbery ? 1.5 : 1.0;
+    let finalFameValue = baseFame;
+    let liValue: number | undefined;
+    let liCategory: 'LOW' | 'MEDIUM' | 'HIGH' | 'EXTREME' | undefined;
+    let clutchSituation = false;
 
-    // Notify parent of the special event with subtype details
+    // Get LI from lastClassifiedPlay (if available)
+    if (lastClassifiedPlay?.leverageIndex !== undefined) {
+      liValue = lastClassifiedPlay.leverageIndex;
+      liCategory = lastClassifiedPlay.leverageCategory;
+      clutchSituation = lastClassifiedPlay.isClutchSituation || false;
+
+      // Use fameEngine's calculateFame for proper LI weighting
+      try {
+        const fameEventType = isStarPlayRobbery ? 'ROBBERY' : 'WEB_GEM';
+        const fameResult = calculateFame(fameEventType as 'ROBBERY' | 'WEB_GEM', liValue);
+        finalFameValue = fameResult.finalFame;
+      } catch (e) {
+        // Fallback to manual calculation: baseFame × √LI
+        finalFameValue = baseFame * Math.sqrt(liValue);
+      }
+    }
+
+    console.log(`[StarPlay] ${eventType} - ${subtype} by ${firstFielderName} (#${firstFielderPos}), +${finalFameValue.toFixed(2)} Fame (base: ${baseFame}, LI: ${liValue?.toFixed(2) || 'N/A'})`);
+
+    // Notify parent of the special event with Fame context
     if (onSpecialEvent) {
       onSpecialEvent({
         eventType: eventType as SpecialEventType,
         fielderPosition: firstFielderPos,
         fielderName: firstFielderName,
+        leverageIndex: liValue,
+        leverageCategory: liCategory,
+        isClutchSituation: clutchSituation,
+        fameValue: finalFameValue,
+        baseFame: baseFame,
       });
     }
 
@@ -2899,6 +3607,10 @@ export function EnhancedInteractiveField({
   // NEW: Start next at-bat - clears all state for new batter
   // ============================================
   const startNextAtBat = useCallback(() => {
+    // Clear 5-step flow state
+    setFlowStep('IDLE');
+    setActiveAction(null);
+
     // Clear all play lifecycle state
     setLastClassifiedPlay(null);
     setPlayCommitted(false);
@@ -2970,8 +3682,8 @@ export function EnhancedInteractiveField({
       {/* GT-010: Field area fills available space while maintaining aspect ratio */}
       {/* Uses flex-1 to take remaining vertical space after buttons */}
       <div className="relative flex-1 min-h-0 w-full flex items-center justify-center">
-        {/* Inner container maintains 8:5 aspect ratio (SVG is 1600x1000) */}
-        <div className="relative w-full h-full" style={{ maxWidth: '100%', aspectRatio: '8/5' }}>
+        {/* Inner container maintains 16:9 aspect ratio (SVG is 1600x900) */}
+        <div className="relative w-full h-full" style={{ maxWidth: '100%', aspectRatio: '16/9' }}>
           <FieldDropZone
           onFielderDrop={handleFielderDrop}
           onBatterDrop={handleBatterDrop}
@@ -3101,6 +3813,88 @@ export function EnhancedInteractiveField({
           />
         )}
 
+        {/* NEW 5-STEP FLOW: Step 2 (HIT) - Click to set hit location */}
+        {flowStep === 'HIT_LOCATION' && (
+          <div
+            className="absolute inset-0 z-40 cursor-crosshair"
+            onClick={(e) => {
+              const element = e.currentTarget;
+              const rect = element.getBoundingClientRect();
+              const relX = e.clientX - rect.left;
+              const relY = e.clientY - rect.top;
+              const svgX = (relX / rect.width) * SVG_WIDTH;
+              const svgY = (relY / rect.height) * SVG_HEIGHT;
+              const position = svgToNormalized(svgX, svgY);
+              handleHitLocationClick(position);
+            }}
+            style={{ background: 'rgba(0, 100, 0, 0.2)' }}
+          >
+            <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 pointer-events-none">
+              <div className="bg-[#2E7D32] border-[4px] border-white px-6 py-4 shadow-[6px_6px_0px_0px_rgba(0,0,0,0.5)] text-center">
+                <div className="text-[14px] font-bold text-white mb-2">
+                  ⚾ HIT
+                </div>
+                <div className="text-[11px] font-bold text-[#A5D6A7] animate-pulse">
+                  👆 TAP WHERE THE BALL LANDED
+                </div>
+              </div>
+            </div>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setFlowStep('IDLE');
+                setActiveAction(null);
+              }}
+              className="absolute bottom-4 left-1/2 transform -translate-x-1/2 pointer-events-auto
+                         bg-[#666] border-[3px] border-white px-4 py-2 text-white text-[10px] font-bold
+                         hover:bg-[#888] shadow-[3px_3px_0px_0px_rgba(0,0,0,0.3)]"
+            >
+              CANCEL
+            </button>
+          </div>
+        )}
+
+        {/* NEW 5-STEP FLOW: Step 2 (OUT) - Prompt for fielding sequence */}
+        {flowStep === 'OUT_FIELDING' && placedFielders.length === 0 && (
+          <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 pointer-events-none z-30">
+            <div className="bg-[#C62828] border-[4px] border-white px-6 py-4 shadow-[6px_6px_0px_0px_rgba(0,0,0,0.5)] text-center">
+              <div className="text-[14px] font-bold text-white mb-2">
+                🧤 OUT
+              </div>
+              <div className="text-[11px] font-bold text-[#FFCDD2] animate-pulse">
+                DRAG FIELDER TO BALL LOCATION
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* NEW 5-STEP FLOW: Advance button after fielding sequence complete (Step 2 OUT) */}
+        {flowStep === 'OUT_FIELDING' && placedFielders.length > 0 && (
+          <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 z-40 flex gap-2">
+            <button
+              onClick={() => {
+                setFlowStep('IDLE');
+                setActiveAction(null);
+                setPlacedFielders([]);
+                setThrowSequence([]);
+              }}
+              className="bg-[#666] border-[3px] border-white px-4 py-2 text-white text-[10px] font-bold
+                         hover:bg-[#888] shadow-[3px_3px_0px_0px_rgba(0,0,0,0.3)]"
+            >
+              CANCEL
+            </button>
+            <button
+              onClick={handleOutAdvance}
+              className="bg-gradient-to-b from-[#C62828] to-[#B71C1C] border-[3px] border-[#C4A853]
+                         px-6 py-2 text-white text-sm font-bold uppercase
+                         hover:scale-105 active:scale-95 transition-transform
+                         shadow-[4px_4px_0px_0px_rgba(0,0,0,0.4)]"
+            >
+              ADVANCE →
+            </button>
+          </div>
+        )}
+
         {/* Throw Sequence Display */}
         {throwSequence.length > 0 && (
           <div className="absolute top-2 left-2 bg-[#3366FF] border-[3px] border-white px-3 py-1.5 shadow-[3px_3px_0px_0px_rgba(0,0,0,0.3)] z-20">
@@ -3139,52 +3933,7 @@ export function EnhancedInteractiveField({
           />
         )}
 
-        {/* Left Panel - Hit Type Selection (LF foul territory) */}
-        <SidePanel
-          side="left"
-          isOpen={showHitTypeModal}
-          onClose={() => {
-            setShowHitTypeModal(false);
-            handleReset();
-          }}
-          title="SELECT HIT TYPE"
-        >
-          <HitTypeContent
-            onSelect={(hitType) => {
-              handleHitTypeSelect(hitType);
-              setShowHitTypeModal(false);
-              // Reset after play is recorded - keeps contextual state for buttons
-              handleReset();
-            }}
-            spraySector={batterPosition ? getSpraySector(batterPosition.x, batterPosition.y).sector : undefined}
-            inferredBase={batterPosition ? determineBatterBase(batterPosition) || undefined : undefined}
-          />
-        </SidePanel>
-
-        {/* Right Panel - Out Type Selection (RF foul territory) */}
-        <SidePanel
-          side="right"
-          isOpen={showOutTypeModal}
-          onClose={() => {
-            setShowOutTypeModal(false);
-            handleReset();
-          }}
-          title="SELECT OUT TYPE"
-        >
-          <OutTypeContent
-            onSelect={(outType) => {
-              handleOutTypeSelect(outType);
-              setShowOutTypeModal(false);
-              // Reset after play is recorded - keeps contextual state for buttons
-              handleReset();
-            }}
-            fieldingSequence={throwSequence.map((f) => f.positionNumber)}
-            outs={gameSituation.outs}
-            bases={gameSituation.bases}
-          />
-        </SidePanel>
-
-        {/* Right Panel - HR Distance Input */}
+        {/* HR Distance Input Panel - used when hit location is in stands */}
         <SidePanel
           side="right"
           isOpen={showHRDistanceModal && pendingHRData !== null}
@@ -3215,35 +3964,62 @@ export function EnhancedInteractiveField({
         {/* THREE-ZONE FOUL TERRITORY BUTTON LAYOUT */}
         {/* ============================================ */}
 
-        {/* LEFT FOUL ZONE: Result Buttons (BB, K, HBP, HR) */}
+        {/* LEFT FOUL ZONE: Action Selection (Step 1) */}
         <div className="absolute bottom-16 left-2 z-30">
-          <LeftFoulButtons
-            onQuickResult={handleQuickResult}
-            onHomeRun={handleQuickHomeRun}
-            onStrikeout={handleStrikeout}
-          />
+          {flowStep === 'IDLE' && (
+            <ActionSelector
+              onHit={handleHitAction}
+              onOut={handleOutAction}
+              onOtherAction={handleOtherAction}
+              disabled={false}
+              activeAction={activeAction}
+            />
+          )}
         </div>
 
-        {/* RIGHT FOUL ZONE: Special Event Buttons (🥜 💥 🤦 ⭐ 7️⃣) */}
+        {/* RIGHT FOUL ZONE: Outcome Buttons (Step 3) or Special Event Buttons */}
         <div className="absolute bottom-16 right-2 z-30">
-          <RightFoulButtons
-            onSpecialEvent={handleContextualEvent}
-          />
+          {/* NEW 5-STEP FLOW: Show OutcomeButtons in HIT_OUTCOME or OUT_OUTCOME step */}
+          {flowStep === 'HIT_OUTCOME' && (
+            <OutcomeButtons
+              mode="HIT"
+              onAdvance={(outcome) => handleHitOutcome(outcome as HitOutcome)}
+              onBack={handleOutcomeBack}
+              fieldingContext={{
+                isPitcherInvolved: placedFielders.some(pf => pf.fielder.positionNumber === 1),
+              }}
+            />
+          )}
+          {flowStep === 'OUT_OUTCOME' && (
+            <OutcomeButtons
+              mode="OUT"
+              onAdvance={(outcome) => handleOutOutcome(outcome as OutOutcome)}
+              onBack={handleOutcomeBack}
+              fieldingContext={{
+                isDoublePlay: placedFielders.length >= 3,
+                isDeepOutfield: ballLocation && ballLocation.y > 0.8 ? true : undefined,
+              }}
+            />
+          )}
         </div>
 
-        {/* BEHIND HOME ZONE: Game Controls (RESET, CLASSIFY, UNDO) */}
-        <div className="absolute bottom-2 left-1/2 -translate-x-1/2 z-30">
-          <BehindHomeButtons
-            onReset={handleReset}
-            onClassify={canClassify ? handleClassifyPlay : undefined}
-            canClassify={canClassify}
-            isClassifying={isClassifying}
-          />
-        </div>
+        {/* RESET BUTTON - Simple reset for new flow */}
+        {flowStep !== 'IDLE' && (
+          <div className="absolute bottom-2 left-1/2 -translate-x-1/2 z-30">
+            <button
+              onClick={handleReset}
+              className="bg-[#333] border-[3px] border-[#C4A853] px-4 py-2 text-white text-xs font-bold
+                         hover:bg-[#444] active:scale-95 transition-all
+                         shadow-[3px_3px_0px_0px_rgba(0,0,0,0.3)]"
+            >
+              ↩ RESET
+            </button>
+          </div>
+        )}
 
         {/* RUNNER OUTCOMES HINT BANNER - Per GAME_TRACKER_IMPLEMENTATION_ADDENDUM.md */}
-        {/* Top center hint for user during RUNNER_OUTCOMES phase */}
-        {getUIPhase() === 'RUNNER_OUTCOMES' && (
+        {/* Top center hint for user during RUNNER_OUTCOMES or RUNNER_CONFIRM phase */}
+        {(getUIPhase() === 'RUNNER_OUTCOMES' || flowStep === 'RUNNER_CONFIRM') && (
           <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50
                           bg-black/80 px-4 py-2 rounded text-white text-xs
                           border border-[#C4A853]">
@@ -3255,22 +4031,23 @@ export function EnhancedInteractiveField({
         )}
 
         {/* RUNNER OUTCOMES DISPLAY - Per GAME_TRACKER_IMPLEMENTATION_ADDENDUM.md */}
-        {/* Shows calculated runner defaults in RUNNER_OUTCOMES phase */}
+        {/* Shows calculated runner defaults in RUNNER_OUTCOMES or RUNNER_CONFIRM phase */}
         {/* User can adjust before tapping End At-Bat */}
-        {getUIPhase() === 'RUNNER_OUTCOMES' && runnerOutcomes && (
+        {(getUIPhase() === 'RUNNER_OUTCOMES' || flowStep === 'RUNNER_CONFIRM') && runnerOutcomes && (
           <div className="absolute top-16 right-4 z-40 max-w-xs">
             <RunnerOutcomesDisplay
               outcomes={runnerOutcomes}
               onOutcomeChange={setRunnerOutcomes}
-              playType={lastClassifiedPlay?.type || 'unknown'}
+              playType={pendingRunnerEvent || lastClassifiedPlay?.type || 'unknown'}
+              isRunnerEvent={pendingRunnerEvent !== null}
             />
           </div>
         )}
 
         {/* END AT-BAT BUTTON - Per GAME_TRACKER_IMPLEMENTATION_ADDENDUM.md */}
-        {/* Visible in RUNNER_OUTCOMES phase (lastClassifiedPlay !== null && !playCommitted) */}
+        {/* Visible in RUNNER_OUTCOMES or RUNNER_CONFIRM phase */}
         {/* ALWAYS shows - even if no runners on base */}
-        {getUIPhase() === 'RUNNER_OUTCOMES' && (
+        {(getUIPhase() === 'RUNNER_OUTCOMES' || flowStep === 'RUNNER_CONFIRM') && (
           <button
             onClick={handleEndAtBat}
             className="absolute bottom-4 left-1/2 -translate-x-1/2 z-40
@@ -3286,79 +4063,9 @@ export function EnhancedInteractiveField({
           </button>
         )}
 
-        {/* MODIFIER BUTTON BAR - Per GAME_TRACKER_IMPLEMENTATION_ADDENDUM.md */}
-        {/* Visible in MODIFIERS_ACTIVE phase (after End At-Bat tapped) */}
-        {/* Bottom right, modifiers do NOT auto-dismiss */}
-        {getUIPhase() === 'MODIFIERS_ACTIVE' && (
-          <div className="absolute bottom-4 right-4 z-40">
-            <ModifierButtonBar
-              enabledModifiers={enabledModifiers}
-              activeModifiers={activeModifiers}
-              onModifierTap={handleModifierTap}
-            />
-            {/* Next At-Bat button to clear state and start fresh */}
-            <button
-              onClick={startNextAtBat}
-              className="mt-2 w-full
-                         bg-gradient-to-b from-[#1565C0] to-[#0D47A1]
-                         border-2 border-[#C4A853] rounded-md
-                         px-4 py-2.5
-                         text-[#BBDEFB] text-xs font-bold uppercase tracking-wide
-                         hover:from-[#1976D2] hover:to-[#1565C0]
-                         active:scale-95 transition-all
-                         shadow-[3px_3px_0px_0px_rgba(0,0,0,0.4)]"
-            >
-              NEXT AT-BAT →
-            </button>
-          </div>
-        )}
-
-        {/* Phase 5B: Contextual buttons - appear ABOVE behind-home zone after play completion */}
-        {/* These buttons auto-dismiss after 3 seconds via useEffect that clears lastPlayContext */}
-        {lastPlayContext !== null && (
-          <div className="absolute bottom-16 left-1/2 -translate-x-1/2 z-40 bg-[#1a1a1a]/90 border-2 border-[#C4A853] rounded-lg px-4 py-2 shadow-lg">
-            <div className="flex flex-wrap justify-center gap-2">
-              {inferContextualButtons(lastPlayContext).map((eventType) => (
-                <button
-                  key={eventType}
-                  onClick={() => {
-                    handleContextualEvent(eventType);
-                    // Clear context after selection to hide buttons
-                    setLastPlayContext(null);
-                  }}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-[#FF6600] hover:bg-[#FF8800] border-2 border-[#C4A853] text-white text-[11px] font-bold rounded-md shadow-[2px_2px_0px_0px_rgba(0,0,0,0.3)] active:scale-95 transition-all"
-                >
-                  <span>{getEventEmoji(eventType)}</span>
-                  <span>{getEventLabel(eventType)}</span>
-                </button>
-              ))}
-              {/* Dismiss button */}
-              <button
-                onClick={() => setLastPlayContext(null)}
-                className="px-2 py-1.5 bg-[#666] hover:bg-[#888] border-2 border-[#999] text-white text-[10px] font-bold rounded-md active:scale-95 transition-all"
-              >
-                ✕
-              </button>
-            </div>
-          </div>
-        )}
+        {/* LEGACY MODIFIERS_ACTIVE and CONTEXTUAL BUTTONS REMOVED */}
+        {/* New 5-step flow handles modifiers in Step 3 (OutcomeButtons) */}
       </div>
-
-      {/* Play Type Modal */}
-      {showPlayTypeModal && batterPosition && (
-        <PlayTypeModal
-          onSelect={handlePlayTypeSelect}
-          isFoul={isFoulTerritory(batterPosition.x, batterPosition.y)}
-          isInStands={isInStands(batterPosition.y)}
-          onClose={() => setShowPlayTypeModal(false)}
-        />
-      )}
-
-      {/*
-        Hit Type Modal, Out Type Modal, and HR Distance Modal are now handled by SidePanels
-        (Phase 2 - modals in foul territory) - see the SidePanel components above.
-        The old center-overlay modals are removed to avoid duplication and keep field visible.
-      */}
 
       {/* Special Event Prompt Modal */}
       {showSpecialEventPrompt && pendingPrompts.length > 0 && (

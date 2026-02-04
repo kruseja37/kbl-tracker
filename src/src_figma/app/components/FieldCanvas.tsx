@@ -91,8 +91,9 @@ const FOUL_TERRITORY_WIDTH = 20; // ft visible along foul lines
 // ============================================
 
 // SVG dimensions - wider for iPad horizontal view
-const SVG_WIDTH = 1600;
-const SVG_HEIGHT = 900; // Shorter height = wider aspect ratio
+// EXPORTED: These must be used by any component doing coordinate conversion
+export const SVG_WIDTH = 1600;
+export const SVG_HEIGHT = 900; // Shorter height = wider aspect ratio (16:9)
 
 // Home plate position in SVG (bottom center)
 const HOME_SVG_X = SVG_WIDTH / 2;

@@ -48,8 +48,9 @@ export default {
         },
       },
       fontFamily: {
+        sans: ['"Press Start 2P"', 'monospace'],  // Default font for all text
         pixel: ['"Press Start 2P"', '"Courier New"', 'monospace'],
-        body: ['"Segoe UI"', 'system-ui', '-apple-system', 'sans-serif'],
+        body: ['"Press Start 2P"', 'monospace'],  // Also pixel font
         mono: ['"SF Mono"', '"Monaco"', '"Inconsolata"', 'monospace'],
       },
       boxShadow: {

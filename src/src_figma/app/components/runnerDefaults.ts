@@ -169,19 +169,33 @@ function calculateOutDefaults(
   outs: number,
   fieldingSequence: number[]
 ): RunnerDefaults {
-  // Ground out - check for double play potential
-  if (outType === 'GO') {
-    // With R1 and less than 2 outs, likely double play
-    if (bases.first && outs < 2 && fieldingSequence.length >= 2) {
-      return {
-        batter: { from: 'batter', to: 'out', isDefault: true, reason: 'Ground out' },
-        first: { from: 'first', to: 'out', isDefault: true, reason: 'DP - force at 2B' },
-        ...(bases.second && { second: { from: 'second', to: 'third', isDefault: true, reason: 'Advances on DP' } }),
-        ...(bases.third && { third: { from: 'third', to: 'home', isDefault: true, reason: 'Scores on DP' } }),
-      };
-    }
+  // ============================================
+  // DOUBLE PLAY DETECTION (Most important check first!)
+  // Per BASEBALL_RULES_INTEGRATION.md: DP when R1 on base + multi-fielder throw
+  // ============================================
 
-    // Standard ground out - runners may advance
+  // Check for DP: Either explicit DP type OR ground ball with R1 + throw sequence
+  // 6-4-3 = SS → 2B → 1B (3 fielders), 4-6-3 = 2B → SS → 1B, etc.
+  const isLikelyDP = (
+    outType === 'DP' ||
+    outType === 'TP' ||
+    (bases.first && outs < 2 && fieldingSequence.length >= 2 && (outType === 'GO' || outType === 'FC' || outType === undefined))
+  );
+
+  if (isLikelyDP) {
+    return {
+      batter: { from: 'batter', to: 'out', isDefault: true, reason: outType === 'TP' ? 'Triple play' : 'Ground into DP' },
+      first: { from: 'first', to: 'out', isDefault: true, reason: 'Force out at 2B' },
+      // R2 may advance if not also out on TP
+      ...(bases.second && outType !== 'TP' && { second: { from: 'second', to: 'third', isDefault: true, reason: 'Advances on DP' } }),
+      ...(bases.second && outType === 'TP' && { second: { from: 'second', to: 'out', isDefault: true, reason: 'Out on TP' } }),
+      // R3 may score on DP (run counts if scored before 3rd out)
+      ...(bases.third && { third: { from: 'third', to: 'home', isDefault: true, reason: 'Scores on DP' } }),
+    };
+  }
+
+  // Ground out (non-DP) - batter out, runners may advance
+  if (outType === 'GO') {
     return {
       batter: { from: 'batter', to: 'out', isDefault: true, reason: 'Ground out' },
       // R3 may score on contact (productive out)
@@ -190,8 +204,22 @@ function calculateOutDefaults(
       ...(bases.third && outs >= 2 && { third: { from: 'third', to: 'third', isDefault: true, reason: 'Holds' } }),
       // R2 typically advances on ground out
       ...(bases.second && { second: { from: 'second', to: 'third', isDefault: true, reason: 'Advances to 3B' } }),
-      // R1 - depends on force situation
+      // R1 advances to 2B (no force since batter is out at 1B)
       ...(bases.first && { first: { from: 'first', to: 'second', isDefault: true, reason: 'Advances to 2B' } }),
+    };
+  }
+
+  // Fielder's Choice (non-DP) - batter reaches, lead runner is out
+  if (outType === 'FC') {
+    return {
+      batter: { from: 'batter', to: 'first', isDefault: true, reason: "Fielder's choice" },
+      // R1 is out on FC (most common)
+      ...(bases.first && { first: { from: 'first', to: 'out', isDefault: true, reason: 'Out on FC' } }),
+      // R2 advances or may be out
+      ...(bases.second && !bases.first && { second: { from: 'second', to: 'out', isDefault: true, reason: 'Out on FC' } }),
+      ...(bases.second && bases.first && { second: { from: 'second', to: 'third', isDefault: true, reason: 'Advances on FC' } }),
+      // R3 scores
+      ...(bases.third && { third: { from: 'third', to: 'home', isDefault: true, reason: 'Scores on FC' } }),
     };
   }
 
@@ -378,6 +406,109 @@ export function calculateD3KDefaults(bases: GameBases, outs: number): RunnerDefa
       first: { from: 'first', to: 'second', isDefault: true, reason: 'Advances to 2B' }
     }),
   };
+}
+
+// ============================================
+// STOLEN BASE / RUNNER EVENT DEFAULTS
+// ============================================
+
+export type RunnerEventType = 'SB' | 'CS' | 'PK' | 'TBL';
+
+/**
+ * Calculate runner defaults for stolen base events (SB, CS, PK, TBL)
+ * Shows the runner outcome modal so user can choose which runner is affected
+ * and where all runners end up.
+ *
+ * @param eventType The type of runner event (SB=safe, CS/PK/TBL=out)
+ * @param bases Current base occupancy
+ * @param targetRunner The runner to default as stealing (trailing runner usually)
+ * @returns Default runner outcomes for display/adjustment
+ */
+export function calculateStolenBaseDefaults(
+  eventType: RunnerEventType,
+  bases: GameBases,
+  targetRunner?: 'first' | 'second' | 'third'
+): RunnerDefaults {
+  const isSuccess = eventType === 'SB';
+
+  // Determine target runner (trailing runner by default)
+  let stealer: 'first' | 'second' | 'third' | null = targetRunner || null;
+  if (!stealer) {
+    if (bases.first) stealer = 'first';
+    else if (bases.second) stealer = 'second';
+    else if (bases.third) stealer = 'third';
+  }
+
+  // No runner? Return minimal defaults (batter stays, no runner movement)
+  if (!stealer) {
+    return {
+      // For runner events, batter stays at bat - use 'first' as placeholder
+      // (the batter field is required but won't be used for runner events)
+      batter: { from: 'batter', to: 'first', isDefault: true, reason: 'At bat continues' },
+    };
+  }
+
+  // Calculate target base for the stealing runner
+  const targetBase: BaseId = stealer === 'first' ? 'second'
+    : stealer === 'second' ? 'third'
+    : 'home';
+
+  // Reason text based on event type
+  const eventReasons: Record<RunnerEventType, string> = {
+    'SB': 'Stolen base',
+    'CS': 'Caught stealing',
+    'PK': 'Picked off',
+    'TBL': 'TOOTBLAN',
+  };
+
+  // Build result - stealer is affected, others hold
+  // For runner events, batter stays at bat - use 'first' as placeholder
+  // (the batter field is required but won't be processed for runner events)
+  const result: RunnerDefaults = {
+    batter: { from: 'batter', to: 'first', isDefault: true, reason: 'At bat continues' },
+  };
+
+  // Add outcomes for each runner
+  if (bases.first) {
+    if (stealer === 'first') {
+      result.first = {
+        from: 'first',
+        to: isSuccess ? targetBase : 'out',
+        isDefault: true,
+        reason: eventReasons[eventType],
+      };
+    } else {
+      result.first = { from: 'first', to: 'first', isDefault: true, reason: 'Holds' };
+    }
+  }
+
+  if (bases.second) {
+    if (stealer === 'second') {
+      result.second = {
+        from: 'second',
+        to: isSuccess ? targetBase : 'out',
+        isDefault: true,
+        reason: eventReasons[eventType],
+      };
+    } else {
+      result.second = { from: 'second', to: 'second', isDefault: true, reason: 'Holds' };
+    }
+  }
+
+  if (bases.third) {
+    if (stealer === 'third') {
+      result.third = {
+        from: 'third',
+        to: isSuccess ? 'home' : 'out',
+        isDefault: true,
+        reason: eventReasons[eventType],
+      };
+    } else {
+      result.third = { from: 'third', to: 'third', isDefault: true, reason: 'Holds' };
+    }
+  }
+
+  return result;
 }
 
 export default calculateRunnerDefaults;

@@ -5,7 +5,8 @@
 > 1. `spec-docs/CURRENT_STATE.md` - What's implemented and what's not
 > 2. `spec-docs/AI_OPERATING_PREFERENCES.md` - How to work on this project (this file)
 > 3. `spec-docs/SMB4_GAME_MECHANICS.md` - ⭐ Central reference for what IS/ISN'T in SMB4
-> 4. `spec-docs/SESSION_LOG.md` - What happened recently (for context, not source of truth)
+> 4. `spec-docs/SESSION_LOG_SUMMARY.md` - Condensed recent sessions (fast context loading)
+> 5. `spec-docs/SESSION_LOG.md` - Full history if needed (5,900+ lines)
 >
 > **WAR Calculation Specs** (read when implementing stat calculations):
 > - `spec-docs/KBL_XHD_TRACKER_MASTER_SPEC_v3.md` - Master spec with all WAR/EOS/Award systems
@@ -208,7 +209,8 @@ Maintain **spec-docs/** as the single source of truth. All decisions, findings, 
 - `CURRENT_STATE.md` - What's implemented, what's not, known bugs
 - `DECISIONS_LOG.md` - Key decisions with date, context, and rationale
 - `REQUIREMENTS.md` - User requirements and constraints
-- `SESSION_LOG.md` - Running log of work sessions
+- `SESSION_LOG.md` - Running log of work sessions (full history)
+- `SESSION_LOG_SUMMARY.md` - Condensed recent sessions (update each session end)
 - `WORST_CASE_SCENARIOS.md` - Test results and edge cases
 
 ### 10.2 Session Handoff Protocol
@@ -219,12 +221,18 @@ Maintain **spec-docs/** as the single source of truth. All decisions, findings, 
    - What decisions were made and why
    - What's pending/incomplete
    - Key context that shouldn't be lost
+3. Update `SESSION_LOG_SUMMARY.md`:
+   - Keep only last 5 sessions in detail
+   - Update "Quick Status" table at top
+   - Update "Active Work" section if work focus changed
 
 ### 10.3 Session Start Protocol
 **At the start of any continued session:**
-1. Read `CURRENT_STATE.md`, `SESSION_LOG.md`, and `DECISIONS_LOG.md`
-2. Confirm understanding: "Based on docs, we're at X point. Correct?"
-3. Don't rely on compaction summaries alone—they lose nuance
+1. Read `SESSION_LOG_SUMMARY.md` first (condensed recent context)
+2. Read `CURRENT_STATE.md` for implementation status
+3. Confirm understanding: "Based on docs, we're at X point. Correct?"
+4. Only read full `SESSION_LOG.md` if you need specific historical details
+5. Don't rely on compaction summaries alone—they lose nuance
 
 ### 10.4 Write-First Principle
 **If it's important, write it to a file before moving on.**

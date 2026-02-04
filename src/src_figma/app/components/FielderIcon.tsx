@@ -9,11 +9,13 @@
  */
 
 import { useDrag } from 'react-dnd';
-import { type FieldCoordinate, FIELDER_POSITIONS, normalizedToSvg } from './FieldCanvas';
-
-// SVG dimensions must match FieldCanvas (updated 2026-02-01 to 1600x1000)
-const SVG_WIDTH = 1600;
-const SVG_HEIGHT = 1000;
+import {
+  type FieldCoordinate,
+  FIELDER_POSITIONS,
+  normalizedToSvg,
+  useViewBox,
+  svgToViewBoxPercent,
+} from './FieldCanvas';
 
 // ============================================
 // TYPES
@@ -71,14 +73,17 @@ export function FielderIcon({
   containerHeight = 560,
   isErrorMode = false,
 }: FielderIconProps) {
+  // Get current viewBox from context (for dynamic zoom support)
+  const viewBox = useViewBox();
+
   // Get default position if not provided
   const defaultPosition = FIELDER_POSITIONS[fielder.positionNumber];
   const fieldPosition = position || { x: defaultPosition.x, y: defaultPosition.y };
 
-  // Calculate screen position using the same coordinate conversion as FieldCanvas
+  // Calculate screen position using viewBox-aware conversion
+  // This correctly positions elements when the viewBox is zoomed
   const svgCoords = normalizedToSvg(fieldPosition.x, fieldPosition.y);
-  const leftPercent = (svgCoords.svgX / SVG_WIDTH) * 100;
-  const topPercent = (svgCoords.svgY / SVG_HEIGHT) * 100;
+  const { leftPercent, topPercent } = svgToViewBoxPercent(svgCoords.svgX, svgCoords.svgY, viewBox);
 
   // Setup drag
   const [{ isDragging }, drag] = useDrag(
@@ -225,10 +230,12 @@ export function PlacedFielder({
   borderColor = '#E8E8D8',
   onClick,
 }: PlacedFielderProps) {
-  // Calculate screen position using the same coordinate conversion as FieldCanvas
+  // Get current viewBox from context (for dynamic zoom support)
+  const viewBox = useViewBox();
+
+  // Calculate screen position using viewBox-aware conversion
   const svgCoords = normalizedToSvg(placedPosition.x, placedPosition.y);
-  const leftPercent = (svgCoords.svgX / SVG_WIDTH) * 100;
-  const topPercent = (svgCoords.svgY / SVG_HEIGHT) * 100;
+  const { leftPercent, topPercent } = svgToViewBoxPercent(svgCoords.svgX, svgCoords.svgY, viewBox);
 
   // Get position label
   const defaultPosition = FIELDER_POSITIONS[fielder.positionNumber];
@@ -326,6 +333,9 @@ export interface BatterIconProps {
  * BatterIcon - Draggable batter at home plate
  */
 export function BatterIcon({ name = 'BATTER', isDragged = false, onClick }: BatterIconProps) {
+  // Get current viewBox from context (for dynamic zoom support)
+  const viewBox = useViewBox();
+
   const [{ isDragging }, drag] = useDrag(
     () => ({
       type: ItemTypes.BATTER,
@@ -339,10 +349,9 @@ export function BatterIcon({ name = 'BATTER', isDragged = false, onClick }: Batt
 
   if (isDragged) return null;
 
-  // Position batter near home plate using the same coordinate system
+  // Position batter near home plate using viewBox-aware conversion
   const homeCoords = normalizedToSvg(0.5, 0.02); // Just slightly in front of home
-  const leftPercent = (homeCoords.svgX / SVG_WIDTH) * 100;
-  const topPercent = (homeCoords.svgY / SVG_HEIGHT) * 100;
+  const { leftPercent, topPercent } = svgToViewBoxPercent(homeCoords.svgX, homeCoords.svgY, viewBox);
 
   return (
     <div
@@ -403,10 +412,12 @@ export interface BallLandingMarkerProps {
  * BallLandingMarker - Shows where a ball landed on the field
  */
 export function BallLandingMarker({ position, type = 'hit' }: BallLandingMarkerProps) {
-  // Calculate screen position using the same coordinate conversion as FieldCanvas
+  // Get current viewBox from context (for dynamic zoom support)
+  const viewBox = useViewBox();
+
+  // Calculate screen position using viewBox-aware conversion
   const svgCoords = normalizedToSvg(position.x, position.y);
-  const leftPercent = (svgCoords.svgX / SVG_WIDTH) * 100;
-  const topPercent = (svgCoords.svgY / SVG_HEIGHT) * 100;
+  const { leftPercent, topPercent } = svgToViewBoxPercent(svgCoords.svgX, svgCoords.svgY, viewBox);
 
   // Color based on type
   const colors = {
@@ -481,10 +492,12 @@ export interface FadingBallMarkerProps {
  * Per Story 9: Ball indicator fades after 1 second
  */
 export function FadingBallMarker({ position, isVisible, onFadeComplete }: FadingBallMarkerProps) {
-  // Calculate screen position
+  // Get current viewBox from context (for dynamic zoom support)
+  const viewBox = useViewBox();
+
+  // Calculate screen position using viewBox-aware conversion
   const svgCoords = normalizedToSvg(position.x, position.y);
-  const leftPercent = (svgCoords.svgX / SVG_WIDTH) * 100;
-  const topPercent = (svgCoords.svgY / SVG_HEIGHT) * 100;
+  const { leftPercent, topPercent } = svgToViewBoxPercent(svgCoords.svgX, svgCoords.svgY, viewBox);
 
   return (
     <div
@@ -571,10 +584,12 @@ export function DropZoneHighlight({
   size = 'medium',
   label,
 }: DropZoneHighlightProps) {
-  // Calculate screen position
+  // Get current viewBox from context (for dynamic zoom support)
+  const viewBox = useViewBox();
+
+  // Calculate screen position using viewBox-aware conversion
   const svgCoords = normalizedToSvg(position.x, position.y);
-  const leftPercent = (svgCoords.svgX / SVG_WIDTH) * 100;
-  const topPercent = (svgCoords.svgY / SVG_HEIGHT) * 100;
+  const { leftPercent, topPercent } = svgToViewBoxPercent(svgCoords.svgX, svgCoords.svgY, viewBox);
 
   // Size mapping
   const sizeMap = {

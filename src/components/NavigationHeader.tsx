@@ -4,8 +4,8 @@ import TeamSelector from './TeamSelector';
 export default function NavigationHeader() {
   const location = useLocation();
 
-  // Don't show header on main menu
-  if (location.pathname === '/') {
+  // Don't show header on main menu or game-tracker (has its own integrated header)
+  if (location.pathname === '/' || location.pathname.startsWith('/game-tracker')) {
     return null;
   }
 

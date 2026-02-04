@@ -100,23 +100,88 @@ export function HitTypeContent({ onSelect, spraySector, inferredBase }: HitTypeC
 
 /**
  * OutTypeContent - Content for out type selection (to be used in SidePanel)
+ *
+ * Baseball rules applied for filtering:
+ * - SF (Sacrifice Fly): Requires runner on 3rd AND <2 outs
+ * - SAC (Sacrifice Bunt): Requires runners on base AND <2 outs
+ * - DP (Double Play): Requires runners on base AND <2 outs
+ * - TP (Triple Play): Requires runners on 1st AND 2nd AND 0 outs
+ * - FC (Fielder's Choice): Requires runners on base
  */
 interface OutTypeContentProps {
-  onSelect: (outType: 'GO' | 'FO' | 'LO' | 'DP' | 'TP' | 'K' | 'FC' | 'SAC') => void;
+  onSelect: (outType: 'GO' | 'FO' | 'LO' | 'PO' | 'DP' | 'TP' | 'K' | 'FC' | 'SAC' | 'SF') => void;
   fieldingSequence?: number[];
+  outs?: number;
+  bases?: { first: boolean; second: boolean; third: boolean };
 }
 
-export function OutTypeContent({ onSelect, fieldingSequence }: OutTypeContentProps) {
-  const outTypes: Array<{ type: 'GO' | 'FO' | 'LO' | 'DP' | 'TP' | 'K' | 'FC' | 'SAC'; label: string }> = [
-    { type: 'GO', label: 'GROUND OUT' },
-    { type: 'FO', label: 'FLY OUT' },
-    { type: 'LO', label: 'LINE OUT' },
-    { type: 'DP', label: 'DOUBLE PLAY' },
-    { type: 'TP', label: 'TRIPLE PLAY' },
-    { type: 'K', label: 'STRIKEOUT' },
-    { type: 'FC', label: 'FIELDER\'S CHOICE' },
-    { type: 'SAC', label: 'SACRIFICE' },
+export function OutTypeContent({ onSelect, fieldingSequence, outs = 0, bases }: OutTypeContentProps) {
+  // Determine runner state (bases are booleans: true = occupied, false = empty)
+  const hasRunners = bases?.first || bases?.second || bases?.third || false;
+  const hasRunnerOnThird = bases?.third || false;
+  const hasRunnersOnFirstAndSecond = (bases?.first && bases?.second) || false;
+
+  // Baseball rules for availability
+  const isSFAvailable = outs < 2 && hasRunnerOnThird;
+  const isSACAvailable = outs < 2 && hasRunners;
+  const isDPAvailable = outs < 2 && hasRunners;
+  const isTPAvailable = outs === 0 && hasRunnersOnFirstAndSecond;
+  const isFCAvailable = hasRunners;
+
+  // Build out types with availability and tooltips
+  const outTypes: Array<{
+    type: 'GO' | 'FO' | 'LO' | 'PO' | 'DP' | 'TP' | 'K' | 'FC' | 'SAC' | 'SF';
+    label: string;
+    available: boolean;
+    tooltip?: string;
+  }> = [
+    { type: 'GO', label: 'GROUND OUT', available: true },
+    { type: 'FO', label: 'FLY OUT', available: true },
+    { type: 'LO', label: 'LINE OUT', available: true },
+    { type: 'PO', label: 'POP OUT', available: true },
+    {
+      type: 'DP',
+      label: 'DOUBLE PLAY',
+      available: isDPAvailable,
+      tooltip: !isDPAvailable
+        ? (outs >= 2 ? 'Cannot turn DP with 2 outs' : 'DP requires runners on base')
+        : undefined
+    },
+    {
+      type: 'TP',
+      label: 'TRIPLE PLAY',
+      available: isTPAvailable,
+      tooltip: !isTPAvailable
+        ? (outs > 0 ? 'TP requires 0 outs' : 'TP requires runners on 1st and 2nd')
+        : undefined
+    },
+    { type: 'K', label: 'STRIKEOUT', available: true },
+    {
+      type: 'FC',
+      label: 'FIELDER\'S CHOICE',
+      available: isFCAvailable,
+      tooltip: !isFCAvailable ? 'FC requires runners on base' : undefined
+    },
+    {
+      type: 'SAC',
+      label: 'SACRIFICE BUNT',
+      available: isSACAvailable,
+      tooltip: !isSACAvailable
+        ? (outs >= 2 ? 'Cannot sacrifice with 2 outs' : 'SAC requires runners on base')
+        : undefined
+    },
+    {
+      type: 'SF',
+      label: 'SACRIFICE FLY',
+      available: isSFAvailable,
+      tooltip: !isSFAvailable
+        ? (outs >= 2 ? 'Cannot sac fly with 2 outs' : 'SF requires runner on 3rd')
+        : undefined
+    },
   ];
+
+  // Filter to only show available options (hide unavailable ones entirely)
+  const availableOutTypes = outTypes.filter(({ available }) => available);
 
   return (
     <div className="space-y-2">
@@ -125,8 +190,16 @@ export function OutTypeContent({ onSelect, fieldingSequence }: OutTypeContentPro
           Sequence: {fieldingSequence.join('-')}
         </div>
       )}
+      {/* Show game situation context */}
+      {bases && (
+        <div className="text-[8px] text-[#888] mb-2 flex gap-2">
+          <span>Outs: {outs}</span>
+          <span>R: {hasRunners ? '⚫' : '⚪'}</span>
+          {hasRunnerOnThird && <span className="text-[#4CAF50]">R3</span>}
+        </div>
+      )}
       <div className="space-y-1.5">
-        {outTypes.map(({ type, label }) => (
+        {availableOutTypes.map(({ type, label }) => (
           <button
             key={type}
             onClick={() => onSelect(type)}

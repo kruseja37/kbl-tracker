@@ -1,0 +1,9 @@
+/* Retro SNES Baseball Game Fonts */
+@import url('https://fonts.googleapis.com/css2?family=Black+Ops+One&family=Press+Start+2P&family=Bangers&family=Righteous&display=swap');
+
+/* 
+  Font hierarchy for KBL Tracker:
+  - Bangers / Righteous: Main display fonts (headers, buttons)
+  - Black Ops One: Alternative bold display
+  - System fonts: Body text
+*/

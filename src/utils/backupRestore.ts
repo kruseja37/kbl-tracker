@@ -47,6 +47,10 @@ const KBL_DATABASES: Record<string, string[]> = {
   'kbl-player-data': ['players', 'playerRatings'],
   'kbl-relationships': ['relationships'],
   'kbl-transactions': ['transactions'],
+  'kbl-schedule': ['scheduledGames', 'scheduleMetadata'],
+  'kbl-league-builder': ['leagueTemplates', 'globalTeams', 'globalPlayers', 'rulesPresets', 'teamRosters'],
+  'kbl-playoffs': ['playoffs', 'series', 'playoffGames', 'playoffStats'],
+  'kbl-offseason': ['offseasonState', 'awards', 'ratings', 'retirements', 'freeAgency', 'draft', 'trades'],
 };
 
 // ============================================

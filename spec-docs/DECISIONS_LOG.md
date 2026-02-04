@@ -5,6 +5,71 @@
 
 ---
 
+## February 2026
+
+### 2026-02-03: Testing Plan Expanded to Cover Complete Figma UI
+
+**Context**: Testing Implementation Plan originally focused heavily on GameTracker and calculation engines. User requested comprehensive coverage of ALL Figma UI components.
+
+**Decision**: Expand testing plan from 6 phases to 11 phases, covering every page and component in the Figma codebase.
+
+**Rationale**:
+- Original plan would leave 60+ UI components untested
+- League Builder, Franchise Mode, Exhibition, and Playoffs all have significant business logic
+- Offseason flows (Trade, Draft, Free Agency, etc.) have complex state management
+- Complete coverage ensures no orphaned or broken UI code
+
+**Phases Added**:
+| Phase | Coverage | Tests |
+|-------|----------|-------|
+| Phase 6 (Expanded) | GameTracker UI Components | 50+ |
+| Phase 7 | League Builder (7 pages) | 40+ |
+| Phase 8 | Franchise Mode (15 components, 6 hooks) | 80+ |
+| Phase 9 | Exhibition Mode | 15+ |
+| Phase 10 | Playoff/World Series | 25+ |
+| Phase 11 | Navigation | 10+ |
+
+**Sprint Plan Extended**:
+- 5 sprints → 8 sprints
+- Sprint 5-8 cover Phases 6-11
+
+**Target Changes**:
+- Test files: 55+ → 120+
+- Passing tests: 1800+ → 3000+
+
+**Intentionally Skipped**:
+- 45 shadcn/ui primitive components (library code, not business logic)
+- DragDropFieldDemo.tsx (demo component)
+- SubstitutionModalBase.tsx (tested via derived modals)
+
+**Document Updated**: `spec-docs/TESTING_IMPLEMENTATION_PLAN.md`
+
+---
+
+### 2026-02-03: Legacy↔Figma Codebase Reconciliation Complete
+
+**Context**: Build was failing with 42 TypeScript errors after Phase 1 & 2 Figma buildout.
+
+**Decision**: Fix API mismatches in integration wrappers rather than rewriting integrations.
+
+**Rationale**:
+- Root cause was AI-generated integration files that hallucinated API signatures
+- Integration wrappers assumed different function signatures than actual legacy engines
+- Fixing to match actual APIs is faster and preserves existing architecture
+
+**Root Cause Pattern Identified**:
+```
+Integration file assumed: processEndOfSeasonAging(age, rating)
+Actual legacy API:       processEndOfSeasonAging(age, {overall: rating}, fame, modifier)
+```
+
+**Files Fixed**: 7 integration/hook files
+**Files Created**: 2 stub files for missing franchiseStorage
+
+**Special Case**: `useFanMorale.ts` was stubbed out (not imported anywhere, 21 errors)
+
+---
+
 ## January 2026
 
 ### 2026-01-25: SMB4 UI Cleanup - Removed Balk Button

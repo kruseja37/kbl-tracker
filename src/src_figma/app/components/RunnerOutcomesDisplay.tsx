@@ -22,6 +22,8 @@ interface RunnerOutcomesDisplayProps {
   outcomes: RunnerDefaults;
   onOutcomeChange: (updated: RunnerDefaults) => void;
   playType: string;
+  /** If true, this is a runner event (SB/CS/PK/TBL) - hides batter row since at-bat continues */
+  isRunnerEvent?: boolean;
 }
 
 interface OutcomeRowProps {
@@ -106,6 +108,7 @@ export function RunnerOutcomesDisplay({
   outcomes,
   onOutcomeChange,
   playType,
+  isRunnerEvent = false,
 }: RunnerOutcomesDisplayProps) {
   // Get possible destinations for each runner
   const getBatterDestinations = (): BaseId[] => {
@@ -192,17 +195,20 @@ export function RunnerOutcomesDisplay({
       {/* Play type indicator */}
       <div className="text-[#888] text-xs mb-2">
         Play: <span className="text-white">{playType}</span>
+        {isRunnerEvent && <span className="text-[#C4A853] ml-2">(At-bat continues)</span>}
       </div>
 
       {/* Outcome rows */}
       <div className="space-y-0">
-        {/* Batter outcome - always shown */}
-        <OutcomeRow
-          label="BATTER"
-          outcome={outcomes.batter}
-          onToggle={() => cycleDestination('batter')}
-          possibleDestinations={getBatterDestinations()}
-        />
+        {/* Batter outcome - hidden for runner events since at-bat continues */}
+        {!isRunnerEvent && (
+          <OutcomeRow
+            label="BATTER"
+            outcome={outcomes.batter}
+            onToggle={() => cycleDestination('batter')}
+            possibleDestinations={getBatterDestinations()}
+          />
+        )}
 
         {/* Runner on first */}
         {outcomes.first && (

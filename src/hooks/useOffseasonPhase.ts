@@ -40,6 +40,7 @@ export interface UseOffseasonPhaseReturn {
 // CONSTANTS
 // ============================================
 
+// Offseason phases - Schedule removed (games are added on-the-fly per SCHEDULE_SYSTEM_FIGMA_SPEC.md)
 export const OFFSEASON_PHASES = {
   AWARDS: 1,
   EOS_RATINGS: 2,
@@ -51,10 +52,9 @@ export const OFFSEASON_PHASES = {
   DRAFT: 8,
   TRADES: 9,
   SPRING_TRAINING: 10,
-  SCHEDULE: 11,
 } as const;
 
-export const TOTAL_PHASES = 11;
+export const TOTAL_PHASES = 10;
 
 export const PHASE_NAMES: Record<number, string> = {
   1: 'Awards Ceremony',
@@ -67,7 +67,6 @@ export const PHASE_NAMES: Record<number, string> = {
   8: 'Draft',
   9: 'Trade Period',
   10: 'Spring Training',
-  11: 'Schedule Release',
 };
 
 // ============================================

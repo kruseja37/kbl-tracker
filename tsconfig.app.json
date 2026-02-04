@@ -16,6 +16,12 @@
     "noEmit": true,
     "jsx": "react-jsx",
 
+    /* Path aliases for Figma imports */
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["src/src_figma/*"]
+    },
+
     /* Linting */
     "strict": true,
     "noUnusedLocals": false,
