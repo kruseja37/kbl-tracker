@@ -3,7 +3,7 @@ import { Routes, Route } from 'react-router-dom';
 // Global styles
 import './styles/global.css';
 
-import NavigationHeader from './components/NavigationHeader';
+// Legacy NavigationHeader removed - Figma pages have their own headers
 import NotFound from './pages/NotFound';
 
 // Figma Design Pages (exhaustive UI replacement)
@@ -39,7 +39,6 @@ import { LeagueBuilderRules } from './src_figma/app/pages/LeagueBuilderRules';
 function App() {
   return (
     <>
-      <NavigationHeader />
       <Routes>
         {/* Main Menu - Figma Design */}
         <Route path="/" element={<AppHome />} />
