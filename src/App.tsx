@@ -15,6 +15,12 @@ import { PostGameSummary } from './src_figma/app/pages/PostGameSummary';
 import { ExhibitionGame } from './src_figma/app/pages/ExhibitionGame';
 import { WorldSeries } from './src_figma/app/pages/WorldSeries';
 import { LeagueBuilder } from './src_figma/app/pages/LeagueBuilder';
+import { LeagueBuilderLeagues } from './src_figma/app/pages/LeagueBuilderLeagues';
+import { LeagueBuilderTeams } from './src_figma/app/pages/LeagueBuilderTeams';
+import { LeagueBuilderPlayers } from './src_figma/app/pages/LeagueBuilderPlayers';
+import { LeagueBuilderRosters } from './src_figma/app/pages/LeagueBuilderRosters';
+import { LeagueBuilderDraft } from './src_figma/app/pages/LeagueBuilderDraft';
+import { LeagueBuilderRules } from './src_figma/app/pages/LeagueBuilderRules';
 
 /**
  * KBL Tracker - Main App
@@ -54,6 +60,12 @@ function App() {
 
         {/* League Builder - Figma Design */}
         <Route path="/league-builder" element={<LeagueBuilder />} />
+        <Route path="/league-builder/leagues" element={<LeagueBuilderLeagues />} />
+        <Route path="/league-builder/teams" element={<LeagueBuilderTeams />} />
+        <Route path="/league-builder/players" element={<LeagueBuilderPlayers />} />
+        <Route path="/league-builder/rosters" element={<LeagueBuilderRosters />} />
+        <Route path="/league-builder/draft" element={<LeagueBuilderDraft />} />
+        <Route path="/league-builder/rules" element={<LeagueBuilderRules />} />
 
         {/* 404 */}
         <Route path="*" element={<NotFound />} />

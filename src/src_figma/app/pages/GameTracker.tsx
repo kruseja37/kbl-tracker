@@ -309,52 +309,69 @@ export function GameTracker() {
   const homePitcherPlayer = homeTeamPlayers.find(p => p.name === homePitcher?.name);
 
   // Initialize game with lineup data on mount
+  // FIX: BUG-007 - Try loading existing game first, only create new if none found
   // This ensures each batter has a unique ID and stats are tracked separately
   const [gameInitialized, setGameInitialized] = useState(false);
   useEffect(() => {
     if (gameInitialized) return;
 
-    // Convert roster to lineup format required by initializeGame
-    const awayLineup = awayTeamPlayers
-      .filter(p => p.battingOrder) // Only players in batting order
-      .sort((a, b) => (a.battingOrder || 0) - (b.battingOrder || 0))
-      .map(p => ({
-        playerId: `away-${p.name.replace(/\s+/g, '-').toLowerCase()}`,
-        playerName: p.name,
-        position: p.position,
-      }));
+    const initializeOrLoadGame = async () => {
+      // Try to load existing game first (handles page refresh)
+      const hasExistingGame = await loadExistingGame();
 
-    const homeLineup = homeTeamPlayers
-      .filter(p => p.battingOrder) // Only players in batting order
-      .sort((a, b) => (a.battingOrder || 0) - (b.battingOrder || 0))
-      .map(p => ({
-        playerId: `home-${p.name.replace(/\s+/g, '-').toLowerCase()}`,
-        playerName: p.name,
-        position: p.position,
-      }));
+      if (hasExistingGame) {
+        console.log('[GameTracker] Loaded existing game from IndexedDB');
+        setGameInitialized(true);
+        return;
+      }
 
-    console.log('[GameTracker] Initializing game with lineups:', {
-      away: awayLineup.map(p => p.playerName),
-      home: homeLineup.map(p => p.playerName),
-    });
+      // No existing game found - create new one
+      console.log('[GameTracker] No existing game found, initializing new game');
 
-    initializeGame({
-      gameId: gameId || `game-${Date.now()}`,
-      seasonId: 'season-2024',
-      awayTeamId: awayTeamId,
-      awayTeamName: 'Tigers',
-      homeTeamId: homeTeamId,
-      homeTeamName: 'Sox',
-      awayLineup,
-      homeLineup,
-      awayStartingPitcherId: `away-${awayPitcher?.name.replace(/\s+/g, '-').toLowerCase() || 'pitcher'}`,
-      awayStartingPitcherName: awayPitcher?.name || 'Pitcher',
-      homeStartingPitcherId: `home-${homePitcher?.name.replace(/\s+/g, '-').toLowerCase() || 'pitcher'}`,
-      homeStartingPitcherName: homePitcher?.name || 'Pitcher',
-    });
+      // Convert roster to lineup format required by initializeGame
+      const awayLineup = awayTeamPlayers
+        .filter(p => p.battingOrder) // Only players in batting order
+        .sort((a, b) => (a.battingOrder || 0) - (b.battingOrder || 0))
+        .map(p => ({
+          playerId: `away-${p.name.replace(/\s+/g, '-').toLowerCase()}`,
+          playerName: p.name,
+          position: p.position,
+        }));
 
-    setGameInitialized(true);
-  }, [gameInitialized, awayTeamPlayers, homeTeamPlayers, awayPitcher, homePitcher, awayTeamId, homeTeamId, gameId, initializeGame]);
+      const homeLineup = homeTeamPlayers
+        .filter(p => p.battingOrder) // Only players in batting order
+        .sort((a, b) => (a.battingOrder || 0) - (b.battingOrder || 0))
+        .map(p => ({
+          playerId: `home-${p.name.replace(/\s+/g, '-').toLowerCase()}`,
+          playerName: p.name,
+          position: p.position,
+        }));
+
+      console.log('[GameTracker] Initializing game with lineups:', {
+        away: awayLineup.map(p => p.playerName),
+        home: homeLineup.map(p => p.playerName),
+      });
+
+      await initializeGame({
+        gameId: gameId || `game-${Date.now()}`,
+        seasonId: 'season-2024',
+        awayTeamId: awayTeamId,
+        awayTeamName: 'Tigers',
+        homeTeamId: homeTeamId,
+        homeTeamName: 'Sox',
+        awayLineup,
+        homeLineup,
+        awayStartingPitcherId: `away-${awayPitcher?.name.replace(/\s+/g, '-').toLowerCase() || 'pitcher'}`,
+        awayStartingPitcherName: awayPitcher?.name || 'Pitcher',
+        homeStartingPitcherId: `home-${homePitcher?.name.replace(/\s+/g, '-').toLowerCase() || 'pitcher'}`,
+        homeStartingPitcherName: homePitcher?.name || 'Pitcher',
+      });
+
+      setGameInitialized(true);
+    };
+
+    initializeOrLoadGame();
+  }, [gameInitialized, awayTeamPlayers, homeTeamPlayers, awayPitcher, homePitcher, awayTeamId, homeTeamId, gameId, initializeGame, loadExistingGame]);
 
   // Get current batter's lineup position
   const battingTeamPlayers = gameState.isTop ? awayTeamPlayers : homeTeamPlayers;
