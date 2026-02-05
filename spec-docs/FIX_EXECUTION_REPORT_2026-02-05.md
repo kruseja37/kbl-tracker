@@ -141,6 +141,30 @@ Baseline: Build PASS, Tests 5025 passing (77 known PostGameSummary failures)
 ### MIN-04: HBP Tracking (DEFERRED)
 **Assessment**: HBP is lumped with BB in both batter and pitcher stats. PitcherGameStats interface has 9 fields vs spec's 30+. Fixing this properly requires MAJ-07 (expand PitcherGameStats) — not a simple constant change.
 
+## Tier 4: Cosmetic/Documentation
+
+| ID | Description | Assessment | Status |
+|----|------------|------------|--------|
+| MIN-02 | FLO (Foul Line Out) undocumented in spec | Valid play type, exists in code. Spec docs don't enumerate all out subtypes. | ℹ️ NO ACTION |
+| MIN-06 | No per-inning pitch count prompt | Feature request, not a bug. Spec describes optional calibration prompt. | ℹ️ FEATURE REQUEST |
+
+## Remaining Items (Out of Batch-Fix Scope)
+
+These require larger structural work and are tracked separately:
+
+| ID | Description | Effort | Notes |
+|----|------------|--------|-------|
+| MAJ-01 | Wire WAR calculators to UI | Large | 5 engines, 365 tests, zero UI |
+| MAJ-02 | Wire fan morale to UI | Medium | Hook stubbed |
+| MAJ-03 | Wire detection system | Medium | Never called |
+| MAJ-04 | Wire narrative engine | Medium | No hook |
+| MAJ-06 | Substitution modals → backend | Large | Rich data thrown away |
+| MAJ-07 | Expand PitcherGameStats (9→30+ fields) | Large | Blocks MIN-04, MAJ-08, MAJ-09 |
+| MAJ-08 | W/L/SV decision tracking | Medium | Requires MAJ-07 |
+| MAJ-09 | Achievement detection | Medium | Requires MAJ-03, MAJ-07 |
+| MAJ-11 | Missing detection functions | Medium | 7+ functions |
+| MAJ-12 | D3K — user decision needed | Small | Does D3K exist in SMB4? |
+
 ## Test Count Delta
 - Before: 5025 tests passing
 - After: 5025 tests passing
