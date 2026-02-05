@@ -115,6 +115,11 @@ export interface PitcherGameStats {
   inheritedRunnersScored: number;
   bequeathedRunners: number;
   bequeathedRunnersScored: number;
+  // MAJ-08: Pitcher decisions per PITCHER_STATS_TRACKING_SPEC.md §5-6
+  decision: 'W' | 'L' | 'ND' | null;
+  save: boolean;
+  hold: boolean;
+  blownSave: boolean;
 }
 
 export interface RunnerAdvancement {
@@ -687,6 +692,100 @@ function processTrackerScoredEvents(
   return { earnedRuns, totalRuns };
 }
 
+/**
+ * MAJ-08: Calculate pitcher decisions (W/L/SV/H/BS) at game end.
+ * Per PITCHER_STATS_TRACKING_SPEC.md §5-6.
+ *
+ * Mutates the PitcherGameStats objects in the provided Map.
+ */
+function calculatePitcherDecisions(
+  pitcherStats: Map<string, PitcherGameStats>,
+  homeScore: number,
+  awayScore: number,
+  gameInnings: number,
+): void {
+  if (homeScore === awayScore) return; // Tie game = no decisions
+
+  const winningTeam = homeScore > awayScore ? 'home' : 'away';
+
+  // Separate pitchers by team
+  const teamPitchers: { id: string; stats: PitcherGameStats; team: 'away' | 'home' }[] = [];
+  pitcherStats.forEach((stats, id) => {
+    const team: 'away' | 'home' = id.toLowerCase().startsWith('away-') ? 'away' : 'home';
+    teamPitchers.push({ id, stats, team });
+  });
+
+  const winTeamPitchers = teamPitchers.filter(p => p.team === winningTeam);
+  const loseTeamPitchers = teamPitchers.filter(p => p.team !== winningTeam);
+
+  // --- LOSS: Pitcher with most runs allowed on losing team ---
+  // Simplified: highest runsAllowed on losing team gets L.
+  // Full spec uses "pitcher of record when go-ahead run scored" which requires
+  // play-by-play lead tracking. This is a reasonable approximation.
+  if (loseTeamPitchers.length > 0) {
+    let losingPitcher = loseTeamPitchers[0];
+    for (const p of loseTeamPitchers) {
+      if (p.stats.runsAllowed > losingPitcher.stats.runsAllowed) {
+        losingPitcher = p;
+      }
+    }
+    losingPitcher.stats.decision = 'L';
+    // Mark rest as ND
+    for (const p of loseTeamPitchers) {
+      if (p.stats.decision === null) p.stats.decision = 'ND';
+    }
+  }
+
+  // --- WIN: Starter gets W if ≥5 IP (15 outs, scaled for short games) ---
+  const minOutsForQualifyingW = Math.min(15, Math.floor(gameInnings * 5 / 9 * 3));
+  const starter = winTeamPitchers.find(p => p.stats.isStarter);
+
+  if (starter && starter.stats.outsRecorded >= minOutsForQualifyingW) {
+    starter.stats.decision = 'W';
+  } else {
+    // Starter didn't qualify — find the most effective reliever
+    // "Most effective" = most outs recorded among relievers
+    const relievers = winTeamPitchers.filter(p => !p.stats.isStarter && p.stats.outsRecorded > 0);
+    if (relievers.length > 0) {
+      let bestReliever = relievers[0];
+      for (const r of relievers) {
+        if (r.stats.outsRecorded > bestReliever.stats.outsRecorded) {
+          bestReliever = r;
+        }
+      }
+      bestReliever.stats.decision = 'W';
+    } else if (starter) {
+      // If no relievers recorded outs, starter still gets W
+      starter.stats.decision = 'W';
+    }
+  }
+
+  // --- SAVE: Last pitcher on winning team who isn't the W pitcher ---
+  const lastWinPitcher = winTeamPitchers.find(p => p.stats.finishedGame);
+  if (lastWinPitcher && lastWinPitcher.stats.decision !== 'W' && !lastWinPitcher.stats.isStarter) {
+    const scoreDiff = Math.abs(homeScore - awayScore);
+    const outs = lastWinPitcher.stats.outsRecorded;
+
+    // Save criteria: entered with ≤3 run lead and pitched ≥1 inning,
+    // OR entered with tying run on base/at-bat/on-deck,
+    // OR pitched ≥3 innings
+    const criterion1 = scoreDiff <= 3 && outs >= 3;
+    const criterion3 = outs >= 9; // 3+ innings
+
+    // Simplified criterion 2: if inherited runners ≥ 1 and lead was small
+    const criterion2 = lastWinPitcher.stats.inheritedRunners > 0 && scoreDiff <= 4;
+
+    if (criterion1 || criterion2 || criterion3) {
+      lastWinPitcher.stats.save = true;
+    }
+  }
+
+  // Mark remaining winning team pitchers as ND
+  for (const p of winTeamPitchers) {
+    if (p.stats.decision === null) p.stats.decision = 'ND';
+  }
+}
+
 function createEmptyPitcherStats(): PitcherGameStats {
   return {
     outsRecorded: 0, hitsAllowed: 0, runsAllowed: 0, earnedRuns: 0,
@@ -699,6 +798,7 @@ function createEmptyPitcherStats(): PitcherGameStats {
     exitInning: null, exitOuts: null, finishedGame: false,
     inheritedRunners: 0, inheritedRunnersScored: 0,
     bequeathedRunners: 0, bequeathedRunnersScored: 0,
+    decision: null, save: false, hold: false, blownSave: false,
   };
 }
 
@@ -2527,6 +2627,9 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         lastPitcherStats.exitOuts = gameState.outs;
       }
     }
+
+    // MAJ-08: Calculate pitcher decisions (W/L/SV/H/BS)
+    calculatePitcherDecisions(pitcherStats, gameState.homeScore, gameState.awayScore, gameState.inning);
 
     // Convert pitcher stats Map to array for PersistedGameState
     const pitcherGameStatsArray: PersistedGameState['pitcherGameStats'] = [];
