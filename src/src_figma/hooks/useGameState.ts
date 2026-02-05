@@ -169,7 +169,8 @@ export interface UseGameStateReturn {
   advanceRunner: (from: 'first' | 'second' | 'third', to: 'second' | 'third' | 'home', outcome: 'safe' | 'out') => void;
   /** Batch update runners - processes all movements atomically to avoid race conditions */
   advanceRunnersBatch: (movements: Array<{ from: 'first' | 'second' | 'third'; to: 'second' | 'third' | 'home' | 'out'; outcome: 'safe' | 'out' }>) => void;
-  makeSubstitution: (benchPlayerId: string, lineupPlayerId: string, benchPlayerName?: string, lineupPlayerName?: string) => void;
+  makeSubstitution: (benchPlayerId: string, lineupPlayerId: string, benchPlayerName?: string, lineupPlayerName?: string, options?: { subType?: 'player_sub' | 'pinch_hit' | 'pinch_run' | 'defensive_sub' | 'position_switch' | 'double_switch'; newPosition?: string; base?: '1B' | '2B' | '3B'; isPinchHitter?: boolean }) => void;
+  switchPositions: (switches: Array<{ playerId: string; newPosition: string }>) => void;
   changePitcher: (newPitcherId: string, exitingPitcherId: string, newPitcherName?: string, exitingPitcherName?: string) => void;
   advanceCount: (type: 'ball' | 'strike' | 'foul') => void;
   resetCount: () => void;
@@ -858,7 +859,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
 
   // Substitution log for game history
   const [substitutionLog, setSubstitutionLog] = useState<Array<{
-    type: 'player_sub' | 'pitching_change';
+    type: 'player_sub' | 'pitching_change' | 'pinch_hit' | 'pinch_run' | 'defensive_sub' | 'position_switch' | 'double_switch';
     inning: number;
     halfInning: 'TOP' | 'BOTTOM';
     outgoingPlayerId: string;
@@ -2376,10 +2377,24 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     setGameState(prev => ({ ...prev, balls: 0, strikes: 0 }));
   }, []);
 
-  const makeSubstitution = useCallback((benchPlayerId: string, lineupPlayerId: string, benchPlayerName?: string, lineupPlayerName?: string) => {
+  const makeSubstitution = useCallback((
+    benchPlayerId: string,
+    lineupPlayerId: string,
+    benchPlayerName?: string,
+    lineupPlayerName?: string,
+    // MAJ-06: Optional rich substitution data from modals
+    options?: {
+      subType?: 'player_sub' | 'pinch_hit' | 'pinch_run' | 'defensive_sub' | 'position_switch' | 'double_switch';
+      newPosition?: string;         // Override position instead of inheriting
+      base?: '1B' | '2B' | '3B';   // For pinch runners: which base
+      isPinchHitter?: boolean;      // For pinch hitters: replace mid-at-bat
+    }
+  ) => {
+    const subType = options?.subType || 'player_sub';
+
     // Log substitution event
     setSubstitutionLog(prev => [...prev, {
-      type: 'player_sub',
+      type: subType,
       inning: gameState.inning,
       halfInning: gameState.isTop ? 'TOP' : 'BOTTOM',
       outgoingPlayerId: lineupPlayerId,
@@ -2395,25 +2410,25 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     const homeIndex = homeLineupRef.current.findIndex(p => p.playerId === lineupPlayerId);
 
     if (awayIndex >= 0) {
-      // Substitute in away lineup - preserve the position of the player being replaced
-      const outgoingPosition = awayLineupRef.current[awayIndex].position;
+      // MAJ-06: Use newPosition if provided, otherwise preserve outgoing position
+      const position = options?.newPosition || awayLineupRef.current[awayIndex].position;
       awayLineupRef.current[awayIndex] = {
         playerId: benchPlayerId,
         playerName: benchPlayerName || benchPlayerId,
-        position: outgoingPosition,
+        position,
       };
     } else if (homeIndex >= 0) {
-      // Substitute in home lineup - preserve the position of the player being replaced
-      const outgoingPosition = homeLineupRef.current[homeIndex].position;
+      const position = options?.newPosition || homeLineupRef.current[homeIndex].position;
       homeLineupRef.current[homeIndex] = {
         playerId: benchPlayerId,
         playerName: benchPlayerName || benchPlayerId,
-        position: outgoingPosition,
+        position,
       };
     }
 
     // If the substituted player is the current batter, update current batter
-    if (lineupPlayerId === gameState.currentBatterId) {
+    // Also handle pinch hitter (replaces current batter mid-AB)
+    if (lineupPlayerId === gameState.currentBatterId || options?.isPinchHitter) {
       setGameState(prev => ({
         ...prev,
         currentBatterId: benchPlayerId,
@@ -2430,8 +2445,41 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       return newStats;
     });
 
-    console.log(`[useGameState] Substitution complete: ${benchPlayerName || benchPlayerId} replaces ${lineupPlayerName || lineupPlayerId} in inning ${gameState.inning}`);
+    console.log(`[useGameState] Substitution (${subType}): ${benchPlayerName || benchPlayerId} replaces ${lineupPlayerName || lineupPlayerId} in inning ${gameState.inning}`);
   }, [gameState.inning, gameState.isTop, gameState.currentBatterId]);
+
+  // MAJ-06: Position switch (no new players, just position reassignment)
+  const switchPositions = useCallback((switches: Array<{ playerId: string; newPosition: string }>) => {
+    for (const sw of switches) {
+      const awayIdx = awayLineupRef.current.findIndex(p => p.playerId === sw.playerId);
+      const homeIdx = homeLineupRef.current.findIndex(p => p.playerId === sw.playerId);
+
+      if (awayIdx >= 0) {
+        awayLineupRef.current[awayIdx] = {
+          ...awayLineupRef.current[awayIdx],
+          position: sw.newPosition,
+        };
+      } else if (homeIdx >= 0) {
+        homeLineupRef.current[homeIdx] = {
+          ...homeLineupRef.current[homeIdx],
+          position: sw.newPosition,
+        };
+      }
+    }
+
+    setSubstitutionLog(prev => [...prev, {
+      type: 'position_switch',
+      inning: gameState.inning,
+      halfInning: gameState.isTop ? 'TOP' : 'BOTTOM',
+      outgoingPlayerId: switches.map(s => s.playerId).join(','),
+      outgoingPlayerName: 'Position Switch',
+      incomingPlayerId: switches.map(s => s.playerId).join(','),
+      incomingPlayerName: switches.map(s => `${s.playerId}->${s.newPosition}`).join(', '),
+      timestamp: Date.now(),
+    }]);
+
+    console.log(`[useGameState] Position switch: ${switches.map(s => `${s.playerId}->${s.newPosition}`).join(', ')}`);
+  }, [gameState.inning, gameState.isTop]);
 
   const changePitcher = useCallback((newPitcherId: string, exitingPitcherId: string, newPitcherName?: string, exitingPitcherName?: string) => {
     // Per PITCH_COUNT_TRACKING_SPEC.md: Mandatory pitch count capture on pitching change
@@ -2899,6 +2947,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     advanceRunner,
     advanceRunnersBatch,
     makeSubstitution,
+    switchPositions,
     changePitcher,
     advanceCount,
     resetCount,
