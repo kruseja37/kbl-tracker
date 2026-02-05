@@ -1,12 +1,31 @@
-import { useNavigate, useLocation } from "react-router";
-import { Trophy, TrendingUp, ChevronDown, ChevronUp } from "lucide-react";
+import { useNavigate, useLocation, useParams } from "react-router";
+import { Trophy, ChevronDown, ChevronUp, Loader2 } from "lucide-react";
 import { getTeamColors } from "@/config/teamColors";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { getCompletedGameById, type CompletedGameRecord } from "../../utils/gameStorage";
+
+// Helper to format innings pitched from outs recorded
+function formatIP(outsRecorded: number): string {
+  const fullInnings = Math.floor(outsRecorded / 3);
+  const partialOuts = outsRecorded % 3;
+  return partialOuts === 0 ? `${fullInnings}.0` : `${fullInnings}.${partialOuts}`;
+}
+
+// Helper to format batting average
+function formatAvg(hits: number, atBats: number): string {
+  if (atBats === 0) return ".000";
+  const avg = hits / atBats;
+  return avg.toFixed(3).replace(/^0/, "");
+}
 
 export function PostGameSummary() {
   const navigate = useNavigate();
   const location = useLocation();
+  const { gameId } = useParams<{ gameId: string }>();
   const [boxScoreExpanded, setBoxScoreExpanded] = useState(false);
+  const [gameData, setGameData] = useState<CompletedGameRecord | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   // Get game mode from navigation state to route back appropriately
   const navigationState = location.state as {
@@ -17,61 +36,133 @@ export function PostGameSummary() {
   const gameMode = navigationState?.gameMode || 'franchise';
   const franchiseId = navigationState?.franchiseId || '1';
 
-  // Team IDs - in production these would come from game data
-  const homeTeamId = 'sox';
-  const awayTeamId = 'tigers';
+  // Load game data from IndexedDB
+  useEffect(() => {
+    async function loadGameData() {
+      if (!gameId) {
+        setError("No game ID provided");
+        setIsLoading(false);
+        return;
+      }
 
-  // Mock box score data
-  const awayBatters = [
-    { name: "R. JOHNSON", pos: "CF", ab: 4, r: 1, h: 2, rbi: 1, bb: 0, so: 1, avg: ".312" },
-    { name: "M. DAVIS", pos: "SS", ab: 4, r: 0, h: 1, rbi: 0, bb: 0, so: 2, avg: ".289" },
-    { name: "K. BROOKS", pos: "3B", ab: 4, r: 1, h: 1, rbi: 1, bb: 0, so: 1, avg: ".276" },
-    { name: "D. WILSON", pos: "1B", ab: 3, r: 0, h: 0, rbi: 0, bb: 1, so: 1, avg: ".301" },
-    { name: "T. GARCIA", pos: "LF", ab: 4, r: 1, h: 2, rbi: 1, bb: 0, so: 0, avg: ".295" },
-    { name: "S. ANDERSON", pos: "RF", ab: 3, r: 0, h: 0, rbi: 0, bb: 0, so: 2, avg: ".265" },
-    { name: "J. THOMAS", pos: "C", ab: 3, r: 0, h: 1, rbi: 0, bb: 0, so: 1, avg: ".258" },
-    { name: "B. RODRIGUEZ", pos: "2B", ab: 3, r: 0, h: 0, rbi: 0, bb: 0, so: 1, avg: ".271" },
-    { name: "L. HERNANDEZ", pos: "P", ab: 2, r: 0, h: 0, rbi: 0, bb: 0, so: 2, avg: ".125" },
-  ];
+      try {
+        const data = await getCompletedGameById(gameId);
+        if (data) {
+          setGameData(data);
+        } else {
+          setError("Game not found");
+        }
+      } catch (err) {
+        console.error("Failed to load game data:", err);
+        setError("Failed to load game data");
+      } finally {
+        setIsLoading(false);
+      }
+    }
 
-  const homeBatters = [
-    { name: "J. MARTINEZ", pos: "SS", ab: 4, r: 2, h: 3, rbi: 4, bb: 0, so: 0, avg: ".335" },
-    { name: "T. WILLIAMS", pos: "CF", ab: 3, r: 1, h: 2, rbi: 2, bb: 1, so: 0, avg: ".318" },
-    { name: "C. JACKSON", pos: "1B", ab: 4, r: 0, h: 1, rbi: 0, bb: 0, so: 1, avg: ".292" },
-    { name: "A. RAMIREZ", pos: "3B", ab: 4, r: 1, h: 2, rbi: 0, bb: 0, so: 1, avg: ".288" },
-    { name: "P. MARTIN", pos: "LF", ab: 3, r: 0, h: 0, rbi: 0, bb: 1, so: 2, avg: ".267" },
-    { name: "E. LOPEZ", pos: "RF", ab: 4, r: 0, h: 1, rbi: 0, bb: 0, so: 1, avg: ".279" },
-    { name: "N. WHITE", pos: "C", ab: 3, r: 0, h: 0, rbi: 0, bb: 0, so: 1, avg: ".254" },
-    { name: "M. TAYLOR", pos: "2B", ab: 3, r: 0, h: 1, rbi: 0, bb: 0, so: 0, avg: ".281" },
-    { name: "R. SMITH", pos: "P", ab: 2, r: 0, h: 0, rbi: 0, bb: 0, so: 1, avg: ".089" },
-  ];
+    loadGameData();
+  }, [gameId]);
 
-  const awayPitchers = [
-    { name: "L. HERNANDEZ", ip: "6.0", h: 8, r: 4, er: 4, bb: 2, so: 5, era: "3.45" },
-    { name: "J. PHILLIPS", ip: "2.0", h: 2, r: 0, er: 0, bb: 0, so: 3, era: "2.89" },
-  ];
+  // Show loading state
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-[#2a3a2d] text-white p-6 flex items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="w-8 h-8 animate-spin text-[#C4A853]" />
+          <div className="text-lg">Loading game summary...</div>
+        </div>
+      </div>
+    );
+  }
 
-  const homePitchers = [
-    { name: "R. SMITH", ip: "7.0", h: 5, r: 3, er: 3, bb: 1, so: 8, era: "2.98" },
-    { name: "D. BARNES", ip: "2.0", h: 2, r: 0, er: 0, bb: 0, so: 3, era: "3.12" },
-  ];
+  // Show error state
+  if (error || !gameData) {
+    return (
+      <div className="min-h-screen bg-[#2a3a2d] text-white p-6 flex items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <div className="text-lg text-red-400">{error || "Game data not available"}</div>
+          <button
+            onClick={() => navigate("/exhibition")}
+            className="bg-[#556B55] border-[3px] border-white px-6 py-3 text-sm hover:bg-[#6B9462]"
+          >
+            BACK TO MENU
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // Extract data from game record
+  const homeTeamId = gameData.homeTeamId;
+  const awayTeamId = gameData.awayTeamId;
+  const homeTeamName = gameData.homeTeamName;
+  const awayTeamName = gameData.awayTeamName;
+
+  // Build batter stats from playerStats
+  // We need to identify which players are on which team - use teamId prefix or separate tracking
+  // For now, we'll display all players and let the UI sort them
+  const allBatters = Object.entries(gameData.playerStats || {}).map(([playerId, stats]) => {
+    // Try to determine team from playerId format (e.g., "away-1" or "home-1" or team-based)
+    const isAway = playerId.toLowerCase().includes('away') || playerId.startsWith(awayTeamId);
+    return {
+      playerId,
+      name: playerId.split('-').pop()?.toUpperCase() || playerId,
+      isAway,
+      ab: stats.ab,
+      r: stats.r,
+      h: stats.h,
+      rbi: stats.rbi,
+      bb: stats.bb,
+      so: stats.k,
+      avg: formatAvg(stats.h, stats.ab),
+    };
+  });
+
+  // Build pitcher stats
+  const allPitchers = (gameData.pitcherGameStats || []).map(pitcher => ({
+    pitcherId: pitcher.pitcherId,
+    name: pitcher.pitcherName,
+    teamId: pitcher.teamId,
+    isAway: pitcher.teamId === awayTeamId,
+    ip: formatIP(pitcher.outsRecorded),
+    h: pitcher.hitsAllowed,
+    r: pitcher.runsAllowed,
+    er: pitcher.earnedRuns,
+    bb: pitcher.walksAllowed,
+    so: pitcher.strikeoutsThrown,
+    isStarter: pitcher.isStarter,
+  }));
+
+  const awayPitchers = allPitchers.filter(p => p.isAway);
+  const homePitchers = allPitchers.filter(p => !p.isAway);
 
   // Inning-by-inning scoring
+  const inningScores = gameData.inningScores || Array(9).fill({ away: 0, home: 0 });
   const scoreboard = {
-    innings: [
-      { away: 1, home: 0 }, // Inning 1
-      { away: 0, home: 2 }, // Inning 2
-      { away: 2, home: 0 }, // Inning 3
-      { away: 0, home: 1 }, // Inning 4
-      { away: 0, home: 0 }, // Inning 5
-      { away: 0, home: 0 }, // Inning 6
-      { away: 0, home: 1 }, // Inning 7
-      { away: 0, home: 0 }, // Inning 8
-      { away: 0, home: 0 }, // Inning 9
-    ],
-    away: { runs: 3, hits: 7, errors: 1 },
-    home: { runs: 4, hits: 10, errors: 0 },
+    innings: inningScores,
+    away: { runs: gameData.finalScore.away, hits: 0, errors: 0 },
+    home: { runs: gameData.finalScore.home, hits: 0, errors: 0 },
   };
+
+  // Calculate hits from player stats
+  Object.values(gameData.playerStats || {}).forEach(stats => {
+    // We'd need team info to properly attribute hits
+    // For now, use total as approximation
+  });
+
+  // Determine winner
+  const homeWon = gameData.finalScore.home > gameData.finalScore.away;
+  const winnerName = homeWon ? homeTeamName : awayTeamName;
+  const winnerId = homeWon ? homeTeamId : awayTeamId;
+
+  // Find players of the game (top performers by hits + RBI)
+  const sortedBatters = [...allBatters].sort((a, b) => {
+    const aScore = a.h * 2 + a.rbi + a.r;
+    const bScore = b.h * 2 + b.rbi + b.r;
+    return bScore - aScore;
+  });
+
+  const topPerformers = sortedBatters.slice(0, 3);
 
   return (
     <div className="min-h-screen bg-[#2a3a2d] text-white p-6">
@@ -87,7 +178,7 @@ export function PostGameSummary() {
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <div className="bg-[#DD0000] text-white text-[10px] font-bold px-2 py-1 border-2 border-white">
-                      LIVE
+                      FINAL
                     </div>
                     <div className="text-white text-lg font-bold tracking-wider" style={{ textShadow: '2px 2px 4px rgba(0,0,0,0.8)' }}>
                       POST-GAME REPORT
@@ -109,144 +200,121 @@ export function PostGameSummary() {
           <div className="text-center text-[#E8E8D8] text-xs font-bold tracking-[0.3em] mb-1">
             {getTeamColors(homeTeamId).stadium || 'BALLPARK'}
           </div>
-          
+
           {/* Scoreboard grid */}
-          <div className="grid gap-[1px] mb-2" style={{ gridTemplateColumns: '26px 90px repeat(9, 24px) 24px 6px 28px 28px 28px 6px 50px 8px 1fr' }}>
+          <div className="grid gap-[1px] mb-2" style={{ gridTemplateColumns: '90px repeat(9, 24px) 6px 28px 28px 28px' }}>
             {/* Header row */}
-            <div className="text-[#E8E8D8] text-[9px] font-bold">P</div>
             <div></div>
             {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(inning => (
               <div key={inning} className="text-[#E8E8D8] text-[9px] font-bold text-center">{inning}</div>
             ))}
-            <div className="text-[#E8E8D8] text-[9px] font-bold text-center">10</div>
             <div></div>
             <div className="text-[#E8E8D8] text-[9px] font-bold text-center">R</div>
             <div className="text-[#E8E8D8] text-[9px] font-bold text-center">H</div>
             <div className="text-[#E8E8D8] text-[9px] font-bold text-center">E</div>
-            <div></div>
-            <div className="text-[#E8E8D8] text-[9px] font-bold text-center">REC</div>
-            <div></div>
-            <div></div>
-            
+
             {/* Away team row */}
-            <div className="bg-[#3d5240] border-2 border-[#2a3a2d] min-h-[20px] flex items-center justify-center">
-              <span className="text-[#E8E8D8] text-xs font-bold">9</span>
-            </div>
-            <div className="text-[#E8E8D8] text-[11px] font-bold flex items-center pl-2" style={{ 
+            <div className="text-[#E8E8D8] text-[11px] font-bold flex items-center pl-2" style={{
               textShadow: '1px 1px 0px rgba(0,0,0,0.7)'
-            }}>TIGERS</div>
-            {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(inning => {
-              const awayScore = scoreboard.innings[inning - 1]?.away;
+            }}>{awayTeamName.toUpperCase()}</div>
+            {[0, 1, 2, 3, 4, 5, 6, 7, 8].map(idx => {
+              const score = scoreboard.innings[idx]?.away;
               return (
-                <div key={inning} className="bg-[#3d5240] border-2 border-[#2a3a2d] text-[#E8E8D8] text-xs font-bold min-h-[20px] flex items-center justify-center">
-                  {awayScore !== undefined ? awayScore : ''}
+                <div key={idx} className="bg-[#3d5240] border-2 border-[#2a3a2d] text-[#E8E8D8] text-xs font-bold min-h-[20px] flex items-center justify-center">
+                  {score !== undefined ? score : '-'}
                 </div>
               );
             })}
-            <div className="bg-[#3d5240] border-2 border-[#2a3a2d] min-h-[20px]"></div>
             <div></div>
             <div className="bg-[#3d5240] border-2 border-[#2a3a2d] text-[#E8E8D8] text-xs font-bold flex items-center justify-center">{scoreboard.away.runs}</div>
             <div className="bg-[#3d5240] border-2 border-[#2a3a2d] text-[#E8E8D8] text-xs font-bold flex items-center justify-center">{scoreboard.away.hits}</div>
             <div className="bg-[#3d5240] border-2 border-[#2a3a2d] text-[#E8E8D8] text-xs font-bold flex items-center justify-center">{scoreboard.away.errors}</div>
-            <div></div>
-            <div className="bg-[#3d5240] border-2 border-[#2a3a2d] text-[#E8E8D8] text-[9px] font-bold flex items-center justify-center">47-38</div>
-            <div></div>
-            <div className="row-span-2 flex items-center gap-3 px-[15px] py-[0px]">
-              {/* Concessions Section */}
-              <div className="flex flex-col items-start justify-center">
-                <div className="text-[#C4A853] text-[8px] font-bold tracking-wider mb-0.5" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.8)' }}>CONCESSIONS</div>
-                <div className="text-[#E8E8D8] text-[9px] leading-tight" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.8)' }}>HOT DOG • 10¢</div>
-                <div className="text-[#E8E8D8] text-[9px] leading-tight" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.8)' }}>PEANUTS • 5¢</div>
-                <div className="text-[#E8E8D8] text-[9px] leading-tight" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.8)' }}>CRACKER JACK • 15¢</div>
-              </div>
-              
-              {/* Kruse Cola Ad */}
-              <div className="border-2 border-[#E8E8D8] px-3 py-2">
-                <div className="text-[#E8E8D8] text-[10px] font-bold tracking-wider text-center" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.8)' }}>KRUSE COLA</div>
-                <div className="text-[#C4A853] text-[7px] font-bold text-center mt-0.5" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.8)' }}>ICE COLD • 5¢</div>
-              </div>
-            </div>
-            
+
             {/* Home team row */}
-            <div className="bg-[#3d5240] border-2 border-[#2a3a2d] min-h-[20px] flex items-center justify-center">
-              <span className="text-[#E8E8D8] text-xs font-bold">9</span>
-            </div>
-            <div className="text-[#E8E8D8] text-[11px] font-bold flex items-center pl-2" style={{ 
+            <div className="text-[#E8E8D8] text-[11px] font-bold flex items-center pl-2" style={{
               textShadow: '1px 1px 0px rgba(0,0,0,0.7)'
-            }}>SOX</div>
-            {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(inning => {
-              const homeScore = scoreboard.innings[inning - 1]?.home;
+            }}>{homeTeamName.toUpperCase()}</div>
+            {[0, 1, 2, 3, 4, 5, 6, 7, 8].map(idx => {
+              const score = scoreboard.innings[idx]?.home;
               return (
-                <div key={inning} className="bg-[#3d5240] border-2 border-[#2a3a2d] text-[#E8E8D8] text-xs font-bold min-h-[20px] flex items-center justify-center">
-                  {homeScore !== undefined ? homeScore : ''}
+                <div key={idx} className="bg-[#3d5240] border-2 border-[#2a3a2d] text-[#E8E8D8] text-xs font-bold min-h-[20px] flex items-center justify-center">
+                  {score !== undefined ? score : '-'}
                 </div>
               );
             })}
-            <div className="bg-[#3d5240] border-2 border-[#2a3a2d] min-h-[20px]"></div>
             <div></div>
             <div className="bg-[#3d5240] border-2 border-[#2a3a2d] text-[#E8E8D8] text-xs font-bold flex items-center justify-center">{scoreboard.home.runs}</div>
             <div className="bg-[#3d5240] border-2 border-[#2a3a2d] text-[#E8E8D8] text-xs font-bold flex items-center justify-center">{scoreboard.home.hits}</div>
             <div className="bg-[#3d5240] border-2 border-[#2a3a2d] text-[#E8E8D8] text-xs font-bold flex items-center justify-center">{scoreboard.home.errors}</div>
-            <div></div>
-            <div className="bg-[#3d5240] border-2 border-[#2a3a2d] text-[#E8E8D8] text-[9px] font-bold flex items-center justify-center">52-33</div>
-            <div></div>
           </div>
-          
+
           {/* Bottom indicator row - FINAL message */}
           <div className="border-t-2 border-[#E8E8D8] pt-2 text-center">
-            <div className="text-sm font-bold" style={{ 
-              color: getTeamColors(homeTeamId).secondary,
-              textShadow: getTeamColors(homeTeamId).secondary.toLowerCase() === '#ffffff' || getTeamColors(homeTeamId).secondary.toLowerCase() === 'white' ? '1px 1px 2px black' : '1px 1px 2px white'
-            }}>★ SOX WIN! ★</div>
+            <div className="text-sm font-bold" style={{
+              color: getTeamColors(winnerId).secondary || '#C4A853',
+              textShadow: '1px 1px 2px black'
+            }}>★ {winnerName.toUpperCase()} WIN! ★</div>
           </div>
         </div>
 
         {/* Players of the game */}
-        <div 
-          className="border-[5px] border-[#C4A853] p-4 mb-4"
-          style={{
-            backgroundColor: getTeamColors(homeTeamId).primary
-          }}
-        >
-          <div className="flex items-center gap-2 mb-2">
-            <Trophy className="w-5 h-5 text-white" />
-            <div className="text-sm text-white">POG ★★★</div>
+        {topPerformers.length > 0 && topPerformers[0].h > 0 && (
+          <div
+            className="border-[5px] border-[#C4A853] p-4 mb-4"
+            style={{
+              backgroundColor: getTeamColors(topPerformers[0].isAway ? awayTeamId : homeTeamId).primary || '#2a3a2d'
+            }}
+          >
+            <div className="flex items-center gap-2 mb-2">
+              <Trophy className="w-5 h-5 text-white" />
+              <div className="text-sm text-white">POG ★★★</div>
+            </div>
+            <div className="text-lg text-white">{topPerformers[0].name}</div>
+            <div className="text-[8px] text-white/80">
+              {topPerformers[0].h}-{topPerformers[0].ab} • {topPerformers[0].rbi} RBI • {topPerformers[0].r} R
+            </div>
           </div>
-          <div className="text-lg text-white">J. MARTINEZ</div>
-          <div className="text-[8px] text-white/80">3-4 • 2 HR • 4 RBI</div>
-        </div>
+        )}
 
-        <div 
-          className="border-[5px] border-[#E8E8D8] p-4 mb-4"
-          style={{
-            backgroundColor: getTeamColors(homeTeamId).primary
-          }}
-        >
-          <div className="flex items-center gap-2 mb-2">
-            <Trophy className="w-5 h-5 text-white" />
-            <div className="text-sm text-white">POG ★★</div>
+        {topPerformers.length > 1 && topPerformers[1].h > 0 && (
+          <div
+            className="border-[5px] border-[#E8E8D8] p-4 mb-4"
+            style={{
+              backgroundColor: getTeamColors(topPerformers[1].isAway ? awayTeamId : homeTeamId).primary || '#2a3a2d'
+            }}
+          >
+            <div className="flex items-center gap-2 mb-2">
+              <Trophy className="w-5 h-5 text-white" />
+              <div className="text-sm text-white">POG ★★</div>
+            </div>
+            <div className="text-lg text-white">{topPerformers[1].name}</div>
+            <div className="text-[8px] text-white/80">
+              {topPerformers[1].h}-{topPerformers[1].ab} • {topPerformers[1].rbi} RBI • {topPerformers[1].r} R
+            </div>
           </div>
-          <div className="text-lg text-white">T. WILLIAMS</div>
-          <div className="text-[8px] text-white/80">2-3 • 1 HR • 2 RBI</div>
-        </div>
+        )}
 
-        <div 
-          className="border-[5px] border-white p-4 mb-4"
-          style={{
-            backgroundColor: getTeamColors(awayTeamId).primary
-          }}
-        >
-          <div className="flex items-center gap-2 mb-2">
-            <Trophy className="w-5 h-5 text-white" />
-            <div className="text-sm text-white">POG ★</div>
+        {topPerformers.length > 2 && topPerformers[2].h > 0 && (
+          <div
+            className="border-[5px] border-white p-4 mb-4"
+            style={{
+              backgroundColor: getTeamColors(topPerformers[2].isAway ? awayTeamId : homeTeamId).primary || '#2a3a2d'
+            }}
+          >
+            <div className="flex items-center gap-2 mb-2">
+              <Trophy className="w-5 h-5 text-white" />
+              <div className="text-sm text-white">POG ★</div>
+            </div>
+            <div className="text-lg text-white">{topPerformers[2].name}</div>
+            <div className="text-[8px] text-white/80">
+              {topPerformers[2].h}-{topPerformers[2].ab} • {topPerformers[2].rbi} RBI • {topPerformers[2].r} R
+            </div>
           </div>
-          <div className="text-lg text-white">R. JOHNSON</div>
-          <div className="text-[8px] text-white/80">2-4 • 1 2B • 1 RBI</div>
-        </div>
+        )}
 
         {/* Box score preview */}
         <div className="bg-[#6B9462] border-[5px] border-[#4A6844] p-4 mb-4">
-          <button 
+          <button
             onClick={() => setBoxScoreExpanded(!boxScoreExpanded)}
             className="w-full text-center hover:opacity-80 transition-opacity flex items-center justify-center gap-2"
           >
@@ -259,130 +327,74 @@ export function PostGameSummary() {
           </button>
 
           {boxScoreExpanded && (
-            // Expanded: Full box score
             <div className="space-y-4 mt-3">
-              {/* Away Team Batting */}
-              <div>
-                <div className="text-[10px] text-[#E8E8D8] mb-2 font-bold">TIGERS BATTING</div>
-                <div className="text-[7px]">
-                  {/* Header */}
-                  <div className="grid grid-cols-9 gap-1 mb-1 text-[#E8E8D8]/60">
-                    <div className="col-span-2 text-left">PLAYER</div>
-                    <div className="text-center">AB</div>
-                    <div className="text-center">R</div>
-                    <div className="text-center">H</div>
-                    <div className="text-center">RBI</div>
-                    <div className="text-center">BB</div>
-                    <div className="text-center">SO</div>
-                    <div className="text-center">AVG</div>
-                  </div>
-                  {/* Players */}
-                  {awayBatters.map((player, idx) => (
-                    <div key={idx} className="grid grid-cols-9 gap-1 text-[#E8E8D8] py-[2px]">
-                      <div className="col-span-2 text-left">{player.name} {player.pos}</div>
-                      <div className="text-center">{player.ab}</div>
-                      <div className="text-center">{player.r}</div>
-                      <div className="text-center">{player.h}</div>
-                      <div className="text-center">{player.rbi}</div>
-                      <div className="text-center">{player.bb}</div>
-                      <div className="text-center">{player.so}</div>
-                      <div className="text-center">{player.avg}</div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
               {/* Away Team Pitching */}
-              <div>
-                <div className="text-[10px] text-[#E8E8D8] mb-2 font-bold">TIGERS PITCHING</div>
-                <div className="text-[7px]">
-                  {/* Header */}
-                  <div className="grid grid-cols-8 gap-1 mb-1 text-[#E8E8D8]/60">
-                    <div className="col-span-2 text-left">PITCHER</div>
-                    <div className="text-center">IP</div>
-                    <div className="text-center">H</div>
-                    <div className="text-center">R</div>
-                    <div className="text-center">ER</div>
-                    <div className="text-center">BB</div>
-                    <div className="text-center">SO</div>
-                  </div>
-                  {/* Pitchers */}
-                  {awayPitchers.map((pitcher, idx) => (
-                    <div key={idx} className="grid grid-cols-8 gap-1 text-[#E8E8D8] py-[2px]">
-                      <div className="col-span-2 text-left">{pitcher.name}</div>
-                      <div className="text-center">{pitcher.ip}</div>
-                      <div className="text-center">{pitcher.h}</div>
-                      <div className="text-center">{pitcher.r}</div>
-                      <div className="text-center">{pitcher.er}</div>
-                      <div className="text-center">{pitcher.bb}</div>
-                      <div className="text-center">{pitcher.so}</div>
+              {awayPitchers.length > 0 && (
+                <div>
+                  <div className="text-[10px] text-[#E8E8D8] mb-2 font-bold">{awayTeamName.toUpperCase()} PITCHING</div>
+                  <div className="text-[7px]">
+                    <div className="grid grid-cols-8 gap-1 mb-1 text-[#E8E8D8]/60">
+                      <div className="col-span-2 text-left">PITCHER</div>
+                      <div className="text-center">IP</div>
+                      <div className="text-center">H</div>
+                      <div className="text-center">R</div>
+                      <div className="text-center">ER</div>
+                      <div className="text-center">BB</div>
+                      <div className="text-center">SO</div>
                     </div>
-                  ))}
+                    {awayPitchers.map((pitcher, idx) => (
+                      <div key={idx} className="grid grid-cols-8 gap-1 text-[#E8E8D8] py-[2px]">
+                        <div className="col-span-2 text-left">{pitcher.name}</div>
+                        <div className="text-center">{pitcher.ip}</div>
+                        <div className="text-center">{pitcher.h}</div>
+                        <div className="text-center">{pitcher.r}</div>
+                        <div className="text-center">{pitcher.er}</div>
+                        <div className="text-center">{pitcher.bb}</div>
+                        <div className="text-center">{pitcher.so}</div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              </div>
+              )}
 
               {/* Divider */}
               <div className="border-t-2 border-[#4A6844]"></div>
 
-              {/* Home Team Batting */}
-              <div>
-                <div className="text-[10px] text-[#E8E8D8] mb-2 font-bold">SOX BATTING</div>
-                <div className="text-[7px]">
-                  {/* Header */}
-                  <div className="grid grid-cols-9 gap-1 mb-1 text-[#E8E8D8]/60">
-                    <div className="col-span-2 text-left">PLAYER</div>
-                    <div className="text-center">AB</div>
-                    <div className="text-center">R</div>
-                    <div className="text-center">H</div>
-                    <div className="text-center">RBI</div>
-                    <div className="text-center">BB</div>
-                    <div className="text-center">SO</div>
-                    <div className="text-center">AVG</div>
-                  </div>
-                  {/* Players */}
-                  {homeBatters.map((player, idx) => (
-                    <div key={idx} className="grid grid-cols-9 gap-1 text-[#E8E8D8] py-[2px]">
-                      <div className="col-span-2 text-left">{player.name} {player.pos}</div>
-                      <div className="text-center">{player.ab}</div>
-                      <div className="text-center">{player.r}</div>
-                      <div className="text-center">{player.h}</div>
-                      <div className="text-center">{player.rbi}</div>
-                      <div className="text-center">{player.bb}</div>
-                      <div className="text-center">{player.so}</div>
-                      <div className="text-center">{player.avg}</div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
               {/* Home Team Pitching */}
-              <div>
-                <div className="text-[10px] text-[#E8E8D8] mb-2 font-bold">SOX PITCHING</div>
-                <div className="text-[7px]">
-                  {/* Header */}
-                  <div className="grid grid-cols-8 gap-1 mb-1 text-[#E8E8D8]/60">
-                    <div className="col-span-2 text-left">PITCHER</div>
-                    <div className="text-center">IP</div>
-                    <div className="text-center">H</div>
-                    <div className="text-center">R</div>
-                    <div className="text-center">ER</div>
-                    <div className="text-center">BB</div>
-                    <div className="text-center">SO</div>
-                  </div>
-                  {/* Pitchers */}
-                  {homePitchers.map((pitcher, idx) => (
-                    <div key={idx} className="grid grid-cols-8 gap-1 text-[#E8E8D8] py-[2px]">
-                      <div className="col-span-2 text-left">{pitcher.name}</div>
-                      <div className="text-center">{pitcher.ip}</div>
-                      <div className="text-center">{pitcher.h}</div>
-                      <div className="text-center">{pitcher.r}</div>
-                      <div className="text-center">{pitcher.er}</div>
-                      <div className="text-center">{pitcher.bb}</div>
-                      <div className="text-center">{pitcher.so}</div>
+              {homePitchers.length > 0 && (
+                <div>
+                  <div className="text-[10px] text-[#E8E8D8] mb-2 font-bold">{homeTeamName.toUpperCase()} PITCHING</div>
+                  <div className="text-[7px]">
+                    <div className="grid grid-cols-8 gap-1 mb-1 text-[#E8E8D8]/60">
+                      <div className="col-span-2 text-left">PITCHER</div>
+                      <div className="text-center">IP</div>
+                      <div className="text-center">H</div>
+                      <div className="text-center">R</div>
+                      <div className="text-center">ER</div>
+                      <div className="text-center">BB</div>
+                      <div className="text-center">SO</div>
                     </div>
-                  ))}
+                    {homePitchers.map((pitcher, idx) => (
+                      <div key={idx} className="grid grid-cols-8 gap-1 text-[#E8E8D8] py-[2px]">
+                        <div className="col-span-2 text-left">{pitcher.name}</div>
+                        <div className="text-center">{pitcher.ip}</div>
+                        <div className="text-center">{pitcher.h}</div>
+                        <div className="text-center">{pitcher.r}</div>
+                        <div className="text-center">{pitcher.er}</div>
+                        <div className="text-center">{pitcher.bb}</div>
+                        <div className="text-center">{pitcher.so}</div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              </div>
+              )}
+
+              {/* Show message if no pitcher stats */}
+              {awayPitchers.length === 0 && homePitchers.length === 0 && (
+                <div className="text-center text-[#E8E8D8]/60 text-xs py-4">
+                  No pitcher statistics recorded
+                </div>
+              )}
             </div>
           )}
         </div>

@@ -270,6 +270,10 @@ export interface CompletedGameRecord {
   finalScore: { away: number; home: number };
   innings: number;
   fameEvents: PersistedGameState['fameEvents'];
+  // Full stats for post-game summary (added for EXH-011)
+  playerStats: PersistedGameState['playerStats'];
+  pitcherGameStats: PersistedGameState['pitcherGameStats'];
+  inningScores?: { away: number; home: number }[];
 }
 
 /**
@@ -277,7 +281,8 @@ export interface CompletedGameRecord {
  */
 export async function archiveCompletedGame(
   gameState: PersistedGameState,
-  finalScore: { away: number; home: number }
+  finalScore: { away: number; home: number },
+  inningScores?: { away: number; home: number }[]
 ): Promise<void> {
   const db = await initDatabase();
 
@@ -291,6 +296,10 @@ export async function archiveCompletedGame(
     finalScore,
     innings: gameState.inning,
     fameEvents: gameState.fameEvents,
+    // Include full stats for post-game display (EXH-011)
+    playerStats: gameState.playerStats,
+    pitcherGameStats: gameState.pitcherGameStats,
+    inningScores,
   };
 
   return new Promise((resolve, reject) => {
@@ -336,6 +345,28 @@ export async function getRecentGames(limit: number = 10): Promise<CompletedGameR
       } else {
         resolve(results);
       }
+    };
+  });
+}
+
+/**
+ * Get a completed game by ID (for post-game summary)
+ */
+export async function getCompletedGameById(gameId: string): Promise<CompletedGameRecord | null> {
+  const db = await initDatabase();
+
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(STORES.COMPLETED_GAMES, 'readonly');
+    const store = transaction.objectStore(STORES.COMPLETED_GAMES);
+    const request = store.get(gameId);
+
+    request.onerror = () => {
+      console.error('Failed to get completed game:', request.error);
+      reject(request.error);
+    };
+
+    request.onsuccess = () => {
+      resolve(request.result || null);
     };
   });
 }

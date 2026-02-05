@@ -20,7 +20,7 @@ import {
   type FameEventRecord,
 } from '../../utils/eventLog';
 import { aggregateGameToSeason } from '../../utils/seasonAggregator';
-import type { PersistedGameState } from '../../utils/gameStorage';
+import { archiveCompletedGame, type PersistedGameState } from '../utils/gameStorage';
 import type { AtBatResult, HalfInning } from '../../types/game';
 import { getBaseOutLI, type BaseState } from '../../engines/leverageCalculator';
 
@@ -2036,9 +2036,20 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     // Mark as aggregated after successful aggregation
     await markGameAggregated(gameState.gameId);
 
+    // Archive completed game with full stats for post-game summary (EXH-011)
+    const inningScores = scoreboard.innings.map(inn => ({
+      away: inn.away ?? 0,
+      home: inn.home ?? 0,
+    }));
+    await archiveCompletedGame(
+      persistedState,
+      { away: gameState.awayScore, home: gameState.homeScore },
+      inningScores
+    );
+
     setIsSaving(false);
     setLastSavedAt(Date.now());
-  }, [gameState, playerStats, pitcherStats, fameEvents, atBatSequence]);
+  }, [gameState, playerStats, pitcherStats, fameEvents, atBatSequence, scoreboard]);
 
   const endGame = useCallback(async () => {
     // Per PITCH_COUNT_TRACKING_SPEC.md: Mandatory pitch count capture at end of game

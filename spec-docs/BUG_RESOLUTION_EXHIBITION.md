@@ -232,11 +232,28 @@ Exhibition Mode allows users to play a single game between two teams without fra
 ---
 
 ### BUG-EXH-011: End-game summary shows demo data
-**Status**: OPEN
+**Status**: FIXED
 **Reported**: February 4, 2026
-**Fixed**: N/A
+**Fixed**: February 4, 2026
 
-**Notes**: PostGameSummary.tsx needs to be wired to actual game stats.
+**Root Cause**: PostGameSummary.tsx was using hardcoded mock data instead of loading actual game stats from IndexedDB.
+
+**Resolution**:
+1. Added `getCompletedGameById()` function to `gameStorage.ts` to retrieve archived game data
+2. Enhanced `CompletedGameRecord` interface to include `playerStats`, `pitcherGameStats`, and `inningScores`
+3. Updated `archiveCompletedGame()` to store full game stats when game ends
+4. Updated `useGameState.ts` to call `archiveCompletedGame()` with inning scores
+5. Rewrote `PostGameSummary.tsx` to:
+   - Load game data from IndexedDB using gameId from URL
+   - Display real team names, scores, and inning-by-inning scoring
+   - Show real pitcher stats in expandable box score
+   - Calculate and display top performers (Players of the Game)
+   - Handle loading and error states gracefully
+
+**Files Changed**:
+- `src/src_figma/utils/gameStorage.ts` - Added `getCompletedGameById()`, enhanced interfaces
+- `src/src_figma/hooks/useGameState.ts` - Added `archiveCompletedGame()` call with inning scores
+- `src/src_figma/app/pages/PostGameSummary.tsx` - Complete rewrite to use real data
 
 ---
 
@@ -646,7 +663,7 @@ The parent component (GameTracker) should consume these via the onSpecialEvent c
 | EXH-008 | Inside-the-park HR unclear | ⏳ OPEN |
 | EXH-009 | No pitcher in lineup | ⏳ OPEN |
 | EXH-010 | Scoreboard demo data | ✅ FIXED |
-| EXH-011 | End-game summary demo data | ⏳ OPEN |
+| EXH-011 | End-game summary demo data | ✅ FIXED |
 | EXH-012 | Missing jersey numbers | ⚠️ PARTIAL |
 | EXH-013 | Time is demo data | ✅ FIXED |
 | EXH-014 | Wrong team records | ✅ FIXED |
@@ -672,4 +689,4 @@ The parent component (GameTracker) should consume these via the onSpecialEvent c
 | EXH-035 | FC erases batter even when safe at first | ✅ FIXED |
 | EXH-036 | No way to edit mojo/fitness in player card | ✅ FIXED |
 
-**Fixed**: 23 | **Partial**: 2 | **By Design**: 1 | **Open**: 9
+**Fixed**: 24 | **Partial**: 2 | **By Design**: 1 | **Open**: 8
