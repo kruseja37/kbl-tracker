@@ -67,7 +67,8 @@ function convertToRosterPitcher(
 
 /**
  * Auto-generate lineup when no stored lineup exists.
- * Takes first 9 batters and first SP as starter.
+ * Takes first 8 batters + starting pitcher batting 9th (NL-style, no DH).
+ * SMB4 doesn't have DH, so pitcher always bats.
  */
 function autoGenerateLineup(teamPlayers: LBPlayer[]): LoadedLineup {
   // Split into batters and pitchers
@@ -78,19 +79,27 @@ function autoGenerateLineup(teamPlayers: LBPlayer[]): LoadedLineup {
     p => ['SP', 'RP', 'CP'].includes(p.primaryPosition)
   );
 
-  // Create lineup from first 9 batters
-  const lineupPlayers = batters.slice(0, 9).map((player, idx) =>
-    convertToRosterPlayer(player, idx + 1, player.primaryPosition)
-  );
-
-  // Remaining batters become bench
-  const benchPlayers = batters.slice(9).map(player =>
-    convertToRosterPlayer(player, undefined, undefined)
-  );
-
   // Find starting pitcher (first SP)
   const starters = pitchers.filter(p => p.primaryPosition === 'SP');
   const relievers = pitchers.filter(p => p.primaryPosition !== 'SP');
+  const startingPitcher = starters[0];
+
+  // Create lineup: first 8 batters + pitcher batting 9th (EXH-009)
+  const lineupPlayers: RosterPlayer[] = batters.slice(0, 8).map((player, idx) =>
+    convertToRosterPlayer(player, idx + 1, player.primaryPosition)
+  );
+
+  // Add starting pitcher to batting order at 9th spot
+  if (startingPitcher) {
+    lineupPlayers.push(
+      convertToRosterPlayer(startingPitcher, 9, 'P')
+    );
+  }
+
+  // Remaining batters become bench
+  const benchPlayers = batters.slice(8).map(player =>
+    convertToRosterPlayer(player, undefined, undefined)
+  );
 
   const rosterPitchers: RosterPitcher[] = [
     // First starter is active

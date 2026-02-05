@@ -237,11 +237,19 @@ Exhibition Mode allows users to play a single game between two teams without fra
 ---
 
 ### BUG-EXH-009: Default lineups missing pitcher, can't sub pitcher
-**Status**: OPEN
+**Status**: FIXED
 **Reported**: February 4, 2026
-**Fixed**: N/A
+**Fixed**: February 4, 2026
 
-**Notes**: Requires adding pitcher to batting lineup (9th spot or separate) and enabling drag-to-replace for pitchers.
+**Root Cause**: `autoGenerateLineup()` in `lineupLoader.ts` created a 9-batter lineup from position players only, excluding the pitcher. SMB4 doesn't have DH, so pitcher should bat 9th (NL-style).
+
+**Resolution**: Changed auto-generation to:
+- Take first 8 position players (batting order 1-8)
+- Add starting pitcher to batting order at 9th spot with position "P"
+- Remaining position players go to bench
+
+**Files Changed**:
+- `src/src_figma/utils/lineupLoader.ts` - autoGenerateLineup() now includes pitcher at #9
 
 ---
 
@@ -675,7 +683,7 @@ The parent component (GameTracker) should consume these via the onSpecialEvent c
 | EXH-006 | Team names missing colors | ✅ FIXED |
 | EXH-007 | Strikeouts require fielder | ✅ FIXED |
 | EXH-008 | Inside-the-park HR unclear | ✅ FIXED |
-| EXH-009 | No pitcher in lineup | ⏳ OPEN |
+| EXH-009 | No pitcher in lineup | ✅ FIXED |
 | EXH-010 | Scoreboard demo data | ✅ FIXED |
 | EXH-011 | End-game summary demo data | ✅ FIXED |
 | EXH-012 | Missing jersey numbers | ⚠️ PARTIAL |
@@ -703,4 +711,4 @@ The parent component (GameTracker) should consume these via the onSpecialEvent c
 | EXH-035 | FC erases batter even when safe at first | ✅ FIXED |
 | EXH-036 | No way to edit mojo/fitness in player card | ✅ FIXED |
 
-**Fixed**: 25 | **Partial**: 2 | **By Design**: 1 | **Open**: 7
+**Fixed**: 26 | **Partial**: 2 | **By Design**: 1 | **Open**: 6
