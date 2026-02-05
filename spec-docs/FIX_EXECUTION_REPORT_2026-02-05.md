@@ -4,14 +4,16 @@ Source Audit: spec-docs/SPEC_UI_ALIGNMENT_REPORT.md
 Baseline: Build PASS, Tests 5025 passing (77 known PostGameSummary failures)
 
 ## Summary
-- Total fixes attempted: 10
-- Fixes completed: 10
+- Total fixes attempted: 19 (Tiers 1-4: 10, Phase C: 7, Phase D: 2)
+- Fixes completed: 18 (includes 1 partial: MAJ-06 backend only)
 - Fixes reverted: 0
 - Fixes blocked (needs user): 0
 - Fixes assessed as not-a-bug: 1 (MIN-05: SF RBI=1 is correct)
-- Fixes deferred to larger effort: 1 (MIN-04: HBP tracking → MAJ-07 PitcherGameStats expansion)
+- Fixes deferred to larger effort: 1 (MIN-04: HBP tracking → resolved by MAJ-07)
+- Spec-only fixes: 2 (MAJ-13 fame table, MAJ-12 D3K confirmation)
 - Regressions caught and fixed: 1 (CRIT-03 test expected old buggy behavior)
 - Final state: Build PASS, Tests 5025 passing
+- Remaining: 1 item (MAJ-01: Wire WAR calculators to UI — large effort)
 
 ## Tier 1: Critical Fixes
 
@@ -148,22 +150,73 @@ Baseline: Build PASS, Tests 5025 passing (77 known PostGameSummary failures)
 | MIN-02 | FLO (Foul Line Out) undocumented in spec | Valid play type, exists in code. Spec docs don't enumerate all out subtypes. | ℹ️ NO ACTION |
 | MIN-06 | No per-inning pitch count prompt | Feature request, not a bug. Spec describes optional calibration prompt. | ℹ️ FEATURE REQUEST |
 
-## Remaining Items (Out of Batch-Fix Scope)
+## Phase C: Wire Orphaned Systems
 
-These require larger structural work and are tracked separately:
+| ID | Description | Files | Verify | Status |
+|----|------------|-------|--------|--------|
+| MAJ-07 | Expand PitcherGameStats (9→29 fields) | useGameState.ts, gameStorage.ts | Build ✅ Tests 5025 ✅ | ✅ COMPLETE |
+| MAJ-08 | W/L/SV/H/BS decision tracking | useGameState.ts | Build ✅ Tests 5025 ✅ | ✅ COMPLETE |
+| MAJ-03 | Wire detection system (runPlayDetections) | GameTracker.tsx, detectionIntegration.ts | Build ✅ Tests 5025 ✅ | ✅ COMPLETE |
+| MAJ-09 | End-of-game achievement detection (CG/NH/PG/Maddux) | GameTracker.tsx | Build ✅ Tests 5025 ✅ | ✅ COMPLETE |
+| MAJ-11 | Missing detection functions (wired via runPlayDetections) | GameTracker.tsx | Build ✅ Tests 5025 ✅ | ✅ COMPLETE |
+| MAJ-02 | Wire fan morale to UI | useFanMorale.ts, GameTracker.tsx | Build ✅ Tests 5025 ✅ | ✅ COMPLETE |
+| MAJ-04 | Wire narrative engine | narrativeIntegration.ts, GameTracker.tsx | Build ✅ Tests 5025 ✅ | ✅ COMPLETE |
+
+### MAJ-07: Expand PitcherGameStats
+- Added 20 fields: intentionalWalks, hitByPitch, wildPitches, basesLoadedWalks, firstInningRuns, consecutiveHRsAllowed, isStarter, entryInning, entryOuts, exitInning, exitOuts, finishedGame, inheritedRunners, inheritedRunnersScored, bequeathedRunners, bequeathedRunnersScored, decision, save, hold, blownSave
+- Added hbp to PlayerGameStats
+- Updated all tracking in recordWalk, recordHit, recordOut, recordEvent, changePitcher, endGame
+
+### MAJ-08: Pitcher Decision Tracking
+- Implemented calculatePitcherDecisions() pure function: W/L/SV/ND
+- Win: starter ≥5 IP gets W, otherwise most effective reliever
+- Loss: pitcher with most runs allowed on losing team
+- Save: last pitcher on winning team meeting criteria (≤3 run lead + 1IP, or 3+ IP)
+
+### MAJ-03 + MAJ-09 + MAJ-11: Detection System + Achievements
+- Imported runPlayDetections into GameTracker.tsx handleEnhancedPlayComplete
+- Auto-detected events record as Fame events immediately
+- Prompt detections display notification UI with Confirm/Dismiss buttons
+- End-of-game: checks for CG, Shutout, No-Hitter, Perfect Game, Maddux
+- Non-blocking: errors never prevent play recording
+
+### MAJ-02: Fan Morale
+- Added processGameResult to useFanMorale hook (was completely stubbed)
+- Calls createGameMoraleEvent + processMoraleEvent from engine
+- Processes at game end with win/loss, shutout, no-hitter, blowout detection
+
+### MAJ-04: Narrative Engine
+- Created narrativeIntegration.ts with generateGameRecap helper
+- Generates GAME_RECAP narrative at game end
+- Passes narrative to post-game summary via navigation state
+
+## Phase D: GameTracker Completeness
+
+| ID | Description | Files | Verify | Status |
+|----|------------|-------|--------|--------|
+| MAJ-06 | Substitution backend enhancement | useGameState.ts | Build ✅ Tests 5025 ✅ | ✅ PARTIAL |
+| MAJ-12 | D3K — spec updated (exists in SMB4) | RUNNER_ADVANCEMENT_RULES.md, archive/SMB4_GAME_MECHANICS.md | Spec-only fix | ✅ COMPLETE |
+
+### MAJ-06: Substitution Backend
+- Enhanced makeSubstitution with optional `options`: subType, newPosition, base, isPinchHitter
+- Added switchPositions function for position-only switches
+- Expanded substitutionLog type union to 7 types
+- Backward compatible — existing callers unaffected
+- NOTE: Full modal UI trigger wiring deferred (requires UI design decisions)
+
+### MAJ-12: D3K Spec Update (COMPLETE)
+- User confirmed: D3K **exists** in SMB4
+- Spec was wrong — `RUNNER_ADVANCEMENT_RULES.md` line 23 and `archive/SMB4_GAME_MECHANICS.md` line 16 both said "❌ NO"
+- Updated both to "✅ YES — Batter can run to 1B if unoccupied (or 2 outs)"
+- `RUNNER_ADVANCEMENT_RULES.md` line 253 already correctly described D3K rules (internal contradiction now resolved)
+- Code `recordD3K()` in useGameState.ts is correct as-is — no code changes needed
+- Decision logged in DECISIONS_LOG.md
+
+## Remaining Items (Out of Batch-Fix Scope)
 
 | ID | Description | Effort | Notes |
 |----|------------|--------|-------|
 | MAJ-01 | Wire WAR calculators to UI | Large | 5 engines, 365 tests, zero UI |
-| MAJ-02 | Wire fan morale to UI | Medium | Hook stubbed |
-| MAJ-03 | Wire detection system | Medium | Never called |
-| MAJ-04 | Wire narrative engine | Medium | No hook |
-| MAJ-06 | Substitution modals → backend | Large | Rich data thrown away |
-| MAJ-07 | Expand PitcherGameStats (9→30+ fields) | Large | Blocks MIN-04, MAJ-08, MAJ-09 |
-| MAJ-08 | W/L/SV decision tracking | Medium | Requires MAJ-07 |
-| MAJ-09 | Achievement detection | Medium | Requires MAJ-03, MAJ-07 |
-| MAJ-11 | Missing detection functions | Medium | 7+ functions |
-| MAJ-12 | D3K — user decision needed | Small | Does D3K exist in SMB4? |
 
 ## Test Count Delta
 - Before: 5025 tests passing
@@ -175,3 +228,7 @@ These require larger structural work and are tracked separately:
 - Runner tracker state not included in undo snapshots (tracker may be briefly out of sync after undo)
 - After half-inning switches, tracker pitcher is synced on next record call (not immediately)
 - Event log `runners` field still uses empty-string stubs for runner IDs (cosmetic — could be populated from tracker in future)
+- Fan morale: currently assumes home team is tracked team; rival detection not yet implemented
+- Narrative: only home-perspective recap generated; dual narratives possible via engine API
+- Detection: immaculate inning detection requires per-inning pitch counting not yet wired
+- Substitution modals: backend accepts rich data but modal UI triggers not yet connected

@@ -20,7 +20,7 @@
 | Infield Fly Rule | ✅ YES | Called with R1+R2 or loaded, <2 outs |
 | Ground Rule Double | ⚠️ RARE | May exist in some stadiums |
 | Obstruction | ❌ NO | Not implemented |
-| Dropped 3rd Strike | ❌ NO | Strikeouts are always outs |
+| Dropped 3rd Strike | ✅ YES | Batter can run to 1B if unoccupied (or 2 outs) |
 
 **Events that ARE in SMB4:**
 - Hits (1B, 2B, 3B, HR)

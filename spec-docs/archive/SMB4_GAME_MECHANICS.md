@@ -13,7 +13,7 @@
 | **Catcher Interference** | ❌ NO | Not implemented |
 | **Infield Fly Rule** | ✅ YES | Called with R1+R2 or loaded, <2 outs |
 | **Obstruction** | ❌ NO | Not implemented |
-| **Dropped 3rd Strike** | ❌ NO | K is always an out |
+| **Dropped 3rd Strike** | ✅ YES | Batter can run to 1B if unoccupied (or 2 outs) |
 | **Pitch Clock** | ❌ NO | No time limits |
 | **Shift Restrictions** | ❌ NO | Free defensive positioning |
 | **Runner Lead-offs** | ❌ NO | Runners don't lead off |

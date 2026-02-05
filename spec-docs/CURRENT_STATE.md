@@ -27,23 +27,26 @@
 
 **Fix report**: `spec-docs/FIX_EXECUTION_REPORT_2026-02-05.md`
 
-### Orphaned Systems (10 engines, ~4,500+ lines)
-- ALL WAR calculators (bWAR, pWAR, fWAR, rWAR, mWAR) — 365 tests pass, zero UI
-- Fan Morale engine — hook stubbed
-- Narrative engine — no hook
-- Detection Functions — never called
-- ~~Inherited Runner Tracker~~ — ✅ Now wired to useGameState (shadow state pattern, 11 integration points)
-- Relationship engine — hook orphaned
+### Orphaned Systems Status (Updated Feb 5, Phase C/D)
+- ALL WAR calculators (bWAR, pWAR, fWAR, rWAR, mWAR) — ⚠️ STILL ORPHANED (365 tests pass, zero UI)
+- ~~Fan Morale engine~~ — ✅ NOW WIRED (useFanMorale.processGameResult → GameTracker.handleEndGame)
+- ~~Narrative engine~~ — ✅ NOW WIRED (narrativeIntegration.generateGameRecap → GameTracker.handleEndGame)
+- ~~Detection Functions~~ — ✅ NOW WIRED (runPlayDetections → GameTracker.handleEnhancedPlayComplete)
+- ~~Inherited Runner Tracker~~ — ✅ WIRED (shadow state pattern, 11 integration points)
+- Relationship engine — ⚠️ STILL ORPHANED
 
-### Spec Alignment Score
+### Spec Alignment Score (Updated Feb 5, Phase C/D)
 | System | Constants | Connectivity |
 |--------|-----------|-------------|
 | WAR | 100% | ORPHANED |
 | Mojo/Fitness/Salary | 100% | Connected |
-| Fame | 84% | Moderate |
-| Fan Morale | 100% | ORPHANED |
+| Fame | 84% | Connected (detection wired) |
+| Fan Morale | 100% | Connected (processGameResult wired) |
+| Narrative | 100% | Connected (generateGameRecap wired) |
 | Leverage | 100% | Connected |
-| GameTracker | 67% | 4 critical bugs |
+| GameTracker | 95% | 6 critical bugs FIXED, detection+achievements wired |
+| Substitution | — | Backend enhanced (modal UI triggers pending) |
+| PitcherGameStats | 100% | Expanded 9→29 fields, W/L/SV decisions tracked |
 
 ---
 

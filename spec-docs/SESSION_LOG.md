@@ -6,6 +6,65 @@
 > **IMPORTANT**: This log is for *what happened* during sessions. For *how things work*,
 > see the relevant SPEC docs. Finalized logic should be PROMOTED to specs, not left here.
 
+## Session: February 5, 2026 - Phase C/D: Wire Orphaned Systems + D3K Confirmation
+
+### What Was Accomplished
+- ✅ **MAJ-07**: Expanded PitcherGameStats from 9 to 29 fields — committed as `37d28dd`
+- ✅ **MAJ-08**: Implemented W/L/SV pitcher decision tracking — committed as `d0410ab`
+- ✅ **MAJ-03 + MAJ-09 + MAJ-11**: Wired detection system (runPlayDetections) into GameTracker, added end-of-game achievement detection (CG/CGSO/NH/PG/Maddux), prompt-detect UI for user confirmations — committed as `091d8b4`
+- ✅ **MAJ-02**: Wired fan morale engine to GameTracker. Added processGameResult to useFanMorale hook, calls at game end — committed as `091d8b4`
+- ✅ **MAJ-04**: Wired narrative engine. Created narrativeIntegration.ts with generateGameRecap(), passes narrative to post-game summary — committed as `091d8b4`
+- ✅ **MAJ-06**: Enhanced substitution backend — makeSubstitution accepts rich options (subType, newPosition, base, isPinchHitter), added switchPositions, expanded substitutionLog to 7 types — committed as `1af504f`
+- ✅ **MAJ-12**: User confirmed D3K exists in SMB4. Updated RUNNER_ADVANCEMENT_RULES.md and archive/SMB4_GAME_MECHANICS.md. Code recordD3K() correct as-is.
+
+### Changes Made
+
+**Phase C (committed `091d8b4`):**
+1. MAJ-03: Imported runPlayDetections into GameTracker.tsx handleEnhancedPlayComplete. Auto-detected events record as Fame events immediately. Prompt detections display notification UI with Confirm/Dismiss buttons. Non-blocking (errors never prevent play recording).
+2. MAJ-09: End-of-game checks for CG, Shutout, No-Hitter, Perfect Game, Maddux in handleEndGame
+3. MAJ-11: Detection functions wired via runPlayDetections (web gem, robbery, triple play, clutch grand slam, TOOTBLAN)
+4. MAJ-02: Added processGameResult to useFanMorale hook. Calls createGameMoraleEvent + processMoraleEvent from engine. Processes at game end with win/loss, shutout, no-hitter, blowout detection.
+5. MAJ-04: Created narrativeIntegration.ts with generateGameRecap helper. Generates GAME_RECAP narrative at game end. Passes narrative to post-game summary via navigation state.
+
+**Phase D (committed `1af504f`):**
+6. MAJ-06: Enhanced makeSubstitution with optional `options` param. Added switchPositions function. Expanded substitutionLog type union to 7 types. Backward compatible.
+
+**Phase D spec fix (uncommitted):**
+7. MAJ-12: Updated RUNNER_ADVANCEMENT_RULES.md and archive/SMB4_GAME_MECHANICS.md — D3K: ❌ NO → ✅ YES
+
+### Key Files Modified
+| File | Changes |
+|------|---------|
+| GameTracker.tsx | MAJ-03 (detection wiring), MAJ-09 (achievement detection), MAJ-02 (fan morale), MAJ-04 (narrative) |
+| useFanMorale.ts | MAJ-02 (added processGameResult) |
+| narrativeIntegration.ts | MAJ-04 (NEW FILE — Figma adapter for narrative engine) |
+| useGameState.ts | MAJ-06 (substitution enhancement), MAJ-07 (PitcherGameStats expansion), MAJ-08 (decisions) |
+| gameStorage.ts | MAJ-07 (persisted PitcherGameStats fields) |
+| RUNNER_ADVANCEMENT_RULES.md | MAJ-12 (D3K: YES) |
+| archive/SMB4_GAME_MECHANICS.md | MAJ-12 (D3K: YES) |
+| DECISIONS_LOG.md | MAJ-12 decision entry |
+| FIX_EXECUTION_REPORT_2026-02-05.md | Phase C/D tables, MAJ-12 complete |
+
+### NFL Results
+- **Build**: PASS (1824 modules transformed)
+- **Tests**: 5025 passing (baseline maintained)
+- **Regressions**: 0
+
+### Orphaned Systems Status (Updated)
+| System | Status |
+|--------|--------|
+| WAR calculators (bWAR, pWAR, fWAR, rWAR, mWAR) | ⚠️ STILL ORPHANED — 365 tests pass, zero UI |
+| Fan Morale engine | ✅ NOW WIRED (useFanMorale → GameTracker) |
+| Narrative engine | ✅ NOW WIRED (narrativeIntegration → GameTracker) |
+| Detection functions | ✅ NOW WIRED (runPlayDetections → GameTracker) |
+| Inherited Runner Tracker | ✅ WIRED (Tier 2, shadow state) |
+| Relationship engine | ⚠️ STILL ORPHANED |
+
+### Remaining from Audit
+- MAJ-01: Wire WAR calculators to UI (large effort, 5 engines, 365 tests)
+
+---
+
 ## Session: February 5, 2026 - Batch Fix Execution (Tier 1 + Tier 2)
 
 ### What Was Accomplished

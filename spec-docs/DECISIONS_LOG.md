@@ -7,6 +7,22 @@
 
 ## February 2026
 
+### 2026-02-05: D3K (Dropped Third Strike) Confirmed in SMB4
+
+**Context**: Spec documents (`RUNNER_ADVANCEMENT_RULES.md` line 23, `archive/SMB4_GAME_MECHANICS.md` line 16) incorrectly stated "Dropped 3rd Strike: ❌ NO". However, `RUNNER_ADVANCEMENT_RULES.md` line 253 correctly described D3K rules, creating an internal contradiction. The `recordD3K()` function was already fully implemented in `useGameState.ts` and fires via specific 2-3 fielding sequence detection.
+
+**Decision**: D3K **exists** in SMB4. Updated all spec docs to reflect ✅ YES. Code implementation (`recordD3K`) is correct and requires no changes.
+
+**Rationale**: User confirmed from direct gameplay experience that D3K is a real mechanic in Super Mega Baseball 4. The original spec entries were wrong.
+
+**Files Changed**:
+- `spec-docs/RUNNER_ADVANCEMENT_RULES.md` — Line 23: ❌ NO → ✅ YES
+- `spec-docs/archive/SMB4_GAME_MECHANICS.md` — Line 16: ❌ NO → ✅ YES
+
+**Implications**: The existing `recordD3K()` code in `useGameState.ts` is correct as-is. D3K detection via 2-3 fielding sequence can remain active.
+
+---
+
 ### 2026-02-03: Testing Plan Expanded to Cover Complete Figma UI
 
 **Context**: Testing Implementation Plan originally focused heavily on GameTracker and calculation engines. User requested comprehensive coverage of ALL Figma UI components.
