@@ -278,18 +278,51 @@ export interface BaseStats {
   accuracy?: number;
 }
 
+/**
+ * Apply Mojo only to all stats (legacy behavior, kept for backward compatibility)
+ * NOTE: For proper stat differentiation per spec Sec 8.1, use applyCombinedModifiers instead.
+ */
 export function applyMojoToAllStats(baseStats: BaseStats, mojo: MojoLevel): AdjustedStats {
   const multiplier = getMojoStatMultiplier(mojo);
 
   return {
     power: Math.round(baseStats.power * multiplier),
     contact: Math.round(baseStats.contact * multiplier),
-    speed: Math.round(baseStats.speed * multiplier), // Mojo affects speed less (optional per spec)
+    speed: Math.round(baseStats.speed * multiplier),
     fielding: Math.round(baseStats.fielding * multiplier),
     arm: Math.round(baseStats.arm * multiplier),
     velocity: baseStats.velocity ? Math.round(baseStats.velocity * multiplier) : undefined,
     junk: baseStats.junk ? Math.round(baseStats.junk * multiplier) : undefined,
     accuracy: baseStats.accuracy ? Math.round(baseStats.accuracy * multiplier) : undefined,
+  };
+}
+
+/**
+ * CRIT-05 fix: Apply Mojo and Fitness with proper stat differentiation per spec Section 8.1
+ *
+ * - Speed: fitnessMultiplier ONLY (mojo doesn't affect speed — it's a physical attribute)
+ * - Junk: mojoMultiplier ONLY (fitness doesn't affect pitch repertoire/deception)
+ * - All others (power, contact, fielding, arm, velocity, accuracy): combined (mojo × fitness)
+ *
+ * @param fitnessMultiplier - from getFitnessStatMultiplier(fitnessState)
+ */
+export function applyCombinedModifiers(
+  baseStats: BaseStats,
+  mojo: MojoLevel,
+  fitnessMultiplier: number,
+): AdjustedStats {
+  const mojoMultiplier = getMojoStatMultiplier(mojo);
+  const combined = mojoMultiplier * fitnessMultiplier;
+
+  return {
+    power: Math.round(baseStats.power * combined),
+    contact: Math.round(baseStats.contact * combined),
+    speed: Math.round(baseStats.speed * fitnessMultiplier),     // Fitness only
+    fielding: Math.round(baseStats.fielding * combined),
+    arm: Math.round(baseStats.arm * combined),
+    velocity: baseStats.velocity ? Math.round(baseStats.velocity * combined) : undefined,
+    junk: baseStats.junk ? Math.round(baseStats.junk * mojoMultiplier) : undefined,  // Mojo only
+    accuracy: baseStats.accuracy ? Math.round(baseStats.accuracy * combined) : undefined,
   };
 }
 

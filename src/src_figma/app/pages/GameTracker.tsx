@@ -14,7 +14,7 @@ import { TeamRoster, type Player, type Pitcher } from "@/app/components/TeamRost
 import { MiniScoreboard } from "@/app/components/MiniScoreboard";
 import { getTeamColors, getFielderBorderColors } from "@/config/teamColors";
 import { defaultTigersPlayers, defaultTigersPitchers, defaultSoxPlayers, defaultSoxPitchers } from "@/data/defaultRosters";
-import { useGameState, type HitType, type OutType, type WalkType, type RunnerAdvancement } from "@/hooks/useGameState";
+import { useGameState, type HitType, type OutType, type WalkType, type RunnerAdvancement, type PlayerGameStats, type PitcherGameStats } from "@/hooks/useGameState";
 import { usePlayerState, type PlayerStateData, getStateBadge, formatMultiplier } from "@/app/hooks/usePlayerState";
 // EXH-036: Import Mojo/Fitness types for PlayerCardModal editing
 import type { MojoLevel } from "../../../engines/mojoEngine";
@@ -22,6 +22,8 @@ import type { FitnessState } from "../../../engines/fitnessEngine";
 import { MOJO_STATES, getMojoColor } from "../../../engines/mojoEngine";
 import { FITNESS_STATES } from "../../../engines/fitnessEngine";
 import { useFameTracking, type FameEventDisplay, formatFameValue, getFameColor, getLITier } from "@/app/hooks/useFameTracking";
+import { FielderCreditModal, type RunnerOutInfo, type FielderCredit } from "../components/modals/FielderCreditModal";
+import { ErrorOnAdvanceModal, type RunnerAdvanceInfo, type ErrorOnAdvanceResult } from "../components/modals/ErrorOnAdvanceModal";
 
 // Note: Using GameState from useGameState hook instead of local interface
 // This interface is deprecated but kept for reference during migration
@@ -111,6 +113,7 @@ export function GameTracker() {
     recordOut,
     recordWalk,
     recordD3K,
+    recordError,
     recordEvent,
     advanceRunner,
     advanceRunnersBatch,
@@ -156,6 +159,16 @@ export function GameTracker() {
   // End game confirmation state
   const [showEndGameConfirmation, setShowEndGameConfirmation] = useState(false);
 
+  // EXH-016: Fielder credit modal state for thrown-out runners
+  const [fielderCreditModalOpen, setFielderCreditModalOpen] = useState(false);
+  const [pendingPlayForFielderCredit, setPendingPlayForFielderCredit] = useState<PlayData | null>(null);
+  const [runnersOutForCredit, setRunnersOutForCredit] = useState<RunnerOutInfo[]>([]);
+
+  // EXH-025: Error on advance modal state
+  const [errorOnAdvanceModalOpen, setErrorOnAdvanceModalOpen] = useState(false);
+  const [pendingPlayForErrorOnAdvance, setPendingPlayForErrorOnAdvance] = useState<PlayData | null>(null);
+  const [runnersWithExtraAdvance, setRunnersWithExtraAdvance] = useState<RunnerAdvanceInfo[]>([]);
+
   // Runner names tracking - who is on each base
   // Updated when batters reach base via hit, walk, error, etc.
   const [runnerNames, setRunnerNames] = useState<{
@@ -175,16 +188,28 @@ export function GameTracker() {
   const fieldZoomLevel = isScoreboardMinimized ? 0.35 : 0;
 
   // Undo system - restore game state on undo
+  // CRIT-01 fix: Now restores playerStats and pitcherStats Maps alongside gameState/scoreboard
   const handleUndo = useCallback((snapshot: GameSnapshot) => {
     console.log("Restoring game state from snapshot:", snapshot.playDescription);
-    // The snapshot.gameState contains { gameState, scoreboard } - cast and extract
-    const storedState = snapshot.gameState as { gameState: typeof gameState; scoreboard: typeof scoreboard } | null;
+    const storedState = snapshot.gameState as {
+      gameState: typeof gameState;
+      scoreboard: typeof scoreboard;
+      playerStatsEntries?: [string, PlayerGameStats][];
+      pitcherStatsEntries?: [string, PitcherGameStats][];
+    } | null;
     if (storedState && storedState.gameState && storedState.scoreboard) {
       restoreState({
         gameState: storedState.gameState,
         scoreboard: storedState.scoreboard,
+        // Reconstruct Maps from serialized entries (Maps don't survive JSON.stringify)
+        playerStats: storedState.playerStatsEntries
+          ? new Map(storedState.playerStatsEntries)
+          : undefined,
+        pitcherStats: storedState.pitcherStatsEntries
+          ? new Map(storedState.pitcherStatsEntries)
+          : undefined,
       });
-      console.log("State restored successfully");
+      console.log("State restored successfully (including player/pitcher stats)");
     } else {
       console.warn("Incomplete snapshot - cannot restore", snapshot);
     }
@@ -193,12 +218,16 @@ export function GameTracker() {
   const undoSystem = useUndoSystem(5, handleUndo);
 
   // Keep undo system current state in sync with game state
+  // CRIT-01 fix: Include playerStats and pitcherStats as serializable entries
+  // (Maps don't survive JSON.parse(JSON.stringify(...)) used by UndoSystem deep clone)
   useEffect(() => {
     undoSystem.setCurrentState({
       gameState,
       scoreboard,
+      playerStatsEntries: Array.from(playerStats.entries()),
+      pitcherStatsEntries: Array.from(pitcherStats.entries()),
     });
-  }, [gameState, scoreboard]);
+  }, [gameState, scoreboard, playerStats, pitcherStats]);
 
   // Expandable sections state
   const [expandedSections, setExpandedSections] = useState({
@@ -710,6 +739,137 @@ export function GameTracker() {
     console.log("Enhanced play complete:", playData);
     console.log("Runner outcomes:", playData.runnerOutcomes);
 
+    // ============================================
+    // EXH-016: Check for thrown-out runners and prompt for fielder credit
+    // Skip for strikeouts (no fielding play on runner) and HRs (everyone scores)
+    // ============================================
+    if (playData.runnerOutcomes && playData.type !== 'hr') {
+      const outcomes = playData.runnerOutcomes;
+      const runnersOut: RunnerOutInfo[] = [];
+
+      // Check each runner position for outs (excluding batter)
+      if (outcomes.first?.to === 'out') {
+        runnersOut.push({
+          runnerName: runnerNames.first || 'R1',
+          fromBase: '1B',
+          outAtBase: '2B', // R1 typically thrown out at 2B
+        });
+      }
+      if (outcomes.second?.to === 'out') {
+        runnersOut.push({
+          runnerName: runnerNames.second || 'R2',
+          fromBase: '2B',
+          outAtBase: '3B', // R2 typically thrown out at 3B
+        });
+      }
+      if (outcomes.third?.to === 'out') {
+        runnersOut.push({
+          runnerName: runnerNames.third || 'R3',
+          fromBase: '3B',
+          outAtBase: 'HOME', // R3 typically thrown out at home
+        });
+      }
+
+      // If there are runners out, show the fielder credit modal
+      if (runnersOut.length > 0) {
+        console.log('[EXH-016] Runners out - prompting for fielder credit:', runnersOut);
+        setRunnersOutForCredit(runnersOut);
+        setPendingPlayForFielderCredit(playData);
+        setFielderCreditModalOpen(true);
+        return; // Exit early - will continue in handleFielderCreditConfirm
+      }
+
+      // ============================================
+      // EXH-025: Check for extra runner advancement (possible error)
+      // Compare actual outcome to expected outcome based on hit type
+      // ============================================
+      const extraAdvances: RunnerAdvanceInfo[] = [];
+
+      // Expected advancement per hit type (minimum standard advancement)
+      const getExpectedBase = (fromBase: '1B' | '2B' | '3B', hitType: string): '2B' | '3B' | 'HOME' => {
+        if (hitType === '1B') {
+          // Single: R1→2B, R2→3B, R3→HOME
+          if (fromBase === '1B') return '2B';
+          if (fromBase === '2B') return '3B';
+          return 'HOME';
+        }
+        if (hitType === '2B') {
+          // Double: R1→3B (or HOME), R2→HOME, R3→HOME
+          if (fromBase === '1B') return '3B';
+          return 'HOME';
+        }
+        if (hitType === '3B' || hitType === 'HR') {
+          // Triple/HR: Everyone scores
+          return 'HOME';
+        }
+        // Default: advance one base
+        if (fromBase === '1B') return '2B';
+        if (fromBase === '2B') return '3B';
+        return 'HOME';
+      };
+
+      // Map outcome.to to base format
+      const outcomeToBase = (to: string): '2B' | '3B' | 'HOME' | null => {
+        if (to === 'second') return '2B';
+        if (to === 'third') return '3B';
+        if (to === 'home') return 'HOME';
+        return null;
+      };
+
+      // Check if outcome exceeds expected (for hits only)
+      if (playData.type === 'hit' && playData.hitType) {
+        // R1 check
+        if (outcomes.first && outcomes.first.to !== 'first' && outcomes.first.to !== 'out') {
+          const actualBase = outcomeToBase(outcomes.first.to);
+          const expectedBase = getExpectedBase('1B', playData.hitType);
+          if (actualBase && actualBase !== expectedBase) {
+            // Check if actual is further than expected
+            const baseOrder = ['2B', '3B', 'HOME'];
+            const actualIdx = baseOrder.indexOf(actualBase);
+            const expectedIdx = baseOrder.indexOf(expectedBase);
+            if (actualIdx > expectedIdx) {
+              extraAdvances.push({
+                runnerName: runnerNames.first || 'R1',
+                fromBase: '1B',
+                toBase: actualBase,
+                expectedBase,
+              });
+            }
+          }
+        }
+
+        // R2 check
+        if (outcomes.second && outcomes.second.to !== 'second' && outcomes.second.to !== 'out') {
+          const actualBase = outcomeToBase(outcomes.second.to);
+          const expectedBase = getExpectedBase('2B', playData.hitType);
+          if (actualBase && actualBase !== expectedBase) {
+            const baseOrder = ['2B', '3B', 'HOME'];
+            const actualIdx = baseOrder.indexOf(actualBase);
+            const expectedIdx = baseOrder.indexOf(expectedBase);
+            if (actualIdx > expectedIdx) {
+              extraAdvances.push({
+                runnerName: runnerNames.second || 'R2',
+                fromBase: '2B',
+                toBase: actualBase,
+                expectedBase,
+              });
+            }
+          }
+        }
+
+        // R3 - can't advance beyond home, so no extra check needed
+      }
+
+      // If there are extra advances, queue the error prompt modal to show AFTER play is recorded
+      // NOTE: We no longer return early - the play is recorded normally, modal is informational
+      if (extraAdvances.length > 0) {
+        console.log('[EXH-025] Extra advances detected - will prompt for error attribution after play:', extraAdvances);
+        setRunnersWithExtraAdvance(extraAdvances);
+        setPendingPlayForErrorOnAdvance(playData);
+        // Modal will be shown after play recording completes (see end of function)
+      }
+    }
+
     try {
       // ============================================
       // STEP 1: Calculate RBI from ACTUAL runner outcomes
@@ -845,6 +1005,11 @@ export function GameTracker() {
         const walkType = playData.walkType || 'BB';
         await recordWalk(walkType as WalkType);
         console.log(`Walk recorded: ${walkType}`);
+      } else if (playData.type === 'error') {
+        // ROE (Reached On Error) - batter reaches base, no out, AB counted, no hit
+        const rbi = calculateRBIFromOutcomes();
+        await recordError(rbi, runnerAdvancement);
+        console.log(`Error recorded: ${playData.errorType} error by fielder #${playData.errorFielder}, RBI: ${rbi}`);
       }
 
       // Note: Runner outcomes are now handled by runnerAdvancement parameter
@@ -994,10 +1159,180 @@ export function GameTracker() {
       //   playerStateHook.updateMojo(gameState.currentBatterId, 'STRIKEOUT', gameSituation);
       // }
 
+      // ============================================
+      // EXH-025: Show error attribution modal AFTER play is recorded
+      // This is informational - the play has already been processed
+      // ============================================
+      if (runnersWithExtraAdvance.length > 0) {
+        console.log('[EXH-025] Opening error attribution modal after play recorded');
+        setErrorOnAdvanceModalOpen(true);
+      }
+
     } catch (error) {
       console.error('Failed to record enhanced play:', error);
     }
-  }, [recordHit, recordOut, recordWalk, advanceCount, gameState, undoSystem, playerStats, pitcherStats, fameTrackingHook, playerStateHook]);
+  }, [recordHit, recordOut, recordWalk, recordError, advanceCount, gameState, undoSystem, playerStats, pitcherStats, fameTrackingHook, playerStateHook, runnerNames]);
+
+  // EXH-016: Handle fielder credit confirmation - continue processing the play with credits
+  const handleFielderCreditConfirm = useCallback(async (credits: FielderCredit[]) => {
+    console.log('[EXH-016] Fielder credits confirmed:', credits);
+    setFielderCreditModalOpen(false);
+
+    // Get the pending play data
+    const playData = pendingPlayForFielderCredit;
+    if (!playData) {
+      console.error('[EXH-016] No pending play data for fielder credit');
+      return;
+    }
+
+    // Store the fielder credits with the play data for later processing
+    // TODO: Integrate credits into player stats (assists, putouts)
+    // For now, we log them and continue with the play
+
+    // Clear the pending state
+    setPendingPlayForFielderCredit(null);
+    setRunnersOutForCredit([]);
+
+    // Re-call the enhanced play handler with the same play data
+    // The modal is now closed, so it won't trigger again
+    // Actually, we need to process the play directly here to avoid infinite loop
+    // Let's extract the core play processing logic
+
+    try {
+      // RBI calculation (copied from handleEnhancedPlayComplete)
+      const calculateRBIFromOutcomes = (): number => {
+        if (!playData.runnerOutcomes) {
+          const { first, second, third } = gameState.bases;
+          if (playData.type === 'hr') {
+            return 1 + (first ? 1 : 0) + (second ? 1 : 0) + (third ? 1 : 0);
+          }
+          return third ? 1 : 0;
+        }
+
+        let rbi = 0;
+        const outcomes = playData.runnerOutcomes;
+        if (outcomes.third?.to === 'home') rbi++;
+        if (outcomes.second?.to === 'home') rbi++;
+        if (outcomes.first?.to === 'home') rbi++;
+        if (outcomes.batter?.to === 'home') rbi++;
+        return rbi;
+      };
+
+      // Capture undo snapshot
+      const playDescription = playData.type === 'hr'
+        ? `HR (${playData.hrDistance}ft)`
+        : playData.type === 'hit'
+        ? `${playData.hitType} to ${playData.spraySector}`
+        : playData.type === 'out'
+        ? `${playData.outType} (${playData.fieldingSequence.join('-')})`
+        : playData.type;
+      undoSystem.captureSnapshot(playDescription);
+
+      // Convert runner outcomes to RunnerAdvancement format
+      const convertToRunnerAdvancement = (): RunnerAdvancement | undefined => {
+        if (!playData.runnerOutcomes) return undefined;
+
+        const outcomes = playData.runnerOutcomes;
+        const advancement: RunnerAdvancement = {};
+
+        if (outcomes.first && outcomes.first.to !== 'first') {
+          advancement.fromFirst = outcomes.first.to === 'out' ? 'out' :
+                                  outcomes.first.to as 'second' | 'third' | 'home';
+        }
+        if (outcomes.second && outcomes.second.to !== 'second') {
+          advancement.fromSecond = outcomes.second.to === 'out' ? 'out' :
+                                   outcomes.second.to as 'third' | 'home';
+        }
+        if (outcomes.third && outcomes.third.to !== 'third') {
+          advancement.fromThird = outcomes.third.to === 'out' ? 'out' :
+                                  outcomes.third.to as 'home';
+        }
+
+        return Object.keys(advancement).length > 0 ? advancement : undefined;
+      };
+
+      const runnerAdvancement = convertToRunnerAdvancement();
+      const batterReached = playData.runnerOutcomes?.batter?.to !== 'out' &&
+                            playData.runnerOutcomes?.batter?.to !== undefined;
+
+      // Record the play
+      if (playData.type === 'hr') {
+        const rbi = calculateRBIFromOutcomes();
+        await recordHit('HR', rbi, runnerAdvancement);
+      } else if (playData.type === 'hit') {
+        const hitType = playData.hitType || '1B';
+        const rbi = calculateRBIFromOutcomes();
+        await recordHit(hitType as HitType, rbi, runnerAdvancement);
+      } else if (playData.type === 'out') {
+        const outType = playData.outType || 'GO';
+        if (outType === 'K' && batterReached) {
+          await recordD3K(true);
+        } else if (outType === 'K' || outType === 'KL') {
+          const isD3KThrownOut = playData.fieldingSequence.length >= 2 &&
+                                  playData.fieldingSequence[0] === 2 &&
+                                  playData.fieldingSequence[1] === 3;
+          if (isD3KThrownOut && !batterReached) {
+            await recordD3K(false);
+          } else {
+            await recordOut(outType as OutType, runnerAdvancement);
+          }
+        } else {
+          await recordOut(outType as OutType, runnerAdvancement);
+        }
+      } else if (playData.type === 'foul_out') {
+        await recordOut('FO', runnerAdvancement);
+      } else if (playData.type === 'walk') {
+        const walkType = playData.walkType || 'BB';
+        await recordWalk(walkType as WalkType);
+      }
+
+      console.log('[EXH-016] Play recorded with fielder credits');
+    } catch (error) {
+      console.error('[EXH-016] Failed to record play:', error);
+    }
+  }, [pendingPlayForFielderCredit, gameState, undoSystem, recordHit, recordOut, recordD3K, recordWalk]);
+
+  // EXH-016: Handle fielder credit modal close (skip credits)
+  const handleFielderCreditClose = useCallback(() => {
+    // If user closes modal without confirming, still process the play with default credits
+    handleFielderCreditConfirm(runnersOutForCredit.map(runner => ({
+      ...runner,
+      putoutBy: runner.outAtBase === 'HOME' ? 'C' : runner.outAtBase === '3B' ? '3B' : 'SS',
+      assistBy: [],
+    })));
+  }, [runnersOutForCredit, handleFielderCreditConfirm]);
+
+  // EXH-025: Handle error on advance modal confirmation
+  const handleErrorOnAdvanceConfirm = useCallback((results: ErrorOnAdvanceResult[]) => {
+    setErrorOnAdvanceModalOpen(false);
+
+    // Log error attributions for now (full integration will record to game state)
+    results.forEach(result => {
+      if (result.wasError && result.errorType && result.errorFielder) {
+        console.log(`[EXH-025] Error on advance: ${result.runnerName} ${result.fromBase} → ${result.toBase}, ` +
+          `${result.errorType} error by ${result.errorFielder}`);
+      } else {
+        console.log(`[EXH-025] No error: ${result.runnerName} ${result.fromBase} → ${result.toBase} (good baserunning)`);
+      }
+    });
+
+    // Process the pending play now that we have error attribution
+    if (pendingPlayForErrorOnAdvance) {
+      // TODO: Add error attribution to play data before recording
+      // For now, the play was already processed - this modal is informational
+    }
+
+    setPendingPlayForErrorOnAdvance(null);
+    setRunnersWithExtraAdvance([]);
+  }, [pendingPlayForErrorOnAdvance]);
+
+  // EXH-025: Handle error on advance modal close (assume no errors)
+  const handleErrorOnAdvanceClose = useCallback(() => {
+    setErrorOnAdvanceModalOpen(false);
+    setPendingPlayForErrorOnAdvance(null);
+    setRunnersWithExtraAdvance([]);
+    console.log('[EXH-025] Modal closed - assuming no errors on advancement');
+  }, []);
 
   // Handle special events (Web Gem, Robbery, TOOTBLAN, etc.) from EnhancedInteractiveField
   // Phase 5B: Extended to handle all contextual button events
@@ -2458,6 +2793,22 @@ export function GameTracker() {
             onDismiss={dismissPitchCountPrompt}
           />
         )}
+
+        {/* EXH-016: Fielder Credit Modal for thrown-out runners */}
+        <FielderCreditModal
+          isOpen={fielderCreditModalOpen}
+          onClose={handleFielderCreditClose}
+          onConfirm={handleFielderCreditConfirm}
+          runnersOut={runnersOutForCredit}
+        />
+
+        {/* EXH-025: Error on Advance Modal for extra base advancement */}
+        <ErrorOnAdvanceModal
+          isOpen={errorOnAdvanceModalOpen}
+          onClose={handleErrorOnAdvanceClose}
+          onConfirm={handleErrorOnAdvanceConfirm}
+          runnersWithExtraAdvance={runnersWithExtraAdvance}
+        />
       </div>
     </DndProvider>
   );

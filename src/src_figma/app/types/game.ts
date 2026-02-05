@@ -766,8 +766,8 @@ export const FAME_VALUES: Record<FameEventType, number> = {
   WALK_OFF_GRAND_SLAM: 3,
   // Defensive Highlights
   WEB_GEM: 0.75,
-  ROBBERY: 1.5,
-  ROBBERY_GRAND_SLAM: 2.5,
+  ROBBERY: 1,            // CRIT-06 fix: Spec v3.3 standardized to +1
+  ROBBERY_GRAND_SLAM: 1, // CRIT-06 fix: Spec v3.3 standardized to +1
   TRIPLE_PLAY: 2,
   UNASSISTED_TRIPLE_PLAY: 3,
   THROW_OUT_AT_HOME: 0.5,

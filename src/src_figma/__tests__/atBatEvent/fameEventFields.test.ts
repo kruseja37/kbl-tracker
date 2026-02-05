@@ -303,7 +303,7 @@ describe('Fame Value Calculation', () => {
 
   test('playoff multiplier increases fame value', () => {
     // Per FAME_SYSTEM_TRACKING.md, playoffs have higher fame multiplier
-    const baseFame = 1.5; // Robbery base value
+    const baseFame = 1.0; // Robbery base value (spec v3.3)
     const li = 4.0;
     const playoffMultiplier = 1.5; // Example playoff boost
 

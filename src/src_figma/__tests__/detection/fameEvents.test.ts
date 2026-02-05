@@ -129,8 +129,8 @@ describe('FAME_VALUES Constants', () => {
       expect(FAME_VALUES.WEB_GEM).toBe(0.75);
     });
 
-    test('ROBBERY = 1.5 (higher than WEB_GEM per spec)', () => {
-      expect(FAME_VALUES.ROBBERY).toBe(1.5);
+    test('ROBBERY = 1 (standardized per spec v3.3, still higher than WEB_GEM)', () => {
+      expect(FAME_VALUES.ROBBERY).toBe(1);
       expect(FAME_VALUES.ROBBERY).toBeGreaterThan(FAME_VALUES.WEB_GEM);
     });
 

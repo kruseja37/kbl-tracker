@@ -102,6 +102,7 @@ function mapResultToPlayResult(result: AtBatResult): PlayResult {
     'LO': 'line_out',
     'PO': 'popup_out',
     'DP': 'gidp',
+    'TP': 'gidp', // Triple play mapped to GIDP for clutch purposes (worst outcome for batter)
     'SF': 'sac_fly',
     'SAC': 'sac_bunt',
     'HBP': 'hbp',

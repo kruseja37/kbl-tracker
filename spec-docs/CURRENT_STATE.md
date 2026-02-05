@@ -1,7 +1,43 @@
 # KBL Tracker - Current State
 
 > **Purpose**: Single source of truth for what's implemented, what's not, and known issues
-> **Last Updated**: February 5, 2026 (Exhibition Bug Fixes Session)
+> **Last Updated**: February 5, 2026 (Spec-UI Alignment Audit)
+
+---
+
+## Spec-UI Alignment Audit (February 5, 2026) 🔍
+
+**Full report**: `spec-docs/SPEC_UI_ALIGNMENT_REPORT.md`
+
+### Critical Bugs Found (6) — 5 Fixed, 1 Deferred
+| ID | Issue | Location | Status |
+|----|-------|----------|--------|
+| CRIT-01 | Undo doesn't restore player/pitcher stats | useGameState.ts, GameTracker.tsx | ✅ Fixed (Map serialization) |
+| CRIT-02 | All runs marked earned (no ER/UER) | useGameState.ts:910 | ⏳ Deferred (requires Tier 2 wiring of inheritedRunnerTracker) |
+| CRIT-03 | FC runs incorrectly unearned | inheritedRunnerTracker.ts:216 | ✅ Fixed (removed FC exclusion) |
+| CRIT-04 | TP silently mapped to DP | game.ts, useGameState.ts | ✅ Fixed (TP now first-class AtBatResult) |
+| CRIT-05 | Mojo applies uniformly (should differ) | mojoEngine.ts | ✅ Fixed (added applyCombinedModifiers) |
+| CRIT-06 | Robbery fame values wrong | types/game.ts + 6 files | ✅ Fixed (1.5/2.5 → 1/1 per spec v3.3) |
+
+**Fix report**: `spec-docs/FIX_EXECUTION_REPORT_2026-02-05.md`
+
+### Orphaned Systems (11 engines, ~5,000+ lines)
+- ALL WAR calculators (bWAR, pWAR, fWAR, rWAR, mWAR) — 365 tests pass, zero UI
+- Fan Morale engine — hook stubbed
+- Narrative engine — no hook
+- Detection Functions — never called
+- Inherited Runner Tracker — never imported by useGameState
+- Relationship engine — hook orphaned
+
+### Spec Alignment Score
+| System | Constants | Connectivity |
+|--------|-----------|-------------|
+| WAR | 100% | ORPHANED |
+| Mojo/Fitness/Salary | 100% | Connected |
+| Fame | 84% | Moderate |
+| Fan Morale | 100% | ORPHANED |
+| Leverage | 100% | Connected |
+| GameTracker | 67% | 4 critical bugs |
 
 ---
 

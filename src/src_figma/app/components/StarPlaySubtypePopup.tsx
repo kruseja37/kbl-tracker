@@ -50,7 +50,7 @@ export function StarPlaySubtypePopup({
   onSelect,
   onCancel,
 }: StarPlaySubtypePopupProps) {
-  const fameValue = isRobbery ? '+1.5' : '+1.0';
+  const fameValue = isRobbery ? '+1.0' : '+0.75'; // CRIT-06: Spec v3.3 values
   const title = isRobbery ? 'HR ROBBERY' : 'WEB GEM';
   const emoji = isRobbery ? '🎭' : '⭐';
   const borderColor = isRobbery ? '#9C27B0' : '#C4A853';

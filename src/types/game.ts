@@ -11,7 +11,7 @@ export type BatterHand = 'L' | 'R' | 'S';
 
 export type AtBatResult =
   | '1B' | '2B' | '3B' | 'HR' | 'BB' | 'IBB' | 'K' | 'KL'
-  | 'GO' | 'FO' | 'LO' | 'PO' | 'DP' | 'SF' | 'SAC' | 'HBP' | 'E' | 'FC' | 'D3K';
+  | 'GO' | 'FO' | 'LO' | 'PO' | 'DP' | 'TP' | 'SF' | 'SAC' | 'HBP' | 'E' | 'FC' | 'D3K';
 
 export type GameEvent = 'SB' | 'CS' | 'WP' | 'PB' | 'PK' | 'BALK' | 'PITCH_CHANGE' | 'PINCH_HIT' | 'PINCH_RUN' | 'DEF_SUB' | 'POS_SWITCH';
 // Special play types for outs and hits
@@ -166,10 +166,10 @@ export function countRunners(bases: Bases): number { return [bases.first, bases.
 export function hasRISP(bases: Bases): boolean { return bases.second !== null || bases.third !== null; }
 export function isBasesLoaded(bases: Bases): boolean { return bases.first !== null && bases.second !== null && bases.third !== null; }
 
-export function isOut(result: AtBatResult): boolean { return ['K', 'KL', 'GO', 'FO', 'LO', 'PO', 'DP', 'SF', 'SAC'].includes(result); }
+export function isOut(result: AtBatResult): boolean { return ['K', 'KL', 'GO', 'FO', 'LO', 'PO', 'DP', 'TP', 'SF', 'SAC'].includes(result); }
 export function isHit(result: AtBatResult): boolean { return ['1B', '2B', '3B', 'HR'].includes(result); }
 export function reachesBase(result: AtBatResult): boolean { return ['1B', '2B', '3B', 'HR', 'BB', 'IBB', 'HBP', 'E', 'FC', 'D3K'].includes(result); }
-export function requiresBallInPlayData(result: AtBatResult): boolean { return ['1B', '2B', '3B', 'HR', 'GO', 'FO', 'LO', 'PO', 'DP', 'FC', 'E'].includes(result); }
+export function requiresBallInPlayData(result: AtBatResult): boolean { return ['1B', '2B', '3B', 'HR', 'GO', 'FO', 'LO', 'PO', 'DP', 'TP', 'FC', 'E'].includes(result); }
 
 export function inferFielder(result: AtBatResult, direction: Direction): Position | null {
   const map: Record<string, Record<Direction, Position>> = {
@@ -766,8 +766,8 @@ export const FAME_VALUES: Record<FameEventType, number> = {
   WALK_OFF_GRAND_SLAM: 3,
   // Defensive Highlights
   WEB_GEM: 0.75,
-  ROBBERY: 1.5,
-  ROBBERY_GRAND_SLAM: 2.5,
+  ROBBERY: 1,            // CRIT-06 fix: Spec v3.3 standardized to +1 for all robbery types
+  ROBBERY_GRAND_SLAM: 1, // CRIT-06 fix: Same difficulty as regular robbery per spec v3.3
   TRIPLE_PLAY: 2,
   UNASSISTED_TRIPLE_PLAY: 3,
   THROW_OUT_AT_HOME: 0.5,

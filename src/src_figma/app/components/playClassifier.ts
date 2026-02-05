@@ -274,8 +274,8 @@ function classifySingleFielderOut(
   if (isOutfielder && location.y > 0.6) {
     // Check for Web Gem / Robbery prompts based on depth
     // Per GAMETRACKER_DRAGDROP_SPEC.md v2:
-    // - y > 0.95 = ROBBERY (catch at wall, HR denied) → +1.5 Fame
-    // - 0.8 < y ≤ 0.95 = WEB GEM (spectacular catch) → +1.0 Fame
+    // - y > 0.95 = ROBBERY (catch at wall, HR denied) → +1.0 Fame (spec v3.3)
+    // - 0.8 < y ≤ 0.95 = WEB GEM (spectacular catch) → +0.75 Fame
     if (location.y > 0.95) {
       prompts.push({
         eventType: 'ROBBERY',

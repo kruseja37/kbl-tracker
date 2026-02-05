@@ -146,7 +146,12 @@ export interface UseGameStateReturn {
   loadExistingGame: () => Promise<boolean>;
 
   // Undo support
-  restoreState: (snapshot: { gameState: GameState; scoreboard: ScoreboardState }) => void;
+  restoreState: (snapshot: {
+    gameState: GameState;
+    scoreboard: ScoreboardState;
+    playerStats?: Map<string, PlayerGameStats>;
+    pitcherStats?: Map<string, PitcherGameStats>;
+  }) => void;
 
   // Loading/persistence
   isLoading: boolean;
@@ -180,7 +185,7 @@ function mapAtBatResultFromHit(hitType: HitType): AtBatResult {
 }
 
 function mapAtBatResultFromOut(outType: OutType): AtBatResult {
-  // AtBatResult types per game.ts: 'K', 'KL', 'GO', 'FO', 'LO', 'PO', 'DP', 'SF', 'SAC', 'FC', 'D3K'
+  // AtBatResult types per game.ts: 'K', 'KL', 'GO', 'FO', 'LO', 'PO', 'DP', 'TP', 'SF', 'SAC', 'FC', 'D3K'
   switch (outType) {
     case 'K': return 'K';
     case 'KL': return 'KL';
@@ -189,7 +194,7 @@ function mapAtBatResultFromOut(outType: OutType): AtBatResult {
     case 'LO': return 'LO';
     case 'PO': return 'PO';
     case 'DP': return 'DP';
-    case 'TP': return 'DP'; // Triple play recorded as DP (closest type)
+    case 'TP': return 'TP'; // CRIT-04 fix: Preserve TP as distinct AtBatResult (was losing data by mapping to DP)
     case 'FC': return 'FC';
     case 'SF': return 'SF';
     case 'SH': return 'SAC';
@@ -382,6 +387,13 @@ export function getDefaultRunnerOutcome(
     return 'HELD';
   }
 
+  // TRIPLE PLAY (TP): R1 and R2 are out (CRIT-04 fix: TP now distinct from DP)
+  if (result === 'TP') {
+    if (base === 'first') return 'OUT_2B';
+    if (base === 'second') return 'OUT_3B';
+    return 'HELD';
+  }
+
   // SACRIFICE FLY (SF): R3 scores (that's what makes it a SF)
   if (result === 'SF') {
     if (base === 'third') return 'SCORED';
@@ -545,8 +557,8 @@ export function calculateRBIs(
     rbis = 0;
   }
 
-  // DP doesn't give RBIs even if run scores
-  if (result === 'DP') {
+  // DP/TP doesn't give RBIs even if run scores
+  if (result === 'DP' || result === 'TP') {
     rbis = 0;
   }
 
@@ -557,7 +569,7 @@ export function calculateRBIs(
  * Helper type definitions matching src/types/game.ts
  */
 export function isOut(result: AtBatResult): boolean {
-  return ['K', 'KL', 'GO', 'FO', 'LO', 'PO', 'DP', 'SF', 'SAC'].includes(result);
+  return ['K', 'KL', 'GO', 'FO', 'LO', 'PO', 'DP', 'TP', 'SF', 'SAC'].includes(result);
 }
 
 export function isHit(result: AtBatResult): boolean {
@@ -1651,7 +1663,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     const FAME_VALUES: Record<string, number> = {
       // Fielding events (fielder receives Fame)
       WEB_GEM: 1.0,         // Spectacular catch (0.8 < y ≤ 0.95)
-      ROBBERY: 1.5,         // HR denied at wall (y > 0.95)
+      ROBBERY: 1.0,         // HR denied at wall (y > 0.95) — CRIT-06: spec v3.3 standardized to +1
 
       // Baserunning events (runner receives Fame)
       TOOTBLAN: -3.0,       // Baserunning blunder
@@ -2297,10 +2309,22 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
   }, [gameState, playerStats, pitcherStats, fameEvents, atBatSequence, scoreboard, completeGameInternal]);
 
   // Restore state from undo snapshot (Phase 7 - Undo System)
-  const restoreState = useCallback((snapshot: { gameState: GameState; scoreboard: ScoreboardState }) => {
+  // CRIT-01 fix: Now also restores playerStats and pitcherStats Maps
+  const restoreState = useCallback((snapshot: {
+    gameState: GameState;
+    scoreboard: ScoreboardState;
+    playerStats?: Map<string, PlayerGameStats>;
+    pitcherStats?: Map<string, PitcherGameStats>;
+  }) => {
     console.log('[useGameState] Restoring state from snapshot');
     setGameState(snapshot.gameState);
     setScoreboard(snapshot.scoreboard);
+    if (snapshot.playerStats) {
+      setPlayerStats(snapshot.playerStats);
+    }
+    if (snapshot.pitcherStats) {
+      setPitcherStats(snapshot.pitcherStats);
+    }
   }, []);
 
   // Set loading to false after initial setup

@@ -2966,10 +2966,23 @@ export function EnhancedInteractiveField({
 
     const fieldingSequence = placedFielders.map(pf => pf.fielder.positionNumber);
 
-    // Build play data from outcome
+    // Handle ROE (Reached On Error) - batter reaches base due to error
+    // Must handle BEFORE building playData since 'ROE' is not in PlayData.OutType
+    // This triggers the error fielder selection flow
+    if (outcome.type === 'ROE') {
+      console.log('[Flow] ROE selected - starting error fielder selection');
+      // Store the play data and trigger error fielder selection
+      setPendingError(true);
+      setAwaitingErrorFielder(true);
+      // Keep showing fielding area so user can tap the fielder who made the error
+      setFlowStep('OUT_FIELDING');
+      return; // Exit early - will continue in handleFielderClick → handleErrorTypeSelect
+    }
+
+    // Build play data from outcome (ROE already handled above)
     const playData: PlayData = {
       type: 'out',
-      outType: outcome.type,
+      outType: outcome.type as OutType, // Cast is safe since ROE is handled above
       fieldingSequence,
       ballLocation: ballLocation || undefined,
       spraySector: ballLocation ? getSpraySector(ballLocation.x, ballLocation.y).sector : undefined,
@@ -2986,7 +2999,7 @@ export function EnhancedInteractiveField({
       onSpecialEvent?.({ eventType: 'WEB_GEM' });
     }
 
-    // Handle error modifier
+    // Handle error modifier (error ON an out, not ROE)
     if (outcome.modifiers.includes('E')) {
       playData.type = 'error';
     }
@@ -3244,11 +3257,13 @@ export function EnhancedInteractiveField({
         }
         break;
       case 'E':
-        // Error - start error flow
-        console.log('[Flow] Error selected - starting error flow');
+        // Error (ROE) - start error flow
+        // Flow: Show ball landing prompt → user clicks location → user taps fielder → error type → runner outcomes
+        console.log('[Flow] Error (ROE) selected - starting error flow with ball location prompt');
         setPendingError(true);
-        setAwaitingErrorFielder(true);
-        setFlowStep('OUT_FIELDING'); // Use fielding step to capture error fielder
+        setPendingBatterBase('1B'); // Default: batter reaches first on error
+        setShowBallLandingPrompt(true); // First: get ball location
+        // After ball location is set, awaitingErrorFielder will be set in handleBallLandingConfirm
         break;
       default:
         setFlowStep('IDLE');
@@ -3589,8 +3604,8 @@ export function EnhancedInteractiveField({
     const eventType = isStarPlayRobbery ? 'ROBBERY' : 'WEB_GEM';
 
     // Calculate LI-weighted Fame value
-    // Per SPECIAL_EVENTS_SPEC.md: ROBBERY = +1.5, WEB_GEM = +1.0 base fame
-    const baseFame = isStarPlayRobbery ? 1.5 : 1.0;
+    // Per SPECIAL_EVENTS_SPEC.md v3.3: ROBBERY = +1.0, WEB_GEM = +0.75 base fame (CRIT-06 fix)
+    const baseFame = isStarPlayRobbery ? 1.0 : 0.75;
     let finalFameValue = baseFame;
     let liValue: number | undefined;
     let liCategory: 'LOW' | 'MEDIUM' | 'HIGH' | 'EXTREME' | undefined;
@@ -3683,8 +3698,9 @@ export function EnhancedInteractiveField({
     setPendingError(false);
     setErrorFielder(null);
 
-    // Note: Don't call completePlay here - wait for End At-Bat
-    console.log('[ErrorType] → RUNNER_OUTCOMES phase');
+    // Transition to RUNNER_CONFIRM to show runner outcomes modal
+    setFlowStep('RUNNER_CONFIRM');
+    console.log('[ErrorType] → RUNNER_CONFIRM phase');
   }, [errorFielder, ballLocation, batterPosition, gameSituation.bases, gameSituation.outs]);
 
   const handleErrorTypeCancel = useCallback(() => {

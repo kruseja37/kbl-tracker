@@ -500,6 +500,7 @@ export {
   getMojoStatMultiplier,
   applyMojoToStat,
   applyMojoToAllStats,
+  applyCombinedModifiers,
 
   // Mojo change calculation
   calculateAmplification,

@@ -210,12 +210,13 @@ describe('Earned Run Attribution', () => {
     expect(result.scoredEvent!.wasEarnedRun).toBe(false);
   });
 
-  test('runner who reached via FC scores as UNEARNED run', () => {
+  test('runner who reached via FC scores as EARNED run (CRIT-03 fix: FC runs are earned per baseball rules)', () => {
     let state = createRunnerTrackingState('pitcher-1', 'Pitcher A');
     state = addRunner(state, 'runner-1', 'Batter One', '1B', 'FC');
 
     const result = advanceRunner(state, 'runner-1', 'HOME');
-    expect(result.scoredEvent!.wasEarnedRun).toBe(false);
+    // FC runs ARE earned — only error-reached runners produce unearned runs
+    expect(result.scoredEvent!.wasEarnedRun).toBe(true);
   });
 
   test('ER charged to original pitcher even after pitching change', () => {
