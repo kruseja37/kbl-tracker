@@ -1,5 +1,10 @@
 import { useState, useEffect } from 'react';
 import { useDrag, useDrop } from 'react-dnd';
+// EXH-036: Import Mojo/Fitness types for editing
+import type { MojoLevel } from '../../../engines/mojoEngine';
+import type { FitnessState } from '../../../engines/fitnessEngine';
+import { MOJO_STATES, getMojoColor } from '../../../engines/mojoEngine';
+import { FITNESS_STATES } from '../../../engines/fitnessEngine';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type DndRef = any; // React-dnd connector refs are not fully compatible with React 19 ref types
@@ -31,7 +36,7 @@ interface PitcherStats {
 
 export interface Player {
   name: string;
-  position: string;
+  position?: string; // undefined for bench/substituted out players
   battingOrder?: number; // undefined for bench players
   stats: PlayerStats;
   battingHand: 'L' | 'R' | 'S';
@@ -58,6 +63,11 @@ interface TeamRosterProps {
   onSubstitution?: (benchPlayerName: string, lineupPlayerName: string) => void;
   onPitcherSubstitution?: (newPitcherName: string, replacedName: string, replacedType: 'player' | 'pitcher') => void;
   onPositionSwap?: (player1Name: string, player2Name: string) => void;
+  // EXH-036: Mojo/Fitness editing callbacks
+  getPlayerMojo?: (playerName: string) => MojoLevel | undefined;
+  getPlayerFitness?: (playerName: string) => FitnessState | undefined;
+  onMojoChange?: (playerName: string, newMojo: MojoLevel) => void;
+  onFitnessChange?: (playerName: string, newFitness: FitnessState) => void;
 }
 
 interface PlayerCardModalProps {
@@ -66,6 +76,11 @@ interface PlayerCardModalProps {
   onClose: () => void;
   teamColor: string;
   teamName: string;
+  // EXH-036: Mojo/Fitness editing support
+  currentMojo?: MojoLevel;
+  currentFitness?: FitnessState;
+  onMojoChange?: (newMojo: MojoLevel) => void;
+  onFitnessChange?: (newFitness: FitnessState) => void;
 }
 
 interface DraggableBenchPlayerProps {
@@ -84,6 +99,8 @@ interface DraggableLineupPlayerProps {
 interface DraggablePitcherProps {
   pitcher: Pitcher;
   onClick: () => void;
+  onPitcherDrop?: (droppedPitcher: Pitcher) => void;
+  isInGame?: boolean;
 }
 
 function DraggableBenchPlayer({ player, onClick }: DraggableBenchPlayerProps) {
@@ -130,7 +147,7 @@ function DraggableBenchPlayer({ player, onClick }: DraggableBenchPlayerProps) {
   );
 }
 
-function DraggablePitcher({ pitcher, onClick }: DraggablePitcherProps) {
+function DraggablePitcher({ pitcher, onClick, onPitcherDrop, isInGame }: DraggablePitcherProps) {
   const [{ isDragging }, drag] = useDrag(() => ({
     type: DragTypes.PITCHER,
     item: { pitcher },
@@ -139,21 +156,49 @@ function DraggablePitcher({ pitcher, onClick }: DraggablePitcherProps) {
     }),
   }), [pitcher]);
 
+  // Only allow drops on the active pitcher during live games
+  const [{ isOver, canDrop }, drop] = useDrop<{ pitcher: Pitcher }, void, { isOver: boolean; canDrop: boolean }>(() => ({
+    accept: DragTypes.PITCHER,
+    drop: (item: { pitcher: Pitcher }) => {
+      if (onPitcherDrop && item.pitcher.name !== pitcher.name && !item.pitcher.isOutOfGame) {
+        onPitcherDrop(item.pitcher);
+      }
+    },
+    canDrop: (item: { pitcher: Pitcher }): boolean => {
+      // Can only drop on the active pitcher, and can't drop on yourself
+      return Boolean(pitcher.isActive && item.pitcher.name !== pitcher.name && !item.pitcher.isOutOfGame);
+    },
+    collect: (monitor) => ({
+      isOver: monitor.isOver(),
+      canDrop: monitor.canDrop(),
+    }),
+  }), [pitcher, onPitcherDrop]);
+
+  const isDropTarget = isOver && canDrop;
+
+  // Combine drag and drop refs
+  const combinedRef = (el: HTMLButtonElement | null) => {
+    drag(el);
+    drop(el);
+  };
+
   return (
     <button
-      ref={drag as DndRef}
+      ref={combinedRef}
       onClick={(e) => {
         if (!isDragging) {
           onClick();
         }
       }}
-      className={`w-full bg-[#5A7A52] p-1.5 text-left transition-transform ${
+      className={`w-full bg-[#5A7A52] p-1.5 text-left transition-all ${
         pitcher.isActive ? 'border-[3px] border-[#C4A853]' : 'border-[2px] border-[#E8E8D8]'
       } ${
-        pitcher.isOutOfGame 
-          ? 'opacity-50 cursor-not-allowed' 
+        pitcher.isOutOfGame
+          ? 'opacity-50 cursor-not-allowed'
           : 'hover:scale-[1.02] active:scale-[0.98] cursor-move'
-      } ${isDragging ? 'opacity-50' : ''}`}
+      } ${isDragging ? 'opacity-50' : ''} ${
+        isDropTarget ? 'border-[#0066FF] border-[4px] bg-[#6A8A62] scale-105' : ''
+      } ${canDrop && !isDropTarget && pitcher.isActive ? 'border-[#7733DD]' : ''}`}
       disabled={pitcher.isOutOfGame}
       style={{ position: 'relative' }}
     >
@@ -174,6 +219,12 @@ function DraggablePitcher({ pitcher, onClick }: DraggablePitcherProps) {
           <div className="text-[7px] text-[#E8E8D8]/80" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>{pitcher.stats.pitches}p</div>
         </div>
       </div>
+      {/* Visual hint for drop target */}
+      {pitcher.isActive && isInGame && (
+        <div className="absolute -bottom-1 left-1/2 transform -translate-x-1/2 text-[6px] text-[#C4A853] font-bold whitespace-nowrap" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.5)' }}>
+          ▼ DROP TO REPLACE
+        </div>
+      )}
     </button>
   );
 }
@@ -250,7 +301,11 @@ function DraggableLineupPlayer({ player, onClick, onDrop, onPitcherDrop, onLineu
   );
 }
 
-function PlayerCardModal({ player, pitcher, onClose, teamColor, teamName }: PlayerCardModalProps) {
+function PlayerCardModal({ player, pitcher, onClose, teamColor, teamName, currentMojo, currentFitness, onMojoChange, onFitnessChange }: PlayerCardModalProps) {
+  // EXH-036: State for editing mojo/fitness
+  const [isEditingMojo, setIsEditingMojo] = useState(false);
+  const [isEditingFitness, setIsEditingFitness] = useState(false);
+
   if (!player && !pitcher) return null;
 
   return (
@@ -404,6 +459,115 @@ function PlayerCardModal({ player, pitcher, onClose, teamColor, teamName }: Play
           </>
         )}
 
+        {/* EXH-036: Mojo/Fitness Editing Section */}
+        {(currentMojo !== undefined || currentFitness !== undefined) && (
+          <div className="bg-[#5A7A52] border-[3px] border-[#E8E8D8] p-3 mb-3 space-y-2">
+            <div className="text-[8px] text-[#E8E8D8] font-bold mb-1" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>
+              CONDITION
+            </div>
+
+            {/* Mojo Row */}
+            {currentMojo !== undefined && onMojoChange && (
+              <div className="flex items-center gap-2">
+                <span className="text-[7px] text-[#E8E8D8] w-12" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>MOJO</span>
+                {isEditingMojo ? (
+                  <div className="flex gap-1 flex-wrap">
+                    {([-2, -1, 0, 1, 2] as MojoLevel[]).map((level) => (
+                      <button
+                        key={level}
+                        onClick={() => {
+                          onMojoChange(level);
+                          setIsEditingMojo(false);
+                        }}
+                        className={`px-2 py-1 text-[8px] font-bold border-2 transition-all ${
+                          level === currentMojo
+                            ? 'border-[#C4A853] bg-[#C4A853]/30'
+                            : 'border-[#E8E8D8]/50 hover:border-[#E8E8D8]'
+                        }`}
+                        style={{ color: getMojoColor(level) }}
+                      >
+                        {MOJO_STATES[level].emoji} {MOJO_STATES[level].displayName}
+                      </button>
+                    ))}
+                    <button
+                      onClick={() => setIsEditingMojo(false)}
+                      className="px-1 text-[#E8E8D8]/70 hover:text-[#E8E8D8]"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ) : (
+                  <div
+                    className="flex items-center gap-1 cursor-pointer hover:bg-[#6B9462] px-1 rounded"
+                    onClick={() => setIsEditingMojo(true)}
+                  >
+                    <span
+                      className="text-xs font-bold"
+                      style={{ color: getMojoColor(currentMojo), textShadow: '1px 1px 0px rgba(0,0,0,0.5)' }}
+                    >
+                      {MOJO_STATES[currentMojo].emoji} {MOJO_STATES[currentMojo].displayName}
+                    </span>
+                    <span className="text-[8px] text-[#E8E8D8]/70">
+                      ({MOJO_STATES[currentMojo].statMultiplier.toFixed(2)}x)
+                    </span>
+                    <span className="text-[8px] text-[#C4A853]">✏️</span>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Fitness Row */}
+            {currentFitness !== undefined && onFitnessChange && (
+              <div className="flex items-center gap-2">
+                <span className="text-[7px] text-[#E8E8D8] w-12" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>FITNESS</span>
+                {isEditingFitness ? (
+                  <div className="flex gap-1 flex-wrap">
+                    {(['JUICED', 'FIT', 'WELL', 'STRAINED', 'WEAK', 'HURT'] as FitnessState[]).map((state) => (
+                      <button
+                        key={state}
+                        onClick={() => {
+                          onFitnessChange(state);
+                          setIsEditingFitness(false);
+                        }}
+                        className={`px-2 py-1 text-[8px] font-bold border-2 transition-all ${
+                          state === currentFitness
+                            ? 'border-[#C4A853] bg-[#C4A853]/30'
+                            : 'border-[#E8E8D8]/50 hover:border-[#E8E8D8]'
+                        }`}
+                        style={{ color: FITNESS_STATES[state].color }}
+                      >
+                        {FITNESS_STATES[state].emoji} {FITNESS_STATES[state].displayName}
+                      </button>
+                    ))}
+                    <button
+                      onClick={() => setIsEditingFitness(false)}
+                      className="px-1 text-[#E8E8D8]/70 hover:text-[#E8E8D8]"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ) : (
+                  <div
+                    className="flex items-center gap-1 cursor-pointer hover:bg-[#6B9462] px-1 rounded"
+                    onClick={() => setIsEditingFitness(true)}
+                  >
+                    <span
+                      className="text-xs font-bold"
+                      style={{ color: FITNESS_STATES[currentFitness].color, textShadow: '1px 1px 0px rgba(0,0,0,0.5)' }}
+                    >
+                      {FITNESS_STATES[currentFitness].emoji} {FITNESS_STATES[currentFitness].displayName}
+                    </span>
+                    <span className="text-[8px] text-[#E8E8D8]/70">
+                      ({FITNESS_STATES[currentFitness].multiplier.toFixed(2)}x)
+                    </span>
+                    <span className="text-[8px] text-[#C4A853]">✏️</span>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Close button */}
         <button
           onClick={onClose}
@@ -416,7 +580,7 @@ function PlayerCardModal({ player, pitcher, onClose, teamColor, teamName }: Play
   );
 }
 
-export function TeamRoster({ teamName, teamColor, teamBorderColor, players, pitchers, isAway, isInGame, onSubstitution, onPitcherSubstitution, onPositionSwap }: TeamRosterProps) {
+export function TeamRoster({ teamName, teamColor, teamBorderColor, players, pitchers, isAway, isInGame, onSubstitution, onPitcherSubstitution, onPositionSwap, getPlayerMojo, getPlayerFitness, onMojoChange, onFitnessChange }: TeamRosterProps) {
   const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
   const [selectedPitcher, setSelectedPitcher] = useState<Pitcher | null>(null);
   const [localPlayers, setLocalPlayers] = useState<Player[]>(players);
@@ -461,7 +625,9 @@ export function TeamRoster({ teamName, teamColor, teamBorderColor, players, pitc
     const newBenchPlayer: Player = {
       ...lineupPlayer,
       battingOrder: undefined,
-      // Mark as out of game only during live gameplay
+      // In pre-game mode: clear position (player goes to bench pool)
+      // In live game mode: preserve position but mark as out of game
+      position: isInGame ? lineupPlayer.position : undefined,
       isOutOfGame: isInGame ? true : undefined,
     };
 
@@ -485,14 +651,25 @@ export function TeamRoster({ teamName, teamColor, teamBorderColor, players, pitc
   };
 
   const handlePositionSwap = (player1: Player, player2: Player) => {
-    // Swap positions between two lineup players, keep batting order the same
+    // In pre-game mode: swap BOTH batting order AND position
+    // In live game mode: only swap positions (keeping batting order)
     setLocalPlayers(prevPlayers => {
       return prevPlayers.map(p => {
         if (p.name === player1.name) {
-          return { ...p, position: player2.position };
+          return {
+            ...p,
+            position: player2.position,
+            // Swap batting order in pre-game, keep same in live game
+            battingOrder: isInGame ? p.battingOrder : player2.battingOrder,
+          };
         }
         if (p.name === player2.name) {
-          return { ...p, position: player1.position };
+          return {
+            ...p,
+            position: player1.position,
+            // Swap batting order in pre-game, keep same in live game
+            battingOrder: isInGame ? p.battingOrder : player1.battingOrder,
+          };
         }
         return p;
       });
@@ -576,13 +753,46 @@ export function TeamRoster({ teamName, teamColor, teamBorderColor, players, pitc
     }
   };
 
+  // Handle pitcher-to-pitcher substitution (e.g., reliever replacing starter)
+  const handlePitcherToPitcherSubstitution = (newPitcher: Pitcher, activePitcher: Pitcher) => {
+    // Update pitcher list - new pitcher becomes active, old pitcher becomes inactive
+    setLocalPitchers(prevPitchers => {
+      return prevPitchers.map(p => {
+        if (p.name === newPitcher.name) {
+          // New pitcher becomes active
+          return { ...p, isActive: true };
+        } else if (p.name === activePitcher.name) {
+          // Old pitcher becomes inactive and marked as out of game during live play
+          return {
+            ...p,
+            isActive: false,
+            isOutOfGame: isInGame ? true : undefined,
+          };
+        }
+        return p;
+      });
+    });
+
+    // Notify parent
+    if (onPitcherSubstitution) {
+      onPitcherSubstitution(newPitcher.name, activePitcher.name, 'pitcher');
+    }
+  };
+
   return (
     <>
-      <div 
-        className="bg-[#4A6A42] border-[4px] border-[#E8E8D8] p-3 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.3)]"
+      <div
+        className="bg-[#4A6A42] border-[4px] p-3 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.3)]"
+        style={{ borderColor: teamBorderColor || '#E8E8D8' }}
       >
         {/* Team Header */}
-        <div className="text-[8px] text-[#E8E8D8] font-bold mb-2 flex items-center gap-1" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>
+        <div
+          className="text-[10px] font-bold mb-2 flex items-center gap-1"
+          style={{
+            color: teamColor || '#E8E8D8',
+            textShadow: `2px 2px 0px ${teamBorderColor || 'rgba(0,0,0,0.5)'}`,
+          }}
+        >
           {isAway ? '▲' : '▼'} {teamName}
         </div>
 
@@ -626,6 +836,8 @@ export function TeamRoster({ teamName, teamColor, teamBorderColor, players, pitc
                   key={pitcher.name}
                   pitcher={pitcher}
                   onClick={() => handlePitcherClick(pitcher)}
+                  onPitcherDrop={(droppedPitcher) => handlePitcherToPitcherSubstitution(droppedPitcher, pitcher)}
+                  isInGame={isInGame}
                 />
               ))}
             </div>
@@ -633,13 +845,17 @@ export function TeamRoster({ teamName, teamColor, teamBorderColor, players, pitc
         )}
       </div>
 
-      {/* Player Card Modal */}
+      {/* Player Card Modal - EXH-036: Now with mojo/fitness editing */}
       <PlayerCardModal
         player={selectedPlayer}
         pitcher={selectedPitcher}
         onClose={handleCloseModal}
         teamColor={teamColor}
         teamName={teamName}
+        currentMojo={selectedPlayer ? getPlayerMojo?.(selectedPlayer.name) : selectedPitcher ? getPlayerMojo?.(selectedPitcher.name) : undefined}
+        currentFitness={selectedPlayer ? getPlayerFitness?.(selectedPlayer.name) : selectedPitcher ? getPlayerFitness?.(selectedPitcher.name) : undefined}
+        onMojoChange={selectedPlayer ? (newMojo) => onMojoChange?.(selectedPlayer.name, newMojo) : selectedPitcher ? (newMojo) => onMojoChange?.(selectedPitcher.name, newMojo) : undefined}
+        onFitnessChange={selectedPlayer ? (newFitness) => onFitnessChange?.(selectedPlayer.name, newFitness) : selectedPitcher ? (newFitness) => onFitnessChange?.(selectedPitcher.name, newFitness) : undefined}
       />
     </>
   );
