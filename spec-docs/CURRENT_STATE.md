@@ -1,7 +1,7 @@
 # KBL Tracker - Current State
 
 > **Purpose**: Single source of truth for what's implemented, what's not, and known issues
-> **Last Updated**: February 3, 2026 (League Builder Integration Complete)
+> **Last Updated**: February 5, 2026 (Exhibition Bug Fixes Session)
 
 ---
 
@@ -72,6 +72,30 @@ src/src_figma/__tests__/statCalculations/
 - **Hooks**: 8/8 covered
 - **Target Tests**: 3000+ (up from 1800+)
 - **Target Test Files**: 120+ (up from 55+)
+
+---
+
+## Recent Fixes (February 5, 2026)
+
+### Exhibition Mode Bug Fixes ✅
+
+**Post-Game Summary (EXH-011)**:
+- ✅ Game archived BEFORE navigation (was showing "Game not found")
+- ✅ Team hits calculated from player stats (was showing 0)
+- ✅ Pitcher names display correctly (was showing IDs)
+- ✅ Player names properly formatted from IDs
+- ✅ Stale data cleared on new game initialization
+
+**Runner/Scoring Fixes**:
+- ✅ Error (E) no longer wipes runners from bases
+- ✅ WP/PB runs now update inning-by-inning scoreboard
+- ✅ Inside-the-park HR properly scores all runners (EXH-008)
+- ✅ Pitcher included in batting lineup at #9 (EXH-009)
+
+**Key Technical Changes**:
+- Added `pitcherNamesRef` to track pitcher ID → name mapping
+- `advanceRunner` and `advanceRunnersBatch` now update scoreboard innings
+- `initializeGame` clears all previous game state
 
 ---
 

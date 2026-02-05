@@ -6,6 +6,68 @@
 > **IMPORTANT**: This log is for *what happened* during sessions. For *how things work*,
 > see the relevant SPEC docs. Finalized logic should be PROMOTED to specs, not left here.
 
+## Session: February 5, 2026 - Exhibition Mode Bug Fixes (Continuation)
+
+### What Was Accomplished
+
+- ✅ **EXH-008**: Fixed inside-the-park HR flow - added HR case to `calculateHitDefaults()`
+- ✅ **EXH-009**: Fixed pitcher in batting lineup - now at 9th spot, handles stored lineups too
+- ✅ **EXH-011**: Fixed post-game summary data issues:
+  - Game archived BEFORE navigation (was: "Game not found")
+  - Team hits now calculated from player stats (was: showing 0)
+  - Pitcher names display correctly (was: showing IDs like "away-hurley-bender")
+  - Player names properly formatted from IDs (title case, spaces)
+  - Stale data cleared on game init (fame events, scoreboard, pitcher names ref)
+- ✅ **Runner on Error fix**: Error (E) no longer wipes all runners from bases
+- ✅ **Scoreboard line score fix**: WP/PB runs now update inning-by-inning scores
+
+### Bugs Found During Testing
+- POG (Players of the Game) display is working but needs verification that correct players are shown
+
+### NFL Results
+- Tier 1 (Build): ✅ `npm run build` exits 0
+- Tier 2 (Data Flow): ✅ endGame → archiveCompletedGame → PostGameSummary loads data
+- Tier 3 (Spec Alignment): Not fully audited
+- **Day Status**: PARTIAL (more testing needed on post-game summary)
+
+### Key Files Modified
+- `src/src_figma/hooks/useGameState.ts`:
+  - Added `pitcherNamesRef` to track pitcher ID → name mapping
+  - Fixed `recordError()` runner handling (was wiping bases)
+  - Moved `archiveCompletedGame()` call to happen BEFORE pitch count prompt
+  - Fixed `advanceRunner()` and `advanceRunnersBatch()` to update scoreboard inning scores
+  - Added state clearing in `initializeGame()` for new games
+- `src/src_figma/app/pages/PostGameSummary.tsx`:
+  - Fixed player name extraction from IDs
+  - Fixed team hits calculation from player stats
+- `src/src_figma/app/components/runnerDefaults.ts`:
+  - Added HR case to `calculateHitDefaults()` for inside-the-park HRs
+- `src/src_figma/utils/lineupLoader.ts`:
+  - Fixed stored lineup handling to include pitcher at #9 if missing
+
+### Git Commits (7 this session)
+- `7af2f02` fix: Update scoreboard inning scores for WP/PB runner advances
+- `d95337b` fix(EXH-011): Fix post-game summary data issues
+- `7e027fa` fix: Fix 3 issues from user testing
+- `bacf564` fix(EXH-009): Add pitcher to batting lineup at 9th spot
+- `0b21261` fix(EXH-008): Handle inside-the-park HR in runner defaults
+- `83b6a0a` fix(EXH-011): Wire PostGameSummary to actual game stats from IndexedDB
+- `8b45b4d` fix: Exhibition mode bug fixes and enhanced GameTracker features
+
+### Pending / Next Steps
+- [ ] Verify POG display shows correct top performers
+- [ ] EXH-016: Add fielder credit prompt on thrown-out runner
+- [ ] EXH-025: Add error fielder prompt on runner advance
+- [ ] EXH-004: Stadium names (requires League Builder data update)
+
+### Key Context for Next Session
+- Post-game summary should now work, but needs user verification
+- Pitcher ID format is `away-{name}` or `home-{name}` (dashes for spaces)
+- Player ID format same as pitcher
+- `pitcherNamesRef` tracks ID→name mapping, populated in `initializeGame` and `changePitcher`
+
+---
+
 ## Session: February 3, 2026 (Continuation) - League Builder Integration
 
 ### What Was Accomplished
