@@ -1731,9 +1731,11 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
   }, [gameState.outs, gameState.bases]);
 
   const advanceRunner = useCallback((from: 'first' | 'second' | 'third', to: 'second' | 'third' | 'home', outcome: 'safe' | 'out') => {
+    // Calculate score change first so we can update both game state and scoreboard
+    const runsScored = (outcome === 'safe' && to === 'home') ? 1 : 0;
+
     setGameState(prev => {
       const newBases = { ...prev.bases };
-      let scoreChange = 0;
       let outsChange = 0;
 
       // Clear origin base
@@ -1744,7 +1746,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       if (outcome === 'safe') {
         if (to === 'second') newBases.second = true;
         if (to === 'third') newBases.third = true;
-        if (to === 'home') scoreChange = 1;
+        // home is handled by runsScored
       } else {
         outsChange = 1;
       }
@@ -1753,11 +1755,33 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         ...prev,
         bases: newBases,
         outs: prev.outs + outsChange,
-        awayScore: prev.isTop ? prev.awayScore + scoreChange : prev.awayScore,
-        homeScore: prev.isTop ? prev.homeScore : prev.homeScore + scoreChange,
+        awayScore: prev.isTop ? prev.awayScore + runsScored : prev.awayScore,
+        homeScore: prev.isTop ? prev.homeScore : prev.homeScore + runsScored,
       };
     });
-  }, []);
+
+    // Update scoreboard inning scores if a run scored (fixes WP/PB runs not showing in line score)
+    if (runsScored > 0) {
+      setScoreboard(prev => {
+        const teamKey = gameState.isTop ? 'away' : 'home';
+        const inningIdx = gameState.inning - 1;
+        const newInnings = [...prev.innings];
+        const currentInningScore = newInnings[inningIdx]?.[teamKey] || 0;
+        newInnings[inningIdx] = {
+          ...newInnings[inningIdx],
+          [teamKey]: currentInningScore + runsScored,
+        };
+        return {
+          ...prev,
+          innings: newInnings,
+          [teamKey]: {
+            ...prev[teamKey],
+            runs: prev[teamKey].runs + runsScored,
+          },
+        };
+      });
+    }
+  }, [gameState.isTop, gameState.inning]);
 
   /**
    * Batch update runners - processes all movements atomically
@@ -1771,10 +1795,12 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
 
     console.log('[advanceRunnersBatch] Processing movements:', movements);
 
+    // Calculate runs scored first so we can update scoreboard
+    const runsScored = movements.filter(m => m.outcome === 'safe' && m.to === 'home').length;
+
     setGameState(prev => {
       // Start with all bases cleared for runners that moved
       const newBases = { ...prev.bases };
-      let scoreChange = 0;
       let outsChange = 0;
 
       // First pass: clear all origin bases
@@ -1789,24 +1815,46 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         if (move.outcome === 'safe') {
           if (move.to === 'second') newBases.second = true;
           if (move.to === 'third') newBases.third = true;
-          if (move.to === 'home') scoreChange++;
+          // home is handled by runsScored
         } else {
           // Runner is out
           outsChange++;
         }
       }
 
-      console.log('[advanceRunnersBatch] Result - bases:', newBases, 'runs:', scoreChange, 'outs:', outsChange);
+      console.log('[advanceRunnersBatch] Result - bases:', newBases, 'runs:', runsScored, 'outs:', outsChange);
 
       return {
         ...prev,
         bases: newBases,
         outs: prev.outs + outsChange,
-        awayScore: prev.isTop ? prev.awayScore + scoreChange : prev.awayScore,
-        homeScore: prev.isTop ? prev.homeScore : prev.homeScore + scoreChange,
+        awayScore: prev.isTop ? prev.awayScore + runsScored : prev.awayScore,
+        homeScore: prev.isTop ? prev.homeScore : prev.homeScore + runsScored,
       };
     });
-  }, []);
+
+    // Update scoreboard inning scores if runs scored (fixes WP/PB runs not showing in line score)
+    if (runsScored > 0) {
+      setScoreboard(prev => {
+        const teamKey = gameState.isTop ? 'away' : 'home';
+        const inningIdx = gameState.inning - 1;
+        const newInnings = [...prev.innings];
+        const currentInningScore = newInnings[inningIdx]?.[teamKey] || 0;
+        newInnings[inningIdx] = {
+          ...newInnings[inningIdx],
+          [teamKey]: currentInningScore + runsScored,
+        };
+        return {
+          ...prev,
+          innings: newInnings,
+          [teamKey]: {
+            ...prev[teamKey],
+            runs: prev[teamKey].runs + runsScored,
+          },
+        };
+      });
+    }
+  }, [gameState.isTop, gameState.inning]);
 
   const advanceCount = useCallback((type: 'ball' | 'strike' | 'foul') => {
     setGameState(prev => {
