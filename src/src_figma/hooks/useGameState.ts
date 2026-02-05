@@ -624,6 +624,9 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
   const [playerStats, setPlayerStats] = useState<Map<string, PlayerGameStats>>(new Map());
   const [pitcherStats, setPitcherStats] = useState<Map<string, PitcherGameStats>>(new Map());
 
+  // Track pitcher ID → name mapping for post-game summary (EXH-011 pitcher names fix)
+  const pitcherNamesRef = useRef<Map<string, string>>(new Map());
+
   // Fame events tracked during game (per SPECIAL_EVENTS_SPEC.md)
   const [fameEvents, setFameEvents] = useState<FameEventRecord[]>([]);
 
@@ -653,6 +656,17 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
   const initializeGame = useCallback(async (config: GameInitConfig) => {
     setIsLoading(true);
 
+    // Clear all state from previous game (fix for stale data issue EXH-011)
+    setFameEvents([]);
+    setSubstitutionLog([]);
+    setPitchCountPrompt(null);
+    pitcherNamesRef.current.clear();
+    setScoreboard({
+      innings: Array(9).fill({ away: undefined, home: undefined }),
+      away: { runs: 0, hits: 0, errors: 0 },
+      home: { runs: 0, hits: 0, errors: 0 },
+    });
+
     // Store lineup refs
     awayLineupRef.current = config.awayLineup;
     homeLineupRef.current = config.homeLineup;
@@ -679,11 +693,15 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     }
     setPlayerStats(initialPlayerStats);
 
-    // Initialize pitcher stats
+    // Initialize pitcher stats and name mapping
     const initialPitcherStats = new Map<string, PitcherGameStats>();
     initialPitcherStats.set(config.awayStartingPitcherId, createEmptyPitcherStats());
     initialPitcherStats.set(config.homeStartingPitcherId, createEmptyPitcherStats());
     setPitcherStats(initialPitcherStats);
+
+    // Track pitcher names for post-game summary (EXH-011 fix)
+    pitcherNamesRef.current.set(config.awayStartingPitcherId, config.awayStartingPitcherName);
+    pitcherNamesRef.current.set(config.homeStartingPitcherId, config.homeStartingPitcherName);
 
     // Set initial game state
     const leadoffBatter = config.awayLineup[0];
@@ -1901,6 +1919,11 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         return newStats;
       });
 
+      // Track pitcher name for post-game summary (EXH-011 fix)
+      if (newPitcherName) {
+        pitcherNamesRef.current.set(newPitcherId, newPitcherName);
+      }
+
       setGameState(prev => ({
         ...prev,
         currentPitcherId: newPitcherId,
@@ -2113,29 +2136,41 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
 
     // Map local pitcher stats to PersistedGameState format
     // Note: Local PitcherGameStats has fewer fields, so we use defaults for missing ones
-    const pitcherGameStatsArray = Array.from(pitcherStats.entries()).map(([pitcherId, stats], idx) => ({
-      pitcherId,
-      pitcherName: pitcherId,
-      teamId: gameState.isTop ? gameState.homeTeamId : gameState.awayTeamId,
-      isStarter: idx === 0, // First entry is starter
-      entryInning: idx === 0 ? 1 : gameState.inning, // Starter enters inning 1
-      outsRecorded: stats.outsRecorded,
-      hitsAllowed: stats.hitsAllowed,
-      runsAllowed: stats.runsAllowed,
-      earnedRuns: stats.earnedRuns,
-      walksAllowed: stats.walksAllowed,
-      strikeoutsThrown: stats.strikeoutsThrown,
-      homeRunsAllowed: stats.homeRunsAllowed,
-      hitBatters: 0, // Not tracked in local PitcherGameStats
-      basesReachedViaError: 0,
-      wildPitches: 0, // Not tracked in local PitcherGameStats
-      pitchCount: stats.pitchCount,
-      battersFaced: stats.battersFaced,
-      consecutiveHRsAllowed: 0,
-      firstInningRuns: 0,
-      basesLoadedWalks: 0,
-      inningsComplete: Math.floor(stats.outsRecorded / 3),
-    }));
+    // Pitcher IDs have format "away-{name}" or "home-{name}" - extract team from prefix
+    const pitcherGameStatsArray = Array.from(pitcherStats.entries()).map(([pitcherId, stats], idx) => {
+      // Determine team from pitcher ID prefix
+      const isAwayPitcher = pitcherId.toLowerCase().startsWith('away-');
+      const teamId = isAwayPitcher ? gameState.awayTeamId : gameState.homeTeamId;
+
+      // Get actual pitcher name from our tracking ref (EXH-011 fix)
+      const pitcherName = pitcherNamesRef.current.get(pitcherId) ||
+        // Fallback: extract name from ID by removing team prefix
+        pitcherId.replace(/^(away|home)-/, '').replace(/-/g, ' ');
+
+      return {
+        pitcherId,
+        pitcherName,
+        teamId,
+        isStarter: idx === 0, // First entry is starter
+        entryInning: idx === 0 ? 1 : gameState.inning, // Starter enters inning 1
+        outsRecorded: stats.outsRecorded,
+        hitsAllowed: stats.hitsAllowed,
+        runsAllowed: stats.runsAllowed,
+        earnedRuns: stats.earnedRuns,
+        walksAllowed: stats.walksAllowed,
+        strikeoutsThrown: stats.strikeoutsThrown,
+        homeRunsAllowed: stats.homeRunsAllowed,
+        hitBatters: 0, // Not tracked in local PitcherGameStats
+        basesReachedViaError: 0,
+        wildPitches: 0, // Not tracked in local PitcherGameStats
+        pitchCount: stats.pitchCount,
+        battersFaced: stats.battersFaced,
+        consecutiveHRsAllowed: 0,
+        firstInningRuns: 0,
+        basesLoadedWalks: 0,
+        inningsComplete: Math.floor(stats.outsRecorded / 3),
+      };
+    });
 
     const persistedState: PersistedGameState = {
       id: 'current',

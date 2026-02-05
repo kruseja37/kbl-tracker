@@ -99,14 +99,21 @@ export function PostGameSummary() {
   const awayTeamName = gameData.awayTeamName;
 
   // Build batter stats from playerStats
-  // We need to identify which players are on which team - use teamId prefix or separate tracking
-  // For now, we'll display all players and let the UI sort them
+  // Player IDs have format "away-{name}" or "home-{name}"
   const allBatters = Object.entries(gameData.playerStats || {}).map(([playerId, stats]) => {
-    // Try to determine team from playerId format (e.g., "away-1" or "home-1" or team-based)
-    const isAway = playerId.toLowerCase().includes('away') || playerId.startsWith(awayTeamId);
+    // Determine team from playerId prefix (e.g., "away-john-smith" or "home-jane-doe")
+    const isAway = playerId.toLowerCase().startsWith('away-');
+
+    // Extract player name: remove "away-" or "home-" prefix, then convert dashes to spaces and title case
+    const nameFromId = playerId.replace(/^(away|home)-/, '').replace(/-/g, ' ');
+    const formattedName = nameFromId
+      .split(' ')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+      .join(' ');
+
     return {
       playerId,
-      name: playerId.split('-').pop()?.toUpperCase() || playerId,
+      name: formattedName,
       isAway,
       ab: stats.ab,
       r: stats.r,
@@ -136,19 +143,25 @@ export function PostGameSummary() {
   const awayPitchers = allPitchers.filter(p => p.isAway);
   const homePitchers = allPitchers.filter(p => !p.isAway);
 
+  // Calculate team hits from player stats (using player ID prefix)
+  let awayHits = 0;
+  let homeHits = 0;
+  Object.entries(gameData.playerStats || {}).forEach(([playerId, stats]) => {
+    const isAway = playerId.toLowerCase().startsWith('away-');
+    if (isAway) {
+      awayHits += stats.h;
+    } else {
+      homeHits += stats.h;
+    }
+  });
+
   // Inning-by-inning scoring
   const inningScores = gameData.inningScores || Array(9).fill({ away: 0, home: 0 });
   const scoreboard = {
     innings: inningScores,
-    away: { runs: gameData.finalScore.away, hits: 0, errors: 0 },
-    home: { runs: gameData.finalScore.home, hits: 0, errors: 0 },
+    away: { runs: gameData.finalScore.away, hits: awayHits, errors: 0 },
+    home: { runs: gameData.finalScore.home, hits: homeHits, errors: 0 },
   };
-
-  // Calculate hits from player stats
-  Object.values(gameData.playerStats || {}).forEach(stats => {
-    // We'd need team info to properly attribute hits
-    // For now, use total as approximation
-  });
 
   // Determine winner
   const homeWon = gameData.finalScore.home > gameData.finalScore.away;
