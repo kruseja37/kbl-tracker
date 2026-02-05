@@ -17,7 +17,7 @@ import { useState, useEffect } from 'react';
 // ============================================
 
 export type HitType = '1B' | '2B' | '3B' | 'HR';
-export type OutType = 'GO' | 'FO' | 'LO' | 'PO' | 'FLO' | 'K' | 'KL' | 'DP' | 'FC';
+export type OutType = 'GO' | 'FO' | 'LO' | 'PO' | 'FLO' | 'K' | 'KL' | 'DP' | 'TP' | 'FC' | 'E';
 export type HitModifier = 'BUNT' | 'IS' | '7+';
 export type OutModifier = 'SF' | 'SAC' | 'IFR' | 'RD' | 'E' | '7+';
 export type SpecialEvent = 'KP' | 'NUT' | 'WEB';
@@ -48,6 +48,11 @@ export interface OutcomeButtonsProps {
     isPitcherInvolved?: boolean;  // Show KP/NUT options
     isDeepOutfield?: boolean;     // Show WEB option
     isDoublePlay?: boolean;       // Pre-select DP
+  };
+  /** Current game situation for situational button disabling */
+  gameContext?: {
+    outs: number;
+    bases: { first: boolean; second: boolean; third: boolean };
   };
 }
 
@@ -122,7 +127,9 @@ const OUT_TYPES_ROW2: { type: OutType; label: string }[] = [
   { type: 'K', label: 'K' },
   { type: 'KL', label: 'KL' },
   { type: 'DP', label: 'DP' },
+  { type: 'TP', label: 'TP' },
   { type: 'FC', label: 'FC' },
+  { type: 'E', label: 'E' },
 ];
 
 const OUT_MODIFIERS: { mod: OutModifier; label: string; title: string }[] = [
@@ -148,6 +155,7 @@ export function OutcomeButtons({
   onBack,
   suggestedType,
   fieldingContext,
+  gameContext,
 }: OutcomeButtonsProps) {
   // Selected primary type
   const [selectedType, setSelectedType] = useState<HitType | OutType | null>(
@@ -166,6 +174,38 @@ export function OutcomeButtons({
       setSelectedType('DP');
     }
   }, [fieldingContext, mode]);
+
+  // Situational disable logic per MAJ-10
+  const isOutTypeDisabled = (type: OutType): boolean => {
+    if (!gameContext) return false;
+    const { outs, bases } = gameContext;
+    const hasRunners = bases.first || bases.second || bases.third;
+
+    switch (type) {
+      case 'DP':
+      case 'TP':
+        // DP/TP impossible with no runners on base
+        return !hasRunners;
+      default:
+        return false;
+    }
+  };
+
+  const isModifierDisabled = (mod: string): boolean => {
+    if (!gameContext) return false;
+    const { outs, bases } = gameContext;
+
+    switch (mod) {
+      case 'SAC':
+        // Sacrifice bunt not possible with 2 outs
+        return outs >= 2;
+      case 'SF':
+        // Sacrifice fly requires runner on third
+        return !bases.third;
+      default:
+        return false;
+    }
+  };
 
   const toggleModifier = (mod: string) => {
     setSelectedModifiers((prev) => {
@@ -319,36 +359,48 @@ export function OutcomeButtons({
 
       {/* Out Type Selection - Row 1 */}
       <div className="flex gap-1.5 mb-1.5">
-        {OUT_TYPES_ROW1.map(({ type, label }) => (
-          <button
-            key={type}
-            onClick={() => setSelectedType(type)}
-            className={`${typeBtnBase} text-sm px-3 py-2 ${
-              selectedType === type
-                ? 'bg-[#C62828] text-white border-white'
-                : 'bg-[#4A2020] text-[#FFCDD2] border-[#C4A853]'
-            }`}
-          >
-            {label}
-          </button>
-        ))}
+        {OUT_TYPES_ROW1.map(({ type, label }) => {
+          const disabled = isOutTypeDisabled(type);
+          return (
+            <button
+              key={type}
+              onClick={() => !disabled && setSelectedType(type)}
+              disabled={disabled}
+              className={`${typeBtnBase} text-sm px-3 py-2 ${
+                disabled
+                  ? 'bg-[#2a2a2a] text-[#555] border-[#444] cursor-not-allowed opacity-50'
+                  : selectedType === type
+                    ? 'bg-[#C62828] text-white border-white'
+                    : 'bg-[#4A2020] text-[#FFCDD2] border-[#C4A853]'
+              }`}
+            >
+              {label}
+            </button>
+          );
+        })}
       </div>
 
       {/* Out Type Selection - Row 2 */}
       <div className="flex gap-1.5 mb-3">
-        {OUT_TYPES_ROW2.map(({ type, label }) => (
-          <button
-            key={type}
-            onClick={() => setSelectedType(type)}
-            className={`${typeBtnBase} text-sm px-3 py-2 ${
-              selectedType === type
-                ? 'bg-[#C62828] text-white border-white'
-                : 'bg-[#4A2020] text-[#FFCDD2] border-[#C4A853]'
-            }`}
-          >
-            {label}
-          </button>
-        ))}
+        {OUT_TYPES_ROW2.map(({ type, label }) => {
+          const disabled = isOutTypeDisabled(type);
+          return (
+            <button
+              key={type}
+              onClick={() => !disabled && setSelectedType(type)}
+              disabled={disabled}
+              className={`${typeBtnBase} text-sm px-3 py-2 ${
+                disabled
+                  ? 'bg-[#2a2a2a] text-[#555] border-[#444] cursor-not-allowed opacity-50'
+                  : selectedType === type
+                    ? 'bg-[#C62828] text-white border-white'
+                    : 'bg-[#4A2020] text-[#FFCDD2] border-[#C4A853]'
+              }`}
+            >
+              {label}
+            </button>
+          );
+        })}
       </div>
 
       {/* Modifiers */}
@@ -356,20 +408,26 @@ export function OutcomeButtons({
         Modifiers
       </div>
       <div className="flex flex-wrap gap-1.5 mb-3">
-        {OUT_MODIFIERS.map(({ mod, label, title }) => (
-          <button
-            key={mod}
-            onClick={() => toggleModifier(mod)}
-            className={`${modifierBtnBase} ${
-              selectedModifiers.has(mod)
-                ? 'bg-[#C4A853] text-black border-white'
-                : 'bg-[#333] text-[#888] border-[#555]'
-            }`}
-            title={title}
-          >
-            {label}
-          </button>
-        ))}
+        {OUT_MODIFIERS.map(({ mod, label, title }) => {
+          const disabled = isModifierDisabled(mod);
+          return (
+            <button
+              key={mod}
+              onClick={() => !disabled && toggleModifier(mod)}
+              disabled={disabled}
+              className={`${modifierBtnBase} ${
+                disabled
+                  ? 'bg-[#2a2a2a] text-[#555] border-[#444] cursor-not-allowed opacity-50'
+                  : selectedModifiers.has(mod)
+                    ? 'bg-[#C4A853] text-black border-white'
+                    : 'bg-[#333] text-[#888] border-[#555]'
+              }`}
+              title={disabled ? `${title} (not available in current situation)` : title}
+            >
+              {label}
+            </button>
+          );
+        })}
       </div>
 
       {/* Special Events */}

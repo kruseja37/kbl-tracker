@@ -2966,11 +2966,11 @@ export function EnhancedInteractiveField({
 
     const fieldingSequence = placedFielders.map(pf => pf.fielder.positionNumber);
 
-    // Handle ROE (Reached On Error) - batter reaches base due to error
-    // Must handle BEFORE building playData since 'ROE' is not in PlayData.OutType
+    // Handle E (Reached On Error) - batter reaches base due to error
+    // Must handle BEFORE building playData since 'E' is not in PlayData.OutType
     // This triggers the error fielder selection flow
-    if (outcome.type === 'ROE') {
-      console.log('[Flow] ROE selected - starting error fielder selection');
+    if (outcome.type === 'E') {
+      console.log('[Flow] E (ROE) selected - starting error fielder selection');
       // Store the play data and trigger error fielder selection
       setPendingError(true);
       setAwaitingErrorFielder(true);
@@ -2979,10 +2979,10 @@ export function EnhancedInteractiveField({
       return; // Exit early - will continue in handleFielderClick → handleErrorTypeSelect
     }
 
-    // Build play data from outcome (ROE already handled above)
+    // Build play data from outcome (E/ROE already handled above)
     const playData: PlayData = {
       type: 'out',
-      outType: outcome.type as OutType, // Cast is safe since ROE is handled above
+      outType: outcome.type as OutType, // Cast is safe since E is handled above
       fieldingSequence,
       ballLocation: ballLocation || undefined,
       spraySector: ballLocation ? getSpraySector(ballLocation.x, ballLocation.y).sector : undefined,
@@ -4105,6 +4105,10 @@ export function EnhancedInteractiveField({
               fieldingContext={{
                 isPitcherInvolved: placedFielders.some(pf => pf.fielder.positionNumber === 1),
               }}
+              gameContext={{
+                outs: gameSituation.outs,
+                bases: gameSituation.bases,
+              }}
             />
           )}
           {flowStep === 'OUT_OUTCOME' && (
@@ -4115,6 +4119,10 @@ export function EnhancedInteractiveField({
               fieldingContext={{
                 isDoublePlay: placedFielders.length >= 3,
                 isDeepOutfield: ballLocation && ballLocation.y > 0.8 ? true : undefined,
+              }}
+              gameContext={{
+                outs: gameSituation.outs,
+                bases: gameSituation.bases,
               }}
             />
           )}

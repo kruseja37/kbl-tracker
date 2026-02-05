@@ -6,6 +6,131 @@
 > **IMPORTANT**: This log is for *what happened* during sessions. For *how things work*,
 > see the relevant SPEC docs. Finalized logic should be PROMOTED to specs, not left here.
 
+## Session: February 5, 2026 - Batch Fix Execution (Tier 1 + Tier 2)
+
+### What Was Accomplished
+- ✅ **Tier 1 Critical Fixes (5)**: CRIT-01 (undo stats), CRIT-03 (FC earned runs), CRIT-04 (TP→DP mapping), CRIT-05 (mojo differentiation), CRIT-06 (robbery fame values) — committed as `996a925`
+- ✅ **Tier 2 Batch 1**: OutcomeButtons fixes — MAJ-10 (situational disable: DP/TP with no runners, SAC at 2 outs, SF with no R3), MIN-01 (ROE→E alignment), MIN-03 (added TP button)
+- ✅ **Tier 2 Batch 2**: CRIT-02 + MAJ-05 — Wired inheritedRunnerTracker to useGameState using shadow state pattern (useRef). 11 integration points, 6 helper functions. ER/UER now attributed to responsible pitcher.
+- ✅ **All 8 fixes verified**: Build PASS (1817 modules), Tests 5025 passing, zero regressions
+
+### Changes Made
+
+**Tier 1 (committed `996a925`):**
+1. CRIT-01: Expanded restoreState() to serialize/restore playerStats + pitcherStats Maps via `[key, value][]` arrays
+2. CRIT-03: Removed FC from unearned-run exclusion in inheritedRunnerTracker (2 locations)
+3. CRIT-04: Added 'TP' as first-class AtBatResult — updated game.ts, useGameState.ts, useClutchCalculations.ts
+4. CRIT-05: Added applyCombinedModifiers() to mojoEngine — speed→fitness only, junk→mojo only, others→combined
+5. CRIT-06: Updated robbery fame values from 1.5/2.5 to 1/1 across 7 code files + 2 test files
+
+**Tier 2 (uncommitted):**
+6. MAJ-10+MIN-01+MIN-03: Added gameContext prop, isOutTypeDisabled(), isModifierDisabled() to OutcomeButtons. Changed ROE→E. Added TP to OUT_TYPES_ROW2.
+7. CRIT-02+MAJ-05: Shadow state wiring of inheritedRunnerTracker into useGameState — runnerTrackerRef, 11 integration points (initializeGame, recordHit, recordOut, recordWalk, recordError, recordD3K, changePitcher, endInning, advanceRunner, advanceRunnersBatch), 6 helpers (syncTrackerPitcher, findRunnerOnBase, baseToTrackerBase, trackerBaseToPosition, destToTrackerBase, processTrackerScoredEvents)
+
+### Regressions Caught
+- CRIT-03: Test was asserting old buggy behavior (FC=unearned) — updated test to assert correct behavior
+- CRIT-04: Build failed with TS2741 — added 'TP' to exhaustive Record mapping in useClutchCalculations.ts
+
+### Decisions Made
+- Shadow state pattern chosen for inheritedRunnerTracker wiring — useRef doesn't trigger re-renders, boolean bases preserved for all UI rendering
+- D3K classified as howReached: 'error' — uncaught third strike makes runs unearned
+- Runner advancement processed third→second→first to avoid base collisions
+
+### Files Modified
+| File | Changes |
+|------|---------|
+| useGameState.ts | CRIT-01 (undo), CRIT-04 (TP), CRIT-02+MAJ-05 (tracker wiring) |
+| GameTracker.tsx | CRIT-01 (snapshot capture in handleUndo) |
+| inheritedRunnerTracker.ts | CRIT-03 (FC earned run fix) |
+| game.ts | CRIT-04 (TP type), CRIT-06 (robbery fame) |
+| mojoEngine.ts | CRIT-05 (applyCombinedModifiers) |
+| OutcomeButtons.tsx | MAJ-10+MIN-01+MIN-03 |
+| EnhancedInteractiveField.tsx | ROE→E check, gameContext prop passing, CRIT-06 (robbery values) |
+| useClutchCalculations.ts | CRIT-04 (TP in Record mapping) |
+| src_figma/app/types/game.ts | CRIT-06 (robbery fame) |
+| StarPlaySubtypePopup.tsx | CRIT-06 (robbery fame) |
+| playClassifier.ts | CRIT-06 (robbery comment) |
+| 2 test files | CRIT-03 + CRIT-06 assertion updates |
+
+### NFL Results
+- **Build**: PASS (1817 modules transformed)
+- **Tests**: 5025 passing (baseline maintained)
+- **Regressions**: 2 caught and fixed during Tier 1
+
+### Known Limitations
+- Runner tracker state not included in undo snapshots (may briefly desync after undo)
+- After half-inning switches, tracker pitcher synced on next record call (not immediately)
+- Event log `runners` field still uses empty-string stubs for runner IDs
+
+### Pending / Next Steps
+- [ ] Commit Tier 2 fixes
+- [ ] Tier 2 Batch 3: Wire WAR calculators to UI (MAJ-01) — if desired
+- [ ] Tier 3: Spec constant fixes from audit report
+- [ ] Tier 4: Cosmetic/cleanup fixes
+
+### Key Context for Next Session
+- Full fix execution report at `spec-docs/FIX_EXECUTION_REPORT_2026-02-05.md`
+- inheritedRunnerTracker is NO LONGER orphaned — wired via shadow state in useGameState
+- 10 engines still orphaned (all WAR calcs, fan morale, narrative, detection, relationship)
+- Build baseline: 1817 modules, 5025 tests passing
+
+---
+
+## Session: February 5, 2026 - Comprehensive Spec-UI Alignment Audit
+
+### What Was Accomplished
+- ✅ **Full 4-layer spec-UI alignment audit** using 5 parallel agents
+- ✅ **Layer 1 (Spec→Backend)**: Audited WAR (67 checks, 100% match), Player Systems (~250 checks, 94% match), GameTracker (~180 checks)
+- ✅ **Layer 2 (Backend→UI)**: Checked all 18 base engines for UI connectivity — found 11 orphaned
+- ✅ **Layer 3 (UI→Backend)**: Audited GameTracker, FranchiseHome, ExhibitionGame, PostGameSummary for dead buttons, fake data, broken pipes
+- ✅ **Layer 4 (Cross-layer)**: Identified spec internal contradictions (Fame values), type mismatches (ROE vs E)
+- ✅ **Report saved**: `spec-docs/SPEC_UI_ALIGNMENT_REPORT.md`
+
+### Key Findings
+
+**6 Critical Bugs:**
+1. Undo system doesn't restore player/pitcher stats (useGameState.ts:2300-2304)
+2. All runs treated as earned — no ER/UER distinction (useGameState.ts:910)
+3. FC runs incorrectly treated as unearned (inheritedRunnerTracker.ts:216)
+4. Triple Play silently mapped to DP — data loss (useGameState.ts:192)
+5. Mojo applies uniformly to all stats, should differentiate speed/junk (mojoEngine.ts:281-293)
+6. Robbery fame values don't match spec v3.3 (types/game.ts:769-770)
+
+**Orphaned Code (~5,000+ lines):**
+- ALL 5 WAR calculators (bWAR, pWAR, fWAR, rWAR, mWAR) — engines pass 365 tests but zero UI display
+- Fan Morale engine — hook exists but is stubbed out
+- Narrative engine — no hook at all
+- Detection Functions — never called from UI
+- Inherited Runner Tracker — never imported by useGameState
+
+**Mock Data:** 20+ locations with hardcoded fake data (FranchiseHome ~60% mock)
+
+### Decisions Made
+- None (audit-only session)
+
+### NFL Results
+- This was an audit session, not implementation — NFL not applicable
+- **Baseline**: Build passes, 5025/5102 tests pass (77 failures all in PostGameSummary.test.tsx react-router mock)
+
+### Pending / Next Steps
+- [ ] Fix 6 critical bugs (see SPEC_UI_ALIGNMENT_REPORT.md Phase A & B)
+- [ ] Wire orphaned WAR calculators to UI (Phase C)
+- [ ] Wire fan morale and detection systems (Phase C)
+- [ ] Connect substitution modals to proper backend handlers
+- [ ] Scrub mock data from FranchiseHome and other components (Phase E)
+
+### Key Context for Next Session
+- The report at `spec-docs/SPEC_UI_ALIGNMENT_REPORT.md` has a 5-phase prioritized fix plan
+- Phase A (critical GameTracker fixes) should come first — undo stats, ER tracking, TP mapping
+- The gotcha file `kbl-gotchas.md` has a stale CS value (-0.4 should be -0.45)
+- SPECIAL_EVENTS_SPEC has internal contradiction between inline values (Sec 5) and summary tables
+
+### Files Modified
+- `spec-docs/SPEC_UI_ALIGNMENT_REPORT.md` - NEW: Full 4-layer alignment audit report
+- `spec-docs/SESSION_LOG.md` - Updated with this session entry
+
+---
+
 ## Session: February 5, 2026 - Exhibition Mode Bug Fixes (Continuation)
 
 ### What Was Accomplished

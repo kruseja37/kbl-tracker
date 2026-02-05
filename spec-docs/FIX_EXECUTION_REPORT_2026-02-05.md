@@ -4,8 +4,8 @@ Source Audit: spec-docs/SPEC_UI_ALIGNMENT_REPORT.md
 Baseline: Build PASS, Tests 5025 passing (77 known PostGameSummary failures)
 
 ## Summary
-- Total fixes attempted: 5
-- Fixes completed: 5
+- Total fixes attempted: 8
+- Fixes completed: 8
 - Fixes reverted: 0
 - Fixes blocked (needs user): 0
 - Regressions caught and fixed: 1 (CRIT-03 test expected old buggy behavior)
@@ -21,11 +21,12 @@ Baseline: Build PASS, Tests 5025 passing (77 known PostGameSummary failures)
 | CRIT-05 | Mojo applies uniformly (should differentiate) | mojoEngine.ts, index.ts | Build ✅ Tests 5025 ✅ | ✅ COMPLETE |
 | CRIT-06 | Robbery fame values wrong | 7 code files + 2 test files | Build ✅ Tests 5025 ✅ | ✅ COMPLETE |
 
-## Deferred to Tier 2
+## Tier 2: Wiring Fixes
 
-| ID | Description | Why Deferred | Prerequisite |
-|----|------------|-------------|-------------|
-| CRIT-02 + MAJ-05 | Wire inheritedRunnerTracker for ER/UER tracking | Requires refactoring runner identity tracking across all useGameState action functions. Engine works (47 tests pass), but wiring is multi-hour Tier 2 task. | CRIT-03 (FC bug) already fixed in the engine. |
+| ID | Description | Files | Verify | Status |
+|----|------------|-------|--------|--------|
+| MAJ-10 + MIN-01 + MIN-03 | OutcomeButtons: situational disable, ROE→E, add TP | OutcomeButtons.tsx, EnhancedInteractiveField.tsx | Build ✅ Tests 5025 ✅ | ✅ COMPLETE |
+| CRIT-02 + MAJ-05 | Wire inheritedRunnerTracker for ER/UER attribution | useGameState.ts (imports, 7 integration points) | Build ✅ Tests 5025 ✅ | ✅ COMPLETE |
 
 ## Regressions Encountered
 
@@ -34,6 +35,8 @@ Baseline: Build PASS, Tests 5025 passing (77 known PostGameSummary failures)
 | CRIT-03 | 1 test failed: "runner who reached via FC scores as UNEARNED run" | Test was asserting old buggy behavior (FC=unearned). Per baseball rules, FC runs ARE earned. | Updated test to assert correct behavior (FC=earned). |
 | CRIT-04 | Build failed: TS2741 missing 'TP' in Record<AtBatResult, PlayResult> | Adding TP to AtBatResult requires it in all exhaustive Record mappings. | Added `'TP': 'gidp'` to useClutchCalculations.ts mapping. |
 | CRIT-06 | (None) | — | — |
+| MAJ-10+MIN-01+MIN-03 | (None) | — | — |
+| CRIT-02+MAJ-05 | (None) | — | — |
 
 ## Detailed Changes
 
@@ -68,8 +71,56 @@ Baseline: Build PASS, Tests 5025 passing (77 known PostGameSummary failures)
 **Fix**: Updated FAME_VALUES in 3 locations, hardcoded values in 2 UI components, comments in 1 file, and 2 test files.
 **Files**: `game.ts`, `src_figma/app/types/game.ts`, `useGameState.ts`, `EnhancedInteractiveField.tsx`, `StarPlaySubtypePopup.tsx`, `playClassifier.ts`, 2 test files
 
+### MAJ-10 + MIN-01 + MIN-03: OutcomeButtons Fixes
+**Problem (MAJ-10)**: All buttons always clickable regardless of game state. SAC should disable at 2 outs, SF should disable with no R3, DP/TP should disable with no runners.
+**Problem (MIN-01)**: OutcomeButtons used `'ROE'` but useGameState uses `'E'`.
+**Problem (MIN-03)**: TP button missing from OutcomeButtons despite TP being valid in useGameState.
+**Fix**:
+- Added `gameContext` prop to `OutcomeButtonsProps` with `outs` and `bases`
+- Added `isOutTypeDisabled()` helper: DP/TP disabled with no runners
+- Added `isModifierDisabled()` helper: SAC disabled at 2 outs, SF disabled with no R3
+- Changed `OutType` from `'ROE'` to `'E'` to match useGameState
+- Added `'TP'` to `OUT_TYPES_ROW2`
+- Updated `EnhancedInteractiveField.tsx`: passes `gameContext` to both OutcomeButtons usages, updated `'ROE'` check to `'E'` in `handleOutOutcome`
+- Disabled buttons show with reduced opacity and cursor-not-allowed
+**Files**: `OutcomeButtons.tsx`, `EnhancedInteractiveField.tsx`
+
+### CRIT-02 + MAJ-05: Wire inheritedRunnerTracker for ER/UER Attribution
+**Problem (CRIT-02)**: All runs marked as earned, charged to current pitcher. No ER/UER distinction.
+**Problem (MAJ-05)**: inheritedRunnerTracker (527 lines, 47 tests passing) was completely orphaned — never imported or called.
+**Fix**: Shadow state pattern — `runnerTrackerRef` maintains parallel runner identity tracking alongside boolean bases.
+**Integration points wired**:
+1. **Import**: Added 11 tracker functions + 2 types from `inheritedRunnerTracker.ts`
+2. **initializeGame**: Initialize tracker with home starting pitcher
+3. **recordHit**: Advance existing runners, add batter, collect scored events, attribute ER to responsible pitcher
+4. **recordOut**: Advance/remove runners per runnerData, add batter on FC, attribute ER correctly
+5. **recordWalk**: Force-advance runners, add batter, attribute bases-loaded walk ER correctly
+6. **recordError**: Advance runners, add batter as 'error' (unearned), attribute via tracker
+7. **recordD3K**: Add batter as 'error' when reached on D3K
+8. **changePitcher**: Call `handlePitchingChange()` to mark runners as inherited by new pitcher
+9. **endInning**: Call `clearBases()` + `nextInning()` to reset tracker
+10. **advanceRunner**: Look up runner by base, advance/out in tracker, attribute scored runs
+11. **advanceRunnersBatch**: Batch process all movements through tracker with ER attribution
+**Helper functions added**:
+- `syncTrackerPitcher()`: Ensures tracker's pitcher matches gameState after half-inning switches
+- `findRunnerOnBase()`: Looks up runner ID from base position in tracker
+- `baseToTrackerBase()` / `trackerBaseToPosition()`: Convert between naming conventions
+- `destToTrackerBase()`: Convert destination to tracker format
+- `processTrackerScoredEvents()`: Process scored events and attribute runs/ER to correct pitchers
+**Key design decisions**:
+- Shadow state (useRef) — tracker doesn't trigger re-renders, only provides data
+- Boolean bases preserved — no UI changes needed, all existing base rendering works
+- Pitcher sync on each record function — handles half-inning transitions gracefully
+- D3K classified as 'error' for ER purposes (uncaught third strike)
+**Files**: `useGameState.ts` only (all changes contained to the hook)
+
 ## Test Count Delta
 - Before: 5025 tests passing
 - After: 5025 tests passing
 - New tests added: 0
 - Tests modified: 2 (CRIT-03 FC assertion, CRIT-06 robbery value assertion)
+
+## Known Limitations
+- Runner tracker state not included in undo snapshots (tracker may be briefly out of sync after undo)
+- After half-inning switches, tracker pitcher is synced on next record call (not immediately)
+- Event log `runners` field still uses empty-string stubs for runner IDs (cosmetic — could be populated from tracker in future)

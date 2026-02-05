@@ -9,24 +9,30 @@
 
 **Full report**: `spec-docs/SPEC_UI_ALIGNMENT_REPORT.md`
 
-### Critical Bugs Found (6) — 5 Fixed, 1 Deferred
+### Critical Bugs Found (6) — All 6 Fixed
 | ID | Issue | Location | Status |
 |----|-------|----------|--------|
 | CRIT-01 | Undo doesn't restore player/pitcher stats | useGameState.ts, GameTracker.tsx | ✅ Fixed (Map serialization) |
-| CRIT-02 | All runs marked earned (no ER/UER) | useGameState.ts:910 | ⏳ Deferred (requires Tier 2 wiring of inheritedRunnerTracker) |
+| CRIT-02 | All runs marked earned (no ER/UER) | useGameState.ts | ✅ Fixed (Tier 2: wired inheritedRunnerTracker via shadow state pattern) |
 | CRIT-03 | FC runs incorrectly unearned | inheritedRunnerTracker.ts:216 | ✅ Fixed (removed FC exclusion) |
 | CRIT-04 | TP silently mapped to DP | game.ts, useGameState.ts | ✅ Fixed (TP now first-class AtBatResult) |
 | CRIT-05 | Mojo applies uniformly (should differ) | mojoEngine.ts | ✅ Fixed (added applyCombinedModifiers) |
 | CRIT-06 | Robbery fame values wrong | types/game.ts + 6 files | ✅ Fixed (1.5/2.5 → 1/1 per spec v3.3) |
 
+### Tier 2 Wiring Fixes (February 5, 2026)
+| ID | Issue | Location | Status |
+|----|-------|----------|--------|
+| MAJ-10 + MIN-01 + MIN-03 | OutcomeButtons: situational disable, ROE→E, add TP | OutcomeButtons.tsx, EnhancedInteractiveField.tsx | ✅ Fixed |
+| CRIT-02 + MAJ-05 | Wire inheritedRunnerTracker for ER/UER attribution | useGameState.ts (11 integration points) | ✅ Fixed |
+
 **Fix report**: `spec-docs/FIX_EXECUTION_REPORT_2026-02-05.md`
 
-### Orphaned Systems (11 engines, ~5,000+ lines)
+### Orphaned Systems (10 engines, ~4,500+ lines)
 - ALL WAR calculators (bWAR, pWAR, fWAR, rWAR, mWAR) — 365 tests pass, zero UI
 - Fan Morale engine — hook stubbed
 - Narrative engine — no hook
 - Detection Functions — never called
-- Inherited Runner Tracker — never imported by useGameState
+- ~~Inherited Runner Tracker~~ — ✅ Now wired to useGameState (shadow state pattern, 11 integration points)
 - Relationship engine — hook orphaned
 
 ### Spec Alignment Score

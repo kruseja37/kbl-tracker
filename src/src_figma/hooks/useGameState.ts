@@ -23,6 +23,20 @@ import { aggregateGameToSeason } from '../../utils/seasonAggregator';
 import { archiveCompletedGame, type PersistedGameState } from '../utils/gameStorage';
 import type { AtBatResult, HalfInning } from '../../types/game';
 import { getBaseOutLI, type BaseState } from '../../engines/leverageCalculator';
+import {
+  createRunnerTrackingState,
+  addRunner as trackerAddRunner,
+  advanceRunner as trackerAdvanceRunner,
+  runnerOut as trackerRunnerOut,
+  handlePitchingChange as trackerHandlePitchingChange,
+  clearBases as trackerClearBases,
+  nextInning as trackerNextInning,
+  nextAtBat as trackerNextAtBat,
+  getCurrentBases as trackerGetCurrentBases,
+  type RunnerTrackingState,
+  type RunnerScoredEvent,
+} from '../app/engines/inheritedRunnerTracker';
+import type { HowReached } from '../app/types/substitution';
 
 // ============================================
 // TYPES
@@ -580,6 +594,78 @@ export function reachesBase(result: AtBatResult): boolean {
   return ['1B', '2B', '3B', 'HR', 'BB', 'IBB', 'HBP', 'E', 'FC', 'D3K'].includes(result);
 }
 
+/**
+ * Convert base position name to tracker base format
+ */
+function baseToTrackerBase(base: 'first' | 'second' | 'third'): '1B' | '2B' | '3B' {
+  return base === 'first' ? '1B' : base === 'second' ? '2B' : '3B';
+}
+
+/**
+ * Convert tracker base to position name format
+ */
+function trackerBaseToPosition(base: '1B' | '2B' | '3B'): 'first' | 'second' | 'third' {
+  return base === '1B' ? 'first' : base === '2B' ? 'second' : 'third';
+}
+
+/**
+ * Ensure the tracker's current pitcher matches the game state's current pitcher.
+ * This is necessary after half-inning transitions where endInning() clears bases
+ * but doesn't know about the opposing team's pitcher.
+ */
+function syncTrackerPitcher(state: RunnerTrackingState, pitcherId: string, pitcherName: string): RunnerTrackingState {
+  if (state.currentPitcherId === pitcherId) return state;
+  return { ...state, currentPitcherId: pitcherId, currentPitcherName: pitcherName };
+}
+
+/**
+ * Find a runner in the tracker by their current base position
+ */
+function findRunnerOnBase(state: RunnerTrackingState, base: 'first' | 'second' | 'third'): string | null {
+  const trackerBase = baseToTrackerBase(base);
+  const runner = state.runners.find(r => r.currentBase === trackerBase);
+  return runner?.runnerId ?? null;
+}
+
+/**
+ * Convert destination to tracker format
+ */
+function destToTrackerBase(dest: 'second' | 'third' | 'home'): '1B' | '2B' | '3B' | 'HOME' {
+  if (dest === 'home') return 'HOME';
+  return dest === 'second' ? '2B' : '3B';
+}
+
+/**
+ * Process scored events from the tracker and attribute ER/UER to correct pitchers.
+ * Returns the number of earned runs and total runs, and updates pitcherStats.
+ */
+function processTrackerScoredEvents(
+  scoredEvents: RunnerScoredEvent[],
+  setPitcherStats: React.Dispatch<React.SetStateAction<Map<string, PitcherGameStats>>>,
+  createEmpty: () => PitcherGameStats
+): { earnedRuns: number; totalRuns: number } {
+  let earnedRuns = 0;
+  const totalRuns = scoredEvents.length;
+
+  for (const event of scoredEvents) {
+    if (event.wasEarnedRun) earnedRuns++;
+
+    // Attribute run to the RESPONSIBLE pitcher (who allowed runner on base)
+    setPitcherStats(prev => {
+      const newStats = new Map(prev);
+      const pStats = newStats.get(event.chargedToPitcherId) || createEmpty();
+      pStats.runsAllowed++;
+      if (event.wasEarnedRun) {
+        pStats.earnedRuns++;
+      }
+      newStats.set(event.chargedToPitcherId, pStats);
+      return newStats;
+    });
+  }
+
+  return { earnedRuns, totalRuns };
+}
+
 function createEmptyPitcherStats(): PitcherGameStats {
   return {
     outsRecorded: 0, hitsAllowed: 0, runsAllowed: 0, earnedRuns: 0,
@@ -661,6 +747,13 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
   // Ref to hold endInning function to avoid circular dependency
   const endInningRef = useRef<(() => void) | null>(null);
 
+  // CRIT-02 + MAJ-05: Shadow state for inherited runner tracking (ER/UER attribution)
+  // This ref mirrors the boolean bases but stores rich runner identity data.
+  // It does NOT trigger re-renders — only provides data for ER calculations.
+  const runnerTrackerRef = useRef<RunnerTrackingState>(
+    createRunnerTrackingState('', '')
+  );
+
   // ============================================
   // INITIALIZATION
   // ============================================
@@ -714,6 +807,12 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     // Track pitcher names for post-game summary (EXH-011 fix)
     pitcherNamesRef.current.set(config.awayStartingPitcherId, config.awayStartingPitcherName);
     pitcherNamesRef.current.set(config.homeStartingPitcherId, config.homeStartingPitcherName);
+
+    // CRIT-02: Initialize runner tracker with home starting pitcher (they pitch first in top of 1st)
+    runnerTrackerRef.current = createRunnerTrackingState(
+      config.homeStartingPitcherId,
+      config.homeStartingPitcherName
+    );
 
     // Set initial game state
     const leadoffBatter = config.awayLineup[0];
@@ -831,6 +930,60 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     if (runnerData?.fromSecond === 'home') runsScored++;
     if (runnerData?.fromThird === 'home') runsScored++;
 
+    // CRIT-02: Update runner tracker — advance existing runners FIRST, then add batter
+    const scoredEvents: RunnerScoredEvent[] = [];
+    let tracker = syncTrackerPitcher(runnerTrackerRef.current, gameState.currentPitcherId, gameState.currentPitcherName);
+
+    // Advance existing runners per runnerData
+    if (runnerData) {
+      // Process in order: third → second → first (avoid collision)
+      for (const [base, dest] of [
+        ['third', runnerData.fromThird],
+        ['second', runnerData.fromSecond],
+        ['first', runnerData.fromFirst],
+      ] as const) {
+        if (!dest) continue;
+        const runnerId = findRunnerOnBase(tracker, base as 'first' | 'second' | 'third');
+        if (!runnerId) continue;
+
+        if (dest === 'out') {
+          tracker = trackerRunnerOut(tracker, runnerId);
+        } else {
+          const trackerDest = destToTrackerBase(dest);
+          const result = trackerAdvanceRunner(tracker, runnerId, trackerDest);
+          tracker = result.state;
+          if (result.scoredEvent) scoredEvents.push(result.scoredEvent);
+        }
+      }
+    } else if (hitType === 'HR') {
+      // HR with no runnerData: all runners score
+      for (const base of ['third', 'second', 'first'] as const) {
+        const runnerId = findRunnerOnBase(tracker, base);
+        if (runnerId) {
+          const result = trackerAdvanceRunner(tracker, runnerId, 'HOME');
+          tracker = result.state;
+          if (result.scoredEvent) scoredEvents.push(result.scoredEvent);
+        }
+      }
+    }
+
+    // Add batter to tracker
+    const howReached: HowReached = 'hit';
+    if (hitType === 'HR') {
+      // Batter scores immediately on HR — add then advance to HOME
+      tracker = trackerAddRunner(tracker, gameState.currentBatterId, gameState.currentBatterName, '1B', howReached);
+      const hrResult = trackerAdvanceRunner(tracker, gameState.currentBatterId, 'HOME');
+      tracker = hrResult.state;
+      if (hrResult.scoredEvent) scoredEvents.push(hrResult.scoredEvent);
+    } else {
+      const batterBase = hitType === '1B' ? '1B' : hitType === '2B' ? '2B' : '3B';
+      tracker = trackerAddRunner(tracker, gameState.currentBatterId, gameState.currentBatterName, batterBase, howReached);
+    }
+
+    // Advance at-bat counter in tracker
+    tracker = trackerNextAtBat(tracker);
+    runnerTrackerRef.current = tracker;
+
     // Calculate leverage index from base-out state
     const baseState: BaseState = (
       (gameState.bases.first ? 1 : 0) +
@@ -910,7 +1063,8 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       return newStats;
     });
 
-    // Update pitcher stats
+    // Update pitcher stats — CRIT-02: Use tracker for ER attribution
+    // First: update current pitcher's non-run stats (hits, pitch count, etc.)
     setPitcherStats(prev => {
       const newStats = new Map(prev);
       const pStats = newStats.get(gameState.currentPitcherId) || createEmptyPitcherStats();
@@ -918,11 +1072,13 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       pStats.battersFaced++;
       pStats.pitchCount += pitchCount;
       if (hitType === 'HR') pStats.homeRunsAllowed++;
-      pStats.runsAllowed += runsScored;
-      pStats.earnedRuns += runsScored; // Simplified - all runs earned for now
       newStats.set(gameState.currentPitcherId, pStats);
       return newStats;
     });
+    // Then: attribute runs/ER to the RESPONSIBLE pitcher via tracker events
+    if (scoredEvents.length > 0) {
+      processTrackerScoredEvents(scoredEvents, setPitcherStats, createEmptyPitcherStats);
+    }
 
     // Update scoreboard
     setScoreboard(prev => {
@@ -1049,6 +1205,41 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     if (runnerData?.fromSecond === 'home') runsScored++;
     if (runnerData?.fromFirst === 'home') runsScored++;
 
+    // CRIT-02: Update runner tracker for outs
+    const outScoredEvents: RunnerScoredEvent[] = [];
+    let outTracker = syncTrackerPitcher(runnerTrackerRef.current, gameState.currentPitcherId, gameState.currentPitcherName);
+
+    if (runnerData) {
+      // Process runners: third → second → first (avoid collision)
+      for (const [base, dest] of [
+        ['third', runnerData.fromThird],
+        ['second', runnerData.fromSecond],
+        ['first', runnerData.fromFirst],
+      ] as const) {
+        if (!dest) continue;
+        const runnerId = findRunnerOnBase(outTracker, base as 'first' | 'second' | 'third');
+        if (!runnerId) continue;
+
+        if (dest === 'out') {
+          outTracker = trackerRunnerOut(outTracker, runnerId);
+        } else {
+          const trackerDest = destToTrackerBase(dest);
+          const result = trackerAdvanceRunner(outTracker, runnerId, trackerDest);
+          outTracker = result.state;
+          if (result.scoredEvent) outScoredEvents.push(result.scoredEvent);
+        }
+      }
+    }
+
+    // FC: batter reaches first base — add to tracker
+    if (outType === 'FC') {
+      outTracker = trackerAddRunner(outTracker, gameState.currentBatterId, gameState.currentBatterName, '1B', 'FC');
+    }
+
+    // Advance at-bat counter
+    outTracker = trackerNextAtBat(outTracker);
+    runnerTrackerRef.current = outTracker;
+
     // Calculate leverage index from base-out state
     const baseState: BaseState = (
       (gameState.bases.first ? 1 : 0) +
@@ -1121,7 +1312,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       return newStats;
     });
 
-    // Update pitcher stats
+    // Update pitcher stats — CRIT-02: Use tracker for ER attribution
     setPitcherStats(prev => {
       const newStats = new Map(prev);
       const pStats = newStats.get(gameState.currentPitcherId) || createEmptyPitcherStats();
@@ -1131,13 +1322,14 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       if (outType === 'K' || outType === 'KL' || outType === 'D3K') {
         pStats.strikeoutsThrown++;
       }
-      if (runsScored > 0) {
-        pStats.runsAllowed += runsScored;
-        pStats.earnedRuns += runsScored; // Simplified - all runs earned for now
-      }
+      // Note: runs/ER now attributed via tracker below (not to current pitcher blindly)
       newStats.set(gameState.currentPitcherId, pStats);
       return newStats;
     });
+    // Attribute runs/ER to responsible pitcher via tracker
+    if (outScoredEvents.length > 0) {
+      processTrackerScoredEvents(outScoredEvents, setPitcherStats, createEmptyPitcherStats);
+    }
 
     // Update scoreboard if runs scored (e.g., sac fly, DP with runner scoring from third)
     if (runsScored > 0) {
@@ -1225,6 +1417,40 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     const basesLoaded = gameState.bases.first && gameState.bases.second && gameState.bases.third;
     const runsScored = basesLoaded ? 1 : 0;
 
+    // CRIT-02: Update runner tracker for walk (force-advance pattern)
+    const walkScoredEvents: RunnerScoredEvent[] = [];
+    let walkTracker = syncTrackerPitcher(runnerTrackerRef.current, gameState.currentPitcherId, gameState.currentPitcherName);
+
+    // Force-advance runners (process in order: third → second → first to avoid collision)
+    if (basesLoaded) {
+      const r3 = findRunnerOnBase(walkTracker, 'third');
+      if (r3) {
+        const res = trackerAdvanceRunner(walkTracker, r3, 'HOME');
+        walkTracker = res.state;
+        if (res.scoredEvent) walkScoredEvents.push(res.scoredEvent);
+      }
+    }
+    if (gameState.bases.first && gameState.bases.second) {
+      const r2 = findRunnerOnBase(walkTracker, 'second');
+      if (r2) {
+        const res = trackerAdvanceRunner(walkTracker, r2, '3B');
+        walkTracker = res.state;
+      }
+    }
+    if (gameState.bases.first) {
+      const r1 = findRunnerOnBase(walkTracker, 'first');
+      if (r1) {
+        const res = trackerAdvanceRunner(walkTracker, r1, '2B');
+        walkTracker = res.state;
+      }
+    }
+
+    // Add batter to first base
+    const walkHow: HowReached = walkType === 'HBP' ? 'HBP' : 'walk';
+    walkTracker = trackerAddRunner(walkTracker, gameState.currentBatterId, gameState.currentBatterName, '1B', walkHow);
+    walkTracker = trackerNextAtBat(walkTracker);
+    runnerTrackerRef.current = walkTracker;
+
     // Calculate leverage index from base-out state
     const baseState: BaseState = (
       (gameState.bases.first ? 1 : 0) +
@@ -1295,20 +1521,21 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       return newStats;
     });
 
-    // Update pitcher stats
+    // Update pitcher stats — CRIT-02: Use tracker for ER attribution on walks
     setPitcherStats(prev => {
       const newStats = new Map(prev);
       const pStats = newStats.get(gameState.currentPitcherId) || createEmptyPitcherStats();
       pStats.walksAllowed++;
       pStats.battersFaced++;
       pStats.pitchCount += pitchCount;
-      if (basesLoaded) {
-        pStats.runsAllowed++;
-        pStats.earnedRuns++;
-      }
+      // Note: runs/ER attributed via tracker below (runner on 3rd may be inherited)
       newStats.set(gameState.currentPitcherId, pStats);
       return newStats;
     });
+    // Attribute runs/ER to responsible pitcher via tracker
+    if (walkScoredEvents.length > 0) {
+      processTrackerScoredEvents(walkScoredEvents, setPitcherStats, createEmptyPitcherStats);
+    }
 
     // Update scoreboard - walks do NOT count as hits, only update runs if bases loaded
     // FIX: This was missing entirely - walks weren't updating the scoreboard at all
@@ -1444,6 +1671,15 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       return newStats;
     });
 
+    // CRIT-02: Update runner tracker for D3K
+    if (batterReached) {
+      let d3kTracker = syncTrackerPitcher(runnerTrackerRef.current, gameState.currentPitcherId, gameState.currentPitcherName);
+      // D3K batter reaches first — categorize as 'error' for ER purposes (uncaught third strike)
+      d3kTracker = trackerAddRunner(d3kTracker, gameState.currentBatterId, gameState.currentBatterName, '1B', 'error');
+      d3kTracker = trackerNextAtBat(d3kTracker);
+      runnerTrackerRef.current = d3kTracker;
+    }
+
     // Update game state
     setGameState(prev => ({
       ...prev,
@@ -1485,6 +1721,36 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     if (runnerData?.fromFirst === 'home') runsScored++;
     if (runnerData?.fromSecond === 'home') runsScored++;
     if (runnerData?.fromThird === 'home') runsScored++;
+
+    // CRIT-02: Update runner tracker for errors
+    const errorScoredEvents: RunnerScoredEvent[] = [];
+    let errorTracker = syncTrackerPitcher(runnerTrackerRef.current, gameState.currentPitcherId, gameState.currentPitcherName);
+
+    if (runnerData) {
+      for (const [base, dest] of [
+        ['third', runnerData.fromThird],
+        ['second', runnerData.fromSecond],
+        ['first', runnerData.fromFirst],
+      ] as const) {
+        if (!dest) continue;
+        const runnerId = findRunnerOnBase(errorTracker, base as 'first' | 'second' | 'third');
+        if (!runnerId) continue;
+
+        if (dest === 'out') {
+          errorTracker = trackerRunnerOut(errorTracker, runnerId);
+        } else {
+          const trackerDest = destToTrackerBase(dest);
+          const result = trackerAdvanceRunner(errorTracker, runnerId, trackerDest);
+          errorTracker = result.state;
+          if (result.scoredEvent) errorScoredEvents.push(result.scoredEvent);
+        }
+      }
+    }
+
+    // Batter reaches first on error
+    errorTracker = trackerAddRunner(errorTracker, gameState.currentBatterId, gameState.currentBatterName, '1B', 'error');
+    errorTracker = trackerNextAtBat(errorTracker);
+    runnerTrackerRef.current = errorTracker;
 
     const event: AtBatEvent = {
       eventId: `${gameState.gameId}_${newSequence}`,
@@ -1538,17 +1804,21 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       return newStats;
     });
 
-    // Update pitcher stats - runs on errors are unearned
+    // Update pitcher stats — CRIT-02: Use tracker for ER attribution on errors
     setPitcherStats(prev => {
       const newStats = new Map(prev);
       const pStats = newStats.get(gameState.currentPitcherId) || createEmptyPitcherStats();
       pStats.battersFaced++;
       pStats.pitchCount += pitchCount;
-      pStats.runsAllowed += runsScored;
-      // Note: earnedRuns NOT incremented - runs on errors are unearned
+      // Note: runs/ER attributed via tracker (runner who scored may have been from a different pitcher)
       newStats.set(gameState.currentPitcherId, pStats);
       return newStats;
     });
+    // Attribute runs/ER to responsible pitcher via tracker
+    // The tracker correctly marks error-reached runners as unearned runs
+    if (errorScoredEvents.length > 0) {
+      processTrackerScoredEvents(errorScoredEvents, setPitcherStats, createEmptyPitcherStats);
+    }
 
     // Update scoreboard - increment errors for fielding team
     setScoreboard(prev => {
@@ -1746,6 +2016,24 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     // Calculate score change first so we can update both game state and scoreboard
     const runsScored = (outcome === 'safe' && to === 'home') ? 1 : 0;
 
+    // CRIT-02: Update runner tracker for individual runner advancement (WP, PB, SB, etc.)
+    let advTracker = syncTrackerPitcher(runnerTrackerRef.current, gameState.currentPitcherId, gameState.currentPitcherName);
+    const runnerId = findRunnerOnBase(advTracker, from);
+    if (runnerId) {
+      if (outcome === 'out') {
+        advTracker = trackerRunnerOut(advTracker, runnerId);
+      } else {
+        const trackerDest = destToTrackerBase(to);
+        const result = trackerAdvanceRunner(advTracker, runnerId, trackerDest);
+        advTracker = result.state;
+        // Attribute scored run to responsible pitcher
+        if (result.scoredEvent) {
+          processTrackerScoredEvents([result.scoredEvent], setPitcherStats, createEmptyPitcherStats);
+        }
+      }
+    }
+    runnerTrackerRef.current = advTracker;
+
     setGameState(prev => {
       const newBases = { ...prev.bases };
       let outsChange = 0;
@@ -1793,7 +2081,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         };
       });
     }
-  }, [gameState.isTop, gameState.inning]);
+  }, [gameState.isTop, gameState.inning, gameState.currentPitcherId, gameState.currentPitcherName]);
 
   /**
    * Batch update runners - processes all movements atomically
@@ -1809,6 +2097,38 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
 
     // Calculate runs scored first so we can update scoreboard
     const runsScored = movements.filter(m => m.outcome === 'safe' && m.to === 'home').length;
+
+    // CRIT-02: Update runner tracker for batch movements (SB, WP, PB, etc.)
+    let batchTracker = syncTrackerPitcher(runnerTrackerRef.current, gameState.currentPitcherId, gameState.currentPitcherName);
+    const batchScoredEvents: RunnerScoredEvent[] = [];
+
+    // Sort movements: process from third → second → first to avoid collision
+    const sortedMovements = [...movements].sort((a, b) => {
+      const order = { third: 0, second: 1, first: 2 };
+      return order[a.from] - order[b.from];
+    });
+
+    for (const move of sortedMovements) {
+      const runnerId = findRunnerOnBase(batchTracker, move.from);
+      if (!runnerId) continue;
+
+      if (move.outcome === 'out') {
+        batchTracker = trackerRunnerOut(batchTracker, runnerId);
+      } else if (move.to === 'out') {
+        batchTracker = trackerRunnerOut(batchTracker, runnerId);
+      } else {
+        const trackerDest = destToTrackerBase(move.to as 'second' | 'third' | 'home');
+        const result = trackerAdvanceRunner(batchTracker, runnerId, trackerDest);
+        batchTracker = result.state;
+        if (result.scoredEvent) batchScoredEvents.push(result.scoredEvent);
+      }
+    }
+    runnerTrackerRef.current = batchTracker;
+
+    // Attribute runs/ER to responsible pitchers
+    if (batchScoredEvents.length > 0) {
+      processTrackerScoredEvents(batchScoredEvents, setPitcherStats, createEmptyPitcherStats);
+    }
 
     setGameState(prev => {
       // Start with all bases cleared for runners that moved
@@ -1866,7 +2186,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         };
       });
     }
-  }, [gameState.isTop, gameState.inning]);
+  }, [gameState.isTop, gameState.inning, gameState.currentPitcherId, gameState.currentPitcherName]);
 
   const advanceCount = useCallback((type: 'ball' | 'strike' | 'foul') => {
     setGameState(prev => {
@@ -1984,6 +2304,16 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         pitcherNamesRef.current.set(newPitcherId, newPitcherName);
       }
 
+      // CRIT-02 + MAJ-05: Notify runner tracker of pitching change
+      // This marks all current runners as "inherited" by the new pitcher
+      const pitchChangeResult = trackerHandlePitchingChange(
+        runnerTrackerRef.current,
+        newPitcherId,
+        newPitcherName || ''
+      );
+      runnerTrackerRef.current = pitchChangeResult.state;
+      console.log(`[useGameState] Runner tracker: ${pitchChangeResult.bequeathedRunners.length} bequeathed runners, ${pitchChangeResult.inheritedRunnerCount} inherited`);
+
       setGameState(prev => ({
         ...prev,
         currentPitcherId: newPitcherId,
@@ -2025,16 +2355,29 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
   }, []);
 
   const endInning = useCallback(() => {
+    // CRIT-02: Clear runner tracker for new half-inning and update inning number
+    let endTracker = trackerClearBases(runnerTrackerRef.current);
+    endTracker = trackerNextInning(endTracker);
+
     setGameState(prev => {
       const newIsTop = !prev.isTop;
       // After TOP (isTop was true, newIsTop is false): stay on same inning, switch to BOTTOM
       // After BOTTOM (isTop was false, newIsTop is true): increment inning, switch to TOP
       const newInning = newIsTop ? prev.inning + 1 : prev.inning;
 
+      // Update tracker's current pitcher to match the new half-inning's pitcher
+      // When switching sides, the other team's pitcher becomes current
+      // This will be corrected by the next changePitcher call if applicable
+      // For now, keep the tracker's pitcher as-is (it's only used for new runners added)
+
       // Get next batter
       const battingTeamLineup = newIsTop ? awayLineupRef.current : homeLineupRef.current;
       const currentIndex = newIsTop ? awayBatterIndex : homeBatterIndex;
       const nextBatter = battingTeamLineup[currentIndex];
+
+      // Sync tracker inning number
+      endTracker = { ...endTracker, inning: newInning };
+      runnerTrackerRef.current = endTracker;
 
       return {
         ...prev,
