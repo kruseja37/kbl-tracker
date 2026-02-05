@@ -24,6 +24,13 @@ import { FITNESS_STATES } from "../../../engines/fitnessEngine";
 import { useFameTracking, type FameEventDisplay, formatFameValue, getFameColor, getLITier } from "@/app/hooks/useFameTracking";
 import { FielderCreditModal, type RunnerOutInfo, type FielderCredit } from "../components/modals/FielderCreditModal";
 import { ErrorOnAdvanceModal, type RunnerAdvanceInfo, type ErrorOnAdvanceResult } from "../components/modals/ErrorOnAdvanceModal";
+// MAJ-03: Wire detection system
+import { runPlayDetections, type UIDetectionResult } from "../engines/detectionIntegration";
+import type { FameEventType } from "../../../types/game";
+// MAJ-02: Wire fan morale to UI
+import { useFanMorale, type GameResult as FanMoraleGameResult } from "../hooks/useFanMorale";
+// MAJ-04: Wire narrative engine
+import { generateGameRecap } from "../engines/narrativeIntegration";
 
 // Note: Using GameState from useGameState hook instead of local interface
 // This interface is deprecated but kept for reference during migration
@@ -145,6 +152,9 @@ export function GameTracker() {
     isPlayoffs: false, // TODO: Get from game context
   });
 
+  // MAJ-02: Fan morale tracking
+  const fanMoraleHook = useFanMorale();
+
   // Track selected hit/out/walk details for the two-step record flow
   const [pendingOutcome, setPendingOutcome] = useState<{
     type: 'hit' | 'out' | 'walk';
@@ -176,6 +186,9 @@ export function GameTracker() {
     second?: string;
     third?: string;
   }>({});
+
+  // MAJ-03: Detection system state — pending prompts for user confirmation
+  const [pendingDetections, setPendingDetections] = useState<UIDetectionResult[]>([]);
 
   // Enhanced field toggle - use new FieldCanvas-based interactive field
   const [useEnhancedField, setUseEnhancedField] = useState(true);
@@ -1160,6 +1173,61 @@ export function GameTracker() {
       // }
 
       // ============================================
+      // STEP 6: MAJ-03 — Run play detection system
+      // Auto-detects fame events (web gem, robbery, triple play, etc.)
+      // Prompt detections are shown as notifications for user confirmation
+      // ============================================
+      try {
+        const detectionResults = runPlayDetections(
+          playData,
+          { id: gameState.currentBatterId, name: gameState.currentBatterName },
+          { id: gameState.currentPitcherId, name: gameState.currentPitcherName },
+          {
+            inning: gameState.inning,
+            isTop: gameState.isTop,
+            outs: gameState.outs,
+            bases: gameState.bases,
+            homeScore: gameState.homeScore,
+            awayScore: gameState.awayScore,
+          },
+          {
+            gameId: gameId || 'demo-game',
+            leverageIndex: playData.leverageIndex,
+            isPlayoffs: false, // TODO: Get from game context
+            rbi: calculateRBIFromOutcomes(),
+          }
+        );
+
+        if (detectionResults.length > 0) {
+          console.log(`[MAJ-03] Detection results:`, detectionResults.map(d => `${d.icon} ${d.eventType}`));
+
+          // Auto-detected events: record as Fame events immediately
+          const autoDetected = detectionResults.filter(d => !d.requiresConfirmation);
+          for (const detection of autoDetected) {
+            fameTrackingHook.recordFameEvent(
+              detection.eventType as FameEventType,
+              gameState.currentBatterId,
+              gameState.currentBatterName,
+              gameState.inning,
+              gameState.isTop ? 'TOP' : 'BOTTOM',
+              playData.leverageIndex || 1.0
+            );
+            console.log(`[MAJ-03] Auto-detected fame event: ${detection.eventType}`);
+          }
+
+          // Prompt detections: queue for user confirmation
+          const promptDetections = detectionResults.filter(d => d.requiresConfirmation);
+          if (promptDetections.length > 0) {
+            setPendingDetections(prev => [...prev, ...promptDetections]);
+            console.log(`[MAJ-03] Queued ${promptDetections.length} detections for user confirmation`);
+          }
+        }
+      } catch (detectionError) {
+        // Detection is non-critical — never block play recording
+        console.warn('[MAJ-03] Detection system error (non-blocking):', detectionError);
+      }
+
+      // ============================================
       // EXH-025: Show error attribution modal AFTER play is recorded
       // This is informational - the play has already been processed
       // ============================================
@@ -1332,6 +1400,28 @@ export function GameTracker() {
     setPendingPlayForErrorOnAdvance(null);
     setRunnersWithExtraAdvance([]);
     console.log('[EXH-025] Modal closed - assuming no errors on advancement');
+  }, []);
+
+  // MAJ-03: Handle detection prompt confirmation — user confirms a detected event
+  const handleDetectionConfirm = useCallback((detection: UIDetectionResult) => {
+    // Record as Fame event
+    fameTrackingHook.recordFameEvent(
+      detection.eventType as FameEventType,
+      gameState.currentBatterId,
+      gameState.currentBatterName,
+      gameState.inning,
+      gameState.isTop ? 'TOP' : 'BOTTOM',
+      1.0 // Default LI — detection was triggered per-play
+    );
+    // Remove from pending
+    setPendingDetections(prev => prev.filter(d => d !== detection));
+    console.log(`[MAJ-03] User confirmed detection: ${detection.eventType}`);
+  }, [fameTrackingHook, gameState]);
+
+  // MAJ-03: Handle detection prompt dismissal — user declines a detected event
+  const handleDetectionDismiss = useCallback((detection: UIDetectionResult) => {
+    setPendingDetections(prev => prev.filter(d => d !== detection));
+    console.log(`[MAJ-03] User dismissed detection: ${detection.eventType}`);
   }, []);
 
   // Handle special events (Web Gem, Robbery, TOOTBLAN, etc.) from EnhancedInteractiveField
@@ -1509,15 +1599,105 @@ export function GameTracker() {
 
   // Handle end game with navigation
   const handleEndGame = useCallback(async () => {
+    // MAJ-09: End-of-game achievement detection (No-Hitter, Perfect Game, Maddux, CG, Shutout)
+    try {
+      const totalGameOuts = gameState.inning * 3; // Approximate from current inning
+      for (const [pitcherId, pStats] of pitcherStats.entries()) {
+        if (!pStats.isStarter) continue; // Only starters can have CG/NH/PG
+
+        const ipOuts = pStats.outsRecorded;
+        // Complete game: starter must have pitched the entire game (≥ scheduled innings × 3 outs)
+        const scheduledOuts = 9 * 3; // 9-inning game standard
+        const isCompleteGame = ipOuts >= scheduledOuts;
+        if (!isCompleteGame) continue;
+
+        const pitcherName = pitcherId; // ID contains name info from game state tracking
+        const isShutout = isCompleteGame && pStats.runsAllowed === 0;
+        const isNoHitter = isShutout && pStats.hitsAllowed === 0;
+        const isPerfectGame = isNoHitter && pStats.walksAllowed === 0 && (pStats.hitByPitch || 0) === 0;
+        const isMaddux = isShutout && pStats.pitchCount < 100;
+
+        if (isPerfectGame) {
+          fameTrackingHook.recordFameEvent('PERFECT_GAME' as FameEventType, pitcherId, pitcherName, gameState.inning, gameState.isTop ? 'TOP' : 'BOTTOM', 1.0);
+          console.log(`[MAJ-09] Perfect Game detected for ${pitcherId}`);
+        } else if (isNoHitter) {
+          fameTrackingHook.recordFameEvent('NO_HITTER' as FameEventType, pitcherId, pitcherName, gameState.inning, gameState.isTop ? 'TOP' : 'BOTTOM', 1.0);
+          console.log(`[MAJ-09] No-Hitter detected for ${pitcherId}`);
+        } else if (isMaddux) {
+          fameTrackingHook.recordFameEvent('MADDUX' as FameEventType, pitcherId, pitcherName, gameState.inning, gameState.isTop ? 'TOP' : 'BOTTOM', 1.0);
+          console.log(`[MAJ-09] Maddux detected for ${pitcherId}`);
+        } else if (isShutout) {
+          fameTrackingHook.recordFameEvent('SHUTOUT' as FameEventType, pitcherId, pitcherName, gameState.inning, gameState.isTop ? 'TOP' : 'BOTTOM', 1.0);
+          console.log(`[MAJ-09] Complete Game Shutout detected for ${pitcherId}`);
+        } else {
+          fameTrackingHook.recordFameEvent('COMPLETE_GAME' as FameEventType, pitcherId, pitcherName, gameState.inning, gameState.isTop ? 'TOP' : 'BOTTOM', 1.0);
+          console.log(`[MAJ-09] Complete Game detected for ${pitcherId}`);
+        }
+      }
+    } catch (detectionError) {
+      console.warn('[MAJ-09] End-of-game detection error (non-blocking):', detectionError);
+    }
+
+    // MAJ-02: Update fan morale at game end
+    try {
+      const homeWon = gameState.homeScore > gameState.awayScore;
+      const runDiff = gameState.homeScore - gameState.awayScore;
+      const isBlowout = Math.abs(runDiff) >= 7;
+
+      // Check for special game results from pitcher stats
+      let isNoHitter = false;
+      let isShutout = false;
+      for (const [, pStats] of pitcherStats.entries()) {
+        if (pStats.isStarter && pStats.outsRecorded >= 27) {
+          if (pStats.hitsAllowed === 0 && pStats.runsAllowed === 0) isNoHitter = true;
+          if (pStats.runsAllowed === 0) isShutout = true;
+        }
+      }
+
+      const moraleGameResult: FanMoraleGameResult = {
+        gameId: gameId || 'demo-game',
+        won: homeWon, // Assume home team is tracked team for now
+        isWalkOff: false, // TODO: detect walk-off from last play
+        isNoHitter,
+        isShutout,
+        isBlowout,
+        vsRival: false, // TODO: detect rival matchup
+        runDifferential: runDiff,
+        playerPerformances: [], // TODO: populate with per-player WAR
+      };
+
+      fanMoraleHook.processGameResult(moraleGameResult, { season: 1, game: 1 });
+      console.log(`[MAJ-02] Fan morale updated — won: ${homeWon}, diff: ${runDiff}, shutout: ${isShutout}`);
+    } catch (moraleError) {
+      console.warn('[MAJ-02] Fan morale update error (non-blocking):', moraleError);
+    }
+
+    // MAJ-04: Generate game recap narrative
+    let gameNarrative = null;
+    try {
+      const homeWonForNarrative = gameState.homeScore > gameState.awayScore;
+      gameNarrative = generateGameRecap({
+        teamName: homeTeamName,
+        opponentName: awayTeamName,
+        teamScore: gameState.homeScore,
+        opponentScore: gameState.awayScore,
+        isShutout: gameState.awayScore === 0 && homeWonForNarrative,
+      });
+      console.log(`[MAJ-04] Narrative generated: "${gameNarrative.headline}"`);
+    } catch (narrativeError) {
+      console.warn('[MAJ-04] Narrative generation error (non-blocking):', narrativeError);
+    }
+
     await hookEndGame();
-    // Pass game mode so PostGameSummary knows where to route
+    // Pass game mode and narrative so PostGameSummary can display them
     navigate(`/post-game/${gameId}`, {
       state: {
         gameMode: navigationState?.gameMode || 'franchise',
         franchiseId: gameId?.replace('franchise-', '') || '1',
+        gameNarrative,
       }
     });
-  }, [hookEndGame, navigate, gameId, navigationState?.gameMode]);
+  }, [hookEndGame, navigate, gameId, navigationState?.gameMode, gameState, pitcherStats, fameTrackingHook, fanMoraleHook, homeTeamName, awayTeamName]);
 
   return (
     <DndProvider backend={HTML5Backend}>
@@ -2809,6 +2989,40 @@ export function GameTracker() {
           onConfirm={handleErrorOnAdvanceConfirm}
           runnersWithExtraAdvance={runnersWithExtraAdvance}
         />
+
+        {/* MAJ-03: Detection prompt notifications */}
+        {pendingDetections.length > 0 && (
+          <div className="fixed bottom-24 right-4 z-50 flex flex-col gap-2 max-w-[320px]">
+            {pendingDetections.map((detection, idx) => (
+              <div
+                key={`${detection.eventType}-${idx}`}
+                className="bg-[#1a1a1a] border-2 border-[#C4A853] rounded-lg p-3 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.4)] animate-fade-in"
+              >
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-lg">{detection.icon}</span>
+                  <span className="text-xs font-bold text-[#C4A853] uppercase tracking-wider">
+                    {detection.eventType.replace(/_/g, ' ')}
+                  </span>
+                </div>
+                <p className="text-[11px] text-[#ccc] mb-2">{detection.message}</p>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => handleDetectionConfirm(detection)}
+                    className="flex-1 px-3 py-1.5 bg-[#2E7D32] text-white text-[10px] font-bold uppercase rounded border border-[#4CAF50] hover:bg-[#388E3C] active:scale-95 transition-all"
+                  >
+                    Confirm
+                  </button>
+                  <button
+                    onClick={() => handleDetectionDismiss(detection)}
+                    className="flex-1 px-3 py-1.5 bg-[#333] text-[#888] text-[10px] font-bold uppercase rounded border border-[#555] hover:bg-[#444] active:scale-95 transition-all"
+                  >
+                    Dismiss
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </DndProvider>
   );

@@ -21,11 +21,14 @@ import {
   type FanMorale,
   type MoraleEvent,
   type GameDate,
+  type GameResult,
 
   // Functions - these have correct signatures
   initializeFanMorale,
   getFanState,
   getRiskLevel,
+  createGameMoraleEvent,
+  processMoraleEvent,
 
   // Display helpers from integration layer
   getFanStateDisplay,
@@ -38,7 +41,7 @@ import {
 } from '../engines/fanMoraleIntegration';
 
 // Re-export types for consumers
-export type { FanState, MoraleTrend, RiskLevel, FanMorale, MoraleEvent };
+export type { FanState, MoraleTrend, RiskLevel, FanMorale, MoraleEvent, GameResult };
 
 // ============================================
 // HOOK TYPES
@@ -77,6 +80,7 @@ export interface UseFanMoraleReturn {
 
   // Actions
   initialize: (initialMorale?: number, gameDate?: GameDate) => void;
+  processGameResult: (gameResult: GameResult, gameDate: GameDate) => void;
   refresh: () => void;
 }
 
@@ -137,6 +141,27 @@ export function useFanMorale(
     setMorale(newMorale);
   }, []);
 
+  // Process a game result and update morale accordingly
+  const processGameResult = useCallback((
+    gameResult: GameResult,
+    gameDate: GameDate
+  ) => {
+    if (!morale) {
+      // Auto-initialize if not yet started
+      const newMorale = initializeFanMorale(50, gameDate);
+      setMorale(newMorale);
+      // Process after init
+      const event = createGameMoraleEvent(gameResult, gameDate);
+      const { updatedMorale } = processMoraleEvent(newMorale, event);
+      setMorale(updatedMorale);
+      return;
+    }
+
+    const event = createGameMoraleEvent(gameResult, gameDate);
+    const { updatedMorale } = processMoraleEvent(morale, event);
+    setMorale(updatedMorale);
+  }, [morale]);
+
   // Refresh (recalculate derived values)
   const refresh = useCallback(() => {
     if (morale) {
@@ -154,6 +179,7 @@ export function useFanMorale(
     faAttractiveness,
     recentEvents,
     initialize,
+    processGameResult,
     refresh,
   };
 }
