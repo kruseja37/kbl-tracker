@@ -117,6 +117,7 @@ export interface PersistedGameState {
     rbi: number;
     r: number;
     bb: number;
+    hbp: number;  // MAJ-07: Track HBP separately
     k: number;
     sb: number;
     cs: number;

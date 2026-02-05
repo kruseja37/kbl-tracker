@@ -79,21 +79,42 @@ export interface PlayerGameStats {
   r: number;
   rbi: number;
   bb: number;
+  hbp: number;    // MAJ-07: Track HBP separately from BB
   k: number;
   sb: number;
   cs: number;
 }
 
 export interface PitcherGameStats {
+  // Core counting stats (existing)
   outsRecorded: number;
   hitsAllowed: number;
   runsAllowed: number;
   earnedRuns: number;
-  walksAllowed: number;
+  walksAllowed: number;         // BB only (not IBB or HBP)
   strikeoutsThrown: number;
   homeRunsAllowed: number;
   pitchCount: number;
   battersFaced: number;
+  // MAJ-07: New counting stats per PITCHER_STATS_TRACKING_SPEC.md
+  intentionalWalks: number;     // IBB
+  hitByPitch: number;           // HBP
+  wildPitches: number;          // WP
+  basesLoadedWalks: number;     // BB/HBP/IBB with bases loaded
+  firstInningRuns: number;      // Runs allowed in first inning (starters only)
+  consecutiveHRsAllowed: number; // Current streak of consecutive HR allowed
+  // Role/timing fields
+  isStarter: boolean;
+  entryInning: number;          // Which inning pitcher entered
+  entryOuts: number;            // Outs when pitcher entered
+  exitInning: number | null;    // Which inning pitcher left (null = still active)
+  exitOuts: number | null;      // Outs when pitcher left
+  finishedGame: boolean;
+  // Inherited/bequeathed runners (from inheritedRunnerTracker)
+  inheritedRunners: number;
+  inheritedRunnersScored: number;
+  bequeathedRunners: number;
+  bequeathedRunnersScored: number;
 }
 
 export interface RunnerAdvancement {
@@ -228,7 +249,7 @@ function mapAtBatResultFromWalk(walkType: WalkType): AtBatResult {
 function createEmptyPlayerStats(): PlayerGameStats {
   return {
     pa: 0, ab: 0, h: 0, singles: 0, doubles: 0, triples: 0, hr: 0,
-    r: 0, rbi: 0, bb: 0, k: 0, sb: 0, cs: 0,
+    r: 0, rbi: 0, bb: 0, hbp: 0, k: 0, sb: 0, cs: 0,
   };
 }
 
@@ -671,6 +692,13 @@ function createEmptyPitcherStats(): PitcherGameStats {
     outsRecorded: 0, hitsAllowed: 0, runsAllowed: 0, earnedRuns: 0,
     walksAllowed: 0, strikeoutsThrown: 0, homeRunsAllowed: 0,
     pitchCount: 0, battersFaced: 0,
+    // MAJ-07 new fields
+    intentionalWalks: 0, hitByPitch: 0, wildPitches: 0,
+    basesLoadedWalks: 0, firstInningRuns: 0, consecutiveHRsAllowed: 0,
+    isStarter: false, entryInning: 1, entryOuts: 0,
+    exitInning: null, exitOuts: null, finishedGame: false,
+    inheritedRunners: 0, inheritedRunnersScored: 0,
+    bequeathedRunners: 0, bequeathedRunnersScored: 0,
   };
 }
 
@@ -800,8 +828,16 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
 
     // Initialize pitcher stats and name mapping
     const initialPitcherStats = new Map<string, PitcherGameStats>();
-    initialPitcherStats.set(config.awayStartingPitcherId, createEmptyPitcherStats());
-    initialPitcherStats.set(config.homeStartingPitcherId, createEmptyPitcherStats());
+    const awayStarter = createEmptyPitcherStats();
+    awayStarter.isStarter = true;
+    awayStarter.entryInning = 1;
+    awayStarter.entryOuts = 0;
+    const homeStarter = createEmptyPitcherStats();
+    homeStarter.isStarter = true;
+    homeStarter.entryInning = 1;
+    homeStarter.entryOuts = 0;
+    initialPitcherStats.set(config.awayStartingPitcherId, awayStarter);
+    initialPitcherStats.set(config.homeStartingPitcherId, homeStarter);
     setPitcherStats(initialPitcherStats);
 
     // Track pitcher names for post-game summary (EXH-011 fix)
@@ -1071,7 +1107,16 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       pStats.hitsAllowed++;
       pStats.battersFaced++;
       pStats.pitchCount += pitchCount;
-      if (hitType === 'HR') pStats.homeRunsAllowed++;
+      if (hitType === 'HR') {
+        pStats.homeRunsAllowed++;
+        pStats.consecutiveHRsAllowed++;
+      } else {
+        pStats.consecutiveHRsAllowed = 0; // Reset on non-HR hit
+      }
+      // MAJ-07: Track first-inning runs for starters
+      if (pStats.isStarter && gameState.inning === 1 && runsScored > 0) {
+        pStats.firstInningRuns += runsScored;
+      }
       newStats.set(gameState.currentPitcherId, pStats);
       return newStats;
     });
@@ -1322,6 +1367,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       if (outType === 'K' || outType === 'KL' || outType === 'D3K') {
         pStats.strikeoutsThrown++;
       }
+      pStats.consecutiveHRsAllowed = 0; // Out breaks HR streak
       // Note: runs/ER now attributed via tracker below (not to current pitcher blindly)
       newStats.set(gameState.currentPitcherId, pStats);
       return newStats;
@@ -1510,22 +1556,36 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
 
     await logAtBatEvent(event);
 
-    // Update player stats
+    // Update player stats — MAJ-07: Track HBP separately from BB
     setPlayerStats(prev => {
       const newStats = new Map(prev);
       const batterStats = newStats.get(gameState.currentBatterId) || createEmptyPlayerStats();
       batterStats.pa++;
-      batterStats.bb++;
+      if (walkType === 'HBP') {
+        batterStats.hbp = (batterStats.hbp || 0) + 1;
+      } else {
+        batterStats.bb++;  // BB and IBB count as walks for batter
+      }
       if (basesLoaded) batterStats.rbi++;
       newStats.set(gameState.currentBatterId, batterStats);
       return newStats;
     });
 
     // Update pitcher stats — CRIT-02: Use tracker for ER attribution on walks
+    // MAJ-07: Track HBP/IBB separately from BB
     setPitcherStats(prev => {
       const newStats = new Map(prev);
       const pStats = newStats.get(gameState.currentPitcherId) || createEmptyPitcherStats();
-      pStats.walksAllowed++;
+      if (walkType === 'HBP') {
+        pStats.hitByPitch++;
+      } else if (walkType === 'IBB') {
+        pStats.intentionalWalks++;
+      } else {
+        pStats.walksAllowed++;  // BB only
+      }
+      if (basesLoaded) {
+        pStats.basesLoadedWalks++;
+      }
       pStats.battersFaced++;
       pStats.pitchCount += pitchCount;
       // Note: runs/ER attributed via tracker below (runner on 3rd may be inherited)
@@ -2009,8 +2069,19 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       console.log(`[useGameState] Recorded CS for runner: ${runnerId}`);
     }
 
+    // MAJ-07: Track WP in pitcher stats
+    if (eventType === 'WP') {
+      setPitcherStats(prev => {
+        const newStats = new Map(prev);
+        const pStats = newStats.get(gameState.currentPitcherId) || createEmptyPitcherStats();
+        pStats.wildPitches++;
+        newStats.set(gameState.currentPitcherId, pStats);
+        return newStats;
+      });
+    }
+
     // TODO: Log to separate event store
-  }, [gameState.outs, gameState.bases]);
+  }, [gameState.outs, gameState.bases, gameState.currentPitcherId]);
 
   const advanceRunner = useCallback((from: 'first' | 'second' | 'third', to: 'second' | 'third' | 'home', outcome: 'safe' | 'out') => {
     // Calculate score change first so we can update both game state and scoreboard
@@ -2290,11 +2361,32 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         timestamp: Date.now(),
       }]);
 
-      // Initialize new pitcher stats
+      // MAJ-07: Set exit info on outgoing pitcher and bequeathed runners
       setPitcherStats(prev => {
         const newStats = new Map(prev);
+        // Update outgoing pitcher
+        const outgoing = newStats.get(exitingPitcherId);
+        if (outgoing) {
+          outgoing.exitInning = gameState.inning;
+          outgoing.exitOuts = gameState.outs;
+          // Count bequeathed runners from tracker
+          const activeRunners = runnerTrackerRef.current.runners.filter(
+            r => r.currentBase && r.currentBase !== 'HOME' && r.currentBase !== 'OUT'
+          );
+          outgoing.bequeathedRunners = activeRunners.length;
+          newStats.set(exitingPitcherId, outgoing);
+        }
+        // Initialize new pitcher stats with entry context
         if (!newStats.has(newPitcherId)) {
-          newStats.set(newPitcherId, createEmptyPitcherStats());
+          const newPStats = createEmptyPitcherStats();
+          newPStats.entryInning = gameState.inning;
+          newPStats.entryOuts = gameState.outs;
+          // Count inherited runners (same as bequeathed from outgoing)
+          const activeRunners = runnerTrackerRef.current.runners.filter(
+            r => r.currentBase && r.currentBase !== 'HOME' && r.currentBase !== 'OUT'
+          );
+          newPStats.inheritedRunners = activeRunners.length;
+          newStats.set(newPitcherId, newPStats);
         }
         return newStats;
       });
@@ -2411,8 +2503,8 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     const playerStatsRecord: Record<string, {
       pa: number; ab: number; h: number; singles: number; doubles: number;
       triples: number; hr: number; rbi: number; r: number; bb: number;
-      k: number; sb: number; cs: number; putouts: number; assists: number;
-      fieldingErrors: number;
+      hbp: number; k: number; sb: number; cs: number; putouts: number;
+      assists: number; fieldingErrors: number;
     }> = {};
     playerStats.forEach((stats, playerId) => {
       playerStatsRecord[playerId] = {
@@ -2422,6 +2514,19 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         fieldingErrors: 0,
       };
     });
+
+    // MAJ-07: Mark the last pitcher on each team as finishedGame
+    // The pitcher still active at game end finished the game
+    const lastPitcherId = gameState.currentPitcherId;
+    const lastPitcherStats = pitcherStats.get(lastPitcherId);
+    if (lastPitcherStats) {
+      lastPitcherStats.finishedGame = true;
+      // If they never had exit info set, set it now
+      if (lastPitcherStats.exitInning === null) {
+        lastPitcherStats.exitInning = gameState.inning;
+        lastPitcherStats.exitOuts = gameState.outs;
+      }
+    }
 
     // Convert pitcher stats Map to array for PersistedGameState
     const pitcherGameStatsArray: PersistedGameState['pitcherGameStats'] = [];
@@ -2525,8 +2630,8 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     const playerStatsRecord: Record<string, {
       pa: number; ab: number; h: number; singles: number; doubles: number;
       triples: number; hr: number; rbi: number; r: number; bb: number;
-      k: number; sb: number; cs: number; putouts: number; assists: number;
-      fieldingErrors: number;
+      hbp: number; k: number; sb: number; cs: number; putouts: number;
+      assists: number; fieldingErrors: number;
     }> = {};
     playerStats.forEach((stats, playerId) => {
       playerStatsRecord[playerId] = {
@@ -2554,23 +2659,23 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         pitcherId,
         pitcherName,
         teamId,
-        isStarter: idx === 0, // First entry is starter
-        entryInning: idx === 0 ? 1 : gameState.inning, // Starter enters inning 1
+        isStarter: stats.isStarter,
+        entryInning: stats.entryInning,
         outsRecorded: stats.outsRecorded,
         hitsAllowed: stats.hitsAllowed,
         runsAllowed: stats.runsAllowed,
         earnedRuns: stats.earnedRuns,
-        walksAllowed: stats.walksAllowed,
+        walksAllowed: stats.walksAllowed + stats.intentionalWalks, // Persisted format combines BB+IBB
         strikeoutsThrown: stats.strikeoutsThrown,
         homeRunsAllowed: stats.homeRunsAllowed,
-        hitBatters: 0, // Not tracked in local PitcherGameStats
-        basesReachedViaError: 0,
-        wildPitches: 0, // Not tracked in local PitcherGameStats
+        hitBatters: stats.hitByPitch,
+        basesReachedViaError: 0, // TODO: Track via runner tracker howReached=error
+        wildPitches: stats.wildPitches,
         pitchCount: stats.pitchCount,
         battersFaced: stats.battersFaced,
-        consecutiveHRsAllowed: 0,
-        firstInningRuns: 0,
-        basesLoadedWalks: 0,
+        consecutiveHRsAllowed: stats.consecutiveHRsAllowed,
+        firstInningRuns: stats.firstInningRuns,
+        basesLoadedWalks: stats.basesLoadedWalks,
         inningsComplete: Math.floor(stats.outsRecorded / 3),
       };
     });
