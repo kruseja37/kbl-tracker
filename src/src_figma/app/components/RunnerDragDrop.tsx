@@ -39,6 +39,8 @@ export interface RunnerMoveData {
 
 export interface RunnerDragDropProps {
   bases: { first: boolean; second: boolean; third: boolean };
+  /** Runner names for each occupied base (optional - shows base number if not provided) */
+  runnerNames?: { first?: string; second?: string; third?: string };
   onRunnerMove: (data: RunnerMoveData) => void;
   /** Callback when runner drag starts (to show drop zones) */
   onDragStart?: (from: Exclude<BaseId, 'home'>) => void;
@@ -70,23 +72,24 @@ const RUNNER_POSITIONS: Record<Exclude<BaseId, 'home'>, { x: number; y: number }
   third: { x: BASE_POSITIONS.third.x + 0.02, y: BASE_POSITIONS.third.y + 0.02 },  // Lead toward home
 };
 
-// Drop zone positions - safe zone on bag, out zone before the bag (toward previous base)
+// Drop zone positions - safe zone on bag, out zone offset to avoid overlap
+// Zones are 44px so need ~0.08-0.10 offset to not overlap
 const DROP_ZONES: Record<BaseId, { safe: { x: number; y: number }; out: { x: number; y: number } }> = {
   first: {
-    safe: { x: BASE_POSITIONS.first.x, y: BASE_POSITIONS.first.y },              // On the bag
-    out: { x: BASE_POSITIONS.first.x - 0.04, y: BASE_POSITIONS.first.y - 0.04 }, // Toward home
+    safe: { x: BASE_POSITIONS.first.x + 0.03, y: BASE_POSITIONS.first.y },        // Slightly toward outfield
+    out: { x: BASE_POSITIONS.first.x - 0.06, y: BASE_POSITIONS.first.y - 0.06 },  // Toward home plate
   },
   second: {
-    safe: { x: BASE_POSITIONS.second.x, y: BASE_POSITIONS.second.y },            // On the bag
-    out: { x: BASE_POSITIONS.second.x, y: BASE_POSITIONS.second.y + 0.06 },      // Past the bag
+    safe: { x: BASE_POSITIONS.second.x, y: BASE_POSITIONS.second.y - 0.04 },      // Toward outfield
+    out: { x: BASE_POSITIONS.second.x, y: BASE_POSITIONS.second.y + 0.08 },       // Toward pitcher
   },
   third: {
-    safe: { x: BASE_POSITIONS.third.x, y: BASE_POSITIONS.third.y },              // On the bag
-    out: { x: BASE_POSITIONS.third.x + 0.04, y: BASE_POSITIONS.third.y - 0.04 }, // Toward home
+    safe: { x: BASE_POSITIONS.third.x - 0.03, y: BASE_POSITIONS.third.y },        // Slightly toward outfield
+    out: { x: BASE_POSITIONS.third.x + 0.06, y: BASE_POSITIONS.third.y - 0.06 },  // Toward home plate
   },
   home: {
-    safe: { x: BASE_POSITIONS.home.x, y: BASE_POSITIONS.home.y - 0.02 },         // On home plate
-    out: { x: BASE_POSITIONS.home.x, y: BASE_POSITIONS.home.y + 0.06 },          // In front of catcher
+    safe: { x: BASE_POSITIONS.home.x - 0.06, y: BASE_POSITIONS.home.y },          // Left of home plate
+    out: { x: BASE_POSITIONS.home.x + 0.06, y: BASE_POSITIONS.home.y },           // Right of home plate
   },
 };
 
@@ -96,11 +99,13 @@ const DROP_ZONES: Record<BaseId, { safe: { x: number; y: number }; out: { x: num
 
 interface RunnerIconProps {
   base: Exclude<BaseId, 'home'>;
+  /** Runner name (optional - shows base number if not provided) */
+  runnerName?: string;
   onDragStart?: () => void;
   onDragEnd?: () => void;
 }
 
-function RunnerIcon({ base, onDragStart, onDragEnd }: RunnerIconProps) {
+function RunnerIcon({ base, runnerName, onDragStart, onDragEnd }: RunnerIconProps) {
   // Get current viewBox from context (for dynamic zoom support)
   const viewBox = useViewBox();
 
@@ -128,6 +133,10 @@ function RunnerIcon({ base, onDragStart, onDragEnd }: RunnerIconProps) {
 
   // Baseball-style runner icon with chalkboard aesthetic
   const baseLabel = base === 'first' ? '1' : base === 'second' ? '2' : '3';
+  // Extract last name for display (e.g., "J. MARTINEZ" -> "MARTINEZ")
+  const displayName = runnerName
+    ? runnerName.split(' ').pop()?.toUpperCase() || `R${baseLabel}`
+    : `R${baseLabel}`;
 
   return (
     <div
@@ -161,9 +170,9 @@ function RunnerIcon({ base, onDragStart, onDragEnd }: RunnerIconProps) {
           {baseLabel}
         </span>
       </div>
-      {/* Base label below runner */}
+      {/* Runner name label below runner */}
       <div
-        className="absolute left-1/2 transform -translate-x-1/2"
+        className="absolute left-1/2 transform -translate-x-1/2 whitespace-nowrap"
         style={{
           bottom: 'max(-12px, -0.9cqw)',
           fontSize: 'max(7px, 0.5cqw)',
@@ -176,7 +185,7 @@ function RunnerIcon({ base, onDragStart, onDragEnd }: RunnerIconProps) {
           letterSpacing: '0.5px',
         }}
       >
-        R{baseLabel}
+        {displayName}
       </div>
     </div>
   );
@@ -242,17 +251,17 @@ function DropZone({ base, outcome, onDrop, visible }: DropZoneProps) {
         style={{
           backgroundColor: bgColor,
           borderColor,
-          borderWidth: 'max(2px, 0.15cqw)',
+          borderWidth: 'max(3px, 0.2cqw)',
           borderStyle: 'solid',
           opacity,
-          width: 'max(28px, 2.5cqw)',
-          height: 'max(28px, 2.5cqw)',
-          boxShadow: isOver && canDrop ? '0 0 10px rgba(255,215,0,0.8)' : '2px 2px 0px 0px rgba(0,0,0,0.3)',
+          width: 'max(44px, 3.8cqw)',
+          height: 'max(44px, 3.8cqw)',
+          boxShadow: isOver && canDrop ? '0 0 12px rgba(255,215,0,0.9)' : '2px 2px 0px 0px rgba(0,0,0,0.3)',
         }}
       >
         <div style={{ color: 'white', textAlign: 'center', lineHeight: 1.2 }}>
-          <div style={{ fontSize: 'max(7px, 0.5cqw)' }}>{isSafe ? 'SAFE' : 'OUT'}</div>
-          <div style={{ fontSize: 'max(5px, 0.35cqw)', opacity: 0.8 }}>
+          <div style={{ fontSize: 'max(9px, 0.65cqw)', fontWeight: 700 }}>{isSafe ? 'SAFE' : 'OUT'}</div>
+          <div style={{ fontSize: 'max(6px, 0.45cqw)', opacity: 0.8 }}>
             {base === 'home' ? 'HP' : base === 'first' ? '1B' : base === 'second' ? '2B' : '3B'}
           </div>
         </div>
@@ -340,6 +349,7 @@ function PlayTypeModal({ from, to, outcome, onSelect, onClose }: PlayTypeModalPr
 
 export function RunnerDragDrop({
   bases,
+  runnerNames = {},
   onRunnerMove,
   onDragStart,
   onDragEnd,
@@ -407,6 +417,7 @@ export function RunnerDragDrop({
       {bases.first && (
         <RunnerIcon
           base="first"
+          runnerName={runnerNames.first}
           onDragStart={() => handleDragStart('first')}
           onDragEnd={handleDragEnd}
         />
@@ -414,6 +425,7 @@ export function RunnerDragDrop({
       {bases.second && (
         <RunnerIcon
           base="second"
+          runnerName={runnerNames.second}
           onDragStart={() => handleDragStart('second')}
           onDragEnd={handleDragEnd}
         />
@@ -421,6 +433,7 @@ export function RunnerDragDrop({
       {bases.third && (
         <RunnerIcon
           base="third"
+          runnerName={runnerNames.third}
           onDragStart={() => handleDragStart('third')}
           onDragEnd={handleDragEnd}
         />

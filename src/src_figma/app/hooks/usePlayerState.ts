@@ -241,6 +241,110 @@ export function usePlayerState(options: UsePlayerStateOptions) {
   }, []);
 
   /**
+   * EXH-036: Directly set player's Mojo level (for manual editing via PlayerCard)
+   */
+  const setMojo = useCallback((
+    playerId: string,
+    newMojo: MojoLevel
+  ) => {
+    setPlayers(prev => {
+      const player = prev.get(playerId);
+      if (!player) return prev;
+
+      const previousMojo = player.gameState.currentMojo;
+
+      // Detect state changes for notification
+      const changes = detectStateChanges(
+        playerId,
+        player.playerName,
+        previousMojo,
+        newMojo,
+        player.fitnessProfile.currentFitness,
+        player.fitnessProfile.currentFitness
+      );
+
+      if (changes.length > 0) {
+        setNotifications(n => [...n, ...changes]);
+      }
+
+      // Update state
+      const newGameState = updateGamePlayerState(player.gameState, {
+        newMojo,
+      });
+
+      const newCombinedState = createCombinedPlayerState(
+        playerId,
+        player.playerName,
+        newMojo,
+        player.fitnessProfile
+      );
+
+      const newMap = new Map(prev);
+      newMap.set(playerId, {
+        ...player,
+        gameState: newGameState,
+        combinedState: newCombinedState,
+      });
+
+      return newMap;
+    });
+  }, []);
+
+  /**
+   * EXH-036: Directly set player's Fitness state (for manual editing via PlayerCard)
+   */
+  const setFitness = useCallback((
+    playerId: string,
+    newFitness: FitnessState
+  ) => {
+    setPlayers(prev => {
+      const player = prev.get(playerId);
+      if (!player) return prev;
+
+      const previousFitness = player.fitnessProfile.currentFitness;
+
+      // Detect state changes for notification
+      const changes = detectStateChanges(
+        playerId,
+        player.playerName,
+        player.gameState.currentMojo,
+        player.gameState.currentMojo,
+        previousFitness,
+        newFitness
+      );
+
+      if (changes.length > 0) {
+        setNotifications(n => [...n, ...changes]);
+      }
+
+      // Update fitness profile
+      const newFitnessProfile: PlayerFitnessProfile = {
+        ...player.fitnessProfile,
+        currentFitness: newFitness,
+      };
+
+      const newCombinedState = createCombinedPlayerState(
+        playerId,
+        player.playerName,
+        player.gameState.currentMojo,
+        newFitnessProfile
+      );
+
+      const newInjuryRisk = calculateInjuryRisk(newFitnessProfile);
+
+      const newMap = new Map(prev);
+      newMap.set(playerId, {
+        ...player,
+        fitnessProfile: newFitnessProfile,
+        combinedState: newCombinedState,
+        injuryRisk: newInjuryRisk,
+      });
+
+      return newMap;
+    });
+  }, []);
+
+  /**
    * Apply rest day recovery
    */
   const applyRestRecovery = useCallback((
@@ -418,6 +522,8 @@ export function usePlayerState(options: UsePlayerStateOptions) {
     // State updates
     updateMojo,
     updateFitness,
+    setMojo,      // EXH-036: Direct setter for PlayerCard editing
+    setFitness,   // EXH-036: Direct setter for PlayerCard editing
     applyRestRecovery,
 
     // Stats

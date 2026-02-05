@@ -51,6 +51,12 @@ interface PlayerCardProps {
   onPlayerClick?: (playerId: string) => void;
   mojoLevel?: import('../../engines/mojoEngine').MojoLevel;
   fitnessState?: import('../../engines/fitnessEngine').FitnessState;
+  /** EXH-036: Callback when mojo is changed via player card edit */
+  onMojoChange?: (newMojo: MojoLevel) => void;
+  /** EXH-036: Callback when fitness is changed via player card edit */
+  onFitnessChange?: (newFitness: FitnessState) => void;
+  /** EXH-036: Whether editing is allowed (true during games) */
+  allowEdit?: boolean;
 }
 
 interface PlayerFullStats {
@@ -127,6 +133,9 @@ export function PlayerCard({
   onPlayerClick,
   mojoLevel,
   fitnessState: fitnessStateProp,
+  onMojoChange,
+  onFitnessChange,
+  allowEdit = false,
 }: PlayerCardProps) {
   const resolvePlayerName = getPlayerNameFn || ((id: string) => {
     const player = getPlayer(id);
@@ -136,6 +145,10 @@ export function PlayerCard({
   const [stats, setStats] = useState<PlayerFullStats | null>(null);
   const [showSalaryBreakdown, setShowSalaryBreakdown] = useState(false);
   const warCalculations = useWARCalculations();
+
+  // EXH-036: Edit mode state for mojo/fitness
+  const [isEditingMojo, setIsEditingMojo] = useState(false);
+  const [isEditingFitness, setIsEditingFitness] = useState(false);
 
   useEffect(() => {
     if (warCalculations.isLoading) {
@@ -330,35 +343,109 @@ export function PlayerCard({
           <span className="text-xs text-gray-500">({stats.fameTier})</span>
         </div>
 
-        {/* Mojo & Fitness */}
+        {/* Mojo & Fitness - EXH-036: Now editable when allowEdit=true */}
         {(mojoLevel !== undefined || fitnessStateProp) && (
-          <div className="flex items-center gap-3 bg-white p-2 border-2 border-retro-blue">
+          <div className="bg-white p-2 border-2 border-retro-blue space-y-2">
+            {/* Mojo Row */}
             {mojoLevel !== undefined && (
-              <div className="flex items-center gap-1">
-                <span className="font-pixel text-[0.6rem] text-gray-500">MOJO</span>
-                <span
-                  className="font-bold text-sm"
-                  style={{ color: getMojoColor(mojoLevel) }}
-                >
-                  {MOJO_STATES[mojoLevel].emoji} {MOJO_STATES[mojoLevel].displayName}
-                </span>
-                <span className="text-xs text-gray-400">
-                  ({MOJO_STATES[mojoLevel].statMultiplier.toFixed(2)}x)
-                </span>
+              <div className="flex items-center gap-2">
+                <span className="font-pixel text-[0.6rem] text-gray-500 w-12">MOJO</span>
+                {isEditingMojo && allowEdit && onMojoChange ? (
+                  <div className="flex gap-1 flex-wrap">
+                    {([-2, -1, 0, 1, 2] as MojoLevel[]).map((level) => (
+                      <button
+                        key={level}
+                        onClick={() => {
+                          onMojoChange(level);
+                          setIsEditingMojo(false);
+                        }}
+                        className={`px-2 py-1 text-xs font-bold border-2 transition-all ${
+                          level === mojoLevel
+                            ? 'border-retro-gold bg-retro-gold/20'
+                            : 'border-gray-300 hover:border-retro-blue'
+                        }`}
+                        style={{ color: getMojoColor(level) }}
+                      >
+                        {MOJO_STATES[level].emoji} {MOJO_STATES[level].displayName}
+                      </button>
+                    ))}
+                    <button
+                      onClick={() => setIsEditingMojo(false)}
+                      className="px-2 py-1 text-xs text-gray-500 hover:text-gray-700"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ) : (
+                  <div
+                    className={`flex items-center gap-1 ${allowEdit && onMojoChange ? 'cursor-pointer hover:bg-retro-cream px-1 rounded' : ''}`}
+                    onClick={() => allowEdit && onMojoChange && setIsEditingMojo(true)}
+                  >
+                    <span
+                      className="font-bold text-sm"
+                      style={{ color: getMojoColor(mojoLevel) }}
+                    >
+                      {MOJO_STATES[mojoLevel].emoji} {MOJO_STATES[mojoLevel].displayName}
+                    </span>
+                    <span className="text-xs text-gray-400">
+                      ({MOJO_STATES[mojoLevel].statMultiplier.toFixed(2)}x)
+                    </span>
+                    {allowEdit && onMojoChange && (
+                      <span className="text-xs text-retro-blue ml-1">✏️</span>
+                    )}
+                  </div>
+                )}
               </div>
             )}
+            {/* Fitness Row */}
             {fitnessStateProp && (
-              <div className="flex items-center gap-1">
-                <span className="font-pixel text-[0.6rem] text-gray-500">FITNESS</span>
-                <span
-                  className="font-bold text-sm"
-                  style={{ color: FITNESS_STATES[fitnessStateProp].color }}
-                >
-                  {FITNESS_STATES[fitnessStateProp].emoji} {FITNESS_STATES[fitnessStateProp].displayName}
-                </span>
-                <span className="text-xs text-gray-400">
-                  ({FITNESS_STATES[fitnessStateProp].multiplier.toFixed(2)}x)
-                </span>
+              <div className="flex items-center gap-2">
+                <span className="font-pixel text-[0.6rem] text-gray-500 w-12">FITNESS</span>
+                {isEditingFitness && allowEdit && onFitnessChange ? (
+                  <div className="flex gap-1 flex-wrap">
+                    {(['JUICED', 'FIT', 'WELL', 'STRAINED', 'WEAK', 'HURT'] as FitnessState[]).map((state) => (
+                      <button
+                        key={state}
+                        onClick={() => {
+                          onFitnessChange(state);
+                          setIsEditingFitness(false);
+                        }}
+                        className={`px-2 py-1 text-xs font-bold border-2 transition-all ${
+                          state === fitnessStateProp
+                            ? 'border-retro-gold bg-retro-gold/20'
+                            : 'border-gray-300 hover:border-retro-blue'
+                        }`}
+                        style={{ color: FITNESS_STATES[state].color }}
+                      >
+                        {FITNESS_STATES[state].emoji} {FITNESS_STATES[state].displayName}
+                      </button>
+                    ))}
+                    <button
+                      onClick={() => setIsEditingFitness(false)}
+                      className="px-2 py-1 text-xs text-gray-500 hover:text-gray-700"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ) : (
+                  <div
+                    className={`flex items-center gap-1 ${allowEdit && onFitnessChange ? 'cursor-pointer hover:bg-retro-cream px-1 rounded' : ''}`}
+                    onClick={() => allowEdit && onFitnessChange && setIsEditingFitness(true)}
+                  >
+                    <span
+                      className="font-bold text-sm"
+                      style={{ color: FITNESS_STATES[fitnessStateProp].color }}
+                    >
+                      {FITNESS_STATES[fitnessStateProp].emoji} {FITNESS_STATES[fitnessStateProp].displayName}
+                    </span>
+                    <span className="text-xs text-gray-400">
+                      ({FITNESS_STATES[fitnessStateProp].multiplier.toFixed(2)}x)
+                    </span>
+                    {allowEdit && onFitnessChange && (
+                      <span className="text-xs text-retro-blue ml-1">✏️</span>
+                    )}
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -685,9 +772,26 @@ interface PlayerCardModalProps {
   onClose: () => void;
   mojoLevel?: MojoLevel;
   fitnessState?: FitnessState;
+  /** EXH-036: Callback when mojo is changed via player card edit */
+  onMojoChange?: (newMojo: MojoLevel) => void;
+  /** EXH-036: Callback when fitness is changed via player card edit */
+  onFitnessChange?: (newFitness: FitnessState) => void;
+  /** EXH-036: Whether editing is allowed (true during games) */
+  allowEdit?: boolean;
 }
 
-export function PlayerCardModal({ isOpen, playerId, playerName, teamId, onClose, mojoLevel, fitnessState: fitnessStateProp }: PlayerCardModalProps) {
+export function PlayerCardModal({
+  isOpen,
+  playerId,
+  playerName,
+  teamId,
+  onClose,
+  mojoLevel,
+  fitnessState: fitnessStateProp,
+  onMojoChange,
+  onFitnessChange,
+  allowEdit = false,
+}: PlayerCardModalProps) {
   if (!isOpen) return null;
 
   return (
@@ -703,6 +807,9 @@ export function PlayerCardModal({ isOpen, playerId, playerName, teamId, onClose,
           onClose={onClose}
           mojoLevel={mojoLevel}
           fitnessState={fitnessStateProp}
+          onMojoChange={onMojoChange}
+          onFitnessChange={onFitnessChange}
+          allowEdit={allowEdit}
         />
       </div>
     </div>

@@ -16,6 +16,11 @@ import { getTeamColors, getFielderBorderColors } from "@/config/teamColors";
 import { defaultTigersPlayers, defaultTigersPitchers, defaultSoxPlayers, defaultSoxPitchers } from "@/data/defaultRosters";
 import { useGameState, type HitType, type OutType, type WalkType, type RunnerAdvancement } from "@/hooks/useGameState";
 import { usePlayerState, type PlayerStateData, getStateBadge, formatMultiplier } from "@/app/hooks/usePlayerState";
+// EXH-036: Import Mojo/Fitness types for PlayerCardModal editing
+import type { MojoLevel } from "../../../engines/mojoEngine";
+import type { FitnessState } from "../../../engines/fitnessEngine";
+import { MOJO_STATES, getMojoColor } from "../../../engines/mojoEngine";
+import { FITNESS_STATES } from "../../../engines/fitnessEngine";
 import { useFameTracking, type FameEventDisplay, formatFameValue, getFameColor, getLITier } from "@/app/hooks/useFameTracking";
 
 // Note: Using GameState from useGameState hook instead of local interface
@@ -46,17 +51,55 @@ export function GameTracker() {
   const { gameId } = useParams();
   const location = useLocation();
 
-  // Get rosters from navigation state or use defaults
+  // Get rosters and team info from navigation state or use defaults
   const navigationState = location.state as {
     awayPlayers?: Player[];
     awayPitchers?: Pitcher[];
     homePlayers?: Player[];
     homePitchers?: Pitcher[];
+    awayTeamName?: string;
+    homeTeamName?: string;
+    awayTeamId?: string;
+    homeTeamId?: string;
+    // Team colors from database (passed from ExhibitionGame)
+    awayTeamColor?: string;
+    awayTeamBorderColor?: string;
+    homeTeamColor?: string;
+    homeTeamBorderColor?: string;
+    stadiumName?: string;
+    awayRecord?: string;
+    homeRecord?: string;
+    gameMode?: 'exhibition' | 'franchise' | 'playoff';
   } | null;
 
-  // Team IDs - in production these would come from game data
-  const homeTeamId = 'sox';
-  const awayTeamId = 'tigers';
+  // Team IDs - use navigation state or defaults
+  const homeTeamId = navigationState?.homeTeamId || 'sox';
+  const awayTeamId = navigationState?.awayTeamId || 'tigers';
+  const homeTeamName = navigationState?.homeTeamName || 'SOX';
+  const awayTeamName = navigationState?.awayTeamName || 'TIGERS';
+  const stadiumName = navigationState?.stadiumName;
+  const awayRecord = navigationState?.awayRecord || (navigationState?.gameMode === 'exhibition' ? '0-0' : '0-0');
+  const homeRecord = navigationState?.homeRecord || (navigationState?.gameMode === 'exhibition' ? '0-0' : '0-0');
+
+  // Team colors - prefer navigation state (from database), fall back to static config
+  const awayTeamColor = navigationState?.awayTeamColor || getTeamColors(awayTeamId).primary;
+  const awayTeamBorderColor = navigationState?.awayTeamBorderColor || getTeamColors(awayTeamId).secondary;
+  const homeTeamColor = navigationState?.homeTeamColor || getTeamColors(homeTeamId).primary;
+  const homeTeamBorderColor = navigationState?.homeTeamBorderColor || getTeamColors(homeTeamId).secondary;
+
+  // Game timer state
+  const [gameStartTime] = useState(() => new Date());
+  const [elapsedMinutes, setElapsedMinutes] = useState(0);
+
+  // Update elapsed time every minute
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const now = new Date();
+      const diff = Math.floor((now.getTime() - gameStartTime.getTime()) / 60000);
+      setElapsedMinutes(diff);
+    }, 60000);
+    return () => clearInterval(interval);
+  }, [gameStartTime]);
 
   // Use the game state hook for real data persistence
   const {
@@ -107,11 +150,19 @@ export function GameTracker() {
     rbi?: number;
   } | null>(null);
 
-  // Player card modal state
-  const [selectedPlayer, setSelectedPlayer] = useState<{ name: string; type: 'batter' | 'pitcher' } | null>(null);
+  // Player card modal state - EXH-036: Added playerId for mojo/fitness editing
+  const [selectedPlayer, setSelectedPlayer] = useState<{ name: string; type: 'batter' | 'pitcher'; playerId: string } | null>(null);
 
   // End game confirmation state
   const [showEndGameConfirmation, setShowEndGameConfirmation] = useState(false);
+
+  // Runner names tracking - who is on each base
+  // Updated when batters reach base via hit, walk, error, etc.
+  const [runnerNames, setRunnerNames] = useState<{
+    first?: string;
+    second?: string;
+    third?: string;
+  }>({});
 
   // Enhanced field toggle - use new FieldCanvas-based interactive field
   const [useEnhancedField, setUseEnhancedField] = useState(true);
@@ -170,11 +221,19 @@ export function GameTracker() {
   // Determine which team is batting and which is fielding
   const battingTeamId = gameState.isTop ? awayTeamId : homeTeamId;
   const fieldingTeamId = gameState.isTop ? homeTeamId : awayTeamId;
-  
-  // Get team colors
-  const battingTeamColors = getTeamColors(battingTeamId);
-  const fieldingTeamColors = getTeamColors(fieldingTeamId);
-  const [fielderColor1, fielderColor2] = getFielderBorderColors(fieldingTeamId);
+
+  // Get team colors - use navigation state (from database) if available, fall back to static config
+  // This ensures teams loaded from IndexedDB show correct colors
+  const battingTeamColors = gameState.isTop
+    ? { primary: awayTeamColor, secondary: awayTeamBorderColor }
+    : { primary: homeTeamColor, secondary: homeTeamBorderColor };
+  const fieldingTeamColors = gameState.isTop
+    ? { primary: homeTeamColor, secondary: homeTeamBorderColor }
+    : { primary: awayTeamColor, secondary: awayTeamBorderColor };
+
+  // Fielder border colors alternate between primary and secondary
+  const fielderColor1 = fieldingTeamColors.primary;
+  const fielderColor2 = fieldingTeamColors.secondary;
 
   // Mock roster data - in production this would come from your game state
   const availablePitchers = [
@@ -204,9 +263,19 @@ export function GameTracker() {
     { name: 'R. LOPEZ', pos: 'C', batting: false },
   ];
 
+  // EXH-036: Helper to generate consistent player IDs (must match playerStateHook registration)
+  const generatePlayerId = (name: string, team: 'home' | 'away') =>
+    `${team}-${name.replace(/\s+/g, '-').toLowerCase()}`;
+
+  // EXH-036: Determine current team batting (for ID generation)
+  // When it's top of inning, away team bats; bottom of inning, home team bats
+  const battingTeam: 'home' | 'away' = gameState.isTop ? 'away' : 'home';
+  const fieldingTeam: 'home' | 'away' = gameState.isTop ? 'home' : 'away';
+
   // LineupCard data derived from current team data
+  // EXH-036: Use consistent IDs that match playerStateHook registration
   const lineupCardData: LineupPlayer[] = currentLineup.map((player, idx) => ({
-    id: `lineup-${idx}`,
+    id: generatePlayerId(player.name, battingTeam),
     name: player.name,
     position: player.pos,
     battingOrder: idx + 1,
@@ -214,16 +283,16 @@ export function GameTracker() {
     battingHand: 'R', // Would come from player data
   }));
 
-  const benchCardData: BenchPlayer[] = benchPlayers.map((player, idx) => ({
-    id: `bench-${idx}`,
+  const benchCardData: BenchPlayer[] = benchPlayers.map((player) => ({
+    id: generatePlayerId(player.name, battingTeam),
     name: player.name,
     positions: [player.pos],
     battingHand: player.hand as 'L' | 'R' | 'S',
     isUsed: false,
   }));
 
-  const bullpenCardData: BullpenPitcher[] = availablePitchers.map((pitcher, idx) => ({
-    id: `bullpen-${idx}`,
+  const bullpenCardData: BullpenPitcher[] = availablePitchers.map((pitcher) => ({
+    id: generatePlayerId(pitcher.name, fieldingTeam),
     name: pitcher.name,
     throwingHand: pitcher.hand as 'L' | 'R',
     fitness: 'FIT' as const,
@@ -232,28 +301,16 @@ export function GameTracker() {
   }));
 
   const currentPitcherData: BullpenPitcher = {
-    id: 'current-pitcher',
+    id: generatePlayerId('R. LOPEZ', fieldingTeam),
     name: 'R. LOPEZ',
     throwingHand: 'R',
     fitness: 'FIT',
     isCurrentPitcher: true,
   };
 
-  // Field positions (defense) with SVG coordinates
-  const fieldPositions: FieldPosition[] = [
-    { name: "SMITH", position: "CF", number: "8", svgX: 200, svgY: 60 },
-    { name: "JONES", position: "LF", number: "7", svgX: 72, svgY: 72 },
-    { name: "DAVIS", position: "RF", number: "9", svgX: 328, svgY: 72 },
-    { name: "BROWN", position: "SS", number: "6", svgX: 144, svgY: 120 },
-    { name: "WILSON", position: "2B", number: "4", svgX: 256, svgY: 120 },
-    { name: "GARCIA", position: "3B", number: "5", svgX: 110, svgY: 152 },
-    { name: "MARTIN", position: "1B", number: "3", svgX: 290, svgY: 152 },
-    { name: "LOPEZ", position: "C", number: "2", svgX: 200, svgY: 259 },
-    { name: "PITCHER", position: "P", number: "1", svgX: 200, svgY: 165 },
-  ];
-
   // Roster data - use navigation state if available, otherwise use defaults with some at-bats
-  const awayTeamPlayers = navigationState?.awayPlayers || [
+  // Use useState so we can update the roster when substitutions are made
+  const [awayTeamPlayers, setAwayTeamPlayers] = useState<Player[]>(navigationState?.awayPlayers || [
     { name: 'J. MARTINEZ', position: 'SS', battingOrder: 1, stats: { ab: 2, h: 0, r: 0, rbi: 0, bb: 0, k: 1 }, battingHand: 'R' as const },
     { name: 'A. SMITH', position: 'CF', battingOrder: 2, stats: { ab: 2, h: 1, r: 1, rbi: 0, bb: 0, k: 0 }, battingHand: 'L' as const },
     { name: 'D. JONES', position: 'LF', battingOrder: 3, stats: { ab: 2, h: 1, r: 0, rbi: 1, bb: 0, k: 0 }, battingHand: 'R' as const },
@@ -267,7 +324,7 @@ export function GameTracker() {
     { name: 'A. TAYLOR', position: 'C', stats: { ab: 0, h: 0, r: 0, rbi: 0, bb: 0, k: 0 }, battingHand: 'R' as const },
     { name: 'B. ANDERSON', position: 'IF', stats: { ab: 0, h: 0, r: 0, rbi: 0, bb: 0, k: 0 }, battingHand: 'L' as const },
     { name: 'C. THOMAS', position: 'OF', stats: { ab: 0, h: 0, r: 0, rbi: 0, bb: 0, k: 0 }, battingHand: 'R' as const },
-  ];
+  ]);
 
   const awayTeamPitchers = navigationState?.awayPitchers || [
     { name: 'R. LOPEZ', stats: { ip: '4.2', h: 4, r: 4, er: 4, bb: 2, k: 3, pitches: 67 }, throwingHand: 'R' as const, isStarter: true, isActive: true },
@@ -277,7 +334,8 @@ export function GameTracker() {
   ];
 
   // Mock roster data for Home Team (Sox)
-  const homeTeamPlayers = navigationState?.homePlayers || [
+  // Use useState so we can update the roster when substitutions are made
+  const [homeTeamPlayers, setHomeTeamPlayers] = useState<Player[]>(navigationState?.homePlayers || [
     { name: 'P. HERNANDEZ', position: 'CF', battingOrder: 1, stats: { ab: 2, h: 1, r: 1, rbi: 0, bb: 0, k: 0 }, battingHand: 'L' as const },
     { name: 'K. WASHINGTON', position: 'SS', battingOrder: 2, stats: { ab: 2, h: 1, r: 1, rbi: 1, bb: 0, k: 0 }, battingHand: 'R' as const },
     { name: 'L. RODRIGUEZ', position: 'LF', battingOrder: 3, stats: { ab: 2, h: 1, r: 1, rbi: 2, bb: 0, k: 1 }, battingHand: 'L' as const },
@@ -291,7 +349,7 @@ export function GameTracker() {
     { name: 'E. CLARK', position: 'OF', stats: { ab: 0, h: 0, r: 0, rbi: 0, bb: 0, k: 0 }, battingHand: 'L' as const },
     { name: 'F. MILLER', position: 'IF', stats: { ab: 0, h: 0, r: 0, rbi: 0, bb: 0, k: 0 }, battingHand: 'R' as const },
     { name: 'G. EVANS', position: 'C', stats: { ab: 0, h: 0, r: 0, rbi: 0, bb: 0, k: 0 }, battingHand: 'R' as const },
-  ];
+  ]);
 
   const homeTeamPitchers = navigationState?.homePitchers || [
     { name: 'S. WHITE', stats: { ip: '5.0', h: 3, r: 3, er: 3, bb: 1, k: 4, pitches: 72 }, throwingHand: 'R' as const, isStarter: true, isActive: true },
@@ -299,6 +357,40 @@ export function GameTracker() {
     { name: 'V. TURNER', stats: { ip: '0.0', h: 0, r: 0, er: 0, bb: 0, k: 0, pitches: 0 }, throwingHand: 'R' as const },
     { name: 'W. COLLINS', stats: { ip: '0.0', h: 0, r: 0, er: 0, bb: 0, k: 0, pitches: 0 }, throwingHand: 'R' as const },
   ];
+
+  // Field positions (defense) with SVG coordinates - dynamically built from fielding team's lineup
+  // When isTop = true, home team is fielding; when isTop = false, away team is fielding
+  const fieldingTeamPlayers = fieldingTeam === 'home' ? homeTeamPlayers : awayTeamPlayers;
+
+  // Map position abbreviations to position numbers and SVG coordinates
+  const positionMap: Record<string, { number: string; svgX: number; svgY: number }> = {
+    'P': { number: '1', svgX: 200, svgY: 165 },
+    'C': { number: '2', svgX: 200, svgY: 259 },
+    '1B': { number: '3', svgX: 290, svgY: 152 },
+    '2B': { number: '4', svgX: 256, svgY: 120 },
+    '3B': { number: '5', svgX: 110, svgY: 152 },
+    'SS': { number: '6', svgX: 144, svgY: 120 },
+    'LF': { number: '7', svgX: 72, svgY: 72 },
+    'CF': { number: '8', svgX: 200, svgY: 60 },
+    'RF': { number: '9', svgX: 328, svgY: 72 },
+  };
+
+  // Build field positions from fielding team's lineup (first 9 players with valid positions)
+  const fieldPositions: FieldPosition[] = fieldingTeamPlayers
+    .filter(player => player.position && positionMap[player.position])
+    .slice(0, 9)
+    .map(player => {
+      const posData = positionMap[player.position!];
+      // Extract last name for display (e.g., "J. MARTINEZ" -> "MARTINEZ")
+      const lastName = player.name.split(' ').pop() || player.name;
+      return {
+        name: lastName.toUpperCase(),
+        position: player.position!,
+        number: posData.number,
+        svgX: posData.svgX,
+        svgY: posData.svgY,
+      };
+    });
 
   // Get current pitcher numbers
   const awayPitcher = awayTeamPitchers.find(p => p.isActive);
@@ -330,21 +422,21 @@ export function GameTracker() {
 
       // Convert roster to lineup format required by initializeGame
       const awayLineup = awayTeamPlayers
-        .filter(p => p.battingOrder) // Only players in batting order
+        .filter(p => p.battingOrder && p.position) // Only players in batting order with positions
         .sort((a, b) => (a.battingOrder || 0) - (b.battingOrder || 0))
         .map(p => ({
           playerId: `away-${p.name.replace(/\s+/g, '-').toLowerCase()}`,
           playerName: p.name,
-          position: p.position,
+          position: p.position!, // Safe - filtered above
         }));
 
       const homeLineup = homeTeamPlayers
-        .filter(p => p.battingOrder) // Only players in batting order
+        .filter(p => p.battingOrder && p.position) // Only players in batting order with positions
         .sort((a, b) => (a.battingOrder || 0) - (b.battingOrder || 0))
         .map(p => ({
           playerId: `home-${p.name.replace(/\s+/g, '-').toLowerCase()}`,
           playerName: p.name,
-          position: p.position,
+          position: p.position!, // Safe - filtered above
         }));
 
       console.log('[GameTracker] Initializing game with lineups:', {
@@ -372,6 +464,109 @@ export function GameTracker() {
 
     initializeOrLoadGame();
   }, [gameInitialized, awayTeamPlayers, homeTeamPlayers, awayPitcher, homePitcher, awayTeamId, homeTeamId, gameId, initializeGame, loadExistingGame]);
+
+  // EXH-036: Register players with playerStateHook for mojo/fitness tracking
+  // This runs once after game is initialized to set up all players with default states
+  useEffect(() => {
+    if (!gameInitialized) return;
+
+    // Helper to get player ID from name (consistent with how gameState creates IDs)
+    const getPlayerId = (name: string, teamPrefix: string) =>
+      `${teamPrefix}-${name.replace(/\s+/g, '-').toLowerCase()}`;
+
+    // Register all away team batters
+    awayTeamPlayers.forEach((player) => {
+      const playerId = getPlayerId(player.name, 'away');
+      // Only register if not already registered
+      if (!playerStateHook.getPlayer(playerId)) {
+        playerStateHook.registerPlayer(
+          playerId,
+          player.name,
+          (player.position || 'DH') as import('../../../engines/fitnessEngine').PlayerPosition,
+          0, // Starting mojo: Normal
+          'FIT', // Starting fitness: FIT
+          [], // Traits (not available in current Player type)
+          25 // Default age
+        );
+      }
+    });
+
+    // Register all home team batters
+    homeTeamPlayers.forEach((player) => {
+      const playerId = getPlayerId(player.name, 'home');
+      if (!playerStateHook.getPlayer(playerId)) {
+        playerStateHook.registerPlayer(
+          playerId,
+          player.name,
+          (player.position || 'DH') as import('../../../engines/fitnessEngine').PlayerPosition,
+          0,
+          'FIT',
+          [],
+          25
+        );
+      }
+    });
+
+    // Register pitchers
+    if (awayPitcher) {
+      const pitcherId = getPlayerId(awayPitcher.name, 'away');
+      if (!playerStateHook.getPlayer(pitcherId)) {
+        playerStateHook.registerPlayer(
+          pitcherId,
+          awayPitcher.name,
+          'SP',
+          0,
+          'FIT',
+          [],
+          25
+        );
+      }
+    }
+    if (homePitcher) {
+      const pitcherId = getPlayerId(homePitcher.name, 'home');
+      if (!playerStateHook.getPlayer(pitcherId)) {
+        playerStateHook.registerPlayer(
+          pitcherId,
+          homePitcher.name,
+          'SP',
+          0,
+          'FIT',
+          [],
+          25
+        );
+      }
+    }
+
+    console.log('[GameTracker] Registered players with playerStateHook for mojo/fitness tracking');
+  }, [gameInitialized, awayTeamPlayers, homeTeamPlayers, awayPitcher, homePitcher, playerStateHook]);
+
+  // EXH-036: Helper functions to get/set mojo/fitness by player name and team
+  // These are used by TeamRoster components to enable mojo/fitness editing in player cards
+  const getPlayerIdFromName = useCallback((name: string, team: 'away' | 'home') => {
+    return `${team}-${name.replace(/\s+/g, '-').toLowerCase()}`;
+  }, []);
+
+  const getPlayerMojoByName = useCallback((name: string, team: 'away' | 'home') => {
+    const playerId = getPlayerIdFromName(name, team);
+    const playerData = playerStateHook.getPlayer(playerId);
+    return playerData?.gameState.currentMojo;
+  }, [getPlayerIdFromName, playerStateHook]);
+
+  const getPlayerFitnessByName = useCallback((name: string, team: 'away' | 'home') => {
+    const playerId = getPlayerIdFromName(name, team);
+    const playerData = playerStateHook.getPlayer(playerId);
+    return playerData?.fitnessProfile.currentFitness;
+  }, [getPlayerIdFromName, playerStateHook]);
+
+  const setPlayerMojoByName = useCallback((name: string, team: 'away' | 'home', newMojo: MojoLevel) => {
+    const playerId = getPlayerIdFromName(name, team);
+    playerStateHook.setMojo(playerId, newMojo);
+  }, [getPlayerIdFromName, playerStateHook]);
+
+  const setPlayerFitnessByName = useCallback((name: string, team: 'away' | 'home', newFitness: FitnessState) => {
+    const playerId = getPlayerIdFromName(name, team);
+    playerStateHook.setFitness(playerId, newFitness);
+  }, [getPlayerIdFromName, playerStateHook]);
 
   // Get current batter's lineup position
   const battingTeamPlayers = gameState.isTop ? awayTeamPlayers : homeTeamPlayers;
@@ -461,9 +656,48 @@ export function GameTracker() {
       changePitcher(sub.incomingPlayerId, sub.outgoingPlayerId, sub.incomingPlayerName, sub.outgoingPlayerName);
     } else if (sub.type === 'player_sub' || sub.type === 'double_switch') {
       makeSubstitution(sub.incomingPlayerId, sub.outgoingPlayerId, sub.incomingPlayerName, sub.outgoingPlayerName);
+
+      // EXH-018 FIX: Also update local player arrays so UI reflects the substitution
+      // Find which team the outgoing player is on and update that team's roster
+      const updateTeamRoster = (players: Player[], setPlayers: React.Dispatch<React.SetStateAction<Player[]>>) => {
+        const outgoingIndex = players.findIndex(p => p.name === sub.outgoingPlayerName);
+        const incomingIndex = players.findIndex(p => p.name === sub.incomingPlayerName);
+
+        if (outgoingIndex >= 0 && incomingIndex >= 0) {
+          setPlayers(prev => {
+            const updated = [...prev];
+            // Transfer batting order from outgoing to incoming player
+            const outgoingBattingOrder = updated[outgoingIndex].battingOrder;
+            const outgoingPosition = updated[outgoingIndex].position;
+
+            // Incoming player takes the batting order and position
+            updated[incomingIndex] = {
+              ...updated[incomingIndex],
+              battingOrder: outgoingBattingOrder,
+              position: outgoingPosition,
+            };
+
+            // Outgoing player loses batting order and is marked as out of game
+            updated[outgoingIndex] = {
+              ...updated[outgoingIndex],
+              battingOrder: undefined,
+              isOutOfGame: true,
+            };
+
+            return updated;
+          });
+          return true;
+        }
+        return false;
+      };
+
+      // Try away team first, then home team
+      if (!updateTeamRoster(awayTeamPlayers, setAwayTeamPlayers)) {
+        updateTeamRoster(homeTeamPlayers, setHomeTeamPlayers);
+      }
     }
     // position_swap would need additional handling
-  }, [changePitcher, makeSubstitution]);
+  }, [changePitcher, makeSubstitution, awayTeamPlayers, homeTeamPlayers]);
 
   const handlePlayComplete = (playData: any) => {
     console.log("Play complete:", playData);
@@ -580,8 +814,11 @@ export function GameTracker() {
           console.log(`D3K recorded: Batter reached first (K stat counted, no out recorded)`);
         } else if (outType === 'K' || outType === 'KL') {
           // Normal strikeout OR D3K where batter didn't reach (thrown out at first)
-          // Check if this is D3K thrown out scenario
-          const isD3KThrownOut = playData.fieldingSequence.length > 0 && playData.fieldingSequence[0] === 2; // Catcher involved
+          // Check if this is D3K thrown out scenario - D3K has catcher throwing to first: [2, 3]
+          // Regular strikeouts have empty fieldingSequence []
+          const isD3KThrownOut = playData.fieldingSequence.length >= 2 &&
+                                  playData.fieldingSequence[0] === 2 &&
+                                  playData.fieldingSequence[1] === 3;
           if (isD3KThrownOut && !batterReached) {
             // D3K where batter was thrown out - still counts K for batter/pitcher, but also out
             await recordD3K(false);
@@ -612,6 +849,72 @@ export function GameTracker() {
 
       // Note: Runner outcomes are now handled by runnerAdvancement parameter
       // No need to call applyRunnerOutcomes() separately
+
+      // ============================================
+      // UPDATE RUNNER NAMES based on outcomes
+      // Tracks WHO is on each base for display purposes
+      // ============================================
+      if (playData.runnerOutcomes) {
+        const outcomes = playData.runnerOutcomes;
+        const newRunnerNames: { first?: string; second?: string; third?: string } = {};
+
+        // Process runners in reverse order (third -> second -> first) to handle cascading
+        // Runner from third -> goes home (scored) or stays, or out
+        if (outcomes.third) {
+          if (outcomes.third.to === 'third') {
+            // Runner stayed on third
+            newRunnerNames.third = runnerNames.third;
+          }
+          // If to === 'home' or 'out', they're no longer on base
+        } else if (gameState.bases.third && runnerNames.third) {
+          // No outcome specified but base was occupied - preserve runner
+          newRunnerNames.third = runnerNames.third;
+        }
+
+        // Runner from second -> may go to third, home, or out
+        if (outcomes.second) {
+          if (outcomes.second.to === 'third') {
+            newRunnerNames.third = runnerNames.second;
+          } else if (outcomes.second.to === 'second') {
+            // Runner stayed on second
+            newRunnerNames.second = runnerNames.second;
+          }
+          // If to === 'home' or 'out', they're no longer on base
+        } else if (gameState.bases.second && runnerNames.second) {
+          // No outcome specified but base was occupied - preserve runner
+          newRunnerNames.second = runnerNames.second;
+        }
+
+        // Runner from first -> may go to second, third, home, or out
+        if (outcomes.first) {
+          if (outcomes.first.to === 'second') {
+            newRunnerNames.second = runnerNames.first;
+          } else if (outcomes.first.to === 'third') {
+            newRunnerNames.third = runnerNames.first;
+          } else if (outcomes.first.to === 'first') {
+            // Runner stayed on first
+            newRunnerNames.first = runnerNames.first;
+          }
+          // If to === 'home' or 'out', they're no longer on base
+        } else if (gameState.bases.first && runnerNames.first) {
+          // No outcome specified but base was occupied - preserve runner
+          newRunnerNames.first = runnerNames.first;
+        }
+
+        // Now add the batter to their destination base
+        const batterName = gameState.currentBatterName;
+        if (outcomes.batter?.to === 'first') {
+          newRunnerNames.first = batterName;
+        } else if (outcomes.batter?.to === 'second') {
+          newRunnerNames.second = batterName;
+        } else if (outcomes.batter?.to === 'third') {
+          newRunnerNames.third = batterName;
+        }
+        // If batter goes home (HR) or out, they're not on base
+
+        setRunnerNames(newRunnerNames);
+        console.log('[RunnerNames] Updated:', newRunnerNames);
+      }
 
       // Log spray chart data
       if (playData.ballLocation) {
@@ -676,17 +979,20 @@ export function GameTracker() {
         isPlayoff: false, // TODO: Get from game context
       };
 
-      if (playData.type === 'hr') {
-        playerStateHook.updateMojo(gameState.currentBatterId, 'HOME_RUN', gameSituation);
-      } else if (playData.type === 'hit') {
-        // Map hit type to specific MojoTrigger
-        const hitTrigger = playData.hitType === '2B' ? 'DOUBLE'
-          : playData.hitType === '3B' ? 'TRIPLE'
-          : 'SINGLE';
-        playerStateHook.updateMojo(gameState.currentBatterId, hitTrigger, gameSituation);
-      } else if (playData.type === 'out' && (playData.outType === 'K' || playData.outType === 'KL')) {
-        playerStateHook.updateMojo(gameState.currentBatterId, 'STRIKEOUT', gameSituation);
-      }
+      // DISABLED: Auto-updating mojo based on play outcomes
+      // Per user request, mojo should only change via manual user input through the PlayerCard
+      // The updateMojo calls below have been commented out:
+      //
+      // if (playData.type === 'hr') {
+      //   playerStateHook.updateMojo(gameState.currentBatterId, 'HOME_RUN', gameSituation);
+      // } else if (playData.type === 'hit') {
+      //   const hitTrigger = playData.hitType === '2B' ? 'DOUBLE'
+      //     : playData.hitType === '3B' ? 'TRIPLE'
+      //     : 'SINGLE';
+      //   playerStateHook.updateMojo(gameState.currentBatterId, hitTrigger, gameSituation);
+      // } else if (playData.type === 'out' && (playData.outType === 'K' || playData.outType === 'KL')) {
+      //   playerStateHook.updateMojo(gameState.currentBatterId, 'STRIKEOUT', gameSituation);
+      // }
 
     } catch (error) {
       console.error('Failed to record enhanced play:', error);
@@ -713,10 +1019,49 @@ export function GameTracker() {
     }
   }, [recordEvent, undoSystem]);
 
-  const handleSubstitution = (teamType: 'away' | 'home', benchPlayerName: string, lineupPlayerName: string) => {
+  const handleSubstitution = useCallback((teamType: 'away' | 'home', benchPlayerName: string, lineupPlayerName: string) => {
     console.log(`Substitution: ${benchPlayerName} replacing ${lineupPlayerName} on ${teamType} team`);
-    // In a real app, you would update the game state and persist the substitution
-  };
+
+    // Generate player IDs in same format as initializeGame
+    const benchPlayerId = `${teamType}-${benchPlayerName.replace(/\s+/g, '-').toLowerCase()}`;
+    const lineupPlayerId = `${teamType}-${lineupPlayerName.replace(/\s+/g, '-').toLowerCase()}`;
+
+    // Call the hook's makeSubstitution function to update game state
+    makeSubstitution(benchPlayerId, lineupPlayerId, benchPlayerName, lineupPlayerName);
+
+    // Update local player state for UI display
+    const players = teamType === 'away' ? awayTeamPlayers : homeTeamPlayers;
+    const setPlayers = teamType === 'away' ? setAwayTeamPlayers : setHomeTeamPlayers;
+
+    const outgoingIndex = players.findIndex(p => p.name === lineupPlayerName);
+    const incomingIndex = players.findIndex(p => p.name === benchPlayerName);
+
+    if (outgoingIndex >= 0 && incomingIndex >= 0) {
+      setPlayers(prev => {
+        const updated = [...prev];
+        // Transfer batting order and position from outgoing to incoming player
+        const outgoingBattingOrder = updated[outgoingIndex].battingOrder;
+        const outgoingPosition = updated[outgoingIndex].position;
+
+        // Incoming player takes the batting order and position
+        updated[incomingIndex] = {
+          ...updated[incomingIndex],
+          battingOrder: outgoingBattingOrder,
+          position: outgoingPosition,
+        };
+
+        // Outgoing player loses batting order, position, and is marked as out of game
+        updated[outgoingIndex] = {
+          ...updated[outgoingIndex],
+          battingOrder: undefined,
+          position: undefined, // Remove position so they don't show in field
+          isOutOfGame: true,
+        };
+
+        return updated;
+      });
+    }
+  }, [makeSubstitution, awayTeamPlayers, homeTeamPlayers]);
 
   const handlePitcherSubstitution = (teamType: 'away' | 'home', newPitcherName: string, replacedName: string, replacedType: 'player' | 'pitcher') => {
     console.log(`Pitcher Substitution: ${newPitcherName} replacing ${replacedName} (${replacedType}) on ${teamType} team`);
@@ -731,10 +1076,29 @@ export function GameTracker() {
     changePitcher(newPitcherId, exitingPitcherId, newPitcherName, replacedName);
   };
 
-  const handlePositionSwap = (teamType: 'away' | 'home', player1Name: string, player2Name: string) => {
+  const handlePositionSwap = useCallback((teamType: 'away' | 'home', player1Name: string, player2Name: string) => {
     console.log(`Position Swap: ${player1Name} and ${player2Name} swapping positions on ${teamType} team`);
-    // In a real app, you would update the game state and persist the position swap
-  };
+
+    // Update local player state for UI display
+    const setPlayers = teamType === 'away' ? setAwayTeamPlayers : setHomeTeamPlayers;
+
+    setPlayers(prev => {
+      const updated = [...prev];
+      const player1Index = updated.findIndex(p => p.name === player1Name);
+      const player2Index = updated.findIndex(p => p.name === player2Name);
+
+      if (player1Index >= 0 && player2Index >= 0) {
+        // Swap positions only (not batting order) during live game
+        const player1Position = updated[player1Index].position;
+        const player2Position = updated[player2Index].position;
+
+        updated[player1Index] = { ...updated[player1Index], position: player2Position };
+        updated[player2Index] = { ...updated[player2Index], position: player1Position };
+      }
+
+      return updated;
+    });
+  }, []);
 
   // ============================================
   // OUTCOME RECORDING HANDLERS
@@ -804,13 +1168,21 @@ export function GameTracker() {
   // Handle end of inning
   const handleEndInning = useCallback(() => {
     endInning();
+    // Clear runner names when inning ends (bases are cleared)
+    setRunnerNames({});
   }, [endInning]);
 
   // Handle end game with navigation
   const handleEndGame = useCallback(async () => {
     await hookEndGame();
-    navigate(`/post-game/${gameId}`);
-  }, [hookEndGame, navigate, gameId]);
+    // Pass game mode so PostGameSummary knows where to route
+    navigate(`/post-game/${gameId}`, {
+      state: {
+        gameMode: navigationState?.gameMode || 'franchise',
+        franchiseId: gameId?.replace('franchise-', '') || '1',
+      }
+    });
+  }, [hookEndGame, navigate, gameId, navigationState?.gameMode]);
 
   return (
     <DndProvider backend={HTML5Backend}>
@@ -872,8 +1244,8 @@ export function GameTracker() {
         {/* Scoreboard - toggleable between full and mini */}
         {isScoreboardMinimized ? (
           <MiniScoreboard
-            awayTeamName="TIGERS"
-            homeTeamName="SOX"
+            awayTeamName={awayTeamName.toUpperCase()}
+            homeTeamName={homeTeamName.toUpperCase()}
             awayRuns={scoreboard.away.runs}
             homeRuns={scoreboard.home.runs}
             inning={gameState.inning}
@@ -886,33 +1258,35 @@ export function GameTracker() {
         <div className="bg-[#6B9462] border-b-[4px] border-[#3d5240] px-4 py-2 sticky top-0 z-10">
           <div className="max-w-7xl mx-auto">
             {/* Scoreboard row */}
-            <div className="flex items-center justify-between bg-[rgb(133,181,229)] border-[4px] border-[#1a3020] p-2">
-              {/* Super Mega Baseball Logo + Minimize Button */}
+            <div className="relative flex items-center justify-between bg-[rgb(133,181,229)] border-[4px] border-[#1a3020] p-2">
+              {/* Mini button - absolute positioned top-right */}
+              <button
+                onClick={() => setIsScoreboardMinimized(true)}
+                className="absolute top-1 right-1 flex items-center gap-1 px-2 py-0.5 bg-[#3d5240] border-2 border-[#2a3a2d] hover:bg-[#4a6a4a] transition-colors z-10"
+                title="Minimize Scoreboard"
+              >
+                <ChevronUp className="w-3 h-3 text-[#E8E8D8]" />
+                <span className="text-[#E8E8D8] text-[8px] font-bold">MINI</span>
+              </button>
+
+              {/* Super Mega Baseball Logo */}
               <div className="flex items-center gap-2">
-                <div className="bg-white border-[4px] border-[#0066FF] px-[12px] py-[6px] shadow-[4px_4px_0px_0px_#DD0000]">
-                  <div className="text-xs text-[#DD0000] tracking-wide leading-tight">SUPER MEGA</div>
-                  <div className="text-sm text-[#0066FF] tracking-wide leading-tight">BASEBALL</div>
+                <div className="bg-white border-[4px] border-[#0066FF] px-[10px] py-[4px] shadow-[3px_3px_0px_0px_#DD0000]">
+                  <div className="text-[10px] text-[#DD0000] tracking-wide leading-tight">SUPER MEGA</div>
+                  <div className="text-xs text-[#0066FF] tracking-wide leading-tight">BASEBALL</div>
                 </div>
-                <button
-                  onClick={() => setIsScoreboardMinimized(true)}
-                  className="flex items-center gap-1 px-2 py-1 bg-[#3d5240] border-2 border-[#2a3a2d] hover:bg-[#4a6a4a] transition-colors"
-                  title="Minimize Scoreboard"
-                >
-                  <ChevronUp className="w-4 h-4 text-[#E8E8D8]" />
-                  <span className="text-[#E8E8D8] text-[10px] font-bold">MINI</span>
-                </button>
               </div>
 
-              {/* Fenway-style scoreboard in the middle */}
-              <div className="mx-4">
-                <div className="bg-[#556B55] border-[4px] border-[#3d5240] p-2 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.5)]">
+              {/* Fenway-style scoreboard in the middle - compact for more field visibility */}
+              <div className="mx-2">
+                <div className="bg-[#556B55] border-[3px] border-[#3d5240] p-1.5 shadow-[3px_3px_0px_0px_rgba(0,0,0,0.5)]">
                   {/* Stadium name header */}
                   <div className="text-center text-[#E8E8D8] text-xs font-bold tracking-[0.3em] mb-1">
-                    {getTeamColors(homeTeamId).stadium || 'BALLPARK'}
+                    {stadiumName || getTeamColors(homeTeamId).stadium || 'BALLPARK'}
                   </div>
                   
                   {/* Scoreboard grid */}
-                  <div className="grid gap-[1px] mb-2" style={{ gridTemplateColumns: '26px 90px repeat(9, 24px) 24px 6px 28px 28px 28px 6px 50px 8px auto' }}>
+                  <div className="grid gap-[1px] mb-2" style={{ gridTemplateColumns: '26px 110px repeat(9, 22px) 22px 6px 26px 26px 26px 6px 48px 8px auto' }}>
                     {/* Header row */}
                     <div className="text-[#E8E8D8] text-[9px] font-bold">P</div>
                     <div></div>
@@ -930,12 +1304,17 @@ export function GameTracker() {
                     <div></div>
                     
                     {/* Away team row */}
+                    {/* P column: shows pitcher position number (1) - jersey numbers not yet in data model */}
                     <div className="bg-[#3d5240] border-2 border-[#2a3a2d] min-h-[20px] flex items-center justify-center">
-                      <span className="text-[#E8E8D8] text-xs font-bold">{awayPitcherPlayer?.battingOrder || '1'}</span>
+                      <span className="text-[#E8E8D8] text-xs font-bold">1</span>
                     </div>
-                    <div className="text-[#E8E8D8] text-[11px] font-bold flex items-center pl-2" style={{ 
-                      textShadow: '1px 1px 0px rgba(0,0,0,0.7)'
-                    }}>TIGERS</div>
+                    <div
+                      className="text-[#E8E8D8] font-bold flex items-center pl-1 overflow-hidden whitespace-nowrap text-ellipsis"
+                      style={{
+                        textShadow: '1px 1px 0px rgba(0,0,0,0.7)',
+                        fontSize: awayTeamName.length > 12 ? '8px' : awayTeamName.length > 9 ? '9px' : awayTeamName.length > 6 ? '10px' : '11px',
+                      }}
+                    >{awayTeamName.toUpperCase()}</div>
                     {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(inning => {
                       const awayScore = scoreboard.innings[inning - 1]?.away;
                       const isCurrentInning = gameState.inning === inning && gameState.isTop;
@@ -951,7 +1330,7 @@ export function GameTracker() {
                     <div className="bg-[#3d5240] border-2 border-[#2a3a2d] text-[#E8E8D8] text-xs font-bold flex items-center justify-center">{scoreboard.away.hits}</div>
                     <div className="bg-[#3d5240] border-2 border-[#2a3a2d] text-[#E8E8D8] text-xs font-bold flex items-center justify-center">{scoreboard.away.errors}</div>
                     <div></div>
-                    <div className="bg-[#3d5240] border-2 border-[#2a3a2d] text-[#E8E8D8] text-[9px] font-bold flex items-center justify-center">47-38</div>
+                    <div className="bg-[#3d5240] border-2 border-[#2a3a2d] text-[#E8E8D8] text-[9px] font-bold flex items-center justify-center">{awayRecord}</div>
                     <div></div>
                     <div className="row-span-2 flex items-center gap-3 px-[15px] py-[0px]">
                       {/* Concessions Section */}
@@ -970,12 +1349,17 @@ export function GameTracker() {
                     </div>
                     
                     {/* Home team row */}
+                    {/* P column: shows pitcher position number (1) - jersey numbers not yet in data model */}
                     <div className="bg-[#3d5240] border-2 border-[#2a3a2d] min-h-[20px] flex items-center justify-center">
-                      <span className="text-[#E8E8D8] text-xs font-bold">{homePitcherPlayer?.battingOrder || '1'}</span>
+                      <span className="text-[#E8E8D8] text-xs font-bold">1</span>
                     </div>
-                    <div className="text-[#E8E8D8] text-[11px] font-bold flex items-center pl-2" style={{ 
-                      textShadow: '1px 1px 0px rgba(0,0,0,0.7)'
-                    }}>SOX</div>
+                    <div
+                      className="text-[#E8E8D8] font-bold flex items-center pl-1 overflow-hidden whitespace-nowrap text-ellipsis"
+                      style={{
+                        textShadow: '1px 1px 0px rgba(0,0,0,0.7)',
+                        fontSize: homeTeamName.length > 12 ? '8px' : homeTeamName.length > 9 ? '9px' : homeTeamName.length > 6 ? '10px' : '11px',
+                      }}
+                    >{homeTeamName.toUpperCase()}</div>
                     {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(inning => {
                       const homeScore = scoreboard.innings[inning - 1]?.home;
                       const isCurrentInning = gameState.inning === inning && !gameState.isTop;
@@ -991,7 +1375,7 @@ export function GameTracker() {
                     <div className="bg-[#3d5240] border-2 border-[#2a3a2d] text-[#E8E8D8] text-xs font-bold flex items-center justify-center">{scoreboard.home.hits}</div>
                     <div className="bg-[#3d5240] border-2 border-[#2a3a2d] text-[#E8E8D8] text-xs font-bold flex items-center justify-center">{scoreboard.home.errors}</div>
                     <div></div>
-                    <div className="bg-[#3d5240] border-2 border-[#2a3a2d] text-[#E8E8D8] text-[9px] font-bold flex items-center justify-center">52-33</div>
+                    <div className="bg-[#3d5240] border-2 border-[#2a3a2d] text-[#E8E8D8] text-[9px] font-bold flex items-center justify-center">{homeRecord}</div>
                     <div></div>
                   </div>
                   
@@ -1080,8 +1464,8 @@ export function GameTracker() {
                   
                   {/* Game info below scoreboard */}
                   <div className="mt-2 flex justify-between items-center text-[7px] text-[#E8E8D8]">
-                    <span>JAN 27, 2026 • GAME #12</span>
-                    <span>TIME: 1:47</span>
+                    <span>{gameStartTime.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }).toUpperCase()}</span>
+                    <span>TIME: {Math.floor(elapsedMinutes / 60)}:{(elapsedMinutes % 60).toString().padStart(2, '0')}</span>
                   </div>
                 </div>
               </div>
@@ -1116,7 +1500,7 @@ export function GameTracker() {
             /* Enhanced Interactive Field - FULL VIEWPORT, field spans entire screen
                Stands should extend to edges of viewport
                Height adjusts based on scoreboard state: mini (52px) vs full (240px) */
-            <div className="bg-[#6B9462] relative w-full" style={{ height: isScoreboardMinimized ? 'calc(100vh - 52px)' : 'calc(100vh - 240px)', minHeight: '400px' }}>
+            <div className="bg-[#6B9462] relative w-full" style={{ height: isScoreboardMinimized ? 'calc(100vh - 52px)' : 'calc(100vh - 200px)', minHeight: '400px' }}>
                 <EnhancedInteractiveField
                   gameSituation={{
                     outs: gameState.outs,
@@ -1130,6 +1514,8 @@ export function GameTracker() {
                   onRunnerMove={handleEnhancedRunnerMove}
                   onBatchRunnerMove={handleBatchRunnerMove}
                   fielderBorderColors={[fielderColor1, fielderColor2]}
+                  batterBackgroundColor={battingTeamColors.primary}
+                  batterBorderColor={battingTeamColors.secondary}
                   playerNames={{
                     1: fieldPositions.find(fp => fp.number === '1')?.name || 'P',
                     2: fieldPositions.find(fp => fp.number === '2')?.name || 'C',
@@ -1141,6 +1527,8 @@ export function GameTracker() {
                     8: fieldPositions.find(fp => fp.number === '8')?.name || 'CF',
                     9: fieldPositions.find(fp => fp.number === '9')?.name || 'RF',
                   }}
+                  runnerNames={runnerNames}
+                  currentBatterName={gameState.currentBatterName}
                   zoomLevel={fieldZoomLevel}
                 />
               </div>
@@ -1261,11 +1649,11 @@ export function GameTracker() {
           <div className="grid grid-cols-3 gap-3">
             {/* Current Batter - clickable - shows LIVE data from gameState */}
             <button
-              onClick={() => setSelectedPlayer({ name: gameState.currentBatterName || 'Unknown', type: 'batter' })}
+              onClick={() => setSelectedPlayer({ name: gameState.currentBatterName || 'Unknown', type: 'batter', playerId: gameState.currentBatterId })}
               className="bg-[#4A6A42] border-[4px] border-[#E8E8D8] p-2 text-left hover:scale-105 transition-transform cursor-pointer shadow-[4px_4px_0px_0px_rgba(0,0,0,0.3)] relative"
             >
               <div className="absolute top-1 right-2 text-[7px] text-[#E8E8D8] font-bold" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>
-                {gameState.isTop ? 'TIGERS' : 'SOX'}
+                {gameState.isTop ? awayTeamName.toUpperCase() : homeTeamName.toUpperCase()}
               </div>
               <div className="text-[7px] text-[#E8E8D8]" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>▶ AT BAT</div>
               <div className="text-xs text-[#E8E8D8] font-bold" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>{currentBatterDisplayName}</div>
@@ -1276,8 +1664,10 @@ export function GameTracker() {
             <div className="bg-[#556B55] border-[4px] border-[#E8E8D8] p-1 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.3)]">
               <div className="flex items-center justify-center gap-4 text-[8px]">
                 <div className="text-center">
-                  <div className="font-bold text-sm text-[#E8E8D8]" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>TIGERS</div>
-                  <div className="text-base text-[#E8E8D8] font-bold" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>{gameState.awayScore}</div>
+                  <div className="font-bold text-sm text-[#E8E8D8]" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>
+                    {awayTeamName.toUpperCase()}
+                  </div>
+                  <div className="text-base text-[#E8E8D8] font-bold mt-1" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>{gameState.awayScore}</div>
                 </div>
 
                 <div className="text-center px-4">
@@ -1293,19 +1683,21 @@ export function GameTracker() {
                 </div>
 
                 <div className="text-center">
-                  <div className="font-bold text-sm text-[#E8E8D8]" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>SOX</div>
-                  <div className="text-base text-[#E8E8D8] font-bold" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>{gameState.homeScore}</div>
+                  <div className="font-bold text-sm text-[#E8E8D8]" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>
+                    {homeTeamName.toUpperCase()}
+                  </div>
+                  <div className="text-base text-[#E8E8D8] font-bold mt-1" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>{gameState.homeScore}</div>
                 </div>
               </div>
             </div>
 
             {/* Current Pitcher - clickable - shows LIVE data from gameState */}
             <button
-              onClick={() => setSelectedPlayer({ name: gameState.currentPitcherName || 'Unknown', type: 'pitcher' })}
+              onClick={() => setSelectedPlayer({ name: gameState.currentPitcherName || 'Unknown', type: 'pitcher', playerId: gameState.currentPitcherId })}
               className="bg-[#4A6A42] border-[4px] border-[#E8E8D8] p-2 text-left hover:scale-105 transition-transform cursor-pointer shadow-[4px_4px_0px_0px_rgba(0,0,0,0.3)] relative"
             >
               <div className="absolute top-1 right-2 text-[7px] text-[#E8E8D8] font-bold" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>
-                {gameState.isTop ? 'SOX' : 'TIGERS'}
+                {gameState.isTop ? homeTeamName.toUpperCase() : awayTeamName.toUpperCase()}
               </div>
               <div className="text-[7px] text-[#E8E8D8]" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>PITCHING</div>
               <div className="text-xs text-[#E8E8D8] font-bold" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>{currentPitcherDisplayName}</div>
@@ -1369,17 +1761,17 @@ export function GameTracker() {
             </div>
           </div>
 
-          {/* Team Rosters */}
+          {/* Team Rosters - EXH-036: Now with mojo/fitness editing support */}
           <div className="grid grid-cols-2 gap-3">
             <TeamRoster
-              teamName="TIGERS"
-              teamColor={getTeamColors(awayTeamId).primary}
-              teamBorderColor={getTeamColors(awayTeamId).secondary}
+              teamName={awayTeamName.toUpperCase()}
+              teamColor={awayTeamColor}
+              teamBorderColor={awayTeamBorderColor}
               players={awayTeamPlayers}
               pitchers={awayTeamPitchers}
               isAway={true}
               isInGame={true}
-              onSubstitution={(benchPlayerName, lineupPlayerName) => 
+              onSubstitution={(benchPlayerName, lineupPlayerName) =>
                 handleSubstitution('away', benchPlayerName, lineupPlayerName)
               }
               onPitcherSubstitution={(newPitcherName, replacedName, replacedType) =>
@@ -1388,16 +1780,20 @@ export function GameTracker() {
               onPositionSwap={(player1Name, player2Name) =>
                 handlePositionSwap('away', player1Name, player2Name)
               }
+              getPlayerMojo={(playerName) => getPlayerMojoByName(playerName, 'away')}
+              getPlayerFitness={(playerName) => getPlayerFitnessByName(playerName, 'away')}
+              onMojoChange={(playerName, newMojo) => setPlayerMojoByName(playerName, 'away', newMojo)}
+              onFitnessChange={(playerName, newFitness) => setPlayerFitnessByName(playerName, 'away', newFitness)}
             />
             <TeamRoster
-              teamName="SOX"
-              teamColor={getTeamColors(homeTeamId).primary}
-              teamBorderColor={getTeamColors(homeTeamId).secondary}
+              teamName={homeTeamName.toUpperCase()}
+              teamColor={homeTeamColor}
+              teamBorderColor={homeTeamBorderColor}
               players={homeTeamPlayers}
               pitchers={homeTeamPitchers}
               isAway={false}
               isInGame={true}
-              onSubstitution={(benchPlayerName, lineupPlayerName) => 
+              onSubstitution={(benchPlayerName, lineupPlayerName) =>
                 handleSubstitution('home', benchPlayerName, lineupPlayerName)
               }
               onPitcherSubstitution={(newPitcherName, replacedName, replacedType) =>
@@ -1406,6 +1802,10 @@ export function GameTracker() {
               onPositionSwap={(player1Name, player2Name) =>
                 handlePositionSwap('home', player1Name, player2Name)
               }
+              getPlayerMojo={(playerName) => getPlayerMojoByName(playerName, 'home')}
+              getPlayerFitness={(playerName) => getPlayerFitnessByName(playerName, 'home')}
+              onMojoChange={(playerName, newMojo) => setPlayerMojoByName(playerName, 'home', newMojo)}
+              onFitnessChange={(playerName, newFitness) => setPlayerFitnessByName(playerName, 'home', newFitness)}
             />
           </div>
 
@@ -1947,6 +2347,7 @@ export function GameTracker() {
               onToggle={() => toggleSection('substitutions')}
             >
               {/* LineupCard - Drag-drop substitution interface (Per spec: no buttons) */}
+              {/* EXH-036: Added onPlayerClick to allow mojo/fitness editing from lineup cards */}
               <LineupCard
                 lineup={lineupCardData}
                 bench={benchCardData}
@@ -1954,12 +2355,13 @@ export function GameTracker() {
                 currentPitcher={currentPitcherData}
                 onSubstitution={handleLineupCardSubstitution}
                 isExpanded={true}
+                onPlayerClick={(playerId, playerName, type) => setSelectedPlayer({ name: playerName, type, playerId })}
               />
             </ExpandablePanel>
           </div>
           )}
 
-          {/* Control buttons - Simplified to UNDO and END GAME only */}
+          {/* Control buttons - UNDO and END GAME */}
           <div className="flex gap-3 items-center">
             <button
               className="flex-1 bg-[#808080] border-[5px] border-white py-4 text-white text-base font-bold hover:bg-[#999999] active:scale-95 transition-transform shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)]"
@@ -1982,11 +2384,15 @@ export function GameTracker() {
           </div>
           </div>{/* Close p-4 space-y-4 wrapper */}
 
-        {/* Player Card Modal */}
+        {/* Player Card Modal - EXH-036: Now with mojo/fitness editing */}
         {selectedPlayer && (
-          <PlayerCardModal 
-            player={selectedPlayer} 
-            onClose={() => setSelectedPlayer(null)} 
+          <PlayerCardModal
+            player={selectedPlayer}
+            onClose={() => setSelectedPlayer(null)}
+            currentMojo={playerStateHook.getPlayer(selectedPlayer.playerId)?.gameState.currentMojo}
+            currentFitness={playerStateHook.getPlayer(selectedPlayer.playerId)?.fitnessProfile.currentFitness}
+            onMojoChange={(newMojo) => playerStateHook.setMojo(selectedPlayer.playerId, newMojo)}
+            onFitnessChange={(newFitness) => playerStateHook.setFitness(selectedPlayer.playerId, newFitness)}
           />
         )}
 
@@ -2226,11 +2632,27 @@ function ExpandablePanel({ title, isExpanded, onToggle, children }: ExpandablePa
 }
 
 interface PlayerCardModalProps {
-  player: { name: string; type: 'batter' | 'pitcher' };
+  player: { name: string; type: 'batter' | 'pitcher'; playerId: string };
   onClose: () => void;
+  // EXH-036: Mojo/Fitness editing
+  currentMojo?: MojoLevel;
+  currentFitness?: FitnessState;
+  onMojoChange?: (newMojo: MojoLevel) => void;
+  onFitnessChange?: (newFitness: FitnessState) => void;
 }
 
-function PlayerCardModal({ player, onClose }: PlayerCardModalProps) {
+function PlayerCardModal({
+  player,
+  onClose,
+  currentMojo,
+  currentFitness,
+  onMojoChange,
+  onFitnessChange
+}: PlayerCardModalProps) {
+  // EXH-036: State for editing mode
+  const [isEditingMojo, setIsEditingMojo] = useState(false);
+  const [isEditingFitness, setIsEditingFitness] = useState(false);
+
   // Mock player data - in production this would come from your game state
   const batterStats = {
     position: 'SS',
@@ -2387,6 +2809,115 @@ function PlayerCardModal({ player, onClose }: PlayerCardModalProps) {
               </div>
             </div>
           </>
+        )}
+
+        {/* EXH-036: Mojo/Fitness Editing Section */}
+        {(currentMojo !== undefined || currentFitness !== undefined) && (
+          <div className="bg-[#5A7A52] border-[4px] border-[#E8E8D8] p-2 mt-2 space-y-2">
+            <div className="text-[8px] text-[#E8E8D8] font-bold mb-1" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>
+              CONDITION
+            </div>
+
+            {/* Mojo Row */}
+            {currentMojo !== undefined && onMojoChange && (
+              <div className="flex items-center gap-2">
+                <span className="text-[7px] text-[#E8E8D8] w-12" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>MOJO</span>
+                {isEditingMojo ? (
+                  <div className="flex gap-1 flex-wrap">
+                    {([-2, -1, 0, 1, 2] as MojoLevel[]).map((level) => (
+                      <button
+                        key={level}
+                        onClick={() => {
+                          onMojoChange(level);
+                          setIsEditingMojo(false);
+                        }}
+                        className={`px-2 py-1 text-[8px] font-bold border-2 transition-all ${
+                          level === currentMojo
+                            ? 'border-[#C4A853] bg-[#C4A853]/30'
+                            : 'border-[#E8E8D8]/50 hover:border-[#E8E8D8]'
+                        }`}
+                        style={{ color: getMojoColor(level) }}
+                      >
+                        {MOJO_STATES[level].emoji} {MOJO_STATES[level].displayName}
+                      </button>
+                    ))}
+                    <button
+                      onClick={() => setIsEditingMojo(false)}
+                      className="px-1 text-[#E8E8D8]/70 hover:text-[#E8E8D8]"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ) : (
+                  <div
+                    className="flex items-center gap-1 cursor-pointer hover:bg-[#6B9462] px-1 rounded"
+                    onClick={() => setIsEditingMojo(true)}
+                  >
+                    <span
+                      className="text-xs font-bold"
+                      style={{ color: getMojoColor(currentMojo), textShadow: '1px 1px 0px rgba(0,0,0,0.5)' }}
+                    >
+                      {MOJO_STATES[currentMojo].emoji} {MOJO_STATES[currentMojo].displayName}
+                    </span>
+                    <span className="text-[8px] text-[#E8E8D8]/70">
+                      ({MOJO_STATES[currentMojo].statMultiplier.toFixed(2)}x)
+                    </span>
+                    <span className="text-[8px] text-[#C4A853]">✏️</span>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Fitness Row */}
+            {currentFitness !== undefined && onFitnessChange && (
+              <div className="flex items-center gap-2">
+                <span className="text-[7px] text-[#E8E8D8] w-12" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>FITNESS</span>
+                {isEditingFitness ? (
+                  <div className="flex gap-1 flex-wrap">
+                    {(['JUICED', 'FIT', 'WELL', 'STRAINED', 'WEAK', 'HURT'] as FitnessState[]).map((state) => (
+                      <button
+                        key={state}
+                        onClick={() => {
+                          onFitnessChange(state);
+                          setIsEditingFitness(false);
+                        }}
+                        className={`px-2 py-1 text-[8px] font-bold border-2 transition-all ${
+                          state === currentFitness
+                            ? 'border-[#C4A853] bg-[#C4A853]/30'
+                            : 'border-[#E8E8D8]/50 hover:border-[#E8E8D8]'
+                        }`}
+                        style={{ color: FITNESS_STATES[state].color }}
+                      >
+                        {FITNESS_STATES[state].emoji} {FITNESS_STATES[state].displayName}
+                      </button>
+                    ))}
+                    <button
+                      onClick={() => setIsEditingFitness(false)}
+                      className="px-1 text-[#E8E8D8]/70 hover:text-[#E8E8D8]"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ) : (
+                  <div
+                    className="flex items-center gap-1 cursor-pointer hover:bg-[#6B9462] px-1 rounded"
+                    onClick={() => setIsEditingFitness(true)}
+                  >
+                    <span
+                      className="text-xs font-bold"
+                      style={{ color: FITNESS_STATES[currentFitness].color, textShadow: '1px 1px 0px rgba(0,0,0,0.5)' }}
+                    >
+                      {FITNESS_STATES[currentFitness].emoji} {FITNESS_STATES[currentFitness].displayName}
+                    </span>
+                    <span className="text-[8px] text-[#E8E8D8]/70">
+                      ({FITNESS_STATES[currentFitness].multiplier.toFixed(2)}x)
+                    </span>
+                    <span className="text-[8px] text-[#C4A853]">✏️</span>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         )}
       </div>
     </div>

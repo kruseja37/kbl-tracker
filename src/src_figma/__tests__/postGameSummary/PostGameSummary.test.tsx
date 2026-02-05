@@ -17,6 +17,12 @@ const mockNavigate = vi.fn();
 
 vi.mock('react-router', () => ({
   useNavigate: () => mockNavigate,
+  useLocation: () => ({
+    state: {
+      gameMode: 'franchise',
+      franchiseId: '1',
+    },
+  }),
 }));
 
 vi.mock('@/config/teamColors', () => ({

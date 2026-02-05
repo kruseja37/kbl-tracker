@@ -33,6 +33,8 @@ interface RunnerOutcomeArrowsProps {
   outcomes: RunnerDefaults;
   onOutcomeChange: (updated: RunnerDefaults) => void;
   bases: { first: boolean; second: boolean; third: boolean };
+  /** If true, this is a runner event (SB/CS/PK/TBL) - hides batter arrow since at-bat continues */
+  isRunnerEvent?: boolean;
 }
 
 type RunnerId = 'batter' | 'first' | 'second' | 'third';
@@ -356,6 +358,7 @@ export function RunnerOutcomeArrows({
   outcomes,
   onOutcomeChange,
   bases,
+  isRunnerEvent = false,
 }: RunnerOutcomeArrowsProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [draggingRunner, setDraggingRunner] = useState<RunnerId | null>(null);
@@ -412,8 +415,8 @@ export function RunnerOutcomeArrows({
   return (
     <>
       {/* ARROWS - Draw first (behind runners) */}
-      {/* Batter arrow - only if not out and moving somewhere */}
-      {outcomes.batter && outcomes.batter.to !== 'out' && (
+      {/* Batter arrow - only if not out, not a runner event, and moving somewhere */}
+      {!isRunnerEvent && outcomes.batter && outcomes.batter.to !== 'out' && (
         <OutcomeArrow
           from={RUNNER_START_POSITIONS.batter}
           to={DESTINATION_POSITIONS[outcomes.batter.to]}
@@ -453,7 +456,8 @@ export function RunnerOutcomeArrows({
       )}
 
       {/* OUT MARKERS */}
-      {outcomes.batter?.to === 'out' && (
+      {/* Batter out marker - hide for runner events */}
+      {!isRunnerEvent && outcomes.batter?.to === 'out' && (
         <OutMarker position={RUNNER_START_POSITIONS.batter} />
       )}
       {outcomes.first?.to === 'out' && (
@@ -469,8 +473,8 @@ export function RunnerOutcomeArrows({
       {/* DRAGGABLE RUNNERS - Shown at their DESTINATION positions */}
       {/* Per design: runners should be shown where they're advancing TO */}
 
-      {/* Batter - show at destination (if not out) */}
-      {outcomes.batter.to !== 'out' && (
+      {/* Batter - show at destination (if not out, and not a runner event) */}
+      {!isRunnerEvent && outcomes.batter.to !== 'out' && (
         <DraggableRunner
           runnerId="batter"
           position={DESTINATION_POSITIONS[outcomes.batter.to]}

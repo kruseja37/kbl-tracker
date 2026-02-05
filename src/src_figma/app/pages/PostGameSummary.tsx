@@ -1,11 +1,21 @@
-import { useNavigate } from "react-router";
+import { useNavigate, useLocation } from "react-router";
 import { Trophy, TrendingUp, ChevronDown, ChevronUp } from "lucide-react";
 import { getTeamColors } from "@/config/teamColors";
 import { useState } from "react";
 
 export function PostGameSummary() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [boxScoreExpanded, setBoxScoreExpanded] = useState(false);
+
+  // Get game mode from navigation state to route back appropriately
+  const navigationState = location.state as {
+    gameMode?: 'exhibition' | 'franchise' | 'playoff';
+    franchiseId?: string;
+  } | null;
+
+  const gameMode = navigationState?.gameMode || 'franchise';
+  const franchiseId = navigationState?.franchiseId || '1';
 
   // Team IDs - in production these would come from game data
   const homeTeamId = 'sox';
@@ -380,7 +390,16 @@ export function PostGameSummary() {
         {/* Action buttons */}
         <div className="flex justify-end">
           <button
-            onClick={() => navigate("/franchise/1")}
+            onClick={() => {
+              // Route based on game mode
+              if (gameMode === 'exhibition') {
+                navigate("/exhibition");
+              } else if (gameMode === 'playoff') {
+                navigate("/world-series");
+              } else {
+                navigate(`/franchise/${franchiseId}`);
+              }
+            }}
             className="bg-[#556B55] border-[5px] border-white py-[16px] text-sm text-[#E8E8D8] hover:bg-[#6B9462] active:scale-95 transition-transform shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)] m-[0px] px-[10px]"
           >
             CONTINUE

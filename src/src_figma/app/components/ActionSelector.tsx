@@ -3,7 +3,7 @@
  *
  * Three primary buttons: HIT, OUT, OTHER
  * - HIT → prompts for hit location
- * - OUT → prompts for fielding sequence
+ * - OUT → shows submenu: K (strikeout), KL (looking), Ball in Play (fielding sequence)
  * - OTHER → expands to show BB, IBB, HBP, D3K, SB, CS, PK, TBL, PB, WP, E
  *
  * Per GAMETRACKER_UI_DESIGN.md - positioned in left foul corner
@@ -16,6 +16,8 @@ import { useState } from 'react';
 // ============================================
 
 export type PrimaryAction = 'HIT' | 'OUT' | 'OTHER';
+
+export type StrikeoutType = 'K' | 'KL';
 
 export type OtherAction =
   | 'BB'    // Walk
@@ -33,8 +35,10 @@ export type OtherAction =
 export interface ActionSelectorProps {
   /** Called when HIT is selected */
   onHit: () => void;
-  /** Called when OUT is selected */
+  /** Called when OUT (ball in play) is selected - proceeds to fielder drag */
   onOut: () => void;
+  /** Called when a strikeout (K or KL) is selected - no fielder drag needed */
+  onStrikeout: (type: StrikeoutType) => void;
   /** Called when an OTHER action is selected */
   onOtherAction: (action: OtherAction) => void;
   /** Whether buttons are disabled (e.g., during another flow) */
@@ -48,9 +52,9 @@ export interface ActionSelectorProps {
 // ============================================
 
 const primaryBtnBase = `
-  w-20 h-14 rounded-lg
+  w-[110px] h-14 rounded-lg
   border-3 border-[#C4A853]
-  text-lg font-black uppercase tracking-wide
+  text-base font-black uppercase tracking-wide
   hover:scale-105 active:scale-95 transition-all
   shadow-[4px_4px_0px_0px_rgba(0,0,0,0.5)]
   disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100
@@ -98,13 +102,21 @@ const OTHER_ACTIONS: OtherActionConfig[] = [
 export function ActionSelector({
   onHit,
   onOut,
+  onStrikeout,
   onOtherAction,
   disabled = false,
   activeAction = null,
 }: ActionSelectorProps) {
   const [showOtherMenu, setShowOtherMenu] = useState(false);
+  const [showOutMenu, setShowOutMenu] = useState(false);
+
+  const handleOutClick = () => {
+    setShowOtherMenu(false);
+    setShowOutMenu(!showOutMenu);
+  };
 
   const handleOtherClick = () => {
+    setShowOutMenu(false);
     setShowOtherMenu(!showOtherMenu);
   };
 
@@ -115,11 +127,17 @@ export function ActionSelector({
 
   const handleHit = () => {
     setShowOtherMenu(false);
+    setShowOutMenu(false);
     onHit();
   };
 
-  const handleOut = () => {
-    setShowOtherMenu(false);
+  const handleStrikeout = (type: StrikeoutType) => {
+    setShowOutMenu(false);
+    onStrikeout(type);
+  };
+
+  const handleBallInPlay = () => {
+    setShowOutMenu(false);
     onOut();
   };
 
@@ -141,14 +159,15 @@ export function ActionSelector({
 
         {/* OUT Button */}
         <button
-          onClick={handleOut}
+          onClick={handleOutClick}
           disabled={disabled}
           className={`${primaryBtnBase} bg-gradient-to-b from-[#C62828] to-[#8B0000] text-[#FFEBEE] ${
-            activeAction === 'OUT' ? 'ring-2 ring-white ring-offset-2 ring-offset-[#1a1a1a]' : ''
+            showOutMenu || activeAction === 'OUT' ? 'ring-2 ring-white ring-offset-2 ring-offset-[#1a1a1a]' : ''
           }`}
-          title="Record an out - drag fielder to ball location"
+          title="Record an out (K, KL, or Ball in Play)"
         >
           OUT
+          <span className="ml-1 text-xs">{showOutMenu ? '▲' : '▼'}</span>
         </button>
 
         {/* OTHER Button */}
@@ -164,6 +183,49 @@ export function ActionSelector({
           <span className="ml-1 text-xs">{showOtherMenu ? '▲' : '▼'}</span>
         </button>
       </div>
+
+      {/* OUT Expansion Menu (K, KL, Ball in Play) */}
+      {showOutMenu && (
+        <div className="absolute left-full top-0 ml-2 p-2 bg-[#1a1a1a]/95 rounded-lg border-2 border-[#C4A853]/50 z-50">
+          <div className="text-[10px] text-[#888] uppercase tracking-wider mb-2 px-1">
+            Out Type
+          </div>
+          <div className="flex flex-col gap-1.5">
+            {/* Strikeout Swinging */}
+            <button
+              onClick={() => handleStrikeout('K')}
+              className={`${otherBtnBase} bg-gradient-to-b from-[#7B1FA2] to-[#4A148C] text-[#F3E5F5] min-w-[100px]`}
+              title="Strikeout Swinging"
+            >
+              K
+            </button>
+            {/* Strikeout Looking */}
+            <button
+              onClick={() => handleStrikeout('KL')}
+              className={`${otherBtnBase} bg-gradient-to-b from-[#6A1B9A] to-[#38006B] text-[#F3E5F5] min-w-[100px]`}
+              title="Strikeout Looking"
+            >
+              KL
+            </button>
+            {/* Ball in Play */}
+            <button
+              onClick={handleBallInPlay}
+              className={`${otherBtnBase} bg-gradient-to-b from-[#C62828] to-[#8B0000] text-[#FFEBEE] min-w-[100px]`}
+              title="Ball in Play - drag fielder to ball location"
+            >
+              Ball in Play
+            </button>
+            {/* Back button */}
+            <button
+              onClick={() => setShowOutMenu(false)}
+              className={`${otherBtnBase} bg-[#424242] text-[#E0E0E0]`}
+              title="Close menu"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* OTHER Expansion Menu */}
       {showOtherMenu && (

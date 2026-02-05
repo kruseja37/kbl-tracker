@@ -325,6 +325,10 @@ export interface BatterIconProps {
   name?: string;
   /** Whether batter has been dragged somewhere */
   isDragged?: boolean;
+  /** Background color for team identification (primary team color) */
+  backgroundColor?: string;
+  /** Border color for team identification (secondary team color) */
+  borderColor?: string;
   /** Click handler */
   onClick?: () => void;
 }
@@ -332,7 +336,7 @@ export interface BatterIconProps {
 /**
  * BatterIcon - Draggable batter at home plate
  */
-export function BatterIcon({ name = 'BATTER', isDragged = false, onClick }: BatterIconProps) {
+export function BatterIcon({ name = 'BATTER', isDragged = false, backgroundColor = '#2563EB', borderColor = '#C4A853', onClick }: BatterIconProps) {
   // Get current viewBox from context (for dynamic zoom support)
   const viewBox = useViewBox();
 
@@ -349,8 +353,11 @@ export function BatterIcon({ name = 'BATTER', isDragged = false, onClick }: Batt
 
   if (isDragged) return null;
 
-  // Position batter near home plate using viewBox-aware conversion
-  const homeCoords = normalizedToSvg(0.5, 0.02); // Just slightly in front of home
+  // Extract last name for compact display (e.g., "J. MARTINEZ" -> "MARTINEZ")
+  const displayName = name.split(' ').pop()?.toUpperCase() || name;
+
+  // Position batter at home plate area - near the batter's box
+  const homeCoords = normalizedToSvg(0.5, 0.04); // Slightly in front of home plate
   const { leftPercent, topPercent } = svgToViewBoxPercent(homeCoords.svgX, homeCoords.svgY, viewBox);
 
   return (
@@ -372,26 +379,28 @@ export function BatterIcon({ name = 'BATTER', isDragged = false, onClick }: Batt
     >
       <div
         style={{
-          backgroundColor: '#CC44CC',
-          borderColor: 'white',
-          borderWidth: '2px',
+          backgroundColor: backgroundColor,
+          borderColor: borderColor,
+          borderWidth: 'max(2px, 0.12cqw)',
           borderStyle: 'solid',
-          padding: '4px 6px',
-          boxShadow: '2px 2px 0px 0px rgba(0,0,0,0.3)',
+          padding: 'max(3px, 0.2cqw) max(6px, 0.4cqw)',
+          borderRadius: '4px',
+          boxShadow: '2px 2px 0px 0px rgba(0,0,0,0.4)',
         }}
       >
         <div
           style={{
-            fontSize: '9px',
+            fontSize: 'max(8px, 0.55cqw)',
             fontWeight: 'bold',
-            color: 'white',
+            color: '#E8E8D8',
             textAlign: 'center',
-            textShadow: '1px 1px 0px rgba(0,0,0,0.3)',
+            textShadow: '1px 1px 0px rgba(0,0,0,0.5)',
+            letterSpacing: '0.3px',
+            whiteSpace: 'nowrap',
           }}
         >
-          {name}
+          ⚾ {displayName}
         </div>
-        <div style={{ fontSize: '12px', textAlign: 'center' }}>🏏</div>
       </div>
     </div>
   );
@@ -591,11 +600,11 @@ export function DropZoneHighlight({
   const svgCoords = normalizedToSvg(position.x, position.y);
   const { leftPercent, topPercent } = svgToViewBoxPercent(svgCoords.svgX, svgCoords.svgY, viewBox);
 
-  // Size mapping
+  // Size mapping - increased for easier touch targets
   const sizeMap = {
-    small: { width: 40, height: 40 },
-    medium: { width: 60, height: 60 },
-    large: { width: 80, height: 80 },
+    small: { width: 56, height: 56 },
+    medium: { width: 80, height: 80 },
+    large: { width: 100, height: 100 },
   };
 
   // Color mapping

@@ -71,6 +71,8 @@ export interface LineupCardProps {
   onSubstitution: (sub: SubstitutionData) => void;
   isExpanded?: boolean;
   onToggleExpanded?: () => void;
+  /** EXH-036: Callback when a player is clicked (for mojo/fitness editing) */
+  onPlayerClick?: (playerId: string, playerName: string, type: 'batter' | 'pitcher') => void;
 }
 
 const ItemTypes = {
@@ -86,9 +88,11 @@ const ItemTypes = {
 interface LineupSlotProps {
   player: LineupPlayer;
   onDrop: (incomingPlayer: { id: string; type: string; from: 'lineup' | 'bench' }, targetPlayer: LineupPlayer) => void;
+  /** EXH-036: Callback when player row is clicked */
+  onPlayerClick?: (playerId: string, playerName: string) => void;
 }
 
-function LineupSlot({ player, onDrop }: LineupSlotProps) {
+function LineupSlot({ player, onDrop, onPlayerClick }: LineupSlotProps) {
   const [{ isDragging }, drag] = useDrag(() => ({
     type: ItemTypes.LINEUP_PLAYER,
     item: { id: player.id, type: ItemTypes.LINEUP_PLAYER, from: 'lineup' as const, player },
@@ -125,12 +129,21 @@ function LineupSlot({ player, onDrop }: LineupSlotProps) {
     ? '#3366FF'
     : '#2a2a2a';
 
+  // EXH-036: Handle click to open player card
+  const handleClick = (e: React.MouseEvent) => {
+    // Only trigger if not dragging
+    if (!isDragging && onPlayerClick) {
+      onPlayerClick(player.id, player.name);
+    }
+  };
+
   return (
     <div
       ref={combinedRef as DndRef}
+      onClick={handleClick}
       className={`flex items-center gap-2 px-2 py-1.5 border-b border-[#444] transition-all ${
         isDragging ? 'opacity-50' : ''
-      } ${player.isUsed ? 'opacity-60' : 'cursor-grab active:cursor-grabbing'}`}
+      } ${player.isUsed ? 'opacity-60' : 'cursor-grab active:cursor-grabbing'} ${onPlayerClick ? 'hover:bg-[#3a3a3a]' : ''}`}
       style={{ backgroundColor: bgColor }}
     >
       {/* Batting order */}
@@ -176,9 +189,11 @@ function LineupSlot({ player, onDrop }: LineupSlotProps) {
 
 interface BenchPlayerItemProps {
   player: BenchPlayer;
+  /** EXH-036: Callback when player row is clicked */
+  onPlayerClick?: (playerId: string, playerName: string) => void;
 }
 
-function BenchPlayerItem({ player }: BenchPlayerItemProps) {
+function BenchPlayerItem({ player, onPlayerClick }: BenchPlayerItemProps) {
   const [{ isDragging }, drag] = useDrag(() => ({
     type: ItemTypes.BENCH_PLAYER,
     item: { id: player.id, type: ItemTypes.BENCH_PLAYER, from: 'bench' as const, player },
@@ -188,9 +203,17 @@ function BenchPlayerItem({ player }: BenchPlayerItemProps) {
     }),
   }), [player]);
 
+  // EXH-036: Handle click to open player card
+  const handleClick = () => {
+    if (!isDragging && onPlayerClick) {
+      onPlayerClick(player.id, player.name);
+    }
+  };
+
   return (
     <div
       ref={drag as DndRef}
+      onClick={handleClick}
       className={`flex items-center gap-1.5 px-2 py-1 rounded transition-all ${
         isDragging ? 'opacity-50' : ''
       } ${player.isUsed
@@ -220,9 +243,11 @@ function BenchPlayerItem({ player }: BenchPlayerItemProps) {
 
 interface BullpenPitcherItemProps {
   pitcher: BullpenPitcher;
+  /** EXH-036: Callback when pitcher row is clicked */
+  onPlayerClick?: (playerId: string, playerName: string) => void;
 }
 
-function BullpenPitcherItem({ pitcher }: BullpenPitcherItemProps) {
+function BullpenPitcherItem({ pitcher, onPlayerClick }: BullpenPitcherItemProps) {
   const [{ isDragging }, drag] = useDrag(() => ({
     type: ItemTypes.BULLPEN_PITCHER,
     item: { id: pitcher.id, type: ItemTypes.BULLPEN_PITCHER, pitcher },
@@ -241,9 +266,17 @@ function BullpenPitcherItem({ pitcher }: BullpenPitcherItemProps) {
 
   const canDrag = !pitcher.isUsed && !pitcher.isCurrentPitcher;
 
+  // EXH-036: Handle click to open player card
+  const handleClick = () => {
+    if (!isDragging && onPlayerClick) {
+      onPlayerClick(pitcher.id, pitcher.name);
+    }
+  };
+
   return (
     <div
       ref={drag as DndRef}
+      onClick={handleClick}
       className={`flex items-center gap-1.5 px-2 py-1 rounded transition-all ${
         isDragging ? 'opacity-50' : ''
       } ${pitcher.isCurrentPitcher
@@ -253,7 +286,7 @@ function BullpenPitcherItem({ pitcher }: BullpenPitcherItemProps) {
         : canDrag
         ? 'bg-[#3a3a5a] cursor-grab active:cursor-grabbing hover:bg-[#4a4a6a]'
         : 'bg-[#333]'
-      }`}
+      } ${onPlayerClick ? 'hover:ring-1 hover:ring-[#C4A853]' : ''}`}
     >
       <div className={`text-[9px] font-bold ${
         pitcher.isUsed ? 'text-[#666] line-through' : 'text-[#E8E8D8]'
@@ -390,6 +423,7 @@ export function LineupCard({
   onSubstitution,
   isExpanded = false,
   onToggleExpanded,
+  onPlayerClick,
 }: LineupCardProps) {
   // Pending substitution for confirmation
   const [pendingSub, setPendingSub] = useState<{
@@ -494,6 +528,7 @@ export function LineupCard({
                   key={player.id}
                   player={player}
                   onDrop={handleLineupDrop}
+                  onPlayerClick={onPlayerClick ? (id, name) => onPlayerClick(id, name, 'batter') : undefined}
                 />
               ))}
             </div>
@@ -504,7 +539,11 @@ export function LineupCard({
             <div className="text-[8px] text-[#888] mb-1 px-1">BENCH</div>
             <div className="flex flex-wrap gap-1">
               {bench.map(player => (
-                <BenchPlayerItem key={player.id} player={player} />
+                <BenchPlayerItem
+                  key={player.id}
+                  player={player}
+                  onPlayerClick={onPlayerClick ? (id, name) => onPlayerClick(id, name, 'batter') : undefined}
+                />
               ))}
               {bench.length === 0 && (
                 <div className="text-[8px] text-[#555] italic">No players available</div>
@@ -521,7 +560,11 @@ export function LineupCard({
             />
             <div className="flex flex-wrap gap-1 mt-1">
               {bullpen.filter(p => !p.isCurrentPitcher).map(pitcher => (
-                <BullpenPitcherItem key={pitcher.id} pitcher={pitcher} />
+                <BullpenPitcherItem
+                  key={pitcher.id}
+                  pitcher={pitcher}
+                  onPlayerClick={onPlayerClick ? (id, name) => onPlayerClick(id, name, 'pitcher') : undefined}
+                />
               ))}
               {bullpen.filter(p => !p.isCurrentPitcher).length === 0 && (
                 <div className="text-[8px] text-[#555] italic">No pitchers available</div>

@@ -643,6 +643,9 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
   const [pitchCountPrompt, setPitchCountPrompt] = useState<PitchCountPrompt | null>(null);
   const pendingActionRef = useRef<(() => Promise<void>) | null>(null);
 
+  // Ref to hold endInning function to avoid circular dependency
+  const endInningRef = useRef<(() => void) | null>(null);
+
   // ============================================
   // INITIALIZATION
   // ============================================
@@ -765,7 +768,8 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     setGameState(prev => {
       const battingTeamLineup = prev.isTop ? awayLineupRef.current : homeLineupRef.current;
       const currentIndex = prev.isTop ? awayBatterIndex : homeBatterIndex;
-      const nextIndex = (currentIndex + 1) % battingTeamLineup.length;
+      // Always cycle through first 9 batters (standard batting order)
+      const nextIndex = (currentIndex + 1) % 9;
       const nextBatter = battingTeamLineup[nextIndex];
 
       if (prev.isTop) {
@@ -975,23 +979,45 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
 
     // Calculate outs on play:
     // - DP = 2 outs, TP = 3 outs (batter + runners)
+    // - FC = 1 out (runner out, batter SAFE) - batter does NOT count as out
     // - Otherwise start with 1 (batter out) and add any runners thrown out
-    let outsOnPlay = outType === 'DP' ? 2 : outType === 'TP' ? 3 : 1;
+    let outsOnPlay: number;
 
-    // FIX: Count additional outs from runners thrown out (e.g., tag up attempt on fly out)
-    // Only count runner outs if NOT already a DP/TP (to avoid double counting)
-    if (outType !== 'DP' && outType !== 'TP' && runnerData) {
-      if (runnerData.fromFirst === 'out') outsOnPlay++;
-      if (runnerData.fromSecond === 'out') outsOnPlay++;
-      if (runnerData.fromThird === 'out') outsOnPlay++;
-      console.log(`[recordOut] Outs on play: ${outsOnPlay} (batter + ${outsOnPlay - 1} runner(s))`);
+    if (outType === 'DP') {
+      outsOnPlay = 2;
+    } else if (outType === 'TP') {
+      outsOnPlay = 3;
+    } else if (outType === 'FC') {
+      // FC: Batter is SAFE at first, only runners count as outs
+      outsOnPlay = 0;
+      if (runnerData) {
+        if (runnerData.fromFirst === 'out') outsOnPlay++;
+        if (runnerData.fromSecond === 'out') outsOnPlay++;
+        if (runnerData.fromThird === 'out') outsOnPlay++;
+      }
+      // Default to 1 out if no runner data specified (most common FC scenario)
+      if (outsOnPlay === 0) outsOnPlay = 1;
+      console.log(`[recordOut] FC: ${outsOnPlay} runner out(s), batter safe at first`);
+    } else {
+      // Standard out: batter is out
+      outsOnPlay = 1;
+      // Count additional outs from runners thrown out (e.g., tag up attempt on fly out)
+      if (runnerData) {
+        if (runnerData.fromFirst === 'out') outsOnPlay++;
+        if (runnerData.fromSecond === 'out') outsOnPlay++;
+        if (runnerData.fromThird === 'out') outsOnPlay++;
+        console.log(`[recordOut] Outs on play: ${outsOnPlay} (batter + ${outsOnPlay - 1} runner(s))`);
+      }
     }
 
     const newOuts = gameState.outs + outsOnPlay;
 
-    // Calculate runs scored on sacrifice plays
+    // Calculate runs scored on sacrifice plays or during DP/TP
+    // Count ALL runners who scored (from third, second, or even first)
     let runsScored = 0;
     if (runnerData?.fromThird === 'home') runsScored++;
+    if (runnerData?.fromSecond === 'home') runsScored++;
+    if (runnerData?.fromFirst === 'home') runsScored++;
 
     // Calculate leverage index from base-out state
     const baseState: BaseState = (
@@ -1075,9 +1101,35 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       if (outType === 'K' || outType === 'KL' || outType === 'D3K') {
         pStats.strikeoutsThrown++;
       }
+      if (runsScored > 0) {
+        pStats.runsAllowed += runsScored;
+        pStats.earnedRuns += runsScored; // Simplified - all runs earned for now
+      }
       newStats.set(gameState.currentPitcherId, pStats);
       return newStats;
     });
+
+    // Update scoreboard if runs scored (e.g., sac fly, DP with runner scoring from third)
+    if (runsScored > 0) {
+      setScoreboard(prev => {
+        const teamKey = gameState.isTop ? 'away' : 'home';
+        const inningIdx = gameState.inning - 1;
+        const newInnings = [...prev.innings];
+        const currentInningScore = newInnings[inningIdx]?.[teamKey] || 0;
+        newInnings[inningIdx] = {
+          ...newInnings[inningIdx],
+          [teamKey]: currentInningScore + runsScored,
+        };
+        return {
+          ...prev,
+          innings: newInnings,
+          [teamKey]: {
+            ...prev[teamKey],
+            runs: prev[teamKey].runs + runsScored,
+          },
+        };
+      });
+    }
 
     // Update game state (including bases from runnerData)
     setGameState(prev => {
@@ -1099,6 +1151,12 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         // Note: 'home' and 'out' don't set any base
       }
 
+      // FC special case: Batter reaches first base
+      if (outType === 'FC') {
+        newBases.first = true;
+        console.log('[recordOut] FC: Batter reaches first base');
+      }
+
       // On DP/TP, typically bases are cleared based on the play
       // The runnerData should already reflect who was put out
 
@@ -1113,9 +1171,12 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       };
     });
 
-    // Check for end of inning
+    // Check for end of inning - auto-end on third out
     if (newOuts >= 3) {
-      // Will be handled by endInning or UI
+      // Auto-end the inning with a small delay to let UI update
+      setTimeout(() => {
+        endInningRef.current?.();
+      }, 500);
     } else {
       advanceToNextBatter();
     }
@@ -1366,9 +1427,12 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       },
     }));
 
-    // Check for end of inning
+    // Check for end of inning - auto-end on third out
     if (newOuts >= 3) {
-      // Will be handled by endInning or UI
+      // Auto-end the inning with a small delay to let UI update
+      setTimeout(() => {
+        endInningRef.current?.();
+      }, 500);
     } else {
       advanceToNextBatter();
     }
@@ -1714,11 +1778,49 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       timestamp: Date.now(),
     }]);
 
-    // TODO: Update lineup refs to swap the players
-    // This would require finding the player in the lineup and replacing them
+    // Update lineup refs to swap the players
+    // Find which lineup contains the outgoing player and swap them
+    const awayIndex = awayLineupRef.current.findIndex(p => p.playerId === lineupPlayerId);
+    const homeIndex = homeLineupRef.current.findIndex(p => p.playerId === lineupPlayerId);
 
-    console.log(`[useGameState] Substitution logged: ${benchPlayerName || benchPlayerId} replaces ${lineupPlayerName || lineupPlayerId} in inning ${gameState.inning}`);
-  }, [gameState.inning, gameState.isTop]);
+    if (awayIndex >= 0) {
+      // Substitute in away lineup - preserve the position of the player being replaced
+      const outgoingPosition = awayLineupRef.current[awayIndex].position;
+      awayLineupRef.current[awayIndex] = {
+        playerId: benchPlayerId,
+        playerName: benchPlayerName || benchPlayerId,
+        position: outgoingPosition,
+      };
+    } else if (homeIndex >= 0) {
+      // Substitute in home lineup - preserve the position of the player being replaced
+      const outgoingPosition = homeLineupRef.current[homeIndex].position;
+      homeLineupRef.current[homeIndex] = {
+        playerId: benchPlayerId,
+        playerName: benchPlayerName || benchPlayerId,
+        position: outgoingPosition,
+      };
+    }
+
+    // If the substituted player is the current batter, update current batter
+    if (lineupPlayerId === gameState.currentBatterId) {
+      setGameState(prev => ({
+        ...prev,
+        currentBatterId: benchPlayerId,
+        currentBatterName: benchPlayerName || benchPlayerId,
+      }));
+    }
+
+    // Initialize stats for new player if they don't have any
+    setPlayerStats(prev => {
+      const newStats = new Map(prev);
+      if (!newStats.has(benchPlayerId)) {
+        newStats.set(benchPlayerId, createEmptyPlayerStats());
+      }
+      return newStats;
+    });
+
+    console.log(`[useGameState] Substitution complete: ${benchPlayerName || benchPlayerId} replaces ${lineupPlayerName || lineupPlayerId} in inning ${gameState.inning}`);
+  }, [gameState.inning, gameState.isTop, gameState.currentBatterId]);
 
   const changePitcher = useCallback((newPitcherId: string, exitingPitcherId: string, newPitcherName?: string, exitingPitcherName?: string) => {
     // Per PITCH_COUNT_TRACKING_SPEC.md: Mandatory pitch count capture on pitching change
@@ -1800,7 +1902,9 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
   const endInning = useCallback(() => {
     setGameState(prev => {
       const newIsTop = !prev.isTop;
-      const newInning = !newIsTop ? prev.inning + 1 : prev.inning;
+      // After TOP (isTop was true, newIsTop is false): stay on same inning, switch to BOTTOM
+      // After BOTTOM (isTop was false, newIsTop is true): increment inning, switch to TOP
+      const newInning = newIsTop ? prev.inning + 1 : prev.inning;
 
       // Get next batter
       const battingTeamLineup = newIsTop ? awayLineupRef.current : homeLineupRef.current;
@@ -1820,6 +1924,9 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       };
     });
   }, [awayBatterIndex, homeBatterIndex]);
+
+  // Update endInning ref so it can be called from recordOut/recordD3K
+  endInningRef.current = endInning;
 
   // Internal function to complete game after pitch counts confirmed
   const completeGameInternal = useCallback(async () => {
