@@ -136,6 +136,17 @@ function calculateHitDefaults(
     };
   }
 
+  // Inside-the-Park Home Run: Batter to home, all runners score (EXH-008)
+  // This handles HR selected from hit type menu (ball in play, not over fence)
+  if (hitType === 'HR') {
+    return {
+      batter: { from: 'batter', to: 'home', isDefault: false, reason: 'Inside-the-Park HR' },
+      ...(bases.third && { third: { from: 'third', to: 'home', isDefault: false, reason: 'Scores on HR' } }),
+      ...(bases.second && { second: { from: 'second', to: 'home', isDefault: false, reason: 'Scores on HR' } }),
+      ...(bases.first && { first: { from: 'first', to: 'home', isDefault: false, reason: 'Scores on HR' } }),
+    };
+  }
+
   // Default single behavior
   return {
     batter: { from: 'batter', to: 'first', isDefault: true, reason: 'Hit' },

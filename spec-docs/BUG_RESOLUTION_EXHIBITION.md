@@ -214,11 +214,25 @@ Exhibition Mode allows users to play a single game between two teams without fra
 ---
 
 ### BUG-EXH-008: Inside-the-park HR flow unclear
-**Status**: OPEN
+**Status**: FIXED
 **Reported**: February 4, 2026
-**Fixed**: N/A
+**Fixed**: February 4, 2026
 
-**Notes**: Needs design decision on how to trigger inside-the-park HR flow.
+**Root Cause**: `calculateHitDefaults()` in `runnerDefaults.ts` didn't handle `hitType === 'HR'` case. When user selected HR from hit type menu for a ball in play (inside-the-park HR), it fell through to default single behavior instead of scoring all runners.
+
+**Resolution**: Added explicit handling for inside-the-park HR in `calculateHitDefaults()`:
+- Batter goes to home
+- All runners score
+- Reason displayed as "Inside-the-Park HR"
+
+**How to trigger Inside-the-Park HR**:
+1. Click HIT
+2. Tap ball location in OUTFIELD (not in stands)
+3. Select "HOME RUN" from hit type options
+4. All runners will be set to score
+
+**Files Changed**:
+- `src/src_figma/app/components/runnerDefaults.ts` - Added HR case in calculateHitDefaults()
 
 ---
 
@@ -660,7 +674,7 @@ The parent component (GameTracker) should consume these via the onSpecialEvent c
 | EXH-005 | Can't edit pre-game lineups | ✅ FIXED |
 | EXH-006 | Team names missing colors | ✅ FIXED |
 | EXH-007 | Strikeouts require fielder | ✅ FIXED |
-| EXH-008 | Inside-the-park HR unclear | ⏳ OPEN |
+| EXH-008 | Inside-the-park HR unclear | ✅ FIXED |
 | EXH-009 | No pitcher in lineup | ⏳ OPEN |
 | EXH-010 | Scoreboard demo data | ✅ FIXED |
 | EXH-011 | End-game summary demo data | ✅ FIXED |
@@ -689,4 +703,4 @@ The parent component (GameTracker) should consume these via the onSpecialEvent c
 | EXH-035 | FC erases batter even when safe at first | ✅ FIXED |
 | EXH-036 | No way to edit mojo/fitness in player card | ✅ FIXED |
 
-**Fixed**: 24 | **Partial**: 2 | **By Design**: 1 | **Open**: 8
+**Fixed**: 25 | **Partial**: 2 | **By Design**: 1 | **Open**: 7
