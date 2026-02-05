@@ -734,7 +734,19 @@ export function calculateStoryMoraleImpact(
   effectivePersonality: ReporterPersonality,
   context: NarrativeContext
 ): number {
-  const config = REPORTER_MORALE_INFLUENCE[effectivePersonality];
+  let config = REPORTER_MORALE_INFLUENCE[effectivePersonality];
+
+  // HOT_TAKE personality uses random ranges per spec (NARRATIVE_SYSTEM_SPEC.md §306-311)
+  // Each story gets freshly randomized values to simulate unpredictable reactions
+  if (effectivePersonality === 'HOT_TAKE') {
+    config = {
+      basePerStory: 0,
+      winBoost: Math.random() * 2 + 1,        // randomRange(+1, +3)
+      lossBuffer: Math.random() * -3,          // randomRange(-3, 0)
+      streakAmplifier: Math.random() * 1.5 + 0.5, // randomRange(0.5, 2.0)
+    };
+  }
+
   let impact = config.basePerStory;
 
   // Game result modifier

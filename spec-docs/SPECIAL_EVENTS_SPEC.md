@@ -1565,18 +1565,18 @@ function generateWeeklyNarrative(events: SpecialEvent[]): string[] {
 | **Back-to-Back HR** | Consecutive batters HR | +0.5 Fame each | ✅ Auto |
 | **Inside Park HR** | HR without leaving field | +1.5 Fame | ❌ Manual |
 
-### Fame Bonus Summary (+1 per event unless noted)
+### Fame Bonus Summary (values per inline spec above)
 
 | Event | Fame | Recipient |
 |-------|------|-----------|
 | **Highlight Plays** | | |
 | Walk-Off Hit | +1 | Batter |
-| Web Gem | +1 | Fielder |
+| Web Gem | +0.75 | Fielder |
 | Robbery (HR-saving catch) | +1 | Fielder |
-| Inside-the-Park HR | +1 | Batter |
-| Cycle | +1 | Batter |
+| Inside-the-Park HR | +1.5 | Batter |
+| Cycle | +3.0 | Batter |
 | Multi-HR Game (2+) | +1 | Batter |
-| Back-to-Back HRs | +1 | Each batter |
+| Back-to-Back HRs | +0.5 each | Each batter |
 | Clutch Grand Slam | +1 | Batter |
 | Unassisted Triple Play | +3 | Fielder |
 | **Pitching** | | |

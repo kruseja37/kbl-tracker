@@ -4,10 +4,12 @@ Source Audit: spec-docs/SPEC_UI_ALIGNMENT_REPORT.md
 Baseline: Build PASS, Tests 5025 passing (77 known PostGameSummary failures)
 
 ## Summary
-- Total fixes attempted: 8
-- Fixes completed: 8
+- Total fixes attempted: 10
+- Fixes completed: 10
 - Fixes reverted: 0
 - Fixes blocked (needs user): 0
+- Fixes assessed as not-a-bug: 1 (MIN-05: SF RBI=1 is correct)
+- Fixes deferred to larger effort: 1 (MIN-04: HBP tracking → MAJ-07 PitcherGameStats expansion)
 - Regressions caught and fixed: 1 (CRIT-03 test expected old buggy behavior)
 - Final state: Build PASS, Tests 5025 passing
 
@@ -113,6 +115,31 @@ Baseline: Build PASS, Tests 5025 passing (77 known PostGameSummary failures)
 - Pitcher sync on each record function — handles half-inning transitions gracefully
 - D3K classified as 'error' for ER purposes (uncaught third strike)
 **Files**: `useGameState.ts` only (all changes contained to the hook)
+
+## Tier 3: Spec Constants
+
+| ID | Description | Files | Verify | Status |
+|----|------------|-------|--------|--------|
+| MAJ-13 | Spec fame summary table contradicts inline values | SPECIAL_EVENTS_SPEC.md | Spec-only fix | ✅ COMPLETE |
+| MIN-07 | HOT_TAKE uses fixed values, spec says randomRange | narrativeEngine.ts | Build ✅ Tests 5025 ✅ | ✅ COMPLETE |
+| MIN-05 | SF RBI hardcoded to 1 | — | Baseball rules confirm 1 RBI | ✅ NOT A BUG |
+| MIN-04 | HBP not tracked separately in pitcher stats | — | Requires MAJ-07 expansion | ⏳ DEFERRED |
+
+### MAJ-13: Spec Fame Summary Table Fix
+**Problem**: Summary table at line 1568 showed +1 for all events. Inline values (Sec 5) show granular values: Web Gem +0.75, Cycle +3.0, Inside Park HR +1.5.
+**Fix**: Updated summary table to match inline values. Code already matched inline values.
+**Files**: `SPECIAL_EVENTS_SPEC.md` only (spec fix, no code change)
+
+### MIN-07: HOT_TAKE Random Ranges
+**Problem**: `REPORTER_MORALE_INFLUENCE.HOT_TAKE` used fixed values (winBoost: 3, lossBuffer: -3, streakAmplifier: 2.0). Spec says `randomRange(+1, +3)`, `randomRange(-3, 0)`, `randomRange(0.5, 2.0)`.
+**Fix**: Added per-invocation random generation in `calculateStoryMoraleImpact` when effectivePersonality is HOT_TAKE.
+**Files**: `narrativeEngine.ts`
+
+### MIN-05: SF RBI = 1 (NOT A BUG)
+**Assessment**: A sacrifice fly by definition scores exactly 1 run from third base. The hardcoded value is correct per baseball rules and confirmed by MASTER_BASEBALL_RULES_AND_LOGIC.md.
+
+### MIN-04: HBP Tracking (DEFERRED)
+**Assessment**: HBP is lumped with BB in both batter and pitcher stats. PitcherGameStats interface has 9 fields vs spec's 30+. Fixing this properly requires MAJ-07 (expand PitcherGameStats) — not a simple constant change.
 
 ## Test Count Delta
 - Before: 5025 tests passing
