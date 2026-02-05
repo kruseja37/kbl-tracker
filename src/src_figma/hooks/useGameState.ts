@@ -1545,22 +1545,64 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       };
     });
 
-    // Update game state - batter takes first base
+    // Update game state - batter takes first base, runners advance per runnerData
     setGameState(prev => {
-      let newBases = { first: true, second: false, third: false };
+      // Start with current bases, then apply movements
+      let newFirst = true; // Batter reaches first on error
+      let newSecond = prev.bases.second; // Default: stay
+      let newThird = prev.bases.third;   // Default: stay
 
-      // Handle runner advancement
+      // Handle runner advancement from runnerData
       if (runnerData) {
-        if (runnerData.fromFirst === 'second') newBases.second = true;
-        if (runnerData.fromFirst === 'third') newBases.third = true;
-        if (runnerData.fromSecond === 'third') newBases.third = true;
+        // R1 movement
+        if (prev.bases.first) {
+          if (runnerData.fromFirst === 'second') {
+            newSecond = true;
+            // First base now has batter
+          } else if (runnerData.fromFirst === 'third') {
+            newThird = true;
+          } else if (runnerData.fromFirst === 'home' || runnerData.fromFirst === 'out') {
+            // First vacated, batter takes it
+          } else {
+            // R1 stays at first - but batter also reaches first!
+            // This shouldn't happen (two people on first), default to R1 goes to second
+            newSecond = true;
+          }
+        }
+
+        // R2 movement
+        if (prev.bases.second) {
+          if (runnerData.fromSecond === 'third') {
+            newThird = true;
+            newSecond = prev.bases.first && runnerData.fromFirst === 'second'; // Only occupied if R1 went there
+          } else if (runnerData.fromSecond === 'home' || runnerData.fromSecond === 'out') {
+            // Second vacated
+            newSecond = prev.bases.first && runnerData.fromFirst === 'second';
+          }
+          // else R2 stays at second
+        }
+
+        // R3 movement (scores or holds)
+        if (prev.bases.third) {
+          if (runnerData.fromThird === 'home' || runnerData.fromThird === 'out') {
+            // Third vacated
+            newThird = prev.bases.second && runnerData.fromSecond === 'third';
+          }
+          // else R3 stays at third
+        }
+      } else {
+        // No runner data - default behavior: runners advance one base
+        if (prev.bases.third) newThird = false; // R3 scores
+        if (prev.bases.second) { newThird = true; newSecond = false; } // R2 to third
+        if (prev.bases.first) { newSecond = true; } // R1 to second
+        // Batter to first (already set)
       }
 
       return {
         ...prev,
         balls: 0,
         strikes: 0,
-        bases: newBases,
+        bases: { first: newFirst, second: newSecond, third: newThird },
         awayScore: prev.isTop ? prev.awayScore + runsScored : prev.awayScore,
         homeScore: prev.isTop ? prev.homeScore : prev.homeScore + runsScored,
       };
@@ -2052,6 +2094,109 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
   }, [gameState, playerStats, pitcherStats, fameEvents, atBatSequence, scoreboard]);
 
   const endGame = useCallback(async () => {
+    // Archive game FIRST so PostGameSummary can load it (EXH-011 fix)
+    // Build persisted state for archiving
+    const playerStatsRecord: Record<string, {
+      pa: number; ab: number; h: number; singles: number; doubles: number;
+      triples: number; hr: number; rbi: number; r: number; bb: number;
+      k: number; sb: number; cs: number; putouts: number; assists: number;
+      fieldingErrors: number;
+    }> = {};
+    playerStats.forEach((stats, playerId) => {
+      playerStatsRecord[playerId] = {
+        ...stats,
+        putouts: 0,
+        assists: 0,
+        fieldingErrors: 0,
+      };
+    });
+
+    // Map local pitcher stats to PersistedGameState format
+    // Note: Local PitcherGameStats has fewer fields, so we use defaults for missing ones
+    const pitcherGameStatsArray = Array.from(pitcherStats.entries()).map(([pitcherId, stats], idx) => ({
+      pitcherId,
+      pitcherName: pitcherId,
+      teamId: gameState.isTop ? gameState.homeTeamId : gameState.awayTeamId,
+      isStarter: idx === 0, // First entry is starter
+      entryInning: idx === 0 ? 1 : gameState.inning, // Starter enters inning 1
+      outsRecorded: stats.outsRecorded,
+      hitsAllowed: stats.hitsAllowed,
+      runsAllowed: stats.runsAllowed,
+      earnedRuns: stats.earnedRuns,
+      walksAllowed: stats.walksAllowed,
+      strikeoutsThrown: stats.strikeoutsThrown,
+      homeRunsAllowed: stats.homeRunsAllowed,
+      hitBatters: 0, // Not tracked in local PitcherGameStats
+      basesReachedViaError: 0,
+      wildPitches: 0, // Not tracked in local PitcherGameStats
+      pitchCount: stats.pitchCount,
+      battersFaced: stats.battersFaced,
+      consecutiveHRsAllowed: 0,
+      firstInningRuns: 0,
+      basesLoadedWalks: 0,
+      inningsComplete: Math.floor(stats.outsRecorded / 3),
+    }));
+
+    const persistedState: PersistedGameState = {
+      id: 'current',
+      gameId: gameState.gameId,
+      savedAt: Date.now(),
+      inning: gameState.inning,
+      halfInning: gameState.isTop ? 'TOP' : 'BOTTOM',
+      outs: gameState.outs,
+      homeScore: gameState.homeScore,
+      awayScore: gameState.awayScore,
+      bases: {
+        first: gameState.bases.first ? { playerId: 'r1', playerName: 'R1' } : null,
+        second: gameState.bases.second ? { playerId: 'r2', playerName: 'R2' } : null,
+        third: gameState.bases.third ? { playerId: 'r3', playerName: 'R3' } : null,
+      },
+      currentBatterIndex: 0,
+      atBatCount: atBatSequence,
+      awayTeamId: gameState.awayTeamId,
+      homeTeamId: gameState.homeTeamId,
+      awayTeamName: gameState.awayTeamName,
+      homeTeamName: gameState.homeTeamName,
+      playerStats: playerStatsRecord,
+      pitcherGameStats: pitcherGameStatsArray,
+      // Map local FameEventRecord to PersistedGameState format
+      // Note: Local FameEventRecord has fewer fields, so we use defaults for missing ones
+      fameEvents: fameEvents.map((fe, idx) => ({
+        id: `${gameState.gameId}_fame_${idx}`,
+        gameId: gameState.gameId,
+        eventType: fe.eventType,
+        playerId: fe.playerId,
+        playerName: fe.playerName,
+        playerTeam: '', // Not tracked in local FameEventRecord
+        fameValue: fe.fameValue,
+        fameType: fe.fameType,
+        inning: gameState.inning, // Use current game inning
+        halfInning: gameState.isTop ? 'TOP' as const : 'BOTTOM' as const,
+        timestamp: Date.now(),
+        autoDetected: true, // Assume auto-detected
+        description: fe.description,
+      })),
+      lastHRBatterId: null,
+      consecutiveHRCount: 0,
+      inningStrikeouts: 0,
+      maxDeficitAway: 0,
+      maxDeficitHome: 0,
+      activityLog: [],
+    };
+
+    // Archive game for post-game summary
+    const inningScores = scoreboard.innings.map(inn => ({
+      away: inn.away ?? 0,
+      home: inn.home ?? 0,
+    }));
+    await archiveCompletedGame(
+      persistedState,
+      { away: gameState.awayScore, home: gameState.homeScore },
+      inningScores
+    );
+
+    console.log('[endGame] Game archived for post-game summary');
+
     // Per PITCH_COUNT_TRACKING_SPEC.md: Mandatory pitch count capture at end of game
     // Show prompt for current pitcher (simplified - full spec requires all pitchers)
     const currentPitcherStats = pitcherStats.get(gameState.currentPitcherId) || createEmptyPitcherStats();
@@ -2064,9 +2209,9 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       lastVerifiedInning: gameState.inning,
     });
 
-    // Store the pending action
+    // Store the pending action (for season aggregation, etc.)
     pendingActionRef.current = completeGameInternal;
-  }, [gameState.currentPitcherId, gameState.currentPitcherName, gameState.inning, pitcherStats, completeGameInternal]);
+  }, [gameState, playerStats, pitcherStats, fameEvents, atBatSequence, scoreboard, completeGameInternal]);
 
   // Restore state from undo snapshot (Phase 7 - Undo System)
   const restoreState = useCallback((snapshot: { gameState: GameState; scoreboard: ScoreboardState }) => {

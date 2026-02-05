@@ -146,14 +146,45 @@ export async function loadTeamLineup(
   const lineup = roster.lineupVsRHP;
   const lineupPlayerIds = new Set(lineup.map(slot => slot.playerId));
 
-  const lineupPlayers: RosterPlayer[] = [];
-  for (const slot of lineup) {
+  // Find starting pitcher
+  const pitcherPlayers = teamPlayers.filter(
+    p => ['SP', 'RP', 'CP'].includes(p.primaryPosition)
+  );
+  const starters = pitcherPlayers.filter(p => p.primaryPosition === 'SP');
+  const startingPitcherId = roster.startingRotation?.[0] || starters[0]?.id;
+  const startingPitcher = teamPlayers.find(p => p.id === startingPitcherId);
+
+  // Check if lineup includes a pitcher (SMB4 doesn't have DH)
+  const lineupHasPitcher = lineup.some(slot => {
     const player = playerMap.get(slot.playerId);
+    return player && ['SP', 'RP', 'CP'].includes(player.primaryPosition);
+  });
+
+  const lineupPlayers: RosterPlayer[] = [];
+  for (let i = 0; i < lineup.length; i++) {
+    const slot = lineup[i];
+    const player = playerMap.get(slot.playerId);
+
+    // If this is spot 9 and no pitcher in lineup, replace with starting pitcher (EXH-009)
+    if (!lineupHasPitcher && slot.battingOrder === 9 && startingPitcher) {
+      lineupPlayers.push(
+        convertToRosterPlayer(startingPitcher, 9, 'P')
+      );
+      continue;
+    }
+
     if (player) {
       lineupPlayers.push(
         convertToRosterPlayer(player, slot.battingOrder, slot.fieldingPosition)
       );
     }
+  }
+
+  // If lineup has 8 players and no pitcher, add starting pitcher at 9
+  if (!lineupHasPitcher && lineupPlayers.length === 8 && startingPitcher) {
+    lineupPlayers.push(
+      convertToRosterPlayer(startingPitcher, 9, 'P')
+    );
   }
 
   // Bench players: MLB roster minus lineup players
@@ -173,14 +204,7 @@ export async function loadTeamLineup(
     }
   }
 
-  // Build pitcher list
-  const pitcherPlayers = teamPlayers.filter(
-    p => ['SP', 'RP', 'CP'].includes(p.primaryPosition)
-  );
-
-  // Determine starting pitcher from rotation
-  const startingPitcherId = roster.startingRotation?.[0];
-
+  // Build pitcher list (reuse pitcherPlayers from above)
   const rosterPitchers: RosterPitcher[] = [];
   for (const player of pitcherPlayers) {
     const isActive = player.id === startingPitcherId;
