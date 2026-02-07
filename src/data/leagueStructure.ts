@@ -177,3 +177,27 @@ export function teamUsesDH(leagueId: string, teamId: string): boolean {
   const conference = getTeamConference(leagueId, teamId);
   return conference?.useDH ?? false;
 }
+
+// Helper to get division for a team
+export function getTeamDivision(leagueId: string, teamId: string): Division | null {
+  const league = LEAGUES[leagueId];
+  if (!league) return null;
+
+  for (const conference of league.conferences) {
+    for (const division of conference.divisions) {
+      if (division.teamIds.includes(teamId)) {
+        return division;
+      }
+    }
+  }
+  return null;
+}
+
+// Check if two teams are rivals (same division)
+export function areRivals(leagueId: string, teamA: string, teamB: string): boolean {
+  if (!teamA || !teamB || teamA === teamB) return false;
+  const divA = getTeamDivision(leagueId, teamA);
+  const divB = getTeamDivision(leagueId, teamB);
+  if (!divA || !divB) return false;
+  return divA.id === divB.id;
+}

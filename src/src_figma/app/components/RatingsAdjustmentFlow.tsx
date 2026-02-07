@@ -1,7 +1,10 @@
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import { X, ArrowLeft, ArrowRight, TrendingUp, TrendingDown, Minus, Lock, Trophy, DollarSign, Star, Award, ChevronDown, ChevronUp, ChevronRight, BarChart3, CheckCircle, Plus } from "lucide-react";
 import { useOffseasonData, type OffseasonPlayer, type OffseasonTeam } from "@/hooks/useOffseasonData";
 import { useOffseasonState, type RatingAdjustment, type ManagerBonus } from "../../hooks/useOffseasonState";
+import { getAllManagerSeasonStatsForSeason } from '../../../utils/managerStorage';
+import { calculateMOYVotes, getMWARRating } from '../../../engines/mwarCalculator';
+import type { ManagerSeasonStats } from '../../../engines/mwarCalculator';
 
 // Types
 type Position = "SP" | "RP" | "CP" | "SP/RP" | "C" | "1B" | "2B" | "3B" | "SS" | "LF" | "CF" | "RF" | "DH" | "UTIL" | "BENCH" | "TWO-WAY";
@@ -90,10 +93,50 @@ const MOCK_TEAMS: Team[] = [
 ];
 
 /**
- * Convert OffseasonTeam to local Team format with defaults for ratings adjustment
+ * Convert mWAR value to letter grade (S through D)
  */
-function convertToLocalTeam(team: OffseasonTeam, index: number): Team {
-  // Default manager data for now (would come from manager system in future)
+function mwarToGrade(mWAR: number): Grade {
+  const rating = getMWARRating(mWAR);
+  switch (rating) {
+    case 'Elite': return 'S';
+    case 'Excellent': return 'A+';
+    case 'Above Average': return 'A';
+    case 'Average': return 'B+';
+    case 'Below Average': return 'C+';
+    case 'Poor': return 'D';
+    default: return 'B';
+  }
+}
+
+/**
+ * Convert OffseasonTeam to local Team format with real or default manager data
+ */
+function convertToLocalTeam(
+  team: OffseasonTeam,
+  index: number,
+  realManagerStats?: ManagerSeasonStats[],
+  moyManagerId?: string
+): Team {
+  // Try to find real manager stats for this team
+  const realStats = realManagerStats?.find(m => m.teamId === team.id);
+
+  if (realStats) {
+    const wins = realStats.teamRecord.wins;
+    const losses = realStats.teamRecord.losses;
+    return {
+      id: team.id,
+      name: team.name,
+      shortName: team.shortName,
+      record: { wins, losses },
+      logo: team.shortName.slice(0, 3).toUpperCase(),
+      managerName: realStats.managerId.replace(/-manager$/, '').replace(/-/g, ' '),
+      managerGrade: mwarToGrade(realStats.mWAR),
+      mWAR: realStats.mWAR,
+      isManagerOfYear: realStats.managerId === moyManagerId,
+    };
+  }
+
+  // Fallback: default manager data
   const defaultManagers = [
     { name: "Manager 1", grade: "B+" as Grade, mWAR: 2.0, isMOY: false },
     { name: "Manager 2", grade: "A-" as Grade, mWAR: 3.2, isMOY: false },
@@ -110,7 +153,7 @@ function convertToLocalTeam(team: OffseasonTeam, index: number): Team {
     id: team.id,
     name: team.name,
     shortName: team.shortName,
-    record: { wins: 35, losses: 35 }, // Default - would come from season data
+    record: { wins: 35, losses: 35 },
     logo: team.shortName.slice(0, 3).toUpperCase(),
     managerName: mgr.name,
     managerGrade: mgr.grade,
@@ -344,14 +387,40 @@ export function RatingsAdjustmentFlow({ seasonId, onClose }: RatingsAdjustmentFl
   // Offseason state hook for persistence
   const { saveRatingChanges } = useOffseasonState(seasonId);
   const [isSaving, setIsSaving] = useState(false);
+  const [managerSeasonStats, setManagerSeasonStats] = useState<ManagerSeasonStats[]>([]);
+
+  // Load real manager season stats
+  useEffect(() => {
+    getAllManagerSeasonStatsForSeason(seasonId)
+      .then(stats => setManagerSeasonStats(stats))
+      .catch(err => console.warn('[RatingsAdjustment] Failed to load manager stats:', err));
+  }, [seasonId]);
+
+  // Determine MOY winner from real data
+  const moyManagerId = useMemo(() => {
+    if (managerSeasonStats.length === 0) return undefined;
+    const managersWithVotes = managerSeasonStats
+      .filter(m => m.gamesPlayed > 0)
+      .map(m => ({
+        managerId: m.managerId,
+        votes: calculateMOYVotes(
+          { mWAR: m.mWAR, overperformanceWins: m.overperformanceWins },
+          managerSeasonStats.map(ms => ({ mWAR: ms.mWAR, overperformanceWins: ms.overperformanceWins }))
+        ),
+      }))
+      .sort((a, b) => b.votes - a.votes);
+    return managersWithVotes[0]?.managerId;
+  }, [managerSeasonStats]);
 
   // Convert real data to local format, with mock fallback
   const TEAMS: Team[] = useMemo(() => {
     if (hasRealData && realTeams.length > 0) {
-      return realTeams.slice(0, 8).map((team, index) => convertToLocalTeam(team, index));
+      return realTeams.slice(0, 8).map((team, index) =>
+        convertToLocalTeam(team, index, managerSeasonStats, moyManagerId)
+      );
     }
     return MOCK_TEAMS;
-  }, [realTeams, hasRealData]);
+  }, [realTeams, hasRealData, managerSeasonStats, moyManagerId]);
 
   const ALL_PLAYERS: Player[] = useMemo(() => {
     if (hasRealData && realPlayers.length > 0) {

@@ -14,6 +14,7 @@ import { TeamRoster, type Player, type Pitcher } from "@/app/components/TeamRost
 import { MiniScoreboard } from "@/app/components/MiniScoreboard";
 import { getTeamColors, getFielderBorderColors } from "@/config/teamColors";
 import { defaultTigersPlayers, defaultTigersPitchers, defaultSoxPlayers, defaultSoxPitchers } from "@/data/defaultRosters";
+import { areRivals } from '../../../data/leagueStructure';
 import { useGameState, type HitType, type OutType, type WalkType, type RunnerAdvancement, type PlayerGameStats, type PitcherGameStats } from "@/hooks/useGameState";
 import { usePlayerState, type PlayerStateData, getStateBadge, formatMultiplier } from "@/app/hooks/usePlayerState";
 // EXH-036: Import Mojo/Fitness types for PlayerCardModal editing
@@ -31,6 +32,10 @@ import type { FameEventType } from "../../../types/game";
 import { useFanMorale, type GameResult as FanMoraleGameResult } from "../hooks/useFanMorale";
 // MAJ-04: Wire narrative engine
 import { generateGameRecap } from "../engines/narrativeIntegration";
+// mWAR: Manager decision tracking
+import { useMWARCalculations } from "../hooks/useMWARCalculations";
+import type { GameStateForLI } from "../../../engines/leverageCalculator";
+import { saveGameDecisions, aggregateManagerGameToSeason } from '../../../utils/managerStorage';
 
 // Note: Using GameState from useGameState hook instead of local interface
 // This interface is deprecated but kept for reference during migration
@@ -79,6 +84,11 @@ export function GameTracker() {
     awayRecord?: string;
     homeRecord?: string;
     gameMode?: 'exhibition' | 'franchise' | 'playoff';
+    leagueId?: string;
+    homeManagerId?: string;
+    homeManagerName?: string;
+    awayManagerId?: string;
+    awayManagerName?: string;
   } | null;
 
   // Team IDs - use navigation state or defaults
@@ -89,6 +99,9 @@ export function GameTracker() {
   const stadiumName = navigationState?.stadiumName;
   const awayRecord = navigationState?.awayRecord || (navigationState?.gameMode === 'exhibition' ? '0-0' : '0-0');
   const homeRecord = navigationState?.homeRecord || (navigationState?.gameMode === 'exhibition' ? '0-0' : '0-0');
+  const leagueId = navigationState?.leagueId || 'sml';
+  const homeManagerId = navigationState?.homeManagerId || `${homeTeamId}-manager`;
+  const awayManagerId = navigationState?.awayManagerId || `${awayTeamId}-manager`;
 
   // Team colors - prefer navigation state (from database), fall back to static config
   const awayTeamColor = navigationState?.awayTeamColor || getTeamColors(awayTeamId).primary;
@@ -155,6 +168,40 @@ export function GameTracker() {
 
   // MAJ-02: Fan morale tracking
   const fanMoraleHook = useFanMorale();
+
+  // mWAR: Manager decision tracking
+  const mwarHook = useMWARCalculations();
+
+  // Initialize mWAR tracking at game start
+  useEffect(() => {
+    if (gameId) {
+      mwarHook.initializeGame(gameId, homeManagerId);
+      mwarHook.initializeSeason('season-1', homeManagerId, homeTeamId);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gameId]);
+
+  // Helper to build GameStateForLI from current game state for mWAR/LI calculations
+  const buildGameStateForLI = useCallback((): GameStateForLI => ({
+    inning: gameState?.inning ?? 1,
+    halfInning: gameState?.isTop ? 'TOP' : 'BOTTOM',
+    outs: (gameState?.outs ?? 0) as 0 | 1 | 2,
+    runners: {
+      first: !!gameState?.bases?.first,
+      second: !!gameState?.bases?.second,
+      third: !!gameState?.bases?.third,
+    },
+    homeScore: gameState?.homeScore ?? 0,
+    awayScore: gameState?.awayScore ?? 0,
+  }), [gameState]);
+
+  // Track pending mWAR decisions for outcome resolution
+  const [pendingMWARDecisions, setPendingMWARDecisions] = useState<Map<string, {
+    decisionId: string;
+    decisionType: string;
+    involvedPlayers: string[];
+    resolveAfterNextPlay: boolean;
+  }>>(new Map());
 
   // Track selected hit/out/walk details for the two-step record flow
   const [pendingOutcome, setPendingOutcome] = useState<{
@@ -697,6 +744,13 @@ export function GameTracker() {
 
     if (sub.type === 'pitching_change') {
       changePitcher(sub.incomingPlayerId, sub.outgoingPlayerId, sub.incomingPlayerName, sub.outgoingPlayerName);
+      // mWAR: Record pitching change decision
+      try {
+        const gsLI = buildGameStateForLI();
+        const decisionId = mwarHook.recordDecision('pitching_change', gsLI, [sub.incomingPlayerId, sub.outgoingPlayerId], `Replaced ${sub.outgoingPlayerName} with ${sub.incomingPlayerName}`);
+        setPendingMWARDecisions(prev => new Map(prev).set(decisionId, { decisionId, decisionType: 'pitching_change', involvedPlayers: [sub.incomingPlayerId], resolveAfterNextPlay: true }));
+        console.log(`[mWAR] Recorded pitching_change decision: ${decisionId}`);
+      } catch (e) { console.warn('[mWAR] Decision recording error (non-blocking):', e); }
     } else if (sub.type === 'position_swap') {
       // MAJ-06: Position-only switch — no new players enter
       switchPositions([
@@ -709,6 +763,19 @@ export function GameTracker() {
         subType: sub.type === 'double_switch' ? 'double_switch' : 'player_sub',
         newPosition: sub.newPosition,
       });
+
+      // mWAR: Infer decision type — pinch hitter if outgoing is current batter, otherwise defensive sub
+      try {
+        const gsLI = buildGameStateForLI();
+        const isPinchHitter = sub.outgoingPlayerId === gameState?.currentBatterId;
+        const decisionType = isPinchHitter ? 'pinch_hitter' : 'defensive_sub';
+        const decisionId = mwarHook.recordDecision(decisionType as any, gsLI, [sub.incomingPlayerId, sub.outgoingPlayerId], `${isPinchHitter ? 'PH' : 'Def sub'}: ${sub.incomingPlayerName} for ${sub.outgoingPlayerName}`);
+        if (isPinchHitter) {
+          // Resolve pinch hitter after next AB
+          setPendingMWARDecisions(prev => new Map(prev).set(decisionId, { decisionId, decisionType: 'pinch_hitter', involvedPlayers: [sub.incomingPlayerId], resolveAfterNextPlay: true }));
+        }
+        console.log(`[mWAR] Recorded ${decisionType} decision: ${decisionId}`);
+      } catch (e) { console.warn('[mWAR] Decision recording error (non-blocking):', e); }
 
       // EXH-018 FIX: Also update local player arrays so UI reflects the substitution
       // Find which team the outgoing player is on and update that team's roster
@@ -1238,6 +1305,59 @@ export function GameTracker() {
       }
 
       // ============================================
+      // mWAR: IBB detection + outcome resolution + Manager Moment check
+      // ============================================
+      try {
+        const gsLI = buildGameStateForLI();
+
+        // Auto-detect IBB decisions
+        if (playData.type === 'walk' && playData.walkType === 'IBB') {
+          const decisionId = mwarHook.recordDecision('intentional_walk', gsLI, [gameState?.currentBatterId || ''], `IBB issued`);
+          // IBB resolves after next batter
+          setPendingMWARDecisions(prev => new Map(prev).set(decisionId, { decisionId, decisionType: 'intentional_walk', involvedPlayers: [], resolveAfterNextPlay: true }));
+          console.log(`[mWAR] Recorded IBB decision: ${decisionId}`);
+        }
+
+        // Resolve pending decisions that should resolve after this play
+        if (pendingMWARDecisions.size > 0) {
+          const toResolve = Array.from(pendingMWARDecisions.values()).filter(d => d.resolveAfterNextPlay);
+          for (const pending of toResolve) {
+            let outcome: 'success' | 'failure' | 'neutral' = 'neutral';
+            if (pending.decisionType === 'pinch_hitter') {
+              // PH success: hit, walk, HBP; failure: K, GIDP
+              const isHit = playData.type === 'hit' || playData.type === 'hr';
+              const isWalk = playData.type === 'walk';
+              const isK = playData.type === 'out' && (playData.outType === 'K' || playData.outType === 'KL');
+              outcome = isHit || isWalk ? 'success' : isK ? 'failure' : 'neutral';
+            } else if (pending.decisionType === 'pitching_change') {
+              // Pitching change success: out recorded; failure: hit/walk/run scored
+              const isOut = playData.type === 'out' || playData.type === 'foul_out';
+              const isHit = playData.type === 'hit' || playData.type === 'hr';
+              outcome = isOut ? 'success' : isHit ? 'failure' : 'neutral';
+            } else if (pending.decisionType === 'intentional_walk') {
+              // IBB success: next batter makes out; failure: hit or walk
+              const isOut = playData.type === 'out' || playData.type === 'foul_out';
+              const isHit = playData.type === 'hit' || playData.type === 'hr';
+              outcome = isOut ? 'success' : isHit ? 'failure' : 'neutral';
+            }
+            mwarHook.resolveDecisionOutcome(pending.decisionId, outcome);
+            console.log(`[mWAR] Resolved ${pending.decisionType} → ${outcome}`);
+          }
+          // Remove resolved decisions
+          setPendingMWARDecisions(prev => {
+            const next = new Map(prev);
+            for (const d of toResolve) next.delete(d.decisionId);
+            return next;
+          });
+        }
+
+        // Check for Manager Moment (high leverage situation)
+        mwarHook.checkForManagerMoment(gsLI);
+      } catch (mwarError) {
+        console.warn('[mWAR] Decision tracking error (non-blocking):', mwarError);
+      }
+
+      // ============================================
       // EXH-025: Show error attribution modal AFTER play is recorded
       // This is informational - the play has already been processed
       // ============================================
@@ -1249,7 +1369,7 @@ export function GameTracker() {
     } catch (error) {
       console.error('Failed to record enhanced play:', error);
     }
-  }, [recordHit, recordOut, recordWalk, recordError, advanceCount, gameState, undoSystem, playerStats, pitcherStats, fameTrackingHook, playerStateHook, runnerNames]);
+  }, [recordHit, recordOut, recordWalk, recordError, advanceCount, gameState, undoSystem, playerStats, pitcherStats, fameTrackingHook, playerStateHook, runnerNames, buildGameStateForLI, mwarHook, pendingMWARDecisions]);
 
   // EXH-016: Handle fielder credit confirmation - continue processing the play with credits
   const handleFielderCreditConfirm = useCallback(async (credits: FielderCredit[]) => {
@@ -1511,6 +1631,14 @@ export function GameTracker() {
     // 1. Show pitch count prompt for exiting pitcher
     // 2. After confirmation, update currentPitcherId/currentPitcherName
     changePitcher(newPitcherId, exitingPitcherId, newPitcherName, replacedName);
+
+    // mWAR: Record pitching change decision
+    try {
+      const gsLI = buildGameStateForLI();
+      const decisionId = mwarHook.recordDecision('pitching_change', gsLI, [newPitcherId, exitingPitcherId], `Replaced ${replacedName} with ${newPitcherName}`);
+      setPendingMWARDecisions(prev => new Map(prev).set(decisionId, { decisionId, decisionType: 'pitching_change', involvedPlayers: [newPitcherId], resolveAfterNextPlay: true }));
+      console.log(`[mWAR] Recorded pitching_change decision: ${decisionId}`);
+    } catch (e) { console.warn('[mWAR] Decision recording error (non-blocking):', e); }
   };
 
   const handlePositionSwap = useCallback((teamType: 'away' | 'home', player1Name: string, player2Name: string) => {
@@ -1666,6 +1794,8 @@ export function GameTracker() {
         }
       }
 
+      const isRivalMatchup = areRivals(leagueId, homeTeamId, awayTeamId);
+
       const moraleGameResult: FanMoraleGameResult = {
         gameId: gameId || 'demo-game',
         won: homeWon, // Assume home team is tracked team for now
@@ -1673,12 +1803,12 @@ export function GameTracker() {
         isNoHitter,
         isShutout,
         isBlowout,
-        vsRival: false, // TODO: detect rival matchup — needs division data from leagueBuilderStorage + team IDs at game init
+        vsRival: isRivalMatchup,
         runDifferential: runDiff,
         playerPerformances: [], // TODO: populate with per-player WAR
       };
 
-      fanMoraleHook.processGameResult(moraleGameResult, { season: 1, game: 1 });
+      fanMoraleHook.processGameResult(moraleGameResult, { season: 1, game: 1 }, isRivalMatchup ? awayTeamName : undefined);
       console.log(`[MAJ-02] Fan morale updated — won: ${homeWon}, diff: ${runDiff}, shutout: ${isShutout}`);
     } catch (moraleError) {
       console.warn('[MAJ-02] Fan morale update error (non-blocking):', moraleError);
@@ -1710,6 +1840,26 @@ export function GameTracker() {
       console.warn('[MAJ-04] Narrative generation error (non-blocking):', narrativeError);
     }
 
+    // mWAR: Persist decisions and aggregate to season
+    try {
+      if (mwarHook.gameStats && mwarHook.gameStats.decisions.length > 0) {
+        await saveGameDecisions(mwarHook.gameStats.decisions);
+        // Aggregate to season with default team stats (actual record comes from season data)
+        await aggregateManagerGameToSeason(
+          gameId || 'demo-game',
+          'season-1',
+          homeManagerId,
+          homeTeamId,
+          { wins: 0, losses: 0 }, // TODO: get actual team record from season storage
+          0.5, // Default salary score
+          50, // Default season games
+        );
+        console.log(`[mWAR] Persisted ${mwarHook.gameStats.decisions.length} decisions, mWAR: ${mwarHook.formatCurrentMWAR()}`);
+      }
+    } catch (mwarError) {
+      console.warn('[mWAR] Persistence error (non-blocking):', mwarError);
+    }
+
     await hookEndGame();
     // Pass game mode and narratives so PostGameSummary can display them
     navigate(`/post-game/${gameId}`, {
@@ -1720,7 +1870,7 @@ export function GameTracker() {
         awayNarrative,
       }
     });
-  }, [hookEndGame, navigate, gameId, navigationState?.gameMode, gameState, pitcherStats, fameTrackingHook, fanMoraleHook, homeTeamName, awayTeamName]);
+  }, [hookEndGame, navigate, gameId, navigationState?.gameMode, gameState, pitcherStats, fameTrackingHook, fanMoraleHook, homeTeamName, awayTeamName, mwarHook, homeManagerId, homeTeamId]);
 
   return (
     <DndProvider backend={HTML5Backend}>
@@ -1750,6 +1900,48 @@ export function GameTracker() {
                 </div>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* mWAR: Manager Moment Notification — shows at LI ≥ 2.0 */}
+      {mwarHook.managerMoment.isTriggered && (
+        <div className="fixed bottom-4 left-4 right-4 z-50 max-w-md mx-auto">
+          <div className="bg-[#4A6A42] border-4 border-[#FFD700] p-3 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.5)]">
+            <div className="flex items-center justify-between mb-1">
+              <div className="text-xs font-bold text-[#FFD700]">
+                ⚡ MANAGER MOMENT (LI: {mwarHook.managerMoment.leverageIndex.toFixed(1)})
+              </div>
+              <button
+                onClick={() => mwarHook.dismissManagerMoment()}
+                className="text-[#E8E8D8]/60 hover:text-[#E8E8D8] text-xs px-1"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="text-sm text-[#E8E8D8] mb-2">{mwarHook.managerMoment.context}</div>
+            {mwarHook.managerMoment.decisionType && (
+              <div className="flex gap-2">
+                <button
+                  onClick={() => {
+                    const gsLI = buildGameStateForLI();
+                    const decisionId = mwarHook.recordDecision(mwarHook.managerMoment.decisionType!, gsLI, [], mwarHook.managerMoment.suggestedAction || '');
+                    setPendingMWARDecisions(prev => new Map(prev).set(decisionId, { decisionId, decisionType: mwarHook.managerMoment.decisionType!, involvedPlayers: [], resolveAfterNextPlay: true }));
+                    mwarHook.dismissManagerMoment();
+                    console.log(`[mWAR] User called ${mwarHook.managerMoment.decisionType}: ${decisionId}`);
+                  }}
+                  className="flex-1 py-1.5 text-xs bg-[#FFD700] text-[#2A3A22] font-bold border-2 border-[#B8960A] hover:bg-[#E8C400] active:scale-95 transition-transform"
+                >
+                  Call {mwarHook.managerMoment.decisionType?.replace(/_/g, ' ')}
+                </button>
+                <button
+                  onClick={() => mwarHook.dismissManagerMoment()}
+                  className="flex-1 py-1.5 text-xs bg-[#5A8352] text-[#E8E8D8] border-2 border-[#4A6844] hover:bg-[#4F7D4B] active:scale-95 transition-transform"
+                >
+                  Skip
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}

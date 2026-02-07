@@ -91,6 +91,8 @@ export interface Team {
   foundedYear?: number;
   championships?: number;
   retiredNumbers?: number[];
+  managerId?: string;
+  managerName?: string;
   createdDate: string;
   lastModified: string;
 }

@@ -80,7 +80,7 @@ export interface UseFanMoraleReturn {
 
   // Actions
   initialize: (initialMorale?: number, gameDate?: GameDate) => void;
-  processGameResult: (gameResult: GameResult, gameDate: GameDate) => void;
+  processGameResult: (gameResult: GameResult, gameDate: GameDate, vsRivalName?: string) => void;
   refresh: () => void;
 }
 
@@ -144,20 +144,21 @@ export function useFanMorale(
   // Process a game result and update morale accordingly
   const processGameResult = useCallback((
     gameResult: GameResult,
-    gameDate: GameDate
+    gameDate: GameDate,
+    vsRivalName?: string
   ) => {
     if (!morale) {
       // Auto-initialize if not yet started
       const newMorale = initializeFanMorale(50, gameDate);
       setMorale(newMorale);
       // Process after init
-      const event = createGameMoraleEvent(gameResult, gameDate);
+      const event = createGameMoraleEvent(gameResult, gameDate, vsRivalName);
       const { updatedMorale } = processMoraleEvent(newMorale, event);
       setMorale(updatedMorale);
       return;
     }
 
-    const event = createGameMoraleEvent(gameResult, gameDate);
+    const event = createGameMoraleEvent(gameResult, gameDate, vsRivalName);
     const { updatedMorale } = processMoraleEvent(morale, event);
     setMorale(updatedMorale);
   }, [morale]);

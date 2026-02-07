@@ -1,7 +1,10 @@
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import { ArrowLeft, Star, Award, Trophy, ChevronDown, CheckCircle, X, TrendingUp, TrendingDown } from "lucide-react";
 import { useOffseasonData, type OffseasonPlayer, type OffseasonTeam } from "../../hooks/useOffseasonData";
 import { useOffseasonState, type AwardWinner } from "../../hooks/useOffseasonState";
+import { getAllManagerSeasonStatsForSeason } from '../../../utils/managerStorage';
+import { calculateMOYVotes, formatMWAR, getMWARRating } from '../../../engines/mwarCalculator';
+import type { ManagerSeasonStats } from '../../../engines/mwarCalculator';
 
 // Types
 type Position = "C" | "1B" | "2B" | "3B" | "SS" | "LF" | "CF" | "RF" | "P" | "DH";
@@ -110,6 +113,7 @@ export function AwardsCeremonyFlow({ onClose, seasonId = 'season-1', seasonNumbe
   const [currentSpecialAward, setCurrentSpecialAward] = useState(0);
   const [awards, setAwards] = useState<Award[]>([]);
   const [isSaving, setIsSaving] = useState(false);
+  const [managerSeasonStats, setManagerSeasonStats] = useState<ManagerSeasonStats[]>([]);
 
   // Wire to real data
   const {
@@ -118,6 +122,13 @@ export function AwardsCeremonyFlow({ onClose, seasonId = 'season-1', seasonNumbe
     players: realPlayers,
     hasRealData,
   } = useOffseasonData();
+
+  // Load manager season stats for MOY calculation
+  useEffect(() => {
+    getAllManagerSeasonStatsForSeason(seasonId)
+      .then(stats => setManagerSeasonStats(stats))
+      .catch(err => console.warn('[AwardsCeremony] Failed to load manager stats:', err));
+  }, [seasonId]);
 
   // Wire to offseason state for persistence
   const offseasonState = useOffseasonState(seasonId, seasonNumber);
@@ -335,7 +346,7 @@ export function AwardsCeremonyFlow({ onClose, seasonId = 'season-1', seasonNumbe
           {screen === "CY_YOUNG" && <CyYoungScreen league={currentLeague} onContinue={handleContinue} />}
           {screen === "MVP" && <MVPScreen league={currentLeague} onContinue={handleContinue} />}
           {screen === "MANAGER_YEAR" && (
-            <ManagerYearScreen league={currentLeague} onContinue={handleContinue} />
+            <ManagerYearScreen league={currentLeague} onContinue={handleContinue} managerSeasonStats={managerSeasonStats} />
           )}
           {screen === "SPECIAL_AWARDS" && (
             <SpecialAwardsScreen
@@ -1564,14 +1575,53 @@ function MVPScreen({ league, onContinue }: { league: League; onContinue: () => v
 }
 
 // Screen 11: Manager of the Year
-function ManagerYearScreen({ league, onContinue }: { league: League; onContinue: () => void }) {
-  const winner = {
+function ManagerYearScreen({ league, onContinue, managerSeasonStats = [] }: { league: League; onContinue: () => void; managerSeasonStats?: ManagerSeasonStats[] }) {
+  // Try to find MOY winner from real data
+  const moyWinner = useMemo(() => {
+    if (managerSeasonStats.length === 0) return null;
+
+    // Calculate MOY votes for each manager
+    const managersWithVotes = managerSeasonStats
+      .filter(m => m.gamesPlayed > 0)
+      .map(m => ({
+        stats: m,
+        votes: calculateMOYVotes(
+          { mWAR: m.mWAR, overperformanceWins: m.overperformanceWins },
+          managerSeasonStats.map(ms => ({ mWAR: ms.mWAR, overperformanceWins: ms.overperformanceWins }))
+        ),
+      }))
+      .sort((a, b) => b.votes - a.votes);
+
+    return managersWithVotes[0] || null;
+  }, [managerSeasonStats]);
+
+  // Use real data if available, else fallback to hardcoded
+  const winner = moyWinner ? (() => {
+    const m = moyWinner.stats;
+    const wins = m.teamRecord.wins;
+    const losses = m.teamRecord.losses;
+    const totalGames = wins + losses;
+    const winPct = totalGames > 0 ? (wins / totalGames).toFixed(3) : '.000';
+    const expectedWins = Math.round(m.expectedWinPct * totalGames);
+    const expectedLosses = totalGames - expectedWins;
+    const overperf = Math.round(m.overperformanceWins);
+    return {
+      team: m.teamId,
+      record: `${wins}-${losses}`,
+      winPct: winPct.startsWith('0') ? winPct.slice(1) : winPct,
+      expected: `${expectedWins}-${expectedLosses}`,
+      overperformance: `${overperf >= 0 ? '+' : ''}${overperf} wins`,
+      mwar: m.mWAR,
+      isRealData: true,
+    };
+  })() : {
     team: league === "AL" ? "Baltimore Orioles" : "Atlanta Braves",
     record: league === "AL" ? "98-64" : "104-58",
     winPct: league === "AL" ? ".605" : ".642",
     expected: league === "AL" ? "88-74" : "96-66",
     overperformance: league === "AL" ? "+10 wins" : "+8 wins",
     mwar: league === "AL" ? 4.2 : 3.8,
+    isRealData: false,
   };
 
   return (
@@ -1617,11 +1667,15 @@ function ManagerYearScreen({ league, onContinue }: { league: League; onContinue:
             <div className="flex justify-between items-center">
               <span className="text-[#E8E8D8]/60">mWAR:</span>
               <div className="flex items-center gap-2">
-                <span>+{winner.mwar}</span>
+                <span>{formatMWAR(winner.mwar)}</span>
                 <div className="w-24 bg-[#E8E8D8]/20 h-3 rounded">
-                  <div className="bg-[#5599FF] h-full rounded" style={{ width: "84%" }}></div>
+                  <div className="bg-[#5599FF] h-full rounded" style={{ width: `${Math.min(100, Math.max(0, (winner.mwar / 5) * 100))}%` }}></div>
                 </div>
               </div>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-[#E8E8D8]/60">Rating:</span>
+              <span className="text-[#FFD700]">{getMWARRating(winner.mwar)}</span>
             </div>
           </div>
         </div>
