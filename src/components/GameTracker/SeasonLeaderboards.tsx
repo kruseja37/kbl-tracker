@@ -53,6 +53,8 @@ export function SeasonBattingLeaderboard({
     runs: 'Runs Leaders',
     sb: 'Stolen Base Leaders',
     fameNet: 'Fame Leaders (Batting)',
+    bWAR: 'Batting WAR Leaders',
+    totalWAR: 'Total WAR Leaders',
   };
 
   const displayTitle = title || titleMap[sortBy];
@@ -144,6 +146,7 @@ export function SeasonPitchingLeaderboard({
     saves: 'Saves Leaders',
     ip: 'Innings Pitched Leaders',
     fameNet: 'Fame Leaders (Pitching)',
+    pWAR: 'Pitching WAR Leaders',
   };
 
   const displayTitle = title || titleMap[sortBy];
@@ -319,6 +322,8 @@ function getStatHeader(sortBy: BattingSortKey): string {
     runs: 'R',
     sb: 'SB',
     fameNet: 'Fame',
+    bWAR: 'bWAR',
+    totalWAR: 'WAR',
   };
   return headers[sortBy];
 }
@@ -332,6 +337,7 @@ function getPitchingStatHeader(sortBy: PitchingSortKey): string {
     saves: 'SV',
     ip: 'IP',
     fameNet: 'Fame',
+    pWAR: 'pWAR',
   };
   return headers[sortBy];
 }
@@ -358,6 +364,10 @@ function formatBattingStat(sortBy: BattingSortKey, player: BattingLeaderEntry): 
       return player.stolenBases.toString();
     case 'fameNet':
       return player.fameNet > 0 ? `+${player.fameNet}` : player.fameNet.toString();
+    case 'bWAR':
+      return player.bWAR.toFixed(1);
+    case 'totalWAR':
+      return player.totalWAR.toFixed(1);
     default:
       return '';
   }
@@ -379,6 +389,8 @@ function formatPitchingStat(sortBy: PitchingSortKey, player: PitchingLeaderEntry
       return player.ip;
     case 'fameNet':
       return player.fameNet > 0 ? `+${player.fameNet}` : player.fameNet.toString();
+    case 'pWAR':
+      return player.pWAR.toFixed(1);
     default:
       return '';
   }

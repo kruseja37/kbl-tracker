@@ -2943,6 +2943,13 @@ function LeagueLeadersContent() {
       { player: "S. Kim", team: "Moonstars", value: ".945" },
       { player: "D. Lee", team: "Beewolves", value: ".918" },
     ],
+    WAR: [
+      { player: "D. Wilson", team: "Beewolves", value: "5.2" },
+      { player: "R. Williams", team: "Nemesis", value: "4.8" },
+      { player: "J. Martinez", team: "Moonstars", value: "4.1" },
+      { player: "S. Kim", team: "Moonstars", value: "3.5" },
+      { player: "D. Lee", team: "Beewolves", value: "3.2" },
+    ],
   };
 
   const pitchingLeadersDataNL = {
@@ -2981,6 +2988,13 @@ function LeagueLeadersContent() {
       { player: "D. Martinez", team: "Beewolves", value: "25" },
       { player: "A. Brown", team: "Nemesis", value: "21" },
     ],
+    WAR: [
+      { player: "A. Chen", team: "Nemesis", value: "4.5" },
+      { player: "R. Garcia", team: "Moonstars", value: "3.8" },
+      { player: "D. Lee", team: "Beewolves", value: "3.2" },
+      { player: "J. Martinez", team: "Nemesis", value: "2.9" },
+      { player: "S. Kim", team: "Moonstars", value: "2.5" },
+    ],
   };
 
   const battingLeadersAL = [
@@ -2989,6 +3003,7 @@ function LeagueLeadersContent() {
     { stat: "RBI", value: "128" },
     { stat: "SB", value: "48" },
     { stat: "OPS", value: "1.087" },
+    { stat: "WAR", value: "5.8" },
   ];
 
   const battingLeadersNL = [
@@ -2997,6 +3012,7 @@ function LeagueLeadersContent() {
     { stat: "RBI", value: "125" },
     { stat: "SB", value: "62" },
     { stat: "OPS", value: "1.065" },
+    { stat: "WAR", value: "5.2" },
   ];
 
   const pitchingLeadersAL = [
@@ -3005,6 +3021,7 @@ function LeagueLeadersContent() {
     { stat: "K", value: "287" },
     { stat: "WHIP", value: "1.02" },
     { stat: "SV", value: "45" },
+    { stat: "WAR", value: "4.9" },
   ];
 
   const pitchingLeadersNL = [
@@ -3013,6 +3030,7 @@ function LeagueLeadersContent() {
     { stat: "K", value: "243" },
     { stat: "WHIP", value: "0.94" },
     { stat: "SV", value: "42" },
+    { stat: "WAR", value: "4.5" },
   ];
 
   // Mock award race leaders - AL
@@ -3511,6 +3529,13 @@ function AwardsContent() {
       { player: "S. Kim", team: "Moonstars", value: ".945" },
       { player: "D. Lee", team: "Beewolves", value: ".918" },
     ],
+    WAR: [
+      { player: "D. Wilson", team: "Beewolves", value: "5.2" },
+      { player: "R. Williams", team: "Nemesis", value: "4.8" },
+      { player: "J. Martinez", team: "Moonstars", value: "4.1" },
+      { player: "S. Kim", team: "Moonstars", value: "3.5" },
+      { player: "D. Lee", team: "Beewolves", value: "3.2" },
+    ],
   };
 
   const pitchingLeadersDataNL = {
@@ -3549,6 +3574,13 @@ function AwardsContent() {
       { player: "D. Martinez", team: "Beewolves", value: "25" },
       { player: "A. Brown", team: "Nemesis", value: "21" },
     ],
+    WAR: [
+      { player: "A. Chen", team: "Nemesis", value: "4.5" },
+      { player: "R. Garcia", team: "Moonstars", value: "3.8" },
+      { player: "D. Lee", team: "Beewolves", value: "3.2" },
+      { player: "J. Martinez", team: "Nemesis", value: "2.9" },
+      { player: "S. Kim", team: "Moonstars", value: "2.5" },
+    ],
   };
 
   const battingLeadersAL = [
@@ -3557,6 +3589,7 @@ function AwardsContent() {
     { stat: "RBI", value: "128" },
     { stat: "SB", value: "48" },
     { stat: "OPS", value: "1.087" },
+    { stat: "WAR", value: "5.8" },
   ];
 
   const battingLeadersNL = [
@@ -3565,6 +3598,7 @@ function AwardsContent() {
     { stat: "RBI", value: "125" },
     { stat: "SB", value: "62" },
     { stat: "OPS", value: "1.065" },
+    { stat: "WAR", value: "5.2" },
   ];
 
   const pitchingLeadersAL = [
@@ -3573,6 +3607,7 @@ function AwardsContent() {
     { stat: "K", value: "287" },
     { stat: "WHIP", value: "1.02" },
     { stat: "SV", value: "45" },
+    { stat: "WAR", value: "4.9" },
   ];
 
   const pitchingLeadersNL = [
@@ -3581,6 +3616,7 @@ function AwardsContent() {
     { stat: "K", value: "243" },
     { stat: "WHIP", value: "0.94" },
     { stat: "SV", value: "42" },
+    { stat: "WAR", value: "4.5" },
   ];
 
   // Mock award winners - AL

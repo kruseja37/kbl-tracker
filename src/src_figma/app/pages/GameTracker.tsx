@@ -125,6 +125,7 @@ export function GameTracker() {
     advanceRunner,
     advanceRunnersBatch,
     makeSubstitution,
+    switchPositions,
     changePitcher,
     advanceCount,
     resetCount,
@@ -696,8 +697,18 @@ export function GameTracker() {
 
     if (sub.type === 'pitching_change') {
       changePitcher(sub.incomingPlayerId, sub.outgoingPlayerId, sub.incomingPlayerName, sub.outgoingPlayerName);
+    } else if (sub.type === 'position_swap') {
+      // MAJ-06: Position-only switch — no new players enter
+      switchPositions([
+        { playerId: sub.incomingPlayerId, newPosition: sub.newPosition || '' },
+        { playerId: sub.outgoingPlayerId, newPosition: '' }, // Will be set by the swap logic
+      ]);
     } else if (sub.type === 'player_sub' || sub.type === 'double_switch') {
-      makeSubstitution(sub.incomingPlayerId, sub.outgoingPlayerId, sub.incomingPlayerName, sub.outgoingPlayerName);
+      // MAJ-06: Pass enriched options to makeSubstitution
+      makeSubstitution(sub.incomingPlayerId, sub.outgoingPlayerId, sub.incomingPlayerName, sub.outgoingPlayerName, {
+        subType: sub.type === 'double_switch' ? 'double_switch' : 'player_sub',
+        newPosition: sub.newPosition,
+      });
 
       // EXH-018 FIX: Also update local player arrays so UI reflects the substitution
       // Find which team the outgoing player is on and update that team's roster
@@ -710,7 +721,7 @@ export function GameTracker() {
             const updated = [...prev];
             // Transfer batting order from outgoing to incoming player
             const outgoingBattingOrder = updated[outgoingIndex].battingOrder;
-            const outgoingPosition = updated[outgoingIndex].position;
+            const outgoingPosition = sub.newPosition || updated[outgoingIndex].position;
 
             // Incoming player takes the batting order and position
             updated[incomingIndex] = {
@@ -738,8 +749,7 @@ export function GameTracker() {
         updateTeamRoster(homeTeamPlayers, setHomeTeamPlayers);
       }
     }
-    // position_swap would need additional handling
-  }, [changePitcher, makeSubstitution, awayTeamPlayers, homeTeamPlayers]);
+  }, [changePitcher, makeSubstitution, switchPositions, awayTeamPlayers, homeTeamPlayers]);
 
   const handlePlayComplete = (playData: any) => {
     console.log("Play complete:", playData);
@@ -1451,8 +1461,10 @@ export function GameTracker() {
     const benchPlayerId = `${teamType}-${benchPlayerName.replace(/\s+/g, '-').toLowerCase()}`;
     const lineupPlayerId = `${teamType}-${lineupPlayerName.replace(/\s+/g, '-').toLowerCase()}`;
 
-    // Call the hook's makeSubstitution function to update game state
-    makeSubstitution(benchPlayerId, lineupPlayerId, benchPlayerName, lineupPlayerName);
+    // MAJ-06: Call with enriched options for proper sub type logging
+    makeSubstitution(benchPlayerId, lineupPlayerId, benchPlayerName, lineupPlayerName, {
+      subType: 'player_sub',
+    });
 
     // Update local player state for UI display
     const players = teamType === 'away' ? awayTeamPlayers : homeTeamPlayers;
@@ -1661,7 +1673,7 @@ export function GameTracker() {
         isNoHitter,
         isShutout,
         isBlowout,
-        vsRival: false, // TODO: detect rival matchup
+        vsRival: false, // TODO: detect rival matchup — needs division data from leagueBuilderStorage + team IDs at game init
         runDifferential: runDiff,
         playerPerformances: [], // TODO: populate with per-player WAR
       };
@@ -1672,10 +1684,12 @@ export function GameTracker() {
       console.warn('[MAJ-02] Fan morale update error (non-blocking):', moraleError);
     }
 
-    // MAJ-04: Generate game recap narrative
+    // MAJ-04: Generate game recap narratives (dual perspective)
     let gameNarrative = null;
+    let awayNarrative = null;
     try {
       const homeWonForNarrative = gameState.homeScore > gameState.awayScore;
+      // Home team perspective
       gameNarrative = generateGameRecap({
         teamName: homeTeamName,
         opponentName: awayTeamName,
@@ -1683,18 +1697,27 @@ export function GameTracker() {
         opponentScore: gameState.awayScore,
         isShutout: gameState.awayScore === 0 && homeWonForNarrative,
       });
-      console.log(`[MAJ-04] Narrative generated: "${gameNarrative.headline}"`);
+      // Away team perspective
+      awayNarrative = generateGameRecap({
+        teamName: awayTeamName,
+        opponentName: homeTeamName,
+        teamScore: gameState.awayScore,
+        opponentScore: gameState.homeScore,
+        isShutout: gameState.homeScore === 0 && !homeWonForNarrative,
+      });
+      console.log(`[MAJ-04] Dual narratives: Home "${gameNarrative.headline}", Away "${awayNarrative.headline}"`);
     } catch (narrativeError) {
       console.warn('[MAJ-04] Narrative generation error (non-blocking):', narrativeError);
     }
 
     await hookEndGame();
-    // Pass game mode and narrative so PostGameSummary can display them
+    // Pass game mode and narratives so PostGameSummary can display them
     navigate(`/post-game/${gameId}`, {
       state: {
         gameMode: navigationState?.gameMode || 'franchise',
         franchiseId: gameId?.replace('franchise-', '') || '1',
         gameNarrative,
+        awayNarrative,
       }
     });
   }, [hookEndGame, navigate, gameId, navigationState?.gameMode, gameState, pitcherStats, fameTrackingHook, fanMoraleHook, homeTeamName, awayTeamName]);

@@ -1,6 +1,7 @@
 import { useState, useMemo } from "react";
 import { Edit, TrendingUp, TrendingDown, XCircle, Users, Building2, User } from "lucide-react";
 import { useOffseasonData, type OffseasonTeam, type OffseasonPlayer } from "@/hooks/useOffseasonData";
+import { useSeasonStats, type BattingLeaderEntry, type PitchingLeaderEntry } from '../../../hooks/useSeasonStats';
 
 type TeamHubTab = "team" | "fan-morale" | "roster" | "stats" | "stadium" | "manager";
 
@@ -95,9 +96,55 @@ function convertToStatsItem(player: OffseasonPlayer) {
   }
 }
 
+// Helper to convert OffseasonPlayer + real season stats to stats format
+function convertToStatsItemFromSeason(
+  player: OffseasonPlayer,
+  batting: BattingLeaderEntry | undefined,
+  pitching: PitchingLeaderEntry | undefined,
+) {
+  const shortName = player.name.split(' ').map((n, i) => i === 0 ? n[0] + '.' : n).join(' ');
+  const isPitcher = ['SP', 'RP', 'CP'].includes(player.position);
+
+  if (isPitcher && pitching) {
+    return {
+      name: shortName,
+      pos: player.position,
+      war: parseFloat(pitching.pWAR.toFixed(1)),
+      pwar: parseFloat(pitching.pWAR.toFixed(1)),
+      bwar: 0.0,
+      rwar: 0.0,
+      fwar: 0.0,
+      era: parseFloat(pitching.era.toFixed(2)),
+      ip: parseFloat(pitching.ip),
+      k: pitching.strikeouts,
+      w: pitching.wins,
+      l: pitching.losses,
+    };
+  } else if (!isPitcher && batting) {
+    return {
+      name: shortName,
+      pos: player.position,
+      war: parseFloat(batting.totalWAR.toFixed(1)),
+      pwar: 0.0,
+      bwar: parseFloat(batting.bWAR.toFixed(1)),
+      rwar: parseFloat(batting.rWAR.toFixed(1)),
+      fwar: parseFloat(batting.fWAR.toFixed(1)),
+      avg: parseFloat(batting.avg.toFixed(3)),
+      hr: batting.homeRuns,
+      rbi: batting.rbi,
+      sb: batting.stolenBases,
+      ops: parseFloat(batting.ops.toFixed(3)),
+    };
+  }
+
+  // Fallback: player exists in roster but has no matching season stats
+  return convertToStatsItem(player);
+}
+
 export function TeamHubContent() {
   // Get real data from hook
   const { teams: realTeams, players: realPlayers, hasRealData, isLoading } = useOffseasonData();
+  const seasonStats = useSeasonStats();
 
   const [activeHubTab, setActiveHubTab] = useState<TeamHubTab>("team");
   const [selectedTeam, setSelectedTeam] = useState<string>("Tigers");
@@ -138,6 +185,30 @@ export function TeamHubContent() {
     return MOCK_ROSTER_DATA;
   }, [realPlayers, realTeams, selectedTeam, hasRealData]);
 
+  // Build lookup maps from season stats for real WAR
+  const battingByPlayer = useMemo(() => {
+    const map = new Map<string, BattingLeaderEntry>();
+    if (!seasonStats.isLoading) {
+      // Get all batting leaders (large limit to capture all players)
+      const allBatters = seasonStats.getBattingLeaders('totalWAR', 500);
+      for (const b of allBatters) {
+        map.set(b.playerId, b);
+      }
+    }
+    return map;
+  }, [seasonStats.isLoading, seasonStats.getBattingLeaders]);
+
+  const pitchingByPlayer = useMemo(() => {
+    const map = new Map<string, PitchingLeaderEntry>();
+    if (!seasonStats.isLoading) {
+      const allPitchers = seasonStats.getPitchingLeaders('pWAR', 500);
+      for (const p of allPitchers) {
+        map.set(p.playerId, p);
+      }
+    }
+    return map;
+  }, [seasonStats.isLoading, seasonStats.getPitchingLeaders]);
+
   // Get stats for selected team
   const statsData = useMemo(() => {
     if (hasRealData && realPlayers.length > 0 && realTeams.length > 0) {
@@ -145,12 +216,21 @@ export function TeamHubContent() {
       if (selectedTeamObj) {
         const teamPlayers = realPlayers.filter(p => p.teamId === selectedTeamObj.id).slice(0, 15);
         if (teamPlayers.length > 0) {
-          return teamPlayers.map(p => convertToStatsItem(p)).sort((a, b) => b.war - a.war);
+          // Try to use real WAR from season stats
+          const hasSeasonData = battingByPlayer.size > 0 || pitchingByPlayer.size > 0;
+          return teamPlayers.map(p => {
+            const batting = battingByPlayer.get(p.id);
+            const pitching = pitchingByPlayer.get(p.id);
+            if (hasSeasonData && (batting || pitching)) {
+              return convertToStatsItemFromSeason(p, batting, pitching);
+            }
+            return convertToStatsItem(p);
+          }).sort((a, b) => b.war - a.war);
         }
       }
     }
     return MOCK_STATS_DATA;
-  }, [realPlayers, realTeams, selectedTeam, hasRealData]);
+  }, [realPlayers, realTeams, selectedTeam, hasRealData, battingByPlayer, pitchingByPlayer]);
 
   // Mock fan morale data (no real data equivalent yet)
   const fanMorale = {

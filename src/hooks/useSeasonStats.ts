@@ -3,9 +3,10 @@
  * Per STAT_TRACKING_ARCHITECTURE_SPEC.md - Phase 3: Season Stats Querying
  *
  * Provides React hook interface for accessing season stats.
+ * WAR is computed on-the-fly from season stats (no schema migration).
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   type PlayerSeasonBatting,
   type PlayerSeasonPitching,
@@ -20,6 +21,13 @@ import {
   calculatePitchingDerived,
   calculateFieldingDerived,
 } from '../utils/seasonStorage';
+
+// WAR calculator imports
+import { calculateBWARSimplified } from '../engines/bwarCalculator';
+import { calculatePWARSimplified, type PitchingStatsForWAR } from '../engines/pwarCalculator';
+import { calculateFWARFromStats, type Position } from '../engines/fwarCalculator';
+import { calculateRWARSimplified, type BaserunningStats } from '../engines/rwarCalculator';
+import type { BattingStatsForWAR } from '../types/war';
 
 // Default season
 const DEFAULT_SEASON_ID = 'season-1';
@@ -37,6 +45,11 @@ export interface BattingLeaderEntry extends PlayerSeasonBatting {
   obp: number;
   slg: number;
   ops: number;
+  // WAR fields (computed on-the-fly)
+  bWAR: number;
+  fWAR: number;
+  rWAR: number;
+  totalWAR: number;  // bWAR + fWAR + rWAR
 }
 
 export interface PitchingLeaderEntry extends PlayerSeasonPitching {
@@ -44,6 +57,8 @@ export interface PitchingLeaderEntry extends PlayerSeasonPitching {
   era: number;
   whip: number;
   ip: string;  // Formatted innings pitched (e.g., "45.2")
+  // WAR fields (computed on-the-fly)
+  pWAR: number;
 }
 
 export interface FieldingLeaderEntry extends PlayerSeasonFielding {
@@ -51,8 +66,8 @@ export interface FieldingLeaderEntry extends PlayerSeasonFielding {
   fieldingPct: number;
 }
 
-export type BattingSortKey = 'avg' | 'obp' | 'slg' | 'ops' | 'hr' | 'rbi' | 'hits' | 'runs' | 'sb' | 'fameNet';
-export type PitchingSortKey = 'era' | 'whip' | 'wins' | 'strikeouts' | 'saves' | 'ip' | 'fameNet';
+export type BattingSortKey = 'avg' | 'obp' | 'slg' | 'ops' | 'hr' | 'rbi' | 'hits' | 'runs' | 'sb' | 'fameNet' | 'bWAR' | 'totalWAR';
+export type PitchingSortKey = 'era' | 'whip' | 'wins' | 'strikeouts' | 'saves' | 'ip' | 'fameNet' | 'pWAR';
 export type FieldingSortKey = 'fieldingPct' | 'putouts' | 'assists' | 'errors';
 
 export interface UseSeasonStatsReturn {
@@ -79,6 +94,84 @@ export interface UseSeasonStatsReturn {
 }
 
 // ============================================
+// WAR CONVERSION FUNCTIONS
+// ============================================
+
+/**
+ * Convert PlayerSeasonBatting to BattingStatsForWAR
+ */
+function seasonBattingToWAR(stats: PlayerSeasonBatting): BattingStatsForWAR {
+  return {
+    pa: stats.pa,
+    ab: stats.ab,
+    hits: stats.hits,
+    singles: stats.singles,
+    doubles: stats.doubles,
+    triples: stats.triples,
+    homeRuns: stats.homeRuns,
+    walks: stats.walks,
+    intentionalWalks: 0,  // Not tracked in SMB4
+    hitByPitch: stats.hitByPitch,
+    sacFlies: stats.sacFlies,
+    sacBunts: stats.sacBunts,
+    strikeouts: stats.strikeouts,
+    gidp: stats.gidp,
+    stolenBases: stats.stolenBases,
+    caughtStealing: stats.caughtStealing,
+  };
+}
+
+/**
+ * Convert PlayerSeasonPitching to PitchingStatsForWAR
+ */
+function seasonPitchingToWAR(stats: PlayerSeasonPitching): PitchingStatsForWAR {
+  return {
+    ip: stats.outsRecorded / 3,
+    strikeouts: stats.strikeouts,
+    walks: stats.walksAllowed,
+    hitByPitch: stats.hitBatters,
+    homeRunsAllowed: stats.homeRunsAllowed,
+    gamesStarted: stats.gamesStarted,
+    gamesAppeared: stats.games,
+    saves: stats.saves,
+    holds: stats.holds,
+  };
+}
+
+/**
+ * Convert PlayerSeasonBatting to BaserunningStats for rWAR
+ */
+function seasonBattingToBaserunning(stats: PlayerSeasonBatting): BaserunningStats {
+  return {
+    stolenBases: stats.stolenBases,
+    caughtStealing: stats.caughtStealing,
+    singles: stats.singles,
+    walks: stats.walks,
+    hitByPitch: stats.hitByPitch,
+    intentionalWalks: 0,
+    gidp: stats.gidp,
+    gidpOpportunities: Math.round(stats.pa * 0.15),  // Estimate: ~15% of PA
+  };
+}
+
+/**
+ * Get primary position from fielding stats
+ */
+function getPrimaryPosition(fielding: PlayerSeasonFielding | undefined): Position {
+  if (!fielding || !fielding.gamesByPosition) return 'SS';
+
+  let maxGames = 0;
+  let primaryPos: Position = 'SS';
+  for (const [pos, games] of Object.entries(fielding.gamesByPosition)) {
+    if (games > maxGames) {
+      maxGames = games;
+      primaryPos = pos as Position;
+    }
+  }
+  return primaryPos;
+}
+
+// ============================================
 // HELPER FUNCTIONS
 // ============================================
 
@@ -92,10 +185,48 @@ function formatInningsPitched(outsRecorded: number): string {
 }
 
 /**
- * Convert batting stats to leaderboard entry with derived stats
+ * Convert batting stats to leaderboard entry with derived stats and WAR
  */
-function toBattingLeaderEntry(stats: PlayerSeasonBatting, rank: number): BattingLeaderEntry {
+function toBattingLeaderEntry(
+  stats: PlayerSeasonBatting,
+  rank: number,
+  seasonGames: number,
+  fielding: PlayerSeasonFielding | undefined
+): BattingLeaderEntry {
   const derived = calculateBattingDerived(stats);
+
+  // Compute WAR components
+  let bWAR = 0;
+  let fWAR = 0;
+  let rWAR = 0;
+
+  try {
+    if (stats.pa > 0) {
+      const bwarResult = calculateBWARSimplified(seasonBattingToWAR(stats), seasonGames);
+      bWAR = bwarResult.bWAR;
+    }
+  } catch { /* WAR calc may fail for edge cases — default to 0 */ }
+
+  try {
+    if (fielding && fielding.games > 0) {
+      const pos = getPrimaryPosition(fielding);
+      const fwarResult = calculateFWARFromStats(
+        { putouts: fielding.putouts, assists: fielding.assists, errors: fielding.errors, doublePlays: fielding.doublePlays },
+        pos,
+        fielding.games,
+        seasonGames
+      );
+      fWAR = fwarResult.fWAR;
+    }
+  } catch { /* fWAR calc may fail — default to 0 */ }
+
+  try {
+    if (stats.stolenBases > 0 || stats.caughtStealing > 0 || stats.gidp > 0) {
+      const rwarResult = calculateRWARSimplified(seasonBattingToBaserunning(stats), seasonGames);
+      rWAR = rwarResult.rWAR;
+    }
+  } catch { /* rWAR calc may fail — default to 0 */ }
+
   return {
     ...stats,
     rank,
@@ -103,20 +234,38 @@ function toBattingLeaderEntry(stats: PlayerSeasonBatting, rank: number): Batting
     obp: derived.obp,
     slg: derived.slg,
     ops: derived.ops,
+    bWAR,
+    fWAR,
+    rWAR,
+    totalWAR: bWAR + fWAR + rWAR,
   };
 }
 
 /**
- * Convert pitching stats to leaderboard entry with derived stats
+ * Convert pitching stats to leaderboard entry with derived stats and WAR
  */
-function toPitchingLeaderEntry(stats: PlayerSeasonPitching, rank: number): PitchingLeaderEntry {
+function toPitchingLeaderEntry(
+  stats: PlayerSeasonPitching,
+  rank: number,
+  seasonGames: number
+): PitchingLeaderEntry {
   const derived = calculatePitchingDerived(stats);
+
+  let pWAR = 0;
+  try {
+    if (stats.outsRecorded > 0) {
+      const pwarResult = calculatePWARSimplified(seasonPitchingToWAR(stats), seasonGames);
+      pWAR = pwarResult.pWAR;
+    }
+  } catch { /* pWAR calc may fail — default to 0 */ }
+
   return {
     ...stats,
     rank,
     era: derived.era,
     whip: derived.whip,
     ip: formatInningsPitched(stats.outsRecorded),
+    pWAR,
   };
 }
 
@@ -133,6 +282,42 @@ function toFieldingLeaderEntry(stats: PlayerSeasonFielding, rank: number): Field
 }
 
 // ============================================
+// SORT HELPERS
+// ============================================
+
+function getBattingSortValue(entry: BattingLeaderEntry, sortBy: BattingSortKey): number {
+  switch (sortBy) {
+    case 'avg': return entry.avg;
+    case 'obp': return entry.obp;
+    case 'slg': return entry.slg;
+    case 'ops': return entry.ops;
+    case 'hr': return entry.homeRuns;
+    case 'rbi': return entry.rbi;
+    case 'hits': return entry.hits;
+    case 'runs': return entry.runs;
+    case 'sb': return entry.stolenBases;
+    case 'fameNet': return entry.fameNet;
+    case 'bWAR': return entry.bWAR;
+    case 'totalWAR': return entry.totalWAR;
+    default: return 0;
+  }
+}
+
+function getPitchingSortValue(entry: PitchingLeaderEntry, sortBy: PitchingSortKey): number {
+  switch (sortBy) {
+    case 'era': return entry.era;
+    case 'whip': return entry.whip;
+    case 'wins': return entry.wins;
+    case 'strikeouts': return entry.strikeouts;
+    case 'saves': return entry.saves;
+    case 'ip': return entry.outsRecorded;
+    case 'fameNet': return entry.fameNet;
+    case 'pWAR': return entry.pWAR;
+    default: return 0;
+  }
+}
+
+// ============================================
 // HOOK
 // ============================================
 
@@ -145,6 +330,17 @@ export function useSeasonStats(seasonId: string = DEFAULT_SEASON_ID): UseSeasonS
   const [battingStats, setBattingStats] = useState<PlayerSeasonBatting[]>([]);
   const [pitchingStats, setPitchingStats] = useState<PlayerSeasonPitching[]>([]);
   const [fieldingStats, setFieldingStats] = useState<PlayerSeasonFielding[]>([]);
+
+  // Fielding lookup by playerId for WAR computation
+  const fieldingByPlayer = useMemo(() => {
+    const map = new Map<string, PlayerSeasonFielding>();
+    for (const f of fieldingStats) {
+      map.set(f.playerId, f);
+    }
+    return map;
+  }, [fieldingStats]);
+
+  const seasonGames = seasonMetadata?.totalGames ?? DEFAULT_TOTAL_GAMES;
 
   // Load all stats for the season
   const loadStats = useCallback(async () => {
@@ -181,34 +377,27 @@ export function useSeasonStats(seasonId: string = DEFAULT_SEASON_ID): UseSeasonS
   }, [loadStats]);
 
   // Get batting leaderboard sorted by specified stat
+  // Strategy: pre-compute all entries (with WAR), then sort, then slice
   const getBattingLeaders = useCallback((sortBy: BattingSortKey, limit: number = 10): BattingLeaderEntry[] => {
     // Filter out players with insufficient at-bats for rate stats
-    const qualifyingAB = sortBy === 'avg' || sortBy === 'obp' || sortBy === 'slg' || sortBy === 'ops' ? 10 : 0;
+    const isRateStat = sortBy === 'avg' || sortBy === 'obp' || sortBy === 'slg' || sortBy === 'ops';
+    const qualifyingAB = isRateStat ? 10 : 0;
 
     const qualified = battingStats.filter(s => s.ab >= qualifyingAB);
 
-    // Sort based on stat type
-    const sorted = [...qualified].sort((a, b) => {
-      const aDerived = calculateBattingDerived(a);
-      const bDerived = calculateBattingDerived(b);
+    // Pre-compute all entries with WAR
+    const entries = qualified.map((s, _i) =>
+      toBattingLeaderEntry(s, 0, seasonGames, fieldingByPlayer.get(s.playerId))
+    );
 
-      switch (sortBy) {
-        case 'avg': return bDerived.avg - aDerived.avg;
-        case 'obp': return bDerived.obp - aDerived.obp;
-        case 'slg': return bDerived.slg - aDerived.slg;
-        case 'ops': return bDerived.ops - aDerived.ops;
-        case 'hr': return b.homeRuns - a.homeRuns;
-        case 'rbi': return b.rbi - a.rbi;
-        case 'hits': return b.hits - a.hits;
-        case 'runs': return b.runs - a.runs;
-        case 'sb': return b.stolenBases - a.stolenBases;
-        case 'fameNet': return b.fameNet - a.fameNet;
-        default: return 0;
-      }
-    });
+    // Lower-is-better stats (none for batting currently)
+    const sorted = [...entries].sort((a, b) =>
+      getBattingSortValue(b, sortBy) - getBattingSortValue(a, sortBy)
+    );
 
-    return sorted.slice(0, limit).map((s, i) => toBattingLeaderEntry(s, i + 1));
-  }, [battingStats]);
+    // Re-assign ranks after sort
+    return sorted.slice(0, limit).map((entry, i) => ({ ...entry, rank: i + 1 }));
+  }, [battingStats, seasonGames, fieldingByPlayer]);
 
   // Get pitching leaderboard sorted by specified stat
   const getPitchingLeaders = useCallback((sortBy: PitchingSortKey, limit: number = 10): PitchingLeaderEntry[] => {
@@ -217,24 +406,22 @@ export function useSeasonStats(seasonId: string = DEFAULT_SEASON_ID): UseSeasonS
 
     const qualified = pitchingStats.filter(s => s.outsRecorded >= qualifyingOuts);
 
-    const sorted = [...qualified].sort((a, b) => {
-      const aDerived = calculatePitchingDerived(a);
-      const bDerived = calculatePitchingDerived(b);
+    // Pre-compute all entries with WAR
+    const entries = qualified.map((s, _i) =>
+      toPitchingLeaderEntry(s, 0, seasonGames)
+    );
 
-      switch (sortBy) {
-        case 'era': return aDerived.era - bDerived.era;  // Lower is better
-        case 'whip': return aDerived.whip - bDerived.whip;  // Lower is better
-        case 'wins': return b.wins - a.wins;
-        case 'strikeouts': return b.strikeouts - a.strikeouts;
-        case 'saves': return b.saves - a.saves;
-        case 'ip': return b.outsRecorded - a.outsRecorded;
-        case 'fameNet': return b.fameNet - a.fameNet;
-        default: return 0;
-      }
+    // Lower-is-better stats
+    const lowerIsBetter = sortBy === 'era' || sortBy === 'whip';
+    const sorted = [...entries].sort((a, b) => {
+      const aVal = getPitchingSortValue(a, sortBy);
+      const bVal = getPitchingSortValue(b, sortBy);
+      return lowerIsBetter ? aVal - bVal : bVal - aVal;
     });
 
-    return sorted.slice(0, limit).map((s, i) => toPitchingLeaderEntry(s, i + 1));
-  }, [pitchingStats]);
+    // Re-assign ranks after sort
+    return sorted.slice(0, limit).map((entry, i) => ({ ...entry, rank: i + 1 }));
+  }, [pitchingStats, seasonGames]);
 
   // Get fielding leaderboard sorted by specified stat
   const getFieldingLeaders = useCallback((sortBy: FieldingSortKey, limit: number = 10): FieldingLeaderEntry[] => {

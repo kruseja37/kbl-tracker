@@ -655,6 +655,26 @@ function findRunnerOnBase(state: RunnerTrackingState, base: 'first' | 'second' |
 }
 
 /**
+ * Build runner info for event logging from tracker state.
+ * Replaces empty-string runnerId stubs with actual runner IDs from the tracker.
+ */
+function buildRunnerInfo(
+  trackerState: RunnerTrackingState,
+  base: 'first' | 'second' | 'third',
+  occupied: boolean,
+  fallbackPitcherId: string,
+): { runnerId: string; runnerName: string; responsiblePitcherId: string } | null {
+  if (!occupied) return null;
+  const trackerBase = baseToTrackerBase(base);
+  const runner = trackerState.runners.find(r => r.currentBase === trackerBase);
+  return {
+    runnerId: runner?.runnerId ?? '',
+    runnerName: runner?.runnerName ?? '',
+    responsiblePitcherId: runner?.responsiblePitcherId ?? fallbackPitcherId,
+  };
+}
+
+/**
  * Convert destination to tracker format
  */
 function destToTrackerBase(dest: 'second' | 'third' | 'home'): '1B' | '2B' | '3B' | 'HOME' {
@@ -1159,9 +1179,9 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       halfInning: gameState.isTop ? 'TOP' : 'BOTTOM',
       outs: gameState.outs,
       runners: {
-        first: gameState.bases.first ? { runnerId: '', runnerName: '', responsiblePitcherId: gameState.currentPitcherId } : null,
-        second: gameState.bases.second ? { runnerId: '', runnerName: '', responsiblePitcherId: gameState.currentPitcherId } : null,
-        third: gameState.bases.third ? { runnerId: '', runnerName: '', responsiblePitcherId: gameState.currentPitcherId } : null,
+        first: buildRunnerInfo(runnerTrackerRef.current, 'first', !!gameState.bases.first, gameState.currentPitcherId),
+        second: buildRunnerInfo(runnerTrackerRef.current, 'second', !!gameState.bases.second, gameState.currentPitcherId),
+        third: buildRunnerInfo(runnerTrackerRef.current, 'third', !!gameState.bases.third, gameState.currentPitcherId),
       },
       awayScore: gameState.awayScore,
       homeScore: gameState.homeScore,
@@ -1417,9 +1437,9 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       halfInning: gameState.isTop ? 'TOP' : 'BOTTOM',
       outs: gameState.outs,
       runners: {
-        first: gameState.bases.first ? { runnerId: '', runnerName: '', responsiblePitcherId: gameState.currentPitcherId } : null,
-        second: gameState.bases.second ? { runnerId: '', runnerName: '', responsiblePitcherId: gameState.currentPitcherId } : null,
-        third: gameState.bases.third ? { runnerId: '', runnerName: '', responsiblePitcherId: gameState.currentPitcherId } : null,
+        first: buildRunnerInfo(runnerTrackerRef.current, 'first', !!gameState.bases.first, gameState.currentPitcherId),
+        second: buildRunnerInfo(runnerTrackerRef.current, 'second', !!gameState.bases.second, gameState.currentPitcherId),
+        third: buildRunnerInfo(runnerTrackerRef.current, 'third', !!gameState.bases.third, gameState.currentPitcherId),
       },
       awayScore: gameState.awayScore,
       homeScore: gameState.homeScore,
@@ -1634,9 +1654,9 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       halfInning: gameState.isTop ? 'TOP' : 'BOTTOM',
       outs: gameState.outs,
       runners: {
-        first: gameState.bases.first ? { runnerId: '', runnerName: '', responsiblePitcherId: gameState.currentPitcherId } : null,
-        second: gameState.bases.second ? { runnerId: '', runnerName: '', responsiblePitcherId: gameState.currentPitcherId } : null,
-        third: gameState.bases.third ? { runnerId: '', runnerName: '', responsiblePitcherId: gameState.currentPitcherId } : null,
+        first: buildRunnerInfo(runnerTrackerRef.current, 'first', !!gameState.bases.first, gameState.currentPitcherId),
+        second: buildRunnerInfo(runnerTrackerRef.current, 'second', !!gameState.bases.second, gameState.currentPitcherId),
+        third: buildRunnerInfo(runnerTrackerRef.current, 'third', !!gameState.bases.third, gameState.currentPitcherId),
       },
       awayScore: gameState.awayScore,
       homeScore: gameState.homeScore,
@@ -1780,15 +1800,15 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       halfInning: gameState.isTop ? 'TOP' : 'BOTTOM',
       outs: gameState.outs, // Outs BEFORE the play
       runners: {
-        first: gameState.bases.first ? { runnerId: '', runnerName: '', responsiblePitcherId: gameState.currentPitcherId } : null,
-        second: gameState.bases.second ? { runnerId: '', runnerName: '', responsiblePitcherId: gameState.currentPitcherId } : null,
-        third: gameState.bases.third ? { runnerId: '', runnerName: '', responsiblePitcherId: gameState.currentPitcherId } : null,
+        first: buildRunnerInfo(runnerTrackerRef.current, 'first', !!gameState.bases.first, gameState.currentPitcherId),
+        second: buildRunnerInfo(runnerTrackerRef.current, 'second', !!gameState.bases.second, gameState.currentPitcherId),
+        third: buildRunnerInfo(runnerTrackerRef.current, 'third', !!gameState.bases.third, gameState.currentPitcherId),
       },
       awayScore: gameState.awayScore,
       homeScore: gameState.homeScore,
       outsAfter: newOuts,
       runnersAfter: {
-        first: batterReached ? { runnerId: '', runnerName: '', responsiblePitcherId: gameState.currentPitcherId } : null,
+        first: batterReached ? { runnerId: gameState.currentBatterId, runnerName: gameState.currentBatterName, responsiblePitcherId: gameState.currentPitcherId } : null,
         second: null,
         third: null,
       },
@@ -1931,9 +1951,9 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       halfInning: gameState.isTop ? 'TOP' : 'BOTTOM',
       outs: gameState.outs,
       runners: {
-        first: gameState.bases.first ? { runnerId: '', runnerName: '', responsiblePitcherId: gameState.currentPitcherId } : null,
-        second: gameState.bases.second ? { runnerId: '', runnerName: '', responsiblePitcherId: gameState.currentPitcherId } : null,
-        third: gameState.bases.third ? { runnerId: '', runnerName: '', responsiblePitcherId: gameState.currentPitcherId } : null,
+        first: buildRunnerInfo(runnerTrackerRef.current, 'first', !!gameState.bases.first, gameState.currentPitcherId),
+        second: buildRunnerInfo(runnerTrackerRef.current, 'second', !!gameState.bases.second, gameState.currentPitcherId),
+        third: buildRunnerInfo(runnerTrackerRef.current, 'third', !!gameState.bases.third, gameState.currentPitcherId),
       },
       awayScore: gameState.awayScore,
       homeScore: gameState.homeScore,

@@ -11,6 +11,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useSeasonData, type TeamStanding } from '../../hooks/useSeasonData';
 import { useSeasonStats, type BattingLeaderEntry, type PitchingLeaderEntry } from '../../hooks/useSeasonStats';
 import { calculateStandings, type SeasonMetadata, type TeamStanding as StorageTeamStanding } from '../../utils/seasonStorage';
+import { useRelationshipData, type UseRelationshipDataReturn } from '../app/hooks/useRelationshipData';
 
 // ============================================
 // TYPES
@@ -45,6 +46,7 @@ export interface BattingLeadersData {
   RBI: LeaderEntry[];
   SB: LeaderEntry[];
   OPS: LeaderEntry[];
+  WAR: LeaderEntry[];
 }
 
 export interface PitchingLeadersData {
@@ -53,6 +55,7 @@ export interface PitchingLeadersData {
   K: LeaderEntry[];
   WHIP: LeaderEntry[];
   SV: LeaderEntry[];
+  WAR: LeaderEntry[];
 }
 
 export interface NextGameInfo {
@@ -86,6 +89,9 @@ export interface UseFranchiseDataReturn {
 
   // Flags
   hasRealData: boolean;
+
+  // Relationships & team chemistry (wired from relationship engine)
+  relationshipData: UseRelationshipDataReturn;
 
   // Actions
   refresh: () => Promise<void>;
@@ -166,6 +172,13 @@ const MOCK_BATTING_LEADERS: BattingLeadersData = {
     { player: "T. Anderson", team: "Sox", value: ".923" },
     { player: "A. Brown", team: "Crocs", value: ".901" },
   ],
+  WAR: [
+    { player: "J. Rodriguez", team: "Tigers", value: "6.8" },
+    { player: "M. Thompson", team: "Crocs", value: "5.9" },
+    { player: "K. Martinez", team: "Sox", value: "5.2" },
+    { player: "T. Anderson", team: "Sox", value: "4.8" },
+    { player: "A. Brown", team: "Crocs", value: "4.1" },
+  ],
 };
 
 const MOCK_PITCHING_LEADERS: PitchingLeadersData = {
@@ -204,6 +217,13 @@ const MOCK_PITCHING_LEADERS: PitchingLeadersData = {
     { player: "J. Parker", team: "Sox", value: "28" },
     { player: "K. Lee", team: "Crocs", value: "24" },
   ],
+  WAR: [
+    { player: "T. Anderson", team: "Sox", value: "5.7" },
+    { player: "J. Williams", team: "Tigers", value: "4.9" },
+    { player: "K. Brown", team: "Crocs", value: "4.2" },
+    { player: "C. Rivera", team: "Crocs", value: "3.1" },
+    { player: "M. Davis", team: "Sox", value: "2.8" },
+  ],
 };
 
 // ============================================
@@ -230,6 +250,9 @@ function toBattingLeaderEntry(entry: BattingLeaderEntry, stat: keyof BattingLead
       break;
     case 'OPS':
       value = entry.ops.toFixed(3);
+      break;
+    case 'WAR':
+      value = entry.totalWAR.toFixed(1);
       break;
     default:
       value = '0';
@@ -263,6 +286,9 @@ function toPitchingLeaderEntry(entry: PitchingLeaderEntry, stat: keyof PitchingL
     case 'SV':
       value = entry.saves.toString();
       break;
+    case 'WAR':
+      value = entry.pWAR.toFixed(1);
+      break;
     default:
       value = '0';
   }
@@ -290,6 +316,9 @@ export function useFranchiseData(seasonId: string = 'season-1'): UseFranchiseDat
   const seasonData = useSeasonData(seasonId);
   const seasonStats = useSeasonStats(seasonId);
 
+  // Relationship engine — wired here so it's available throughout franchise UI
+  const relationshipData = useRelationshipData();
+
   // Compute hasRealData based on whether we have actual stats
   const hasRealData = useMemo(() => {
     return seasonStats.battingLeaders.length > 0 || seasonStats.pitchingLeaders.length > 0;
@@ -307,6 +336,7 @@ export function useFranchiseData(seasonId: string = 'season-1'): UseFranchiseDat
       RBI: seasonStats.getBattingLeaders('rbi', 5).map((e: BattingLeaderEntry) => toBattingLeaderEntry(e, 'RBI')),
       SB: seasonStats.getBattingLeaders('sb', 5).map((e: BattingLeaderEntry) => toBattingLeaderEntry(e, 'SB')),
       OPS: seasonStats.getBattingLeaders('ops', 5).map((e: BattingLeaderEntry) => toBattingLeaderEntry(e, 'OPS')),
+      WAR: seasonStats.getBattingLeaders('totalWAR', 5).map((e: BattingLeaderEntry) => toBattingLeaderEntry(e, 'WAR')),
     };
   }, [hasRealData, seasonStats]);
 
@@ -322,6 +352,7 @@ export function useFranchiseData(seasonId: string = 'season-1'): UseFranchiseDat
       K: seasonStats.getPitchingLeaders('strikeouts', 5).map((e: PitchingLeaderEntry) => toPitchingLeaderEntry(e, 'K')),
       WHIP: seasonStats.getPitchingLeaders('whip', 5).map((e: PitchingLeaderEntry) => toPitchingLeaderEntry(e, 'WHIP')),
       SV: seasonStats.getPitchingLeaders('saves', 5).map((e: PitchingLeaderEntry) => toPitchingLeaderEntry(e, 'SV')),
+      WAR: seasonStats.getPitchingLeaders('pWAR', 5).map((e: PitchingLeaderEntry) => toPitchingLeaderEntry(e, 'WAR')),
     };
   }, [hasRealData, seasonStats]);
 
@@ -430,6 +461,7 @@ export function useFranchiseData(seasonId: string = 'season-1'): UseFranchiseDat
     pitchingLeaders,
     nextGame,
     hasRealData,
+    relationshipData,
     refresh,
   };
 }
