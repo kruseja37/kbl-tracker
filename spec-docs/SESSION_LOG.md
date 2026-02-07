@@ -6,6 +6,58 @@
 > **IMPORTANT**: This log is for *what happened* during sessions. For *how things work*,
 > see the relevant SPEC docs. Finalized logic should be PROMOTED to specs, not left here.
 
+## Session: February 7, 2026 (Part 2) - mWAR System + Fan Morale Rival Detection
+
+### What Was Accomplished
+- ✅ **Fan Morale Rival Detection**: Added `areRivals()` helper to leagueStructure.ts, wired into GameTracker replacing hardcoded `false`
+- ✅ **Manager Storage Layer**: Created managerStorage.ts with separate `kbl-manager` IndexedDB (3 stores: profiles, decisions, seasonStats)
+- ✅ **mWAR GameTracker Integration**: Decision recording (pitching changes, PH, defensive subs, IBBs), outcome resolution, Manager Moment notifications (LI ≥ 2.0)
+- ✅ **Game-End Persistence**: Decisions saved to IndexedDB, season aggregation with mWAR recalculation
+- ✅ **AwardsCeremonyFlow**: ManagerYearScreen now loads real ManagerSeasonStats, calculates MOY votes, displays real mWAR/record/rating
+- ✅ **RatingsAdjustmentFlow**: convertToLocalTeam uses real manager stats, determines MOY winner, converts mWAR to letter grades
+
+### Key Files Modified/Created
+| File | Changes |
+|------|---------|
+| `src/data/leagueStructure.ts` | Added `getTeamDivision()`, `areRivals()` |
+| `src/src_figma/app/hooks/useFanMorale.ts` | Threaded `vsRivalName` through `processGameResult` |
+| `src/src_figma/app/pages/ExhibitionGame.tsx` | Added `leagueId` to nav state |
+| `src/src_figma/app/pages/GameTracker.tsx` | Major: rival detection, mWAR hook, decision recording, outcome resolution, Manager Moment UI, game-end persistence |
+| `src/utils/managerStorage.ts` | **NEW** — IndexedDB CRUD for manager profiles, decisions, season stats |
+| `src/utils/leagueBuilderStorage.ts` | Added `managerId`/`managerName` to Team interface |
+| `src/src_figma/app/components/AwardsCeremonyFlow.tsx` | Real MOY data, calculateMOYVotes, dynamic mWAR display |
+| `src/src_figma/app/components/RatingsAdjustmentFlow.tsx` | Real manager stats, MOY determination, mWAR→grade conversion |
+
+### Existing Code Reused (NOT reimplemented)
+| Module | Lines | Usage |
+|--------|-------|-------|
+| mwarCalculator.ts | 960 | All calculation functions, types, constants |
+| mwarIntegration.ts | 346 | Manager Moment detection, display helpers |
+| useMWARCalculations.ts | 234 | React hook for state management |
+
+### NFL Results
+- **Build**: PASS (only 2 pre-existing errors: FielderCreditModal, ErrorOnAdvanceModal)
+- **Tests**: 5025 passing, 0 regressions (77 pre-existing failures)
+- **Regressions**: 0
+
+### Data Flow Trace (mWAR)
+```
+UI INPUT:     GameTracker.tsx:~1140 — handleLineupCardSubstitution records decision
+CALLED FROM:  GameTracker.tsx:~1314 — handleEnhancedPlayComplete resolves outcomes
+STORAGE:      managerStorage.ts:~160 — saveGameDecisions writes to IndexedDB
+CALLED FROM:  GameTracker.tsx:~1770 — handleEndGame calls saveGameDecisions
+CALCULATOR:   mwarCalculator.ts:~630 — recalculateSeasonStats computes mWAR
+CALLED FROM:  managerStorage.ts:~275 — aggregateManagerGameToSeason
+DISPLAY:      AwardsCeremonyFlow.tsx:~1570 — ManagerYearScreen shows MOY winner
+RENDERS IN:   AwardsCeremonyFlow.tsx:~340 — screen === "MANAGER_YEAR"
+```
+
+### Deferred Items
+- **Immaculate inning detection**: Requires per-at-bat pitch count input (not in PlayData)
+- **E4 (TeamHubContent manager stats)**: Optional enhancement, deferred
+
+---
+
 ## Session: February 7, 2026 - Wire WAR to UI + Remaining Audit Items
 
 ### What Was Accomplished
@@ -43,9 +95,9 @@
 | useGameState.ts | Runner ID stubs (buildRunnerInfo helper) |
 
 ### Deferred Items (No Data Source)
-- **mWAR**: Requires `ManagerDecision[]` tracking not yet built
+- ~~**mWAR**~~ — ✅ NOW BUILT (see Session Feb 7 Part 2 above)
 - **Immaculate inning detection**: Requires per-at-bat pitch count input (not in PlayData)
-- **Fan morale rival detection**: Needs division/rivalry data from leagueBuilderStorage
+- ~~**Fan morale rival detection**~~ — ✅ NOW WIRED (areRivals from leagueStructure.ts)
 
 ### NFL Results
 - **Build**: PASS (pre-existing errors only: 2 missing modal files)
@@ -56,7 +108,7 @@
 | System | Status |
 |--------|--------|
 | WAR calculators (bWAR, pWAR, fWAR, rWAR) | ✅ NOW WIRED to 3 UI surfaces |
-| mWAR | ⚠️ STILL ORPHANED (needs manager decision tracking) |
+| mWAR | ✅ NOW WIRED (see Session Feb 7 Part 2) |
 | Fan Morale engine | ✅ WIRED |
 | Narrative engine | ✅ WIRED (home + away) |
 | Detection functions | ✅ WIRED |

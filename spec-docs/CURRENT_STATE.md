@@ -1,7 +1,7 @@
 # KBL Tracker - Current State
 
 > **Purpose**: Single source of truth for what's implemented, what's not, and known issues
-> **Last Updated**: February 7, 2026 (WAR Wiring + Remaining Audit Items)
+> **Last Updated**: February 7, 2026 (mWAR System + Fan Morale Rival Detection)
 
 ---
 
@@ -27,23 +27,24 @@
 
 **Fix report**: `spec-docs/FIX_EXECUTION_REPORT_2026-02-05.md`
 
-### Orphaned Systems Status (Updated Feb 7)
+### Orphaned Systems Status (Updated Feb 7, Part 2)
 - ~~WAR calculators (bWAR, pWAR, fWAR, rWAR)~~ — ✅ NOW WIRED to 3 UI surfaces (League Leaders, Team Hub, Season Leaderboards)
-- mWAR — ⚠️ STILL ORPHANED (needs manager decision tracking infrastructure)
-- ~~Fan Morale engine~~ — ✅ WIRED (useFanMorale.processGameResult → GameTracker.handleEndGame)
+- ~~mWAR~~ — ✅ NOW WIRED (full pipeline: decisions → storage → aggregation → MOY → display)
+- ~~Fan Morale engine~~ — ✅ WIRED (useFanMorale.processGameResult → GameTracker.handleEndGame + rival detection)
 - ~~Narrative engine~~ — ✅ WIRED (home + away narratives → GameTracker.handleEndGame)
 - ~~Detection Functions~~ — ✅ WIRED (runPlayDetections → GameTracker.handleEnhancedPlayComplete)
 - ~~Inherited Runner Tracker~~ — ✅ WIRED (shadow state pattern, 11 integration points)
 - ~~Relationship engine~~ — ✅ NOW WIRED (through useFranchiseData context)
+- **No remaining orphaned systems** 🎉
 
 ### Spec Alignment Score (Updated Feb 7)
 | System | Constants | Connectivity |
 |--------|-----------|-------------|
 | WAR (bWAR/pWAR/fWAR/rWAR) | 100% | ✅ Connected (3 UI surfaces) |
-| mWAR | 100% | ⚠️ ORPHANED (needs manager decisions) |
+| mWAR | 100% | ✅ Connected (decisions → storage → aggregation → MOY → display) |
 | Mojo/Fitness/Salary | 100% | Connected |
 | Fame | 84% | Connected (detection wired) |
-| Fan Morale | 100% | Connected (processGameResult wired) |
+| Fan Morale | 100% | Connected (processGameResult wired + rival detection) |
 | Narrative | 100% | Connected (home + away recaps) |
 | Leverage | 100% | Connected |
 | GameTracker | 95% | 6 critical bugs FIXED, detection+achievements wired |
