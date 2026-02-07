@@ -1,7 +1,7 @@
 # KBL Tracker - Current State
 
 > **Purpose**: Single source of truth for what's implemented, what's not, and known issues
-> **Last Updated**: February 7, 2026 (mWAR System + Fan Morale Rival Detection)
+> **Last Updated**: February 7, 2026 (mWAR + Rival Detection + Clean Build — 0 TS errors)
 
 ---
 

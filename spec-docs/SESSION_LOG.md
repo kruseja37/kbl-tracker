@@ -6,11 +6,14 @@
 > **IMPORTANT**: This log is for *what happened* during sessions. For *how things work*,
 > see the relevant SPEC docs. Finalized logic should be PROMOTED to specs, not left here.
 
-## Session: February 7, 2026 (Part 2) - mWAR System + Fan Morale Rival Detection
+## Session: February 7, 2026 (Part 2) - mWAR System + Fan Morale Rival Detection + Clean Build
 
 ### What Was Accomplished
 - ✅ **Fan Morale Rival Detection**: Added `areRivals()` helper to leagueStructure.ts, wired into GameTracker replacing hardcoded `false`
 - ✅ **Manager Storage Layer**: Created managerStorage.ts with separate `kbl-manager` IndexedDB (3 stores: profiles, decisions, seasonStats)
+- ✅ **FielderCreditModal** (EXH-016): Full implementation — putout/assist assignment for thrown-out runners
+- ✅ **ErrorOnAdvanceModal** (EXH-025): Full implementation — error attribution for extra-base advancement
+- ✅ **Build now fully clean** — 0 TypeScript errors (was 2 pre-existing)
 - ✅ **mWAR GameTracker Integration**: Decision recording (pitching changes, PH, defensive subs, IBBs), outcome resolution, Manager Moment notifications (LI ≥ 2.0)
 - ✅ **Game-End Persistence**: Decisions saved to IndexedDB, season aggregation with mWAR recalculation
 - ✅ **AwardsCeremonyFlow**: ManagerYearScreen now loads real ManagerSeasonStats, calculates MOY votes, displays real mWAR/record/rating
