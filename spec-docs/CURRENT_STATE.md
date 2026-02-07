@@ -1,7 +1,7 @@
 # KBL Tracker - Current State
 
 > **Purpose**: Single source of truth for what's implemented, what's not, and known issues
-> **Last Updated**: February 5, 2026 (Spec-UI Alignment Audit)
+> **Last Updated**: February 7, 2026 (WAR Wiring + Remaining Audit Items)
 
 ---
 
@@ -27,26 +27,29 @@
 
 **Fix report**: `spec-docs/FIX_EXECUTION_REPORT_2026-02-05.md`
 
-### Orphaned Systems Status (Updated Feb 5, Phase C/D)
-- ALL WAR calculators (bWAR, pWAR, fWAR, rWAR, mWAR) — ⚠️ STILL ORPHANED (365 tests pass, zero UI)
-- ~~Fan Morale engine~~ — ✅ NOW WIRED (useFanMorale.processGameResult → GameTracker.handleEndGame)
-- ~~Narrative engine~~ — ✅ NOW WIRED (narrativeIntegration.generateGameRecap → GameTracker.handleEndGame)
-- ~~Detection Functions~~ — ✅ NOW WIRED (runPlayDetections → GameTracker.handleEnhancedPlayComplete)
+### Orphaned Systems Status (Updated Feb 7)
+- ~~WAR calculators (bWAR, pWAR, fWAR, rWAR)~~ — ✅ NOW WIRED to 3 UI surfaces (League Leaders, Team Hub, Season Leaderboards)
+- mWAR — ⚠️ STILL ORPHANED (needs manager decision tracking infrastructure)
+- ~~Fan Morale engine~~ — ✅ WIRED (useFanMorale.processGameResult → GameTracker.handleEndGame)
+- ~~Narrative engine~~ — ✅ WIRED (home + away narratives → GameTracker.handleEndGame)
+- ~~Detection Functions~~ — ✅ WIRED (runPlayDetections → GameTracker.handleEnhancedPlayComplete)
 - ~~Inherited Runner Tracker~~ — ✅ WIRED (shadow state pattern, 11 integration points)
-- Relationship engine — ⚠️ STILL ORPHANED
+- ~~Relationship engine~~ — ✅ NOW WIRED (through useFranchiseData context)
 
-### Spec Alignment Score (Updated Feb 5, Phase C/D)
+### Spec Alignment Score (Updated Feb 7)
 | System | Constants | Connectivity |
 |--------|-----------|-------------|
-| WAR | 100% | ORPHANED |
+| WAR (bWAR/pWAR/fWAR/rWAR) | 100% | ✅ Connected (3 UI surfaces) |
+| mWAR | 100% | ⚠️ ORPHANED (needs manager decisions) |
 | Mojo/Fitness/Salary | 100% | Connected |
 | Fame | 84% | Connected (detection wired) |
 | Fan Morale | 100% | Connected (processGameResult wired) |
-| Narrative | 100% | Connected (generateGameRecap wired) |
+| Narrative | 100% | Connected (home + away recaps) |
 | Leverage | 100% | Connected |
 | GameTracker | 95% | 6 critical bugs FIXED, detection+achievements wired |
-| Substitution | — | Backend enhanced (modal UI triggers pending) |
+| Substitution | — | ✅ Backend + UI triggers wired (subType, position_swap) |
 | PitcherGameStats | 100% | Expanded 9→29 fields, W/L/SV decisions tracked |
+| Relationship Engine | 100% | ✅ Connected (through useFranchiseData) |
 
 ---
 

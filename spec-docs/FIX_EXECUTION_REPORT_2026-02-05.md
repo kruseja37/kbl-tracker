@@ -13,7 +13,7 @@ Baseline: Build PASS, Tests 5025 passing (77 known PostGameSummary failures)
 - Spec-only fixes: 2 (MAJ-13 fame table, MAJ-12 D3K confirmation)
 - Regressions caught and fixed: 1 (CRIT-03 test expected old buggy behavior)
 - Final state: Build PASS, Tests 5025 passing
-- Remaining: 1 item (MAJ-01: Wire WAR calculators to UI — large effort)
+- Remaining: 0 items (MAJ-01 completed Feb 7 as `df442bd`)
 
 ## Tier 1: Critical Fixes
 
@@ -216,7 +216,7 @@ Baseline: Build PASS, Tests 5025 passing (77 known PostGameSummary failures)
 
 | ID | Description | Effort | Notes |
 |----|------------|--------|-------|
-| MAJ-01 | Wire WAR calculators to UI | Large | 5 engines, 365 tests, zero UI |
+| ~~MAJ-01~~ | ~~Wire WAR calculators to UI~~ | ~~Large~~ | ✅ COMPLETE — committed `df442bd` (Feb 7). bWAR/pWAR/fWAR/rWAR wired to League Leaders, Team Hub, Season Leaderboards. mWAR deferred (needs manager decisions). |
 
 ## Test Count Delta
 - Before: 5025 tests passing
@@ -227,8 +227,8 @@ Baseline: Build PASS, Tests 5025 passing (77 known PostGameSummary failures)
 ## Known Limitations
 - Runner tracker state not included in undo snapshots (tracker may be briefly out of sync after undo)
 - After half-inning switches, tracker pitcher is synced on next record call (not immediately)
-- Event log `runners` field still uses empty-string stubs for runner IDs (cosmetic — could be populated from tracker in future)
-- Fan morale: currently assumes home team is tracked team; rival detection not yet implemented
-- Narrative: only home-perspective recap generated; dual narratives possible via engine API
+- ~~Event log `runners` field still uses empty-string stubs for runner IDs~~ — ✅ FIXED (Feb 7): `buildRunnerInfo()` populates from `runnerTrackerRef`
+- Fan morale: currently assumes home team is tracked team; rival detection not yet implemented (needs division/rivalry data)
+- ~~Narrative: only home-perspective recap generated~~ — ✅ FIXED (Feb 7): both home + away recaps now generated
 - Detection: immaculate inning detection requires per-inning pitch counting not yet wired
-- Substitution modals: backend accepts rich data but modal UI triggers not yet connected
+- ~~Substitution modals: backend accepts rich data but modal UI triggers not yet connected~~ — ✅ FIXED (Feb 7): UI passes subType/newPosition, position_swap case added

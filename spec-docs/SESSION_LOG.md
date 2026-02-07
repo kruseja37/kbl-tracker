@@ -6,6 +6,65 @@
 > **IMPORTANT**: This log is for *what happened* during sessions. For *how things work*,
 > see the relevant SPEC docs. Finalized logic should be PROMOTED to specs, not left here.
 
+## Session: February 7, 2026 - Wire WAR to UI + Remaining Audit Items
+
+### What Was Accomplished
+- ✅ **MAJ-01**: Wired WAR calculators (bWAR, pWAR, fWAR, rWAR) to 3 UI surfaces — committed as `df442bd`
+- ✅ **MAJ-06 (UI triggers)**: Enriched substitution calls with subType/newPosition, added position_swap case
+- ✅ **Runner ID stubs**: Added `buildRunnerInfo()` helper, replaced 16 empty-string instances with actual runner data from `runnerTrackerRef`
+- ✅ **Dual narrative**: Away team game recap generated at game end alongside home narrative
+- ✅ **Relationship engine**: Wired through `useFranchiseData` context (no longer orphaned)
+
+### Changes Made (committed `df442bd`)
+
+**MAJ-01 — WAR Calculator Wiring (4 steps):**
+1. **useSeasonStats.ts**: Added WAR calculator imports, 4 conversion functions (`seasonBattingToWAR`, `seasonPitchingToWAR`, `seasonBattingToBaserunning`, `getPrimaryPosition`). Extended `BattingLeaderEntry` with `bWAR/fWAR/rWAR/totalWAR`, `PitchingLeaderEntry` with `pWAR`. New sort keys: `bWAR`, `totalWAR`, `pWAR`. Refactored leaders to pre-compute WAR → sort → slice → re-rank.
+2. **useFranchiseData.ts**: Added `WAR: LeaderEntry[]` to batting/pitching leader interfaces. Added WAR mock data, converter cases, real data population. Also wired `useRelationshipData` through context.
+3. **FranchiseHome.tsx**: Added WAR tabs to LeagueLeadersContent (batting + pitching, AL + NL) and AwardsContent sections. 8 tab arrays updated with WAR mock entries.
+4. **TeamHubContent.tsx**: Imported `useSeasonStats`, created `battingByPlayer`/`pitchingByPlayer` Maps, added `convertToStatsItemFromSeason()` for real WAR display.
+5. **SeasonLeaderboards.tsx**: Added WAR format/title cases for `bWAR`, `totalWAR`, `pWAR`.
+
+**MAJ-06 — Substitution UI Triggers:**
+6. GameTracker.tsx: `handleLineupCardSubstitution` passes enriched options (`subType`, `newPosition`). Added `position_swap` case using `switchPositions()`.
+
+**Minor Items:**
+7. **useGameState.ts**: Added `buildRunnerInfo()` helper using `runnerTrackerRef`. Replaced 16 empty-string runner ID stubs with actual data. Fixed `batterReached` case to use `currentBatterId`/`currentBatterName`.
+8. **GameTracker.tsx**: Added away team narrative generation at game end. Passes `awayNarrative` to PostGameSummary.
+
+### Key Files Modified
+| File | Changes |
+|------|---------|
+| useSeasonStats.ts | MAJ-01 Step 1 (WAR computation, sort keys, leader refactor) |
+| SeasonLeaderboards.tsx | MAJ-01 Step 1b (WAR format/title cases) |
+| useFranchiseData.ts | MAJ-01 Step 2 (WAR leaders) + relationship engine wiring |
+| FranchiseHome.tsx | MAJ-01 Step 3 (WAR tabs in League Leaders) |
+| TeamHubContent.tsx | MAJ-01 Step 4 (real WAR in team stats) |
+| GameTracker.tsx | MAJ-06 (sub triggers) + dual narrative |
+| useGameState.ts | Runner ID stubs (buildRunnerInfo helper) |
+
+### Deferred Items (No Data Source)
+- **mWAR**: Requires `ManagerDecision[]` tracking not yet built
+- **Immaculate inning detection**: Requires per-at-bat pitch count input (not in PlayData)
+- **Fan morale rival detection**: Needs division/rivalry data from leagueBuilderStorage
+
+### NFL Results
+- **Build**: PASS (pre-existing errors only: 2 missing modal files)
+- **Tests**: 5025 passing (baseline maintained), 77 pre-existing failures
+- **Regressions**: 0
+
+### Orphaned Systems Status (Updated)
+| System | Status |
+|--------|--------|
+| WAR calculators (bWAR, pWAR, fWAR, rWAR) | ✅ NOW WIRED to 3 UI surfaces |
+| mWAR | ⚠️ STILL ORPHANED (needs manager decision tracking) |
+| Fan Morale engine | ✅ WIRED |
+| Narrative engine | ✅ WIRED (home + away) |
+| Detection functions | ✅ WIRED |
+| Inherited Runner Tracker | ✅ WIRED |
+| Relationship engine | ✅ NOW WIRED (through useFranchiseData) |
+
+---
+
 ## Session: February 5, 2026 - Phase C/D: Wire Orphaned Systems + D3K Confirmation
 
 ### What Was Accomplished
