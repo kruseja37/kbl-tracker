@@ -6,6 +6,33 @@
 > **IMPORTANT**: This log is for *what happened* during sessions. For *how things work*,
 > see the relevant SPEC docs. Finalized logic should be PROMOTED to specs, not left here.
 
+## Session: February 7, 2026 (Part 3) - Minor Fixes + Dual-Team Morale + Test Cleanup
+
+### Accomplished
+1. **Runner tracker undo sync** — `getRunnerTrackerSnapshot()` serializes Map to entries array for undo snapshots; `restoreState()` reconstructs Map on undo
+2. **Immaculate inning detection** — `inningPitchesRef` auto-tracks strikeouts (K/KL/D3K); pitch count entered by user at end-of-inning via `PitchCountPrompt`; detected when 3 Ks + 9 pitches confirmed
+3. **Fan morale team side fix** — Originally single-team; user flagged "what if both teams user-controlled?" → redesigned to dual-team (`homeFanMorale` + `awayFanMorale`); exhibition mode skips morale entirely
+4. **Test file cleanup** — Fixed 77 pre-existing test failures across 3 files:
+   - FranchiseSetup.test.tsx (11→0): Added complete `useLeagueBuilderData` mock
+   - LeagueBuilder.test.tsx (33→0): Added `createMockHookReturn()` helper with all 25+ hook properties
+   - PostGameSummary.test.tsx (33→0): Added `useParams` + `getCompletedGameById` mocks, async queries
+
+### Build Status
+- **TypeScript**: 0 errors
+- **Tests**: 5094 passing, 0 failing (106 test files)
+
+### Commits
+- `ff58e05` — fix: Runner tracker undo sync, immaculate inning detection, fan morale team side
+- `ca65489` — fix: Dual-team fan morale tracking, skip exhibition mode
+- `2591f52` — fix: Align 3 test files with data-driven components (77 failures → 0)
+
+### Decisions
+- **Dual-team fan morale**: Both home and away teams get independent morale tracking; each processes opposite game result. Supports franchise mode with multiple user-controlled teams.
+- **Exhibition morale skip**: No fan morale processing in exhibition mode (no persistent team context)
+- **Immaculate inning UX**: Auto-track strikeouts silently; only prompt user for pitch count at end of inning (non-intrusive)
+
+---
+
 ## Session: February 7, 2026 (Part 2) - mWAR System + Fan Morale Rival Detection + Clean Build
 
 ### What Was Accomplished
