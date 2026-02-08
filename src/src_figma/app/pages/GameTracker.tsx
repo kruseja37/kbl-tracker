@@ -170,8 +170,11 @@ export function GameTracker() {
     isPlayoffs: false, // TODO: Get from game context
   });
 
-  // MAJ-02: Fan morale tracking
-  const fanMoraleHook = useFanMorale();
+  // MAJ-02: Fan morale tracking — one hook per team for dual-team franchise support
+  // In exhibition mode these are instantiated but never called (no morale in exhibition)
+  const gameMode = navigationState?.gameMode || 'exhibition';
+  const homeFanMorale = useFanMorale(homeTeamId);
+  const awayFanMorale = useFanMorale(awayTeamId);
 
   // mWAR: Manager decision tracking
   const mwarHook = useMWARCalculations();
@@ -1795,44 +1798,56 @@ export function GameTracker() {
       console.warn('[MAJ-09] End-of-game detection error (non-blocking):', detectionError);
     }
 
-    // MAJ-02: Update fan morale at game end
-    try {
-      const homeWon = gameState.homeScore > gameState.awayScore;
-      // Use userTeamSide to determine if the user's team won (not always home)
-      const userWon = userTeamSide === 'home' ? homeWon : !homeWon;
-      const runDiff = userTeamSide === 'home'
-        ? gameState.homeScore - gameState.awayScore
-        : gameState.awayScore - gameState.homeScore;
-      const isBlowout = Math.abs(runDiff) >= 7;
+    // MAJ-02: Update fan morale at game end (franchise/playoff only — no morale in exhibition)
+    if (gameMode !== 'exhibition') {
+      try {
+        const homeWon = gameState.homeScore > gameState.awayScore;
+        const homeRunDiff = gameState.homeScore - gameState.awayScore;
+        const isBlowout = Math.abs(homeRunDiff) >= 7;
+        const isRivalMatchup = areRivals(leagueId, homeTeamId, awayTeamId);
 
-      // Check for special game results from pitcher stats
-      let isNoHitter = false;
-      let isShutout = false;
-      for (const [, pStats] of pitcherStats.entries()) {
-        if (pStats.isStarter && pStats.outsRecorded >= 27) {
-          if (pStats.hitsAllowed === 0 && pStats.runsAllowed === 0) isNoHitter = true;
-          if (pStats.runsAllowed === 0) isShutout = true;
+        // Check for special game results from pitcher stats
+        let isNoHitter = false;
+        let isShutout = false;
+        for (const [, pStats] of pitcherStats.entries()) {
+          if (pStats.isStarter && pStats.outsRecorded >= 27) {
+            if (pStats.hitsAllowed === 0 && pStats.runsAllowed === 0) isNoHitter = true;
+            if (pStats.runsAllowed === 0) isShutout = true;
+          }
         }
+
+        // Home team perspective
+        const homeResult: FanMoraleGameResult = {
+          gameId: gameId || 'demo-game',
+          won: homeWon,
+          isWalkOff: false, // TODO: detect walk-off from last play
+          isNoHitter: isNoHitter && homeWon, // Only counts for the winning side
+          isShutout: isShutout && homeWon,
+          isBlowout,
+          vsRival: isRivalMatchup,
+          runDifferential: homeRunDiff,
+          playerPerformances: [],
+        };
+        homeFanMorale.processGameResult(homeResult, { season: 1, game: 1 }, isRivalMatchup ? awayTeamName : undefined);
+
+        // Away team perspective (opposite won/runDiff, mirrored no-hitter/shutout)
+        const awayResult: FanMoraleGameResult = {
+          gameId: gameId || 'demo-game',
+          won: !homeWon,
+          isWalkOff: false,
+          isNoHitter: isNoHitter && !homeWon,
+          isShutout: isShutout && !homeWon,
+          isBlowout,
+          vsRival: isRivalMatchup,
+          runDifferential: -homeRunDiff,
+          playerPerformances: [],
+        };
+        awayFanMorale.processGameResult(awayResult, { season: 1, game: 1 }, isRivalMatchup ? homeTeamName : undefined);
+
+        console.log(`[MAJ-02] Fan morale updated (both teams) — homeWon: ${homeWon}, diff: ${homeRunDiff}, shutout: ${isShutout}`);
+      } catch (moraleError) {
+        console.warn('[MAJ-02] Fan morale update error (non-blocking):', moraleError);
       }
-
-      const isRivalMatchup = areRivals(leagueId, homeTeamId, awayTeamId);
-
-      const moraleGameResult: FanMoraleGameResult = {
-        gameId: gameId || 'demo-game',
-        won: userWon, // Uses userTeamSide to correctly track user's team
-        isWalkOff: false, // TODO: detect walk-off from last play
-        isNoHitter,
-        isShutout,
-        isBlowout,
-        vsRival: isRivalMatchup,
-        runDifferential: runDiff,
-        playerPerformances: [], // TODO: populate with per-player WAR
-      };
-
-      fanMoraleHook.processGameResult(moraleGameResult, { season: 1, game: 1 }, isRivalMatchup ? awayTeamName : undefined);
-      console.log(`[MAJ-02] Fan morale updated — userWon: ${userWon} (side: ${userTeamSide}), diff: ${runDiff}, shutout: ${isShutout}`);
-    } catch (moraleError) {
-      console.warn('[MAJ-02] Fan morale update error (non-blocking):', moraleError);
     }
 
     // MAJ-04: Generate game recap narratives (dual perspective)
@@ -1891,7 +1906,7 @@ export function GameTracker() {
         awayNarrative,
       }
     });
-  }, [hookEndGame, navigate, gameId, navigationState?.gameMode, gameState, pitcherStats, fameTrackingHook, fanMoraleHook, homeTeamName, awayTeamName, mwarHook, homeManagerId, homeTeamId]);
+  }, [hookEndGame, navigate, gameId, navigationState?.gameMode, gameMode, gameState, pitcherStats, fameTrackingHook, homeFanMorale, awayFanMorale, homeTeamName, awayTeamName, mwarHook, homeManagerId, homeTeamId]);
 
   return (
     <DndProvider backend={HTML5Backend}>
