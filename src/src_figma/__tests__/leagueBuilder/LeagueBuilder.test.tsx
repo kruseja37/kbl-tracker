@@ -2,7 +2,7 @@
  * LeagueBuilder Component Tests
  *
  * Tests the main LeagueBuilder page with module cards and league list.
- * Per Ralph Framework S-B017
+ * Updated 2026-02-07: Added missing isSMB4Seeded/seedSMB4Data to hook mock.
  */
 
 import { describe, test, expect, vi, beforeEach } from 'vitest';
@@ -19,16 +19,17 @@ vi.mock('react-router', () => ({
   useNavigate: () => mockNavigate,
 }));
 
-vi.mock('../../hooks/useLeagueBuilderData', () => ({
-  useLeagueBuilderData: vi.fn(() => ({
+// Helper to create a complete hook return value
+function createMockHookReturn(overrides: Record<string, unknown> = {}) {
+  return {
     leagues: [
-      { id: 'league-1', name: 'Kruse Baseball', teamIds: ['team-1', 'team-2'], defaultRulesPreset: 'preset-1' },
-      { id: 'league-2', name: 'Minor League', teamIds: ['team-3'], defaultRulesPreset: 'preset-1' },
+      { id: 'league-1', name: 'Kruse Baseball', teamIds: ['team-1', 'team-2'], defaultRulesPreset: 'preset-1', conferences: [], divisions: [], createdDate: '2026-01-01', lastModified: '2026-01-01' },
+      { id: 'league-2', name: 'Minor League', teamIds: ['team-3'], defaultRulesPreset: 'preset-1', conferences: [], divisions: [], createdDate: '2026-01-01', lastModified: '2026-01-01' },
     ],
     teams: [
-      { id: 'team-1', name: 'Sox' },
-      { id: 'team-2', name: 'Tigers' },
-      { id: 'team-3', name: 'Bears' },
+      { id: 'team-1', name: 'Sox', abbreviation: 'SOX', location: 'City', nickname: 'Sox' },
+      { id: 'team-2', name: 'Tigers', abbreviation: 'TIG', location: 'City', nickname: 'Tigers' },
+      { id: 'team-3', name: 'Bears', abbreviation: 'BRS', location: 'City', nickname: 'Bears' },
     ],
     players: [
       { id: 'player-1', name: 'John Smith' },
@@ -39,7 +40,37 @@ vi.mock('../../hooks/useLeagueBuilderData', () => ({
     ],
     isLoading: false,
     error: null,
-  })),
+    // All required hook functions
+    getLeague: vi.fn(),
+    createLeague: vi.fn(),
+    updateLeague: vi.fn(),
+    removeLeague: vi.fn(),
+    duplicateLeague: vi.fn(),
+    getTeamById: vi.fn(),
+    createTeam: vi.fn(),
+    updateTeam: vi.fn(),
+    removeTeam: vi.fn(),
+    getPlayerById: vi.fn(),
+    getTeamPlayers: vi.fn(),
+    createPlayer: vi.fn(),
+    updatePlayer: vi.fn(),
+    removePlayer: vi.fn(),
+    getRulesById: vi.fn(),
+    createRulesPreset: vi.fn(),
+    updateRulesPreset: vi.fn(),
+    removeRulesPreset: vi.fn(),
+    getRoster: vi.fn(),
+    updateRoster: vi.fn(),
+    removeRoster: vi.fn(),
+    seedSMB4Data: vi.fn(() => Promise.resolve({ teams: 0, players: 0 })),
+    isSMB4Seeded: vi.fn(() => Promise.resolve(false)),
+    refresh: vi.fn(),
+    ...overrides,
+  };
+}
+
+vi.mock('../../hooks/useLeagueBuilderData', () => ({
+  useLeagueBuilderData: vi.fn(() => createMockHookReturn()),
 }));
 
 // ============================================
@@ -59,7 +90,6 @@ describe('LeagueBuilder Component', () => {
 
     test('renders back button', () => {
       render(<LeagueBuilder />);
-      // Back button is the first button with ArrowLeft icon
       const buttons = screen.getAllByRole('button');
       expect(buttons[0]).toBeInTheDocument();
     });
@@ -217,28 +247,13 @@ describe('LeagueBuilder Component', () => {
   describe('Loading State', () => {
     test('shows loading indicator when isLoading', async () => {
       const { useLeagueBuilderData } = await import('../../hooks/useLeagueBuilderData');
-      vi.mocked(useLeagueBuilderData).mockReturnValue({
+      vi.mocked(useLeagueBuilderData).mockReturnValue(createMockHookReturn({
         leagues: [],
         teams: [],
         players: [],
         rulesPresets: [],
         isLoading: true,
-        error: null,
-        createLeague: vi.fn(),
-        updateLeague: vi.fn(),
-        removeLeague: vi.fn(),
-        duplicateLeague: vi.fn(),
-        createTeam: vi.fn(),
-        updateTeam: vi.fn(),
-        removeTeam: vi.fn(),
-        createPlayer: vi.fn(),
-        updatePlayer: vi.fn(),
-        removePlayer: vi.fn(),
-        createRulesPreset: vi.fn(),
-        updateRulesPreset: vi.fn(),
-        removeRulesPreset: vi.fn(),
-        refresh: vi.fn(),
-      });
+      }) as ReturnType<typeof useLeagueBuilderData>);
 
       render(<LeagueBuilder />);
       expect(screen.getByText('Loading leagues...')).toBeInTheDocument();
@@ -246,28 +261,13 @@ describe('LeagueBuilder Component', () => {
 
     test('shows ... for counts when loading', async () => {
       const { useLeagueBuilderData } = await import('../../hooks/useLeagueBuilderData');
-      vi.mocked(useLeagueBuilderData).mockReturnValue({
+      vi.mocked(useLeagueBuilderData).mockReturnValue(createMockHookReturn({
         leagues: [],
         teams: [],
         players: [],
         rulesPresets: [],
         isLoading: true,
-        error: null,
-        createLeague: vi.fn(),
-        updateLeague: vi.fn(),
-        removeLeague: vi.fn(),
-        duplicateLeague: vi.fn(),
-        createTeam: vi.fn(),
-        updateTeam: vi.fn(),
-        removeTeam: vi.fn(),
-        createPlayer: vi.fn(),
-        updatePlayer: vi.fn(),
-        removePlayer: vi.fn(),
-        createRulesPreset: vi.fn(),
-        updateRulesPreset: vi.fn(),
-        removeRulesPreset: vi.fn(),
-        refresh: vi.fn(),
-      });
+      }) as ReturnType<typeof useLeagueBuilderData>);
 
       render(<LeagueBuilder />);
       const ellipses = screen.getAllByText('...');
@@ -278,28 +278,13 @@ describe('LeagueBuilder Component', () => {
   describe('Error State', () => {
     test('shows error message when error occurs', async () => {
       const { useLeagueBuilderData } = await import('../../hooks/useLeagueBuilderData');
-      vi.mocked(useLeagueBuilderData).mockReturnValue({
+      vi.mocked(useLeagueBuilderData).mockReturnValue(createMockHookReturn({
         leagues: [],
         teams: [],
         players: [],
         rulesPresets: [],
-        isLoading: false,
         error: 'Failed to load data',
-        createLeague: vi.fn(),
-        updateLeague: vi.fn(),
-        removeLeague: vi.fn(),
-        duplicateLeague: vi.fn(),
-        createTeam: vi.fn(),
-        updateTeam: vi.fn(),
-        removeTeam: vi.fn(),
-        createPlayer: vi.fn(),
-        updatePlayer: vi.fn(),
-        removePlayer: vi.fn(),
-        createRulesPreset: vi.fn(),
-        updateRulesPreset: vi.fn(),
-        removeRulesPreset: vi.fn(),
-        refresh: vi.fn(),
-      });
+      }) as ReturnType<typeof useLeagueBuilderData>);
 
       render(<LeagueBuilder />);
       expect(screen.getByText('Error: Failed to load data')).toBeInTheDocument();
@@ -309,28 +294,12 @@ describe('LeagueBuilder Component', () => {
   describe('Empty State', () => {
     test('shows empty message when no leagues exist', async () => {
       const { useLeagueBuilderData } = await import('../../hooks/useLeagueBuilderData');
-      vi.mocked(useLeagueBuilderData).mockReturnValue({
+      vi.mocked(useLeagueBuilderData).mockReturnValue(createMockHookReturn({
         leagues: [],
         teams: [],
         players: [],
         rulesPresets: [],
-        isLoading: false,
-        error: null,
-        createLeague: vi.fn(),
-        updateLeague: vi.fn(),
-        removeLeague: vi.fn(),
-        duplicateLeague: vi.fn(),
-        createTeam: vi.fn(),
-        updateTeam: vi.fn(),
-        removeTeam: vi.fn(),
-        createPlayer: vi.fn(),
-        updatePlayer: vi.fn(),
-        removePlayer: vi.fn(),
-        createRulesPreset: vi.fn(),
-        updateRulesPreset: vi.fn(),
-        removeRulesPreset: vi.fn(),
-        refresh: vi.fn(),
-      });
+      }) as ReturnType<typeof useLeagueBuilderData>);
 
       render(<LeagueBuilder />);
       expect(screen.getByText('No leagues created yet. Create your first league below!')).toBeInTheDocument();
@@ -340,28 +309,12 @@ describe('LeagueBuilder Component', () => {
   describe('Singular/Plural Counts', () => {
     test('shows singular "league" for 1 league', async () => {
       const { useLeagueBuilderData } = await import('../../hooks/useLeagueBuilderData');
-      vi.mocked(useLeagueBuilderData).mockReturnValue({
-        leagues: [{ id: 'league-1', name: 'Test', teamIds: [], defaultRulesPreset: '' }],
+      vi.mocked(useLeagueBuilderData).mockReturnValue(createMockHookReturn({
+        leagues: [{ id: 'league-1', name: 'Test', teamIds: [], defaultRulesPreset: '', conferences: [], divisions: [], createdDate: '2026-01-01', lastModified: '2026-01-01' }],
         teams: [],
         players: [],
         rulesPresets: [],
-        isLoading: false,
-        error: null,
-        createLeague: vi.fn(),
-        updateLeague: vi.fn(),
-        removeLeague: vi.fn(),
-        duplicateLeague: vi.fn(),
-        createTeam: vi.fn(),
-        updateTeam: vi.fn(),
-        removeTeam: vi.fn(),
-        createPlayer: vi.fn(),
-        updatePlayer: vi.fn(),
-        removePlayer: vi.fn(),
-        createRulesPreset: vi.fn(),
-        updateRulesPreset: vi.fn(),
-        removeRulesPreset: vi.fn(),
-        refresh: vi.fn(),
-      });
+      }) as ReturnType<typeof useLeagueBuilderData>);
 
       render(<LeagueBuilder />);
       expect(screen.getByText('1 league')).toBeInTheDocument();
@@ -369,31 +322,14 @@ describe('LeagueBuilder Component', () => {
 
     test('shows singular "team" for 1 team in league row', async () => {
       const { useLeagueBuilderData } = await import('../../hooks/useLeagueBuilderData');
-      vi.mocked(useLeagueBuilderData).mockReturnValue({
-        leagues: [{ id: 'league-1', name: 'Test', teamIds: ['team-1'], defaultRulesPreset: '' }],
-        teams: [{ id: 'team-1', name: 'Sox' }],
+      vi.mocked(useLeagueBuilderData).mockReturnValue(createMockHookReturn({
+        leagues: [{ id: 'league-1', name: 'Test', teamIds: ['team-1'], defaultRulesPreset: '', conferences: [], divisions: [], createdDate: '2026-01-01', lastModified: '2026-01-01' }],
+        teams: [{ id: 'team-1', name: 'Sox', abbreviation: 'SOX', location: 'City', nickname: 'Sox' }],
         players: [],
         rulesPresets: [],
-        isLoading: false,
-        error: null,
-        createLeague: vi.fn(),
-        updateLeague: vi.fn(),
-        removeLeague: vi.fn(),
-        duplicateLeague: vi.fn(),
-        createTeam: vi.fn(),
-        updateTeam: vi.fn(),
-        removeTeam: vi.fn(),
-        createPlayer: vi.fn(),
-        updatePlayer: vi.fn(),
-        removePlayer: vi.fn(),
-        createRulesPreset: vi.fn(),
-        updateRulesPreset: vi.fn(),
-        removeRulesPreset: vi.fn(),
-        refresh: vi.fn(),
-      });
+      }) as ReturnType<typeof useLeagueBuilderData>);
 
       render(<LeagueBuilder />);
-      // The league row shows "1 team" (not "1 teams")
       const teamTexts = screen.getAllByText('1 team');
       expect(teamTexts.length).toBeGreaterThan(0);
     });
