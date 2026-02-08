@@ -35,6 +35,7 @@ import {
   getCurrentBases as trackerGetCurrentBases,
   type RunnerTrackingState,
   type RunnerScoredEvent,
+  type PitcherRunnerStats,
 } from '../app/engines/inheritedRunnerTracker';
 import type { HowReached } from '../app/types/substitution';
 
@@ -192,7 +193,23 @@ export interface UseGameStateReturn {
     scoreboard: ScoreboardState;
     playerStats?: Map<string, PlayerGameStats>;
     pitcherStats?: Map<string, PitcherGameStats>;
+    runnerTrackerState?: {
+      runners: RunnerTrackingState['runners'];
+      currentPitcherId: string;
+      currentPitcherName: string;
+      pitcherStats: Map<string, PitcherRunnerStats>;
+      inning: number;
+      atBatNumber: number;
+    };
   }) => void;
+  getRunnerTrackerSnapshot: () => {
+    runners: RunnerTrackingState['runners'];
+    currentPitcherId: string;
+    currentPitcherName: string;
+    pitcherStatsEntries: [string, PitcherRunnerStats][];
+    inning: number;
+    atBatNumber: number;
+  };
 
   // Loading/persistence
   isLoading: boolean;
@@ -903,6 +920,10 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     createRunnerTrackingState('', '')
   );
 
+  // Inning-level pitch tracking for immaculate inning detection
+  // Tracks total pitches and strikeouts per half-inning
+  const inningPitchesRef = useRef({ pitches: 0, strikeouts: 0, pitcherId: '' });
+
   // ============================================
   // INITIALIZATION
   // ============================================
@@ -915,6 +936,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     setSubstitutionLog([]);
     setPitchCountPrompt(null);
     pitcherNamesRef.current.clear();
+    inningPitchesRef.current = { pitches: 0, strikeouts: 0, pitcherId: '' };
     setScoreboard({
       innings: Array(9).fill({ away: undefined, home: undefined }),
       away: { runs: 0, hits: 0, errors: 0 },
@@ -1325,6 +1347,12 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
   const recordOut = useCallback(async (outType: OutType, runnerData?: RunnerAdvancement, pitchCount: number = 1) => {
     const newSequence = atBatSequence + 1;
     setAtBatSequence(newSequence);
+
+    // Track inning strikeouts for immaculate inning detection
+    // (Pitch count will be confirmed by user at end of inning)
+    if (outType === 'K' || outType === 'KL') {
+      inningPitchesRef.current.strikeouts++;
+    }
 
     const battingTeamId = gameState.isTop ? gameState.awayTeamId : gameState.homeTeamId;
     const pitchingTeamId = gameState.isTop ? gameState.homeTeamId : gameState.awayTeamId;
@@ -1774,6 +1802,9 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
   const recordD3K = useCallback(async (batterReached: boolean, pitchCount: number = 3) => {
     const newSequence = atBatSequence + 1;
     setAtBatSequence(newSequence);
+
+    // Track strikeout for immaculate inning detection (D3K is a strikeout)
+    inningPitchesRef.current.strikeouts++;
 
     const battingTeamId = gameState.isTop ? gameState.awayTeamId : gameState.homeTeamId;
     const pitchingTeamId = gameState.isTop ? gameState.homeTeamId : gameState.awayTeamId;
@@ -2586,6 +2617,21 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
 
   // Confirm pitch count and execute pending action (per PITCH_COUNT_TRACKING_SPEC.md)
   const confirmPitchCount = useCallback((pitcherId: string, finalCount: number) => {
+    // Check for immaculate inning at end of half-inning
+    // Requires: user confirmed exactly 9 pitches AND we tracked 3 strikeouts this half-inning
+    if (pitchCountPrompt?.type === 'end_inning' && finalCount === 9 && inningPitchesRef.current.strikeouts === 3) {
+      const immaculateFameEvent: FameEventRecord = {
+        eventType: 'IMMACULATE_INNING',
+        fameType: 'bonus',
+        fameValue: 2, // Per FAME_VALUES.IMMACULATE_INNING
+        playerId: pitcherId,
+        playerName: pitchCountPrompt.pitcherName,
+        description: `Immaculate inning in inning ${gameState.inning} (${gameState.isTop ? 'top' : 'bottom'})`,
+      };
+      setFameEvents(prev => [...prev, immaculateFameEvent]);
+      console.log(`[Fame] Immaculate inning detected! Pitcher: ${pitchCountPrompt.pitcherName}, pitches: ${finalCount}, K: 3`);
+    }
+
     // Update the pitcher's final pitch count
     setPitcherStats(prev => {
       const newStats = new Map(prev);
@@ -2597,7 +2643,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
 
     console.log(`[useGameState] Pitch count confirmed: ${pitcherId} = ${finalCount} pitches`);
 
-    // Execute the pending action (pitching change or end game)
+    // Execute the pending action (pitching change, end inning, or end game)
     if (pendingActionRef.current) {
       pendingActionRef.current();
       pendingActionRef.current = null;
@@ -2605,16 +2651,29 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
 
     // Clear the prompt
     setPitchCountPrompt(null);
-  }, []);
+  }, [pitchCountPrompt, gameState.inning, gameState.isTop]);
 
-  // Dismiss pitch count prompt without confirming (cancels the pending action)
+  // Dismiss pitch count prompt without confirming
+  // For end_inning: still transitions the inning (just skips pitch count update)
+  // For pitching_change/end_game: cancels the pending action
   const dismissPitchCountPrompt = useCallback(() => {
+    if (pitchCountPrompt?.type === 'end_inning') {
+      // Still execute the inning transition, just don't update pitch count
+      if (pendingActionRef.current) {
+        pendingActionRef.current();
+        pendingActionRef.current = null;
+      }
+      console.log('[useGameState] Pitch count prompt dismissed — inning transition proceeding without count update');
+    } else {
+      pendingActionRef.current = null;
+      console.log('[useGameState] Pitch count prompt dismissed, action cancelled');
+    }
     setPitchCountPrompt(null);
-    pendingActionRef.current = null;
-    console.log('[useGameState] Pitch count prompt dismissed, action cancelled');
-  }, []);
+  }, [pitchCountPrompt]);
 
-  const endInning = useCallback(() => {
+  // Internal function that performs the actual inning transition
+  // Called after pitch count is confirmed by user
+  const executeEndInning = useCallback(() => {
     // CRIT-02: Clear runner tracker for new half-inning and update inning number
     let endTracker = trackerClearBases(runnerTrackerRef.current);
     endTracker = trackerNextInning(endTracker);
@@ -2624,11 +2683,6 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       // After TOP (isTop was true, newIsTop is false): stay on same inning, switch to BOTTOM
       // After BOTTOM (isTop was false, newIsTop is true): increment inning, switch to TOP
       const newInning = newIsTop ? prev.inning + 1 : prev.inning;
-
-      // Update tracker's current pitcher to match the new half-inning's pitcher
-      // When switching sides, the other team's pitcher becomes current
-      // This will be corrected by the next changePitcher call if applicable
-      // For now, keep the tracker's pitcher as-is (it's only used for new runners added)
 
       // Get next batter
       const battingTeamLineup = newIsTop ? awayLineupRef.current : homeLineupRef.current;
@@ -2651,7 +2705,26 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         currentBatterName: nextBatter?.playerName || '',
       };
     });
-  }, [awayBatterIndex, homeBatterIndex]);
+
+    // Reset inning pitch counter for next half-inning
+    inningPitchesRef.current = { pitches: 0, strikeouts: 0, pitcherId: gameState.currentPitcherId };
+  }, [awayBatterIndex, homeBatterIndex, gameState.currentPitcherId]);
+
+  const endInning = useCallback(() => {
+    // Show pitch count prompt for the current pitcher at end of half-inning
+    const currentPitcherStats = pitcherStats.get(gameState.currentPitcherId) || createEmptyPitcherStats();
+
+    setPitchCountPrompt({
+      type: 'end_inning',
+      pitcherId: gameState.currentPitcherId,
+      pitcherName: gameState.currentPitcherName || gameState.currentPitcherId,
+      currentCount: currentPitcherStats.pitchCount,
+      lastVerifiedInning: gameState.inning,
+    });
+
+    // Store the inning transition as a pending action
+    pendingActionRef.current = async () => executeEndInning();
+  }, [gameState.currentPitcherId, gameState.currentPitcherName, gameState.inning, pitcherStats, executeEndInning]);
 
   // Update endInning ref so it can be called from recordOut/recordD3K
   endInningRef.current = endInning;
@@ -2927,13 +3000,36 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     pendingActionRef.current = completeGameInternal;
   }, [gameState, playerStats, pitcherStats, fameEvents, atBatSequence, scoreboard, completeGameInternal]);
 
+  // Snapshot runner tracker for undo system (Maps don't survive JSON.stringify)
+  // Converts pitcherStats Map to serializable entries array
+  const getRunnerTrackerSnapshot = useCallback(() => {
+    const tracker = runnerTrackerRef.current;
+    return {
+      runners: tracker.runners,
+      currentPitcherId: tracker.currentPitcherId,
+      currentPitcherName: tracker.currentPitcherName,
+      pitcherStatsEntries: Array.from(tracker.pitcherStats.entries()),
+      inning: tracker.inning,
+      atBatNumber: tracker.atBatNumber,
+    };
+  }, []);
+
   // Restore state from undo snapshot (Phase 7 - Undo System)
   // CRIT-01 fix: Now also restores playerStats and pitcherStats Maps
+  // Runner tracker undo fix: Also restores runnerTrackerRef for correct ER attribution
   const restoreState = useCallback((snapshot: {
     gameState: GameState;
     scoreboard: ScoreboardState;
     playerStats?: Map<string, PlayerGameStats>;
     pitcherStats?: Map<string, PitcherGameStats>;
+    runnerTrackerState?: {
+      runners: RunnerTrackingState['runners'];
+      currentPitcherId: string;
+      currentPitcherName: string;
+      pitcherStats: Map<string, PitcherRunnerStats>;
+      inning: number;
+      atBatNumber: number;
+    };
   }) => {
     console.log('[useGameState] Restoring state from snapshot');
     setGameState(snapshot.gameState);
@@ -2943,6 +3039,10 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     }
     if (snapshot.pitcherStats) {
       setPitcherStats(snapshot.pitcherStats);
+    }
+    if (snapshot.runnerTrackerState) {
+      runnerTrackerRef.current = snapshot.runnerTrackerState;
+      console.log('[useGameState] Runner tracker restored from snapshot');
     }
   }, []);
 
@@ -2980,6 +3080,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     initializeGame,
     loadExistingGame,
     restoreState,
+    getRunnerTrackerSnapshot,
     isLoading,
     isSaving,
     lastSavedAt,

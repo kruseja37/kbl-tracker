@@ -110,6 +110,7 @@ export function ExhibitionGame() {
         homeRecord: '0-0',
         gameMode: 'exhibition' as const,
         leagueId: 'sml', // Default to Super Mega League for exhibition
+        userTeamSide: 'home' as const, // Exhibition games default to user as home team
       }
     });
   };

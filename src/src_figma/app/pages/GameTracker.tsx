@@ -24,6 +24,7 @@ import { MOJO_STATES, getMojoColor } from "../../../engines/mojoEngine";
 import { FITNESS_STATES } from "../../../engines/fitnessEngine";
 import { useFameTracking, type FameEventDisplay, formatFameValue, getFameColor, getLITier } from "@/app/hooks/useFameTracking";
 import { FielderCreditModal, type RunnerOutInfo, type FielderCredit } from "../components/modals/FielderCreditModal";
+import type { PitcherRunnerStats } from "../engines/inheritedRunnerTracker";
 import { ErrorOnAdvanceModal, type RunnerAdvanceInfo, type ErrorOnAdvanceResult } from "../components/modals/ErrorOnAdvanceModal";
 // MAJ-03: Wire detection system
 import { runPlayDetections, type UIDetectionResult } from "../engines/detectionIntegration";
@@ -89,6 +90,7 @@ export function GameTracker() {
     homeManagerName?: string;
     awayManagerId?: string;
     awayManagerName?: string;
+    userTeamSide?: 'home' | 'away';
   } | null;
 
   // Team IDs - use navigation state or defaults
@@ -102,6 +104,7 @@ export function GameTracker() {
   const leagueId = navigationState?.leagueId || 'sml';
   const homeManagerId = navigationState?.homeManagerId || `${homeTeamId}-manager`;
   const awayManagerId = navigationState?.awayManagerId || `${awayTeamId}-manager`;
+  const userTeamSide = navigationState?.userTeamSide || 'home';
 
   // Team colors - prefer navigation state (from database), fall back to static config
   const awayTeamColor = navigationState?.awayTeamColor || getTeamColors(awayTeamId).primary;
@@ -150,6 +153,7 @@ export function GameTracker() {
     initializeGame,
     loadExistingGame,
     restoreState,
+    getRunnerTrackerSnapshot,
     isLoading,
     isSaving,
   } = useGameState(gameId);
@@ -249,16 +253,26 @@ export function GameTracker() {
   const fieldZoomLevel = isScoreboardMinimized ? 0.35 : 0;
 
   // Undo system - restore game state on undo
-  // CRIT-01 fix: Now restores playerStats and pitcherStats Maps alongside gameState/scoreboard
+  // CRIT-01 fix: Now restores playerStats, pitcherStats Maps, and runner tracker alongside gameState/scoreboard
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const handleUndo = useCallback((snapshot: GameSnapshot) => {
     console.log("Restoring game state from snapshot:", snapshot.playDescription);
-    const storedState = snapshot.gameState as {
-      gameState: typeof gameState;
-      scoreboard: typeof scoreboard;
-      playerStatsEntries?: [string, PlayerGameStats][];
-      pitcherStatsEntries?: [string, PitcherGameStats][];
-    } | null;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const storedState = snapshot.gameState as any;
     if (storedState && storedState.gameState && storedState.scoreboard) {
+      // Reconstruct runner tracker from serialized snapshot (Map from entries)
+      // Note: Types are loosened due to JSON serialization; restoreState validates internally
+      const runnerTrackerState = storedState.runnerTrackerSnapshot
+        ? {
+            runners: storedState.runnerTrackerSnapshot.runners,
+            currentPitcherId: storedState.runnerTrackerSnapshot.currentPitcherId as string,
+            currentPitcherName: storedState.runnerTrackerSnapshot.currentPitcherName as string,
+            pitcherStats: new Map(storedState.runnerTrackerSnapshot.pitcherStatsEntries) as Map<string, PitcherRunnerStats>,
+            inning: storedState.runnerTrackerSnapshot.inning as number,
+            atBatNumber: storedState.runnerTrackerSnapshot.atBatNumber as number,
+          }
+        : undefined;
+
       restoreState({
         gameState: storedState.gameState,
         scoreboard: storedState.scoreboard,
@@ -269,8 +283,10 @@ export function GameTracker() {
         pitcherStats: storedState.pitcherStatsEntries
           ? new Map(storedState.pitcherStatsEntries)
           : undefined,
+        // Restore runner tracker for correct ER attribution after undo
+        runnerTrackerState,
       });
-      console.log("State restored successfully (including player/pitcher stats)");
+      console.log("State restored successfully (including player/pitcher stats + runner tracker)");
     } else {
       console.warn("Incomplete snapshot - cannot restore", snapshot);
     }
@@ -287,8 +303,9 @@ export function GameTracker() {
       scoreboard,
       playerStatsEntries: Array.from(playerStats.entries()),
       pitcherStatsEntries: Array.from(pitcherStats.entries()),
+      runnerTrackerSnapshot: getRunnerTrackerSnapshot(),
     });
-  }, [gameState, scoreboard, playerStats, pitcherStats]);
+  }, [gameState, scoreboard, playerStats, pitcherStats, getRunnerTrackerSnapshot]);
 
   // Expandable sections state
   const [expandedSections, setExpandedSections] = useState({
@@ -1781,7 +1798,11 @@ export function GameTracker() {
     // MAJ-02: Update fan morale at game end
     try {
       const homeWon = gameState.homeScore > gameState.awayScore;
-      const runDiff = gameState.homeScore - gameState.awayScore;
+      // Use userTeamSide to determine if the user's team won (not always home)
+      const userWon = userTeamSide === 'home' ? homeWon : !homeWon;
+      const runDiff = userTeamSide === 'home'
+        ? gameState.homeScore - gameState.awayScore
+        : gameState.awayScore - gameState.homeScore;
       const isBlowout = Math.abs(runDiff) >= 7;
 
       // Check for special game results from pitcher stats
@@ -1798,7 +1819,7 @@ export function GameTracker() {
 
       const moraleGameResult: FanMoraleGameResult = {
         gameId: gameId || 'demo-game',
-        won: homeWon, // Assume home team is tracked team for now
+        won: userWon, // Uses userTeamSide to correctly track user's team
         isWalkOff: false, // TODO: detect walk-off from last play
         isNoHitter,
         isShutout,
@@ -1809,7 +1830,7 @@ export function GameTracker() {
       };
 
       fanMoraleHook.processGameResult(moraleGameResult, { season: 1, game: 1 }, isRivalMatchup ? awayTeamName : undefined);
-      console.log(`[MAJ-02] Fan morale updated — won: ${homeWon}, diff: ${runDiff}, shutout: ${isShutout}`);
+      console.log(`[MAJ-02] Fan morale updated — userWon: ${userWon} (side: ${userTeamSide}), diff: ${runDiff}, shutout: ${isShutout}`);
     } catch (moraleError) {
       console.warn('[MAJ-02] Fan morale update error (non-blocking):', moraleError);
     }

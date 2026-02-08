@@ -12,7 +12,7 @@
  * TODO: Rewrite this hook to match the actual legacy fanMoraleEngine API when needed.
  */
 
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useRef } from 'react';
 import {
   // Types - these are correctly imported
   type FanState,
@@ -96,9 +96,15 @@ export interface UseFanMoraleReturn {
  * This stub provides basic morale tracking with correct types.
  */
 export function useFanMorale(
-  _initialTeamId?: string,
+  initialTeamId?: string,
   marketSize: 'SMALL' | 'MEDIUM' | 'LARGE' = 'MEDIUM'
 ): UseFanMoraleReturn {
+  // Store team ID for logging/debugging
+  const teamIdRef = useRef(initialTeamId);
+  if (initialTeamId && initialTeamId !== teamIdRef.current) {
+    teamIdRef.current = initialTeamId;
+  }
+
   // State
   const [morale, setMorale] = useState<FanMorale | null>(null);
   const [recentEvents] = useState<MoraleEvent[]>([]);
