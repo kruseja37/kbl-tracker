@@ -736,15 +736,17 @@ function processTrackerScoredEvents(
  *
  * Mutates the PitcherGameStats objects in the provided Map.
  */
-function calculatePitcherDecisions(
+async function calculatePitcherDecisions(
   pitcherStats: Map<string, PitcherGameStats>,
   homeScore: number,
   awayScore: number,
   gameInnings: number,
-): void {
+  gameId: string,
+): Promise<void> {
   if (homeScore === awayScore) return; // Tie game = no decisions
 
   const winningTeam = homeScore > awayScore ? 'home' : 'away';
+  const losingTeam = winningTeam === 'home' ? 'away' : 'home';
 
   // Separate pitchers by team
   const teamPitchers: { id: string; stats: PitcherGameStats; team: 'away' | 'home' }[] = [];
@@ -756,18 +758,82 @@ function calculatePitcherDecisions(
   const winTeamPitchers = teamPitchers.filter(p => p.team === winningTeam);
   const loseTeamPitchers = teamPitchers.filter(p => p.team !== winningTeam);
 
-  // --- LOSS: Pitcher with most runs allowed on losing team ---
-  // Simplified: highest runsAllowed on losing team gets L.
-  // Full spec uses "pitcher of record when go-ahead run scored" which requires
-  // play-by-play lead tracking. This is a reasonable approximation.
+  // --- D-01 FIX: LOSS via lead-change tracking ---
+  // The L goes to the pitcher who was on the mound when the winning team
+  // took a lead they never relinquished (the "go-ahead" run).
+  // We scan AtBatEvents to find when the winning team last took the lead
+  // for good, then identify which losing-team pitcher was pitching at that moment.
   if (loseTeamPitchers.length > 0) {
-    let losingPitcher = loseTeamPitchers[0];
-    for (const p of loseTeamPitchers) {
-      if (p.stats.runsAllowed > losingPitcher.stats.runsAllowed) {
-        losingPitcher = p;
+    let losingPitcherId: string | null = null;
+
+    try {
+      const events = await getGameEvents(gameId);
+      if (events.length > 0) {
+        // Walk through events chronologically to find the at-bat where the
+        // winning team took their final go-ahead lead.
+        // "Final go-ahead" = the first moment the winning team had a lead
+        // that was never tied or surpassed afterward.
+        //
+        // Strategy: scan forward. Track every at-bat where the winning team
+        // takes or extends a lead. The LAST at-bat where the winning team's
+        // lead went from <= 0 to > 0 is the go-ahead moment. The losing-team
+        // pitcher on the mound at that at-bat gets the L.
+
+        let goAheadPitcherId: string | null = null;
+
+        for (const evt of events) {
+          // Calculate lead from winning team's perspective BEFORE and AFTER the at-bat
+          const winScoreBefore = winningTeam === 'home' ? evt.homeScore : evt.awayScore;
+          const loseScoreBefore = winningTeam === 'home' ? evt.awayScore : evt.homeScore;
+          const winScoreAfter = winningTeam === 'home' ? evt.homeScoreAfter : evt.awayScoreAfter;
+          const loseScoreAfter = winningTeam === 'home' ? evt.awayScoreAfter : evt.homeScoreAfter;
+
+          const leadBefore = winScoreBefore - loseScoreBefore;
+          const leadAfter = winScoreAfter - loseScoreAfter;
+
+          // Did the winning team take or re-take the lead on this at-bat?
+          if (leadBefore <= 0 && leadAfter > 0) {
+            // This is a go-ahead moment. The pitcher of the LOSING team
+            // who was pitching at this at-bat is the candidate for the L.
+            // The losing team is the team pitching when the winning team bats.
+            // If winning team is batting: the pitcher is on the losing team.
+            const pitcherTeam = evt.pitcherTeamId.toLowerCase().startsWith('away') ? 'away' : 'home';
+            if (pitcherTeam === losingTeam) {
+              goAheadPitcherId = evt.pitcherId;
+            }
+          }
+        }
+
+        if (goAheadPitcherId) {
+          losingPitcherId = goAheadPitcherId;
+        }
       }
+    } catch (err) {
+      // If IndexedDB fails, fall back to most-runs-allowed heuristic
+      console.warn('[calculatePitcherDecisions] Failed to read events for lead tracking, using fallback:', err);
     }
-    losingPitcher.stats.decision = 'L';
+
+    // Fallback: if lead-change tracking didn't find anyone (e.g., no events,
+    // edge case), use the original heuristic: most runs allowed
+    if (!losingPitcherId) {
+      let worst = loseTeamPitchers[0];
+      for (const p of loseTeamPitchers) {
+        if (p.stats.runsAllowed > worst.stats.runsAllowed) {
+          worst = p;
+        }
+      }
+      losingPitcherId = worst.id;
+    }
+
+    // Assign L to the identified pitcher
+    const lp = loseTeamPitchers.find(p => p.id === losingPitcherId);
+    if (lp) {
+      lp.stats.decision = 'L';
+    } else {
+      // ID not in loseTeamPitchers (shouldn't happen) — fallback to first
+      loseTeamPitchers[0].stats.decision = 'L';
+    }
+
     // Mark rest as ND
     for (const p of loseTeamPitchers) {
       if (p.stats.decision === null) p.stats.decision = 'ND';
@@ -1845,7 +1911,17 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       },
       awayScoreAfter: gameState.awayScore,
       homeScoreAfter: gameState.homeScore,
-      leverageIndex: 1.0,
+      // D-05 FIX: Calculate leverageIndex from base-out state instead of hardcoding 1.0
+      // Same pattern as recordHit (lines 1167-1173) and recordOut
+      leverageIndex: (() => {
+        const bs: BaseState = (
+          (gameState.bases.first ? 1 : 0) +
+          (gameState.bases.second ? 2 : 0) +
+          (gameState.bases.third ? 4 : 0)
+        ) as BaseState;
+        const o = Math.min(gameState.outs, 2) as 0 | 1 | 2;
+        return getBaseOutLI(bs, o);
+      })(),
       winProbabilityBefore: 0.5,
       winProbabilityAfter: 0.5,
       wpa: 0,
@@ -2011,7 +2087,9 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       const batterStats = newStats.get(gameState.currentBatterId) || createEmptyPlayerStats();
       batterStats.pa++;
       // No AB charged on error
-      batterStats.rbi += rbi;
+      // D-04 FIX: Errors NEVER credit RBI per baseball rules and calculateRBIs().
+      // The rbi parameter is kept in the signature for backward compat but ignored.
+      // batterStats.rbi += rbi; // REMOVED — was D-04 bug
       newStats.set(gameState.currentBatterId, batterStats);
       return newStats;
     });
@@ -2148,7 +2226,9 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       ROBBERY: 1.0,         // HR denied at wall (y > 0.95) — CRIT-06: spec v3.3 standardized to +1
 
       // Baserunning events (runner receives Fame)
-      TOOTBLAN: -3.0,       // Baserunning blunder
+      // D-07 FIX: TOOTBLAN uses tiered fame, not flat -3.0.
+      // Sentinel value — actual fame computed below based on rally-killer check.
+      TOOTBLAN: -0.5,       // Base value; overridden to -2.0 if rally killer
 
       // Comebacker events (batter receives Fame)
       KILLED: 3.0,          // Killed pitcher (+3 Fame to batter)
@@ -2166,7 +2246,16 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     };
 
     if (FAME_VALUES[eventType] !== undefined && FAME_VALUES[eventType] !== 0) {
-      const baseFame = FAME_VALUES[eventType];
+      let baseFame = FAME_VALUES[eventType];
+
+      // D-07 FIX: TOOTBLAN tiered fame per SPECIAL_EVENTS_SPEC.md
+      // Rally killer: runner was in scoring position (2B or 3B) with <2 outs → -2.0
+      // Standard: -0.5
+      if (eventType === 'TOOTBLAN') {
+        const isRallyKiller = (gameState.bases.second || gameState.bases.third) && gameState.outs < 2;
+        baseFame = isRallyKiller ? -2.0 : -0.5;
+      }
+
       const adjustedFame = baseFame * fameMultiplier;
 
       // Determine who receives the Fame
@@ -2770,7 +2859,8 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     }
 
     // MAJ-08: Calculate pitcher decisions (W/L/SV/H/BS)
-    calculatePitcherDecisions(pitcherStats, gameState.homeScore, gameState.awayScore, gameState.inning);
+    // D-01 FIX: Now async — uses lead-change tracking from AtBatEvents
+    await calculatePitcherDecisions(pitcherStats, gameState.homeScore, gameState.awayScore, gameState.inning, gameState.gameId);
 
     // Convert pitcher stats Map to array for PersistedGameState
     const pitcherGameStatsArray: PersistedGameState['pitcherGameStats'] = [];

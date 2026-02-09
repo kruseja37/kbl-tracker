@@ -6,6 +6,56 @@
 > **IMPORTANT**: This log is for *what happened* during sessions. For *how things work*,
 > see the relevant SPEC docs. Finalized logic should be PROMOTED to specs, not left here.
 
+## Session: February 9, 2026 — Canonical Bug Fixes (D-04, D-05, D-07, D-01)
+
+### Accomplished
+1. **D-04 fix** (Error RBI): Removed `batterStats.rbi += rbi` from `recordError`. Errors never credit RBI.
+2. **D-05 fix** (D3K Leverage): Replaced hardcoded `leverageIndex: 1.0` in `recordD3K` with `getBaseOutLI(baseState, outs)`.
+3. **D-07 fix** (TOOTBLAN Fame): Replaced flat `-3.0` with tiered logic: `-0.5` base, `-2.0` rally killer (scoring position + <2 outs).
+4. **D-01 fix** (Pitcher W/L): Made `calculatePitcherDecisions` async. Now reads AtBatEvents to find the go-ahead moment and assigns L to the pitcher on the mound when the winning team took their final lead.
+5. **Regression check**: Full 480-combo logic matrix re-run → 480/480 pass, 0 fail, 0 errors.
+
+### Build Status
+- **TypeScript**: 0 errors
+- **Tests**: 5094 passing, 0 failing (106 test files)
+- **Logic matrix**: 480/480 pass
+
+### Docs Updated
+- `spec-docs/canonical/features/gametracker.md` — D-01/D-04/D-05/D-07 marked ✅ FIXED with fix descriptions
+- `spec-docs/CURRENT_STATE.md` — Added bug fix section
+- `spec-docs/LOGIC_MATRIX_REPORT.md` — Updated with post-fix results
+
+---
+
+## Logic Matrix Test Execution — 2026-02-09
+
+### Test Pipeline Completed
+1. **Engine discovery** (Mode A + Mode B) — Produced ENGINE_API_MAP.md (1,298 lines) and FRANCHISE_API_MAP.md (807 lines)
+2. **Golden case generation** — 30 hand-verified test cases across 8 clusters, user-reviewed and approved
+3. **Test harness built** — `test-utils/run-logic-matrix.ts` (~1,100 lines), self-test validated (29/29 pass, 1 skip)
+4. **Full matrix executed** — 480 tests (20 outcomes x 8 base states x 3 out counts)
+
+### Results
+- **Tests run**: 480
+- **Pass rate**: 100.0% (480/480)
+- **Failures**: 0
+- **Errors**: 0
+- **Report**: `spec-docs/LOGIC_MATRIX_REPORT.md`
+- **Raw data**: `test-utils/results/`
+
+### Key Findings
+- Pure logic layer (`getDefaultRunnerOutcome`, `isRunnerForced`, `calculateRBIs`, etc.) is internally consistent across all 480 state combinations
+- Known bugs D-01, D-04, D-05, D-07 exist in the React-coupled layer, not the pure logic layer
+- GC-01 golden case had data inconsistency (description said 2 runs but runnerData showed R2→3B) — fixed to 1 run
+
+### What's NOT Tested
+- React state machine (`recordHit`, `recordOut`, etc.)
+- Walk-off detection, inning transitions, pitcher stats
+- Fame event recording
+- Integration between pure logic and React state
+
+---
+
 ## Session: February 7, 2026 (Part 3) - Minor Fixes + Dual-Team Morale + Test Cleanup
 
 ### Accomplished

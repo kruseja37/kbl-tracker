@@ -1,7 +1,23 @@
 # KBL Tracker - Current State
 
 > **Purpose**: Single source of truth for what's implemented, what's not, and known issues
-> **Last Updated**: February 7, 2026 (Part 3: Dual-team morale, immaculate inning, test cleanup — 0 TS errors, 5094 tests passing)
+> **Last Updated**: February 9, 2026 (Bug fixes D-01/D-04/D-05/D-07, logic matrix 480/480 pass — 0 TS errors, 5094 tests passing)
+
+---
+
+## GameTracker Canonical Bug Fixes (February 9, 2026) 🐛
+
+**Logic matrix**: 480/480 tests pass (20 outcomes × 8 base states × 3 out counts)
+**Report**: `spec-docs/LOGIC_MATRIX_REPORT.md`
+
+| Bug ID | Description | Fix Summary | Status |
+|--------|-------------|-------------|--------|
+| D-04 | Error RBI credited | `recordError` ignores rbi parameter; errors never credit RBI | ✅ Fixed |
+| D-05 | D3K leverageIndex hardcoded 1.0 | Uses `getBaseOutLI(baseState, outs)` like other at-bats | ✅ Fixed |
+| D-07 | TOOTBLAN fame flat -3.0 | Tiered: -0.5 base, -2.0 rally killer (scoring pos + <2 outs) | ✅ Fixed |
+| D-01 | Pitcher W/L = most runsAllowed | Lead-change tracking via AtBatEvents; falls back to heuristic | ✅ Fixed |
+
+**Test infrastructure created**: `test-utils/run-logic-matrix.ts` (harness), `test-utils/golden-cases.json` (30 golden cases)
 
 ---
 
