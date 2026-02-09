@@ -1,7 +1,29 @@
 # KBL Tracker - Current State
 
 > **Purpose**: Single source of truth for what's implemented, what's not, and known issues
-> **Last Updated**: February 9, 2026 (Bug fixes D-01/D-04/D-05/D-07, logic matrix 480/480 pass — 0 TS errors, 5094 tests passing)
+> **Last Updated**: February 9, 2026 (Pipeline CRIT fixes — 10/11 pipelines INTACT, 0 TS errors, 5094 tests passing)
+
+---
+
+## Data Pipeline Critical Fixes (February 9, 2026) 🔧
+
+**Pipeline trace report**: `spec-docs/DATA_PIPELINE_TRACE_REPORT.md`
+**Machine-readable**: `test-utils/pipeline-trace-data.json`
+
+| CRIT ID | Pipeline | Issue | Status |
+|---------|----------|-------|--------|
+| CRIT-01 | PL-03 Standings | `seasonId` never set on `CompletedGameRecord` — standings always mock | ✅ Fixed |
+| CRIT-03 | PL-01/02 Team Assignment | All batters → away team, all pitchers → home team | ✅ Fixed |
+| CRIT-04 | PL-01/02 Player Names | Names stored as player IDs in season stats | ✅ Fixed |
+| CRIT-02 | PL-09 Pitcher Decisions | W/L/SV/H/BS never serialized or aggregated to season stats | ✅ Fixed |
+| CRIT-05 | PL-05 Fielding Stats | putouts/assists/errors always 0 — infrastructure orphaned | ⚠️ NEEDS FEATURE WORK |
+
+**Pipeline health**: 10/11 INTACT, 1 NEEDS FEATURE WORK (fielding inference)
+
+### Remaining Data Quality Issues (MEDIUM)
+- HBP/SF/SAC/GIDP not tracked in game-level batting stats (affects wOBA accuracy slightly)
+- Division assignment for standings is arbitrary (no league/division config exists)
+- `playerTeam` always '' in fame events (doesn't affect aggregation)
 
 ---
 

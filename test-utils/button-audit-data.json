@@ -1,0 +1,250 @@
+{
+  "generated": "2026-02-09",
+  "pages": [
+    {
+      "name": "AppHome",
+      "route": "/",
+      "file": "src/src_figma/app/pages/AppHome.tsx",
+      "health": "GOOD",
+      "elements": [
+        { "id": "AH-01", "type": "link", "label": "LOAD FRANCHISE", "tier": "B", "status": "WIRED", "handler": "<Link to>", "handlerFile": "AppHome.tsx:26", "destination": "navigate(/franchise/tigers)", "destinationFile": "react-router" },
+        { "id": "AH-02", "type": "link", "label": "NEW FRANCHISE", "tier": "B", "status": "WIRED", "handler": "<Link to>", "handlerFile": "AppHome.tsx:40", "destination": "navigate(/franchise/setup)", "destinationFile": "react-router" },
+        { "id": "AH-03", "type": "link", "label": "Exhibition Game", "tier": "B", "status": "WIRED", "handler": "<Link to>", "handlerFile": "AppHome.tsx:54", "destination": "navigate(/exhibition)", "destinationFile": "react-router" },
+        { "id": "AH-04", "type": "link", "label": "PLAYOFFS", "tier": "B", "status": "WIRED", "handler": "<Link to>", "handlerFile": "AppHome.tsx:68", "destination": "navigate(/world-series)", "destinationFile": "react-router" },
+        { "id": "AH-05", "type": "link", "label": "LEAGUE BUILDER", "tier": "B", "status": "WIRED", "handler": "<Link to>", "handlerFile": "AppHome.tsx:82", "destination": "navigate(/league-builder)", "destinationFile": "react-router" }
+      ]
+    },
+    {
+      "name": "ExhibitionGame",
+      "route": "/exhibition",
+      "file": "src/src_figma/app/pages/ExhibitionGame.tsx",
+      "health": "GOOD",
+      "elements": [
+        { "id": "EX-01", "type": "button", "label": "Back arrow", "tier": "B", "status": "WIRED", "handler": "navigate(\"/\")", "handlerFile": "ExhibitionGame.tsx:123", "destination": "navigate(/)", "destinationFile": "react-router" },
+        { "id": "EX-02", "type": "button", "label": "GO TO LEAGUE BUILDER", "tier": "B", "status": "WIRED", "handler": "navigate(\"/league-builder\")", "handlerFile": "ExhibitionGame.tsx:157", "destination": "navigate(/league-builder)", "destinationFile": "react-router" },
+        { "id": "EX-03", "type": "button", "label": "League name cards", "tier": "C", "status": "WIRED", "handler": "setSelectedLeagueId", "handlerFile": "ExhibitionGame.tsx:176", "destination": "local state", "destinationFile": "" },
+        { "id": "EX-04", "type": "button", "label": "CONTINUE", "tier": "C", "status": "WIRED", "handler": "setStep(\"select\")", "handlerFile": "ExhibitionGame.tsx:201", "destination": "wizard step advance", "destinationFile": "" },
+        { "id": "EX-05", "type": "select", "label": "AWAY TEAM dropdown", "tier": "C", "status": "WIRED", "handler": "setSelectedAwayTeamId", "handlerFile": "ExhibitionGame.tsx:222", "destination": "loadTeamLineup() → IndexedDB read", "destinationFile": "src/src_figma/utils/lineupLoader.ts:128" },
+        { "id": "EX-06", "type": "select", "label": "HOME TEAM dropdown", "tier": "C", "status": "WIRED", "handler": "setSelectedHomeTeamId", "handlerFile": "ExhibitionGame.tsx:240", "destination": "loadTeamLineup() → IndexedDB read", "destinationFile": "src/src_figma/utils/lineupLoader.ts:128" },
+        { "id": "EX-07a", "type": "button", "label": "BACK", "tier": "C", "status": "WIRED", "handler": "setStep(\"league\")", "handlerFile": "ExhibitionGame.tsx:256", "destination": "wizard step back", "destinationFile": "" },
+        { "id": "EX-07b", "type": "button", "label": "CONTINUE", "tier": "C", "status": "WIRED", "handler": "setStep(\"lineups\")", "handlerFile": "ExhibitionGame.tsx:263", "destination": "wizard step advance", "destinationFile": "" },
+        { "id": "EX-08a", "type": "button", "label": "BACK", "tier": "C", "status": "WIRED", "handler": "setStep(\"select\")", "handlerFile": "ExhibitionGame.tsx:324", "destination": "wizard step back", "destinationFile": "" },
+        { "id": "EX-08b", "type": "button", "label": "START GAME", "tier": "B", "status": "WIRED", "handler": "handleStartGame", "handlerFile": "ExhibitionGame.tsx:91", "destination": "navigate(/game-tracker/exhibition-1, {state})", "destinationFile": "react-router" }
+      ]
+    },
+    {
+      "name": "WorldSeries",
+      "route": "/world-series",
+      "file": "src/src_figma/app/pages/WorldSeries.tsx",
+      "health": "CRITICAL",
+      "elements": [
+        { "id": "WS-01", "type": "button", "label": "Back arrow", "tier": "B", "status": "WIRED", "handler": "navigate(\"/\")", "handlerFile": "WorldSeries.tsx:43", "destination": "navigate(/)", "destinationFile": "react-router" },
+        { "id": "WS-02", "type": "button", "label": "Tab buttons (x4)", "tier": "C", "status": "WIRED", "handler": "setActiveTab", "handlerFile": "WorldSeries.tsx:63", "destination": "local state", "destinationFile": "" },
+        { "id": "WS-03", "type": "button", "label": "League select cards (x4)", "tier": "C", "status": "FAKE", "handler": "handleLeagueSelect", "handlerFile": "WorldSeries.tsx:129", "destination": "mockLeagues local state", "destinationFile": "" },
+        { "id": "WS-04", "type": "button", "label": "Best of N per round", "tier": "C", "status": "FAKE", "handler": "handleGamesPerRoundChange", "handlerFile": "WorldSeries.tsx:146", "destination": "local state only", "destinationFile": "" },
+        { "id": "WS-05", "type": "button", "label": "Innings per game (x4)", "tier": "C", "status": "FAKE", "handler": "setSettings", "handlerFile": "WorldSeries.tsx:244", "destination": "local state only", "destinationFile": "" },
+        { "id": "WS-06", "type": "button", "label": "DH rule (x3)", "tier": "C", "status": "FAKE", "handler": "setSettings", "handlerFile": "WorldSeries.tsx:263", "destination": "local state only", "destinationFile": "" },
+        { "id": "WS-07", "type": "button", "label": "GENERATE PLAYOFF BRACKET", "tier": "C", "status": "FAKE", "handler": "handleConfirm", "handlerFile": "WorldSeries.tsx:152", "destination": "sets isConfigured=true only", "destinationFile": "" },
+        { "id": "WS-08", "type": "button", "label": "Batting stat accordions (x5)", "tier": "C", "status": "FAKE", "handler": "setExpandedBattingStat", "handlerFile": "WorldSeries.tsx:568", "destination": "hardcoded battingLeadersData", "destinationFile": "" },
+        { "id": "WS-09", "type": "button", "label": "Pitching stat accordions (x5)", "tier": "C", "status": "FAKE", "handler": "setExpandedPitchingStat", "handlerFile": "WorldSeries.tsx:619", "destination": "hardcoded pitchingLeadersData", "destinationFile": "" },
+        { "id": "WS-10", "type": "button", "label": "Year history accordions (x3)", "tier": "C", "status": "FAKE", "handler": "setExpandedYear", "handlerFile": "WorldSeries.tsx:833", "destination": "hardcoded playoffHistory", "destinationFile": "" }
+      ]
+    },
+    {
+      "name": "FranchiseSetup",
+      "route": "/franchise/setup",
+      "file": "src/src_figma/app/pages/FranchiseSetup.tsx",
+      "health": "NEEDS_WORK",
+      "elements": [
+        { "id": "FS-01", "type": "button", "label": "Back arrow", "tier": "B", "status": "WIRED", "handler": "navigate(\"/\")", "handlerFile": "FranchiseSetup.tsx:175", "destination": "navigate(/)", "destinationFile": "react-router" },
+        { "id": "FS-05", "type": "button", "label": "START FRANCHISE", "tier": "B", "status": "FAKE", "handler": "navigate(\"/franchise/new\")", "handlerFile": "FranchiseSetup.tsx:108", "destination": "navigate only — config NOT persisted", "destinationFile": "" },
+        { "id": "FS-26", "type": "button", "label": "[View Rosters]", "tier": "C", "status": "DEAD", "handler": "none", "handlerFile": "FranchiseSetup.tsx:1117", "destination": "no handler attached", "destinationFile": "" }
+      ]
+    },
+    {
+      "name": "FranchiseHome",
+      "route": "/franchise/:franchiseId",
+      "file": "src/src_figma/app/pages/FranchiseHome.tsx",
+      "health": "NEEDS_WORK",
+      "elements": [
+        { "id": "FH-09", "type": "button", "label": "CREATE PLAYOFF BRACKET", "tier": "A", "status": "WIRED", "handler": "playoffData.createNewPlayoff", "handlerFile": "FranchiseHome.tsx:758", "destination": "usePlayoffData().createNewPlayoff() → IndexedDB", "destinationFile": "src/src_figma/hooks/usePlayoffData.ts" },
+        { "id": "FH-10", "type": "button", "label": "START PLAYOFFS", "tier": "A", "status": "WIRED", "handler": "playoffData.startPlayoffs", "handlerFile": "FranchiseHome.tsx:902", "destination": "usePlayoffData().startPlayoffs() → IndexedDB", "destinationFile": "src/src_figma/hooks/usePlayoffData.ts" },
+        { "id": "FH-24", "type": "callback", "label": "onAdvanceComplete", "tier": "A", "status": "WIRED", "handler": "setCurrentSeason + localStorage", "handlerFile": "FranchiseHome.tsx:1402", "destination": "localStorage.setItem('kbl-current-season')", "destinationFile": "" },
+        { "id": "FH-30", "type": "callback", "label": "AddGameModal.onAddGame", "tier": "A", "status": "WIRED", "handler": "handleAddGame", "handlerFile": "FranchiseHome.tsx:299", "destination": "scheduleData.addGame() → IndexedDB", "destinationFile": "src/src_figma/hooks/useScheduleData.ts" },
+        { "id": "FH-31", "type": "callback", "label": "AddGameModal.onAddSeries", "tier": "A", "status": "WIRED", "handler": "handleAddSeries", "handlerFile": "FranchiseHome.tsx:315", "destination": "scheduleData.addSeries() → IndexedDB", "destinationFile": "src/src_figma/hooks/useScheduleData.ts" },
+        { "id": "FH-36", "type": "button", "label": "SIMULATE", "tier": "C", "status": "FAKE", "handler": "handleSimulate", "handlerFile": "FranchiseHome.tsx:1780", "destination": "console.log only", "destinationFile": "" },
+        { "id": "FH-37", "type": "button", "label": "SKIP", "tier": "C", "status": "FAKE", "handler": "handleSkip", "handlerFile": "FranchiseHome.tsx:1786", "destination": "console.log only", "destinationFile": "" }
+      ]
+    },
+    {
+      "name": "LeagueBuilder",
+      "route": "/league-builder",
+      "file": "src/src_figma/app/pages/LeagueBuilder.tsx",
+      "health": "GOOD",
+      "elements": [
+        { "id": "LB-02", "type": "button", "label": "SEED SMB4 DATABASE", "tier": "A", "status": "WIRED", "handler": "handleSeedDatabase", "handlerFile": "LeagueBuilder.tsx:19", "destination": "hook.seedSMB4Data() → leagueBuilderStorage.seedFromSMB4Database()", "destinationFile": "src/utils/leagueBuilderStorage.ts" }
+      ]
+    },
+    {
+      "name": "LeagueBuilderLeagues",
+      "route": "/league-builder/leagues",
+      "file": "src/src_figma/app/pages/LeagueBuilderLeagues.tsx",
+      "health": "GOOD",
+      "elements": [
+        { "id": "LL-04", "type": "button", "label": "Duplicate league", "tier": "A", "status": "WIRED", "handler": "handleDuplicate", "handlerFile": "LeagueBuilderLeagues.tsx:152", "destination": "hook.duplicateLeague() → saveLeagueTemplate()", "destinationFile": "src/utils/leagueBuilderStorage.ts" },
+        { "id": "LL-06", "type": "button", "label": "Confirm delete", "tier": "A", "status": "WIRED", "handler": "handleDelete", "handlerFile": "LeagueBuilderLeagues.tsx:143", "destination": "hook.removeLeague() → deleteLeagueTemplate()", "destinationFile": "src/utils/leagueBuilderStorage.ts" },
+        { "id": "LL-16", "type": "button", "label": "Save/Create League", "tier": "A", "status": "WIRED", "handler": "handleSave", "handlerFile": "LeagueBuilderLeagues.tsx:110", "destination": "hook.createLeague/updateLeague() → saveLeagueTemplate()", "destinationFile": "src/utils/leagueBuilderStorage.ts" }
+      ]
+    },
+    {
+      "name": "LeagueBuilderTeams",
+      "route": "/league-builder/teams",
+      "file": "src/src_figma/app/pages/LeagueBuilderTeams.tsx",
+      "health": "GOOD",
+      "elements": [
+        { "id": "LT-04", "type": "button", "label": "Confirm delete team", "tier": "A", "status": "WIRED", "handler": "handleDelete", "handlerFile": "LeagueBuilderTeams.tsx:177", "destination": "hook.removeTeam() → deleteTeam()", "destinationFile": "src/utils/leagueBuilderStorage.ts" },
+        { "id": "LT-20", "type": "button", "label": "Save/Create Team", "tier": "A", "status": "WIRED", "handler": "handleSave", "handlerFile": "LeagueBuilderTeams.tsx:132", "destination": "hook.createTeam/updateTeam() → saveTeam()", "destinationFile": "src/utils/leagueBuilderStorage.ts" }
+      ]
+    },
+    {
+      "name": "LeagueBuilderPlayers",
+      "route": "/league-builder/players",
+      "file": "src/src_figma/app/pages/LeagueBuilderPlayers.tsx",
+      "health": "GOOD",
+      "elements": [
+        { "id": "LP-07", "type": "button", "label": "Confirm delete player", "tier": "A", "status": "WIRED", "handler": "handleDelete", "handlerFile": "LeagueBuilderPlayers.tsx:272", "destination": "hook.removePlayer() → deletePlayer()", "destinationFile": "src/utils/leagueBuilderStorage.ts" },
+        { "id": "LP-29", "type": "button", "label": "Save/Create Player", "tier": "A", "status": "WIRED", "handler": "handleSave", "handlerFile": "LeagueBuilderPlayers.tsx:214", "destination": "hook.createPlayer/updatePlayer() → savePlayer()", "destinationFile": "src/utils/leagueBuilderStorage.ts" }
+      ]
+    },
+    {
+      "name": "LeagueBuilderRosters",
+      "route": "/league-builder/rosters",
+      "file": "src/src_figma/app/pages/LeagueBuilderRosters.tsx",
+      "health": "GOOD",
+      "elements": [
+        { "id": "LR-02", "type": "button", "label": "REVERT", "tier": "A", "status": "WIRED", "handler": "handleRevert", "handlerFile": "LeagueBuilderRosters.tsx:114", "destination": "loadRoster() → getTeamRoster() → IndexedDB", "destinationFile": "src/utils/leagueBuilderStorage.ts" },
+        { "id": "LR-03", "type": "button", "label": "SAVE", "tier": "A", "status": "WIRED", "handler": "handleSave", "handlerFile": "LeagueBuilderRosters.tsx:100", "destination": "hook.updateRoster() → saveTeamRoster()", "destinationFile": "src/utils/leagueBuilderStorage.ts" }
+      ]
+    },
+    {
+      "name": "LeagueBuilderDraft",
+      "route": "/league-builder/draft",
+      "file": "src/src_figma/app/pages/LeagueBuilderDraft.tsx",
+      "health": "NEEDS_WORK",
+      "elements": [
+        { "id": "LD-02", "type": "button", "label": "START DRAFT", "tier": "B", "status": "FAKE", "handler": "alert()", "handlerFile": "LeagueBuilderDraft.tsx:153", "destination": "alert() only — no draft execution", "destinationFile": "" }
+      ]
+    },
+    {
+      "name": "LeagueBuilderRules",
+      "route": "/league-builder/rules",
+      "file": "src/src_figma/app/pages/LeagueBuilderRules.tsx",
+      "health": "GOOD",
+      "elements": [
+        { "id": "LRu-04", "type": "button", "label": "Duplicate preset", "tier": "A", "status": "WIRED", "handler": "handleDuplicate", "handlerFile": "LeagueBuilderRules.tsx:37", "destination": "hook.createRulesPreset() → saveRulesPreset()", "destinationFile": "src/utils/leagueBuilderStorage.ts" },
+        { "id": "LRu-06", "type": "button", "label": "Confirm delete preset", "tier": "A", "status": "WIRED", "handler": "handleDelete", "handlerFile": "LeagueBuilderRules.tsx:47", "destination": "hook.removeRulesPreset() → deleteRulesPreset()", "destinationFile": "src/utils/leagueBuilderStorage.ts" },
+        { "id": "LRu-35", "type": "button", "label": "CREATE/UPDATE preset", "tier": "A", "status": "WIRED", "handler": "handleSubmit", "handlerFile": "LeagueBuilderRules.tsx:431", "destination": "onSave → hook.createRulesPreset/updateRulesPreset() → saveRulesPreset()", "destinationFile": "src/utils/leagueBuilderStorage.ts" }
+      ]
+    },
+    {
+      "name": "PostGameSummary",
+      "route": "/post-game/:gameId",
+      "file": "src/src_figma/app/pages/PostGameSummary.tsx",
+      "health": "GOOD",
+      "elements": [
+        { "id": "PGS-01", "type": "button", "label": "BACK TO MENU", "tier": "B", "status": "WIRED", "handler": "navigate(\"/exhibition\")", "handlerFile": "PostGameSummary.tsx:85", "destination": "navigate(/exhibition)", "destinationFile": "react-router" },
+        { "id": "PGS-03", "type": "button", "label": "CONTINUE", "tier": "B", "status": "WIRED", "handler": "navigate()", "handlerFile": "PostGameSummary.tsx:418", "destination": "navigate based on gameMode", "destinationFile": "react-router" }
+      ]
+    }
+  ],
+  "orphanedHandlers": [
+    {
+      "component": "TradeInterfaceContent",
+      "file": "src/src_figma/app/pages/FranchiseHome.tsx",
+      "lines": "2288-2893",
+      "elementCount": 20,
+      "reason": "Defined but never rendered — replaced by <TradeFlow> component"
+    },
+    {
+      "component": "AwardsContent",
+      "file": "src/src_figma/app/pages/FranchiseHome.tsx",
+      "lines": "3481-4203",
+      "elementCount": 17,
+      "reason": "Defined but never rendered — replaced by inline content + <AwardsCeremonyFlow>"
+    },
+    {
+      "modal": "DefensiveSubModal",
+      "file": "src/src_figma/app/components/modals/DefensiveSubModal.tsx",
+      "elementCount": 7,
+      "reason": "Barrel export only — not imported by active figma GameTracker"
+    },
+    {
+      "modal": "DoubleSwitchModal",
+      "file": "src/src_figma/app/components/modals/DoubleSwitchModal.tsx",
+      "elementCount": 7,
+      "reason": "Barrel export only — not imported by active figma GameTracker"
+    },
+    {
+      "modal": "PinchHitterModal",
+      "file": "src/src_figma/app/components/modals/PinchHitterModal.tsx",
+      "elementCount": 5,
+      "reason": "Barrel export only — not imported by active figma GameTracker"
+    },
+    {
+      "modal": "PinchRunnerModal",
+      "file": "src/src_figma/app/components/modals/PinchRunnerModal.tsx",
+      "elementCount": 5,
+      "reason": "Barrel export only — not imported by active figma GameTracker"
+    },
+    {
+      "modal": "PitchingChangeModal",
+      "file": "src/src_figma/app/components/modals/PitchingChangeModal.tsx",
+      "elementCount": 4,
+      "reason": "Barrel export only — not imported by active figma GameTracker"
+    },
+    {
+      "modal": "PositionSwitchModal",
+      "file": "src/src_figma/app/components/modals/PositionSwitchModal.tsx",
+      "elementCount": 6,
+      "reason": "Barrel export only — not imported by active figma GameTracker"
+    }
+  ],
+  "reconciliation": {
+    "topDownCount": 314,
+    "bottomUpHandlerCount": 230,
+    "matchedCount": 258,
+    "deadElements": [
+      { "id": "FS-26", "label": "[View Rosters]", "file": "FranchiseSetup.tsx:1117", "reason": "No onClick handler" }
+    ],
+    "fakeElements": [
+      { "id": "FS-05", "label": "START FRANCHISE", "file": "FranchiseSetup.tsx:108", "reason": "Navigates but doesn't persist config" },
+      { "id": "FH-36", "label": "SIMULATE", "file": "FranchiseHome.tsx:1780", "reason": "console.log stub" },
+      { "id": "FH-37", "label": "SKIP", "file": "FranchiseHome.tsx:1786", "reason": "console.log stub" },
+      { "id": "LD-02", "label": "START DRAFT", "file": "LeagueBuilderDraft.tsx:153", "reason": "alert() placeholder" },
+      { "id": "WS-03", "label": "League select", "file": "WorldSeries.tsx:129", "reason": "Uses mockLeagues, not IndexedDB" },
+      { "id": "WS-04", "label": "Best of N", "file": "WorldSeries.tsx:146", "reason": "Local state only" },
+      { "id": "WS-05", "label": "Innings per game", "file": "WorldSeries.tsx:244", "reason": "Local state only" },
+      { "id": "WS-06", "label": "DH rule", "file": "WorldSeries.tsx:263", "reason": "Local state only" },
+      { "id": "WS-07", "label": "GENERATE BRACKET", "file": "WorldSeries.tsx:152", "reason": "Sets boolean only, no generation" },
+      { "id": "WS-08", "label": "Batting accordions", "file": "WorldSeries.tsx:568", "reason": "Hardcoded mock data" },
+      { "id": "WS-09", "label": "Pitching accordions", "file": "WorldSeries.tsx:619", "reason": "Hardcoded mock data" },
+      { "id": "WS-10", "label": "History accordions", "file": "WorldSeries.tsx:833", "reason": "Hardcoded mock data" }
+    ],
+    "orphanedSubComponents": [
+      { "name": "TradeInterfaceContent", "file": "FranchiseHome.tsx:2288-2893", "lines": 605 },
+      { "name": "AwardsContent", "file": "FranchiseHome.tsx:3481-4203", "lines": 722 }
+    ],
+    "orphanedModals": [
+      "DefensiveSubModal",
+      "DoubleSwitchModal",
+      "PinchHitterModal",
+      "PinchRunnerModal",
+      "PitchingChangeModal",
+      "PositionSwitchModal"
+    ],
+    "queryParamMismatches": [
+      { "source": "LeagueBuilder.tsx:197", "target": "LeagueBuilderLeagues.tsx", "param": "?id=", "issue": "Target ignores param" },
+      { "source": "LeagueBuilder.tsx:204", "target": "LeagueBuilderLeagues.tsx", "param": "?new=true", "issue": "Target ignores param" }
+    ]
+  }
+}

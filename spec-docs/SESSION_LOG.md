@@ -6,6 +6,42 @@
 > **IMPORTANT**: This log is for *what happened* during sessions. For *how things work*,
 > see the relevant SPEC docs. Finalized logic should be PROMOTED to specs, not left here.
 
+## Session: February 9, 2026 — Data Pipeline Trace + 5 Critical Pipeline Fixes
+
+### Accomplished
+1. **Franchise button audit** completed (from prior context) — 314 interactive elements across 12 pages + 9 modals audited. Report: `spec-docs/FRANCHISE_BUTTON_AUDIT.md`
+2. **Data pipeline tracer** executed — traced all 11 data pipelines from game completion fan-out. Found 5 critical issues. Reports: `spec-docs/DATA_PIPELINE_TRACE_REPORT.md`, `test-utils/pipeline-trace-data.json`
+3. **CRIT-01 fix**: `seasonId` never set on `CompletedGameRecord` — standings queries returned empty. Added `seasonId` param to `archiveCompletedGame()`, passed from `seasonIdRef.current` at both call sites.
+4. **CRIT-03 fix**: All batters assigned to away team, all pitchers to home team in season stats. Added `playerName`+`teamId` to `PersistedGameState.playerStats` type. Populated from lineup refs (away/home) in both `completeGameInternal()` and `endGame()`. Pitchers now use ID prefix (`away-`/`home-`) for team resolution.
+5. **CRIT-04 fix**: Player names stored as player IDs in season stats. Fixed alongside CRIT-03 — `playerName` now populated from lineup refs via `playerNameLookup` Map.
+6. **CRIT-02 fix**: Pitcher W/L/SV/H/BS never written to season stats. Added `decision`/`save`/`hold`/`blownSave` fields to `PersistedGameState.pitcherGameStats` type. Serialized in both code paths. Added aggregation in `aggregatePitchingStats()`.
+7. **CRIT-05**: Fielding stats (putouts/assists/errors) always 0. Investigated and documented as **NEEDS FEATURE WORK** — fielding inference infrastructure exists (`FieldingEvent`, `logFieldingEvent`, `fieldingStatsAggregator`) but is completely orphaned. Not a bug — requires feature work to wire fielding inference from out types into gameplay loop.
+8. **Re-trace**: After fixes, 10/11 pipelines now INTACT. Only PL-05 (fielding) remains as NEEDS FEATURE WORK.
+
+### Pipeline Status After Fixes
+| Pipeline | Before | After |
+|----------|--------|-------|
+| PL-01 Batting Stats | PARTIALLY BROKEN | ✅ INTACT |
+| PL-02 Pitching Stats | PARTIALLY BROKEN | ✅ INTACT |
+| PL-03 Standings | BROKEN | ✅ INTACT |
+| PL-05 Fielding Stats | BROKEN | ⚠️ NEEDS FEATURE WORK |
+| PL-09 Pitcher Decisions | BROKEN | ✅ INTACT |
+
+### Files Changed (CRIT fixes)
+- `src/src_figma/utils/gameStorage.ts` — `seasonId` on archive, `playerName`+`teamId` on playerStats, decision fields on pitcherGameStats
+- `src/utils/gameStorage.ts` — same type changes (base version)
+- `src/src_figma/hooks/useGameState.ts` — both `completeGameInternal()` and `endGame()` updated with correct name/team/decision/seasonId
+- `src/utils/seasonAggregator.ts` — reads `playerName`/`teamId` from game data, aggregates W/L/SV/H/BS
+- `src/hooks/useGamePersistence.ts` — updated types
+- `src/components/GameTracker/index.tsx` — updated legacy types
+
+### Build Status
+- **TypeScript**: 0 errors
+- **Tests**: 5094 passing, 0 failing (106 test files)
+- **Logic matrix**: 480/480 pass (unchanged)
+
+---
+
 ## Session: February 9, 2026 — Canonical Bug Fixes (D-04, D-05, D-07, D-01)
 
 ### Accomplished

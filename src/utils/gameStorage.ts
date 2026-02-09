@@ -107,6 +107,8 @@ export interface PersistedGameState {
 
   // Player stats (batting)
   playerStats: Record<string, {
+    playerName: string;
+    teamId: string;
     pa: number;
     ab: number;
     h: number;
@@ -148,6 +150,11 @@ export interface PersistedGameState {
     firstInningRuns: number;
     basesLoadedWalks: number;
     inningsComplete: number;
+    // MAJ-08: Pitcher decisions
+    decision: 'W' | 'L' | 'ND' | null;
+    save: boolean;
+    hold: boolean;
+    blownSave: boolean;
   }>;
 
   // Fame tracking
@@ -277,13 +284,15 @@ export interface CompletedGameRecord {
  */
 export async function archiveCompletedGame(
   gameState: PersistedGameState,
-  finalScore: { away: number; home: number }
+  finalScore: { away: number; home: number },
+  seasonId?: string
 ): Promise<void> {
   const db = await initDatabase();
 
   const record: CompletedGameRecord = {
     gameId: gameState.gameId,
     date: Date.now(),
+    seasonId: seasonId || 'season-1',
     awayTeamId: gameState.awayTeamId,
     homeTeamId: gameState.homeTeamId,
     awayTeamName: gameState.awayTeamName,

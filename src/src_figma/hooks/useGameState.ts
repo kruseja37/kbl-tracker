@@ -2830,7 +2830,15 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     );
 
     // Convert Map to Record for PersistedGameState
+    // Build lookup sets for team assignment from lineup refs
+    const awayPlayerIds = new Set(awayLineupRef.current.map(p => p.playerId));
+    const playerNameLookup = new Map<string, string>();
+    for (const p of [...awayLineupRef.current, ...homeLineupRef.current]) {
+      playerNameLookup.set(p.playerId, p.playerName);
+    }
+
     const playerStatsRecord: Record<string, {
+      playerName: string; teamId: string;
       pa: number; ab: number; h: number; singles: number; doubles: number;
       triples: number; hr: number; rbi: number; r: number; bb: number;
       hbp: number; k: number; sb: number; cs: number; putouts: number;
@@ -2839,6 +2847,12 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     playerStats.forEach((stats, playerId) => {
       playerStatsRecord[playerId] = {
         ...stats,
+        playerName: playerNameLookup.get(playerId) || playerId,
+        teamId: awayPlayerIds.has(playerId) ? gameState.awayTeamId : gameState.homeTeamId,
+        // CRIT-05: Fielding stats (putouts/assists/errors) are not tracked during gameplay.
+        // Infrastructure exists (FieldingEvent, logFieldingEvent, fieldingStatsAggregator)
+        // but is orphaned — never called from at-bat recording. NEEDS FEATURE WORK to wire
+        // fielding inference from out types (GO→infielder, FO→outfielder) into the gameplay loop.
         putouts: 0,
         assists: 0,
         fieldingErrors: 0,
@@ -2863,14 +2877,20 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     await calculatePitcherDecisions(pitcherStats, gameState.homeScore, gameState.awayScore, gameState.inning, gameState.gameId);
 
     // Convert pitcher stats Map to array for PersistedGameState
+    // Use same team/name resolution as endGame() — pitcher IDs have "away-{name}" or "home-{name}" prefix
     const pitcherGameStatsArray: PersistedGameState['pitcherGameStats'] = [];
     pitcherStats.forEach((stats, pitcherId) => {
+      const isAwayPitcher = pitcherId.toLowerCase().startsWith('away-');
+      const teamId = isAwayPitcher ? gameState.awayTeamId : gameState.homeTeamId;
+      const pitcherName = pitcherNamesRef.current.get(pitcherId) ||
+        pitcherId.replace(/^(away|home)-/, '').replace(/-/g, ' ');
+
       pitcherGameStatsArray.push({
         pitcherId,
-        pitcherName: pitcherId, // TODO: Resolve from roster
-        teamId: gameState.homeTeamId, // TODO: Determine from context
-        isStarter: pitcherGameStatsArray.length === 0,
-        entryInning: 1,
+        pitcherName,
+        teamId,
+        isStarter: stats.isStarter,
+        entryInning: stats.entryInning,
         outsRecorded: stats.outsRecorded,
         hitsAllowed: stats.hitsAllowed,
         runsAllowed: stats.runsAllowed,
@@ -2878,15 +2898,20 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         walksAllowed: stats.walksAllowed,
         strikeoutsThrown: stats.strikeoutsThrown,
         homeRunsAllowed: stats.homeRunsAllowed,
-        hitBatters: 0,
+        hitBatters: stats.hitByPitch,
         basesReachedViaError: 0,
-        wildPitches: 0,
+        wildPitches: stats.wildPitches,
         pitchCount: stats.pitchCount,
         battersFaced: stats.battersFaced,
-        consecutiveHRsAllowed: 0,
-        firstInningRuns: 0,
-        basesLoadedWalks: 0,
+        consecutiveHRsAllowed: stats.consecutiveHRsAllowed,
+        firstInningRuns: stats.firstInningRuns,
+        basesLoadedWalks: stats.basesLoadedWalks,
         inningsComplete: Math.floor(stats.outsRecorded / 3),
+        // MAJ-08: Pitcher decisions
+        decision: stats.decision,
+        save: stats.save,
+        hold: stats.hold,
+        blownSave: stats.blownSave,
       });
     });
 
@@ -2951,7 +2976,8 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     await archiveCompletedGame(
       persistedState,
       { away: gameState.awayScore, home: gameState.homeScore },
-      inningScores
+      inningScores,
+      seasonId
     );
 
     setIsSaving(false);
@@ -2960,8 +2986,15 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
 
   const endGame = useCallback(async () => {
     // Archive game FIRST so PostGameSummary can load it (EXH-011 fix)
-    // Build persisted state for archiving
+    // Build persisted state for archiving — include player name and team
+    const awayPlayerIdsForEndGame = new Set(awayLineupRef.current.map(p => p.playerId));
+    const playerNameLookupForEndGame = new Map<string, string>();
+    for (const p of [...awayLineupRef.current, ...homeLineupRef.current]) {
+      playerNameLookupForEndGame.set(p.playerId, p.playerName);
+    }
+
     const playerStatsRecord: Record<string, {
+      playerName: string; teamId: string;
       pa: number; ab: number; h: number; singles: number; doubles: number;
       triples: number; hr: number; rbi: number; r: number; bb: number;
       hbp: number; k: number; sb: number; cs: number; putouts: number;
@@ -2970,6 +3003,8 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     playerStats.forEach((stats, playerId) => {
       playerStatsRecord[playerId] = {
         ...stats,
+        playerName: playerNameLookupForEndGame.get(playerId) || playerId,
+        teamId: awayPlayerIdsForEndGame.has(playerId) ? gameState.awayTeamId : gameState.homeTeamId,
         putouts: 0,
         assists: 0,
         fieldingErrors: 0,
@@ -3011,6 +3046,12 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         firstInningRuns: stats.firstInningRuns,
         basesLoadedWalks: stats.basesLoadedWalks,
         inningsComplete: Math.floor(stats.outsRecorded / 3),
+        // MAJ-08: Pitcher decisions (not yet calculated at endGame time — set to null/false)
+        // Decisions are calculated in completeGameInternal after pitch count confirmation
+        decision: stats.decision,
+        save: stats.save,
+        hold: stats.hold,
+        blownSave: stats.blownSave,
       };
     });
 
@@ -3066,10 +3107,12 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       away: inn.away ?? 0,
       home: inn.home ?? 0,
     }));
+    const seasonId = seasonIdRef.current || 'season-1';
     await archiveCompletedGame(
       persistedState,
       { away: gameState.awayScore, home: gameState.homeScore },
-      inningScores
+      inningScores,
+      seasonId
     );
 
     console.log('[endGame] Game archived for post-game summary');

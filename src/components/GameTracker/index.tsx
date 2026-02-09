@@ -154,6 +154,8 @@ function createInitialLineupState(): LineupState {
 }
 
 interface PlayerStats {
+  playerName: string;
+  teamId: string;
   pa: number;
   ab: number;
   h: number;
@@ -174,6 +176,7 @@ interface PlayerStats {
 }
 
 const initialStats: PlayerStats = {
+  playerName: '', teamId: '',
   pa: 0, ab: 0, h: 0, singles: 0, doubles: 0, triples: 0, hr: 0, rbi: 0, r: 0, bb: 0, k: 0, sb: 0, cs: 0,
   putouts: 0, assists: 0, fieldingErrors: 0,
 };
@@ -208,6 +211,12 @@ interface PitcherGameStats {
   firstInningRuns: number;
   basesLoadedWalks: number;
   inningsComplete: number;
+
+  // MAJ-08: Pitcher decisions
+  decision: 'W' | 'L' | 'ND' | null;
+  save: boolean;
+  hold: boolean;
+  blownSave: boolean;
 }
 
 const createInitialPitcherStats = (
@@ -238,6 +247,10 @@ const createInitialPitcherStats = (
   firstInningRuns: 0,
   basesLoadedWalks: 0,
   inningsComplete: 0,
+  decision: null,
+  save: false,
+  hold: false,
+  blownSave: false,
 });
 
 // Props interface for GameTracker

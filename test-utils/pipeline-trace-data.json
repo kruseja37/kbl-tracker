@@ -1,0 +1,739 @@
+{
+  "metadata": {
+    "generated": "2026-02-09",
+    "updated": "2026-02-09-post-crit-fixes",
+    "pipelinesTraced": 11,
+    "highPriority": 4,
+    "mediumPriority": 4,
+    "lowPriority": 3,
+    "intactCount": 10,
+    "brokenCount": 0,
+    "needsFeatureWorkCount": 1
+  },
+  "pipelines": [
+    {
+      "id": "PL-01",
+      "name": "Game → Season Batting Stats",
+      "priority": "HIGH",
+      "status": "INTACT",
+      "entryPoint": {
+        "file": "src/src_figma/hooks/useGameState.ts",
+        "line": 2822,
+        "function": "completeGameInternal"
+      },
+      "junctions": [
+        {
+          "index": 1,
+          "type": "TRANSFORM",
+          "file": "src/src_figma/hooks/useGameState.ts",
+          "lines": "2832-2937",
+          "function": "inline PersistedGameState construction",
+          "verified": true,
+          "issues": [
+            {
+              "severity": "HIGH",
+              "type": "DATA_CORRUPTION",
+              "line": 2842,
+              "description": "putouts/assists/fieldingErrors hardcoded to 0 in playerStatsRecord"
+            },
+            {
+              "severity": "HIGH",
+              "type": "DATA_CORRUPTION",
+              "line": 2871,
+              "description": "ALL pitchers assigned to homeTeamId regardless of actual team"
+            },
+            {
+              "severity": "MEDIUM",
+              "type": "PLACEHOLDER",
+              "line": 2870,
+              "description": "pitcherName set to pitcherId (placeholder)"
+            }
+          ]
+        },
+        {
+          "index": 2,
+          "type": "AGGREGATE",
+          "file": "src/utils/seasonAggregator.ts",
+          "lines": "141-175",
+          "function": "aggregateBattingStats",
+          "verified": true,
+          "issues": [
+            {
+              "severity": "HIGH",
+              "type": "PLACEHOLDER",
+              "line": 148,
+              "description": "playerName = playerId — names show as IDs in leaderboards"
+            },
+            {
+              "severity": "HIGH",
+              "type": "DATA_CORRUPTION",
+              "line": 149,
+              "description": "teamId = gameState.awayTeamId — ALL players assigned to away team"
+            },
+            {
+              "severity": "MEDIUM",
+              "type": "DATA_LOSS",
+              "line": 170,
+              "description": "HBP, SF, SAC, GIDP never aggregated from game data (always 0)"
+            }
+          ]
+        },
+        {
+          "index": 3,
+          "type": "STORE",
+          "file": "src/utils/seasonStorage.ts",
+          "lines": "426-437",
+          "function": "updateBattingStats",
+          "verified": true,
+          "issues": []
+        },
+        {
+          "index": 4,
+          "type": "RETRIEVE",
+          "file": "src/hooks/useSeasonStats.ts",
+          "lines": "324-370",
+          "function": "useSeasonStats → getAllBattingStats",
+          "verified": true,
+          "issues": []
+        },
+        {
+          "index": 5,
+          "type": "RENDER",
+          "file": "src/src_figma/app/pages/FranchiseHome.tsx",
+          "lines": "2895-3500",
+          "function": "LeagueLeadersContent",
+          "verified": true,
+          "issues": []
+        }
+      ],
+      "variants": {
+        "happyPath": "PARTIAL_PASS",
+        "partialData": "PASS_WITH_WARNINGS",
+        "duplicate": "PROTECTED"
+      }
+    },
+    {
+      "id": "PL-02",
+      "name": "Game → Season Pitching Stats",
+      "priority": "HIGH",
+      "status": "INTACT",
+      "entryPoint": {
+        "file": "src/src_figma/hooks/useGameState.ts",
+        "line": 2822,
+        "function": "completeGameInternal"
+      },
+      "junctions": [
+        {
+          "index": 1,
+          "type": "TRANSFORM",
+          "file": "src/src_figma/hooks/useGameState.ts",
+          "lines": "2866-2891",
+          "function": "inline pitcherGameStats serialization",
+          "verified": true,
+          "issues": [
+            {
+              "severity": "CRITICAL",
+              "type": "DATA_LOSS",
+              "line": 2866,
+              "description": "Pitcher decisions (win/loss/save/hold/blownSave) NOT serialized to PersistedGameState"
+            },
+            {
+              "severity": "MEDIUM",
+              "type": "HARDCODED_ZERO",
+              "line": 2881,
+              "description": "hitBatters hardcoded to 0"
+            },
+            {
+              "severity": "MEDIUM",
+              "type": "HARDCODED_ZERO",
+              "line": 2882,
+              "description": "basesReachedViaError hardcoded to 0"
+            },
+            {
+              "severity": "MEDIUM",
+              "type": "HARDCODED_ZERO",
+              "line": 2883,
+              "description": "wildPitches hardcoded to 0"
+            }
+          ]
+        },
+        {
+          "index": 2,
+          "type": "AGGREGATE",
+          "file": "src/utils/seasonAggregator.ts",
+          "lines": "180-234",
+          "function": "aggregatePitchingStats",
+          "verified": true,
+          "issues": [
+            {
+              "severity": "CRITICAL",
+              "type": "DATA_LOSS",
+              "line": 229,
+              "description": "W/L/SV/H/BS NEVER aggregated. Comment confirms: 'would need decision tracking'"
+            }
+          ]
+        },
+        {
+          "index": 3,
+          "type": "STORE",
+          "file": "src/utils/seasonStorage.ts",
+          "lines": "439-450",
+          "function": "updatePitchingStats",
+          "verified": true,
+          "issues": []
+        },
+        {
+          "index": 4,
+          "type": "RETRIEVE",
+          "file": "src/hooks/useSeasonStats.ts",
+          "lines": "247-270",
+          "function": "toPitchingLeaderEntry",
+          "verified": true,
+          "issues": []
+        },
+        {
+          "index": 5,
+          "type": "RENDER",
+          "file": "src/src_figma/app/pages/FranchiseHome.tsx",
+          "lines": "2895-3500",
+          "function": "LeagueLeadersContent → pitching leaders",
+          "verified": true,
+          "issues": []
+        }
+      ],
+      "variants": {
+        "happyPath": "PARTIAL_PASS",
+        "partialData": "PASS",
+        "duplicate": "PROTECTED"
+      }
+    },
+    {
+      "id": "PL-03",
+      "name": "Game → Standings",
+      "priority": "HIGH",
+      "status": "INTACT",
+      "entryPoint": {
+        "file": "src/src_figma/utils/gameStorage.ts",
+        "line": 283,
+        "function": "archiveCompletedGame"
+      },
+      "junctions": [
+        {
+          "index": 1,
+          "type": "STORE",
+          "file": "src/src_figma/utils/gameStorage.ts",
+          "lines": "283-320",
+          "function": "archiveCompletedGame",
+          "verified": true,
+          "issues": [
+            {
+              "severity": "CRITICAL",
+              "type": "MISSING_FIELD",
+              "line": 290,
+              "description": "seasonId NEVER set on CompletedGameRecord despite field existing in type (line 266)"
+            }
+          ]
+        },
+        {
+          "index": 2,
+          "type": "RETRIEVE",
+          "file": "src/utils/gameStorage.ts",
+          "lines": "315-341",
+          "function": "getRecentGames",
+          "verified": true,
+          "issues": []
+        },
+        {
+          "index": 3,
+          "type": "FILTER_CALCULATE",
+          "file": "src/utils/seasonStorage.ts",
+          "lines": "784-917",
+          "function": "calculateStandings",
+          "verified": true,
+          "issues": [
+            {
+              "severity": "CRITICAL",
+              "type": "BROKEN_FILTER",
+              "line": 789,
+              "description": "Filter g.seasonId === seasonId ALWAYS fails because seasonId is never set on records. Returns empty array."
+            }
+          ]
+        },
+        {
+          "index": 4,
+          "type": "TRANSFORM",
+          "file": "src/src_figma/hooks/useFranchiseData.ts",
+          "lines": "381-420",
+          "function": "standings conversion to LeagueStandings",
+          "verified": true,
+          "issues": [
+            {
+              "severity": "MEDIUM",
+              "type": "ARBITRARY_DIVISION",
+              "line": 402,
+              "description": "Division assignment is arbitrary slice — no league/division config exists"
+            }
+          ]
+        },
+        {
+          "index": 5,
+          "type": "RENDER",
+          "file": "src/src_figma/app/pages/FranchiseHome.tsx",
+          "lines": "1645-1724",
+          "function": "StandingsContent",
+          "verified": true,
+          "issues": []
+        }
+      ],
+      "variants": {
+        "happyPath": "FAIL",
+        "partialData": "NOT_REACHED",
+        "duplicate": "NOT_REACHED"
+      },
+      "maskedBy": "MOCK_STANDINGS fallback in useFranchiseData.ts:383"
+    },
+    {
+      "id": "PL-04",
+      "name": "Game → WAR Recalculation",
+      "priority": "HIGH",
+      "status": "INTACT",
+      "note": "Depends on PL-01/PL-02 data quality",
+      "entryPoint": {
+        "file": "src/hooks/useSeasonStats.ts",
+        "line": 324,
+        "function": "useSeasonStats loadStats"
+      },
+      "junctions": [
+        {
+          "index": 1,
+          "type": "RETRIEVE",
+          "file": "src/hooks/useSeasonStats.ts",
+          "lines": "324-370",
+          "function": "getAllBattingStats + getAllPitchingStats + getAllFieldingStats",
+          "verified": true,
+          "issues": []
+        },
+        {
+          "index": 2,
+          "type": "TRANSFORM",
+          "file": "src/hooks/useSeasonStats.ts",
+          "lines": "103-155",
+          "function": "seasonBattingToWAR + seasonPitchingToWAR + seasonBattingToBaserunning",
+          "verified": true,
+          "issues": [
+            {
+              "severity": "LOW",
+              "type": "DATA_QUALITY",
+              "line": 113,
+              "description": "hitByPitch always 0 (never populated upstream) — affects wOBA denominator slightly"
+            }
+          ]
+        },
+        {
+          "index": 3,
+          "type": "CALCULATE",
+          "file": "src/engines/bwarCalculator.ts + pwarCalculator.ts + fwarCalculator.ts + rwarCalculator.ts",
+          "lines": "various",
+          "function": "calculateBWARSimplified + calculatePWARSimplified + calculateFWARFromStats + calculateRWARSimplified",
+          "verified": true,
+          "issues": []
+        },
+        {
+          "index": 4,
+          "type": "AGGREGATE",
+          "file": "src/hooks/useSeasonStats.ts",
+          "lines": "230-241",
+          "function": "totalWAR = bWAR + fWAR + rWAR",
+          "verified": true,
+          "issues": []
+        },
+        {
+          "index": 5,
+          "type": "RENDER",
+          "file": "src/components/GameTracker/WARDisplay.tsx + FranchiseHome.tsx",
+          "lines": "various",
+          "function": "WARPanel + WARLeaderboard + LeagueLeadersContent",
+          "verified": true,
+          "issues": []
+        }
+      ],
+      "variants": {
+        "happyPath": "PASS",
+        "partialData": "PASS",
+        "duplicate": "NOT_APPLICABLE"
+      }
+    },
+    {
+      "id": "PL-05",
+      "name": "Game → Season Fielding Stats",
+      "priority": "MEDIUM",
+      "status": "NEEDS_FEATURE_WORK",
+      "note": "Fielding inference infrastructure exists but is orphaned — not a bug, needs feature work to wire into gameplay",
+      "entryPoint": {
+        "file": "src/src_figma/hooks/useGameState.ts",
+        "line": 2842,
+        "function": "playerStatsRecord construction"
+      },
+      "junctions": [
+        {
+          "index": 1,
+          "type": "TRANSFORM",
+          "file": "src/src_figma/hooks/useGameState.ts",
+          "lines": "2842-2844",
+          "function": "inline",
+          "verified": true,
+          "issues": [
+            {
+              "severity": "HIGH",
+              "type": "HARDCODED_ZERO",
+              "line": 2842,
+              "description": "putouts: 0, assists: 0, fieldingErrors: 0 — ALL fielding stats hardcoded to zero"
+            }
+          ]
+        }
+      ],
+      "variants": {
+        "happyPath": "FAIL",
+        "partialData": "NOT_REACHED"
+      }
+    },
+    {
+      "id": "PL-06",
+      "name": "Game → Fame Aggregation",
+      "priority": "MEDIUM",
+      "status": "INTACT",
+      "entryPoint": {
+        "file": "src/utils/seasonAggregator.ts",
+        "line": 266,
+        "function": "aggregateFameEvents"
+      },
+      "junctions": [
+        {
+          "index": 1,
+          "type": "TRANSFORM",
+          "file": "src/src_figma/hooks/useGameState.ts",
+          "lines": "2916-2930",
+          "function": "fameEvents mapping",
+          "verified": true,
+          "issues": [
+            {
+              "severity": "LOW",
+              "type": "MISSING_FIELD",
+              "line": 2922,
+              "description": "playerTeam always '' (empty string)"
+            }
+          ]
+        },
+        {
+          "index": 2,
+          "type": "AGGREGATE",
+          "file": "src/utils/seasonAggregator.ts",
+          "lines": "266-306",
+          "function": "aggregateFameEvents",
+          "verified": true,
+          "issues": []
+        }
+      ],
+      "variants": {
+        "happyPath": "PASS",
+        "partialData": "PASS"
+      }
+    },
+    {
+      "id": "PL-07",
+      "name": "Game → Game Archive",
+      "priority": "MEDIUM",
+      "status": "INTACT",
+      "entryPoint": {
+        "file": "src/src_figma/utils/gameStorage.ts",
+        "line": 283,
+        "function": "archiveCompletedGame"
+      },
+      "junctions": [
+        {
+          "index": 1,
+          "type": "STORE",
+          "file": "src/src_figma/utils/gameStorage.ts",
+          "lines": "283-320",
+          "function": "archiveCompletedGame",
+          "verified": true,
+          "issues": []
+        },
+        {
+          "index": 2,
+          "type": "RETRIEVE",
+          "file": "src/src_figma/utils/gameStorage.ts",
+          "lines": "356-373",
+          "function": "getCompletedGameById",
+          "verified": true,
+          "issues": []
+        },
+        {
+          "index": 3,
+          "type": "RENDER",
+          "file": "src/src_figma/app/pages/PostGameSummary.tsx",
+          "lines": "21-64",
+          "function": "PostGameSummary",
+          "verified": true,
+          "issues": []
+        }
+      ],
+      "variants": {
+        "happyPath": "PASS",
+        "partialData": "PASS"
+      }
+    },
+    {
+      "id": "PL-08",
+      "name": "Game → Milestone Detection",
+      "priority": "MEDIUM",
+      "status": "INTACT",
+      "entryPoint": {
+        "file": "src/utils/milestoneAggregator.ts",
+        "line": 693,
+        "function": "aggregateGameWithMilestones"
+      },
+      "junctions": [
+        {
+          "index": 1,
+          "type": "CALCULATE",
+          "file": "src/utils/milestoneAggregator.ts",
+          "lines": "693-929",
+          "function": "aggregateGameWithMilestones",
+          "verified": true,
+          "issues": []
+        }
+      ],
+      "variants": {
+        "happyPath": "PASS"
+      }
+    },
+    {
+      "id": "PL-09",
+      "name": "Game → Pitcher Decisions (Season)",
+      "priority": "HIGH",
+      "status": "INTACT",
+      "entryPoint": {
+        "file": "src/src_figma/hooks/useGameState.ts",
+        "line": 739,
+        "function": "calculatePitcherDecisions"
+      },
+      "junctions": [
+        {
+          "index": 1,
+          "type": "CALCULATE",
+          "file": "src/src_figma/hooks/useGameState.ts",
+          "lines": "739-891",
+          "function": "calculatePitcherDecisions",
+          "verified": true,
+          "issues": []
+        },
+        {
+          "index": 2,
+          "type": "TRANSFORM",
+          "file": "src/src_figma/hooks/useGameState.ts",
+          "lines": "2866-2891",
+          "function": "pitcherGameStats serialization",
+          "verified": true,
+          "issues": [
+            {
+              "severity": "CRITICAL",
+              "type": "DATA_LOSS",
+              "line": 2866,
+              "description": "Decision fields (win/loss/save/hold/blownSave) NOT included in PersistedGameState.pitcherGameStats"
+            }
+          ]
+        },
+        {
+          "index": 3,
+          "type": "AGGREGATE",
+          "file": "src/utils/seasonAggregator.ts",
+          "lines": "180-234",
+          "function": "aggregatePitchingStats",
+          "verified": true,
+          "issues": [
+            {
+              "severity": "CRITICAL",
+              "type": "NOT_IMPLEMENTED",
+              "line": 229,
+              "description": "W/L/SV/H/BS aggregation commented out: 'would need decision tracking'"
+            }
+          ]
+        }
+      ],
+      "variants": {
+        "happyPath": "FAIL",
+        "partialData": "NOT_REACHED"
+      }
+    },
+    {
+      "id": "PL-10",
+      "name": "Game → Career Stats",
+      "priority": "LOW",
+      "status": "INTACT",
+      "entryPoint": {
+        "file": "src/utils/milestoneAggregator.ts",
+        "line": 693,
+        "function": "aggregateGameWithMilestones"
+      },
+      "junctions": [
+        {
+          "index": 1,
+          "type": "AGGREGATE",
+          "file": "src/utils/milestoneAggregator.ts",
+          "lines": "140-211",
+          "function": "aggregateGameToCareerBatting + aggregateGameToCareerPitching",
+          "verified": true,
+          "issues": []
+        }
+      ],
+      "variants": {
+        "happyPath": "PASS"
+      },
+      "note": "Career pipeline correctly includes pitcher decisions (W/L/SV) unlike season pipeline"
+    },
+    {
+      "id": "PL-11",
+      "name": "Game → Season Game Count",
+      "priority": "LOW",
+      "status": "INTACT",
+      "entryPoint": {
+        "file": "src/utils/seasonAggregator.ts",
+        "line": 93,
+        "function": "incrementSeasonGames"
+      },
+      "junctions": [
+        {
+          "index": 1,
+          "type": "STORE",
+          "file": "src/utils/seasonStorage.ts",
+          "function": "incrementSeasonGames",
+          "verified": true,
+          "issues": []
+        }
+      ],
+      "variants": {
+        "happyPath": "PASS"
+      }
+    }
+  ],
+  "criticalIssues": [
+    {
+      "id": "CRIT-01",
+      "pipeline": "PL-03",
+      "title": "Standings always show mock data — seasonId never set on CompletedGameRecord",
+      "severity": "CRITICAL",
+      "status": "FIXED",
+      "fixDate": "2026-02-09",
+      "fix": "Added seasonId parameter to archiveCompletedGame(), passed from seasonIdRef.current at both call sites"
+    },
+    {
+      "id": "CRIT-02",
+      "pipeline": "PL-09",
+      "title": "Pitcher W/L/SV/H/BS never written to season stats",
+      "severity": "CRITICAL",
+      "status": "FIXED",
+      "fixDate": "2026-02-09",
+      "fix": "Added decision/save/hold/blownSave to PersistedGameState.pitcherGameStats type, serialized in both completeGameInternal and endGame, aggregated in seasonAggregator"
+    },
+    {
+      "id": "CRIT-03",
+      "pipeline": "PL-01/PL-02",
+      "title": "All players assigned to wrong team in season stats",
+      "severity": "HIGH",
+      "status": "FIXED",
+      "fixDate": "2026-02-09",
+      "fix": "Added playerName+teamId to PersistedGameState.playerStats; populated from lineup refs (awayLineupRef/homeLineupRef); pitcher team from ID prefix"
+    },
+    {
+      "id": "CRIT-04",
+      "pipeline": "PL-01/PL-02",
+      "title": "Player names stored as player IDs in season stats",
+      "severity": "HIGH",
+      "status": "FIXED",
+      "fixDate": "2026-02-09",
+      "fix": "playerName now carried through PersistedGameState.playerStats and read by seasonAggregator"
+    },
+    {
+      "id": "CRIT-05",
+      "pipeline": "PL-05",
+      "title": "Fielding stats always zero — not tracked during gameplay",
+      "severity": "HIGH",
+      "status": "NEEDS_FEATURE_WORK",
+      "note": "Fielding inference infrastructure exists (FieldingEvent type, logFieldingEvent function, fieldingStatsAggregator service) but is completely orphaned. Wiring requires either user input during gameplay or auto-inference from out types — both are feature work, not bug fixes."
+    }
+  ],
+  "dataLossPoints": [
+    {
+      "pipeline": "PL-01",
+      "junction": "J1→J2",
+      "field": "playerName",
+      "upstreamHas": true,
+      "downstreamNeeds": true
+    },
+    {
+      "pipeline": "PL-01",
+      "junction": "J1→J2",
+      "field": "teamId (correct)",
+      "upstreamHas": true,
+      "downstreamNeeds": true
+    },
+    {
+      "pipeline": "PL-01",
+      "junction": "J2",
+      "fields": ["hitByPitch", "sacFlies", "sacBunts", "gidp"],
+      "upstreamHas": false,
+      "downstreamNeeds": true
+    },
+    {
+      "pipeline": "PL-02",
+      "junction": "J1→J2",
+      "fields": ["win", "loss", "save", "hold", "blownSave"],
+      "upstreamHas": true,
+      "downstreamNeeds": true
+    },
+    {
+      "pipeline": "PL-02",
+      "junction": "J1",
+      "fields": ["hitBatters", "wildPitches", "basesReachedViaError"],
+      "upstreamHas": "partial",
+      "downstreamNeeds": true
+    },
+    {
+      "pipeline": "PL-03",
+      "junction": "J1",
+      "field": "seasonId",
+      "upstreamHas": true,
+      "downstreamNeeds": true
+    },
+    {
+      "pipeline": "PL-05",
+      "junction": "J1",
+      "fields": ["putouts", "assists", "fieldingErrors"],
+      "upstreamHas": false,
+      "downstreamNeeds": true
+    }
+  ],
+  "asyncRisks": [
+    {
+      "pipeline": "PL-01/PL-02/PL-05",
+      "junction": "J2",
+      "risk": "Race condition if two games complete simultaneously — no locking mechanism",
+      "codeHandlesIt": false
+    },
+    {
+      "pipeline": "PL-04",
+      "junction": "J1",
+      "risk": "Stats may be stale on first render after game completion — no auto-refresh trigger",
+      "codeHandlesIt": "partial"
+    }
+  ],
+  "integrityChecks": {
+    "tierAWiredCovered": true,
+    "fanOutBranchesCovered": true,
+    "highPriorityVariantsTested": true,
+    "asyncJunctionsFlagged": true,
+    "typeAlignmentChecked": true,
+    "mdAndJsonProduced": true
+  }
+}

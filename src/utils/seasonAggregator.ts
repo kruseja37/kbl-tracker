@@ -143,10 +143,9 @@ async function aggregateBattingStats(
   seasonId: string
 ): Promise<void> {
   for (const [playerId, gameStats] of Object.entries(gameState.playerStats)) {
-    // Determine player name and team from game context
-    // In a full implementation, this would come from roster data
-    const playerName = playerId;  // Placeholder
-    const teamId = gameState.awayTeamId;  // Placeholder - would need roster lookup
+    // Player name and team carried through from PersistedGameState
+    const playerName = gameStats.playerName || playerId;
+    const teamId = gameStats.teamId || gameState.awayTeamId;
 
     const seasonStats = await getOrCreateBattingStats(seasonId, playerId, playerName, teamId);
 
@@ -226,7 +225,12 @@ async function aggregatePitchingStats(
       shutouts: seasonStats.shutouts + (isShutout ? 1 : 0),
       noHitters: seasonStats.noHitters + (isNoHitter ? 1 : 0),
       perfectGames: seasonStats.perfectGames + (isPerfectGame ? 1 : 0),
-      // Note: W/L/SV/H/BS would need decision tracking
+      // MAJ-08: Pitcher decisions (W/L/SV/H/BS)
+      wins: seasonStats.wins + (pitcherStats.decision === 'W' ? 1 : 0),
+      losses: seasonStats.losses + (pitcherStats.decision === 'L' ? 1 : 0),
+      saves: seasonStats.saves + (pitcherStats.save ? 1 : 0),
+      holds: seasonStats.holds + (pitcherStats.hold ? 1 : 0),
+      blownSaves: seasonStats.blownSaves + (pitcherStats.blownSave ? 1 : 0),
     };
 
     await updatePitchingStats(updated);
@@ -241,8 +245,9 @@ async function aggregateFieldingStats(
   seasonId: string
 ): Promise<void> {
   for (const [playerId, gameStats] of Object.entries(gameState.playerStats)) {
-    const playerName = playerId;  // Placeholder
-    const teamId = gameState.awayTeamId;  // Placeholder
+    // Player name and team carried through from PersistedGameState
+    const playerName = gameStats.playerName || playerId;
+    const teamId = gameStats.teamId || gameState.awayTeamId;
 
     const seasonStats = await getOrCreateFieldingStats(seasonId, playerId, playerName, teamId);
 
