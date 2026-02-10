@@ -1,11 +1,10 @@
 /**
- * Substitution Modals Index
+ * Modals Index
  *
- * Per FIGMA_IMPLEMENTATION_PLAN.md Phase 1.1
- * Exports all 6 substitution modal components
+ * Base components + active modal exports
  */
 
-// Base components
+// Base components (used by FielderCreditModal, ErrorOnAdvanceModal)
 export {
   SubstitutionModalBase,
   ModalSection,
@@ -18,10 +17,6 @@ export {
   PitcherLineDisplay,
 } from './SubstitutionModalBase';
 
-// Substitution modals
-export { PitchingChangeModal } from './PitchingChangeModal';
-export { PinchHitterModal } from './PinchHitterModal';
-export { PinchRunnerModal } from './PinchRunnerModal';
-export { DefensiveSubModal } from './DefensiveSubModal';
-export { DoubleSwitchModal } from './DoubleSwitchModal';
-export { PositionSwitchModal } from './PositionSwitchModal';
+// Active modals
+export { FielderCreditModal } from './FielderCreditModal';
+export { ErrorOnAdvanceModal } from './ErrorOnAdvanceModal';
