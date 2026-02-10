@@ -139,6 +139,7 @@ export interface FieldingEvent {
   wasRoutine?: boolean;
   wasDifficult?: boolean;
   isClutch?: boolean;
+  missedDive?: boolean;
 }
 
 /**
@@ -270,8 +271,12 @@ export function calculateErrorValue(
     wasRoutine?: boolean;
     wasDifficult?: boolean;
     isClutch?: boolean;
+    missedDive?: boolean;
   } = {}
 ): number {
+  // Missed dive = no penalty (player attempted extraordinary play)
+  if (context.missedDive) return 0;
+
   const basePenalty = FIELDING_RUN_VALUES.error[errorType] || -0.15;
   const posMod = POSITION_MODIFIERS.error[position] || 1.0;
 
@@ -331,6 +336,7 @@ export function calculateEventValue(event: FieldingEvent): number {
           wasRoutine: event.wasRoutine,
           wasDifficult: event.wasDifficult,
           isClutch: event.isClutch,
+          missedDive: event.missedDive,
         }
       );
 

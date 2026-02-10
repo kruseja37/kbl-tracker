@@ -908,6 +908,37 @@ export function applyChampionshipFame(
 }
 
 // ============================================
+// FAILED HR ROBBERY DETECTION (GAP-B3-017)
+// ============================================
+
+/**
+ * Determine if the user should be prompted about a potential robbery attempt.
+ * Only prompts on HRs that reach deep zones (y >= 0.85 normalized depth).
+ * If no zone depth is provided, defaults to prompting (HR could be near wall).
+ */
+export function shouldPromptForRobbery(
+  result: string,
+  zoneDepth?: number,
+): boolean {
+  if (result !== 'HR') return false;
+  if (zoneDepth === undefined) return true;
+  return zoneDepth >= 0.85;
+}
+
+/**
+ * Evaluate the outcome of a robbery attempt.
+ * Returns 'FAILED_ROBBERY' if the fielder attempted but failed,
+ * null otherwise (not attempted, or attempted and succeeded — success is a ROBBERY bonus).
+ */
+export function evaluateFailedRobbery(
+  attempted: boolean,
+  failed: boolean,
+): 'FAILED_ROBBERY' | null {
+  if (attempted && failed) return 'FAILED_ROBBERY';
+  return null;
+}
+
+// ============================================
 // EXPORTS
 // ============================================
 
