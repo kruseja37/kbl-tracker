@@ -631,6 +631,14 @@ export function calculateSeasonMWAR(
   seasonGames: number,
   runsPerWin?: number
 ): MWARResult {
+  // NaN guard: if any numeric input is NaN, return zero result
+  if (isNaN(teamStats.wins) || isNaN(teamStats.losses) || isNaN(teamStats.salaryScore) ||
+      isNaN(seasonGames) || (runsPerWin !== undefined && isNaN(runsPerWin))) {
+    return { mWAR: 0, decisionWAR: 0, overperformanceWAR: 0, decisionCount: 0,
+      successRate: 0, teamRecord: '0-0', expectedWins: 0, actualWins: 0,
+      overperformanceWins: 0, rating: 'Average' };
+  }
+
   // Default RPW for season length
   const rpw = runsPerWin ?? (10 * (seasonGames / 162));
 

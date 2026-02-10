@@ -300,6 +300,14 @@ export function calculatePWAR(
   const { useLeverageAdjustment = true } = options;
   const { ip, gamesStarted, gamesAppeared, saves = 0, holds = 0, averageLeverageIndex } = stats;
 
+  // NaN guard: if any numeric input is NaN, return zero result
+  if (isNaN(ip) || isNaN(gamesStarted) || isNaN(gamesAppeared) || isNaN(context.leagueFIP) ||
+      isNaN(context.fipConstant) || isNaN(context.gamesPerTeam)) {
+    return { fip: 0, leagueFIP: 0, fipDiff: 0, fipRunsAboveAvg: 0,
+      replacementLevel: 0, leverageMultiplier: 1.0, pitcherRPW: 0, pWAR: 0,
+      ip: 0, role: 'starter', starterShare: 1 };
+  }
+
   // Handle zero innings
   if (ip === 0) {
     return {

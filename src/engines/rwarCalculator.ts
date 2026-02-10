@@ -325,6 +325,13 @@ export function calculateRWAR(
   leagueStats: LeagueBaserunningStats,
   seasonGames: number
 ): RWARResult {
+  // NaN guard: if any numeric input is NaN, return zero result
+  if (isNaN(seasonGames) || isNaN(stats.stolenBases) || isNaN(stats.caughtStealing) ||
+      isNaN(stats.gidp) || isNaN(stats.gidpOpportunities)) {
+    return { wSB: 0, UBR: 0, wGDP: 0, BsR: 0, rWAR: 0,
+      runsPerWin: 0, seasonGames: seasonGames || 0, ubrEstimated: true };
+  }
+
   // Step 1: Calculate wSB
   const wSB = calculateWSB(stats, leagueStats);
 

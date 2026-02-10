@@ -353,6 +353,12 @@ export function calculateGameFWAR(
   events: FieldingEvent[],
   seasonGames: number
 ): GameFieldingSummary & { events: FieldingEvent[] } {
+  // NaN guard
+  if (isNaN(seasonGames)) {
+    return { playerId: events[0]?.playerId || '', gameId: '', position: events[0]?.position || 'SS',
+      runsSaved: 0, fWAR: 0, plays: 0, errors: 0, starPlays: 0, events: [] };
+  }
+
   let runsSaved = 0;
   let plays = 0;
   let errors = 0;
@@ -397,6 +403,13 @@ export function calculateSeasonFWAR(
   gamesPlayed: number,
   seasonGames: number
 ): FWARResult {
+  // NaN guard
+  if (isNaN(gamesPlayed) || isNaN(seasonGames)) {
+    return { totalRunsSaved: 0, putoutRuns: 0, assistRuns: 0, dpRuns: 0, errorRuns: 0,
+      starPlayRuns: 0, positionalAdjustment: 0, fWAR: 0, gamesPlayed: 0,
+      position: primaryPosition, seasonGames: 0, runsPerWin: 0 };
+  }
+
   // Sum up all event values by category
   let putoutRuns = 0;
   let assistRuns = 0;
@@ -469,6 +482,14 @@ export function calculateFWARFromStats(
   gamesPlayed: number,
   seasonGames: number
 ): FWARResult {
+  // NaN guard
+  if (isNaN(stats.putouts) || isNaN(stats.assists) || isNaN(stats.errors) ||
+      isNaN(stats.doublePlays) || isNaN(gamesPlayed) || isNaN(seasonGames)) {
+    return { totalRunsSaved: 0, putoutRuns: 0, assistRuns: 0, dpRuns: 0, errorRuns: 0,
+      starPlayRuns: 0, positionalAdjustment: 0, fWAR: 0, gamesPlayed: 0,
+      position, seasonGames: 0, runsPerWin: 0 };
+  }
+
   // Estimate runs from counting stats
   const putoutBase = position === 'C' || position === '1B' ? 0.01 : 0.02;
   const assistBase = 0.03;

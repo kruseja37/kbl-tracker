@@ -213,6 +213,14 @@ export function calculateBWAR(
 ): BWARResult {
   const { seasonGames, leagueWOBA, wobaScale, wobaWeights, runsPerPA, replacementRunsPer600PA, runsPerWin } = context;
 
+  // NaN guard: if any numeric input is NaN, return zero result
+  if (isNaN(stats.pa) || isNaN(seasonGames) || isNaN(leagueWOBA) || isNaN(wobaScale) ||
+      isNaN(runsPerPA) || isNaN(replacementRunsPer600PA) || isNaN(runsPerWin)) {
+    return { wOBA: 0, wRAA: 0, battingRuns: 0, parkAdjustment: 0, leagueAdjustment: 0,
+      replacementRuns: 0, runsAboveReplacement: 0, runsPerWin: 0, bWAR: 0,
+      plateAppearances: stats.pa || 0, seasonGames: seasonGames || 0 };
+  }
+
   // Step 1: Calculate wOBA
   const wOBA = calculateWOBA(stats, wobaWeights);
 
