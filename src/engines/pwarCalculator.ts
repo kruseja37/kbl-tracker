@@ -508,3 +508,70 @@ export function getPWARTier(pWAR: number): string {
   if (pWAR > 0.0) return 'Below Average';
   return 'Replacement';
 }
+
+// ============================================
+// PARK FACTOR ADJUSTMENTS (GAP-B1-004)
+// Per PWAR_CALCULATION_SPEC.md & STADIUM_ANALYTICS_SPEC.md
+// ============================================
+
+/** Neutral park factor — no adjustment */
+export const DEFAULT_PARK_FACTOR = 1.00;
+
+/**
+ * SMB4 stadium park factors.
+ * Values > 1.00 = hitter-friendly, < 1.00 = pitcher-friendly.
+ * Starts with neutral baseline; populated from game data over time.
+ */
+export const SMB4_PARK_FACTORS: Record<string, number> = {
+  neutral: 1.00,
+};
+
+/**
+ * Look up the park factor for a stadium by name.
+ * Returns DEFAULT_PARK_FACTOR for unknown parks.
+ */
+export function getParkFactor(parkName: string): number {
+  return SMB4_PARK_FACTORS[parkName] ?? DEFAULT_PARK_FACTOR;
+}
+
+/**
+ * Adjust FIP for park effects.
+ * Hitter-friendly parks (PF > 1) deflate the pitcher's adjusted FIP (credit),
+ * pitcher-friendly parks (PF < 1) inflate it (debit).
+ * Formula: adjustedFIP = rawFIP / parkFactor
+ */
+export function applyPitcherParkFactor(
+  rawFIP: number,
+  parkFactor: number = DEFAULT_PARK_FACTOR,
+): number {
+  if (parkFactor <= 0) return rawFIP;
+  return rawFIP / parkFactor;
+}
+
+/**
+ * Adjust ERA for park effects (same direction as FIP).
+ * Formula: adjustedERA = rawERA / parkFactor
+ */
+export function getParkAdjustedERA(
+  rawERA: number,
+  parkFactor: number,
+): number {
+  if (parkFactor <= 0) return rawERA;
+  return rawERA / parkFactor;
+}
+
+/**
+ * Calculate ERA+ (park-adjusted, league-relative ERA metric).
+ * 100 = league average. Higher is better.
+ * Formula: ERA+ = 100 × (leagueERA / (ERA × parkFactor))
+ * Capped at 999 for ERA ≈ 0.
+ */
+export function calculateERAPlus(
+  era: number,
+  leagueERA: number,
+  parkFactor: number,
+): number {
+  const denominator = era * parkFactor;
+  if (denominator <= 0) return 999;
+  return Math.round(100 * (leagueERA / denominator));
+}

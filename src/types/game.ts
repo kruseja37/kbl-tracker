@@ -724,6 +724,7 @@ export type FameEventType =
   | 'WRONG_BASE_THROW'
   | 'PASSED_BALL_RUN'
   | 'PASSED_BALL_WINNING_RUN'
+  | 'FAILED_ROBBERY'          // Failed HR robbery attempt (-1 Fame)
   // Baserunning Blunders
   | 'TOOTBLAN'
   | 'TOOTBLAN_RALLY_KILLER'
@@ -913,6 +914,7 @@ export const FAME_VALUES: Record<FameEventType, number> = {
   WRONG_BASE_THROW: -1,
   PASSED_BALL_RUN: -1,
   PASSED_BALL_WINNING_RUN: -2,
+  FAILED_ROBBERY: -1,
   // Baserunning Blunders
   TOOTBLAN: -1,
   TOOTBLAN_RALLY_KILLER: -2,
@@ -1099,6 +1101,7 @@ export const FAME_EVENT_LABELS: Record<FameEventType, string> = {
   WRONG_BASE_THROW: 'Threw to Wrong Base',
   PASSED_BALL_RUN: 'Passed Ball Allowing Run',
   PASSED_BALL_WINNING_RUN: 'Passed Ball Allowing Winning Run',
+  FAILED_ROBBERY: 'Failed HR Robbery',
   // Baserunning Blunders
   TOOTBLAN: 'TOOTBLAN',
   TOOTBLAN_RALLY_KILLER: 'TOOTBLAN (Rally Killer)',
@@ -1288,6 +1291,7 @@ export const FAME_TARGET: Record<FameEventType, FameTarget> = {
   WRONG_BASE_THROW: 'fielder',
   PASSED_BALL_RUN: 'fielder',
   PASSED_BALL_WINNING_RUN: 'fielder',
+  FAILED_ROBBERY: 'fielder',
   // Baserunning
   TOOTBLAN: 'player',
   TOOTBLAN_RALLY_KILLER: 'player',
