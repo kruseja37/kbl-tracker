@@ -2,51 +2,8 @@ import { useState, useMemo } from "react";
 import { useNavigate } from "react-router";
 import { ArrowLeft, Check, Gamepad2, Loader2, AlertCircle } from "lucide-react";
 import { useLeagueBuilderData, type LeagueTemplate, type Team } from "../../hooks/useLeagueBuilderData";
-
-interface FranchiseConfig {
-  league: string | null;
-  leagueDetails: {
-    name: string;
-    teams: number;
-    conferences: number;
-    divisions: number;
-  } | null;
-  season: {
-    gamesPerTeam: number;
-    inningsPerGame: number;
-    extraInningsRule: string;
-    scheduleType: string;
-    allStarGame: boolean;
-    tradeDeadline: boolean;
-    mercyRule: boolean;
-  };
-  playoffs: {
-    teamsQualifying: number;
-    format: string;
-    seriesLengths: {
-      wildCard: string;
-      divisionSeries: string;
-      championship: string;
-      worldSeries: string;
-    };
-    homeFieldAdvantage: string;
-  };
-  teams: {
-    selectedTeams: string[];
-    mode: "single" | "multiplayer";
-    playerAssignments: Record<string, string>;
-  };
-  roster: {
-    mode: "existing" | "draft";
-    draftSettings?: {
-      playerPool: string;
-      rounds: number;
-      format: string;
-      timePerPick: string;
-    };
-  };
-  franchiseName: string;
-}
+import type { FranchiseConfig } from "../../../types/franchise";
+import { initializeFranchise } from "../../../utils/franchiseInitializer";
 
 const INITIAL_CONFIG: FranchiseConfig = {
   league: null,
@@ -88,6 +45,8 @@ export function FranchiseSetup() {
   const [currentStep, setCurrentStep] = useState(1);
   const [config, setConfig] = useState<FranchiseConfig>(INITIAL_CONFIG);
   const [expandedLeague, setExpandedLeague] = useState<string | null>(null);
+  const [isInitializing, setIsInitializing] = useState(false);
+  const [initError, setInitError] = useState<string | null>(null);
 
   // Get teams that belong to the selected league
   const leagueTeams = useMemo(() => {
@@ -100,12 +59,20 @@ export function FranchiseSetup() {
 
   const totalSteps = 6;
 
-  const handleNext = () => {
+  const handleNext = async () => {
     if (currentStep < totalSteps) {
       setCurrentStep(currentStep + 1);
     } else {
-      // Start franchise - navigate to franchise home
-      navigate("/franchise/new");
+      // Start franchise — persist to IndexedDB and navigate
+      setIsInitializing(true);
+      setInitError(null);
+      try {
+        const franchiseId = await initializeFranchise(config);
+        navigate(`/franchise/${franchiseId}`);
+      } catch (err) {
+        setInitError(err instanceof Error ? err.message : 'Failed to create franchise');
+        setIsInitializing(false);
+      }
     }
   };
 
@@ -138,7 +105,27 @@ export function FranchiseSetup() {
 
   return (
     <div className="min-h-screen bg-[#6B9462] text-[#E8E8D8] flex items-center justify-center p-6">
+      {/* Initialization overlay */}
+      {isInitializing && (
+        <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center">
+          <div className="bg-[#4A6A42] border-[6px] border-[#E8E8D8] p-8 text-center shadow-[8px_8px_0px_0px_rgba(0,0,0,0.5)]">
+            <Loader2 className="w-12 h-12 animate-spin text-[#C4A853] mx-auto mb-4" />
+            <p className="text-lg text-[#E8E8D8] font-bold tracking-wider" style={{ textShadow: '2px 2px 0px rgba(0,0,0,0.3)' }}>CREATING FRANCHISE</p>
+            <p className="text-xs text-[#E8E8D8]/70 mt-2" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.2)' }}>Generating schedule and initializing season...</p>
+          </div>
+        </div>
+      )}
+
       <div className="w-full max-w-[800px] bg-[#5A7A52] border-[6px] border-[#E8E8D8] shadow-[8px_8px_0px_0px_rgba(0,0,0,0.5)]">
+        {/* Init error banner */}
+        {initError && (
+          <div className="bg-[#DD0000]/20 border-b-4 border-[#DD0000] px-6 py-3 flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 text-[#DD0000] shrink-0" />
+            <p className="text-xs text-[#DD0000]">{initError}</p>
+            <button onClick={() => setInitError(null)} className="ml-auto text-xs text-[#DD0000]/70 hover:text-[#DD0000]">[Dismiss]</button>
+          </div>
+        )}
+
         {/* Header */}
         <div className="bg-[#4A6A42] border-b-[6px] border-[#E8E8D8] px-8 py-4">
           <div className="flex items-center justify-between mb-3">

@@ -24,7 +24,7 @@ export function AppHome() {
         {/* Menu buttons with SNES styling */}
         <div className="space-y-4 max-w-2xl mx-auto">
           <Link
-            to="/franchise/tigers"
+            to="/franchise/select"
             className="bg-[#5599FF] h-[71.102px] relative block w-full"
           >
             <div aria-hidden="true" className="absolute border-[#3366CC] border-[5.556px] border-solid inset-0 pointer-events-none shadow-[6px_6px_0px_0px_rgba(0,0,0,0.8)]" />

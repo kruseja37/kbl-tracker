@@ -1,5 +1,5 @@
 import { useState, useEffect, createContext, useContext } from "react";
-import { useNavigate } from "react-router";
+import { useNavigate, useParams } from "react-router";
 import { Calendar, Users, TrendingUp, Newspaper, Trophy, Folder, Home, ChevronDown, ChevronUp, DollarSign, ClipboardList, Star, Award, TrendingDown, Shuffle, UserMinus, CheckCircle, ArrowRight, BarChart3, Plus } from "lucide-react";
 import { getTeamColors } from "@/config/teamColors";
 import { getStadiumForTeam } from "@/config/stadiumData";
@@ -37,9 +37,10 @@ type SeasonPhase = "regular" | "playoffs" | "offseason";
 
 export function FranchiseHome() {
   const navigate = useNavigate();
+  const { franchiseId } = useParams<{ franchiseId: string }>();
 
   // Real season data from IndexedDB (with mock fallbacks)
-  const franchiseData = useFranchiseData();
+  const franchiseData = useFranchiseData(franchiseId);
 
   const [seasonPhase, setSeasonPhase] = useState<SeasonPhase>("regular");
   const [activeTab, setActiveTab] = useState<TabType>("todays-game");
@@ -66,7 +67,14 @@ export function FranchiseHome() {
 
   // Playoff System State - Persisted to IndexedDB via usePlayoffData
   const playoffData = usePlayoffData(currentSeason);
-  
+
+  // Sync league name from franchise config when loaded
+  useEffect(() => {
+    if (franchiseData.leagueName) {
+      setLeagueName(franchiseData.leagueName);
+    }
+  }, [franchiseData.leagueName]);
+
   // All-Star voting state
   const [allStarLeague, setAllStarLeague] = useState<"Eastern" | "Western">("Eastern");
 

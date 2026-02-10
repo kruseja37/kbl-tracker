@@ -10,7 +10,7 @@
  */
 
 const DB_NAME = 'kbl-schedule';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 const STORES = {
   SCHEDULED_GAMES: 'scheduledGames',
@@ -25,6 +25,7 @@ export type GameStatus = 'SCHEDULED' | 'IN_PROGRESS' | 'COMPLETED' | 'SKIPPED';
 
 export interface ScheduledGame {
   id: string;
+  franchiseId?: string;         // Tags game to a franchise (multi-franchise isolation)
   seasonNumber: number;
   gameNumber: number;           // 1, 2, 3... (league-wide sequence)
   dayNumber: number;            // For display: Day 1, Day 2...
@@ -52,6 +53,7 @@ export interface ScheduleMetadata {
 }
 
 export interface AddGameInput {
+  franchiseId?: string;         // Tags game to a franchise
   seasonNumber: number;
   gameNumber?: number;          // Auto-increment if not provided
   dayNumber?: number;           // Auto-increment if not provided
@@ -102,6 +104,14 @@ export async function initScheduleDatabase(): Promise<IDBDatabase> {
         gamesStore.createIndex('status', 'status', { unique: false });
         gamesStore.createIndex('awayTeamId', 'awayTeamId', { unique: false });
         gamesStore.createIndex('homeTeamId', 'homeTeamId', { unique: false });
+      }
+
+      // v2: Add franchiseId index for multi-franchise isolation
+      if (db.objectStoreNames.contains(STORES.SCHEDULED_GAMES)) {
+        const gamesStore = (event.target as IDBOpenDBRequest).transaction!.objectStore(STORES.SCHEDULED_GAMES);
+        if (!gamesStore.indexNames.contains('franchiseId')) {
+          gamesStore.createIndex('franchiseId', 'franchiseId', { unique: false });
+        }
       }
 
       // Schedule metadata store
@@ -196,6 +206,7 @@ export async function addGame(input: AddGameInput): Promise<ScheduledGame> {
 
   const game: ScheduledGame = {
     id: generateGameId(),
+    franchiseId: input.franchiseId,
     seasonNumber: input.seasonNumber,
     gameNumber,
     dayNumber,
@@ -456,6 +467,81 @@ export async function clearAllSchedules(): Promise<void> {
     tx.objectStore(STORES.SCHEDULE_METADATA).clear();
 
     tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+// ============================================
+// FRANCHISE-SCOPED OPERATIONS
+// ============================================
+
+/**
+ * Get all games for a franchise and season, sorted by game number.
+ */
+export async function getAllGamesByFranchise(
+  franchiseId: string,
+  seasonNumber: number,
+): Promise<ScheduledGame[]> {
+  const db = await initScheduleDatabase();
+
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORES.SCHEDULED_GAMES, 'readonly');
+    const store = tx.objectStore(STORES.SCHEDULED_GAMES);
+    const request = store.getAll();
+
+    request.onsuccess = () => {
+      const games = (request.result || [])
+        .filter((g: ScheduledGame) => g.franchiseId === franchiseId && g.seasonNumber === seasonNumber)
+        .sort((a: ScheduledGame, b: ScheduledGame) => a.gameNumber - b.gameNumber);
+      resolve(games);
+    };
+
+    request.onerror = () => reject(request.error);
+  });
+}
+
+/**
+ * Get next scheduled game for a franchise/season.
+ */
+export async function getNextFranchiseGame(
+  franchiseId: string,
+  seasonNumber: number,
+  teamFilter?: string,
+): Promise<ScheduledGame | null> {
+  const games = await getAllGamesByFranchise(franchiseId, seasonNumber);
+
+  const scheduledGames = games
+    .filter(g => g.status === 'SCHEDULED')
+    .filter(g => !teamFilter || g.awayTeamId === teamFilter || g.homeTeamId === teamFilter);
+
+  return scheduledGames[0] || null;
+}
+
+/**
+ * Clear all schedule data for a franchise (all seasons).
+ * Used when deleting a franchise.
+ */
+export async function clearFranchiseSchedule(franchiseId: string): Promise<void> {
+  const db = await initScheduleDatabase();
+
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORES.SCHEDULED_GAMES, 'readwrite');
+    const store = tx.objectStore(STORES.SCHEDULED_GAMES);
+    const request = store.getAll();
+
+    request.onsuccess = () => {
+      const games = (request.result || []).filter(
+        (g: ScheduledGame) => g.franchiseId === franchiseId,
+      );
+
+      for (const game of games) {
+        store.delete(game.id);
+      }
+
+      tx.oncomplete = () => resolve();
+    };
+
+    request.onerror = () => reject(request.error);
     tx.onerror = () => reject(tx.error);
   });
 }

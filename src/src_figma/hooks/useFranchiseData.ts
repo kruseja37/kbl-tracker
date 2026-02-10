@@ -12,6 +12,9 @@ import { useSeasonData, type TeamStanding } from '../../hooks/useSeasonData';
 import { useSeasonStats, type BattingLeaderEntry, type PitchingLeaderEntry } from '../../hooks/useSeasonStats';
 import { calculateStandings, type SeasonMetadata, type TeamStanding as StorageTeamStanding } from '../../utils/seasonStorage';
 import { useRelationshipData, type UseRelationshipDataReturn } from '../app/hooks/useRelationshipData';
+import { getFranchiseConfig, loadFranchise } from '../../utils/franchiseManager';
+import { getNextFranchiseGame } from '../../utils/scheduleStorage';
+import type { StoredFranchiseConfig } from '../../types/franchise';
 
 // ============================================
 // TYPES
@@ -73,6 +76,10 @@ export interface UseFranchiseDataReturn {
   // Loading state
   isLoading: boolean;
   error: string | null;
+
+  // Franchise info
+  franchiseConfig: StoredFranchiseConfig | null;
+  leagueName: string;
 
   // Season info
   seasonNumber: number;
@@ -311,7 +318,47 @@ function calculateWeek(gamesPlayed: number, gamesPerWeek: number = 6): number {
 // HOOK
 // ============================================
 
-export function useFranchiseData(seasonId: string = 'season-1'): UseFranchiseDataReturn {
+export function useFranchiseData(franchiseId?: string): UseFranchiseDataReturn {
+  // Derive seasonId from franchiseId (or fallback for legacy usage)
+  const seasonId = franchiseId ? `${franchiseId}-season-1` : 'season-1';
+
+  // Franchise config loaded from IndexedDB
+  const [franchiseConfig, setFranchiseConfig] = useState<StoredFranchiseConfig | null>(null);
+  const [franchiseLeagueName, setFranchiseLeagueName] = useState<string>('');
+
+  // Load franchise config when franchiseId changes
+  useEffect(() => {
+    if (!franchiseId) {
+      setFranchiseConfig(null);
+      setFranchiseLeagueName('');
+      return;
+    }
+    let cancelled = false;
+    async function load() {
+      try {
+        const config = await getFranchiseConfig(franchiseId!);
+        if (!cancelled) {
+          setFranchiseConfig(config);
+          setFranchiseLeagueName(
+            config?.leagueDetails?.name || 'League'
+          );
+        }
+        // Also load franchise metadata for additional fields
+        const meta = await loadFranchise(franchiseId!);
+        if (!cancelled && meta) {
+          // Prefer metadata leagueName if available (set during initialization)
+          if (meta.leagueName) {
+            setFranchiseLeagueName(meta.leagueName);
+          }
+        }
+      } catch (err) {
+        console.error('[useFranchiseData] Failed to load franchise config:', err);
+      }
+    }
+    load();
+    return () => { cancelled = true; };
+  }, [franchiseId]);
+
   // Get real data from existing hooks
   const seasonData = useSeasonData(seasonId);
   const seasonStats = useSeasonStats(seasonId);
@@ -426,12 +473,38 @@ export function useFranchiseData(seasonId: string = 'season-1'): UseFranchiseDat
   const totalGames = seasonData.seasonMetadata?.totalGames ?? 64;
   const currentWeek = calculateWeek(gamesPlayed);
 
-  // Next game info (placeholder - would need schedule system)
-  const nextGame = useMemo((): NextGameInfo | null => {
-    // Return null if no next game scheduled
-    // In future, this would come from schedule storage
-    return null;
-  }, []);
+  // Next game info — loaded from franchise schedule
+  const [nextGame, setNextGame] = useState<NextGameInfo | null>(null);
+
+  useEffect(() => {
+    if (!franchiseId) {
+      setNextGame(null);
+      return;
+    }
+    let cancelled = false;
+    async function loadNextGame() {
+      try {
+        const game = await getNextFranchiseGame(franchiseId!, 1);
+        if (!cancelled && game) {
+          setNextGame({
+            id: game.id,
+            awayTeam: game.awayTeamId,
+            homeTeam: game.homeTeamId,
+            awayRecord: '0-0',
+            homeRecord: '0-0',
+            gameNumber: game.gameNumber,
+            totalGames: totalGames,
+          });
+        } else if (!cancelled) {
+          setNextGame(null);
+        }
+      } catch (err) {
+        console.error('[useFranchiseData] Failed to load next game:', err);
+      }
+    }
+    loadNextGame();
+    return () => { cancelled = true; };
+  }, [franchiseId, totalGames, gamesPlayed]);
 
   // Refresh function
   const refresh = useCallback(async () => {
@@ -451,6 +524,8 @@ export function useFranchiseData(seasonId: string = 'season-1'): UseFranchiseDat
   return {
     isLoading,
     error,
+    franchiseConfig,
+    leagueName: franchiseLeagueName,
     seasonNumber,
     seasonName,
     currentWeek,

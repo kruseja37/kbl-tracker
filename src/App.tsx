@@ -9,6 +9,7 @@ import NotFound from './pages/NotFound';
 // Figma Design Pages (exhaustive UI replacement)
 import { AppHome } from './src_figma/app/pages/AppHome';
 import { FranchiseSetup } from './src_figma/app/pages/FranchiseSetup';
+import { FranchiseSelector } from './src_figma/app/pages/FranchiseSelector';
 import { FranchiseHome } from './src_figma/app/pages/FranchiseHome';
 import { GameTracker } from './src_figma/app/pages/GameTracker';
 import { PostGameSummary } from './src_figma/app/pages/PostGameSummary';
@@ -44,6 +45,7 @@ function App() {
         <Route path="/" element={<AppHome />} />
 
         {/* Franchise Flow - Figma Design */}
+        <Route path="/franchise/select" element={<FranchiseSelector />} />
         <Route path="/franchise/setup" element={<FranchiseSetup />} />
         <Route path="/franchise/:franchiseId" element={<FranchiseHome />} />
 

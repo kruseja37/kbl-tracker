@@ -8,6 +8,7 @@ import { LeagueBuilderRosters } from "@/app/pages/LeagueBuilderRosters";
 import { LeagueBuilderDraft } from "@/app/pages/LeagueBuilderDraft";
 import { LeagueBuilderRules } from "@/app/pages/LeagueBuilderRules";
 import { FranchiseHome } from "@/app/pages/FranchiseHome";
+import { FranchiseSelector } from "@/app/pages/FranchiseSelector";
 import { FranchiseSetup } from "@/app/pages/FranchiseSetup";
 import { GameTracker } from "@/app/pages/GameTracker";
 import { PostGameSummary } from "@/app/pages/PostGameSummary";
@@ -46,6 +47,10 @@ export const router = createBrowserRouter([
   {
     path: "/league-builder/rules",
     Component: LeagueBuilderRules,
+  },
+  {
+    path: "/franchise/select",
+    Component: FranchiseSelector,
   },
   {
     path: "/franchise/setup",

@@ -19,6 +19,7 @@ const mockNavigate = vi.fn();
 
 vi.mock('react-router', () => ({
   useNavigate: () => mockNavigate,
+  useParams: () => ({ franchiseId: 'test-franchise-123' }),
 }));
 
 // Mock local storage
