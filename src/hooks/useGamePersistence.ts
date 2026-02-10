@@ -20,6 +20,8 @@ import {
 
 // PlayerStats interface (matches GameTracker)
 interface PlayerStats {
+  playerName: string;
+  teamId: string;
   pa: number;
   ab: number;
   h: number;
@@ -61,6 +63,11 @@ interface PitcherGameStats {
   firstInningRuns: number;
   basesLoadedWalks: number;
   inningsComplete: number;
+  // MAJ-08: Pitcher decisions
+  decision: 'W' | 'L' | 'ND' | null;
+  save: boolean;
+  hold: boolean;
+  blownSave: boolean;
 }
 
 // Per-inning pitch tracking for Immaculate Inning detection

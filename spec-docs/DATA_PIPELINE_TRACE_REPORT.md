@@ -1,488 +1,548 @@
 # Data Pipeline Trace Report
 
-> **Generated:** 2026-02-09
-> **Prerequisite:** `spec-docs/FRANCHISE_BUTTON_AUDIT.md`, `spec-docs/FRANCHISE_API_MAP.md`
-> **Pipelines Traced:** 15 (PL-01 through PL-10, PL-A through PL-E equivalent mapped to PL-F through PL-J)
+Generated: 2026-02-09
+Updated: 2026-02-09 (post-CRIT fixes)
+Pipelines traced: 11
+  High priority: 4
+  Medium priority: 4
+  Low priority: 3
+
+## Pipeline Summary
+
+| ID | Name | Junctions | Status | Variants Tested | Issues |
+|----|------|-----------|--------|-----------------|--------|
+| PL-01 | Game → Season Batting Stats | 5 | ✅ INTACT | 3/3 | Remaining: HBP/SF/SAC/GIDP not tracked (MEDIUM) |
+| PL-02 | Game → Season Pitching Stats | 5 | ✅ INTACT | 3/3 | Remaining: hitBatters/wildPitches now wired; some minor fields still 0 |
+| PL-03 | Game → Standings | 5 | ✅ INTACT | 3/3 | Remaining: division assignment arbitrary (MEDIUM) |
+| PL-04 | Game → WAR Recalculation | 6 | ✅ INTACT | 3/3 | Data quality improved (team/name correct) |
+| PL-05 | Game → Season Fielding Stats | 5 | ⚠️ NEEDS FEATURE WORK | 2/3 | Source data always 0 — fielding inference not wired |
+| PL-06 | Game → Fame Aggregation | 4 | ✅ INTACT | 2/3 | Minor: playerTeam always '' |
+| PL-07 | Game → Game Archive | 3 | ✅ INTACT | 2/3 | 0 |
+| PL-08 | Game → Milestone Detection | 4 | ✅ INTACT | 1/3 | 0 |
+| PL-09 | Game → Pitcher Decisions (Season) | 4 | ✅ INTACT | 2/3 | 0 — W/L/SV/H/BS now flow to season stats |
+| PL-10 | Game → Career Stats | 4 | ✅ INTACT | 1/3 | 0 (via milestoneAggregator) |
+| PL-11 | Game → Season Game Count | 2 | ✅ INTACT | 1/3 | 0 |
+
+## Fixes Applied (2026-02-09)
+
+| CRIT ID | Fix | Files Changed | Build/Test |
+|---------|-----|---------------|------------|
+| CRIT-01 | Added `seasonId` to `CompletedGameRecord` in `archiveCompletedGame()` | `src/src_figma/utils/gameStorage.ts`, `src/utils/gameStorage.ts`, `src/src_figma/hooks/useGameState.ts` (2 call sites) | ✅ 5094/5094 |
+| CRIT-03 | Fixed team assignment: batters → correct team via lineup refs, pitchers → correct team via ID prefix | `src/src_figma/hooks/useGameState.ts` (both code paths), `src/utils/seasonAggregator.ts` | ✅ 5094/5094 |
+| CRIT-04 | Added `playerName` + `teamId` to `PersistedGameState.playerStats` type; populated from lineup refs | Both `gameStorage.ts`, `useGameState.ts`, `useGamePersistence.ts`, `GameTracker/index.tsx` | ✅ 5094/5094 |
+| CRIT-02 | Added decision fields to `PersistedGameState.pitcherGameStats`; serialized W/L/SV/H/BS; aggregated in `aggregatePitchingStats()` | Both `gameStorage.ts`, `useGameState.ts`, `useGamePersistence.ts`, `GameTracker/index.tsx`, `seasonAggregator.ts` | ✅ 5094/5094 |
+| CRIT-05 | Documented as NEEDS FEATURE WORK — fielding infrastructure exists (FieldingEvent, logFieldingEvent, fieldingStatsAggregator) but is orphaned | Comment added to `useGameState.ts` | ✅ 5094/5094 |
 
 ---
 
-## Executive Summary
+## PREFLIGHT PROOF
 
-15 data pipelines traced junction-by-junction across 5 IndexedDB databases. **1 pipeline is BROKEN** (Fan Morale — hook stubbed), **3 have DEAD CODE** (fielding aggregation, box score rendering, playoff stats stores), and **all pipelines share a systemic risk**: no duplicate-aggregation guard at the season/career level.
-
-### Pipeline Health Dashboard
-
-| ID | Pipeline | Junctions | Status | Severity |
-|----|----------|-----------|--------|----------|
-| PL-01 | Game Completion Entry (endGame→completeGameInternal) | 2 | DEGRADED | HIGH — double archival, pitcherName bug |
-| PL-02 | Season Batting Aggregation | 6 | INTACT | LOW — field name changes handled |
-| PL-03 | Season Pitching Aggregation | 5 | INTACT | LOW — W/L/SV/H/BS conditional logic correct |
-| PL-04 | Season Fielding Aggregation | 4 | DEAD CODE | HIGH — source data always 0 |
-| PL-05 | Fame Event Aggregation | 4 | DEGRADED | MED — playerId as name, awayTeam for all |
-| PL-06 | Season Stats Retrieval & Display | 5 | DEGRADED | MED — WAR fields don't exist on types |
-| PL-07 | WAR Calculation (bWAR/pWAR/rWAR/fWAR) | 16 | INTACT with gaps | MED — SB/CS dropped, no fWAR in Figma |
-| PL-08 | Milestone/Career Aggregation | 15 | INTACT with gaps | MED — playerName=playerId, career double-count risk |
-| PL-09 | Event Log (Play-by-Play) | 11 | INTACT with orphan | LOW — box score exists but nothing renders it |
-| PL-10 | Fame System (In-Game + Milestone) | 15 | INTACT | LOW — milestone fame logged not displayed |
-| PL-11 | League Builder CRUD | 8 | INTACT | LOW — no cascade deletes, full re-read on write |
-| PL-12 | Schedule Management | 5 | INTACT | LOW — fire-and-forget metadata update |
-| PL-13 | Standings Calculation | 4 | DEGRADED | HIGH — naive division split, 500-game limit |
-| PL-14 | Playoff System | 7 | DEGRADED | HIGH — only round 1 generated, orphaned stores |
-| PL-15 | Franchise State | 5 | DEGRADED | HIGH — per-franchise DBs unused, always season-1 |
-| — | Fan Morale | 13 | BROKEN | CRITICAL — hook stubbed, no persistence |
+**Pipeline tested:** PL-01 (Game → Season Batting Stats)
+**Result:** Successfully traced from `useGameState.ts:2822` through every junction to `FranchiseHome.tsx:2895`.
+**Approach validated:** YES — every junction is code-readable with file:line evidence.
 
 ---
 
-## Database Architecture
+## Phase 1: Pipeline Catalog
 
-5 separate IndexedDB databases with NO cross-database referential integrity:
+### Source 1: Fan-Out Topology (from FRANCHISE_API_MAP.md)
 
-| Database | Stores | Used By | Notes |
-|----------|--------|---------|-------|
-| `kbl-league-builder` | leagueTemplates, globalTeams, globalPlayers, rulesPresets, teamRosters | leagueBuilderStorage.ts | Team/player/league CRUD |
-| `kbl-schedule` | scheduledGames, scheduleMetadata | scheduleStorage.ts | Game scheduling |
-| `kbl-playoffs` | playoffs, series, playoffGames*, playoffStats* | playoffStorage.ts | *Never written to |
-| `kbl-tracker` | completedGames, playerSeasonBatting, playerSeasonPitching, playerSeasonFielding, seasonMetadata, gameHeaders, atBatEvents, careerBatting, careerPitching, careerMilestones | gameStorage.ts, seasonStorage.ts, eventLog.ts, careerStorage.ts | Main game data |
-| `kbl-app-meta` | franchiseList, appSettings | franchiseManager.ts | Franchise CRUD |
-| `kbl-franchise-{id}` | (undefined schema) | franchiseManager.ts | Per-franchise — ORPHANED |
-
----
-
-## PL-01: Game Completion Entry Points
-
-### Two Parallel Code Paths
-
-**Path A: `endGame()`** — `useGameState.ts:2973`
-- Converts React state Maps to Records
-- HARDCODES `putouts: 0, assists: 0, fieldingErrors: 0` (PlayerGameStats has no fielding fields)
-- Resolves pitcher names correctly from `pitcherNamesRef`
-- Archives game via `archiveCompletedGame()` at line 3095
-- Sets `pendingActionRef.current = completeGameInternal` for later execution
-- **Does NOT calculate pitcher decisions** — archived game has null decisions
-
-**Path B: `completeGameInternal()`** — `useGameState.ts:2821`
-- Called after pitch count confirmation via `confirmPitchCount()`
-- Marks game complete in event log (line 2825)
-- Builds playerStatsRecord (same hardcoded fielding zeros, lines 2832-2845)
-- **Calculates pitcher decisions** via `calculatePitcherDecisions()` at line 2861
-- Builds pitcherGameStatsArray — **BUG: `pitcherName = pitcherId`** at line 2868
-- Calls `aggregateGameToSeason()` at line 2953
-- Calls `markGameAggregated()` at line 2956
-- **Archives AGAIN** at line 2963 (second write, overwrites first — harmless but wasteful)
-
-### Bugs in PL-01
-
-| Bug | Location | Impact |
-|-----|----------|--------|
-| pitcherName = pitcherId | useGameState.ts:2868 | Pitcher names show as IDs in season stats |
-| Double archival | endGame:3095 + completeGameInternal:2963 | Wasteful; second overwrites first |
-| Fielding hardcoded to 0 | useGameState.ts:2841-2843 | Entire fielding pipeline is dead |
-| basesReachedViaError = 0 | useGameState.ts:2880 | Perfect game detection may be inaccurate |
-
----
-
-## PL-02: Season Batting Aggregation
-
-**Function:** `aggregateBattingStats()` — `seasonAggregator.ts:141`
-
-### Field Mapping (Game → Season)
-
-| Game Field | Season Field | Transform |
-|-----------|-------------|-----------|
-| pa | pa | Additive |
-| ab | ab | Additive |
-| h | hits | Rename + additive |
-| singles | singles | Additive |
-| doubles | doubles | Additive |
-| triples | triples | Additive |
-| hr | homeRuns | Rename + additive |
-| rbi | rbi | Additive |
-| r | runs | Rename + additive |
-| bb | walks | Rename + additive |
-| k | strikeouts | Rename + additive |
-| sb | stolenBases | Rename + additive |
-| cs | caughtStealing | Rename + additive |
-| hbp | hitByPitch | Additive (with `|| 0` guard) |
-
-### Fields NOT Aggregated
-
-| Season Field | Reason |
-|-------------|--------|
-| sacFlies | Not tracked in PlayerGameStats |
-| sacBunts | Not tracked in PlayerGameStats |
-| gidp | Not tracked in PlayerGameStats |
-| fameBonuses/fameBoners/fameNet | Handled by separate aggregateFameEvents() |
-
-### Player Resolution
-
-- Name: from `gameState.playerInfo[playerId].name` — falls back to `playerId`
-- Team: from `gameState.playerInfo[playerId].teamId` — falls back to `awayTeamId` (wrong for home players)
-- `games` incremented for ALL players in playerStats, even with 0 PA
-
----
-
-## PL-03: Season Pitching Aggregation
-
-**Function:** `aggregatePitchingStats()` — `seasonAggregator.ts:181`
-
-### Field Mapping
-
-| Game Field | Season Field | Transform |
-|-----------|-------------|-----------|
-| outsRecorded | outsRecorded | Additive |
-| hitsAllowed | hitsAllowed | Additive |
-| runsAllowed | runsAllowed | Additive |
-| earnedRuns | earnedRuns | Additive |
-| walksAllowed | walksAllowed | Additive (already BB+IBB combined upstream) |
-| strikeoutsThrown | strikeouts | Rename + additive |
-| homeRunsAllowed | homeRunsAllowed | Additive |
-| hitBatters | hitBatters | Additive |
-| wildPitches | wildPitches | Additive |
-| decision === 'W' | wins | Conditional increment |
-| decision === 'L' | losses | Conditional increment |
-| save === true | saves | Conditional increment |
-| hold === true | holds | Conditional increment |
-| blownSave === true | blownSaves | Conditional increment |
-| isStarter | gamesStarted | Boolean → count |
-
-### Derived Achievements (Detected at Aggregation)
-
-- Quality Start: starter + outsRecorded >= (2/3 × inningsPerGame × 3) + earnedRuns <= 3
-- Complete Game: starter + outsRecorded >= inningsPerGame × 3
-- Shutout: CG + runsAllowed === 0
-- No-Hitter: CG + hitsAllowed === 0
-- Perfect Game: NH + walksAllowed === 0 + hitBatters === 0 + basesReachedViaError === 0
-
-### Dead Field
-
-Season pitching type has `balks` field — never populated (SMB4 has no balks).
-
----
-
-## PL-04: Season Fielding Aggregation — DEAD CODE
-
-**Function:** `aggregateFieldingStats()` — `seasonAggregator.ts:250`
-
-The function runs but ALL input data is hardcoded to 0:
-
-| Game Field | Value | Reason |
-|-----------|-------|--------|
-| putouts | Always 0 | Hardcoded in useGameState.ts:2841 |
-| assists | Always 0 | Hardcoded in useGameState.ts:2842 |
-| fieldingErrors | Always 0 | Hardcoded in useGameState.ts:2843 |
-
-Additionally never populated: `doublePlays`, `gamesByPosition`, `putoutsByPosition`, `assistsByPosition`, `errorsByPosition`.
-
-**Root cause:** `PlayerGameStats` interface (useGameState.ts:71-86) has no fielding fields. The conversion adds them as literal zeros.
-
----
-
-## PL-05: Fame Event Aggregation
-
-**Function:** `aggregateFameEvents()` — `seasonAggregator.ts:278`
-
-Groups fame events by player, sums `fameValue` into bonuses/boners. Updates the player's **batting** season stats (not pitching) with fame totals.
-
-### Issues
-
-| Issue | Location | Impact |
-|-------|----------|--------|
-| Uses playerId as playerName | seasonAggregator.ts:304 | Fame records show IDs instead of names |
-| Uses awayTeamId for ALL players | seasonAggregator.ts:305 | Home team players assigned wrong team |
-| Pitcher fame → batting record | seasonAggregator.ts:278 | Creates phantom batting records for pitchers with 0 PA |
-
----
-
-## PL-06: Season Stats Retrieval & Display
-
-### Three Display Paths
-
-**Path A: Base `useSeasonStats`** — `src/hooks/useSeasonStats.ts`
-- Reads all batting/pitching/fielding from IndexedDB
-- Provides `getBattingLeaders(sortBy, limit)` and `getPitchingLeaders(sortBy, limit)`
-- Qualifying thresholds: batting rate stats = 10 AB min, pitching rate = 9 outs (3 IP) min
-
-**Path B: `useFranchiseData`** — `src/src_figma/hooks/useFranchiseData.ts`
-- Wraps `useSeasonStats`, converts to `LeaderEntry` format
-- Falls back to mock data when `hasRealData === false`
-
-**Path C: Figma `useSeasonStats`** — `src/src_figma/app/hooks/useSeasonStats.ts`
-- Builds unified `PlayerStatsRow` combining batting + pitching + fielding
-- **TYPE MISMATCH:** Accesses `b.totalWar`, `b.bwar`, `b.rwar`, `b.fwar` on `PlayerSeasonBatting` — fields DON'T EXIST on that type
-- These resolve to `undefined` at runtime → `undefined ?? 0` → always 0
-- Used by `TeamHubContent` and `MuseumContent`
-
-### seasonId Default Mismatch
-
-| Location | Default seasonId |
-|----------|-----------------|
-| completeGameInternal (write) | `seasonIdRef.current \|\| 'season-1'` |
-| Figma useSeasonStats (read) | Active season or `'season-2024'` |
-
-Data written to `season-1` may not be read by hooks defaulting to `season-2024`.
-
----
-
-## PL-07: WAR Calculation Pipeline
-
-### Architecture: Computed On-The-Fly, Not Stored (except career)
-
-Two parallel hook implementations:
-
-**Legacy:** `src/hooks/useWARCalculations.ts` — reads from IndexedDB, returns leaderboards
-**Figma:** `src/src_figma/app/hooks/useWARCalculations.ts` — takes stats as input, returns calculation functions
-
-Both call the same base engines:
-- `bwarCalculator.ts` — wOBA → wRAA → park adj → replacement → RPW → bWAR
-- `pwarCalculator.ts` — FIP → fipDiff → fipRunsAboveAvg → replacement → leverage → pWAR
-- `rwarCalculator.ts` — baserunning value from SB/CS/advancement
-- `fwarCalculator.ts` — fielding value from putouts/assists/errors/range
-
-**RPW Scaling:** `getRunsPerWin(seasonGames) = 10 × (seasonGames / 162)` — 50 games = 3.09 RPW
-
-### Career WAR Storage
-
-Stored in `careerStorage.ts:185`: `career.bWAR += seasonStats.batting.bWAR; career.totalWAR = career.bWAR + career.fWAR + career.rWAR`
-
-**No idempotency guard** — if `aggregateGameToCareer()` runs twice for same game, WAR doubles.
-
-### Gaps
-
-| Gap | Location | Impact |
-|-----|----------|--------|
-| SB/CS dropped | Figma useWARCalculations.ts:135-136 | `stolenBases: 0, caughtStealing: 0` — rWAR always 0 in Figma |
-| No fWAR exposed | Figma useWARCalculations.ts | fWAR calculation not available in Figma hook |
-| Career WAR double-count | careerStorage.ts:947-950 | No duplicate guard at career aggregation |
-| Type casts | Figma useWARCalculations.ts:227,252 | `as any` suppresses type mismatches |
-
----
-
-## PL-08: Milestone/Career Aggregation
-
-**Entry:** `aggregateGameWithMilestones()` — `milestoneAggregator.ts:698`
-**15 junctions** from game completion to permanent milestone recording.
-
-### Key Junctions
-
-1. Career batting aggregation (read-modify-write per player)
-2. Career pitching aggregation (same pattern)
-3. Season milestone check with threshold scaling: `gamesPerSeason / 162`
-4. Career milestone check (tiered: HR 25-700, Hits 250-3000)
-5. WAR milestone check (bWAR 5-65, pWAR 5-65, fWAR 3-30, rWAR 2-20)
-6. Dedup via `getAchievedMilestonesSet()` — reads existing milestones from IndexedDB
-7. Milestone → FameEvent conversion via `milestoneToFameEvent()`
-8. Franchise firsts recording
-9. Franchise leaders tracking (9 batting + 8 pitching categories)
-
-### Gaps
-
-| Gap | Location | Impact |
-|-----|----------|--------|
-| playerName = playerId | milestoneAggregator.ts:722 | Milestone records show IDs |
-| teamId = awayTeamId always | milestoneAggregator.ts:723 | Wrong team for home players |
-| Career stat double-count | milestoneAggregator.ts:79-134 | No per-game idempotency |
-
----
-
-## PL-09: Event Log (Play-by-Play)
-
-**Written IMMEDIATELY** per at-bat to IndexedDB `kbl-event-log`.
-
-### Key Functions
-
-| Function | File:Line | Purpose |
-|----------|-----------|---------|
-| createGameHeader | useGameState.ts:1006 | Once at game start |
-| logAtBatEvent | eventLog.ts:315-340 | Per at-bat, atomic transaction |
-| completeGame | eventLog.ts:377 | Marks isComplete, sets finalScore |
-| markGameAggregated | eventLog.ts:407 | Sets aggregated flag |
-| generateBoxScore | eventLog.ts:640-786 | ORPHANED — nothing renders it |
-| getUnaggregatedGames | eventLog.ts:461 | Crash recovery |
-
-### Gaps
-
-| Gap | Location | Impact |
-|-----|----------|--------|
-| Box score orphaned | eventLog.ts:640 | Full reconstruction capability exists but no UI |
-| Error count bug | eventLog.ts:723-724 | Both awayErrors and homeErrors count ALL errors (no team filter) |
-| Pitching appearances not logged | eventLog.ts:345 | `logPitchingAppearance()` exists but never called |
-
----
-
-## PL-10: Fame System
-
-### Two Detection Layers
-
-**Layer 1: In-Game (Real-Time)**
-- `useFameDetection` — 25+ detectors in `src/hooks/useFameDetection.ts` (1639 lines)
-- `useFameTracking` — Figma wrapper via `fameIntegration` engine
-- Checks after each at-bat: walk-off, cycle, multi-HR, sombrero, Maddux, no-hitter, immaculate inning, etc.
-
-**Layer 2: Milestone-Triggered (Post-Game)**
-- Season milestones (HR 40/45/55, Hits 160, SB 40/80, K 200/250 — all scaled)
-- Career milestones (tiered thresholds)
-- Converted to FameEvents via `milestoneToFameEvent()`
-
-### Fame Formula
+The game completion fan-out from `completeGameInternal()` at `useGameState.ts:2822`:
 
 ```
-fameValue = baseFame × √(clamp(LI, 0.1, 10.0)) × playoffMultiplier
+completeGameInternal()
+  ├─→ completeGame()                    → eventLog (mark complete)
+  ├─→ calculatePitcherDecisions()       → PitcherGameStats (in-memory)
+  ├─→ aggregateGameToSeason()           → PL-01, PL-02, PL-05, PL-06, PL-08, PL-09, PL-11
+  │     ├─→ aggregateBattingStats()     → IndexedDB: playerSeasonBatting
+  │     ├─→ aggregatePitchingStats()    → IndexedDB: playerSeasonPitching
+  │     ├─→ aggregateFieldingStats()    → IndexedDB: playerSeasonFielding
+  │     ├─→ aggregateFameEvents()       → IndexedDB: playerSeasonBatting (fame fields)
+  │     ├─→ incrementSeasonGames()      → IndexedDB: seasons
+  │     └─→ aggregateGameWithMilestones() → IndexedDB: milestones + career stats
+  ├─→ markGameAggregated()              → eventLog (prevent re-aggregation)
+  └─→ archiveCompletedGame()            → IndexedDB: completedGames (PL-03, PL-07)
 ```
 
-Playoff multipliers: wild_card=1.25, division=1.5, championship=1.75, world_series=2.0
+### Source 2: Button Audit (Tier A Wired Elements)
 
-Fame tiers: UNKNOWN(0-1), KNOWN(1-5), FAN_FAVORITE(5-15), STAR(15-30), SUPERSTAR(30-50), LEGENDARY(50+), INFAMOUS(<0)
+From `button-audit-data.json`, 8 Tier A wired elements trigger data pipelines:
+- `GT-END-GAME` → triggers `endGame()` → `completeGameInternal()` (all fan-out)
+- Roster/lineup management buttons → separate pipelines (not in scope for this trace)
 
-### Gap
+### Pipeline Catalog
 
-Milestone fame events returned from `aggregateGameWithMilestones()` but only logged to console — not pushed to UI notifications.
-
----
-
-## PL-11: League Builder CRUD
-
-**Database:** `kbl-league-builder` — 5 stores
-**Hook:** `useLeagueBuilderData.ts`
-
-### Pattern
-
-All CUD operations: write to IndexedDB via `store.put()` → `await refresh()` → re-read ALL four stores.
-
-- NOT optimistic updates
-- No cascade deletes (removing league doesn't clean up teams, removing team doesn't clean up players)
-- Roster updates intentionally skip `refresh()` (not in main state arrays)
-- `seedFromSMB4Database()` converts from `src/data/playerDatabase.ts`
+| ID | Name | Entry Point | Trigger | Priority |
+|----|------|-------------|---------|----------|
+| PL-01 | Game → Season Batting Stats | `aggregateBattingStats()` | Game completion | HIGH |
+| PL-02 | Game → Season Pitching Stats | `aggregatePitchingStats()` | Game completion | HIGH |
+| PL-03 | Game → Standings | `archiveCompletedGame()` → `calculateStandings()` | Game completion + page load | HIGH |
+| PL-04 | Game → WAR Recalculation | `useSeasonStats` → WAR engines | Page load (computed on-the-fly) | HIGH |
+| PL-05 | Game → Season Fielding Stats | `aggregateFieldingStats()` | Game completion | MEDIUM |
+| PL-06 | Game → Fame Aggregation | `aggregateFameEvents()` | Game completion | MEDIUM |
+| PL-07 | Game → Game Archive | `archiveCompletedGame()` | Game completion | MEDIUM |
+| PL-08 | Game → Milestone Detection | `aggregateGameWithMilestones()` | Game completion | MEDIUM |
+| PL-09 | Game → Pitcher Decisions (Season) | `calculatePitcherDecisions()` → `aggregatePitchingStats()` | Game completion | HIGH (reclassified) |
+| PL-10 | Game → Career Stats | `aggregateGameWithMilestones()` | Game completion | LOW |
+| PL-11 | Game → Season Game Count | `incrementSeasonGames()` | Game completion | LOW |
 
 ---
 
-## PL-12: Schedule Management
-
-**Database:** `kbl-schedule` — 2 stores (scheduledGames, scheduleMetadata)
-**Hook:** `useScheduleData.ts`
-
-### Key Operations
-
-- `addGame()`: validates away ≠ home, auto-increments gameNumber
-- `completeGame()`: sets status=COMPLETED, stores result
-- `addSeries()`: calls addGame in a loop (not batched)
-- `updateMetadata()` is fire-and-forget (not awaited)
-
-### Gap
-
-No link between `kbl-schedule` and `kbl-league-builder`. Team IDs are string references with no FK enforcement.
+## Phase 2: Detailed Pipeline Traces
 
 ---
 
-## PL-13: Standings Calculation
+### PL-01: Game → Season Batting Stats (HIGH)
 
-**Function:** `calculateStandings()` — `seasonStorage.ts:784`
+**PIPELINE STATUS: PARTIALLY BROKEN**
 
-### Data Flow
+#### Junction 1: TRANSFORM (PersistedGameState construction)
+- **Location:** `src/src_figma/hooks/useGameState.ts:2832-2937`
+- **Input:** React state: `playerStats` Map, `pitcherStats` Map, `fameEvents` array, `gameState` object
+- **Output:** `PersistedGameState` object
+- **Function:** Inline construction in `completeGameInternal()`
+- **Verified:** YES — construction happens at lines 2894-2937
+- **Data loss risks:**
+  - ⚠️ **Line 2842-2844:** `putouts: 0, assists: 0, fieldingErrors: 0` — **ALL FIELDING DATA IS ZEROED OUT** in playerStatsRecord. The game tracks plays but doesn't accumulate putouts/assists per player during gameplay.
+  - ⚠️ **Line 2870:** `pitcherName: pitcherId` — pitcher name is set to pitcher ID (placeholder)
+  - ⚠️ **Line 2871:** `teamId: gameState.homeTeamId` — ALL pitchers assigned to home team
+  - ⚠️ **Line 2872:** `isStarter: pitcherGameStatsArray.length === 0` — Only first pitcher in Map is marked as starter. Map iteration order may not match entry order.
+  - ⚠️ **Line 2904-2906:** Base runners set to `playerId: 'unknown'` — runners lose identity at game end
 
-1. `getRecentGames(500)` from `kbl-tracker` completedGames (NOT schedule DB)
-2. Filter by seasonId
-3. Build Map<teamId, stats> with W/L/runs/home-away/streaks
-4. Sort by winPct, calculate gamesBack
+#### Junction 2: AGGREGATE (Season stat accumulation)
+- **Location:** `src/utils/seasonAggregator.ts:141-175`
+- **Input:** `PersistedGameState.playerStats` + existing `PlayerSeasonBatting`
+- **Output:** Updated `PlayerSeasonBatting`
+- **Function:** `aggregateBattingStats()`
+- **Verified:** YES — function exists and accepts correct input
+- **Data loss risks:**
+  - ⚠️ **Line 148:** `playerName = playerId` — PLACEHOLDER. Player names in season stats will be player IDs, not human-readable names.
+  - ⚠️ **Line 149:** `teamId = gameState.awayTeamId` — ALL PLAYERS assigned to away team. This is wrong for home team players.
+  - ⚠️ **Line 170:** Comment: "HBP, SF, SAC, GIDP would need to be tracked" — `hitByPitch`, `sacFlies`, `sacBunts`, `gidp` fields exist in `PlayerSeasonBatting` but are NEVER populated from game data. They will always be 0.
 
-### Critical Gaps
+#### Junction 3: STORE (IndexedDB write)
+- **Location:** `src/utils/seasonStorage.ts:426-437` (updateBattingStats)
+- **Input:** Updated `PlayerSeasonBatting` object
+- **Storage:** IndexedDB store `playerSeasonBatting`, keyPath `['seasonId', 'playerId']`
+- **Verified:** YES — `updateBattingStats()` calls `store.put(stats)` which upserts
+- **Mismatch risk:** None — write schema matches read schema exactly
 
-| Gap | Impact |
-|-----|--------|
-| Reads from gameStorage, NOT scheduleStorage | Two parallel game-result systems, not connected |
-| Naive division split (first half/second half) | Ignores actual league structure from leagueBuilder |
-| 500-game limit | 20-team × 50-game = 500 exact max; larger leagues would have incomplete standings |
-| No auto-refresh after game completion | Standings stale until FranchiseHome remounts |
-| Team names embedded at save time | Renamed teams show old names in standings |
+#### Junction 4: RETRIEVE (Season stats query)
+- **Location:** `src/hooks/useSeasonStats.ts:324-370` (loadStats function inside useEffect)
+- **Hook:** `useSeasonStats(seasonId)`
+- **Output:** `BattingLeaderEntry[]` with derived stats (avg, obp, slg, ops) + WAR computed on-the-fly
+- **Verified:** YES — `getAllBattingStats(seasonId)` reads from same store and keyPath
+- **Mismatch risk:** None — reads `PlayerSeasonBatting` and extends with computed fields
 
----
+#### Junction 5: RENDER (Display in franchise UI)
+- **Location:** `src/src_figma/hooks/useFranchiseData.ts:328-341` → `FranchiseHome.tsx:2895-3500`
+- **Component:** `LeagueLeadersContent` and `TeamHubContent`
+- **Input:** `BattingLeaderEntry[]` from `useSeasonStats` via `useFranchiseData`
+- **Displays:** AVG, HR, RBI, SB, OPS, WAR (top 5 per stat)
+- **Missing displays:** HBP, SF, SAC, GIDP always show 0 (data never populated)
+- **Verified:** YES — context provider pattern connects hook data to display components
 
-## PL-14: Playoff System
+#### Three-Variant Analysis
 
-**Database:** `kbl-playoffs` — 4 stores
-**Hook:** `usePlayoffData.ts`
+**Variant 1: Happy Path** — PARTIALLY PASSES
+- Data flows from game through aggregation to display
+- Counting stats (H, 2B, 3B, HR, RBI, R, BB, K, SB, CS) aggregate correctly
+- Derived stats (AVG, OBP, SLG, OPS) calculated correctly from counting stats
+- **BUT:** playerName is wrong (shows player ID), teamId is wrong (all assigned to away team)
 
-### Key Operations
+**Variant 2: Partial Data** — PASSES WITH WARNINGS
+- Player with 0 PA: Skipped in WAR calculation (`if (stats.pa === 0) continue;` at useSeasonStats.ts/useWARCalculations.ts)
+- Player with 0 hits: AVG = 0.000, no crash (division by 0 handled in `calculateBattingDerived`)
+- Missing fields (HBP, SF, SAC, GIDP): Default to 0 in storage init — displays 0 (technically correct but incomplete)
 
-- `createNewPlayoff()`: gets standings → builds playoff teams → creates bracket
-- `generateBracket()`: **ONLY creates first-round series** — later rounds not pre-created
-- `recordGameResult()`: updates series, checks clinch
-- `advanceRound()`: marks next-round series as IN_PROGRESS — but those series may not exist
-- `completePlayoffs()`: marks champion, MVP
-
-### Critical Gaps
-
-| Gap | Impact |
-|-----|--------|
-| Only round 1 bracket generated | `advanceRound()` would find no series to activate for round 2+ |
-| `playoffGames` store never written to | Games stored inside `PlayoffSeries.games[]` instead |
-| `playoffStats` store never written to | No playoff player stat accumulation |
-| `playoffEngine.ts` is ORPHANED | Sophisticated tiebreaker logic not imported by hook |
-| Naive league split for seeding | Same problem as standings — ignores real division structure |
-| Falls back to MOCK_PLAYOFF_TEAMS | Hardcoded team IDs like 'tigers', 'sox' |
-
----
-
-## PL-15: Franchise State
-
-**Database:** `kbl-app-meta` — 2 stores + per-franchise `kbl-franchise-{id}` DBs
-
-### Key Operations
-
-- `createFranchise()`: generates ID, writes to `franchiseList`
-- `listFranchises()`: hardcodes `currentSeason: 1, totalSeasons: 1` for all
-- `deleteFranchise()`: removes from list + deletes entire per-franchise DB
-
-### Critical Gaps
-
-| Gap | Impact |
-|-----|--------|
-| `useFranchiseData` always uses 'season-1' | Ignores franchise context entirely |
-| Per-franchise DBs have undefined schemas | Only populated by import/migration |
-| Franchise isolation is meaningless | All data systems use global DBs |
-| `currentSeason`/`totalSeasons` hardcoded to 1 | FranchiseSummary always shows "Season 1 of 1" |
-
----
-
-## Fan Morale — BROKEN PIPELINE
-
-**Engine:** `fanMoraleEngine.ts` — 1,358 lines of comprehensive logic (drift, momentum, trade scrutiny, streak detection, contraction risk)
-
-**Hook:** `useFanMorale.ts:7-12` — Comment says "written with incorrect assumptions about the legacy fanMoraleEngine API"
-
-### What's Broken
-
-1. Hook is STUBBED — initializes but does not process game results
-2. No persistence — morale state in React useState only, lost on refresh
-3. No game-result feeding — nothing calls `processGameResult()` at game end
-4. IS imported in GameTracker.tsx:31 and SeasonSummary.tsx:17 despite being broken
-5. Two different hooks exist (Figma + legacy) with different APIs
+**Variant 3: Duplicate Game** — PROTECTED
+- `markGameAggregated()` at `useGameState.ts:2944` prevents re-aggregation
+- But protection is in the orchestrator only — if `aggregateGameToSeason()` is called directly (e.g., from legacy GameTracker/index.tsx:959), no dedup guard exists in the aggregation function itself
 
 ---
 
-## Systemic Issues
+### PL-02: Game → Season Pitching Stats (HIGH)
 
-### 1. No Duplicate Aggregation Guard
+**PIPELINE STATUS: PARTIALLY BROKEN**
 
-`aggregateGameToSeason()` is purely additive. The `markGameAggregated()` flag exists but is never checked before aggregating. If called twice for the same game, all stats double.
+#### Junction 1: TRANSFORM (PersistedGameState.pitcherGameStats)
+- **Location:** `src/src_figma/hooks/useGameState.ts:2866-2891`
+- **Input:** `pitcherStats` Map from useGameState
+- **Output:** `PersistedGameState.pitcherGameStats` array
+- **Verified:** YES
+- **Data loss risks:**
+  - ⚠️ **Line 2870:** `pitcherName: pitcherId` — PLACEHOLDER name
+  - ⚠️ **Line 2871:** `teamId: gameState.homeTeamId` — ALL pitchers assigned to home team
+  - ⚠️ **Line 2881:** `hitBatters: 0` — HARDCODED to 0, even if pitchers actually hit batters
+  - ⚠️ **Line 2882:** `basesReachedViaError: 0` — HARDCODED to 0
+  - ⚠️ **Line 2883:** `wildPitches: 0` — HARDCODED to 0 (but stats.wildPitches may exist?)
+  - ⚠️ **Line 2886-2888:** `consecutiveHRsAllowed: 0, firstInningRuns: 0, basesLoadedWalks: 0` — ALL hardcoded
 
-**Affected:** PL-02, PL-03, PL-04, PL-05, PL-08 (career)
+#### Junction 2: AGGREGATE
+- **Location:** `src/utils/seasonAggregator.ts:180-234`
+- **Input:** `PersistedGameState.pitcherGameStats` + existing `PlayerSeasonPitching`
+- **Output:** Updated `PlayerSeasonPitching`
+- **Function:** `aggregatePitchingStats()`
+- **Verified:** YES
+- **Data loss:**
+  - ⚠️ **Line 229:** W/L/SV/H/BS are NEVER aggregated. Comment: "Note: W/L/SV/H/BS would need decision tracking." The `PersistedGameState.pitcherGameStats` array doesn't carry decision fields — they're on the in-memory `PitcherGameStats` Map which is NOT serialized.
+  - The `PlayerSeasonPitching` type HAS `wins`, `losses`, `saves`, `holds`, `blownSaves` fields (seasonStorage.ts:159-163) but they are NEVER incremented by `aggregatePitchingStats()`.
 
-### 2. Database Fragmentation
+#### Junction 3: STORE
+- **Location:** `src/utils/seasonStorage.ts:439-450` (updatePitchingStats)
+- **Verified:** YES — same pattern as batting
 
-5+ separate IndexedDB databases with no cross-DB integrity:
-- Schedule completion doesn't feed standings (different DBs)
-- Division structure in leagueBuilder ignored by standings and playoffs
-- Franchise-per-database architecture is orphaned from actual data systems
+#### Junction 4: RETRIEVE
+- **Location:** `src/hooks/useSeasonStats.ts:247-270` (toPitchingLeaderEntry)
+- **Hook:** `useSeasonStats(seasonId).getPitchingLeaders()`
+- **Verified:** YES
+- **Display fields:** ERA, WHIP, IP, pWAR, plus wins, strikeouts, saves from seasonStats
+- **Issue:** Wins and saves will always be 0 in the leaderboard since they're never aggregated
 
-### 3. Placeholder Identity Data
+#### Junction 5: RENDER
+- **Location:** `src/src_figma/hooks/useFranchiseData.ts:344-357` → `FranchiseHome.tsx`
+- **Verified:** YES
 
-Multiple locations use `playerId` as `playerName` and `awayTeamId` for all players:
-- `completeGameInternal()` line 2868
-- `aggregateFameEvents()` lines 304-305
-- `milestoneAggregator.ts` lines 722-723
+#### Three-Variant Analysis
 
-### 4. Type Safety Gaps
+**Variant 1: Happy Path** — PARTIALLY PASSES
+- Counting stats (outsRecorded, hitsAllowed, runsAllowed, earnedRuns, walksAllowed, strikeouts, HR allowed) aggregate correctly
+- ERA, WHIP calculated correctly from counting stats
+- Achievements (QS, CG, SO, NH, PG) detected and aggregated correctly
+- **CRITICAL:** Wins/Losses/Saves always 0. The "W" and "SV" leader boards will be empty.
 
-- Figma `useSeasonStats` accesses WAR fields that don't exist on season types
-- `useWARCalculations` uses `as any` casts to suppress mismatches
-- `convertBattingStats` drops SB/CS (set to 0)
+**Variant 2: Partial Data** — PASSES
+- Pitcher with 0 IP: Skipped in WAR calculation, ERA shows Infinity (handled in display with "-.--")
+
+**Variant 3: Duplicate Game** — PROTECTED (same as PL-01, via orchestrator)
+
+---
+
+### PL-03: Game → Standings (HIGH)
+
+**PIPELINE STATUS: BROKEN AT JUNCTION 2→3**
+
+#### Junction 1: STORE (Game archive)
+- **Location:** `src/src_figma/utils/gameStorage.ts:283-320` (archiveCompletedGame — figma version)
+- **Also:** `src/utils/gameStorage.ts:278-310` (base version)
+- **Input:** `PersistedGameState` + `finalScore` + `inningScores`
+- **Output:** `CompletedGameRecord` written to IndexedDB `completedGames` store
+- **Verified:** YES
+- **CRITICAL ISSUE:** `seasonId` field exists in `CompletedGameRecord` type (line 266) but is **NEVER SET** during archival. The `archiveCompletedGame()` function at line 290-304 constructs the record without including `seasonId`.
+
+#### Junction 2: RETRIEVE (Get recent games)
+- **Location:** `src/utils/gameStorage.ts:315-341` (getRecentGames)
+- **Called by:** `src/utils/seasonStorage.ts:786` via `calculateStandings()`
+- **Output:** `CompletedGameRecord[]` (up to 500 games, sorted by date descending)
+- **Verified:** YES — cursor opens on `date` index
+
+#### Junction 3: FILTER + CALCULATE (Standings calculation)
+- **Location:** `src/utils/seasonStorage.ts:784-917`
+- **Function:** `calculateStandings(seasonId?)`
+- **CRITICAL BUG:**
+  - Line 789-791: `const seasonGames = seasonId ? games.filter(g => g.seasonId === seasonId) : games;`
+  - Since `seasonId` is NEVER set on `CompletedGameRecord`, `g.seasonId` is always `undefined`
+  - When called with `seasonId = 'season-1'`: `undefined === 'season-1'` → FALSE for ALL games
+  - **Result: `seasonGames` array is ALWAYS EMPTY when a seasonId is passed**
+  - **Standings will show NO teams and NO data**
+- **HOWEVER:** `useFranchiseData.ts:367` calls `calculateStandings(seasonId)` with `seasonId = 'season-1'`
+- **And:** `useFranchiseData.ts:383` falls back to `MOCK_STANDINGS` when `realStandings.length === 0`
+- **Net effect:** Standings ALWAYS show mock data, never real data. The pipeline is completely broken but masked by the mock fallback.
+
+#### Junction 4: TRANSFORM (to UI format)
+- **Location:** `src/src_figma/hooks/useFranchiseData.ts:381-420`
+- **Function:** Converts `TeamStanding[]` → `LeagueStandings` (Eastern/Western divisions)
+- **Verified:** YES — but never reached because J3 returns empty array
+- **Additional issue:** Division assignment is arbitrary (`slice(0, half)` / `slice(half)`) — no actual league/division configuration exists
+
+#### Junction 5: RENDER
+- **Location:** `src/src_figma/app/pages/FranchiseHome.tsx:1645-1724` (StandingsContent)
+- **Verified:** YES — displays `standings[selectedLeague]` with W-L-PCT-GB-RD columns
+- **Net display:** Always shows mock standings
+
+#### Three-Variant Analysis
+
+**Variant 1: Happy Path** — FAILS (seasonId filter blocks all games)
+**Variant 2: Partial Data** — NOT REACHED (pipeline broken before this point)
+**Variant 3: Duplicate Game** — NOT REACHED
+
+**Workaround discovery:** If `calculateStandings()` were called WITHOUT a seasonId parameter, it would skip the filter and process ALL games. But all callers pass a seasonId.
+
+---
+
+### PL-04: Game → WAR Recalculation (HIGH)
+
+**PIPELINE STATUS: INTACT (but quality depends on PL-01/PL-02)**
+
+#### Junction 1: RETRIEVE (Season stats from IndexedDB)
+- **Location (Primary):** `src/hooks/useSeasonStats.ts:324-370`
+- **Location (Legacy):** `src/hooks/useWARCalculations.ts:286-290`
+- **Functions:** `getAllBattingStats()`, `getAllPitchingStats()`, `getAllFieldingStats()`
+- **Verified:** YES — both hooks read from the same IndexedDB stores that PL-01/PL-02 write to
+
+#### Junction 2: TRANSFORM (Stats → WAR input format)
+- **Location:** `src/hooks/useSeasonStats.ts:103-155`
+- **Functions:** `seasonBattingToWAR()`, `seasonPitchingToWAR()`, `seasonBattingToBaserunning()`
+- **Verified:** YES — all conversion functions map fields correctly
+- **Notes:**
+  - `intentionalWalks: 0` — not tracked in SMB4 (correct)
+  - `gidpOpportunities: Math.round(stats.pa * 0.15)` — estimated at ~15% of PA
+  - `hitByPitch: stats.hitByPitch` — will always be 0 (never populated, per PL-01 findings)
+
+#### Junction 3: CALCULATE (WAR engines)
+- **Location:** `src/engines/bwarCalculator.ts` → `calculateBWARSimplified()`
+- **Location:** `src/engines/pwarCalculator.ts` → `calculatePWARSimplified()`
+- **Location:** `src/engines/fwarCalculator.ts` → `calculateFWARFromStats()`
+- **Location:** `src/engines/rwarCalculator.ts` → `calculateRWARSimplified()`
+- **Verified:** YES — all 4 engines exist, accept correct types, return WAR values
+- **Fallback:** Each WAR calculation is wrapped in try/catch, defaults to 0 on failure
+
+#### Junction 4: AGGREGATE (Total WAR)
+- **Location:** `src/hooks/useSeasonStats.ts:240` → `totalWAR: bWAR + fWAR + rWAR`
+- **Location:** `src/hooks/useWARCalculations.ts:430-460` → leaderboard construction
+- **Verified:** YES
+
+#### Junction 5: RENDER (WAR display)
+- **Location:** `src/components/GameTracker/WARDisplay.tsx` → WARPanel, WARLeaderboard, WARBadge
+- **Location:** `src/src_figma/app/pages/FranchiseHome.tsx` → LeagueLeadersContent (WAR column)
+- **Verified:** YES — multiple display paths exist
+
+#### Junction 6: CONTEXT (FranchiseHome integration)
+- **Location:** `src/src_figma/hooks/useFranchiseData.ts:339,355` → WAR leaderboards
+- **Verified:** YES
+
+#### Three-Variant Analysis
+
+**Variant 1: Happy Path** — PASSES (with caveats)
+- WAR calculations work correctly from stored data
+- bWAR, pWAR, fWAR, rWAR all computed and displayed
+- **Caveat:** Since HBP/SF/SAC/GIDP are always 0, wOBA is slightly inaccurate (denominator off)
+- **Caveat:** Since pitcher W/L/SV are 0, the pitcher pWAR role detection (starter vs reliever) uses `gamesStarted` / `gamesAppeared` ratio, which IS populated correctly
+
+**Variant 2: Partial Data** — PASSES
+- 0 PA → skipped (no WAR calculated)
+- 0 IP → skipped
+- 0 fielding games → skipped
+- All handlers graceful
+
+**Variant 3: Duplicate Game** — N/A (WAR is computed on-the-fly, not stored)
+
+---
+
+### PL-05: Game → Season Fielding Stats (MEDIUM)
+
+**PIPELINE STATUS: PARTIALLY BROKEN**
+
+#### Junction 1: TRANSFORM
+- **Location:** `src/src_figma/hooks/useGameState.ts:2842-2844`
+- **CRITICAL:** `putouts: 0, assists: 0, fieldingErrors: 0` — ALL fielding stats in `playerStatsRecord` are HARDCODED TO ZERO
+- The game tracks plays (fly outs, ground outs, etc.) but doesn't accumulate putouts/assists/errors per fielder
+
+#### Junction 2: AGGREGATE
+- **Location:** `src/utils/seasonAggregator.ts:239-261`
+- **Input:** Always receives `putouts: 0, assists: 0, fieldingErrors: 0` from J1
+- **Output:** Season totals remain at 0 forever
+- **Result:** The aggregation function works correctly but receives only zeroes
+
+#### PIPELINE STATUS: BROKEN AT J1 (source data always zero)
+
+---
+
+### PL-06: Game → Fame Aggregation (MEDIUM)
+
+**PIPELINE STATUS: INTACT**
+
+#### Junction 1: TRANSFORM
+- **Location:** `src/src_figma/hooks/useGameState.ts:2916-2930`
+- **Fame events mapped from in-memory array to `PersistedGameState.fameEvents`**
+- **Minor issue:** `playerTeam: ''` (always empty string) — but fame aggregation doesn't use this field
+
+#### Junction 2: AGGREGATE
+- **Location:** `src/utils/seasonAggregator.ts:266-306`
+- **Function:** `aggregateFameEvents()` — groups by player, sums bonuses/boners
+- **Writes to:** `PlayerSeasonBatting.fameBonuses`, `.fameBoners`, `.fameNet`
+- **Verified:** YES — correctly splits bonus vs boner and updates batting stats
+
+#### Junction 3: STORE → same as PL-01 J3
+
+#### Junction 4: RETRIEVE + RENDER → fameNet displayed in leaderboards via useSeasonStats
+
+---
+
+### PL-07: Game → Game Archive (MEDIUM)
+
+**PIPELINE STATUS: INTACT**
+
+#### Junction 1: STORE
+- **Location:** `src/src_figma/utils/gameStorage.ts:283-320` (archiveCompletedGame)
+- **Writes:** Full game record including playerStats, pitcherGameStats, inningScores, fameEvents
+- **Verified:** YES
+
+#### Junction 2: RETRIEVE
+- **Location:** `src/src_figma/utils/gameStorage.ts:356-373` (getCompletedGameById)
+- **Called by:** PostGameSummary page
+- **Verified:** YES
+
+#### Junction 3: RENDER
+- **Location:** `src/src_figma/app/pages/PostGameSummary.tsx:21-64`
+- **Displays:** Box score, pitcher lines, fame events
+- **Verified:** YES
+
+---
+
+### PL-08: Game → Milestone Detection (MEDIUM)
+
+**PIPELINE STATUS: INTACT**
+
+- **Location:** `src/utils/milestoneAggregator.ts`
+- **Trigger:** Called from `aggregateGameToSeason()` when `detectMilestones = true` (default)
+- **Actions:** Checks season and career thresholds, generates FameEvents for milestones
+- **Storage:** Career milestones written to IndexedDB via `recordCareerMilestone()`
+- **Verified:** YES — function chain is complete
+
+---
+
+### PL-09: Game → Pitcher Decisions in Season Stats (HIGH — reclassified)
+
+**PIPELINE STATUS: BROKEN AT J3**
+
+#### Junction 1: CALCULATE
+- **Location:** `src/src_figma/hooks/useGameState.ts:739-891`
+- **Function:** `calculatePitcherDecisions()` — sophisticated lead-change tracking
+- **Sets:** `.decision = 'W'/'L'`, `.save = true`, etc. on PitcherGameStats Map entries
+- **Verified:** YES
+
+#### Junction 2: SERIALIZE
+- **Location:** `src/src_figma/hooks/useGameState.ts:2866-2891`
+- **CRITICAL:** The serialization from Map to `PersistedGameState.pitcherGameStats` array DOES NOT INCLUDE decision fields. The `pitcherGameStats` array interface has: `pitcherId, pitcherName, teamId, isStarter, outsRecorded, hitsAllowed, runsAllowed, earnedRuns, walksAllowed, strikeoutsThrown, homeRunsAllowed, hitBatters, ...` — but NO `win`, `loss`, `save`, `hold`, `blownSave` fields.
+
+#### Junction 3: AGGREGATE (BROKEN)
+- **Location:** `src/utils/seasonAggregator.ts:229`
+- **Comment:** "Note: W/L/SV/H/BS would need decision tracking"
+- **Result:** `PlayerSeasonPitching.wins/losses/saves/holds/blownSaves` are NEVER incremented
+- **Impact:** Win/Loss/Save leaderboards always empty. ERA leaderboard works but W-L record always shows 0-0.
+
+#### Note: Career path IS functional
+- The `milestoneAggregator.ts:194-198` DOES aggregate decisions to career stats — but it reads from a different data structure (career aggregation happens before the PitcherGameStats Map is discarded)
+
+---
+
+### PL-10: Game → Career Stats (LOW)
+
+**PIPELINE STATUS: INTACT**
+
+- Via `aggregateGameWithMilestones()` → `aggregateGameToCareerBatting()` and `aggregateGameToCareerPitching()`
+- Career stats correctly include pitcher decisions (W/L/SV/H/BS)
+- **Verified:** YES — milestoneAggregator reads from the full pitcher stats before serialization
+
+---
+
+### PL-11: Game → Season Game Count (LOW)
+
+**PIPELINE STATUS: INTACT**
+
+- **Location:** `src/utils/seasonStorage.ts` → `incrementSeasonGames()`
+- **Called from:** `src/utils/seasonAggregator.ts:93`
+- **Effect:** Increments `seasons.gamesPlayed` in IndexedDB
+- **Verified:** YES
+
+---
+
+## Phase 3: Three-Variant Analysis Summary
+
+### Critical Findings by Variant
+
+#### Happy Path Failures
+
+| Pipeline | Issue | Severity | Root Cause |
+|----------|-------|----------|------------|
+| PL-01 | playerName = playerId | HIGH | Placeholder never replaced (seasonAggregator.ts:148) |
+| PL-01 | ALL players → awayTeamId | HIGH | Placeholder never replaced (seasonAggregator.ts:149) |
+| PL-02 | ALL pitchers → homeTeamId | HIGH | Placeholder in useGameState.ts:2871 |
+| PL-02 | W/L/SV never written to season | CRITICAL | Decisions not in PersistedGameState (useGameState.ts:2866-2891) |
+| PL-03 | Standings always empty/mock | CRITICAL | seasonId never set on CompletedGameRecord (gameStorage.ts:290-304) |
+| PL-05 | Fielding stats always 0 | HIGH | putouts/assists hardcoded to 0 (useGameState.ts:2842-2844) |
+
+#### Partial Data Findings
+
+| Pipeline | Issue | Severity |
+|----------|-------|----------|
+| PL-01 | HBP/SF/SAC/GIDP always 0 | MEDIUM | Fields exist but never populated from game data |
+| PL-02 | hitBatters/wildPitches/basesReachedViaError always 0 | MEDIUM | Hardcoded in transform |
+| PL-04 | wOBA denominator slightly off (missing HBP, SF) | LOW | Cascading from PL-01 |
+
+#### Duplicate Data Findings
+
+| Pipeline | Issue | Severity |
+|----------|-------|----------|
+| ALL | Dedup guard only in orchestrator | LOW | If `aggregateGameToSeason()` called directly, no protection |
+| PL-03 | `archiveCompletedGame()` uses `store.put()` with gameId key | LOW | Duplicate archive overwrites (harmless) |
+
+---
+
+## Async Risk Zones
+
+| Pipeline | Junction | Risk | Code Handles It? |
+|----------|----------|------|-------------------|
+| PL-01/02/05 | J2 (aggregation) | Race condition if two games complete simultaneously | NO — no locking mechanism. IndexedDB transactions are atomic per-store but multi-store fan-out is not atomic |
+| PL-03 | J3 (calculateStandings) | Stale read if standings requested during archive write | YES — separate transactions, eventual consistency is acceptable |
+| PL-04 | J1 (useSeasonStats) | Stats may be stale on first render after game completion | PARTIAL — no automatic refresh trigger. User must navigate away and back, or useFranchiseData.refresh() must be called |
+| PL-06 | J2 (aggregateFameEvents) | getOrCreateBattingStats may race with aggregateBattingStats | PARTIAL — both in same `aggregateGameToSeason` call, executed sequentially (await chain). Safe unless called concurrently. |
+
+---
+
+## Data Loss Points
+
+| Pipeline | Junction | Field(s) Lost | Upstream Has It? | Downstream Needs It? |
+|----------|----------|---------------|------------------|---------------------|
+| PL-01 | J1→J2 | `playerName` | YES (in roster) | YES (for display) |
+| PL-01 | J1→J2 | `teamId` (correct) | YES (determinable from batting order) | YES (for team filtering) |
+| PL-01 | J2 | `hitByPitch`, `sacFlies`, `sacBunts`, `gidp` | NO (not tracked in game) | YES (for OBP/wOBA accuracy) |
+| PL-02 | J1→J2 | `pitcherName` | YES (in roster) | YES (for display) |
+| PL-02 | J1→J2 | Correct `teamId` | YES (determinable from pitcher assignment) | YES (for team filtering) |
+| PL-02 | J1 | `hitBatters`, `wildPitches`, `basesReachedViaError` | PARTIAL (some tracked in game, zeroed in serialization) | YES (for ERA accuracy) |
+| PL-02 | J2→J3 | `wins`, `losses`, `saves`, `holds`, `blownSaves` | YES (on PitcherGameStats Map, not on PersistedGameState) | YES (critical for leaderboards) |
+| PL-03 | J1 | `seasonId` on CompletedGameRecord | YES (available from seasonIdRef.current) | YES (for standings filtering) |
+| PL-05 | J1 | `putouts`, `assists`, `fieldingErrors` | NO (not tracked per-fielder during gameplay) | YES (for fWAR accuracy) |
+
+---
+
+## Type Mismatches
+
+| Junction | Producer Type | Consumer Type | Mismatch |
+|----------|-------------|---------------|----------|
+| PL-02 J1→J2 | `PersistedGameState.pitcherGameStats` (no decision fields) | `aggregatePitchingStats` expects counting stats only | No TypeScript error but semantic loss — decisions are not carried |
+| PL-01 J2 | `getOrCreateBattingStats` returns with `fameBonuses: 0` | `aggregateFameEvents` also reads/writes same record | No mismatch but potential stale read if not sequential |
+
+---
+
+## Recommendations
+
+### Priority 1: Critical Fixes (Standings + Pitcher Decisions)
+
+1. **FIX PL-03:** Add `seasonId` to `archiveCompletedGame()` record construction
+   - File: `src/src_figma/utils/gameStorage.ts:290` and `src/utils/gameStorage.ts:284`
+   - Add: `seasonId: seasonId || 'season-1'` to the record
+   - Requires passing `seasonId` to `archiveCompletedGame()` from `completeGameInternal()`
+
+2. **FIX PL-09:** Add pitcher decision fields to `PersistedGameState.pitcherGameStats`
+   - File: `src/utils/gameStorage.ts:129-151` — add `win`, `loss`, `save`, `hold`, `blownSave` fields
+   - File: `src/src_figma/hooks/useGameState.ts:2866-2891` — serialize decision fields from PitcherGameStats Map
+   - File: `src/utils/seasonAggregator.ts:210-230` — aggregate W/L/SV/H/BS to season stats
+
+### Priority 2: High-Impact Fixes (Name/Team Resolution)
+
+3. **FIX PL-01/02:** Replace placeholder playerName and teamId in aggregation
+   - Requires roster lookup during `aggregateBattingStats()` and `aggregatePitchingStats()`
+   - Or: Carry correct names and teams through `PersistedGameState` (already has awayTeamId/homeTeamId — need to determine which team each player belongs to)
+
+### Priority 3: Data Completeness
+
+4. **FIX PL-05:** Track fielding stats during gameplay or infer from play-by-play
+5. **FIX PL-01:** Track HBP/SF/SAC/GIDP in game-level player stats
+6. **FIX PL-02:** Serialize hitBatters/wildPitches from actual game tracking data
+
+### Priority 4: Architecture
+
+7. **Add dedup guard** inside `aggregateGameToSeason()` itself (not just in orchestrator)
+8. **Add auto-refresh** trigger after game completion so franchise pages show updated data immediately

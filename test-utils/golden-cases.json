@@ -1,0 +1,1161 @@
+{
+  "generated": "2026-02-09",
+  "engine_api_map_version": "2026-02-08",
+  "total_cases": 30,
+  "known_bugs": {
+    "D-01": "W/L assignment uses 'most runsAllowed' instead of lead-change tracking",
+    "D-04": "recordError accepts rbi parameter but calculateRBIs returns 0 for errors",
+    "D-05": "recordD3K hardcodes leverageIndex=1.0 instead of using getBaseOutLI",
+    "D-07": "TOOTBLAN fame is flat -3.0 instead of tiered -0.5 / -2.0 (rally killer)"
+  },
+  "coverage": {
+    "outcomes_covered": ["1B", "2B", "3B", "HR", "K", "KL", "GO", "FO", "LO", "PO", "DP", "TP", "FC", "SF", "SH", "D3K", "BB", "HBP", "IBB", "E"],
+    "outcomes_not_covered": [],
+    "base_states_covered": ["empty", "R1", "R2", "R3", "R1+R2", "R1+R3", "R2+R3", "loaded"],
+    "base_states_not_covered": [],
+    "out_states_covered": [0, 1, 2],
+    "transitions_covered": ["inning_change", "game_end_walkoff", "run_scoring", "force_out_no_score", "tag_up", "force_advance_walk"]
+  },
+  "gap_coverage_priority": {
+    "KL": "GC-13 (R1, 1 out), GC-14 (R2+R3, 2 outs) — was 0% coverage",
+    "1_out_scenarios": "GC-02, GC-05, GC-08, GC-11, GC-13, GC-16, GC-19, GC-22, GC-25 — was 93% untested",
+    "R2_R3": "GC-06, GC-14, GC-20, GC-28 — was 85% untested",
+    "multi_runner_2_outs": "GC-07, GC-14, GC-17, GC-23, GC-27, GC-29"
+  },
+  "clusters": [
+    {
+      "name": "Cluster 1: Hits",
+      "cases": [
+        {
+          "id": "GC-01",
+          "category": "Hits - Single",
+          "description": "Single with R2+R3, 0 outs — R3 scores, R2 to 3B (conservative default)",
+          "input_state": {
+            "outs": 0,
+            "bases": { "first": false, "second": true, "third": true },
+            "inning": 3,
+            "isTop": true,
+            "homeScore": 1,
+            "awayScore": 0
+          },
+          "action": "recordHit",
+          "action_args": {
+            "hitType": "1B",
+            "rbi": 1,
+            "runnerData": { "fromSecond": "third", "fromThird": "home" }
+          },
+          "expected_output": {
+            "outs": 0,
+            "bases": { "first": true, "second": false, "third": true },
+            "homeScore": 1,
+            "awayScore": 1,
+            "runs_scored_this_play": 1
+          },
+          "expected_player_stats": {
+            "batter": { "pa": 1, "ab": 1, "h": 1, "singles": 1, "rbi": 1 }
+          },
+          "expected_pitcher_stats": {
+            "runsAllowed": "+1",
+            "hitsAllowed": "+1"
+          },
+          "reasoning": "Single with R2+R3: R3 scores, R2 to 3B per getDefaultRunnerOutcome (1B + R2 → TO_3B). Batter to 1B. 1 RBI credited. R2+R3 was 85% untested base state. Fixed: original case had inconsistency (description said 2 runs but runnerData shows R2→3B not home).",
+          "alternative_if_aggressive": "If aggressive baserunning, R2 could score too (2 RBI). This case uses conservative defaults.",
+          "edge_case_notes": "Tests R2+R3 base state (priority gap). Verifies R2 advances to 3B (not scores) on a single."
+        },
+        {
+          "id": "GC-02",
+          "category": "Hits - Double",
+          "description": "Double with R1, 1 out — R1 to 3B, batter to 2B",
+          "input_state": {
+            "outs": 1,
+            "bases": { "first": true, "second": false, "third": false },
+            "inning": 5,
+            "isTop": false,
+            "homeScore": 2,
+            "awayScore": 3
+          },
+          "action": "recordHit",
+          "action_args": {
+            "hitType": "2B",
+            "rbi": 0,
+            "runnerData": { "fromFirst": "third" }
+          },
+          "expected_output": {
+            "outs": 1,
+            "bases": { "first": false, "second": true, "third": true },
+            "homeScore": 2,
+            "awayScore": 3,
+            "runs_scored_this_play": 0
+          },
+          "expected_player_stats": {
+            "batter": { "pa": 1, "ab": 1, "h": 1, "doubles": 1, "rbi": 0 }
+          },
+          "expected_pitcher_stats": {
+            "hitsAllowed": "+1"
+          },
+          "reasoning": "Double with R1: getDefaultRunnerOutcome returns TO_3B for R1 on 2B. Batter to 2B. No runs score. 1-out scenario (priority gap).",
+          "alternative_if_aggressive": "If aggressive, R1 could score on a double. Standard default is R1 to 3B.",
+          "edge_case_notes": "Tests 1-out scenario (93% untested). Non-scoring double with runner advancement."
+        },
+        {
+          "id": "GC-03",
+          "category": "Hits - Triple",
+          "description": "Triple with loaded bases, 0 outs — all 3 runners score",
+          "input_state": {
+            "outs": 0,
+            "bases": { "first": true, "second": true, "third": true },
+            "inning": 1,
+            "isTop": true,
+            "homeScore": 0,
+            "awayScore": 0
+          },
+          "action": "recordHit",
+          "action_args": {
+            "hitType": "3B",
+            "rbi": 3,
+            "runnerData": { "fromFirst": "home", "fromSecond": "home", "fromThird": "home" }
+          },
+          "expected_output": {
+            "outs": 0,
+            "bases": { "first": false, "second": false, "third": true },
+            "homeScore": 0,
+            "awayScore": 3,
+            "runs_scored_this_play": 3
+          },
+          "expected_player_stats": {
+            "batter": { "pa": 1, "ab": 1, "h": 1, "triples": 1, "rbi": 3 }
+          },
+          "expected_pitcher_stats": {
+            "runsAllowed": "+3",
+            "earnedRuns": "+3",
+            "hitsAllowed": "+1"
+          },
+          "reasoning": "Triple with bases loaded: getDefaultRunnerOutcome returns SCORED for ALL runners on 3B. Batter reaches 3B. 3 RBI. Tests loaded base state.",
+          "alternative_if_aggressive": "N/A — all runners always score on a triple.",
+          "edge_case_notes": "Tests loaded base state. Verifies all 3 runners score and pitcher charged with 3 ER."
+        },
+        {
+          "id": "GC-04",
+          "category": "Hits - Home Run",
+          "description": "Grand slam HR with loaded bases, 2 outs — 4 runs score",
+          "input_state": {
+            "outs": 2,
+            "bases": { "first": true, "second": true, "third": true },
+            "inning": 7,
+            "isTop": false,
+            "homeScore": 3,
+            "awayScore": 6
+          },
+          "action": "recordHit",
+          "action_args": {
+            "hitType": "HR",
+            "rbi": 4
+          },
+          "expected_output": {
+            "outs": 2,
+            "bases": { "first": false, "second": false, "third": false },
+            "homeScore": 7,
+            "awayScore": 6,
+            "runs_scored_this_play": 4
+          },
+          "expected_player_stats": {
+            "batter": { "pa": 1, "ab": 1, "h": 1, "hr": 1, "rbi": 4, "r": 1 }
+          },
+          "expected_pitcher_stats": {
+            "runsAllowed": "+4",
+            "earnedRuns": "+4",
+            "homeRunsAllowed": "+1",
+            "hitsAllowed": "+1"
+          },
+          "reasoning": "Grand slam: HR with no runnerData triggers auto-score for all runners (useGameState.ts:1137-1147). Batter also scores. Total 4 runs. Bases clear.",
+          "alternative_if_aggressive": "N/A — all runners always score on HR.",
+          "edge_case_notes": "Tests HR auto-score with no runnerData provided. Verifies 4 RBI and all bases cleared. Multi-runner at 2 outs (priority gap)."
+        },
+        {
+          "id": "GC-05",
+          "category": "Hits - Single",
+          "description": "Single with R1+R3, 1 out — R3 scores, R1 to 2B",
+          "input_state": {
+            "outs": 1,
+            "bases": { "first": true, "second": false, "third": true },
+            "inning": 4,
+            "isTop": true,
+            "homeScore": 2,
+            "awayScore": 1
+          },
+          "action": "recordHit",
+          "action_args": {
+            "hitType": "1B",
+            "rbi": 1,
+            "runnerData": { "fromFirst": "second", "fromThird": "home" }
+          },
+          "expected_output": {
+            "outs": 1,
+            "bases": { "first": true, "second": true, "third": false },
+            "homeScore": 2,
+            "awayScore": 2,
+            "runs_scored_this_play": 1
+          },
+          "expected_player_stats": {
+            "batter": { "pa": 1, "ab": 1, "h": 1, "singles": 1, "rbi": 1 }
+          },
+          "expected_pitcher_stats": {
+            "runsAllowed": "+1",
+            "earnedRuns": "+1",
+            "hitsAllowed": "+1"
+          },
+          "reasoning": "Single with R1+R3: R3 scores (default), R1 to 2B (default), batter to 1B. 1 RBI. Tests 1-out with R1+R3 base state.",
+          "alternative_if_aggressive": "R1 could go to 3B on aggressive single. Default is TO_2B.",
+          "edge_case_notes": "Tests 1-out scenario (priority gap) with R1+R3 base state."
+        }
+      ]
+    },
+    {
+      "name": "Cluster 2: Walks & HBP",
+      "cases": [
+        {
+          "id": "GC-06",
+          "category": "Walks - BB",
+          "description": "Walk with R2+R3, 0 outs — no force, runners hold",
+          "input_state": {
+            "outs": 0,
+            "bases": { "first": false, "second": true, "third": true },
+            "inning": 2,
+            "isTop": false,
+            "homeScore": 0,
+            "awayScore": 1
+          },
+          "action": "recordWalk",
+          "action_args": {
+            "walkType": "BB"
+          },
+          "expected_output": {
+            "outs": 0,
+            "bases": { "first": true, "second": true, "third": true },
+            "homeScore": 0,
+            "awayScore": 1,
+            "runs_scored_this_play": 0
+          },
+          "expected_player_stats": {
+            "batter": { "pa": 1, "ab": 0, "bb": 1 }
+          },
+          "expected_pitcher_stats": {
+            "walksAllowed": "+1",
+            "battersFaced": "+1"
+          },
+          "reasoning": "BB with R2+R3: R1 is empty so no force chain. R2 and R3 are NOT forced (isRunnerForced: R2 only forced if R1 occupied, R3 only forced if R1+R2 occupied). Batter to 1B. No runs. Bases become loaded. R2+R3 is priority gap (85% untested).",
+          "alternative_if_aggressive": "N/A — walks only advance forced runners.",
+          "edge_case_notes": "KEY TEST: Verifies that R2+R3 runners HOLD on a walk when R1 is empty. Common misconception that R3 advances on any walk."
+        },
+        {
+          "id": "GC-07",
+          "category": "Walks - BB Loaded",
+          "description": "Walk with loaded bases, 2 outs — forced run scores",
+          "input_state": {
+            "outs": 2,
+            "bases": { "first": true, "second": true, "third": true },
+            "inning": 6,
+            "isTop": true,
+            "homeScore": 4,
+            "awayScore": 3
+          },
+          "action": "recordWalk",
+          "action_args": {
+            "walkType": "BB"
+          },
+          "expected_output": {
+            "outs": 2,
+            "bases": { "first": true, "second": true, "third": true },
+            "homeScore": 4,
+            "awayScore": 4,
+            "runs_scored_this_play": 1
+          },
+          "expected_player_stats": {
+            "batter": { "pa": 1, "ab": 0, "bb": 1, "rbi": 1 }
+          },
+          "expected_pitcher_stats": {
+            "walksAllowed": "+1",
+            "basesLoadedWalks": "+1",
+            "runsAllowed": "+1",
+            "earnedRuns": "+1"
+          },
+          "reasoning": "Bases loaded walk: all runners forced. R3 forced home (scores). R2 to 3B, R1 to 2B, batter to 1B. Bases remain loaded. 1 RBI. Uses force advance logic at useGameState.ts:1778-1782. Multi-runner at 2 outs (priority gap).",
+          "alternative_if_aggressive": "N/A — forced advance only.",
+          "edge_case_notes": "Verifies bases loaded walk force advance pattern. Confirms basesLoadedWalks stat incremented. Tests multi-runner at 2 outs."
+        },
+        {
+          "id": "GC-08",
+          "category": "Walks - HBP",
+          "description": "HBP with R1+R2, 1 out — forced advance, R2 to 3B",
+          "input_state": {
+            "outs": 1,
+            "bases": { "first": true, "second": true, "third": false },
+            "inning": 3,
+            "isTop": false,
+            "homeScore": 1,
+            "awayScore": 1
+          },
+          "action": "recordWalk",
+          "action_args": {
+            "walkType": "HBP"
+          },
+          "expected_output": {
+            "outs": 1,
+            "bases": { "first": true, "second": true, "third": true },
+            "homeScore": 1,
+            "awayScore": 1,
+            "runs_scored_this_play": 0
+          },
+          "expected_player_stats": {
+            "batter": { "pa": 1, "ab": 0, "hbp": 1 }
+          },
+          "expected_pitcher_stats": {
+            "hitByPitch": "+1",
+            "battersFaced": "+1"
+          },
+          "reasoning": "HBP with R1+R2: R1 forced to 2B, R2 forced to 3B (R2 forced because R1 occupied). Batter to 1B. Bases become loaded. HBP tracked separately from BB per MAJ-07. 1-out scenario (priority gap).",
+          "alternative_if_aggressive": "N/A — forced advance only.",
+          "edge_case_notes": "Tests HBP separate stat tracking (MAJ-07). Verifies hitByPitch incremented, not walksAllowed. 1-out priority gap."
+        }
+      ]
+    },
+    {
+      "name": "Cluster 3: Standard Outs",
+      "cases": [
+        {
+          "id": "GC-09",
+          "category": "Outs - Strikeout",
+          "description": "Strikeout (K) with bases empty, 0 outs",
+          "input_state": {
+            "outs": 0,
+            "bases": { "first": false, "second": false, "third": false },
+            "inning": 1,
+            "isTop": true,
+            "homeScore": 0,
+            "awayScore": 0
+          },
+          "action": "recordOut",
+          "action_args": {
+            "outType": "K"
+          },
+          "expected_output": {
+            "outs": 1,
+            "bases": { "first": false, "second": false, "third": false },
+            "homeScore": 0,
+            "awayScore": 0,
+            "runs_scored_this_play": 0
+          },
+          "expected_player_stats": {
+            "batter": { "pa": 1, "ab": 1, "k": 1 }
+          },
+          "expected_pitcher_stats": {
+            "strikeoutsThrown": "+1",
+            "outsRecorded": "+1",
+            "battersFaced": "+1"
+          },
+          "reasoning": "Basic K: 1 out added, batter gets PA+AB+K, pitcher gets K+out+BF. No runner movement. Simplest case.",
+          "alternative_if_aggressive": "N/A",
+          "edge_case_notes": "Baseline case. Verifies basic out recording."
+        },
+        {
+          "id": "GC-10",
+          "category": "Outs - Groundout",
+          "description": "Groundout with R3, 0 outs — R3 holds, batter out",
+          "input_state": {
+            "outs": 0,
+            "bases": { "first": false, "second": false, "third": true },
+            "inning": 4,
+            "isTop": false,
+            "homeScore": 0,
+            "awayScore": 0
+          },
+          "action": "recordOut",
+          "action_args": {
+            "outType": "GO"
+          },
+          "expected_output": {
+            "outs": 1,
+            "bases": { "first": false, "second": false, "third": true },
+            "homeScore": 0,
+            "awayScore": 0,
+            "runs_scored_this_play": 0
+          },
+          "expected_player_stats": {
+            "batter": { "pa": 1, "ab": 1 }
+          },
+          "expected_pitcher_stats": {
+            "outsRecorded": "+1",
+            "battersFaced": "+1"
+          },
+          "reasoning": "GO with R3 only: R3 HELD per getDefaultRunnerOutcome (GO -> HELD for all). Batter out. R3 not forced (no R1). 1 out added.",
+          "alternative_if_aggressive": "R3 could score on GO if infield drawn in. Default is HELD.",
+          "edge_case_notes": "Verifies R3 does NOT automatically score on GO. Important because FO is different (R3 tags up on FO)."
+        },
+        {
+          "id": "GC-11",
+          "category": "Outs - Flyout with tag-up",
+          "description": "Flyout with R3, 1 out — R3 tags up and scores",
+          "input_state": {
+            "outs": 1,
+            "bases": { "first": false, "second": false, "third": true },
+            "inning": 5,
+            "isTop": true,
+            "homeScore": 2,
+            "awayScore": 2
+          },
+          "action": "recordOut",
+          "action_args": {
+            "outType": "FO",
+            "runnerData": { "fromThird": "home" }
+          },
+          "expected_output": {
+            "outs": 2,
+            "bases": { "first": false, "second": false, "third": false },
+            "homeScore": 2,
+            "awayScore": 3,
+            "runs_scored_this_play": 1
+          },
+          "expected_player_stats": {
+            "batter": { "pa": 1, "ab": 1, "rbi": 1 }
+          },
+          "expected_pitcher_stats": {
+            "outsRecorded": "+1",
+            "runsAllowed": "+1",
+            "earnedRuns": "+1"
+          },
+          "reasoning": "FO with R3 and <2 outs: getDefaultRunnerOutcome returns SCORED for R3 (tag up). This should auto-correct to SF via autoCorrectResult (FO + R3 scores + <2 outs -> SF). 1-out scenario (priority gap).",
+          "alternative_if_aggressive": "N/A — tag up is the standard outcome.",
+          "edge_case_notes": "CRITICAL: Should auto-correct FO->SF. Verify both the auto-correction AND the run scoring. Tests 1-out priority gap."
+        },
+        {
+          "id": "GC-12",
+          "category": "Outs - Lineout",
+          "description": "Lineout with R1+R2, 2 outs — no runner advancement",
+          "input_state": {
+            "outs": 2,
+            "bases": { "first": true, "second": true, "third": false },
+            "inning": 7,
+            "isTop": false,
+            "homeScore": 5,
+            "awayScore": 4
+          },
+          "action": "recordOut",
+          "action_args": {
+            "outType": "LO"
+          },
+          "expected_output": {
+            "outs": 3,
+            "bases": { "first": false, "second": false, "third": false },
+            "homeScore": 5,
+            "awayScore": 4,
+            "runs_scored_this_play": 0,
+            "triggers_end_inning": true
+          },
+          "expected_player_stats": {
+            "batter": { "pa": 1, "ab": 1 }
+          },
+          "expected_pitcher_stats": {
+            "outsRecorded": "+1"
+          },
+          "reasoning": "LO with R1+R2, 2 outs: 3rd out recorded, inning ends. Runners stranded. No runs score. Bases clear for next half-inning. LO runners HOLD per getDefaultRunnerOutcome.",
+          "alternative_if_aggressive": "N/A",
+          "edge_case_notes": "Tests inning-ending 3rd out. Verifies bases clear and auto-endInning triggers after 500ms delay."
+        }
+      ]
+    },
+    {
+      "name": "Cluster 4: Strikeout Looking & D3K (Priority Gaps)",
+      "cases": [
+        {
+          "id": "GC-13",
+          "category": "Outs - KL",
+          "description": "Strikeout looking with R1, 1 out — runners hold",
+          "input_state": {
+            "outs": 1,
+            "bases": { "first": true, "second": false, "third": false },
+            "inning": 3,
+            "isTop": true,
+            "homeScore": 0,
+            "awayScore": 0
+          },
+          "action": "recordOut",
+          "action_args": {
+            "outType": "KL"
+          },
+          "expected_output": {
+            "outs": 2,
+            "bases": { "first": true, "second": false, "third": false },
+            "homeScore": 0,
+            "awayScore": 0,
+            "runs_scored_this_play": 0
+          },
+          "expected_player_stats": {
+            "batter": { "pa": 1, "ab": 1, "k": 1 }
+          },
+          "expected_pitcher_stats": {
+            "strikeoutsThrown": "+1",
+            "outsRecorded": "+1",
+            "battersFaced": "+1"
+          },
+          "reasoning": "KL with R1: Runner HELD per getDefaultRunnerOutcome (K/KL -> HELD). KL and K produce identical stat effects — both are strikeouts. KL had ZERO test coverage. 1-out scenario (priority gap).",
+          "alternative_if_aggressive": "N/A — runners hold on strikeout.",
+          "edge_case_notes": "PRIORITY: KL was 0% tested. Verifies KL behaves identically to K for stats. Tests 1-out gap."
+        },
+        {
+          "id": "GC-14",
+          "category": "Outs - KL",
+          "description": "KL with R2+R3, 2 outs — 3rd out, stranded runners",
+          "input_state": {
+            "outs": 2,
+            "bases": { "first": false, "second": true, "third": true },
+            "inning": 8,
+            "isTop": false,
+            "homeScore": 3,
+            "awayScore": 4
+          },
+          "action": "recordOut",
+          "action_args": {
+            "outType": "KL"
+          },
+          "expected_output": {
+            "outs": 3,
+            "bases": { "first": false, "second": false, "third": false },
+            "homeScore": 3,
+            "awayScore": 4,
+            "runs_scored_this_play": 0,
+            "triggers_end_inning": true
+          },
+          "expected_player_stats": {
+            "batter": { "pa": 1, "ab": 1, "k": 1 }
+          },
+          "expected_pitcher_stats": {
+            "strikeoutsThrown": "+1",
+            "outsRecorded": "+1"
+          },
+          "reasoning": "KL with R2+R3, 2 outs: 3rd out ends inning. Runners stranded — NO runs score. Tests KL (0% coverage), R2+R3 (85% untested), and multi-runner at 2 outs (priority gap). Triple priority coverage.",
+          "alternative_if_aggressive": "N/A",
+          "edge_case_notes": "TRIPLE PRIORITY: KL + R2+R3 + 2 outs. Verifies runners stranded on 3rd out."
+        },
+        {
+          "id": "GC-15",
+          "category": "Outs - D3K (batter reaches)",
+          "description": "D3K with bases empty, 2 outs — batter reaches 1B",
+          "input_state": {
+            "outs": 2,
+            "bases": { "first": false, "second": false, "third": false },
+            "inning": 6,
+            "isTop": true,
+            "homeScore": 1,
+            "awayScore": 1
+          },
+          "action": "recordD3K",
+          "action_args": {
+            "batterReached": true
+          },
+          "expected_output": {
+            "outs": 2,
+            "bases": { "first": true, "second": false, "third": false },
+            "homeScore": 1,
+            "awayScore": 1,
+            "runs_scored_this_play": 0
+          },
+          "expected_player_stats": {
+            "batter": { "pa": 1, "ab": 1, "k": 1 }
+          },
+          "expected_pitcher_stats": {
+            "strikeoutsThrown": "+1",
+            "battersFaced": "+1"
+          },
+          "expected_bugs": {
+            "D-05": {
+              "field": "leverageIndex",
+              "expected_correct": "getBaseOutLI(0, 2) which is ~0.348",
+              "actual_in_code": "1.0 (hardcoded)",
+              "status": "EXPECTED FAIL"
+            }
+          },
+          "reasoning": "D3K with empty bases, 2 outs: legal because 1B is empty. Batter reaches 1B. K stat credited to BOTH batter and pitcher per D3K rules. No out recorded because batterReached=true. D-05 bug: leverageIndex hardcoded to 1.0.",
+          "alternative_if_aggressive": "N/A",
+          "edge_case_notes": "EXPECTED FAIL (D-05): leverageIndex should use getBaseOutLI but is hardcoded to 1.0. Verify batter gets K stat despite reaching base."
+        },
+        {
+          "id": "GC-16",
+          "category": "Outs - D3K (batter out)",
+          "description": "D3K with R1, 1 out — batter out (can't reach, 1B occupied with <2 outs)",
+          "input_state": {
+            "outs": 1,
+            "bases": { "first": true, "second": false, "third": false },
+            "inning": 4,
+            "isTop": false,
+            "homeScore": 0,
+            "awayScore": 2
+          },
+          "action": "recordD3K",
+          "action_args": {
+            "batterReached": false
+          },
+          "expected_output": {
+            "outs": 2,
+            "bases": { "first": true, "second": false, "third": false },
+            "homeScore": 0,
+            "awayScore": 2,
+            "runs_scored_this_play": 0
+          },
+          "expected_player_stats": {
+            "batter": { "pa": 1, "ab": 1, "k": 1 }
+          },
+          "expected_pitcher_stats": {
+            "strikeoutsThrown": "+1",
+            "outsRecorded": "+1",
+            "battersFaced": "+1"
+          },
+          "expected_bugs": {
+            "D-05": {
+              "field": "leverageIndex",
+              "expected_correct": "getBaseOutLI(1, 1) which is ~2.17",
+              "actual_in_code": "1.0 (hardcoded)",
+              "status": "EXPECTED FAIL"
+            }
+          },
+          "reasoning": "D3K with R1, 1 out: batter cannot reach because 1B is occupied and <2 outs. batterReached=false means out recorded. Runner holds. 1-out priority gap.",
+          "alternative_if_aggressive": "N/A",
+          "edge_case_notes": "EXPECTED FAIL (D-05). Tests D3K legality — 1B occupied with <2 outs means batter must be retired. 1-out gap."
+        }
+      ]
+    },
+    {
+      "name": "Cluster 5: Double Plays & Triple Plays",
+      "cases": [
+        {
+          "id": "GC-17",
+          "category": "Outs - DP",
+          "description": "Double play with loaded bases, 0 outs — R1 out at 2B, batter out at 1B",
+          "input_state": {
+            "outs": 0,
+            "bases": { "first": true, "second": true, "third": true },
+            "inning": 5,
+            "isTop": true,
+            "homeScore": 2,
+            "awayScore": 1
+          },
+          "action": "recordOut",
+          "action_args": {
+            "outType": "DP",
+            "runnerData": { "fromFirst": "out", "fromSecond": "third", "fromThird": "home" }
+          },
+          "expected_output": {
+            "outs": 2,
+            "bases": { "first": false, "second": false, "third": true },
+            "homeScore": 2,
+            "awayScore": 2,
+            "runs_scored_this_play": 1
+          },
+          "expected_player_stats": {
+            "batter": { "pa": 1, "ab": 1, "rbi": 0 }
+          },
+          "expected_pitcher_stats": {
+            "outsRecorded": "+2",
+            "runsAllowed": "+1"
+          },
+          "reasoning": "DP with loaded bases: R3 scores, R2 to 3B, R1 out at 2B, batter out at 1B. 2 outs added. DP gives 0 RBI per calculateRBIs (DP/TP always 0). R3 scores despite DP because run scored before 3rd out.",
+          "alternative_if_aggressive": "N/A — DP outcomes are deterministic.",
+          "edge_case_notes": "Tests DP with loaded bases. Verifies 0 RBI rule for DP even though run scores. Multi-runner at play."
+        },
+        {
+          "id": "GC-18",
+          "category": "Outs - DP",
+          "description": "DP with R1 only, 0 outs — classic 6-4-3",
+          "input_state": {
+            "outs": 0,
+            "bases": { "first": true, "second": false, "third": false },
+            "inning": 2,
+            "isTop": false,
+            "homeScore": 0,
+            "awayScore": 0
+          },
+          "action": "recordOut",
+          "action_args": {
+            "outType": "DP",
+            "runnerData": { "fromFirst": "out" }
+          },
+          "expected_output": {
+            "outs": 2,
+            "bases": { "first": false, "second": false, "third": false },
+            "homeScore": 0,
+            "awayScore": 0,
+            "runs_scored_this_play": 0
+          },
+          "expected_player_stats": {
+            "batter": { "pa": 1, "ab": 1 }
+          },
+          "expected_pitcher_stats": {
+            "outsRecorded": "+2",
+            "battersFaced": "+1"
+          },
+          "reasoning": "Classic DP with R1: getDefaultRunnerOutcome returns OUT_2B for R1 on DP. Batter out at 1B. 2 outs. Bases clear.",
+          "alternative_if_aggressive": "N/A",
+          "edge_case_notes": "Simple DP case. Verifies 2 outs recorded and R1 removed."
+        },
+        {
+          "id": "GC-19",
+          "category": "Outs - TP",
+          "description": "Triple play with R1+R2, 0 outs — all runners and batter out, inning ends",
+          "input_state": {
+            "outs": 0,
+            "bases": { "first": true, "second": true, "third": false },
+            "inning": 3,
+            "isTop": true,
+            "homeScore": 1,
+            "awayScore": 0
+          },
+          "action": "recordOut",
+          "action_args": {
+            "outType": "TP",
+            "runnerData": { "fromFirst": "out", "fromSecond": "out" }
+          },
+          "expected_output": {
+            "outs": 3,
+            "bases": { "first": false, "second": false, "third": false },
+            "homeScore": 1,
+            "awayScore": 0,
+            "runs_scored_this_play": 0,
+            "triggers_end_inning": true
+          },
+          "expected_player_stats": {
+            "batter": { "pa": 1, "ab": 1 }
+          },
+          "expected_pitcher_stats": {
+            "outsRecorded": "+3"
+          },
+          "reasoning": "TP with R1+R2: getDefaultRunnerOutcome returns OUT_2B for R1, OUT_3B for R2, batter out. 3 outs = inning ends. 0 RBI (DP/TP rule). Rare play but must be handled.",
+          "alternative_if_aggressive": "N/A",
+          "edge_case_notes": "Tests TP (rare outcome). Verifies 3 outs recorded in single play and inning ends."
+        }
+      ]
+    },
+    {
+      "name": "Cluster 6: Sacrifice Plays & Fielder's Choice",
+      "cases": [
+        {
+          "id": "GC-20",
+          "category": "Outs - SF",
+          "description": "Sacrifice fly with R2+R3, 0 outs — R3 scores, R2 holds",
+          "input_state": {
+            "outs": 0,
+            "bases": { "first": false, "second": true, "third": true },
+            "inning": 8,
+            "isTop": false,
+            "homeScore": 4,
+            "awayScore": 5
+          },
+          "action": "recordOut",
+          "action_args": {
+            "outType": "SF",
+            "runnerData": { "fromThird": "home" }
+          },
+          "expected_output": {
+            "outs": 1,
+            "bases": { "first": false, "second": true, "third": false },
+            "homeScore": 5,
+            "awayScore": 5,
+            "runs_scored_this_play": 1
+          },
+          "expected_player_stats": {
+            "batter": { "pa": 1, "ab": 0, "rbi": 1 }
+          },
+          "expected_pitcher_stats": {
+            "outsRecorded": "+1",
+            "runsAllowed": "+1",
+            "earnedRuns": "+1"
+          },
+          "reasoning": "SF with R2+R3: R3 scores (that's what defines SF), R2 HELD per getDefaultRunnerOutcome. SF does NOT count as AB (line 1496). 1 RBI auto-credited per SF rule (line 1462). R2+R3 priority gap.",
+          "alternative_if_aggressive": "R2 could tag up to 3B. Default is HELD.",
+          "edge_case_notes": "Tests SF no-AB rule + R2+R3 gap. Verifies ab=0 for batter."
+        },
+        {
+          "id": "GC-21",
+          "category": "Outs - SH (SAC)",
+          "description": "Sacrifice bunt with R1, 0 outs — R1 to 2B, batter out",
+          "input_state": {
+            "outs": 0,
+            "bases": { "first": true, "second": false, "third": false },
+            "inning": 7,
+            "isTop": true,
+            "homeScore": 3,
+            "awayScore": 3
+          },
+          "action": "recordOut",
+          "action_args": {
+            "outType": "SH",
+            "runnerData": { "fromFirst": "second" }
+          },
+          "expected_output": {
+            "outs": 1,
+            "bases": { "first": false, "second": true, "third": false },
+            "homeScore": 3,
+            "awayScore": 3,
+            "runs_scored_this_play": 0
+          },
+          "expected_player_stats": {
+            "batter": { "pa": 1, "ab": 0 }
+          },
+          "expected_pitcher_stats": {
+            "outsRecorded": "+1",
+            "battersFaced": "+1"
+          },
+          "reasoning": "SAC bunt with R1: R1 advances to 2B per getDefaultRunnerOutcome (SAC -> R1 TO_2B). Batter out. SAC does NOT count as AB (same as SF, line 1496). 0 RBI.",
+          "alternative_if_aggressive": "N/A — SAC advancement is standard.",
+          "edge_case_notes": "Tests SAC/SH no-AB rule. Note: code uses 'SH' as OutType but getDefaultRunnerOutcome checks 'SAC'."
+        },
+        {
+          "id": "GC-22",
+          "category": "Outs - FC",
+          "description": "Fielder's choice with R1+R3, 1 out — R1 out at 2B, R3 holds, batter reaches",
+          "input_state": {
+            "outs": 1,
+            "bases": { "first": true, "second": false, "third": true },
+            "inning": 6,
+            "isTop": false,
+            "homeScore": 3,
+            "awayScore": 2
+          },
+          "action": "recordOut",
+          "action_args": {
+            "outType": "FC",
+            "runnerData": { "fromFirst": "out" }
+          },
+          "expected_output": {
+            "outs": 2,
+            "bases": { "first": true, "second": false, "third": true },
+            "homeScore": 3,
+            "awayScore": 2,
+            "runs_scored_this_play": 0
+          },
+          "expected_player_stats": {
+            "batter": { "pa": 1, "ab": 1 }
+          },
+          "expected_pitcher_stats": {
+            "outsRecorded": "+1",
+            "battersFaced": "+1"
+          },
+          "reasoning": "FC with R1+R3: R1 OUT_2B per getDefaultRunnerOutcome (FC -> R1 OUT_2B). R3 HELD. Batter reaches 1B (FC: batter safe, line 1429). 1 out from runner, batter NOT out. Tests FC batter-reaches-base logic. 1-out priority gap.",
+          "alternative_if_aggressive": "R3 could score on FC. Default is HELD.",
+          "edge_case_notes": "CRITICAL: FC is special — batter reaches base while a runner is put out. Verify batter on 1B. Tests 1-out gap + R1+R3 state."
+        }
+      ]
+    },
+    {
+      "name": "Cluster 7: Errors & Walks (IBB)",
+      "cases": [
+        {
+          "id": "GC-23",
+          "category": "Error",
+          "description": "Error with R1+R2, 2 outs — all runners advance one base, batter reaches",
+          "input_state": {
+            "outs": 2,
+            "bases": { "first": true, "second": true, "third": false },
+            "inning": 5,
+            "isTop": true,
+            "homeScore": 1,
+            "awayScore": 0
+          },
+          "action": "recordError",
+          "action_args": {
+            "rbi": 0,
+            "runnerData": { "fromFirst": "second", "fromSecond": "third" }
+          },
+          "expected_output": {
+            "outs": 2,
+            "bases": { "first": true, "second": true, "third": true },
+            "homeScore": 1,
+            "awayScore": 0,
+            "runs_scored_this_play": 0
+          },
+          "expected_player_stats": {
+            "batter": { "pa": 1, "ab": 1 }
+          },
+          "expected_pitcher_stats": {
+            "battersFaced": "+1"
+          },
+          "expected_scoreboard": {
+            "fielding_team_errors": "+1"
+          },
+          "expected_bugs": {
+            "D-04": {
+              "field": "rbi parameter",
+              "expected_correct": "recordError should ignore rbi parameter; errors never credit RBI per calculateRBIs",
+              "actual_in_code": "recordError accepts rbi parameter and adds it to batter stats (line 2014)",
+              "status": "EXPECTED FAIL"
+            }
+          },
+          "reasoning": "Error with R1+R2: getDefaultRunnerOutcome returns TO_2B for R1, TO_3B for R2 (E -> everyone advances one base). Batter reaches 1B with howReached='error'. Bases become loaded. 0 RBI on errors. Multi-runner at 2 outs (priority gap).",
+          "alternative_if_aggressive": "Runners could advance further on error. Default is +1 base each.",
+          "edge_case_notes": "EXPECTED FAIL (D-04): rbi parameter accepted but calculateRBIs returns 0 for errors. Tests error RBI discrepancy. Multi-runner at 2 outs."
+        },
+        {
+          "id": "GC-24",
+          "category": "Error",
+          "description": "Error with R3, 0 outs — R3 scores as unearned run",
+          "input_state": {
+            "outs": 0,
+            "bases": { "first": false, "second": false, "third": true },
+            "inning": 3,
+            "isTop": false,
+            "homeScore": 0,
+            "awayScore": 1
+          },
+          "action": "recordError",
+          "action_args": {
+            "rbi": 0,
+            "runnerData": { "fromThird": "home" }
+          },
+          "expected_output": {
+            "outs": 0,
+            "bases": { "first": true, "second": false, "third": false },
+            "homeScore": 1,
+            "awayScore": 1,
+            "runs_scored_this_play": 1
+          },
+          "expected_player_stats": {
+            "batter": { "pa": 1, "ab": 1, "rbi": 0 }
+          },
+          "expected_pitcher_stats": {
+            "runsAllowed": "+1",
+            "earnedRuns": "+0"
+          },
+          "expected_scoreboard": {
+            "fielding_team_errors": "+1"
+          },
+          "reasoning": "Error with R3: R3 scores per getDefaultRunnerOutcome (E -> R3 SCORED). Batter to 1B with howReached='error'. Run is UNEARNED (errors produce UER, not ER). 0 RBI per calculateRBIs. Fielding team errors +1.",
+          "alternative_if_aggressive": "N/A — R3 always scores on error.",
+          "edge_case_notes": "KEY: Verifies run scored on error is UNEARNED. earnedRuns should NOT increment. Tests ER attribution logic."
+        },
+        {
+          "id": "GC-25",
+          "category": "Walks - IBB",
+          "description": "Intentional walk with R2, 1 out — R2 holds, batter to 1B",
+          "input_state": {
+            "outs": 1,
+            "bases": { "first": false, "second": true, "third": false },
+            "inning": 7,
+            "isTop": true,
+            "homeScore": 3,
+            "awayScore": 3
+          },
+          "action": "recordWalk",
+          "action_args": {
+            "walkType": "IBB"
+          },
+          "expected_output": {
+            "outs": 1,
+            "bases": { "first": true, "second": true, "third": false },
+            "homeScore": 3,
+            "awayScore": 3,
+            "runs_scored_this_play": 0
+          },
+          "expected_player_stats": {
+            "batter": { "pa": 1, "ab": 0, "bb": 0 }
+          },
+          "expected_pitcher_stats": {
+            "intentionalWalks": "+1",
+            "battersFaced": "+1",
+            "walksAllowed": "+0"
+          },
+          "reasoning": "IBB with R2: R2 not forced (R1 empty), so R2 HELD. Batter to 1B. IBB tracked as intentionalWalk, NOT walksAllowed (separate stat per MAJ-07). 1-out priority gap. PA counts but NOT AB, and NOT bb.",
+          "alternative_if_aggressive": "N/A — forced advance only.",
+          "edge_case_notes": "Tests IBB stat tracking — intentionalWalks incremented, walksAllowed NOT incremented. 1-out gap."
+        }
+      ]
+    },
+    {
+      "name": "Cluster 8: Inning & Game Transitions + Fame Events",
+      "cases": [
+        {
+          "id": "GC-26",
+          "category": "Transition - Walk-off",
+          "description": "Walk-off HR in bottom 9, home team trailing by 1 — game ends",
+          "input_state": {
+            "outs": 1,
+            "bases": { "first": true, "second": false, "third": false },
+            "inning": 9,
+            "isTop": false,
+            "homeScore": 4,
+            "awayScore": 5
+          },
+          "action": "recordHit",
+          "action_args": {
+            "hitType": "HR",
+            "rbi": 2
+          },
+          "expected_output": {
+            "outs": 1,
+            "bases": { "first": false, "second": false, "third": false },
+            "homeScore": 6,
+            "awayScore": 5,
+            "runs_scored_this_play": 2,
+            "isWalkOff": true
+          },
+          "expected_player_stats": {
+            "batter": { "pa": 1, "ab": 1, "h": 1, "hr": 1, "rbi": 2, "r": 1 }
+          },
+          "expected_pitcher_stats": {
+            "runsAllowed": "+2",
+            "earnedRuns": "+2",
+            "homeRunsAllowed": "+1",
+            "hitsAllowed": "+1"
+          },
+          "reasoning": "Walk-off HR: bottom 9+, home trailing, HR gives home the lead. Walk-off detection: isBottom && inning>=9 && homeScoreAfter > awayScoreAfter && homeScore <= awayScore (line 1175-1180). R1 auto-scores on HR.",
+          "alternative_if_aggressive": "N/A",
+          "edge_case_notes": "Tests walk-off detection. Verifies isWalkOff=true in AtBatEvent. Home was trailing 4-5, HR scores 2 (batter + R1) for 6-5 win."
+        },
+        {
+          "id": "GC-27",
+          "category": "Transition - 3rd out with runner scoring",
+          "description": "GO with R1+R3, 2 outs — 3rd out on force at 2B, R3 run does NOT count",
+          "input_state": {
+            "outs": 2,
+            "bases": { "first": true, "second": false, "third": true },
+            "inning": 4,
+            "isTop": true,
+            "homeScore": 2,
+            "awayScore": 1
+          },
+          "action": "recordOut",
+          "action_args": {
+            "outType": "GO",
+            "runnerData": { "fromFirst": "out", "fromThird": "home" }
+          },
+          "expected_output": {
+            "outs": 3,
+            "bases": { "first": false, "second": false, "third": false },
+            "homeScore": 2,
+            "awayScore": 1,
+            "runs_scored_this_play": 0,
+            "triggers_end_inning": true
+          },
+          "expected_player_stats": {
+            "batter": { "pa": 1, "ab": 1 }
+          },
+          "expected_pitcher_stats": {
+            "outsRecorded": "+1"
+          },
+          "reasoning": "GO with R1+R3, 2 outs: this should auto-correct to DP (GO + runner out + <2 outs check — wait, outs=2 so auto-correct may NOT trigger). The force out at 2B is the 3rd out. Per timing rule, if the 3rd out is a FORCE out, NO runs score even if R3 crossed home plate before the force. R3's run is nullified. Multi-runner at 2 outs (priority gap).",
+          "alternative_if_aggressive": "N/A — force out timing rule is absolute.",
+          "edge_case_notes": "CRITICAL TIMING RULE: Force out at 2B for 3rd out means R3's run does NOT count. This is one of baseball's most important rules. Tests multi-runner at 2 outs."
+        },
+        {
+          "id": "GC-28",
+          "category": "Outs - PO",
+          "description": "Popup with R2+R3, 1 out — runners hold",
+          "input_state": {
+            "outs": 1,
+            "bases": { "first": false, "second": true, "third": true },
+            "inning": 2,
+            "isTop": false,
+            "homeScore": 0,
+            "awayScore": 0
+          },
+          "action": "recordOut",
+          "action_args": {
+            "outType": "PO"
+          },
+          "expected_output": {
+            "outs": 2,
+            "bases": { "first": false, "second": true, "third": true },
+            "homeScore": 0,
+            "awayScore": 0,
+            "runs_scored_this_play": 0
+          },
+          "expected_player_stats": {
+            "batter": { "pa": 1, "ab": 1 }
+          },
+          "expected_pitcher_stats": {
+            "outsRecorded": "+1",
+            "battersFaced": "+1"
+          },
+          "reasoning": "PO with R2+R3: runners HELD per getDefaultRunnerOutcome (FO/LO/PO -> HELD, exception only for R3 tag-up on FO). PO does NOT allow tag-up scoring. R2+R3 priority gap + 1-out gap.",
+          "alternative_if_aggressive": "N/A — no tag-up opportunity on popup.",
+          "edge_case_notes": "Tests PO vs FO distinction: FO allows R3 tag-up, PO does NOT. R2+R3 gap + 1-out gap."
+        },
+        {
+          "id": "GC-29",
+          "category": "Fame - TOOTBLAN",
+          "description": "TOOTBLAN event with R1, 2 outs — fame calculation",
+          "input_state": {
+            "outs": 2,
+            "bases": { "first": true, "second": false, "third": false },
+            "inning": 7,
+            "isTop": true,
+            "homeScore": 5,
+            "awayScore": 4
+          },
+          "action": "recordEvent",
+          "action_args": {
+            "eventType": "TOOTBLAN",
+            "runnerId": "runner-001"
+          },
+          "expected_output": {
+            "fame_event": {
+              "eventType": "TOOTBLAN",
+              "fameType": "boner",
+              "baseFame": -3.0,
+              "adjustedFame_formula": "baseFame * sqrt(LI)"
+            },
+            "leverageIndex_lookup": "getBaseOutLI(1, 2)"
+          },
+          "expected_bugs": {
+            "D-07": {
+              "field": "baseFame",
+              "expected_correct": "-0.5 (standard) or -2.0 (rally killer)",
+              "actual_in_code": "-3.0 (flat, no tiered logic)",
+              "status": "EXPECTED FAIL"
+            }
+          },
+          "reasoning": "TOOTBLAN with R1, 2 outs: fame event recorded with baseFame=-3.0. Formula: adjustedFame = -3.0 * sqrt(LI). D-07 bug: spec says -0.5 base / -2.0 rally killer, code uses flat -3.0.",
+          "alternative_if_aggressive": "N/A",
+          "edge_case_notes": "EXPECTED FAIL (D-07): TOOTBLAN fame is flat -3.0 instead of tiered system. This TOOTBLAN at 2 outs should be a 'rally killer' at -2.0 per spec."
+        },
+        {
+          "id": "GC-30",
+          "category": "Transition - Inning end",
+          "description": "Flyout for 3rd out in top of inning — transition to bottom half",
+          "input_state": {
+            "outs": 2,
+            "bases": { "first": false, "second": true, "third": false },
+            "inning": 5,
+            "isTop": true,
+            "homeScore": 3,
+            "awayScore": 2
+          },
+          "action": "recordOut",
+          "action_args": {
+            "outType": "FO"
+          },
+          "expected_output": {
+            "outs": 3,
+            "bases": { "first": false, "second": false, "third": false },
+            "homeScore": 3,
+            "awayScore": 2,
+            "runs_scored_this_play": 0,
+            "triggers_end_inning": true,
+            "after_end_inning": {
+              "outs": 0,
+              "bases": { "first": false, "second": false, "third": false },
+              "isTop": false,
+              "inning": 5
+            }
+          },
+          "expected_player_stats": {
+            "batter": { "pa": 1, "ab": 1 }
+          },
+          "expected_pitcher_stats": {
+            "outsRecorded": "+1"
+          },
+          "reasoning": "FO for 3rd out: triggers endInning. R2 stranded. After endInning: outs reset to 0, bases clear, isTop flips to false (bottom 5th). Inning number stays 5 (only increments on bottom->top transition).",
+          "alternative_if_aggressive": "N/A",
+          "edge_case_notes": "Tests TOP->BOTTOM transition. Verifies: outs reset, bases clear, isTop flips, inning stays same. Also tests R2 stranded on FO (no tag-up on FO from 2B)."
+        }
+      ]
+    }
+  ]
+}

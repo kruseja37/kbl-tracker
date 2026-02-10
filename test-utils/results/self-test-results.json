@@ -1,0 +1,1330 @@
+{
+  "timestamp": "2026-02-09T18:19:38.226Z",
+  "total_golden_cases": 30,
+  "oracle_passes": 29,
+  "oracle_fails": 0,
+  "skipped": 1,
+  "failures": [],
+  "details": [
+    {
+      "id": "GC-01",
+      "status": "PASS",
+      "checks": [
+        {
+          "field": "outs",
+          "expected": 0,
+          "oracle": 0,
+          "match": true
+        },
+        {
+          "field": "bases.first",
+          "expected": true,
+          "oracle": true,
+          "match": true
+        },
+        {
+          "field": "bases.second",
+          "expected": false,
+          "oracle": false,
+          "match": true
+        },
+        {
+          "field": "bases.third",
+          "expected": true,
+          "oracle": true,
+          "match": true
+        },
+        {
+          "field": "runs_scored",
+          "expected": 1,
+          "oracle": 1,
+          "match": true
+        },
+        {
+          "field": "rbi",
+          "expected": 1,
+          "oracle": 1,
+          "match": true
+        },
+        {
+          "field": "countsAsAB",
+          "expected": true,
+          "oracle": true,
+          "match": true
+        }
+      ]
+    },
+    {
+      "id": "GC-02",
+      "status": "PASS",
+      "checks": [
+        {
+          "field": "outs",
+          "expected": 1,
+          "oracle": 1,
+          "match": true
+        },
+        {
+          "field": "bases.first",
+          "expected": false,
+          "oracle": false,
+          "match": true
+        },
+        {
+          "field": "bases.second",
+          "expected": true,
+          "oracle": true,
+          "match": true
+        },
+        {
+          "field": "bases.third",
+          "expected": true,
+          "oracle": true,
+          "match": true
+        },
+        {
+          "field": "runs_scored",
+          "expected": 0,
+          "oracle": 0,
+          "match": true
+        },
+        {
+          "field": "rbi",
+          "expected": 0,
+          "oracle": 0,
+          "match": true
+        },
+        {
+          "field": "countsAsAB",
+          "expected": true,
+          "oracle": true,
+          "match": true
+        }
+      ]
+    },
+    {
+      "id": "GC-03",
+      "status": "PASS",
+      "checks": [
+        {
+          "field": "outs",
+          "expected": 0,
+          "oracle": 0,
+          "match": true
+        },
+        {
+          "field": "bases.first",
+          "expected": false,
+          "oracle": false,
+          "match": true
+        },
+        {
+          "field": "bases.second",
+          "expected": false,
+          "oracle": false,
+          "match": true
+        },
+        {
+          "field": "bases.third",
+          "expected": true,
+          "oracle": true,
+          "match": true
+        },
+        {
+          "field": "runs_scored",
+          "expected": 3,
+          "oracle": 3,
+          "match": true
+        },
+        {
+          "field": "rbi",
+          "expected": 3,
+          "oracle": 3,
+          "match": true
+        },
+        {
+          "field": "countsAsAB",
+          "expected": true,
+          "oracle": true,
+          "match": true
+        }
+      ]
+    },
+    {
+      "id": "GC-04",
+      "status": "PASS",
+      "checks": [
+        {
+          "field": "outs",
+          "expected": 2,
+          "oracle": 2,
+          "match": true
+        },
+        {
+          "field": "bases.first",
+          "expected": false,
+          "oracle": false,
+          "match": true
+        },
+        {
+          "field": "bases.second",
+          "expected": false,
+          "oracle": false,
+          "match": true
+        },
+        {
+          "field": "bases.third",
+          "expected": false,
+          "oracle": false,
+          "match": true
+        },
+        {
+          "field": "runs_scored",
+          "expected": 4,
+          "oracle": 4,
+          "match": true
+        },
+        {
+          "field": "rbi",
+          "expected": 4,
+          "oracle": 4,
+          "match": true
+        },
+        {
+          "field": "countsAsAB",
+          "expected": true,
+          "oracle": true,
+          "match": true
+        }
+      ]
+    },
+    {
+      "id": "GC-05",
+      "status": "PASS",
+      "checks": [
+        {
+          "field": "outs",
+          "expected": 1,
+          "oracle": 1,
+          "match": true
+        },
+        {
+          "field": "bases.first",
+          "expected": true,
+          "oracle": true,
+          "match": true
+        },
+        {
+          "field": "bases.second",
+          "expected": true,
+          "oracle": true,
+          "match": true
+        },
+        {
+          "field": "bases.third",
+          "expected": false,
+          "oracle": false,
+          "match": true
+        },
+        {
+          "field": "runs_scored",
+          "expected": 1,
+          "oracle": 1,
+          "match": true
+        },
+        {
+          "field": "rbi",
+          "expected": 1,
+          "oracle": 1,
+          "match": true
+        },
+        {
+          "field": "countsAsAB",
+          "expected": true,
+          "oracle": true,
+          "match": true
+        }
+      ]
+    },
+    {
+      "id": "GC-06",
+      "status": "PASS",
+      "checks": [
+        {
+          "field": "outs",
+          "expected": 0,
+          "oracle": 0,
+          "match": true
+        },
+        {
+          "field": "bases.first",
+          "expected": true,
+          "oracle": true,
+          "match": true
+        },
+        {
+          "field": "bases.second",
+          "expected": true,
+          "oracle": true,
+          "match": true
+        },
+        {
+          "field": "bases.third",
+          "expected": true,
+          "oracle": true,
+          "match": true
+        },
+        {
+          "field": "runs_scored",
+          "expected": 0,
+          "oracle": 0,
+          "match": true
+        },
+        {
+          "field": "countsAsAB",
+          "expected": false,
+          "oracle": false,
+          "match": true
+        }
+      ]
+    },
+    {
+      "id": "GC-07",
+      "status": "PASS",
+      "checks": [
+        {
+          "field": "outs",
+          "expected": 2,
+          "oracle": 2,
+          "match": true
+        },
+        {
+          "field": "bases.first",
+          "expected": true,
+          "oracle": true,
+          "match": true
+        },
+        {
+          "field": "bases.second",
+          "expected": true,
+          "oracle": true,
+          "match": true
+        },
+        {
+          "field": "bases.third",
+          "expected": true,
+          "oracle": true,
+          "match": true
+        },
+        {
+          "field": "runs_scored",
+          "expected": 1,
+          "oracle": 1,
+          "match": true
+        },
+        {
+          "field": "rbi",
+          "expected": 1,
+          "oracle": 1,
+          "match": true
+        },
+        {
+          "field": "countsAsAB",
+          "expected": false,
+          "oracle": false,
+          "match": true
+        }
+      ]
+    },
+    {
+      "id": "GC-08",
+      "status": "PASS",
+      "checks": [
+        {
+          "field": "outs",
+          "expected": 1,
+          "oracle": 1,
+          "match": true
+        },
+        {
+          "field": "bases.first",
+          "expected": true,
+          "oracle": true,
+          "match": true
+        },
+        {
+          "field": "bases.second",
+          "expected": true,
+          "oracle": true,
+          "match": true
+        },
+        {
+          "field": "bases.third",
+          "expected": true,
+          "oracle": true,
+          "match": true
+        },
+        {
+          "field": "runs_scored",
+          "expected": 0,
+          "oracle": 0,
+          "match": true
+        },
+        {
+          "field": "countsAsAB",
+          "expected": false,
+          "oracle": false,
+          "match": true
+        }
+      ]
+    },
+    {
+      "id": "GC-09",
+      "status": "PASS",
+      "checks": [
+        {
+          "field": "outs",
+          "expected": 1,
+          "oracle": 1,
+          "match": true
+        },
+        {
+          "field": "bases.first",
+          "expected": false,
+          "oracle": false,
+          "match": true
+        },
+        {
+          "field": "bases.second",
+          "expected": false,
+          "oracle": false,
+          "match": true
+        },
+        {
+          "field": "bases.third",
+          "expected": false,
+          "oracle": false,
+          "match": true
+        },
+        {
+          "field": "runs_scored",
+          "expected": 0,
+          "oracle": 0,
+          "match": true
+        },
+        {
+          "field": "countsAsAB",
+          "expected": true,
+          "oracle": true,
+          "match": true
+        }
+      ]
+    },
+    {
+      "id": "GC-10",
+      "status": "PASS",
+      "checks": [
+        {
+          "field": "outs",
+          "expected": 1,
+          "oracle": 1,
+          "match": true
+        },
+        {
+          "field": "bases.first",
+          "expected": false,
+          "oracle": false,
+          "match": true
+        },
+        {
+          "field": "bases.second",
+          "expected": false,
+          "oracle": false,
+          "match": true
+        },
+        {
+          "field": "bases.third",
+          "expected": true,
+          "oracle": true,
+          "match": true
+        },
+        {
+          "field": "runs_scored",
+          "expected": 0,
+          "oracle": 0,
+          "match": true
+        },
+        {
+          "field": "countsAsAB",
+          "expected": true,
+          "oracle": true,
+          "match": true
+        }
+      ]
+    },
+    {
+      "id": "GC-11",
+      "status": "PASS",
+      "checks": [
+        {
+          "field": "outs",
+          "expected": 2,
+          "oracle": 2,
+          "match": true
+        },
+        {
+          "field": "bases.first",
+          "expected": false,
+          "oracle": false,
+          "match": true
+        },
+        {
+          "field": "bases.second",
+          "expected": false,
+          "oracle": false,
+          "match": true
+        },
+        {
+          "field": "bases.third",
+          "expected": false,
+          "oracle": false,
+          "match": true
+        },
+        {
+          "field": "runs_scored",
+          "expected": 1,
+          "oracle": 1,
+          "match": true
+        },
+        {
+          "field": "rbi",
+          "expected": 1,
+          "oracle": 1,
+          "match": true
+        },
+        {
+          "field": "countsAsAB",
+          "expected": true,
+          "oracle": true,
+          "match": true
+        }
+      ]
+    },
+    {
+      "id": "GC-12",
+      "status": "PASS",
+      "checks": [
+        {
+          "field": "outs",
+          "expected": 3,
+          "oracle": 3,
+          "match": true
+        },
+        {
+          "field": "bases.first",
+          "expected": false,
+          "oracle": false,
+          "match": true
+        },
+        {
+          "field": "bases.second",
+          "expected": false,
+          "oracle": false,
+          "match": true
+        },
+        {
+          "field": "bases.third",
+          "expected": false,
+          "oracle": false,
+          "match": true
+        },
+        {
+          "field": "runs_scored",
+          "expected": 0,
+          "oracle": 0,
+          "match": true
+        },
+        {
+          "field": "triggers_end_inning",
+          "expected": true,
+          "oracle": true,
+          "match": true
+        },
+        {
+          "field": "countsAsAB",
+          "expected": true,
+          "oracle": true,
+          "match": true
+        }
+      ]
+    },
+    {
+      "id": "GC-13",
+      "status": "PASS",
+      "checks": [
+        {
+          "field": "outs",
+          "expected": 2,
+          "oracle": 2,
+          "match": true
+        },
+        {
+          "field": "bases.first",
+          "expected": true,
+          "oracle": true,
+          "match": true
+        },
+        {
+          "field": "bases.second",
+          "expected": false,
+          "oracle": false,
+          "match": true
+        },
+        {
+          "field": "bases.third",
+          "expected": false,
+          "oracle": false,
+          "match": true
+        },
+        {
+          "field": "runs_scored",
+          "expected": 0,
+          "oracle": 0,
+          "match": true
+        },
+        {
+          "field": "countsAsAB",
+          "expected": true,
+          "oracle": true,
+          "match": true
+        }
+      ]
+    },
+    {
+      "id": "GC-14",
+      "status": "PASS",
+      "checks": [
+        {
+          "field": "outs",
+          "expected": 3,
+          "oracle": 3,
+          "match": true
+        },
+        {
+          "field": "bases.first",
+          "expected": false,
+          "oracle": false,
+          "match": true
+        },
+        {
+          "field": "bases.second",
+          "expected": false,
+          "oracle": false,
+          "match": true
+        },
+        {
+          "field": "bases.third",
+          "expected": false,
+          "oracle": false,
+          "match": true
+        },
+        {
+          "field": "runs_scored",
+          "expected": 0,
+          "oracle": 0,
+          "match": true
+        },
+        {
+          "field": "triggers_end_inning",
+          "expected": true,
+          "oracle": true,
+          "match": true
+        },
+        {
+          "field": "countsAsAB",
+          "expected": true,
+          "oracle": true,
+          "match": true
+        }
+      ]
+    },
+    {
+      "id": "GC-15",
+      "status": "PASS",
+      "checks": [
+        {
+          "field": "outs",
+          "expected": 2,
+          "oracle": 2,
+          "match": true
+        },
+        {
+          "field": "bases.first",
+          "expected": true,
+          "oracle": true,
+          "match": true
+        },
+        {
+          "field": "bases.second",
+          "expected": false,
+          "oracle": false,
+          "match": true
+        },
+        {
+          "field": "bases.third",
+          "expected": false,
+          "oracle": false,
+          "match": true
+        },
+        {
+          "field": "runs_scored",
+          "expected": 0,
+          "oracle": 0,
+          "match": true
+        },
+        {
+          "field": "countsAsAB",
+          "expected": true,
+          "oracle": true,
+          "match": true
+        }
+      ]
+    },
+    {
+      "id": "GC-16",
+      "status": "PASS",
+      "checks": [
+        {
+          "field": "outs",
+          "expected": 2,
+          "oracle": 2,
+          "match": true
+        },
+        {
+          "field": "bases.first",
+          "expected": true,
+          "oracle": true,
+          "match": true
+        },
+        {
+          "field": "bases.second",
+          "expected": false,
+          "oracle": false,
+          "match": true
+        },
+        {
+          "field": "bases.third",
+          "expected": false,
+          "oracle": false,
+          "match": true
+        },
+        {
+          "field": "runs_scored",
+          "expected": 0,
+          "oracle": 0,
+          "match": true
+        },
+        {
+          "field": "countsAsAB",
+          "expected": true,
+          "oracle": true,
+          "match": true
+        }
+      ]
+    },
+    {
+      "id": "GC-17",
+      "status": "PASS",
+      "checks": [
+        {
+          "field": "outs",
+          "expected": 2,
+          "oracle": 2,
+          "match": true
+        },
+        {
+          "field": "bases.first",
+          "expected": false,
+          "oracle": false,
+          "match": true
+        },
+        {
+          "field": "bases.second",
+          "expected": false,
+          "oracle": false,
+          "match": true
+        },
+        {
+          "field": "bases.third",
+          "expected": true,
+          "oracle": true,
+          "match": true
+        },
+        {
+          "field": "runs_scored",
+          "expected": 1,
+          "oracle": 1,
+          "match": true
+        },
+        {
+          "field": "rbi",
+          "expected": 0,
+          "oracle": 0,
+          "match": true
+        },
+        {
+          "field": "countsAsAB",
+          "expected": true,
+          "oracle": true,
+          "match": true
+        }
+      ]
+    },
+    {
+      "id": "GC-18",
+      "status": "PASS",
+      "checks": [
+        {
+          "field": "outs",
+          "expected": 2,
+          "oracle": 2,
+          "match": true
+        },
+        {
+          "field": "bases.first",
+          "expected": false,
+          "oracle": false,
+          "match": true
+        },
+        {
+          "field": "bases.second",
+          "expected": false,
+          "oracle": false,
+          "match": true
+        },
+        {
+          "field": "bases.third",
+          "expected": false,
+          "oracle": false,
+          "match": true
+        },
+        {
+          "field": "runs_scored",
+          "expected": 0,
+          "oracle": 0,
+          "match": true
+        },
+        {
+          "field": "countsAsAB",
+          "expected": true,
+          "oracle": true,
+          "match": true
+        }
+      ]
+    },
+    {
+      "id": "GC-19",
+      "status": "PASS",
+      "checks": [
+        {
+          "field": "outs",
+          "expected": 3,
+          "oracle": 3,
+          "match": true
+        },
+        {
+          "field": "bases.first",
+          "expected": false,
+          "oracle": false,
+          "match": true
+        },
+        {
+          "field": "bases.second",
+          "expected": false,
+          "oracle": false,
+          "match": true
+        },
+        {
+          "field": "bases.third",
+          "expected": false,
+          "oracle": false,
+          "match": true
+        },
+        {
+          "field": "runs_scored",
+          "expected": 0,
+          "oracle": 0,
+          "match": true
+        },
+        {
+          "field": "triggers_end_inning",
+          "expected": true,
+          "oracle": true,
+          "match": true
+        },
+        {
+          "field": "countsAsAB",
+          "expected": true,
+          "oracle": true,
+          "match": true
+        }
+      ]
+    },
+    {
+      "id": "GC-20",
+      "status": "PASS",
+      "checks": [
+        {
+          "field": "outs",
+          "expected": 1,
+          "oracle": 1,
+          "match": true
+        },
+        {
+          "field": "bases.first",
+          "expected": false,
+          "oracle": false,
+          "match": true
+        },
+        {
+          "field": "bases.second",
+          "expected": true,
+          "oracle": true,
+          "match": true
+        },
+        {
+          "field": "bases.third",
+          "expected": false,
+          "oracle": false,
+          "match": true
+        },
+        {
+          "field": "runs_scored",
+          "expected": 1,
+          "oracle": 1,
+          "match": true
+        },
+        {
+          "field": "rbi",
+          "expected": 1,
+          "oracle": 1,
+          "match": true
+        },
+        {
+          "field": "countsAsAB",
+          "expected": false,
+          "oracle": false,
+          "match": true
+        }
+      ]
+    },
+    {
+      "id": "GC-21",
+      "status": "PASS",
+      "checks": [
+        {
+          "field": "outs",
+          "expected": 1,
+          "oracle": 1,
+          "match": true
+        },
+        {
+          "field": "bases.first",
+          "expected": false,
+          "oracle": false,
+          "match": true
+        },
+        {
+          "field": "bases.second",
+          "expected": true,
+          "oracle": true,
+          "match": true
+        },
+        {
+          "field": "bases.third",
+          "expected": false,
+          "oracle": false,
+          "match": true
+        },
+        {
+          "field": "runs_scored",
+          "expected": 0,
+          "oracle": 0,
+          "match": true
+        },
+        {
+          "field": "countsAsAB",
+          "expected": false,
+          "oracle": false,
+          "match": true
+        }
+      ]
+    },
+    {
+      "id": "GC-22",
+      "status": "PASS",
+      "checks": [
+        {
+          "field": "outs",
+          "expected": 2,
+          "oracle": 2,
+          "match": true
+        },
+        {
+          "field": "bases.first",
+          "expected": true,
+          "oracle": true,
+          "match": true
+        },
+        {
+          "field": "bases.second",
+          "expected": false,
+          "oracle": false,
+          "match": true
+        },
+        {
+          "field": "bases.third",
+          "expected": true,
+          "oracle": true,
+          "match": true
+        },
+        {
+          "field": "runs_scored",
+          "expected": 0,
+          "oracle": 0,
+          "match": true
+        },
+        {
+          "field": "countsAsAB",
+          "expected": true,
+          "oracle": true,
+          "match": true
+        }
+      ]
+    },
+    {
+      "id": "GC-23",
+      "status": "PASS",
+      "checks": [
+        {
+          "field": "outs",
+          "expected": 2,
+          "oracle": 2,
+          "match": true
+        },
+        {
+          "field": "bases.first",
+          "expected": true,
+          "oracle": true,
+          "match": true
+        },
+        {
+          "field": "bases.second",
+          "expected": true,
+          "oracle": true,
+          "match": true
+        },
+        {
+          "field": "bases.third",
+          "expected": true,
+          "oracle": true,
+          "match": true
+        },
+        {
+          "field": "runs_scored",
+          "expected": 0,
+          "oracle": 0,
+          "match": true
+        },
+        {
+          "field": "countsAsAB",
+          "expected": true,
+          "oracle": true,
+          "match": true
+        }
+      ]
+    },
+    {
+      "id": "GC-24",
+      "status": "PASS",
+      "checks": [
+        {
+          "field": "outs",
+          "expected": 0,
+          "oracle": 0,
+          "match": true
+        },
+        {
+          "field": "bases.first",
+          "expected": true,
+          "oracle": true,
+          "match": true
+        },
+        {
+          "field": "bases.second",
+          "expected": false,
+          "oracle": false,
+          "match": true
+        },
+        {
+          "field": "bases.third",
+          "expected": false,
+          "oracle": false,
+          "match": true
+        },
+        {
+          "field": "runs_scored",
+          "expected": 1,
+          "oracle": 1,
+          "match": true
+        },
+        {
+          "field": "rbi",
+          "expected": 0,
+          "oracle": 0,
+          "match": true
+        },
+        {
+          "field": "countsAsAB",
+          "expected": true,
+          "oracle": true,
+          "match": true
+        }
+      ]
+    },
+    {
+      "id": "GC-25",
+      "status": "PASS",
+      "checks": [
+        {
+          "field": "outs",
+          "expected": 1,
+          "oracle": 1,
+          "match": true
+        },
+        {
+          "field": "bases.first",
+          "expected": true,
+          "oracle": true,
+          "match": true
+        },
+        {
+          "field": "bases.second",
+          "expected": true,
+          "oracle": true,
+          "match": true
+        },
+        {
+          "field": "bases.third",
+          "expected": false,
+          "oracle": false,
+          "match": true
+        },
+        {
+          "field": "runs_scored",
+          "expected": 0,
+          "oracle": 0,
+          "match": true
+        },
+        {
+          "field": "countsAsAB",
+          "expected": false,
+          "oracle": false,
+          "match": true
+        }
+      ]
+    },
+    {
+      "id": "GC-26",
+      "status": "PASS",
+      "checks": [
+        {
+          "field": "outs",
+          "expected": 1,
+          "oracle": 1,
+          "match": true
+        },
+        {
+          "field": "bases.first",
+          "expected": false,
+          "oracle": false,
+          "match": true
+        },
+        {
+          "field": "bases.second",
+          "expected": false,
+          "oracle": false,
+          "match": true
+        },
+        {
+          "field": "bases.third",
+          "expected": false,
+          "oracle": false,
+          "match": true
+        },
+        {
+          "field": "runs_scored",
+          "expected": 2,
+          "oracle": 2,
+          "match": true
+        },
+        {
+          "field": "rbi",
+          "expected": 2,
+          "oracle": 2,
+          "match": true
+        },
+        {
+          "field": "countsAsAB",
+          "expected": true,
+          "oracle": true,
+          "match": true
+        }
+      ]
+    },
+    {
+      "id": "GC-27",
+      "status": "PASS",
+      "checks": [
+        {
+          "field": "outs",
+          "expected": 3,
+          "oracle": 3,
+          "match": true
+        },
+        {
+          "field": "bases.first",
+          "expected": false,
+          "oracle": false,
+          "match": true
+        },
+        {
+          "field": "bases.second",
+          "expected": false,
+          "oracle": false,
+          "match": true
+        },
+        {
+          "field": "bases.third",
+          "expected": false,
+          "oracle": false,
+          "match": true
+        },
+        {
+          "field": "runs_scored",
+          "expected": 0,
+          "oracle": 0,
+          "match": true
+        },
+        {
+          "field": "triggers_end_inning",
+          "expected": true,
+          "oracle": true,
+          "match": true
+        },
+        {
+          "field": "countsAsAB",
+          "expected": true,
+          "oracle": true,
+          "match": true
+        }
+      ]
+    },
+    {
+      "id": "GC-28",
+      "status": "PASS",
+      "checks": [
+        {
+          "field": "outs",
+          "expected": 2,
+          "oracle": 2,
+          "match": true
+        },
+        {
+          "field": "bases.first",
+          "expected": false,
+          "oracle": false,
+          "match": true
+        },
+        {
+          "field": "bases.second",
+          "expected": true,
+          "oracle": true,
+          "match": true
+        },
+        {
+          "field": "bases.third",
+          "expected": true,
+          "oracle": true,
+          "match": true
+        },
+        {
+          "field": "runs_scored",
+          "expected": 0,
+          "oracle": 0,
+          "match": true
+        },
+        {
+          "field": "countsAsAB",
+          "expected": true,
+          "oracle": true,
+          "match": true
+        }
+      ]
+    },
+    {
+      "id": "GC-29",
+      "status": "SKIP",
+      "checks": [],
+      "note": "recordEvent"
+    },
+    {
+      "id": "GC-30",
+      "status": "PASS",
+      "checks": [
+        {
+          "field": "outs",
+          "expected": 3,
+          "oracle": 3,
+          "match": true
+        },
+        {
+          "field": "bases.first",
+          "expected": false,
+          "oracle": false,
+          "match": true
+        },
+        {
+          "field": "bases.second",
+          "expected": false,
+          "oracle": false,
+          "match": true
+        },
+        {
+          "field": "bases.third",
+          "expected": false,
+          "oracle": false,
+          "match": true
+        },
+        {
+          "field": "runs_scored",
+          "expected": 0,
+          "oracle": 0,
+          "match": true
+        },
+        {
+          "field": "triggers_end_inning",
+          "expected": true,
+          "oracle": true,
+          "match": true
+        },
+        {
+          "field": "countsAsAB",
+          "expected": true,
+          "oracle": true,
+          "match": true
+        }
+      ]
+    }
+  ]
+}

@@ -1,539 +1,379 @@
 # Franchise Button Audit Report
 
-> **Generated**: 2026-02-09
-> **Scope**: All 13 non-GameTracker page components
-> **Method**: Top-down manual code read of every interactive element
-> **Auditor**: Claude (manual code analysis, no browser verification)
+**Generated:** 2026-02-09
+**Pages audited:** 12 (+ 9 modals)
+**Total interactive element types found:** 434
+**Audit method:** Top-down (components→handlers) + Bottom-up (handlers→components) with reconciliation
 
----
+## Reconciliation Integrity
+
+- **Top-down elements (non-GameTracker pages):** 284
+- **Top-down elements (modals, non-GT):** 75
+- **GameTracker-scoped modals (FielderCredit, ErrorOnAdvance, PitchCount, PlayerCard, EndGame):** 25
+- **Orphaned sub-components (in FranchiseHome):** ~50 elements in 2 dead sub-components
+- **Bottom-up handler functions found:** 87 handler definitions across non-GT pages, 143 across all components
+- **Dead modal elements:** 5 modals × ~6 elements avg = ~30 dead elements in orphaned figma modals
+- **Unmatched elements (DEAD buttons):** See detail below
+- **Orphaned handlers:** 2 entire sub-components in FranchiseHome (~1300 lines dead code)
 
 ## Executive Summary
 
-| Metric | Count |
-|--------|-------|
-| Pages audited | 13 |
-| Total interactive elements catalogued | 142 |
-| Tier A (data-mutating) elements | 28 |
-| Tier B (navigation) elements | 22 |
-| Tier C (UI state) elements | 92 |
-| WIRED (handler reaches storage/navigation) | 112 (79%) |
-| FAKE (handler exists but does nothing real) | 12 (8%) |
-| BROKEN (handler targets non-existent destination) | 2 (1%) |
-| DEAD CODE (defined but never rendered) | 2 functions |
-| Hardcoded mock data blocks | 9+ major blocks |
+### Health by Page
 
-### Page Health Summary
+| Page | Route | Elements | Tier A | Tier B | Tier C | WIRED | DEAD | FAKE | TODO | Health |
+|------|-------|----------|--------|--------|--------|-------|------|------|------|--------|
+| AppHome | `/` | 5 | 0 | 5 | 0 | 5 | 0 | 0 | 0 | ✅ GOOD |
+| ExhibitionGame | `/exhibition` | 10 | 0 | 3 | 7 | 10 | 0 | 0 | 0 | ✅ GOOD |
+| WorldSeries | `/world-series` | 10 | 0 | 1 | 9 | 2 | 0 | 8 | 0 | ⚠️ CRITICAL |
+| FranchiseSetup | `/franchise/setup` | 37 | 0 | 4 | 33 | 35 | 1 | 1 | 0 | ⚠️ NEEDS WORK |
+| FranchiseHome | `/franchise/:id` | 100 | 6 | 11 | 83 | 55 | 37 | 2 | 0 | ⚠️ NEEDS WORK |
+| LeagueBuilder | `/league-builder` | 10 | 1 | 9 | 0 | 10 | 0 | 0 | 0 | ✅ GOOD |
+| LB Leagues | `/league-builder/leagues` | 16 | 3 | 4 | 9 | 16 | 0 | 0 | 0 | ✅ GOOD |
+| LB Teams | `/league-builder/teams` | 20 | 2 | 3 | 15 | 20 | 0 | 0 | 0 | ✅ GOOD |
+| LB Players | `/league-builder/players` | 29 | 2 | 3 | 24 | 29 | 0 | 0 | 0 | ✅ GOOD |
+| LB Rosters | `/league-builder/rosters` | 25 | 20 | 2 | 3 | 25 | 0 | 0 | 0 | ✅ GOOD |
+| LB Draft | `/league-builder/draft` | 14 | 5 | 2 | 7 | 13 | 0 | 1 | 0 | ⚠️ NEEDS WORK |
+| LB Rules | `/league-builder/rules` | 35 | 3 | 3 | 29 | 35 | 0 | 0 | 0 | ✅ GOOD |
+| PostGameSummary | `/post-game/:id` | 3 | 0 | 2 | 1 | 3 | 0 | 0 | 0 | ✅ GOOD |
+| **TOTALS** | | **314** | **42** | **52** | **220** | **258** | **38** | **12** | **0** | |
 
-| Page | Route | Lines | Health | Wired % | Critical Issues |
-|------|-------|-------|--------|---------|-----------------|
-| AppHome | `/` | 107 | NEEDS WORK | 80% | 1 broken link (/franchise/select) |
-| LeagueBuilder | `/league-builder` | 457 | NEEDS WORK | 90% | CSV import is FAKE |
-| LeagueBuilderLeagues | `/league-builder/leagues` | ~800 | GOOD | >95% | None |
-| LeagueBuilderTeams | `/league-builder/teams` | ~600 | GOOD | >95% | None |
-| LeagueBuilderPlayers | `/league-builder/players` | ~800 | GOOD | >95% | None |
-| LeagueBuilderRosters | `/league-builder/rosters` | ~600 | GOOD | >95% | None |
-| LeagueBuilderDraft | `/league-builder/draft` | ~500 | CRITICAL | <50% | All draft ops local-only |
-| LeagueBuilderRules | `/league-builder/rules` | ~500 | GOOD | >90% | None |
-| FranchiseSetup | `/franchise/setup` | 1444 | CRITICAL | 70% | START FRANCHISE broken + no persistence |
-| FranchiseHome | `/franchise/:franchiseId` | 4656 | NEEDS WORK | 75% | Massive hardcoded data, SIMULATE/SKIP fake |
-| PostGameSummary | `/post-game/:gameId` | 689 | GOOD | >95% | None |
-| ExhibitionGame | `/exhibition` | 347 | GOOD | >95% | None |
-| WorldSeries | `/world-series` | ~1100 | CRITICAL | <50% | Uses hardcoded mockLeagues, no persistence |
+### Modals Summary
 
----
-
-## Health Rating Definitions
-
-| Rating | Criteria |
-|--------|----------|
-| **GOOD** | >80% of interactive elements are WIRED to real storage/navigation. No critical bugs. |
-| **NEEDS WORK** | >60% wired, but has FAKE handlers, broken links, or significant hardcoded data. |
-| **CRITICAL** | <50% wired, or has broken navigation that blocks core user flows. |
-
-## Tier Definitions
-
-| Tier | Description | Examples |
-|------|-------------|---------|
-| **A** | Data-mutating: writes to IndexedDB, creates/deletes records | Save, Delete, Import, Generate |
-| **B** | Navigation: triggers route change or major page transition | Links, navigate() calls, START GAME |
-| **C** | UI state: local React state only, no persistence or navigation | Toggles, accordions, tab switches, filters |
-| **C->A** | UI trigger that opens a modal/wizard which then performs a Tier A action | "Create New" buttons that open save modals |
+| Modal | Used By | Status | Elements | Notes |
+|-------|---------|--------|----------|-------|
+| AddGameModal | FranchiseHome | ✅ WIRED | 11 | All elements persist to IndexedDB |
+| FielderCreditModal | GameTracker | ✅ WIRED | 4 | Active in figma GT |
+| ErrorOnAdvanceModal | GameTracker | ⚠️ TODO | 6 | Confirm handler only console.logs |
+| PitchCountModal | GameTracker (inline) | ✅ WIRED | 4 | Active in figma GT |
+| PlayerCardModal | GameTracker (inline) | ✅ WIRED | 9 | Mojo/Fitness editing works |
+| EndGameConfirm | GameTracker (inline) | ✅ WIRED | 5 | Saves game to IndexedDB |
+| DefensiveSubModal | ❌ NONE | 🔴 DEAD | 7 | Orphaned — barrel export only |
+| DoubleSwitchModal | ❌ NONE | 🔴 DEAD | 7 | Orphaned — barrel export only |
+| PinchHitterModal | ❌ NONE | 🔴 DEAD | 5 | Orphaned — barrel export only |
+| PinchRunnerModal | ❌ NONE | 🔴 DEAD | 5 | Orphaned — barrel export only |
+| PitchingChangeModal | ❌ NONE | 🔴 DEAD | 4 | Orphaned — barrel export only |
+| PositionSwitchModal | ❌ NONE | 🔴 DEAD | 6 | Orphaned — barrel export only |
 
 ---
 
 ## Page-by-Page Inventory
 
-### Page 1: AppHome (`/`)
-**File**: `src/src_figma/app/pages/AppHome.tsx` (107 lines)
-**Health**: NEEDS WORK (80% wired, 1 broken link)
+### AppHome (`/`)
 
-| ID | Type | Label | Tier | Status | Handler / Destination |
+| ID | Type | Label | Tier | Status | Handler → Destination |
 |----|------|-------|------|--------|-----------------------|
-| P01-E01 | link | LOAD FRANCHISE | B | **BROKEN** | Link to `/franchise/select` -- route does not exist |
-| P01-E02 | link | NEW FRANCHISE | B | WIRED | Link to `/franchise/setup` |
-| P01-E03 | link | Exhibition Game | B | WIRED | Link to `/exhibition` |
-| P01-E04 | link | PLAYOFFS | B | WIRED | Link to `/world-series` |
-| P01-E05 | link | LEAGUE BUILDER | B | WIRED | Link to `/league-builder` |
+| AH-01 | Link | LOAD FRANCHISE | B | WIRED | `<Link to="/franchise/tigers">` |
+| AH-02 | Link | NEW FRANCHISE | B | WIRED | `<Link to="/franchise/setup">` |
+| AH-03 | Link | Exhibition Game | B | WIRED | `<Link to="/exhibition">` |
+| AH-04 | Link | PLAYOFFS | B | WIRED | `<Link to="/world-series">` |
+| AH-05 | Link | LEAGUE BUILDER | B | WIRED | `<Link to="/league-builder">` |
 
-**Issues**: P01-E01 links to `/franchise/select` which is not defined in `routes.tsx`. Should link to `/franchise/selector` or a new `FranchiseSelector` page.
+Health: ✅ GOOD — Note: AH-01 hardcodes `/franchise/tigers` (single-franchise app)
 
 ---
 
-### Page 2: LeagueBuilder (`/league-builder`)
-**File**: `src/src_figma/app/pages/LeagueBuilder.tsx` (457 lines)
-**Health**: NEEDS WORK (CSV import is FAKE)
+### ExhibitionGame (`/exhibition`)
 
-| ID | Type | Label | Tier | Status | Handler / Destination |
+| ID | Type | Label | Tier | Status | Handler → Destination |
 |----|------|-------|------|--------|-----------------------|
-| P02-E01 | button | Back | B | WIRED | `navigate("/")` |
-| P02-E02 | button | IMPORT SMB4 DATA | A | WIRED | `handleSeedDatabase()` -> `seedSMB4Data(true)` -> IndexedDB |
-| P02-E03 | link | Leagues card | B | WIRED | `navigate("/league-builder/leagues")` |
-| P02-E04 | link | Teams card | B | WIRED | `navigate("/league-builder/teams")` |
-| P02-E05 | link | Players card | B | WIRED | `navigate("/league-builder/players")` |
-| P02-E06 | link | Rosters card | B | WIRED | `navigate("/league-builder/rosters")` |
-| P02-E07 | link | Draft card | B | WIRED | `navigate("/league-builder/draft")` |
-| P02-E08 | link | Rules card | B | WIRED | `navigate("/league-builder/rules")` |
-| P02-E09 | link | CREATE NEW LEAGUE | B | WIRED | `navigate("/league-builder/leagues?new=true")` |
-| P02-E10 | button | SELECT CSV FILE | A | **FAKE** | Reads file contents but never calls any IndexedDB write function |
-| P02-E11+ | button(xN) | League rows | B | WIRED | `navigate` to league detail |
-| P02-E12+ | button(xN) | Tree expand/collapse | C | WIRED | `setTreeExpanded` local state |
+| EX-01 | button | Back arrow | B | WIRED | `navigate("/")` |
+| EX-02 | button | GO TO LEAGUE BUILDER | B | WIRED | `navigate("/league-builder")` — shown when no leagues |
+| EX-03 | button (×N) | League name cards | C | WIRED | `setSelectedLeagueId(league.id)` |
+| EX-04 | button | CONTINUE (league→select) | C | WIRED | `setStep("select")` |
+| EX-05 | select | AWAY TEAM dropdown | C | WIRED | `setSelectedAwayTeamId()` → triggers `loadTeamLineup()` → IndexedDB read |
+| EX-06 | select | HOME TEAM dropdown | C | WIRED | `setSelectedHomeTeamId()` → triggers `loadTeamLineup()` → IndexedDB read |
+| EX-07a | button | BACK (select→league) | C | WIRED | `setStep("league")` |
+| EX-07b | button | CONTINUE (select→lineups) | C | WIRED | `setStep("lineups")` |
+| EX-08a | button | BACK (lineups→select) | C | WIRED | `setStep("select")` |
+| EX-08b | button | START GAME | B | WIRED | `handleStartGame()` → `navigate("/game-tracker/exhibition-1", {state: rosters})` |
 
-**Issues**: P02-E10 (CSV import) parses the file but drops the data. No storage call is made.
+Health: ✅ GOOD — Hardcoded values: `leagueId: 'sml'` (line 112), `userTeamSide: 'home'` (line 113)
 
 ---
 
-### Page 3: LeagueBuilderLeagues (`/league-builder/leagues`)
-**File**: `src/src_figma/app/pages/LeagueBuilderLeagues.tsx` (~800 lines)
-**Health**: GOOD
+### WorldSeries (`/world-series`)
 
-| ID | Type | Label | Tier | Status | Handler / Destination |
+| ID | Type | Label | Tier | Status | Handler → Destination |
 |----|------|-------|------|--------|-----------------------|
-| P03-E01 | button | Back | B | WIRED | `navigate("/league-builder")` |
-| P03-E02 | button | CREATE NEW LEAGUE | C->A | WIRED | Opens modal -> `handleSave` -> `createLeague()` -> IndexedDB |
-| P03-E03 | button(xN) | Edit league | C | WIRED | Opens edit modal |
-| P03-E04 | button(xN) | Duplicate | A | WIRED | `duplicateLeague(id)` -> IndexedDB |
-| P03-E05 | button(xN) | Delete | A | WIRED | `handleDelete` -> `removeLeague(id)` -> IndexedDB |
-| P03-E06 | button | Save (in modal) | A | WIRED | `handleSave` -> `createLeague`/`updateLeague` -> IndexedDB |
-| P03-E07+ | various | Modal wizard navigation, team toggles | C | WIRED | Local state |
+| WS-01 | button | Back arrow | B | WIRED | `navigate("/")` |
+| WS-02 | button (×4) | Tab buttons | C | WIRED | `setActiveTab(tab.id)` |
+| WS-03 | button (×4) | League select cards | C | **FAKE** | Uses hardcoded `mockLeagues` array — not from IndexedDB |
+| WS-04 | button (×N) | Best of N per round | C | **FAKE** | Sets local state from mock data |
+| WS-05 | button (×4) | Innings per game | C | **FAKE** | Local state only, mock data |
+| WS-06 | button (×3) | DH rule | C | **FAKE** | Local state only |
+| WS-07 | button | GENERATE PLAYOFF BRACKET | C | **FAKE** | Only sets `isConfigured=true` — no bracket generation |
+| WS-08 | button (×5) | Batting stat accordions | C | **FAKE** | Hardcoded `battingLeadersData` |
+| WS-09 | button (×5) | Pitching stat accordions | C | **FAKE** | Hardcoded `pitchingLeadersData` |
+| WS-10 | button (×3) | Year history accordions | C | **FAKE** | Hardcoded `playoffHistory` |
+
+Health: ⚠️ CRITICAL — Entire page is a mock shell. Zero data persistence. Zero engine calls.
 
 ---
 
-### Page 4: LeagueBuilderTeams (`/league-builder/teams`)
-**File**: `src/src_figma/app/pages/LeagueBuilderTeams.tsx` (~600 lines)
-**Health**: GOOD
+### FranchiseSetup (`/franchise/setup`)
 
-| ID | Type | Label | Tier | Status | Handler / Destination |
+| ID | Type | Label | Tier | Status | Handler → Destination |
 |----|------|-------|------|--------|-----------------------|
-| P04-E01 | button | Back | B | WIRED | `navigate("/league-builder")` |
-| P04-E02 | button | CREATE NEW TEAM | C->A | WIRED | Opens modal -> `handleSave` -> `createTeam()` -> IndexedDB |
-| P04-E03 | button(xN) | Edit | C | WIRED | Opens edit modal |
-| P04-E04 | button(xN) | Delete | A | WIRED | `handleDelete` -> `removeTeam(id)` -> IndexedDB |
-| P04-E05 | button | Save (in modal) | A | WIRED | `handleSave` -> `createTeam`/`updateTeam` -> IndexedDB |
-| P04-E06+ | various | Form inputs, color pickers | C | WIRED | `setFormData` local state |
+| FS-01 | button | Back arrow | B | WIRED | `navigate("/")` |
+| FS-02 | button | CANCEL | B | WIRED | `navigate("/")` |
+| FS-03 | button | NEXT | C | WIRED | `handleNext()` → advances wizard step |
+| FS-04 | button | BACK | C | WIRED | `handleBack()` → goes to previous step |
+| FS-05 | button | START FRANCHISE | B | **FAKE** | `navigate("/franchise/new")` — does NOT persist config to storage |
+| FS-06 | button (×N) | League radio buttons | C | WIRED | `selectLeague(league.id)` — local state |
+| FS-07 | button (×N) | Expand league details | C | WIRED | Toggles `expandedLeague` |
+| FS-08 | button | Create New League | B | WIRED | `navigate("/league-builder/leagues?new=true")` |
+| FS-09 | button (×3) | Quick presets | C | WIRED | `applyPreset()` — local state |
+| FS-10 | button (×6) | Games per team | C | WIRED | `setConfig(...)` — local state |
+| FS-11 | button (×3) | Innings per game | C | WIRED | `setConfig(...)` — local state |
+| FS-12 | button (×3) | Extra innings rule | C | WIRED | `setConfig(...)` — local state |
+| FS-13 | button (×3) | Schedule type | C | WIRED | `setConfig(...)` — local state |
+| FS-14 | button (×3) | Additional options | C | WIRED | `setConfig(...)` — local state |
+| FS-15 | button (×5) | Teams qualifying | C | WIRED | `setConfig(...)` — local state |
+| FS-16 | button (×3) | Playoff format | C | WIRED | `setConfig(...)` — local state |
+| FS-17 | button (×8) | Series lengths per round | C | WIRED | `setConfig(...)` — local state |
+| FS-18 | button (×3) | Home field advantage | C | WIRED | `setConfig(...)` — local state |
+| FS-19 | button | Select All teams | C | WIRED | Sets all team IDs |
+| FS-20 | button | Clear All teams | C | WIRED | Clears team selection |
+| FS-21 | button | Random 1 team | C | WIRED | Selects random team |
+| FS-22 | button (×N) | Team selection grid | C | WIRED | `toggleTeam(team.id)` |
+| FS-23 | button | Single Player radio | C | WIRED | `setConfig({mode: "single"})` |
+| FS-24 | button | Multiplayer radio | C | WIRED | `setConfig({mode: "multiplayer"})` |
+| FS-25 | button | Use Existing Rosters | C | WIRED | `setConfig({roster.mode: "existing"})` |
+| FS-26 | button | [View Rosters] | C | **DEAD** | No onClick handler attached |
+| FS-27 | button | Fantasy Draft radio | C | WIRED | `setConfig({roster.mode: "draft"})` |
+| FS-28 | button (×3) | Player pool source | C | WIRED | `setConfig(...)` |
+| FS-29 | input[number] | Draft rounds | C | WIRED | `setConfig(...)` |
+| FS-30 | select | Draft format | C | WIRED | `setConfig(...)` |
+| FS-31 | select | Time per pick | C | WIRED | `setConfig(...)` |
+| FS-32 | input[text] | Franchise name | C | WIRED | `setConfig(...)` |
+| FS-33–37 | button (×5) | [Edit] buttons | C | WIRED | `jumpToStep(N)` |
+
+Health: ⚠️ NEEDS WORK — FS-05 (START FRANCHISE) never persists config. FS-26 ([View Rosters]) is dead.
 
 ---
 
-### Page 5: LeagueBuilderPlayers (`/league-builder/players`)
-**File**: `src/src_figma/app/pages/LeagueBuilderPlayers.tsx` (~800 lines)
-**Health**: GOOD
+### FranchiseHome (`/franchise/:franchiseId`)
 
-| ID | Type | Label | Tier | Status | Handler / Destination |
+**Active elements (rendered):**
+
+| ID | Type | Label | Tier | Status | Handler → Destination |
 |----|------|-------|------|--------|-----------------------|
-| P05-E01 | button | Back | B | WIRED | `navigate("/league-builder")` |
-| P05-E02 | button | CREATE PLAYER | C->A | WIRED | Opens modal -> `handleSave` -> `createPlayer()` -> IndexedDB |
-| P05-E03 | button | GENERATE PLAYERS | A | WIRED | `handleGeneratePlayers` -> `createPlayer()` in loop -> IndexedDB |
-| P05-E04 | button(xN) | Delete | A | WIRED | `handleDelete` -> `removePlayer(id)` -> IndexedDB |
-| P05-E05 | button | Save (in modal) | A | WIRED | `handleSave` -> `createPlayer`/`updatePlayer` -> IndexedDB |
-| P05-E06+ | various | Search, filters, arsenal toggles | C | WIRED | Local state |
+| FH-01 | button | SMB Logo | B | WIRED | `navigate("/")` |
+| FH-02 | button | Home icon | B | WIRED | `navigate("/")` |
+| FH-03–05 | button (×3) | Season phase toggles | C | WIRED | `setSeasonPhase(...)` |
+| FH-06 | button (×N) | Sub-tab buttons (9/8/10) | C | WIRED | `setActiveTab(tab.id)` |
+| FH-07–08 | button (×2) | All-Star league toggles | C | WIRED | `setAllStarLeague(...)` |
+| FH-09 | button | CREATE PLAYOFF BRACKET | **A** | WIRED | `playoffData.createNewPlayoff()` → IndexedDB |
+| FH-10 | button | START PLAYOFFS | **A** | WIRED | `playoffData.startPlayoffs()` → IndexedDB |
+| FH-11 | button | PROCEED TO OFFSEASON | C | WIRED | `setSeasonPhase("offseason")` |
+| FH-12 | button | START FREE AGENCY | B | WIRED | Opens `<FreeAgencyFlow>` |
+| FH-21 | button | DRAFT card | B | WIRED | Opens `<DraftFlow>` |
+| FH-22 | button | START FINALIZE | B | WIRED | Opens `<FinalizeAdvanceFlow>` |
+| FH-24 | (prop) | onAdvanceComplete | **A** | WIRED | `localStorage.setItem('kbl-current-season', ...)` |
+| FH-25 | button | RATINGS ADJUSTMENTS card | B | WIRED | Opens `<RatingsAdjustmentFlow>` |
+| FH-26 | button | BEGIN AWARDS CEREMONY | B | WIRED | Opens `<AwardsCeremonyFlow>` |
+| FH-27 | button | CONTRACTION/EXPANSION | B | WIRED | Opens `<ContractionExpansionFlow>` |
+| FH-28 | button | RETIREMENT PHASE | B | WIRED | Opens `<RetirementFlow>` |
+| FH-30 | (prop) | AddGameModal.onAddGame | **A** | WIRED | `scheduleData.addGame()` → IndexedDB |
+| FH-31 | (prop) | AddGameModal.onAddSeries | **A** | WIRED | `scheduleData.addSeries()` → IndexedDB |
+| FH-32–33 | button (×2) | Standings league toggles | C | WIRED | `setSelectedLeague(...)` |
+| FH-34 | button | PLAY GAME | B | WIRED | Opens confirm → `navigate("/game-tracker/game-123")` |
+| FH-35 | button | SCORE GAME | B | WIRED | Opens confirm → navigate |
+| FH-36 | button | SIMULATE | C | **FAKE** | `console.log("Game simulated")` — stub |
+| FH-37 | button | SKIP | C | **FAKE** | `console.log("Game skipped")` — stub |
+| FH-38–41 | button (×4) | Accordion toggles | C | WIRED | Local state toggles |
+| FH-64–77 | button (×14) | League Leaders accordions | C | WIRED | Local state toggles |
+| FH-95–100 | button (×6+) | Beat Reporter filters/articles | C | WIRED | Local state toggles (mock data) |
+
+**Orphaned sub-components (DEAD — defined but never rendered):**
+
+| Sub-component | Lines | Elements | Notes |
+|---------------|-------|----------|-------|
+| `TradeInterfaceContent` | 2288-2893 (~605 lines) | 20 | Replaced by `<TradeFlow>` component |
+| `AwardsContent` | 3481-4203 (~722 lines) | 17 | Awards tab uses inline content + `<AwardsCeremonyFlow>` |
+
+Health: ⚠️ NEEDS WORK — 37 orphaned elements in 2 dead sub-components (~1300 lines of dead code). SIMULATE and SKIP are stubs.
 
 ---
 
-### Page 6: LeagueBuilderRosters (`/league-builder/rosters`)
-**File**: `src/src_figma/app/pages/LeagueBuilderRosters.tsx` (~600 lines)
-**Health**: GOOD
+### LeagueBuilder Hub (`/league-builder`)
 
-| ID | Type | Label | Tier | Status | Handler / Destination |
+| ID | Type | Label | Tier | Status | Handler → Destination |
 |----|------|-------|------|--------|-----------------------|
-| P06-E01 | button | Back | B | WIRED | `navigate("/league-builder")` |
-| P06-E02 | button | SAVE | A | WIRED | `handleSave` -> `updateRoster` -> IndexedDB |
-| P06-E03 | button | REVERT | C | WIRED | Reloads from storage |
-| P06-E04+ | various | Team selection, tab buttons | C | WIRED | Local state |
+| LB-01 | button | Back arrow | B | WIRED | `navigate("/")` |
+| LB-02 | button | SEED SMB4 DATABASE | **A** | WIRED | `handleSeedDatabase()` → `hook.seedSMB4Data()` → `leagueBuilderStorage.seedFromSMB4Database()` → IndexedDB |
+| LB-03–08 | Link (×6) | Nav cards (Leagues/Teams/Players/Rosters/Draft/Rules) | B | WIRED | React Router `<Link to="/league-builder/...">` |
+| LB-09 | Link | Quick nav: Leagues (+) | B | WIRED | `navigate("/league-builder/leagues?new=true")` |
+| LB-10 | Link | Quick nav: League row | B | WIRED | `navigate("/league-builder/leagues?id=...")` |
+
+Health: ✅ GOOD — Note: LB-09/10 pass query params that target pages don't read
 
 ---
 
-### Page 7: LeagueBuilderDraft (`/league-builder/draft`)
-**File**: `src/src_figma/app/pages/LeagueBuilderDraft.tsx` (~500 lines)
-**Health**: CRITICAL (<50% wired -- draft is entirely local state, not persisted)
+### LeagueBuilder Leagues (`/league-builder/leagues`)
 
-| ID | Type | Label | Tier | Status | Handler / Destination |
+| ID | Type | Label | Tier | Status | Handler → Destination |
 |----|------|-------|------|--------|-----------------------|
-| P07-E01 | button | Back | B | WIRED | `navigate("/league-builder")` |
-| P07-E02 | button | Generate Prospects | A | **FAKE** | Creates local state array only, not persisted |
-| P07-E03 | button | Start Draft | C | **FAKE** | Activates draft flow in local state only |
-| P07-E04 | button(xN) | Make Pick | A | **FAKE** | Updates local state only, not persisted |
-| P07-E05 | button | Undo Last Pick | C | WIRED | Local state undo |
-| P07-E06+ | various | Tab, config buttons | C | WIRED | Local state |
+| LL-01 | button | Back arrow | B | WIRED | `navigate("/league-builder")` |
+| LL-02 | button | CREATE NEW LEAGUE | B | WIRED | Opens create modal |
+| LL-03 | button (×N) | League card click | B | WIRED | Opens edit modal |
+| LL-04 | button (×N) | Duplicate league | **A** | WIRED | `hook.duplicateLeague()` → `saveLeagueTemplate()` |
+| LL-05 | button (×N) | Edit league | B | WIRED | Opens edit modal |
+| LL-06 | button (×N) | Confirm delete | **A** | WIRED | `hook.removeLeague()` → `deleteLeagueTemplate()` |
+| LL-07 | button (×N) | Cancel delete | C | WIRED | Clears confirm state |
+| LL-08 | button (×N) | Delete league (trash icon) | C | WIRED | Sets confirm state |
+| LL-09 | button | Close modal | C | WIRED | Closes modal |
+| LL-10–14 | input/select (×5) | Form fields | C | WIRED | Local form state |
+| LL-15 | button | Cancel | C | WIRED | Closes modal |
+| LL-16 | button | Save/Create | **A** | WIRED | `hook.createLeague()` or `hook.updateLeague()` → `saveLeagueTemplate()` |
 
-**Issues**: The entire draft workflow operates exclusively in React state. Generated prospects are lost on page navigation. Draft picks are not saved anywhere. This page is a UI shell with no data persistence.
+Health: ✅ GOOD
 
 ---
 
-### Page 8: LeagueBuilderRules (`/league-builder/rules`)
-**File**: `src/src_figma/app/pages/LeagueBuilderRules.tsx` (~500 lines)
-**Health**: GOOD
+### LeagueBuilder Teams (`/league-builder/teams`)
 
-| ID | Type | Label | Tier | Status | Handler / Destination |
-|----|------|-------|------|--------|-----------------------|
-| P08-E01 | button | Back | B | WIRED | `navigate("/league-builder")` |
-| P08-E02 | button | NEW PRESET | C | WIRED | Opens create modal |
-| P08-E03 | button(xN) | Duplicate | A | WIRED | `createRulesPreset` -> IndexedDB |
-| P08-E04 | button(xN) | Delete | A | WIRED | `removeRulesPreset` -> IndexedDB |
-| P08-E05+ | various | Tab, config buttons | C | WIRED | Local state |
+All 20 elements WIRED. CRUD via `saveTeam()` / `deleteTeam()`. Health: ✅ GOOD
 
----
+### LeagueBuilder Players (`/league-builder/players`)
 
-### Page 9: FranchiseSetup (`/franchise/setup`)
-**File**: `src/src_figma/app/pages/FranchiseSetup.tsx` (1444 lines)
-**Health**: CRITICAL (START FRANCHISE broken + no data persistence)
+All 29 elements WIRED. CRUD via `savePlayer()` / `deletePlayer()`. Pitcher-specific fields conditionally rendered. Health: ✅ GOOD
 
-| ID | Type | Label | Tier | Status | Handler / Destination |
-|----|------|-------|------|--------|-----------------------|
-| P09-E01 | button | CANCEL | B | WIRED | `navigate("/")` |
-| P09-E02 | button(x5) | NEXT (steps 1-5) | C | WIRED | `handleNext` -> advances wizard step |
-| P09-E03 | button(x5) | BACK (steps 2-6) | C | WIRED | `handleBack` -> goes back |
-| P09-E04 | button | START FRANCHISE (step 6) | B | **BROKEN** | `navigate("/franchise/new")` -- route does not exist |
-| P09-E05 | link | Create New League | B | WIRED | `navigate("/league-builder/leagues?new=true")` |
-| P09-E06 | button(xN) | League cards | C | WIRED | `selectLeague` -> sets config local state |
-| P09-E07+ | various | Presets, config, team grid, inputs | C | WIRED | `setConfig` local state |
+### LeagueBuilder Rosters (`/league-builder/rosters`)
 
-**Issues**:
-1. P09-E04: "START FRANCHISE" navigates to `/franchise/new` which does not match any route. The route pattern is `/franchise/:franchiseId`, so this would attempt to load a franchise with ID "new", which does not exist.
-2. **No persistence**: All wizard config data (league selection, team, rules preset, season length, etc.) lives exclusively in React state. There is no call to any storage function at any step. When the user completes 6 wizard steps and clicks START FRANCHISE, all configuration is lost.
+All 25 elements WIRED. Two-phase save: local mutations + explicit SAVE → `saveTeamRoster()`. Health: ✅ GOOD
+
+### LeagueBuilder Draft (`/league-builder/draft`)
+
+13 WIRED, 1 FAKE. START DRAFT button shows `alert()` only. Draft settings and generated prospects are NOT persisted. Health: ⚠️ NEEDS WORK
+
+### LeagueBuilder Rules (`/league-builder/rules`)
+
+All 35 elements WIRED. CRUD via `saveRulesPreset()` / `deleteRulesPreset()`. Health: ✅ GOOD
 
 ---
 
-### Page 10: FranchiseHome (`/franchise/:franchiseId`)
-**File**: `src/src_figma/app/pages/FranchiseHome.tsx` (4656 lines)
-**Health**: NEEDS WORK (core nav wired, massive hardcoded mock data throughout)
+### PostGameSummary (`/post-game/:gameId`)
 
-#### Main Navigation
-| ID | Type | Label | Tier | Status | Handler / Destination |
+| ID | Type | Label | Tier | Status | Handler → Destination |
 |----|------|-------|------|--------|-----------------------|
-| P10-E01 | button | Logo (home) | B | WIRED | `navigate("/")` |
-| P10-E02 | button | Home icon | B | WIRED | `navigate("/")` |
-| P10-E03 | button(x3) | Season phase toggle | C | WIRED | `setSeasonPhase` |
-| P10-E04 | button(x~9) | Sub-tab navigation | C | WIRED | `setActiveTab` |
+| PGS-01 | button | BACK TO MENU | B | WIRED | `navigate("/exhibition")` — only in error state |
+| PGS-02 | button | BOX SCORE toggle | C | WIRED | Toggles boxScoreExpanded |
+| PGS-03 | button | CONTINUE | B | WIRED | Routes to `/exhibition`, `/world-series`, or `/franchise/{id}` based on gameMode |
 
-#### Today's Game (GameDayContent)
-| ID | Type | Label | Tier | Status | Handler / Destination |
-|----|------|-------|------|--------|-----------------------|
-| P10-E05 | button | PLAY GAME | B | WIRED | `handlePlayGame` -> lineup preview -> `navigate(/game-tracker/{gameId})` |
-| P10-E06 | button | SCORE GAME | C | WIRED | `setConfirmAction("watch")` -- dialog opens but no real logic after confirm |
-| P10-E07 | button | SIMULATE | C | **FAKE** | `handleSimulate` -> `console.log("Game simulated")` only |
-| P10-E08 | button | SKIP | C | **FAKE** | `handleSkip` -> `console.log("Game skipped")` only |
-| P10-E09 | button | BEAT WRITERS | C | WIRED | Toggles accordion |
-| P10-E10 | button | HEAD-TO-HEAD HISTORY | C | WIRED | Toggles accordion |
-| P10-E11 | button | Away Team Stats | C | WIRED | Toggles stats panel |
-| P10-E12 | button | Home Team Stats | C | WIRED | Toggles stats panel |
-| P10-E13 | button | CONFIRM (in dialog) | B | WIRED | Calls `handlePlayGame`/`handleSimulate`/`handleSkip` |
-| P10-E14 | button | CANCEL (in dialog) | C | WIRED | Closes dialog |
-| P10-E15 | button | START GAME (lineup preview) | B | WIRED | `navigate` to game-tracker |
-| P10-E16 | button | BACK (lineup preview) | C | WIRED | Closes preview |
-
-**Hardcoded data in GameDayContent**: headToHeadGames, beatWriterStories, team stats with "PLAYER NAME" placeholders, lineup preview generic names.
-**Partially wired**: `nextGame` comes from `useFranchiseData` hook (real data with mock fallback).
-
-#### Schedule Tab
-| ID | Type | Label | Tier | Status | Handler / Destination |
-|----|------|-------|------|--------|-----------------------|
-| P10-E17 | button | Add Game | C->A | WIRED | Opens AddGameModal -> `handleAddGame` -> `scheduleData.addGame` -> IndexedDB |
-| P10-E18 | select | Team filter | C | WIRED | `setSelectedScheduleTeam` |
-
-#### Standings Tab (StandingsContent)
-| ID | Type | Label | Tier | Status | Handler / Destination |
-|----|------|-------|------|--------|-----------------------|
-| P10-E19 | button(x2) | League toggle (Eastern/Western) | C | WIRED | `setSelectedLeague` |
-
-**Data**: Standings from `useFranchiseDataContext` (real data with mock fallback).
-
-#### Leaders Tab (LeagueLeadersContent)
-| ID | Type | Label | Tier | Status | Handler / Destination |
-|----|------|-------|------|--------|-----------------------|
-| P10-E20+ | button(x20+) | Section expand/collapse, league toggles, stat expand | C | WIRED | `toggleSection`/`setExpandedLeague`/`setExpandedBattingStat`/`setExpandedPitchingStat` |
-
-**Hardcoded data**: NL data hardcoded mock. All Gold Glove, Silver Slugger, Major Awards data hardcoded.
-**Real data**: AL batting/pitching leaders from `useFranchiseDataContext`.
-
-#### Rosters/Trades Tab
-| ID | Type | Label | Tier | Status | Handler / Destination |
-|----|------|-------|------|--------|-----------------------|
-| P10-E21 | component | TradeFlow | A | WIRED | Imported from `@/app/components/TradeFlow` |
-
-#### All-Star Tab
-| ID | Type | Label | Tier | Status | Handler / Destination |
-|----|------|-------|------|--------|-----------------------|
-| P10-E22 | button(x2) | League toggle | C | WIRED | `setAllStarLeague` |
-
-**Hardcoded data**: All ~65 All-Star player records are hardcoded mock.
-
-#### Museum Tab
-| ID | Type | Label | Tier | Status | Handler / Destination |
-|----|------|-------|------|--------|-----------------------|
-| P10-E23 | component | MuseumContent | C | WIRED | Receives `retiredJerseys` from local state |
-
-#### Playoff Tabs (bracket, series, playoff-stats, playoff-leaders, advance)
-| ID | Type | Label | Tier | Status | Handler / Destination |
-|----|------|-------|------|--------|-----------------------|
-| P10-E24 | button | CREATE PLAYOFF BRACKET | A | WIRED | `playoffData.createNewPlayoff` -> IndexedDB |
-| P10-E25 | button | START PLAYOFFS | A | WIRED | `playoffData.startPlayoffs` -> IndexedDB |
-| P10-E26 | button | PROCEED TO OFFSEASON | C | WIRED | `setSeasonPhase("offseason")` |
-
-#### Offseason Tabs
-| ID | Type | Label | Tier | Status | Handler / Destination |
-|----|------|-------|------|--------|-----------------------|
-| P10-E27 | button | START FREE AGENCY | C | WIRED | Shows `FreeAgencyFlow` component |
-| P10-E28 | button | END-OF-SEASON RATINGS ADJUSTMENTS | C | WIRED | Shows `RatingsAdjustmentFlow` |
-| P10-E29 | button | BEGIN AWARDS CEREMONY | C | WIRED | Shows `AwardsCeremonyFlow` |
-| P10-E30 | button | BEGIN CONTRACTION/EXPANSION | C | WIRED | Shows `ContractionExpansionFlow` |
-| P10-E31 | button | BEGIN RETIREMENT PHASE | C | WIRED | Shows `RetirementFlow` |
-| P10-E32 | button | SEASON DRAFT (START) | C | WIRED | Shows `DraftFlow` |
-| P10-E33 | button | START FINALIZE & ADVANCE | C->A | WIRED | Shows `FinalizeAdvanceFlow` -> on complete: increments season, saves to localStorage |
-
-#### BeatReporterNews
-| ID | Type | Label | Tier | Status | Handler / Destination |
-|----|------|-------|------|--------|-----------------------|
-| P10-E34+ | button(x4+) | News filter, team filter, article expand | C | WIRED | Local state filters |
-
-**Hardcoded data**: All 10 news articles hardcoded.
+Health: ✅ GOOD — Read-only page, no data mutations
 
 ---
 
-### Page 11: PostGameSummary (`/post-game/:gameId`)
-**File**: `src/src_figma/app/pages/PostGameSummary.tsx` (689 lines)
-**Health**: GOOD
+## Tier A Elements Needing Attention
 
-| ID | Type | Label | Tier | Status | Handler / Destination |
-|----|------|-------|------|--------|-----------------------|
-| P11-E01 | button | BOX SCORE | C | WIRED | Toggles box score visibility |
-| P11-E02 | button | CONTINUE | B | WIRED | Navigates based on `gameMode` (franchise -> franchise home, else -> home) |
+### FAKE Tier A (appears to mutate data but doesn't):
 
-**Data**: Game data loaded from IndexedDB via `getCompletedGameById()`.
+| Element | Page | Issue | Priority |
+|---------|------|-------|----------|
+| FS-05: START FRANCHISE | FranchiseSetup | Navigates to `/franchise/new` but never persists the 6-step config wizard data to IndexedDB | HIGH |
+| FH-36: SIMULATE | FranchiseHome | `console.log("Game simulated")` — no game simulation engine | HIGH |
+| FH-37: SKIP | FranchiseHome | `console.log("Game skipped")` — no skip logic | HIGH |
+| LD-02: START DRAFT | LB Draft | Shows `alert()` — no draft execution logic | MEDIUM |
 
----
+### TODO Tier A (partially implemented):
 
-### Page 12: ExhibitionGame (`/exhibition`)
-**File**: `src/src_figma/app/pages/ExhibitionGame.tsx` (347 lines)
-**Health**: GOOD
-
-| ID | Type | Label | Tier | Status | Handler / Destination |
-|----|------|-------|------|--------|-----------------------|
-| P12-E01 | button | Back | B | WIRED | `navigate("/")` |
-| P12-E02 | button | GO TO LEAGUE BUILDER | B | WIRED | `navigate("/league-builder")` |
-| P12-E03 | button(xN) | League selection | C | WIRED | `setSelectedLeagueId` |
-| P12-E04 | button(xN) | Team selection | C | WIRED | `setSelectedAwayTeamId`/`setSelectedHomeTeamId` |
-| P12-E05 | button(x2) | CONTINUE | C | WIRED | `setStep` |
-| P12-E06 | button(x2) | BACK | C | WIRED | `setStep` |
-| P12-E07 | button | START GAME | B | WIRED | `handleStartGame` -> `navigate` to `/game-tracker/exhibition-1` with state |
-
-**Data**: Uses real data from `useLeagueBuilderData` for leagues/teams/players.
+| Element | Page | Issue | Priority |
+|---------|------|-------|----------|
+| EAM-06: Confirm (ErrorOnAdvance) | GameTracker modal | `handleErrorOnAdvanceConfirm` only does `console.log` — doesn't persist error attributions | MEDIUM |
 
 ---
 
-### Page 13: WorldSeries (`/world-series`)
-**File**: `src/src_figma/app/pages/WorldSeries.tsx` (~1100 lines)
-**Health**: CRITICAL (<50% wired -- uses hardcoded mockLeagues, no persistence)
+## Orphaned Handlers
 
-| ID | Type | Label | Tier | Status | Handler / Destination |
-|----|------|-------|------|--------|-----------------------|
-| P13-E01 | button | Back | B | WIRED | `navigate("/")` |
-| P13-E02 | button(x5) | Tab buttons | C | WIRED | `setActiveTab` |
-| P13-E03 | button | QUICK SETUP | C | **FAKE** | Uses hardcoded `mockLeagues`, not real data |
-| P13-E04 | button(xN) | League selection | C | **FAKE** | Uses hardcoded `mockLeagues` |
-| P13-E05 | button | GENERATE PLAYOFF BRACKET | C | **FAKE** | `setIsConfigured(true)` -- no persistence |
-| P13-E06+ | various | Games per round, innings, DH, exhibition mode | C | WIRED | Local state |
+### Dead Sub-Components in FranchiseHome (1327 lines)
 
-**Issues**: The entire page operates on hardcoded `mockLeagues` instead of importing from `useLeagueBuilderData`. Bracket configuration is never persisted. This is a UI shell that cannot produce real playoff data.
+| Component | Lines | Purpose | Replacement |
+|-----------|-------|---------|-------------|
+| `TradeInterfaceContent` | 2288-2893 | Trade UI with player selection | `<TradeFlow>` component (active) |
+| `AwardsContent` | 3481-4203 | Awards display + trait wheel | Inline content + `<AwardsCeremonyFlow>` |
 
----
+### Dead Figma Modals (5 modals, ~29 elements)
 
-## Critical Bugs (Prioritized)
+| Modal | File | Purpose | Notes |
+|-------|------|---------|-------|
+| DefensiveSubModal | `modals/DefensiveSubModal.tsx` | Defensive substitutions | Barrel export only, not imported by active GT |
+| DoubleSwitchModal | `modals/DoubleSwitchModal.tsx` | Double switch | Barrel export only |
+| PinchHitterModal | `modals/PinchHitterModal.tsx` | Pinch hitter | Barrel export only |
+| PinchRunnerModal | `modals/PinchRunnerModal.tsx` | Pinch runner | Barrel export only |
+| PitchingChangeModal | `modals/PitchingChangeModal.tsx` | Pitching change | Barrel export only |
+| PositionSwitchModal | `modals/PositionSwitchModal.tsx` | Position swap | Barrel export only |
 
-### Severity: BLOCKER (blocks core user flows)
+### Query Param Mismatch
 
-| # | Page | Element | Bug | Impact |
-|---|------|---------|-----|--------|
-| BUG-01 | FranchiseSetup | P09-E04 | START FRANCHISE navigates to `/franchise/new` which does not exist | **Users cannot create a franchise** -- the 6-step wizard leads to a dead end |
-| BUG-02 | FranchiseSetup | (entire page) | Config data never persisted to storage -- all React state | Even if BUG-01 is fixed, all wizard choices are lost on navigation |
-| BUG-03 | AppHome | P01-E01 | LOAD FRANCHISE links to `/franchise/select` which does not exist | **Users cannot load an existing franchise** from the home screen |
-
-### Severity: HIGH (feature does not function)
-
-| # | Page | Element | Bug | Impact |
-|---|------|---------|-----|--------|
-| BUG-04 | LeagueBuilderDraft | P07-E02/E04 | All draft operations in local state only, never persisted | Draft results are lost on navigation -- page is non-functional as a feature |
-| BUG-05 | WorldSeries | P13-E03/E04/E05 | Uses hardcoded mockLeagues, no persistence | Playoff brackets do not use real league data and are lost on refresh |
-| BUG-06 | LeagueBuilder | P02-E10 | CSV import reads file but never writes to IndexedDB | Users think import worked but no data is saved |
-
-### Severity: MEDIUM (feature partially non-functional)
-
-| # | Page | Element | Bug | Impact |
-|---|------|---------|-----|--------|
-| BUG-07 | FranchiseHome | P10-E07 | SIMULATE handler only does `console.log("Game simulated")` | Button appears functional but does nothing |
-| BUG-08 | FranchiseHome | P10-E08 | SKIP handler only does `console.log("Game skipped")` | Button appears functional but does nothing |
+| Source | Target | Param | Issue |
+|--------|--------|-------|-------|
+| `LeagueBuilder.tsx:197` | `LeagueBuilderLeagues.tsx` | `?id=` | Target page ignores `?id=` — doesn't auto-open league |
+| `LeagueBuilder.tsx:204` | `LeagueBuilderLeagues.tsx` | `?new=true` | Target page ignores `?new=true` — doesn't auto-open create modal |
 
 ---
 
-## Tier A Elements Requiring Attention
+## Data Flow Chains (Tier A Destinations)
 
-All Tier A (data-mutating) elements, grouped by status:
+### Fully Wired (IndexedDB persistence confirmed):
 
-### Tier A: WIRED (18 elements -- no action needed)
+```
+League Builder CRUD:
+  UI handler → useLeagueBuilderData hook → leagueBuilderStorage.ts → IndexedDB
+  Functions: saveLeagueTemplate, deleteLeagueTemplate, saveTeam, deleteTeam,
+             savePlayer, deletePlayer, saveRulesPreset, deleteRulesPreset,
+             saveTeamRoster, getTeamRoster, seedFromSMB4Database
 
-| ID | Page | Label | Storage Target |
-|----|------|-------|----------------|
-| P02-E02 | LeagueBuilder | IMPORT SMB4 DATA | `seedSMB4Data(true)` -> IndexedDB |
-| P03-E04 | LBLeagues | Duplicate | `duplicateLeague(id)` -> IndexedDB |
-| P03-E05 | LBLeagues | Delete | `removeLeague(id)` -> IndexedDB |
-| P03-E06 | LBLeagues | Save (modal) | `createLeague`/`updateLeague` -> IndexedDB |
-| P04-E04 | LBTeams | Delete | `removeTeam(id)` -> IndexedDB |
-| P04-E05 | LBTeams | Save (modal) | `createTeam`/`updateTeam` -> IndexedDB |
-| P05-E03 | LBPlayers | GENERATE PLAYERS | `createPlayer()` loop -> IndexedDB |
-| P05-E04 | LBPlayers | Delete | `removePlayer(id)` -> IndexedDB |
-| P05-E05 | LBPlayers | Save (modal) | `createPlayer`/`updatePlayer` -> IndexedDB |
-| P06-E02 | LBRosters | SAVE | `updateRoster` -> IndexedDB |
-| P08-E03 | LBRules | Duplicate | `createRulesPreset` -> IndexedDB |
-| P08-E04 | LBRules | Delete | `removeRulesPreset` -> IndexedDB |
-| P10-E17 | FranchiseHome | Add Game | `scheduleData.addGame` -> IndexedDB |
-| P10-E21 | FranchiseHome | TradeFlow | Imported component with own storage |
-| P10-E24 | FranchiseHome | CREATE PLAYOFF BRACKET | `playoffData.createNewPlayoff` -> IndexedDB |
-| P10-E25 | FranchiseHome | START PLAYOFFS | `playoffData.startPlayoffs` -> IndexedDB |
-| P10-E33 | FranchiseHome | FINALIZE & ADVANCE | `FinalizeAdvanceFlow` -> localStorage |
-| P03-E02 | LBLeagues | CREATE NEW LEAGUE | Via modal -> `createLeague()` |
+Franchise Home Schedule:
+  handleAddGame/handleAddSeries → useScheduleData().addGame/addSeries() → IndexedDB
 
-### Tier A: FAKE (4 elements -- action required)
+Franchise Home Playoffs:
+  playoffData.createNewPlayoff/startPlayoffs → usePlayoffData() → IndexedDB
 
-| ID | Page | Label | What Happens | What Should Happen |
-|----|------|-------|--------------|--------------------|
-| P02-E10 | LeagueBuilder | SELECT CSV FILE | Reads file, drops data | Should parse CSV and call `createPlayer()`/`createTeam()` for each row |
-| P07-E02 | LBDraft | Generate Prospects | Creates local array | Should persist prospects to IndexedDB via draft storage |
-| P07-E04 | LBDraft | Make Pick | Updates local state | Should persist picks to IndexedDB and update roster assignments |
-| P13-E05 | WorldSeries | GENERATE PLAYOFF BRACKET | Sets local boolean | Should use real league data and persist bracket to IndexedDB |
+Exhibition Game:
+  loadTeamLineup() → lineupLoader.ts → getRoster() → IndexedDB (READ only)
+  handleStartGame → navigate with state (no write — GT does the write)
 
-### Tier A: BROKEN (1 element -- action required)
+Post-Game Summary:
+  getCompletedGameById() → gameStorage.ts → IndexedDB (READ only)
+```
 
-| ID | Page | Label | What Happens | What Should Happen |
-|----|------|-------|--------------|--------------------|
-| P09-E04 | FranchiseSetup | START FRANCHISE | Navigates to non-existent `/franchise/new` | Should persist config to IndexedDB, create franchise record, navigate to `/franchise/{newId}` |
+### Partially Wired (local state only, no persistence):
 
----
-
-## Orphaned / Dead Code
-
-### Dead Functions (defined but never rendered)
-
-| Function | File | Lines | Description |
-|----------|------|-------|-------------|
-| `TradeInterfaceContent` | FranchiseHome.tsx | ~2459-3068 | Complete trade UI with team selects, player selection, propose/accept/reject buttons. Uses hardcoded `mockRosters`. Replaced by `TradeFlow` component but never removed. |
-| `AwardsContent` | FranchiseHome.tsx | ~3644-4351 | Complete awards UI with Gold Glove, Silver Slugger, MVP display. All data hardcoded. Not rendered from any tab -- appears to be a duplicate of `LeagueLeadersContent` with different styling. |
-
-### Orphaned Handlers
-
-| Handler | File | Issue |
-|---------|------|-------|
-| `handleSimulate` | FranchiseHome.tsx | Defined, called from CONFIRM dialog, but body is only `console.log` |
-| `handleSkip` | FranchiseHome.tsx | Defined, called from CONFIRM dialog, but body is only `console.log` |
-
----
-
-## Hardcoded Mock Data Inventory
-
-Major hardcoded data blocks that prevent features from using real data:
-
-| Location | Data Block | Approximate Size | Should Come From |
-|----------|-----------|-----------------|-----------------|
-| FranchiseHome (GameDayContent) | `headToHeadGames` | ~10 game records | `h2hTracker` / game history storage |
-| FranchiseHome (GameDayContent) | `beatWriterStories` | ~5 story objects | `headlineEngine` / `narrativeEngine` |
-| FranchiseHome (GameDayContent) | Team stats tables | ~20 rows with "PLAYER NAME" | Season stats aggregator |
-| FranchiseHome (GameDayContent) | Lineup preview | Generic placeholder names | Roster storage for selected teams |
-| FranchiseHome (LeagueLeadersContent) | NL leaders data | ~50 player records | Season stats aggregator (NL side) |
-| FranchiseHome (LeagueLeadersContent) | Gold Glove, Silver Slugger, Major Awards | ~30 award records | Awards engine / season aggregator |
-| FranchiseHome (AllStarContent) | `allStarVotes` | ~65 player records | All-Star selection engine (does not exist yet) |
-| FranchiseHome (BeatReporterNews) | News articles | 10 articles | `headlineEngine` / `narrativeEngine` |
-| WorldSeries | `mockLeagues` | ~4 league objects | `useLeagueBuilderData` hook |
-
----
-
-## Reconciliation
-
-### Top-Down vs Bottom-Up
-
-| Metric | Count |
-|--------|-------|
-| Pages scanned (top-down) | 13 |
-| Total interactive elements found (top-down) | 142 |
-| Elements with real handlers (WIRED) | 112 |
-| Elements with fake/stub handlers (FAKE) | 12 |
-| Elements with broken targets (BROKEN) | 2 |
-| Dead code functions found (never rendered) | 2 |
-| Handler functions that are stubs (console.log only) | 2 |
-
-### Unmatched Elements
-
-| Type | Items | Notes |
-|------|-------|-------|
-| Dead code (defined, never rendered) | `TradeInterfaceContent`, `AwardsContent` | Safe to remove; `TradeFlow` replaced the former |
-| Stub handlers (exist but do nothing real) | `handleSimulate`, `handleSkip` | Need real implementation or explicit "coming soon" UI |
-
-### Coverage Gaps
-
-| Gap | Description |
-|-----|-------------|
-| No `/franchise/select` route | `FranchiseSelector.tsx` exists as a file but is not in routes |
-| No draft persistence layer | `LeagueBuilderDraft` has UI but no storage functions for draft data |
-| No game simulation engine | SIMULATE/SKIP buttons exist but no simulation logic exists anywhere |
-| No All-Star selection engine | All-Star tab renders hardcoded data, no engine to compute selections |
+```
+FranchiseSetup: All config → local useState → LOST on navigate
+Draft settings: draftRounds/pickTimer/draftOrder → local useState → LOST on navigate
+Draft prospects: generateProspects() → local useState → LOST on navigate/refresh
+WorldSeries: All settings → local useState → all mock data
+```
 
 ---
 
 ## Recommendations
 
-### Priority 1: Fix Blockers (enables core franchise flow)
-1. **Wire FranchiseSetup persistence**: Add `franchiseManager.createFranchise(config)` call at wizard completion
-2. **Add `/franchise/select` route**: Wire `FranchiseSelector.tsx` into `routes.tsx`
-3. **Fix START FRANCHISE navigation**: Navigate to `/franchise/{newlyCreatedId}` after persisting
+### Priority 1: Critical (data-mutating buttons that should work but don't)
 
-### Priority 2: Fix High-Severity (complete broken features)
-4. **Wire LeagueBuilderDraft persistence**: Create draft storage functions, persist prospects and picks
-5. **Wire WorldSeries to real data**: Replace `mockLeagues` with `useLeagueBuilderData`, add bracket persistence
-6. **Wire CSV import**: Complete the `handleCSVImport` function to write parsed data to IndexedDB
+1. **FranchiseSetup.START FRANCHISE** — Must persist config to IndexedDB before navigating
+2. **FranchiseHome.SIMULATE** — Needs game simulation engine or at minimum score entry
+3. **FranchiseHome.SKIP** — Needs game skip logic (advance schedule, record 0-0 or forfeit)
 
-### Priority 3: Fix Medium-Severity (stub implementations)
-7. **Implement SIMULATE/SKIP**: At minimum, advance the schedule and record a simulated result
-8. **Remove dead code**: Delete `TradeInterfaceContent` and `AwardsContent` from FranchiseHome.tsx (~1300 lines)
+### Priority 2: Dead Code Removal (~1600 lines)
 
-### Priority 4: Replace Hardcoded Data (ongoing)
-9. Wire FranchiseHome hardcoded data to real engines/storage as each engine becomes available
-10. Prioritize: team stats > league leaders NL > beat writer stories > head-to-head > all-star > news
+1. **Remove `TradeInterfaceContent`** from FranchiseHome.tsx (~605 lines dead code)
+2. **Remove `AwardsContent`** from FranchiseHome.tsx (~722 lines dead code)
+3. **Consider removing 5 dead figma modals** or wiring them into active GameTracker
 
----
+### Priority 3: Wiring Gaps
 
-## Appendix: Element Count by Type
+1. **LeagueBuilder query params** — `?id=` and `?new=true` are sent but never read
+2. **ErrorOnAdvanceModal.Confirm** — Wire to actual game state, not just console.log
+3. **Draft START DRAFT button** — Wire to draft execution logic
+4. **WorldSeries** — Entire page needs real data integration (or remove/hide until ready)
 
-| Element Type | Count |
-|--------------|-------|
-| button | 89 |
-| link | 18 |
-| select | 3 |
-| component (embedded) | 8 |
-| various (form inputs, toggles) | 24 |
-| **Total** | **142** |
+### Priority 4: Hardcoded Values
 
-## Appendix: Element Count by Tier
-
-| Tier | Count | Description |
-|------|-------|-------------|
-| A | 23 | Data-mutating (write to storage) |
-| B | 22 | Navigation (route changes) |
-| C | 92 | UI state (local React state) |
-| C->A | 5 | UI trigger leading to data mutation |
-| **Total** | **142** | |
+1. `ExhibitionGame.tsx:112` — `leagueId: 'sml'` hardcoded
+2. `ExhibitionGame.tsx:113` — `userTeamSide: 'home'` hardcoded
+3. `AppHome.tsx:26` — `<Link to="/franchise/tigers">` hardcoded franchise ID
+4. All WorldSeries mock data arrays (mockLeagues, mockTeams, battingLeadersData, etc.)
+5. All BeatReporterNews articles in FranchiseHome (~300 lines of mock news)
