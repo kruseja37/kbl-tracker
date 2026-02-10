@@ -240,6 +240,12 @@ export async function initLeagueBuilderDatabase(): Promise<IDBDatabase> {
 
     request.onsuccess = () => {
       dbInstance = request.result;
+      // Auto-invalidate singleton if the database is externally closed or version-changed
+      dbInstance.onclose = () => { dbInstance = null; };
+      dbInstance.onversionchange = () => {
+        dbInstance?.close();
+        dbInstance = null;
+      };
       resolve(dbInstance);
     };
 
@@ -855,6 +861,11 @@ function convertTeam(team: TeamData): Omit<Team, 'createdDate' | 'lastModified'>
  * @returns Object with counts of seeded teams and players
  */
 export async function seedFromSMB4Database(clearExisting = true): Promise<{ teams: number; players: number }> {
+  // Force-reset the DB singleton to ensure a fresh connection.
+  // This prevents silent failures when IndexedDB was externally cleared
+  // (e.g., via devtools) and the cached connection is stale.
+  dbInstance = null;
+
   const db = await initLeagueBuilderDatabase();
 
   if (clearExisting) {
@@ -889,7 +900,28 @@ export async function seedFromSMB4Database(clearExisting = true): Promise<{ team
 
   console.log(`[LeagueBuilder] Seeded ${teamCount} teams and ${playerCount} players from SMB4 database`);
 
-  return { teams: teamCount, players: playerCount };
+  // Post-seed verification: read back counts to confirm writes persisted
+  const verifyTeams = await getAllTeams();
+  const verifyPlayers = await getAllPlayers();
+  const persistedTeams = verifyTeams.length;
+  const persistedPlayers = verifyPlayers.length;
+
+  if (persistedTeams === 0 && teamCount > 0) {
+    throw new Error(
+      `SMB4 import verification failed: wrote ${teamCount} teams but read back 0. ` +
+      `Database may have been cleared externally. Please try again.`
+    );
+  }
+  if (persistedPlayers === 0 && playerCount > 0) {
+    throw new Error(
+      `SMB4 import verification failed: wrote ${playerCount} players but read back 0. ` +
+      `Database may have been cleared externally. Please try again.`
+    );
+  }
+
+  console.log(`[LeagueBuilder] Verified: ${persistedTeams} teams, ${persistedPlayers} players in DB`);
+
+  return { teams: persistedTeams, players: persistedPlayers };
 }
 
 /**

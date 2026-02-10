@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router";
-import { Database, Users, User, Folder, Shuffle, Settings, ArrowLeft, Loader2, Download, CheckCircle } from "lucide-react";
+import { Database, Users, User, Folder, Shuffle, Settings, ArrowLeft, Loader2, Download, CheckCircle, AlertCircle } from "lucide-react";
 import { useLeagueBuilderData } from "../../hooks/useLeagueBuilderData";
 
 export function LeagueBuilder() {
@@ -9,6 +9,7 @@ export function LeagueBuilder() {
 
   const [isSeeding, setIsSeeding] = useState(false);
   const [seedResult, setSeedResult] = useState<{ teams: number; players: number } | null>(null);
+  const [seedError, setSeedError] = useState<string | null>(null);
   const [isAlreadySeeded, setIsAlreadySeeded] = useState(false);
 
   // Check if already seeded on mount
@@ -29,6 +30,7 @@ export function LeagueBuilder() {
 
     setIsSeeding(true);
     setSeedResult(null);
+    setSeedError(null);
 
     try {
       const result = await seedSMB4Data(true);
@@ -36,7 +38,8 @@ export function LeagueBuilder() {
       setIsAlreadySeeded(true);
     } catch (err) {
       console.error('Failed to seed database:', err);
-      alert('Failed to import SMB4 database. Check console for details.');
+      const message = err instanceof Error ? err.message : 'Unknown error';
+      setSeedError(message);
     } finally {
       setIsSeeding(false);
     }
@@ -106,6 +109,13 @@ export function LeagueBuilder() {
           {seedResult && (
             <div className="mt-3 pt-3 border-t border-[#E8E8D8]/30 text-xs text-[#4CAF50]">
               ✓ Successfully imported {seedResult.teams} teams and {seedResult.players} players!
+            </div>
+          )}
+
+          {seedError && (
+            <div className="mt-3 pt-3 border-t border-[#E8E8D8]/30 text-xs text-[#F44336] flex items-start gap-2">
+              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+              <span>Import failed: {seedError}</span>
             </div>
           )}
         </div>
