@@ -420,7 +420,8 @@ export function PostGameSummary() {
               if (gameMode === 'exhibition') {
                 navigate("/exhibition");
               } else if (gameMode === 'playoff') {
-                navigate("/world-series");
+                // Return to franchise home (bracket tab) — NOT /world-series
+                navigate(`/franchise/${franchiseId}`);
               } else {
                 navigate(`/franchise/${franchiseId}`);
               }

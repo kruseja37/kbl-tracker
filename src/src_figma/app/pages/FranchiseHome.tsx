@@ -18,6 +18,7 @@ import { ScheduleContent } from "@/app/components/ScheduleContent";
 import { useFranchiseData, type UseFranchiseDataReturn } from "@/hooks/useFranchiseData";
 import { useScheduleData, type ScheduledGame } from "@/hooks/useScheduleData";
 import { usePlayoffData } from "@/hooks/usePlayoffData";
+import { getHomeFieldPattern, detectClinch } from "../../../engines/playoffEngine";
 
 // Context for passing franchise data to child components
 const FranchiseDataContext = createContext<UseFranchiseDataReturn | null>(null);
@@ -64,6 +65,9 @@ export function FranchiseHome() {
   });
   const scheduleData = useScheduleData(currentSeason);
   const [addGameModalOpen, setAddGameModalOpen] = useState(false);
+
+  // Bracket UI state
+  const [expandedSeriesId, setExpandedSeriesId] = useState<string | null>(null);
 
   // Playoff System State - Persisted to IndexedDB via usePlayoffData
   const playoffData = usePlayoffData(currentSeason);
@@ -331,6 +335,42 @@ export function FranchiseHome() {
     } catch (err) {
       console.error('[FranchiseHome] Failed to add series:', err);
     }
+  };
+
+  // Launch a playoff game in the GameTracker
+  const handlePlayPlayoffGame = (series: ReturnType<typeof playoffData.getSeriesForTeam> & {}) => {
+    if (!series || series.status !== 'IN_PROGRESS') return;
+
+    // Determine next game number (count completed games + 1)
+    const completedGames = series.games.filter(g => g.status === 'COMPLETED').length;
+    const nextGameNumber = completedGames + 1;
+
+    // Determine home/away using playoff engine
+    const homeTeamId = getHomeFieldPattern(
+      nextGameNumber,
+      series.bestOf,
+      series.higherSeed.teamId,
+      series.lowerSeed.teamId
+    );
+    const isHigherSeedHome = homeTeamId === series.higherSeed.teamId;
+
+    const awayTeamId = isHigherSeedHome ? series.lowerSeed.teamId : series.higherSeed.teamId;
+    const awayTeamName = isHigherSeedHome ? series.lowerSeed.teamName : series.higherSeed.teamName;
+    const homeTeamName = isHigherSeedHome ? series.higherSeed.teamName : series.lowerSeed.teamName;
+
+    navigate(`/game-tracker/playoff-${series.id}-g${nextGameNumber}`, {
+      state: {
+        gameMode: 'playoff' as const,
+        playoffSeriesId: series.id,
+        playoffGameNumber: nextGameNumber,
+        awayTeamId,
+        homeTeamId,
+        awayTeamName: awayTeamName.toUpperCase(),
+        homeTeamName: homeTeamName.toUpperCase(),
+        franchiseId,
+        leagueId: 'sml',
+      },
+    });
   };
 
   const regularSeasonTabs = [
@@ -749,8 +789,16 @@ export function FranchiseHome() {
                 {playoffData.playoff ? `Season ${playoffData.playoff.seasonNumber} Postseason` : `Season ${currentSeason} Postseason`}
               </div>
               {playoffData.playoff?.status === 'COMPLETED' && playoffData.playoff.champion && (
-                <div className="mt-2 text-lg text-[#FFD700]">
-                  🏆 CHAMPION: {playoffData.playoff.teams.find(t => t.teamId === playoffData.playoff?.champion)?.teamName.toUpperCase()}
+                <div className="mt-4 bg-gradient-to-r from-[#4A6844] via-[#FFD700]/20 to-[#4A6844] border-2 border-[#FFD700] p-4 rounded">
+                  <div className="text-2xl text-[#FFD700] font-bold animate-pulse">
+                    🏆 CHAMPION 🏆
+                  </div>
+                  <div className="text-xl text-[#FFD700] mt-1">
+                    {playoffData.playoff.teams.find(t => t.teamId === playoffData.playoff?.champion)?.teamName.toUpperCase()}
+                  </div>
+                  <div className="text-xs text-[#E8E8D8]/60 mt-1">
+                    Season {playoffData.playoff.seasonNumber} World Series Champions
+                  </div>
                 </div>
               )}
             </div>
@@ -792,14 +840,34 @@ export function FranchiseHome() {
                     </div>
                     <div className="space-y-4">
                       {playoffData.bracketByLeague.Eastern.length > 0 ? (
-                        playoffData.bracketByLeague.Eastern.map((s) => (
+                        playoffData.bracketByLeague.Eastern.map((s) => {
+                          const higherStatus = s.status === 'IN_PROGRESS' ? detectClinch(s.higherSeedWins, s.lowerSeedWins, s.bestOf) : null;
+                          const lowerStatus = s.status === 'IN_PROGRESS' ? detectClinch(s.lowerSeedWins, s.higherSeedWins, s.bestOf) : null;
+                          const isExpanded = expandedSeriesId === s.id;
+                          return (
                           <div key={s.id}>
                             <div className="text-xs text-[#E8E8D8]/60 mb-2">{s.roundName.toUpperCase()}</div>
-                            <div className={`bg-[#4A6844] p-3 border-2 ${
-                              s.status === 'COMPLETED' ? 'border-[#00DD00]' :
-                              s.status === 'IN_PROGRESS' ? 'border-[#5599FF]' :
-                              'border-[#E8E8D8]/30'
-                            }`}>
+                            <div
+                              className={`bg-[#4A6844] p-3 border-2 cursor-pointer transition-all ${
+                                s.status === 'COMPLETED' ? 'border-[#00DD00]' :
+                                s.status === 'IN_PROGRESS' ? 'border-[#5599FF]' :
+                                'border-[#E8E8D8]/30'
+                              }`}
+                              onClick={() => setExpandedSeriesId(isExpanded ? null : s.id)}
+                            >
+                              {/* Clinch/Elimination badges */}
+                              {higherStatus?.isClinchGame && (
+                                <div className="text-[8px] text-[#FFD700] text-center mb-1">⭐ {s.higherSeed.teamName} can clinch</div>
+                              )}
+                              {lowerStatus?.isEliminationGame && (
+                                <div className="text-[8px] text-[#DC3545] text-center mb-1">⚠️ {s.lowerSeed.teamName} facing elimination</div>
+                              )}
+                              {lowerStatus?.isClinchGame && (
+                                <div className="text-[8px] text-[#FFD700] text-center mb-1">⭐ {s.lowerSeed.teamName} can clinch</div>
+                              )}
+                              {higherStatus?.isEliminationGame && (
+                                <div className="text-[8px] text-[#DC3545] text-center mb-1">⚠️ {s.higherSeed.teamName} facing elimination</div>
+                              )}
                               <div className="flex justify-between items-center mb-1">
                                 <span className={`text-xs ${s.winner === s.higherSeed.teamId ? 'text-[#00DD00] font-bold' : 'text-[#E8E8D8]'}`}>
                                   ({s.higherSeed.seed}) {s.higherSeed.teamName}
@@ -812,12 +880,36 @@ export function FranchiseHome() {
                                 </span>
                                 <span className="text-xs text-[#E8E8D8]">{s.lowerSeedWins}</span>
                               </div>
+                              {/* Expanded: game-by-game results */}
+                              {isExpanded && s.games.filter(g => g.status === 'COMPLETED').length > 0 && (
+                                <div className="mt-2 pt-2 border-t border-[#E8E8D8]/20">
+                                  <div className="grid grid-cols-3 gap-1">
+                                    {s.games.filter(g => g.status === 'COMPLETED' && g.result).map(g => (
+                                      <div key={g.gameNumber} className="bg-[#5A8352] p-1 text-center">
+                                        <div className="text-[8px] text-[#E8E8D8]/60">G{g.gameNumber}</div>
+                                        <div className={`text-[9px] font-bold ${g.result!.winnerId === s.higherSeed.teamId ? 'text-[#00DD00]' : 'text-[#E8E8D8]'}`}>
+                                          {g.result!.awayScore}-{g.result!.homeScore}
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
                               {s.status === 'IN_PROGRESS' && (
-                                <div className="mt-2 text-[8px] text-[#5599FF] text-center">IN PROGRESS - Best of {s.bestOf}</div>
+                                <div className="mt-2 space-y-2">
+                                  <div className="text-[8px] text-[#5599FF] text-center">IN PROGRESS - Best of {s.bestOf}</div>
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); handlePlayPlayoffGame(s); }}
+                                    className="w-full bg-[#5599FF] border-[2px] border-[#3366FF] py-1.5 text-[10px] text-white font-bold hover:bg-[#3366FF] active:scale-95 transition-transform"
+                                  >
+                                    ⚾ PLAY GAME {s.games.filter(g => g.status === 'COMPLETED').length + 1}
+                                  </button>
+                                </div>
                               )}
                             </div>
                           </div>
-                        ))
+                          );
+                        })
                       ) : (
                         <div className="text-xs text-[#E8E8D8]/60 text-center py-4">
                           {playoffData.playoff.teams.filter(t => t.league === 'Eastern').slice(0, 4).map((t, i) => (
@@ -835,14 +927,34 @@ export function FranchiseHome() {
                     </div>
                     <div className="space-y-4">
                       {playoffData.bracketByLeague.Western.length > 0 ? (
-                        playoffData.bracketByLeague.Western.map((s) => (
+                        playoffData.bracketByLeague.Western.map((s) => {
+                          const higherStatus = s.status === 'IN_PROGRESS' ? detectClinch(s.higherSeedWins, s.lowerSeedWins, s.bestOf) : null;
+                          const lowerStatus = s.status === 'IN_PROGRESS' ? detectClinch(s.lowerSeedWins, s.higherSeedWins, s.bestOf) : null;
+                          const isExpanded = expandedSeriesId === s.id;
+                          return (
                           <div key={s.id}>
                             <div className="text-xs text-[#E8E8D8]/60 mb-2">{s.roundName.toUpperCase()}</div>
-                            <div className={`bg-[#4A6844] p-3 border-2 ${
-                              s.status === 'COMPLETED' ? 'border-[#00DD00]' :
-                              s.status === 'IN_PROGRESS' ? 'border-[#5599FF]' :
-                              'border-[#E8E8D8]/30'
-                            }`}>
+                            <div
+                              className={`bg-[#4A6844] p-3 border-2 cursor-pointer transition-all ${
+                                s.status === 'COMPLETED' ? 'border-[#00DD00]' :
+                                s.status === 'IN_PROGRESS' ? 'border-[#5599FF]' :
+                                'border-[#E8E8D8]/30'
+                              }`}
+                              onClick={() => setExpandedSeriesId(isExpanded ? null : s.id)}
+                            >
+                              {/* Clinch/Elimination badges */}
+                              {higherStatus?.isClinchGame && (
+                                <div className="text-[8px] text-[#FFD700] text-center mb-1">⭐ {s.higherSeed.teamName} can clinch</div>
+                              )}
+                              {lowerStatus?.isEliminationGame && (
+                                <div className="text-[8px] text-[#DC3545] text-center mb-1">⚠️ {s.lowerSeed.teamName} facing elimination</div>
+                              )}
+                              {lowerStatus?.isClinchGame && (
+                                <div className="text-[8px] text-[#FFD700] text-center mb-1">⭐ {s.lowerSeed.teamName} can clinch</div>
+                              )}
+                              {higherStatus?.isEliminationGame && (
+                                <div className="text-[8px] text-[#DC3545] text-center mb-1">⚠️ {s.higherSeed.teamName} facing elimination</div>
+                              )}
                               <div className="flex justify-between items-center mb-1">
                                 <span className={`text-xs ${s.winner === s.higherSeed.teamId ? 'text-[#00DD00] font-bold' : 'text-[#E8E8D8]'}`}>
                                   ({s.higherSeed.seed}) {s.higherSeed.teamName}
@@ -855,12 +967,36 @@ export function FranchiseHome() {
                                 </span>
                                 <span className="text-xs text-[#E8E8D8]">{s.lowerSeedWins}</span>
                               </div>
+                              {/* Expanded: game-by-game results */}
+                              {isExpanded && s.games.filter(g => g.status === 'COMPLETED').length > 0 && (
+                                <div className="mt-2 pt-2 border-t border-[#E8E8D8]/20">
+                                  <div className="grid grid-cols-3 gap-1">
+                                    {s.games.filter(g => g.status === 'COMPLETED' && g.result).map(g => (
+                                      <div key={g.gameNumber} className="bg-[#5A8352] p-1 text-center">
+                                        <div className="text-[8px] text-[#E8E8D8]/60">G{g.gameNumber}</div>
+                                        <div className={`text-[9px] font-bold ${g.result!.winnerId === s.higherSeed.teamId ? 'text-[#00DD00]' : 'text-[#E8E8D8]'}`}>
+                                          {g.result!.awayScore}-{g.result!.homeScore}
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
                               {s.status === 'IN_PROGRESS' && (
-                                <div className="mt-2 text-[8px] text-[#5599FF] text-center">IN PROGRESS - Best of {s.bestOf}</div>
+                                <div className="mt-2 space-y-2">
+                                  <div className="text-[8px] text-[#5599FF] text-center">IN PROGRESS - Best of {s.bestOf}</div>
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); handlePlayPlayoffGame(s); }}
+                                    className="w-full bg-[#5599FF] border-[2px] border-[#3366FF] py-1.5 text-[10px] text-white font-bold hover:bg-[#3366FF] active:scale-95 transition-transform"
+                                  >
+                                    ⚾ PLAY GAME {s.games.filter(g => g.status === 'COMPLETED').length + 1}
+                                  </button>
+                                </div>
                               )}
                             </div>
                           </div>
-                        ))
+                          );
+                        })
                       ) : (
                         <div className="text-xs text-[#E8E8D8]/60 text-center py-4">
                           {playoffData.playoff.teams.filter(t => t.league === 'Western').slice(0, 4).map((t, i) => (
@@ -896,6 +1032,14 @@ export function FranchiseHome() {
                         </span>
                         <span className="text-lg text-[#E8E8D8]">{playoffData.bracketByLeague.Championship.lowerSeedWins}</span>
                       </div>
+                      {playoffData.bracketByLeague.Championship.status === 'IN_PROGRESS' && (
+                        <button
+                          onClick={() => handlePlayPlayoffGame(playoffData.bracketByLeague.Championship!)}
+                          className="w-full mt-3 bg-[#FFD700] border-[2px] border-[#CC9900] py-2 text-[11px] text-[#1a1a1a] font-bold hover:bg-[#CC9900] hover:text-white active:scale-95 transition-transform"
+                        >
+                          🏆 PLAY GAME {playoffData.bracketByLeague.Championship.games.filter(g => g.status === 'COMPLETED').length + 1}
+                        </button>
+                      )}
                     </div>
                   ) : (
                     <div className="bg-[#4A6844] p-4 border-2 border-[#FFD700]/50">

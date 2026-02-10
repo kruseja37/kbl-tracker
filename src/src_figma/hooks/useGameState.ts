@@ -14,6 +14,7 @@ import {
   getGameEvents,
   getUnaggregatedGames,
   markGameAggregated,
+  getGameFieldingEvents,
   type AtBatEvent,
   type RunnerState,
   type GameHeader,
@@ -216,6 +217,9 @@ export interface UseGameStateReturn {
   isSaving: boolean;
   lastSavedAt: number | null;
   atBatSequence: number;
+
+  // Playoff context setter (called from GameTracker with navigation state)
+  setPlayoffContext: (seriesId: string | null, gameNumber: number | null) => void;
 }
 
 export interface GameInitConfig {
@@ -231,6 +235,9 @@ export interface GameInitConfig {
   homeStartingPitcherName: string;
   awayLineup: { playerId: string; playerName: string; position: string }[];
   homeLineup: { playerId: string; playerName: string; position: string }[];
+  // Playoff context (optional — set when launching from playoff bracket)
+  playoffSeriesId?: string;
+  playoffGameNumber?: number;
 }
 
 // ============================================
@@ -925,6 +932,10 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
   const homeLineupRef = useRef<{ playerId: string; playerName: string; position: string }[]>([]);
   const seasonIdRef = useRef<string>('');
 
+  // Playoff context refs (set from GameTracker navigation state)
+  const playoffSeriesIdRef = useRef<string | null>(null);
+  const playoffGameNumberRef = useRef<number | null>(null);
+
   const [gameState, setGameState] = useState<GameState>({
     gameId: initialGameId || '',
     homeScore: 0,
@@ -1013,6 +1024,10 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     awayLineupRef.current = config.awayLineup;
     homeLineupRef.current = config.homeLineup;
     seasonIdRef.current = config.seasonId;
+
+    // Store playoff context if provided
+    playoffSeriesIdRef.current = config.playoffSeriesId || null;
+    playoffGameNumberRef.current = config.playoffGameNumber || null;
 
     // Create game header in IndexedDB
     await createGameHeader({
@@ -2837,6 +2852,33 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       playerNameLookup.set(p.playerId, p.playerName);
     }
 
+    // CRIT-05 FIX: Query fielding events from IndexedDB and tally per player
+    // Fielding events are stored with position-based playerIds (e.g., "SS", "CF")
+    // We need to map them back to real player IDs via lineup refs
+    const fieldingEvents = await getGameFieldingEvents(gameState.gameId);
+    const positionToPlayerIdMap = new Map<string, string>(); // "SS_teamId" → playerId
+    for (const p of [...awayLineupRef.current, ...homeLineupRef.current]) {
+      if (p.position) {
+        const teamId = awayPlayerIds.has(p.playerId) ? gameState.awayTeamId : gameState.homeTeamId;
+        positionToPlayerIdMap.set(`${p.position}_${teamId}`, p.playerId);
+      }
+    }
+
+    // Build per-player fielding tally
+    const playerFieldingTally = new Map<string, { putouts: number; assists: number; errors: number }>();
+    for (const fe of fieldingEvents) {
+      // Try to resolve position-based ID to real player ID
+      const resolvedId = positionToPlayerIdMap.get(`${fe.playerId}_${fe.teamId}`) ||
+                          positionToPlayerIdMap.get(`${fe.position}_${fe.teamId}`) ||
+                          fe.playerId;
+      const tally = playerFieldingTally.get(resolvedId) || { putouts: 0, assists: 0, errors: 0 };
+      if (fe.playType === 'putout') tally.putouts++;
+      else if (fe.playType === 'assist' || fe.playType === 'outfield_assist') tally.assists++;
+      else if (fe.playType === 'error') tally.errors++;
+      else if (fe.playType === 'double_play_pivot') tally.assists++; // Pivot = assist
+      playerFieldingTally.set(resolvedId, tally);
+    }
+
     const playerStatsRecord: Record<string, {
       playerName: string; teamId: string;
       pa: number; ab: number; h: number; singles: number; doubles: number;
@@ -2845,17 +2887,15 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       assists: number; fieldingErrors: number;
     }> = {};
     playerStats.forEach((stats, playerId) => {
+      const fieldingTally = playerFieldingTally.get(playerId) || { putouts: 0, assists: 0, errors: 0 };
       playerStatsRecord[playerId] = {
         ...stats,
         playerName: playerNameLookup.get(playerId) || playerId,
         teamId: awayPlayerIds.has(playerId) ? gameState.awayTeamId : gameState.homeTeamId,
-        // CRIT-05: Fielding stats (putouts/assists/errors) are not tracked during gameplay.
-        // Infrastructure exists (FieldingEvent, logFieldingEvent, fieldingStatsAggregator)
-        // but is orphaned — never called from at-bat recording. NEEDS FEATURE WORK to wire
-        // fielding inference from out types (GO→infielder, FO→outfielder) into the gameplay loop.
-        putouts: 0,
-        assists: 0,
-        fieldingErrors: 0,
+        // CRIT-05 FIXED: Fielding stats now populated from IndexedDB fielding events
+        putouts: fieldingTally.putouts,
+        assists: fieldingTally.assists,
+        fieldingErrors: fieldingTally.errors,
       };
     });
 
@@ -2968,6 +3008,32 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     // Mark as aggregated after successful aggregation
     await markGameAggregated(gameState.gameId);
 
+    // Record playoff series game result if this was a playoff game
+    if (playoffSeriesIdRef.current) {
+      try {
+        const { recordSeriesGame } = await import('../../utils/playoffStorage');
+        const winnerId = gameState.homeScore > gameState.awayScore
+          ? gameState.homeTeamId : gameState.awayTeamId;
+        await recordSeriesGame(playoffSeriesIdRef.current, {
+          gameNumber: playoffGameNumberRef.current || 1,
+          homeTeamId: gameState.homeTeamId,
+          awayTeamId: gameState.awayTeamId,
+          status: 'COMPLETED' as const,
+          result: {
+            homeScore: gameState.homeScore,
+            awayScore: gameState.awayScore,
+            winnerId,
+            innings: gameState.inning,
+          },
+          gameLogId: gameState.gameId,
+          playedAt: Date.now(),
+        });
+        console.log(`[Playoff] Recorded series game: ${playoffSeriesIdRef.current} G${playoffGameNumberRef.current}, winner: ${winnerId}`);
+      } catch (err) {
+        console.error('[Playoff] Failed to record series game:', err);
+      }
+    }
+
     // Archive completed game with full stats for post-game summary (EXH-011)
     const inningScores = scoreboard.innings.map(inn => ({
       away: inn.away ?? 0,
@@ -2993,6 +3059,29 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       playerNameLookupForEndGame.set(p.playerId, p.playerName);
     }
 
+    // CRIT-05 FIX: Query fielding events for endGame path too
+    const endGameFieldingEvents = await getGameFieldingEvents(gameState.gameId);
+    const endGamePosToPlayerMap = new Map<string, string>();
+    for (const p of [...awayLineupRef.current, ...homeLineupRef.current]) {
+      if (p.position) {
+        const teamId = awayPlayerIdsForEndGame.has(p.playerId) ? gameState.awayTeamId : gameState.homeTeamId;
+        endGamePosToPlayerMap.set(`${p.position}_${teamId}`, p.playerId);
+      }
+    }
+
+    const endGameFieldingTally = new Map<string, { putouts: number; assists: number; errors: number }>();
+    for (const fe of endGameFieldingEvents) {
+      const resolvedId = endGamePosToPlayerMap.get(`${fe.playerId}_${fe.teamId}`) ||
+                          endGamePosToPlayerMap.get(`${fe.position}_${fe.teamId}`) ||
+                          fe.playerId;
+      const tally = endGameFieldingTally.get(resolvedId) || { putouts: 0, assists: 0, errors: 0 };
+      if (fe.playType === 'putout') tally.putouts++;
+      else if (fe.playType === 'assist' || fe.playType === 'outfield_assist') tally.assists++;
+      else if (fe.playType === 'error') tally.errors++;
+      else if (fe.playType === 'double_play_pivot') tally.assists++;
+      endGameFieldingTally.set(resolvedId, tally);
+    }
+
     const playerStatsRecord: Record<string, {
       playerName: string; teamId: string;
       pa: number; ab: number; h: number; singles: number; doubles: number;
@@ -3001,13 +3090,15 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       assists: number; fieldingErrors: number;
     }> = {};
     playerStats.forEach((stats, playerId) => {
+      const fieldingTally = endGameFieldingTally.get(playerId) || { putouts: 0, assists: 0, errors: 0 };
       playerStatsRecord[playerId] = {
         ...stats,
         playerName: playerNameLookupForEndGame.get(playerId) || playerId,
         teamId: awayPlayerIdsForEndGame.has(playerId) ? gameState.awayTeamId : gameState.homeTeamId,
-        putouts: 0,
-        assists: 0,
-        fieldingErrors: 0,
+        // CRIT-05 FIXED: Fielding stats from IndexedDB
+        putouts: fieldingTally.putouts,
+        assists: fieldingTally.assists,
+        fieldingErrors: fieldingTally.errors,
       };
     });
 
@@ -3186,6 +3277,15 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     }
   }, [initialGameId]);
 
+  // Playoff context setter (for GameTracker to set from navigation state)
+  const setPlayoffContext = useCallback((seriesId: string | null, gameNumber: number | null) => {
+    playoffSeriesIdRef.current = seriesId;
+    playoffGameNumberRef.current = gameNumber;
+    if (seriesId) {
+      console.log(`[Playoff] Context set: series=${seriesId}, game=${gameNumber}`);
+    }
+  }, []);
+
   return {
     gameState,
     scoreboard,
@@ -3218,5 +3318,6 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     isSaving,
     lastSavedAt,
     atBatSequence,
+    setPlayoffContext,
   };
 }

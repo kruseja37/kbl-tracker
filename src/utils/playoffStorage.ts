@@ -187,6 +187,12 @@ export async function initPlayoffDatabase(): Promise<IDBDatabase> {
 
     request.onsuccess = () => {
       dbInstance = request.result;
+      // Auto-invalidate singleton if the database is externally closed or version-changed
+      dbInstance.onclose = () => { dbInstance = null; };
+      dbInstance.onversionchange = () => {
+        dbInstance?.close();
+        dbInstance = null;
+      };
       resolve(dbInstance);
     };
 
@@ -242,10 +248,23 @@ export async function createPlayoff(config: Omit<PlayoffConfig, 'id' | 'createdA
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORES.PLAYOFFS, 'readwrite');
     const store = tx.objectStore(STORES.PLAYOFFS);
-    const request = store.add(playoff);
 
-    request.onsuccess = () => resolve(playoff);
-    request.onerror = () => reject(request.error);
+    // First, delete any existing playoff for this season (same transaction = atomic)
+    const index = store.index('seasonNumber');
+    const cursorReq = index.openCursor(config.seasonNumber);
+    cursorReq.onsuccess = () => {
+      const cursor = cursorReq.result;
+      if (cursor) {
+        cursor.delete();
+        cursor.continue();
+      } else {
+        // All existing records for this season deleted, now add the new one
+        const addReq = store.add(playoff);
+        addReq.onsuccess = () => resolve(playoff);
+        addReq.onerror = () => reject(addReq.error);
+      }
+    };
+    cursorReq.onerror = () => reject(cursorReq.error);
   });
 }
 
@@ -331,12 +350,14 @@ export async function completePlayoff(playoffId: string, championId: string, mvp
 // SERIES CRUD OPERATIONS
 // ============================================
 
+let seriesCounter = 0;
+
 export async function createSeries(series: Omit<PlayoffSeries, 'id' | 'createdAt'>): Promise<PlayoffSeries> {
   const db = await initPlayoffDatabase();
 
   const newSeries: PlayoffSeries = {
     ...series,
-    id: `series-${series.playoffId}-r${series.round}-${Date.now()}`,
+    id: `series-${series.playoffId}-r${series.round}-${Date.now()}-${seriesCounter++}`,
     createdAt: Date.now(),
   };
 
@@ -528,6 +549,125 @@ export async function generateBracket(
 }
 
 // ============================================
+// BRACKET ADVANCEMENT
+// ============================================
+
+/**
+ * Create next-round series from completed round's winners.
+ *
+ * Matchup logic:
+ * - Within a conference: highest remaining seed vs lowest remaining seed
+ * - Championship round: Eastern champion vs Western champion (higher seed = home)
+ *
+ * @param playoffId - The playoff instance ID
+ * @param completedRound - The round number that just completed
+ * @param playoff - The current playoff config (for team league lookup + gamesPerRound)
+ * @returns The newly created series for the next round
+ */
+export async function createNextRoundSeries(
+  playoffId: string,
+  completedRound: number,
+  playoff: PlayoffConfig
+): Promise<PlayoffSeries[]> {
+  const nextRound = completedRound + 1;
+
+  if (nextRound > playoff.rounds) {
+    throw new Error(`Cannot advance past final round (${playoff.rounds})`);
+  }
+
+  // Get all completed series from the round that just finished
+  const completedSeries = await getSeriesByRound(playoffId, completedRound);
+  const winners = completedSeries
+    .filter(s => s.status === 'COMPLETED' && s.winner)
+    .map(s => {
+      const isHigherSeedWinner = s.winner === s.higherSeed.teamId;
+      return {
+        teamId: s.winner!,
+        teamName: isHigherSeedWinner ? s.higherSeed.teamName : s.lowerSeed.teamName,
+        seed: isHigherSeedWinner ? s.higherSeed.seed : s.lowerSeed.seed,
+      };
+    });
+
+  const bestOf = playoff.gamesPerRound[nextRound - 1] || 7;
+  const gamesRequired = Math.ceil(bestOf / 2);
+  const totalRounds = playoff.rounds;
+
+  // Determine if this is the championship round (final round)
+  const isChampionship = nextRound === playoff.rounds;
+
+  if (isChampionship) {
+    // Championship: match conference champions against each other
+    // Find which conference each winner belongs to
+    const teamLeagueMap = new Map(playoff.teams.map(t => [t.teamId, t.league]));
+
+    const easternWinners = winners.filter(w => teamLeagueMap.get(w.teamId) === 'Eastern');
+    const westernWinners = winners.filter(w => teamLeagueMap.get(w.teamId) === 'Western');
+
+    if (easternWinners.length !== 1 || westernWinners.length !== 1) {
+      throw new Error(`Expected 1 winner per conference for championship, got Eastern: ${easternWinners.length}, Western: ${westernWinners.length}`);
+    }
+
+    const eastern = easternWinners[0];
+    const western = westernWinners[0];
+
+    // Higher seed gets home field
+    const higherSeed = eastern.seed <= western.seed ? eastern : western;
+    const lowerSeed = eastern.seed <= western.seed ? western : eastern;
+
+    const champSeries = await createSeries({
+      playoffId,
+      round: nextRound,
+      roundName: getRoundName(nextRound, totalRounds),
+      higherSeed: { teamId: higherSeed.teamId, teamName: higherSeed.teamName, seed: higherSeed.seed },
+      lowerSeed: { teamId: lowerSeed.teamId, teamName: lowerSeed.teamName, seed: lowerSeed.seed },
+      status: 'IN_PROGRESS',
+      bestOf,
+      gamesRequired,
+      higherSeedWins: 0,
+      lowerSeedWins: 0,
+      games: [],
+    });
+
+    return [champSeries];
+  } else {
+    // Non-championship: match winners within each conference (highest seed vs lowest seed)
+    const teamLeagueMap = new Map(playoff.teams.map(t => [t.teamId, t.league]));
+    const newSeries: PlayoffSeries[] = [];
+
+    for (const league of ['Eastern', 'Western'] as const) {
+      const leagueWinners = winners
+        .filter(w => teamLeagueMap.get(w.teamId) === league)
+        .sort((a, b) => a.seed - b.seed); // Sort by seed ascending
+
+      // Pair highest vs lowest seed
+      const pairs: [typeof leagueWinners[0], typeof leagueWinners[0]][] = [];
+      for (let i = 0; i < leagueWinners.length / 2; i++) {
+        pairs.push([leagueWinners[i], leagueWinners[leagueWinners.length - 1 - i]]);
+      }
+
+      for (const [higher, lower] of pairs) {
+        const s = await createSeries({
+          playoffId,
+          round: nextRound,
+          roundName: getRoundName(nextRound, totalRounds),
+          higherSeed: { teamId: higher.teamId, teamName: higher.teamName, seed: higher.seed },
+          lowerSeed: { teamId: lower.teamId, teamName: lower.teamName, seed: lower.seed },
+          status: 'IN_PROGRESS',
+          bestOf,
+          gamesRequired,
+          higherSeedWins: 0,
+          lowerSeedWins: 0,
+          games: [],
+        });
+        newSeries.push(s);
+      }
+    }
+
+    return newSeries;
+  }
+}
+
+// ============================================
 // PLAYOFF STATS
 // ============================================
 
@@ -581,6 +721,25 @@ export async function getAllPlayoffs(): Promise<PlayoffConfig[]> {
     request.onsuccess = () => resolve(request.result || []);
     request.onerror = () => reject(request.error);
   });
+}
+
+/**
+ * Reset the database connection singleton.
+ * Call this if the database was externally modified (e.g., cleared via devtools).
+ */
+export function resetPlayoffDbConnection(): void {
+  dbInstance = null;
+}
+
+/**
+ * Delete all playoff data for a given season.
+ * Useful for "starting fresh" with playoff creation.
+ */
+export async function deletePlayoffBySeason(seasonNumber: number): Promise<void> {
+  const existing = await getPlayoffBySeason(seasonNumber);
+  if (existing) {
+    await deletePlayoff(existing.id);
+  }
 }
 
 export async function deletePlayoff(playoffId: string): Promise<void> {

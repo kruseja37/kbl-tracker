@@ -753,7 +753,10 @@ export type FameEventType =
   | 'CAREER_WILD_PITCHES_TIER'
   | 'CAREER_HBP_PITCHER_TIER'
   | 'CAREER_ERRORS_TIER'
-  | 'CAREER_PASSED_BALLS_TIER';
+  | 'CAREER_PASSED_BALLS_TIER'
+  // Fan Favorite / Albatross Season-End Events
+  | 'FAN_FAVORITE_NAMED'
+  | 'ALBATROSS_NAMED';
 
 // Fame values for each event type
 export const FAME_VALUES: Record<FameEventType, number> = {
@@ -939,7 +942,10 @@ export const FAME_VALUES: Record<FameEventType, number> = {
   CAREER_WILD_PITCHES_TIER: -0.5,
   CAREER_HBP_PITCHER_TIER: -0.5,
   CAREER_ERRORS_TIER: -0.5,
-  CAREER_PASSED_BALLS_TIER: -0.5
+  CAREER_PASSED_BALLS_TIER: -0.5,
+  // Fan Favorite / Albatross Season-End Events
+  FAN_FAVORITE_NAMED: 2.0,
+  ALBATROSS_NAMED: -1.0
 };
 
 // Human-readable labels for Fame events
@@ -1122,7 +1128,10 @@ export const FAME_EVENT_LABELS: Record<FameEventType, string> = {
   CAREER_WILD_PITCHES_TIER: 'Career Wild Pitches Milestone',
   CAREER_HBP_PITCHER_TIER: 'Career HBP Milestone (Pitcher)',
   CAREER_ERRORS_TIER: 'Career Errors Milestone',
-  CAREER_PASSED_BALLS_TIER: 'Career Passed Balls Milestone'
+  CAREER_PASSED_BALLS_TIER: 'Career Passed Balls Milestone',
+  // Fan Favorite / Albatross Season-End Events
+  FAN_FAVORITE_NAMED: 'Named Fan Favorite',
+  ALBATROSS_NAMED: 'Named Team Albatross'
 };
 
 // Fame attribution target - who gets credited/blamed
@@ -1308,7 +1317,10 @@ export const FAME_TARGET: Record<FameEventType, FameTarget> = {
   CAREER_WILD_PITCHES_TIER: 'pitcher',
   CAREER_HBP_PITCHER_TIER: 'pitcher',
   CAREER_ERRORS_TIER: 'fielder',
-  CAREER_PASSED_BALLS_TIER: 'fielder'
+  CAREER_PASSED_BALLS_TIER: 'fielder',
+  // Fan Favorite / Albatross Season-End Events
+  FAN_FAVORITE_NAMED: 'player',
+  ALBATROSS_NAMED: 'player'
 };
 
 // Fame event record

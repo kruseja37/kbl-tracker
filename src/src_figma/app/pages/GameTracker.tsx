@@ -37,6 +37,9 @@ import { generateGameRecap } from "../engines/narrativeIntegration";
 import { useMWARCalculations } from "../hooks/useMWARCalculations";
 import type { GameStateForLI } from "../../../engines/leverageCalculator";
 import { saveGameDecisions, aggregateManagerGameToSeason } from '../../../utils/managerStorage';
+// Fielding pipeline: extract fielding events from PlayData and log to IndexedDB
+import { extractFieldingEvents, type FieldingExtractionContext } from '../utils/fieldingEventExtractor';
+import { logFieldingEvent } from '../../../utils/eventLog';
 
 // Note: Using GameState from useGameState hook instead of local interface
 // This interface is deprecated but kept for reference during migration
@@ -91,6 +94,10 @@ export function GameTracker() {
     awayManagerId?: string;
     awayManagerName?: string;
     userTeamSide?: 'home' | 'away';
+    // Playoff context (for recording series results)
+    playoffSeriesId?: string;
+    playoffGameNumber?: number;
+    franchiseId?: string;
   } | null;
 
   // Team IDs - use navigation state or defaults
@@ -156,18 +163,30 @@ export function GameTracker() {
     getRunnerTrackerSnapshot,
     isLoading,
     isSaving,
+    setPlayoffContext,
   } = useGameState(gameId);
+
+  // Set playoff context from navigation state (if this is a playoff game)
+  const isPlayoffGame = navigationState?.gameMode === 'playoff';
+  useEffect(() => {
+    if (navigationState?.playoffSeriesId) {
+      setPlayoffContext(
+        navigationState.playoffSeriesId,
+        navigationState.playoffGameNumber ?? null
+      );
+    }
+  }, [navigationState?.playoffSeriesId, navigationState?.playoffGameNumber, setPlayoffContext]);
 
   // Player state management (Mojo, Fitness, Clutch)
   const playerStateHook = usePlayerState({
     gameId: gameId || 'demo-game',
-    isPlayoffs: false, // TODO: Get from game context
+    isPlayoffs: isPlayoffGame,
   });
 
   // Fame tracking
   const fameTrackingHook = useFameTracking({
     gameId: gameId || 'demo-game',
-    isPlayoffs: false, // TODO: Get from game context
+    isPlayoffs: isPlayoffGame,
   });
 
   // MAJ-02: Fan morale tracking — one hook per team for dual-team franchise support
@@ -1126,6 +1145,29 @@ export function GameTracker() {
       // No need to call applyRunnerOutcomes() separately
 
       // ============================================
+      // STEP 4.5: Log fielding events for fWAR pipeline
+      // Extracts putouts/assists/errors from PlayData and writes to IndexedDB
+      // ============================================
+      if (playData.type !== 'walk' && playData.type !== 'foul_ball') {
+        try {
+          const fieldingContext: FieldingExtractionContext = {
+            gameId: gameState.gameId,
+            defensiveTeamId: gameState.isTop ? gameState.homeTeamId : gameState.awayTeamId,
+            atBatSequence: Date.now(), // Unique per at-bat
+          };
+          const fieldingEvents = extractFieldingEvents(playData, fieldingContext);
+          for (const fe of fieldingEvents) {
+            await logFieldingEvent(fe);
+          }
+          if (fieldingEvents.length > 0) {
+            console.log(`[Fielding] Logged ${fieldingEvents.length} fielding event(s) for ${playData.type}`);
+          }
+        } catch (err) {
+          console.error('[Fielding] Failed to log fielding events:', err);
+        }
+      }
+
+      // ============================================
       // UPDATE RUNNER NAMES based on outcomes
       // Tracks WHO is on each base for display purposes
       // ============================================
@@ -1502,6 +1544,26 @@ export function GameTracker() {
       } else if (playData.type === 'walk') {
         const walkType = playData.walkType || 'BB';
         await recordWalk(walkType as WalkType);
+      }
+
+      // Log fielding events for fWAR pipeline (same as handleEnhancedPlayComplete)
+      if (playData.type !== 'walk' && playData.type !== 'foul_ball') {
+        try {
+          const fieldingContext: FieldingExtractionContext = {
+            gameId: gameState.gameId,
+            defensiveTeamId: gameState.isTop ? gameState.homeTeamId : gameState.awayTeamId,
+            atBatSequence: Date.now(),
+          };
+          const fieldingEvents = extractFieldingEvents(playData, fieldingContext);
+          for (const fe of fieldingEvents) {
+            await logFieldingEvent(fe);
+          }
+          if (fieldingEvents.length > 0) {
+            console.log(`[Fielding] Logged ${fieldingEvents.length} fielding event(s) via fielder credit path`);
+          }
+        } catch (err) {
+          console.error('[Fielding] Failed to log fielding events:', err);
+        }
       }
 
       console.log('[EXH-016] Play recorded with fielder credits');
@@ -1901,7 +1963,7 @@ export function GameTracker() {
     navigate(`/post-game/${gameId}`, {
       state: {
         gameMode: navigationState?.gameMode || 'franchise',
-        franchiseId: gameId?.replace('franchise-', '') || '1',
+        franchiseId: navigationState?.franchiseId || gameId?.replace('franchise-', '') || '1',
         gameNarrative,
         awayNarrative,
       }

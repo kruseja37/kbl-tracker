@@ -873,6 +873,41 @@ export function detectFirstCareer(
 }
 
 // ============================================
+// CHAMPIONSHIP FAME
+// ============================================
+
+/**
+ * Championship Fame Bonus Result
+ * All championship roster players get +1 Fame per SEASON_END_FIGMA_SPEC.md
+ */
+export interface ChampionshipFameBonus {
+  playerId: string;
+  playerName: string;
+  fameBefore: number;
+  fameAfter: number;
+  bonusApplied: number;
+}
+
+/**
+ * Apply championship fame bonus to all roster players.
+ * +1 Fame to each player on the winning roster.
+ *
+ * @param roster - Array of players with current fame values
+ * @returns Array of fame bonus results showing before/after
+ */
+export function applyChampionshipFame(
+  roster: Array<{ playerId: string; playerName: string; currentFame: number }>
+): ChampionshipFameBonus[] {
+  return roster.map((player) => ({
+    playerId: player.playerId,
+    playerName: player.playerName,
+    fameBefore: player.currentFame,
+    fameAfter: player.currentFame + 1,
+    bonusApplied: 1,
+  }));
+}
+
+// ============================================
 // EXPORTS
 // ============================================
 

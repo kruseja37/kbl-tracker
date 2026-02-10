@@ -25,6 +25,7 @@ import {
   generateBracket,
   getPlayoffLeaders,
   getRoundName,
+  deletePlayoffBySeason,
   type PlayoffConfig,
   type PlayoffSeries,
   type PlayoffTeam,
@@ -300,6 +301,9 @@ export function usePlayoffData(seasonNumber: number = 1): UsePlayoffDataReturn {
         playoffTeams = MOCK_PLAYOFF_TEAMS.slice(0, config.teamsQualifying);
       }
 
+      // Delete any existing playoff for this season first (prevents ConstraintError on unique index)
+      await deletePlayoffBySeason(config.seasonNumber);
+
       const newPlayoff = await createPlayoff({
         seasonNumber: config.seasonNumber,
         seasonId: config.seasonId,
@@ -350,19 +354,70 @@ export function usePlayoffData(seasonNumber: number = 1): UsePlayoffDataReturn {
     }
   }, [playoff, refresh]);
 
-  // Record game result
+  // Record game result — also checks for series completion and auto-advances
   const recordGameResult = useCallback(async (seriesId: string, game: SeriesGame) => {
+    if (!playoff) {
+      throw new Error('No playoff to record game result');
+    }
+
     try {
-      await recordSeriesGame(seriesId, game);
+      // Record the game — recordSeriesGame handles win counting + series completion
+      const updatedSeries = await recordSeriesGame(seriesId, game);
+
+      // If the series just completed, handle advancement
+      if (updatedSeries.status === 'COMPLETED' && updatedSeries.winner) {
+        console.log(`[Playoff] Series ${seriesId} completed. Winner: ${updatedSeries.winner}`);
+
+        // Mark losing team as eliminated
+        const loserId = updatedSeries.winner === updatedSeries.higherSeed.teamId
+          ? updatedSeries.lowerSeed.teamId
+          : updatedSeries.higherSeed.teamId;
+
+        const updatedTeams = playoff.teams.map(t =>
+          t.teamId === loserId
+            ? { ...t, eliminated: true, eliminatedInRound: updatedSeries.round }
+            : t
+        );
+        await updatePlayoff(playoff.id, { teams: updatedTeams });
+
+        // Check if ALL series in this round are now complete
+        const roundSeries = await getSeriesByRound(playoff.id, updatedSeries.round);
+        const allRoundComplete = roundSeries.every(s => s.status === 'COMPLETED');
+
+        if (allRoundComplete) {
+          console.log(`[Playoff] All series in round ${updatedSeries.round} complete. Advancing...`);
+
+          // Check if this was the championship (final round)
+          if (updatedSeries.round === playoff.rounds) {
+            // Championship complete — crown the winner
+            const champSeries = roundSeries.find(s => s.winner);
+            if (champSeries?.winner) {
+              await completePlayoff(playoff.id, champSeries.winner);
+              console.log(`[Playoff] Champion crowned: ${champSeries.winner}`);
+            }
+          } else {
+            // Generate next round matchups from winners
+            const { createNextRoundSeries } = await import('../../utils/playoffStorage');
+            const latestPlayoff = await getPlayoffBySeason(playoff.seasonNumber);
+            if (latestPlayoff) {
+              await createNextRoundSeries(playoff.id, updatedSeries.round, latestPlayoff);
+              // Advance the currentRound pointer
+              await updatePlayoff(playoff.id, { currentRound: updatedSeries.round + 1 });
+              console.log(`[Playoff] Advanced to round ${updatedSeries.round + 1}`);
+            }
+          }
+        }
+      }
+
       await refresh();
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to record game result';
       setError(message);
       throw err;
     }
-  }, [refresh]);
+  }, [playoff, refresh]);
 
-  // Advance to next round
+  // Advance to next round (manual trigger — auto-advancement happens in recordGameResult)
   const advanceRound = useCallback(async () => {
     if (!playoff) {
       throw new Error('No playoff to advance');
@@ -383,14 +438,23 @@ export function usePlayoffData(seasonNumber: number = 1): UsePlayoffDataReturn {
         throw new Error('Not all series in current round are complete');
       }
 
+      // Check if next-round series already exist (from auto-advancement)
+      const existingNextRound = await getSeriesByRound(playoff.id, nextRound);
+      if (existingNextRound.length === 0) {
+        // Generate next round matchups
+        const { createNextRoundSeries } = await import('../../utils/playoffStorage');
+        await createNextRoundSeries(playoff.id, playoff.currentRound, playoff);
+      } else {
+        // Mark existing next-round series as IN_PROGRESS if still PENDING
+        for (const s of existingNextRound) {
+          if (s.status === 'PENDING') {
+            await updateSeries(s.id, { status: 'IN_PROGRESS' });
+          }
+        }
+      }
+
       // Update playoff to next round
       await updatePlayoff(playoff.id, { currentRound: nextRound });
-
-      // Mark next round series as IN_PROGRESS
-      const nextRoundSeries = await getSeriesByRound(playoff.id, nextRound);
-      for (const s of nextRoundSeries) {
-        await updateSeries(s.id, { status: 'IN_PROGRESS' });
-      }
 
       await refresh();
     } catch (err) {

@@ -83,7 +83,9 @@ export type MoraleEventType =
   // Season events
   | 'OPENING_DAY' | 'ALL_STAR_BREAK' | 'RIVALRY_SWEEP' | 'SWEPT_BY_RIVAL'
   // System events
-  | 'EXPECTED_WINS_UPDATE' | 'NATURAL_DRIFT' | 'SEASON_ASSESSMENT';
+  | 'EXPECTED_WINS_UPDATE' | 'NATURAL_DRIFT' | 'SEASON_ASSESSMENT'
+  // Championship events
+  | 'CHAMPIONSHIP';
 
 export interface MoraleModifier {
   type: string;
@@ -370,6 +372,8 @@ export const BASE_MORALE_IMPACTS: Partial<Record<MoraleEventType, number>> = {
   EXPECTED_WINS_UPDATE: 0,  // Calculated dynamically
   NATURAL_DRIFT: 0,         // Calculated dynamically
   SEASON_ASSESSMENT: 0,     // Calculated dynamically
+  // Championship events
+  CHAMPIONSHIP: 20,         // Per S-SEP009: +20 morale for winning championship
 };
 
 /**

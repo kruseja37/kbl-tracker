@@ -131,6 +131,12 @@ export interface PlayerSeasonBatting {
   fameBoners: number;
   fameNet: number;
 
+  // WAR components (populated by WAR orchestrator after calculation)
+  bwar?: number;       // Batting WAR
+  rwar?: number;       // Baserunning WAR
+  fwar?: number;       // Fielding WAR
+  totalWar?: number;   // Combined WAR (bwar + rwar + fwar)
+
   // Timestamps
   lastUpdated: number;
 }
@@ -173,6 +179,9 @@ export interface PlayerSeasonPitching {
   fameBonuses: number;
   fameBoners: number;
   fameNet: number;
+
+  // WAR (populated by WAR orchestrator after calculation)
+  pwar?: number;       // Pitching WAR
 
   // Timestamps
   lastUpdated: number;
