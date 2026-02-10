@@ -1857,10 +1857,14 @@ export function EnhancedInteractiveField({
         }
       }
 
-      // Infer spray direction
+      // Infer spray direction (only fair-territory directions for spray chart)
       if (!enrichedPlayData.sprayDirection) {
         const sector = getSpraySector(location.x, location.y);
-        enrichedPlayData.sprayDirection = inferDirection(sector);
+        const dir = inferDirection(sector);
+        // Spray direction only tracks fair-territory directions
+        if (dir !== 'Foul-Left' && dir !== 'Foul-Right') {
+          enrichedPlayData.sprayDirection = dir;
+        }
       }
 
       // Run fielder inference for learning

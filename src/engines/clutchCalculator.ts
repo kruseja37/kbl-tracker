@@ -175,6 +175,97 @@ export interface PlayoffContext {
   isClinchGame?: boolean;
 }
 
+/**
+ * Manager decision types that can be auto-detected or prompted
+ */
+export type ManagerDecisionType =
+  | 'pitching_change'
+  | 'pinch_hitter'
+  | 'pinch_runner'
+  | 'defensive_sub'
+  | 'ibb'
+  | 'steal_call'
+  | 'bunt_call'
+  | 'squeeze_call'
+  | 'hit_and_run';
+
+/**
+ * How the decision was detected
+ */
+export type InferenceMethod = 'auto' | 'prompt' | 'manual';
+
+/**
+ * Decisions that can be auto-detected from game state changes
+ */
+export const AUTO_DECISIONS: ManagerDecisionType[] = [
+  'pitching_change',
+  'pinch_hitter',
+  'pinch_runner',
+  'defensive_sub',
+  'ibb',
+];
+
+/**
+ * Decisions that require user confirmation via prompt
+ */
+export const PROMPT_DECISIONS: ManagerDecisionType[] = [
+  'steal_call',
+  'bunt_call',
+  'squeeze_call',
+  'hit_and_run',
+];
+
+/**
+ * Input for inferManagerDecision
+ */
+export interface InferDecisionInput {
+  pitcherChanged?: boolean;
+  pinchHitterUsed?: boolean;
+  pinchRunnerUsed?: boolean;
+  defensiveSubMade?: boolean;
+  ibbIssued?: boolean;
+  involvedPlayers?: string[];
+}
+
+/**
+ * Result from inferManagerDecision
+ */
+export interface InferredDecision {
+  type: ManagerDecisionType;
+  inferenceMethod: InferenceMethod;
+  confidence: number;
+  involvedPlayers: string[];
+}
+
+/**
+ * Infer a manager decision from game state changes.
+ * Priority order: pitching_change > pinch_hitter > pinch_runner > defensive_sub > ibb.
+ * Returns null if no decision detected.
+ */
+export function inferManagerDecision(
+  input: InferDecisionInput,
+): InferredDecision | null {
+  const involvedPlayers = input.involvedPlayers ?? [];
+
+  if (input.pitcherChanged) {
+    return { type: 'pitching_change', inferenceMethod: 'auto', confidence: 1.0, involvedPlayers };
+  }
+  if (input.pinchHitterUsed) {
+    return { type: 'pinch_hitter', inferenceMethod: 'auto', confidence: 1.0, involvedPlayers };
+  }
+  if (input.pinchRunnerUsed) {
+    return { type: 'pinch_runner', inferenceMethod: 'auto', confidence: 1.0, involvedPlayers };
+  }
+  if (input.defensiveSubMade) {
+    return { type: 'defensive_sub', inferenceMethod: 'auto', confidence: 1.0, involvedPlayers };
+  }
+  if (input.ibbIssued) {
+    return { type: 'ibb', inferenceMethod: 'auto', confidence: 1.0, involvedPlayers };
+  }
+
+  return null;
+}
+
 // ============================================
 // CONSTANTS
 // ============================================

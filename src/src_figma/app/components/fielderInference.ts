@@ -15,10 +15,13 @@ import { getSpraySector } from './FieldCanvas';
 // TYPES
 // ============================================
 
-export type Direction = 'Left' | 'Left-Center' | 'Center' | 'Right-Center' | 'Right';
+export type Direction = 'Left' | 'Left-Center' | 'Center' | 'Right-Center' | 'Right' | 'Foul-Left' | 'Foul-Right';
+export type FoulZone = 'FL-LINE' | 'FL-HOME' | 'FR-LINE' | 'FR-HOME' | 'FOUL-BACK';
 export type ExitType = 'Ground' | 'Line Drive' | 'Fly Ball' | 'Pop Up';
 export type Position = 'P' | 'C' | '1B' | '2B' | '3B' | 'SS' | 'LF' | 'CF' | 'RF';
 export type PlayDifficulty = 'routine' | 'likely' | 'difficult' | 'impossible';
+/** The 5 fair-territory directions (used as keys in inference matrices) */
+type FairDirection = 'Left' | 'Left-Center' | 'Center' | 'Right-Center' | 'Right';
 
 /** Position number to abbreviation mapping */
 export const POSITION_MAP: Record<number, Position> = {
@@ -58,7 +61,7 @@ export interface FielderInferenceResult {
 // Per FieldingModal.tsx - Direction → Position mapping
 // ============================================
 
-const GROUND_BALL_INFERENCE: Record<Direction, InferenceResult> = {
+const GROUND_BALL_INFERENCE: Record<FairDirection, InferenceResult> = {
   'Left': { primary: '3B', secondary: 'SS', tertiary: 'P' },
   'Left-Center': { primary: 'SS', secondary: '3B', tertiary: '2B' },
   'Center': { primary: 'P', secondary: 'SS', tertiary: '2B' },
@@ -66,7 +69,7 @@ const GROUND_BALL_INFERENCE: Record<Direction, InferenceResult> = {
   'Right': { primary: '1B', secondary: '2B', tertiary: 'P' },
 };
 
-const FLY_BALL_INFERENCE: Record<Direction, InferenceResult> = {
+const FLY_BALL_INFERENCE: Record<FairDirection, InferenceResult> = {
   'Left': { primary: 'LF', secondary: 'CF', tertiary: '3B' },
   'Left-Center': { primary: 'CF', secondary: 'LF', tertiary: 'SS' },
   'Center': { primary: 'CF' },
@@ -74,7 +77,7 @@ const FLY_BALL_INFERENCE: Record<Direction, InferenceResult> = {
   'Right': { primary: 'RF', secondary: 'CF', tertiary: '1B' },
 };
 
-const LINE_DRIVE_INFERENCE: Record<Direction, InferenceResult> = {
+const LINE_DRIVE_INFERENCE: Record<FairDirection, InferenceResult> = {
   'Left': { primary: '3B', secondary: 'LF' },
   'Left-Center': { primary: 'SS', secondary: 'CF' },
   'Center': { primary: 'P', secondary: 'CF' },
@@ -82,7 +85,7 @@ const LINE_DRIVE_INFERENCE: Record<Direction, InferenceResult> = {
   'Right': { primary: '1B', secondary: 'RF' },
 };
 
-const POP_FLY_INFERENCE: Record<Direction, InferenceResult> = {
+const POP_FLY_INFERENCE: Record<FairDirection, InferenceResult> = {
   'Left': { primary: '3B', secondary: 'SS' },
   'Left-Center': { primary: 'SS', secondary: '3B' },
   'Center': { primary: 'SS', secondary: '2B' },
@@ -91,7 +94,7 @@ const POP_FLY_INFERENCE: Record<Direction, InferenceResult> = {
 };
 
 /** DP Chain defaults by direction */
-export const DP_CHAINS: Record<Direction, string> = {
+export const DP_CHAINS: Record<FairDirection, string> = {
   'Left': '5-4-3',
   'Left-Center': '6-4-3',
   'Center': '6-4-3',
@@ -127,8 +130,16 @@ export function inferDirection(sector: SpraySector): Direction {
 
 /**
  * Infer direction from x-coordinate (0 = left, 1 = right)
+ * When isFoul is true or x is in extreme foul territory, returns Foul-Left / Foul-Right.
  */
-export function inferDirectionFromX(x: number): Direction {
+export function inferDirectionFromX(x: number, isFoul?: boolean): Direction {
+  // Foul territory overrides
+  if (isFoul) {
+    return x <= 0.5 ? 'Foul-Left' : 'Foul-Right';
+  }
+  if (x < 0.05) return 'Foul-Left';
+  if (x > 0.95) return 'Foul-Right';
+
   if (x < 0.25) return 'Left';
   if (x < 0.4) return 'Left-Center';
   if (x < 0.6) return 'Center';
@@ -237,6 +248,183 @@ export function inferPlayDifficulty(
 }
 
 // ============================================
+// FOUL ZONE INFERENCE (GAP-B3-009)
+// ============================================
+
+/**
+ * Classify a foul territory zone from x/y coordinates.
+ * Returns null if the location is in fair territory.
+ */
+export function classifyFoulZone(x: number, y: number): FoulZone | null {
+  // Behind the plate — very shallow, any horizontal position
+  if (y < 0.10) return 'FOUL-BACK';
+
+  // Left foul territory
+  if (x < 0.10) {
+    return y < 0.30 ? 'FL-HOME' : 'FL-LINE';
+  }
+
+  // Right foul territory
+  if (x > 0.90) {
+    return y < 0.30 ? 'FR-HOME' : 'FR-LINE';
+  }
+
+  // Fair territory
+  return null;
+}
+
+/**
+ * Infer fielder for a foul ball given zone and result type.
+ */
+export function inferFoulBallFielder(
+  zone: FoulZone,
+  result: string,
+): InferenceResult {
+  // Behind plate → always catcher
+  if (zone === 'FOUL-BACK') {
+    return { primary: 'C' };
+  }
+
+  // Pop-ups in foul territory
+  if (result === 'PO') {
+    if (zone === 'FL-LINE' || zone === 'FL-HOME') return { primary: '3B', secondary: 'C' };
+    if (zone === 'FR-LINE' || zone === 'FR-HOME') return { primary: '1B', secondary: 'C' };
+  }
+
+  // Fly-outs in foul territory
+  if (zone === 'FL-LINE') return { primary: 'LF', secondary: '3B' };
+  if (zone === 'FL-HOME') return { primary: 'C', secondary: '3B' };
+  if (zone === 'FR-LINE') return { primary: 'RF', secondary: '1B' };
+  if (zone === 'FR-HOME') return { primary: 'C', secondary: '1B' };
+
+  // Fallback
+  return { primary: 'C' };
+}
+
+// ============================================
+// DEPTH-AWARE POP FLY INFERENCE (MAJ-B3-006)
+// ============================================
+
+type PopFlyDepth = 'shallow' | 'infield' | 'outfield' | 'deep';
+
+/**
+ * Infer fielder for a pop fly based on direction and depth.
+ * Shallow depth is always C regardless of direction.
+ */
+export function inferPopFlyFielder(
+  direction: Direction,
+  depth: PopFlyDepth,
+): InferenceResult {
+  // Shallow → always catcher
+  if (depth === 'shallow') {
+    return { primary: 'C', secondary: 'P' };
+  }
+
+  // Map foul directions to their fair-territory equivalent for infield/outfield
+  let fairDir: FairDirection;
+  if (direction === 'Foul-Left') fairDir = 'Left';
+  else if (direction === 'Foul-Right') fairDir = 'Right';
+  else fairDir = direction;
+
+  if (depth === 'infield') {
+    const map: Record<FairDirection, InferenceResult> = {
+      'Left': { primary: '3B', secondary: 'SS' },
+      'Left-Center': { primary: 'SS', secondary: '3B' },
+      'Center': { primary: 'SS', secondary: '2B' },
+      'Right-Center': { primary: '2B', secondary: '1B' },
+      'Right': { primary: '1B', secondary: '2B' },
+    };
+    return map[fairDir];
+  }
+
+  if (depth === 'outfield') {
+    const map: Record<FairDirection, InferenceResult> = {
+      'Left': { primary: 'LF', secondary: 'CF' },
+      'Left-Center': { primary: 'CF', secondary: 'LF' },
+      'Center': { primary: 'CF' },
+      'Right-Center': { primary: 'CF', secondary: 'RF' },
+      'Right': { primary: 'RF', secondary: 'CF' },
+    };
+    return map[fairDir];
+  }
+
+  // deep
+  const map: Record<FairDirection, InferenceResult> = {
+    'Left': { primary: 'LF', secondary: 'CF' },
+    'Left-Center': { primary: 'CF', secondary: 'LF' },
+    'Center': { primary: 'CF' },
+    'Right-Center': { primary: 'CF', secondary: 'RF' },
+    'Right': { primary: 'RF', secondary: 'CF' },
+  };
+  return map[fairDir];
+}
+
+/**
+ * Infer depth from y coordinate for pop fly inference.
+ */
+function inferPopFlyDepth(y: number): PopFlyDepth {
+  if (y < 0.15) return 'shallow';
+  if (y < 0.35) return 'infield';
+  if (y < 0.70) return 'outfield';
+  return 'deep';
+}
+
+/**
+ * Check if a direction is in fair territory (for matrix lookups).
+ */
+function isFairDirection(d: Direction): d is FairDirection {
+  return d !== 'Foul-Left' && d !== 'Foul-Right';
+}
+
+/**
+ * Get the nearest fair-territory direction for a foul direction.
+ */
+function toFairDirection(d: Direction): FairDirection {
+  if (d === 'Foul-Left') return 'Left';
+  if (d === 'Foul-Right') return 'Right';
+  return d;
+}
+
+// ============================================
+// FOUL DIRECTION INFERENCE HELPERS
+// ============================================
+
+/**
+ * Get inference result for foul territory directions in inferFielderEnhanced.
+ */
+function inferFoulDirectionFielder(result: string, direction: Direction, exitType?: ExitType | null): InferenceResult | null {
+  const isFoulLeft = direction === 'Foul-Left';
+
+  // Ground balls in foul territory → catcher
+  if (['GO', 'DP', 'FC', 'SAC'].includes(result) || exitType === 'Ground') {
+    return { primary: 'C', secondary: isFoulLeft ? '3B' : '1B' };
+  }
+
+  // Fly outs in foul territory
+  if (['FO', 'SF'].includes(result) || exitType === 'Fly Ball') {
+    return isFoulLeft
+      ? { primary: 'LF', secondary: '3B' }
+      : { primary: 'RF', secondary: '1B' };
+  }
+
+  // Line drives
+  if (result === 'LO' || exitType === 'Line Drive') {
+    return isFoulLeft
+      ? { primary: '3B', secondary: 'LF' }
+      : { primary: '1B', secondary: 'RF' };
+  }
+
+  // Pop ups
+  if (result === 'PO' || exitType === 'Pop Up') {
+    return isFoulLeft
+      ? { primary: '3B', secondary: 'C' }
+      : { primary: '1B', secondary: 'C' };
+  }
+
+  return null;
+}
+
+// ============================================
 // MAIN INFERENCE FUNCTION
 // ============================================
 
@@ -249,9 +437,10 @@ export function inferFielder(
     resultType?: string;
     exitType?: ExitType;
     isOut?: boolean;
+    depth?: PopFlyDepth;
   }
 ): FielderInferenceResult {
-  const { resultType, exitType: providedExitType, isOut = true } = options || {};
+  const { resultType, exitType: providedExitType, isOut = true, depth: explicitDepth } = options || {};
 
   // Get spray sector
   const sector = getSpraySector(location.x, location.y);
@@ -268,35 +457,41 @@ export function inferFielder(
     exitType = inferExitTypeFromLocation(location.y, isOut);
   }
 
+  // Use fair direction for matrix lookups
+  const fairDir = toFairDirection(direction);
+
   // Select appropriate inference matrix
   let inference: InferenceResult;
   let confidence: number;
 
   switch (exitType) {
     case 'Ground':
-      inference = GROUND_BALL_INFERENCE[direction];
-      confidence = 0.85; // Ground balls are predictable
+      inference = GROUND_BALL_INFERENCE[fairDir];
+      confidence = 0.85;
       break;
     case 'Fly Ball':
-      inference = FLY_BALL_INFERENCE[direction];
-      confidence = 0.90; // Fly balls are very predictable
+      inference = FLY_BALL_INFERENCE[fairDir];
+      confidence = 0.90;
       break;
     case 'Line Drive':
-      inference = LINE_DRIVE_INFERENCE[direction];
-      confidence = 0.70; // Line drives can go many places
+      inference = LINE_DRIVE_INFERENCE[fairDir];
+      confidence = 0.70;
       break;
-    case 'Pop Up':
-      inference = POP_FLY_INFERENCE[direction];
-      confidence = 0.80; // Pop ups are fairly predictable
+    case 'Pop Up': {
+      // Depth-aware pop fly inference (MAJ-B3-006)
+      const depth = explicitDepth || inferPopFlyDepth(location.y);
+      inference = inferPopFlyFielder(direction, depth);
+      confidence = 0.80;
       break;
+    }
   }
 
   // Adjust confidence based on depth (edge cases are less certain)
   if (location.y > 0.9 || location.y < 0.1) {
-    confidence *= 0.8; // Edge of field
+    confidence *= 0.8;
   }
   if (location.x < 0.1 || location.x > 0.9) {
-    confidence *= 0.85; // Foul line area
+    confidence *= 0.85;
   }
 
   const primaryPosition = inference.primary;
@@ -326,6 +521,12 @@ export function inferFielderEnhanced(
   exitType?: ExitType | null
 ): number | null {
   if (!direction) return null;
+
+  // Handle foul directions with dedicated logic
+  if (!isFairDirection(direction)) {
+    const foulInference = inferFoulDirectionFielder(result, direction, exitType);
+    return foulInference ? POSITION_NUMBER[foulInference.primary] : null;
+  }
 
   let inference: InferenceResult | null = null;
 
@@ -365,7 +566,7 @@ export function inferFielderEnhanced(
  * Get suggested DP chain based on direction
  */
 export function getSuggestedDPChain(direction: Direction): string {
-  return DP_CHAINS[direction];
+  return DP_CHAINS[toFairDirection(direction)];
 }
 
 /**

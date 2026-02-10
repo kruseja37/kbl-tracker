@@ -2,7 +2,7 @@
  * Offseason State Storage
  *
  * Manages the offseason state machine and persists all offseason decisions.
- * Per OFFSEASON_SYSTEM_SPEC.md - 10 phases in strict order.
+ * Per OFFSEASON_SYSTEM_SPEC.md §2 - 11 phases in strict order.
  *
  * Phases:
  * 1. Finalize Standings
@@ -12,9 +12,10 @@
  * 5. Retirements
  * 6. Free Agency
  * 7. Draft
- * 8. Trades
- * 9. Farm Transactions (Call-ups, Send-downs)
- * 10. Spring Training / Finalize
+ * 8. Farm System Reconciliation
+ * 9. Chemistry Rebalancing
+ * 10. Trades
+ * 11. Spring Training / Finalize
  */
 
 // ============================================
@@ -29,8 +30,9 @@ export type OffseasonPhase =
   | 'RETIREMENTS'
   | 'FREE_AGENCY'
   | 'DRAFT'
+  | 'FARM_RECONCILIATION'
+  | 'CHEMISTRY_REBALANCING'
   | 'TRADES'
-  | 'FARM_TRANSACTIONS'
   | 'SPRING_TRAINING';
 
 export const OFFSEASON_PHASES: OffseasonPhase[] = [
@@ -41,8 +43,9 @@ export const OFFSEASON_PHASES: OffseasonPhase[] = [
   'RETIREMENTS',
   'FREE_AGENCY',
   'DRAFT',
+  'FARM_RECONCILIATION',
+  'CHEMISTRY_REBALANCING',
   'TRADES',
-  'FARM_TRANSACTIONS',
   'SPRING_TRAINING',
 ];
 
@@ -325,8 +328,39 @@ export async function getOffseasonState(
     const request = store.get(`offseason-${seasonId}`);
 
     request.onerror = () => reject(request.error);
-    request.onsuccess = () => resolve(request.result || null);
+    request.onsuccess = () => {
+      const state = request.result || null;
+      if (state) {
+        migrateOffseasonState(state);
+      }
+      resolve(state);
+    };
   });
+}
+
+/**
+ * Migrate legacy phase names in persisted OffseasonState records.
+ * FARM_TRANSACTIONS → FARM_RECONCILIATION (MAJ-B5-014)
+ * Mutates in place for efficiency.
+ */
+function migrateOffseasonState(state: OffseasonState): void {
+  const LEGACY_MIGRATIONS: Record<string, OffseasonPhase> = {
+    'FARM_TRANSACTIONS': 'FARM_RECONCILIATION',
+  };
+
+  // Migrate currentPhase
+  const migratedCurrent = LEGACY_MIGRATIONS[state.currentPhase];
+  if (migratedCurrent) {
+    state.currentPhase = migratedCurrent;
+  }
+
+  // Migrate phasesCompleted
+  for (let i = 0; i < state.phasesCompleted.length; i++) {
+    const migrated = LEGACY_MIGRATIONS[state.phasesCompleted[i]];
+    if (migrated) {
+      state.phasesCompleted[i] = migrated;
+    }
+  }
 }
 
 /**
@@ -378,8 +412,9 @@ export function getPhaseDisplayName(phase: OffseasonPhase): string {
     RETIREMENTS: 'Retirements',
     FREE_AGENCY: 'Free Agency',
     DRAFT: 'Draft',
+    FARM_RECONCILIATION: 'Farm System Reconciliation',
+    CHEMISTRY_REBALANCING: 'Chemistry Rebalancing',
     TRADES: 'Trades',
-    FARM_TRANSACTIONS: 'Farm Transactions',
     SPRING_TRAINING: 'Spring Training',
   };
   return names[phase] || phase;

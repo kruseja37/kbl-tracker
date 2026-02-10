@@ -12,8 +12,9 @@ import type { AtBatResult, Direction, ExitType, Position, Bases } from '../types
 // ============================================
 
 type InferenceResult = { primary: Position; secondary?: Position; tertiary?: Position };
+type FairDirection = 'Left' | 'Left-Center' | 'Center' | 'Right-Center' | 'Right';
 
-const GROUND_BALL_INFERENCE: Record<Direction, InferenceResult> = {
+const GROUND_BALL_INFERENCE: Record<FairDirection, InferenceResult> = {
   'Left': { primary: '3B', secondary: 'SS', tertiary: 'P' },
   'Left-Center': { primary: 'SS', secondary: '3B', tertiary: '2B' },
   'Center': { primary: 'P', secondary: 'SS', tertiary: '2B' },
@@ -21,7 +22,7 @@ const GROUND_BALL_INFERENCE: Record<Direction, InferenceResult> = {
   'Right': { primary: '1B', secondary: '2B', tertiary: 'P' },
 };
 
-const FLY_BALL_INFERENCE: Record<Direction, InferenceResult> = {
+const FLY_BALL_INFERENCE: Record<FairDirection, InferenceResult> = {
   'Left': { primary: 'LF', secondary: 'CF', tertiary: '3B' },
   'Left-Center': { primary: 'CF', secondary: 'LF', tertiary: 'SS' },
   'Center': { primary: 'CF' },
@@ -29,7 +30,7 @@ const FLY_BALL_INFERENCE: Record<Direction, InferenceResult> = {
   'Right': { primary: 'RF', secondary: 'CF', tertiary: '1B' },
 };
 
-const LINE_DRIVE_INFERENCE: Record<Direction, InferenceResult> = {
+const LINE_DRIVE_INFERENCE: Record<FairDirection, InferenceResult> = {
   'Left': { primary: '3B', secondary: 'LF' },
   'Left-Center': { primary: 'SS', secondary: 'CF' },
   'Center': { primary: 'P', secondary: 'CF' },
@@ -37,7 +38,7 @@ const LINE_DRIVE_INFERENCE: Record<Direction, InferenceResult> = {
   'Right': { primary: '1B', secondary: 'RF' },
 };
 
-const POP_FLY_INFERENCE: Record<Direction, InferenceResult> = {
+const POP_FLY_INFERENCE: Record<FairDirection, InferenceResult> = {
   'Left': { primary: '3B', secondary: 'SS' },
   'Left-Center': { primary: 'SS', secondary: '3B' },
   'Center': { primary: 'SS', secondary: '2B' },
@@ -52,35 +53,37 @@ function inferFielderEnhanced(
 ): Position | null {
   if (!direction) return null;
 
+  // Cast to FairDirection for matrix lookup (foul directions handled separately in production code)
+  const fairDir = direction as FairDirection;
   let inference: InferenceResult | null = null;
 
   // For hits, use exit type first if available
   if (['1B', '2B', '3B'].includes(result) && exitType) {
     if (exitType === 'Ground') {
-      inference = GROUND_BALL_INFERENCE[direction];
+      inference = GROUND_BALL_INFERENCE[fairDir];
     } else if (exitType === 'Line Drive') {
-      inference = LINE_DRIVE_INFERENCE[direction];
+      inference = LINE_DRIVE_INFERENCE[fairDir];
     } else if (exitType === 'Fly Ball') {
-      inference = FLY_BALL_INFERENCE[direction];
+      inference = FLY_BALL_INFERENCE[fairDir];
     } else if (exitType === 'Pop Up') {
-      inference = POP_FLY_INFERENCE[direction];
+      inference = POP_FLY_INFERENCE[fairDir];
     }
   }
   // Ground balls (by result)
   else if (['GO', 'DP', 'FC', 'SAC'].includes(result) || exitType === 'Ground') {
-    inference = GROUND_BALL_INFERENCE[direction];
+    inference = GROUND_BALL_INFERENCE[fairDir];
   }
   // Fly balls (by result)
   else if (['FO', 'SF'].includes(result) || exitType === 'Fly Ball') {
-    inference = FLY_BALL_INFERENCE[direction];
+    inference = FLY_BALL_INFERENCE[fairDir];
   }
   // Line drives (by result)
   else if (result === 'LO' || exitType === 'Line Drive') {
-    inference = LINE_DRIVE_INFERENCE[direction];
+    inference = LINE_DRIVE_INFERENCE[fairDir];
   }
   // Pop flies (by result)
   else if (result === 'PO' || exitType === 'Pop Up') {
-    inference = POP_FLY_INFERENCE[direction];
+    inference = POP_FLY_INFERENCE[fairDir];
   }
 
   return inference?.primary || null;
@@ -495,7 +498,7 @@ function runTests(): void {
   // ===== DP CHAIN TESTS =====
   console.log('\n--- DP Chain Tests ---\n');
 
-  const dpChains: Record<Direction, string> = {
+  const dpChains: Record<FairDirection, string> = {
     'Left': '5-4-3',
     'Left-Center': '6-4-3',
     'Center': '6-4-3',
@@ -517,7 +520,7 @@ function runTests(): void {
     return posMap[parts[parts.length - 1]];
   }
 
-  for (const [dir, chain] of Object.entries(dpChains) as [Direction, string][]) {
+  for (const [dir, chain] of Object.entries(dpChains) as [FairDirection, string][]) {
     const assists = buildAssistChain(chain);
     const putout = getPutout(chain);
 

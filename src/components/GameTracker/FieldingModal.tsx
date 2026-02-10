@@ -35,16 +35,18 @@ export type { PlayType, ErrorType, D3KOutcome, DepthType, AssistType, DPRole, Er
 function buildHitZone(direction: Direction | null, depth: DepthType | null, position: Position): string {
   if (!direction) return `${position}-range`;
 
-  const directionMap: Record<Direction, string> = {
+  const directionMap: Partial<Record<Direction, string>> = {
     'Left': 'LF',
     'Left-Center': 'LC',
     'Center': 'CF',
     'Right-Center': 'RC',
     'Right': 'RF',
+    'Foul-Left': 'FL',
+    'Foul-Right': 'FR',
   };
 
   const depthSuffix = depth ? `-${depth}` : '';
-  return `${directionMap[direction]}${depthSuffix}`;
+  return `${directionMap[direction] ?? 'UNK'}${depthSuffix}`;
 }
 
 /**
@@ -82,7 +84,7 @@ export function recordFieldingForLearning(
 
 type InferenceResult = { primary: Position; secondary?: Position; tertiary?: Position };
 
-const GROUND_BALL_INFERENCE: Record<Direction, InferenceResult> = {
+const GROUND_BALL_INFERENCE: Partial<Record<Direction, InferenceResult>> = {
   'Left': { primary: '3B', secondary: 'SS', tertiary: 'P' },
   'Left-Center': { primary: 'SS', secondary: '3B', tertiary: '2B' },
   'Center': { primary: 'P', secondary: 'SS', tertiary: '2B' },
@@ -90,7 +92,7 @@ const GROUND_BALL_INFERENCE: Record<Direction, InferenceResult> = {
   'Right': { primary: '1B', secondary: '2B', tertiary: 'P' },
 };
 
-const FLY_BALL_INFERENCE: Record<Direction, InferenceResult> = {
+const FLY_BALL_INFERENCE: Partial<Record<Direction, InferenceResult>> = {
   'Left': { primary: 'LF', secondary: 'CF', tertiary: '3B' },
   'Left-Center': { primary: 'CF', secondary: 'LF', tertiary: 'SS' },
   'Center': { primary: 'CF' },
@@ -98,7 +100,7 @@ const FLY_BALL_INFERENCE: Record<Direction, InferenceResult> = {
   'Right': { primary: 'RF', secondary: 'CF', tertiary: '1B' },
 };
 
-const LINE_DRIVE_INFERENCE: Record<Direction, InferenceResult> = {
+const LINE_DRIVE_INFERENCE: Partial<Record<Direction, InferenceResult>> = {
   'Left': { primary: '3B', secondary: 'LF' },
   'Left-Center': { primary: 'SS', secondary: 'CF' },
   'Center': { primary: 'P', secondary: 'CF' },
@@ -106,7 +108,7 @@ const LINE_DRIVE_INFERENCE: Record<Direction, InferenceResult> = {
   'Right': { primary: '1B', secondary: 'RF' },
 };
 
-const POP_FLY_INFERENCE: Record<Direction, InferenceResult> = {
+const POP_FLY_INFERENCE: Partial<Record<Direction, InferenceResult>> = {
   'Left': { primary: '3B', secondary: 'SS' },
   'Left-Center': { primary: 'SS', secondary: '3B' },
   'Center': { primary: 'SS', secondary: '2B' },
@@ -115,7 +117,7 @@ const POP_FLY_INFERENCE: Record<Direction, InferenceResult> = {
 };
 
 // DP Chain defaults by direction
-const DP_CHAINS: Record<Direction, string> = {
+const DP_CHAINS: Partial<Record<Direction, string>> = {
   'Left': '5-4-3',
   'Left-Center': '6-4-3',
   'Center': '6-4-3',
@@ -140,30 +142,30 @@ export function inferFielderEnhanced(
   // For hits, use exit type first if available
   if (['1B', '2B', '3B'].includes(result) && exitType) {
     if (exitType === 'Ground') {
-      inference = GROUND_BALL_INFERENCE[direction];
+      inference = GROUND_BALL_INFERENCE[direction] ?? null;
     } else if (exitType === 'Line Drive') {
-      inference = LINE_DRIVE_INFERENCE[direction];
+      inference = LINE_DRIVE_INFERENCE[direction] ?? null;
     } else if (exitType === 'Fly Ball') {
-      inference = FLY_BALL_INFERENCE[direction];
+      inference = FLY_BALL_INFERENCE[direction] ?? null;
     } else if (exitType === 'Pop Up') {
-      inference = POP_FLY_INFERENCE[direction];
+      inference = POP_FLY_INFERENCE[direction] ?? null;
     }
   }
   // Ground balls (by result)
   else if (['GO', 'DP', 'FC', 'SAC'].includes(result) || exitType === 'Ground') {
-    inference = GROUND_BALL_INFERENCE[direction];
+    inference = GROUND_BALL_INFERENCE[direction] ?? null;
   }
   // Fly balls (by result)
   else if (['FO', 'SF'].includes(result) || exitType === 'Fly Ball') {
-    inference = FLY_BALL_INFERENCE[direction];
+    inference = FLY_BALL_INFERENCE[direction] ?? null;
   }
   // Line drives (by result)
   else if (result === 'LO' || exitType === 'Line Drive') {
-    inference = LINE_DRIVE_INFERENCE[direction];
+    inference = LINE_DRIVE_INFERENCE[direction] ?? null;
   }
   // Pop flies (by result)
   else if (result === 'PO' || exitType === 'Pop Up') {
-    inference = POP_FLY_INFERENCE[direction];
+    inference = POP_FLY_INFERENCE[direction] ?? null;
   }
 
   return inference?.primary || null;
@@ -240,7 +242,7 @@ export default function FieldingModal({
   const [primaryFielder, setPrimaryFielder] = useState<Position | null>(inferredFielder);
   const [playType, setPlayType] = useState<PlayType>('routine');
   const [errorType, setErrorType] = useState<ErrorType | null>(null);
-  const [dpChain, setDpChain] = useState<string | null>(result === 'DP' && direction ? DP_CHAINS[direction] : null);
+  const [dpChain, setDpChain] = useState<string | null>(result === 'DP' && direction ? DP_CHAINS[direction] ?? null : null);
   const [savedRun, setSavedRun] = useState(false);
 
   // New Day 4 fields
