@@ -1,0 +1,153 @@
+================================================================================
+KBL TRACKER SPEC CONSOLIDATION — 7 CLI PROMPTS — QUICK REFERENCE
+================================================================================
+
+WORKFLOW:
+  Phase B, Session 1-6: Run domain consolidation prompts (can run in parallel)
+  Phase B, Session 7:   Run cross-domain validator after all 6 templates exist
+
+================================================================================
+DOMAIN CONSOLIDATION PROMPTS (Run Sessions 1-6)
+================================================================================
+
+[1] CONSOLIDATE_DOMAIN_1_WAR_STATS.md                    139 lines
+    → Consolidates: bWAR, pWAR, fWAR, rWAR, mWAR calculations
+    → Source files: 8 specs (BWAR, PWAR, FWAR, RWAR, MWAR, STAT_TRACKING, 
+                             STADIUM_ANALYTICS, ADAPTIVE_STANDARDS)
+    → Code files: 6 calculator engines + warOrchestrator
+    → Output: spec-docs/BUILD_TEMPLATE_WAR_STATS.md
+    → Cross-domain: feeds into Domain 3 (Grade), Domain 2 (Clutch), Domain 3 (HOF)
+
+[2] CONSOLIDATE_DOMAIN_2_GAMETRACKER.md                 153 lines
+    → Consolidates: GameTracker, fielding input, inherited runners, clutch, leverage
+    → Source files: 12 specs (FIELDING, FIELD_ZONE_INPUT, GAMETRACKER_DRAGDROP,
+                             INHERITED_RUNNERS, PITCHER_STATS, PITCH_COUNT,
+                             SUBSTITUTION, AUTO_CORRECTION, CLUTCH, LEVERAGE,
+                             + 2 STORIES files)
+    → Code files: 5 files (game.ts, useGameState.ts, clutchCalculator,
+                          fielderInference, EnhancedInteractiveField)
+    → CRITICAL: FieldingPlay = 40+ fields minus shift fields + code-only fields
+    → Output: spec-docs/BUILD_TEMPLATE_GAMETRACKER.md
+    → Cross-domain: feeds into Domain 1 (fWAR), Domain 3 (Fame/Clutch),
+                    Domain 4 (roster changes)
+
+[3] CONSOLIDATE_DOMAIN_3_PLAYER_SYSTEMS.md              164 lines
+    → Consolidates: Grade, Salary, Mojo, Fame, Fan Systems, EOS Ratings, Awards
+    → Source files: 15 specs (GRADE, grade_tracking, SALARY, MOJO, MILESTONE,
+                             FAN_FAVORITE, FAN_MORALE, DYNAMIC_DESIGNATIONS,
+                             NARRATIVE, SPECIAL_EVENTS, EOS_RATINGS, EOS_RATINGS_FIGMA,
+                             AWARDS_CEREMONY, + 2 STORIES files)
+    → Code files: 6 engines (gradeEngine, salaryCalculator, mojoEngine,
+                            fameEngine, fanMoraleEngine, milestoneEngine)
+    → CRITICAL: HOF score uses games/season from Domain 5
+    → CRITICAL: Maddux threshold weighted by innings/game
+    → Output: spec-docs/BUILD_TEMPLATE_PLAYER_SYSTEMS.md
+    → Cross-domain: consumes Domain 1 (WAR baseline), Domain 2 (Clutch),
+                    affects Domain 4 (Trade/FA), affects Domain 5 (HOF)
+
+[4] CONSOLIDATE_DOMAIN_4_FRANCHISE_OFFSEASON.md         241 lines  ← LARGEST
+    → Consolidates: Franchise Mode, Offseason, Farm, Trade, Draft, FA, Retirement
+    → Source files: 20 specs (FRANCHISE_MODE, OFFSEASON_SYSTEM, FARM_SYSTEM,
+                             TRADE_SYSTEM, GAME_SIMULATION, DRAFT_FIGMA,
+                             FREE_AGENCY_FIGMA, CONTRACTION_EXPANSION_FIGMA,
+                             FINALIZE_ADVANCE_FIGMA, RETIREMENT_FIGMA,
+                             TRADE_FIGMA, FIGMA_BLURB_FREE_AGENCY_EXCHANGE,
+                             + 7 STORIES files)
+    → Code files: 7 files (offseasonStorage, franchiseStorage, useOffseasonPhase,
+                          DraftFlow, FreeAgencyFlow, RetirementFlow,
+                          FinalizeAdvanceFlow)
+    → CONTEXT MGMT: Large domain, includes pause/resume guidance
+    → KNOWN CONTRADICTIONS: phase count, farm cap (RESOLVED), FA flow
+    → Output: spec-docs/BUILD_TEMPLATE_FRANCHISE_OFFSEASON.md
+    → Cross-domain: consumes Domain 3 (Salary, Grade), Domain 1 (WAR),
+                    consumes Domain 5 (League Rules), affects Domain 5 (playoffs)
+
+[5] CONSOLIDATE_DOMAIN_5_LEAGUE_PLAYOFFS.md             155 lines
+    → Consolidates: League Builder, Season Setup, Playoffs, Schedule
+    → Source files: 10 specs (LEAGUE_BUILDER, LEAGUE_BUILDER_FIGMA,
+                             SEASON_SETUP, SEASON_SETUP_FIGMA,
+                             PLAYOFF_SYSTEM, PLAYOFFS_FIGMA, SEASON_END_FIGMA,
+                             SCHEDULE_SYSTEM_FIGMA, + 2 STORIES files)
+    → Code files: All in src/components/LeagueBuilder/, playoffStorage, WorldSeries
+    → CRITICAL: Defines games/season variable (used by Domain 3 for HOF weighting)
+    → Updates to apply: NEW-001 (SP/RP as pitchers), NEW-003 (remove Pitch Counts)
+    → Output: spec-docs/BUILD_TEMPLATE_LEAGUE_PLAYOFFS.md
+    → Cross-domain: games/season consumed by Domain 3, rules affect Domain 2,
+                    playoff rosters affect Domain 4, season end triggers Domain 4
+
+[6] CONSOLIDATE_DOMAIN_6_MASTER.md                      148 lines
+    → Consolidates: Master Spec features (Oddity Records, Nicknames, Award Emblems,
+                   HOF Score framework, Legacy/Dynasty, Calendar, Revenge Games,
+                   Headlines)
+    → Source files: 3 files (KBL_XHD_TRACKER_MASTER_SPEC_v3, app_features_and_questions,
+                            STORIES_GAP_CLOSERS)
+    → Code files: Search for implementations of master-only features
+    → TASK: Identify master-only vs. Domain 1-5 covered features
+    → Output: spec-docs/BUILD_TEMPLATE_MASTER.md
+    → Cross-domain: Many master features reference systems in other domains;
+                    must flag contradictions
+
+================================================================================
+CROSS-DOMAIN VALIDATION PROMPT (Run Session 7 AFTER all 6 templates exist)
+================================================================================
+
+[7] CONSOLIDATE_CROSS_DOMAIN_VALIDATOR.md               256 lines
+    → Purpose: Validate all 6 domain templates are consistent with each other
+    → Reads: 6 BUILD_TEMPLATE files + CONTRADICTIONS.md + TRIAGE_DECISIONS.md
+    → Performs 5 validation checks:
+      [✓] Cross-domain reference validation (every "See BUILD_TEMPLATE_X.md §Y" resolves)
+      [✓] Shared interface consistency (no interface defined differently in 2+ templates)
+      [✓] Formula & constant consistency (cross-domain formulas reference correct values)
+      [✓] Feature dependency validation (no missing deps, no circular deps)
+      [✓] Phase B triage coverage (all 132 BUILDs covered by ≥1 template)
+    → Output: spec-docs/CROSS_DOMAIN_VALIDATION.md
+      - Lists issues categorized: BROKEN_XREFS, INTERFACE_MISMATCHES,
+        FORMULA_MISMATCHES, DEPENDENCY_ERRORS, UNCOVERED_TRIAGE
+      - Each issue has fix recommendation
+      - Final status: "CLEAN" or "ISSUES FOUND" with severity ratings
+
+================================================================================
+CRITICAL FEATURES IN EACH DOMAIN
+================================================================================
+
+Domain 1: WAR baseline values (used by Domain 3 Grade)
+Domain 2: FieldingPlay interface (40+ fields, minus shift, + code-only)
+Domain 3: HOF score formula (weighted by games/season FROM Domain 5)
+Domain 4: Offseason phase count (resolve contradiction from code)
+Domain 5: games/season variable (SOURCE for Domain 3 HOF weighting)
+Domain 6: Master-only vs Domain-covered feature mapping
+
+================================================================================
+OUTPUTS PRODUCED
+================================================================================
+
+Domain 1 → spec-docs/BUILD_TEMPLATE_WAR_STATS.md
+Domain 2 → spec-docs/BUILD_TEMPLATE_GAMETRACKER.md
+Domain 3 → spec-docs/BUILD_TEMPLATE_PLAYER_SYSTEMS.md
+Domain 4 → spec-docs/BUILD_TEMPLATE_FRANCHISE_OFFSEASON.md
+Domain 5 → spec-docs/BUILD_TEMPLATE_LEAGUE_PLAYOFFS.md
+Domain 6 → spec-docs/BUILD_TEMPLATE_MASTER.md
+All     → Appends to spec-docs/CONTRADICTIONS.md
+Final   → spec-docs/CROSS_DOMAIN_VALIDATION.md (from Domain 7)
+
+================================================================================
+USER PRE-DECISIONS (DO NOT RE-SURFACE)
+================================================================================
+
+CRIT-B6-005:     Farm cap = 10 with release modal [Domain 4]
+GAP-B3-010:      No shift logic [Domain 2] [SKIPPED]
+GAP-B2-001:      IFR stays user input only [Domain 2] [SKIPPED]
+GAP-B3-014:      (Related to IFR) [SKIPPED]
+GAP-B3-015:      No ground rule double tracking [SKIPPED]
+GAP-B10-006:     HOF score weighted by games/season [Domain 3, uses Domain 5]
+GAP-B3-011:      FieldingPlay = 40+ minus shift + code fields [Domain 2]
+GAP-B3-013:      Fielding aligns with enhanced FieldCanvas [Domain 2]
+GAP-B11-012:     Supplemental FA coexists with dice-based [Domain 4]
+NEW-001:         SP/RP classified as pitchers [Domain 5]
+NEW-002:         Pre-game lineup screen for Franchise Mode [Domain 4]
+NEW-003:         Remove Pitch Counts & Mound Visits from Rules [Domain 5]
+MIS-B14-001:     Maddux threshold weighted by innings/game [Domain 3]
+
+================================================================================
+TOTAL CONTENT: 1,380 lines (7 files + README + this guide)
+================================================================================
