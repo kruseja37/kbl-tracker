@@ -702,8 +702,11 @@ export function calculateSalaryWithBreakdown(
     : 1.0;
   const afterPersonality = afterFame * personalityModifier;
 
-  // Final salary with minimum
-  const finalSalary = Math.max(MIN_SALARY, Math.round(afterPersonality * 10) / 10);
+  // Final salary clamped to [MIN_SALARY, MAX_SALARY]
+  const finalSalary = Math.min(
+    MAX_SALARY,
+    Math.max(MIN_SALARY, Math.round(afterPersonality * 10) / 10)
+  );
 
   return {
     baseSalary,
