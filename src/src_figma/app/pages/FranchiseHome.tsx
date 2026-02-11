@@ -2,7 +2,6 @@ import { useState, useEffect, createContext, useContext } from "react";
 import { useNavigate, useParams } from "react-router";
 import { Calendar, Users, TrendingUp, Newspaper, Trophy, Folder, Home, ChevronDown, ChevronUp, DollarSign, ClipboardList, Star, Award, TrendingDown, Shuffle, UserMinus, CheckCircle, ArrowRight, BarChart3, Plus } from "lucide-react";
 import { getTeamColors } from "@/config/teamColors";
-import { getStadiumForTeam } from "@/config/stadiumData";
 import { TeamHubContent } from "@/app/components/TeamHubContent";
 import { MuseumContent, type RetiredJersey } from "@/app/components/MuseumContent";
 import { FreeAgencyFlow } from "@/app/components/FreeAgencyFlow";
@@ -581,6 +580,7 @@ export function FranchiseHome() {
             onAddGame={() => setAddGameModalOpen(true)}
             dropdownOpen={scheduleDropdownOpen}
             setDropdownOpen={setScheduleDropdownOpen}
+            stadiumMap={franchiseData.stadiumMap}
           />
         )}
         {activeTab === "news" && (
@@ -2376,7 +2376,7 @@ function GameDayContent({ scheduleData, currentSeason, onDataRefresh }: GameDayC
 
           <div className="text-center">
             <div className="text-2xl text-[#E8E8D8]">vs</div>
-            <div className="text-[7px] text-[#E8E8D8]/70 italic mt-1">{getStadiumForTeam(homeTeamId.toUpperCase())}</div>
+            <div className="text-[7px] text-[#E8E8D8]/70 italic mt-1">{franchiseData.stadiumMap[homeTeamId] || homeTeamId.toUpperCase()}</div>
           </div>
 
           <div className="text-center">

@@ -35,11 +35,6 @@ vi.mock('@/config/teamColors', () => ({
   getTeamColors: vi.fn().mockReturnValue({ primary: '#FF0000', secondary: '#FFFFFF' }),
 }));
 
-// Mock stadium data - must return a string, not an object
-vi.mock('@/config/stadiumData', () => ({
-  getStadiumForTeam: vi.fn().mockReturnValue('Test Stadium'),
-}));
-
 // Mock all child components to avoid deep rendering issues
 vi.mock('@/app/components/TeamHubContent', () => ({
   TeamHubContent: () => <div data-testid="team-hub-content">Team Hub Content</div>,
@@ -108,6 +103,7 @@ vi.mock('@/hooks/useFranchiseData', () => ({
     seasonStats: {},
     isLoading: false,
     error: null,
+    stadiumMap: { 'team-1': 'Tiger Stadium', 'team-2': 'Sox Park' },
     refresh: vi.fn(),
   })),
 }));

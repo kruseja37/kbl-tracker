@@ -10,14 +10,6 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { ScheduleContent } from '../../app/components/ScheduleContent';
 
 // ============================================
-// MOCKS
-// ============================================
-
-vi.mock('@/config/stadiumData', () => ({
-  getStadiumForTeam: vi.fn().mockReturnValue('Test Stadium'),
-}));
-
-// ============================================
 // DEFAULT PROPS
 // ============================================
 
@@ -71,6 +63,7 @@ const defaultProps = {
   onAddGame: vi.fn(),
   dropdownOpen: false,
   setDropdownOpen: vi.fn(),
+  stadiumMap: { TIGERS: 'Tiger Stadium', SOX: 'Sox Park', BEARS: 'Bear Field', CROCS: 'Croc Arena', MOOSE: 'Moose Dome' } as Record<string, string>,
 };
 
 // ============================================

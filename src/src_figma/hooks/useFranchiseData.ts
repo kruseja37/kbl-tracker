@@ -14,6 +14,7 @@ import { calculateStandings, type SeasonMetadata, type TeamStanding as StorageTe
 import { useRelationshipData, type UseRelationshipDataReturn } from '../app/hooks/useRelationshipData';
 import { getFranchiseConfig, loadFranchise } from '../../utils/franchiseManager';
 import { getNextFranchiseGame } from '../../utils/scheduleStorage';
+import { getAllTeams } from '../../utils/leagueBuilderStorage';
 import type { StoredFranchiseConfig } from '../../types/franchise';
 
 // ============================================
@@ -96,6 +97,9 @@ export interface UseFranchiseDataReturn {
 
   // Flags
   hasRealData: boolean;
+
+  // Team stadium lookup (teamId → stadium name)
+  stadiumMap: Record<string, string>;
 
   // Relationships & team chemistry (wired from relationship engine)
   relationshipData: UseRelationshipDataReturn;
@@ -256,6 +260,31 @@ export function useFranchiseData(franchiseId?: string): UseFranchiseDataReturn {
     load();
     return () => { cancelled = true; };
   }, [franchiseId]);
+
+  // Stadium lookup map — loaded from real team data in IndexedDB
+  const [stadiumMap, setStadiumMap] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadStadiums() {
+      try {
+        const teams = await getAllTeams();
+        if (!cancelled) {
+          const map: Record<string, string> = {};
+          for (const team of teams) {
+            if (team.stadium) {
+              map[team.id] = team.stadium;
+            }
+          }
+          setStadiumMap(map);
+        }
+      } catch (err) {
+        console.error('[useFranchiseData] Failed to load stadium map:', err);
+      }
+    }
+    loadStadiums();
+    return () => { cancelled = true; };
+  }, []);
 
   // Get real data from existing hooks
   const seasonData = useSeasonData(seasonId);
@@ -437,6 +466,7 @@ export function useFranchiseData(franchiseId?: string): UseFranchiseDataReturn {
     pitchingLeaders,
     nextGame,
     hasRealData,
+    stadiumMap,
     relationshipData,
     refresh,
   };

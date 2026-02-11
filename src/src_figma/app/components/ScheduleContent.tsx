@@ -1,6 +1,4 @@
 import { ChevronDown, ChevronUp, CheckCircle, Plus } from "lucide-react";
-import { getStadiumForTeam } from "@/config/stadiumData";
-
 interface ScheduledGame {
   id: string;
   seasonNumber: number;
@@ -27,6 +25,7 @@ interface ScheduleContentProps {
   onAddGame: () => void;
   dropdownOpen: boolean;
   setDropdownOpen: (open: boolean) => void;
+  stadiumMap: Record<string, string>;
 }
 
 export function ScheduleContent({
@@ -36,7 +35,8 @@ export function ScheduleContent({
   availableTeams,
   onAddGame,
   dropdownOpen,
-  setDropdownOpen
+  setDropdownOpen,
+  stadiumMap
 }: ScheduleContentProps) {
   const filteredGames = selectedTeam === "FULL LEAGUE" 
     ? games 
@@ -187,7 +187,7 @@ export function ScheduleContent({
                 </div>
                 <div className="text-center px-2">
                   <div className="text-xl text-[#E8E8D8]">@</div>
-                  <div className="text-[7px] text-[#E8E8D8]/70 italic mt-1">{getStadiumForTeam(nextGame.homeTeamId)}</div>
+                  <div className="text-[7px] text-[#E8E8D8]/70 italic mt-1">{stadiumMap[nextGame.homeTeamId] || nextGame.homeTeamId}</div>
                 </div>
                 <div className="text-left">
                   <div className="text-base text-[#E8E8D8]">{nextGame.homeTeamId}</div>
@@ -240,7 +240,7 @@ export function ScheduleContent({
                 </div>
                 <div className="text-center px-2">
                   <div className="text-xl text-[#E8E8D8]">@</div>
-                  <div className="text-[7px] text-[#E8E8D8]/70 italic mt-1">{getStadiumForTeam(game.homeTeamId)}</div>
+                  <div className="text-[7px] text-[#E8E8D8]/70 italic mt-1">{stadiumMap[game.homeTeamId] || game.homeTeamId}</div>
                 </div>
                 <div className="text-left">
                   <div className="text-base text-[#E8E8D8]">{game.homeTeamId}</div>
