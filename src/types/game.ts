@@ -4,7 +4,7 @@ import { type MojoLevel, getMojoFameModifier } from '../engines/mojoEngine';
 import { type FitnessState, getFitnessFameModifier } from '../engines/fitnessEngine';
 
 export type HalfInning = 'TOP' | 'BOTTOM';
-export type Direction = 'Left' | 'Left-Center' | 'Center' | 'Right-Center' | 'Right';
+export type Direction = 'Left' | 'Left-Center' | 'Center' | 'Right-Center' | 'Right' | 'Foul-Left' | 'Foul-Right';
 export type ExitType = 'Ground' | 'Line Drive' | 'Fly Ball' | 'Pop Up';
 export type Position = 'P' | 'C' | '1B' | '2B' | '3B' | 'SS' | 'LF' | 'CF' | 'RF' | 'DH' | 'SP' | 'RP' | 'CP' | 'IF' | 'OF';
 export type BatterHand = 'L' | 'R' | 'S';
@@ -172,7 +172,7 @@ export function reachesBase(result: AtBatResult): boolean { return ['1B', '2B', 
 export function requiresBallInPlayData(result: AtBatResult): boolean { return ['1B', '2B', '3B', 'HR', 'GO', 'FO', 'LO', 'PO', 'DP', 'TP', 'FC', 'E'].includes(result); }
 
 export function inferFielder(result: AtBatResult, direction: Direction): Position | null {
-  const map: Record<string, Record<Direction, Position>> = {
+  const map: Record<string, Partial<Record<Direction, Position>>> = {
     'FO': { 'Left': 'LF', 'Left-Center': 'LF', 'Center': 'CF', 'Right-Center': 'RF', 'Right': 'RF' },
     'LO': { 'Left': 'LF', 'Left-Center': 'CF', 'Center': 'CF', 'Right-Center': 'CF', 'Right': 'RF' },
     'PO': { 'Left': '3B', 'Left-Center': 'SS', 'Center': '2B', 'Right-Center': '2B', 'Right': '1B' },

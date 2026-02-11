@@ -28,37 +28,8 @@ interface PostseasonMVPFlowProps {
   onCancel: () => void;
 }
 
-// --- Mock candidates (used when no real data provided) ---
-
-const MOCK_CANDIDATES: MVPCandidate[] = [
-  {
-    id: "mvp1",
-    name: "Barry Bonds",
-    position: "LF",
-    team: "San Francisco Giants",
-    pWAR: 3.2,
-    playoffStats: { avg: ".385", hr: 4, rbi: 12 },
-    ratings: { power: 99, contact: 85, speed: 65, fielding: 55, arm: 60 },
-  },
-  {
-    id: "mvp2",
-    name: "Pedro Martinez",
-    position: "SP",
-    team: "Boston Red Sox",
-    pWAR: 2.8,
-    playoffStats: { era: "1.87", k: 28, w: 3 },
-    ratings: { velocity: 95, junk: 92, accuracy: 88 },
-  },
-  {
-    id: "mvp3",
-    name: "Derek Jeter",
-    position: "SS",
-    team: "New York Yankees",
-    pWAR: 2.4,
-    playoffStats: { avg: ".342", hr: 2, rbi: 8 },
-    ratings: { power: 65, contact: 82, speed: 75, fielding: 78, arm: 72 },
-  },
-];
+// Empty candidates fallback — populated from playoff game stats when available
+const MOCK_CANDIDATES: MVPCandidate[] = [];
 
 // --- Medal Config ---
 

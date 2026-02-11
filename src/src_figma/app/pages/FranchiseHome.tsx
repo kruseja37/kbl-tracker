@@ -19,6 +19,21 @@ import { useFranchiseData, type UseFranchiseDataReturn } from "@/hooks/useFranch
 import { useScheduleData, type ScheduledGame } from "@/hooks/useScheduleData";
 import { usePlayoffData } from "@/hooks/usePlayoffData";
 import { getHomeFieldPattern, detectClinch } from "../../../engines/playoffEngine";
+import { SimulationOverlay } from "@/app/components/SimulationOverlay";
+import { BatchOperationOverlay, type BatchOperationType } from "@/app/components/BatchOperationOverlay";
+import {
+  buildRosterFromPlayers,
+  generateSyntheticGame,
+  generatePlayByPlay,
+  generateQuickResult,
+  type PlayByPlayEntry,
+} from "../../../utils/syntheticGameFactory";
+import { processCompletedGame } from "../../../utils/processCompletedGame";
+import { archiveBatchGameResult } from "../../../utils/gameStorage";
+import { markSeasonComplete } from "../../../utils/seasonStorage";
+import { getAllGames } from "../../../utils/scheduleStorage";
+import { startOffseason, OFFSEASON_PHASES, type OffseasonPhase } from "../../../utils/offseasonStorage";
+import { useOffseasonState } from "@/hooks/useOffseasonState";
 
 // Context for passing franchise data to child components
 const FranchiseDataContext = createContext<UseFranchiseDataReturn | null>(null);
@@ -72,6 +87,59 @@ export function FranchiseHome() {
   // Playoff System State - Persisted to IndexedDB via usePlayoffData
   const playoffData = usePlayoffData(currentSeason);
 
+  // Offseason State - tracks current phase progression
+  const offseasonState = useOffseasonState(`season-${currentSeason}`, currentSeason);
+
+  // Map offseason phases to their corresponding tab IDs
+  const phaseToTab: Record<OffseasonPhase, TabType> = {
+    STANDINGS_FINAL: "news",
+    AWARDS: "awards",
+    RATINGS_ADJUSTMENTS: "ratings-adj",
+    CONTRACTION_EXPANSION: "contraction",
+    RETIREMENTS: "retirements",
+    FREE_AGENCY: "free-agency",
+    DRAFT: "draft",
+    FARM_RECONCILIATION: "news",       // placeholder — no dedicated tab yet
+    CHEMISTRY_REBALANCING: "news",     // placeholder — no dedicated tab yet
+    TRADES: "rosters",
+    SPRING_TRAINING: "finalize",
+  };
+
+  // Complete current phase and advance to next, then navigate to the new phase's tab
+  const handleAdvancePhase = async () => {
+    try {
+      // Figure out what the next phase will be before advancing
+      const currentIdx = offseasonState.currentPhase
+        ? OFFSEASON_PHASES.indexOf(offseasonState.currentPhase)
+        : -1;
+      const nextPhase = currentIdx >= 0 && currentIdx < OFFSEASON_PHASES.length - 1
+        ? OFFSEASON_PHASES[currentIdx + 1]
+        : null;
+
+      if (offseasonState.canAdvance) {
+        await offseasonState.advanceToNextPhase();
+      } else {
+        // completeCurrentPhase also advances internally
+        await offseasonState.completeCurrentPhase();
+      }
+
+      // Navigate to the new phase's tab
+      if (nextPhase && phaseToTab[nextPhase]) {
+        setActiveTab(phaseToTab[nextPhase]);
+      }
+    } catch (err) {
+      console.error('Failed to advance offseason phase:', err);
+    }
+  };
+
+  const handleStartNewSeason = () => {
+    const newSeason = currentSeason + 1;
+    setCurrentSeason(newSeason);
+    localStorage.setItem('kbl-current-season', String(newSeason));
+    setSeasonPhase("regular");
+    setActiveTab("todays-game");
+  };
+
   // Sync league name from franchise config when loaded
   useEffect(() => {
     if (franchiseData.leagueName) {
@@ -82,116 +150,23 @@ export function FranchiseHome() {
   // All-Star voting state
   const [allStarLeague, setAllStarLeague] = useState<"Eastern" | "Western">("Eastern");
 
-  // Mock All-Star voting data
+  // Empty All-Star voting data — will be populated from season stats when available
+  const emptyPositions = {
+    C: [] as { name: string; team: string; pos: string; votes: number }[],
+    "1B": [] as { name: string; team: string; pos: string; votes: number }[],
+    "2B": [] as { name: string; team: string; pos: string; votes: number }[],
+    "3B": [] as { name: string; team: string; pos: string; votes: number }[],
+    SS: [] as { name: string; team: string; pos: string; votes: number }[],
+    LF: [] as { name: string; team: string; pos: string; votes: number }[],
+    CF: [] as { name: string; team: string; pos: string; votes: number }[],
+    RF: [] as { name: string; team: string; pos: string; votes: number }[],
+    Bench: [] as { name: string; team: string; pos: string; votes: number }[],
+    SP: [] as { name: string; team: string; pos: string; votes: number }[],
+    RP: [] as { name: string; team: string; pos: string; votes: number }[],
+  };
   const allStarVotes = {
-    Eastern: {
-      C: [
-        { name: "M. Chen", team: "Tigers", pos: "C", votes: 245680 },
-        { name: "J. Taylor", team: "Sox", pos: "C", votes: 198420 },
-      ],
-      "1B": [
-        { name: "R. Thompson", team: "Moonstars", pos: "1B", votes: 312450 },
-        { name: "D. Martinez", team: "Crocs", pos: "1B", votes: 267890 },
-      ],
-      "2B": [
-        { name: "K. Anderson", team: "Sox", pos: "2B", votes: 289340 },
-        { name: "S. Tanaka", team: "Tigers", pos: "2B", votes: 234120 },
-      ],
-      "3B": [
-        { name: "L. Rodriguez", team: "Nemesis", pos: "3B", votes: 298760 },
-        { name: "P. Davis", team: "Moonstars", pos: "3B", votes: 256340 },
-      ],
-      SS: [
-        { name: "J. Martinez", team: "Sox", pos: "SS", votes: 334590 },
-        { name: "H. Nakamura", team: "Tigers", pos: "SS", votes: 278920 },
-      ],
-      LF: [
-        { name: "A. Johnson", team: "Crocs", pos: "LF", votes: 276430 },
-        { name: "R. Garcia", team: "Nemesis", pos: "LF", votes: 241680 },
-      ],
-      CF: [
-        { name: "Y. Wilson", team: "Moonstars", pos: "CF", votes: 356780 },
-        { name: "D. Brown", team: "Tigers", pos: "CF", votes: 298450 },
-      ],
-      RF: [
-        { name: "T. Ramirez", team: "Sox", pos: "RF", votes: 302140 },
-        { name: "K. White", team: "Crocs", pos: "RF", votes: 267320 },
-      ],
-      Bench: [
-        { name: "L. Kim", team: "Tigers", pos: "OF", votes: 223450 },
-        { name: "M. Lopez", team: "Sox", pos: "1B", votes: 198760 },
-        { name: "S. Patel", team: "Nemesis", pos: "2B", votes: 187340 },
-        { name: "R. Lee", team: "Moonstars", pos: "3B", votes: 176890 },
-        { name: "J. Smith", team: "Crocs", pos: "SS", votes: 165420 },
-      ],
-      SP: [
-        { name: "C. Hernandez", team: "Tigers", pos: "SP", votes: 298450 },
-        { name: "D. Peterson", team: "Sox", pos: "SP", votes: 276340 },
-        { name: "M. Sato", team: "Moonstars", pos: "SP", votes: 245680 },
-        { name: "L. Williams", team: "Crocs", pos: "SP", votes: 223890 },
-      ],
-      RP: [
-        { name: "K. Rivera", team: "Nemesis", pos: "RP", votes: 187650 },
-        { name: "T. Jackson", team: "Tigers", pos: "RP", votes: 176340 },
-        { name: "P. Gonzalez", team: "Sox", pos: "RP", votes: 165780 },
-        { name: "A. Yamamoto", team: "Moonstars", pos: "RP", votes: 154230 },
-        { name: "R. Miller", team: "Crocs", pos: "RP", votes: 142890 },
-      ],
-    },
-    Western: {
-      C: [
-        { name: "B. Foster", team: "Herbisaurs", pos: "C", votes: 267890 },
-        { name: "J. O'Brien", team: "Wild Pigs", pos: "C", votes: 234560 },
-      ],
-      "1B": [
-        { name: "M. Thompson", team: "Beewolves", pos: "1B", votes: 334780 },
-        { name: "D. Chang", team: "Herbisaurs", pos: "1B", votes: 289450 },
-      ],
-      "2B": [
-        { name: "S. Murphy", team: "Wild Pigs", pos: "2B", votes: 312560 },
-        { name: "K. Suzuki", team: "Beewolves", pos: "2B", votes: 276340 },
-      ],
-      "3B": [
-        { name: "R. Cruz", team: "Herbisaurs", pos: "3B", votes: 298340 },
-        { name: "L. Bennett", team: "Wild Pigs", pos: "3B", votes: 267120 },
-      ],
-      SS: [
-        { name: "T. Silva", team: "Beewolves", pos: "SS", votes: 345670 },
-        { name: "A. Wright", team: "Herbisaurs", pos: "SS", votes: 289760 },
-      ],
-      LF: [
-        { name: "J. Park", team: "Wild Pigs", pos: "LF", votes: 287450 },
-        { name: "M. Torres", team: "Beewolves", pos: "LF", votes: 256780 },
-      ],
-      CF: [
-        { name: "D. Coleman", team: "Herbisaurs", pos: "CF", votes: 367890 },
-        { name: "R. Hayes", team: "Wild Pigs", pos: "CF", votes: 312340 },
-      ],
-      RF: [
-        { name: "K. Brooks", team: "Beewolves", pos: "RF", votes: 323450 },
-        { name: "S. Powell", team: "Herbisaurs", pos: "RF", votes: 278960 },
-      ],
-      Bench: [
-        { name: "A. Morgan", team: "Wild Pigs", pos: "OF", votes: 234560 },
-        { name: "L. Fisher", team: "Beewolves", pos: "C", votes: 212890 },
-        { name: "T. Cooper", team: "Herbisaurs", pos: "2B", votes: 198450 },
-        { name: "J. Reed", team: "Wild Pigs", pos: "3B", votes: 187230 },
-        { name: "M. Ward", team: "Beewolves", pos: "1B", votes: 176540 },
-      ],
-      SP: [
-        { name: "L. Richardson", team: "Herbisaurs", pos: "SP", votes: 312450 },
-        { name: "K. Butler", team: "Wild Pigs", pos: "SP", votes: 289340 },
-        { name: "D. Russell", team: "Beewolves", pos: "SP", votes: 267890 },
-        { name: "T. Howard", team: "Herbisaurs", pos: "SP", votes: 245670 },
-      ],
-      RP: [
-        { name: "S. Griffin", team: "Wild Pigs", pos: "RP", votes: 198760 },
-        { name: "M. Barnes", team: "Beewolves", pos: "RP", votes: 187450 },
-        { name: "R. Henderson", team: "Herbisaurs", pos: "RP", votes: 176340 },
-        { name: "J. Dixon", team: "Wild Pigs", pos: "RP", votes: 165780 },
-        { name: "A. Perry", team: "Beewolves", pos: "RP", votes: 154230 },
-      ],
-    },
+    Eastern: { ...emptyPositions },
+    Western: { ...emptyPositions },
   };
 
   // Helper functions for All-Star data
@@ -240,11 +215,23 @@ export function FranchiseHome() {
     navigate("/");
   };
 
-  // Schedule System Functions
-  const availableTeams = [
-    "TIGERS", "SOX", "BEARS", "CROCS", "MOOSE", 
-    "NEMESIS", "MOONSTARS", "HERBISAURS", "WILD PIGS", "BEEWOLVES"
-  ];
+  // Begin offseason: initialize offseason state in IndexedDB, then switch phase
+  const handleBeginOffseason = async () => {
+    try {
+      const seasonId = `season-${currentSeason}`;
+      await startOffseason(seasonId, currentSeason);
+      setSeasonPhase("offseason");
+      setActiveTab("awards");
+    } catch (err) {
+      console.error('Failed to start offseason:', err);
+      // Still switch phase even if DB init fails — UI tabs work regardless
+      setSeasonPhase("offseason");
+      setActiveTab("awards");
+    }
+  };
+
+  // Schedule System Functions — team list populated from league structure
+  const availableTeams: string[] = [];
 
   // Schedule helper functions - now use scheduleData from hook
   const getNextGameNumber = (): number => {
@@ -508,7 +495,80 @@ export function FranchiseHome() {
 
       {/* Content area */}
       <div className="max-w-7xl mx-auto p-4 bg-[#567A50]">
-        {activeTab === "todays-game" && <GameDayContent />}
+        {/* Offseason Phase Progress Banner */}
+        {seasonPhase === "offseason" && offseasonState.state && (
+          <div className="mb-4 bg-[#6B9462] border-[5px] border-[#C4A853] p-4">
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <div className="text-[14px] text-[#C4A853] font-bold" style={{ textShadow: '2px 2px 4px rgba(0,0,0,0.8)' }}>
+                  OFFSEASON — PHASE {offseasonState.currentPhaseIndex + 1} OF {offseasonState.totalPhases}
+                </div>
+                <div className="text-[11px] text-[#E8E8D8] mt-1">
+                  {offseasonState.phaseName}
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                {offseasonState.isOffseasonComplete ? (
+                  <button
+                    onClick={handleStartNewSeason}
+                    className="bg-[#C4A853] text-black px-6 py-3 text-sm font-bold hover:bg-[#D4B863] active:scale-95 transition-all shadow-[3px_3px_0px_0px_rgba(0,0,0,0.6)]"
+                  >
+                    START SEASON {currentSeason + 1}
+                  </button>
+                ) : (
+                  <button
+                    onClick={handleAdvancePhase}
+                    disabled={offseasonState.isLoading}
+                    className="bg-[#5A8352] border-[3px] border-[#4A6844] px-5 py-2 text-sm text-[#E8E8D8] hover:bg-[#4F7D4B] active:scale-95 transition-all disabled:opacity-50"
+                  >
+                    {offseasonState.isLoading ? "ADVANCING..." : offseasonState.canAdvance ? "ADVANCE TO NEXT PHASE" : "COMPLETE PHASE & ADVANCE"}
+                  </button>
+                )}
+              </div>
+            </div>
+            {/* Progress bar */}
+            <div className="w-full bg-[#4A6844] h-2 border border-[#3A5834]">
+              <div
+                className="bg-[#C4A853] h-full transition-all duration-500"
+                style={{ width: `${offseasonState.progress}%` }}
+              />
+            </div>
+            {/* Phase dots */}
+            <div className="flex justify-between mt-2 px-1">
+              {OFFSEASON_PHASES.map((phase, i) => {
+                const isComplete = offseasonState.isPhaseComplete(phase);
+                const isCurrent = offseasonState.currentPhase === phase;
+                return (
+                  <button
+                    key={phase}
+                    onClick={() => {
+                      const tabForPhase = phaseToTab[phase];
+                      if (tabForPhase) setActiveTab(tabForPhase);
+                    }}
+                    className={`w-5 h-5 rounded-full border-2 text-[7px] flex items-center justify-center transition-all ${
+                      isComplete
+                        ? "bg-[#C4A853] border-[#C4A853] text-black"
+                        : isCurrent
+                        ? "bg-[#5A8352] border-[#C4A853] text-[#E8E8D8] animate-pulse"
+                        : "bg-[#4A6844] border-[#4A6844] text-[#E8E8D8]/40"
+                    }`}
+                    title={offseasonState.getPhaseDisplayName(phase)}
+                  >
+                    {i + 1}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {activeTab === "todays-game" && (
+          <GameDayContent
+            scheduleData={scheduleData}
+            currentSeason={currentSeason}
+            onDataRefresh={() => franchiseData.refresh()}
+          />
+        )}
         {activeTab === "team" && (
           <TeamHubContent />
         )}
@@ -788,19 +848,94 @@ export function FranchiseHome() {
               <div className="text-sm text-[#E8E8D8]/70">
                 {playoffData.playoff ? `Season ${playoffData.playoff.seasonNumber} Postseason` : `Season ${currentSeason} Postseason`}
               </div>
-              {playoffData.playoff?.status === 'COMPLETED' && playoffData.playoff.champion && (
-                <div className="mt-4 bg-gradient-to-r from-[#4A6844] via-[#FFD700]/20 to-[#4A6844] border-2 border-[#FFD700] p-4 rounded">
-                  <div className="text-2xl text-[#FFD700] font-bold animate-pulse">
-                    🏆 CHAMPION 🏆
+              {playoffData.playoff?.status === 'COMPLETED' && playoffData.playoff.champion && (() => {
+                const champ = playoffData.playoff!;
+                const championTeam = champ.teams.find(t => t.teamId === champ.champion);
+                const champSeries = playoffData.bracketByLeague.Championship;
+                const loserName = champSeries
+                  ? (champSeries.winner === champSeries.higherSeed.teamId
+                    ? champSeries.lowerSeed.teamName
+                    : champSeries.higherSeed.teamName)
+                  : null;
+                const seriesScore = champSeries
+                  ? `${Math.max(champSeries.higherSeedWins, champSeries.lowerSeedWins)}-${Math.min(champSeries.higherSeedWins, champSeries.lowerSeedWins)}`
+                  : null;
+
+                return (
+                  <div className="mt-6 space-y-4">
+                    {/* Champion Banner */}
+                    <div className="bg-gradient-to-b from-[#4A6844] via-[#FFD700]/10 to-[#4A6844] border-[4px] border-[#FFD700] p-8">
+                      <div className="text-3xl text-[#FFD700] font-bold animate-pulse mb-2">
+                        🏆 CHAMPION 🏆
+                      </div>
+                      <div className="text-2xl text-[#FFD700] mb-1" style={{ textShadow: '2px 2px 4px rgba(0,0,0,0.8)' }}>
+                        {championTeam?.teamName.toUpperCase() ?? 'CHAMPION'}
+                      </div>
+                      <div className="text-sm text-[#E8E8D8]/80 mb-1">
+                        Season {champ.seasonNumber} World Series Champions
+                      </div>
+                      {loserName && seriesScore && (
+                        <div className="text-xs text-[#E8E8D8]/60">
+                          Won World Series {seriesScore} vs {loserName}
+                        </div>
+                      )}
+                      {championTeam?.regularSeasonRecord && (
+                        <div className="text-[10px] text-[#E8E8D8]/40 mt-1">
+                          Regular Season: {championTeam.regularSeasonRecord.wins}-{championTeam.regularSeasonRecord.losses}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Playoff MVP */}
+                    {champ.mvp && (
+                      <div className="bg-[#5A8352] border-[3px] border-[#FFD700] p-4">
+                        <div className="flex items-center justify-center gap-2 mb-2">
+                          <Trophy className="w-5 h-5 text-[#FFD700]" />
+                          <div className="text-sm text-[#FFD700] font-bold">PLAYOFF MVP</div>
+                        </div>
+                        <div className="text-lg text-[#E8E8D8] font-bold">{champ.mvp.playerName}</div>
+                        <div className="text-xs text-[#E8E8D8]/70 mt-1">
+                          {champ.teams.find(t => t.teamId === champ.mvp?.teamId)?.teamName ?? champ.mvp.teamId}
+                        </div>
+                        {champ.mvp.stats && (
+                          <div className="text-[10px] text-[#C4A853] mt-1">{champ.mvp.stats}</div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Playoff Series Summary */}
+                    <div className="bg-[#5A8352] border-[3px] border-[#4A6844] p-4">
+                      <div className="text-xs text-[#C4A853] mb-3 uppercase">Playoff Path</div>
+                      <div className="space-y-2">
+                        {playoffData.completedSeries
+                          .filter(s => s.winner === champ.champion)
+                          .map(s => {
+                            const opponent = s.winner === s.higherSeed.teamId ? s.lowerSeed : s.higherSeed;
+                            const winnerWins = s.winner === s.higherSeed.teamId ? s.higherSeedWins : s.lowerSeedWins;
+                            const loserWins = s.winner === s.higherSeed.teamId ? s.lowerSeedWins : s.higherSeedWins;
+                            return (
+                              <div key={s.id} className="flex justify-between items-center text-[10px] text-[#E8E8D8] bg-[#4A6844] p-2">
+                                <span className="text-[#E8E8D8]/60 w-24">{s.roundName}</span>
+                                <span>vs {opponent.teamName}</span>
+                                <span className="text-[#00DD00] font-bold">{winnerWins}-{loserWins}</span>
+                              </div>
+                            );
+                          })}
+                      </div>
+                    </div>
+
+                    {/* BEGIN OFFSEASON Button */}
+                    <button
+                      onClick={handleBeginOffseason}
+                      className="w-full bg-[#C4A853] border-[5px] border-[#9A7B2C] py-4 px-8 text-lg text-[#1a1a1a] hover:bg-[#D4B863] active:scale-[0.98] transition-transform shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)] flex items-center justify-center gap-3"
+                      style={{ textShadow: '1px 1px 0px rgba(255,255,255,0.3)' }}
+                    >
+                      <span>BEGIN OFFSEASON</span>
+                      <ArrowRight className="w-5 h-5" />
+                    </button>
                   </div>
-                  <div className="text-xl text-[#FFD700] mt-1">
-                    {playoffData.playoff.teams.find(t => t.teamId === playoffData.playoff?.champion)?.teamName.toUpperCase()}
-                  </div>
-                  <div className="text-xs text-[#E8E8D8]/60 mt-1">
-                    Season {playoffData.playoff.seasonNumber} World Series Champions
-                  </div>
-                </div>
-              )}
+                );
+              })()}
             </div>
 
             {!playoffData.playoff ? (
@@ -1399,7 +1534,7 @@ export function FranchiseHome() {
 
               {/* Advance Button */}
               <button
-                onClick={() => setSeasonPhase("offseason")}
+                onClick={handleBeginOffseason}
                 disabled={playoffData.playoff?.status !== 'COMPLETED'}
                 className={`w-full border-[5px] p-8 transition-all shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)] group ${
                   playoffData.playoff?.status === 'COMPLETED'
@@ -1875,127 +2010,459 @@ function StandingsContent() {
   );
 }
 
-function GameDayContent() {
+interface GameDayContentProps {
+  scheduleData: ReturnType<typeof useScheduleData>;
+  currentSeason: number;
+  onDataRefresh: () => Promise<void>;
+}
+
+function GameDayContent({ scheduleData, currentSeason, onDataRefresh }: GameDayContentProps) {
   const navigate = useNavigate();
+  const { franchiseId } = useParams<{ franchiseId: string }>();
   const [confirmAction, setConfirmAction] = useState<string | null>(null);
   const [showHeadToHead, setShowHeadToHead] = useState(false);
   const [showBeatWriters, setShowBeatWriters] = useState(false);
   const [showAwayTeamStats, setShowAwayTeamStats] = useState(false);
   const [showHomeTeamStats, setShowHomeTeamStats] = useState(false);
 
-  // Team IDs for the matchup
-  const awayTeamId = 'tigers'; // Away team
-  const homeTeamId = 'sox';    // Home team
+  // Simulation state
+  const [isSimulating, setIsSimulating] = useState(false);
+  const [simPlayByPlay, setSimPlayByPlay] = useState<PlayByPlayEntry[]>([]);
+  const [simResult, setSimResult] = useState<{ away: number; home: number } | null>(null);
+  const [simAwayName, setSimAwayName] = useState('');
+  const [simHomeName, setSimHomeName] = useState('');
 
-  // Mock head-to-head data
-  const headToHeadGames = [
-    { date: "6/15", result: "W", score: "7-4", location: "HOME" },
-    { date: "5/22", result: "L", score: "2-5", location: "AWAY" },
-    { date: "4/18", result: "W", score: "9-3", location: "HOME" },
-    { date: "3/29", result: "W", score: "6-2", location: "AWAY" },
-    { date: "3/12", result: "L", score: "1-8", location: "AWAY" },
-  ];
+  // Toast state
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  // Mock beat writer stories
-  const beatWriterStories = [
-    {
-      author: "@TigersBeatJim",
-      time: "2h ago",
-      content: "Tigers' ace pitcher Rodriguez has been dominant in his last 3 starts with a 1.20 ERA. Looking to continue that streak tonight against the Sox.",
-      verified: true,
-    },
-    {
-      author: "@SoxInsider",
-      time: "4h ago",
-      content: "Sox manager confirms lineup changes for tonight's matchup. Johnson moves to cleanup spot, Martinez gets the start at DH.",
-      verified: true,
-    },
-    {
-      author: "@BaseballBuzz",
-      time: "6h ago",
-      content: "This Tigers-Sox rivalry has been heating up all season. Tonight's game could have major playoff implications with both teams in the hunt.",
-      verified: false,
-    },
-    {
-      author: "@TigersNation",
-      time: "8h ago",
-      content: "Breaking: Tigers activate slugger Thompson from IL. Expected to be in tonight's starting lineup. Huge boost for the offense!",
-      verified: true,
-    },
-  ];
+  // Batch operation state
+  const [batchType, setBatchType] = useState<BatchOperationType | null>(null);
+  const [batchCurrent, setBatchCurrent] = useState(0);
+  const [batchTotal, setBatchTotal] = useState(0);
+  const [isBatchRunning, setIsBatchRunning] = useState(false);
+
+  // Season completion state
+  const [seasonComplete, setSeasonComplete] = useState(false);
+
+  // Auto-dismiss toast after 4 seconds
+  useEffect(() => {
+    if (!toastMessage) return;
+    const timer = setTimeout(() => setToastMessage(null), 4000);
+    return () => clearTimeout(timer);
+  }, [toastMessage]);
+
+  // Access franchise data for season config
+  const franchiseData = useFranchiseDataContext();
+
+  // Derive season complete: all games resolved (no SCHEDULED games remain)
+  // Only true when we have loaded games AND none are SCHEDULED
+  const allGames = scheduleData.games ?? [];
+  const hasGames = allGames.length > 0;
+  const upcomingCount = (scheduleData.upcomingGames ?? []).length;
+  const isSeasonOver = hasGames && upcomingCount === 0;
+
+  // Sync seasonComplete from schedule data on load / refresh
+  useEffect(() => {
+    if (isSeasonOver && !seasonComplete) {
+      setSeasonComplete(true);
+    }
+  }, [isSeasonOver]);
+
+  /**
+   * Check if season is now complete after a game action.
+   * Reads directly from IndexedDB (not React state) to avoid stale data.
+   * If all scheduled games are resolved, mark season in storage.
+   */
+  const checkSeasonComplete = async () => {
+    try {
+      // Read fresh from DB — React state may not have updated yet
+      const freshGames = await getAllGames(currentSeason);
+      if (freshGames.length === 0) return;
+
+      const stillScheduled = freshGames.filter(g => g.status === 'SCHEDULED').length;
+      if (stillScheduled === 0) {
+        const seasonId = `season-${currentSeason}`;
+        await markSeasonComplete(seasonId);
+        setSeasonComplete(true);
+        setToastMessage('REGULAR SEASON COMPLETE!');
+      }
+    } catch (err) {
+      console.error('Failed to check season completion:', err);
+    }
+  };
+
+  // Team IDs for the matchup — pull from schedule if available
+  const awayTeamId = scheduleData.nextGame?.awayTeamId ?? '';
+  const homeTeamId = scheduleData.nextGame?.homeTeamId ?? '';
 
   const handlePlayGame = () => {
     navigate("/game-tracker/game-123");
     setConfirmAction(null);
   };
 
-  const handleSimulate = () => {
-    // Simulate game logic here
-    console.log("Game simulated");
+  const handleSimulate = async () => {
     setConfirmAction(null);
+
+    // Get next game from schedule — pull real team IDs and game number
+    const nextGame = scheduleData.nextGame;
+    const awayId = nextGame?.awayTeamId ?? awayTeamId;
+    const homeId = nextGame?.homeTeamId ?? homeTeamId;
+    const gameNum = nextGame?.gameNumber ?? 1;
+
+    // Build rosters from real franchise player data
+    const awayRoster = await buildRosterFromPlayers(awayId, awayId.toUpperCase());
+    const homeRoster = await buildRosterFromPlayers(homeId, homeId.toUpperCase());
+
+    // Generate synthetic game with real player names
+    const game = generateSyntheticGame(awayRoster, homeRoster, {
+      seed: Date.now(),
+      gameNumber: gameNum,
+    });
+
+    // Generate play-by-play entries
+    const playByPlay = generatePlayByPlay(game);
+
+    // Show overlay with team names from the generated game
+    setSimPlayByPlay(playByPlay);
+    setSimResult({ away: game.awayScore, home: game.homeScore });
+    setSimAwayName(game.awayTeamName);
+    setSimHomeName(game.homeTeamName);
+    setIsSimulating(true);
+
+    // Process through real pipeline (runs while animation plays)
+    try {
+      const seasonId = franchiseId ? `${franchiseId}-season-${currentSeason}` : `season-${currentSeason}`;
+      await processCompletedGame(game, { seasonId });
+
+      // Mark game completed in schedule
+      if (nextGame) {
+        const winningTeam = game.homeScore > game.awayScore ? homeId : awayId;
+        const losingTeam = game.homeScore > game.awayScore ? awayId : homeId;
+        await scheduleData.completeGame(nextGame.id, {
+          awayScore: game.awayScore,
+          homeScore: game.homeScore,
+          winningTeamId: winningTeam,
+          losingTeamId: losingTeam,
+          gameLogId: game.gameId,
+        });
+      }
+    } catch (err) {
+      console.error('Failed to process simulated game:', err);
+    }
   };
 
-  const handleSkip = () => {
-    // Skip game logic here
-    console.log("Game skipped");
-    setConfirmAction(null);
+  const handleSimulationComplete = async () => {
+    setIsSimulating(false);
+    setSimPlayByPlay([]);
+    setSimResult(null);
+    setSimAwayName('');
+    setSimHomeName('');
+    await onDataRefresh();
+    await scheduleData.refresh();
+    await checkSeasonComplete();
   };
+
+  // ============================================
+  // SCOPE HELPERS — get games by scope
+  // ============================================
+
+  /**
+   * Get upcoming (SCHEDULED) games for a given scope.
+   * - "today": all games on the same dayNumber as the next game
+   * - "week": next 7 unique dayNumbers worth of games
+   * - "season": all remaining scheduled games
+   */
+  function getGamesByScope(scope: 'today' | 'week' | 'season'): ScheduledGame[] {
+    const upcoming = scheduleData.upcomingGames ?? []; // already filtered to SCHEDULED
+    if (upcoming.length === 0) return [];
+
+    const firstDay = upcoming[0].dayNumber;
+
+    switch (scope) {
+      case 'today':
+        return upcoming.filter((g) => g.dayNumber === firstDay);
+      case 'week': {
+        // Collect up to 7 unique day numbers
+        const days = new Set<number>();
+        for (const g of upcoming) {
+          days.add(g.dayNumber);
+          if (days.size >= 7) break;
+        }
+        return upcoming.filter((g) => days.has(g.dayNumber));
+      }
+      case 'season':
+        return [...upcoming];
+    }
+  }
+
+  // ============================================
+  // BATCH SIMULATE
+  // ============================================
+
+  const handleBatchSimulate = async (scope: 'today' | 'week' | 'season') => {
+    setConfirmAction(null);
+
+    const games = getGamesByScope(scope);
+    if (games.length === 0) return;
+
+    setBatchType('simulate');
+    setBatchTotal(games.length);
+    setBatchCurrent(0);
+    setIsBatchRunning(true);
+
+    const batchSeasonId = franchiseId ? `${franchiseId}-season-${currentSeason}` : `season-${currentSeason}`;
+    let processed = 0;
+
+    for (const game of games) {
+      // Generate a quick W/L result (no player stats)
+      const result = generateQuickResult(
+        game.awayTeamId,
+        game.homeTeamId,
+        Date.now() + processed
+      );
+
+      try {
+        await scheduleData.completeGame(game.id, {
+          awayScore: result.awayScore,
+          homeScore: result.homeScore,
+          winningTeamId: result.winningTeamId,
+          losingTeamId: result.losingTeamId,
+        });
+
+        // Also archive to completedGames store so standings can see it
+        await archiveBatchGameResult({
+          awayTeamId: game.awayTeamId,
+          homeTeamId: game.homeTeamId,
+          awayScore: result.awayScore,
+          homeScore: result.homeScore,
+          seasonId: batchSeasonId,
+        });
+      } catch (err) {
+        console.error(`Failed to simulate game ${game.id}:`, err);
+      }
+
+      processed++;
+      setBatchCurrent(processed);
+    }
+
+    // Refresh will happen in handleBatchComplete
+  };
+
+  // ============================================
+  // BATCH SKIP
+  // ============================================
+
+  const handleBatchSkip = async (scope: 'today' | 'week' | 'season') => {
+    setConfirmAction(null);
+
+    const games = getGamesByScope(scope);
+    if (games.length === 0) return;
+
+    setBatchType('skip');
+    setBatchTotal(games.length);
+    setBatchCurrent(0);
+    setIsBatchRunning(true);
+
+    let processed = 0;
+
+    for (const game of games) {
+      try {
+        await scheduleData.updateStatus(game.id, 'SKIPPED');
+      } catch (err) {
+        console.error(`Failed to skip game ${game.id}:`, err);
+      }
+
+      processed++;
+      setBatchCurrent(processed);
+    }
+
+    // Refresh will happen in handleBatchComplete
+  };
+
+  const handleBatchComplete = async () => {
+    const type = batchType;
+    const count = batchTotal;
+
+    setIsBatchRunning(false);
+    setBatchType(null);
+    setBatchCurrent(0);
+    setBatchTotal(0);
+
+    await onDataRefresh();
+    await scheduleData.refresh();
+
+    if (type === 'simulate') {
+      setToastMessage(`${count} game${count !== 1 ? 's' : ''} simulated`);
+    } else {
+      setToastMessage(`${count} game${count !== 1 ? 's' : ''} skipped`);
+    }
+
+    // Check if season is now complete
+    await checkSeasonComplete();
+  };
+
+  const handleSkip = async () => {
+    setConfirmAction(null);
+
+    const nextGame = scheduleData.nextGame;
+    if (!nextGame) return;
+
+    const away = nextGame.awayTeamId.toUpperCase();
+    const home = nextGame.homeTeamId.toUpperCase();
+
+    try {
+      // Mark as SKIPPED — no stats, no standings impact, game ceases to exist
+      await scheduleData.updateStatus(nextGame.id, 'SKIPPED');
+
+      // Refresh data so nextGame advances
+      await onDataRefresh();
+
+      // Show toast
+      setToastMessage(`Game skipped \u2014 ${away} vs ${home} removed from schedule`);
+
+      // Check if season is now complete
+      await checkSeasonComplete();
+    } catch (err) {
+      console.error('Failed to skip game:', err);
+    }
+  };
+
+  // Season progress numbers
+  const completedCount = (scheduleData.completedGames ?? []).length;
+  const skippedCount = allGames.filter(g => g.status === 'SKIPPED').length;
+  const resolvedCount = completedCount + skippedCount;
+  const totalScheduled = allGames.length;
+  const gamesPerTeam = franchiseData.franchiseConfig?.season?.gamesPerTeam ?? totalScheduled;
 
   return (
     <div className="space-y-4">
+      {/* Season complete banner */}
+      {seasonComplete && (
+        <div className="bg-[#C4A853] border-[6px] border-[#9A7B2C] p-6 text-center">
+          <div className="text-2xl text-[#1a1a1a] mb-2" style={{ textShadow: '1px 1px 0px rgba(255,255,255,0.3)' }}>
+            REGULAR SEASON COMPLETE
+          </div>
+          <div className="text-sm text-[#1a1a1a]/80 mb-1">
+            {completedCount} game{completedCount !== 1 ? 's' : ''} played
+            {skippedCount > 0 && ` / ${skippedCount} skipped`}
+          </div>
+          <div className="text-[10px] text-[#1a1a1a]/60 mb-3">
+            Season {currentSeason} ({gamesPerTeam} games per team)
+          </div>
+          <button
+            onClick={() => navigate(`/franchise/${franchiseId}/season-summary`)}
+            className="bg-[#1a1a1a] border-[4px] border-[#9A7B2C] py-3 px-8 text-sm text-[#C4A853] hover:bg-[#2a2a2a] active:scale-95 transition-transform shadow-[4px_4px_0px_0px_rgba(0,0,0,0.5)]"
+            style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.5)' }}
+          >
+            VIEW SEASON SUMMARY
+          </button>
+        </div>
+      )}
+
       {/* Next game card */}
+      {!seasonComplete && scheduleData.nextGame && (
       <div className="bg-[#5A8352] border-[5px] border-[#C4A853] p-4 relative">
-        <div className="text-[8px] text-[#E8E8D8] mb-3">▶ NEXT GAME • 7/12</div>
+        <div className="text-[8px] text-[#E8E8D8] mb-3">▶ NEXT GAME{scheduleData.nextGame.date ? ` • ${scheduleData.nextGame.date}` : ''}</div>
         <div className="grid grid-cols-3 gap-4 items-center mb-4">
           <div className="text-center">
-            <div className="text-lg text-[#E8E8D8]" style={{ textShadow: '2px 2px 4px rgba(0,0,0,0.8)' }}>TIGERS</div>
-            <div className="text-[8px] text-[#E8E8D8]">42-28</div>
+            <div className="text-lg text-[#E8E8D8]" style={{ textShadow: '2px 2px 4px rgba(0,0,0,0.8)' }}>{awayTeamId.toUpperCase()}</div>
+            <div className="text-[8px] text-[#E8E8D8]">{franchiseData.nextGame?.awayRecord ?? ''}</div>
           </div>
 
           <div className="text-center">
             <div className="text-2xl text-[#E8E8D8]">vs</div>
-            <div className="text-[7px] text-[#E8E8D8]/70 italic mt-1">{getStadiumForTeam("SOX")}</div>
+            <div className="text-[7px] text-[#E8E8D8]/70 italic mt-1">{getStadiumForTeam(homeTeamId.toUpperCase())}</div>
           </div>
 
           <div className="text-center">
-            <div className="text-lg text-[#E8E8D8]" style={{ textShadow: '2px 2px 4px rgba(0,0,0,0.8)' }}>SOX</div>
-            <div className="text-[8px] text-[#E8E8D8]">38-32</div>
+            <div className="text-lg text-[#E8E8D8]" style={{ textShadow: '2px 2px 4px rgba(0,0,0,0.8)' }}>{homeTeamId.toUpperCase()}</div>
+            <div className="text-[8px] text-[#E8E8D8]">{franchiseData.nextGame?.homeRecord ?? ''}</div>
           </div>
         </div>
 
         <div className="space-y-2">
-          <div className="flex justify-center">
+          {/* Row 1: Play / Score */}
+          <div className="flex gap-2 justify-center">
             <button
               onClick={() => setConfirmAction("play")}
-              className="max-w-[200px] bg-[#5A8352] border-[5px] border-[#4A6844] py-3 px-8 text-sm text-[#E8E8D8] hover:bg-[#4F7D4B] active:scale-95 transition-transform shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)]"
+              className="bg-[#5A8352] border-[5px] border-[#4A6844] py-3 px-8 text-sm text-[#E8E8D8] hover:bg-[#4F7D4B] active:scale-95 transition-transform shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)]"
             >
               PLAY GAME
             </button>
-          </div>
-          <div className="flex gap-2 justify-center">
             <button
               onClick={() => setConfirmAction("watch")}
-              className="max-w-[150px] bg-[#4A6844] border-[5px] border-[#5A8352] py-2 px-4 text-[10px] text-[#E8E8D8] hover:bg-[#3F5A3A] active:scale-95 transition-transform shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)]"
+              className="bg-[#4A6844] border-[5px] border-[#5A8352] py-3 px-4 text-[10px] text-[#E8E8D8] hover:bg-[#3F5A3A] active:scale-95 transition-transform shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)]"
             >
               SCORE GAME
             </button>
+          </div>
+
+          {/* Row 2: Single game simulate / skip */}
+          <div className="flex gap-2 justify-center">
             <button
               onClick={() => setConfirmAction("simulate")}
               className="bg-[#4A6844] border-[5px] border-[#5A8352] py-2 px-4 text-[10px] text-[#E8E8D8] hover:bg-[#3F5A3A] active:scale-95 transition-transform shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)] whitespace-nowrap"
             >
-              SIMULATE
+              SIM 1 GAME
             </button>
             <button
               onClick={() => setConfirmAction("skip")}
               className="bg-[#4A6844] border-[5px] border-[#5A8352] py-2 px-4 text-[10px] text-[#E8E8D8] hover:bg-[#3F5A3A] active:scale-95 transition-transform shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)] whitespace-nowrap"
             >
-              SKIP
+              SKIP 1 GAME
+            </button>
+          </div>
+
+          {/* Row 3: Batch simulate options */}
+          <div className="flex gap-1 justify-center flex-wrap">
+            <button
+              onClick={() => setConfirmAction("sim-today")}
+              className="bg-[#3F5A3A] border-[3px] border-[#5A8352] py-1 px-3 text-[8px] text-[#E8E8D8] hover:bg-[#4A6844] active:scale-95 transition-transform"
+            >
+              SIM TODAY ({getGamesByScope('today').length})
+            </button>
+            <button
+              onClick={() => setConfirmAction("sim-week")}
+              className="bg-[#3F5A3A] border-[3px] border-[#5A8352] py-1 px-3 text-[8px] text-[#E8E8D8] hover:bg-[#4A6844] active:scale-95 transition-transform"
+            >
+              SIM WEEK ({getGamesByScope('week').length})
+            </button>
+            <button
+              onClick={() => setConfirmAction("sim-season")}
+              className="bg-[#3F5A3A] border-[3px] border-[#5A8352] py-1 px-3 text-[8px] text-[#E8E8D8] hover:bg-[#4A6844] active:scale-95 transition-transform"
+            >
+              SIM SEASON ({getGamesByScope('season').length})
+            </button>
+          </div>
+
+          {/* Row 4: Batch skip options */}
+          <div className="flex gap-1 justify-center flex-wrap">
+            <button
+              onClick={() => setConfirmAction("skip-today")}
+              className="bg-[#3F5A3A] border-[3px] border-[#5A8352] py-1 px-3 text-[8px] text-[#E8E8D8]/70 hover:bg-[#4A6844] active:scale-95 transition-transform"
+            >
+              SKIP TODAY ({getGamesByScope('today').length})
+            </button>
+            <button
+              onClick={() => setConfirmAction("skip-week")}
+              className="bg-[#3F5A3A] border-[3px] border-[#5A8352] py-1 px-3 text-[8px] text-[#E8E8D8]/70 hover:bg-[#4A6844] active:scale-95 transition-transform"
+            >
+              SKIP WEEK ({getGamesByScope('week').length})
+            </button>
+            <button
+              onClick={() => setConfirmAction("skip-season")}
+              className="bg-[#3F5A3A] border-[3px] border-[#5A8352] py-1 px-3 text-[8px] text-[#E8E8D8]/70 hover:bg-[#4A6844] active:scale-95 transition-transform"
+            >
+              SKIP SEASON ({getGamesByScope('season').length})
             </button>
           </div>
         </div>
 
-        <div className="absolute bottom-2 right-2 text-[8px] text-[#E8E8D8]">GAME 71/162</div>
+        <div className="absolute bottom-2 right-2 text-[8px] text-[#E8E8D8]">
+          GAME {resolvedCount + 1}/{totalScheduled}
+        </div>
       </div>
+      )}
 
       {/* Beat writers button */}
       <div>
@@ -2008,34 +2475,13 @@ function GameDayContent() {
         </button>
       </div>
 
-      {/* Beat writers expandable section */}
+      {/* Beat writers expandable section — empty state (no narrative engine yet) */}
       {showBeatWriters && (
         <div className="bg-[#6B9462] border-[6px] border-[#4A6844] p-4">
           <div className="text-[8px] text-[#E8E8D8] mb-3">▶ LATEST FROM BEAT WRITERS</div>
-          <div className="space-y-2">
-            {beatWriterStories.map((story, index) => (
-              <div 
-                key={index}
-                className="bg-[#4A6844] border-[4px] border-[#5A8352] p-3"
-              >
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center gap-2">
-                    <span className={`text-[8px] ${story.verified ? "text-[#E8E8D8]" : "text-[#E8E8D8]/80"}`}>
-                      {story.author}
-                    </span>
-                    {story.verified && (
-                      <div className="w-3 h-3 bg-[#5A8352] rounded-full flex items-center justify-center">
-                        <span className="text-[#E8E8D8] text-[6px]">✓</span>
-                      </div>
-                    )}
-                  </div>
-                  <span className="text-[8px] text-[#E8E8D8]/60">{story.time}</span>
-                </div>
-                <div className="text-[8px] text-[#E8E8D8] leading-relaxed">
-                  {story.content}
-                </div>
-              </div>
-            ))}
+          <div className="text-center py-6">
+            <div className="text-[10px] text-[#E8E8D8]/50">No beat writer stories yet</div>
+            <div className="text-[8px] text-[#E8E8D8]/30 mt-1">Stories will appear as the season progresses</div>
           </div>
           <div className="mt-3 text-[8px] text-[#E8E8D8] text-center">
             FOLLOW BEAT WRITERS ON X FOR REAL-TIME UPDATES
@@ -2054,42 +2500,13 @@ function GameDayContent() {
         </button>
       </div>
 
-      {/* Head-to-head expandable section */}
+      {/* Head-to-head expandable section — empty state (needs completedGames query) */}
       {showHeadToHead && (
         <div className="bg-[#6B9462] border-[6px] border-[#4A6844] p-4">
-          <div className="text-[8px] text-[#E8E8D8] mb-3">▶ RECENT MATCHUPS (TIGERS vs SOX)</div>
-          <div className="bg-[#4A6844] border-[4px] border-[#5A8352]">
-            <table className="w-full">
-              <thead>
-                <tr className="bg-[#5A8352]">
-                  <th className="text-[8px] text-[#E8E8D8] px-3 py-2 text-left border-r-2 border-[#6B9462]">DATE</th>
-                  <th className="text-[8px] text-[#E8E8D8] px-3 py-2 text-center border-r-2 border-[#6B9462]">RESULT</th>
-                  <th className="text-[8px] text-[#E8E8D8] px-3 py-2 text-center border-r-2 border-[#6B9462]">SCORE</th>
-                  <th className="text-[8px] text-[#E8E8D8] px-3 py-2 text-center">LOCATION</th>
-                </tr>
-              </thead>
-              <tbody>
-                {headToHeadGames.map((game, index) => (
-                  <tr 
-                    key={index} 
-                    className={`${index % 2 === 0 ? "bg-[#4A6844]" : "bg-[#3F5A3A]"} border-t-2 border-[#5A8352]`}
-                  >
-                    <td className="text-[8px] text-[#E8E8D8] px-3 py-2 border-r-2 border-[#5A8352]">{game.date}</td>
-                    <td className={`text-[8px] px-3 py-2 text-center border-r-2 border-[#5A8352] ${
-                      game.result === "W" ? "text-[#E8E8D8]" : "text-[#E8E8D8]/60"
-                    }`}>
-                      {game.result === "W" ? "WIN" : "LOSS"}
-                    </td>
-                    <td className="text-[8px] text-[#E8E8D8] px-3 py-2 text-center border-r-2 border-[#5A8352]">{game.score}</td>
-                    <td className="text-[8px] text-[#E8E8D8] px-3 py-2 text-center">{game.location}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <div className="mt-3 text-[8px] text-[#E8E8D8] flex justify-between">
-            <span>SEASON RECORD: 3-2</span>
-            <span>TIGERS LEAD SERIES</span>
+          <div className="text-[8px] text-[#E8E8D8] mb-3">▶ RECENT MATCHUPS ({awayTeamId.toUpperCase()} vs {homeTeamId.toUpperCase()})</div>
+          <div className="text-center py-6">
+            <div className="text-[10px] text-[#E8E8D8]/50">No head-to-head history yet</div>
+            <div className="text-[8px] text-[#E8E8D8]/30 mt-1">Results will appear after these teams play each other</div>
           </div>
         </div>
       )}
@@ -2413,8 +2830,14 @@ function GameDayContent() {
             <div className="text-sm text-[#E8E8D8] mb-6 text-center">
               {confirmAction === "play" && "Start playing this game?"}
               {confirmAction === "watch" && "Watch this game?"}
-              {confirmAction === "simulate" && "Simulate this game?"}
-              {confirmAction === "skip" && "Skip this game?"}
+              {confirmAction === "simulate" && "Simulate this game? Full player stats will be generated."}
+              {confirmAction === "skip" && "Skip this game? It will be removed from the schedule entirely."}
+              {confirmAction === "sim-today" && `Simulate ${getGamesByScope('today').length} game(s) for today? W/L outcomes and standings will be updated.`}
+              {confirmAction === "sim-week" && `Simulate ${getGamesByScope('week').length} game(s) this week? W/L outcomes and standings will be updated.`}
+              {confirmAction === "sim-season" && `Simulate ${getGamesByScope('season').length} remaining game(s)? W/L outcomes and standings will be updated.`}
+              {confirmAction === "skip-today" && `Skip ${getGamesByScope('today').length} game(s) for today? They will be removed from the schedule.`}
+              {confirmAction === "skip-week" && `Skip ${getGamesByScope('week').length} game(s) this week? They will be removed from the schedule.`}
+              {confirmAction === "skip-season" && `Skip ${getGamesByScope('season').length} remaining game(s)? They will be removed from the schedule.`}
             </div>
             <div className="flex gap-2">
               <button
@@ -2424,7 +2847,18 @@ function GameDayContent() {
                 CANCEL
               </button>
               <button
-                onClick={confirmAction === "play" ? handlePlayGame : confirmAction === "simulate" ? handleSimulate : handleSkip}
+                onClick={() => {
+                  if (confirmAction === "play") handlePlayGame();
+                  else if (confirmAction === "watch") handlePlayGame();
+                  else if (confirmAction === "simulate") handleSimulate();
+                  else if (confirmAction === "skip") handleSkip();
+                  else if (confirmAction === "sim-today") handleBatchSimulate('today');
+                  else if (confirmAction === "sim-week") handleBatchSimulate('week');
+                  else if (confirmAction === "sim-season") handleBatchSimulate('season');
+                  else if (confirmAction === "skip-today") handleBatchSkip('today');
+                  else if (confirmAction === "skip-week") handleBatchSkip('week');
+                  else if (confirmAction === "skip-season") handleBatchSkip('season');
+                }}
                 className="flex-1 bg-[#5A8352] border-[5px] border-[#4A6844] py-3 text-sm text-[#E8E8D8] hover:bg-[#4F7D4B] active:scale-95 transition-transform shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)]"
               >
                 CONFIRM
@@ -2433,6 +2867,37 @@ function GameDayContent() {
           </div>
         </div>
       )}
+
+      {/* Toast notification */}
+      {toastMessage && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 animate-in fade-in slide-in-from-bottom-4">
+          <div className="bg-[#4A6844] border-[4px] border-[#C4A853] px-6 py-3 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)]">
+            <div className="text-[11px] text-[#E8E8D8] whitespace-nowrap">
+              {toastMessage}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Simulation overlay */}
+      <SimulationOverlay
+        isOpen={isSimulating}
+        playByPlay={simPlayByPlay}
+        awayTeamName={simAwayName || awayTeamId.toUpperCase()}
+        homeTeamName={simHomeName || homeTeamId.toUpperCase()}
+        finalAwayScore={simResult?.away ?? 0}
+        finalHomeScore={simResult?.home ?? 0}
+        onComplete={handleSimulationComplete}
+      />
+
+      {/* Batch operation overlay */}
+      <BatchOperationOverlay
+        isOpen={isBatchRunning}
+        operationType={batchType ?? 'simulate'}
+        current={batchCurrent}
+        total={batchTotal}
+        onComplete={handleBatchComplete}
+      />
     </div>
   );
 }
@@ -2447,219 +2912,38 @@ function LeagueLeadersContent() {
   // Get leaders from context (real data or mock fallback)
   const franchiseData = useFranchiseDataContext();
 
-  // Use real batting/pitching leaders for AL (franchise data)
-  // NL still uses mock data below until multi-franchise support
+  // Use real batting/pitching leaders from franchise data
+  // Single league — both AL/NL views show the same real data
   const battingLeadersDataAL = franchiseData.battingLeaders;
   const pitchingLeadersDataAL = franchiseData.pitchingLeaders;
+  const battingLeadersDataNL = franchiseData.battingLeaders;
+  const pitchingLeadersDataNL = franchiseData.pitchingLeaders;
 
-  // Mock league leaders data - NL (kept for dual-league display)
-  const battingLeadersDataNL = {
-    AVG: [
-      { player: "D. Wilson", team: "Beewolves", value: ".338" },
-      { player: "R. Williams", team: "Nemesis", value: ".325" },
-      { player: "J. Martinez", team: "Moonstars", value: ".319" },
-      { player: "D. Lee", team: "Beewolves", value: ".305" },
-      { player: "S. Kim", team: "Moonstars", value: ".298" },
-    ],
-    HR: [
-      { player: "R. Williams", team: "Nemesis", value: "44" },
-      { player: "J. Martinez", team: "Moonstars", value: "39" },
-      { player: "D. Wilson", team: "Beewolves", value: "33" },
-      { player: "S. Kim", team: "Moonstars", value: "30" },
-      { player: "D. Lee", team: "Beewolves", value: "28" },
-    ],
-    RBI: [
-      { player: "R. Williams", team: "Nemesis", value: "125" },
-      { player: "J. Martinez", team: "Moonstars", value: "115" },
-      { player: "D. Wilson", team: "Beewolves", value: "102" },
-      { player: "S. Kim", team: "Moonstars", value: "95" },
-      { player: "D. Lee", team: "Beewolves", value: "88" },
-    ],
-    SB: [
-      { player: "D. Wilson", team: "Beewolves", value: "62" },
-      { player: "R. Williams", team: "Nemesis", value: "41" },
-      { player: "J. Martinez", team: "Moonstars", value: "35" },
-      { player: "D. Lee", team: "Beewolves", value: "29" },
-      { player: "S. Kim", team: "Moonstars", value: "22" },
-    ],
-    OPS: [
-      { player: "D. Wilson", team: "Beewolves", value: "1.065" },
-      { player: "R. Williams", team: "Nemesis", value: "1.028" },
-      { player: "J. Martinez", team: "Moonstars", value: ".995" },
-      { player: "S. Kim", team: "Moonstars", value: ".945" },
-      { player: "D. Lee", team: "Beewolves", value: ".918" },
-    ],
-    WAR: [
-      { player: "D. Wilson", team: "Beewolves", value: "5.2" },
-      { player: "R. Williams", team: "Nemesis", value: "4.8" },
-      { player: "J. Martinez", team: "Moonstars", value: "4.1" },
-      { player: "S. Kim", team: "Moonstars", value: "3.5" },
-      { player: "D. Lee", team: "Beewolves", value: "3.2" },
-    ],
-  };
+  // Derive summary cards from real leaders data (top value per category)
+  const makeSummary = (data: Record<string, { value: string }[]>) =>
+    Object.entries(data).map(([stat, entries]) => ({
+      stat,
+      value: entries[0]?.value ?? '—',
+    }));
 
-  const pitchingLeadersDataNL = {
-    ERA: [
-      { player: "A. Chen", team: "Nemesis", value: "2.14" },
-      { player: "R. Garcia", team: "Moonstars", value: "2.45" },
-      { player: "D. Lee", team: "Beewolves", value: "2.78" },
-      { player: "J. Martinez", team: "Nemesis", value: "2.95" },
-      { player: "S. Kim", team: "Moonstars", value: "3.08" },
-    ],
-    W: [
-      { player: "R. Garcia", team: "Moonstars", value: "21" },
-      { player: "A. Chen", team: "Nemesis", value: "20" },
-      { player: "D. Lee", team: "Beewolves", value: "17" },
-      { player: "J. Martinez", team: "Nemesis", value: "16" },
-      { player: "S. Kim", team: "Moonstars", value: "15" },
-    ],
-    K: [
-      { player: "A. Chen", team: "Nemesis", value: "243" },
-      { player: "R. Garcia", team: "Moonstars", value: "234" },
-      { player: "D. Lee", team: "Beewolves", value: "205" },
-      { player: "J. Martinez", team: "Nemesis", value: "189" },
-      { player: "S. Kim", team: "Moonstars", value: "172" },
-    ],
-    WHIP: [
-      { player: "A. Chen", team: "Nemesis", value: "0.94" },
-      { player: "R. Garcia", team: "Moonstars", value: "1.01" },
-      { player: "D. Lee", team: "Beewolves", value: "1.09" },
-      { player: "J. Martinez", team: "Nemesis", value: "1.16" },
-      { player: "S. Kim", team: "Moonstars", value: "1.20" },
-    ],
-    SV: [
-      { player: "K. Lee", team: "Beewolves", value: "42" },
-      { player: "J. Parker", team: "Nemesis", value: "36" },
-      { player: "R. Garcia", team: "Moonstars", value: "29" },
-      { player: "D. Martinez", team: "Beewolves", value: "25" },
-      { player: "A. Brown", team: "Nemesis", value: "21" },
-    ],
-    WAR: [
-      { player: "A. Chen", team: "Nemesis", value: "4.5" },
-      { player: "R. Garcia", team: "Moonstars", value: "3.8" },
-      { player: "D. Lee", team: "Beewolves", value: "3.2" },
-      { player: "J. Martinez", team: "Nemesis", value: "2.9" },
-      { player: "S. Kim", team: "Moonstars", value: "2.5" },
-    ],
-  };
+  const battingLeadersAL = makeSummary(battingLeadersDataAL as unknown as Record<string, { value: string }[]>);
+  const battingLeadersNL = makeSummary(battingLeadersDataNL as unknown as Record<string, { value: string }[]>);
+  const pitchingLeadersAL = makeSummary(pitchingLeadersDataAL as unknown as Record<string, { value: string }[]>);
+  const pitchingLeadersNL = makeSummary(pitchingLeadersDataNL as unknown as Record<string, { value: string }[]>);
 
-  const battingLeadersAL = [
-    { stat: "AVG", value: ".342" },
-    { stat: "HR", value: "47" },
-    { stat: "RBI", value: "128" },
-    { stat: "SB", value: "48" },
-    { stat: "OPS", value: "1.087" },
-    { stat: "WAR", value: "5.8" },
-  ];
+  // Empty award race data — will be populated from fWAR calculations when games are played
+  const goldGloveLeadersAL: { position: string; player: string; team: string; tier: string; fWAR: string }[] = [];
+  const boogerGloveLeaderAL = { position: "", player: "", team: "", tier: "BOOGER", fWAR: "" };
+  const goldGloveLeadersNL: { position: string; player: string; team: string; tier: string; fWAR: string }[] = [];
+  const boogerGloveLeaderNL = { position: "", player: "", team: "", tier: "BOOGER", fWAR: "" };
 
-  const battingLeadersNL = [
-    { stat: "AVG", value: ".338" },
-    { stat: "HR", value: "44" },
-    { stat: "RBI", value: "125" },
-    { stat: "SB", value: "62" },
-    { stat: "OPS", value: "1.065" },
-    { stat: "WAR", value: "5.2" },
-  ];
+  const silverSluggerLeadersAL: { position: string; player: string; team: string }[] = [];
+  const silverSluggerLeadersNL: { position: string; player: string; team: string }[] = [];
 
-  const pitchingLeadersAL = [
-    { stat: "ERA", value: "2.38" },
-    { stat: "W", value: "19" },
-    { stat: "K", value: "287" },
-    { stat: "WHIP", value: "1.02" },
-    { stat: "SV", value: "45" },
-    { stat: "WAR", value: "4.9" },
-  ];
+  const majorAwardsLeadersAL: { award: string; player: string; team: string; stats: string }[] = [];
+  const majorAwardsLeadersNL: { award: string; player: string; team: string; stats: string }[] = [];
 
-  const pitchingLeadersNL = [
-    { stat: "ERA", value: "2.14" },
-    { stat: "W", value: "21" },
-    { stat: "K", value: "243" },
-    { stat: "WHIP", value: "0.94" },
-    { stat: "SV", value: "42" },
-    { stat: "WAR", value: "4.5" },
-  ];
-
-  // Mock award race leaders - AL
-  const goldGloveLeadersAL = [
-    { position: "C", player: "M. Santos", team: "Sox", tier: "PLATINUM", fWAR: "6.8" },
-    { position: "1B", player: "K. Johnson", team: "Tigers", tier: "GOLD", fWAR: "5.2" },
-    { position: "2B", player: "T. Davis", team: "Sox", tier: "GOLD", fWAR: "4.9" },
-    { position: "3B", player: "K. Martinez", team: "Sox", tier: "GOLD", fWAR: "5.7" },
-    { position: "SS", player: "J. Rodriguez", team: "Tigers", tier: "GOLD", fWAR: "6.3" },
-    { position: "LF", player: "A. Brown", team: "Crocs", tier: "GOLD", fWAR: "4.1" },
-    { position: "CF", player: "T. Anderson", team: "Sox", tier: "GOLD", fWAR: "5.9" },
-    { position: "RF", player: "M. Thompson", team: "Crocs", tier: "GOLD", fWAR: "5.4" },
-    { position: "P", player: "J. Williams", team: "Tigers", tier: "GOLD", fWAR: "4.7" },
-    { position: "UTIL", player: "C. Rivera", team: "Crocs", tier: "GOLD", fWAR: "3.8" },
-  ];
-
-  const boogerGloveLeaderAL = { position: "2B", player: "T. Clumsy", team: "Sox", tier: "BOOGER", fWAR: "-1.2" };
-
-  // Mock award race leaders - NL
-  const goldGloveLeadersNL = [
-    { position: "C", player: "D. Lee", team: "Beewolves", tier: "GOLD", fWAR: "5.8" },
-    { position: "1B", player: "R. Williams", team: "Nemesis", tier: "PLATINUM", fWAR: "6.5" },
-    { position: "2B", player: "J. Martinez", team: "Moonstars", tier: "GOLD", fWAR: "5.1" },
-    { position: "3B", player: "D. Wilson", team: "Beewolves", tier: "GOLD", fWAR: "5.5" },
-    { position: "SS", player: "A. Chen", team: "Nemesis", tier: "GOLD", fWAR: "6.1" },
-    { position: "LF", player: "S. Kim", team: "Moonstars", tier: "GOLD", fWAR: "4.3" },
-    { position: "CF", player: "R. Garcia", team: "Moonstars", tier: "GOLD", fWAR: "5.7" },
-    { position: "RF", player: "J. Parker", team: "Nemesis", tier: "GOLD", fWAR: "5.2" },
-    { position: "P", player: "A. Chen", team: "Nemesis", tier: "GOLD", fWAR: "4.9" },
-    { position: "UTIL", player: "K. Lee", team: "Beewolves", tier: "GOLD", fWAR: "3.9" },
-  ];
-
-  const boogerGloveLeaderNL = { position: "LF", player: "B. Butterfingers", team: "Moonstars", tier: "BOOGER", fWAR: "-1.5" };
-
-  const silverSluggerLeadersAL = [
-    { position: "C", player: "M. Santos", team: "Sox" },
-    { position: "1B", player: "M. Thompson", team: "Crocs" },
-    { position: "2B", player: "K. Martinez", team: "Sox" },
-    { position: "3B", player: "J. Rodriguez", team: "Tigers" },
-    { position: "SS", player: "T. Anderson", team: "Sox" },
-    { position: "OF", player: "C. Rivera", team: "Crocs" },
-    { position: "OF", player: "A. Brown", team: "Crocs" },
-    { position: "OF", player: "K. Johnson", team: "Tigers" },
-    { position: "DH", player: "R. Smith", team: "Tigers" },
-  ];
-
-  const silverSluggerLeadersNL = [
-    { position: "C", player: "D. Lee", team: "Beewolves" },
-    { position: "1B", player: "R. Williams", team: "Nemesis" },
-    { position: "2B", player: "J. Martinez", team: "Moonstars" },
-    { position: "3B", player: "D. Wilson", team: "Beewolves" },
-    { position: "SS", player: "A. Chen", team: "Nemesis" },
-    { position: "OF", player: "S. Kim", team: "Moonstars" },
-    { position: "OF", player: "R. Garcia", team: "Moonstars" },
-    { position: "OF", player: "J. Parker", team: "Nemesis" },
-    { position: "DH", player: "K. Lee", team: "Beewolves" },
-  ];
-
-  const majorAwardsLeadersAL = [
-    { award: "RELIEVER OF THE YEAR", player: "C. Rivera", team: "Crocs", stats: "45 SV, 1.87 ERA" },
-    { award: "BENCH PLAYER OF THE YEAR", player: "K. Martinez", team: "Sox", stats: ".312 AVG, 18 HR" },
-    { award: "ROOKIE OF THE YEAR", player: "T. Davis", team: "Sox", stats: ".289 AVG, 25 HR, 89 RBI" },
-    { award: "CY YOUNG", player: "T. Anderson", team: "Sox", stats: "19-4, 2.38 ERA, 287 K" },
-    { award: "MVP", player: "J. Rodriguez", team: "Tigers", stats: ".342 AVG, 41 HR, 118 RBI" },
-  ];
-
-  const majorAwardsLeadersNL = [
-    { award: "RELIEVER OF THE YEAR", player: "K. Lee", team: "Beewolves", stats: "42 SV, 1.95 ERA" },
-    { award: "BENCH PLAYER OF THE YEAR", player: "J. Parker", team: "Nemesis", stats: ".305 AVG, 16 HR" },
-    { award: "ROOKIE OF THE YEAR", player: "E. Jackson", team: "Beewolves", stats: ".289 AVG, 25 HR, 89 RBI" },
-    { award: "CY YOUNG", player: "A. Chen", team: "Nemesis", stats: "20-4, 2.14 ERA, 243 K" },
-    { award: "MVP", player: "D. Wilson", team: "Beewolves", stats: ".338 AVG, 33 HR, 102 RBI" },
-  ];
-
-  const leagueWideAwardsLeaders = [
-    { award: "MANAGER OF THE YEAR (AL)", player: "Coach Martinez", team: "Tigers", stats: "102-60 Record" },
-    { award: "MANAGER OF THE YEAR (NL)", player: "Coach Williams", team: "Nemesis", stats: "98-64 Record" },
-    { award: "KARA KAWAGUCHI AWARD", player: "D. Tanaka", team: "Moonstars", stats: "Community Excellence" },
-    { award: "BUST OF THE YEAR (AL)", player: "B. Foster", team: "Sox", stats: ".198 AVG, -2.1 WAR" },
-    { award: "BUST OF THE YEAR (NL)", player: "R. Flop", team: "Beewolves", stats: ".185 AVG, -2.5 WAR" },
-    { award: "COMEBACK PLAYER (AL)", player: "V. Ortiz", team: "Crocs", stats: "Returned from injury, .301 AVG" },
-    { award: "COMEBACK PLAYER (NL)", player: "M. Phoenix", team: "Moonstars", stats: "Returned from injury, .295 AVG" },
-  ];
+  const leagueWideAwardsLeaders: { award: string; player: string; team: string; stats: string }[] = [];
 
   const toggleSection = (section: string) => {
     setExpandedSection(expandedSection === section ? null : section);
@@ -3030,121 +3314,20 @@ function BeatReporterNews() {
   const [selectedTeam, setSelectedTeam] = useState<string | null>(null);
   const [expandedArticle, setExpandedArticle] = useState<number | null>(null);
 
-  // Mock news data
-  const newsArticles = [
-    {
-      id: 1,
-      type: "league",
-      headline: "Playoff Race Heats Up: Three Teams Battle for Final Wildcard Spot",
-      excerpt: "With just 10 games remaining, the Sox, Tigers, and Crocs are separated by just 2 games in the AL wildcard race...",
-      fullText: "With just 10 games remaining in the regular season, the American League wildcard race has become a nail-biter. The Sox, Tigers, and Crocs are separated by just 2 games, setting up a dramatic final stretch. The Sox currently hold the edge at 87-65, followed by the Tigers at 86-66 and the Crocs at 85-67. Each team has favorable matchups remaining, but the pressure is mounting. 'Every game matters now,' said Sox manager Coach Thompson. 'We can't afford any slip-ups.' The Tigers face a crucial 4-game series against the last-place Jacks this weekend, while the Crocs have a tough road trip to face the division-leading Blowfish. Baseball fans are in for a thrilling finish as these three teams battle for postseason berths.",
-      reporter: "Sarah Martinez",
-      team: null,
-      timestamp: "2 hours ago",
-      category: "STANDINGS"
-    },
-    {
-      id: 2,
-      type: "team",
-      headline: "Beewolves Ace Wilson Returns to Practice After Injury Scare",
-      excerpt: "David Wilson threw a successful bullpen session today, indicating he could return to the rotation this weekend...",
-      fullText: "David Wilson threw a successful bullpen session today, indicating he could return to the rotation this weekend after missing three starts with shoulder inflammation. The Beewolves' ace threw approximately 40 pitches, reporting no discomfort afterward. 'Everything felt good,' Wilson said. 'My fastball had good velocity and my breaking stuff had the usual bite.' Manager Coach Williams expressed optimism about Wilson's return, stating he could start as early as Saturday against the Moonstars. Wilson's return couldn't come at a better time, as the Beewolves are pushing for home-field advantage in the NL playoffs. The 28-year-old right-hander is 14-6 with a 2.45 ERA this season and has been a cornerstone of the team's success.",
-      reporter: "Mike Chen",
-      team: "Beewolves",
-      timestamp: "4 hours ago",
-      category: "INJURY REPORT"
-    },
-    {
-      id: 3,
-      type: "league",
-      headline: "Commissioner Announces Rule Changes for Season 2",
-      excerpt: "League officials confirmed several rule modifications including expanded rosters and adjusted playoff format...",
-      fullText: "League officials confirmed several rule modifications that will take effect in Season 2, including expanded rosters and an adjusted playoff format. The most significant change expands active rosters from 26 to 28 players for the entire season, giving managers more flexibility with pitching staffs and bench depth. Additionally, the playoff format will now include three wild card teams per league instead of two, with the top two wild card teams hosting the third in a best-of-three series. Commissioner Henderson explained, 'These changes reflect our commitment to competitive balance and player welfare.' Other modifications include a pitch clock for relief pitchers and expanded instant replay review. Team executives have expressed mixed reactions, with some praising the innovation while others worry about tradition.",
-      reporter: "Jessica Brown",
-      team: null,
-      timestamp: "6 hours ago",
-      category: "LEAGUE NEWS"
-    },
-    {
-      id: 4,
-      type: "team",
-      headline: "Tigers Slugger Rodriguez Eyes Historic 50-Home Run Season",
-      excerpt: "J. Rodriguez sits at 41 homers with 15 games to play. If he reaches 50, he'll join an elite club of power hitters...",
-      fullText: "J. Rodriguez sits at 41 homers with 15 games to play. If he reaches 50, he'll join an elite club of power hitters in league history. The Tigers' first baseman has been on an absolute tear, hitting 12 home runs in his last 20 games. 'I'm not really thinking about the number,' Rodriguez said after yesterday's two-homer performance. 'I'm just trying to help us win and make the playoffs.' Despite his humble approach, the entire baseball world is watching. Rodriguez would become just the seventh player in league history to reach the 50-homer milestone in a single season. His power surge has been instrumental in keeping the Tigers in the wildcard race. Pitchers are being extra careful with him, as evidenced by his league-leading 89 walks this season. Tigers fans are hoping the slugger can maintain his pace and etch his name in the record books.",
-      reporter: "Tom Anderson",
-      team: "Tigers",
-      timestamp: "8 hours ago",
-      category: "RECORDS WATCH"
-    },
-    {
-      id: 5,
-      type: "team",
-      headline: "Nemesis Front Office Hints at Major Trade Deadline Activity",
-      excerpt: "GM Williams suggested the team is exploring 'all options' to bolster the bullpen before the August 31 deadline...",
-      fullText: "GM Williams suggested the team is exploring 'all options' to bolster the bullpen before the August 31 deadline. The Nemesis have been linked to several high-profile relievers in recent days, including All-Star closer M. Rivera from the struggling Jacks. 'We're a complete team, but we recognize that adding one more late-inning arm could be the difference between a division title and a wild card spot,' Williams told reporters. The Nemesis currently sit 3.5 games behind the division-leading Beewolves with three weeks remaining. Sources indicate the team is willing to part with top prospect outfielder K. Santos in the right deal. Williams acknowledged the difficulty of trading prospects but emphasized the team's win-now mentality. 'Our window is open right now, and we need to take advantage,' he said. Expect the Nemesis to be active as the deadline approaches.",
-      reporter: "Rachel Kim",
-      team: "Nemesis",
-      timestamp: "12 hours ago",
-      category: "TRADE RUMORS"
-    },
-    {
-      id: 6,
-      type: "league",
-      headline: "All-Star Game MVP Winner Donates Award to Youth Baseball Program",
-      excerpt: "Moonstars' D. Tanaka announced he will auction his All-Star MVP trophy to benefit local youth baseball initiatives...",
-      fullText: "Moonstars' D. Tanaka announced he will auction his All-Star MVP trophy to benefit local youth baseball initiatives in underserved communities. The heartfelt gesture comes as no surprise to those who know Tanaka, who has long been an advocate for youth sports access. 'Baseball changed my life, and I want to give that opportunity to as many kids as possible,' Tanaka said at a press conference. The auction is expected to raise over $100,000, with proceeds going to the Play Ball Foundation, which provides equipment and coaching to youth programs across the country. Tanaka went 2-for-3 with a home run and three RBIs in this year's All-Star Game, earning MVP honors. The 31-year-old outfielder is having a career year, batting .318 with 28 homers and 94 RBIs. His off-field contributions are equally impressive, and he's widely considered a leading candidate for the Kara Kawaguchi Award for community excellence.",
-      reporter: "Chris Johnson",
-      team: null,
-      timestamp: "1 day ago",
-      category: "COMMUNITY"
-    },
-    {
-      id: 7,
-      type: "team",
-      headline: "Sox Manager Addresses Clubhouse Chemistry Questions",
-      excerpt: "Following recent reports of tension, Coach Thompson held a team meeting to 'clear the air' and refocus on playoffs...",
-      fullText: "Following recent reports of tension between veteran players and younger call-ups, Coach Thompson held a team meeting to 'clear the air' and refocus on playoffs. The meeting came after anonymous sources suggested friction over playing time allocation down the stretch. 'Every successful team goes through adversity,' Thompson told reporters. 'What matters is how you respond. We had a great conversation, and everyone is on the same page now.' Star pitcher T. Anderson echoed his manager's sentiments: 'We're all professionals here. Sometimes emotions run high when you're fighting for a playoff spot, but we're united in our goal.' The Sox have won 4 of their last 5 games since the meeting, suggesting the team has indeed moved past any issues. With the wildcard race heating up, the Sox can't afford distractions and appear focused on securing their first postseason berth in five years.",
-      reporter: "David Park",
-      team: "Sox",
-      timestamp: "1 day ago",
-      category: "CLUBHOUSE"
-    },
-    {
-      id: 8,
-      type: "team",
-      headline: "Crocs Announce Stadium Upgrades for Next Season",
-      excerpt: "The franchise revealed plans for a $12M renovation including new video boards and expanded concessions...",
-      fullText: "The franchise revealed plans for a $12M renovation including new video boards, expanded concessions, and upgraded fan amenities. The improvements will transform the gameday experience at Crocs Stadium, which has been home to the team since 2015. The centerpiece is a massive 4K video board in center field, which will be the largest in the league. 'We're committed to providing our fans with a world-class experience,' said team president Angela Morris. Other upgrades include a new kids' play area, craft beer garden, and modernized luxury suites. The team also plans to install a state-of-the-art sound system and improve WiFi connectivity throughout the stadium. Construction will begin immediately after the season ends, with completion targeted for Opening Day next year. Season ticket holders will receive exclusive previews and discounts at the new concession stands. The Crocs are hoping the improvements will boost attendance, which has lagged behind league averages despite the team's on-field success.",
-      reporter: "Emily White",
-      team: "Crocs",
-      timestamp: "2 days ago",
-      category: "FRANCHISE"
-    },
-    {
-      id: 9,
-      type: "league",
-      headline: "Cy Young Race Remains Too Close to Call",
-      excerpt: "Anderson and Chen are neck-and-neck for their respective league awards with nearly identical stats...",
-      fullText: "Anderson and Chen are neck-and-neck for their respective league awards with nearly identical stats heading into the final weeks of the season. Sox ace T. Anderson leads the AL with a 19-4 record and 2.38 ERA, while Nemesis pitcher A. Chen tops the NL at 20-4 with a 2.14 ERA. Both pitchers have been dominant all season, and both have strong cases for the award. Anderson leads in strikeouts with 287, while Chen has been more efficient with fewer walks. 'Both guys have been exceptional,' said Hall of Fame pitcher R. Martinez. 'It's going to come down to who finishes stronger.' Anderson has two starts remaining, while Chen has three. The voting will take place after the regular season ends, with results announced before the playoffs begin. Historically, win-loss record has played a significant role in Cy Young voting, which could give Chen an edge if he finishes 23-4. However, advanced metrics slightly favor Anderson's dominance. It's truly a toss-up at this point.",
-      reporter: "Brian Rodriguez",
-      team: null,
-      timestamp: "2 days ago",
-      category: "AWARDS WATCH"
-    },
-    {
-      id: 10,
-      type: "team",
-      headline: "Moonstars Prospect Call-Up Creates Roster Controversy",
-      excerpt: "The decision to promote rookie phenom K. Sato has sparked debate about service time manipulation...",
-      fullText: "The decision to promote rookie phenom K. Sato has sparked debate about service time manipulation and competitive integrity. Sato, 22, was promoted from Triple-A yesterday after dominating the minors with a .342 average and 31 home runs. However, the timing raised eyebrows around the league. By calling him up now rather than at the start of the season, the Moonstars effectively delay his free agency eligibility by one year. 'It's a smart business move, but it feels wrong,' said one rival executive who requested anonymity. 'This kid should have been up months ago.' The Moonstars defended the decision, citing Sato's need for development and the strong performance of current roster players. 'We make decisions based on what's best for the organization and the player's long-term development,' said GM Peterson. Sato himself seems unfazed: 'I'm just happy to be here and ready to contribute.' The controversy highlights ongoing tensions between competitive and financial considerations in roster management.",
-      reporter: "Lisa Thompson",
-      team: "Moonstars",
-      timestamp: "3 days ago",
-      category: "PROSPECTS"
-    }
-  ];
+  // Empty news data — will be populated by narrative engine when games are played
+  const newsArticles: {
+    id: number;
+    type: string;
+    headline: string;
+    excerpt: string;
+    fullText: string;
+    reporter: string;
+    team: string | null;
+    timestamp: string;
+    category: string;
+  }[] = [];
 
-  const teams = ["Beewolves", "Tigers", "Nemesis", "Sox", "Crocs", "Moonstars"];
+  const teams: string[] = [];
 
   const filteredArticles = newsArticles.filter(article => {
     if (newsFilter === "league") return article.type === "league";

@@ -14,6 +14,7 @@ import { GameTracker } from "@/app/pages/GameTracker";
 import { PostGameSummary } from "@/app/pages/PostGameSummary";
 import { ExhibitionGame } from "@/app/pages/ExhibitionGame";
 import { WorldSeries } from "@/app/pages/WorldSeries";
+import { SeasonSummary } from "@/app/pages/SeasonSummary";
 
 export const router = createBrowserRouter([
   {
@@ -59,6 +60,10 @@ export const router = createBrowserRouter([
   {
     path: "/franchise/:franchiseId",
     Component: FranchiseHome,
+  },
+  {
+    path: "/franchise/:franchiseId/season-summary",
+    Component: SeasonSummary,
   },
   {
     path: "/game-tracker/:gameId",

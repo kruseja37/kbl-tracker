@@ -40,33 +40,35 @@ export interface UseOffseasonPhaseReturn {
 // CONSTANTS
 // ============================================
 
-// Offseason phases - Schedule removed (games are added on-the-fly per SCHEDULE_SYSTEM_FIGMA_SPEC.md)
+// Offseason phases - 11 phases per OFFSEASON_SYSTEM_SPEC.md §2
 export const OFFSEASON_PHASES = {
-  AWARDS: 1,
-  EOS_RATINGS: 2,
-  RETIREMENTS: 3,
-  FA_PROTECTION: 4,
-  FREE_AGENCY_1: 5,
-  FREE_AGENCY_2: 6,
-  FREE_AGENCY_3: 7,
-  DRAFT: 8,
-  TRADES: 9,
-  SPRING_TRAINING: 10,
+  STANDINGS_FINAL: 1,
+  AWARDS: 2,
+  RATINGS_ADJUSTMENTS: 3,
+  CONTRACTION_EXPANSION: 4,
+  RETIREMENTS: 5,
+  FREE_AGENCY: 6,
+  DRAFT: 7,
+  FARM_RECONCILIATION: 8,
+  CHEMISTRY_REBALANCING: 9,
+  TRADES: 10,
+  SPRING_TRAINING: 11,
 } as const;
 
-export const TOTAL_PHASES = 10;
+export const TOTAL_PHASES = 11;
 
 export const PHASE_NAMES: Record<number, string> = {
-  1: 'Awards Ceremony',
-  2: 'End of Season Ratings',
-  3: 'Retirements',
-  4: 'FA Protection',
-  5: 'Free Agency Round 1',
-  6: 'Free Agency Round 2',
-  7: 'Free Agency Round 3',
-  8: 'Draft',
-  9: 'Trade Period',
-  10: 'Spring Training',
+  1: 'Finalize Standings',
+  2: 'Awards Ceremony',
+  3: 'Ratings & Manager Bonuses',
+  4: 'Contraction/Expansion',
+  5: 'Retirements',
+  6: 'Free Agency',
+  7: 'Draft',
+  8: 'Farm System Reconciliation',
+  9: 'Chemistry Rebalancing',
+  10: 'Trades',
+  11: 'Spring Training',
 };
 
 // ============================================

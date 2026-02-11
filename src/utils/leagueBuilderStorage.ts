@@ -743,6 +743,7 @@ export async function clearAllLeagueBuilderData(): Promise<void> {
 // ============================================
 
 import { TEAMS as SMB4_TEAMS, PLAYERS as SMB4_PLAYERS, type PlayerData, type TeamData } from '../data/playerDatabase';
+import { SUPER_MEGA_LEAGUE } from '../data/leagueStructure';
 
 /**
  * Chemistry code to full chemistry name mapping
@@ -920,6 +921,44 @@ export async function seedFromSMB4Database(clearExisting = true): Promise<{ team
   }
 
   console.log(`[LeagueBuilder] Verified: ${persistedTeams} teams, ${persistedPlayers} players in DB`);
+
+  // Step 3: Auto-create "Super Mega League" template from leagueStructure.ts
+  // This ensures IMPORT SMB4 DATA is a single-click full recovery.
+  const allTeamIds: string[] = [];
+  const conferences: Conference[] = [];
+  const divisions: Division[] = [];
+
+  for (const conf of SUPER_MEGA_LEAGUE.conferences) {
+    const divisionIds: string[] = [];
+    for (const div of conf.divisions) {
+      divisionIds.push(div.id);
+      allTeamIds.push(...div.teamIds);
+      divisions.push({
+        id: div.id,
+        name: div.name,
+        conferenceId: conf.id,
+        teamIds: [...div.teamIds],
+      });
+    }
+    conferences.push({
+      id: conf.id,
+      name: conf.name,
+      abbreviation: conf.name === 'Super Conference' ? 'SUP' : 'MEG',
+      divisionIds,
+    });
+  }
+
+  await saveLeagueTemplate({
+    id: 'sml',
+    name: SUPER_MEGA_LEAGUE.name,
+    description: 'Default SMB4 league — 20 teams, 2 conferences, 4 divisions',
+    teamIds: allTeamIds,
+    conferences,
+    divisions,
+    defaultRulesPreset: 'standard',
+  });
+
+  console.log(`[LeagueBuilder] Created "${SUPER_MEGA_LEAGUE.name}" league template with ${allTeamIds.length} teams`);
 
   return { teams: persistedTeams, players: persistedPlayers };
 }

@@ -485,3 +485,325 @@ export const QUICK_TAP_BUTTONS: QuickTapButton[] = [
   { id: 'hr_center', label: 'HR C', zone: 'Z15' },
   { id: 'hr_right', label: 'HR R', zone: 'Z13' },
 ];
+
+// ============================================
+// ZONE-TO-CQ INTEGRATION (GAP-B3-025)
+// ============================================
+
+/**
+ * Get trajectory modifiers (depth/speed) from zone + ball type.
+ * Used to enrich contact quality data.
+ */
+export function getCQTrajectoryFromZone(
+  zoneId: string,
+  ballType: string,
+): Record<string, string> {
+  const depth = ZONE_TO_DEPTH[zoneId] || 'medium';
+
+  if (ballType === 'Fly Ball') {
+    // Map zone depth to trajectory depth
+    if (depth === 'infield' || depth === 'foul_catcher' || depth === 'foul_shallow') {
+      return { depth: 'shallow' };
+    }
+    if (depth === 'shallow') return { depth: 'medium' };
+    if (depth === 'medium') return { depth: 'deep' };
+    if (depth === 'deep') return { depth: 'deep' };
+    return { depth: 'shallow' };
+  }
+
+  if (ballType === 'Ground Ball') {
+    // Infield grounders are medium speed; through-the-hole (shallow OF) are hard
+    if (depth === 'infield') return { speed: 'medium' };
+    if (depth === 'shallow') return { speed: 'hard' };
+    if (depth === 'medium' || depth === 'deep') return { speed: 'hard' };
+    return { speed: 'medium' };
+  }
+
+  // Line drives and pop-ups: no trajectory modification
+  return {};
+}
+
+/**
+ * Estimate contact quality (0.0 – 1.0) from zone, ball type, and result.
+ */
+export function getContactQualityFromZone(
+  zoneId: string,
+  ballType: string,
+  result: string,
+): number {
+  // Foul zones delegate to dedicated function
+  if (zoneId.startsWith('F')) {
+    return getFoulContactQuality(zoneId, ballType);
+  }
+
+  // HR is always maximum contact quality
+  if (result === 'HR') return 1.0;
+
+  // Line drives are always hard contact
+  if (ballType === 'Line Drive') return 0.85;
+
+  // Pop ups are always weak contact
+  if (ballType === 'Pop Up') return 0.20;
+
+  const depth = ZONE_TO_DEPTH[zoneId] || 'medium';
+
+  if (ballType === 'Fly Ball') {
+    if (depth === 'deep') return 0.75;
+    if (depth === 'medium') return 0.55;
+    if (depth === 'shallow') return 0.35;
+    return 0.35; // infield pop fly
+  }
+
+  if (ballType === 'Ground Ball') {
+    if (depth === 'shallow' || depth === 'medium' || depth === 'deep') return 0.70; // through the hole
+    return 0.50; // infield grounder
+  }
+
+  return 0.50; // fallback
+}
+
+/**
+ * Contact quality for foul territory balls.
+ */
+export function getFoulContactQuality(
+  zoneId: string,
+  ballType: string,
+): number {
+  // Line drives in foul territory are still hard contact
+  if (ballType === 'Line Drive') return 0.70;
+
+  const zone = FIELD_ZONES[zoneId];
+  if (!zone) return 0.25; // unknown foul zone
+
+  switch (zone.area) {
+    case 'foul_catcher': return 0.15;
+    case 'foul_shallow': return 0.20;
+    case 'foul_medium': return 0.35;
+    case 'foul_deep': return 0.50;
+    default: return 0.25;
+  }
+}
+
+// ============================================
+// SPRAY CHART GENERATION (GAP-B3-026)
+// ============================================
+
+/** Color map for spray chart dots by result category */
+export const SPRAY_COLORS: Record<string, string> = {
+  HR: '#FF4444',
+  triple: '#FF8800',
+  double: '#FFCC00',
+  single: '#44CC44',
+  out: '#888888',
+  error: '#8844FF',
+};
+
+/** Size map for spray chart dots by result category */
+export const SPRAY_SIZES: Record<string, number> = {
+  HR: 12,
+  triple: 10,
+  double: 8,
+  single: 7,
+  out: 6,
+  error: 7,
+};
+
+/**
+ * Generate a spray chart point (normalized 0-1) from a zone ID.
+ * When randomize=true, adds small jitter around the zone center.
+ */
+export function generateSprayPoint(
+  zoneId: string,
+  randomize: boolean,
+): { x: number; y: number } {
+  const center = ZONE_CENTERS[zoneId];
+  if (!center) return { x: 0.5, y: 0.5 };
+
+  // Normalize from 0-100 to 0-1
+  let x = center.x / 100;
+  let y = center.y / 100;
+
+  if (randomize) {
+    // Add ±3% jitter
+    x += (Math.random() - 0.5) * 0.06;
+    y += (Math.random() - 0.5) * 0.06;
+    // Clamp to [0, 1]
+    x = Math.max(0, Math.min(1, x));
+    y = Math.max(0, Math.min(1, y));
+  }
+
+  return { x, y };
+}
+
+/** Spray chart entry stored per at-bat */
+export interface SprayChartEntry {
+  zoneId: string;
+  result: string;
+  exitType: string;
+  isHit: boolean;
+  isHR: boolean;
+  point: { x: number; y: number };
+  batterHand: string;
+}
+
+const HIT_RESULTS = new Set(['HR', 'single', 'double', 'triple', '1B', '2B', '3B']);
+
+/**
+ * Create a spray chart entry from zone tap + at-bat result.
+ */
+export function createSprayChartEntry(
+  zoneId: string,
+  batterHand: string,
+  result: string,
+  exitType: string,
+): SprayChartEntry {
+  return {
+    zoneId,
+    result,
+    exitType,
+    isHit: HIT_RESULTS.has(result),
+    isHR: result === 'HR',
+    point: generateSprayPoint(zoneId, true),
+    batterHand,
+  };
+}
+
+// ============================================
+// STADIUM SPRAY INTEGRATION (GAP-B3-027)
+// ============================================
+
+type StadiumZone =
+  | 'LEFT_LINE' | 'LEFT_FIELD' | 'LEFT_CENTER'
+  | 'CENTER'
+  | 'RIGHT_CENTER' | 'RIGHT_FIELD' | 'RIGHT_LINE';
+
+/**
+ * Map a field zone to a coarser stadium spray zone.
+ */
+const ZONE_TO_STADIUM: Record<string, StadiumZone> = {
+  // Wall zones
+  Z13: 'RIGHT_LINE',
+  Z14: 'RIGHT_CENTER',
+  Z15: 'CENTER',
+  Z16: 'LEFT_CENTER',
+  Z17: 'LEFT_LINE',
+  // Deep outfield
+  Z08: 'RIGHT_FIELD',
+  Z09: 'RIGHT_CENTER',
+  Z10: 'CENTER',
+  Z11: 'LEFT_CENTER',
+  Z12: 'LEFT_FIELD',
+  // Shallow outfield
+  Z05: 'RIGHT_FIELD',
+  Z06: 'CENTER',
+  Z07: 'LEFT_FIELD',
+  // Infield
+  Z00: 'CENTER',
+  Z01: 'RIGHT_FIELD',
+  Z02: 'RIGHT_CENTER',
+  Z03: 'LEFT_CENTER',
+  Z04: 'LEFT_FIELD',
+  // Foul
+  F00: 'RIGHT_LINE',
+  F01: 'RIGHT_LINE',
+  F02: 'RIGHT_LINE',
+  F03: 'LEFT_LINE',
+  F04: 'LEFT_LINE',
+  F05: 'LEFT_LINE',
+  F06: 'CENTER',
+};
+
+export function mapToStadiumSprayZone(zoneId: string): StadiumZone {
+  return ZONE_TO_STADIUM[zoneId] || 'CENTER';
+}
+
+/**
+ * Base distances (feet) for HR estimation by zone.
+ * Wall zones get park-specific bases; others use a generic default.
+ */
+const HR_DISTANCE_BASE: Record<string, number> = {
+  Z13: 330,  // RF wall (short porch)
+  Z14: 370,  // RCF wall
+  Z15: 400,  // CF wall
+  Z16: 370,  // LCF wall
+  Z17: 330,  // LF wall
+};
+
+/**
+ * Estimate HR distance in feet. Non-HR results return 0.
+ */
+export function estimateDistance(zoneId: string, result: string): number {
+  if (result !== 'HR') return 0;
+
+  const base = HR_DISTANCE_BASE[zoneId] || 370;
+  // Add random variance: (random - 0.3) * 60 → range about -18 to +42
+  const offset = Math.floor((Math.random() - 0.3) * 60);
+  return base + offset;
+}
+
+/**
+ * Estimate angle in degrees from zone center.
+ * 0° = dead center, negative = left, positive = right.
+ */
+export function estimateAngle(zoneId: string): number {
+  const center = ZONE_CENTERS[zoneId];
+  if (!center) return 0;
+
+  // Convert x (0-100) to angle: center (50) = 0°, edges = ±45°
+  return (center.x - 50) * 0.9;
+}
+
+/** Context for a stadium batted ball event */
+export interface BattedBallContext {
+  gameId: string;
+  inning: number;
+  batterId: string;
+  pitcherId: string;
+}
+
+/** Full stadium-spray batted ball event */
+export interface StadiumBattedBallEvent {
+  gameId: string;
+  inning: number;
+  batterId: string;
+  pitcherId: string;
+  zone: StadiumZone;
+  inputZone: string;
+  distance: number;
+  angle: number;
+  outcome: string;
+  outType: string;
+  batterHandedness: string;
+}
+
+const EXIT_TYPE_MAP: Record<string, string> = {
+  'Fly Ball': 'FLY',
+  'Ground Ball': 'GROUND',
+  'Line Drive': 'LINE',
+  'Pop Up': 'POPUP',
+};
+
+/**
+ * Create a stadium-level batted ball event from zone tap data.
+ */
+export function createStadiumBattedBallEvent(
+  zoneId: string,
+  context: BattedBallContext,
+  batterHand: string,
+  result: string,
+  exitType: string,
+): StadiumBattedBallEvent {
+  return {
+    gameId: context.gameId,
+    inning: context.inning,
+    batterId: context.batterId,
+    pitcherId: context.pitcherId,
+    zone: mapToStadiumSprayZone(zoneId),
+    inputZone: zoneId,
+    distance: estimateDistance(zoneId, result),
+    angle: estimateAngle(zoneId),
+    outcome: result,
+    outType: EXIT_TYPE_MAP[exitType] || exitType,
+    batterHandedness: batterHand,
+  };
+}

@@ -65,20 +65,9 @@ const goldGlovePositions: Position[] = ["C", "1B", "2B", "3B", "SS", "LF", "CF",
 const silverSluggerPositions: Position[] = ["C", "1B", "2B", "3B", "SS", "LF", "CF", "RF", "DH"];
 
 // Mock data for when real data isn't available
-const MOCK_PLAYERS: Player[] = [
-  { id: "1", name: "Francisco Lindor", team: "NYM", position: "SS", grade: "A", age: 30, salary: 34100000, league: "NL", traits: [] },
-  { id: "2", name: "Shohei Ohtani", team: "LAA", position: "DH", grade: "A+", age: 29, salary: 30000000, league: "AL", traits: [] },
-  { id: "3", name: "Mike Trout", team: "LAA", position: "CF", grade: "A+", age: 32, salary: 35000000, league: "AL", traits: [] },
-  { id: "4", name: "Ronald Acuña Jr.", team: "ATL", position: "RF", grade: "A+", age: 26, salary: 17000000, league: "NL", traits: [] },
-  { id: "5", name: "Gerrit Cole", team: "NYY", position: "P", grade: "A", age: 33, salary: 36000000, league: "AL", traits: [] },
-  { id: "6", name: "Mookie Betts", team: "LAD", position: "SS", grade: "A", age: 31, salary: 30500000, league: "NL", traits: [] },
-];
+const MOCK_PLAYERS: Player[] = [];
 
-const MOCK_TEAMS: OffseasonTeam[] = [
-  { id: "nyy", name: "New York Yankees", shortName: "NYY", record: { wins: 92, losses: 70 }, primaryColor: "#003087", secondaryColor: "#E4002C" },
-  { id: "lad", name: "Los Angeles Dodgers", shortName: "LAD", record: { wins: 100, losses: 62 }, primaryColor: "#005A9C", secondaryColor: "#EF3E42" },
-  { id: "atl", name: "Atlanta Braves", shortName: "ATL", record: { wins: 104, losses: 58 }, primaryColor: "#CE1141", secondaryColor: "#13274F" },
-];
+const MOCK_TEAMS: OffseasonTeam[] = [];
 
 // Convert OffseasonPlayer to local Player type
 function convertToAwardPlayer(p: OffseasonPlayer, teamShortName: string): Player {

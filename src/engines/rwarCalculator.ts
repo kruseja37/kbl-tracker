@@ -88,9 +88,25 @@ export interface AdvancementStats {
   firstToHomeOnDouble: number; // Scored from 1st on a double
   secondToHomeOnSingle: number; // Scored from 2nd on a single
   tagsScored: number;          // Tag up and scored on fly out
+  tagsScoredFrom2B: number;    // Granular: tag-up scored from 2B
+  tagsScoredFrom3B: number;    // Granular: tag-up scored from 3B
   thrownOutAdvancing: number;  // Thrown out trying to take extra base
   pickedOff: number;           // Picked off
   advancementOpportunities: number; // Total opportunities to take extra base
+  heldOpportunities: number;   // Times runner was held when they could have advanced
+}
+
+/**
+ * Individual runner advancement event
+ */
+export interface RunnerAdvancement {
+  runnerId: string;
+  fromBase: '1B' | '2B' | '3B';
+  toBase: '2B' | '3B' | 'HOME' | 'OUT';
+  advancementType: 'forced' | 'extra' | 'held' | 'out';
+  onPlay: string;
+  couldHaveAdvanced: boolean;
+  tagUpFrom?: string;
 }
 
 /**
@@ -220,6 +236,98 @@ export function calculateWSBSimplified(stats: StolenBaseStats): number {
 }
 
 // ============================================
+// RUNNER ADVANCEMENT HELPERS (GAP-B1-006, MIN-B1-006)
+// ============================================
+
+/**
+ * Create a blank AdvancementStats with all counters at zero.
+ */
+export function createBlankAdvancementStats(): AdvancementStats {
+  return {
+    firstToThird: 0,
+    firstToHomeOnDouble: 0,
+    secondToHomeOnSingle: 0,
+    tagsScored: 0,
+    tagsScoredFrom2B: 0,
+    tagsScoredFrom3B: 0,
+    thrownOutAdvancing: 0,
+    pickedOff: 0,
+    advancementOpportunities: 0,
+    heldOpportunities: 0,
+  };
+}
+
+/**
+ * Classify a runner advancement as forced, extra, held, or out.
+ * "forced" includes minimum-required advances (e.g. 1B→2B on a single).
+ */
+export function classifyAdvancement(
+  fromBase: string,
+  toBase: string,
+  onPlay: string,
+  isForced: boolean,
+): 'forced' | 'extra' | 'held' | 'out' {
+  if (toBase === 'OUT') return 'out';
+  if (isForced) return 'forced';
+
+  // Minimum-required advances are classified as forced even if not technically
+  // 1B→2B on a single is the expected minimum
+  if (fromBase === '1B' && toBase === '2B' && onPlay === 'single') return 'forced';
+
+  return 'extra';
+}
+
+/**
+ * Accumulate a single RunnerAdvancement event into AdvancementStats.
+ * Mutates stats in place.
+ */
+export function accumulateAdvancement(
+  stats: AdvancementStats,
+  event: RunnerAdvancement,
+): void {
+  if (event.advancementType === 'out') {
+    stats.thrownOutAdvancing += 1;
+    return;
+  }
+
+  if (event.advancementType === 'held') {
+    if (event.couldHaveAdvanced) {
+      stats.heldOpportunities += 1;
+      stats.advancementOpportunities += 1;
+    }
+    return;
+  }
+
+  if (event.advancementType === 'forced') {
+    // Forced advances don't count as extra-base opportunities
+    return;
+  }
+
+  // advancementType === 'extra'
+  stats.advancementOpportunities += 1;
+
+  // Route to the correct counter
+  if (event.fromBase === '1B' && event.toBase === '3B') {
+    stats.firstToThird += 1;
+  } else if (event.fromBase === '1B' && event.toBase === 'HOME' && event.onPlay === 'double') {
+    stats.firstToHomeOnDouble += 1;
+  } else if (event.fromBase === '2B' && event.toBase === 'HOME' && (event.onPlay === 'single')) {
+    stats.secondToHomeOnSingle += 1;
+  } else if (event.toBase === 'HOME' && (event.onPlay === 'flyOut' || event.onPlay === 'sacFly')) {
+    // Tag-up scoring — track granularly by origin base
+    stats.tagsScored += 1;
+    if (event.fromBase === '3B') {
+      stats.tagsScoredFrom3B += 1;
+    } else if (event.fromBase === '2B') {
+      stats.tagsScoredFrom2B += 1;
+    }
+  } else if (event.toBase === 'HOME') {
+    // Other scoring plays (tag-ups or extra advancement)
+    stats.tagsScored += 1;
+  }
+}
+
+// ============================================
 // UBR CALCULATION
 // ============================================
 
@@ -236,7 +344,15 @@ export function calculateUBR(
   ubr += stats.firstToThird * ADVANCEMENT_VALUES.firstToThird_onSingle;
   ubr += stats.firstToHomeOnDouble * ADVANCEMENT_VALUES.firstToHome_onDouble;
   ubr += stats.secondToHomeOnSingle * ADVANCEMENT_VALUES.secondToHome_onSingle;
-  ubr += stats.tagsScored * ADVANCEMENT_VALUES.thirdToHome_onFlyOut;
+
+  // Granular tag-up scoring: use per-origin values when available
+  if (stats.tagsScoredFrom2B > 0 || stats.tagsScoredFrom3B > 0) {
+    ubr += stats.tagsScoredFrom2B * ADVANCEMENT_VALUES.secondToHome_onFlyOut;
+    ubr += stats.tagsScoredFrom3B * ADVANCEMENT_VALUES.thirdToHome_onFlyOut;
+  } else {
+    // Fallback: treat all tag-ups as 3B→HOME
+    ubr += stats.tagsScored * ADVANCEMENT_VALUES.thirdToHome_onFlyOut;
+  }
 
   // Penalty for outs on bases
   ubr += stats.thrownOutAdvancing * ADVANCEMENT_VALUES.thrownOut_advancing;

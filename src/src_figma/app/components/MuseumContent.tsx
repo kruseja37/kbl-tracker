@@ -19,8 +19,8 @@ interface MuseumContentProps {
   retiredJerseys?: RetiredJersey[];
 }
 
-// Mock teams for fallback
-const MOCK_TEAMS = ["Tigers", "Sox", "Bears", "Crocs", "Moonstars", "Nemesis", "Herbisaurs", "Wild Pigs", "Beewolves", "Moose"];
+// Empty fallback — populated from real data when available
+const MOCK_TEAMS: string[] = [];
 
 export function MuseumContent({ retiredJerseys: propRetiredJerseys = [] }: MuseumContentProps) {
   const [activeTab, setActiveTab] = useState<MuseumTab>("league-history");
@@ -124,43 +124,18 @@ export function MuseumContent({ retiredJerseys: propRetiredJerseys = [] }: Museu
     }));
   }, [museumAllTimeLeaders]);
 
-  // Mock season standings for selected team
-  const seasonStandings = [
-    { year: 2025, record: "56-34", standing: "1st AL West", playoffs: "Champions" },
-    { year: 2024, record: "52-38", standing: "2nd AL West", playoffs: "Wild Card" },
-    { year: 2023, record: "48-42", standing: "3rd AL West", playoffs: "Missed" },
-    { year: 2022, record: "51-39", standing: "2nd AL West", playoffs: "Division Series" },
-    { year: 2021, record: "58-32", standing: "1st AL West", playoffs: "Champions" },
-  ];
+  // Empty season standings — populated from real data when available
+  const seasonStandings: { year: number; record: string; standing: string; playoffs: string }[] = [];
 
-  // Mock team top 10 players
-  const teamTop10 = [
-    { name: "J. Rodriguez", war: 64.2, pwar: 64.2, bwar: 0.0, rwar: 0.0, fwar: 0.0, years: "2018-2025" },
-    { name: "L. Johnson", war: 46.9, pwar: 0.0, bwar: 41.2, rwar: 3.4, fwar: 2.3, years: "2019-2025" },
-    { name: "Historical Player 1", war: 42.3, pwar: 0.0, bwar: 38.1, rwar: 2.8, fwar: 1.4, years: "2010-2018" },
-    { name: "Historical Player 2", war: 39.8, pwar: 39.8, bwar: 0.0, rwar: 0.0, fwar: 0.0, years: "2012-2020" },
-    { name: "Historical Player 3", war: 36.5, pwar: 0.0, bwar: 32.4, rwar: 2.9, fwar: 1.2, years: "2015-2022" },
-    { name: "Historical Player 4", war: 34.2, pwar: 34.2, bwar: 0.0, rwar: 0.0, fwar: 0.0, years: "2011-2019" },
-    { name: "Historical Player 5", war: 31.8, pwar: 0.0, bwar: 28.7, rwar: 2.1, fwar: 1.0, years: "2013-2021" },
-    { name: "Historical Player 6", war: 29.4, pwar: 0.0, bwar: 26.3, rwar: 2.0, fwar: 1.1, years: "2016-2023" },
-    { name: "Historical Player 7", war: 27.9, pwar: 27.9, bwar: 0.0, rwar: 0.0, fwar: 0.0, years: "2014-2022" },
-    { name: "Historical Player 8", war: 25.6, pwar: 0.0, bwar: 23.1, rwar: 1.8, fwar: 0.7, years: "2017-2024" },
-  ];
+  // Empty team top 10 — populated from real data when available
+  const teamTop10: { name: string; war: number; pwar: number; bwar: number; rwar: number; fwar: number; years: string }[] = [];
 
-  // Mock team accolades
+  // Empty team accolades — populated from real data when available
   const teamAccolades = {
-    championships: [2025, 2021, 2015],
-    mvps: [
-      { player: "J. Rodriguez", year: 2025 },
-      { player: "L. Johnson", year: 2024 },
-    ],
-    cyYoungs: [
-      { player: "J. Rodriguez", year: 2023 },
-      { player: "Historical Pitcher 1", year: 2018 },
-    ],
-    roys: [
-      { player: "Historical Player 3", year: 2015 },
-    ],
+    championships: [] as number[],
+    mvps: [] as { player: string; year: number }[],
+    cyYoungs: [] as { player: string; year: number }[],
+    roys: [] as { player: string; year: number }[],
   };
 
   // Transform retired jerseys to component format

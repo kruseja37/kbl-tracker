@@ -123,43 +123,7 @@ function convertToLocalTeam(team: OffseasonTeam, allPlayers: OffseasonPlayer[], 
 }
 
 // Mock team data (fallback when real data not available)
-const MOCK_TEAMS: Team[] = [
-  {
-    id: "tigers",
-    name: "Detroit Tigers",
-    isUserTeam: true,
-    payroll: 85200000,
-    players: [
-      { id: "p1", name: "J. Rodriguez", position: "CF", overall: 92, salary: 15200000, age: 27, lastSeasonStats: ".298 AVG, 32 HR", war: 4.5 },
-      { id: "p2", name: "M. Chen", position: "SP", overall: 88, salary: 12500000, age: 29, lastSeasonStats: "14-8, 3.21 ERA", war: 3.8 },
-      { id: "p3", name: "R. Davis", position: "3B", overall: 84, salary: 8300000, age: 26 },
-      { id: "p4", name: "L. Martinez", position: "C", overall: 81, salary: 6100000, age: 30 },
-      { id: "p5", name: "K. Wilson", position: "RP", overall: 78, salary: 4200000, age: 28 },
-    ],
-  },
-  {
-    id: "sox",
-    name: "Boston Sox",
-    payroll: 72100000,
-    players: [
-      { id: "p6", name: "K. Martinez", position: "SS", overall: 91, salary: 14800000, age: 25 },
-      { id: "p7", name: "T. Anderson", position: "2B", overall: 87, salary: 11200000, age: 28 },
-      { id: "p8", name: "D. Brown", position: "SP", overall: 85, salary: 9500000, age: 31 },
-      { id: "p9", name: "P. Johnson", position: "LF", overall: 82, salary: 7000000, age: 29 },
-      { id: "p10", name: "A. Garcia", position: "RP", overall: 77, salary: 3800000, age: 27 },
-    ],
-  },
-  {
-    id: "bears",
-    name: "Chicago Bears",
-    payroll: 78500000,
-    players: [
-      { id: "p11", name: "J. Kim", position: "CF", overall: 86, salary: 8200000, age: 24 },
-      { id: "p12", name: "S. Thompson", position: "SP", overall: 83, salary: 7500000, age: 30 },
-      { id: "p13", name: "M. Williams", position: "1B", overall: 80, salary: 5900000, age: 26 },
-    ],
-  },
-];
+const MOCK_TEAMS: Team[] = [];
 
 interface TradeFlowProps {
   seasonId: string;

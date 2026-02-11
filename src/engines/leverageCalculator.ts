@@ -596,6 +596,235 @@ export function getLIEmoji(category: 'LOW' | 'MEDIUM' | 'HIGH' | 'EXTREME'): str
 }
 
 // ============================================
+// §10.5-10.7 RELATIONSHIP LI MODIFIERS
+// ============================================
+
+/**
+ * Revenge Arc - derived from ended relationships between cross-team players
+ * Per LEVERAGE_INDEX_SPEC.md §10.5
+ */
+export interface RevengeArc {
+  playerId: string;
+  formerPartnerId: string;
+  arcType: 'SCORNED_LOVER' | 'ESTRANGED_FRIEND' | 'SURPASSED_MENTOR' | 'VICTIM_REVENGE' | 'BULLY_CONFRONTED';
+  liMultiplier: number;
+}
+
+/**
+ * Romantic Matchup - derived from active romantic relationships between cross-team players
+ * Per LEVERAGE_INDEX_SPEC.md §10.6
+ */
+export interface RomanticMatchup {
+  playerAId: string;
+  playerBId: string;
+  matchupType: 'LOVERS_RIVALRY' | 'MARRIED_OPPONENTS' | 'EX_SPOUSE_REVENGE';
+  liMultiplier: number;
+}
+
+/**
+ * Context for relationship-based LI modifiers
+ */
+export interface RelationshipLIContext {
+  revengeArcs: RevengeArc[];
+  romanticMatchups: RomanticMatchup[];
+  familyPlayers: Map<string, { childCount: number }>;
+  isHomeGame: boolean;
+}
+
+/**
+ * Revenge arc LI multipliers by arc type
+ * Per LEVERAGE_INDEX_SPEC.md §10.5
+ */
+export const REVENGE_ARC_MULTIPLIERS = {
+  SCORNED_LOVER: 1.5,
+  ESTRANGED_FRIEND: 1.25,
+  SURPASSED_MENTOR: 1.3,
+  VICTIM_REVENGE: 1.75,
+  BULLY_CONFRONTED: 0.9,
+} as const;
+
+/**
+ * Romantic matchup LI multipliers
+ * Per LEVERAGE_INDEX_SPEC.md §10.6
+ */
+export const ROMANTIC_MATCHUP_MULTIPLIERS = {
+  LOVERS_RIVALRY: 1.3,
+  MARRIED_OPPONENTS: 1.4,
+  EX_SPOUSE_REVENGE: 1.6,
+} as const;
+
+/**
+ * Family home game LI configuration
+ * Per LEVERAGE_INDEX_SPEC.md §10.7
+ */
+export const HOME_FAMILY_LI_CONFIG = {
+  NON_PLAYER_SPOUSE: 1.1,
+  PER_CHILD: 0.1,
+  MAX_CHILD_BONUS: 0.5,
+} as const;
+
+/**
+ * Get revenge arc LI modifier for a batter-pitcher matchup.
+ * Finds arcs where EITHER player is playerId or formerPartnerId
+ * and the OTHER is the other player. Returns Math.max(1.0, highest modifier).
+ *
+ * @param batterId - Current batter
+ * @param pitcherId - Current pitcher
+ * @param arcs - All active revenge arcs in the game
+ * @returns LI multiplier (>= 1.0)
+ */
+export function getRevengeArcModifier(
+  batterId: string,
+  pitcherId: string,
+  arcs: RevengeArc[]
+): number {
+  let maxModifier = 1.0;
+
+  for (const arc of arcs) {
+    const involves =
+      (arc.playerId === batterId && arc.formerPartnerId === pitcherId) ||
+      (arc.playerId === pitcherId && arc.formerPartnerId === batterId) ||
+      (arc.formerPartnerId === batterId && arc.playerId === pitcherId) ||
+      (arc.formerPartnerId === pitcherId && arc.playerId === batterId);
+
+    if (involves) {
+      // BULLY_CONFRONTED (0.9) gets floored at 1.0 — bully doesn't get emotional boost
+      maxModifier = Math.max(maxModifier, arc.liMultiplier);
+    }
+  }
+
+  return maxModifier;
+}
+
+/**
+ * Get romantic matchup LI modifier for a batter-pitcher matchup.
+ * Checks if batter and pitcher are involved in any romantic matchup.
+ * Returns Math.max of all applicable matchup multipliers.
+ *
+ * @param batterId - Current batter
+ * @param pitcherId - Current pitcher
+ * @param matchups - All active romantic matchups in the game
+ * @returns LI multiplier (>= 1.0)
+ */
+export function getRomanticMatchupModifier(
+  batterId: string,
+  pitcherId: string,
+  matchups: RomanticMatchup[]
+): number {
+  let maxModifier = 1.0;
+
+  for (const matchup of matchups) {
+    const involves =
+      (matchup.playerAId === batterId && matchup.playerBId === pitcherId) ||
+      (matchup.playerAId === pitcherId && matchup.playerBId === batterId);
+
+    if (involves) {
+      maxModifier = Math.max(maxModifier, matchup.liMultiplier);
+    }
+  }
+
+  return maxModifier;
+}
+
+/**
+ * Get family home game LI modifier for a player.
+ * Only applies during home games for players with family data.
+ *
+ * Formula: NON_PLAYER_SPOUSE + min(childCount × PER_CHILD, MAX_CHILD_BONUS)
+ *
+ * @param playerId - Player to check
+ * @param familyPlayers - Map of player IDs to family data
+ * @param isHomeGame - Whether this is a home game
+ * @returns LI multiplier (>= 1.0)
+ */
+export function getFamilyHomeLIModifier(
+  playerId: string,
+  familyPlayers: Map<string, { childCount: number }>,
+  isHomeGame: boolean
+): number {
+  if (!isHomeGame) return 1.0;
+
+  const family = familyPlayers.get(playerId);
+  if (!family) return 1.0;
+
+  const childBonus = Math.min(
+    family.childCount * HOME_FAMILY_LI_CONFIG.PER_CHILD,
+    HOME_FAMILY_LI_CONFIG.MAX_CHILD_BONUS
+  );
+
+  return HOME_FAMILY_LI_CONFIG.NON_PLAYER_SPOUSE + childBonus;
+}
+
+/**
+ * Calculate LI with relationship modifiers applied.
+ *
+ * Stacking rules:
+ * - Revenge and romantic modifiers use Math.max (do NOT multiply together)
+ * - Family modifier stacks multiplicatively with the relationship modifier
+ * - Final LI capped at 10.0
+ * - Each modifier has an enable/disable config flag
+ *
+ * @param gameState - Current game state
+ * @param batterId - Current batter ID
+ * @param pitcherId - Current pitcher ID
+ * @param context - Relationship context (arcs, matchups, family)
+ * @param config - Optional config with enable/disable flags
+ * @returns Complete LI result with rawLI reflecting modifiers
+ */
+export function calculateLIWithRelationships(
+  gameState: GameStateForLI,
+  batterId: string,
+  pitcherId: string,
+  context: RelationshipLIContext,
+  config?: Partial<LIConfig>
+): LIResult {
+  // 1. Calculate base LI
+  const baseResult = calculateLeverageIndex(gameState, config);
+
+  // 2. Calculate revenge arc modifier (if enabled, default: true)
+  const enableRevenge = config?.enableRevengeArcModifier !== false;
+  const revengeModifier = enableRevenge
+    ? getRevengeArcModifier(batterId, pitcherId, context.revengeArcs)
+    : 1.0;
+
+  // 3. Calculate romantic matchup modifier (if enabled, default: true)
+  const enableRomantic = config?.enableRomanticMatchupModifier !== false;
+  const romanticModifier = enableRomantic
+    ? getRomanticMatchupModifier(batterId, pitcherId, context.romanticMatchups)
+    : 1.0;
+
+  // 4. Revenge and romantic use Math.max (do NOT stack)
+  const relationshipModifier = Math.max(revengeModifier, romanticModifier);
+
+  // 5. Calculate family home modifier (if enabled, default: true)
+  // Family bonus applies when batter is on the home team (BOTTOM half)
+  const enableFamily = config?.enableFamilyHomeModifier !== false;
+  const isBatterHome = gameState.halfInning === 'BOTTOM';
+  const familyModifier = enableFamily
+    ? getFamilyHomeLIModifier(batterId, context.familyPlayers, isBatterHome)
+    : 1.0;
+
+  // 6. Family stacks multiplicatively with relationship modifier
+  const totalModifier = relationshipModifier * familyModifier;
+
+  // 7. Apply to raw LI
+  const modifiedRawLI = baseResult.rawLI * totalModifier;
+
+  // 8. Clamp to bounds
+  const modifiedLI = Math.max(LI_BOUNDS.min, Math.min(LI_BOUNDS.max, modifiedRawLI));
+
+  // 9. Re-categorize
+  const category = getLICategory(modifiedLI);
+
+  return {
+    ...baseResult,
+    rawLI: modifiedRawLI,
+    leverageIndex: modifiedLI,
+    category,
+  };
+}
+
+// ============================================
 // SCENARIO EXAMPLES (for testing/documentation)
 // ============================================
 

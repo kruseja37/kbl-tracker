@@ -53,37 +53,9 @@ type Screen =
   | "PHASE_SUMMARY";
 
 // Mock Data (fallback when real data not available)
-const MOCK_TEAMS: Team[] = [
-  { id: "thunder", name: "New York Thunder", shortName: "THUNDER", primaryColor: "#DD0000", secondaryColor: "#0066FF" },
-  { id: "redsox", name: "Boston Red Sox", shortName: "SOX", primaryColor: "#DD0000", secondaryColor: "#003087" },
-  { id: "giants", name: "San Francisco Giants", shortName: "GIANTS", primaryColor: "#FD5A1E", secondaryColor: "#27251F" },
-  { id: "mariners", name: "Seattle Mariners", shortName: "MARINERS", primaryColor: "#0C2C56", secondaryColor: "#005C5C" },
-  { id: "rockies", name: "Colorado Rockies", shortName: "ROCKIES", primaryColor: "#33006F", secondaryColor: "#C4CED4" },
-  { id: "dodgers", name: "Los Angeles Dodgers", shortName: "DODGERS", primaryColor: "#005A9C", secondaryColor: "#EF3E42" },
-  { id: "cubs", name: "Chicago Cubs", shortName: "CUBS", primaryColor: "#0E3386", secondaryColor: "#CC3433" },
-  { id: "astros", name: "Houston Astros", shortName: "ASTROS", primaryColor: "#EB6E1F", secondaryColor: "#002D62" },
-];
+const MOCK_TEAMS: Team[] = [];
 
-const MOCK_PLAYERS: Player[] = [
-  { id: "p1", name: "Roger Clemens", position: "SP", grade: "A", age: 42, seasons: 20, war: 139.4, teamId: "thunder", jerseyNumber: 21, awards: ["7× Cy Young", "2× MVP"], careerStats: "354 Wins | 3.12 ERA | 4,672 K" },
-  { id: "p2", name: "Tony Gwynn", position: "RF", grade: "A-", age: 39, seasons: 18, war: 69.2, teamId: "giants", jerseyNumber: 19, awards: ["8× Batting Champ"], careerStats: ".338 AVG | 3,141 Hits | 319 SB" },
-  { id: "p3", name: "Mark McGwire", position: "1B", grade: "B+", age: 37, seasons: 16, war: 62.1, teamId: "giants", jerseyNumber: 25, awards: ["12× All-Star"], careerStats: "583 HR | .263 AVG | 1,414 RBI" },
-  { id: "p4", name: "Barry Bonds", position: "LF", grade: "A+", age: 35, seasons: 15, war: 162.8, teamId: "giants", jerseyNumber: 25, awards: ["5× MVP", "8× Gold Glove"], careerStats: ".298 AVG | 514 HR | 1,299 RBI" },
-  { id: "p5", name: "Ken Griffey Jr.", position: "CF", grade: "A", age: 33, seasons: 12, war: 83.8, teamId: "mariners", jerseyNumber: 24, awards: ["MVP", "10× Gold Glove"], careerStats: ".292 AVG | 398 HR | 1,152 RBI" },
-  { id: "p6", name: "Derek Jeter", position: "SS", grade: "A-", age: 30, seasons: 10, war: 72.4, teamId: "thunder", jerseyNumber: 2, awards: ["5× World Series", "14× All-Star"], careerStats: ".314 AVG | 260 HR | 1,311 RBI" },
-  { id: "p7", name: "Alex Rodriguez", position: "3B", grade: "A", age: 28, seasons: 8, war: 117.5, teamId: "thunder", jerseyNumber: 13, awards: ["3× MVP", "14× All-Star"], careerStats: ".300 AVG | 696 HR | 2,086 RBI" },
-  { id: "p8", name: "Mike Trout", position: "CF", grade: "B+", age: 22, seasons: 4, war: 72.8, teamId: "thunder", jerseyNumber: 27, awards: ["3× MVP", "9× All-Star"], careerStats: ".305 AVG | 350 HR | 899 RBI" },
-  { id: "p9", name: "Randy Johnson", position: "SP", grade: "A-", age: 41, seasons: 19, war: 104.3, teamId: "mariners", jerseyNumber: 51, awards: ["5× Cy Young"], careerStats: "303 Wins | 3.29 ERA | 4,875 K" },
-  { id: "p10", name: "Pedro Martinez", position: "SP", grade: "B+", age: 38, seasons: 16, war: 86.0, teamId: "redsox", jerseyNumber: 45, awards: ["3× Cy Young"], careerStats: "219 Wins | 2.93 ERA | 3,154 K" },
-  { id: "p11", name: "Greg Maddux", position: "SP", grade: "B+", age: 36, seasons: 18, war: 106.6, teamId: "cubs", jerseyNumber: 31, awards: ["4× Cy Young"], careerStats: "355 Wins | 3.16 ERA | 3,371 K" },
-  { id: "p12", name: "Mariano Rivera", position: "CP", grade: "B", age: 34, seasons: 12, war: 56.6, teamId: "thunder", jerseyNumber: 42, awards: ["5× World Series"], careerStats: "652 SV | 2.21 ERA | 1,173 K" },
-  { id: "p13", name: "David Ortiz", position: "1B", grade: "A", age: 32, seasons: 10, war: 55.3, teamId: "redsox", jerseyNumber: 34, awards: ["10× All-Star"], careerStats: ".286 AVG | 541 HR | 1,768 RBI" },
-  { id: "p14", name: "Manny Ramirez", position: "LF", grade: "A-", age: 31, seasons: 11, war: 69.3, teamId: "redsox", jerseyNumber: 24, awards: ["12× All-Star"], careerStats: ".312 AVG | 555 HR | 1,831 RBI" },
-  { id: "p15", name: "Jason Varitek", position: "C", grade: "B+", age: 29, seasons: 9, war: 34.1, teamId: "redsox", jerseyNumber: 33, awards: ["3× All-Star"], careerStats: ".256 AVG | 193 HR | 757 RBI" },
-  { id: "p16", name: "Curt Schilling", position: "SP", grade: "A-", age: 37, seasons: 17, war: 79.9, teamId: "redsox", jerseyNumber: 38, awards: ["6× All-Star"], careerStats: "216 Wins | 3.46 ERA | 3,116 K" },
-  { id: "p17", name: "Todd Helton", position: "1B", grade: "A-", age: 33, seasons: 12, war: 61.8, teamId: "rockies", jerseyNumber: 17, awards: ["5× All-Star"], careerStats: ".316 AVG | 369 HR | 1,406 RBI" },
-  { id: "p18", name: "Larry Walker", position: "RF", grade: "A", age: 36, seasons: 15, war: 72.7, teamId: "rockies", jerseyNumber: 33, awards: ["MVP", "7× All-Star"], careerStats: ".313 AVG | 383 HR | 1,311 RBI" },
-];
+const MOCK_PLAYERS: Player[] = [];
 
 /**
  * Convert OffseasonPlayer to local Player format

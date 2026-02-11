@@ -5,39 +5,13 @@ import { useSeasonStats, type BattingLeaderEntry, type PitchingLeaderEntry } fro
 
 type TeamHubTab = "team" | "fan-morale" | "roster" | "stats" | "stadium" | "manager";
 
-// Mock data fallbacks
-const MOCK_TEAMS = ["Tigers", "Sox", "Bears", "Crocs", "Moonstars", "Nemesis", "Herbisaurs", "Wild Pigs", "Beewolves", "Moose"];
-const MOCK_STADIUMS = [
-  "Tiger Stadium", "Sox Field", "Bear Den", "Croc Pit", "Moon Base",
-  "Nemesis Arena", "Herbi Park", "Pig Pen", "Hive Stadium", "Moose Lodge"
-];
+// Empty fallbacks — populated from real data when available
+const MOCK_TEAMS: string[] = [];
+const MOCK_STADIUMS: string[] = [];
 
-const MOCK_ROSTER_DATA = [
-  { name: "J. Rodriguez", position: "SP", grade: "A+", morale: 95, contract: "$12.5M", trueValue: "$15.2M", netDiff: "+$2.7M", fitness: 98 },
-  { name: "K. Thompson", position: "C", grade: "A", morale: 88, contract: "$8.3M", trueValue: "$9.1M", netDiff: "+$0.8M", fitness: 92 },
-  { name: "M. Chen", position: "1B", grade: "A-", morale: 82, contract: "$6.7M", trueValue: "$6.5M", netDiff: "-$0.2M", fitness: 95 },
-  { name: "D. Martinez", position: "2B", grade: "B+", morale: 79, contract: "$4.2M", trueValue: "$5.8M", netDiff: "+$1.6M", fitness: 89 },
-  { name: "L. Johnson", position: "3B", grade: "B", morale: 85, contract: "$5.1M", trueValue: "$4.9M", netDiff: "-$0.2M", fitness: 91 },
-  { name: "R. Williams", position: "SS", grade: "A-", morale: 91, contract: "$7.8M", trueValue: "$8.9M", netDiff: "+$1.1M", fitness: 94 },
-  { name: "T. Davis", position: "LF", grade: "B+", morale: 76, contract: "$3.9M", trueValue: "$4.2M", netDiff: "+$0.3M", fitness: 87 },
-  { name: "S. Wilson", position: "CF", grade: "A", morale: 89, contract: "$9.2M", trueValue: "$10.5M", netDiff: "+$1.3M", fitness: 96 },
-  { name: "P. Garcia", position: "RF", grade: "B", morale: 81, contract: "$4.5M", trueValue: "$4.1M", netDiff: "-$0.4M", fitness: 88 },
-  { name: "A. Brown", position: "SP", grade: "A-", morale: 87, contract: "$10.1M", trueValue: "$11.3M", netDiff: "+$1.2M", fitness: 93 },
-  { name: "C. Taylor", position: "RP", grade: "B+", morale: 84, contract: "$2.8M", trueValue: "$3.5M", netDiff: "+$0.7M", fitness: 90 },
-];
+const MOCK_ROSTER_DATA: { name: string; position: string; grade: string; morale: number; contract: string; trueValue: string; netDiff: string; fitness: number }[] = [];
 
-const MOCK_STATS_DATA = [
-  { name: "J. Rodriguez", pos: "SP", war: 8.4, pwar: 8.4, bwar: 0.0, rwar: 0.0, fwar: 0.0, era: 2.31, ip: 187.2, k: 234, w: 15, l: 4 },
-  { name: "S. Wilson", pos: "CF", war: 6.8, pwar: 0.0, bwar: 5.2, rwar: 1.1, fwar: 0.5, avg: 0.318, hr: 28, rbi: 89, sb: 24, ops: 0.945 },
-  { name: "K. Thompson", pos: "C", war: 5.9, pwar: 0.0, bwar: 4.8, rwar: 0.3, fwar: 0.8, avg: 0.289, hr: 22, rbi: 78, sb: 2, ops: 0.867 },
-  { name: "A. Brown", pos: "SP", war: 5.7, pwar: 5.7, bwar: 0.0, rwar: 0.0, fwar: 0.0, era: 3.12, ip: 165.1, k: 189, w: 12, l: 7 },
-  { name: "R. Williams", pos: "SS", war: 5.3, pwar: 0.0, bwar: 4.1, rwar: 0.8, fwar: 0.4, avg: 0.295, hr: 18, rbi: 72, sb: 15, ops: 0.823 },
-  { name: "M. Chen", pos: "1B", war: 4.6, pwar: 0.0, bwar: 4.9, rwar: 0.1, fwar: -0.4, avg: 0.301, hr: 31, rbi: 98, sb: 1, ops: 0.891 },
-  { name: "D. Martinez", pos: "2B", war: 3.8, pwar: 0.0, bwar: 3.2, rwar: 0.4, fwar: 0.2, avg: 0.278, hr: 14, rbi: 56, sb: 18, ops: 0.789 },
-  { name: "L. Johnson", pos: "3B", war: 3.2, pwar: 0.0, bwar: 2.9, rwar: 0.2, fwar: 0.1, avg: 0.265, hr: 19, rbi: 67, sb: 5, ops: 0.776 },
-  { name: "T. Davis", pos: "LF", war: 2.4, pwar: 0.0, bwar: 2.1, rwar: 0.5, fwar: -0.2, avg: 0.259, hr: 12, rbi: 48, sb: 9, ops: 0.741 },
-  { name: "C. Taylor", pos: "RP", war: 2.1, pwar: 2.1, bwar: 0.0, rwar: 0.0, fwar: 0.0, era: 2.89, ip: 68.0, k: 81, sv: 28, w: 4 },
-];
+const MOCK_STATS_DATA: { name: string; pos: string; war: number; pwar: number; bwar: number; rwar: number; fwar: number; era?: number; ip?: number; k?: number; w?: number; l?: number; sv?: number; avg?: number; hr?: number; rbi?: number; sb?: number; ops?: number }[] = [];
 
 // Helper to convert OffseasonPlayer to roster format
 function convertToRosterItem(player: OffseasonPlayer) {

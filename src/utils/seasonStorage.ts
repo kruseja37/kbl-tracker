@@ -583,6 +583,37 @@ export async function incrementSeasonGames(seasonId: string): Promise<void> {
 }
 
 /**
+ * Mark a season as complete (all games played/skipped).
+ * Sets status to 'completed' and records the end date.
+ */
+export async function markSeasonComplete(seasonId: string): Promise<void> {
+  const db = await initSeasonDatabase();
+
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(STORES.SEASON_METADATA, 'readwrite');
+    const store = transaction.objectStore(STORES.SEASON_METADATA);
+    const request = store.get(seasonId);
+
+    request.onerror = () => reject(request.error);
+
+    request.onsuccess = () => {
+      if (request.result) {
+        const updated: SeasonMetadata = {
+          ...request.result,
+          status: 'completed' as const,
+          endDate: Date.now(),
+        };
+        const putRequest = store.put(updated);
+        putRequest.onerror = () => reject(putRequest.error);
+        putRequest.onsuccess = () => resolve();
+      } else {
+        resolve(); // Season doesn't exist, ignore
+      }
+    };
+  });
+}
+
+/**
  * Get active season
  */
 export async function getActiveSeason(): Promise<SeasonMetadata | null> {

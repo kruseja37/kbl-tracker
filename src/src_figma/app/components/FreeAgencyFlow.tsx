@@ -46,37 +46,9 @@ interface Move {
 type Screen = "PROTECTION" | "DICE_ROLL" | "DESTINATION" | "EXCHANGE" | "ROUND_SUMMARY" | "FINAL_SUMMARY";
 
 // Mock Data (fallback when real data not available)
-const MOCK_TEAMS: Team[] = [
-  { id: "thunder", name: "New York Thunder", shortName: "THUNDER", record: { wins: 42, losses: 28 }, primaryColor: "#DD0000", secondaryColor: "#0066FF" },
-  { id: "redsox", name: "Boston Red Sox", shortName: "SOX", record: { wins: 48, losses: 22 }, primaryColor: "#DD0000", secondaryColor: "#003087" },
-  { id: "giants", name: "San Francisco Giants", shortName: "GIANTS", record: { wins: 35, losses: 35 }, primaryColor: "#FD5A1E", secondaryColor: "#27251F" },
-  { id: "mariners", name: "Seattle Mariners", shortName: "MARINERS", record: { wins: 40, losses: 30 }, primaryColor: "#0C2C56", secondaryColor: "#005C5C" },
-  { id: "rockies", name: "Colorado Rockies", shortName: "ROCKIES", record: { wins: 28, losses: 42 }, primaryColor: "#33006F", secondaryColor: "#C4CED4" },
-  { id: "dodgers", name: "Los Angeles Dodgers", shortName: "DODGERS", record: { wins: 52, losses: 18 }, primaryColor: "#005A9C", secondaryColor: "#EF3E42" },
-  { id: "cubs", name: "Chicago Cubs", shortName: "CUBS", record: { wins: 38, losses: 32 }, primaryColor: "#0E3386", secondaryColor: "#CC3433" },
-  { id: "astros", name: "Houston Astros", shortName: "ASTROS", record: { wins: 45, losses: 25 }, primaryColor: "#EB6E1F", secondaryColor: "#002D62" },
-];
+const MOCK_TEAMS: Team[] = [];
 
-const MOCK_PLAYERS: Player[] = [
-  { id: "p1", name: "Barry Bonds", position: "LF", grade: "A+", personality: "EGOTISTICAL", salary: 12.5, teamId: "giants" },
-  { id: "p2", name: "Derek Jeter", position: "SS", grade: "A-", personality: "COMPETITIVE", salary: 10.2, teamId: "thunder" },
-  { id: "p3", name: "Mike Trout", position: "CF", grade: "B+", personality: "JOLLY", salary: 8.5, teamId: "thunder" },
-  { id: "p4", name: "Alex Rodriguez", position: "3B", grade: "A", personality: "COMPETITIVE", salary: 11.0, teamId: "thunder" },
-  { id: "p5", name: "Ken Griffey Jr.", position: "CF", grade: "A", personality: "DROOPY", salary: 9.8, teamId: "mariners" },
-  { id: "p6", name: "Roger Clemens", position: "SP", grade: "A", personality: "TOUGH", salary: 10.5, teamId: "astros" },
-  { id: "p7", name: "Randy Johnson", position: "SP", grade: "A-", personality: "TIMID", salary: 9.5, teamId: "giants" },
-  { id: "p8", name: "Pedro Martinez", position: "SP", grade: "B+", personality: "RELAXED", salary: 8.8, teamId: "redsox" },
-  { id: "p9", name: "Greg Maddux", position: "SP", grade: "B+", personality: "COMPETITIVE", salary: 8.2, teamId: "cubs" },
-  { id: "p10", name: "Mariano Rivera", position: "CP", grade: "B", personality: "JOLLY", salary: 7.5, teamId: "thunder" },
-  { id: "p11", name: "John Smoltz", position: "SP", grade: "B", personality: "RELAXED", salary: 7.0, teamId: "astros" },
-  { id: "p12", name: "Tony Gwynn", position: "RF", grade: "B-", personality: "JOLLY", salary: 6.5, teamId: "giants" },
-  { id: "p13", name: "David Ortiz", position: "1B", grade: "A", personality: "TOUGH", salary: 10.8, teamId: "redsox" },
-  { id: "p14", name: "Manny Ramirez", position: "LF", grade: "A-", personality: "RELAXED", salary: 9.9, teamId: "redsox" },
-  { id: "p15", name: "Jason Varitek", position: "C", grade: "B+", personality: "COMPETITIVE", salary: 7.8, teamId: "redsox" },
-  { id: "p16", name: "Curt Schilling", position: "SP", grade: "A-", personality: "TOUGH", salary: 9.2, teamId: "redsox" },
-  { id: "p17", name: "Todd Helton", position: "1B", grade: "A-", personality: "JOLLY", salary: 9.5, teamId: "rockies" },
-  { id: "p18", name: "Larry Walker", position: "RF", grade: "A", personality: "RELAXED", salary: 10.0, teamId: "rockies" },
-];
+const MOCK_PLAYERS: Player[] = [];
 
 /**
  * Convert OffseasonPlayer to local Player format

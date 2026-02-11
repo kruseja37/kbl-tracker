@@ -98,21 +98,10 @@ export interface UsePlayoffDataReturn {
 }
 
 // ============================================
-// DEFAULT/MOCK DATA
+// EMPTY FALLBACK (no mock data — shows empty state)
 // ============================================
 
-const MOCK_PLAYOFF_TEAMS: PlayoffTeam[] = [
-  // Eastern Conference
-  { teamId: 'tigers', teamName: 'Tigers', seed: 1, league: 'Eastern', regularSeasonRecord: { wins: 56, losses: 34 }, eliminated: false },
-  { teamId: 'sox', teamName: 'Sox', seed: 2, league: 'Eastern', regularSeasonRecord: { wins: 52, losses: 38 }, eliminated: false },
-  { teamId: 'moonstars', teamName: 'Moonstars', seed: 3, league: 'Eastern', regularSeasonRecord: { wins: 48, losses: 42 }, eliminated: false },
-  { teamId: 'bears', teamName: 'Bears', seed: 4, league: 'Eastern', regularSeasonRecord: { wins: 54, losses: 36 }, eliminated: false },
-  // Western Conference
-  { teamId: 'herbisaurs', teamName: 'Herbisaurs', seed: 1, league: 'Western', regularSeasonRecord: { wins: 58, losses: 32 }, eliminated: false },
-  { teamId: 'wild-pigs', teamName: 'Wild Pigs', seed: 2, league: 'Western', regularSeasonRecord: { wins: 53, losses: 37 }, eliminated: false },
-  { teamId: 'hot-corners', teamName: 'Hot Corners', seed: 3, league: 'Western', regularSeasonRecord: { wins: 55, losses: 35 }, eliminated: false },
-  { teamId: 'sand-cats', teamName: 'Sand Cats', seed: 4, league: 'Western', regularSeasonRecord: { wins: 51, losses: 39 }, eliminated: false },
-];
+const MOCK_PLAYOFF_TEAMS: PlayoffTeam[] = [];
 
 // ============================================
 // HOOK IMPLEMENTATION

@@ -3,7 +3,7 @@
  *
  * Provides real season data for the FranchiseHome page, bridging
  * existing IndexedDB hooks to the Figma UI components.
- * Falls back to mock data when real data is not available.
+ * Shows empty states when no real data exists yet.
  */
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
@@ -105,132 +105,30 @@ export interface UseFranchiseDataReturn {
 }
 
 // ============================================
-// MOCK DATA (fallback when no real data)
+// EMPTY DATA (shown when no real data exists yet)
 // ============================================
 
-const MOCK_STANDINGS: LeagueStandings = {
-  Eastern: {
-    "Atlantic": [
-      { team: "Tigers", wins: 56, losses: 34, gamesBack: "-", runDiff: "+127" },
-      { team: "Sox", wins: 52, losses: 38, gamesBack: "4.0", runDiff: "+89" },
-      { team: "Moonstars", wins: 48, losses: 42, gamesBack: "8.0", runDiff: "+45" },
-      { team: "Crocs", wins: 44, losses: 46, gamesBack: "12.0", runDiff: "-12" },
-      { team: "Nemesis", wins: 38, losses: 52, gamesBack: "18.0", runDiff: "-78" },
-    ],
-    "Central": [
-      { team: "Bears", wins: 54, losses: 36, gamesBack: "-", runDiff: "+103" },
-      { team: "Jacks", wins: 49, losses: 41, gamesBack: "5.0", runDiff: "+67" },
-      { team: "Blowfish", wins: 45, losses: 45, gamesBack: "9.0", runDiff: "+23" },
-      { team: "Overdogs", wins: 41, losses: 49, gamesBack: "13.0", runDiff: "-34" },
-      { team: "Freebooters", wins: 35, losses: 55, gamesBack: "19.0", runDiff: "-92" },
-    ],
-  },
-  Western: {
-    "Mountain": [
-      { team: "Herbisaurs", wins: 58, losses: 32, gamesBack: "-", runDiff: "+145" },
-      { team: "Wild Pigs", wins: 53, losses: 37, gamesBack: "5.0", runDiff: "+98" },
-      { team: "Beewolves", wins: 47, losses: 43, gamesBack: "11.0", runDiff: "+56" },
-      { team: "Crocodons", wins: 42, losses: 48, gamesBack: "16.0", runDiff: "-23" },
-      { team: "Sirloins", wins: 36, losses: 54, gamesBack: "22.0", runDiff: "-88" },
-    ],
-    "Pacific": [
-      { team: "Hot Corners", wins: 55, losses: 35, gamesBack: "-", runDiff: "+118" },
-      { team: "Sand Cats", wins: 51, losses: 39, gamesBack: "4.0", runDiff: "+82" },
-      { team: "Platypi", wins: 46, losses: 44, gamesBack: "9.0", runDiff: "+34" },
-      { team: "Grapplers", wins: 40, losses: 50, gamesBack: "15.0", runDiff: "-45" },
-      { team: "Moose", wins: 34, losses: 56, gamesBack: "21.0", runDiff: "-101" },
-    ],
-  },
+const EMPTY_STANDINGS: LeagueStandings = {
+  Eastern: {},
+  Western: {},
 };
 
-const MOCK_BATTING_LEADERS: BattingLeadersData = {
-  AVG: [
-    { player: "J. Rodriguez", team: "Tigers", value: ".342" },
-    { player: "K. Martinez", team: "Sox", value: ".328" },
-    { player: "T. Anderson", team: "Sox", value: ".312" },
-    { player: "L. Ramirez", team: "Crocs", value: ".308" },
-    { player: "M. Thompson", team: "Crocs", value: ".301" },
-  ],
-  HR: [
-    { player: "M. Thompson", team: "Crocs", value: "47" },
-    { player: "J. Rodriguez", team: "Tigers", value: "41" },
-    { player: "K. Martinez", team: "Sox", value: "38" },
-    { player: "T. Anderson", team: "Sox", value: "32" },
-    { player: "A. Brown", team: "Crocs", value: "30" },
-  ],
-  RBI: [
-    { player: "K. Martinez", team: "Sox", value: "128" },
-    { player: "M. Thompson", team: "Crocs", value: "121" },
-    { player: "J. Rodriguez", team: "Tigers", value: "118" },
-    { player: "T. Anderson", team: "Sox", value: "98" },
-    { player: "A. Brown", team: "Crocs", value: "92" },
-  ],
-  SB: [
-    { player: "T. Davis", team: "Sox", value: "48" },
-    { player: "K. Martinez", team: "Sox", value: "38" },
-    { player: "J. Rodriguez", team: "Tigers", value: "28" },
-    { player: "A. Brown", team: "Crocs", value: "24" },
-    { player: "M. Santos", team: "Sox", value: "19" },
-  ],
-  OPS: [
-    { player: "J. Rodriguez", team: "Tigers", value: "1.087" },
-    { player: "M. Thompson", team: "Crocs", value: "1.042" },
-    { player: "K. Martinez", team: "Sox", value: ".989" },
-    { player: "T. Anderson", team: "Sox", value: ".923" },
-    { player: "A. Brown", team: "Crocs", value: ".901" },
-  ],
-  WAR: [
-    { player: "J. Rodriguez", team: "Tigers", value: "6.8" },
-    { player: "M. Thompson", team: "Crocs", value: "5.9" },
-    { player: "K. Martinez", team: "Sox", value: "5.2" },
-    { player: "T. Anderson", team: "Sox", value: "4.8" },
-    { player: "A. Brown", team: "Crocs", value: "4.1" },
-  ],
+const EMPTY_BATTING_LEADERS: BattingLeadersData = {
+  AVG: [],
+  HR: [],
+  RBI: [],
+  SB: [],
+  OPS: [],
+  WAR: [],
 };
 
-const MOCK_PITCHING_LEADERS: PitchingLeadersData = {
-  ERA: [
-    { player: "T. Anderson", team: "Sox", value: "2.38" },
-    { player: "J. Williams", team: "Tigers", value: "2.67" },
-    { player: "K. Brown", team: "Crocs", value: "2.89" },
-    { player: "M. Davis", team: "Sox", value: "3.12" },
-    { player: "R. Smith", team: "Tigers", value: "3.24" },
-  ],
-  W: [
-    { player: "T. Anderson", team: "Sox", value: "19" },
-    { player: "J. Williams", team: "Tigers", value: "18" },
-    { player: "K. Brown", team: "Crocs", value: "17" },
-    { player: "M. Davis", team: "Sox", value: "16" },
-    { player: "R. Smith", team: "Tigers", value: "15" },
-  ],
-  K: [
-    { player: "T. Anderson", team: "Sox", value: "287" },
-    { player: "J. Williams", team: "Tigers", value: "221" },
-    { player: "K. Brown", team: "Crocs", value: "198" },
-    { player: "M. Davis", team: "Sox", value: "187" },
-    { player: "R. Smith", team: "Tigers", value: "176" },
-  ],
-  WHIP: [
-    { player: "T. Anderson", team: "Sox", value: "1.02" },
-    { player: "J. Williams", team: "Tigers", value: "1.08" },
-    { player: "K. Brown", team: "Crocs", value: "1.15" },
-    { player: "M. Davis", team: "Sox", value: "1.18" },
-    { player: "R. Smith", team: "Tigers", value: "1.22" },
-  ],
-  SV: [
-    { player: "C. Rivera", team: "Crocs", value: "45" },
-    { player: "D. Martinez", team: "Sox", value: "38" },
-    { player: "R. Smith", team: "Tigers", value: "31" },
-    { player: "J. Parker", team: "Sox", value: "28" },
-    { player: "K. Lee", team: "Crocs", value: "24" },
-  ],
-  WAR: [
-    { player: "T. Anderson", team: "Sox", value: "5.7" },
-    { player: "J. Williams", team: "Tigers", value: "4.9" },
-    { player: "K. Brown", team: "Crocs", value: "4.2" },
-    { player: "C. Rivera", team: "Crocs", value: "3.1" },
-    { player: "M. Davis", team: "Sox", value: "2.8" },
-  ],
+const EMPTY_PITCHING_LEADERS: PitchingLeadersData = {
+  ERA: [],
+  W: [],
+  K: [],
+  WHIP: [],
+  SV: [],
+  WAR: [],
 };
 
 // ============================================
@@ -374,7 +272,7 @@ export function useFranchiseData(franchiseId?: string): UseFranchiseDataReturn {
   // Build batting leaders from real data or fallback to mock
   const battingLeaders = useMemo((): BattingLeadersData => {
     if (!hasRealData) {
-      return MOCK_BATTING_LEADERS;
+      return EMPTY_BATTING_LEADERS;
     }
 
     return {
@@ -390,7 +288,7 @@ export function useFranchiseData(franchiseId?: string): UseFranchiseDataReturn {
   // Build pitching leaders from real data or fallback to mock
   const pitchingLeaders = useMemo((): PitchingLeadersData => {
     if (!hasRealData) {
-      return MOCK_PITCHING_LEADERS;
+      return EMPTY_PITCHING_LEADERS;
     }
 
     return {
@@ -426,9 +324,9 @@ export function useFranchiseData(franchiseId?: string): UseFranchiseDataReturn {
   // For now, we group all teams into a simple structure
   // TODO: Add proper league/division configuration
   const standings = useMemo((): LeagueStandings => {
-    // Use mock standings if no real data
+    // Show empty standings if no real data exists yet
     if (!standingsLoaded || realStandings.length === 0) {
-      return MOCK_STANDINGS;
+      return EMPTY_STANDINGS;
     }
 
     // Convert real standings to UI format
@@ -486,12 +384,15 @@ export function useFranchiseData(franchiseId?: string): UseFranchiseDataReturn {
       try {
         const game = await getNextFranchiseGame(franchiseId!, 1);
         if (!cancelled && game) {
+          // Look up real W-L records from standings
+          const awayStanding = realStandings.find(s => s.teamId === game.awayTeamId);
+          const homeStanding = realStandings.find(s => s.teamId === game.homeTeamId);
           setNextGame({
             id: game.id,
             awayTeam: game.awayTeamId,
             homeTeam: game.homeTeamId,
-            awayRecord: '0-0',
-            homeRecord: '0-0',
+            awayRecord: awayStanding ? `${awayStanding.wins}-${awayStanding.losses}` : '0-0',
+            homeRecord: homeStanding ? `${homeStanding.wins}-${homeStanding.losses}` : '0-0',
             gameNumber: game.gameNumber,
             totalGames: totalGames,
           });
@@ -504,7 +405,7 @@ export function useFranchiseData(franchiseId?: string): UseFranchiseDataReturn {
     }
     loadNextGame();
     return () => { cancelled = true; };
-  }, [franchiseId, totalGames, gamesPlayed]);
+  }, [franchiseId, totalGames, gamesPlayed, realStandings]);
 
   // Refresh function
   const refresh = useCallback(async () => {

@@ -224,6 +224,37 @@ export const DECISION_VALUES: Record<DecisionType, { success: number; failure: n
 };
 
 /**
+ * Tiered pinch-hitter failure values
+ * Per MWAR_CALCULATION_SPEC.md §5
+ * - severe: K, GIDP — unproductive outs (no ball in play)
+ * - mild: batted-ball outs (groundOut, flyOut, lineOut, popOut)
+ */
+export const PH_FAILURE_VALUES = {
+  severe: -0.5,
+  mild: -0.3,
+} as const;
+
+/**
+ * Classify a pinch-hitter at-bat result into a failure tier.
+ * Strikeouts and GIDP are "severe"; all other outs are "mild".
+ */
+export function classifyPHFailure(atBatResult: string): 'severe' | 'mild' {
+  const severe = ['K', 'strikeout', 'strikeout_swinging', 'strikeout_looking', 'GIDP'];
+  if (severe.includes(atBatResult)) return 'severe';
+  return 'mild';
+}
+
+/**
+ * Calculate the LI-weighted mWAR penalty for a PH failure.
+ * Formula: PH_FAILURE_VALUES[tier] × √(LI)
+ */
+export function calculatePHFailureValue(atBatResult: string, leverageIndex: number): number {
+  const tier = classifyPHFailure(atBatResult);
+  const baseValue = PH_FAILURE_VALUES[tier];
+  return baseValue * Math.sqrt(leverageIndex);
+}
+
+/**
  * mWAR rating thresholds
  */
 export const MWAR_THRESHOLDS = {
@@ -306,12 +337,21 @@ export function createManagerDecision(
  */
 export function getDecisionBaseValue(
   decisionType: DecisionType,
-  outcome: DecisionOutcome
+  outcome: DecisionOutcome,
+  atBatResult?: string
 ): number {
   if (outcome === 'neutral') return 0;
 
   const values = DECISION_VALUES[decisionType];
-  return outcome === 'success' ? values.success : values.failure;
+  if (outcome === 'success') return values.success;
+
+  // Tiered PH failure: use atBatResult to pick severe vs mild penalty
+  if (decisionType === 'pinch_hitter' && atBatResult) {
+    const tier = classifyPHFailure(atBatResult);
+    return PH_FAILURE_VALUES[tier];
+  }
+
+  return values.failure;
 }
 
 /**
@@ -320,9 +360,10 @@ export function getDecisionBaseValue(
 export function calculateDecisionClutchImpact(
   decisionType: DecisionType,
   outcome: DecisionOutcome,
-  leverageIndex: number
+  leverageIndex: number,
+  atBatResult?: string
 ): number {
-  const baseValue = getDecisionBaseValue(decisionType, outcome);
+  const baseValue = getDecisionBaseValue(decisionType, outcome, atBatResult);
   const liWeight = Math.sqrt(leverageIndex);
   return baseValue * liWeight;
 }

@@ -88,50 +88,8 @@ function convertToLocalPlayer(player: OffseasonPlayer, index: number): Player {
   };
 }
 
-// Mock teams fallback
-const MOCK_TEAMS: Team[] = [
-  {
-    id: "sf-giants",
-    name: "San Francisco Giants",
-    isUserControlled: true,
-    chemistry: 70,
-    chemistryChange: 10,
-    mlbRoster: [
-      { id: "p1", name: "Derek Jeter", position: "SS", grade: "A", age: 32, salary: 18500000, war: 4.2, yearsOfService: 10 },
-      { id: "p2", name: "Barry Bonds", position: "LF", grade: "A", age: 35, salary: 22100000, war: 5.1, yearsOfService: 15 },
-      { id: "p3", name: "Mike Johnson", position: "SS", grade: "C+", age: 28, salary: 4200000, war: 0.8, yearsOfService: 6, priorDemotions: 2 },
-    ],
-    farmRoster: [
-      { id: "p4", name: "Marcus Williams", position: "SS", grade: "B", age: 20, salary: 0, war: 0, ceiling: "A", yearsInMinors: 1 },
-      { id: "p5", name: "Jake Thompson", position: "SP", grade: "B", age: 21, salary: 0, war: 0, ceiling: "A-", yearsInMinors: 2 },
-      { id: "p6", name: "Carlos Ramirez", position: "CF", grade: "B-", age: 19, salary: 0, war: 0, ceiling: "A-", yearsInMinors: 1 },
-    ],
-    chemistryFactors: [
-      { description: "Barry Bonds departed (was chemistry drain)", change: 8 },
-      { description: "Derek Jeter became Veteran Leader", change: 5 },
-      { description: "Lost teammate bond (Clemens retired)", change: -3 },
-      { description: "New player adjusting (Marcus Williams)", change: -2 },
-    ],
-  },
-  {
-    id: "detroit-tigers",
-    name: "Detroit Tigers",
-    isUserControlled: false,
-    chemistry: 64,
-    chemistryChange: 8,
-    mlbRoster: [],
-    farmRoster: [],
-  },
-  {
-    id: "boston-legends",
-    name: "Boston Legends",
-    isUserControlled: false,
-    chemistry: 55,
-    chemistryChange: -7,
-    mlbRoster: [],
-    farmRoster: [],
-  },
-];
+// Empty teams fallback — populated from IndexedDB when available
+const MOCK_TEAMS: Team[] = [];
 
 export function FinalizeAdvanceFlow({ onClose, onAdvanceComplete }: FinalizeAdvanceFlowProps) {
   // Get real data from hook

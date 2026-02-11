@@ -3,59 +3,9 @@ import { ChevronDown, AlertTriangle, Dice1, Users, Award, TrendingDown, Building
 import { useOffseasonData, type OffseasonTeam, type OffseasonPlayer } from "@/hooks/useOffseasonData";
 
 // Mock teams for fallback
-const MOCK_AT_RISK_TEAMS: Team[] = [
-  {
-    id: "KC",
-    name: "Athletics",
-    city: "Kansas City",
-    league: "AL",
-    division: "AL Central",
-    fanMorale: 18,
-    record: "48-114",
-    attendance: 12450,
-    seasons: 12,
-    championships: 1,
-    playoffAppearances: 3,
-    rosterSize: 22,
-    cornerstonePlayer: "Marcus Johnson (SS)"
-  },
-  {
-    id: "TB",
-    name: "Stingrays",
-    city: "Tampa Bay",
-    league: "AL",
-    division: "AL East",
-    fanMorale: 28,
-    record: "62-100",
-    attendance: 18200,
-    seasons: 8,
-    championships: 0,
-    playoffAppearances: 1,
-    rosterSize: 21,
-    cornerstonePlayer: "Roberto Diaz (CF)"
-  },
-  {
-    id: "MON",
-    name: "Expos",
-    city: "Montreal",
-    league: "NL",
-    division: "NL East",
-    fanMorale: 42,
-    record: "71-91",
-    attendance: 22100,
-    seasons: 15,
-    championships: 0,
-    playoffAppearances: 4,
-    rosterSize: 20,
-    cornerstonePlayer: "Andre Dawson Jr. (RF)"
-  }
-];
+const MOCK_AT_RISK_TEAMS: Team[] = [];
 
-const MOCK_ALL_TEAMS: Team[] = [
-  { id: "NYY", name: "Yankees", city: "New York", league: "AL", division: "AL East", fanMorale: 85, record: "98-64", attendance: 45000, seasons: 25, championships: 5, playoffAppearances: 18, rosterSize: 22 },
-  { id: "LAD", name: "Dodgers", city: "Los Angeles", league: "NL", division: "NL West", fanMorale: 78, record: "95-67", attendance: 48000, seasons: 25, championships: 3, playoffAppearances: 15, rosterSize: 21 },
-  { id: "BOS", name: "Red Sox", city: "Boston", league: "AL", division: "AL East", fanMorale: 72, record: "89-73", attendance: 38000, seasons: 25, championships: 2, playoffAppearances: 12, rosterSize: 22 },
-];
+const MOCK_ALL_TEAMS: Team[] = [];
 
 // Helper to convert OffseasonTeam to local Team format
 function convertToLocalTeam(team: OffseasonTeam, players: OffseasonPlayer[], index: number): Team {
