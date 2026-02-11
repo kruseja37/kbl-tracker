@@ -15,6 +15,7 @@ import { GameTracker } from './src_figma/app/pages/GameTracker';
 import { PostGameSummary } from './src_figma/app/pages/PostGameSummary';
 import { ExhibitionGame } from './src_figma/app/pages/ExhibitionGame';
 import { WorldSeries } from './src_figma/app/pages/WorldSeries';
+import { SeasonSummary } from './src_figma/app/pages/SeasonSummary';
 import { LeagueBuilder } from './src_figma/app/pages/LeagueBuilder';
 import { LeagueBuilderLeagues } from './src_figma/app/pages/LeagueBuilderLeagues';
 import { LeagueBuilderTeams } from './src_figma/app/pages/LeagueBuilderTeams';
@@ -47,6 +48,7 @@ function App() {
         {/* Franchise Flow - Figma Design */}
         <Route path="/franchise/select" element={<FranchiseSelector />} />
         <Route path="/franchise/setup" element={<FranchiseSetup />} />
+        <Route path="/franchise/:franchiseId/season-summary" element={<SeasonSummary />} />
         <Route path="/franchise/:franchiseId" element={<FranchiseHome />} />
 
         {/* Game Flow - Figma Design */}

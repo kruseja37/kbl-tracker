@@ -319,6 +319,41 @@ export async function archiveCompletedGame(
 }
 
 /**
+ * Archive a batch-simulated game (lightweight — no full game state needed).
+ * Writes directly to the completedGames store so calculateStandings can find it.
+ */
+export async function archiveBatchGameResult(params: {
+  awayTeamId: string;
+  homeTeamId: string;
+  awayScore: number;
+  homeScore: number;
+  seasonId?: string;
+}): Promise<void> {
+  const db = await initDatabase();
+
+  const record: CompletedGameRecord = {
+    gameId: `batch-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    date: Date.now(),
+    seasonId: params.seasonId || 'season-1',
+    awayTeamId: params.awayTeamId,
+    homeTeamId: params.homeTeamId,
+    awayTeamName: params.awayTeamId,
+    homeTeamName: params.homeTeamId,
+    finalScore: { away: params.awayScore, home: params.homeScore },
+    innings: 9,
+    fameEvents: [],
+  };
+
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(STORES.COMPLETED_GAMES, 'readwrite');
+    const store = transaction.objectStore(STORES.COMPLETED_GAMES);
+    const request = store.put(record);
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => resolve();
+  });
+}
+
+/**
  * Get recent completed games
  */
 export async function getRecentGames(limit: number = 10): Promise<CompletedGameRecord[]> {

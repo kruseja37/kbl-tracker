@@ -5,7 +5,7 @@
  * while batch operations are running.
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 
 export type BatchOperationType = 'simulate' | 'skip';
 
@@ -25,27 +25,37 @@ export function BatchOperationOverlay({
   onComplete,
 }: BatchOperationOverlayProps) {
   const [showDone, setShowDone] = useState(false);
+  const completedRef = useRef(false);
+  const onCompleteRef = useRef(onComplete);
+  onCompleteRef.current = onComplete;
 
   const isFinished = current >= total && total > 0;
   const label = operationType === 'simulate' ? 'Simulating' : 'Skipping';
   const doneLabel = operationType === 'simulate' ? 'SIMULATION COMPLETE' : 'GAMES SKIPPED';
   const percent = total > 0 ? Math.round((current / total) * 100) : 0;
 
-  // Show done state briefly after finishing
+  const handleDismiss = useCallback(() => {
+    if (!completedRef.current) {
+      completedRef.current = true;
+      onCompleteRef.current();
+    }
+  }, []);
+
+  // Show done state briefly, then auto-dismiss
   useEffect(() => {
-    if (isFinished && !showDone) {
+    if (isFinished && !showDone && !completedRef.current) {
       setShowDone(true);
-      const timer = setTimeout(() => {
-        onComplete();
-        setShowDone(false);
-      }, 1500);
+      const timer = setTimeout(handleDismiss, 1500);
       return () => clearTimeout(timer);
     }
-  }, [isFinished, showDone, onComplete]);
+  }, [isFinished, showDone, handleDismiss]);
 
-  // Reset showDone when overlay closes
+  // Reset when overlay closes
   useEffect(() => {
-    if (!isOpen) setShowDone(false);
+    if (!isOpen) {
+      setShowDone(false);
+      completedRef.current = false;
+    }
   }, [isOpen]);
 
   if (!isOpen) return null;
@@ -81,6 +91,16 @@ export function BatchOperationOverlay({
           <div className="text-[10px] text-[#E8E8D8]/60">
             {percent}%
           </div>
+
+          {/* Done button (shown when finished) */}
+          {showDone && (
+            <button
+              onClick={handleDismiss}
+              className="mt-4 bg-[#3F5A3A] border-[3px] border-[#C4A853] px-6 py-2 text-[10px] text-[#E8E8D8] hover:bg-[#4A6844] active:scale-95 transition-transform"
+            >
+              CONTINUE
+            </button>
+          )}
         </div>
       </div>
     </div>

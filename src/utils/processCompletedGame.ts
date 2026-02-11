@@ -42,7 +42,7 @@ export async function processCompletedGame(
   await archiveCompletedGame(gameState, {
     away: gameState.awayScore,
     home: gameState.homeScore,
-  });
+  }, options?.seasonId);
 
   return { aggregation };
 }

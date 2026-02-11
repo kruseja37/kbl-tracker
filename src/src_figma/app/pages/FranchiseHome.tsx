@@ -29,6 +29,7 @@ import {
   type PlayByPlayEntry,
 } from "../../../utils/syntheticGameFactory";
 import { processCompletedGame } from "../../../utils/processCompletedGame";
+import { archiveBatchGameResult } from "../../../utils/gameStorage";
 import { markSeasonComplete } from "../../../utils/seasonStorage";
 import { getAllGames } from "../../../utils/scheduleStorage";
 import { startOffseason, OFFSEASON_PHASES, type OffseasonPhase } from "../../../utils/offseasonStorage";
@@ -2263,7 +2264,8 @@ function GameDayContent({ scheduleData, currentSeason, onDataRefresh }: GameDayC
 
     // Process through real pipeline (runs while animation plays)
     try {
-      await processCompletedGame(game, { seasonId: `season-${currentSeason}` });
+      const seasonId = franchiseId ? `${franchiseId}-season-${currentSeason}` : `season-${currentSeason}`;
+      await processCompletedGame(game, { seasonId });
 
       // Mark game completed in schedule
       if (nextGame) {
@@ -2289,6 +2291,7 @@ function GameDayContent({ scheduleData, currentSeason, onDataRefresh }: GameDayC
     setSimAwayName('');
     setSimHomeName('');
     await onDataRefresh();
+    await scheduleData.refresh();
     await checkSeasonComplete();
   };
 
@@ -2340,6 +2343,7 @@ function GameDayContent({ scheduleData, currentSeason, onDataRefresh }: GameDayC
     setBatchCurrent(0);
     setIsBatchRunning(true);
 
+    const batchSeasonId = franchiseId ? `${franchiseId}-season-${currentSeason}` : `season-${currentSeason}`;
     let processed = 0;
 
     for (const game of games) {
@@ -2356,6 +2360,15 @@ function GameDayContent({ scheduleData, currentSeason, onDataRefresh }: GameDayC
           homeScore: result.homeScore,
           winningTeamId: result.winningTeamId,
           losingTeamId: result.losingTeamId,
+        });
+
+        // Also archive to completedGames store so standings can see it
+        await archiveBatchGameResult({
+          awayTeamId: game.awayTeamId,
+          homeTeamId: game.homeTeamId,
+          awayScore: result.awayScore,
+          homeScore: result.homeScore,
+          seasonId: batchSeasonId,
         });
       } catch (err) {
         console.error(`Failed to simulate game ${game.id}:`, err);
