@@ -19,6 +19,20 @@ import { useFranchiseData, type UseFranchiseDataReturn } from "@/hooks/useFranch
 import { useScheduleData, type ScheduledGame } from "@/hooks/useScheduleData";
 import { usePlayoffData } from "@/hooks/usePlayoffData";
 import { getHomeFieldPattern, detectClinch } from "../../../engines/playoffEngine";
+import { SimulationOverlay } from "@/app/components/SimulationOverlay";
+import { BatchOperationOverlay, type BatchOperationType } from "@/app/components/BatchOperationOverlay";
+import {
+  buildRosterFromPlayers,
+  generateSyntheticGame,
+  generatePlayByPlay,
+  generateQuickResult,
+  type PlayByPlayEntry,
+} from "../../../utils/syntheticGameFactory";
+import { processCompletedGame } from "../../../utils/processCompletedGame";
+import { markSeasonComplete } from "../../../utils/seasonStorage";
+import { getAllGames } from "../../../utils/scheduleStorage";
+import { startOffseason, OFFSEASON_PHASES, type OffseasonPhase } from "../../../utils/offseasonStorage";
+import { useOffseasonState } from "@/hooks/useOffseasonState";
 
 // Context for passing franchise data to child components
 const FranchiseDataContext = createContext<UseFranchiseDataReturn | null>(null);
@@ -71,6 +85,59 @@ export function FranchiseHome() {
 
   // Playoff System State - Persisted to IndexedDB via usePlayoffData
   const playoffData = usePlayoffData(currentSeason);
+
+  // Offseason State - tracks current phase progression
+  const offseasonState = useOffseasonState(`season-${currentSeason}`, currentSeason);
+
+  // Map offseason phases to their corresponding tab IDs
+  const phaseToTab: Record<OffseasonPhase, TabType> = {
+    STANDINGS_FINAL: "news",
+    AWARDS: "awards",
+    RATINGS_ADJUSTMENTS: "ratings-adj",
+    CONTRACTION_EXPANSION: "contraction",
+    RETIREMENTS: "retirements",
+    FREE_AGENCY: "free-agency",
+    DRAFT: "draft",
+    FARM_RECONCILIATION: "news",       // placeholder — no dedicated tab yet
+    CHEMISTRY_REBALANCING: "news",     // placeholder — no dedicated tab yet
+    TRADES: "rosters",
+    SPRING_TRAINING: "finalize",
+  };
+
+  // Complete current phase and advance to next, then navigate to the new phase's tab
+  const handleAdvancePhase = async () => {
+    try {
+      // Figure out what the next phase will be before advancing
+      const currentIdx = offseasonState.currentPhase
+        ? OFFSEASON_PHASES.indexOf(offseasonState.currentPhase)
+        : -1;
+      const nextPhase = currentIdx >= 0 && currentIdx < OFFSEASON_PHASES.length - 1
+        ? OFFSEASON_PHASES[currentIdx + 1]
+        : null;
+
+      if (offseasonState.canAdvance) {
+        await offseasonState.advanceToNextPhase();
+      } else {
+        // completeCurrentPhase also advances internally
+        await offseasonState.completeCurrentPhase();
+      }
+
+      // Navigate to the new phase's tab
+      if (nextPhase && phaseToTab[nextPhase]) {
+        setActiveTab(phaseToTab[nextPhase]);
+      }
+    } catch (err) {
+      console.error('Failed to advance offseason phase:', err);
+    }
+  };
+
+  const handleStartNewSeason = () => {
+    const newSeason = currentSeason + 1;
+    setCurrentSeason(newSeason);
+    localStorage.setItem('kbl-current-season', String(newSeason));
+    setSeasonPhase("regular");
+    setActiveTab("todays-game");
+  };
 
   // Sync league name from franchise config when loaded
   useEffect(() => {
@@ -238,6 +305,21 @@ export function FranchiseHome() {
 
   const handleLogoClick = () => {
     navigate("/");
+  };
+
+  // Begin offseason: initialize offseason state in IndexedDB, then switch phase
+  const handleBeginOffseason = async () => {
+    try {
+      const seasonId = `season-${currentSeason}`;
+      await startOffseason(seasonId, currentSeason);
+      setSeasonPhase("offseason");
+      setActiveTab("awards");
+    } catch (err) {
+      console.error('Failed to start offseason:', err);
+      // Still switch phase even if DB init fails — UI tabs work regardless
+      setSeasonPhase("offseason");
+      setActiveTab("awards");
+    }
   };
 
   // Schedule System Functions
@@ -508,7 +590,80 @@ export function FranchiseHome() {
 
       {/* Content area */}
       <div className="max-w-7xl mx-auto p-4 bg-[#567A50]">
-        {activeTab === "todays-game" && <GameDayContent />}
+        {/* Offseason Phase Progress Banner */}
+        {seasonPhase === "offseason" && offseasonState.state && (
+          <div className="mb-4 bg-[#6B9462] border-[5px] border-[#C4A853] p-4">
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <div className="text-[14px] text-[#C4A853] font-bold" style={{ textShadow: '2px 2px 4px rgba(0,0,0,0.8)' }}>
+                  OFFSEASON — PHASE {offseasonState.currentPhaseIndex + 1} OF {offseasonState.totalPhases}
+                </div>
+                <div className="text-[11px] text-[#E8E8D8] mt-1">
+                  {offseasonState.phaseName}
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                {offseasonState.isOffseasonComplete ? (
+                  <button
+                    onClick={handleStartNewSeason}
+                    className="bg-[#C4A853] text-black px-6 py-3 text-sm font-bold hover:bg-[#D4B863] active:scale-95 transition-all shadow-[3px_3px_0px_0px_rgba(0,0,0,0.6)]"
+                  >
+                    START SEASON {currentSeason + 1}
+                  </button>
+                ) : (
+                  <button
+                    onClick={handleAdvancePhase}
+                    disabled={offseasonState.isLoading}
+                    className="bg-[#5A8352] border-[3px] border-[#4A6844] px-5 py-2 text-sm text-[#E8E8D8] hover:bg-[#4F7D4B] active:scale-95 transition-all disabled:opacity-50"
+                  >
+                    {offseasonState.isLoading ? "ADVANCING..." : offseasonState.canAdvance ? "ADVANCE TO NEXT PHASE" : "COMPLETE PHASE & ADVANCE"}
+                  </button>
+                )}
+              </div>
+            </div>
+            {/* Progress bar */}
+            <div className="w-full bg-[#4A6844] h-2 border border-[#3A5834]">
+              <div
+                className="bg-[#C4A853] h-full transition-all duration-500"
+                style={{ width: `${offseasonState.progress}%` }}
+              />
+            </div>
+            {/* Phase dots */}
+            <div className="flex justify-between mt-2 px-1">
+              {OFFSEASON_PHASES.map((phase, i) => {
+                const isComplete = offseasonState.isPhaseComplete(phase);
+                const isCurrent = offseasonState.currentPhase === phase;
+                return (
+                  <button
+                    key={phase}
+                    onClick={() => {
+                      const tabForPhase = phaseToTab[phase];
+                      if (tabForPhase) setActiveTab(tabForPhase);
+                    }}
+                    className={`w-5 h-5 rounded-full border-2 text-[7px] flex items-center justify-center transition-all ${
+                      isComplete
+                        ? "bg-[#C4A853] border-[#C4A853] text-black"
+                        : isCurrent
+                        ? "bg-[#5A8352] border-[#C4A853] text-[#E8E8D8] animate-pulse"
+                        : "bg-[#4A6844] border-[#4A6844] text-[#E8E8D8]/40"
+                    }`}
+                    title={offseasonState.getPhaseDisplayName(phase)}
+                  >
+                    {i + 1}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {activeTab === "todays-game" && (
+          <GameDayContent
+            scheduleData={scheduleData}
+            currentSeason={currentSeason}
+            onDataRefresh={() => franchiseData.refresh()}
+          />
+        )}
         {activeTab === "team" && (
           <TeamHubContent />
         )}
@@ -788,19 +943,94 @@ export function FranchiseHome() {
               <div className="text-sm text-[#E8E8D8]/70">
                 {playoffData.playoff ? `Season ${playoffData.playoff.seasonNumber} Postseason` : `Season ${currentSeason} Postseason`}
               </div>
-              {playoffData.playoff?.status === 'COMPLETED' && playoffData.playoff.champion && (
-                <div className="mt-4 bg-gradient-to-r from-[#4A6844] via-[#FFD700]/20 to-[#4A6844] border-2 border-[#FFD700] p-4 rounded">
-                  <div className="text-2xl text-[#FFD700] font-bold animate-pulse">
-                    🏆 CHAMPION 🏆
+              {playoffData.playoff?.status === 'COMPLETED' && playoffData.playoff.champion && (() => {
+                const champ = playoffData.playoff!;
+                const championTeam = champ.teams.find(t => t.teamId === champ.champion);
+                const champSeries = playoffData.bracketByLeague.Championship;
+                const loserName = champSeries
+                  ? (champSeries.winner === champSeries.higherSeed.teamId
+                    ? champSeries.lowerSeed.teamName
+                    : champSeries.higherSeed.teamName)
+                  : null;
+                const seriesScore = champSeries
+                  ? `${Math.max(champSeries.higherSeedWins, champSeries.lowerSeedWins)}-${Math.min(champSeries.higherSeedWins, champSeries.lowerSeedWins)}`
+                  : null;
+
+                return (
+                  <div className="mt-6 space-y-4">
+                    {/* Champion Banner */}
+                    <div className="bg-gradient-to-b from-[#4A6844] via-[#FFD700]/10 to-[#4A6844] border-[4px] border-[#FFD700] p-8">
+                      <div className="text-3xl text-[#FFD700] font-bold animate-pulse mb-2">
+                        🏆 CHAMPION 🏆
+                      </div>
+                      <div className="text-2xl text-[#FFD700] mb-1" style={{ textShadow: '2px 2px 4px rgba(0,0,0,0.8)' }}>
+                        {championTeam?.teamName.toUpperCase() ?? 'CHAMPION'}
+                      </div>
+                      <div className="text-sm text-[#E8E8D8]/80 mb-1">
+                        Season {champ.seasonNumber} World Series Champions
+                      </div>
+                      {loserName && seriesScore && (
+                        <div className="text-xs text-[#E8E8D8]/60">
+                          Won World Series {seriesScore} vs {loserName}
+                        </div>
+                      )}
+                      {championTeam?.regularSeasonRecord && (
+                        <div className="text-[10px] text-[#E8E8D8]/40 mt-1">
+                          Regular Season: {championTeam.regularSeasonRecord.wins}-{championTeam.regularSeasonRecord.losses}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Playoff MVP */}
+                    {champ.mvp && (
+                      <div className="bg-[#5A8352] border-[3px] border-[#FFD700] p-4">
+                        <div className="flex items-center justify-center gap-2 mb-2">
+                          <Trophy className="w-5 h-5 text-[#FFD700]" />
+                          <div className="text-sm text-[#FFD700] font-bold">PLAYOFF MVP</div>
+                        </div>
+                        <div className="text-lg text-[#E8E8D8] font-bold">{champ.mvp.playerName}</div>
+                        <div className="text-xs text-[#E8E8D8]/70 mt-1">
+                          {champ.teams.find(t => t.teamId === champ.mvp?.teamId)?.teamName ?? champ.mvp.teamId}
+                        </div>
+                        {champ.mvp.stats && (
+                          <div className="text-[10px] text-[#C4A853] mt-1">{champ.mvp.stats}</div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Playoff Series Summary */}
+                    <div className="bg-[#5A8352] border-[3px] border-[#4A6844] p-4">
+                      <div className="text-xs text-[#C4A853] mb-3 uppercase">Playoff Path</div>
+                      <div className="space-y-2">
+                        {playoffData.completedSeries
+                          .filter(s => s.winner === champ.champion)
+                          .map(s => {
+                            const opponent = s.winner === s.higherSeed.teamId ? s.lowerSeed : s.higherSeed;
+                            const winnerWins = s.winner === s.higherSeed.teamId ? s.higherSeedWins : s.lowerSeedWins;
+                            const loserWins = s.winner === s.higherSeed.teamId ? s.lowerSeedWins : s.higherSeedWins;
+                            return (
+                              <div key={s.id} className="flex justify-between items-center text-[10px] text-[#E8E8D8] bg-[#4A6844] p-2">
+                                <span className="text-[#E8E8D8]/60 w-24">{s.roundName}</span>
+                                <span>vs {opponent.teamName}</span>
+                                <span className="text-[#00DD00] font-bold">{winnerWins}-{loserWins}</span>
+                              </div>
+                            );
+                          })}
+                      </div>
+                    </div>
+
+                    {/* BEGIN OFFSEASON Button */}
+                    <button
+                      onClick={handleBeginOffseason}
+                      className="w-full bg-[#C4A853] border-[5px] border-[#9A7B2C] py-4 px-8 text-lg text-[#1a1a1a] hover:bg-[#D4B863] active:scale-[0.98] transition-transform shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)] flex items-center justify-center gap-3"
+                      style={{ textShadow: '1px 1px 0px rgba(255,255,255,0.3)' }}
+                    >
+                      <span>BEGIN OFFSEASON</span>
+                      <ArrowRight className="w-5 h-5" />
+                    </button>
                   </div>
-                  <div className="text-xl text-[#FFD700] mt-1">
-                    {playoffData.playoff.teams.find(t => t.teamId === playoffData.playoff?.champion)?.teamName.toUpperCase()}
-                  </div>
-                  <div className="text-xs text-[#E8E8D8]/60 mt-1">
-                    Season {playoffData.playoff.seasonNumber} World Series Champions
-                  </div>
-                </div>
-              )}
+                );
+              })()}
             </div>
 
             {!playoffData.playoff ? (
@@ -1399,7 +1629,7 @@ export function FranchiseHome() {
 
               {/* Advance Button */}
               <button
-                onClick={() => setSeasonPhase("offseason")}
+                onClick={handleBeginOffseason}
                 disabled={playoffData.playoff?.status !== 'COMPLETED'}
                 className={`w-full border-[5px] p-8 transition-all shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)] group ${
                   playoffData.playoff?.status === 'COMPLETED'
@@ -1875,17 +2105,90 @@ function StandingsContent() {
   );
 }
 
-function GameDayContent() {
+interface GameDayContentProps {
+  scheduleData: ReturnType<typeof useScheduleData>;
+  currentSeason: number;
+  onDataRefresh: () => Promise<void>;
+}
+
+function GameDayContent({ scheduleData, currentSeason, onDataRefresh }: GameDayContentProps) {
   const navigate = useNavigate();
+  const { franchiseId } = useParams<{ franchiseId: string }>();
   const [confirmAction, setConfirmAction] = useState<string | null>(null);
   const [showHeadToHead, setShowHeadToHead] = useState(false);
   const [showBeatWriters, setShowBeatWriters] = useState(false);
   const [showAwayTeamStats, setShowAwayTeamStats] = useState(false);
   const [showHomeTeamStats, setShowHomeTeamStats] = useState(false);
 
-  // Team IDs for the matchup
-  const awayTeamId = 'tigers'; // Away team
-  const homeTeamId = 'sox';    // Home team
+  // Simulation state
+  const [isSimulating, setIsSimulating] = useState(false);
+  const [simPlayByPlay, setSimPlayByPlay] = useState<PlayByPlayEntry[]>([]);
+  const [simResult, setSimResult] = useState<{ away: number; home: number } | null>(null);
+  const [simAwayName, setSimAwayName] = useState('');
+  const [simHomeName, setSimHomeName] = useState('');
+
+  // Toast state
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  // Batch operation state
+  const [batchType, setBatchType] = useState<BatchOperationType | null>(null);
+  const [batchCurrent, setBatchCurrent] = useState(0);
+  const [batchTotal, setBatchTotal] = useState(0);
+  const [isBatchRunning, setIsBatchRunning] = useState(false);
+
+  // Season completion state
+  const [seasonComplete, setSeasonComplete] = useState(false);
+
+  // Auto-dismiss toast after 4 seconds
+  useEffect(() => {
+    if (!toastMessage) return;
+    const timer = setTimeout(() => setToastMessage(null), 4000);
+    return () => clearTimeout(timer);
+  }, [toastMessage]);
+
+  // Access franchise data for season config
+  const franchiseData = useFranchiseDataContext();
+
+  // Derive season complete: all games resolved (no SCHEDULED games remain)
+  // Only true when we have loaded games AND none are SCHEDULED
+  const allGames = scheduleData.games ?? [];
+  const hasGames = allGames.length > 0;
+  const upcomingCount = (scheduleData.upcomingGames ?? []).length;
+  const isSeasonOver = hasGames && upcomingCount === 0;
+
+  // Sync seasonComplete from schedule data on load / refresh
+  useEffect(() => {
+    if (isSeasonOver && !seasonComplete) {
+      setSeasonComplete(true);
+    }
+  }, [isSeasonOver]);
+
+  /**
+   * Check if season is now complete after a game action.
+   * Reads directly from IndexedDB (not React state) to avoid stale data.
+   * If all scheduled games are resolved, mark season in storage.
+   */
+  const checkSeasonComplete = async () => {
+    try {
+      // Read fresh from DB — React state may not have updated yet
+      const freshGames = await getAllGames(currentSeason);
+      if (freshGames.length === 0) return;
+
+      const stillScheduled = freshGames.filter(g => g.status === 'SCHEDULED').length;
+      if (stillScheduled === 0) {
+        const seasonId = `season-${currentSeason}`;
+        await markSeasonComplete(seasonId);
+        setSeasonComplete(true);
+        setToastMessage('REGULAR SEASON COMPLETE!');
+      }
+    } catch (err) {
+      console.error('Failed to check season completion:', err);
+    }
+  };
+
+  // Team IDs for the matchup — pull from schedule if available
+  const awayTeamId = scheduleData.nextGame?.awayTeamId ?? 'tigers';
+  const homeTeamId = scheduleData.nextGame?.homeTeamId ?? 'sox';
 
   // Mock head-to-head data
   const headToHeadGames = [
@@ -1929,21 +2232,255 @@ function GameDayContent() {
     setConfirmAction(null);
   };
 
-  const handleSimulate = () => {
-    // Simulate game logic here
-    console.log("Game simulated");
+  const handleSimulate = async () => {
     setConfirmAction(null);
+
+    // Get next game from schedule — pull real team IDs and game number
+    const nextGame = scheduleData.nextGame;
+    const awayId = nextGame?.awayTeamId ?? awayTeamId;
+    const homeId = nextGame?.homeTeamId ?? homeTeamId;
+    const gameNum = nextGame?.gameNumber ?? 1;
+
+    // Build rosters from real franchise player data
+    const awayRoster = await buildRosterFromPlayers(awayId, awayId.toUpperCase());
+    const homeRoster = await buildRosterFromPlayers(homeId, homeId.toUpperCase());
+
+    // Generate synthetic game with real player names
+    const game = generateSyntheticGame(awayRoster, homeRoster, {
+      seed: Date.now(),
+      gameNumber: gameNum,
+    });
+
+    // Generate play-by-play entries
+    const playByPlay = generatePlayByPlay(game);
+
+    // Show overlay with team names from the generated game
+    setSimPlayByPlay(playByPlay);
+    setSimResult({ away: game.awayScore, home: game.homeScore });
+    setSimAwayName(game.awayTeamName);
+    setSimHomeName(game.homeTeamName);
+    setIsSimulating(true);
+
+    // Process through real pipeline (runs while animation plays)
+    try {
+      await processCompletedGame(game, { seasonId: `season-${currentSeason}` });
+
+      // Mark game completed in schedule
+      if (nextGame) {
+        const winningTeam = game.homeScore > game.awayScore ? homeId : awayId;
+        const losingTeam = game.homeScore > game.awayScore ? awayId : homeId;
+        await scheduleData.completeGame(nextGame.id, {
+          awayScore: game.awayScore,
+          homeScore: game.homeScore,
+          winningTeamId: winningTeam,
+          losingTeamId: losingTeam,
+          gameLogId: game.gameId,
+        });
+      }
+    } catch (err) {
+      console.error('Failed to process simulated game:', err);
+    }
   };
 
-  const handleSkip = () => {
-    // Skip game logic here
-    console.log("Game skipped");
-    setConfirmAction(null);
+  const handleSimulationComplete = async () => {
+    setIsSimulating(false);
+    setSimPlayByPlay([]);
+    setSimResult(null);
+    setSimAwayName('');
+    setSimHomeName('');
+    await onDataRefresh();
+    await checkSeasonComplete();
   };
+
+  // ============================================
+  // SCOPE HELPERS — get games by scope
+  // ============================================
+
+  /**
+   * Get upcoming (SCHEDULED) games for a given scope.
+   * - "today": all games on the same dayNumber as the next game
+   * - "week": next 7 unique dayNumbers worth of games
+   * - "season": all remaining scheduled games
+   */
+  function getGamesByScope(scope: 'today' | 'week' | 'season'): ScheduledGame[] {
+    const upcoming = scheduleData.upcomingGames ?? []; // already filtered to SCHEDULED
+    if (upcoming.length === 0) return [];
+
+    const firstDay = upcoming[0].dayNumber;
+
+    switch (scope) {
+      case 'today':
+        return upcoming.filter((g) => g.dayNumber === firstDay);
+      case 'week': {
+        // Collect up to 7 unique day numbers
+        const days = new Set<number>();
+        for (const g of upcoming) {
+          days.add(g.dayNumber);
+          if (days.size >= 7) break;
+        }
+        return upcoming.filter((g) => days.has(g.dayNumber));
+      }
+      case 'season':
+        return [...upcoming];
+    }
+  }
+
+  // ============================================
+  // BATCH SIMULATE
+  // ============================================
+
+  const handleBatchSimulate = async (scope: 'today' | 'week' | 'season') => {
+    setConfirmAction(null);
+
+    const games = getGamesByScope(scope);
+    if (games.length === 0) return;
+
+    setBatchType('simulate');
+    setBatchTotal(games.length);
+    setBatchCurrent(0);
+    setIsBatchRunning(true);
+
+    let processed = 0;
+
+    for (const game of games) {
+      // Generate a quick W/L result (no player stats)
+      const result = generateQuickResult(
+        game.awayTeamId,
+        game.homeTeamId,
+        Date.now() + processed
+      );
+
+      try {
+        await scheduleData.completeGame(game.id, {
+          awayScore: result.awayScore,
+          homeScore: result.homeScore,
+          winningTeamId: result.winningTeamId,
+          losingTeamId: result.losingTeamId,
+        });
+      } catch (err) {
+        console.error(`Failed to simulate game ${game.id}:`, err);
+      }
+
+      processed++;
+      setBatchCurrent(processed);
+    }
+
+    // Refresh will happen in handleBatchComplete
+  };
+
+  // ============================================
+  // BATCH SKIP
+  // ============================================
+
+  const handleBatchSkip = async (scope: 'today' | 'week' | 'season') => {
+    setConfirmAction(null);
+
+    const games = getGamesByScope(scope);
+    if (games.length === 0) return;
+
+    setBatchType('skip');
+    setBatchTotal(games.length);
+    setBatchCurrent(0);
+    setIsBatchRunning(true);
+
+    let processed = 0;
+
+    for (const game of games) {
+      try {
+        await scheduleData.updateStatus(game.id, 'SKIPPED');
+      } catch (err) {
+        console.error(`Failed to skip game ${game.id}:`, err);
+      }
+
+      processed++;
+      setBatchCurrent(processed);
+    }
+
+    // Refresh will happen in handleBatchComplete
+  };
+
+  const handleBatchComplete = async () => {
+    const type = batchType;
+    const count = batchTotal;
+
+    setIsBatchRunning(false);
+    setBatchType(null);
+    setBatchCurrent(0);
+    setBatchTotal(0);
+
+    await onDataRefresh();
+    await scheduleData.refresh();
+
+    if (type === 'simulate') {
+      setToastMessage(`${count} game${count !== 1 ? 's' : ''} simulated`);
+    } else {
+      setToastMessage(`${count} game${count !== 1 ? 's' : ''} skipped`);
+    }
+
+    // Check if season is now complete
+    await checkSeasonComplete();
+  };
+
+  const handleSkip = async () => {
+    setConfirmAction(null);
+
+    const nextGame = scheduleData.nextGame;
+    if (!nextGame) return;
+
+    const away = nextGame.awayTeamId.toUpperCase();
+    const home = nextGame.homeTeamId.toUpperCase();
+
+    try {
+      // Mark as SKIPPED — no stats, no standings impact, game ceases to exist
+      await scheduleData.updateStatus(nextGame.id, 'SKIPPED');
+
+      // Refresh data so nextGame advances
+      await onDataRefresh();
+
+      // Show toast
+      setToastMessage(`Game skipped \u2014 ${away} vs ${home} removed from schedule`);
+
+      // Check if season is now complete
+      await checkSeasonComplete();
+    } catch (err) {
+      console.error('Failed to skip game:', err);
+    }
+  };
+
+  // Season progress numbers
+  const completedCount = (scheduleData.completedGames ?? []).length;
+  const skippedCount = allGames.filter(g => g.status === 'SKIPPED').length;
+  const resolvedCount = completedCount + skippedCount;
+  const totalScheduled = allGames.length;
+  const gamesPerTeam = franchiseData.franchiseConfig?.season?.gamesPerTeam ?? totalScheduled;
 
   return (
     <div className="space-y-4">
+      {/* Season complete banner */}
+      {seasonComplete && (
+        <div className="bg-[#C4A853] border-[6px] border-[#9A7B2C] p-6 text-center">
+          <div className="text-2xl text-[#1a1a1a] mb-2" style={{ textShadow: '1px 1px 0px rgba(255,255,255,0.3)' }}>
+            REGULAR SEASON COMPLETE
+          </div>
+          <div className="text-sm text-[#1a1a1a]/80 mb-1">
+            {completedCount} game{completedCount !== 1 ? 's' : ''} played
+            {skippedCount > 0 && ` / ${skippedCount} skipped`}
+          </div>
+          <div className="text-[10px] text-[#1a1a1a]/60 mb-3">
+            Season {currentSeason} ({gamesPerTeam} games per team)
+          </div>
+          <button
+            onClick={() => navigate(`/franchise/${franchiseId}/season-summary`)}
+            className="bg-[#1a1a1a] border-[4px] border-[#9A7B2C] py-3 px-8 text-sm text-[#C4A853] hover:bg-[#2a2a2a] active:scale-95 transition-transform shadow-[4px_4px_0px_0px_rgba(0,0,0,0.5)]"
+            style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.5)' }}
+          >
+            VIEW SEASON SUMMARY
+          </button>
+        </div>
+      )}
+
       {/* Next game card */}
+      {!seasonComplete && (
       <div className="bg-[#5A8352] border-[5px] border-[#C4A853] p-4 relative">
         <div className="text-[8px] text-[#E8E8D8] mb-3">▶ NEXT GAME • 7/12</div>
         <div className="grid grid-cols-3 gap-4 items-center mb-4">
@@ -1964,38 +2501,88 @@ function GameDayContent() {
         </div>
 
         <div className="space-y-2">
-          <div className="flex justify-center">
+          {/* Row 1: Play / Score */}
+          <div className="flex gap-2 justify-center">
             <button
               onClick={() => setConfirmAction("play")}
-              className="max-w-[200px] bg-[#5A8352] border-[5px] border-[#4A6844] py-3 px-8 text-sm text-[#E8E8D8] hover:bg-[#4F7D4B] active:scale-95 transition-transform shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)]"
+              className="bg-[#5A8352] border-[5px] border-[#4A6844] py-3 px-8 text-sm text-[#E8E8D8] hover:bg-[#4F7D4B] active:scale-95 transition-transform shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)]"
             >
               PLAY GAME
             </button>
-          </div>
-          <div className="flex gap-2 justify-center">
             <button
               onClick={() => setConfirmAction("watch")}
-              className="max-w-[150px] bg-[#4A6844] border-[5px] border-[#5A8352] py-2 px-4 text-[10px] text-[#E8E8D8] hover:bg-[#3F5A3A] active:scale-95 transition-transform shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)]"
+              className="bg-[#4A6844] border-[5px] border-[#5A8352] py-3 px-4 text-[10px] text-[#E8E8D8] hover:bg-[#3F5A3A] active:scale-95 transition-transform shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)]"
             >
               SCORE GAME
             </button>
+          </div>
+
+          {/* Row 2: Single game simulate / skip */}
+          <div className="flex gap-2 justify-center">
             <button
               onClick={() => setConfirmAction("simulate")}
               className="bg-[#4A6844] border-[5px] border-[#5A8352] py-2 px-4 text-[10px] text-[#E8E8D8] hover:bg-[#3F5A3A] active:scale-95 transition-transform shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)] whitespace-nowrap"
             >
-              SIMULATE
+              SIM 1 GAME
             </button>
             <button
               onClick={() => setConfirmAction("skip")}
               className="bg-[#4A6844] border-[5px] border-[#5A8352] py-2 px-4 text-[10px] text-[#E8E8D8] hover:bg-[#3F5A3A] active:scale-95 transition-transform shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)] whitespace-nowrap"
             >
-              SKIP
+              SKIP 1 GAME
+            </button>
+          </div>
+
+          {/* Row 3: Batch simulate options */}
+          <div className="flex gap-1 justify-center flex-wrap">
+            <button
+              onClick={() => setConfirmAction("sim-today")}
+              className="bg-[#3F5A3A] border-[3px] border-[#5A8352] py-1 px-3 text-[8px] text-[#E8E8D8] hover:bg-[#4A6844] active:scale-95 transition-transform"
+            >
+              SIM TODAY ({getGamesByScope('today').length})
+            </button>
+            <button
+              onClick={() => setConfirmAction("sim-week")}
+              className="bg-[#3F5A3A] border-[3px] border-[#5A8352] py-1 px-3 text-[8px] text-[#E8E8D8] hover:bg-[#4A6844] active:scale-95 transition-transform"
+            >
+              SIM WEEK ({getGamesByScope('week').length})
+            </button>
+            <button
+              onClick={() => setConfirmAction("sim-season")}
+              className="bg-[#3F5A3A] border-[3px] border-[#5A8352] py-1 px-3 text-[8px] text-[#E8E8D8] hover:bg-[#4A6844] active:scale-95 transition-transform"
+            >
+              SIM SEASON ({getGamesByScope('season').length})
+            </button>
+          </div>
+
+          {/* Row 4: Batch skip options */}
+          <div className="flex gap-1 justify-center flex-wrap">
+            <button
+              onClick={() => setConfirmAction("skip-today")}
+              className="bg-[#3F5A3A] border-[3px] border-[#5A8352] py-1 px-3 text-[8px] text-[#E8E8D8]/70 hover:bg-[#4A6844] active:scale-95 transition-transform"
+            >
+              SKIP TODAY ({getGamesByScope('today').length})
+            </button>
+            <button
+              onClick={() => setConfirmAction("skip-week")}
+              className="bg-[#3F5A3A] border-[3px] border-[#5A8352] py-1 px-3 text-[8px] text-[#E8E8D8]/70 hover:bg-[#4A6844] active:scale-95 transition-transform"
+            >
+              SKIP WEEK ({getGamesByScope('week').length})
+            </button>
+            <button
+              onClick={() => setConfirmAction("skip-season")}
+              className="bg-[#3F5A3A] border-[3px] border-[#5A8352] py-1 px-3 text-[8px] text-[#E8E8D8]/70 hover:bg-[#4A6844] active:scale-95 transition-transform"
+            >
+              SKIP SEASON ({getGamesByScope('season').length})
             </button>
           </div>
         </div>
 
-        <div className="absolute bottom-2 right-2 text-[8px] text-[#E8E8D8]">GAME 71/162</div>
+        <div className="absolute bottom-2 right-2 text-[8px] text-[#E8E8D8]">
+          GAME {resolvedCount + 1}/{totalScheduled}
+        </div>
       </div>
+      )}
 
       {/* Beat writers button */}
       <div>
@@ -2413,8 +3000,14 @@ function GameDayContent() {
             <div className="text-sm text-[#E8E8D8] mb-6 text-center">
               {confirmAction === "play" && "Start playing this game?"}
               {confirmAction === "watch" && "Watch this game?"}
-              {confirmAction === "simulate" && "Simulate this game?"}
-              {confirmAction === "skip" && "Skip this game?"}
+              {confirmAction === "simulate" && "Simulate this game? Full player stats will be generated."}
+              {confirmAction === "skip" && "Skip this game? It will be removed from the schedule entirely."}
+              {confirmAction === "sim-today" && `Simulate ${getGamesByScope('today').length} game(s) for today? W/L outcomes and standings will be updated.`}
+              {confirmAction === "sim-week" && `Simulate ${getGamesByScope('week').length} game(s) this week? W/L outcomes and standings will be updated.`}
+              {confirmAction === "sim-season" && `Simulate ${getGamesByScope('season').length} remaining game(s)? W/L outcomes and standings will be updated.`}
+              {confirmAction === "skip-today" && `Skip ${getGamesByScope('today').length} game(s) for today? They will be removed from the schedule.`}
+              {confirmAction === "skip-week" && `Skip ${getGamesByScope('week').length} game(s) this week? They will be removed from the schedule.`}
+              {confirmAction === "skip-season" && `Skip ${getGamesByScope('season').length} remaining game(s)? They will be removed from the schedule.`}
             </div>
             <div className="flex gap-2">
               <button
@@ -2424,7 +3017,18 @@ function GameDayContent() {
                 CANCEL
               </button>
               <button
-                onClick={confirmAction === "play" ? handlePlayGame : confirmAction === "simulate" ? handleSimulate : handleSkip}
+                onClick={() => {
+                  if (confirmAction === "play") handlePlayGame();
+                  else if (confirmAction === "watch") handlePlayGame();
+                  else if (confirmAction === "simulate") handleSimulate();
+                  else if (confirmAction === "skip") handleSkip();
+                  else if (confirmAction === "sim-today") handleBatchSimulate('today');
+                  else if (confirmAction === "sim-week") handleBatchSimulate('week');
+                  else if (confirmAction === "sim-season") handleBatchSimulate('season');
+                  else if (confirmAction === "skip-today") handleBatchSkip('today');
+                  else if (confirmAction === "skip-week") handleBatchSkip('week');
+                  else if (confirmAction === "skip-season") handleBatchSkip('season');
+                }}
                 className="flex-1 bg-[#5A8352] border-[5px] border-[#4A6844] py-3 text-sm text-[#E8E8D8] hover:bg-[#4F7D4B] active:scale-95 transition-transform shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)]"
               >
                 CONFIRM
@@ -2433,6 +3037,37 @@ function GameDayContent() {
           </div>
         </div>
       )}
+
+      {/* Toast notification */}
+      {toastMessage && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 animate-in fade-in slide-in-from-bottom-4">
+          <div className="bg-[#4A6844] border-[4px] border-[#C4A853] px-6 py-3 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)]">
+            <div className="text-[11px] text-[#E8E8D8] whitespace-nowrap">
+              {toastMessage}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Simulation overlay */}
+      <SimulationOverlay
+        isOpen={isSimulating}
+        playByPlay={simPlayByPlay}
+        awayTeamName={simAwayName || awayTeamId.toUpperCase()}
+        homeTeamName={simHomeName || homeTeamId.toUpperCase()}
+        finalAwayScore={simResult?.away ?? 0}
+        finalHomeScore={simResult?.home ?? 0}
+        onComplete={handleSimulationComplete}
+      />
+
+      {/* Batch operation overlay */}
+      <BatchOperationOverlay
+        isOpen={isBatchRunning}
+        operationType={batchType ?? 'simulate'}
+        current={batchCurrent}
+        total={batchTotal}
+        onComplete={handleBatchComplete}
+      />
     </div>
   );
 }
