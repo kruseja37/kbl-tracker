@@ -6,6 +6,45 @@
 > **IMPORTANT**: This log is for *what happened* during sessions. For *how things work*,
 > see the relevant SPEC docs. Finalized logic should be PROMOTED to specs, not left here.
 
+## Session: February 11, 2026 — Mock Data Scrub + Franchise Setup Fix
+
+### Accomplished
+1. **Mock data scrub (28 blocks)**: Replaced all MOCK_* constants across 17 files with typed empty arrays/structures. ~1,350 lines of fake data removed. Zero regressions (5,627 tests pass).
+2. **FranchiseSetup league click fix**: onClick was only on the tiny 6×6 radio button, not the card. Moved onClick to outer `<div>`, added `cursor-pointer`, changed radio to visual-only `<div>`, added `e.stopPropagation()` on expand/collapse.
+3. **FranchiseSetup auto-seed**: Added `useEffect` that detects `leagues.length === 0` after loading and auto-calls `seedSMB4Data(false)` so first-time users see Super Mega League without visiting League Builder first.
+4. **Worktree → main merge**: All changes committed on `claude/serene-hopper` and merged into `main` (commit `536dc34`). Dev server on 5173 picks up changes via Vite HMR.
+
+### Key Decision: Empty State vs Mock Data
+After scrub, franchise pages with no games played show empty state (empty tables, "—" values) instead of fake mock data. This is correct — real data populates automatically from IndexedDB as games are played. No franchise recreation needed.
+
+### Files Changed (17 files, -1,193 / +494 lines)
+| Tier | File | Change |
+|------|------|--------|
+| T1 | `useFranchiseData.ts` | MOCK_STANDINGS/LEADERS → EMPTY_*, wired real W-L records |
+| T2 | `FranchiseHome.tsx` | NL leaders, summary cards, awards, All-Star, news, availableTeams → empty |
+| T2 | `DraftFlow.tsx` | MOCK_TEAMS → empty |
+| T2 | `FinalizeAdvanceFlow.tsx` | MOCK_TEAMS → empty |
+| T2 | `FreeAgencyFlow.tsx` | MOCK_TEAMS + MOCK_PLAYERS → empty |
+| T2 | `RetirementFlow.tsx` | MOCK_TEAMS + MOCK_PLAYERS → empty |
+| T2 | `AwardsCeremonyFlow.tsx` | MOCK_PLAYERS + MOCK_TEAMS → empty |
+| T2 | `RatingsAdjustmentFlow.tsx` | MOCK_TEAMS + MOCK_ALL_PLAYERS → empty |
+| T2 | `ContractionExpansionFlow.tsx` | MOCK_AT_RISK_TEAMS + MOCK_ALL_TEAMS → empty |
+| T2 | `TradeFlow.tsx` | MOCK_TEAMS → empty |
+| T2 | `PlayoffSeedingFlow.tsx` | MOCK_PLAYOFF_TEAMS → empty |
+| T2 | `PostseasonMVPFlow.tsx` | MOCK_CANDIDATES → empty |
+| T2 | `usePlayoffData.ts` | MOCK_PLAYOFF_TEAMS → empty |
+| T3 | `TeamHubContent.tsx` | MOCK_TEAMS/STADIUMS/ROSTER/STATS → empty |
+| T3 | `MuseumContent.tsx` | MOCK_TEAMS, seasonStandings, teamTop10, teamAccolades → empty |
+| T3 | `useMuseumData.ts` | 9 MOCK_* arrays → empty |
+| Fix | `FranchiseSetup.tsx` | Auto-seed + card click fix |
+
+### Build Verification
+- `npm run build` → 0 errors, 4.24s
+- `npm test` → 11,254 passed (main repo, both src locations), 0 failures
+- Browser verified: league card clickable on localhost:5173
+
+---
+
 ## Session: February 9, 2026 — Data Pipeline Trace + 5 Critical Pipeline Fixes
 
 ### Accomplished

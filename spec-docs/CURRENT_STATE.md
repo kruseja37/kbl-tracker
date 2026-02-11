@@ -1,7 +1,24 @@
 # KBL Tracker - Current State
 
 > **Purpose**: Single source of truth for what's implemented, what's not, and known issues
-> **Last Updated**: February 9, 2026 (Pipeline CRIT fixes — 10/11 pipelines INTACT, 0 TS errors, 5094 tests passing)
+> **Last Updated**: February 11, 2026 (Mock data scrub + franchise setup fix — 0 TS errors, 11,254 tests passing)
+
+---
+
+## Mock Data Scrub + Franchise Setup Fix (February 11, 2026) 🧹
+
+**Inventory**: `spec-docs/MOCK_DATA_INVENTORY.md`
+
+| Item | Status |
+|------|--------|
+| 28 MOCK_* blocks across 17 files | ✅ Replaced with typed empty arrays |
+| FranchiseSetup league card click | ✅ Fixed (onClick on outer div, not radio button) |
+| FranchiseSetup auto-seed | ✅ Added (seeds SMB4 data when no leagues in IndexedDB) |
+| ~1,350 lines of fake data | ✅ Deleted |
+
+**Post-scrub behavior**: Franchise pages with no games show empty state (empty tables, "—" values). Real data populates from IndexedDB as games are played. No franchise recreation needed.
+
+**Remaining inline mocks (out of scope — not in inventory)**: TeamHubContent has `fanMorale`, `stadiumData`, `managerData` as structural placeholders for features not yet wired to storage.
 
 ---
 
