@@ -3,29 +3,8 @@ import { ChevronDown, ChevronUp, X, Search, Plus, Clock, Trophy, Star, AlertCirc
 import { useOffseasonData, type OffseasonTeam, type OffseasonPlayer } from "@/hooks/useOffseasonData";
 import { useOffseasonState, type DraftPick as StoredDraftPick } from "../../hooks/useOffseasonState";
 
-// Mock teams for fallback
-const MOCK_TEAMS = [
-  { name: "Detroit Diamonds", mlb: 21, farm: 8 },
-  { name: "Miami Marlins", mlb: 22, farm: 7 },
-  { name: "Kansas City Royals", mlb: 20, farm: 9 },
-  { name: "Colorado Rockies", mlb: 22, farm: 8 },
-  { name: "Oakland Athletics", mlb: 21, farm: 9 },
-  { name: "Seattle Mariners", mlb: 22, farm: 7 },
-  { name: "Texas Rangers", mlb: 20, farm: 10 },
-  { name: "Arizona Diamondbacks", mlb: 22, farm: 6 },
-  { name: "Minnesota Twins", mlb: 21, farm: 8 },
-  { name: "Tampa Bay Rays", mlb: 22, farm: 9 },
-  { name: "Chicago White Sox", mlb: 22, farm: 8 },
-  { name: "San Francisco Giants", mlb: 21, farm: 9 }, // USER TEAM
-  { name: "Toronto Blue Jays", mlb: 22, farm: 10 },
-  { name: "Philadelphia Phillies", mlb: 22, farm: 9 },
-  { name: "St. Louis Cardinals", mlb: 22, farm: 10 },
-  { name: "Boston Red Sox", mlb: 22, farm: 10 },
-  { name: "Houston Astros", mlb: 22, farm: 10 },
-  { name: "New York Yankees", mlb: 22, farm: 10 },
-  { name: "Los Angeles Dodgers", mlb: 22, farm: 10 },
-  { name: "Atlanta Braves", mlb: 22, farm: 10 },
-];
+// Empty teams fallback — populated from IndexedDB when available
+const MOCK_TEAMS: { name: string; mlb: number; farm: number }[] = [];
 
 type DraftScreen = 
   | "inactive-selection"

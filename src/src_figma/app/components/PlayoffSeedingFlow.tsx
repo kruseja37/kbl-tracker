@@ -46,17 +46,8 @@ function gradeRank(grade: string): number {
   return GRADE_ORDER[grade] ?? 99;
 }
 
-// --- Mock teams for preview when no data provided ---
-const MOCK_PLAYOFF_TEAMS: PlayoffTeamSeed[] = [
-  { teamId: "t1", teamName: "Los Angeles Dodgers", shortName: "LAD", grade: "A+", record: { wins: 52, losses: 18 }, seed: 1, primaryColor: "#005A9C" },
-  { teamId: "t2", teamName: "Boston Red Sox", shortName: "BOS", grade: "A", record: { wins: 48, losses: 22 }, seed: 2, primaryColor: "#DD0000" },
-  { teamId: "t3", teamName: "Houston Astros", shortName: "HOU", grade: "A-", record: { wins: 45, losses: 25 }, seed: 3, primaryColor: "#EB6E1F" },
-  { teamId: "t4", teamName: "New York Thunder", shortName: "NYT", grade: "A-", record: { wins: 42, losses: 28 }, seed: 4, primaryColor: "#0066FF" },
-  { teamId: "t5", teamName: "Seattle Mariners", shortName: "SEA", grade: "B+", record: { wins: 40, losses: 30 }, seed: 5, primaryColor: "#0C2C56" },
-  { teamId: "t6", teamName: "Chicago Cubs", shortName: "CHC", grade: "B+", record: { wins: 38, losses: 32 }, seed: 6, primaryColor: "#0E3386" },
-  { teamId: "t7", teamName: "San Francisco Giants", shortName: "SFG", grade: "B", record: { wins: 35, losses: 35 }, seed: 7, primaryColor: "#FD5A1E" },
-  { teamId: "t8", teamName: "Colorado Rockies", shortName: "COL", grade: "B-", record: { wins: 28, losses: 42 }, seed: 8, primaryColor: "#33006F" },
-];
+// Empty teams fallback — populated from standings when available
+const MOCK_PLAYOFF_TEAMS: PlayoffTeamSeed[] = [];
 
 // --- Step indicator ---
 const STEPS = ["League", "Playoffs", "Teams", "Seeding", "Confirm"];

@@ -81,16 +81,7 @@ interface TeamSummary {
 }
 
 // Mock Data (fallback when real data not available)
-const MOCK_TEAMS: Team[] = [
-  { id: "thunder", name: "New York Thunder", shortName: "THUNDER", record: { wins: 42, losses: 28 }, logo: "NYT", managerName: "Joe Torre", managerGrade: "A-", mWAR: 3.8, isManagerOfYear: true },
-  { id: "redsox", name: "Boston Red Sox", shortName: "SOX", record: { wins: 48, losses: 22 }, logo: "BOS", managerName: "Terry Francona", managerGrade: "A", mWAR: 4.2, isManagerOfYear: false },
-  { id: "giants", name: "San Francisco Giants", shortName: "GIANTS", record: { wins: 35, losses: 35 }, logo: "SF", managerName: "Bruce Bochy", managerGrade: "B+", mWAR: 1.5, isManagerOfYear: false },
-  { id: "mariners", name: "Seattle Mariners", shortName: "MARINERS", record: { wins: 40, losses: 30 }, logo: "SEA", managerName: "Lou Piniella", managerGrade: "B", mWAR: 2.1, isManagerOfYear: false },
-  { id: "rockies", name: "Colorado Rockies", shortName: "ROCKIES", record: { wins: 28, losses: 42 }, logo: "COL", managerName: "Clint Hurdle", managerGrade: "C+", mWAR: -1.8, isManagerOfYear: false },
-  { id: "dodgers", name: "Los Angeles Dodgers", shortName: "DODGERS", record: { wins: 52, losses: 18 }, logo: "LAD", managerName: "Tommy Lasorda", managerGrade: "A+", mWAR: 5.1, isManagerOfYear: false },
-  { id: "cubs", name: "Chicago Cubs", shortName: "CUBS", record: { wins: 38, losses: 32 }, logo: "CHC", managerName: "Dusty Baker", managerGrade: "B", mWAR: 1.9, isManagerOfYear: false },
-  { id: "astros", name: "Houston Astros", shortName: "ASTROS", record: { wins: 45, losses: 25 }, logo: "HOU", managerName: "Phil Garner", managerGrade: "A-", mWAR: 3.2, isManagerOfYear: false },
-];
+const MOCK_TEAMS: Team[] = [];
 
 /**
  * Convert mWAR value to letter grade (S through D)
@@ -228,106 +219,7 @@ function convertToLocalPlayer(player: OffseasonPlayer): Player {
   };
 }
 
-const MOCK_ALL_PLAYERS: Player[] = [
-  // Thunder players
-  {
-    id: "p1", name: "Mike Trout", position: "CF", detectedPosition: "CF", grade: "A+", salary: 12.0, salaryPercentile: 95,
-    stats: { bWAR: 4.2, rWAR: 1.1, fWAR: 0.8, pWAR: 0, bWARPercentile: 98, rWARPercentile: 85, fWARPercentile: 72, pWARPercentile: 0 },
-    ratingsBefore: { powerL: 85, powerR: 83, contactL: 82, contactR: 80, speed: 78, fielding: 75, arm: 70 },
-    ratingsAfter: { powerL: 88, powerR: 86, contactL: 85, contactR: 83, speed: 80, fielding: 75, arm: 70 },
-    netChange: 14, salaryChange: 1.5, teamId: "thunder"
-  },
-  {
-    id: "p2", name: "Derek Jeter", position: "SS", detectedPosition: "SS", grade: "A-", salary: 8.0, salaryPercentile: 88,
-    stats: { bWAR: 3.5, rWAR: 0.9, fWAR: 1.2, pWAR: 0, bWARPercentile: 85, rWARPercentile: 78, fWARPercentile: 88, pWARPercentile: 0 },
-    ratingsBefore: { powerL: 65, powerR: 63, contactL: 88, contactR: 86, speed: 80, fielding: 85, arm: 80 },
-    ratingsAfter: { powerL: 67, powerR: 65, contactL: 90, contactR: 88, speed: 82, fielding: 85, arm: 80 },
-    netChange: 6, salaryChange: 1.2, teamId: "thunder"
-  },
-  {
-    id: "p3", name: "Alex Rodriguez", position: "3B", detectedPosition: "3B", grade: "A", salary: 15.0, salaryPercentile: 98,
-    stats: { bWAR: 1.8, rWAR: 0.4, fWAR: -0.2, pWAR: 0, bWARPercentile: 42, rWARPercentile: 38, fWARPercentile: 28, pWARPercentile: 0 },
-    ratingsBefore: { powerL: 92, powerR: 90, contactL: 78, contactR: 76, speed: 72, fielding: 70, arm: 85 },
-    ratingsAfter: { powerL: 88, powerR: 86, contactL: 75, contactR: 73, speed: 70, fielding: 68, arm: 83 },
-    netChange: -10, salaryChange: -3.8, teamId: "thunder"
-  },
-  {
-    id: "p4", name: "Mariano Rivera", position: "CP", detectedPosition: "CP", grade: "A", salary: 10.0, salaryPercentile: 92,
-    stats: { bWAR: 0, rWAR: 0, fWAR: 0, pWAR: 3.8, bWARPercentile: 0, rWARPercentile: 0, fWARPercentile: 0, pWARPercentile: 95 },
-    ratingsBefore: { velocity: 88, junk: 92, accuracy: 90 },
-    ratingsAfter: { velocity: 89, junk: 94, accuracy: 91 },
-    netChange: 4, salaryChange: 0.8, teamId: "thunder"
-  },
-  {
-    id: "p5", name: "Jorge Posada", position: "C", detectedPosition: "C", grade: "B+", salary: 6.5, salaryPercentile: 75,
-    stats: { bWAR: 2.1, rWAR: 0.5, fWAR: 0.3, pWAR: 0, bWARPercentile: 76, rWARPercentile: 68, fWARPercentile: 62, pWARPercentile: 0 },
-    ratingsBefore: { powerL: 78, powerR: 76, contactL: 72, contactR: 70, speed: 45, fielding: 68, arm: 75 },
-    ratingsAfter: { powerL: 78, powerR: 76, contactL: 72, contactR: 70, speed: 45, fielding: 68, arm: 75 },
-    netChange: 0, salaryChange: 0, teamId: "thunder"
-  },
-
-  // Giants players
-  {
-    id: "p6", name: "Barry Bonds", position: "LF", detectedPosition: "LF", grade: "A+", salary: 18.0, salaryPercentile: 99,
-    stats: { bWAR: 2.5, rWAR: 0.6, fWAR: 0.1, pWAR: 0, bWARPercentile: 55, rWARPercentile: 52, fWARPercentile: 45, pWARPercentile: 0 },
-    ratingsBefore: { powerL: 99, powerR: 97, contactL: 88, contactR: 86, speed: 68, fielding: 72, arm: 75 },
-    ratingsAfter: { powerL: 95, powerR: 93, contactL: 85, contactR: 83, speed: 66, fielding: 70, arm: 73 },
-    netChange: -10, salaryChange: -5.2, teamId: "giants"
-  },
-  {
-    id: "p7", name: "Willie Mays", position: "CF", detectedPosition: "CF", grade: "A-", salary: 7.5, salaryPercentile: 82,
-    stats: { bWAR: 3.8, rWAR: 1.2, fWAR: 1.5, pWAR: 0, bWARPercentile: 92, rWARPercentile: 88, fWARPercentile: 95, pWARPercentile: 0 },
-    ratingsBefore: { powerL: 82, powerR: 80, contactL: 85, contactR: 83, speed: 88, fielding: 92, arm: 88 },
-    ratingsAfter: { powerL: 85, powerR: 83, contactL: 87, contactR: 85, speed: 90, fielding: 94, arm: 90 },
-    netChange: 9, salaryChange: 2.8, teamId: "giants"
-  },
-  {
-    id: "p8", name: "Randy Johnson", position: "SP", detectedPosition: "SP", grade: "A-", salary: 9.5, salaryPercentile: 86,
-    stats: { bWAR: 0, rWAR: 0, fWAR: 0, pWAR: 2.8, bWARPercentile: 0, rWARPercentile: 0, fWARPercentile: 0, pWARPercentile: 82 },
-    ratingsBefore: { velocity: 95, junk: 85, accuracy: 80 },
-    ratingsAfter: { velocity: 95, junk: 85, accuracy: 80 },
-    netChange: 0, salaryChange: 0, teamId: "giants"
-  },
-
-  // Red Sox players
-  {
-    id: "p9", name: "David Ortiz", position: "DH", detectedPosition: "DH", grade: "A", salary: 15.0, salaryPercentile: 94,
-    stats: { bWAR: 4.5, rWAR: 1.8, fWAR: 0, pWAR: 0, bWARPercentile: 96, rWARPercentile: 92, fWARPercentile: 0, pWARPercentile: 0 },
-    ratingsBefore: { powerL: 95, powerR: 93, contactL: 85, contactR: 83, speed: 45, fielding: undefined, arm: undefined },
-    ratingsAfter: { powerL: 97, powerR: 95, contactL: 87, contactR: 85, speed: 44, fielding: undefined, arm: undefined },
-    netChange: 5, salaryChange: 1.8, teamId: "redsox"
-  },
-  {
-    id: "p10", name: "Pedro Martinez", position: "SP", detectedPosition: "SP", grade: "A+", salary: 14.0, salaryPercentile: 96,
-    stats: { bWAR: 0, rWAR: 0, fWAR: 0, pWAR: 5.2, bWARPercentile: 0, rWARPercentile: 0, fWARPercentile: 0, pWARPercentile: 98 },
-    ratingsBefore: { velocity: 92, junk: 95, accuracy: 93 },
-    ratingsAfter: { velocity: 93, junk: 97, accuracy: 95 },
-    netChange: 5, salaryChange: 4.2, teamId: "redsox"
-  },
-  {
-    id: "p11", name: "Manny Ramirez", position: "LF", detectedPosition: "LF", grade: "A-", salary: 9.9, salaryPercentile: 89,
-    stats: { bWAR: 3.2, rWAR: 0.8, fWAR: -0.3, pWAR: 0, bWARPercentile: 88, rWARPercentile: 75, fWARPercentile: 35, pWARPercentile: 0 },
-    ratingsBefore: { powerL: 90, powerR: 88, contactL: 86, contactR: 84, speed: 52, fielding: 62, arm: 68 },
-    ratingsAfter: { powerL: 91, powerR: 89, contactL: 87, contactR: 85, speed: 52, fielding: 61, arm: 68 },
-    netChange: 3, salaryChange: 0.5, teamId: "redsox"
-  },
-
-  // Mariners players
-  {
-    id: "p12", name: "Ken Griffey Jr.", position: "CF", detectedPosition: "CF", grade: "A", salary: 9.8, salaryPercentile: 88,
-    stats: { bWAR: 1.9, rWAR: 0.4, fWAR: 0.5, pWAR: 0, bWARPercentile: 48, rWARPercentile: 42, fWARPercentile: 58, pWARPercentile: 0 },
-    ratingsBefore: { powerL: 92, powerR: 90, contactL: 88, contactR: 86, speed: 78, fielding: 88, arm: 82 },
-    ratingsAfter: { powerL: 88, powerR: 86, contactL: 86, contactR: 84, speed: 76, fielding: 87, arm: 81 },
-    netChange: -8, salaryChange: -2.8, teamId: "mariners"
-  },
-  {
-    id: "p13", name: "Ichiro Suzuki", position: "RF", detectedPosition: "RF", grade: "A-", salary: 8.5, salaryPercentile: 84,
-    stats: { bWAR: 3.9, rWAR: 1.3, fWAR: 1.6, pWAR: 0, bWARPercentile: 94, rWARPercentile: 89, fWARPercentile: 96, pWARPercentile: 0 },
-    ratingsBefore: { powerL: 55, powerR: 53, contactL: 95, contactR: 93, speed: 92, fielding: 90, arm: 88 },
-    ratingsAfter: { powerL: 56, powerR: 54, contactL: 97, contactR: 95, speed: 94, fielding: 92, arm: 90 },
-    netChange: 8, salaryChange: 2.2, teamId: "mariners"
-  },
-];
+const MOCK_ALL_PLAYERS: Player[] = [];
 
 // Helper functions
 function getGradeColor(grade: Grade): string {

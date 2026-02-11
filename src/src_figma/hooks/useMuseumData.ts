@@ -65,60 +65,18 @@ export type {
 };
 
 // ============================================
-// MOCK DATA (for first-time or fallback)
+// EMPTY FALLBACKS (no mock data — shows empty state)
 // ============================================
 
-const MOCK_CHAMPIONSHIPS: ChampionshipRecord[] = [
-  { year: 2025, champion: "Tigers", championId: "tigers", runnerUp: "Sox", runnerUpId: "sox", series: "4-2", mvp: "J. Rodriguez", mvpId: "p1" },
-  { year: 2024, champion: "Moonstars", championId: "moonstars", runnerUp: "Beewolves", runnerUpId: "beewolves", series: "4-3" },
-  { year: 2023, champion: "Sox", championId: "sox", runnerUp: "Tigers", runnerUpId: "tigers", series: "4-1" },
-];
-
-const MOCK_TEAM_RECORDS: TeamAllTimeRecord[] = [
-  { teamId: "tigers", teamName: "Tigers", totalWins: 487, totalLosses: 361, winPct: 0.574, championships: 2, playoffAppearances: 4, lastUpdated: Date.now() },
-  { teamId: "sox", teamName: "Sox", totalWins: 468, totalLosses: 380, winPct: 0.552, championships: 1, playoffAppearances: 5, lastUpdated: Date.now() },
-  { teamId: "moonstars", teamName: "Moonstars", totalWins: 445, totalLosses: 403, winPct: 0.525, championships: 1, playoffAppearances: 3, lastUpdated: Date.now() },
-];
-
-const MOCK_AWARD_WINNERS: AwardWinner[] = [
-  { year: 2025, awardType: 'MVP', playerId: "p1", playerName: "J. Rodriguez", teamId: "tigers", teamName: "Tigers", stats: "24-4, 2.12 ERA" },
-  { year: 2025, awardType: 'CY_YOUNG', playerId: "p2", playerName: "A. Brown", teamId: "sox", teamName: "Sox", stats: "21-6, 2.45 ERA" },
-  { year: 2025, awardType: 'ROY', playerId: "p3", playerName: "M. Chen", teamId: "bears", teamName: "Bears", stats: ".298, 28 HR" },
-];
-
-const MOCK_ALL_TIME_LEADERS: AllTimeLeader[] = [
-  { id: "l1", playerId: "p1", name: "J. Rodriguez", teamId: "tigers", teamName: "Tigers", category: 'pitching', war: 64.2, pwar: 64.2, bwar: 0, rwar: 0, fwar: 0, era: 2.45, wins: 187, lastUpdated: Date.now() },
-  { id: "l2", playerId: "p4", name: "S. Wilson", teamId: "sox", teamName: "Sox", category: 'batting', war: 58.9, pwar: 0, bwar: 52.3, rwar: 4.8, fwar: 1.8, avg: 0.312, hr: 342, lastUpdated: Date.now() },
-  { id: "l3", playerId: "p5", name: "K. Thompson", teamId: "moonstars", teamName: "Moonstars", category: 'batting', war: 56.7, pwar: 0, bwar: 48.9, rwar: 2.1, fwar: 5.7, avg: 0.298, hr: 298, lastUpdated: Date.now() },
-];
-
-const MOCK_HALL_OF_FAME: HallOfFamer[] = [
-  { id: "hof1", playerId: "p1", name: "J. Rodriguez", teamId: "tigers", teamName: "Tigers", position: "SP", jerseyNumber: 42, inductedYear: 2026, careerYears: "2018-2025", careerWar: 64.2, highlights: ["3x Cy Young", "World Series MVP 2025"] },
-  { id: "hof2", playerId: "p6", name: "Historical Legend", teamId: "tigers", teamName: "Tigers", position: "CF", jerseyNumber: 7, inductedYear: 2020, careerYears: "2005-2017", careerWar: 58.4, highlights: ["MVP 2012", "500 HR Club"] },
-];
-
-const MOCK_RECORDS: LeagueRecord[] = [
-  { id: "r1", category: 'batting', recordName: "Most Career Home Runs", playerId: "p3", playerName: "M. Chen", teamId: "bears", teamName: "Bears", year: "2015-2025", value: "389", numericValue: 389, isCareer: true },
-  { id: "r2", category: 'batting', recordName: "Highest Career Batting Average", playerId: "p4", playerName: "S. Wilson", teamId: "sox", teamName: "Sox", year: "2016-2025", value: ".312", numericValue: 0.312, isCareer: true },
-  { id: "r3", category: 'pitching', recordName: "Most Career Wins", playerId: "p1", playerName: "J. Rodriguez", teamId: "tigers", teamName: "Tigers", year: "2018-2025", value: "187", numericValue: 187, isCareer: true },
-  { id: "r4", category: 'pitching', recordName: "Lowest Career ERA", playerId: "p1", playerName: "J. Rodriguez", teamId: "tigers", teamName: "Tigers", year: "2018-2025", value: "2.45", numericValue: 2.45, isCareer: true },
-];
-
-const MOCK_MOMENTS: LegendaryMoment[] = [
-  { id: "m1", date: "Oct 15, 2025", year: 2025, title: "Rodriguez Perfect Game in World Series Game 7", description: "In the most pressure-packed moment imaginable, J. Rodriguez delivered a perfect game to clinch the championship.", reporter: "Sarah Jenkins", playerId: "p1", playerName: "J. Rodriguez", teamId: "tigers", teamName: "Tigers", tags: ["perfect-game", "world-series"] },
-  { id: "m2", date: "Jul 4, 2024", year: 2024, title: "Chen's 4 Home Runs on Independence Day", description: "M. Chen put on a fireworks show of his own, becoming only the third player in league history to hit four home runs in a single game.", reporter: "Mike Patterson", playerId: "p3", playerName: "M. Chen", teamId: "bears", teamName: "Bears", tags: ["4-homer-game"] },
-];
-
-const MOCK_RETIRED_JERSEYS: RetiredJersey[] = [
-  { id: "rj1", teamId: "tigers", teamName: "Tigers", number: 42, playerId: "p1", playerName: "J. Rodriguez", position: "SP", years: "2018-2025", retiredYear: 2025 },
-  { id: "rj2", teamId: "tigers", teamName: "Tigers", number: 7, playerId: "p6", playerName: "Historical Legend", position: "CF", years: "2005-2017", retiredYear: 2017 },
-];
-
-const MOCK_STADIUMS: StadiumData[] = [
-  { id: "s1", teamId: "tigers", name: "Tiger Stadium", opened: 1912, capacity: 42000, overall: 102, hr: 106, doubles: 104, triples: 98 },
-  { id: "s2", teamId: "sox", name: "Sox Field", opened: 1995, capacity: 38500, overall: 98, hr: 95, doubles: 99, triples: 102 },
-  { id: "s3", teamId: "bears", name: "Bear Den", opened: 2001, capacity: 45000, overall: 105, hr: 108, doubles: 107, triples: 96 },
-];
+const MOCK_CHAMPIONSHIPS: ChampionshipRecord[] = [];
+const MOCK_TEAM_RECORDS: TeamAllTimeRecord[] = [];
+const MOCK_AWARD_WINNERS: AwardWinner[] = [];
+const MOCK_ALL_TIME_LEADERS: AllTimeLeader[] = [];
+const MOCK_HALL_OF_FAME: HallOfFamer[] = [];
+const MOCK_RECORDS: LeagueRecord[] = [];
+const MOCK_MOMENTS: LegendaryMoment[] = [];
+const MOCK_RETIRED_JERSEYS: RetiredJersey[] = [];
+const MOCK_STADIUMS: StadiumData[] = [];
 
 // ============================================
 // HOOK RETURN TYPE

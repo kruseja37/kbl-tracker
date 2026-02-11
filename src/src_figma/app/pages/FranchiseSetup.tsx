@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { useNavigate } from "react-router";
 import { ArrowLeft, Check, Gamepad2, Loader2, AlertCircle } from "lucide-react";
 import { useLeagueBuilderData, type LeagueTemplate, type Team } from "../../hooks/useLeagueBuilderData";
@@ -41,12 +41,24 @@ const INITIAL_CONFIG: FranchiseConfig = {
 
 export function FranchiseSetup() {
   const navigate = useNavigate();
-  const { leagues, teams, isLoading, error } = useLeagueBuilderData();
+  const { leagues, teams, isLoading, error, seedSMB4Data } = useLeagueBuilderData();
   const [currentStep, setCurrentStep] = useState(1);
   const [config, setConfig] = useState<FranchiseConfig>(INITIAL_CONFIG);
   const [expandedLeague, setExpandedLeague] = useState<string | null>(null);
   const [isInitializing, setIsInitializing] = useState(false);
   const [initError, setInitError] = useState<string | null>(null);
+  const autoSeedAttempted = useRef(false);
+
+  // Auto-seed SMB4 data if no leagues exist (first-time setup)
+  useEffect(() => {
+    if (!isLoading && !error && leagues.length === 0 && !autoSeedAttempted.current) {
+      autoSeedAttempted.current = true;
+      console.log('[FranchiseSetup] No leagues found, auto-seeding SMB4 data...');
+      seedSMB4Data(false).catch((err) => {
+        console.error('[FranchiseSetup] Auto-seed failed:', err);
+      });
+    }
+  }, [isLoading, error, leagues.length, seedSMB4Data]);
 
   // Get teams that belong to the selected league
   const leagueTeams = useMemo(() => {
@@ -324,21 +336,21 @@ function Step1SelectLeague({
           return (
             <div
               key={league.id}
-              className={`border-4 p-4 transition-all ${
+              onClick={() => selectLeague(league.id)}
+              className={`border-4 p-4 transition-all cursor-pointer ${
                 isSelected
                   ? "border-[#C4A853] bg-[#C4A853]/10"
                   : "border-[#E8E8D8] bg-[#4A6A42] hover:border-[#C4A853]"
               }`}
             >
               <div className="flex items-start gap-3">
-                <button
-                  onClick={() => selectLeague(league.id)}
+                <div
                   className={`w-6 h-6 rounded-full border-4 flex-shrink-0 mt-1 ${
                     isSelected ? "border-[#C4A853] bg-[#C4A853]" : "border-[#E8E8D8] bg-transparent"
                   }`}
                 >
                   {isSelected && <div className="w-full h-full rounded-full bg-[#4A6A42] scale-50" />}
-                </button>
+                </div>
 
                 <div className="flex-1">
                   <h3 className="text-sm font-bold text-[#E8E8D8] mb-2" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>{league.name.toUpperCase()}</h3>
@@ -391,7 +403,7 @@ function Step1SelectLeague({
 
                 {((league.conferences?.length || 0) > 0 || (league.teamIds?.length || 0) > 0) && (
                   <button
-                    onClick={() => setExpandedLeague(isExpanded ? null : league.id)}
+                    onClick={(e) => { e.stopPropagation(); setExpandedLeague(isExpanded ? null : league.id); }}
                     className="text-[#E8E8D8]/50 hover:text-[#E8E8D8] text-xs"
                   >
                     {isExpanded ? "▲" : "▼"}
