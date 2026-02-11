@@ -5,8 +5,7 @@
  * Provides IndexedDB storage for game state, allowing recovery after page refresh.
  */
 
-const DB_NAME = 'kbl-tracker';
-const DB_VERSION = 2;  // Bumped from 1 - existing DBs may be at version 2
+import { getTrackerDb } from '../../utils/trackerDb';
 
 // Store names
 const STORES = {
@@ -20,57 +19,12 @@ const STORES = {
 // DATABASE INITIALIZATION
 // ============================================
 
-let dbInstance: IDBDatabase | null = null;
-
 /**
- * Initialize the IndexedDB database
+ * Initialize the IndexedDB database.
+ * Delegates to the shared trackerDb initializer to avoid version conflicts.
  */
 export async function initDatabase(): Promise<IDBDatabase> {
-  if (dbInstance) return dbInstance;
-
-  return new Promise((resolve, reject) => {
-    const request = indexedDB.open(DB_NAME, DB_VERSION);
-
-    request.onerror = () => {
-      console.error('Failed to open database:', request.error);
-      reject(request.error);
-    };
-
-    request.onsuccess = () => {
-      dbInstance = request.result;
-      resolve(dbInstance);
-    };
-
-    request.onupgradeneeded = (event) => {
-      const db = (event.target as IDBOpenDBRequest).result;
-
-      // Current game state (single record, overwritten)
-      if (!db.objectStoreNames.contains(STORES.CURRENT_GAME)) {
-        db.createObjectStore(STORES.CURRENT_GAME, { keyPath: 'id' });
-      }
-
-      // Completed games archive
-      if (!db.objectStoreNames.contains(STORES.COMPLETED_GAMES)) {
-        const completedStore = db.createObjectStore(STORES.COMPLETED_GAMES, { keyPath: 'gameId' });
-        completedStore.createIndex('date', 'date', { unique: false });
-        completedStore.createIndex('seasonId', 'seasonId', { unique: false });
-      }
-
-      // Player game stats (for historical lookup)
-      if (!db.objectStoreNames.contains(STORES.PLAYER_GAME_STATS)) {
-        const playerStore = db.createObjectStore(STORES.PLAYER_GAME_STATS, { keyPath: ['gameId', 'playerId'] });
-        playerStore.createIndex('playerId', 'playerId', { unique: false });
-        playerStore.createIndex('gameId', 'gameId', { unique: false });
-      }
-
-      // Pitcher game stats
-      if (!db.objectStoreNames.contains(STORES.PITCHER_GAME_STATS)) {
-        const pitcherStore = db.createObjectStore(STORES.PITCHER_GAME_STATS, { keyPath: ['gameId', 'pitcherId'] });
-        pitcherStore.createIndex('pitcherId', 'pitcherId', { unique: false });
-        pitcherStore.createIndex('gameId', 'gameId', { unique: false });
-      }
-    };
-  });
+  return getTrackerDb();
 }
 
 // ============================================

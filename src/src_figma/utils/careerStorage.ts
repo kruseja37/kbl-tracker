@@ -7,19 +7,10 @@
  * Career stats are updated game-by-game (not end-of-season).
  */
 
-const DB_NAME = 'kbl-tracker';
-const DB_VERSION = 3;  // Bump version to add career stores
+import { getTrackerDb } from '../../utils/trackerDb';
 
 // Store names
 const STORES = {
-  // Existing stores
-  CURRENT_GAME: 'currentGame',
-  COMPLETED_GAMES: 'completedGames',
-  PLAYER_SEASON_BATTING: 'playerSeasonBatting',
-  PLAYER_SEASON_PITCHING: 'playerSeasonPitching',
-  PLAYER_SEASON_FIELDING: 'playerSeasonFielding',
-  SEASON_METADATA: 'seasonMetadata',
-  // NEW: Career stores
   PLAYER_CAREER_BATTING: 'playerCareerBatting',
   PLAYER_CAREER_PITCHING: 'playerCareerPitching',
   PLAYER_CAREER_FIELDING: 'playerCareerFielding',
@@ -30,111 +21,12 @@ const STORES = {
 // DATABASE INITIALIZATION
 // ============================================
 
-let dbInstance: IDBDatabase | null = null;
-
 /**
- * Initialize the IndexedDB database with career stores
+ * Initialize the IndexedDB database with career stores.
+ * Delegates to the shared trackerDb initializer to avoid version conflicts.
  */
 export async function initCareerDatabase(): Promise<IDBDatabase> {
-  if (dbInstance) return dbInstance;
-
-  return new Promise((resolve, reject) => {
-    const request = indexedDB.open(DB_NAME, DB_VERSION);
-
-    request.onerror = () => {
-      console.error('Failed to open database:', request.error);
-      reject(request.error);
-    };
-
-    request.onsuccess = () => {
-      dbInstance = request.result;
-      resolve(dbInstance);
-    };
-
-    request.onupgradeneeded = (event) => {
-      const db = (event.target as IDBOpenDBRequest).result;
-
-      // Existing stores from Phase 2 & 3 (preserved for upgrade path)
-      if (!db.objectStoreNames.contains(STORES.CURRENT_GAME)) {
-        db.createObjectStore(STORES.CURRENT_GAME, { keyPath: 'id' });
-      }
-
-      if (!db.objectStoreNames.contains(STORES.COMPLETED_GAMES)) {
-        const completedStore = db.createObjectStore(STORES.COMPLETED_GAMES, { keyPath: 'gameId' });
-        completedStore.createIndex('date', 'date', { unique: false });
-        completedStore.createIndex('seasonId', 'seasonId', { unique: false });
-      }
-
-      if (!db.objectStoreNames.contains(STORES.PLAYER_SEASON_BATTING)) {
-        const battingStore = db.createObjectStore(STORES.PLAYER_SEASON_BATTING, {
-          keyPath: ['seasonId', 'playerId']
-        });
-        battingStore.createIndex('playerId', 'playerId', { unique: false });
-        battingStore.createIndex('seasonId', 'seasonId', { unique: false });
-        battingStore.createIndex('teamId', 'teamId', { unique: false });
-      }
-
-      if (!db.objectStoreNames.contains(STORES.PLAYER_SEASON_PITCHING)) {
-        const pitchingStore = db.createObjectStore(STORES.PLAYER_SEASON_PITCHING, {
-          keyPath: ['seasonId', 'playerId']
-        });
-        pitchingStore.createIndex('playerId', 'playerId', { unique: false });
-        pitchingStore.createIndex('seasonId', 'seasonId', { unique: false });
-        pitchingStore.createIndex('teamId', 'teamId', { unique: false });
-      }
-
-      if (!db.objectStoreNames.contains(STORES.PLAYER_SEASON_FIELDING)) {
-        const fieldingStore = db.createObjectStore(STORES.PLAYER_SEASON_FIELDING, {
-          keyPath: ['seasonId', 'playerId']
-        });
-        fieldingStore.createIndex('playerId', 'playerId', { unique: false });
-        fieldingStore.createIndex('seasonId', 'seasonId', { unique: false });
-      }
-
-      if (!db.objectStoreNames.contains(STORES.SEASON_METADATA)) {
-        const metaStore = db.createObjectStore(STORES.SEASON_METADATA, { keyPath: 'seasonId' });
-        metaStore.createIndex('status', 'status', { unique: false });
-      }
-
-      // NEW: Career batting stats
-      if (!db.objectStoreNames.contains(STORES.PLAYER_CAREER_BATTING)) {
-        const careerBattingStore = db.createObjectStore(STORES.PLAYER_CAREER_BATTING, {
-          keyPath: 'playerId'
-        });
-        careerBattingStore.createIndex('teamId', 'teamId', { unique: false });
-        careerBattingStore.createIndex('homeRuns', 'homeRuns', { unique: false });
-        careerBattingStore.createIndex('hits', 'hits', { unique: false });
-      }
-
-      // NEW: Career pitching stats
-      if (!db.objectStoreNames.contains(STORES.PLAYER_CAREER_PITCHING)) {
-        const careerPitchingStore = db.createObjectStore(STORES.PLAYER_CAREER_PITCHING, {
-          keyPath: 'playerId'
-        });
-        careerPitchingStore.createIndex('teamId', 'teamId', { unique: false });
-        careerPitchingStore.createIndex('wins', 'wins', { unique: false });
-        careerPitchingStore.createIndex('strikeouts', 'strikeouts', { unique: false });
-      }
-
-      // NEW: Career fielding stats
-      if (!db.objectStoreNames.contains(STORES.PLAYER_CAREER_FIELDING)) {
-        const careerFieldingStore = db.createObjectStore(STORES.PLAYER_CAREER_FIELDING, {
-          keyPath: 'playerId'
-        });
-        careerFieldingStore.createIndex('teamId', 'teamId', { unique: false });
-      }
-
-      // NEW: Career milestones achieved
-      if (!db.objectStoreNames.contains(STORES.CAREER_MILESTONES)) {
-        const milestoneStore = db.createObjectStore(STORES.CAREER_MILESTONES, {
-          keyPath: 'id'
-        });
-        milestoneStore.createIndex('playerId', 'playerId', { unique: false });
-        milestoneStore.createIndex('milestoneType', 'milestoneType', { unique: false });
-        milestoneStore.createIndex('achievedDate', 'achievedDate', { unique: false });
-      }
-    };
-  });
+  return getTrackerDb();
 }
 
 // ============================================

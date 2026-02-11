@@ -2130,24 +2130,29 @@ function GameDayContent({ scheduleData, currentSeason, onDataRefresh }: GameDayC
     setIsSimulating(true);
 
     // Process through real pipeline (runs while animation plays)
-    try {
-      const seasonId = franchiseId ? `${franchiseId}-season-${currentSeason}` : `season-${currentSeason}`;
-      await processCompletedGame(game, { seasonId });
+    const seasonId = franchiseId ? `${franchiseId}-season-${currentSeason}` : `season-${currentSeason}`;
 
-      // Mark game completed in schedule
+    try {
+      await processCompletedGame(game, { seasonId });
+    } catch (err) {
+      console.error('[handleSimulate] processCompletedGame failed:', err);
+    }
+
+    try {
       if (nextGame) {
         const winningTeam = game.homeScore > game.awayScore ? homeId : awayId;
         const losingTeam = game.homeScore > game.awayScore ? awayId : homeId;
-        await scheduleData.completeGame(nextGame.id, {
+        const result = {
           awayScore: game.awayScore,
           homeScore: game.homeScore,
           winningTeamId: winningTeam,
           losingTeamId: losingTeam,
           gameLogId: game.gameId,
-        });
+        };
+        await scheduleData.completeGame(nextGame.id, result);
       }
     } catch (err) {
-      console.error('Failed to process simulated game:', err);
+      console.error('[handleSimulate] scheduleData.completeGame failed:', err);
     }
   };
 
