@@ -142,7 +142,7 @@ export function FinalizeAdvanceFlow({ onClose, onAdvanceComplete, seasonNumber =
 
   const [teams, setTeams] = useState<Team[]>(initialTeams);
 
-  const selectedTeam = teams.find(t => t.id === selectedTeamId) || teams[0];
+  const selectedTeam = teams.find(t => t.id === selectedTeamId) || teams[0] || null;
 
   const handleCallUp = (player: Player) => {
     setSelectedPlayer(player);
@@ -403,6 +403,24 @@ export function FinalizeAdvanceFlow({ onClose, onAdvanceComplete, seasonNumber =
     return (
       <div className="fixed inset-0 bg-black/95 z-50 flex items-center justify-center">
         <div className="text-[#E8E8D8] text-xl">Loading finalize & advance data...</div>
+      </div>
+    );
+  }
+
+  // No teams loaded — show empty state instead of crashing on selectedTeam.mlbRoster
+  if (teams.length === 0 || !selectedTeam) {
+    return (
+      <div className="fixed inset-0 bg-black/95 z-50 flex items-center justify-center">
+        <div className="text-center space-y-4">
+          <div className="text-[#E8E8D8] text-xl">No team data available</div>
+          <div className="text-[#E8E8D8]/60 text-sm">Team rosters could not be loaded for the finalize phase.</div>
+          <button
+            onClick={onClose}
+            className="bg-[#5A8352] border-[4px] border-[#4A6844] px-6 py-3 text-[#E8E8D8] hover:bg-[#4F7D4B] active:scale-95 transition-all"
+          >
+            Back to Offseason
+          </button>
+        </div>
       </div>
     );
   }
