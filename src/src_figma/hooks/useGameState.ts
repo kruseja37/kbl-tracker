@@ -1321,9 +1321,13 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       awayScoreAfter: gameState.isTop ? gameState.awayScore + runsScored : gameState.awayScore,
       homeScoreAfter: gameState.isTop ? gameState.homeScore : gameState.homeScore + runsScored,
       leverageIndex,
-      winProbabilityBefore: 0.5, // TODO: Implement win probability calculator
+      // TODO MAJ-12: WPA requires a run-expectancy lookup table indexed by
+      // (inning, outs, base-state, run-differential). Substantial feature
+      // (~500-line table + calculation logic). Deferred.
+      // Reference: https://www.fangraphs.com/library/misc/wpa/
+      winProbabilityBefore: 0.5,
       winProbabilityAfter: 0.5,
-      wpa: 0, // TODO: Calculate WPA = winProbAfter - winProbBefore
+      wpa: 0,
       ballInPlay: null,
       fameEvents: [],
       isLeadoff: gameState.outs === 0 && !gameState.bases.first && !gameState.bases.second && !gameState.bases.third,

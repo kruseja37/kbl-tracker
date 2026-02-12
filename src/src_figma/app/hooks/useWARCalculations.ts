@@ -55,6 +55,8 @@ export interface SimpleBattingStats {
   sacFlies: number;    // SF
   sacBunts: number;    // SH
   groundedIntoDP: number; // GIDP
+  stolenBases: number; // SB — MAJ-16
+  caughtStealing: number; // CS — MAJ-16
 
   // Optional identifiers
   playerId?: string;
@@ -132,8 +134,8 @@ function convertBattingStats(stats: SimpleBattingStats) {
     sacFlies: stats.sacFlies,
     sacBunts: stats.sacBunts,
     gidp: stats.groundedIntoDP,
-    stolenBases: 0, // TODO: Add to SimpleBattingStats
-    caughtStealing: 0, // TODO: Add to SimpleBattingStats
+    stolenBases: stats.stolenBases, // MAJ-16: Now reads from SimpleBattingStats
+    caughtStealing: stats.caughtStealing, // MAJ-16: Now reads from SimpleBattingStats
   };
 }
 
