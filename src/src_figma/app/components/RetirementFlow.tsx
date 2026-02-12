@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 import { ArrowLeft, Dice1, Dice2, Dice3, Dice4, Dice5, Dice6, Trophy, CheckCircle, X } from "lucide-react";
 import { useOffseasonData, type OffseasonPlayer, type OffseasonTeam } from "@/hooks/useOffseasonData";
 import { useOffseasonState, type RetirementDecision } from "../../hooks/useOffseasonState";
+import { retirePlayer } from "../../../utils/leagueBuilderStorage";
 
 // Types
 type Position = "SP" | "RP" | "CP" | "C" | "1B" | "2B" | "3B" | "SS" | "LF" | "CF" | "RF";
@@ -356,7 +357,17 @@ export function RetirementFlow({ onClose, onRetirementsComplete, seasonId = 'sea
       }));
 
       await offseasonState.saveRetirementDecisions(retirementDecisions);
-      console.log(`[RetirementFlow] Saved ${retirementDecisions.length} retirements`);
+
+      // Remove retired players from team rosters in leagueBuilderStorage
+      for (const r of retirements) {
+        try {
+          await retirePlayer(r.player.id);
+        } catch (err) {
+          console.error(`[RetirementFlow] Failed to retire ${r.player.name} from roster:`, err);
+        }
+      }
+
+      console.log(`[RetirementFlow] Saved ${retirementDecisions.length} retirements and updated rosters`);
       onClose();
     } catch (err) {
       console.error('[RetirementFlow] Failed to save retirements:', err);

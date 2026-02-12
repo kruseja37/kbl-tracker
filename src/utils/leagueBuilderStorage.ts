@@ -41,7 +41,7 @@ export type Chemistry = 'Competitive' | 'Spirited' | 'Crafty' | 'Scholarly' | 'D
 
 export type MojoState = 'On Fire' | 'Hot' | 'Normal' | 'Cold' | 'Ice Cold';
 
-export type RosterStatus = 'MLB' | 'FARM' | 'FREE_AGENT';
+export type RosterStatus = 'MLB' | 'FARM' | 'FREE_AGENT' | 'RETIRED';
 
 // League Template
 export interface Conference {
@@ -505,6 +505,67 @@ export async function deletePlayer(id: string): Promise<void> {
     request.onsuccess = () => resolve();
     request.onerror = () => reject(request.error);
   });
+}
+
+/**
+ * Retire a player: mark RETIRED in the player record and remove from
+ * their team roster (mlbRoster, lineups, rotation, bullpen, depth chart, etc.).
+ */
+export async function retirePlayer(playerId: string): Promise<void> {
+  // 1. Update the player record
+  const player = await getPlayer(playerId);
+  if (!player) return;
+
+  const previousTeamId = player.currentTeamId;
+
+  const db = await initLeagueBuilderDatabase();
+  const now = nowISO();
+  const updatedPlayer: Player = {
+    ...player,
+    rosterStatus: 'RETIRED',
+    currentTeamId: null,
+    lastModified: now,
+  };
+  await new Promise<void>((resolve, reject) => {
+    const tx = db.transaction(STORES.GLOBAL_PLAYERS, 'readwrite');
+    const store = tx.objectStore(STORES.GLOBAL_PLAYERS);
+    const request = store.put(updatedPlayer);
+    request.onsuccess = () => resolve();
+    request.onerror = () => reject(request.error);
+  });
+
+  // 2. Remove from team roster if they were on one
+  if (!previousTeamId) return;
+
+  const roster = await getTeamRoster(previousTeamId);
+  if (!roster) return;
+
+  const removeId = (arr: string[]) => arr.filter(id => id !== playerId);
+  const removeFromLineup = (slots: LineupSlot[]) => slots.filter(s => s.playerId !== playerId);
+  const removeFromDepth = (dc: DepthChart): DepthChart => {
+    const cleaned = { ...dc };
+    for (const pos of Object.keys(cleaned) as (keyof DepthChart)[]) {
+      cleaned[pos] = removeId(cleaned[pos]);
+    }
+    return cleaned;
+  };
+
+  const cleanedRoster: TeamRoster = {
+    ...roster,
+    mlbRoster: removeId(roster.mlbRoster),
+    farmRoster: removeId(roster.farmRoster),
+    lineupVsRHP: removeFromLineup(roster.lineupVsRHP),
+    lineupVsLHP: removeFromLineup(roster.lineupVsLHP),
+    startingRotation: removeId(roster.startingRotation),
+    closingPitcher: roster.closingPitcher === playerId ? '' : roster.closingPitcher,
+    setupPitchers: removeId(roster.setupPitchers),
+    depthChart: removeFromDepth(roster.depthChart),
+    pinchHitOrder: removeId(roster.pinchHitOrder),
+    pinchRunOrder: removeId(roster.pinchRunOrder),
+    defensiveSubOrder: removeId(roster.defensiveSubOrder),
+  };
+
+  await saveTeamRoster(cleanedRoster);
 }
 
 // ============================================
