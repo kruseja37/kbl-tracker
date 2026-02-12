@@ -9,63 +9,61 @@ type TeamHubTab = "team" | "fan-morale" | "roster" | "stats" | "stadium" | "mana
 const MOCK_TEAMS: string[] = [];
 const MOCK_STADIUMS: string[] = [];
 
-const MOCK_ROSTER_DATA: { name: string; position: string; grade: string; morale: number; contract: string; trueValue: string; netDiff: string; fitness: number }[] = [];
+const MOCK_ROSTER_DATA: { name: string; position: string; grade: string; morale: string | number; contract: string; trueValue: string; netDiff: string; fitness: string | number }[] = [];
 
 const MOCK_STATS_DATA: { name: string; pos: string; war: number; pwar: number; bwar: number; rwar: number; fwar: number; era?: number; ip?: number; k?: number; w?: number; l?: number; sv?: number; avg?: number; hr?: number; rbi?: number; sb?: number; ops?: number }[] = [];
 
 // Helper to convert OffseasonPlayer to roster format
 function convertToRosterItem(player: OffseasonPlayer) {
-  const salary = player.salary || 1000000;
-  const trueValue = salary * (0.8 + Math.random() * 0.4); // Random true value within 20% of contract
-  const diff = trueValue - salary;
-  const diffStr = diff >= 0 ? `+$${(diff / 1000000).toFixed(1)}M` : `-$${(Math.abs(diff) / 1000000).toFixed(1)}M`;
+  const salary = player.salary || 0;
+  const contractStr = salary > 0 ? `$${(salary / 1000000).toFixed(1)}M` : '—';
 
   return {
     name: player.name.split(' ').map((n, i) => i === 0 ? n[0] + '.' : n).join(' '),
     position: player.position,
     grade: player.grade,
-    morale: 70 + Math.floor(Math.random() * 25),
-    contract: `$${(salary / 1000000).toFixed(1)}M`,
-    trueValue: `$${(trueValue / 1000000).toFixed(1)}M`,
-    netDiff: diffStr,
-    fitness: 85 + Math.floor(Math.random() * 13),
+    morale: '—' as string | number,
+    contract: contractStr,
+    trueValue: '—',
+    netDiff: '—',
+    fitness: '—' as string | number,
   };
 }
 
-// Helper to convert OffseasonPlayer to stats format
+// Helper to convert OffseasonPlayer to stats format (empty — no season data yet)
 function convertToStatsItem(player: OffseasonPlayer) {
+  const shortName = player.name.split(' ').map((n, i) => i === 0 ? n[0] + '.' : n).join(' ');
   const isPitcher = ['SP', 'RP', 'CP'].includes(player.position);
-  const baseWar = 1.0 + Math.random() * 7;
 
   if (isPitcher) {
     return {
-      name: player.name.split(' ').map((n, i) => i === 0 ? n[0] + '.' : n).join(' '),
+      name: shortName,
       pos: player.position,
-      war: parseFloat(baseWar.toFixed(1)),
-      pwar: parseFloat(baseWar.toFixed(1)),
+      war: 0.0,
+      pwar: 0.0,
       bwar: 0.0,
       rwar: 0.0,
       fwar: 0.0,
-      era: parseFloat((2.5 + Math.random() * 2.5).toFixed(2)),
-      ip: parseFloat((60 + Math.random() * 140).toFixed(1)),
-      k: Math.floor(80 + Math.random() * 160),
-      w: Math.floor(5 + Math.random() * 12),
-      l: Math.floor(2 + Math.random() * 10),
+      era: undefined as number | undefined,
+      ip: undefined as number | undefined,
+      k: undefined as number | undefined,
+      w: undefined as number | undefined,
+      l: undefined as number | undefined,
     };
   } else {
     return {
-      name: player.name.split(' ').map((n, i) => i === 0 ? n[0] + '.' : n).join(' '),
+      name: shortName,
       pos: player.position,
-      war: parseFloat(baseWar.toFixed(1)),
+      war: 0.0,
       pwar: 0.0,
-      bwar: parseFloat((baseWar * 0.7).toFixed(1)),
-      rwar: parseFloat((baseWar * 0.15).toFixed(1)),
-      fwar: parseFloat((baseWar * 0.15).toFixed(1)),
-      avg: parseFloat((0.220 + Math.random() * 0.100).toFixed(3)),
-      hr: Math.floor(5 + Math.random() * 35),
-      rbi: Math.floor(30 + Math.random() * 80),
-      sb: Math.floor(Math.random() * 30),
-      ops: parseFloat((0.650 + Math.random() * 0.350).toFixed(3)),
+      bwar: 0.0,
+      rwar: 0.0,
+      fwar: 0.0,
+      avg: undefined as number | undefined,
+      hr: undefined as number | undefined,
+      rbi: undefined as number | undefined,
+      sb: undefined as number | undefined,
+      ops: undefined as number | undefined,
     };
   }
 }
@@ -515,19 +513,19 @@ export function TeamHubContent() {
                     <td className="py-2 px-2 text-[#E8E8D8] text-center">{player.position}</td>
                     <td className="py-2 px-2 text-[#E8E8D8] text-center font-bold">{player.grade}</td>
                     <td className="py-2 px-2 text-center">
-                      <span className={player.morale >= 85 ? "text-[#00DD00]" : player.morale >= 70 ? "text-[#E8E8D8]" : "text-[#DD0000]"}>
+                      <span className={typeof player.morale === 'number' ? (player.morale >= 85 ? "text-[#00DD00]" : player.morale >= 70 ? "text-[#E8E8D8]" : "text-[#DD0000]") : "text-[#E8E8D8]/50"}>
                         {player.morale}
                       </span>
                     </td>
                     <td className="py-2 px-2 text-[#E8E8D8] text-center">{player.contract}</td>
-                    <td className="py-2 px-2 text-[#E8E8D8] text-center">{player.trueValue}</td>
+                    <td className="py-2 px-2 text-[#E8E8D8]/50 text-center">{player.trueValue}</td>
                     <td className="py-2 px-2 text-center">
-                      <span className={player.netDiff.startsWith("+") ? "text-[#00DD00]" : "text-[#DD0000]"}>
+                      <span className={typeof player.netDiff === 'string' && player.netDiff.startsWith("+") ? "text-[#00DD00]" : player.netDiff === '—' ? "text-[#E8E8D8]/50" : "text-[#DD0000]"}>
                         {player.netDiff}
                       </span>
                     </td>
                     <td className="py-2 px-2 text-center">
-                      <span className={player.fitness >= 90 ? "text-[#00DD00]" : player.fitness >= 80 ? "text-[#E8E8D8]" : "text-[#DD0000]"}>
+                      <span className={typeof player.fitness === 'number' ? (player.fitness >= 90 ? "text-[#00DD00]" : player.fitness >= 80 ? "text-[#E8E8D8]" : "text-[#DD0000]") : "text-[#E8E8D8]/50"}>
                         {player.fitness}
                       </span>
                     </td>
@@ -618,10 +616,10 @@ export function TeamHubContent() {
                         <td className="py-2 px-2 text-[#E8E8D8] text-center">{player.bwar.toFixed(1)}</td>
                         <td className="py-2 px-2 text-[#E8E8D8] text-center">{player.rwar.toFixed(1)}</td>
                         <td className="py-2 px-2 text-[#E8E8D8] text-center">{player.fwar.toFixed(1)}</td>
-                        <td className="py-2 px-2 text-[#E8E8D8] text-center text-[8px]">
-                          {player.pos === "SP" || player.pos === "RP" 
-                            ? `${player.era} ERA, ${player.k} K`
-                            : `${player.avg} AVG, ${player.hr} HR`
+                        <td className="py-2 px-2 text-[#E8E8D8]/50 text-center text-[8px]">
+                          {player.pos === "SP" || player.pos === "RP"
+                            ? (player.era != null ? `${player.era} ERA, ${player.k} K` : '—')
+                            : (player.avg != null ? `${player.avg} AVG, ${player.hr} HR` : '—')
                           }
                         </td>
                       </tr>
