@@ -1,6 +1,7 @@
 import { useNavigate } from "react-router";
 import { ArrowLeft, Trophy, Settings, GitBranch, BarChart3, ChevronDown, ChevronUp } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { getAllLeagueTemplates, type LeagueTemplate } from "../../../utils/leagueBuilderStorage";
 
 type PlayoffTab = "setup" | "bracket" | "leaders" | "history";
 
@@ -110,13 +111,29 @@ function SetupTab({
   setSettings: (settings: PlayoffSettings) => void;
   setIsConfigured: (configured: boolean) => void;
 }) {
-  // Mock leagues - in production this would come from League Builder
-  const mockLeagues = [
-    { id: "1", name: "American League", teams: 8 },
-    { id: "2", name: "National League", teams: 12 },
-    { id: "3", name: "KBL Super League", teams: 16 },
-    { id: "4", name: "Minor League", teams: 4 },
-  ];
+  // Load real leagues from League Builder storage
+  const [leagues, setLeagues] = useState<{ id: string; name: string; teams: number }[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    async function loadLeagues() {
+      try {
+        const templates = await getAllLeagueTemplates();
+        if (!cancelled) {
+          setLeagues(
+            templates.map((t: LeagueTemplate) => ({
+              id: t.id,
+              name: t.name,
+              teams: t.teamIds.length,
+            }))
+          );
+        }
+      } catch (err) {
+        console.error('[WorldSeries] Failed to load leagues:', err);
+      }
+    }
+    loadLeagues();
+    return () => { cancelled = true; };
+  }, []);
 
   const calculateRounds = (teamCount: number): number => {
     if (teamCount <= 2) return 1;
@@ -127,7 +144,7 @@ function SetupTab({
   };
 
   const handleLeagueSelect = (leagueId: string) => {
-    const league = mockLeagues.find((l) => l.id === leagueId);
+    const league = leagues.find((l) => l.id === leagueId);
     if (league) {
       const rounds = calculateRounds(league.teams);
       const defaultGamesPerRound = Array(rounds).fill(7);
@@ -168,8 +185,13 @@ function SetupTab({
       {/* League Selection */}
       <div className="bg-[#6B9462] border-[6px] border-[#4A6844] p-6">
         <div className="text-sm text-[#E8E8D8] mb-4">▶ SELECT LEAGUE</div>
+        {leagues.length === 0 ? (
+          <div className="text-center text-[#E8E8D8]/50 text-[9px] py-4">
+            No leagues found — create a league in Franchise Mode first.
+          </div>
+        ) : (
         <div className="grid grid-cols-2 gap-3">
-          {mockLeagues.map((league) => (
+          {leagues.map((league) => (
             <button
               key={league.id}
               onClick={() => handleLeagueSelect(league.id)}
@@ -184,6 +206,7 @@ function SetupTab({
             </button>
           ))}
         </div>
+        )}
       </div>
 
       {settings.leagueId && (
@@ -309,18 +332,6 @@ function SetupTab({
 }
 
 function BracketView({ settings }: { settings: PlayoffSettings }) {
-  // Mock bracket data - would be auto-generated based on league standings
-  const mockTeams = [
-    { name: "Tigers", seed: 1, record: "68-32" },
-    { name: "Sox", seed: 2, record: "65-35" },
-    { name: "Cubs", seed: 3, record: "62-38" },
-    { name: "Dodgers", seed: 4, record: "60-40" },
-    { name: "Yankees", seed: 5, record: "58-42" },
-    { name: "Mets", seed: 6, record: "56-44" },
-    { name: "Brewers", seed: 7, record: "54-46" },
-    { name: "Braves", seed: 8, record: "52-48" },
-  ];
-
   const getRoundName = (roundIndex: number, totalRounds: number) => {
     const remaining = totalRounds - roundIndex;
     if (remaining === 1) return "Championship";
@@ -342,89 +353,17 @@ function BracketView({ settings }: { settings: PlayoffSettings }) {
         </div>
       </div>
 
-      {/* Bracket Rounds */}
+      {/* Empty Bracket State — no playoff games recorded yet */}
       {settings.gamesPerRound.map((games, roundIndex) => (
         <div key={roundIndex} className="bg-[#6B9462] border-[6px] border-[#4A6844] p-4">
           <div className="text-sm text-[#E8E8D8] mb-3">
             ▶ {getRoundName(roundIndex, settings.rounds).toUpperCase()} - BEST OF {games}
           </div>
-          <div className="space-y-2">
-            {/* Show matchups based on round */}
-            {roundIndex === 0 && settings.teamCount >= 8 && (
-              <>
-                <Matchup team1={mockTeams[0]} team2={mockTeams[7]} games={games} />
-                <Matchup team1={mockTeams[3]} team2={mockTeams[4]} games={games} />
-                <Matchup team1={mockTeams[1]} team2={mockTeams[6]} games={games} />
-                <Matchup team1={mockTeams[2]} team2={mockTeams[5]} games={games} />
-              </>
-            )}
-            {roundIndex === 1 && (
-              <>
-                <Matchup team1={mockTeams[0]} team2={mockTeams[3]} games={games} winner={mockTeams[0]} />
-                <Matchup team1={mockTeams[1]} team2={mockTeams[2]} games={games} winner={mockTeams[2]} />
-              </>
-            )}
-            {roundIndex === 2 && (
-              <Matchup team1={mockTeams[0]} team2={mockTeams[2]} games={games} inProgress />
-            )}
+          <div className="text-center text-[#E8E8D8]/50 text-[9px] py-4">
+            Matchups will appear once playoffs begin.
           </div>
         </div>
       ))}
-    </div>
-  );
-}
-
-function Matchup({
-  team1,
-  team2,
-  games,
-  winner,
-  inProgress,
-}: {
-  team1: { name: string; seed: number; record: string };
-  team2: { name: string; seed: number; record: string };
-  games: number;
-  winner?: { name: string; seed: number; record: string };
-  inProgress?: boolean;
-}) {
-  return (
-    <div className="bg-[#4A6844] border-4 border-[#5A8352] p-3">
-      <div className="space-y-2">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="text-[#E8E8D8]/50 text-[8px] w-6">#{team1.seed}</div>
-            <div className={`text-[8px] ${winner?.name === team1.name ? "text-[#E8E8D8]" : "text-[#E8E8D8]/70"}`}>
-              {team1.name}
-            </div>
-            <div className="text-[8px] text-[#E8E8D8]/40">{team1.record}</div>
-          </div>
-          <div className="text-[#E8E8D8] text-xs">
-            {winner?.name === team1.name ? Math.ceil(games / 2) : inProgress ? "2" : "-"}
-          </div>
-        </div>
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="text-[#E8E8D8]/50 text-[8px] w-6">#{team2.seed}</div>
-            <div className={`text-[8px] ${winner?.name === team2.name ? "text-[#E8E8D8]" : "text-[#E8E8D8]/70"}`}>
-              {team2.name}
-            </div>
-            <div className="text-[8px] text-[#E8E8D8]/40">{team2.record}</div>
-          </div>
-          <div className="text-[#E8E8D8] text-xs">
-            {winner?.name === team2.name ? Math.ceil(games / 2) : inProgress ? "1" : "-"}
-          </div>
-        </div>
-      </div>
-      {inProgress && (
-        <div className="mt-2 pt-2 border-t-2 border-[#5A8352] text-center text-[#E8E8D8]/60 text-[8px]">
-          SERIES IN PROGRESS
-        </div>
-      )}
-      {winner && (
-        <div className="mt-2 pt-2 border-t-2 border-[#5A8352] text-center text-[#E8E8D8] text-[8px]">
-          {winner.name.toUpperCase()} ADVANCE
-        </div>
-      )}
     </div>
   );
 }
