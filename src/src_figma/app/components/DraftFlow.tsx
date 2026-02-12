@@ -1731,7 +1731,7 @@ export function DraftFlow({ seasonId, seasonNumber = 1, onComplete, onCancel }: 
               <div className="grid grid-cols-2 gap-4">
                 {/* Your Picks */}
                 <div className="bg-[#5A8352] border-[3px] border-[#FFD700]">
-                  <div className="bg-[#FFD700] p-2 text-[10px] text-[#1A1A1A] font-bold">YOUR PICKS (Giants Farm)</div>
+                  <div className="bg-[#FFD700] p-2 text-[10px] text-[#1A1A1A] font-bold">YOUR PICKS ({userTeamName ? `${userTeamName} Farm` : 'Your Farm'})</div>
                   <div className="p-4 space-y-3">
                     {userPicks.length > 0 ? (
                       userPicks.map((pick, index) => (
