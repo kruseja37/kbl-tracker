@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
-import { Edit, TrendingUp, TrendingDown, XCircle, Users, Building2, User } from "lucide-react";
+import { Edit, Building2, User } from "lucide-react";
 import { useOffseasonData, type OffseasonTeam, type OffseasonPlayer } from "@/hooks/useOffseasonData";
 import { useSeasonStats, type BattingLeaderEntry, type PitchingLeaderEntry } from '../../../hooks/useSeasonStats';
 
@@ -212,57 +212,8 @@ export function TeamHubContent() {
     return MOCK_STATS_DATA;
   }, [realPlayers, realTeams, selectedTeam, hasRealData, battingByPlayer, pitchingByPlayer]);
 
-  // Mock fan morale data (no real data equivalent yet)
-  const fanMorale = {
-    netMorale: 78,
-    changes: [
-      { date: "Week 14 • Game 3", change: +5, reason: "Walk-off home run by J. Rodriguez", type: "positive" },
-      { date: "Week 14 • Game 2", change: -3, reason: "Blown save in 9th inning", type: "negative" },
-      { date: "Week 14 • Game 1", change: +8, reason: "Dominant pitching performance", type: "positive" },
-      { date: "Week 13 • Game 5", change: +4, reason: "Three-game winning streak", type: "positive" },
-      { date: "Week 13 • Game 2", change: -6, reason: "Shutout loss to division rival", type: "negative" },
-    ],
-    beatReports: [
-      { reporter: "Sarah Jenkins", text: "The city is buzzing after Rodriguez's heroics. Ticket sales are up 15% for next week's homestand." },
-      { reporter: "Mike Patterson", text: "Despite the bullpen struggles, fans remain optimistic about the team's playoff chances." },
-      { reporter: "Elena Rodriguez", text: "The front office reports record merchandise sales following the recent winning streak." },
-    ]
-  };
-
-  // Mock stadium data
-  const stadiumData = {
-    name: selectedStadium,
-    parkFactors: {
-      overall: 102,
-      leftField: 98,
-      centerField: 105,
-      rightField: 101,
-      doubles: 104,
-      triples: 98,
-      homeRuns: 106,
-    },
-    records: {
-      attendance: "54,234 (Week 8 vs Sox)",
-      mostRuns: "Tigers 15 - Bears 3 (Week 5)",
-      longestGame: "14 innings (Week 11 vs Crocs)",
-      noHitters: 3,
-    },
-    notableMoments: [
-      { reporter: "Tom Anderson", text: "Rodriguez's perfect game in Week 3 will be remembered forever at this ballpark." },
-      { reporter: "Lisa Chen", text: "The atmosphere during last week's playoff-implications game was electric - loudest crowd of the season." },
-    ]
-  };
-
-  // Mock manager data
-  const managerData = {
-    name: "Frank Sullivan",
-    mwar: 4.2,
-    record: "56-34",
-    winPct: 0.622,
-    jobSecurity: 87,
-    yearsWithTeam: 3,
-    championships: 1,
-  };
+  // NOTE: Fan morale, stadium park factors, and manager tracking
+  // are not yet implemented — their tabs show empty states.
 
   // Sorting functions
   const handleRosterSort = (column: string) => {
@@ -399,67 +350,12 @@ export function TeamHubContent() {
 
       {/* Fan Morale Tab */}
       {activeHubTab === "fan-morale" && (
-        <div className="space-y-4">
-          {/* Net Morale */}
-          <div className="bg-[#6B9462] border-[5px] border-[#4A6844] p-6">
-            <div className="text-center">
-              <div className="text-[10px] text-[#E8E8D8]/70 mb-2">NET FAN MORALE</div>
-              <div 
-                className="text-[32px] text-[#E8E8D8] font-bold"
-                style={{ textShadow: '3px 3px 6px rgba(0,0,0,0.8)' }}
-              >
-                {fanMorale.netMorale}
-              </div>
-              <div className="text-[8px] text-[#E8E8D8]/60 mt-1">
-                {fanMorale.netMorale >= 80 ? "EXCELLENT" : fanMorale.netMorale >= 60 ? "GOOD" : fanMorale.netMorale >= 40 ? "AVERAGE" : "POOR"}
-              </div>
-            </div>
-          </div>
-
-          {/* Morale Changes */}
-          <div className="bg-[#6B9462] border-[5px] border-[#4A6844] p-4">
-            <div 
-              className="text-[12px] text-[#E8E8D8] mb-3 pb-2 border-b-2 border-[#4A6844]"
-              style={{ textShadow: '2px 2px 4px rgba(0,0,0,0.8)' }}
-            >
-              RECENT MORALE CHANGES
-            </div>
-            <div className="space-y-2">
-              {fanMorale.changes.map((change, idx) => (
-                <div key={idx} className="bg-[#5A8352] p-3 border-l-4" style={{
-                  borderLeftColor: change.type === "positive" ? "#00DD00" : "#DD0000"
-                }}>
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex-1">
-                      <div className="text-[8px] text-[#E8E8D8]/70 mb-1">{change.date}</div>
-                      <div className="text-[10px] text-[#E8E8D8]">{change.reason}</div>
-                    </div>
-                    <div className={`text-[14px] font-bold ${
-                      change.type === "positive" ? "text-[#00DD00]" : "text-[#DD0000]"
-                    }`}>
-                      {change.change > 0 ? "+" : ""}{change.change}
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Beat Reporter Comments */}
-          <div className="bg-[#6B9462] border-[5px] border-[#4A6844] p-4">
-            <div 
-              className="text-[12px] text-[#E8E8D8] mb-3 pb-2 border-b-2 border-[#4A6844]"
-              style={{ textShadow: '2px 2px 4px rgba(0,0,0,0.8)' }}
-            >
-              BEAT REPORTERS ON FAN MORALE
-            </div>
-            <div className="space-y-3">
-              {fanMorale.beatReports.map((report, idx) => (
-                <div key={idx} className="bg-[#5A8352] p-3">
-                  <div className="text-[8px] text-[#E8E8D8]/70 mb-1">— {report.reporter}</div>
-                  <div className="text-[10px] text-[#E8E8D8] italic">"{report.text}"</div>
-                </div>
-              ))}
+        <div className="bg-[#6B9462] border-[5px] border-[#4A6844] p-8">
+          <div className="text-center">
+            <div className="text-[24px] text-[#E8E8D8]/30 mb-4">📊</div>
+            <div className="text-[12px] text-[#E8E8D8]/50 mb-2">FAN MORALE</div>
+            <div className="text-[10px] text-[#E8E8D8]/40">
+              Fan morale tracking begins after games are played.
             </div>
           </div>
         </div>
@@ -724,93 +620,14 @@ export function TeamHubContent() {
             </select>
           </div>
 
-          {/* Park Factors */}
-          <div className="bg-[#6B9462] border-[5px] border-[#4A6844] p-4">
-            <div 
-              className="text-[12px] text-[#E8E8D8] mb-3 pb-2 border-b-2 border-[#4A6844]"
-              style={{ textShadow: '2px 2px 4px rgba(0,0,0,0.8)' }}
-            >
-              PARK FACTORS
-            </div>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              <div className="bg-[#5A8352] p-3 text-center">
-                <div className="text-[8px] text-[#E8E8D8]/70 mb-1">OVERALL</div>
-                <div className={`text-[16px] font-bold ${
-                  stadiumData.parkFactors.overall > 100 ? "text-[#DD0000]" : "text-[#0066FF]"
-                }`}>
-                  {stadiumData.parkFactors.overall}
-                </div>
+          {/* Empty state — park factors/records not yet tracked */}
+          <div className="bg-[#6B9462] border-[5px] border-[#4A6844] p-8">
+            <div className="text-center">
+              <Building2 className="w-8 h-8 text-[#E8E8D8]/30 mx-auto mb-4" />
+              <div className="text-[12px] text-[#E8E8D8]/50 mb-2">{selectedStadium || 'STADIUM'}</div>
+              <div className="text-[10px] text-[#E8E8D8]/40">
+                Park factors and stadium records will be available after games are played.
               </div>
-              <div className="bg-[#5A8352] p-3 text-center">
-                <div className="text-[8px] text-[#E8E8D8]/70 mb-1">LEFT FIELD</div>
-                <div className="text-[16px] text-[#E8E8D8] font-bold">{stadiumData.parkFactors.leftField}</div>
-              </div>
-              <div className="bg-[#5A8352] p-3 text-center">
-                <div className="text-[8px] text-[#E8E8D8]/70 mb-1">CENTER</div>
-                <div className="text-[16px] text-[#E8E8D8] font-bold">{stadiumData.parkFactors.centerField}</div>
-              </div>
-              <div className="bg-[#5A8352] p-3 text-center">
-                <div className="text-[8px] text-[#E8E8D8]/70 mb-1">RIGHT FIELD</div>
-                <div className="text-[16px] text-[#E8E8D8] font-bold">{stadiumData.parkFactors.rightField}</div>
-              </div>
-              <div className="bg-[#5A8352] p-3 text-center">
-                <div className="text-[8px] text-[#E8E8D8]/70 mb-1">DOUBLES</div>
-                <div className="text-[16px] text-[#E8E8D8] font-bold">{stadiumData.parkFactors.doubles}</div>
-              </div>
-              <div className="bg-[#5A8352] p-3 text-center">
-                <div className="text-[8px] text-[#E8E8D8]/70 mb-1">TRIPLES</div>
-                <div className="text-[16px] text-[#E8E8D8] font-bold">{stadiumData.parkFactors.triples}</div>
-              </div>
-              <div className="bg-[#5A8352] p-3 text-center">
-                <div className="text-[8px] text-[#E8E8D8]/70 mb-1">HOME RUNS</div>
-                <div className="text-[16px] text-[#E8E8D8] font-bold">{stadiumData.parkFactors.homeRuns}</div>
-              </div>
-            </div>
-          </div>
-
-          {/* Stadium Records */}
-          <div className="bg-[#6B9462] border-[5px] border-[#4A6844] p-4">
-            <div 
-              className="text-[12px] text-[#E8E8D8] mb-3 pb-2 border-b-2 border-[#4A6844]"
-              style={{ textShadow: '2px 2px 4px rgba(0,0,0,0.8)' }}
-            >
-              STADIUM RECORDS
-            </div>
-            <div className="space-y-2">
-              <div className="bg-[#5A8352] p-3">
-                <div className="text-[8px] text-[#E8E8D8]/70">HIGHEST ATTENDANCE</div>
-                <div className="text-[10px] text-[#E8E8D8]">{stadiumData.records.attendance}</div>
-              </div>
-              <div className="bg-[#5A8352] p-3">
-                <div className="text-[8px] text-[#E8E8D8]/70">HIGHEST SCORING GAME</div>
-                <div className="text-[10px] text-[#E8E8D8]">{stadiumData.records.mostRuns}</div>
-              </div>
-              <div className="bg-[#5A8352] p-3">
-                <div className="text-[8px] text-[#E8E8D8]/70">LONGEST GAME</div>
-                <div className="text-[10px] text-[#E8E8D8]">{stadiumData.records.longestGame}</div>
-              </div>
-              <div className="bg-[#5A8352] p-3">
-                <div className="text-[8px] text-[#E8E8D8]/70">NO-HITTERS</div>
-                <div className="text-[10px] text-[#E8E8D8]">{stadiumData.records.noHitters} career</div>
-              </div>
-            </div>
-          </div>
-
-          {/* Notable Moments */}
-          <div className="bg-[#6B9462] border-[5px] border-[#4A6844] p-4">
-            <div 
-              className="text-[12px] text-[#E8E8D8] mb-3 pb-2 border-b-2 border-[#4A6844]"
-              style={{ textShadow: '2px 2px 4px rgba(0,0,0,0.8)' }}
-            >
-              NOTABLE MOMENTS
-            </div>
-            <div className="space-y-3">
-              {stadiumData.notableMoments.map((moment, idx) => (
-                <div key={idx} className="bg-[#5A8352] p-3">
-                  <div className="text-[8px] text-[#E8E8D8]/70 mb-1">— {moment.reporter}</div>
-                  <div className="text-[10px] text-[#E8E8D8] italic">"{moment.text}"</div>
-                </div>
-              ))}
             </div>
           </div>
         </div>
@@ -818,98 +635,12 @@ export function TeamHubContent() {
 
       {/* Manager Tab */}
       {activeHubTab === "manager" && (
-        <div className="space-y-4">
-          {/* Manager Overview */}
-          <div className="bg-[#6B9462] border-[5px] border-[#4A6844] p-6">
-            <div className="text-center mb-4">
-              <div 
-                className="text-[18px] text-[#E8E8D8] mb-1"
-                style={{ textShadow: '2px 2px 4px rgba(0,0,0,0.8)' }}
-              >
-                {managerData.name}
-              </div>
-              <div className="text-[8px] text-[#E8E8D8]/70">HEAD COACH</div>
-            </div>
-
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-3 max-w-2xl mx-auto">
-              <div className="bg-[#5A8352] p-4 text-center">
-                <div className="text-[8px] text-[#E8E8D8]/70 mb-1">mWAR</div>
-                <div className="text-[18px] text-[#E8E8D8] font-bold">{managerData.mwar.toFixed(1)}</div>
-              </div>
-              <div className="bg-[#5A8352] p-4 text-center">
-                <div className="text-[8px] text-[#E8E8D8]/70 mb-1">RECORD</div>
-                <div className="text-[18px] text-[#E8E8D8] font-bold">{managerData.record}</div>
-              </div>
-              <div className="bg-[#5A8352] p-4 text-center">
-                <div className="text-[8px] text-[#E8E8D8]/70 mb-1">WIN %</div>
-                <div className="text-[18px] text-[#E8E8D8] font-bold">{(managerData.winPct * 100).toFixed(1)}%</div>
-              </div>
-              <div className="bg-[#5A8352] p-4 text-center">
-                <div className="text-[8px] text-[#E8E8D8]/70 mb-1">YEARS w/ TEAM</div>
-                <div className="text-[18px] text-[#E8E8D8] font-bold">{managerData.yearsWithTeam}</div>
-              </div>
-              <div className="bg-[#5A8352] p-4 text-center">
-                <div className="text-[8px] text-[#E8E8D8]/70 mb-1">CHAMPIONSHIPS</div>
-                <div className="text-[18px] text-[#E8E8D8] font-bold">{managerData.championships}</div>
-              </div>
-              <div className="bg-[#5A8352] p-4 text-center">
-                <div className="text-[8px] text-[#E8E8D8]/70 mb-1">JOB SECURITY</div>
-                <div className={`text-[18px] font-bold ${
-                  managerData.jobSecurity >= 80 ? "text-[#00DD00]" : 
-                  managerData.jobSecurity >= 60 ? "text-[#E8E8D8]" : 
-                  "text-[#DD0000]"
-                }`}>
-                  {managerData.jobSecurity}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Job Security Meter */}
-          <div className="bg-[#6B9462] border-[5px] border-[#4A6844] p-4">
-            <div 
-              className="text-[12px] text-[#E8E8D8] mb-3 pb-2 border-b-2 border-[#4A6844]"
-              style={{ textShadow: '2px 2px 4px rgba(0,0,0,0.8)' }}
-            >
-              JOB SECURITY STATUS
-            </div>
-            <div className="bg-[#4A6844] h-8 rounded overflow-hidden">
-              <div 
-                className={`h-full transition-all ${
-                  managerData.jobSecurity >= 80 ? "bg-[#00DD00]" : 
-                  managerData.jobSecurity >= 60 ? "bg-[#0066FF]" : 
-                  "bg-[#DD0000]"
-                }`}
-                style={{ width: `${managerData.jobSecurity}%` }}
-              >
-                <div className="h-full flex items-center justify-center text-[10px] text-white font-bold">
-                  {managerData.jobSecurity >= 80 ? "SECURE" : 
-                   managerData.jobSecurity >= 60 ? "STABLE" : 
-                   managerData.jobSecurity >= 40 ? "WARM SEAT" : "HOT SEAT"}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Fire Manager Button */}
-          <div className="bg-[#6B9462] border-[5px] border-[#DD0000] p-6">
-            <div className="text-center">
-              <div className="text-[10px] text-[#E8E8D8]/70 mb-3">MANAGEMENT ACTION</div>
-              <button 
-                onClick={() => {
-                  if (window.confirm(`Are you sure you want to fire ${managerData.name}? This action cannot be undone.`)) {
-                    // Fire manager logic would go here
-                    alert("Manager has been fired.");
-                  }
-                }}
-                className="bg-[#DD0000] hover:bg-[#BB0000] text-white px-6 py-3 text-[11px] font-bold border-[3px] border-[#990000] transition active:scale-95"
-              >
-                <div className="flex items-center gap-2 justify-center">
-                  <XCircle className="w-4 h-4" />
-                  FIRE MANAGER
-                </div>
-              </button>
-              <div className="text-[8px] text-[#DD0000] mt-2">⚠️ This action cannot be undone</div>
+        <div className="bg-[#6B9462] border-[5px] border-[#4A6844] p-8">
+          <div className="text-center">
+            <User className="w-8 h-8 text-[#E8E8D8]/30 mx-auto mb-4" />
+            <div className="text-[12px] text-[#E8E8D8]/50 mb-2">MANAGER</div>
+            <div className="text-[10px] text-[#E8E8D8]/40">
+              Manager tracking is not yet available. mWAR, record, and job security will appear here once implemented.
             </div>
           </div>
         </div>
