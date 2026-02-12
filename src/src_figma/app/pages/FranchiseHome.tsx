@@ -504,6 +504,82 @@ export function FranchiseHome() {
     });
   };
 
+  // --- Playoff SIM state ---
+  const [isPlayoffSimulating, setIsPlayoffSimulating] = useState(false);
+  const [playoffSimPlayByPlay, setPlayoffSimPlayByPlay] = useState<PlayByPlayEntry[]>([]);
+  const [playoffSimResult, setPlayoffSimResult] = useState<{ away: number; home: number } | null>(null);
+  const [playoffSimAwayName, setPlayoffSimAwayName] = useState('');
+  const [playoffSimHomeName, setPlayoffSimHomeName] = useState('');
+
+  const handleSimPlayoffGame = async (series: ReturnType<typeof playoffData.getSeriesForTeam> & {}) => {
+    if (!series || series.status !== 'IN_PROGRESS') return;
+
+    const completedGames = series.games.filter(g => g.status === 'COMPLETED').length;
+    const nextGameNumber = completedGames + 1;
+
+    // Determine home/away using playoff engine (same as handlePlayPlayoffGame)
+    const homeTeamId = getHomeFieldPattern(
+      nextGameNumber,
+      series.bestOf,
+      series.higherSeed.teamId,
+      series.lowerSeed.teamId
+    );
+    const isHigherSeedHome = homeTeamId === series.higherSeed.teamId;
+    const awayTeamId = isHigherSeedHome ? series.lowerSeed.teamId : series.higherSeed.teamId;
+    const awayTeamName = isHigherSeedHome ? series.lowerSeed.teamName : series.higherSeed.teamName;
+    const homeTeamName = isHigherSeedHome ? series.higherSeed.teamName : series.lowerSeed.teamName;
+
+    // Build rosters from real franchise player data (same as regular season SIM)
+    const awayRoster = await buildRosterFromPlayers(awayTeamId, awayTeamName.toUpperCase());
+    const homeRoster = await buildRosterFromPlayers(homeTeamId, homeTeamName.toUpperCase());
+
+    // Generate synthetic game
+    const game = generateSyntheticGame(awayRoster, homeRoster, {
+      seed: Date.now(),
+      gameNumber: nextGameNumber,
+    });
+
+    // Generate play-by-play for overlay animation
+    const playByPlay = generatePlayByPlay(game);
+
+    // Show overlay
+    setPlayoffSimPlayByPlay(playByPlay);
+    setPlayoffSimResult({ away: game.awayScore, home: game.homeScore });
+    setPlayoffSimAwayName(game.awayTeamName);
+    setPlayoffSimHomeName(game.homeTeamName);
+    setIsPlayoffSimulating(true);
+
+    // Record result to playoffStorage (same path as played games)
+    try {
+      const winnerId = game.homeScore > game.awayScore ? homeTeamId : awayTeamId;
+      await playoffData.recordGameResult(series.id, {
+        gameNumber: nextGameNumber,
+        homeTeamId,
+        awayTeamId,
+        status: 'COMPLETED',
+        result: {
+          homeScore: game.homeScore,
+          awayScore: game.awayScore,
+          winnerId,
+          innings: 9,
+        },
+        gameLogId: game.gameId,
+        playedAt: Date.now(),
+      });
+    } catch (err) {
+      console.error('[handleSimPlayoffGame] recordGameResult failed:', err);
+    }
+  };
+
+  const handlePlayoffSimComplete = async () => {
+    setIsPlayoffSimulating(false);
+    setPlayoffSimPlayByPlay([]);
+    setPlayoffSimResult(null);
+    setPlayoffSimAwayName('');
+    setPlayoffSimHomeName('');
+    await playoffData.refresh();
+  };
+
   const regularSeasonTabs = [
     { id: "news", label: "THE TOOTWHISTLE TIMES", icon: <Newspaper className="w-4 h-4" /> },
     { id: "todays-game", label: "Today's Game", icon: <Calendar className="w-4 h-4" /> },
@@ -1178,12 +1254,20 @@ export function FranchiseHome() {
                               {s.status === 'IN_PROGRESS' && (
                                 <div className="mt-2 space-y-2">
                                   <div className="text-[8px] text-[#5599FF] text-center">IN PROGRESS - Best of {s.bestOf}</div>
-                                  <button
-                                    onClick={(e) => { e.stopPropagation(); handlePlayPlayoffGame(s); }}
-                                    className="w-full bg-[#5599FF] border-[2px] border-[#3366FF] py-1.5 text-[10px] text-white font-bold hover:bg-[#3366FF] active:scale-95 transition-transform"
-                                  >
-                                    ⚾ PLAY GAME {s.games.filter(g => g.status === 'COMPLETED').length + 1}
-                                  </button>
+                                  <div className="flex gap-1">
+                                    <button
+                                      onClick={(e) => { e.stopPropagation(); handlePlayPlayoffGame(s); }}
+                                      className="flex-1 bg-[#5599FF] border-[2px] border-[#3366FF] py-1.5 text-[10px] text-white font-bold hover:bg-[#3366FF] active:scale-95 transition-transform"
+                                    >
+                                      ⚾ PLAY GAME {s.games.filter(g => g.status === 'COMPLETED').length + 1}
+                                    </button>
+                                    <button
+                                      onClick={(e) => { e.stopPropagation(); handleSimPlayoffGame(s); }}
+                                      className="bg-[#4A6844] border-[2px] border-[#5A8352] py-1.5 px-2 text-[10px] text-[#E8E8D8] font-bold hover:bg-[#3F5A3A] active:scale-95 transition-transform"
+                                    >
+                                      SIM
+                                    </button>
+                                  </div>
                                 </div>
                               )}
                             </div>
@@ -1265,12 +1349,20 @@ export function FranchiseHome() {
                               {s.status === 'IN_PROGRESS' && (
                                 <div className="mt-2 space-y-2">
                                   <div className="text-[8px] text-[#5599FF] text-center">IN PROGRESS - Best of {s.bestOf}</div>
-                                  <button
-                                    onClick={(e) => { e.stopPropagation(); handlePlayPlayoffGame(s); }}
-                                    className="w-full bg-[#5599FF] border-[2px] border-[#3366FF] py-1.5 text-[10px] text-white font-bold hover:bg-[#3366FF] active:scale-95 transition-transform"
-                                  >
-                                    ⚾ PLAY GAME {s.games.filter(g => g.status === 'COMPLETED').length + 1}
-                                  </button>
+                                  <div className="flex gap-1">
+                                    <button
+                                      onClick={(e) => { e.stopPropagation(); handlePlayPlayoffGame(s); }}
+                                      className="flex-1 bg-[#5599FF] border-[2px] border-[#3366FF] py-1.5 text-[10px] text-white font-bold hover:bg-[#3366FF] active:scale-95 transition-transform"
+                                    >
+                                      ⚾ PLAY GAME {s.games.filter(g => g.status === 'COMPLETED').length + 1}
+                                    </button>
+                                    <button
+                                      onClick={(e) => { e.stopPropagation(); handleSimPlayoffGame(s); }}
+                                      className="bg-[#4A6844] border-[2px] border-[#5A8352] py-1.5 px-2 text-[10px] text-[#E8E8D8] font-bold hover:bg-[#3F5A3A] active:scale-95 transition-transform"
+                                    >
+                                      SIM
+                                    </button>
+                                  </div>
                                 </div>
                               )}
                             </div>
@@ -1313,12 +1405,20 @@ export function FranchiseHome() {
                         <span className="text-lg text-[#E8E8D8]">{playoffData.bracketByLeague.Championship.lowerSeedWins}</span>
                       </div>
                       {playoffData.bracketByLeague.Championship.status === 'IN_PROGRESS' && (
-                        <button
-                          onClick={() => handlePlayPlayoffGame(playoffData.bracketByLeague.Championship!)}
-                          className="w-full mt-3 bg-[#FFD700] border-[2px] border-[#CC9900] py-2 text-[11px] text-[#1a1a1a] font-bold hover:bg-[#CC9900] hover:text-white active:scale-95 transition-transform"
-                        >
-                          🏆 PLAY GAME {playoffData.bracketByLeague.Championship.games.filter(g => g.status === 'COMPLETED').length + 1}
-                        </button>
+                        <div className="flex gap-1 mt-3">
+                          <button
+                            onClick={() => handlePlayPlayoffGame(playoffData.bracketByLeague.Championship!)}
+                            className="flex-1 bg-[#FFD700] border-[2px] border-[#CC9900] py-2 text-[11px] text-[#1a1a1a] font-bold hover:bg-[#CC9900] hover:text-white active:scale-95 transition-transform"
+                          >
+                            🏆 PLAY GAME {playoffData.bracketByLeague.Championship.games.filter(g => g.status === 'COMPLETED').length + 1}
+                          </button>
+                          <button
+                            onClick={() => handleSimPlayoffGame(playoffData.bracketByLeague.Championship!)}
+                            className="bg-[#4A6844] border-[2px] border-[#5A8352] py-2 px-3 text-[10px] text-[#E8E8D8] font-bold hover:bg-[#3F5A3A] active:scale-95 transition-transform"
+                          >
+                            SIM
+                          </button>
+                        </div>
                       )}
                     </div>
                   ) : (
@@ -1723,6 +1823,17 @@ export function FranchiseHome() {
             </div>
           </div>
         )}
+
+        {/* Playoff SIM overlay */}
+        <SimulationOverlay
+          isOpen={isPlayoffSimulating}
+          playByPlay={playoffSimPlayByPlay}
+          awayTeamName={playoffSimAwayName}
+          homeTeamName={playoffSimHomeName}
+          finalAwayScore={playoffSimResult?.away ?? 0}
+          finalHomeScore={playoffSimResult?.home ?? 0}
+          onComplete={handlePlayoffSimComplete}
+        />
         
         {activeTab === "free-agency" && (
           <div>
