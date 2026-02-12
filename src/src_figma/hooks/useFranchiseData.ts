@@ -223,9 +223,9 @@ function calculateWeek(gamesPlayed: number, gamesPerWeek: number = 6): number {
 // HOOK
 // ============================================
 
-export function useFranchiseData(franchiseId?: string): UseFranchiseDataReturn {
-  // Derive seasonId from franchiseId (or fallback for legacy usage)
-  const seasonId = franchiseId ? `${franchiseId}-season-1` : 'season-1';
+export function useFranchiseData(franchiseId?: string, currentSeason: number = 1): UseFranchiseDataReturn {
+  // Derive seasonId from franchiseId and current season number
+  const seasonId = franchiseId ? `${franchiseId}-season-${currentSeason}` : `season-${currentSeason}`;
 
   // Franchise config loaded from IndexedDB
   const [franchiseConfig, setFranchiseConfig] = useState<StoredFranchiseConfig | null>(null);

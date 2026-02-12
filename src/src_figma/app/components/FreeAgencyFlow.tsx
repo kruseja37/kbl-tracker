@@ -178,15 +178,6 @@ export function FreeAgencyFlow({ onClose, seasonId = 'season-1', seasonNumber = 
     return ALL_PLAYERS.filter(p => p.teamId === teamId);
   };
 
-  // Show loading state
-  if (isLoading) {
-    return (
-      <div className="fixed inset-0 bg-black/95 z-50 flex items-center justify-center">
-        <div className="text-[#E8E8D8] text-xl">Loading free agency data...</div>
-      </div>
-    );
-  }
-
   // Create dice assignments for current team
   const createDiceAssignments = (teamId: string, protectedPlayerId?: string): DiceAssignment[] => {
     const roster = getTeamRoster(teamId).filter(p => p.id !== protectedPlayerId);
@@ -383,8 +374,8 @@ export function FreeAgencyFlow({ onClose, seasonId = 'season-1', seasonNumber = 
     setProtectedPlayers({});
   };
 
-  const roster = getTeamRoster(currentTeam.id);
-  const eligible = roster.filter(p => !protectedPlayers[currentTeam.id] || protectedPlayers[currentTeam.id].id !== p.id);
+  const roster = currentTeam ? getTeamRoster(currentTeam.id) : [];
+  const eligible = currentTeam ? roster.filter(p => !protectedPlayers[currentTeam.id] || protectedPlayers[currentTeam.id].id !== p.id) : [];
   const sortedRoster = [...roster].sort((a, b) => getGradeTier(b.grade) - getGradeTier(a.grade));
   const recommended = sortedRoster[0];
 
@@ -440,6 +431,15 @@ export function FreeAgencyFlow({ onClose, seasonId = 'season-1', seasonNumber = 
       setIsSaving(false);
     }
   }, [allMoves, offseasonState, onClose]);
+
+  // Show loading state (must be after all hooks)
+  if (isLoading) {
+    return (
+      <div className="fixed inset-0 bg-black/95 z-50 flex items-center justify-center">
+        <div className="text-[#E8E8D8] text-xl">Loading free agency data...</div>
+      </div>
+    );
+  }
 
   return (
     <div className="fixed inset-0 bg-black/95 z-50 overflow-y-auto">

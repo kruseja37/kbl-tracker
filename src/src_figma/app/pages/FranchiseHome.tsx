@@ -27,11 +27,9 @@ import {
   buildRosterFromPlayers,
   generateSyntheticGame,
   generatePlayByPlay,
-  generateQuickResult,
   type PlayByPlayEntry,
 } from "../../../utils/syntheticGameFactory";
 import { processCompletedGame } from "../../../utils/processCompletedGame";
-import { archiveBatchGameResult } from "../../../utils/gameStorage";
 import { markSeasonComplete } from "../../../utils/seasonStorage";
 import { getAllGames } from "../../../utils/scheduleStorage";
 import { startOffseason, OFFSEASON_PHASES, type OffseasonPhase } from "../../../utils/offseasonStorage";
@@ -60,9 +58,6 @@ export function FranchiseHome() {
   const navigate = useNavigate();
   const { franchiseId } = useParams<{ franchiseId: string }>();
 
-  // Real season data from IndexedDB (with mock fallbacks)
-  const franchiseData = useFranchiseData(franchiseId);
-
   const [seasonPhase, setSeasonPhase] = useState<SeasonPhase>("regular");
   const [activeTab, setActiveTab] = useState<TabType>("todays-game");
   const [leagueName, setLeagueName] = useState<string>("KRUSE BASEBALL");
@@ -78,7 +73,7 @@ export function FranchiseHome() {
   const [showPlayoffSeeding, setShowPlayoffSeeding] = useState(false);
   const [retiredJerseys, setRetiredJerseys] = useState<RetiredJersey[]>([]);
   const [selectedScheduleTeam, setSelectedScheduleTeam] = useState<string>("FULL LEAGUE");
-  
+
   // Schedule System State - Persisted to IndexedDB via useScheduleData
   // Load initial season from localStorage or default to 1
   const [currentSeason, setCurrentSeason] = useState(() => {
@@ -86,6 +81,9 @@ export function FranchiseHome() {
     return stored ? parseInt(stored, 10) : 1;
   });
   const scheduleData = useScheduleData(currentSeason);
+
+  // Real season data from IndexedDB (with mock fallbacks)
+  const franchiseData = useFranchiseData(franchiseId, currentSeason);
   const [addGameModalOpen, setAddGameModalOpen] = useState(false);
 
   // Bracket UI state
@@ -2637,28 +2635,29 @@ function GameDayContent({ scheduleData, currentSeason, onDataRefresh }: GameDayC
     let processed = 0;
 
     for (const game of games) {
-      // Generate a quick W/L result (no player stats)
-      const result = generateQuickResult(
-        game.awayTeamId,
-        game.homeTeamId,
-        Date.now() + processed
-      );
-
       try {
-        await scheduleData.completeGame(game.id, {
-          awayScore: result.awayScore,
-          homeScore: result.homeScore,
-          winningTeamId: result.winningTeamId,
-          losingTeamId: result.losingTeamId,
+        // Build real rosters and generate full synthetic game with player stats
+        const awayRoster = await buildRosterFromPlayers(game.awayTeamId, game.awayTeamId.toUpperCase());
+        const homeRoster = await buildRosterFromPlayers(game.homeTeamId, game.homeTeamId.toUpperCase());
+
+        const syntheticGame = generateSyntheticGame(awayRoster, homeRoster, {
+          seed: Date.now() + processed,
+          gameNumber: game.gameNumber ?? processed + 1,
         });
 
-        // Also archive to completedGames store so standings can see it
-        await archiveBatchGameResult({
-          awayTeamId: game.awayTeamId,
-          homeTeamId: game.homeTeamId,
-          awayScore: result.awayScore,
-          homeScore: result.homeScore,
-          seasonId: batchSeasonId,
+        // Process through full stats pipeline (batting, pitching, fielding, fame)
+        await processCompletedGame(syntheticGame, { seasonId: batchSeasonId });
+
+        // Update schedule with result
+        const winningTeam = syntheticGame.homeScore > syntheticGame.awayScore ? game.homeTeamId : game.awayTeamId;
+        const losingTeam = syntheticGame.homeScore > syntheticGame.awayScore ? game.awayTeamId : game.homeTeamId;
+
+        await scheduleData.completeGame(game.id, {
+          awayScore: syntheticGame.awayScore,
+          homeScore: syntheticGame.homeScore,
+          winningTeamId: winningTeam,
+          losingTeamId: losingTeam,
+          gameLogId: syntheticGame.gameId,
         });
       } catch (err) {
         console.error(`Failed to simulate game ${game.id}:`, err);

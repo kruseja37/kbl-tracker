@@ -1373,7 +1373,7 @@ export function DraftFlow({ seasonId, seasonNumber = 1, onComplete, onCancel }: 
       <div className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center overflow-y-auto p-8">
         <div className="max-w-3xl mx-auto bg-[#6B9462] border-[5px] border-[#FFD700]">
           <div className="bg-[#FFD700] p-4 border-b-[3px] border-[#C4A853]">
-            <div className="text-sm text-[#1A1A1A] font-bold">⭐ YOUR PICK - SAN FRANCISCO GIANTS</div>
+            <div className="text-sm text-[#1A1A1A] font-bold">⭐ YOUR PICK - {userTeamName?.toUpperCase() || 'YOUR TEAM'}</div>
             <div className="text-[10px] text-[#1A1A1A]/70">Round {currentPick?.round} │ Pick {currentPickIndex + 1}</div>
           </div>
 
@@ -1743,7 +1743,7 @@ export function DraftFlow({ seasonId, seasonNumber = 1, onComplete, onCancel }: 
                             Grade: <span className={getGradeColor(pick.prospect?.grade || "")}>{pick.prospect?.grade}</span>, 
                             Ceiling: <span className={getCeilingColor(pick.prospect?.potentialCeiling || "")}>{pick.prospect?.potentialCeiling}</span>
                           </div>
-                          <div className="text-[9px] text-[#5599FF]">→ SAN FRANCISCO FARM</div>
+                          <div className="text-[9px] text-[#5599FF]">→ {userTeamName?.toUpperCase() || 'YOUR TEAM'} FARM</div>
                         </div>
                       ))
                     ) : (
