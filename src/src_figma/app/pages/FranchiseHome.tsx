@@ -2095,6 +2095,28 @@ function GameDayContent({ scheduleData, currentSeason, onDataRefresh }: GameDayC
   const awayTeamId = scheduleData.nextGame?.awayTeamId ?? '';
   const homeTeamId = scheduleData.nextGame?.homeTeamId ?? '';
 
+  // Lookup team record from standings (handles nested LeagueStandings shape)
+  const getTeamRecord = (teamId: string): string => {
+    const standings = franchiseData.standings;
+    if (!standings || typeof standings !== 'object') return '0-0';
+    try {
+      for (const conference of Object.values(standings)) {
+        if (!conference || typeof conference !== 'object') continue;
+        for (const division of Object.values(conference as Record<string, unknown>)) {
+          if (!Array.isArray(division)) continue;
+          const entry = division.find(
+            (s: { team?: string; wins?: number; losses?: number }) =>
+              s.team && s.team.toLowerCase() === teamId.toLowerCase()
+          );
+          if (entry) return `${entry.wins}-${entry.losses}`;
+        }
+      }
+    } catch {
+      // Standings shape doesn't match expected — return default
+    }
+    return '0-0';
+  };
+
   const handlePlayGame = () => {
     navigate("/game-tracker/game-123");
     setConfirmAction(null);
@@ -2528,146 +2550,16 @@ function GameDayContent({ scheduleData, currentSeason, onDataRefresh }: GameDayC
               <div className="text-[10px] tracking-wide uppercase" style={{ textShadow: '2px 2px 0px rgba(0,0,0,0.4)' }}>
                 {awayTeamId}
               </div>
-              <div className="text-[7px] text-[#E8E8D8]/80 mt-1">42-28 • 1ST IN DIVISION</div>
+              <div className="text-[7px] text-[#E8E8D8]/80 mt-1">{getTeamRecord(awayTeamId)}</div>
             </div>
             {showAwayTeamStats ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
           </button>
-          
+
           {showAwayTeamStats && (
             <div className="bg-[#6B9462] border-4 border-[#4A6844] border-t-0 p-4 overflow-y-auto max-h-[600px]">
-          
-          {/* Team Leaders */}
-          <div className="space-y-3 text-[7px]">
-            {/* bWAR Leaders */}
-            <div>
-              <div className="text-[#E8E8D8]/80 mb-1 uppercase" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.2)' }}>bWAR:</div>
-              <div className="space-y-0.5 text-[#E8E8D8]/90">
-                <div className="flex justify-between"><span>1. PLAYER NAME</span><span>5.2</span></div>
-                <div className="flex justify-between"><span>2. PLAYER NAME</span><span>4.8</span></div>
-                <div className="flex justify-between"><span>3. PLAYER NAME</span><span>4.1</span></div>
+              <div className="text-center text-[9px] text-[#E8E8D8]/50 py-4">
+                No stats yet — play games to see team leaders.
               </div>
-            </div>
-
-            {/* pWAR Leaders */}
-            <div>
-              <div className="text-[#E8E8D8]/80 mb-1 uppercase" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.2)' }}>pWAR:</div>
-              <div className="space-y-0.5 text-[#E8E8D8]/90">
-                <div className="flex justify-between"><span>1. PLAYER NAME</span><span>3.9</span></div>
-                <div className="flex justify-between"><span>2. PLAYER NAME</span><span>3.2</span></div>
-                <div className="flex justify-between"><span>3. PLAYER NAME</span><span>2.7</span></div>
-              </div>
-            </div>
-
-            {/* fWAR Leaders */}
-            <div>
-              <div className="text-[#E8E8D8]/80 mb-1 uppercase" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.2)' }}>fWAR:</div>
-              <div className="space-y-0.5 text-[#E8E8D8]/90">
-                <div className="flex justify-between"><span>1. PLAYER NAME</span><span>5.4</span></div>
-                <div className="flex justify-between"><span>2. PLAYER NAME</span><span>4.9</span></div>
-                <div className="flex justify-between"><span>3. PLAYER NAME</span><span>4.2</span></div>
-              </div>
-            </div>
-
-            {/* rWAR Leaders */}
-            <div>
-              <div className="text-[#E8E8D8]/80 mb-1 uppercase" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.2)' }}>rWAR:</div>
-              <div className="space-y-0.5 text-[#E8E8D8]/90">
-                <div className="flex justify-between"><span>1. PLAYER NAME</span><span>5.1</span></div>
-                <div className="flex justify-between"><span>2. PLAYER NAME</span><span>4.7</span></div>
-                <div className="flex justify-between"><span>3. PLAYER NAME</span><span>4.0</span></div>
-              </div>
-            </div>
-
-            {/* AVG Leaders */}
-            <div>
-              <div className="text-[#E8E8D8]/80 mb-1 uppercase" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.2)' }}>BATTING AVG:</div>
-              <div className="space-y-0.5 text-[#E8E8D8]/90">
-                <div className="flex justify-between"><span>1. PLAYER NAME</span><span>.324</span></div>
-                <div className="flex justify-between"><span>2. PLAYER NAME</span><span>.312</span></div>
-                <div className="flex justify-between"><span>3. PLAYER NAME</span><span>.298</span></div>
-              </div>
-            </div>
-
-            {/* HR Leaders */}
-            <div>
-              <div className="text-[#E8E8D8]/80 mb-1 uppercase" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.2)' }}>HOME RUNS:</div>
-              <div className="space-y-0.5 text-[#E8E8D8]/90">
-                <div className="flex justify-between"><span>1. PLAYER NAME</span><span>24</span></div>
-                <div className="flex justify-between"><span>2. PLAYER NAME</span><span>18</span></div>
-                <div className="flex justify-between"><span>3. PLAYER NAME</span><span>15</span></div>
-              </div>
-            </div>
-
-            {/* RBI Leaders */}
-            <div>
-              <div className="text-[#E8E8D8]/80 mb-1 uppercase" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.2)' }}>RBI:</div>
-              <div className="space-y-0.5 text-[#E8E8D8]/90">
-                <div className="flex justify-between"><span>1. PLAYER NAME</span><span>67</span></div>
-                <div className="flex justify-between"><span>2. PLAYER NAME</span><span>58</span></div>
-                <div className="flex justify-between"><span>3. PLAYER NAME</span><span>52</span></div>
-              </div>
-            </div>
-
-            {/* OPS Leaders */}
-            <div>
-              <div className="text-[#E8E8D8]/80 mb-1 uppercase" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.2)' }}>OPS:</div>
-              <div className="space-y-0.5 text-[#E8E8D8]/90">
-                <div className="flex justify-between"><span>1. PLAYER NAME</span><span>.942</span></div>
-                <div className="flex justify-between"><span>2. PLAYER NAME</span><span>.918</span></div>
-                <div className="flex justify-between"><span>3. PLAYER NAME</span><span>.887</span></div>
-              </div>
-            </div>
-
-            {/* ERA Leaders */}
-            <div>
-              <div className="text-[#E8E8D8]/80 mb-1 uppercase" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.2)' }}>ERA:</div>
-              <div className="space-y-0.5 text-[#E8E8D8]/90">
-                <div className="flex justify-between"><span>1. PLAYER NAME</span><span>2.45</span></div>
-                <div className="flex justify-between"><span>2. PLAYER NAME</span><span>2.89</span></div>
-                <div className="flex justify-between"><span>3. PLAYER NAME</span><span>3.12</span></div>
-              </div>
-            </div>
-
-            {/* WHIP Leaders */}
-            <div>
-              <div className="text-[#E8E8D8]/80 mb-1 uppercase" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.2)' }}>WHIP:</div>
-              <div className="space-y-0.5 text-[#E8E8D8]/90">
-                <div className="flex justify-between"><span>1. PLAYER NAME</span><span>1.08</span></div>
-                <div className="flex justify-between"><span>2. PLAYER NAME</span><span>1.15</span></div>
-                <div className="flex justify-between"><span>3. PLAYER NAME</span><span>1.22</span></div>
-              </div>
-            </div>
-
-            {/* Strikeouts Leaders */}
-            <div>
-              <div className="text-[#E8E8D8]/80 mb-1 uppercase" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.2)' }}>STRIKEOUTS:</div>
-              <div className="space-y-0.5 text-[#E8E8D8]/90">
-                <div className="flex justify-between"><span>1. PLAYER NAME</span><span>142</span></div>
-                <div className="flex justify-between"><span>2. PLAYER NAME</span><span>128</span></div>
-                <div className="flex justify-between"><span>3. PLAYER NAME</span><span>115</span></div>
-              </div>
-            </div>
-
-            {/* Stolen Bases Leaders */}
-            <div>
-              <div className="text-[#E8E8D8]/80 mb-1 uppercase" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.2)' }}>STOLEN BASES:</div>
-              <div className="space-y-0.5 text-[#E8E8D8]/90">
-                <div className="flex justify-between"><span>1. PLAYER NAME</span><span>32</span></div>
-                <div className="flex justify-between"><span>2. PLAYER NAME</span><span>24</span></div>
-                <div className="flex justify-between"><span>3. PLAYER NAME</span><span>18</span></div>
-              </div>
-            </div>
-
-            {/* Fielding % Leaders */}
-            <div>
-              <div className="text-[#E8E8D8]/80 mb-1 uppercase" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.2)' }}>FIELDING %:</div>
-              <div className="space-y-0.5 text-[#E8E8D8]/90">
-                <div className="flex justify-between"><span>1. PLAYER NAME</span><span>.995</span></div>
-                <div className="flex justify-between"><span>2. PLAYER NAME</span><span>.992</span></div>
-                <div className="flex justify-between"><span>3. PLAYER NAME</span><span>.988</span></div>
-              </div>
-            </div>
-          </div>
             </div>
           )}
         </div>
@@ -2682,146 +2574,16 @@ function GameDayContent({ scheduleData, currentSeason, onDataRefresh }: GameDayC
               <div className="text-[10px] tracking-wide uppercase" style={{ textShadow: '2px 2px 0px rgba(0,0,0,0.4)' }}>
                 {homeTeamId}
               </div>
-              <div className="text-[7px] text-[#E8E8D8]/80 mt-1">38-32 • 2ND IN DIVISION</div>
+              <div className="text-[7px] text-[#E8E8D8]/80 mt-1">{getTeamRecord(homeTeamId)}</div>
             </div>
             {showHomeTeamStats ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
           </button>
-          
+
           {showHomeTeamStats && (
             <div className="bg-[#6B9462] border-4 border-[#4A6844] border-t-0 p-4 overflow-y-auto max-h-[600px]">
-          
-          {/* Team Leaders */}
-          <div className="space-y-3 text-[7px]">
-            {/* bWAR Leaders */}
-            <div>
-              <div className="text-[#E8E8D8]/80 mb-1 uppercase" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.2)' }}>bWAR:</div>
-              <div className="space-y-0.5 text-[#E8E8D8]/90">
-                <div className="flex justify-between"><span>1. PLAYER NAME</span><span>6.1</span></div>
-                <div className="flex justify-between"><span>2. PLAYER NAME</span><span>5.4</span></div>
-                <div className="flex justify-between"><span>3. PLAYER NAME</span><span>4.3</span></div>
+              <div className="text-center text-[9px] text-[#E8E8D8]/50 py-4">
+                No stats yet — play games to see team leaders.
               </div>
-            </div>
-
-            {/* pWAR Leaders */}
-            <div>
-              <div className="text-[#E8E8D8]/80 mb-1 uppercase" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.2)' }}>pWAR:</div>
-              <div className="space-y-0.5 text-[#E8E8D8]/90">
-                <div className="flex justify-between"><span>1. PLAYER NAME</span><span>4.2</span></div>
-                <div className="flex justify-between"><span>2. PLAYER NAME</span><span>3.8</span></div>
-                <div className="flex justify-between"><span>3. PLAYER NAME</span><span>3.1</span></div>
-              </div>
-            </div>
-
-            {/* fWAR Leaders */}
-            <div>
-              <div className="text-[#E8E8D8]/80 mb-1 uppercase" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.2)' }}>fWAR:</div>
-              <div className="space-y-0.5 text-[#E8E8D8]/90">
-                <div className="flex justify-between"><span>1. PLAYER NAME</span><span>6.3</span></div>
-                <div className="flex justify-between"><span>2. PLAYER NAME</span><span>5.6</span></div>
-                <div className="flex justify-between"><span>3. PLAYER NAME</span><span>4.5</span></div>
-              </div>
-            </div>
-
-            {/* rWAR Leaders */}
-            <div>
-              <div className="text-[#E8E8D8]/80 mb-1 uppercase" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.2)' }}>rWAR:</div>
-              <div className="space-y-0.5 text-[#E8E8D8]/90">
-                <div className="flex justify-between"><span>1. PLAYER NAME</span><span>6.0</span></div>
-                <div className="flex justify-between"><span>2. PLAYER NAME</span><span>5.2</span></div>
-                <div className="flex justify-between"><span>3. PLAYER NAME</span><span>4.4</span></div>
-              </div>
-            </div>
-
-            {/* AVG Leaders */}
-            <div>
-              <div className="text-[#E8E8D8]/80 mb-1 uppercase" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.2)' }}>BATTING AVG:</div>
-              <div className="space-y-0.5 text-[#E8E8D8]/90">
-                <div className="flex justify-between"><span>1. PLAYER NAME</span><span>.318</span></div>
-                <div className="flex justify-between"><span>2. PLAYER NAME</span><span>.305</span></div>
-                <div className="flex justify-between"><span>3. PLAYER NAME</span><span>.294</span></div>
-              </div>
-            </div>
-
-            {/* HR Leaders */}
-            <div>
-              <div className="text-[#E8E8D8]/80 mb-1 uppercase" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.2)' }}>HOME RUNS:</div>
-              <div className="space-y-0.5 text-[#E8E8D8]/90">
-                <div className="flex justify-between"><span>1. PLAYER NAME</span><span>28</span></div>
-                <div className="flex justify-between"><span>2. PLAYER NAME</span><span>21</span></div>
-                <div className="flex justify-between"><span>3. PLAYER NAME</span><span>19</span></div>
-              </div>
-            </div>
-
-            {/* RBI Leaders */}
-            <div>
-              <div className="text-[#E8E8D8]/80 mb-1 uppercase" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.2)' }}>RBI:</div>
-              <div className="space-y-0.5 text-[#E8E8D8]/90">
-                <div className="flex justify-between"><span>1. PLAYER NAME</span><span>72</span></div>
-                <div className="flex justify-between"><span>2. PLAYER NAME</span><span>61</span></div>
-                <div className="flex justify-between"><span>3. PLAYER NAME</span><span>55</span></div>
-              </div>
-            </div>
-
-            {/* OPS Leaders */}
-            <div>
-              <div className="text-[#E8E8D8]/80 mb-1 uppercase" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.2)' }}>OPS:</div>
-              <div className="space-y-0.5 text-[#E8E8D8]/90">
-                <div className="flex justify-between"><span>1. PLAYER NAME</span><span>.965</span></div>
-                <div className="flex justify-between"><span>2. PLAYER NAME</span><span>.932</span></div>
-                <div className="flex justify-between"><span>3. PLAYER NAME</span><span>.901</span></div>
-              </div>
-            </div>
-
-            {/* ERA Leaders */}
-            <div>
-              <div className="text-[#E8E8D8]/80 mb-1 uppercase" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.2)' }}>ERA:</div>
-              <div className="space-y-0.5 text-[#E8E8D8]/90">
-                <div className="flex justify-between"><span>1. PLAYER NAME</span><span>2.67</span></div>
-                <div className="flex justify-between"><span>2. PLAYER NAME</span><span>2.98</span></div>
-                <div className="flex justify-between"><span>3. PLAYER NAME</span><span>3.24</span></div>
-              </div>
-            </div>
-
-            {/* WHIP Leaders */}
-            <div>
-              <div className="text-[#E8E8D8]/80 mb-1 uppercase" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.2)' }}>WHIP:</div>
-              <div className="space-y-0.5 text-[#E8E8D8]/90">
-                <div className="flex justify-between"><span>1. PLAYER NAME</span><span>1.12</span></div>
-                <div className="flex justify-between"><span>2. PLAYER NAME</span><span>1.18</span></div>
-                <div className="flex justify-between"><span>3. PLAYER NAME</span><span>1.26</span></div>
-              </div>
-            </div>
-
-            {/* Strikeouts Leaders */}
-            <div>
-              <div className="text-[#E8E8D8]/80 mb-1 uppercase" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.2)' }}>STRIKEOUTS:</div>
-              <div className="space-y-0.5 text-[#E8E8D8]/90">
-                <div className="flex justify-between"><span>1. PLAYER NAME</span><span>156</span></div>
-                <div className="flex justify-between"><span>2. PLAYER NAME</span><span>134</span></div>
-                <div className="flex justify-between"><span>3. PLAYER NAME</span><span>121</span></div>
-              </div>
-            </div>
-
-            {/* Stolen Bases Leaders */}
-            <div>
-              <div className="text-[#E8E8D8]/80 mb-1 uppercase" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.2)' }}>STOLEN BASES:</div>
-              <div className="space-y-0.5 text-[#E8E8D8]/90">
-                <div className="flex justify-between"><span>1. PLAYER NAME</span><span>28</span></div>
-                <div className="flex justify-between"><span>2. PLAYER NAME</span><span>22</span></div>
-                <div className="flex justify-between"><span>3. PLAYER NAME</span><span>16</span></div>
-              </div>
-            </div>
-
-            {/* Fielding % Leaders */}
-            <div>
-              <div className="text-[#E8E8D8]/80 mb-1 uppercase" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.2)' }}>FIELDING %:</div>
-              <div className="space-y-0.5 text-[#E8E8D8]/90">
-                <div className="flex justify-between"><span>1. PLAYER NAME</span><span>.993</span></div>
-                <div className="flex justify-between"><span>2. PLAYER NAME</span><span>.990</span></div>
-                <div className="flex justify-between"><span>3. PLAYER NAME</span><span>.986</span></div>
-              </div>
-            </div>
-          </div>
             </div>
           )}
         </div>
