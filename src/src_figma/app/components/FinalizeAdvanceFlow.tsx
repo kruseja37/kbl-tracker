@@ -693,36 +693,36 @@ export function FinalizeAdvanceFlow({ onClose, onAdvanceComplete, seasonNumber =
                   </div>
 
                   <div className="space-y-3 max-h-[400px] overflow-y-auto">
-                    <div className="bg-[#4A6844] p-4 border-2 border-[#E8E8D8]/30">
-                      <button
-                        onClick={() => toggleExpandTeam("detroit-tigers")}
-                        className="w-full flex items-center justify-between text-[#E8E8D8] text-sm font-bold"
-                      >
-                        <span>Detroit Tigers (3 transactions)</span>
-                        {expandedTeams.has("detroit-tigers") ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                      </button>
-                      {expandedTeams.has("detroit-tigers") && (
-                        <div className="mt-3 space-y-2 text-xs text-[#E8E8D8]/80 pl-4">
-                          <div>⬆️ Called up Jake Thompson (SP, B) - ROOKIE</div>
-                          <div>⬇️ Sent down Tom Davis (SP, C) to Farm</div>
-                          <div>💀 Bill Smith (RP, C-) retired - declined demotion</div>
+                    {teams.filter(t => !t.isUserControlled).map(aiTeam => {
+                      const aiTxns = transactions.filter(t => t.team === aiTeam.name);
+                      return (
+                        <div key={aiTeam.id} className="bg-[#4A6844] p-4 border-2 border-[#E8E8D8]/30">
+                          <button
+                            onClick={() => toggleExpandTeam(aiTeam.id)}
+                            className="w-full flex items-center justify-between text-[#E8E8D8] text-sm font-bold"
+                          >
+                            <span>{aiTeam.name} ({aiTxns.length} transaction{aiTxns.length !== 1 ? 's' : ''})</span>
+                            {expandedTeams.has(aiTeam.id) ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                          </button>
+                          {expandedTeams.has(aiTeam.id) && (
+                            <div className="mt-3 space-y-2 text-xs text-[#E8E8D8]/80 pl-4">
+                              {aiTxns.length === 0 ? (
+                                <div className="text-[#E8E8D8]/50">No transactions</div>
+                              ) : aiTxns.map(txn => (
+                                <div key={txn.id}>
+                                  {txn.type === 'call-up' && `⬆️ Called up ${txn.player.name} (${txn.player.position}, ${txn.player.grade}) - ROOKIE`}
+                                  {txn.type === 'send-down' && `⬇️ Sent down ${txn.player.name} (${txn.player.position}, ${txn.player.grade}) to Farm`}
+                                  {txn.type === 'retirement' && `💀 ${txn.player.name} (${txn.player.position}, ${txn.player.grade}) retired - declined demotion`}
+                                </div>
+                              ))}
+                            </div>
+                          )}
                         </div>
-                      )}
-                    </div>
-
-                    <div className="bg-[#4A6844] p-4 border-2 border-[#E8E8D8]/30">
-                      <button className="w-full flex items-center justify-between text-[#E8E8D8] text-sm font-bold">
-                        <span>Miami Marlins (2 transactions)</span>
-                        <ChevronDown className="w-4 h-4" />
-                      </button>
-                    </div>
-
-                    <div className="bg-[#4A6844] p-4 border-2 border-[#E8E8D8]/30">
-                      <button className="w-full flex items-center justify-between text-[#E8E8D8] text-sm font-bold">
-                        <span>Kansas City Royals (1 transaction)</span>
-                        <ChevronDown className="w-4 h-4" />
-                      </button>
-                    </div>
+                      );
+                    })}
+                    {teams.filter(t => !t.isUserControlled).length === 0 && (
+                      <div className="text-sm text-[#E8E8D8]/50 text-center py-4">No AI teams in league</div>
+                    )}
                   </div>
                 </div>
               )}
@@ -942,19 +942,42 @@ export function FinalizeAdvanceFlow({ onClose, onAdvanceComplete, seasonNumber =
                   )}
 
                   {/* AI Teams */}
-                  <div className="bg-[#4A6844] p-4 border-2 border-[#E8E8D8]/30">
-                    <div className="text-sm text-[#E8E8D8] font-bold mb-3">
-                      DETROIT TIGERS (AI-Controlled)
-                    </div>
-                    <div className="space-y-2 text-xs text-[#E8E8D8] pl-4">
-                      <div>⬆️ CALL UP: Jake Thompson (SP, B) → MLB</div>
-                      <div className="text-[#E8E8D8]/60 pl-4">💰 Salary: $1,200,000</div>
-                      <div className="text-[#E8E8D8]/60 pl-4">🌟 Status: ROOKIE</div>
-                      <div className="mt-2">⬇️ SEND DOWN: Tom Davis (SP, C) → Farm</div>
-                      <div className="mt-2">💀 RETIRED: Bill Smith (RP, C-) - Declined demotion</div>
-                      <div className="text-[#E8E8D8]/60 pl-4">📁 Added to Inactive Player Database</div>
-                    </div>
-                  </div>
+                  {teams.filter(t => !t.isUserControlled).map(aiTeam => {
+                    const aiTxns = transactions.filter(t => t.team === aiTeam.name);
+                    return (
+                      <div key={aiTeam.id} className="bg-[#4A6844] p-4 border-2 border-[#E8E8D8]/30">
+                        <div className="text-sm text-[#E8E8D8] font-bold mb-3">
+                          {aiTeam.name.toUpperCase()} (AI-Controlled)
+                        </div>
+                        <div className="space-y-2 text-xs text-[#E8E8D8] pl-4">
+                          {aiTxns.length === 0 ? (
+                            <div className="text-[#E8E8D8]/50">No transactions</div>
+                          ) : aiTxns.map(txn => (
+                            <div key={txn.id}>
+                              {txn.type === 'call-up' && (
+                                <>
+                                  <div>⬆️ CALL UP: {txn.player.name} ({txn.player.position}, {txn.player.grade}) → MLB</div>
+                                  <div className="text-[#E8E8D8]/60 pl-4">
+                                    💰 Salary: ${calculateRookieSalary(txn.player.grade).toLocaleString()}
+                                  </div>
+                                  <div className="text-[#E8E8D8]/60 pl-4">🌟 Status: ROOKIE</div>
+                                </>
+                              )}
+                              {txn.type === 'send-down' && (
+                                <div className="mt-2">⬇️ SEND DOWN: {txn.player.name} ({txn.player.position}, {txn.player.grade}) → Farm</div>
+                              )}
+                              {txn.type === 'retirement' && (
+                                <>
+                                  <div className="mt-2">💀 RETIRED: {txn.player.name} ({txn.player.position}, {txn.player.grade}) - Declined demotion</div>
+                                  <div className="text-[#E8E8D8]/60 pl-4">📁 Added to Inactive Player Database</div>
+                                </>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
 
