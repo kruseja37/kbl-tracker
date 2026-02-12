@@ -109,7 +109,7 @@ function convertToLocalPlayer(player: OffseasonPlayer): Player {
  * Convert OffseasonTeam to local Team format with players
  */
 function convertToLocalTeam(team: OffseasonTeam, allPlayers: OffseasonPlayer[], index: number): Team {
-  const teamPlayers = allPlayers.filter(p => p.teamId === team.id).slice(0, 5);
+  const teamPlayers = allPlayers.filter(p => p.teamId === team.id);
   const convertedPlayers = teamPlayers.map(convertToLocalPlayer);
   const payroll = convertedPlayers.reduce((sum, p) => sum + p.salary, 0);
 
@@ -139,7 +139,7 @@ export function TradeFlow({ seasonId, onComplete }: TradeFlowProps) {
   // Convert real data to local format, with mock fallback
   const teams: Team[] = useMemo(() => {
     if (hasRealData && realTeams.length > 0 && realPlayers.length > 0) {
-      return realTeams.slice(0, 3).map((team, index) => convertToLocalTeam(team, realPlayers, index));
+      return realTeams.map((team, index) => convertToLocalTeam(team, realPlayers, index));
     }
     return MOCK_TEAMS;
   }, [realTeams, realPlayers, hasRealData]);
@@ -601,7 +601,7 @@ export function TradeFlow({ seasonId, onComplete }: TradeFlowProps) {
 
                   <div className="text-xs text-[#E8E8D8] mb-2 font-bold">SENDS TO TEAM 2:</div>
                   <div className="space-y-1 mb-3">
-                    {getTeam(team1Id).players.slice(0, 3).map(player => (
+                    {getTeam(team1Id).players.map(player => (
                       <button
                         key={player.id}
                         onClick={() => togglePlayerSelection(1, player.id)}
@@ -611,7 +611,7 @@ export function TradeFlow({ seasonId, onComplete }: TradeFlowProps) {
                             : "bg-[#4A6844] border-[#E8E8D8]/30"
                         }`}
                       >
-                        {selectedTeam1Players.has(player.id) ? "☑" : "☐"} {player.name} ({player.position})
+                        {selectedTeam1Players.has(player.id) ? "☑" : "☐"} {player.name} ({player.position}) — {formatSalary(player.salary)}
                       </button>
                     ))}
                   </div>
@@ -645,7 +645,7 @@ export function TradeFlow({ seasonId, onComplete }: TradeFlowProps) {
 
                   <div className="text-xs text-[#E8E8D8] mb-2 font-bold">SENDS TO TEAM 3:</div>
                   <div className="space-y-1 mb-3">
-                    {getTeam(team2Id).players.slice(0, 3).map(player => (
+                    {getTeam(team2Id).players.map(player => (
                       <button
                         key={player.id}
                         onClick={() => togglePlayerSelection(2, player.id)}
@@ -655,7 +655,7 @@ export function TradeFlow({ seasonId, onComplete }: TradeFlowProps) {
                             : "bg-[#4A6844] border-[#E8E8D8]/30"
                         }`}
                       >
-                        {selectedTeam2Players.has(player.id) ? "☑" : "☐"} {player.name} ({player.position})
+                        {selectedTeam2Players.has(player.id) ? "☑" : "☐"} {player.name} ({player.position}) — {formatSalary(player.salary)}
                       </button>
                     ))}
                   </div>
@@ -689,7 +689,7 @@ export function TradeFlow({ seasonId, onComplete }: TradeFlowProps) {
 
                   <div className="text-xs text-[#E8E8D8] mb-2 font-bold">SENDS TO TEAM 1:</div>
                   <div className="space-y-1 mb-3">
-                    {getTeam(team3Id).players.slice(0, 3).map(player => (
+                    {getTeam(team3Id).players.map(player => (
                       <button
                         key={player.id}
                         onClick={() => togglePlayerSelection(3, player.id)}
@@ -699,7 +699,7 @@ export function TradeFlow({ seasonId, onComplete }: TradeFlowProps) {
                             : "bg-[#4A6844] border-[#E8E8D8]/30"
                         }`}
                       >
-                        {selectedTeam3Players.has(player.id) ? "☑" : "☐"} {player.name} ({player.position})
+                        {selectedTeam3Players.has(player.id) ? "☑" : "☐"} {player.name} ({player.position}) — {formatSalary(player.salary)}
                       </button>
                     ))}
                   </div>

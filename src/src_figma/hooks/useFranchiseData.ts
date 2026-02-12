@@ -14,7 +14,7 @@ import { calculateStandings, type SeasonMetadata, type TeamStanding as StorageTe
 import { useRelationshipData, type UseRelationshipDataReturn } from '../app/hooks/useRelationshipData';
 import { getFranchiseConfig, loadFranchise } from '../../utils/franchiseManager';
 import { getNextFranchiseGame } from '../../utils/scheduleStorage';
-import { getAllTeams } from '../../utils/leagueBuilderStorage';
+import { getAllTeams, getAllLeagueTemplates, type LeagueTemplate, type Conference, type Division } from '../../utils/leagueBuilderStorage';
 import type { StoredFranchiseConfig } from '../../types/franchise';
 
 // ============================================
@@ -334,6 +334,37 @@ export function useFranchiseData(franchiseId?: string): UseFranchiseDataReturn {
   const [realStandings, setRealStandings] = useState<StorageTeamStanding[]>([]);
   const [standingsLoaded, setStandingsLoaded] = useState(false);
 
+  // League template for conference/division structure
+  const [leagueTemplate, setLeagueTemplate] = useState<LeagueTemplate | null>(null);
+  // Team name lookup (teamId → name)
+  const [teamNameMap, setTeamNameMap] = useState<Record<string, string>>({});
+
+  // Load league template + team names for standings structure
+  useEffect(() => {
+    let cancelled = false;
+    async function loadLeagueStructure() {
+      try {
+        const [templates, teams] = await Promise.all([
+          getAllLeagueTemplates(),
+          getAllTeams(),
+        ]);
+        if (cancelled) return;
+        if (templates.length > 0) {
+          setLeagueTemplate(templates[0]); // Use first league template
+        }
+        const nameMap: Record<string, string> = {};
+        for (const t of teams) {
+          nameMap[t.id] = t.name;
+        }
+        setTeamNameMap(nameMap);
+      } catch (err) {
+        console.error('[useFranchiseData] Failed to load league structure:', err);
+      }
+    }
+    loadLeagueStructure();
+    return () => { cancelled = true; };
+  }, []);
+
   // Load real standings from IndexedDB
   useEffect(() => {
     async function loadStandings() {
@@ -349,49 +380,99 @@ export function useFranchiseData(franchiseId?: string): UseFranchiseDataReturn {
     loadStandings();
   }, [seasonId]);
 
-  // Convert real standings to league/division format
-  // For now, we group all teams into a simple structure
-  // TODO: Add proper league/division configuration
+  // Convert real standings to league/division format using the actual
+  // conference/division structure from the league template.
+  // When no games have been played, seed ALL teams at 0-0.
   const standings = useMemo((): LeagueStandings => {
-    // Show empty standings if no real data exists yet
-    if (!standingsLoaded || realStandings.length === 0) {
-      return EMPTY_STANDINGS;
+    if (!standingsLoaded) return EMPTY_STANDINGS;
+
+    // Build a lookup of teamId → standing entry from real game data
+    const standingsByTeamId = new Map<string, StorageTeamStanding>();
+    for (const s of realStandings) {
+      standingsByTeamId.set(s.teamId, s);
     }
 
-    // Convert real standings to UI format
-    const convertToEntry = (s: StorageTeamStanding): StandingEntry => ({
-      team: s.teamName,
-      wins: s.wins,
-      losses: s.losses,
-      gamesBack: s.gamesBack === 0 ? "-" : s.gamesBack.toFixed(1),
-      runDiff: s.runDiff >= 0 ? `+${s.runDiff}` : `${s.runDiff}`,
-    });
-
-    // Split teams into leagues/divisions based on the 20 SML teams
-    // Using the same structure as the mock data
-    const allTeams = realStandings.map(convertToEntry);
-
-    // If we have game data, organize into divisions
-    // For now, put first half in Eastern, second half in Western
-    const half = Math.ceil(allTeams.length / 2);
-    const eastern = allTeams.slice(0, half);
-    const western = allTeams.slice(half);
-
-    // Split each league into two divisions
-    const eastHalf = Math.ceil(eastern.length / 2);
-    const westHalf = Math.ceil(western.length / 2);
-
-    return {
-      Eastern: {
-        "Division 1": eastern.slice(0, eastHalf),
-        "Division 2": eastern.slice(eastHalf),
-      },
-      Western: {
-        "Division 1": western.slice(0, westHalf),
-        "Division 2": western.slice(westHalf),
-      },
+    // Helper: build a StandingEntry for a teamId (0-0 fallback if no games)
+    const entryForTeam = (teamId: string): StandingEntry => {
+      const s = standingsByTeamId.get(teamId);
+      if (s) {
+        return {
+          team: s.teamName,
+          wins: s.wins,
+          losses: s.losses,
+          gamesBack: s.gamesBack === 0 ? "-" : s.gamesBack.toFixed(1),
+          runDiff: s.runDiff >= 0 ? `+${s.runDiff}` : `${s.runDiff}`,
+        };
+      }
+      // No game data yet — show 0-0
+      return {
+        team: teamNameMap[teamId] || teamId,
+        wins: 0,
+        losses: 0,
+        gamesBack: "-",
+        runDiff: "+0",
+      };
     };
-  }, [standingsLoaded, realStandings]);
+
+    // If we have a league template, use its real conference/division names
+    if (leagueTemplate && leagueTemplate.conferences.length > 0) {
+      const result: LeagueStandings = { Eastern: {}, Western: {} };
+
+      leagueTemplate.conferences.forEach((conf: Conference, confIdx: number) => {
+        const confKey = confIdx === 0 ? 'Eastern' : 'Western';
+        const divisions = leagueTemplate.divisions?.filter(
+          (d: Division) => d.conferenceId === conf.id
+        ) || [];
+
+        if (divisions.length > 0) {
+          for (const div of divisions) {
+            const entries = div.teamIds.map(entryForTeam);
+            // Sort by wins desc, then run diff
+            entries.sort((a, b) => b.wins - a.wins || parseInt(b.runDiff) - parseInt(a.runDiff));
+            // Recalculate games back within division
+            if (entries.length > 0) {
+              const leaderWins = entries[0].wins;
+              const leaderLosses = entries[0].losses;
+              for (const entry of entries) {
+                const gb = ((leaderWins - entry.wins) + (entry.losses - leaderLosses)) / 2;
+                entry.gamesBack = gb === 0 ? "-" : gb.toFixed(1);
+              }
+            }
+            result[confKey][div.name] = entries;
+          }
+        } else {
+          // No divisions defined — put all conference teams in one group
+          const teamIds = leagueTemplate.teamIds.slice(
+            confIdx * Math.ceil(leagueTemplate.teamIds.length / 2),
+            (confIdx + 1) * Math.ceil(leagueTemplate.teamIds.length / 2),
+          );
+          result[confKey][conf.name] = teamIds.map(entryForTeam);
+        }
+      });
+
+      return result;
+    }
+
+    // Fallback: no league template — if we have standings from games, split generically
+    if (realStandings.length > 0) {
+      const allEntries = realStandings.map(s => entryForTeam(s.teamId));
+      const half = Math.ceil(allEntries.length / 2);
+      const eastHalf = Math.ceil(half / 2);
+      const westHalf = Math.ceil((allEntries.length - half) / 2);
+      return {
+        Eastern: {
+          "Division 1": allEntries.slice(0, eastHalf),
+          "Division 2": allEntries.slice(eastHalf, half),
+        },
+        Western: {
+          "Division 1": allEntries.slice(half, half + westHalf),
+          "Division 2": allEntries.slice(half + westHalf),
+        },
+      };
+    }
+
+    return EMPTY_STANDINGS;
+  }, [standingsLoaded, realStandings, leagueTemplate, teamNameMap]);
 
   // Season info
   const seasonNumber = seasonData.seasonMetadata?.seasonNumber ?? 1;
