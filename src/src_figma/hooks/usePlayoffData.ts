@@ -87,6 +87,7 @@ export interface UsePlayoffDataReturn {
     gamesPerRound: number[];
     inningsPerGame?: number;
     useDH?: boolean;
+    preSeededTeams?: PlayoffTeam[];
   }) => Promise<PlayoffConfig>;
   startPlayoffs: () => Promise<void>;
   recordGameResult: (seriesId: string, game: SeriesGame) => Promise<void>;
@@ -248,12 +249,16 @@ export function usePlayoffData(seasonNumber: number = 1): UsePlayoffDataReturn {
     gamesPerRound: number[];
     inningsPerGame?: number;
     useDH?: boolean;
+    preSeededTeams?: PlayoffTeam[];
   }): Promise<PlayoffConfig> => {
     try {
       // Get standings + league structure to determine playoff teams via qualifyTeams()
       let playoffTeams: PlayoffTeam[];
 
-      try {
+      if (config.preSeededTeams && config.preSeededTeams.length > 0) {
+        // Use pre-seeded teams from PlayoffSeedingFlow (user-adjusted seeding)
+        playoffTeams = config.preSeededTeams;
+      } else try {
         const [standings, leagueTemplates, allTeams] = await Promise.all([
           calculateStandings(config.seasonId),
           getAllLeagueTemplates(),

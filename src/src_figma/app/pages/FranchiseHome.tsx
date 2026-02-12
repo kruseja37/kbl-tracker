@@ -12,12 +12,13 @@ import { ContractionExpansionFlow } from "@/app/components/ContractionExpansionF
 import { DraftFlow } from "@/app/components/DraftFlow";
 import { FinalizeAdvanceFlow } from "@/app/components/FinalizeAdvanceFlow";
 import { SeasonEndFlow } from "@/app/components/SeasonEndFlow";
+import { PlayoffSeedingFlow } from "@/app/components/PlayoffSeedingFlow";
 import { TradeFlow } from "@/app/components/TradeFlow";
 import { AddGameModal, type GameFormData } from "@/app/components/AddGameModal";
 import { ScheduleContent } from "@/app/components/ScheduleContent";
 import { useFranchiseData, type UseFranchiseDataReturn } from "@/hooks/useFranchiseData";
 import { useScheduleData, type ScheduledGame } from "@/hooks/useScheduleData";
-import { usePlayoffData } from "@/hooks/usePlayoffData";
+import { usePlayoffData, type PlayoffTeam } from "@/hooks/usePlayoffData";
 import { getHomeFieldPattern, detectClinch } from "../../../engines/playoffEngine";
 import { SimulationOverlay } from "@/app/components/SimulationOverlay";
 import { BatchOperationOverlay, type BatchOperationType } from "@/app/components/BatchOperationOverlay";
@@ -71,6 +72,7 @@ export function FranchiseHome() {
   const [showDraft, setShowDraft] = useState(false);
   const [showFinalize, setShowFinalize] = useState(false);
   const [showSeasonEnd, setShowSeasonEnd] = useState(false);
+  const [showPlayoffSeeding, setShowPlayoffSeeding] = useState(false);
   const [retiredJerseys, setRetiredJerseys] = useState<RetiredJersey[]>([]);
   const [selectedScheduleTeam, setSelectedScheduleTeam] = useState<string>("FULL LEAGUE");
   
@@ -295,6 +297,82 @@ export function FranchiseHome() {
       mvpCandidates: undefined, // Playoff stats not yet tracked per player
     };
   }, [franchiseData.standings, franchiseData.teamNameMap, playoffData, currentSeason, scheduleData.games.length]);
+
+  // Build PlayoffSeedingFlow teams from standings (sorted by win% descending)
+  const playoffSeedingTeams = useMemo(() => {
+    const teams: Array<{
+      teamId: string; teamName: string; shortName: string;
+      grade: string; record: { wins: number; losses: number };
+      seed: number; primaryColor: string;
+    }> = [];
+
+    const standings = franchiseData.standings;
+    if (standings) {
+      for (const [, conf] of Object.entries(standings)) {
+        if (!conf || typeof conf !== 'object') continue;
+        for (const [, entries] of Object.entries(conf as Record<string, unknown>)) {
+          if (!Array.isArray(entries)) continue;
+          entries.forEach((entry: { team?: string; wins?: number; losses?: number }) => {
+            if (!entry || !entry.team) return;
+            const teamName = entry.team;
+            const teamId = Object.entries(franchiseData.teamNameMap ?? {})
+              .find(([, name]) => name === teamName)?.[0] || teamName;
+            const colors = getTeamColors(teamId);
+            teams.push({
+              teamId,
+              teamName,
+              shortName: teamName.split(' ').pop()?.slice(0, 3).toUpperCase() || teamName.slice(0, 3).toUpperCase(),
+              grade: '-', // Team grade not tracked in standings
+              record: { wins: entry.wins ?? 0, losses: entry.losses ?? 0 },
+              seed: 0, // Will be assigned by position
+              primaryColor: colors.primary || '#5A8352',
+            });
+          });
+        }
+      }
+    }
+
+    // Sort by win% descending, assign seeds
+    teams.sort((a, b) => {
+      const aWinPct = a.record.wins + a.record.losses > 0 ? a.record.wins / (a.record.wins + a.record.losses) : 0;
+      const bWinPct = b.record.wins + b.record.losses > 0 ? b.record.wins / (b.record.wins + b.record.losses) : 0;
+      return bWinPct - aWinPct;
+    });
+    teams.forEach((t, i) => { t.seed = i + 1; });
+
+    return teams;
+  }, [franchiseData.standings, franchiseData.teamNameMap]);
+
+  // Handle playoff seeding completion → create bracket with user's seed order
+  const handleSeedingComplete = async (seededTeams: Array<{
+    teamId: string; teamName: string; shortName: string;
+    grade: string; record: { wins: number; losses: number };
+    seed: number; primaryColor: string;
+  }>) => {
+    setShowPlayoffSeeding(false);
+    try {
+      // Transform PlayoffTeamSeed[] → PlayoffTeam[] for createNewPlayoff
+      const half = Math.ceil(seededTeams.length / 2);
+      const preSeededTeams: PlayoffTeam[] = seededTeams.map((t, i) => ({
+        teamId: t.teamId,
+        teamName: t.teamName,
+        seed: t.seed,
+        league: (i < half ? 'Eastern' : 'Western') as 'Eastern' | 'Western',
+        regularSeasonRecord: { wins: t.record.wins, losses: t.record.losses },
+        eliminated: false,
+      }));
+
+      await playoffData.createNewPlayoff({
+        seasonNumber: currentSeason,
+        seasonId: `season-${currentSeason}`,
+        teamsQualifying: seededTeams.length,
+        gamesPerRound: [5, 7, 7],
+        preSeededTeams,
+      });
+    } catch (err) {
+      console.error('Failed to create playoff from seeding:', err);
+    }
+  };
 
   // Schedule System Functions — team list derived from franchise league structure
   const availableTeams = useMemo(() => Object.keys(franchiseData.teamNameMap ?? {}), [franchiseData.teamNameMap]);
@@ -1016,22 +1094,20 @@ export function FranchiseHome() {
                   Create a playoff bracket based on current standings
                 </div>
                 <button
-                  onClick={async () => {
-                    try {
-                      await playoffData.createNewPlayoff({
-                        seasonNumber: currentSeason,
-                        seasonId: `season-${currentSeason}`,
-                        teamsQualifying: 8,
-                        gamesPerRound: [5, 7, 7], // Wild Card, Division, Championship
-                      });
-                    } catch (err) {
-                      console.error('Failed to create playoff:', err);
-                    }
-                  }}
+                  onClick={() => setShowPlayoffSeeding(true)}
                   className="bg-[#5599FF] border-[3px] border-[#3366FF] px-6 py-3 text-sm text-[#E8E8D8] hover:bg-[#3366FF] active:scale-95 transition-transform"
                 >
                   CREATE PLAYOFF BRACKET
                 </button>
+
+                {showPlayoffSeeding && (
+                  <PlayoffSeedingFlow
+                    teams={playoffSeedingTeams}
+                    teamsQualifying={Math.min(8, playoffSeedingTeams.length)}
+                    onComplete={handleSeedingComplete}
+                    onCancel={() => setShowPlayoffSeeding(false)}
+                  />
+                )}
               </div>
             ) : (
               // Playoff exists - show bracket
