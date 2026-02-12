@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import { X, ChevronDown, ChevronUp, ArrowUp, ArrowDown, Trophy, BarChart3, CheckCircle, Users, FileText, Clock, TrendingUp, Award, Flame, Sunrise } from "lucide-react";
 import { useOffseasonData, type OffseasonTeam, type OffseasonPlayer } from "@/hooks/useOffseasonData";
 import { SpringTrainingFlow } from "./SpringTrainingFlow";
@@ -115,9 +115,9 @@ export function FinalizeAdvanceFlow({ onClose, onAdvanceComplete, seasonNumber =
   const [expandedChemistry, setExpandedChemistry] = useState<Set<string>>(new Set());
 
   // Convert real data to local format
-  const initialTeams = useMemo((): Team[] => {
+  const convertedTeams = useMemo((): Team[] => {
     if (hasRealData && realTeams.length > 0 && realPlayers.length > 0) {
-      return realTeams.slice(0, 10).map((team, index) => {
+      return realTeams.map((team, index) => {
         const teamPlayers = realPlayers.filter(p => p.teamId === team.id);
         const mlbPlayers = teamPlayers.slice(0, Math.min(22, teamPlayers.length));
         const farmPlayers = teamPlayers.slice(22);
@@ -140,7 +140,15 @@ export function FinalizeAdvanceFlow({ onClose, onAdvanceComplete, seasonNumber =
     return EMPTY_TEAMS;
   }, [realTeams, realPlayers, hasRealData]);
 
-  const [teams, setTeams] = useState<Team[]>(initialTeams);
+  const [teams, setTeams] = useState<Team[]>(convertedTeams);
+
+  // Sync teams state when async data arrives from IndexedDB
+  useEffect(() => {
+    if (convertedTeams.length > 0 && teams.length === 0) {
+      setTeams(convertedTeams);
+      setSelectedTeamId(convertedTeams[0]?.id || "");
+    }
+  }, [convertedTeams]);
 
   const selectedTeam = teams.find(t => t.id === selectedTeamId) || teams[0] || null;
 

@@ -303,6 +303,8 @@ interface RatingsAdjustmentFlowProps {
 }
 
 export function RatingsAdjustmentFlow({ seasonId, onClose }: RatingsAdjustmentFlowProps) {
+  const seasonNumber = parseInt(seasonId.replace('season-', ''), 10) || 1;
+
   // Load real data from playerDatabase via hook
   const { teams: realTeams, players: realPlayers, hasRealData, isLoading } = useOffseasonData();
 
@@ -475,7 +477,7 @@ export function RatingsAdjustmentFlow({ seasonId, onClose }: RatingsAdjustmentFl
           </button>
           <div className="text-center">
             <div className="text-xl text-[#E8E8D8]">RATINGS ADJUSTMENTS</div>
-            <div className="text-xs text-[#E8E8D8]/60">Season 3 → Season 4</div>
+            <div className="text-xs text-[#E8E8D8]/60">Season {seasonNumber} → Season {seasonNumber + 1}</div>
           </div>
           <div className="w-40"></div>
         </div>
@@ -491,6 +493,7 @@ export function RatingsAdjustmentFlow({ seasonId, onClose }: RatingsAdjustmentFl
               topFallers={topFallers}
               teams={TEAMS}
               allPlayers={ALL_PLAYERS}
+              seasonNumber={seasonNumber}
               onSelectTeam={(index) => {
                 setCurrentTeamIndex(index);
                 setScreen("TEAM_REVEAL");
@@ -509,6 +512,7 @@ export function RatingsAdjustmentFlow({ seasonId, onClose }: RatingsAdjustmentFl
               players={teamPlayers}
               teamIndex={currentTeamIndex}
               totalTeams={TEAMS.length}
+              seasonNumber={seasonNumber}
               onNext={goToNextTeam}
               onPrev={goToPrevTeam}
               onGoToManagerDistribution={() => setScreen("MANAGER_DISTRIBUTION")}
@@ -539,6 +543,7 @@ export function RatingsAdjustmentFlow({ seasonId, onClose }: RatingsAdjustmentFl
               totalUnchanged={totalUnchanged}
               topRisers={topRisers}
               topFallers={topFallers}
+              seasonNumber={seasonNumber}
               onClose={handleSaveAndClose}
               isSaving={isSaving}
             />
@@ -558,6 +563,7 @@ function OverviewScreen({
   topFallers,
   teams,
   allPlayers,
+  seasonNumber,
   onSelectTeam,
   onBeginReview,
   onSkipAll,
@@ -569,6 +575,7 @@ function OverviewScreen({
   topFallers: Player[];
   teams: Team[];
   allPlayers: Player[];
+  seasonNumber: number;
   onSelectTeam: (index: number) => void;
   onBeginReview: () => void;
   onSkipAll: () => void;
@@ -579,10 +586,10 @@ function OverviewScreen({
       <div className="bg-[#6B9462] border-[5px] border-[#C4A853] p-6">
         <div className="text-2xl text-[#E8E8D8] mb-2 flex items-center gap-2">
           <BarChart3 className="w-8 h-8" />
-          SEASON 3 PERFORMANCE REVIEW
+          SEASON {seasonNumber} PERFORMANCE REVIEW
         </div>
         <div className="text-sm text-[#E8E8D8]/80">
-          Based on WAR performance vs salary expectations, player ratings will be adjusted for Season 4.
+          Based on WAR performance vs salary expectations, player ratings will be adjusted for Season {seasonNumber + 1}.
         </div>
       </div>
 
@@ -698,6 +705,7 @@ function TeamRevealScreen({
   players,
   teamIndex,
   totalTeams,
+  seasonNumber,
   onNext,
   onPrev,
   onGoToManagerDistribution,
@@ -706,6 +714,7 @@ function TeamRevealScreen({
   players: Player[];
   teamIndex: number;
   totalTeams: number;
+  seasonNumber: number;
   onNext: () => void;
   onPrev: () => void;
   onGoToManagerDistribution: () => void;
@@ -735,7 +744,7 @@ function TeamRevealScreen({
           </div>
           <div className="flex-1">
             <div className="text-2xl text-[#E8E8D8]">{team.name}</div>
-            <div className="text-sm text-[#E8E8D8]/60">Season 3: {team.record.wins}-{team.record.losses}</div>
+            <div className="text-sm text-[#E8E8D8]/60">Season {seasonNumber}: {team.record.wins}-{team.record.losses}</div>
           </div>
           <div className="text-sm text-[#E8E8D8]/60">Team {teamIndex + 1} of {totalTeams}</div>
         </div>
@@ -787,6 +796,7 @@ function TeamRevealScreen({
               key={player.id}
               player={player}
               team={team}
+              seasonNumber={seasonNumber}
               isExpanded={expandedPlayer === player.id}
               onToggleExpand={() => setExpandedPlayer(expandedPlayer === player.id ? null : player.id)}
             />
@@ -837,11 +847,13 @@ function TeamRevealScreen({
 function PlayerCard({
   player,
   team,
+  seasonNumber,
   isExpanded,
   onToggleExpand,
 }: {
   player: Player;
   team: Team;
+  seasonNumber: number;
   isExpanded: boolean;
   onToggleExpand: () => void;
 }) {
@@ -924,7 +936,7 @@ function PlayerCard({
         <div className="border-t-[3px] border-[#4A6844] p-4 bg-[#4A6844]">
           {/* Season Performance */}
           <div className="mb-4">
-            <div className="text-sm text-[#E8E8D8] font-bold mb-2">SEASON 3 PERFORMANCE</div>
+            <div className="text-sm text-[#E8E8D8] font-bold mb-2">SEASON {seasonNumber} PERFORMANCE</div>
             <div className="grid grid-cols-4 gap-2 text-xs">
               {isPitcher ? (
                 <div className="text-[#E8E8D8]/80">
@@ -1329,6 +1341,7 @@ function LeagueSummaryScreen({
   totalUnchanged,
   topRisers,
   topFallers,
+  seasonNumber,
   onClose,
   isSaving = false,
 }: {
@@ -1339,6 +1352,7 @@ function LeagueSummaryScreen({
   totalUnchanged: number;
   topRisers: Player[];
   topFallers: Player[];
+  seasonNumber: number;
   onClose: () => void;
   isSaving?: boolean;
 }) {
@@ -1358,7 +1372,7 @@ function LeagueSummaryScreen({
       <div className="bg-[#6B9462] border-[5px] border-[#C4A853] p-8 text-center">
         <div className="text-3xl text-[#E8E8D8] mb-4 flex items-center justify-center gap-3">
           <CheckCircle className="w-10 h-10 text-[#228B22]" />
-          SEASON 3 → SEASON 4 ADJUSTMENTS COMPLETE
+          SEASON {seasonNumber} → SEASON {seasonNumber + 1} ADJUSTMENTS COMPLETE
         </div>
         <div className="text-lg text-[#E8E8D8]/80">
           {totalPlayers} players reviewed • {totalImproved} improved • {totalDeclined} declined • {totalUnchanged} unchanged
