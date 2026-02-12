@@ -92,7 +92,7 @@ function buildCandidates(players: Player[], scoreFn: (p: Player) => number): Awa
   }));
 }
 
-/** Abbreviate name: "Mike Trout" → "M. Trout" */
+/** Abbreviate name: "Jock McGroin" → "J. McGroin" */
 function abbrevName(name: string): string {
   const parts = name.split(' ');
   if (parts.length < 2) return name;

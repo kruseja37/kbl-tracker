@@ -3,7 +3,7 @@
  * Per BUG-010 and KBL_XHD_TRACKER_MASTER_SPEC_v3.md
  *
  * Displays player name with colored morale superscript.
- * Example: "Mike Trout⁷⁸" where 78 is in green
+ * Example: "Jock McGroin⁷⁸" where 78 is in green
  */
 
 import React from 'react';

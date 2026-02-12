@@ -376,7 +376,7 @@ export function LeagueBuilderTeams() {
                     onChange={(e) =>
                       setFormData((prev) => ({ ...prev, name: e.target.value }))
                     }
-                    placeholder="e.g., San Francisco Giants"
+                    placeholder="e.g., Sirloins"
                     className="w-full bg-[#4A6844] border-[4px] border-[#3F5A3A] p-3 text-[#E8E8D8] placeholder-[#E8E8D8]/40 focus:border-[#E8E8D8] outline-none"
                   />
                 </div>
@@ -411,7 +411,7 @@ export function LeagueBuilderTeams() {
                     onChange={(e) =>
                       setFormData((prev) => ({ ...prev, location: e.target.value }))
                     }
-                    placeholder="e.g., San Francisco"
+                    placeholder="e.g., Castleton"
                     className="w-full bg-[#4A6844] border-[4px] border-[#3F5A3A] p-3 text-[#E8E8D8] placeholder-[#E8E8D8]/40 focus:border-[#E8E8D8] outline-none"
                   />
                 </div>

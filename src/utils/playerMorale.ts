@@ -3,7 +3,7 @@
  * Per KBL_XHD_TRACKER_MASTER_SPEC_v3.md - Player Morale System
  *
  * Morale is a 0-99 scale displayed as colored superscript next to player names.
- * Example: "Mike Trout⁷⁸" in green
+ * Example: "Jock McGroin⁷⁸" in green
  *
  * This is DISTINCT from Mojo (-2 to +2) which is a short-term confidence system.
  * Morale is a longer-term satisfaction/happiness metric affected by:
