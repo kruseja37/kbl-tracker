@@ -164,9 +164,12 @@ async function aggregateBattingStats(
       runs: seasonStats.runs + gameStats.r,
       walks: seasonStats.walks + gameStats.bb,
       strikeouts: seasonStats.strikeouts + gameStats.k,
+      hitByPitch: seasonStats.hitByPitch + (gameStats.hbp || 0),    // MAJ-11
+      sacFlies: seasonStats.sacFlies + (gameStats.sf || 0),          // MAJ-11
+      sacBunts: seasonStats.sacBunts + (gameStats.sh || 0),          // MAJ-11
       stolenBases: seasonStats.stolenBases + gameStats.sb,
       caughtStealing: seasonStats.caughtStealing + gameStats.cs,
-      // Note: HBP, SF, SAC, GIDP would need to be tracked in game stats
+      gidp: seasonStats.gidp + (gameStats.gidp || 0),               // MAJ-11
     };
 
     await updateBattingStats(updated);

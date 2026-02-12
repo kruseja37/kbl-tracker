@@ -166,9 +166,13 @@ interface PlayerStats {
   rbi: number;
   r: number;
   bb: number;
+  hbp: number;       // MAJ-11: Hit by pitch
   k: number;
   sb: number;
   cs: number;        // Caught stealing
+  sf: number;        // MAJ-11: Sacrifice flies
+  sh: number;        // MAJ-11: Sacrifice bunts
+  gidp: number;      // MAJ-11: Grounded into double play
   // Fielding stats
   putouts: number;
   assists: number;
@@ -177,7 +181,8 @@ interface PlayerStats {
 
 const initialStats: PlayerStats = {
   playerName: '', teamId: '',
-  pa: 0, ab: 0, h: 0, singles: 0, doubles: 0, triples: 0, hr: 0, rbi: 0, r: 0, bb: 0, k: 0, sb: 0, cs: 0,
+  pa: 0, ab: 0, h: 0, singles: 0, doubles: 0, triples: 0, hr: 0, rbi: 0, r: 0, bb: 0, hbp: 0, k: 0, sb: 0, cs: 0,
+  sf: 0, sh: 0, gidp: 0,
   putouts: 0, assists: 0, fieldingErrors: 0,
 };
 

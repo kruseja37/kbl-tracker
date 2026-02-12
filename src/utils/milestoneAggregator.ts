@@ -714,8 +714,8 @@ export async function aggregateGameWithMilestones(
 
   // Process each batter
   for (const [playerId, gameStats] of Object.entries(gameState.playerStats)) {
-    const playerName = playerId; // TODO: Get from roster
-    const teamId = gameState.awayTeamId; // TODO: Determine from roster
+    const playerName = gameStats.playerName || playerId; // CRIT-02: Use actual name from game stats
+    const teamId = gameStats.teamId || gameState.awayTeamId; // CRIT-02: Use actual team from game stats
 
     // Get previous season stats for comparison
     const previousSeasonStats = await getOrCreateBattingStats(

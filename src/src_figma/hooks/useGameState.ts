@@ -85,6 +85,9 @@ export interface PlayerGameStats {
   k: number;
   sb: number;
   cs: number;
+  sf: number;     // MAJ-11: Sacrifice flies
+  sh: number;     // MAJ-11: Sacrifice bunts (SH)
+  gidp: number;   // MAJ-11: Grounded into double play
 }
 
 export interface PitcherGameStats {
@@ -279,7 +282,7 @@ function mapAtBatResultFromWalk(walkType: WalkType): AtBatResult {
 function createEmptyPlayerStats(): PlayerGameStats {
   return {
     pa: 0, ab: 0, h: 0, singles: 0, doubles: 0, triples: 0, hr: 0,
-    r: 0, rbi: 0, bb: 0, hbp: 0, k: 0, sb: 0, cs: 0,
+    r: 0, rbi: 0, bb: 0, hbp: 0, k: 0, sb: 0, cs: 0, sf: 0, sh: 0, gidp: 0,
   };
 }
 
@@ -1607,6 +1610,13 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       }
       if (outType === 'SF') {
         batterStats.rbi++;
+        batterStats.sf++;       // MAJ-11: Track sacrifice flies
+      }
+      if (outType === 'SH') {
+        batterStats.sh++;       // MAJ-11: Track sacrifice bunts
+      }
+      if (outType === 'DP') {
+        batterStats.gidp++;     // MAJ-11: Track grounded into double play
       }
       newStats.set(gameState.currentBatterId, batterStats);
       return newStats;
@@ -2905,8 +2915,9 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       playerName: string; teamId: string;
       pa: number; ab: number; h: number; singles: number; doubles: number;
       triples: number; hr: number; rbi: number; r: number; bb: number;
-      hbp: number; k: number; sb: number; cs: number; putouts: number;
-      assists: number; fieldingErrors: number;
+      hbp: number; k: number; sb: number; cs: number;
+      sf: number; sh: number; gidp: number; // MAJ-11
+      putouts: number; assists: number; fieldingErrors: number;
     }> = {};
     playerStats.forEach((stats, playerId) => {
       const fieldingTally = playerFieldingTally.get(playerId) || { putouts: 0, assists: 0, errors: 0 };
@@ -3116,8 +3127,9 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       playerName: string; teamId: string;
       pa: number; ab: number; h: number; singles: number; doubles: number;
       triples: number; hr: number; rbi: number; r: number; bb: number;
-      hbp: number; k: number; sb: number; cs: number; putouts: number;
-      assists: number; fieldingErrors: number;
+      hbp: number; k: number; sb: number; cs: number;
+      sf: number; sh: number; gidp: number; // MAJ-11
+      putouts: number; assists: number; fieldingErrors: number;
     }> = {};
     playerStats.forEach((stats, playerId) => {
       const fieldingTally = endGameFieldingTally.get(playerId) || { putouts: 0, assists: 0, errors: 0 };

@@ -32,9 +32,13 @@ interface PlayerStats {
   rbi: number;
   r: number;
   bb: number;
+  hbp: number;   // MAJ-11: Hit by pitch
   k: number;
   sb: number;
   cs: number;
+  sf: number;    // MAJ-11: Sacrifice flies
+  sh: number;    // MAJ-11: Sacrifice bunts
+  gidp: number;  // MAJ-11: Grounded into double play
   putouts: number;
   assists: number;
   fieldingErrors: number;
