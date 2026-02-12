@@ -699,6 +699,31 @@ function buildRunnerInfo(
 }
 
 /**
+ * Build runnersAfter snapshot from the tracker state.
+ * Call AFTER tracker has been updated with all runner movements for this play.
+ */
+function buildRunnersAfter(
+  trackerState: RunnerTrackingState,
+): { first: { runnerId: string; runnerName: string; responsiblePitcherId: string } | null;
+     second: { runnerId: string; runnerName: string; responsiblePitcherId: string } | null;
+     third: { runnerId: string; runnerName: string; responsiblePitcherId: string } | null } {
+  const findOnBase = (base: '1B' | '2B' | '3B') => {
+    const runner = trackerState.runners.find(r => r.currentBase === base);
+    if (!runner) return null;
+    return {
+      runnerId: runner.runnerId,
+      runnerName: runner.runnerName,
+      responsiblePitcherId: runner.responsiblePitcherId,
+    };
+  };
+  return {
+    first: findOnBase('1B'),
+    second: findOnBase('2B'),
+    third: findOnBase('3B'),
+  };
+}
+
+/**
  * Convert destination to tracker format
  */
 function destToTrackerBase(dest: 'second' | 'third' | 'home'): '1B' | '2B' | '3B' | 'HOME' {
@@ -1289,7 +1314,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       awayScore: gameState.awayScore,
       homeScore: gameState.homeScore,
       outsAfter: gameState.outs,
-      runnersAfter: { first: null, second: null, third: null }, // Updated below
+      runnersAfter: buildRunnersAfter(runnerTrackerRef.current),
       awayScoreAfter: gameState.isTop ? gameState.awayScore + runsScored : gameState.awayScore,
       homeScoreAfter: gameState.isTop ? gameState.homeScore : gameState.homeScore + runsScored,
       leverageIndex,
@@ -1553,7 +1578,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       awayScore: gameState.awayScore,
       homeScore: gameState.homeScore,
       outsAfter: Math.min(newOuts, 3),
-      runnersAfter: { first: null, second: null, third: null },
+      runnersAfter: newOuts >= 3 ? { first: null, second: null, third: null } : buildRunnersAfter(runnerTrackerRef.current),
       awayScoreAfter: gameState.isTop ? gameState.awayScore + runsScored : gameState.awayScore,
       homeScoreAfter: gameState.isTop ? gameState.homeScore : gameState.homeScore + runsScored,
       leverageIndex,
@@ -1770,7 +1795,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       awayScore: gameState.awayScore,
       homeScore: gameState.homeScore,
       outsAfter: gameState.outs,
-      runnersAfter: { first: null, second: null, third: null },
+      runnersAfter: buildRunnersAfter(runnerTrackerRef.current),
       awayScoreAfter: gameState.isTop ? gameState.awayScore + runsScored : gameState.awayScore,
       homeScoreAfter: isBottom ? homeScoreAfter : gameState.homeScore + runsScored,
       leverageIndex,
@@ -1894,6 +1919,14 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     const result: AtBatResult = 'K';
     const newOuts = batterReached ? gameState.outs : gameState.outs + 1;
 
+    // Update runner tracker BEFORE event creation so runnersAfter is correct
+    if (batterReached) {
+      let d3kTracker = syncTrackerPitcher(runnerTrackerRef.current, gameState.currentPitcherId, gameState.currentPitcherName);
+      d3kTracker = trackerAddRunner(d3kTracker, gameState.currentBatterId, gameState.currentBatterName, '1B', 'error');
+      d3kTracker = trackerNextAtBat(d3kTracker);
+      runnerTrackerRef.current = d3kTracker;
+    }
+
     const event: AtBatEvent = {
       eventId: `${gameState.gameId}_${newSequence}`,
       gameId: gameState.gameId,
@@ -1919,11 +1952,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       awayScore: gameState.awayScore,
       homeScore: gameState.homeScore,
       outsAfter: newOuts,
-      runnersAfter: {
-        first: batterReached ? { runnerId: gameState.currentBatterId, runnerName: gameState.currentBatterName, responsiblePitcherId: gameState.currentPitcherId } : null,
-        second: null,
-        third: null,
-      },
+      runnersAfter: newOuts >= 3 ? { first: null, second: null, third: null } : buildRunnersAfter(runnerTrackerRef.current),
       awayScoreAfter: gameState.awayScore,
       homeScoreAfter: gameState.homeScore,
       // D-05 FIX: Calculate leverageIndex from base-out state instead of hardcoding 1.0
@@ -1974,14 +2003,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       return newStats;
     });
 
-    // CRIT-02: Update runner tracker for D3K
-    if (batterReached) {
-      let d3kTracker = syncTrackerPitcher(runnerTrackerRef.current, gameState.currentPitcherId, gameState.currentPitcherName);
-      // D3K batter reaches first — categorize as 'error' for ER purposes (uncaught third strike)
-      d3kTracker = trackerAddRunner(d3kTracker, gameState.currentBatterId, gameState.currentBatterName, '1B', 'error');
-      d3kTracker = trackerNextAtBat(d3kTracker);
-      runnerTrackerRef.current = d3kTracker;
-    }
+    // (Runner tracker already updated before event creation above)
 
     // Update game state
     setGameState(prev => ({
@@ -2080,7 +2102,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       awayScore: gameState.awayScore,
       homeScore: gameState.homeScore,
       outsAfter: gameState.outs,
-      runnersAfter: { first: null, second: null, third: null },
+      runnersAfter: buildRunnersAfter(runnerTrackerRef.current),
       awayScoreAfter: gameState.isTop ? gameState.awayScore + runsScored : gameState.awayScore,
       homeScoreAfter: gameState.isTop ? gameState.homeScore : gameState.homeScore + runsScored,
       leverageIndex: 1.0,
@@ -2935,11 +2957,19 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         hitsAllowed: stats.hitsAllowed,
         runsAllowed: stats.runsAllowed,
         earnedRuns: stats.earnedRuns,
-        walksAllowed: stats.walksAllowed,
+        walksAllowed: stats.walksAllowed + stats.intentionalWalks, // Combine BB+IBB (matches endGame path)
         strikeoutsThrown: stats.strikeoutsThrown,
         homeRunsAllowed: stats.homeRunsAllowed,
         hitBatters: stats.hitByPitch,
-        basesReachedViaError: 0,
+        basesReachedViaError: (() => {
+          // CRIT-06: Count runners who reached via error from runner tracker
+          // Note: Undercounts runners who reached via error but were later put out (removed from tracker)
+          const trackerPitcherStats = runnerTrackerRef.current.pitcherStats.get(pitcherId);
+          if (!trackerPitcherStats) return 0;
+          const onBase = trackerPitcherStats.runnersOnBase.filter(r => r.howReached === 'error').length;
+          const scored = trackerPitcherStats.runnersScored.filter(r => r.howReached === 'error').length;
+          return onBase + scored;
+        })(),
         wildPitches: stats.wildPitches,
         pitchCount: stats.pitchCount,
         battersFaced: stats.battersFaced,
@@ -3129,7 +3159,15 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         strikeoutsThrown: stats.strikeoutsThrown,
         homeRunsAllowed: stats.homeRunsAllowed,
         hitBatters: stats.hitByPitch,
-        basesReachedViaError: 0, // TODO: Track via runner tracker howReached=error
+        basesReachedViaError: (() => {
+          // CRIT-06: Count runners who reached via error from runner tracker
+          // Note: Undercounts runners who reached via error but were later put out (removed from tracker)
+          const trackerPitcherStats = runnerTrackerRef.current.pitcherStats.get(pitcherId);
+          if (!trackerPitcherStats) return 0;
+          const onBase = trackerPitcherStats.runnersOnBase.filter(r => r.howReached === 'error').length;
+          const scored = trackerPitcherStats.runnersScored.filter(r => r.howReached === 'error').length;
+          return onBase + scored;
+        })(),
         wildPitches: stats.wildPitches,
         pitchCount: stats.pitchCount,
         battersFaced: stats.battersFaced,

@@ -307,3 +307,87 @@ Organize players by role:
 
 ### Data Storage Location
 Player/team data goes in: `src/data/playerDatabase.ts`
+
+# KBL Tracker — Claude Code Operating Rules
+
+## ACTIVE FIX PROTOCOL (remove this section when DATA_INTEGRITY_FIX_PLAN_v2 is complete)
+
+You are working through a structured fix plan in `spec-docs/DATA_INTEGRITY_FIX_PLAN_v2.md`. 
+Read that file at the start of every batch. These rules apply to ALL batches:
+
+### Core Rules
+1. Do NOT edit any file until you have READ and PASTED the relevant code.
+2. Every grep command must be RUN and its output PASTED before proceeding.
+3. If a step says "Paste the results" — you MUST paste them verbatim.
+4. If you cannot find what a step asks for, STOP and report what you found instead. Do NOT proceed with assumptions.
+5. Do NOT invent line numbers. Use grep output for actual locations.
+6. Do NOT assume what code does from function names. READ the function body.
+7. After ANY fix, re-read the changed code and PASTE the new version to prove it's correct.
+8. BLOCKED and DEFERRED are legitimate outcomes. A clear "BLOCKED: [reason]" with a TODO comment is better than speculative code.
+9. If implementation would require >50 lines of NEW logic AND you are not confident it's correct, DEFER with a detailed TODO.
+
+### Before/After Protocol (EVERY batch)
+**BEFORE starting:**
+```
+git status
+git diff --stat
+```
+Must be clean. If not, commit or stash first.
+
+**AFTER completing:**
+```
+git diff --stat
+git diff src/ | head -300
+npm run build && npm test
+```
+Then run CANARY CHECKS from the fix plan. Paste ALL output.
+
+### Canary Checks (run after EVERY batch)
+```bash
+# CANARY 1: Build + Tests
+npm run build && npm test
+
+# CANARY 2: No hardcoded team names
+grep -rn "TIGERS\|SOX\|San Francisco Giants\|redsox\|Barry Bonds\|Mike Trout" \
+  src/src_figma/ --include="*.tsx" | grep -v test | grep -v "teamColors"
+
+# CANARY 3: No hardcoded season-1
+grep -n "season-1" src/src_figma/hooks/useFranchiseData.ts
+
+# CANARY 4: Pitcher stats not hardcoded to 0
+grep -n "hitByPitch.*: 0\|wildPitch.*: 0" \
+  src/src_figma/hooks/useGameState.ts | grep -v "test\|spec\|TODO\|default\|initial\|reset"
+
+# CANARY 5: W/L/SV in aggregation (after Batch 1B)
+grep -n "wins\|losses\|saves" src/utils/seasonAggregator.ts | grep "+="
+
+# CANARY 6: playerName in milestone aggregator (after Batch 1B)
+grep -n "playerName\|playerId" src/utils/milestoneAggregator.ts | head -10
+
+# CANARY 7: isPlayoff from route state (after Batch 2A)
+grep -n "isPlayoff.*false\|isPlayoff.*=.*false" src/src_figma/app/pages/GameTracker.tsx
+
+# CANARY 8: Walk-off detection (after Batch 2A)
+grep -n "isWalkOff.*false\|isWalkOff.*=.*false" \
+  src/src_figma/app/pages/GameTracker.tsx src/src_figma/hooks/useGameState.ts
+```
+Report PASS/FAIL for each. If any FAIL, stop and fix before next batch.
+
+### Summary Report Format (end of EVERY batch)
+```
+BATCH [X] COMPLETE
+
+Changes:
+  [issue]: FIXED / BLOCKED (reason) / DEFERRED (reason) / UNSAFE (reason)
+  
+Files changed:
+  [paste git diff --stat output]
+
+Canary checks:
+  CANARY 1: PASS/FAIL
+  CANARY 2: PASS/FAIL — [count] results
+  ...
+
+Commit: git add -u && git commit -m "[batch]: [summary]"
+```
+
