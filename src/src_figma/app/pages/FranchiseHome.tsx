@@ -488,6 +488,29 @@ export function FranchiseHome() {
     }
   };
 
+  // Lookup team record from standings (handles nested LeagueStandings shape)
+  // MAJ-15: Moved before playoff handler so it's in scope for all navigate() calls
+  const getTeamRecord = (teamId: string): string => {
+    const standings = franchiseData.standings;
+    if (!standings || typeof standings !== 'object') return '0-0';
+    try {
+      for (const conference of Object.values(standings)) {
+        if (!conference || typeof conference !== 'object') continue;
+        for (const division of Object.values(conference as Record<string, unknown>)) {
+          if (!Array.isArray(division)) continue;
+          const entry = division.find(
+            (s: { team?: string; wins?: number; losses?: number }) =>
+              s.team && s.team.toLowerCase() === teamId.toLowerCase()
+          );
+          if (entry) return `${entry.wins}-${entry.losses}`;
+        }
+      }
+    } catch {
+      // Standings shape doesn't match expected — return default
+    }
+    return '0-0';
+  };
+
   // Launch a playoff game in the GameTracker
   const handlePlayPlayoffGame = (series: ReturnType<typeof playoffData.getSeriesForTeam> & {}) => {
     if (!series || series.status !== 'IN_PROGRESS') return;
@@ -518,6 +541,8 @@ export function FranchiseHome() {
         homeTeamId,
         awayTeamName: awayTeamName.toUpperCase(),
         homeTeamName: homeTeamName.toUpperCase(),
+        awayRecord: getTeamRecord(awayTeamId), // MAJ-15: Pass actual team records to GameTracker
+        homeRecord: getTeamRecord(homeTeamId), // MAJ-15: Pass actual team records to GameTracker
         franchiseId,
         leagueId: 'sml',
       },
@@ -2448,6 +2473,29 @@ function GameDayContent({ scheduleData, currentSeason, onDataRefresh }: GameDayC
   // Access franchise data for season config
   const franchiseData = useFranchiseDataContext();
 
+  // Lookup team record from standings (handles nested LeagueStandings shape)
+  // MAJ-15: Needed by handlePlayGame and JSX display
+  const getTeamRecord = (teamId: string): string => {
+    const standings = franchiseData.standings;
+    if (!standings || typeof standings !== 'object') return '0-0';
+    try {
+      for (const conference of Object.values(standings)) {
+        if (!conference || typeof conference !== 'object') continue;
+        for (const division of Object.values(conference as Record<string, unknown>)) {
+          if (!Array.isArray(division)) continue;
+          const entry = division.find(
+            (s: { team?: string; wins?: number; losses?: number }) =>
+              s.team && s.team.toLowerCase() === teamId.toLowerCase()
+          );
+          if (entry) return `${entry.wins}-${entry.losses}`;
+        }
+      }
+    } catch {
+      // Standings shape doesn't match expected — return default
+    }
+    return '0-0';
+  };
+
   // Derive season complete: all games resolved (no SCHEDULED games remain)
   // Only true when we have loaded games AND none are SCHEDULED
   const allGames = scheduleData.games ?? [];
@@ -2488,28 +2536,6 @@ function GameDayContent({ scheduleData, currentSeason, onDataRefresh }: GameDayC
   // Team IDs for the matchup — pull from schedule if available
   const awayTeamId = scheduleData.nextGame?.awayTeamId ?? '';
   const homeTeamId = scheduleData.nextGame?.homeTeamId ?? '';
-
-  // Lookup team record from standings (handles nested LeagueStandings shape)
-  const getTeamRecord = (teamId: string): string => {
-    const standings = franchiseData.standings;
-    if (!standings || typeof standings !== 'object') return '0-0';
-    try {
-      for (const conference of Object.values(standings)) {
-        if (!conference || typeof conference !== 'object') continue;
-        for (const division of Object.values(conference as Record<string, unknown>)) {
-          if (!Array.isArray(division)) continue;
-          const entry = division.find(
-            (s: { team?: string; wins?: number; losses?: number }) =>
-              s.team && s.team.toLowerCase() === teamId.toLowerCase()
-          );
-          if (entry) return `${entry.wins}-${entry.losses}`;
-        }
-      }
-    } catch {
-      // Standings shape doesn't match expected — return default
-    }
-    return '0-0';
-  };
 
   const handlePlayGame = () => {
     const nextGame = scheduleData.nextGame;

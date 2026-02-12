@@ -106,8 +106,8 @@ export function GameTracker() {
   const homeTeamName = navigationState?.homeTeamName || 'HOME';
   const awayTeamName = navigationState?.awayTeamName || 'AWAY';
   const stadiumName = navigationState?.stadiumName;
-  const awayRecord = navigationState?.awayRecord || (navigationState?.gameMode === 'exhibition' ? '0-0' : '0-0');
-  const homeRecord = navigationState?.homeRecord || (navigationState?.gameMode === 'exhibition' ? '0-0' : '0-0');
+  const awayRecord = navigationState?.awayRecord || '0-0'; // MAJ-15: Reads actual record from route state; defaults 0-0 for exhibition
+  const homeRecord = navigationState?.homeRecord || '0-0'; // MAJ-15: Reads actual record from route state; defaults 0-0 for exhibition
   const leagueId = navigationState?.leagueId || 'sml';
   const homeManagerId = navigationState?.homeManagerId || `${homeTeamId}-manager`;
   const awayManagerId = navigationState?.awayManagerId || `${awayTeamId}-manager`;
@@ -1293,7 +1293,7 @@ export function GameTracker() {
           ...(gameState.bases.third ? [3] : []),
         ],
         scoreDiff: gameState.homeScore - gameState.awayScore,
-        isPlayoff: false, // TODO: Get from game context
+        isPlayoff: isPlayoffGame, // MAJ-13: Use actual playoff state from route
       };
 
       // DISABLED: Auto-updating mojo based on play outcomes
@@ -1332,7 +1332,7 @@ export function GameTracker() {
           {
             gameId: gameId || 'demo-game',
             leverageIndex: playData.leverageIndex,
-            isPlayoffs: false, // TODO: Get from game context
+            isPlayoffs: isPlayoffGame, // MAJ-13: Use actual playoff state from route
             rbi: calculateRBIFromOutcomes(),
           }
         );
@@ -1878,11 +1878,14 @@ export function GameTracker() {
           }
         }
 
+        // MAJ-14: Walk-off = home team wins in the bottom half (scored go-ahead run in their last at-bat)
+        const isWalkOff = homeWon && !gameState.isTop;
+
         // Home team perspective
         const homeResult: FanMoraleGameResult = {
           gameId: gameId || 'demo-game',
           won: homeWon,
-          isWalkOff: false, // TODO: detect walk-off from last play
+          isWalkOff, // MAJ-14: Use real walk-off detection
           isNoHitter: isNoHitter && homeWon, // Only counts for the winning side
           isShutout: isShutout && homeWon,
           isBlowout,
@@ -1896,7 +1899,7 @@ export function GameTracker() {
         const awayResult: FanMoraleGameResult = {
           gameId: gameId || 'demo-game',
           won: !homeWon,
-          isWalkOff: false,
+          isWalkOff, // MAJ-14: Same walk-off flag (away team experienced it too)
           isNoHitter: isNoHitter && !homeWon,
           isShutout: isShutout && !homeWon,
           isBlowout,
@@ -1948,7 +1951,7 @@ export function GameTracker() {
           'season-1',
           homeManagerId,
           homeTeamId,
-          { wins: 0, losses: 0 }, // TODO: get actual team record from season storage
+          { wins: parseInt(homeRecord.split('-')[0]) || 0, losses: parseInt(homeRecord.split('-')[1]) || 0 }, // MAJ-15: Use actual team record from route state
           0.5, // Default salary score
           50, // Default season games
         );
