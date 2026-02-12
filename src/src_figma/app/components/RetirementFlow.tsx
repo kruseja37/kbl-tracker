@@ -209,6 +209,49 @@ export function RetirementFlow({ onClose, onRetirementsComplete, seasonId = 'sea
   const [ceremonyTeamIndex, setCeremonyTeamIndex] = useState(0);
   const [isRolling, setIsRolling] = useState(false);
 
+  // Save retirements and close — must be declared before any early returns (React hooks rules)
+  const saveAndClose = useCallback(async () => {
+    if (retirements.length === 0) {
+      onClose();
+      return;
+    }
+
+    try {
+      setIsSaving(true);
+      // Convert to RetirementDecision format
+      const retirementDecisions: RetirementDecision[] = retirements.map(r => ({
+        playerId: r.player.id,
+        playerName: r.player.name,
+        teamId: r.team.id,
+        age: r.player.age,
+        finalOverall: r.player.grade,
+        careerWAR: r.player.war,
+        reason: r.player.age >= 38 ? 'AGE' : 'VOLUNTARY',
+        hallOfFameEligible: r.player.war >= 60 || r.player.seasons >= 15,
+        retiredAt: Date.now(),
+      }));
+
+      await offseasonState.saveRetirementDecisions(retirementDecisions);
+
+      // Remove retired players from team rosters in leagueBuilderStorage
+      for (const r of retirements) {
+        try {
+          await retirePlayer(r.player.id);
+        } catch (err) {
+          console.error(`[RetirementFlow] Failed to retire ${r.player.name} from roster:`, err);
+        }
+      }
+
+      console.log(`[RetirementFlow] Saved ${retirementDecisions.length} retirements and updated rosters`);
+      onClose();
+    } catch (err) {
+      console.error('[RetirementFlow] Failed to save retirements:', err);
+      onClose();
+    } finally {
+      setIsSaving(false);
+    }
+  }, [retirements, offseasonState, onClose]);
+
   const currentTeam = TEAMS[currentTeamIndex];
 
   // Get roster for current team
@@ -333,49 +376,6 @@ export function RetirementFlow({ onClose, onRetirementsComplete, seasonId = 'sea
       }
     }
   };
-
-  // Save retirements and close
-  const saveAndClose = useCallback(async () => {
-    if (retirements.length === 0) {
-      onClose();
-      return;
-    }
-
-    try {
-      setIsSaving(true);
-      // Convert to RetirementDecision format
-      const retirementDecisions: RetirementDecision[] = retirements.map(r => ({
-        playerId: r.player.id,
-        playerName: r.player.name,
-        teamId: r.team.id,
-        age: r.player.age,
-        finalOverall: r.player.grade,
-        careerWAR: r.player.war,
-        reason: r.player.age >= 38 ? 'AGE' : 'VOLUNTARY',
-        hallOfFameEligible: r.player.war >= 60 || r.player.seasons >= 15,
-        retiredAt: Date.now(),
-      }));
-
-      await offseasonState.saveRetirementDecisions(retirementDecisions);
-
-      // Remove retired players from team rosters in leagueBuilderStorage
-      for (const r of retirements) {
-        try {
-          await retirePlayer(r.player.id);
-        } catch (err) {
-          console.error(`[RetirementFlow] Failed to retire ${r.player.name} from roster:`, err);
-        }
-      }
-
-      console.log(`[RetirementFlow] Saved ${retirementDecisions.length} retirements and updated rosters`);
-      onClose();
-    } catch (err) {
-      console.error('[RetirementFlow] Failed to save retirements:', err);
-      onClose();
-    } finally {
-      setIsSaving(false);
-    }
-  }, [retirements, offseasonState, onClose]);
 
   return (
     <div className="fixed inset-0 bg-black/95 z-50 overflow-y-auto">
