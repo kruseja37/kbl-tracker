@@ -148,9 +148,9 @@ export function TradeFlow({ seasonId, onComplete }: TradeFlowProps) {
   const [tradeMode, setTradeMode] = useState<TradeMode>("two-way");
 
   // Trade Builder State - use first team IDs from loaded teams
-  const defaultTeam1 = teams[0]?.id || "tigers";
-  const defaultTeam2 = teams[1]?.id || "sox";
-  const defaultTeam3 = teams[2]?.id || "bears";
+  const defaultTeam1 = teams[0]?.id || "team-1";
+  const defaultTeam2 = teams[1]?.id || "team-2";
+  const defaultTeam3 = teams[2]?.id || "team-3";
 
   const [team1Id, setTeam1Id] = useState(defaultTeam1);
   const [team2Id, setTeam2Id] = useState(defaultTeam2);

@@ -2512,7 +2512,27 @@ function GameDayContent({ scheduleData, currentSeason, onDataRefresh }: GameDayC
   };
 
   const handlePlayGame = () => {
-    navigate("/game-tracker/game-123");
+    const nextGame = scheduleData.nextGame;
+    const away = nextGame?.awayTeamId || awayTeamId;
+    const home = nextGame?.homeTeamId || homeTeamId;
+    const awayName = franchiseData.teamNameMap?.[away] || away;
+    const homeName = franchiseData.teamNameMap?.[home] || home;
+    const gameNum = nextGame?.gameNumber ?? 1;
+
+    navigate(`/game-tracker/franchise-g${gameNum}`, {
+      state: {
+        gameMode: 'franchise' as const,
+        awayTeamId: away,
+        homeTeamId: home,
+        awayTeamName: awayName.toUpperCase(),
+        homeTeamName: homeName.toUpperCase(),
+        awayRecord: getTeamRecord(away),
+        homeRecord: getTeamRecord(home),
+        stadiumName: franchiseData.stadiumMap?.[home],
+        franchiseId,
+        leagueId: 'sml',
+      },
+    });
     setConfirmAction(null);
   };
 

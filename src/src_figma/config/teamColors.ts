@@ -62,8 +62,18 @@ export const teamColors: Record<string, TeamColors> = {
 };
 
 // Helper function to get team colors by ID
+const DEFAULT_TEAM_COLORS: TeamColors = {
+  id: 'default',
+  name: 'Team',
+  abbreviation: 'TM',
+  primary: '#5A8352',
+  secondary: '#4A6844',
+  text: '#E8E8D8',
+  border: '#4A6844',
+};
+
 export function getTeamColors(teamId: string): TeamColors {
-  return teamColors[teamId] || teamColors.sox; // Default fallback
+  return teamColors[teamId] || DEFAULT_TEAM_COLORS;
 }
 
 // Helper function to get alternating fielder border colors

@@ -100,11 +100,11 @@ export function GameTracker() {
     franchiseId?: string;
   } | null;
 
-  // Team IDs - use navigation state or defaults
-  const homeTeamId = navigationState?.homeTeamId || 'sox';
-  const awayTeamId = navigationState?.awayTeamId || 'tigers';
-  const homeTeamName = navigationState?.homeTeamName || 'SOX';
-  const awayTeamName = navigationState?.awayTeamName || 'TIGERS';
+  // Team IDs - use navigation state or standalone defaults
+  const homeTeamId = navigationState?.homeTeamId || 'home';
+  const awayTeamId = navigationState?.awayTeamId || 'away';
+  const homeTeamName = navigationState?.homeTeamName || 'HOME';
+  const awayTeamName = navigationState?.awayTeamName || 'AWAY';
   const stadiumName = navigationState?.stadiumName;
   const awayRecord = navigationState?.awayRecord || (navigationState?.gameMode === 'exhibition' ? '0-0' : '0-0');
   const homeRecord = navigationState?.homeRecord || (navigationState?.gameMode === 'exhibition' ? '0-0' : '0-0');

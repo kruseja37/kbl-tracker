@@ -101,6 +101,7 @@ export function FinalizeAdvanceFlow({ onClose, onAdvanceComplete, seasonNumber =
   const { teams: realTeams, players: realPlayers, hasRealData, isLoading } = useOffseasonData();
 
   const [currentScreen, setCurrentScreen] = useState<Screen>("roster-management");
+  const [showIncompleteRosterConfirm, setShowIncompleteRosterConfirm] = useState(false);
   const [selectedTeamId, setSelectedTeamId] = useState("sf-giants");
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [showCallUpModal, setShowCallUpModal] = useState(false);
@@ -475,10 +476,10 @@ export function FinalizeAdvanceFlow({ onClose, onAdvanceComplete, seasonNumber =
               </div>
               
               <div className="text-sm text-[#E8E8D8]">
-                Roster Status: {isRosterValid(selectedTeam) ? (
-                  <span className="text-[#4CAF50]">✓ Valid ({selectedTeam.mlbRoster.length} MLB + {selectedTeam.farmRoster.length} Farm = {selectedTeam.mlbRoster.length + selectedTeam.farmRoster.length})</span>
+                Roster: {isRosterValid(selectedTeam) ? (
+                  <span className="text-[#4CAF50]">✓ Full ({selectedTeam.mlbRoster.length} MLB + {selectedTeam.farmRoster.length} Farm = {selectedTeam.mlbRoster.length + selectedTeam.farmRoster.length})</span>
                 ) : (
-                  <span className="text-[#DD0000]">✗ Invalid ({selectedTeam.mlbRoster.length} MLB + {selectedTeam.farmRoster.length} Farm = {selectedTeam.mlbRoster.length + selectedTeam.farmRoster.length})</span>
+                  <span className="text-[#FFD700]">⚠ {selectedTeam.mlbRoster.length} MLB + {selectedTeam.farmRoster.length} Farm = {selectedTeam.mlbRoster.length + selectedTeam.farmRoster.length} (ideal: 32)</span>
                 )}
               </div>
             </div>
@@ -642,8 +643,7 @@ export function FinalizeAdvanceFlow({ onClose, onAdvanceComplete, seasonNumber =
               
               <button
                 onClick={() => setCurrentScreen("validation")}
-                disabled={!allRostersValid}
-                className={`bg-[#5A8352] border-[4px] border-[#C4A853] px-8 py-3 text-[#E8E8D8] text-lg font-bold hover:bg-[#4F7D4B] active:scale-95 transition-all shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)] ${!allRostersValid ? "opacity-50 cursor-not-allowed" : ""}`}
+                className="bg-[#5A8352] border-[4px] border-[#C4A853] px-8 py-3 text-[#E8E8D8] text-lg font-bold hover:bg-[#4F7D4B] active:scale-95 transition-all shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)]"
               >
                 Continue to Advance →
               </button>
@@ -753,15 +753,16 @@ export function FinalizeAdvanceFlow({ onClose, onAdvanceComplete, seasonNumber =
             <div className="bg-[#6B9462] border-[5px] border-[#4A6844] p-8">
               <div className="text-center mb-8">
                 <h3 className="text-2xl text-[#E8E8D8] font-bold mb-2">✓ ROSTER VALIDATION</h3>
-                <div className="text-sm text-[#E8E8D8]/70">All teams must have 22 MLB + 10 Farm = 32 players</div>
+                <div className="text-sm text-[#E8E8D8]/70">Ideal roster: 22 MLB + 10 Farm = 32 players</div>
               </div>
 
               <div className="bg-[#5A8352] border-[4px] border-[#4A6844] p-6 mb-6">
                 <div className="text-lg text-[#E8E8D8] font-bold mb-2">
-                  VALIDATION STATUS: {allRostersValid ? "✓ ALL TEAMS VALID" : "⚠️ TEAMS NEED ATTENTION"}
+                  ROSTER STATUS: {allRostersValid ? "✓ ALL TEAMS AT FULL STRENGTH" : `⚠ ${teams.length - teams.filter(isRosterValid).length} team(s) have incomplete rosters`}
                 </div>
                 <div className="text-sm text-[#E8E8D8]/80">
-                  {teams.filter(isRosterValid).length} of {teams.length} teams have valid rosters
+                  {teams.filter(isRosterValid).length} of {teams.length} teams at ideal roster size
+                  {!allRostersValid && " — teams with fewer players will have a thinner bench"}
                 </div>
               </div>
 
@@ -785,8 +786,9 @@ export function FinalizeAdvanceFlow({ onClose, onAdvanceComplete, seasonNumber =
                         </div>
                         {!valid && (
                           <div className="mt-2 text-xs text-[#E8E8D8]/80">
-                            Problem: {team.mlbRoster.length !== 22 && `MLB roster needs ${22 - team.mlbRoster.length} more`}
-                            {team.farmRoster.length !== 10 && `Farm roster needs ${10 - team.farmRoster.length} more`}
+                            Note: {team.mlbRoster.length !== 22 && `MLB roster has ${team.mlbRoster.length}/22 players`}
+                            {team.mlbRoster.length !== 22 && team.farmRoster.length !== 10 && " │ "}
+                            {team.farmRoster.length !== 10 && `Farm roster has ${team.farmRoster.length}/10 players`}
                           </div>
                         )}
                       </div>
@@ -810,13 +812,44 @@ export function FinalizeAdvanceFlow({ onClose, onAdvanceComplete, seasonNumber =
                     View Transaction Report
                   </button>
                   <button
-                    onClick={() => setCurrentScreen("transaction-report")}
-                    disabled={!allRostersValid}
-                    className={`bg-[#5A8352] border-[4px] border-[#C4A853] px-8 py-3 text-[#E8E8D8] font-bold hover:bg-[#4F7D4B] active:scale-95 transition-all shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)] ${!allRostersValid ? "opacity-50 cursor-not-allowed" : ""}`}
+                    onClick={() => {
+                      if (!allRostersValid) {
+                        setShowIncompleteRosterConfirm(true);
+                      } else {
+                        setCurrentScreen("transaction-report");
+                      }
+                    }}
+                    className="bg-[#5A8352] border-[4px] border-[#C4A853] px-8 py-3 text-[#E8E8D8] font-bold hover:bg-[#4F7D4B] active:scale-95 transition-all shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)]"
                   >
                     Continue →
                   </button>
                 </div>
+
+                {showIncompleteRosterConfirm && (
+                  <div className="mt-4 bg-[#5A3A3A] border-[3px] border-[#DD0000]/50 p-4">
+                    <div className="text-sm text-[#E8E8D8] mb-3">
+                      {teams.length - teams.filter(isRosterValid).length} team(s) have incomplete rosters. Teams with fewer players will have a thinner bench — this is a gameplay consequence, not an error.
+                    </div>
+                    <div className="text-sm text-[#E8E8D8]/70 mb-4">Advance anyway?</div>
+                    <div className="flex gap-3 justify-end">
+                      <button
+                        onClick={() => setShowIncompleteRosterConfirm(false)}
+                        className="bg-[#4A6844] border-[3px] border-[#E8E8D8]/30 px-4 py-2 text-sm text-[#E8E8D8] hover:bg-[#3D5A37] active:scale-95 transition-all"
+                      >
+                        Go Back
+                      </button>
+                      <button
+                        onClick={() => {
+                          setShowIncompleteRosterConfirm(false);
+                          setCurrentScreen("transaction-report");
+                        }}
+                        className="bg-[#5A8352] border-[3px] border-[#C4A853] px-4 py-2 text-sm text-[#E8E8D8] font-bold hover:bg-[#4F7D4B] active:scale-95 transition-all"
+                      >
+                        Advance Anyway →
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </div>
