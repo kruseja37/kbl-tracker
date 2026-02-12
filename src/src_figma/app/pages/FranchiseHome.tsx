@@ -11,6 +11,7 @@ import { AwardsCeremonyFlow } from "@/app/components/AwardsCeremonyFlow";
 import { ContractionExpansionFlow } from "@/app/components/ContractionExpansionFlow";
 import { DraftFlow } from "@/app/components/DraftFlow";
 import { FinalizeAdvanceFlow } from "@/app/components/FinalizeAdvanceFlow";
+import { SeasonEndFlow } from "@/app/components/SeasonEndFlow";
 import { TradeFlow } from "@/app/components/TradeFlow";
 import { AddGameModal, type GameFormData } from "@/app/components/AddGameModal";
 import { ScheduleContent } from "@/app/components/ScheduleContent";
@@ -69,6 +70,7 @@ export function FranchiseHome() {
   const [showContraction, setShowContraction] = useState(false);
   const [showDraft, setShowDraft] = useState(false);
   const [showFinalize, setShowFinalize] = useState(false);
+  const [showSeasonEnd, setShowSeasonEnd] = useState(false);
   const [retiredJerseys, setRetiredJerseys] = useState<RetiredJersey[]>([]);
   const [selectedScheduleTeam, setSelectedScheduleTeam] = useState<string>("FULL LEAGUE");
   
@@ -210,6 +212,89 @@ export function FranchiseHome() {
       setActiveTab("awards");
     }
   };
+
+  // Build SeasonEndFlow props from franchise + playoff data
+  const seasonEndProps = useMemo(() => {
+    // Flatten standings from { Eastern: { div: entry[] }, Western: { div: entry[] } } to TeamStanding[]
+    const flatStandings: Array<{
+      teamId: string; teamName: string; shortName: string;
+      wins: number; losses: number; division: string;
+      primaryColor: string;
+    }> = [];
+
+    const standings = franchiseData.standings;
+    if (standings) {
+      for (const [, conf] of Object.entries(standings)) {
+        if (!conf || typeof conf !== 'object') continue;
+        for (const [divName, entries] of Object.entries(conf as Record<string, unknown>)) {
+          if (!Array.isArray(entries)) continue;
+          entries.forEach((entry: { team?: string; wins?: number; losses?: number }) => {
+            if (!entry || !entry.team) return;
+            const teamName = entry.team;
+            // Find teamId by name from teamNameMap (reverse lookup)
+            const teamId = Object.entries(franchiseData.teamNameMap ?? {})
+              .find(([, name]) => name === teamName)?.[0] || teamName;
+            const colors = getTeamColors(teamId);
+            flatStandings.push({
+              teamId,
+              teamName,
+              shortName: teamName.slice(0, 3).toUpperCase(),
+              wins: entry.wins ?? 0,
+              losses: entry.losses ?? 0,
+              division: divName,
+              primaryColor: colors.primary || '#5A8352',
+            });
+          });
+        }
+      }
+    }
+
+    // Championship data from playoff bracket
+    const championship = playoffData.bracketByLeague?.Championship ?? null;
+    const championTeam = playoffData.playoff?.champion
+      ? playoffData.playoff.teams.find(t => t.teamId === playoffData.playoff?.champion)
+      : null;
+
+    const championshipData = championship && championTeam ? {
+      teamName: championTeam.teamName,
+      opponentName: championship.winner === championship.higherSeed.teamId
+        ? championship.lowerSeed.teamName
+        : championship.higherSeed.teamName,
+      seriesResult: `${championship.higherSeedWins}-${championship.lowerSeedWins}`,
+      seasonNumber: currentSeason,
+      rosterCount: 0,
+      pitchers: [] as { name: string; position: string }[],
+      positionPlayers: [] as { name: string; position: string }[],
+    } : undefined;
+
+    const totalPlayers = flatStandings.length * 22; // Approximate roster size
+
+    return {
+      seasonNumber: currentSeason,
+      standings: flatStandings,
+      hadPlayoffs: playoffData.playoff?.status === 'COMPLETED',
+      championship: championshipData,
+      mojoReset: {
+        hotPlayers: 0,
+        coldPlayers: 0,
+        specialMojo: 0,
+        normalPlayers: totalPlayers,
+        totalPlayers,
+      },
+      archive: {
+        seasonNumber: currentSeason,
+        champion: championTeam?.teamName,
+        championResult: championship
+          ? `${championship.higherSeedWins}-${championship.lowerSeedWins}`
+          : undefined,
+        divisionWinners: [],
+        playoffTeams: playoffData.playoff?.teams.length ?? 0,
+        totalGames: scheduleData.games.length,
+        totalPlayers,
+      },
+      mvpCandidates: undefined, // Playoff stats not yet tracked per player
+    };
+  }, [franchiseData.standings, franchiseData.teamNameMap, playoffData, currentSeason, scheduleData.games.length]);
 
   // Schedule System Functions — team list derived from franchise league structure
   const availableTeams = useMemo(() => Object.keys(franchiseData.teamNameMap ?? {}), [franchiseData.teamNameMap]);
@@ -1518,7 +1603,7 @@ export function FranchiseHome() {
 
               {/* Advance Button */}
               <button
-                onClick={handleBeginOffseason}
+                onClick={() => setShowSeasonEnd(true)}
                 disabled={playoffData.playoff?.status !== 'COMPLETED'}
                 className={`w-full border-[5px] p-8 transition-all shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)] group ${
                   playoffData.playoff?.status === 'COMPLETED'
@@ -1547,6 +1632,17 @@ export function FranchiseHome() {
                 <div className="text-center text-xs text-[#FF9944] mt-4">
                   ⚠️ Complete all playoff series before advancing to offseason
                 </div>
+              )}
+
+              {showSeasonEnd && (
+                <SeasonEndFlow
+                  {...seasonEndProps}
+                  onComplete={() => {
+                    setShowSeasonEnd(false);
+                    handleBeginOffseason();
+                  }}
+                  onCancel={() => setShowSeasonEnd(false)}
+                />
               )}
             </div>
           </div>
