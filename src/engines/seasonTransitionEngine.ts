@@ -196,7 +196,7 @@ export function incrementYearsOfService(): { count: number } {
 /** Step 8: Finalize — increment season number, mark transition complete */
 export function finalizeSeasonTransition(currentSeason: number): { newSeason: number } {
   const newSeason = currentSeason + 1;
-  localStorage.setItem('kbl_current_season', String(newSeason));
+  localStorage.setItem('kbl-current-season', String(newSeason));
   localStorage.setItem('kbl_last_transition', JSON.stringify({
     fromSeason: currentSeason,
     toSeason: newSeason,

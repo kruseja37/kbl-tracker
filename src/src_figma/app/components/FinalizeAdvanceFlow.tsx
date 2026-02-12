@@ -1,7 +1,10 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { X, ChevronDown, ChevronUp, ArrowUp, ArrowDown, Trophy, BarChart3, CheckCircle, Users, FileText, Clock, TrendingUp, Award, Flame, Sunrise } from "lucide-react";
 import { useOffseasonData, type OffseasonTeam, type OffseasonPlayer } from "@/hooks/useOffseasonData";
 import { SpringTrainingFlow } from "./SpringTrainingFlow";
+import { executeSeasonTransition, type TransitionResult } from "../../../engines/seasonTransitionEngine";
+import { updateFranchiseMetadata, getActiveFranchise } from "../../../utils/franchiseManager";
+import { generateNewSeasonSchedule } from "../../../utils/franchiseInitializer";
 
 type Screen =
   | "roster-management"
@@ -106,6 +109,8 @@ export function FinalizeAdvanceFlow({ onClose, onAdvanceComplete, seasonNumber =
   const [mlbSortBy, setMlbSortBy] = useState<"grade" | "age" | "salary">("grade");
   const [farmSortBy, setFarmSortBy] = useState<"ceiling" | "age" | "years">("ceiling");
   const [processingStep, setProcessingStep] = useState(0);
+  const [transitionResult, setTransitionResult] = useState<TransitionResult | null>(null);
+  const [transitionError, setTransitionError] = useState<string | null>(null);
   const [expandedTeams, setExpandedTeams] = useState<Set<string>>(new Set());
   const [expandedChemistry, setExpandedChemistry] = useState<Set<string>>(new Set());
 
@@ -321,18 +326,49 @@ export function FinalizeAdvanceFlow({ onClose, onAdvanceComplete, seasonNumber =
     }, 800);
   };
 
-  const startSeasonTransition = () => {
+  const startSeasonTransition = useCallback(async () => {
     setCurrentScreen("season-transition");
-    let step = 0;
-    const interval = setInterval(() => {
-      step++;
-      setProcessingStep(step);
-      if (step >= 7) {
-        clearInterval(interval);
-        setTimeout(() => setCurrentScreen("chemistry-rebalancing"), 1000);
+    setProcessingStep(0);
+    setTransitionError(null);
+
+    try {
+      // Execute REAL season transition operations via the engine
+      const result = await executeSeasonTransition(seasonNumber, (stepNumber: number, stepName: string, details?: string) => {
+        // Map engine's 8 steps to UI's 7 display steps:
+        // Engine steps: 1=Archive, 2=Ages, 3=Salaries, 4=Mojo, 5=ClearStats, 6=Rookies, 7=Service, 8=Finalize
+        // UI steps: 1=Archive, 2=Ages, 3=Salaries, 4=Mojo, 5=ClearStats, 6=Rookies, 7=Service
+        // Engine step 8 (Finalize) maps to completing step 7 in the UI
+        const uiStep = Math.min(stepNumber, 7);
+        setProcessingStep(uiStep);
+      });
+
+      setTransitionResult(result);
+
+      if (result.success) {
+        // After engine finishes, ensure UI shows step 7 complete
+        setProcessingStep(7);
+
+        // Update FranchiseMetadata.currentSeason in IndexedDB
+        const franchiseId = await getActiveFranchise();
+        if (franchiseId) {
+          await updateFranchiseMetadata(franchiseId, {
+            currentSeason: seasonNumber + 1,
+          });
+
+          // Generate schedule for the new season
+          const gamesScheduled = await generateNewSeasonSchedule(franchiseId, seasonNumber + 1);
+          console.log(`[SeasonTransition] Generated ${gamesScheduled} games for Season ${seasonNumber + 1}`);
+        }
+      } else {
+        const failedStep = result.steps.find((s: { status: string }) => s.status === 'error');
+        setTransitionError(
+          `Transition failed at "${failedStep?.name || 'unknown'}": ${failedStep?.error || 'Unknown error'}`
+        );
       }
-    }, 600);
-  };
+    } catch (err) {
+      setTransitionError(err instanceof Error ? err.message : 'Season transition failed');
+    }
+  }, [seasonNumber]);
 
   const getChemistryLabel = (score: number): { label: string; color: string; icon: string } => {
     if (score >= 80) return { label: "Excellent", color: "#4CAF50", icon: "🟢" };
@@ -902,7 +938,10 @@ export function FinalizeAdvanceFlow({ onClose, onAdvanceComplete, seasonNumber =
                 <div className="space-y-3">
                   <div className={`flex items-center justify-between p-3 ${processingStep >= 1 ? "bg-[#4A6844]" : "bg-[#3D5A37]"} border-2 border-[#E8E8D8]/30`}>
                     <div className="text-sm text-[#E8E8D8]">
-                      {processingStep >= 1 ? "✓" : "○"} Archiving Season 1 data...
+                      {processingStep >= 1 ? "✓" : "○"} Archiving Season {seasonNumber} data...
+                      {processingStep >= 1 && transitionResult?.steps[0]?.details && (
+                        <span className="text-xs text-[#E8E8D8]/60 ml-2">({transitionResult.steps[0].details})</span>
+                      )}
                     </div>
                     <div className="text-xs text-[#E8E8D8]/60">
                       {processingStep >= 1 ? "Complete" : "Pending"}
@@ -912,7 +951,11 @@ export function FinalizeAdvanceFlow({ onClose, onAdvanceComplete, seasonNumber =
                   <div className={`flex items-center justify-between p-3 ${processingStep >= 2 ? "bg-[#4A6844]" : "bg-[#3D5A37]"} border-2 border-[#E8E8D8]/30`}>
                     <div className="text-sm text-[#E8E8D8]">
                       {processingStep >= 2 ? "✓" : "○"} Incrementing player ages...
-                      {processingStep >= 2 && <span className="text-xs text-[#E8E8D8]/60 ml-2">(All players aged +1 year)</span>}
+                      {processingStep >= 2 && (
+                        <span className="text-xs text-[#E8E8D8]/60 ml-2">
+                          ({transitionResult?.summary.playersAged ?? 0} players aged +1 year)
+                        </span>
+                      )}
                     </div>
                     <div className="text-xs text-[#E8E8D8]/60">
                       {processingStep >= 2 ? "Complete" : "Pending"}
@@ -922,7 +965,11 @@ export function FinalizeAdvanceFlow({ onClose, onAdvanceComplete, seasonNumber =
                   <div className={`flex items-center justify-between p-3 ${processingStep >= 3 ? "bg-[#4A6844]" : "bg-[#3D5A37]"} border-2 border-[#E8E8D8]/30`}>
                     <div className="text-sm text-[#E8E8D8]">
                       {processingStep >= 3 ? "✓" : "○"} Recalculating salaries...
-                      {processingStep >= 3 && <span className="text-xs text-[#E8E8D8]/60 ml-2">(Based on new age factors and ratings)</span>}
+                      {processingStep >= 3 && (
+                        <span className="text-xs text-[#E8E8D8]/60 ml-2">
+                          ({transitionResult?.summary.salariesRecalculated ?? 0} salaries changed)
+                        </span>
+                      )}
                     </div>
                     <div className="text-xs text-[#E8E8D8]/60">
                       {processingStep >= 3 ? "Complete" : "Pending"}
@@ -932,7 +979,11 @@ export function FinalizeAdvanceFlow({ onClose, onAdvanceComplete, seasonNumber =
                   <div className={`flex items-center justify-between p-3 ${processingStep >= 4 ? "bg-[#4A6844]" : "bg-[#3D5A37]"} border-2 border-[#E8E8D8]/30`}>
                     <div className="text-sm text-[#E8E8D8]">
                       {processingStep >= 4 ? "✓" : "○"} Resetting player mojo...
-                      {processingStep >= 4 && <span className="text-xs text-[#E8E8D8]/60 ml-2">(All players reset to NORMAL)</span>}
+                      {processingStep >= 4 && (
+                        <span className="text-xs text-[#E8E8D8]/60 ml-2">
+                          ({transitionResult?.summary.mojosReset ?? 0} mojos reset to NORMAL)
+                        </span>
+                      )}
                     </div>
                     <div className="text-xs text-[#E8E8D8]/60">
                       {processingStep >= 4 ? "Complete" : "Pending"}
@@ -942,7 +993,9 @@ export function FinalizeAdvanceFlow({ onClose, onAdvanceComplete, seasonNumber =
                   <div className={`flex items-center justify-between p-3 ${processingStep >= 5 ? "bg-[#4A6844]" : "bg-[#3D5A37]"} border-2 border-[#E8E8D8]/30`}>
                     <div className="text-sm text-[#E8E8D8]">
                       {processingStep >= 5 ? "✓" : "○"} Clearing seasonal statistics...
-                      {processingStep >= 5 && <span className="text-xs text-[#E8E8D8]/60 ml-2">(Career totals preserved)</span>}
+                      {processingStep >= 5 && (
+                        <span className="text-xs text-[#E8E8D8]/60 ml-2">(Career totals preserved)</span>
+                      )}
                     </div>
                     <div className="text-xs text-[#E8E8D8]/60">
                       {processingStep >= 5 ? "Complete" : "Pending"}
@@ -952,6 +1005,11 @@ export function FinalizeAdvanceFlow({ onClose, onAdvanceComplete, seasonNumber =
                   <div className={`flex items-center justify-between p-3 ${processingStep >= 6 ? "bg-[#4A6844]" : "bg-[#3D5A37]"} border-2 border-[#E8E8D8]/30`}>
                     <div className="text-sm text-[#E8E8D8]">
                       {processingStep >= 6 ? "✓" : "○"} Applying rookie designations...
+                      {processingStep >= 6 && (
+                        <span className="text-xs text-[#E8E8D8]/60 ml-2">
+                          ({transitionResult?.summary.rookiesApplied ?? 0} rookies designated)
+                        </span>
+                      )}
                     </div>
                     <div className="text-xs text-[#E8E8D8]/60">
                       {processingStep >= 6 ? "Complete" : "Pending"}
@@ -961,42 +1019,56 @@ export function FinalizeAdvanceFlow({ onClose, onAdvanceComplete, seasonNumber =
                   <div className={`flex items-center justify-between p-3 ${processingStep >= 7 ? "bg-[#4A6844]" : "bg-[#3D5A37]"} border-2 border-[#E8E8D8]/30`}>
                     <div className="text-sm text-[#E8E8D8]">
                       {processingStep >= 7 ? "✓" : "○"} Incrementing years of service...
+                      {processingStep >= 7 && (
+                        <span className="text-xs text-[#E8E8D8]/60 ml-2">
+                          ({transitionResult?.summary.serviceIncremented ?? 0} records updated)
+                        </span>
+                      )}
                     </div>
                     <div className="text-xs text-[#E8E8D8]/60">
                       {processingStep >= 7 ? "Complete" : "Pending"}
                     </div>
                   </div>
+
+                  {/* Error display */}
+                  {transitionError && (
+                    <div className="flex items-center justify-between p-3 bg-[#8B2500] border-2 border-[#FF4444]/50 mt-2">
+                      <div className="text-sm text-[#FF9999]">
+                        ⚠️ {transitionError}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
 
-              {processingStep >= 7 && (
+              {processingStep >= 7 && transitionResult?.success && (
                 <>
                   <div className="bg-[#5A8352] border-[4px] border-[#FFD700] p-6 mb-6">
-                    <div className="text-lg text-[#E8E8D8] font-bold mb-4">SEASON 1 FINAL SUMMARY</div>
+                    <div className="text-lg text-[#E8E8D8] font-bold mb-4">SEASON {seasonNumber} TRANSITION SUMMARY</div>
                     <div className="grid grid-cols-2 gap-4 text-sm text-[#E8E8D8]">
                       <div>
-                        <div className="text-[#E8E8D8]/60">🏆 Champions</div>
-                        <div className="font-bold">San Francisco Giants</div>
+                        <div className="text-[#E8E8D8]/60">👤 Players Aged</div>
+                        <div className="font-bold">{transitionResult.summary.playersAged} players +1 year</div>
                       </div>
                       <div>
-                        <div className="text-[#E8E8D8]/60">🥇 MVP</div>
-                        <div className="font-bold">Barry Bonds (SF)</div>
+                        <div className="text-[#E8E8D8]/60">💰 Salaries Changed</div>
+                        <div className="font-bold">{transitionResult.summary.salariesRecalculated} recalculated</div>
                       </div>
                       <div>
-                        <div className="text-[#E8E8D8]/60">🏅 Cy Young</div>
-                        <div className="font-bold">Pedro Martinez (BOS)</div>
+                        <div className="text-[#E8E8D8]/60">🔄 Mojo Reset</div>
+                        <div className="font-bold">{transitionResult.summary.mojosReset} players to NORMAL</div>
                       </div>
                       <div>
-                        <div className="text-[#E8E8D8]/60">📊 League WAR Leader</div>
-                        <div className="font-bold">Barry Bonds (5.1)</div>
+                        <div className="text-[#E8E8D8]/60">⭐ New Rookies</div>
+                        <div className="font-bold">{transitionResult.summary.rookiesApplied} designated</div>
                       </div>
                     </div>
                   </div>
 
                   <div className="text-center mb-6">
-                    <button className="text-sm text-[#5599FF] hover:text-[#3366FF] underline">
-                      View Full Season 1 Archive
-                    </button>
+                    <div className="text-sm text-[#E8E8D8]/60">
+                      Season {seasonNumber} → Season {nextSeason} transition complete
+                    </div>
                   </div>
                 </>
               )}
@@ -1156,7 +1228,7 @@ export function FinalizeAdvanceFlow({ onClose, onAdvanceComplete, seasonNumber =
                   <div>✓ Transaction report generated</div>
                   <div>✓ AI teams processed</div>
                   <div>✓ Season transition complete</div>
-                  <div>✓ Season 1 archived</div>
+                  <div>✓ Season {seasonNumber} archived</div>
                 </div>
               </div>
 

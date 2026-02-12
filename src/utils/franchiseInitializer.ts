@@ -16,6 +16,7 @@ import type { FranchiseConfig, StoredFranchiseConfig } from '../types/franchise'
 import {
   createFranchise,
   saveFranchiseConfig,
+  getFranchiseConfig,
   updateFranchiseMetadata,
   setActiveFranchise,
 } from './franchiseManager';
@@ -102,4 +103,71 @@ export async function initializeFranchise(config: FranchiseConfig): Promise<stri
   await setActiveFranchise(franchiseId);
 
   return franchiseId;
+}
+
+/**
+ * Generate a schedule for a new season within an existing franchise.
+ *
+ * Loads the franchise config to get league/team data and season length,
+ * then generates and writes a full round-robin schedule to IndexedDB.
+ *
+ * Called by both advancement paths:
+ *   - FinalizeAdvanceFlow (after executeSeasonTransition)
+ *   - handleStartNewSeason in FranchiseHome (offseason shortcut)
+ *
+ * @param franchiseId — The franchise to generate schedule for
+ * @param newSeasonNumber — The season number to tag the schedule with
+ * @returns Number of games scheduled
+ */
+export async function generateNewSeasonSchedule(
+  franchiseId: string,
+  newSeasonNumber: number,
+): Promise<number> {
+  // 1. Load the stored franchise config for league + season settings
+  const config = await getFranchiseConfig(franchiseId);
+  if (!config) {
+    throw new Error(`Franchise config not found for ${franchiseId}`);
+  }
+  if (!config.league) {
+    throw new Error('No league ID in franchise config');
+  }
+
+  // 2. Load the league template to get team IDs
+  const leagueTemplate = await getLeagueTemplate(config.league);
+  if (!leagueTemplate) {
+    throw new Error(`League template "${config.league}" not found`);
+  }
+
+  // 3. Load full team data
+  const teamIds = leagueTemplate.teamIds || [];
+  const teams: ScheduleTeam[] = [];
+  for (const teamId of teamIds) {
+    const team = await getTeam(teamId);
+    if (team) {
+      teams.push({ teamId: team.id, teamName: team.name });
+    }
+  }
+
+  if (teams.length < 2) {
+    throw new Error('Need at least 2 teams to generate schedule');
+  }
+
+  // 4. Generate round-robin schedule
+  const gamesPerTeam = config.season.gamesPerTeam;
+  const scheduleGames = generateSchedule(teams, gamesPerTeam);
+
+  // 5. Write schedule to IndexedDB (tagged with franchiseId + new season)
+  await initScheduleDatabase();
+  for (const game of scheduleGames) {
+    await addGame({
+      franchiseId,
+      seasonNumber: newSeasonNumber,
+      gameNumber: game.gameNumber,
+      dayNumber: game.gameNumber,
+      awayTeamId: game.awayTeamId,
+      homeTeamId: game.homeTeamId,
+    });
+  }
+
+  return scheduleGames.length;
 }
