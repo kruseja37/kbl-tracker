@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, createContext, useContext } from "react";
 import { useNavigate, useParams } from "react-router";
-import { Calendar, Users, TrendingUp, Newspaper, Trophy, Folder, Home, ChevronDown, ChevronUp, DollarSign, ClipboardList, Star, Award, TrendingDown, Shuffle, UserMinus, CheckCircle, ArrowRight, BarChart3, Plus } from "lucide-react";
+import { Calendar, Users, TrendingUp, Newspaper, Trophy, Folder, Home, ChevronDown, ChevronUp, DollarSign, ClipboardList, Star, Award, TrendingDown, Shuffle, UserMinus, CheckCircle, ArrowRight, BarChart3, Plus, GitMerge, FlaskConical, Sunrise } from "lucide-react";
 import { getTeamColors } from "@/config/teamColors";
 import { TeamHubContent } from "@/app/components/TeamHubContent";
 import { MuseumContent, type RetiredJersey } from "@/app/components/MuseumContent";
@@ -14,6 +14,7 @@ import { FinalizeAdvanceFlow } from "@/app/components/FinalizeAdvanceFlow";
 import { SeasonEndFlow } from "@/app/components/SeasonEndFlow";
 import { PlayoffSeedingFlow } from "@/app/components/PlayoffSeedingFlow";
 import { TradeFlow } from "@/app/components/TradeFlow";
+import { SpringTrainingFlow } from "@/app/components/SpringTrainingFlow";
 import { AddGameModal, type GameFormData } from "@/app/components/AddGameModal";
 import { ScheduleContent } from "@/app/components/ScheduleContent";
 import { useFranchiseData, type UseFranchiseDataReturn } from "@/hooks/useFranchiseData";
@@ -50,7 +51,7 @@ export function useFranchiseDataContext() {
   return context;
 }
 
-type TabType = "todays-game" | "team" | "schedule" | "standings" | "news" | "leaders" | "rosters" | "allstar" | "museum" | "awards" | "ratings-adj" | "contraction" | "retirements" | "free-agency" | "draft" | "finalize" | "advance" | "bracket" | "series" | "playoff-stats" | "playoff-leaders";
+type TabType = "todays-game" | "team" | "schedule" | "standings" | "news" | "leaders" | "rosters" | "allstar" | "museum" | "awards" | "ratings-adj" | "contraction" | "retirements" | "free-agency" | "draft" | "farm-reconciliation" | "chemistry" | "spring-training" | "finalize" | "advance" | "bracket" | "series" | "playoff-stats" | "playoff-leaders";
 type SeasonPhase = "regular" | "playoffs" | "offseason";
 
 // ScheduledGame type is imported from useScheduleData hook
@@ -105,10 +106,10 @@ export function FranchiseHome() {
     RETIREMENTS: "retirements",
     FREE_AGENCY: "free-agency",
     DRAFT: "draft",
-    FARM_RECONCILIATION: "news",       // placeholder — no dedicated tab yet
-    CHEMISTRY_REBALANCING: "news",     // placeholder — no dedicated tab yet
+    FARM_RECONCILIATION: "farm-reconciliation",
+    CHEMISTRY_REBALANCING: "chemistry",
     TRADES: "rosters",
-    SPRING_TRAINING: "finalize",
+    SPRING_TRAINING: "spring-training",
   };
 
   // Complete current phase and advance to next, then navigate to the new phase's tab
@@ -624,16 +625,32 @@ export function FranchiseHome() {
     { id: "museum", label: "MUSEUM", icon: <Trophy className="w-4 h-4" /> },
   ];
 
+  // Offseason tabs: phases 1-11 in state machine order, then utility tabs (finalize, museum)
   const offseasonTabs = [
+    // Phase 1: STANDINGS_FINAL
     { id: "news", label: "THE TOOTWHISTLE TIMES", icon: <Newspaper className="w-4 h-4" /> },
+    // Phase 2: AWARDS
     { id: "awards", label: "AWARDS", icon: <Award className="w-4 h-4" /> },
+    // Phase 3: RATINGS_ADJUSTMENTS
     { id: "ratings-adj", label: "RATINGS ADJ", icon: <TrendingDown className="w-4 h-4" /> },
-    { id: "retirements", label: "RETIREMENTS", icon: <UserMinus className="w-4 h-4" /> },
+    // Phase 4: CONTRACTION_EXPANSION
     { id: "contraction", label: "CONTRACT/EXPAND", icon: <Shuffle className="w-4 h-4" /> },
+    // Phase 5: RETIREMENTS
+    { id: "retirements", label: "RETIREMENTS", icon: <UserMinus className="w-4 h-4" /> },
+    // Phase 6: FREE_AGENCY
     { id: "free-agency", label: "FREE AGENCY", icon: <DollarSign className="w-4 h-4" /> },
+    // Phase 7: DRAFT
     { id: "draft", label: "DRAFT", icon: <ClipboardList className="w-4 h-4" /> },
+    // Phase 8: FARM_RECONCILIATION
+    { id: "farm-reconciliation", label: "FARM SYSTEM", icon: <GitMerge className="w-4 h-4" /> },
+    // Phase 9: CHEMISTRY_REBALANCING
+    { id: "chemistry", label: "CHEMISTRY", icon: <FlaskConical className="w-4 h-4" /> },
+    // Phase 10: TRADES
     { id: "rosters", label: "TRADES", icon: <Folder className="w-4 h-4" /> },
-    { id: "finalize", label: "FINALIZE AND ADVANCE", icon: <CheckCircle className="w-4 h-4" /> },
+    // Phase 11: SPRING_TRAINING
+    { id: "spring-training", label: "SPRING TRAINING", icon: <Sunrise className="w-4 h-4" /> },
+    // Utility tabs (not offseason phases)
+    { id: "finalize", label: "FINALIZE & ADVANCE", icon: <CheckCircle className="w-4 h-4" /> },
     { id: "museum", label: "MUSEUM", icon: <Trophy className="w-4 h-4" /> },
   ];
 
@@ -1960,6 +1977,95 @@ export function FranchiseHome() {
               </div>
             </div>
           </button>
+        )}
+        {activeTab === "farm-reconciliation" && (
+          <div className="p-8 space-y-6">
+            <div className="bg-[#5A8352] border-[5px] border-[#C4A853] p-6">
+              <div className="flex items-center gap-4 mb-4">
+                <div className="w-16 h-16 bg-[#1A1A1A] rounded-full flex items-center justify-center text-3xl">
+                  🌾
+                </div>
+                <div>
+                  <div className="text-2xl text-[#E8E8D8]">FARM SYSTEM RECONCILIATION</div>
+                  <div className="text-sm text-[#E8E8D8]/80">Offseason Phase 8</div>
+                </div>
+              </div>
+              <div className="text-sm text-[#E8E8D8]/80 mb-4">
+                Review and balance farm system rosters across all teams. Ensure each team has the correct number of farm players after draft picks, retirements, and free agency moves.
+              </div>
+              <div className="grid grid-cols-3 gap-4 mt-4">
+                <div className="bg-[#4A6844] border-[3px] border-[#5A8352] p-3 text-center">
+                  <div className="text-2xl text-[#E8E8D8]">🌱</div>
+                  <div className="text-xs text-[#E8E8D8]/60">Prospects</div>
+                </div>
+                <div className="bg-[#4A6844] border-[3px] border-[#5A8352] p-3 text-center">
+                  <div className="text-2xl text-[#E8E8D8]">📋</div>
+                  <div className="text-xs text-[#E8E8D8]/60">Roster Slots</div>
+                </div>
+                <div className="bg-[#4A6844] border-[3px] border-[#5A8352] p-3 text-center">
+                  <div className="text-2xl text-[#E8E8D8]">⚖️</div>
+                  <div className="text-xs text-[#E8E8D8]/60">Balance</div>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-[#4169E1]/20 border-l-4 border-[#4169E1] p-4">
+              <div className="text-xs text-[#E8E8D8]/90 mb-2 flex items-center gap-2">
+                <span>💡</span>
+                <span className="font-bold">Phase 8 — Coming Soon</span>
+              </div>
+              <div className="text-xs text-[#E8E8D8]/70">
+                Farm system reconciliation will automatically balance rosters after the draft and free agency phases. For now, use the "Complete Phase & Advance" button to skip to the next phase.
+              </div>
+            </div>
+          </div>
+        )}
+        {activeTab === "chemistry" && (
+          <div className="p-8 space-y-6">
+            <div className="bg-[#5A8352] border-[5px] border-[#C4A853] p-6">
+              <div className="flex items-center gap-4 mb-4">
+                <div className="w-16 h-16 bg-[#1A1A1A] rounded-full flex items-center justify-center text-3xl">
+                  ⚗️
+                </div>
+                <div>
+                  <div className="text-2xl text-[#E8E8D8]">CHEMISTRY REBALANCING</div>
+                  <div className="text-sm text-[#E8E8D8]/80">Offseason Phase 9</div>
+                </div>
+              </div>
+              <div className="text-sm text-[#E8E8D8]/80 mb-4">
+                Team chemistry shifts based on roster changes during the offseason. New acquisitions, departures, and trades all affect how well your team gels heading into the new season.
+              </div>
+              <div className="grid grid-cols-3 gap-4 mt-4">
+                <div className="bg-[#4A6844] border-[3px] border-[#5A8352] p-3 text-center">
+                  <div className="text-2xl text-[#E8E8D8]">📈</div>
+                  <div className="text-xs text-[#E8E8D8]/60">Improved</div>
+                </div>
+                <div className="bg-[#4A6844] border-[3px] border-[#5A8352] p-3 text-center">
+                  <div className="text-2xl text-[#E8E8D8]">📉</div>
+                  <div className="text-xs text-[#E8E8D8]/60">Declined</div>
+                </div>
+                <div className="bg-[#4A6844] border-[3px] border-[#5A8352] p-3 text-center">
+                  <div className="text-2xl text-[#E8E8D8]">➖</div>
+                  <div className="text-xs text-[#E8E8D8]/60">Unchanged</div>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-[#4169E1]/20 border-l-4 border-[#4169E1] p-4">
+              <div className="text-xs text-[#E8E8D8]/90 mb-2 flex items-center gap-2">
+                <span>💡</span>
+                <span className="font-bold">Phase 9 — Coming Soon</span>
+              </div>
+              <div className="text-xs text-[#E8E8D8]/70">
+                Chemistry rebalancing will calculate team chemistry changes based on roster moves. For now, use the "Complete Phase & Advance" button to skip to the next phase.
+              </div>
+            </div>
+          </div>
+        )}
+        {activeTab === "spring-training" && (
+          <div className="p-8">
+            <SpringTrainingFlow />
+          </div>
         )}
         {activeTab === "finalize" && (
           <div>
