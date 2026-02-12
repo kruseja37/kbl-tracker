@@ -59,6 +59,7 @@ export interface OffseasonTeam {
   id: string;
   name: string;
   shortName: string;
+  stadium: string;
   record: { wins: number; losses: number };
   primaryColor: string;
   secondaryColor: string;
@@ -254,6 +255,7 @@ function convertToOffseasonTeam(team: TeamData): OffseasonTeam {
     id: team.id,
     name: team.name,
     shortName,
+    stadium: team.homePark,
     record: { wins: 0, losses: 0 }, // Would come from season data
     primaryColor: team.primaryColor,
     secondaryColor: team.secondaryColor,

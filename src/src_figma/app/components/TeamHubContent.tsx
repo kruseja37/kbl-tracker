@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Edit, TrendingUp, TrendingDown, XCircle, Users, Building2, User } from "lucide-react";
 import { useOffseasonData, type OffseasonTeam, type OffseasonPlayer } from "@/hooks/useOffseasonData";
 import { useSeasonStats, type BattingLeaderEntry, type PitchingLeaderEntry } from '../../../hooks/useSeasonStats';
@@ -121,8 +121,8 @@ export function TeamHubContent() {
   const seasonStats = useSeasonStats();
 
   const [activeHubTab, setActiveHubTab] = useState<TeamHubTab>("team");
-  const [selectedTeam, setSelectedTeam] = useState<string>("Tigers");
-  const [selectedStadium, setSelectedStadium] = useState<string>("Tiger Stadium");
+  const [selectedTeam, setSelectedTeam] = useState<string>("");
+  const [selectedStadium, setSelectedStadium] = useState<string>("");
   const [selectedStatsPlayer, setSelectedStatsPlayer] = useState<string>("J. Rodriguez");
   const [statsView, setStatsView] = useState<"table" | "spraychart">("table");
   const [rosterSortColumn, setRosterSortColumn] = useState<string>("name");
@@ -133,17 +133,25 @@ export function TeamHubContent() {
   // Convert real data to local formats with mock fallback
   const teams = useMemo(() => {
     if (hasRealData && realTeams.length > 0) {
-      return realTeams.slice(0, 10).map(t => t.name);
+      return realTeams.map(t => t.name);
     }
     return MOCK_TEAMS;
   }, [realTeams, hasRealData]);
 
   const stadiums = useMemo(() => {
     if (hasRealData && realTeams.length > 0) {
-      return realTeams.slice(0, 10).map(t => `${t.name} Stadium`);
+      return realTeams.map(t => t.stadium || t.name);
     }
     return MOCK_STADIUMS;
   }, [realTeams, hasRealData]);
+
+  // Default to first team once data loads
+  useEffect(() => {
+    if (teams.length > 0 && !selectedTeam) {
+      setSelectedTeam(teams[0]);
+      setSelectedStadium(stadiums[0] || teams[0]);
+    }
+  }, [teams, stadiums, selectedTeam]);
 
   // Get roster for selected team
   const rosterData = useMemo(() => {
@@ -361,7 +369,11 @@ export function TeamHubContent() {
             {teams.map((team) => (
               <button
                 key={team}
-                onClick={() => setSelectedTeam(team)}
+                onClick={() => {
+                  setSelectedTeam(team);
+                  const idx = teams.indexOf(team);
+                  if (idx >= 0 && stadiums[idx]) setSelectedStadium(stadiums[idx]);
+                }}
                 className={`p-4 transition border-[3px] ${
                   selectedTeam === team
                     ? "bg-[#4A6844] border-[#E8E8D8] text-[#E8E8D8]"
