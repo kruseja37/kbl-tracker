@@ -31,8 +31,9 @@
 ### Champion Celebration ✅
 - SeasonEndFlow with confetti + PostseasonMVPFlow card-reveal
 - Real team name, real series result
-### Offseason ✅ (11/11 phases walkable, 0 crashes)
+### Offseason ✅ (11/11 phases walkable, 0 crashes, browser-verified)
 - 11-phase state machine (offseasonStorage + IndexedDB)
+- All 11 transitions verified: tab auto-selects, content renders, IndexedDB updates correctly
 - Phase 1: Standings Final (Tootwhistle Times newspaper)
 - Phase 2: Awards Ceremony (13 sub-screens, real player data)
 - Phase 3: Ratings Adjustments (WAR-based, persists to player records)
@@ -43,7 +44,8 @@
 - Phase 8: Farm Reconciliation (placeholder, skip works)
 - Phase 9: Chemistry Rebalancing (placeholder, skip works)
 - Phase 10: Trades (full trade UI with real players and salaries)
-- Phase 11: Spring Training (real player data, career phase projections)
+- Phase 11: Spring Training (real player data, career phase projections — onComplete wired to handleAdvancePhase)
+- "START SEASON N+1" button appears after Phase 11 completion
 ### Season Advancement ✅
 - seasonTransitionEngine: age players, recalculate salaries, reset mojo, clear stats, apply rookie designations, increment service years
 - Both advancement paths aligned (handleStartNewSeason + FinalizeAdvanceFlow)

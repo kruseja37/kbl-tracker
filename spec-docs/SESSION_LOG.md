@@ -32,9 +32,27 @@
 - Flow D2 (Draft): PASS — 20 AI-generated prospects, user pick, roster tracking (FIXED MLB name bug)
 - Flow D3 (GameTracker Season 2): PASS — game loads with full field, all buttons, playable
 - Flow D4 (Museum): PASS — UI loads (6 tabs), data empty (expected: museum pipeline not built yet)
+### Offseason Phase Machine Verification (continued session)
+- Wired SpringTrainingFlow `onComplete` prop from FranchiseHome → handleAdvancePhase
+- SIMmed Season 2: 160 regular season games → playoffs (Crocodons champion, 4-0 sweep of Wideloads) → offseason
+- Systematically verified ALL 11 offseason phase transitions via browser:
+  - Phase 1→2 (STANDINGS_FINAL → AWARDS): PASS — tab auto-selected to AWARDS, Awards Ceremony content loaded
+  - Phase 2→3 (AWARDS → RATINGS_ADJUSTMENTS): PASS — tab auto-selected to RATINGS ADJ
+  - Phase 3→4 (RATINGS_ADJUSTMENTS → CONTRACTION_EXPANSION): PASS — tab auto-selected to CONTRACT/EXPAND
+  - Phase 4→5 (CONTRACTION_EXPANSION → RETIREMENTS): PASS — tab auto-selected to RETIREMENTS
+  - Phase 5→6 (RETIREMENTS → FREE_AGENCY): PASS — tab auto-selected to FREE AGENCY
+  - Phase 6→7 (FREE_AGENCY → DRAFT): PASS — tab auto-selected to DRAFT
+  - Phase 7→8 (DRAFT → FARM_RECONCILIATION): PASS — tab auto-selected to FARM SYSTEM
+  - Phase 8→9 (FARM_RECONCILIATION → CHEMISTRY_REBALANCING): PASS — tab auto-selected to CHEMISTRY
+  - Phase 9→10 (CHEMISTRY_REBALANCING → TRADES): PASS — tab auto-selected to TRADES
+  - Phase 10→11 (TRADES → SPRING_TRAINING): PASS — tab auto-selected to SPRING TRAINING
+  - Phase 11→COMPLETED: PASS — "START SEASON 3" button appears, IndexedDB status=COMPLETED
+- IndexedDB verified: all 11 phases in phasesCompleted array, completedAt timestamp present
+- Spring Training content loads with real data: 78 DEVELOPING, 308 PRIME, 120 DECLINING, 0 MUST RETIRE
+- Only console error: pre-existing FreeAgencyFlow hooks ordering warning (non-blocking)
 ### Pending (for next session)
-- PRE_MANUAL_CLEANUP.md: 5 batches of fixes/verification before manual testing
 - FinalizeAdvanceFlow requires 32 players per team (farm validation blocks advance without full draft)
 - GameTracker in franchise mode shows "TIGERS/SOX" defaults instead of real team names
 - Museum data pipeline needs building (all tabs empty)
+- FreeAgencyFlow hooks ordering warning (React dev mode, non-blocking)
 - See CURRENT_STATE.md "Known Issues" section for complete list

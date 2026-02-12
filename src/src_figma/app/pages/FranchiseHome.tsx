@@ -2062,7 +2062,7 @@ export function FranchiseHome() {
         )}
         {activeTab === "spring-training" && (
           <div className="p-8">
-            <SpringTrainingFlow />
+            <SpringTrainingFlow onComplete={handleAdvancePhase} />
           </div>
         )}
         {activeTab === "finalize" && (
