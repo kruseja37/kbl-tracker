@@ -1,10 +1,37 @@
-import { useState, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { ChevronDown, ChevronUp, X, Search, Plus, Clock, Trophy, Star, AlertCircle, CheckCircle, Sparkles } from "lucide-react";
 import { useOffseasonData, type OffseasonTeam, type OffseasonPlayer } from "@/hooks/useOffseasonData";
 import { useOffseasonState, type DraftPick as StoredDraftPick } from "../../hooks/useOffseasonState";
+import { savePlayer, getTeamRoster, saveTeamRoster, type TeamRoster } from "../../../utils/leagueBuilderStorage";
+import { getActiveFranchise, loadFranchise } from "../../../utils/franchiseManager";
 
 // Empty teams fallback — populated from IndexedDB when available
 const EMPTY_TEAMS: { name: string; mlb: number; farm: number }[] = [];
+
+// Name pools for generating random draft prospects
+const FIRST_NAMES = [
+  "Marcus", "Jake", "Carlos", "David", "Michael", "James", "Robert", "John",
+  "Tyler", "Ryan", "Kevin", "Brian", "Chris", "Matt", "Alex", "Sam", "Nick",
+  "Eric", "Jason", "Brandon", "Justin", "Derek", "Anthony", "Steven", "Kyle",
+  "Tomás", "Javier", "Diego", "André", "Hiro", "Wei", "Riku", "Dante",
+  "Kai", "Zion", "Miles", "Theo", "Leo", "Asher", "Roman", "Ezra",
+];
+const LAST_NAMES = [
+  "Williams", "Thompson", "Ramirez", "Chen", "Johnson", "Smith", "Brown",
+  "Davis", "Garcia", "Martinez", "Wilson", "Anderson", "Taylor", "Thomas",
+  "Moore", "Jackson", "White", "Harris", "Clark", "Lewis", "Robinson",
+  "Tanaka", "Hernández", "Park", "Nguyen", "Okafor", "Kowalski", "Moreau",
+];
+const PROSPECT_POSITIONS = ["SS", "SP", "CF", "3B", "C", "RF", "1B", "LF", "2B", "RP"];
+const PROSPECT_GRADES: Array<"B" | "B-" | "C+" | "C" | "C-"> = ["B", "B", "B-", "B-", "C+", "C+", "C+", "C", "C", "C", "C", "C-", "C-", "C-"];
+const CEILINGS: Record<string, Array<DraftProspect["potentialCeiling"]>> = {
+  "B": ["A", "A-", "A-"],
+  "B-": ["A-", "B+", "B+"],
+  "C+": ["B+", "B", "B"],
+  "C": ["B", "B-", "B-"],
+  "C-": ["B-", "B-", "B-"],
+};
+const PERSONALITIES = ["LEADER", "COMPETITIVE", "CALM", "HOTHEAD"];
 
 type DraftScreen = 
   | "inactive-selection"
@@ -68,6 +95,27 @@ export function DraftFlow({ seasonId, seasonNumber = 1, onComplete, onCancel }: 
   const { saveDraft } = useOffseasonState(seasonId);
   const [isSaving, setIsSaving] = useState(false);
 
+  // Load controlled team name from franchise metadata
+  const [userTeamName, setUserTeamName] = useState<string | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    async function loadUserTeam() {
+      try {
+        const franchiseId = await getActiveFranchise();
+        if (franchiseId && !cancelled) {
+          const meta = await loadFranchise(franchiseId);
+          if (meta?.controlledTeamName && !cancelled) {
+            setUserTeamName(meta.controlledTeamName);
+          }
+        }
+      } catch (err) {
+        console.error('[DraftFlow] Failed to load controlled team:', err);
+      }
+    }
+    loadUserTeam();
+    return () => { cancelled = true; };
+  }, []);
+
   const [currentScreen, setCurrentScreen] = useState<DraftScreen>("inactive-selection");
   const [selectedInactivePlayers, setSelectedInactivePlayers] = useState<string[]>([]);
   const [draftClass, setDraftClass] = useState<DraftProspect[]>([]);
@@ -102,36 +150,64 @@ export function DraftFlow({ seasonId, seasonNumber = 1, onComplete, onCancel }: 
     return EMPTY_TEAMS;
   }, [realTeams, realPlayers, hasRealData]);
 
+  // Map team names to their IDs for roster wiring
+  const teamNameToId = useMemo(() => {
+    const map: Record<string, string> = {};
+    if (hasRealData && realTeams.length > 0) {
+      realTeams.slice(0, 20).forEach(t => { map[t.name] = t.id; });
+    }
+    return map;
+  }, [realTeams, hasRealData]);
+
   // Inactive players (retired players eligible for draft) — populated from retirement/museum data when available
   const inactivePlayers: { id: string; name: string; position: string; grade: "B" | "B-" | "C+" | "C" | "C-"; retiredSeason: number; seasons: number; hof: boolean }[] = [];
 
   // Ineligible players (Hall of Famers too high-grade for farm) — populated from museum data when available
   const ineligiblePlayers: { name: string; grade: string }[] = [];
 
-  // Generate draft class
+  // Generate draft class with random prospects
   const generateDraftClass = () => {
-    const aiProspects: DraftProspect[] = [
-      { id: "p1", name: "Marcus Williams", position: "SS", grade: "B", age: 20, potentialCeiling: "A", power: 65, contact: 75, speed: 70, fielding: 80, personality: "LEADER" },
-      { id: "p2", name: "Jake Thompson", position: "SP", grade: "B", age: 21, potentialCeiling: "A-", velocity: 85, junk: 70, accuracy: 75, personality: "COMPETITIVE" },
-      { id: "p3", name: "Carlos Ramirez", position: "CF", grade: "B-", age: 19, potentialCeiling: "A-", power: 55, contact: 65, speed: 82, fielding: 70, personality: "COMPETITIVE" },
-      { id: "p4", name: "David Chen", position: "3B", grade: "B-", age: 20, potentialCeiling: "B+", power: 70, contact: 60, speed: 55, fielding: 65, personality: "CALM" },
-      { id: "p5", name: "Tommy Martinez", position: "C", grade: "B-", age: 22, potentialCeiling: "B+", power: 60, contact: 65, speed: 40, fielding: 75, personality: "LEADER" },
-      { id: "p6", name: "Ryan Anderson", position: "RF", grade: "C+", age: 20, potentialCeiling: "B+", power: 75, contact: 55, speed: 60, fielding: 50, personality: "HOTHEAD" },
-      { id: "p7", name: "Michael Johnson", position: "1B", grade: "C+", age: 21, potentialCeiling: "B", power: 80, contact: 50, speed: 35, fielding: 55, personality: "CALM" },
-      { id: "p8", name: "Brandon Lee", position: "LF", grade: "C+", age: 19, potentialCeiling: "B+", power: 65, contact: 60, speed: 65, fielding: 50, personality: "HOTHEAD" },
-      { id: "p9", name: "Justin Wilson", position: "SP", grade: "C+", age: 21, potentialCeiling: "B", velocity: 80, junk: 65, accuracy: 60, personality: "CALM" },
-      { id: "p10", name: "Sam Rodriguez", position: "2B", grade: "C+", age: 20, potentialCeiling: "B", power: 50, contact: 70, speed: 75, fielding: 65, personality: "LEADER" },
-      { id: "p11", name: "Eric Taylor", position: "RP", grade: "C+", age: 22, potentialCeiling: "B", velocity: 90, junk: 55, accuracy: 65, personality: "COMPETITIVE" },
-      { id: "p12", name: "Chris Brown", position: "SS", grade: "C", age: 21, potentialCeiling: "B-", power: 45, contact: 65, speed: 70, fielding: 75, personality: "CALM" },
-      { id: "p13", name: "Alex Garcia", position: "CF", grade: "C", age: 19, potentialCeiling: "B", power: 50, contact: 60, speed: 85, fielding: 65, personality: "COMPETITIVE" },
-      { id: "p14", name: "Daniel Kim", position: "3B", grade: "C", age: 20, potentialCeiling: "B-", power: 65, contact: 55, speed: 50, fielding: 60, personality: "CALM" },
-      { id: "p15", name: "Matt Davis", position: "SP", grade: "C", age: 22, potentialCeiling: "B-", velocity: 75, junk: 70, accuracy: 65, personality: "LEADER" },
-      { id: "p16", name: "Tyler White", position: "RP", grade: "C", age: 21, potentialCeiling: "B-", velocity: 85, junk: 60, accuracy: 55, personality: "HOTHEAD" },
-      { id: "p17", name: "Kevin Santos", position: "C", grade: "C", age: 20, potentialCeiling: "B-", power: 55, contact: 60, speed: 35, fielding: 70, personality: "LEADER" },
-      { id: "p18", name: "Josh Miller", position: "RF", grade: "C-", age: 22, potentialCeiling: "B-", power: 70, contact: 45, speed: 55, fielding: 45, personality: "HOTHEAD" },
-      { id: "p19", name: "Nick Moore", position: "1B", grade: "C-", age: 21, potentialCeiling: "B-", power: 75, contact: 50, speed: 30, fielding: 50, personality: "CALM" },
-      { id: "p20", name: "Brian Jackson", position: "LF", grade: "C-", age: 20, potentialCeiling: "B-", power: 60, contact: 55, speed: 60, fielding: 45, personality: "COMPETITIVE" },
-    ];
+    const pick = <T,>(arr: T[]): T => arr[Math.floor(Math.random() * arr.length)];
+    const randBetween = (lo: number, hi: number) => lo + Math.floor(Math.random() * (hi - lo + 1));
+    const usedNames = new Set<string>();
+
+    const aiProspects: DraftProspect[] = [];
+    for (let i = 0; i < 20; i++) {
+      // Generate unique name
+      let name: string;
+      do {
+        name = `${pick(FIRST_NAMES)} ${pick(LAST_NAMES)}`;
+      } while (usedNames.has(name));
+      usedNames.add(name);
+
+      const grade = PROSPECT_GRADES[i % PROSPECT_GRADES.length];
+      const position = PROSPECT_POSITIONS[i % PROSPECT_POSITIONS.length];
+      const ceiling = pick(CEILINGS[grade]);
+      const isPitcher = position === "SP" || position === "RP";
+
+      const prospect: DraftProspect = {
+        id: `p${i + 1}`,
+        name,
+        position,
+        grade,
+        age: randBetween(19, 22),
+        potentialCeiling: ceiling,
+        personality: pick(PERSONALITIES),
+      };
+
+      if (isPitcher) {
+        prospect.velocity = randBetween(70, 92);
+        prospect.junk = randBetween(50, 75);
+        prospect.accuracy = randBetween(50, 75);
+      } else {
+        prospect.power = randBetween(40, 82);
+        prospect.contact = randBetween(40, 78);
+        prospect.speed = randBetween(28, 86);
+        prospect.fielding = randBetween(40, 82);
+      }
+
+      aiProspects.push(prospect);
+    }
 
     // Add selected inactive players
     const inactiveProspects: DraftProspect[] = selectedInactivePlayers.map(id => {
@@ -208,7 +284,7 @@ export function DraftFlow({ seasonId, seasonNumber = 1, onComplete, onCancel }: 
     // Auto-advance through AI picks if draft doesn't start with user
     setTimeout(() => {
       const firstPick = draftPicks[0];
-      if (firstPick?.teamName !== "San Francisco Giants") {
+      if (firstPick?.teamName !== userTeamName) {
         // Trigger AI picks
         const availableProspects = draftClass;
         if (availableProspects.length > 0) {
@@ -324,7 +400,7 @@ export function DraftFlow({ seasonId, seasonNumber = 1, onComplete, onCancel }: 
 
     // Auto-pick for AI teams (simulate)
     const nextPick = draftPicks[nextPickIndex];
-    if (nextPick?.teamName !== "San Francisco Giants") {
+    if (nextPick?.teamName !== userTeamName) {
       setTimeout(() => {
         const availableProspects = draftClass;
         if (availableProspects.length > 0) {
@@ -389,6 +465,63 @@ export function DraftFlow({ seasonId, seasonNumber = 1, onComplete, onCancel }: 
       const maxRounds = Math.max(...draftPicks.filter(p => p.prospect).map(p => p.round), 1);
 
       await saveDraft(order, picks, maxRounds);
+
+      // Add drafted players to leagueBuilderStorage rosters
+      for (const pick of picks) {
+        try {
+          const teamId = teamNameToId[pick.teamId];
+          if (!teamId) continue;
+
+          const prospect = draftPicks.find(
+            dp => dp.prospect?.id === pick.playerId
+          )?.prospect;
+          if (!prospect) continue;
+
+          const isPitcher = prospect.position === "SP" || prospect.position === "RP" || prospect.position === "CP";
+          const [firstName, ...lastParts] = prospect.name.split(' ');
+          const lastName = lastParts.join(' ') || firstName;
+
+          // Create the player in leagueBuilderStorage
+          const saved = await savePlayer({
+            firstName,
+            lastName,
+            gender: 'M',
+            age: prospect.age,
+            bats: 'R',
+            throws: 'R',
+            primaryPosition: prospect.position as 'SS' | 'SP' | 'CF' | '3B' | 'C' | 'RF' | '1B' | 'LF' | '2B' | 'RP',
+            power: prospect.power ?? 0,
+            contact: prospect.contact ?? 0,
+            speed: prospect.speed ?? 0,
+            fielding: prospect.fielding ?? 0,
+            arm: 50,
+            velocity: prospect.velocity ?? 0,
+            junk: prospect.junk ?? 0,
+            accuracy: prospect.accuracy ?? 0,
+            arsenal: isPitcher ? ['4F', 'SL'] : [],
+            overallGrade: prospect.grade,
+            personality: 'Competitive',
+            chemistry: 'Competitive',
+            morale: 75,
+            mojo: 'Normal',
+            fame: 0,
+            salary: 0.5,
+            currentTeamId: teamId,
+            rosterStatus: 'FARM',
+            isCustom: false,
+          });
+
+          // Add to team's farm roster
+          const roster = await getTeamRoster(teamId);
+          if (roster) {
+            roster.farmRoster.push(saved.id);
+            await saveTeamRoster(roster);
+          }
+        } catch (err) {
+          console.error(`[DraftFlow] Failed to persist drafted player ${pick.playerName}:`, err);
+        }
+      }
+
       onComplete();
     } catch (error) {
       console.error('[DraftFlow] Failed to save draft:', error);
@@ -397,7 +530,7 @@ export function DraftFlow({ seasonId, seasonNumber = 1, onComplete, onCancel }: 
     } finally {
       setIsSaving(false);
     }
-  }, [draftPicks, draftTeams, saveDraft, onComplete]);
+  }, [draftPicks, draftTeams, saveDraft, onComplete, teamNameToId]);
 
   const getGradeColor = (grade: string) => {
     switch (grade) {
@@ -779,7 +912,7 @@ export function DraftFlow({ seasonId, seasonNumber = 1, onComplete, onCancel }: 
 
   // Screen 3: Draft Order Reveal
   if (currentScreen === "order-reveal") {
-    const userTeamIndex = Object.keys(teamRosters).indexOf("San Francisco Giants");
+    const userTeamIndex = userTeamName ? Object.keys(teamRosters).indexOf(userTeamName) : -1;
     const teamsList = Object.values(teamRosters).slice(0, 20);
 
     return (
@@ -813,7 +946,7 @@ export function DraftFlow({ seasonId, seasonNumber = 1, onComplete, onCancel }: 
                 </div>
                 <div className="p-4 space-y-2 max-h-96 overflow-y-auto">
                   {teamsList.map((team, index) => {
-                    const isUserTeam = team.teamName === "San Francisco Giants";
+                    const isUserTeam = team.teamName === userTeamName;
                     
                     return (
                       <div 
@@ -874,7 +1007,7 @@ export function DraftFlow({ seasonId, seasonNumber = 1, onComplete, onCancel }: 
     const currentPick = draftPicks[currentPickIndex];
     const recentPicks = draftPicks.slice(0, currentPickIndex).filter(p => p.prospect).reverse().slice(0, 5);
     const upcomingPicks = draftPicks.slice(currentPickIndex, currentPickIndex + 10);
-    const isUserPick = currentPick?.teamName === "San Francisco Giants";
+    const isUserPick = currentPick?.teamName === userTeamName;
     const currentTeamStatus = currentPick ? teamRosters[currentPick.teamName] : null;
 
     const availableProspects = sortProspects(draftClass);
@@ -1188,7 +1321,7 @@ export function DraftFlow({ seasonId, seasonNumber = 1, onComplete, onCancel }: 
   // Screen 5: Pick Selection Modal
   if (currentScreen === "pick-modal") {
     const currentPick = draftPicks[currentPickIndex];
-    const isUserPick = currentPick?.teamName === "San Francisco Giants";
+    const isUserPick = currentPick?.teamName === userTeamName;
     const teamStatus = currentPick ? teamRosters[currentPick.teamName] : null;
 
     if (!isUserPick) {
@@ -1369,7 +1502,7 @@ export function DraftFlow({ seasonId, seasonNumber = 1, onComplete, onCancel }: 
   // Screen 7: Pick Confirmation
   if (currentScreen === "pick-confirmation") {
     const currentPick = draftPicks[currentPickIndex];
-    const isUserPick = currentPick?.teamName === "San Francisco Giants";
+    const isUserPick = currentPick?.teamName === userTeamName;
     const teamStatus = currentPick ? teamRosters[currentPick.teamName] : null;
 
     return (
@@ -1522,7 +1655,7 @@ export function DraftFlow({ seasonId, seasonNumber = 1, onComplete, onCancel }: 
 
   // Screen 9: Draft Summary
   if (currentScreen === "draft-summary") {
-    const userPicks = draftPicks.filter(p => p.teamName === "San Francisco Giants" && p.prospect);
+    const userPicks = draftPicks.filter(p => p.teamName === userTeamName && p.prospect);
     const allPicks = draftPicks.filter(p => p.prospect);
     const passedTeams = Object.values(teamRosters).filter(t => t.hasPassedDraft);
     
@@ -1541,7 +1674,7 @@ export function DraftFlow({ seasonId, seasonNumber = 1, onComplete, onCancel }: 
       })
       .slice(0, 3);
 
-    const userTeamStatus = teamRosters["San Francisco Giants"];
+    const userTeamStatus = userTeamName ? teamRosters[userTeamName] : undefined;
 
     return (
       <div className="fixed inset-0 bg-black/90 z-50 overflow-y-auto">
