@@ -1947,7 +1947,7 @@ function StandingsContent() {
             className="text-[12px] text-[#E8E8D8] mb-3 pb-2 border-b-2 border-[#4A6844]"
             style={{ textShadow: '2px 2px 4px rgba(0,0,0,0.8)' }}
           >
-            {division.toUpperCase()} DIVISION
+            {division.toUpperCase()}
           </div>
           
           {/* Table Header */}
@@ -2729,7 +2729,7 @@ function LeagueLeadersContent() {
                   expandedLeague === "al" ? "bg-[#4A6844] text-[#E8E8D8]" : "bg-[#5A8352] text-[#E8E8D8]/70 hover:bg-[#4F7D4B]"
                 }`}
               >
-                <div className="text-[10px] font-bold">AMERICAN LEAGUE</div>
+                <div className="text-[10px] font-bold">EASTERN LEAGUE</div>
               </button>
               <button
                 onClick={() => setExpandedLeague("nl")}
@@ -2737,7 +2737,7 @@ function LeagueLeadersContent() {
                   expandedLeague === "nl" ? "bg-[#4A6844] text-[#E8E8D8]" : "bg-[#5A8352] text-[#E8E8D8]/70 hover:bg-[#4F7D4B]"
                 }`}
               >
-                <div className="text-[10px] font-bold">NATIONAL LEAGUE</div>
+                <div className="text-[10px] font-bold">WESTERN LEAGUE</div>
               </button>
             </div>
 
@@ -2872,7 +2872,7 @@ function LeagueLeadersContent() {
                   expandedLeague === "al" ? "bg-[#4A6844] text-[#E8E8D8]" : "bg-[#5A8352] text-[#E8E8D8]/70 hover:bg-[#4F7D4B]"
                 }`}
               >
-                <div className="text-[10px] font-bold">AMERICAN LEAGUE</div>
+                <div className="text-[10px] font-bold">EASTERN LEAGUE</div>
               </button>
               <button
                 onClick={() => setExpandedLeague("nl")}
@@ -2880,7 +2880,7 @@ function LeagueLeadersContent() {
                   expandedLeague === "nl" ? "bg-[#4A6844] text-[#E8E8D8]" : "bg-[#5A8352] text-[#E8E8D8]/70 hover:bg-[#4F7D4B]"
                 }`}
               >
-                <div className="text-[10px] font-bold">NATIONAL LEAGUE</div>
+                <div className="text-[10px] font-bold">WESTERN LEAGUE</div>
               </button>
             </div>
 
@@ -2944,7 +2944,7 @@ function LeagueLeadersContent() {
                   expandedLeague === "al" ? "bg-[#4A6844] text-[#E8E8D8]" : "bg-[#5A8352] text-[#E8E8D8]/70 hover:bg-[#4F7D4B]"
                 }`}
               >
-                <div className="text-[10px] font-bold">AMERICAN LEAGUE</div>
+                <div className="text-[10px] font-bold">EASTERN LEAGUE</div>
               </button>
               <button
                 onClick={() => setExpandedLeague("nl")}
@@ -2952,7 +2952,7 @@ function LeagueLeadersContent() {
                   expandedLeague === "nl" ? "bg-[#4A6844] text-[#E8E8D8]" : "bg-[#5A8352] text-[#E8E8D8]/70 hover:bg-[#4F7D4B]"
                 }`}
               >
-                <div className="text-[10px] font-bold">NATIONAL LEAGUE</div>
+                <div className="text-[10px] font-bold">WESTERN LEAGUE</div>
               </button>
             </div>
 
@@ -2992,7 +2992,7 @@ function LeagueLeadersContent() {
                   expandedLeague === "al" ? "bg-[#4A6844] text-[#E8E8D8]" : "bg-[#5A8352] text-[#E8E8D8]/70 hover:bg-[#4F7D4B]"
                 }`}
               >
-                <div className="text-[10px] font-bold">AMERICAN LEAGUE</div>
+                <div className="text-[10px] font-bold">EASTERN LEAGUE</div>
               </button>
               <button
                 onClick={() => setExpandedLeague("nl")}
@@ -3000,7 +3000,7 @@ function LeagueLeadersContent() {
                   expandedLeague === "nl" ? "bg-[#4A6844] text-[#E8E8D8]" : "bg-[#5A8352] text-[#E8E8D8]/70 hover:bg-[#4F7D4B]"
                 }`}
               >
-                <div className="text-[10px] font-bold">NATIONAL LEAGUE</div>
+                <div className="text-[10px] font-bold">WESTERN LEAGUE</div>
               </button>
             </div>
 

@@ -360,10 +360,10 @@ function LeagueLeadersScreen({ onContinue }: { onContinue: () => void }) {
         </div>
 
         <div className="grid grid-cols-2 gap-6">
-          {/* American League */}
+          {/* Eastern League */}
           <div className="bg-[#4A6844] border-[3px] border-[#5A8352] p-4">
             <div className="text-base text-[#E8E8D8] mb-4 border-b-2 border-[#E8E8D8]/20 pb-2">
-              AMERICAN LEAGUE
+              EASTERN LEAGUE
             </div>
 
             <div className="space-y-3">
@@ -396,10 +396,10 @@ function LeagueLeadersScreen({ onContinue }: { onContinue: () => void }) {
             </div>
           </div>
 
-          {/* National League */}
+          {/* Western League */}
           <div className="bg-[#4A6844] border-[3px] border-[#5A8352] p-4">
             <div className="text-base text-[#E8E8D8] mb-4 border-b-2 border-[#E8E8D8]/20 pb-2">
-              NATIONAL LEAGUE
+              WESTERN LEAGUE
             </div>
 
             <div className="space-y-3">
@@ -951,7 +951,7 @@ function RelieverYearScreen({ league, onContinue }: { league: League; onContinue
     <div className="space-y-4">
       <div className="bg-[#5A8352] border-[5px] border-[#C4A853] p-4 text-center">
         <div className="text-lg text-[#E8E8D8]">🔥 RELIEVER OF THE YEAR</div>
-        <div className="text-sm text-[#E8E8D8]/60 mt-1">{league === "AL" ? "AMERICAN LEAGUE" : "NATIONAL LEAGUE"}</div>
+        <div className="text-sm text-[#E8E8D8]/60 mt-1">{league === "AL" ? "EASTERN LEAGUE" : "WESTERN LEAGUE"}</div>
       </div>
 
       {/* Voting Breakdown */}
@@ -1028,7 +1028,7 @@ function RelieverYearScreen({ league, onContinue }: { league: League; onContinue
         onClick={onContinue}
         className="w-full bg-[#5A8352] border-[5px] border-[#4A6844] py-4 text-lg text-[#E8E8D8] hover:bg-[#4F7D4B] active:scale-95 transition-transform shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)]"
       >
-        Continue {league === "AL" ? "to National League" : "to Bench Player"} →
+        Continue {league === "AL" ? "to Western League" : "to Bench Player"} →
       </button>
     </div>
   );
@@ -1191,7 +1191,7 @@ function RookieYearScreen({ league, onContinue }: { league: League; onContinue: 
     <div className="space-y-4">
       <div className="bg-[#5A8352] border-[5px] border-[#C4A853] p-4 text-center">
         <div className="text-lg text-[#E8E8D8]">🌟 ROOKIE OF THE YEAR</div>
-        <div className="text-sm text-[#E8E8D8]/60 mt-1">{league === "AL" ? "AMERICAN LEAGUE" : "NATIONAL LEAGUE"}</div>
+        <div className="text-sm text-[#E8E8D8]/60 mt-1">{league === "AL" ? "EASTERN LEAGUE" : "WESTERN LEAGUE"}</div>
       </div>
 
       <div className="bg-[#5A8352] border-[5px] border-[#4A6844] p-3">
@@ -1294,7 +1294,7 @@ function RookieYearScreen({ league, onContinue }: { league: League; onContinue: 
         disabled={!traitRevealed[league]}
         className="w-full bg-[#5A8352] border-[5px] border-[#4A6844] py-4 text-lg text-[#E8E8D8] hover:bg-[#4F7D4B] disabled:opacity-50 disabled:cursor-not-allowed active:scale-95 transition-transform shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)]"
       >
-        Continue {league === "AL" ? "to National League" : "to Cy Young"} →
+        Continue {league === "AL" ? "to Western League" : "to Cy Young"} →
       </button>
     </div>
   );
@@ -1341,7 +1341,7 @@ function CyYoungScreen({ league, onContinue }: { league: League; onContinue: () 
           ✨ CY YOUNG AWARD WINNER ✨
         </div>
         <div className="text-base text-[#E8E8D8]/80 mb-6">
-          {league === "AL" ? "AMERICAN LEAGUE" : "NATIONAL LEAGUE"}
+          {league === "AL" ? "EASTERN LEAGUE" : "WESTERN LEAGUE"}
         </div>
 
         <div className="w-40 h-40 bg-[#E8E8D8] rounded-full mx-auto mb-6 flex items-center justify-center text-4xl">
@@ -1426,7 +1426,7 @@ function CyYoungScreen({ league, onContinue }: { league: League; onContinue: () 
         disabled={!traitRevealed[league]}
         className="w-full bg-[#5A8352] border-[5px] border-[#4A6844] py-4 text-lg text-[#E8E8D8] hover:bg-[#4F7D4B] disabled:opacity-50 disabled:cursor-not-allowed active:scale-95 transition-transform shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)]"
       >
-        Continue {league === "AL" ? "to National League" : "to MVP"} →
+        Continue {league === "AL" ? "to Western League" : "to MVP"} →
       </button>
     </div>
   );
@@ -1472,7 +1472,7 @@ function MVPScreen({ league, onContinue }: { league: League; onContinue: () => v
           ✨✨✨ MOST VALUABLE PLAYER ✨✨✨
         </div>
         <div className="text-lg text-[#E8E8D8]/80 mb-8">
-          {league === "AL" ? "AMERICAN LEAGUE" : "NATIONAL LEAGUE"}
+          {league === "AL" ? "EASTERN LEAGUE" : "WESTERN LEAGUE"}
         </div>
 
         <div className="w-48 h-48 bg-[#E8E8D8] rounded-full mx-auto mb-6 flex items-center justify-center text-5xl">
@@ -1557,7 +1557,7 @@ function MVPScreen({ league, onContinue }: { league: League; onContinue: () => v
         disabled={!traitRevealed[league]}
         className="w-full bg-[#5A8352] border-[5px] border-[#4A6844] py-4 text-lg text-[#E8E8D8] hover:bg-[#4F7D4B] disabled:opacity-50 disabled:cursor-not-allowed active:scale-95 transition-transform shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)]"
       >
-        Continue {league === "AL" ? "to National League" : "to Manager of the Year"} →
+        Continue {league === "AL" ? "to Western League" : "to Manager of the Year"} →
       </button>
     </div>
   );
@@ -1618,7 +1618,7 @@ function ManagerYearScreen({ league, onContinue, managerSeasonStats = [] }: { le
       <div className="bg-[#5A8352] border-[5px] border-[#C4A853] p-4 text-center">
         <div className="text-lg text-[#E8E8D8]">📋 MANAGER OF THE YEAR</div>
         <div className="text-sm text-[#E8E8D8]/60 mt-1">
-          {league === "AL" ? "AMERICAN LEAGUE" : "NATIONAL LEAGUE"}
+          {league === "AL" ? "EASTERN LEAGUE" : "WESTERN LEAGUE"}
         </div>
       </div>
 
@@ -1682,7 +1682,7 @@ function ManagerYearScreen({ league, onContinue, managerSeasonStats = [] }: { le
         onClick={onContinue}
         className="w-full bg-[#5A8352] border-[5px] border-[#4A6844] py-4 text-lg text-[#E8E8D8] hover:bg-[#4F7D4B] active:scale-95 transition-transform shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)]"
       >
-        Continue {league === "AL" ? "to National League" : "to Special Awards"} →
+        Continue {league === "AL" ? "to Western League" : "to Special Awards"} →
       </button>
     </div>
   );

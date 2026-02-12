@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect } from "react";
 import { Edit, Building2, User } from "lucide-react";
 import { useOffseasonData, type OffseasonTeam, type OffseasonPlayer } from "@/hooks/useOffseasonData";
 import { useSeasonStats, type BattingLeaderEntry, type PitchingLeaderEntry } from '../../../hooks/useSeasonStats';
+import { useFranchiseDataContext } from "@/app/pages/FranchiseHome";
 
 type TeamHubTab = "team" | "fan-morale" | "roster" | "stats" | "stadium" | "manager";
 
@@ -117,6 +118,30 @@ export function TeamHubContent() {
   // Get real data from hook
   const { teams: realTeams, players: realPlayers, hasRealData, isLoading } = useOffseasonData();
   const seasonStats = useSeasonStats();
+  const franchiseData = useFranchiseDataContext();
+
+  // Build team → W-L record lookup from real standings (case-insensitive)
+  const teamRecordMap = useMemo(() => {
+    const map = new Map<string, string>();
+    const standings = franchiseData.standings;
+    if (!standings) return map;
+    for (const conference of Object.values(standings)) {
+      if (!conference || typeof conference !== 'object') continue;
+      for (const division of Object.values(conference as Record<string, unknown>)) {
+        if (!Array.isArray(division)) continue;
+        for (const entry of division) {
+          if (entry && entry.team) {
+            map.set(entry.team.toLowerCase(), `${entry.wins ?? 0}-${entry.losses ?? 0}`);
+          }
+        }
+      }
+    }
+    return map;
+  }, [franchiseData.standings]);
+
+  const getTeamRecord = (teamName: string): string => {
+    return teamRecordMap.get(teamName.toLowerCase()) || '0-0';
+  };
 
   const [activeHubTab, setActiveHubTab] = useState<TeamHubTab>("team");
   const [selectedTeam, setSelectedTeam] = useState<string>("");
@@ -330,7 +355,7 @@ export function TeamHubContent() {
                 }`}
               >
                 <div className="text-[11px] font-bold">{team}</div>
-                <div className="text-[8px] mt-1">56-34 • 1st</div>
+                <div className="text-[8px] mt-1">{getTeamRecord(team)}</div>
               </button>
             ))}
           </div>
