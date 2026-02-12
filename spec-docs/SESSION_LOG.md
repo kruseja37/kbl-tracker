@@ -23,6 +23,18 @@
 ### Full Lifecycle Verified
 - Season 1 → Playoffs → Champion → Offseason (11/11 phases) → Season 2 → Play games ✅
 - 0 console errors throughout
+### Browser-Verified Flows (continued session)
+- League Leaders N/A fix: rewired batch SIM to full pipeline (generateSyntheticGame + processCompletedGame)
+- useFranchiseData: dynamic seasonId from currentSeason param (was hardcoded season-1)
+- FreeAgencyFlow hooks crash: moved isLoading early return after all hooks + guarded currentTeam access
+- DraftFlow: replaced 2 hardcoded "SAN FRANCISCO GIANTS" with dynamic userTeamName
+- Flow D1 (Free Agency): PASS — full protection→dice→destination→exchange flow with real players
+- Flow D2 (Draft): PASS — 20 AI-generated prospects, user pick, roster tracking (FIXED MLB name bug)
+- Flow D3 (GameTracker Season 2): PASS — game loads with full field, all buttons, playable
+- Flow D4 (Museum): PASS — UI loads (6 tabs), data empty (expected: museum pipeline not built yet)
 ### Pending (for next session)
 - PRE_MANUAL_CLEANUP.md: 5 batches of fixes/verification before manual testing
+- FinalizeAdvanceFlow requires 32 players per team (farm validation blocks advance without full draft)
+- GameTracker in franchise mode shows "TIGERS/SOX" defaults instead of real team names
+- Museum data pipeline needs building (all tabs empty)
 - See CURRENT_STATE.md "Known Issues" section for complete list
