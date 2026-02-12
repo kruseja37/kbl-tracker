@@ -5,6 +5,7 @@ import { useOffseasonState, type RatingAdjustment, type ManagerBonus } from "../
 import { getAllManagerSeasonStatsForSeason } from '../../../utils/managerStorage';
 import { calculateMOYVotes, getMWARRating } from '../../../engines/mwarCalculator';
 import type { ManagerSeasonStats } from '../../../engines/mwarCalculator';
+import { getPlayer, savePlayer } from '../../../utils/leagueBuilderStorage';
 
 // Types
 type Position = "SP" | "RP" | "CP" | "SP/RP" | "C" | "1B" | "2B" | "3B" | "SS" | "LF" | "CF" | "RF" | "DH" | "UTIL" | "BENCH" | "TWO-WAY";
@@ -154,21 +155,45 @@ function convertToLocalTeam(
 }
 
 /**
- * Convert OffseasonPlayer to local Player format with mock rating changes
+ * Compute WAR-based rating adjustments.
+ *
+ * - WAR contribution: war * 1.5, clamped ±8
+ * - Age development: <25 → +2..+4 bonus (younger = bigger)
+ * - Age decline: >33 → -2..-5 penalty (older = bigger)
+ * - If WAR is exactly 0 AND age is 25-33, net change is 0 (fresh franchise / no data)
+ */
+function computeNetChange(war: number, age: number): number {
+  // WAR component
+  const warComponent = Math.max(-8, Math.min(8, Math.round(war * 1.5)));
+
+  // Age component
+  let ageComponent = 0;
+  if (age < 25) {
+    // Young players develop: 22→+4, 23→+3, 24→+2
+    ageComponent = Math.max(2, 4 - (age - 22));
+  } else if (age > 33) {
+    // Old players decline: 34→-2, 35→-3, 36→-4, 37+→-5
+    ageComponent = -Math.min(5, 2 + (age - 34));
+  }
+
+  return Math.max(-12, Math.min(12, warComponent + ageComponent));
+}
+
+/**
+ * Convert OffseasonPlayer to local Player format with WAR-based rating changes
  */
 function convertToLocalPlayer(player: OffseasonPlayer): Player {
-  // Generate mock rating changes based on position
   const isPitcher = ["SP", "RP", "CP"].includes(player.position);
-  const baseRating = 70; // Default base rating
+  const baseRating = 70;
 
-  // Generate random change for demo purposes
-  const netChange = Math.floor(Math.random() * 20) - 8; // -8 to +11
-  const salaryChange = netChange * 0.3; // Roughly $0.3M per point
+  // WAR-driven adjustment instead of Math.random()
+  const netChange = computeNetChange(player.war, player.age);
+  const salaryChange = netChange * 0.3;
 
   const ratingsBefore: PlayerRatings = isPitcher ? {
-    velocity: player.velocity ?? baseRating + Math.floor(Math.random() * 20),
-    junk: player.junk ?? baseRating + Math.floor(Math.random() * 20),
-    accuracy: player.accuracy ?? baseRating + Math.floor(Math.random() * 20),
+    velocity: player.velocity ?? baseRating,
+    junk: player.junk ?? baseRating,
+    accuracy: player.accuracy ?? baseRating,
   } : {
     powerL: player.power ?? baseRating,
     powerR: (player.power ?? baseRating) - 2,
@@ -179,6 +204,7 @@ function convertToLocalPlayer(player: OffseasonPlayer): Player {
     arm: player.arm ?? baseRating,
   };
 
+  // Distribute net change across ratings
   const ratingsAfter: PlayerRatings = isPitcher ? {
     velocity: (ratingsBefore.velocity || baseRating) + Math.floor(netChange / 3),
     junk: (ratingsBefore.junk || baseRating) + Math.floor(netChange / 3),
@@ -193,6 +219,10 @@ function convertToLocalPlayer(player: OffseasonPlayer): Player {
     arm: (ratingsBefore.arm || baseRating) + Math.floor(netChange / 7),
   };
 
+  // Compute salary percentile from actual salary rank (computed by caller after all players converted)
+  // Use 50 as placeholder; the parent memo will adjust if needed
+  const salaryPercentile = 50;
+
   return {
     id: player.id,
     name: player.name,
@@ -200,16 +230,16 @@ function convertToLocalPlayer(player: OffseasonPlayer): Player {
     detectedPosition: player.position as Position,
     grade: player.grade as Grade,
     salary: player.salary,
-    salaryPercentile: Math.floor(Math.random() * 100),
+    salaryPercentile,
     stats: {
       bWAR: isPitcher ? 0 : player.war * 0.6,
       rWAR: isPitcher ? 0 : player.war * 0.2,
       fWAR: isPitcher ? 0 : player.war * 0.2,
       pWAR: isPitcher ? player.war : 0,
-      bWARPercentile: Math.floor(Math.random() * 100),
-      rWARPercentile: Math.floor(Math.random() * 100),
-      fWARPercentile: Math.floor(Math.random() * 100),
-      pWARPercentile: Math.floor(Math.random() * 100),
+      bWARPercentile: 50,
+      rWARPercentile: 50,
+      fWARPercentile: 50,
+      pWARPercentile: 50,
     },
     ratingsBefore,
     ratingsAfter,
@@ -383,6 +413,35 @@ export function RatingsAdjustmentFlow({ seasonId, onClose }: RatingsAdjustmentFl
         }));
 
       await saveRatingChanges(adjustments, bonuses);
+
+      // Persist updated ratings to leagueBuilderStorage
+      for (const player of ALL_PLAYERS) {
+        if (player.netChange === 0) continue; // Skip unchanged players
+        try {
+          const existing = await getPlayer(player.id);
+          if (!existing) continue;
+
+          const after = player.ratingsAfter;
+          const isPitcher = isPitcherPosition(player.position);
+
+          if (isPitcher) {
+            existing.velocity = after.velocity ?? existing.velocity;
+            existing.junk = after.junk ?? existing.junk;
+            existing.accuracy = after.accuracy ?? existing.accuracy;
+          } else {
+            existing.power = after.powerL ?? existing.power;
+            existing.contact = after.contactL ?? existing.contact;
+            existing.speed = after.speed ?? existing.speed;
+            existing.fielding = after.fielding ?? existing.fielding;
+            existing.arm = after.arm ?? existing.arm;
+          }
+
+          await savePlayer(existing);
+        } catch (err) {
+          console.error(`[RatingsAdjustment] Failed to persist ratings for ${player.name}:`, err);
+        }
+      }
+
       onClose();
     } catch (error) {
       console.error('[RatingsAdjustmentFlow] Failed to save ratings:', error);
