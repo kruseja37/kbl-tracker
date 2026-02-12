@@ -36,6 +36,8 @@ import { getAllGames } from "../../../utils/scheduleStorage";
 import { startOffseason, OFFSEASON_PHASES, type OffseasonPhase } from "../../../utils/offseasonStorage";
 import { useOffseasonState } from "@/hooks/useOffseasonState";
 import { generateNewSeasonSchedule } from "../../../utils/franchiseInitializer";
+import { executeSeasonTransition } from "../../../engines/seasonTransitionEngine";
+import { updateFranchiseMetadata } from "../../../utils/franchiseManager";
 
 // Context for passing franchise data to child components
 const FranchiseDataContext = createContext<UseFranchiseDataReturn | null>(null);
@@ -138,10 +140,26 @@ export function FranchiseHome() {
 
   const handleStartNewSeason = async () => {
     const newSeason = currentSeason + 1;
-    setCurrentSeason(newSeason);
-    localStorage.setItem('kbl-current-season', String(newSeason));
 
-    // Generate schedule for the new season
+    // 1. Execute season transition (age players, recalculate salaries, reset mojo, etc.)
+    try {
+      const result = await executeSeasonTransition(currentSeason);
+      console.log(`[handleStartNewSeason] Season transition complete:`, result);
+    } catch (err) {
+      console.error('[handleStartNewSeason] Season transition failed:', err);
+    }
+
+    // 2. Update franchise metadata in IndexedDB
+    if (franchiseId) {
+      try {
+        await updateFranchiseMetadata(franchiseId, { currentSeason: newSeason });
+        console.log(`[handleStartNewSeason] Franchise metadata updated to Season ${newSeason}`);
+      } catch (err) {
+        console.error('[handleStartNewSeason] Failed to update franchise metadata:', err);
+      }
+    }
+
+    // 3. Generate schedule for the new season
     if (franchiseId) {
       try {
         const gamesScheduled = await generateNewSeasonSchedule(franchiseId, newSeason);
@@ -151,6 +169,9 @@ export function FranchiseHome() {
       }
     }
 
+    // 4. Update React state and localStorage
+    setCurrentSeason(newSeason);
+    localStorage.setItem('kbl-current-season', String(newSeason));
     setSeasonPhase("regular");
     setActiveTab("todays-game");
   };
