@@ -1709,6 +1709,7 @@ function SpecialAwardsScreen({ awardType, onContinue, allPlayers = [] }: { award
   const [traitRevealed, setTraitRevealed] = useState(false);
   const [isRolling, setIsRolling] = useState(false);
   const [selectedTrait, setSelectedTrait] = useState("BARGAIN BIN HERO");
+  const [selectedCandidate, setSelectedCandidate] = useState(0);
 
   const possibleTraits = ["BARGAIN BIN HERO", "OVERACHIEVER", "DIAMOND IN THE ROUGH", "VALUE PICK", "HIDDEN GEM"];
 
@@ -1962,7 +1963,6 @@ function SpecialAwardsScreen({ awardType, onContinue, allPlayers = [] }: { award
   }
 
   // COMEBACK
-  const [selectedCandidate, setSelectedCandidate] = useState(0);
 
   const comebackTraits = ["RECOVERED", "SECOND WIND", "RESILIENT", "BOUNCE BACK", "VETERAN SAVVY"];
 
