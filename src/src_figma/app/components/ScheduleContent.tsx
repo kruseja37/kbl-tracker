@@ -26,6 +26,8 @@ interface ScheduleContentProps {
   dropdownOpen: boolean;
   setDropdownOpen: (open: boolean) => void;
   stadiumMap: Record<string, string>;
+  seasonNumber?: number;
+  teamNameMap?: Record<string, string>;
 }
 
 export function ScheduleContent({
@@ -36,8 +38,12 @@ export function ScheduleContent({
   onAddGame,
   dropdownOpen,
   setDropdownOpen,
-  stadiumMap
+  stadiumMap,
+  seasonNumber = 1,
+  teamNameMap = {},
 }: ScheduleContentProps) {
+  // Helper: resolve team ID to display name
+  const teamName = (id: string) => teamNameMap[id] || id;
   const filteredGames = selectedTeam === "FULL LEAGUE" 
     ? games 
     : games.filter(g => g.awayTeamId === selectedTeam || g.homeTeamId === selectedTeam);
@@ -73,7 +79,7 @@ export function ScheduleContent({
       {/* Header with Add Game button */}
       <div className="bg-[#5A8352] p-4">
         <div className="flex items-center justify-between mb-2">
-          <div className="text-sm text-[#E8E8D8]">📅 SEASON 2 SCHEDULE</div>
+          <div className="text-sm text-[#E8E8D8]">📅 SEASON {seasonNumber} SCHEDULE</div>
           <button
             onClick={onAddGame}
             className="bg-[#5599FF] border-[3px] border-[#3366FF] px-3 py-1 text-xs text-[#E8E8D8] hover:bg-[#3366FF] active:scale-95 transition-transform flex items-center gap-1"
@@ -95,7 +101,7 @@ export function ScheduleContent({
 
       {/* Filter Dropdown */}
       <div className="bg-[#5A8352] border-[5px] border-[#4A6844] p-4">
-        <div className="text-[8px] text-[#E8E8D8] mb-3">▶ 2024 SEASON SCHEDULE</div>
+        <div className="text-[8px] text-[#E8E8D8] mb-3">▶ SEASON {seasonNumber} SCHEDULE</div>
         <div className="relative">
           <button 
             onClick={() => setDropdownOpen(!dropdownOpen)}
@@ -147,7 +153,7 @@ export function ScheduleContent({
           <div className="text-4xl mb-4">📭</div>
           <div className="text-lg text-[#E8E8D8] mb-2">NO GAMES SCHEDULED</div>
           <div className="text-sm text-[#E8E8D8]/80 mb-6">
-            Your Season 2 schedule is empty.<br />
+            Your Season {seasonNumber} schedule is empty.<br />
             Add games as you play them in SMB4.
           </div>
           <div className="space-y-3">
@@ -182,15 +188,15 @@ export function ScheduleContent({
               </div>
               <div className="flex items-center justify-center gap-4">
                 <div className="text-right">
-                  <div className="text-base text-[#E8E8D8]">{nextGame.awayTeamId}</div>
+                  <div className="text-base text-[#E8E8D8]">{teamName(nextGame.awayTeamId)}</div>
                   <div className="text-[8px] text-[#E8E8D8]/60">(AWAY)</div>
                 </div>
                 <div className="text-center px-2">
                   <div className="text-xl text-[#E8E8D8]">@</div>
-                  <div className="text-[7px] text-[#E8E8D8]/70 italic mt-1">{stadiumMap[nextGame.homeTeamId] || nextGame.homeTeamId}</div>
+                  <div className="text-[7px] text-[#E8E8D8]/70 italic mt-1">{stadiumMap[nextGame.homeTeamId] || teamName(nextGame.homeTeamId)}</div>
                 </div>
                 <div className="text-left">
-                  <div className="text-base text-[#E8E8D8]">{nextGame.homeTeamId}</div>
+                  <div className="text-base text-[#E8E8D8]">{teamName(nextGame.homeTeamId)}</div>
                   <div className="text-[8px] text-[#E8E8D8]/60">(HOME)</div>
                 </div>
               </div>
@@ -214,7 +220,7 @@ export function ScheduleContent({
                     {index === 0 && <span className="text-[#FFD700]">← NEXT GAME</span>}
                   </div>
                   <div className="flex items-center justify-between text-xs text-[#E8E8D8]">
-                    <span>{game.awayTeamId === selectedTeam ? "vs" : "@"} {game.awayTeamId === selectedTeam ? game.homeTeamId : game.awayTeamId}</span>
+                    <span>{game.awayTeamId === selectedTeam ? "vs" : "@"} {teamName(game.awayTeamId === selectedTeam ? game.homeTeamId : game.awayTeamId)}</span>
                     <span>{game.awayTeamId === selectedTeam ? "Home" : "Away"}</span>
                   </div>
                 </div>
@@ -235,15 +241,15 @@ export function ScheduleContent({
               </div>
               <div className="flex items-center justify-center gap-4">
                 <div className="text-right">
-                  <div className="text-base text-[#E8E8D8]">{game.awayTeamId}</div>
+                  <div className="text-base text-[#E8E8D8]">{teamName(game.awayTeamId)}</div>
                   <div className="text-[8px] text-[#E8E8D8]/60">(AWAY)</div>
                 </div>
                 <div className="text-center px-2">
                   <div className="text-xl text-[#E8E8D8]">@</div>
-                  <div className="text-[7px] text-[#E8E8D8]/70 italic mt-1">{stadiumMap[game.homeTeamId] || game.homeTeamId}</div>
+                  <div className="text-[7px] text-[#E8E8D8]/70 italic mt-1">{stadiumMap[game.homeTeamId] || teamName(game.homeTeamId)}</div>
                 </div>
                 <div className="text-left">
-                  <div className="text-base text-[#E8E8D8]">{game.homeTeamId}</div>
+                  <div className="text-base text-[#E8E8D8]">{teamName(game.homeTeamId)}</div>
                   <div className="text-[8px] text-[#E8E8D8]/60">(HOME)</div>
                 </div>
               </div>
@@ -278,7 +284,7 @@ export function ScheduleContent({
                 return (
                   <div key={game.id} className="bg-[#5A8352] border-[5px] border-[#4A6844] p-3">
                     <div className="flex items-center justify-between text-[10px] text-[#E8E8D8]/80">
-                      <span>Game {game.gameNumber} │ Day {game.dayNumber} │ {game.awayTeamId === selectedTeam ? "@" : "vs"} {opponent} │ {location}</span>
+                      <span>Game {game.gameNumber} │ Day {game.dayNumber} │ {game.awayTeamId === selectedTeam ? "@" : "vs"} {teamName(opponent)} │ {location}</span>
                       <span className={isWin ? "text-[#00DD00]" : "text-[#DD0000]"}>
                         {isWin ? "W" : "L"} {score}
                       </span>
@@ -300,7 +306,7 @@ export function ScheduleContent({
               </div>
               <div className="flex items-center justify-center gap-4">
                 <div className="text-right">
-                  <div className="text-base text-[#E8E8D8]">{game.awayTeamId}</div>
+                  <div className="text-base text-[#E8E8D8]">{teamName(game.awayTeamId)}</div>
                   <div className="text-[8px] text-[#E8E8D8]/60">(AWAY)</div>
                 </div>
                 <div className="text-center px-2">
@@ -313,7 +319,7 @@ export function ScheduleContent({
                   )}
                 </div>
                 <div className="text-left">
-                  <div className="text-base text-[#E8E8D8]">{game.homeTeamId}</div>
+                  <div className="text-base text-[#E8E8D8]">{teamName(game.homeTeamId)}</div>
                   <div className="text-[8px] text-[#E8E8D8]/60">(HOME)</div>
                 </div>
               </div>

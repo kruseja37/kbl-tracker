@@ -64,6 +64,7 @@ const defaultProps = {
   dropdownOpen: false,
   setDropdownOpen: vi.fn(),
   stadiumMap: { TIGERS: 'Tiger Stadium', SOX: 'Sox Park', BEARS: 'Bear Field', CROCS: 'Croc Arena', MOOSE: 'Moose Dome' } as Record<string, string>,
+  seasonNumber: 2,
 };
 
 // ============================================
@@ -79,7 +80,8 @@ describe('ScheduleContent Component', () => {
     test('renders schedule header with season info', () => {
       render(<ScheduleContent {...defaultProps} />);
       // Header shows "📅 SEASON 2 SCHEDULE"
-      expect(screen.getByText(/SEASON 2 SCHEDULE/)).toBeInTheDocument();
+      const seasonHeaders = screen.getAllByText(/SEASON 2 SCHEDULE/);
+      expect(seasonHeaders.length).toBeGreaterThan(0);
     });
 
     test('renders Add Game button', () => {

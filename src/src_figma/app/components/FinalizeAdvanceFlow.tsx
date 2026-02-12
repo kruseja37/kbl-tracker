@@ -59,6 +59,7 @@ interface Team {
 interface FinalizeAdvanceFlowProps {
   onClose: () => void;
   onAdvanceComplete: () => void;
+  seasonNumber?: number;
 }
 
 // Helper to convert OffseasonPlayer to local Player format
@@ -91,7 +92,8 @@ function convertToLocalPlayer(player: OffseasonPlayer, index: number): Player {
 // Empty teams fallback — populated from IndexedDB when available
 const MOCK_TEAMS: Team[] = [];
 
-export function FinalizeAdvanceFlow({ onClose, onAdvanceComplete }: FinalizeAdvanceFlowProps) {
+export function FinalizeAdvanceFlow({ onClose, onAdvanceComplete, seasonNumber = 1 }: FinalizeAdvanceFlowProps) {
+  const nextSeason = seasonNumber + 1;
   // Get real data from hook
   const { teams: realTeams, players: realPlayers, hasRealData, isLoading } = useOffseasonData();
 
@@ -380,7 +382,7 @@ export function FinalizeAdvanceFlow({ onClose, onAdvanceComplete }: FinalizeAdva
               <FileText className="w-6 h-6 text-[#E8E8D8]" />
               <h2 className="text-2xl text-[#E8E8D8] font-bold">FINALIZE & ADVANCE</h2>
             </div>
-            <div className="text-sm text-[#E8E8D8]/70">Season 2 Preparation</div>
+            <div className="text-sm text-[#E8E8D8]/70">Season {nextSeason} Preparation</div>
           </div>
           <button
             onClick={onClose}
@@ -764,7 +766,7 @@ export function FinalizeAdvanceFlow({ onClose, onAdvanceComplete }: FinalizeAdva
             <div className="bg-[#6B9462] border-[5px] border-[#4A6844] p-8">
               <div className="text-center mb-8">
                 <h3 className="text-2xl text-[#E8E8D8] font-bold mb-2">📋 TRANSACTION REPORT</h3>
-                <div className="text-sm text-[#E8E8D8]/70">Season 2 Preparation</div>
+                <div className="text-sm text-[#E8E8D8]/70">Season {nextSeason} Preparation</div>
               </div>
 
               <div className="bg-[#5A8352] border-[4px] border-[#4A6844] p-6 mb-6">
@@ -888,7 +890,7 @@ export function FinalizeAdvanceFlow({ onClose, onAdvanceComplete }: FinalizeAdva
                   {processingStep >= 7 ? "✓ SEASON TRANSITION COMPLETE" : "⏳ PROCESSING SEASON TRANSITION"}
                 </h3>
                 <div className="text-sm text-[#E8E8D8]/70">
-                  {processingStep >= 7 ? "Season 2 is ready to begin" : "Please wait while we prepare Season 2"}
+                  {processingStep >= 7 ? `Season ${nextSeason} is ready to begin` : `Please wait while we prepare Season ${nextSeason}`}
                 </div>
               </div>
 
@@ -1005,7 +1007,7 @@ export function FinalizeAdvanceFlow({ onClose, onAdvanceComplete }: FinalizeAdva
                     onClick={() => setCurrentScreen("chemistry-rebalancing")}
                     className="bg-[#5A8352] border-[4px] border-[#C4A853] px-8 py-3 text-[#E8E8D8] font-bold hover:bg-[#4F7D4B] active:scale-95 transition-all shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)]"
                   >
-                    Continue to Season 2 →
+                    Continue to Season {nextSeason} →
                   </button>
                 </div>
               )}
@@ -1166,7 +1168,7 @@ export function FinalizeAdvanceFlow({ onClose, onAdvanceComplete }: FinalizeAdva
                     <div>1. Apply all roster changes to Super Mega Baseball 4</div>
                     <div className="pl-4 text-[#E8E8D8]/70">(Use the Transaction Report as your guide)</div>
                     <div>2. Advance to the new season in SMB4</div>
-                    <div>3. Return here to begin tracking Season 2</div>
+                    <div>3. Return here to begin tracking Season {nextSeason}</div>
                   </div>
                   <div className="text-center pt-4">
                     <button
@@ -1220,7 +1222,7 @@ export function FinalizeAdvanceFlow({ onClose, onAdvanceComplete }: FinalizeAdva
 
                   <div className="flex items-start gap-3">
                     <div className="text-[#E8E8D8] font-bold">2.</div>
-                    <div className="text-sm text-[#E8E8D8]">Advance to Season 2 in SMB4</div>
+                    <div className="text-sm text-[#E8E8D8]">Advance to Season {nextSeason} in SMB4</div>
                   </div>
 
                   <div className="flex items-start gap-3">
@@ -1292,7 +1294,7 @@ export function FinalizeAdvanceFlow({ onClose, onAdvanceComplete }: FinalizeAdva
                   <div className="space-y-2 text-sm text-[#E8E8D8]">
                     <div>📍 Destination: MLB Roster ({selectedTeam.mlbRoster.length}/22 → {selectedTeam.mlbRoster.length + 1}/22)</div>
                     <div>💰 Salary: ${calculateRookieSalary(selectedPlayer.grade).toLocaleString()} (Grade {selectedPlayer.grade} rookie rate)</div>
-                    <div>🌟 Status: Will be designated ROOKIE for Season 2</div>
+                    <div>🌟 Status: Will be designated ROOKIE for Season {nextSeason}</div>
                   </div>
                 </div>
 

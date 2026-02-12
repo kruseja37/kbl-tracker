@@ -226,7 +226,7 @@ export function FranchiseSetup() {
               {currentStep === 2 && <Step2SeasonSettings config={config} setConfig={setConfig} />}
               {currentStep === 3 && <Step3PlayoffSettings config={config} setConfig={setConfig} />}
               {currentStep === 4 && <Step4TeamControl config={config} setConfig={setConfig} leagueTeams={leagueTeams} />}
-              {currentStep === 5 && <Step5RosterMode config={config} setConfig={setConfig} />}
+              {currentStep === 5 && <Step5RosterMode config={config} setConfig={setConfig} leagueTeams={leagueTeams} />}
               {currentStep === 6 && <Step6Confirm config={config} setConfig={setConfig} jumpToStep={jumpToStep} leagues={leagues} leagueTeams={leagueTeams} />}
             </>
           )}
@@ -1064,9 +1064,11 @@ function Step4TeamControl({
 function Step5RosterMode({
   config,
   setConfig,
+  leagueTeams,
 }: {
   config: FranchiseConfig;
   setConfig: (config: FranchiseConfig) => void;
+  leagueTeams: Team[];
 }) {
   return (
     <div>
@@ -1110,7 +1112,7 @@ function Step5RosterMode({
             <p className="text-xs text-[#E8E8D8]/70 mb-2" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.2)' }}>ROSTER SUMMARY</p>
             <div className="h-[1px] bg-[#E8E8D8]/30 mb-3" />
             <div className="space-y-2 mb-3">
-              <p className="text-xs text-[#00CC00]" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>✓ All 16 teams have valid rosters (22 MLB + up to 10 farm)</p>
+              <p className="text-xs text-[#00CC00]" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>✓ All {leagueTeams.length} teams have valid rosters (22 MLB + up to 10 farm)</p>
               <p className="text-xs text-[#00CC00]" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>✓ 506 total players assigned</p>
             </div>
             <button className="text-xs text-[#C4A853] hover:text-[#C4A853]" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>[View Rosters]</button>

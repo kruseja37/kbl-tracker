@@ -581,6 +581,8 @@ export function FranchiseHome() {
             dropdownOpen={scheduleDropdownOpen}
             setDropdownOpen={setScheduleDropdownOpen}
             stadiumMap={franchiseData.stadiumMap}
+            seasonNumber={currentSeason}
+            teamNameMap={franchiseData.teamNameMap}
           />
         )}
         {activeTab === "news" && (
@@ -1620,13 +1622,14 @@ export function FranchiseHome() {
 
         {/* Contraction/Expansion Modal */}
         {showContraction && (
-          <ContractionExpansionFlow onComplete={() => setShowContraction(false)} />
+          <ContractionExpansionFlow seasonNumber={currentSeason} onComplete={() => setShowContraction(false)} />
         )}
 
         {/* Draft Modal */}
         {showDraft && (
           <DraftFlow
             seasonId={`season-${currentSeason}`}
+            seasonNumber={currentSeason}
             onComplete={() => {
               setShowDraft(false);
               setActiveTab("todays-game");
@@ -1644,7 +1647,7 @@ export function FranchiseHome() {
               <div className="flex items-center gap-4">
                 <Trophy className="w-12 h-12 text-[#C4A853] group-hover:text-[#5599FF] transition-colors" />
                 <div className="text-left">
-                  <div className="text-3xl text-[#E8E8D8] font-bold">SEASON 27 DRAFT</div>
+                  <div className="text-3xl text-[#E8E8D8] font-bold">SEASON {currentSeason} DRAFT</div>
                   <div className="text-base text-[#E8E8D8]/70 mt-1">Draft 10 prospects to your farm system</div>
                 </div>
               </div>
@@ -1685,6 +1688,7 @@ export function FranchiseHome() {
             
             {showFinalize && (
               <FinalizeAdvanceFlow
+                seasonNumber={currentSeason}
                 onClose={() => setShowFinalize(false)}
                 onAdvanceComplete={() => {
                   // Increment season number and persist to localStorage

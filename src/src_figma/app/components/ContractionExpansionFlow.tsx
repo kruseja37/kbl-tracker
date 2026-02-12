@@ -110,10 +110,11 @@ type FlowStep =
   | "summary";
 
 interface ContractionExpansionFlowProps {
+  seasonNumber?: number;
   onComplete: () => void;
 }
 
-export function ContractionExpansionFlow({ onComplete }: ContractionExpansionFlowProps) {
+export function ContractionExpansionFlow({ seasonNumber = 1, onComplete }: ContractionExpansionFlowProps) {
   // Get real data from hook
   const { teams: realTeams, players: realPlayers, hasRealData, isLoading } = useOffseasonData();
 
@@ -404,7 +405,7 @@ export function ContractionExpansionFlow({ onComplete }: ContractionExpansionFlo
       case "expansion-team-draft":
         return <ExpansionTeamDraftScreen onContinue={() => setCurrentStep("summary")} />;
       case "summary":
-        return <SummaryScreen contractedTeams={contractedTeams} expansionTeams={expansionTeams} onComplete={onComplete} />;
+        return <SummaryScreen contractedTeams={contractedTeams} expansionTeams={expansionTeams} seasonNumber={seasonNumber} onComplete={onComplete} />;
       default:
         return null;
     }
@@ -1224,13 +1225,15 @@ function ExpansionTeamDraftScreen({
 }
 
 // Screen 12: Summary
-function SummaryScreen({ 
+function SummaryScreen({
   contractedTeams,
   expansionTeams,
-  onComplete 
-}: { 
+  seasonNumber = 1,
+  onComplete
+}: {
   contractedTeams: ContractionResult[];
   expansionTeams: Team[];
+  seasonNumber?: number;
   onComplete: () => void;
 }) {
   const contracted = contractedTeams.filter(r => r.contracted);
@@ -1243,7 +1246,7 @@ function SummaryScreen({
           <div className="text-lg text-[#E8E8D8]">📊 CONTRACTION/EXPANSION SUMMARY</div>
           <div className="text-xs text-[#E8E8D8]/60">Screen 12 of 12</div>
         </div>
-        <div className="text-xs text-[#E8E8D8]/60 text-center">Season 26 Complete</div>
+        <div className="text-xs text-[#E8E8D8]/60 text-center">Season {seasonNumber} Complete</div>
       </div>
 
       <div className="grid grid-cols-2 gap-4">

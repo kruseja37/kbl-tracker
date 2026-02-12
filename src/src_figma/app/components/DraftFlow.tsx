@@ -55,11 +55,12 @@ interface TeamRosterStatus {
 
 interface DraftFlowProps {
   seasonId: string;
+  seasonNumber?: number;
   onComplete: () => void;
   onCancel: () => void;
 }
 
-export function DraftFlow({ seasonId, onComplete, onCancel }: DraftFlowProps) {
+export function DraftFlow({ seasonId, seasonNumber = 1, onComplete, onCancel }: DraftFlowProps) {
   // Get real data from hook
   const { teams: realTeams, players: realPlayers, hasRealData, isLoading } = useOffseasonData();
 
@@ -693,7 +694,7 @@ export function DraftFlow({ seasonId, onComplete, onCancel }: DraftFlowProps) {
             <div className="bg-[#4A6844] p-4 border-b-[3px] border-[#3F5A3A]">
               <div className="flex items-center justify-between">
                 <div>
-                  <div className="text-sm text-[#E8E8D8]">📋 DRAFT CLASS PREVIEW - SEASON 27</div>
+                  <div className="text-sm text-[#E8E8D8]">📋 DRAFT CLASS PREVIEW - SEASON {seasonNumber}</div>
                   <div className="text-[10px] text-[#E8E8D8]/60 mt-1">Screen 2 of 9 • 🌱 All picks go to FARM roster</div>
                 </div>
               </div>
@@ -795,7 +796,7 @@ export function DraftFlow({ seasonId, onComplete, onCancel }: DraftFlowProps) {
             <div className="bg-[#4A6844] p-4 border-b-[3px] border-[#3F5A3A]">
               <div className="flex items-center justify-between">
                 <div>
-                  <div className="text-sm text-[#E8E8D8]">🎯 DRAFT ORDER - SEASON 27</div>
+                  <div className="text-sm text-[#E8E8D8]">🎯 DRAFT ORDER - SEASON {seasonNumber}</div>
                   <div className="text-[10px] text-[#E8E8D8]/60 mt-1">Screen 3 of 9 • 🌱 All drafted players go directly to FARM roster</div>
                 </div>
               </div>
@@ -895,7 +896,7 @@ export function DraftFlow({ seasonId, onComplete, onCancel }: DraftFlowProps) {
             <div className="bg-[#4A6844] p-4 border-b-[3px] border-[#3F5A3A]">
               <div className="flex items-center justify-between">
                 <div>
-                  <div className="text-sm text-[#E8E8D8]">📋 SEASON 27 DRAFT</div>
+                  <div className="text-sm text-[#E8E8D8]">📋 SEASON {seasonNumber} DRAFT</div>
                   <div className="text-[10px] text-[#E8E8D8]/60 mt-1">
                     Round {currentPick?.round} │ Pick {currentPickIndex + 1} of {draftPicks.length} │ 🌱 All picks → FARM
                   </div>
@@ -1224,7 +1225,7 @@ export function DraftFlow({ seasonId, onComplete, onCancel }: DraftFlowProps) {
             )}
 
             <div className="text-xs text-[#E8E8D8] text-center mb-6">
-              "With the {currentPickIndex + 1}{currentPickIndex === 0 ? 'st' : currentPickIndex === 1 ? 'nd' : currentPickIndex === 2 ? 'rd' : 'th'} pick in the Season 27 Draft, the {currentPick?.teamName} select {selectedProspect?.name}, {selectedProspect?.position}, to their Farm roster."
+              "With the {currentPickIndex + 1}{currentPickIndex === 0 ? 'st' : currentPickIndex === 1 ? 'nd' : currentPickIndex === 2 ? 'rd' : 'th'} pick in the Season {seasonNumber} Draft, the {currentPick?.teamName} select {selectedProspect?.name}, {selectedProspect?.position}, to their Farm roster."
             </div>
 
             <div className="flex gap-3 justify-center">
@@ -1404,7 +1405,7 @@ export function DraftFlow({ seasonId, onComplete, onCancel }: DraftFlowProps) {
 
               {/* Announcement */}
               <div className="text-xs text-[#E8E8D8] text-center mb-6">
-                "With the {currentPickIndex + 1}{currentPickIndex === 0 ? 'st' : currentPickIndex === 1 ? 'nd' : currentPickIndex === 2 ? 'rd' : 'th'} pick in the Season 27 Draft, the {currentPick?.teamName} select {selectedProspect.name}, {selectedProspect.position}, to their Farm roster."
+                "With the {currentPickIndex + 1}{currentPickIndex === 0 ? 'st' : currentPickIndex === 1 ? 'nd' : currentPickIndex === 2 ? 'rd' : 'th'} pick in the Season {seasonNumber} Draft, the {currentPick?.teamName} select {selectedProspect.name}, {selectedProspect.position}, to their Farm roster."
               </div>
 
               {/* Transaction */}
@@ -1554,7 +1555,7 @@ export function DraftFlow({ seasonId, onComplete, onCancel }: DraftFlowProps) {
           <div className="max-w-6xl mx-auto bg-[#6B9462] border-[5px] border-[#FFD700]">
             {/* Header */}
             <div className="bg-[#FFD700] p-4 border-b-[3px] border-[#C4A853]">
-              <div className="text-sm text-[#1A1A1A] font-bold">📊 DRAFT SUMMARY - SEASON 27</div>
+              <div className="text-sm text-[#1A1A1A] font-bold">📊 DRAFT SUMMARY - SEASON {seasonNumber}</div>
               <div className="text-[10px] text-[#1A1A1A]/70 mt-1">Screen 9 of 9 • 🌱 ALL PICKS WENT TO FARM ROSTERS</div>
             </div>
 

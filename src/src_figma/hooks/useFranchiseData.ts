@@ -101,6 +101,9 @@ export interface UseFranchiseDataReturn {
   // Team stadium lookup (teamId → stadium name)
   stadiumMap: Record<string, string>;
 
+  // Team name lookup (teamId → display name)
+  teamNameMap: Record<string, string>;
+
   // Relationships & team chemistry (wired from relationship engine)
   relationshipData: UseRelationshipDataReturn;
 
@@ -548,6 +551,7 @@ export function useFranchiseData(franchiseId?: string): UseFranchiseDataReturn {
     nextGame,
     hasRealData,
     stadiumMap,
+    teamNameMap,
     relationshipData,
     refresh,
   };
