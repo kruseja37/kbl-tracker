@@ -568,6 +568,74 @@ export async function retirePlayer(playerId: string): Promise<void> {
   await saveTeamRoster(cleanedRoster);
 }
 
+/**
+ * Transfer a player from one team to another.
+ * Removes from old team roster arrays, adds to new team's mlbRoster,
+ * and updates the player's currentTeamId.
+ */
+export async function transferPlayer(playerId: string, newTeamId: string): Promise<void> {
+  const player = await getPlayer(playerId);
+  if (!player) return;
+
+  const oldTeamId = player.currentTeamId;
+
+  // 1. Update player record
+  const db = await initLeagueBuilderDatabase();
+  const now = nowISO();
+  const updatedPlayer: Player = {
+    ...player,
+    currentTeamId: newTeamId,
+    lastModified: now,
+  };
+  await new Promise<void>((resolve, reject) => {
+    const tx = db.transaction(STORES.GLOBAL_PLAYERS, 'readwrite');
+    const store = tx.objectStore(STORES.GLOBAL_PLAYERS);
+    const request = store.put(updatedPlayer);
+    request.onsuccess = () => resolve();
+    request.onerror = () => reject(request.error);
+  });
+
+  // 2. Remove from old team roster
+  if (oldTeamId) {
+    const oldRoster = await getTeamRoster(oldTeamId);
+    if (oldRoster) {
+      const removeId = (arr: string[]) => arr.filter(id => id !== playerId);
+      const removeFromLineup = (slots: LineupSlot[]) => slots.filter(s => s.playerId !== playerId);
+      const removeFromDepth = (dc: DepthChart): DepthChart => {
+        const cleaned = { ...dc };
+        for (const pos of Object.keys(cleaned) as (keyof DepthChart)[]) {
+          cleaned[pos] = removeId(cleaned[pos]);
+        }
+        return cleaned;
+      };
+
+      await saveTeamRoster({
+        ...oldRoster,
+        mlbRoster: removeId(oldRoster.mlbRoster),
+        farmRoster: removeId(oldRoster.farmRoster),
+        lineupVsRHP: removeFromLineup(oldRoster.lineupVsRHP),
+        lineupVsLHP: removeFromLineup(oldRoster.lineupVsLHP),
+        startingRotation: removeId(oldRoster.startingRotation),
+        closingPitcher: oldRoster.closingPitcher === playerId ? '' : oldRoster.closingPitcher,
+        setupPitchers: removeId(oldRoster.setupPitchers),
+        depthChart: removeFromDepth(oldRoster.depthChart),
+        pinchHitOrder: removeId(oldRoster.pinchHitOrder),
+        pinchRunOrder: removeId(oldRoster.pinchRunOrder),
+        defensiveSubOrder: removeId(oldRoster.defensiveSubOrder),
+      });
+    }
+  }
+
+  // 3. Add to new team roster
+  const newRoster = await getTeamRoster(newTeamId);
+  if (newRoster && !newRoster.mlbRoster.includes(playerId)) {
+    await saveTeamRoster({
+      ...newRoster,
+      mlbRoster: [...newRoster.mlbRoster, playerId],
+    });
+  }
+}
+
 // ============================================
 // RULES PRESET OPERATIONS
 // ============================================

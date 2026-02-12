@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 import { Lock, Dice1, Dice2, Dice3, Dice4, Dice5, Dice6, Trophy, Heart, Frown, Smile, Zap, Shield, Crown, ArrowRight, ArrowLeft, CheckCircle, Star, ArrowUp, ArrowDown, RotateCcw } from "lucide-react";
 import { useOffseasonData, type OffseasonPlayer, type OffseasonTeam } from "@/hooks/useOffseasonData";
 import { useOffseasonState, type FreeAgentSigning } from "../../hooks/useOffseasonState";
+import { transferPlayer, retirePlayer } from "../../../utils/leagueBuilderStorage";
 
 // Types
 type Personality = "COMPETITIVE" | "RELAXED" | "DROOPY" | "JOLLY" | "TOUGH" | "TIMID" | "EGOTISTICAL";
@@ -263,8 +264,10 @@ export function FreeAgencyFlow({ onClose, seasonId = 'season-1', seasonNumber = 
 
     switch (personality) {
       case "COMPETITIVE": {
-        // Find rival (closest to .500 head-to-head)
-        const rival = TEAMS.find(t => t.id === "redsox") || TEAMS[1];
+        // Find the best team that isn't the player's current team
+        const rival = TEAMS
+          .filter(t => t.id !== currentTeam.id)
+          .sort((a, b) => (b.record.wins - b.record.losses) - (a.record.wins - a.record.losses))[0] || TEAMS[1];
         return { team: rival, outcome: "MOVED", reason: `Your rival! (${rival.record.wins}-${rival.record.losses})` };
       }
       case "RELAXED": {
@@ -410,6 +413,25 @@ export function FreeAgencyFlow({ onClose, seasonId = 'season-1', seasonNumber = 
         await offseasonState.saveFreeAgentSignings(signings, declinedPlayers);
         console.log(`[FreeAgencyFlow] Saved ${signings.length} signings, ${declinedPlayers.length} declined`);
       }
+
+      // Update leagueBuilderStorage rosters for each move
+      for (const move of allMoves) {
+        try {
+          if (move.outcome === 'MOVED' && move.toTeam && move.toTeam.id !== move.fromTeam.id) {
+            // Transfer the departing player to the destination team
+            await transferPlayer(move.player.id, move.toTeam.id);
+            // Transfer the return player back to the originating team
+            if (move.returnPlayer) {
+              await transferPlayer(move.returnPlayer.id, move.fromTeam.id);
+            }
+          } else if (move.outcome === 'RETIRED') {
+            await retirePlayer(move.player.id);
+          }
+        } catch (err) {
+          console.error(`[FreeAgencyFlow] Failed to update roster for ${move.player.name}:`, err);
+        }
+      }
+
       onClose();
     } catch (err) {
       console.error('[FreeAgencyFlow] Failed to save free agency data:', err);
