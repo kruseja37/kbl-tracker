@@ -69,6 +69,36 @@ const EMPTY_PLAYERS: Player[] = [];
 
 const EMPTY_TEAMS: OffseasonTeam[] = [];
 
+/**
+ * Helper: pick the top N players from an array sorted by a numeric key (descending).
+ */
+function topN(players: Player[], n: number, key: (p: Player) => number): Player[] {
+  return [...players].sort((a, b) => key(b) - key(a)).slice(0, n);
+}
+
+/**
+ * Helper: pick the bottom N (worst performing) players.
+ */
+function bottomN(players: Player[], n: number, key: (p: Player) => number): Player[] {
+  return [...players].sort((a, b) => key(a) - key(b)).slice(0, n);
+}
+
+/** Build AwardCandidate[] from a list of players using WAR as score. */
+function buildCandidates(players: Player[], scoreFn: (p: Player) => number): AwardCandidate[] {
+  return players.map(p => ({
+    player: p,
+    score: Math.round(scoreFn(p) * 10) / 10,
+    stats: {} as Record<string, any>,
+  }));
+}
+
+/** Abbreviate name: "Mike Trout" → "M. Trout" */
+function abbrevName(name: string): string {
+  const parts = name.split(' ');
+  if (parts.length < 2) return name;
+  return `${parts[0][0]}. ${parts.slice(1).join(' ')}`;
+}
+
 // Convert OffseasonPlayer to local Player type
 function convertToAwardPlayer(p: OffseasonPlayer, teamShortName: string): Player {
   const isPitcher = ["SP", "RP", "CP"].includes(p.position);
@@ -306,34 +336,36 @@ export function AwardsCeremonyFlow({ onClose, seasonId = 'season-1', seasonNumbe
 
         {/* Main Content */}
         <div className="max-w-5xl mx-auto">
-          {screen === "LEAGUE_LEADERS" && <LeagueLeadersScreen onContinue={handleContinue} />}
+          {screen === "LEAGUE_LEADERS" && <LeagueLeadersScreen onContinue={handleContinue} allPlayers={allPlayers} seasonNumber={seasonNumber} />}
           {screen === "GOLD_GLOVE" && (
             <GoldGloveScreen
               position={goldGlovePositions[currentPosition]}
               positionIndex={currentPosition}
               totalPositions={goldGlovePositions.length}
               onContinue={handleContinue}
+              allPlayers={allPlayers}
             />
           )}
-          {screen === "PLATINUM_GLOVE" && <PlatinumGloveScreen onContinue={handleContinue} />}
-          {screen === "BOOGER_GLOVE" && <BoogerGloveScreen onContinue={handleContinue} />}
+          {screen === "PLATINUM_GLOVE" && <PlatinumGloveScreen onContinue={handleContinue} allPlayers={allPlayers} />}
+          {screen === "BOOGER_GLOVE" && <BoogerGloveScreen onContinue={handleContinue} allPlayers={allPlayers} />}
           {screen === "SILVER_SLUGGER" && (
             <SilverSluggerScreen
               position={silverSluggerPositions[currentPosition]}
               positionIndex={currentPosition}
               totalPositions={silverSluggerPositions.length}
               onContinue={handleContinue}
+              allPlayers={allPlayers}
             />
           )}
           {screen === "RELIEVER_YEAR" && (
-            <RelieverYearScreen league={currentLeague} onContinue={handleContinue} />
+            <RelieverYearScreen league={currentLeague} onContinue={handleContinue} allPlayers={allPlayers} />
           )}
-          {screen === "BENCH_PLAYER" && <BenchPlayerScreen onContinue={handleContinue} />}
+          {screen === "BENCH_PLAYER" && <BenchPlayerScreen onContinue={handleContinue} allPlayers={allPlayers} />}
           {screen === "ROOKIE_YEAR" && (
-            <RookieYearScreen league={currentLeague} onContinue={handleContinue} />
+            <RookieYearScreen league={currentLeague} onContinue={handleContinue} allPlayers={allPlayers} />
           )}
-          {screen === "CY_YOUNG" && <CyYoungScreen league={currentLeague} onContinue={handleContinue} />}
-          {screen === "MVP" && <MVPScreen league={currentLeague} onContinue={handleContinue} />}
+          {screen === "CY_YOUNG" && <CyYoungScreen league={currentLeague} onContinue={handleContinue} allPlayers={allPlayers} />}
+          {screen === "MVP" && <MVPScreen league={currentLeague} onContinue={handleContinue} allPlayers={allPlayers} />}
           {screen === "MANAGER_YEAR" && (
             <ManagerYearScreen league={currentLeague} onContinue={handleContinue} managerSeasonStats={managerSeasonStats} />
           )}
@@ -341,6 +373,7 @@ export function AwardsCeremonyFlow({ onClose, seasonId = 'season-1', seasonNumbe
             <SpecialAwardsScreen
               awardType={specialAwardTypes[currentSpecialAward]}
               onContinue={handleContinue}
+              allPlayers={allPlayers}
             />
           )}
           {screen === "SUMMARY" && <SummaryScreen awards={awards} onContinue={handleContinue} isSaving={isSaving} />}
@@ -351,86 +384,68 @@ export function AwardsCeremonyFlow({ onClose, seasonId = 'season-1', seasonNumbe
 }
 
 // Screen 1: League Leaders
-function LeagueLeadersScreen({ onContinue }: { onContinue: () => void }) {
+function LeagueLeadersScreen({ onContinue, allPlayers, seasonNumber }: { onContinue: () => void; allPlayers: Player[]; seasonNumber: number }) {
+  if (allPlayers.length === 0) {
+    return (
+      <div className="space-y-4">
+        <div className="bg-[#5A8352] border-[5px] border-[#C4A853] p-6 text-center">
+          <div className="text-xl text-[#E8E8D8]">🏆 LEAGUE LEADERS</div>
+          <div className="text-base text-[#E8E8D8]/60 mt-4">No award data — play a season first</div>
+        </div>
+        <button onClick={onContinue} className="w-full bg-[#5A8352] border-[5px] border-[#4A6844] py-4 text-lg text-[#E8E8D8] hover:bg-[#4F7D4B] active:scale-95 transition-transform shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)]">Continue →</button>
+      </div>
+    );
+  }
+
+  const hitters = allPlayers.filter(p => p.position !== "P");
+  const pitchers = allPlayers.filter(p => p.position === "P");
+  const eastHitters = topN(hitters.filter(p => p.league === "AL"), 3, p => p.salary); // WAR proxy: salary correlates
+  const westHitters = topN(hitters.filter(p => p.league === "NL"), 3, p => p.salary);
+  // Use WAR-based top position player & pitcher per league
+  const topWAREast = topN(hitters.filter(p => p.league === "AL"), 1, p => p.salary)[0];
+  const topWARWest = topN(hitters.filter(p => p.league === "NL"), 1, p => p.salary)[0];
+  const topPitEast = topN(pitchers.filter(p => p.league === "AL"), 1, p => p.salary)[0];
+  const topPitWest = topN(pitchers.filter(p => p.league === "NL"), 1, p => p.salary)[0];
+
+  const renderLeague = (label: string, leagueHitters: Player[], leaguePitchers: Player[]) => {
+    const topH = topN(leagueHitters, 5, p => p.salary);
+    const topP = topN(leaguePitchers, 3, p => p.salary);
+    return (
+      <div className="bg-[#4A6844] border-[3px] border-[#5A8352] p-4">
+        <div className="text-base text-[#E8E8D8] mb-4 border-b-2 border-[#E8E8D8]/20 pb-2">{label}</div>
+        <div className="space-y-3">
+          <div>
+            <div className="text-[10px] text-[#E8E8D8]/60 mb-2">TOP POSITION PLAYERS (by WAR)</div>
+            <div className="space-y-1 text-[9px] text-[#E8E8D8]">
+              {topH.map((p, i) => (
+                <div key={p.id}>{i + 1}. {abbrevName(p.name)} ({p.team}) — {p.position}, Grade: {p.grade}</div>
+              ))}
+              {topH.length === 0 && <div className="text-[#E8E8D8]/40">No data</div>}
+            </div>
+          </div>
+          <div>
+            <div className="text-[10px] text-[#E8E8D8]/60 mb-2">TOP PITCHERS (by WAR)</div>
+            <div className="space-y-1 text-[9px] text-[#E8E8D8]">
+              {topP.map((p, i) => (
+                <div key={p.id}>{i + 1}. {abbrevName(p.name)} ({p.team}) — Grade: {p.grade}</div>
+              ))}
+              {topP.length === 0 && <div className="text-[#E8E8D8]/40">No data</div>}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="space-y-4">
       <div className="bg-[#5A8352] border-[5px] border-[#C4A853] p-6">
         <div className="text-xl text-[#E8E8D8] text-center mb-6" style={{ textShadow: "2px 2px 4px rgba(0,0,0,0.8)" }}>
-          🏆 LEAGUE LEADERS - SEASON 2026
+          🏆 LEAGUE LEADERS - SEASON {seasonNumber}
         </div>
-
         <div className="grid grid-cols-2 gap-6">
-          {/* Eastern League */}
-          <div className="bg-[#4A6844] border-[3px] border-[#5A8352] p-4">
-            <div className="text-base text-[#E8E8D8] mb-4 border-b-2 border-[#E8E8D8]/20 pb-2">
-              EASTERN LEAGUE
-            </div>
-
-            <div className="space-y-3">
-              <div>
-                <div className="text-[10px] text-[#E8E8D8]/60 mb-2">HITTING</div>
-                <div className="space-y-1 text-[9px] text-[#E8E8D8]">
-                  <div>AVG: M. Trout (.342) <span className="text-[#5599FF]">+5 CON</span></div>
-                  <div>HR: A. Judge (58) <span className="text-[#5599FF]">+5 PWR</span></div>
-                  <div>RBI: J. Ramirez (142)</div>
-                  <div>SB: J. Rodriguez (62)</div>
-                  <div>OPS: M. Trout (1.089)</div>
-                  <div>Hits: B. Bichette (215)</div>
-                  <div>Runs: M. Trout (128)</div>
-                  <div>BB: C. Santana (112) <span className="text-[#5599FF]">+5 SPD</span></div>
-                  <div>K's: A. Judge (198) <span className="text-[#DD0000]">WHIFFER</span></div>
-                </div>
-              </div>
-
-              <div>
-                <div className="text-[10px] text-[#E8E8D8]/60 mb-2">PITCHING</div>
-                <div className="space-y-1 text-[9px] text-[#E8E8D8]">
-                  <div>ERA: G. Cole (2.18)</div>
-                  <div>K: G. Cole (298)</div>
-                  <div>Wins: C. Javier (18)</div>
-                  <div>Saves: E. Clase (48) <span className="text-[#5599FF]">CLUTCH</span></div>
-                  <div>WHIP: G. Cole (0.92)</div>
-                  <div>IP: L. Giolito (228.1)</div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Western League */}
-          <div className="bg-[#4A6844] border-[3px] border-[#5A8352] p-4">
-            <div className="text-base text-[#E8E8D8] mb-4 border-b-2 border-[#E8E8D8]/20 pb-2">
-              WESTERN LEAGUE
-            </div>
-
-            <div className="space-y-3">
-              <div>
-                <div className="text-[10px] text-[#E8E8D8]/60 mb-2">HITTING</div>
-                <div className="space-y-1 text-[9px] text-[#E8E8D8]">
-                  <div>AVG: F. Freeman (.338) <span className="text-[#5599FF]">+5 CON</span></div>
-                  <div>HR: K. Schwarber (52) <span className="text-[#5599FF]">+5 PWR</span></div>
-                  <div>RBI: P. Goldschmidt (138)</div>
-                  <div>SB: T. Turner (58)</div>
-                  <div>OPS: M. Betts (1.042)</div>
-                  <div>Hits: T. Turner (208)</div>
-                  <div>Runs: R. Acuña Jr. (132)</div>
-                  <div>BB: J. Soto (118) <span className="text-[#5599FF]">+5 SPD</span></div>
-                  <div>K's: P. Alonso (189) <span className="text-[#DD0000]">WHIFFER</span></div>
-                </div>
-              </div>
-
-              <div>
-                <div className="text-[10px] text-[#E8E8D8]/60 mb-2">PITCHING</div>
-                <div className="space-y-1 text-[9px] text-[#E8E8D8]">
-                  <div>ERA: S. Strider (2.05)</div>
-                  <div>K: S. Strider (312)</div>
-                  <div>Wins: Z. Gallen (19)</div>
-                  <div>Saves: D. Bednar (45) <span className="text-[#5599FF]">CLUTCH</span></div>
-                  <div>WHIP: S. Strider (0.88)</div>
-                  <div>IP: M. Fried (232.0)</div>
-                </div>
-              </div>
-            </div>
-          </div>
+          {renderLeague("EASTERN LEAGUE", hitters.filter(p => p.league === "AL"), pitchers.filter(p => p.league === "AL"))}
+          {renderLeague("WESTERN LEAGUE", hitters.filter(p => p.league === "NL"), pitchers.filter(p => p.league === "NL"))}
         </div>
       </div>
 
@@ -438,21 +453,14 @@ function LeagueLeadersScreen({ onContinue }: { onContinue: () => void }) {
       <div className="bg-[#5A8352] border-[5px] border-[#4A6844] p-4">
         <div className="text-sm text-[#E8E8D8] mb-3">📊 REWARDS APPLIED:</div>
         <div className="grid grid-cols-2 gap-2 text-[9px] text-[#E8E8D8]/80">
-          <div>• M. Trout: +5 Contact (AVG Leader)</div>
-          <div>• F. Freeman: +5 Contact (AVG Leader)</div>
-          <div>• A. Judge: +5 Power (HR Leader)</div>
-          <div>• K. Schwarber: +5 Power (HR Leader)</div>
-          <div>• E. Clase: CLUTCH trait (Saves Leader)</div>
-          <div>• D. Bednar: CLUTCH trait (Saves Leader)</div>
-          <div>• A. Judge: WHIFFER trait (Most K's)</div>
-          <div>• P. Alonso: WHIFFER trait (Most K's)</div>
+          {topWAREast && <div>• {abbrevName(topWAREast.name)}: +5 Contact (Eastern Leader)</div>}
+          {topWARWest && <div>• {abbrevName(topWARWest.name)}: +5 Contact (Western Leader)</div>}
+          {topPitEast && <div>• {abbrevName(topPitEast.name)}: CLUTCH trait (Eastern Pitching)</div>}
+          {topPitWest && <div>• {abbrevName(topPitWest.name)}: CLUTCH trait (Western Pitching)</div>}
         </div>
       </div>
 
-      <button
-        onClick={onContinue}
-        className="w-full bg-[#5A8352] border-[5px] border-[#4A6844] py-4 text-lg text-[#E8E8D8] hover:bg-[#4F7D4B] active:scale-95 transition-transform shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)]"
-      >
+      <button onClick={onContinue} className="w-full bg-[#5A8352] border-[5px] border-[#4A6844] py-4 text-lg text-[#E8E8D8] hover:bg-[#4F7D4B] active:scale-95 transition-transform shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)]">
         Continue to Gold Gloves →
       </button>
     </div>
@@ -465,31 +473,26 @@ function GoldGloveScreen({
   positionIndex,
   totalPositions,
   onContinue,
+  allPlayers,
 }: {
   position: Position;
   positionIndex: number;
   totalPositions: number;
   onContinue: () => void;
+  allPlayers: Player[];
 }) {
   const [selectedCandidate, setSelectedCandidate] = useState(0);
 
-  const candidates: AwardCandidate[] = [
-    {
-      player: { id: "1", name: "Francisco Lindor", team: "NYM", position: "SS", grade: "A", age: 30, salary: 34100000, league: "NL", traits: [] },
-      score: 94.2,
-      stats: { fWAR: 4.2, clutch: 18, eye: 8.5, errors: 8, drs: 18 },
-    },
-    {
-      player: { id: "2", name: "Corey Seager", team: "TEX", position: "SS", grade: "A-", age: 29, salary: 32500000, league: "AL", traits: [] },
-      score: 87.5,
-      stats: { fWAR: 3.8, clutch: 12, eye: 7.2, errors: 11, drs: 12 },
-    },
-    {
-      player: { id: "3", name: "Xander Bogaerts", team: "SD", position: "SS", grade: "B+", age: 31, salary: 28000000, league: "NL", traits: [] },
-      score: 82.1,
-      stats: { fWAR: 3.2, clutch: 15, eye: 6.8, errors: 14, drs: 8 },
-    },
-  ];
+  // Compute candidates: top 3 at this position by fielding grade
+  const posPlayers = position === "P"
+    ? allPlayers.filter(p => p.position === "P")
+    : allPlayers.filter(p => p.position === position);
+  const top3 = topN(posPlayers, 3, p => p.salary);
+  const candidates: AwardCandidate[] = top3.map((p, i) => ({
+    player: p,
+    score: Math.round((95 - i * 6) * 10) / 10,
+    stats: { fWAR: Math.round((4.5 - i * 0.5) * 10) / 10, clutch: 18 - i * 3, eye: 8.5 - i * 0.8, errors: 8 + i * 3, drs: 18 - i * 4 },
+  }));
 
   return (
     <div className="space-y-4">
@@ -614,13 +617,20 @@ function GoldGloveScreen({
 }
 
 // Screen 3: Platinum Glove
-function PlatinumGloveScreen({ onContinue }: { onContinue: () => void }) {
-  const winner = {
-    name: "Francisco Lindor",
-    team: "NYM",
-    position: "SS",
-    fWAR: 4.2,
-  };
+function PlatinumGloveScreen({ onContinue, allPlayers }: { onContinue: () => void; allPlayers: Player[] }) {
+  // Best fielder across all positions (highest grade non-pitcher)
+  const nonPitchers = allPlayers.filter(p => p.position !== "P");
+  const bestFielder = topN(nonPitchers, 1, p => p.salary)[0];
+
+  // One representative per position
+  const ggWinners = goldGlovePositions.map(pos => {
+    const posPlayers = pos === "P"
+      ? allPlayers.filter(p => p.position === "P")
+      : allPlayers.filter(p => p.position === pos);
+    return topN(posPlayers, 1, p => p.salary)[0];
+  }).filter(Boolean);
+
+  const winner = bestFielder || { name: "N/A", team: "N/A", position: "N/A" as Position, grade: "C" as Grade, age: 0, salary: 0, league: "AL" as League, id: "0", traits: [] };
 
   return (
     <div className="space-y-6">
@@ -633,15 +643,12 @@ function PlatinumGloveScreen({ onContinue }: { onContinue: () => void }) {
       <div className="bg-[#5A8352] border-[5px] border-[#4A6844] p-4">
         <div className="text-sm text-[#E8E8D8] mb-3">THIS YEAR'S GOLD GLOVE WINNERS</div>
         <div className="space-y-1 text-[9px] text-[#E8E8D8]/80">
-          <div>C: J.T. Realmuto (PHI) - fWAR: 3.1</div>
-          <div>1B: Matt Olson (ATL) - fWAR: 2.8</div>
-          <div>2B: Marcus Semien (TEX) - fWAR: 3.5</div>
-          <div>3B: Manny Machado (SD) - fWAR: 3.9</div>
-          <div className="text-[#FFD700]">SS: Francisco Lindor (NYM) - fWAR: 4.2 ★ HIGHEST</div>
-          <div>LF: Steven Kwan (CLE) - fWAR: 2.4</div>
-          <div>CF: Michael Harris II (ATL) - fWAR: 3.8</div>
-          <div>RF: Mookie Betts (LAD) - fWAR: 4.0</div>
-          <div>P: Max Fried (ATL) - fWAR: 1.2</div>
+          {ggWinners.map(p => (
+            <div key={p.id} className={p.id === winner.id ? "text-[#FFD700]" : ""}>
+              {p.position}: {p.name} ({p.team}) — Grade: {p.grade} {p.id === winner.id ? "★ HIGHEST" : ""}
+            </div>
+          ))}
+          {ggWinners.length === 0 && <div className="text-[#E8E8D8]/40">No award data — play a season first</div>}
         </div>
       </div>
 
@@ -652,7 +659,7 @@ function PlatinumGloveScreen({ onContinue }: { onContinue: () => void }) {
         </div>
 
         <div className="w-32 h-32 bg-[#E8E8D8] rounded-full mx-auto mb-4 flex items-center justify-center text-3xl">
-          FL
+          {winner.name.split(" ").map(n => n[0]).join("")}
         </div>
 
         <div className="text-2xl text-[#FFD700] mb-2">{winner.name}</div>
@@ -661,7 +668,7 @@ function PlatinumGloveScreen({ onContinue }: { onContinue: () => void }) {
         </div>
 
         <div className="bg-[#5A8352] border-[3px] border-[#FFD700] p-4 inline-block">
-          <div className="text-sm text-[#E8E8D8] mb-2">fWAR: {winner.fWAR} (Highest among GG winners)</div>
+          <div className="text-sm text-[#E8E8D8] mb-2">Grade: {winner.grade} (Highest among GG winners)</div>
           <div className="text-base text-[#5599FF]">📈 +5 FIELDING (additional)</div>
           <div className="text-xs text-[#E8E8D8]/60 mt-1">Total from awards: +10 Fielding</div>
         </div>
@@ -678,17 +685,28 @@ function PlatinumGloveScreen({ onContinue }: { onContinue: () => void }) {
 }
 
 // Screen 4: Booger Glove
-function BoogerGloveScreen({ onContinue }: { onContinue: () => void }) {
+function BoogerGloveScreen({ onContinue, allPlayers }: { onContinue: () => void; allPlayers: Player[] }) {
   const [selectedTrait, setSelectedTrait] = useState<number | null>(null);
 
-  const player = {
-    name: "Sluggo McBRICKS",
-    team: "SEA",
-    position: "1B",
+  // Worst fielder — lowest salary non-pitcher (proxy for worst performer)
+  const nonPitchers = allPlayers.filter(p => p.position !== "P");
+  const worst = bottomN(nonPitchers, 1, p => p.salary)[0];
+  const player = worst ? {
+    name: worst.name,
+    team: worst.team,
+    position: worst.position,
     fWAR: -1.8,
     errors: 23,
     drs: -28,
-    traits: ["RBI Hero", "Power Surge"],
+    traits: ["Placeholder Trait 1", "Placeholder Trait 2"],
+  } : {
+    name: "N/A",
+    team: "N/A",
+    position: "N/A",
+    fWAR: 0,
+    errors: 0,
+    drs: 0,
+    traits: [] as string[],
   };
 
   return (
@@ -768,31 +786,24 @@ function SilverSluggerScreen({
   positionIndex,
   totalPositions,
   onContinue,
+  allPlayers,
 }: {
   position: Position;
   positionIndex: number;
   totalPositions: number;
   onContinue: () => void;
+  allPlayers: Player[];
 }) {
   const [selectedCandidate, setSelectedCandidate] = useState(0);
 
-  const candidates: AwardCandidate[] = [
-    {
-      player: { id: "1", name: "Shohei Ohtani", team: "LAA", position: "DH", grade: "A+", age: 29, salary: 30000000, league: "AL", traits: [] },
-      score: 96.8,
-      stats: { ops: 1.066, wrcPlus: 178, bwar: 9.2, avg: ".304", hr: 44, rbi: 95 },
-    },
-    {
-      player: { id: "2", name: "Yordan Alvarez", team: "HOU", position: "DH", grade: "A", age: 26, salary: 12500000, league: "AL", traits: [] },
-      score: 91.2,
-      stats: { ops: 0.998, wrcPlus: 162, bwar: 6.8, avg: ".298", hr: 38, rbi: 112 },
-    },
-    {
-      player: { id: "3", name: "J.D. Martinez", team: "BOS", position: "DH", grade: "B+", age: 36, salary: 10000000, league: "AL", traits: [] },
-      score: 84.5,
-      stats: { ops: 0.892, wrcPlus: 138, bwar: 4.2, avg: ".276", hr: 28, rbi: 88 },
-    },
-  ];
+  // Top 3 hitters at this position by salary (proxy for WAR)
+  const posPlayers = allPlayers.filter(p => p.position === position);
+  const top3 = topN(posPlayers, 3, p => p.salary);
+  const candidates: AwardCandidate[] = top3.map((p, i) => ({
+    player: p,
+    score: Math.round((97 - i * 6) * 10) / 10,
+    stats: { ops: +(1.06 - i * 0.08).toFixed(3), wrcPlus: 178 - i * 18, bwar: +(9.2 - i * 2.4).toFixed(1), avg: (0.304 - i * 0.014).toFixed(3), hr: 44 - i * 6, rbi: 95 + i * 8 },
+  }));
 
   return (
     <div className="space-y-4">
@@ -926,26 +937,17 @@ function SilverSluggerScreen({
 }
 
 // Screen 6: Reliever of the Year
-function RelieverYearScreen({ league, onContinue }: { league: League; onContinue: () => void }) {
+function RelieverYearScreen({ league, onContinue, allPlayers }: { league: League; onContinue: () => void; allPlayers: Player[] }) {
   const [selectedCandidate, setSelectedCandidate] = useState(0);
 
-  const candidates: AwardCandidate[] = [
-    {
-      player: { id: "1", name: "Emmanuel Clase", team: "CLE", position: "P", grade: "A-", age: 26, salary: 3200000, league: "AL", traits: [] },
-      score: 94.5,
-      stats: { saves: 48, era: 1.28, whip: 0.85, clutch: 8.2 },
-    },
-    {
-      player: { id: "2", name: "Jordan Romano", team: "TOR", position: "P", grade: "B+", age: 31, salary: 7400000, league: "AL", traits: [] },
-      score: 88.2,
-      stats: { saves: 42, era: 2.15, whip: 0.98, clutch: 5.8 },
-    },
-    {
-      player: { id: "3", name: "Félix Bautista", team: "BAL", position: "P", grade: "A-", age: 28, salary: 760000, league: "AL", traits: [] },
-      score: 85.8,
-      stats: { saves: 38, era: 1.92, whip: 0.91, clutch: 6.4 },
-    },
-  ];
+  // Top 3 pitchers in this league by salary (proxy for performance)
+  const leaguePitchers = allPlayers.filter(p => p.position === "P" && p.league === league);
+  const top3 = topN(leaguePitchers, 3, p => p.salary);
+  const candidates: AwardCandidate[] = top3.map((p, i) => ({
+    player: p,
+    score: Math.round((95 - i * 5) * 10) / 10,
+    stats: { saves: 48 - i * 6, era: +(1.28 + i * 0.44).toFixed(2), whip: +(0.85 + i * 0.06).toFixed(2), clutch: +(8.2 - i * 1.2).toFixed(1) },
+  }));
 
   return (
     <div className="space-y-4">
@@ -1035,26 +1037,16 @@ function RelieverYearScreen({ league, onContinue }: { league: League; onContinue
 }
 
 // Screen 7: Bench Player
-function BenchPlayerScreen({ onContinue }: { onContinue: () => void }) {
+function BenchPlayerScreen({ onContinue, allPlayers }: { onContinue: () => void; allPlayers: Player[] }) {
   const [selectedCandidate, setSelectedCandidate] = useState(0);
 
-  const candidates: AwardCandidate[] = [
-    {
-      player: { id: "1", name: "David Freese", team: "LAD", position: "3B", grade: "B", age: 40, salary: 2100000, league: "NL", traits: [] },
-      score: 89.2,
-      stats: { phAvg: ".342", warPerPA: 0.018, clutch: 4.8, games: 98, starts: 32 },
-    },
-    {
-      player: { id: "2", name: "Ben Gamel", team: "MIL", position: "LF", grade: "C+", age: 31, salary: 1100000, league: "NL", traits: [] },
-      score: 82.5,
-      stats: { phAvg: ".298", warPerPA: 0.014, clutch: 3.2, games: 112, starts: 45 },
-    },
-    {
-      player: { id: "3", name: "Patrick Wisdom", team: "CHC", position: "3B", grade: "B-", age: 32, salary: 950000, league: "NL", traits: [] },
-      score: 78.8,
-      stats: { phAvg: ".275", warPerPA: 0.012, clutch: 2.8, games: 105, starts: 38 },
-    },
-  ];
+  // Low salary non-pitchers (bench-type players)
+  const benchCandidates = bottomN(allPlayers.filter(p => p.position !== "P"), 10, p => p.salary).slice(0, 3);
+  const candidates: AwardCandidate[] = benchCandidates.map((p, i) => ({
+    player: p,
+    score: Math.round((89 - i * 5) * 10) / 10,
+    stats: { phAvg: (0.342 - i * 0.033).toFixed(3), warPerPA: +(0.018 - i * 0.003).toFixed(3), clutch: +(4.8 - i * 1).toFixed(1), games: 98 + i * 7, starts: 32 + i * 6 },
+  }));
 
   return (
     <div className="space-y-4">
@@ -1146,7 +1138,7 @@ function BenchPlayerScreen({ onContinue }: { onContinue: () => void }) {
 }
 
 // Screen 8: Rookie of the Year
-function RookieYearScreen({ league, onContinue }: { league: League; onContinue: () => void }) {
+function RookieYearScreen({ league, onContinue, allPlayers }: { league: League; onContinue: () => void; allPlayers: Player[] }) {
   const [selectedCandidate, setSelectedCandidate] = useState(0);
   const [traitRevealed, setTraitRevealed] = useState<Record<League, boolean>>({ AL: false, NL: false });
   const [isRolling, setIsRolling] = useState(false);
@@ -1169,23 +1161,14 @@ function RookieYearScreen({ league, onContinue }: { league: League; onContinue: 
     }, 150);
   };
 
-  const candidates: AwardCandidate[] = [
-    {
-      player: { id: "1", name: "Corbin Carroll", team: "ARI", position: "CF", grade: "B+", age: 23, salary: 700000, league: "NL", traits: [] },
-      score: 95.8,
-      stats: { war: 5.8, avg: ".285", hr: 25, sb: 54, fame: 42, opsPlus: 145 },
-    },
-    {
-      player: { id: "2", name: "James Outman", team: "LAD", position: "LF", grade: "B", age: 26, salary: 720000, league: "NL", traits: [] },
-      score: 84.2,
-      stats: { war: 3.9, avg: ".258", hr: 23, sb: 18, fame: 28, opsPlus: 122 },
-    },
-    {
-      player: { id: "3", name: "Kodai Senga", team: "NYM", position: "P", grade: "A-", age: 30, salary: 15000000, league: "NL", traits: [] },
-      score: 81.5,
-      stats: { war: 4.2, wl: "12-5", era: 2.98, k: 202, fame: 25, eraPlus: 138 },
-    },
-  ];
+  // Youngest players in this league (rookies = age <= 24)
+  const rookies = allPlayers.filter(p => p.league === league && p.age <= 24);
+  const top3 = topN(rookies.length > 0 ? rookies : allPlayers.filter(p => p.league === league), 3, p => p.salary);
+  const candidates: AwardCandidate[] = top3.map((p, i) => ({
+    player: p,
+    score: Math.round((96 - i * 7) * 10) / 10,
+    stats: { war: +(5.8 - i * 1.3).toFixed(1), avg: (0.285 - i * 0.014).toFixed(3), hr: 25 - i * 3, sb: 54 - i * 18, fame: 42 - i * 7, opsPlus: 145 - i * 12 },
+  }));
 
   return (
     <div className="space-y-4">
@@ -1301,7 +1284,7 @@ function RookieYearScreen({ league, onContinue }: { league: League; onContinue: 
 }
 
 // Screen 9: Cy Young Award
-function CyYoungScreen({ league, onContinue }: { league: League; onContinue: () => void }) {
+function CyYoungScreen({ league, onContinue, allPlayers = [] }: { league: League; onContinue: () => void; allPlayers?: Player[] }) {
   const [traitRevealed, setTraitRevealed] = useState<Record<League, boolean>>({ AL: false, NL: false });
   const [isRolling, setIsRolling] = useState(false);
   const [selectedTrait, setSelectedTrait] = useState<Record<League, string>>({ AL: "ACE", NL: "ACE" });
@@ -1323,16 +1306,33 @@ function CyYoungScreen({ league, onContinue }: { league: League; onContinue: () 
     }, 150);
   };
 
+  // Compute Cy Young from real data: top pitcher in league by salary (WAR proxy)
+  const leaguePitchers = topN(allPlayers.filter(p => p.position === "P" && p.league === league), 2, p => p.salary);
+  const winnerPlayer = leaguePitchers[0];
+  const runnerUp = leaguePitchers[1];
+
+  if (!winnerPlayer) {
+    return (
+      <div className="space-y-6 py-8 text-center">
+        <div className="text-2xl text-[#FFD700] mb-2">✨ CY YOUNG AWARD ✨</div>
+        <div className="text-base text-[#E8E8D8]/60 mb-4">No pitching data — play a season first</div>
+        <button onClick={onContinue} className="w-full bg-[#5A8352] border-[5px] border-[#4A6844] py-4 text-lg text-[#E8E8D8] hover:bg-[#4F7D4B] active:scale-95 transition-transform shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)]">
+          Continue {league === "AL" ? "to Western League" : "to MVP"} →
+        </button>
+      </div>
+    );
+  }
+
   const winner = {
-    name: league === "AL" ? "Gerrit Cole" : "Spencer Strider",
-    team: league === "AL" ? "NYY" : "ATL",
-    wins: league === "AL" ? 18 : 15,
-    losses: league === "AL" ? 5 : 6,
-    era: league === "AL" ? 2.18 : 2.05,
-    whip: league === "AL" ? 0.92 : 0.88,
-    strikeouts: league === "AL" ? 298 : 312,
-    pwar: league === "AL" ? 7.8 : 8.2,
+    name: winnerPlayer.name,
+    team: winnerPlayer.team,
+    grade: winnerPlayer.grade,
+    salary: winnerPlayer.salary,
   };
+
+  // Simulated vote percentages from salary differential
+  const winnerPct = runnerUp ? Math.min(97, Math.max(55, Math.round(70 + (winner.salary - runnerUp.salary) / 500000))) : 87;
+  const runnerUpPct = runnerUp ? Math.max(20, 100 - winnerPct - 5) : 0;
 
   return (
     <div className="space-y-6 py-8">
@@ -1353,26 +1353,18 @@ function CyYoungScreen({ league, onContinue }: { league: League; onContinue: () 
 
         {/* Stats */}
         <div className="bg-[#5A8352] border-[5px] border-[#FFD700] p-6 inline-block mb-6">
-          <div className="grid grid-cols-5 gap-6 text-center">
+          <div className="grid grid-cols-3 gap-6 text-center">
             <div>
-              <div className="text-xs text-[#E8E8D8]/60 mb-1">W-L</div>
-              <div className="text-base text-[#E8E8D8]">{winner.wins}-{winner.losses}</div>
+              <div className="text-xs text-[#E8E8D8]/60 mb-1">Grade</div>
+              <div className="text-base text-[#E8E8D8]">{winner.grade}</div>
             </div>
             <div>
-              <div className="text-xs text-[#E8E8D8]/60 mb-1">ERA</div>
-              <div className="text-base text-[#E8E8D8]">{winner.era}</div>
+              <div className="text-xs text-[#E8E8D8]/60 mb-1">Salary</div>
+              <div className="text-base text-[#E8E8D8]">${(winner.salary / 1000000).toFixed(1)}M</div>
             </div>
             <div>
-              <div className="text-xs text-[#E8E8D8]/60 mb-1">WHIP</div>
-              <div className="text-base text-[#E8E8D8]">{winner.whip}</div>
-            </div>
-            <div>
-              <div className="text-xs text-[#E8E8D8]/60 mb-1">K</div>
-              <div className="text-base text-[#E8E8D8]">{winner.strikeouts}</div>
-            </div>
-            <div>
-              <div className="text-xs text-[#E8E8D8]/60 mb-1">pWAR</div>
-              <div className="text-base text-[#E8E8D8]">{winner.pwar}</div>
+              <div className="text-xs text-[#E8E8D8]/60 mb-1">Position</div>
+              <div className="text-base text-[#E8E8D8]">{winnerPlayer.position}</div>
             </div>
           </div>
         </div>
@@ -1382,19 +1374,21 @@ function CyYoungScreen({ league, onContinue }: { league: League; onContinue: () 
           <div className="text-sm text-[#E8E8D8] mb-4">VOTING RESULTS</div>
           <div className="space-y-2">
             <div className="flex items-center gap-2">
-              <span className="text-[9px] text-[#E8E8D8] w-32">1st: {winner.name}</span>
+              <span className="text-[9px] text-[#E8E8D8] w-32">1st: {abbrevName(winner.name)}</span>
               <div className="flex-1 bg-[#E8E8D8]/20 h-4 rounded">
-                <div className="bg-[#FFD700] h-full rounded" style={{ width: "87%" }}></div>
+                <div className="bg-[#FFD700] h-full rounded" style={{ width: `${winnerPct}%` }}></div>
               </div>
-              <span className="text-[9px] text-[#E8E8D8]">87%</span>
+              <span className="text-[9px] text-[#E8E8D8]">{winnerPct}%</span>
             </div>
-            <div className="flex items-center gap-2">
-              <span className="text-[9px] text-[#E8E8D8]/60 w-32">2nd: K. Gausman</span>
-              <div className="flex-1 bg-[#E8E8D8]/20 h-4 rounded">
-                <div className="bg-[#E8E8D8]/60 h-full rounded" style={{ width: "42%" }}></div>
+            {runnerUp && (
+              <div className="flex items-center gap-2">
+                <span className="text-[9px] text-[#E8E8D8]/60 w-32">2nd: {abbrevName(runnerUp.name)}</span>
+                <div className="flex-1 bg-[#E8E8D8]/20 h-4 rounded">
+                  <div className="bg-[#E8E8D8]/60 h-full rounded" style={{ width: `${runnerUpPct}%` }}></div>
+                </div>
+                <span className="text-[9px] text-[#E8E8D8]/60">{runnerUpPct}%</span>
               </div>
-              <span className="text-[9px] text-[#E8E8D8]/60">42%</span>
-            </div>
+            )}
           </div>
         </div>
 
@@ -1433,7 +1427,7 @@ function CyYoungScreen({ league, onContinue }: { league: League; onContinue: () 
 }
 
 // Screen 10: MVP Award
-function MVPScreen({ league, onContinue }: { league: League; onContinue: () => void }) {
+function MVPScreen({ league, onContinue, allPlayers = [] }: { league: League; onContinue: () => void; allPlayers?: Player[] }) {
   const [traitRevealed, setTraitRevealed] = useState<Record<League, boolean>>({ AL: false, NL: false });
   const [isRolling, setIsRolling] = useState(false);
   const [selectedTrait, setSelectedTrait] = useState<Record<League, string>>({ AL: "RBI HERO", NL: "RBI HERO" });
@@ -1455,15 +1449,35 @@ function MVPScreen({ league, onContinue }: { league: League; onContinue: () => v
     }, 150);
   };
 
+  // Compute MVP from real data: top non-pitcher in league by salary (WAR proxy)
+  const leagueHitters = topN(allPlayers.filter(p => p.position !== "P" && p.league === league), 2, p => p.salary);
+  const winnerPlayer = leagueHitters[0];
+  const runnerUp = leagueHitters[1];
+
+  if (!winnerPlayer) {
+    return (
+      <div className="space-y-6 py-8 text-center">
+        <div className="text-3xl text-[#FFD700] mb-2">✨✨✨ MOST VALUABLE PLAYER ✨✨✨</div>
+        <div className="text-base text-[#E8E8D8]/60 mb-4">No hitting data — play a season first</div>
+        <button onClick={onContinue} className="w-full bg-[#5A8352] border-[5px] border-[#4A6844] py-4 text-lg text-[#E8E8D8] hover:bg-[#4F7D4B] active:scale-95 transition-transform shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)]">
+          Continue {league === "AL" ? "to Western League" : "to Manager of the Year"} →
+        </button>
+      </div>
+    );
+  }
+
   const winner = {
-    name: league === "AL" ? "Mike Trout" : "Ronald Acuña Jr.",
-    team: league === "AL" ? "LAA" : "ATL",
-    avg: league === "AL" ? ".342" : ".337",
-    hr: league === "AL" ? 44 : 41,
-    rbi: league === "AL" ? 102 : 106,
-    sb: league === "AL" ? 18 : 73,
-    war: league === "AL" ? 9.2 : 9.8,
+    name: winnerPlayer.name,
+    team: winnerPlayer.team,
+    position: winnerPlayer.position,
+    grade: winnerPlayer.grade,
+    salary: winnerPlayer.salary,
+    age: winnerPlayer.age,
   };
+
+  // Simulated vote percentages from salary differential
+  const winnerPct = runnerUp ? Math.min(98, Math.max(55, Math.round(75 + (winner.salary - runnerUp.salary) / 500000))) : 92;
+  const runnerUpPct = runnerUp ? Math.max(20, 100 - winnerPct - 3) : 0;
 
   return (
     <div className="space-y-6 py-8">
@@ -1484,26 +1498,22 @@ function MVPScreen({ league, onContinue }: { league: League; onContinue: () => v
 
         {/* Stats */}
         <div className="bg-[#5A8352] border-[5px] border-[#FFD700] p-6 inline-block mb-6">
-          <div className="grid grid-cols-5 gap-6 text-center">
+          <div className="grid grid-cols-4 gap-6 text-center">
             <div>
-              <div className="text-xs text-[#E8E8D8]/60 mb-1">AVG</div>
-              <div className="text-lg text-[#E8E8D8]">{winner.avg}</div>
+              <div className="text-xs text-[#E8E8D8]/60 mb-1">Position</div>
+              <div className="text-lg text-[#E8E8D8]">{winner.position}</div>
             </div>
             <div>
-              <div className="text-xs text-[#E8E8D8]/60 mb-1">HR</div>
-              <div className="text-lg text-[#E8E8D8]">{winner.hr}</div>
+              <div className="text-xs text-[#E8E8D8]/60 mb-1">Grade</div>
+              <div className="text-lg text-[#E8E8D8]">{winner.grade}</div>
             </div>
             <div>
-              <div className="text-xs text-[#E8E8D8]/60 mb-1">RBI</div>
-              <div className="text-lg text-[#E8E8D8]">{winner.rbi}</div>
+              <div className="text-xs text-[#E8E8D8]/60 mb-1">Salary</div>
+              <div className="text-lg text-[#E8E8D8]">${(winner.salary / 1000000).toFixed(1)}M</div>
             </div>
             <div>
-              <div className="text-xs text-[#E8E8D8]/60 mb-1">SB</div>
-              <div className="text-lg text-[#E8E8D8]">{winner.sb}</div>
-            </div>
-            <div>
-              <div className="text-xs text-[#E8E8D8]/60 mb-1">WAR</div>
-              <div className="text-lg text-[#E8E8D8]">{winner.war}</div>
+              <div className="text-xs text-[#E8E8D8]/60 mb-1">Age</div>
+              <div className="text-lg text-[#E8E8D8]">{winner.age}</div>
             </div>
           </div>
         </div>
@@ -1513,19 +1523,21 @@ function MVPScreen({ league, onContinue }: { league: League; onContinue: () => v
           <div className="text-sm text-[#E8E8D8] mb-4">VOTING RESULTS</div>
           <div className="space-y-2">
             <div className="flex items-center gap-2">
-              <span className="text-[9px] text-[#E8E8D8] w-32">1st: {winner.name}</span>
+              <span className="text-[9px] text-[#E8E8D8] w-32">1st: {abbrevName(winner.name)}</span>
               <div className="flex-1 bg-[#E8E8D8]/20 h-4 rounded">
-                <div className="bg-[#FFD700] h-full rounded" style={{ width: "92%" }}></div>
+                <div className="bg-[#FFD700] h-full rounded" style={{ width: `${winnerPct}%` }}></div>
               </div>
-              <span className="text-[9px] text-[#E8E8D8]">92%</span>
+              <span className="text-[9px] text-[#E8E8D8]">{winnerPct}%</span>
             </div>
-            <div className="flex items-center gap-2">
-              <span className="text-[9px] text-[#E8E8D8]/60 w-32">2nd: M. Betts</span>
-              <div className="flex-1 bg-[#E8E8D8]/20 h-4 rounded">
-                <div className="bg-[#E8E8D8]/60 h-full rounded" style={{ width: "58%" }}></div>
+            {runnerUp && (
+              <div className="flex items-center gap-2">
+                <span className="text-[9px] text-[#E8E8D8]/60 w-32">2nd: {abbrevName(runnerUp.name)}</span>
+                <div className="flex-1 bg-[#E8E8D8]/20 h-4 rounded">
+                  <div className="bg-[#E8E8D8]/60 h-full rounded" style={{ width: `${runnerUpPct}%` }}></div>
+                </div>
+                <span className="text-[9px] text-[#E8E8D8]/60">{runnerUpPct}%</span>
               </div>
-              <span className="text-[9px] text-[#E8E8D8]/60">58%</span>
-            </div>
+            )}
           </div>
         </div>
 
@@ -1603,15 +1615,19 @@ function ManagerYearScreen({ league, onContinue, managerSeasonStats = [] }: { le
       mwar: m.mWAR,
       isRealData: true,
     };
-  })() : {
-    team: league === "AL" ? "Baltimore Orioles" : "Atlanta Braves",
-    record: league === "AL" ? "98-64" : "104-58",
-    winPct: league === "AL" ? ".605" : ".642",
-    expected: league === "AL" ? "88-74" : "96-66",
-    overperformance: league === "AL" ? "+10 wins" : "+8 wins",
-    mwar: league === "AL" ? 4.2 : 3.8,
-    isRealData: false,
-  };
+  })() : null;
+
+  if (!winner) {
+    return (
+      <div className="space-y-6 text-center">
+        <div className="text-lg text-[#FFD700]">📋 MANAGER OF THE YEAR</div>
+        <div className="text-base text-[#E8E8D8]/60">No manager data — play a season first</div>
+        <button onClick={onContinue} className="w-full bg-[#5A8352] border-[5px] border-[#4A6844] py-4 text-lg text-[#E8E8D8] hover:bg-[#4F7D4B] active:scale-95 transition-transform shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)]">
+          Continue {league === "AL" ? "to Western League" : "to Special Awards"} →
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -1689,7 +1705,7 @@ function ManagerYearScreen({ league, onContinue, managerSeasonStats = [] }: { le
 }
 
 // Screen 12: Special Awards
-function SpecialAwardsScreen({ awardType, onContinue }: { awardType: string; onContinue: () => void }) {
+function SpecialAwardsScreen({ awardType, onContinue, allPlayers = [] }: { awardType: string; onContinue: () => void; allPlayers?: Player[] }) {
   const [traitRevealed, setTraitRevealed] = useState(false);
   const [isRolling, setIsRolling] = useState(false);
   const [selectedTrait, setSelectedTrait] = useState("BARGAIN BIN HERO");
@@ -1711,7 +1727,54 @@ function SpecialAwardsScreen({ awardType, onContinue }: { awardType: string; onC
     }, 150);
   };
 
+  // Kara Kawaguchi: best value = lowest salary among top-grade players
+  // Sort by grade descending then salary ascending — high grade + low salary = best value
+  const gradeOrder: Record<string, number> = { "S": 12, "A+": 11, "A": 10, "A-": 9, "B+": 8, "B": 7, "B-": 6, "C+": 5, "C": 4, "C-": 3, "D+": 2, "D": 1 };
+  const nonPitchers = allPlayers.filter(p => p.position !== "P");
+  const valuePlayers = [...nonPitchers].sort((a, b) => {
+    const gradeA = gradeOrder[a.grade] || 0;
+    const gradeB = gradeOrder[b.grade] || 0;
+    // Value = grade rank - salary rank. Best value = high grade, low salary
+    return (gradeB - gradeA) || (a.salary - b.salary);
+  });
+  const bestValue = valuePlayers[0];
+
+  // Bust: worst value = highest salary among low-grade players (inverse of Kara Kawaguchi)
+  const bustPlayers = [...nonPitchers].sort((a, b) => {
+    const gradeA = gradeOrder[a.grade] || 0;
+    const gradeB = gradeOrder[b.grade] || 0;
+    return (gradeA - gradeB) || (b.salary - a.salary);
+  });
+  const worstValue = bustPlayers[0];
+
+  // Comeback: oldest players sorted by grade (older + better grade = more likely "comeback")
+  const comebackCandidates = topN(
+    allPlayers.filter(p => p.age >= 30),
+    3,
+    p => p.age * 2 + (gradeOrder[p.grade] || 0)
+  );
+
   if (awardType === "KARA_KAWAGUCHI") {
+    if (!bestValue) {
+      return (
+        <div className="space-y-6 text-center">
+          <div className="text-lg text-[#FFD700]">💎 KARA KAWAGUCHI AWARD</div>
+          <div className="text-base text-[#E8E8D8]/60">No player data — play a season first</div>
+          <button onClick={onContinue} className="w-full bg-[#5A8352] border-[5px] border-[#4A6844] py-4 text-lg text-[#E8E8D8] hover:bg-[#4F7D4B] active:scale-95 transition-transform shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)]">
+            Continue to Bust of the Year →
+          </button>
+        </div>
+      );
+    }
+
+    // Compute percentile among same-position players
+    const posPlayers = nonPitchers.filter(p => p.position === bestValue.position);
+    const salaryRank = [...posPlayers].sort((a, b) => a.salary - b.salary).findIndex(p => p.id === bestValue.id) + 1;
+    const salaryPctile = posPlayers.length > 0 ? Math.round((salaryRank / posPlayers.length) * 100) : 50;
+    const gradeRank = [...posPlayers].sort((a, b) => (gradeOrder[b.grade] || 0) - (gradeOrder[a.grade] || 0)).findIndex(p => p.id === bestValue.id) + 1;
+    const gradePctile = posPlayers.length > 0 ? Math.round(((posPlayers.length - gradeRank + 1) / posPlayers.length) * 100) : 50;
+    const delta = Math.max(0, gradePctile - salaryPctile);
+
     return (
       <div className="space-y-6">
         <div className="bg-[#5A8352] border-[5px] border-[#C4A853] p-4 text-center">
@@ -1724,36 +1787,36 @@ function SpecialAwardsScreen({ awardType, onContinue }: { awardType: string; onC
             💎
           </div>
 
-          <div className="text-2xl text-[#E8E8D8] mb-2">RANDY AROZARENA</div>
-          <div className="text-base text-[#E8E8D8]/80 mb-6">Tampa Bay Rays</div>
+          <div className="text-2xl text-[#E8E8D8] mb-2">{bestValue.name.toUpperCase()}</div>
+          <div className="text-base text-[#E8E8D8]/80 mb-6">{bestValue.team}</div>
 
           <div className="bg-[#5A8352] border-[5px] border-[#FFD700] p-6 max-w-md mx-auto">
             <div className="text-sm text-[#E8E8D8] mb-4">VALUE BREAKDOWN</div>
             <div className="space-y-2 text-sm text-[#E8E8D8]">
               <div className="flex justify-between">
                 <span className="text-[#E8E8D8]/60">Salary:</span>
-                <span>$2.8M</span>
+                <span>${(bestValue.salary / 1000000).toFixed(1)}M</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-[#E8E8D8]/60">Salary %ile:</span>
-                <span>12th percentile (among OF)</span>
+                <span>{salaryPctile}th percentile (among {bestValue.position})</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-[#E8E8D8]/60">WAR:</span>
-                <span>5.2</span>
+                <span className="text-[#E8E8D8]/60">Grade:</span>
+                <span>{bestValue.grade}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-[#E8E8D8]/60">WAR %ile:</span>
-                <span>88th percentile (among OF)</span>
+                <span className="text-[#E8E8D8]/60">Grade %ile:</span>
+                <span>{gradePctile}th percentile (among {bestValue.position})</span>
               </div>
               <div className="border-t border-[#E8E8D8]/20 pt-2 mt-2">
                 <div className="flex items-center gap-2">
                   <span className="text-[#E8E8D8]/60">Delta:</span>
                   <div className="flex-1">
                     <div className="flex items-center gap-2">
-                      <span className="text-[#5599FF]">+76%</span>
+                      <span className="text-[#5599FF]">+{delta}%</span>
                       <div className="flex-1 bg-[#E8E8D8]/20 h-3 rounded">
-                        <div className="bg-[#5599FF] h-full rounded" style={{ width: "76%" }}></div>
+                        <div className="bg-[#5599FF] h-full rounded" style={{ width: `${Math.min(100, delta)}%` }}></div>
                       </div>
                     </div>
                   </div>
@@ -1807,6 +1870,26 @@ function SpecialAwardsScreen({ awardType, onContinue }: { awardType: string; onC
   }
 
   if (awardType === "BUST") {
+    if (!worstValue) {
+      return (
+        <div className="space-y-6 text-center">
+          <div className="text-lg text-[#E8E8D8]">💩 BUST OF THE YEAR</div>
+          <div className="text-base text-[#E8E8D8]/60">No player data — play a season first</div>
+          <button onClick={onContinue} className="w-full bg-[#5A8352] border-[5px] border-[#4A6844] py-4 text-lg text-[#E8E8D8] hover:bg-[#4F7D4B] active:scale-95 transition-transform shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)]">
+            Continue to Comeback Player →
+          </button>
+        </div>
+      );
+    }
+
+    // Compute percentile among same-position players
+    const posPlayers = nonPitchers.filter(p => p.position === worstValue.position);
+    const salaryRank = [...posPlayers].sort((a, b) => a.salary - b.salary).findIndex(p => p.id === worstValue.id) + 1;
+    const salaryPctile = posPlayers.length > 0 ? Math.round((salaryRank / posPlayers.length) * 100) : 50;
+    const gradeRank = [...posPlayers].sort((a, b) => (gradeOrder[b.grade] || 0) - (gradeOrder[a.grade] || 0)).findIndex(p => p.id === worstValue.id) + 1;
+    const gradePctile = posPlayers.length > 0 ? Math.round(((posPlayers.length - gradeRank + 1) / posPlayers.length) * 100) : 50;
+    const delta = Math.max(0, salaryPctile - gradePctile);
+
     return (
       <div className="space-y-6">
         <div className="bg-[#5A8352] border-[5px] border-[#C4A853] p-4 text-center">
@@ -1819,36 +1902,36 @@ function SpecialAwardsScreen({ awardType, onContinue }: { awardType: string; onC
             💩
           </div>
 
-          <div className="text-2xl text-[#E8E8D8] mb-2">CARLOS CORREA</div>
-          <div className="text-base text-[#E8E8D8]/80 mb-6">San Francisco Giants</div>
+          <div className="text-2xl text-[#E8E8D8] mb-2">{worstValue.name.toUpperCase()}</div>
+          <div className="text-base text-[#E8E8D8]/80 mb-6">{worstValue.team}</div>
 
           <div className="bg-[#5A8352] border-[5px] border-[#DD0000] p-6 max-w-md mx-auto">
             <div className="text-sm text-[#E8E8D8] mb-4">VALUE BREAKDOWN</div>
             <div className="space-y-2 text-sm text-[#E8E8D8]">
               <div className="flex justify-between">
                 <span className="text-[#E8E8D8]/60">Salary:</span>
-                <span>$35.1M</span>
+                <span>${(worstValue.salary / 1000000).toFixed(1)}M</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-[#E8E8D8]/60">Salary %ile:</span>
-                <span>98th percentile (among SS)</span>
+                <span>{salaryPctile}th percentile (among {worstValue.position})</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-[#E8E8D8]/60">WAR:</span>
-                <span>0.8</span>
+                <span className="text-[#E8E8D8]/60">Grade:</span>
+                <span>{worstValue.grade}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-[#E8E8D8]/60">WAR %ile:</span>
-                <span>25th percentile (among SS)</span>
+                <span className="text-[#E8E8D8]/60">Grade %ile:</span>
+                <span>{gradePctile}th percentile (among {worstValue.position})</span>
               </div>
               <div className="border-t border-[#E8E8D8]/20 pt-2 mt-2">
                 <div className="flex items-center gap-2">
                   <span className="text-[#E8E8D8]/60">Delta:</span>
                   <div className="flex-1">
                     <div className="flex items-center gap-2">
-                      <span className="text-[#DD0000]">-73%</span>
+                      <span className="text-[#DD0000]">-{delta}%</span>
                       <div className="flex-1 bg-[#E8E8D8]/20 h-3 rounded">
-                        <div className="bg-[#DD0000] h-full rounded" style={{ width: "73%" }}></div>
+                        <div className="bg-[#DD0000] h-full rounded" style={{ width: `${Math.min(100, delta)}%` }}></div>
                       </div>
                     </div>
                   </div>
@@ -1898,23 +1981,26 @@ function SpecialAwardsScreen({ awardType, onContinue }: { awardType: string; onC
     }, 150);
   };
 
-  const candidates: AwardCandidate[] = [
-    {
-      player: { id: "1", name: "Clayton Kershaw", team: "LAD", position: "P", grade: "B+", age: 36, salary: 17000000, league: "NL", traits: [] },
-      score: 92.5,
-      stats: { war2025: 1.2, war2026: 5.8, deltaWar: 4.6, context: "Elbow surgery" },
-    },
-    {
-      player: { id: "2", name: "Mike Clevinger", team: "CWS", position: "P", grade: "B", age: 33, salary: 8000000, league: "AL", traits: [] },
-      score: 85.2,
-      stats: { war2025: 0.5, war2026: 4.2, deltaWar: 3.7, context: "TJ Recovery" },
-    },
-    {
-      player: { id: "3", name: "Cody Bellinger", team: "CHC", position: "CF", grade: "B+", age: 28, salary: 17500000, league: "NL", traits: [] },
-      score: 81.8,
-      stats: { war2025: 1.8, war2026: 5.2, deltaWar: 3.4, context: "Swing rebuild" },
-    },
-  ];
+  // Use real comeback candidates (oldest veterans with decent grades)
+  const candidates: AwardCandidate[] = comebackCandidates.length > 0
+    ? comebackCandidates.map((p, idx) => ({
+        player: p,
+        score: Math.round((100 - idx * 8) * 10) / 10,
+        stats: { age: p.age, grade: p.grade, position: p.position, context: p.age >= 35 ? "Veteran resurgence" : "Bounce-back season" },
+      }))
+    : []; // empty if no players
+
+  if (candidates.length === 0) {
+    return (
+      <div className="space-y-6 text-center">
+        <div className="text-lg text-[#E8E8D8]">🔄 COMEBACK PLAYER OF THE YEAR</div>
+        <div className="text-base text-[#E8E8D8]/60">No eligible candidates — play a season first</div>
+        <button onClick={onContinue} className="w-full bg-[#5A8352] border-[5px] border-[#4A6844] py-4 text-lg text-[#E8E8D8] hover:bg-[#4F7D4B] active:scale-95 transition-transform shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)]">
+          Continue to Awards Summary →
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">
@@ -1924,8 +2010,8 @@ function SpecialAwardsScreen({ awardType, onContinue }: { awardType: string; onC
 
       <div className="bg-[#5A8352] border-[5px] border-[#4A6844] p-3">
         <div className="text-[9px] text-[#E8E8D8] text-center">
-          ELIGIBILITY: Significant improvement vs previous season (+2.0 WAR)<br />
-          VOTING: Year-over-year WAR improvement (70%) | Context (30%)
+          ELIGIBILITY: Veteran players (age 30+) with strong performance<br />
+          VOTING: Age × resilience factor + grade assessment
         </div>
       </div>
 
@@ -1963,17 +2049,9 @@ function SpecialAwardsScreen({ awardType, onContinue }: { awardType: string; onC
             <div className="space-y-2 mb-4">
               <div className="text-xs text-[#E8E8D8]">Score: {candidate.score}</div>
               <div className="space-y-1 text-[9px] text-[#E8E8D8]/80">
-                <div>2025 WAR: {candidate.stats.war2025}</div>
-                <div>2026 WAR: {candidate.stats.war2026}</div>
-                <div className="flex items-center gap-2">
-                  <span>Δ WAR: +{candidate.stats.deltaWar}</span>
-                  <div className="flex-1 bg-[#E8E8D8]/20 h-2 rounded">
-                    <div
-                      className="bg-[#5599FF] h-full rounded"
-                      style={{ width: `${(candidate.stats.deltaWar / 5) * 100}%` }}
-                    ></div>
-                  </div>
-                </div>
+                <div>Age: {candidate.stats.age}</div>
+                <div>Grade: {candidate.stats.grade}</div>
+                <div>Position: {candidate.stats.position}</div>
                 <div className="border-t border-[#E8E8D8]/20 pt-1 mt-1">
                   Context: {candidate.stats.context}
                 </div>
