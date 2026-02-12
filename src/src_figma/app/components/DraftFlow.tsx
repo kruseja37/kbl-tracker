@@ -4,7 +4,7 @@ import { useOffseasonData, type OffseasonTeam, type OffseasonPlayer } from "@/ho
 import { useOffseasonState, type DraftPick as StoredDraftPick } from "../../hooks/useOffseasonState";
 
 // Empty teams fallback — populated from IndexedDB when available
-const MOCK_TEAMS: { name: string; mlb: number; farm: number }[] = [];
+const EMPTY_TEAMS: { name: string; mlb: number; farm: number }[] = [];
 
 type DraftScreen = 
   | "inactive-selection"
@@ -99,24 +99,14 @@ export function DraftFlow({ seasonId, seasonNumber = 1, onComplete, onCancel }: 
         };
       });
     }
-    return MOCK_TEAMS;
+    return EMPTY_TEAMS;
   }, [realTeams, realPlayers, hasRealData]);
 
-  // Mock inactive players (retired players eligible for draft)
-  const inactivePlayers = [
-    { id: "i1", name: "Roberto Alomar", position: "2B", grade: "B" as const, retiredSeason: 12, seasons: 15, hof: false },
-    { id: "i2", name: "Kevin Appier", position: "SP", grade: "B" as const, retiredSeason: 11, seasons: 11, hof: false },
-    { id: "i3", name: "Mike Schmidt", position: "3B", grade: "B" as const, retiredSeason: 9, seasons: 18, hof: true },
-    { id: "i4", name: "Ryne Sandberg", position: "2B", grade: "B-" as const, retiredSeason: 10, seasons: 16, hof: false },
-    { id: "i5", name: "Wade Boggs", position: "3B", grade: "B-" as const, retiredSeason: 8, seasons: 18, hof: false },
-    { id: "i6", name: "Tony Gwynn", position: "RF", grade: "B-" as const, retiredSeason: 7, seasons: 20, hof: true },
-  ];
+  // Inactive players (retired players eligible for draft) — populated from retirement/museum data when available
+  const inactivePlayers: { id: string; name: string; position: string; grade: "B" | "B-" | "C+" | "C" | "C-"; retiredSeason: number; seasons: number; hof: boolean }[] = [];
 
-  const ineligiblePlayers = [
-    { name: "Babe Ruth", grade: "A+" },
-    { name: "Lou Gehrig", grade: "A" },
-    { name: "Ted Williams", grade: "A" },
-  ];
+  // Ineligible players (Hall of Famers too high-grade for farm) — populated from museum data when available
+  const ineligiblePlayers: { name: string; grade: string }[] = [];
 
   // Generate draft class
   const generateDraftClass = () => {
@@ -577,7 +567,9 @@ export function DraftFlow({ seasonId, seasonNumber = 1, onComplete, onCancel }: 
                   <div className="text-[9px] text-[#E8E8D8]/60">Sort: Grade</div>
                 </div>
                 <div className="p-4 space-y-2 max-h-64 overflow-y-auto">
-                  {inactivePlayers.map(player => (
+                  {inactivePlayers.length === 0 ? (
+                    <div className="text-[10px] text-[#E8E8D8]/50 text-center py-4">No retired players eligible for draft yet.</div>
+                  ) : inactivePlayers.map(player => (
                     <label key={player.id} className="flex items-center gap-3 p-2 hover:bg-[#4A6844] cursor-pointer">
                       <input
                         type="checkbox"
@@ -608,7 +600,9 @@ export function DraftFlow({ seasonId, seasonNumber = 1, onComplete, onCancel }: 
               <div className="bg-[#5A8352] border-[3px] border-[#DD0000] p-3">
                 <div className="text-[10px] text-[#E8E8D8] mb-2">⛔ NOT ELIGIBLE (Grade too high for Farm: A-, A, A+)</div>
                 <div className="text-[9px] text-[#E8E8D8]/60">
-                  {ineligiblePlayers.map(p => `${p.name} (${p.grade})`).join(", ")}...
+                  {ineligiblePlayers.length > 0
+                    ? ineligiblePlayers.map(p => `${p.name} (${p.grade})`).join(", ")
+                    : "No Hall of Fame players ineligible yet."}
                 </div>
               </div>
 

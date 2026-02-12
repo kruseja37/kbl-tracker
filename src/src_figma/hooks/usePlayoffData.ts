@@ -101,7 +101,7 @@ export interface UsePlayoffDataReturn {
 // EMPTY FALLBACK (no mock data — shows empty state)
 // ============================================
 
-const MOCK_PLAYOFF_TEAMS: PlayoffTeam[] = [];
+const EMPTY_PLAYOFF_TEAMS: PlayoffTeam[] = [];
 
 // ============================================
 // HOOK IMPLEMENTATION
@@ -283,11 +283,11 @@ export function usePlayoffData(seasonNumber: number = 1): UsePlayoffDataReturn {
           ];
         } else {
           // Fall back to mock teams
-          playoffTeams = MOCK_PLAYOFF_TEAMS.slice(0, config.teamsQualifying);
+          playoffTeams = EMPTY_PLAYOFF_TEAMS.slice(0, config.teamsQualifying);
         }
       } catch {
         // Fall back to mock teams
-        playoffTeams = MOCK_PLAYOFF_TEAMS.slice(0, config.teamsQualifying);
+        playoffTeams = EMPTY_PLAYOFF_TEAMS.slice(0, config.teamsQualifying);
       }
 
       // Delete any existing playoff for this season first (prevents ConstraintError on unique index)

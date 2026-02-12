@@ -20,7 +20,7 @@ interface MuseumContentProps {
 }
 
 // Empty fallback — populated from real data when available
-const MOCK_TEAMS: string[] = [];
+const EMPTY_TEAMS: string[] = [];
 
 export function MuseumContent({ retiredJerseys: propRetiredJerseys = [] }: MuseumContentProps) {
   const [activeTab, setActiveTab] = useState<MuseumTab>("league-history");
@@ -63,7 +63,7 @@ export function MuseumContent({ retiredJerseys: propRetiredJerseys = [] }: Museu
     if (hasOffseasonData && realTeams.length > 0) {
       return realTeams.map((t) => t.name);
     }
-    return MOCK_TEAMS;
+    return EMPTY_TEAMS;
   }, [realTeams, hasOffseasonData]);
 
   // Transform museum data to component format
@@ -543,6 +543,9 @@ export function MuseumContent({ retiredJerseys: propRetiredJerseys = [] }: Museu
                     {selectedTeam.toUpperCase()} SEASON BY SEASON
                   </div>
                   <div className="space-y-2">
+                    {seasonStandings.length === 0 && (
+                      <div className="text-[10px] text-[#E8E8D8]/50 text-center py-4">No season history yet. Complete a season to see standings.</div>
+                    )}
                     {seasonStandings.map((season, idx) => (
                       <div key={idx} className="bg-[#5A8352] p-3">
                         <div className="flex items-center justify-between">
@@ -590,6 +593,9 @@ export function MuseumContent({ retiredJerseys: propRetiredJerseys = [] }: Museu
                         </tr>
                       </thead>
                       <tbody>
+                        {teamTop10.length === 0 && (
+                          <tr><td colSpan={7} className="text-[10px] text-[#E8E8D8]/50 text-center py-4">No player data yet. Complete games to build WAR rankings.</td></tr>
+                        )}
                         {teamTop10.map((player, idx) => (
                           <tr key={idx} className={`border-b border-[#4A6844]/30 ${idx % 2 === 0 ? "bg-[#5A8352]/20" : ""}`}>
                             <td className="py-2 px-2 text-[#E8E8D8]">{player.name}</td>
@@ -618,6 +624,9 @@ export function MuseumContent({ retiredJerseys: propRetiredJerseys = [] }: Museu
                       CHAMPIONSHIPS
                     </div>
                     <div className="flex gap-3 flex-wrap">
+                      {teamAccolades.championships.length === 0 && (
+                        <div className="text-[10px] text-[#E8E8D8]/50 py-2">No championships yet.</div>
+                      )}
                       {teamAccolades.championships.map((year, idx) => (
                         <div key={idx} className="bg-[#5A8352] p-4 text-center min-w-[80px]">
                           <Trophy className="w-8 h-8 text-[#FFD700] mx-auto mb-2" />
@@ -635,6 +644,9 @@ export function MuseumContent({ retiredJerseys: propRetiredJerseys = [] }: Museu
                       MVP AWARDS
                     </div>
                     <div className="space-y-2">
+                      {teamAccolades.mvps.length === 0 && (
+                        <div className="text-[10px] text-[#E8E8D8]/50 py-2">No MVP awards yet.</div>
+                      )}
                       {teamAccolades.mvps.map((award, idx) => (
                         <div key={idx} className="bg-[#5A8352] p-3 flex items-center gap-3">
                           <Award className="w-5 h-5 text-[#FFD700]" />
@@ -654,6 +666,9 @@ export function MuseumContent({ retiredJerseys: propRetiredJerseys = [] }: Museu
                       CY YOUNG AWARDS
                     </div>
                     <div className="space-y-2">
+                      {teamAccolades.cyYoungs.length === 0 && (
+                        <div className="text-[10px] text-[#E8E8D8]/50 py-2">No Cy Young awards yet.</div>
+                      )}
                       {teamAccolades.cyYoungs.map((award, idx) => (
                         <div key={idx} className="bg-[#5A8352] p-3 flex items-center gap-3">
                           <Award className="w-5 h-5 text-[#0066FF]" />
@@ -673,6 +688,9 @@ export function MuseumContent({ retiredJerseys: propRetiredJerseys = [] }: Museu
                       ROOKIE OF THE YEAR
                     </div>
                     <div className="space-y-2">
+                      {teamAccolades.roys.length === 0 && (
+                        <div className="text-[10px] text-[#E8E8D8]/50 py-2">No Rookie of the Year awards yet.</div>
+                      )}
                       {teamAccolades.roys.map((award, idx) => (
                         <div key={idx} className="bg-[#5A8352] p-3 flex items-center gap-3">
                           <Award className="w-5 h-5 text-[#5599FF]" />

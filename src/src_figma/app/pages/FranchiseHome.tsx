@@ -1,4 +1,4 @@
-import { useState, useEffect, createContext, useContext } from "react";
+import { useState, useEffect, useMemo, createContext, useContext } from "react";
 import { useNavigate, useParams } from "react-router";
 import { Calendar, Users, TrendingUp, Newspaper, Trophy, Folder, Home, ChevronDown, ChevronUp, DollarSign, ClipboardList, Star, Award, TrendingDown, Shuffle, UserMinus, CheckCircle, ArrowRight, BarChart3, Plus } from "lucide-react";
 import { getTeamColors } from "@/config/teamColors";
@@ -149,42 +149,12 @@ export function FranchiseHome() {
   // All-Star voting state
   const [allStarLeague, setAllStarLeague] = useState<"Eastern" | "Western">("Eastern");
 
-  // Empty All-Star voting data — will be populated from season stats when available
-  const emptyPositions = {
-    C: [] as { name: string; team: string; pos: string; votes: number }[],
-    "1B": [] as { name: string; team: string; pos: string; votes: number }[],
-    "2B": [] as { name: string; team: string; pos: string; votes: number }[],
-    "3B": [] as { name: string; team: string; pos: string; votes: number }[],
-    SS: [] as { name: string; team: string; pos: string; votes: number }[],
-    LF: [] as { name: string; team: string; pos: string; votes: number }[],
-    CF: [] as { name: string; team: string; pos: string; votes: number }[],
-    RF: [] as { name: string; team: string; pos: string; votes: number }[],
-    Bench: [] as { name: string; team: string; pos: string; votes: number }[],
-    SP: [] as { name: string; team: string; pos: string; votes: number }[],
-    RP: [] as { name: string; team: string; pos: string; votes: number }[],
-  };
-  const allStarVotes = {
-    Eastern: { ...emptyPositions },
-    Western: { ...emptyPositions },
-  };
-
-  // Helper functions for All-Star data
-  const getTopPlayerByPosition = (league: "Eastern" | "Western", position: string) => {
-    const leagueData = allStarVotes[league] as Record<string, { name: string; team: string; pos: string; votes: number }[]>;
-    return leagueData[position]?.[0];
-  };
-
-  const getBenchPlayers = (league: "Eastern" | "Western") => {
-    return allStarVotes[league].Bench || [];
-  };
-
-  const getStartingPitchers = (league: "Eastern" | "Western") => {
-    return allStarVotes[league].SP || [];
-  };
-
-  const getReliefPitchers = (league: "Eastern" | "Western") => {
-    return allStarVotes[league].RP || [];
-  };
+  // All-Star voting helpers — return empty until season stats engine populates data
+  type AllStarPlayer = { name: string; team: string; pos: string; votes: number };
+  const getTopPlayerByPosition = (_league: "Eastern" | "Western", _position: string): AllStarPlayer | undefined => undefined;
+  const getBenchPlayers = (_league: "Eastern" | "Western"): AllStarPlayer[] => [];
+  const getStartingPitchers = (_league: "Eastern" | "Western"): AllStarPlayer[] => [];
+  const getReliefPitchers = (_league: "Eastern" | "Western"): AllStarPlayer[] => [];
 
   useEffect(() => {
     // Try to load the selected league from localStorage
@@ -229,8 +199,8 @@ export function FranchiseHome() {
     }
   };
 
-  // Schedule System Functions — team list populated from league structure
-  const availableTeams: string[] = [];
+  // Schedule System Functions — team list derived from franchise league structure
+  const availableTeams = useMemo(() => Object.keys(franchiseData.teamNameMap ?? {}), [franchiseData.teamNameMap]);
 
   // Schedule helper functions - now use scheduleData from hook
   const getNextGameNumber = (): number => {

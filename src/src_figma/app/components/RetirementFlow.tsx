@@ -52,10 +52,10 @@ type Screen =
   | "JERSEY_CEREMONY"
   | "PHASE_SUMMARY";
 
-// Mock Data (fallback when real data not available)
-const MOCK_TEAMS: Team[] = [];
+// Empty fallback — populated from IndexedDB when available
+const EMPTY_TEAMS: Team[] = [];
 
-const MOCK_PLAYERS: Player[] = [];
+const EMPTY_PLAYERS: Player[] = [];
 
 /**
  * Convert OffseasonPlayer to local Player format
@@ -189,14 +189,14 @@ export function RetirementFlow({ onClose, onRetirementsComplete, seasonId = 'sea
     if (hasRealData && realTeams.length > 0) {
       return realTeams.slice(0, 8).map(convertToLocalTeam);
     }
-    return MOCK_TEAMS;
+    return EMPTY_TEAMS;
   }, [realTeams, hasRealData]);
 
   const ALL_PLAYERS: Player[] = useMemo(() => {
     if (hasRealData && realPlayers.length > 0) {
       return realPlayers.map(convertToLocalPlayer);
     }
-    return MOCK_PLAYERS;
+    return EMPTY_PLAYERS;
   }, [realPlayers, hasRealData]);
 
   const [screen, setScreen] = useState<Screen>("PROBABILITY");

@@ -64,10 +64,10 @@ type Screen =
 const goldGlovePositions: Position[] = ["C", "1B", "2B", "3B", "SS", "LF", "CF", "RF", "P"];
 const silverSluggerPositions: Position[] = ["C", "1B", "2B", "3B", "SS", "LF", "CF", "RF", "DH"];
 
-// Mock data for when real data isn't available
-const MOCK_PLAYERS: Player[] = [];
+// Empty fallback — populated from IndexedDB when available
+const EMPTY_PLAYERS: Player[] = [];
 
-const MOCK_TEAMS: OffseasonTeam[] = [];
+const EMPTY_TEAMS: OffseasonTeam[] = [];
 
 // Convert OffseasonPlayer to local Player type
 function convertToAwardPlayer(p: OffseasonPlayer, teamShortName: string): Player {
@@ -170,14 +170,14 @@ export function AwardsCeremonyFlow({ onClose, seasonId = 'season-1', seasonNumbe
         return convertToAwardPlayer(p, team?.shortName || "UNK");
       });
     }
-    return MOCK_PLAYERS;
+    return EMPTY_PLAYERS;
   }, [realPlayers, realTeams, hasRealData]);
 
   const allTeams = useMemo((): OffseasonTeam[] => {
     if (hasRealData && realTeams.length > 0) {
       return realTeams;
     }
-    return MOCK_TEAMS;
+    return EMPTY_TEAMS;
   }, [realTeams, hasRealData]);
 
   const specialAwardTypes = ["KARA_KAWAGUCHI", "BUST", "COMEBACK"];

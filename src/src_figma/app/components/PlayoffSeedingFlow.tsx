@@ -47,7 +47,7 @@ function gradeRank(grade: string): number {
 }
 
 // Empty teams fallback — populated from standings when available
-const MOCK_PLAYOFF_TEAMS: PlayoffTeamSeed[] = [];
+const EMPTY_PLAYOFF_TEAMS: PlayoffTeamSeed[] = [];
 
 // --- Step indicator ---
 const STEPS = ["League", "Playoffs", "Teams", "Seeding", "Confirm"];
@@ -134,7 +134,7 @@ export function PlayoffSeedingFlow({
   onComplete,
   onCancel,
 }: PlayoffSeedingFlowProps) {
-  const initialTeams = (providedTeams.length > 0 ? providedTeams : MOCK_PLAYOFF_TEAMS)
+  const initialTeams = (providedTeams.length > 0 ? providedTeams : EMPTY_PLAYOFF_TEAMS)
     .slice(0, teamsQualifying)
     .map((t, i) => ({ ...t, seed: i + 1 }));
 

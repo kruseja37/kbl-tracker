@@ -122,8 +122,8 @@ function convertToLocalTeam(team: OffseasonTeam, allPlayers: OffseasonPlayer[], 
   };
 }
 
-// Mock team data (fallback when real data not available)
-const MOCK_TEAMS: Team[] = [];
+// Empty fallback — populated from IndexedDB when available
+const EMPTY_TEAMS: Team[] = [];
 
 interface TradeFlowProps {
   seasonId: string;
@@ -141,7 +141,7 @@ export function TradeFlow({ seasonId, onComplete }: TradeFlowProps) {
     if (hasRealData && realTeams.length > 0 && realPlayers.length > 0) {
       return realTeams.map((team, index) => convertToLocalTeam(team, realPlayers, index));
     }
-    return MOCK_TEAMS;
+    return EMPTY_TEAMS;
   }, [realTeams, realPlayers, hasRealData]);
 
   const [currentScreen, setCurrentScreen] = useState<Screen>("trade-builder");

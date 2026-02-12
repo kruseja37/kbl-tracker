@@ -68,15 +68,15 @@ export type {
 // EMPTY FALLBACKS (no mock data — shows empty state)
 // ============================================
 
-const MOCK_CHAMPIONSHIPS: ChampionshipRecord[] = [];
-const MOCK_TEAM_RECORDS: TeamAllTimeRecord[] = [];
-const MOCK_AWARD_WINNERS: AwardWinner[] = [];
-const MOCK_ALL_TIME_LEADERS: AllTimeLeader[] = [];
-const MOCK_HALL_OF_FAME: HallOfFamer[] = [];
-const MOCK_RECORDS: LeagueRecord[] = [];
-const MOCK_MOMENTS: LegendaryMoment[] = [];
-const MOCK_RETIRED_JERSEYS: RetiredJersey[] = [];
-const MOCK_STADIUMS: StadiumData[] = [];
+const EMPTY_CHAMPIONSHIPS: ChampionshipRecord[] = [];
+const EMPTY_TEAM_RECORDS: TeamAllTimeRecord[] = [];
+const EMPTY_AWARD_WINNERS: AwardWinner[] = [];
+const EMPTY_ALL_TIME_LEADERS: AllTimeLeader[] = [];
+const EMPTY_HALL_OF_FAME: HallOfFamer[] = [];
+const EMPTY_RECORDS: LeagueRecord[] = [];
+const EMPTY_MOMENTS: LegendaryMoment[] = [];
+const EMPTY_RETIRED_JERSEYS: RetiredJersey[] = [];
+const EMPTY_STADIUMS: StadiumData[] = [];
 
 // ============================================
 // HOOK RETURN TYPE
@@ -183,15 +183,15 @@ export function useMuseumData(): UseMuseumDataReturn {
       // Use real data if available, otherwise use mock
       const hasRealData = champs.length > 0 || teams.length > 0;
 
-      setChampionships(champs.length > 0 ? champs : MOCK_CHAMPIONSHIPS);
-      setTeamRecords(teams.length > 0 ? teams : MOCK_TEAM_RECORDS);
-      setAwardWinners(awards.length > 0 ? awards : MOCK_AWARD_WINNERS);
-      setAllTimeLeaders(leaders.length > 0 ? leaders : MOCK_ALL_TIME_LEADERS);
-      setHallOfFamers(hof.length > 0 ? hof : MOCK_HALL_OF_FAME);
-      setRecords(recs.length > 0 ? recs : MOCK_RECORDS);
-      setMoments(moms.length > 0 ? moms : MOCK_MOMENTS);
-      setRetiredJerseys(jerseys.length > 0 ? jerseys : MOCK_RETIRED_JERSEYS);
-      setStadiums(stads.length > 0 ? stads : MOCK_STADIUMS);
+      setChampionships(champs.length > 0 ? champs : EMPTY_CHAMPIONSHIPS);
+      setTeamRecords(teams.length > 0 ? teams : EMPTY_TEAM_RECORDS);
+      setAwardWinners(awards.length > 0 ? awards : EMPTY_AWARD_WINNERS);
+      setAllTimeLeaders(leaders.length > 0 ? leaders : EMPTY_ALL_TIME_LEADERS);
+      setHallOfFamers(hof.length > 0 ? hof : EMPTY_HALL_OF_FAME);
+      setRecords(recs.length > 0 ? recs : EMPTY_RECORDS);
+      setMoments(moms.length > 0 ? moms : EMPTY_MOMENTS);
+      setRetiredJerseys(jerseys.length > 0 ? jerseys : EMPTY_RETIRED_JERSEYS);
+      setStadiums(stads.length > 0 ? stads : EMPTY_STADIUMS);
 
       setHasData(hasRealData);
     } catch (err) {
@@ -199,15 +199,15 @@ export function useMuseumData(): UseMuseumDataReturn {
       setError(err instanceof Error ? err.message : 'Failed to load museum data');
 
       // Use mock data on error
-      setChampionships(MOCK_CHAMPIONSHIPS);
-      setTeamRecords(MOCK_TEAM_RECORDS);
-      setAwardWinners(MOCK_AWARD_WINNERS);
-      setAllTimeLeaders(MOCK_ALL_TIME_LEADERS);
-      setHallOfFamers(MOCK_HALL_OF_FAME);
-      setRecords(MOCK_RECORDS);
-      setMoments(MOCK_MOMENTS);
-      setRetiredJerseys(MOCK_RETIRED_JERSEYS);
-      setStadiums(MOCK_STADIUMS);
+      setChampionships(EMPTY_CHAMPIONSHIPS);
+      setTeamRecords(EMPTY_TEAM_RECORDS);
+      setAwardWinners(EMPTY_AWARD_WINNERS);
+      setAllTimeLeaders(EMPTY_ALL_TIME_LEADERS);
+      setHallOfFamers(EMPTY_HALL_OF_FAME);
+      setRecords(EMPTY_RECORDS);
+      setMoments(EMPTY_MOMENTS);
+      setRetiredJerseys(EMPTY_RETIRED_JERSEYS);
+      setStadiums(EMPTY_STADIUMS);
       setHasData(false);
     } finally {
       setIsLoading(false);
@@ -227,31 +227,31 @@ export function useMuseumData(): UseMuseumDataReturn {
       await initMuseumDatabase();
 
       // Seed all mock data
-      for (const champ of MOCK_CHAMPIONSHIPS) {
+      for (const champ of EMPTY_CHAMPIONSHIPS) {
         await saveChampionship(champ);
       }
-      for (const team of MOCK_TEAM_RECORDS) {
+      for (const team of EMPTY_TEAM_RECORDS) {
         await saveTeamRecord(team);
       }
-      for (const award of MOCK_AWARD_WINNERS) {
+      for (const award of EMPTY_AWARD_WINNERS) {
         await saveAwardWinner(award);
       }
-      for (const leader of MOCK_ALL_TIME_LEADERS) {
+      for (const leader of EMPTY_ALL_TIME_LEADERS) {
         await saveAllTimeLeader(leader);
       }
-      for (const member of MOCK_HALL_OF_FAME) {
+      for (const member of EMPTY_HALL_OF_FAME) {
         await saveHallOfFamer(member);
       }
-      for (const rec of MOCK_RECORDS) {
+      for (const rec of EMPTY_RECORDS) {
         await saveRecord(rec);
       }
-      for (const moment of MOCK_MOMENTS) {
+      for (const moment of EMPTY_MOMENTS) {
         await saveMoment(moment);
       }
-      for (const jersey of MOCK_RETIRED_JERSEYS) {
+      for (const jersey of EMPTY_RETIRED_JERSEYS) {
         await saveRetiredJersey(jersey);
       }
-      for (const stadium of MOCK_STADIUMS) {
+      for (const stadium of EMPTY_STADIUMS) {
         await saveStadium(stadium);
       }
 

@@ -90,7 +90,7 @@ function convertToLocalPlayer(player: OffseasonPlayer, index: number): Player {
 }
 
 // Empty teams fallback — populated from IndexedDB when available
-const MOCK_TEAMS: Team[] = [];
+const EMPTY_TEAMS: Team[] = [];
 
 export function FinalizeAdvanceFlow({ onClose, onAdvanceComplete, seasonNumber = 1 }: FinalizeAdvanceFlowProps) {
   const nextSeason = seasonNumber + 1;
@@ -132,7 +132,7 @@ export function FinalizeAdvanceFlow({ onClose, onAdvanceComplete, seasonNumber =
         };
       });
     }
-    return MOCK_TEAMS;
+    return EMPTY_TEAMS;
   }, [realTeams, realPlayers, hasRealData]);
 
   const [teams, setTeams] = useState<Team[]>(initialTeams);

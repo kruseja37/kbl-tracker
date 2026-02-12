@@ -28,8 +28,8 @@ interface PostseasonMVPFlowProps {
   onCancel: () => void;
 }
 
-// Empty candidates fallback — populated from playoff game stats when available
-const MOCK_CANDIDATES: MVPCandidate[] = [];
+// Empty fallback — populated from playoff game stats when available
+const EMPTY_CANDIDATES: MVPCandidate[] = [];
 
 // --- Medal Config ---
 
@@ -65,7 +65,7 @@ export function PostseasonMVPFlow({
   onCancel,
 }: PostseasonMVPFlowProps) {
   // Sort candidates by pWAR descending; display order: 3rd, 2nd, 1st
-  const sortedCandidates = (providedCandidates || MOCK_CANDIDATES)
+  const sortedCandidates = (providedCandidates || EMPTY_CANDIDATES)
     .sort((a, b) => b.pWAR - a.pWAR)
     .slice(0, 3);
 

@@ -6,12 +6,12 @@ import { useSeasonStats, type BattingLeaderEntry, type PitchingLeaderEntry } fro
 type TeamHubTab = "team" | "fan-morale" | "roster" | "stats" | "stadium" | "manager";
 
 // Empty fallbacks — populated from real data when available
-const MOCK_TEAMS: string[] = [];
-const MOCK_STADIUMS: string[] = [];
+const EMPTY_TEAMS: string[] = [];
+const EMPTY_STADIUMS: string[] = [];
 
-const MOCK_ROSTER_DATA: { name: string; position: string; grade: string; morale: string | number; contract: string; trueValue: string; netDiff: string; fitness: string | number }[] = [];
+const EMPTY_ROSTER_DATA: { name: string; position: string; grade: string; morale: string | number; contract: string; trueValue: string; netDiff: string; fitness: string | number }[] = [];
 
-const MOCK_STATS_DATA: { name: string; pos: string; war: number; pwar: number; bwar: number; rwar: number; fwar: number; era?: number; ip?: number; k?: number; w?: number; l?: number; sv?: number; avg?: number; hr?: number; rbi?: number; sb?: number; ops?: number }[] = [];
+const EMPTY_STATS_DATA: { name: string; pos: string; war: number; pwar: number; bwar: number; rwar: number; fwar: number; era?: number; ip?: number; k?: number; w?: number; l?: number; sv?: number; avg?: number; hr?: number; rbi?: number; sb?: number; ops?: number }[] = [];
 
 // Helper to convert OffseasonPlayer to roster format
 function convertToRosterItem(player: OffseasonPlayer) {
@@ -133,14 +133,14 @@ export function TeamHubContent() {
     if (hasRealData && realTeams.length > 0) {
       return realTeams.map(t => t.name);
     }
-    return MOCK_TEAMS;
+    return EMPTY_TEAMS;
   }, [realTeams, hasRealData]);
 
   const stadiums = useMemo(() => {
     if (hasRealData && realTeams.length > 0) {
       return realTeams.map(t => t.stadium || t.name);
     }
-    return MOCK_STADIUMS;
+    return EMPTY_STADIUMS;
   }, [realTeams, hasRealData]);
 
   // Default to first team once data loads
@@ -162,7 +162,7 @@ export function TeamHubContent() {
         }
       }
     }
-    return MOCK_ROSTER_DATA;
+    return EMPTY_ROSTER_DATA;
   }, [realPlayers, realTeams, selectedTeam, hasRealData]);
 
   // Build lookup maps from season stats for real WAR
@@ -209,7 +209,7 @@ export function TeamHubContent() {
         }
       }
     }
-    return MOCK_STATS_DATA;
+    return EMPTY_STATS_DATA;
   }, [realPlayers, realTeams, selectedTeam, hasRealData, battingByPlayer, pitchingByPlayer]);
 
   // NOTE: Fan morale, stadium park factors, and manager tracking

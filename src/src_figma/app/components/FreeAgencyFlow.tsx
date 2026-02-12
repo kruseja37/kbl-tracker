@@ -45,10 +45,10 @@ interface Move {
 
 type Screen = "PROTECTION" | "DICE_ROLL" | "DESTINATION" | "EXCHANGE" | "ROUND_SUMMARY" | "FINAL_SUMMARY";
 
-// Mock Data (fallback when real data not available)
-const MOCK_TEAMS: Team[] = [];
+// Empty fallback — populated from IndexedDB when available
+const EMPTY_TEAMS: Team[] = [];
 
-const MOCK_PLAYERS: Player[] = [];
+const EMPTY_PLAYERS: Player[] = [];
 
 /**
  * Convert OffseasonPlayer to local Player format
@@ -145,14 +145,14 @@ export function FreeAgencyFlow({ onClose, seasonId = 'season-1', seasonNumber = 
     if (hasRealData && realTeams.length > 0) {
       return realTeams.slice(0, 8).map(convertToLocalTeam); // Limit to 8 teams for free agency flow
     }
-    return MOCK_TEAMS;
+    return EMPTY_TEAMS;
   }, [realTeams, hasRealData]);
 
   const ALL_PLAYERS: Player[] = useMemo(() => {
     if (hasRealData && realPlayers.length > 0) {
       return realPlayers.map(convertToLocalPlayer);
     }
-    return MOCK_PLAYERS;
+    return EMPTY_PLAYERS;
   }, [realPlayers, hasRealData]);
 
   const [screen, setScreen] = useState<Screen>("PROTECTION");

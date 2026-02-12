@@ -2,10 +2,10 @@ import { useState, useEffect, useMemo } from "react";
 import { ChevronDown, AlertTriangle, Dice1, Users, Award, TrendingDown, Building2, FileText, BarChart3 } from "lucide-react";
 import { useOffseasonData, type OffseasonTeam, type OffseasonPlayer } from "@/hooks/useOffseasonData";
 
-// Mock teams for fallback
-const MOCK_AT_RISK_TEAMS: Team[] = [];
+// Empty teams fallback — populated from IndexedDB when available
+const EMPTY_AT_RISK_TEAMS: Team[] = [];
 
-const MOCK_ALL_TEAMS: Team[] = [];
+const EMPTY_ALL_TEAMS: Team[] = [];
 
 // Helper to convert OffseasonTeam to local Team format
 function convertToLocalTeam(team: OffseasonTeam, players: OffseasonPlayer[], index: number): Team {
@@ -133,7 +133,7 @@ export function ContractionExpansionFlow({ seasonNumber = 1, onComplete }: Contr
         convertToLocalTeam(team, realPlayers, index)
       );
     }
-    return MOCK_ALL_TEAMS;
+    return EMPTY_ALL_TEAMS;
   }, [realTeams, realPlayers, hasRealData]);
 
   // Teams at risk (filter for low morale)
@@ -144,7 +144,7 @@ export function ContractionExpansionFlow({ seasonNumber = 1, onComplete }: Contr
         .sort((a, b) => a.fanMorale - b.fanMorale)
         .slice(0, 3);
     }
-    return MOCK_AT_RISK_TEAMS;
+    return EMPTY_AT_RISK_TEAMS;
   }, [allTeamsData, hasRealData]);
 
   // Convert real players to local format for a given team

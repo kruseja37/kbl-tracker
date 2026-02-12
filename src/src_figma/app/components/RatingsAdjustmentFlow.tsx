@@ -80,8 +80,8 @@ interface TeamSummary {
   salaryDelta: number;
 }
 
-// Mock Data (fallback when real data not available)
-const MOCK_TEAMS: Team[] = [];
+// Empty fallback — populated from IndexedDB when available
+const EMPTY_TEAMS: Team[] = [];
 
 /**
  * Convert mWAR value to letter grade (S through D)
@@ -219,7 +219,7 @@ function convertToLocalPlayer(player: OffseasonPlayer): Player {
   };
 }
 
-const MOCK_ALL_PLAYERS: Player[] = [];
+const EMPTY_ALL_PLAYERS: Player[] = [];
 
 // Helper functions
 function getGradeColor(grade: Grade): string {
@@ -311,14 +311,14 @@ export function RatingsAdjustmentFlow({ seasonId, onClose }: RatingsAdjustmentFl
         convertToLocalTeam(team, index, managerSeasonStats, moyManagerId)
       );
     }
-    return MOCK_TEAMS;
+    return EMPTY_TEAMS;
   }, [realTeams, hasRealData, managerSeasonStats, moyManagerId]);
 
   const ALL_PLAYERS: Player[] = useMemo(() => {
     if (hasRealData && realPlayers.length > 0) {
       return realPlayers.map(convertToLocalPlayer);
     }
-    return MOCK_ALL_PLAYERS;
+    return EMPTY_ALL_PLAYERS;
   }, [realPlayers, hasRealData]);
 
   const [screen, setScreen] = useState<Screen>("OVERVIEW");
