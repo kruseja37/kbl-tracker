@@ -35,6 +35,8 @@ import {
   type PlayoffStatus,
 } from '../../utils/playoffStorage';
 import { calculateStandings, type TeamStanding } from '../../utils/seasonStorage';
+import { qualifyTeams, type TeamStanding as EngineTeamStanding, type QualificationConfig } from '../../engines/playoffEngine';
+import { getAllLeagueTemplates, getAllTeams, type LeagueTemplate } from '../../utils/leagueBuilderStorage';
 
 // Re-export types
 export type {
@@ -248,45 +250,92 @@ export function usePlayoffData(seasonNumber: number = 1): UsePlayoffDataReturn {
     useDH?: boolean;
   }): Promise<PlayoffConfig> => {
     try {
-      // Get standings to determine playoff teams
+      // Get standings + league structure to determine playoff teams via qualifyTeams()
       let playoffTeams: PlayoffTeam[];
 
       try {
-        const standings = await calculateStandings(config.seasonId);
-        if (standings.length >= config.teamsQualifying) {
-          // Convert standings to playoff teams
-          // Split into leagues (assume first half Eastern, second half Western)
-          const half = Math.ceil(standings.length / 2);
-          const eastern = standings.slice(0, half);
-          const western = standings.slice(half);
+        const [standings, leagueTemplates, allTeams] = await Promise.all([
+          calculateStandings(config.seasonId),
+          getAllLeagueTemplates(),
+          getAllTeams(),
+        ]);
 
-          // Take top teams from each
-          const teamsPerLeague = Math.ceil(config.teamsQualifying / 2);
+        // Build team name lookup
+        const teamNameLookup: Record<string, string> = {};
+        for (const t of allTeams) {
+          teamNameLookup[t.id] = t.name;
+        }
 
-          playoffTeams = [
-            ...eastern.slice(0, teamsPerLeague).map((s, i) => ({
-              teamId: s.teamId,
-              teamName: s.teamName,
-              seed: i + 1,
-              league: 'Eastern' as const,
-              regularSeasonRecord: { wins: s.wins, losses: s.losses },
-              eliminated: false,
-            })),
-            ...western.slice(0, teamsPerLeague).map((s, i) => ({
-              teamId: s.teamId,
-              teamName: s.teamName,
-              seed: i + 1,
-              league: 'Western' as const,
-              regularSeasonRecord: { wins: s.wins, losses: s.losses },
-              eliminated: false,
-            })),
-          ];
+        const template: LeagueTemplate | undefined = leagueTemplates[0];
+
+        if (standings.length >= config.teamsQualifying && template && template.divisions.length > 0) {
+          // Build teamId → { conferenceId, divisionId } from league structure
+          const teamStructure: Record<string, { conferenceId: string; divisionId: string }> = {};
+          for (const div of template.divisions) {
+            for (const teamId of div.teamIds) {
+              teamStructure[teamId] = {
+                conferenceId: div.conferenceId,
+                divisionId: div.id,
+              };
+            }
+          }
+
+          // Convert seasonStorage standings to playoffEngine standings
+          const engineStandings: EngineTeamStanding[] = standings.map(s => ({
+            teamId: s.teamId,
+            wins: s.wins,
+            losses: s.losses,
+            divisionId: teamStructure[s.teamId]?.divisionId || 'unknown',
+            conferenceId: teamStructure[s.teamId]?.conferenceId || 'unknown',
+            h2hRecord: {},  // Not available from seasonStorage; tiebreaker falls to runDiff
+            runDiff: s.runDiff,
+          }));
+
+          // Determine division winners + wildcard spots per conference
+          const numConferences = template.conferences.length || 2;
+          const divisionsPerConference = template.divisions.length / numConferences;
+          const teamsPerConference = Math.ceil(config.teamsQualifying / numConferences);
+          const divWinnersPerConf = Math.min(Math.floor(divisionsPerConference), teamsPerConference);
+          const wildcardsPerConf = Math.max(0, teamsPerConference - divWinnersPerConf);
+
+          const qualConfig: QualificationConfig = {
+            divisionWinners: divWinnersPerConf,
+            wildcards: wildcardsPerConf,
+          };
+
+          const qualified = qualifyTeams(engineStandings, qualConfig);
+
+          // Map conferenceId → conference index (0=Eastern, 1=Western)
+          const confIdToLeague: Record<string, 'Eastern' | 'Western'> = {};
+          template.conferences.forEach((conf, idx) => {
+            confIdToLeague[conf.id] = idx === 0 ? 'Eastern' : 'Western';
+          });
+
+          // Convert QualifiedTeam[] → PlayoffTeam[]
+          playoffTeams = qualified.map(q => ({
+            teamId: q.teamId,
+            teamName: teamNameLookup[q.teamId] || q.teamId,
+            seed: q.seed,
+            league: confIdToLeague[q.conferenceId] || 'Eastern',
+            regularSeasonRecord: { wins: q.wins, losses: q.losses },
+            eliminated: false,
+          }));
+        } else if (standings.length >= config.teamsQualifying) {
+          // Fallback: no league template divisions — seed by overall record
+          playoffTeams = standings.slice(0, config.teamsQualifying).map((s, i) => ({
+            teamId: s.teamId,
+            teamName: s.teamName,
+            seed: i + 1,
+            league: (i < Math.ceil(config.teamsQualifying / 2) ? 'Eastern' : 'Western') as 'Eastern' | 'Western',
+            regularSeasonRecord: { wins: s.wins, losses: s.losses },
+            eliminated: false,
+          }));
         } else {
-          // Fall back to mock teams
+          // Not enough teams with standings
           playoffTeams = EMPTY_PLAYOFF_TEAMS.slice(0, config.teamsQualifying);
         }
       } catch {
-        // Fall back to mock teams
+        // Fall back to empty teams
         playoffTeams = EMPTY_PLAYOFF_TEAMS.slice(0, config.teamsQualifying);
       }
 
