@@ -2,6 +2,17 @@ import { useNavigate } from "react-router";
 import { ArrowLeft, Trophy, Settings, GitBranch, BarChart3, ChevronDown, ChevronUp } from "lucide-react";
 import { useState, useEffect } from "react";
 import { getAllLeagueTemplates, type LeagueTemplate } from "../../../utils/leagueBuilderStorage";
+import {
+  getAllPlayoffs,
+  getPlayoffBySeason,
+  getSeriesByPlayoff,
+  getPlayoffLeaders,
+  type PlayoffConfig,
+  type PlayoffSeries,
+  type PlayoffPlayerStats,
+  type PlayoffTeam,
+  type PlayoffMVP,
+} from "../../../utils/playoffStorage";
 
 type PlayoffTab = "setup" | "bracket" | "leaders" | "history";
 
@@ -371,118 +382,100 @@ function BracketView({ settings }: { settings: PlayoffSettings }) {
 function PlayoffLeadersContent() {
   const [expandedBattingStat, setExpandedBattingStat] = useState<string | null>(null);
   const [expandedPitchingStat, setExpandedPitchingStat] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [battingData, setBattingData] = useState<Record<string, Array<{ player: string; team: string; value: string }>>>({});
+  const [pitchingData, setPitchingData] = useState<Record<string, Array<{ player: string; team: string; value: string }>>>({});
 
-  // Mock playoff leaders data
-  const battingLeadersData = {
-    AVG: [
-      { player: "J. Rodriguez", team: "Tigers", value: ".385" },
-      { player: "K. Martinez", team: "Sox", value: ".361" },
-      { player: "T. Anderson", team: "Sox", value: ".342" },
-      { player: "M. Thompson", team: "Crocs", value: ".328" },
-      { player: "D. Wilson", team: "Beewolves", value: ".315" },
-    ],
-    HR: [
-      { player: "M. Thompson", team: "Crocs", value: "8" },
-      { player: "J. Rodriguez", team: "Tigers", value: "7" },
-      { player: "K. Martinez", team: "Sox", value: "6" },
-      { player: "R. Williams", team: "Nemesis", value: "5" },
-      { player: "D. Wilson", team: "Beewolves", value: "5" },
-    ],
-    RBI: [
-      { player: "K. Martinez", team: "Sox", value: "21" },
-      { player: "M. Thompson", team: "Crocs", value: "19" },
-      { player: "J. Rodriguez", team: "Tigers", value: "18" },
-      { player: "R. Williams", team: "Nemesis", value: "16" },
-      { player: "T. Anderson", team: "Sox", value: "14" },
-    ],
-    SB: [
-      { player: "T. Davis", team: "Sox", value: "9" },
-      { player: "D. Wilson", team: "Beewolves", value: "7" },
-      { player: "K. Martinez", team: "Sox", value: "5" },
-      { player: "J. Rodriguez", team: "Tigers", value: "4" },
-      { player: "A. Brown", team: "Crocs", value: "3" },
-    ],
-    OPS: [
-      { player: "J. Rodriguez", team: "Tigers", value: "1.245" },
-      { player: "M. Thompson", team: "Crocs", value: "1.198" },
-      { player: "K. Martinez", team: "Sox", value: "1.142" },
-      { player: "D. Wilson", team: "Beewolves", value: "1.087" },
-      { player: "R. Williams", team: "Nemesis", value: "1.034" },
-    ],
-  };
+  // Load real playoff stats from IndexedDB
+  useEffect(() => {
+    let cancelled = false;
+    async function loadLeaders() {
+      try {
+        // Find the most recent playoff
+        const allPlayoffs = await getAllPlayoffs();
+        const activePlayoff = allPlayoffs
+          .filter(p => p.status === 'IN_PROGRESS' || p.status === 'COMPLETED')
+          .sort((a, b) => b.seasonNumber - a.seasonNumber)[0];
 
-  const pitchingLeadersData = {
-    ERA: [
-      { player: "T. Anderson", team: "Sox", value: "1.72" },
-      { player: "A. Chen", team: "Nemesis", value: "1.89" },
-      { player: "J. Williams", team: "Tigers", value: "2.14" },
-      { player: "R. Garcia", team: "Moonstars", value: "2.38" },
-      { player: "K. Brown", team: "Crocs", value: "2.67" },
-    ],
-    W: [
-      { player: "T. Anderson", team: "Sox", value: "4" },
-      { player: "A. Chen", team: "Nemesis", value: "4" },
-      { player: "J. Williams", team: "Tigers", value: "3" },
-      { player: "R. Garcia", team: "Moonstars", value: "3" },
-      { player: "K. Brown", team: "Crocs", value: "2" },
-    ],
-    K: [
-      { player: "T. Anderson", team: "Sox", value: "47" },
-      { player: "A. Chen", team: "Nemesis", value: "41" },
-      { player: "J. Williams", team: "Tigers", value: "38" },
-      { player: "R. Garcia", team: "Moonstars", value: "32" },
-      { player: "K. Brown", team: "Crocs", value: "29" },
-    ],
-    WHIP: [
-      { player: "A. Chen", team: "Nemesis", value: "0.87" },
-      { player: "T. Anderson", team: "Sox", value: "0.94" },
-      { player: "J. Williams", team: "Tigers", value: "1.02" },
-      { player: "R. Garcia", team: "Moonstars", value: "1.08" },
-      { player: "K. Brown", team: "Crocs", value: "1.15" },
-    ],
-    SV: [
-      { player: "C. Rivera", team: "Crocs", value: "8" },
-      { player: "K. Lee", team: "Beewolves", value: "6" },
-      { player: "D. Martinez", team: "Sox", value: "5" },
-      { player: "R. Smith", team: "Tigers", value: "4" },
-      { player: "J. Parker", team: "Nemesis", value: "3" },
-    ],
-  };
+        if (!activePlayoff || cancelled) {
+          setIsLoading(false);
+          return;
+        }
 
-  const battingLeaders = [
-    { stat: "AVG", value: ".385" },
-    { stat: "HR", value: "8" },
-    { stat: "RBI", value: "21" },
-    { stat: "SB", value: "9" },
-    { stat: "OPS", value: "1.245" },
-  ];
+        // Batting stats
+        const battingStats: Record<string, keyof PlayoffPlayerStats> = {
+          AVG: 'avg', HR: 'homeRuns', RBI: 'rbi', SB: 'stolenBases', OPS: 'ops',
+        };
+        const newBatting: typeof battingData = {};
+        for (const [label, stat] of Object.entries(battingStats)) {
+          const leaders = await getPlayoffLeaders(activePlayoff.id, stat, 5);
+          newBatting[label] = leaders.map(p => ({
+            player: p.playerName,
+            team: p.teamId,
+            value: stat === 'avg' ? p.avg.toFixed(3) :
+                   stat === 'ops' ? p.ops.toFixed(3) :
+                   String(p[stat] ?? 0),
+          }));
+        }
 
-  const pitchingLeaders = [
-    { stat: "ERA", value: "1.72" },
-    { stat: "W", value: "4" },
-    { stat: "K", value: "47" },
-    { stat: "WHIP", value: "0.87" },
-    { stat: "SV", value: "8" },
-  ];
+        // Pitching stats
+        const pitchingStats: Record<string, keyof PlayoffPlayerStats> = {
+          ERA: 'era', W: 'wins', K: 'pitchingStrikeouts', WHIP: 'whip', SV: 'saves',
+        };
+        const newPitching: typeof pitchingData = {};
+        for (const [label, stat] of Object.entries(pitchingStats)) {
+          const leaders = await getPlayoffLeaders(activePlayoff.id, stat, 5);
+          newPitching[label] = leaders
+            .filter(p => (p.pitchingGames ?? 0) > 0)
+            .map(p => ({
+              player: p.playerName,
+              team: p.teamId,
+              value: stat === 'era' ? (p.era ?? 0).toFixed(2) :
+                     stat === 'whip' ? (p.whip ?? 0).toFixed(2) :
+                     String(p[stat] ?? 0),
+            }));
+        }
 
-  // Mock awards race data
-  const awardsRaceData = {
-    bestHitter: [
-      { player: "J. Rodriguez", team: "Tigers", stats: ".385 AVG, 7 HR, 18 RBI, 1.245 OPS" },
-      { player: "M. Thompson", team: "Crocs", stats: ".328 AVG, 8 HR, 19 RBI, 1.198 OPS" },
-      { player: "K. Martinez", team: "Sox", stats: ".361 AVG, 6 HR, 21 RBI, 1.142 OPS" },
-    ],
-    bestPitcher: [
-      { player: "T. Anderson", team: "Sox", stats: "4-0, 1.72 ERA, 47 K, 0.94 WHIP" },
-      { player: "A. Chen", team: "Nemesis", stats: "4-1, 1.89 ERA, 41 K, 0.87 WHIP" },
-      { player: "J. Williams", team: "Tigers", stats: "3-0, 2.14 ERA, 38 K, 1.02 WHIP" },
-    ],
-    bestFielder: [
-      { player: "T. Davis", team: "Sox", stats: "SS, 0 Errors, .995 FLD%, 12 Assists" },
-      { player: "D. Wilson", team: "Beewolves", stats: "CF, 0 Errors, 1.000 FLD%, 8 Putouts" },
-      { player: "K. Martinez", team: "Sox", stats: "3B, 1 Error, .980 FLD%, 14 Assists" },
-    ],
-  };
+        if (!cancelled) {
+          setBattingData(newBatting);
+          setPitchingData(newPitching);
+          setIsLoading(false);
+        }
+      } catch (err) {
+        console.error('[PlayoffLeaders] Failed to load:', err);
+        if (!cancelled) setIsLoading(false);
+      }
+    }
+    loadLeaders();
+    return () => { cancelled = true; };
+  }, []);
+
+  const battingCategories = ['AVG', 'HR', 'RBI', 'SB', 'OPS'];
+  const pitchingCategories = ['ERA', 'W', 'K', 'WHIP', 'SV'];
+
+  const hasData = Object.values(battingData).some(arr => arr.length > 0) ||
+                  Object.values(pitchingData).some(arr => arr.length > 0);
+
+  if (isLoading) {
+    return (
+      <div className="text-center py-12 text-[#E8E8D8]/60 text-xs">
+        Loading playoff statistics...
+      </div>
+    );
+  }
+
+  if (!hasData) {
+    return (
+      <div className="space-y-4">
+        <div className="bg-[#6B9462] border-[6px] border-[#4A6844] p-6 text-center">
+          <Trophy className="w-10 h-10 text-[#E8E8D8]/30 mx-auto mb-2" />
+          <div className="text-lg text-[#E8E8D8]">PLAYOFF LEADERS</div>
+          <div className="text-sm text-[#E8E8D8]/50 mt-3">No playoff stats yet</div>
+          <div className="text-[8px] text-[#E8E8D8]/40 mt-1">Stats will appear once playoff games are played</div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">
@@ -500,31 +493,32 @@ function PlayoffLeadersContent() {
             <div className="text-xs text-[#E8E8D8] text-center">BATTING LEADERS</div>
           </div>
           <div className="space-y-2">
-            {battingLeaders.map((leader, index) => {
-              const data = battingLeadersData[leader.stat as keyof typeof battingLeadersData];
+            {battingCategories.map((cat) => {
+              const data = battingData[cat] || [];
+              const topValue = data[0]?.value || '-';
               return (
-                <div key={index}>
+                <div key={cat}>
                   <button
-                    onClick={() =>
-                      setExpandedBattingStat(expandedBattingStat === leader.stat ? null : leader.stat)
-                    }
+                    onClick={() => setExpandedBattingStat(expandedBattingStat === cat ? null : cat)}
                     className="w-full bg-[#6B9462] border-4 border-[#4A6844] p-3 hover:bg-[#5A8352] transition"
                   >
                     <div className="flex justify-between items-center">
                       <div className="flex items-center gap-2">
-                        <div className="text-[8px] text-[#E8E8D8]">{leader.stat}</div>
-                        {expandedBattingStat === leader.stat ? (
+                        <div className="text-[8px] text-[#E8E8D8]">{cat}</div>
+                        {expandedBattingStat === cat ? (
                           <ChevronUp className="w-3 h-3 text-[#E8E8D8]" />
                         ) : (
                           <ChevronDown className="w-3 h-3 text-[#E8E8D8]" />
                         )}
                       </div>
-                      <div className="text-[8px] text-[#E8E8D8]">{leader.value}</div>
+                      <div className="text-[8px] text-[#E8E8D8]">{topValue}</div>
                     </div>
                   </button>
-                  {expandedBattingStat === leader.stat && (
+                  {expandedBattingStat === cat && (
                     <div className="bg-[#4A6844] border-4 border-[#5A8352] border-t-0 p-2">
-                      {data.map((player, pIndex) => (
+                      {data.length === 0 ? (
+                        <div className="text-[8px] text-[#E8E8D8]/40 text-center py-2">No data</div>
+                      ) : data.map((player, pIndex) => (
                         <div
                           key={pIndex}
                           className="flex justify-between items-center py-1 border-b border-[#5A8352] last:border-0"
@@ -551,31 +545,32 @@ function PlayoffLeadersContent() {
             <div className="text-xs text-[#E8E8D8] text-center">PITCHING LEADERS</div>
           </div>
           <div className="space-y-2">
-            {pitchingLeaders.map((leader, index) => {
-              const data = pitchingLeadersData[leader.stat as keyof typeof pitchingLeadersData];
+            {pitchingCategories.map((cat) => {
+              const data = pitchingData[cat] || [];
+              const topValue = data[0]?.value || '-';
               return (
-                <div key={index}>
+                <div key={cat}>
                   <button
-                    onClick={() =>
-                      setExpandedPitchingStat(expandedPitchingStat === leader.stat ? null : leader.stat)
-                    }
+                    onClick={() => setExpandedPitchingStat(expandedPitchingStat === cat ? null : cat)}
                     className="w-full bg-[#6B9462] border-4 border-[#4A6844] p-3 hover:bg-[#5A8352] transition"
                   >
                     <div className="flex justify-between items-center">
                       <div className="flex items-center gap-2">
-                        <div className="text-[8px] text-[#E8E8D8]">{leader.stat}</div>
-                        {expandedPitchingStat === leader.stat ? (
+                        <div className="text-[8px] text-[#E8E8D8]">{cat}</div>
+                        {expandedPitchingStat === cat ? (
                           <ChevronUp className="w-3 h-3 text-[#E8E8D8]" />
                         ) : (
                           <ChevronDown className="w-3 h-3 text-[#E8E8D8]" />
                         )}
                       </div>
-                      <div className="text-[8px] text-[#E8E8D8]">{leader.value}</div>
+                      <div className="text-[8px] text-[#E8E8D8]">{topValue}</div>
                     </div>
                   </button>
-                  {expandedPitchingStat === leader.stat && (
+                  {expandedPitchingStat === cat && (
                     <div className="bg-[#4A6844] border-4 border-[#5A8352] border-t-0 p-2">
-                      {data.map((player, pIndex) => (
+                      {data.length === 0 ? (
+                        <div className="text-[8px] text-[#E8E8D8]/40 text-center py-2">No data</div>
+                      ) : data.map((player, pIndex) => (
                         <div
                           key={pIndex}
                           className="flex justify-between items-center py-1 border-b border-[#5A8352] last:border-0"
@@ -596,166 +591,103 @@ function PlayoffLeadersContent() {
           </div>
         </div>
       </div>
-
-      {/* Awards Race Section */}
-      <div className="bg-[#6B9462] border-[6px] border-[#4A6844] p-6 text-center mt-6">
-        <Trophy className="w-8 h-8 text-[#E8E8D8] mx-auto mb-2" />
-        <div className="text-sm text-[#E8E8D8]">PLAYOFF AWARDS RACE</div>
-        <div className="text-[8px] text-[#E8E8D8]/70 mt-1">TOP PERFORMERS</div>
-      </div>
-
-      <div className="grid grid-cols-3 gap-4">
-        {/* Best Hitter */}
-        <div>
-          <div className="bg-[#6B9462] border-[6px] border-[#4A6844] p-3 mb-3 text-center">
-            <div className="text-xs text-[#E8E8D8]">BEST HITTER</div>
-          </div>
-          <div className="space-y-2">
-            {awardsRaceData.bestHitter.map((candidate, index) => (
-              <div
-                key={index}
-                className="bg-[#6B9462] border-4 border-[#4A6844] p-3"
-              >
-                <div className="flex items-center gap-2 mb-1">
-                  <div className="text-[8px] text-[#E8E8D8]/50 w-4">{index + 1}.</div>
-                  <div className="text-[8px] text-[#E8E8D8] font-bold">{candidate.player}</div>
-                </div>
-                <div className="text-[7px] text-[#E8E8D8]/60 ml-6">{candidate.team}</div>
-                <div className="text-[7px] text-[#E8E8D8]/80 ml-6 mt-1">{candidate.stats}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Best Pitcher */}
-        <div>
-          <div className="bg-[#6B9462] border-[6px] border-[#4A6844] p-3 mb-3 text-center">
-            <div className="text-xs text-[#E8E8D8]">BEST PITCHER</div>
-          </div>
-          <div className="space-y-2">
-            {awardsRaceData.bestPitcher.map((candidate, index) => (
-              <div
-                key={index}
-                className="bg-[#6B9462] border-4 border-[#4A6844] p-3"
-              >
-                <div className="flex items-center gap-2 mb-1">
-                  <div className="text-[8px] text-[#E8E8D8]/50 w-4">{index + 1}.</div>
-                  <div className="text-[8px] text-[#E8E8D8] font-bold">{candidate.player}</div>
-                </div>
-                <div className="text-[7px] text-[#E8E8D8]/60 ml-6">{candidate.team}</div>
-                <div className="text-[7px] text-[#E8E8D8]/80 ml-6 mt-1">{candidate.stats}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Best Fielder */}
-        <div>
-          <div className="bg-[#6B9462] border-[6px] border-[#4A6844] p-3 mb-3 text-center">
-            <div className="text-xs text-[#E8E8D8]">BEST FIELDER</div>
-          </div>
-          <div className="space-y-2">
-            {awardsRaceData.bestFielder.map((candidate, index) => (
-              <div
-                key={index}
-                className="bg-[#6B9462] border-4 border-[#4A6844] p-3"
-              >
-                <div className="flex items-center gap-2 mb-1">
-                  <div className="text-[8px] text-[#E8E8D8]/50 w-4">{index + 1}.</div>
-                  <div className="text-[8px] text-[#E8E8D8] font-bold">{candidate.player}</div>
-                </div>
-                <div className="text-[7px] text-[#E8E8D8]/60 ml-6">{candidate.team}</div>
-                <div className="text-[7px] text-[#E8E8D8]/80 ml-6 mt-1">{candidate.stats}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
     </div>
   );
 }
 
 function PlayoffHistoryContent() {
-  const [expandedYear, setExpandedYear] = useState<string | null>("2023");
+  const [expandedSeason, setExpandedSeason] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [historyData, setHistoryData] = useState<Array<{
+    playoffId: string;
+    seasonNumber: number;
+    championTeam: PlayoffTeam | undefined;
+    runnerUpTeam: PlayoffTeam | undefined;
+    mvp: PlayoffMVP | undefined;
+    seriesList: PlayoffSeries[];
+  }>>([]);
 
-  // Mock historical playoff data
-  const playoffHistory = [
-    {
-      year: "2023",
-      league: "American League",
-      champion: { team: "Tigers", seed: 1, record: "68-32" },
-      runnerUp: { team: "Sox", seed: 2, record: "65-35" },
-      seriesResult: "4-3",
-      mvp: { player: "J. Rodriguez", stats: ".385 AVG, 7 HR, 18 RBI" },
-      bestPitcher: { player: "T. Anderson", stats: "4-0, 1.72 ERA, 47 K" },
-      bestFielder: { player: "T. Davis", stats: "SS, 0 Errors, .995 FLD%" },
-      rounds: [
-        {
-          name: "Championship",
-          matchups: [
-            { team1: "Tigers", team2: "Sox", result: "4-3", winner: "Tigers" }
-          ]
-        },
-        {
-          name: "Semi-Finals",
-          matchups: [
-            { team1: "Tigers", team2: "Dodgers", result: "4-1", winner: "Tigers" },
-            { team1: "Sox", team2: "Cubs", result: "4-2", winner: "Sox" }
-          ]
+  useEffect(() => {
+    let cancelled = false;
+    async function loadHistory() {
+      try {
+        const allPlayoffs = await getAllPlayoffs();
+        const completed = allPlayoffs
+          .filter(p => p.status === 'COMPLETED' && p.champion)
+          .sort((a, b) => b.seasonNumber - a.seasonNumber);
+
+        const entries = [];
+        for (const playoff of completed) {
+          const seriesList = await getSeriesByPlayoff(playoff.id);
+          const championTeam = playoff.teams.find(t => t.teamId === playoff.champion);
+
+          // Find runner-up: the team that lost in the final round
+          const maxRound = Math.max(...seriesList.map(s => s.round), 0);
+          const finalSeries = seriesList.find(s => s.round === maxRound && s.status === 'COMPLETED');
+          const runnerUpId = finalSeries
+            ? (finalSeries.winner === finalSeries.higherSeed.teamId
+                ? finalSeries.lowerSeed.teamId
+                : finalSeries.higherSeed.teamId)
+            : undefined;
+          const runnerUpTeam = runnerUpId ? playoff.teams.find(t => t.teamId === runnerUpId) : undefined;
+
+          entries.push({
+            playoffId: playoff.id,
+            seasonNumber: playoff.seasonNumber,
+            championTeam,
+            runnerUpTeam,
+            mvp: playoff.mvp,
+            seriesList: seriesList.sort((a, b) => b.round - a.round),
+          });
         }
-      ]
-    },
-    {
-      year: "2022",
-      league: "National League",
-      champion: { team: "Cubs", seed: 1, record: "62-38" },
-      runnerUp: { team: "Dodgers", seed: 2, record: "60-40" },
-      seriesResult: "4-3",
-      mvp: { player: "R. Williams", stats: ".361 AVG, 6 HR, 21 RBI" },
-      bestPitcher: { player: "A. Chen", stats: "4-1, 1.89 ERA, 41 K" },
-      bestFielder: { player: "D. Wilson", stats: "CF, 0 Errors, 1.000 FLD%" },
-      rounds: [
-        {
-          name: "Championship",
-          matchups: [
-            { team1: "Cubs", team2: "Dodgers", result: "4-3", winner: "Cubs" }
-          ]
-        },
-        {
-          name: "Semi-Finals",
-          matchups: [
-            { team1: "Cubs", team2: "Brewers", result: "4-0", winner: "Cubs" },
-            { team1: "Dodgers", team2: "Mets", result: "4-2", winner: "Dodgers" }
-          ]
+
+        if (!cancelled) {
+          setHistoryData(entries);
+          if (entries.length > 0) setExpandedSeason(entries[0].playoffId);
+          setIsLoading(false);
         }
-      ]
-    },
-    {
-      year: "2021",
-      league: "American League",
-      champion: { team: "Yankees", seed: 1, record: "58-42" },
-      runnerUp: { team: "Mets", seed: 2, record: "56-44" },
-      seriesResult: "4-1",
-      mvp: { player: "M. Thompson", stats: ".328 AVG, 8 HR, 19 RBI" },
-      bestPitcher: { player: "J. Williams", stats: "3-0, 2.14 ERA, 38 K" },
-      bestFielder: { player: "K. Martinez", stats: "3B, 1 Error, .980 FLD%" },
-      rounds: [
-        {
-          name: "Championship",
-          matchups: [
-            { team1: "Yankees", team2: "Mets", result: "4-1", winner: "Yankees" }
-          ]
-        },
-        {
-          name: "Semi-Finals",
-          matchups: [
-            { team1: "Yankees", team2: "Braves", result: "4-2", winner: "Yankees" },
-            { team1: "Mets", team2: "Tigers", result: "4-3", winner: "Mets" }
-          ]
-        }
-      ]
+      } catch (err) {
+        console.error('[PlayoffHistory] Failed to load:', err);
+        if (!cancelled) setIsLoading(false);
+      }
     }
-  ];
+    loadHistory();
+    return () => { cancelled = true; };
+  }, []);
+
+  if (isLoading) {
+    return (
+      <div className="text-center py-12 text-[#E8E8D8]/60 text-xs">
+        Loading playoff history...
+      </div>
+    );
+  }
+
+  if (historyData.length === 0) {
+    return (
+      <div className="space-y-4">
+        <div className="bg-[#6B9462] border-[6px] border-[#4A6844] p-6 text-center">
+          <Trophy className="w-10 h-10 text-[#E8E8D8]/30 mx-auto mb-2" />
+          <div className="text-lg text-[#E8E8D8]">PLAYOFF HISTORY</div>
+          <div className="text-sm text-[#E8E8D8]/50 mt-3">No championship history yet</div>
+          <div className="text-[8px] text-[#E8E8D8]/40 mt-1">History will appear after a playoff is completed</div>
+        </div>
+      </div>
+    );
+  }
+
+  // Build all-time championship counts from real data
+  const champCounts: Record<string, { teamName: string; count: number }> = {};
+  for (const entry of historyData) {
+    if (entry.championTeam) {
+      const id = entry.championTeam.teamId;
+      if (!champCounts[id]) {
+        champCounts[id] = { teamName: entry.championTeam.teamName, count: 0 };
+      }
+      champCounts[id].count++;
+    }
+  }
+  const champRanking = Object.values(champCounts).sort((a, b) => b.count - a.count);
 
   return (
     <div className="space-y-4">
@@ -767,140 +699,118 @@ function PlayoffHistoryContent() {
       </div>
 
       {/* Championship History */}
-      {playoffHistory.map((playoff) => (
-        <div key={playoff.year} className="bg-[#6B9462] border-[6px] border-[#4A6844] p-4">
-          <button
-            onClick={() => setExpandedYear(expandedYear === playoff.year ? null : playoff.year)}
-            className="w-full text-left"
-          >
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <Trophy className="w-5 h-5 text-[#E8E8D8]" />
-                <div>
-                  <div className="text-sm text-[#E8E8D8]">
-                    {playoff.year} CHAMPIONSHIP - {playoff.league.toUpperCase()}
-                  </div>
-                  <div className="text-[8px] text-[#E8E8D8]/60 mt-1">
-                    {playoff.champion.team.toUpperCase()} def. {playoff.runnerUp.team.toUpperCase()} ({playoff.seriesResult})
+      {historyData.map((entry) => {
+        const champName = entry.championTeam?.teamName ?? 'Unknown';
+        const runnerUpName = entry.runnerUpTeam?.teamName ?? 'Unknown';
+
+        // Find the championship series result
+        const maxRound = Math.max(...entry.seriesList.map(s => s.round), 0);
+        const finalSeries = entry.seriesList.find(s => s.round === maxRound && s.status === 'COMPLETED');
+        const champWins = finalSeries
+          ? (finalSeries.winner === finalSeries.higherSeed.teamId ? finalSeries.higherSeedWins : finalSeries.lowerSeedWins)
+          : 0;
+        const runnerUpWins = finalSeries
+          ? (finalSeries.winner === finalSeries.higherSeed.teamId ? finalSeries.lowerSeedWins : finalSeries.higherSeedWins)
+          : 0;
+
+        return (
+          <div key={entry.playoffId} className="bg-[#6B9462] border-[6px] border-[#4A6844] p-4">
+            <button
+              onClick={() => setExpandedSeason(expandedSeason === entry.playoffId ? null : entry.playoffId)}
+              className="w-full text-left"
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <Trophy className="w-5 h-5 text-[#E8E8D8]" />
+                  <div>
+                    <div className="text-sm text-[#E8E8D8]">
+                      SEASON {entry.seasonNumber} CHAMPIONSHIP
+                    </div>
+                    <div className="text-[8px] text-[#E8E8D8]/60 mt-1">
+                      {champName.toUpperCase()} def. {runnerUpName.toUpperCase()} ({champWins}-{runnerUpWins})
+                    </div>
                   </div>
                 </div>
+                {expandedSeason === entry.playoffId ? (
+                  <ChevronUp className="w-4 h-4 text-[#E8E8D8]" />
+                ) : (
+                  <ChevronDown className="w-4 h-4 text-[#E8E8D8]" />
+                )}
               </div>
-              {expandedYear === playoff.year ? (
-                <ChevronUp className="w-4 h-4 text-[#E8E8D8]" />
-              ) : (
-                <ChevronDown className="w-4 h-4 text-[#E8E8D8]" />
-              )}
-            </div>
-          </button>
+            </button>
 
-          {expandedYear === playoff.year && (
-            <div className="mt-4 space-y-4">
-              {/* Championship Series */}
-              <div className="bg-[#4A6844] border-4 border-[#5A8352] p-3">
-                <div className="text-[8px] text-[#E8E8D8]/70 mb-2">CHAMPIONSHIP SERIES</div>
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Trophy className="w-4 h-4 text-[#E8E8D8]" />
-                      <div className="text-[#E8E8D8]/50 text-[8px] w-6">#{playoff.champion.seed}</div>
-                      <div className="text-[8px] text-[#E8E8D8] font-bold">{playoff.champion.team}</div>
-                      <div className="text-[8px] text-[#E8E8D8]/40">{playoff.champion.record}</div>
-                    </div>
-                    <div className="text-[#E8E8D8] text-xs">{playoff.seriesResult.split('-')[0]}</div>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <div className="w-4"></div>
-                      <div className="text-[#E8E8D8]/50 text-[8px] w-6">#{playoff.runnerUp.seed}</div>
-                      <div className="text-[8px] text-[#E8E8D8]/70">{playoff.runnerUp.team}</div>
-                      <div className="text-[8px] text-[#E8E8D8]/40">{playoff.runnerUp.record}</div>
-                    </div>
-                    <div className="text-[#E8E8D8] text-xs">{playoff.seriesResult.split('-')[1]}</div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Playoff Rounds */}
-              {playoff.rounds.map((round, rIndex) => (
-                <div key={rIndex} className="bg-[#4A6844] border-4 border-[#5A8352] p-3">
-                  <div className="text-[8px] text-[#E8E8D8]/70 mb-2">{round.name.toUpperCase()}</div>
-                  <div className="space-y-3">
-                    {round.matchups.map((matchup, mIndex) => (
-                      <div key={mIndex} className="space-y-1">
+            {expandedSeason === entry.playoffId && (
+              <div className="mt-4 space-y-4">
+                {/* Series results by round (highest round first) */}
+                {entry.seriesList
+                  .filter(s => s.status === 'COMPLETED')
+                  .map((series) => (
+                    <div key={series.id} className="bg-[#4A6844] border-4 border-[#5A8352] p-3">
+                      <div className="text-[8px] text-[#E8E8D8]/70 mb-2">{series.roundName.toUpperCase()}</div>
+                      <div className="space-y-1">
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-2">
-                            {matchup.winner === matchup.team1 && (
+                            {series.winner === series.higherSeed.teamId && (
                               <Trophy className="w-3 h-3 text-[#E8E8D8]" />
                             )}
-                            <div className="text-[8px] text-[#E8E8D8]">{matchup.team1}</div>
+                            {series.winner !== series.higherSeed.teamId && <div className="w-3" />}
+                            <div className="text-[#E8E8D8]/50 text-[8px] w-6">#{series.higherSeed.seed}</div>
+                            <div className={`text-[8px] ${series.winner === series.higherSeed.teamId ? 'text-[#E8E8D8] font-bold' : 'text-[#E8E8D8]/70'}`}>
+                              {series.higherSeed.teamName}
+                            </div>
                           </div>
-                          <div className="text-[8px] text-[#E8E8D8]">{matchup.result.split('-')[0]}</div>
+                          <div className="text-[8px] text-[#E8E8D8]">{series.higherSeedWins}</div>
                         </div>
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-2">
-                            {matchup.winner === matchup.team2 && (
+                            {series.winner === series.lowerSeed.teamId && (
                               <Trophy className="w-3 h-3 text-[#E8E8D8]" />
                             )}
-                            <div className="text-[8px] text-[#E8E8D8]/70">{matchup.team2}</div>
+                            {series.winner !== series.lowerSeed.teamId && <div className="w-3" />}
+                            <div className="text-[#E8E8D8]/50 text-[8px] w-6">#{series.lowerSeed.seed}</div>
+                            <div className={`text-[8px] ${series.winner === series.lowerSeed.teamId ? 'text-[#E8E8D8] font-bold' : 'text-[#E8E8D8]/70'}`}>
+                              {series.lowerSeed.teamName}
+                            </div>
                           </div>
-                          <div className="text-[8px] text-[#E8E8D8]/70">{matchup.result.split('-')[1]}</div>
+                          <div className="text-[8px] text-[#E8E8D8]/70">{series.lowerSeedWins}</div>
                         </div>
                       </div>
-                    ))}
-                  </div>
-                </div>
-              ))}
+                    </div>
+                  ))}
 
-              {/* Awards */}
-              <div className="bg-[#4A6844] border-4 border-[#5A8352] p-3">
-                <div className="text-[8px] text-[#E8E8D8]/70 mb-3">PLAYOFF AWARDS</div>
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between py-2 border-b border-[#5A8352]">
-                    <div>
-                      <div className="text-[8px] text-[#E8E8D8] font-bold">MVP</div>
-                      <div className="text-[7px] text-[#E8E8D8]/60 mt-1">{playoff.mvp.player}</div>
+                {/* MVP Award */}
+                {entry.mvp && (
+                  <div className="bg-[#4A6844] border-4 border-[#5A8352] p-3">
+                    <div className="text-[8px] text-[#E8E8D8]/70 mb-3">PLAYOFF AWARDS</div>
+                    <div className="flex items-center justify-between py-2">
+                      <div>
+                        <div className="text-[8px] text-[#E8E8D8] font-bold">MVP</div>
+                        <div className="text-[7px] text-[#E8E8D8]/60 mt-1">{entry.mvp.playerName}</div>
+                      </div>
+                      <div className="text-[7px] text-[#E8E8D8]/80 text-right">{entry.mvp.stats}</div>
                     </div>
-                    <div className="text-[7px] text-[#E8E8D8]/80 text-right">{playoff.mvp.stats}</div>
                   </div>
-                  <div className="flex items-center justify-between py-2 border-b border-[#5A8352]">
-                    <div>
-                      <div className="text-[8px] text-[#E8E8D8] font-bold">BEST PITCHER</div>
-                      <div className="text-[7px] text-[#E8E8D8]/60 mt-1">{playoff.bestPitcher.player}</div>
-                    </div>
-                    <div className="text-[7px] text-[#E8E8D8]/80 text-right">{playoff.bestPitcher.stats}</div>
-                  </div>
-                  <div className="flex items-center justify-between py-2">
-                    <div>
-                      <div className="text-[8px] text-[#E8E8D8] font-bold">BEST FIELDER</div>
-                      <div className="text-[7px] text-[#E8E8D8]/60 mt-1">{playoff.bestFielder.player}</div>
-                    </div>
-                    <div className="text-[7px] text-[#E8E8D8]/80 text-right">{playoff.bestFielder.stats}</div>
-                  </div>
-                </div>
+                )}
               </div>
-            </div>
-          )}
-        </div>
-      ))}
+            )}
+          </div>
+        );
+      })}
 
-      {/* All-Time Stats Summary */}
-      <div className="bg-[#6B9462] border-[6px] border-[#4A6844] p-4">
-        <div className="text-sm text-[#E8E8D8] mb-3">▶ ALL-TIME CHAMPIONSHIPS</div>
-        <div className="grid grid-cols-3 gap-3">
-          <div className="bg-[#4A6844] border-4 border-[#5A8352] p-3 text-center">
-            <div className="text-[8px] text-[#E8E8D8]/70">TIGERS</div>
-            <div className="text-lg text-[#E8E8D8] mt-1">2</div>
-          </div>
-          <div className="bg-[#4A6844] border-4 border-[#5A8352] p-3 text-center">
-            <div className="text-[8px] text-[#E8E8D8]/70">CUBS</div>
-            <div className="text-lg text-[#E8E8D8] mt-1">1</div>
-          </div>
-          <div className="bg-[#4A6844] border-4 border-[#5A8352] p-3 text-center">
-            <div className="text-[8px] text-[#E8E8D8]/70">YANKEES</div>
-            <div className="text-lg text-[#E8E8D8] mt-1">1</div>
+      {/* All-Time Championships (computed from real data) */}
+      {champRanking.length > 0 && (
+        <div className="bg-[#6B9462] border-[6px] border-[#4A6844] p-4">
+          <div className="text-sm text-[#E8E8D8] mb-3">▶ ALL-TIME CHAMPIONSHIPS</div>
+          <div className={`grid gap-3 ${champRanking.length >= 3 ? 'grid-cols-3' : champRanking.length === 2 ? 'grid-cols-2' : 'grid-cols-1'}`}>
+            {champRanking.map((team) => (
+              <div key={team.teamName} className="bg-[#4A6844] border-4 border-[#5A8352] p-3 text-center">
+                <div className="text-[8px] text-[#E8E8D8]/70">{team.teamName.toUpperCase()}</div>
+                <div className="text-lg text-[#E8E8D8] mt-1">{team.count}</div>
+              </div>
+            ))}
           </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }
