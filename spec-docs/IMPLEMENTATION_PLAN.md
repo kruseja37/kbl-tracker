@@ -1,36 +1,37 @@
 # KBL Tracker Implementation Plan v5
 
 > **Created**: January 25, 2026
-> **Updated**: January 25, 2026 (Post-Day 0 Deep Audit)
-> **Status**: Day 0 COMPLETE - Ready for Phase 1
+> **Updated**: February 12, 2026 (Reconciled against actual implementation state)
+> **Status**: Phase 1 MOSTLY COMPLETE — 4/6 orphaned engines wired, 5/7 bugs fixed
 > **Methodology**: ✅ Audit Complete → Connect Orphans → Close Gaps → Fix Bugs → Polish
 >
 > **Sprint Goal**: Wire all orphaned engines to UI, close known gaps, fix remaining bugs
 
 ---
 
-## What Changed (v5 Update)
+## What Changed (Feb 12, 2026 Update)
 
-**Day 0 Deep Audit COMPLETED** - All 3 partial specs fully audited:
+Reconciled this plan against actual codebase state. Many items marked as TODO were
+already completed in recent sessions but never updated here.
 
-1. **STAT_TRACKING_ARCHITECTURE_SPEC.md** - ✅ FULLY VERIFIED
-   - All 4 implemented phases match spec
-   - 11 IndexedDB stores verified
-   - All derived stat formulas match (AVG, OBP, SLG, ERA, WHIP)
-   - Phase 5 (Export/Cloud) documented as POST-MVP
+**Engines wired since Jan 25:**
+- ✅ mWAR — `useMWARCalculations` hook wired to GameTracker.tsx:199
+- ✅ Mojo — `usePlayerState` hook integrates mojoEngine → GameTracker.tsx:181
+- ✅ Fitness — `usePlayerState` hook integrates fitnessEngine → GameTracker.tsx:181
 
-2. **OFFSEASON_SYSTEM_SPEC.md** - ⚠️ PARTIALLY IMPLEMENTED (as expected)
-   - Phase 1 (Season End Processing): ✅ Working
-   - Team MVP/Ace/Cornerstone: ✅ Fully implemented
-   - Legacy Status tiers: ✅ Implemented
-   - Phases 2-10 (Awards, FA, Draft, etc.): ❌ Explicitly NOT IMPLEMENTED - shown as "Coming Soon" in UI
+**Still orphaned:**
+- ❌ fWAR — calculator runs via useWARCalculations but no UI display column
+- ❌ rWAR — calculator runs via useWARCalculations but no UI display column
+- ❌ Clutch — `useClutchCalculations.ts` hook exists but NOT imported in GameTracker
 
-3. **ADAPTIVE_STANDARDS_ENGINE_SPEC.md** - ✅ FULLY VERIFIED (Static v1)
-   - All 22 SMB4_BASELINES constants match
-   - All 7 linear weights match (Jester GUTS method)
-   - All 6 wOBA weights match
-   - All scaling functions verified
-   - Phases 2-5 (dynamic learning) documented as POST-MVP
+**Bugs fixed since Jan 25:**
+- ✅ BUG-009 (Undo button) — UndoSystem.tsx → GameTracker.tsx:317
+- ✅ BUG-011 (Pitch count) — useGameState.ts pitchCountPrompt
+- ✅ BUG-012 (Pitcher exit prompt) — useGameState.ts:3311
+
+**Data integrity fixes (Feb 12, Batches 1A-F3):**
+- ✅ 21/21 issues resolved (see DATA_INTEGRITY_FIX_REPORT.md)
+- Including: WPA system, substitution validation, autoCorrectResult, walk-off, isPlayoff, SB/CS
 
 ---
 
@@ -89,16 +90,16 @@
 |-----------|--------|-------|
 | BWAR_CALCULATION_SPEC.md | ✅ VERIFIED | SMB4 calibrations documented |
 | PWAR_CALCULATION_SPEC.md | ✅ VERIFIED | Minor spec inconsistencies resolved |
-| FWAR_CALCULATION_SPEC.md | ✅ VERIFIED | ❌ ORPHANED - needs connection |
-| RWAR_CALCULATION_SPEC.md | ✅ VERIFIED | ❌ ORPHANED - needs connection |
-| MWAR_CALCULATION_SPEC.md | ✅ VERIFIED | ❌ ORPHANED - needs connection |
+| FWAR_CALCULATION_SPEC.md | ✅ VERIFIED | ⚠️ No UI display — calculator runs but results hidden |
+| RWAR_CALCULATION_SPEC.md | ✅ VERIFIED | ⚠️ No UI display — calculator runs but results hidden |
+| MWAR_CALCULATION_SPEC.md | ✅ VERIFIED | ✅ WIRED — useMWARCalculations hook |
 | LEVERAGE_INDEX_SPEC.md | ✅ VERIFIED | Connected to 8 files |
-| CLUTCH_ATTRIBUTION_SPEC.md | ✅ VERIFIED | ❌ ORPHANED - needs connection |
-| MOJO_FITNESS_SYSTEM_SPEC.md | ✅ VERIFIED | ❌ ORPHANED - needs connection |
+| CLUTCH_ATTRIBUTION_SPEC.md | ✅ VERIFIED | ❌ ORPHANED — hook exists but not imported |
+| MOJO_FITNESS_SYSTEM_SPEC.md | ✅ VERIFIED | ✅ WIRED — usePlayerState hook |
 | SALARY_SYSTEM_SPEC.md | ✅ VERIFIED | Blocked on ratings data |
 | FAME_SYSTEM_TRACKING.md | ✅ VERIFIED | Connected |
 | FIELDING_SYSTEM_SPEC.md | ✅ VERIFIED | 16 requirements verified |
-| SUBSTITUTION_FLOW_SPEC.md | ✅ VERIFIED | 7 requirements verified |
+| SUBSTITUTION_FLOW_SPEC.md | ✅ VERIFIED | ✅ Validation wired (Feb 12 Batch F3) |
 | FAN_MORALE_SYSTEM_SPEC.md | ✅ VERIFIED | Connected |
 | NARRATIVE_SYSTEM_SPEC.md | ✅ VERIFIED | Templates working, Claude API POST-MVP |
 | MILESTONE_SYSTEM_SPEC.md | ✅ VERIFIED | Connected, UI missing |
@@ -108,384 +109,112 @@
 | **OFFSEASON_SYSTEM_SPEC.md** | ⚠️ PARTIAL | Phase 1 only; Phases 2-10 POST-MVP |
 | **ADAPTIVE_STANDARDS_ENGINE_SPEC.md** | ✅ VERIFIED | Static v1; Phases 2-5 POST-MVP |
 
-### Critical Finding: 6 Orphaned Engines
+### Engine Connection Status (Updated Feb 12)
 
-| Engine | File | Tests Pass? | Connected? | Target Day |
-|--------|------|-------------|------------|------------|
-| fWAR Calculator | fwarCalculator.ts | ✅ | ❌ ORPHANED | Day 1 |
-| rWAR Calculator | rwarCalculator.ts | ✅ | ❌ ORPHANED | Day 1 |
-| mWAR Calculator | mwarCalculator.ts | ✅ | ❌ ORPHANED | Day 2 |
-| Clutch Calculator | clutchCalculator.ts | ✅ | ❌ ORPHANED | Day 2 |
-| Mojo Engine | mojoEngine.ts | ✅ | ❌ ORPHANED | Day 3 |
-| Fitness Engine | fitnessEngine.ts | ✅ | ❌ ORPHANED | Day 3 |
+| Engine | File | Tests Pass? | Connected? | Status |
+|--------|------|-------------|------------|--------|
+| fWAR Calculator | fwarCalculator.ts | ✅ | ⚠️ Runs but no UI display | Needs display column |
+| rWAR Calculator | rwarCalculator.ts | ✅ | ⚠️ Runs but no UI display | Needs display column |
+| mWAR Calculator | mwarCalculator.ts | ✅ | ✅ WIRED | useMWARCalculations hook |
+| Clutch Calculator | clutchCalculator.ts | ✅ | ❌ ORPHANED | Hook exists, not imported |
+| Mojo Engine | mojoEngine.ts | ✅ | ✅ WIRED | usePlayerState hook |
+| Fitness Engine | fitnessEngine.ts | ✅ | ✅ WIRED | usePlayerState hook |
 
 ### Known Gaps
 
-| Gap | Spec | Priority | Target Day |
-|-----|------|----------|------------|
-| IBB Tracking | BWAR_CALCULATION_SPEC | MEDIUM | Day 5 |
-| Player Ratings Data | SALARY_SYSTEM_SPEC | HIGH | Day 5 |
-| Milestone Watch UI | MILESTONE_SYSTEM_SPEC | MEDIUM | Day 6 |
-| Fame Events During Game | SPECIAL_EVENTS_SPEC | MEDIUM | Day 7 |
+| Gap | Spec | Priority | Status |
+|-----|------|----------|--------|
+| IBB Tracking | BWAR_CALCULATION_SPEC | MEDIUM | TODO |
+| Player Ratings Data | SALARY_SYSTEM_SPEC | HIGH | TODO |
+| Milestone Watch UI | MILESTONE_SYSTEM_SPEC | MEDIUM | TODO |
+| Fame Events During Game | SPECIAL_EVENTS_SPEC | MEDIUM | TODO |
 | Park Factor (Pitching) | PWAR_CALCULATION_SPEC | LOW | POST-MVP |
 | Claude API Narrative | NARRATIVE_SYSTEM_SPEC | LOW | POST-MVP |
 
-### Remaining Bugs
+### Bug Status (Updated Feb 12)
 
-| Bug | Description | Priority | Target Day |
-|-----|-------------|----------|------------|
-| BUG-006 | No Mojo/Fitness in scoreboard | HIGH | Day 3 |
-| BUG-007 | No Fame events during game | MEDIUM | Day 7 |
-| BUG-008 | End Game modal wrong data | MEDIUM | Day 7 |
-| BUG-009 | No undo button | HIGH | Day 4 |
-| BUG-011 | No pitch count displayed | MEDIUM | Day 4 |
-| BUG-012 | Pitcher exit prompt missing | MEDIUM | Day 8 |
-| BUG-014 | No inning summary | LOW | Day 9 |
-
----
-
-## 2-Week Sprint Plan
-
-### ~~PHASE 0: Complete Partial Audits~~ ✅ COMPLETE
-
-**Status**: Day 0 completed January 25, 2026
-
-All 3 partial specs deep audited with:
-- File:line evidence for all requirements
-- Grep results showing actual code matches
-- POST-MVP items explicitly documented
-- Audit report updated
+| Bug | Description | Priority | Status |
+|-----|-------------|----------|--------|
+| BUG-006 | No Mojo/Fitness in scoreboard | HIGH | **TODO** — usePlayerState wired but scoreboard display missing |
+| BUG-007 | No Fame events during game | MEDIUM | **TODO** |
+| BUG-008 | End Game modal wrong data | MEDIUM | **TODO** |
+| BUG-009 | No undo button | HIGH | ✅ **FIXED** — UndoSystem.tsx → GameTracker.tsx:317 |
+| BUG-011 | No pitch count displayed | MEDIUM | ✅ **FIXED** — useGameState.ts pitchCountPrompt |
+| BUG-012 | Pitcher exit prompt missing | MEDIUM | ✅ **FIXED** — useGameState.ts:3311 |
+| BUG-014 | No inning summary | LOW | **TODO** |
 
 ---
 
-### PHASE 1: Connect Orphaned Engines (Days 1-4)
+## Remaining Sprint Work
 
-#### Day 1: Wire fWAR + rWAR to useWARCalculations
+### Still TODO — Orphan Wiring
 
-**Goal**: fWAR and rWAR appear in WAR leaderboards alongside bWAR/pWAR
+| # | Task | Effort | Notes |
+|---|------|--------|-------|
+| 1 | Wire Clutch Calculator | SMALL | Import useClutchCalculations in GameTracker, add display |
+| 2 | Add fWAR/rWAR display columns | SMALL | Data already flowing, just no UI column |
+| 3 | BUG-006: Mojo/Fitness scoreboard display | MEDIUM | usePlayerState wired, need scoreboard component |
 
-**Tasks**:
+### Still TODO — Gap Closure
 
-| # | Task | File | Change |
-|---|------|------|--------|
-| 1.1 | Import fwarCalculator | useWARCalculations.ts | Add import |
-| 1.2 | Import rwarCalculator | useWARCalculations.ts | Add import |
-| 1.3 | Add fWAR calculation call | useWARCalculations.ts | Calculate per-player fWAR |
-| 1.4 | Add rWAR calculation call | useWARCalculations.ts | Calculate per-player rWAR |
-| 1.5 | Update return type | useWARCalculations.ts | Include fWAR, rWAR |
-| 1.6 | Update WARDisplay | WARDisplay.tsx | Show fWAR + rWAR columns |
-| 1.7 | Update PlayerCard | PlayerCard.tsx | Show WAR breakdown |
-
-**NFL Verification Required (Day 1)**:
-
-```
-TIER 1: BUILD & TESTS
-□ npm run build → Exit code: ___
-□ npm test → Passing: ___ / ___
-□ Paste actual terminal output here
-
-TIER 2: DATA FLOW TRACE (fWAR)
-□ UI INPUT:     FieldingModal.tsx:___ - Fielding data collected
-□ STORAGE:      eventLog.ts:___ - logFieldingEvent()
-□ CALLED FROM:  AtBatFlow.tsx:___ - submitFieldingData()
-□ CALCULATOR:   fwarCalculator.ts:___ - calculateFWAR()
-□ CALLED FROM:  useWARCalculations.ts:___ - (NEW CALL)
-□ DISPLAY:      WARDisplay.tsx:___ - fWAR column
-□ RENDERS IN:   index.tsx:___ - WARPanel
-
-TIER 3: EXTERNAL VERIFICATION
-□ Browser test: Record 5 fielding plays
-□ Verify fWAR appears in WAR panel
-□ Screenshot taken: Yes/No
-
-VERDICT: [ VERIFIED | UNVERIFIED | INCOMPLETE ]
-```
+| # | Task | Effort | Notes |
+|---|------|--------|-------|
+| 4 | IBB Tracking in bWAR | SMALL | Ensure isIntentionalWalk persists and feeds wOBA |
+| 5 | Player Ratings Data Model | MEDIUM | Types + storage + game setup UI |
+| 6 | Milestone Watch UI | MEDIUM | Component + hook + scoreboard integration |
+| 7 | Fame Events During Game (BUG-007) | MEDIUM | Toast notifications + detection wiring |
+| 8 | End Game Modal Fix (BUG-008) | SMALL | Correct data sources |
+| 9 | Inning Summary (BUG-014) | SMALL | Display at inning end |
 
 ---
 
-#### Day 2: Wire mWAR + Clutch Calculator
-
-**Goal**: mWAR and Clutch stats visible in displays
-
-**Tasks**:
-
-| # | Task | File | Change |
-|---|------|------|--------|
-| 2.1 | Create useMWARCalculations hook | hooks/useMWARCalculations.ts | NEW |
-| 2.2 | Create useClutchCalculations hook | hooks/useClutchCalculations.ts | NEW |
-| 2.3 | Track manager decisions | GameTracker/index.tsx | Call mWAR after subs |
-| 2.4 | Display mWAR | SeasonSummary.tsx | Add mWAR section |
-| 2.5 | Display Clutch | PlayerCard.tsx | Add clutch section |
-| 2.6 | Create ClutchLeaderboard | SeasonLeaderboards.tsx | Add clutch tab |
-
-**NFL Verification Required (Day 2)**:
-
-```
-TIER 1: BUILD & TESTS
-□ npm run build → Exit code: ___
-□ npm test → Passing: ___ / ___
-□ Paste actual terminal output here
-
-TIER 2: DATA FLOW TRACE (mWAR)
-□ UI INPUT:     index.tsx:___ - Substitution events
-□ STORAGE:      transactionStorage.ts:___ - Decision events
-□ CALLED FROM:  index.tsx:___ - after handlePinchHitter
-□ CALCULATOR:   mwarCalculator.ts:___ - calculateMWAR()
-□ CALLED FROM:  useMWARCalculations.ts:___ - (NEW HOOK)
-□ DISPLAY:      SeasonSummary.tsx:___ - mWAR section
-□ RENDERS IN:   SeasonSummary modal
-
-TIER 2: DATA FLOW TRACE (Clutch)
-□ UI INPUT:     AtBatFlow.tsx:___ - At-bat with LI
-□ STORAGE:      eventLog.ts:___ - AtBatEvent.leverageIndex
-□ CALLED FROM:  AtBatFlow.tsx:___ - handleSubmitAtBat()
-□ CALCULATOR:   clutchCalculator.ts:___ - calculateClutchValue()
-□ CALLED FROM:  useClutchCalculations.ts:___ - (NEW HOOK)
-□ DISPLAY:      PlayerCard.tsx:___ - Clutch section
-□ RENDERS IN:   PlayerCard modal
-
-TIER 3: EXTERNAL VERIFICATION
-□ Browser test: Make substitutions, verify mWAR
-□ Browser test: High LI at-bats, verify clutch
-□ Screenshot taken: Yes/No
-
-VERDICT: [ VERIFIED | UNVERIFIED | INCOMPLETE ]
-```
-
----
-
-#### Day 3: Wire Mojo + Fitness Engines (Fixes BUG-006)
-
-**Goal**: Mojo and Fitness visible in Scoreboard
-
-**Tasks**:
-
-| # | Task | File | Change |
-|---|------|------|--------|
-| 3.1 | Create useMojoState hook | hooks/useMojoState.ts | NEW |
-| 3.2 | Create useFitnessState hook | hooks/useFitnessState.ts | NEW |
-| 3.3 | Add Mojo triggers | GameTracker/index.tsx | Call after events |
-| 3.4 | Add Fitness updates | GameTracker/index.tsx | Call after games |
-| 3.5 | Create MojoFitnessDisplay | MojoFitnessDisplay.tsx | NEW component |
-| 3.6 | Add to Scoreboard | Scoreboard.tsx | Show mojo/fitness |
-| 3.7 | Add to PlayerCard | PlayerCard.tsx | Show mojo history |
-
-**Mojo Triggers** (from MOJO_FITNESS_SYSTEM_SPEC.md):
-- HR: +1 (grand slam: +2)
-- 3+ hit game: +1
-- Strikeout: -1 (3 consecutive: additional -1)
-- Error: -1
-- Walk-off: +2
-
-**NFL Verification Required (Day 3)**:
-
-```
-TIER 1: BUILD & TESTS
-□ npm run build → Exit code: ___
-□ npm test → Passing: ___ / ___
-□ Paste actual terminal output here
-
-TIER 2: DATA FLOW TRACE (Mojo)
-□ UI INPUT:     index.tsx:___ - At-bat events
-□ STORAGE:      (localStorage or IndexedDB):___ - Mojo states
-□ CALLED FROM:  index.tsx:___ - after handleSubmitAtBat()
-□ CALCULATOR:   mojoEngine.ts:___ - updateMojoForEvent()
-□ CALLED FROM:  useMojoState.ts:___ - (NEW HOOK)
-□ DISPLAY:      Scoreboard.tsx:___ - MojoFitnessDisplay
-□ RENDERS IN:   Scoreboard component
-
-TIER 3: EXTERNAL VERIFICATION
-□ Browser test: HR → verify mojo increases
-□ Browser test: K → verify mojo decreases
-□ Scoreboard shows mojo/fitness: Yes/No
-□ BUG-006 resolved: Yes/No
-□ Screenshot taken: Yes/No
-
-VERDICT: [ VERIFIED | UNVERIFIED | INCOMPLETE ]
-```
-
----
-
-#### Day 4: Integration Testing + Bug Fixes (BUG-009, BUG-011)
-
-**Goal**: All engines work end-to-end
-
-**Tasks**:
-
-| # | Task | Description |
-|---|------|-------------|
-| 4.1 | Integration test | Play full 9-inning game |
-| 4.2 | Verify all WAR components | Check bWAR, fWAR, rWAR, pWAR display |
-| 4.3 | BUG-009: Add undo button | Visible undo in UI |
-| 4.4 | BUG-011: Pitch count display | Show in Scoreboard |
-
-**NFL Verification Required (Day 4)**:
-
-```
-TIER 1: BUILD & TESTS
-□ npm run build → Exit code: ___
-□ npm test → Passing: ___ / ___
-
-TIER 2: FULL GAME TEST
-□ Play complete 9-inning game
-□ WAR leaderboard shows: bWAR ✓ pWAR ✓ fWAR ✓ rWAR ✓
-□ PlayerCard shows: clutch ✓ mojo ✓ fitness ✓
-□ Scoreboard shows: mojo ✓ fitness ✓ pitch count ✓
-□ Undo button: visible ✓ functional ✓
-
-TIER 3: BUG VERIFICATION
-□ BUG-009 (Undo): Works / Still broken
-□ BUG-011 (Pitch count): Works / Still broken
-
-VERDICT: [ VERIFIED | UNVERIFIED | INCOMPLETE ]
-```
-
----
-
-### PHASE 2: Close Known Gaps (Days 5-7)
-
-#### Day 5: IBB Tracking + Player Ratings Data Model
-
-**Goal**: IBB tracked for wOBA, ratings available for salary
-
-**Tasks**:
-
-| # | Task | File | Change |
-|---|------|------|--------|
-| 5.1 | Add IBB to AtBatEvent | game.ts | Ensure isIntentionalWalk exists |
-| 5.2 | Track IBB in storage | eventLog.ts | Persist IBB flag |
-| 5.3 | Use IBB in bWAR | bwarCalculator.ts | Update wOBA calculation |
-| 5.4 | Create PlayerRatings type | types/player.ts | NEW |
-| 5.5 | Create ratingsStorage | storage/ratingsStorage.ts | NEW |
-| 5.6 | Add ratings to game setup | GameSetup flow | UI for ratings |
-| 5.7 | Wire ratings to salary | PlayerCard.tsx | Pass to salary calc |
-
-**NFL Verification Required (Day 5)**: Same template as above
-
----
-
-#### Day 6: Milestone Watch UI
-
-**Goal**: Show approaching milestones during game
-
-**Tasks**:
-
-| # | Task | File | Change |
-|---|------|------|--------|
-| 6.1 | Create MilestoneWatch component | MilestoneWatch.tsx | NEW |
-| 6.2 | Create useMilestoneWatch hook | useMilestoneWatch.ts | NEW |
-| 6.3 | Integrate with game flow | index.tsx | Show alerts |
-| 6.4 | Add to Scoreboard | Scoreboard.tsx | Display proximity |
-
-**NFL Verification Required (Day 6)**: Same template as above
-
----
-
-#### Day 7: Fame Events During Game + End Game Fix (BUG-007, BUG-008)
-
-**Goal**: Fame toasts during game, correct end game summary
-
-**Tasks**:
-
-| # | Task | File | Change |
-|---|------|------|--------|
-| 7.1 | BUG-007: Fame during game | index.tsx | Show notifications |
-| 7.2 | Create FameToast component | FameToast.tsx | NEW |
-| 7.3 | Wire to useFameDetection | index.tsx | Trigger toasts |
-| 7.4 | BUG-008: Fix End Game modal | EndGameSummary | Correct data |
-
-**NFL Verification Required (Day 7)**: Same template as above
-
----
-
-### PHASE 3: Bug Fixes & Polish (Days 8-10)
-
-#### Day 8: Pitcher Management (BUG-012)
-
-**Tasks**:
-- Pitcher exit prompt when tiring
-- Pitch count thresholds (85, 100, 115)
-- Fatigue indicator in Scoreboard
-
-#### Day 9: UI Polish (BUG-014)
-
-**Tasks**:
-- Inning summary at inning end
-- Flow improvements
-- Confirmation dialogs
-- Responsive layout
-
-#### Day 10: Final Integration Testing
-
-**Full Verification Checklist**:
-```
-□ npm run build → Exit 0
-□ All tests pass
-□ Full 9-inning game played
-□ All WAR components display (bWAR, pWAR, fWAR, rWAR)
-□ Mojo/Fitness visible in scoreboard
-□ Clutch stats in PlayerCard
-□ mWAR in SeasonSummary
-□ Fame events toast during game
-□ Milestone watch working
-□ Pitch count displayed
-□ Undo button functional
-□ End game summary correct
-□ Data persists after refresh
-```
-
----
-
-### PHASE 4: Buffer / Stretch Goals (Days 11-14)
-
-**Reserved for:**
-- Bug fixes discovered during testing
-- Performance optimization
-- Documentation updates
-
-**Post-MVP Items (explicitly deferred)**:
-- OFFSEASON_SYSTEM: Phases 2-10 (Awards, FA, Draft, Trades, etc.)
-- ADAPTIVE_STANDARDS: Phases 2-5 (Dynamic league learning)
-- STAT_TRACKING: Phase 5 (Export/Cloud sync)
-- Park factor for pitching
-- Claude API for narrative
-
----
-
-## Engine Connection Status Matrix
+## Engine Connection Status Matrix (Updated Feb 12)
 
 | Engine | UI Hook | Storage | Calculator | Display | Status |
 |--------|---------|---------|------------|---------|--------|
 | bWAR | ✅ | ✅ | ✅ | ✅ | ✅ DONE |
 | pWAR | ✅ | ✅ | ✅ | ✅ | ✅ DONE |
-| fWAR | ❌ | ✅ | ✅ | ❌ | Day 1 |
-| rWAR | ❌ | ⚠️ | ✅ | ❌ | Day 1 |
-| mWAR | ❌ | ⚠️ | ✅ | ❌ | Day 2 |
-| Clutch | ❌ | ✅ | ✅ | ❌ | Day 2 |
-| Mojo | ❌ | ❌ | ✅ | ❌ | Day 3 |
-| Fitness | ❌ | ❌ | ✅ | ❌ | Day 3 |
+| fWAR | ✅ | ✅ | ✅ | ❌ | Needs display |
+| rWAR | ✅ | ⚠️ | ✅ | ❌ | Needs display |
+| mWAR | ✅ | ✅ | ✅ | ⚠️ | ✅ Hook wired, display TBD |
+| Clutch | ❌ | ✅ | ✅ | ❌ | Hook orphaned |
+| Mojo | ✅ | ✅ | ✅ | ⚠️ | ✅ Wired, scoreboard display missing |
+| Fitness | ✅ | ✅ | ✅ | ⚠️ | ✅ Wired, scoreboard display missing |
 | Leverage | ✅ | ✅ | ✅ | ✅ | ✅ DONE |
+| WPA | ✅ | ✅ | ✅ | ⚠️ | ✅ DONE (Feb 12) — display TBD |
 | Fame | ✅ | ✅ | ✅ | ✅ | ✅ DONE |
-| Salary | ⚠️ | ❌ | ✅ | ✅ | Day 5 |
+| Salary | ⚠️ | ❌ | ✅ | ✅ | Blocked on ratings data |
 | Fan Morale | ✅ | ✅ | ✅ | ✅ | ✅ DONE |
 | Narrative | ✅ | ✅ | ✅ | ✅ | ✅ DONE |
-| Milestone | ✅ | ✅ | ✅ | ❌ | Day 6 |
+| Milestone | ✅ | ✅ | ✅ | ❌ | Needs UI |
 
 ---
 
-## Success Criteria (v5)
+## Success Criteria (Updated Feb 12)
 
 Sprint complete when:
 
 1. ✅ **All audits complete**: Day 0 finished - all specs audited
-2. **All engines connected**: fWAR, rWAR, mWAR, Clutch, Mojo, Fitness wired to UI
-3. **Gaps closed**: IBB tracking, Player ratings, Milestone watch
-4. **Bugs fixed**: BUG-006, 007, 008, 009, 011, 012, 014
-5. **Build succeeds**: `npm run build` exits 0
-6. **All tests pass**: 267+ tests green
-7. **End-to-end tested**: Full game with all features visible
-8. **NFL verified**: Each day's completion includes 3-tier verification
+2. ⚠️ **All engines connected**: 4/6 wired (fWAR/rWAR need display, Clutch orphaned)
+3. ❌ **Gaps closed**: IBB tracking, Player ratings, Milestone watch still TODO
+4. ⚠️ **Bugs fixed**: 3/7 fixed (BUG-009, 011, 012). BUG-006, 007, 008, 014 remain.
+5. ✅ **Build succeeds**: `npm run build` exits 0
+6. ✅ **All tests pass**: 5,653 tests green (Feb 12)
+7. ❌ **End-to-end tested**: Full game with all features visible
+8. ✅ **NFL verified**: Data integrity batches 1A-F3 all verified
 
 ---
 
-*Last Updated: January 25, 2026 (v5 - Post Day 0 Deep Audit)*
+## Post-MVP Items (Explicitly Deferred)
+
+- OFFSEASON_SYSTEM: Phases 2-10 (Awards, FA, Draft, Trades, etc.)
+- ADAPTIVE_STANDARDS: Phases 2-5 (Dynamic league learning)
+- STAT_TRACKING: Phase 5 (Export/Cloud sync)
+- Park factor for pitching (requires ~30 home games of data)
+- Park factor adjustment for bWAR/pWAR (same prerequisite)
+- Adaptive league calibration (SMB4 static baselines sufficient for MVP)
+- Claude API for narrative
+
+---
+
+*Last Updated: February 12, 2026 (Reconciled against actual codebase state)*

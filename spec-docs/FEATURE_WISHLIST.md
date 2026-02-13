@@ -4,6 +4,7 @@
 > This prevents good ideas from being lost while maintaining sprint discipline.
 >
 > **Last Audited**: January 24, 2026 - Full spec-to-implementation audit completed
+> **Last Updated**: February 12, 2026 - Reconciled against DATA_INTEGRITY_FIX_REPORT + recent sessions
 
 ---
 
@@ -11,22 +12,23 @@
 
 | System | HIGH | MEDIUM | LOW | Total |
 |--------|------|--------|-----|-------|
-| WAR Calculation | 2 | 7 | 6 | 15 |
+| WAR Calculation | 1 | 7 | 6 | 14 |
 | Fame/Aging | 3 | 5 | 5 | 13 |
 | Mojo/Fitness/Salary | 2 | 8 | 10 | 20 |
 | Fan Morale/Narrative | 1 | 17 | 17 | 35 |
 | Relationships/Chemistry | 10 | 8 | 6 | **24 (entire system missing)** |
 | Fielding | 5 | 7 | 5 | 17 |
-| **TOTAL** | **23** | **52** | **49** | **124** |
+| **TOTAL** | **22** | **52** | **49** | **123** |
+
+*Down from 124 (Jan 24). 13 items moved to Completed, 12 new items discovered.*
 
 ---
 
 ## HIGH Priority Gaps (Must Fix for MVP)
 
-### WAR Calculation (2 gaps)
+### WAR Calculation (1 gap)
 | Feature | Spec Says | Implementation | Notes |
 |---------|-----------|----------------|-------|
-| mWAR Calculator | Complete manager WAR system with decision tracking, leverage weighting | **MISSING** - No mwarCalculator.ts exists | Entire WAR component unimplemented |
 | Total WAR Aggregation | Position Player WAR = bWAR + rWAR + fWAR; Pitcher WAR = pWAR + fWAR + bWAR + rWAR | **MISSING** - No totalWARCalculator | No way to get combined player WAR |
 
 ### Fame/Aging (3 gaps)
@@ -154,15 +156,13 @@
 
 ## LOW Priority Gaps (Nice to Have)
 
-### WAR Calculation (8 gaps)
+### WAR Calculation (6 gaps)
 - League Adjustment for multiple leagues
 - Park factor 30-game minimum check
 - Calibration minimum PA validation
 - Collision error type in fWAR
 - firstToSecond_onFlyOut tracking
 - Overrunning vs thrown out distinction
-- **Park factor adjustment for bWAR/pWAR** (deferred from Day 2 - requires ~30 home games of data)
-- **Adaptive league calibration** (deferred from Day 2 - SMB4 static baselines sufficient for MVP)
 
 ### Fame/Aging (5 gaps)
 - Outfield Assist Fame bonus (+1)
@@ -220,6 +220,29 @@
 | Feature | Implemented | Date | Notes |
 |---------|-------------|------|-------|
 | Reporter Reliability System | ✅ | Jan 24, 2026 | 65-95% accuracy by personality, retractions |
+| mWAR Calculator | ✅ | ~Jan-Feb 2026 | `useMWARCalculations` hook → GameTracker.tsx:199. Tests pass. |
+| Mojo Engine wired | ✅ | ~Jan-Feb 2026 | `usePlayerState` hook integrates mojoEngine → GameTracker.tsx:181 |
+| Fitness Engine wired | ✅ | ~Jan-Feb 2026 | `usePlayerState` hook integrates fitnessEngine → GameTracker.tsx:181 |
+| HBP/SF/SAC/GIDP tracking | ✅ | Feb 12, 2026 | DATA_INTEGRITY Batch 1B (#11) — useGameState.ts:84,88-90 |
+| WPA (Win Probability Added) | ✅ | Feb 12, 2026 | DATA_INTEGRITY Batch F2 (#12) — winExpectancyTable.ts + wpaCalculator.ts + 26 tests |
+| Substitution validation | ✅ | Feb 12, 2026 | DATA_INTEGRITY Batch F3 (#9) — LineupState tracking + validateSubstitution() |
+| autoCorrectResult wired | ✅ | Feb 12, 2026 | DATA_INTEGRITY Batch 2C (#7) — FO→SF, GO→DP auto-corrections |
+| Walk-off detection | ✅ | Feb 12, 2026 | DATA_INTEGRITY Batch 2A (#14) — GameTracker.tsx:1881 |
+| isPlayoff flag | ✅ | Feb 12, 2026 | DATA_INTEGRITY Batch 2A (#13) — route state |
+| SB/CS in WAR calculations | ✅ | Feb 12, 2026 | DATA_INTEGRITY Batch 2B (#16) — useWARCalculations.ts |
+| Undo button (BUG-009) | ✅ | ~Jan-Feb 2026 | UndoSystem.tsx → GameTracker.tsx:317 |
+| Pitch count tracking (BUG-011) | ✅ | ~Jan-Feb 2026 | useGameState.ts pitchCountPrompt state management |
+| Pitcher exit prompt (BUG-012) | ✅ | ~Jan-Feb 2026 | useGameState.ts:3311 — endGame() triggers prompt |
+
+---
+
+## Still Orphaned (Hook/Engine Exists But NOT Wired to UI Display)
+
+| Engine | Hook | Wired to GameTracker? | Display Exists? | Notes |
+|--------|------|-----------------------|-----------------|-------|
+| Clutch Calculator | `useClutchCalculations.ts` | ❌ NOT imported | ❌ No display | Hook exists but never called |
+| fWAR Calculator | `fwarCalculator.ts` | Via useWARCalculations | ❌ No UI column | Calculator runs but results not shown |
+| rWAR Calculator | `rwarCalculator.ts` | Via useWARCalculations | ❌ No UI column | Calculator runs but results not shown |
 
 ---
 
@@ -251,6 +274,8 @@ Each agent compared spec requirements against actual code, identifying:
 - Spec/implementation mismatches
 
 Results were compiled into this document for tracking and prioritization.
+
+On February 12, 2026, reconciled against DATA_INTEGRITY_FIX_REPORT (21 resolved issues) and recent session work. 13 items moved to Completed, WAR HIGH reduced from 2→1, LOW WAR reduced from 8→6 (park factor deferred items moved to POST-MVP notes in IMPLEMENTATION_PLAN).
 
 ---
 
