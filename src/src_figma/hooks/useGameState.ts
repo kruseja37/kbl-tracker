@@ -24,6 +24,7 @@ import { aggregateGameToSeason } from '../../utils/seasonAggregator';
 import { archiveCompletedGame, type PersistedGameState } from '../utils/gameStorage';
 import type { AtBatResult, HalfInning } from '../../types/game';
 import { getBaseOutLI, type BaseState } from '../../engines/leverageCalculator';
+import { calculateWPA } from '../../engines/wpaCalculator';
 import {
   createRunnerTrackingState,
   addRunner as trackerAddRunner,
@@ -1321,13 +1322,19 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       awayScoreAfter: gameState.isTop ? gameState.awayScore + runsScored : gameState.awayScore,
       homeScoreAfter: gameState.isTop ? gameState.homeScore : gameState.homeScore + runsScored,
       leverageIndex,
-      // TODO MAJ-12: WPA requires a run-expectancy lookup table indexed by
-      // (inning, outs, base-state, run-differential). Substantial feature
-      // (~500-line table + calculation logic). Deferred.
-      // Reference: https://www.fangraphs.com/library/misc/wpa/
-      winProbabilityBefore: 0.5,
-      winProbabilityAfter: 0.5,
-      wpa: 0,
+      // MAJ-12: WPA from win expectancy table
+      ...(() => {
+        const rAfter = buildRunnersAfter(runnerTrackerRef.current);
+        const wpaResult = calculateWPA(
+          { inning: gameState.inning, isTop: gameState.isTop, outs: gameState.outs,
+            bases: gameState.bases, homeScore: gameState.homeScore, awayScore: gameState.awayScore },
+          { outs: gameState.outs,
+            bases: { first: !!rAfter.first, second: !!rAfter.second, third: !!rAfter.third },
+            homeScore: gameState.isTop ? gameState.homeScore : gameState.homeScore + runsScored,
+            awayScore: gameState.isTop ? gameState.awayScore + runsScored : gameState.awayScore }
+        );
+        return wpaResult;
+      })(),
       ballInPlay: null,
       fameEvents: [],
       isLeadoff: gameState.outs === 0 && !gameState.bases.first && !gameState.bases.second && !gameState.bases.third,
@@ -1620,9 +1627,20 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       awayScoreAfter: gameState.isTop ? gameState.awayScore + runsScored : gameState.awayScore,
       homeScoreAfter: gameState.isTop ? gameState.homeScore : gameState.homeScore + runsScored,
       leverageIndex,
-      winProbabilityBefore: 0.5,
-      winProbabilityAfter: 0.5,
-      wpa: 0,
+      // MAJ-12: WPA from win expectancy table
+      ...(() => {
+        const rAfter = newOuts >= 3
+          ? { first: false, second: false, third: false }
+          : (() => { const ra = buildRunnersAfter(runnerTrackerRef.current); return { first: !!ra.first, second: !!ra.second, third: !!ra.third }; })();
+        return calculateWPA(
+          { inning: gameState.inning, isTop: gameState.isTop, outs: gameState.outs,
+            bases: gameState.bases, homeScore: gameState.homeScore, awayScore: gameState.awayScore },
+          { outs: newOuts,
+            bases: rAfter,
+            homeScore: gameState.isTop ? gameState.homeScore : gameState.homeScore + runsScored,
+            awayScore: gameState.isTop ? gameState.awayScore + runsScored : gameState.awayScore }
+        );
+      })(),
       ballInPlay: null,
       fameEvents: [],
       isLeadoff: gameState.outs === 0 && !gameState.bases.first && !gameState.bases.second && !gameState.bases.third,
@@ -1845,9 +1863,18 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       awayScoreAfter: gameState.isTop ? gameState.awayScore + runsScored : gameState.awayScore,
       homeScoreAfter: isBottom ? homeScoreAfter : gameState.homeScore + runsScored,
       leverageIndex,
-      winProbabilityBefore: 0.5,
-      winProbabilityAfter: 0.5,
-      wpa: 0,
+      // MAJ-12: WPA from win expectancy table
+      ...(() => {
+        const rAfter = buildRunnersAfter(runnerTrackerRef.current);
+        return calculateWPA(
+          { inning: gameState.inning, isTop: gameState.isTop, outs: gameState.outs,
+            bases: gameState.bases, homeScore: gameState.homeScore, awayScore: gameState.awayScore },
+          { outs: gameState.outs,
+            bases: { first: !!rAfter.first, second: !!rAfter.second, third: !!rAfter.third },
+            homeScore: isBottom ? gameState.homeScore + runsScored : gameState.homeScore,
+            awayScore: gameState.isTop ? gameState.awayScore + runsScored : gameState.awayScore }
+        );
+      })(),
       ballInPlay: null,
       fameEvents: [],
       isLeadoff: false,
@@ -2012,9 +2039,20 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         const o = Math.min(gameState.outs, 2) as 0 | 1 | 2;
         return getBaseOutLI(bs, o);
       })(),
-      winProbabilityBefore: 0.5,
-      winProbabilityAfter: 0.5,
-      wpa: 0,
+      // MAJ-12: WPA from win expectancy table
+      ...(() => {
+        const rAfter = newOuts >= 3
+          ? { first: false, second: false, third: false }
+          : (() => { const ra = buildRunnersAfter(runnerTrackerRef.current); return { first: !!ra.first, second: !!ra.second, third: !!ra.third }; })();
+        return calculateWPA(
+          { inning: gameState.inning, isTop: gameState.isTop, outs: gameState.outs,
+            bases: gameState.bases, homeScore: gameState.homeScore, awayScore: gameState.awayScore },
+          { outs: newOuts,
+            bases: rAfter,
+            homeScore: gameState.homeScore,
+            awayScore: gameState.awayScore }
+        );
+      })(),
       ballInPlay: null,
       fameEvents: [],
       isLeadoff: false,
@@ -2151,10 +2189,27 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       runnersAfter: buildRunnersAfter(runnerTrackerRef.current),
       awayScoreAfter: gameState.isTop ? gameState.awayScore + runsScored : gameState.awayScore,
       homeScoreAfter: gameState.isTop ? gameState.homeScore : gameState.homeScore + runsScored,
-      leverageIndex: 1.0,
-      winProbabilityBefore: 0.5,
-      winProbabilityAfter: 0.5,
-      wpa: 0,
+      // MAJ-12: Calculate leverageIndex and WPA from game state
+      leverageIndex: (() => {
+        const bs: BaseState = (
+          (gameState.bases.first ? 1 : 0) +
+          (gameState.bases.second ? 2 : 0) +
+          (gameState.bases.third ? 4 : 0)
+        ) as BaseState;
+        const o = Math.min(gameState.outs, 2) as 0 | 1 | 2;
+        return getBaseOutLI(bs, o);
+      })(),
+      ...(() => {
+        const rAfter = buildRunnersAfter(runnerTrackerRef.current);
+        return calculateWPA(
+          { inning: gameState.inning, isTop: gameState.isTop, outs: gameState.outs,
+            bases: gameState.bases, homeScore: gameState.homeScore, awayScore: gameState.awayScore },
+          { outs: gameState.outs,
+            bases: { first: !!rAfter.first, second: !!rAfter.second, third: !!rAfter.third },
+            homeScore: gameState.isTop ? gameState.homeScore : gameState.homeScore + runsScored,
+            awayScore: gameState.isTop ? gameState.awayScore + runsScored : gameState.awayScore }
+        );
+      })(),
       ballInPlay: null,
       fameEvents: [],
       isLeadoff: false,
