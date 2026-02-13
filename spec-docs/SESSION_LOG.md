@@ -92,3 +92,74 @@ All batches completed. Full details in `DATA_INTEGRITY_FIX_REPORT.md`.
 **Orphan wiring (3):** Clutch hook import, fWAR/rWAR display columns, Mojo/Fitness scoreboard display
 **Gap closure (3):** IBB tracking, Player ratings data model, Milestone watch UI
 **Bug fixes (4):** BUG-006 (scoreboard), BUG-007 (fame events), BUG-008 (end game modal), BUG-014 (inning summary)
+
+---
+## Session: 2026-02-13 — Pre-Manual Bug Triage + Doc Reconciliation
+
+### What Was Accomplished
+- ✅ Deep cross-check of ALL tracking docs vs actual codebase (6 documents updated)
+- ✅ Full bug triage: read GAMETRACKER_BUGS.md, traced all 4 active bugs in code, classified each
+- ✅ Discovered BUG number collision (GAMETRACKER_BUGS.md vs IMPLEMENTATION_PLAN.md used same numbers for different bugs)
+- ✅ Found BUG-007 (Fame events) is LIKELY FIXED — useFameTracking fully wired with popup (GameTracker:2016-2040)
+- ✅ Found BUG-008 was mislabeled — End Game modal is fine, real issue is PostGameSummary data gaps
+- ✅ Confirmed FinalizeAdvanceFlow 32-player already uses soft gate ("Advance Anyway" button)
+- ✅ Classified all orphan features (Clutch=INVISIBLE, fWAR/rWAR=NO UI BUILT)
+- ✅ Verified IBB IS tracked (useGameState:107,283), Player ratings viewable in offseason
+- ✅ Updated GAMETRACKER_BUGS.md summary (11/15 fixed, 4 remaining)
+- ✅ Updated CURRENT_STATE.md with accurate issue list (7 active items, properly described)
+- ✅ Updated IMPLEMENTATION_PLAN.md bug table (removed stale BUG numbers, 11 remaining sprint items)
+- ✅ Fixed stale MEMORY.md (test baseline, autoCorrectResult marked fixed)
+- ✅ Committed doc reconciliation (5bdf426) and triage (d379437)
+
+### Decisions Made
+- Bug number collision resolved: GAMETRACKER_BUGS.md retains original numbers, IMPLEMENTATION_PLAN.md now uses descriptive names instead
+- Fame events classified "LIKELY FIXED" pending live verification rather than "TODO"
+- PostGameSummary gaps now properly described (errors=0 hardcode + no batting box score) instead of vague "End Game modal wrong data"
+
+### NFL Results
+- Not an implementation day — triage/documentation only
+- **Day Status**: COMPLETE (triage objective achieved)
+
+### Build Status
+- Build: PASS (exit 0)
+- Tests: 5,653 / 5,653 passing (134 files)
+- All canary checks: PASS
+
+### Pending / Next Steps
+**Must verify during manual testing:**
+- [ ] Fame events popup — trigger one in live game to confirm LIKELY FIXED
+- [ ] PostGameSummary — play a game, end it, check if box score data looks right
+
+**Remaining sprint items (11 total, per IMPLEMENTATION_PLAN.md):**
+Orphan wiring:
+- [ ] Wire Clutch Calculator (import useClutchCalculations in GameTracker)
+- [ ] Add fWAR/rWAR display columns
+- [ ] Mojo/Fitness scoreboard display (MiniScoreboard has no mojo/fitness props)
+
+Gap closure:
+- [ ] IBB tracking in bWAR (IBB tracked, verify wOBA formula excludes it)
+- [ ] Player Ratings data model (types + storage + game setup UI)
+- [ ] Milestone Watch UI (component + hook + scoreboard)
+- [ ] PostGameSummary fixes (errors=0, add batting box score)
+- [ ] Inning summary component (new, render at inning flip)
+- [ ] Exit type double-entry UX (review AtBatFlow modal)
+- [ ] Lineup access modal (view/edit lineup mid-game)
+- [ ] Special plays logging (wire fame + activity log for diving/robbery)
+
+### Key Context for Next Session
+- GAMETRACKER_BUGS.md original BUG-006 = "Exit type double entry" (NOT mojo/fitness)
+- GAMETRACKER_BUGS.md original BUG-008 = "Team names in scoreboard" (FIXED, NOT end game modal)
+- IMPLEMENTATION_PLAN.md now uses descriptive names to avoid number confusion
+- Fame popup code exists at GameTracker.tsx:2016-2040 — test by getting a home run or special event
+- PostGameSummary.tsx:162 has `errors: 0` hardcoded — fix by pulling from game state
+
+### Files Modified
+- `spec-docs/CURRENT_STATE.md` — accurate test count, fixed statuses, added active issues section
+- `spec-docs/GAMETRACKER_BUGS.md` — updated summary table (11/15 fixed), separated tracking
+- `spec-docs/IMPLEMENTATION_PLAN.md` — accurate bug table, 11 remaining sprint items
+- `spec-docs/SESSION_LOG.md` — this session entry
+- `CLAUDE.md` — removed stale ACTIVE FIX PROTOCOL (replaced with completion notice)
+
+### Commits This Session
+- `5bdf426` — Reconcile all tracking docs with actual codebase state
+- `d379437` — Pre-manual triage: classify bugs, update tracking docs
