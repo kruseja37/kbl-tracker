@@ -175,7 +175,6 @@ export function emptySeasonPitching(playerId: string, seasonId: string): PlayerS
     homeRunsAllowed: 0,
     hitBatters: 0,
     wildPitches: 0,
-    balks: 0,
     blownSaves: 0,
     qualityStarts: 0,
     completeGames: 0,

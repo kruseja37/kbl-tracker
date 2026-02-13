@@ -104,7 +104,7 @@ export interface PlayerCareerPitching {
   homeRunsAllowed: number;
   hitBatters: number;
   wildPitches: number;
-  balks: number;
+  // balks removed — SMB4 has no balks (see kbl-gotchas.md)
 
   // Decisions
   wins: number;
@@ -255,7 +255,6 @@ export function createInitialCareerPitching(
     homeRunsAllowed: 0,
     hitBatters: 0,
     wildPitches: 0,
-    balks: 0,
     wins: 0,
     losses: 0,
     saves: 0,
