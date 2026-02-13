@@ -52,7 +52,43 @@
 - Only console error: pre-existing FreeAgencyFlow hooks ordering warning (non-blocking)
 ### Pending (for next session)
 - FinalizeAdvanceFlow requires 32 players per team (farm validation blocks advance without full draft)
-- GameTracker in franchise mode shows "TIGERS/SOX" defaults instead of real team names
+- ~~GameTracker "TIGERS/SOX" defaults~~ — FIXED (uses navigationState, defaults to 'HOME'/'AWAY')
 - Museum data pipeline needs building (all tabs empty)
 - FreeAgencyFlow hooks ordering warning (React dev mode, non-blocking)
 - See CURRENT_STATE.md "Known Issues" section for complete list
+
+---
+## Session: 2026-02-12 (cont.) — Data Integrity Fixes + Documentation Reconciliation
+### Data Integrity Fix Plan v2 (21/21 RESOLVED)
+All batches completed. Full details in `DATA_INTEGRITY_FIX_REPORT.md`.
+
+| Batch | Issues | Commits |
+|-------|--------|---------|
+| 1A-i | #1 pitcher stats, #4 fielding persistence | (prior session) |
+| 1A-ii | #5 runnersAfter null, #6 basesReachedViaError | (prior session) |
+| 1B | #2 milestone playerName, #3 W/L/SV, #11 HBP/SF/SAC/GIDP | a76ad23 |
+| 2A | #8 loss decision, #13 isPlayoff, #14 walk-off, #15 team record | 7629f29 |
+| 2B | #10 pitch count, #16 SB/CS in WAR, #17 fielding credits | d393bfd |
+| 2C | #7 autoCorrectResult wired | 6b5dd45 |
+| 3 | #18 hooks ordering, #19-20 docs, #21 dead balks field | def25eb |
+| F1 | Career pitching W/L/SV/H/BS aggregation | d790a72 |
+| F2 | #12 WPA system (winExpectancyTable + wpaCalculator, 26 tests) | 1f39f15 |
+| F3 | #9 LineupState tracking + substitution validation | 4b0e11e |
+
+### Documentation Reconciliation
+- Updated DATA_INTEGRITY_FIX_REPORT.md: 21/21 ALL RESOLVED (296141a)
+- Updated FEATURE_WISHLIST.md: moved 13 completed items, added "Still Orphaned" section (60c1c4f)
+- Updated IMPLEMENTATION_PLAN.md: reconciled engine matrix, remaining 9 sprint items (60c1c4f)
+- Updated CURRENT_STATE.md: fixed test count (5653/134), marked #6/#13/#14 as FIXED, added data integrity + orphan + bug sections
+- Updated SESSION_LOG.md: added data integrity batch table
+- Cleaned CLAUDE.md: removed stale ACTIVE FIX PROTOCOL section (data integrity work complete)
+
+### Final Test Baseline
+- Build: PASS (exit 0)
+- Tests: 5,653 passing / 0 failing / 134 test files
+- All 8 canary checks: PASS
+
+### Remaining Sprint Work (per IMPLEMENTATION_PLAN.md)
+**Orphan wiring (3):** Clutch hook import, fWAR/rWAR display columns, Mojo/Fitness scoreboard display
+**Gap closure (3):** IBB tracking, Player ratings data model, Milestone watch UI
+**Bug fixes (4):** BUG-006 (scoreboard), BUG-007 (fame events), BUG-008 (end game modal), BUG-014 (inning summary)

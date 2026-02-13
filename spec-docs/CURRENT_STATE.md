@@ -1,11 +1,11 @@
 # KBL TRACKER — CURRENT STATE
-# Last updated: 2026-02-12
+# Last updated: 2026-02-12 (post-data-integrity reconciliation)
 ---
 ## BUILD STATUS
 | Metric | Value |
 |--------|-------|
 | Build | PASSING (exit 0) |
-| Tests | 5,627 passing / 0 failing / 133 files |
+| Tests | 5,653 passing / 0 failing / 134 files |
 | Logic Matrix | 480/480 pass |
 | Console errors | 0 (verified across full franchise UI) |
 ---
@@ -68,7 +68,7 @@
 3. ~~FinalizeAdvanceFlow empty teams~~ — FIXED (prev session)
 4. ~~Remaining "San Francisco Giants"~~ — FIXED: DraftFlow had 2 hardcoded instances, now dynamic
 5. FinalizeAdvanceFlow requires 32 players/team — blocks advance without completing full draft
-6. GameTracker in franchise shows "TIGERS/SOX" defaults instead of scheduled team names
+6. ~~GameTracker franchise "TIGERS/SOX" defaults~~ — FIXED: uses navigationState team names, defaults to 'HOME'/'AWAY'
 ### Browser Verified ✅
 7. ~~Free Agency full flow~~ — VERIFIED: protection→dice→destination→exchange works with real players
 8. ~~Draft full flow~~ — VERIFIED: 20 AI prospects, user pick, farm roster tracking works
@@ -80,13 +80,26 @@
 11. Chemistry Rebalancing — placeholder "coming soon"
 12. Contraction/Expansion — placeholder "coming soon"
 ### Feature Gaps (Pre-Existing, Not Regressions)
-13. Fielding stats pipeline (CRIT-05) — needs feature work
-14. HBP/SF/SAC/GIDP not tracked in game-level batting stats
+13. ~~Fielding stats pipeline (CRIT-05)~~ — FIXED: Both completeGameInternal + endGame query IndexedDB fielding events (useGameState.ts:3136,3352)
+14. ~~HBP/SF/SAC/GIDP not tracked~~ — FIXED: Batch 1B added sf/sh/gidp/hbp to PlayerStats (useGameState.ts:84-92)
 15. Phase 3-11 tests not started (testing pipeline)
 16. Performance optimization (P6-005) pending
-17. Fan Morale system — empty state (feature not built)
-18. Park Factors system — empty state (feature not built)
+17. Fan Morale system — engine built + wired to GameTracker (useFanMorale hook, processGameResult called at game end). No visible UI display yet.
+18. Park Factors — used in bWAR/pWAR calculators; no standalone UI or per-stadium management
 19. Manager tracking — empty state (feature not built)
+### Data Integrity (21/21 RESOLVED — see DATA_INTEGRITY_FIX_REPORT.md)
+20. Batches 1A-i through F3 all complete (Feb 12, 2026)
+21. Includes: WPA system, substitution validation, autoCorrectResult, walk-off, isPlayoff, SB/CS in WAR
+22. All canary checks pass, no regressions
+### Orphaned Engines (Calculators Run But No UI Display)
+23. Clutch Calculator — `useClutchCalculations.ts` hook exists but NOT imported in active Figma GameTracker
+24. fWAR Calculator — runs via useWARCalculations, no display column in UI
+25. rWAR Calculator — runs via useWARCalculations, no display column in UI
+### Active Bugs (from IMPLEMENTATION_PLAN.md)
+26. BUG-006: Mojo/Fitness not shown in scoreboard (usePlayerState wired, MiniScoreboard has no mojo/fitness display)
+27. BUG-007: No Fame events during game (toast notifications + detection missing)
+28. BUG-008: End Game modal shows wrong data
+29. BUG-014: No inning summary display
 ---
 ## KEY ARCHITECTURAL DECISIONS
 | Decision | Rationale | Date |
