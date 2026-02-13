@@ -67,7 +67,7 @@
 2. ~~Season number off-by-2 in Ratings Adjustments~~ — FIXED (prev session)
 3. ~~FinalizeAdvanceFlow empty teams~~ — FIXED (prev session)
 4. ~~Remaining "San Francisco Giants"~~ — FIXED: DraftFlow had 2 hardcoded instances, now dynamic
-5. FinalizeAdvanceFlow requires 32 players/team — blocks advance without completing full draft
+5. ~~FinalizeAdvanceFlow 32-player requirement~~ — FIXED: shows warning + "Advance Anyway" button (soft gate, not blocker)
 6. ~~GameTracker franchise "TIGERS/SOX" defaults~~ — FIXED: uses navigationState team names, defaults to 'HOME'/'AWAY'
 ### Browser Verified ✅
 7. ~~Free Agency full flow~~ — VERIFIED: protection→dice→destination→exchange works with real players
@@ -95,11 +95,14 @@
 23. Clutch Calculator — `useClutchCalculations.ts` hook exists but NOT imported in active Figma GameTracker
 24. fWAR Calculator — runs via useWARCalculations, no display column in UI
 25. rWAR Calculator — runs via useWARCalculations, no display column in UI
-### Active Bugs (from IMPLEMENTATION_PLAN.md)
-26. BUG-006: Mojo/Fitness not shown in scoreboard (usePlayerState wired, MiniScoreboard has no mojo/fitness display)
-27. BUG-007: No Fame events during game (toast notifications + detection missing)
-28. BUG-008: End Game modal shows wrong data
-29. BUG-014: No inning summary display
+### Active Issues (Pre-Manual-Testing)
+26. Mojo/Fitness not shown in scoreboard — usePlayerState wired (GameTracker:622-694), MiniScoreboard has no mojo/fitness display
+27. ~~Fame events during game~~ — LIKELY FIXED: useFameTracking wired, popup renders at GameTracker:2016-2040. Needs live verification.
+28. PostGameSummary data gaps — errors hardcoded to 0 (PostGameSummary.tsx:162), no batting box score
+29. Inning summary — NOT BUILT in Figma layer (legacy component not ported)
+30. Exit type requires double entry (original BUG-006 from GAMETRACKER_BUGS.md) — UX flow issue
+31. No lineup access in GameTracker (original BUG-009) — no modal to view/edit lineup during game
+32. Special plays not logged (original BUG-014) — no fame/activity log for diving catches, robberies etc.
 ---
 ## KEY ARCHITECTURAL DECISIONS
 | Decision | Rationale | Date |

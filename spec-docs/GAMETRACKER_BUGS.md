@@ -225,63 +225,58 @@ function getMoraleDisplay(player) {
 
 ---
 
-## Summary
+## Summary (Updated Feb 12, 2026)
 
 | Priority | Count | Fixed | Remaining |
 |----------|-------|-------|-----------|
-| Critical | 5 | 4 | 1 |
-| High | 5 | 1 | 4 |
-| Medium | 5 | 1 | 4 |
-| **Total** | **15** | **6** | **9** |
+| Critical | 5 | 5 | 0 |
+| High | 5 | 4 | 1 |
+| Medium | 5 | 2 | 3 |
+| **Total** | **15** | **11** | **4** |
 
 ---
 
-## Fixed Bugs (January 25, 2026)
+## Fixed Bugs
 
-| Bug | Description | Fix |
-|-----|-------------|-----|
-| BUG-001 | PH position assignment broken | Added position validation in PinchHitterModal |
-| BUG-002 | Defensive sub creates duplicates | Added validateDefensiveAlignment() in DefensiveSubModal |
-| BUG-003 | GO should auto-correct to DP | Added auto-correction in checkAutoCorrection() |
-| BUG-004 | WAR leaderboards not populating | Added getOrCreateSeason() call on game start |
-| BUG-005 | Season Summary loading forever | Fixed seasonId default, ensured season creation |
-| BUG-010 | No player morale superscripts | Created PlayerNameWithMorale component |
-| BUG-013 | Impossible events not greyed out | Added hasRunners check for event buttons |
-| BUG-015 | HR fielding shows "Clean" | Added HR-specific options (Over Fence, etc.) |
+| Bug | Description | Fix | Date |
+|-----|-------------|-----|------|
+| BUG-001 | PH position assignment broken | Added position validation in PinchHitterModal | Jan 25 |
+| BUG-002 | Defensive sub creates duplicates | Added validateDefensiveAlignment() in DefensiveSubModal | Jan 25 |
+| BUG-003 | GO should auto-correct to DP | Added auto-correction in checkAutoCorrection() | Jan 25 |
+| BUG-004 | WAR leaderboards not populating | Added getOrCreateSeason() call on game start | Jan 25 |
+| BUG-005 | Season Summary loading forever | Fixed seasonId default, ensured season creation | Jan 25 |
+| BUG-007 | Player names not clickable | onClick handlers on batter, due up, pitcher | Jan 27 |
+| BUG-008 | Team names not shown in scoreboard | getTeam() wired to Scoreboard props | Jan 27 |
+| BUG-010 | No player morale superscripts | Created PlayerNameWithMorale component | Jan 25 |
+| BUG-011 | HR distance allows invalid values | min=250/max=550 validation + red error messages | Jan 27 |
+| BUG-013 | Impossible events not greyed out | Added hasRunners check for event buttons | Jan 25 |
+| BUG-015 | HR fielding shows "Clean" | Added HR-specific options (Over Fence, etc.) | Jan 25 |
 
 ---
 
 ## Remaining Bugs
 
-### Critical (1 remaining)
-- None - all critical bugs fixed
+### High Priority (1 remaining)
+- BUG-006: Exit type requires double entry (UX flow review needed)
 
-### High Priority (4 remaining)
-- BUG-006: Exit type requires double entry
-- BUG-007: Player names not clickable
-- BUG-008: Team names not shown in scoreboard
-- BUG-009: No lineup access in GameTracker
-
-### Medium Priority (4 remaining)
-- BUG-011: HR distance allows invalid values
-- BUG-012: No stadium association
-- BUG-014: Special plays not logged
+### Medium Priority (3 remaining)
+- BUG-009: No lineup access in GameTracker (new modal component needed)
+- BUG-012: No stadium association (game setup enhancement)
+- BUG-014: Special plays not logged (fame/activity log integration)
 
 ---
 
-## Suggested Next Fix Order
+## Separately Tracked Issues (from IMPLEMENTATION_PLAN.md)
 
-### Next Sprint
-1. BUG-008: Team names in scoreboard (quick fix)
-2. BUG-007: Player names clickable (needs PlayerCard integration)
-3. BUG-006: Exit type double entry (UX flow review needed)
-4. BUG-009: Lineup access (new modal component)
+These are NOT from the original Jan 25 bug list but are tracked elsewhere:
 
-### Later
-5. BUG-011: HR distance validation (requires stadium data)
-6. BUG-012: Stadium association (game setup enhancement)
-7. BUG-014: Special plays logging (fame/activity log integration)
+| Item | Description | Status | Location |
+|------|-------------|--------|----------|
+| Mojo/Fitness scoreboard | usePlayerState wired but no scoreboard display | TODO | IMPLEMENTATION_PLAN.md |
+| Fame events during game | Popup IS wired (GameTracker.tsx:2016-2040) — needs live verification | LIKELY FIXED | IMPLEMENTATION_PLAN.md |
+| PostGameSummary gaps | Errors hardcoded to 0; no batting box score | TODO | PostGameSummary.tsx |
+| Inning summary | No inning-end summary in Figma layer | NOT BUILT | IMPLEMENTATION_PLAN.md |
 
 ---
 
-*Update this document as bugs are fixed or new bugs are found.*
+*Updated Feb 12, 2026. Next: update IMPLEMENTATION_PLAN.md bug numbers to avoid confusion with this file.*

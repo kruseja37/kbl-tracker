@@ -131,17 +131,19 @@ already completed in recent sessions but never updated here.
 | Park Factor (Pitching) | PWAR_CALCULATION_SPEC | LOW | POST-MVP |
 | Claude API Narrative | NARRATIVE_SYSTEM_SPEC | LOW | POST-MVP |
 
-### Bug Status (Updated Feb 12)
+### Bug Status (Updated Feb 12 — triage session)
 
-| Bug | Description | Priority | Status |
-|-----|-------------|----------|--------|
-| BUG-006 | No Mojo/Fitness in scoreboard | HIGH | **TODO** — usePlayerState wired but scoreboard display missing |
-| BUG-007 | No Fame events during game | MEDIUM | **TODO** |
-| BUG-008 | End Game modal wrong data | MEDIUM | **TODO** |
-| BUG-009 | No undo button | HIGH | ✅ **FIXED** — UndoSystem.tsx → GameTracker.tsx:317 |
-| BUG-011 | No pitch count displayed | MEDIUM | ✅ **FIXED** — useGameState.ts pitchCountPrompt |
-| BUG-012 | Pitcher exit prompt missing | MEDIUM | ✅ **FIXED** — useGameState.ts:3311 |
-| BUG-014 | No inning summary | LOW | **TODO** |
+| Item | Description | Priority | Status |
+|------|-------------|----------|--------|
+| Mojo/Fitness scoreboard | usePlayerState wired, MiniScoreboard has no display | HIGH | **TODO** |
+| Fame events popup | useFameTracking wired, popup at GameTracker:2016 | MEDIUM | ✅ **LIKELY FIXED** — needs live test |
+| PostGameSummary gaps | Errors hardcoded 0, no batting box score | MEDIUM | **TODO** |
+| Inning summary | Not built in Figma layer | LOW | **NOT BUILT** |
+| Exit type double entry | UX: click exit type → modal → click again | MEDIUM | **TODO** (original BUG-006) |
+| No lineup access | No modal to view/edit lineup mid-game | MEDIUM | **TODO** (original BUG-009) |
+| Undo button | | HIGH | ✅ **FIXED** — UndoSystem.tsx → GameTracker.tsx:317 |
+| Pitch count display | | MEDIUM | ✅ **FIXED** — useGameState.ts pitchCountPrompt |
+| Pitcher exit prompt | | MEDIUM | ✅ **FIXED** — useGameState.ts:3311 |
 
 ---
 
@@ -159,12 +161,14 @@ already completed in recent sessions but never updated here.
 
 | # | Task | Effort | Notes |
 |---|------|--------|-------|
-| 4 | IBB Tracking in bWAR | SMALL | Ensure isIntentionalWalk persists and feeds wOBA |
+| 4 | IBB Tracking in bWAR | SMALL | IBB IS tracked (useGameState:107,283). Verify wOBA formula excludes IBB. |
 | 5 | Player Ratings Data Model | MEDIUM | Types + storage + game setup UI |
 | 6 | Milestone Watch UI | MEDIUM | Component + hook + scoreboard integration |
-| 7 | Fame Events During Game (BUG-007) | MEDIUM | Toast notifications + detection wiring |
-| 8 | End Game Modal Fix (BUG-008) | SMALL | Correct data sources |
-| 9 | Inning Summary (BUG-014) | SMALL | Display at inning end |
+| 7 | PostGameSummary fixes | SMALL | Fix errors=0 hardcode; add batting box score section |
+| 8 | Inning summary component | MEDIUM | New component + render at inning flip |
+| 9 | Exit type double-entry UX | MEDIUM | Review AtBatFlow modal flow |
+| 10 | Lineup access modal | MEDIUM | New modal for viewing/editing lineup mid-game |
+| 11 | Special plays logging | MEDIUM | Wire fame events + activity log for diving/robbery etc. |
 
 ---
 
