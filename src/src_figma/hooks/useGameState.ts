@@ -1559,6 +1559,37 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     // Clutch = high leverage (LI >= 1.5)
     const isClutch = leverageIndex >= 1.5;
 
+    // MAJ-07: Auto-correct result based on runner outcomes
+    // Convert RunnerAdvancement → RunnerOutcome format for autoCorrectResult
+    const runnerOutcomesForCorrection: {
+      first: RunnerOutcome | null;
+      second: RunnerOutcome | null;
+      third: RunnerOutcome | null;
+    } = {
+      first: !gameState.bases.first ? null
+        : runnerData?.fromFirst === 'home' ? 'SCORED'
+        : runnerData?.fromFirst === 'third' ? 'TO_3B'
+        : runnerData?.fromFirst === 'second' ? 'TO_2B'
+        : runnerData?.fromFirst === 'out' ? 'OUT_2B'
+        : 'HELD',
+      second: !gameState.bases.second ? null
+        : runnerData?.fromSecond === 'home' ? 'SCORED'
+        : runnerData?.fromSecond === 'third' ? 'TO_3B'
+        : runnerData?.fromSecond === 'out' ? 'OUT_3B'
+        : 'HELD',
+      third: !gameState.bases.third ? null
+        : runnerData?.fromThird === 'home' ? 'SCORED'
+        : runnerData?.fromThird === 'out' ? 'OUT_HOME'
+        : 'HELD',
+    };
+
+    const mappedResult = mapAtBatResultFromOut(outType);
+    const correction = autoCorrectResult(mappedResult, gameState.outs, gameState.bases, runnerOutcomesForCorrection);
+    const effectiveResult = correction ? correction.correctedResult : mappedResult;
+    if (correction) {
+      console.log(`[recordOut] MAJ-07: ${correction.explanation}`);
+    }
+
     // Create at-bat event
     const event: AtBatEvent = {
       eventId: `${gameState.gameId}_${newSequence}`,
@@ -1571,8 +1602,8 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       pitcherId: gameState.currentPitcherId,
       pitcherName: gameState.currentPitcherName,
       pitcherTeamId: pitchingTeamId,
-      result: mapAtBatResultFromOut(outType),
-      rbiCount: outType === 'SF' ? 1 : 0,
+      result: effectiveResult,
+      rbiCount: effectiveResult === 'SF' ? 1 : 0, // MAJ-07: use corrected result
       runsScored,
       inning: gameState.inning,
       halfInning: gameState.isTop ? 'TOP' : 'BOTTOM',
@@ -1601,25 +1632,26 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
 
     await logAtBatEvent(event);
 
-    // Update player stats
+    // Update player stats — MAJ-07: use effectiveResult for corrected type
+    const statResult = effectiveResult; // corrected: e.g. FO→SF, GO→DP
     setPlayerStats(prev => {
       const newStats = new Map(prev);
       const batterStats = newStats.get(gameState.currentBatterId) || createEmptyPlayerStats();
       batterStats.pa++;
-      if (outType !== 'SF' && outType !== 'SH') {
+      if (statResult !== 'SF' && statResult !== 'SAC') {
         batterStats.ab++;
       }
-      if (outType === 'K' || outType === 'KL' || outType === 'D3K') {
+      if (statResult === 'K' || statResult === 'KL' || statResult === 'D3K') {
         batterStats.k++;
       }
-      if (outType === 'SF') {
+      if (statResult === 'SF') {
         batterStats.rbi++;
         batterStats.sf++;       // MAJ-11: Track sacrifice flies
       }
-      if (outType === 'SH') {
-        batterStats.sh++;       // MAJ-11: Track sacrifice bunts
+      if (statResult === 'SAC') {
+        batterStats.sh++;       // MAJ-11: Track sacrifice bunts (SAC = SH in AtBatResult)
       }
-      if (outType === 'DP') {
+      if (statResult === 'DP') {
         batterStats.gidp++;     // MAJ-11: Track grounded into double play
       }
       newStats.set(gameState.currentBatterId, batterStats);
@@ -2568,6 +2600,15 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     setGameState(prev => ({ ...prev, balls: 0, strikes: 0 }));
   }, []);
 
+  // TODO MAJ-09: Wire validateSubstitution() from types/game.ts here.
+  // BLOCKED: useGameState does not track LineupState (bench[], usedPlayers[]).
+  // validateSubstitution needs: LineupState.bench (BenchPlayer[]), LineupState.usedPlayers (string[]),
+  // LineupState.lineup (LineupPlayer[]). Currently only awayLineupRef/homeLineupRef exist
+  // ({playerId, playerName, position}[]) with no bench or usedPlayers tracking.
+  // Needs: (1) Add usedPlayers: string[] state, (2) Add bench tracking state,
+  // (3) Build LineupState at validation time, (4) Update callers in GameTracker.tsx
+  // to handle {success: false, error: string} return and show UI error toast.
+  // Estimated: ~80-100 lines of new state + caller updates.
   const makeSubstitution = useCallback((
     benchPlayerId: string,
     lineupPlayerId: string,
