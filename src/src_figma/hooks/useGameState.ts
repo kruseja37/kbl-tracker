@@ -22,7 +22,8 @@ import {
 } from '../../utils/eventLog';
 import { aggregateGameToSeason } from '../../utils/seasonAggregator';
 import { archiveCompletedGame, type PersistedGameState } from '../utils/gameStorage';
-import type { AtBatResult, HalfInning } from '../../types/game';
+import type { AtBatResult, HalfInning, LineupState, LineupPlayer, BenchPlayer, Position } from '../../types/game';
+import { validateSubstitution } from '../../types/game';
 import { getBaseOutLI, type BaseState } from '../../engines/leverageCalculator';
 import { calculateWPA } from '../../engines/wpaCalculator';
 import {
@@ -175,7 +176,7 @@ export interface UseGameStateReturn {
   advanceRunner: (from: 'first' | 'second' | 'third', to: 'second' | 'third' | 'home', outcome: 'safe' | 'out') => void;
   /** Batch update runners - processes all movements atomically to avoid race conditions */
   advanceRunnersBatch: (movements: Array<{ from: 'first' | 'second' | 'third'; to: 'second' | 'third' | 'home' | 'out'; outcome: 'safe' | 'out' }>) => void;
-  makeSubstitution: (benchPlayerId: string, lineupPlayerId: string, benchPlayerName?: string, lineupPlayerName?: string, options?: { subType?: 'player_sub' | 'pinch_hit' | 'pinch_run' | 'defensive_sub' | 'position_switch' | 'double_switch'; newPosition?: string; base?: '1B' | '2B' | '3B'; isPinchHitter?: boolean }) => void;
+  makeSubstitution: (benchPlayerId: string, lineupPlayerId: string, benchPlayerName?: string, lineupPlayerName?: string, options?: { subType?: 'player_sub' | 'pinch_hit' | 'pinch_run' | 'defensive_sub' | 'position_switch' | 'double_switch'; newPosition?: string; base?: '1B' | '2B' | '3B'; isPinchHitter?: boolean }) => { success: boolean; error?: string };
   switchPositions: (switches: Array<{ playerId: string; newPosition: string }>) => void;
   changePitcher: (newPitcherId: string, exitingPitcherId: string, newPitcherName?: string, exitingPitcherName?: string) => void;
   advanceCount: (type: 'ball' | 'strike' | 'foul') => void;
@@ -239,6 +240,9 @@ export interface GameInitConfig {
   homeStartingPitcherName: string;
   awayLineup: { playerId: string; playerName: string; position: string }[];
   homeLineup: { playerId: string; playerName: string; position: string }[];
+  // MAJ-09: Optional bench rosters for substitution validation
+  awayBench?: { playerId: string; playerName: string; positions: string[] }[];
+  homeBench?: { playerId: string; playerName: string; positions: string[] }[];
   // Playoff context (optional — set when launching from playoff bracket)
   playoffSeriesId?: string;
   playoffGameNumber?: number;
@@ -961,6 +965,14 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
   const homeLineupRef = useRef<{ playerId: string; playerName: string; position: string }[]>([]);
   const seasonIdRef = useRef<string>('');
 
+  // MAJ-09: Full LineupState tracking for substitution validation
+  const awayLineupStateRef = useRef<LineupState>({
+    lineup: [], bench: [], usedPlayers: [], currentPitcher: null,
+  });
+  const homeLineupStateRef = useRef<LineupState>({
+    lineup: [], bench: [], usedPlayers: [], currentPitcher: null,
+  });
+
   // Playoff context refs (set from GameTracker navigation state)
   const playoffSeriesIdRef = useRef<string | null>(null);
   const playoffGameNumberRef = useRef<number | null>(null);
@@ -1053,6 +1065,58 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     awayLineupRef.current = config.awayLineup;
     homeLineupRef.current = config.homeLineup;
     seasonIdRef.current = config.seasonId;
+
+    // MAJ-09: Initialize full LineupState for substitution validation
+    awayLineupStateRef.current = {
+      lineup: config.awayLineup.map((p, idx) => ({
+        playerId: p.playerId,
+        playerName: p.playerName,
+        position: p.position as Position,
+        battingOrder: idx + 1,
+        enteredInning: 1,
+        isStarter: true,
+      })),
+      bench: (config.awayBench || []).map(b => ({
+        playerId: b.playerId,
+        playerName: b.playerName,
+        positions: b.positions as Position[],
+        isAvailable: true,
+      })),
+      usedPlayers: [],
+      currentPitcher: {
+        playerId: config.awayStartingPitcherId,
+        playerName: config.awayStartingPitcherName,
+        position: 'P' as Position,
+        battingOrder: config.awayLineup.findIndex(p => p.playerId === config.awayStartingPitcherId) + 1 || 1,
+        enteredInning: 1,
+        isStarter: true,
+      },
+    };
+    homeLineupStateRef.current = {
+      lineup: config.homeLineup.map((p, idx) => ({
+        playerId: p.playerId,
+        playerName: p.playerName,
+        position: p.position as Position,
+        battingOrder: idx + 1,
+        enteredInning: 1,
+        isStarter: true,
+      })),
+      bench: (config.homeBench || []).map(b => ({
+        playerId: b.playerId,
+        playerName: b.playerName,
+        positions: b.positions as Position[],
+        isAvailable: true,
+      })),
+      usedPlayers: [],
+      currentPitcher: {
+        playerId: config.homeStartingPitcherId,
+        playerName: config.homeStartingPitcherName,
+        position: 'P' as Position,
+        battingOrder: config.homeLineup.findIndex(p => p.playerId === config.homeStartingPitcherId) + 1 || 1,
+        enteredInning: 1,
+        isStarter: true,
+      },
+    };
 
     // Store playoff context if provided
     playoffSeriesIdRef.current = config.playoffSeriesId || null;
@@ -2655,15 +2719,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     setGameState(prev => ({ ...prev, balls: 0, strikes: 0 }));
   }, []);
 
-  // TODO MAJ-09: Wire validateSubstitution() from types/game.ts here.
-  // BLOCKED: useGameState does not track LineupState (bench[], usedPlayers[]).
-  // validateSubstitution needs: LineupState.bench (BenchPlayer[]), LineupState.usedPlayers (string[]),
-  // LineupState.lineup (LineupPlayer[]). Currently only awayLineupRef/homeLineupRef exist
-  // ({playerId, playerName, position}[]) with no bench or usedPlayers tracking.
-  // Needs: (1) Add usedPlayers: string[] state, (2) Add bench tracking state,
-  // (3) Build LineupState at validation time, (4) Update callers in GameTracker.tsx
-  // to handle {success: false, error: string} return and show UI error toast.
-  // Estimated: ~80-100 lines of new state + caller updates.
+  // MAJ-09: Substitution with validation via LineupState tracking
   const makeSubstitution = useCallback((
     benchPlayerId: string,
     lineupPlayerId: string,
@@ -2676,8 +2732,23 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       base?: '1B' | '2B' | '3B';   // For pinch runners: which base
       isPinchHitter?: boolean;      // For pinch hitters: replace mid-at-bat
     }
-  ) => {
+  ): { success: boolean; error?: string } => {
     const subType = options?.subType || 'player_sub';
+
+    // MAJ-09: Determine which team this substitution is for
+    const awayIndex = awayLineupRef.current.findIndex(p => p.playerId === lineupPlayerId);
+    const isAwayTeam = awayIndex >= 0;
+    const lineupStateRef = isAwayTeam ? awayLineupStateRef : homeLineupStateRef;
+
+    // MAJ-09: Validate substitution if LineupState is initialized (bench data present)
+    // If bench was never provided (legacy callers), skip validation gracefully
+    if (lineupStateRef.current.bench.length > 0 || lineupStateRef.current.usedPlayers.length > 0) {
+      const validation = validateSubstitution(lineupStateRef.current, benchPlayerId, lineupPlayerId);
+      if (!validation.isValid) {
+        console.warn(`[useGameState] Substitution REJECTED: ${validation.errors.join(', ')}`);
+        return { success: false, error: validation.errors.join('; ') };
+      }
+    }
 
     // Log substitution event
     setSubstitutionLog(prev => [...prev, {
@@ -2692,11 +2763,9 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     }]);
 
     // Update lineup refs to swap the players
-    // Find which lineup contains the outgoing player and swap them
-    const awayIndex = awayLineupRef.current.findIndex(p => p.playerId === lineupPlayerId);
     const homeIndex = homeLineupRef.current.findIndex(p => p.playerId === lineupPlayerId);
 
-    if (awayIndex >= 0) {
+    if (isAwayTeam) {
       // MAJ-06: Use newPosition if provided, otherwise preserve outgoing position
       const position = options?.newPosition || awayLineupRef.current[awayIndex].position;
       awayLineupRef.current[awayIndex] = {
@@ -2710,6 +2779,50 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         playerId: benchPlayerId,
         playerName: benchPlayerName || benchPlayerId,
         position,
+      };
+    }
+
+    // MAJ-09: Update LineupState to reflect the substitution
+    const currentState = lineupStateRef.current;
+    const lineupIdx = currentState.lineup.findIndex(p => p.playerId === lineupPlayerId);
+    if (lineupIdx >= 0) {
+      const removedPlayer = currentState.lineup[lineupIdx];
+      const newPosition = (options?.newPosition || removedPlayer.position) as Position;
+
+      // Build updated lineup: replace outgoing with incoming
+      const newLineup = [...currentState.lineup];
+      newLineup[lineupIdx] = {
+        playerId: benchPlayerId,
+        playerName: benchPlayerName || benchPlayerId,
+        position: newPosition,
+        battingOrder: removedPlayer.battingOrder,
+        enteredInning: gameState.inning,
+        enteredFor: removedPlayer.playerName,
+        isStarter: false,
+      };
+
+      // Mark bench player as unavailable
+      const newBench = currentState.bench.map(b =>
+        b.playerId === benchPlayerId ? { ...b, isAvailable: false } : b
+      );
+
+      // Track used player (outgoing can't re-enter)
+      const newUsedPlayers = [...currentState.usedPlayers, lineupPlayerId];
+
+      // Update currentPitcher if pitcher was replaced
+      let newCurrentPitcher = currentState.currentPitcher;
+      if (removedPlayer.position === 'P' || subType === 'double_switch') {
+        // Check if the incoming player is the new pitcher
+        if (newPosition === 'P') {
+          newCurrentPitcher = newLineup[lineupIdx];
+        }
+      }
+
+      lineupStateRef.current = {
+        lineup: newLineup,
+        bench: newBench,
+        usedPlayers: newUsedPlayers,
+        currentPitcher: newCurrentPitcher,
       };
     }
 
@@ -2733,6 +2846,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     });
 
     console.log(`[useGameState] Substitution (${subType}): ${benchPlayerName || benchPlayerId} replaces ${lineupPlayerName || lineupPlayerId} in inning ${gameState.inning}`);
+    return { success: true };
   }, [gameState.inning, gameState.isTop, gameState.currentBatterId]);
 
   // MAJ-06: Position switch (no new players, just position reassignment)
@@ -2846,6 +2960,41 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         currentPitcherId: newPitcherId,
         currentPitcherName: newPitcherName || '',
       }));
+
+      // MAJ-09: Update LineupState currentPitcher and usedPlayers for the pitching team
+      // Pitching team = opposite of batting team: if isTop, home is pitching; if !isTop, away is pitching
+      const pitchingStateRef = gameState.isTop ? homeLineupStateRef : awayLineupStateRef;
+      const pitchState = pitchingStateRef.current;
+
+      // Find new pitcher in lineup (they might already be there via makeSubstitution/double switch)
+      const newPitcherInLineup = pitchState.lineup.find(p => p.playerId === newPitcherId);
+      if (newPitcherInLineup) {
+        pitchingStateRef.current = {
+          ...pitchState,
+          currentPitcher: { ...newPitcherInLineup, position: 'P' as Position },
+          usedPlayers: pitchState.usedPlayers.includes(exitingPitcherId)
+            ? pitchState.usedPlayers
+            : [...pitchState.usedPlayers, exitingPitcherId],
+        };
+      } else {
+        // New pitcher came from bench (not yet in lineup via makeSubstitution — standalone pitching change)
+        // The makeSubstitution call that preceded this should have already updated lineup
+        // Just update currentPitcher reference
+        pitchingStateRef.current = {
+          ...pitchState,
+          currentPitcher: {
+            playerId: newPitcherId,
+            playerName: newPitcherName || newPitcherId,
+            position: 'P' as Position,
+            battingOrder: pitchState.currentPitcher?.battingOrder || 1,
+            enteredInning: gameState.inning,
+            isStarter: false,
+          },
+          usedPlayers: pitchState.usedPlayers.includes(exitingPitcherId)
+            ? pitchState.usedPlayers
+            : [...pitchState.usedPlayers, exitingPitcherId],
+        };
+      }
 
       console.log(`[useGameState] Pitching change logged: ${newPitcherName || newPitcherId} replaces ${exitingPitcherName || exitingPitcherId} in inning ${gameState.inning}`);
     };

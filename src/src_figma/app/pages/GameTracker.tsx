@@ -568,9 +568,32 @@ export function GameTracker() {
           position: p.position!, // Safe - filtered above
         }));
 
+      // MAJ-09: Extract bench players (players without batting order = not in starting lineup)
+      const awayStarterIds = new Set(awayLineup.map(p => p.playerId));
+      const awayBench = awayTeamPlayers
+        .filter(p => !awayStarterIds.has(`away-${p.name.replace(/\s+/g, '-').toLowerCase()}`))
+        .filter(p => !p.isOutOfGame) // Don't include already-removed players
+        .map(p => ({
+          playerId: `away-${p.name.replace(/\s+/g, '-').toLowerCase()}`,
+          playerName: p.name,
+          positions: [p.position || 'DH'].filter(Boolean),
+        }));
+
+      const homeStarterIds = new Set(homeLineup.map(p => p.playerId));
+      const homeBench = homeTeamPlayers
+        .filter(p => !homeStarterIds.has(`home-${p.name.replace(/\s+/g, '-').toLowerCase()}`))
+        .filter(p => !p.isOutOfGame)
+        .map(p => ({
+          playerId: `home-${p.name.replace(/\s+/g, '-').toLowerCase()}`,
+          playerName: p.name,
+          positions: [p.position || 'DH'].filter(Boolean),
+        }));
+
       console.log('[GameTracker] Initializing game with lineups:', {
         away: awayLineup.map(p => p.playerName),
         home: homeLineup.map(p => p.playerName),
+        awayBench: awayBench.map(p => p.playerName),
+        homeBench: homeBench.map(p => p.playerName),
       });
 
       await initializeGame({
@@ -582,6 +605,8 @@ export function GameTracker() {
         homeTeamName: 'Sox',
         awayLineup,
         homeLineup,
+        awayBench,
+        homeBench,
         awayStartingPitcherId: `away-${awayPitcher?.name.replace(/\s+/g, '-').toLowerCase() || 'pitcher'}`,
         awayStartingPitcherName: awayPitcher?.name || 'Pitcher',
         homeStartingPitcherId: `home-${homePitcher?.name.replace(/\s+/g, '-').toLowerCase() || 'pitcher'}`,
@@ -798,10 +823,16 @@ export function GameTracker() {
       ]);
     } else if (sub.type === 'player_sub' || sub.type === 'double_switch') {
       // MAJ-06: Pass enriched options to makeSubstitution
-      makeSubstitution(sub.incomingPlayerId, sub.outgoingPlayerId, sub.incomingPlayerName, sub.outgoingPlayerName, {
+      // MAJ-09: Check validation result before proceeding
+      const subResult = makeSubstitution(sub.incomingPlayerId, sub.outgoingPlayerId, sub.incomingPlayerName, sub.outgoingPlayerName, {
         subType: sub.type === 'double_switch' ? 'double_switch' : 'player_sub',
         newPosition: sub.newPosition,
       });
+      if (!subResult.success) {
+        console.warn(`[GameTracker] Substitution rejected: ${subResult.error}`);
+        // TODO: Show UI toast/notification to user
+        return;
+      }
 
       // mWAR: Infer decision type — pinch hitter if outgoing is current batter, otherwise defensive sub
       try {
@@ -1664,9 +1695,15 @@ export function GameTracker() {
     const lineupPlayerId = `${teamType}-${lineupPlayerName.replace(/\s+/g, '-').toLowerCase()}`;
 
     // MAJ-06: Call with enriched options for proper sub type logging
-    makeSubstitution(benchPlayerId, lineupPlayerId, benchPlayerName, lineupPlayerName, {
+    // MAJ-09: Check validation result before updating UI
+    const subResult = makeSubstitution(benchPlayerId, lineupPlayerId, benchPlayerName, lineupPlayerName, {
       subType: 'player_sub',
     });
+    if (!subResult.success) {
+      console.warn(`[GameTracker] Substitution rejected: ${subResult.error}`);
+      // TODO: Show UI toast/notification to user
+      return;
+    }
 
     // Update local player state for UI display
     const players = teamType === 'away' ? awayTeamPlayers : homeTeamPlayers;
