@@ -153,8 +153,10 @@ export async function aggregateGameToCareerPitching(
     homeRunsAllowed: number;
     hitBatters: number;
     wildPitches: number;
+    // Accept EITHER win/loss booleans OR decision string (pitcherGameStats uses decision)
     win?: boolean;
     loss?: boolean;
+    decision?: 'W' | 'L' | 'ND' | null;
     save?: boolean;
     hold?: boolean;
     blownSave?: boolean;
@@ -191,8 +193,8 @@ export async function aggregateGameToCareerPitching(
     homeRunsAllowed: previous.homeRunsAllowed + pitcherStats.homeRunsAllowed,
     hitBatters: previous.hitBatters + pitcherStats.hitBatters,
     wildPitches: previous.wildPitches + pitcherStats.wildPitches,
-    wins: previous.wins + (pitcherStats.win ? 1 : 0),
-    losses: previous.losses + (pitcherStats.loss ? 1 : 0),
+    wins: previous.wins + ((pitcherStats.win || pitcherStats.decision === 'W') ? 1 : 0),
+    losses: previous.losses + ((pitcherStats.loss || pitcherStats.decision === 'L') ? 1 : 0),
     saves: previous.saves + (pitcherStats.save ? 1 : 0),
     holds: previous.holds + (pitcherStats.hold ? 1 : 0),
     blownSaves: previous.blownSaves + (pitcherStats.blownSave ? 1 : 0),
