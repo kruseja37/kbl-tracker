@@ -873,6 +873,7 @@ export async function clearAllLeagueBuilderData(): Promise<void> {
 
 import { TEAMS as SMB4_TEAMS, PLAYERS as SMB4_PLAYERS, type PlayerData, type TeamData } from '../data/playerDatabase';
 import { SUPER_MEGA_LEAGUE } from '../data/leagueStructure';
+import { calculateSalary, type PlayerForSalary, type PlayerPosition as SalaryPosition } from '../engines/salaryCalculator';
 
 /**
  * Chemistry code to full chemistry name mapping
@@ -891,6 +892,34 @@ const CHEMISTRY_MAP: Record<string, Chemistry> = {
   'FIERY': 'Competitive',  // Map FIERY to Competitive
   'GRITTY': 'Competitive', // Map GRITTY to Competitive
 };
+
+/**
+ * Compute salary from SMB4 player ratings using the salary engine
+ */
+function computeInitialSalary(player: PlayerData, primaryPosition: Position): number {
+  const posMap: Record<string, SalaryPosition> = {
+    'C': 'C', '1B': '1B', '2B': '2B', 'SS': 'SS', '3B': '3B',
+    'LF': 'LF', 'CF': 'CF', 'RF': 'RF', 'DH': 'DH',
+    'SP': 'SP', 'RP': 'RP', 'CP': 'CP', 'SP/RP': 'SP/RP',
+  };
+  const salaryPlayer: PlayerForSalary = {
+    id: player.id,
+    name: player.name,
+    isPitcher: player.isPitcher,
+    primaryPosition: posMap[primaryPosition] || 'UTIL',
+    ratings: player.isPitcher
+      ? { velocity: player.pitcherRatings?.velocity ?? 50, junk: player.pitcherRatings?.junk ?? 50, accuracy: player.pitcherRatings?.accuracy ?? 50 }
+      : { power: player.batterRatings?.power ?? 50, contact: player.batterRatings?.contact ?? 50, speed: player.batterRatings?.speed ?? 50, fielding: player.batterRatings?.fielding ?? 50, arm: player.batterRatings?.arm ?? 50 },
+    battingRatings: player.isPitcher && player.batterRatings
+      ? { power: player.batterRatings.power, contact: player.batterRatings.contact, speed: player.batterRatings.speed, fielding: player.batterRatings.fielding, arm: player.batterRatings.arm }
+      : undefined,
+    age: player.age,
+    personality: 'Competitive',
+    fame: 0,
+    traits: [player.traits.trait1, player.traits.trait2].filter((t): t is string => !!t),
+  };
+  return calculateSalary(salaryPlayer);
+}
 
 /**
  * Convert SMB4 PlayerData to League Builder Player format
@@ -954,7 +983,7 @@ function convertPlayer(player: PlayerData): Omit<Player, 'createdDate' | 'lastMo
     morale: 75, // Default morale
     mojo: 'Normal',
     fame: 0,
-    salary: 1.0, // Default salary in millions
+    salary: computeInitialSalary(player, primaryPosition),
     currentTeamId: player.teamId === 'free-agent' ? null : player.teamId,
     rosterStatus,
     isCustom: false,
