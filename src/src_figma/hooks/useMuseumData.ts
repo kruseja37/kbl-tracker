@@ -49,6 +49,7 @@ import {
   type RetiredJersey,
   type StadiumData,
 } from '../../utils/museumStorage';
+import { populateMuseumLeaders } from '../../utils/museumPipeline';
 
 // Re-export types for convenience
 export type {
@@ -126,6 +127,7 @@ export interface UseMuseumDataReturn {
   // Actions
   refresh: () => Promise<void>;
   seedMockData: () => Promise<void>;
+  populateFromCareerData: () => Promise<number>;
 }
 
 // ============================================
@@ -180,13 +182,26 @@ export function useMuseumData(): UseMuseumDataReturn {
         getStadiums(),
       ]);
 
-      // Use real data if available, otherwise use mock
-      const hasRealData = champs.length > 0 || teams.length > 0;
+      // Auto-populate all-time leaders from career data if museum is empty
+      let finalLeaders = leaders;
+      if (leaders.length === 0) {
+        try {
+          const count = await populateMuseumLeaders();
+          if (count > 0) {
+            finalLeaders = await getAllTimeLeaders();
+          }
+        } catch (err) {
+          console.warn('[useMuseumData] Auto-populate from career data failed:', err);
+        }
+      }
+
+      // Use real data if available, otherwise use empty fallbacks
+      const hasRealData = champs.length > 0 || teams.length > 0 || finalLeaders.length > 0;
 
       setChampionships(champs.length > 0 ? champs : EMPTY_CHAMPIONSHIPS);
       setTeamRecords(teams.length > 0 ? teams : EMPTY_TEAM_RECORDS);
       setAwardWinners(awards.length > 0 ? awards : EMPTY_AWARD_WINNERS);
-      setAllTimeLeaders(leaders.length > 0 ? leaders : EMPTY_ALL_TIME_LEADERS);
+      setAllTimeLeaders(finalLeaders.length > 0 ? finalLeaders : EMPTY_ALL_TIME_LEADERS);
       setHallOfFamers(hof.length > 0 ? hof : EMPTY_HALL_OF_FAME);
       setRecords(recs.length > 0 ? recs : EMPTY_RECORDS);
       setMoments(moms.length > 0 ? moms : EMPTY_MOMENTS);
@@ -217,6 +232,23 @@ export function useMuseumData(): UseMuseumDataReturn {
   // Load on mount
   useEffect(() => {
     loadData();
+  }, [loadData]);
+
+  /**
+   * Populate museum from career data (all-time leaders pipeline)
+   * Returns number of leader records written.
+   */
+  const populateFromCareerData = useCallback(async (): Promise<number> => {
+    try {
+      const count = await populateMuseumLeaders();
+      if (count > 0) {
+        await loadData();
+      }
+      return count;
+    } catch (err) {
+      console.error('[useMuseumData] Error populating from career data:', err);
+      return 0;
+    }
   }, [loadData]);
 
   /**
@@ -401,6 +433,7 @@ export function useMuseumData(): UseMuseumDataReturn {
 
     refresh: loadData,
     seedMockData,
+    populateFromCareerData,
   };
 }
 
