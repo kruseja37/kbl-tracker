@@ -54,6 +54,8 @@ export function SeasonBattingLeaderboard({
     sb: 'Stolen Base Leaders',
     fameNet: 'Fame Leaders (Batting)',
     bWAR: 'Batting WAR Leaders',
+    fWAR: 'Fielding WAR Leaders',
+    rWAR: 'Baserunning WAR Leaders',
     totalWAR: 'Total WAR Leaders',
   };
 
@@ -323,6 +325,8 @@ function getStatHeader(sortBy: BattingSortKey): string {
     sb: 'SB',
     fameNet: 'Fame',
     bWAR: 'bWAR',
+    fWAR: 'fWAR',
+    rWAR: 'rWAR',
     totalWAR: 'WAR',
   };
   return headers[sortBy];

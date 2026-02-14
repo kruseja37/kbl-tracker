@@ -66,7 +66,7 @@ export interface FieldingLeaderEntry extends PlayerSeasonFielding {
   fieldingPct: number;
 }
 
-export type BattingSortKey = 'avg' | 'obp' | 'slg' | 'ops' | 'hr' | 'rbi' | 'hits' | 'runs' | 'sb' | 'fameNet' | 'bWAR' | 'totalWAR';
+export type BattingSortKey = 'avg' | 'obp' | 'slg' | 'ops' | 'hr' | 'rbi' | 'hits' | 'runs' | 'sb' | 'fameNet' | 'bWAR' | 'fWAR' | 'rWAR' | 'totalWAR';
 export type PitchingSortKey = 'era' | 'whip' | 'wins' | 'strikeouts' | 'saves' | 'ip' | 'fameNet' | 'pWAR';
 export type FieldingSortKey = 'fieldingPct' | 'putouts' | 'assists' | 'errors';
 
@@ -298,6 +298,8 @@ function getBattingSortValue(entry: BattingLeaderEntry, sortBy: BattingSortKey):
     case 'sb': return entry.stolenBases;
     case 'fameNet': return entry.fameNet;
     case 'bWAR': return entry.bWAR;
+    case 'fWAR': return entry.fWAR;
+    case 'rWAR': return entry.rWAR;
     case 'totalWAR': return entry.totalWAR;
     default: return 0;
   }

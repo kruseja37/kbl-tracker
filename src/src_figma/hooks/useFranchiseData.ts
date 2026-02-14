@@ -51,6 +51,8 @@ export interface BattingLeadersData {
   SB: LeaderEntry[];
   OPS: LeaderEntry[];
   WAR: LeaderEntry[];
+  fWAR: LeaderEntry[];
+  rWAR: LeaderEntry[];
 }
 
 export interface PitchingLeadersData {
@@ -127,6 +129,8 @@ const EMPTY_BATTING_LEADERS: BattingLeadersData = {
   SB: [],
   OPS: [],
   WAR: [],
+  fWAR: [],
+  rWAR: [],
 };
 
 const EMPTY_PITCHING_LEADERS: PitchingLeadersData = {
@@ -165,6 +169,12 @@ function toBattingLeaderEntry(entry: BattingLeaderEntry, stat: keyof BattingLead
       break;
     case 'WAR':
       value = entry.totalWAR.toFixed(1);
+      break;
+    case 'fWAR':
+      value = entry.fWAR.toFixed(1);
+      break;
+    case 'rWAR':
+      value = entry.rWAR.toFixed(1);
       break;
     default:
       value = '0';
@@ -314,6 +324,8 @@ export function useFranchiseData(franchiseId?: string, currentSeason: number = 1
       SB: seasonStats.getBattingLeaders('sb', 5).map((e: BattingLeaderEntry) => toBattingLeaderEntry(e, 'SB')),
       OPS: seasonStats.getBattingLeaders('ops', 5).map((e: BattingLeaderEntry) => toBattingLeaderEntry(e, 'OPS')),
       WAR: seasonStats.getBattingLeaders('totalWAR', 5).map((e: BattingLeaderEntry) => toBattingLeaderEntry(e, 'WAR')),
+      fWAR: seasonStats.getBattingLeaders('fWAR', 5).map((e: BattingLeaderEntry) => toBattingLeaderEntry(e, 'fWAR')),
+      rWAR: seasonStats.getBattingLeaders('rWAR', 5).map((e: BattingLeaderEntry) => toBattingLeaderEntry(e, 'rWAR')),
     };
   }, [hasRealData, seasonStats]);
 
