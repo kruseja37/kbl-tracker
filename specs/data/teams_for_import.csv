@@ -1,0 +1,29 @@
+teamId,name,abbreviation,conference,division,stadiumId,primaryColor,secondaryColor,textColor,ownerPlayerId,managerName,isActive
+1,Angels,LAA,AL,West,1,#BA0021,#003263,#FFFFFF,,,TRUE
+2,Blue Jays,TOR,AL,East,2,#134A8E,#E8291C,#FFFFFF,,,TRUE
+3,Giants,SF,NL,West,3,#FD5A1E,#27251F,#FFFFFF,,,TRUE
+4,Indians,CLE,AL,Central,4,#E50022,#00385D,#FFFFFF,,,TRUE
+5,Mets,NYM,NL,East,5,#002D72,#FF5910,#FFFFFF,,,TRUE
+6,Twins,MIN,AL,Central,6,#002B5C,#D31145,#FFFFFF,,,TRUE
+7,White Sox,CWS,AL,Central,7,#27251F,#C4CED4,#FFFFFF,,,TRUE
+8,Yankees,NYY,AL,East,8,#003087,#C4CED3,#FFFFFF,,,TRUE
+9,Beewolves,BEE,Super,Wild,9,#FFD700,#000000,#000000,,,TRUE
+10,Blowfish,BLO,Super,Wild,10,#00CED1,#FF6347,#FFFFFF,,,TRUE
+11,Buzzards,BUZ,Super,Wild,11,#8B0000,#FFD700,#FFFFFF,,,TRUE
+12,Crocodons,CRO,Super,Wild,12,#228B22,#FFD700,#FFFFFF,,,TRUE
+13,Freebooters,FRE,Super,Wild,13,#800080,#FFD700,#FFFFFF,,,TRUE
+14,Grapplers,GRA,Super,Power,14,#FF4500,#000000,#FFFFFF,,,TRUE
+15,Heaters,HEA,Super,Power,15,#FF0000,#FFFFFF,#FFFFFF,,,TRUE
+16,Herbisaurs,HER,Mega,Natural,16,#32CD32,#8B4513,#FFFFFF,,,TRUE
+17,Hot Corners,HOT,Mega,Natural,17,#FF8C00,#000000,#000000,,,TRUE
+18,Jacks,JAC,Mega,Natural,18,#4169E1,#FFD700,#FFFFFF,,,TRUE
+19,Moonstars,MOO,Mega,Natural,19,#191970,#C0C0C0,#FFFFFF,,,TRUE
+20,Moose,MOS,Mega,Lumber,20,#8B4513,#228B22,#FFFFFF,,,TRUE
+21,Nemesis,NEM,Mega,Lumber,21,#000000,#FF0000,#FFFFFF,,,TRUE
+22,Overdogs,OVR,Super,Power,9,#FFD700,#000000,#000000,,,TRUE
+23,Platypi,PLA,Super,Power,10,#008080,#FF69B4,#FFFFFF,,,TRUE
+24,Sandcats,SAN,Mega,Lumber,11,#DEB887,#8B4513,#000000,,,TRUE
+25,Sawteeth,SAW,Mega,Lumber,12,#4682B4,#FF6347,#FFFFFF,,,TRUE
+26,Sirloins,SIR,Super,Wild,13,#8B0000,#FFD700,#FFFFFF,,,TRUE
+27,Wideloads,WID,Super,Power,14,#FF1493,#00BFFF,#FFFFFF,,,TRUE
+28,Wild Pigs,WPG,Mega,Natural,15,#FF69B4,#90EE90,#000000,,,TRUE

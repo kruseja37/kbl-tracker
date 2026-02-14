@@ -1,0 +1,24 @@
+stadiumId,name,leftDistance,leftWallHeight,centerDistance,centerWallHeight,rightDistance,rightWallHeight,parkFactor,parkFactorNotes
+1,Apple Field,337,Med,419,Med,347,Med,1.00,Balanced park - baseline reference
+2,Sakura Hills,358,Med,406,Med,358,Med,0.97,Deep symmetrical corners
+3,Colonial Plaza,347,Low,410,Med,347,Low,1.05,Low corner walls boost HR potential
+4,Swagger Center,335,High,387,Med,298,High,1.04,Shortest RF (298) but high corner walls balance
+5,Motor Yard,348,Med,414,Med,349,Med,0.98,Deep balanced park
+6,Bingata Bowl,326,Med,419,Med,326,Med,1.02,Short symmetrical corners
+7,Emerald Diamond,315,High,413,Med,345,Med,1.00,Very short LF (315) but high wall
+8,Shaka Sports Turf,377,Med,433,Med,377,Med,0.88,Deepest park - most pitcher friendly
+9,Red Rock Park,341,Med,418,Low,327,Low,1.06,Short RF with low wall - hitter friendly
+10,El Viejo Stadium,351,Med,419,Med,339,Med,0.98,Slightly deep corners
+11,Founders Field,360,Low,428,Med,328,Med,0.97,Deep LF/CF but low LF wall and short RF
+12,Big Sky Park,314,High,397,Med,357,Med,1.01,Shortest LF (314) but high wall limits advantage
+13,Lafayette Corner,328,Med,400,High,335,Med,0.98,High CF wall suppresses deep HRs
+14,Tiger Den,314,High,373,Med,314,High,1.05,Shortest CF (373) but high corner walls
+15,Parque Jardineros,370,Med,408,Low,370,Med,0.94,Deep corners but low CF helps slightly
+16,Stade Royale,333,Med,429,Med,321,Low,1.02,Short RF with low wall favors LH pull hitters
+17,Battery Bay,358,Med,403,Med,358,Med,0.98,Deep symmetrical corners
+18,The Corral,324,Med,395,Low,377,Med,1.06,Short LF and low CF wall - hitter friendly
+19,Golden Field,313,Med,402,Med,313,Med,1.10,Shortest symmetrical corners - most HR friendly
+20,Whackers Wheel,322,Med,408,Med,321,Med,1.04,Short symmetrical corners
+21,Peril Point,371,Low,408,Low,331,Med,0.96,Deep LF but low walls help hitters
+22,Ciudad de Colores,331,Med,400,Med,331,Med,1.03,Short CF at 400
+23,Castillo Arena,357,Med,370,Med,341,Med,1.08,Shortest CF in league (370) - HR friendly

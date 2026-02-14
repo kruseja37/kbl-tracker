@@ -1,0 +1,2 @@
+awardId,seasonId,playerId,playerName,teamId,teamName,awardType,place,rewardType,rewardValue,notes
+1,1,1,Example Player,1,Angels,MVP,1,trait,Random Positive Trait,Season 1 MVP Winner

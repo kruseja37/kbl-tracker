@@ -1,0 +1,2 @@
+pitchingId,seasonId,playerId,playerName,teamId,teamName,type,W,L,ERA,R,ER,WHIP,G,GS,SV,IP,H,AVG,SO,BB,WP,HR,CG,SHO,HB,TBF,NP,K9,BB9,HR9,FIP,pWAR
+1,1,1,Example Pitcher,1,Angels,REG,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0

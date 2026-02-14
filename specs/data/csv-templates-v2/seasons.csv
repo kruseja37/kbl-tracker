@@ -1,0 +1,2 @@
+seasonId,seasonNumber,leagueName,startDate,endDate,status,gamesPerTeam,inningsPerGame,dhRuleAL,dhRuleNL,playoffTeams,playoffSeriesLength,rookieAbLimit,rookieIpLimit,notes
+1,1,KBL XHD,2024-01-01,,active,128,9,TRUE,FALSE,4,5,38,14,Season 1
