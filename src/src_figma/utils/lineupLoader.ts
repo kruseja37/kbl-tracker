@@ -65,18 +65,74 @@ function convertToRosterPitcher(
   };
 }
 
+// Required fielding positions (8 field positions, pitcher handled separately)
+const FIELD_POSITIONS = ['C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF'] as const;
+
+/**
+ * Build a valid 8-player lineup with unique positions.
+ * Greedy: fill each required position with the best available player at that position.
+ * Uses secondaryPosition as fallback. Remaining slots filled as DH/utility.
+ */
+function buildPositionValidLineup(batters: LBPlayer[]): { starters: Array<{ player: LBPlayer; position: string }>; bench: LBPlayer[] } {
+  const assigned = new Set<LBPlayer>();
+  const filledPositions = new Map<string, LBPlayer>();
+
+  // Pass 1: Fill positions with primary position matches
+  for (const pos of FIELD_POSITIONS) {
+    const candidate = batters.find(p => !assigned.has(p) && p.primaryPosition === pos);
+    if (candidate) {
+      filledPositions.set(pos, candidate);
+      assigned.add(candidate);
+    }
+  }
+
+  // Pass 2: Fill remaining positions with secondary position matches
+  for (const pos of FIELD_POSITIONS) {
+    if (filledPositions.has(pos)) continue;
+    const candidate = batters.find(p => !assigned.has(p) && p.secondaryPosition === pos);
+    if (candidate) {
+      filledPositions.set(pos, candidate);
+      assigned.add(candidate);
+    }
+  }
+
+  // Pass 3: Fill any still-empty positions with best available unassigned player
+  for (const pos of FIELD_POSITIONS) {
+    if (filledPositions.has(pos)) continue;
+    const candidate = batters.find(p => !assigned.has(p));
+    if (candidate) {
+      filledPositions.set(pos, candidate);
+      assigned.add(candidate);
+    }
+  }
+
+  // Build ordered starters list
+  const starters: Array<{ player: LBPlayer; position: string }> = [];
+  for (const [pos, player] of filledPositions) {
+    starters.push({ player, position: pos });
+  }
+
+  // If fewer than 8 filled, add remaining batters as DH
+  const remaining = batters.filter(p => !assigned.has(p));
+  while (starters.length < 8 && remaining.length > 0) {
+    starters.push({ player: remaining.shift()!, position: 'DH' });
+  }
+
+  return { starters, bench: remaining };
+}
+
 /**
  * Auto-generate lineup when no stored lineup exists.
- * Takes first 8 batters + starting pitcher batting 9th (NL-style, no DH).
+ * Fills each defensive position exactly once, then adds pitcher batting 9th.
  * SMB4 doesn't have DH, so pitcher always bats.
  */
 function autoGenerateLineup(teamPlayers: LBPlayer[]): LoadedLineup {
   // Split into batters and pitchers
   const batters = teamPlayers.filter(
-    p => !['SP', 'RP', 'CP'].includes(p.primaryPosition)
+    p => !['SP', 'RP', 'CP', 'SP/RP'].includes(p.primaryPosition)
   );
   const pitchers = teamPlayers.filter(
-    p => ['SP', 'RP', 'CP'].includes(p.primaryPosition)
+    p => ['SP', 'RP', 'CP', 'SP/RP'].includes(p.primaryPosition)
   );
 
   // Find starting pitcher (first SP)
@@ -84,9 +140,11 @@ function autoGenerateLineup(teamPlayers: LBPlayer[]): LoadedLineup {
   const relievers = pitchers.filter(p => p.primaryPosition !== 'SP');
   const startingPitcher = starters[0];
 
-  // Create lineup: first 8 batters + pitcher batting 9th (EXH-009)
-  const lineupPlayers: RosterPlayer[] = batters.slice(0, 8).map((player, idx) =>
-    convertToRosterPlayer(player, idx + 1, player.primaryPosition)
+  // Build position-valid lineup (8 field positions, each unique)
+  const { starters: lineupStarters, bench: benchBatters } = buildPositionValidLineup(batters);
+
+  const lineupPlayers: RosterPlayer[] = lineupStarters.map((entry, idx) =>
+    convertToRosterPlayer(entry.player, idx + 1, entry.position)
   );
 
   // Add starting pitcher to batting order at 9th spot
@@ -97,7 +155,7 @@ function autoGenerateLineup(teamPlayers: LBPlayer[]): LoadedLineup {
   }
 
   // Remaining batters become bench
-  const benchPlayers = batters.slice(8).map(player =>
+  const benchPlayers = benchBatters.map(player =>
     convertToRosterPlayer(player, undefined, undefined)
   );
 

@@ -80,29 +80,62 @@ async function buildGameTrackerRoster(teamId: string): Promise<{
   const positionPlayers = dbPlayers.filter(p => !PITCHER_POS.has(p.primaryPosition));
   const pitcherPlayers = dbPlayers.filter(p => PITCHER_POS.has(p.primaryPosition));
 
-  // Build position player roster: first 9 as starters (with battingOrder), rest as bench
+  // Build position-valid lineup: fill each defensive position exactly once
+  const FIELD_POS = ['C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF'] as const;
+  const assigned = new Set<typeof positionPlayers[number]>();
+  const filledPositions = new Map<string, typeof positionPlayers[number]>();
+
+  // Pass 1: Fill with primary position matches
+  for (const pos of FIELD_POS) {
+    const candidate = positionPlayers.find(p => !assigned.has(p) && p.primaryPosition === pos);
+    if (candidate) { filledPositions.set(pos, candidate); assigned.add(candidate); }
+  }
+  // Pass 2: Fill remaining with secondary position matches
+  for (const pos of FIELD_POS) {
+    if (filledPositions.has(pos)) continue;
+    const candidate = positionPlayers.find(p => !assigned.has(p) && p.secondaryPosition === pos);
+    if (candidate) { filledPositions.set(pos, candidate); assigned.add(candidate); }
+  }
+  // Pass 3: Fill any still-empty with best available
+  for (const pos of FIELD_POS) {
+    if (filledPositions.has(pos)) continue;
+    const candidate = positionPlayers.find(p => !assigned.has(p));
+    if (candidate) { filledPositions.set(pos, candidate); assigned.add(candidate); }
+  }
+
   const players: TeamRosterPlayer[] = [];
-  positionPlayers.forEach((p, idx) => {
+  let order = 1;
+  for (const [pos, p] of filledPositions) {
     players.push({
       name: formatName(p.firstName, p.lastName),
-      position: idx < 9 ? p.primaryPosition : (p.primaryPosition === 'SP' || p.primaryPosition === 'RP' ? undefined : p.primaryPosition),
-      battingOrder: idx < 9 ? idx + 1 : undefined,
+      position: pos,
+      battingOrder: order++,
       stats: { ...emptyBatterStats },
       battingHand: p.bats,
     });
-  });
+  }
 
-  // Add pitcher to batting 9th spot if we have <9 position players
-  // (pitcher bats last in the lineup)
-  if (players.filter(p => p.battingOrder !== undefined).length < 9 && pitcherPlayers.length > 0) {
+  // Add pitcher to batting 9th spot (pitcher bats last in lineup)
+  if (pitcherPlayers.length > 0) {
     const starter = pitcherPlayers.find(p => p.primaryPosition === 'SP') || pitcherPlayers[0];
-    const nextOrder = players.filter(p => p.battingOrder !== undefined).length + 1;
     players.push({
       name: formatName(starter.firstName, starter.lastName),
       position: 'P',
-      battingOrder: nextOrder,
+      battingOrder: order++,
       stats: { ...emptyBatterStats },
       battingHand: starter.bats,
+    });
+  }
+
+  // Remaining position players become bench
+  const benchPlayers = positionPlayers.filter(p => !assigned.has(p));
+  for (const p of benchPlayers) {
+    players.push({
+      name: formatName(p.firstName, p.lastName),
+      position: p.primaryPosition,
+      battingOrder: undefined,
+      stats: { ...emptyBatterStats },
+      battingHand: p.bats,
     });
   }
 
