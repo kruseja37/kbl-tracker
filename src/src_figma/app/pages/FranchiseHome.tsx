@@ -42,6 +42,10 @@ import { getRecentGames } from "../../../utils/gameStorage";
 import { generateGameRecap } from "../engines/narrativeIntegration";
 import type { Player as TeamRosterPlayer, Pitcher as TeamRosterPitcher } from "@/app/components/TeamRoster";
 import { LineupPreview } from "@/app/components/LineupPreview";
+import { MilestoneWatchPanel } from "@/app/components/MilestoneWatchPanel";
+import { getApproachingMilestones, type MilestoneWatch } from "../../../utils/milestoneDetector";
+import { getAllCareerBatting, getAllCareerPitching } from "../../../utils/careerStorage";
+import { getSeasonBattingStats, getSeasonPitchingStats, getActiveSeason } from "../../../utils/seasonStorage";
 
 // Pitcher positions for separating roster
 const PITCHER_POS = new Set(['SP', 'RP', 'CP', 'P', 'SP/RP', 'TWO-WAY']);
@@ -187,6 +191,7 @@ interface PreGameData {
   scheduleGameId?: string;
   selectedAwayStarterIdx: number;
   selectedHomeStarterIdx: number;
+  milestoneWatches?: MilestoneWatch[];
 }
 
 export function FranchiseHome() {
@@ -2726,6 +2731,59 @@ function GameDayContent({ scheduleData, currentSeason, onDataRefresh }: GameDayC
       selectedHomeStarterIdx: homeStarterIdx >= 0 ? homeStarterIdx : 0,
     });
     setConfirmAction(null);
+
+    // T3-06: Async milestone watch computation (non-blocking)
+    (async () => {
+      try {
+        const [careerBatters, careerPitchers, activeSeason] = await Promise.all([
+          getAllCareerBatting(),
+          getAllCareerPitching(),
+          getActiveSeason(),
+        ]);
+        const seasonId = activeSeason?.seasonId || '';
+        const [seasonBatters, seasonPitchers] = seasonId
+          ? await Promise.all([
+              getSeasonBattingStats(seasonId),
+              getSeasonPitchingStats(seasonId),
+            ])
+          : [[], []];
+
+        // Build lookup maps
+        const careerBatMap = new Map(careerBatters.map(b => [b.playerId, b]));
+        const careerPitMap = new Map(careerPitchers.map(p => [p.playerId, p]));
+        const seasonBatMap = new Map(seasonBatters.map(b => [b.playerId, b]));
+        const seasonPitMap = new Map(seasonPitchers.map(p => [p.playerId, p]));
+        const achieved = new Set<string>(); // TODO: load from careerStorage milestones
+
+        // Collect player IDs from both rosters
+        const playerIds = new Set<string>();
+        for (const p of [...awayRoster.players, ...homeRoster.players]) {
+          if (p.name) playerIds.add(p.name); // name is used as playerId
+        }
+        for (const p of [...awayRoster.pitchers, ...homeRoster.pitchers]) {
+          if (p.name) playerIds.add(p.name);
+        }
+
+        const watches: MilestoneWatch[] = [];
+        for (const pid of playerIds) {
+          const pw = getApproachingMilestones(
+            careerBatMap.get(pid) || null,
+            careerPitMap.get(pid) || null,
+            seasonBatMap.get(pid) || null,
+            seasonPitMap.get(pid) || null,
+            achieved,
+          );
+          watches.push(...pw);
+        }
+
+        // Sort by closest to milestone
+        watches.sort((a, b) => a.neededForMilestone - b.neededForMilestone);
+
+        setPreGameData(prev => prev ? { ...prev, milestoneWatches: watches } : prev);
+      } catch (err) {
+        console.warn('[FranchiseHome] Milestone watch computation failed:', err);
+      }
+    })();
   };
 
   // T3-01: Launch game with selected starters from pre-game screen
@@ -3385,6 +3443,14 @@ function GameDayContent({ scheduleData, currentSeason, onDataRefresh }: GameDayC
                 startingPitcher={preGameData.homePitchers[preGameData.selectedHomeStarterIdx]}
                 teamColor="#E8E8D8"
                 isAway={false}
+              />
+            </div>
+
+            {/* T3-06: Milestone Watch */}
+            <div className="mb-4">
+              <MilestoneWatchPanel
+                watches={preGameData.milestoneWatches || []}
+                isLoading={!preGameData.milestoneWatches}
               />
             </div>
 
