@@ -15,6 +15,7 @@ import {
   getUnaggregatedGames,
   markGameAggregated,
   getGameFieldingEvents,
+  getGameHeader,
   type AtBatEvent,
   type RunnerState,
   type GameHeader,
@@ -3362,12 +3363,21 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       activityLog: [],
     };
 
-    // Aggregate game stats to season totals
-    const seasonId = seasonIdRef.current || 'season-1';
-    await aggregateGameToSeason(persistedState, { seasonId });
+    // T1-08 FIX: Check if already aggregated (idempotency guard)
+    // Prevents double aggregation when endGame's useEffect re-fires
+    const header = await getGameHeader(gameState.gameId);
+    const alreadyAggregated = header?.aggregated === true;
 
-    // Mark as aggregated after successful aggregation
-    await markGameAggregated(gameState.gameId);
+    const seasonId = seasonIdRef.current || 'season-1';
+    if (!alreadyAggregated) {
+      // Aggregate game stats to season totals
+      await aggregateGameToSeason(persistedState, { seasonId });
+      // Mark as aggregated after successful aggregation
+      await markGameAggregated(gameState.gameId);
+      console.log('[T1-08] Stats aggregated to season (first call)');
+    } else {
+      console.log('[T1-08] Skipping aggregation — game already aggregated');
+    }
 
     // Record playoff series game result if this was a playoff game
     if (playoffSeriesIdRef.current) {
@@ -3396,16 +3406,20 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     }
 
     // Archive completed game with full stats for post-game summary (EXH-011)
-    const inningScores = scoreboard.innings.map(inn => ({
-      away: inn.away ?? 0,
-      home: inn.home ?? 0,
-    }));
-    await archiveCompletedGame(
-      persistedState,
-      { away: gameState.awayScore, home: gameState.homeScore },
-      inningScores,
-      seasonId
-    );
+    // T1-08: Only archive if not already done by endGame() — the archive is idempotent
+    // but skipping avoids unnecessary IndexedDB writes
+    if (!alreadyAggregated) {
+      const inningScores = scoreboard.innings.map(inn => ({
+        away: inn.away ?? 0,
+        home: inn.home ?? 0,
+      }));
+      await archiveCompletedGame(
+        persistedState,
+        { away: gameState.awayScore, home: gameState.homeScore },
+        inningScores,
+        seasonId
+      );
+    }
 
     setIsSaving(false);
     setLastSavedAt(Date.now());

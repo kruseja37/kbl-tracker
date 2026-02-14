@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate, useParams, useLocation } from "react-router";
 import { Menu, ChevronUp } from "lucide-react";
 import { DndProvider } from "react-dnd";
@@ -128,6 +128,11 @@ export function GameTracker() {
   // Game timer state
   const [gameStartTime] = useState(() => new Date());
   const [elapsedMinutes, setElapsedMinutes] = useState(0);
+
+  // T1-08 FIX: Guard against double end-game execution
+  // The auto-end useEffect can re-fire due to volatile deps in handleEndGame's useCallback.
+  // This ref ensures handleEndGame only executes once per game.
+  const gameEndingRef = useRef(false);
 
   // Update elapsed time every minute
   useEffect(() => {
@@ -1875,6 +1880,13 @@ export function GameTracker() {
 
   // Handle end game with navigation
   const handleEndGame = useCallback(async () => {
+    // T1-08 FIX: Prevent double execution from useEffect re-firing
+    if (gameEndingRef.current) {
+      console.log('[T1-08] handleEndGame already in progress — skipping duplicate call');
+      return;
+    }
+    gameEndingRef.current = true;
+
     // MAJ-09: End-of-game achievement detection (No-Hitter, Perfect Game, Maddux, CG, Shutout)
     try {
       const totalGameOuts = gameState.inning * 3; // Approximate from current inning
