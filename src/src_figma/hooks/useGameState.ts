@@ -2595,7 +2595,17 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         };
       });
     }
-  }, [gameState.isTop, gameState.inning, gameState.currentPitcherId, gameState.currentPitcherName]);
+
+    // T0-03 FIX: Check if baserunning out (CS, pickoff, TOOTBLAN, etc.) caused 3rd out.
+    // advanceRunner increments outs via setGameState but never checked for inning end.
+    // Uses same pattern as recordOut (line 1826): setTimeout to let UI update before flip.
+    if (outcome === 'out' && gameState.outs + 1 >= 3) {
+      console.log('[advanceRunner] T0-03: Baserunning out caused 3rd out — triggering end of inning');
+      setTimeout(() => {
+        endInningRef.current?.();
+      }, 500);
+    }
+  }, [gameState.isTop, gameState.inning, gameState.outs, gameState.currentPitcherId, gameState.currentPitcherName]);
 
   /**
    * Batch update runners - processes all movements atomically
@@ -2700,7 +2710,16 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         };
       });
     }
-  }, [gameState.isTop, gameState.inning, gameState.currentPitcherId, gameState.currentPitcherName]);
+
+    // T0-03 FIX: Check if batch runner outs caused 3rd out (same pattern as advanceRunner).
+    const totalOuts = movements.filter(m => m.outcome === 'out').length;
+    if (totalOuts > 0 && gameState.outs + totalOuts >= 3) {
+      console.log('[advanceRunnersBatch] T0-03: Baserunning out(s) caused 3rd out — triggering end of inning');
+      setTimeout(() => {
+        endInningRef.current?.();
+      }, 500);
+    }
+  }, [gameState.isTop, gameState.inning, gameState.outs, gameState.currentPitcherId, gameState.currentPitcherName]);
 
   const advanceCount = useCallback((type: 'ball' | 'strike' | 'foul') => {
     setGameState(prev => {
