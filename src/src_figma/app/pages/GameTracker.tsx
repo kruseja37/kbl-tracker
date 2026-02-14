@@ -41,6 +41,7 @@ import { completeGame as completeScheduleGame } from '../../../utils/scheduleSto
 // Fielding pipeline: extract fielding events from PlayData and log to IndexedDB
 import { extractFieldingEvents, type FieldingExtractionContext } from '../utils/fieldingEventExtractor';
 import { logFieldingEvent } from '../../../utils/eventLog';
+import { POSITION_MAP } from '../components/fielderInference';
 
 // Note: Using GameState from useGameState hook instead of local interface
 // This interface is deprecated but kept for reference during migration
@@ -935,6 +936,50 @@ export function GameTracker() {
     // This would update bases, outs, scores, etc.
   };
 
+  // T1-05: Auto-infer fielder credits from fieldingSequence
+  // Standard baseball rules: last fielder = putout, others = assists
+  // For DP/TP: distribute putouts across the bases where outs occur
+  const inferFielderCredits = useCallback((
+    runnersOut: RunnerOutInfo[],
+    fieldingSequence: number[],
+    outType?: string
+  ): FielderCredit[] | null => {
+    if (fieldingSequence.length === 0) return null; // No sequence = can't infer
+
+    const posLabel = (n: number): string => POSITION_MAP[n] || `P${n}`;
+
+    // Single out: last fielder = putout, rest = assists
+    if (runnersOut.length === 1) {
+      const putoutBy = posLabel(fieldingSequence[fieldingSequence.length - 1]);
+      const assistBy = fieldingSequence.slice(0, -1).map(n => posLabel(n));
+      return [{
+        ...runnersOut[0],
+        putoutBy,
+        assistBy,
+      }];
+    }
+
+    // DP: Two outs. In a standard 6-4-3 DP:
+    //   - Force out at 2B: putout by 4 (2B), assist by 6 (SS)
+    //   - Batter out at 1B: putout by 3 (1B), assist by 4 (2B)
+    // General rule: middle fielder(s) get putout on lead runner,
+    // last fielder gets putout on batter
+    if (runnersOut.length === 2 && (outType === 'DP' || outType === 'GO') && fieldingSequence.length >= 3) {
+      const assists = fieldingSequence.slice(0, -2).map(n => posLabel(n));
+      const midFielder = posLabel(fieldingSequence[fieldingSequence.length - 2]);
+      const lastFielder = posLabel(fieldingSequence[fieldingSequence.length - 1]);
+      return [
+        // Lead runner out (force at next base)
+        { ...runnersOut[0], putoutBy: midFielder, assistBy: assists },
+        // Trailing runner/batter out
+        { ...runnersOut[1], putoutBy: lastFielder, assistBy: [...assists, midFielder] },
+      ];
+    }
+
+    // Fallback: can't confidently infer for 3+ outs or unusual sequences
+    return null;
+  }, []);
+
   // Enhanced play handler for the new drag-drop field
   const handleEnhancedPlayComplete = useCallback(async (playData: PlayData) => {
     console.log("Enhanced play complete:", playData);
@@ -971,13 +1016,21 @@ export function GameTracker() {
         });
       }
 
-      // If there are runners out, show the fielder credit modal
+      // If there are runners out, try to auto-infer credits from fieldingSequence
       if (runnersOut.length > 0) {
-        console.log('[EXH-016] Runners out - prompting for fielder credit:', runnersOut);
-        setRunnersOutForCredit(runnersOut);
-        setPendingPlayForFielderCredit(playData);
-        setFielderCreditModalOpen(true);
-        return; // Exit early - will continue in handleFielderCreditConfirm
+        const autoCredits = inferFielderCredits(runnersOut, playData.fieldingSequence, playData.outType);
+        if (autoCredits) {
+          // T1-05: Auto-inferred — skip modal, log credits directly
+          console.log('[EXH-016] Auto-inferred fielder credits:', autoCredits);
+          // Continue processing — credits are logged but play proceeds without modal
+        } else {
+          // Can't auto-infer — fall back to manual modal
+          console.log('[EXH-016] Cannot auto-infer, prompting for fielder credit:', runnersOut);
+          setRunnersOutForCredit(runnersOut);
+          setPendingPlayForFielderCredit(playData);
+          setFielderCreditModalOpen(true);
+          return; // Exit early - will continue in handleFielderCreditConfirm
+        }
       }
 
       // ============================================
@@ -1503,7 +1556,7 @@ export function GameTracker() {
     } catch (error) {
       console.error('Failed to record enhanced play:', error);
     }
-  }, [recordHit, recordOut, recordWalk, recordError, advanceCount, gameState, undoSystem, playerStats, pitcherStats, fameTrackingHook, playerStateHook, runnerNames, buildGameStateForLI, mwarHook, pendingMWARDecisions]);
+  }, [recordHit, recordOut, recordWalk, recordError, advanceCount, gameState, undoSystem, playerStats, pitcherStats, fameTrackingHook, playerStateHook, runnerNames, buildGameStateForLI, mwarHook, pendingMWARDecisions, inferFielderCredits]);
 
   // EXH-016: Handle fielder credit confirmation - continue processing the play with credits
   const handleFielderCreditConfirm = useCallback(async (credits: FielderCredit[]) => {
