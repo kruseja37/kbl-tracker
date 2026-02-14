@@ -304,3 +304,99 @@ All 40 items across all tiers now addressed:
 - Tier 1: 11 wrong-results fixes
 - Tier 2: 6 wiring fixes + 5 already resolved
 - Tier 3: 6 feature builds + 1 verification (T3-05) + 2 new features (T3-04, T3-06, T3-07)
+
+---
+## Session: 2026-02-14 (cont.) — Full Codebase Cleanup
+
+### Goal
+Make the project easily understandable for future AI agent sessions that have never worked in kbl-tracker.
+
+### Phase 1: spec-docs/ Cleanup (417MB → 262MB)
+- Deleted 254 duplicate .jpg files (~190MB) — SMB4 screenshots existed as both .jpg and .jpeg
+- Archived 38 completed work artifacts (CLI prompts, audit reports, old session logs)
+- Archived superseded document versions
+- Removed .DS_Store files throughout
+- Removed exact duplicate files (identified via md5 hash)
+
+### Phase 2: src/ vs src_figma/ Analysis
+- Confirmed src_figma lives INSIDE src/ at `src/src_figma/` (not a sibling)
+- Mapped 384+ cross-imports from src_figma → src/ (engines, utils, types, hooks)
+- Confirmed all 16 routes in App.tsx import exclusively from src_figma/app/pages/
+- Identified 6 duplicate utils, dead pages, dead services
+
+### Phase 3: Dead Code Removal
+**Archived (preserved in archived-*/ folders):**
+- 20 dead legacy page components → `src/archived-pages/` (252K)
+- 35 dead components (awards/, museum/, offseason/ subfolders) → `src/archived-components/` (372K)
+- 3 dead hooks (useNarrativeMorale, usePlayerData, useRosterData) → `src/archived-hooks/` (16K)
+- 8 orphan test files → `src/archived-tests/` (124K)
+- 11 stale migration docs → `src/src_figma/archived-docs/` (208K)
+
+**Deleted (not archived):**
+- `src/services/` — 2 dead files (apiConfig.ts, teamService.ts), no imports
+- `src/src_figma/imports/` — 2 Figma export artifacts, never imported
+- 4 stale figma config files from src_figma/ root
+- Root-level artifacts: cleanup.sh, run-cleanup.sh, CLAUDE.md.backup, files.zip
+
+### What Remains Active in src/
+- `components/`: GameTracker/ (31 files) + 6 shared components (AgingDisplay, FanMoralePanel, LeagueBuilder, NavigationHeader, RelationshipPanel, TeamSelector)
+- `hooks/`: 16 hooks — all verified as imported by active code
+- `engines/`: 36 engine files + __tests__/ (WAR calculators, mojo, salary, playoffs, etc.)
+- `utils/`: 38 storage + utility modules (IndexedDB layer, game processing, franchise management)
+- `types/`: 4 type files (game.ts, franchise.ts, war.ts, index.ts)
+- `context/`: AppContext.tsx + appStateStorage.ts
+- `tests/`: 3 files (baseballLogicTests, runStateMachineTests, stateMachineTests)
+
+### Final Sizes
+- spec-docs/: 263MB (mostly SMB4 reference images)
+- src/: 8.9MB total
+- archived-*/ folders: ~764K total
+
+### Known Deferred Item
+- Type consolidation: src/types/ vs src/src_figma/app/types/ have partial duplicates (game.ts differs by FAILED_ROBBERY constant, war.ts is identical, index.ts differs). Requires updating 384+ import paths — deferred to dedicated session.
+
+### Documentation Updated
+- CURRENT_STATE.md: Added "CODEBASE ARCHITECTURE" section with directory layout, architecture rules, and type duplication notes
+- SESSION_LOG.md: This entry
+
+### Decisions Made
+- **No folder restructuring:** src_figma stays inside src/ — moving it would break vite alias, tsconfig paths, and all @ imports
+- **Archive over delete:** Dead code moved to archived-*/ folders rather than deleted, for reference
+- **Type consolidation deferred:** Too many import paths to update safely without dedicated session + build verification
+
+### Phase 4: Full Project Cleanup for Agent Transfer
+**Goal:** Prep entire kbl-tracker folder for new agents starting from scratch.
+
+**Root-level cleanup:**
+- Removed duplicate `mcp.json` (identical to `.mcp.json`)
+- Removed `Claude Skills/` folder (superseded by `.claude/skills/`)
+- Removed `test-results/` (empty, just `.last-run.json`)
+- Removed `.DS_Store`
+
+**spec-docs reorganization (134 → 78 items at root):**
+- Archived 24 audit/report artifacts (AUDIT_REPORT, COHESION_REPORT, DATA_INTEGRITY_FIX_REPORT, etc.)
+- Archived 12 stale/superseded docs (PIPELINE, CLAUDE_CODE_CONSTITUTION, RALPH_FRAMEWORK, etc.)
+- Created `stories/` subfolder → moved 14 STORIES_*.md files
+- Created `testing/` subfolder → moved 6 testing pipeline + API map docs
+- Removed duplicates (Audit Triage.xlsx, test_write_permission)
+- Archive grew from 82 → 119 files
+
+**src cleanup:**
+- Removed `src/src_figma/app/data/mockData.ts` (confirmed orphaned/unused)
+
+**CLAUDE.md rewrite:**
+- Updated project structure with accurate file counts (16 pages, 49 components, 15 figma engines, etc.)
+- Removed 70-line SMB4 extraction protocol (one-time-use, no longer needed)
+- Updated custom skills section (4 → 20 skills, organized by pipeline)
+- Removed stale references to deleted files and old component counts
+
+**CURRENT_STATE.md updates:**
+- Updated spec-docs directory layout to reflect new subfolder structure
+- Archive count updated (79 → 119)
+
+**Final project state:**
+- Root: 15 items (src, spec-docs, reference-docs, test-utils, config files)
+- spec-docs/: 78 items at root, organized into 7 subfolders
+- src/: 8.9MB, all active code verified
+- CLAUDE.md: 187 lines, accurate, concise
+- All 3 agent-facing docs (CURRENT_STATE, SESSION_LOG, CLAUDE.md) current and consistent

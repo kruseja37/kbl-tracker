@@ -1,5 +1,65 @@
 # KBL TRACKER — CURRENT STATE
-# Last updated: 2026-02-14 (all manual testing bug fixes complete)
+# Last updated: 2026-02-14 (codebase cleanup + architecture documentation)
+---
+
+## CODEBASE ARCHITECTURE (Read This First)
+
+### Directory Layout
+```
+kbl-tracker/
+├── src/                          # ALL source code (tsconfig include: ["src"])
+│   ├── App.tsx                   # Root router — ALL routes import from src_figma/
+│   ├── main.tsx                  # Vite entry point
+│   ├── src_figma/                # ACTIVE UI layer (Figma-designed components)
+│   │   ├── app/
+│   │   │   ├── pages/            # 16 page components (all routed in App.tsx)
+│   │   │   ├── components/       # ~50 UI components (modals, flows, overlays)
+│   │   │   └── types/            # Figma-layer type definitions
+│   │   ├── hooks/                # Figma-layer hooks (useFranchiseData, useMuseumData, etc.)
+│   │   └── archived-docs/        # 11 stale migration docs (safe to ignore)
+│   ├── engines/                  # 36 game/stat engines (WAR, mojo, salary, playoffs, etc.)
+│   │   └── __tests__/            # Engine unit tests
+│   ├── utils/                    # 38 storage + utility modules (IndexedDB, game processing)
+│   ├── hooks/                    # 16 shared hooks (WAR, stats, aging, morale, etc.)
+│   ├── types/                    # 4 shared type files (game.ts, franchise.ts, war.ts, index.ts)
+│   ├── context/                  # AppContext.tsx + appStateStorage.ts
+│   ├── components/               # 7 active items (GameTracker/ + 6 shared components)
+│   │   └── GameTracker/          # 31 files — core game tracking UI
+│   ├── tests/                    # 3 test files (logic matrix, state machine)
+│   ├── styles/                   # global.css
+│   ├── pages/                    # Only NotFound.tsx is routed (imported by App.tsx)
+│   ├── archived-pages/           # 20 dead legacy pages (252K)
+│   ├── archived-components/      # 35 dead components (372K)
+│   ├── archived-hooks/           # 3 dead hooks (16K)
+│   └── archived-tests/           # 8 orphan test files (124K)
+├── spec-docs/                    # Project documentation (263MB, mostly SMB4 images)
+│   ├── archive/                  # 119 archived docs (completed work, superseded versions)
+│   ├── stories/                  # 14 user story files by feature area
+│   ├── testing/                  # 6 testing pipeline docs + API maps
+│   ├── canonical/                # Auto-generated architecture docs
+│   ├── ralph/                    # Phased implementation roadmap
+│   ├── data/                     # CSV data files + import scripts
+│   └── [~50 active spec docs]   # Feature specs, Figma specs, system specs
+├── public/                       # Static assets
+├── vite.config.ts                # Vite + Vitest config (@ alias → src/src_figma)
+├── tsconfig.app.json             # TS config (@ paths → src/src_figma/*)
+└── package.json
+```
+
+### Key Architecture Rules
+1. **All routes** are in `App.tsx` and import exclusively from `src/src_figma/app/pages/`
+2. **Vite alias `@`** resolves to `src/src_figma` (configured in both vite.config.ts and tsconfig.app.json)
+3. **384+ cross-imports** from src_figma → src/ for engines, utils, types, hooks (this is correct — src/ is the shared business logic layer)
+4. **IndexedDB** is the persistence layer — unified via `src/utils/trackerDb.ts`
+5. **No mock data** in production paths — all removed during prior audit
+6. **archived-*/ folders** contain dead code preserved for reference — NOT imported anywhere
+
+### Type Duplication (Known, Deferred)
+- `src/types/game.ts` (1576 lines) vs `src/src_figma/app/types/game.ts` (1572 lines) — differ by FAILED_ROBBERY constant
+- `src/types/war.ts` is identical to `src/src_figma/app/types/war.ts`
+- `src/types/index.ts` (119 lines) vs `src/src_figma/app/types/index.ts` (78 lines)
+- Consolidation requires updating import paths across 384+ files — deferred to dedicated session
+
 ---
 ## BUILD STATUS
 | Metric | Value |
