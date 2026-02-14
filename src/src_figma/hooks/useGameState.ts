@@ -223,6 +223,10 @@ export interface UseGameStateReturn {
   lastSavedAt: number | null;
   atBatSequence: number;
 
+  // T0-01: Auto game-end detection
+  showAutoEndPrompt: boolean;
+  dismissAutoEndPrompt: () => void;
+
   // Playoff context setter (called from GameTracker with navigation state)
   setPlayoffContext: (seriesId: string | null, gameNumber: number | null) => void;
 }
@@ -246,6 +250,8 @@ export interface GameInitConfig {
   // Playoff context (optional — set when launching from playoff bracket)
   playoffSeriesId?: string;
   playoffGameNumber?: number;
+  // T0-01: Number of regulation innings (default 9, SMB4 franchise often 6 or 7)
+  totalInnings?: number;
 }
 
 // ============================================
@@ -954,6 +960,8 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [lastSavedAt, setLastSavedAt] = useState<number | null>(null);
+  // T0-01: Auto game-end detection prompt
+  const [showAutoEndPrompt, setShowAutoEndPrompt] = useState(false);
   const [atBatSequence, setAtBatSequence] = useState(0);
 
   // Current batter index for each team
@@ -1031,6 +1039,9 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
   // Ref to hold endInning function to avoid circular dependency
   const endInningRef = useRef<(() => void) | null>(null);
 
+  // T0-01: Regulation innings for auto game-end detection (default 9)
+  const totalInningsRef = useRef<number>(9);
+
   // CRIT-02 + MAJ-05: Shadow state for inherited runner tracking (ER/UER attribution)
   // This ref mirrors the boolean bases but stores rich runner identity data.
   // It does NOT trigger re-renders — only provides data for ER calculations.
@@ -1065,6 +1076,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     awayLineupRef.current = config.awayLineup;
     homeLineupRef.current = config.homeLineup;
     seasonIdRef.current = config.seasonId;
+    totalInningsRef.current = config.totalInnings || 9;
 
     // MAJ-09: Initialize full LineupState for substitution validation
     awayLineupStateRef.current = {
@@ -3078,6 +3090,36 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
   // Internal function that performs the actual inning transition
   // Called after pitch count is confirmed by user
   const executeEndInning = useCallback(() => {
+    // T0-01: Auto game-end detection at regulation end.
+    // Check BEFORE transitioning to the next half-inning.
+    const totalInnings = totalInningsRef.current;
+    const { inning, isTop, homeScore, awayScore } = gameState;
+
+    // After TOP of regulation final inning (or later): if home team leads, game is over
+    // (Home team doesn't need to bat if already ahead)
+    if (isTop && inning >= totalInnings && homeScore > awayScore) {
+      console.log(`[T0-01] Auto game-end: Home leads ${homeScore}-${awayScore} after top of inning ${inning}. Game over.`);
+      // Trigger endGame flow after a small delay
+      setTimeout(() => {
+        setShowAutoEndPrompt(true);
+      }, 300);
+      return; // Don't transition to next half-inning
+    }
+
+    // After BOTTOM of regulation final inning (or later): if not tied, game is over
+    if (!isTop && inning >= totalInnings && homeScore !== awayScore) {
+      console.log(`[T0-01] Auto game-end: Score ${awayScore}-${homeScore} after bottom of inning ${inning}. Game over.`);
+      setTimeout(() => {
+        setShowAutoEndPrompt(true);
+      }, 300);
+      return; // Don't transition to next half-inning
+    }
+
+    // If tied after regulation, continue to extra innings (normal transition)
+    if (!isTop && inning >= totalInnings && homeScore === awayScore) {
+      console.log(`[T0-01] Tied ${homeScore}-${awayScore} after regulation. Extra innings.`);
+    }
+
     // CRIT-02: Clear runner tracker for new half-inning and update inning number
     let endTracker = trackerClearBases(runnerTrackerRef.current);
     endTracker = trackerNextInning(endTracker);
@@ -3122,7 +3164,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         currentPitcherName: newPitcherName,
       };
     });
-  }, [awayBatterIndex, homeBatterIndex]);
+  }, [awayBatterIndex, homeBatterIndex, gameState]);
 
   const endInning = useCallback(() => {
     // Show pitch count prompt for the current pitcher at end of half-inning
@@ -3657,6 +3699,9 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     isSaving,
     lastSavedAt,
     atBatSequence,
+    // T0-01: Auto game-end detection
+    showAutoEndPrompt,
+    dismissAutoEndPrompt: useCallback(() => setShowAutoEndPrompt(false), []),
     setPlayoffContext,
   };
 }

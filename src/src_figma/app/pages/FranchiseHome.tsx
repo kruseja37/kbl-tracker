@@ -640,6 +640,8 @@ export function FranchiseHome() {
         leagueId: 'sml',
         // T0-05: Pass season number for playoff persistence
         seasonNumber: currentSeason,
+        // T0-01: Pass total innings for auto game-end detection
+        totalInnings: franchiseData?.franchiseConfig?.season?.inningsPerGame ?? 9,
       },
     });
   };
@@ -2665,6 +2667,8 @@ function GameDayContent({ scheduleData, currentSeason, onDataRefresh }: GameDayC
         // T0-05: Pass schedule game ID so GameTracker can mark it completed
         scheduleGameId: nextGame?.id,
         seasonNumber: currentSeason,
+        // T0-01: Pass total innings for auto game-end detection
+        totalInnings: franchiseData.franchiseConfig?.season?.inningsPerGame ?? 9,
       },
     });
     setConfirmAction(null);

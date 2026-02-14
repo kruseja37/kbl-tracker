@@ -102,6 +102,8 @@ export function GameTracker() {
     // T0-05: Schedule persistence context
     scheduleGameId?: string;
     seasonNumber?: number;
+    // T0-01: Total innings for auto game-end detection
+    totalInnings?: number;
   } | null;
 
   // Team IDs - use navigation state or standalone defaults
@@ -167,6 +169,9 @@ export function GameTracker() {
     getRunnerTrackerSnapshot,
     isLoading,
     isSaving,
+    // T0-01: Auto game-end detection
+    showAutoEndPrompt,
+    dismissAutoEndPrompt,
     setPlayoffContext,
   } = useGameState(gameId);
 
@@ -621,6 +626,8 @@ export function GameTracker() {
         awayStartingPitcherName: awayPitcher?.name || 'Pitcher',
         homeStartingPitcherId: `home-${homePitcher?.name.replace(/\s+/g, '-').toLowerCase() || 'pitcher'}`,
         homeStartingPitcherName: homePitcher?.name || 'Pitcher',
+        // T0-01: Pass total innings for auto game-end detection (default 9 for exhibition)
+        totalInnings: navigationState?.totalInnings || 9,
       });
 
       setGameInitialized(true);
@@ -2040,6 +2047,15 @@ export function GameTracker() {
       }
     });
   }, [hookEndGame, navigate, gameId, navigationState?.gameMode, gameMode, gameState, pitcherStats, fameTrackingHook, homeFanMorale, awayFanMorale, homeTeamName, awayTeamName, mwarHook, homeManagerId, homeTeamId]);
+
+  // T0-01: Auto-trigger endGame when regulation ends
+  useEffect(() => {
+    if (showAutoEndPrompt) {
+      console.log('[T0-01] Auto game-end detected — triggering handleEndGame');
+      dismissAutoEndPrompt();
+      handleEndGame();
+    }
+  }, [showAutoEndPrompt, dismissAutoEndPrompt, handleEndGame]);
 
   return (
     <DndProvider backend={HTML5Backend}>
