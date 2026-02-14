@@ -117,8 +117,13 @@ function convertToStatsItemFromSeason(
 export function TeamHubContent() {
   // Get real data from hook
   const { teams: realTeams, players: realPlayers, hasRealData, isLoading } = useOffseasonData();
-  const seasonStats = useSeasonStats();
   const franchiseData = useFranchiseDataContext();
+
+  // Derive correct seasonId for stats lookup (must match what GameTracker uses when aggregating)
+  const franchiseId = franchiseData.franchiseConfig?.franchiseId;
+  const seasonNumber = franchiseData.seasonNumber || 1;
+  const seasonId = franchiseId ? `${franchiseId}-season-${seasonNumber}` : `season-${seasonNumber}`;
+  const seasonStats = useSeasonStats(seasonId);
 
   // Build team → W-L record lookup from real standings (case-insensitive)
   const teamRecordMap = useMemo(() => {
