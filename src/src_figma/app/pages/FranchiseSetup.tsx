@@ -1070,6 +1070,7 @@ function Step5RosterMode({
   setConfig: (config: FranchiseConfig) => void;
   leagueTeams: Team[];
 }) {
+  const navigate = useNavigate();
   return (
     <div>
       <h2 className="text-lg font-bold text-[#E8E8D8] mb-2 tracking-wide" style={{ textShadow: '2px 2px 0px rgba(0,0,0,0.3)' }}>ROSTER MODE</h2>
@@ -1115,7 +1116,7 @@ function Step5RosterMode({
               <p className="text-xs text-[#00CC00]" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>✓ All {leagueTeams.length} teams have valid rosters (22 MLB + up to 10 farm)</p>
               <p className="text-xs text-[#00CC00]" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>✓ 506 total players assigned</p>
             </div>
-            <button className="text-xs text-[#C4A853] hover:text-[#C4A853]" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>[View Rosters]</button>
+            <button onClick={() => navigate('/league-builder/rosters')} className="text-xs text-[#C4A853] hover:text-[#FFD700] underline" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>[View Rosters]</button>
           </div>
         )}
       </div>
