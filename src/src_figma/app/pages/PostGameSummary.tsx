@@ -155,8 +155,9 @@ export function PostGameSummary() {
     }
   });
 
-  // Inning-by-inning scoring
-  const inningScores = gameData.inningScores || Array(9).fill({ away: 0, home: 0 });
+  // Inning-by-inning scoring — use actual innings played, not hardcoded 9
+  const inningScores = gameData.inningScores || [];
+  const numInnings = inningScores.length || 9; // fallback to 9 if no data
   const scoreboard = {
     innings: inningScores,
     away: { runs: gameData.finalScore.away, hits: awayHits, errors: 0 },
@@ -215,10 +216,10 @@ export function PostGameSummary() {
           </div>
 
           {/* Scoreboard grid */}
-          <div className="grid gap-[1px] mb-2" style={{ gridTemplateColumns: '90px repeat(9, 24px) 6px 28px 28px 28px' }}>
+          <div className="grid gap-[1px] mb-2" style={{ gridTemplateColumns: `90px repeat(${numInnings}, 24px) 6px 28px 28px 28px` }}>
             {/* Header row */}
             <div></div>
-            {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(inning => (
+            {Array.from({ length: numInnings }, (_, i) => i + 1).map(inning => (
               <div key={inning} className="text-[#E8E8D8] text-[9px] font-bold text-center">{inning}</div>
             ))}
             <div></div>
@@ -230,7 +231,7 @@ export function PostGameSummary() {
             <div className="text-[#E8E8D8] text-[11px] font-bold flex items-center pl-2" style={{
               textShadow: '1px 1px 0px rgba(0,0,0,0.7)'
             }}>{awayTeamName.toUpperCase()}</div>
-            {[0, 1, 2, 3, 4, 5, 6, 7, 8].map(idx => {
+            {Array.from({ length: numInnings }, (_, idx) => {
               const score = scoreboard.innings[idx]?.away;
               return (
                 <div key={idx} className="bg-[#3d5240] border-2 border-[#2a3a2d] text-[#E8E8D8] text-xs font-bold min-h-[20px] flex items-center justify-center">
@@ -247,7 +248,7 @@ export function PostGameSummary() {
             <div className="text-[#E8E8D8] text-[11px] font-bold flex items-center pl-2" style={{
               textShadow: '1px 1px 0px rgba(0,0,0,0.7)'
             }}>{homeTeamName.toUpperCase()}</div>
-            {[0, 1, 2, 3, 4, 5, 6, 7, 8].map(idx => {
+            {Array.from({ length: numInnings }, (_, idx) => {
               const score = scoreboard.innings[idx]?.home;
               return (
                 <div key={idx} className="bg-[#3d5240] border-2 border-[#2a3a2d] text-[#E8E8D8] text-xs font-bold min-h-[20px] flex items-center justify-center">
