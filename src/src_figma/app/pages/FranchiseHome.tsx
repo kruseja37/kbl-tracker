@@ -38,6 +38,8 @@ import { generateNewSeasonSchedule } from "../../../utils/franchiseInitializer";
 import { executeSeasonTransition } from "../../../engines/seasonTransitionEngine";
 import { updateFranchiseMetadata } from "../../../utils/franchiseManager";
 import { getPlayersByTeam } from "../../../utils/leagueBuilderStorage";
+import { getRecentGames } from "../../../utils/gameStorage";
+import { generateGameRecap } from "../engines/narrativeIntegration";
 import type { Player as TeamRosterPlayer, Pitcher as TeamRosterPitcher } from "@/app/components/TeamRoster";
 
 // Pitcher positions for separating roster
@@ -3645,8 +3647,8 @@ function BeatReporterNews() {
   const [selectedTeam, setSelectedTeam] = useState<string | null>(null);
   const [expandedArticle, setExpandedArticle] = useState<number | null>(null);
 
-  // Empty news data — will be populated by narrative engine when games are played
-  const newsArticles: {
+  // Load narratives from recent completed games
+  const [newsArticles, setNewsArticles] = useState<{
     id: number;
     type: string;
     headline: string;
@@ -3656,9 +3658,65 @@ function BeatReporterNews() {
     team: string | null;
     timestamp: string;
     category: string;
-  }[] = [];
+  }[]>([]);
 
-  const teams: string[] = [];
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const recentGames = await getRecentGames(20);
+        if (cancelled) return;
+        const articles = recentGames.flatMap((game, idx) => {
+          const results: typeof newsArticles = [];
+          // Generate home perspective narrative
+          const homeNarr = generateGameRecap({
+            teamName: game.homeTeamName,
+            opponentName: game.awayTeamName,
+            teamScore: game.finalScore.home,
+            opponentScore: game.finalScore.away,
+            isShutout: game.finalScore.away === 0 && game.finalScore.home > game.finalScore.away,
+          });
+          results.push({
+            id: idx * 2,
+            type: 'team',
+            headline: homeNarr.headline,
+            excerpt: homeNarr.body,
+            fullText: homeNarr.body + (homeNarr.quote ? `\n\n"${homeNarr.quote}"` : ''),
+            reporter: homeNarr.reporter.name,
+            team: game.homeTeamName,
+            timestamp: new Date(game.date).toLocaleDateString(),
+            category: game.finalScore.home > game.finalScore.away ? 'CLUBHOUSE' : 'STANDINGS',
+          });
+          // Generate away perspective narrative
+          const awayNarr = generateGameRecap({
+            teamName: game.awayTeamName,
+            opponentName: game.homeTeamName,
+            teamScore: game.finalScore.away,
+            opponentScore: game.finalScore.home,
+            isShutout: game.finalScore.home === 0 && game.finalScore.away > game.finalScore.home,
+          });
+          results.push({
+            id: idx * 2 + 1,
+            type: 'team',
+            headline: awayNarr.headline,
+            excerpt: awayNarr.body,
+            fullText: awayNarr.body + (awayNarr.quote ? `\n\n"${awayNarr.quote}"` : ''),
+            reporter: awayNarr.reporter.name,
+            team: game.awayTeamName,
+            timestamp: new Date(game.date).toLocaleDateString(),
+            category: game.finalScore.away > game.finalScore.home ? 'CLUBHOUSE' : 'STANDINGS',
+          });
+          return results;
+        });
+        if (!cancelled) setNewsArticles(articles);
+      } catch (err) {
+        console.warn('[BeatReporterNews] Failed to load narratives:', err);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  const teams = useMemo(() => [...new Set(newsArticles.map(a => a.team).filter((t): t is string => !!t))].sort(), [newsArticles]);
 
   const filteredArticles = newsArticles.filter(article => {
     if (newsFilter === "league") return article.type === "league";
