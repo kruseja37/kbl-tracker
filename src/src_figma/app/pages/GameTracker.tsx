@@ -615,9 +615,9 @@ export function GameTracker() {
           ? `${navigationState.franchiseId}-season-${navigationState?.seasonNumber || 1}`
           : 'season-1',
         awayTeamId: awayTeamId,
-        awayTeamName: 'Tigers',
+        awayTeamName: awayTeamName,
         homeTeamId: homeTeamId,
-        homeTeamName: 'Sox',
+        homeTeamName: homeTeamName,
         awayLineup,
         homeLineup,
         awayBench,
@@ -2626,51 +2626,51 @@ export function GameTracker() {
               <span>𝕏</span> BEAT REPORTERS
             </div>
             <div className="space-y-2">
-              {/* Tigers Beat Reporter */}
+              {/* Away Beat Reporter */}
               <div className="bg-white border-[2px] border-[#333] p-2">
                 <div className="flex items-start gap-2 mb-1">
                   <div className="w-6 h-6 bg-[#DD0000] border-[2px] border-black flex items-center justify-center text-white text-[8px] font-bold flex-shrink-0">
-                    TR
+                    {awayTeamName.slice(0, 2).toUpperCase()}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="text-[8px] text-black font-bold leading-tight">@TigersInsider</div>
+                    <div className="text-[8px] text-black font-bold leading-tight">@{awayTeamName.replace(/\s+/g, '')}Insider</div>
                     <div className="text-[7px] text-[#666] leading-tight">2m ago</div>
                   </div>
                 </div>
                 <div className="text-[8px] text-black leading-snug">
-                  R. LOPEZ struggling in the 5th. Tigers down 4-3. Bullpen warming up.
+                  {gameState.currentPitcherName || 'Pitcher'} struggling in the {gameState.inning > 1 ? `${gameState.inning}th` : '1st'}. {awayTeamName} down. Bullpen warming up.
                 </div>
               </div>
 
-              {/* Sox Beat Reporter */}
+              {/* Home Beat Reporter */}
               <div className="bg-white border-[2px] border-[#333] p-2">
                 <div className="flex items-start gap-2 mb-1">
                   <div className="w-6 h-6 bg-[#0066FF] border-[2px] border-black flex items-center justify-center text-white text-[8px] font-bold flex-shrink-0">
-                    SB
+                    {homeTeamName.slice(0, 2).toUpperCase()}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="text-[8px] text-black font-bold leading-tight">@SoxBeatWriter</div>
+                    <div className="text-[8px] text-black font-bold leading-tight">@{homeTeamName.replace(/\s+/g, '')}Beat</div>
                     <div className="text-[7px] text-[#666] leading-tight">5m ago</div>
                   </div>
                 </div>
                 <div className="text-[8px] text-black leading-snug">
-                  S. WHITE dealing through 5 IP. 4 K's, only 1 BB. Sox offense showing signs of life.
+                  {homeTeamName} offense showing signs of life. Good at-bats up and down the lineup.
                 </div>
               </div>
 
-              {/* Tigers Beat Reporter 2 */}
+              {/* Away Beat Reporter 2 */}
               <div className="bg-white border-[2px] border-[#333] p-2">
                 <div className="flex items-start gap-2 mb-1">
                   <div className="w-6 h-6 bg-[#DD0000] border-[2px] border-black flex items-center justify-center text-white text-[8px] font-bold flex-shrink-0">
-                    TR
+                    {awayTeamName.slice(0, 2).toUpperCase()}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="text-[8px] text-black font-bold leading-tight">@TigersInsider</div>
+                    <div className="text-[8px] text-black font-bold leading-tight">@{awayTeamName.replace(/\s+/g, '')}Insider</div>
                     <div className="text-[7px] text-[#666] leading-tight">8m ago</div>
                   </div>
                 </div>
                 <div className="text-[8px] text-black leading-snug">
-                  MARTINEZ with a clutch RBI double in the 4th. That's his 2nd hit today.
+                  Clutch RBI double in the {gameState.inning > 2 ? `${gameState.inning - 1}th` : '1st'}. The bats are coming alive.
                 </div>
               </div>
             </div>
