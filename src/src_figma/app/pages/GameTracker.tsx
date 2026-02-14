@@ -985,6 +985,12 @@ export function GameTracker() {
     console.log("Enhanced play complete:", playData);
     console.log("Runner outcomes:", playData.runnerOutcomes);
 
+    // T1-06: Clear stale error-on-advance state from previous plays
+    // Use local variable to track within this function call (avoids stale React state in closure)
+    let localExtraAdvances: RunnerAdvanceInfo[] = [];
+    setRunnersWithExtraAdvance([]);
+    setPendingPlayForErrorOnAdvance(null);
+
     // ============================================
     // EXH-016: Check for thrown-out runners and prompt for fielder credit
     // Skip for strikeouts (no fielding play on runner) and HRs (everyone scores)
@@ -1116,10 +1122,12 @@ export function GameTracker() {
 
       // If there are extra advances, queue the error prompt modal to show AFTER play is recorded
       // NOTE: We no longer return early - the play is recorded normally, modal is informational
+      // T1-06: Use local variable + state together to avoid stale closure reads
       if (extraAdvances.length > 0) {
         console.log('[EXH-025] Extra advances detected - will prompt for error attribution after play:', extraAdvances);
         setRunnersWithExtraAdvance(extraAdvances);
         setPendingPlayForErrorOnAdvance(playData);
+        localExtraAdvances = extraAdvances;
         // Modal will be shown after play recording completes (see end of function)
       }
     }
@@ -1547,8 +1555,9 @@ export function GameTracker() {
       // ============================================
       // EXH-025: Show error attribution modal AFTER play is recorded
       // This is informational - the play has already been processed
+      // T1-06: Use local variable (not stale React state from closure)
       // ============================================
-      if (runnersWithExtraAdvance.length > 0) {
+      if (localExtraAdvances.length > 0) {
         console.log('[EXH-025] Opening error attribution modal after play recorded');
         setErrorOnAdvanceModalOpen(true);
       }
