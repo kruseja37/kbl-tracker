@@ -36,6 +36,8 @@ import { generateGameRecap } from "../engines/narrativeIntegration";
 import { useMWARCalculations } from "../hooks/useMWARCalculations";
 import type { GameStateForLI } from "../../../engines/leverageCalculator";
 import { saveGameDecisions, aggregateManagerGameToSeason } from '../../../utils/managerStorage';
+// T0-05: Schedule persistence — mark played games as COMPLETED
+import { completeGame as completeScheduleGame } from '../../../utils/scheduleStorage';
 // Fielding pipeline: extract fielding events from PlayData and log to IndexedDB
 import { extractFieldingEvents, type FieldingExtractionContext } from '../utils/fieldingEventExtractor';
 import { logFieldingEvent } from '../../../utils/eventLog';
@@ -97,6 +99,9 @@ export function GameTracker() {
     playoffSeriesId?: string;
     playoffGameNumber?: number;
     franchiseId?: string;
+    // T0-05: Schedule persistence context
+    scheduleGameId?: string;
+    seasonNumber?: number;
   } | null;
 
   // Team IDs - use navigation state or standalone defaults
@@ -601,7 +606,9 @@ export function GameTracker() {
 
       await initializeGame({
         gameId: gameId || `game-${Date.now()}`,
-        seasonId: 'season-2024',
+        seasonId: navigationState?.franchiseId
+          ? `${navigationState.franchiseId}-season-${navigationState?.seasonNumber || 1}`
+          : 'season-1',
         awayTeamId: awayTeamId,
         awayTeamName: 'Tigers',
         homeTeamId: homeTeamId,
@@ -2002,6 +2009,27 @@ export function GameTracker() {
     }
 
     await hookEndGame();
+
+    // T0-05 FIX: Mark the schedule game as COMPLETED (franchise mode only)
+    // The SIM path does this in FranchiseHome.tsx, but the PLAY path was missing it entirely.
+    // This updates standings (wins/losses) and advances the schedule to the next game.
+    if (navigationState?.scheduleGameId && (navigationState?.gameMode === 'franchise' || navigationState?.gameMode === 'playoff')) {
+      try {
+        const winnerId = gameState.homeScore > gameState.awayScore ? homeTeamId : awayTeamId;
+        const loserId = gameState.homeScore > gameState.awayScore ? awayTeamId : homeTeamId;
+        await completeScheduleGame(navigationState.scheduleGameId, {
+          homeScore: gameState.homeScore,
+          awayScore: gameState.awayScore,
+          winningTeamId: winnerId,
+          losingTeamId: loserId,
+          gameLogId: gameId,
+        });
+        console.log(`[T0-05] Schedule game ${navigationState.scheduleGameId} marked COMPLETED — winner: ${winnerId}`);
+      } catch (schedErr) {
+        console.error('[T0-05] Schedule completion failed:', schedErr);
+      }
+    }
+
     // Pass game mode and narratives so PostGameSummary can display them
     navigate(`/post-game/${gameId}`, {
       state: {

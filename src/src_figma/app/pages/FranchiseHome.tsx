@@ -638,6 +638,8 @@ export function FranchiseHome() {
         homeRecord: getTeamRecord(homeTeamId), // MAJ-15: Pass actual team records to GameTracker
         franchiseId,
         leagueId: 'sml',
+        // T0-05: Pass season number for playoff persistence
+        seasonNumber: currentSeason,
       },
     });
   };
@@ -2660,6 +2662,9 @@ function GameDayContent({ scheduleData, currentSeason, onDataRefresh }: GameDayC
         stadiumName: franchiseData.stadiumMap?.[home],
         franchiseId,
         leagueId: 'sml',
+        // T0-05: Pass schedule game ID so GameTracker can mark it completed
+        scheduleGameId: nextGame?.id,
+        seasonNumber: currentSeason,
       },
     });
     setConfirmAction(null);

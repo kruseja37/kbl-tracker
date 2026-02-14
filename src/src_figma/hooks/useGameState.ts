@@ -3531,6 +3531,17 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
 
     // Store the pending action (for season aggregation, etc.)
     pendingActionRef.current = completeGameInternal;
+
+    // T0-05 FIX: Call completeGameInternal directly instead of deferring to pitch count prompt.
+    // The GameTracker navigates to PostGameSummary immediately after endGame() returns,
+    // which unmounts the component before the pitch count prompt can render/fire.
+    // This ensures aggregateGameToSeason, markGameAggregated, and archiveCompletedGame run.
+    try {
+      await completeGameInternal();
+      console.log('[endGame] T0-05: completeGameInternal executed — stats aggregated');
+    } catch (err) {
+      console.error('[endGame] T0-05: completeGameInternal failed:', err);
+    }
   }, [gameState, playerStats, pitcherStats, fameEvents, atBatSequence, scoreboard, completeGameInternal]);
 
   // Snapshot runner tracker for undo system (Maps don't survive JSON.stringify)
