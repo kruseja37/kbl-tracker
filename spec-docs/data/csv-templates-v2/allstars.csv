@@ -1,3 +1,0 @@
-allstarId,seasonId,playerId,playerName,teamId,teamName,position,conference,votes,isStarter,wasSelected,resultType,resultValue,notes
-1,1,1,Example Player,1,Angels,SS,AL,125,TRUE,TRUE,traitGained,Clutch,All-Star starter
-2,1,2,Another Player,5,Mets,3B,NL,98,FALSE,TRUE,traitLost,Tough Out,All-Star reserve - lost trait

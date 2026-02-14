@@ -648,6 +648,47 @@ export function calculateRBIs(
   return rbis;
 }
 
+function isForceOutRunner(
+  fromBase: 'first' | 'second' | 'third',
+  runnerData: RunnerAdvancement,
+  basesBeforePlay: Bases
+): boolean {
+  const destination = fromBase === 'first'
+    ? runnerData.fromFirst
+    : fromBase === 'second'
+      ? runnerData.fromSecond
+      : runnerData.fromThird;
+
+  if (destination !== 'out') return false;
+
+  if (fromBase === 'first') return true;
+  if (fromBase === 'second') return basesBeforePlay.first;
+  return basesBeforePlay.first && basesBeforePlay.second;
+}
+
+function shouldInvalidateRunsOnThirdOut(
+  outType: OutType,
+  outsBeforePlay: number,
+  outsOnPlay: number,
+  basesBeforePlay: Bases,
+  runnerData?: RunnerAdvancement
+): boolean {
+  const outsAfterPlay = outsBeforePlay + outsOnPlay;
+  if (outsAfterPlay < 3) return false;
+
+  // Project Bible: no run can score if the 3rd out is batter-runner out before 1B.
+  if (outType === 'GO') return true;
+
+  if (!runnerData) return false;
+
+  // Project Bible: no run can score if the 3rd out is ANY force out.
+  return (
+    isForceOutRunner('first', runnerData, basesBeforePlay) ||
+    isForceOutRunner('second', runnerData, basesBeforePlay) ||
+    isForceOutRunner('third', runnerData, basesBeforePlay)
+  );
+}
+
 /**
  * Helper type definitions matching src/types/game.ts
  */
@@ -1376,6 +1417,28 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     // Clutch = high leverage (LI >= 1.5)
     const isClutch = leverageIndex >= 1.5;
 
+    const runnerOutcomesForRbi: { first: RunnerOutcome | null; second: RunnerOutcome | null; third: RunnerOutcome | null } = {
+      first: !gameState.bases.first ? null
+        : (hitType === 'HR' && !runnerData) ? 'SCORED'
+        : runnerData?.fromFirst === 'home' ? 'SCORED'
+        : runnerData?.fromFirst === 'third' ? 'TO_3B'
+        : runnerData?.fromFirst === 'second' ? 'TO_2B'
+        : runnerData?.fromFirst === 'out' ? 'OUT_2B'
+        : 'HELD',
+      second: !gameState.bases.second ? null
+        : (hitType === 'HR' && !runnerData) ? 'SCORED'
+        : runnerData?.fromSecond === 'home' ? 'SCORED'
+        : runnerData?.fromSecond === 'third' ? 'TO_3B'
+        : runnerData?.fromSecond === 'out' ? 'OUT_3B'
+        : 'HELD',
+      third: !gameState.bases.third ? null
+        : (hitType === 'HR' && !runnerData) ? 'SCORED'
+        : runnerData?.fromThird === 'home' ? 'SCORED'
+        : runnerData?.fromThird === 'out' ? 'OUT_HOME'
+        : 'HELD',
+    };
+    const calculatedRbi = calculateRBIs(mapAtBatResultFromHit(hitType), runnerOutcomesForRbi, gameState.bases);
+
     // Create at-bat event
     const event: AtBatEvent = {
       eventId: `${gameState.gameId}_${newSequence}`,
@@ -1389,7 +1452,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       pitcherName: gameState.currentPitcherName,
       pitcherTeamId: pitchingTeamId,
       result: mapAtBatResultFromHit(hitType),
-      rbiCount: rbi,
+      rbiCount: calculatedRbi,
       runsScored,
       inning: gameState.inning,
       halfInning: gameState.isTop ? 'TOP' : 'BOTTOM',
@@ -1440,7 +1503,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       if (hitType === '2B') batterStats.doubles++;
       if (hitType === '3B') batterStats.triples++;
       if (hitType === 'HR') batterStats.hr++;
-      batterStats.rbi += rbi;
+      batterStats.rbi += calculatedRbi;
       if (hitType === 'HR') batterStats.r++; // Batter scores on HR
       newStats.set(gameState.currentBatterId, batterStats);
       return newStats;
@@ -1596,12 +1659,11 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
 
     const newOuts = gameState.outs + outsOnPlay;
 
-    // Calculate runs scored on sacrifice plays or during DP/TP
-    // Count ALL runners who scored (from third, second, or even first)
-    let runsScored = 0;
-    if (runnerData?.fromThird === 'home') runsScored++;
-    if (runnerData?.fromSecond === 'home') runsScored++;
-    if (runnerData?.fromFirst === 'home') runsScored++;
+    // Calculate runs scored on this play before 3rd-out force-play validation.
+    let rawRunsScored = 0;
+    if (runnerData?.fromThird === 'home') rawRunsScored++;
+    if (runnerData?.fromSecond === 'home') rawRunsScored++;
+    if (runnerData?.fromFirst === 'home') rawRunsScored++;
 
     // CRIT-02: Update runner tracker for outs
     const outScoredEvents: RunnerScoredEvent[] = [];
@@ -1681,6 +1743,18 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       console.log(`[recordOut] MAJ-07: ${correction.explanation}`);
     }
 
+    const runsInvalidatedByThirdOutRule = shouldInvalidateRunsOnThirdOut(
+      outType,
+      gameState.outs,
+      outsOnPlay,
+      gameState.bases,
+      runnerData
+    );
+    const runsScored = runsInvalidatedByThirdOutRule ? 0 : rawRunsScored;
+    const rbiCount = runsInvalidatedByThirdOutRule
+      ? 0
+      : calculateRBIs(effectiveResult, runnerOutcomesForCorrection, gameState.bases);
+
     // Create at-bat event
     const event: AtBatEvent = {
       eventId: `${gameState.gameId}_${newSequence}`,
@@ -1694,7 +1768,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       pitcherName: gameState.currentPitcherName,
       pitcherTeamId: pitchingTeamId,
       result: effectiveResult,
-      rbiCount: effectiveResult === 'SF' ? 1 : 0, // MAJ-07: use corrected result
+      rbiCount,
       runsScored,
       inning: gameState.inning,
       halfInning: gameState.isTop ? 'TOP' : 'BOTTOM',
@@ -1746,8 +1820,8 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       if (statResult === 'K' || statResult === 'KL' || statResult === 'D3K') {
         batterStats.k++;
       }
+      batterStats.rbi += rbiCount;
       if (statResult === 'SF') {
-        batterStats.rbi++;
         batterStats.sf++;       // MAJ-11: Track sacrifice flies
       }
       if (statResult === 'SAC') {
@@ -1776,7 +1850,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       return newStats;
     });
     // Attribute runs/ER to responsible pitcher via tracker
-    if (outScoredEvents.length > 0) {
+    if (!runsInvalidatedByThirdOutRule && outScoredEvents.length > 0) {
       processTrackerScoredEvents(outScoredEvents, setPitcherStats, createEmptyPitcherStats);
     }
 
@@ -2257,7 +2331,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       pitcherName: gameState.currentPitcherName,
       pitcherTeamId: pitchingTeamId,
       result: 'E', // Reach on Error (E is the standard AtBatResult type)
-      rbiCount: rbi,
+      rbiCount: 0,
       runsScored,
       inning: gameState.inning,
       halfInning: gameState.isTop ? 'TOP' : 'BOTTOM',
@@ -2308,7 +2382,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       const newStats = new Map(prev);
       const batterStats = newStats.get(gameState.currentBatterId) || createEmptyPlayerStats();
       batterStats.pa++;
-      // No AB charged on error
+      batterStats.ab++; // Reach on error is an at-bat per Project Bible.
       // D-04 FIX: Errors NEVER credit RBI per baseball rules and calculateRBIs().
       // The rbi parameter is kept in the signature for backward compat but ignored.
       // batterStats.rbi += rbi; // REMOVED — was D-04 bug

@@ -1,2 +1,0 @@
-mvpStatId,seasonId,playerId,playerName,teamId,teamName,position,isBench,overallGrade,gradeWeight,first,second,third,walkoffs,fameBonus,fameBoner,clutchPlays,tempClutch,chokes,tempChoke,starPlays,errors,fErrors,caughtCBs,missedCBs,pickoffs,killedPitchers,nutShots,passedBalls,juiced,injuries,onFire,jacked,netFielding,clutchScore,mvpRaw,mvpWeighted,mvpScore
-1,1,1,Example Player,1,Angels,SS,FALSE,B,1.0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0

@@ -1,2 +1,0 @@
-playerId,name,age,primaryPosition,secondaryPosition,bats,throws,chemistry,personality,overallGrade,gradeWeight,power,contact,speed,fielding,arm,velocity,junk,accuracy,arsenal,trait1,trait2,isActive,createdDate,notes
-1,Example Player,28,SS,IF,R,R,Competitive,Tough,B,1.0,65,72,58,83,75,0,0,0,,Tough Out,,TRUE,2024-01-01,Header row example - delete this row

@@ -559,9 +559,9 @@ function FieldDropZone({ children, onFielderDrop, onBatterDrop, onBatterDragChan
   const isBatterDragging = canDrop && itemType === ItemTypes.BATTER;
 
   // Use effect to notify parent of drag state changes
-  useState(() => {
+  useEffect(() => {
     onBatterDragChange?.(isBatterDragging);
-  });
+  }, [isBatterDragging, onBatterDragChange]);
 
   return (
     <div
@@ -2354,6 +2354,8 @@ export function EnhancedInteractiveField({
   const handleBallLandingCancel = useCallback(() => {
     setShowBallLandingPrompt(false);
     setPendingBatterBase(null);
+    setFlowStep('IDLE');
+    setActiveAction(null);
     // Inline reset state instead of calling handleReset (defined later)
     setPlacedFielders([]);
     setThrowSequence([]);
@@ -2369,6 +2371,10 @@ export function EnhancedInteractiveField({
     setClassificationResult(null);
     setPendingPrompts([]);
     setCurrentPromptIndex(0);
+    setPendingError(false);
+    setAwaitingErrorFielder(false);
+    setErrorFielder(null);
+    setShowErrorTypePopup(false);
   }, []);
 
   // ============================================
@@ -3204,19 +3210,36 @@ export function EnhancedInteractiveField({
         // Wild Pitch / Passed Ball - all runners advance one base
         // These events don't end the at-bat
         console.log('[Flow] All runners advance event:', action);
-        if (onRunnerMove) {
+        {
           const bases = gameSituation.bases;
-          // Advance R3 to home
+          const movements: Array<{
+            from: 'first' | 'second' | 'third';
+            to: 'second' | 'third' | 'home' | 'out';
+            outcome: 'safe' | 'out';
+          }> = [];
+
+          // Process from lead runner first so state updates stay baseball-correct.
           if (bases.third) {
-            onRunnerMove({ from: 'third', to: 'home', outcome: 'safe', playType: action as 'WP' | 'PB' });
+            movements.push({ from: 'third', to: 'home', outcome: 'safe' });
           }
-          // Advance R2 to third
           if (bases.second) {
-            onRunnerMove({ from: 'second', to: 'third', outcome: 'safe', playType: action as 'WP' | 'PB' });
+            movements.push({ from: 'second', to: 'third', outcome: 'safe' });
           }
-          // Advance R1 to second
           if (bases.first) {
-            onRunnerMove({ from: 'first', to: 'second', outcome: 'safe', playType: action as 'WP' | 'PB' });
+            movements.push({ from: 'first', to: 'second', outcome: 'safe' });
+          }
+
+          if (onBatchRunnerMove && movements.length > 0) {
+            onBatchRunnerMove(movements, action);
+          } else if (onRunnerMove) {
+            for (const movement of movements) {
+              onRunnerMove({
+                from: movement.from,
+                to: movement.to === 'out' ? movement.from : movement.to,
+                outcome: movement.outcome,
+                playType: action as 'WP' | 'PB',
+              });
+            }
           }
         }
         // Stay in IDLE - at-bat continues
@@ -3273,7 +3296,7 @@ export function EnhancedInteractiveField({
         setFlowStep('IDLE');
         setActiveAction(null);
     }
-  }, [handleQuickResult, onRunnerMove]);
+  }, [handleQuickResult, onRunnerMove, onBatchRunnerMove, gameSituation.bases]);
 
   // ============================================
   // NEW: Strikeout handler using Play Lifecycle
@@ -3997,6 +4020,9 @@ export function EnhancedInteractiveField({
                 setActiveAction(null);
                 setPlacedFielders([]);
                 setThrowSequence([]);
+                setBallLocation(null);
+                setFadingBallPosition(null);
+                setShowFadingBall(false);
               }}
               className="bg-[#666] border-[3px] border-white px-4 py-2 text-white text-[10px] font-bold
                          hover:bg-[#888] shadow-[3px_3px_0px_0px_rgba(0,0,0,0.3)]"
