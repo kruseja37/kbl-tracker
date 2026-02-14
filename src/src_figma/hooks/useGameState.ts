@@ -3074,9 +3074,20 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       const currentIndex = newIsTop ? awayBatterIndex : homeBatterIndex;
       const nextBatter = battingTeamLineup[currentIndex];
 
-      // Sync tracker inning number
+      // T0-02 FIX: Switch to the correct pitching team's current pitcher
+      // When newIsTop (away bats), HOME team pitches; when !newIsTop (home bats), AWAY team pitches
+      const pitchingTeamState = newIsTop ? homeLineupStateRef : awayLineupStateRef;
+      const newPitcher = pitchingTeamState.current.currentPitcher;
+      const newPitcherId = newPitcher?.playerId || prev.currentPitcherId;
+      const newPitcherName = newPitcher?.playerName || prev.currentPitcherName;
+
+      // Sync tracker with new pitcher and inning number
+      endTracker = syncTrackerPitcher(endTracker, newPitcherId, newPitcherName);
       endTracker = { ...endTracker, inning: newInning };
       runnerTrackerRef.current = endTracker;
+
+      // Reset inning pitch counter for the NEW pitcher
+      inningPitchesRef.current = { pitches: 0, strikeouts: 0, pitcherId: newPitcherId };
 
       return {
         ...prev,
@@ -3088,12 +3099,11 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         bases: { first: false, second: false, third: false },
         currentBatterId: nextBatter?.playerId || '',
         currentBatterName: nextBatter?.playerName || '',
+        currentPitcherId: newPitcherId,
+        currentPitcherName: newPitcherName,
       };
     });
-
-    // Reset inning pitch counter for next half-inning
-    inningPitchesRef.current = { pitches: 0, strikeouts: 0, pitcherId: gameState.currentPitcherId };
-  }, [awayBatterIndex, homeBatterIndex, gameState.currentPitcherId]);
+  }, [awayBatterIndex, homeBatterIndex]);
 
   const endInning = useCallback(() => {
     // Show pitch count prompt for the current pitcher at end of half-inning
