@@ -998,6 +998,7 @@ export function FranchiseHome() {
             stadiumMap={franchiseData.stadiumMap}
             seasonNumber={currentSeason}
             teamNameMap={franchiseData.teamNameMap}
+            onDeleteGame={async (gameId) => { await scheduleData.deleteGame(gameId); }}
           />
         )}
         {activeTab === "news" && (

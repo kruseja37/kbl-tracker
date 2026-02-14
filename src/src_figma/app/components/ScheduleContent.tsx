@@ -1,4 +1,5 @@
-import { ChevronDown, ChevronUp, CheckCircle, Plus } from "lucide-react";
+import { useState } from "react";
+import { ChevronDown, ChevronUp, CheckCircle, Plus, Trash2 } from "lucide-react";
 interface ScheduledGame {
   id: string;
   seasonNumber: number;
@@ -28,6 +29,7 @@ interface ScheduleContentProps {
   stadiumMap: Record<string, string>;
   seasonNumber?: number;
   teamNameMap?: Record<string, string>;
+  onDeleteGame?: (gameId: string) => void;
 }
 
 export function ScheduleContent({
@@ -41,7 +43,9 @@ export function ScheduleContent({
   stadiumMap,
   seasonNumber = 1,
   teamNameMap = {},
+  onDeleteGame,
 }: ScheduleContentProps) {
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   // Helper: resolve team ID to display name
   const teamName = (id: string) => teamNameMap[id] || id;
   const filteredGames = selectedTeam === "FULL LEAGUE" 
@@ -51,6 +55,37 @@ export function ScheduleContent({
   const completedGames = filteredGames.filter(g => g.status === 'COMPLETED').reverse();
   const upcomingGames = filteredGames.filter(g => g.status === 'SCHEDULED');
   const nextGame = upcomingGames[0];
+
+  const renderDeleteButton = (gameId: string) => {
+    if (!onDeleteGame) return null;
+    if (confirmDeleteId === gameId) {
+      return (
+        <div className="flex items-center gap-1">
+          <button
+            onClick={(e) => { e.stopPropagation(); onDeleteGame(gameId); setConfirmDeleteId(null); }}
+            className="bg-[#DC3545] border-[2px] border-[#8B0000] px-2 py-0.5 text-[8px] text-white font-bold hover:bg-[#8B0000] transition-colors"
+          >
+            DELETE
+          </button>
+          <button
+            onClick={(e) => { e.stopPropagation(); setConfirmDeleteId(null); }}
+            className="bg-[#4A6844] border-[2px] border-[#3F5A3A] px-2 py-0.5 text-[8px] text-[#E8E8D8] font-bold hover:bg-[#3F5A3A] transition-colors"
+          >
+            CANCEL
+          </button>
+        </div>
+      );
+    }
+    return (
+      <button
+        onClick={(e) => { e.stopPropagation(); setConfirmDeleteId(gameId); }}
+        className="text-[#E8E8D8]/40 hover:text-[#DC3545] transition-colors p-1"
+        title="Remove game"
+      >
+        <Trash2 className="w-3.5 h-3.5" />
+      </button>
+    );
+  };
 
   // Get team stats if filtering by team
   const getTeamStats = () => {
@@ -184,7 +219,10 @@ export function ScheduleContent({
                 <div className="text-[10px] text-[#E8E8D8]">
                   {nextGame.date || `DAY ${nextGame.dayNumber}`} {nextGame.date && "• TODAY"}
                 </div>
-                <div className="text-[8px] text-[#E8E8D8] bg-[#4A6844] px-2 py-1">NEXT GAME</div>
+                <div className="flex items-center gap-2">
+                  <div className="text-[8px] text-[#E8E8D8] bg-[#4A6844] px-2 py-1">NEXT GAME</div>
+                  {renderDeleteButton(nextGame.id)}
+                </div>
               </div>
               <div className="flex items-center justify-center gap-4">
                 <div className="text-right">
@@ -217,7 +255,10 @@ export function ScheduleContent({
                 <div key={game.id} className="bg-[#5A8352] border-[5px] border-[#4A6844] p-3">
                   <div className="flex items-center justify-between text-[10px] text-[#E8E8D8]/80 mb-2">
                     <span>Game {game.gameNumber} │ Day {game.dayNumber}</span>
-                    {index === 0 && <span className="text-[#FFD700]">← NEXT GAME</span>}
+                    <div className="flex items-center gap-2">
+                      {index === 0 && <span className="text-[#FFD700]">← NEXT GAME</span>}
+                      {renderDeleteButton(game.id)}
+                    </div>
                   </div>
                   <div className="flex items-center justify-between text-xs text-[#E8E8D8]">
                     <span>{game.awayTeamId === selectedTeam ? "vs" : "@"} {teamName(game.awayTeamId === selectedTeam ? game.homeTeamId : game.awayTeamId)}</span>
@@ -235,9 +276,12 @@ export function ScheduleContent({
                 <div className="text-[10px] text-[#E8E8D8]">
                   {game.date || `DAY ${game.dayNumber}`}
                 </div>
-                {game.time && (
-                  <div className="text-[8px] text-[#E8E8D8] bg-[#4A6844] px-2 py-1">{game.time}</div>
-                )}
+                <div className="flex items-center gap-2">
+                  {game.time && (
+                    <div className="text-[8px] text-[#E8E8D8] bg-[#4A6844] px-2 py-1">{game.time}</div>
+                  )}
+                  {renderDeleteButton(game.id)}
+                </div>
               </div>
               <div className="flex items-center justify-center gap-4">
                 <div className="text-right">
