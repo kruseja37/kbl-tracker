@@ -187,7 +187,7 @@ export interface UseGameStateReturn {
 
   // Pitch count prompts (per PITCH_COUNT_TRACKING_SPEC.md)
   pitchCountPrompt: PitchCountPrompt | null;
-  confirmPitchCount: (pitcherId: string, finalCount: number) => void;
+  confirmPitchCount: (pitcherId: string, finalCount: number) => { immaculateInning?: { pitcherId: string; pitcherName: string } };
   dismissPitchCountPrompt: () => void;
 
   // Initialization
@@ -3057,7 +3057,8 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
   }, [pitcherStats, gameState.inning, gameState.isTop]);
 
   // Confirm pitch count and execute pending action (per PITCH_COUNT_TRACKING_SPEC.md)
-  const confirmPitchCount = useCallback((pitcherId: string, finalCount: number) => {
+  const confirmPitchCount = useCallback((pitcherId: string, finalCount: number): { immaculateInning?: { pitcherId: string; pitcherName: string } } => {
+    let result: { immaculateInning?: { pitcherId: string; pitcherName: string } } = {};
     // Check for immaculate inning at end of half-inning
     // Requires: user confirmed exactly 9 pitches AND we tracked 3 strikeouts this half-inning
     if (pitchCountPrompt?.type === 'end_inning' && finalCount === 9 && inningPitchesRef.current.strikeouts === 3) {
@@ -3070,6 +3071,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         description: `Immaculate inning in inning ${gameState.inning} (${gameState.isTop ? 'top' : 'bottom'})`,
       };
       setFameEvents(prev => [...prev, immaculateFameEvent]);
+      result = { immaculateInning: { pitcherId, pitcherName: pitchCountPrompt.pitcherName } };
       console.log(`[Fame] Immaculate inning detected! Pitcher: ${pitchCountPrompt.pitcherName}, pitches: ${finalCount}, K: 3`);
     }
 
@@ -3092,6 +3094,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
 
     // Clear the prompt
     setPitchCountPrompt(null);
+    return result;
   }, [pitchCountPrompt, gameState.inning, gameState.isTop]);
 
   // Dismiss pitch count prompt without confirming

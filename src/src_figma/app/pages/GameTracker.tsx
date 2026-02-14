@@ -3464,7 +3464,19 @@ export function GameTracker() {
         {pitchCountPrompt && (
           <PitchCountModal
             prompt={pitchCountPrompt}
-            onConfirm={confirmPitchCount}
+            onConfirm={(pitcherId: string, finalCount: number) => {
+              const result = confirmPitchCount(pitcherId, finalCount);
+              if (result.immaculateInning) {
+                fameTrackingHook.recordFameEvent(
+                  'IMMACULATE_INNING' as FameEventType,
+                  result.immaculateInning.pitcherId,
+                  result.immaculateInning.pitcherName,
+                  gameState.inning,
+                  gameState.isTop ? 'TOP' : 'BOTTOM',
+                  1.0
+                );
+              }
+            }}
             onDismiss={dismissPitchCountPrompt}
           />
         )}
