@@ -37,6 +37,89 @@ import { useOffseasonState } from "@/hooks/useOffseasonState";
 import { generateNewSeasonSchedule } from "../../../utils/franchiseInitializer";
 import { executeSeasonTransition } from "../../../engines/seasonTransitionEngine";
 import { updateFranchiseMetadata } from "../../../utils/franchiseManager";
+import { getPlayersByTeam } from "../../../utils/leagueBuilderStorage";
+import type { Player as TeamRosterPlayer, Pitcher as TeamRosterPitcher } from "@/app/components/TeamRoster";
+
+// Pitcher positions for separating roster
+const PITCHER_POS = new Set(['SP', 'RP', 'CP', 'P', 'SP/RP', 'TWO-WAY']);
+
+/**
+ * Load real players from IndexedDB and convert to GameTracker format.
+ * Returns { players, pitchers } ready for navigation state.
+ *
+ * Falls back to empty arrays if no data (GameTracker.tsx will use its defaults).
+ */
+async function buildGameTrackerRoster(teamId: string): Promise<{
+  players: TeamRosterPlayer[];
+  pitchers: TeamRosterPitcher[];
+}> {
+  let dbPlayers;
+  try {
+    dbPlayers = await getPlayersByTeam(teamId);
+  } catch {
+    return { players: [], pitchers: [] };
+  }
+
+  if (!dbPlayers || dbPlayers.length === 0) {
+    return { players: [], pitchers: [] };
+  }
+
+  // Format name as "F. LASTNAME" — matches GameTracker convention
+  const formatName = (first: string, last: string) => {
+    const initial = first?.charAt(0)?.toUpperCase() || '?';
+    const upper = last?.toUpperCase() || 'PLAYER';
+    return `${initial}. ${upper}`;
+  };
+
+  const emptyBatterStats = { ab: 0, h: 0, r: 0, rbi: 0, bb: 0, k: 0 };
+  const emptyPitcherStats = { ip: '0.0', h: 0, r: 0, er: 0, bb: 0, k: 0, pitches: 0 };
+
+  // Split into position players and pitchers
+  const positionPlayers = dbPlayers.filter(p => !PITCHER_POS.has(p.primaryPosition));
+  const pitcherPlayers = dbPlayers.filter(p => PITCHER_POS.has(p.primaryPosition));
+
+  // Build position player roster: first 9 as starters (with battingOrder), rest as bench
+  const players: TeamRosterPlayer[] = [];
+  positionPlayers.forEach((p, idx) => {
+    players.push({
+      name: formatName(p.firstName, p.lastName),
+      position: idx < 9 ? p.primaryPosition : (p.primaryPosition === 'SP' || p.primaryPosition === 'RP' ? undefined : p.primaryPosition),
+      battingOrder: idx < 9 ? idx + 1 : undefined,
+      stats: { ...emptyBatterStats },
+      battingHand: p.bats,
+    });
+  });
+
+  // Add pitcher to batting 9th spot if we have <9 position players
+  // (pitcher bats last in the lineup)
+  if (players.filter(p => p.battingOrder !== undefined).length < 9 && pitcherPlayers.length > 0) {
+    const starter = pitcherPlayers.find(p => p.primaryPosition === 'SP') || pitcherPlayers[0];
+    const nextOrder = players.filter(p => p.battingOrder !== undefined).length + 1;
+    players.push({
+      name: formatName(starter.firstName, starter.lastName),
+      position: 'P',
+      battingOrder: nextOrder,
+      stats: { ...emptyBatterStats },
+      battingHand: starter.bats,
+    });
+  }
+
+  // Build pitcher roster
+  const pitchers: TeamRosterPitcher[] = [];
+  const starterPitcher = pitcherPlayers.find(p => p.primaryPosition === 'SP') || pitcherPlayers[0];
+  pitcherPlayers.forEach(p => {
+    const isStarter = starterPitcher && p.id === starterPitcher.id;
+    pitchers.push({
+      name: formatName(p.firstName, p.lastName),
+      stats: { ...emptyPitcherStats },
+      throwingHand: p.throws,
+      isStarter: isStarter || false,
+      isActive: isStarter || false,
+    });
+  });
+
+  return { players, pitchers };
+}
 
 // Context for passing franchise data to child components
 const FranchiseDataContext = createContext<UseFranchiseDataReturn | null>(null);
@@ -512,7 +595,7 @@ export function FranchiseHome() {
   };
 
   // Launch a playoff game in the GameTracker
-  const handlePlayPlayoffGame = (series: ReturnType<typeof playoffData.getSeriesForTeam> & {}) => {
+  const handlePlayPlayoffGame = async (series: ReturnType<typeof playoffData.getSeriesForTeam> & {}) => {
     if (!series || series.status !== 'IN_PROGRESS') return;
 
     // Determine next game number (count completed games + 1)
@@ -532,6 +615,12 @@ export function FranchiseHome() {
     const awayTeamName = isHigherSeedHome ? series.lowerSeed.teamName : series.higherSeed.teamName;
     const homeTeamName = isHigherSeedHome ? series.higherSeed.teamName : series.lowerSeed.teamName;
 
+    // T0-08: Load real rosters from IndexedDB for both teams
+    const [awayRoster, homeRoster] = await Promise.all([
+      buildGameTrackerRoster(awayTeamId),
+      buildGameTrackerRoster(homeTeamId),
+    ]);
+
     navigate(`/game-tracker/playoff-${series.id}-g${nextGameNumber}`, {
       state: {
         gameMode: 'playoff' as const,
@@ -541,6 +630,10 @@ export function FranchiseHome() {
         homeTeamId,
         awayTeamName: awayTeamName.toUpperCase(),
         homeTeamName: homeTeamName.toUpperCase(),
+        awayPlayers: awayRoster.players.length > 0 ? awayRoster.players : undefined,
+        awayPitchers: awayRoster.pitchers.length > 0 ? awayRoster.pitchers : undefined,
+        homePlayers: homeRoster.players.length > 0 ? homeRoster.players : undefined,
+        homePitchers: homeRoster.pitchers.length > 0 ? homeRoster.pitchers : undefined,
         awayRecord: getTeamRecord(awayTeamId), // MAJ-15: Pass actual team records to GameTracker
         homeRecord: getTeamRecord(homeTeamId), // MAJ-15: Pass actual team records to GameTracker
         franchiseId,
@@ -2537,13 +2630,19 @@ function GameDayContent({ scheduleData, currentSeason, onDataRefresh }: GameDayC
   const awayTeamId = scheduleData.nextGame?.awayTeamId ?? '';
   const homeTeamId = scheduleData.nextGame?.homeTeamId ?? '';
 
-  const handlePlayGame = () => {
+  const handlePlayGame = async () => {
     const nextGame = scheduleData.nextGame;
     const away = nextGame?.awayTeamId || awayTeamId;
     const home = nextGame?.homeTeamId || homeTeamId;
     const awayName = franchiseData.teamNameMap?.[away] || away;
     const homeName = franchiseData.teamNameMap?.[home] || home;
     const gameNum = nextGame?.gameNumber ?? 1;
+
+    // T0-08: Load real rosters from IndexedDB for both teams
+    const [awayRoster, homeRoster] = await Promise.all([
+      buildGameTrackerRoster(away),
+      buildGameTrackerRoster(home),
+    ]);
 
     navigate(`/game-tracker/franchise-g${gameNum}`, {
       state: {
@@ -2552,6 +2651,10 @@ function GameDayContent({ scheduleData, currentSeason, onDataRefresh }: GameDayC
         homeTeamId: home,
         awayTeamName: awayName.toUpperCase(),
         homeTeamName: homeName.toUpperCase(),
+        awayPlayers: awayRoster.players.length > 0 ? awayRoster.players : undefined,
+        awayPitchers: awayRoster.pitchers.length > 0 ? awayRoster.pitchers : undefined,
+        homePlayers: homeRoster.players.length > 0 ? homeRoster.players : undefined,
+        homePitchers: homeRoster.pitchers.length > 0 ? homeRoster.pitchers : undefined,
         awayRecord: getTeamRecord(away),
         homeRecord: getTeamRecord(home),
         stadiumName: franchiseData.stadiumMap?.[home],

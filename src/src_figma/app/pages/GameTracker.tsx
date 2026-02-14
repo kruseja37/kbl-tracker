@@ -13,7 +13,6 @@ import { UndoButton, useUndoSystem, type GameSnapshot } from "@/app/components/U
 import { TeamRoster, type Player, type Pitcher } from "@/app/components/TeamRoster";
 import { MiniScoreboard } from "@/app/components/MiniScoreboard";
 import { getTeamColors, getFielderBorderColors } from "@/config/teamColors";
-import { defaultTigersPlayers, defaultTigersPitchers, defaultSoxPlayers, defaultSoxPitchers } from "@/data/defaultRosters";
 import { areRivals } from '../../../data/leagueStructure';
 import { useGameState, type HitType, type OutType, type WalkType, type RunnerAdvancement, type PlayerGameStats, type PitcherGameStats } from "@/hooks/useGameState";
 import { usePlayerState, type PlayerStateData, getStateBadge, formatMultiplier } from "@/app/hooks/usePlayerState";
@@ -364,34 +363,6 @@ export function GameTracker() {
   const fielderColor1 = fieldingTeamColors.primary;
   const fielderColor2 = fieldingTeamColors.secondary;
 
-  // Mock roster data - in production this would come from your game state
-  const availablePitchers = [
-    { name: 'T. JOHNSON', hand: 'R', fitness: '🟢' },
-    { name: 'M. WILLIAMS', hand: 'L', fitness: '🟢' },
-    { name: 'K. DAVIS', hand: 'R', fitness: '🟡' },
-    { name: 'S. RODRIGUEZ', hand: 'L', fitness: '🟢' },
-  ];
-
-  const benchPlayers = [
-    { name: 'A. TAYLOR', pos: 'C', hand: 'R', avg: '.267' },
-    { name: 'B. ANDERSON', pos: 'IF', hand: 'L', avg: '.234' },
-    { name: 'C. THOMAS', pos: 'OF', hand: 'R', avg: '.289' },
-    { name: 'D. HARRIS', pos: 'IF', hand: 'R', avg: '.251' },
-    { name: 'E. CLARK', pos: 'OF', hand: 'L', avg: '.276' },
-  ];
-
-  const currentLineup = [
-    { name: 'J. MARTINEZ', pos: 'SS', batting: true },
-    { name: 'A. SMITH', pos: 'CF', batting: false },
-    { name: 'D. JONES', pos: 'LF', batting: false },
-    { name: 'B. DAVIS', pos: 'RF', batting: false },
-    { name: 'T. BROWN', pos: 'SS', batting: false },
-    { name: 'C. WILSON', pos: '2B', batting: false },
-    { name: 'M. GARCIA', pos: '3B', batting: false },
-    { name: 'J. MARTIN', pos: '1B', batting: false },
-    { name: 'R. LOPEZ', pos: 'C', batting: false },
-  ];
-
   // EXH-036: Helper to generate consistent player IDs (must match playerStateHook registration)
   const generatePlayerId = (name: string, team: 'home' | 'away') =>
     `${team}-${name.replace(/\s+/g, '-').toLowerCase()}`;
@@ -400,42 +371,6 @@ export function GameTracker() {
   // When it's top of inning, away team bats; bottom of inning, home team bats
   const battingTeam: 'home' | 'away' = gameState.isTop ? 'away' : 'home';
   const fieldingTeam: 'home' | 'away' = gameState.isTop ? 'home' : 'away';
-
-  // LineupCard data derived from current team data
-  // EXH-036: Use consistent IDs that match playerStateHook registration
-  const lineupCardData: LineupPlayer[] = currentLineup.map((player, idx) => ({
-    id: generatePlayerId(player.name, battingTeam),
-    name: player.name,
-    position: player.pos,
-    battingOrder: idx + 1,
-    isCurrentBatter: player.batting,
-    battingHand: 'R', // Would come from player data
-  }));
-
-  const benchCardData: BenchPlayer[] = benchPlayers.map((player) => ({
-    id: generatePlayerId(player.name, battingTeam),
-    name: player.name,
-    positions: [player.pos],
-    battingHand: player.hand as 'L' | 'R' | 'S',
-    isUsed: false,
-  }));
-
-  const bullpenCardData: BullpenPitcher[] = availablePitchers.map((pitcher) => ({
-    id: generatePlayerId(pitcher.name, fieldingTeam),
-    name: pitcher.name,
-    throwingHand: pitcher.hand as 'L' | 'R',
-    fitness: 'FIT' as const,
-    isUsed: false,
-    isCurrentPitcher: false,
-  }));
-
-  const currentPitcherData: BullpenPitcher = {
-    id: generatePlayerId('R. LOPEZ', fieldingTeam),
-    name: 'R. LOPEZ',
-    throwingHand: 'R',
-    fitness: 'FIT',
-    isCurrentPitcher: true,
-  };
 
   // Roster data - use navigation state if available, otherwise use defaults with some at-bats
   // Use useState so we can update the roster when substitutions are made
@@ -486,6 +421,74 @@ export function GameTracker() {
     { name: 'V. TURNER', stats: { ip: '0.0', h: 0, r: 0, er: 0, bb: 0, k: 0, pitches: 0 }, throwingHand: 'R' as const },
     { name: 'W. COLLINS', stats: { ip: '0.0', h: 0, r: 0, er: 0, bb: 0, k: 0, pitches: 0 }, throwingHand: 'R' as const },
   ];
+
+  // T0-08: Derive lineup/bench/bullpen from actual team data (dynamic, not hardcoded)
+  const battingTeamPlayersRaw = gameState.isTop ? awayTeamPlayers : homeTeamPlayers;
+  const fieldingTeamPitchersRaw = gameState.isTop ? homeTeamPitchers : awayTeamPitchers;
+
+  const currentLineup = battingTeamPlayersRaw
+    .filter(p => p.battingOrder !== undefined && !p.isOutOfGame)
+    .sort((a, b) => (a.battingOrder || 0) - (b.battingOrder || 0))
+    .map((p) => ({
+      name: p.name,
+      pos: p.position || 'DH',
+      batting: p.name === gameState.currentBatterName,
+    }));
+
+  const benchPlayers = battingTeamPlayersRaw
+    .filter(p => p.battingOrder === undefined && !p.isOutOfGame)
+    .map(p => ({
+      name: p.name,
+      pos: p.position || 'UT',
+      hand: p.battingHand,
+      avg: '.000',
+    }));
+
+  const availablePitchers = fieldingTeamPitchersRaw
+    .filter(p => !p.isActive && !p.isOutOfGame)
+    .map(p => ({
+      name: p.name,
+      hand: p.throwingHand,
+      fitness: '🟢',
+    }));
+
+  // LineupCard data derived from current team data
+  // EXH-036: Use consistent IDs that match playerStateHook registration
+  const lineupCardData: LineupPlayer[] = currentLineup.map((player, idx) => ({
+    id: generatePlayerId(player.name, battingTeam),
+    name: player.name,
+    position: player.pos,
+    battingOrder: idx + 1,
+    isCurrentBatter: player.batting,
+    battingHand: (battingTeamPlayersRaw.find(p => p.name === player.name)?.battingHand || 'R') as 'L' | 'R' | 'S',
+  }));
+
+  const benchCardData: BenchPlayer[] = benchPlayers.map((player) => ({
+    id: generatePlayerId(player.name, battingTeam),
+    name: player.name,
+    positions: [player.pos],
+    battingHand: player.hand as 'L' | 'R' | 'S',
+    isUsed: false,
+  }));
+
+  const bullpenCardData: BullpenPitcher[] = availablePitchers.map((pitcher) => ({
+    id: generatePlayerId(pitcher.name, fieldingTeam),
+    name: pitcher.name,
+    throwingHand: pitcher.hand as 'L' | 'R',
+    fitness: 'FIT' as const,
+    isUsed: false,
+    isCurrentPitcher: false,
+  }));
+
+  // Derive current pitcher from actual pitcher data
+  const activePitcher = fieldingTeamPitchersRaw.find(p => p.isActive) || fieldingTeamPitchersRaw.find(p => p.isStarter) || fieldingTeamPitchersRaw[0];
+  const currentPitcherData: BullpenPitcher = {
+    id: generatePlayerId(activePitcher?.name || 'PITCHER', fieldingTeam),
+    name: activePitcher?.name || 'PITCHER',
+    throwingHand: (activePitcher?.throwingHand || 'R') as 'L' | 'R',
+    fitness: 'FIT',
+    isCurrentPitcher: true,
+  };
 
   // Field positions (defense) with SVG coordinates - dynamically built from fielding team's lineup
   // When isTop = true, home team is fielding; when isTop = false, away team is fielding
