@@ -13,7 +13,7 @@
  */
 
 import type { PersistedGameState } from './gameStorage';
-import { getPlayersByTeam } from './leagueBuilderStorage';
+import { getPlayersByTeam, getTeamRoster } from './leagueBuilderStorage';
 
 // ============================================
 // ROSTER TEMPLATES
@@ -29,7 +29,8 @@ export interface TeamRoster {
   teamName: string;
   batters: RosterPlayer[];
   starter: RosterPlayer;
-  relievers: RosterPlayer[];
+  closer: RosterPlayer | null;   // T1-10: CL/CP for save situations
+  relievers: RosterPlayer[];     // Non-closer relievers (setup men)
 }
 
 /**
@@ -56,7 +57,7 @@ function generateRoster(teamId: string, teamName: string): TeamRoster {
     { playerId: `${teamId}-rp-1`, playerName: `${teamName} RP2` },
   ];
 
-  return { teamId, teamName, batters, starter, relievers };
+  return { teamId, teamName, batters, starter, closer: null, relievers };
 }
 
 // ============================================
@@ -64,18 +65,21 @@ function generateRoster(teamId: string, teamName: string): TeamRoster {
 // ============================================
 
 /** Positions considered "pitcher" */
-const PITCHER_POSITIONS = new Set(['SP', 'RP', 'CL']);
+const PITCHER_POSITIONS = new Set(['SP', 'RP', 'CP', 'SP/RP']);
 
 /**
  * Build a TeamRoster from real franchise player data stored in IndexedDB.
  *
- * Loads players via getPlayersByTeam(), splits by position,
- * takes first 9 position players as batters, first SP as starter,
- * remaining pitchers as relievers. Pads with generic names if short.
+ * T1-10: Now uses TeamRoster.startingRotation for proper rotation cycling,
+ * identifies the closer from TeamRoster.closingPitcher, and separates
+ * setup relievers from the closer.
+ *
+ * @param rotationIndex - Which starter in the rotation to use (0-based, wraps around)
  */
 export async function buildRosterFromPlayers(
   teamId: string,
-  teamName: string
+  teamName: string,
+  rotationIndex: number = 0
 ): Promise<TeamRoster> {
   let players;
   try {
@@ -88,6 +92,17 @@ export async function buildRosterFromPlayers(
   if (!players || players.length === 0) {
     return generateRoster(teamId, teamName);
   }
+
+  // Load roster config for rotation/closer data
+  let rosterConfig;
+  try {
+    rosterConfig = await getTeamRoster(teamId);
+  } catch {
+    rosterConfig = null;
+  }
+
+  // Build a player lookup by ID
+  const playerById = new Map(players.map((p) => [p.id, p]));
 
   // Separate batters from pitchers
   const positionPlayers = players.filter(
@@ -107,7 +122,6 @@ export async function buildRosterFromPlayers(
         playerName: `${p.firstName} ${p.lastName}`,
       });
     } else {
-      // Pad with generic name
       batters.push({
         playerId: `${teamId}-bat-${i}`,
         playerName: `${teamName} Player ${i + 1}`,
@@ -115,9 +129,20 @@ export async function buildRosterFromPlayers(
     }
   }
 
-  // Find starter — first SP, or first pitcher
-  const starters = pitchers.filter((p) => p.primaryPosition === 'SP');
-  const starterPlayer = starters[0] || pitchers[0];
+  // T1-10: Pick starter from rotation if available
+  let starterPlayer = null;
+  if (rosterConfig?.startingRotation && rosterConfig.startingRotation.length > 0) {
+    const rotLen = rosterConfig.startingRotation.length;
+    const idx = rotationIndex % rotLen;
+    const starterId = rosterConfig.startingRotation[idx];
+    starterPlayer = playerById.get(starterId) || null;
+  }
+  // Fallback: first SP, then any pitcher
+  if (!starterPlayer) {
+    const sps = pitchers.filter((p) => p.primaryPosition === 'SP');
+    starterPlayer = sps[rotationIndex % Math.max(1, sps.length)] || pitchers[0] || null;
+  }
+
   const starter: RosterPlayer = starterPlayer
     ? {
         playerId: starterPlayer.id,
@@ -128,19 +153,59 @@ export async function buildRosterFromPlayers(
         playerName: `${teamName} SP`,
       };
 
-  // Remaining pitchers become relievers (max 2)
-  const remainingPitchers = pitchers.filter(
-    (p) => !starterPlayer || p.id !== starterPlayer.id
-  );
-  const relievers: RosterPlayer[] = remainingPitchers
-    .slice(0, 2)
-    .map((p) => ({
-      playerId: p.id,
-      playerName: `${p.firstName} ${p.lastName}`,
-    }));
+  // T1-10: Identify closer from roster config
+  let closerPlayer = null;
+  if (rosterConfig?.closingPitcher) {
+    closerPlayer = playerById.get(rosterConfig.closingPitcher) || null;
+  }
+  // Fallback: look for CL/CP position
+  if (!closerPlayer) {
+    closerPlayer = pitchers.find(
+      (p) => p.primaryPosition === 'CP' &&
+             p.id !== starterPlayer?.id
+    ) || null;
+  }
+
+  const closer: RosterPlayer | null = closerPlayer
+    ? {
+        playerId: closerPlayer.id,
+        playerName: `${closerPlayer.firstName} ${closerPlayer.lastName}`,
+      }
+    : null;
+
+  // Remaining pitchers become relievers (exclude starter + closer)
+  const usedIds = new Set<string>();
+  if (starterPlayer) usedIds.add(starterPlayer.id);
+  if (closerPlayer) usedIds.add(closerPlayer.id);
+
+  const remainingPitchers = pitchers.filter((p) => !usedIds.has(p.id));
+
+  // T1-10: Prefer setup pitchers from roster config, then remaining RPs
+  const relievers: RosterPlayer[] = [];
+  if (rosterConfig?.setupPitchers) {
+    for (const spId of rosterConfig.setupPitchers) {
+      const p = playerById.get(spId);
+      if (p && !usedIds.has(p.id)) {
+        relievers.push({
+          playerId: p.id,
+          playerName: `${p.firstName} ${p.lastName}`,
+        });
+        usedIds.add(p.id);
+      }
+    }
+  }
+  // Fill remaining slots from other pitchers
+  for (const p of remainingPitchers) {
+    if (!usedIds.has(p.id) && relievers.length < 3) {
+      relievers.push({
+        playerId: p.id,
+        playerName: `${p.firstName} ${p.lastName}`,
+      });
+    }
+  }
 
   // Pad relievers if needed
-  while (relievers.length < 2) {
+  while (relievers.length < 1) {
     const idx = relievers.length;
     relievers.push({
       playerId: `${teamId}-rp-${idx}`,
@@ -148,7 +213,7 @@ export async function buildRosterFromPlayers(
     });
   }
 
-  return { teamId, teamName, batters, starter, relievers };
+  return { teamId, teamName, batters, starter, closer, relievers };
 }
 
 // ============================================
@@ -349,49 +414,172 @@ export function generateSyntheticGame(
     };
   }
 
-  // Away team pitching: starter + maybe reliever
-  const awayStarterOuts = Math.min(innings * 3, 15 + Math.floor(rng() * 12)); // 5-9 IP
-  const awayRelieverOuts = Math.max(0, innings * 3 - awayStarterOuts);
-  const awayStarterRuns = Math.min(homeRuns, Math.round(homeRuns * (0.5 + rng() * 0.5)));
-  const awayRelieverRuns = homeRuns - awayStarterRuns;
+  // T1-10: Generate pitching with proper role-based usage
+  // Helper to build pitching staff for a team
+  function buildTeamPitching(
+    roster: TeamRoster,
+    teamId: string,
+    runsAllowed: number,
+    isWinningTeam: boolean,
+    opponentRuns: number
+  ) {
+    const totalOuts = innings * 3;
 
-  pitcherGameStats.push(generatePitcherStats(
-    awayRoster.starter, awayRoster.teamId, true, awayStarterOuts, awayStarterRuns, 1
-  ));
+    // Starter gets 5-9 IP (15-27 outs)
+    const starterOuts = Math.min(totalOuts, 15 + Math.floor(rng() * 12));
+    const reliefOuts = Math.max(0, totalOuts - starterOuts);
 
-  if (awayRelieverOuts > 0 && awayRoster.relievers.length > 0) {
-    const relieverInning = Math.floor(awayStarterOuts / 3) + 1;
+    // Split runs: starter gets proportional share
+    const starterRuns = reliefOuts > 0
+      ? Math.min(runsAllowed, Math.round(runsAllowed * (0.5 + rng() * 0.5)))
+      : runsAllowed;
+    const reliefRuns = runsAllowed - starterRuns;
+
     pitcherGameStats.push(generatePitcherStats(
-      awayRoster.relievers[0], awayRoster.teamId, false, awayRelieverOuts, awayRelieverRuns, relieverInning
+      roster.starter, teamId, true, starterOuts, starterRuns, 1
     ));
+
+    if (reliefOuts > 0) {
+      const relieverInning = Math.floor(starterOuts / 3) + 1;
+      const teamLead = isWinningTeam ? (opponentRuns < runsAllowed ? 0 : opponentRuns - runsAllowed) : 0;
+
+      // T1-10: Use closer for final inning in save situations
+      // Save situation: winning team, lead ≤ 3, late game (last 3 innings)
+      const isSaveSituation = isWinningTeam && teamLead > 0 && teamLead <= 3 &&
+        relieverInning >= Math.max(1, innings - 2);
+
+      if (isSaveSituation && roster.closer) {
+        // Split: setup man gets middle innings, closer gets last inning
+        const closerOuts = Math.min(reliefOuts, 3); // Closer gets ~1 IP
+        const setupOuts = reliefOuts - closerOuts;
+        const closerInning = innings; // Last inning
+
+        if (setupOuts > 0 && roster.relievers.length > 0) {
+          const setupRuns = Math.min(reliefRuns, Math.round(reliefRuns * rng() * 0.5));
+          pitcherGameStats.push(generatePitcherStats(
+            roster.relievers[0], teamId, false, setupOuts, setupRuns, relieverInning
+          ));
+          const closerRuns = reliefRuns - setupRuns;
+          pitcherGameStats.push(generatePitcherStats(
+            roster.closer, teamId, false, closerOuts, closerRuns, closerInning
+          ));
+        } else {
+          // Closer handles all relief innings
+          pitcherGameStats.push(generatePitcherStats(
+            roster.closer, teamId, false, reliefOuts, reliefRuns, relieverInning
+          ));
+        }
+      } else {
+        // Non-save situation: use setup/relief pitchers
+        const reliever = roster.relievers[0] || roster.closer;
+        if (reliever) {
+          pitcherGameStats.push(generatePitcherStats(
+            reliever, teamId, false, reliefOuts, reliefRuns, relieverInning
+          ));
+        }
+      }
+    }
   }
 
-  // Home team pitching: starter + maybe reliever
-  const homeStarterOuts = Math.min(innings * 3, 15 + Math.floor(rng() * 12));
-  const homeRelieverOuts = Math.max(0, innings * 3 - homeStarterOuts);
-  const homeStarterRuns = Math.min(awayRuns, Math.round(awayRuns * (0.5 + rng() * 0.5)));
-  const homeRelieverRuns = awayRuns - homeStarterRuns;
-
-  pitcherGameStats.push(generatePitcherStats(
-    homeRoster.starter, homeRoster.teamId, true, homeStarterOuts, homeStarterRuns, 1
-  ));
-
-  if (homeRelieverOuts > 0 && homeRoster.relievers.length > 0) {
-    const relieverInning = Math.floor(homeStarterOuts / 3) + 1;
-    pitcherGameStats.push(generatePitcherStats(
-      homeRoster.relievers[0], homeRoster.teamId, false, homeRelieverOuts, homeRelieverRuns, relieverInning
-    ));
-  }
-
-  // Assign pitcher decisions (simplified from useGameState.ts:776)
   const winningTeam = homeRuns > awayRuns ? homeRoster.teamId : awayRoster.teamId;
+
+  // Away team pitching (faces home batters → runsAllowed = homeRuns)
+  buildTeamPitching(awayRoster, awayRoster.teamId, homeRuns,
+    winningTeam === awayRoster.teamId, awayRuns);
+
+  // Home team pitching (faces away batters → runsAllowed = awayRuns)
+  buildTeamPitching(homeRoster, homeRoster.teamId, awayRuns,
+    winningTeam === homeRoster.teamId, homeRuns);
+
+  // T1-10: Assign pitcher decisions with proper reliever W/L and save/hold
   for (const ps of pitcherGameStats) {
-    if (ps.teamId === winningTeam && ps.isStarter) {
-      ps.decision = 'W';
-    } else if (ps.teamId !== winningTeam && ps.isStarter) {
-      ps.decision = 'L';
+    const isOnWinningTeam = ps.teamId === winningTeam;
+
+    if (ps.isStarter) {
+      if (isOnWinningTeam) {
+        ps.decision = 'W';
+      } else {
+        ps.decision = 'L';
+      }
     } else {
-      ps.decision = 'ND';
+      // Reliever decisions
+      if (!isOnWinningTeam) {
+        // Losing team reliever: L if starter left with lead/tie that this reliever blew
+        // Simplified: if starter didn't get the L and reliever allowed runs, reliever gets L
+        const teamStarter = pitcherGameStats.find(
+          (p) => p.teamId === ps.teamId && p.isStarter
+        );
+        if (teamStarter && teamStarter.decision !== 'L' && ps.runsAllowed > 0) {
+          teamStarter.decision = 'ND';
+          ps.decision = 'L';
+        } else {
+          ps.decision = 'ND';
+        }
+      } else {
+        // Winning team reliever: check for W (if starter didn't qualify)
+        ps.decision = 'ND'; // Default
+
+        // Check if this reliever qualifies for save
+        // Save: finishes game, not winning pitcher, entered with lead ≤ 3 in late game
+        const teamPitchers = pitcherGameStats.filter((p) => p.teamId === ps.teamId);
+        const isLastPitcher = teamPitchers[teamPitchers.length - 1]?.pitcherId === ps.pitcherId;
+        const teamStarter = teamPitchers.find((p) => p.isStarter);
+
+        if (isLastPitcher && teamStarter?.decision === 'W') {
+          // Not the winning pitcher, finished the game — check save conditions
+          const lead = homeRuns > awayRuns
+            ? homeRuns - awayRuns
+            : awayRuns - homeRuns;
+          const enteredInLateGame = ps.entryInning >= Math.max(1, innings - 2);
+
+          if (lead <= 3 && enteredInLateGame && ps.outsRecorded >= 3) {
+            ps.save = true;
+          } else if (ps.outsRecorded >= 9) {
+            // 3+ IP finish = save regardless of lead
+            ps.save = true;
+          }
+        }
+
+        // Check for hold: entered in save situation, maintained lead, didn't finish
+        if (!isLastPitcher && !ps.save) {
+          const lead = homeRuns > awayRuns
+            ? homeRuns - awayRuns
+            : awayRuns - homeRuns;
+          if (lead <= 3 && ps.entryInning >= Math.max(1, innings - 2) &&
+              ps.outsRecorded >= 1 && ps.runsAllowed === 0) {
+            ps.hold = true;
+          }
+        }
+      }
+    }
+  }
+
+  // T1-10: Fix starter W when reliever blew lead — reliever gets W instead
+  // If winning team starter left with a deficit but team came back
+  for (const ps of pitcherGameStats) {
+    if (ps.teamId === winningTeam && ps.isStarter && ps.decision === 'W') {
+      // Check: did the starter leave while team was behind?
+      // Approximate: if starter allowed more runs than the team scored at that point
+      // In a synthetic game we can't know exact sequencing, so we keep starter W
+      // unless the starter gave up more runs than the final margin
+      const teamScore = ps.teamId === homeRoster.teamId ? homeRuns : awayRuns;
+      const opponentScore = ps.teamId === homeRoster.teamId ? awayRuns : homeRuns;
+      if (ps.runsAllowed > teamScore && opponentScore > 0) {
+        // Starter was likely losing when pulled — give W to last reliever
+        const teamRelievers = pitcherGameStats.filter(
+          (p) => p.teamId === ps.teamId && !p.isStarter
+        );
+        if (teamRelievers.length > 0) {
+          ps.decision = 'ND';
+          // Last reliever who wasn't the save pitcher gets the W
+          const wCandidate = teamRelievers.find((r) => !r.save) || teamRelievers[0];
+          if (wCandidate.save) {
+            // Can't have both W and save — remove save, give W
+            wCandidate.save = false;
+          }
+          wCandidate.decision = 'W';
+        }
+      }
     }
   }
 

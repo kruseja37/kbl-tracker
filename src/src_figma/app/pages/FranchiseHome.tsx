@@ -672,8 +672,9 @@ export function FranchiseHome() {
     const homeTeamName = isHigherSeedHome ? series.higherSeed.teamName : series.lowerSeed.teamName;
 
     // Build rosters from real franchise player data (same as regular season SIM)
-    const awayRoster = await buildRosterFromPlayers(awayTeamId, awayTeamName.toUpperCase());
-    const homeRoster = await buildRosterFromPlayers(homeTeamId, homeTeamName.toUpperCase());
+    // T1-10: Use game number as rotation index (cycles through starters in playoff series)
+    const awayRoster = await buildRosterFromPlayers(awayTeamId, awayTeamName.toUpperCase(), completedGames);
+    const homeRoster = await buildRosterFromPlayers(homeTeamId, homeTeamName.toUpperCase(), completedGames);
 
     // Generate synthetic game
     const game = generateSyntheticGame(awayRoster, homeRoster, {
@@ -2792,11 +2793,21 @@ function GameDayContent({ scheduleData, currentSeason, onDataRefresh }: GameDayC
     const batchSeasonId = franchiseId ? `${franchiseId}-season-${currentSeason}` : `season-${currentSeason}`;
     let processed = 0;
 
+    // T1-10: Track rotation index per team across batch games
+    const rotationIndices = new Map<string, number>();
+
     for (const game of games) {
       try {
-        // Build real rosters and generate full synthetic game with player stats
-        const awayRoster = await buildRosterFromPlayers(game.awayTeamId, game.awayTeamId.toUpperCase());
-        const homeRoster = await buildRosterFromPlayers(game.homeTeamId, game.homeTeamId.toUpperCase());
+        // T1-10: Get and advance rotation index for each team
+        const awayRotIdx = rotationIndices.get(game.awayTeamId) ?? 0;
+        const homeRotIdx = rotationIndices.get(game.homeTeamId) ?? 0;
+
+        const awayRoster = await buildRosterFromPlayers(game.awayTeamId, game.awayTeamId.toUpperCase(), awayRotIdx);
+        const homeRoster = await buildRosterFromPlayers(game.homeTeamId, game.homeTeamId.toUpperCase(), homeRotIdx);
+
+        // Advance rotation for next game
+        rotationIndices.set(game.awayTeamId, awayRotIdx + 1);
+        rotationIndices.set(game.homeTeamId, homeRotIdx + 1);
 
         const syntheticGame = generateSyntheticGame(awayRoster, homeRoster, {
           seed: Date.now() + processed,
