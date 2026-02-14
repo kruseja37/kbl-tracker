@@ -4,24 +4,10 @@ import { useOffseasonData, type OffseasonTeam, type OffseasonPlayer } from "@/ho
 import { useOffseasonState, type DraftPick as StoredDraftPick } from "../../hooks/useOffseasonState";
 import { savePlayer, getTeamRoster, saveTeamRoster, type TeamRoster } from "../../../utils/leagueBuilderStorage";
 import { getActiveFranchise, loadFranchise } from "../../../utils/franchiseManager";
+import { FIRST_NAMES, LAST_NAMES } from "../../../data/nameDatabase";
 
 // Empty teams fallback — populated from IndexedDB when available
 const EMPTY_TEAMS: { name: string; mlb: number; farm: number }[] = [];
-
-// Name pools for generating random draft prospects
-const FIRST_NAMES = [
-  "Marcus", "Jake", "Carlos", "David", "Michael", "James", "Robert", "John",
-  "Tyler", "Ryan", "Kevin", "Brian", "Chris", "Matt", "Alex", "Sam", "Nick",
-  "Eric", "Jason", "Brandon", "Justin", "Derek", "Anthony", "Steven", "Kyle",
-  "Tomás", "Javier", "Diego", "André", "Hiro", "Wei", "Riku", "Dante",
-  "Kai", "Zion", "Miles", "Theo", "Leo", "Asher", "Roman", "Ezra",
-];
-const LAST_NAMES = [
-  "Williams", "Thompson", "Ramirez", "Chen", "Johnson", "Smith", "Brown",
-  "Davis", "Garcia", "Martinez", "Wilson", "Anderson", "Taylor", "Thomas",
-  "Moore", "Jackson", "White", "Harris", "Clark", "Lewis", "Robinson",
-  "Tanaka", "Hernández", "Park", "Nguyen", "Okafor", "Kowalski", "Moreau",
-];
 const PROSPECT_POSITIONS = ["SS", "SP", "CF", "3B", "C", "RF", "1B", "LF", "2B", "RP"];
 const PROSPECT_GRADES: Array<"B" | "B-" | "C+" | "C" | "C-"> = ["B", "B", "B-", "B-", "C+", "C+", "C+", "C", "C", "C", "C", "C-", "C-", "C-"];
 const CEILINGS: Record<string, Array<DraftProspect["potentialCeiling"]>> = {

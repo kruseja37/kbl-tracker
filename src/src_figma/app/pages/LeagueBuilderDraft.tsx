@@ -540,23 +540,13 @@ export function LeagueBuilderDraft() {
   );
 }
 
-// Name generators
-const FIRST_NAMES = [
-  "Marcus", "Jake", "Carlos", "David", "Michael", "James", "Robert", "John",
-  "Tyler", "Ryan", "Kevin", "Brian", "Chris", "Matt", "Alex", "Sam", "Nick",
-  "Eric", "Jason", "Brandon", "Justin", "Derek", "Anthony", "Steven", "Kyle",
-];
-
-const LAST_NAMES = [
-  "Williams", "Thompson", "Ramirez", "Chen", "Johnson", "Smith", "Brown",
-  "Davis", "Garcia", "Martinez", "Wilson", "Anderson", "Taylor", "Thomas",
-  "Moore", "Jackson", "White", "Harris", "Clark", "Lewis", "Robinson",
-];
+// Name generators — use shared name database (2,756 first + 2,128 last names)
+import { FIRST_NAMES, LAST_NAMES, pickRandomName } from "../../../data/nameDatabase";
 
 function generateFirstName(): string {
-  return FIRST_NAMES[Math.floor(Math.random() * FIRST_NAMES.length)];
+  return pickRandomName(FIRST_NAMES);
 }
 
 function generateLastName(): string {
-  return LAST_NAMES[Math.floor(Math.random() * LAST_NAMES.length)];
+  return pickRandomName(LAST_NAMES);
 }
