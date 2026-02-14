@@ -2888,24 +2888,24 @@ export function GameTracker() {
                   </OutcomeDetailPanel>
                 )}
 
-                {/* Error Details - Placeholder */}
+                {/* Error Details — T0-04 FIX: Wire position buttons to recordError */}
                 {expandedOutcome === 'E' && (
                   <OutcomeDetailPanel title="ERROR DETAILS">
                     <div className="space-y-2">
                       <div>
                         <div className="text-[7px] text-white mb-1">FIELDED BY:</div>
                         <div className="grid grid-cols-5 gap-1">
-                          <DetailButton label="P" onClick={() => {}} />
-                          <DetailButton label="C" onClick={() => {}} />
-                          <DetailButton label="1B" onClick={() => {}} />
-                          <DetailButton label="2B" onClick={() => {}} />
-                          <DetailButton label="3B" onClick={() => {}} />
+                          <DetailButton label="P" onClick={() => { recordError(0); setExpandedOutcome(null); }} />
+                          <DetailButton label="C" onClick={() => { recordError(0); setExpandedOutcome(null); }} />
+                          <DetailButton label="1B" onClick={() => { recordError(0); setExpandedOutcome(null); }} />
+                          <DetailButton label="2B" onClick={() => { recordError(0); setExpandedOutcome(null); }} />
+                          <DetailButton label="3B" onClick={() => { recordError(0); setExpandedOutcome(null); }} />
                         </div>
                         <div className="grid grid-cols-4 gap-1 mt-1">
-                          <DetailButton label="SS" onClick={() => {}} />
-                          <DetailButton label="LF" onClick={() => {}} />
-                          <DetailButton label="CF" onClick={() => {}} />
-                          <DetailButton label="RF" onClick={() => {}} />
+                          <DetailButton label="SS" onClick={() => { recordError(0); setExpandedOutcome(null); }} />
+                          <DetailButton label="LF" onClick={() => { recordError(0); setExpandedOutcome(null); }} />
+                          <DetailButton label="CF" onClick={() => { recordError(0); setExpandedOutcome(null); }} />
+                          <DetailButton label="RF" onClick={() => { recordError(0); setExpandedOutcome(null); }} />
                         </div>
                       </div>
                     </div>
