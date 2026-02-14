@@ -372,18 +372,18 @@ export function GameTracker() {
   const battingTeam: 'home' | 'away' = gameState.isTop ? 'away' : 'home';
   const fieldingTeam: 'home' | 'away' = gameState.isTop ? 'home' : 'away';
 
-  // Roster data - use navigation state if available, otherwise use defaults with some at-bats
+  // Roster data - use navigation state if available, otherwise use defaults with ZERO stats (new game)
   // Use useState so we can update the roster when substitutions are made
   const [awayTeamPlayers, setAwayTeamPlayers] = useState<Player[]>(navigationState?.awayPlayers || [
-    { name: 'J. MARTINEZ', position: 'SS', battingOrder: 1, stats: { ab: 2, h: 0, r: 0, rbi: 0, bb: 0, k: 1 }, battingHand: 'R' as const },
-    { name: 'A. SMITH', position: 'CF', battingOrder: 2, stats: { ab: 2, h: 1, r: 1, rbi: 0, bb: 0, k: 0 }, battingHand: 'L' as const },
-    { name: 'D. JONES', position: 'LF', battingOrder: 3, stats: { ab: 2, h: 1, r: 0, rbi: 1, bb: 0, k: 0 }, battingHand: 'R' as const },
-    { name: 'B. DAVIS', position: 'RF', battingOrder: 4, stats: { ab: 2, h: 0, r: 0, rbi: 0, bb: 0, k: 2 }, battingHand: 'R' as const },
-    { name: 'T. BROWN', position: '1B', battingOrder: 5, stats: { ab: 2, h: 1, r: 1, rbi: 0, bb: 0, k: 0 }, battingHand: 'L' as const },
-    { name: 'C. WILSON', position: '2B', battingOrder: 6, stats: { ab: 2, h: 0, r: 0, rbi: 1, bb: 0, k: 1 }, battingHand: 'R' as const },
-    { name: 'M. GARCIA', position: '3B', battingOrder: 7, stats: { ab: 1, h: 0, r: 0, rbi: 0, bb: 1, k: 0 }, battingHand: 'S' as const },
-    { name: 'J. MARTIN', position: 'C', battingOrder: 8, stats: { ab: 2, h: 1, r: 0, rbi: 1, bb: 0, k: 0 }, battingHand: 'R' as const },
-    { name: 'R. LOPEZ', position: 'P', battingOrder: 9, stats: { ab: 1, h: 0, r: 0, rbi: 0, bb: 0, k: 1 }, battingHand: 'R' as const },
+    { name: 'J. MARTINEZ', position: 'SS', battingOrder: 1, stats: { ab: 0, h: 0, r: 0, rbi: 0, bb: 0, k: 0 }, battingHand: 'R' as const },
+    { name: 'A. SMITH', position: 'CF', battingOrder: 2, stats: { ab: 0, h: 0, r: 0, rbi: 0, bb: 0, k: 0 }, battingHand: 'L' as const },
+    { name: 'D. JONES', position: 'LF', battingOrder: 3, stats: { ab: 0, h: 0, r: 0, rbi: 0, bb: 0, k: 0 }, battingHand: 'R' as const },
+    { name: 'B. DAVIS', position: 'RF', battingOrder: 4, stats: { ab: 0, h: 0, r: 0, rbi: 0, bb: 0, k: 0 }, battingHand: 'R' as const },
+    { name: 'T. BROWN', position: '1B', battingOrder: 5, stats: { ab: 0, h: 0, r: 0, rbi: 0, bb: 0, k: 0 }, battingHand: 'L' as const },
+    { name: 'C. WILSON', position: '2B', battingOrder: 6, stats: { ab: 0, h: 0, r: 0, rbi: 0, bb: 0, k: 0 }, battingHand: 'R' as const },
+    { name: 'M. GARCIA', position: '3B', battingOrder: 7, stats: { ab: 0, h: 0, r: 0, rbi: 0, bb: 0, k: 0 }, battingHand: 'S' as const },
+    { name: 'J. MARTIN', position: 'C', battingOrder: 8, stats: { ab: 0, h: 0, r: 0, rbi: 0, bb: 0, k: 0 }, battingHand: 'R' as const },
+    { name: 'R. LOPEZ', position: 'P', battingOrder: 9, stats: { ab: 0, h: 0, r: 0, rbi: 0, bb: 0, k: 0 }, battingHand: 'R' as const },
     // Bench players
     { name: 'A. TAYLOR', position: 'C', stats: { ab: 0, h: 0, r: 0, rbi: 0, bb: 0, k: 0 }, battingHand: 'R' as const },
     { name: 'B. ANDERSON', position: 'IF', stats: { ab: 0, h: 0, r: 0, rbi: 0, bb: 0, k: 0 }, battingHand: 'L' as const },
@@ -391,24 +391,24 @@ export function GameTracker() {
   ]);
 
   const awayTeamPitchers = navigationState?.awayPitchers || [
-    { name: 'R. LOPEZ', stats: { ip: '4.2', h: 4, r: 4, er: 4, bb: 2, k: 3, pitches: 67 }, throwingHand: 'R' as const, isStarter: true, isActive: true },
+    { name: 'R. LOPEZ', stats: { ip: '0.0', h: 0, r: 0, er: 0, bb: 0, k: 0, pitches: 0 }, throwingHand: 'R' as const, isStarter: true, isActive: true },
     { name: 'T. JOHNSON', stats: { ip: '0.0', h: 0, r: 0, er: 0, bb: 0, k: 0, pitches: 0 }, throwingHand: 'R' as const },
     { name: 'M. WILLIAMS', stats: { ip: '0.0', h: 0, r: 0, er: 0, bb: 0, k: 0, pitches: 0 }, throwingHand: 'L' as const },
     { name: 'K. DAVIS', stats: { ip: '0.0', h: 0, r: 0, er: 0, bb: 0, k: 0, pitches: 0 }, throwingHand: 'R' as const },
   ];
 
-  // Mock roster data for Home Team (Sox)
+  // Fallback roster data for Home Team (exhibition mode) — ZERO stats for new game
   // Use useState so we can update the roster when substitutions are made
   const [homeTeamPlayers, setHomeTeamPlayers] = useState<Player[]>(navigationState?.homePlayers || [
-    { name: 'P. HERNANDEZ', position: 'CF', battingOrder: 1, stats: { ab: 2, h: 1, r: 1, rbi: 0, bb: 0, k: 0 }, battingHand: 'L' as const },
-    { name: 'K. WASHINGTON', position: 'SS', battingOrder: 2, stats: { ab: 2, h: 1, r: 1, rbi: 1, bb: 0, k: 0 }, battingHand: 'R' as const },
-    { name: 'L. RODRIGUEZ', position: 'LF', battingOrder: 3, stats: { ab: 2, h: 1, r: 1, rbi: 2, bb: 0, k: 1 }, battingHand: 'L' as const },
-    { name: 'M. JACKSON', position: 'RF', battingOrder: 4, stats: { ab: 2, h: 0, r: 0, rbi: 0, bb: 0, k: 1 }, battingHand: 'R' as const },
-    { name: 'N. MARTINEZ', position: '1B', battingOrder: 5, stats: { ab: 2, h: 1, r: 0, rbi: 1, bb: 0, k: 0 }, battingHand: 'R' as const },
-    { name: 'O. THOMPSON', position: '3B', battingOrder: 6, stats: { ab: 1, h: 0, r: 0, rbi: 0, bb: 1, k: 0 }, battingHand: 'S' as const },
-    { name: 'Q. GONZALEZ', position: '2B', battingOrder: 7, stats: { ab: 2, h: 0, r: 0, rbi: 0, bb: 0, k: 2 }, battingHand: 'R' as const },
-    { name: 'R. ADAMS', position: 'C', battingOrder: 8, stats: { ab: 2, h: 0, r: 1, rbi: 0, bb: 0, k: 1 }, battingHand: 'R' as const },
-    { name: 'S. WHITE', position: 'P', battingOrder: 9, stats: { ab: 1, h: 0, r: 0, rbi: 0, bb: 0, k: 1 }, battingHand: 'R' as const },
+    { name: 'P. HERNANDEZ', position: 'CF', battingOrder: 1, stats: { ab: 0, h: 0, r: 0, rbi: 0, bb: 0, k: 0 }, battingHand: 'L' as const },
+    { name: 'K. WASHINGTON', position: 'SS', battingOrder: 2, stats: { ab: 0, h: 0, r: 0, rbi: 0, bb: 0, k: 0 }, battingHand: 'R' as const },
+    { name: 'L. RODRIGUEZ', position: 'LF', battingOrder: 3, stats: { ab: 0, h: 0, r: 0, rbi: 0, bb: 0, k: 0 }, battingHand: 'L' as const },
+    { name: 'M. JACKSON', position: 'RF', battingOrder: 4, stats: { ab: 0, h: 0, r: 0, rbi: 0, bb: 0, k: 0 }, battingHand: 'R' as const },
+    { name: 'N. MARTINEZ', position: '1B', battingOrder: 5, stats: { ab: 0, h: 0, r: 0, rbi: 0, bb: 0, k: 0 }, battingHand: 'R' as const },
+    { name: 'O. THOMPSON', position: '3B', battingOrder: 6, stats: { ab: 0, h: 0, r: 0, rbi: 0, bb: 0, k: 0 }, battingHand: 'S' as const },
+    { name: 'Q. GONZALEZ', position: '2B', battingOrder: 7, stats: { ab: 0, h: 0, r: 0, rbi: 0, bb: 0, k: 0 }, battingHand: 'R' as const },
+    { name: 'R. ADAMS', position: 'C', battingOrder: 8, stats: { ab: 0, h: 0, r: 0, rbi: 0, bb: 0, k: 0 }, battingHand: 'R' as const },
+    { name: 'S. WHITE', position: 'P', battingOrder: 9, stats: { ab: 0, h: 0, r: 0, rbi: 0, bb: 0, k: 0 }, battingHand: 'R' as const },
     // Bench players
     { name: 'E. CLARK', position: 'OF', stats: { ab: 0, h: 0, r: 0, rbi: 0, bb: 0, k: 0 }, battingHand: 'L' as const },
     { name: 'F. MILLER', position: 'IF', stats: { ab: 0, h: 0, r: 0, rbi: 0, bb: 0, k: 0 }, battingHand: 'R' as const },
@@ -416,7 +416,7 @@ export function GameTracker() {
   ]);
 
   const homeTeamPitchers = navigationState?.homePitchers || [
-    { name: 'S. WHITE', stats: { ip: '5.0', h: 3, r: 3, er: 3, bb: 1, k: 4, pitches: 72 }, throwingHand: 'R' as const, isStarter: true, isActive: true },
+    { name: 'S. WHITE', stats: { ip: '0.0', h: 0, r: 0, er: 0, bb: 0, k: 0, pitches: 0 }, throwingHand: 'R' as const, isStarter: true, isActive: true },
     { name: 'U. PARKER', stats: { ip: '0.0', h: 0, r: 0, er: 0, bb: 0, k: 0, pitches: 0 }, throwingHand: 'L' as const },
     { name: 'V. TURNER', stats: { ip: '0.0', h: 0, r: 0, er: 0, bb: 0, k: 0, pitches: 0 }, throwingHand: 'R' as const },
     { name: 'W. COLLINS', stats: { ip: '0.0', h: 0, r: 0, er: 0, bb: 0, k: 0, pitches: 0 }, throwingHand: 'R' as const },
@@ -3574,33 +3574,34 @@ function PlayerCardModal({
   const [isEditingMojo, setIsEditingMojo] = useState(false);
   const [isEditingFitness, setIsEditingFitness] = useState(false);
 
-  // Mock player data - in production this would come from your game state
+  // T0-09: Zero stats for player card — no phantom data
+  // TODO: Wire to actual game state (playerStats/pitcherStats Maps) for live stats
   const batterStats = {
     position: 'SS',
     battingHand: 'R',
     throwingHand: 'R',
-    avg: '.289',
-    hr: 12,
-    rbi: 45,
-    sb: 8,
+    avg: '.000',
+    hr: 0,
+    rbi: 0,
+    sb: 0,
     gameStats: {
-      ab: 2,
+      ab: 0,
       hits: 0,
       bb: 0,
-      so: 1,
+      so: 0,
     }
   };
 
   const pitcherStats = {
     throwingHand: 'R',
-    era: '3.45',
-    wins: 8,
-    losses: 4,
-    so: 87,
+    era: '0.00',
+    wins: 0,
+    losses: 0,
+    so: 0,
     gameStats: {
-      pitches: 67,
-      strikes: 42,
-      balls: 25,
+      pitches: 0,
+      strikes: 0,
+      balls: 0,
       fitness: 'Fresh',
     }
   };
