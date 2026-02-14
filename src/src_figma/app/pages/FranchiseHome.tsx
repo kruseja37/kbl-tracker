@@ -41,6 +41,7 @@ import { getPlayersByTeam } from "../../../utils/leagueBuilderStorage";
 import { getRecentGames } from "../../../utils/gameStorage";
 import { generateGameRecap } from "../engines/narrativeIntegration";
 import type { Player as TeamRosterPlayer, Pitcher as TeamRosterPitcher } from "@/app/components/TeamRoster";
+import { LineupPreview } from "@/app/components/LineupPreview";
 
 // Pitcher positions for separating roster
 const PITCHER_POS = new Set(['SP', 'RP', 'CP', 'P', 'SP/RP', 'TWO-WAY']);
@@ -171,6 +172,22 @@ type TabType = "todays-game" | "team" | "schedule" | "standings" | "news" | "lea
 type SeasonPhase = "regular" | "playoffs" | "offseason";
 
 // ScheduledGame type is imported from useScheduleData hook
+
+// Pre-game lineup review data
+interface PreGameData {
+  awayPlayers: TeamRosterPlayer[];
+  awayPitchers: TeamRosterPitcher[];
+  homePlayers: TeamRosterPlayer[];
+  homePitchers: TeamRosterPitcher[];
+  awayTeamId: string;
+  homeTeamId: string;
+  awayTeamName: string;
+  homeTeamName: string;
+  gameNumber: number;
+  scheduleGameId?: string;
+  selectedAwayStarterIdx: number;
+  selectedHomeStarterIdx: number;
+}
 
 export function FranchiseHome() {
   const navigate = useNavigate();
@@ -2477,6 +2494,7 @@ export function FranchiseHome() {
         nextDate={getNextDate()}
         teams={availableTeams}
       />
+
     </div>
     </FranchiseDataContext.Provider>
   );
@@ -2588,6 +2606,9 @@ function GameDayContent({ scheduleData, currentSeason, onDataRefresh }: GameDayC
   // Toast state
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
+  // T3-01: Pre-game lineup review state
+  const [preGameData, setPreGameData] = useState<PreGameData | null>(null);
+
   // Batch operation state
   const [batchType, setBatchType] = useState<BatchOperationType | null>(null);
   const [batchCurrent, setBatchCurrent] = useState(0);
@@ -2671,6 +2692,7 @@ function GameDayContent({ scheduleData, currentSeason, onDataRefresh }: GameDayC
   const awayTeamId = scheduleData.nextGame?.awayTeamId ?? '';
   const homeTeamId = scheduleData.nextGame?.homeTeamId ?? '';
 
+  // T3-01: Show pre-game lineup review before launching game
   const handlePlayGame = async () => {
     const nextGame = scheduleData.nextGame;
     const away = nextGame?.awayTeamId || awayTeamId;
@@ -2679,36 +2701,72 @@ function GameDayContent({ scheduleData, currentSeason, onDataRefresh }: GameDayC
     const homeName = franchiseData.teamNameMap?.[home] || home;
     const gameNum = nextGame?.gameNumber ?? 1;
 
-    // T0-08: Load real rosters from IndexedDB for both teams
+    // Load real rosters from IndexedDB for both teams
     const [awayRoster, homeRoster] = await Promise.all([
       buildGameTrackerRoster(away),
       buildGameTrackerRoster(home),
     ]);
 
-    navigate(`/game-tracker/franchise-g${gameNum}`, {
+    // Find default starter indices (first SP)
+    const awayStarterIdx = awayRoster.pitchers.findIndex(p => p.isStarter);
+    const homeStarterIdx = homeRoster.pitchers.findIndex(p => p.isStarter);
+
+    setPreGameData({
+      awayPlayers: awayRoster.players,
+      awayPitchers: awayRoster.pitchers,
+      homePlayers: homeRoster.players,
+      homePitchers: homeRoster.pitchers,
+      awayTeamId: away,
+      homeTeamId: home,
+      awayTeamName: awayName.toUpperCase(),
+      homeTeamName: homeName.toUpperCase(),
+      gameNumber: gameNum,
+      scheduleGameId: nextGame?.id,
+      selectedAwayStarterIdx: awayStarterIdx >= 0 ? awayStarterIdx : 0,
+      selectedHomeStarterIdx: homeStarterIdx >= 0 ? homeStarterIdx : 0,
+    });
+    setConfirmAction(null);
+  };
+
+  // T3-01: Launch game with selected starters from pre-game screen
+  const handleLaunchGame = () => {
+    if (!preGameData) return;
+    const { awayPlayers, awayPitchers, homePlayers, homePitchers } = preGameData;
+
+    // Apply selected starter: mark the chosen pitcher as isStarter/isActive
+    const finalAwayPitchers = awayPitchers.map((p, i) => ({
+      ...p,
+      isStarter: i === preGameData.selectedAwayStarterIdx,
+      isActive: i === preGameData.selectedAwayStarterIdx,
+    }));
+    const finalHomePitchers = homePitchers.map((p, i) => ({
+      ...p,
+      isStarter: i === preGameData.selectedHomeStarterIdx,
+      isActive: i === preGameData.selectedHomeStarterIdx,
+    }));
+
+    navigate(`/game-tracker/franchise-g${preGameData.gameNumber}`, {
       state: {
         gameMode: 'franchise' as const,
-        awayTeamId: away,
-        homeTeamId: home,
-        awayTeamName: awayName.toUpperCase(),
-        homeTeamName: homeName.toUpperCase(),
-        awayPlayers: awayRoster.players.length > 0 ? awayRoster.players : undefined,
-        awayPitchers: awayRoster.pitchers.length > 0 ? awayRoster.pitchers : undefined,
-        homePlayers: homeRoster.players.length > 0 ? homeRoster.players : undefined,
-        homePitchers: homeRoster.pitchers.length > 0 ? homeRoster.pitchers : undefined,
-        awayRecord: getTeamRecord(away),
-        homeRecord: getTeamRecord(home),
-        stadiumName: franchiseData.stadiumMap?.[home],
+        awayTeamId: preGameData.awayTeamId,
+        homeTeamId: preGameData.homeTeamId,
+        awayTeamName: preGameData.awayTeamName,
+        homeTeamName: preGameData.homeTeamName,
+        awayPlayers: awayPlayers.length > 0 ? awayPlayers : undefined,
+        awayPitchers: finalAwayPitchers.length > 0 ? finalAwayPitchers : undefined,
+        homePlayers: homePlayers.length > 0 ? homePlayers : undefined,
+        homePitchers: finalHomePitchers.length > 0 ? finalHomePitchers : undefined,
+        awayRecord: getTeamRecord(preGameData.awayTeamId),
+        homeRecord: getTeamRecord(preGameData.homeTeamId),
+        stadiumName: franchiseData.stadiumMap?.[preGameData.homeTeamId],
         franchiseId,
         leagueId: 'sml',
-        // T0-05: Pass schedule game ID so GameTracker can mark it completed
-        scheduleGameId: nextGame?.id,
+        scheduleGameId: preGameData.scheduleGameId,
         seasonNumber: currentSeason,
-        // T0-01: Pass total innings for auto game-end detection
         totalInnings: franchiseData.franchiseConfig?.season?.inningsPerGame ?? 9,
       },
     });
-    setConfirmAction(null);
+    setPreGameData(null);
   };
 
   const handleSimulate = async () => {
@@ -3265,6 +3323,89 @@ function GameDayContent({ scheduleData, currentSeason, onDataRefresh }: GameDayC
         total={batchTotal}
         onComplete={handleBatchComplete}
       />
+
+      {/* T3-01: Pre-game lineup review overlay */}
+      {preGameData && (
+        <div className="fixed inset-0 bg-black/85 flex items-center justify-center z-50 overflow-y-auto p-4">
+          <div className="bg-[#6B9462] border-[6px] border-[#4A6844] p-6 max-w-3xl w-full my-4">
+            {/* Header */}
+            <div className="text-center mb-4">
+              <div className="text-lg text-[#E8E8D8] font-bold mb-1" style={{ textShadow: '2px 2px 0px rgba(0,0,0,0.5)' }}>
+                PRE-GAME LINEUP
+              </div>
+              <div className="text-xs text-[#E8E8D8]/70">
+                Game {preGameData.gameNumber} &bull; {preGameData.awayTeamName} @ {preGameData.homeTeamName}
+              </div>
+            </div>
+
+            {/* Starter Selection */}
+            <div className="grid grid-cols-2 gap-4 mb-4">
+              {/* Away Starter */}
+              <div>
+                <div className="text-[9px] text-[#E8E8D8]/60 mb-1 uppercase tracking-wider">Away Starting Pitcher</div>
+                <select
+                  value={preGameData.selectedAwayStarterIdx}
+                  onChange={(e) => setPreGameData({ ...preGameData, selectedAwayStarterIdx: Number(e.target.value) })}
+                  className="w-full bg-[#3d5240] border-[3px] border-[#2a3a2d] text-[#E8E8D8] text-xs px-2 py-2"
+                >
+                  {preGameData.awayPitchers.map((p, i) => (
+                    <option key={i} value={i}>{p.name} ({p.throwingHand})</option>
+                  ))}
+                </select>
+              </div>
+              {/* Home Starter */}
+              <div>
+                <div className="text-[9px] text-[#E8E8D8]/60 mb-1 uppercase tracking-wider">Home Starting Pitcher</div>
+                <select
+                  value={preGameData.selectedHomeStarterIdx}
+                  onChange={(e) => setPreGameData({ ...preGameData, selectedHomeStarterIdx: Number(e.target.value) })}
+                  className="w-full bg-[#3d5240] border-[3px] border-[#2a3a2d] text-[#E8E8D8] text-xs px-2 py-2"
+                >
+                  {preGameData.homePitchers.map((p, i) => (
+                    <option key={i} value={i}>{p.name} ({p.throwingHand})</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* Lineups Side by Side */}
+            <div className="grid grid-cols-2 gap-4 mb-6">
+              <LineupPreview
+                teamName={preGameData.awayTeamName}
+                lineup={preGameData.awayPlayers.filter(p => p.battingOrder != null)}
+                bench={preGameData.awayPlayers.filter(p => p.battingOrder == null)}
+                startingPitcher={preGameData.awayPitchers[preGameData.selectedAwayStarterIdx]}
+                teamColor="#E8E8D8"
+                isAway={true}
+              />
+              <LineupPreview
+                teamName={preGameData.homeTeamName}
+                lineup={preGameData.homePlayers.filter(p => p.battingOrder != null)}
+                bench={preGameData.homePlayers.filter(p => p.battingOrder == null)}
+                startingPitcher={preGameData.homePitchers[preGameData.selectedHomeStarterIdx]}
+                teamColor="#E8E8D8"
+                isAway={false}
+              />
+            </div>
+
+            {/* Actions */}
+            <div className="flex gap-3">
+              <button
+                onClick={() => setPreGameData(null)}
+                className="flex-1 bg-[#4A6844] border-[5px] border-[#5A8352] py-3 text-sm text-[#E8E8D8] hover:bg-[#3F5A3A] active:scale-95 transition-transform shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)]"
+              >
+                BACK
+              </button>
+              <button
+                onClick={handleLaunchGame}
+                className="flex-[2] bg-[#C4A853] border-[5px] border-[#8B7635] py-3 text-sm text-[#1a3020] font-bold hover:bg-[#D4B863] active:scale-95 transition-transform shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)]"
+              >
+                START GAME
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
