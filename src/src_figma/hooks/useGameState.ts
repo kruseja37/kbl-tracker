@@ -217,6 +217,9 @@ export interface UseGameStateReturn {
     inning: number;
     atBatNumber: number;
   };
+  // T1-02/03/04: Runner names from tracker (replaces fragile runnerNames state)
+  getBaseRunnerNames: () => { first?: string; second?: string; third?: string };
+  runnerIdentityVersion: number;
 
   // Loading/persistence
   isLoading: boolean;
@@ -1020,6 +1023,10 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
 
   // Fame events tracked during game (per SPECIAL_EVENTS_SPEC.md)
   const [fameEvents, setFameEvents] = useState<FameEventRecord[]>([]);
+
+  // T1-02/03/04: Counter that increments when runner identity changes (pinch runner, etc.)
+  // Used as a dependency trigger for the runnerNames sync effect in GameTracker.
+  const [runnerIdentityVersion, setRunnerIdentityVersion] = useState(0);
 
   // Substitution log for game history
   const [substitutionLog, setSubstitutionLog] = useState<Array<{
@@ -2877,6 +2884,23 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       return newStats;
     });
 
+    // T1-02 FIX: Update runner tracker when pinch runner replaces a baserunner.
+    // Without this, the tracker still has the old runner's ID, so scored runs and
+    // SB/CS get credited to the replaced player instead of the pinch runner.
+    if (subType === 'pinch_run' && options?.base) {
+      const tracker = runnerTrackerRef.current;
+      const trackerBase = options.base; // Already '1B' | '2B' | '3B'
+      const oldRunner = tracker.runners.find(r => r.currentBase === trackerBase);
+      if (oldRunner) {
+        // Swap runner identity while preserving responsible pitcher
+        oldRunner.runnerId = benchPlayerId;
+        oldRunner.runnerName = benchPlayerName || benchPlayerId;
+        console.log(`[useGameState] T1-02: Pinch runner ${benchPlayerName} replaced ${lineupPlayerName} on ${trackerBase}`);
+      }
+      // T1-02: Increment version counter so the runnerNames sync effect fires in GameTracker.
+      setRunnerIdentityVersion(v => v + 1);
+    }
+
     console.log(`[useGameState] Substitution (${subType}): ${benchPlayerName || benchPlayerId} replaces ${lineupPlayerName || lineupPlayerId} in inning ${gameState.inning}`);
     return { success: true };
   }, [gameState.inning, gameState.isTop, gameState.currentBatterId]);
@@ -3633,6 +3657,20 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     };
   }, []);
 
+  // T1-02/03/04: Get runner names from the tracker (single source of truth)
+  // This replaces the fragile runnerNames state in GameTracker that fell out of sync
+  // with SB, WP, pinch runner, and thrown-out-advancing events.
+  const getBaseRunnerNames = useCallback((): { first?: string; second?: string; third?: string } => {
+    const tracker = runnerTrackerRef.current;
+    const result: { first?: string; second?: string; third?: string } = {};
+    for (const runner of tracker.runners) {
+      if (runner.currentBase === '1B') result.first = runner.runnerName;
+      else if (runner.currentBase === '2B') result.second = runner.runnerName;
+      else if (runner.currentBase === '3B') result.third = runner.runnerName;
+    }
+    return result;
+  }, []);
+
   // Restore state from undo snapshot (Phase 7 - Undo System)
   // CRIT-01 fix: Now also restores playerStats and pitcherStats Maps
   // Runner tracker undo fix: Also restores runnerTrackerRef for correct ER attribution
@@ -3709,6 +3747,8 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     loadExistingGame,
     restoreState,
     getRunnerTrackerSnapshot,
+    getBaseRunnerNames,
+    runnerIdentityVersion,
     isLoading,
     isSaving,
     lastSavedAt,

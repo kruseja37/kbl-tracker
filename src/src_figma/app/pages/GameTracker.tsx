@@ -172,6 +172,8 @@ export function GameTracker() {
     loadExistingGame,
     restoreState,
     getRunnerTrackerSnapshot,
+    getBaseRunnerNames,
+    runnerIdentityVersion,
     isLoading,
     isSaving,
     // T0-01: Auto game-end detection
@@ -274,6 +276,23 @@ export function GameTracker() {
     second?: string;
     third?: string;
   }>({});
+
+  // T1-02/03/04 FIX: Sync runnerNames from the runner tracker whenever bases change.
+  // The tracker is the single source of truth for runner identity (handles SB, WP, PB,
+  // pinch runners, thrown-out-advancing, etc.). Without this sync, runnerNames would
+  // fall out of sync and show "R1"/"R2"/"R3" or ghost runners.
+  useEffect(() => {
+    const trackerNames = getBaseRunnerNames();
+    setRunnerNames(prev => {
+      // Only update if different to avoid infinite render loops
+      if (prev.first !== trackerNames.first ||
+          prev.second !== trackerNames.second ||
+          prev.third !== trackerNames.third) {
+        return trackerNames;
+      }
+      return prev;
+    });
+  }, [gameState.bases.first, gameState.bases.second, gameState.bases.third, runnerIdentityVersion, getBaseRunnerNames]);
 
   // MAJ-03: Detection system state — pending prompts for user confirmation
   const [pendingDetections, setPendingDetections] = useState<UIDetectionResult[]>([]);
