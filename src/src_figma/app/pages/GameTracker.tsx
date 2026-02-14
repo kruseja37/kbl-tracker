@@ -2256,6 +2256,8 @@ export function GameTracker() {
             homeTeamName={homeTeamName.toUpperCase()}
             awayRuns={scoreboard.away.runs}
             homeRuns={scoreboard.home.runs}
+            awayErrors={scoreboard.away.errors}
+            homeErrors={scoreboard.home.errors}
             inning={gameState.inning}
             isTop={gameState.isTop}
             outs={gameState.outs}

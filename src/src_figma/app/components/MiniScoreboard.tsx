@@ -6,6 +6,8 @@ interface MiniScoreboardProps {
   homeTeamName: string;
   awayRuns: number;
   homeRuns: number;
+  awayErrors: number;
+  homeErrors: number;
   inning: number;
   isTop: boolean;
   outs: number;
@@ -22,6 +24,8 @@ export const MiniScoreboard: React.FC<MiniScoreboardProps> = ({
   homeTeamName,
   awayRuns,
   homeRuns,
+  awayErrors,
+  homeErrors,
   inning,
   isTop,
   outs,
@@ -39,6 +43,9 @@ export const MiniScoreboard: React.FC<MiniScoreboardProps> = ({
             <div className="bg-[#3d5240] border-2 border-[#2a3a2d] px-3 py-0.5 min-w-[36px] text-center">
               <span className="text-[#E8E8D8] text-lg font-bold">{awayRuns}</span>
             </div>
+            {awayErrors > 0 && (
+              <span className="text-[#DC3545] text-xs font-bold">E:{awayErrors}</span>
+            )}
           </div>
 
           {/* Divider */}
@@ -75,6 +82,9 @@ export const MiniScoreboard: React.FC<MiniScoreboardProps> = ({
 
           {/* Home Team */}
           <div className="flex items-center gap-2">
+            {homeErrors > 0 && (
+              <span className="text-[#DC3545] text-xs font-bold">E:{homeErrors}</span>
+            )}
             <div className="bg-[#3d5240] border-2 border-[#2a3a2d] px-3 py-0.5 min-w-[36px] text-center">
               <span className="text-[#E8E8D8] text-lg font-bold">{homeRuns}</span>
             </div>
