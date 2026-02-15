@@ -400,3 +400,5 @@ Make the project easily understandable for future AI agent sessions that have ne
 - src/: 8.9MB, all active code verified
 - CLAUDE.md: 187 lines, accurate, concise
 - All 3 agent-facing docs (CURRENT_STATE, SESSION_LOG, CLAUDE.md) current and consistent
+
+- **2026-02-15:** Phase 1 GameTracker bugs (exit-type double entry, lineup modal access, special-play logging, stadium/HR data) resolved; `fake-indexeddb` added for season/franchise tests, PostGameSummary/useGameState imports aligned, and `npm test` confirms 134 suites (5,653 tests) pass. Phase 2 wiring validation remains the next active effort.
