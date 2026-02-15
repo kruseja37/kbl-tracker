@@ -235,6 +235,9 @@ export interface CompletedGameRecord {
   finalScore: { away: number; home: number };
   innings: number;
   fameEvents: PersistedGameState['fameEvents'];
+  playerStats: PersistedGameState['playerStats'];
+  pitcherGameStats: PersistedGameState['pitcherGameStats'];
+  inningScores?: { away: number; home: number }[];
 }
 
 /**
@@ -243,6 +246,7 @@ export interface CompletedGameRecord {
 export async function archiveCompletedGame(
   gameState: PersistedGameState,
   finalScore: { away: number; home: number },
+  inningScores: { away: number; home: number }[] = [],
   seasonId?: string
 ): Promise<void> {
   const db = await initDatabase();
@@ -258,6 +262,9 @@ export async function archiveCompletedGame(
     finalScore,
     innings: gameState.inning,
     fameEvents: gameState.fameEvents,
+    playerStats: gameState.playerStats,
+    pitcherGameStats: gameState.pitcherGameStats,
+    inningScores,
   };
 
   return new Promise((resolve, reject) => {
@@ -300,6 +307,9 @@ export async function archiveBatchGameResult(params: {
     finalScore: { away: params.awayScore, home: params.homeScore },
     innings: 9,
     fameEvents: [],
+    playerStats: {},
+    pitcherGameStats: [],
+    inningScores: [],
   };
 
   return new Promise((resolve, reject) => {
@@ -338,6 +348,25 @@ export async function getRecentGames(limit: number = 10): Promise<CompletedGameR
       } else {
         resolve(results);
       }
+    };
+  });
+}
+
+export async function getCompletedGameById(gameId: string): Promise<CompletedGameRecord | null> {
+  const db = await initDatabase();
+
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(STORES.COMPLETED_GAMES, 'readonly');
+    const store = transaction.objectStore(STORES.COMPLETED_GAMES);
+    const request = store.get(gameId);
+
+    request.onerror = () => {
+      console.error('Failed to load completed game:', request.error);
+      reject(request.error);
+    };
+
+    request.onsuccess = () => {
+      resolve(request.result || null);
     };
   });
 }

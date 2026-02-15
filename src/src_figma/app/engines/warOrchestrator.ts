@@ -39,7 +39,7 @@ import {
   getAllFieldingStats,
   updateBattingStats,
   updatePitchingStats,
-} from '../../utils/seasonStorage';
+} from '../../../utils/seasonStorage';
 
 // ============================================
 // TYPES

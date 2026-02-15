@@ -17,6 +17,12 @@ import type { FitnessState } from '../engines/fitnessEngine';
 
 // ============================================
 // FAME AUTO-DETECTION HOOK
+const DEFAULT_INNINGS_PER_GAME = 9;
+
+export const calculateMadduxThreshold = (inningsPerGame: number = DEFAULT_INNINGS_PER_GAME): number => (
+  Math.floor(inningsPerGame * 9.44)
+);
+
 // Per FAN_HAPPINESS_SPEC.md Section 4
 // ============================================
 
@@ -72,6 +78,7 @@ interface GameContext {
   bases: Bases;
   isGameOver: boolean;
   scheduledInnings: number;
+  inningsPerGame?: number;
   maxDeficitOvercome: number;  // For comeback detection
   lastHRBatterId: string | null;  // For back-to-back HR detection
   consecutiveHRCount: number;  // For B2B2B HR detection
@@ -954,8 +961,7 @@ export function useFameDetection({
   // ============================================
   const detectMaddux = useCallback((
     context: GameContext,
-    pitcherStats: PlayerStats,
-    pitchThreshold: number = 100  // Default MLB threshold
+    pitcherStats: PlayerStats
   ): DetectionResult | null => {
     if (!settings.enabled) return null;
     if (!context.isGameOver) return null;
@@ -968,8 +974,10 @@ export function useFameDetection({
     // Must be a shutout
     if (pitcherStats.runsAllowed > 0) return null;
 
-    // Must be under pitch threshold
-    if (pitcherStats.pitchCount >= pitchThreshold) return null;
+    // Must be under scaled Maddux threshold (IDs 6 & 20: Math.floor(innings × 9.44))
+    const inningsForThreshold = context.inningsPerGame ?? context.scheduledInnings ?? DEFAULT_INNINGS_PER_GAME;
+    const madduxThreshold = calculateMadduxThreshold(inningsForThreshold);
+    if (pitcherStats.pitchCount >= madduxThreshold) return null;
 
     const key = createEventKey('MADDUX', pitcherStats.playerId, 0);
     if (isAlreadyDetected(key)) return null;
@@ -1547,8 +1555,7 @@ export function useFameDetection({
   // ============================================
   const checkEndGameFame = useCallback((
     context: GameContext,
-    allPitchers: PlayerStats[],
-    pitchThreshold: number = 100  // For Maddux detection
+    allPitchers: PlayerStats[]
   ): DetectionResult[] => {
     if (!settings.enabled) return [];
 
@@ -1566,7 +1573,7 @@ export function useFameDetection({
 
       // Check for Maddux (CGSO under pitch threshold) - only if not no-hitter
       if (!noHitter) {
-        const maddux = detectMaddux(context, pitcher, pitchThreshold);
+        const maddux = detectMaddux(context, pitcher);
         if (maddux) {
           detectedResults.push(maddux);
           continue; // Maddux implies CGSO, don't double credit

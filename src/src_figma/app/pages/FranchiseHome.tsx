@@ -38,7 +38,7 @@ import { generateNewSeasonSchedule } from "../../../utils/franchiseInitializer";
 import { executeSeasonTransition } from "../../../engines/seasonTransitionEngine";
 import { updateFranchiseMetadata } from "../../../utils/franchiseManager";
 import { getPlayersByTeam } from "../../../utils/leagueBuilderStorage";
-import { getRecentGames } from "../../../utils/gameStorage";
+import { getRecentGames } from "../../utils/gameStorage";
 import { generateGameRecap } from "../engines/narrativeIntegration";
 import type { Player as TeamRosterPlayer, Pitcher as TeamRosterPitcher } from "@/app/components/TeamRoster";
 import { LineupPreview } from "@/app/components/LineupPreview";

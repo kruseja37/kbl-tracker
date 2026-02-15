@@ -39,10 +39,15 @@ export async function processCompletedGame(
   const aggregation = await aggregateGameToSeason(gameState, options);
 
   // Step 2: Archive to completedGames store
-  await archiveCompletedGame(gameState, {
-    away: gameState.awayScore,
-    home: gameState.homeScore,
-  }, options?.seasonId);
+  await archiveCompletedGame(
+    gameState,
+    {
+      away: gameState.awayScore,
+      home: gameState.homeScore,
+    },
+    [],
+    options?.seasonId
+  );
 
   return { aggregation };
 }

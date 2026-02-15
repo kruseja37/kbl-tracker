@@ -1,0 +1,34 @@
+{
+  "source": "Billy Yank's Guide to Super Mega Baseball, 3rd Edition",
+  "notes": [
+    "Parks have variable dimensions — these are representative measurements",
+    "When center field measurement wasn't available, closest available measurement used",
+    "Some parks have quirks not captured here (Lafayette Corner has frequent wall height variations, Stade Royale has unusual outfield shape)",
+    "Wall heights: low ≈ 4-6ft, medium ≈ 8-10ft, high ≈ 12-16ft (estimated from in-game visuals)"
+  ],
+  "parks": [
+    { "name": "Apple Field", "lf": 337, "lfWall": "medium", "cf": 419, "cfWall": "medium", "rf": 347, "rfWall": "medium" },
+    { "name": "Sakura Hills", "lf": 358, "lfWall": "medium", "cf": 406, "cfWall": "medium", "rf": 358, "rfWall": "medium" },
+    { "name": "Colonial Plaza", "lf": 347, "lfWall": "low", "cf": 410, "cfWall": "medium", "rf": 347, "rfWall": "low" },
+    { "name": "Swagger Center", "lf": 335, "lfWall": "high", "cf": 387, "cfWall": "medium", "rf": 298, "rfWall": "high" },
+    { "name": "Motor Yard", "lf": 348, "lfWall": "medium", "cf": 414, "cfWall": "medium", "rf": 349, "rfWall": "medium" },
+    { "name": "Bingata Bowl", "lf": 326, "lfWall": "medium", "cf": 419, "cfWall": "medium", "rf": 326, "rfWall": "medium" },
+    { "name": "Emerald Diamond", "lf": 315, "lfWall": "high", "cf": 413, "cfWall": "medium", "rf": 345, "rfWall": "medium" },
+    { "name": "Shaka Sports Turf", "lf": 377, "lfWall": "medium", "cf": 433, "cfWall": "medium", "rf": 377, "rfWall": "medium" },
+    { "name": "Red Rock Park", "lf": 341, "lfWall": "medium", "cf": 418, "cfWall": "low", "rf": 327, "rfWall": "low" },
+    { "name": "El Viejo Stadium", "lf": 351, "lfWall": "medium", "cf": 419, "cfWall": "medium", "rf": 339, "rfWall": "medium" },
+    { "name": "Founder's Field", "lf": 360, "lfWall": "low", "cf": 428, "cfWall": "medium", "rf": 328, "rfWall": "medium" },
+    { "name": "Big Sky Park", "lf": 314, "lfWall": "high", "cf": 397, "cfWall": "medium", "rf": 357, "rfWall": "medium" },
+    { "name": "Lafayette Corner", "lf": 328, "lfWall": "medium", "cf": 400, "cfWall": "high", "rf": 335, "rfWall": "medium" },
+    { "name": "Tiger Den", "lf": 314, "lfWall": "high", "cf": 373, "cfWall": "medium", "rf": 314, "rfWall": "high" },
+    { "name": "Parque Jardineros", "lf": 370, "lfWall": "medium", "cf": 408, "cfWall": "low", "rf": 370, "rfWall": "medium" },
+    { "name": "Stade Royale", "lf": 333, "lfWall": "medium", "cf": 429, "cfWall": "medium", "rf": 321, "rfWall": "low" },
+    { "name": "Battery Bay", "lf": 358, "lfWall": "medium", "cf": 403, "cfWall": "medium", "rf": 358, "rfWall": "medium" },
+    { "name": "The Corral", "lf": 324, "lfWall": "medium", "cf": 395, "cfWall": "low", "rf": 377, "rfWall": "medium" },
+    { "name": "Golden Field", "lf": 313, "lfWall": "medium", "cf": 402, "cfWall": "medium", "rf": 313, "rfWall": "medium" },
+    { "name": "Whacker's Wheel", "lf": 322, "lfWall": "medium", "cf": 408, "cfWall": "medium", "rf": 321, "rfWall": "medium" },
+    { "name": "Peril Point", "lf": 371, "lfWall": "low", "cf": 408, "cfWall": "low", "rf": 331, "rfWall": "medium" },
+    { "name": "Ciudad de Colores", "lf": 331, "lfWall": "medium", "cf": 400, "cfWall": "medium", "rf": 331, "rfWall": "medium" },
+    { "name": "Castillo Arena", "lf": 357, "lfWall": "medium", "cf": 370, "cfWall": "medium", "rf": 341, "rfWall": "medium" }
+  ]
+}

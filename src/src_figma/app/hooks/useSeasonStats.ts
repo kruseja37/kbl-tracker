@@ -19,7 +19,7 @@ import {
   calcOPS,
   calcERA,
   formatIP,
-} from '../../utils/seasonStorage';
+} from '../../../utils/seasonStorage';
 
 // ============================================
 // TYPES
