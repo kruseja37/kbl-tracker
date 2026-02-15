@@ -2254,6 +2254,8 @@ The KBL XHD Tracker is a comprehensive stat-tracking application for Super Mega 
 
 **Game Count Options:** 24, 32, 40, 48, 56, 81, 100, 162
 
+**Innings Per Game Options:** 6 (default, SMB4 pacing) and 9 (traditional full game) are both supported.
+
 ### Step 2: Team Selection
 
 - Select teams from master database (toggle on/off)

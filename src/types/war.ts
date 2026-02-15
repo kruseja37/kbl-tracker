@@ -10,15 +10,19 @@
 // ============================================
 
 /**
- * SMB4 season length configurations
+ * Supported season length options (games per team) from the master spec.
  */
-export type SeasonLength = 'mini' | 'short' | 'standard' | 'long';
+export type SeasonLength = 24 | 32 | 40 | 48 | 56 | 81 | 100 | 162;
 
 export const SEASON_GAMES: Record<SeasonLength, number> = {
-  mini: 16,
-  short: 20,
-  standard: 32,
-  long: 48,
+  24: 24,
+  32: 32,
+  40: 40,
+  48: 48,
+  56: 56,
+  81: 81,
+  100: 100,
+  162: 162,
 };
 
 /**
