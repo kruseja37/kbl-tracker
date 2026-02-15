@@ -599,6 +599,7 @@ export function generateSyntheticGame(
     homeTeamId: homeRoster.teamId,
     awayTeamName: awayRoster.teamName,
     homeTeamName: homeRoster.teamName,
+    seasonNumber: 1,
     playerStats,
     pitcherGameStats,
     fameEvents: [],

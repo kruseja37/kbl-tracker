@@ -21,7 +21,8 @@ import {
   type GameHeader,
   type FameEventRecord,
 } from '../../utils/eventLog';
-import { aggregateGameToSeason } from '../../utils/seasonAggregator';
+import type { GameAggregationOptions } from '../../utils/seasonAggregator';
+import { processCompletedGame } from '../../utils/processCompletedGame';
 import { archiveCompletedGame, type PersistedGameState } from '../utils/gameStorage';
 import type { AtBatResult, HalfInning, LineupState, LineupPlayer, BenchPlayer, Position } from '../../types/game';
 import { validateSubstitution } from '../../types/game';
@@ -66,6 +67,15 @@ export interface GameState {
   awayTeamName: string;
   homeTeamName: string;
   stadiumName?: string | null;
+  seasonNumber: number;
+}
+
+export interface EndGameOptions {
+  activityLog?: string[];
+  seasonId?: string;
+  franchiseId?: string;
+  currentSeason?: number;
+  currentGame?: number;
 }
 
 export interface ScoreboardState {
@@ -184,7 +194,7 @@ export interface UseGameStateReturn {
   advanceCount: (type: 'ball' | 'strike' | 'foul') => void;
   resetCount: () => void;
   endInning: () => void;
-  endGame: () => Promise<void>;
+  endGame: (options?: EndGameOptions) => Promise<void>;
 
   // Pitch count prompts (per PITCH_COUNT_TRACKING_SPEC.md)
   pitchCountPrompt: PitchCountPrompt | null;
@@ -260,6 +270,15 @@ export interface GameInitConfig {
   // T0-01: Number of regulation innings (default 9, SMB4 franchise often 6 or 7)
   totalInnings?: number;
   stadiumName?: string | null;
+  seasonNumber: number;
+}
+
+function parseSeasonNumberFromId(seasonId: string): number {
+  if (!seasonId) return 1;
+  const match = /-season-(\d+)/i.exec(seasonId);
+  if (!match) return 1;
+  const parsed = Number(match[1]);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 1;
 }
 
 // ============================================
@@ -1053,6 +1072,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     awayTeamName: '',
     homeTeamName: '',
     stadiumName: null,
+    seasonNumber: 1,
   });
 
   const [scoreboard, setScoreboard] = useState<ScoreboardState>({
@@ -1258,6 +1278,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       awayTeamName: config.awayTeamName,
       homeTeamName: config.homeTeamName,
       stadiumName: config.stadiumName || null,
+      seasonNumber: config.seasonNumber,
     });
 
     setAwayBatterIndex(0);
@@ -1301,6 +1322,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
           awayTeamName: inProgressGame.awayTeamName,
           homeTeamName: inProgressGame.homeTeamName,
           stadiumName: inProgressGame.stadiumName ?? null,
+          seasonNumber: parseSeasonNumberFromId(inProgressGame.seasonId),
         });
         setAtBatSequence(events.length);
         seasonIdRef.current = inProgressGame.seasonId;
@@ -3299,7 +3321,8 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
   endInningRef.current = endInning;
 
   // Internal function to complete game after pitch counts confirmed
-  const completeGameInternal = useCallback(async () => {
+  const completeGameInternal = useCallback(async (opts?: EndGameOptions) => {
+    const activityLog = opts?.activityLog ?? [];
     setIsSaving(true);
 
     // Mark game as complete in event log
@@ -3450,6 +3473,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       homeTeamId: gameState.homeTeamId,
       awayTeamName: gameState.awayTeamName,
       homeTeamName: gameState.homeTeamName,
+      seasonNumber: gameState.seasonNumber,
       stadiumName: gameState.stadiumName ?? null,
       playerStats: playerStatsRecord,
       pitcherGameStats: pitcherGameStatsArray,
@@ -3473,7 +3497,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       inningStrikeouts: 0,
       maxDeficitAway: 0,
       maxDeficitHome: 0,
-      activityLog: [],
+      activityLog: activityLog.slice(-20),
     };
 
     // T1-08 FIX: Check if already aggregated (idempotency guard)
@@ -3481,11 +3505,18 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     const header = await getGameHeader(gameState.gameId);
     const alreadyAggregated = header?.aggregated === true;
 
-    const seasonId = seasonIdRef.current || 'season-1';
+    const targetSeasonId = opts?.seasonId ?? seasonIdRef.current ?? 'season-1';
+    const currentSeasonNumber = opts?.currentSeason ?? gameState.seasonNumber;
+    const aggregationOptions: GameAggregationOptions = {
+      seasonId: targetSeasonId,
+      detectMilestones: true,
+      franchiseId: opts?.franchiseId,
+      currentGame: opts?.currentGame,
+      currentSeason: currentSeasonNumber,
+    };
+
     if (!alreadyAggregated) {
-      // Aggregate game stats to season totals
-      await aggregateGameToSeason(persistedState, { seasonId });
-      // Mark as aggregated after successful aggregation
+      await processCompletedGame(persistedState, aggregationOptions);
       await markGameAggregated(gameState.gameId);
       console.log('[T1-08] Stats aggregated to season (first call)');
     } else {
@@ -3530,7 +3561,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         persistedState,
         { away: gameState.awayScore, home: gameState.homeScore },
         inningScores,
-        seasonId
+        targetSeasonId
       );
     }
 
@@ -3538,9 +3569,19 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     setLastSavedAt(Date.now());
   }, [gameState, playerStats, pitcherStats, fameEvents, atBatSequence, scoreboard]);
 
-  const endGame = useCallback(async () => {
+  const endGame = useCallback(async (options?: EndGameOptions) => {
     // Archive game FIRST so PostGameSummary can load it (EXH-011 fix)
     // Build persisted state for archiving — include player name and team
+    const activityLog = options?.activityLog ?? [];
+    const seasonIdValue = options?.seasonId ?? seasonIdRef.current ?? 'season-1';
+    const currentSeasonNumber = options?.currentSeason ?? gameState.seasonNumber;
+    const endGameOptions: EndGameOptions = {
+      activityLog,
+      seasonId: seasonIdValue,
+      franchiseId: options?.franchiseId,
+      currentSeason: currentSeasonNumber,
+      currentGame: options?.currentGame,
+    };
     const awayPlayerIdsForEndGame = new Set(awayLineupRef.current.map(p => p.playerId));
     const playerNameLookupForEndGame = new Map<string, string>();
     for (const p of [...awayLineupRef.current, ...homeLineupRef.current]) {
@@ -3663,6 +3704,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       homeTeamId: gameState.homeTeamId,
       awayTeamName: gameState.awayTeamName,
       homeTeamName: gameState.homeTeamName,
+      seasonNumber: currentSeasonNumber,
       stadiumName: gameState.stadiumName ?? null,
       playerStats: playerStatsRecord,
       pitcherGameStats: pitcherGameStatsArray,
@@ -3688,7 +3730,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       inningStrikeouts: 0,
       maxDeficitAway: 0,
       maxDeficitHome: 0,
-      activityLog: [],
+      activityLog: activityLog.slice(-20),
     };
 
     // Archive game for post-game summary
@@ -3696,7 +3738,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       away: inn.away ?? 0,
       home: inn.home ?? 0,
     }));
-    const seasonId = seasonIdRef.current || 'season-1';
+    const seasonId = seasonIdValue;
     await archiveCompletedGame(
       persistedState,
       { away: gameState.awayScore, home: gameState.homeScore },
@@ -3719,14 +3761,14 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     });
 
     // Store the pending action (for season aggregation, etc.)
-    pendingActionRef.current = completeGameInternal;
+    pendingActionRef.current = () => completeGameInternal(endGameOptions);
 
     // T0-05 FIX: Call completeGameInternal directly instead of deferring to pitch count prompt.
     // The GameTracker navigates to PostGameSummary immediately after endGame() returns,
     // which unmounts the component before the pitch count prompt can render/fire.
-    // This ensures aggregateGameToSeason, markGameAggregated, and archiveCompletedGame run.
+    // This ensures processCompletedGame, markGameAggregated, and archiveCompletedGame run.
     try {
-      await completeGameInternal();
+      await completeGameInternal(endGameOptions);
       console.log('[endGame] T0-05: completeGameInternal executed — stats aggregated');
     } catch (err) {
       console.error('[endGame] T0-05: completeGameInternal failed:', err);

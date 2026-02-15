@@ -101,6 +101,7 @@ export function GameTracker() {
     playoffSeriesId?: string;
     playoffGameNumber?: number;
     franchiseId?: string;
+    seasonId?: string;
     // T0-05: Schedule persistence context
     scheduleGameId?: string;
     seasonNumber?: number;
@@ -214,6 +215,11 @@ export function GameTracker() {
   const scoreboardStadiumLabel =
     selectedStadium || getTeamColors(homeTeamId).stadium || 'BALLPARK';
 
+  const [activityLog, setActivityLog] = useState<string[]>([]);
+  const pushActivityLog = useCallback((entry: string) => {
+    setActivityLog(prev => [entry, ...prev].slice(0, 20));
+  }, []);
+
   // Player state management (Mojo, Fitness, Clutch)
   const playerStateHook = usePlayerState({
     gameId: gameId || 'demo-game',
@@ -225,6 +231,19 @@ export function GameTracker() {
     gameId: gameId || 'demo-game',
     isPlayoffs: isPlayoffGame,
   });
+
+  const lastFameKeyRef = useRef<string>('');
+  useEffect(() => {
+    const event = fameTrackingHook.lastEvent;
+    if (!event) {
+      lastFameKeyRef.current = '';
+      return;
+    }
+    const key = `${event.label}-${event.finalFame}-${event.icon}`;
+    if (lastFameKeyRef.current === key) return;
+    lastFameKeyRef.current = key;
+    pushActivityLog(`✨ ${event.label} (${formatFameValue(event.finalFame)} Fame)`);
+  }, [fameTrackingHook.lastEvent, formatFameValue, pushActivityLog]);
 
   // MAJ-02: Fan morale tracking — one hook per team for dual-team franchise support
   // In exhibition mode these are instantiated but never called (no morale in exhibition)
@@ -673,6 +692,7 @@ export function GameTracker() {
         homeStartingPitcherName: homePitcher?.name || 'Pitcher',
         // T0-01: Pass total innings for auto game-end detection (default 9 for exhibition)
         totalInnings: navigationState?.totalInnings || 9,
+        seasonNumber: navigationState?.seasonNumber || 1,
         stadiumName: selectedStadium || undefined,
       });
 
@@ -1310,13 +1330,14 @@ export function GameTracker() {
             atBatSequence: Date.now(), // Unique per at-bat
           };
           const fieldingEvents = extractFieldingEvents(playData, fieldingContext);
-          for (const fe of fieldingEvents) {
-            await logFieldingEvent(fe);
-          }
-          if (fieldingEvents.length > 0) {
-            console.log(`[Fielding] Logged ${fieldingEvents.length} fielding event(s) for ${playData.type}`);
-          }
-        } catch (err) {
+        for (const fe of fieldingEvents) {
+          await logFieldingEvent(fe);
+        }
+        if (fieldingEvents.length > 0) {
+          console.log(`[Fielding] Logged ${fieldingEvents.length} fielding event(s) for ${playData.type}`);
+          pushActivityLog(`[Fielding] Logged ${fieldingEvents.length} event(s) for ${playData.type}`);
+        }
+      } catch (err) {
           console.error('[Fielding] Failed to log fielding events:', err);
         }
       }
@@ -1715,6 +1736,7 @@ export function GameTracker() {
           }
           if (fieldingEvents.length > 0) {
             console.log(`[Fielding] Logged ${fieldingEvents.length} fielding event(s) via fielder credit path`);
+            pushActivityLog(`[Fielding] Logged ${fieldingEvents.length} event(s) via fielder credit path`);
           }
         } catch (err) {
           console.error('[Fielding] Failed to log fielding events:', err);
@@ -2129,7 +2151,20 @@ export function GameTracker() {
       console.warn('[mWAR] Persistence error (non-blocking):', mwarError);
     }
 
-    await hookEndGame();
+    const computedSeasonId = navigationState?.seasonId
+      ?? (navigationState?.franchiseId
+        ? `${navigationState.franchiseId}-season-${navigationState?.seasonNumber ?? 1}`
+        : `season-${navigationState?.seasonNumber ?? 1}`);
+    pushActivityLog(
+      `[Game End] ${homeTeamName} ${gameState.homeScore} - ${awayTeamName} ${gameState.awayScore} (Inning ${gameState.inning})`
+    );
+    const endGameOptions = {
+      activityLog,
+      seasonId: computedSeasonId,
+      franchiseId: navigationState?.franchiseId,
+      currentSeason: navigationState?.seasonNumber ?? 1,
+    };
+    await hookEndGame(endGameOptions);
 
     // T0-05 FIX: Mark the schedule game as COMPLETED (franchise mode only)
     // The SIM path does this in FranchiseHome.tsx, but the PLAY path was missing it entirely.
@@ -2160,7 +2195,7 @@ export function GameTracker() {
         awayNarrative,
       }
     });
-  }, [hookEndGame, navigate, gameId, navigationState?.gameMode, gameMode, gameState, pitcherStats, fameTrackingHook, homeFanMorale, awayFanMorale, homeTeamName, awayTeamName, mwarHook, homeManagerId, homeTeamId]);
+  }, [hookEndGame, navigate, gameId, navigationState?.gameMode, gameMode, gameState, pitcherStats, fameTrackingHook, homeFanMorale, awayFanMorale, homeTeamName, awayTeamName, mwarHook, homeManagerId, homeTeamId, activityLog, pushActivityLog]);
 
   // T0-01: Auto-trigger endGame when regulation ends
   useEffect(() => {

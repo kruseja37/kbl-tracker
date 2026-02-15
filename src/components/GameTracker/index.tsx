@@ -531,6 +531,7 @@ export default function GameTracker({ onGameEnd }: GameTrackerProps = {}) {
       maxDeficitHome,
       activityLog,
       currentInningPitches,
+      seasonNumber: 1,
     };
   }, [
     gameId, inning, halfInning, outs, homeScore, awayScore, bases,
