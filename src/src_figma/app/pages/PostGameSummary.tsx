@@ -103,6 +103,8 @@ export function PostGameSummary() {
   const awayTeamId = gameData.awayTeamId;
   const homeTeamName = gameData.homeTeamName;
   const awayTeamName = gameData.awayTeamName;
+  const stadiumLabel = gameData.stadiumName ?? 'Unknown Stadium';
+  const activityLogEntries = gameData.activityLog ?? [];
 
   // Build batter stats from playerStats
   // Player IDs have format "away-{name}" or "home-{name}"
@@ -218,7 +220,7 @@ export function PostGameSummary() {
         <div className="bg-[#556B55] border-[4px] border-[#3d5240] p-2 mb-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.5)]">
           {/* Stadium name header */}
           <div className="text-center text-[#E8E8D8] text-xs font-bold tracking-[0.3em] mb-1">
-            {getTeamColors(homeTeamId).stadium || 'BALLPARK'}
+            {stadiumLabel}
           </div>
 
           {/* Scoreboard grid */}
@@ -275,6 +277,21 @@ export function PostGameSummary() {
               textShadow: '1px 1px 2px black'
             }}>★ {winnerName.toUpperCase()} WIN! ★</div>
           </div>
+        </div>
+
+        <div className="bg-[#1f2b21] border-2 border-[#314437] rounded-md p-3 text-[#E8E8D8] text-xs flex flex-col gap-2 mb-4">
+          <div className="text-[10px] tracking-[0.4em] font-bold text-[#C4A853] uppercase">
+            Activity Log
+          </div>
+          {activityLogEntries.length > 0 ? (
+            <ul className="space-y-1 list-disc list-inside text-[#E8E8D8]">
+              {activityLogEntries.slice(0, 5).map((entry, idx) => (
+                <li key={idx}>{entry}</li>
+              ))}
+            </ul>
+          ) : (
+            <div className="text-[#A8B8A2]">No notable actions recorded during this game.</div>
+          )}
         </div>
 
         {/* Players of the game */}

@@ -58,6 +58,7 @@ export interface PersistedGameState {
   homeTeamId: string;
   awayTeamName: string;
   homeTeamName: string;
+  seasonNumber: number;
   stadiumName?: string | null;
 
   // Player stats (batting)
@@ -229,6 +230,8 @@ export interface CompletedGameRecord {
   gameId: string;
   date: number;
   seasonId?: string;
+  seasonNumber?: number;
+  stadiumName?: string | null;
   awayTeamId: string;
   homeTeamId: string;
   awayTeamName: string;
@@ -238,6 +241,7 @@ export interface CompletedGameRecord {
   fameEvents: PersistedGameState['fameEvents'];
   playerStats: PersistedGameState['playerStats'];
   pitcherGameStats: PersistedGameState['pitcherGameStats'];
+  activityLog?: string[];
   inningScores?: { away: number; home: number }[];
 }
 
@@ -256,6 +260,8 @@ export async function archiveCompletedGame(
     gameId: gameState.gameId,
     date: Date.now(),
     seasonId: seasonId || 'season-1',
+    seasonNumber: gameState.seasonNumber,
+    stadiumName: gameState.stadiumName ?? null,
     awayTeamId: gameState.awayTeamId,
     homeTeamId: gameState.homeTeamId,
     awayTeamName: gameState.awayTeamName,
@@ -265,6 +271,7 @@ export async function archiveCompletedGame(
     fameEvents: gameState.fameEvents,
     playerStats: gameState.playerStats,
     pitcherGameStats: gameState.pitcherGameStats,
+    activityLog: gameState.activityLog,
     inningScores,
   };
 
@@ -301,6 +308,8 @@ export async function archiveBatchGameResult(params: {
     gameId: `batch-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     date: Date.now(),
     seasonId: params.seasonId || 'season-1',
+    seasonNumber: 1,
+    stadiumName: null,
     awayTeamId: params.awayTeamId,
     homeTeamId: params.homeTeamId,
     awayTeamName: params.awayTeamId,
@@ -310,6 +319,7 @@ export async function archiveBatchGameResult(params: {
     fameEvents: [],
     playerStats: {},
     pitcherGameStats: [],
+    activityLog: [],
     inningScores: [],
   };
 

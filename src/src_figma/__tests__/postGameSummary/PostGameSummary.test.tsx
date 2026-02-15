@@ -38,6 +38,8 @@ vi.mock('@/config/teamColors', () => ({
 const mockGameData = {
   gameId: 'test-game-123',
   date: Date.now(),
+  stadiumName: 'Sox Field',
+  seasonNumber: 1,
   awayTeamId: 'tigers',
   homeTeamId: 'sox',
   awayTeamName: 'Tigers',
@@ -45,6 +47,7 @@ const mockGameData = {
   finalScore: { away: 3, home: 4 },
   innings: 9,
   fameEvents: [],
+  activityLog: ['Game saved to archive', 'MVP announced'],
   playerStats: {
     // Away batters (prefix: away-)
     'away-r-johnson': {
@@ -162,6 +165,13 @@ const mockGameData = {
     { away: 0, home: 0 },
   ],
 };
+
+describe('Activity Log', () => {
+  test('shows activity entries when present', async () => {
+    render(<PostGameSummary />);
+    expect(await screen.findByText('Game saved to archive')).toBeInTheDocument();
+  });
+});
 
 vi.mock('../../utils/gameStorage', () => ({
   getCompletedGameById: vi.fn(() => Promise.resolve(mockGameData)),
