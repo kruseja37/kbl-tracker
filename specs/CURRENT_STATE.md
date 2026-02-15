@@ -241,3 +241,33 @@ All fixes pass build + tests but need browser verification.
 ### New Files (This Bug Fix Cycle)
 - `src/utils/museumPipeline.ts` — career → museum auto-populate
 - `src/src_figma/app/components/MilestoneWatchPanel.tsx` — milestone watch UI
+## Build Status
+- npm run build: PASSES (0 errors as of Feb 15, 2026)
+- npm test: 4 archived suite failures (pre-existing, excluded from main build)
+
+## Reconciliation Status (specs/KBL_Guide_v2_Spec_Reconciliation.json)
+- Total corrections: 102
+- Guide-only (code already correct): 96
+- Code fixes needed: 6
+- Code fixes applied: 1 (IDs 6, 20 — Maddux threshold)
+- Code fixes remaining: 5 (IDs 5, 42, 83, 114 — undo cap, All-Star timing, park factor clamp)
+
+## Park Data
+- Source: Billy Yank's Guide to Super Mega Baseball, 3rd Edition
+- Location: src/data/smb4-parks.json (23 parks)
+- Utility: src/data/parkLookup.ts (getParkByName, getMinFenceDistance, LEAGUE_AVG_DIMENSIONS)
+- Status: IMPLEMENTED, not yet consumed by GameTracker (pending B3) or WAR calculators (pending R2)
+
+## Maddux Detection
+- Status: FIXED (Feb 15, 2026)
+- Threshold: Math.floor(inningsPerGame * 9.44) — 84 for 9-inning, 56 for 6-inning games
+- Location: src/hooks/useFameDetection.ts (calculateMadduxThreshold)
+
+## GameTracker Bugs (specs/GAMETRACKER_BUGS.md)
+- Total: 15
+- Fixed: 11
+- Remaining: 4 (BUG-006, BUG-009, BUG-012, BUG-014)
+
+## Franchise ↔ GameTracker Wiring
+- Status: NOT YET VERIFIED (pending W1-W3)
+- Plan: FRANCHISE_GAMETRACKER_PLAN.md + FRANCHISE_GAMETRACKER_WIRING_MATRIX.md

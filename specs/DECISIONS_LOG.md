@@ -317,3 +317,38 @@ Actual legacy API:       processEndOfSeasonAging(age, {overall: rating}, fame, m
 ---
 
 *Add new decisions at the top of this document.*
+## Feb 15, 2026 — Park Dimensions as Canonical Data
+
+**Decision:** Use Billy Yank's Guide to Super Mega Baseball (3rd Edition) as the canonical source for all SMB4 park dimensions (fence distances and wall heights).
+
+**Context:** The app needs real park dimensions for two features: (1) HR distance validation during at-bat recording, and (2) park factor derivation for WAR calculations. The existing ParkFactors interface in src/types/war.ts had abstract multipliers but no connection to actual stadium geometry.
+
+**Rationale:** Billy Yank's Guide is the most comprehensive community resource for SMB4 data. The fence distances were manually compiled from in-game measurements across all 23 stadiums. Wall heights are categorized as low/medium/high.
+
+**Implementation:** src/data/smb4-parks.json + src/data/parkLookup.ts. Consumed by upcoming R2 (park factor derivation) and B3 (stadium association + HR validation).
+
+**Trade-offs:** The dimensions are representative, not pixel-perfect. Parks have variable geometry that a simple LF/CF/RF + wall height model doesn't fully capture (e.g., Lafayette Corner's frequent wall height variations, Stade Royale's unusual outfield shape). This is acceptable for v1; refinement is deferred.
+
+---
+
+## Feb 15, 2026 — Shim Modules for src_figma Imports
+
+**Decision:** Create re-export shim modules in src/src_figma/utils/ rather than mass-renaming import paths.
+
+**Context:** The src_figma directory tree had stale imports pointing to ../../utils/gameStorage etc. that broke when the root utils modules were restructured. The options were: (a) fix every import path in src_figma, or (b) create thin shim modules that re-export from the correct locations.
+
+**Rationale:** Shims minimize churn and risk. Changing dozens of import paths across components and tests is high-risk for a non-functional change. Shims achieve the same result with 4 small files.
+
+**Trade-offs:** Adds a layer of indirection. If src_figma is ever consolidated into the main source tree, the shims should be removed and imports updated directly.
+
+---
+
+## Feb 15, 2026 — Archived Code Excluded from Build
+
+**Decision:** Exclude src/archived-pages/ and src/archived-tests/ from TypeScript compilation via tsconfig.app.json rather than deleting them.
+
+**Context:** 16 of 26 pre-existing build errors came from archived files referencing modules that no longer exist. These files are not used by the running application.
+
+**Rationale:** Excluding preserves git history and allows future reference. Deleting would be cleaner but irreversible without git archaeology.
+
+**Trade-offs:** The files still exist on disk and could confuse future contributors. A comment in tsconfig.app.json explains why they're excluded.

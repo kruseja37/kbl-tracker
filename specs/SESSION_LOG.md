@@ -402,3 +402,53 @@ Make the project easily understandable for future AI agent sessions that have ne
 - All 3 agent-facing docs (CURRENT_STATE, SESSION_LOG, CLAUDE.md) current and consistent
 
 - **2026-02-15:** Phase 1 GameTracker bugs (exit-type double entry, lineup modal access, special-play logging, stadium/HR data) resolved; `fake-indexeddb` added for season/franchise tests, PostGameSummary/useGameState imports aligned, and `npm test` confirms 134 suites (5,653 tests) pass. Phase 2 wiring validation remains the next active effort.
+## Session: Feb 15, 2026 — Reconciliation & Data Foundation
+
+### Context
+Began executing Codex prompt contracts for KBL Tracker reconciliation fixes and franchise/gametracker remediation. Prompt contracts were architected by Claude (claude.ai) based on:
+- Reconciliation audit of 102 corrections from specs/KBL_Guide_v2_Spec_Reconciliation.json
+- FRANCHISE_GAMETRACKER_PLAN.md (5-phase remediation)
+- Billy Yank's Guide to Super Mega Baseball (3rd Edition) for park dimensions data
+
+### Completed
+- **R1 — Maddux Threshold Fix (IDs 6, 20)**
+  - Replaced hardcoded pitchThreshold=100 in detectMaddux with Math.floor(inningsPerGame * 9.44)
+  - Added calculateMadduxThreshold helper in src/hooks/useFameDetection.ts
+  - Added DEFAULT_INNINGS_PER_GAME constant, made GameContext carry optional inningsPerGame
+  - Plumbed inningsPerGame: 9 through end-game and mid-game fame contexts in GameTracker/index.tsx
+  - Files changed: src/hooks/useFameDetection.ts, src/components/GameTracker/index.tsx
+
+- **R0 — Build Baseline Cleanup (26 pre-existing errors → 0)**
+  - Added src/archived-pages/** and src/archived-tests/** to tsconfig.app.json exclude (killed 16 errors)
+  - Fixed stale import paths in src_figma: warOrchestrator.ts, useSeasonStats.ts, PostGameSummary.tsx, FranchiseHome.tsx
+  - Created shim modules in src/src_figma/utils/ (gameStorage, seasonStorage, careerStorage, franchiseStorage) that re-export from root src/utils/*
+  - Extended CompletedGameRecord with playerStats, pitcherGameStats, inningScores fields
+  - Added getCompletedGameById helper to src/utils/gameStorage.ts
+  - npm run build now passes with 0 errors
+
+- **D1 — Park Dimensions Data Ingestion**
+  - Added src/data/smb4-parks.json with all 23 SMB4 park dimensions (source: Billy Yank's Guide, 3rd Edition)
+  - Created src/data/parkLookup.ts with TypeScript types (ParkDimensions, WallHeight) and utilities (getParkByName, getAllParks, getParkNames, getMinFenceDistance, LEAGUE_AVG_DIMENSIONS)
+  - Added resolveJsonModule: true to tsconfig.app.json
+  - Park count verified: 23
+
+### Decisions Made
+- Billy Yank's Guide (3rd Edition) is the canonical source for SMB4 park dimensions
+- Park factors will be derived from real fence distances via heuristic formula (upcoming R2)
+- HR distance validation will use actual fence distance per stadium per direction (upcoming B3)
+- Shim modules chosen over mass-renaming of src_figma imports to minimize churn
+- archived-pages/ and archived-tests/ excluded from build rather than deleted (preserves history)
+
+### Known Issues (pre-existing, not introduced by this session)
+- npm test fails on 4 archived test suites that still reference missing modules
+- .worktrees/ copies have stale imports that don't match main tree
+- These do NOT affect the main build or main-tree test suites
+
+### Pending (next session)
+- R2: Park factor clamping [0.70, 1.30] + derivation from real dimensions
+- R3: All-Star break timing (0.5 → 0.6)
+- R4: Undo stack cap (10 → 20)
+- R-VERIFY: Mark all 102 reconciliation corrections resolved in JSON
+- B1-B4: GameTracker bug fixes (exit modal, lineup modal, stadium association, special plays)
+- W1-W3: Franchise ↔ GameTracker wiring verification
+- T1: Core regression tests
