@@ -96,6 +96,7 @@ export interface GameStateForPersistence {
   homeTeamId: string;
   awayTeamName: string;
   homeTeamName: string;
+  seasonNumber: number;
   playerStats: Record<string, PlayerStats>;
   pitcherGameStats: Map<string, PitcherGameStats>;
   fameEvents: FameEvent[];
@@ -172,6 +173,7 @@ function toPersistedState(state: GameStateForPersistence): PersistedGameState {
     homeTeamId: state.homeTeamId,
     awayTeamName: state.awayTeamName,
     homeTeamName: state.homeTeamName,
+    seasonNumber: state.seasonNumber,
     playerStats: state.playerStats,
     pitcherGameStats: mapToArray(state.pitcherGameStats),
     fameEvents: state.fameEvents.map(e => ({
@@ -220,6 +222,7 @@ function fromPersistedState(persisted: PersistedGameState): GameStateForPersiste
     homeTeamId: persisted.homeTeamId,
     awayTeamName: persisted.awayTeamName,
     homeTeamName: persisted.homeTeamName,
+    seasonNumber: persisted.seasonNumber,
     playerStats: persisted.playerStats,
     pitcherGameStats: arrayToMap(persisted.pitcherGameStats),
     fameEvents: persisted.fameEvents as FameEvent[],

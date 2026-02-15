@@ -40,6 +40,8 @@ export interface Player {
   battingOrder?: number; // undefined for bench players
   stats: PlayerStats;
   battingHand: 'L' | 'R' | 'S';
+  mojo?: MojoLevel;
+  fitness?: FitnessState;
   isOutOfGame?: boolean; // Track if player was substituted out
 }
 
@@ -47,6 +49,8 @@ export interface Pitcher {
   name: string;
   stats: PitcherStats;
   throwingHand: 'L' | 'R';
+  mojo?: MojoLevel;
+  fitness?: FitnessState;
   isStarter?: boolean;
   isActive?: boolean; // Currently pitching in the game
   isOutOfGame?: boolean; // Track if pitcher was substituted out

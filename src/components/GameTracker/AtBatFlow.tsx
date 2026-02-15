@@ -1220,6 +1220,7 @@ export default function AtBatFlow({
               }}
               onClick={handleProceedToFielding}
               disabled={!readyForFielding}
+              aria-label="Continue to fielding phase"
             >
               Continue to Fielding →
             </button>

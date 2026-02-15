@@ -45,7 +45,11 @@ interface StateSnapshot {
 
 class UndoStack {
   private stack: StateSnapshot[] = [];
-  private maxSize: number = 5;
+  private maxSize: number;
+
+  constructor(maxSize: number = 5) {
+    this.maxSize = maxSize;
+  }
 
   push(snapshot: StateSnapshot): void {
     this.stack.push(snapshot);
@@ -247,6 +251,21 @@ describe('Undo Stack Size Limit', () => {
     }
 
     expect(undoCount).toBe(5);
+  });
+});
+
+describe('Undo Stack custom cap behavior', () => {
+  test('caps at 20 entries even when 21 pushes occur', () => {
+    const undoStack = new UndoStack(20);
+
+    for (let i = 0; i < 21; i++) {
+      undoStack.push(createSnapshot({ outs: i }));
+    }
+
+    expect(undoStack.length).toBe(20);
+    const remaining = undoStack.getAll();
+    expect(remaining[0].gameState.outs).toBe(1);
+    expect(remaining[remaining.length - 1].gameState.outs).toBe(20);
   });
 });
 
