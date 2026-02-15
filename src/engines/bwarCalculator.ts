@@ -20,6 +20,7 @@ import {
   SMB4_WOBA_WEIGHTS,
   createDefaultLeagueContext,
 } from '../types/war';
+import { clampParkFactors, getDerivedParkFactorsIfAvailable } from './parkFactorDeriver';
 
 // Re-export types and constants for engines/index.ts
 export {
@@ -105,20 +106,19 @@ export function getEffectiveParkFactor(
   parkFactors: ParkFactors,
   batterHand: 'L' | 'R' | 'S'
 ): number {
-  // Switch hitters: use average of both
+  const safeFactors = clampParkFactors(parkFactors);
+
   if (batterHand === 'S') {
-    const leftFactor = (parkFactors.leftHandedHR + parkFactors.leftHandedAVG) / 2;
-    const rightFactor = (parkFactors.rightHandedHR + parkFactors.rightHandedAVG) / 2;
+    const leftFactor = (safeFactors.leftHandedHR + safeFactors.leftHandedAVG) / 2;
+    const rightFactor = (safeFactors.rightHandedHR + safeFactors.rightHandedAVG) / 2;
     return (leftFactor + rightFactor) / 2;
   }
 
-  // Use handedness-specific factor, blended with overall
   const handedFactor = batterHand === 'L'
-    ? (parkFactors.leftHandedHR + parkFactors.leftHandedAVG) / 2
-    : (parkFactors.rightHandedHR + parkFactors.rightHandedAVG) / 2;
+    ? (safeFactors.leftHandedHR + safeFactors.leftHandedAVG) / 2
+    : (safeFactors.rightHandedHR + safeFactors.rightHandedAVG) / 2;
 
-  // Blend: 60% handedness-specific, 40% overall runs factor
-  return (handedFactor * 0.6) + (parkFactors.runs * 0.4);
+  return (handedFactor * 0.6) + (safeFactors.runs * 0.4);
 }
 
 /**
@@ -150,7 +150,7 @@ export function applyMultiTeamParkFactor(
   let totalAdjustment = 0;
 
   for (const stint of stints) {
-    const parkFactors = getParkFactors(stint.teamId);
+    const parkFactors = clampParkFactors(getParkFactors(stint.teamId));
     const effectivePF = getEffectiveParkFactor(parkFactors, batterHand);
     const stintAdjustment = (leagueRunsPerPA - (effectivePF * leagueRunsPerPA)) * stint.homePA;
     totalAdjustment += stintAdjustment;
@@ -208,6 +208,7 @@ export function calculateBWAR(
   context: LeagueContext,
   options: {
     parkFactors?: ParkFactors;
+    stadiumName?: string;
     batterHand?: 'L' | 'R' | 'S';
   } = {}
 ): BWARResult {
@@ -231,8 +232,16 @@ export function calculateBWAR(
   let parkAdjustment = 0;
   let battingRuns = wRAA;
 
-  if (options.parkFactors && options.parkFactors.confidence !== 'LOW' && options.batterHand) {
-    const effectivePF = getEffectiveParkFactor(options.parkFactors, options.batterHand);
+  let resolvedParkFactors: ParkFactors | undefined = options.parkFactors
+    ? clampParkFactors(options.parkFactors)
+    : undefined;
+
+  if (!resolvedParkFactors && options.stadiumName) {
+    resolvedParkFactors = getDerivedParkFactorsIfAvailable(options.stadiumName);
+  }
+
+  if (resolvedParkFactors && options.batterHand) {
+    const effectivePF = getEffectiveParkFactor(resolvedParkFactors, options.batterHand);
     const homePA = stats.homePA ?? Math.floor(stats.pa / 2);  // Assume 50% home if not tracked
     parkAdjustment = (runsPerPA - (effectivePF * runsPerPA)) * homePA;
     battingRuns = wRAA + parkAdjustment;

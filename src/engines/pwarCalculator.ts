@@ -1,3 +1,5 @@
+import { MAX_PARK_FACTOR, MIN_PARK_FACTOR } from './parkFactorDeriver';
+
 /**
  * Pitching WAR (pWAR) Calculator
  * Per PWAR_CALCULATION_SPEC.md
@@ -545,7 +547,8 @@ export function applyPitcherParkFactor(
   parkFactor: number = DEFAULT_PARK_FACTOR,
 ): number {
   if (parkFactor <= 0) return rawFIP;
-  return rawFIP / parkFactor;
+  const safeFactor = Math.max(MIN_PARK_FACTOR, Math.min(MAX_PARK_FACTOR, parkFactor));
+  return rawFIP / safeFactor;
 }
 
 /**
@@ -557,7 +560,8 @@ export function getParkAdjustedERA(
   parkFactor: number,
 ): number {
   if (parkFactor <= 0) return rawERA;
-  return rawERA / parkFactor;
+  const safeFactor = Math.max(MIN_PARK_FACTOR, Math.min(MAX_PARK_FACTOR, parkFactor));
+  return rawERA / safeFactor;
 }
 
 /**
@@ -571,7 +575,9 @@ export function calculateERAPlus(
   leagueERA: number,
   parkFactor: number,
 ): number {
-  const denominator = era * parkFactor;
+  if (parkFactor <= 0) return 999;
+  const safeFactor = Math.max(MIN_PARK_FACTOR, Math.min(MAX_PARK_FACTOR, parkFactor));
+  const denominator = era * safeFactor;
   if (denominator <= 0) return 999;
   return Math.round(100 * (leagueERA / denominator));
 }

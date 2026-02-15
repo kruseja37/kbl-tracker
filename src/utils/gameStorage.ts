@@ -58,6 +58,7 @@ export interface PersistedGameState {
   homeTeamId: string;
   awayTeamName: string;
   homeTeamName: string;
+  stadiumName?: string | null;
 
   // Player stats (batting)
   playerStats: Record<string, {

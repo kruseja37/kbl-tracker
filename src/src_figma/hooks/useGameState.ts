@@ -65,6 +65,7 @@ export interface GameState {
   homeTeamId: string;
   awayTeamName: string;
   homeTeamName: string;
+  stadiumName?: string | null;
 }
 
 export interface ScoreboardState {
@@ -233,6 +234,8 @@ export interface UseGameStateReturn {
 
   // Playoff context setter (called from GameTracker with navigation state)
   setPlayoffContext: (seriesId: string | null, gameNumber: number | null) => void;
+  // Stadium selector helper
+  setStadiumName: (stadiumName: string | null) => void;
 }
 
 export interface GameInitConfig {
@@ -256,6 +259,7 @@ export interface GameInitConfig {
   playoffGameNumber?: number;
   // T0-01: Number of regulation innings (default 9, SMB4 franchise often 6 or 7)
   totalInnings?: number;
+  stadiumName?: string | null;
 }
 
 // ============================================
@@ -1048,6 +1052,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     homeTeamId: '',
     awayTeamName: '',
     homeTeamName: '',
+    stadiumName: null,
   });
 
   const [scoreboard, setScoreboard] = useState<ScoreboardState>({
@@ -1055,6 +1060,10 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     away: { runs: 0, hits: 0, errors: 0 },
     home: { runs: 0, hits: 0, errors: 0 },
   });
+
+  const setStadiumName = useCallback((name: string | null) => {
+    setGameState(prev => ({ ...prev, stadiumName: name }));
+  }, []);
 
   const [playerStats, setPlayerStats] = useState<Map<string, PlayerGameStats>>(new Map());
   const [pitcherStats, setPitcherStats] = useState<Map<string, PitcherGameStats>>(new Map());
@@ -1248,6 +1257,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       homeTeamId: config.homeTeamId,
       awayTeamName: config.awayTeamName,
       homeTeamName: config.homeTeamName,
+      stadiumName: config.stadiumName || null,
     });
 
     setAwayBatterIndex(0);
@@ -1290,6 +1300,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
           homeTeamId: inProgressGame.homeTeamId,
           awayTeamName: inProgressGame.awayTeamName,
           homeTeamName: inProgressGame.homeTeamName,
+          stadiumName: inProgressGame.stadiumName ?? null,
         });
         setAtBatSequence(events.length);
         seasonIdRef.current = inProgressGame.seasonId;
@@ -3439,6 +3450,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       homeTeamId: gameState.homeTeamId,
       awayTeamName: gameState.awayTeamName,
       homeTeamName: gameState.homeTeamName,
+      stadiumName: gameState.stadiumName ?? null,
       playerStats: playerStatsRecord,
       pitcherGameStats: pitcherGameStatsArray,
       fameEvents: fameEvents.map((fe, idx) => ({
@@ -3651,6 +3663,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       homeTeamId: gameState.homeTeamId,
       awayTeamName: gameState.awayTeamName,
       homeTeamName: gameState.homeTeamName,
+      stadiumName: gameState.stadiumName ?? null,
       playerStats: playerStatsRecord,
       pitcherGameStats: pitcherGameStatsArray,
       // Map local FameEventRecord to PersistedGameState format
@@ -3834,5 +3847,6 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     showAutoEndPrompt,
     dismissAutoEndPrompt: useCallback(() => setShowAutoEndPrompt(false), []),
     setPlayoffContext,
+    setStadiumName,
   };
 }

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from "react";
+import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useNavigate, useParams, useLocation } from "react-router";
 import { Menu, ChevronUp } from "lucide-react";
 import { DndProvider } from "react-dnd";
@@ -14,6 +14,7 @@ import { TeamRoster, type Player, type Pitcher } from "@/app/components/TeamRost
 import { MiniScoreboard } from "@/app/components/MiniScoreboard";
 import { getTeamColors, getFielderBorderColors } from "@/config/teamColors";
 import { areRivals } from '../../../data/leagueStructure';
+import { getParkNames } from "../../../data/parkLookup";
 import { useGameState, type HitType, type OutType, type WalkType, type RunnerAdvancement, type PlayerGameStats, type PitcherGameStats } from "@/hooks/useGameState";
 import { usePlayerState, type PlayerStateData, getStateBadge, formatMultiplier } from "@/app/hooks/usePlayerState";
 // EXH-036: Import Mojo/Fitness types for PlayerCardModal editing
@@ -112,7 +113,11 @@ export function GameTracker() {
   const awayTeamId = navigationState?.awayTeamId || 'away';
   const homeTeamName = navigationState?.homeTeamName || 'HOME';
   const awayTeamName = navigationState?.awayTeamName || 'AWAY';
-  const stadiumName = navigationState?.stadiumName;
+  const parkNames = useMemo(() => getParkNames(), []);
+  const [selectedStadium, setSelectedStadium] = useState<string | null>(() =>
+    navigationState?.stadiumName || parkNames[0] || null
+  );
+  const showStadiumSelector = !navigationState?.stadiumName;
   const awayRecord = navigationState?.awayRecord || '0-0'; // MAJ-15: Reads actual record from route state; defaults 0-0 for exhibition
   const homeRecord = navigationState?.homeRecord || '0-0'; // MAJ-15: Reads actual record from route state; defaults 0-0 for exhibition
   const leagueId = navigationState?.leagueId || 'sml';
@@ -181,6 +186,7 @@ export function GameTracker() {
     showAutoEndPrompt,
     dismissAutoEndPrompt,
     setPlayoffContext,
+    setStadiumName,
   } = useGameState(gameId);
 
   // Set playoff context from navigation state (if this is a playoff game)
@@ -193,6 +199,20 @@ export function GameTracker() {
       );
     }
   }, [navigationState?.playoffSeriesId, navigationState?.playoffGameNumber, setPlayoffContext]);
+
+  useEffect(() => {
+    const navStadium = navigationState?.stadiumName;
+    if (navStadium && navStadium !== selectedStadium) {
+      setSelectedStadium(navStadium);
+    }
+  }, [navigationState?.stadiumName, selectedStadium]);
+
+  useEffect(() => {
+    setStadiumName(selectedStadium);
+  }, [selectedStadium, setStadiumName]);
+
+  const scoreboardStadiumLabel =
+    selectedStadium || getTeamColors(homeTeamId).stadium || 'BALLPARK';
 
   // Player state management (Mojo, Fitness, Clutch)
   const playerStateHook = usePlayerState({
@@ -653,13 +673,14 @@ export function GameTracker() {
         homeStartingPitcherName: homePitcher?.name || 'Pitcher',
         // T0-01: Pass total innings for auto game-end detection (default 9 for exhibition)
         totalInnings: navigationState?.totalInnings || 9,
+        stadiumName: selectedStadium || undefined,
       });
 
       setGameInitialized(true);
     };
 
     initializeOrLoadGame();
-  }, [gameInitialized, awayTeamPlayers, homeTeamPlayers, awayPitcher, homePitcher, awayTeamId, homeTeamId, gameId, initializeGame, loadExistingGame]);
+  }, [gameInitialized, awayTeamPlayers, homeTeamPlayers, awayPitcher, homePitcher, awayTeamId, homeTeamId, gameId, initializeGame, loadExistingGame, selectedStadium]);
 
   // EXH-036: Register players with playerStateHook for mojo/fitness tracking
   // This runs once after game is initialized to set up all players with default states
@@ -2292,7 +2313,19 @@ export function GameTracker() {
                 <div className="bg-[#556B55] border-[3px] border-[#3d5240] p-1.5 shadow-[3px_3px_0px_0px_rgba(0,0,0,0.5)]">
                   {/* Stadium name header */}
                   <div className="text-center text-[#E8E8D8] text-xs font-bold tracking-[0.3em] mb-1">
-                    {stadiumName || getTeamColors(homeTeamId).stadium || 'BALLPARK'}
+                    <div>{scoreboardStadiumLabel}</div>
+                    {showStadiumSelector && parkNames.length > 0 && (
+                      <select
+                        value={selectedStadium ?? ''}
+                        onChange={(event) => setSelectedStadium(event.target.value || null)}
+                        className="mt-1 text-[9px] text-[#E8E8D8] bg-[#1a1a1a] border-2 border-[#2a3a2d] rounded px-1 py-0.5 w-full"
+                      >
+                        <option value="">Select Stadium</option>
+                        {parkNames.map((park) => (
+                          <option key={park} value={park}>{park}</option>
+                        ))}
+                      </select>
+                    )}
                   </div>
                   
                   {/* Scoreboard grid */}

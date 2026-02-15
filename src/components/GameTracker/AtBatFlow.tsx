@@ -14,6 +14,7 @@ import type {
   FieldingData,
 } from '../../types/game';
 import { inferFielder, requiresBallInPlayData, isOut } from '../../types/game';
+import { getMinFenceDistance, getParkByName } from '../../data/parkLookup';
 import FieldingModal from './FieldingModal';
 
 
@@ -25,6 +26,7 @@ interface AtBatFlowProps {
   outs: number;
   onComplete: (flowState: AtBatFlowState) => void;
   onCancel: () => void;
+  stadiumName?: string | null;
 }
 
 const directions: Direction[] = ['Left', 'Left-Center', 'Center', 'Right-Center', 'Right'];
@@ -46,7 +48,28 @@ const specialPlaysForHR: SpecialPlayType[] = ['Over Fence', 'Robbery Attempt', '
 // DP Types
 const dpTypes = ['6-4-3', '4-6-3', '5-4-3', '3-6-3', '6-3', '4-3', '1-6-3', 'Other'];
 
-export default function AtBatFlow({ result: initialResult, bases, batterName, batterHand = 'R', outs, onComplete, onCancel }: AtBatFlowProps) {
+type FenceDirection = 'lf' | 'cf' | 'rf';
+
+const mapDirectionToFence = (direction: Direction | null): FenceDirection | null => {
+  if (!direction) return null;
+  if (direction === 'Left') return 'lf';
+  if (direction === 'Right') return 'rf';
+  if (direction.includes('Center')) return 'cf';
+  if (direction.includes('Left')) return 'lf';
+  if (direction.includes('Right')) return 'rf';
+  return 'cf';
+};
+
+export default function AtBatFlow({
+  result: initialResult,
+  bases,
+  batterName,
+  batterHand = 'R',
+  outs,
+  onComplete,
+  onCancel,
+  stadiumName,
+}: AtBatFlowProps) {
   // Track the current result (can be auto-corrected based on runner outcomes)
   const [result, setResult] = useState<AtBatResult>(initialResult);
   const [autoCorrection, setAutoCorrection] = useState<string | null>(null);
@@ -60,6 +83,10 @@ export default function AtBatFlow({ result: initialResult, bases, batterName, ba
   const [is7PlusPitchAB, setIs7PlusPitchAB] = useState(false);
   const [beatOutSingle, setBeatOutSingle] = useState(false);
   const [dpType, setDpType] = useState<string | null>(null);
+  const fenceDirection = mapDirectionToFence(direction);
+  const park = stadiumName ? getParkByName(stadiumName) : undefined;
+  const hrMinDistance = fenceDirection && park ? getMinFenceDistance(park, fenceDirection) : 250;
+  const parkLabel = stadiumName || 'selected stadium';
 
   // Batter thrown out advancing (e.g., double but out stretching to 3B)
   const [batterOutAdvancing, setBatterOutAdvancing] = useState(false);
@@ -626,7 +653,12 @@ export default function AtBatFlow({ result: initialResult, bases, batterName, ba
   const canProceedToFielding = (): boolean => {
     if (needsDirection && !direction) return false;
     // Exit type is now collected in FieldingModal, not here
-    if (needsHRDistance && (!hrDistance || parseInt(hrDistance) < 250 || parseInt(hrDistance) > 550)) return false;
+    if (needsHRDistance) {
+      const parsedValue = parseInt(hrDistance);
+      if (!hrDistance || Number.isNaN(parsedValue) || parsedValue < hrMinDistance || parsedValue > 550) {
+        return false;
+      }
+    }
     if (needsDPType && !dpType) return false;
 
     // Can't proceed while waiting for extra event explanation
@@ -709,6 +741,19 @@ export default function AtBatFlow({ result: initialResult, bases, batterName, ba
     }
   };
 
+  const readyForFielding = canProceedToFielding();
+
+  useEffect(() => {
+    if (
+      needsFieldingConfirmation &&
+      readyForFielding &&
+      !fieldingData &&
+      !showFieldingModal
+    ) {
+      setShowFieldingModal(true);
+    }
+  }, [needsFieldingConfirmation, readyForFielding, fieldingData, showFieldingModal]);
+
   const getRunnerName = (runner: Runner | null) => {
     if (!runner) return '';
     const parts = runner.playerName.split(' ');
@@ -787,9 +832,9 @@ export default function AtBatFlow({ result: initialResult, bases, batterName, ba
                   : {}),
               }}
             />
-            {hrDistance && parseInt(hrDistance) < 250 && (
+            {needsHRDistance && direction && hrDistance && parseInt(hrDistance) < hrMinDistance && (
               <div style={{ color: '#ef4444', fontSize: '11px', marginTop: '4px' }}>
-                Min HR distance: 250 ft
+                HR to {direction} must be at least {hrMinDistance} ft ({parkLabel} {direction} fence)
               </div>
             )}
             {hrDistance && parseInt(hrDistance) > 550 && (
@@ -1166,17 +1211,19 @@ export default function AtBatFlow({ result: initialResult, bases, batterName, ba
             Confirm At-Bat
           </button>
         ) : (
-          <button
-            style={{
-              ...styles.submitButton,
-              opacity: canProceedToFielding() ? 1 : 0.5,
-              backgroundColor: '#2196F3',
-            }}
-            onClick={handleProceedToFielding}
-            disabled={!canProceedToFielding()}
-          >
-            Continue to Fielding →
-          </button>
+          !showFieldingModal && (
+            <button
+              style={{
+                ...styles.submitButton,
+                opacity: readyForFielding ? 1 : 0.5,
+                backgroundColor: '#2196F3',
+              }}
+              onClick={handleProceedToFielding}
+              disabled={!readyForFielding}
+            >
+              Continue to Fielding →
+            </button>
+          )
         )}
       </div>
 

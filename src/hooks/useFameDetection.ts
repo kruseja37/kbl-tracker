@@ -6,7 +6,8 @@ import type {
   HalfInning,
   AtBatResult,
   Bases,
-  Position
+  Position,
+  SpecialPlayType,
 } from '../types/game';
 import {
   createFameEvent,
@@ -1368,6 +1369,65 @@ export function useFameDetection({
   }, [settings.enabled]);
 
   // ============================================
+  // SPECIAL PLAY DETECTION (WEB GEM / ROBBERY)
+  // ============================================
+  const detectSpecialPlay = useCallback((
+    context: GameContext,
+    playerId: string,
+    playerName: string,
+    teamId: string,
+    specialPlay: SpecialPlayType | null
+  ): DetectionResult | null => {
+    if (!settings.enabled || !specialPlay) return null;
+
+    const specialPlayFameMap: Record<SpecialPlayType, FameEventType | null> = {
+      Routine: null,
+      Diving: 'WEB_GEM',
+      'Wall Catch': 'WEB_GEM',
+      Running: 'WEB_GEM',
+      Leaping: 'WEB_GEM',
+      Clean: null,
+      'Robbery Attempt': 'ROBBERY',
+      'Over Fence': null,
+      'Wall Scraper': null,
+    };
+
+    const eventType = specialPlayFameMap[specialPlay];
+    if (!eventType) return null;
+
+    const key = createEventKey(eventType, playerId, context.inning);
+    if (isAlreadyDetected(key)) return null;
+    markDetected(key);
+
+    const description =
+      eventType === 'ROBBERY'
+        ? `${playerName} went for the wall robbery`
+        : `${playerName} made a ${specialPlay.toLowerCase()} catch`;
+
+    const event = createFameEvent(
+      context.gameId,
+      context.inning,
+      context.halfInning,
+      eventType,
+      playerId,
+      playerName,
+      teamId,
+      true,
+      description,
+      undefined,
+      undefined,
+      context.leverageIndex,
+      context.batterMojo,
+      context.batterFitness
+    );
+
+    return {
+      event,
+      message: description
+    };
+  }, [settings.enabled]);
+
+  // ============================================
   // MAIN DETECTION FUNCTION
   // Call this after each at-bat to check for auto-detected events
   // ============================================
@@ -1628,6 +1688,7 @@ export function useFameDetection({
     detectMaddux,
     detectConsecutiveHRAllowed,
     detectBatterOutStretching,
+    detectSpecialPlay,
     detectComebackWin
   };
 }

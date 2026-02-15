@@ -22,7 +22,7 @@
  * (Configured via seasons.csv gamesPerTeam and league numTeams)
  */
 
-import type { AtBatResult, Position, HalfInning } from '../types/game';
+import type { AtBatResult, Position, HalfInning, SpecialPlayType } from '../types/game';
 
 // ============================================
 // DATABASE SETUP
@@ -110,6 +110,7 @@ export interface GameHeader {
   awayTeamName: string;
   homeTeamId: string;
   homeTeamName: string;
+  stadiumName?: string | null;
 
   // Final state
   finalScore: { away: number; home: number } | null;  // null if game in progress
@@ -269,6 +270,7 @@ export interface FieldingEvent {
 
   playType: 'putout' | 'assist' | 'error' | 'double_play_pivot' | 'outfield_assist';
   difficulty: 'routine' | 'likely' | '50-50' | 'unlikely' | 'spectacular';
+  specialPlayType?: SpecialPlayType | null;
 
   // For range calculation
   ballInPlay: BallInPlayData;

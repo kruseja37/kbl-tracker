@@ -105,10 +105,10 @@ export function getSpecialEvents(
     events.push({ name: 'Opening Day', date: SEASON_CALENDAR.OPENING_DAY });
   }
 
-  // All-Star Break (~50% through season)
-  const allStarGame = Math.round(totalGames * 0.5);
+  // All-Star Break (~60% through season)
+  const allStarGame = Math.round(totalGames * 0.6);
   if (gameNumber === allStarGame) {
-    events.push({ name: 'All-Star Break', date: SEASON_CALENDAR.ALL_STAR_BREAK, gameThreshold: 0.5 });
+    events.push({ name: 'All-Star Break', date: SEASON_CALENDAR.ALL_STAR_BREAK, gameThreshold: 0.6 });
   }
 
   // Trade Deadline (~65% through season)

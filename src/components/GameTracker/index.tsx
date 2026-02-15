@@ -23,6 +23,7 @@ import type {
   FameAutoDetectionSettings,
   FieldingData,
   Direction,
+  SpecialPlayType,
 } from '../../types/game';
 import {
   createEmptyBases,
@@ -821,7 +822,7 @@ export default function GameTracker({ onGameEnd }: GameTrackerProps = {}) {
       currentBatterIndex, playerStats, activityLog,
       lineupState, substitutionHistory  // Include lineup state for proper undo
     });
-    setUndoStack(prev => [...prev.slice(-9), state]);
+    setUndoStack(prev => [...prev.slice(-19), state]);
   };
 
   // Handle undo
@@ -1660,7 +1661,8 @@ export default function GameTracker({ onGameEnd }: GameTrackerProps = {}) {
     homeScoreAfter: number,
     detectedFameEvents: FameEvent[],
     fieldingData?: FieldingData,
-    direction?: Direction | null
+    direction?: Direction | null,
+    specialPlay?: SpecialPlayType | null
   ) => {
     // Ensure game header exists
     await ensureGameHeaderCreated();
@@ -1809,6 +1811,7 @@ export default function GameTracker({ onGameEnd }: GameTrackerProps = {}) {
                     isOutfieldAssist ? 'outfield_assist' :
                     fieldingData.assistChain.length > 0 ? 'assist' : 'putout',
           difficulty: mapPlayTypeToDifficulty(fieldingData.playType),
+          specialPlayType: specialPlay ?? null,
 
           ballInPlay: atBatEvent.ballInPlay || {
             trajectory: mapPlayTypeToTrajectory(result, fieldingData.playType),
@@ -1922,7 +1925,10 @@ export default function GameTracker({ onGameEnd }: GameTrackerProps = {}) {
         emptyRunnersAfter,
         awayScore,
         homeScore,
-        []
+        [],
+        undefined,
+        undefined,
+        undefined
       ).catch(err => console.error('[EventLog] Async K logging failed:', err));
 
       // Update pitcher stats for strikeout
@@ -1942,7 +1948,18 @@ export default function GameTracker({ onGameEnd }: GameTrackerProps = {}) {
   // Handle at-bat flow completion
   const handleAtBatFlowComplete = (flowState: AtBatFlowState) => {
     const { result, rbiCount } = flowState;
+    let specialPlayFielderId: string | null = null;
+    let specialPlayFielderName: string | null = null;
+    let specialPlayTeamId: string | null = null;
     if (!result) return;
+
+    if (flowState.fieldingData) {
+      const fieldingTeamId = halfInning === 'TOP' ? homeTeamId : awayTeamId;
+      const fielderInfo = getPlayerByPosition(flowState.fieldingData.primaryFielder);
+      specialPlayFielderId = fielderInfo?.playerId || flowState.fieldingData.primaryFielder;
+      specialPlayFielderName = fielderInfo?.playerName || flowState.fieldingData.primaryFielder;
+      specialPlayTeamId = fieldingTeamId;
+    }
 
     const stats = { ...playerStats[currentBatter.id] };
     stats.pa++;
@@ -2285,6 +2302,22 @@ export default function GameTracker({ onGameEnd }: GameTrackerProps = {}) {
       pitcherFitness: fitnessState.getPlayerFitness(getCurrentPitcherId()).state,
     };
 
+    const specialPlayDetection =
+      specialPlayFielderId && flowState.specialPlay
+        ? fameDetection.detectSpecialPlay(
+            gameContext,
+            specialPlayFielderId,
+            specialPlayFielderName || specialPlayFielderId,
+            specialPlayTeamId ?? (halfInning === 'TOP' ? homeTeamId : awayTeamId),
+            flowState.specialPlay
+          )
+        : null;
+
+    if (specialPlayDetection) {
+      addFameEvent(specialPlayDetection.event);
+      extraEventLogs.push(`⭐ ${specialPlayDetection.message}`);
+    }
+
     // Run fame detection and capture results
     // Note: The onFameDetected callback also fires via the hook, but we capture
     // results explicitly here for event log integration and belt-and-suspenders reliability
@@ -2354,6 +2387,9 @@ export default function GameTracker({ onGameEnd }: GameTrackerProps = {}) {
 
     // Get Fame events that were just detected (captured from fameDetection above)
     const detectedFameEvents: FameEvent[] = fameDetectionResults.map(r => r.event);
+    if (specialPlayDetection) {
+      detectedFameEvents.push(specialPlayDetection.event);
+    }
 
     // Log to event log asynchronously (don't block UI)
     // Pass fieldingData to persist detailed fielding info for fWAR calculation
@@ -2367,7 +2403,8 @@ export default function GameTracker({ onGameEnd }: GameTrackerProps = {}) {
       finalHomeScore,
       detectedFameEvents,
       flowState.fieldingData,  // Fielding data from FieldingModal
-      flowState.direction       // Direction for zone mapping
+      flowState.direction,      // Direction for zone mapping
+      flowState.specialPlay
     ).catch(err => console.error('[EventLog] Async logging failed:', err));
 
     // ============================================
@@ -2471,6 +2508,26 @@ export default function GameTracker({ onGameEnd }: GameTrackerProps = {}) {
     setPendingResult(null);
   };
 
+  const formatSpecialPlayNote = (specialPlay: SpecialPlayType | null, result: AtBatResult | null): string | null => {
+    if (!specialPlay || !result) return null;
+
+    if (result === 'HR') {
+      if (specialPlay === 'Over Fence') return null;
+      return `(${specialPlay})`;
+    }
+
+    if (isHit(result)) {
+      if (specialPlay === 'Clean') return null;
+      return `(${specialPlay} effort)`;
+    }
+
+    if (isOut(result) && specialPlay !== 'Routine') {
+      return `(${specialPlay} play)`;
+    }
+
+    return null;
+  };
+
   // Generate activity log entry
   const generateActivityLog = (flowState: AtBatFlowState, batterName: string): string => {
     const { result, rbiCount, direction, hrDistance } = flowState;
@@ -2548,6 +2605,11 @@ export default function GameTracker({ onGameEnd }: GameTrackerProps = {}) {
         break;
       default:
         log += result;
+    }
+
+    const specialNote = formatSpecialPlayNote(flowState.specialPlay, result);
+    if (specialNote) {
+      log += ` ${specialNote}`;
     }
 
     return log;

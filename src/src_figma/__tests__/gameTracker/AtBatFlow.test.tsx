@@ -6,7 +6,7 @@
  */
 
 import { describe, test, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, within } from '@testing-library/react';
 import AtBatFlow from '../../../components/GameTracker/AtBatFlow';
 import type { Bases } from '../../../types/game';
 
@@ -167,8 +167,9 @@ describe('AtBatFlow Component', () => {
     test('validates min distance', () => {
       render(<AtBatFlow {...defaultProps} result="HR" />);
       const input = screen.getByPlaceholderText('e.g., 420');
+      fireEvent.click(screen.getByText('Left'));
       fireEvent.change(input, { target: { value: '200' } });
-      expect(screen.getByText('Min HR distance: 250 ft')).toBeInTheDocument();
+      expect(screen.getByText(/must be at least/)).toBeInTheDocument();
     });
 
     test('validates max distance', () => {
@@ -399,11 +400,11 @@ describe('AtBatFlow Component', () => {
   });
 
   describe('Submit Button', () => {
-    test('shows Continue to Fielding button for ball-in-play outs', () => {
+    test('does not show Continue to Fielding button once modal opens', () => {
       render(<AtBatFlow {...defaultProps} result="GO" />);
       // Select direction
       fireEvent.click(screen.getByText('Left'));
-      expect(screen.getByText('Continue to Fielding →')).toBeInTheDocument();
+      expect(screen.queryByText('Continue to Fielding →')).not.toBeInTheDocument();
     });
 
     test('shows Confirm At-Bat for K/KL', () => {
@@ -434,26 +435,25 @@ describe('AtBatFlow Component', () => {
   });
 
   describe('Fielding Modal Integration', () => {
-    test('opens fielding modal for ball-in-play outs', () => {
+    test('opens fielding modal for ball-in-play outs', async () => {
       render(<AtBatFlow {...defaultProps} result="GO" />);
       fireEvent.click(screen.getByText('Left'));
-      fireEvent.click(screen.getByText('Continue to Fielding →'));
       expect(screen.getByTestId('fielding-modal')).toBeInTheDocument();
+      expect(await screen.findByTestId('fielding-modal')).toBeInTheDocument();
     });
 
-    test('opens fielding modal for hits with fielding attempt', () => {
+    test('opens fielding modal for hits with fielding attempt', async () => {
       render(<AtBatFlow {...defaultProps} result="1B" />);
       fireEvent.click(screen.getByText('Left'));
       fireEvent.click(screen.getByText('Diving'));
-      fireEvent.click(screen.getByText('Continue to Fielding →'));
-      expect(screen.getByTestId('fielding-modal')).toBeInTheDocument();
+      expect(await screen.findByTestId('fielding-modal')).toBeInTheDocument();
     });
 
-    test('shows fielding status after modal completion', () => {
+    test('shows fielding status after modal completion', async () => {
       render(<AtBatFlow {...defaultProps} result="GO" />);
       fireEvent.click(screen.getByText('Left'));
-      fireEvent.click(screen.getByText('Continue to Fielding →'));
-      fireEvent.click(screen.getByText('Complete Fielding'));
+      const modal = await screen.findByTestId('fielding-modal');
+      fireEvent.click(within(modal).getByText('Complete Fielding'));
       expect(screen.getByText('✓ Fielding Confirmed:')).toBeInTheDocument();
     });
   });
@@ -485,17 +485,14 @@ describe('AtBatFlow Component', () => {
       );
     });
 
-    test('includes HR distance in flow state', () => {
+    test('includes HR distance in flow state', async () => {
       const onComplete = vi.fn();
       render(<AtBatFlow {...defaultProps} result="HR" onComplete={onComplete} />);
       fireEvent.click(screen.getByText('Center'));
       const input = screen.getByPlaceholderText('e.g., 420');
       fireEvent.change(input, { target: { value: '425' } });
-      // HR with "Over Fence" (default) doesn't need fielding, but needs to proceed
-      // First complete fielding modal then confirm
-      fireEvent.click(screen.getByText('Continue to Fielding →'));
-      // Complete fielding modal
-      fireEvent.click(screen.getByText('Complete Fielding'));
+      const modal = await screen.findByTestId('fielding-modal');
+      fireEvent.click(within(modal).getByText('Complete Fielding'));
       // Now confirm at-bat
       fireEvent.click(screen.getByText('Confirm At-Bat'));
       expect(onComplete).toHaveBeenCalledWith(
