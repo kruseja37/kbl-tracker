@@ -246,11 +246,12 @@ All fixes pass build + tests but need browser verification.
 - npm test: 4 archived suite failures (pre-existing, excluded from main build)
 
 ## Reconciliation Status (specs/KBL_Guide_v2_Spec_Reconciliation.json)
-- Total corrections: 102
-- Guide-only (code already correct): 96
-- Code fixes needed: 6
-- Code fixes applied: 1 (IDs 6, 20 — Maddux threshold)
-- Code fixes remaining: 5 (IDs 5, 42, 83, 114 — undo cap, All-Star timing, park factor clamp)
+- Total corrections: 97
+- Guide-only: 93
+- Code fixes needed: 6 (across 4 JSON entries)
+- Code fixes applied: 2 (IDs 6, 20 — Maddux threshold)
+- Code fixes remaining: 0 — ALL COMPLETE
+Closeout: All 97 entries in KBL_Guide_v2_Spec_Reconciliation.json have status field (4 FIXED, 93 GUIDE_ONLY)
 
 ## Park Data
 - Source: Billy Yank's Guide to Super Mega Baseball, 3rd Edition
