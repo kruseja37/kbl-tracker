@@ -28,13 +28,19 @@ export function PostGameSummary() {
   const [error, setError] = useState<string | null>(null);
 
   // Get game mode from navigation state to route back appropriately
-  const navigationState = location.state as {
+  const navigationState = (location.state ?? {}) as {
     gameMode?: 'exhibition' | 'franchise' | 'playoff';
     franchiseId?: string;
-  } | null;
+    seasonId?: string;
+  };
 
   const gameMode = navigationState?.gameMode || 'franchise';
   const franchiseId = navigationState?.franchiseId || '1';
+  const baseNavigationState = {
+    ...navigationState,
+    gameMode,
+    franchiseId,
+  };
 
   // Load game data from IndexedDB
   useEffect(() => {
@@ -419,14 +425,26 @@ export function PostGameSummary() {
             onClick={() => {
               // Route based on game mode
               if (gameMode === 'exhibition') {
-                navigate("/exhibition");
-              } else if (gameMode === 'playoff') {
-                // Return to franchise home (bracket tab) — NOT /world-series
-                navigate(`/franchise/${franchiseId}`);
-              } else {
-                navigate(`/franchise/${franchiseId}`);
-              }
-            }}
+      navigate("/exhibition");
+            } else if (gameMode === 'playoff') {
+              // Return to franchise home (bracket tab) — NOT /world-series
+              navigate(`/franchise/${franchiseId}`, {
+                state: {
+                  ...baseNavigationState,
+                  refreshAfterGame: true,
+                  refreshToken: Date.now(),
+                },
+              });
+            } else {
+              navigate(`/franchise/${franchiseId}`, {
+                state: {
+                  ...baseNavigationState,
+                  refreshAfterGame: true,
+                  refreshToken: Date.now(),
+                },
+              });
+            }
+          }}
             className="bg-[#556B55] border-[5px] border-white py-[16px] text-sm text-[#E8E8D8] hover:bg-[#6B9462] active:scale-95 transition-transform shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)] m-[0px] px-[10px]"
           >
             CONTINUE

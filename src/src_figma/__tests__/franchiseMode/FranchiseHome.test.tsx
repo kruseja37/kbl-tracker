@@ -16,10 +16,17 @@ import { render, screen } from '@testing-library/react';
 // ============================================
 
 const mockNavigate = vi.fn();
+const mockLocation = {
+  pathname: "/franchise/test-franchise-123",
+  search: "",
+  hash: "",
+  state: null,
+};
 
 vi.mock('react-router', () => ({
   useNavigate: () => mockNavigate,
   useParams: () => ({ franchiseId: 'test-franchise-123' }),
+  useLocation: () => mockLocation,
 }));
 
 // Mock local storage

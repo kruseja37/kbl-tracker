@@ -1,5 +1,5 @@
-import { useState, useEffect, useMemo, createContext, useContext } from "react";
-import { useNavigate, useParams } from "react-router";
+import { useState, useEffect, useMemo, createContext, useContext, useRef } from "react";
+import { useNavigate, useParams, useLocation } from "react-router";
 import { Calendar, Users, TrendingUp, Newspaper, Trophy, Folder, Home, ChevronDown, ChevronUp, DollarSign, ClipboardList, Star, Award, TrendingDown, Shuffle, UserMinus, CheckCircle, ArrowRight, BarChart3, Plus, GitMerge, FlaskConical, Sunrise } from "lucide-react";
 import { getTeamColors } from "@/config/teamColors";
 import { TeamHubContent } from "@/app/components/TeamHubContent";
@@ -21,6 +21,8 @@ import { useFranchiseData, type UseFranchiseDataReturn } from "@/hooks/useFranch
 import { useScheduleData, type ScheduledGame } from "@/hooks/useScheduleData";
 import { usePlayoffData, type PlayoffTeam } from "@/hooks/usePlayoffData";
 import { getHomeFieldPattern, detectClinch } from "../../../engines/playoffEngine";
+import type { MojoLevel } from "../../../engines/mojoEngine";
+import type { FitnessState } from "../../../engines/fitnessEngine";
 import { SimulationOverlay } from "@/app/components/SimulationOverlay";
 import { BatchOperationOverlay, type BatchOperationType } from "@/app/components/BatchOperationOverlay";
 import {
@@ -56,11 +58,15 @@ const PITCHER_POS = new Set(['SP', 'RP', 'CP', 'P', 'SP/RP', 'TWO-WAY']);
  *
  * Falls back to empty arrays if no data (GameTracker.tsx will use its defaults).
  */
-async function buildGameTrackerRoster(teamId: string): Promise<{
+async function buildGameTrackerRoster(
+  teamId: string,
+  context: { franchiseId?: string; leagueId?: string } = {},
+): Promise<{
   players: TeamRosterPlayer[];
   pitchers: TeamRosterPitcher[];
 }> {
   let dbPlayers;
+  void context;
   try {
     dbPlayers = await getPlayersByTeam(teamId);
   } catch {
@@ -117,6 +123,8 @@ async function buildGameTrackerRoster(teamId: string): Promise<{
       battingOrder: order++,
       stats: { ...emptyBatterStats },
       battingHand: p.bats,
+      mojo: 0 as MojoLevel,
+      fitness: 'FIT' as FitnessState,
     });
   }
 
@@ -141,6 +149,8 @@ async function buildGameTrackerRoster(teamId: string): Promise<{
       battingOrder: undefined,
       stats: { ...emptyBatterStats },
       battingHand: p.bats,
+      mojo: 0 as MojoLevel,
+      fitness: 'FIT' as FitnessState,
     });
   }
 
@@ -155,6 +165,8 @@ async function buildGameTrackerRoster(teamId: string): Promise<{
       throwingHand: p.throws,
       isStarter: isStarter || false,
       isActive: isStarter || false,
+      mojo: 0 as MojoLevel,
+      fitness: 'FIT' as FitnessState,
     });
   });
 
@@ -224,6 +236,7 @@ export function FranchiseHome() {
 
   // Real season data from IndexedDB (with mock fallbacks)
   const franchiseData = useFranchiseData(franchiseId, currentSeason);
+  const franchiseLeagueId = franchiseData.franchiseConfig?.league || 'sml';
   const [addGameModalOpen, setAddGameModalOpen] = useState(false);
 
   // Bracket UI state
@@ -231,6 +244,40 @@ export function FranchiseHome() {
 
   // Playoff System State - Persisted to IndexedDB via usePlayoffData
   const playoffData = usePlayoffData(currentSeason);
+  const location = useLocation();
+  const locationState = (location.state ?? {}) as {
+    refreshAfterGame?: boolean;
+    refreshToken?: number;
+  };
+  const shouldRefreshAfterGame = Boolean(locationState.refreshAfterGame);
+  const refreshToken = locationState.refreshToken ?? null;
+  const lastRefreshToken = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (!shouldRefreshAfterGame || refreshToken === null) return;
+    if (lastRefreshToken.current === refreshToken) return;
+    lastRefreshToken.current = refreshToken;
+
+    const refreshAll = async () => {
+      try {
+        await Promise.all([
+          franchiseData.refresh(),
+          scheduleData.refresh(),
+          playoffData.refresh(),
+        ]);
+      } catch (err) {
+        console.error('[FranchiseHome] Failed to refresh data after game completion:', err);
+      }
+    };
+
+    refreshAll();
+  }, [
+    shouldRefreshAfterGame,
+    refreshToken,
+    franchiseData.refresh,
+    scheduleData.refresh,
+    playoffData.refresh,
+  ]);
 
   // Offseason State - tracks current phase progression
   const offseasonState = useOffseasonState(`season-${currentSeason}`, currentSeason);
@@ -674,8 +721,8 @@ export function FranchiseHome() {
 
     // T0-08: Load real rosters from IndexedDB for both teams
     const [awayRoster, homeRoster] = await Promise.all([
-      buildGameTrackerRoster(awayTeamId),
-      buildGameTrackerRoster(homeTeamId),
+      buildGameTrackerRoster(awayTeamId, { franchiseId, leagueId: franchiseLeagueId }),
+      buildGameTrackerRoster(homeTeamId, { franchiseId, leagueId: franchiseLeagueId }),
     ]);
 
     navigate(`/game-tracker/playoff-${series.id}-g${nextGameNumber}`, {
@@ -694,7 +741,8 @@ export function FranchiseHome() {
         awayRecord: getTeamRecord(awayTeamId), // MAJ-15: Pass actual team records to GameTracker
         homeRecord: getTeamRecord(homeTeamId), // MAJ-15: Pass actual team records to GameTracker
         franchiseId,
-        leagueId: 'sml',
+        leagueId: franchiseLeagueId,
+        stadiumName: franchiseData.stadiumMap?.[homeTeamId] ?? homeTeamName.toUpperCase(),
         // T0-05: Pass season number for playoff persistence
         seasonNumber: currentSeason,
         // T0-01: Pass total innings for auto game-end detection
@@ -2632,6 +2680,7 @@ function GameDayContent({ scheduleData, currentSeason, onDataRefresh }: GameDayC
 
   // Access franchise data for season config
   const franchiseData = useFranchiseDataContext();
+  const franchiseLeagueId = franchiseData.franchiseConfig?.league || 'sml';
 
   // Lookup team record from standings (handles nested LeagueStandings shape)
   // MAJ-15: Needed by handlePlayGame and JSX display
@@ -2708,8 +2757,8 @@ function GameDayContent({ scheduleData, currentSeason, onDataRefresh }: GameDayC
 
     // Load real rosters from IndexedDB for both teams
     const [awayRoster, homeRoster] = await Promise.all([
-      buildGameTrackerRoster(away),
-      buildGameTrackerRoster(home),
+      buildGameTrackerRoster(away, { franchiseId, leagueId: franchiseLeagueId }),
+      buildGameTrackerRoster(home, { franchiseId, leagueId: franchiseLeagueId }),
     ]);
 
     // Find default starter indices (first SP)
@@ -2816,9 +2865,9 @@ function GameDayContent({ scheduleData, currentSeason, onDataRefresh }: GameDayC
         homePitchers: finalHomePitchers.length > 0 ? finalHomePitchers : undefined,
         awayRecord: getTeamRecord(preGameData.awayTeamId),
         homeRecord: getTeamRecord(preGameData.homeTeamId),
-        stadiumName: franchiseData.stadiumMap?.[preGameData.homeTeamId],
+        stadiumName: franchiseData.stadiumMap?.[preGameData.homeTeamId] ?? preGameData.homeTeamName,
         franchiseId,
-        leagueId: 'sml',
+        leagueId: franchiseLeagueId,
         scheduleGameId: preGameData.scheduleGameId,
         seasonNumber: currentSeason,
         totalInnings: franchiseData.franchiseConfig?.season?.inningsPerGame ?? 9,

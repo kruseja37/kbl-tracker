@@ -359,7 +359,15 @@ describe('PostGameSummary Component', () => {
       render(<PostGameSummary />);
       const continueBtn = await screen.findByText('CONTINUE');
       fireEvent.click(continueBtn);
-      expect(mockNavigate).toHaveBeenCalledWith('/franchise/1');
+      expect(mockNavigate).toHaveBeenCalledWith(
+        '/franchise/1',
+        expect.objectContaining({
+          state: expect.objectContaining({
+            refreshAfterGame: true,
+            refreshToken: expect.any(Number),
+          }),
+        })
+      );
     });
   });
 
