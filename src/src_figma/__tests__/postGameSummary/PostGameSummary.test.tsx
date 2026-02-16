@@ -6,8 +6,9 @@
  */
 
 import { describe, test, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, within } from '@testing-library/react';
 import { PostGameSummary } from '../../app/pages/PostGameSummary';
+import type { CompletedGameRecord } from '../../utils/gameStorage';
 
 // ============================================
 // MOCKS
@@ -166,6 +167,98 @@ const mockGameData = {
   ],
 };
 
+const oneInningGame: CompletedGameRecord = {
+  gameId: 'one-inning-game',
+  date: Date.now(),
+  stadiumName: 'Swagger Center',
+  seasonNumber: 1,
+  awayTeamId: 'moonstars',
+  homeTeamId: 'heaters',
+  awayTeamName: 'Moonstars',
+  homeTeamName: 'Heaters',
+  finalScore: { away: 1, home: 0 },
+  innings: 1,
+  fameEvents: [
+    {
+      id: 'fame-1',
+      gameId: 'one-inning-game',
+      eventType: 'HR',
+      playerId: 'away-b-louis',
+      playerName: 'B. Louis',
+      playerTeam: 'moonstars',
+      fameValue: 2,
+      fameType: 'bonus',
+      inning: 1,
+      halfInning: 'TOP',
+      timestamp: Date.now(),
+      autoDetected: false,
+      description: 'Moonstars HR',
+    },
+  ],
+  activityLog: ['Moonstars HR! Swagger Center'],
+  playerStats: {
+    'away-b-louis': {
+      pa: 2, ab: 2, h: 2, singles: 1, doubles: 0, triples: 0, hr: 1,
+      rbi: 1, r: 1, bb: 0, hbp: 0, k: 0, sb: 0, cs: 0,
+      putouts: 0, assists: 0, fieldingErrors: 0,
+    },
+    'home-b-fuller': {
+      pa: 1, ab: 1, h: 0, singles: 0, doubles: 0, triples: 0, hr: 0,
+      rbi: 0, r: 0, bb: 0, hbp: 0, k: 1, sb: 0, cs: 0,
+      putouts: 0, assists: 0, fieldingErrors: 0,
+    },
+  },
+  pitcherGameStats: [
+    {
+      pitcherId: 'away-p-lam',
+      pitcherName: 'Moonstars Ace',
+      teamId: 'moonstars',
+      isStarter: true,
+      entryInning: 1,
+      outsRecorded: 3,
+      hitsAllowed: 0,
+      runsAllowed: 0,
+      earnedRuns: 0,
+      walksAllowed: 1,
+      strikeoutsThrown: 3,
+      homeRunsAllowed: 1,
+      hitBatters: 0,
+      basesReachedViaError: 0,
+      wildPitches: 0,
+      pitchCount: 18,
+      battersFaced: 4,
+      consecutiveHRsAllowed: 0,
+      firstInningRuns: 0,
+      basesLoadedWalks: 0,
+      inningsComplete: 1,
+    },
+    {
+      pitcherId: 'home-p-fuller',
+      pitcherName: 'Heaters Turn',
+      teamId: 'heaters',
+      isStarter: true,
+      entryInning: 1,
+      outsRecorded: 3,
+      hitsAllowed: 2,
+      runsAllowed: 1,
+      earnedRuns: 1,
+      walksAllowed: 0,
+      strikeoutsThrown: 3,
+      homeRunsAllowed: 1,
+      hitBatters: 0,
+      basesReachedViaError: 0,
+      wildPitches: 0,
+      pitchCount: 20,
+      battersFaced: 5,
+      consecutiveHRsAllowed: 0,
+      firstInningRuns: 1,
+      basesLoadedWalks: 0,
+      inningsComplete: 1,
+    },
+  ],
+  inningScores: [{ away: 1, home: 0 }],
+};
+
 describe('Activity Log', () => {
   test('shows activity entries when present', async () => {
     render(<PostGameSummary />);
@@ -291,9 +384,14 @@ describe('PostGameSummary Component', () => {
 
     test('renders POG stats for top performer', async () => {
       render(<PostGameSummary />);
-      // Component format: {h}-{ab} • {rbi} RBI • {r} R
-      // J Martinez: 3-4 • 4 RBI • 2 R
-      expect(await screen.findByText('3-4 • 4 RBI • 2 R')).toBeInTheDocument();
+      const pogCard = await screen.findByText('J Martinez');
+      const card = pogCard.closest('div[class*="border-[5px]"]');
+      expect(card).toBeTruthy();
+      const withinCard = within(card!);
+      expect(withinCard.getByText('4 AB')).toBeInTheDocument();
+      expect(withinCard.getByText('1 BB')).toBeInTheDocument();
+      expect(withinCard.getByText('0 SO')).toBeInTheDocument();
+      expect(withinCard.getByText('2 R')).toBeInTheDocument();
     });
   });
 
@@ -415,6 +513,28 @@ describe('PostGameSummary Component', () => {
       render(<PostGameSummary />);
       // Home team is 'sox' → getTeamColors returns stadium: 'Sox Field'
       expect(await screen.findByText('Sox Field')).toBeInTheDocument();
+    });
+  });
+
+  describe('One-inning recap', () => {
+    test('shows activity log, 1.0 IP, and fame count for short game', async () => {
+      const { getCompletedGameById } = await import('../../utils/gameStorage');
+      vi.mocked(getCompletedGameById).mockResolvedValueOnce(oneInningGame);
+
+      render(<PostGameSummary />);
+
+      expect(await screen.findByText('Moonstars HR! Swagger Center')).toBeInTheDocument();
+
+      const boxScoreToggle = await screen.findByText('BOX SCORE');
+      fireEvent.click(boxScoreToggle);
+
+      const pitcherLabel = await screen.findByText('Moonstars Ace');
+      const pitcherRow = pitcherLabel.closest('div[class*="grid-cols-8"]');
+      expect(pitcherRow).toBeTruthy();
+      const ipCell = pitcherRow?.querySelector(':scope > div:nth-child(2)');
+      expect(ipCell?.textContent?.trim()).toBe('1.0');
+
+      expect(await screen.findByText('Fame events recorded: 1')).toBeInTheDocument();
     });
   });
 });

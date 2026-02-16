@@ -105,6 +105,7 @@ export function PostGameSummary() {
   const awayTeamName = gameData.awayTeamName;
   const stadiumLabel = gameData.stadiumName ?? 'Unknown Stadium';
   const activityLogEntries = gameData.activityLog ?? [];
+  const fameCount = gameData.fameEvents?.length ?? 0;
 
   // Build batter stats from playerStats
   // Player IDs have format "away-{name}" or "home-{name}"
@@ -292,62 +293,51 @@ export function PostGameSummary() {
           ) : (
             <div className="text-[#A8B8A2]">No notable actions recorded during this game.</div>
           )}
+          <div className="text-[10px] text-[#A8B8A2] uppercase tracking-[0.3em] mt-2">
+            Fame events recorded: {fameCount}
+          </div>
         </div>
 
         {/* Players of the game */}
-        {topPerformers.length > 0 && topPerformers[0].h > 0 && (
-          <div
-            className="border-[5px] border-[#C4A853] p-4 mb-4"
-            style={{
-              backgroundColor: getTeamColors(topPerformers[0].isAway ? awayTeamId : homeTeamId).primary || '#2a3a2d'
-            }}
-          >
-            <div className="flex items-center gap-2 mb-2">
-              <Trophy className="w-5 h-5 text-white" />
-              <div className="text-sm text-white">POG ★★★</div>
+        {[0, 1, 2].map(rank => {
+          const player = topPerformers[rank];
+          if (!player || player.h === 0) return null;
+          const borderColor = rank === 0 ? '#C4A853' : rank === 1 ? '#E8E8D8' : '#FFFFFF';
+          const label = rank === 0 ? 'POG ★★★' : rank === 1 ? 'POG ★★' : 'POG ★';
+          return (
+            <div
+              key={rank}
+              className="border-[5px] p-4 mb-4"
+              style={{
+                borderColor,
+                backgroundColor: getTeamColors(player.isAway ? awayTeamId : homeTeamId).primary || '#2a3a2d'
+              }}
+            >
+              <div className="flex items-center gap-2 mb-2">
+                <Trophy className="w-5 h-5 text-white" />
+                <div className="text-sm text-white">{label}</div>
+              </div>
+              <div className="text-lg text-white">{player.name}</div>
+              <div className="text-[8px] text-white/80 space-y-1">
+                <div className="flex items-center gap-2">
+                  <span className="font-bold">{player.h}</span>
+                  <span>-</span>
+                  <span>{player.ab} AB</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span>{player.bb} BB</span>
+                  <span>•</span>
+                  <span>{player.so} SO</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span>{player.rbi} RBI</span>
+                  <span>•</span>
+                  <span>{player.r} R</span>
+                </div>
+              </div>
             </div>
-            <div className="text-lg text-white">{topPerformers[0].name}</div>
-            <div className="text-[8px] text-white/80">
-              {topPerformers[0].h}-{topPerformers[0].ab} • {topPerformers[0].rbi} RBI • {topPerformers[0].r} R
-            </div>
-          </div>
-        )}
-
-        {topPerformers.length > 1 && topPerformers[1].h > 0 && (
-          <div
-            className="border-[5px] border-[#E8E8D8] p-4 mb-4"
-            style={{
-              backgroundColor: getTeamColors(topPerformers[1].isAway ? awayTeamId : homeTeamId).primary || '#2a3a2d'
-            }}
-          >
-            <div className="flex items-center gap-2 mb-2">
-              <Trophy className="w-5 h-5 text-white" />
-              <div className="text-sm text-white">POG ★★</div>
-            </div>
-            <div className="text-lg text-white">{topPerformers[1].name}</div>
-            <div className="text-[8px] text-white/80">
-              {topPerformers[1].h}-{topPerformers[1].ab} • {topPerformers[1].rbi} RBI • {topPerformers[1].r} R
-            </div>
-          </div>
-        )}
-
-        {topPerformers.length > 2 && topPerformers[2].h > 0 && (
-          <div
-            className="border-[5px] border-white p-4 mb-4"
-            style={{
-              backgroundColor: getTeamColors(topPerformers[2].isAway ? awayTeamId : homeTeamId).primary || '#2a3a2d'
-            }}
-          >
-            <div className="flex items-center gap-2 mb-2">
-              <Trophy className="w-5 h-5 text-white" />
-              <div className="text-sm text-white">POG ★</div>
-            </div>
-            <div className="text-lg text-white">{topPerformers[2].name}</div>
-            <div className="text-[8px] text-white/80">
-              {topPerformers[2].h}-{topPerformers[2].ab} • {topPerformers[2].rbi} RBI • {topPerformers[2].r} R
-            </div>
-          </div>
-        )}
+          );
+        })}
 
         {/* Box score preview */}
         <div className="bg-[#6B9462] border-[5px] border-[#4A6844] p-4 mb-4">

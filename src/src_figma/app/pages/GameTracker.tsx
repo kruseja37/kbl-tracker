@@ -219,6 +219,9 @@ export function GameTracker() {
   const pushActivityLog = useCallback((entry: string) => {
     setActivityLog(prev => [entry, ...prev].slice(0, 20));
   }, []);
+  const logAction = useCallback((entry: string) => {
+    pushActivityLog(entry);
+  }, [pushActivityLog]);
 
   // Player state management (Mojo, Fitness, Clutch)
   const playerStateHook = usePlayerState({
@@ -1259,11 +1262,13 @@ export function GameTracker() {
         const rbi = calculateRBIFromOutcomes();
         await recordHit('HR', rbi, runnerAdvancement);
         console.log(`HR recorded: ${playData.hrDistance}ft, type: ${playData.hrType}, sector: ${playData.spraySector}, RBI: ${rbi}`);
+        logAction(`HR (${playData.hrDistance ?? '??'}ft${playData.spraySector ? ` ${playData.spraySector}` : ''}) — ${rbi} RBI`);
       } else if (playData.type === 'hit') {
         const hitType = playData.hitType || '1B';
         const rbi = calculateRBIFromOutcomes();
         await recordHit(hitType as HitType, rbi, runnerAdvancement);
         console.log(`Hit recorded: ${hitType}, sector: ${playData.spraySector}, sequence: ${playData.fieldingSequence.join('-')}, RBI: ${rbi}`);
+        logAction(`${hitType} hit${playData.spraySector ? ` to ${playData.spraySector}` : ''} — ${rbi} RBI`);
       } else if (playData.type === 'out') {
         const outType = playData.outType || 'GO';
 
@@ -1275,6 +1280,7 @@ export function GameTracker() {
           // recordD3K correctly: counts K for both batter and pitcher, NO out, batter reaches 1B
           await recordD3K(true);
           console.log(`D3K recorded: Batter reached first (K stat counted, no out recorded)`);
+          logAction(`D3K (batter reached first)`);
         } else if (outType === 'K' || outType === 'KL') {
           // Normal strikeout OR D3K where batter didn't reach (thrown out at first)
           // Check if this is D3K thrown out scenario - D3K has catcher throwing to first: [2, 3]
@@ -1286,33 +1292,40 @@ export function GameTracker() {
             // D3K where batter was thrown out - still counts K for batter/pitcher, but also out
             await recordD3K(false);
             console.log(`D3K recorded: Batter thrown out (K stat counted, out recorded)`);
+            logAction(`D3K (batter thrown out)`);
           } else {
             // Normal strikeout
             await recordOut(outType as OutType, runnerAdvancement);
             console.log(`Strikeout recorded: ${outType}`);
+            logAction(`Strikeout (${outType})`);
           }
         } else {
           // Normal out (non-strikeout)
           await recordOut(outType as OutType, runnerAdvancement);
           console.log(`Out recorded: ${outType}, sequence: ${playData.fieldingSequence.join('-')}, sector: ${playData.spraySector}`);
+          logAction(`Out (${outType})${playData.fieldingSequence.length ? ` via ${playData.fieldingSequence.join('-')}` : ''}`);
         }
       } else if (playData.type === 'foul_out') {
         await recordOut('FO', runnerAdvancement);
         console.log(`Foul out recorded: ${playData.foulType}, fielder: ${playData.fieldingSequence[0]}`);
+        logAction(`Foul out (${playData.foulType})`);
       } else if (playData.type === 'foul_ball') {
         await advanceCount('strike');
         console.log(`Foul ball (strike) recorded`);
+        logAction('Foul ball (strike)');
       } else if (playData.type === 'walk') {
         // FIX: BUG-001/002/003 - Walks now properly route to recordWalk()
         // This correctly tracks PA without AB or H
         const walkType = playData.walkType || 'BB';
         await recordWalk(walkType as WalkType);
         console.log(`Walk recorded: ${walkType}`);
+        logAction(`${walkType} walk`);
       } else if (playData.type === 'error') {
         // ROE (Reached On Error) - batter reaches base, no out, AB counted, no hit
         const rbi = calculateRBIFromOutcomes();
         await recordError(rbi, runnerAdvancement);
         console.log(`Error recorded: ${playData.errorType} error by fielder #${playData.errorFielder}, RBI: ${rbi}`);
+        logAction(`${playData.errorType} error by fielder ${playData.errorFielder} — ${rbi} RBI`);
       }
 
       // Note: Runner outcomes are now handled by runnerAdvancement parameter
@@ -1975,10 +1988,13 @@ export function GameTracker() {
           pendingOutcome.subType as HitType,
           pendingOutcome.rbi || 0
         );
+        logAction(`${pendingOutcome.subType} (manual) — ${pendingOutcome.rbi || 0} RBI`);
       } else if (pendingOutcome.type === 'out') {
         await recordOut(pendingOutcome.subType as OutType);
+        logAction(`Out (${pendingOutcome.subType}) (manual entry)`);
       } else if (pendingOutcome.type === 'walk') {
         await recordWalk(pendingOutcome.subType as WalkType);
+        logAction(`${pendingOutcome.subType} walk (manual)`);
       }
 
       // Clear pending outcome and close panels
