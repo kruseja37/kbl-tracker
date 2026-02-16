@@ -537,4 +537,26 @@ describe('PostGameSummary Component', () => {
       expect(await screen.findByText('Fame events recorded: 1')).toBeInTheDocument();
     });
   });
+
+  describe('Badge-driven activity log coverage', () => {
+    test('shows activity log entry and hides empty-state message for short game', async () => {
+      const { getCompletedGameById } = await import('../../utils/gameStorage');
+      vi.mocked(getCompletedGameById).mockResolvedValueOnce(oneInningGame);
+
+      render(<PostGameSummary />);
+
+      expect(await screen.findByText('Moonstars HR! Swagger Center')).toBeInTheDocument();
+      expect(screen.queryByText('No notable actions recorded during this game.')).not.toBeInTheDocument();
+    });
+
+    test('displays fame badge count when fame events exist', async () => {
+      const { getCompletedGameById } = await import('../../utils/gameStorage');
+      vi.mocked(getCompletedGameById).mockResolvedValueOnce(oneInningGame);
+
+      render(<PostGameSummary />);
+
+      expect(await screen.findByText('Fame events recorded: 1')).toBeInTheDocument();
+      expect(screen.getByText('Moonstars HR! Swagger Center')).toBeInTheDocument();
+    });
+  });
 });

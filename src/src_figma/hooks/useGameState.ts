@@ -3460,7 +3460,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       getTeamColors(gameState.awayTeamId).stadium ??
       'Unknown Stadium';
 
-    const resolvedStadium =
+    resolvedStadium =
       gameState.stadiumName ??
       getTeamColors(gameState.homeTeamId).stadium ??
       getTeamColors(gameState.awayTeamId).stadium ??
