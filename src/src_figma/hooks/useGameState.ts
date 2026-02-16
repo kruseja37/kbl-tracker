@@ -846,11 +846,19 @@ function processTrackerScoredEvents(
   return { earnedRuns, totalRuns };
 }
 
+function clonePitcherStatsMap(
+  source: Map<string, PitcherGameStats>
+): Map<string, PitcherGameStats> {
+  return new Map(
+    Array.from(source.entries(), ([pitcherId, stats]) => [pitcherId, { ...stats }])
+  );
+}
+
 /**
  * MAJ-08: Calculate pitcher decisions (W/L/SV/H/BS) at game end.
  * Per PITCHER_STATS_TRACKING_SPEC.md §5-6.
  *
- * Mutates the PitcherGameStats objects in the provided Map.
+ * Returns a cloned stats map with pitcher decisions populated.
  */
 async function calculatePitcherDecisions(
   pitcherStats: Map<string, PitcherGameStats>,
@@ -858,15 +866,17 @@ async function calculatePitcherDecisions(
   awayScore: number,
   gameInnings: number,
   gameId: string,
-): Promise<void> {
-  if (homeScore === awayScore) return; // Tie game = no decisions
+): Promise<Map<string, PitcherGameStats>> {
+  const updatedPitcherStats = clonePitcherStatsMap(pitcherStats);
+
+  if (homeScore === awayScore) return updatedPitcherStats; // Tie game = no decisions
 
   const winningTeam = homeScore > awayScore ? 'home' : 'away';
   const losingTeam = winningTeam === 'home' ? 'away' : 'home';
 
   // Separate pitchers by team
   const teamPitchers: { id: string; stats: PitcherGameStats; team: 'away' | 'home' }[] = [];
-  pitcherStats.forEach((stats, id) => {
+  updatedPitcherStats.forEach((stats, id) => {
     const team: 'away' | 'home' = id.toLowerCase().startsWith('away-') ? 'away' : 'home';
     teamPitchers.push({ id, stats, team });
   });
@@ -1004,6 +1014,8 @@ async function calculatePitcherDecisions(
   for (const p of winTeamPitchers) {
     if (p.stats.decision === null) p.stats.decision = 'ND';
   }
+
+  return updatedPitcherStats;
 }
 
 function createEmptyPitcherStats(): PitcherGameStats {
@@ -3411,27 +3423,35 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       };
     });
 
-    // MAJ-07: Mark the last pitcher on each team as finishedGame
-    // The pitcher still active at game end finished the game
+    // MAJ-07: Mark the last pitcher on each team as finishedGame on a cloned map.
+    // Never mutate objects sourced from React state maps directly.
+    const finalizedPitcherStats = clonePitcherStatsMap(pitcherStats);
     const lastPitcherId = gameState.currentPitcherId;
-    const lastPitcherStats = pitcherStats.get(lastPitcherId);
+    const lastPitcherStats = finalizedPitcherStats.get(lastPitcherId);
     if (lastPitcherStats) {
-      lastPitcherStats.finishedGame = true;
-      // If they never had exit info set, set it now
-      if (lastPitcherStats.exitInning === null) {
-        lastPitcherStats.exitInning = gameState.inning;
-        lastPitcherStats.exitOuts = gameState.outs;
-      }
+      finalizedPitcherStats.set(lastPitcherId, {
+        ...lastPitcherStats,
+        finishedGame: true,
+        // If they never had exit info set, set it now
+        exitInning: lastPitcherStats.exitInning ?? gameState.inning,
+        exitOuts: lastPitcherStats.exitOuts ?? gameState.outs,
+      });
     }
 
     // MAJ-08: Calculate pitcher decisions (W/L/SV/H/BS)
     // D-01 FIX: Now async — uses lead-change tracking from AtBatEvents
-    await calculatePitcherDecisions(pitcherStats, gameState.homeScore, gameState.awayScore, gameState.inning, gameState.gameId);
+    const pitcherStatsWithDecisions = await calculatePitcherDecisions(
+      finalizedPitcherStats,
+      gameState.homeScore,
+      gameState.awayScore,
+      gameState.inning,
+      gameState.gameId
+    );
 
     // Convert pitcher stats Map to array for PersistedGameState
     // Use same team/name resolution as endGame() — pitcher IDs have "away-{name}" or "home-{name}" prefix
     const pitcherGameStatsArray: PersistedGameState['pitcherGameStats'] = [];
-    pitcherStats.forEach((stats, pitcherId) => {
+    pitcherStatsWithDecisions.forEach((stats, pitcherId) => {
       const isAwayPitcher = pitcherId.toLowerCase().startsWith('away-');
       const teamId = isAwayPitcher ? gameState.awayTeamId : gameState.homeTeamId;
       const pitcherName = pitcherNamesRef.current.get(pitcherId) ||
