@@ -52,32 +52,44 @@ const mockGameData = {
   playerStats: {
     // Away batters (prefix: away-)
     'away-r-johnson': {
+      playerName: 'R Johnson',
+      teamId: 'tigers',
       pa: 4, ab: 4, h: 2, singles: 1, doubles: 1, triples: 0, hr: 0,
       rbi: 1, r: 1, bb: 0, hbp: 0, k: 1, sb: 0, cs: 0,
       putouts: 0, assists: 0, fieldingErrors: 0,
     },
     'away-m-davis': {
+      playerName: 'M Davis',
+      teamId: 'tigers',
       pa: 4, ab: 4, h: 1, singles: 1, doubles: 0, triples: 0, hr: 0,
       rbi: 1, r: 0, bb: 0, hbp: 0, k: 2, sb: 0, cs: 0,
       putouts: 0, assists: 0, fieldingErrors: 0,
     },
     'away-k-smith': {
+      playerName: 'K Smith',
+      teamId: 'tigers',
       pa: 4, ab: 3, h: 1, singles: 0, doubles: 0, triples: 0, hr: 1,
       rbi: 1, r: 1, bb: 1, hbp: 0, k: 0, sb: 0, cs: 0,
       putouts: 0, assists: 0, fieldingErrors: 0,
     },
     // Home batters (prefix: home-)
     'home-j-martinez': {
+      playerName: 'J Martinez',
+      teamId: 'sox',
       pa: 5, ab: 4, h: 3, singles: 1, doubles: 0, triples: 0, hr: 2,
       rbi: 4, r: 2, bb: 1, hbp: 0, k: 0, sb: 0, cs: 0,
       putouts: 0, assists: 0, fieldingErrors: 0,
     },
     'home-t-williams': {
+      playerName: 'T Williams',
+      teamId: 'sox',
       pa: 4, ab: 4, h: 2, singles: 2, doubles: 0, triples: 0, hr: 0,
       rbi: 0, r: 1, bb: 0, hbp: 0, k: 1, sb: 1, cs: 0,
       putouts: 0, assists: 0, fieldingErrors: 0,
     },
     'home-b-anderson': {
+      playerName: 'B Anderson',
+      teamId: 'sox',
       pa: 3, ab: 3, h: 1, singles: 1, doubles: 0, triples: 0, hr: 0,
       rbi: 0, r: 1, bb: 0, hbp: 0, k: 0, sb: 0, cs: 0,
       putouts: 0, assists: 0, fieldingErrors: 0,
@@ -198,11 +210,15 @@ const oneInningGame: CompletedGameRecord = {
   activityLog: ['Moonstars HR! Swagger Center'],
   playerStats: {
     'away-b-louis': {
+      playerName: 'B Louis',
+      teamId: 'moonstars',
       pa: 2, ab: 2, h: 2, singles: 1, doubles: 0, triples: 0, hr: 1,
       rbi: 1, r: 1, bb: 0, hbp: 0, k: 0, sb: 0, cs: 0,
       putouts: 0, assists: 0, fieldingErrors: 0,
     },
     'home-b-fuller': {
+      playerName: 'B Fuller',
+      teamId: 'heaters',
       pa: 1, ab: 1, h: 0, singles: 0, doubles: 0, triples: 0, hr: 0,
       rbi: 0, r: 0, bb: 0, hbp: 0, k: 1, sb: 0, cs: 0,
       putouts: 0, assists: 0, fieldingErrors: 0,
@@ -521,7 +537,7 @@ describe('PostGameSummary Component', () => {
       const { getCompletedGameById } = await import('../../utils/gameStorage');
       vi.mocked(getCompletedGameById).mockResolvedValueOnce(oneInningGame);
 
-      render(<PostGameSummary />);
+      render(<PostGameSummary gameId={oneInningGame.gameId} />);
 
       expect(await screen.findByText('Moonstars HR! Swagger Center')).toBeInTheDocument();
 
@@ -543,7 +559,7 @@ describe('PostGameSummary Component', () => {
       const { getCompletedGameById } = await import('../../utils/gameStorage');
       vi.mocked(getCompletedGameById).mockResolvedValueOnce(oneInningGame);
 
-      render(<PostGameSummary />);
+      render(<PostGameSummary gameId={oneInningGame.gameId} />);
 
       expect(await screen.findByText('Moonstars HR! Swagger Center')).toBeInTheDocument();
       expect(screen.queryByText('No notable actions recorded during this game.')).not.toBeInTheDocument();
@@ -553,7 +569,7 @@ describe('PostGameSummary Component', () => {
       const { getCompletedGameById } = await import('../../utils/gameStorage');
       vi.mocked(getCompletedGameById).mockResolvedValueOnce(oneInningGame);
 
-      render(<PostGameSummary />);
+      render(<PostGameSummary gameId={oneInningGame.gameId} />);
 
       expect(await screen.findByText('Fame events recorded: 1')).toBeInTheDocument();
       expect(screen.getByText('Moonstars HR! Swagger Center')).toBeInTheDocument();

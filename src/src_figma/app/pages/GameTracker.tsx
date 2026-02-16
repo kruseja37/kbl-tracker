@@ -2049,191 +2049,203 @@ export function GameTracker() {
       return;
     }
     gameEndingRef.current = true;
+    let endGameCompleted = false;
 
-    // MAJ-09: End-of-game achievement detection (No-Hitter, Perfect Game, Maddux, CG, Shutout)
     try {
-      const totalGameOuts = gameState.inning * 3; // Approximate from current inning
-      for (const [pitcherId, pStats] of pitcherStats.entries()) {
-        if (!pStats.isStarter) continue; // Only starters can have CG/NH/PG
-
-        const ipOuts = pStats.outsRecorded;
-        // Complete game: starter must have pitched the entire game (≥ scheduled innings × 3 outs)
-        const scheduledOuts = 9 * 3; // 9-inning game standard
-        const isCompleteGame = ipOuts >= scheduledOuts;
-        if (!isCompleteGame) continue;
-
-        const pitcherName = pitcherId; // ID contains name info from game state tracking
-        const isShutout = isCompleteGame && pStats.runsAllowed === 0;
-        const isNoHitter = isShutout && pStats.hitsAllowed === 0;
-        const isPerfectGame = isNoHitter && pStats.walksAllowed === 0 && (pStats.hitByPitch || 0) === 0;
-        const isMaddux = isShutout && pStats.pitchCount < 100;
-
-        if (isPerfectGame) {
-          fameTrackingHook.recordFameEvent('PERFECT_GAME' as FameEventType, pitcherId, pitcherName, gameState.inning, gameState.isTop ? 'TOP' : 'BOTTOM', 1.0);
-          console.log(`[MAJ-09] Perfect Game detected for ${pitcherId}`);
-        } else if (isNoHitter) {
-          fameTrackingHook.recordFameEvent('NO_HITTER' as FameEventType, pitcherId, pitcherName, gameState.inning, gameState.isTop ? 'TOP' : 'BOTTOM', 1.0);
-          console.log(`[MAJ-09] No-Hitter detected for ${pitcherId}`);
-        } else if (isMaddux) {
-          fameTrackingHook.recordFameEvent('MADDUX' as FameEventType, pitcherId, pitcherName, gameState.inning, gameState.isTop ? 'TOP' : 'BOTTOM', 1.0);
-          console.log(`[MAJ-09] Maddux detected for ${pitcherId}`);
-        } else if (isShutout) {
-          fameTrackingHook.recordFameEvent('SHUTOUT' as FameEventType, pitcherId, pitcherName, gameState.inning, gameState.isTop ? 'TOP' : 'BOTTOM', 1.0);
-          console.log(`[MAJ-09] Complete Game Shutout detected for ${pitcherId}`);
-        } else {
-          fameTrackingHook.recordFameEvent('COMPLETE_GAME' as FameEventType, pitcherId, pitcherName, gameState.inning, gameState.isTop ? 'TOP' : 'BOTTOM', 1.0);
-          console.log(`[MAJ-09] Complete Game detected for ${pitcherId}`);
-        }
-      }
-    } catch (detectionError) {
-      console.warn('[MAJ-09] End-of-game detection error (non-blocking):', detectionError);
-    }
-
-    // MAJ-02: Update fan morale at game end (franchise/playoff only — no morale in exhibition)
-    if (gameMode !== 'exhibition') {
+      // MAJ-09: End-of-game achievement detection (No-Hitter, Perfect Game, Maddux, CG, Shutout)
       try {
-        const homeWon = gameState.homeScore > gameState.awayScore;
-        const homeRunDiff = gameState.homeScore - gameState.awayScore;
-        const isBlowout = Math.abs(homeRunDiff) >= 7;
-        const isRivalMatchup = areRivals(leagueId, homeTeamId, awayTeamId);
+        const totalGameOuts = gameState.inning * 3; // Approximate from current inning
+        for (const [pitcherId, pStats] of pitcherStats.entries()) {
+          if (!pStats.isStarter) continue; // Only starters can have CG/NH/PG
 
-        // Check for special game results from pitcher stats
-        let isNoHitter = false;
-        let isShutout = false;
-        for (const [, pStats] of pitcherStats.entries()) {
-          if (pStats.isStarter && pStats.outsRecorded >= 27) {
-            if (pStats.hitsAllowed === 0 && pStats.runsAllowed === 0) isNoHitter = true;
-            if (pStats.runsAllowed === 0) isShutout = true;
+          const ipOuts = pStats.outsRecorded;
+          // Complete game: starter must have pitched the entire game (≥ scheduled innings × 3 outs)
+          const scheduledOuts = 9 * 3; // 9-inning game standard
+          const isCompleteGame = ipOuts >= scheduledOuts;
+          if (!isCompleteGame) continue;
+
+          const pitcherName = pitcherId; // ID contains name info from game state tracking
+          const isShutout = isCompleteGame && pStats.runsAllowed === 0;
+          const isNoHitter = isShutout && pStats.hitsAllowed === 0;
+          const isPerfectGame = isNoHitter && pStats.walksAllowed === 0 && (pStats.hitByPitch || 0) === 0;
+          const isMaddux = isShutout && pStats.pitchCount < 100;
+
+          if (isPerfectGame) {
+            fameTrackingHook.recordFameEvent('PERFECT_GAME' as FameEventType, pitcherId, pitcherName, gameState.inning, gameState.isTop ? 'TOP' : 'BOTTOM', 1.0);
+            console.log(`[MAJ-09] Perfect Game detected for ${pitcherId}`);
+          } else if (isNoHitter) {
+            fameTrackingHook.recordFameEvent('NO_HITTER' as FameEventType, pitcherId, pitcherName, gameState.inning, gameState.isTop ? 'TOP' : 'BOTTOM', 1.0);
+            console.log(`[MAJ-09] No-Hitter detected for ${pitcherId}`);
+          } else if (isMaddux) {
+            fameTrackingHook.recordFameEvent('MADDUX' as FameEventType, pitcherId, pitcherName, gameState.inning, gameState.isTop ? 'TOP' : 'BOTTOM', 1.0);
+            console.log(`[MAJ-09] Maddux detected for ${pitcherId}`);
+          } else if (isShutout) {
+            fameTrackingHook.recordFameEvent('SHUTOUT' as FameEventType, pitcherId, pitcherName, gameState.inning, gameState.isTop ? 'TOP' : 'BOTTOM', 1.0);
+            console.log(`[MAJ-09] Complete Game Shutout detected for ${pitcherId}`);
+          } else {
+            fameTrackingHook.recordFameEvent('COMPLETE_GAME' as FameEventType, pitcherId, pitcherName, gameState.inning, gameState.isTop ? 'TOP' : 'BOTTOM', 1.0);
+            console.log(`[MAJ-09] Complete Game detected for ${pitcherId}`);
           }
         }
+      } catch (detectionError) {
+        console.warn('[MAJ-09] End-of-game detection error (non-blocking):', detectionError);
+      }
 
-        // MAJ-14: Walk-off = home team wins in the bottom half (scored go-ahead run in their last at-bat)
-        const isWalkOff = homeWon && !gameState.isTop;
+      // MAJ-02: Update fan morale at game end (franchise/playoff only — no morale in exhibition)
+      if (gameMode !== 'exhibition') {
+        try {
+          const homeWon = gameState.homeScore > gameState.awayScore;
+          const homeRunDiff = gameState.homeScore - gameState.awayScore;
+          const isBlowout = Math.abs(homeRunDiff) >= 7;
+          const isRivalMatchup = areRivals(leagueId, homeTeamId, awayTeamId);
 
+          // Check for special game results from pitcher stats
+          let isNoHitter = false;
+          let isShutout = false;
+          for (const [, pStats] of pitcherStats.entries()) {
+            if (pStats.isStarter && pStats.outsRecorded >= 27) {
+              if (pStats.hitsAllowed === 0 && pStats.runsAllowed === 0) isNoHitter = true;
+              if (pStats.runsAllowed === 0) isShutout = true;
+            }
+          }
+
+          // MAJ-14: Walk-off = home team wins in the bottom half (scored go-ahead run in their last at-bat)
+          const isWalkOff = homeWon && !gameState.isTop;
+
+          // Home team perspective
+          const homeResult: FanMoraleGameResult = {
+            gameId: gameId || 'demo-game',
+            won: homeWon,
+            isWalkOff, // MAJ-14: Use real walk-off detection
+            isNoHitter: isNoHitter && homeWon, // Only counts for the winning side
+            isShutout: isShutout && homeWon,
+            isBlowout,
+            vsRival: isRivalMatchup,
+            runDifferential: homeRunDiff,
+            playerPerformances: [],
+          };
+          homeFanMorale.processGameResult(homeResult, { season: 1, game: 1 }, isRivalMatchup ? awayTeamName : undefined);
+
+          // Away team perspective (opposite won/runDiff, mirrored no-hitter/shutout)
+          const awayResult: FanMoraleGameResult = {
+            gameId: gameId || 'demo-game',
+            won: !homeWon,
+            isWalkOff, // MAJ-14: Same walk-off flag (away team experienced it too)
+            isNoHitter: isNoHitter && !homeWon,
+            isShutout: isShutout && !homeWon,
+            isBlowout,
+            vsRival: isRivalMatchup,
+            runDifferential: -homeRunDiff,
+            playerPerformances: [],
+          };
+          awayFanMorale.processGameResult(awayResult, { season: 1, game: 1 }, isRivalMatchup ? homeTeamName : undefined);
+
+          console.log(`[MAJ-02] Fan morale updated (both teams) — homeWon: ${homeWon}, diff: ${homeRunDiff}, shutout: ${isShutout}`);
+        } catch (moraleError) {
+          console.warn('[MAJ-02] Fan morale update error (non-blocking):', moraleError);
+        }
+      }
+
+      // MAJ-04: Generate game recap narratives (dual perspective)
+      let gameNarrative = null;
+      let awayNarrative = null;
+      try {
+        const homeWonForNarrative = gameState.homeScore > gameState.awayScore;
         // Home team perspective
-        const homeResult: FanMoraleGameResult = {
-          gameId: gameId || 'demo-game',
-          won: homeWon,
-          isWalkOff, // MAJ-14: Use real walk-off detection
-          isNoHitter: isNoHitter && homeWon, // Only counts for the winning side
-          isShutout: isShutout && homeWon,
-          isBlowout,
-          vsRival: isRivalMatchup,
-          runDifferential: homeRunDiff,
-          playerPerformances: [],
-        };
-        homeFanMorale.processGameResult(homeResult, { season: 1, game: 1 }, isRivalMatchup ? awayTeamName : undefined);
-
-        // Away team perspective (opposite won/runDiff, mirrored no-hitter/shutout)
-        const awayResult: FanMoraleGameResult = {
-          gameId: gameId || 'demo-game',
-          won: !homeWon,
-          isWalkOff, // MAJ-14: Same walk-off flag (away team experienced it too)
-          isNoHitter: isNoHitter && !homeWon,
-          isShutout: isShutout && !homeWon,
-          isBlowout,
-          vsRival: isRivalMatchup,
-          runDifferential: -homeRunDiff,
-          playerPerformances: [],
-        };
-        awayFanMorale.processGameResult(awayResult, { season: 1, game: 1 }, isRivalMatchup ? homeTeamName : undefined);
-
-        console.log(`[MAJ-02] Fan morale updated (both teams) — homeWon: ${homeWon}, diff: ${homeRunDiff}, shutout: ${isShutout}`);
-      } catch (moraleError) {
-        console.warn('[MAJ-02] Fan morale update error (non-blocking):', moraleError);
+        gameNarrative = generateGameRecap({
+          teamName: homeTeamName,
+          opponentName: awayTeamName,
+          teamScore: gameState.homeScore,
+          opponentScore: gameState.awayScore,
+          isShutout: gameState.awayScore === 0 && homeWonForNarrative,
+        });
+        // Away team perspective
+        awayNarrative = generateGameRecap({
+          teamName: awayTeamName,
+          opponentName: homeTeamName,
+          teamScore: gameState.awayScore,
+          opponentScore: gameState.homeScore,
+          isShutout: gameState.homeScore === 0 && !homeWonForNarrative,
+        });
+        console.log(`[MAJ-04] Dual narratives: Home "${gameNarrative.headline}", Away "${awayNarrative.headline}"`);
+      } catch (narrativeError) {
+        console.warn('[MAJ-04] Narrative generation error (non-blocking):', narrativeError);
       }
-    }
 
-    // MAJ-04: Generate game recap narratives (dual perspective)
-    let gameNarrative = null;
-    let awayNarrative = null;
-    try {
-      const homeWonForNarrative = gameState.homeScore > gameState.awayScore;
-      // Home team perspective
-      gameNarrative = generateGameRecap({
-        teamName: homeTeamName,
-        opponentName: awayTeamName,
-        teamScore: gameState.homeScore,
-        opponentScore: gameState.awayScore,
-        isShutout: gameState.awayScore === 0 && homeWonForNarrative,
-      });
-      // Away team perspective
-      awayNarrative = generateGameRecap({
-        teamName: awayTeamName,
-        opponentName: homeTeamName,
-        teamScore: gameState.awayScore,
-        opponentScore: gameState.homeScore,
-        isShutout: gameState.homeScore === 0 && !homeWonForNarrative,
-      });
-      console.log(`[MAJ-04] Dual narratives: Home "${gameNarrative.headline}", Away "${awayNarrative.headline}"`);
-    } catch (narrativeError) {
-      console.warn('[MAJ-04] Narrative generation error (non-blocking):', narrativeError);
-    }
-
-    // mWAR: Persist decisions and aggregate to season
-    try {
-      if (mwarHook.gameStats && mwarHook.gameStats.decisions.length > 0) {
-        await saveGameDecisions(mwarHook.gameStats.decisions);
-        // Aggregate to season with default team stats (actual record comes from season data)
-        await aggregateManagerGameToSeason(
-          gameId || 'demo-game',
-          'season-1',
-          homeManagerId,
-          homeTeamId,
-          { wins: parseInt(homeRecord.split('-')[0]) || 0, losses: parseInt(homeRecord.split('-')[1]) || 0 }, // MAJ-15: Use actual team record from route state
-          0.5, // Default salary score
-          50, // Default season games
-        );
-        console.log(`[mWAR] Persisted ${mwarHook.gameStats.decisions.length} decisions, mWAR: ${mwarHook.formatCurrentMWAR()}`);
+      // mWAR: Persist decisions and aggregate to season
+      try {
+        if (mwarHook.gameStats && mwarHook.gameStats.decisions.length > 0) {
+          await saveGameDecisions(mwarHook.gameStats.decisions);
+          // Aggregate to season with default team stats (actual record comes from season data)
+          await aggregateManagerGameToSeason(
+            gameId || 'demo-game',
+            'season-1',
+            homeManagerId,
+            homeTeamId,
+            { wins: parseInt(homeRecord.split('-')[0]) || 0, losses: parseInt(homeRecord.split('-')[1]) || 0 }, // MAJ-15: Use actual team record from route state
+            0.5, // Default salary score
+            50, // Default season games
+          );
+          console.log(`[mWAR] Persisted ${mwarHook.gameStats.decisions.length} decisions, mWAR: ${mwarHook.formatCurrentMWAR()}`);
+        }
+      } catch (mwarError) {
+        console.warn('[mWAR] Persistence error (non-blocking):', mwarError);
       }
-    } catch (mwarError) {
-      console.warn('[mWAR] Persistence error (non-blocking):', mwarError);
-    }
 
-    const computedSeasonId = navigationState?.seasonId
-      ?? (navigationState?.franchiseId
-        ? `${navigationState.franchiseId}-season-${navigationState?.seasonNumber ?? 1}`
-        : `season-${navigationState?.seasonNumber ?? 1}`);
-    pushActivityLog(
-      `[Game End] ${homeTeamName} ${gameState.homeScore} - ${awayTeamName} ${gameState.awayScore} (Inning ${gameState.inning})`
-    );
+      const computedSeasonId = navigationState?.seasonId
+        ?? (navigationState?.franchiseId
+          ? `${navigationState.franchiseId}-season-${navigationState?.seasonNumber ?? 1}`
+          : `season-${navigationState?.seasonNumber ?? 1}`);
+      pushActivityLog(
+        `[Game End] ${homeTeamName} ${gameState.homeScore} - ${awayTeamName} ${gameState.awayScore} (Inning ${gameState.inning})`
+      );
     const endGameOptions = {
       activityLog,
       seasonId: computedSeasonId,
       franchiseId: navigationState?.franchiseId,
       currentSeason: navigationState?.seasonNumber ?? 1,
+      stadiumName: selectedStadium,
     };
-    await hookEndGame(endGameOptions);
+      await hookEndGame(endGameOptions);
 
-    // T0-05 FIX: Mark the schedule game as COMPLETED (franchise mode only)
-    // The SIM path does this in FranchiseHome.tsx, but the PLAY path was missing it entirely.
-    // This updates standings (wins/losses) and advances the schedule to the next game.
-    if (navigationState?.scheduleGameId && (navigationState?.gameMode === 'franchise' || navigationState?.gameMode === 'playoff')) {
-      try {
-        const winnerId = gameState.homeScore > gameState.awayScore ? homeTeamId : awayTeamId;
-        const loserId = gameState.homeScore > gameState.awayScore ? awayTeamId : homeTeamId;
-        await completeScheduleGame(navigationState.scheduleGameId, {
-          homeScore: gameState.homeScore,
-          awayScore: gameState.awayScore,
-          winningTeamId: winnerId,
-          losingTeamId: loserId,
-          gameLogId: gameId,
-        });
-        console.log(`[T0-05] Schedule game ${navigationState.scheduleGameId} marked COMPLETED — winner: ${winnerId}`);
-      } catch (schedErr) {
-        console.error('[T0-05] Schedule completion failed:', schedErr);
+      // T0-05 FIX: Mark the schedule game as COMPLETED (franchise mode only)
+      // The SIM path does this in FranchiseHome.tsx, but the PLAY path was missing it entirely.
+      // This updates standings (wins/losses) and advances the schedule to the next game.
+      if (navigationState?.scheduleGameId && (navigationState?.gameMode === 'franchise' || navigationState?.gameMode === 'playoff')) {
+        try {
+          const winnerId = gameState.homeScore > gameState.awayScore ? homeTeamId : awayTeamId;
+          const loserId = gameState.homeScore > gameState.awayScore ? awayTeamId : homeTeamId;
+          await completeScheduleGame(navigationState.scheduleGameId, {
+            homeScore: gameState.homeScore,
+            awayScore: gameState.awayScore,
+            winningTeamId: winnerId,
+            losingTeamId: loserId,
+            gameLogId: gameId,
+          });
+          console.log(`[T0-05] Schedule game ${navigationState.scheduleGameId} marked COMPLETED — winner: ${winnerId}`);
+        } catch (schedErr) {
+          console.error('[T0-05] Schedule completion failed:', schedErr);
+        }
+      }
+
+      // Pass game mode and narratives so PostGameSummary can display them
+      navigate(`/post-game/${gameId}`, {
+        state: {
+          gameMode: navigationState?.gameMode || 'franchise',
+          franchiseId: navigationState?.franchiseId || gameId?.replace('franchise-', '') || '1',
+          gameNarrative,
+          awayNarrative,
+        }
+      });
+      endGameCompleted = true;
+    } catch (err) {
+      console.error('[GameTracker] End game flow failed:', err);
+    } finally {
+      // Release the guard lock if end-game did not complete, so user can retry.
+      if (!endGameCompleted) {
+        gameEndingRef.current = false;
       }
     }
-
-    // Pass game mode and narratives so PostGameSummary can display them
-    navigate(`/post-game/${gameId}`, {
-      state: {
-        gameMode: navigationState?.gameMode || 'franchise',
-        franchiseId: navigationState?.franchiseId || gameId?.replace('franchise-', '') || '1',
-        gameNarrative,
-        awayNarrative,
-      }
-    });
   }, [hookEndGame, navigate, gameId, navigationState?.gameMode, gameMode, gameState, pitcherStats, fameTrackingHook, homeFanMorale, awayFanMorale, homeTeamName, awayTeamName, mwarHook, homeManagerId, homeTeamId, activityLog, pushActivityLog]);
 
   // T0-01: Auto-trigger endGame when regulation ends

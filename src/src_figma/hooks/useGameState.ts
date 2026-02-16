@@ -77,6 +77,7 @@ export interface EndGameOptions {
   franchiseId?: string;
   currentSeason?: number;
   currentGame?: number;
+  stadiumName?: string | null;
 }
 
 export interface ScoreboardState {
@@ -832,7 +833,7 @@ function processTrackerScoredEvents(
     // Attribute run to the RESPONSIBLE pitcher (who allowed runner on base)
     setPitcherStats(prev => {
       const newStats = new Map(prev);
-      const pStats = newStats.get(event.chargedToPitcherId) || createEmpty();
+      const pStats = { ...(newStats.get(event.chargedToPitcherId) || createEmpty()) };
       pStats.runsAllowed++;
       if (event.wasEarnedRun) {
         pStats.earnedRuns++;
@@ -1146,7 +1147,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     pitcherNamesRef.current.clear();
     inningPitchesRef.current = { pitches: 0, strikeouts: 0, pitcherId: '' };
     setScoreboard({
-      innings: Array(9).fill({ away: undefined, home: undefined }),
+      innings: Array(9).fill(null).map(() => ({ away: undefined, home: undefined })),
       away: { runs: 0, hits: 0, errors: 0 },
       home: { runs: 0, hits: 0, errors: 0 },
     });
@@ -1529,7 +1530,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     // Update player stats
     setPlayerStats(prev => {
       const newStats = new Map(prev);
-      const batterStats = newStats.get(gameState.currentBatterId) || createEmptyPlayerStats();
+      const batterStats = { ...(newStats.get(gameState.currentBatterId) || createEmptyPlayerStats()) };
       batterStats.pa++;
       batterStats.ab++;
       batterStats.h++;
@@ -1547,7 +1548,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     // First: update current pitcher's non-run stats (hits, pitch count, etc.)
     setPitcherStats(prev => {
       const newStats = new Map(prev);
-      const pStats = newStats.get(gameState.currentPitcherId) || createEmptyPitcherStats();
+      const pStats = { ...(newStats.get(gameState.currentPitcherId) || createEmptyPitcherStats()) };
       pStats.hitsAllowed++;
       pStats.battersFaced++;
       pStats.pitchCount += pitchCount;
@@ -1846,7 +1847,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     const statResult = effectiveResult; // corrected: e.g. FO→SF, GO→DP
     setPlayerStats(prev => {
       const newStats = new Map(prev);
-      const batterStats = newStats.get(gameState.currentBatterId) || createEmptyPlayerStats();
+      const batterStats = { ...(newStats.get(gameState.currentBatterId) || createEmptyPlayerStats()) };
       batterStats.pa++;
       if (statResult !== 'SF' && statResult !== 'SAC') {
         batterStats.ab++;
@@ -1871,7 +1872,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     // Update pitcher stats — CRIT-02: Use tracker for ER attribution
     setPitcherStats(prev => {
       const newStats = new Map(prev);
-      const pStats = newStats.get(gameState.currentPitcherId) || createEmptyPitcherStats();
+      const pStats = { ...(newStats.get(gameState.currentPitcherId) || createEmptyPitcherStats()) };
       pStats.outsRecorded += outsOnPlay;
       pStats.battersFaced++;
       pStats.pitchCount += pitchCount;
@@ -2079,7 +2080,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     // Update player stats — MAJ-07: Track HBP separately from BB
     setPlayerStats(prev => {
       const newStats = new Map(prev);
-      const batterStats = newStats.get(gameState.currentBatterId) || createEmptyPlayerStats();
+      const batterStats = { ...(newStats.get(gameState.currentBatterId) || createEmptyPlayerStats()) };
       batterStats.pa++;
       if (walkType === 'HBP') {
         batterStats.hbp = (batterStats.hbp || 0) + 1;
@@ -2095,7 +2096,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     // MAJ-07: Track HBP/IBB separately from BB
     setPitcherStats(prev => {
       const newStats = new Map(prev);
-      const pStats = newStats.get(gameState.currentPitcherId) || createEmptyPitcherStats();
+      const pStats = { ...(newStats.get(gameState.currentPitcherId) || createEmptyPitcherStats()) };
       if (walkType === 'HBP') {
         pStats.hitByPitch++;
       } else if (walkType === 'IBB') {
@@ -2257,7 +2258,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     // Update batter stats - ALWAYS count K, PA, AB
     setPlayerStats(prev => {
       const newStats = new Map(prev);
-      const batterStats = newStats.get(gameState.currentBatterId) || createEmptyPlayerStats();
+      const batterStats = { ...(newStats.get(gameState.currentBatterId) || createEmptyPlayerStats()) };
       batterStats.pa++;
       batterStats.ab++; // K counts as AB
       batterStats.k++;  // Always count the strikeout
@@ -2268,7 +2269,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     // Update pitcher stats - ALWAYS count K
     setPitcherStats(prev => {
       const newStats = new Map(prev);
-      const pStats = newStats.get(gameState.currentPitcherId) || createEmptyPitcherStats();
+      const pStats = { ...(newStats.get(gameState.currentPitcherId) || createEmptyPitcherStats()) };
       pStats.strikeoutsThrown++;
       pStats.battersFaced++;
       pStats.pitchCount += pitchCount;
@@ -2414,7 +2415,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     // Update player stats (PA but no AB for ROE)
     setPlayerStats(prev => {
       const newStats = new Map(prev);
-      const batterStats = newStats.get(gameState.currentBatterId) || createEmptyPlayerStats();
+      const batterStats = { ...(newStats.get(gameState.currentBatterId) || createEmptyPlayerStats()) };
       batterStats.pa++;
       batterStats.ab++; // Reach on error is an at-bat per Project Bible.
       // D-04 FIX: Errors NEVER credit RBI per baseball rules and calculateRBIs().
@@ -2427,7 +2428,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     // Update pitcher stats — CRIT-02: Use tracker for ER attribution on errors
     setPitcherStats(prev => {
       const newStats = new Map(prev);
-      const pStats = newStats.get(gameState.currentPitcherId) || createEmptyPitcherStats();
+      const pStats = { ...(newStats.get(gameState.currentPitcherId) || createEmptyPitcherStats()) };
       pStats.battersFaced++;
       pStats.pitchCount += pitchCount;
       // Note: runs/ER attributed via tracker (runner who scored may have been from a different pitcher)
@@ -2644,7 +2645,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     if (eventType === 'WP') {
       setPitcherStats(prev => {
         const newStats = new Map(prev);
-        const pStats = newStats.get(gameState.currentPitcherId) || createEmptyPitcherStats();
+        const pStats = { ...(newStats.get(gameState.currentPitcherId) || createEmptyPitcherStats()) };
         pStats.wildPitches++;
         newStats.set(gameState.currentPitcherId, pStats);
         return newStats;
@@ -3080,14 +3081,15 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         // Update outgoing pitcher
         const outgoing = newStats.get(exitingPitcherId);
         if (outgoing) {
-          outgoing.exitInning = gameState.inning;
-          outgoing.exitOuts = gameState.outs;
+          const updatedOutgoing = { ...outgoing };
+          updatedOutgoing.exitInning = gameState.inning;
+          updatedOutgoing.exitOuts = gameState.outs;
           // Count bequeathed runners from tracker
           const activeRunners = runnerTrackerRef.current.runners.filter(
             r => r.currentBase && r.currentBase !== 'HOME' && r.currentBase !== 'OUT'
           );
-          outgoing.bequeathedRunners = activeRunners.length;
-          newStats.set(exitingPitcherId, outgoing);
+          updatedOutgoing.bequeathedRunners = activeRunners.length;
+          newStats.set(exitingPitcherId, updatedOutgoing);
         }
         // Initialize new pitcher stats with entry context
         if (!newStats.has(newPitcherId)) {
@@ -3186,7 +3188,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     // Update the pitcher's final pitch count
     setPitcherStats(prev => {
       const newStats = new Map(prev);
-      const stats = newStats.get(pitcherId) || createEmptyPitcherStats();
+      const stats = { ...(newStats.get(pitcherId) || createEmptyPitcherStats()) };
       stats.pitchCount = finalCount;
       newStats.set(pitcherId, stats);
       return newStats;
@@ -3230,6 +3232,26 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     // Check BEFORE transitioning to the next half-inning.
     const totalInnings = totalInningsRef.current;
     const { inning, isTop, homeScore, awayScore } = gameState;
+    const teamKey = isTop ? 'away' : 'home';
+    const inningIdx = Math.max(0, inning - 1);
+
+    // Ensure each completed half-inning is represented in line score, even if scoreless.
+    // Without this, scoreless innings can remain undefined in GameTracker and archived inningScores.
+    setScoreboard(prev => {
+      const inningsCopy = [...prev.innings];
+      while (inningsCopy.length <= inningIdx) {
+        inningsCopy.push({ away: undefined, home: undefined });
+      }
+      const currentInning = inningsCopy[inningIdx] || { away: undefined, home: undefined };
+      inningsCopy[inningIdx] = {
+        ...currentInning,
+        [teamKey]: currentInning[teamKey] ?? 0,
+      };
+      return {
+        ...prev,
+        innings: inningsCopy,
+      };
+    });
 
     // After TOP of regulation final inning (or later): if home team leads, game is over
     // (Home team doesn't need to bat if already ahead)
@@ -3455,12 +3477,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
 
     // Construct PersistedGameState for aggregation
     const resolvedStadium =
-      gameState.stadiumName ??
-      getTeamColors(gameState.homeTeamId).stadium ??
-      getTeamColors(gameState.awayTeamId).stadium ??
-      'Unknown Stadium';
-
-    resolvedStadium =
+      opts?.stadiumName ??
       gameState.stadiumName ??
       getTeamColors(gameState.homeTeamId).stadium ??
       getTeamColors(gameState.awayTeamId).stadium ??
@@ -3594,6 +3611,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       franchiseId: options?.franchiseId,
       currentSeason: currentSeasonNumber,
       currentGame: options?.currentGame,
+      stadiumName: options?.stadiumName,
     };
     const awayPlayerIdsForEndGame = new Set(awayLineupRef.current.map(p => p.playerId));
     const playerNameLookupForEndGame = new Map<string, string>();
@@ -3696,6 +3714,13 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         blownSave: stats.blownSave,
       };
     });
+
+    const resolvedStadium =
+      options?.stadiumName ??
+      gameState.stadiumName ??
+      getTeamColors(gameState.homeTeamId).stadium ??
+      getTeamColors(gameState.awayTeamId).stadium ??
+      'Unknown Stadium';
 
     const persistedState: PersistedGameState = {
       id: 'current',

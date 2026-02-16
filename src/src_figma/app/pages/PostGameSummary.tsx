@@ -18,6 +18,10 @@ function formatAvg(hits: number, atBats: number): string {
   return avg.toFixed(3).replace(/^0/, "");
 }
 
+function normalizeTeamId(teamId: string | undefined | null): string {
+  return (teamId ?? "").trim().toLowerCase();
+}
+
 type BadgeVariant = "default" | "success" | "fame";
 
 interface BadgeData {
@@ -166,10 +170,11 @@ function getPitcherBadgeData(
   return Array.from(new Map(badges.map(b => [b.label, b])).values());
 }
 
-export function PostGameSummary() {
+export function PostGameSummary({ gameId: gameIdProp }: { gameId?: string } = {}) {
   const navigate = useNavigate();
   const location = useLocation();
-  const { gameId } = useParams<{ gameId: string }>();
+  const { gameId: gameIdFromRoute } = useParams<{ gameId: string }>();
+  const gameId = gameIdProp ?? gameIdFromRoute;
   const [boxScoreExpanded, setBoxScoreExpanded] = useState(false);
   const [gameData, setGameData] = useState<CompletedGameRecord | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -192,33 +197,56 @@ export function PostGameSummary() {
 
   // Load game data from IndexedDB
   useEffect(() => {
+    let cancelled = false;
+
     async function loadGameData() {
+      // Hard reset prior game state before loading next summary.
+      setGameData(null);
+      setError(null);
+      setIsLoading(true);
+      setBoxScoreExpanded(false);
+
       if (!gameId) {
-        setError("No game ID provided");
-        setIsLoading(false);
+        if (!cancelled) {
+          setError("No game ID provided");
+          setIsLoading(false);
+        }
         return;
       }
 
       try {
         const data = await getCompletedGameById(gameId);
-        if (data) {
+        if (cancelled) return;
+        if (data && data.gameId === gameId) {
           setGameData(data);
         } else {
           setError("Game not found");
         }
       } catch (err) {
+        if (cancelled) return;
         console.error("Failed to load game data:", err);
         setError("Failed to load game data");
       } finally {
-        setIsLoading(false);
+        if (!cancelled) {
+          setIsLoading(false);
+        }
       }
     }
 
     loadGameData();
+
+    return () => {
+      cancelled = true;
+    };
   }, [gameId]);
 
+  const hasStaleGameData =
+    Boolean(gameData) &&
+    typeof gameId === "string" &&
+    gameData.gameId !== gameId;
+
   // Show loading state
-  if (isLoading) {
+  if (isLoading || hasStaleGameData) {
     return (
       <div className="min-h-screen bg-[#2a3a2d] text-white p-6 flex items-center justify-center">
         <div className="flex flex-col items-center gap-4">
@@ -251,28 +279,36 @@ export function PostGameSummary() {
   const awayTeamId = gameData.awayTeamId;
   const homeTeamName = gameData.homeTeamName;
   const awayTeamName = gameData.awayTeamName;
-  const stadiumLabel = gameData.stadiumName ?? 'Unknown Stadium';
+  const stadiumLabel = gameData.stadiumName;
   const activityLogEntries = gameData.activityLog ?? [];
   const fameEvents = gameData.fameEvents ?? [];
   const fameCount = fameEvents.length;
 
   // Build batter stats from playerStats
-  // Player IDs have format "away-{name}" or "home-{name}"
-  const allBatters = Object.entries(gameData.playerStats || {}).map(([playerId, stats]) => {
-    // Determine team from playerId prefix (e.g., "away-john-smith" or "home-jane-doe")
-    const isAway = playerId.toLowerCase().startsWith('away-');
+  const normalizedAwayTeamId = normalizeTeamId(awayTeamId);
+  const normalizedHomeTeamId = normalizeTeamId(homeTeamId);
 
-    // Extract player name: remove "away-" or "home-" prefix, then convert dashes to spaces and title case
-    const nameFromId = playerId.replace(/^(away|home)-/, '').replace(/-/g, ' ');
-    const formattedName = nameFromId
-      .split(' ')
-      .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-      .join(' ');
+  const allBatters = Object.entries(gameData.playerStats)
+    .filter(([, stats]) => {
+      const teamId = normalizeTeamId(stats.teamId);
+      return (
+        (teamId === normalizedAwayTeamId || teamId === normalizedHomeTeamId) &&
+        typeof stats.playerName === "string" &&
+        stats.playerName.trim().length > 0
+      );
+    })
+    .map(([playerId, stats]) => {
+      const teamId = normalizeTeamId(stats.teamId);
+      const isAway = teamId === normalizedAwayTeamId;
+      const plateAppearances = stats.pa;
+      const hasOffensiveLine = plateAppearances > 0 || stats.h > 0 || stats.r > 0 || stats.rbi > 0;
 
       return {
         playerId,
-        name: formattedName,
+        name: stats.playerName,
         isAway,
+        teamId: stats.teamId,
+        pa: plateAppearances,
         ab: stats.ab,
         r: stats.r,
         h: stats.h,
@@ -281,51 +317,68 @@ export function PostGameSummary() {
         bb: stats.bb,
         so: stats.k,
         avg: formatAvg(stats.h, stats.ab),
+        hasOffensiveLine,
       };
     });
 
   // Build pitcher stats
-  const allPitchers = (gameData.pitcherGameStats || []).map(pitcher => ({
-    pitcherId: pitcher.pitcherId,
-    name: pitcher.pitcherName,
-    teamId: pitcher.teamId,
-    isAway: pitcher.teamId === awayTeamId,
-    ip: formatIP(pitcher.outsRecorded),
-    h: pitcher.hitsAllowed,
-    r: pitcher.runsAllowed,
-    er: pitcher.earnedRuns,
-    bb: pitcher.walksAllowed,
-    so: pitcher.strikeoutsThrown,
-    isStarter: pitcher.isStarter,
-    outsRecorded: pitcher.outsRecorded,
-    hitsAllowed: pitcher.hitsAllowed,
-    earnedRuns: pitcher.earnedRuns,
-    walksAllowed: pitcher.walksAllowed,
-    strikeoutsThrown: pitcher.strikeoutsThrown,
-  }));
+  const allPitchers = gameData.pitcherGameStats
+    .filter((pitcher) => {
+      const teamId = normalizeTeamId(pitcher.teamId);
+      return (
+        (teamId === normalizedAwayTeamId || teamId === normalizedHomeTeamId) &&
+        typeof pitcher.pitcherName === "string" &&
+        pitcher.pitcherName.trim().length > 0 &&
+        Number.isFinite(pitcher.outsRecorded)
+      );
+    })
+    .map(pitcher => {
+      const teamId = normalizeTeamId(pitcher.teamId);
+      const isAway = teamId === normalizedAwayTeamId;
+      const outsRecorded = pitcher.outsRecorded;
+
+      return {
+        pitcherId: pitcher.pitcherId,
+        name: pitcher.pitcherName,
+        teamId: pitcher.teamId,
+        isAway,
+        ip: formatIP(outsRecorded),
+        h: pitcher.hitsAllowed,
+        r: pitcher.runsAllowed,
+        er: pitcher.earnedRuns,
+        bb: pitcher.walksAllowed,
+        so: pitcher.strikeoutsThrown,
+        isStarter: pitcher.isStarter,
+        outsRecorded,
+        hitsAllowed: pitcher.hitsAllowed,
+        earnedRuns: pitcher.earnedRuns,
+        walksAllowed: pitcher.walksAllowed,
+        strikeoutsThrown: pitcher.strikeoutsThrown,
+      };
+    });
 
   const awayPitchers = allPitchers.filter(p => p.isAway);
   const homePitchers = allPitchers.filter(p => !p.isAway);
+  const awayBatters = allBatters.filter(b => b.isAway && b.hasOffensiveLine);
+  const homeBatters = allBatters.filter(b => !b.isAway && b.hasOffensiveLine);
 
-  // Calculate team hits from player stats (using player ID prefix)
-  let awayHits = 0;
-  let homeHits = 0;
-  Object.entries(gameData.playerStats || {}).forEach(([playerId, stats]) => {
-    const isAway = playerId.toLowerCase().startsWith('away-');
-    if (isAway) {
-      awayHits += stats.h;
-    } else {
-      homeHits += stats.h;
-    }
-  });
+  // Calculate team totals strictly from this game's playerStats rows.
+  const awayHits = awayBatters.reduce((sum, batter) => sum + batter.h, 0);
+  const homeHits = homeBatters.reduce((sum, batter) => sum + batter.h, 0);
+  const awayErrors = allBatters
+    .filter((batter) => batter.isAway)
+    .reduce((sum, batter) => sum + gameData.playerStats[batter.playerId].fieldingErrors, 0);
+  const homeErrors = allBatters
+    .filter((batter) => !batter.isAway)
+    .reduce((sum, batter) => sum + gameData.playerStats[batter.playerId].fieldingErrors, 0);
 
-  // Inning-by-inning scoring — use actual innings played, not hardcoded 9
-  const inningScores = gameData.inningScores || [];
-  const numInnings = inningScores.length || 9; // fallback to 9 if no data
+  // Inning-by-inning scoring from this completed game only.
+  const inningScores = gameData.inningScores ?? [];
+  const numInnings = inningScores.length;
   const scoreboard = {
     innings: inningScores,
-    away: { runs: gameData.finalScore.away, hits: awayHits, errors: 0 },
-    home: { runs: gameData.finalScore.home, hits: homeHits, errors: 0 },
+    away: { runs: gameData.finalScore.away, hits: awayHits, errors: awayErrors },
+    home: { runs: gameData.finalScore.home, hits: homeHits, errors: homeErrors },
   };
 
   // Determine winner
@@ -333,8 +386,10 @@ export function PostGameSummary() {
   const winnerName = homeWon ? homeTeamName : awayTeamName;
   const winnerId = homeWon ? homeTeamId : awayTeamId;
 
-  // Find players of the game (top performers by hits + RBI)
-  const sortedBatters = [...allBatters].sort((a, b) => {
+  // Find players of the game from this game's saved batting lines only.
+  const sortedBatters = allBatters
+    .filter(b => b.hasOffensiveLine && Boolean(b.name))
+    .sort((a, b) => {
     const aScore = a.h * 2 + a.rbi + a.r;
     const bScore = b.h * 2 + b.rbi + b.r;
     return bScore - aScore;
@@ -510,6 +565,70 @@ export function PostGameSummary() {
 
           {boxScoreExpanded && (
             <div className="space-y-4 mt-3">
+              {/* Away Team Batting */}
+              {awayBatters.length > 0 && (
+                <div>
+                  <div className="text-[10px] text-[#E8E8D8] mb-2 font-bold">{awayTeamName.toUpperCase()} BATTING</div>
+                  <div className="text-[7px]">
+                    <div className="grid grid-cols-8 gap-1 mb-1 text-[#E8E8D8]/60">
+                      <div className="col-span-2 text-left">BATTER</div>
+                      <div className="text-center">AB</div>
+                      <div className="text-center">R</div>
+                      <div className="text-center">H</div>
+                      <div className="text-center">RBI</div>
+                      <div className="text-center">BB</div>
+                      <div className="text-center">SO</div>
+                    </div>
+                    {awayBatters.map((batter, idx) => (
+                      <div key={`${batter.playerId}-${idx}`} className="grid grid-cols-8 gap-1 text-[#E8E8D8] py-[2px]">
+                        <div className="col-span-2 text-left">{batter.name}</div>
+                        <div className="text-center">{batter.ab}</div>
+                        <div className="text-center">{batter.r}</div>
+                        <div className="text-center">{batter.h}</div>
+                        <div className="text-center">{batter.rbi}</div>
+                        <div className="text-center">{batter.bb}</div>
+                        <div className="text-center">{batter.so}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Divider */}
+              <div className="border-t-2 border-[#4A6844]"></div>
+
+              {/* Home Team Batting */}
+              {homeBatters.length > 0 && (
+                <div>
+                  <div className="text-[10px] text-[#E8E8D8] mb-2 font-bold">{homeTeamName.toUpperCase()} BATTING</div>
+                  <div className="text-[7px]">
+                    <div className="grid grid-cols-8 gap-1 mb-1 text-[#E8E8D8]/60">
+                      <div className="col-span-2 text-left">BATTER</div>
+                      <div className="text-center">AB</div>
+                      <div className="text-center">R</div>
+                      <div className="text-center">H</div>
+                      <div className="text-center">RBI</div>
+                      <div className="text-center">BB</div>
+                      <div className="text-center">SO</div>
+                    </div>
+                    {homeBatters.map((batter, idx) => (
+                      <div key={`${batter.playerId}-${idx}`} className="grid grid-cols-8 gap-1 text-[#E8E8D8] py-[2px]">
+                        <div className="col-span-2 text-left">{batter.name}</div>
+                        <div className="text-center">{batter.ab}</div>
+                        <div className="text-center">{batter.r}</div>
+                        <div className="text-center">{batter.h}</div>
+                        <div className="text-center">{batter.rbi}</div>
+                        <div className="text-center">{batter.bb}</div>
+                        <div className="text-center">{batter.so}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Divider */}
+              <div className="border-t-2 border-[#4A6844]"></div>
+
               {/* Away Team Pitching */}
               {awayPitchers.length > 0 && (
                 <div>
@@ -572,9 +691,9 @@ export function PostGameSummary() {
               )}
 
               {/* Show message if no pitcher stats */}
-              {awayPitchers.length === 0 && homePitchers.length === 0 && (
+              {awayPitchers.length === 0 && homePitchers.length === 0 && awayBatters.length === 0 && homeBatters.length === 0 && (
                 <div className="text-center text-[#E8E8D8]/60 text-xs py-4">
-                  No pitcher statistics recorded
+                  No box score statistics recorded
                 </div>
               )}
             </div>
