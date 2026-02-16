@@ -13,6 +13,25 @@ import { UndoButton, useUndoSystem, type GameSnapshot } from "@/app/components/U
 import { TeamRoster, type Player, type Pitcher } from "@/app/components/TeamRoster";
 import { MiniScoreboard } from "@/app/components/MiniScoreboard";
 import { getTeamColors, getFielderBorderColors } from "@/config/teamColors";
+
+const ordinalSuffix = (num: number) => {
+  if (num % 100 >= 11 && num % 100 <= 13) return "th";
+  switch (num % 10) {
+    case 1:
+      return "st";
+    case 2:
+      return "nd";
+    case 3:
+      return "rd";
+    default:
+      return "th";
+  }
+};
+
+const formatInningLabel = (isTop: boolean, inning: number) => {
+  const half = isTop ? "Top" : "Bottom";
+  return `${half} ${inning}${ordinalSuffix(inning)}`;
+};
 import { areRivals } from '../../../data/leagueStructure';
 import { getParkNames } from "../../../data/parkLookup";
 import { useGameState, type HitType, type OutType, type WalkType, type RunnerAdvancement, type PlayerGameStats, type PitcherGameStats } from "@/hooks/useGameState";
@@ -219,9 +238,13 @@ export function GameTracker() {
   const pushActivityLog = useCallback((entry: string) => {
     setActivityLog(prev => [entry, ...prev].slice(0, 20));
   }, []);
+  const inningLabel = useCallback(() => {
+    return formatInningLabel(gameState.isTop, Math.max(1, gameState.inning));
+  }, [gameState.inning, gameState.isTop]);
+
   const logAction = useCallback((entry: string) => {
-    pushActivityLog(entry);
-  }, [pushActivityLog]);
+    pushActivityLog(`${inningLabel()}: ${entry}`);
+  }, [inningLabel, pushActivityLog]);
 
   // Player state management (Mojo, Fitness, Clutch)
   const playerStateHook = usePlayerState({

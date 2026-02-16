@@ -6,6 +6,7 @@
  */
 
 import { useState, useCallback, useEffect, useRef } from 'react';
+import { getTeamColors } from '@/config/teamColors';
 // Import from src/ persistence layer
 import {
   logAtBatEvent,
@@ -3453,6 +3454,18 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     });
 
     // Construct PersistedGameState for aggregation
+    const resolvedStadium =
+      gameState.stadiumName ??
+      getTeamColors(gameState.homeTeamId).stadium ??
+      getTeamColors(gameState.awayTeamId).stadium ??
+      'Unknown Stadium';
+
+    const resolvedStadium =
+      gameState.stadiumName ??
+      getTeamColors(gameState.homeTeamId).stadium ??
+      getTeamColors(gameState.awayTeamId).stadium ??
+      'Unknown Stadium';
+
     const persistedState: PersistedGameState = {
       id: 'current',
       gameId: gameState.gameId,
@@ -3474,7 +3487,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       awayTeamName: gameState.awayTeamName,
       homeTeamName: gameState.homeTeamName,
       seasonNumber: gameState.seasonNumber,
-      stadiumName: gameState.stadiumName ?? null,
+      stadiumName: resolvedStadium,
       playerStats: playerStatsRecord,
       pitcherGameStats: pitcherGameStatsArray,
       fameEvents: fameEvents.map((fe, idx) => ({
@@ -3705,7 +3718,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       awayTeamName: gameState.awayTeamName,
       homeTeamName: gameState.homeTeamName,
       seasonNumber: currentSeasonNumber,
-      stadiumName: gameState.stadiumName ?? null,
+      stadiumName: resolvedStadium,
       playerStats: playerStatsRecord,
       pitcherGameStats: pitcherGameStatsArray,
       // Map local FameEventRecord to PersistedGameState format

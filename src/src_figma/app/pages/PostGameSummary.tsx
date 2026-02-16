@@ -18,6 +18,154 @@ function formatAvg(hits: number, atBats: number): string {
   return avg.toFixed(3).replace(/^0/, "");
 }
 
+type BadgeVariant = "default" | "success" | "fame";
+
+interface BadgeData {
+  label: string;
+  variant?: BadgeVariant;
+}
+
+type FameEventRecord = CompletedGameRecord["fameEvents"] extends Array<infer U> ? U : never;
+
+const badgeVariantClasses: Record<BadgeVariant, string> = {
+  default: "bg-white/10 border-white/30 text-[#E8E8D8]",
+  success: "bg-[#C4A853] border-[#C4A853] text-[#1b2a12]",
+  fame: "bg-[#CC44CC] border-[#CC44CC] text-white",
+};
+
+function SummaryBadge({ label, variant = "default" }: { label: string; variant?: BadgeVariant }) {
+  return (
+    <span
+      className={`inline-flex items-center gap-1 text-[9px] tracking-[0.3em] uppercase px-2 py-0.5 rounded-full border ${badgeVariantClasses[variant]}`}
+    >
+      {label}
+    </span>
+  );
+}
+
+function BadgeGroup({ badges }: { badges: BadgeData[] }) {
+  if (badges.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="flex flex-wrap gap-2 mt-2">
+      {badges.map((badge, idx) => (
+        <SummaryBadge key={`${badge.label}-${idx}`} label={badge.label} variant={badge.variant} />
+      ))}
+    </div>
+  );
+}
+
+function normalizeBadgeLabel(value: string | undefined): string {
+  if (!value) return "Fame Event";
+  return value
+    .replace(/_/g, " ")
+    .split(" ")
+    .filter(Boolean)
+    .map(word => word[0]?.toUpperCase() + word.slice(1).toLowerCase())
+    .join(" ");
+}
+
+function getFameBadgeLabel(event: FameEventRecord): string {
+  const type = event?.eventType?.toLowerCase() ?? "";
+  if (type.includes("walkoff")) {
+    if (type.includes("hr")) {
+      return "Walk-off HR";
+    }
+    return "Walk-off";
+  }
+  if (type.includes("clutch")) {
+    return "Clutch Moment";
+  }
+  if (type.includes("web")) {
+    return "Web Gem";
+  }
+  if (event.description) {
+    return event.description;
+  }
+  if (event.eventType) {
+    return normalizeBadgeLabel(event.eventType);
+  }
+  return "Fame Event";
+}
+
+interface PlayerBadgeInputs {
+  playerId: string;
+  hr: number;
+  rbi: number;
+  r: number;
+  bb: number;
+  so: number;
+  h: number;
+}
+
+function buildPlayerBadgeData(player: PlayerBadgeInputs, fameMap: Map<string, FameEventRecord[]>): BadgeData[] {
+  const badges: BadgeData[] = [];
+  if (player.hr > 0) {
+    badges.push({ label: `${player.hr} HR`, variant: "success" });
+  }
+  if (player.h >= 2) {
+    badges.push({ label: `${player.h} Hits`, variant: "success" });
+  }
+  if (player.r >= 2) {
+    badges.push({ label: `${player.r} R`, variant: "default" });
+  }
+  if (player.rbi >= 2) {
+    badges.push({ label: `${player.rbi} RBI`, variant: "default" });
+  }
+  if (player.bb >= 3) {
+    badges.push({ label: `${player.bb} BB`, variant: "default" });
+  }
+  const fameForPlayer = fameMap.get(player.playerId) ?? [];
+  fameForPlayer.forEach(event => {
+    badges.push({ label: getFameBadgeLabel(event), variant: "fame" });
+  });
+  return Array.from(new Map(badges.map(b => [b.label, b])).values());
+}
+
+interface PitcherBadgeInputs {
+  pitcherId: string;
+  outsRecorded: number;
+  earnedRuns: number;
+  hitsAllowed: number;
+  walksAllowed: number;
+  strikeoutsThrown: number;
+  isStarter: boolean;
+}
+
+function getPitcherBadgeData(
+  pitcher: PitcherBadgeInputs,
+  fameMap: Map<string, FameEventRecord[]>
+): BadgeData[] {
+  const badges: BadgeData[] = [];
+  if (pitcher.outsRecorded >= 3) {
+    badges.push({ label: "1+ IP", variant: "default" });
+  }
+  if (pitcher.earnedRuns === 0 && pitcher.outsRecorded > 0) {
+    badges.push({ label: "Scoreless", variant: "success" });
+  }
+  if (pitcher.hitsAllowed === 0 && pitcher.outsRecorded > 0) {
+    badges.push({ label: "Hitless", variant: "success" });
+  }
+  if (pitcher.strikeoutsThrown >= 3) {
+    badges.push({ label: `${pitcher.strikeoutsThrown} K`, variant: "success" });
+  }
+  if (pitcher.walksAllowed === 0 && pitcher.outsRecorded > 0) {
+    badges.push({ label: "No BB", variant: "default" });
+  }
+  if (pitcher.isStarter) {
+    badges.push({ label: "Starter", variant: "default" });
+  }
+
+  const fameForPitcher = fameMap.get(pitcher.pitcherId) ?? [];
+  fameForPitcher.forEach(event => {
+    badges.push({ label: getFameBadgeLabel(event), variant: "fame" });
+  });
+
+  return Array.from(new Map(badges.map(b => [b.label, b])).values());
+}
+
 export function PostGameSummary() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -105,7 +253,8 @@ export function PostGameSummary() {
   const awayTeamName = gameData.awayTeamName;
   const stadiumLabel = gameData.stadiumName ?? 'Unknown Stadium';
   const activityLogEntries = gameData.activityLog ?? [];
-  const fameCount = gameData.fameEvents?.length ?? 0;
+  const fameEvents = gameData.fameEvents ?? [];
+  const fameCount = fameEvents.length;
 
   // Build batter stats from playerStats
   // Player IDs have format "away-{name}" or "home-{name}"
@@ -120,19 +269,20 @@ export function PostGameSummary() {
       .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
       .join(' ');
 
-    return {
-      playerId,
-      name: formattedName,
-      isAway,
-      ab: stats.ab,
-      r: stats.r,
-      h: stats.h,
-      rbi: stats.rbi,
-      bb: stats.bb,
-      so: stats.k,
-      avg: formatAvg(stats.h, stats.ab),
-    };
-  });
+      return {
+        playerId,
+        name: formattedName,
+        isAway,
+        ab: stats.ab,
+        r: stats.r,
+        h: stats.h,
+        hr: stats.hr,
+        rbi: stats.rbi,
+        bb: stats.bb,
+        so: stats.k,
+        avg: formatAvg(stats.h, stats.ab),
+      };
+    });
 
   // Build pitcher stats
   const allPitchers = (gameData.pitcherGameStats || []).map(pitcher => ({
@@ -147,6 +297,11 @@ export function PostGameSummary() {
     bb: pitcher.walksAllowed,
     so: pitcher.strikeoutsThrown,
     isStarter: pitcher.isStarter,
+    outsRecorded: pitcher.outsRecorded,
+    hitsAllowed: pitcher.hitsAllowed,
+    earnedRuns: pitcher.earnedRuns,
+    walksAllowed: pitcher.walksAllowed,
+    strikeoutsThrown: pitcher.strikeoutsThrown,
   }));
 
   const awayPitchers = allPitchers.filter(p => p.isAway);
