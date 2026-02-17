@@ -47,9 +47,9 @@ export interface PersistedGameState {
   homeScore: number;
   awayScore: number;
   bases: {
-    first: { playerId: string; playerName: string } | null;
-    second: { playerId: string; playerName: string } | null;
-    third: { playerId: string; playerName: string } | null;
+    first: { playerId: string; playerName: string; inheritedFrom?: string | null } | null;
+    second: { playerId: string; playerName: string; inheritedFrom?: string | null } | null;
+    third: { playerId: string; playerName: string; inheritedFrom?: string | null } | null;
   };
   currentBatterIndex: number;
   atBatCount: number;
@@ -164,6 +164,13 @@ export interface PersistedGameState {
 
   // Activity log (recent entries)
   activityLog: string[];
+
+  // Per-inning pitch tracking (for Immaculate Inning detection)
+  currentInningPitches?: {
+    pitches: number;
+    strikeouts: number;
+    pitcherId: string;
+  } | null;
 }
 
 // ... (keep saveCurrentGame, loadCurrentGame, clearCurrentGame, hasSavedGame as they were) ...

@@ -96,7 +96,6 @@ export interface GameStateForPersistence {
   homeTeamId: string;
   awayTeamName: string;
   homeTeamName: string;
-  seasonNumber: number;
   playerStats: Record<string, PlayerStats>;
   pitcherGameStats: Map<string, PitcherGameStats>;
   fameEvents: FameEvent[];
@@ -106,8 +105,8 @@ export interface GameStateForPersistence {
   maxDeficitAway: number;
   maxDeficitHome: number;
   activityLog: string[];
-  // Per-inning pitch tracking (for Immaculate Inning detection)
-  currentInningPitches?: InningPitchData;
+  currentInningPitches?: InningPitchData | null;
+  seasonNumber: number;
 }
 
 export interface UseGamePersistenceOptions {
@@ -162,11 +161,29 @@ function toPersistedState(state: GameStateForPersistence): PersistedGameState {
     outs: state.outs,
     homeScore: state.homeScore,
     awayScore: state.awayScore,
-    bases: {
-      first: state.bases.first ? { playerId: state.bases.first.playerId, playerName: state.bases.first.playerName } : null,
-      second: state.bases.second ? { playerId: state.bases.second.playerId, playerName: state.bases.second.playerName } : null,
-      third: state.bases.third ? { playerId: state.bases.third.playerId, playerName: state.bases.third.playerName } : null,
-    },
+  bases: {
+    first: state.bases.first
+      ? {
+          playerId: state.bases.first.playerId,
+          playerName: state.bases.first.playerName,
+          inheritedFrom: state.bases.first.inheritedFrom ?? null,
+        }
+      : null,
+    second: state.bases.second
+      ? {
+          playerId: state.bases.second.playerId,
+          playerName: state.bases.second.playerName,
+          inheritedFrom: state.bases.second.inheritedFrom ?? null,
+        }
+      : null,
+    third: state.bases.third
+      ? {
+          playerId: state.bases.third.playerId,
+          playerName: state.bases.third.playerName,
+          inheritedFrom: state.bases.third.inheritedFrom ?? null,
+        }
+      : null,
+  },
     currentBatterIndex: state.currentBatterIndex,
     atBatCount: state.atBatCount,
     awayTeamId: state.awayTeamId,
@@ -174,8 +191,8 @@ function toPersistedState(state: GameStateForPersistence): PersistedGameState {
     awayTeamName: state.awayTeamName,
     homeTeamName: state.homeTeamName,
     seasonNumber: state.seasonNumber,
-    playerStats: state.playerStats,
-    pitcherGameStats: mapToArray(state.pitcherGameStats),
+  playerStats: state.playerStats,
+  pitcherGameStats: mapToArray(state.pitcherGameStats),
     fameEvents: state.fameEvents.map(e => ({
       id: e.id,
       gameId: e.gameId,
@@ -196,8 +213,9 @@ function toPersistedState(state: GameStateForPersistence): PersistedGameState {
     inningStrikeouts: state.inningStrikeouts,
     maxDeficitAway: state.maxDeficitAway,
     maxDeficitHome: state.maxDeficitHome,
-    activityLog: state.activityLog.slice(0, 20),  // Keep last 20 entries
-  };
+  activityLog: state.activityLog.slice(0, 20),  // Keep last 20 entries
+  currentInningPitches: state.currentInningPitches ?? null,
+};
 }
 
 /**
@@ -212,9 +230,9 @@ function fromPersistedState(persisted: PersistedGameState): GameStateForPersiste
     homeScore: persisted.homeScore,
     awayScore: persisted.awayScore,
     bases: {
-      first: persisted.bases.first ? { ...persisted.bases.first, inheritedFrom: null } : null,
-      second: persisted.bases.second ? { ...persisted.bases.second, inheritedFrom: null } : null,
-      third: persisted.bases.third ? { ...persisted.bases.third, inheritedFrom: null } : null,
+      first: persisted.bases.first ? { ...persisted.bases.first } : null,
+      second: persisted.bases.second ? { ...persisted.bases.second } : null,
+      third: persisted.bases.third ? { ...persisted.bases.third } : null,
     },
     currentBatterIndex: persisted.currentBatterIndex,
     atBatCount: persisted.atBatCount,
@@ -232,6 +250,7 @@ function fromPersistedState(persisted: PersistedGameState): GameStateForPersiste
     maxDeficitAway: persisted.maxDeficitAway,
     maxDeficitHome: persisted.maxDeficitHome,
     activityLog: persisted.activityLog,
+    currentInningPitches: persisted.currentInningPitches ?? null,
   };
 }
 
