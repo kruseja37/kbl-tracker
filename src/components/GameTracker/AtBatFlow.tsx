@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useReducer, useState, useEffect } from 'react';
 import type {
   AtBatResult,
   Direction,
@@ -15,6 +15,16 @@ import type {
 } from '../../types/game';
 import { inferFielder, requiresBallInPlayData, isOut } from '../../types/game';
 import { getMinFenceDistance, getParkByName } from '../../data/parkLookup';
+import {
+  isRunnerForced as evaluateRunnerForced,
+  getMinimumAdvancement as evaluateMinimumAdvancement,
+  isExtraAdvancement as evaluateExtraAdvancement,
+  outcomeToDestination as mapOutcomeToDestination,
+  getDefaultOutcome as evaluateDefaultOutcome,
+  calculateRBIs as evaluateRBIs,
+  RunnerOutcomes,
+  BaseKey,
+} from './atBatLogic';
 import FieldingModal from './FieldingModal';
 
 
@@ -46,7 +56,19 @@ const specialPlaysForHits: SpecialPlayType[] = ['Clean', 'Diving', 'Leaping', 'R
 const specialPlaysForHR: SpecialPlayType[] = ['Over Fence', 'Robbery Attempt', 'Wall Scraper'];
 
 // DP Types
-const dpTypes = ['6-4-3', '4-6-3', '5-4-3', '3-6-3', '6-3', '4-3', '1-6-3', 'Other'];
+const dpTypes = [
+  '6-4-3',
+  '4-6-3',
+  '5-4-3',
+  '3-6-3',
+  '6-3',
+  '4-3',
+  '1-6-3',
+  'Other',
+  'Flyout DP',
+  'Lineout DP',
+];
+const flyDpTypes = new Set(['Flyout DP', 'Lineout DP']);
 
 type FenceDirection = 'lf' | 'cf' | 'rf';
 
@@ -60,6 +82,242 @@ const mapDirectionToFence = (direction: Direction | null): FenceDirection | null
   return 'cf';
 };
 
+type BooleanField = 'savedRun' | 'is7PlusPitchAB' | 'beatOutSingle' | 'batterOutAdvancing';
+
+interface PendingExtraEvent {
+  base: BaseKey;
+  outcome: RunnerOutcome;
+}
+
+interface AtBatState {
+  initialResult: AtBatResult;
+  result: AtBatResult;
+  direction: Direction | null;
+  fielder: Position | null;
+  hrDistance: string;
+  specialPlay: SpecialPlayType | null;
+  runnerOutcomes: RunnerOutcomes;
+  extraEvents: ExtraEvent[];
+  is7PlusPitchAB: boolean;
+  beatOutSingle: boolean;
+  savedRun: boolean;
+  batterOutAdvancing: boolean;
+  outAdvancingPutout: Position | null;
+  outAdvancingAssists: Position[];
+  autoCorrection: string | null;
+  pendingExtraEvent: PendingExtraEvent | null;
+  dpType: string | null;
+  dpForcePlay: boolean;
+  fieldingData: FieldingData | null;
+}
+
+type AtBatAction =
+  | { type: 'SET_RESULT'; payload: AtBatResult }
+  | { type: 'SET_DIRECTION'; payload: Direction | null }
+  | { type: 'SET_FIELDER'; payload: Position | null }
+  | { type: 'SET_HR_DISTANCE'; payload: string }
+  | { type: 'SET_SPECIAL_PLAY'; payload: SpecialPlayType | null }
+  | {
+      type: 'SET_RUNNER_OUTCOME';
+      payload: { base: BaseKey; outcome: RunnerOutcome; runnerName?: string; bases: Bases; outs: number };
+    }
+  | {
+      type: 'SET_RUNNER_OUTCOMES';
+      payload: { outcomes: RunnerOutcomes; bases: Bases; outs: number };
+    }
+  | { type: 'ADD_EXTRA_EVENT'; payload: ExtraEvent }
+  | { type: 'REMOVE_EXTRA_EVENT'; payload: { runner: string } }
+  | { type: 'TOGGLE_BOOLEAN'; payload: { field: BooleanField; value?: boolean } }
+  | { type: 'SET_OUT_ADVANCING_PUTOUT'; payload: Position | null }
+  | { type: 'TOGGLE_OUT_ADVANCING_ASSIST'; payload: Position }
+  | { type: 'SET_DP_TYPE'; payload: { dpType: string | null; bases: Bases; outs: number } }
+  | { type: 'UPDATE_FIELDING_DATA'; payload: FieldingData | null };
+
+const countRunnerOuts = (outcomes: RunnerOutcomes): number => {
+  let count = 0;
+  if (outcomes.first && outcomes.first.startsWith('OUT_')) count++;
+  if (outcomes.second && outcomes.second.startsWith('OUT_')) count++;
+  if (outcomes.third && outcomes.third.startsWith('OUT_')) count++;
+  return count;
+};
+
+const hasRunnerAdvanced = (bases: Bases, outcomes: RunnerOutcomes): boolean => {
+  return (
+    (bases.first && ['TO_2B', 'TO_3B', 'SCORED'].includes(outcomes.first || '')) ||
+    (bases.second && ['TO_3B', 'SCORED'].includes(outcomes.second || '')) ||
+    (bases.third && outcomes.third === 'SCORED')
+  );
+};
+
+const applyAutoCorrection = (
+  state: AtBatState,
+  outcomes: RunnerOutcomes,
+  bases: Bases,
+  outs: number
+): { result: AtBatResult; autoCorrection: string | null } => {
+  const prevResult = state.result;
+  let nextResult = prevResult;
+  let autoCorrection = state.autoCorrection;
+
+  if (state.initialResult === 'FO' && outs < 2 && bases.third && outcomes.third === 'SCORED') {
+    nextResult = 'SF';
+    autoCorrection = 'Auto-corrected to Sac Fly (runner scored from 3rd on fly out)';
+  } else if (state.initialResult === 'FO' && prevResult === 'SF' && outcomes.third !== 'SCORED') {
+    nextResult = 'FO';
+    autoCorrection = null;
+  } else if (state.initialResult === 'GO' && outs < 2) {
+    const runnerOutsCount = countRunnerOuts(outcomes);
+    if (runnerOutsCount >= 1) {
+      nextResult = 'DP';
+      autoCorrection = 'Auto-corrected to Double Play (2 outs recorded: batter + runner)';
+    } else {
+      const runnerAdvance = hasRunnerAdvanced(bases, outcomes);
+      if (runnerAdvance && prevResult !== 'SAC') {
+        autoCorrection = 'Tip: If this was an intentional sacrifice bunt, use SAC instead';
+      } else if (!runnerAdvance) {
+        autoCorrection = null;
+      }
+    }
+  } else if (state.initialResult === 'GO' && prevResult === 'DP') {
+    if (countRunnerOuts(outcomes) === 0) {
+      nextResult = 'GO';
+      autoCorrection = null;
+    }
+  }
+
+  return { result: nextResult, autoCorrection };
+};
+
+const initialAtBatState = (initialResult: AtBatResult): AtBatState => ({
+  initialResult,
+  result: initialResult,
+  direction: null,
+  fielder: null,
+  hrDistance: '',
+  specialPlay: null,
+  runnerOutcomes: { first: null, second: null, third: null },
+  extraEvents: [],
+  is7PlusPitchAB: false,
+  beatOutSingle: false,
+  savedRun: false,
+  batterOutAdvancing: false,
+  outAdvancingPutout: null,
+  outAdvancingAssists: [],
+  autoCorrection: null,
+  pendingExtraEvent: null,
+  dpType: null,
+  dpForcePlay: true,
+  fieldingData: null,
+});
+
+const reducer = (state: AtBatState, action: AtBatAction): AtBatState => {
+  switch (action.type) {
+    case 'SET_DIRECTION': {
+      const direction = action.payload;
+      const needsFielder = isOut(state.result) && !['K', 'KL'].includes(state.result);
+      return {
+        ...state,
+        direction,
+        fielder: needsFielder && direction ? inferFielder(state.result, direction) : state.fielder,
+      };
+    }
+    case 'SET_FIELDER':
+      return { ...state, fielder: action.payload };
+    case 'SET_HR_DISTANCE':
+      return { ...state, hrDistance: action.payload };
+    case 'SET_SPECIAL_PLAY':
+      return { ...state, specialPlay: action.payload };
+    case 'SET_RESULT':
+      return { ...state, result: action.payload, autoCorrection: null };
+    case 'SET_RUNNER_OUTCOMES': {
+      const auto = applyAutoCorrection(state, action.payload.outcomes, action.payload.bases, action.payload.outs);
+      return {
+        ...state,
+        runnerOutcomes: action.payload.outcomes,
+        extraEvents: [],
+        pendingExtraEvent: null,
+        result: auto.result,
+        autoCorrection: auto.autoCorrection,
+      };
+    }
+    case 'SET_RUNNER_OUTCOME': {
+      const { base, outcome, runnerName, bases, outs } = action.payload;
+      const updatedOutcomes: RunnerOutcomes = { ...state.runnerOutcomes, [base]: outcome };
+      const auto = applyAutoCorrection(state, updatedOutcomes, bases, outs);
+      const filteredEvents = runnerName
+        ? state.extraEvents.filter(ev => ev.runner !== runnerName)
+        : state.extraEvents;
+      const needsExtra = evaluateExtraAdvancement(base, outcome, auto.result, bases, outs);
+      return {
+        ...state,
+        runnerOutcomes: updatedOutcomes,
+        extraEvents: filteredEvents,
+        pendingExtraEvent: needsExtra ? { base, outcome } : null,
+        result: auto.result,
+        autoCorrection: auto.autoCorrection,
+      };
+    }
+    case 'ADD_EXTRA_EVENT':
+      return {
+        ...state,
+        extraEvents: [...state.extraEvents, action.payload],
+        pendingExtraEvent: null,
+      };
+    case 'REMOVE_EXTRA_EVENT':
+      return {
+        ...state,
+        extraEvents: state.extraEvents.filter(ev => ev.runner !== action.payload.runner),
+        pendingExtraEvent: null,
+      };
+    case 'TOGGLE_BOOLEAN': {
+      const { field, value } = action.payload;
+      const nextValue = value !== undefined ? value : !state[field];
+      if (field === 'batterOutAdvancing' && !nextValue) {
+        return {
+          ...state,
+          [field]: nextValue,
+          outAdvancingPutout: null,
+          outAdvancingAssists: [],
+        };
+      }
+      return { ...state, [field]: nextValue };
+    }
+    case 'SET_OUT_ADVANCING_PUTOUT':
+      return { ...state, outAdvancingPutout: action.payload };
+    case 'TOGGLE_OUT_ADVANCING_ASSIST': {
+      const alreadySelected = state.outAdvancingAssists.includes(action.payload);
+      const assists = alreadySelected
+        ? state.outAdvancingAssists.filter(p => p !== action.payload)
+        : [...state.outAdvancingAssists, action.payload];
+      return { ...state, outAdvancingAssists: assists };
+    }
+    case 'SET_DP_TYPE': {
+      const { dpType, bases, outs } = action.payload;
+      let dpForcePlay = state.dpForcePlay;
+
+      if (dpType === null) {
+        dpForcePlay = true;
+      } else if (flyDpTypes.has(dpType)) {
+        dpForcePlay = false;
+      } else if (dpType === 'Other') {
+        dpForcePlay = evaluateRunnerForced('third', 'DP', bases, outs);
+      } else {
+        dpForcePlay = true;
+      }
+
+      return { ...state, dpType, dpForcePlay };
+    }
+    case 'UPDATE_FIELDING_DATA':
+      return {
+        ...state,
+        fieldingData: action.payload,
+        fielder: action.payload?.primaryFielder ?? state.fielder,
+      };
+    default:
+      return state;
+  }
+};
+
 export default function AtBatFlow({
   result: initialResult,
   bases,
@@ -70,246 +328,54 @@ export default function AtBatFlow({
   onCancel,
   stadiumName,
 }: AtBatFlowProps) {
-  // Track the current result (can be auto-corrected based on runner outcomes)
-  const [result, setResult] = useState<AtBatResult>(initialResult);
-  const [autoCorrection, setAutoCorrection] = useState<string | null>(null);
-
-  const [direction, setDirection] = useState<Direction | null>(null);
-  const [exitType, setExitType] = useState<ExitType | null>(null);
-  const [fielder, setFielder] = useState<Position | null>(null);
-  const [hrDistance, setHrDistance] = useState<string>('');
-  const [specialPlay, setSpecialPlay] = useState<SpecialPlayType | null>(null);
-  const [savedRun, setSavedRun] = useState(false);
-  const [is7PlusPitchAB, setIs7PlusPitchAB] = useState(false);
-  const [beatOutSingle, setBeatOutSingle] = useState(false);
-  const [dpType, setDpType] = useState<string | null>(null);
+  const [state, dispatch] = useReducer(reducer, initialAtBatState(initialResult));
+  const {
+    result,
+    direction,
+    fielder,
+    hrDistance,
+    specialPlay,
+    runnerOutcomes,
+    extraEvents,
+    is7PlusPitchAB,
+    beatOutSingle,
+    savedRun,
+    batterOutAdvancing,
+    outAdvancingPutout,
+    outAdvancingAssists,
+    autoCorrection,
+    pendingExtraEvent,
+    dpType,
+    dpForcePlay,
+    fieldingData,
+  } = state;
+  const exitType: ExitType | null = null;
   const fenceDirection = mapDirectionToFence(direction);
   const park = stadiumName ? getParkByName(stadiumName) : undefined;
   const hrMinDistance = fenceDirection && park ? getMinFenceDistance(park, fenceDirection) : 250;
   const parkLabel = stadiumName || 'selected stadium';
 
-  // Batter thrown out advancing (e.g., double but out stretching to 3B)
-  const [batterOutAdvancing, setBatterOutAdvancing] = useState(false);
-  const [outAdvancingPutout, setOutAdvancingPutout] = useState<Position | null>(null);
-  const [outAdvancingAssists, setOutAdvancingAssists] = useState<Position[]>([]);
-
-  // Runner outcomes - what happened to each runner
-  const [runnerOutcomes, setRunnerOutcomes] = useState<{
-    first: RunnerOutcome | null;
-    second: RunnerOutcome | null;
-    third: RunnerOutcome | null;
-  }>({ first: null, second: null, third: null });
-
-  // Extra events inferred from non-standard advancement
-  const [extraEvents, setExtraEvents] = useState<ExtraEvent[]>([]);
-
-  // Which runner needs extra event explanation (null if none)
-  const [pendingExtraEvent, setPendingExtraEvent] = useState<{
-    base: 'first' | 'second' | 'third';
-    outcome: RunnerOutcome;
-  } | null>(null);
-
   // Fielding modal state
   const [showFieldingModal, setShowFieldingModal] = useState(false);
-  const [fieldingData, setFieldingData] = useState<FieldingData | null>(null);
-
-  // Helper to count runner outs from outcomes
-  const countRunnerOuts = (outcomes: typeof runnerOutcomes): number => {
-    let count = 0;
-    if (outcomes.first && outcomes.first.startsWith('OUT_')) count++;
-    if (outcomes.second && outcomes.second.startsWith('OUT_')) count++;
-    if (outcomes.third && outcomes.third.startsWith('OUT_')) count++;
-    return count;
-  };
-
-  // Auto-correction logic
-  const checkAutoCorrection = (newOutcomes: typeof runnerOutcomes) => {
-    // FO → SF: If runner from 3rd scores on a fly out with less than 2 outs, it's a sac fly
-    if (initialResult === 'FO' && outs < 2 && bases.third && newOutcomes.third === 'SCORED') {
-      setResult('SF');
-      setAutoCorrection('Auto-corrected to Sac Fly (runner scored from 3rd on fly out)');
-    }
-    // If they change their mind and the runner didn't score, revert to FO
-    else if (initialResult === 'FO' && result === 'SF' && newOutcomes.third !== 'SCORED') {
-      setResult('FO');
-      setAutoCorrection(null);
-    }
-    // GO → DP: If GO with a runner out, and total outs = 2, it's a double play (BUG-003 fix)
-    else if (initialResult === 'GO' && outs < 2) {
-      const runnerOutsCount = countRunnerOuts(newOutcomes);
-
-      // If a runner is out, and we'd record 2 total outs (batter + runner), auto-correct to DP
-      if (runnerOutsCount >= 1) {
-        // GO = batter out (1) + runner out (1) = 2 outs recorded = DP
-        setResult('DP');
-        setAutoCorrection('Auto-corrected to Double Play (2 outs recorded: batter + runner)');
-      }
-      // If no runner outs but runner advances, suggest SAC (but don't auto-correct)
-      else {
-        const runnerAdvanced =
-          (bases.first && (newOutcomes.first === 'TO_2B' || newOutcomes.first === 'TO_3B' || newOutcomes.first === 'SCORED')) ||
-          (bases.second && (newOutcomes.second === 'TO_3B' || newOutcomes.second === 'SCORED')) ||
-          (bases.third && newOutcomes.third === 'SCORED');
-
-        if (runnerAdvanced && result !== 'SAC') {
-          // Don't auto-correct GO to SAC, but show a hint
-          setAutoCorrection('Tip: If this was an intentional sacrifice bunt, use SAC instead');
-        } else if (!runnerAdvanced) {
-          setAutoCorrection(null);
-        }
-      }
-    }
-    // If user selected GO but it was auto-corrected to DP, and they remove runner outs, revert to GO
-    else if (initialResult === 'GO' && result === 'DP') {
-      const runnerOutsCount = countRunnerOuts(newOutcomes);
-      if (runnerOutsCount === 0) {
-        setResult('GO');
-        setAutoCorrection(null);
-      }
-    }
-  };
-
-  // Wrapper for setting runner outcomes that also checks for auto-corrections
-  const handleRunnerOutcomeChange = (newOutcomes: typeof runnerOutcomes) => {
-    setRunnerOutcomes(newOutcomes);
-    checkAutoCorrection(newOutcomes);
-  };
 
   // ============================================
   // FORCE PLAY LOGIC
   // ============================================
+  const isRunnerForced = (base: 'first' | 'second' | 'third'): boolean =>
+    evaluateRunnerForced(base, result, bases, outs);
 
-  // Check if a runner is forced to advance based on result and base state
-  const isRunnerForced = (base: 'first' | 'second' | 'third'): boolean => {
-    // On walks/HBP, only runners with occupied bases behind them are forced
-    if (['BB', 'IBB', 'HBP'].includes(result)) {
-      if (base === 'first') return true; // R1 always forced (batter takes 1B)
-      if (base === 'second') return !!bases.first; // R2 forced only if R1 exists
-      if (base === 'third') return !!bases.first && !!bases.second; // R3 forced only if bases loaded
-    }
-
-    // On singles, batter takes 1B so R1 is forced
-    if (result === '1B') {
-      if (base === 'first') return true;
-      return false;
-    }
-
-    // On doubles, batter takes 2B so R1 and R2 are forced
-    if (result === '2B') {
-      if (base === 'first') return true;
-      if (base === 'second') return true;
-      return false;
-    }
-
-    // On triples, batter takes 3B so all runners must vacate
-    if (result === '3B') {
-      return true;
-    }
-
-    // FC where batter reaches 1B
-    if (result === 'FC') {
-      if (base === 'first') return true;
-      return false;
-    }
-
-    // On outs (GO, FO, LO, PO, K, etc.), batter doesn't reach - no forces
-    return false;
-  };
-
-  // Get minimum base a runner must advance to (null if not forced)
-  const getMinimumAdvancement = (base: 'first' | 'second' | 'third'): 'second' | 'third' | 'home' | null => {
-    if (!isRunnerForced(base)) return null;
-
-    // On doubles, R1 must go to at least 3B (batter takes 2B)
-    if (result === '2B') {
-      if (base === 'first') return 'third';
-      if (base === 'second') return 'third'; // R2 must vacate for batter
-    }
-
-    // On triples, all must score
-    if (result === '3B') {
-      return 'home';
-    }
-
-    // Default: advance one base
-    if (base === 'first') return 'second';
-    if (base === 'second') return 'third';
-    if (base === 'third') return 'home';
-
-    return null;
-  };
+  const getMinimumAdvancement = (base: 'first' | 'second' | 'third'): 'second' | 'third' | 'home' | null =>
+    evaluateMinimumAdvancement(base, result, bases, outs);
 
   // ============================================
   // EXTRA ADVANCEMENT DETECTION
   // ============================================
-
-  // Check if a runner advancement exceeds what's standard for the result
-  // Extra advancement requires an additional event (SB, WP, PB, E, BALK)
   const isExtraAdvancement = (
     base: 'first' | 'second' | 'third',
     outcome: RunnerOutcome
-  ): boolean => {
-    // Map outcome to destination
-    const destination = outcomeToDestination(outcome);
-    if (!destination) return false; // HELD or OUT doesn't need extra event
+  ): boolean => evaluateExtraAdvancement(base, outcome, result, bases, outs);
 
-    // ============================================
-    // WALKS (BB, IBB, HBP)
-    // Standard: forced runners advance exactly 1 base
-    // Extra: any advancement beyond +1 base
-    // ============================================
-    if (['BB', 'IBB', 'HBP'].includes(result)) {
-      // R1: Standard is TO_2B, anything beyond is extra
-      if (base === 'first') {
-        return destination !== '2B'; // TO_3B or HOME = extra
-      }
-      // R2: If forced (R1 exists), standard is TO_3B. If not forced, any advance is extra
-      if (base === 'second') {
-        if (isRunnerForced('second')) {
-          return destination === 'HOME'; // Forced R2 scoring = extra
-        } else {
-          return true; // Non-forced R2 advancing at all = extra
-        }
-      }
-      // R3: If forced (bases loaded), scoring is standard. Otherwise any advance is extra
-      if (base === 'third') {
-        if (isRunnerForced('third')) {
-          return false; // Forced R3 scoring = standard
-        } else {
-          return destination === 'HOME'; // Non-forced R3 scoring = extra
-        }
-      }
-    }
-
-    // ============================================
-    // STRIKEOUTS (K, KL)
-    // Standard: runners hold
-    // Extra: any advancement requires WP, PB, or SB
-    // ============================================
-    if (['K', 'KL'].includes(result)) {
-      return true; // Any advancement on K requires extra event
-    }
-
-    // ============================================
-    // SINGLES (1B)
-    // R1 scoring on a single is rare - likely error
-    // ============================================
-    if (result === '1B') {
-      if (base === 'first' && destination === 'HOME') return true;
-    }
-
-    return false;
-  };
-
-  // Convert outcome to destination base
-  const outcomeToDestination = (outcome: RunnerOutcome): '2B' | '3B' | 'HOME' | null => {
-    switch (outcome) {
-      case 'TO_2B': return '2B';
-      case 'TO_3B': return '3B';
-      case 'SCORED': return 'HOME';
-      default: return null;
-    }
-  };
+  const outcomeToDestination = mapOutcomeToDestination;
 
   // Convert base to display string
   const baseToString = (base: 'first' | 'second' | 'third'): '1B' | '2B' | '3B' => {
@@ -339,40 +405,23 @@ export default function AtBatFlow({
       event: eventType,
     };
 
-    setExtraEvents([...extraEvents, newExtraEvent]);
-    setPendingExtraEvent(null);
+    dispatch({ type: 'ADD_EXTRA_EVENT', payload: newExtraEvent });
   };
 
   // Enhanced runner outcome handler that checks for extra advancement
   // FIX: Clear existing extra events for this runner when selection changes
-  const handleRunnerOutcomeWithInference = (
-    base: 'first' | 'second' | 'third',
-    outcome: RunnerOutcome
-  ) => {
-    const newOutcomes = { ...runnerOutcomes, [base]: outcome };
+  const handleRunnerOutcomeWithInference = (base: BaseKey, outcome: RunnerOutcome) => {
     const runner = bases[base];
-    const runnerName = runner?.playerName || '';
+    const runnerName = runner?.playerName;
 
-    // CRITICAL FIX: Clear any pending extra event for this runner
-    if (pendingExtraEvent && pendingExtraEvent.base === base) {
-      setPendingExtraEvent(null);
+    if (runnerName) {
+      dispatch({ type: 'REMOVE_EXTRA_EVENT', payload: { runner: runnerName } });
     }
 
-    // CRITICAL FIX: Remove any existing extra events for this runner
-    // This prevents stacking when user changes their selection
-    const filteredExtraEvents = extraEvents.filter(ev => ev.runner !== runnerName);
-    if (filteredExtraEvents.length !== extraEvents.length) {
-      setExtraEvents(filteredExtraEvents);
-    }
-
-    // Check if this is extra advancement that needs explanation
-    const isExtra = isExtraAdvancement(base, outcome);
-
-    if (isExtra) {
-      setPendingExtraEvent({ base, outcome });
-    }
-
-    handleRunnerOutcomeChange(newOutcomes);
+    dispatch({
+      type: 'SET_RUNNER_OUTCOME',
+      payload: { base, outcome, runnerName, bases, outs },
+    });
   };
 
   // Determine what step we're on based on what's filled in
@@ -400,15 +449,11 @@ export default function AtBatFlow({
 
   // Auto-infer fielder when direction is selected
   const handleDirectionSelect = (dir: Direction) => {
-    setDirection(dir);
-    if (needsFielder) {
-      const inferred = inferFielder(result, dir);
-      if (inferred) setFielder(inferred);
-    }
+    dispatch({ type: 'SET_DIRECTION', payload: dir });
   };
 
   // Get runner outcome options based on which base they're on, the result, and force rules
-  const getRunnerOptions = (base: 'first' | 'second' | 'third'): { value: RunnerOutcome; label: string; isExtra?: boolean }[] => {
+  const getRunnerOptions = (base: BaseKey): { value: RunnerOutcome; label: string; isExtra?: boolean }[] => {
     const options: { value: RunnerOutcome; label: string; isExtra?: boolean }[] = [];
     const forced = isRunnerForced(base);
     const minAdvance = getMinimumAdvancement(base);
@@ -474,180 +519,49 @@ export default function AtBatFlow({
     return options;
   };
 
-  // Get default/standard outcome for a runner based on result type
-  // NOTE: This returns the EXPECTED/STANDARD outcome, not just the minimum required
-  const getDefaultOutcome = (base: 'first' | 'second' | 'third'): RunnerOutcome | null => {
-    const minAdvance = getMinimumAdvancement(base);
-    const forced = isRunnerForced(base);
-
-    // ============================================
-    // HITS - Handle based on hit type
-    // ============================================
-    
-    // DOUBLE (2B): R2 scores, R1 goes to 3B (not just minimum)
-    if (result === '2B') {
-      if (base === 'third') return 'SCORED';
-      if (base === 'second') return 'SCORED'; // R2 typically scores on double
-      if (base === 'first') return 'TO_3B';   // R1 to 3B
-    }
-
-    // TRIPLE (3B): All runners score
-    if (result === '3B') {
-      return 'SCORED';
-    }
-
-    // SINGLE (1B): Standard advancement
-    if (result === '1B') {
-      if (base === 'third') return 'SCORED';
-      if (base === 'second') return 'TO_3B';
-      if (base === 'first') return 'TO_2B';
-    }
-
-    // HR: All score (handled automatically, but just in case)
-    if (result === 'HR') {
-      return 'SCORED';
-    }
-
-    // ============================================
-    // WALKS/HBP - Forced runners advance one base, others hold
-    // ============================================
-    if (['BB', 'IBB', 'HBP'].includes(result)) {
-      if (forced && minAdvance) {
-        if (minAdvance === 'home') return 'SCORED';
-        if (minAdvance === 'third') return 'TO_3B';
-        if (minAdvance === 'second') return 'TO_2B';
-      }
-      return 'HELD'; // Non-forced runners hold
-    }
-
-    // ============================================
-    // OUTS - Most runners hold
-    // ============================================
-
-    // STRIKEOUTS (K, KL): Runners almost always hold
-    if (['K', 'KL', 'D3K'].includes(result)) {
-      return 'HELD';
-    }
-
-    // GROUND OUTS (GO): Runners typically hold unless advancing
-    if (result === 'GO') {
-      return 'HELD';
-    }
-
-    // FLY OUTS (FO, LO, PO): Runners typically hold
-    // Exception: R3 can tag up on FO with < 2 outs
-    if (['FO', 'LO', 'PO'].includes(result)) {
-      if (base === 'third' && result === 'FO' && outs < 2) {
-        return 'SCORED'; // Tag up opportunity
-      }
-      return 'HELD';
-    }
-
-    // DOUBLE PLAY (DP): R1 is typically out, others hold
-    if (result === 'DP') {
-      if (base === 'first') return 'OUT_2B';
-      return 'HELD';
-    }
-
-    // SACRIFICE FLY (SF): R3 scores (that's what makes it a SF)
-    if (result === 'SF') {
-      if (base === 'third') return 'SCORED';
-      return 'HELD';
-    }
-
-    // SACRIFICE BUNT (SAC): Runners typically advance one base
-    if (result === 'SAC') {
-      if (base === 'first') return 'TO_2B';
-      if (base === 'second') return 'TO_3B';
-      return 'HELD';
-    }
-
-    // FIELDER'S CHOICE (FC): R1 typically out, batter reaches
-    if (result === 'FC') {
-      if (base === 'first') return 'OUT_2B';
-      return 'HELD';
-    }
-
-    // ERROR (E): Runners can advance, default to +1 base
-    if (result === 'E') {
-      if (base === 'third') return 'SCORED';
-      if (base === 'second') return 'TO_3B';
-      if (base === 'first') return 'TO_2B';
-    }
-
-    // For any other outs, default to held
-    if (isOut(result)) {
-      return 'HELD';
-    }
-
-    return null;
-  };
+  const getDefaultOutcome = (base: 'first' | 'second' | 'third'): RunnerOutcome | null =>
+    evaluateDefaultOutcome(base, result, bases, outs);
 
   // ============================================
   // AUTO-DEFAULT RUNNER OUTCOMES ON MOUNT
   // ============================================
   useEffect(() => {
-    // Only auto-default if we have runners and no outcomes set yet
     const hasRunners = bases.first || bases.second || bases.third;
     const hasOutcomes = runnerOutcomes.first || runnerOutcomes.second || runnerOutcomes.third;
-    
+
     if (hasRunners && !hasOutcomes) {
-      const defaults: typeof runnerOutcomes = {
-        first: bases.first ? getDefaultOutcome('first') : null,
-        second: bases.second ? getDefaultOutcome('second') : null,
-        third: bases.third ? getDefaultOutcome('third') : null,
+      const defaults: RunnerOutcomes = {
+        first: bases.first ? evaluateDefaultOutcome('first', result, bases, outs) : null,
+        second: bases.second ? evaluateDefaultOutcome('second', result, bases, outs) : null,
+        third: bases.third ? evaluateDefaultOutcome('third', result, bases, outs) : null,
       };
-      
-      // Only set if we have actual defaults
+
       if (defaults.first || defaults.second || defaults.third) {
-        // Use handleRunnerOutcomeChange to trigger auto-correction check
-        handleRunnerOutcomeChange(defaults);
+        dispatch({ type: 'SET_RUNNER_OUTCOMES', payload: { outcomes: defaults, bases, outs } });
       }
     }
-  }, [result, bases.first, bases.second, bases.third]); // Re-run if result or bases change
+  }, [result, bases.first, bases.second, bases.third, bases, outs]);
 
   // ============================================
   // AUTO-DEFAULT SPECIAL PLAY FOR HITS
   // ============================================
   useEffect(() => {
-    // For HRs, default to "Over Fence" (ball cleared the wall - BUG-015 fix)
-    // For other hits, default to "Clean" (no fielding attempt)
-    // For outs, default to "Routine"
     if (result === 'HR' && specialPlay === null) {
-      setSpecialPlay('Over Fence');
+      dispatch({ type: 'SET_SPECIAL_PLAY', payload: 'Over Fence' });
     } else if (['1B', '2B', '3B'].includes(result) && specialPlay === null) {
-      setSpecialPlay('Clean');
+      dispatch({ type: 'SET_SPECIAL_PLAY', payload: 'Clean' });
     } else if (['FO', 'LO', 'GO', 'PO'].includes(result) && specialPlay === null) {
-      setSpecialPlay('Routine');
+      dispatch({ type: 'SET_SPECIAL_PLAY', payload: 'Routine' });
     }
-  }, [result]); // Only run when result changes
+  }, [result, specialPlay]);
 
-  // Calculate RBIs from runner outcomes
-  const calculateRBIs = (): number => {
-    let rbis = 0;
-
-    // Count runners who scored
-    if (runnerOutcomes.first === 'SCORED') rbis++;
-    if (runnerOutcomes.second === 'SCORED') rbis++;
-    if (runnerOutcomes.third === 'SCORED') rbis++;
-
-    // HR adds batter's run as RBI
-    if (result === 'HR') {
-      rbis = (bases.first ? 1 : 0) + (bases.second ? 1 : 0) + (bases.third ? 1 : 0) + 1;
-    }
-
-    // Errors don't give RBIs
-    if (result === 'E') {
-      rbis = 0;
-    }
-
-    // DP doesn't give RBIs even if run scores
-    if (result === 'DP') {
-      rbis = 0;
-    }
-
-    return rbis;
-  };
+  const calculateRBIs = (): number =>
+    evaluateRBIs({
+      result,
+      bases,
+      runnerOutcomes,
+      forceDoublePlay: result === 'DP' ? dpForcePlay : undefined,
+    });
 
   // Check if basic inputs are ready (before fielding modal)
   const canProceedToFielding = (): boolean => {
@@ -727,8 +641,7 @@ export default function AtBatFlow({
 
   // Handler for fielding modal completion
   const handleFieldingComplete = (data: FieldingData) => {
-    setFieldingData(data);
-    setFielder(data.primaryFielder);
+    dispatch({ type: 'UPDATE_FIELDING_DATA', payload: data });
     setShowFieldingModal(false);
   };
 
@@ -817,9 +730,8 @@ export default function AtBatFlow({
               value={hrDistance}
               onChange={e => {
                 const val = e.target.value;
-                // Allow empty (user clearing field) or valid range
                 if (val === '' || (parseInt(val) >= 0 && parseInt(val) <= 550)) {
-                  setHrDistance(val);
+                  dispatch({ type: 'SET_HR_DISTANCE', payload: val });
                 }
               }}
               min={250}
@@ -861,7 +773,7 @@ export default function AtBatFlow({
                     color: fielder === pos ? '#000' : '#fff',
                     minWidth: '36px',
                   }}
-                  onClick={() => setFielder(pos)}
+                  onClick={() => dispatch({ type: 'SET_FIELDER', payload: pos })}
                 >
                   {pos}
                 </button>
@@ -883,7 +795,9 @@ export default function AtBatFlow({
                     backgroundColor: dpType === type ? '#4CAF50' : '#333',
                     color: dpType === type ? '#000' : '#fff',
                   }}
-                  onClick={() => setDpType(type)}
+                  onClick={() =>
+                    dispatch({ type: 'SET_DP_TYPE', payload: { dpType: type, bases, outs } })
+                  }
                 >
                   {type}
                 </button>
@@ -908,7 +822,7 @@ export default function AtBatFlow({
                     backgroundColor: specialPlay === play ? '#4CAF50' : '#333',
                     color: specialPlay === play ? '#000' : '#fff',
                   }}
-                  onClick={() => setSpecialPlay(play)}
+                  onClick={() => dispatch({ type: 'SET_SPECIAL_PLAY', payload: play })}
                 >
                   {play}
                 </button>
@@ -917,14 +831,16 @@ export default function AtBatFlow({
             {/* Show "saved run" for star defensive plays on outs */}
             {!isHitResult && (specialPlay === 'Diving' || specialPlay === 'Wall Catch') && (
               <div style={styles.checkboxRow}>
-                <label style={styles.checkbox}>
-                  <input
-                    type="checkbox"
-                    checked={savedRun}
-                    onChange={e => setSavedRun(e.target.checked)}
-                  />
-                  Did this save a run?
-                </label>
+            <label style={styles.checkbox}>
+              <input
+                type="checkbox"
+                checked={savedRun}
+                onChange={e =>
+                  dispatch({ type: 'TOGGLE_BOOLEAN', payload: { field: 'savedRun', value: e.target.checked } })
+                }
+              />
+              Did this save a run?
+            </label>
               </div>
             )}
             {/* Hint for hits when fielding attempt is selected (not HRs) */}
@@ -1074,7 +990,9 @@ export default function AtBatFlow({
             <input
               type="checkbox"
               checked={is7PlusPitchAB}
-              onChange={e => setIs7PlusPitchAB(e.target.checked)}
+              onChange={e =>
+                dispatch({ type: 'TOGGLE_BOOLEAN', payload: { field: 'is7PlusPitchAB', value: e.target.checked } })
+              }
             />
             7+ Pitch At-Bat?
           </label>
@@ -1087,7 +1005,9 @@ export default function AtBatFlow({
               <input
                 type="checkbox"
                 checked={beatOutSingle}
-                onChange={e => setBeatOutSingle(e.target.checked)}
+                onChange={e =>
+                  dispatch({ type: 'TOGGLE_BOOLEAN', payload: { field: 'beatOutSingle', value: e.target.checked } })
+                }
               />
               Beat Throw (close play)?
             </label>
@@ -1104,13 +1024,9 @@ export default function AtBatFlow({
               <input
                 type="checkbox"
                 checked={batterOutAdvancing}
-                onChange={e => {
-                  setBatterOutAdvancing(e.target.checked);
-                  if (!e.target.checked) {
-                    setOutAdvancingPutout(null);
-                    setOutAdvancingAssists([]);
-                  }
-                }}
+                onChange={e =>
+                  dispatch({ type: 'TOGGLE_BOOLEAN', payload: { field: 'batterOutAdvancing', value: e.target.checked } })
+                }
               />
               {result === '1B' && 'Out stretching to 2B?'}
               {result === '2B' && 'Out stretching to 3B?'}
@@ -1134,7 +1050,7 @@ export default function AtBatFlow({
                             ...styles.positionMiniButton,
                             backgroundColor: outAdvancingPutout === pos ? '#f44336' : '#333',
                           }}
-                          onClick={() => setOutAdvancingPutout(pos)}
+                      onClick={() => dispatch({ type: 'SET_OUT_ADVANCING_PUTOUT', payload: pos })}
                         >
                           {pos}
                         </button>
@@ -1152,13 +1068,9 @@ export default function AtBatFlow({
                             ...styles.positionMiniButton,
                             backgroundColor: outAdvancingAssists.includes(pos) ? '#FF9800' : '#333',
                           }}
-                          onClick={() => {
-                            if (outAdvancingAssists.includes(pos)) {
-                              setOutAdvancingAssists(outAdvancingAssists.filter(p => p !== pos));
-                            } else {
-                              setOutAdvancingAssists([...outAdvancingAssists, pos]);
-                            }
-                          }}
+                          onClick={() =>
+                            dispatch({ type: 'TOGGLE_OUT_ADVANCING_ASSIST', payload: pos })
+                          }
                         >
                           {pos}
                         </button>
