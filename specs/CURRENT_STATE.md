@@ -241,6 +241,7 @@ All fixes pass build + tests but need browser verification.
 ### New Files (This Bug Fix Cycle)
 - `src/utils/museumPipeline.ts` — career → museum auto-populate
 - `src/src_figma/app/components/MilestoneWatchPanel.tsx` — milestone watch UI
+- `src/components/GameTracker/gameEngine.ts` — pure helper set for runner processing, win probability, pitcher stat updates, and base counting extracted from GameTracker
 ## Build Status
 - npm run build: PASSES (0 errors as of Feb 15, 2026)
 - npm test: 4 archived suite failures (pre-existing, excluded from main build)

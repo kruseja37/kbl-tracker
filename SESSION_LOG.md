@@ -10,3 +10,7 @@
 - The main scoreboard stops updating beyond the top of the 1st even though inning-state advances—`inningScores` in the stored record or `GameTracker` state must be missing the later halves.  Check the game state (currently stored in IndexedDB) to make sure each half-inning pushes into `inningScores` before archiving.
 - Manual instructions for verifying PostGameSummary (1-inning game, IndexedDB, continue behavior) were provided already; please complete them and confirm the scoreboard/activity log badges display correctly.
 - Recommended next steps: rerun the manual flow in a real browser, capture the issues above (End Game still broken, scoreboard updates missing), and re-open the tooling if extra console log data is needed.
+
+## 2026-02-17
+- Created `src/components/GameTracker/gameEngine.ts` and moved `processRunnerOutcomes`, `isForceOut`, `calculateSimpleWinProbability`, `calculateLOB`, and the pitcher stats updater into it so the GameTracker component now imports pure helpers for MLB rule handling, RBI adjustments, win probability, and pitcher bookkeeping.
+- No tests executed during this refactor step.
