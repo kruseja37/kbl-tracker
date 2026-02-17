@@ -170,6 +170,7 @@ async function aggregateBattingStats(
       stolenBases: seasonStats.stolenBases + gameStats.sb,
       caughtStealing: seasonStats.caughtStealing + gameStats.cs,
       gidp: seasonStats.gidp + (gameStats.gidp || 0),               // MAJ-11
+      d3kOutcomes: (seasonStats.d3kOutcomes ?? 0) + (gameStats.d3kOutcomes ?? 0),
     };
 
     await updateBattingStats(updated);
@@ -222,6 +223,7 @@ async function aggregatePitchingStats(
       homeRunsAllowed: seasonStats.homeRunsAllowed + pitcherStats.homeRunsAllowed,
       hitBatters: seasonStats.hitBatters + pitcherStats.hitBatters,
       wildPitches: seasonStats.wildPitches + pitcherStats.wildPitches,
+      comebackerInjuries: (seasonStats.comebackerInjuries ?? 0) + (pitcherStats.comebackerInjuries ?? 0),
       // Achievements
       qualityStarts: seasonStats.qualityStarts + (isQualityStart ? 1 : 0),
       completeGames: seasonStats.completeGames + (isCompleteGame ? 1 : 0),
@@ -261,6 +263,9 @@ async function aggregateFieldingStats(
       putouts: seasonStats.putouts + gameStats.putouts,
       assists: seasonStats.assists + gameStats.assists,
       errors: seasonStats.errors + gameStats.fieldingErrors,
+      divingCatches: (seasonStats.divingCatches ?? 0) + (gameStats.divingCatches ?? 0),
+      robberies: (seasonStats.robberies ?? 0) + (gameStats.robberies ?? 0),
+      nutshots: (seasonStats.nutshots ?? 0) + (gameStats.nutshots ?? 0),
       // Note: DP, position-specific stats would need more tracking
     };
 

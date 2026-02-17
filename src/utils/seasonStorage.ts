@@ -57,6 +57,7 @@ export interface PlayerSeasonBatting {
   stolenBases: number;
   caughtStealing: number;
   gidp: number;    // Grounded into double play
+  d3kOutcomes?: number;
 
   // Fame
   fameBonuses: number;
@@ -91,6 +92,7 @@ export interface PlayerSeasonPitching {
   homeRunsAllowed: number;
   hitBatters: number;
   wildPitches: number;
+  comebackerInjuries?: number;
   // balks removed — SMB4 has no balks (see kbl-gotchas.md)
 
   // Decisions
@@ -131,6 +133,9 @@ export interface PlayerSeasonFielding {
   assists: number;
   errors: number;
   doublePlays: number;
+  divingCatches?: number;
+  robberies?: number;
+  nutshots?: number;
 
   // By position (games at each position)
   gamesByPosition: Record<string, number>;
@@ -185,7 +190,8 @@ export function createInitialBattingStats(
     sacBunts: 0,
     stolenBases: 0,
     caughtStealing: 0,
-    gidp: 0,
+  gidp: 0,
+  d3kOutcomes: 0,
     fameBonuses: 0,
     fameBoners: 0,
     fameNet: 0,
@@ -215,6 +221,7 @@ export function createInitialPitchingStats(
     homeRunsAllowed: 0,
     hitBatters: 0,
     wildPitches: 0,
+    comebackerInjuries: 0,
     wins: 0,
     losses: 0,
     saves: 0,
@@ -248,6 +255,9 @@ export function createInitialFieldingStats(
     assists: 0,
     errors: 0,
     doublePlays: 0,
+    divingCatches: 0,
+    robberies: 0,
+    nutshots: 0,
     gamesByPosition: {},
     putoutsByPosition: {},
     assistsByPosition: {},

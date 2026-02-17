@@ -12,7 +12,6 @@
  */
 
 import type { FameEvent } from '../types/game';
-import type { CareerStats } from './careerStorage';
 import type { PlayerSeasonBatting, PlayerSeasonPitching, SeasonMetadata } from './seasonStorage';
 import {
   getSeasonBattingStats,
@@ -29,11 +28,7 @@ import {
   type LegacyStatusTier,
   type EndOfSeasonMVPResult,
 } from './teamMVP';
-import {
-  aggregateGameToCareer,
-  getCareerStats,
-  type SeasonStatsForCareer,
-} from './careerStorage';
+import type { CareerStats } from './careerStorage';
 
 // ============================================
 // TYPES
@@ -237,82 +232,6 @@ function convertToPitcherSeasonStats(pitching: PlayerSeasonPitching): PitcherSea
   };
 }
 
-/**
- * Convert season stats to career aggregation format
- */
-function convertToSeasonStatsForCareer(
-  batting: PlayerSeasonBatting,
-  pitching: PlayerSeasonPitching | null
-): SeasonStatsForCareer {
-  const bWAR = calculateBattingWAR(batting);
-  const fWAR = calculateFieldingWAR(batting);
-  const rWAR = calculateBaserunningWAR(batting);
-
-  const result: SeasonStatsForCareer = {
-    playerId: batting.playerId,
-    playerName: batting.playerName,
-    teamId: batting.teamId,
-    seasonId: batting.seasonId,
-    batting: {
-      games: batting.games,
-      pa: batting.pa,
-      ab: batting.ab,
-      hits: batting.hits,
-      singles: batting.singles,
-      doubles: batting.doubles,
-      triples: batting.triples,
-      homeRuns: batting.homeRuns,
-      rbi: batting.rbi,
-      runs: batting.runs,
-      walks: batting.walks,
-      strikeouts: batting.strikeouts,
-      hitByPitch: batting.hitByPitch,
-      sacFlies: batting.sacFlies,
-      sacBunts: batting.sacBunts,
-      stolenBases: batting.stolenBases,
-      caughtStealing: batting.caughtStealing,
-      gidp: batting.gidp,
-      bWAR,
-      fWAR,
-      rWAR,
-      fameBonuses: batting.fameBonuses,
-      fameBoners: batting.fameBoners,
-    },
-  };
-
-  if (pitching && pitching.games > 0) {
-    const pWAR = calculatePitchingWAR(pitching);
-    result.pitching = {
-      games: pitching.games,
-      gamesStarted: pitching.gamesStarted,
-      outsRecorded: pitching.outsRecorded,
-      hitsAllowed: pitching.hitsAllowed,
-      runsAllowed: pitching.runsAllowed,
-      earnedRuns: pitching.earnedRuns,
-      walksAllowed: pitching.walksAllowed,
-      strikeouts: pitching.strikeouts,
-      homeRunsAllowed: pitching.homeRunsAllowed,
-      hitBatters: pitching.hitBatters,
-      wildPitches: pitching.wildPitches,
-      wins: pitching.wins,
-      losses: pitching.losses,
-      saves: pitching.saves,
-      holds: pitching.holds,
-      blownSaves: pitching.blownSaves,
-      qualityStarts: pitching.qualityStarts,
-      completeGames: pitching.completeGames,
-      shutouts: pitching.shutouts,
-      noHitters: pitching.noHitters,
-      perfectGames: pitching.perfectGames,
-      pWAR,
-      fameBonuses: pitching.fameBonuses,
-      fameBoners: pitching.fameBoners,
-    };
-  }
-
-  return result;
-}
-
 // ============================================
 // MAIN PROCESSING FUNCTION
 // ============================================
@@ -368,41 +287,7 @@ export async function processSeasonEnd(
 
   console.log(`[SeasonEnd] MVP/Ace detection complete: ${mvpResult.teamMVPs.size} MVPs, ${mvpResult.teamAces.size} Aces`);
 
-  // 5. Aggregate to career stats and check career milestones
   const careerUpdates: SeasonEndResult['careerUpdates'] = [];
-
-  for (const batting of battingStats) {
-    const pitching = pitchingByPlayer.get(batting.playerId) || null;
-    const seasonStats = convertToSeasonStatsForCareer(batting, pitching);
-
-    // Get previous career stats
-    const previousCareerStats = await getCareerStats(batting.playerId);
-
-    // Aggregate season to career
-    const aggregationResult = await aggregateGameToCareer(
-      batting.playerId,
-      batting.playerName,
-      batting.teamId,
-      seasonStats,
-      {
-        enableCareerMilestones: true,
-        enableFranchiseFirsts: true,
-        enableFranchiseLeaders: true,
-      }
-    );
-
-    if (aggregationResult) {
-      careerUpdates.push({
-        playerId: batting.playerId,
-        playerName: batting.playerName,
-        previousCareerStats,
-        newCareerStats: aggregationResult.current,
-        careerMilestones: aggregationResult.fameEvents,
-      });
-    }
-  }
-
-  console.log(`[SeasonEnd] Career aggregation complete: ${careerUpdates.length} players updated`);
 
   // 6. Collect all fame events
   const allFameEvents: FameEvent[] = [

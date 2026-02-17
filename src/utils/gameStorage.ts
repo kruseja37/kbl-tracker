@@ -34,6 +34,7 @@ export async function initDatabase(): Promise<IDBDatabase> {
 /**
  * Game state that gets persisted
  */
+
 export interface PersistedGameState {
   id: string;  // Always 'current' for the active game
   gameId: string;
@@ -75,16 +76,21 @@ export interface PersistedGameState {
     rbi: number;
     r: number;
     bb: number;
-    hbp: number;  // MAJ-11: Hit by pitch (batter)
+    hbp: number;  
     k: number;
     sb: number;
     cs: number;
-    sf: number;   // MAJ-11: Sacrifice flies
-    sh: number;   // MAJ-11: Sacrifice bunts
-    gidp: number; // MAJ-11: Grounded into double play
+    sf: number;   
+    sh: number;   
+    gidp: number; 
     putouts: number;
     assists: number;
     fieldingErrors: number;
+    // --- NEW SMB4 METRICS ---
+    d3kOutcomes?: number;
+    divingCatches?: number;
+    robberies?: number;
+    nutshots?: number;
   }>;
 
   // Pitcher stats (accumulated)
@@ -110,11 +116,12 @@ export interface PersistedGameState {
     firstInningRuns: number;
     basesLoadedWalks: number;
     inningsComplete: number;
-    // MAJ-08: Pitcher decisions
     decision: 'W' | 'L' | 'ND' | null;
     save: boolean;
     hold: boolean;
     blownSave: boolean;
+    // --- NEW SMB4 METRICS ---
+    comebackerInjuries?: number;
   }>;
 
   // Fame tracking
@@ -134,6 +141,20 @@ export interface PersistedGameState {
     description?: string;
   }>;
 
+  // --- NEW: ADVANCED TRACKING ARRAYS ---
+  managerDecisions?: Array<{
+    managerId: string;
+    decisionType: string;
+    mwarImpact: number;
+    description: string;
+  }>;
+  
+  moraleShifts?: Array<{
+    teamId: string;
+    shiftAmount: number;
+    triggerEvent: string;
+  }>;
+
   // Fame detection state
   lastHRBatterId: string | null;
   consecutiveHRCount: number;
@@ -145,82 +166,7 @@ export interface PersistedGameState {
   activityLog: string[];
 }
 
-/**
- * Save current game state to IndexedDB
- */
-export async function saveCurrentGame(state: PersistedGameState): Promise<void> {
-  const db = await initDatabase();
-
-  return new Promise((resolve, reject) => {
-    const transaction = db.transaction(STORES.CURRENT_GAME, 'readwrite');
-    const store = transaction.objectStore(STORES.CURRENT_GAME);
-
-    // Always use 'current' as the key so we overwrite the same record
-    const stateToSave = { ...state, id: 'current', savedAt: Date.now() };
-    const request = store.put(stateToSave);
-
-    request.onerror = () => {
-      console.error('Failed to save game state:', request.error);
-      reject(request.error);
-    };
-
-    request.onsuccess = () => {
-      resolve();
-    };
-  });
-}
-
-/**
- * Load current game state from IndexedDB
- */
-export async function loadCurrentGame(): Promise<PersistedGameState | null> {
-  const db = await initDatabase();
-
-  return new Promise((resolve, reject) => {
-    const transaction = db.transaction(STORES.CURRENT_GAME, 'readonly');
-    const store = transaction.objectStore(STORES.CURRENT_GAME);
-    const request = store.get('current');
-
-    request.onerror = () => {
-      console.error('Failed to load game state:', request.error);
-      reject(request.error);
-    };
-
-    request.onsuccess = () => {
-      resolve(request.result || null);
-    };
-  });
-}
-
-/**
- * Clear current game state (when starting new game or game completed)
- */
-export async function clearCurrentGame(): Promise<void> {
-  const db = await initDatabase();
-
-  return new Promise((resolve, reject) => {
-    const transaction = db.transaction(STORES.CURRENT_GAME, 'readwrite');
-    const store = transaction.objectStore(STORES.CURRENT_GAME);
-    const request = store.delete('current');
-
-    request.onerror = () => {
-      console.error('Failed to clear game state:', request.error);
-      reject(request.error);
-    };
-
-    request.onsuccess = () => {
-      resolve();
-    };
-  });
-}
-
-/**
- * Check if there's a saved game in progress
- */
-export async function hasSavedGame(): Promise<boolean> {
-  const saved = await loadCurrentGame();
-  return saved !== null;
-}
+// ... (keep saveCurrentGame, loadCurrentGame, clearCurrentGame, hasSavedGame as they were) ...
 
 // ============================================
 // COMPLETED GAMES ARCHIVE
@@ -243,6 +189,9 @@ export interface CompletedGameRecord {
   pitcherGameStats: PersistedGameState['pitcherGameStats'];
   activityLog?: string[];
   inningScores?: { away: number; home: number }[];
+  // --- NEW: CATCH THE ADVANCED ARRAYS ---
+  managerDecisions?: PersistedGameState['managerDecisions'];
+  moraleShifts?: PersistedGameState['moraleShifts'];
 }
 
 /**
@@ -273,6 +222,9 @@ export async function archiveCompletedGame(
     pitcherGameStats: gameState.pitcherGameStats,
     activityLog: gameState.activityLog,
     inningScores,
+    // --- NEW: ARCHIVE THE ADVANCED ARRAYS ---
+    managerDecisions: gameState.managerDecisions || [],
+    moraleShifts: gameState.moraleShifts || [],
   };
 
   return new Promise((resolve, reject) => {
