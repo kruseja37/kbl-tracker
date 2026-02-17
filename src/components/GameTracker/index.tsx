@@ -313,6 +313,10 @@ type GameAction =
   | {
       type: 'SYNC_PERSISTENCE';
       state: PersistedReducerState;
+    }
+  | {
+      type: 'REHYDRATE_STATE';
+      state: GameState;
     };
 
 const createStateSnapshot = (state: GameState): GameState => ({
@@ -560,6 +564,14 @@ const gameReducer = (state: GameState, action: GameAction): GameState => {
       };
       return withUndoSnapshot(state, nextState);
     }
+
+    case 'REHYDRATE_STATE':
+      return {
+        ...action.state,
+        bases: { ...action.state.bases },
+        undoStack: [],
+        lastPitcherUpdate: null,
+      };
 
     default:
       return state;
@@ -822,26 +834,61 @@ export default function GameTracker({ onGameEnd }: GameTrackerProps = {}) {
   // ============================================
   const gamePersistence = useGamePersistence({ enabled: true, autoSaveDelay: 500 });
 
-  // Track if we've attempted to restore from saved state
-  const hasAttemptedRestore = useRef(false);
-  const [showRecoveryPrompt, setShowRecoveryPrompt] = useState(false);
+  // Track if we've already rehydrated to avoid duplicate loads
+  const hasRehydratedFromPersistence = useRef(false);
 
-  // Check for saved game on mount
-  // BUG FIX: Only set hasAttemptedRestore AFTER checking hasSavedGame
-  // Previously it was set before the check, causing the prompt to never show
+  // Auto-rehydrate once persistence init completes
   useEffect(() => {
-    // Wait until loading is complete
     if (gamePersistence.isLoading) return;
-    // Only attempt once
-    if (hasAttemptedRestore.current) return;
+    if (hasRehydratedFromPersistence.current) return;
 
-    // Now that loading is done, we can check and set the flag
-    hasAttemptedRestore.current = true;
-
-    if (gamePersistence.hasSavedGame) {
-      setShowRecoveryPrompt(true);
+    if (!gamePersistence.hasSavedGame) {
+      hasRehydratedFromPersistence.current = true;
+      return;
     }
-  }, [gamePersistence.isLoading, gamePersistence.hasSavedGame]);
+
+    let cancelled = false;
+    const rehydrate = async () => {
+      const savedState = await gamePersistence.loadGame();
+      if (cancelled || !savedState) {
+        hasRehydratedFromPersistence.current = true;
+        return;
+      }
+
+      const rehydratedState: GameState = {
+        ...initialGameState,
+        inning: savedState.inning,
+        halfInning: savedState.halfInning,
+        outs: savedState.outs,
+        homeScore: savedState.homeScore,
+        awayScore: savedState.awayScore,
+        bases: savedState.bases,
+        currentBatterIndex: savedState.currentBatterIndex,
+        atBatCount: savedState.atBatCount,
+        inningStrikeouts: savedState.inningStrikeouts,
+        consecutiveHRCount: savedState.consecutiveHRCount,
+        lastHRBatterId: savedState.lastHRBatterId,
+        maxDeficitAway: savedState.maxDeficitAway,
+        maxDeficitHome: savedState.maxDeficitHome,
+      };
+
+      dispatch({ type: 'REHYDRATE_STATE', state: rehydratedState });
+      setPlayerStats(savedState.playerStats);
+      setPitcherGameStats(savedState.pitcherGameStats);
+      setFameEvents(savedState.fameEvents);
+      setActivityLog([`📂 Game restored from save`, ...savedState.activityLog.slice(0, 9)]);
+      if (savedState.currentInningPitches) {
+        setCurrentInningPitches(savedState.currentInningPitches);
+      }
+
+      hasRehydratedFromPersistence.current = true;
+    };
+
+    rehydrate();
+    return () => {
+      cancelled = true;
+    };
+  }, [gamePersistence.isLoading, gamePersistence.hasSavedGame, gamePersistence.loadGame]);
 
   // Build current state for persistence
   const buildPersistenceState = useCallback((): GameStateForPersistence => {
@@ -880,59 +927,16 @@ export default function GameTracker({ onGameEnd }: GameTrackerProps = {}) {
 
   // Auto-save when key game state changes
   useEffect(() => {
-    // Don't save during initial load or if recovery prompt is shown
-    if (gamePersistence.isLoading || showRecoveryPrompt) return;
+    // Don't save during initial load
+    if (gamePersistence.isLoading) return;
     // Don't save if game hasn't started (no at-bats yet)
     if (atBatCount === 0 && inning === 1 && outs === 0) return;
 
     gamePersistence.triggerAutoSave(buildPersistenceState());
   }, [
     inning, halfInning, outs, homeScore, awayScore, atBatCount,
-    buildPersistenceState, gamePersistence, showRecoveryPrompt
+    buildPersistenceState, gamePersistence
   ]);
-
-  // Restore game from saved state
-  const handleRestoreGame = useCallback(async () => {
-    const savedState = await gamePersistence.loadGame();
-    if (savedState) {
-      dispatch({
-        type: 'SYNC_PERSISTENCE',
-        state: {
-          inning: savedState.inning,
-          halfInning: savedState.halfInning,
-          outs: savedState.outs,
-          homeScore: savedState.homeScore,
-          awayScore: savedState.awayScore,
-          bases: savedState.bases,
-          currentBatterIndex: savedState.currentBatterIndex,
-          atBatCount: savedState.atBatCount,
-          inningStrikeouts: savedState.inningStrikeouts,
-          consecutiveHRCount: savedState.consecutiveHRCount,
-          lastHRBatterId: savedState.lastHRBatterId,
-          maxDeficitAway: savedState.maxDeficitAway,
-          maxDeficitHome: savedState.maxDeficitHome,
-        },
-      });
-      setPlayerStats(savedState.playerStats);
-      setPitcherGameStats(savedState.pitcherGameStats);
-      setFameEvents(savedState.fameEvents);
-      setActivityLog(savedState.activityLog);
-      // Restore per-inning pitch tracking (if present in saved state)
-      if (savedState.currentInningPitches) {
-        setCurrentInningPitches(savedState.currentInningPitches);
-      }
-
-      // Add recovery message to log
-      setActivityLog(prev => [`📂 Game restored from save`, ...prev.slice(0, 9)]);
-    }
-    setShowRecoveryPrompt(false);
-  }, [gamePersistence]);
-
-  // Start new game (discard saved)
-  const handleDiscardSave = useCallback(async () => {
-    await gamePersistence.clearGame();
-    setShowRecoveryPrompt(false);
-  }, [gamePersistence]);
 
   // ============================================
   // LIVE STATS (Phase 3 Enhancement)
@@ -2226,71 +2230,6 @@ export default function GameTracker({ onGameEnd }: GameTrackerProps = {}) {
 
   return (
     <div style={styles.container}>
-      {/* Game Recovery Prompt Modal */}
-      {showRecoveryPrompt && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          backgroundColor: 'rgba(0,0,0,0.8)',
-          display: 'flex',
-          justifyContent: 'center',
-          alignItems: 'center',
-          zIndex: 1000,
-        }}>
-          <div style={{
-            backgroundColor: '#1a1a2e',
-            padding: '32px',
-            borderRadius: '12px',
-            border: '2px solid #4a9eff',
-            maxWidth: '400px',
-            textAlign: 'center',
-          }}>
-            <div style={{ fontSize: '48px', marginBottom: '16px' }}>📂</div>
-            <h2 style={{ color: '#fff', marginBottom: '16px' }}>Game In Progress</h2>
-            <p style={{ color: '#aaa', marginBottom: '24px' }}>
-              A saved game was found. Would you like to continue where you left off?
-            </p>
-            {gamePersistence.lastSavedAt && (
-              <p style={{ color: '#666', fontSize: '12px', marginBottom: '24px' }}>
-                Last saved: {new Date(gamePersistence.lastSavedAt).toLocaleString()}
-              </p>
-            )}
-            <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
-              <button
-                onClick={handleRestoreGame}
-                style={{
-                  padding: '12px 24px',
-                  backgroundColor: '#4a9eff',
-                  color: '#fff',
-                  border: 'none',
-                  borderRadius: '6px',
-                  cursor: 'pointer',
-                  fontWeight: 'bold',
-                }}
-              >
-                Continue Game
-              </button>
-              <button
-                onClick={handleDiscardSave}
-                style={{
-                  padding: '12px 24px',
-                  backgroundColor: '#333',
-                  color: '#fff',
-                  border: '1px solid #555',
-                  borderRadius: '6px',
-                  cursor: 'pointer',
-                }}
-              >
-                Start Fresh
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       <Scoreboard
         awayName={awayTeamName}
         homeName={homeTeamName}

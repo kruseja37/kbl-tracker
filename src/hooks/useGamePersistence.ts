@@ -222,6 +222,17 @@ function toPersistedState(state: GameStateForPersistence): PersistedGameState {
  * Convert persisted state back to game state format
  */
 function fromPersistedState(persisted: PersistedGameState): GameStateForPersistence {
+  const mapPersistedRunner = (
+    runner: PersistedGameState['bases']['first']
+  ): Bases['first'] => {
+    if (!runner) return null;
+    return {
+      playerId: runner.playerId,
+      playerName: runner.playerName,
+      inheritedFrom: runner.inheritedFrom ?? null,
+    };
+  };
+
   return {
     gameId: persisted.gameId,
     inning: persisted.inning,
@@ -230,9 +241,9 @@ function fromPersistedState(persisted: PersistedGameState): GameStateForPersiste
     homeScore: persisted.homeScore,
     awayScore: persisted.awayScore,
     bases: {
-      first: persisted.bases.first ? { ...persisted.bases.first } : null,
-      second: persisted.bases.second ? { ...persisted.bases.second } : null,
-      third: persisted.bases.third ? { ...persisted.bases.third } : null,
+      first: mapPersistedRunner(persisted.bases.first),
+      second: mapPersistedRunner(persisted.bases.second),
+      third: mapPersistedRunner(persisted.bases.third),
     },
     currentBatterIndex: persisted.currentBatterIndex,
     atBatCount: persisted.atBatCount,
