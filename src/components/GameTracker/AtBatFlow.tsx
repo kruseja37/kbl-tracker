@@ -142,9 +142,17 @@ const countRunnerOuts = (outcomes: RunnerOutcomes): number => {
 };
 
 const hasRunnerAdvanced = (bases: Bases, outcomes: RunnerOutcomes): boolean => {
+  const firstAdvanced =
+    outcomes.first === 'TO_2B' ||
+    outcomes.first === 'TO_3B' ||
+    outcomes.first === 'SCORED';
+  const secondAdvanced =
+    outcomes.second === 'TO_3B' ||
+    outcomes.second === 'SCORED';
+
   return (
-    (!!bases.first && ['TO_2B', 'TO_3B', 'SCORED'].includes(outcomes.first || '')) ||
-    (!!bases.second && ['TO_3B', 'SCORED'].includes(outcomes.second || '')) ||
+    (!!bases.first && firstAdvanced) ||
+    (!!bases.second && secondAdvanced) ||
     (!!bases.third && outcomes.third === 'SCORED')
   );
 };
@@ -417,7 +425,7 @@ export default function AtBatFlow({
   // Get possible extra events that could explain the advancement
   const getPossibleExtraEvents = (): ExtraEventType[] => {
     // Most common scenarios
-    return ['SB', 'WP', 'PB', 'E', 'BALK'];
+    return ['SB', 'WP', 'PB', 'E'];
   };
 
   // Handle selection of extra event explanation
@@ -941,7 +949,6 @@ export default function AtBatFlow({
                       {eventType === 'WP' && 'Wild Pitch'}
                       {eventType === 'PB' && 'Passed Ball'}
                       {eventType === 'E' && 'Error'}
-                      {eventType === 'BALK' && 'Balk'}
                     </button>
                   ))}
                 </div>
@@ -958,7 +965,6 @@ export default function AtBatFlow({
                     {ev.event === 'WP' && `Wild Pitch: ${ev.runner} advances to ${ev.to === 'HOME' ? 'Home' : ev.to}`}
                     {ev.event === 'PB' && `Passed Ball: ${ev.runner} advances to ${ev.to === 'HOME' ? 'Home' : ev.to}`}
                     {ev.event === 'E' && `Error: ${ev.runner} advances to ${ev.to === 'HOME' ? 'Home' : ev.to}`}
-                    {ev.event === 'BALK' && `Balk: ${ev.runner} advances to ${ev.to === 'HOME' ? 'Home' : ev.to}`}
                   </div>
                 ))}
               </div>

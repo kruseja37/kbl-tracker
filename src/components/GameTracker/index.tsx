@@ -267,9 +267,21 @@ const createInitialPitcherStats = (
 
 const MAX_UNDO_STACK = 20;
 
-type NonAtBatEvent = 'SB' | 'CS' | 'WP' | 'PB' | 'PK' | 'BALK';
+type NonAtBatEvent = 'SB' | 'CS' | 'WP' | 'PB' | 'PK';
+
+const initialPlayerStatsState: Record<string, PlayerStats> = Object.fromEntries(
+  demoLineup.map(p => [p.id, { ...initialStats }])
+);
+
+const initialPitcherGameStatsState = (): Map<string, PitcherGameStats> => {
+  const initialMap = new Map<string, PitcherGameStats>();
+  initialMap.set('home_pitcher', createInitialPitcherStats('home_pitcher', 'Home Starter', 'home', true, 1));
+  initialMap.set('away_pitcher', createInitialPitcherStats('away_pitcher', 'Away Starter', 'away', true, 1));
+  return initialMap;
+};
 
 interface GameState {
+  isRehydrated: boolean;
   inning: number;
   halfInning: HalfInning;
   outs: number;
@@ -277,6 +289,9 @@ interface GameState {
   awayScore: number;
   bases: Bases;
   currentBatterIndex: number;
+  playerStats: Record<string, PlayerStats>;
+  pitcherGameStats: Map<string, PitcherGameStats>;
+  activityLog: string[];
   atBatCount: number;
   inningStrikeouts: number;
   consecutiveHRCount: number;
@@ -317,11 +332,26 @@ type GameAction =
   | {
       type: 'REHYDRATE_STATE';
       state: GameState;
+    }
+  | {
+      type: 'UPDATE_PLAYER_STATS';
+      updater: (prev: Record<string, PlayerStats>) => Record<string, PlayerStats>;
+    }
+  | {
+      type: 'UPDATE_PITCHER_GAME_STATS';
+      updater: (prev: Map<string, PitcherGameStats>) => Map<string, PitcherGameStats>;
+    }
+  | {
+      type: 'UPDATE_ACTIVITY_LOG';
+      updater: (prev: string[]) => string[];
     };
 
 const createStateSnapshot = (state: GameState): GameState => ({
   ...state,
   bases: { ...state.bases },
+  playerStats: { ...state.playerStats },
+  pitcherGameStats: new Map(state.pitcherGameStats),
+  activityLog: [...state.activityLog],
   undoStack: [],
   lastPitcherUpdate: null,
 });
@@ -344,6 +374,7 @@ const applyFlipInningState = (state: GameState): GameState => ({
 });
 
 const initialGameState: GameState = {
+  isRehydrated: false,
   inning: 1,
   halfInning: 'TOP',
   outs: 0,
@@ -351,6 +382,9 @@ const initialGameState: GameState = {
   awayScore: 0,
   bases: createEmptyBases(),
   currentBatterIndex: 0,
+  playerStats: initialPlayerStatsState,
+  pitcherGameStats: initialPitcherGameStatsState(),
+  activityLog: [],
   atBatCount: 0,
   inningStrikeouts: 0,
   consecutiveHRCount: 0,
@@ -480,26 +514,7 @@ const gameReducer = (state: GameState, action: GameAction): GameState => {
       let nextMaxDeficitAway = state.maxDeficitAway;
       let nextMaxDeficitHome = state.maxDeficitHome;
 
-      if (action.event === 'BALK') {
-        if (updatedBases.third) {
-          if (state.halfInning === 'TOP') {
-            nextAwayScore += 1;
-            nextMaxDeficitHome = Math.max(nextMaxDeficitHome, nextAwayScore - nextHomeScore);
-          } else {
-            nextHomeScore += 1;
-            nextMaxDeficitAway = Math.max(nextMaxDeficitAway, nextHomeScore - nextAwayScore);
-          }
-          updatedBases.third = null;
-        }
-        if (updatedBases.second) {
-          updatedBases.third = updatedBases.second;
-          updatedBases.second = null;
-        }
-        if (updatedBases.first) {
-          updatedBases.second = updatedBases.first;
-          updatedBases.first = null;
-        }
-      } else if (action.result) {
+      if (action.result) {
         const { runner, outcome, toBase } = action.result;
         const runnerInfo = updatedBases[runner];
 
@@ -568,9 +583,31 @@ const gameReducer = (state: GameState, action: GameAction): GameState => {
     case 'REHYDRATE_STATE':
       return {
         ...action.state,
+        isRehydrated: true,
         bases: { ...action.state.bases },
+        playerStats: { ...action.state.playerStats },
+        pitcherGameStats: new Map(action.state.pitcherGameStats),
+        activityLog: [...action.state.activityLog],
         undoStack: [],
         lastPitcherUpdate: null,
+      };
+
+    case 'UPDATE_PLAYER_STATS':
+      return {
+        ...state,
+        playerStats: action.updater(state.playerStats),
+      };
+
+    case 'UPDATE_PITCHER_GAME_STATS':
+      return {
+        ...state,
+        pitcherGameStats: action.updater(state.pitcherGameStats),
+      };
+
+    case 'UPDATE_ACTIVITY_LOG':
+      return {
+        ...state,
+        activityLog: action.updater(state.activityLog),
       };
 
     default:
@@ -596,6 +633,7 @@ interface GameTrackerProps {
 export default function GameTracker({ onGameEnd }: GameTrackerProps = {}) {
   const [state, dispatch] = useReducer(gameReducer, initialGameState);
   const {
+    isRehydrated,
     inning,
     halfInning,
     outs,
@@ -603,6 +641,9 @@ export default function GameTracker({ onGameEnd }: GameTrackerProps = {}) {
     awayScore,
     bases,
     currentBatterIndex,
+    playerStats,
+    pitcherGameStats,
+    activityLog,
     atBatCount,
     inningStrikeouts,
     consecutiveHRCount,
@@ -616,6 +657,7 @@ export default function GameTracker({ onGameEnd }: GameTrackerProps = {}) {
     dispatch({
       type: 'SYNC_PERSISTENCE',
       state: {
+        isRehydrated: state.isRehydrated,
         inning: state.inning,
         halfInning: state.halfInning,
         outs: state.outs,
@@ -623,6 +665,9 @@ export default function GameTracker({ onGameEnd }: GameTrackerProps = {}) {
         awayScore: state.awayScore,
         bases: state.bases,
         currentBatterIndex: state.currentBatterIndex,
+        playerStats: state.playerStats,
+        pitcherGameStats: state.pitcherGameStats,
+        activityLog: state.activityLog,
         atBatCount: state.atBatCount,
         inningStrikeouts: state.inningStrikeouts,
         consecutiveHRCount: state.consecutiveHRCount,
@@ -633,14 +678,6 @@ export default function GameTracker({ onGameEnd }: GameTrackerProps = {}) {
       },
     });
   }, [state]);
-
-  // Player stats
-  const [playerStats, setPlayerStats] = useState<Record<string, PlayerStats>>(
-    Object.fromEntries(demoLineup.map(p => [p.id, { ...initialStats }]))
-  );
-
-  // Activity log
-  const [activityLog, setActivityLog] = useState<string[]>([]);
 
   // At-bat flow state
   const [pendingResult, setPendingResult] = useState<AtBatResult | null>(null);
@@ -763,27 +800,16 @@ export default function GameTracker({ onGameEnd }: GameTrackerProps = {}) {
   const [eventSequence, setEventSequence] = useState(0);
   const [gameHeaderCreated, setGameHeaderCreated] = useState(false);
 
-  // ============================================
-  // PITCHER GAME STATS (Accumulated per game)
-  // Per STAT_TRACKING_ARCHITECTURE_SPEC.md
-  // ============================================
-  // Track each pitcher's accumulated stats throughout the game
-  // Key: pitcherId, Value: accumulated stats
-  const [pitcherGameStats, setPitcherGameStats] = useState<Map<string, PitcherGameStats>>(() => {
-    // Initialize with placeholder starting pitchers (would be set during game setup)
-    const initialMap = new Map<string, PitcherGameStats>();
-    initialMap.set('home_pitcher', createInitialPitcherStats('home_pitcher', 'Home Starter', 'home', true, 1));
-    initialMap.set('away_pitcher', createInitialPitcherStats('away_pitcher', 'Away Starter', 'away', true, 1));
-    return initialMap;
-  });
-
   useEffect(() => {
     if (!state.lastPitcherUpdate) return;
     const { pitcherId, stats } = state.lastPitcherUpdate;
-    setPitcherGameStats(prev => {
-      const next = new Map(prev);
-      next.set(pitcherId, stats);
-      return next;
+    dispatch({
+      type: 'UPDATE_PITCHER_GAME_STATS',
+      updater: prev => {
+        const next = new Map(prev);
+        next.set(pitcherId, stats);
+        return next;
+      },
     });
   }, [state.lastPitcherUpdate]);
 
@@ -834,21 +860,16 @@ export default function GameTracker({ onGameEnd }: GameTrackerProps = {}) {
   // ============================================
   const gamePersistence = useGamePersistence({ enabled: true, autoSaveDelay: 500 });
 
-  // Rehydration handshake flag: blocks render + autosave until persistence sync finishes
-  const [isRehydrated, setIsRehydrated] = useState(false);
-  const [rehydrationDispatchDone, setRehydrationDispatchDone] = useState(false);
-
   // Auto-rehydrate once persistence init completes
   useEffect(() => {
     if (gamePersistence.isLoading) return;
     if (isRehydrated) return;
-    if (rehydrationDispatchDone) return;
 
     let cancelled = false;
     const rehydrate = async () => {
       if (!gamePersistence.hasSavedGame) {
         if (!cancelled) {
-          setIsRehydrated(true);
+          dispatch({ type: 'REHYDRATE_STATE', state: initialGameState });
         }
         return;
       }
@@ -860,6 +881,7 @@ export default function GameTracker({ onGameEnd }: GameTrackerProps = {}) {
 
       const rehydratedState: GameState = {
         ...initialGameState,
+        isRehydrated: true,
         inning: savedState.inning,
         halfInning: savedState.halfInning,
         outs: savedState.outs,
@@ -867,6 +889,9 @@ export default function GameTracker({ onGameEnd }: GameTrackerProps = {}) {
         awayScore: savedState.awayScore,
         bases: savedState.bases,
         currentBatterIndex: savedState.currentBatterIndex,
+        playerStats: savedState.playerStats,
+        pitcherGameStats: savedState.pitcherGameStats,
+        activityLog: [`📂 Game restored from save`, ...savedState.activityLog.slice(0, 9)],
         atBatCount: savedState.atBatCount,
         inningStrikeouts: savedState.inningStrikeouts,
         consecutiveHRCount: savedState.consecutiveHRCount,
@@ -876,16 +901,9 @@ export default function GameTracker({ onGameEnd }: GameTrackerProps = {}) {
       };
 
       dispatch({ type: 'REHYDRATE_STATE', state: rehydratedState });
-      setPlayerStats(savedState.playerStats);
-      setPitcherGameStats(savedState.pitcherGameStats);
       setFameEvents(savedState.fameEvents);
-      setActivityLog([`📂 Game restored from save`, ...savedState.activityLog.slice(0, 9)]);
       if (savedState.currentInningPitches) {
         setCurrentInningPitches(savedState.currentInningPitches);
-      }
-
-      if (!cancelled) {
-        setRehydrationDispatchDone(true);
       }
     };
 
@@ -898,15 +916,7 @@ export default function GameTracker({ onGameEnd }: GameTrackerProps = {}) {
     gamePersistence.hasSavedGame,
     gamePersistence.loadGame,
     isRehydrated,
-    rehydrationDispatchDone,
   ]);
-
-  // Mark rehydration complete only after dispatch has been processed.
-  useEffect(() => {
-    if (!rehydrationDispatchDone) return;
-    setIsRehydrated(true);
-    setRehydrationDispatchDone(false);
-  }, [rehydrationDispatchDone]);
 
   // Build current state for persistence
   const buildPersistenceState = useCallback((): GameStateForPersistence => {
@@ -1017,10 +1027,13 @@ export default function GameTracker({ onGameEnd }: GameTrackerProps = {}) {
     // Add to activity log
     const symbol = event.fameType === 'bonus' ? '⭐' : '💀';
     const valueStr = event.fameValue > 0 ? `+${event.fameValue}` : `${event.fameValue}`;
-    setActivityLog(prev => [
-      `${symbol} ${event.playerName}: ${event.description || event.eventType} (${valueStr} Fame)`,
-      ...prev.slice(0, 9)
-    ]);
+    dispatch({
+      type: 'UPDATE_ACTIVITY_LOG',
+      updater: prev => [
+        `${symbol} ${event.playerName}: ${event.description || event.eventType} (${valueStr} Fame)`,
+        ...prev.slice(0, 9),
+      ],
+    });
   }, [fameSettings.showToasts]);
 
   // Dismiss Fame toast
@@ -1510,32 +1523,34 @@ export default function GameTracker({ onGameEnd }: GameTrackerProps = {}) {
 
   // Credit fielding stats (putout, assist)
   const creditFieldingStats = (putoutPosition: Position | null, assistPositions: Position[]) => {
-    setPlayerStats(prev => {
-      const updated = { ...prev };
+    dispatch({
+      type: 'UPDATE_PLAYER_STATS',
+      updater: prev => {
+        const updated = { ...prev };
 
-      // Credit putout
-      if (putoutPosition) {
-        const putoutPlayerId = getPlayerIdByPosition(putoutPosition);
-        if (putoutPlayerId && updated[putoutPlayerId]) {
-          updated[putoutPlayerId] = {
-            ...updated[putoutPlayerId],
-            putouts: (updated[putoutPlayerId].putouts || 0) + 1,
-          };
+        // Credit putout
+        if (putoutPosition) {
+          const putoutPlayerId = getPlayerIdByPosition(putoutPosition);
+          if (putoutPlayerId && updated[putoutPlayerId]) {
+            updated[putoutPlayerId] = {
+              ...updated[putoutPlayerId],
+              putouts: (updated[putoutPlayerId].putouts || 0) + 1,
+            };
+          }
         }
-      }
 
-      // Credit assists
-      for (const assistPos of assistPositions) {
-        const assistPlayerId = getPlayerIdByPosition(assistPos);
-        if (assistPlayerId && updated[assistPlayerId]) {
-          updated[assistPlayerId] = {
-            ...updated[assistPlayerId],
-            assists: (updated[assistPlayerId].assists || 0) + 1,
-          };
+        // Credit assists
+        for (const assistPos of assistPositions) {
+          const assistPlayerId = getPlayerIdByPosition(assistPos);
+          if (assistPlayerId && updated[assistPlayerId]) {
+            updated[assistPlayerId] = {
+              ...updated[assistPlayerId],
+              assists: (updated[assistPlayerId].assists || 0) + 1,
+            };
+          }
         }
-      }
-
-      return updated;
+        return updated;
+      },
     });
   };
 
@@ -1970,7 +1985,7 @@ export default function GameTracker({ onGameEnd }: GameTrackerProps = {}) {
     const hasRunners = bases.first || bases.second || bases.third;
 
     // Runner-dependent events require runners
-    if (!hasRunners && ['SB', 'CS', 'WP', 'PB', 'PK', 'BALK'].includes(event)) {
+    if (!hasRunners && ['SB', 'CS', 'WP', 'PB', 'PK'].includes(event)) {
       return;
     }
 
@@ -1994,9 +2009,6 @@ export default function GameTracker({ onGameEnd }: GameTrackerProps = {}) {
         break;
       case 'PK':
         setPendingEvent('PK');
-        break;
-      case 'BALK':
-        handleBalk();
         break;
       // Substitution events
       case 'PITCH_CHANGE':
@@ -2039,37 +2051,43 @@ export default function GameTracker({ onGameEnd }: GameTrackerProps = {}) {
 
     // Add stats entries for new players
     if (newPlayerIds.length > 0) {
-      setPlayerStats((prev) => {
-        const updated = { ...prev };
-        for (const id of newPlayerIds) {
-          if (!updated[id]) {
-            updated[id] = { ...initialStats };
+      dispatch({
+        type: 'UPDATE_PLAYER_STATS',
+        updater: prev => {
+          const updated = { ...prev };
+          for (const id of newPlayerIds) {
+            if (!updated[id]) {
+              updated[id] = { ...initialStats };
+            }
           }
-        }
-        return updated;
+          return updated;
+        },
       });
     }
 
     // Initialize pitcher stats for new pitchers
     if (event.eventType === 'PITCH_CHANGE') {
       const pc = event as PitchingChangeEvent;
-      setPitcherGameStats((prev) => {
-        const newMap = new Map(prev);
-        if (!newMap.has(pc.incomingPitcherId)) {
-          // Determine team based on which half of inning (home pitches in TOP, away in BOTTOM)
-          const teamId = halfInning === 'TOP' ? homeTeamId : awayTeamId;
-          newMap.set(
-            pc.incomingPitcherId,
-            createInitialPitcherStats(
+      dispatch({
+        type: 'UPDATE_PITCHER_GAME_STATS',
+        updater: prev => {
+          const newMap = new Map(prev);
+          if (!newMap.has(pc.incomingPitcherId)) {
+            // Determine team based on which half of inning (home pitches in TOP, away in BOTTOM)
+            const teamId = halfInning === 'TOP' ? homeTeamId : awayTeamId;
+            newMap.set(
               pc.incomingPitcherId,
-              pc.incomingPitcherName,
-              teamId,
-              false, // Not a starter
-              inning // Entry inning
-            )
-          );
-        }
-        return newMap;
+              createInitialPitcherStats(
+                pc.incomingPitcherId,
+                pc.incomingPitcherName,
+                teamId,
+                false, // Not a starter
+                inning // Entry inning
+              )
+            );
+          }
+          return newMap;
+        },
       });
     }
 
@@ -2110,7 +2128,10 @@ export default function GameTracker({ onGameEnd }: GameTrackerProps = {}) {
     }
 
     if (logEntry) {
-      setActivityLog((prev) => [logEntry, ...prev.slice(0, 9)]);
+      dispatch({
+        type: 'UPDATE_ACTIVITY_LOG',
+        updater: prev => [logEntry, ...prev.slice(0, 9)],
+      });
     }
 
     // ============================================
@@ -2189,12 +2210,6 @@ export default function GameTracker({ onGameEnd }: GameTrackerProps = {}) {
     setPendingSubType(null);
   };
 
-  // Handle balk
-  const handleBalk = () => {
-    dispatch({ type: 'RECORD_EVENT', event: 'BALK' });
-    setActivityLog(prev => ['Balk - all runners advance one base.', ...prev.slice(0, 9)]);
-  };
-
   // Handle event flow completion
   const handleEventFlowComplete = (result: EventResult) => {
     const { event, runner, outcome, toBase } = result;
@@ -2209,13 +2224,22 @@ export default function GameTracker({ onGameEnd }: GameTrackerProps = {}) {
 
     if (outcome === 'OUT') {
       const eventName = event === 'SB' ? 'caught stealing' : event === 'PK' ? 'picked off' : 'out';
-      setActivityLog(prev => [`${runnerName} ${eventName} at ${toBase || 'base'}.`, ...prev.slice(0, 9)]);
+      dispatch({
+        type: 'UPDATE_ACTIVITY_LOG',
+        updater: prev => [`${runnerName} ${eventName} at ${toBase || 'base'}.`, ...prev.slice(0, 9)],
+      });
     } else if (outcome === 'SCORE') {
       const eventName = event === 'SB' ? 'steals home!' : `scores on ${event}`;
-      setActivityLog(prev => [`${runnerName} ${eventName}`, ...prev.slice(0, 9)]);
+      dispatch({
+        type: 'UPDATE_ACTIVITY_LOG',
+        updater: prev => [`${runnerName} ${eventName}`, ...prev.slice(0, 9)],
+      });
     } else if (outcome === 'ADVANCE') {
       const eventName = event === 'SB' ? `steals ${toBase}` : `advances to ${toBase} on ${event}`;
-      setActivityLog(prev => [`${runnerName} ${eventName}.`, ...prev.slice(0, 9)]);
+      dispatch({
+        type: 'UPDATE_ACTIVITY_LOG',
+        updater: prev => [`${runnerName} ${eventName}.`, ...prev.slice(0, 9)],
+      });
     }
     setPendingEvent(null);
   };

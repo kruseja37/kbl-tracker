@@ -40,7 +40,7 @@ const resultButtons: { result: AtBatResult; label: string; color: string }[][] =
   ],
 ];
 
-// Note: BALK removed - not possible in SMB4 (too many throws over IS possible though)
+// Note: BALK removed - not possible in SMB4 (too many throws over is possible though)
 const eventButtons: { event: GameEvent; label: string; color: string }[] = [
   { event: 'SB', label: 'Steal', color: '#26A69A' },
   { event: 'CS', label: 'CS', color: '#EF5350' },
@@ -142,8 +142,8 @@ export default function AtBatButtons({ onResult, onEvent, disabled, outs, bases 
       <div style={styles.buttonRow}>
         {eventButtons.map(({ event, label, color }) => {
           // Runner-dependent events require runners on base (BUG-013 fix)
-          // SB, CS, WP, PB, PK (Pickoff), BALK all require runners
-          const requiresRunners = ['SB', 'CS', 'WP', 'PB', 'PK', 'BALK'].includes(event);
+          // SB, CS, WP, PB, PK (Pickoff) all require runners
+          const requiresRunners = ['SB', 'CS', 'WP', 'PB', 'PK'].includes(event);
           const isEventDisabled = disabled || (requiresRunners && !hasRunners);
           const tooltip = requiresRunners && !hasRunners
             ? `${label} requires runners on base`

@@ -13,7 +13,7 @@ export type AtBatResult =
   | '1B' | '2B' | '3B' | 'HR' | 'BB' | 'IBB' | 'K' | 'KL'
   | 'GO' | 'FO' | 'LO' | 'PO' | 'DP' | 'TP' | 'SF' | 'SAC' | 'HBP' | 'E' | 'FC' | 'D3K';
 
-export type GameEvent = 'SB' | 'CS' | 'WP' | 'PB' | 'PK' | 'BALK' | 'PITCH_CHANGE' | 'PINCH_HIT' | 'PINCH_RUN' | 'DEF_SUB' | 'POS_SWITCH';
+export type GameEvent = 'SB' | 'CS' | 'WP' | 'PB' | 'PK' | 'PITCH_CHANGE' | 'PINCH_HIT' | 'PINCH_RUN' | 'DEF_SUB' | 'POS_SWITCH';
 // Special play types for outs and hits
 // For outs: Routine, Diving, Wall Catch, Running, Leaping
 // For hits: Clean (no fielding attempt), Diving, Leaping, Robbery Attempt
@@ -22,7 +22,7 @@ export type SpecialPlayType = 'Routine' | 'Diving' | 'Wall Catch' | 'Running' | 
 export type RunnerOutcome = 'SCORED' | 'TO_3B' | 'TO_2B' | 'HELD' | 'OUT_HOME' | 'OUT_3B' | 'OUT_2B';
 
 // Extra event types for inferred advancement events
-export type ExtraEventType = 'SB' | 'WP' | 'PB' | 'E' | 'BALK';
+export type ExtraEventType = 'SB' | 'WP' | 'PB' | 'E';
 
 // Extra event recorded when runner advances beyond standard
 export interface ExtraEvent {

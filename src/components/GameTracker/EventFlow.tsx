@@ -1,6 +1,7 @@
 import { useReducer } from 'react';
 import type { GameEvent, Bases, Runner, EventResult } from '../../types/game';
-import { BaseKey, getEventOutcomes } from './atBatLogic';
+import type { BaseKey } from './atBatLogic';
+import { getEventOutcomes } from './atBatLogic';
 
 interface EventFlowProps {
   event: GameEvent;
