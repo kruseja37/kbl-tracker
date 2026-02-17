@@ -836,47 +836,56 @@ export default function GameTracker({ onGameEnd }: GameTrackerProps = {}) {
 
   // Rehydration handshake flag: blocks render + autosave until persistence sync finishes
   const [isRehydrated, setIsRehydrated] = useState(false);
+  const [rehydrationDispatchDone, setRehydrationDispatchDone] = useState(false);
 
   // Auto-rehydrate once persistence init completes
   useEffect(() => {
     if (gamePersistence.isLoading) return;
     if (isRehydrated) return;
+    if (rehydrationDispatchDone) return;
 
     let cancelled = false;
     const rehydrate = async () => {
-      if (gamePersistence.hasSavedGame) {
-        const savedState = await gamePersistence.loadGame();
-        if (!cancelled && savedState) {
-          const rehydratedState: GameState = {
-            ...initialGameState,
-            inning: savedState.inning,
-            halfInning: savedState.halfInning,
-            outs: savedState.outs,
-            homeScore: savedState.homeScore,
-            awayScore: savedState.awayScore,
-            bases: savedState.bases,
-            currentBatterIndex: savedState.currentBatterIndex,
-            atBatCount: savedState.atBatCount,
-            inningStrikeouts: savedState.inningStrikeouts,
-            consecutiveHRCount: savedState.consecutiveHRCount,
-            lastHRBatterId: savedState.lastHRBatterId,
-            maxDeficitAway: savedState.maxDeficitAway,
-            maxDeficitHome: savedState.maxDeficitHome,
-          };
-
-          dispatch({ type: 'REHYDRATE_STATE', state: rehydratedState });
-          setPlayerStats(savedState.playerStats);
-          setPitcherGameStats(savedState.pitcherGameStats);
-          setFameEvents(savedState.fameEvents);
-          setActivityLog([`📂 Game restored from save`, ...savedState.activityLog.slice(0, 9)]);
-          if (savedState.currentInningPitches) {
-            setCurrentInningPitches(savedState.currentInningPitches);
-          }
+      if (!gamePersistence.hasSavedGame) {
+        if (!cancelled) {
+          setIsRehydrated(true);
         }
+        return;
+      }
+
+      const savedState = await gamePersistence.loadGame();
+      if (cancelled || !savedState) {
+        return;
+      }
+
+      const rehydratedState: GameState = {
+        ...initialGameState,
+        inning: savedState.inning,
+        halfInning: savedState.halfInning,
+        outs: savedState.outs,
+        homeScore: savedState.homeScore,
+        awayScore: savedState.awayScore,
+        bases: savedState.bases,
+        currentBatterIndex: savedState.currentBatterIndex,
+        atBatCount: savedState.atBatCount,
+        inningStrikeouts: savedState.inningStrikeouts,
+        consecutiveHRCount: savedState.consecutiveHRCount,
+        lastHRBatterId: savedState.lastHRBatterId,
+        maxDeficitAway: savedState.maxDeficitAway,
+        maxDeficitHome: savedState.maxDeficitHome,
+      };
+
+      dispatch({ type: 'REHYDRATE_STATE', state: rehydratedState });
+      setPlayerStats(savedState.playerStats);
+      setPitcherGameStats(savedState.pitcherGameStats);
+      setFameEvents(savedState.fameEvents);
+      setActivityLog([`📂 Game restored from save`, ...savedState.activityLog.slice(0, 9)]);
+      if (savedState.currentInningPitches) {
+        setCurrentInningPitches(savedState.currentInningPitches);
       }
 
       if (!cancelled) {
-        setIsRehydrated(true);
+        setRehydrationDispatchDone(true);
       }
     };
 
@@ -884,7 +893,20 @@ export default function GameTracker({ onGameEnd }: GameTrackerProps = {}) {
     return () => {
       cancelled = true;
     };
-  }, [gamePersistence.isLoading, gamePersistence.hasSavedGame, gamePersistence.loadGame, isRehydrated]);
+  }, [
+    gamePersistence.isLoading,
+    gamePersistence.hasSavedGame,
+    gamePersistence.loadGame,
+    isRehydrated,
+    rehydrationDispatchDone,
+  ]);
+
+  // Mark rehydration complete only after dispatch has been processed.
+  useEffect(() => {
+    if (!rehydrationDispatchDone) return;
+    setIsRehydrated(true);
+    setRehydrationDispatchDone(false);
+  }, [rehydrationDispatchDone]);
 
   // Build current state for persistence
   const buildPersistenceState = useCallback((): GameStateForPersistence => {
@@ -923,9 +945,9 @@ export default function GameTracker({ onGameEnd }: GameTrackerProps = {}) {
 
   // Auto-save when key game state changes
   useEffect(() => {
+    if (!isRehydrated) return;
     // Don't save during initial load
     if (gamePersistence.isLoading) return;
-    if (!isRehydrated) return;
     // Don't save if game hasn't started (no at-bats yet)
     if (atBatCount === 0 && inning === 1 && outs === 0) return;
 
@@ -2213,17 +2235,8 @@ export default function GameTracker({ onGameEnd }: GameTrackerProps = {}) {
     return dueUp;
   };
 
-  // Show loading state while checking for saved game
-  if (gamePersistence.isLoading || !isRehydrated) {
-    return (
-      <div style={{ ...styles.container, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-        <div style={{ textAlign: 'center', color: '#fff' }}>
-          <div style={{ fontSize: '24px', marginBottom: '16px' }}>⚾</div>
-          <div>Loading...</div>
-        </div>
-      </div>
-    );
-  }
+  // Strict gate: never render gameplay until rehydration handshake completes.
+  if (!isRehydrated) return <LoadingSpinner />;
 
   return (
     <div style={styles.container}>
@@ -2764,6 +2777,17 @@ export default function GameTracker({ onGameEnd }: GameTrackerProps = {}) {
         onMojoChange={handleMojoChange}
         onFitnessChange={handleFitnessChange}
       />
+    </div>
+  );
+}
+
+function LoadingSpinner() {
+  return (
+    <div style={{ ...styles.container, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+      <div style={{ textAlign: 'center', color: '#fff' }}>
+        <div style={{ fontSize: '24px', marginBottom: '16px' }}>⚾</div>
+        <div>Loading...</div>
+      </div>
     </div>
   );
 }

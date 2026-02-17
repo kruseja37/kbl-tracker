@@ -141,11 +141,7 @@ function mapToArray(map: Map<string, PitcherGameStats>): PitcherGameStats[] {
  * Convert Array back to Map after loading
  */
 function arrayToMap(arr: PitcherGameStats[]): Map<string, PitcherGameStats> {
-  const map = new Map<string, PitcherGameStats>();
-  for (const stats of arr) {
-    map.set(stats.pitcherId, stats);
-  }
-  return map;
+  return new Map(arr.map(stats => [stats.pitcherId, stats] as const));
 }
 
 /**
