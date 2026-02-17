@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useReducer } from 'react';
 import type { GameEvent, Bases, Runner, EventResult } from '../../types/game';
+import { BaseKey, getEventOutcomes } from './atBatLogic';
 
 interface EventFlowProps {
   event: GameEvent;
@@ -9,15 +10,29 @@ interface EventFlowProps {
 }
 
 export default function EventFlow({ event, bases, onComplete, onCancel }: EventFlowProps) {
-  const [selectedRunner, setSelectedRunner] = useState<'first' | 'second' | 'third' | null>(null);
-  const [selectedOutcomeId, setSelectedOutcomeId] = useState<string | null>(null);
+  type EventFlowState = {
+    selectedRunner: BaseKey | null;
+    selectedOutcomeId: string | null;
+  };
 
-  interface OutcomeOption {
-    id: string;
-    value: 'ADVANCE' | 'SCORE' | 'OUT';
-    label: string;
-    toBase?: 'second' | 'third' | 'home';
-  }
+  type EventFlowAction =
+    | { type: 'SET_RUNNER'; runner: BaseKey }
+    | { type: 'SET_OUTCOME'; outcomeId: string };
+
+  const initialState: EventFlowState = { selectedRunner: null, selectedOutcomeId: null };
+
+  const reducer = (state: EventFlowState, action: EventFlowAction): EventFlowState => {
+    switch (action.type) {
+      case 'SET_RUNNER':
+        return { selectedRunner: action.runner, selectedOutcomeId: null };
+      case 'SET_OUTCOME':
+        return { ...state, selectedOutcomeId: action.outcomeId };
+      default:
+        return state;
+    }
+  };
+
+  const [state, dispatch] = useReducer(reducer, initialState);
 
   const getRunnerName = (runner: Runner | null) => {
     if (!runner) return '';
@@ -26,64 +41,26 @@ export default function EventFlow({ event, bases, onComplete, onCancel }: EventF
   };
 
   // Get available runners based on event type
-  const getAvailableRunners = (): ('first' | 'second' | 'third')[] => {
-    const runners: ('first' | 'second' | 'third')[] = [];
+  const getAvailableRunners = (): BaseKey[] => {
+    const runners: BaseKey[] = [];
     if (bases.first) runners.push('first');
     if (bases.second) runners.push('second');
     if (bases.third) runners.push('third');
     return runners;
   };
 
-  // Get available outcomes based on event and runner
-  const getAvailableOutcomes = (): OutcomeOption[] => {
-    if (!selectedRunner) return [];
+  const canSubmit = () => state.selectedRunner !== null && state.selectedOutcomeId !== null;
 
-    if (event === 'CS' || event === 'PK') {
-      // For caught stealing and pickoff, runner is out
-      return [{ id: 'OUT', value: 'OUT', label: 'Out' }];
-    }
-
-    if (event === 'SB' || event === 'WP' || event === 'PB') {
-      const outcomes: OutcomeOption[] = [];
-
-      if (selectedRunner === 'third') {
-        outcomes.push({ id: 'SCORE_HOME', value: 'SCORE', label: 'Scores', toBase: 'home' });
-        if (event === 'SB') {
-          outcomes.push({ id: 'OUT_HOME', value: 'OUT', label: 'Out at Home' });
-        }
-      } else if (selectedRunner === 'second') {
-        outcomes.push({ id: 'ADVANCE_3B', value: 'ADVANCE', label: 'To 3rd', toBase: 'third' });
-        outcomes.push({ id: 'SCORE_HOME', value: 'SCORE', label: 'Scores', toBase: 'home' });
-        if (event === 'SB') {
-          outcomes.push({ id: 'OUT', value: 'OUT', label: 'Out' });
-        }
-      } else {
-        // first base
-        outcomes.push({ id: 'ADVANCE_2B', value: 'ADVANCE', label: 'To 2nd', toBase: 'second' });
-        outcomes.push({ id: 'ADVANCE_3B', value: 'ADVANCE', label: 'To 3rd', toBase: 'third' });
-        if (event === 'SB') {
-          outcomes.push({ id: 'OUT', value: 'OUT', label: 'Out' });
-        }
-      }
-
-      return outcomes;
-    }
-
-    return [];
-  };
-
-  const canSubmit = () => {
-    return selectedRunner !== null && selectedOutcomeId !== null;
-  };
+  const outcomeOptions = state.selectedRunner ? getEventOutcomes(event, state.selectedRunner, bases) : [];
 
   const handleSubmit = () => {
-    if (!selectedRunner || !selectedOutcomeId) return;
-    const selectedOutcome = getAvailableOutcomes().find((outcome) => outcome.id === selectedOutcomeId);
+    if (!state.selectedRunner || !state.selectedOutcomeId) return;
+    const selectedOutcome = outcomeOptions.find((outcome) => outcome.id === state.selectedOutcomeId);
     if (!selectedOutcome) return;
 
     onComplete({
       event,
-      runner: selectedRunner,
+      runner: state.selectedRunner,
       outcome: selectedOutcome.value,
       toBase: selectedOutcome.toBase,
     });
@@ -105,13 +82,11 @@ export default function EventFlow({ event, bases, onComplete, onCancel }: EventF
   return (
     <div style={styles.overlay}>
       <div style={styles.modal}>
-        {/* Header */}
         <div style={styles.header}>
           <span style={styles.eventBadge}>{getEventTitle()}</span>
           <button style={styles.cancelBtn} onClick={onCancel}>✕</button>
         </div>
 
-        {/* Runner Selection */}
         <div style={styles.section}>
           <div style={styles.sectionLabel}>SELECT RUNNER:</div>
           <div style={styles.buttonRow}>
@@ -120,13 +95,10 @@ export default function EventFlow({ event, bases, onComplete, onCancel }: EventF
                 key={base}
                 style={{
                   ...styles.runnerButton,
-                  backgroundColor: selectedRunner === base ? '#4CAF50' : '#333',
-                  color: selectedRunner === base ? '#000' : '#fff',
+                  backgroundColor: state.selectedRunner === base ? '#4CAF50' : '#333',
+                  color: state.selectedRunner === base ? '#000' : '#fff',
                 }}
-                onClick={() => {
-                  setSelectedRunner(base);
-                  setSelectedOutcomeId(null);
-                }}
+                onClick={() => dispatch({ type: 'SET_RUNNER', runner: base })}
               >
                 {getRunnerName(bases[base])} ({base === 'first' ? '1B' : base === 'second' ? '2B' : '3B'})
               </button>
@@ -134,20 +106,19 @@ export default function EventFlow({ event, bases, onComplete, onCancel }: EventF
           </div>
         </div>
 
-        {/* Outcome Selection */}
-        {selectedRunner && (
+        {state.selectedRunner && (
           <div style={styles.section}>
             <div style={styles.sectionLabel}>OUTCOME:</div>
             <div style={styles.buttonRow}>
-              {getAvailableOutcomes().map(outcome => (
+              {outcomeOptions.map(outcome => (
                 <button
                   key={outcome.id}
                   style={{
                     ...styles.outcomeButton,
-                    backgroundColor: selectedOutcomeId === outcome.id ? '#4CAF50' : '#333',
-                    color: selectedOutcomeId === outcome.id ? '#000' : '#fff',
+                    backgroundColor: state.selectedOutcomeId === outcome.id ? '#4CAF50' : '#333',
+                    color: state.selectedOutcomeId === outcome.id ? '#000' : '#fff',
                   }}
-                  onClick={() => setSelectedOutcomeId(outcome.id)}
+                  onClick={() => dispatch({ type: 'SET_OUTCOME', outcomeId: outcome.id })}
                 >
                   {outcome.label}
                 </button>
@@ -156,7 +127,6 @@ export default function EventFlow({ event, bases, onComplete, onCancel }: EventF
           </div>
         )}
 
-        {/* Submit Button */}
         <button
           style={{
             ...styles.submitButton,

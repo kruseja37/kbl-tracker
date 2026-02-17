@@ -1,4 +1,4 @@
-import type { AtBatResult, Bases, RunnerOutcome } from '../../types/game';
+import type { AtBatResult, Bases, RunnerOutcome, GameEvent } from '../../types/game';
 import { isOut } from '../../types/game';
 
 export type BaseKey = 'first' | 'second' | 'third';
@@ -247,4 +247,56 @@ export const calculateRBIs = ({
   }
 
   return rbis;
+};
+
+export type EventOutcomeValue = 'ADVANCE' | 'SCORE' | 'OUT';
+
+export interface EventOutcomeOption {
+  id: string;
+  value: EventOutcomeValue;
+  label: string;
+  toBase?: 'second' | 'third' | 'home';
+}
+
+export const getEventOutcomes = (
+  event: GameEvent,
+  base: BaseKey,
+  bases: Bases
+): EventOutcomeOption[] => {
+  if (!bases[base]) return [];
+
+  if (event === 'CS' || event === 'PK') {
+    return [{ id: 'OUT', value: 'OUT', label: 'Out' }];
+  }
+
+  if (event === 'SB' || event === 'WP' || event === 'PB') {
+    const outcomes: EventOutcomeOption[] = [];
+
+    if (base === 'third') {
+      outcomes.push({ id: 'SCORE_HOME', value: 'SCORE', label: 'Scores', toBase: 'home' });
+      if (event === 'SB') {
+        outcomes.push({ id: 'OUT_HOME', value: 'OUT', label: 'Out at Home' });
+      }
+    }
+
+    if (base === 'second') {
+      outcomes.push({ id: 'ADVANCE_3B', value: 'ADVANCE', label: 'To 3rd', toBase: 'third' });
+      outcomes.push({ id: 'SCORE_HOME', value: 'SCORE', label: 'Scores', toBase: 'home' });
+      if (event === 'SB') {
+        outcomes.push({ id: 'OUT', value: 'OUT', label: 'Out' });
+      }
+    }
+
+    if (base === 'first') {
+      outcomes.push({ id: 'ADVANCE_2B', value: 'ADVANCE', label: 'To 2nd', toBase: 'second' });
+      outcomes.push({ id: 'ADVANCE_3B', value: 'ADVANCE', label: 'To 3rd', toBase: 'third' });
+      if (event === 'SB') {
+        outcomes.push({ id: 'OUT', value: 'OUT', label: 'Out' });
+      }
+    }
+
+    return outcomes;
+  }
+
+  return [];
 };
