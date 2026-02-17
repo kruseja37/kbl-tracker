@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useReducer, useState, useEffect } from 'react';
 import type {
   Position,
   AtBatResult,
@@ -19,6 +19,13 @@ import type {
 import { recordFieldingEvent, type FieldingEvent } from '../../engines/adaptiveLearningEngine';
 import FieldZoneInput from './FieldZoneInput';
 import { type ZoneTapResult, getDepthFromZone } from '../../data/fieldZones';
+
+import {
+  buildAssistChainFromDpType,
+  sanitizeAssistChain,
+  getPutoutPositionFromDpType,
+  getDefaultDpType,
+} from './fieldingLogic';
 
 // Re-export types for consumers that import from FieldingModal
 export type { PlayType, ErrorType, D3KOutcome, DepthType, AssistType, DPRole, ErrorContext, AssistChainEntry, FieldingData };
@@ -184,7 +191,43 @@ interface FieldingModalProps {
   batterHand?: BatterHand;  // For zone-based input (defaults to 'R')
   onComplete: (fieldingData: FieldingData, selectedExitType?: ExitType) => void;
   onCancel: () => void;
+  defaultFielder?: Position | null;
 }
+
+type FieldingSelectionState = {
+  primaryFielder: Position | null;
+  assists: AssistChainEntry[];
+  playType: PlayType;
+  isError: boolean;
+  savedRun: boolean;
+};
+
+type FieldingSelectionAction =
+  | { type: 'SET_PRIMARY'; primary: Position | null }
+  | { type: 'SET_ASSISTS'; assists: AssistChainEntry[] }
+  | { type: 'SET_PLAY_TYPE'; playType: PlayType }
+  | { type: 'SET_ERROR'; isError: boolean }
+  | { type: 'SET_SAVED_RUN'; savedRun: boolean };
+
+const selectionReducer = (
+  state: FieldingSelectionState,
+  action: FieldingSelectionAction
+): FieldingSelectionState => {
+  switch (action.type) {
+    case 'SET_PRIMARY':
+      return { ...state, primaryFielder: action.primary };
+    case 'SET_ASSISTS':
+      return { ...state, assists: action.assists };
+    case 'SET_PLAY_TYPE':
+      return { ...state, playType: action.playType };
+    case 'SET_ERROR':
+      return { ...state, isError: action.isError };
+    case 'SET_SAVED_RUN':
+      return { ...state, savedRun: action.savedRun };
+    default:
+      return state;
+  }
+};
 
 // Infer exit type from result for deterministic cases
 function inferExitType(result: AtBatResult): ExitType | null {
@@ -220,6 +263,7 @@ export default function FieldingModal({
   batterHand = 'R',
   onComplete,
   onCancel,
+  defaultFielder = null,
 }: FieldingModalProps) {
   // Exit type: use prop, or infer from result, or let user select
   const inferredExitType = inferExitType(result);
@@ -238,12 +282,19 @@ export default function FieldingModal({
   // Zone-based input state (FIELD_ZONE_INPUT_SPEC.md)
   const [selectedZoneId, setSelectedZoneId] = useState<string | null>(null);
 
-  // State
-  const [primaryFielder, setPrimaryFielder] = useState<Position | null>(inferredFielder);
-  const [playType, setPlayType] = useState<PlayType>('routine');
+  const defaultDpType = getDefaultDpType(direction);
+  const [dpChain, setDpChain] = useState<string | null>(result === 'DP' ? defaultDpType : null);
+
+  const [selectionState, dispatchSelection] = useReducer(selectionReducer, {
+    primaryFielder: defaultFielder ?? inferredFielder,
+    assists: [],
+    playType: 'routine',
+    isError: false,
+    savedRun: false,
+  });
+
+  const { primaryFielder, assists, playType, isError, savedRun } = selectionState;
   const [errorType, setErrorType] = useState<ErrorType | null>(null);
-  const [dpChain, setDpChain] = useState<string | null>(result === 'DP' && direction ? DP_CHAINS[direction] ?? null : null);
-  const [savedRun, setSavedRun] = useState(false);
 
   // New Day 4 fields
   const [depth, setDepth] = useState<DepthType | null>(null);

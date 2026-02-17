@@ -26,6 +26,7 @@ import {
   BaseKey,
 } from './atBatLogic';
 import FieldingModal from './FieldingModal';
+import { mapPlayTypeToSpecialPlay } from './fieldingLogic';
 
 
 interface AtBatFlowProps {
@@ -611,6 +612,12 @@ export default function AtBatFlow({
         }
       : undefined;
 
+    const fieldingFromModal = fieldingData;
+    const primaryFielded = fieldingFromModal?.primaryFielder || fielder;
+    const specialFromFielding = fieldingFromModal
+      ? mapPlayTypeToSpecialPlay(fieldingFromModal.playType, result)
+      : null;
+
     const flowState: AtBatFlowState = {
       step: 'CONFIRM',
       result,
@@ -618,11 +625,7 @@ export default function AtBatFlow({
       exitType,
       fielder: fieldingData?.primaryFielder || fielder,
       hrDistance: hrDistance ? parseInt(hrDistance) : null,
-      specialPlay: fieldingData?.playType === 'diving' ? 'Diving' :
-                   fieldingData?.playType === 'wall' ? 'Wall Catch' :
-                   fieldingData?.playType === 'leaping' ? 'Leaping' :
-                   fieldingData?.playType === 'charging' ? 'Running' :
-                   specialPlay,
+      specialPlay: specialFromFielding ?? specialPlay,
       savedRun: fieldingData?.savedRun || savedRun,
       is7PlusPitchAB,
       beatOutSingle,
