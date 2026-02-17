@@ -168,7 +168,9 @@ export function useMWARCalculations(seasonId: string = 'current'): UseMWARCalcul
         const managerStat = newStats.get(decision.managerId);
 
         if (managerStat) {
-          addDecisionToSeasonStats(managerStat, resolvedDecision);
+          const nextManagerStat = structuredClone(managerStat);
+          addDecisionToSeasonStats(nextManagerStat, resolvedDecision);
+          newStats.set(decision.managerId, nextManagerStat);
         }
 
         return newStats;
@@ -195,8 +197,10 @@ export function useMWARCalculations(seasonId: string = 'current'): UseMWARCalcul
       const managerStat = newStats.get(managerId);
 
       if (managerStat) {
+        const nextManagerStat = structuredClone(managerStat);
         const teamStats = { wins, losses, salaryScore };
-        recalculateSeasonStats(managerStat, teamStats, DEFAULT_SEASON_GAMES);
+        recalculateSeasonStats(nextManagerStat, teamStats, DEFAULT_SEASON_GAMES);
+        newStats.set(managerId, nextManagerStat);
       }
 
       return newStats;

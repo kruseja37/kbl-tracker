@@ -240,13 +240,8 @@ export function PostGameSummary({ gameId: gameIdProp }: { gameId?: string } = {}
     };
   }, [gameId]);
 
-  const hasStaleGameData =
-    Boolean(gameData) &&
-    typeof gameId === "string" &&
-    gameData.gameId !== gameId;
-
   // Show loading state
-  if (isLoading || hasStaleGameData) {
+  if (isLoading) {
     return (
       <div className="min-h-screen bg-[#2a3a2d] text-white p-6 flex items-center justify-center">
         <div className="flex flex-col items-center gap-4">

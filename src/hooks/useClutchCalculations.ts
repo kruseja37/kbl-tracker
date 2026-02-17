@@ -186,12 +186,10 @@ export function useClutchCalculations(): UseClutchCalculationsReturn {
     setPlayerClutchStats(prev => {
       const newStats = new Map(prev);
 
-      // Ensure player has stats entry
-      if (!newStats.has(event.playerId)) {
-        newStats.set(event.playerId, createPlayerClutchStats(event.playerId));
-      }
-
-      const playerStats = newStats.get(event.playerId)!;
+      const existingPlayerStats = newStats.get(event.playerId);
+      const playerStats = existingPlayerStats
+        ? structuredClone(existingPlayerStats)
+        : createPlayerClutchStats(event.playerId);
 
       // Convert game state for LI calculation
       const liGameState: GameStateForLI = {
@@ -238,6 +236,7 @@ export function useClutchCalculations(): UseClutchCalculationsReturn {
 
       // Accumulate the event
       accumulateClutchEvent(playerStats, finalClutchValue, leverageIndex, false);
+      newStats.set(event.playerId, playerStats);
 
       return newStats;
     });

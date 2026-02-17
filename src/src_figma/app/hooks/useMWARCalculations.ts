@@ -136,8 +136,12 @@ export function useMWARCalculations(
       return newMap;
     });
 
-    // Update game stats
-    setGameStats(prev => prev ? recordManagerDecision(prev, decision) : null);
+    // Update game stats immutably before calling mutating helper
+    setGameStats(prev => {
+      if (!prev) return null;
+      const nextGameStats = structuredClone(prev);
+      return recordManagerDecision(nextGameStats, decision);
+    });
 
     return decision.decisionId;
   }, [gameStats]);
@@ -159,15 +163,14 @@ export function useMWARCalculations(
       return newMap;
     });
 
-    // Update season stats - addDecisionToSeasonStats mutates in place
-    if (seasonStats) {
-      setSeasonStats(prev => {
-        if (!prev) return null;
-        addDecisionToSeasonStats(prev, resolvedDecision);
-        return { ...prev };  // Return new reference to trigger re-render
-      });
-    }
-  }, [pendingDecisions, seasonStats]);
+    // Update season stats immutably before calling mutating helper
+    setSeasonStats(prev => {
+      if (!prev) return null;
+      const nextSeasonStats = structuredClone(prev);
+      addDecisionToSeasonStats(nextSeasonStats, resolvedDecision);
+      return nextSeasonStats;
+    });
+  }, [pendingDecisions]);
 
   // Check for Manager Moment
   const checkForManagerMoment = useCallback((gameState: GameStateForLI) => {
