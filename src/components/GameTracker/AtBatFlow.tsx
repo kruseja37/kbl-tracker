@@ -15,6 +15,7 @@ import type {
 } from '../../types/game';
 import { inferFielder, requiresBallInPlayData, isOut } from '../../types/game';
 import { getMinFenceDistance, getParkByName } from '../../data/parkLookup';
+import type { RunnerOutcomes, BaseKey } from './atBatLogic';
 import {
   isRunnerForced as evaluateRunnerForced,
   getMinimumAdvancement as evaluateMinimumAdvancement,
@@ -22,8 +23,6 @@ import {
   outcomeToDestination as mapOutcomeToDestination,
   getDefaultOutcome as evaluateDefaultOutcome,
   calculateRBIs as evaluateRBIs,
-  RunnerOutcomes,
-  BaseKey,
 } from './atBatLogic';
 import FieldingModal from './FieldingModal';
 import { mapPlayTypeToSpecialPlay } from './fieldingLogic';
@@ -144,9 +143,9 @@ const countRunnerOuts = (outcomes: RunnerOutcomes): number => {
 
 const hasRunnerAdvanced = (bases: Bases, outcomes: RunnerOutcomes): boolean => {
   return (
-    (bases.first && ['TO_2B', 'TO_3B', 'SCORED'].includes(outcomes.first || '')) ||
-    (bases.second && ['TO_3B', 'SCORED'].includes(outcomes.second || '')) ||
-    (bases.third && outcomes.third === 'SCORED')
+    (!!bases.first && ['TO_2B', 'TO_3B', 'SCORED'].includes(outcomes.first || '')) ||
+    (!!bases.second && ['TO_3B', 'SCORED'].includes(outcomes.second || '')) ||
+    (!!bases.third && outcomes.third === 'SCORED')
   );
 };
 
