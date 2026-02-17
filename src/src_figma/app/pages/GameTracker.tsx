@@ -636,97 +636,111 @@ export function GameTracker() {
   // FIX: BUG-007 - Try loading existing game first, only create new if none found
   // This ensures each batter has a unique ID and stats are tracked separately
   const [gameInitialized, setGameInitialized] = useState(false);
+  const initInProgressRef = useRef(false);
   useEffect(() => {
-    if (gameInitialized) return;
+    if (gameInitialized || initInProgressRef.current) return;
+    initInProgressRef.current = true;
+    let cancelled = false;
 
     const initializeOrLoadGame = async () => {
-      // Try to load existing game first (handles page refresh)
-      const hasExistingGame = await loadExistingGame();
+      try {
+        // Try to load existing game first (handles page refresh)
+        const hasExistingGame = await loadExistingGame();
+        if (cancelled) return;
 
-      if (hasExistingGame) {
-        console.log('[GameTracker] Loaded existing game from IndexedDB');
-        setGameInitialized(true);
-        return;
+        if (hasExistingGame) {
+          console.log('[GameTracker] Loaded existing game from IndexedDB');
+          setGameInitialized(true);
+          return;
+        }
+
+        // No existing game found - create new one
+        console.log('[GameTracker] No existing game found, initializing new game');
+
+        // Convert roster to lineup format required by initializeGame
+        const awayLineup = awayTeamPlayers
+          .filter(p => p.battingOrder && p.position) // Only players in batting order with positions
+          .sort((a, b) => (a.battingOrder || 0) - (b.battingOrder || 0))
+          .map(p => ({
+            playerId: `away-${p.name.replace(/\s+/g, '-').toLowerCase()}`,
+            playerName: p.name,
+            position: p.position!, // Safe - filtered above
+          }));
+
+        const homeLineup = homeTeamPlayers
+          .filter(p => p.battingOrder && p.position) // Only players in batting order with positions
+          .sort((a, b) => (a.battingOrder || 0) - (b.battingOrder || 0))
+          .map(p => ({
+            playerId: `home-${p.name.replace(/\s+/g, '-').toLowerCase()}`,
+            playerName: p.name,
+            position: p.position!, // Safe - filtered above
+          }));
+
+        // MAJ-09: Extract bench players (players without batting order = not in starting lineup)
+        const awayStarterIds = new Set(awayLineup.map(p => p.playerId));
+        const awayBench = awayTeamPlayers
+          .filter(p => !awayStarterIds.has(`away-${p.name.replace(/\s+/g, '-').toLowerCase()}`))
+          .filter(p => !p.isOutOfGame) // Don't include already-removed players
+          .map(p => ({
+            playerId: `away-${p.name.replace(/\s+/g, '-').toLowerCase()}`,
+            playerName: p.name,
+            positions: [p.position || 'DH'].filter(Boolean),
+          }));
+
+        const homeStarterIds = new Set(homeLineup.map(p => p.playerId));
+        const homeBench = homeTeamPlayers
+          .filter(p => !homeStarterIds.has(`home-${p.name.replace(/\s+/g, '-').toLowerCase()}`))
+          .filter(p => !p.isOutOfGame)
+          .map(p => ({
+            playerId: `home-${p.name.replace(/\s+/g, '-').toLowerCase()}`,
+            playerName: p.name,
+            positions: [p.position || 'DH'].filter(Boolean),
+          }));
+
+        console.log('[GameTracker] Initializing game with lineups:', {
+          away: awayLineup.map(p => p.playerName),
+          home: homeLineup.map(p => p.playerName),
+          awayBench: awayBench.map(p => p.playerName),
+          homeBench: homeBench.map(p => p.playerName),
+        });
+
+        await initializeGame({
+          gameId: gameId || `game-${Date.now()}`,
+          seasonId: navigationState?.franchiseId
+            ? `${navigationState.franchiseId}-season-${navigationState?.seasonNumber || 1}`
+            : 'season-1',
+          awayTeamId: awayTeamId,
+          awayTeamName: awayTeamName,
+          homeTeamId: homeTeamId,
+          homeTeamName: homeTeamName,
+          awayLineup,
+          homeLineup,
+          awayBench,
+          homeBench,
+          awayStartingPitcherId: `away-${awayPitcher?.name.replace(/\s+/g, '-').toLowerCase() || 'pitcher'}`,
+          awayStartingPitcherName: awayPitcher?.name || 'Pitcher',
+          homeStartingPitcherId: `home-${homePitcher?.name.replace(/\s+/g, '-').toLowerCase() || 'pitcher'}`,
+          homeStartingPitcherName: homePitcher?.name || 'Pitcher',
+          // T0-01: Pass total innings for auto game-end detection (default 9 for exhibition)
+          totalInnings: navigationState?.totalInnings || 9,
+          seasonNumber: navigationState?.seasonNumber || 1,
+          stadiumName: selectedStadium || undefined,
+        });
+
+        if (!cancelled) {
+          setGameInitialized(true);
+        }
+      } finally {
+        initInProgressRef.current = false;
       }
-
-      // No existing game found - create new one
-      console.log('[GameTracker] No existing game found, initializing new game');
-
-      // Convert roster to lineup format required by initializeGame
-      const awayLineup = awayTeamPlayers
-        .filter(p => p.battingOrder && p.position) // Only players in batting order with positions
-        .sort((a, b) => (a.battingOrder || 0) - (b.battingOrder || 0))
-        .map(p => ({
-          playerId: `away-${p.name.replace(/\s+/g, '-').toLowerCase()}`,
-          playerName: p.name,
-          position: p.position!, // Safe - filtered above
-        }));
-
-      const homeLineup = homeTeamPlayers
-        .filter(p => p.battingOrder && p.position) // Only players in batting order with positions
-        .sort((a, b) => (a.battingOrder || 0) - (b.battingOrder || 0))
-        .map(p => ({
-          playerId: `home-${p.name.replace(/\s+/g, '-').toLowerCase()}`,
-          playerName: p.name,
-          position: p.position!, // Safe - filtered above
-        }));
-
-      // MAJ-09: Extract bench players (players without batting order = not in starting lineup)
-      const awayStarterIds = new Set(awayLineup.map(p => p.playerId));
-      const awayBench = awayTeamPlayers
-        .filter(p => !awayStarterIds.has(`away-${p.name.replace(/\s+/g, '-').toLowerCase()}`))
-        .filter(p => !p.isOutOfGame) // Don't include already-removed players
-        .map(p => ({
-          playerId: `away-${p.name.replace(/\s+/g, '-').toLowerCase()}`,
-          playerName: p.name,
-          positions: [p.position || 'DH'].filter(Boolean),
-        }));
-
-      const homeStarterIds = new Set(homeLineup.map(p => p.playerId));
-      const homeBench = homeTeamPlayers
-        .filter(p => !homeStarterIds.has(`home-${p.name.replace(/\s+/g, '-').toLowerCase()}`))
-        .filter(p => !p.isOutOfGame)
-        .map(p => ({
-          playerId: `home-${p.name.replace(/\s+/g, '-').toLowerCase()}`,
-          playerName: p.name,
-          positions: [p.position || 'DH'].filter(Boolean),
-        }));
-
-      console.log('[GameTracker] Initializing game with lineups:', {
-        away: awayLineup.map(p => p.playerName),
-        home: homeLineup.map(p => p.playerName),
-        awayBench: awayBench.map(p => p.playerName),
-        homeBench: homeBench.map(p => p.playerName),
-      });
-
-      await initializeGame({
-        gameId: gameId || `game-${Date.now()}`,
-        seasonId: navigationState?.franchiseId
-          ? `${navigationState.franchiseId}-season-${navigationState?.seasonNumber || 1}`
-          : 'season-1',
-        awayTeamId: awayTeamId,
-        awayTeamName: awayTeamName,
-        homeTeamId: homeTeamId,
-        homeTeamName: homeTeamName,
-        awayLineup,
-        homeLineup,
-        awayBench,
-        homeBench,
-        awayStartingPitcherId: `away-${awayPitcher?.name.replace(/\s+/g, '-').toLowerCase() || 'pitcher'}`,
-        awayStartingPitcherName: awayPitcher?.name || 'Pitcher',
-        homeStartingPitcherId: `home-${homePitcher?.name.replace(/\s+/g, '-').toLowerCase() || 'pitcher'}`,
-        homeStartingPitcherName: homePitcher?.name || 'Pitcher',
-        // T0-01: Pass total innings for auto game-end detection (default 9 for exhibition)
-        totalInnings: navigationState?.totalInnings || 9,
-        seasonNumber: navigationState?.seasonNumber || 1,
-        stadiumName: selectedStadium || undefined,
-      });
-
-      setGameInitialized(true);
     };
 
     initializeOrLoadGame();
-  }, [gameInitialized, awayTeamPlayers, homeTeamPlayers, awayPitcher, homePitcher, awayTeamId, homeTeamId, gameId, initializeGame, loadExistingGame, selectedStadium]);
+    return () => {
+      cancelled = true;
+      initInProgressRef.current = false;
+    };
+  }, [gameInitialized, awayTeamPlayers, homeTeamPlayers, awayPitcher, homePitcher, awayTeamId, homeTeamId, gameId, initializeGame, loadExistingGame, selectedStadium, navigationState?.franchiseId, navigationState?.seasonNumber, navigationState?.totalInnings, awayTeamName, homeTeamName]);
 
   // EXH-036: Register players with playerStateHook for mojo/fitness tracking
   // This runs once after game is initialized to set up all players with default states
@@ -2256,6 +2270,16 @@ export function GameTracker() {
       handleEndGame();
     }
   }, [showAutoEndPrompt, dismissAutoEndPrompt, handleEndGame]);
+
+  if (isLoading || !gameInitialized) {
+    return (
+      <div className="min-h-screen bg-[#6B9462] flex items-center justify-center">
+        <div className="bg-[#1a3020] border-4 border-[#C4A853] px-6 py-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.4)]">
+          <div className="text-[#E8E8D8] text-sm font-bold tracking-wide">Loading game...</div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <DndProvider backend={HTML5Backend}>
