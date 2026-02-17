@@ -731,6 +731,12 @@ export function GameTracker() {
         if (!cancelled) {
           setGameInitialized(true);
         }
+      } catch (err) {
+        console.error('[GameTracker] Failed to initialize/load game:', err);
+        // Fail-open so a transient persistence error cannot black-screen the UI.
+        if (!cancelled) {
+          setGameInitialized(true);
+        }
       } finally {
         initInProgressRef.current = false;
       }

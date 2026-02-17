@@ -13,7 +13,6 @@ import {
   createGameHeader,
   completeGame,
   getGameEvents,
-  checkDataIntegrity,
   markGameAggregated,
   getGameFieldingEvents,
   getGameHeader,
@@ -1304,13 +1303,12 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
   const loadExistingGame = useCallback(async (): Promise<boolean> => {
     setIsLoading(true);
     try {
-      // Find in-progress games from event log integrity scan.
-      // NOTE: getUnaggregatedGames() only returns completed games, so it cannot
-      // be used for active-game rehydration.
-      const { incompleteGames } = await checkDataIntegrity();
-      const inProgressGame = initialGameId
-        ? incompleteGames.find(g => g.gameId === initialGameId) || incompleteGames[0]
-        : incompleteGames[0];
+      if (!initialGameId) {
+        setIsLoading(false);
+        return false;
+      }
+      const header = await getGameHeader(initialGameId);
+      const inProgressGame = header && !header.isComplete ? header : null;
 
       if (inProgressGame) {
         // Get the last event to reconstruct current state
