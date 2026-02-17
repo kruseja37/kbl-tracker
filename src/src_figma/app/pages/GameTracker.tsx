@@ -208,6 +208,7 @@ export function GameTracker() {
     setPlayoffContext,
     setStadiumName,
   } = useGameState(gameId);
+  const [gameInitialized, setGameInitialized] = useState(false);
 
   // Set playoff context from navigation state (if this is a playoff game)
   const isPlayoffGame = navigationState?.gameMode === 'playoff';
@@ -636,7 +637,6 @@ export function GameTracker() {
   // Initialize game with lineup data on mount
   // FIX: BUG-007 - Try loading existing game first, only create new if none found
   // This ensures each batter has a unique ID and stats are tracked separately
-  const [gameInitialized, setGameInitialized] = useState(false);
   const initInProgressRef = useRef(false);
   useEffect(() => {
     if (gameInitialized || initInProgressRef.current) return;
