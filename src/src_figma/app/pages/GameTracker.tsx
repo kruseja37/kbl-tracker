@@ -419,6 +419,7 @@ export function GameTracker() {
   // CRIT-01 fix: Include playerStats and pitcherStats as serializable entries
   // (Maps don't survive JSON.parse(JSON.stringify(...)) used by UndoSystem deep clone)
   useEffect(() => {
+    if (!gameInitialized) return;
     undoSystem.setCurrentState({
       gameState,
       scoreboard,
@@ -426,7 +427,7 @@ export function GameTracker() {
       pitcherStatsEntries: Array.from(pitcherStats.entries()),
       runnerTrackerSnapshot: getRunnerTrackerSnapshot(),
     });
-  }, [gameState, scoreboard, playerStats, pitcherStats, getRunnerTrackerSnapshot]);
+  }, [gameInitialized, gameState, scoreboard, playerStats, pitcherStats, getRunnerTrackerSnapshot]);
 
   // Expandable sections state
   const [expandedSections, setExpandedSections] = useState({

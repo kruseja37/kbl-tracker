@@ -13,7 +13,7 @@ import {
   createGameHeader,
   completeGame,
   getGameEvents,
-  getUnaggregatedGames,
+  checkDataIntegrity,
   markGameAggregated,
   getGameFieldingEvents,
   getGameHeader,
@@ -578,7 +578,7 @@ export function autoCorrectResult(
 
 /**
  * Check if runner advancement exceeds standard for the result.
- * Extra advancement requires explanation (SB, WP, PB, E, BALK).
+ * Extra advancement requires explanation (SB, WP, PB, E).
  * Per AtBatFlow.tsx lines 221-275
  */
 export function isExtraAdvancement(
@@ -1304,21 +1304,80 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
   const loadExistingGame = useCallback(async (): Promise<boolean> => {
     setIsLoading(true);
     try {
-      // Find incomplete games (not aggregated means game in progress or not finalized)
-      const incompleteGames = await getUnaggregatedGames();
-      const inProgressGame = incompleteGames.find(g => !g.isComplete);
+      // Find in-progress games from event log integrity scan.
+      // NOTE: getUnaggregatedGames() only returns completed games, so it cannot
+      // be used for active-game rehydration.
+      const { incompleteGames } = await checkDataIntegrity();
+      const inProgressGame = initialGameId
+        ? incompleteGames.find(g => g.gameId === initialGameId) || incompleteGames[0]
+        : incompleteGames[0];
 
       if (inProgressGame) {
         // Get the last event to reconstruct current state
         const events = await getGameEvents(inProgressGame.gameId);
         const lastEvent = events.length > 0 ? events[events.length - 1] : null;
 
+        // Rehydrate pitcher stats as a Map keyed by pitcherId (never as array).
+        const rehydratedPitcherStats = new Map<string, PitcherGameStats>();
+        const getOrCreatePitcher = (pitcherId: string): PitcherGameStats => {
+          const existing = rehydratedPitcherStats.get(pitcherId);
+          if (existing) return existing;
+          const created = createEmptyPitcherStats();
+          rehydratedPitcherStats.set(pitcherId, created);
+          return created;
+        };
+
+        for (const event of events) {
+          const stats = getOrCreatePitcher(event.pitcherId);
+          stats.battersFaced += 1;
+
+          // Approximate outs on play from before/after context.
+          const outsOnPlay = event.outsAfter >= event.outs
+            ? event.outsAfter - event.outs
+            : (event.outsAfter === 0 ? 3 - event.outs : 0);
+          if (outsOnPlay > 0) {
+            stats.outsRecorded += outsOnPlay;
+          }
+
+          if (['1B', '2B', '3B', 'HR'].includes(event.result)) {
+            stats.hitsAllowed += 1;
+          }
+          if (event.result === 'HR') {
+            stats.homeRunsAllowed += 1;
+            stats.consecutiveHRsAllowed += 1;
+          } else {
+            stats.consecutiveHRsAllowed = 0;
+          }
+          if (event.result === 'K' || event.result === 'KL') {
+            stats.strikeoutsThrown += 1;
+          }
+          if (event.result === 'BB') {
+            stats.walksAllowed += 1;
+          }
+          if (event.result === 'HBP') {
+            stats.hitByPitch += 1;
+          }
+          if (event.result === 'IBB') {
+            stats.intentionalWalks += 1;
+          }
+
+          const runsAllowedOnPlay = event.pitcherTeamId === inProgressGame.homeTeamId
+            ? Math.max(0, event.awayScoreAfter - event.awayScore)
+            : Math.max(0, event.homeScoreAfter - event.homeScore);
+          stats.runsAllowed += runsAllowedOnPlay;
+        }
+
+        if (lastEvent && !rehydratedPitcherStats.has(lastEvent.pitcherId)) {
+          rehydratedPitcherStats.set(lastEvent.pitcherId, createEmptyPitcherStats());
+        }
+        setPitcherStats(rehydratedPitcherStats);
+
         setGameState({
           gameId: inProgressGame.gameId,
           homeScore: lastEvent?.homeScoreAfter ?? 0,
           awayScore: lastEvent?.awayScoreAfter ?? 0,
           inning: lastEvent?.inning ?? 1,
-          isTop: lastEvent?.halfInning === 'TOP',
+          isTop: lastEvent ? lastEvent.halfInning === 'TOP' : true,
           outs: lastEvent?.outsAfter ?? 0,
           balls: 0,
           strikes: 0,
@@ -1327,10 +1386,10 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
             second: !!lastEvent?.runnersAfter?.second,
             third: !!lastEvent?.runnersAfter?.third,
           },
-          currentBatterId: '',
-          currentBatterName: '',
-          currentPitcherId: '',
-          currentPitcherName: '',
+          currentBatterId: lastEvent?.batterId ?? '',
+          currentBatterName: lastEvent?.batterName ?? '',
+          currentPitcherId: lastEvent?.pitcherId ?? '',
+          currentPitcherName: lastEvent?.pitcherName ?? '',
           awayTeamId: inProgressGame.awayTeamId,
           homeTeamId: inProgressGame.homeTeamId,
           awayTeamName: inProgressGame.awayTeamName,
@@ -1348,7 +1407,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     }
     setIsLoading(false);
     return false;
-  }, []);
+  }, [initialGameId]);
 
   // ============================================
   // CORE ACTIONS
