@@ -1,4 +1,4 @@
-import { useReducer, useState, useEffect } from 'react';
+import { useReducer, useState } from 'react';
 import type {
   AtBatResult,
   Direction,
@@ -112,7 +112,7 @@ interface AtBatState {
 }
 
 type AtBatAction =
-  | { type: 'SET_RESULT'; payload: AtBatResult }
+  | { type: 'SET_RESULT'; payload: { result: AtBatResult; bases: Bases; outs: number } }
   | { type: 'SET_DIRECTION'; payload: Direction | null }
   | { type: 'SET_FIELDER'; payload: Position | null }
   | { type: 'SET_HR_DISTANCE'; payload: string }
@@ -188,14 +188,27 @@ const applyAutoCorrection = (
   return { result: nextResult, autoCorrection };
 };
 
-const initialAtBatState = (initialResult: AtBatResult): AtBatState => ({
+const getDefaultSpecialPlay = (result: AtBatResult): SpecialPlayType | null => {
+  if (result === 'HR') return 'Over Fence';
+  if (['1B', '2B', '3B'].includes(result)) return 'Clean';
+  if (['FO', 'LO', 'GO', 'PO'].includes(result)) return 'Routine';
+  return null;
+};
+
+const getDefaultRunnerOutcomes = (result: AtBatResult, bases: Bases, outs: number): RunnerOutcomes => ({
+  first: bases.first ? evaluateDefaultOutcome('first', result, bases, outs) : null,
+  second: bases.second ? evaluateDefaultOutcome('second', result, bases, outs) : null,
+  third: bases.third ? evaluateDefaultOutcome('third', result, bases, outs) : null,
+});
+
+const initialAtBatState = (initialResult: AtBatResult, bases: Bases, outs: number): AtBatState => ({
   initialResult,
   result: initialResult,
   direction: null,
   fielder: null,
   hrDistance: '',
-  specialPlay: null,
-  runnerOutcomes: { first: null, second: null, third: null },
+  specialPlay: getDefaultSpecialPlay(initialResult),
+  runnerOutcomes: getDefaultRunnerOutcomes(initialResult, bases, outs),
   extraEvents: [],
   is7PlusPitchAB: false,
   beatOutSingle: false,
@@ -206,7 +219,7 @@ const initialAtBatState = (initialResult: AtBatResult): AtBatState => ({
   autoCorrection: null,
   pendingExtraEvent: null,
   dpType: null,
-  dpForcePlay: true,
+  dpForcePlay: initialResult === 'DP',
   fieldingData: null,
 });
 
@@ -227,8 +240,23 @@ const reducer = (state: AtBatState, action: AtBatAction): AtBatState => {
       return { ...state, hrDistance: action.payload };
     case 'SET_SPECIAL_PLAY':
       return { ...state, specialPlay: action.payload };
-    case 'SET_RESULT':
-      return { ...state, result: action.payload, autoCorrection: null };
+    case 'SET_RESULT': {
+      const { result, bases, outs } = action.payload;
+      const defaultOutcomes = getDefaultRunnerOutcomes(result, bases, outs);
+      const nextDpType = result === 'DP' ? state.dpType : null;
+      const nextDpForcePlay = result === 'DP' ? true : state.dpForcePlay;
+      return {
+        ...state,
+        result,
+        specialPlay: getDefaultSpecialPlay(result),
+        runnerOutcomes: defaultOutcomes,
+        extraEvents: [],
+        pendingExtraEvent: null,
+        autoCorrection: null,
+        dpType: nextDpType,
+        dpForcePlay: nextDpForcePlay,
+      };
+    }
     case 'SET_RUNNER_OUTCOMES': {
       const auto = applyAutoCorrection(state, action.payload.outcomes, action.payload.bases, action.payload.outs);
       return {
@@ -328,7 +356,11 @@ export default function AtBatFlow({
   onCancel,
   stadiumName,
 }: AtBatFlowProps) {
-  const [state, dispatch] = useReducer(reducer, initialAtBatState(initialResult));
+  const [state, dispatch] = useReducer(
+    reducer,
+    { initialResult, bases, outs },
+    ({ initialResult, bases, outs }) => initialAtBatState(initialResult, bases, outs)
+  );
   const {
     result,
     direction,
@@ -519,42 +551,6 @@ export default function AtBatFlow({
     return options;
   };
 
-  const getDefaultOutcome = (base: 'first' | 'second' | 'third'): RunnerOutcome | null =>
-    evaluateDefaultOutcome(base, result, bases, outs);
-
-  // ============================================
-  // AUTO-DEFAULT RUNNER OUTCOMES ON MOUNT
-  // ============================================
-  useEffect(() => {
-    const hasRunners = bases.first || bases.second || bases.third;
-    const hasOutcomes = runnerOutcomes.first || runnerOutcomes.second || runnerOutcomes.third;
-
-    if (hasRunners && !hasOutcomes) {
-      const defaults: RunnerOutcomes = {
-        first: bases.first ? evaluateDefaultOutcome('first', result, bases, outs) : null,
-        second: bases.second ? evaluateDefaultOutcome('second', result, bases, outs) : null,
-        third: bases.third ? evaluateDefaultOutcome('third', result, bases, outs) : null,
-      };
-
-      if (defaults.first || defaults.second || defaults.third) {
-        dispatch({ type: 'SET_RUNNER_OUTCOMES', payload: { outcomes: defaults, bases, outs } });
-      }
-    }
-  }, [result, bases.first, bases.second, bases.third, bases, outs]);
-
-  // ============================================
-  // AUTO-DEFAULT SPECIAL PLAY FOR HITS
-  // ============================================
-  useEffect(() => {
-    if (result === 'HR' && specialPlay === null) {
-      dispatch({ type: 'SET_SPECIAL_PLAY', payload: 'Over Fence' });
-    } else if (['1B', '2B', '3B'].includes(result) && specialPlay === null) {
-      dispatch({ type: 'SET_SPECIAL_PLAY', payload: 'Clean' });
-    } else if (['FO', 'LO', 'GO', 'PO'].includes(result) && specialPlay === null) {
-      dispatch({ type: 'SET_SPECIAL_PLAY', payload: 'Routine' });
-    }
-  }, [result, specialPlay]);
-
   const calculateRBIs = (): number =>
     evaluateRBIs({
       result,
@@ -655,17 +651,6 @@ export default function AtBatFlow({
   };
 
   const readyForFielding = canProceedToFielding();
-
-  useEffect(() => {
-    if (
-      needsFieldingConfirmation &&
-      readyForFielding &&
-      !fieldingData &&
-      !showFieldingModal
-    ) {
-      setShowFieldingModal(true);
-    }
-  }, [needsFieldingConfirmation, readyForFielding, fieldingData, showFieldingModal]);
 
   const getRunnerName = (runner: Runner | null) => {
     if (!runner) return '';
