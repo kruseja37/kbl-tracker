@@ -199,3 +199,15 @@ Rules:
 
 ### Mandatory Cycle (repeated from above for emphasis)
 Run commands → paste output → log findings to correct file → commit → next commands
+
+---
+
+## Session End Protocol (mandatory)
+Before ending any session, rewrite CURRENT_STATE.md completely:
+1. Update "Current Phase and Step"
+2. Update "Last Completed Action" to what was just done
+3. Update "Next Action" to exactly what next session starts with
+4. Update "Key Decisions Made" if any new decisions were reached
+5. Commit CURRENT_STATE.md with message: "docs: session end — update CURRENT_STATE.md"
+
+CURRENT_STATE.md is the single file that makes new threads work. If it is stale, new threads will be disoriented. There are no exceptions.
