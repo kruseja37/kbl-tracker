@@ -164,3 +164,38 @@ Rules:
 - Never write a second command batch before findings from the first are logged
 - If JK pastes new CLI output without prior commit, Claude responds: "Log first" and produces the AUDIT_LOG update before anything else
 - No finding exists until it is in AUDIT_LOG.md — chat is ephemeral, the log is permanent
+
+---
+
+## Documentation Routing Rules (Non-Negotiable)
+
+### Finding Storage
+- FINDING-001 through FINDING-055: full text in `spec-docs/AUDIT_LOG.md`
+- FINDING-056 onwards: full text in `spec-docs/FINDINGS/FINDINGS_056_onwards.md`
+- AUDIT_LOG.md contains one-line index entries only for FINDING-056+
+- NEVER append full finding blocks to AUDIT_LOG.md again
+
+### Index Entry Format (for AUDIT_LOG.md)
+| FINDING-NNN | YYYY-MM-DD | STATUS | filename.ts | One-line summary |
+
+### Full Finding Format (for FINDINGS_056_onwards.md)
+```
+### FINDING-NNN
+**Date:** | **Phase:** | **Status:**
+**File:**
+**Evidence:**
+**Impact:**
+```
+
+### SUBSYSTEM_MAP.md
+- Update wiring status after every batch that changes a subsystem status
+- Location: spec-docs/SUBSYSTEM_MAP.md
+- Statuses: ✅ WIRED | ⚠️ PARTIAL | ❌ ORPHANED | 🔲 UNKNOWN | ❌ MISSING
+
+### File Size Limits
+- AUDIT_LOG.md: index only for 056+, should stay under 200 lines net new
+- FINDINGS_056_onwards.md: when it exceeds 500 lines, create FINDINGS_072_onwards.md (or next batch number) and update this rule
+- PHASE_SUMMARIES/: one file per phase, written at phase close
+
+### Mandatory Cycle (repeated from above for emphasis)
+Run commands → paste output → log findings to correct file → commit → next commands

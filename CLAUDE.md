@@ -212,3 +212,11 @@ Every diagnostic or audit cycle follows this exact order:
 
 NEVER write a second command batch before AUDIT_LOG.md findings from the first are logged and committed.
 If JK pastes new CLI output without a prior commit, Claude must say "Log first" and produce the AUDIT_LOG update before proceeding.
+
+## Documentation Routing
+- FINDING-001 to 055: full text in spec-docs/AUDIT_LOG.md
+- FINDING-056 onwards: full text in spec-docs/FINDINGS/FINDINGS_056_onwards.md
+- AUDIT_LOG.md is INDEX ONLY for finding 056+
+- New findings go to FINDINGS_056_onwards.md until it exceeds 500 lines, then create next file
+- SUBSYSTEM_MAP.md must be updated when any wiring status changes
+- Never put full finding blocks in AUDIT_LOG.md
