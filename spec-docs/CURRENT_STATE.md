@@ -6,9 +6,9 @@
 ---
 
 ## Current Phase and Step
-- **Phase:** 1 — COMPLETE
-- **Step:** Phase 1 Synthesis written — PHASE_SUMMARIES/PHASE1_BREADTH.md
-- **Status:** Ready to open Phase 2 — OOTP pattern conformance audit
+- **Phase:** 2 — OOTP Pattern Conformance Audit — IN PROGRESS
+- **Step:** First subsystem complete — Clutch Attribution (#12) + Leverage Index (#11b)
+- **Status:** FINDING-098 + 099 logged. PATTERN_MAP updated. Ready for next subsystem: Fan Morale (#13)
 
 ---
 
@@ -29,17 +29,18 @@ Tier 2 key results:
 
 ---
 
+## Last Completed Action
+Session 2026-02-18 (cont). Phase 2 opened. PATTERN_MAP reconciled with Phase 1 findings.
+First Phase 2 audit complete: Clutch Attribution + Leverage Index.
+- FINDING-098: Clutch Attribution — PARTIAL conformance. Architecture correct (stat pipeline pattern). Disconnection only. Fix is wiring.
+- FINDING-099: LI — N conformance. Two LI values in flight violates OOTP single-value principle. 6 getBaseOutLI calls in useGameState must be replaced with calculateLeverageIndex.
+OOTP research confirmed Clutch is KBL-original (no OOTP analog). LI used only as leverage_multiplier in pitcher WAR in OOTP.
+
 ## Next Action
-**Open Phase 2 — OOTP Pattern Conformance Audit**
-
-Per CURRENT_STATE.md Phase 2 instructions: for each subsystem, read the OOTP pattern from PATTERN_MAP.md, read the relevant OOTP_ARCHITECTURE_RESEARCH.md section, open the KBL code, ask "does the code follow the OOTP structural pattern?", log finding with conformance verdict.
-
-Recommended Phase 2 start order (highest impact first, per PHASE1_BREADTH.md):
-1. Clutch + LI — surgical wiring gap, high downstream impact
-2. Fan Morale — stub must be replaced or cut
-3. Stats Aggregation — liveStatsCalculator orphan affects real-time box score
-4. Positional WAR — 3,268 lines complete and orphaned
-5. Trait System — foundational gap affecting mojo/clutch/fitness/adaptive learning
+**Phase 2 — Next subsystem: Fan Morale (#13)**
+Per PATTERN_MAP: OOTP Pattern = "Team performance input; affects attendance, storylines."
+Status: 🔲 STUBBED. Follows Pattern: UNKNOWN.
+Steps: read relevant OOTP section (Section 7 — Traits, Chemistry, Personality), read fanMoraleEngine.ts + useFanMorale.ts, ask "does the architecture follow OOTP pattern?", log finding.
 
 ---
 

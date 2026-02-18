@@ -1016,6 +1016,8 @@ Still unresolved. FINDING-047 fallback path only has base state, not full scoreb
 | FINDING-095 | useAgingData (app/hooks/) | CONFIRMED ORPHANED — SpringTrainingFlow bypasses it with direct engine import |
 | FINDING-096 | Clutch Attribution — calculatePlayAttribution never called in active app | CONFIRMED PARTIAL — engine + hook complete; trigger missing; players accumulate zero clutch stats |
 | FINDING-097 | Leverage Index — full LI spec implemented; active hook uses boLI only | CONFIRMED PARTIAL — useGameState uses partial boLI at 6 sites; EnhancedInteractiveField uses full LI; relationship modifiers dead |
+| FINDING-098 | Clutch Attribution — Phase 2 pattern conformance | CONFIRMED PARTIAL — architecture follows OOTP stat pipeline pattern correctly; disconnection from per-play trigger is the only failure; fix is wiring only |
+| FINDING-099 | Leverage Index — Phase 2 pattern conformance | CONFIRMED N — two LI values in flight violates OOTP single-value principle; 6 getBaseOutLI calls in useGameState must be replaced with calculateLeverageIndex |
 | FINDING-066 | mWAR — useMWARCalculations wired in GameTracker | CONFIRMED WIRED — revises FINDING-061; bWAR/fWAR/pWAR/rWAR still orphaned |
 | FINDING-067 | Fame tracking — useFameTracking wired in GameTracker | CONFIRMED WIRED — revises FINDING-062; fameEngine/fameIntegration still orphaned |
 | FINDING-068 | Fan Morale — useFanMorale wired in GameTracker | CONFIRMED WIRED — backend engine wiring TBD |

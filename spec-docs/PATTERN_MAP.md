@@ -34,8 +34,8 @@ structure. SMB4 defines the content. Neither is optional.
 | 9 | Relationships | Personality inputs to morale, development rate, narrative triggers | PARTIAL | UNKNOWN | SMB4 chemistry types, player bonds, rival dynamics | PARTIAL | ⚠️ PARTIAL |
 | 10 | Narrative / Headlines | Side-effect consumer of stat pipeline; never writes back | PARTIAL | UNKNOWN | KBL headline engine, game recap generator | Y | ⚠️ PARTIAL |
 | 11 | Mojo / Fitness | Per-player fatigue/condition; persists between games, feeds dev calc | Y | UNKNOWN | Mojo as performance multiplier; fitness as injury risk | PARTIAL | ✅ WIRED |
-| 11b | Leverage Index | Situational weight applied to all clutch/fame/WAR calculations | Y | UNKNOWN | Full LI spec implemented; boLI only in active hook; relationship modifiers dead | PARTIAL | ⚠️ PARTIAL |
-| 12 | Clutch Attribution | Per-play multi-participant credit distribution weighted by LI | Y | UNKNOWN | Batter + pitcher + catcher + fielder + runner + manager per play | Y | ⚠️ PARTIAL |
+| 11b | Leverage Index | Situational weight applied to all clutch/fame/WAR calculations | Y | N (FINDING-099) | Full LI spec implemented; boLI only in active hook; relationship modifiers dead | PARTIAL | ⚠️ PARTIAL |
+| 12 | Clutch Attribution | Per-play multi-participant credit distribution weighted by LI | Y | PARTIAL (FINDING-098) | Batter + pitcher + catcher + fielder + runner + manager per play | Y | ⚠️ PARTIAL |
 | 13 | Fan Morale | Team performance input; affects attendance, storylines | Y | UNKNOWN | Fan morale per team, game outcome driven | N | 🔲 STUBBED |
 | 14 | Farm System | Affiliate roster; development level determines growth rate | Y | UNKNOWN | Minor league system, prospect tracking | PARTIAL | ❌ ORPHANED |
 | 15 | Trade System | Transaction log entry; immediate roster state change | Y | UNKNOWN | Player trades, waiver moves | N | ❌ ORPHANED |
