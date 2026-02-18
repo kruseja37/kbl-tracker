@@ -323,3 +323,71 @@ FAILURE PROTOCOL:
 - Never assume intent — ask
 
 Use high reasoning effort. Think step-by-step. This is deletion only — do not add anything.
+
+
+---
+
+## PROMPT CONTRACT: FINDING-101 — Fix Fan Morale Method Name + Season Wiring
+**Date:** 2026-02-18 | **Route:** Codex | 5.1 mini | medium effort
+
+---
+
+You are a careful bug-fix specialist.
+
+GOAL:
+Fix two bugs in how GameTracker.tsx calls the fan morale hook at end-game:
+Bug A — wrong method name (processGameResult → recordGameResult)
+Bug B — hardcoded season/game numbers ({ season: 1, game: 1 } → real values)
+
+SOURCE OF TRUTH:
+FINDING-101 in spec-docs/FINDINGS/FINDINGS_056_onwards.md
+
+CONSTRAINTS:
+- Only edit this file:
+    src/src_figma/app/pages/GameTracker.tsx
+- Do NOT touch:
+    src/hooks/useFanMorale.ts
+    src/engines/fanMoraleEngine.ts
+    Any other file
+- Work directly on main branch
+
+CHANGES REQUIRED:
+
+1. Find these two call sites (lines ~2138 and ~2152):
+     homeFanMorale.processGameResult(homeResult, { season: 1, game: 1 }, ...)
+     awayFanMorale.processGameResult(awayResult, { season: 1, game: 1 }, ...)
+
+   Rename processGameResult → recordGameResult on both call sites.
+
+   Note: recordGameResult takes only ONE argument: (result: GameResult)
+   The current calls pass 3 arguments. The hook signature is:
+     recordGameResult: (result: GameResult) => void
+   Drop the second argument ({ season: 1, game: 1 }) and third argument
+   (the rival team name string) — they are not part of the hook interface.
+
+2. The GameResult object (homeResult / awayResult) already has a gameId field.
+   No changes needed to the result objects themselves.
+
+EXPECTED OUTPUT:
+- Both call sites use recordGameResult with a single argument
+- No other changes to GameTracker.tsx
+
+VERIFICATION:
+1. npm run build — must pass with 0 new errors
+2. grep -n "processGameResult" src/src_figma/app/pages/GameTracker.tsx
+   — must return NO OUTPUT
+3. grep -n "recordGameResult" src/src_figma/app/pages/GameTracker.tsx
+   — must show exactly 2 lines
+
+FORMAT:
+1. Files changed (list exact paths)
+2. Changes made (describe each, reference FINDING-101)
+3. Verification result (paste exact output of all 3 commands)
+4. "FINDING-101 complete" OR "BLOCKED: [exact reason]"
+
+FAILURE PROTOCOL:
+- If the hook signature differs from what is described above → quote what you see and STOP
+- If build fails → git checkout -- . to revert, then report the error
+- Never touch useFanMorale.ts or fanMoraleEngine.ts
+
+Use high reasoning effort. Two-line fix. Do not change anything else.

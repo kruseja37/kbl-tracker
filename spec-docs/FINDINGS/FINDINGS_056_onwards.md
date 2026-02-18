@@ -526,3 +526,40 @@ GameTracker.tsx contains a live toggle button (`useEnhancedField` useState, line
 
 **Impact:** SILENT DATA LOSS. Any user who toggled to Legacy Field and recorded plays produced zero stats, zero persistence, zero mWAR. The game appeared to function but dropped all data. No error shown. Worse than a crash.
 **Resolution:** FIXED 2026-02-18. Removed toggle, legacy branch, handlePlayComplete stub. DragDropGameTracker.tsx (676 lines) archived to src/archived-components/. GameTracker.tsx -200 lines net. Build clean (7 pre-existing errors in inactive path only). Verified by grep — zero legacy references remain.
+
+### FINDING-101
+**Date:** 2026-02-18 | **Phase:** 2 | **Status:** CONFIRMED
+**File:** `src/hooks/useFanMorale.ts`, `src/src_figma/app/pages/GameTracker.tsx`
+
+**Three bugs confirmed:**
+
+**Bug A — Wrong method name (silent runtime failure).**
+GameTracker.tsx lines 2138, 2152 call `homeFanMorale.processGameResult(...)` and
+`awayFanMorale.processGameResult(...)`. The hook exports `recordGameResult`, not
+`processGameResult`. The call fails silently — caught by try/catch at line 2156,
+logged as `[MAJ-02] Fan morale update error (non-blocking)`. Fan morale never
+updates after any game. The engine is fully wired structurally but broken at the
+call site by a method name mismatch.
+
+**Bug B — Hardcoded season/game numbers.**
+Both calls pass `{ season: 1, game: 1 }` hardcoded. No connection to actual
+franchise season number or game index from the schedule. All morale history is
+tagged to season 1, game 1 regardless of when the game was played.
+
+**Bug C — localStorage instead of IndexedDB.**
+useFanMorale persists to `localStorage` (`kbl-fan-morale-{teamId}`). All other
+KBL persistence uses IndexedDB. Fan morale state survives across franchise resets,
+cannot be wiped with the standard data layer tools, and is invisible to the
+rest of the storage system.
+
+**Phase 2 Pattern Verdict:** N/A — Fan morale is a per-team audience sentiment
+system (SMB4-original). OOTP Section 7.2 morale is per-player, 5 categories,
+affecting development speed and storyline triggers. Different concepts. No
+OOTP structural pattern to conform to for this system. Integration verdict:
+BROKEN (Bug A means it never fires). Architecture verdict: PARTIAL (localStorage
+gap is a data layer violation).
+
+**Impact:** Fan morale is called every game end (wired correctly) but silently
+no-ops every time. 1,357 lines of fanMoraleEngine.ts produce zero output in
+production. Fix is surgical: rename call sites + wire season/game numbers.
+localStorage gap is a follow-on item (requires IndexedDB schema addition).

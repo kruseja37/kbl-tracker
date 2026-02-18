@@ -1019,6 +1019,7 @@ Still unresolved. FINDING-047 fallback path only has base state, not full scoreb
 | FINDING-098 | Clutch Attribution — Phase 2 pattern conformance | CONFIRMED PARTIAL — architecture follows OOTP stat pipeline pattern correctly; disconnection from per-play trigger is the only failure; fix is wiring only |
 | FINDING-099 | Leverage Index — Phase 2 pattern conformance | CONFIRMED N — two LI values in flight violates OOTP single-value principle; 6 getBaseOutLI calls in useGameState must be replaced with calculateLeverageIndex |
 | FINDING-100 | Legacy Field toggle — silent data loss risk | FIXED 2026-02-18 — toggle removed, legacy branch deleted, DragDropGameTracker.tsx archived, handlePlayComplete stub deleted; -200 lines GameTracker.tsx |
+| FINDING-101 | Fan Morale — 3 bugs: wrong method name (silent no-op), hardcoded season/game, localStorage vs IndexedDB | CONFIRMED — fanMoraleEngine never fires in production; fix is surgical (method rename + season wiring); localStorage gap is follow-on |
 | FINDING-066 | mWAR — useMWARCalculations wired in GameTracker | CONFIRMED WIRED — revises FINDING-061; bWAR/fWAR/pWAR/rWAR still orphaned |
 | FINDING-067 | Fame tracking — useFameTracking wired in GameTracker | CONFIRMED WIRED — revises FINDING-062; fameEngine/fameIntegration still orphaned |
 | FINDING-068 | Fan Morale — useFanMorale wired in GameTracker | CONFIRMED WIRED — backend engine wiring TBD |
