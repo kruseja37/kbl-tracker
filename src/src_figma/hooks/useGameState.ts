@@ -25,9 +25,10 @@ import type { GameAggregationOptions } from '../../utils/seasonAggregator';
 import { processCompletedGame } from '../../utils/processCompletedGame';
 import {
   archiveCompletedGame,
+  saveCurrentGame,
   loadCurrentGame,
-  debouncedSaveCurrentGame,
   immediateSaveCurrentGame,
+  clearCurrentGame,
   type PersistedGameState,
 } from '../utils/gameStorage';
 import type { AtBatResult, HalfInning, LineupState, LineupPlayer, BenchPlayer, Position } from '../../types/game';
@@ -1058,6 +1059,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
   const [isSaving, setIsSaving] = useState(false);
   const [lastSavedAt, setLastSavedAt] = useState<number | null>(null);
   const latestPersistedRef = useRef<PersistedGameState | null>(null);
+  const autoSaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // T0-01: Auto game-end detection prompt
   const [showAutoEndPrompt, setShowAutoEndPrompt] = useState(false);
   const [atBatSequence, setAtBatSequence] = useState(0);
@@ -1163,6 +1165,16 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
 
   const initializeGame = useCallback(async (config: GameInitConfig) => {
     setIsLoading(true);
+    latestPersistedRef.current = null;
+    if (autoSaveTimeoutRef.current) {
+      clearTimeout(autoSaveTimeoutRef.current);
+      autoSaveTimeoutRef.current = null;
+    }
+    try {
+      await clearCurrentGame();
+    } catch (err) {
+      console.warn('[useGameState] Failed to clear stale currentGame before initialize:', err);
+    }
 
     // Clear all state from previous game (fix for stale data issue EXH-011)
     setFameEvents([]);
@@ -1311,22 +1323,42 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
 
   const loadExistingGame = useCallback(async (): Promise<boolean> => {
     setIsLoading(true);
+    latestPersistedRef.current = null;
+    if (autoSaveTimeoutRef.current) {
+      clearTimeout(autoSaveTimeoutRef.current);
+      autoSaveTimeoutRef.current = null;
+    }
     try {
       if (!initialGameId) {
         setIsLoading(false);
         return false;
       }
 
+      const header = await getGameHeader(initialGameId);
+      const inProgressGame = header && !header.isComplete ? header : null;
+
       // Primary rehydration path: restore exact in-progress snapshot from currentGame store.
       // This preserves non-at-bat runner movement + full scoreboard state across refresh.
       const savedSnapshot = await loadCurrentGame();
+      if (savedSnapshot && (savedSnapshot.gameId !== initialGameId || !inProgressGame)) {
+        try {
+          await clearCurrentGame();
+        } catch (err) {
+          console.warn('[useGameState] Failed to clear stale currentGame snapshot:', err);
+        }
+      }
       const hasUsableLiveSnapshot = !!(
         savedSnapshot?.scoreboard ||
         savedSnapshot?.runnerTrackerSnapshot ||
         savedSnapshot?.currentPitcherId ||
         savedSnapshot?.currentBatterId
       );
-      if (savedSnapshot && savedSnapshot.gameId === initialGameId && hasUsableLiveSnapshot) {
+      if (
+        savedSnapshot &&
+        savedSnapshot.gameId === initialGameId &&
+        hasUsableLiveSnapshot &&
+        inProgressGame
+      ) {
         const emptyBoard = createEmptyScoreboardState();
         const snapshotBoard = savedSnapshot.scoreboard;
         const normalizedScoreboard: ScoreboardState = {
@@ -1539,13 +1571,11 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
           seasonNumber: savedSnapshot.seasonNumber ?? 1,
         });
 
+        latestPersistedRef.current = savedSnapshot;
         setLastSavedAt(savedSnapshot.savedAt ?? Date.now());
         setIsLoading(false);
         return true;
       }
-
-      const header = await getGameHeader(initialGameId);
-      const inProgressGame = header && !header.isComplete ? header : null;
 
       if (inProgressGame) {
         // Get the last event to reconstruct current state
@@ -1858,6 +1888,29 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       }
     }
 
+    // Fallback: preserve occupied bases from boolean state even if tracker identity is temporarily missing.
+    if (gameState.bases.first && !baseRunners.first) {
+      baseRunners.first = latestPersistedRef.current?.bases.first || {
+        playerId: `r1-${gameState.gameId}`,
+        playerName: 'Runner',
+        inheritedFrom: null,
+      };
+    }
+    if (gameState.bases.second && !baseRunners.second) {
+      baseRunners.second = latestPersistedRef.current?.bases.second || {
+        playerId: `r2-${gameState.gameId}`,
+        playerName: 'Runner',
+        inheritedFrom: null,
+      };
+    }
+    if (gameState.bases.third && !baseRunners.third) {
+      baseRunners.third = latestPersistedRef.current?.bases.third || {
+        playerId: `r3-${gameState.gameId}`,
+        playerName: 'Runner',
+        inheritedFrom: null,
+      };
+    }
+
     const persisted: PersistedGameState = {
       id: 'current',
       gameId: gameState.gameId,
@@ -1929,7 +1982,14 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     };
 
     latestPersistedRef.current = persisted;
-    debouncedSaveCurrentGame(persisted, 250);
+    if (autoSaveTimeoutRef.current) {
+      clearTimeout(autoSaveTimeoutRef.current);
+    }
+    autoSaveTimeoutRef.current = setTimeout(() => {
+      saveCurrentGame(persisted).catch(err => {
+        console.error('[useGameState] Auto-save failed:', err);
+      });
+    }, 250);
     setLastSavedAt(Date.now());
   }, [
     isLoading,
@@ -1946,6 +2006,10 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
 
   useEffect(() => {
     const flushSave = () => {
+      if (autoSaveTimeoutRef.current) {
+        clearTimeout(autoSaveTimeoutRef.current);
+        autoSaveTimeoutRef.current = null;
+      }
       if (!latestPersistedRef.current) return;
       immediateSaveCurrentGame(latestPersistedRef.current);
       setLastSavedAt(Date.now());
@@ -1963,6 +2027,10 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     return () => {
       window.removeEventListener('beforeunload', flushSave);
       document.removeEventListener('visibilitychange', onVisibility);
+      if (autoSaveTimeoutRef.current) {
+        clearTimeout(autoSaveTimeoutRef.current);
+        autoSaveTimeoutRef.current = null;
+      }
     };
   }, []);
 
@@ -4229,6 +4297,17 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         inningScores,
         targetSeasonId
       );
+    }
+
+    try {
+      if (autoSaveTimeoutRef.current) {
+        clearTimeout(autoSaveTimeoutRef.current);
+        autoSaveTimeoutRef.current = null;
+      }
+      await clearCurrentGame();
+      latestPersistedRef.current = null;
+    } catch (err) {
+      console.warn('[useGameState] Failed to clear currentGame at game end:', err);
     }
 
     setIsSaving(false);

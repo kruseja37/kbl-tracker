@@ -1,3 +1,20 @@
+## 2026-02-18
+- Investigated persistence regression where scoreboard data leaked across sessions and lead runners could disappear after refresh.
+- Root causes identified in `/Users/johnkruse/Projects/kbl-tracker/src/src_figma/hooks/useGameState.ts`:
+  - stale `currentGame` snapshot could be applied without confirming an in-progress game header,
+  - shared debounced save path could write delayed stale data across game boundaries,
+  - snapshot serialization could miss runner identity while base booleans were still occupied.
+- Implemented fixes:
+  - gated snapshot rehydrate to `savedSnapshot.gameId === initialGameId` **and** `header && !header.isComplete`,
+  - auto-clear stale/mismatched `currentGame` snapshots,
+  - replaced shared debounce with hook-local timeout + direct `saveCurrentGame`,
+  - canceled pending autosave timers on init/load/unmount/end-game,
+  - clear `currentGame` on new game initialization and after completed game aggregation,
+  - added runner fallback serialization for occupied bases when tracker identity is temporarily missing.
+- Verification status:
+  - Target files compile cleanly in isolation.
+  - Full `npm run build` still reports pre-existing legacy errors under `src/components/GameTracker/*` unrelated to this Figma persistence path.
+
 ## 2026-02-15
 - Manual persistence verification still outstanding: CLI environment lacks browser access to open DevTools, so please finish the steps described in the instructions (complete a game in dev mode, open Application → IndexedDB → `kbl-tracker-db` → `games`, and confirm the latest entry includes `stadiumName`, `seasonNumber`, `activityLog[]`, and `fameEvents[]`).
 - Tests run:

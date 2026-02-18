@@ -1,5 +1,5 @@
 # KBL TRACKER — CURRENT STATE
-# Last updated: 2026-02-14 (codebase cleanup + architecture documentation)
+# Last updated: 2026-02-18 (persistence/rehydration hardening update)
 ---
 
 ## CODEBASE ARCHITECTURE (Read This First)
@@ -64,11 +64,21 @@ kbl-tracker/
 ## BUILD STATUS
 | Metric | Value |
 |--------|-------|
-| Build | PASSING (exit 0) |
+| Build | Full workspace build currently reports pre-existing legacy TS errors in `src/components/GameTracker/*`; active Figma path changes compile |
 | Tests | 5,653 passing / 0 failing / 134 files |
 | Logic Matrix | 480/480 pass |
 | Console errors | 0 (verified across full franchise UI) |
 ---
+## LATEST DELTA (2026-02-18)
+- Persistence path hardened in `src/src_figma/hooks/useGameState.ts`:
+  - strict snapshot rehydrate gate (`gameId` match + in-progress header required),
+  - stale `currentGame` cleanup for mismatched/completed headers,
+  - hook-local autosave timer (replacing shared debounce usage),
+  - autosave timer cancellation on init/load/unmount/end-game,
+  - `currentGame` cleared on fresh initialization and post-game completion,
+  - base-occupancy fallback serialization to prevent lead-runner loss on refresh.
+- Remaining validation requirement: browser-level manual confirmation that no scoreboard/runners leak into a new game after ending previous game.
+
 ## MANUAL TESTING BUG FIX STATUS — ALL TIERS COMPLETE ✅
 
 Source: `MANUAL_TESTING_BUG_FIX_PLAN.md` (35 issue IDs, 28 commits)

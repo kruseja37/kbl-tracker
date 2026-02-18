@@ -1,6 +1,28 @@
 # KBL TRACKER — SESSION LOG
 # Previous sessions archived at: spec-docs/archive/SESSION_LOG_through_2026-02-11.md
 ---
+## Session: 2026-02-18 — Persistence/Rehydration Hardening (GameTracker Figma Path)
+### Accomplished
+- Investigated refresh regression where large scoreboard values leaked from prior sessions and lead runners intermittently disappeared.
+- Identified race/staleness causes in `src/src_figma/hooks/useGameState.ts`:
+  - `currentGame` snapshot rehydrated without strict in-progress header validation,
+  - shared debounced save path allowed delayed stale writes across game boundaries,
+  - snapshot runner identity could be absent while base occupancy booleans remained true.
+- Implemented hardening changes:
+  - Strict snapshot gate: rehydrate snapshot only when gameId matches AND `getGameHeader(...).isComplete === false`.
+  - Stale snapshot cleanup: auto-clear mismatched/invalid `currentGame` snapshots.
+  - Autosave isolation: replaced shared `debouncedSaveCurrentGame` usage with hook-local timeout + `saveCurrentGame`.
+  - Lifecycle safety: clear pending autosave timers during initialize/load/unmount/end-game.
+  - Session hygiene: clear `currentGame` on new game initialization and after completed game processing.
+  - Runner durability: fallback serialization preserves occupied lead bases even if tracker identity momentarily lags.
+### Verification
+- Figma persistence path updated and compiles.
+- Full `npm run build` still surfaces pre-existing legacy type errors in `src/components/GameTracker/*` outside the active Figma path.
+### Pending Manual Check
+- Browser validation still required:
+  1. Start game A, create runners + scoreboard changes, refresh, verify all bases and line score persist.
+  2. End game A, start game B, verify no residual scoreboard/runners carry over.
+
 ## Session: 2026-02-12 — Full Stack Audit + Post-Season Build
 ### Accomplished
 - Full Stack Audit: 28 defects found and fixed (2 CRITICAL, 12 MAJOR, 8 MINOR, 4 INFO)
