@@ -211,3 +211,33 @@ Before ending any session, rewrite CURRENT_STATE.md completely:
 5. Commit CURRENT_STATE.md with message: "docs: session end — update CURRENT_STATE.md"
 
 CURRENT_STATE.md is the single file that makes new threads work. If it is stale, new threads will be disoriented. There are no exceptions.
+
+---
+
+## SMB4 Asset Protection Rule (Non-Negotiable)
+The OOTP architecture is the structural reference. It is NOT the content
+reference. SMB4-specific logic is never automatically replaced or modified
+to match OOTP patterns.
+
+**SMB4-specific systems that require JK approval before ANY change:**
+- Mojo engine and mojo as performance multiplier
+- Fitness engine and fitness decay model
+- Chemistry types and trait system (SMB4 flavor)
+- Fame tiers and fame calculation logic
+- Clutch index and clutch moment detection
+- Narrative flavor, headline templates, game recap voice
+- Stadium analytics and park factor model
+- Adaptive standards system
+- Any player personality traits specific to SMB4
+
+**Gate for every Phase 2 finding that proposes a code change:**
+1. Claude produces: proposed change description in plain English
+2. Claude states: what OOTP pattern it follows
+3. Claude states: what SMB4 asset is affected and how it is preserved
+4. JK reviews and explicitly approves or rejects
+5. Only after explicit approval does a code prompt get written
+
+"Follows OOTP pattern" alone is never sufficient justification for a change.
+Required justification: "follows OOTP pattern AND preserves SMB4 asset intact."
+If Claude cannot show how the SMB4 asset survives the change, the change
+does not happen. Full stop.

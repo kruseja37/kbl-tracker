@@ -29,3 +29,15 @@
 [2026-02-18] DECISION-009: OOTP architecture is the reference pattern. We copy OOTP structural patterns, not their assets. Same data flow shapes, same pipeline contracts, different SMB4-specific traits/ratings/narratives. Architecture is the template; SMB4 spec-docs provide the content.
 
 [2026-02-18] DECISION-010: Documentation routing is structural. FINDINGS 001-055: AUDIT_LOG.md full text. FINDINGS 056+: FINDINGS_056_onwards.md full text, AUDIT_LOG.md index only. CURRENT_STATE.md is rewritten (not appended) at every session end. ARCHITECTURAL_DECISIONS.md is append-only, never deleted.
+
+[2026-02-18] DECISION-011: SMB4 assets are protected from pattern conformance.
+OOTP patterns define structure only. SMB4-specific logic (mojo, traits,
+chemistry, fame, clutch, fitness, narrative voice, stadium analytics) is never
+automatically changed to match OOTP. Every proposed change to these systems
+requires JK explicit approval with a plain-English description of what changes
+and how the SMB4 asset is preserved. Code prompts only after approval.
+
+[2026-02-18] DECISION-012: Phase 2 output is proposals, not code.
+When a pattern mismatch is found, Claude produces a proposed change description.
+Not a prompt. Not code. A description. JK decides whether to adopt the OOTP
+pattern, preserve the SMB4 asset, or find a hybrid. Prompts come after approval.
