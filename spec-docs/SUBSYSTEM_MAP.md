@@ -11,11 +11,11 @@
 | 1 | GameTracker / Game State | useGameState.ts, GameTracker.tsx | ✅ WIRED | Deep audited FINDING-001 to 048 |
 | 2 | Stats Aggregation | seasonAggregator.ts, liveStatsCalculator.ts | 🔲 UNKNOWN | |
 | 3 | Franchise / Season Engine | franchiseManager.ts, franchiseStorage.ts | 🔲 UNKNOWN | |
-| 4 | WAR System | bwar/fwar/pwar/rwar/mwarCalculator.ts, warOrchestrator.ts | 🔲 UNKNOWN | |
-| 5 | Fame / Milestone | fameEngine.ts, milestoneDetector.ts, fameIntegration.ts | 🔲 UNKNOWN | fameEngine 947 lines — FINDING-022 |
+| 4 | WAR System | bwar/fwar/pwar/rwar/mwarCalculator.ts, warOrchestrator.ts | ❌ ORPHANED | FINDING-061: 3287 lines unimported. mwarHook needs investigation. |
+| 5 | Fame / Milestone | fameEngine.ts, milestoneDetector.ts, fameIntegration.ts | ⚠️ PARTIAL | FINDING-062: one fn in FranchiseHome, rest orphaned. Milestone files duplicated (FINDING-063). |
 | 6 | Schedule System | scheduleGenerator.ts, scheduleStorage.ts | 🔲 UNKNOWN | |
-| 7 | Offseason | offseasonStorage.ts, seasonEndProcessor.ts, seasonTransitionEngine.ts | 🔲 UNKNOWN | |
-| 8 | Playoffs | playoffEngine.ts, playoffStorage.ts | 🔲 UNKNOWN | |
+| 7 | Offseason | offseasonStorage.ts, seasonEndProcessor.ts, seasonTransitionEngine.ts | ⚠️ PARTIAL | FINDING-064: active hooks exist, page wiring unknown. |
+| 8 | Playoffs | playoffEngine.ts, playoffStorage.ts | ⚠️ PARTIAL | FINDING-064: active hook exists, page wiring unknown. |
 | 9 | Relationships | relationshipEngine.ts, relationshipStorage.ts, relationshipIntegration.ts | 🔲 UNKNOWN | |
 | 10 | Narrative / Headlines | narrativeEngine.ts, headlineEngine.ts, narrativeIntegration.ts | 🔲 UNKNOWN | |
 | 11 | Mojo / Fitness | mojoEngine.ts, fitnessEngine.ts, playerStateIntegration.ts | 🔲 UNKNOWN | playerStateHook seen at GameTracker line 287 |

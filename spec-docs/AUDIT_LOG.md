@@ -1046,3 +1046,65 @@ Still unresolved. FINDING-047 fallback path only has base state, not full scoreb
 **Verified by:** Claude + JK
 **Impact:** Consistent architecture. All persistence logic lives in src/utils/. The src_figma/utils/ layer is purely an alias layer. This is clean — not a concern.
 
+
+---
+
+### FINDING-061
+**Date:** 2026-02-17
+**Phase:** 1
+**File:** WAR subsystem — all five calculators + warOrchestrator
+**Claim:** WAR system wiring status unknown
+**Evidence:** File sizes: bwarCalculator 406, fwarCalculator 692, pwarCalculator 583, rwarCalculator 597, mwarCalculator 1009, warOrchestrator 381 lines. warOrchestrator exports: PlayerWARSummary interface, calculateAndPersistSeasonWAR(). Command 5 returned NO OUTPUT — warOrchestrator, bwar/fwar/pwar/rwar/mwarCalculator are not imported by any active hook or page.
+**Status:** CONFIRMED — WAR calculators are ORPHANED from active app
+**Verification method:** grep imports in src_figma/hooks/ and pages/
+**Verified by:** Claude + JK
+**Impact:** CRITICAL. 3,287 lines of WAR calculation code (5 calculators + orchestrator) are completely unimported by the active app. calculateAndPersistSeasonWAR() exists but nothing calls it. WAR values shown anywhere in the UI are either hardcoded, calculated inline, or not shown at all. Must verify what mwarHook (seen at GameTracker line 287) actually is — it may be the active WAR path.
+
+---
+
+### FINDING-062
+**Date:** 2026-02-17
+**Phase:** 1
+**File:** Fame / Milestone subsystem
+**Claim:** Fame and milestone systems wiring status unknown
+**Evidence:** fameEngine.ts: 947 lines. Exports: calculateFame(), getFameTier(), detectCareerMilestones(), detectCareerNegativeMilestones(), detectSeasonMilestones(), detectSeasonNegativeMilestones(), CAREER_THRESHOLDS, SEASON_THRESHOLDS. fameIntegration.ts: 514 lines. milestoneDetector.ts: 1,471 lines (exists in BOTH src/utils/ and src_figma/utils/ — identical size, likely duplicated). milestoneAggregator.ts: 931 lines (same duplication pattern). Command 6: fameIntegration/fameEngine/milestoneDetector/milestoneAggregator — NOT imported by any active hook. ONE import found: FranchiseHome.tsx imports getApproachingMilestones from milestoneDetector.
+**Status:** CONFIRMED — fame/milestone partially wired (one function in FranchiseHome only)
+**Verification method:** grep imports in hooks/ and pages/
+**Verified by:** Claude + JK
+**Impact:** 947-line fameEngine orphaned. 1,471-line milestoneDetector used for one function (getApproachingMilestones) in FranchiseHome. fameIntegration.ts (514 lines) completely orphaned. The full fame calculation pipeline (calculateFame, tier detection, season/career milestones) never fires in the active app.
+
+---
+
+### FINDING-063
+**Date:** 2026-02-17
+**Phase:** 1
+**File:** Milestone duplication
+**Claim:** milestoneDetector.ts and milestoneAggregator.ts are unique files
+**Evidence:** src/utils/milestoneDetector.ts: 1,471 lines. src/src_figma/utils/milestoneDetector.ts: 1,471 lines — identical line count. src/utils/milestoneAggregator.ts: 931 lines. src/src_figma/utils/milestoneAggregator.ts: 931 lines — identical.
+**Status:** CONFIRMED — both milestone files are duplicated, NOT re-exports (unlike gameStorage/franchiseStorage pattern)
+**Verification method:** wc -l comparison
+**Verified by:** Claude + JK
+**Impact:** Unlike the clean re-export pattern in utils/, these files appear to be actual duplicates — same content in two locations. Risk of divergence if one is edited and the other is not. Must verify whether they are true duplicates or have differences.
+
+---
+
+### FINDING-064
+**Date:** 2026-02-17
+**Phase:** 1
+**File:** Offseason / Playoff subsystem
+**Claim:** Offseason and playoff systems wiring status unknown
+**Evidence:** seasonEndProcessor.ts: 417 lines. Key export: processSeasonEnd() — the main season-end pipeline. offseasonStorage.ts: 759 lines. seasonTransitionEngine.ts: 315 lines. playoffStorage.ts: 784 lines. playoffEngine.ts: 510 lines. Active hooks: useOffseasonData.ts 404 lines, useOffseasonState.ts 431 lines, usePlayoffData.ts 585 lines — all three are active hooks (in src_figma/hooks/). Wiring to pages unknown.
+**Status:** CONFIRMED — substantial offseason/playoff infrastructure with active hooks, page wiring unknown
+**Verification method:** wc -l
+**Verified by:** Claude + JK
+**Impact:** The offseason and playoff systems have real active hooks, unlike WAR/Fame which are fully orphaned. Whether SeasonSummary.tsx and WorldSeries.tsx pages actually use these hooks is the critical unknown.
+
+---
+
+## SUBSYSTEM_MAP updates required (2026-02-17 batch B):
+- WAR System: ❌ ORPHANED (calculators unimported — but mwarHook needs investigation)
+- Fame/Milestone: ⚠️ PARTIAL (one function in FranchiseHome, rest orphaned)
+- Offseason: ⚠️ PARTIAL (active hooks exist, page wiring unknown)
+- Playoffs: ⚠️ PARTIAL (active hook exists, page wiring unknown)
+- milestoneDetector/Aggregator: duplicated files — not re-exports
+
