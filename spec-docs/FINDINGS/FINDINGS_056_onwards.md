@@ -681,3 +681,73 @@ logic change — the calculator logic is correct.
 **Impact of current state:** WAR values displayed in TeamHub/UI are stale or zero for
 all position players, pitchers, and baserunners. mWAR similarly unverified.
 All 3,287 lines of WAR calculator code produce zero output in production.
+
+### FINDING-104
+**Date:** 2026-02-18 | **Phase:** 2 | **Status:** CONFIRMED
+**System:** Trait System
+**Files:** `src/data/traitPools.ts`, `src/data/playerDatabase.ts`,
+`src/src_figma/hooks/useOffseasonData.ts`
+
+**Phase 2 Pattern Verdict:** STUB — data catalog exists, no execution layer
+
+**SMB4 reference (BillyYank Guide 3rd Ed + FEATURE_WISHLIST design intent):**
+Traits are situational ±rating modifiers scaled by chemistry potency (team roster
+composition). Three required layers: (1) trait data with chemistryType + trigger +
+effect values per potency level, (2) potency calculator (count players per chemistry
+type), (3) trait trigger engine (fires at game event resolution, applies ±delta to
+relevant rating for that play).
+
+**What exists:**
+
+Layer 1 — Trait catalog: PRESENT but INCOMPLETE.
+`traitPools.ts` (701 lines) has 60+ SMB4-accurate traits organized by tier (S/A/B/C)
+and positive/negative. Names, descriptions, tiers are correct per SMB4 guide.
+HOWEVER — the `Trait` interface is missing the three fields the execution layer
+requires:
+- `chemistryType` — which chemistry type governs this trait's potency (MISSING)
+- `trigger` — what game condition activates the trait (MISSING — buried in description
+  string only, e.g. "2-strike count")
+- `effect` — the ±delta at each potency level (MISSING — the exact numbers from the
+  guide, e.g. K Collector: +8/+15/+30 VEL/JNK, are not in the interface)
+Without these fields, no engine can apply trait effects without hardcoded logic.
+
+Layer 2 — Chemistry potency calculator: ABSENT.
+No function anywhere in the codebase counts players by chemistry type to determine
+potency tier (Level 1/2/3). `grep -rn "potency\|chemistryPotency"` → zero hits.
+
+Layer 3 — Trait trigger engine: ABSENT.
+No function applies trait effects at game event resolution. `grep -rn "applyTrait\|
+traitEffect\|traitBonus\|checkTrait\|activateTrait"` → zero hits.
+`traitPools.ts` is never imported in the active app — zero import sites.
+
+**Player type:** PARTIAL.
+`playerDatabase.ts` has `traits: PlayerTraits` (trait1?: string, trait2?: string — ID
+only) and `chemistry: Chemistry`. Fields exist on Player. But PlayerTraits stores only
+string IDs, not resolved Trait objects with effect data.
+
+**Chemistry type mismatch:** CONFIRMED.
+`playerDatabase.ts` defines 7 chemistry types: SPIRITED, CRAFTY, DISCIPLINED, FIERY,
+GRITTY, SCHOLARLY, COMPETITIVE. SMB4 has exactly 5: Spirited, Competitive, Disciplined,
+Crafty, Scholarly. FIERY and GRITTY are KBL additions with no SMB4 backing. This must
+be reconciled before potency calculation can be built — potency math only makes sense
+for the 5 SMB4 chemistry types.
+
+**Traits misused as personality proxy:** CONFIRMED BUG.
+`useOffseasonData.ts` line 112-139 infers player personality from trait name strings
+("if traits.includes('clutch') return 'COMPETITIVE'"). This is the only active use
+of trait data in the app, and it conflates two separate systems. Traits are mechanical
+rating modifiers. Personality is a separate system. This usage must be removed or
+replaced when the real personality system is built.
+
+**Summary — what needs to be built:**
+1. Add `chemistryType`, `trigger`, `effect: {l1, l2, l3}` to `Trait` interface in
+   traitPools.ts and populate all 60+ traits with correct SMB4 values
+2. Reconcile chemistry types: decide whether FIERY/GRITTY are kept as KBL-original
+   or removed to match SMB4's 5-type system
+3. Build chemistry potency calculator: `getChemistryPotency(roster) → Map<ChemType, 1|2|3>`
+4. Build trait trigger engine: at play resolution, for each active player, check trigger
+   conditions, look up potency, apply ±delta to relevant rating
+5. Remove personality-from-traits hack in useOffseasonData.ts
+
+**Priority:** HIGH per FEATURE_WISHLIST (core SMB4 differentiator).
+**Dependency:** None — independent of morale, WAR, or other systems.
