@@ -613,3 +613,104 @@ All three must pass before snapshot is applied.
 | 18 | Does substitution calling setAwayTeamPlayers re-trigger the init useEffect? | 2026-02-17 | FINDING-034: YES — confirmed real bug path triggered by substitutions |
 | 19 | What are the closing dep arrays for initializeGame and loadExistingGame useCallbacks? | 2026-02-17 | Pending — read lines 1260-1330 |
 | 20 | Does gameInitialized flag prevent re-initialization after substitution re-fires effect? | 2026-02-17 | Partially — line 640 checks gameInitialized but initInProgressRef also guards. Need to verify both guards hold under substitution scenario |
+
+---
+
+### FINDING-036
+**Date:** 2026-02-17
+**Phase:** 1
+**File:** `src/src_figma/hooks/useGameState.ts` — initializeGame closing dep array
+**Claim:** FINDING-032 — initializeGame dep array not yet visible
+**Evidence:** Line visible at end of initializeGame body: `}, []);` — empty dependency array.
+**Status:** CONFIRMED — initializeGame has empty dep array, fully stable ref
+**Verification method:** sed lines 1260-1330
+**Verified by:** Claude + JK
+**Impact:** initializeGame ref is completely stable — it never changes. This eliminates it as a cause of the useEffect re-fire. The re-fire risk from FINDING-034 is real but initializeGame itself is not the trigger.
+
+---
+
+### FINDING-037
+**Date:** 2026-02-17
+**Phase:** 1
+**File:** `src/src_figma/hooks/useGameState.ts` — loadExistingGame dep array
+**Claim:** loadExistingGame dep array stability unknown
+**Evidence:** loadExistingGame body visible at lines 1324+. Dep array closing bracket not yet seen in this range — function body continues into stat restoration. Need one more read to confirm dep array. However: loadExistingGame only uses initialGameId (a string prop) and internal refs/setters. If dep array is [initialGameId] or [], it would be stable.
+**Status:** UNVERIFIED — dep array still not confirmed
+**Verification method:** sed lines 1400-1440 — body still running
+**Next action:** Read lines 1540-1580 to find closing dep array
+
+---
+
+### FINDING-038
+**Date:** 2026-02-17
+**Phase:** 1
+**File:** `src/src_figma/app/pages/GameTracker.tsx`
+**Claim:** gameInitialized flag prevents re-initialization after state changes
+**Evidence:**
+- Line 211: `const [gameInitialized, setGameInitialized] = useState(false)`
+- Line 642: `if (gameInitialized || initInProgressRef.current) return;` — FIRST check in the init useEffect
+- setGameInitialized(true) called at lines 654, 732, 738 (all success paths)
+- gameInitialized is in the dep array at line 750
+**Status:** CONFIRMED — gameInitialized IS an effective guard
+**Verification method:** grep gameInitialized/setGameInitialized
+**Verified by:** Claude + JK
+**Impact:** REVISES FINDING-034. When setAwayTeamPlayers fires during a substitution, the init useEffect re-fires BUT immediately exits at line 642 because gameInitialized is already true. The race condition from FINDING-034 does NOT cause re-initialization during normal gameplay. The guard works correctly.
+
+---
+
+### FINDING-039
+**Date:** 2026-02-17
+**Phase:** 1
+**File:** `src/src_figma/app/pages/GameTracker.tsx`
+**Claim:** setAwayTeamPlayers/setHomeTeamPlayers are called during substitutions
+**Evidence:**
+- Line 1015-1016: called inside updateTeamRoster (substitution path)
+- Line 1913: called inside handleSubstitution
+- Line 1970: called inside handlePositionSwap
+All three are substitution handlers — not random state updates.
+**Status:** CONFIRMED — player state only changes on substitution
+**Verification method:** grep setAwayTeamPlayers/setHomeTeamPlayers
+**Verified by:** Claude + JK
+**Impact:** Combined with FINDING-038: substitutions update player arrays → init useEffect re-fires → exits immediately at gameInitialized guard. No re-initialization occurs. This path is safe.
+
+---
+
+### FINDING-040
+**Date:** 2026-02-17
+**Phase:** 1
+**File:** `src/src_figma/app/pages/GameTracker.tsx` line 825
+**Claim:** Second useEffect also depends on awayTeamPlayers/homeTeamPlayers
+**Evidence:** Line 825: `}, [gameInitialized, awayTeamPlayers, homeTeamPlayers, awayPitcher, homePitcher, playerStateHook]);` — a second useEffect with player arrays in dep array, also guarded by `if (!gameInitialized) return` at line 755.
+**Status:** CONFIRMED — second effect also re-fires on substitution but is guarded
+**Verification method:** grep gameInitialized
+**Verified by:** Claude + JK
+**Impact:** Both useEffects that depend on player arrays are guarded by gameInitialized. Substitution-triggered re-fires are safe. The initialization race condition hypothesis from FINDING-031 is substantially weakened — the guards appear to work.
+
+---
+
+## REVISED UNDERSTANDING OF BUG ROOT CAUSE (2026-02-17)
+
+Based on FINDING-036 through FINDING-040, the useEffect race condition theory is largely disproven:
+- initializeGame has empty dep array — completely stable
+- gameInitialized guard exits early on all re-fires
+- Substitution-triggered re-fires are safe
+
+**New hypothesis:** Runner disappearance and scoreboard bugs are more likely caused by:
+1. The autosave snapshot missing runner state in some edge case (FINDING-016 showed timer-based save — what if component unmounts before timer fires?)
+2. The hasUsableLiveSnapshot check failing for a valid game (if scoreboard/runnerTracker are null at snapshot time)
+3. A specific at-bat outcome path that doesn't trigger autosave before refresh
+
+**Next investigation target:** The autosave trigger path — when exactly does it fire, and what state does it capture?
+
+---
+
+## OPEN QUESTIONS (Updated 2026-02-17 batch 6)
+
+| # | Question | Raised | Resolved |
+|---|----------|--------|----------|
+| 16 | initializeGame dep array stable? | 2026-02-17 | FINDING-036: YES — empty dep array |
+| 19 | loadExistingGame dep array? | 2026-02-17 | FINDING-037: UNVERIFIED — need lines 1540-1580 |
+| 20 | Does gameInitialized prevent re-init after substitution? | 2026-02-17 | FINDING-038: YES — guard works |
+| 21 | When exactly does autosave fire and what does it capture? | 2026-02-17 | Pending — new priority target |
+| 22 | Can component unmount before autosave timer fires, losing runner state? | 2026-02-17 | Pending — critical for bug root cause |
+| 23 | What does the autosave snapshot include — does it capture runnerTrackerSnapshot? | 2026-02-17 | Pending — read autosave path in useGameState.ts |
