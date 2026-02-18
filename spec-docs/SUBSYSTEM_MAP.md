@@ -1,31 +1,36 @@
 # KBL Tracker Subsystem Map
-**Last updated:** 2026-02-17
-**Status:** IN PROGRESS — Phase 1 breadth survey
+**Last updated:** 2026-02-18
+**Status:** Tier 1 + Tier 2 COMPLETE — all rows closed
+
 ## Legend
 - ✅ WIRED — active app imports and uses
-- ⚠️ PARTIAL — integration file exists, wiring incomplete
+- ⚠️ PARTIAL — some wiring present, gaps confirmed
 - ❌ ORPHANED — engine exists, not imported by active app
-- 🔲 UNKNOWN — not yet audited
+- 🔲 STUBBED — called live but returns placeholder/dummy data
+
 | # | Subsystem | Key Files | Wiring Status | Notes |
 |---|-----------|-----------|---------------|-------|
 | 1 | GameTracker / Game State | useGameState.ts, GameTracker.tsx | ✅ WIRED | Deep audited FINDING-001 to 048 |
-| 2 | Stats Aggregation | seasonAggregator.ts, liveStatsCalculator.ts | 🔲 UNKNOWN | |
-| 3 | Franchise / Season Engine | franchiseManager.ts, franchiseStorage.ts | 🔲 UNKNOWN | |
-| 4 | WAR System | bwar/fwar/pwar/rwar/mwarCalculator.ts, warOrchestrator.ts | ❌ ORPHANED | FINDING-061: 3287 lines unimported. mwarHook needs investigation. |
-| 5 | Fame / Milestone | fameEngine.ts, milestoneDetector.ts, fameIntegration.ts | ⚠️ PARTIAL | FINDING-062: one fn in FranchiseHome, rest orphaned. Milestone files duplicated (FINDING-063). |
-| 6 | Schedule System | scheduleGenerator.ts, scheduleStorage.ts | 🔲 UNKNOWN | |
-| 7 | Offseason | offseasonStorage.ts, seasonEndProcessor.ts, seasonTransitionEngine.ts | ⚠️ PARTIAL | FINDING-064: active hooks exist, page wiring unknown. |
-| 8 | Playoffs | playoffEngine.ts, playoffStorage.ts | ⚠️ PARTIAL | FINDING-064: active hook exists, page wiring unknown. |
-| 9 | Relationships | relationshipEngine.ts, relationshipStorage.ts, relationshipIntegration.ts | 🔲 UNKNOWN | |
-| 10 | Narrative / Headlines | narrativeEngine.ts, headlineEngine.ts, narrativeIntegration.ts | 🔲 UNKNOWN | |
-| 11 | Mojo / Fitness | mojoEngine.ts, fitnessEngine.ts, playerStateIntegration.ts | 🔲 UNKNOWN | playerStateHook seen at GameTracker line 287 |
-| 12 | Fan Morale | fanMoraleEngine.ts, fanMoraleIntegration.ts | 🔲 UNKNOWN | |
-| 13 | Farm System | farmStorage.ts | 🔲 UNKNOWN | |
-| 14 | Trade System | tradeEngine.ts, transactionStorage.ts | 🔲 UNKNOWN | |
-| 15 | Salary System | salaryCalculator.ts | 🔲 UNKNOWN | |
-| 16 | League Builder | leagueBuilderStorage.ts, useLeagueBuilderData.ts | 🔲 UNKNOWN | |
-| 17 | Museum / HOF | museumPipeline.ts, museumStorage.ts, hofEngine.ts | 🔲 UNKNOWN | |
-| 18 | Aging / Ratings | agingEngine.ts, ratingsAdjustmentEngine.ts, agingIntegration.ts | 🔲 UNKNOWN | |
-| 19 | Career Stats | careerStorage.ts | 🔲 UNKNOWN | |
-| 20 | UI Pages | 16 pages in src_figma/app/pages/ | 🔲 UNKNOWN | |
-| 21 | Trait System | smb4_traits_reference.md, player types | ❌ MISSING | FINDING-055: no traits on players anywhere |
+| 2 | Stats Aggregation | seasonAggregator.ts, liveStatsCalculator.ts | ⚠️ PARTIAL | FINDING-080: aggregateGameToSeason wired at game end; liveStatsCalculator orphaned |
+| 3 | Franchise / Season Engine | franchiseManager.ts, franchiseInitializer.ts | ✅ WIRED | FINDING-081: 6 active consumers across pages/hooks |
+| 4 | WAR System | bwar/fwar/pwar/rwar calculators, warOrchestrator | ❌ ORPHANED | FINDING-061: positional WAR (3,287 lines) unimported. mWAR (FINDING-066) is ✅ WIRED separately |
+| 4b | mWAR | useMWARCalculations.ts | ✅ WIRED | FINDING-066: live in GameTracker, persisted at end-game |
+| 5 | Fame / Milestone | fameEngine, fameIntegration, milestoneDetector, milestoneAggregator | ✅ WIRED | FINDING-092: per-play hook + direct engine calls + EOS; milestones fire at game completion via seasonAggregator |
+| 6 | Schedule System | scheduleStorage.ts, scheduleGenerator.ts | ✅ WIRED | FINDING-082: GameTracker, FranchiseHome, SeasonSummary, useFranchiseData |
+| 7 | Offseason | useOffseasonData.ts, useOffseasonState.ts | ✅ WIRED | FINDING-090: 12 active consumers across all offseason flows |
+| 8 | Playoffs | playoffEngine.ts, playoffStorage.ts, usePlayoffData.ts | ✅ WIRED | FINDING-091: FranchiseHome + SeasonSummary |
+| 9 | Relationships | relationshipEngine.ts, relationshipIntegration.ts | ⚠️ PARTIAL | FINDING-086: reached only via useFranchiseData → useRelationshipData (one indirect hop, FranchiseHome only) |
+| 10 | Narrative / Headlines | narrativeIntegration.ts, headlineGenerator.ts | ⚠️ PARTIAL | FINDING-087: game recap wired (GameTracker + FranchiseHome SIM); headlineGenerator.ts orphaned |
+| 11 | Mojo / Fitness / Clutch | mojoEngine.ts, fitnessEngine.ts, playerStateIntegration.ts | ✅ WIRED | FINDING-088: full chain confirmed — playerStateIntegration → engines → usePlayerState → GameTracker |
+| 11b | Leverage Index | leverageCalculator.ts | ⚠️ PARTIAL | FINDING-097: full LI spec implemented; useGameState uses boLI only (partial); EnhancedInteractiveField uses full LI; relationship modifiers dead |
+| 22 | Clutch Attribution | clutchCalculator.ts, useClutchCalculations.ts | ⚠️ PARTIAL | FINDING-096: 1,126-line engine complete; playerStateIntegration imports it; calculatePlayAttribution never called in active app; players accumulate zero clutch stats |
+| 12 | Fan Morale | fanMoraleEngine.ts, useFanMorale.ts | 🔲 STUBBED | FINDING-089: hook called live in GameTracker but explicitly stubbed in source; fanMoraleEngine never properly called |
+| 13 | Farm System | farmStorage.ts | ❌ ORPHANED | FINDING-072: 327 lines, zero active importers |
+| 14 | Trade System | tradeEngine.ts, transactionStorage.ts | ❌ ORPHANED | FINDING-073: 1,516 lines combined, zero active importers |
+| 15 | Salary System | src/engines/salaryCalculator.ts | ✅ WIRED | FINDING-083: offseason hook, leagueBuilderStorage, seasonTransitionEngine |
+| 16 | League Builder | leagueBuilderStorage.ts, useLeagueBuilderData.ts | ✅ WIRED | FINDING-075/081: consumed by FranchiseHome, WorldSeries, useFranchiseData, usePlayoffData |
+| 17 | Museum / HOF | museumStorage.ts, museumPipeline.ts, hofEngine.ts | ⚠️ PARTIAL | FINDING-076: useMuseumData wired to storage/pipeline; hofEngine test-only (HOF induction not live) |
+| 18 | Aging / Ratings | agingEngine.ts, ratingsAdjustmentEngine.ts | ⚠️ PARTIAL | FINDING-077/079/095: agingEngine fires via SpringTrainingFlow direct import (bypasses integration); ratingsAdjustmentEngine ORPHANED; useAgingData self-orphaned |
+| 19 | Career Stats | careerStorage.ts, useCareerStats.ts | ⚠️ PARTIAL | FINDING-078: careerStorage wired (FranchiseHome + milestones); useCareerStats hook orphaned in inactive path |
+| 20 | UI Pages | 16 pages in src_figma/app/pages/ | ✅ WIRED | FINDING-093: full page→hook map complete. PostGameSummary + WorldSeries have zero app-level hooks — data gap risk |
+| 21 | Trait System | smb4_traits_reference.md, player types | ❌ MISSING | FINDING-055/056: no traits in active type system; field in legacy unifiedPlayerStorage only |

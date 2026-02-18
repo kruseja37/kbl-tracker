@@ -6,55 +6,39 @@
 ---
 
 ## Current Phase and Step
-- **Phase:** 1 — Breadth Survey (Tier 1)
-- **Step:** Tier 1 Batch D — Farm, Trade, Salary, League Builder, Museum/HOF,
-  Aging, Career Stats, UI page imports
-- **Status:** NOT YET RUN — this is the immediate next action
+- **Phase:** 1 — Breadth Survey
+- **Step:** Tier 1 + Tier 2 COMPLETE — FINDING-001 to 097, all SUBSYSTEM_MAP rows closed
+- **Status:** Ready for Phase 1 Synthesis → write PHASE_SUMMARIES/PHASE1_BREADTH.md and declare Phase 1 closed
 
 ---
 
 ## Last Completed Action
-Session 2026-02-18. Accomplished:
-- Committed CURRENT_STATE.md, ARCHITECTURAL_DECISIONS.md, PATTERN_MAP.md
-- Committed OOTP_ARCHITECTURE_RESEARCH.md (1,216 lines — full Opus research)
-- Updated SESSION_RULES.md with session end protocol
-- Added FINDING-065 to 071 to FINDINGS_056_onwards.md
-- Established OOTP architecture as the Phase 2 audit reference pattern
+Session 2026-02-18. Tier 2 Batch A + B complete. Findings 080–095 logged to FINDINGS_056_onwards.md.
+SUBSYSTEM_MAP.md fully updated — zero UNKNOWN rows remain.
 
-Phase 1 breadth audit progress: Batches A, B, C complete. Batch D not run.
+Tier 2 key results:
+- Franchise, Schedule, Salary, Offseason, Playoffs, Mojo/Fitness, Fame/Milestone all ✅ WIRED
+- Fan Morale 🔲 STUBBED — hook called live but internally marked TODO, returns placeholder data
+- Relationships ⚠️ PARTIAL — only reached indirectly via useFranchiseData (FranchiseHome only)
+- Narrative ⚠️ PARTIAL — game recap wired; headlineGenerator.ts orphaned
+- Farm, Trade, positional WAR (bWAR/fWAR/pWAR/rWAR), Trait System ❌ ORPHANED/MISSING
+- PostGameSummary + WorldSeries pages have zero app-level hook imports — data gap risk
+- Clutch Attribution ⚠️ PARTIAL — engine complete, trigger never called, zero clutch stats accumulate (FINDING-096)
+- Leverage Index ⚠️ PARTIAL — full spec implemented but useGameState uses boLI only; full LI only in EnhancedInteractiveField; relationship modifiers (revenge/romantic/family) dead (FINDING-097)
 
 ---
 
 ## Next Action
-**Run Tier 1 Batch D immediately.** Prompt targets:
-Farm, Trade, Salary, League Builder, Museum/HOF, Aging/Ratings, Career Stats,
-UI page imports (FranchiseHome, SeasonSummary, PostGameSummary, WorldSeries).
-Ask Claude to produce the Batch D prompt — it is already written.
+**Phase 1 Synthesis (Option C — now unblocked)**
+Write `spec-docs/PHASE_SUMMARIES/PHASE1_BREADTH.md` using findings 001–095.
+Declare Phase 1 closed, update AUDIT_LOG phase tracker, open Phase 2.
 
-After Batch D completes:
-1. Log findings to FINDINGS_056_onwards.md
-2. Update PATTERN_MAP.md with any status changes
-3. Write PHASE_SUMMARIES/PHASE1_BREADTH.md (synthesis of all Phase 1 findings)
-4. Open Phase 2
-
----
-
-## Phase 2 Instructions for Future Thread
-When Phase 2 opens, for EVERY subsystem audit:
-1. Read the subsystem's "OOTP Pattern" from PATTERN_MAP.md
-2. Read the corresponding section in OOTP_ARCHITECTURE_RESEARCH.md for detail
-   - Player lifecycle: Section 3
-   - Stat pipeline: Section 2
-   - Season lifecycle: Section 4
-   - Franchise continuity: Section 5
-   - Narrative engine: Section 6
-   - Traits/personality: Section 7
-   - Replayability: Section 8
-3. Open the KBL code file
-4. Ask: does the code follow the OOTP structural pattern?
-5. Log finding with pattern conformance verdict (Y / N / PARTIAL)
-
-The OOTP research is not a Phase 1 tool. It is the Phase 2 audit lens.
+Synthesis should cover:
+1. Wiring verdict per subsystem (pull from SUBSYSTEM_MAP.md)
+2. Top architectural risks (stubbed fan morale, orphaned WAR, missing traits, PostGameSummary data gap)
+3. Four-layer architecture violations (SpringTrainingFlow, EnhancedInteractiveField, SeasonEndFlow — direct engine imports)
+4. The two live data paths that matter most: GameTracker (6 hooks, game state) and FranchiseHome (4 hooks, franchise state)
+5. Phase 2 priority order recommendation
 
 ---
 
@@ -68,8 +52,13 @@ See ARCHITECTURAL_DECISIONS.md for full list. Summary:
 6. Pattern Map is the Phase 2 audit lens — pattern conformance not just existence
 7. Trait system is MISSING from active types — exists only in legacy code
 8. mWAR is active and wired; bWAR/fWAR/pWAR/rWAR are orphaned
-9. Relationship engine is fully orphaned — zero gameplay effect currently
+9. Relationship engine is indirectly wired via useFranchiseData — not directly by any page
 10. OOTP architecture = reference pattern; SMB4 specs = content that fills it
+11. Farm/Trade are fully orphaned — no active wiring anywhere
+12. ratingsAdjustmentEngine is orphaned — EOS ratings changes never fire
+13. HOF induction (hofEngine) is test-only — never runs in production
+14. Fan morale hook is explicitly STUBBED in source — not a real implementation
+15. PostGameSummary + WorldSeries have zero app-level hook imports
 
 ---
 
@@ -77,13 +66,24 @@ See ARCHITECTURAL_DECISIONS.md for full list. Summary:
 1. This file (CURRENT_STATE.md) — orient yourself here first
 2. spec-docs/SESSION_RULES.md — operating rules, documentation routing
 3. spec-docs/ARCHITECTURAL_DECISIONS.md — all decided patterns
-4. spec-docs/PATTERN_MAP.md — subsystem status vs OOTP reference
-5. spec-docs/SUBSYSTEM_MAP.md — wiring status per subsystem
-6. spec-docs/AUDIT_LOG.md — index only for findings 056+; full text 001-055
-7. spec-docs/FINDINGS/FINDINGS_056_onwards.md — full finding text 056-071
+4. spec-docs/SUBSYSTEM_MAP.md — wiring status per subsystem (now complete)
+5. spec-docs/AUDIT_LOG.md — findings index (001-055 full text; 056+ index only)
+6. spec-docs/FINDINGS/FINDINGS_056_onwards.md — full finding text 056-095
 
 Phase 2 only: also read spec-docs/OOTP_ARCHITECTURE_RESEARCH.md per section
-as directed in "Phase 2 Instructions" above. Do NOT read it in full upfront.
+as directed in "Phase 2 Instructions" below. Do NOT read it in full upfront.
+
+---
+
+## Phase 2 Instructions for Future Thread
+When Phase 2 opens, for EVERY subsystem audit:
+1. Read the subsystem's "OOTP Pattern" from PATTERN_MAP.md
+2. Read the corresponding section in OOTP_ARCHITECTURE_RESEARCH.md for detail
+3. Open the KBL code file
+4. Ask: does the code follow the OOTP structural pattern?
+5. Log finding with pattern conformance verdict (Y / N / PARTIAL)
+
+The OOTP research is not a Phase 1 tool. It is the Phase 2 audit lens.
 
 ---
 

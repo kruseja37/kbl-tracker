@@ -998,6 +998,24 @@ Still unresolved. FINDING-047 fallback path only has base state, not full scoreb
 | FINDING-063 | Milestone file duplication (not re-exports) | CONFIRMED — milestoneDetector + milestoneAggregator duplicated in two locations |
 | FINDING-064 | Offseason/Playoff — storage + active hooks exist | CONFIRMED PARTIAL — hooks active; page wiring unknown |
 | FINDING-065 | Mojo/Fitness — usePlayerState wired in GameTracker | CONFIRMED WIRED — live during games; engine backend wiring TBD |
+| FINDING-080 | Stats Aggregation — aggregateGameToSeason + liveStatsCalculator | CONFIRMED PARTIAL — aggregation wired at game end; liveStatsCalculator orphaned |
+| FINDING-081 | Franchise — franchiseManager + franchiseInitializer | CONFIRMED WIRED — 6 active consumers across pages/hooks |
+| FINDING-082 | Schedule — scheduleStorage + scheduleGenerator + useScheduleData | CONFIRMED WIRED — GameTracker, FranchiseHome, SeasonSummary, useFranchiseData |
+| FINDING-083 | Salary — salaryCalculator | CONFIRMED WIRED — offseason hook, leagueBuilder, seasonTransition |
+| FINDING-084 | Integration wrappers — playerState, fanMorale, narrative | CONFIRMED WIRED — all three exported via engines/index.ts |
+| FINDING-085 | liveStatsCalculator | CONFIRMED ORPHANED — inactive path only |
+| FINDING-086 | Relationships — relationshipIntegration, useRelationshipData | CONFIRMED WIRED (indirect) — reached via useFranchiseData only |
+| FINDING-087 | Narrative — narrativeIntegration, headlineGenerator | CONFIRMED PARTIAL — game recap wired; headlineGenerator orphaned |
+| FINDING-088 | Mojo/Fitness — playerStateIntegration full chain | CONFIRMED WIRED — playerStateIntegration → mojoEngine/fitnessEngine/clutch → usePlayerState → GameTracker |
+| FINDING-089 | Fan Morale — useFanMorale STUBBED | CONFIRMED STUBBED — hook called live but returns placeholder data; fanMoraleEngine never properly called |
+| FINDING-090 | Offseason — useOffseasonData, useOffseasonState | CONFIRMED WIRED — 12 active consumers across all offseason flows |
+| FINDING-091 | Playoffs — usePlayoffData | CONFIRMED WIRED — FranchiseHome + SeasonSummary |
+| FINDING-092 | Fame/Milestone — multi-path wiring confirmed | CONFIRMED WIRED — per-play hook, direct engine calls, end-of-season; milestones fire at game completion |
+| FINDING-093 | UI Pages — complete page→hook map | CONFIRMED — GameTracker(6), FranchiseHome(4), SeasonSummary(4); PostGameSummary/WorldSeries have zero app hooks |
+| FINDING-094 | headlineGenerator.ts | CONFIRMED ORPHANED — no active importers |
+| FINDING-095 | useAgingData (app/hooks/) | CONFIRMED ORPHANED — SpringTrainingFlow bypasses it with direct engine import |
+| FINDING-096 | Clutch Attribution — calculatePlayAttribution never called in active app | CONFIRMED PARTIAL — engine + hook complete; trigger missing; players accumulate zero clutch stats |
+| FINDING-097 | Leverage Index — full LI spec implemented; active hook uses boLI only | CONFIRMED PARTIAL — useGameState uses partial boLI at 6 sites; EnhancedInteractiveField uses full LI; relationship modifiers dead |
 | FINDING-066 | mWAR — useMWARCalculations wired in GameTracker | CONFIRMED WIRED — revises FINDING-061; bWAR/fWAR/pWAR/rWAR still orphaned |
 | FINDING-067 | Fame tracking — useFameTracking wired in GameTracker | CONFIRMED WIRED — revises FINDING-062; fameEngine/fameIntegration still orphaned |
 | FINDING-068 | Fan Morale — useFanMorale wired in GameTracker | CONFIRMED WIRED — backend engine wiring TBD |
