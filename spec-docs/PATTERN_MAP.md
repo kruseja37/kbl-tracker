@@ -8,59 +8,81 @@ structure. SMB4 defines the content. Neither is optional.
 **Purpose:** Compare each KBL subsystem against its OOTP architectural pattern.
 **Audit lens:** Does KBL code follow the correct structural pattern?
 **Reference:** spec-docs/OOTP_ARCHITECTURE_RESEARCH.md (Sections 1-10)
-**Updated:** 2026-02-18 (Phase 1 Tier 1 — Batch D not yet run)
+**Updated:** 2026-02-18 — Reconciled with Phase 1 findings (FINDING-001 to 097)
 
 ## Column Definitions
 - **OOTP Pattern:** The structural role this subsystem plays in OOTP
 - **KBL Code:** Does relevant code exist? (Y / PARTIAL / MISSING)
-- **Follows Pattern:** Does it follow the OOTP structural pattern? (Y / N / UNKNOWN)
+- **Follows Pattern:** Does it follow the OOTP structural pattern? (Y / N / UNKNOWN — Phase 2 fills this)
 - **SMB4 Asset:** What KBL-specific content fills this pattern slot
 - **Spine Dep:** Does this require the stat pipeline to work? (Y / N / PARTIAL)
-- **Status:** WIRED / PARTIAL / ORPHANED / MISSING / UNKNOWN
+- **Status:** Phase 1 verdict from SUBSYSTEM_MAP (source of truth)
 
 ---
 
 | # | Subsystem | OOTP Pattern | KBL Code | Follows Pattern | SMB4 Asset | Spine Dep | Status |
 |---|-----------|-------------|----------|-----------------|------------|-----------|--------|
-| 1 | GameTracker / Game State | Atomic game event recorder; feeds stat pipeline on completion | Y | UNKNOWN | At-bat outcomes, mojo events, clutch moments | Y | WIRED |
-| 2 | Stats Aggregation | Synchronous post-game accumulator; updates season totals immediately | PARTIAL | UNKNOWN | Same counting stats + KBL-specific (mojo impact, clutch index) | — | PARTIAL |
-| 3 | Franchise / Season Engine | Root aggregate; all queries scoped franchiseId → yearId → data | Y | UNKNOWN | Single franchise per user, season number not calendar year | N | PARTIAL |
-| 4 | WAR — positional | Derived field on PlayerSeasonStats; recalcs from live stats each game | Y | N | bWAR/fWAR/pWAR/rWAR exist but not wired to pipeline | Y | ORPHANED |
-| 5 | WAR — mWAR | Manager decision tracker; persists decisions, resolves outcomes | Y | UNKNOWN | Manager WAR based on in-game decisions, leverage-weighted | Y | WIRED |
-| 6 | Fame / Milestone | Career total threshold checker; fires narrative triggers on cross | PARTIAL | UNKNOWN | Fame tiers, KBL-specific milestone thresholds | Y | PARTIAL |
-| 7 | Schedule System | 162-game grid; completion event fires stat pipeline | Y | UNKNOWN | Same structure; game completion triggers aggregation | Y | PARTIAL |
-| 8 | Offseason | Atomic phase sequence; locks stats then opens next season | PARTIAL | UNKNOWN | Same phases; KBL-specific award categories | Y | PARTIAL |
-| 9 | Playoffs | Separate stat tables; bracket seeded from standings | PARTIAL | UNKNOWN | Playoff format TBD; postseason stats tracked separately | Y | PARTIAL |
-| 10 | Relationships | Personality inputs to morale, development rate, narrative triggers | Y | N | SMB4 chemistry types, player bonds, rival dynamics | PARTIAL | ORPHANED |
-| 11 | Narrative / Headlines | Side-effect consumer of stat pipeline; never writes back | PARTIAL | UNKNOWN | KBL headline engine, game recap generator | Y | PARTIAL |
-| 12 | Mojo / Fitness | Per-player fatigue/condition; persists between games, feeds dev calc | Y | UNKNOWN | Mojo as performance multiplier; fitness as injury risk | PARTIAL | WIRED |
-| 13 | Fan Morale | Team performance input; affects attendance, storylines | Y | UNKNOWN | Fan morale per team, game outcome driven | N | WIRED |
-| 14 | Farm System | Affiliate roster; development level determines growth rate | UNKNOWN | UNKNOWN | Minor league system, prospect tracking | PARTIAL | UNKNOWN |
-| 15 | Trade System | Transaction log entry; immediate roster state change | UNKNOWN | UNKNOWN | Player trades, waiver moves | N | UNKNOWN |
-| 16 | Salary System | Contract entity; service time drives eligibility categories | UNKNOWN | UNKNOWN | KBL salary structure, contract years | N | UNKNOWN |
-| 17 | League Builder | World config; generates league/team/player entities at creation | Y | UNKNOWN | Fictional teams, custom rosters, KBL league rules | N | WIRED |
-| 18 | Museum / HOF | Career threshold evaluator; runs post-retirement, eligibility gated | UNKNOWN | UNKNOWN | KBL Hall of Fame criteria, fame-tier based | Y | UNKNOWN |
-| 19 | Aging / Ratings | Season-close rating mutation; age-curve driven, 10-factor model | Y | UNKNOWN | SMB4 aging curve, trait-influenced development | Y | ORPHANED |
-| 20 | Career Stats | SUM of PlayerSeasonStats rows by playerId; no separate table | UNKNOWN | UNKNOWN | All career counting stats, rate stats derived | Y | UNKNOWN |
-| 21 | Trait System | First-class Player fields; inputs to dev rate, narrative, contracts | MISSING | N | SMB4 traits (Chemistry types, tier bonuses, performance mods) | PARTIAL | MISSING |
-| 22 | Player Dev Engine | 10-factor growth model at season close; moves ratings toward potential | Y | UNKNOWN | SMB4-specific growth factors, trait-influenced | Y | ORPHANED |
-| 23 | Record Book | Persistent single-season + career records; checked after every game | UNKNOWN | UNKNOWN | KBL franchise records, league records | Y | UNKNOWN |
-| 24 | UI Pages | Consumers only; read from stat stores, never write | PARTIAL | UNKNOWN | 16 pages — GameTracker wired, others unknown | N | PARTIAL |
+| 1 | GameTracker / Game State | Atomic game event recorder; feeds stat pipeline on completion | Y | UNKNOWN | At-bat outcomes, mojo events, clutch moments | Y | ✅ WIRED |
+| 2 | Stats Aggregation | Synchronous post-game accumulator; updates season totals immediately | PARTIAL | UNKNOWN | Same counting stats + KBL-specific (mojo impact, clutch index) | — | ⚠️ PARTIAL |
+| 3 | Franchise / Season Engine | Root aggregate; all queries scoped franchiseId → yearId → data | Y | UNKNOWN | Single franchise per user, season number not calendar year | N | ✅ WIRED |
+| 4 | WAR — positional | Derived field on PlayerSeasonStats; recalcs from live stats each game | Y | N | bWAR/fWAR/pWAR/rWAR exist but not wired to pipeline | Y | ❌ ORPHANED |
+| 4b | WAR — mWAR | Manager decision tracker; persists decisions, resolves outcomes | Y | UNKNOWN | Manager WAR based on in-game decisions, leverage-weighted | Y | ✅ WIRED |
+| 5 | Fame / Milestone | Career total threshold checker; fires narrative triggers on cross | Y | UNKNOWN | Fame tiers, KBL-specific milestone thresholds | Y | ✅ WIRED |
+| 6 | Schedule System | 162-game grid; completion event fires stat pipeline | Y | UNKNOWN | Same structure; game completion triggers aggregation | Y | ✅ WIRED |
+| 7 | Offseason | Atomic phase sequence; locks stats then opens next season | Y | UNKNOWN | Same phases; KBL-specific award categories | Y | ✅ WIRED |
+| 8 | Playoffs | Separate stat tables; bracket seeded from standings | Y | UNKNOWN | Playoff format TBD; postseason stats tracked separately | Y | ✅ WIRED |
+| 9 | Relationships | Personality inputs to morale, development rate, narrative triggers | PARTIAL | UNKNOWN | SMB4 chemistry types, player bonds, rival dynamics | PARTIAL | ⚠️ PARTIAL |
+| 10 | Narrative / Headlines | Side-effect consumer of stat pipeline; never writes back | PARTIAL | UNKNOWN | KBL headline engine, game recap generator | Y | ⚠️ PARTIAL |
+| 11 | Mojo / Fitness | Per-player fatigue/condition; persists between games, feeds dev calc | Y | UNKNOWN | Mojo as performance multiplier; fitness as injury risk | PARTIAL | ✅ WIRED |
+| 11b | Leverage Index | Situational weight applied to all clutch/fame/WAR calculations | Y | UNKNOWN | Full LI spec implemented; boLI only in active hook; relationship modifiers dead | PARTIAL | ⚠️ PARTIAL |
+| 12 | Clutch Attribution | Per-play multi-participant credit distribution weighted by LI | Y | UNKNOWN | Batter + pitcher + catcher + fielder + runner + manager per play | Y | ⚠️ PARTIAL |
+| 13 | Fan Morale | Team performance input; affects attendance, storylines | Y | UNKNOWN | Fan morale per team, game outcome driven | N | 🔲 STUBBED |
+| 14 | Farm System | Affiliate roster; development level determines growth rate | Y | UNKNOWN | Minor league system, prospect tracking | PARTIAL | ❌ ORPHANED |
+| 15 | Trade System | Transaction log entry; immediate roster state change | Y | UNKNOWN | Player trades, waiver moves | N | ❌ ORPHANED |
+| 16 | Salary System | Contract entity; service time drives eligibility categories | Y | UNKNOWN | KBL salary structure, contract years | N | ✅ WIRED |
+| 17 | League Builder | World config; generates league/team/player entities at creation | Y | UNKNOWN | Fictional teams, custom rosters, KBL league rules | N | ✅ WIRED |
+| 18 | Museum / HOF | Career threshold evaluator; runs post-retirement, eligibility gated | PARTIAL | UNKNOWN | KBL Hall of Fame criteria, fame-tier based | Y | ⚠️ PARTIAL |
+| 19 | Aging / Ratings | Season-close rating mutation; age-curve driven, 10-factor model | Y | UNKNOWN | SMB4 aging curve, trait-influenced development | Y | ⚠️ PARTIAL |
+| 20 | Career Stats | SUM of PlayerSeasonStats rows by playerId; no separate table | PARTIAL | UNKNOWN | All career counting stats, rate stats derived | Y | ⚠️ PARTIAL |
+| 21 | Trait System | First-class Player fields; inputs to dev rate, narrative, contracts | MISSING | N | SMB4 traits (Chemistry types, tier bonuses, performance mods) | PARTIAL | ❌ MISSING |
+| 22 | Player Dev Engine | 10-factor growth model at season close; moves ratings toward potential | UNKNOWN | UNKNOWN | SMB4-specific growth factors, trait-influenced | Y | 🔲 UNKNOWN |
+| 23 | Record Book | Persistent single-season + career records; checked after every game | UNKNOWN | UNKNOWN | KBL franchise records, league records | Y | 🔲 UNKNOWN |
+| 24 | UI Pages | Consumers only; read from stat stores, never write | Y | UNKNOWN | 16 pages — GameTracker wired, PostGameSummary/WorldSeries data gap | N | ✅ WIRED |
 
 ---
 
 ## Status Key
-- **WIRED** — follows pattern, connected to active app
-- **PARTIAL** — exists, connection incomplete or pattern conformance unknown
-- **ORPHANED** — exists, confirmed not connected to active app
-- **MISSING** — does not exist in codebase at all
-- **UNKNOWN** — Tier 1 audit not yet run for this subsystem
+- ✅ WIRED — follows pattern, connected to active app
+- ⚠️ PARTIAL — exists, connection incomplete or pattern conformance unknown
+- ❌ ORPHANED — exists, confirmed not connected to active app
+- ❌ MISSING — does not exist in codebase at all
+- 🔲 STUBBED — called live but returns placeholder/dummy data
+- 🔲 UNKNOWN — Phase 1 audit not yet run for this subsystem
 
 ## Critical Spine Path
 These subsystems must work correctly before anything else matters:
-2 (Stats Aggregation) → 3 (Franchise Engine) → 7 (Schedule) → 20 (Career Stats)
+2 (Stats Aggregation) → 3 (Franchise Engine) → 6 (Schedule) → 20 (Career Stats)
 
 Everything with Spine Dep = Y depends on this chain being correct.
 
+## Phase 2 Priority Order (per PHASE1_BREADTH.md)
+1. Clutch + LI (#11b, #12) — surgical wiring gap, high downstream impact
+2. Fan Morale (#13) — stub must be replaced or cut
+3. Stats Aggregation (#2) — liveStatsCalculator orphan affects real-time box score
+4. Positional WAR (#4) — 3,268 lines complete and orphaned
+5. Trait System (#21) — foundational gap affecting mojo/clutch/fitness/adaptive learning
+
 ## Phase 2 Audit Question Per Row
-For every UNKNOWN in "Follows Pattern": open the key file, verify it matches the OOTP contract in ARCHITECTURAL_DECISIONS.md and OOTP_ARCHITECTURE_RESEARCH.md. Update status to Y, N, or PARTIAL with finding number as evidence.
+For every UNKNOWN in "Follows Pattern": open the key file, verify it matches the OOTP
+contract in ARCHITECTURAL_DECISIONS.md and OOTP_ARCHITECTURE_RESEARCH.md.
+Update "Follows Pattern" to Y, N, or PARTIAL with finding number as evidence.
+Update "Status" if Phase 2 reveals a different verdict than Phase 1.
+
+## Phase 2 Gate (SMB4 Asset Protection)
+Before any code change proposed from a Phase 2 finding:
+1. State the proposed change in plain English
+2. State which OOTP pattern it follows
+3. State which SMB4 asset is affected and how it is preserved
+4. Wait for JK explicit approval
+"Follows OOTP pattern" alone is never sufficient. Required: "follows OOTP pattern
+AND preserves SMB4 asset intact."
