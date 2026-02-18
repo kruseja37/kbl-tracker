@@ -714,3 +714,88 @@ Based on FINDING-036 through FINDING-040, the useEffect race condition theory is
 | 21 | When exactly does autosave fire and what does it capture? | 2026-02-17 | Pending — new priority target |
 | 22 | Can component unmount before autosave timer fires, losing runner state? | 2026-02-17 | Pending — critical for bug root cause |
 | 23 | What does the autosave snapshot include — does it capture runnerTrackerSnapshot? | 2026-02-17 | Pending — read autosave path in useGameState.ts |
+
+---
+
+### FINDING-041
+**Date:** 2026-02-17
+**Phase:** 1
+**File:** `src/src_figma/hooks/useGameState.ts` lines 1975-2040
+**Claim:** Autosave may miss runner state if component unmounts before timer fires
+**Evidence:**
+- Autosave timer: 250ms debounce (line ~1988), saves full persisted state
+- runnerTrackerSnapshot IS included in the persisted object (line 1972 confirmed)
+- Unmount cleanup at line 2027: clears the timer but does NOT flush the save
+- HOWEVER: beforeunload handler at line ~2015 calls immediateSaveCurrentGame(latestPersistedRef.current) — synchronous flush on page unload
+- visibilitychange handler also flushes when tab goes hidden
+- latestPersistedRef.current always holds the latest state — even if timer hasn't fired yet
+**Status:** CONFIRMED — unmount gap exists but beforeunload covers the refresh case
+**Verification method:** sed lines 1975-2040
+**Verified by:** Claude + JK
+**Impact:** On normal page refresh: beforeunload fires → immediateSaveCurrentGame flushes latest state including runners → rehydration picks it up. The unmount-before-timer gap is covered for refresh. Gap remains for: app crash, browser kill, or navigation that doesn't trigger beforeunload. This is acceptable risk, not the primary bug.
+
+---
+
+### FINDING-042
+**Date:** 2026-02-17
+**Phase:** 1
+**File:** `src/src_figma/hooks/useGameState.ts`
+**Claim:** Autosave dep array may miss state that affects runner tracking
+**Evidence:** Autosave useCallback dep array (lines ~2000-2010):
+`[isLoading, gameState, scoreboard, playerStats, pitcherStats, fameEvents, substitutionLog, atBatSequence, awayBatterIndex, homeBatterIndex]`
+runnerTrackerRef is a useRef — NOT in the dep array (refs don't trigger re-renders). The autosave fires when the listed state changes, but runnerTrackerRef updates happen imperatively and don't trigger the autosave directly.
+**Status:** CONFIRMED — runner tracker updates don't directly trigger autosave
+**Verification method:** Dep array visible in sed output lines 1975-2040
+**Verified by:** Claude + JK
+**Impact:** POTENTIAL BUG PATH. If a runner is moved (runnerTrackerRef updated) but no listed state changes (no score, no out, no at-bat sequence change), the 250ms autosave may not fire with the updated runner position. On refresh, the stale snapshot is loaded — runner appears to disappear. This is a credible root cause for the runner disappearance bug.
+
+---
+
+### FINDING-043
+**Date:** 2026-02-17
+**Phase:** 1
+**File:** `src/src_figma/hooks/useGameState.ts`
+**Claim:** loadExistingGame dep array unknown
+**Evidence:** Line 1540-1580 shows stat restoration (playerStats, pitcherStats maps being rebuilt from snapshot). Closing dep array not yet visible — function body continues past line 1580.
+**Status:** UNVERIFIED — dep array still not found
+**Verification method:** sed lines 1540-1580
+**Verified by:** Claude
+**Next action:** Read lines 1750-1790 to find closing bracket
+
+---
+
+### FINDING-044
+**Date:** 2026-02-17
+**Phase:** 1
+**File:** `src/src_figma/hooks/useGameState.ts`
+**Claim:** runnerTrackerRef is properly restored on rehydration
+**Evidence:** Lines 1493-1502: if savedSnapshot.runnerTrackerSnapshot exists, runnerTrackerRef.current is fully rebuilt with runners, currentPitcherId, currentPitcherName, pitcherStats, inning, atBatNumber. Line 1533: fallback rebuild path also exists. Line 1736: second rebuild path exists.
+**Status:** CONFIRMED — runner tracker restoration is thorough
+**Verification method:** grep runnerTrackerSnapshot in useGameState.ts
+**Verified by:** Claude + JK
+**Impact:** Rehydration of runner tracker is correct. The bug is in CAPTURE (FINDING-042), not RESTORE. Runner state is restored fine when the snapshot has it — but the snapshot may not have the latest runner position if no listed dep changed since the last autosave.
+
+---
+
+## REVISED ROOT CAUSE HYPOTHESIS (2026-02-17 — Batch 7)
+
+**Runner disappearance bug — most likely cause:**
+runnerTrackerRef is a useRef. Updating it (moving a runner between bases without recording an at-bat) does NOT trigger any of the autosave deps. If the user moves a runner manually and then refreshes before the next at-bat event fires the autosave, the snapshot has stale runner positions. On reload, the correct gameId/snapshot is found but runner positions are from before the manual move.
+
+**Fix:** Add an explicit autosave trigger whenever runnerTrackerRef is mutated. Since refs don't trigger re-renders, this requires either: (a) a separate useState counter that increments on every runner move, added to the autosave dep array, or (b) calling immediateSaveCurrentGame() directly after every runner mutation.
+
+**Scoreboard showing prior game data:**
+Still under investigation — likely related to the clearCurrentGame() call sequence on new game initialization.
+
+---
+
+## OPEN QUESTIONS (Updated 2026-02-17 batch 7)
+
+| # | Question | Raised | Resolved |
+|---|----------|--------|----------|
+| 19 | loadExistingGame dep array? | 2026-02-17 | FINDING-043: UNVERIFIED — need lines 1750-1790 |
+| 22 | Can unmount lose runner state? | 2026-02-17 | FINDING-041: beforeunload covers refresh case — acceptable |
+| 23 | Does autosave capture runnerTrackerSnapshot? | 2026-02-17 | FINDING-041: YES — captured at line 1972 |
+| 24 | Does runner move without at-bat trigger autosave? | 2026-02-17 | FINDING-042: NO — runnerTrackerRef not in dep array. LIKELY ROOT CAUSE. |
+| 25 | What triggers runner moves — is there an explicit save call after? | 2026-02-17 | Pending — need to find runner move handlers |
+| 26 | What is the clearCurrentGame sequence on new game start? | 2026-02-17 | Pending — scoreboard bug investigation |
