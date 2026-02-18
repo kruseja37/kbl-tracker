@@ -160,12 +160,16 @@
 **Added:** 2026-02-18 | **Source:** BillyYank SMB4 Guide 3rd Ed + Phase 2 audit
 
 **What SMB4 traits actually are:**
-Each player has up to 2 traits. Each trait gives a ±rating bonus in a specific in-game situation. The size of the bonus is determined by how many players of the trait's chemistry type are on the roster (trait potency):
-- Level 1 (0-2 players of that chemistry): minimal effect
-- Level 2 (3-6 players): mid-level effect
-- Level 3 (7+ players): huge effect
+Each player has up to 2 traits. Traits are persistent player attributes — stored on the
+master player record. They are NOT dynamic in-game engine effects on stat calculation
+or play resolution. Their role in KBL:
+- Chosen via dropdown at player creation (from the trait catalog)
+- Assigned sparingly to generated/rookie players at generation time
+- Added or removed during the awards ceremony as rewards/penalties for post-season designations
+- May inform salary calculation and player grades
+- Display on player cards for roster identity
 
-Traits are purely mechanical. Examples from the guide:
+SMB4 trait names and descriptions from BillyYank Guide (examples):
 | Trait | Trigger | Level 1 | Level 2 | Level 3 |
 |-------|---------|---------|---------|---------|
 | K Collector (Competitive) | Pitcher, 2-strike count | +8 VEL/JNK | +15 VEL/JNK | +30 VEL/JNK |
@@ -176,20 +180,25 @@ Traits are purely mechanical. Examples from the guide:
 | Sprinter (Competitive) | Batter, out of box | minor | major | huge |
 | K Neglecter (Competitive) | Pitcher, 2-strike count | -30 VEL/JNK | -15 VEL/JNK | -8 VEL/JNK |
 
-(Full trait list in BillyYank SMB4 Guide 3rd Ed — Traits section, all 5 chemistry types)
+(Note: The trigger/effect values above describe what these traits mean in SMB4. In KBL,
+traits are identity/awards attributes — they do NOT fire as engine effects during play resolution.)
+
+(Full trait list in BillyYank SMB4 Guide 3rd Ed — Traits section, all 5 chemistry types;
+also in src/data/traitPools.ts — 60+ traits, S/A/B/C tiers, positive + negative)
 
 **KBL implementation intent:**
-- Each Player gets `traits: Trait[]` (max 2) — first-class field on Player type
-- Each Trait has: name, chemistryType, trigger condition, effect (stat + delta at each potency level)
-- At game time: check trigger condition → look up team chemistry potency for that trait's type → apply delta to relevant rating for that play/at-bat
-- Traits fire at the engine level (GameTracker play resolution), not UI level
-- Negative traits must be preserved — they are part of roster construction strategy
-- Chemistry potency calculation: count players of each chemistry type on active roster
+- Each Player has `trait1?: string`, `trait2?: string` (max 2, stored as IDs) — already on Player type ✅
+- Player creation: dropdown backed by `traitPools.ts` catalog — NOT YET WIRED ❌
+- Generated/rookie players: `getWeightedTraitPool()` assigns traits at generation — NOT BUILT ❌
+- Awards ceremony: specific awards grant/revoke traits, written back to player record — UI EXISTS, persistence BROKEN ❌
+- Salary / grade: traits can be a factor in valuation formulas — NOT YET BUILT
+- No engine trigger layer needed — traits are static attributes, not dynamic modifiers
 
-**Key design constraint:** Traits and morale are independent systems. Do not couple them.
+**Key design constraint:** Traits and morale are independent systems. Traits have no
+effect on in-game stat calculation or play resolution.
 
 **Priority:** HIGH for franchise authenticity — this is a core SMB4 differentiator.
-**Dependency:** Chemistry type must be a field on Player before traits can be built.
+**Dependency:** None — traitPools.ts catalog already exists, player storage already has the fields.
 
 ---
 
