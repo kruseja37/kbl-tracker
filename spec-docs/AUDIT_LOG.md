@@ -263,4 +263,117 @@ Next action: Phase 1 — read active GameTracker.tsx and useGameState.ts in full
 | 7 | How does end-game flow execute in active GameTracker? | 2026-02-17 | Pending Phase 1 continued |
 | 8 | How does handlePlayGame pass roster data in? | 2026-02-17 | Pending Phase 1 continued |
 | 9 | Are atBatLogic.ts and fieldingLogic.ts complete or stubs? | 2026-02-17 | Pending next read |
-| 10 | Size and content of gameStorage.ts and processCompletedGame.ts? | 2026-02-17 | Pending next read |
+| 10 | Size and content of gameStorage.ts and processCompletedGame.ts? | 2026-02-17 | FINDING-016/017: sizes confirmed, contents pending |
+
+---
+
+### FINDING-016
+**Date:** 2026-02-17
+**Phase:** 1
+**File:** `src/src_figma/hooks/useGameState.ts`
+**Claim:** SESSION_LOG 2026-02-18 — shared debounce replaced with hook-local timer
+**Evidence:** autoSaveTimeoutRef (useRef) IS present at line 1062. clearTimeout called at lines 1169, 1327, 1985, 2009, 2030, 4303. setTimeout fires saveCurrentGame at line 1988. Timer cancelled at end-game (line 4303) and on load (line 1327).
+**Status:** CONFIRMED — hook-local timer EXISTS in active useGameState.ts
+**Verification method:** grep for autoSave/debounce in useGameState.ts
+**Verified by:** Claude + JK
+**Impact:** REVISES FINDING-013. The hook-local timer fix WAS applied to useGameState.ts (active hook). useGamePersistence.ts (inactive path) still uses debounce but that doesn't matter since it's not used. This is good news — autosave is cleaner than assumed.
+
+---
+
+### FINDING-017
+**Date:** 2026-02-17
+**Phase:** 1
+**File:** `src/src_figma/hooks/useGameState.ts`
+**Claim:** SESSION_LOG 2026-02-18 — stale currentGame cleared on new game init and game load
+**Evidence:** clearCurrentGame() called at line 1174 (init path) and line 1345 (load path). loadCurrentGame() called at line 1342. Header checked at line 1338: `!header.isComplete` guard exists.
+**Status:** PARTIALLY CONFIRMED
+**Verification method:** grep for endGame/completeGame/isComplete in useGameState.ts
+**Verified by:** Claude + JK
+**Impact:** Some persistence hardening IS present in the active hook. The isComplete guard on load (line 1338) is a partial rehydration gate — not the full isRehydrated flag, but it does check header validity before loading. FINDING-012 partially revised — there IS a guard, just not named isRehydrated.
+
+---
+
+### FINDING-018
+**Date:** 2026-02-17
+**Phase:** 1
+**File:** `src/src_figma/hooks/useGameState.ts`
+**Claim:** endGame flow is complete and wired
+**Evidence:** endGame() defined at line 4317. completeGameInternal() at line 4043. clearCurrentGame() called at line 4307 on end-game. completeScheduleGame called (T0-05). Fielding events queried at line 4338. CRIT-05 fix present. Double-aggregation guard at line 4238.
+**Status:** CONFIRMED — endGame flow is substantial and wired
+**Verification method:** grep for endGame/completeGame in useGameState.ts
+**Verified by:** Claude + JK
+**Impact:** End-game path is more complete than Phase 0 suggested. The bugs are more likely in the load/rehydration path than the save path.
+
+---
+
+### FINDING-019
+**Date:** 2026-02-17
+**Phase:** 1
+**File:** `src/src_figma/app/pages/GameTracker.tsx`
+**Claim:** GameTracker.tsx has minimal persistence logic — defers to useGameState
+**Evidence:** 10+ useEffect calls in active GameTracker.tsx. loadExistingGame called at line 649 inside a useEffect at line 641. Comment at line 638: "Try loading existing game first, only create new if none found." Multiple useEffects watching state at lines 215, 224, 231, 263, 285, 351, 422, 641, 754, 2273.
+**Status:** CONFIRMED — GameTracker has substantial useEffect complexity
+**Verification method:** grep for useEffect/save/load/persist in GameTracker.tsx
+**Verified by:** Claude + JK
+**Impact:** 10+ useEffects in the orchestrator is a state tearing risk. Multiple effects watching overlapping state can fire in unpredictable order. This is a likely secondary cause of the runner/scoreboard bugs alongside the rehydration path.
+
+---
+
+### FINDING-020
+**Date:** 2026-02-17
+**Phase:** 1
+**File:** `src/src_figma/utils/gameStorage.ts`
+**Claim:** gameStorage.ts is a full implementation
+**Evidence:** wc -l returns 1 line. File exists but is effectively empty or a re-export only.
+**Status:** CONFIRMED (critical — near-empty file)
+**Verification method:** wc -l
+**Verified by:** Claude + JK
+**Impact:** CRITICAL. Active gameStorage.ts in src_figma/utils/ is 1 line. This means the active hook (useGameState.ts) is importing saveCurrentGame, loadCurrentGame, clearCurrentGame from this file — but the file has almost no content. Need to read it immediately to understand what it exports (likely re-exports from src/utils/gameStorage.ts).
+
+---
+
+### FINDING-021
+**Date:** 2026-02-17
+**Phase:** 1
+**File:** `src/utils/processCompletedGame.ts`
+**Claim:** processCompletedGame is the game result orchestrator
+**Evidence:** 53 lines. Small file.
+**Status:** UNVERIFIED — size noted, contents not yet read
+**Verification method:** wc -l
+**Verified by:** Claude
+**Next action:** Read contents in next batch
+
+---
+
+### FINDING-022
+**Date:** 2026-02-17
+**Phase:** 1
+**File:** `src/components/GameTracker/atBatLogic.ts`, `src/components/GameTracker/fieldingLogic.ts`, `src/engines/fameEngine.ts`
+**Claim:** These are complete extracted logic files
+**Evidence:**
+- atBatLogic.ts: 302 lines. Exports: BaseKey, RunnerOutcomes, isRunnerForced, getMinimumAdvancement, outcomeToDestination, isExtraAdvancement, getDefaultOutcome, calculateRBIs, getEventOutcomes. Real implementations, not stubs.
+- fieldingLogic.ts: 120 lines. Exports: buildAssistChainFromDpType, sanitizeAssistChain, getPutoutPositionFromDpType, getDefaultDpType, mapPlayTypeToSpecialPlay. Real implementations.
+- fameEngine.ts: 947 lines. Substantial — not a stub.
+**Status:** CONFIRMED (all three are real, complete files — all orphaned from active app)
+**Verification method:** wc -l + grep exports
+**Verified by:** Claude + JK
+**Impact:** 947-line fameEngine.ts, 302-line atBatLogic.ts, 120-line fieldingLogic.ts — all complete, none imported by active GameTracker. Significant reusable logic sitting unused.
+
+---
+
+## OPEN QUESTIONS (Updated 2026-02-17 batch 2)
+
+| # | Question | Raised | Resolved |
+|---|----------|--------|----------|
+| 1 | Does active GameTracker.tsx import from gameEngine/atBatLogic/fieldingLogic? | 2026-02-17 | FINDING-008: imports ZERO |
+| 2 | Full import list of active GameTracker.tsx? | 2026-02-17 | FINDING-008/009: confirmed |
+| 3 | Does useGameState.ts have a rehydration guard? | 2026-02-17 | FINDING-017: partial guard exists (isComplete check at line 1338) |
+| 4 | What is in fameEngine.ts? | 2026-02-17 | FINDING-022: 947 lines, complete, orphaned |
+| 5 | How does GameTracker.tsx trigger saves? | 2026-02-17 | FINDING-019: 10+ useEffects, loadExistingGame at line 649 |
+| 6 | What guard conditions on load/rehydrate in useGameState.ts? | 2026-02-17 | FINDING-017: isComplete header check at line 1338 — partial |
+| 7 | How does end-game flow execute? | 2026-02-17 | FINDING-018: endGame() line 4317, substantial and wired |
+| 8 | How does handlePlayGame pass roster data in? | 2026-02-17 | Pending next read |
+| 9 | Are atBatLogic.ts and fieldingLogic.ts complete or stubs? | 2026-02-17 | FINDING-022: both complete, both orphaned |
+| 10 | What does src_figma/utils/gameStorage.ts actually contain? | 2026-02-17 | FINDING-020: 1 line — likely re-export, MUST READ |
+| 11 | What does processCompletedGame.ts actually do in 53 lines? | 2026-02-17 | Pending next read |
+| 12 | Why are there 10+ useEffects in GameTracker.tsx and do any conflict? | 2026-02-17 | Pending deeper read |
