@@ -997,4 +997,11 @@ Still unresolved. FINDING-047 fallback path only has base state, not full scoreb
 | FINDING-062 | Fame/Milestone — fameEngine, fameIntegration, milestoneDetector | CONFIRMED PARTIAL — one fn in FranchiseHome; full pipeline orphaned |
 | FINDING-063 | Milestone file duplication (not re-exports) | CONFIRMED — milestoneDetector + milestoneAggregator duplicated in two locations |
 | FINDING-064 | Offseason/Playoff — storage + active hooks exist | CONFIRMED PARTIAL — hooks active; page wiring unknown |
+| FINDING-065 | Mojo/Fitness — usePlayerState wired in GameTracker | CONFIRMED WIRED — live during games; engine backend wiring TBD |
+| FINDING-066 | mWAR — useMWARCalculations wired in GameTracker | CONFIRMED WIRED — revises FINDING-061; bWAR/fWAR/pWAR/rWAR still orphaned |
+| FINDING-067 | Fame tracking — useFameTracking wired in GameTracker | CONFIRMED WIRED — revises FINDING-062; fameEngine/fameIntegration still orphaned |
+| FINDING-068 | Fan Morale — useFanMorale wired in GameTracker | CONFIRMED WIRED — backend engine wiring TBD |
+| FINDING-069 | Narrative — generateGameRecap partial wiring | CONFIRMED PARTIAL — thin wrapper wired; full narrative/headline engine orphaned |
+| FINDING-070 | Relationship system — all files unwired | CONFIRMED ORPHANED — chemistry/relationships have zero effect on gameplay |
+| FINDING-071 | Four-layer architecture pattern confirmed | CONFIRMED — hook layers 3-4 are active surface; layers 1-2 are orphan zone |
 

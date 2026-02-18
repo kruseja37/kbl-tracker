@@ -127,3 +127,59 @@ AUDIT_LOG.md contains findings 001-055.
 - Offseason: ⚠️ PARTIAL (active hooks exist, page wiring unknown)
 - Playoffs: ⚠️ PARTIAL (active hook exists, page wiring unknown)
 - milestoneDetector/Aggregator: duplicated files — not re-exports
+
+---
+
+### FINDING-065
+**Date:** 2026-02-17 | **Phase:** 1 | **Status:** CONFIRMED WIRED
+**File:** `src/src_figma/app/hooks/usePlayerState.ts`, `GameTracker.tsx`
+**Evidence:** usePlayerState imported at GameTracker line 38. playerStateHook instantiated line 251. Players registered via registerPlayer() at lines 765-812. Actively used during game.
+**Impact:** Mojo/fitness tracking IS live during games. mojoEngine.ts (916 lines) and fitnessEngine.ts (962 lines) are backends — whether playerStateIntegration calls them or reimplements inline still needs verification.
+
+---
+
+### FINDING-066
+**Date:** 2026-02-17 | **Phase:** 1 | **Status:** CONFIRMED WIRED
+**File:** `src/src_figma/app/hooks/useMWARCalculations.ts`, `GameTracker.tsx`
+**Evidence:** useMWARCalculations imported at GameTracker line 56. mwarHook fully wired: initializeGame(), initializeSeason(), recordDecision(), resolveDecisionOutcome(), checkForManagerMoment(), saveGameDecisions(). Decision tracking fires on pitching changes, IBB, pinch hitters. mWAR persisted at end-game.
+**Impact:** REVISES FINDING-061. mWAR (manager WAR) is actively tracked. Orphaned calculators are bWAR/fWAR/pWAR/rWAR only. Two distinct WAR tracks: mWAR (live) vs positional WAR (orphaned).
+
+---
+
+### FINDING-067
+**Date:** 2026-02-17 | **Phase:** 1 | **Status:** CONFIRMED WIRED
+**File:** `src/src_figma/app/hooks/useFameTracking.ts`, `GameTracker.tsx`
+**Evidence:** useFameTracking imported at GameTracker line 44. fameTrackingHook instantiated line 257. Used in endGame flow and at-bat processing dep arrays.
+**Impact:** REVISES FINDING-062. Fame tracking IS active during games via hook layer. fameEngine.ts (raw calculations) and fameIntegration.ts still orphaned — hook may reimplement inline.
+
+---
+
+### FINDING-068
+**Date:** 2026-02-17 | **Phase:** 1 | **Status:** CONFIRMED WIRED
+**File:** `src/src_figma/app/hooks/useFanMorale.ts`, `GameTracker.tsx`
+**Evidence:** useFanMorale imported at GameTracker line 52. homeFanMorale and awayFanMorale instantiated lines 278-279. Referenced in endGame dep array.
+**Impact:** Fan morale updates during and after games. fanMoraleEngine.ts (1,357 lines) backend wiring to hook needs verification.
+
+---
+
+### FINDING-069
+**Date:** 2026-02-17 | **Phase:** 1 | **Status:** CONFIRMED PARTIAL
+**File:** `src/src_figma/app/engines/narrativeIntegration.ts`
+**Evidence:** generateGameRecap() imported by GameTracker.tsx (line 54) AND FranchiseHome.tsx (line 44). narrativeIntegration.ts is only 81 lines — thin wrapper. Full narrativeEngine.ts (1,276 lines) and headlineEngine.ts (287 lines) not imported directly.
+**Impact:** Game recaps generated. Full narrative/headline system (storylines, beat writer, relationship-driven content) not wired.
+
+---
+
+### FINDING-070
+**Date:** 2026-02-17 | **Phase:** 1 | **Status:** CONFIRMED ORPHANED
+**File:** `src/engines/relationshipEngine.ts`, `src/src_figma/app/engines/relationshipIntegration.ts`
+**Evidence:** relationshipIntegration NOT imported by any active hook or page. relationshipEngine.ts (273 lines), relationshipIntegration.ts (524 lines), useRelationshipData (199 lines) — all unwired.
+**Impact:** Player chemistry and relationships have zero effect on gameplay. Trait-relationship-chemistry system entirely disconnected.
+
+---
+
+### FINDING-071
+**Date:** 2026-02-17 | **Phase:** 1 | **Status:** CONFIRMED
+**File:** App-wide
+**Evidence:** Pattern confirmed across multiple subsystems. Four-layer architecture: (1) Raw engines src/engines/ — calculation logic, no React. (2) Integration adapters src_figma/app/engines/ — bridge to React. (3) App hooks src_figma/app/hooks/ — React hooks consuming integrations. (4) Page hooks src_figma/hooks/ — higher-level hooks used by pages directly.
+**Impact:** Hook layer (3-4) is the active surface. Layers 1-2 are where orphaned code lives. Audit should focus on which layer-3 hooks are wired to pages and whether they call layer-1 engines or reimplement inline.
