@@ -9,34 +9,52 @@
 - **Phase:** 1 — Breadth Survey (Tier 1)
 - **Step:** Tier 1 Batch D — Farm, Trade, Salary, League Builder, Museum/HOF,
   Aging, Career Stats, UI page imports
-- **Status:** NOT YET RUN — prompt is written, ready to execute next session
+- **Status:** NOT YET RUN — this is the immediate next action
 
 ---
 
 ## Last Completed Action
-Session 2026-02-18 established sustainable documentation system:
-- CURRENT_STATE.md — created (this file)
-- ARCHITECTURAL_DECISIONS.md — created (10 decisions logged)
-- PATTERN_MAP.md — created (24 subsystems mapped against OOTP patterns)
-- OOTP_ARCHITECTURE_RESEARCH.md — committed (1,216 lines, full Opus research)
-- SESSION_RULES.md — updated with session end protocol
-- FINDINGS_056_onwards.md — FINDING-065 to 071 added (gap from prior session)
-- AUDIT_LOG.md — index entries added for FINDING-056 to 071
+Session 2026-02-18. Accomplished:
+- Committed CURRENT_STATE.md, ARCHITECTURAL_DECISIONS.md, PATTERN_MAP.md
+- Committed OOTP_ARCHITECTURE_RESEARCH.md (1,216 lines — full Opus research)
+- Updated SESSION_RULES.md with session end protocol
+- Added FINDING-065 to 071 to FINDINGS_056_onwards.md
+- Established OOTP architecture as the Phase 2 audit reference pattern
 
-Key insight this session: OOTP architecture is the reference pattern. We copy
-structural patterns, not assets. Pattern Map is the Phase 2 audit lens.
-Question is not "does it exist?" but "does it follow the correct pattern?"
+Phase 1 breadth audit progress: Batches A, B, C complete. Batch D not run.
 
 ---
 
 ## Next Action
-Run Tier 1 Batch D. Prompt already written — ask Claude for it or find it
-in prior session context. Targets: Farm, Trade, Salary, League Builder,
-Museum/HOF, Aging/Ratings, Career Stats, UI page imports (FranchiseHome,
-SeasonSummary, PostGameSummary, WorldSeries).
+**Run Tier 1 Batch D immediately.** Prompt targets:
+Farm, Trade, Salary, League Builder, Museum/HOF, Aging/Ratings, Career Stats,
+UI page imports (FranchiseHome, SeasonSummary, PostGameSummary, WorldSeries).
+Ask Claude to produce the Batch D prompt — it is already written.
 
-After Batch D: close Phase 1 with PHASE1_BREADTH.md summary, then open
-Phase 2 using PATTERN_MAP.md as the audit lens.
+After Batch D completes:
+1. Log findings to FINDINGS_056_onwards.md
+2. Update PATTERN_MAP.md with any status changes
+3. Write PHASE_SUMMARIES/PHASE1_BREADTH.md (synthesis of all Phase 1 findings)
+4. Open Phase 2
+
+---
+
+## Phase 2 Instructions for Future Thread
+When Phase 2 opens, for EVERY subsystem audit:
+1. Read the subsystem's "OOTP Pattern" from PATTERN_MAP.md
+2. Read the corresponding section in OOTP_ARCHITECTURE_RESEARCH.md for detail
+   - Player lifecycle: Section 3
+   - Stat pipeline: Section 2
+   - Season lifecycle: Section 4
+   - Franchise continuity: Section 5
+   - Narrative engine: Section 6
+   - Traits/personality: Section 7
+   - Replayability: Section 8
+3. Open the KBL code file
+4. Ask: does the code follow the OOTP structural pattern?
+5. Log finding with pattern conformance verdict (Y / N / PARTIAL)
+
+The OOTP research is not a Phase 1 tool. It is the Phase 2 audit lens.
 
 ---
 
@@ -64,8 +82,8 @@ See ARCHITECTURAL_DECISIONS.md for full list. Summary:
 6. spec-docs/AUDIT_LOG.md — index only for findings 056+; full text 001-055
 7. spec-docs/FINDINGS/FINDINGS_056_onwards.md — full finding text 056-071
 
-Do NOT read AUDIT_LOG.md in full. Use the index to find specific findings
-only when directly relevant to the task at hand.
+Phase 2 only: also read spec-docs/OOTP_ARCHITECTURE_RESEARCH.md per section
+as directed in "Phase 2 Instructions" above. Do NOT read it in full upfront.
 
 ---
 
@@ -74,4 +92,5 @@ only when directly relevant to the task at hand.
 - Append to AUDIT_LOG.md for new findings (use FINDINGS_056_onwards.md)
 - Ask "what should I do next?" — the answer is always in this file
 - Skip reading this file and start working from context alone
+- Read OOTP_ARCHITECTURE_RESEARCH.md in full at session start (too large)
 - Conflate mWAR (active) with positional WAR (orphaned) — they are separate
