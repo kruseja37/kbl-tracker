@@ -6,93 +6,63 @@
 ---
 
 ## Current Phase and Step
-- **Phase:** 2 — OOTP Pattern Conformance Audit — IN PROGRESS
-- **Step:** First subsystem complete — Clutch Attribution (#12) + Leverage Index (#11b)
-- **Status:** FINDING-098 + 099 logged. PATTERN_MAP updated. Ready for next subsystem: Fan Morale (#13)
+- **Phase:** 3 — Fix Prioritization and Execution
+- **Status:** Phase 2 COMPLETE. All 5 priority subsystems audited. Ready to plan and execute fixes.
 
 ---
 
-## Last Completed Action
-Session 2026-02-18. Phase 1 complete. PHASE_SUMMARIES/PHASE1_BREADTH.md written.
-FINDING-001 through FINDING-097. All 23 SUBSYSTEM_MAP rows closed.
-AUDIT_LOG phase tracker updated: Phase 1 → COMPLETE.
+## Phase 2 Final Results
 
-Tier 2 key results:
-- Franchise, Schedule, Salary, Offseason, Playoffs, Mojo/Fitness, Fame/Milestone all ✅ WIRED
-- Fan Morale 🔲 STUBBED — hook called live but internally marked TODO, returns placeholder data
-- Relationships ⚠️ PARTIAL — only reached indirectly via useFranchiseData (FranchiseHome only)
-- Narrative ⚠️ PARTIAL — game recap wired; headlineGenerator.ts orphaned
-- Farm, Trade, positional WAR (bWAR/fWAR/pWAR/rWAR), Trait System ❌ ORPHANED/MISSING
-- PostGameSummary + WorldSeries pages have zero app-level hook imports — data gap risk
-- Clutch Attribution ⚠️ PARTIAL — engine complete, trigger never called, zero clutch stats accumulate (FINDING-096)
-- Leverage Index ⚠️ PARTIAL — full spec implemented but useGameState uses boLI only; full LI only in EnhancedInteractiveField; relationship modifiers (revenge/romantic/family) dead (FINDING-097)
+| Finding | Subsystem | Verdict | Fix Complexity |
+|---------|-----------|---------|----------------|
+| 098 | Clutch Attribution | PARTIAL — pipeline disconnected | Wire trigger from at-bat outcome |
+| 099 | Leverage Index | N — dual-value violation | Replace 6 getBaseOutLI calls |
+| 100 | Legacy Field Removal | FIXED | Done (3705a86) |
+| 101 | Fan Morale | BROKEN — method name mismatch | 2-line rename (contract written) |
+| 102 | Stats Aggregation | PARTIAL — Steps 6/7/8/10/11 absent | Standings wiring = HIGH |
+| 103 | Positional WAR | N — zero callers | 1 import + 1 call in processCompletedGame.ts |
+| 104 | Trait System | PARTIAL — storage wired, ceremony not persisting | 3 targeted fixes |
 
 ---
-
-## Last Completed Action
-Session 2026-02-18 (cont). Phase 2 opened. PATTERN_MAP reconciled with Phase 1 findings.
-First Phase 2 audit complete: Clutch Attribution + Leverage Index.
-- FINDING-098: Clutch Attribution — PARTIAL conformance. Architecture correct (stat pipeline pattern). Disconnection only. Fix is wiring.
-- FINDING-099: LI — N conformance. Two LI values in flight violates OOTP single-value principle. 6 getBaseOutLI calls in useGameState must be replaced with calculateLeverageIndex.
-OOTP research confirmed Clutch is KBL-original (no OOTP analog). LI used only as leverage_multiplier in pitcher WAR in OOTP.
 
 ## Next Action
-**Phase 2 — Next subsystem: Fan Morale (#13)**
-Per PATTERN_MAP: OOTP Pattern = "Team performance input; affects attendance, storylines."
-Status: 🔲 STUBBED. Follows Pattern: UNKNOWN.
-Steps: read relevant OOTP section (Section 7 — Traits, Chemistry, Personality), read fanMoraleEngine.ts + useFanMorale.ts, ask "does the architecture follow OOTP pattern?", log finding.
+**Phase 3 — Confirm fix execution order with JK, then execute.**
+
+Proposed priority order:
+1. FINDING-101: Fan Morale method rename (2 lines, contract ready in PROMPT_CONTRACTS.md)
+2. FINDING-103: Wire warOrchestrator into processCompletedGame.ts (closes WAR + FINDING-102 Step 8)
+3. FINDING-102 Step 6: Wire standings update into post-game pipeline (HIGH per audit)
+4. FINDING-099: Replace dual LI values with single calculateLeverageIndex
+5. FINDING-104: (a) trait dropdown in player creation, (b) ceremony persistence to player record
+6. FINDING-098: Wire clutch trigger from at-bat outcome
 
 ---
 
 ## Key Decisions Made (do not re-derive these)
-See ARCHITECTURAL_DECISIONS.md for full list. Summary:
-1. No separate career stats table — career = SUM(PlayerSeasonStats) by playerId
-2. Stat pipeline is synchronous and game-triggered
-3. Season transition is atomic — closeSeason() / openSeason() are transactional
-4. src_figma/utils/ files are re-export barrels only
-5. Four-layer architecture is intentional pattern, not a bug
-6. Pattern Map is the Phase 2 audit lens — pattern conformance not just existence
-7. Trait system is MISSING from active types — exists only in legacy code
-8. mWAR is active and wired; bWAR/fWAR/pWAR/rWAR are orphaned
-9. Relationship engine is indirectly wired via useFranchiseData — not directly by any page
-10. OOTP architecture = reference pattern; SMB4 specs = content that fills it
-11. Farm/Trade are fully orphaned — no active wiring anywhere
-12. ratingsAdjustmentEngine is orphaned — EOS ratings changes never fire
-13. HOF induction (hofEngine) is test-only — never runs in production
-14. Fan morale hook is explicitly STUBBED in source — not a real implementation
-15. PostGameSummary + WorldSeries have zero app-level hook imports
+See ARCHITECTURAL_DECISIONS.md for full list. Summary of Phase 2 additions:
+1–15. (All prior decisions still hold — see previous CURRENT_STATE or ARCHITECTURAL_DECISIONS.md)
+16. **Traits are NOT engine effects.** Persistent player attributes only. No potency calculator, no trigger layer needed. Stored as trait1/trait2 string IDs on master player record.
+17. **Trait use cases:** player creation dropdown, generated/rookie player assignment, awards ceremony rewards/penalties, salary/grade influence.
+18. **Player Morale ≠ Traits.** Fully independent systems. No coupling.
+19. **FIERY + GRITTY chemistry types** are KBL-only additions (SMB4 has 5). Decision on keep/remove pending.
+20. **traitPools.ts** (60+ traits, S/A/B/C tiers) is the canonical catalog. Never imported — must be wired.
+21. **warOrchestrator.ts** is fully correct — zero callers. One wiring call closes the gap.
+22. **Fan morale localStorage** (Bug C, FINDING-101) is a separate follow-on item after Bug A method rename fix.
 
 ---
 
 ## Files a New Thread Must Read (in order)
-1. This file (CURRENT_STATE.md) — orient yourself here first
-2. spec-docs/SESSION_RULES.md — operating rules, documentation routing
-3. spec-docs/ARCHITECTURAL_DECISIONS.md — all decided patterns
-4. spec-docs/SUBSYSTEM_MAP.md — wiring status per subsystem (now complete)
-5. spec-docs/AUDIT_LOG.md — findings index (001-055 full text; 056+ index only)
-6. spec-docs/FINDINGS/FINDINGS_056_onwards.md — full finding text 056-095
-
-Phase 2 only: also read spec-docs/OOTP_ARCHITECTURE_RESEARCH.md per section
-as directed in "Phase 2 Instructions" below. Do NOT read it in full upfront.
-
----
-
-## Phase 2 Instructions for Future Thread
-When Phase 2 opens, for EVERY subsystem audit:
-1. Read the subsystem's "OOTP Pattern" from PATTERN_MAP.md
-2. Read the corresponding section in OOTP_ARCHITECTURE_RESEARCH.md for detail
-3. Open the KBL code file
-4. Ask: does the code follow the OOTP structural pattern?
-5. Log finding with pattern conformance verdict (Y / N / PARTIAL)
-
-The OOTP research is not a Phase 1 tool. It is the Phase 2 audit lens.
+1. This file (CURRENT_STATE.md)
+2. spec-docs/SESSION_RULES.md
+3. spec-docs/AUDIT_LOG.md — findings index
+4. spec-docs/FINDINGS/FINDINGS_056_onwards.md — full text for FINDING-098 through 104
+5. spec-docs/PROMPT_CONTRACTS.md — FINDING-101 fix contract ready to execute
 
 ---
 
 ## What a New Thread Should NOT Do
-- Re-derive decisions already in ARCHITECTURAL_DECISIONS.md
-- Append to AUDIT_LOG.md for new findings (use FINDINGS_056_onwards.md)
-- Ask "what should I do next?" — the answer is always in this file
-- Skip reading this file and start working from context alone
-- Read OOTP_ARCHITECTURE_RESEARCH.md in full at session start (too large)
-- Conflate mWAR (active) with positional WAR (orphaned) — they are separate
+- Re-audit Phase 2 subsystems — they are complete
+- Rebuild WAR engines — the calculators are correct, only wiring is needed
+- Treat trait fields as engine modifiers — they are static attributes only
+- Read OOTP_ARCHITECTURE_RESEARCH.md in full (too large, use per-section as needed)
+- Conflate mWAR (active/wired) with positional WAR (orphaned) — they are separate
