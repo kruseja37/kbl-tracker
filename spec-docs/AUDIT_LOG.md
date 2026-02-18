@@ -980,3 +980,69 @@ Still unresolved. FINDING-047 fallback path only has base state, not full scoreb
 **Impact:** CRITICAL. If traits are not stored on players, then every engine that depends on trait data (clutchCalculator, mojoEngine, fitnessEngine, adaptiveLearningEngine, relationshipEngine, fameEngine, awardEmblems) is either: (a) running without trait inputs (producing wrong outputs), or (b) has its trait logic pathway dead. This is not a bug — it is a missing foundational layer that the entire advanced stats system depends on. Must verify whether player data structure has a traits field at all.
 **Next action:** grep for "trait" in player type definitions and storage files
 
+
+---
+
+### FINDING-056
+**Date:** 2026-02-17
+**Phase:** 1
+**File:** `src/utils/unifiedPlayerStorage.ts` lines 67-69, 176
+**Claim:** FINDING-055 — traits not stored on players anywhere
+**Evidence:** Lines 67-69: `// Chemistry and traits` comment, `traits: PlayerTraits;` field exists in the player type. Line 176: traits field also present in a second interface. PlayerTraits type is defined somewhere — file has the field.
+**Status:** CONFIRMED GAP PARTIALLY REVISED — traits field EXISTS in unifiedPlayerStorage player type, but NOT in active app player types (command 5 returned no output for src_figma/app/types/ and src/types/)
+**Verification method:** grep trait in player storage and type files
+**Verified by:** Claude + JK
+**Impact:** The traits field exists in `unifiedPlayerStorage.ts` (legacy/src path) but is absent from the active app's type definitions (src_figma/app/types/game.ts, src/types/game.ts, src/types/index.ts). This means: the data model has traits, the active app's type system does not. Players created through the active UI cannot have traits assigned because the type doesn't include the field. The trait system exists as a stub in legacy code but was never migrated to the active app.
+
+---
+
+### FINDING-057
+**Date:** 2026-02-17
+**Phase:** 1
+**File:** Stats Aggregation subsystem
+**Claim:** Stats aggregation is unknown
+**Evidence:** seasonAggregator.ts: 344 lines. Key exports: aggregateGameToSeason(), getCurrentSeasonId(), getGameMilestones(). seasonStorage.ts: 898 lines (substantial). liveStatsCalculator.ts: 365 lines. processCompletedGame.ts calls aggregateGameToSeason (FINDING-025 — confirmed wired for game completion).
+**Status:** CONFIRMED — core aggregation function exists and is called
+**Verification method:** wc -l + grep exports
+**Verified by:** Claude + JK
+**Impact:** Stats aggregation pipeline is real and partially wired. Need to verify what stat categories aggregateGameToSeason covers and whether it handles all the WAR inputs.
+
+---
+
+### FINDING-058
+**Date:** 2026-02-17
+**Phase:** 1
+**File:** Franchise subsystem
+**Claim:** Franchise storage is unknown
+**Evidence:** franchiseManager.ts: 722 lines. Full CRUD for franchise metadata: createFranchise, loadFranchise, deleteFranchise, renameFranchise, listFranchises, getActiveFranchise, setActiveFranchise, exportFranchise, importFranchise. franchiseStorage.ts (src/utils/): 157 lines. franchiseInitializer.ts: 173 lines. src_figma/utils/franchiseStorage.ts: 1 line (re-export, same pattern as gameStorage).
+**Status:** CONFIRMED — franchise CRUD layer is real and substantial
+**Verification method:** wc -l + grep exports
+**Verified by:** Claude + JK
+**Impact:** Franchise creation/management infrastructure exists. Whether it's wired to the active FranchiseHome/FranchiseSetup pages is unknown.
+
+---
+
+### FINDING-059
+**Date:** 2026-02-17
+**Phase:** 1
+**File:** Schedule subsystem
+**Claim:** Schedule system is unknown
+**Evidence:** scheduleStorage.ts: 547 lines. Full schedule API: getAllGames, getGamesByTeam, getNextScheduledGame, addGame, addSeries, updateGameStatus, completeGame, deleteGame, getTeamScheduleStats, clearSeasonSchedule. scheduleGenerator.ts: 89 lines (small — likely generates the initial schedule). useScheduleData.ts (active hook): 224 lines.
+**Status:** CONFIRMED — schedule system is substantial and has an active hook
+**Verification method:** wc -l + grep exports
+**Verified by:** Claude + JK
+**Impact:** Schedule system has real storage and an active hook. The completeGame() function in scheduleStorage is what marks games played — this is the T0-05 fix referenced in GameTracker.tsx line 59. Wiring to FranchiseHome page unknown.
+
+---
+
+### FINDING-060
+**Date:** 2026-02-17
+**Phase:** 1
+**File:** src_figma/utils/ re-export pattern
+**Claim:** Only gameStorage.ts uses the re-export pattern
+**Evidence:** src_figma/utils/franchiseStorage.ts: 1 line (re-export). src_figma/utils/seasonStorage.ts: 1 line (re-export). Same pattern as gameStorage confirmed across all three.
+**Status:** CONFIRMED — all src_figma/utils/ files are re-export barrels pointing to src/utils/
+**Verification method:** wc -l
+**Verified by:** Claude + JK
+**Impact:** Consistent architecture. All persistence logic lives in src/utils/. The src_figma/utils/ layer is purely an alias layer. This is clean — not a concern.
+
