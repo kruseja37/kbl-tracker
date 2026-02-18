@@ -886,3 +886,97 @@ Still unresolved. FINDING-047 fallback path only has base state, not full scoreb
 | 26 | Can a 250ms autosave window create gap where clearCurrentGame clears valid runner data? | 2026-02-17 | Pending — need to trace timing of clear vs save |
 | 27 | Does the fallback path (FINDING-047) fire more than expected? | 2026-02-17 | Pending — need to add logging or trace condition |
 | 28 | Phase 1 complete? | 2026-02-17 | Pending — assess remaining unknowns |
+
+---
+
+### FINDING-049
+**Date:** 2026-02-17
+**Phase:** 1
+**File:** `spec-docs/` directory
+**Claim:** Spec-docs are manageable in scope
+**Evidence:** 164,089 total lines. 80+ spec files. Major specs include: FRANCHISE_MODE_SPEC, OFFSEASON_SYSTEM_SPEC, NARRATIVE_SYSTEM_SPEC, SALARY_SYSTEM_SPEC, TRADE_SYSTEM_SPEC, FARM_SYSTEM_SPEC, PLAYOFF_SYSTEM_SPEC, MILESTONE_SYSTEM_SPEC, MOJO_FITNESS_SYSTEM_SPEC, RELATIONSHIP_ENGINE (implied), ADAPTIVE_STANDARDS_ENGINE, STADIUM_ANALYTICS, AWARDS_CEREMONY, CONTRACTION_EXPANSION, DRAFT, FREE_AGENCY, RETIREMENT, SEASON_SETUP, SEASON_END, LEAGUE_BUILDER, and 5 separate WAR calc specs (BWAR, FWAR, PWAR, RWAR, MWAR).
+**Status:** CONFIRMED — spec corpus is massive, 20+ distinct subsystems documented
+**Verification method:** ls spec-docs/ + wc -l
+**Verified by:** Claude + JK
+**Impact:** Original 6-subsystem audit plan was severely underscoped. Full subsystem count is 20+. Plan requires revision.
+
+---
+
+### FINDING-050
+**Date:** 2026-02-17
+**Phase:** 1
+**File:** `src/engines/` directory
+**Claim:** Engine layer is limited
+**Evidence:** 30+ engine files confirmed: adaptiveLearningEngine, agingEngine, awardEmblems, bwarCalculator, calendarEngine, calibrationService, clutchCalculator, detectionFunctions, fameEngine, fanFavoriteEngine, fanMoraleEngine, fitnessEngine, fwarCalculator, gradeEngine, h2hTracker, headlineEngine, hofEngine, legacyDynastyTracker, leverageCalculator, mojoEngine, mwarCalculator, narrativeEngine, nicknameEngine, oddityRecordTracker, parkFactorDeriver, playoffEngine, pwarCalculator, ratingsAdjustmentEngine, relationshipEngine, rwarCalculator, salaryCalculator, seasonTransitionEngine, tradeEngine, winExpectancyTable, wpaCalculator.
+**Status:** CONFIRMED — 35 engine files, none examined beyond fameEngine size
+**Verification method:** find src -name "*.ts" export grep
+**Verified by:** Claude + JK
+**Impact:** Engines exist for virtually every spec. Wiring status unknown for all 35.
+
+---
+
+### FINDING-051
+**Date:** 2026-02-17
+**Phase:** 1
+**File:** `src/src_figma/app/engines/` — integration layer
+**Claim:** Integration layer unknown
+**Evidence:** Separate integration engine files exist alongside the core engines: adaptiveLearningIntegration, agingIntegration, detectionIntegration, fameIntegration, fanMoraleIntegration, mwarIntegration, narrativeIntegration, playerStateIntegration, relationshipIntegration, warOrchestrator, saveDetector, d3kTracker, inheritedRunnerTracker.
+**Status:** CONFIRMED — integration layer exists as a bridge between src/engines/ and active app
+**Verification method:** find src -name "*.ts"
+**Verified by:** Claude + JK
+**Impact:** Architecture has three layers: engines (src/engines/), integration adapters (src_figma/app/engines/), and hooks (src_figma/hooks/). Wiring status of each integration file is unknown. This is likely where most gaps live.
+
+---
+
+### FINDING-052
+**Date:** 2026-02-17
+**Phase:** 1
+**File:** `src/src_figma/app/pages/` — UI pages
+**Claim:** UI page count unknown
+**Evidence:** 16 pages: AppHome, ExhibitionGame, FranchiseHome, FranchiseSelector, FranchiseSetup, GameTracker, LeagueBuilder (+ 6 sub-pages), PostGameSummary, SeasonSummary, WorldSeries.
+**Status:** CONFIRMED — 16 pages total
+**Verification method:** ls pages/
+**Verified by:** Claude + JK
+**Impact:** Routing status, data wiring, and completion state unknown for all pages except GameTracker (examined) and partially PostGameSummary (referenced in code).
+
+---
+
+### FINDING-053
+**Date:** 2026-02-17
+**Phase:** 1
+**File:** `src/src_figma/hooks/` vs `src/hooks/`
+**Claim:** Hook duplication pattern
+**Evidence:** Active hooks (src_figma/hooks/): useFranchiseData, useGameState, useLeagueBuilderData, useMuseumData, useOffseasonData, useOffseasonState, usePlayoffData, useScheduleData. Legacy hooks (src/hooks/): useAgingData, useCareerStats, useClutchCalculations, useDataIntegrity, useFameDetection, useFanMorale, useFitnessState, useGamePersistence, useLiveStats, useMWARCalculations, useMojoState, useOffseasonPhase, useRelationshipData, useSeasonData, useSeasonStats, useWARCalculations.
+**Status:** CONFIRMED — same duplication pattern as useGameState. Active app uses src_figma/hooks/, legacy hooks in src/hooks/ are likely inactive.
+**Verification method:** ls both hook directories
+**Verified by:** Claude + JK
+**Impact:** Need to verify which src_figma hooks are actually imported by active pages before assuming src/hooks/ are all dead.
+
+---
+
+### FINDING-054
+**Date:** 2026-02-17
+**Phase:** 1
+**File:** AUDIT_LOG.md
+**Claim:** Documentation size is manageable
+**Evidence:** 888 lines already. At current pace (50 findings per subsystem survey), projecting 1500-2000 lines before Phase 1 closes.
+**Status:** CONFIRMED — restructure required now
+**Verification method:** wc -l AUDIT_LOG.md
+**Verified by:** Claude + JK
+**Impact:** Doc restructure must happen before next batch. See restructure plan below.
+
+
+---
+
+### FINDING-055
+**Date:** 2026-02-17
+**Phase:** 1
+**File:** App-wide (player creation, player storage, trait system)
+**Claim:** SMB4 trait system is implemented and tied to players
+**Evidence:** JK confirmed: no traits are tied to players anywhere in the app. Not in player creation UI, not in player data structures, not in storage. smb4_traits_reference.md documents 60+ traits across 5 Chemistry types with tier bonuses. The trait system affects: mojo, clutch, fitness decay, pitch bonuses, batting bonuses, baserunning, fielding — virtually every calculation in the app.
+**Status:** CONFIRMED GAP — trait system is completely unimplemented
+**Verification method:** Direct user observation
+**Verified by:** JK
+**Impact:** CRITICAL. If traits are not stored on players, then every engine that depends on trait data (clutchCalculator, mojoEngine, fitnessEngine, adaptiveLearningEngine, relationshipEngine, fameEngine, awardEmblems) is either: (a) running without trait inputs (producing wrong outputs), or (b) has its trait logic pathway dead. This is not a bug — it is a missing foundational layer that the entire advanced stats system depends on. Must verify whether player data structure has a traits field at all.
+**Next action:** grep for "trait" in player type definitions and storage files
+
