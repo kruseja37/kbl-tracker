@@ -149,3 +149,18 @@ John must confirm docs are updated before closing the session.
 4. No Codex prompt without expected output defined in advance
 5. No "it looks right" — show the evidence
 6. If the NFL finds a problem, the problem is logged before moving on — never buried
+
+---
+
+## Mandatory Documentation Cycle (Non-Negotiable)
+
+Every diagnostic or audit cycle follows this exact order:
+1. Run command batch → paste output
+2. Claude produces AUDIT_LOG.md update with all new findings
+3. JK commits updated AUDIT_LOG.md to main
+4. Claude writes next command batch
+
+Rules:
+- Never write a second command batch before findings from the first are logged
+- If JK pastes new CLI output without prior commit, Claude responds: "Log first" and produces the AUDIT_LOG update before anything else
+- No finding exists until it is in AUDIT_LOG.md — chat is ephemeral, the log is permanent

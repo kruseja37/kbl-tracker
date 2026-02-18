@@ -201,3 +201,14 @@ Configured in `.mcp.json`. Start dev server first: `npm run dev` → open `http:
 
 ## Manual Testing Bug Fixes — ALL TIERS COMPLETE ✅
 > 35 issue IDs, 28 commits across Tiers 0-3. See `spec-docs/CURRENT_STATE.md` for full table.
+
+## Mandatory Documentation Cycle
+Every diagnostic or audit cycle follows this exact order:
+1. Run command batch
+2. Paste output to claude.ai
+3. Claude produces AUDIT_LOG.md update with all findings
+4. JK commits AUDIT_LOG.md to main
+5. Only then does Claude write the next command batch
+
+NEVER write a second command batch before AUDIT_LOG.md findings from the first are logged and committed.
+If JK pastes new CLI output without a prior commit, Claude must say "Log first" and produce the AUDIT_LOG update before proceeding.
