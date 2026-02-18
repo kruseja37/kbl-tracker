@@ -377,3 +377,84 @@ Next action: Phase 1 — read active GameTracker.tsx and useGameState.ts in full
 | 10 | What does src_figma/utils/gameStorage.ts actually contain? | 2026-02-17 | FINDING-020: 1 line — likely re-export, MUST READ |
 | 11 | What does processCompletedGame.ts actually do in 53 lines? | 2026-02-17 | Pending next read |
 | 12 | Why are there 10+ useEffects in GameTracker.tsx and do any conflict? | 2026-02-17 | Pending deeper read |
+
+---
+
+### FINDING-023
+**Date:** 2026-02-17
+**Phase:** 1
+**File:** `src/src_figma/utils/gameStorage.ts`
+**Claim:** FINDING-020 flagged this as a near-empty critical file
+**Evidence:** File contains exactly: `export * from '../../utils/gameStorage';`
+**Status:** CONFIRMED — pure re-export barrel, not missing implementation
+**Verification method:** cat src/src_figma/utils/gameStorage.ts
+**Verified by:** Claude + JK
+**Impact:** RESOLVES FINDING-020. Active hook correctly resolves to src/utils/gameStorage.ts via re-export. Save/load path is intact.
+
+---
+
+### FINDING-024
+**Date:** 2026-02-17
+**Phase:** 1
+**File:** `src/utils/gameStorage.ts` (real implementation)
+**Claim:** gameStorage is the real persistence layer
+**Evidence:** Re-export chain confirmed. processCompletedGame.ts imports from this layer. Real implementation at src/utils/ not src_figma/utils/.
+**Status:** CONFIRMED
+**Verification method:** Traced re-export chain
+**Verified by:** Claude
+**Next action:** Read src/utils/gameStorage.ts contents to understand full API surface
+
+---
+
+### FINDING-025
+**Date:** 2026-02-17
+**Phase:** 1
+**File:** `src/utils/processCompletedGame.ts`
+**Claim:** processCompletedGame is the game result orchestrator
+**Evidence:** 53 lines. Clean two-step pipeline: (1) aggregateGameToSeason() — full stat aggregation, (2) archiveCompletedGame() — writes to completedGames store. Described as "non-React equivalent of completeGameInternal."
+**Status:** CONFIRMED — clean, complete, correct pattern
+**Verification method:** cat src/utils/processCompletedGame.ts
+**Verified by:** Claude + JK
+**Impact:** Two paths exist for same operation: processCompletedGame (pure) and completeGameInternal (React hook). Divergence risk.
+
+---
+
+### FINDING-026
+**Date:** 2026-02-17
+**Phase:** 1
+**File:** `src/src_figma/hooks/useGameState.ts` lines 1330-1360
+**Claim:** FINDING-012 said no rehydration gate. FINDING-017 said partial gate.
+**Evidence:** Three-layer rehydration guard confirmed:
+- `header && !header.isComplete` — rejects completed games
+- `savedSnapshot.gameId === initialGameId` — rejects mismatched snapshots
+- `hasUsableLiveSnapshot` — requires scoreboard OR runnerTracker OR pitcher/batter IDs
+All three must pass before snapshot is applied.
+**Status:** CONFIRMED — gate IS present and multi-layered
+**Verification method:** sed lines 1330-1360
+**Verified by:** Claude + JK
+**Impact:** REVISES FINDING-012. Rehydration gate exists and is robust. Runner/scoreboard bugs NOT caused by missing gate. Root cause likely the useEffect race condition in FINDING-027.
+
+---
+
+### FINDING-027
+**Date:** 2026-02-17
+**Phase:** 1
+**File:** `src/src_figma/app/pages/GameTracker.tsx`
+**Claim:** initializeGame and loadExistingGame are cleanly separated
+**Evidence:** loadExistingGame called at line 649 first. initializeGame at line 708 only if load returns false. Both in dependency array of same useEffect at line 750 — 13+ dependencies.
+**Status:** CONFIRMED — correct pattern but unstable dep array
+**Verification method:** grep initializeGame/loadExistingGame
+**Verified by:** Claude + JK
+**Impact:** 13+ dependencies in one useEffect means any dep change re-fires the entire init/load sequence. If useCallback refs for initializeGame or loadExistingGame are unstable, effect re-fires mid-game — overwriting runners and scoreboard. Most likely root cause of persistence bugs.
+
+---
+
+## OPEN QUESTIONS (Updated 2026-02-17 batch 3)
+
+| # | Question | Raised | Resolved |
+|---|----------|--------|----------|
+| 10 | What does src_figma/utils/gameStorage.ts contain? | 2026-02-17 | FINDING-023: pure re-export |
+| 11 | What does processCompletedGame.ts do? | 2026-02-17 | FINDING-025: clean 2-step orchestrator |
+| 15 | What is the real implementation in src/utils/gameStorage.ts? | 2026-02-17 | Pending — need to read |
+| 16 | Are useCallback deps stable for initializeGame and loadExistingGame? | 2026-02-17 | Pending — critical for confirming FINDING-027 |
+| 17 | Do completeGameInternal and processCompletedGame stay in sync? | 2026-02-17 | Pending — divergence risk flagged in FINDING-025 |
