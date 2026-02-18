@@ -156,7 +156,44 @@
 
 ## Design Intent — Future Systems (Captured from Phase 2 Audit)
 
-### Player Morale System (OOTP-Inspired, SMB4-Flavored)
+### Trait System (SMB4-Accurate, Per-Player Situational Rating Modifiers)
+**Added:** 2026-02-18 | **Source:** BillyYank SMB4 Guide 3rd Ed + Phase 2 audit
+
+**What SMB4 traits actually are:**
+Each player has up to 2 traits. Each trait gives a ±rating bonus in a specific in-game situation. The size of the bonus is determined by how many players of the trait's chemistry type are on the roster (trait potency):
+- Level 1 (0-2 players of that chemistry): minimal effect
+- Level 2 (3-6 players): mid-level effect
+- Level 3 (7+ players): huge effect
+
+Traits are purely mechanical. Examples from the guide:
+| Trait | Trigger | Level 1 | Level 2 | Level 3 |
+|-------|---------|---------|---------|---------|
+| K Collector (Competitive) | Pitcher, 2-strike count | +8 VEL/JNK | +15 VEL/JNK | +30 VEL/JNK |
+| Tough Out (Competitive) | Batter, 2-strike count | +12 CON | +25 CON | +50 CON |
+| Whiffer (Competitive) | Batter, 2-strike count | -50 CON | -25 CON | -12 CON |
+| First Pitch Slayer (Competitive) | Batter, 0-0 count | +5 POW/+8 CON | +10 POW/+15 CON | +20 POW/+30 CON |
+| Cannon Arm (Competitive) | Fielder, max-power throw | minor | major | huge |
+| Sprinter (Competitive) | Batter, out of box | minor | major | huge |
+| K Neglecter (Competitive) | Pitcher, 2-strike count | -30 VEL/JNK | -15 VEL/JNK | -8 VEL/JNK |
+
+(Full trait list in BillyYank SMB4 Guide 3rd Ed — Traits section, all 5 chemistry types)
+
+**KBL implementation intent:**
+- Each Player gets `traits: Trait[]` (max 2) — first-class field on Player type
+- Each Trait has: name, chemistryType, trigger condition, effect (stat + delta at each potency level)
+- At game time: check trigger condition → look up team chemistry potency for that trait's type → apply delta to relevant rating for that play/at-bat
+- Traits fire at the engine level (GameTracker play resolution), not UI level
+- Negative traits must be preserved — they are part of roster construction strategy
+- Chemistry potency calculation: count players of each chemistry type on active roster
+
+**Key design constraint:** Traits and morale are independent systems. Do not couple them.
+
+**Priority:** HIGH for franchise authenticity — this is a core SMB4 differentiator.
+**Dependency:** Chemistry type must be a field on Player before traits can be built.
+
+---
+
+### Player Morale System (OOTP-Inspired)
 **Added:** 2026-02-18 | **Source:** Phase 2 audit FINDING-101 + OOTP_ARCHITECTURE_RESEARCH.md Section 7.2
 
 **Context:**
@@ -179,33 +216,39 @@ Key behaviors:
 - Morale shifts are storyline triggers and results
 - Players prioritize categories differently (prospects care more about role than wins)
 
-**KBL design intent (SMB4 content fills the OOTP structure):**
-Adopt the OOTP 5-category per-player morale structure, but fill it with SMB4-flavored content:
+**Clarification on SMB4 systems (do not conflate these):**
+- **Traits** — situational ±rating modifiers (e.g. K Collector: +30 VEL/JNK on 2-strike counts; Tough Out: +50 Contact on 2-strike counts). Pure mechanical system. Scaled by chemistry potency. Nothing to do with morale or personality.
+- **Chemistry** — team composition (Competitive/Spirited/Crafty/Disciplined/Scholarly). Determines trait potency tiers (0-2 players = level 1, 3-6 = level 2, 7+ = level 3). Also pure mechanical.
+- **Morale** — player sentiment/happiness. Separate from both. This is what we are designing here.
+- **Personality** — separate from all of the above.
 
-| OOTP Category | KBL/SMB4 Equivalent | Notes |
+**KBL design intent — adopt OOTP 5-category structure:**
+Adopt OOTP's per-player morale structure directly. No SMB4 analog exists for this — it is an OOTP pattern being added to KBL.
+
+| OOTP Category | KBL Implementation | Notes |
 |--------------|---------------------|-------|
-| Team Performance | Same — win/loss record | Direct analog |
-| Player Performance | Grade-based satisfaction (A/B/C vs expectation) | Use KBL grade system |
-| Roster Moves | Trades, DFA, call-ups | Same concept |
-| Expected Role | Lineup position, batting order slot | SMB4 flavor — "I should be batting 3rd" |
-| Team Chemistry | SMB4 Chemistry types (Hustler/Power/Tech/Speed/Balanced) | SMB4-specific, not OOTP generic |
+| Team Performance | Win/loss record, standings position | Direct analog |
+| Player Performance | Grade vs expectation (A player in B role = unhappy) | Use KBL grade system |
+| Roster Moves | Trades, DFA, call-ups, releases | Direct analog |
+| Expected Role | Lineup slot, batting order position, starts vs bench | "I should be batting 3rd" |
+| Team Chemistry | Overall team morale average, clubhouse tone | OOTP-aligned, KBL-flavored |
 
 **Effect on KBL gameplay (proposed):**
 - Mojo floor/ceiling modifier: unhappy players have lower mojo ceiling for the game
 - Development speed input: feeds into ratingsAdjustmentEngine (currently orphaned)
 - Narrative trigger source: "Player X demands trade", "Slumping player seeks reassurance"
-- Clutch index modifier: players in FRUSTRATED/APATHETIC state get small clutch penalty
+- Clutch index modifier: players in low morale state get small clutch penalty
 - Manager WAR input: good morale management = positive mWAR contribution
 
 **Implementation notes:**
-- This is a new system — no existing code to wire, build from scratch
+- New system — no existing code to wire, build from scratch
 - Should use IndexedDB (not localStorage like current fan morale)
 - Must be on `Player` type as `playerMorale: PlayerMorale` — first-class field
-- Trait system (#21 MISSING) must exist first — morale reacts differently per Chemistry type
-- Recommended build order: Trait System → Player Morale → ratingsAdjustmentEngine reconnect
-- Do NOT build until Trait System is in active type system (FINDING-055/056)
+- No dependency on Trait system — these are independent systems
+- Recommended build order: Player Morale → ratingsAdjustmentEngine reconnect
+- Can be built independently of Trait System work
 
-**Priority:** MEDIUM — important for franchise depth but blocked by Trait System gap.
+**Priority:** MEDIUM — important for franchise depth, no blockers beyond IndexedDB schema work.
 
 ---
 
