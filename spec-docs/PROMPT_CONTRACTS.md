@@ -228,3 +228,98 @@ Before sending any prompt to Codex, verify:
 - [ ] "High reasoning effort. Think step-by-step." is at the end
 
 If any checkbox is empty → rewrite the prompt before sending.
+
+
+---
+
+## PROMPT CONTRACT: FINDING-100 — Remove Legacy Field Toggle
+**Date:** 2026-02-18 | **Route:** Claude Code CLI | sonnet | standard effort
+
+---
+
+You are a careful dead-code removal specialist.
+
+GOAL:
+Remove the Legacy InteractiveField toggle and its entire dead branch from GameTracker.tsx,
+delete the handlePlayComplete stub, and archive DragDropGameTracker.tsx.
+No logic changes. No behavior changes to the Enhanced field path. Deletion only.
+
+SOURCE OF TRUTH:
+FINDING-100 in spec-docs/FINDINGS/FINDINGS_056_onwards.md
+
+CONSTRAINTS:
+- Only edit these files:
+    src/src_figma/app/pages/GameTracker.tsx
+- Only move/delete this file:
+    src/src_figma/app/components/DragDropGameTracker.tsx
+      → move to: src/archived-components/DragDropGameTracker.tsx
+- Do NOT touch:
+    src/src_figma/app/components/EnhancedInteractiveField.tsx
+    src/src_figma/app/components/FieldCanvas.tsx
+    src/src_figma/hooks/useGameState.ts
+    Any other file
+- Work directly on main branch
+
+CHANGES REQUIRED (in order):
+
+1. In GameTracker.tsx — remove the import:
+   import { InteractiveField } from "@/app/components/DragDropGameTracker";
+   Delete this line entirely.
+
+2. In GameTracker.tsx — remove the useState:
+   const [useEnhancedField, setUseEnhancedField] = useState(...)
+   Delete this line entirely.
+
+3. In GameTracker.tsx — remove the toggle button from JSX:
+   Find the button element that calls setUseEnhancedField(!useEnhancedField)
+   and renders "ENHANCED FIELD ✓" / "LEGACY FIELD" text.
+   Delete the entire button element and any wrapping div that exists solely
+   to contain it.
+
+4. In GameTracker.tsx — collapse the conditional field render:
+   The JSX currently reads:
+     {useEnhancedField ? ( <Enhanced branch> ) : ( <Legacy branch> )}
+   Replace the entire ternary expression with ONLY the Enhanced branch content
+   (the first branch), unwrapped from the ternary.
+   Delete the legacy SVG field and InteractiveField JSX entirely.
+   Preserve the outer div structure exactly.
+
+5. In GameTracker.tsx — remove the dead handlePlayComplete stub:
+   const handlePlayComplete = (playData: any) => {
+     console.log("Play complete:", playData);
+     // Update game state based on play data
+     // This would update bases, outs, scores, etc.
+   };
+   Delete the entire function.
+
+6. Move DragDropGameTracker.tsx to archive:
+   git mv src/src_figma/app/components/DragDropGameTracker.tsx \
+          src/archived-components/DragDropGameTracker.tsx
+
+EXPECTED OUTPUT:
+- GameTracker.tsx has no reference to useEnhancedField, InteractiveField,
+  handlePlayComplete, or DragDropGameTracker anywhere
+- EnhancedInteractiveField renders unconditionally
+- DragDropGameTracker.tsx exists only in archived-components/
+
+VERIFICATION:
+1. npm run build   — must pass with 0 errors
+2. grep -n "useEnhancedField\|handlePlayComplete\|DragDropGameTracker\|InteractiveField" \
+       src/src_figma/app/pages/GameTracker.tsx
+   — must return NO OUTPUT
+3. ls src/archived-components/DragDropGameTracker.tsx   — must exist
+
+FORMAT:
+1. Files changed (list exact paths)
+2. Changes made (describe each, reference FINDING-100)
+3. Verification result (paste exact output of all 3 commands)
+4. "FINDING-100 complete" OR "BLOCKED: [exact reason]"
+
+FAILURE PROTOCOL:
+- If anything is ambiguous → quote the exact section and stop
+- If a change would require touching a file not listed → STOP and report
+- If build fails → git checkout -- . to revert, then report the error
+- Never summarize or batch changes
+- Never assume intent — ask
+
+Use high reasoning effort. Think step-by-step. This is deletion only — do not add anything.

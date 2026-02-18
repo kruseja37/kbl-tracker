@@ -513,3 +513,15 @@ AUDIT_LOG.md contains findings 001-055.
 **Evidence:** OOTP_ARCHITECTURE_RESEARCH.md Section 2 Step 8 defines LI usage: single `leverage_multiplier` in pitcher WAR formula. OOTP uses one unified LI value per game state — no split between partial and full calculations. KBL currently has two different LI values in flight simultaneously: (1) `getBaseOutLI` (base-out state only, no inning/score context) called at 6 sites in useGameState.ts; (2) `calculateLeverageIndex` (full: boLI × inning multiplier × score dampener × walkoff boost) called in EnhancedInteractiveField.tsx. These produce different numbers for the same game state. The full calculation is what both LEVERAGE_INDEX_SPEC.md and OOTP methodology require. Additionally: `calculateLIWithRelationships` (revenge arc, romantic matchup, family home game modifiers) is implemented in leverageCalculator.ts but never receives relationship context data — the RelationshipLIContext is never populated because the relationship system is only indirectly wired (FINDING-086).
 **Impact:** Pattern conformance verdict: N. Two LI values in flight for the same game state violates the OOTP single-value principle and produces inconsistent clutch/WAR/fame weights across the same game. Fix requires replacing 6 `getBaseOutLI` calls in useGameState.ts with `calculateLeverageIndex` calls. The relationship LI modifiers remain dead until FINDING-086 (relationship wiring gap) is addressed. boLI can remain as an exported utility but should not be the value attached to play events.
 **SMB4 Asset:** Relationship LI modifiers (revenge arc, romantic matchup, family home game) are KBL-original SMB4 systems. The fix must preserve these modifier slots — replace boLI with full LI but keep the relationship modifier extension points intact for when the relationship system is wired.
+
+### FINDING-100
+**Date:** 2026-02-18 | **Phase:** 2 | **Status:** CONFIRMED
+**File:** `src/src_figma/app/pages/GameTracker.tsx`, `src/src_figma/app/components/DragDropGameTracker.tsx`
+**Evidence:**
+GameTracker.tsx contains a live toggle button (`useEnhancedField` useState, line 368) that switches between EnhancedInteractiveField and InteractiveField (legacy). Default is Enhanced (true). If toggled to Legacy:
+- `onPlayComplete` fires `handlePlayComplete` (line 1021) — a 4-line stub: `console.log` only, no stat writes, no persistence, no LI calculation, no mWAR, no fielding pipeline
+- `onSpecialEvent`, `onRunnerMove`, `onBatchRunnerMove` are absent from the Legacy branch — all special plays and runner moves silently dropped
+- All 3 downstream consumers (`fieldingEventExtractor.ts`, `runnerDefaults.ts`, `detectionIntegration.ts`) are typed to Enhanced `PlayData` — Legacy bypasses them entirely
+- `DragDropGameTracker.tsx` is 676 lines sitting in the active component folder, not archived
+
+**Impact:** SILENT DATA LOSS. Any user who toggles to Legacy Field and records plays produces zero stats, zero persistence, zero mWAR. The game appears to function but drops all data. No error shown. Worse than a crash. Fix: remove toggle, remove legacy branch, archive DragDropGameTracker.tsx, delete handlePlayComplete stub.
