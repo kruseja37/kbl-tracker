@@ -1,3 +1,20 @@
+## Project Root & Key Paths
+- Project root: /Users/johnkruse/Projects/kbl-tracker
+- Active GameTracker: src/src_figma/app/pages/GameTracker.tsx
+- Active state hook: src/src_figma/hooks/useGameState.ts
+- Inactive (never route here): src/components/GameTracker/index.tsx
+- Spec docs: spec-docs/
+- Always work on main unless JK says otherwise
+
+## Critical Architecture Facts (Phase 0 Confirmed)
+- App.tsx routes GameTracker to src/src_figma/app/pages/GameTracker.tsx ONLY
+- src/components/GameTracker/index.tsx is NOT routed — do not treat as active
+- useGameState.ts (4,647 lines) is the active state system — not deprecated
+- useGamePersistence.ts is wired to the inactive path only
+- 718 useState calls in src/src_figma + src/components/GameTracker/
+
+---
+
 # Project Instructions for Claude Code
 
 ## Session Start Protocol
