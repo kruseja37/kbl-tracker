@@ -1021,6 +1021,7 @@ Still unresolved. FINDING-047 fallback path only has base state, not full scoreb
 | FINDING-100 | Legacy Field toggle — silent data loss risk | FIXED 2026-02-18 — toggle removed, legacy branch deleted, DragDropGameTracker.tsx archived, handlePlayComplete stub deleted; -200 lines GameTracker.tsx |
 | FINDING-101 | Fan Morale — 3 bugs: wrong method name (silent no-op), hardcoded season/game, localStorage vs IndexedDB | CONFIRMED — fanMoraleEngine never fires in production; fix is surgical (method rename + season wiring); localStorage gap is follow-on |
 | FINDING-102 | Stats Aggregation Pipeline — OOTP Steps 6/7/8/10/11 absent from post-game pipeline | PARTIAL — Steps 5+9 correct; standings (Step 6), leaderboard (7), WAR (8), narrative (10), development (11) not wired into aggregateGameToSeason |
+| FINDING-103 | Positional WAR — all 5 calculators correct but warOrchestrator never called; zero callers in active app | N — 3,287 lines produce zero output; fix is one call to calculateAndPersistSeasonWAR() in processCompletedGame.ts |
 | FINDING-066 | mWAR — useMWARCalculations wired in GameTracker | CONFIRMED WIRED — revises FINDING-061; bWAR/fWAR/pWAR/rWAR still orphaned |
 | FINDING-067 | Fame tracking — useFameTracking wired in GameTracker | CONFIRMED WIRED — revises FINDING-062; fameEngine/fameIntegration still orphaned |
 | FINDING-068 | Fan Morale — useFanMorale wired in GameTracker | CONFIRMED WIRED — backend engine wiring TBD |

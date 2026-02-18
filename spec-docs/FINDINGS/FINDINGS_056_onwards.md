@@ -622,3 +622,62 @@ standalone engines/hooks — they are simply not wired into the post-game aggreg
 - Step 7 (Leaderboard): LOW — UI refresh handles this adequately for now
 - Step 10 (Narrative): LOW — narrative system not yet built
 - Step 11 (Development): LOW — ratingsAdjustmentEngine orphaned, blocked by other work
+
+### FINDING-103
+**Date:** 2026-02-18 | **Phase:** 2 | **Status:** CONFIRMED
+**System:** Positional WAR (bWAR, fWAR, pWAR, rWAR, mWAR)
+**Files:** `src/engines/bwarCalculator.ts`, `src/engines/fwarCalculator.ts`,
+`src/engines/pwarCalculator.ts`, `src/engines/rwarCalculator.ts`,
+`src/engines/mwarCalculator.ts`, `src/src_figma/app/engines/warOrchestrator.ts`,
+`src/src_figma/app/engines/mwarIntegration.ts`
+
+**Phase 2 Pattern Verdict:** N — calculators conform to OOTP formula but are disconnected from pipeline
+
+**OOTP reference (Section 2.2 Step 8):**
+OOTP calculates WAR after every game from cumulative season stats. Formula follows
+fWAR model: (Batting Runs + Baserunning Runs + Fielding Runs + Positional Adj +
+League Adj + Replacement Runs) / RPW for position players. WAR persists to
+player_season_stats immediately after each game. It is NOT a separate on-demand
+calculation — it is part of the mandatory post-game pipeline.
+
+**Calculator inventory (3,287 lines across 5 engines):**
+- `bwarCalculator.ts` (406 lines) — batting WAR, wRAA-based, park-adjusted
+- `fwarCalculator.ts` (692 lines) — fielding WAR with correct positional adjustments
+  (C: +3.7, SS: +2.2, CF: +0.7 ... DH: -5.2 — matches FanGraphs/OOTP methodology)
+- `pwarCalculator.ts` (583 lines) — pitcher WAR, FIP-based with LI multiplier
+- `rwarCalculator.ts` (597 lines) — baserunning WAR, SB/CS/advancement based
+- `mwarCalculator.ts` (1,009 lines) — manager WAR, decision quality × LI
+
+**warOrchestrator.ts — exists but never called:**
+`calculateAndPersistSeasonWAR()` (153 lines) is a fully implemented orchestrator:
+reads all season stats from IndexedDB, calls all 5 calculators, accumulates results,
+and would write totals back to season storage. Architecture is correct — plain async
+function, not a React hook, designed to run post-game. However:
+`grep -rn "calculateAndPersistSeasonWAR" src` → **exactly 1 result: its own definition.**
+It is never imported or called anywhere in the active app. Zero callers.
+
+**mWAR exception — partially wired:**
+`useMWARCalculations` IS imported and used in GameTracker.tsx (line 281). Manager
+decisions (pitching changes, pinch hits, defensive subs) are recorded during the
+game with LI context. However: mWAR final calculation and persistence to season
+storage is not confirmed wired to the post-game pipeline. Decision capture ✅.
+Season aggregation of mWAR: UNVERIFIED.
+
+**Positional adjustment implementation: CORRECT.**
+fwarCalculator.ts line 95 defines POSITIONAL_ADJUSTMENTS matching FanGraphs values.
+Applied correctly scaled by playing time factor (lines 452, 516). The calculation
+logic is sound — the problem is it never runs.
+
+**Root cause:** `warOrchestrator.calculateAndPersistSeasonWAR()` must be called from
+`processCompletedGame()` or `aggregateGameToSeason()` after each game.
+Currently `processCompletedGame()` only calls `aggregateGameToSeason()` + `archiveCompletedGame()`.
+The WAR orchestrator call is simply missing from the pipeline chain.
+
+**Fix:** Add one call to `calculateAndPersistSeasonWAR()` in `processCompletedGame.ts`
+after `aggregateGameToSeason()` completes. Pass seasonId, seasonGames, participantIds,
+and playerPositions (all available at that point). This is a wiring change, not a
+logic change — the calculator logic is correct.
+
+**Impact of current state:** WAR values displayed in TeamHub/UI are stale or zero for
+all position players, pitchers, and baserunners. mWAR similarly unverified.
+All 3,287 lines of WAR calculator code produce zero output in production.
