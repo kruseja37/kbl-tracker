@@ -563,3 +563,62 @@ gap is a data layer violation).
 no-ops every time. 1,357 lines of fanMoraleEngine.ts produce zero output in
 production. Fix is surgical: rename call sites + wire season/game numbers.
 localStorage gap is a follow-on item (requires IndexedDB schema addition).
+
+### FINDING-102
+**Date:** 2026-02-18 | **Phase:** 2 | **Status:** CONFIRMED
+**System:** Stats Aggregation Pipeline
+**Files:** `src/utils/seasonAggregator.ts`, `src/utils/processCompletedGame.ts`, `src/src_figma/hooks/useGameState.ts`
+
+**Phase 2 Pattern Verdict:** PARTIAL
+
+**OOTP reference (Section 2.2):**
+After each game, OOTP runs 12 steps: event → box score → season stats update (Step 5) →
+standings update (Step 6) → leaderboard refresh (Step 7) → WAR calc (Step 8) →
+milestone check (Step 9) → narrative trigger (Step 10) → development update (Step 11).
+All 12 steps fire as a single post-game pipeline.
+
+**What KBL does correctly (matches OOTP pattern):**
+Steps 5, 9 (partial) present and functioning:
+- `aggregateGameToSeason()` correctly increments batting/pitching/fielding season totals
+  in IndexedDB after each game (analogous to OOTP Step 5)
+- `aggregateFameEvents()` runs milestone detection (partial Step 9 analog)
+- `aggregateFieldingStats()` writes putouts/assists/errors per player
+- Pipeline wiring: `endGame()` → `completeGameInternal()` → `processCompletedGame()` →
+  `aggregateGameToSeason()` — structurally sound, fires reliably (T0-05 fix confirmed)
+- Career totals: `useCareerStats.ts` exists and accumulates across seasons
+
+**What KBL is missing (OOTP Steps 6, 7, 8, 10, 11 absent from pipeline):**
+
+Step 6 — Standings Update: **MISSING from pipeline.**
+`aggregateGameToSeason()` has zero reference to standings. No team W/L record update
+fires after game completion. Standings are updated separately (or manually) — not
+wired to the post-game aggregation pipeline.
+
+Step 7 — Leaderboard Refresh: **MISSING from pipeline.**
+No leaderboard update in `seasonAggregator.ts` or `processCompletedGame.ts`.
+League leaders data is read-only from accumulated season stats — it refreshes only
+when the UI queries it, not as a triggered pipeline step.
+
+Step 8 — WAR Calculation: **MISSING from pipeline.**
+WAR is not calculated in `aggregateGameToSeason()`. mWAR, bWAR, fWAR engines exist
+separately but do not fire as part of the post-game pipeline. WAR numbers shown in
+UI are from separate, disconnected calculations.
+
+Step 10 — Narrative Trigger: **MISSING from pipeline.**
+Narrative/storyline engine not called from `processCompletedGame()`. No condition
+evaluation fires post-game.
+
+Step 11 — Development Update: **MISSING from pipeline.**
+`ratingsAdjustmentEngine` not called from aggregation pipeline. Player ratings do
+not update on the basis of accumulated playing time during the season.
+
+**Summary:** Pipeline Steps 5 + partial 9 are OOTP-conformant. Steps 6, 7, 8, 10, 11
+are absent from the pipeline. The infrastructure for several of these exists as
+standalone engines/hooks — they are simply not wired into the post-game aggregation call.
+
+**Fix priority:**
+- Step 6 (Standings): HIGH — missing from pipeline, data exists, wiring only
+- Step 8 (WAR): MEDIUM — engines exist, need orchestration
+- Step 7 (Leaderboard): LOW — UI refresh handles this adequately for now
+- Step 10 (Narrative): LOW — narrative system not yet built
+- Step 11 (Development): LOW — ratingsAdjustmentEngine orphaned, blocked by other work
