@@ -23,7 +23,13 @@ import {
 } from '../../utils/eventLog';
 import type { GameAggregationOptions } from '../../utils/seasonAggregator';
 import { processCompletedGame } from '../../utils/processCompletedGame';
-import { archiveCompletedGame, type PersistedGameState } from '../utils/gameStorage';
+import {
+  archiveCompletedGame,
+  loadCurrentGame,
+  debouncedSaveCurrentGame,
+  immediateSaveCurrentGame,
+  type PersistedGameState,
+} from '../utils/gameStorage';
 import type { AtBatResult, HalfInning, LineupState, LineupPlayer, BenchPlayer, Position } from '../../types/game';
 import { validateSubstitution } from '../../types/game';
 import { getBaseOutLI, type BaseState } from '../../engines/leverageCalculator';
@@ -1033,6 +1039,16 @@ function createEmptyPitcherStats(): PitcherGameStats {
   };
 }
 
+function createEmptyScoreboardState(): ScoreboardState {
+  return {
+    innings: Array(9).fill(null).map(() => ({ away: undefined, home: undefined })),
+    away: { runs: 0, hits: 0, errors: 0 },
+    home: { runs: 0, hits: 0, errors: 0 },
+  };
+}
+
+type PersistedRunnerTrackerSnapshot = NonNullable<PersistedGameState['runnerTrackerSnapshot']>;
+
 // ============================================
 // MAIN HOOK
 // ============================================
@@ -1041,6 +1057,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [lastSavedAt, setLastSavedAt] = useState<number | null>(null);
+  const latestPersistedRef = useRef<PersistedGameState | null>(null);
   // T0-01: Auto game-end detection prompt
   const [showAutoEndPrompt, setShowAutoEndPrompt] = useState(false);
   const [atBatSequence, setAtBatSequence] = useState(0);
@@ -1088,11 +1105,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     seasonNumber: 1,
   });
 
-  const [scoreboard, setScoreboard] = useState<ScoreboardState>({
-    innings: Array(9).fill(null).map(() => ({ away: undefined, home: undefined })),
-    away: { runs: 0, hits: 0, errors: 0 },
-    home: { runs: 0, hits: 0, errors: 0 },
-  });
+  const [scoreboard, setScoreboard] = useState<ScoreboardState>(createEmptyScoreboardState);
 
   const setStadiumName = useCallback((name: string | null) => {
     setGameState(prev => ({ ...prev, stadiumName: name }));
@@ -1157,11 +1170,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     setPitchCountPrompt(null);
     pitcherNamesRef.current.clear();
     inningPitchesRef.current = { pitches: 0, strikeouts: 0, pitcherId: '' };
-    setScoreboard({
-      innings: Array(9).fill(null).map(() => ({ away: undefined, home: undefined })),
-      away: { runs: 0, hits: 0, errors: 0 },
-      home: { runs: 0, hits: 0, errors: 0 },
-    });
+    setScoreboard(createEmptyScoreboardState());
 
     // Store lineup refs
     awayLineupRef.current = config.awayLineup;
@@ -1307,6 +1316,234 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         setIsLoading(false);
         return false;
       }
+
+      // Primary rehydration path: restore exact in-progress snapshot from currentGame store.
+      // This preserves non-at-bat runner movement + full scoreboard state across refresh.
+      const savedSnapshot = await loadCurrentGame();
+      const hasUsableLiveSnapshot = !!(
+        savedSnapshot?.scoreboard ||
+        savedSnapshot?.runnerTrackerSnapshot ||
+        savedSnapshot?.currentPitcherId ||
+        savedSnapshot?.currentBatterId
+      );
+      if (savedSnapshot && savedSnapshot.gameId === initialGameId && hasUsableLiveSnapshot) {
+        const emptyBoard = createEmptyScoreboardState();
+        const snapshotBoard = savedSnapshot.scoreboard;
+        const normalizedScoreboard: ScoreboardState = {
+          innings: Array.isArray(snapshotBoard?.innings) && snapshotBoard!.innings.length > 0
+            ? snapshotBoard!.innings.map(inn => ({
+                away: inn?.away,
+                home: inn?.home,
+              }))
+            : emptyBoard.innings,
+          away: {
+            runs: snapshotBoard?.away?.runs ?? savedSnapshot.awayScore ?? 0,
+            hits: snapshotBoard?.away?.hits ?? 0,
+            errors: snapshotBoard?.away?.errors ?? 0,
+          },
+          home: {
+            runs: snapshotBoard?.home?.runs ?? savedSnapshot.homeScore ?? 0,
+            hits: snapshotBoard?.home?.hits ?? 0,
+            errors: snapshotBoard?.home?.errors ?? 0,
+          },
+        };
+        setScoreboard(normalizedScoreboard);
+
+        if (savedSnapshot.awayLineup?.length) {
+          awayLineupRef.current = savedSnapshot.awayLineup;
+        }
+        if (savedSnapshot.homeLineup?.length) {
+          homeLineupRef.current = savedSnapshot.homeLineup;
+        }
+        if (savedSnapshot.awayLineupState) {
+          awayLineupStateRef.current = savedSnapshot.awayLineupState as LineupState;
+        }
+        if (savedSnapshot.homeLineupState) {
+          homeLineupStateRef.current = savedSnapshot.homeLineupState as LineupState;
+        }
+        if (savedSnapshot.seasonId) {
+          seasonIdRef.current = savedSnapshot.seasonId;
+        }
+
+        const restoredPlayerStats = new Map<string, PlayerGameStats>();
+        for (const [playerId, stats] of Object.entries(savedSnapshot.playerStats || {})) {
+          restoredPlayerStats.set(playerId, {
+            pa: stats.pa ?? 0,
+            ab: stats.ab ?? 0,
+            h: stats.h ?? 0,
+            singles: stats.singles ?? 0,
+            doubles: stats.doubles ?? 0,
+            triples: stats.triples ?? 0,
+            hr: stats.hr ?? 0,
+            r: stats.r ?? 0,
+            rbi: stats.rbi ?? 0,
+            bb: stats.bb ?? 0,
+            hbp: stats.hbp ?? 0,
+            k: stats.k ?? 0,
+            sb: stats.sb ?? 0,
+            cs: stats.cs ?? 0,
+            sf: stats.sf ?? 0,
+            sh: stats.sh ?? 0,
+            gidp: stats.gidp ?? 0,
+          });
+        }
+        setPlayerStats(restoredPlayerStats);
+
+        const restoredPitcherStats = new Map<string, PitcherGameStats>();
+        for (const p of savedSnapshot.pitcherGameStats || []) {
+          restoredPitcherStats.set(p.pitcherId, {
+            outsRecorded: p.outsRecorded ?? 0,
+            hitsAllowed: p.hitsAllowed ?? 0,
+            runsAllowed: p.runsAllowed ?? 0,
+            earnedRuns: p.earnedRuns ?? 0,
+            walksAllowed: p.walksAllowed ?? 0,
+            strikeoutsThrown: p.strikeoutsThrown ?? 0,
+            homeRunsAllowed: p.homeRunsAllowed ?? 0,
+            pitchCount: p.pitchCount ?? 0,
+            battersFaced: p.battersFaced ?? 0,
+            intentionalWalks: 0,
+            hitByPitch: p.hitBatters ?? 0,
+            wildPitches: p.wildPitches ?? 0,
+            basesLoadedWalks: p.basesLoadedWalks ?? 0,
+            firstInningRuns: p.firstInningRuns ?? 0,
+            consecutiveHRsAllowed: p.consecutiveHRsAllowed ?? 0,
+            isStarter: p.isStarter ?? false,
+            entryInning: p.entryInning ?? 1,
+            entryOuts: 0,
+            exitInning: null,
+            exitOuts: null,
+            finishedGame: false,
+            inheritedRunners: 0,
+            inheritedRunnersScored: 0,
+            bequeathedRunners: 0,
+            bequeathedRunnersScored: 0,
+            decision: p.decision ?? null,
+            save: p.save ?? false,
+            hold: p.hold ?? false,
+            blownSave: p.blownSave ?? false,
+          });
+        }
+        setPitcherStats(restoredPitcherStats);
+
+        setFameEvents(
+          (savedSnapshot.fameEvents || []).map(fe => ({
+            eventType: fe.eventType,
+            fameType: fe.fameType,
+            fameValue: fe.fameValue,
+            playerId: fe.playerId,
+            playerName: fe.playerName,
+            description: fe.description || fe.eventType,
+          }))
+        );
+        if (savedSnapshot.substitutionLog) {
+          setSubstitutionLog(savedSnapshot.substitutionLog as typeof substitutionLog);
+        }
+
+        if (savedSnapshot.pitcherNamesEntries) {
+          pitcherNamesRef.current = new Map(savedSnapshot.pitcherNamesEntries);
+        } else {
+          const rebuiltPitcherNames = new Map<string, string>();
+          for (const p of savedSnapshot.pitcherGameStats || []) {
+            rebuiltPitcherNames.set(p.pitcherId, p.pitcherName);
+          }
+          pitcherNamesRef.current = rebuiltPitcherNames;
+        }
+
+        const snapshotPitcherId =
+          savedSnapshot.currentPitcherId ||
+          savedSnapshot.runnerTrackerSnapshot?.currentPitcherId ||
+          '';
+        const snapshotPitcherName =
+          savedSnapshot.currentPitcherName ||
+          savedSnapshot.runnerTrackerSnapshot?.currentPitcherName ||
+          '';
+
+        if (savedSnapshot.runnerTrackerSnapshot) {
+          runnerTrackerRef.current = {
+            runners: savedSnapshot.runnerTrackerSnapshot.runners as RunnerTrackingState['runners'],
+            currentPitcherId: savedSnapshot.runnerTrackerSnapshot.currentPitcherId,
+            currentPitcherName: savedSnapshot.runnerTrackerSnapshot.currentPitcherName,
+            pitcherStats: new Map(
+              savedSnapshot.runnerTrackerSnapshot.pitcherStatsEntries as [string, PitcherRunnerStats][]
+            ),
+            inning: savedSnapshot.runnerTrackerSnapshot.inning,
+            atBatNumber: savedSnapshot.runnerTrackerSnapshot.atBatNumber,
+          };
+        } else {
+          const rebuiltTracker = createRunnerTrackingState(snapshotPitcherId, snapshotPitcherName);
+          rebuiltTracker.inning = savedSnapshot.inning ?? 1;
+          rebuiltTracker.atBatNumber = (savedSnapshot.atBatCount ?? 0) + 1;
+          const addTrackedRunner = (
+            base: '1B' | '2B' | '3B',
+            info: PersistedGameState['bases']['first']
+          ) => {
+            if (!info) return;
+            const responsiblePitcherId = info.inheritedFrom || snapshotPitcherId;
+            const isInherited = responsiblePitcherId !== snapshotPitcherId;
+            const runner = {
+              runnerId: info.playerId,
+              runnerName: info.playerName,
+              currentBase: base,
+              startingBase: base,
+              howReached: 'hit' as const,
+              responsiblePitcherId,
+              responsiblePitcherName: responsiblePitcherId,
+              isInherited,
+              inheritedFromPitcherId: isInherited ? responsiblePitcherId : null,
+              inningReached: rebuiltTracker.inning,
+              atBatReached: Math.max(1, rebuiltTracker.atBatNumber - 1),
+            };
+            rebuiltTracker.runners.push(runner);
+          };
+          addTrackedRunner('1B', savedSnapshot.bases.first);
+          addTrackedRunner('2B', savedSnapshot.bases.second);
+          addTrackedRunner('3B', savedSnapshot.bases.third);
+          runnerTrackerRef.current = rebuiltTracker;
+        }
+        setRunnerIdentityVersion(v => v + 1);
+
+        setAwayBatterIndex(
+          savedSnapshot.awayBatterIndex ??
+          (savedSnapshot.halfInning === 'TOP' ? savedSnapshot.currentBatterIndex ?? 0 : 0)
+        );
+        setHomeBatterIndex(
+          savedSnapshot.homeBatterIndex ??
+          (savedSnapshot.halfInning === 'BOTTOM' ? savedSnapshot.currentBatterIndex ?? 0 : 0)
+        );
+        setAtBatSequence(savedSnapshot.atBatCount ?? 0);
+        inningPitchesRef.current = savedSnapshot.currentInningPitches || { pitches: 0, strikeouts: 0, pitcherId: '' };
+
+        setGameState({
+          gameId: savedSnapshot.gameId,
+          homeScore: savedSnapshot.homeScore ?? 0,
+          awayScore: savedSnapshot.awayScore ?? 0,
+          inning: savedSnapshot.inning ?? 1,
+          isTop: (savedSnapshot.halfInning ?? 'TOP') === 'TOP',
+          outs: savedSnapshot.outs ?? 0,
+          balls: 0,
+          strikes: 0,
+          bases: {
+            first: !!savedSnapshot.bases.first,
+            second: !!savedSnapshot.bases.second,
+            third: !!savedSnapshot.bases.third,
+          },
+          currentBatterId: savedSnapshot.currentBatterId ?? '',
+          currentBatterName: savedSnapshot.currentBatterName ?? '',
+          currentPitcherId: snapshotPitcherId,
+          currentPitcherName: snapshotPitcherName,
+          awayTeamId: savedSnapshot.awayTeamId,
+          homeTeamId: savedSnapshot.homeTeamId,
+          awayTeamName: savedSnapshot.awayTeamName,
+          homeTeamName: savedSnapshot.homeTeamName,
+          stadiumName: savedSnapshot.stadiumName ?? null,
+          seasonNumber: savedSnapshot.seasonNumber ?? 1,
+        });
+
+        setLastSavedAt(savedSnapshot.savedAt ?? Date.now());
+        setIsLoading(false);
+        return true;
+      }
+
       const header = await getGameHeader(initialGameId);
       const inProgressGame = header && !header.isComplete ? header : null;
 
@@ -1370,6 +1607,105 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         }
         setPitcherStats(rehydratedPitcherStats);
 
+        // Rebuild scoreboard from event log so inning-by-inning line score is preserved.
+        const rebuiltInnings: ScoreboardState['innings'] = Array(9).fill(null).map(() => ({
+          away: undefined,
+          home: undefined,
+        }));
+        let awayHits = 0;
+        let homeHits = 0;
+        let awayErrors = 0;
+        let homeErrors = 0;
+
+        for (const event of events) {
+          const inningIdx = Math.max(0, event.inning - 1);
+          while (rebuiltInnings.length <= inningIdx) {
+            rebuiltInnings.push({ away: undefined, home: undefined });
+          }
+
+          const awayRunsOnPlay = Math.max(0, event.awayScoreAfter - event.awayScore);
+          const homeRunsOnPlay = Math.max(0, event.homeScoreAfter - event.homeScore);
+          if (awayRunsOnPlay > 0) {
+            rebuiltInnings[inningIdx].away = (rebuiltInnings[inningIdx].away ?? 0) + awayRunsOnPlay;
+          }
+          if (homeRunsOnPlay > 0) {
+            rebuiltInnings[inningIdx].home = (rebuiltInnings[inningIdx].home ?? 0) + homeRunsOnPlay;
+          }
+
+          if (['1B', '2B', '3B', 'HR'].includes(event.result)) {
+            if (event.halfInning === 'TOP') awayHits += 1;
+            else homeHits += 1;
+          }
+          if (event.result === 'E') {
+            if (event.halfInning === 'TOP') homeErrors += 1;
+            else awayErrors += 1;
+          }
+        }
+
+        setScoreboard({
+          innings: rebuiltInnings,
+          away: {
+            runs: lastEvent?.awayScoreAfter ?? 0,
+            hits: awayHits,
+            errors: awayErrors,
+          },
+          home: {
+            runs: lastEvent?.homeScoreAfter ?? 0,
+            hits: homeHits,
+            errors: homeErrors,
+          },
+        });
+
+        // Rebuild runner tracker from last known runners-after state so base identities
+        // (used by runnerNames/UI) survive refresh.
+        const trackerPitcherId = lastEvent?.pitcherId ?? '';
+        const trackerPitcherName = lastEvent?.pitcherName ?? '';
+        const rebuiltTracker = createRunnerTrackingState(trackerPitcherId, trackerPitcherName);
+        rebuiltTracker.inning = lastEvent?.inning ?? 1;
+        rebuiltTracker.atBatNumber = events.length + 1;
+
+        const addTrackedRunner = (
+          base: '1B' | '2B' | '3B',
+          info: RunnerState['first'] | RunnerState['second'] | RunnerState['third']
+        ) => {
+          if (!info) return;
+          const responsiblePitcherId = info.responsiblePitcherId || trackerPitcherId;
+          const isInherited = responsiblePitcherId !== trackerPitcherId;
+          const runner = {
+            runnerId: info.runnerId,
+            runnerName: info.runnerName,
+            currentBase: base,
+            startingBase: base,
+            howReached: 'hit' as const,
+            responsiblePitcherId,
+            responsiblePitcherName: responsiblePitcherId,
+            isInherited,
+            inheritedFromPitcherId: isInherited ? responsiblePitcherId : null,
+            inningReached: rebuiltTracker.inning,
+            atBatReached: Math.max(1, rebuiltTracker.atBatNumber - 1),
+          };
+          rebuiltTracker.runners.push(runner);
+
+          const stats = rebuiltTracker.pitcherStats.get(responsiblePitcherId) || {
+            pitcherId: responsiblePitcherId,
+            pitcherName: responsiblePitcherId,
+            runnersOnBase: [],
+            runnersScored: [],
+            inheritedRunners: [],
+            inheritedRunnersScored: [],
+            bequeathedRunnerCount: 0,
+          };
+          stats.runnersOnBase.push(runner);
+          rebuiltTracker.pitcherStats.set(responsiblePitcherId, stats);
+        };
+
+        addTrackedRunner('1B', lastEvent?.runnersAfter.first ?? null);
+        addTrackedRunner('2B', lastEvent?.runnersAfter.second ?? null);
+        addTrackedRunner('3B', lastEvent?.runnersAfter.third ?? null);
+
+        runnerTrackerRef.current = rebuiltTracker;
+        setRunnerIdentityVersion(v => v + 1);
+
         setGameState({
           gameId: inProgressGame.gameId,
           homeScore: lastEvent?.homeScoreAfter ?? 0,
@@ -1406,6 +1742,229 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     setIsLoading(false);
     return false;
   }, [initialGameId]);
+
+  // Keep a live snapshot in currentGame so refresh restores exact state
+  // (including runner identities and full scoreboard, not only at-bat events).
+  useEffect(() => {
+    if (isLoading) return;
+    if (!gameState.gameId || !gameState.awayTeamId || !gameState.homeTeamId) return;
+
+    const awayPlayerIds = new Set<string>();
+    const playerNameLookup = new Map<string, string>();
+    for (const p of awayLineupRef.current) {
+      awayPlayerIds.add(p.playerId);
+      playerNameLookup.set(p.playerId, p.playerName);
+    }
+    for (const p of homeLineupRef.current) {
+      playerNameLookup.set(p.playerId, p.playerName);
+    }
+    for (const b of awayLineupStateRef.current.bench) {
+      playerNameLookup.set(b.playerId, b.playerName);
+    }
+    for (const b of homeLineupStateRef.current.bench) {
+      playerNameLookup.set(b.playerId, b.playerName);
+    }
+
+    const playerStatsRecord: PersistedGameState['playerStats'] = {};
+    playerStats.forEach((stats, playerId) => {
+      const isAwayPlayer = awayPlayerIds.has(playerId) || playerId.toLowerCase().startsWith('away-');
+      playerStatsRecord[playerId] = {
+        playerName: playerNameLookup.get(playerId) || playerId,
+        teamId: isAwayPlayer ? gameState.awayTeamId : gameState.homeTeamId,
+        pa: stats.pa,
+        ab: stats.ab,
+        h: stats.h,
+        singles: stats.singles,
+        doubles: stats.doubles,
+        triples: stats.triples,
+        hr: stats.hr,
+        rbi: stats.rbi,
+        r: stats.r,
+        bb: stats.bb,
+        hbp: stats.hbp,
+        k: stats.k,
+        sb: stats.sb,
+        cs: stats.cs,
+        sf: stats.sf,
+        sh: stats.sh,
+        gidp: stats.gidp,
+        putouts: 0,
+        assists: 0,
+        fieldingErrors: 0,
+      };
+    });
+
+    const pitcherGameStats: PersistedGameState['pitcherGameStats'] = [];
+    pitcherStats.forEach((stats, pitcherId) => {
+      const isAwayPitcher = pitcherId.toLowerCase().startsWith('away-');
+      pitcherGameStats.push({
+        pitcherId,
+        pitcherName: pitcherNamesRef.current.get(pitcherId) || pitcherId,
+        teamId: isAwayPitcher ? gameState.awayTeamId : gameState.homeTeamId,
+        isStarter: stats.isStarter,
+        entryInning: stats.entryInning,
+        outsRecorded: stats.outsRecorded,
+        hitsAllowed: stats.hitsAllowed,
+        runsAllowed: stats.runsAllowed,
+        earnedRuns: stats.earnedRuns,
+        walksAllowed: stats.walksAllowed + stats.intentionalWalks,
+        strikeoutsThrown: stats.strikeoutsThrown,
+        homeRunsAllowed: stats.homeRunsAllowed,
+        hitBatters: stats.hitByPitch,
+        basesReachedViaError: 0,
+        wildPitches: stats.wildPitches,
+        pitchCount: stats.pitchCount,
+        battersFaced: stats.battersFaced,
+        consecutiveHRsAllowed: stats.consecutiveHRsAllowed,
+        firstInningRuns: stats.firstInningRuns,
+        basesLoadedWalks: stats.basesLoadedWalks,
+        inningsComplete: Math.floor(stats.outsRecorded / 3),
+        decision: stats.decision,
+        save: stats.save,
+        hold: stats.hold,
+        blownSave: stats.blownSave,
+      });
+    });
+
+    const tracker = runnerTrackerRef.current;
+    const baseRunners: {
+      first: PersistedGameState['bases']['first'];
+      second: PersistedGameState['bases']['second'];
+      third: PersistedGameState['bases']['third'];
+    } = {
+      first: null,
+      second: null,
+      third: null,
+    };
+    for (const runner of tracker.runners) {
+      if (runner.currentBase === '1B') {
+        baseRunners.first = {
+          playerId: runner.runnerId,
+          playerName: runner.runnerName,
+          inheritedFrom: runner.isInherited ? (runner.inheritedFromPitcherId || runner.responsiblePitcherId) : null,
+        };
+      } else if (runner.currentBase === '2B') {
+        baseRunners.second = {
+          playerId: runner.runnerId,
+          playerName: runner.runnerName,
+          inheritedFrom: runner.isInherited ? (runner.inheritedFromPitcherId || runner.responsiblePitcherId) : null,
+        };
+      } else if (runner.currentBase === '3B') {
+        baseRunners.third = {
+          playerId: runner.runnerId,
+          playerName: runner.runnerName,
+          inheritedFrom: runner.isInherited ? (runner.inheritedFromPitcherId || runner.responsiblePitcherId) : null,
+        };
+      }
+    }
+
+    const persisted: PersistedGameState = {
+      id: 'current',
+      gameId: gameState.gameId,
+      savedAt: Date.now(),
+      inning: gameState.inning,
+      halfInning: gameState.isTop ? 'TOP' : 'BOTTOM',
+      outs: gameState.outs,
+      homeScore: gameState.homeScore,
+      awayScore: gameState.awayScore,
+      bases: baseRunners,
+      currentBatterIndex: gameState.isTop ? awayBatterIndex : homeBatterIndex,
+      atBatCount: atBatSequence,
+      awayTeamId: gameState.awayTeamId,
+      homeTeamId: gameState.homeTeamId,
+      awayTeamName: gameState.awayTeamName,
+      homeTeamName: gameState.homeTeamName,
+      seasonNumber: gameState.seasonNumber,
+      stadiumName: gameState.stadiumName ?? null,
+      currentBatterId: gameState.currentBatterId,
+      currentBatterName: gameState.currentBatterName,
+      currentPitcherId: gameState.currentPitcherId,
+      currentPitcherName: gameState.currentPitcherName,
+      playerStats: playerStatsRecord,
+      pitcherGameStats,
+      fameEvents: fameEvents.map((fe, idx) => ({
+        id: `${gameState.gameId}_fame_live_${idx}`,
+        gameId: gameState.gameId,
+        eventType: fe.eventType,
+        playerId: fe.playerId,
+        playerName: fe.playerName,
+        playerTeam: '',
+        fameValue: fe.fameValue,
+        fameType: fe.fameType,
+        inning: gameState.inning,
+        halfInning: gameState.isTop ? 'TOP' : 'BOTTOM',
+        timestamp: Date.now(),
+        autoDetected: false,
+        description: fe.description,
+      })),
+      lastHRBatterId: null,
+      consecutiveHRCount: 0,
+      inningStrikeouts: 0,
+      maxDeficitAway: 0,
+      maxDeficitHome: 0,
+      activityLog: [],
+      currentInningPitches: inningPitchesRef.current,
+      scoreboard: {
+        innings: scoreboard.innings.map(inn => ({ away: inn.away, home: inn.home })),
+        away: { ...scoreboard.away },
+        home: { ...scoreboard.home },
+      },
+      awayBatterIndex,
+      homeBatterIndex,
+      seasonId: seasonIdRef.current || undefined,
+      awayLineup: awayLineupRef.current,
+      homeLineup: homeLineupRef.current,
+      awayLineupState: awayLineupStateRef.current as PersistedGameState['awayLineupState'],
+      homeLineupState: homeLineupStateRef.current as PersistedGameState['homeLineupState'],
+      runnerTrackerSnapshot: {
+        runners: tracker.runners as PersistedRunnerTrackerSnapshot['runners'],
+        currentPitcherId: tracker.currentPitcherId,
+        currentPitcherName: tracker.currentPitcherName,
+        pitcherStatsEntries: Array.from(tracker.pitcherStats.entries()) as Array<[string, unknown]>,
+        inning: tracker.inning,
+        atBatNumber: tracker.atBatNumber,
+      },
+      pitcherNamesEntries: Array.from(pitcherNamesRef.current.entries()),
+      substitutionLog: substitutionLog as PersistedGameState['substitutionLog'],
+    };
+
+    latestPersistedRef.current = persisted;
+    debouncedSaveCurrentGame(persisted, 250);
+    setLastSavedAt(Date.now());
+  }, [
+    isLoading,
+    gameState,
+    scoreboard,
+    playerStats,
+    pitcherStats,
+    fameEvents,
+    substitutionLog,
+    atBatSequence,
+    awayBatterIndex,
+    homeBatterIndex,
+  ]);
+
+  useEffect(() => {
+    const flushSave = () => {
+      if (!latestPersistedRef.current) return;
+      immediateSaveCurrentGame(latestPersistedRef.current);
+      setLastSavedAt(Date.now());
+    };
+
+    const onVisibility = () => {
+      if (document.hidden) {
+        flushSave();
+      }
+    };
+
+    window.addEventListener('beforeunload', flushSave);
+    document.addEventListener('visibilitychange', onVisibility);
+
+    return () => {
+      window.removeEventListener('beforeunload', flushSave);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, []);
 
   // ============================================
   // CORE ACTIONS
