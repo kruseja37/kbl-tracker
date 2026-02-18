@@ -458,3 +458,83 @@ All three must pass before snapshot is applied.
 | 15 | What is the real implementation in src/utils/gameStorage.ts? | 2026-02-17 | Pending — need to read |
 | 16 | Are useCallback deps stable for initializeGame and loadExistingGame? | 2026-02-17 | Pending — critical for confirming FINDING-027 |
 | 17 | Do completeGameInternal and processCompletedGame stay in sync? | 2026-02-17 | Pending — divergence risk flagged in FINDING-025 |
+
+---
+
+### FINDING-028
+**Date:** 2026-02-17
+**Phase:** 1
+**File:** `src/src_figma/hooks/useGameState.ts` lines 1166, 1324
+**Claim:** FINDING-027 flagged unstable useCallback refs as likely root cause of re-init race condition
+**Evidence:** initializeGame defined with useCallback at line 1166. loadExistingGame defined with useCallback at line 1324. Neither dep array visible yet — need to read those lines to confirm stability.
+**Status:** UNVERIFIED — useCallback confirmed present, dep arrays not yet read
+**Verification method:** grep for useCallback on those functions
+**Verified by:** Claude
+**Next action:** Read lines 1166-1200 and 1324-1340 to see dep arrays
+
+---
+
+### FINDING-029
+**Date:** 2026-02-17
+**Phase:** 1
+**File:** `src/src_figma/hooks/useGameState.ts` lines 1055-1080
+**Claim:** useGameState hook structure understood
+**Evidence:** Hook opens with: isLoading, isSaving, lastSavedAt (useState), latestPersistedRef + autoSaveTimeoutRef (useRef), showAutoEndPrompt, atBatSequence, awayBatterIndex, homeBatterIndex (useState), awayLineupRef + homeLineupRef + seasonIdRef (useRef), awayLineupStateRef + homeLineupStateRef (useRef). 
+**Status:** CONFIRMED — hook is useState-heavy with ref stabilization for lineup/persistence
+**Verification method:** sed lines 1055-1080
+**Verified by:** Claude + JK
+**Impact:** At least 8 useState calls at the top of a 4,647-line hook. Combined with the 10+ useEffects in GameTracker.tsx, the state surface is extremely large. Any state change can trigger cascading re-renders.
+
+---
+
+### FINDING-030
+**Date:** 2026-02-17
+**Phase:** 1
+**File:** `src/utils/gameStorage.ts`
+**Claim:** gameStorage is a simple persistence layer
+**Evidence:** 537 lines. Full API surface:
+- initDatabase() — IDB initializer
+- saveCurrentGame() — line 278
+- loadCurrentGame() — line 299
+- clearCurrentGame() — line 317
+- hasSavedGame() — line 333
+- archiveCompletedGame() — line 367
+- archiveBatchGameResult() — line 417
+- getRecentGames() — line 457
+- getCompletedGameById() — line 485
+- debouncedSaveCurrentGame() — line 513 (still exists but unused by active hook)
+- immediateSaveCurrentGame() — line 528
+**Status:** CONFIRMED — full, real implementation
+**Verification method:** wc -l + grep exports
+**Verified by:** Claude + JK
+**Impact:** debouncedSaveCurrentGame still exists in the real gameStorage.ts but active useGameState.ts uses the hook-local timer instead (FINDING-016). The debounce function is dead code in production path but still importable — confusion risk.
+
+---
+
+### FINDING-031
+**Date:** 2026-02-17
+**Phase:** 1
+**File:** `src/src_figma/app/pages/GameTracker.tsx` lines 640-760
+**Claim:** FINDING-027 flagged the init useEffect dep array as an instability risk
+**Evidence:** 
+- `initInProgressRef` guards against double-fire (line 640) — good
+- `cancelled` flag prevents stale async updates (cleanup function present) — good
+- Load-then-init pattern is correct: loadExistingGame() first, initializeGame() only if no existing game
+- Dep array (line 750): `[gameInitialized, awayTeamPlayers, homeTeamPlayers, awayPitcher, homePitcher, awayTeamId, homeTeamId, gameId, initializeGame, loadExistingGame, selectedStadium, navigationState?.franchiseId, navigationState?.seasonNumber, navigationState?.totalInnings, awayTeamName, homeTeamName]` — 16 dependencies
+- awayTeamPlayers and homeTeamPlayers are arrays — if parent re-renders and passes new array references, this effect re-fires even if content is identical
+**Status:** CONFIRMED — race condition risk is REAL
+**Verification method:** sed lines 640-760
+**Verified by:** Claude + JK
+**Impact:** CRITICAL. awayTeamPlayers/homeTeamPlayers are array props. In React, arrays are new references on every render. If parent re-renders (very likely during game), this 16-dep useEffect re-fires, calls loadExistingGame() again mid-game, and potentially overwrites live game state. This is the most probable root cause of runner disappearance and scoreboard reset bugs.
+
+---
+
+## OPEN QUESTIONS (Updated 2026-02-17 batch 4)
+
+| # | Question | Raised | Resolved |
+|---|----------|--------|----------|
+| 15 | Full API of src/utils/gameStorage.ts? | 2026-02-17 | FINDING-030: 537 lines, full API confirmed |
+| 16 | Are useCallback deps stable for initializeGame and loadExistingGame? | 2026-02-17 | FINDING-028: UNVERIFIED — dep arrays not yet read |
+| 17 | Do completeGameInternal and processCompletedGame stay in sync? | 2026-02-17 | Pending |
+| 18 | Are awayTeamPlayers/homeTeamPlayers memoized before being passed to GameTracker? | 2026-02-17 | Pending — critical for confirming FINDING-031 |
+| 19 | What are the dep arrays for initializeGame and loadExistingGame useCallbacks? | 2026-02-17 | Pending — read lines 1166-1230 and 1324-1400 |
