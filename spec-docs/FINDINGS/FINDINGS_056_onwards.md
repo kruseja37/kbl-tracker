@@ -524,4 +524,5 @@ GameTracker.tsx contains a live toggle button (`useEnhancedField` useState, line
 - All 3 downstream consumers (`fieldingEventExtractor.ts`, `runnerDefaults.ts`, `detectionIntegration.ts`) are typed to Enhanced `PlayData` — Legacy bypasses them entirely
 - `DragDropGameTracker.tsx` is 676 lines sitting in the active component folder, not archived
 
-**Impact:** SILENT DATA LOSS. Any user who toggles to Legacy Field and records plays produces zero stats, zero persistence, zero mWAR. The game appears to function but drops all data. No error shown. Worse than a crash. Fix: remove toggle, remove legacy branch, archive DragDropGameTracker.tsx, delete handlePlayComplete stub.
+**Impact:** SILENT DATA LOSS. Any user who toggled to Legacy Field and recorded plays produced zero stats, zero persistence, zero mWAR. The game appeared to function but dropped all data. No error shown. Worse than a crash.
+**Resolution:** FIXED 2026-02-18. Removed toggle, legacy branch, handlePlayComplete stub. DragDropGameTracker.tsx (676 lines) archived to src/archived-components/. GameTracker.tsx -200 lines net. Build clean (7 pre-existing errors in inactive path only). Verified by grep — zero legacy references remain.
