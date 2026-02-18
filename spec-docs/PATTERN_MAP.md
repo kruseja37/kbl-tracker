@@ -1,4 +1,10 @@
 # KBL Tracker Pattern Map
+
+## North Star
+**"Follows OOTP pattern AND preserves SMB4 asset intact."**
+Every architectural decision is measured against this. OOTP defines the
+structure. SMB4 defines the content. Neither is optional.
+
 **Purpose:** Compare each KBL subsystem against its OOTP architectural pattern.
 **Audit lens:** Does KBL code follow the correct structural pattern?
 **Reference:** spec-docs/OOTP_ARCHITECTURE_RESEARCH.md (Sections 1-10)
