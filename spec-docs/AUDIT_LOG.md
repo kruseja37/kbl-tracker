@@ -538,3 +538,78 @@ All three must pass before snapshot is applied.
 | 17 | Do completeGameInternal and processCompletedGame stay in sync? | 2026-02-17 | Pending |
 | 18 | Are awayTeamPlayers/homeTeamPlayers memoized before being passed to GameTracker? | 2026-02-17 | Pending — critical for confirming FINDING-031 |
 | 19 | What are the dep arrays for initializeGame and loadExistingGame useCallbacks? | 2026-02-17 | Pending — read lines 1166-1230 and 1324-1400 |
+
+---
+
+### FINDING-032
+**Date:** 2026-02-17
+**Phase:** 1
+**File:** `src/src_figma/hooks/useGameState.ts` lines 1166-1230
+**Claim:** initializeGame useCallback dep array may be unstable
+**Evidence:** initializeGame useCallback body confirmed — no closing bracket or dep array visible in this range. The function body is substantial (sets state, clears timers, builds lineup state). Dep array not yet visible — need lines 1230-1280 to see it.
+**Status:** UNVERIFIED — dep array still not confirmed
+**Verification method:** sed lines 1166-1230
+**Verified by:** Claude
+**Next action:** Read lines 1260-1330 to find closing dep array
+
+---
+
+### FINDING-033
+**Date:** 2026-02-17
+**Phase:** 1
+**File:** `src/src_figma/hooks/useGameState.ts` lines 1324-1400
+**Claim:** loadExistingGame useCallback is the rehydration entry point
+**Evidence:** Full rehydration logic confirmed in detail:
+- Clears autosave timer on entry
+- getGameHeader() check — rejects if no header or isComplete
+- loadCurrentGame() — loads snapshot
+- Clears stale snapshot if gameId mismatch or game complete
+- hasUsableLiveSnapshot check (scoreboard OR runnerTracker OR pitcher/batter IDs)
+- If all pass: restores scoreboard (with normalization), lineups, lineup state, season ID, player stats
+- Scoreboard normalization handles null/undefined gracefully with fallbacks
+**Status:** CONFIRMED — rehydration is thorough and defensive
+**Verification method:** sed lines 1324-1400
+**Verified by:** Claude + JK
+**Impact:** Rehydration logic itself is solid. Dep array for this useCallback still not visible — need to confirm stability.
+
+---
+
+### FINDING-034
+**Date:** 2026-02-17
+**Phase:** 1
+**File:** `src/src_figma/app/pages/GameTracker.tsx`
+**Claim:** awayTeamPlayers and homeTeamPlayers are stable state values
+**Evidence:** 
+- Line 479: `const [awayTeamPlayers, setAwayTeamPlayers] = useState<Player[]>(navigationState?.awayPlayers || [...])`
+- Line 504: `const [homeTeamPlayers, setHomeTeamPlayers] = useState<Player[]>(navigationState?.homePlayers || [...])`
+- Both are useState — initialized once from navigationState, only change when setAwayTeamPlayers/setHomeTeamPlayers called
+- setAwayTeamPlayers called at line 1015-1016 (inside handleLineupCardSubstitution/roster update path)
+**Status:** CONFIRMED — arrays are useState, not props or derived values
+**Verification method:** grep awayTeamPlayers/homeTeamPlayers
+**Verified by:** Claude + JK
+**Impact:** REVISES FINDING-031 partially. Because awayTeamPlayers/homeTeamPlayers are useState (not props), they only change when a substitution occurs — not on every parent render. The race condition risk is lower than feared for normal gameplay. HOWEVER: if a substitution fires setAwayTeamPlayers mid-game, the 16-dep useEffect at line 750 WILL re-fire, calling loadExistingGame() again during an active game. This is still a real bug path — just triggered by substitutions specifically, not every render.
+
+---
+
+### FINDING-035
+**Date:** 2026-02-17
+**Phase:** 1
+**File:** `src/src_figma/app/pages/GameTracker.tsx`
+**Claim:** Player-related useCallbacks are memoized
+**Evidence:** useCallback present for: getPlayerIdFromName (829), getPlayerMojoByName (833), getPlayerFitnessByName (839), setPlayerMojoByName (845), setPlayerFitnessByName (850), handleLineupCardSubstitution (933), handleSubstitution (1893), handlePositionSwap (1966). None of these are in the dep array of the init useEffect — good.
+**Status:** CONFIRMED — player callbacks are memoized and not in init dep array
+**Verification method:** grep useMemo/useCallback for player/team/roster/lineup
+**Verified by:** Claude + JK
+**Impact:** The substitution handlers themselves are stable. The problem is they call setAwayTeamPlayers/setHomeTeamPlayers which triggers the init useEffect re-fire (FINDING-034).
+
+---
+
+## OPEN QUESTIONS (Updated 2026-02-17 batch 5)
+
+| # | Question | Raised | Resolved |
+|---|----------|--------|----------|
+| 16 | Are useCallback deps stable for initializeGame and loadExistingGame? | 2026-02-17 | FINDING-032/033: body confirmed, dep arrays still not visible — need lines 1260-1330 |
+| 17 | Do completeGameInternal and processCompletedGame stay in sync? | 2026-02-17 | Pending |
+| 18 | Does substitution calling setAwayTeamPlayers re-trigger the init useEffect? | 2026-02-17 | FINDING-034: YES — confirmed real bug path triggered by substitutions |
+| 19 | What are the closing dep arrays for initializeGame and loadExistingGame useCallbacks? | 2026-02-17 | Pending — read lines 1260-1330 |
+| 20 | Does gameInitialized flag prevent re-initialization after substitution re-fires effect? | 2026-02-17 | Partially — line 640 checks gameInitialized but initInProgressRef also guards. Need to verify both guards hold under substitution scenario |
