@@ -6,15 +6,16 @@
 ---
 
 ## Current Phase and Step
-- **Phase:** 1 — Breadth Survey
-- **Step:** Tier 1 + Tier 2 COMPLETE — FINDING-001 to 097, all SUBSYSTEM_MAP rows closed
-- **Status:** Ready for Phase 1 Synthesis → write PHASE_SUMMARIES/PHASE1_BREADTH.md and declare Phase 1 closed
+- **Phase:** 1 — COMPLETE
+- **Step:** Phase 1 Synthesis written — PHASE_SUMMARIES/PHASE1_BREADTH.md
+- **Status:** Ready to open Phase 2 — OOTP pattern conformance audit
 
 ---
 
 ## Last Completed Action
-Session 2026-02-18. Tier 2 Batch A + B complete. Findings 080–095 logged to FINDINGS_056_onwards.md.
-SUBSYSTEM_MAP.md fully updated — zero UNKNOWN rows remain.
+Session 2026-02-18. Phase 1 complete. PHASE_SUMMARIES/PHASE1_BREADTH.md written.
+FINDING-001 through FINDING-097. All 23 SUBSYSTEM_MAP rows closed.
+AUDIT_LOG phase tracker updated: Phase 1 → COMPLETE.
 
 Tier 2 key results:
 - Franchise, Schedule, Salary, Offseason, Playoffs, Mojo/Fitness, Fame/Milestone all ✅ WIRED
@@ -29,16 +30,16 @@ Tier 2 key results:
 ---
 
 ## Next Action
-**Phase 1 Synthesis (Option C — now unblocked)**
-Write `spec-docs/PHASE_SUMMARIES/PHASE1_BREADTH.md` using findings 001–095.
-Declare Phase 1 closed, update AUDIT_LOG phase tracker, open Phase 2.
+**Open Phase 2 — OOTP Pattern Conformance Audit**
 
-Synthesis should cover:
-1. Wiring verdict per subsystem (pull from SUBSYSTEM_MAP.md)
-2. Top architectural risks (stubbed fan morale, orphaned WAR, missing traits, PostGameSummary data gap)
-3. Four-layer architecture violations (SpringTrainingFlow, EnhancedInteractiveField, SeasonEndFlow — direct engine imports)
-4. The two live data paths that matter most: GameTracker (6 hooks, game state) and FranchiseHome (4 hooks, franchise state)
-5. Phase 2 priority order recommendation
+Per CURRENT_STATE.md Phase 2 instructions: for each subsystem, read the OOTP pattern from PATTERN_MAP.md, read the relevant OOTP_ARCHITECTURE_RESEARCH.md section, open the KBL code, ask "does the code follow the OOTP structural pattern?", log finding with conformance verdict.
+
+Recommended Phase 2 start order (highest impact first, per PHASE1_BREADTH.md):
+1. Clutch + LI — surgical wiring gap, high downstream impact
+2. Fan Morale — stub must be replaced or cut
+3. Stats Aggregation — liveStatsCalculator orphan affects real-time box score
+4. Positional WAR — 3,268 lines complete and orphaned
+5. Trait System — foundational gap affecting mojo/clutch/fitness/adaptive learning
 
 ---
 

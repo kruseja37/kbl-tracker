@@ -28,7 +28,7 @@ Next action: Phase 1 — read active GameTracker.tsx and useGameState.ts in full
 | Phase | Name | Status | Started | Completed |
 |-------|------|--------|---------|-----------|
 | 0 | Inventory | COMPLETE | 2026-02-17 | 2026-02-17 |
-| 1 | Architecture Map | IN PROGRESS | 2026-02-17 | — |
+| 1 | Architecture Map | COMPLETE | 2026-02-17 | 2026-02-18 |
 | 2 | Seams Audit | NOT STARTED | — | — |
 | 3 | Known Bug Verification | NOT STARTED | — | — |
 | 4 | Debt Inventory | NOT STARTED | — | — |
