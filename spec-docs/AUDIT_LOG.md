@@ -799,3 +799,90 @@ Still under investigation — likely related to the clearCurrentGame() call sequ
 | 24 | Does runner move without at-bat trigger autosave? | 2026-02-17 | FINDING-042: NO — runnerTrackerRef not in dep array. LIKELY ROOT CAUSE. |
 | 25 | What triggers runner moves — is there an explicit save call after? | 2026-02-17 | Pending — need to find runner move handlers |
 | 26 | What is the clearCurrentGame sequence on new game start? | 2026-02-17 | Pending — scoreboard bug investigation |
+
+---
+
+### FINDING-045
+**Date:** 2026-02-17
+**Phase:** 1
+**File:** `src/src_figma/hooks/useGameState.ts`
+**Claim:** FINDING-042 — runner moves don't trigger autosave because runnerTrackerRef is not in dep array
+**Evidence:** 
+- trackerAddRunner, trackerAdvanceRunner, trackerRunnerOut all imported at lines 40-42
+- runnerTrackerRef.current mutated at lines 2095, 2098, 2108, 2119, 2120, 2125, 2130
+- advanceRunner (line 3354) and advanceRunnersBatch (line 3440) are the user-facing handlers
+- Both call setGameState (updating outs, bases, scores) — which IS in the autosave dep array
+- Line 2130: runnerTrackerRef.current = tracker (ref mutation after processing)
+**Status:** CONFIRMED — FINDING-042 PARTIALLY REVISED
+**Verification method:** grep runnerTrackerRef + grep advanceRunner
+**Verified by:** Claude + JK
+**Impact:** Runner moves always accompany a setGameState call (updating bases/outs/score). setGameState IS in the autosave dep array (gameState). Therefore runner moves DO trigger the autosave indirectly via gameState change. FINDING-042's root cause hypothesis is weakened — the autosave fires when runners move. The runner disappearance bug needs a different explanation.
+
+---
+
+### FINDING-046
+**Date:** 2026-02-17
+**Phase:** 1
+**File:** `src/src_figma/hooks/useGameState.ts`
+**Claim:** loadExistingGame dep array unknown
+**Evidence:** Line ~1770: `}, [initialGameId]);` — loadExistingGame closes with dep array of just `[initialGameId]`.
+**Status:** CONFIRMED — loadExistingGame dep array is [initialGameId] — stable
+**Verification method:** sed lines 1750-1790
+**Verified by:** Claude + JK
+**Impact:** loadExistingGame ref is stable — only changes if initialGameId changes. Combined with FINDING-036 (initializeGame has empty dep array), both functions passed to the init useEffect are stable refs. The 16-dep useEffect re-fires are driven by player/team state changes only, and guarded by gameInitialized. No ref instability issues.
+
+---
+
+### FINDING-047
+**Date:** 2026-02-17
+**Phase:** 1
+**File:** `src/src_figma/hooks/useGameState.ts`
+**Claim:** There is a fallback rehydration path from event log when no currentGame snapshot exists
+**Evidence:** Lines 1750-1780 show a second rehydration path: if no usable live snapshot, falls back to reconstructing state from the last at-bat event (lastEvent?.runnersAfter, lastEvent?.batterId, etc.). This path uses the event log, not the currentGame store. Runner positions reconstructed from lastEvent.runnersAfter.
+**Status:** CONFIRMED — fallback path exists
+**Verification method:** sed lines 1750-1790
+**Verified by:** Claude + JK
+**Impact:** CRITICAL for bug investigation. The fallback path reconstructs bases from `lastEvent?.runnersAfter` which only captures base occupancy (true/false), NOT runner identities (who is on which base). If the live snapshot is missing and fallback fires, runner identity data (names, responsible pitcher) is lost — only base state preserved. This IS a credible cause of "runner disappears" — identity lost, base state preserved but shown as unknown runner.
+
+---
+
+### FINDING-048
+**Date:** 2026-02-17
+**Phase:** 1
+**File:** `src/src_figma/hooks/useGameState.ts`
+**Claim:** clearCurrentGame sequence on new game start
+**Evidence:**
+- Line 1174: clearCurrentGame() called inside initializeGame (before new game state is set)
+- Line 1345: clearCurrentGame() called inside loadExistingGame (stale snapshot cleanup)
+- Line 4307: clearCurrentGame() called inside endGame() after game completion
+All three are explicit, intentional clear calls. No race condition apparent in the clear sequence itself.
+**Status:** CONFIRMED — clear sequence is intentional and correct
+**Verification method:** grep clearCurrentGame
+**Verified by:** Claude + JK
+**Impact:** The scoreboard showing prior game data is not caused by a missing clearCurrentGame call. Most likely cause: the hasUsableLiveSnapshot check passes for a snapshot from the previous game (same gameId condition not met → snapshot should be cleared → but what if gameId happens to match?). Or: the fallback event-log path (FINDING-047) reconstructs scoreboard from the wrong game's events.
+
+---
+
+## REVISED ROOT CAUSE HYPOTHESES (2026-02-17 — Batch 8)
+
+**Runner disappearance bug — revised:**
+FINDING-045 shows runner moves DO trigger autosave (via setGameState). FINDING-042 hypothesis weakened.
+New most likely cause: FINDING-047 — fallback path fires when live snapshot is missing, reconstructs from lastEvent.runnersAfter which only has base occupancy (true/false), not runner identities. Runner identity (name, responsible pitcher) is lost.
+
+When does the live snapshot go missing? If clearCurrentGame fires before the new snapshot is written. The 250ms autosave timer creates a window where clearCurrentGame (from initializeGame or loadExistingGame) can run and clear the snapshot before the previous game's runner state is captured.
+
+**Scoreboard reset bug:**
+Still unresolved. FINDING-047 fallback path only has base state, not full scoreboard — if this path fires mid-game, scoreboard would revert to gameState values only.
+
+---
+
+## OPEN QUESTIONS (Updated 2026-02-17 batch 8)
+
+| # | Question | Raised | Resolved |
+|---|----------|--------|----------|
+| 19 | loadExistingGame dep array? | 2026-02-17 | FINDING-046: [initialGameId] — stable |
+| 24 | Does runner move without at-bat trigger autosave? | 2026-02-17 | FINDING-045: YES — via setGameState dep |
+| 25 | What triggers the fallback event-log rehydration path? | 2026-02-17 | FINDING-047: fires when hasUsableLiveSnapshot is false |
+| 26 | Can a 250ms autosave window create gap where clearCurrentGame clears valid runner data? | 2026-02-17 | Pending — need to trace timing of clear vs save |
+| 27 | Does the fallback path (FINDING-047) fire more than expected? | 2026-02-17 | Pending — need to add logging or trace condition |
+| 28 | Phase 1 complete? | 2026-02-17 | Pending — assess remaining unknowns |
