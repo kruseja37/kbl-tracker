@@ -1483,3 +1483,75 @@ partial writes.
 
 **Pattern Map update:** Row 20 → Follows Pattern: N | Finding: FINDING-109
 (Not a blocking bug; partial write risk logged as FIX-DECISION)
+
+### FINDING-110
+**Date:** 2026-02-18 | **Phase:** 1 (Pattern Map) | **Status:** CONFIRMED
+**System:** WAR — mWAR (Pattern Map Row 4b)
+**Files:** `src/src_figma/app/pages/GameTracker.tsx` (lines 281, 286–287, 940, 968, 1599, 1627, 1950, 2188–2200),
+`src/utils/managerStorage.ts` (aggregateManagerGameToSeason),
+`src/src_figma/hooks/useMWARCalculations.ts`
+
+**OOTP Pattern:** Manager decision tracker; persists decisions, resolves outcomes.
+
+**Follows Pattern: PARTIAL**
+
+**What OOTP does:**
+Records each manager decision (pitching change, pinch hitter, IBB, etc.) with its
+leverage index context. At game end, persists decision log and calculates manager WAR
+based on decision quality × LI weight. Manager WAR accumulates to season stats.
+
+**What KBL does — confirmed working:**
+
+Decision recording during game: WIRED ✅
+Three decision types captured with LI context:
+- `mwarHook.recordDecision('pitching_change', gsLI, ...)` — pitching changes (line 940, 1950)
+- `mwarHook.recordDecision(decisionType, gsLI, ...)` — PH/defensive subs (line 968)
+- `mwarHook.recordDecision('intentional_walk', gsLI, ...)` — IBB (line 1599)
+
+Outcome resolution: WIRED ✅
+`mwarHook.resolveDecisionOutcome(pending.decisionId, outcome)` fires after next play
+(line 1627). Decisions are resolved with actual outcome data.
+
+Manager Moment (high-LI prompt): WIRED ✅
+`mwarHook.checkForManagerMoment(gsLI)` fires after each play (line 1639).
+UI renders manager moment prompt at high LI situations (line 2314).
+
+Persistence at game end: WIRED ✅
+`saveGameDecisions(mwarHook.gameStats.decisions)` writes all decisions to IndexedDB.
+`aggregateManagerGameToSeason()` calculates and persists mWAR season stats.
+Both called in end-game flow (lines 2189–2200).
+
+**What KBL does — where it diverges:**
+
+Hardcoded seasonId: ❌
+Both `mwarHook.initializeSeason('season-1', ...)` (line 287) and
+`aggregateManagerGameToSeason(gameId, 'season-1', ...)` (line 2193) pass
+`'season-1'` as a string literal. Same class of bug as FINDING-101 Bug B.
+mWAR season stats never accumulate correctly across seasons — always written to
+'season-1' regardless of actual season number.
+
+Home manager only: ⚠️
+`mwarHook.initializeGame(gameId, homeManagerId)` — only home manager tracked.
+Away manager decisions are not recorded. Acceptable for single-manager franchise
+mode; would need extension for full two-manager tracking.
+
+Team record uses route state, not actual standings: ⚠️
+`{ wins: parseInt(homeRecord.split('-')[0]) || 0, ... }` (line 2195) — uses
+homeRecord from route navigation state, not from a live standings query.
+If the route state is stale or missing, mWAR weighting uses incorrect team record.
+
+**New item for Phase 2 fix queue:**
+FIX-CODE (low): Replace `'season-1'` hardcoded string in mWAR init and aggregation
+calls with actual seasonId from navigationState (same fix class as F-101 Bug B).
+Two-line fix in GameTracker.tsx lines 287 and 2193.
+
+**Pattern verdict summary:**
+| Aspect | OOTP | KBL | Match |
+|--------|------|-----|-------|
+| Records decisions with LI context | Yes | Yes | Y |
+| Resolves decision outcomes | Yes | Yes | Y |
+| Persists at game end | Yes | Yes | Y |
+| Season aggregation | Yes | Yes (hardcoded seasonId) | PARTIAL |
+| Multi-manager tracking | Yes | Home only | PARTIAL |
+
+**Pattern Map update:** Row 4b → Follows Pattern: PARTIAL | Finding: FINDING-110
