@@ -1,166 +1,196 @@
-# KBL TRACKER — GROUND TRUTH AUDIT PLAN
-# Created: 2026-02-17 | Owner: Claude Sonnet 4.6 (captain) + John (PM)
-# Status: ACTIVE — Do not skip steps. Do not declare completion without evidence.
+# KBL TRACKER — AUDIT PLAN (REVISED)
+# Revised: 2026-02-18 | Owner: Claude + JK
+# Supersedes: original AUDIT_PLAN.md (2026-02-17)
+# Status: ACTIVE
+
+---
+
+## The Principle
+
+Know everything knowable from code before touching the browser.
+The sequence is non-negotiable:
+
+1. **Complete the PATTERN_MAP** — all 24 rows closed, no UNKNOWNs remaining
+2. **Fix everything findable in code** — all wiring gaps, broken connections, and
+   architectural violations provable by grep/build/logic
+3. **Browser verification** — surfaces only what is genuinely unknowable without
+   a human: visual bugs, real-interaction state issues, timing problems, UX gaps
+
+You cannot trust browser results if the code underneath is broken.
+You cannot know what to fix until you have the complete code-level picture.
+Do it in order. No exceptions.
 
 ---
 
 ## Core Principle: Evidence Over Assertion
 
 Nothing is marked "working" based on reading code alone. Every claim requires:
-- A test output, OR
 - A grep/build result, OR
-- A manual browser verification performed by John
+- A test output, OR
+- A manual browser verification performed by JK (Phase 3 only)
 
-If we cannot verify it, it goes in the **UNVERIFIED** column. Never in CONFIRMED.
-
----
-
-## How to Use This Document
-
-1. Work phases in order. Do not start Phase 2 until Phase 1 is complete.
-2. Every finding is logged in `AUDIT_LOG.md` using the standard format.
-3. Nothing is closed without a verification method documented.
-4. At session end: update `SESSION_LOG.md` and `AUDIT_LOG.md` before stopping.
+If we cannot verify it → status is UNVERIFIED, not CONFIRMED.
 
 ---
 
-## Phase 0: Inventory (Before Reading Any Code)
+## Phase 1: Complete the Pattern Map
 
-**Goal:** Know exactly what exists before evaluating any of it.
+**Goal:** Close all 22 remaining UNKNOWN rows in PATTERN_MAP.md.
+Every subsystem gets a Follows Pattern verdict: Y / N / PARTIAL.
+Every verdict gets a FINDING number as evidence.
 
-Run the following in Claude Code CLI from the kbl-tracker root and paste output to claude.ai:
+**What's already closed (5 rows):**
+| Row | Subsystem | Follows Pattern | Finding |
+|-----|-----------|-----------------|---------|
+| 4 | WAR — positional | N | FINDING-103 |
+| 11b | Leverage Index | N | FINDING-099 |
+| 12 | Clutch Attribution | PARTIAL | FINDING-098 |
+| 13 | Fan Morale | N (BROKEN) | FINDING-101 |
+| 21 | Trait System | PARTIAL | FINDING-104 |
 
-```bash
-# 1. Full active file tree (no archived, no node_modules)
-find src -not -path "*/archived*" -not -path "*/node_modules*" \( -name "*.ts" -o -name "*.tsx" \) | sort
+**Remaining 22 rows — audit order:**
 
-# 2. Size/complexity of key files
-wc -l src/src_figma/hooks/useGameState.ts \
-   src/components/GameTracker/index.tsx \
-   src/components/GameTracker/gameEngine.ts \
-   src/src_figma/app/pages/*.tsx 2>/dev/null | sort -rn | head -30
+Priority group A — spine-critical (must work for everything else to work):
+| Row | Subsystem | OOTP Pattern to verify against |
+|-----|-----------|-------------------------------|
+| 1 | GameTracker / Game State | Atomic event recorder; feeds stat pipeline on completion |
+| 2 | Stats Aggregation | Synchronous post-game accumulator; updates season totals immediately |
+| 3 | Franchise / Season Engine | Root aggregate; all queries scoped franchiseId → yearId → data |
+| 6 | Schedule System | 162-game grid; completion event fires stat pipeline |
+| 20 | Career Stats | SUM of PlayerSeasonStats by playerId; no separate table |
 
-# 3. How far did the reducer migration get?
-grep -rn "useReducer" src --include="*.ts" --include="*.tsx"
+Priority group B — downstream systems (depend on spine):
+| Row | Subsystem | OOTP Pattern to verify against |
+|-----|-----------|-------------------------------|
+| 4b | WAR — mWAR | Manager decision tracker; persists decisions, resolves outcomes |
+| 5 | Fame / Milestone | Career total threshold checker; fires narrative triggers |
+| 7 | Offseason | Atomic phase sequence; locks stats then opens next season |
+| 8 | Playoffs | Separate stat tables; bracket seeded from standings |
+| 11 | Mojo / Fitness | Per-player fatigue/condition; persists between games, feeds dev calc |
+| 16 | Salary System | Contract entity; service time drives eligibility categories |
+| 17 | League Builder | World config; generates league/team/player entities at creation |
+| 18 | Museum / HOF | Career threshold evaluator; runs post-retirement, eligibility gated |
+| 19 | Aging / Ratings | Season-close rating mutation; age-curve driven |
 
-# 4. How much useState spaghetti remains in GameTracker?
-grep -rn "useState" src/components/GameTracker/ src/src_figma --include="*.tsx" --include="*.ts" | wc -l
+Priority group C — orphaned/partial/unknown systems:
+| Row | Subsystem | OOTP Pattern to verify against |
+|-----|-----------|-------------------------------|
+| 9 | Relationships | Personality inputs to morale, development rate, narrative triggers |
+| 10 | Narrative / Headlines | Side-effect consumer of stat pipeline; never writes back |
+| 14 | Farm System | Affiliate roster; development level determines growth rate |
+| 15 | Trade System | Transaction log entry; immediate roster state change |
+| 22 | Player Dev Engine | 10-factor growth model at season close |
+| 23 | Record Book | Persistent single-season + career records; checked after every game |
+| 24 | UI Pages | Consumers only; read from stat stores, never write |
 
-# 5. Is the old useGameState hook still active?
-grep -rn "useGameState" src --include="*.ts" --include="*.tsx"
+**For each row, the audit steps are:**
+1. Read the relevant section in OOTP_ARCHITECTURE_RESEARCH.md
+2. Open the key KBL file(s)
+3. Ask: does the code follow the OOTP structural pattern?
+4. Log FINDING with verdict (Y / N / PARTIAL) and evidence
+5. Update PATTERN_MAP.md "Follows Pattern" column + finding number
 
-# 6. Does useGamePersistence exist and is it wired?
-grep -rn "useGamePersistence" src --include="*.ts" --include="*.tsx"
-
-# 7. What does the active GameTracker import?
-grep -rn "^import" src/src_figma/app/pages/GameTrackerPage.tsx 2>/dev/null || \
-grep -rn "^import" src/src_figma/app/pages/GameTracker.tsx 2>/dev/null
-```
-
-**Exit criteria:** Full inventory pasted and logged in AUDIT_LOG.md before Phase 1 begins.
-
----
-
-## Phase 1: Architecture Map (One File at a Time)
-
-**Goal:** Understand actual data flow, not intended data flow.
-
-Read each file in order. Document what it *actually* does vs. what the Gemini handoff claims it does.
-
-| # | File | Question to Answer |
-|---|------|--------------------|
-| 1 | Active `GameTracker.tsx` (src_figma path) | Is it on the reducer or still hybrid useState? |
-| 2 | Reducer definition + action types | Does it cover ALL game state transitions? |
-| 3 | `useGameState.ts` | Still active or dead? What imports it? |
-| 4 | `useGamePersistence.ts` | Does it exist? What does it actually do? |
-| 5 | `gameEngine.ts` | What's actually in it vs. what Gemini claims? |
-| 6 | `atBatLogic.ts` | Does it exist? Is MLB Rule 5.08(a) actually implemented? |
-| 7 | `fieldingLogic.ts` | Does it exist? What's in it? |
-
-**For each file:** Log a FINDING entry in AUDIT_LOG.md with CONFIRMED / CONTRADICTED / UNVERIFIED status.
-
-**Exit criteria:** All 7 files read, all findings logged, architecture map complete.
-
----
-
-## Phase 2: The Seams Audit
-
-**Goal:** Find every handoff point between systems — this is where bugs live.
-
-| Seam | Files Involved | What to Verify |
-|------|---------------|----------------|
-| Game state → IndexedDB | useGamePersistence / trackerDb.ts | Save path: when does it fire? What guard prevents saving empty state? |
-| IndexedDB → Game state | useGamePersistence / useGameState | Rehydration gate: does `isRehydrated` guard actually work? |
-| End Game → New Game | GameTracker / useGameState / gameStorage | Is all state cleared? Is scoreboard reset? Are runners cleared? |
-| Franchise → GameTracker | handlePlayGame / GameTrackerPage | Does real roster data flow in? |
-| GameTracker → Franchise | processCompletedGame | Do results write back correctly to standings? |
-| Reducer dispatch → autosave | GameTracker / useGamePersistence | Is autosave on hook-local timer or shared debounce? |
-
-**For each seam:** Write a manual browser test John performs. Log result in AUDIT_LOG.md.
-
-**Exit criteria:** All 6 seams traced in code AND verified by manual test.
+**Exit criteria:**
+- All 24 rows in PATTERN_MAP.md have a non-UNKNOWN "Follows Pattern" value
+- Every verdict has a FINDING number as evidence
+- AUDIT_LOG.md index updated for all new findings
 
 ---
 
-## Phase 3: Known Bug Verification
+## Phase 2: Fix Everything Findable in Code
 
-**Goal:** Confirm which of the 35 bug fixes in CURRENT_STATE.md are actually fixed.
+**Goal:** Resolve every finding that can be fixed without browser verification.
+This means: wiring gaps, broken method names, disconnected systems, missing imports,
+architectural violations — anything provable by grep/build/logic.
 
-**Do not trust the fix log.** Verify with eyes.
+**Process:**
+1. Build the fix queue from all FINDINGS (001–104 + Phase 1 output)
+2. Triage each finding: fixable in code? Needs browser to verify? Needs JK decision?
+3. Sequence fixes in dependency order (spine first, downstream second)
+4. Route each fix per routing rules (PROMPT_CONTRACTS.md template required)
+5. After every fix: `npm run build` passes + relevant tests pass + expected output
+   matches actual output
+6. Document completion in AUDIT_LOG.md + PROMPT_CONTRACTS.md
 
-Priority order:
-1. T0 (game-breaking) — 9 items
-2. T1 (wrong results) — 6 items
-3. T2 (missing wiring) — 11 items
-4. T3 (feature builds) — 7 items
+**Fix triage categories:**
+- **FIX-CODE:** Fixable in code, no browser needed (wiring, method names, missing calls)
+- **FIX-DECISION:** Needs JK to decide before fixing (e.g., FIERY/GRITTY chemistry types)
+- **FIX-BROWSER:** Can't confirm fix without browser (visual, interaction, timing)
+- **DEFER:** Known gap, not blocking, document and move on
 
-For each item: John performs the specific scenario in the browser. Pass/Fail logged in AUDIT_LOG.md with date.
+**Known FIX-CODE items entering Phase 2 (from existing findings):**
+- FINDING-099: LI dual-value — replace 6 getBaseOutLI with calculateLeverageIndex
+- FINDING-101 Bug A: Fan morale method rename (2 lines, contract written)
+- FINDING-101 Bug B: Hardcoded season/game numbers in fan morale call
+- FINDING-102 Step 6: Wire standings update into post-game pipeline
+- FINDING-103: Wire warOrchestrator into processCompletedGame.ts
+- FINDING-104a: Wire traitPools.ts into player creation dropdown
+- FINDING-104b: Write trait changes back to player record after awards ceremony
+- FINDING-098: Wire clutch trigger from at-bat outcome
+(Phase 1 audit will add more items to this list)
 
-**Exit criteria:** All T0 and T1 items manually verified. T2/T3 can be deferred with explicit notation.
+**Exit criteria:**
+- All FIX-CODE items executed, verified by build + tests
+- All FIX-DECISION items have a logged JK decision (fix or explicit defer)
+- All FIX-BROWSER items documented and queued for Phase 3
+- CURRENT_STATE.md updated with post-fix status of every finding
 
 ---
 
-## Phase 4: Debt Inventory
+## Phase 3: Browser Verification
 
-**Goal:** Catalogue everything needing refactoring before we touch it — with dependency ordering.
+**Goal:** Surface everything genuinely unknowable without a human in the browser.
+At this point the code is as correct as it can be without manual testing.
 
-Known debt items to evaluate:
-- [ ] Type duplication: `src/types/game.ts` vs `src/src_figma/app/types/game.ts`
-- [ ] Path drift: active code in src_figma that should be in components/GameTracker/
-- [ ] Dead archived code adjacent to live code
-- [ ] Remaining useState in GameTracker that belongs in the reducer
-- [ ] Gemini Phase A (Modal Dumbing) — real work or already done?
-- [ ] Gemini Phase B (Fame Engine) — real work or already done?
-- [ ] Gemini Phase C (Path cleanup) — real work or already done?
-- [ ] Gemini Phase D (Chaos test suite) — real work or already done?
+**Process:**
+1. JK performs each scenario in the browser
+2. Pass/Fail logged in AUDIT_LOG.md with date and exact behavior observed
+3. New bugs found → new FINDING, queued for code fix
+4. After any new code fixes: return to Phase 3 and re-verify affected scenarios
 
-Output: Prioritized debt list with "fix this before touching that" ordering written to `REFACTOR_ROADMAP.md`.
+**Scenario categories (to be finalized at Phase 3 start):**
+- Game flow: start → play → end → new game (state clear, no bleed-through)
+- Franchise wiring: roster flows into GameTracker, results flow back to standings
+- Post-game: summary data correct (stats, errors, box score)
+- Offseason phases: all 11 transitions, persistence verified
+- Awards ceremony: trait assignments persist to player record
+- Stats: season stats accumulate correctly across multiple games
+- WAR: values update after each game, display in UI
+- Fan morale: updates after game result
 
-**Exit criteria:** Debt list complete, ordering documented, roadmap written.
+**Exit criteria:**
+- All scenarios Pass OR have a logged FINDING with fix committed
+- No known regressions
+- CURRENT_STATE.md reflects final verified state
 
 ---
 
-## Accountability Mechanism
+## Accountability Rules (unchanged from original)
 
-### Finding Format (used in AUDIT_LOG.md)
+1. No finding is CONFIRMED without a verification method documented
+2. `npm run build` must pass after every code change before proceeding
+3. Relevant tests must pass after every code change
+4. JK confirms specific behavior in browser before any ticket closes (Phase 3 only)
+5. If Codex output doesn't match expected → change is NOT applied
+6. Every fix uses the Prompt Contract template in PROMPT_CONTRACTS.md
+7. Write to spec-docs before moving on. Chat is ephemeral. Docs are permanent.
+
+---
+
+## Finding Format
+
 ```
 FINDING-[NNN]
 Date: YYYY-MM-DD
-Phase: [0/1/2/3/4]
-File: [exact path]
-Claim: [what spec/handoff says is true]
-Evidence: [what code/output actually shows]
-Status: CONFIRMED | CONTRADICTED | UNVERIFIED
+Phase: [1/2/3]
+System: [subsystem name]
+Files: [exact paths]
+OOTP Pattern: [what OOTP does]
+KBL Code: [what KBL actually does]
+Follows Pattern: Y | N | PARTIAL
+Status: CONFIRMED | FIXED | UNVERIFIED | DEFERRED
 Verification method: [grep output / build result / manual browser test]
-Verified by: [Claude / John]
 ```
-
-### Rules That Cannot Be Skipped
-1. No finding is CONFIRMED without a verification method documented
-2. `npm run build` must pass after every Codex change before we proceed
-3. Relevant tests must pass after every Codex change
-4. John confirms specific behavior in browser before any ticket is closed
-5. If Codex output doesn't match expected output → change is NOT applied
 
 ---
 
@@ -168,6 +198,7 @@ Verified by: [Claude / John]
 
 Before ending ANY session:
 - [ ] All findings from this session logged in AUDIT_LOG.md
-- [ ] SESSION_LOG.md updated with what was done, what's pending, key decisions
+- [ ] PATTERN_MAP.md updated for any newly closed rows
+- [ ] SESSION_LOG.md updated
 - [ ] CURRENT_STATE.md updated if any status changed
-- [ ] Next session starting point clearly documented
+- [ ] Next session starting point documented in CURRENT_STATE.md

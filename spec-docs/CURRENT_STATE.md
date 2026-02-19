@@ -6,63 +6,73 @@
 ---
 
 ## Current Phase and Step
-- **Phase:** 3 — Fix Prioritization and Execution
-- **Status:** Phase 2 COMPLETE. All 5 priority subsystems audited. Ready to plan and execute fixes.
+- **Phase:** 1 (revised plan) — Complete the Pattern Map
+- **Status:** 5 of 24 rows closed. 22 rows still UNKNOWN in "Follows Pattern."
+- **Next action:** Audit Pattern Map rows in Group A (spine-critical) — start with Row 1 (GameTracker / Game State)
 
 ---
 
-## Phase 2 Final Results
+## Revised Audit Sequence (non-negotiable order)
+1. **Phase 1** — Close all 22 remaining UNKNOWN rows in PATTERN_MAP.md
+2. **Phase 2** — Fix everything findable in code (no browser needed)
+3. **Phase 3** — Browser verification (JK performs scenarios)
 
-| Finding | Subsystem | Verdict | Fix Complexity |
-|---------|-----------|---------|----------------|
-| 098 | Clutch Attribution | PARTIAL — pipeline disconnected | Wire trigger from at-bat outcome |
-| 099 | Leverage Index | N — dual-value violation | Replace 6 getBaseOutLI calls |
-| 100 | Legacy Field Removal | FIXED | Done (3705a86) |
-| 101 | Fan Morale | BROKEN — method name mismatch | 2-line rename (contract written) |
-| 102 | Stats Aggregation | PARTIAL — Steps 6/7/8/10/11 absent | Standings wiring = HIGH |
-| 103 | Positional WAR | N — zero callers | 1 import + 1 call in processCompletedGame.ts |
-| 104 | Trait System | PARTIAL — storage wired, ceremony not persisting | 3 targeted fixes |
+Rationale: cannot trust browser results if code is broken. Cannot know what to fix
+until code-level audit is complete. See AUDIT_PLAN.md for full details.
 
 ---
 
-## Next Action
-**Phase 3 — Confirm fix execution order with JK, then execute.**
+## Pattern Map Status
+**Closed (5):** Row 4 (WAR positional/N/F-103), Row 11b (LI/N/F-099),
+Row 12 (Clutch/PARTIAL/F-098), Row 13 (Fan Morale/N/F-101), Row 21 (Trait/PARTIAL/F-104)
 
-Proposed priority order:
-1. FINDING-101: Fan Morale method rename (2 lines, contract ready in PROMPT_CONTRACTS.md)
-2. FINDING-103: Wire warOrchestrator into processCompletedGame.ts (closes WAR + FINDING-102 Step 8)
-3. FINDING-102 Step 6: Wire standings update into post-game pipeline (HIGH per audit)
-4. FINDING-099: Replace dual LI values with single calculateLeverageIndex
-5. FINDING-104: (a) trait dropdown in player creation, (b) ceremony persistence to player record
-6. FINDING-098: Wire clutch trigger from at-bat outcome
+**Open (22):** Rows 1, 2, 3, 4b, 5, 6, 7, 8, 9, 10, 11, 14, 15, 16, 17, 18, 19, 20, 22, 23, 24
+
+**Group A (spine-critical — audit first):** Rows 1, 2, 3, 6, 20
+**Group B (downstream):** Rows 4b, 5, 7, 8, 11, 16, 17, 18, 19
+**Group C (orphaned/partial/unknown):** Rows 9, 10, 14, 15, 22, 23, 24
 
 ---
 
-## Key Decisions Made (do not re-derive these)
-See ARCHITECTURAL_DECISIONS.md for full list. Summary of Phase 2 additions:
-1–15. (All prior decisions still hold — see previous CURRENT_STATE or ARCHITECTURAL_DECISIONS.md)
-16. **Traits are NOT engine effects.** Persistent player attributes only. No potency calculator, no trigger layer needed. Stored as trait1/trait2 string IDs on master player record.
-17. **Trait use cases:** player creation dropdown, generated/rookie player assignment, awards ceremony rewards/penalties, salary/grade influence.
-18. **Player Morale ≠ Traits.** Fully independent systems. No coupling.
-19. **FIERY + GRITTY chemistry types** are KBL-only additions (SMB4 has 5). Decision on keep/remove pending.
-20. **traitPools.ts** (60+ traits, S/A/B/C tiers) is the canonical catalog. Never imported — must be wired.
-21. **warOrchestrator.ts** is fully correct — zero callers. One wiring call closes the gap.
-22. **Fan morale localStorage** (Bug C, FINDING-101) is a separate follow-on item after Bug A method rename fix.
+## Known Phase 2 Fix Queue (FIX-CODE items confirmed so far)
+- F-099: LI dual-value — replace 6 getBaseOutLI with calculateLeverageIndex
+- F-101 Bug A: Fan morale method rename (2 lines, contract in PROMPT_CONTRACTS.md)
+- F-101 Bug B: Hardcoded season/game numbers in fan morale call
+- F-101 Bug C: Fan morale localStorage → IndexedDB (follow-on)
+- F-102 Step 6: Wire standings into post-game pipeline
+- F-103: Wire warOrchestrator into processCompletedGame.ts
+- F-104a: Wire traitPools.ts into player creation dropdown
+- F-104b: Write trait changes back to player record after awards ceremony
+- F-098: Wire clutch trigger from at-bat outcome
+(Phase 1 will add more items)
+
+---
+
+## Key Decisions Made (do not re-derive)
+1–15: See ARCHITECTURAL_DECISIONS.md
+16. Traits are NOT engine effects. Persistent player attributes only (trait1/trait2 string IDs).
+17. Trait use cases: player creation dropdown, generated player assignment, awards ceremony, salary/grade.
+18. Player Morale ≠ Traits. Fully independent systems.
+19. FIERY + GRITTY chemistry types are KBL-only additions. Decision on keep/remove pending (FIX-DECISION).
+20. traitPools.ts (60+ traits) is the canonical catalog. Must be wired to player creation + ceremony.
+21. warOrchestrator.ts is fully correct — zero callers. One wiring call closes the gap.
+22. Fan morale localStorage (Bug C) is follow-on after Bug A method rename.
 
 ---
 
 ## Files a New Thread Must Read (in order)
 1. This file (CURRENT_STATE.md)
 2. spec-docs/SESSION_RULES.md
-3. spec-docs/AUDIT_LOG.md — findings index
-4. spec-docs/FINDINGS/FINDINGS_056_onwards.md — full text for FINDING-098 through 104
-5. spec-docs/PROMPT_CONTRACTS.md — FINDING-101 fix contract ready to execute
+3. spec-docs/AUDIT_PLAN.md — the revised 3-phase plan
+4. spec-docs/PATTERN_MAP.md — 24 rows, audit status per row
+5. spec-docs/AUDIT_LOG.md — findings index
+6. spec-docs/FINDINGS/FINDINGS_056_onwards.md — full text F-098 through F-104
 
 ---
 
 ## What a New Thread Should NOT Do
-- Re-audit Phase 2 subsystems — they are complete
-- Rebuild WAR engines — the calculators are correct, only wiring is needed
-- Treat trait fields as engine modifiers — they are static attributes only
-- Read OOTP_ARCHITECTURE_RESEARCH.md in full (too large, use per-section as needed)
-- Conflate mWAR (active/wired) with positional WAR (orphaned) — they are separate
+- Skip to fix execution before Phase 1 (Pattern Map) is complete
+- Treat Phase 2 fix queue as final — Phase 1 will add more items
+- Read OOTP_ARCHITECTURE_RESEARCH.md in full (too large — read per-section as needed)
+- Conflate mWAR (active/wired) with positional WAR (orphaned)
+- Start browser testing before Phases 1 and 2 are done
