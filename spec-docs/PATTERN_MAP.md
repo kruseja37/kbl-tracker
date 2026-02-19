@@ -26,7 +26,7 @@ structure. SMB4 defines the content. Neither is optional.
 | 2 | Stats Aggregation | Synchronous post-game accumulator; updates season totals immediately | PARTIAL | PARTIAL (FINDING-106) | Same counting stats + KBL-specific (mojo impact, clutch index) | — | ⚠️ PARTIAL |
 | 3 | Franchise / Season Engine | Root aggregate; all queries scoped franchiseId → yearId → data | Y | N (FINDING-107) | Single franchise per user, season number not calendar year | N | ✅ WIRED |
 | 4 | WAR — positional | Derived field on PlayerSeasonStats; recalcs from live stats each game | Y | N | bWAR/fWAR/pWAR/rWAR exist but not wired to pipeline | Y | ❌ ORPHANED |
-| 4b | WAR — mWAR | Manager decision tracker; persists decisions, resolves outcomes | Y | PARTIAL (FINDING-110) | Manager WAR based on in-game decisions, leverage-weighted | Y | ✅ WIRED |
+| 4b | WAR — mWAR | Manager decision tracker; persists decisions, resolves outcomes | Y | Y (FINDING-110) | Manager WAR based on in-game decisions, leverage-weighted | Y | ✅ WIRED |
 | 5 | Fame / Milestone | Career total threshold checker; fires narrative triggers on cross | Y | PARTIAL (FINDING-111) | Fame tiers, KBL-specific milestone thresholds | Y | ✅ WIRED |
 | 6 | Schedule System | 162-game grid; completion event fires stat pipeline | Y | PARTIAL (FINDING-108) | Same structure; game completion triggers aggregation | Y | ✅ WIRED |
 | 7 | Offseason | Atomic phase sequence; locks stats then opens next season | Y | PARTIAL (FINDING-112) | Same phases; KBL-specific award categories | Y | ✅ WIRED |
@@ -37,8 +37,8 @@ structure. SMB4 defines the content. Neither is optional.
 | 11b | Leverage Index | Situational weight applied to all clutch/fame/WAR calculations | Y | N (FINDING-099) | Full LI spec implemented; boLI only in active hook; relationship modifiers dead | PARTIAL | ⚠️ PARTIAL |
 | 12 | Clutch Attribution | Per-play multi-participant credit distribution weighted by LI | Y | PARTIAL (FINDING-098) | Batter + pitcher + catcher + fielder + runner + manager per play | Y | ⚠️ PARTIAL |
 | 13 | Fan Morale | Team performance input; affects attendance, storylines | Y | UNKNOWN | Fan morale per team, game outcome driven | N | 🔲 STUBBED |
-| 14 | Farm System | Affiliate roster; development level determines growth rate | Y | UNKNOWN | Minor league system, prospect tracking | PARTIAL | ❌ ORPHANED |
-| 15 | Trade System | Transaction log entry; immediate roster state change | Y | UNKNOWN | Player trades, waiver moves | N | ❌ ORPHANED |
+| 14 | Farm System | Affiliate roster; development level determines growth rate | Y | N (FINDING-072) | Minor league system, prospect tracking | PARTIAL | ❌ ORPHANED |
+| 15 | Trade System | Transaction log entry; immediate roster state change | Y | N (FINDING-073) | Player trades, waiver moves | N | ❌ ORPHANED |
 | 16 | Salary System | Contract entity; service time drives eligibility categories | Y | UNKNOWN | KBL salary structure, contract years | N | ✅ WIRED |
 | 17 | League Builder | World config; generates league/team/player entities at creation | Y | UNKNOWN | Fictional teams, custom rosters, KBL league rules | N | ✅ WIRED |
 | 18 | Museum / HOF | Career threshold evaluator; runs post-retirement, eligibility gated | PARTIAL | UNKNOWN | KBL Hall of Fame criteria, fame-tier based | Y | ⚠️ PARTIAL |

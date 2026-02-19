@@ -529,3 +529,30 @@ Candidate fixes (in rough priority order):
 5. FINDING-104: Trait system — (a) dropdown in player creation, (b) ceremony persistence to player record
 6. FINDING-098: Clutch Attribution — wire trigger from at-bat outcome
 Confirm with JK before beginning execution.
+
+## Session: 2026-02-18 — Doc Reconciliation (session end)
+
+### What Was Accomplished
+- Read all 5 session docs + PATTERN_MAP + FINDINGS_056_onwards.md in full
+- Identified discrepancy: CURRENT_STATE.md said 5 rows closed, actual count was 15
+- Closed rows 14 (Farm) and 15 (Trade) using Batch D finding evidence (F-072, F-073) — both ORPHANED = N
+- Updated PATTERN_MAP.md rows 14 and 15 "Follows Pattern" column
+- Rewrote CURRENT_STATE.md to reflect actual state: 15 rows closed, 11 UNKNOWN
+
+### No Code Changes This Session
+Documentation reconciliation only.
+
+### Actual Pattern Map State (post-reconciliation)
+**Closed (15):** Rows 1, 2, 3, 4, 4b, 5, 6, 7, 11b, 12, 13, 14, 15, 20, 21
+**Open (11):** Rows 8, 9, 10, 11, 16, 17, 18, 19, 22, 23, 24
+
+### Next Session Starts With
+Audit Phase 1 — close remaining 11 UNKNOWN rows, starting with Group B:
+- Row 8: Playoffs (usePlayoffData WIRED — needs pattern conformance check)
+- Row 9: Relationships (indirect wiring via useFranchiseData — needs pattern check)
+- Row 10: Narrative/Headlines (game recap WIRED, headline ORPHANED — needs pattern check)
+- Row 11: Mojo/Fitness (playerStateIntegration WIRED — needs pattern check)
+- Rows 16, 17, 18, 19: Salary, League Builder, Museum/HOF, Aging/Ratings
+- Rows 22, 23, 24: Player Dev Engine, Record Book, UI Pages
+
+After Phase 1 complete → build full Phase 2 fix queue → begin fix execution.

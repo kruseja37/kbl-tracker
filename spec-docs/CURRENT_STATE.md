@@ -1,5 +1,5 @@
 # KBL Tracker — Current State
-**Last updated:** 2026-02-18
+**Last updated:** 2026-02-18 (reconciliation session)
 **Protocol:** REWRITE this file (do not append) at every session end.
 **Max length:** 2 pages. If it grows beyond this, you are doing it wrong.
 
@@ -7,13 +7,13 @@
 
 ## Current Phase and Step
 - **Phase:** 1 (revised plan) — Complete the Pattern Map
-- **Status:** 5 of 24 rows closed. 22 rows still UNKNOWN in "Follows Pattern."
-- **Next action:** Audit Pattern Map rows in Group A (spine-critical) — start with Row 1 (GameTracker / Game State)
+- **Status:** 15 of 26 rows closed. 11 rows still UNKNOWN in "Follows Pattern."
+- **Next action:** Audit Group B rows 8, 9, 10, 11 and Group C rows 16, 17, 18, 19, 22, 23, 24
 
 ---
 
 ## Revised Audit Sequence (non-negotiable order)
-1. **Phase 1** — Close all 22 remaining UNKNOWN rows in PATTERN_MAP.md
+1. **Phase 1** — Close all remaining UNKNOWN rows in PATTERN_MAP.md
 2. **Phase 2** — Fix everything findable in code (no browser needed)
 3. **Phase 3** — Browser verification (JK performs scenarios)
 
@@ -23,14 +23,29 @@ until code-level audit is complete. See AUDIT_PLAN.md for full details.
 ---
 
 ## Pattern Map Status
-**Closed (5):** Row 4 (WAR positional/N/F-103), Row 11b (LI/N/F-099),
-Row 12 (Clutch/PARTIAL/F-098), Row 13 (Fan Morale/N/F-101), Row 21 (Trait/PARTIAL/F-104)
+**Closed (15):**
+| Row | Subsystem | Follows Pattern | Finding |
+|-----|-----------|-----------------|---------|
+| 1 | GameTracker / Game State | PARTIAL | F-105 |
+| 2 | Stats Aggregation | PARTIAL | F-106 |
+| 3 | Franchise / Season Engine | PARTIAL | F-107 |
+| 4 | WAR — positional | N | F-103 |
+| 4b | WAR — mWAR | PARTIAL | F-110 |
+| 5 | Fame / Milestone | PARTIAL | F-111 |
+| 6 | Schedule System | PARTIAL | F-108 |
+| 7 | Offseason | PARTIAL | F-112 |
+| 11b | Leverage Index | N | F-099 |
+| 12 | Clutch Attribution | PARTIAL | F-098 |
+| 13 | Fan Morale | N (BROKEN) | F-101 |
+| 14 | Farm System | N (ORPHANED) | F-072 |
+| 15 | Trade System | N (ORPHANED) | F-073 |
+| 20 | Career Stats | N | F-109 |
+| 21 | Trait System | N | F-104 |
 
-**Open (22):** Rows 1, 2, 3, 4b, 5, 6, 7, 8, 9, 10, 11, 14, 15, 16, 17, 18, 19, 20, 22, 23, 24
+**Open (11):** Rows 8, 9, 10, 11, 16, 17, 18, 19, 22, 23, 24
 
-**Group A (spine-critical — audit first):** Rows 1, 2, 3, 6, 20
-**Group B (downstream):** Rows 4b, 5, 7, 8, 11, 16, 17, 18, 19
-**Group C (orphaned/partial/unknown):** Rows 9, 10, 14, 15, 22, 23, 24
+**Group B (downstream):** Rows 8, 9, 10, 11, 16, 17, 18, 19
+**Group C (orphaned/partial/unknown):** Rows 22, 23, 24
 
 ---
 
@@ -44,7 +59,9 @@ Row 12 (Clutch/PARTIAL/F-098), Row 13 (Fan Morale/N/F-101), Row 21 (Trait/PARTIA
 - F-104a: Wire traitPools.ts into player creation dropdown
 - F-104b: Write trait changes back to player record after awards ceremony
 - F-098: Wire clutch trigger from at-bat outcome
-(Phase 1 will add more items)
+- F-110: Fix hardcoded 'season-1' in mWAR init + aggregation calls (2 lines)
+- F-112: Fix clearSeasonalStats (scans localStorage, stats are in IndexedDB — clears nothing)
+(Phase 1 will add more items from rows 8, 9, 10, 11, 16–19, 22–24)
 
 ---
 
@@ -57,6 +74,9 @@ Row 12 (Clutch/PARTIAL/F-098), Row 13 (Fan Morale/N/F-101), Row 21 (Trait/PARTIA
 20. traitPools.ts (60+ traits) is the canonical catalog. Must be wired to player creation + ceremony.
 21. warOrchestrator.ts is fully correct — zero callers. One wiring call closes the gap.
 22. Fan morale localStorage (Bug C) is follow-on after Bug A method rename.
+23. franchiseId scoping gap in seasonStorage/gameStorage/offseasonStorage is DEFERRED (latent debt, no current user impact — single franchise only).
+24. Schedule-to-pipeline decoupling is DEFERRED (works by convention today, architectural debt).
+25. Career stats use incremental write pattern (not OOTP derive-on-read) — FIX-DECISION queued (F-109).
 
 ---
 
@@ -64,9 +84,9 @@ Row 12 (Clutch/PARTIAL/F-098), Row 13 (Fan Morale/N/F-101), Row 21 (Trait/PARTIA
 1. This file (CURRENT_STATE.md)
 2. spec-docs/SESSION_RULES.md
 3. spec-docs/AUDIT_PLAN.md — the revised 3-phase plan
-4. spec-docs/PATTERN_MAP.md — 24 rows, audit status per row
-5. spec-docs/AUDIT_LOG.md — findings index
-6. spec-docs/FINDINGS/FINDINGS_056_onwards.md — full text F-098 through F-104
+4. spec-docs/PATTERN_MAP.md — 26 rows, audit status per row
+5. spec-docs/AUDIT_LOG.md — findings index (F-001 to F-112 + index for 056+)
+6. spec-docs/FINDINGS/FINDINGS_056_onwards.md — full text F-056 through F-112
 
 ---
 
@@ -76,3 +96,4 @@ Row 12 (Clutch/PARTIAL/F-098), Row 13 (Fan Morale/N/F-101), Row 21 (Trait/PARTIA
 - Read OOTP_ARCHITECTURE_RESEARCH.md in full (too large — read per-section as needed)
 - Conflate mWAR (active/wired) with positional WAR (orphaned)
 - Start browser testing before Phases 1 and 2 are done
+- Assume CURRENT_STATE.md row count matches AUDIT_LOG — always check PATTERN_MAP.md directly
