@@ -1700,3 +1700,539 @@ FIX-CODE (low): Move `incrementYearsOfService()` from localStorage to IndexedDB.
 | New season opens correctly | Yes | Yes (by seasonId) | Y |
 
 **Pattern Map update:** Row 7 → Follows Pattern: PARTIAL | Finding: FINDING-112
+
+### FINDING-110
+**Date:** 2026-02-18 | **Phase:** 1 (Pattern Map) | **Status:** CONFIRMED
+**System:** WAR — mWAR (Pattern Map Row 4b)
+**Files:** `src/src_figma/app/hooks/useMWARCalculations.ts` (236 lines),
+`src/utils/managerStorage.ts`, `src/src_figma/app/pages/GameTracker.tsx`
+(lines 54–57, 280–292, 937–968, 1599–1657, 2185–2205)
+
+**OOTP Pattern:** Manager decision tracker; persists decisions, resolves outcomes.
+
+**Follows Pattern: Y (with one hardcoded bug)**
+
+**What OOTP does:**
+Manager decisions (pitching changes, intentional walks, pinch hitters, defensive subs)
+are tracked with game context (LI, score, inning, base/out state). Outcomes are
+resolved post-play. Manager WAR is calculated from quality of decisions weighted by
+leverage. Decisions and season mWAR persist to manager record.
+
+**What KBL does — confirmed working:**
+
+Decision recording: ✅
+- Pitching changes: `mwarHook.recordDecision('pitching_change', gsLI, ...)` at line 940
+- Pinch hitters / defensive subs: recordDecision at line 968
+- Intentional walks: recordDecision at line 1599
+- Outcome resolution: `mwarHook.resolveDecisionOutcome(pending.decisionId, outcome)` at line 1627
+- Manager moments: `mwarHook.checkForManagerMoment(gsLI)` at line 1639
+
+All 3 major decision types tracked with correct LI context. Outcome resolution wired.
+
+Persistence at game end: ✅
+`saveGameDecisions(mwarHook.gameStats.decisions)` → IndexedDB managerDecisions store
+`aggregateManagerGameToSeason(gameId, seasonId, managerId, teamId, ...)` → IndexedDB
+managerSeasonStats store keyed [seasonId, managerId]
+
+Only fires if `mwarHook.gameStats.decisions.length > 0` — correct guard.
+Error is non-blocking (`console.warn`), so mWAR failure won't abort end-game flow.
+
+**One bug found:**
+Hardcoded `'season-1'` in two places:
+- GameTracker.tsx line 287: `mwarHook.initializeSeason('season-1', homeManagerId, homeTeamId)`
+- GameTracker.tsx line 2194: `aggregateManagerGameToSeason(gameId, 'season-1', ...)`
+
+This means all mWAR data accumulates in `'season-1'` regardless of which franchise
+season is actually being played. Same pattern as FINDING-101 Bug B (fan morale).
+mWAR data from Season 2, 3, etc. all goes into the Season 1 bucket.
+
+**New item for Phase 2 fix queue (FIX-CODE):**
+Replace hardcoded `'season-1'` in useMWARCalculations initialization (line 287) and
+aggregateManagerGameToSeason call (line 2194) with the computed `seasonId` that's
+already calculated at line 2208 (`computedSeasonId`). The correct value is already
+in scope — just needs to be wired up to the mWAR calls.
+
+**Pattern verdict summary:**
+| Aspect | OOTP | KBL | Match |
+|--------|------|-----|-------|
+| Records decision types | Yes | Yes (3 types) | Y |
+| Captures LI at decision time | Yes | Yes | Y |
+| Resolves outcome post-play | Yes | Yes | Y |
+| Persists to season record | Yes | Yes (to wrong season bucket) | PARTIAL |
+| Season ID scoping | Yes | No — hardcoded 'season-1' | N |
+
+**Pattern Map update:** Row 4b → Follows Pattern: Y (FINDING-110)
+Note: "Y" because architecture matches; hardcoded seasonId is a bug not a pattern mismatch.
+
+### FINDING-110
+**Date:** 2026-02-18 | **Phase:** 1 (Pattern Map) | **Status:** CONFIRMED
+**System:** WAR — mWAR (Pattern Map Row 4b)
+**Files:** `src/src_figma/app/hooks/useMWARCalculations.ts` (236 lines),
+`src/utils/managerStorage.ts`, `src/src_figma/app/pages/GameTracker.tsx`
+
+**OOTP Pattern:** Manager decision tracker; persists decisions, resolves outcomes.
+
+**Follows Pattern: Y (with one hardcoded bug)**
+
+Decision recording confirmed wired: pitching_change (line 940), pinch hitter/def sub (line 968), IBB (line 1599). Outcome resolution wired (line 1627). Persistence at game end: saveGameDecisions() + aggregateManagerGameToSeason() → IndexedDB. Error is non-blocking. Architecture matches OOTP pattern.
+
+**Bug found (FIX-CODE):** Hardcoded 'season-1' in two places:
+- GameTracker.tsx line 287: mwarHook.initializeSeason('season-1', ...)
+- GameTracker.tsx line 2194: aggregateManagerGameToSeason(gameId, 'season-1', ...)
+All mWAR data accumulates in 'season-1' regardless of actual season. Same pattern as FINDING-101 Bug B.
+Fix: replace both with computedSeasonId (already calculated at line 2208 — just needs to be in scope earlier).
+
+**Pattern Map update:** Row 4b → Follows Pattern: Y | Finding: FINDING-110
+
+---
+
+### FINDING-110 (AUDIT_LOG entry)
+Row 4b — mWAR: Y. See above for full detail.
+
+---
+
+### FINDING-111
+**Date:** 2026-02-18 | **Phase:** 1 (Pattern Map) | **Status:** CONFIRMED
+**System:** Fame / Milestone (Pattern Map Row 5)
+
+**OOTP Pattern:** Career total threshold checker; fires narrative triggers on cross.
+
+**Follows Pattern: PARTIAL**
+
+Detection pipeline confirmed wired: aggregateGameWithMilestones() runs every game via seasonAggregator. Thresholds correct (season + career, scaled by franchise game count). Fame events returned in result object. Fame tiers tracked.
+
+**Gap:** No narrative trigger fires when milestones are crossed. milestoneAggregator returns fameEvents array but no callback, dispatcher, or downstream consumer connects this to a narrative/headline engine. Consistent with FINDING-102 Step 10.
+
+**Pattern Map update:** Row 5 → Follows Pattern: PARTIAL | Finding: FINDING-111
+
+---
+
+### FINDING-112
+**Date:** 2026-02-18 | **Phase:** 1 (Pattern Map) | **Status:** CONFIRMED
+**System:** Offseason (Pattern Map Row 7)
+
+**OOTP Pattern:** Atomic phase sequence; locks stats then opens next season.
+
+**Follows Pattern: Y**
+
+offseasonStorage.ts: OFFSEASON_PHASES array defines 11 phases in strict order. useOffseasonState.ts enforces sequential progression (phase index check before advancing). Phases: standings → awards → ratings → retirements → freeAgency → draft → trades → roster → springTraining → seasonStart. Stats lock / next season open sequenced correctly.
+
+**Pattern Map update:** Row 7 → Follows Pattern: Y | Finding: FINDING-112
+
+---
+
+### FINDING-113
+**Date:** 2026-02-18 | **Phase:** 1 (Pattern Map) | **Status:** CONFIRMED
+**System:** Playoffs (Pattern Map Row 8)
+
+**OOTP Pattern:** Separate stat tables; bracket seeded from standings.
+
+**Follows Pattern: Y**
+
+playoffStorage.ts: separate PLAYOFF_STATS store keyed [playoffId, playerId]. playoffEngine.ts: qualifyTeams(standings, config) seeds bracket from standings. Bracket advancement logic present. Playoff stats separated from season stats by playoffId key.
+
+**Pattern Map update:** Row 8 → Follows Pattern: Y | Finding: FINDING-113
+
+---
+
+### FINDING-114
+**Date:** 2026-02-18 | **Phase:** 1 (Pattern Map) | **Status:** CONFIRMED
+**System:** Mojo / Fitness (Pattern Map Row 11)
+
+**OOTP Pattern:** Per-player fatigue/condition; persists between games, feeds dev calc.
+
+**Follows Pattern: N**
+
+Two critical gaps found:
+
+Gap 1 — Auto-update DISABLED:
+updateMojo() calls in GameTracker.tsx (lines 1526–1533) are commented out with note:
+"Per user request, mojo should only change via manual user input through the PlayerCard."
+Mojo does NOT update automatically from play outcomes. Manual-only.
+
+Gap 2 — No persistence between games:
+usePlayerState.ts has ZERO storage calls (no IndexedDB, no localStorage, no any persistence).
+Mojo and fitness state live entirely in React useState. Cleared on every page unmount.
+No carryover between games despite mojoEngine.ts line 193 describing "Partial carryover
+between games (30%)." The carryover logic exists in the engine but is never called.
+
+Impact: Mojo and fitness are display-only during a game. They reset on every new game.
+The development calculation dependency (fitness feeds dev calc) cannot fire since fitness
+never persists.
+
+**New item for Phase 2 fix queue (FIX-DECISION):**
+Decision needed: re-enable auto-update from play outcomes (was disabled at user request)?
+And: persist mojo/fitness to IndexedDB between games? These are product decisions, not
+just code fixes.
+
+**Pattern Map update:** Row 11 → Follows Pattern: N | Finding: FINDING-114
+
+---
+
+### FINDING-115
+**Date:** 2026-02-18 | **Phase:** 1 (Pattern Map) | **Status:** CONFIRMED
+**System:** Salary System (Pattern Map Row 16)
+
+**OOTP Pattern:** Contract entity; service time drives eligibility categories.
+
+**Follows Pattern: N**
+
+salaryCalculator.ts (1,289 lines): calculates salary from ratings, position, age, WAR,
+fame, personality, traits. No service time concept. No contract entity (years remaining,
+contract type, eligibility tier). Salary is a computed value on the player record, not
+a contract. leagueBuilderStorage.ts has `salary: number` and `contractYears?: number`
+on the player record — contractYears is optional and not connected to salary calculation.
+
+OOTP: service time (days on active roster) drives arbitration eligibility, free agent
+eligibility, salary floor/ceiling. KBL: age-based factor only, no service time tracking.
+
+This is a known design simplification — KBL spec notes "KBL salary structure" as a
+custom approach. Not necessarily a bug, but does not match OOTP's contract model.
+
+**New item for Phase 2 fix queue (FIX-DECISION):**
+Accept age-based salary without service time as explicit KBL design choice, and
+document accordingly. Or implement basic service time tracking.
+
+**Pattern Map update:** Row 16 → Follows Pattern: N | Finding: FINDING-115
+
+---
+
+### FINDING-116
+**Date:** 2026-02-18 | **Phase:** 1 (Pattern Map) | **Status:** CONFIRMED
+**System:** League Builder (Pattern Map Row 17)
+
+**OOTP Pattern:** World config; generates league/team/player entities at creation.
+
+**Follows Pattern: PARTIAL**
+
+leagueBuilderStorage.ts: full CRUD for leagues, teams, players, rules presets.
+Entities persist to IndexedDB correctly. Structure matches OOTP's world config concept.
+
+Divergence: OOTP auto-generates rosters from parameters at world creation.
+KBL requires manual creation of every team and player. No auto-generation from
+config exists. This is by design (KBL is for managing a specific real-world league,
+not generating a fictional universe from scratch). Not a bug.
+
+**Pattern Map update:** Row 17 → Follows Pattern: PARTIAL | Finding: FINDING-116
+
+---
+
+### FINDING-117
+**Date:** 2026-02-18 | **Phase:** 1 (Pattern Map) | **Status:** CONFIRMED
+**System:** Museum / HOF (Pattern Map Row 18)
+
+**OOTP Pattern:** Career threshold evaluator; runs post-retirement, eligibility gated.
+
+**Follows Pattern: PARTIAL**
+
+museumPipeline.ts: populateMuseumLeaders() reads career stats and populates leaderboard.
+museumStorage.ts: stores retired player records and HOF entries.
+retirePlayer() in leagueBuilderStorage.ts exists.
+
+Gaps:
+- HOF eligibility check (years post-retirement gate) not confirmed in code — museumPipeline
+  populates leaders but no eligibility waiting period enforced.
+- "Runs post-retirement" wiring: retirePlayer() is called from offseason retirement flow,
+  but whether that triggers a HOF evaluation pass is not confirmed.
+  grep: `retirePlayer` callers in offseason flow exist; downstream HOF eval not verified.
+
+**Pattern Map update:** Row 18 → Follows Pattern: PARTIAL | Finding: FINDING-117
+
+---
+
+### FINDING-118
+**Date:** 2026-02-18 | **Phase:** 1 (Pattern Map) | **Status:** CONFIRMED
+**System:** Aging / Ratings (Pattern Map Row 19)
+
+**OOTP Pattern:** Season-close rating mutation; age-curve driven, 10-factor model.
+
+**Follows Pattern: N**
+
+agingEngine.ts (263 lines): calculateRatingChange(rating, age) exists. Age curve logic
+present. But:
+
+Gap 1 — Display only, no write-back:
+SpringTrainingFlow.tsx calls calculateRatingChange() to show projected changes.
+No code writes the calculated changes back to the player record in IndexedDB.
+Aging projections display but do not mutate actual ratings.
+
+Gap 2 — Wrong phase:
+OOTP applies aging at season close. KBL shows projections at spring training.
+The projection phase is correct; the mutation phase is missing.
+
+Gap 3 — No connection to offseason:
+grep: `calculateRatingChange` callers = SpringTrainingFlow.tsx only.
+seasonEndProcessor.ts and offseasonStorage.ts do not import agingEngine.
+
+**New item for Phase 2 fix queue (FIX-CODE):**
+agingEngine mutation must fire at season close (offseason ratings phase).
+Connect agingIntegration.ts (exists: src/src_figma/app/engines/agingIntegration.ts)
+to the offseason flow ratings phase. Write calculated changes to player record in
+leagueBuilderStorage.
+
+**Pattern Map update:** Row 19 → Follows Pattern: N | Finding: FINDING-118
+
+---
+
+### FINDING-119
+**Date:** 2026-02-18 | **Phase:** 1 (Pattern Map) | **Status:** CONFIRMED
+**System:** Relationships (Pattern Map Row 9)
+
+**OOTP Pattern:** Personality inputs to morale, development rate, narrative triggers.
+
+**Follows Pattern: N (ORPHANED)**
+
+Full system built — relationshipEngine.ts (9 types), relationshipIntegration.ts (detect arcs/matchups, team chemistry), useRelationshipData hook (morale calc, trade warnings). All architecture is present.
+
+Zero active callers:
+- `useRelationshipData` is defined but never imported in any page or component
+- `detectRevengeArcs()` / `detectRomanticMatchups()` — exported, never called from active app
+- `calculateMoraleEffect()` — called inside hook; hook never instantiated
+- No relationship data feeds into at-bat outcomes, development rate, or narrative triggers
+
+The LI relationship modifiers (revenge arcs, romantic matchups) confirmed dead per F-099.
+Chemistry system (calculateTeamChemistry) has no consumers.
+Trade warnings (generateTradeWarnings) built but not surfaced in TradeFlow.tsx.
+
+Relationship data also has no persistence — all state lives in React useState inside useRelationshipData hook. No IndexedDB or localStorage write path exists for relationship records.
+
+**No Phase 2 FIX-CODE items:** This is a product decision. Full re-enablement requires:
+(1) Persistence layer (IndexedDB store for relationships), (2) Wiring to LI pipeline (F-099 already queued), (3) Wiring to dev rate, (4) UI for entering relationships. **FIX-DECISION queued.**
+
+**Pattern Map update:** Row 9 → Follows Pattern: N | Finding: FINDING-119
+
+---
+
+### FINDING-120
+**Date:** 2026-02-18 | **Phase:** 1 (Pattern Map) | **Status:** CONFIRMED
+**System:** Narrative / Headlines (Pattern Map Row 10)
+
+**OOTP Pattern:** Side-effect consumer of stat pipeline; never writes back.
+
+**Follows Pattern: PARTIAL**
+
+What's wired:
+- `generateGameRecap()` called in GameTracker.tsx (lines 2166, 2174) and FranchiseHome.tsx (lines 3962, 3981). Game recaps ARE generated on game completion.
+- Pattern compliance on "never writes back": PASSES — generateGameRecap returns a GeneratedNarrative object; no storage write happens.
+
+What's missing:
+- headlineEngine.ts: ORPHANED (confirmed F-094 — zero active importers in src_figma)
+- `calculateStoryMoraleImpact()`: exported from narrativeIntegration.ts, never called anywhere in active app
+- Game recap narratives are stored in React state only — not persisted to IndexedDB between sessions
+- "Consumer of stat pipeline" is PARTIAL: recap consumes game result (win/loss/score) but not the full stat pipeline (no player stat lines, no WAR, no LI context passed to narrative)
+
+**Phase 2 items:**
+- Narrative persistence: FIX-DECISION (store recaps to IndexedDB vs. accept ephemeral display only)
+- Headline wiring: FIX-DECISION (enable headlineEngine or formally orphan/remove)
+- Story morale impact: FIX-DECISION (wire calculateStoryMoraleImpact or remove)
+
+**Pattern Map update:** Row 10 → Follows Pattern: PARTIAL | Finding: FINDING-120
+
+---
+
+### FINDING-121
+**Date:** 2026-02-18 | **Phase:** 1 (Pattern Map) | **Status:** CONFIRMED
+**System:** Player Dev Engine (Pattern Map Row 22)
+
+**OOTP Pattern:** 10-factor growth model at season close; moves ratings toward potential.
+
+**Follows Pattern: N (MISSING)**
+
+No player development engine exists as a distinct system. Search for: playerDevEngine, developmentEngine, growthEngine, calculateDevelopment, applyDevelopment — all return zero results.
+
+What exists instead:
+- agingEngine.ts: calculateRatingChange(rating, age) — age-curve driven. Per F-118, display-only; no write-back to player record.
+- agingIntegration.ts: calculateDevelopmentPotential(age, overallRating) — returns a display label ("HIGH UPSIDE", etc.), not a growth calculation.
+- useAgingData: confirmed ORPHANED per F-095 — SpringTrainingFlow bypasses it with direct engine import.
+
+No 10-factor model. No potential ceiling logic connected to season-close rating mutation. No growth rate differential (young players growing faster toward ceiling than veterans). The draft system stores potentialCeiling (A/B/C grade) but nothing reads this at season close to drive development.
+
+**This is a substantial missing system.** FIX-DECISION required before any code work: what is the KBL development model? (SMB4-specific growth factors mentioned in Pattern Map.) Cannot write a FIX-CODE prompt without a spec.
+
+**Phase 2 item:** FIX-DECISION — define KBL player dev model, then implement season-close development pass.
+
+**Pattern Map update:** Row 22 → Follows Pattern: N | Finding: FINDING-121
+
+---
+
+### FINDING-122
+**Date:** 2026-02-18 | **Phase:** 1 (Pattern Map) | **Status:** CONFIRMED
+**System:** Record Book (Pattern Map Row 23)
+
+**OOTP Pattern:** Persistent single-season + career records; checked after every game.
+
+**Follows Pattern: N (ORPHANED)**
+
+One record tracking file found: `src/engines/oddityRecordTracker.ts` — tracks 19 quirky/oddity records (SHORTEST_HOMER, MARATHON_GAME, etc.). Has zero callers in src_figma. Not imported anywhere in the active app.
+
+No standard record book found: no franchise HR record, batting average record, wins record, ERA record, etc. No "checked after every game" trigger anywhere. No record storage file (no recordStorage.ts or similar).
+
+oddityRecordTracker.ts is in legacy engines (src/engines/, not src/src_figma/) — same orphan zone as the other legacy engines.
+
+**Phase 2 items:**
+- FIX-DECISION: Is a standard record book in scope? What records should be tracked?
+- FIX-DECISION: Wire oddityRecordTracker into game completion pipeline, or formally orphan/remove?
+
+**Pattern Map update:** Row 23 → Follows Pattern: N | Finding: FINDING-122
+
+---
+
+### FINDING-123
+**Date:** 2026-02-18 | **Phase:** 1 (Pattern Map) | **Status:** CONFIRMED
+**System:** UI Pages (Pattern Map Row 24)
+
+**OOTP Pattern:** Consumers only; read from stat stores, never write.
+
+**Follows Pattern: PARTIAL**
+
+16 pages in src/src_figma/app/pages/. Three categories:
+
+**Legitimate writers (correct by design):**
+- GameTracker.tsx — data entry point; must write game events → stat pipeline
+- LeagueBuilder*.tsx (7 pages) — entity management; must write players/teams/rules
+- FranchiseHome.tsx — orchestration hub; triggers game completion writes
+
+**Pure consumers (matches OOTP pattern):**
+- PostGameSummary.tsx — reads from gameStorage only; no writes confirmed
+- WorldSeries.tsx — reads from playoffStorage and leagueBuilderStorage; zero writes confirmed
+- SeasonSummary.tsx — reads standings/stats for display
+- AppHome.tsx, FranchiseSelector.tsx, FranchiseSetup.tsx — navigation/setup
+
+**Data gap (not a write violation, but a gap):**
+- PostGameSummary: reads CompletedGameRecord from gameStorage — works correctly IF game data was written. Connected to existing pipeline.
+- WorldSeries stats leaderboard: reads PLAYOFF_STATS store — but nothing ever writes to PLAYOFF_STATS (confirmed in F-113). Leaderboard tab will always show empty.
+- SeasonSummary: reads from seasonStorage — gap depends on whether aggregation pipeline is fully wired (F-102 partial wiring).
+
+**Phase 2 item already queued:** F-113 FIX-DECISION covers playoff stats write path.
+No new FIX-CODE items from this finding. The page layer is architecturally correct.
+
+**Pattern Map update:** Row 24 → Follows Pattern: PARTIAL | Finding: FINDING-123
+
+---
+
+### FINDING-119
+**Date:** 2026-02-18 | **Phase:** 1 (Pattern Map) | **Status:** CONFIRMED
+**System:** Relationships (Pattern Map Row 9)
+
+**OOTP Pattern:** Personality inputs to morale, development rate, narrative triggers.
+
+**Follows Pattern: N**
+
+Code exists — `relationshipEngine.ts`, `relationshipStorage.ts`, `relationshipIntegration.ts`, `useRelationshipData.ts` all present. Hook is called in `useFranchiseData.ts` (line 307). But the returned `relationshipData` object is passed down and never consumed by any active page component (zero `relationshipData.` usages in pages).
+
+Three specific gaps:
+
+Gap 1 — Morale effect never applied:
+`calculateMoraleEffect` exists and is exported from `useRelationshipData`. But no active page or pipeline reads the returned morale value and applies it to anything. Relationships are stored but produce zero gameplay effect.
+
+Gap 2 — LI modifiers dead:
+`detectRevengeArcs()` and `detectRomanticMatchups()` are defined in `relationshipIntegration.ts` (lines 375, 474) but have zero callers in the active app. This was confirmed in FINDING-097 (LI relationship modifiers dead).
+
+Gap 3 — No narrative triggers:
+No code path exists that reads a relationship and fires a narrative trigger. The `generateTradeWarnings()` function exists but only returns warnings; nothing consumes them in the active trade flow.
+
+**Pattern Map update:** Row 9 → Follows Pattern: N | Finding: FINDING-119
+
+---
+
+### FINDING-120
+**Date:** 2026-02-18 | **Phase:** 1 (Pattern Map) | **Status:** CONFIRMED
+**System:** Narrative / Headlines (Pattern Map Row 10)
+
+**OOTP Pattern:** Side-effect consumer of stat pipeline; never writes back.
+
+**Follows Pattern: N**
+
+Game recap wiring partial; headline engine orphaned.
+
+Game recap: `generateGameRecap()` is called in `GameTracker.tsx` (lines 2166, 2174) on game completion. Result is passed via `navigate()` state to PostGameSummary. PostGameSummary.tsx makes zero references to `gameNarrative` or `awayNarrative` — the narrative is generated, passed as navigation state, and immediately dropped. No user ever sees it; it is never stored.
+
+Headline engine: `headlineEngine.ts` (confirmed ORPHANED in FINDING-094) has zero callers in the active app. `headlineGenerator.ts` in utils is also orphaned (FINDING-094).
+
+"Never writes back" is satisfied — but only because nothing is connected at all.
+
+OOTP pattern requires narrative to be a side-effect consumer that surfaces output to the user or stores headlines. KBL generates a recap but discards it.
+
+**Phase 2 fix queue (FIX-CODE):**
+PostGameSummary.tsx must read `gameNarrative` / `awayNarrative` from navigation state and display the recap. This is a 1-component change.
+
+**Pattern Map update:** Row 10 → Follows Pattern: N | Finding: FINDING-120
+
+---
+
+### FINDING-121
+**Date:** 2026-02-18 | **Phase:** 1 (Pattern Map) | **Status:** CONFIRMED
+**System:** Player Dev Engine (Pattern Map Row 22)
+
+**OOTP Pattern:** 10-factor growth model at season close; moves ratings toward potential.
+
+**Follows Pattern: N (MISSING)**
+
+No player development engine (growth toward potential) exists in the codebase.
+
+Files reviewed:
+- `agingEngine.ts` — rating DECAY only (age-curve driven). Already covered in FINDING-118. Does not model growth toward potential.
+- `adaptiveLearningIntegration.ts` — fielder inference prediction system only. Not related to player development.
+- `ratingsAdjustmentEngine.ts` — WAR-vs-salary percentile adjustment at season close. Adjusts ratings based on performance vs peer pool. Zero callers in active app. Does NOT model potential/development curve.
+- `seasonEndProcessor.ts` — MVP/Ace/Career milestone processing only. No ratings mutation.
+
+No 10-factor model, no potential-tracking logic, no "move rating toward potential" system found anywhere. Player ratings only change via:
+1. agingEngine (decay) — display-only, no write-back per FINDING-118
+2. ratingsAdjustmentEngine (WAR-based adjust) — zero callers
+
+**New item for Phase 2 fix queue (FIX-DECISION):**
+Player dev engine does not exist. Decision required: implement from scratch using existing `ratingsAdjustmentEngine.ts` as a starting point, or treat as DEFER. This is a product decision not a wiring fix.
+
+**Pattern Map update:** Row 22 → Follows Pattern: N | Finding: FINDING-121
+
+---
+
+### FINDING-122
+**Date:** 2026-02-18 | **Phase:** 1 (Pattern Map) | **Status:** CONFIRMED
+**System:** Record Book (Pattern Map Row 23)
+
+**OOTP Pattern:** Persistent single-season + career records; checked after every game.
+
+**Follows Pattern: N (ORPHANED)**
+
+`oddityRecordTracker.ts` exists (524 lines): 19 "oddity" record types (shortest homer, slowest triple, most errors in a win, etc.) with `checkPlayOddities()`, `checkEndOfGameOddities()`, `checkSeasonEndOddities()` functions.
+
+Zero callers: `oddityRecordTracker` is never imported by any active app file. The engine is complete but entirely disconnected. No traditional stat record book (all-time single-season HR, BA, wins, ERA etc.) exists anywhere in the codebase — only oddity records.
+
+OOTP pattern requires records to be checked after every game. No such trigger exists.
+
+**New item for Phase 2 fix queue (FIX-DECISION):**
+Wire `checkPlayOddities` + `checkEndOfGameOddities` into `processCompletedGame.ts` to check records on every game. Requires a record storage mechanism (currently no IndexedDB store for records exists). FIX-DECISION: implement full record store + wiring, or DEFER.
+
+**Pattern Map update:** Row 23 → Follows Pattern: N | Finding: FINDING-122
+
+---
+
+### FINDING-123
+**Date:** 2026-02-18 | **Phase:** 1 (Pattern Map) | **Status:** CONFIRMED
+**System:** UI Pages (Pattern Map Row 24)
+
+**OOTP Pattern:** Consumers only; read from stat stores, never write.
+
+**Follows Pattern: PARTIAL**
+
+16 active pages confirmed. Consumer pattern largely followed.
+
+Confirmed consumers (read-only):
+- `PostGameSummary.tsx` — reads from `gameStorage.getCompletedGameById()` ✅
+- `WorldSeries.tsx` — reads from `playoffStorage` ✅
+- `SeasonSummary.tsx` — reads standings + stats ✅
+- All LeagueBuilder* pages — write league config (correct; that is their intended role, not stats) ✅
+- `FranchiseHome.tsx` — reads franchise/season data, writes via engine hooks only ✅
+
+Write path: GameTracker.tsx writes stats via `hookEndGame()` which routes through `processCompletedGame.ts` (the pipeline). No page writes directly to stat stores. ✅
+
+Two gaps preventing full Y verdict:
+
+Gap 1 — PostGameSummary drops narrative:
+`gameNarrative` / `awayNarrative` are passed via navigation state but PostGameSummary.tsx never reads them (confirmed in FINDING-120). The summary page is a consumer but doesn't consume all available data.
+
+Gap 2 — WorldSeries data gap:
+PLAYOFF_STATS store has no write path (confirmed in FINDING-113). WorldSeries.tsx reads from `playoffStorage` but the playoff stats it attempts to read are never written — display will always be empty.
+
+**Pattern Map update:** Row 24 → Follows Pattern: PARTIAL | Finding: FINDING-123

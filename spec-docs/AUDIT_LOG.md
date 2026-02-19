@@ -1047,4 +1047,9 @@ Still unresolved. FINDING-047 fallback path only has base state, not full scoreb
 | FINDING-116 | 2026-02-18 | PARTIAL | leagueBuilderStorage.ts | Row 17 League Builder — entity CRUD correct; no auto-roster generation (by design) |
 | FINDING-117 | 2026-02-18 | PARTIAL | museumPipeline.ts / museumStorage.ts | Row 18 Museum/HOF — leaderboard reads career stats; no eligibility gating; post-retirement trigger unverified |
 | FINDING-118 | 2026-02-18 | N | agingEngine.ts / SpringTrainingFlow.tsx | Row 19 Aging/Ratings — calc exists but display-only; no write-back to player record; wrong phase |
+| FINDING-119 | 2026-02-18 | N | relationshipEngine.ts / useRelationshipData.ts | Row 9 Relationships — full system built; zero active callers; no persistence; completely orphaned |
+| FINDING-120 | 2026-02-18 | PARTIAL | narrativeIntegration.ts / GameTracker.tsx | Row 10 Narrative/Headlines — game recap wired; headlineEngine orphaned; story morale dead; recaps not persisted |
+| FINDING-121 | 2026-02-18 | N | agingIntegration.ts | Row 22 Player Dev Engine — no 10-factor growth model exists; calculateDevelopmentPotential is display-only label; MISSING |
+| FINDING-122 | 2026-02-18 | N | oddityRecordTracker.ts | Row 23 Record Book — oddityRecordTracker exists in legacy engines; zero callers; no standard record book; ORPHANED |
+| FINDING-123 | 2026-02-18 | PARTIAL | app/pages/*.tsx | Row 24 UI Pages — legitimate writers (GameTracker, LeagueBuilder) correct by design; pure consumers confirmed; WorldSeries stats leaderboard always empty (no write path to PLAYOFF_STATS — see F-113) |
 

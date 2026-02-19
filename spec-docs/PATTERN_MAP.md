@@ -31,12 +31,12 @@ structure. SMB4 defines the content. Neither is optional.
 | 6 | Schedule System | 162-game grid; completion event fires stat pipeline | Y | PARTIAL (FINDING-108) | Same structure; game completion triggers aggregation | Y | ✅ WIRED |
 | 7 | Offseason | Atomic phase sequence; locks stats then opens next season | Y | PARTIAL (FINDING-112) | Same phases; KBL-specific award categories | Y | ✅ WIRED |
 | 8 | Playoffs | Separate stat tables; bracket seeded from standings | Y | Y (FINDING-113) | Playoff format TBD; postseason stats tracked separately | Y | ✅ WIRED |
-| 9 | Relationships | Personality inputs to morale, development rate, narrative triggers | PARTIAL | UNKNOWN | SMB4 chemistry types, player bonds, rival dynamics | PARTIAL | ⚠️ PARTIAL |
-| 10 | Narrative / Headlines | Side-effect consumer of stat pipeline; never writes back | PARTIAL | UNKNOWN | KBL headline engine, game recap generator | Y | ⚠️ PARTIAL |
+| 9 | Relationships | Personality inputs to morale, development rate, narrative triggers | PARTIAL | N (FINDING-119) | SMB4 chemistry types, player bonds, rival dynamics | PARTIAL | ❌ ORPHANED |
+| 10 | Narrative / Headlines | Side-effect consumer of stat pipeline; never writes back | PARTIAL | PARTIAL (FINDING-120) | KBL headline engine, game recap generator | Y | ⚠️ PARTIAL |
 | 11 | Mojo / Fitness | Per-player fatigue/condition; persists between games, feeds dev calc | Y | N (FINDING-114) | Mojo as performance multiplier; fitness as injury risk | PARTIAL | ✅ WIRED |
 | 11b | Leverage Index | Situational weight applied to all clutch/fame/WAR calculations | Y | N (FINDING-099) | Full LI spec implemented; boLI only in active hook; relationship modifiers dead | PARTIAL | ⚠️ PARTIAL |
 | 12 | Clutch Attribution | Per-play multi-participant credit distribution weighted by LI | Y | PARTIAL (FINDING-098) | Batter + pitcher + catcher + fielder + runner + manager per play | Y | ⚠️ PARTIAL |
-| 13 | Fan Morale | Team performance input; affects attendance, storylines | Y | UNKNOWN | Fan morale per team, game outcome driven | N | 🔲 STUBBED |
+| 13 | Fan Morale | Team performance input; affects attendance, storylines | Y | N (FINDING-101) | Fan morale per team, game outcome driven | N | 🔲 STUBBED |
 | 14 | Farm System | Affiliate roster; development level determines growth rate | Y | N (FINDING-072) | Minor league system, prospect tracking | PARTIAL | ❌ ORPHANED |
 | 15 | Trade System | Transaction log entry; immediate roster state change | Y | N (FINDING-073) | Player trades, waiver moves | N | ❌ ORPHANED |
 | 16 | Salary System | Contract entity; service time drives eligibility categories | Y | N (FINDING-115) | KBL salary structure, contract years | N | ✅ WIRED |
@@ -45,9 +45,9 @@ structure. SMB4 defines the content. Neither is optional.
 | 19 | Aging / Ratings | Season-close rating mutation; age-curve driven, 10-factor model | Y | N (FINDING-118) | SMB4 aging curve, trait-influenced development | Y | ⚠️ PARTIAL |
 | 20 | Career Stats | SUM of PlayerSeasonStats rows by playerId; no separate table | PARTIAL | N (FINDING-109) | All career counting stats, rate stats derived | Y | ⚠️ PARTIAL |
 | 21 | Trait System | First-class Player fields; inputs to dev rate, narrative, contracts | MISSING | N | SMB4 traits (Chemistry types, tier bonuses, performance mods) | PARTIAL | ❌ MISSING |
-| 22 | Player Dev Engine | 10-factor growth model at season close; moves ratings toward potential | UNKNOWN | UNKNOWN | SMB4-specific growth factors, trait-influenced | Y | 🔲 UNKNOWN |
-| 23 | Record Book | Persistent single-season + career records; checked after every game | UNKNOWN | UNKNOWN | KBL franchise records, league records | Y | 🔲 UNKNOWN |
-| 24 | UI Pages | Consumers only; read from stat stores, never write | Y | UNKNOWN | 16 pages — GameTracker wired, PostGameSummary/WorldSeries data gap | N | ✅ WIRED |
+| 22 | Player Dev Engine | 10-factor growth model at season close; moves ratings toward potential | UNKNOWN | N (FINDING-121) | SMB4-specific growth factors, trait-influenced | Y | ❌ MISSING |
+| 23 | Record Book | Persistent single-season + career records; checked after every game | UNKNOWN | N (FINDING-122) | KBL franchise records, league records | Y | ❌ ORPHANED |
+| 24 | UI Pages | Consumers only; read from stat stores, never write | Y | PARTIAL (FINDING-123) | 16 pages — GameTracker wired, PostGameSummary/WorldSeries data gap | N | ✅ WIRED |
 
 ---
 
