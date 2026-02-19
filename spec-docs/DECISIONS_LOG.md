@@ -5,7 +5,43 @@
 
 ---
 
+## Deferred Technical Debt Register
+> Items explicitly deferred during Phase 1/2 audit (2026-02-18). Each has a trigger condition — the event that makes it worth picking up.
+
+| ID | Finding | Item | Trigger to Re-open |
+|----|---------|------|--------------------|
+| DEFER-001 | F-107 | **franchiseId scoping** — seasonStorage, gameStorage, offseasonStorage have no franchiseId scope. Stats are seasonId-scoped only. Single-franchise constraint masks the gap today. | **Multi-franchise support.** When a second franchise is added, stats will bleed across franchises without this fix. Must be resolved before multi-franchise ships. |
+| DEFER-002 | F-109 | **Career stats idempotency** — incremental write pattern (accepted over derive-on-read). Risk: mid-pipeline failure causes career ↔ season drift. | Any reported career stat discrepancy, OR when a write-failure bug is found in the aggregation pipeline. Add transaction-level guard at that point. |
+| DEFER-003 | F-115 | **Salary service time** — age-based salary calc accepted as KBL design. No service time, no contract eligibility tiers. | If KBL adds free agency, arbitration, or contract negotiation features that require eligibility gating. |
+| DEFER-004 | F-121 | **Player Dev Engine** — no 10-factor growth model exists. Design deferred. | Phase 2 design session with JK. Implement season-close development pass once model is defined. |
+| DEFER-005 | F-101C | **Fan morale localStorage → IndexedDB** — will be fixed in same pass as Bug A/B per Phase 2 plan. Listed here for completeness. | Included in Phase 2 FIX-CODE execution. Not a future defer. |
+
+> **DEFER-001 is the most important.** Multi-franchise is a planned feature. When it's on the roadmap, pull F-107 immediately — it requires touching storage, hooks, and every stats display that reads season data.
+
+---
+
 ## February 2026
+
+### 2026-02-18: Phase 2 Fix Queue Decisions (11 FIX-DECISION items resolved)
+
+**Context**: Phase 1 audit complete. 11 FIX-DECISION items required JK calls before Phase 2 fix execution could begin.
+
+**Decisions Made**:
+| # | Finding | Decision |
+|---|---------|----------|
+| 1 | F-101C | Fan morale localStorage → IndexedDB: **same pass** as Bug A/B fix |
+| 2 | F-107 | franchiseId scoping: **DEFER** — see DEFER-001 above |
+| 3 | F-109 | Career stats model: **accept incremental write** + add idempotency guard |
+| 4 | F-113 | Playoff stats write path: **wire it** — GameTracker → PLAYOFF_STATS during playoff games |
+| 5 | F-114 | Mojo auto-update: **stay manual**. Persistence between games: **YES** (IndexedDB) |
+| 6 | F-115 | Salary service time: **accept age-based** as KBL design — see DEFER-003 |
+| 7 | F-119 | Relationships system: **re-enable** (add persistence + wire to LI + dev rate) |
+| 8 | F-120A | Narrative persistence: **persist recaps to IndexedDB** |
+| 9 | F-120B | Headline engine: **wire it** into the pipeline |
+| 10 | F-121 | Player Dev Engine: **defer design** — JK has idea, define in Phase 2 before implement |
+| 11 | F-122 | Record Book: **wire oddityRecordTracker AND build standard record book** |
+
+
 
 ### 2026-02-05: D3K (Dropped Third Strike) Confirmed in SMB4
 
