@@ -1617,3 +1617,86 @@ Career threshold detection itself is correctly implemented.
 | Fires narrative trigger | Yes | No | N |
 
 **Pattern Map update:** Row 5 → Follows Pattern: PARTIAL | Finding: FINDING-111
+
+### FINDING-112
+**Date:** 2026-02-18 | **Phase:** 1 (Pattern Map) | **Status:** CONFIRMED
+**System:** Offseason (Pattern Map Row 7)
+**Files:** `src/utils/offseasonStorage.ts`, `src/engines/seasonTransitionEngine.ts`,
+`src/src_figma/app/components/FinalizeAdvanceFlow.tsx`,
+`src/src_figma/app/pages/FranchiseHome.tsx`
+
+**OOTP Pattern:** Atomic phase sequence; locks stats then opens next season.
+
+**Follows Pattern: PARTIAL**
+
+**What OOTP does:**
+Offseason runs as a strict 11-phase sequence. When complete: (1) current season stats
+are locked (made read-only), (2) IndexedDB season stats tables are preserved under
+old seasonId, (3) new seasonId is created and becomes the active write target,
+(4) player state is reset (mojo, fitness, age incremented), (5) schedule is generated
+for new season. All of this happens atomically via executeSeasonTransition().
+
+**What KBL does — confirmed working:**
+
+11-phase structure: WIRED ✅
+OFFSEASON_PHASES = ['STANDINGS_FINAL', 'AWARDS', 'RATINGS_ADJUSTMENTS',
+'CONTRACTION_EXPANSION', 'RETIREMENTS', 'FREE_AGENCY', 'DRAFT',
+'FARM_RECONCILIATION', 'CHEMISTRY_REBALANCING', 'TRADES', 'SPRING_TRAINING'].
+Phase state persisted to IndexedDB. `advanceOffseasonPhase()` enforces linear
+progression. `canAdvancePhase()` guards forward movement. ✅
+
+Season transition engine: PRESENT ✅
+`executeSeasonTransition()` in seasonTransitionEngine.ts runs 8 ordered steps:
+archive, age increment, salary recalc, mojo reset, clear stats, rookie designations,
+service time increment, finalize. Called from FinalizeAdvanceFlow.tsx. ✅
+
+Player state reset (age/mojo/salary): WIRED ✅
+`incrementPlayerAges()` — IndexedDB player records updated ✅
+`recalculateSalaries()` — IndexedDB player records updated ✅
+`resetAllMojo()` — IndexedDB mojo records updated ✅
+`incrementYearsOfService()` — writes to localStorage ⚠️ (minor)
+
+**What KBL is missing — CRITICAL:**
+
+Season stats archive: STUB ❌
+`archiveSeasonData(seasonNumber)` writes to localStorage:
+  `{ seasonNumber, archivedAt: ..., // In a full implementation, this would include
+  season stats, standings, etc. }` (lines 49–60)
+Comment admits: "In a full implementation, this would include season stats, standings."
+This is a placeholder. No season stats are actually archived at season end.
+
+Season stats clear: BROKEN ❌
+`clearSeasonalStats(seasonNumber)` scans localStorage for keys matching
+`season_${seasonNumber}_stats` and removes them. But actual season stats live in
+IndexedDB stores (`playerSeasonBatting`, `playerSeasonPitching`, `playerSeasonFielding`).
+No such keys exist in localStorage. This function succeeds but clears nothing.
+
+**Impact:**
+- At "season transition," IndexedDB season stats are neither archived nor cleared
+- New season writes to new `seasonId` — old season data persists under old `seasonId`
+- Stats for multiple seasons coexist in IndexedDB, only distinguished by `seasonId` key
+- This actually means multi-season stats are preserved by accident rather than design
+- But "locked" stats are not truly locked — old `seasonId` records remain writable
+- Season archive (museum, season history) relies on a localStorage stub that contains
+  no actual data
+
+**New items for Phase 2 fix queue:**
+FIX-CODE (medium): Replace `archiveSeasonData()` stub with actual season archive —
+read all `playerSeasonBatting/Pitching/Fielding` rows for current seasonId from
+IndexedDB, write to archive store, mark as read-only.
+FIX-CODE (medium): Replace `clearSeasonalStats()` localStorage scan with actual
+IndexedDB season stats clear using seasonId — or document explicitly that old
+season data is preserved by seasonId isolation (no clear needed).
+FIX-CODE (low): Move `incrementYearsOfService()` from localStorage to IndexedDB.
+
+**Pattern verdict summary:**
+| Aspect | OOTP | KBL | Match |
+|--------|------|-----|-------|
+| 11-phase structure | Yes | Yes | Y |
+| Phase sequence enforced | Yes | Yes | Y |
+| Player state reset (age/mojo) | Yes | Yes | Y |
+| Season stats locked at transition | Yes | No (stub) | N |
+| Season stats archived | Yes | No (stub) | N |
+| New season opens correctly | Yes | Yes (by seasonId) | Y |
+
+**Pattern Map update:** Row 7 → Follows Pattern: PARTIAL | Finding: FINDING-112
