@@ -1555,3 +1555,65 @@ Two-line fix in GameTracker.tsx lines 287 and 2193.
 | Multi-manager tracking | Yes | Home only | PARTIAL |
 
 **Pattern Map update:** Row 4b → Follows Pattern: PARTIAL | Finding: FINDING-110
+
+### FINDING-111
+**Date:** 2026-02-18 | **Phase:** 1 (Pattern Map) | **Status:** CONFIRMED
+**System:** Fame / Milestone (Pattern Map Row 5)
+**Files:** `src/src_figma/app/hooks/useFameTracking.ts`,
+`src/utils/milestoneAggregator.ts`, `src/engines/fameEngine.ts`,
+`src/utils/milestoneDetector.ts`
+
+**OOTP Pattern:** Career total threshold checker; fires narrative triggers on cross.
+
+**Follows Pattern: PARTIAL**
+
+**What OOTP does:**
+After each game aggregation, checks each player's updated career totals against
+threshold tables (500 HR, 3000 hits, 300 wins, etc.). When a threshold is crossed,
+fires a narrative trigger — creating a headline event, updating the game log, and
+persisting the milestone as a permanent career record.
+
+**What KBL does — confirmed working:**
+
+Two-layer detection: PRESENT ✅
+
+Layer 1 — In-game fame events (useFameTracking.ts):
+`checkBatterFameEvents()` and `checkPitcherFameEvents()` fire after every at-bat.
+Detects game-level milestones: multi-hit, multi-HR, strikeout shame, RBI achievements.
+These are game-event thresholds (3 hits in a game), not career thresholds.
+Events recorded to fameEvents state → persisted at game end via aggregateFameEvents().
+
+Layer 2 — Career threshold detection (milestoneAggregator.ts):
+`detectBattingMilestones()` and `detectPitchingMilestones()` compare player's updated
+career totals against CAREER_THRESHOLDS table (500 HR, 3000 hits, career wins, etc.).
+Checks run inside `aggregateGameWithMilestones()`, which is called from
+`aggregateGameToSeason()` after every game. ✅
+Career milestone records persisted to `careerMilestones` IndexedDB store via
+`recordCareerMilestone()`. ✅
+
+De-duplication: CONFIRMED ✅
+`hasMilestoneBeenAchieved(playerId, milestoneType, thresholdValue)` checked before
+recording — prevents re-logging same milestone across multiple games.
+
+**What KBL is missing:**
+
+Narrative triggers on milestone cross: ABSENT ❌
+`aggregateGameWithMilestones()` returns `{ seasonMilestones, careerMilestones }`.
+The caller (`aggregateGameToSeason`) logs milestone counts to console — no narrative
+trigger fires. No headline is generated when a career threshold is crossed.
+The milestone data is correctly detected and persisted; it just doesn't propagate
+to any narrative/headline system. Existing finding: FINDING-102 Step 10.
+
+**No new findings.** Pattern confirms FINDING-102's narrative gap.
+Career threshold detection itself is correctly implemented.
+
+**Pattern verdict summary:**
+| Aspect | OOTP | KBL | Match |
+|--------|------|-----|-------|
+| Career threshold detection | Yes | Yes | Y |
+| Fires after each game | Yes | Yes | Y |
+| Milestone persisted permanently | Yes | Yes | Y |
+| De-duplication guard | Yes | Yes | Y |
+| Fires narrative trigger | Yes | No | N |
+
+**Pattern Map update:** Row 5 → Follows Pattern: PARTIAL | Finding: FINDING-111

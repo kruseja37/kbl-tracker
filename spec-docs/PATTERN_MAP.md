@@ -27,7 +27,7 @@ structure. SMB4 defines the content. Neither is optional.
 | 3 | Franchise / Season Engine | Root aggregate; all queries scoped franchiseId → yearId → data | Y | N (FINDING-107) | Single franchise per user, season number not calendar year | N | ✅ WIRED |
 | 4 | WAR — positional | Derived field on PlayerSeasonStats; recalcs from live stats each game | Y | N | bWAR/fWAR/pWAR/rWAR exist but not wired to pipeline | Y | ❌ ORPHANED |
 | 4b | WAR — mWAR | Manager decision tracker; persists decisions, resolves outcomes | Y | PARTIAL (FINDING-110) | Manager WAR based on in-game decisions, leverage-weighted | Y | ✅ WIRED |
-| 5 | Fame / Milestone | Career total threshold checker; fires narrative triggers on cross | Y | Y (FINDING-111) | Fame tiers, KBL-specific milestone thresholds | Y | ✅ WIRED |
+| 5 | Fame / Milestone | Career total threshold checker; fires narrative triggers on cross | Y | PARTIAL (FINDING-111) | Fame tiers, KBL-specific milestone thresholds | Y | ✅ WIRED |
 | 6 | Schedule System | 162-game grid; completion event fires stat pipeline | Y | PARTIAL (FINDING-108) | Same structure; game completion triggers aggregation | Y | ✅ WIRED |
 | 7 | Offseason | Atomic phase sequence; locks stats then opens next season | Y | PARTIAL (FINDING-112) | Same phases; KBL-specific award categories | Y | ✅ WIRED |
 | 8 | Playoffs | Separate stat tables; bracket seeded from standings | Y | UNKNOWN | Playoff format TBD; postseason stats tracked separately | Y | ✅ WIRED |
