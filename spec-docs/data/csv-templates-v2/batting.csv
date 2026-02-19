@@ -1,0 +1,2 @@
+battingId,seasonId,playerId,playerName,teamId,teamName,type,G,AB,H,HR,RBI,R,TB,2B,3B,BB,SO,SB,CS,HBP,SAC,SF,E,PB,AVG,OBP,SLG,OPS,ISO,BABIP,wOBA,wRAA,wRC,wRCplus,batWAR
+1,1,1,Example Player,1,Angels,REG,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0

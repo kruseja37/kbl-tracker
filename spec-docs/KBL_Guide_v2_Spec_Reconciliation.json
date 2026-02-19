@@ -1,0 +1,1661 @@
+{
+  "_meta": {
+    "description": "Spec-correct values extracted from the KBL Guide v2 error audit, organized by code location. Each entry maps a guide error to the correct spec value and the code file where that value lives.",
+    "generated": "2026-02-14",
+    "source_audit": "KBL_Guide_v2_Error_Audit.md",
+    "total_corrections": 102,
+    "usage": "Ingest with a CLI to reconcile guide content against codebase constants. Each category groups corrections by the engine/module that owns the data."
+  },
+  "categories": [
+    {
+      "id": "mojo_states",
+      "label": "Mojo System \u2014 States & Multipliers",
+      "code_files": [
+        "src/engines/mojoEngine.ts"
+      ],
+      "key_symbols": [
+        "MojoLevel",
+        "MojoName",
+        "MOJO_STATES",
+        "getMojoStatMultiplier"
+      ],
+      "corrections": [
+        {
+          "error_ids": [
+            27,
+            92
+          ],
+          "severity": "MAJOR",
+          "field": "mojo_state_names",
+          "guide_wrong": [
+            "Jacked",
+            "Hot",
+            "Normal",
+            "Cold",
+            "Slumping",
+            "Rattled"
+          ],
+          "spec_correct": [
+            "Jacked",
+            "Locked In",
+            "Normal",
+            "Tense",
+            "Rattled"
+          ],
+          "code_ref": "src/engines/mojoEngine.ts:22",
+          "code_symbol": "MojoName = 'RATTLED' | 'TENSE' | 'NORMAL' | 'LOCKED_IN' | 'JACKED'",
+          "note": "Guide fabricated Hot/Cold/Slumping. Real names are Locked In and Tense. 5 states, not 6.",
+          "status": "GUIDE_ONLY",
+          "audit_date": "2026-02-15"
+        },
+        {
+          "error_ids": [
+            32
+          ],
+          "severity": "CRITICAL",
+          "field": "jacked_multiplier",
+          "guide_wrong": 1.2,
+          "spec_correct": 1.18,
+          "code_ref": "src/engines/mojoEngine.ts:143",
+          "code_symbol": "MOJO_STATES[2].statMultiplier",
+          "status": "GUIDE_ONLY",
+          "audit_date": "2026-02-15"
+        },
+        {
+          "error_ids": [
+            33
+          ],
+          "severity": "CRITICAL",
+          "field": "locked_in_multiplier",
+          "guide_wrong": null,
+          "spec_correct": 1.1,
+          "code_ref": "src/engines/mojoEngine.ts:136",
+          "code_symbol": "MOJO_STATES[1].statMultiplier",
+          "note": "Guide called this 'Hot' with fabricated values",
+          "status": "GUIDE_ONLY",
+          "audit_date": "2026-02-15"
+        },
+        {
+          "error_ids": [
+            34
+          ],
+          "severity": "CRITICAL",
+          "field": "tense_multiplier",
+          "guide_wrong": null,
+          "spec_correct": 0.9,
+          "code_ref": "src/engines/mojoEngine.ts:122",
+          "code_symbol": "MOJO_STATES[-1].statMultiplier",
+          "note": "Guide called this 'Cold' with fabricated values",
+          "status": "GUIDE_ONLY",
+          "audit_date": "2026-02-15"
+        },
+        {
+          "error_ids": [
+            35
+          ],
+          "severity": "CRITICAL",
+          "field": "rattled_multiplier",
+          "guide_wrong": null,
+          "spec_correct": 0.82,
+          "code_ref": "src/engines/mojoEngine.ts:115",
+          "code_symbol": "MOJO_STATES[-2].statMultiplier",
+          "status": "GUIDE_ONLY",
+          "audit_date": "2026-02-15"
+        },
+        {
+          "error_ids": [
+            93,
+            94,
+            95,
+            96,
+            97
+          ],
+          "severity": "CRITICAL",
+          "field": "mojo_effect_descriptions",
+          "guide_wrong": {
+            "Jacked": "+15% power, can't strikeout less often",
+            "Hot": "+8% contact, +5% power",
+            "Cold": "-5% contact, -8% power",
+            "Slumping": "-10% contact, can't get a hit",
+            "Rattled": "-15% discipline, panic swinging"
+          },
+          "spec_correct": {
+            "Jacked (+2)": "~+15-20% all stat boosts",
+            "Locked In (+1)": "~+8-10% all stat boosts",
+            "Normal (0)": "baseline",
+            "Tense (-1)": "~-8-10% all stat penalties",
+            "Rattled (-2)": "~-15-20% all stat penalties, hard to escape"
+          },
+          "code_ref": "src/engines/mojoEngine.ts:109-145",
+          "note": "Guide fabricated per-stat breakdowns. Mojo affects all stats uniformly via statMultiplier.",
+          "status": "GUIDE_ONLY",
+          "audit_date": "2026-02-15"
+        },
+        {
+          "error_ids": [
+            39
+          ],
+          "severity": "CRITICAL",
+          "field": "mojo_carryover_rate",
+          "guide_wrong": "vague description",
+          "spec_correct": 0.3,
+          "code_ref": "src/engines/mojoEngine.ts:463",
+          "code_symbol": "calculateStartingMojo \u2014 endOfLastGameMojo * 0.3",
+          "note": "30% of excess Mojo carries to next game, rounded",
+          "status": "GUIDE_ONLY",
+          "audit_date": "2026-02-15"
+        },
+        {
+          "error_ids": [
+            36
+          ],
+          "severity": "MAJOR",
+          "field": "mojo_state_count",
+          "guide_wrong": 6,
+          "spec_correct": 5,
+          "code_ref": "src/engines/mojoEngine.ts:20",
+          "code_symbol": "MojoLevel = -2 | -1 | 0 | 1 | 2",
+          "status": "GUIDE_ONLY",
+          "audit_date": "2026-02-15"
+        }
+      ]
+    },
+    {
+      "id": "fitness_states",
+      "label": "Fitness System \u2014 States & Multipliers",
+      "code_files": [
+        "src/engines/fitnessEngine.ts"
+      ],
+      "key_symbols": [
+        "FitnessState",
+        "FITNESS_STATES",
+        "getFitnessStatMultiplier"
+      ],
+      "corrections": [
+        {
+          "error_ids": [
+            28,
+            98
+          ],
+          "severity": "MAJOR",
+          "field": "fitness_state_names",
+          "guide_wrong": [
+            "Peak",
+            "Healthy",
+            "Fatigued",
+            "Worn Down",
+            "Injured",
+            "Juiced"
+          ],
+          "spec_correct": [
+            "Juiced",
+            "Fit",
+            "Well",
+            "Strained",
+            "Weak",
+            "Hurt"
+          ],
+          "code_ref": "src/engines/fitnessEngine.ts:20",
+          "code_symbol": "FitnessState = 'JUICED' | 'FIT' | 'WELL' | 'STRAINED' | 'WEAK' | 'HURT'",
+          "note": "Every name except Juiced is wrong in guide.",
+          "status": "GUIDE_ONLY",
+          "audit_date": "2026-02-15"
+        },
+        {
+          "error_ids": [
+            29,
+            99
+          ],
+          "severity": "CRITICAL",
+          "field": "juiced_multiplier",
+          "guide_wrong": "+10% (called 'Peak')",
+          "spec_correct": 1.2,
+          "code_ref": "src/engines/fitnessEngine.ts:140",
+          "code_symbol": "FITNESS_STATES.JUICED.multiplier = 1.20",
+          "status": "GUIDE_ONLY",
+          "audit_date": "2026-02-15"
+        },
+        {
+          "error_ids": [
+            100
+          ],
+          "severity": "CRITICAL",
+          "field": "fit_multiplier",
+          "guide_wrong": "called 'Healthy', baseline",
+          "spec_correct": 1.0,
+          "code_ref": "src/engines/fitnessEngine.ts:140",
+          "code_symbol": "FITNESS_STATES.FIT.multiplier = 1.00",
+          "status": "GUIDE_ONLY",
+          "audit_date": "2026-02-15"
+        },
+        {
+          "error_ids": [
+            30,
+            101
+          ],
+          "severity": "CRITICAL",
+          "field": "well_multiplier",
+          "guide_wrong": "called 'Fatigued', -5%",
+          "spec_correct": 0.95,
+          "code_ref": "src/engines/fitnessEngine.ts:140",
+          "code_symbol": "FITNESS_STATES.WELL.multiplier = 0.95",
+          "status": "GUIDE_ONLY",
+          "audit_date": "2026-02-15"
+        },
+        {
+          "error_ids": [
+            30
+          ],
+          "severity": "CRITICAL",
+          "field": "strained_multiplier",
+          "guide_wrong": "merged with 'Fatigued'",
+          "spec_correct": 0.85,
+          "code_ref": "src/engines/fitnessEngine.ts:140",
+          "code_symbol": "FITNESS_STATES.STRAINED.multiplier = 0.85",
+          "status": "GUIDE_ONLY",
+          "audit_date": "2026-02-15"
+        },
+        {
+          "error_ids": [
+            28
+          ],
+          "severity": "CRITICAL",
+          "field": "weak_multiplier",
+          "guide_wrong": "omitted entirely",
+          "spec_correct": 0.7,
+          "code_ref": "src/engines/fitnessEngine.ts:140",
+          "code_symbol": "FITNESS_STATES.WEAK.multiplier = 0.70",
+          "status": "GUIDE_ONLY",
+          "audit_date": "2026-02-15"
+        },
+        {
+          "error_ids": [
+            102
+          ],
+          "severity": "CRITICAL",
+          "field": "hurt_state_name",
+          "guide_wrong": "Injured",
+          "spec_correct": "Hurt",
+          "code_ref": "src/engines/fitnessEngine.ts:20",
+          "code_symbol": "FitnessState includes 'HURT' (not 'INJURED')",
+          "status": "GUIDE_ONLY",
+          "audit_date": "2026-02-15"
+        },
+        {
+          "error_ids": [
+            31,
+            103
+          ],
+          "severity": "CRITICAL",
+          "field": "juiced_scope",
+          "guide_wrong": "+20% power only, temporary",
+          "spec_correct": "1.20x ALL stats, persistent state",
+          "code_ref": "src/engines/fitnessEngine.ts:140",
+          "note": "Juiced affects all stats not just power, and is not temporary",
+          "status": "GUIDE_ONLY",
+          "audit_date": "2026-02-15"
+        }
+      ]
+    },
+    {
+      "id": "fame_values",
+      "label": "Fame System \u2014 Event Values",
+      "code_files": [
+        "src/types/game.ts"
+      ],
+      "key_symbols": [
+        "FAME_VALUES",
+        "FameEventType"
+      ],
+      "corrections": [
+        {
+          "error_ids": [
+            8
+          ],
+          "severity": "CRITICAL",
+          "field": "PERFECT_GAME",
+          "guide_wrong": 3,
+          "spec_correct": 5,
+          "code_ref": "src/types/game.ts:802",
+          "code_symbol": "PERFECT_GAME: 5",
+          "status": "GUIDE_ONLY",
+          "audit_date": "2026-02-15"
+        },
+        {
+          "error_ids": [
+            9
+          ],
+          "severity": "CRITICAL",
+          "field": "NO_HITTER",
+          "guide_wrong": 3,
+          "spec_correct": 3,
+          "code_ref": "src/types/game.ts:801",
+          "code_symbol": "NO_HITTER: 3",
+          "note": "Guide said +3 same as Perfect Game. Code confirms NO_HITTER=3, but guide's claim that PG also=3 is wrong.",
+          "status": "GUIDE_ONLY",
+          "audit_date": "2026-02-15"
+        },
+        {
+          "error_ids": [
+            10
+          ],
+          "severity": "CRITICAL",
+          "field": "WEB_GEM",
+          "guide_wrong": 1,
+          "spec_correct": 0.75,
+          "code_ref": "src/types/game.ts:772",
+          "code_symbol": "WEB_GEM: 0.75",
+          "status": "GUIDE_ONLY",
+          "audit_date": "2026-02-15"
+        },
+        {
+          "error_ids": [
+            11
+          ],
+          "severity": "CRITICAL",
+          "field": "KILLED_PITCHER",
+          "guide_wrong": 1,
+          "spec_correct": 3,
+          "code_ref": "src/types/game.ts:816",
+          "code_symbol": "KILLED_PITCHER: 3",
+          "note": "This is a Fame BONER (negative). Guide massively understates the penalty.",
+          "status": "GUIDE_ONLY",
+          "audit_date": "2026-02-15"
+        },
+        {
+          "error_ids": [
+            12
+          ],
+          "severity": "CRITICAL",
+          "field": "CYCLE",
+          "guide_wrong": 2,
+          "spec_correct": 3,
+          "code_ref": "src/types/game.ts:785",
+          "code_symbol": "CYCLE: 3",
+          "note": "NATURAL_CYCLE: 4 at line 786",
+          "status": "GUIDE_ONLY",
+          "audit_date": "2026-02-15"
+        },
+        {
+          "error_ids": [
+            13
+          ],
+          "severity": "CRITICAL",
+          "field": "GOLDEN_SOMBRERO",
+          "guide_wrong": -1,
+          "spec_correct": -1,
+          "code_ref": "src/types/game.ts:888",
+          "code_symbol": "GOLDEN_SOMBRERO: -1",
+          "note": "Code shows -1 (boner). Guide said +1 boner. Audit said spec=1.5 but code confirms -1. Reconcile with spec doc.",
+          "status": "GUIDE_ONLY",
+          "audit_date": "2026-02-15"
+        },
+        {
+          "error_ids": [
+            15
+          ],
+          "severity": "CRITICAL",
+          "field": "IMMACULATE_INNING",
+          "guide_wrong": 2,
+          "spec_correct": 2,
+          "code_ref": "src/types/game.ts:806",
+          "code_symbol": "IMMACULATE_INNING: 2",
+          "note": "Code confirms 2. Audit said spec=3. Spec doc may contradict code \u2014 flag for reconciliation.",
+          "status": "GUIDE_ONLY",
+          "audit_date": "2026-02-15"
+        },
+        {
+          "error_ids": [
+            16
+          ],
+          "severity": "CRITICAL",
+          "field": "WALK_OFF_HR",
+          "guide_wrong": 2,
+          "spec_correct": 1.5,
+          "code_ref": "src/types/game.ts:769",
+          "code_symbol": "WALK_OFF_HR: 1.5",
+          "note": "WALK_OFF: 1, WALK_OFF_GRAND_SLAM: 3",
+          "status": "GUIDE_ONLY",
+          "audit_date": "2026-02-15"
+        },
+        {
+          "error_ids": [
+            18
+          ],
+          "severity": "CRITICAL",
+          "field": "NUT_SHOT_DELIVERED",
+          "guide_wrong": 1,
+          "spec_correct": 1,
+          "code_ref": "src/types/game.ts:814",
+          "code_symbol": "NUT_SHOT_DELIVERED: 1",
+          "note": "Code confirms 1. Also NUT_SHOT_TOUGH_GUY: 1 at line 815.",
+          "status": "GUIDE_ONLY",
+          "audit_date": "2026-02-15"
+        },
+        {
+          "error_ids": [
+            14
+          ],
+          "severity": "MINOR",
+          "field": "TOOTBLAN",
+          "guide_wrong": -1,
+          "spec_correct": -1,
+          "code_ref": "src/types/game.ts:919",
+          "code_symbol": "TOOTBLAN: -1",
+          "note": "Value matches. But TOOTBLAN_RALLY_KILLER: -2 at line 920 exists and guide omits it.",
+          "status": "GUIDE_ONLY",
+          "audit_date": "2026-02-15"
+        },
+        {
+          "error_ids": [
+            6,
+            20
+          ],
+          "severity": "CRITICAL",
+          "field": "MADDUX_THRESHOLD",
+          "guide_wrong": 67,
+          "spec_correct": "Math.floor(innings \u00d7 9.44) \u2014 9inn=85, 6inn=56",
+          "code_ref": "src/hooks/useFameDetection.ts:955-972",
+          "code_symbol": "detectMaddux(context, pitcherStats, pitchThreshold = 100)",
+          "note": "Code default is 100 pitches. Spec formula is Math.floor(innings \u00d7 9.44). Guide's 67 matches nothing.",
+          "status": "FIXED",
+          "fixed_date": "2026-02-15"
+        }
+      ]
+    },
+    {
+      "id": "salary_system",
+      "label": "Salary System \u2014 Position Multipliers, Age Factors, Base Formula",
+      "code_files": [
+        "src/engines/salaryCalculator.ts"
+      ],
+      "key_symbols": [
+        "POSITION_MULTIPLIERS",
+        "calculateAgeFactor",
+        "ratingsToBaseSalary"
+      ],
+      "corrections": [
+        {
+          "error_ids": [
+            55
+          ],
+          "severity": "CRITICAL",
+          "field": "position_multiplier_C",
+          "guide_wrong": 1.4,
+          "spec_correct": 1.15,
+          "code_ref": "src/engines/salaryCalculator.ts:222",
+          "code_symbol": "'C': 1.15",
+          "status": "GUIDE_ONLY",
+          "audit_date": "2026-02-15"
+        },
+        {
+          "error_ids": [
+            56
+          ],
+          "severity": "CRITICAL",
+          "field": "position_multiplier_SS",
+          "guide_wrong": 1.4,
+          "spec_correct": 1.12,
+          "code_ref": "src/engines/salaryCalculator.ts:223",
+          "code_symbol": "'SS': 1.12",
+          "status": "GUIDE_ONLY",
+          "audit_date": "2026-02-15"
+        },
+        {
+          "error_ids": [
+            57
+          ],
+          "severity": "CRITICAL",
+          "field": "position_multiplier_1B",
+          "guide_wrong": 1.15,
+          "spec_correct": 0.92,
+          "code_ref": "src/engines/salaryCalculator.ts:237",
+          "code_symbol": "'1B': 0.92",
+          "status": "GUIDE_ONLY",
+          "audit_date": "2026-02-15"
+        },
+        {
+          "error_ids": [
+            57
+          ],
+          "severity": "CRITICAL",
+          "field": "position_multiplier_3B",
+          "guide_wrong": 1.15,
+          "spec_correct": 1.02,
+          "code_ref": "src/engines/salaryCalculator.ts:230",
+          "code_symbol": "'3B': 1.02",
+          "status": "GUIDE_ONLY",
+          "audit_date": "2026-02-15"
+        },
+        {
+          "error_ids": [
+            58
+          ],
+          "severity": "CRITICAL",
+          "field": "position_multiplier_CF",
+          "guide_wrong": "1.05-1.10",
+          "spec_correct": 1.08,
+          "code_ref": "src/engines/salaryCalculator.ts:226",
+          "code_symbol": "'CF': 1.08",
+          "status": "GUIDE_ONLY",
+          "audit_date": "2026-02-15"
+        },
+        {
+          "error_ids": [
+            58
+          ],
+          "severity": "CRITICAL",
+          "field": "position_multiplier_RF",
+          "guide_wrong": "1.05-1.10",
+          "spec_correct": 0.98,
+          "code_ref": "src/engines/salaryCalculator.ts:235",
+          "code_symbol": "'RF': 0.98",
+          "status": "GUIDE_ONLY",
+          "audit_date": "2026-02-15"
+        },
+        {
+          "error_ids": [
+            58
+          ],
+          "severity": "CRITICAL",
+          "field": "position_multiplier_LF",
+          "guide_wrong": "1.05-1.10",
+          "spec_correct": 0.95,
+          "code_ref": "src/engines/salaryCalculator.ts:236",
+          "code_symbol": "'LF': 0.95",
+          "status": "GUIDE_ONLY",
+          "audit_date": "2026-02-15"
+        },
+        {
+          "error_ids": [
+            59
+          ],
+          "severity": "CRITICAL",
+          "field": "position_multiplier_DH",
+          "guide_wrong": 1.0,
+          "spec_correct": 0.88,
+          "code_ref": "src/engines/salaryCalculator.ts:238",
+          "code_symbol": "'DH': 0.88",
+          "status": "GUIDE_ONLY",
+          "audit_date": "2026-02-15"
+        },
+        {
+          "error_ids": [
+            60
+          ],
+          "severity": "CRITICAL",
+          "field": "position_multiplier_2B",
+          "guide_wrong": "omitted",
+          "spec_correct": 1.05,
+          "code_ref": "src/engines/salaryCalculator.ts:227",
+          "code_symbol": "'2B': 1.05",
+          "status": "GUIDE_ONLY",
+          "audit_date": "2026-02-15"
+        },
+        {
+          "error_ids": [
+            60
+          ],
+          "severity": "CRITICAL",
+          "field": "position_multiplier_SP",
+          "guide_wrong": "omitted",
+          "spec_correct": 1.0,
+          "code_ref": "src/engines/salaryCalculator.ts:231",
+          "code_symbol": "'SP': 1.00",
+          "status": "GUIDE_ONLY",
+          "audit_date": "2026-02-15"
+        },
+        {
+          "error_ids": [
+            60
+          ],
+          "severity": "CRITICAL",
+          "field": "position_multiplier_RP",
+          "guide_wrong": "omitted",
+          "spec_correct": 0.85,
+          "code_ref": "src/engines/salaryCalculator.ts:241",
+          "code_symbol": "'RP': 0.85",
+          "status": "GUIDE_ONLY",
+          "audit_date": "2026-02-15"
+        },
+        {
+          "error_ids": [
+            61
+          ],
+          "severity": "CRITICAL",
+          "field": "age_factor_le24",
+          "guide_wrong": 0.75,
+          "spec_correct": 0.7,
+          "code_ref": "src/engines/salaryCalculator.ts:607",
+          "code_symbol": "if (age <= 24) return 0.70",
+          "status": "GUIDE_ONLY",
+          "audit_date": "2026-02-15"
+        },
+        {
+          "error_ids": [
+            62
+          ],
+          "severity": "CRITICAL",
+          "field": "age_factor_27_29",
+          "guide_wrong": 1.2,
+          "spec_correct": 1.0,
+          "code_ref": "src/engines/salaryCalculator.ts:609",
+          "code_symbol": "if (age <= 29) return 1.00",
+          "status": "GUIDE_ONLY",
+          "audit_date": "2026-02-15"
+        },
+        {
+          "error_ids": [
+            62
+          ],
+          "severity": "CRITICAL",
+          "field": "age_factor_30_32",
+          "guide_wrong": 1.2,
+          "spec_correct": 1.1,
+          "code_ref": "src/engines/salaryCalculator.ts:610",
+          "code_symbol": "if (age <= 32) return 1.10",
+          "status": "GUIDE_ONLY",
+          "audit_date": "2026-02-15"
+        },
+        {
+          "error_ids": [
+            63
+          ],
+          "severity": "CRITICAL",
+          "field": "age_factor_36_38",
+          "guide_wrong": 0.95,
+          "spec_correct": 0.85,
+          "code_ref": "src/engines/salaryCalculator.ts:612",
+          "code_symbol": "if (age <= 38) return 0.85",
+          "status": "GUIDE_ONLY",
+          "audit_date": "2026-02-15"
+        },
+        {
+          "error_ids": [
+            63
+          ],
+          "severity": "CRITICAL",
+          "field": "age_factor_gt38",
+          "guide_wrong": "dropping (unspecified)",
+          "spec_correct": 0.7,
+          "code_ref": "src/engines/salaryCalculator.ts:613",
+          "code_symbol": "return 0.70",
+          "status": "GUIDE_ONLY",
+          "audit_date": "2026-02-15"
+        },
+        {
+          "error_ids": [
+            64
+          ],
+          "severity": "CRITICAL",
+          "field": "base_salary_formula",
+          "guide_wrong": "omitted entirely",
+          "spec_correct": "Math.pow(weightedRating / 100, 2.5) * MAX_SALARY",
+          "code_ref": "src/engines/salaryCalculator.ts:429",
+          "code_symbol": "Math.pow(weightedRating / 100, 2.5) * MAX_SALARY",
+          "status": "GUIDE_ONLY",
+          "audit_date": "2026-02-15"
+        },
+        {
+          "error_ids": [
+            66
+          ],
+          "severity": "MAJOR",
+          "field": "salary_cap_type",
+          "guide_wrong": "fixed hard cap",
+          "spec_correct": "soft cap with luxury tax thresholds",
+          "code_ref": "src/engines/salaryCalculator.ts",
+          "note": "See SALARY_SYSTEM_SPEC.md for cap structure details",
+          "status": "GUIDE_ONLY",
+          "audit_date": "2026-02-15"
+        },
+        {
+          "error_ids": [
+            68
+          ],
+          "severity": "MINOR",
+          "field": "albatross_criteria",
+          "guide_wrong": "vague description",
+          "spec_correct": "salary > team_avg \u00d7 1.5 AND negative WAR for 2+ consecutive seasons",
+          "code_ref": "src/engines/salaryCalculator.ts",
+          "note": "Check SALARY_SYSTEM_SPEC.md for canonical definition",
+          "status": "GUIDE_ONLY",
+          "audit_date": "2026-02-15"
+        }
+      ]
+    },
+    {
+      "id": "grade_system",
+      "label": "Grade Algorithm \u2014 Thresholds & Scale",
+      "code_files": [
+        "src/engines/gradeEngine.ts"
+      ],
+      "key_symbols": [
+        "POSITION_PLAYER_GRADE_THRESHOLDS",
+        "PITCHER_GRADE_THRESHOLDS",
+        "Grade",
+        "BATTER_WEIGHTS"
+      ],
+      "corrections": [
+        {
+          "error_ids": [
+            111
+          ],
+          "severity": "MAJOR",
+          "field": "grade_count",
+          "guide_wrong": 10,
+          "spec_correct": 12,
+          "code_ref": "src/engines/gradeEngine.ts:19",
+          "code_symbol": "Grade = 'S' | 'A+' | 'A' | 'A-' | 'B+' | 'B' | 'B-' | 'C+' | 'C' | 'C-' | 'D+' | 'D'",
+          "note": "Guide omits D+ and D grades entirely",
+          "status": "GUIDE_ONLY",
+          "audit_date": "2026-02-15"
+        },
+        {
+          "error_ids": [
+            112
+          ],
+          "severity": "CRITICAL",
+          "field": "grade_thresholds",
+          "guide_wrong": {
+            "S": "95-99",
+            "A+": "92-94",
+            "A": "88-91",
+            "A-": "85-87",
+            "B+": "80-84",
+            "B": "75-79",
+            "B-": "70-74",
+            "C+": "65-69",
+            "C": "60-64",
+            "C-": "50-59"
+          },
+          "spec_correct": {
+            "S": "\u226580",
+            "A+": "\u226578",
+            "A": "\u226573",
+            "A-": "\u226566",
+            "B+": "\u226558",
+            "B": "\u226555",
+            "B-": "\u226548",
+            "C+": "\u226545",
+            "C": "\u226538",
+            "C-": "\u226535",
+            "D+": "\u226530",
+            "D": "\u22650"
+          },
+          "code_ref": "src/engines/gradeEngine.ts:49-62",
+          "code_symbol": "POSITION_PLAYER_GRADE_THRESHOLDS",
+          "note": "Guide uses a fabricated 0-99 scale. Code uses weighted rating thresholds from stat formula.",
+          "status": "GUIDE_ONLY",
+          "audit_date": "2026-02-15"
+        },
+        {
+          "error_ids": [
+            117
+          ],
+          "severity": "MINOR",
+          "field": "batter_weight_formula",
+          "guide_wrong": "(Power\u00d73 + Contact\u00d73 + Speed\u00d72 + Fielding + Arm) / 10",
+          "spec_correct": "power*0.30 + contact*0.30 + speed*0.20 + fielding*0.10 + arm*0.10",
+          "code_ref": "src/engines/gradeEngine.ts:84-90",
+          "code_symbol": "BATTER_WEIGHTS",
+          "note": "Mathematically equivalent but guide implies integer division",
+          "status": "GUIDE_ONLY",
+          "audit_date": "2026-02-15"
+        }
+      ]
+    },
+    {
+      "id": "fan_morale",
+      "label": "Fan Morale System \u2014 States & Ranges",
+      "code_files": [
+        "src/engines/fanMoraleEngine.ts"
+      ],
+      "key_symbols": [
+        "FanState",
+        "FAN_MORALE_RANGES",
+        "getFanState"
+      ],
+      "corrections": [
+        {
+          "error_ids": [
+            104
+          ],
+          "severity": "MAJOR",
+          "field": "fan_state_count",
+          "guide_wrong": 6,
+          "spec_correct": 7,
+          "code_ref": "src/engines/fanMoraleEngine.ts:26-32",
+          "note": "Quick Reference chapter shows 6 states, code has 7",
+          "status": "GUIDE_ONLY",
+          "audit_date": "2026-02-15"
+        },
+        {
+          "error_ids": [
+            105
+          ],
+          "severity": "MAJOR",
+          "field": "fan_state_75_89",
+          "guide_wrong": "Happy",
+          "spec_correct": "EXCITED",
+          "code_ref": "src/engines/fanMoraleEngine.ts:27",
+          "code_symbol": "'EXCITED' // 75-89",
+          "status": "GUIDE_ONLY",
+          "audit_date": "2026-02-15"
+        },
+        {
+          "error_ids": [
+            106
+          ],
+          "severity": "MAJOR",
+          "field": "fan_state_55_74",
+          "guide_wrong": "Neutral (60-74)",
+          "spec_correct": "CONTENT (55-74)",
+          "code_ref": "src/engines/fanMoraleEngine.ts:28,261",
+          "code_symbol": "CONTENT: [55, 74]",
+          "note": "Both name and range are wrong in guide",
+          "status": "GUIDE_ONLY",
+          "audit_date": "2026-02-15"
+        },
+        {
+          "error_ids": [
+            107
+          ],
+          "severity": "MAJOR",
+          "field": "fan_state_40_54",
+          "guide_wrong": "Frustrated (45-59)",
+          "spec_correct": "RESTLESS (40-54)",
+          "code_ref": "src/engines/fanMoraleEngine.ts:29,263",
+          "code_symbol": "RESTLESS: [40, 54]",
+          "status": "GUIDE_ONLY",
+          "audit_date": "2026-02-15"
+        },
+        {
+          "error_ids": [
+            108
+          ],
+          "severity": "MAJOR",
+          "field": "fan_state_25_39",
+          "guide_wrong": "Angry (30-44)",
+          "spec_correct": "FRUSTRATED (25-39)",
+          "code_ref": "src/engines/fanMoraleEngine.ts:30,264",
+          "code_symbol": "FRUSTRATED: [25, 39]",
+          "note": "Guide fabricated 'Angry' state. Real state at this level is FRUSTRATED.",
+          "status": "GUIDE_ONLY",
+          "audit_date": "2026-02-15"
+        },
+        {
+          "error_ids": [
+            108
+          ],
+          "severity": "MAJOR",
+          "field": "fan_state_10_24",
+          "guide_wrong": "omitted (merged into Hostile)",
+          "spec_correct": "APATHETIC (10-24)",
+          "code_ref": "src/engines/fanMoraleEngine.ts:31,265",
+          "code_symbol": "APATHETIC: [10, 24]",
+          "status": "GUIDE_ONLY",
+          "audit_date": "2026-02-15"
+        },
+        {
+          "error_ids": [
+            109
+          ],
+          "severity": "MAJOR",
+          "field": "fan_state_hostile_range",
+          "guide_wrong": "0-29",
+          "spec_correct": "0-9",
+          "code_ref": "src/engines/fanMoraleEngine.ts:32,266",
+          "code_symbol": "HOSTILE: [0, 9]",
+          "status": "GUIDE_ONLY",
+          "audit_date": "2026-02-15"
+        },
+        {
+          "error_ids": [
+            110
+          ],
+          "severity": "CRITICAL",
+          "field": "fa_attraction_modifiers",
+          "guide_wrong": [
+            "+25%",
+            "+10%",
+            "Baseline",
+            "-10%",
+            "-25%",
+            "-40%"
+          ],
+          "spec_correct": "not defined as simple percentages",
+          "code_ref": "src/engines/fanMoraleEngine.ts:275-317",
+          "note": "Guide fabricated all FA attraction percentages. Check FAN_MORALE_SYSTEM_SPEC.md for real modifiers.",
+          "status": "GUIDE_ONLY",
+          "audit_date": "2026-02-15"
+        }
+      ]
+    },
+    {
+      "id": "season_config",
+      "label": "Season Configuration \u2014 Lengths, Phases, Timing",
+      "code_files": [
+        "src/types/war.ts",
+        "src/utils/leagueStorage.ts",
+        "src/utils/milestoneDetector.ts"
+      ],
+      "key_symbols": [
+        "SeasonLength",
+        "SEASON_GAMES",
+        "gamesPerSeason"
+      ],
+      "corrections": [
+        {
+          "error_ids": [
+            2,
+            3,
+            113
+          ],
+          "severity": "CRITICAL",
+          "field": "season_length_options",
+          "guide_wrong": [
+            48,
+            82,
+            128,
+            162
+          ],
+          "spec_correct": [
+            24,
+            32,
+            40,
+            48,
+            56,
+            81,
+            100,
+            162
+          ],
+          "code_ref": "src/types/war.ts:17-22 AND specs/KBL_XHD_TRACKER_MASTER_SPEC_v3.md",
+          "note": "Code war.ts has simplified categories (mini:16, short:20, standard:32, long:48). Master spec has full list. Guide's 82 and 128 don't exist anywhere.",
+          "status": "GUIDE_ONLY",
+          "audit_date": "2026-02-15"
+        },
+        {
+          "error_ids": [
+            42
+          ],
+          "severity": "CRITICAL",
+          "field": "all_star_break_trigger",
+          "guide_wrong": "at 60 games played",
+          "spec_correct": "at 60% of season completion",
+          "code_ref": "specs/KBL_XHD_TRACKER_MASTER_SPEC_v3.md",
+          "note": "Percentage-based, not fixed game count",
+          "status": "FIXED",
+          "fixed_date": "2026-02-15"
+        },
+        {
+          "error_ids": [
+            43
+          ],
+          "severity": "CRITICAL",
+          "field": "trade_deadline_trigger",
+          "guide_wrong": "at 65 games",
+          "spec_correct": "at 65% of season completion",
+          "code_ref": "specs/KBL_XHD_TRACKER_MASTER_SPEC_v3.md",
+          "status": "GUIDE_ONLY",
+          "audit_date": "2026-02-15"
+        },
+        {
+          "error_ids": [
+            40
+          ],
+          "severity": "MAJOR",
+          "field": "preseason_length",
+          "guide_wrong": "28 games",
+          "spec_correct": "varies by league configuration",
+          "code_ref": "specs/KBL_XHD_TRACKER_MASTER_SPEC_v3.md",
+          "status": "GUIDE_ONLY",
+          "audit_date": "2026-02-15"
+        },
+        {
+          "error_ids": [
+            41
+          ],
+          "severity": "MAJOR",
+          "field": "regular_season_length",
+          "guide_wrong": "100 games",
+          "spec_correct": "depends on configured season length (24-162)",
+          "code_ref": "specs/KBL_XHD_TRACKER_MASTER_SPEC_v3.md",
+          "status": "GUIDE_ONLY",
+          "audit_date": "2026-02-15"
+        }
+      ]
+    },
+    {
+      "id": "gametracker",
+      "label": "GameTracker \u2014 Undo, Input System",
+      "code_files": [
+        "src/components/GameTracker/index.tsx",
+        "src/src_figma/__tests__/gameTracker/undoSystem.test.ts"
+      ],
+      "key_symbols": [
+        "undoStack",
+        "UndoStack"
+      ],
+      "corrections": [
+        {
+          "error_ids": [
+            5
+          ],
+          "severity": "CRITICAL",
+          "field": "undo_stack_max",
+          "guide_wrong": 10,
+          "spec_correct": 20,
+          "code_ref": "src/components/GameTracker/index.tsx:308 (useState) + specs/KBL_XHD_TRACKER_MASTER_SPEC_v3.md",
+          "note": "Master spec says 20. Code uses unbounded array \u2014 verify if MAX_UNDO constant exists elsewhere.",
+          "status": "FIXED",
+          "fixed_date": "2026-02-15"
+        },
+        {
+          "error_ids": [
+            7
+          ],
+          "severity": "MINOR",
+          "field": "input_system_name",
+          "guide_wrong": "4-tier input",
+          "spec_correct": "at-bat input with specific fields (outcome, location, RBI, etc.)",
+          "code_ref": "src/components/GameTracker/index.tsx",
+          "status": "GUIDE_ONLY",
+          "audit_date": "2026-02-15"
+        }
+      ]
+    },
+    {
+      "id": "leverage_index",
+      "label": "Leverage Index \u2014 Formula, Range",
+      "code_files": [
+        "src/engines/leverageCalculator.ts"
+      ],
+      "key_symbols": [
+        "LIResult",
+        "GameStateForLI",
+        "BaseState"
+      ],
+      "corrections": [
+        {
+          "error_ids": [
+            22
+          ],
+          "severity": "CRITICAL",
+          "field": "li_calculation_method",
+          "guide_wrong": "continuous formula with specific coefficients",
+          "spec_correct": "lookup-table approach based on (inning, score differential, base/out state)",
+          "code_ref": "src/engines/leverageCalculator.ts:24-90",
+          "note": "Guide fabricated a formula. LI uses pre-computed tables.",
+          "status": "GUIDE_ONLY",
+          "audit_date": "2026-02-15"
+        },
+        {
+          "error_ids": [
+            23
+          ],
+          "severity": "CRITICAL",
+          "field": "li_max_range",
+          "guide_wrong": "0.0 to 3.0",
+          "spec_correct": "0.1 to 10.0 (clamped)",
+          "code_ref": "src/engines/leverageCalculator.ts:72-90",
+          "code_symbol": "LIResult with clamped range",
+          "status": "GUIDE_ONLY",
+          "audit_date": "2026-02-15"
+        }
+      ]
+    },
+    {
+      "id": "adaptive_standards",
+      "label": "Adaptive Standards Engine",
+      "code_files": [
+        "src/src_figma/app/engines/adaptiveLearningEngine.ts",
+        "src/utils/milestoneDetector.ts"
+      ],
+      "key_symbols": [
+        "adaptiveStandard",
+        "scalingFactor"
+      ],
+      "corrections": [
+        {
+          "error_ids": [
+            24
+          ],
+          "severity": "MAJOR",
+          "field": "scaling_formula",
+          "guide_wrong": "simple linear scaling",
+          "spec_correct": "baselineValue * (gamesPlayed / 162) * (inningsPerGame / 9) with smoothing factors",
+          "code_ref": "src/utils/milestoneDetector.ts:29,64",
+          "code_symbol": "config.gamesPerSeason / MLB_BASELINE_GAMES",
+          "status": "GUIDE_ONLY",
+          "audit_date": "2026-02-15"
+        },
+        {
+          "error_ids": [
+            25
+          ],
+          "severity": "CRITICAL",
+          "field": "war_grade_thresholds",
+          "guide_wrong": "fixed thresholds (>6.0 = MVP)",
+          "spec_correct": "thresholds shift with season length via Adaptive Standards",
+          "code_ref": "specs/ADAPTIVE_STANDARDS_ENGINE_SPEC.md",
+          "status": "GUIDE_ONLY",
+          "audit_date": "2026-02-15"
+        }
+      ]
+    },
+    {
+      "id": "clutch_attribution",
+      "label": "Clutch Attribution System",
+      "code_files": [
+        "src/engines/clutchCalculator.ts",
+        "src/hooks/useClutchCalculations.ts"
+      ],
+      "key_symbols": [
+        "clutchFactor",
+        "clutchAttribution"
+      ],
+      "corrections": [
+        {
+          "error_ids": [
+            26
+          ],
+          "severity": "MINOR",
+          "field": "clutch_adjustment_method",
+          "guide_wrong": "adjusts WAR by up to \u00b115%",
+          "spec_correct": "Leverage Index \u00d7 outcome value (nuanced system, not simple percentage cap)",
+          "code_ref": "src/engines/clutchCalculator.ts",
+          "status": "GUIDE_ONLY",
+          "audit_date": "2026-02-15"
+        }
+      ]
+    },
+    {
+      "id": "park_factors",
+      "label": "Park Factors \u2014 Range, Dimensions",
+      "code_files": [
+        "src/types/war.ts",
+        "src/engines/bwarCalculator.ts",
+        "src/engines/pwarCalculator.ts"
+      ],
+      "key_symbols": [
+        "ParkFactors",
+        "parkFactor"
+      ],
+      "corrections": [
+        {
+          "error_ids": [
+            83,
+            114
+          ],
+          "severity": "CRITICAL",
+          "field": "park_factor_range",
+          "guide_wrong": "0.85 to 1.15",
+          "spec_correct": "0.70 to 1.30",
+          "code_ref": "specs/STADIUM_ANALYTICS_SPEC.md:258",
+          "code_symbol": "clamp(parkFactor, 0.70, 1.30)",
+          "status": "FIXED",
+          "fixed_date": "2026-02-15"
+        },
+        {
+          "error_ids": [
+            84
+          ],
+          "severity": "CRITICAL",
+          "field": "park_factor_dimensions",
+          "guide_wrong": "single number",
+          "spec_correct": "multi-dimensional: overall, runs, homeRuns, leftHandedHR, rightHandedHR, leftHandedAVG, rightHandedAVG, confidence",
+          "code_ref": "src/types/war.ts:588-597",
+          "code_symbol": "interface ParkFactors { overall, runs, homeRuns, leftHandedHR, rightHandedHR, leftHandedAVG, rightHandedAVG, confidence }",
+          "status": "GUIDE_ONLY",
+          "audit_date": "2026-02-15"
+        },
+        {
+          "error_ids": [
+            85
+          ],
+          "severity": "MAJOR",
+          "field": "seed_values",
+          "guide_wrong": "single seed value per stadium",
+          "spec_correct": "per-stat-category seed values from SMB4 stadium data",
+          "code_ref": "specs/STADIUM_ANALYTICS_SPEC.md",
+          "status": "GUIDE_ONLY",
+          "audit_date": "2026-02-15"
+        }
+      ]
+    },
+    {
+      "id": "offseason",
+      "label": "Offseason System \u2014 Phases, Awards, Protection",
+      "code_files": [
+        "src/src_figma/app/components/FreeAgencyFlow.tsx"
+      ],
+      "key_symbols": [
+        "protectedPlayer",
+        "offseasonPhase"
+      ],
+      "corrections": [
+        {
+          "error_ids": [
+            50
+          ],
+          "severity": "CRITICAL",
+          "field": "free_agency_protection_count",
+          "guide_wrong": 16,
+          "spec_correct": 1,
+          "code_ref": "specs/OFFSEASON_SYSTEM_SPEC.md:1003-1005",
+          "note": "Each team protects ONE player, not 16. Most egregious error in the guide.",
+          "status": "GUIDE_ONLY",
+          "audit_date": "2026-02-15"
+        },
+        {
+          "error_ids": [
+            48,
+            49
+          ],
+          "severity": "MAJOR",
+          "field": "award_categories_count",
+          "guide_wrong": 13,
+          "spec_correct": 14,
+          "code_ref": "specs/OFFSEASON_SYSTEM_SPEC.md:473-488",
+          "note": "Missing: League Leaders, Kara Kawaguchi Award, Bust of the Year, Comeback Player of the Year",
+          "status": "GUIDE_ONLY",
+          "audit_date": "2026-02-15"
+        },
+        {
+          "error_ids": [
+            51
+          ],
+          "severity": "MAJOR",
+          "field": "manager_bonus_points",
+          "guide_wrong": "feature exists \u2014 manager distributes rating boosts",
+          "spec_correct": "FABRICATED \u2014 feature does not exist. Phase 3 is automated WAR-based ratings adjustment.",
+          "code_ref": "specs/OFFSEASON_SYSTEM_SPEC.md:5.1-5.4",
+          "status": "GUIDE_ONLY",
+          "audit_date": "2026-02-15"
+        },
+        {
+          "error_ids": [
+            52
+          ],
+          "severity": "MINOR",
+          "field": "booger_glove_penalty",
+          "guide_wrong": "-1 Fame Boner",
+          "spec_correct": "trait modification (gain Butter Fingers OR lose most positive trait)",
+          "code_ref": "specs/OFFSEASON_SYSTEM_SPEC.md:562-568",
+          "status": "GUIDE_ONLY",
+          "audit_date": "2026-02-15"
+        },
+        {
+          "error_ids": [
+            53
+          ],
+          "severity": "MAJOR",
+          "field": "offseason_phase_order",
+          "guide_wrong": "different order than spec",
+          "spec_correct": [
+            "Awards",
+            "Retirement",
+            "Contraction",
+            "Ratings Adjustment",
+            "Arbitration",
+            "Free Agency",
+            "Expansion Draft",
+            "Entry Draft",
+            "Supplemental Draft",
+            "Offseason Trades",
+            "Spring Training"
+          ],
+          "code_ref": "specs/OFFSEASON_SYSTEM_SPEC.md",
+          "status": "GUIDE_ONLY",
+          "audit_date": "2026-02-15"
+        },
+        {
+          "error_ids": [
+            54
+          ],
+          "severity": "MINOR",
+          "field": "entry_draft_config",
+          "guide_wrong": "3 rounds, 30 players (fixed)",
+          "spec_correct": "league-configurable rounds and player count",
+          "code_ref": "specs/OFFSEASON_SYSTEM_SPEC.md",
+          "status": "GUIDE_ONLY",
+          "audit_date": "2026-02-15"
+        }
+      ]
+    },
+    {
+      "id": "milestones",
+      "label": "Milestone System \u2014 Scaling, Thresholds",
+      "code_files": [
+        "src/utils/milestoneDetector.ts",
+        "src/src_figma/utils/milestoneDetector.ts"
+      ],
+      "key_symbols": [
+        "scalingFactor",
+        "dynamicThreshold",
+        "MLB_BASELINE_GAMES",
+        "SMB4_DEFAULT_GAMES"
+      ],
+      "corrections": [
+        {
+          "error_ids": [
+            76,
+            77,
+            78
+          ],
+          "severity": "CRITICAL",
+          "field": "default_season_for_scaling",
+          "guide_wrong": "48-game season (scaling factor ~0.30)",
+          "spec_correct": "128-game default (scaling factor 0.79)",
+          "code_ref": "src/utils/milestoneDetector.ts:29,42,55",
+          "note": "SMB4_DEFAULT_GAMES is used as the baseline. Scaling = gamesPerSeason / 162.",
+          "status": "GUIDE_ONLY",
+          "audit_date": "2026-02-15"
+        },
+        {
+          "error_ids": [
+            79
+          ],
+          "severity": "MAJOR",
+          "field": "milestone_threshold_system",
+          "guide_wrong": "single fixed floor (e.g., 500 HR)",
+          "spec_correct": "dual-threshold: Dynamic 10% Threshold (primary, franchise history) + Fixed Threshold Floor (secondary)",
+          "code_ref": "specs/MILESTONE_SYSTEM_SPEC.md:Section 2.0",
+          "status": "GUIDE_ONLY",
+          "audit_date": "2026-02-15"
+        }
+      ]
+    },
+    {
+      "id": "narrative_system",
+      "label": "Narrative System \u2014 Beat Reporters",
+      "code_files": [
+        "src/engines/narrativeEngine.ts",
+        "src/src_figma/app/engines/narrativeIntegration.ts"
+      ],
+      "key_symbols": [
+        "beatReporter",
+        "narrativeEngine"
+      ],
+      "corrections": [
+        {
+          "error_ids": [
+            69
+          ],
+          "severity": "MAJOR",
+          "field": "narrative_structure",
+          "guide_wrong": "6 numbered channels",
+          "spec_correct": "named beat reporters with specific personalities",
+          "code_ref": "src/engines/narrativeEngine.ts + specs/NARRATIVE_SYSTEM_SPEC.md",
+          "status": "GUIDE_ONLY",
+          "audit_date": "2026-02-15"
+        },
+        {
+          "error_ids": [
+            70
+          ],
+          "severity": "MAJOR",
+          "field": "reporter_names",
+          "guide_wrong": "possibly fabricated names",
+          "spec_correct": "check specs/NARRATIVE_SYSTEM_SPEC.md for canonical reporter list",
+          "code_ref": "src/engines/narrativeEngine.ts",
+          "status": "GUIDE_ONLY",
+          "audit_date": "2026-02-15"
+        },
+        {
+          "error_ids": [
+            72
+          ],
+          "severity": "MAJOR",
+          "field": "dynamic_designations",
+          "guide_wrong": "described as seasonal awards",
+          "spec_correct": "specific trigger criteria and timing rules",
+          "code_ref": "specs/DYNAMIC_DESIGNATIONS_SPEC.md",
+          "status": "GUIDE_ONLY",
+          "audit_date": "2026-02-15"
+        }
+      ]
+    },
+    {
+      "id": "farm_system",
+      "label": "Farm System \u2014 Prospects",
+      "code_files": [
+        "src/engines/gradeEngine.ts"
+      ],
+      "key_symbols": [
+        "ProspectOutput",
+        "developmentGrade"
+      ],
+      "corrections": [
+        {
+          "error_ids": [
+            88
+          ],
+          "severity": "MAJOR",
+          "field": "prospect_development_model",
+          "guide_wrong": "story archetypes",
+          "spec_correct": "grade-based progression (no narrative archetypes)",
+          "code_ref": "specs/FARM_SYSTEM_SPEC.md",
+          "status": "GUIDE_ONLY",
+          "audit_date": "2026-02-15"
+        },
+        {
+          "error_ids": [
+            89
+          ],
+          "severity": "MINOR",
+          "field": "farm_player_morale",
+          "guide_wrong": "morale system for farm players",
+          "spec_correct": "development modifiers only, no named 'morale' system",
+          "code_ref": "specs/FARM_SYSTEM_SPEC.md",
+          "status": "GUIDE_ONLY",
+          "audit_date": "2026-02-15"
+        }
+      ]
+    },
+    {
+      "id": "traits",
+      "label": "Traits System \u2014 Count",
+      "code_files": [
+        "src/types/index.ts",
+        "src/data/traitPools.ts",
+        "src/engines/salaryCalculator.ts"
+      ],
+      "key_symbols": [
+        "trait",
+        "ELITE_POSITIVE_TRAITS",
+        "GOOD_POSITIVE_TRAITS"
+      ],
+      "corrections": [
+        {
+          "error_ids": [
+            65
+          ],
+          "severity": "MAJOR",
+          "field": "trait_count",
+          "guide_wrong": 63,
+          "spec_correct": "~161 unique trait names",
+          "code_ref": "src/data/traitPools.ts + specs/smb4_traits_reference.md",
+          "note": "Guide undercounts by 2.5x",
+          "status": "GUIDE_ONLY",
+          "audit_date": "2026-02-15"
+        }
+      ]
+    },
+    {
+      "id": "simulation",
+      "label": "Game Simulation Engine",
+      "code_files": [
+        "src/engines/syntheticGameFactory.ts"
+      ],
+      "key_symbols": [
+        "syntheticGameFactory"
+      ],
+      "corrections": [
+        {
+          "error_ids": [
+            44
+          ],
+          "severity": "MINOR",
+          "field": "sim_engine_equivalence",
+          "guide_wrong": "SIM games use the SAME engines as played games",
+          "spec_correct": "syntheticGameFactory uses probability curves, not identical pitch-by-pitch engine",
+          "code_ref": "specs/GAME_SIMULATION_SPEC.md",
+          "status": "GUIDE_ONLY",
+          "audit_date": "2026-02-15"
+        }
+      ]
+    },
+    {
+      "id": "playoffs",
+      "label": "Playoff Configuration",
+      "code_files": [],
+      "key_symbols": [],
+      "corrections": [
+        {
+          "error_ids": [
+            45
+          ],
+          "severity": "MAJOR",
+          "field": "playoff_format",
+          "guide_wrong": "specific bracket format presented as definitive",
+          "spec_correct": "configurable: 3-game, 5-game, 7-game series",
+          "code_ref": "specs/FRANCHISE_MODE_SPEC.md",
+          "status": "GUIDE_ONLY",
+          "audit_date": "2026-02-15"
+        }
+      ]
+    },
+    {
+      "id": "special_events",
+      "label": "Special Events \u2014 Definitions, Missing Events",
+      "code_files": [
+        "src/types/game.ts",
+        "src/hooks/useFameDetection.ts"
+      ],
+      "key_symbols": [
+        "FameEventType",
+        "detectMaddux"
+      ],
+      "corrections": [
+        {
+          "error_ids": [
+            19
+          ],
+          "severity": "MAJOR",
+          "field": "missing_event_types",
+          "guide_wrong": "partial list",
+          "spec_correct": "Full list in FameEventType union (src/types/game.ts:571-760) includes ~80+ event types",
+          "code_ref": "src/types/game.ts:571-760",
+          "status": "GUIDE_ONLY",
+          "audit_date": "2026-02-15"
+        },
+        {
+          "error_ids": [
+            116
+          ],
+          "severity": "MAJOR",
+          "field": "booger_glove_definition",
+          "guide_wrong": "a fielder's error on an easy play (per-play event)",
+          "spec_correct": "annual AWARD for worst fielder (offseason ceremony)",
+          "code_ref": "specs/OFFSEASON_SYSTEM_SPEC.md",
+          "status": "GUIDE_ONLY",
+          "audit_date": "2026-02-15"
+        }
+      ]
+    },
+    {
+      "id": "misc",
+      "label": "Miscellaneous \u2014 Museum, Architecture, Morale Amplifiers",
+      "code_files": [],
+      "key_symbols": [],
+      "corrections": [
+        {
+          "error_ids": [
+            82
+          ],
+          "severity": "MINOR",
+          "field": "number_retirement",
+          "guide_wrong": "automatic",
+          "spec_correct": "user-initiated ceremony",
+          "code_ref": "specs/KBL_XHD_TRACKER_MASTER_SPEC_v3.md",
+          "status": "GUIDE_ONLY",
+          "audit_date": "2026-02-15"
+        },
+        {
+          "error_ids": [
+            46
+          ],
+          "severity": "MINOR",
+          "field": "mojo_amplification_stacking",
+          "guide_wrong": "1.5x in playoffs (standalone)",
+          "spec_correct": "1.5x stacks with RISP (1.3x), late innings (1.5x), bases loaded (1.4x), close game (1.2x)",
+          "code_ref": "specs/MOJO_FITNESS_SYSTEM_SPEC.md:Section 2.3",
+          "status": "GUIDE_ONLY",
+          "audit_date": "2026-02-15"
+        },
+        {
+          "error_ids": [
+            67
+          ],
+          "severity": "MINOR",
+          "field": "fan_favorite_criteria",
+          "guide_wrong": "morale-based",
+          "spec_correct": "defined criteria: games played, fan morale contribution, media presence",
+          "code_ref": "specs/FAN_FAVORITE_SYSTEM_SPEC.md",
+          "status": "GUIDE_ONLY",
+          "audit_date": "2026-02-15"
+        },
+        {
+          "error_ids": [
+            1
+          ],
+          "severity": "MINOR",
+          "field": "metric_count",
+          "guide_wrong": "50+",
+          "spec_correct": "significantly more than 50 when all WAR components, fame categories, and stat lines counted",
+          "code_ref": "specs/KBL_XHD_TRACKER_MASTER_SPEC_v3.md",
+          "status": "GUIDE_ONLY",
+          "audit_date": "2026-02-15"
+        },
+        {
+          "error_ids": [
+            4
+          ],
+          "severity": "CRITICAL",
+          "field": "innings_per_game_options",
+          "guide_wrong": "6 innings only",
+          "spec_correct": "6 (default) and 9 both supported",
+          "code_ref": "specs/KBL_XHD_TRACKER_MASTER_SPEC_v3.md",
+          "status": "GUIDE_ONLY",
+          "audit_date": "2026-02-15"
+        },
+        {
+          "error_ids": [
+            90
+          ],
+          "severity": "MINOR",
+          "field": "storage_module_count",
+          "guide_wrong": "38 Storage Modules",
+          "spec_correct": "38 storage + utility modules (includes utils, not pure storage)",
+          "code_ref": "CLAUDE.md",
+          "status": "GUIDE_ONLY",
+          "audit_date": "2026-02-15"
+        },
+        {
+          "error_ids": [
+            91
+          ],
+          "severity": "MINOR",
+          "field": "test_count",
+          "guide_wrong": "5,653",
+          "spec_correct": "fluctuates (5,653 at CLAUDE.md snapshot)",
+          "code_ref": "CLAUDE.md",
+          "status": "GUIDE_ONLY",
+          "audit_date": "2026-02-15"
+        }
+      ]
+    }
+  ]
+}

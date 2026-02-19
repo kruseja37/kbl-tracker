@@ -23,12 +23,12 @@ structure. SMB4 defines the content. Neither is optional.
 | # | Subsystem | OOTP Pattern | KBL Code | Follows Pattern | SMB4 Asset | Spine Dep | Status |
 |---|-----------|-------------|----------|-----------------|------------|-----------|--------|
 | 1 | GameTracker / Game State | Atomic game event recorder; feeds stat pipeline on completion | Y | PARTIAL (FINDING-105) | At-bat outcomes, mojo events, clutch moments | Y | ✅ WIRED |
-| 2 | Stats Aggregation | Synchronous post-game accumulator; updates season totals immediately | PARTIAL | UNKNOWN | Same counting stats + KBL-specific (mojo impact, clutch index) | — | ⚠️ PARTIAL |
-| 3 | Franchise / Season Engine | Root aggregate; all queries scoped franchiseId → yearId → data | Y | UNKNOWN | Single franchise per user, season number not calendar year | N | ✅ WIRED |
+| 2 | Stats Aggregation | Synchronous post-game accumulator; updates season totals immediately | PARTIAL | PARTIAL (FINDING-106) | Same counting stats + KBL-specific (mojo impact, clutch index) | — | ⚠️ PARTIAL |
+| 3 | Franchise / Season Engine | Root aggregate; all queries scoped franchiseId → yearId → data | Y | PARTIAL (FINDING-107) | Single franchise per user, season number not calendar year | N | ✅ WIRED |
 | 4 | WAR — positional | Derived field on PlayerSeasonStats; recalcs from live stats each game | Y | N | bWAR/fWAR/pWAR/rWAR exist but not wired to pipeline | Y | ❌ ORPHANED |
 | 4b | WAR — mWAR | Manager decision tracker; persists decisions, resolves outcomes | Y | UNKNOWN | Manager WAR based on in-game decisions, leverage-weighted | Y | ✅ WIRED |
 | 5 | Fame / Milestone | Career total threshold checker; fires narrative triggers on cross | Y | UNKNOWN | Fame tiers, KBL-specific milestone thresholds | Y | ✅ WIRED |
-| 6 | Schedule System | 162-game grid; completion event fires stat pipeline | Y | UNKNOWN | Same structure; game completion triggers aggregation | Y | ✅ WIRED |
+| 6 | Schedule System | 162-game grid; completion event fires stat pipeline | Y | PARTIAL (FINDING-108) | Same structure; game completion triggers aggregation | Y | ✅ WIRED |
 | 7 | Offseason | Atomic phase sequence; locks stats then opens next season | Y | UNKNOWN | Same phases; KBL-specific award categories | Y | ✅ WIRED |
 | 8 | Playoffs | Separate stat tables; bracket seeded from standings | Y | UNKNOWN | Playoff format TBD; postseason stats tracked separately | Y | ✅ WIRED |
 | 9 | Relationships | Personality inputs to morale, development rate, narrative triggers | PARTIAL | UNKNOWN | SMB4 chemistry types, player bonds, rival dynamics | PARTIAL | ⚠️ PARTIAL |
@@ -43,7 +43,7 @@ structure. SMB4 defines the content. Neither is optional.
 | 17 | League Builder | World config; generates league/team/player entities at creation | Y | UNKNOWN | Fictional teams, custom rosters, KBL league rules | N | ✅ WIRED |
 | 18 | Museum / HOF | Career threshold evaluator; runs post-retirement, eligibility gated | PARTIAL | UNKNOWN | KBL Hall of Fame criteria, fame-tier based | Y | ⚠️ PARTIAL |
 | 19 | Aging / Ratings | Season-close rating mutation; age-curve driven, 10-factor model | Y | UNKNOWN | SMB4 aging curve, trait-influenced development | Y | ⚠️ PARTIAL |
-| 20 | Career Stats | SUM of PlayerSeasonStats rows by playerId; no separate table | PARTIAL | UNKNOWN | All career counting stats, rate stats derived | Y | ⚠️ PARTIAL |
+| 20 | Career Stats | SUM of PlayerSeasonStats rows by playerId; no separate table | PARTIAL | N (FINDING-109) | All career counting stats, rate stats derived | Y | ⚠️ PARTIAL |
 | 21 | Trait System | First-class Player fields; inputs to dev rate, narrative, contracts | MISSING | N | SMB4 traits (Chemistry types, tier bonuses, performance mods) | PARTIAL | ❌ MISSING |
 | 22 | Player Dev Engine | 10-factor growth model at season close; moves ratings toward potential | UNKNOWN | UNKNOWN | SMB4-specific growth factors, trait-influenced | Y | 🔲 UNKNOWN |
 | 23 | Record Book | Persistent single-season + career records; checked after every game | UNKNOWN | UNKNOWN | KBL franchise records, league records | Y | 🔲 UNKNOWN |

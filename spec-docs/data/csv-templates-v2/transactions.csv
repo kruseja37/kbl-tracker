@@ -1,0 +1,2 @@
+transactionId,seasonId,gameNumber,date,type,playerId,playerName,fromTeamId,fromTeam,toTeamId,toTeam,details,notes
+1,1,64,2024-03-15,trade,1,Example Player,1,Angels,8,Yankees,Traded for future considerations,Mid-season trade example

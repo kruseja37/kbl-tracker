@@ -1,0 +1,4 @@
+eventId,seasonId,gameNumber,date,d20Roll,eventType,targetPlayerId,targetPlayerName,targetTeamId,targetTeam,oldValue,newValue,details,notes
+1,1,32,2024-02-01,2,Random Good Trait,1,Example Player,1,Angels,,Clutch,Gained Clutch trait,D20 event example
+2,1,64,2024-03-15,10,Change Stadium,,,1,Angels,Apple Field,Golden Field,Stadium changed to Golden Field,Team-level event
+3,1,96,2024-04-01,7,Down 10 Random Category,3,Some Player,3,Giants,75 Contact,65 Contact,Lost 10 Contact points,Rating decrease

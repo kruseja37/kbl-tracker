@@ -826,3 +826,229 @@ likely root of historical state bleed-through bugs.
   only path). This is a REFACTOR item, not a bug fix — defer or sequence carefully.
 
 **Pattern Map update:** Row 1 → Follows Pattern: PARTIAL | Finding: FINDING-105
+
+### FINDING-106
+**Date:** 2026-02-18 | **Phase:** 1 (Pattern Map) | **Status:** CONFIRMED
+**System:** Stats Aggregation (Pattern Map Row 2)
+**Files:** `src/utils/seasonAggregator.ts` (344 lines),
+`src/utils/processCompletedGame.ts` (53 lines)
+
+**OOTP Pattern:** Synchronous post-game accumulator; updates season totals immediately
+after each game completes. All stat categories update in one atomic pass.
+
+**Follows Pattern: PARTIAL**
+
+**What KBL does correctly:**
+`aggregateGameToSeason()` fires after each game via `processCompletedGame()` →
+`completeGameInternal()` → `endGame()`. It runs 5 sub-aggregators sequentially:
+batting stats → pitching stats → fielding stats → fame events → milestone detection.
+All writes go to IndexedDB via `getOrCreateBattingStats` / `updateBattingStats` etc.
+This is the correct structural pattern: one function, called once per game, updates
+all season totals atomically. ✅
+
+**Where it diverges:**
+The accumulator covers batting, pitching, fielding, fame, milestones — but not the
+full OOTP post-game sequence. Missing steps confirmed in FINDING-102:
+- Step 6: Standings update — not called from aggregateGameToSeason
+- Step 8: WAR recalculation — not called (warOrchestrator has zero callers, F-103)
+- Step 10: Narrative trigger — not called (headlineGenerator orphaned, F-094)
+- Step 11: Player development update — not called (ratingsAdjustmentEngine orphaned)
+
+One structural deviation: `DEFAULT_SEASON_ID = 'season-1'` hardcoded as fallback
+(line 33). If `options.seasonId` is not passed correctly, all stats write to the
+wrong season. The franchiseId/currentGame/currentSeason options are passthrough
+only — they don't affect the seasonId used for batting/pitching/fielding aggregation.
+This is a latent bug if any caller omits seasonId. FINDING-102 already noted the
+hardcoded season/game issue in fan morale — same pattern here.
+
+**Pattern verdict summary:**
+| Aspect | OOTP | KBL | Match |
+|--------|------|-----|-------|
+| Fires after every game | Yes | Yes (T0-05 wired) | ✅ |
+| Updates season totals atomically | Yes | Yes (sequential async) | ✅ |
+| Covers all stat categories | Yes (12 steps) | 5 of 12 steps | PARTIAL |
+| Default season ID fallback | N/A | 'season-1' hardcoded | ⚠️ |
+
+**No new fix items.** All gaps already logged in FINDING-102 and FINDING-103.
+Hardcoded seasonId fallback is low-risk if callers always pass seasonId (they do
+via completeGameInternal) — but worth noting as fragility.
+
+**Pattern Map update:** Row 2 → Follows Pattern: PARTIAL | Finding: FINDING-106
+(Consistent with FINDING-102 verdict)
+
+### FINDING-107
+**Date:** 2026-02-18 | **Phase:** 1 (Pattern Map) | **Status:** CONFIRMED
+**System:** Franchise / Season Engine (Pattern Map Row 3)
+**Files:** `src/utils/franchiseStorage.ts`, `src/utils/seasonStorage.ts`,
+`src/utils/gameStorage.ts`, `src/utils/scheduleStorage.ts`,
+`src/types/franchise.ts`
+
+**OOTP Pattern:** Root aggregate; all queries scoped franchiseId → seasonId → data.
+The franchise is the top-level namespace. Every stat, game, and roster record is
+reachable only through franchiseId → seasonId → playerId. No data exists outside
+this hierarchy.
+
+**Follows Pattern: PARTIAL**
+
+**Where KBL matches:**
+`StoredFranchiseConfig` (types/franchise.ts) has franchiseId as primary key. ✅
+`scheduleStorage.ts` scopes games by franchiseId + seasonNumber via IndexedDB
+index (line 113: `createIndex('franchiseId', ...)`). Multi-franchise isolation
+exists at the schedule level. ✅
+
+**Where KBL diverges — the critical gap:**
+
+`seasonStorage.ts` has NO franchiseId column.
+All `PlayerSeasonBatting`, `PlayerSeasonPitching`, `PlayerSeasonFielding` records
+are keyed by `[seasonId, playerId]` only. There is no franchiseId in the index.
+If a user runs two franchises, all batting/pitching/fielding stats from both
+franchises write to the same IndexedDB store, keyed only by seasonId. They will
+collide if both franchises use the same seasonId (e.g. 'season-1').
+
+This is the single biggest architectural deviation from the OOTP pattern. In OOTP,
+`franchiseId → seasonId` is the root namespace and nothing exists outside it. In
+KBL, the stat storage layer has no franchiseId — seasonId is the only scoping key.
+
+`gameStorage.ts` also has no franchiseId on archived game records (`seasonId?` is
+optional with fallback to 'season-1'). Same isolation gap.
+
+`offseasonStorage.ts` similarly scopes by seasonId only (confirmed 0 franchiseId
+references in offseason stores).
+
+**Current practical impact:**
+KBL currently supports only one franchise per user. With a single franchise, the
+missing franchiseId scoping has no effect — all data is implicitly from the one
+franchise. The gap would only manifest if multi-franchise support were added. This
+is a latent architectural debt, not an active bug.
+
+**Pattern verdict summary:**
+| Aspect | OOTP | KBL | Match |
+|--------|------|-----|-------|
+| franchiseId as root namespace | Yes | Yes (franchiseStorage) | ✅ |
+| scheduleStorage scoped by franchiseId | Yes | Yes (indexed) | ✅ |
+| seasonStorage scoped by franchiseId | Yes | No (seasonId only) | ❌ |
+| gameStorage scoped by franchiseId | Yes | No (seasonId only) | ❌ |
+| offseasonStorage scoped by franchiseId | Yes | No (seasonId only) | ❌ |
+
+**Phase 2 disposition:** DEFER. Adding franchiseId to stat storage would require
+an IndexedDB schema migration and updates to all stat read/write calls. This is
+significant refactor work with zero current-user impact (single franchise). Log
+as known architectural debt; do not fix in Phase 2 unless multi-franchise support
+is on the roadmap.
+
+**Pattern Map update:** Row 3 → Follows Pattern: PARTIAL | Finding: FINDING-107
+
+### FINDING-108
+**Date:** 2026-02-18 | **Phase:** 1 (Pattern Map) | **Status:** CONFIRMED
+**System:** Schedule System (Pattern Map Row 6)
+**Files:** `src/utils/scheduleStorage.ts`, `src/src_figma/hooks/useGameState.ts`
+(completeGameInternal, lines 4043–4294)
+
+**OOTP Pattern:** 162-game grid; game completion event fires the stat pipeline.
+The schedule's "mark complete" action and the stat aggregation pipeline are coupled —
+one triggers the other. The schedule is not just a list; it is the event source that
+drives downstream processing.
+
+**Follows Pattern: PARTIAL**
+
+**Where KBL matches:**
+`scheduleStorage.completeGame()` marks a scheduled game as COMPLETED with score,
+timestamp, and gameLogId. This is the correct OOTP pattern: schedule records the
+outcome. ✅
+
+Both `completeGame()` (schedule) and `processCompletedGame()` (stat pipeline) are
+called from the same function — `completeGameInternal()` in useGameState.ts:
+- Line 4048: `await completeGame(gameState.gameId, result)` — marks schedule
+- Line 4253: `await processCompletedGame(persistedState, aggregationOptions)` — runs stats
+
+They fire in the same async chain, which is structurally correct: game ends → schedule
+updated → stats aggregated, all in one operation. ✅
+
+**Where KBL diverges:**
+
+The two calls are sequenced but NOT coupled. In OOTP, the schedule completion event
+IS the pipeline trigger — the schedule record owns the relationship. In KBL,
+`completeGame()` only writes to the schedule store; it does not call or trigger
+`aggregateGameToSeason`. The stat pipeline is a separate call in the same function
+body, not a consequence of schedule completion.
+
+Practical implication: if any future code path marks a game complete in the schedule
+(e.g. SIM, batch processing) without also calling `processCompletedGame()`, the
+stats will not update. There is no protection from this. The SIM path already does
+this — `batchSimSeason()` calls `completeGame()` for SIM results but the stat
+aggregation path for SIM games has been separately verified as wired (FINDING-082).
+However the coupling is achieved by convention, not by architecture.
+
+**SIM path note:**
+SIM games go through `generateSyntheticGame()` + `processCompletedGame()` separately
+from the live game path. Both paths eventually call `processCompletedGame()` — but
+again by convention, not enforced coupling.
+
+**Pattern verdict summary:**
+| Aspect | OOTP | KBL | Match |
+|--------|------|-----|-------|
+| Schedule tracks game outcomes | Yes | Yes | ✅ |
+| Schedule completion triggers stat pipeline | Yes (coupled) | No (sequential, not coupled) | PARTIAL |
+| SIM and live paths both aggregate | Yes | Yes (by convention) | ✅ |
+
+**Phase 2 disposition:** DEFER. The decoupled architecture works correctly today
+because both calls live in the same function. True coupling (schedule completion
+event triggers aggregation) would require a listener/event pattern and is a
+significant refactor. Current risk is low. Document as architectural debt.
+
+**Pattern Map update:** Row 6 → Follows Pattern: PARTIAL | Finding: FINDING-108
+
+### FINDING-109
+**Date:** 2026-02-18 | **Phase:** 1 (Pattern Map) | **Status:** CONFIRMED
+**System:** Career Stats (Pattern Map Row 20)
+**Files:** `src/utils/careerStorage.ts`, `src/utils/milestoneAggregator.ts`,
+`src/hooks/useCareerStats.ts`
+
+**OOTP Pattern:** Career stats = SUM of PlayerSeasonStats rows by playerId.
+No separate career table. Career totals are always derived on read, never written.
+
+**Follows Pattern: N**
+
+**What KBL actually does:**
+KBL maintains a SEPARATE career stats table (`careerStorage.ts`) with its own
+IndexedDB store and its own record types (`PlayerCareerBatting`, `PlayerCareerPitching`,
+`PlayerCareerFielding`). Career stats are WRITTEN incrementally after each game via
+`milestoneAggregator.ts` (lines 105-132: `getOrCreateCareerBatting` → accumulate
+→ `updateCareerBatting`). `useCareerStats.ts` reads from this dedicated career store
+via `getAllCareerBatting()`.
+
+**Why this matters:**
+OOTP's approach (derive career on read from season rows) guarantees consistency —
+career totals can never drift from season totals. KBL's separate write path means
+career totals can desync from season totals if:
+- `aggregateGameToSeason()` succeeds but `aggregateGameWithMilestones()` fails
+  (career update in milestoneAggregator runs inside the milestone path, which is
+  optional: `detectMilestones = true` by default but wrapped in its own try/catch)
+- A past game is re-processed (re-aggregation guards exist in seasonAggregator
+  but career store has no equivalent idempotency guard)
+- Seasons are deleted or reset without clearing careerStorage
+
+**Documented vs. actual contradiction:**
+CURRENT_STATE.md Key Decision #1 states: "No separate career stats table —
+career = SUM(PlayerSeasonStats) by playerId." This is WRONG. The code maintains
+a separate career store. The decision as documented does not match the implementation.
+
+**Pattern verdict summary:**
+| Aspect | OOTP | KBL | Match |
+|--------|------|-----|-------|
+| Career derived from season rows on read | Yes | No — separate write path | ❌ |
+| Career consistency guaranteed | Yes (derived) | No — can desync | ❌ |
+| Career milestone detection | Via derived calc | Yes (writes career + checks thresholds) | N/A |
+
+**Phase 2 disposition:** FIX-DECISION required from JK.
+Option A: Align with OOTP pattern — remove careerStorage, derive career totals from
+seasonStorage on read. Guarantees consistency. Requires rewrite of useCareerStats
+and milestoneAggregator. Medium complexity.
+Option B: Keep separate career store but add idempotency guards and atomic writes
+to prevent desync. Lower risk, easier to implement, but keeps the architectural debt.
+Decision needed before any career-related fixes proceed.
+
+**Also fix:** Update ARCHITECTURAL_DECISIONS.md Key Decision #1 to reflect reality —
+career stats use a separate incremental store, not derived from season rows.
+
+**Pattern Map update:** Row 20 → Follows Pattern: N | Finding: FINDING-109

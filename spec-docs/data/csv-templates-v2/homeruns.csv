@@ -1,0 +1,2 @@
+hrId,seasonId,gameId,batterId,batterName,batterTeamId,batterTeam,pitcherId,pitcherName,pitcherTeamId,pitcherTeam,stadiumId,stadiumName,distance,inning,outs,runnersOn,notes
+1,1,23,2,Barry Bonds,3,Giants,5,Randy Johnson,8,Yankees,13,Stade Royale,498,5,1,0,Stadium record
