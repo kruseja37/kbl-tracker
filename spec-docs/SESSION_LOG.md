@@ -556,3 +556,20 @@ Audit Phase 1 — close remaining 11 UNKNOWN rows, starting with Group B:
 - Rows 22, 23, 24: Player Dev Engine, Record Book, UI Pages
 
 After Phase 1 complete → build full Phase 2 fix queue → begin fix execution.
+
+## Session: 2026-02-18 — Doc Reconciliation #2
+
+### What Was Accomplished
+- Read all 5 session docs — discovered F-113 through F-118 already written to FINDINGS_056_onwards.md but never reflected in PATTERN_MAP.md, AUDIT_LOG.md, or CURRENT_STATE.md
+- Updated PATTERN_MAP.md rows 8, 11, 16, 17, 18, 19 with correct verdicts + finding numbers
+- Added AUDIT_LOG.md index entries for F-113 through F-118
+- Rewrote CURRENT_STATE.md: 21 rows closed, 5 UNKNOWN remaining (rows 9, 10, 22, 23, 24)
+- Added F-118 (aging write-back) to Phase 2 FIX-CODE queue
+- Added F-113 (playoff stats gap), F-114 (mojo persistence), F-115 (salary design) to FIX-DECISION queue
+
+### No Code Changes This Session
+Documentation reconciliation only.
+
+### Next Session Starts With
+Phase 1 — audit the last 5 UNKNOWN rows: 9 (Relationships), 10 (Narrative/Headlines), 22 (Player Dev Engine), 23 (Record Book), 24 (UI Pages).
+After all 5 closed → Phase 1 complete → build full Phase 2 fix queue → JK confirms → begin fix execution.

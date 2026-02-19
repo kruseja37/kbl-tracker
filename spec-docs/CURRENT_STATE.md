@@ -1,5 +1,5 @@
 # KBL Tracker — Current State
-**Last updated:** 2026-02-18 (reconciliation session)
+**Last updated:** 2026-02-18 (doc reconciliation #2)
 **Protocol:** REWRITE this file (do not append) at every session end.
 **Max length:** 2 pages. If it grows beyond this, you are doing it wrong.
 
@@ -7,8 +7,8 @@
 
 ## Current Phase and Step
 - **Phase:** 1 (revised plan) — Complete the Pattern Map
-- **Status:** 15 of 26 rows closed. 11 rows still UNKNOWN in "Follows Pattern."
-- **Next action:** Audit Group B rows 8, 9, 10, 11 and Group C rows 16, 17, 18, 19, 22, 23, 24
+- **Status:** 21 of 26 rows closed. 5 rows still UNKNOWN in "Follows Pattern."
+- **Next action:** Audit rows 9, 10, 22, 23, 24 — the last 5 UNKNOWN rows.
 
 ---
 
@@ -23,7 +23,7 @@ until code-level audit is complete. See AUDIT_PLAN.md for full details.
 ---
 
 ## Pattern Map Status
-**Closed (15):**
+**Closed (21):**
 | Row | Subsystem | Follows Pattern | Finding |
 |-----|-----------|-----------------|---------|
 | 1 | GameTracker / Game State | PARTIAL | F-105 |
@@ -34,18 +34,21 @@ until code-level audit is complete. See AUDIT_PLAN.md for full details.
 | 5 | Fame / Milestone | PARTIAL | F-111 |
 | 6 | Schedule System | PARTIAL | F-108 |
 | 7 | Offseason | PARTIAL | F-112 |
+| 8 | Playoffs | Y | F-113 |
+| 11 | Mojo / Fitness | N | F-114 |
 | 11b | Leverage Index | N | F-099 |
 | 12 | Clutch Attribution | PARTIAL | F-098 |
 | 13 | Fan Morale | N (BROKEN) | F-101 |
 | 14 | Farm System | N (ORPHANED) | F-072 |
 | 15 | Trade System | N (ORPHANED) | F-073 |
+| 16 | Salary System | N | F-115 |
+| 17 | League Builder | PARTIAL | F-116 |
+| 18 | Museum / HOF | PARTIAL | F-117 |
+| 19 | Aging / Ratings | N | F-118 |
 | 20 | Career Stats | N | F-109 |
 | 21 | Trait System | N | F-104 |
 
-**Open (11):** Rows 8, 9, 10, 11, 16, 17, 18, 19, 22, 23, 24
-
-**Group B (downstream):** Rows 8, 9, 10, 11, 16, 17, 18, 19
-**Group C (orphaned/partial/unknown):** Rows 22, 23, 24
+**Open (5):** Rows 9, 10, 22, 23, 24
 
 ---
 
@@ -61,7 +64,14 @@ until code-level audit is complete. See AUDIT_PLAN.md for full details.
 - F-098: Wire clutch trigger from at-bat outcome
 - F-110: Fix hardcoded 'season-1' in mWAR init + aggregation calls (2 lines)
 - F-112: Fix clearSeasonalStats (scans localStorage, stats are in IndexedDB — clears nothing)
-(Phase 1 will add more items from rows 8, 9, 10, 11, 16–19, 22–24)
+- F-118: Wire agingIntegration.ts into offseason ratings phase; write calc results to player record
+
+## Known Phase 2 Fix Queue (FIX-DECISION items)
+- F-113: Playoff stats table empty — no write path from GameTracker to PLAYOFF_STATS store (FIX-DECISION: wire or defer)
+- F-114: Mojo/fitness auto-update was disabled by user request; persistence between games missing (FIX-DECISION: re-enable?)
+- F-115: Salary uses age-based calc, no service time — explicit KBL design choice (FIX-DECISION: accept as-is or add service time?)
+- F-109: Career stats incremental write vs derive-on-read (FIX-DECISION queued)
+(Phase 1 will add more items from rows 9, 10, 22, 23, 24)
 
 ---
 
@@ -77,6 +87,8 @@ until code-level audit is complete. See AUDIT_PLAN.md for full details.
 23. franchiseId scoping gap in seasonStorage/gameStorage/offseasonStorage is DEFERRED (latent debt, no current user impact — single franchise only).
 24. Schedule-to-pipeline decoupling is DEFERRED (works by convention today, architectural debt).
 25. Career stats use incremental write pattern (not OOTP derive-on-read) — FIX-DECISION queued (F-109).
+26. Mojo auto-update was explicitly disabled at user request — cannot re-enable without JK decision.
+27. Salary age-based (not service-time-based) is KBL design choice — FIX-DECISION queued (F-115).
 
 ---
 
@@ -85,8 +97,8 @@ until code-level audit is complete. See AUDIT_PLAN.md for full details.
 2. spec-docs/SESSION_RULES.md
 3. spec-docs/AUDIT_PLAN.md — the revised 3-phase plan
 4. spec-docs/PATTERN_MAP.md — 26 rows, audit status per row
-5. spec-docs/AUDIT_LOG.md — findings index (F-001 to F-112 + index for 056+)
-6. spec-docs/FINDINGS/FINDINGS_056_onwards.md — full text F-056 through F-112
+5. spec-docs/AUDIT_LOG.md — findings index (F-001 to F-118)
+6. spec-docs/FINDINGS/FINDINGS_056_onwards.md — full text F-056 through F-118
 
 ---
 

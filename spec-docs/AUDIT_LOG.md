@@ -1041,4 +1041,10 @@ Still unresolved. FINDING-047 fallback path only has base state, not full scoreb
 | FINDING-069 | Narrative — generateGameRecap partial wiring | CONFIRMED PARTIAL — thin wrapper wired; full narrative/headline engine orphaned |
 | FINDING-070 | Relationship system — all files unwired | CONFIRMED ORPHANED — chemistry/relationships have zero effect on gameplay |
 | FINDING-071 | Four-layer architecture pattern confirmed | CONFIRMED — hook layers 3-4 are active surface; layers 1-2 are orphan zone |
+| FINDING-113 | 2026-02-18 | Y | playoffStorage.ts / playoffEngine.ts | Row 8 Playoffs — separate stat tables, bracket seeded from standings, fully wired |
+| FINDING-114 | 2026-02-18 | N | usePlayerState.ts / GameTracker.tsx | Row 11 Mojo/Fitness — auto-update disabled by design; zero persistence between games (useState only) |
+| FINDING-115 | 2026-02-18 | N | salaryCalculator.ts / leagueBuilderStorage.ts | Row 16 Salary — no service time concept; age-based calc only; KBL design choice |
+| FINDING-116 | 2026-02-18 | PARTIAL | leagueBuilderStorage.ts | Row 17 League Builder — entity CRUD correct; no auto-roster generation (by design) |
+| FINDING-117 | 2026-02-18 | PARTIAL | museumPipeline.ts / museumStorage.ts | Row 18 Museum/HOF — leaderboard reads career stats; no eligibility gating; post-retirement trigger unverified |
+| FINDING-118 | 2026-02-18 | N | agingEngine.ts / SpringTrainingFlow.tsx | Row 19 Aging/Ratings — calc exists but display-only; no write-back to player record; wrong phase |
 
