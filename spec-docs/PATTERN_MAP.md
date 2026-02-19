@@ -22,7 +22,7 @@ structure. SMB4 defines the content. Neither is optional.
 
 | # | Subsystem | OOTP Pattern | KBL Code | Follows Pattern | SMB4 Asset | Spine Dep | Status |
 |---|-----------|-------------|----------|-----------------|------------|-----------|--------|
-| 1 | GameTracker / Game State | Atomic game event recorder; feeds stat pipeline on completion | Y | UNKNOWN | At-bat outcomes, mojo events, clutch moments | Y | ✅ WIRED |
+| 1 | GameTracker / Game State | Atomic game event recorder; feeds stat pipeline on completion | Y | PARTIAL (FINDING-105) | At-bat outcomes, mojo events, clutch moments | Y | ✅ WIRED |
 | 2 | Stats Aggregation | Synchronous post-game accumulator; updates season totals immediately | PARTIAL | UNKNOWN | Same counting stats + KBL-specific (mojo impact, clutch index) | — | ⚠️ PARTIAL |
 | 3 | Franchise / Season Engine | Root aggregate; all queries scoped franchiseId → yearId → data | Y | UNKNOWN | Single franchise per user, season number not calendar year | N | ✅ WIRED |
 | 4 | WAR — positional | Derived field on PlayerSeasonStats; recalcs from live stats each game | Y | N | bWAR/fWAR/pWAR/rWAR exist but not wired to pipeline | Y | ❌ ORPHANED |

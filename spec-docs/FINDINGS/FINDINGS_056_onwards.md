@@ -753,3 +753,76 @@ Needs a decision — keep as KBL extensions or align to SMB4's 5.
 4. Assign traits to generated/rookie players sparingly at player generation time,
    drawing from `traitPools.getWeightedTraitPool()`
 5. Decide on FIERY/GRITTY chemistry types
+
+### FINDING-105
+**Date:** 2026-02-18 | **Phase:** 1 (Pattern Map) | **Status:** CONFIRMED
+**System:** GameTracker / Game State (Pattern Map Row 1)
+**Files:** `src/src_figma/app/pages/GameTracker.tsx`,
+`src/src_figma/hooks/useGameState.ts` (4,647 lines),
+`src/utils/processCompletedGame.ts` (53 lines)
+
+**OOTP Pattern:** Atomic game event recorder; feeds stat pipeline on completion.
+
+**Follows Pattern: PARTIAL**
+
+**What OOTP does:**
+Each game event is recorded as it occurs, fed into a single post-game pipeline that
+fires atomically on completion and updates: season stats, standings, leaderboards,
+WAR, milestones, narratives, player development. The pipeline is a single ordered
+sequence — no partial runs.
+
+**What KBL does — where it matches:**
+
+Event recording: MATCHES INTENT.
+useGameState.ts accumulates all game events in React state (useState) during the
+game — batting stats, pitching stats, fielding events, fame events, scorer events.
+State is autosaved to IndexedDB as currentGame snapshot on a local timer. This is
+not per-event atomic persistence (OOTP records each event immediately), but it is
+functionally equivalent for the stat pipeline purpose — all data is available at
+game end.
+
+Pipeline fires on completion: CONFIRMED.
+endGame() → completeGameInternal() → processCompletedGame() → aggregateGameToSeason()
+This chain fires reliably. T0-05 fix (commit 7e7b363) ensured completeGameInternal()
+runs even when component unmounts before pitch count prompt resolves.
+
+Auto-end detection: CONFIRMED.
+T0-01 fix: third out in regulation triggers auto-end detection (lines 2650, 2994).
+Two detection paths (direct at-bat out + inning transition) both route to endGame().
+
+**What KBL does — where it diverges:**
+
+Pipeline is incomplete (already logged):
+processCompletedGame.ts only calls aggregateGameToSeason() + archiveCompletedGame().
+Missing: standings update (Step 6), WAR (Step 8), narrative (Step 10), development
+(Step 11). These were FINDING-102 and FINDING-103. Not a new finding — confirming
+the same gap from the pattern lens.
+
+Two execution paths with idempotency guards:
+endGame() calls completeGameInternal() directly (T0-05 fix). There is also a
+useEffect auto-trigger path (line 3956). Both are guarded by markGameAggregated()
+to prevent double-aggregation (T1-08 fix). This is architectural fragility — the
+same pipeline runs from two entry points, requiring idempotency guards. OOTP has
+a single pipeline entry point.
+
+No reducer — pure useState:
+useGameState.ts is 4,647 lines of useState. gameState, scoreboard, playerStats,
+pitcherStats, fameEvents are all independent useState slices. No useReducer. This
+is not an OOTP pattern violation per se (OOTP's internal architecture is not
+prescribed), but it is the primary source of the hook's complexity and the
+likely root of historical state bleed-through bugs.
+
+**Pattern verdict summary:**
+| Aspect | OOTP | KBL | Match |
+|--------|------|-----|-------|
+| Records events during game | Per-event atomic | useState accumulation | PARTIAL |
+| Pipeline fires at completion | Yes, single entry | Yes, two entries + guards | PARTIAL |
+| Pipeline is complete | 12 steps | 2 of 12 steps | N |
+| State architecture | Not prescribed | 4,647-line useState hook | N/A |
+
+**New item for Phase 2 fix queue:**
+- Consolidate two endGame execution paths into one. Remove idempotency guard
+  complexity by eliminating the useEffect auto-trigger path (or making it the
+  only path). This is a REFACTOR item, not a bug fix — defer or sequence carefully.
+
+**Pattern Map update:** Row 1 → Follows Pattern: PARTIAL | Finding: FINDING-105
