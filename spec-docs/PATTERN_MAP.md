@@ -24,7 +24,7 @@ structure. SMB4 defines the content. Neither is optional.
 |---|-----------|-------------|----------|-----------------|------------|-----------|--------|
 | 1 | GameTracker / Game State | Atomic game event recorder; feeds stat pipeline on completion | Y | PARTIAL (FINDING-105) | At-bat outcomes, mojo events, clutch moments | Y | ✅ WIRED |
 | 2 | Stats Aggregation | Synchronous post-game accumulator; updates season totals immediately | PARTIAL | PARTIAL (FINDING-106) | Same counting stats + KBL-specific (mojo impact, clutch index) | — | ⚠️ PARTIAL |
-| 3 | Franchise / Season Engine | Root aggregate; all queries scoped franchiseId → yearId → data | Y | PARTIAL (FINDING-107) | Single franchise per user, season number not calendar year | N | ✅ WIRED |
+| 3 | Franchise / Season Engine | Root aggregate; all queries scoped franchiseId → yearId → data | Y | N (FINDING-107) | Single franchise per user, season number not calendar year | N | ✅ WIRED |
 | 4 | WAR — positional | Derived field on PlayerSeasonStats; recalcs from live stats each game | Y | N | bWAR/fWAR/pWAR/rWAR exist but not wired to pipeline | Y | ❌ ORPHANED |
 | 4b | WAR — mWAR | Manager decision tracker; persists decisions, resolves outcomes | Y | PARTIAL (FINDING-110) | Manager WAR based on in-game decisions, leverage-weighted | Y | ✅ WIRED |
 | 5 | Fame / Milestone | Career total threshold checker; fires narrative triggers on cross | Y | Y (FINDING-111) | Fame tiers, KBL-specific milestone thresholds | Y | ✅ WIRED |

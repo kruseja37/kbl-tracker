@@ -1281,3 +1281,70 @@ No race conditions, no partial runs.
 FINDING-106 is the pattern-lens confirmation of those same gaps.
 
 **Pattern Map update:** Row 2 → Follows Pattern: PARTIAL | Finding: FINDING-106 (gaps in F-102/103)
+
+### FINDING-107
+**Date:** 2026-02-18 | **Phase:** 1 (Pattern Map) | **Status:** CONFIRMED
+**System:** Franchise / Season Engine (Pattern Map Row 3)
+**Files:** `src/utils/franchiseManager.ts`, `src/utils/trackerDb.ts`,
+`src/utils/seasonStorage.ts`, `src/utils/gameStorage.ts`,
+`src/utils/careerStorage.ts`
+
+**OOTP Pattern:** Root aggregate; all queries scoped franchiseId → yearId → data.
+
+**Follows Pattern: N**
+
+**What OOTP does:**
+Every data record is keyed franchiseId → yearId → recordId. No query or write touches
+data without a franchiseId scope. Multiple franchises can coexist in the same instance
+with complete isolation. franchiseId is the root of every data hierarchy.
+
+**What KBL does:**
+
+Two separate database systems that do not talk to each other:
+
+System A — Per-franchise DB (src/utils/franchiseManager.ts):
+- `getFranchiseDBName(franchiseId)` → `'kbl-franchise-{id}'`
+- Creates a unique IDB database per franchise
+- Stores: franchiseList, franchiseConfigs (metadata only)
+- `getActiveFranchiseDb()` / `getActiveFranchiseIdSync()` exist
+- `getActiveFranchiseDb()` has ZERO callers outside franchiseManager.ts
+  (grep: `src/` → no matches)
+
+System B — Shared stats DB (src/utils/trackerDb.ts):
+- `DB_NAME = 'kbl-tracker'` — hardcoded single database
+- Used by: seasonStorage.ts, gameStorage.ts, careerStorage.ts
+- Stores: playerSeasonBatting, playerSeasonPitching, playerSeasonFielding,
+  seasonMetadata, currentGame, completedGames, playerGameStats, pitcherGameStats,
+  playerCareerStats
+- Scoped by: `seasonId` (string). No `franchiseId` key on any stats record.
+
+**The gap:**
+Franchise metadata → per-franchise DB ✅
+Franchise stats → shared global DB, unscoped by franchiseId ❌
+
+The per-franchise database infrastructure was built but never connected to the stats
+layer. franchiseId is optional on GameAggregationOptions and passed through to
+franchise firsts/leaders tracking only — it does not scope the underlying stats stores.
+
+**Why this is acceptable for current scope:**
+PATTERN_MAP.md Row 3 already notes: "Single franchise per user." With exactly one
+franchise, the missing franchiseId scope causes no functional data collision. The
+single 'kbl-tracker' DB effectively is the franchise DB. This is not a correctness
+bug right now — it is an architectural mismatch that becomes a real bug if/when
+multi-franchise support is added.
+
+**New item for Phase 2 fix queue:**
+FIX-DECISION: Decide whether to connect stats stores to per-franchise DB or
+document single-franchise-only as an explicit architectural constraint.
+Until that decision: no data corruption, no blocking.
+
+**Pattern verdict summary:**
+| Aspect | OOTP | KBL | Match |
+|--------|------|-----|-------|
+| Per-franchise data isolation | Yes | Infrastructure only | N |
+| Stats scoped by franchiseId | Yes | Scoped by seasonId only | N |
+| Single franchise per user | No | Yes (by design) | N/A |
+| Franchise metadata stored | Yes | Yes | Y |
+
+**Pattern Map update:** Row 3 → Follows Pattern: N | Finding: FINDING-107
+(Not a blocking bug given single-franchise constraint — Phase 2 FIX-DECISION)
