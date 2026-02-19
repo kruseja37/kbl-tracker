@@ -1422,3 +1422,64 @@ If adding table: wire standings write into aggregateGameToSeason() pipeline.
 | Schedule linked to completedGames | Yes | Yes (gameLogId) | Y |
 
 **Pattern Map update:** Row 6 → Follows Pattern: PARTIAL | Finding: FINDING-108
+
+### FINDING-109
+**Date:** 2026-02-18 | **Phase:** 1 (Pattern Map) | **Status:** CONFIRMED
+**System:** Career Stats (Pattern Map Row 20)
+**Files:** `src/utils/careerStorage.ts`, `src/utils/milestoneAggregator.ts`,
+`src/utils/seasonAggregator.ts`, `src/utils/trackerDb.ts`
+
+**OOTP Pattern:** SUM of PlayerSeasonStats rows by playerId; no separate table.
+
+**Follows Pattern: N (but functionally correct)**
+
+**What OOTP does:**
+Career stats are not stored — they are derived at read time by summing all
+PlayerSeasonStats rows for a given playerId. No separate career table exists.
+This means career stats are always consistent with season stats; no drift possible.
+
+**What KBL does:**
+A separate `playerCareerBatting` / `playerCareerPitching` / `playerCareerFielding`
+table exists in IndexedDB, keyed by playerId. Updated incrementally per game via
+`aggregateGameToCareerBatting()` / `aggregateGameToCareerPitching()` in
+milestoneAggregator.ts. Each game: read current career row, add game stats, write back.
+
+Pipeline wiring — CONFIRMED:
+aggregateGameToSeason() → aggregateGameWithMilestones() →
+aggregateGameToCareerBatting() + aggregateGameToCareerPitching()
+Career stats fire every game as part of the milestone pipeline. ✅
+
+**Why KBL's approach differs:**
+KBL needs career totals for milestone detection — checking "does this HR give the
+player 500 career HRs?" requires career totals to be available at game time.
+OOTP's sum-on-demand approach would work too, but KBL's incremental approach
+trades read-time derivation for write-time maintenance.
+
+**The risk of incremental vs. derived:**
+With OOTP's pattern, career stats are always consistent with season stats (derived).
+With KBL's incremental pattern, career stats drift if:
+- A game aggregation fails partway through (partial write)
+- Idempotency guard fails and aggregation runs twice (double-count)
+- A game is rolled back but career totals are not
+
+The T1-08 fix (markGameAggregated guard) reduces double-count risk.
+Partial write risk is not fully mitigated — aggregateGameWithMilestones has no
+transaction wrapper. If aggregateGameToCareerBatting succeeds but a later write
+fails, career batting and pitching totals become inconsistent.
+
+**New item for Phase 2 fix queue:**
+FIX-DECISION: Accept incremental career stats as architectural choice (document
+explicitly + add reconciliation utility) OR switch to OOTP's derived approach.
+If accepting: add transaction wrapper to aggregateGameWithMilestones to prevent
+partial writes.
+
+**Pattern verdict summary:**
+| Aspect | OOTP | KBL | Match |
+|--------|------|-----|-------|
+| Separate career table | No | Yes | N |
+| Career stats always consistent | Yes (derived) | Risk of drift | N |
+| Career stats fire at game end | N/A | Yes | Y |
+| Milestone detection uses career | Yes | Yes | Y |
+
+**Pattern Map update:** Row 20 → Follows Pattern: N | Finding: FINDING-109
+(Not a blocking bug; partial write risk logged as FIX-DECISION)
