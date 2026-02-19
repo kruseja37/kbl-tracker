@@ -1348,3 +1348,77 @@ Until that decision: no data corruption, no blocking.
 
 **Pattern Map update:** Row 3 → Follows Pattern: N | Finding: FINDING-107
 (Not a blocking bug given single-franchise constraint — Phase 2 FIX-DECISION)
+
+### FINDING-108
+**Date:** 2026-02-18 | **Phase:** 1 (Pattern Map) | **Status:** CONFIRMED
+**System:** Schedule System (Pattern Map Row 6)
+**Files:** `src/utils/scheduleStorage.ts`, `src/utils/seasonStorage.ts` (calculateStandings),
+`src/src_figma/app/pages/GameTracker.tsx` (lines 2222–2243)
+
+**OOTP Pattern:** 162-game grid; completion event fires stat pipeline.
+
+**Follows Pattern: PARTIAL**
+
+**What OOTP does:**
+Schedule tracks each game slot. Game completion fires two things in order:
+(1) stats pipeline (batting/pitching/fielding/WAR), (2) standings table update —
+both happen atomically at game end. Standings are a persistent table updated
+incrementally, not derived on-demand.
+
+**What KBL does — schedule grid: MATCHES**
+scheduleStorage.ts maintains a full schedule grid — each game slot has:
+status ('SCHEDULED' | 'IN_PROGRESS' | 'COMPLETED' | 'SKIPPED'),
+result (homeScore, awayScore, winningTeamId, losingTeamId),
+gameLogId linking to completedGames store. 162-game grid structure: ✅
+
+**What KBL does — game completion event: PARTIAL**
+`completeGame(gameId, result)` in scheduleStorage.ts:
+- Marks game status = 'COMPLETED'
+- Writes result (scores, winner, loser) to schedule record
+- Calls `updateMetadata()` (season wins/losses/gamesBehind tracking)
+- Does NOT call stat pipeline
+- Does NOT write to a standings table
+
+`completeScheduleGame` is called from GameTracker.tsx after hookEndGame() — it is
+correctly wired to the end-game flow (T0-05 fix). ✅
+
+**What KBL does — standings: LAZY, NOT PUSHED**
+`calculateStandings()` in seasonStorage.ts (line 763) derives standings on-demand:
+- Fetches all completedGames from IndexedDB (up to 500)
+- Iterates all games, builds team W/L/runs-scored/runs-allowed map
+- Calculates win-pct, sorts, returns array
+- This is a pure read function. It does NOT persist. It is called by UI when standings
+  need to be displayed.
+
+No standing table exists. No standings write fires at game completion.
+OOTP's incremental standings update = absent.
+
+**Comment in GameTracker.tsx is incorrect:**
+Line 2225 comment reads:
+  "This updates standings (wins/losses) and advances the schedule to the next game."
+Grep of completeGame() body confirms: writes status + result to schedule record only.
+No standings update happens here. Comment is stale/wrong.
+
+**Impact:**
+- Standings UI works correctly (lazy recalc from completedGames is equivalent for display)
+- No persistent standings table = no standings-based triggers (can't fire "X team clinched"
+  event when standings flip, because standings only exist when queried)
+- Performance: calculating standings by scanning 500 games on every view is O(N) vs
+  O(1) persistent table. Not a problem at 162 games; could matter at scale.
+
+**New item for Phase 2 fix queue:**
+FIX-DECISION: Is lazy standings calculation acceptable, or should a persistent
+standings table be maintained? Lazy calc is functionally correct for display.
+A persistent table would enable event-driven triggers (clinch detection, GB tracking).
+If staying lazy: remove wrong comment from GameTracker.tsx line 2225.
+If adding table: wire standings write into aggregateGameToSeason() pipeline.
+
+**Pattern verdict summary:**
+| Aspect | OOTP | KBL | Match |
+|--------|------|-----|-------|
+| Schedule grid structure | Yes | Yes | Y |
+| Completion event fires pipeline | Yes | Yes (stats pipeline) | Y |
+| Incremental standings update | Yes | No (lazy calc) | N |
+| Schedule linked to completedGames | Yes | Yes (gameLogId) | Y |
+
+**Pattern Map update:** Row 6 → Follows Pattern: PARTIAL | Finding: FINDING-108
