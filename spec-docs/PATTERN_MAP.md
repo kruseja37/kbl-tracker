@@ -26,10 +26,10 @@ structure. SMB4 defines the content. Neither is optional.
 | 2 | Stats Aggregation | Synchronous post-game accumulator; updates season totals immediately | PARTIAL | PARTIAL (FINDING-106) | Same counting stats + KBL-specific (mojo impact, clutch index) | — | ⚠️ PARTIAL |
 | 3 | Franchise / Season Engine | Root aggregate; all queries scoped franchiseId → yearId → data | Y | PARTIAL (FINDING-107) | Single franchise per user, season number not calendar year | N | ✅ WIRED |
 | 4 | WAR — positional | Derived field on PlayerSeasonStats; recalcs from live stats each game | Y | N | bWAR/fWAR/pWAR/rWAR exist but not wired to pipeline | Y | ❌ ORPHANED |
-| 4b | WAR — mWAR | Manager decision tracker; persists decisions, resolves outcomes | Y | UNKNOWN | Manager WAR based on in-game decisions, leverage-weighted | Y | ✅ WIRED |
-| 5 | Fame / Milestone | Career total threshold checker; fires narrative triggers on cross | Y | UNKNOWN | Fame tiers, KBL-specific milestone thresholds | Y | ✅ WIRED |
+| 4b | WAR — mWAR | Manager decision tracker; persists decisions, resolves outcomes | Y | PARTIAL (FINDING-110) | Manager WAR based on in-game decisions, leverage-weighted | Y | ✅ WIRED |
+| 5 | Fame / Milestone | Career total threshold checker; fires narrative triggers on cross | Y | Y (FINDING-111) | Fame tiers, KBL-specific milestone thresholds | Y | ✅ WIRED |
 | 6 | Schedule System | 162-game grid; completion event fires stat pipeline | Y | PARTIAL (FINDING-108) | Same structure; game completion triggers aggregation | Y | ✅ WIRED |
-| 7 | Offseason | Atomic phase sequence; locks stats then opens next season | Y | UNKNOWN | Same phases; KBL-specific award categories | Y | ✅ WIRED |
+| 7 | Offseason | Atomic phase sequence; locks stats then opens next season | Y | PARTIAL (FINDING-112) | Same phases; KBL-specific award categories | Y | ✅ WIRED |
 | 8 | Playoffs | Separate stat tables; bracket seeded from standings | Y | UNKNOWN | Playoff format TBD; postseason stats tracked separately | Y | ✅ WIRED |
 | 9 | Relationships | Personality inputs to morale, development rate, narrative triggers | PARTIAL | UNKNOWN | SMB4 chemistry types, player bonds, rival dynamics | PARTIAL | ⚠️ PARTIAL |
 | 10 | Narrative / Headlines | Side-effect consumer of stat pipeline; never writes back | PARTIAL | UNKNOWN | KBL headline engine, game recap generator | Y | ⚠️ PARTIAL |

@@ -1052,3 +1052,232 @@ Decision needed before any career-related fixes proceed.
 career stats use a separate incremental store, not derived from season rows.
 
 **Pattern Map update:** Row 20 → Follows Pattern: N | Finding: FINDING-109
+
+### FINDING-110
+**Date:** 2026-02-18 | **Phase:** 1 (Pattern Map) | **Status:** CONFIRMED
+**System:** WAR — mWAR (Pattern Map Row 4b)
+**Files:** `src/utils/managerStorage.ts`, `src/src_figma/app/pages/GameTracker.tsx`
+(lines 2185–2205), `src/src_figma/app/hooks/useMWARCalculations.ts`
+
+**OOTP Pattern:** Manager decision tracker; persists decisions per game, aggregates
+to season mWAR after each game. Manager WAR recalculates with actual win/loss
+context, not defaults.
+
+**Follows Pattern: PARTIAL**
+
+**Where KBL matches:**
+Architecture is correct. `useMWARCalculations` records decisions in-game.
+`saveGameDecisions()` persists them to IndexedDB. `aggregateManagerGameToSeason()`
+reads decisions, adds to season totals, recalculates mWAR with team context, saves.
+The pipeline chain is structurally sound and it actually fires (unlike positional
+WAR, which is orphaned). ✅
+
+**Three bugs in the live wiring (GameTracker.tsx lines 2185–2205):**
+
+Bug A — Hardcoded seasonId (already noted in FINDING-101/102 context):
+`aggregateManagerGameToSeason()` called with `'season-1'` hardcoded.
+If the active season is 'season-2', mWAR aggregates to the wrong season.
+Same pattern as fan morale Bug B. FIX-CODE.
+
+Bug B — Hardcoded teamStats defaults:
+Call passes `0.5` for `teamSalaryScore` and `50` for `seasonGames`.
+Comment says "actual record comes from season data" but the actual record
+IS passed via `homeRecord` parsing. The salary score (0.5) and season games (50)
+remain hardcoded defaults. mWAR recalculation uses these values to weight the
+decision quality metric — wrong inputs produce wrong mWAR. FIX-CODE.
+
+Bug C — homeManager only (away manager never aggregated):
+`aggregateManagerGameToSeason()` is called once with `homeManagerId` and
+`homeTeamId`. The away manager's decisions are never aggregated to season stats.
+Away manager mWAR is always zero (or stale). FIX-CODE.
+
+**Decisions count guard (conditional, not structural):**
+`if (mwarHook.gameStats.decisions.length > 0)` — if no decisions were recorded
+(e.g. game completed with no strategic events), aggregation is skipped entirely.
+This means the game is not counted for that manager's season games denominator.
+Low-impact but worth noting as a flaw in completeness.
+
+**Pattern verdict summary:**
+| Aspect | OOTP | KBL | Match |
+|--------|------|-----|-------|
+| Decisions recorded in-game | Yes | Yes | ✅ |
+| Decisions persisted per game | Yes | Yes | ✅ |
+| Aggregation fires post-game | Yes | Yes | ✅ |
+| Correct seasonId used | Yes | No ('season-1' hardcoded) | ❌ |
+| Correct context (salary, games) | Yes | No (hardcoded defaults) | ❌ |
+| Both managers aggregated | Yes | No (home only) | ❌ |
+
+**Phase 2 fix queue additions:**
+- FINDING-110 Bug A: Pass actual seasonId to aggregateManagerGameToSeason (FIX-CODE)
+- FINDING-110 Bug B: Pass actual salaryScore and seasonGames (FIX-CODE — needs season data lookup)
+- FINDING-110 Bug C: Call aggregateManagerGameToSeason for away manager too (FIX-CODE)
+
+**Pattern Map update:** Row 4b → Follows Pattern: PARTIAL | Finding: FINDING-110
+
+### FINDING-111
+**Date:** 2026-02-18 | **Phase:** 1 (Pattern Map) | **Status:** CONFIRMED
+**System:** Fame / Milestone (Pattern Map Row 5)
+**Files:** `src/utils/milestoneDetector.ts`, `src/utils/milestoneAggregator.ts`,
+`src/utils/seasonAggregator.ts`
+
+**OOTP Pattern:** Career total threshold checker; fires after every game as part of
+the stat pipeline; emits narrative triggers on milestone cross.
+
+**Follows Pattern: Y**
+
+**How it works:**
+`aggregateGameWithMilestones()` is called from `aggregateGameToSeason()` after every
+game (seasonAggregator.ts line 98). It runs per-player:
+1. Accumulates career batting and pitching stats (writes to careerStorage)
+2. Checks season milestones against scaled thresholds (milestoneDetector.ts)
+3. Checks career milestones against tier definitions (CAREER_BATTING_TIERS, etc.)
+4. Fires franchise firsts tracking and leader board updates (if franchiseId provided)
+5. Returns `MilestoneAggregationResult` with all triggered events
+
+`milestoneDetector.ts` defines:
+- SEASON_BATTING_THRESHOLDS and SEASON_PITCHING_THRESHOLDS — checkpoints during a season
+- CAREER_BATTING_TIERS and CAREER_PITCHING_TIERS — multi-level career thresholds
+- `scaleCountingThreshold()` — scales MLB career thresholds by KBL season length ratio
+  (handles 128-game vs 162-game season differences correctly)
+
+**Where it deviates slightly:**
+Narrative trigger: milestone detection produces `fameEvents` in the result object
+but does NOT fire a narrative/headline engine. OOTP triggers narrative on milestone
+cross. KBL returns the events — the caller would need to pass them to the narrative
+engine, which doesn't exist yet (FINDING-102 Step 10). This is the narrative gap,
+not a milestone gap.
+
+Idempotency: `hasMilestoneBeenAchieved()` is used to prevent re-recording the same
+milestone. Correct pattern for a threshold-cross detector that runs after every game.
+
+**Pattern verdict summary:**
+| Aspect | OOTP | KBL | Match |
+|--------|------|-----|-------|
+| Fires after every game | Yes | Yes (via seasonAggregator) | ✅ |
+| Checks career thresholds | Yes | Yes | ✅ |
+| Checks season thresholds | Yes | Yes | ✅ |
+| Fires narrative trigger | Yes | No (narrative engine not built) | PARTIAL |
+| Idempotent (no double-record) | Yes | Yes | ✅ |
+
+**No new fix items.** Narrative gap already logged in FINDING-102.
+
+**Pattern Map update:** Row 5 → Follows Pattern: Y | Finding: FINDING-111
+(Narrative trigger gap is FINDING-102, not a milestone system bug)
+
+### FINDING-112
+**Date:** 2026-02-18 | **Phase:** 1 (Pattern Map) | **Status:** CONFIRMED
+**System:** Offseason (Pattern Map Row 7)
+**Files:** `src/utils/offseasonStorage.ts`,
+`src/src_figma/hooks/useOffseasonState.ts`,
+`src/src_figma/app/pages/FranchiseHome.tsx`
+
+**OOTP Pattern:** Atomic phase sequence; stats are locked at season end, then 11
+offseason phases run in strict order, then next season is opened with a new
+seasonId.
+
+**Follows Pattern: PARTIAL**
+
+**Where KBL matches:**
+11-phase sequence is defined in `OFFSEASON_PHASES` and enforced by
+`advanceOffseasonPhase()` — phases run in strict order, each must complete before
+advancing. `handleStartNewSeason()` fires `executeSeasonTransition()` (ages players,
+recalculates salaries, resets mojo), updates franchise metadata with new season
+number, generates a new schedule. The overall shape matches the OOTP pattern. ✅
+
+**Where it diverges:**
+
+Stats are NOT locked at season end.
+OOTP explicitly locks (makes read-only) the season stat tables when the offseason
+begins. KBL has no stat locking mechanism. A game could theoretically be processed
+after the offseason starts and write to the completed season's stats. No guard
+exists in `aggregateGameToSeason()` or `processCompletedGame()` to check whether
+the target season is still active.
+
+New seasonId derivation is loose.
+`handleStartNewSeason()` derives the next seasonId as `currentSeason + 1` stored
+as a number in localStorage (`'kbl-current-season'`). The seasonId used in storage
+(e.g. `'season-1'`) is not explicitly derived from this number in a controlled
+way — there are multiple places that hardcode `'season-1'` as default. The season
+transition does not atomically update all storage layers to the new seasonId.
+
+Offseason completion → new season start is not atomic.
+`isOffseasonComplete` flag (status === 'COMPLETED') does not trigger the new
+season start automatically. JK must manually call `handleStartNewSeason()`.
+This is a UX choice (not a bug), but creates a gap where offseason is marked
+complete but the new season hasn't been initialized.
+
+localStorage for season number:
+`localStorage.setItem('kbl-current-season', ...)` is used to persist season
+number across refreshes. This is outside the IndexedDB data layer (FINDING-107
+pattern). In a clean architecture, season number would live entirely in
+IndexedDB franchiseStorage, not split across localStorage.
+
+**Pattern verdict summary:**
+| Aspect | OOTP | KBL | Match |
+|--------|------|-----|-------|
+| Phases run in strict order | Yes | Yes | ✅ |
+| Stats locked at offseason start | Yes | No | ❌ |
+| New season opened with new seasonId | Yes | Partial (loose derivation) | PARTIAL |
+| Season transition (age/salary/reset) | Yes | Yes (executeSeasonTransition) | ✅ |
+| Season number in persistent storage | Yes (DB) | Split DB + localStorage | PARTIAL |
+
+**Phase 2 fix queue additions:**
+- FINDING-112a: Add stat-write guard — check season is still active before
+  aggregating (low complexity, prevents edge case corruption). FIX-CODE.
+- FINDING-112b: Remove localStorage season number — derive from franchiseStorage
+  only. FIX-DECISION (requires confirming all read sites). 
+
+**Pattern Map update:** Row 7 → Follows Pattern: PARTIAL | Finding: FINDING-112
+
+### FINDING-106
+**Date:** 2026-02-18 | **Phase:** 1 (Pattern Map) | **Status:** CONFIRMED
+**System:** Stats Aggregation (Pattern Map Row 2)
+**Files:** `src/utils/seasonAggregator.ts` (344 lines),
+`src/utils/processCompletedGame.ts` (53 lines)
+
+**OOTP Pattern:** Synchronous post-game accumulator; updates season totals immediately.
+
+**Follows Pattern: PARTIAL**
+
+**What OOTP does:**
+After each game completion, runs a single synchronous pipeline updating: (1) batting
+season totals, (2) pitching season totals, (3) fielding totals, (4) standings, (5) WAR
+for all participants, (6) milestones, (7) leaderboard cache. All updates happen before
+the game is marked complete. Atomic — no partial runs.
+
+**What KBL does — confirmed working (grep-verified):**
+aggregateGameToSeason() in src/utils/seasonAggregator.ts:
+- aggregateBattingStats() — increments all batting stats per player in IndexedDB ✅
+- aggregatePitchingStats() — increments all pitching stats per pitcher in IndexedDB ✅
+- aggregateFieldingStats() — writes putouts/assists/errors per player in IndexedDB ✅
+- aggregateFameEvents() — milestones + fame tier tracking ✅
+- incrementSeasonGames() — season game counter ✅
+- aggregateGameWithMilestones() — season + career + franchise milestone detection ✅
+
+**What KBL is missing:**
+- Standings update: ABSENT. No call to update team W/L record. Already logged as
+  FINDING-102 Step 6. Confirming from pattern lens.
+- WAR: ABSENT. calculateAndPersistSeasonWAR() exists and is complete (F-103) but
+  never called from this pipeline. Zero callers anywhere.
+- Narrative/headlines: ABSENT (F-102 Step 10)
+- Development update: ABSENT. ratingsAdjustmentEngine not connected (F-102 Step 11)
+
+**Synchronous? Confirmed:** aggregateGameToSeason() is async/await sequential — all
+sub-aggregations run in order before returning. Matches OOTP's atomic requirement.
+No race conditions, no partial runs.
+
+**Pattern verdict summary:**
+| Aspect | OOTP | KBL | Match |
+|--------|------|-----|-------|
+| Batting season totals | Yes | Yes | Y |
+| Pitching season totals | Yes | Yes | Y |
+| Fielding totals | Yes | Yes | Y |
+| Milestones | Yes | Yes | Y |
+| Standings update | Yes | No | N |
+| WAR update | Yes | No | N |
+| Atomic/sequential | Yes | Yes | Y |
+
+**No new findings.** All gaps already captured in FINDING-102 and FINDING-103.
+FINDING-106 is the pattern-lens confirmation of those same gaps.
+
+**Pattern Map update:** Row 2 → Follows Pattern: PARTIAL | Finding: FINDING-106 (gaps in F-102/103)
