@@ -352,5 +352,61 @@ Before implementing Franchise Mode, these should be complete:
 
 ---
 
-*Last Updated: January 22, 2026*
-*Status: PLANNING - Awaiting completion of prerequisite features*
+## 11. v1.1 Updates (February 2026)
+
+### 11.1 Separated Modes Architecture
+
+Franchise Mode is now understood as operating across three distinct modes:
+1. **League Builder** — One-time setup or import
+2. **Franchise Season** — Play games, track stats
+3. **Offseason Workshop** — 11-phase between-season processing
+
+See **SEPARATED_MODES_ARCHITECTURE.md** for full details.
+
+### 11.2 Dynamic Schedule (No Auto-Generation)
+
+> **Key Decision**: KBL does NOT auto-generate a full season schedule. The user plays games in SMB4 and records results. The schedule view shows played games and auto-detects series from consecutive games against the same opponent.
+
+```typescript
+// Series auto-detection
+function detectSeries(recentGames: GameResult[]): SeriesContext | null {
+  if (recentGames.length < 2) return null;
+  const lastOpponent = recentGames[0].opponent;
+  const seriesGames = [];
+  for (const game of recentGames) {
+    if (game.opponent === lastOpponent) seriesGames.push(game);
+    else break;
+  }
+  if (seriesGames.length >= 2) {
+    return {
+      opponent: lastOpponent,
+      gamesInSeries: seriesGames.length,
+      seriesScore: calculateSeriesScore(seriesGames),
+      isActive: true
+    };
+  }
+  return null;
+}
+```
+
+### 11.3 Fictional Date System
+
+KBL uses fictional dates that advance with each game, not tied to real-world calendar:
+- Season 1 starts "April 1, Year 1"
+- Each game advances ~2 days (adjusted for season length)
+- Months follow baseball calendar: April → September
+- Offseason: October → March
+
+### 11.4 Cross-References
+
+| Spec | Content |
+|------|---------|
+| SEPARATED_MODES_ARCHITECTURE.md | Full three-mode architecture |
+| SCHEDULE_SYSTEM_FIGMA_SPEC.md | Schedule UI design |
+| OFFSEASON_SYSTEM_SPEC.md | All 11 offseason phases |
+| ALMANAC_SPEC.md | Cross-season historical reference |
+
+---
+
+*Last Updated: February 20, 2026*
+*Status: PLANNING - Architecture updated, awaiting implementation*

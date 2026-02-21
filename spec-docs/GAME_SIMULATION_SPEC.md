@@ -1,5 +1,7 @@
 # Game Simulation & Skip Specification
 
+> **GOSPEL ANNOTATION (2026-02-21):** Input contract changes — GOSPEL event model (§2-§4) redefines how game data is structured. Simulation logic and skip mechanics remain **valid** but must consume events, not legacy state objects. Feature remains deferred.
+
 > **Purpose**: Define architecture for skipping and simulating games
 > **Status**: PLANNING - Build out deferred until other features complete
 > **Priority**: Future Phase

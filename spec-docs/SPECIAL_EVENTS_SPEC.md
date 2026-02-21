@@ -1,5 +1,7 @@
 # Special Events Specification
 
+> **GOSPEL ANNOTATION (2026-02-21):** Architecture is **superseded by KBL_UNIFIED_ARCHITECTURE_SPEC.md §7** (Modifier Registry replaces hardcoded event system). Narrative rules, event descriptions, and flavor text remain **valid and authoritative** — they become registry entries.
+
 > **Purpose**: Define KBL-specific special events that add flavor and narrative to game tracking
 > **Integration**: fame_and_events_system.md (Fame Bonus/Boner system)
 > **Related Specs**: KBL_XHD_TRACKER_MASTER_SPEC_v3.md §7 (Special Events)

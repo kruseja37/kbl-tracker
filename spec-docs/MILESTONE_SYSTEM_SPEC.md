@@ -1,5 +1,7 @@
 # Milestone System Specification
 
+> **GOSPEL ANNOTATION (2026-02-21):** Trigger point moves from post-game batch to event creation time per **KBL_UNIFIED_ARCHITECTURE_SPEC.md Appendix B**. Detection logic, milestone definitions, and Fame Bonus/Boner scaling remain **valid and authoritative**.
+
 > **Purpose**: Define milestone tracking across single-game, season, and career scopes, including both positive (Fame Bonus) and negative (Fame Boner) milestones
 > **Status**: IMPLEMENTATION (Phase 1 complete - types, detection logic, scaling)
 > **Priority**: Medium (builds on stat tracking infrastructure)

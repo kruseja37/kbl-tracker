@@ -1,5 +1,7 @@
 # Stat Tracking Architecture Specification
 
+> **GOSPEL ANNOTATION (2026-02-21):** Input pipeline shifts from direct state mutation to event consumption per **KBL_UNIFIED_ARCHITECTURE_SPEC.md §4**. Aggregation logic (at-bat → game → season → career) remains **valid and authoritative**.
+
 > **Purpose**: Define the architecture for tracking statistics from at-bat → game → season → career
 > **Related Specs**: PITCHER_STATS_TRACKING_SPEC.md, KBL_XHD_TRACKER_MASTER_SPEC_v3.md §Database Structure
 > **Current State**: Phases 1-4 implemented; Phase 5 (multi-season, career, export) pending

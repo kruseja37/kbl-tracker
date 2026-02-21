@@ -1,5 +1,7 @@
 # Pitch Count Tracking Specification
 
+> **GOSPEL ANNOTATION (2026-02-21):** Interaction model is **extended by KBL_UNIFIED_ARCHITECTURE_SPEC.md §4.6** (pitch count as event metadata). Pitch count tracking logic, thresholds, and PWAR integration remain **valid and authoritative**.
+
 > **Purpose**: Define when and how pitch counts are captured during in-game tracking
 > **Integration**: PWAR_CALCULATION_SPEC.md, INHERITED_RUNNERS_SPEC.md
 > **Related Specs**: KBL_XHD_TRACKER_MASTER_SPEC_v3.md §4 (In-Game Tracking)

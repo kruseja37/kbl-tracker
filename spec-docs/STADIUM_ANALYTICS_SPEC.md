@@ -1314,3 +1314,28 @@ const ORACLE_PARK: Stadium = {
 ---
 
 *This specification defines how stadium analytics enhance the KBL tracker with meaningful park context for player evaluation, game simulation, and historical tracking.*
+
+---
+
+## v1.1 Updates (February 2026)
+
+### Park Dimensions Source
+
+Stadium dimensions are seeded from the **BillyYank Super Mega Baseball Guide (3rd Edition)**, which documents all 23 SMB4 stadiums with:
+- Left/Center/Right field distances
+- Wall heights
+- Surface type
+- Altitude effects
+
+See **SMB4_PARK_DIMENSIONS.md** for the full dataset and **PARK_FACTOR_SEED_SPEC.md** for how these seed values are applied to KBL's park factor system.
+
+### Activation Threshold
+
+Park factors activate after 40% of the season is played (sufficient home/away data). Before that threshold, no park adjustments are applied.
+
+### Cross-References
+
+| New Spec | Relevance |
+|----------|-----------|
+| PARK_FACTOR_SEED_SPEC.md | Park factor seeding and activation rules |
+| SMB4_PARK_DIMENSIONS.md | BillyYank stadium data |

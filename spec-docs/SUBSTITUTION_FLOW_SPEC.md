@@ -1,5 +1,7 @@
 # Substitution Flow Specification
 
+> **GOSPEL ANNOTATION (2026-02-21):** Interaction flow (multi-step substitution UI) is **superseded by KBL_UNIFIED_ARCHITECTURE_SPEC.md §5.2** (event-driven substitution recording). Substitution type tracking, inherited runner logic, and position validation remain **valid and authoritative**.
+
 > **Purpose**: Define how player substitutions are tracked during in-game tracking
 > **Integration**: INHERITED_RUNNERS_SPEC.md, PITCH_COUNT_TRACKING_SPEC.md
 > **Related Specs**: KBL_XHD_TRACKER_MASTER_SPEC_v3.md §4 (In-Game Tracking)

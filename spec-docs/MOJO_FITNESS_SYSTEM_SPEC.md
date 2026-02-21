@@ -1,5 +1,7 @@
 # Mojo & Fitness System Specification
 
+> **GOSPEL ANNOTATION (2026-02-21):** Input source changes from game-derived to user-reported per **KBL_UNIFIED_ARCHITECTURE_SPEC.md §6**. Weighting formulas, decay mechanics, and rating effects remain **valid and authoritative**.
+
 > **Purpose**: Complete specification for SMB4 Mojo and Fitness tracking, effects on ratings, Fame integration, and recovery mechanics
 > **Created**: January 23, 2026
 > **Status**: Active

@@ -3,7 +3,7 @@
 > **Purpose**: Single source of truth for ALL offseason processes
 > **Supersedes**: OFFSEASON_SYSTEM_SPEC v2 (awards-only version)
 > **Created**: January 23, 2026
-> **Integrates**: Personality System, Farm System, Contraction, FA Destinations, Chemistry Alignment
+> **Integrates**: Personality System, Farm System, Expansion Draft, FA Destinations, Chemistry Alignment, Triple Salary Recalculation
 
 ---
 
@@ -13,15 +13,15 @@
 2. [User Interaction Model](#2-user-interaction-model)
 3. [Phase 1: Season End Processing](#3-phase-1-season-end-processing)
 4. [Phase 2: Awards Ceremony](#4-phase-2-awards-ceremony)
-5. [Phase 3: Ratings Adjustment](#5-phase-3-ratings-adjustment)
-6. [Phase 4: Contraction/Expansion](#6-phase-4-contractionexpansion)
+5. [Phase 3: Salary Recalculation #1](#5-phase-3-salary-recalculation-1)
+6. [Phase 4: Expansion (Optional)](#6-phase-4-expansion-optional)
 7. [Phase 5: Retirements](#7-phase-5-retirements)
 8. [Phase 6: Free Agency](#8-phase-6-free-agency)
 9. [Phase 7: Draft](#9-phase-7-draft)
-10. [Phase 8: Farm System Reconciliation](#10-phase-8-farm-system-reconciliation)
-11. [Phase 9: Chemistry Rebalancing](#11-phase-9-chemistry-rebalancing)
-12. [Phase 10: Offseason Trades](#12-phase-10-offseason-trades)
-13. [Phase 11: New Season Prep](#13-phase-11-new-season-prep)
+10. [Phase 8: Salary Recalculation #2](#10-phase-8-salary-recalculation-2)
+11. [Phase 9: Offseason Trades](#11-phase-9-offseason-trades)
+12. [Phase 10: Salary Recalculation #3](#12-phase-10-salary-recalculation-3)
+13. [Phase 11: Finalize & Advance](#13-phase-11-finalize--advance)
 14. [Hidden Personality System](#14-hidden-personality-system)
 15. [Morale System](#15-morale-system)
 16. [Hall of Fame Museum](#16-hall-of-fame-museum)
@@ -31,29 +31,41 @@
 
 ## 1. Offseason Phase Overview
 
+> **UPDATED February 2026**: Contraction REMOVED from v1. Expansion kept as standalone optional feature. Salary recalculates THREE times during offseason (Phases 3, 8, 10). Phase 11 Finalize & Advance includes cut-down signing round with claim priority by reverse expected roster WAR (total salary).
+
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                        OFFSEASON PHASE SEQUENCE (11 PHASES)                  │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                                                                              │
 │  PHASE 1 ──► PHASE 2 ──► PHASE 3 ──► PHASE 4 ──► PHASE 5 ──► PHASE 6       │
-│  Season      Awards      Ratings      Contraction/ Retirements   Free       │
-│  End         Ceremony    Adj          Expansion                  Agency     │
+│  Season      Awards      Salary       Expansion    Retirements   Free       │
+│  End         Ceremony    Recalc #1    (optional)                 Agency     │
 │                                                                              │
 │  PHASE 7 ──► PHASE 8 ──► PHASE 9 ──► PHASE 10 ──► PHASE 11                 │
-│  Draft       Farm        Chemistry    Offseason    New Season               │
-│              Reconcile   Rebalance    Trades       Prep                     │
+│  Draft       Salary      Offseason    Salary       Finalize &               │
+│              Recalc #2   Trades       Recalc #3    Advance                  │
 │                                                                              │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
+### Key Changes from Previous Version
+- **Phase 3**: Now "Salary Recalculation #1" (was "True Value Recalibration")
+- **Phase 4**: Now "Expansion" optional (was "Contraction/Expansion"). Contraction removed entirely
+- **Phase 8**: Now "Salary Recalculation #2" (was "Farm System Reconciliation")
+- **Phase 9**: Now "Offseason Trades" (was "Chemistry Rebalancing")
+- **Phase 10**: Now "Salary Recalculation #3" (new)
+- **Phase 11**: Now "Finalize & Advance" with cut-down deadline, signing round, and roster lock
+
 ### Roster Requirements
 
-| Level | Size | Notes |
-|-------|------|-------|
-| MLB Roster | 22 players | Active roster |
-| Farm Roster | 10 players | Development pool |
-| **Total** | **32 players** | Per team |
+| Level | Size During Season | Size at Phase 11 Finalize |
+|-------|-------------------|--------------------------|
+| MLB Roster | 22 players | 22 players |
+| Farm Roster | **Unlimited** | 10 players |
+| **Total at Finalize** | — | **32 players** |
+
+> **Note**: Farm roster is UNLIMITED during the regular season. The 22 MLB / 10 Farm constraint is only enforced at the Phase 11 Finalize & Advance cut-down deadline.
 
 ---
 
@@ -65,7 +77,7 @@
 
 | Type | Description | User Action | Example |
 |------|-------------|-------------|---------|
-| 🎲 **DICE ROLL** | Probability-based outcome | User clicks to roll | Contraction check, retirement saves |
+| 🎲 **DICE ROLL** | Probability-based outcome | User clicks to roll | FA departure, retirement saves |
 | 🎰 **WHEEL SPIN** | Random selection from pool | User clicks to spin | Trait lottery, draft lottery |
 | 🃏 **CARD REVEAL** | Dramatic single reveal | User clicks to flip | FA destination, award winner |
 | 🏆 **CEREMONY** | Multi-step celebration | User advances through stages | Jersey retirement, HOF induction |
@@ -105,12 +117,12 @@
 │  PHASE 3: RATINGS ADJUSTMENT                                                 │
 │  └─ Salary Adjustments .................. ✅ Confirmation (summary table)   │
 │                                                                              │
-│  PHASE 4: CONTRACTION/EXPANSION                                              │
+│  PHASE 4: EXPANSION (OPTIONAL)                                               │
 │  ├─ Add Expansion Team? ................. 📋 Selection (optional)           │
-│  ├─ Contract a Team? .................... 📋 Selection (optional)           │
-│  └─ Per Team at Risk:                                                        │
-│      ├─ Happiness Display ............... 👁️ Review                        │
-│      └─ Fate Roll ....................... 🎲 DICE ROLL ← HIGH STAKES        │
+│  └─ If Yes:                                                                  │
+│      ├─ Name/Configure New Team ......... 📋 Selection                      │
+│      ├─ Per Existing Team: Protect N .... 📋 Selection                      │
+│      └─ Expansion Draft ................. 📋 Selection (pick from pool)     │
 │                                                                              │
 │  PHASE 5: RETIREMENTS                                                        │
 │  ├─ Per Team:                                                                │
@@ -141,26 +153,26 @@
 │      ├─ Selection ....................... 📋 Selection                      │
 │      └─ Release Player (if full) ........ 📋 Selection (same grade or worse)│
 │                                                                              │
-│  PHASE 8: FARM SYSTEM RECONCILIATION                                        │
-│  ├─ Review MLB/Farm Split ............... 👁️ Review                        │
-│  ├─ Promote Prospects ................... 📋 Selection (if slots open)     │
-│  ├─ Demote Players ...................... 📋 Selection (if needed)         │
-│  └─ Reconciliation Summary .............. ✅ Confirmation                   │
+│  PHASE 8: SALARY RECALCULATION #2                                           │
+│  └─ Post-Draft Salary Adjustments ....... ✅ Confirmation (summary table)   │
 │                                                                              │
-│  PHASE 9: CHEMISTRY REBALANCING                                             │
-│  ├─ Review Team Chemistry ............... 👁️ Review                        │
-│  ├─ Identify Conflicts .................. 👁️ Review (auto-detected)        │
-│  ├─ Chemistry Adjustments ............... ✅ Confirmation (auto)            │
-│  └─ Chemistry Summary ................... ✅ Confirmation                   │
-│                                                                              │
-│  PHASE 10: OFFSEASON TRADES                                                 │
+│  PHASE 9: OFFSEASON TRADES                                                  │
 │  ├─ View Trade Market ................... 👁️ Review                        │
 │  ├─ Propose Trades ...................... 📋 Selection (optional)           │
 │  ├─ Review AI Trade Proposals ........... 📋 Selection (accept/reject)      │
 │  └─ Trade Summary ....................... ✅ Confirmation                   │
 │                                                                              │
-│  PHASE 11: NEW SEASON PREP                                                  │
-│  ├─ Final Roster Validation ............. ✅ Confirmation (auto)            │
+│  PHASE 10: SALARY RECALCULATION #3                                          │
+│  └─ Post-Trade Salary Adjustments ....... ✅ Confirmation (summary table)   │
+│                                                                              │
+│  PHASE 11: FINALIZE & ADVANCE                                               │
+│  ├─ Cut-Down Deadline ................... ✅ Confirmation (all teams → 22/10)│
+│  ├─ Released Players Pool ............... 👁️ Review                        │
+│  ├─ Signing Round ....................... 📋 Selection (reverse exp. WAR)   │
+│  │   └─ Each team (worst WAR first) picks ONE from pool                     │
+│  ├─ Cut-and-Sign Round .................. 📋 Selection (optional per team)  │
+│  │   └─ Cut ONE, sign ONE from newly released                               │
+│  ├─ Final Roster Validation ............. ✅ Confirmation (all at 22/10)    │
 │  ├─ Archive Season ...................... ✅ Confirmation (auto)            │
 │  └─ Launch New Season! .................. ✅ Confirmation                   │
 │                                                                              │
@@ -173,7 +185,6 @@ These moments get full dramatic treatment with animations, sound effects, and su
 
 | Moment | Ceremony Type | Stakes | Animation |
 |--------|---------------|--------|-----------|
-| **Contraction Fate Roll** | 🎲 Dice Roll | Team survival | Dice tumble, dramatic pause, result flash |
 | **MVP Announcement** | 🃏 Card Reveal | League's best | Envelope open, card flip, confetti |
 | **Cy Young Announcement** | 🃏 Card Reveal | Pitching crown | Same as MVP |
 | **Trait Lottery** | 🎰 Wheel Spin | Player upgrade | Slot machine style, trait icons spinning |
@@ -181,72 +192,48 @@ These moments get full dramatic treatment with animations, sound effects, and su
 | **FA Dice Roll** | 🎲 Two Dice | Who leaves? | Dice tumble, dramatic pause, player highlight |
 | **FA Personality Destination** | 🃏 Card Reveal | Where do they go? | Team logo reveal, "Welcome to..." |
 | **Jersey Retirement** | 🏆 Ceremony | Legacy honor | Jersey rising to rafters, number spotlight |
+| **HOF Induction** | 🏆 Ceremony | Legacy honor | Plaque unveiling |
 | **Draft Pick** | 📋 Selection | Future star | Prospect card, stats reveal |
+| **Expansion Draft** | 📋 Selection | Building a team | Protection rounds, pick ceremony |
 
 ### 2.4 Ceremony UI Examples
 
-#### Dice Roll Ceremony
+#### Dice Roll Ceremony (Free Agency Departure)
 ```
 ╔══════════════════════════════════════════════════════════════╗
-║                   🎲 CONTRACTION FATE 🎲                      ║
-║                   Detroit Diamonds                            ║
+║                   🎲 FREE AGENCY DEPARTURE 🎲                 ║
+║                   New York Thunder                            ║
 ╠══════════════════════════════════════════════════════════════╣
 ║                                                               ║
-║  Fan Morale: 23                                            ║
-║  Survival Threshold: 65 or higher                             ║
+║  Protected: Mike Trout (CF, B+)                              ║
+║  11 players assigned dice values (2-12)                      ║
 ║                                                               ║
-║                    ┌─────────────┐                            ║
-║                    │             │                            ║
-║                    │     🎲      │                            ║
-║                    │             │                            ║
-║                    └─────────────┘                            ║
+║         ┌─────┐    ┌─────┐                                   ║
+║         │ 🎲  │    │ 🎲  │                                   ║
+║         └─────┘    └─────┘                                   ║
 ║                                                               ║
-║              [ 🎲 ROLL FOR YOUR TEAM'S FATE 🎲 ]              ║
+║              [ 🎲 ROLL DICE 🎲 ]                               ║
 ║                                                               ║
 ║  (Click to roll - Result is final, no re-rolls)              ║
 ╚══════════════════════════════════════════════════════════════╝
 ```
 
-#### Post-Roll Result (Survived)
+#### Post-Roll Result (Star Departs)
 ```
 ╔══════════════════════════════════════════════════════════════╗
-║                   🎲 CONTRACTION FATE 🎲                      ║
-║                   Detroit Diamonds                            ║
+║                   🎲 FREE AGENCY RESULT 🎲                    ║
+║                   New York Thunder                            ║
 ╠══════════════════════════════════════════════════════════════╣
 ║                                                               ║
 ║                    ┌─────────────┐                            ║
-║                    │             │                            ║
-║                    │     72      │                            ║
-║                    │             │                            ║
+║                    │   3 + 4     │                            ║
+║                    │   = 7       │                            ║
 ║                    └─────────────┘                            ║
 ║                                                               ║
-║               ✨ SURVIVED! (72 ≥ 65) ✨                       ║
+║       💔 Barry Bonds (A+, LF) is leaving!                    ║
+║       Personality: COMPETITIVE → Goes to rival                ║
 ║                                                               ║
-║     The Detroit Diamonds live to fight another season!       ║
-║                                                               ║
-║                      [Continue]                               ║
-╚══════════════════════════════════════════════════════════════╝
-```
-
-#### Post-Roll Result (Contracted)
-```
-╔══════════════════════════════════════════════════════════════╗
-║                   🎲 CONTRACTION FATE 🎲                      ║
-║                   Detroit Diamonds                            ║
-╠══════════════════════════════════════════════════════════════╣
-║                                                               ║
-║                    ┌─────────────┐                            ║
-║                    │             │                            ║
-║                    │     28      │                            ║
-║                    │             │                            ║
-║                    └─────────────┘                            ║
-║                                                               ║
-║              💔 CONTRACTED (28 < 65) 💔                       ║
-║                                                               ║
-║     The Detroit Diamonds will cease operations.              ║
-║     Time to protect your players...                          ║
-║                                                               ║
-║                 [Begin Protection Phase]                      ║
+║                  [Reveal Destination]                         ║
 ╚══════════════════════════════════════════════════════════════╝
 ```
 
@@ -411,11 +398,12 @@ For solo play or faster sessions, users can enable **Streamlined Mode**:
 ║  └────────────────────────────────────────────────────────┘  ║
 ║                                                               ║
 ║  Always Keep Interactive (even in Streamlined):              ║
-║  ☑ Contraction Fate Rolls                                    ║
+║  ☑ Expansion Draft (if triggered)                            ║
 ║  ☑ Draft Lottery                                             ║
 ║  ☑ MVP/Cy Young Announcements                                ║
 ║  ☑ Jersey Retirement Ceremonies                              ║
 ║  ☑ Hall of Fame Inductions                                   ║
+║  ☑ Phase 11 Signing Round                                    ║
 ║  ☐ All Award Card Reveals                                    ║
 ║  ☐ All Trait Wheel Spins                                     ║
 ║  ☐ All FA Destination Reveals                                ║
@@ -626,7 +614,9 @@ When a player with 2 traits earns a new trait:
 
 ---
 
-## 5. Phase 3: Ratings Adjustment
+## 5. Phase 3: Salary Recalculation #1
+
+> **Triple Salary Recalculation**: Salary recalculates at Phases 3, 8, and 10 to reflect roster changes made during the offseason. This ensures salaries are always current as teams reshape their rosters.
 
 ### 5.1 Dynamic Salary Philosophy
 
@@ -682,101 +672,109 @@ function recalibrateContract(player: Player, trueValue: number): ContractUpdate 
 
 ---
 
-## 6. Phase 4: Contraction/Expansion
+## 6. Phase 4: Expansion (Optional)
 
-### 6.1 Contraction Triggers
+> **Note**: Contraction has been REMOVED from v1. It is on the Feature Wishlist for potential v2 implementation. Phase 4 is now exclusively for optional league expansion.
 
-Contraction is checked when fan morale falls below critical thresholds.
+### 6.1 Expansion Trigger
 
-| Happiness Range | Contraction Probability |
-|-----------------|------------------------|
-| 40-49 | 5% |
-| 30-39 | 15% |
-| 20-29 | 35% |
-| 10-19 | 60% |
-| 0-9 | 85% |
-
-### 6.2 Voluntary Team Sale
-
-User may choose to "sell the team" at any happiness level. This triggers:
-
-1. **If Happiness ≥ 50**: Normal contraction (no special effects)
-2. **If Happiness < 50**: Normal contraction (expected by players)
-3. **SCORNED PLAYER SYSTEM** (Happiness ≥ 50 only):
-
-```typescript
-interface ScornedPlayerEffect {
-  // Personality shifts toward negative
-  personalityShift: 'DROOPY' | 'EGOTISTICAL' | 'TOUGH';  // random
-
-  // Trust damage affects future loyalty gains
-  trustDamage: number;  // -20 to -40 base
-
-  // Performance volatility for 2 seasons
-  volatilityDuration: 2;
-  volatilityRange: [-15, +10];  // Rating swing per game
-}
-```
-
-### 6.3 Contraction Process
+Expansion is purely user-initiated. At Phase 4, the user is asked:
 
 ```
 ╔══════════════════════════════════════════════════════════════╗
-║                   CONTRACTION EVENT                           ║
-║                   Detroit Diamonds                            ║
+║                  PHASE 4: EXPANSION                           ║
 ╠══════════════════════════════════════════════════════════════╣
 ║                                                               ║
-║  Fan Morale: 23                                            ║
-║  Contraction Probability: 35%                                 ║
+║  Would you like to add an expansion team?                    ║
 ║                                                               ║
-║  🎲 Rolling dice...                                           ║
+║  Current league size: 12 teams                                ║
 ║                                                               ║
-║  Result: 28 (≤35 = CONTRACTED)                               ║
-║                                                               ║
-║  ─────────────────────────────────────────────────────────── ║
-║                                                               ║
-║  CONTRACTION PROCESSING:                                      ║
-║                                                               ║
-║  1. Protected Players (4 total):                              ║
-║     • [Cornerstone] Marcus Johnson (SS)                       ║
-║     • [User Choice] Tommy Richards (SP)                       ║
-║     • [User Choice] Jake Wilson (CF)                          ║
-║     • [User Choice] Diego Martinez (CP)                       ║
-║                                                               ║
-║  2. Expansion Draft Pool: 18 players                          ║
-║     → Each expansion team selects: 1 Position + 1 Pitcher    ║
-║                                                               ║
-║  3. Retirement Check Processing...                            ║
-║                                                               ║
-║  [Continue]                                                   ║
+║  [Add Expansion Team]    [Skip Phase]                        ║
 ╚══════════════════════════════════════════════════════════════╝
 ```
 
-### 6.4 Protection Rules
+If skipped, Phase 4 completes instantly with no changes.
 
-| Protection Slot | Rule |
-|-----------------|------|
-| 1 (Auto) | Cornerstone (if exists) → becomes **Legacy Cornerstone** |
-| 2-4 (User) | User selects 3 additional players |
+### 6.2 Expansion Team Configuration
 
-**Legacy Cornerstone**: Special designation for cornerstone of contracted team.
-- Carries tragic narrative weight
-- Affects future team chemistry considerations
-- Permanent designation (never removed)
+If user adds a team:
+1. Team name, abbreviation, stadium selection
+2. Team colors (primary, secondary)
+3. Manager assignment
 
-### 6.5 Expansion Draft (from Contraction)
+### 6.2b Stadium Change for Existing Teams
 
-Each existing team may select from the contraction pool:
-- **1 Position Player**
-- **1 Pitcher**
+Any existing team may change their stadium during Phase 4. This is optional and can be skipped.
 
-Selection order: Reverse standings (worst team picks first).
+**Access**: Phase 4 menu shows a "Change Stadium" option for each existing team alongside the expansion team option.
 
-### 6.6 Remaining Players
+**Rules**:
+- Any team can change their stadium at most once per offseason
+- Park factors reset to the new stadium's seed values when a change occurs (observed park factor history is discarded)
+- Fan morale takes a one-time -5 hit (fans miss the old ballpark) — applied at season start
+- The park factor blend ratio resets: new stadium starts at the configured blend ratio for Season 1
 
-After expansion draft, remaining players enter:
-1. **Retirement Check** (with contraction modifier: +30% retirement probability)
-2. **Free Agency Pool** (if not retired)
+```typescript
+interface StadiumChangeEvent {
+  teamId: string;
+  previousStadiumId: string;
+  newStadiumId: string;
+  offseasonYear: number;
+}
+
+function applyStadiumChange(team: Team, newStadium: Stadium): void {
+  team.stadiumId = newStadium.id;
+  team.parkFactors = newStadium.seedParkFactors;  // Reset to seed values
+  team.parkFactorHistory = [];                     // Clear observed history
+  team.pendingFanMoralePenalty = -5;              // Applied at season start
+}
+```
+
+### 6.3 Expansion Draft Protection
+
+Each existing team protects N players (configurable, default: 15):
+
+```typescript
+interface ExpansionDraftConfig {
+  protectedPlayersPerTeam: number;  // Default: 15
+  maxPicksFromAnyTeam: number;      // Default: 2
+  totalExpansionPicks: number;      // Default: 22 (full MLB roster)
+  farmPicksFromDraft: number;       // Expansion team gets extra draft picks
+}
+```
+
+### 6.4 Expansion Draft Ceremony
+
+```
+╔══════════════════════════════════════════════════════════════╗
+║                  🏗️ EXPANSION DRAFT 🏗️                       ║
+║              Welcome: Portland Pioneers                       ║
+╠══════════════════════════════════════════════════════════════╣
+║                                                               ║
+║  Protection Phase: Each team has protected 15 players        ║
+║  Available Pool: 84 unprotected players                       ║
+║                                                               ║
+║  Pick 1 of 22:                                                ║
+║  ┌────────────────────────────────────────────────────────┐  ║
+║  │ PLAYER              TEAM         POS  GRADE  SALARY    │  ║
+║  ├────────────────────────────────────────────────────────┤  ║
+║  │ Jake Thompson       NY Thunder   SP   B+     $8.2M     │  ║
+║  │ Maria Santos        BOS Legends  CF   B      $6.5M     │  ║
+║  │ Rico Valdez         CHI Fire     3B   B      $7.1M     │  ║
+║  │ ...                                                     │  ║
+║  └────────────────────────────────────────────────────────┘  ║
+║                                                               ║
+║  [Select Player]    [View Details]                            ║
+╚══════════════════════════════════════════════════════════════╝
+```
+
+### 6.5 Expansion Team Initial Expectations
+
+The expansion team starts with:
+- Low expected wins (bottom of league)
+- Neutral fan morale (50 — fresh start optimism)
+- Extra draft picks in Phase 7 (compensatory picks in rounds 1-3)
+- No playoff expectations for first season
 
 ---
 
@@ -1180,43 +1178,36 @@ function findRival(team: Team, allTeams: Team[]): Team {
 
 When a player leaves for another team, the **receiving team must give back a player** that matches:
 
-1. **Position Type**: Position player for position player, pitcher for pitcher
-2. **Grade Requirement** based on team records:
-
-| Scenario | Grade Requirement |
-|----------|-------------------|
-| Receiving team has **better record** than losing team | Return player of **equal or better grade** |
-| Receiving team has **worse record** than losing team | Can return player up to **half grade worse** |
+1. **Salary / True Value proximity**: Return player must be within **±20% of the departing player's True Value (salary)**
+2. **No position matching required**: Any player can be exchanged for any player regardless of position
 
 ```typescript
 function selectReturnPlayer(
   receivingTeam: Team,
-  losingTeam: Team,
   departingPlayer: Player
-): Player {
-  const isPitcher = ['SP', 'RP', 'CP'].includes(departingPlayer.position);
-  const receivingBetter = receivingTeam.wins > losingTeam.wins;
+): Player[] {
+  const targetValue = departingPlayer.trueValue;
+  const tolerance = 0.20;  // ±20%
 
-  const candidates = receivingTeam.roster.filter(p => {
-    const posMatch = isPitcher
-      ? ['SP', 'RP', 'CP'].includes(p.position)
-      : !['SP', 'RP', 'CP'].includes(p.position);
-
-    if (!posMatch) return false;
-
-    if (receivingBetter) {
-      // Must return equal or better grade
-      return gradeToValue(p.grade) >= gradeToValue(departingPlayer.grade);
-    } else {
-      // Can return up to half grade worse
-      return gradeToValue(p.grade) >= gradeToValue(departingPlayer.grade) - 0.5;
-    }
+  const eligible = receivingTeam.roster.filter(p => {
+    const delta = Math.abs(p.trueValue - targetValue) / targetValue;
+    return delta <= tolerance;
   });
 
-  // Return random eligible player (or user selection)
-  return randomChoice(candidates);
+  if (eligible.length > 0) {
+    // User selects from eligible players
+    return eligible;
+  }
+
+  // Fallback: return the single player whose True Value is closest
+  const closest = receivingTeam.roster.reduce((best, p) =>
+    Math.abs(p.trueValue - targetValue) < Math.abs(best.trueValue - targetValue) ? p : best
+  );
+  return [closest];
 }
 ```
+
+> **Note**: If no player on the receiving team is within ±20%, the system surfaces the closest match as the only option and informs the user it's a forced fallback.
 
 **Example**:
 - Worse team loses a B+ player → Must get B+ or better back
@@ -1256,29 +1247,9 @@ After both rounds, free agency is complete.
 
 ## 9. Phase 7: Draft
 
-### 9.1 Pre-Draft: Expansion/Contraction Decision
+### 9.1 Pre-Draft: Inactive Player Database
 
-Before the draft begins, the app prompts whether to add **expansion teams** or **contract** any teams:
-
-```
-╔══════════════════════════════════════════════════════════════╗
-║              PRE-DRAFT: LEAGUE STRUCTURE                      ║
-╠══════════════════════════════════════════════════════════════╣
-║                                                               ║
-║  Current Teams: 20                                           ║
-║                                                               ║
-║  Would you like to modify league structure?                  ║
-║                                                               ║
-║  [ Add Expansion Team ]                                      ║
-║  [ Contract a Team ]                                         ║
-║  [ Continue with Current Teams ]                             ║
-║                                                               ║
-╚══════════════════════════════════════════════════════════════╝
-```
-
-### 9.2 Pre-Draft: Inactive Player Database
-
-After confirming teams, the app asks if the user wants to add any players from the **inactive player database** to the upcoming draft class:
+Before the draft begins, the app asks if the user wants to add any players from the **inactive player database** to the upcoming draft class:
 
 ```
 ╔══════════════════════════════════════════════════════════════╗
@@ -1299,7 +1270,7 @@ After confirming teams, the app asks if the user wants to add any players from t
 ╚══════════════════════════════════════════════════════════════╝
 ```
 
-### 9.3 Draft Class Generation
+### 9.2 Draft Class Generation
 
 The AI automatically generates a **fictional draft class** to fill roster gaps. The draft class:
 
@@ -1355,7 +1326,7 @@ function generateProspectGrade(): string {
 }
 ```
 
-### 9.4 Draft Order
+### 9.3 Draft Order
 
 Draft order is set in **reverse order of new average expected WAR per player**:
 
@@ -1371,7 +1342,7 @@ function calculateDraftOrder(teams: Team[]): Team[] {
 
 **Note**: We use average (not aggregate) because some teams may have fewer players due to retirements/FA.
 
-### 9.5 Draft Rules
+### 9.4 Draft Rules
 
 1. **Minimum one pick**: Each team must draft **at least one player**, even if their roster is full
 2. **Replacement rule**: If drafting with a full roster, must **release a player** of **same grade or worse** than the drafted player
@@ -1405,7 +1376,7 @@ function validateDraftPick(
 }
 ```
 
-### 9.6 Draft Flow
+### 9.5 Draft Flow
 
 ```
 ╔══════════════════════════════════════════════════════════════╗
@@ -1434,7 +1405,7 @@ function validateDraftPick(
 ╚══════════════════════════════════════════════════════════════╝
 ```
 
-### 9.7 Draft Completion
+### 9.6 Draft Completion
 
 Draft continues until:
 1. **All teams have full rosters** AND
@@ -1465,167 +1436,77 @@ Teams that pass with full rosters exit the draft. Undrafted released players ret
 
 ---
 
-## 10. Phase 8: Farm System Reconciliation
+## 10. Phase 8: Salary Recalculation #2
 
 ### 10.1 Purpose
 
-After the draft, reconcile MLB and Farm rosters to ensure proper player distribution between levels.
+Second salary recalculation of the offseason, reflecting all changes from the draft (Phase 7). New drafted players receive initial salaries; existing players' salaries may shift based on roster composition changes.
 
-### 10.2 Review MLB/Farm Split
+### 10.2 Processing
 
-Display current roster distribution:
+Same formula as Phase 3. Produces updated salary baseline before the trade window opens.
+
+```typescript
+function phase8SalaryRecalc(teams: Team[]): SalaryRecalcResult[] {
+  return teams.map(team => {
+    const results = team.roster.map(player => recalculateSalary(player, team));
+    return {
+      teamId: team.id,
+      totalSalary: sum(results.map(r => r.newSalary)),
+      adjustments: results.filter(r => r.changed),
+      newDraftees: results.filter(r => r.isNewDraftee)
+    };
+  });
+}
+```
+
+### 10.3 Summary Display
 
 ```
 ╔══════════════════════════════════════════════════════════════╗
-║              FARM SYSTEM RECONCILIATION                       ║
-║              New York Thunder                                 ║
+║              SALARY RECALCULATION #2 (Post-Draft)             ║
 ╠══════════════════════════════════════════════════════════════╣
 ║                                                               ║
-║  CURRENT ROSTER STATUS:                                      ║
+║  TEAM SALARY CHANGES:                                        ║
 ║  ┌────────────────────────────────────────────────────────┐  ║
-║  │ MLB Roster: 22/22 players                              │  ║
-║  │ Farm Roster: 10/10 players                             │  ║
-║  │ Total: 32 players                                       │  ║
+║  │ TEAM              PREV TOTAL  NEW TOTAL   CHANGE       │  ║
+║  ├────────────────────────────────────────────────────────┤  ║
+║  │ NY Thunder        $142.3M     $138.7M     -$3.6M      │  ║
+║  │ BOS Legends       $128.5M     $131.2M     +$2.7M      │  ║
+║  │ CHI Fire          $95.1M      $98.4M      +$3.3M      │  ║
+║  │ DET Diamonds      $72.8M      $76.1M      +$3.3M      │  ║
 ║  └────────────────────────────────────────────────────────┘  ║
 ║                                                               ║
-║  PROSPECTS READY FOR CALL-UP:                               ║
-║  ┌────────────────────────────────────────────────────────┐  ║
-║  │ Marcus Williams (SS, B+) - Farm WAR: 2.1               │  ║
-║  │ Jake Thompson (SP, B) - Farm WAR: 1.8                  │  ║
-║  └────────────────────────────────────────────────────────┘  ║
-║                                                               ║
-║  [Promote Selected]  [Skip Promotions]                      ║
+║  [Continue to Offseason Trades]                              ║
 ╚══════════════════════════════════════════════════════════════╝
 ```
-
-### 10.3 Promotion/Demotion Rules
-
-| Action | Requirement |
-|--------|-------------|
-| Promote from Farm | MLB roster must have open slot OR must demote a player |
-| Demote to Farm | Farm roster must have open slot |
-| 40-Man Roster | Total MLB + Farm cannot exceed 32 players |
-
-### 10.4 Farm Reconciliation Processing
-
-```typescript
-function processFarmReconciliation(team: Team): ReconciliationResult {
-  const mlbRoster = team.roster.filter(p => p.level === 'MLB');
-  const farmRoster = team.roster.filter(p => p.level === 'FARM');
-
-  // Identify prospects ready for promotion
-  const readyProspects = farmRoster.filter(p =>
-    p.farmWAR >= 1.5 || p.seasonsInFarm >= 2
-  );
-
-  // Identify MLB players who could be demoted
-  const demotionCandidates = mlbRoster.filter(p =>
-    p.seasonWAR < 0 && p.grade <= 'C+'
-  );
-
-  return {
-    mlbCount: mlbRoster.length,
-    farmCount: farmRoster.length,
-    readyProspects,
-    demotionCandidates,
-    needsReconciliation: mlbRoster.length !== 22 || farmRoster.length !== 10
-  };
-}
 ```
 
 ---
 
-## 11. Phase 9: Chemistry Rebalancing
+## 11. Phase 9: Offseason Trades
 
 ### 11.1 Purpose
 
-Review and adjust team chemistry based on offseason roster changes (retirements, FA moves, draft picks, trades).
+Dedicated trade window for all teams to propose and execute trades before the final salary recalculation and roster lock.
 
-### 11.2 Chemistry Review
+### 11.2 Trade Window
 
-```
-╔══════════════════════════════════════════════════════════════╗
-║              CHEMISTRY REBALANCING                            ║
-║              New York Thunder                                 ║
-╠══════════════════════════════════════════════════════════════╣
-║                                                               ║
-║  TEAM CHEMISTRY SCORE: 72 (Good)                            ║
-║                                                               ║
-║  CHEMISTRY CHANGES THIS OFFSEASON:                          ║
-║  ┌────────────────────────────────────────────────────────┐  ║
-║  │ 📈 +8: Barry Bonds departed (was chemistry drain)      │  ║
-║  │ 📈 +5: Derek Jeter became Veteran Leader              │  ║
-║  │ 📉 -3: Lost teammate bond (Clemens retired)           │  ║
-║  │ 📉 -2: New player adjustment (Marcus Williams)        │  ║
-║  └────────────────────────────────────────────────────────┘  ║
-║                                                               ║
-║  NET CHANGE: +8                                             ║
-║  Previous: 64 → Current: 72                                 ║
-║                                                               ║
-║  [Continue]                                                 ║
-╚══════════════════════════════════════════════════════════════╝
-```
+> **Full specification**: See [TRADE_SYSTEM_SPEC.md](./TRADE_SYSTEM_SPEC.md) for complete trade system details including no-salary-matching rule and Chemistry-tier trade value evaluation.
 
-### 11.3 Chemistry Factors
+The offseason trade window opens after Salary Recalculation #2 (Phase 8) gives all teams current salary baselines.
 
-| Factor | Effect | Description |
-|--------|--------|-------------|
-| Veteran Leaders | +5 to +10 | Players with 8+ years who stay with team |
-| Teammate Bonds | +3 per bond | Pairs who played 3+ seasons together |
-| New Players | -2 each | Adjustment period for FA signings/draftees |
-| Personality Conflicts | -5 to -15 | EGOTISTICAL vs TIMID, etc. |
-| Chemistry Drains | -3 to -10 | Low morale players affect team |
-| Championship Core | +10 | 3+ players from championship team |
+**Key rules:**
+- No salary matching required (any trade package is valid)
+- Fan morale impacts apply to all trades
+- AI-controlled teams evaluate trade proposals based on needs/surpluses
+- Chemistry-tier potency changes shown in trade preview
 
-### 11.4 Chemistry Processing
-
-```typescript
-function processChemistryRebalancing(team: Team): ChemistryResult {
-  let chemistryDelta = 0;
-
-  // Check for departed chemistry drains
-  for (const player of team.departedPlayers) {
-    if (player.chemistryImpact < 0) {
-      chemistryDelta += Math.abs(player.chemistryImpact);
-    }
-  }
-
-  // Check for new veteran leaders
-  for (const player of team.roster) {
-    if (player.yearsInLeague >= 8 && player.seasonsWithTeam >= 3) {
-      if (!player.hasVeteranLeaderBonus) {
-        chemistryDelta += 5;
-        player.hasVeteranLeaderBonus = true;
-      }
-    }
-  }
-
-  // Penalty for new players
-  const newPlayers = team.roster.filter(p => p.seasonsWithTeam === 0);
-  chemistryDelta -= newPlayers.length * 2;
-
-  return {
-    previousChemistry: team.chemistry,
-    newChemistry: team.chemistry + chemistryDelta,
-    delta: chemistryDelta,
-    changes: generateChemistryChangeLog(team)
-  };
-}
-```
-
----
-
-## 12. Phase 10: Offseason Trades
-
-### 12.1 Purpose
-
-Dedicated trade window for all teams to propose and execute trades before the new season.
-
-### 12.2 Trade Market UI
+### 11.3 Trade Market UI
 
 ```
 ╔══════════════════════════════════════════════════════════════╗
-║              OFFSEASON TRADE WINDOW                           ║
+║              OFFSEASON TRADE WINDOW (Phase 9)                 ║
 ╠══════════════════════════════════════════════════════════════╣
 ║                                                               ║
 ║  TRADE MARKET STATUS:                                        ║
@@ -1642,6 +1523,7 @@ Dedicated trade window for all teams to propose and execute trades before the ne
 ║  ┌────────────────────────────────────────────────────────┐  ║
 ║  │ ← Chicago Fire: Wants Derek Jeter                      │  ║
 ║  │   Offering: Mike Simmons (SP, B+) + Draft Swap         │  ║
+║  │   Chemistry: Jeter's Clutch Tier 2→1 ▼ on CHI          │  ║
 ║  │   [Accept] [Counter] [Reject]                          │  ║
 ║  └────────────────────────────────────────────────────────┘  ║
 ║                                                               ║
@@ -1649,32 +1531,18 @@ Dedicated trade window for all teams to propose and execute trades before the ne
 ╚══════════════════════════════════════════════════════════════╝
 ```
 
-### 12.3 Trade System
+### 11.4 AI Trade Proposals
 
-> **Full specification**: See [TRADE_SYSTEM_SPEC.md](./TRADE_SYSTEM_SPEC.md) for complete trade system details.
-
-Trade packages must have **combined Contract Values within 10%** of each other.
-
-| Asset Type | Notes |
-|------------|-------|
-| MLB Players | Any player on roster |
-| Farm Players | Prospects from farm system |
-| Draft Swaps | Upcoming draft only, position swap (not picks) |
-
-### 12.4 AI Trade Proposals
-
-The system may generate trade proposals from AI-controlled teams:
+AI-controlled teams generate trade proposals based on roster needs:
 
 ```typescript
 function generateAITradeProposals(team: Team): TradeProposal[] {
   const proposals: TradeProposal[] = [];
 
-  // AI teams evaluate team needs
   for (const aiTeam of getAITeams()) {
     const needs = evaluateTeamNeeds(aiTeam);
     const surpluses = evaluateTeamSurpluses(aiTeam);
 
-    // Generate proposal if match found
     const match = findTradeMatch(team, aiTeam, needs, surpluses);
     if (match && match.fairnessScore >= 0.9) {
       proposals.push(createTradeProposal(aiTeam, team, match));
@@ -1685,91 +1553,237 @@ function generateAITradeProposals(team: Team): TradeProposal[] {
 }
 ```
 
----
+### 11.5 Trade Window Completion
 
-## 13. Phase 11: New Season Prep
-
-### 13.1 Purpose
-
-Final validation and season transition. Archives the completed season and prepares for the next.
-
-### 13.2 Final Roster Validation
+The trade window closes when the user confirms "Ready for Salary Recalculation":
 
 ```
 ╔══════════════════════════════════════════════════════════════╗
-║              FINAL ROSTER VALIDATION                          ║
+║              OFFSEASON TRADES COMPLETE                         ║
 ╠══════════════════════════════════════════════════════════════╣
 ║                                                               ║
-║  VALIDATION STATUS:                                          ║
+║  Trades Completed: 4                                         ║
+║  Players Acquired: 6                                         ║
+║  Players Sent: 5                                             ║
+║  Farm Prospects Moved: 3                                     ║
 ║                                                               ║
-║  ✓ All teams have 22 MLB players                            ║
-║  ✓ All teams have 10 Farm players                           ║
-║  ✓ All position requirements met                            ║
-║  ✓ All salary caps within limits                            ║
-║  ✓ No orphaned players                                      ║
+║  [Continue to Salary Recalculation #3]                       ║
+╚══════════════════════════════════════════════════════════════╝
+```
+```
+
+---
+
+## 12. Phase 10: Salary Recalculation #3
+
+### 12.1 Purpose
+
+Third and final salary recalculation of the offseason, reflecting all trades completed in Phase 9.
+
+### 12.2 Processing
+
+Same formula as Phases 3 and 8. Produces final salary baseline for Phase 11 cut-down and the upcoming season.
+
+```typescript
+function phase10SalaryRecalc(teams: Team[]): SalaryRecalcResult[] {
+  return teams.map(team => {
+    const results = team.roster.map(player => recalculateSalary(player, team));
+    return {
+      teamId: team.id,
+      totalSalary: sum(results.map(r => r.newSalary)),
+      adjustments: results.filter(r => r.changed)
+    };
+  });
+}
+```
+
+> **Note**: This total salary figure is used in Phase 11 to determine signing round claim priority (reverse expected roster WAR via total salary — lowest salary picks first).
+
+---
+
+## 13. Phase 11: Finalize & Advance
+
+### 13.1 Purpose
+
+The culmination of the offseason. All teams must reach exactly 22 MLB / 10 Farm before the new season begins. This phase enforces the roster constraint that was relaxed during the season (farm was unlimited) and provides a structured process for handling released players.
+
+### 13.2 Cut-Down Deadline
+
+Every team must cut down to exactly 22 MLB players and 10 Farm players. Teams over the limit must release players; teams under must sign from the released player pool or have empty slots filled.
+
+```
+╔══════════════════════════════════════════════════════════════╗
+║              PHASE 11: FINALIZE & ADVANCE                     ║
+║              Step 1: Cut-Down Deadline                        ║
+╠══════════════════════════════════════════════════════════════╣
 ║                                                               ║
-║  [Continue to Season Archive]                               ║
+║  ROSTER STATUS BY TEAM:                                      ║
+║  ┌────────────────────────────────────────────────────────┐  ║
+║  │ TEAM              MLB   FARM  ACTION NEEDED            │  ║
+║  ├────────────────────────────────────────────────────────┤  ║
+║  │ NY Thunder        24    12    Release 2 MLB, 2 Farm    │  ║
+║  │ BOS Legends       22    11    Release 1 Farm           │  ║
+║  │ CHI Fire          21    10    Need 1 MLB (signing rnd) │  ║
+║  │ DET Diamonds      22    10    ✅ Ready                  │  ║
+║  │ ...                                                     │  ║
+║  └────────────────────────────────────────────────────────┘  ║
+║                                                               ║
+║  [Begin Cut-Down Process]                                    ║
 ╚══════════════════════════════════════════════════════════════╝
 ```
 
-### 13.3 Season Archival
+### 13.3 Released Player Pool
 
-When user confirms "All Set", the app:
+All cut players enter a shared pool available for the signing round.
+
+```typescript
+interface ReleasedPlayerPool {
+  players: ReleasedPlayer[];
+  source: Map<string, string>;  // playerId → releasing team
+}
+
+interface ReleasedPlayer {
+  player: Player;
+  releasedBy: string;  // Team ID
+  salary: number;      // From Phase 10 recalculation
+}
+```
+
+### 13.4 Signing Round (Claim Priority: Reverse Expected WAR)
+
+After all teams have cut down, teams with open roster spots get to claim ONE player from the released pool. **Claim order is determined by reverse expected roster WAR, using total MLB salary as the proxy.**
+
+**Why total salary instead of win-loss record?**
+By Phase 11, rosters have changed dramatically through retirements, free agency, draft, and trades. The regular season record is stale. Total MLB salary (recalculated in Phase 10) is the live proxy for expected roster WAR — it reflects the CURRENT team strength. The team with the LOWEST total MLB salary picks first because they're the "weakest" team by current expectations.
+
+```typescript
+function getSigningRoundOrder(teams: Team[]): Team[] {
+  // Sort by total MLB salary ascending (lowest picks first)
+  return teams
+    .filter(t => t.mlbRoster.length < 22 || t.farmRoster.length < 10)
+    .sort((a, b) => a.totalMLBSalary - b.totalMLBSalary);
+}
+
+function processSigningRound(
+  teams: Team[],
+  pool: ReleasedPlayerPool
+): SigningRoundResult[] {
+  const order = getSigningRoundOrder(teams);
+  const results: SigningRoundResult[] = [];
+
+  for (const team of order) {
+    if (pool.players.length === 0) break;
+
+    // Team picks ONE player from pool
+    const pick = userSelectsFromPool(team, pool);
+    if (pick) {
+      pool.players = pool.players.filter(p => p.player.id !== pick.player.id);
+      results.push({
+        team: team.id,
+        claimed: pick.player,
+        level: determineLevel(team, pick.player)  // MLB or Farm
+      });
+    }
+  }
+
+  return results;
+}
+```
+
+### 13.5 Signing Round UI
+
+```
+╔══════════════════════════════════════════════════════════════╗
+║              SIGNING ROUND                                    ║
+║              Claim Order: Reverse Expected WAR (Total Salary) ║
+╠══════════════════════════════════════════════════════════════╣
+║                                                               ║
+║  Pick 1: Chicago Fire (Total Salary: $42.3M — lowest)        ║
+║                                                               ║
+║  Available Released Players:                                 ║
+║  ┌────────────────────────────────────────────────────────┐  ║
+║  │ PLAYER              POS   GRADE  SALARY  RELEASED BY   │  ║
+║  ├────────────────────────────────────────────────────────┤  ║
+║  │ Jake Wilson          CF    B      $6.2M   NY Thunder    │  ║
+║  │ Maria Santos         SP    B-     $4.1M   BOS Legends   │  ║
+║  │ Rico Valdez          3B    C+     $2.8M   NY Thunder    │  ║
+║  │ Tom Baker            RP    C      $1.5M   SEA Mariners  │  ║
+║  │ ...                                                     │  ║
+║  └────────────────────────────────────────────────────────┘  ║
+║                                                               ║
+║  [Claim Player]    [Pass (skip claiming)]                    ║
+╚══════════════════════════════════════════════════════════════╝
+```
+
+### 13.6 Cut-and-Sign Round (Optional)
+
+After the signing round, any team may optionally CUT one additional player and SIGN one player from the newly expanded pool. This enables last-minute roster optimization.
+
+```typescript
+function processCutAndSignRound(
+  teams: Team[],
+  pool: ReleasedPlayerPool
+): CutAndSignResult[] {
+  const results: CutAndSignResult[] = [];
+
+  // Same order as signing round
+  const order = getSigningRoundOrder(teams);
+
+  for (const team of order) {
+    // Optional: team can cut one player and sign one from pool
+    const action = userDecidesCutAndSign(team, pool);
+    if (action) {
+      // Cut player goes to pool
+      pool.players.push({ player: action.cut, releasedBy: team.id, salary: action.cut.salary });
+      // Sign player from pool
+      pool.players = pool.players.filter(p => p.player.id !== action.sign.player.id);
+
+      results.push({
+        team: team.id,
+        cut: action.cut,
+        signed: action.sign.player
+      });
+    }
+  }
+
+  return results;
+}
+```
+
+### 13.7 Final Roster Lock
+
+After cut-and-sign completes, ALL rosters must be exactly 22 MLB / 10 Farm. Any remaining released players who were not claimed retire from the league.
+
+```
+╔══════════════════════════════════════════════════════════════╗
+║              ROSTERS LOCKED                                   ║
+╠══════════════════════════════════════════════════════════════╣
+║                                                               ║
+║  ✅ All teams at 22 MLB / 10 Farm                            ║
+║                                                               ║
+║  Unclaimed players retiring:                                 ║
+║  • Tom Baker (RP, C) — no claims                             ║
+║  • Pat Wilson (UTIL, C-) — no claims                         ║
+║                                                               ║
+║  [Continue to Season Archive]                                ║
+╚══════════════════════════════════════════════════════════════╝
+```
+
+### 13.8 Season Archival
+
+When user confirms, the app:
 
 1. **Archives Current Season**
-   - All stats preserved
-   - All records preserved
-   - All historical data preserved
-   - Leaders preserved
-   - Team data preserved
+   - All stats, records, historical data preserved
+   - Leaders, team data, transactions preserved
 
 2. **Prepares New Season**
    - Reset player mojos to NORMAL
    - Clear seasonal stats (career totals preserved)
-   - Reset clutch counters
-   - Reset fame counters (career preserved)
-   - Clear injuries (unless long-term)
+   - Reset clutch counters, fame counters (career preserved)
+   - Reset options counter for all players (3 options per player per season)
 
-3. **Validates all rosters**
-   - Each team must have full roster
-   - Position requirements met
-
-```typescript
-function finalizeSeasonTransition(
-  currentSeason: Season,
-  teams: Team[]
-): SeasonTransition {
-  // Archive current season
-  const archive = {
-    seasonNumber: currentSeason.number,
-    standings: currentSeason.standings,
-    stats: currentSeason.allStats,
-    awards: currentSeason.awards,
-    transactions: currentSeason.transactions,
-    retirements: currentSeason.retirements,
-    hallOfFame: currentSeason.hofInductions
-  };
-
-  // Reset for new season
-  for (const team of teams) {
-    for (const player of team.roster) {
-      player.mojo = 'NORMAL';
-      player.seasonStats = createEmptyStats();
-      player.clutchCounter = 0;
-      player.seasonFame = 0;
-      // Career stats preserved
-    }
-  }
-
-  return {
-    archivedSeason: archive,
-    newSeasonNumber: currentSeason.number + 1,
-    teams: teams
-  };
-}
-```
-
-### 13.4 Launch New Season
+3. **Launch**
 
 ```
 ╔══════════════════════════════════════════════════════════════╗
@@ -1777,28 +1791,26 @@ function finalizeSeasonTransition(
 ╠══════════════════════════════════════════════════════════════╣
 ║                                                               ║
 ║  ✓ Season 1 archived                                         ║
-║  ✓ All rosters finalized                                     ║
+║  ✓ All rosters finalized (22/10)                             ║
 ║  ✓ Player stats reset                                        ║
+║  ✓ Options counters reset                                    ║
 ║  ✓ Historical data preserved                                 ║
 ║                                                               ║
 ║  SEASON 1 CHAMPIONS: New York Thunder                        ║
 ║  SEASON 1 MVP: Barry Bonds                                   ║
 ║  SEASON 1 CY YOUNG: Roger Clemens                            ║
 ║                                                               ║
-║  ─────────────────────────────────────────────────────────── ║
-║                                                               ║
 ║              [ 🎮 BEGIN SEASON 2 🎮 ]                        ║
-║                                                               ║
 ╚══════════════════════════════════════════════════════════════╝
 ```
 
 ---
 
-## 14. Hidden Personality System
+## 14. Hybrid Personality System
 
-### 14.1 Personality Types
+### 14.1 Visible Personality Types
 
-Personalities are **HIDDEN** from the user. They affect behavior but are never directly shown.
+Personalities are **visible** to the user and known from the moment a player is drafted.
 
 | Personality | Description | Behavioral Tendency |
 |-------------|-------------|---------------------|
@@ -1810,9 +1822,66 @@ Personalities are **HIDDEN** from the user. They affect behavior but are never d
 | **TIMID** | Anxious | Fears change, avoids spotlight |
 | **EGOTISTICAL** | Self-focused | Wants money and glory |
 
-### 14.2 Personality Distribution
+### 14.2 Hidden Modifiers (Never Directly Revealed)
 
-New players assigned personality via weighted random:
+Each player also has 4 hidden modifiers on a 0-100 scale. These are NEVER shown numerically — they are only hinted at through behavior patterns and beat reporter coverage.
+
+| Modifier | Range | Affects |
+|----------|-------|---------|
+| **Loyalty** | 0-100 | FA destination preference, willingness to take discount, trade request likelihood |
+| **Ambition** | 0-100 | Development speed, award pursuit intensity, willingness to change teams for opportunity |
+| **Resilience** | 0-100 | Morale recovery speed, performance under adversity, retirement probability |
+| **Charisma** | 0-100 | Teammate morale effects, fan engagement, team captain selection, mentorship effectiveness |
+
+```typescript
+interface PlayerPersonality {
+  visibleType: PersonalityType;  // One of 7 types — shown to user
+  hiddenModifiers: {
+    loyalty: number;      // 0-100
+    ambition: number;     // 0-100
+    resilience: number;   // 0-100
+    charisma: number;     // 0-100
+  };
+}
+```
+
+### 14.3 How Hidden Modifiers Surface
+
+Hidden modifiers are never shown as numbers. Instead, they influence observable behavior:
+
+| Modifier | Observable Signals |
+|----------|-------------------|
+| **High Loyalty** | Beat reporter: "He's said he wants to retire here." FA: more likely to stay. Trade: resists leaving. |
+| **Low Loyalty** | Beat reporter: "Sources say he's exploring options." FA: destination-agnostic. |
+| **High Ambition** | Beat reporter: "Working overtime in the cage." Development: faster improvement. FA: seeks bigger role. |
+| **Low Ambition** | Beat reporter: "Seems content with his role." Development: slower improvement. |
+| **High Resilience** | Beat reporter: "Bounced back from that slump quickly." Morale: recovers fast. Retirement: less likely. |
+| **Low Resilience** | Beat reporter: "Still struggling after that rough stretch." Morale: fragile. Retirement: more likely. |
+| **High Charisma** | Beat reporter: "Real leader in that clubhouse." Teammates: morale boost. Team Captain candidate. |
+| **Low Charisma** | Beat reporter: "Keeps to himself." Teammates: no effect. |
+
+### 14.4 Team Captain Selection
+
+The Team Captain designation goes to the player with the highest combined Loyalty + Charisma among veterans (3+ seasons with team):
+
+```typescript
+function selectTeamCaptain(team: Team): Player | null {
+  const veterans = team.roster.filter(p => p.seasonsWithTeam >= 3);
+  if (veterans.length === 0) return null;
+
+  return veterans.reduce((best, player) => {
+    const score = player.personality.hiddenModifiers.loyalty +
+                  player.personality.hiddenModifiers.charisma;
+    const bestScore = best.personality.hiddenModifiers.loyalty +
+                      best.personality.hiddenModifiers.charisma;
+    return score > bestScore ? player : best;
+  });
+}
+```
+
+### 14.5 Personality Distribution
+
+New players assigned visible type via weighted random:
 
 | Personality | Weight |
 |-------------|--------|
@@ -1824,17 +1893,17 @@ New players assigned personality via weighted random:
 | DROOPY | 10% |
 | EGOTISTICAL | 10% |
 
-### 14.3 Personality Shifts
+Hidden modifiers generated via Gaussian distribution centered at 50 with σ=20, clamped to [0, 100]. Visible type creates soft bias:
 
-Personalities can shift due to major events:
-
-| Event | Possible Shift |
-|-------|----------------|
-| Championship Win | → COMPETITIVE, JOLLY |
-| Team Contracted (Happy) | → DROOPY, EGOTISTICAL, TOUGH |
-| Multiple Demotions | → DROOPY, TIMID |
-| Career Achievement | → EGOTISTICAL, COMPETITIVE |
-| Great Teammate Traded | → DROOPY |
+| Personality | Modifier Bias |
+|-------------|--------------|
+| COMPETITIVE | +10 Ambition |
+| RELAXED | +10 Resilience |
+| JOLLY | +10 Charisma |
+| TOUGH | +10 Resilience, +5 Loyalty |
+| TIMID | -10 Ambition, +5 Loyalty |
+| DROOPY | -10 Resilience |
+| EGOTISTICAL | +15 Ambition, -10 Loyalty |
 
 ---
 
@@ -1875,7 +1944,7 @@ interface MoraleEvent {
 const MORALE_EVENTS = {
   TRADED_AWAY: { type: 'NEGATIVE', magnitude: -15, source: 'TRANSACTION' },
   WON_AWARD: { type: 'POSITIVE', magnitude: +10, source: 'PERSONAL' },
-  TEAM_CONTRACTED: { type: 'NEGATIVE', magnitude: -25, source: 'TEAM' },
+  TEAM_REBUILT: { type: 'NEGATIVE', magnitude: -15, source: 'TEAM' },
   CHEMISTRY_DOWNGRADE: { type: 'NEGATIVE', magnitude: -10, source: 'CHEMISTRY' },
   DEMOTED: { type: 'NEGATIVE', magnitude: -12, source: 'TRANSACTION' },
   CALLED_UP: { type: 'POSITIVE', magnitude: +8, source: 'TRANSACTION' },
@@ -1981,8 +2050,7 @@ interface OffseasonState {
 
   // Phase 1-4 data
   awardsProcessed: Award[];
-  ratingsAdjustments: RatingsAdjustment[];
-  contractionOccurred: boolean;
+  salaryRecalc1: SalaryRecalcResult[];
   expansionOccurred: boolean;
 
   // Phase 5: Retirements
@@ -1995,14 +2063,20 @@ interface OffseasonState {
   // Phase 7: Draft
   draftPicks: DraftPick[];
 
-  // Phase 8: Farm System Reconciliation
-  farmReconciliations: FarmReconciliationResult[];
+  // Phase 8: Salary Recalculation #2
+  salaryRecalc2: SalaryRecalcResult[];
 
-  // Phase 9: Chemistry Rebalancing
-  chemistryResults: ChemistryResult[];
-
-  // Phase 10: Offseason Trades
+  // Phase 9: Offseason Trades
   offseasonTrades: OffseasonTrade[];
+
+  // Phase 10: Salary Recalculation #3
+  salaryRecalc3: SalaryRecalcResult[];
+
+  // Phase 11: Finalize & Advance
+  cutDownReleases: ReleasedPlayer[];
+  signingRoundClaims: SigningRoundResult[];
+  cutAndSignActions: CutAndSignResult[];
+  unclamedRetirements: RetiredPlayer[];
 
   // Validation
   rosterValidation: Record<string, ValidationResult>;

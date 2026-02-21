@@ -1053,3 +1053,14 @@ Still unresolved. FINDING-047 fallback path only has base state, not full scoreb
 | FINDING-122 | 2026-02-18 | N | oddityRecordTracker.ts | Row 23 Record Book — oddityRecordTracker exists in legacy engines; zero callers; no standard record book; ORPHANED |
 | FINDING-123 | 2026-02-18 | PARTIAL | app/pages/*.tsx | Row 24 UI Pages — legitimate writers (GameTracker, LeagueBuilder) correct by design; pure consumers confirmed; WorldSeries stats leaderboard always empty (no write path to PLAYOFF_STATS — see F-113) |
 
+
+| FINDING-124 | 2026-02-21 | CONFLICT | TRAIT_INTEGRATION_SPEC / smb4_traits_reference.md | Chemistry type names wrong — specs use 4 invented names (Spirited, Crafty, Tough, Flashy); SMB4 has 5 real types (Competitive, Crafty, Disciplined, Spirited, Scholarly). Resolved: use real SMB4 names. |
+| FINDING-125 | 2026-02-21 | CONFLICT | FREE_AGENCY_FIGMA_SPEC / OFFSEASON_SYSTEM_SPEC | FA player exchange rules contradict: Figma said ±10% salary/no position; Offseason said grade+position type. Resolved: ±20% True Value match, no position restriction. |
+| FINDING-126 | 2026-02-21 | CONFLICT | PROSPECT_GENERATION_SPEC / FARM_SYSTEM_SPEC | Draft grade range (A–D) vs farm schema (B–C- only) — logical gap in pipeline. Resolved: all grades possible on farm, expand farm schema to full range. Bell curve centered on B/B-/C+ at 15% each. |
+| FINDING-127 | 2026-02-21 | DECISION | SALARY_SYSTEM_SPEC / FARM_SYSTEM_SPEC | Rookie salary: resolved as draft-round-based (set at draft, locked until EOS after rookie season). Rating/traits/grade hidden on farm, revealed at call-up — salary unchanged at call-up. |
+| FINDING-128 | 2026-02-21 | DECISION | FRANCHISE_MODE_SPEC | Standings tiebreaker: run differential. If still tied, user selects who advances. |
+| FINDING-129 | 2026-02-21 | DECISION | LEAGUE_BUILDER_SPEC | Farm population at startup: League Builder includes prospect draft step before Season 1. |
+| FINDING-130 | 2026-02-21 | DECISION | OFFSEASON_SYSTEM_SPEC | Stadium change mechanic is v1 scope. New Phase 4 sub-step needed. |
+| FINDING-131 | 2026-02-21 | DECISION | SCOUTING_SYSTEM_SPEC | Scout grade deviation: fat-tail distribution. Keep max-deviation-by-position structure; replace uniform probability with fat-tail model — small misses most common, rare outliers beyond current hard cap possible. |
+| FINDING-132 | 2026-02-21 | DECISION | DYNAMIC_DESIGNATIONS_SPEC / PERSONALITY_SYSTEM_SPEC | Team captain: v1 scope. Formal designation driven by Charisma hidden modifier. Needs full spec. |
+| FINDING-133 | 2026-02-21 | DECISION | NARRATIVE_SYSTEM_SPEC / new UI flow spec | Beat reporter pre-decision warning: v1 scope. Blocking modal before call-up/send-down executes. Conditional on relationship/narrative data. Needs UI flow spec. |

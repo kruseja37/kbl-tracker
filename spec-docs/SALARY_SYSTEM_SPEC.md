@@ -795,12 +795,12 @@ function getExpectedWinPctFromPayroll(payrollPercentile) {
 
 | Happiness | Status | Effects |
 |-----------|--------|---------|
-| 80-100 | Ecstatic | No negative effects, immunity from contraction |
+| 80-100 | Ecstatic | No negative effects |
 | 60-79 | Happy | Normal operations |
 | 40-59 | Neutral | Normal operations |
 | 20-39 | Unhappy | Manager hot seat (+10% mid-season fire chance) |
 | 10-19 | Angry | Manager very hot seat (+25% fire chance) |
-| 0-9 | **Furious** | Contraction risk at season end |
+| 0-9 | **Furious** | Franchise crisis warning |
 
 ### Mid-Season Manager Firing
 
@@ -842,164 +842,122 @@ function fireManager(team) {
 
 ---
 
-## Contraction System
+## Salary Recalculation Schedule
 
-### Contraction Risk Check (End of Season)
+> **UPDATE February 2026**: Salary recalculates at THREE points during the offseason, not just once.
 
-```javascript
-function checkContractionRisk(team, season) {
-  const finalHappiness = calculateFanMorale(team, season);
+### Offseason Recalculation Points
 
-  if (finalHappiness >= 10) {
-    return { atRisk: false };
-  }
+| Phase | Trigger | Purpose |
+|-------|---------|---------|
+| Phase 3 | Post-Awards | Reflect awards, ratings adjustments, initial roster changes |
+| Phase 8 | Post-Draft | Reflect free agency departures, draft picks, farm changes |
+| Phase 10 | Post-Trades | Reflect all offseason trades; becomes baseline for Phase 11 signing round |
 
-  // Fan morale below 10 = contraction risk
-  return {
-    atRisk: true,
-    currentHappiness: finalHappiness,
-    canRecover: true,  // Offseason moves can save them
-    recoveryThreshold: 10
-  };
+### In-Season Triggers
+
+Salary also recalculates immediately during the season when:
+
+| Trigger | Effect |
+|---------|--------|
+| Game completed | WAR changes → performance modifier updates |
+| Fame event | Fame bonus/boner → fame modifier updates |
+| Trait added/removed | Trait modifier recalculates |
+| All-Star selection | Trait may change → trait modifier updates |
+| Random event (ratings) | Base salary recalculates |
+| Award received | Ratings/traits may change → full recalc |
+
+---
+
+## Chemistry-Tier Trait Potency Factor
+
+> **NEW February 2026**: Traits have a POTENCY that scales with the team's count of the trait's Chemistry type. This affects both salary and gameplay impact.
+
+### How It Works
+
+Each trait belongs to a Chemistry type (e.g., Clutch → Spirited, Stealer → Crafty). The more players of that Chemistry type on the team, the more potent the trait becomes.
+
+```typescript
+interface TraitPotency {
+  traitName: string;
+  traitChemistryType: ChemistryType;  // Which Chemistry type this trait belongs to
+  teamChemistryCount: number;          // How many players of that Chemistry type on team
+  potencyTier: 1 | 2 | 3 | 4;         // Tier based on count
+  salaryMultiplier: number;            // Adjusted trait salary impact
+}
+
+const CHEMISTRY_TIER_THRESHOLDS = {
+  1: { min: 0, max: 3 },    // Tier 1: 0-3 players of that Chemistry
+  2: { min: 4, max: 7 },    // Tier 2: 4-7 players
+  3: { min: 8, max: 11 },   // Tier 3: 8-11 players
+  4: { min: 12, max: 99 },  // Tier 4: 12+ players (rare, large roster)
+};
+
+function getChemistryTier(teamChemistryCount: number): number {
+  if (teamChemistryCount >= 12) return 4;
+  if (teamChemistryCount >= 8) return 3;
+  if (teamChemistryCount >= 4) return 2;
+  return 1;
 }
 ```
 
-### Contraction Prevention (Offseason)
+### Potency Effect on Salary
 
-Teams at risk can recover during offseason:
+Higher potency tiers amplify the trait's salary modifier:
 
-```javascript
-function checkContractionRecovery(team, offseasonMoves) {
-  let happinessGain = 0;
+```typescript
+const POTENCY_SALARY_MULTIPLIERS = {
+  1: 1.0,   // Base impact (same as existing trait tiers)
+  2: 1.25,  // +25% amplification
+  3: 1.50,  // +50% amplification
+  4: 1.75,  // +75% amplification (rare)
+};
 
-  // Retirement of overpaid underperformer
-  for (const retirement of offseasonMoves.retirements) {
-    if (retirement.wasUnderperformer) happinessGain += 5;
+function calculateTraitModifierWithPotency(player: Player, team: Team): number {
+  let modifier = 1.0;
+
+  for (const trait of player.traits) {
+    const baseTierMultiplier = getTraitTierMultiplier(trait);  // Existing tier system
+    const traitChemistry = getTraitChemistryType(trait);
+    const teamCount = countChemistryType(team.roster, traitChemistry);
+    
+    // Player's own Chemistry counts toward team total if it matches
+    const selfContributes = player.chemistryType === traitChemistry;
+    const effectiveCount = selfContributes ? teamCount : teamCount;
+    // Note: player is already in team.roster, so they're counted
+    
+    const potencyTier = getChemistryTier(effectiveCount);
+    const potencyMultiplier = POTENCY_SALARY_MULTIPLIERS[potencyTier];
+    
+    // Apply potency to the bonus/penalty portion only
+    const traitEffect = baseTierMultiplier - 1.0;  // e.g., 0.10 for +10%
+    modifier *= 1.0 + (traitEffect * potencyMultiplier);
   }
 
-  // Acquiring popular free agent
-  for (const acquisition of offseasonMoves.freeAgencyAcquisitions) {
-    if (acquisition.player.fame >= 3) happinessGain += 5;
-    if (acquisition.player.grade >= 'A-') happinessGain += 3;
-  }
-
-  // Shedding bad contracts
-  for (const loss of offseasonMoves.freeAgencyLosses) {
-    if (loss.wasOverpaid) happinessGain += 3;
-  }
-
-  const newHappiness = team.fanMorale + happinessGain;
-
-  if (newHappiness >= 10) {
-    return {
-      recovered: true,
-      newHappiness,
-      message: `${team.name} fans have renewed hope! Team avoids contraction.`
-    };
-  }
-
-  return {
-    recovered: false,
-    newHappiness,
-    message: `${team.name} will be contracted. Players enter expansion draft pool.`
-  };
+  return modifier;
 }
 ```
+
+### Example: Potency Impact
+
+| Trait | Base Impact | Team Chemistry Count | Potency Tier | Adjusted Impact |
+|-------|------------|---------------------|-------------|----------------|
+| Clutch (Spirited) | +10% | 2 Spirited players | Tier 1 | +10% (base) |
+| Clutch (Spirited) | +10% | 5 Spirited players | Tier 2 | +12.5% |
+| Clutch (Spirited) | +10% | 9 Spirited players | Tier 3 | +15% |
+| Choker (Spirited) | -10% | 5 Spirited players | Tier 2 | -12.5% |
+
+> **Cross-reference**: See TRAIT_INTEGRATION_SPEC.md for the full Chemistry mechanics, including how traits can come from ANY Chemistry type and how player Chemistry contributes to team counts.
 
 ---
 
 ## Expansion Draft System
 
-When a team is contracted OR a new expansion team is added:
+> **Note**: For expansion draft details, see OFFSEASON_SYSTEM_SPEC.md Phase 4. The expansion draft is user-initiated and optional.
 
-### Step 1: Player Availability
-
-Each existing team must make available:
-- **2 position players**
-- **2 pitchers**
-
-All made-available players must be **within +/- 10% of replacement level WAR**.
+Expansion teams start with salary expectations calibrated to league average:
 
 ```javascript
-function getReplacementLevelWAR(position, gamesPerSeason) {
-  // Replacement level is roughly 0 WAR for a full season
-  // Scale by season length
-  const scaleFactor = gamesPerSeason / 162;
-
-  // Position adjustments (catchers have lower replacement level)
-  const positionAdjustments = {
-    'C': -0.2, 'SS': 0, 'CF': 0, '2B': 0,
-    '3B': 0.1, 'RF': 0.1, 'LF': 0.1, '1B': 0.2, 'DH': 0.3,
-    'SP': 0, 'RP': 0.1, 'CP': 0
-  };
-
-  const baseReplacement = 0;
-  const adjustment = positionAdjustments[position] || 0;
-
-  return (baseReplacement + adjustment) * scaleFactor;
-}
-
-function isWithinReplacementRange(player, seasonStats, gamesPerSeason) {
-  const replacementWAR = getReplacementLevelWAR(player.primaryPosition, gamesPerSeason);
-  const playerWAR = seasonStats.war.total;
-
-  const lowerBound = replacementWAR * 0.9;
-  const upperBound = replacementWAR * 1.1;
-
-  // Since replacement is ~0, use absolute range
-  return playerWAR >= -0.5 && playerWAR <= 0.5;
-}
-```
-
-### Step 2: Team Makes Players Available
-
-```
-+---------------------------------------------------------------------------+
-|  EXPANSION DRAFT - Player Availability                                     |
-+---------------------------------------------------------------------------+
-|  Team: Giants                                                              |
-|                                                                            |
-|  Select 2 POSITION PLAYERS to make available:                              |
-|  (Must be within replacement level +/- 10%)                                |
-|                                                                            |
-|  ELIGIBLE PLAYERS:                                                         |
-|  +-------------------+------+-------+--------+-----------------------------+
-|  | Player            | Pos  | Grade | WAR    | Select                      |
-|  +-------------------+------+-------+--------+-----------------------------+
-|  | Joe Backup        | UTIL | C+    | +0.2   | [x] Selected                |
-|  | Sam Bench         | OF   | C     | -0.1   | [x] Selected                |
-|  | Pat Platoon       | 1B   | C+    | +0.4   | [ ] Eligible                |
-|  | Chris Reserve     | IF   | C     | +0.1   | [ ] Eligible                |
-|  +-------------------+------+-------+--------+-----------------------------+
-|                                                                            |
-|  Select 2 PITCHERS to make available:                                      |
-|  +-------------------+------+-------+--------+-----------------------------+
-|  | Player            | Pos  | Grade | WAR    | Select                      |
-|  +-------------------+------+-------+--------+-----------------------------+
-|  | Mike Mopup        | RP   | C     | +0.1   | [x] Selected                |
-|  | Tom Longman       | RP   | C+    | +0.3   | [x] Selected                |
-|  +-------------------+------+-------+--------+-----------------------------+
-|                                                                            |
-|                    [CONFIRM SELECTIONS]                                    |
-+---------------------------------------------------------------------------+
-```
-
-### Step 3: Expansion Team Drafts
-
-```javascript
-const EXPANSION_DRAFT_RULES = {
-  maxPicks: 20,           // Draft up to 20 players
-  rosterTarget: 22,       // Need 22 total
-  remainingFromDraft: 2,  // Get rest in regular draft
-
-  // Salary constraints
-  salaryFloor: null,      // Calculated based on league average
-  salaryCeiling: null,    // Calculated based on league average
-
-  // Can't take more than 2 from any one team
-  maxPerTeam: 2
-};
-
 function calculateExpansionSalaryLimits(leagueData) {
   const avgTeamSalary = leagueData.totalLeagueSalary / leagueData.teams.length;
 
@@ -1009,44 +967,15 @@ function calculateExpansionSalaryLimits(leagueData) {
   };
 }
 ```
+---
 
-### Step 4: Expansion Draft UI
+## Summary of Key Changes (v3.1 — February 2026)
 
-```
-+---------------------------------------------------------------------------+
-|  EXPANSION DRAFT - New Team: Nashville Stars                               |
-+---------------------------------------------------------------------------+
-|                                                                            |
-|  SALARY CONSTRAINTS                                                        |
-|  League Average Payroll: $120M                                             |
-|  Your Floor: $72M (must reach)                                             |
-|  Your Ceiling: $108M (cannot exceed)                                       |
-|  Current Payroll: $45.2M                                                   |
-|                                                                            |
-|  ROSTER: 12/22 players (8 remaining picks, then regular draft)             |
-|                                                                            |
-|  AVAILABLE PLAYERS (Pick 13 of 20)                                         |
-|  +-------------------+------+-------+--------+----------+------------------+
-|  | Player            | Team | Grade | Salary | WAR      | Picks from Team  |
-|  +-------------------+------+-------+--------+----------+------------------+
-|  | Joe Backup        | SFG  | C+    | $2.5M  | +0.2     | 1 of 2 max       |
-|  | Sam Bench         | SFG  | C     | $1.8M  | -0.1     | 1 of 2 max       |
-|  | Mike Mopup        | NYY  | C     | $1.5M  | +0.1     | 0 of 2 max       |
-|  | Tom Longman       | NYY  | C+    | $2.2M  | +0.3     | 0 of 2 max       |
-|  | ...               | ...  | ...   | ...    | ...      | ...              |
-|  +-------------------+------+-------+--------+----------+------------------+
-|                                                                            |
-|  [Sort: Salary ▼]  [Filter: Position ▼]                                    |
-|                                                                            |
-|                    [DRAFT SELECTED PLAYER]  [PASS - Fill in Regular Draft] |
-+---------------------------------------------------------------------------+
-```
-
-### Step 5: Regular Draft Completion
-
-After expansion draft, expansion team:
-- Picks first in regular draft (worst expected WAR)
-- Gets extra picks to fill remaining roster slots
+- ✅ Contraction system REMOVED (on Feature Wishlist for v2)
+- ✅ Triple salary recalculation (Phases 3, 8, 10) during offseason
+- ✅ Chemistry-tier trait potency factor (traits scale with team Chemistry composition)
+- ✅ Expansion draft simplified (see OFFSEASON_SYSTEM_SPEC.md Phase 4)
+- ✅ Fan morale thresholds updated (no contraction risk references)
 - Must stay within salary ceiling
 
 ---

@@ -408,7 +408,7 @@ Show where the departing player is going based on their personality trait.
 When a player moves to a new team, the receiving team must give back a player of comparable **salary value** (±10%).
 
 ### Core Rule: Salary-Based Matching
-- Return player must be within **±10% of incoming player's TRUE VALUE (salary)**
+- Return player must be within **±20% of incoming player's TRUE VALUE (salary)**
 - **No position matching required** - any player can be exchanged for any player (teams can draft/call-up replacements)
 - **Fallback**: If no one meets threshold, must give the player whose salary is **CLOSEST to the incoming player's salary**
 
@@ -815,6 +815,63 @@ View available free agents and sign them to your team.
 - Empty state: "No free agents available"
 - Retirement: Baseball glove + sunset
 - Celebration: Confetti particles
+
+---
+
+## v1.1 Additions (February 2026): Personality-Driven Destinations
+
+### Hidden Modifier Influence on FA Destinations
+
+Free agent destinations are influenced by the player's hidden personality modifiers (Loyalty, Ambition, Resilience, Charisma). These modifiers are NEVER shown numerically — instead, they manifest through destination preferences and beat reporter hints.
+
+```
+╔══════════════════════════════════════════════════════════════╗
+║              FREE AGENT DESTINATION REVEAL                    ║
+║              Jake Wilson — CF, Grade B                        ║
+╠══════════════════════════════════════════════════════════════╣
+║                                                               ║
+║  Personality: COMPETITIVE                                    ║
+║  Beat Reporter Hint: "Wilson has been seen touring the       ║
+║  NY Thunder facilities. Sources say he wants a ring."        ║
+║                                                               ║
+║  ┌──────────────────────────────────────────────────────┐    ║
+║  │  DESTINATION WHEEL                                     │    ║
+║  │                                                        │    ║
+║  │  🎯 NY Thunder (45%) — Contender, big market          │    ║
+║  │  📍 DET Diamonds (25%) — Hometown connection          │    ║
+║  │  💰 BOS Legends (20%) — Best offer                    │    ║
+║  │  🎲 Surprise (10%) — Wild card destination            │    ║
+║  │                                                        │    ║
+║  └──────────────────────────────────────────────────────┘    ║
+║                                                               ║
+║  [Spin Destination Wheel]                                    ║
+╚══════════════════════════════════════════════════════════════╝
+```
+
+### Personality → Destination Weighting
+
+| Personality | Primary Preference | Secondary |
+|------------|-------------------|-----------|
+| COMPETITIVE | Contenders (winning%) | Big market |
+| RELAXED | Current team (loyalty bonus) | Low pressure |
+| JOLLY | Best teammates (Chemistry fit) | Fun city |
+| TOUGH | Respect (team that values them) | Challenge |
+| TIMID | Stability (current team heavy) | Small market |
+| DROOPY | Random (least predictable) | Whoever offers |
+| EGOTISTICAL | Highest salary | Biggest market |
+
+### Hidden Modifier Effects
+
+| Hidden Modifier | FA Influence |
+|----------------|-------------|
+| High Loyalty | +30% weight to current team, may take discount |
+| Low Loyalty | Destination-agnostic, purely value-driven |
+| High Ambition | Seeks bigger role, avoids bench situations |
+| Low Ambition | Content with current role, less likely to move |
+| High Charisma | Beat reporter drops more hints pre-FA |
+| Low Charisma | Quiet FA process, surprise destination more likely |
+
+> **Note**: Hidden modifiers are NEVER shown numerically. The user infers them from beat reporter coverage and behavioral patterns over time. See PERSONALITY_SYSTEM_SPEC.md for the full hybrid personality system and OFFSEASON_SYSTEM_SPEC.md §14 for integration details.
 
 ---
 

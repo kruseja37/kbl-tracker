@@ -1,5 +1,7 @@
 # Baseball State Machine Audit
 
+> **GOSPEL ANNOTATION (2026-02-21):** Flow model (state transition sequences) is **superseded by KBL_UNIFIED_ARCHITECTURE_SPEC.md §3** (event-driven 1-tap paradigm). Baseball rule tables, legal state definitions, and outcome validation logic remain **valid and authoritative**.
+
 ## Philosophy
 The KBL XHD Tracker should function like a chess engine - every move must be legal, every outcome must be accounted for, and impossible states must be prevented.
 

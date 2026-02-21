@@ -442,3 +442,128 @@ function calculateManagerPool(manager, allManagers) {
 | Small position pools | Merge similar positions if <6 for adjustments (awards are separate) |
 | DH fWAR | Display "N/A", exclude from calculation |
 | Negative manager pools | Must distribute (intended behavior) |
+
+
+---
+
+## End-of-Season Trait Assignment
+
+> **NEW February 2026**: Traits are assigned during the Awards Ceremony (Phase 2) as part of end-of-season processing. This section defines the rules for trait assignment, Chemistry mechanics, and the award-appropriate trait pools.
+
+### Trait Assignment Timing
+
+Traits are assigned AFTER ratings adjustments, during the Awards Ceremony phase. The ceremony includes a "Trait Wheel Spin" reveal for each eligible player.
+
+### Eligibility
+
+Players eligible for trait assignment at end of season:
+- Players with 0 or 1 current traits (max 2 traits per player)
+- Players who meet position-appropriate criteria for the trait pool
+- Players nominated via the "eye test" ranking system (user-driven, allows equal rankings)
+
+### CORRECTED Chemistry Mechanics
+
+> **CRITICAL**: Traits can come from ANY Chemistry type. A player's own Chemistry type does NOT restrict which traits they can receive. Chemistry affects POTENCY, not eligibility.
+
+```typescript
+// CORRECT: Any player can receive any trait
+function canReceiveTrait(player: Player, trait: Trait): boolean {
+  // Only restrictions: max 2 traits, position-appropriate
+  if (player.traits.length >= 2) return false;
+  if (!isPositionAppropriate(trait, player.primaryPosition)) return false;
+  return true;  // Chemistry type does NOT restrict eligibility
+}
+
+// Chemistry affects potency AFTER assignment
+function calculateTraitPotency(player: Player, trait: Trait, team: Team): number {
+  const traitChemistryType = getTraitChemistryType(trait);
+  
+  // Count team members with the TRAIT's Chemistry type (not the player's)
+  const teamChemistryCount = team.roster.filter(
+    p => p.chemistryType === traitChemistryType
+  ).length;
+  
+  // Player's own Chemistry counts if it matches the TRAIT's Chemistry
+  // (player is already in team.roster, so self-synergy is automatic)
+  
+  return getChemistryTier(teamChemistryCount);  // 1-4
+}
+```
+
+### Position-Appropriate Trait Pools
+
+Not all traits make sense for all positions. The trait pool is filtered by position:
+
+```typescript
+const POSITION_TRAIT_POOLS: Record<PositionGroup, string[]> = {
+  'HITTER': [
+    'Clutch', 'Choker', 'Tough Out', 'Free Swinger', 
+    'Whiffer', 'RBI Man', 'Table Setter', 'Power Surge',
+    'Contact Machine', 'Rally Killer'
+  ],
+  'PITCHER': [
+    'Clutch', 'Choker', 'K Artist', 'Wild Thing',
+    'Groundball Machine', 'Innings Eater', 'Flame Thrower',
+    'Crafty Vet', 'Closer Mentality', 'Meltdown'
+  ],
+  'FIELDER': [
+    'Gold Glove', 'Error Prone', 'Range King', 
+    'Cannon Arm', 'Wall Climber'
+  ],
+  'BASERUNNER': [
+    'Stealer', 'Station to Station', 'Aggressive Runner',
+    'Smart Baserunner'
+  ]
+};
+
+// A player can receive traits from multiple pools based on their role
+function getEligibleTraits(player: Player): string[] {
+  const pools: string[] = [];
+  
+  // All position players get HITTER pool
+  if (!isPitcherOnly(player)) {
+    pools.push(...POSITION_TRAIT_POOLS['HITTER']);
+    pools.push(...POSITION_TRAIT_POOLS['BASERUNNER']);
+  }
+  
+  // Fielders (non-DH) get FIELDER pool
+  if (player.primaryPosition !== 'DH') {
+    pools.push(...POSITION_TRAIT_POOLS['FIELDER']);
+  }
+  
+  // Pitchers get PITCHER pool
+  if (isPitcher(player)) {
+    pools.push(...POSITION_TRAIT_POOLS['PITCHER']);
+  }
+  
+  return [...new Set(pools)];  // Deduplicate
+}
+```
+
+### Award-Appropriate Trait Assignment
+
+Traits assigned during awards should relate to the award earned:
+
+| Award | Likely Trait Pool |
+|-------|------------------|
+| MVP | Clutch, RBI Man, Power Surge, Table Setter |
+| Cy Young | K Artist, Innings Eater, Clutch, Groundball Machine |
+| Gold Glove | Gold Glove, Range King, Cannon Arm |
+| Silver Slugger | Contact Machine, Power Surge, RBI Man |
+| Stolen Base Leader | Stealer, Aggressive Runner |
+| Rookie of the Year | Any position-appropriate (weighted toward positive) |
+
+### Trait Distribution Rules
+
+From the 506-player database (initial league):
+- ~30% of players: 0 traits
+- ~50% of players: 1 trait
+- ~20% of players: 2 traits
+
+At end of season, trait assignment is weighted:
+- Award winners: 60% chance of gaining a trait (if eligible)
+- Top performers (non-award): 30% chance
+- Regular players: 5% chance
+- Negative traits: 15% of all assigned traits are negative (Choker, Whiffer, Error Prone, etc.)
+
+> **Cross-reference**: See TRAIT_INTEGRATION_SPEC.md for full Chemistry mechanics, potency calculations, and how traits interact with the salary system.

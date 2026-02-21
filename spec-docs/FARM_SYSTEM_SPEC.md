@@ -1,10 +1,12 @@
-# KBL XHD Tracker - Farm System Specification v1.0
+# KBL XHD Tracker - Farm System Specification v1.1
 
 ## Overview
 
-Every team maintains a 10-player farm team of prospects in addition to their 22-man major league roster. The farm system creates strategic roster management decisions, provides hope for struggling teams, and enables meaningful consequences for personnel moves.
+Every team maintains a farm team of prospects alongside their 22-man major league roster. The farm system creates strategic roster management decisions, provides hope for struggling teams, and enables meaningful consequences for personnel moves.
 
 > **Key Insight**: Bad teams can keep fans engaged by calling up exciting prospects, signaling a commitment to rebuilding. Good teams face pressure to maximize their window with veterans rather than developing youth.
+
+> **v1.1 UPDATE (February 2026)**: Farm roster is now UNLIMITED during the regular season. The 22 MLB / 10 Farm constraint is only enforced at the Phase 11 Finalize & Advance cut-down deadline. Players are limited to 3 options (send-downs) per season.
 
 ---
 
@@ -15,8 +17,63 @@ Every team maintains a 10-player farm team of prospects in addition to their 22-
 ```typescript
 interface FarmRoster {
   teamId: string;
-  players: FarmPlayer[];  // Exactly 10 players
+  players: FarmPlayer[];  // Unlimited during season; 10 at Phase 11 cut-down
 }
+```
+
+### Roster Constraints
+
+| Constraint | During Season | At Phase 11 Finalize |
+|-----------|---------------|---------------------|
+| MLB Roster | 22 players | 22 players |
+| Farm Roster | **Unlimited** | 10 players |
+| Options per player per season | **3 max** | N/A |
+| Call-up reveals true ratings | **Yes** | N/A |
+
+### Options System
+
+Each player may be optioned (sent to farm) a maximum of **3 times per season**. After 3 options, the player must either remain on the MLB roster or be released outright.
+
+```typescript
+interface OptionsTracking {
+  playerId: string;
+  seasonId: number;
+  optionsUsed: number;  // 0-3
+  optionDates: GameDate[];
+  isOutOfOptions: boolean;  // true when optionsUsed >= 3
+}
+
+function canOptionPlayer(player: Player, tracking: OptionsTracking): boolean {
+  return tracking.optionsUsed < 3;
+}
+
+function optionPlayer(player: Player, tracking: OptionsTracking): void {
+  if (!canOptionPlayer(player, tracking)) {
+    throw new Error(`${player.name} is out of options (${tracking.optionsUsed}/3 used)`);
+  }
+  tracking.optionsUsed++;
+  tracking.optionDates.push(getCurrentGameDate());
+  player.level = 'FARM';
+}
+```
+
+### Call-Up Rating Reveal
+
+When a farm prospect is called up to the MLB roster, their **true ratings are revealed** for the first time. Before call-up, the user only sees the scouted grade (B, B-, C+, etc.). Upon call-up, the actual numeric ratings (Power, Contact, Speed, etc.) become visible.
+
+```typescript
+function callUpPlayer(player: FarmPlayer): MLBPlayer {
+  // Reveal true ratings (were hidden as grade-only before)
+  player.ratingsRevealed = true;
+  player.level = 'MLB';
+  
+  // True ratings may differ from scouted grade
+  // A C+ prospect might reveal A- caliber ratings (scout was wrong)
+  // A B prospect might reveal C caliber ratings (scout was overly optimistic)
+  
+  return player;
+}
+```
 
 interface FarmPlayer {
   id: string;
@@ -25,8 +82,8 @@ interface FarmPlayer {
   age: number;
   gender: 'M' | 'F';  // For pronoun generation
 
-  // Rating: B to C- only (no A-tier prospects)
-  overallRating: 'B' | 'B-' | 'C+' | 'C' | 'C-';
+  // Rating: full grade range A through D (matches draft class distribution)
+  overallRating: 'A' | 'A-' | 'B+' | 'B' | 'B-' | 'C+' | 'C' | 'C-' | 'D';
 
   // Potential ceiling (what they could become)
   potentialRating: 'A' | 'A-' | 'B+' | 'B' | 'B-';
@@ -133,51 +190,78 @@ function generateProspectPotential(currentRating: string): string {
 
 ### Call-Up (Farm → MLB)
 
+#### Beat Reporter Pre-Decision Warning
+
+Before the call-up is executed, if the narrative system has relevant data (relationship conflicts, morale implications, farm player storylines), a beat reporter warning modal appears. This is a **blocking modal** — the user must acknowledge or dismiss it before the call-up proceeds.
+
+```
+╔══════════════════════════════════════════════════════════════╗
+║  📰 BEAT REPORTER: HEADS UP                                  ║
+╠══════════════════════════════════════════════════════════════╣
+║  You're about to call up Jake Morrison (CF).                 ║
+║                                                              ║
+║  Reporter Sarah Kim notes:                                   ║
+║  "Morrison and your CF starter Luis Vega have had tension    ║
+║   since last season's locker room incident. This call-up     ║
+║   could affect team chemistry."                              ║
+║                                                              ║
+║    [ Proceed Anyway ]        [ Cancel ]                      ║
+╚══════════════════════════════════════════════════════════════╝
+```
+
+**Trigger conditions** (modal only appears if at least one is true):
+- The prospect has an active negative relationship with a current MLB roster player
+- Calling up this player would pass over a higher-morale prospect (morale event risk)
+- The prospect has a narrative storyline flagged as `callUpSensitive: true`
+
+**No-data behavior**: If none of the above conditions are met, the call-up executes immediately with no modal.
+
 When a prospect is called up:
 
 1. **Prospect leaves farm roster** (creates vacancy)
 2. **Prospect joins MLB roster** (replaces sent-down player or fills open spot)
 3. **Happiness effects applied** (see below)
-4. **Prospect's contract begins** (rookie salary per rating)
+4. **Prospect's contract begins** (rookie salary per draft round — set at draft, not at call-up)
 
 ### Rookie Salary Calculation
 
-> **Added January 23, 2026** to resolve NFL Audit Issue 2.18
-
-Farm prospects receive salary based on their rating when called up:
+> **Decision — February 2026**: Rookie salary is committed at draft time based on draft round/position. Ratings, traits, and true grade are all hidden until call-up. The salary does NOT update when ratings are revealed at call-up. It remains locked until EOS recalculation after the player's first full MLB season (their rookie season).
 
 ```typescript
 /**
- * Calculate rookie salary for a called-up prospect.
- * Rookies start at or near league minimum, with slight premium for higher-rated prospects.
+ * Calculate rookie salary at the moment of drafting.
+ * Called when the user drafts a prospect in the annual draft or the
+ * League Builder startup prospect draft.
+ *
+ * The salary is permanently set here and locked until EOS after their
+ * first MLB season — regardless of what ratings are revealed at call-up.
  *
  * Reference: SALARY_SYSTEM_SPEC.md defines league minimum as $0.5M
  */
-function calculateRookieSalary(overallRating: string): number {
+function calculateRookieSalary(draftRound: number): number {
   const LEAGUE_MINIMUM = 0.5;  // $500K
 
-  const rookieSalaryByRating: Record<string, number> = {
-    'B':  1.2,   // Top prospect: $1.2M (2.4x minimum)
-    'B-': 0.9,   // Solid prospect: $900K
-    'C+': 0.7,   // Average prospect: $700K
-    'C':  0.6,   // Below-average: $600K
-    'C-': 0.5,   // Fringe prospect: League minimum ($500K)
+  const rookieSalaryByRound: Record<number, number> = {
+    1: 2.0,   // Round 1: $2.0M — top pick, could be A-tier franchise player
+    2: 1.2,   // Round 2: $1.2M — solid prospect
+    3: 0.7,   // Round 3: $700K — depth pick
+    4: 0.5,   // Round 4+: league minimum
   };
 
-  return rookieSalaryByRating[overallRating] ?? LEAGUE_MINIMUM;
+  // Round 4 and beyond all receive league minimum
+  const round = Math.min(draftRound, 4);
+  return rookieSalaryByRound[round] ?? LEAGUE_MINIMUM;
 }
-
-// Example usage in trade value calculations:
-// A B-rated prospect's trade value includes their ~$1.2M salary for 3 years of control
 ```
 
-| Rating | Salary ($M) | Notes |
-|--------|-------------|-------|
-| B | $1.2 | Top prospect, near MLB-ready |
-| B- | $0.9 | Solid prospect |
-| C+ | $0.7 | Average prospect |
-| C | $0.6 | Below-average prospect |
-| C- | $0.5 | League minimum |
+| Draft Round | Salary ($M) | Notes |
+|-------------|-------------|-------|
+| Round 1 | $2.0 | Top pick; true grade unknown at time of signing |
+| Round 2 | $1.2 | Solid prospect |
+| Round 3 | $0.7 | Depth pick |
+| Round 4+ | $0.5 | League minimum |
+
+**Salary lock rule**: Rookie salary is fixed at draft time and does NOT change when true ratings/grade are revealed at call-up. The salary recalculates normally at the next EOS cycle after their first full MLB season.
 
 **Years of Control**: All called-up prospects begin with **3 years of team control** at the rookie salary before becoming arbitration-eligible.
 
@@ -194,6 +278,13 @@ interface CallUpEvent {
 ```
 
 ### Send-Down (MLB → Farm)
+
+#### Beat Reporter Pre-Decision Warning
+
+Same blocking modal pattern as call-up. Appears before the send-down executes if:
+- The player being sent down is a Cornerstone, Fan Favorite, or Captain
+- The player has a narrative storyline flagged as `sendDownSensitive: true`
+- Sending down this player would trigger a high-risk immediate retirement assessment (veteran with 3+ send-down history)
 
 When a major leaguer is sent down:
 

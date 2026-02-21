@@ -599,3 +599,327 @@ Phase 2 kick-off. Present full fix queue to JK:
 1. JK reviews FIX-DECISION items and makes calls on each
 2. JK approves FIX-CODE execution order
 3. Begin fix execution using Prompt Contract template, dependency order: spine first, downstream second
+
+## Session: 2026-02-20 — OOTP Architecture Research Ingestion
+
+### What Was Accomplished
+- Read and synthesized the completed OOTP Architecture Research document (1,217 lines, 10 sections + 2 appendices)
+- Document location: `spec-docs/OOTP_ARCHITECTURE_RESEARCH.md`
+- Produced in session 2026-02-18 via exhaustive web research (OOTP manuals v13–24, StatsPlus wiki, OOTPDBTools, Lahman schema, Baseball Reference, FanGraphs, forum analysis)
+
+### Key Architectural Findings (from OOTP research)
+
+**Data Model (Section 1):**
+- OOTP exports 68+ tables via .odb → CSV/MySQL
+- Core entities: Player, Team, Franchise, Season (yearID), Game, PlayerSeasonStats, Contract, Transaction, Award, HOFEntry
+- Career stats = SUM(PlayerSeasonStats) — no separate career table (Lahman/OOTP pattern)
+- PlayerSeasonStats = one row per player per team per yearID
+
+**Stat Pipeline (Section 2) — 12 steps:**
+1. At-bat event → game state 2. Inning end → half-inning stats 3. Game complete → box score 4. Box score → PlayerSeasonStats accumulator 5. Recalculate rate stats 6. Update standings 7. Update leaderboards 8. Recalculate WAR 9. Check career totals + milestones 10. Trigger narratives 11. Player development check 12. Persist
+- Steps 5+9 are wired in KBL; steps 6/7/8/10/11 are missing (confirms F-102)
+
+**Player Lifecycle (Section 3):**
+- Growth phase: < 25, 10-factor model (coaching, playing time, potential, challenge, injury, morale, focus sliders, devSpeedMod, workEthic, intelligence)
+- Decline phase: ≥ 30, rating decay curves by position
+- Development runs at season close
+- Potential ratings also mutable (injury, chance events)
+
+**Season Lifecycle (Section 4):**
+- Phases: preseason → regular_season → postseason → offseason (discrete state machine)
+- closeSeason(): lock stats → awards → HOF → retirements → age+develop → contracts → transactions → records
+- openSeason(): validate rosters → init standings → init schedule → reset accumulators
+- Confirms atomic season transitions needed
+
+**Narrative Engine (Section 5):**
+- 350+ storyline categories across 12 types (team performance, player performance, milestones, records, contracts, injuries, chemistry, transactions, draft, international, personal, HOF)
+- Triggers: stat thresholds (3000 H, 500 HR, etc.), streak detection, record chases (>90% of record), calendar events, milestone proximity
+- Storage: events table with type, playerId, yearId, triggeredAt, articleText
+- Narrative is a side-effect consumer — reads pipeline output but never writes back
+
+**HOF (Section 6):**
+- Eligibility: 5+ years retired, 10+ years professional service
+- Evaluation: career stat thresholds (HOF Score = weighted formula), committee override, narrative legacy score
+- Induction: annual ballot, voting simulation
+- Confirms Phase 2 F-117 (Museum/HOF PARTIAL) — eligibility engine correct, vote simulation missing
+
+**Replayability Systems (Section 8):**
+- Player personality: 6 traits at 1-200 (leadership, loyalty, desire_for_winner, greed, workEthic, intelligence) — drive morale, dev speed, contract behavior, narrative triggers
+- Team chemistry: personality compatibility scoring per pair, clubhouse effect on development
+- Confirms KBL trait design (persistent attributes, max 2) is correct for KBL's simpler SMB4-based model
+
+### Decisions Informed by OOTP Research
+
+**F-109 (Career Stats — derive-on-read vs incremental write):**
+OOTP answer: derive-on-read (SUM across seasons). Recommendation: adopt same pattern.
+→ **FIX-DECISION should resolve to: derive-on-read.** No separate career table needed. CareerStats = sumCareerStats(playerId) across all PlayerSeasonStats rows.
+
+**F-121 (Player Dev Engine — define model):**
+OOTP answer: 10-factor growth model < 25, decline ≥ 30. All factors documented in Section 10.5.
+→ Use OOTP model as spec for KBL's player dev engine. TypeScript implementation contract in Section 10.5.
+
+**F-103 (WAR wiring):**
+OOTP answer: WAR is a derived field recalculated after every game, not a stored constant. Needs league context (lgFIP, average wOBA, RPW) that updates throughout season.
+→ Confirms F-103 fix: wire warOrchestrator into stat pipeline post-game. The WAR calc itself is correct.
+
+**Phase 2 Fix Priority Alignment with OOTP:**
+OOTP Section 9.4 priority order matches KBL Phase 2 queue exactly:
+1. Stat pipeline spine (F-102 steps 6/7/8, F-103 WAR wiring)
+2. Season transition (F-112 clearSeasonalStats, F-113 playoff stats)
+3. Development/aging (F-118 agingIntegration write-back, F-121 dev engine)
+4. Reconnections (F-098 clutch, F-099 LI, F-104 traits, F-119 relationships, F-120 narrative)
+
+### No Code Changes This Session
+Research ingestion and documentation only.
+
+### Next Session Starts With
+Phase 2 kick-off — same as before. JK to confirm FIX-DECISION resolutions (using OOTP findings above as input) before fix execution begins. Recommended first FIX-DECISION decisions:
+1. F-109: Career stats → resolve to derive-on-read (OOTP-confirmed)
+2. F-113: Playoff stats → resolve to wire (WorldSeries leaderboard empty without it)
+3. F-120: Narrative persistence → resolve to IndexedDB (ephemeral display is not franchise-grade)
+Then execute FIX-CODE items in dependency order: F-103 (WAR spine) first, then F-102 steps 6+7+8.
+
+---
+
+## Session: 2026-02-20 — Spec Sync Verification & Completion
+
+### Summary
+Verified all 20 planned spec updates from the decision inventory session are present on disk. JK confirmed the full list.
+
+### Verification Method
+- Searched each updated spec for removed content (contraction, salary matching) — confirmed 0 hits
+- Verified all 7 new spec files exist with correct content via `ls -la`
+- Spot-checked minor updates (cross-references, changelog entries) via content search
+- Confirmed OFFSEASON_SYSTEM_SPEC.md has zero contraction references (earlier compaction summary was stale)
+
+### Confirmed Updates (20 total)
+
+**MAJOR UPDATES (8):**
+1. ✅ TRADE_SYSTEM_SPEC.md — removed salary matching, added Chemistry-tier trade value
+2. ✅ OFFSEASON_SYSTEM_SPEC.md — removed contraction, restructured 11 phases, triple salary recalc, Phase 11 signing round
+3. ✅ SALARY_SYSTEM_SPEC.md — removed contraction, added Chemistry-tier potency factor, triple recalc schedule
+4. ✅ FAN_MORALE_SYSTEM_SPEC.md — simplified 60/20/10/10 formula, removed contraction risk, franchise health warning replaces it
+5. ✅ FARM_SYSTEM_SPEC.md — unlimited farm during season, 3 options limit, call-up rating reveal
+6. ✅ NARRATIVE_SYSTEM_SPEC.md — already had v1.2 corrections (mojo/fitness read-only, morale→probability)
+7. ✅ EOS_RATINGS_ADJUSTMENT_SPEC.md — already had corrected Chemistry mechanics + trait assignment
+8. ✅ FRANCHISE_MODE_SPEC.md — already had separated modes, dynamic schedule, fictional dates
+
+**NEW SPECS CREATED (7):**
+1. ✅ TRAIT_INTEGRATION_SPEC.md — corrected Chemistry mechanics, potency tiers, position-appropriate pools
+2. ✅ SEPARATED_MODES_ARCHITECTURE.md — League Builder → Franchise Season → Offseason Workshop
+3. ✅ SCOUTING_SYSTEM_SPEC.md — hidden ratings, scout accuracy by position, call-up reveal
+4. ✅ PROSPECT_GENERATION_SPEC.md — grade distribution, trait ratios (~30/50/20), Chemistry distribution
+5. ✅ ALMANAC_SPEC.md — top-level nav, cross-season queries, incremental build phases
+6. ✅ PARK_FACTOR_SEED_SPEC.md — BillyYank 23 stadiums, 40% activation threshold
+7. ✅ PERSONALITY_SYSTEM_SPEC.md — hybrid 7 visible + 4 hidden modifiers
+
+**MINOR UPDATES (5):**
+1. ✅ LEAGUE_BUILDER_SPEC.md — personality system reference
+2. ✅ DRAFT_FIGMA_SPEC.md — grade distribution table, reveal ceremony reference
+3. ✅ FREE_AGENCY_FIGMA_SPEC.md — updated cross-reference to PERSONALITY_SYSTEM_SPEC
+4. ✅ AWARDS_CEREMONY_FIGMA_SPEC.md — already had trait wheel + eye test equal ranking
+5. ✅ STADIUM_ANALYTICS_SPEC.md — BillyYank source reference, park factor activation
+
+**Three critical corrections embedded throughout:**
+- Phase 11 claim order by total salary
+- Trait Chemistry mechanics (potency tiers, not binary)
+- Salary matching removal (contract value matching via 10% rule instead)
+
+### No Code Changes This Session
+Spec updates and verification only.
+
+### CURRENT_STATE.md Updated
+Rewritten to reflect Spec Sync completion. Added "Spec Sync: COMPLETE" status line and full 20-item summary.
+
+### Next Session Starts With
+Phase 2 kick-off. JK to confirm FIX-DECISION resolutions (using OOTP findings as input), then execute FIX-CODE items in dependency order. Recommended first decisions:
+1. F-109: Career stats → resolve to derive-on-read (OOTP-confirmed)
+2. F-113: Playoff stats → resolve to wire (WorldSeries leaderboard empty without it)
+3. F-120: Narrative persistence → resolve to IndexedDB (ephemeral display is not franchise-grade)
+Then execute FIX-CODE items: F-103 (WAR spine) first, then F-102 steps 6+7+8.
+
+---
+
+## Session: 2026-02-21 — Spec-to-Fix-Queue Reconciliation
+
+### Summary
+Produced RECONCILIATION_PLAN.md mapping every Phase 2 fix queue item against the 20 updated specs from the spec sync session. Planning only — no code changes.
+
+### Files Read
+- SESSION_RULES.md, CURRENT_STATE.md, SESSION_LOG.md (last 2 entries), AUDIT_LOG.md
+- Specs: NARRATIVE_SYSTEM_SPEC, ALMANAC_SPEC, SEPARATED_MODES_ARCHITECTURE, PERSONALITY_SYSTEM_SPEC, PARK_FACTOR_SEED_SPEC, PROSPECT_GENERATION_SPEC, EOS_RATINGS_ADJUSTMENT_SPEC, PLAYOFF_SYSTEM_SPEC, MOJO_FITNESS_SYSTEM_SPEC (sections), SALARY_SYSTEM_SPEC (formula), FAN_MORALE_SYSTEM_SPEC (storage search)
+
+### Reconciliation Results
+
+**UNCHANGED (7 FIX-CODE items):** F-098, F-099, F-101 Bug A, F-101 Bug B, F-102, F-103, F-104a, F-104b, F-110
+
+**RE-SCOPED (2 FIX-CODE items):**
+- F-112: clearSeasonalStats fix unchanged but must confirm call site is Offseason Phase 1 (not Spring Training)
+- F-118: aging write-back must fire in Offseason Phase 1 (not SpringTrainingFlow — wrong phase per OFFSEASON_SYSTEM_SPEC 11-phase structure)
+
+**RESOLVED FIX-DECISION items (2):**
+- F-109: ALMANAC_SPEC §4.3 resolves to derive-on-read (pre-aggregated, no separate career table)
+- F-115: SALARY_SYSTEM_SPEC confirms age-based salary is final design (no service time concept)
+
+**RE-SCOPED FIX-DECISION items (3):**
+- F-114: Not "re-enable auto-update" — MOJO_FITNESS_SYSTEM_SPEC requires full between-game persistence (fitness persists across games by definition, mojo has carryover); scope = IndexedDB persistence + Team Page editor (§7)
+- F-121: PROSPECT_GENERATION_SPEC is about draft class seeding, not player development. F-121 dev engine gap remains; OOTP research provides 10-factor model; JK must approve
+- F-122: ALMANAC_SPEC §3.2 defines Season Records as a distinct Almanac section (Phase 2 in build priority); both oddityRecordTracker and standard records in scope; JK must confirm both or split
+
+**STILL PENDING FIX-DECISION items (6):** F-101 Bug C, F-107 (deferred), F-113, F-119, F-120 (2 sub-items)
+
+### New Gaps Identified (8)
+- GAP-001: Mode separation enforcement (SEPARATED_MODES_ARCHITECTURE.md)
+- GAP-002: Park factor seeding + 40% activation (PARK_FACTOR_SEED_SPEC.md)
+- GAP-003: Personality system population in player records (PERSONALITY_SYSTEM_SPEC.md)
+- GAP-004: Mojo/fitness stat splits accumulation per PA (MOJO_FITNESS_SYSTEM_SPEC §6.2)
+- GAP-005: Juiced fame scrutiny in fameEngine (MOJO_FITNESS_SYSTEM_SPEC)
+- GAP-006: Between-game mojo/fitness persistence (expanded F-114 scope)
+- GAP-007: Prospect/draft class generation engine (PROSPECT_GENERATION_SPEC §3)
+- GAP-008: Narrative memory storage layer (NARRATIVE_SYSTEM_SPEC §4.3 NarrativeMemory)
+
+### Output
+- RECONCILIATION_PLAN.md written to spec-docs/ (225 lines)
+
+### Next Session Starts With
+JK reviews RECONCILIATION_PLAN.md and answers the 10 questions in Section 6. After decisions:
+1. Confirm F-109 and F-115 resolutions (recommend YES to both)
+2. Decide F-114 scope (bare persistence vs full §7 editor)
+3. Decide F-113 (wire playoff stats now or defer)
+4. Execute Phase 2A FIX-CODE items: F-103 → F-102 → F-099 (in that order)
+
+## Session: 2026-02-21 — Full Spec Review + Reconciliation Plan Integration
+
+### Purpose
+Complete the reconciliation by reading all specs modified today (2026-02-20) that were not covered in the prior session. Integrate findings into RECONCILIATION_PLAN.md.
+
+### Specs Read This Session (Previously Unread)
+1. HANDOFF_RECONCILIATION.md — confirmed this is the task brief, not additional spec content
+2. SEPARATED_MODES_ARCHITECTURE.md — GAP-001 confirmed in full detail; §5.2 specifies transitionMode() must persist to IndexedDB before mode switch
+3. FRANCHISE_MODE_SPEC.md — explicitly PLANNING/deferred; §7.1 defines Default Franchise migration path; confirms F-107 safe as latent debt
+4. LEAGUE_BUILDER_SPEC.md — confirmed personality and trait assignment at import; **SPEC CONFLICTS identified** (see below)
+5. AWARDS_CEREMONY_FIGMA_SPEC.md — **F-104b re-scoped**: trait write-back is event-driven per ceremony screen, not batch
+6. DRAFT_FIGMA_SPEC.md — Farm-First draft model; confirms GAP-007; introduces Potential Ceiling attribute on FarmPlayer
+7. FREE_AGENCY_FIGMA_SPEC.md — UI spec only; no new gaps
+8. STADIUM_ANALYTICS_SPEC.md — **GAP-002 corrected**: 3-tier blend ratios (LOW=70%seed, MEDIUM=30%seed, HIGH=0%seed), not flat 70/30
+9. TRADE_SYSTEM_SPEC.md — future-phase spec; no new gaps or fix items
+10. SMB4_PARK_DIMENSIONS.md — reference data (23 stadiums); confirms GAP-002 data source
+11. OFFSEASON_SYSTEM_SPEC.md (sections) — **F-112 correction**: clearSeasonalStats fires in Phase 11 §13.8 (Season Archival), NOT Phase 1
+12. SCOUTING_SYSTEM_SPEC.md — pre-call-up scouting accuracy; no new gaps (relates to F-121 context)
+13. TRAIT_INTEGRATION_SPEC.md (full) — confirmed Chemistry potency tiers; SPEC CONFLICT with LEAGUE_BUILDER_SPEC
+14. FEATURE_WISHLIST.md — confirmed in-season player dev deferred; F-121 gap still open
+
+### Key Corrections Made to RECONCILIATION_PLAN.md
+
+1. **F-112**: Corrected call site from "Phase 1" to "Phase 11 §13.8 Season Archival"
+2. **F-104b**: Re-scoped from batch write-back to per-step event-driven write-back gated by UI confirmation
+3. **F-107**: Changed rationale — FRANCHISE_MODE_SPEC explicitly PLANNING/deferred with §7.1 migration path
+4. **GAP-002**: Corrected blend ratio description to 3-tier system
+5. **GAP-007**: Added Potential Ceiling attribute requirement from DRAFT_FIGMA_SPEC
+
+### Spec Conflicts Identified (New — Require JK Resolution)
+
+**CONFLICT-001 (Chemistry Types):**
+- LEAGUE_BUILDER_SPEC §5.3 lists 5 types: Competitive, Spirited, Crafty, Scholarly, Disciplined
+- TRAIT_INTEGRATION_SPEC §2.2 TRAIT_CHEMISTRY_MAP lists 4 types: Spirited, Crafty, Tough, Flashy
+- Incompatible. Implementation blocked until resolved.
+
+**CONFLICT-002 (Personality Types):**
+- LEAGUE_BUILDER_SPEC §5.3 lists 11 Personality type values
+- PERSONALITY_SYSTEM_SPEC defines 7 visible types
+- LEAGUE_BUILDER_SPEC v1.1 cross-references PERSONALITY_SYSTEM_SPEC but contradicts it
+- Resolution needed before League Builder personality assignment code is written
+
+### RECONCILIATION_PLAN.md Status
+- All sections updated
+- 12 questions for JK (was 10; added CONFLICT-001 and CONFLICT-002 resolutions)
+- Section 6a (SPEC CONFLICTS) added
+- F-104b route changed to Codex | 5.3 | high
+- F-107 rationale updated
+
+### Next Action
+Await JK confirmation on 12 questions in RECONCILIATION_PLAN.md §6/6a before Phase 2 execution begins. Phase 2A (F-103, F-102, F-099) can begin immediately after JK confirms — these are all UNCHANGED FIX-CODE items not blocked by any decision or conflict.
+
+
+---
+
+## Session: Figma Spec Alignment Audit — 2026-02-21
+
+**Task:** Complete Part 2 of HANDOFF_RECONCILIATION.md — reconcile all 13 Figma specs against updated system specs.
+
+**Method:** Read each Figma spec file directly; cross-referenced against corresponding system spec. No assertions from prior session summaries.
+
+### Results
+
+**OBSOLETE (1):**
+- CONTRACTION_EXPANSION_FIGMA_SPEC.md — entire 977-line file describes removed contraction feature. Action: archive.
+
+**STALE (6):**
+- LEAGUE_BUILDER_FIGMA_SPEC.md — missing LB-F016 Mode Transition screen required by SEPARATED_MODES_ARCHITECTURE §5.1 (HIGH priority)
+- SEASON_SETUP_FIGMA_SPEC.md — missing transitionMode() persistence gate on SS-F007; no mode-separation framing (HIGH priority)
+- EOS_RATINGS_FIGMA_SPEC.md — wrong phase label (says Phase 3, should be Phase 1); no trait performance modifier in Manager Distribution screen (MEDIUM)
+- SEASON_END_FIGMA_SPEC.md — Phase 1 checklist screen missing ratings adjustments and aging (MEDIUM)
+- FINALIZE_ADVANCE_FIGMA_SPEC.md — missing signing round screen between Season Transition and Advance Confirmation (LOW)
+- SCHEDULE_SYSTEM_FIGMA_SPEC.md — uses real-year dates throughout ("2024", "JULY 12"); must use fictional Year N / Day N format (LOW)
+
+**ALIGNED (6):**
+- TRADE_FIGMA_SPEC.md — salary informational only, no matching; consistent with TRADE_SYSTEM_SPEC
+- RETIREMENT_FIGMA_SPEC.md — Phase 5 correct per OFFSEASON_SYSTEM_SPEC
+- PLAYOFFS_FIGMA_SPEC.md — Phase 1 handoff correct; no playoff stats write-back shown (consistent with F-113 pending)
+- DRAFT_FIGMA_SPEC.md — Potential Ceiling field + Farm-First model present (sync-updated)
+- FREE_AGENCY_FIGMA_SPEC.md — personality-driven destination present (sync-updated)
+- AWARDS_CEREMONY_FIGMA_SPEC.md — already confirmed aligned; 13-screen flow with per-step trait gates
+
+**New Gaps Added:**
+- GAP-009: Mode Transition UI (League Builder exit → Franchise Season entry) — no LB-F016 screen exists anywhere
+- GAP-010: Fictional date system in Schedule UI — cosmetic but needs Figma + data model audit
+
+### Files Modified
+- RECONCILIATION_PLAN.md — Part 2 (Figma Spec Alignment Audit) added in full: alignment table, disposition summary, severity ranking, new gaps
+
+### Next Action
+RECONCILIATION_PLAN.md is now complete (Part 1 + Part 2). Ready for JK to answer the 12 questions in §6/6a before Phase 2 execution begins.
+
+
+---
+
+## SESSION: 2026-02-21 — Third-Pass Reconciliation + JK Decisions
+
+### Work Completed
+
+**Third-pass spec verification** — read actual spec content section-by-section (not grep). Produced SPEC_RECONCILIATION_FINDINGS.md with:
+- 22 items confirmed/cleared
+- 3 new conflicts (CONFLICT-003, 004, 005)
+- 7 open questions carried forward (Q-001 through Q-007)
+- 5 watch-list items (not blocking, but notable)
+
+**JK answered all 10 decisions.** Full decision log:
+
+| Decision | Resolution |
+|----------|------------|
+| CONFLICT-003: Chemistry types | Real SMB4 names: Competitive, Crafty, Disciplined, Spirited, Scholarly (5 types). TRAIT_INTEGRATION_SPEC, PROSPECT_GENERATION_SPEC, SALARY_SYSTEM_SPEC all need correction. |
+| CONFLICT-004: FA exchange rule | ±20% True Value match, no position restriction. Neither spec had it right (Figma said ±10%, Offseason said grade-based). Both need correction. |
+| CONFLICT-005: Draft grade range vs farm schema | All grades possible on farm (A through D). Bell curve per PROSPECT_GENERATION_SPEC — B, B-, C+ at 15% each. FARM_SYSTEM_SPEC overallRating field must be expanded to full range. |
+| Q-001: Rookie salary | Set at draft by round/position. Salary locked until EOS recalculation after rookie season ends. Ratings, traits, and grade all hidden while on farm. Revealed at call-up — salary does NOT change at call-up. |
+| Q-002: Standings tiebreaker | Run differential. If still tied, user selects who advances (manual user decision prompt). |
+| Q-003: Farm population at startup | League Builder includes a prospect draft step to populate farms before Season 1 begins. |
+| Q-004: Stadium change mechanic | V1 scope. Needs new section in OFFSEASON_SYSTEM_SPEC (Phase 4 sub-step). |
+| Q-005: Scout grade deviation | Fat-tail distribution. Keep max-deviation-by-position structure (position accuracy sets center), replace uniform probability with fat-tail — small misses most common, rare large outliers possible beyond current hard cap. |
+| Q-006: Team captain | V1 scope. Formal designation driven by Charisma hidden modifier. Needs spec in DYNAMIC_DESIGNATIONS_SPEC or PERSONALITY_SYSTEM_SPEC. |
+| Q-007: Beat reporter pre-decision warning | V1 scope. Blocking modal before call-up/send-down executes. Conditional on relevant relationship/narrative data. Needs UI flow spec. |
+
+### Files Created This Session
+- SPEC_RECONCILIATION_FINDINGS.md — full third-pass findings with all conflicts, open questions, and watch-list items
+
+### Next Action
+Write all spec updates from the 10 decisions. Specs requiring changes:
+1. TRAIT_INTEGRATION_SPEC — chemistry type names (5 real SMB4 types), TRAIT_CHEMISTRY_MAP expansion to cover all SMB4 traits
+2. PROSPECT_GENERATION_SPEC — chemistry type names
+3. SALARY_SYSTEM_SPEC — chemistry type names; draft-round-based rookie salary table (replace rating-at-callup model)
+4. FARM_SYSTEM_SPEC — overallRating schema expanded to full A–D range; rookie salary note (set at draft, locked until post-rookie EOS)
+5. FREE_AGENCY_FIGMA_SPEC — FA exchange rule corrected to ±20% True Value, no position restriction
+6. OFFSEASON_SYSTEM_SPEC — FA exchange rule corrected; stadium change Phase 4 sub-step added; run differential tiebreaker + user-select prompt added; team captain designation added
+7. SCOUTING_SYSTEM_SPEC — grade deviation replaced with fat-tail model
+8. LEAGUE_BUILDER_SPEC — prospect draft step added as new section
+9. DYNAMIC_DESIGNATIONS_SPEC — team captain designation specced
+10. New UI flow spec needed for beat reporter pre-decision warning modal

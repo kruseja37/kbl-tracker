@@ -42,6 +42,16 @@ Player designations (Team MVP, Ace, Fan Favorite, Albatross) are tracked dynamic
 - **Carries Over**: Yes, permanently while player remains on team
 - **Accumulation**: Multiple Cornerstones can exist on a team (one per qualifying season)
 
+### Team Captain (Special)
+- **Criteria**: Player with the highest Charisma hidden modifier on the team, provided Charisma ≥ 70. If no player exceeds 70, no Captain is designated.
+- **Tiebreaker**: If two players share the highest Charisma, the one with more seasons on the team wins. If still tied, the one with higher WAR in the current season wins.
+- **Assignment**: Calculated at season start. Does not change mid-season (Captain badge is stable).
+- **Display**: Solid border badge, "Captain" — always visible regardless of Charisma being hidden
+- **Carries Over**: Recalculated each season start (roster changes, new arrivals)
+- **Effect on narrative**: Beat reporter storylines reference the Captain in leadership and team chemistry contexts. Morale events tied to the Captain's performance have amplified impact (±50% morale swing magnitude).
+- **Effect on Charisma**: The Captain's own Charisma score counts double toward teammate morale effects while they hold the designation.
+- **One per team**: Only one Team Captain per team at any time.
+
 ---
 
 ## Lifecycle
@@ -128,6 +138,7 @@ Current Season State:
 | Fan Favorite | Green (#22C55E) | Light green |
 | Albatross | Red (#EF4444) | Light red |
 | Cornerstone | Bronze (#CD7F32) | Gradient gold→bronze |
+| Team Captain | Purple (#7C3AED) | Light purple |
 
 ### Badge Text
 
@@ -141,6 +152,9 @@ Current Season State:
 - "Team MVP"
 - "Ace"
 - "Fan Favorite"
+- "Albatross"
+- "Cornerstone"
+- "Captain"
 - "Albatross"
 - "Cornerstone"
 

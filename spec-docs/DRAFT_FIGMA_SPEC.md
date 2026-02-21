@@ -825,4 +825,121 @@ Speed through draft with automatic selections.
 
 ---
 
+## v1.1 Additions (February 2026)
+
+### Prospect Reveal Ceremony
+
+When a drafted prospect is selected, a brief reveal ceremony shows:
+
+```
+╔══════════════════════════════════════════════════════════════╗
+║              🎓 DRAFT PICK REVEAL 🎓                         ║
+║              Round 1, Pick 3 — Detroit Diamonds              ║
+╠══════════════════════════════════════════════════════════════╣
+║                                                               ║
+║  ┌──────────────────────────────────────────────────────┐    ║
+║  │  [Player silhouette reveals to photo]                 │    ║
+║  │                                                        │    ║
+║  │  RICO MARTINEZ — SS                                   │    ║
+║  │  Grade: B       Potential Ceiling: A-                 │    ║
+║  │  Chemistry: Spirited                                  │    ║
+║  │  Personality: COMPETITIVE                             │    ║
+║  │  Traits: [🎰 Hidden until call-up]                    │    ║
+║  │                                                        │    ║
+║  │  "A smooth-fielding shortstop with quick hands        │    ║
+║  │   and good instincts. Scout says the bat is coming."  │    ║
+║  │                                                        │    ║
+║  │  → FARM 🌱                                            │    ║
+║  └──────────────────────────────────────────────────────┘    ║
+║                                                               ║
+║  [Continue Draft]                                            ║
+╚══════════════════════════════════════════════════════════════╝
+```
+
+**Key Reveal Elements:**
+- Player photo reveals with brief animation (silhouette → photo)
+- Grade and potential ceiling shown
+- Chemistry type shown (for team composition planning)
+- Visible personality type shown
+- Traits are HIDDEN until MLB call-up (scouted traits may exist but user can't see them)
+- Brief scout report blurb (procedurally generated from attributes)
+
+### Updated Grade Distribution (Farm-First)
+
+| Grade | Percentage | Description |
+|-------|-----------|-------------|
+| B | 15% | Strong prospect (top of draft) |
+| B- | 15% | Above average |
+| C+ | 15% | Average (most common tier) |
+| C | 20% | Below average |
+| C- | 20% | Marginal |
+| D+ | 10% | Long shot |
+| D | 5% | Organizational filler |
+
+> **Note**: Grades A through B+ are extremely rare in the farm-first model. These elite players are already on MLB rosters. The draft pool represents the next tier of talent.
+
+### Inactive Player Database Integration
+
+Before the draft begins, a pre-draft screen allows adding inactive players to the draft class:
+
+```
+╔══════════════════════════════════════════════════════════════╗
+║              PRE-DRAFT: INACTIVE PLAYER DATABASE             ║
+╠══════════════════════════════════════════════════════════════╣
+║                                                               ║
+║  Add any inactive players to this year's draft class?        ║
+║                                                               ║
+║  Available Inactive Players: 47                              ║
+║  Current Draft Class Size: 30                                ║
+║                                                               ║
+║  ┌────────────────────────────────────────────────────────┐  ║
+║  │ PLAYER              POS   GRADE   ADD TO DRAFT?        │  ║
+║  ├────────────────────────────────────────────────────────┤  ║
+║  │ Tommy Sanders       RF    B-      [Add] [Skip]         │  ║
+║  │ Alex Kim            SP    C+      [Add] [Skip]         │  ║
+║  │ ...                                                     │  ║
+║  └────────────────────────────────────────────────────────┘  ║
+║                                                               ║
+║  [Continue to Draft]                                         ║
+╚══════════════════════════════════════════════════════════════╝
+```
+
+> **Cross-reference**: See PROSPECT_GENERATION_SPEC.md for prospect generation rules, scout accuracy, and trait distribution.
+
+---
+
+## v1.1 Updates (February 2026)
+
+### Grade Distribution
+
+Draft prospect grades follow this distribution (see PROSPECT_GENERATION_SPEC.md for details):
+
+| Grade | Percentage |
+|-------|-----------|
+| A | 2% |
+| A- | 5% |
+| B+ | 10% |
+| B | 15% |
+| B- | 15% |
+| C+ | 15% |
+| C | 18% |
+| C- | 12% |
+| D | 8% |
+
+### Prospect Reveal Ceremony
+
+When a farm prospect is called up to the MLB roster, a "reveal ceremony" shows the true ratings compared to the scouted grade. This is a significant narrative moment — scouts can be wrong in either direction.
+
+See SCOUTING_SYSTEM_SPEC.md §4.3 for the reveal UI wireframe.
+
+### Cross-References
+
+| New Spec | Relevance |
+|----------|-----------|
+| SCOUTING_SYSTEM_SPEC.md | Scout accuracy, reveal ceremony |
+| PROSPECT_GENERATION_SPEC.md | Grade distribution, trait assignment |
+| TRAIT_INTEGRATION_SPEC.md | Position-appropriate trait pools |
+
+---
+
 *End of Figma Specification - Farm-First Draft Model*

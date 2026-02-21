@@ -103,84 +103,115 @@ The 65% deadline should be a high-drama moment:
 
 ---
 
-## 4. Trade Matching: Contract Value System
+## 4. Trade Freedom: No Salary Matching
 
 ### 4.1 Core Rule
 
-**Trade packages must have combined Contract Values within 10% of each other.**
+**There is NO salary matching requirement for trades.** Any combination of players, prospects, and draft swaps can be exchanged regardless of contract value imbalance.
 
-This replaces the earlier "True Value matching" concept because:
-- True Value is visible on team pages (not secret)
-- Contract Value creates salary cap strategy
-- Allows "overpaying" for talent or "salary dumps"
+This design reflects KBL's philosophy:
+- No salary cap means no need for cap-matching rules
+- Fan morale and expectations create natural constraints on bad trades
+- Enables creative deals: salary dumps, prospect-for-veteran swaps, three-for-one trades
+- The AI trade evaluator (Section 8) and multiplayer veto system (Section 9) prevent abuse
 
-### 4.2 Contract Value Calculation
+### 4.2 Trade Package Structure
 
 ```typescript
 interface TradePackage {
   players: TradedPlayer[];
   farmProspects: TradedProspect[];
   draftSwaps: DraftSwap[];
-  totalContractValue: number;
-}
-
-function calculatePackageValue(package: TradePackage): number {
-  const playerValue = package.players.reduce(
-    (sum, p) => sum + p.contractValue, 0
-  );
-  const prospectValue = package.farmProspects.reduce(
-    (sum, p) => sum + p.contractValue, 0
-  );
-  const swapValue = package.draftSwaps.reduce(
-    (sum, s) => sum + estimateSwapValue(s), 0
-  );
-
-  return playerValue + prospectValue + swapValue;
 }
 
 function isTradeValid(packageA: TradePackage, packageB: TradePackage): boolean {
-  const valueA = calculatePackageValue(packageA);
-  const valueB = calculatePackageValue(packageB);
+  // Both sides must send at least one asset
+  if (packageA.players.length + packageA.farmProspects.length + packageA.draftSwaps.length === 0) return false;
+  if (packageB.players.length + packageB.farmProspects.length + packageB.draftSwaps.length === 0) return false;
 
-  const difference = Math.abs(valueA - valueB);
-  const threshold = Math.max(valueA, valueB) * 0.10; // 10%
-
-  return difference <= threshold;
+  // Roster validation: neither team ends up below minimum roster size
+  // No salary matching check — any imbalance is permitted
+  return true;
 }
 ```
 
-### 4.3 Trade Validation Example
+### 4.3 Trade Value Assessment (Informational Only)
+
+The app displays salary implications for transparency but does NOT enforce matching:
 
 ```
-Team A offers:        Contract Value
+Team A offers:        Salary
   Mike Trout          $35M
   ─────────────────────────
-  Total:              $35M
+  Total salary sent:  $35M
 
-Team B offers:        Contract Value
-  Player X            $20M
-  Player Y            $12M
+Team B offers:        Salary
+  Farm Prospect X     $800K
+  2nd Round Swap      ~$2.5M est.
   ─────────────────────────
-  Total:              $32M
+  Total salary sent:  $3.3M
 
-Difference: $3M (8.6% of $35M)
-✅ VALID - Within 10% threshold
+Salary differential: $31.7M
+⚠️ Large salary imbalance — fan morale impact likely
+✅ TRADE IS VALID — no matching required
 ```
 
-### 4.4 Salary Dump Trades
+### 4.4 Chemistry-Tier Trade Value Evaluation
 
-Teams CAN offload salary if the other team is willing:
+The trade preview shows how each player's TRAIT POTENCY changes based on the receiving team's Chemistry composition:
 
+```typescript
+function evaluateTraitPotencyChange(
+  player: Player,
+  fromTeam: Team,
+  toTeam: Team
+): TraitPotencyReport[] {
+  return player.traits.map(trait => {
+    const traitChemistry = getTraitChemistryType(trait);
+
+    // Count players of the trait's Chemistry type on each team
+    const fromCount = countChemistryType(fromTeam.roster, traitChemistry);
+    const toCount = countChemistryType(toTeam.roster, traitChemistry);
+
+    // Add/remove self if player's Chemistry matches trait's Chemistry
+    const selfContributes = player.chemistryType === traitChemistry;
+
+    const fromTier = getChemistryTier(fromCount);
+    const toTier = getChemistryTier(toCount + (selfContributes ? 1 : 0));
+
+    return {
+      traitName: trait,
+      traitChemistry,
+      fromTier,
+      toTier,
+      potencyChange: toTier > fromTier ? 'UPGRADE' : toTier < fromTier ? 'DOWNGRADE' : 'SAME',
+      fromBonus: getTierBonus(trait, fromTier),
+      toBonus: getTierBonus(trait, toTier)
+    };
+  });
+}
 ```
-Rebuilding team accepts $40M contract for:
-  - Promising prospect ($2M contract)
-  - 1st Round Draft Swap
 
-Contract values don't match, but...
-  - Receiving team gets the player they want
-  - Sending team clears cap space
-  - Must still be within 10% when INCLUDING swap value
+**Example trade preview:**
 ```
+If traded to the Moose:
+• Clutch (Spirited): Tier 2 → Tier 3 (+5 → +10 in pressure) ▲ UPGRADE
+• Stealer (Crafty): Tier 1 → Tier 1 (no change) ─ SAME
+
+Note: Dave Smith's Competitive chemistry adds +1 to Moose's Competitive tier count
+```
+
+### 4.5 Natural Constraints on Lopsided Trades
+
+Instead of salary matching, KBL uses organic consequences:
+
+| Constraint | Mechanism |
+|-----------|-----------|
+| **Fan morale** | Salary dumps tank fan morale, especially for contending teams |
+| **Expectations loop** | Higher salary → higher expectations → worse morale if team loses |
+| **AI evaluation** | CPU teams won't accept obviously bad deals (Section 8) |
+| **Multiplayer veto** | Other players can veto egregiously lopsided trades (Section 9) |
+| **Beat reporter** | Narrative engine covers bad trades critically |
 
 ---
 
@@ -503,57 +534,22 @@ Taking on salary has consequences:
 ║  │ $12M                │    │ $18M                │          ║
 ║  │                     │    │                     │          ║
 ║  │ 2nd Round Swap      │    │                     │          ║
-║  │ ~$2.5M value        │    │                     │          ║
+║  │ ~$2.5M est.         │    │                     │          ║
 ║  │                     │    │                     │          ║
 ║  ├─────────────────────┤    ├─────────────────────┤          ║
-║  │ TOTAL: $14.5M       │    │ TOTAL: $18M         │          ║
+║  │ SALARY SENT: $14.5M │    │ SALARY RCV: $18M   │          ║
 ║  └─────────────────────┘    └─────────────────────┘          ║
 ║                                                               ║
-║  Difference: $3.5M (19.4%) ❌ EXCEEDS 10% THRESHOLD          ║
+║  Salary differential: $3.5M (you take on more)               ║
+║  ✅ VALID — no salary matching required                       ║
 ║                                                               ║
-║  💡 Add ~$2M in assets to balance trade                      ║
+║  Chemistry impact: Martinez Clutch Tier 2→3 ▲                ║
+║  Fan morale risk: ⚠️ Low (acquiring a star)                  ║
 ║                                                               ║
 ║  [Add Players] [Add Prospects] [Add Swap]    [Cancel]         ║
+║                                                               ║
+║  [Submit Proposal]                                            ║
 ╚══════════════════════════════════════════════════════════════╝
-```
-
-### 7.2 Valid Trade Ready to Submit
-
-```
-╔══════════════════════════════════════════════════════════════╗
-║                    📋 PROPOSE TRADE 📋                        ║
-╠══════════════════════════════════════════════════════════════╣
-║                                                               ║
-║  Trading with: Boston Red Sox                                 ║
-║                                                               ║
-║  ┌─────────────────────┐    ┌─────────────────────┐          ║
-║  │ YOU SEND            │    │ YOU RECEIVE         │          ║
-║  │                     │    │                     │          ║
-║  │ T. Walker (SP)      │    │ J. Martinez (OF)    │          ║
-║  │ $12M                │    │ $18M                │          ║
-║  │                     │    │                     │          ║
-║  │ M. Johnson (FARM)   │    │                     │          ║
-║  │ $850K               │    │                     │          ║
-║  │                     │    │                     │          ║
-║  │ 2nd Round Swap      │    │                     │          ║
-║  │ ~$2.5M value        │    │                     │          ║
-║  │                     │    │                     │          ║
-║  ├─────────────────────┤    ├─────────────────────┤          ║
-║  │ TOTAL: $15.35M      │    │ TOTAL: $18M         │          ║
-║  └─────────────────────┘    └─────────────────────┘          ║
-║                                                               ║
-║  Difference: $2.65M (14.7%) ❌ STILL EXCEEDS 10%             ║
-║                                                               ║
-║  [Adjust Package]                                [Cancel]     ║
-╚══════════════════════════════════════════════════════════════╝
-```
-
-After adding more:
-
-```
-║  Difference: $1.2M (6.7%) ✅ VALID TRADE                     ║
-║                                                               ║
-║  [Submit Proposal]                               [Cancel]     ║
 ```
 
 ### 7.3 Trade Impact Preview
@@ -720,8 +716,8 @@ function generateCounterOffer(
 ║  │ • 1st Round Swap ←NEW                                   │ ║
 ║  │ • 2nd Round Swap                                        │ ║
 ║  │                                                          │ ║
-║  │ Total: $18.2M          Total: $18M                      │ ║
-║  │ Difference: 1.1% ✅                                     │ ║
+║  │ Total salary: $18.2M    Total salary: $18M               │ ║
+║  │ ✅ Valid trade (no salary matching required)              │ ║
 ║  └─────────────────────────────────────────────────────────┘ ║
 ║                                                               ║
 ║  [Accept Counter]  [Counter Their Counter]  [Decline]         ║
@@ -889,28 +885,18 @@ interface TradeParticipant {
 }
 
 function validateThreeTeamTrade(trade: ThreeTeamTrade): boolean {
-  // Each team's send/receive must be within 10%
+  // Each team must send at least one asset and receive at least one asset
   const teams = [trade.teamA, trade.teamB, trade.teamC];
 
   for (const team of teams) {
-    const sendValue = calculatePackageValue(team.sending);
-    const receiveValue = calculatePackageValue(team.receiving);
-
-    const diff = Math.abs(sendValue - receiveValue);
-    const threshold = Math.max(sendValue, receiveValue) * 0.10;
-
-    if (diff > threshold) return false;
+    const sendCount = team.sending.players.length + team.sending.farmProspects.length + team.sending.draftSwaps.length;
+    const receiveCount = team.receiving.players.length + team.receiving.farmProspects.length + team.receiving.draftSwaps.length;
+    if (sendCount === 0 || receiveCount === 0) return false;
   }
 
-  // Total assets in must equal total assets out
-  const totalSent = teams.reduce(
-    (sum, t) => sum + calculatePackageValue(t.sending), 0
-  );
-  const totalReceived = teams.reduce(
-    (sum, t) => sum + calculatePackageValue(t.receiving), 0
-  );
-
-  return totalSent === totalReceived;
+  // No salary matching required — any imbalance is permitted
+  // Roster validation: no team drops below minimum roster size
+  return validateRosterSizes(teams);
 }
 ```
 
@@ -936,7 +922,8 @@ function validateThreeTeamTrade(trade: ThreeTeamTrade): boolean {
 ║  │ Net: +$6M    │      │ Net: -$3M    │      │ Net: -$3M    │           ║
 ║  └──────────────┘      └──────────────┘      └──────────────┘           ║
 ║                                                                           ║
-║  ⚠️ Chicago sending below 10% threshold - add assets to balance          ║
+║  ⚠️ Large salary imbalance — Chicago takes on $3M less          ║
+║     Fan morale risk shown in trade preview                       ║
 ║                                                                           ║
 ╚══════════════════════════════════════════════════════════════════════════╝
 ```
@@ -949,24 +936,24 @@ function validateThreeTeamTrade(trade: ThreeTeamTrade): boolean {
 
 > **Note (January 23, 2026):** OFFSEASON_SYSTEM_SPEC.md is the authoritative source for phase numbering.
 
-Per OFFSEASON_SYSTEM_SPEC.md, Offseason Trades is **Phase 10** (not Phase 11):
+Per OFFSEASON_SYSTEM_SPEC.md, Offseason Trades is **Phase 9** (trades moved up after contraction removal):
 
 ```
 Phase 1: Season End Processing
 Phase 2: Awards Ceremony
-Phase 3: True Value Recalibration
-Phase 4: Contraction Check
+Phase 3: Salary Recalculation (1st of 3)
+Phase 4: Expansion (optional, user-initiated)
 Phase 5: Retirement & Legacy
 Phase 6: Free Agency
 Phase 7: Draft
-Phase 8: Farm System Reconciliation
-Phase 9: Chemistry Rebalancing
-Phase 10: OFFSEASON TRADES ← This spec
-├─ Opens after chemistry rebalancing
+Phase 8: Salary Recalculation (2nd of 3)
+Phase 9: OFFSEASON TRADES ← This spec
+├─ Opens after salary recalculation
 ├─ All teams can propose/accept trades
-├─ Final roster adjustments before season
-└─ Window closes when user confirms "Ready for Season"
-Phase 11: New Season Prep
+├─ Final roster adjustments before cut-down
+└─ Window closes when user confirms "Ready for Cut-Down"
+Phase 10: Salary Recalculation (3rd of 3)
+Phase 11: Finalize & Advance (cut-down to 22/10, signing round, lock rosters)
 ```
 
 ### 12.2 Farm System Integration
@@ -994,7 +981,8 @@ When trading farm prospects:
 
 ### What's Included
 
-✅ Contract Value matching (10% rule)
+✅ No salary matching requirement (fan morale + AI + veto provide natural constraints)
+✅ Chemistry-tier trade value evaluation (trait potency change preview)
 ✅ Single-player / Partial / Full control modes
 ✅ True Value hiding option for single-player
 ✅ Draft swaps (upcoming year only)

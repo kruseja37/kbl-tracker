@@ -1,14 +1,135 @@
 # KBL Fan Morale System Specification
 
-**Version**: 1.0
+**Version**: 1.1
 **Status**: Draft
-**Last Updated**: January 2026
+**Last Updated**: February 2026
 
 ---
 
 ## Terminology Note
 
 > **"Fan Morale"** is the official term used throughout all KBL specifications. Previous references to "fan happiness" should be considered synonymous and have been consolidated under "Fan Morale" for consistency. This parallels "Player Morale" and sounds more natural when describing rises and falls.
+
+---
+
+## 0. Simplified Core Formula (v1.1)
+
+> **UPDATE February 2026**: The granular event-driven system described in sections below is the FULL specification. For implementation priority, Fan Morale can be approximated by this simplified weighted formula:
+
+### 0.1 Core Weights
+
+```typescript
+function calculateFanMorale(team: Team, season: Season): number {
+  // 60% - Performance Gap (actual vs expected wins)
+  const performanceGap = calculatePerformanceGap(team, season);
+  
+  // 20% - Designations (fan favorites and scapegoats)
+  const designationScore = calculateDesignationScore(team);
+  
+  // 10% - Beat Reporter Sentiment
+  const beatReporterScore = calculateBeatReporterSentiment(team);
+  
+  // 10% - Roster Composition + Random Events
+  const rosterRandomScore = calculateRosterAndRandom(team, season);
+  
+  const morale = (
+    performanceGap * 0.60 +
+    designationScore * 0.20 +
+    beatReporterScore * 0.10 +
+    rosterRandomScore * 0.10
+  );
+  
+  return clamp(Math.round(morale), 0, 99);
+}
+```
+
+### 0.2 Performance Gap (60%)
+
+The dominant factor. Compares actual win percentage to expected win percentage based on roster True Value.
+
+```typescript
+function calculatePerformanceGap(team: Team, season: Season): number {
+  const expectedWinPct = getExpectedWinPctFromRosterValue(team);
+  const actualWinPct = team.wins / (team.wins + team.losses);
+  
+  // Delta in games above/below expectation
+  const gamesPlayed = team.wins + team.losses;
+  const expectedWins = Math.round(expectedWinPct * gamesPlayed);
+  const gamesAboveExpected = team.wins - expectedWins;
+  
+  // Convert to 0-99 scale: 50 = meeting expectations
+  // Each game above/below = ~3 points
+  return clamp(50 + (gamesAboveExpected * 3), 0, 99);
+}
+```
+
+### 0.3 Designations (20%)
+
+Fan favorites (outperforming contract) boost morale; scapegoats (underperforming) drain it.
+
+```typescript
+function calculateDesignationScore(team: Team): number {
+  let score = 50;  // Neutral baseline
+  
+  const fanFavorites = team.roster.filter(p => p.designation === 'FAN_FAVORITE');
+  const scapegoats = team.roster.filter(p => p.designation === 'SCAPEGOAT');
+  
+  // Each fan favorite: +5 morale
+  score += fanFavorites.length * 5;
+  
+  // Each scapegoat: -8 morale (negativity bias)
+  score -= scapegoats.length * 8;
+  
+  return clamp(score, 0, 99);
+}
+```
+
+### 0.4 Beat Reporter Sentiment (10%)
+
+Average tone of recent beat reporter coverage.
+
+```typescript
+function calculateBeatReporterSentiment(team: Team): number {
+  const recentArticles = getRecentBeatReporterArticles(team, 10);
+  if (recentArticles.length === 0) return 50;
+  
+  const avgSentiment = average(recentArticles.map(a => a.sentimentScore));
+  // sentimentScore is already 0-99
+  return avgSentiment;
+}
+```
+
+### 0.5 Roster Composition + Random Events (10%)
+
+Star acquisitions, popular call-ups, salary dumps, and random flavor events.
+
+```typescript
+function calculateRosterAndRandom(team: Team, season: Season): number {
+  let score = 50;
+  
+  // Recent star acquisitions boost
+  const recentAcquisitions = getRecentTransactions(team, 30, 'ACQUIRED');
+  for (const acq of recentAcquisitions) {
+    if (acq.player.grade >= 'B+') score += 5;
+    else if (acq.player.grade >= 'B') score += 2;
+  }
+  
+  // Recent prospect call-ups boost
+  const recentCallUps = getRecentTransactions(team, 14, 'CALL_UP');
+  score += recentCallUps.length * 3;
+  
+  // Salary dump penalty
+  const recentSalaryDumps = getRecentTransactions(team, 30, 'SALARY_DUMP');
+  score -= recentSalaryDumps.length * 8;
+  
+  // Random events (±2 per event, max ±10 total)
+  score += getRandomEventAdjustment(team, season);
+  
+  return clamp(score, 0, 99);
+}
+```
+
+> **Note**: The detailed event-driven system (sections below) provides granular precision for each individual event. The simplified formula above is the recommended starting point for implementation. Both approaches should converge to similar results.
 
 ---
 
@@ -22,7 +143,7 @@ Fan Morale is a **dynamic, event-driven metric** that changes constantly through
 - **Reactive**: Fans respond immediately to events, then adjust over time
 - **Logical**: Changes make intuitive sense (winning = happy, salary dumps during contention = suspicious)
 - **Story-driven**: Morale creates narratives ("fans turning on management", "bandwagon filling up")
-- **Consequential**: Low morale affects attendance, merchandise, and ultimately contraction risk
+- **Consequential**: Low morale affects player morale, free agency, and narrative tone
 
 ### 1.2 Core Metric
 
@@ -914,7 +1035,7 @@ const MoraleStateConfig = {
     emoji: '😡',
     color: '#8B0000',
     label: 'Hostile',
-    description: 'Protests. Ownership under fire. Contraction risk.'
+    description: 'Protests. Ownership under fire.'
   }
 };
 ```
@@ -923,26 +1044,26 @@ const MoraleStateConfig = {
 
 ## 9. Consequences of Morale
 
-### 9.1 Contraction Risk
+> **Note**: Contraction has been REMOVED from v1 (see OFFSEASON_SYSTEM_SPEC.md). Low morale no longer triggers contraction risk. Instead, morale consequences focus on player morale, free agency attractiveness, and narrative tone.
 
-Low morale feeds into contraction eligibility:
+### 9.1 Franchise Health Warning
+
+Very low morale triggers warning indicators but no mechanical contraction:
 
 ```typescript
-function calculateContractionRisk(team: Team): ContractionRisk {
-  const moraleComponent = (50 - team.fanMorale.current) / 50;  // 0-1 scale
-  const financialComponent = calculateFinancialHealth(team);
-  const performanceComponent = calculatePerformanceHealth(team);
-
-  // Morale is 30% of contraction calculation
-  const overallRisk =
-    moraleComponent * 0.30 +
-    financialComponent * 0.40 +
-    performanceComponent * 0.30;
-
+function getFranchiseHealthWarning(team: Team): FranchiseWarning | null {
+  if (team.fanMorale.current >= 25) return null;
+  
   return {
-    level: overallRisk > 0.7 ? 'CRITICAL' : overallRisk > 0.5 ? 'HIGH' : 'NORMAL',
-    moraleContribution: moraleComponent,
-    survivalOdds: 100 - (overallRisk * 35)  // Max 35% penalty from risk
+    level: team.fanMorale.current < 10 ? 'CRITICAL' : 'WARNING',
+    message: team.fanMorale.current < 10 
+      ? 'Franchise in crisis — fans demanding change'
+      : 'Fan patience wearing thin',
+    effects: [
+      'Free agent destination penalty (see 9.3)',
+      'Player morale drag (see 9.2)',
+      'Beat reporter negative coverage increase'
+    ]
   };
 }
 ```

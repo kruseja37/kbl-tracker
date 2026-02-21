@@ -1,5 +1,7 @@
 # Season Setup Specification
 
+> **GOSPEL ANNOTATION (2026-02-21):** Season-to-franchise handoff is **covered by KBL_UNIFIED_ARCHITECTURE_SPEC.md §11.3**. Playoff Mode entry flow and New Franchise setup wizard remain **valid and authoritative** — not covered by GOSPEL.
+
 > **Purpose**: Define the flow when user clicks "New Franchise" or "Playoff Mode"
 > **Created**: January 29, 2026
 > **Status**: DRAFT

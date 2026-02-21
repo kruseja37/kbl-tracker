@@ -1,5 +1,7 @@
 # GameTracker Drag-and-Drop Specification
 
+> **GOSPEL ANNOTATION (2026-02-21):** Flow sections (multi-step interview model) are **superseded by KBL_UNIFIED_ARCHITECTURE_SPEC.md §3** (1-tap recording paradigm). Spray chart geometry and hit-location mechanics remain **valid and authoritative**.
+
 > **Purpose**: Define the drag-and-drop interaction model for the GameTracker component
 > **Status**: DRAFT v4 - Added Foul Territory, Substitutions, Undo
 > **Created**: 2026-01-31

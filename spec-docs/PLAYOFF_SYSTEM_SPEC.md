@@ -113,6 +113,11 @@ const PlayoffConfig = {
   // Home field advantage
   homeFieldAdvantage: 'BETTER_SEED',  // 'BETTER_SEED' | 'ALTERNATING' | 'NONE'
 
+  // Tiebreaker (when teams finish with identical records)
+  // Step 1: Run differential (higher run differential advances)
+  // Step 2: If run differential is also tied → user selects which team advances
+  tiebreaker: 'RUN_DIFFERENTIAL_THEN_USER_CHOICE',
+
   // Game schedule pattern (for 7-game series)
   schedulePattern: '2-3-2',  // '2-3-2' | '2-2-1-1-1'
 
@@ -163,6 +168,31 @@ Championship Series (Best-of-7)
 
 World Series (Best-of-7)
 ```
+
+---
+
+## 3.5 Tiebreaker Rules
+
+When two or more teams finish with identical win-loss records and are competing for the same playoff spot or seeding position:
+
+**Step 1 — Run Differential**: The team with the higher run differential (runs scored minus runs allowed across all regular season games) advances or receives the higher seed.
+
+**Step 2 — User Choice**: If teams are also tied on run differential, the system presents a prompt to the user asking which team should advance. No automatic secondary tiebreaker.
+
+```
+╔══════════════════════════════════════════════════════════════╗
+║              TIEBREAKER: PLAYOFF SPOT                        ║
+╠══════════════════════════════════════════════════════════════╣
+║  Boston Red Sox and New York Thunder are tied at 22-10       ║
+║  Run Differential is also equal (+48 each)                   ║
+║                                                              ║
+║  Choose which team advances to the playoffs:                 ║
+║                                                              ║
+║    [ Boston Red Sox ]      [ New York Thunder ]              ║
+╚══════════════════════════════════════════════════════════════╝
+```
+
+> **Note**: Run differential must be tracked in the standings data model throughout the season for this to function. See FRANCHISE_MODE_SPEC §standings for the data model.
 
 ---
 
