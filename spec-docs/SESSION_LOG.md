@@ -843,6 +843,51 @@ Await JK confirmation on 12 questions in RECONCILIATION_PLAN.md §6/6a before Ph
 
 ---
 
+## Session: 2026-02-22 — SpecRecon Step 3 Completion (All 6 Domains) + Step 4 Queue
+
+### Context
+Continuing the "Reconcile specifications before refactor" workflow. Domains 1-5 were already complete (C-001 through C-080). This session completed Domain 6 and compiled the full Step 4 decision queue.
+
+### Accomplished
+
+**Domain 6 Analysis — 22 specs read, 14 findings (C-081 through C-094):**
+- Covered: Playoffs, Awards, Fan Morale, Mojo/Fitness, Stadium/Park, Grades, Simulation, Special Events, Adaptive Standards, and all Figma Offseason specs
+- Cross-referenced against GOSPEL (full 1807 lines) with dedicated GOSPEL verification subagent
+- Wrote STEP3_DOMAIN_6_MATRIX.md to spec-docs/
+
+**Key Domain 6 Findings:**
+- C-081: MOJO_FITNESS simulation integration contradicts GOSPEL "KBL NEVER calculates mojo"
+- C-082: GAME_SIMULATION_SPEC (1040 lines) contradicts GOSPEL "no simulation fudging" — core philosophy question
+- C-083: CONTRACTION_EXPANSION_FIGMA_SPEC (977 lines) describes removed feature — STALE
+- C-085: GOSPEL still references contraction in 4 places — needs cleanup
+- C-087: Grade scale 4-way conflict (12 vs 13 vs 10 vs 9 grades across 4 specs)
+- C-089: SPECIAL_EVENTS_SPEC stale — GOSPEL §7 Modifier Registry replaces hardcoded events
+- C-092: Juiced state internal contradiction (natural recovery vs "NOT achieved through natural recovery")
+- C-093: Fan morale double-counting in FA Attractiveness formula
+
+**Step 3 Totals:**
+- 94 findings across 6 domains (C-001 through C-094)
+- ~39 pending Step 4 decisions requiring JK resolution
+- Domain 4 has 3 decisions already made (C-052, C-053, C-054)
+- Domain 5 has all 11 findings JK-approved
+
+**WATCH Items (clean specs, 0 contradictions):**
+- ALMANAC_SPEC, SMB4_PARK_DIMENSIONS, RETIREMENT_FIGMA_SPEC, TRADE_FIGMA_SPEC, PLAYOFFS_FIGMA_SPEC, FINALIZE_ADVANCE_FIGMA_SPEC, EOS_RATINGS_FIGMA_SPEC (except C-090 quality issue)
+
+### Files Created
+- spec-docs/STEP3_DOMAIN_6_MATRIX.md (102 lines)
+
+### No Code Changes This Session
+Spec analysis and documentation only.
+
+### Decisions Made
+- Domain 6 scope: Full analysis on all 24 remaining specs (JK chose this over reduced scope)
+
+### Next Action
+Walk JK through all ~39 pending Step 4 decisions one by one for resolution. After all decisions made, execute spec updates.
+
+---
+
 ## Session: Figma Spec Alignment Audit — 2026-02-21
 
 **Task:** Complete Part 2 of HANDOFF_RECONCILIATION.md — reconcile all 13 Figma specs against updated system specs.
