@@ -968,3 +968,136 @@ Write all spec updates from the 10 decisions. Specs requiring changes:
 8. LEAGUE_BUILDER_SPEC — prospect draft step added as new section
 9. DYNAMIC_DESIGNATIONS_SPEC — team captain designation specced
 10. New UI flow spec needed for beat reporter pre-decision warning modal
+
+---
+
+## Session: 2026-02-22 — SpecRecon Step 4 Decision Resolution (ALL 42 decisions)
+
+### Context
+Continuation of spec reconciliation workflow. Step 3 was complete (94 findings across 6 domains). Step 4 required JK to resolve ~39 pending decisions. This session walked through all of them.
+
+### Accomplished
+- Resolved ALL 42 Step 4 decisions via structured Q&A with JK
+- Organized decisions into 9 themed groups for efficient walkthrough
+- Wrote STEP4_DECISIONS.md with complete decision log
+
+### JK Decisions Summary (42 total)
+
+**Domain 1 — GameTracker/Event Model (5):**
+- C-002: GOSPEL wins — 2 pinch-hitter entry points
+- C-004: Add Balk as manual between-play event (even without SMB4 balks)
+- C-005: Keep WP_K/PB_K hybrid result types
+- C-011: Add TP to overflow menu
+- C-017: Manual play log correction (no auto-correct GO→DP)
+
+**Domain 2 — Stats Pipeline (6):**
+- C-025: CQ weighted by LI (Contact Quality × Leverage Index)
+- C-027: Exclude IBB from FIP (standard sabermetric)
+- C-033: Keep armFactor in clutch calculations
+- C-058: Use 1.7821 wOBA scale (SMB4-calibrated)
+- C-061: Remove impactMultiplier from fWAR
+- C-062: mWAR 70% unattributed needs reconciliation mechanism
+
+**Domain 3 — Franchise/Offseason (11):**
+- C-041: GOSPEL §12 needs contraction removal
+- C-042: Remove recentPerformance from farm morale (no simulated stats)
+- C-043: Scale EOS threshold with season length (20% of gamesPerTeam); rookies mixed with veterans
+- C-044: Fan morale → EOS as modifier on adjustment formula
+- C-045: New SPINE_ARCHITECTURE_SPEC needed
+- C-046: Mid-season narrative salary changes defer to offseason
+- C-047: Young Player Designation — random from top-3 farm prospects
+- C-048+C-082: Keep simulation for AI-only, rename to AI_GAME_ENGINE
+- C-049: Expand offseason to 14 phases
+- C-050: Annotate DEEP_DIVE with supersession notes
+- C-051: No salary cap in v1
+
+**Domain 4 — Narrative/Designations (7):**
+- C-055+C-056: DESIGNATIONS wins both (playoff-context multipliers + 15% Albatross discount)
+- C-057+C-067: Add Team Captain to data models AND narrative
+- C-065: Scale HOF WAR threshold with opportunityFactor
+- C-066: Add +10% Cornerstone FA retention to DESIGNATIONS
+- C-068: INSIDER reporter reveal = permanent visibility (0-100 value)
+- C-069: Per-game cap on reporter morale influence
+
+**Domain 5 — League Builder/Season Setup (6):**
+- C-074+C-087: 13-grade scale is authoritative (S through D-)
+- C-075: Remove configurable WAR weights
+- C-078: Replace Fame slider with FameLevel dropdown
+- C-079: Pre-generated + editable schedule
+- C-080: SIMULATE button for AI games only
+
+**Domain 6 — Remaining Systems (7):**
+- C-081: Remove mojo/fitness simulation section
+- C-084: Both Franchise Health Warning + EOS modifier
+- C-086: Wheel Spin ceremony, potency-only
+- C-088: Confidence-based blending for park factors
+- C-089: Rewrite Special Events as modifier registry entries
+- C-092: Remove rest path to Juiced state
+- C-093: Keep baseline FA formula only (remove state-based bonuses)
+
+**Cleanup sweep:** C-083+C-085+C-090+C-091+C-094 all approved (archive contraction spec, update GOSPEL, fix math, fix wishlist, archive)
+
+### Files Created
+- spec-docs/STEP4_DECISIONS.md — complete decision log (42 entries)
+
+### No Code Changes This Session
+Decision documentation only.
+
+### Next Action
+Step 5: Execute spec updates based on all 42 decisions. This involves updating ~30+ spec documents with the resolved decisions.
+
+
+---
+
+## Session: 2026-02-22 (Evening) — Gospel Consolidation Mapping
+
+### Context
+Skipped granular spec updates (Step 5). Went directly to gospel consolidation — building the blueprint for the four canonical documents that will replace the current spec sprawl.
+
+### What Was Accomplished
+
+**1. Read and analyzed three major source specs:**
+- LEAGUE_BUILDER_SPEC.md (976 lines) — Mode 1 primary source
+- FRANCHISE_MODE_SPEC.md (412 lines) — cross-cutting architecture
+- OFFSEASON_SYSTEM_SPEC.md (2353 lines) — Mode 3 primary source
+
+**2. Created GOSPEL_CONSOLIDATION_MAP.md (v2, audited):**
+- Maps all active specs to their gospel destination (Mode 1, Mode 2, Mode 3, Almanac)
+- Maps all 62 STEP4 decision IDs to their gospel (verified: zero diff, zero double-counting)
+- Accounts for all 99 .md files on disk (gospel material, process docs, archives)
+- Section 4: Shared specs matrix (9 specs feed multiple gospels)
+- Section 5: Full decision ID reconciliation table
+- Section 6: Drafting order recommendation (Mode 1 → Mode 3 → Mode 2 → Almanac)
+
+**3. Created FRANCHISE_TYPE_DESIGN_NOTE.md (302 lines):**
+- Defines Solo (1P), Couch Co-Op (multiplayer), Custom franchise types
+- `controlledBy: 'human' | 'ai'` flag per team — gates experience, not access
+- Commissioner model: user has full edit power over all teams, rich experience for human teams only
+- Hybrid standings: full events for human-team games, score-only entry for AI-vs-AI
+- Offseason phase scope: `all-teams` vs `human-only` per phase with defaults
+- All-Star partial data approach for AI players
+- AI-vs-AI score entry for playoff seeding
+- Full lineup/roster/mojo control over all teams throughout games and season
+
+**4. Resolved open questions:**
+- Offseason locked at 13 phases (was 11 in spec, C-049 said 14, actual count is 11+2 = 13)
+- The Spine (C-045): standalone 5th document, not preamble
+- All "14" references updated to "13" in both files
+
+### Decisions Made This Session
+- Skip Step 5 (granular spec updates) → go directly to gospel consolidation
+- 4 gospels: MODE_1, MODE_2, MODE_3, ALMANAC + SPINE_ARCHITECTURE as 5th standalone
+- Drafting order: Mode 1 → Mode 3 → Mode 2 → Almanac
+- Franchise types: Solo/Co-Op/Custom as configuration layer, not structural change
+- 13 offseason phases (not 11, not 14)
+- Moved CONTRACTION_EXPANSION_FIGMA_SPEC.md to archive
+
+### Files Created/Modified
+- spec-docs/GOSPEL_CONSOLIDATION_MAP.md (new, 360 lines)
+- spec-docs/FRANCHISE_TYPE_DESIGN_NOTE.md (new, 302 lines)
+- spec-docs/CONTRACTION_EXPANSION_FIGMA_SPEC.md → archive/ (moved by JK)
+
+### No Code Changes This Session
+
+### Next Action
+Draft MODE_1_LEAGUE_BUILDER.md — first gospel. Pull from 13 input specs, apply 9 STEP4 decisions, integrate Franchise Type design note §5, add Spine cross-reference.
