@@ -1180,3 +1180,100 @@ Draft MODE_3_OFFSEASON_WORKSHOP.md in a new session. 17 input specs, 17 decision
 - Draft MODE_2_FRANCHISE_SEASON.md (39 input specs, 31 decision IDs — the largest gospel)
 - Primary source: KBL_UNIFIED_ARCHITECTURE_SPEC.md
 - Covers GameTracker, stats, WAR, standings, roster mgmt, schedule, narrative, designations, milestones, mojo/fitness, clutch, fielding, AI game engine
+
+## Session: 2026-02-23 — Gospel Consolidation: Mode 2 Franchise Season (COMPLETE)
+
+### Accomplished
+- Drafted MODE_2_FRANCHISE_SEASON.md (3,269 lines, 28 sections)
+- Consolidated 39 input specs into single authoritative document
+- Integrated 33 STEP4 decisions (C-002, C-004, C-005, C-011, C-017, C-025, C-027, C-033, C-047, C-048, C-054, C-055, C-056, C-057, C-058, C-059, C-060, C-061, C-062, C-065, C-067, C-068, C-069, C-079, C-080, C-081, C-082, C-084, C-088, C-089, C-092, C-093) plus 3 cross-cutting (C-045, C-054, C-076)
+- Full decision traceability table in §28
+
+### Structure (28 Sections)
+1-5: Overview, Event Model, GameTracker 1-Tap, Enrichment, Between-Play Events
+6-9: Baseball Rules, Substitution, Stats Pipeline, Pitcher Stats
+10-13: Fielding, WAR (5 components), Leverage Index, Clutch Attribution
+14-17: Mojo & Fitness, Modifier Registry, Narrative System, Dynamic Designations
+18-22: Milestones, Fan Favorite/Albatross, Fan Morale, Standings, Schedule
+23-28: Adaptive Standards, Stadium Analytics, AI Game Engine, Data Flow, V2, Traceability
+
+### Key Features
+- Complete TypeScript interfaces for all data models
+- Full formulas for WAR (bWAR/pWAR/fWAR/rWAR/mWAR), Leverage Index, Clutch Attribution
+- SMB4-calibrated constants (wOBA scale 1.7821, FIP constant 3.28)
+- Adaptive scaling system (opportunityFactor for all thresholds)
+- Event-driven architecture: 3 immutable streams (AtBat, BetweenPlay, Transaction)
+- Park factor confidence-based blending (C-088)
+- Modifier registry replacing special events (C-089)
+- AI Game Engine scoped to AI-only games (C-048/C-082)
+
+### Verification
+- Subagent verified all 33 decisions present in document with section references
+- Cross-cutting decisions (C-045, C-054, C-076) tracked separately
+- Decisions routed to other gospels documented in §28
+
+### No Code Changes This Session
+Gospel documentation only.
+
+### What Next Session Starts With
+- Commit MODE_2 and MODE_3 (if not yet committed)
+- Draft ALMANAC.md (2 input specs, 0 decisions) — smallest gospel
+- Draft SPINE_ARCHITECTURE.md (cross-cutting, C-045) — shared data contracts
+- After all 5 gospels complete: archive superseded specs
+
+## Session: 2026-02-23 (Afternoon) — Gospel Consolidation: ALMANAC + SPINE ARCHITECTURE (ALL 5 GOSPELS COMPLETE)
+
+### Accomplished
+
+**Drafted ALMANAC.md (~350 lines, 10 sections):**
+- Read-only cross-season historical reference layer
+- Fully consumes ALMANAC_SPEC.md (all 7 sections) + Almanac-relevant sections of FRANCHISE_MODE_SPEC.md
+- 0 STEP4 decisions (pure read-only consumer)
+- Sections: Overview, Data Sources, Almanac Sections (6 subsections: Leaderboards, Records, Awards, HOF Museum, Team History, Transactions), Cross-Season Query Interface, Career Player Profile, Implementation Priority, Franchise Isolation, V2/Deferred, Cross-References, Decision Traceability
+- Added Career Player Profile section (§5) not in source spec — consolidated from franchise data architecture
+- Qualifying thresholds scale with opportunityFactor
+- 7-phase incremental implementation plan
+
+**Drafted SPINE_ARCHITECTURE.md (~550 lines, 14 sections):**
+- Standalone 5th gospel per C-045
+- Defines shared data contracts connecting all four mode-specific gospels
+- Core entity models: Player, Team, League, Franchise, Season (full TypeScript interfaces)
+- All shared enumerations: Position (11), Grade (13-tier), PersonalityType (7), FameLevel (6), PlayerStatus (5), SeasonPhase (7), MojoLevel (5), FitnessState (6), ChemistryType (5), BatterHand (3), PitcherHand (2)
+- Stats contracts: BattingStats, PitchingStats, FieldingStats, CareerStats
+- Three immutable event streams: AtBatEvent, BetweenPlayEvent, TransactionEvent
+- Two-database storage model: kbl-app-meta (8 global stores) + kbl-franchise-{id} (22 per-franchise stores)
+- Three mode transition handoff contracts: FranchiseHandoff (1→2), SeasonSummary (2→3), NewSeasonHandoff (3→2)
+- Adaptive scaling: opportunityFactor, WAR scaling, SMB4 constants
+- Shared contracts for: Traits, Designations, Fan Morale, Narrative, Park Factors
+- References 13 decisions from other gospels (C-054, C-057, C-058/059, C-070, C-074/087, C-076, C-078, C-084, C-086, C-088, F-124, F-127, F-128)
+
+### Verification
+- Subagent verification pass on both documents: all sections complete, no contradictions, proper cross-references
+- ALMANAC.md fully consumes all 7 sections of ALMANAC_SPEC.md
+- SPINE_ARCHITECTURE.md includes C-045, all 5 core entities, all 3 event streams, all 3 handoff contracts, complete storage schema
+- Cross-checked against GOSPEL_CONSOLIDATION_MAP.md: aligned
+
+### Git Issue
+- Stale .git/index.lock from previous session prevents git operations from VM
+- JK needs to run: `rm /Users/johnkruse/Projects/kbl-tracker/.git/index.lock`
+- MODE_2_FRANCHISE_SEASON.md also still pending commit (was ready last session)
+
+### Gospel Consolidation Summary (ALL 5 COMPLETE)
+
+| Gospel | Lines | Sections | Decisions | Status |
+|--------|-------|----------|-----------|--------|
+| MODE_1_LEAGUE_BUILDER.md | 1,767 | 16 | 12 | ✅ COMMITTED |
+| MODE_3_OFFSEASON_WORKSHOP.md | 1,319 | 21 | 17 + 8 findings | ✅ COMMITTED |
+| MODE_2_FRANCHISE_SEASON.md | 3,269 | 28 | 33 + 3 cross-cutting | ✅ DRAFTED — pending commit |
+| ALMANAC.md | ~350 | 10 | 0 | ✅ DRAFTED — pending commit |
+| SPINE_ARCHITECTURE.md | ~550 | 14 | C-045 | ✅ DRAFTED — pending commit |
+| **TOTAL** | **~7,255** | **89** | **62 IDs** | **5/5 DRAFTED** |
+
+### No Code Changes This Session
+Gospel documentation only.
+
+### What Next Session Starts With
+- Remove .git/index.lock: `rm /Users/johnkruse/Projects/kbl-tracker/.git/index.lock`
+- Commit MODE_2, ALMANAC, SPINE_ARCHITECTURE, SESSION_LOG, CURRENT_STATE
+- Archive superseded specs (per GOSPEL_CONSOLIDATION_MAP.md "Pending Archive" and "NOT Gospel Material" sections)
+- Resume Phase 2 fix execution (code changes)
