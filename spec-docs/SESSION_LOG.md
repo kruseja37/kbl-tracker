@@ -1101,3 +1101,82 @@ Skipped granular spec updates (Step 5). Went directly to gospel consolidation �
 
 ### Next Action
 Draft MODE_1_LEAGUE_BUILDER.md — first gospel. Pull from 13 input specs, apply 9 STEP4 decisions, integrate Franchise Type design note §5, add Spine cross-reference.
+
+
+---
+
+## Session: 2026-02-22 (Late Night) — Mode 1 Gospel Drafted
+
+### Context
+Continued from evening session. Gospel consolidation map and franchise type design note were complete. Began drafting first gospel document.
+
+### What Was Accomplished
+
+**Drafted MODE_1_LEAGUE_BUILDER.md (1,767 lines, 16 sections):**
+
+1. Overview & Mode Definition — Mode 1 lifecycle, what it produces, entry points (C-073)
+2. Franchise Type Selection — Solo/Co-Op/Custom, `controlledBy` flag, phase scope defaults, commissioner model
+3. Leagues Module — Templates, conference/division structure, constraints
+4. Teams Module — Data model, CSV import, branding (controlledBy NOT in global model)
+5. Players Module — Complete data model, 13-grade scale (C-074/C-087), 7-type personality (C-070), FameLevel dropdown (C-078), generation config
+6. Personality & Traits Initial Assignment — 7 types + 4 hidden modifiers, trait distribution 30/50/20, farm visibility rules (C-054)
+7. Rosters Module — Lineup, depth chart, validation rules
+8. Draft Module — Fantasy draft + Startup Prospect Draft, prospect generation, scouting accuracy with fat-tail deviation model
+9. Rules Configuration — Full RulesPreset interface, 16/128 presets (C-071), no contraction (C-072), no WAR weights (C-075), no salary cap (C-051)
+10. Schedule Setup — Pre-generated + editable (C-079), fictional date system, franchise type impact
+11. Franchise Creation Wizard — 6-step flow, Playoff Mode abbreviated flow
+12. Franchise Handoff & Initialization — Full init sequence with salary/standings/franchiseId/copy-not-reference (C-076), Mode Transition screen (C-077)
+13. Data Architecture — Global vs franchise, separate IndexedDB per franchise, storage estimates, franchise management API, startup flow
+14. V2 Material — Explicit out-of-scope list
+15. Cross-References — Source spec consumption table
+16. Decision Traceability — All 12 IDs verified present (40 total references)
+
+**All 12 decision IDs verified in document:**
+C-070, C-071, C-072, C-073, C-074, C-075, C-076, C-077, C-078, C-087, C-045, C-054
+
+### Source Specs Read This Session
+- LEAGUE_BUILDER_SPEC.md (976 lines)
+- GRADE_ALGORITHM_SPEC.md
+- PERSONALITY_SYSTEM_SPEC.md
+- TRAIT_INTEGRATION_SPEC.md
+- SEASON_SETUP_SPEC.md
+- FRANCHISE_MODE_SPEC.md
+- PROSPECT_GENERATION_SPEC.md
+- SCOUTING_SYSTEM_SPEC.md
+- GOSPEL_CONSOLIDATION_MAP.md (full)
+- STEP4_DECISIONS.md (full)
+- FRANCHISE_TYPE_DESIGN_NOTE.md (from session memory)
+
+### Files Created
+- spec-docs/MODE_1_LEAGUE_BUILDER.md (new, 1,767 lines)
+
+### No Code Changes This Session
+
+### Next Action
+Draft MODE_3_OFFSEASON_WORKSHOP.md in a new session. 17 input specs, 17 decision IDs (C-041/C-085, C-042, C-043, C-044, C-046, C-049, C-051, C-052, C-053, C-063, C-064, C-066, C-083/C-094, C-086, C-090). Primary source: OFFSEASON_SYSTEM_SPEC.md (2,353 lines).
+
+## Session: 2026-02-23 — Gospel Consolidation: Mode 3 Offseason Workshop
+
+### Accomplished
+- Drafted MODE_3_OFFSEASON_WORKSHOP.md (1,319 lines, 21 sections)
+- 13-phase structure per C-049: Season End → Awards → Salary #1 → Expansion/Stadium → Retirements → FA → Draft → Salary #2 → Trades → Salary #3 → Farm Recon → Chemistry Rebalancing → Finalize & Advance
+- Integrated all 17 STEP4 decisions: C-041, C-042, C-043, C-044, C-046, C-049, C-051, C-052, C-053, C-063, C-064, C-066, C-083, C-085, C-086, C-090, C-094
+- Integrated 8 reconciliation findings: F-124 (SMB4 chemistry names), F-125 (FA ±20% True Value), F-126 (draft grade range), F-127 (rookie salary), F-130 (stadium changes), F-131 (fat-tail scouting), F-132 (team captain), F-133 (beat reporter warnings)
+- Franchise Type integration: phase scopes (all-teams vs human-only), AI auto-resolution strategies, Couch Co-Op full ceremony
+- Verified: 0 internal contradictions, all decisions substantively integrated, all 13 phases present
+
+### Verification
+- Subagent verification pass: all 17 decisions confirmed present with section references
+- All 8 findings confirmed integrated
+- No contradictions detected across salary formulas, roster sizes, phase scopes, chemistry tiers
+
+### Minor Gaps Identified (follow-up)
+1. §6.2 Expansion draft protection/selection algorithm needs detail
+2. §11.2 AI trade proposal generation logic thin
+3. §4.2 Eye test voting UI mechanics underspecified
+4. §11.2/§15.2 Beat reporter warning list incomplete
+
+### What Next Session Starts With
+- Draft MODE_2_FRANCHISE_SEASON.md (39 input specs, 31 decision IDs — the largest gospel)
+- Primary source: KBL_UNIFIED_ARCHITECTURE_SPEC.md
+- Covers GameTracker, stats, WAR, standings, roster mgmt, schedule, narrative, designations, milestones, mojo/fitness, clutch, fielding, AI game engine

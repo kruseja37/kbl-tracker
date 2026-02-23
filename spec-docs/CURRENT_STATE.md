@@ -1,73 +1,66 @@
-# KBL Tracker — Current State
-**Last updated:** 2026-02-22 (Gospel Consolidation Map complete, ready to draft)
-**Protocol:** REWRITE this file (do not append) at every session end.
-**Max length:** 2 pages. If it grows beyond this, you are doing it wrong.
+# CURRENT_STATE.md
+
+**Last Updated:** 2026-02-23
+**Phase:** Gospel Consolidation — MODE 1 + MODE 3 DRAFTED, MODE 2 NEXT
 
 ---
 
-## Current Phase and Step
-- **Phase:** Gospel Consolidation — MAPPING COMPLETE, DRAFTING NEXT
-- **Next action:** Draft MODE_1_LEAGUE_BUILDER.md (first gospel)
-- **Drafting order:** Mode 1 → Mode 3 → Mode 2 → Almanac → Spine
+## Current Status
 
----
+MODE_3_OFFSEASON_WORKSHOP.md is complete (1,319 lines, 21 sections, 13 phases, 17 decisions + 8 findings applied). MODE_1 was committed earlier today.
 
-## Gospel Consolidation Status
+## Next Action
+
+**Draft MODE_2_FRANCHISE_SEASON.md** — the largest gospel.
+- 39 input specs, 31 decision IDs (29 unique + 2 doc gaps)
+- Primary source: KBL_UNIFIED_ARCHITECTURE_SPEC.md (GameTracker event model)
+- Covers: GameTracker, stats pipeline, WAR (5 calculators), standings, roster mgmt, schedule, narrative, designations, milestones, mojo/fitness, clutch, fielding, events, AI game engine
+- Estimated ~8,000 lines
+
+## Gospel Status
 
 | Gospel | Input Specs | Decisions | Status |
-|--------|-----------|-----------|--------|
-| MODE_1_LEAGUE_BUILDER.md | 13 | 10 | **NEXT** |
-| MODE_3_OFFSEASON_WORKSHOP.md | 17 | 17 | Queued |
-| MODE_2_FRANCHISE_SEASON.md | 39 | 31 | Queued |
-| ALMANAC.md | 2 | 0 | Queued |
-| SPINE_ARCHITECTURE.md | Cross-cutting (C-045) | — | Queued |
+|--------|------------|-----------|--------|
+| MODE_1_LEAGUE_BUILDER.md | 13 | 12 (10 Mode 1 + 2 cross-cutting) | ✅ COMMITTED |
+| MODE_3_OFFSEASON_WORKSHOP.md | 17 | 17 + 8 findings | ✅ DRAFTED — pending commit |
+| MODE_2_FRANCHISE_SEASON.md | 39 | 31 | ⬜ NEXT |
+| ALMANAC.md | 2 | 0 | ⬜ Queued |
+| SPINE_ARCHITECTURE.md | Cross-cutting | C-045 | ⬜ Queued |
 
-### Key Resolved Decisions Affecting All Gospels
-- **13 offseason phases** (not 11, not 14). Phases 12-13: Farm Reconciliation + Chemistry Rebalancing.
-- **Spine = standalone 5th document**, referenced by all 4 gospels.
-- **Franchise Types:** Solo (1P) / Couch Co-Op / Custom — configuration layer, not structural change. Design note written.
-- **Step 5 (granular spec updates) was skipped** — decisions fold directly into gospels.
+## Pending Commit
 
----
+```
+spec-docs/MODE_3_OFFSEASON_WORKSHOP.md (new, 1,319 lines)
+spec-docs/SESSION_LOG.md (appended)
+spec-docs/CURRENT_STATE.md (updated)
+```
 
-## Blueprint Files (the consolidation instruction set)
+## Mode 3 Minor Gaps (follow-up refinement)
 
-| File | Purpose |
-|------|---------|
-| GOSPEL_CONSOLIDATION_MAP.md | Master mapping: specs → gospels, decisions → gospels, shared specs, archive list |
-| FRANCHISE_TYPE_DESIGN_NOTE.md | Solo/Co-Op/Custom franchise types, `controlledBy` flag, phase scope, hybrid standings |
-| STEP4_DECISIONS.md | All 42 decisions (62 unique IDs) — consumed during drafting |
+1. §6.2 Expansion draft protection/selection algorithm needs detail (medium)
+2. §11.2 AI trade proposal generation logic thin (minor)
+3. §4.2 Eye test voting UI mechanics underspecified (minor)
+4. §11.2/§15.2 Beat reporter warning list incomplete (minor)
 
----
+## Key Resolved Decisions (Cumulative)
 
-## Prior Completed Work (do not re-derive)
-- SpecRecon Steps 1-4: ALL COMPLETE
-- Phase 1 Pattern Map: 26/26 rows COMPLETE
-- Spec Sync: 20 items verified on disk COMPLETE
-- Phase B Reconciliation: 92 kept, 48 archived from 140 specs
-- Step 3: 94 findings across 6 domains, all resolved
-- Step 4: 42 decisions (62 IDs), all resolved in STEP4_DECISIONS.md
-- Consolidation Map: all 62 IDs verified, all files on disk accounted for
+- Offseason = 13 phases (not 11, not 14) per C-049
+- Spine = standalone 5th document per C-045
+- Franchise Types = configuration layer (Solo/Co-Op/Custom)
+- Step 5 (granular spec updates) skipped → went straight to gospel consolidation
+- 13-grade scale authoritative (S through D-) per C-074/C-087
+- Personality = 7 types only (not 12) per C-070
+- Fame = FameLevel dropdown (not slider) per C-078
+- No contraction in v1 per C-072
+- No WAR configurable weights per C-075
+- Handoff = copy-not-reference per C-076
+- Chemistry types = real SMB4 names (5 types) per F-124
+- FA exchange = ±20% True Value, no position restriction per F-125
+- Rookie salary = draft-round-based, locked per F-127
+- Trait assignment = wheel spin, potency-only per C-086
 
----
+## Blueprint Files
 
-## Files a New Thread Must Read (in order)
-1. This file (CURRENT_STATE.md)
-2. spec-docs/SESSION_RULES.md
-3. spec-docs/GOSPEL_CONSOLIDATION_MAP.md — **THE KEY FILE** — master blueprint
-4. spec-docs/FRANCHISE_TYPE_DESIGN_NOTE.md — franchise type design
-5. spec-docs/STEP4_DECISIONS.md — all 42 resolved decisions
-
-For Mode 1 drafting, also read:
-6. spec-docs/LEAGUE_BUILDER_SPEC.md — primary source
-7. spec-docs/SEPARATED_MODES_ARCHITECTURE.md — mode boundaries (being superseded)
-
----
-
-## What a New Thread Should NOT Do
-- Re-audit anything — all audit phases complete
-- Re-run reconciliation — all decisions answered
-- Re-ask Step 4 decisions — all 42 resolved
-- Skip reading GOSPEL_CONSOLIDATION_MAP.md — it IS the drafting instruction set
-- Start drafting Mode 2 or Mode 3 before Mode 1 — order matters
-- Modify existing specs — changes go INTO the new gospel docs, not back into source specs
+- GOSPEL_CONSOLIDATION_MAP.md — master routing of specs → gospels
+- FRANCHISE_TYPE_DESIGN_NOTE.md — Solo/Co-Op/Custom design
+- STEP4_DECISIONS.md — all 62 decision IDs (consumed during drafting)
