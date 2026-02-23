@@ -14,7 +14,7 @@
 |--------|-------|-----------|
 | **MODE_1_LEAGUE_BUILDER.md** | One-time setup: teams, rosters, import, rules, personality assignment, startup draft, grade algorithm, franchise save slot creation | Run once per franchise |
 | **MODE_2_FRANCHISE_SEASON.md** | GameTracker, stats pipeline, WAR, standings, roster mgmt, schedule, narrative, designations, milestones, mojo/fitness, clutch, fielding, events, AI game engine | Active during season + playoffs |
-| **MODE_3_OFFSEASON_WORKSHOP.md** | 14 phases: awards, salary recalc ×3, expansion, retirement, FA, draft, trades, finalize, farm reconciliation, chemistry rebalancing | Between seasons |
+| **MODE_3_OFFSEASON_WORKSHOP.md** | 13 phases: awards, salary recalc ×3, expansion, retirement, FA, draft, trades, finalize, farm reconciliation, chemistry rebalancing | Between seasons |
 | **ALMANAC.md** | Read-only cross-season historical reference, career stats, HOF museum, retired jerseys, all-time leaderboards | Always available |
 
 ---
@@ -87,7 +87,7 @@
 
 | Spec File | What It Contributes | Notes |
 |-----------|-------------------|-------|
-| OFFSEASON_SYSTEM_SPEC.md | PRIMARY — entire 14-phase spec | Core input (needs 11→14 update per C-049) |
+| OFFSEASON_SYSTEM_SPEC.md | PRIMARY — entire 13-phase spec | Core input (needs 11→13 update per C-049) |
 | FRANCHISE_MODE_SPEC.md | Season archive, cross-season data persistence | Shared w/ Mode 1+2+Almanac |
 | EOS_RATINGS_ADJUSTMENT_SPEC.md | Phase 3/8/10 salary recalc formulas | Salary recalc |
 | EOS_RATINGS_FIGMA_SPEC.md | Ratings adjustment UI | Figma reference |
@@ -244,7 +244,7 @@
 | C-043 | EOS farm call-up threshold scales with season length | Salary recalc |
 | C-044 | Fan morale → EOS modifier (0.7× at low morale) | Salary recalc |
 | C-046 | Mid-season salary changes deferred to offseason | Phase 3/8/10 |
-| C-049 | Expand to 14 phases (restore farm recon + chemistry) | Phase structure |
+| C-049 | Expand to 13 phases (restore farm recon + chemistry) | Phase structure |
 | C-051 | No salary cap in v1 | Salary rules |
 | C-052 | 4-modifier personality approved | FA destinations |
 | C-053 | Team Captain: Loyalty+Charisma, no minimums | Phase 2 awards |
@@ -332,7 +332,7 @@ All 62 unique IDs from STEP4_DECISIONS.md accounted for:
 **Draft gospels in this order:**
 
 1. **MODE_1_LEAGUE_BUILDER.md** — Smallest scope, cleanest inputs. 13 specs, 10 unique decision IDs.
-2. **MODE_3_OFFSEASON_WORKSHOP.md** — Well-defined phases, mostly self-contained. 17 specs, 17 unique decision IDs. 14-phase structure from C-049 is the main structural change.
+2. **MODE_3_OFFSEASON_WORKSHOP.md** — Well-defined phases, mostly self-contained. 17 specs, 17 unique decision IDs. 13-phase structure from C-049 is the main structural change.
 3. **MODE_2_FRANCHISE_SEASON.md** — Largest and most complex. Benefits from Mode 1 (what enters the season) and Mode 3 (what the season feeds into) being already locked. 38 specs, 31 unique decision IDs.
 4. **ALMANAC.md** — Simplest. Read-only consumer. Draft last since it just references what the other three produce. 2 specs, 0 decisions.
 

@@ -153,7 +153,6 @@ interface OffseasonPhaseConfig {
 | 11 | Finalize & Advance | all-teams | Roster compliance for everyone |
 | 12 | Farm Reconciliation | human-only | Requires call-up/option data from season |
 | 13 | Chemistry Rebalancing | human-only | Requires full roster interaction data |
-| 14 | (TBD per C-049) | TBD | TBD |
 
 ### 4.3 AI Team Resolution in Human-Only Phases
 
