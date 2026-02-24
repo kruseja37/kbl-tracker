@@ -6,6 +6,7 @@
  */
 
 import type { Position, BatterHand } from '../types/game';
+import { ALL_MLB_PLAYERS } from './players/mlb';
 
 // ============================================
 // TYPES
@@ -16,6 +17,7 @@ export type Gender = 'M' | 'F';
 export type Chemistry = 'SPIRITED' | 'CRAFTY' | 'DISCIPLINED' | 'FIERY' | 'GRITTY' | 'SCHOLARLY' | 'COMPETITIVE';
 export type PlayerRole = 'STARTER' | 'BENCH' | 'ROTATION' | 'BULLPEN';
 export type PitcherRole = 'SP' | 'RP' | 'CP' | 'SP/RP';
+export type PrimaryRole = 'PITCHER' | 'POSITION';
 
 export interface BatterRatings {
   power: number;
@@ -47,10 +49,11 @@ export interface PlayerData {
   bats: BatterHand;
   throws: ThrowHand;
 
-  // Position info
-  primaryPosition: Position;
+  // Role and position info
+  primaryRole?: PrimaryRole;  // PITCHER or POSITION — top-level classification
+  primaryPosition: Position;  // Sub-label: SP/RP/CP for pitchers, LF/3B/C etc for position players
   secondaryPosition?: Position;
-  isPitcher: boolean;
+  isPitcher: boolean;  // Kept for backward compatibility (derived from primaryRole)
   pitcherRole?: PitcherRole;  // SP, RP, CP, SP/RP
   role: PlayerRole;  // STARTER, BENCH, ROTATION, BULLPEN
 
@@ -9586,44 +9589,118 @@ export const PLAYERS: Record<string, PlayerData> = {
 };
 
 // ============================================
+// MLB PLAYER INDEX (keyed by id for fast lookup)
+// ============================================
+
+/** MLB players indexed by id — 660 players across 30 MLB teams */
+const MLB_PLAYERS: Record<string, PlayerData> = {};
+for (const p of ALL_MLB_PLAYERS) {
+  MLB_PLAYERS[p.id] = p;
+}
+
+/** Re-export MLB players array for direct consumption */
+export { ALL_MLB_PLAYERS };
+
+// ============================================
+// MLB TEAM DATA
+// ============================================
+
+export const MLB_TEAMS: Record<string, TeamData> = {
+  'yankees': { id: 'yankees', name: 'Yankees', homePark: 'Shogun Stadium', chemistry: 'COMPETITIVE', primaryColor: '#003087', secondaryColor: '#E4002B', rosterIds: ALL_MLB_PLAYERS.filter(p => p.teamId === 'yankees').map(p => p.id), leagueId: 'al' },
+  'red-sox': { id: 'red-sox', name: 'Red Sox', homePark: 'Red Rock Park', chemistry: 'COMPETITIVE', primaryColor: '#BD3039', secondaryColor: '#0C2340', rosterIds: ALL_MLB_PLAYERS.filter(p => p.teamId === 'red-sox').map(p => p.id), leagueId: 'al' },
+  'blue-jays': { id: 'blue-jays', name: 'Blue Jays', homePark: 'Sakura Park', chemistry: 'CRAFTY', primaryColor: '#134A8E', secondaryColor: '#1D2D5C', rosterIds: ALL_MLB_PLAYERS.filter(p => p.teamId === 'blue-jays').map(p => p.id), leagueId: 'al' },
+  'orioles': { id: 'orioles', name: 'Orioles', homePark: 'Emerald Diamond', chemistry: 'SPIRITED', primaryColor: '#DF4601', secondaryColor: '#000000', rosterIds: ALL_MLB_PLAYERS.filter(p => p.teamId === 'orioles').map(p => p.id), leagueId: 'al' },
+  'rays': { id: 'rays', name: 'Rays', homePark: 'Wrigley Field', chemistry: 'DISCIPLINED', primaryColor: '#092C5C', secondaryColor: '#8FBCE6', rosterIds: ALL_MLB_PLAYERS.filter(p => p.teamId === 'rays').map(p => p.id), leagueId: 'al' },
+  'white-sox': { id: 'white-sox', name: 'White Sox', homePark: 'Four Corners Field', chemistry: 'COMPETITIVE', primaryColor: '#27251F', secondaryColor: '#C4CED4', rosterIds: ALL_MLB_PLAYERS.filter(p => p.teamId === 'white-sox').map(p => p.id), leagueId: 'al' },
+  'twins': { id: 'twins', name: 'Twins', homePark: 'Circular Colosseum', chemistry: 'SPIRITED', primaryColor: '#002B5C', secondaryColor: '#D31145', rosterIds: ALL_MLB_PLAYERS.filter(p => p.teamId === 'twins').map(p => p.id), leagueId: 'al' },
+  'indians': { id: 'indians', name: 'Indians', homePark: 'Scott Field', chemistry: 'DISCIPLINED', primaryColor: '#00385D', secondaryColor: '#E50022', rosterIds: ALL_MLB_PLAYERS.filter(p => p.teamId === 'indians').map(p => p.id), leagueId: 'al' },
+  'royals': { id: 'royals', name: 'Royals', homePark: 'Batter\'s Paradise', chemistry: 'CRAFTY', primaryColor: '#004687', secondaryColor: '#BD9B60', rosterIds: ALL_MLB_PLAYERS.filter(p => p.teamId === 'royals').map(p => p.id), leagueId: 'al' },
+  'tigers': { id: 'tigers', name: 'Tigers', homePark: 'Castillo Arena', chemistry: 'COMPETITIVE', primaryColor: '#0C2340', secondaryColor: '#FA4616', rosterIds: ALL_MLB_PLAYERS.filter(p => p.teamId === 'tigers').map(p => p.id), leagueId: 'al' },
+  'astros': { id: 'astros', name: 'Astros', homePark: 'Bob\'s Ballpark', chemistry: 'DISCIPLINED', primaryColor: '#002D62', secondaryColor: '#EB6E1F', rosterIds: ALL_MLB_PLAYERS.filter(p => p.teamId === 'astros').map(p => p.id), leagueId: 'al' },
+  'mariners': { id: 'mariners', name: 'Mariners', homePark: 'Grassy Field', chemistry: 'CRAFTY', primaryColor: '#0C2C56', secondaryColor: '#005C5C', rosterIds: ALL_MLB_PLAYERS.filter(p => p.teamId === 'mariners').map(p => p.id), leagueId: 'al' },
+  'angels': { id: 'angels', name: 'Angels', homePark: 'The Patio', chemistry: 'SPIRITED', primaryColor: '#BA0021', secondaryColor: '#003263', rosterIds: ALL_MLB_PLAYERS.filter(p => p.teamId === 'angels').map(p => p.id), leagueId: 'al' },
+  'rangers': { id: 'rangers', name: 'Rangers', homePark: 'The Show', chemistry: 'COMPETITIVE', primaryColor: '#003278', secondaryColor: '#C0111F', rosterIds: ALL_MLB_PLAYERS.filter(p => p.teamId === 'rangers').map(p => p.id), leagueId: 'al' },
+  'athletics': { id: 'athletics', name: 'Athletics', homePark: 'Planet Field', chemistry: 'CRAFTY', primaryColor: '#003831', secondaryColor: '#EFB21E', rosterIds: ALL_MLB_PLAYERS.filter(p => p.teamId === 'athletics').map(p => p.id), leagueId: 'al' },
+  'braves': { id: 'braves', name: 'Braves', homePark: 'Red Rock Park', chemistry: 'SPIRITED', primaryColor: '#CE1141', secondaryColor: '#13274F', rosterIds: ALL_MLB_PLAYERS.filter(p => p.teamId === 'braves').map(p => p.id), leagueId: 'nl' },
+  'mets': { id: 'mets', name: 'Mets', homePark: 'Sakura Park', chemistry: 'CRAFTY', primaryColor: '#002D72', secondaryColor: '#FF5910', rosterIds: ALL_MLB_PLAYERS.filter(p => p.teamId === 'mets').map(p => p.id), leagueId: 'nl' },
+  'phillies': { id: 'phillies', name: 'Phillies', homePark: 'Emerald Diamond', chemistry: 'COMPETITIVE', primaryColor: '#E81828', secondaryColor: '#002D72', rosterIds: ALL_MLB_PLAYERS.filter(p => p.teamId === 'phillies').map(p => p.id), leagueId: 'nl' },
+  'marlins': { id: 'marlins', name: 'Marlins', homePark: 'Bob\'s Ballpark', chemistry: 'DISCIPLINED', primaryColor: '#00A3E0', secondaryColor: '#EF3340', rosterIds: ALL_MLB_PLAYERS.filter(p => p.teamId === 'marlins').map(p => p.id), leagueId: 'nl' },
+  'expos': { id: 'expos', name: 'Expos', homePark: 'Wrigley Field', chemistry: 'SPIRITED', primaryColor: '#003087', secondaryColor: '#E4002B', rosterIds: ALL_MLB_PLAYERS.filter(p => p.teamId === 'expos').map(p => p.id), leagueId: 'nl' },
+  'cardinals': { id: 'cardinals', name: 'Cardinals', homePark: 'Castillo Arena', chemistry: 'COMPETITIVE', primaryColor: '#C41E3A', secondaryColor: '#0C2340', rosterIds: ALL_MLB_PLAYERS.filter(p => p.teamId === 'cardinals').map(p => p.id), leagueId: 'nl' },
+  'reds': { id: 'reds', name: 'Reds', homePark: 'Batter\'s Paradise', chemistry: 'SPIRITED', primaryColor: '#C6011F', secondaryColor: '#000000', rosterIds: ALL_MLB_PLAYERS.filter(p => p.teamId === 'reds').map(p => p.id), leagueId: 'nl' },
+  'brewers': { id: 'brewers', name: 'Brewers', homePark: 'Four Corners Field', chemistry: 'CRAFTY', primaryColor: '#FFC52F', secondaryColor: '#12284B', rosterIds: ALL_MLB_PLAYERS.filter(p => p.teamId === 'brewers').map(p => p.id), leagueId: 'nl' },
+  'pirates': { id: 'pirates', name: 'Pirates', homePark: 'Shogun Stadium', chemistry: 'DISCIPLINED', primaryColor: '#27251F', secondaryColor: '#FDB827', rosterIds: ALL_MLB_PLAYERS.filter(p => p.teamId === 'pirates').map(p => p.id), leagueId: 'nl' },
+  'cubs': { id: 'cubs', name: 'Cubs', homePark: 'Grassy Field', chemistry: 'COMPETITIVE', primaryColor: '#0E3386', secondaryColor: '#CC3433', rosterIds: ALL_MLB_PLAYERS.filter(p => p.teamId === 'cubs').map(p => p.id), leagueId: 'nl' },
+  'dodgers': { id: 'dodgers', name: 'Dodgers', homePark: 'The Show', chemistry: 'COMPETITIVE', primaryColor: '#005A9C', secondaryColor: '#EF3E42', rosterIds: ALL_MLB_PLAYERS.filter(p => p.teamId === 'dodgers').map(p => p.id), leagueId: 'nl' },
+  'padres': { id: 'padres', name: 'Padres', homePark: 'The Patio', chemistry: 'DISCIPLINED', primaryColor: '#2F241D', secondaryColor: '#FFC425', rosterIds: ALL_MLB_PLAYERS.filter(p => p.teamId === 'padres').map(p => p.id), leagueId: 'nl' },
+  'giants': { id: 'giants', name: 'Giants', homePark: 'Scott Field', chemistry: 'SPIRITED', primaryColor: '#FD5A1E', secondaryColor: '#27251F', rosterIds: ALL_MLB_PLAYERS.filter(p => p.teamId === 'giants').map(p => p.id), leagueId: 'nl' },
+  'diamondbacks': { id: 'diamondbacks', name: 'Diamondbacks', homePark: 'Planet Field', chemistry: 'CRAFTY', primaryColor: '#A71930', secondaryColor: '#E3D4AD', rosterIds: ALL_MLB_PLAYERS.filter(p => p.teamId === 'diamondbacks').map(p => p.id), leagueId: 'nl' },
+  'rockies': { id: 'rockies', name: 'Rockies', homePark: 'Circular Colosseum', chemistry: 'SPIRITED', primaryColor: '#333366', secondaryColor: '#C4CED4', rosterIds: ALL_MLB_PLAYERS.filter(p => p.teamId === 'rockies').map(p => p.id), leagueId: 'nl' },
+};
+
+// ============================================
+// COMBINED LOOKUPS (Standard + MLB)
+// ============================================
+
+/** All teams combined (standard + MLB) */
+const ALL_TEAMS_COMBINED: Record<string, TeamData> = { ...TEAMS, ...MLB_TEAMS };
+
+/** All players combined (standard + MLB) */
+const ALL_PLAYERS_COMBINED: Record<string, PlayerData> = { ...PLAYERS, ...MLB_PLAYERS };
+
+// ============================================
 // HELPER FUNCTIONS
 // ============================================
 
 /**
- * Get all players for a team
+ * Get all players for a team (searches both standard and MLB teams)
  */
 export function getTeamRoster(teamId: string): PlayerData[] {
-  const team = TEAMS[teamId];
+  const team = ALL_TEAMS_COMBINED[teamId];
   if (!team) return [];
-  return team.rosterIds.map(id => PLAYERS[id]).filter(Boolean);
+  return team.rosterIds.map(id => ALL_PLAYERS_COMBINED[id]).filter(Boolean);
 }
 
 /**
  * Get player by ID
  */
 export function getPlayer(playerId: string): PlayerData | undefined {
-  return PLAYERS[playerId];
+  return ALL_PLAYERS_COMBINED[playerId];
 }
 
 /**
- * Get team by ID
+ * Get team by ID (searches both standard and MLB teams)
  */
 export function getTeam(teamId: string): TeamData | undefined {
-  return TEAMS[teamId];
+  return ALL_TEAMS_COMBINED[teamId];
 }
 
 /**
- * Get all teams
+ * Get all teams (standard + MLB)
  */
 export function getAllTeams(): TeamData[] {
+  return Object.values(ALL_TEAMS_COMBINED);
+}
+
+/**
+ * Get standard teams only (excludes MLB)
+ */
+export function getStandardTeams(): TeamData[] {
   return Object.values(TEAMS);
 }
 
 /**
- * Get all players
+ * Get MLB teams only
+ */
+export function getMLBTeams(): TeamData[] {
+  return Object.values(MLB_TEAMS);
+}
+
+/**
+ * Get all players (standard + MLB)
  */
 export function getAllPlayers(): PlayerData[] {
-  return Object.values(PLAYERS);
+  return Object.values(ALL_PLAYERS_COMBINED);
 }
 
 /**
@@ -9690,7 +9767,7 @@ export function getPlayerByName(name: string): PlayerData | undefined {
  * Get all free agents (players with teamId 'free-agent')
  */
 export function getAllFreeAgents(): PlayerData[] {
-  return Object.values(PLAYERS).filter(p => p.teamId === 'free-agent');
+  return Object.values(ALL_PLAYERS_COMBINED).filter(p => p.teamId === 'free-agent');
 }
 
 /**

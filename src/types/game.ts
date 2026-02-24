@@ -6,7 +6,7 @@ import { type FitnessState, getFitnessFameModifier } from '../engines/fitnessEng
 export type HalfInning = 'TOP' | 'BOTTOM';
 export type Direction = 'Left' | 'Left-Center' | 'Center' | 'Right-Center' | 'Right' | 'Foul-Left' | 'Foul-Right';
 export type ExitType = 'Ground' | 'Line Drive' | 'Fly Ball' | 'Pop Up';
-export type Position = 'P' | 'C' | '1B' | '2B' | '3B' | 'SS' | 'LF' | 'CF' | 'RF' | 'DH' | 'SP' | 'RP' | 'CP' | 'IF' | 'OF';
+export type Position = 'P' | 'C' | '1B' | '2B' | '3B' | 'SS' | 'LF' | 'CF' | 'RF' | 'DH' | 'SP' | 'RP' | 'CP' | 'SP/RP' | 'IF' | 'OF' | 'IF/OF' | '1B/OF';
 export type BatterHand = 'L' | 'R' | 'S';
 
 export type AtBatResult =

@@ -5,7 +5,6 @@ import { DndProvider } from "react-dnd";
 import { HTML5Backend } from "react-dnd-html5-backend";
 // REMOVED: BUG-009 - BaserunnerDragDrop was a placeholder that did nothing
 // import { BaserunnerDragDrop, type RunnerMoveData as LegacyRunnerMoveData } from "@/app/components/BaserunnerDragDrop";
-import { InteractiveField } from "@/app/components/DragDropGameTracker";
 import { EnhancedInteractiveField, type PlayData, type SpecialEventData } from "@/app/components/EnhancedInteractiveField";
 import { type RunnerMoveData } from "@/app/components/RunnerDragDrop";
 import { LineupCard, type SubstitutionData, type LineupPlayer, type BenchPlayer, type BullpenPitcher } from "@/app/components/LineupCard";
@@ -363,9 +362,6 @@ export function GameTracker() {
 
   // MAJ-03: Detection system state — pending prompts for user confirmation
   const [pendingDetections, setPendingDetections] = useState<UIDetectionResult[]>([]);
-
-  // Enhanced field toggle - use new FieldCanvas-based interactive field
-  const [useEnhancedField, setUseEnhancedField] = useState(true);
 
   // Scoreboard minimization toggle - allows field to expand
   const [isScoreboardMinimized, setIsScoreboardMinimized] = useState(false);
@@ -1017,12 +1013,6 @@ export function GameTracker() {
       }
     }
   }, [changePitcher, makeSubstitution, switchPositions, awayTeamPlayers, homeTeamPlayers]);
-
-  const handlePlayComplete = (playData: any) => {
-    console.log("Play complete:", playData);
-    // Update game state based on play data
-    // This would update bases, outs, scores, etc.
-  };
 
   // T1-05: Auto-infer fielder credits from fieldingSequence
   // Standard baseball rules: last fielder = putout, others = assists
@@ -2644,164 +2634,44 @@ export function GameTracker() {
           {/* Field controls - floating over field */}
           <div className="absolute top-4 left-4 z-30 flex gap-2">
             <undoSystem.UndoButtonComponent />
-            <button
-              onClick={() => setUseEnhancedField(!useEnhancedField)}
-              className={`text-[8px] px-2 py-0.5 border-2 font-bold transition-colors ${
-                useEnhancedField
-                  ? 'bg-[#4CAF50] border-white text-white'
-                  : 'bg-[#666] border-[#999] text-[#ccc]'
-              }`}
-            >
-              {useEnhancedField ? 'ENHANCED FIELD ✓' : 'LEGACY FIELD'}
-            </button>
           </div>
 
-          {useEnhancedField ? (
-            /* Enhanced Interactive Field - FULL VIEWPORT, field spans entire screen
-               Stands should extend to edges of viewport
-               Height adjusts based on scoreboard state: mini (52px) vs full (240px) */
-            <div className="bg-[#6B9462] relative w-full" style={{ height: isScoreboardMinimized ? 'calc(100vh - 52px)' : 'calc(100vh - 200px)', minHeight: '400px' }}>
-                <EnhancedInteractiveField
-                  gameSituation={{
-                    outs: gameState.outs,
-                    bases: gameState.bases,
-                    inning: gameState.inning,
-                    isTop: gameState.isTop,
-                  }}
-                  fieldPositions={fieldPositions}
-                  onPlayComplete={handleEnhancedPlayComplete}
-                  onSpecialEvent={handleSpecialEvent}
-                  onRunnerMove={handleEnhancedRunnerMove}
-                  onBatchRunnerMove={handleBatchRunnerMove}
-                  fielderBorderColors={[fielderColor1, fielderColor2]}
-                  batterBackgroundColor={battingTeamColors.primary}
-                  batterBorderColor={battingTeamColors.secondary}
-                  playerNames={{
-                    1: fieldPositions.find(fp => fp.number === '1')?.name || 'P',
-                    2: fieldPositions.find(fp => fp.number === '2')?.name || 'C',
-                    3: fieldPositions.find(fp => fp.number === '3')?.name || '1B',
-                    4: fieldPositions.find(fp => fp.number === '4')?.name || '2B',
-                    5: fieldPositions.find(fp => fp.number === '5')?.name || '3B',
-                    6: fieldPositions.find(fp => fp.number === '6')?.name || 'SS',
-                    7: fieldPositions.find(fp => fp.number === '7')?.name || 'LF',
-                    8: fieldPositions.find(fp => fp.number === '8')?.name || 'CF',
-                    9: fieldPositions.find(fp => fp.number === '9')?.name || 'RF',
-                  }}
-                  runnerNames={runnerNames}
-                  currentBatterName={gameState.currentBatterName}
-                  zoomLevel={fieldZoomLevel}
-                />
-              </div>
-            ) : (
-            <div className="bg-[#6B9462] relative" style={{ aspectRatio: "4/3" }}>
-              {/* Baseball diamond - Legacy SVG */}
-              <svg className="absolute inset-0 w-full h-full" viewBox="0 0 400 300" preserveAspectRatio="none">
-                {/* Outfield grass - darker chalky green */}
-                <rect x="0" y="0" width="400" height="300" fill="#6B9462" opacity="0.8" />
-                
-                {/* Warning track / stands area beyond fence - darker chalky brown */}
-                <path
-                  d="M 0 0 L 0 60 L 100 28 L 150 18 L 250 18 L 300 28 L 400 60 L 400 0 Z"
-                  fill="#3d5240"
-                  opacity="0.7"
-                />
-                
-                {/* Infield dirt - darker chalky tan/brown */}
-                <path
-                  d="M 200 237 L 267 178 L 200 119 L 133 178 Z"
-                  fill="#B8935F"
-                  stroke="#E8E8D8"
-                  strokeWidth="2"
-                  opacity="0.8"
-                />
-                
-                {/* Foul lines - chalky white */}
-                <line x1="200" y1="237" x2="0" y2="60" stroke="#E8E8D8" strokeWidth="3" opacity="0.8" />
-                <line x1="200" y1="237" x2="400" y2="60" stroke="#E8E8D8" strokeWidth="3" opacity="0.8" />
-                
-                {/* Outfield fence - bright gold chalk */}
-                {/* Left field line (left foul pole to left-center gap) */}
-                <line
-                  x1="0" y1="60"
-                  x2="100" y2="28"
-                  stroke="#E8C547"
-                  strokeWidth="4"
-                  opacity="1.0"
-                />
-                {/* Left-center line (left-center gap to deep left-center) */}
-                <line
-                  x1="100" y1="28"
-                  x2="150" y2="18"
-                  stroke="#E8C547"
-                  strokeWidth="4"
-                  opacity="1.0"
-                />
-                {/* Center field wall (deep left-center to deep right-center) - deepest part */}
-                <line
-                  x1="150" y1="18"
-                  x2="250" y2="18"
-                  stroke="#E8C547"
-                  strokeWidth="4"
-                  opacity="1.0"
-                />
-                {/* Right-center line (deep right-center to right-center gap) */}
-                <line
-                  x1="250" y1="18"
-                  x2="300" y2="28"
-                  stroke="#E8C547"
-                  strokeWidth="4"
-                  opacity="1.0"
-                />
-                {/* Right field line (right-center gap to right foul pole) */}
-                <line
-                  x1="300" y1="28"
-                  x2="400" y2="60"
-                  stroke="#E8C547"
-                  strokeWidth="4"
-                  opacity="1.0"
-                />
-                
-                {/* Rounded connection points at fence corners */}
-                <circle cx="100" cy="28" r="1.9" fill="#E8C547" opacity="1.0" />
-                <circle cx="150" cy="18" r="1.9" fill="#E8C547" opacity="1.0" />
-                <circle cx="250" cy="18" r="1.9" fill="#E8C547" opacity="1.0" />
-                <circle cx="300" cy="28" r="1.9" fill="#E8C547" opacity="1.0" />
-                
-                {/* Bases - chalky white */}
-                <rect x="195" y="232" width="10" height="10" fill="#E8E8D8" transform="rotate(45 200 237)" opacity="0.9" />
-                <rect x="262" y="173" width="8" height="8" fill="#E8E8D8" transform="rotate(45 267 178)" opacity="0.9" />
-                <rect x="195" y="114" width="8" height="8" fill="#E8E8D8" transform="rotate(45 200 119)" opacity="0.9" />
-                <rect x="128" y="173" width="8" height="8" fill="#E8E8D8" transform="rotate(45 133 178)" opacity="0.9" />
-                
-                {/* Pitcher's mound - darker chalky brown */}
-                <circle cx="200" cy="178" r="10" fill="#8B6F47" stroke="#E8E8D8" strokeWidth="2" opacity="0.7" />
-                <circle cx="200" cy="178" r="5" fill="#B8935F" opacity="0.8" />
-                
-                {/* Pitcher's rubber - chalky white */}
-                <rect x="194" y="177" width="12" height="2" fill="#E8E8D8" opacity="0.9" />
-              </svg>
-
-              {/* Interactive Field with Drag & Drop */}
-              <div id="interactive-field-container" className="absolute inset-0" style={{ zIndex: 45 }}>
-                <InteractiveField
-                  gameSituation={{
-                    outs: gameState.outs,
-                    bases: gameState.bases,
-                    inning: gameState.inning,
-                    isTop: gameState.isTop,
-                  }}
-                  fieldPositions={fieldPositions}
-                  onPlayComplete={handlePlayComplete}
-                  fielderBorderColors={[fielderColor1, fielderColor2]}
-                />
-              </div>
-
-              {/* REMOVED: BUG-009 - BaserunnerDragDrop was a placeholder that returned null
-                  Runner drag-drop is handled by EnhancedInteractiveField using RunnerDragDrop component
-              */}
-            </div>
-            )}
+          {/* Enhanced Interactive Field - FULL VIEWPORT, field spans entire screen
+              Stands should extend to edges of viewport
+              Height adjusts based on scoreboard state: mini (52px) vs full (240px) */}
+          <div className="bg-[#6B9462] relative w-full" style={{ height: isScoreboardMinimized ? 'calc(100vh - 52px)' : 'calc(100vh - 200px)', minHeight: '400px' }}>
+            <EnhancedInteractiveField
+              gameSituation={{
+                outs: gameState.outs,
+                bases: gameState.bases,
+                inning: gameState.inning,
+                isTop: gameState.isTop,
+              }}
+              fieldPositions={fieldPositions}
+              onPlayComplete={handleEnhancedPlayComplete}
+              onSpecialEvent={handleSpecialEvent}
+              onRunnerMove={handleEnhancedRunnerMove}
+              onBatchRunnerMove={handleBatchRunnerMove}
+              fielderBorderColors={[fielderColor1, fielderColor2]}
+              batterBackgroundColor={battingTeamColors.primary}
+              batterBorderColor={battingTeamColors.secondary}
+              playerNames={{
+                1: fieldPositions.find(fp => fp.number === '1')?.name || 'P',
+                2: fieldPositions.find(fp => fp.number === '2')?.name || 'C',
+                3: fieldPositions.find(fp => fp.number === '3')?.name || '1B',
+                4: fieldPositions.find(fp => fp.number === '4')?.name || '2B',
+                5: fieldPositions.find(fp => fp.number === '5')?.name || '3B',
+                6: fieldPositions.find(fp => fp.number === '6')?.name || 'SS',
+                7: fieldPositions.find(fp => fp.number === '7')?.name || 'LF',
+                8: fieldPositions.find(fp => fp.number === '8')?.name || 'CF',
+                9: fieldPositions.find(fp => fp.number === '9')?.name || 'RF',
+              }}
+              runnerNames={runnerNames}
+              currentBatterName={gameState.currentBatterName}
+              zoomLevel={fieldZoomLevel}
+            />
           </div>
+        </div>
 
           {/* Content below field - scrollable */}
           <div className="p-4 space-y-4">
