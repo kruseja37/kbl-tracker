@@ -9,6 +9,12 @@ description: >
   and there is exactly one authoritative version of each feature's spec. Triggers on any
   variation of reconciliation, consolidation, or conflict resolution across spec documents.
 ---
+BEFORE logging any finding that implicates a GOSPEL document:
+- Read the FULL GOSPEL document, not sections
+- List every location where the topic appears
+- Only log the finding if the contradiction holds after full-document review
+- If the finding is withdrawn after full read, log it as WITHDRAWN with reason
+Shallow section reads that miss distributed references are a protocol violation.
 
 # SpecReconciliation Protocol
 
@@ -36,16 +42,44 @@ At the end of every step, output EXCLUSIVELY:
 No chit-chat, no extra advice, no summaries of what we might do later.
 
 ### 3. Source of Truth Hierarchy (enforced)
-- **Tier 1 (absolute SSOT):** Anything created or modified in the last 48 hours (newest
-  files, recent decisions, latest PRs, meeting notes from the past 2 days).
-- Everything older than 48 hours is **Tier 3** and must be actively evaluated: we
-  consciously choose to keep or discard it. You never default to keeping old content.
+
+**Recency Tiers:**
+- **Tier 1:** Anything created or modified in the last 48 hours (newest files, recent
+  decisions, latest PRs, meeting notes from the past 2 days).
+- **Tier 3:** Everything older than 48 hours. Must be actively evaluated: we consciously
+  choose to keep or discard it. Never default to keeping old content.
+
+**Document Authority Types:**
+- **GOSPEL:** Declared SSOT by JK. Used as measuring stick only — never reconciled, only
+  enforced. Referenced in Appendix B or explicitly designated by JK.
+- **ANALYTICAL:** Claude-authored analysis, recommendations, or deep-dives. Tier 1 by date
+  but not canonical until reconciled and approved by JK. Must be converted to prescriptive
+  spec before use.
+
+**Critical rule:** Do not conflate recency with authority. A Tier 1 ANALYTICAL doc outranks
+a Tier 3 spec on timeline only — not on canonical status. GOSPEL documents outrank
+everything regardless of date.
 
 ### 4. File Re-organization
 You only propose and execute file/folder reorganization AFTER a module or section is fully
 reconciled and JK explicitly approves it. When you do reorganize:
 - Move kept files to `/specs/canonical/`
 - Archive everything else to `/specs/archive/YYYY-MM-DD/`
+
+### 5. Full-Document GOSPEL Verification (mandatory)
+Before logging ANY finding that references or implicates a GOSPEL document:
+1. **Read the FULL GOSPEL document** — not sections, not targeted searches. The entire file.
+2. **Enumerate every location** where the finding's topic appears in the GOSPEL (line numbers,
+   section references, exact quotes).
+3. **Only then** determine whether the finding is a genuine contradiction, or whether GOSPEL
+   addresses the topic elsewhere in the document that a section-read missed.
+4. Each finding must include a "GOSPEL coverage" field listing ALL relevant GOSPEL references.
+
+**Rationale:** GOSPEL documents are large, architecturally integrated documents. Topics are
+distributed across multiple sections by design. A shallow section-read that misses distributed
+references is a protocol violation that produces false findings. The C-031 error (claiming GOSPEL
+didn't cover mWAR when it appears 11 times across 7 sections) is the canonical example of this
+failure mode.
 
 ---
 
@@ -133,3 +167,43 @@ NEXT STEP READY
 - Does NOT modify code
 - Does NOT skip files or silently drop content
 - Does NOT proceed to the next step without JK's explicit approval
+
+---
+
+## Mandatory Single-File Analysis Protocol
+
+ALL domain analysis must follow this protocol without exception:
+
+### The Rule
+
+One file at a time. Full read. Evidence before finding. JK approval before next file.
+
+### Steps (repeat for every file in every domain)
+
+1. Read the COMPLETE file — not sections, not headers, not summaries
+2. Output every finding from that file with exact quoted text as evidence
+3. Cross-reference each finding against GOSPEL before logging it
+4. If a finding implicates GOSPEL: quote the exact GOSPEL passage that confirms
+   or contradicts it. No quote = no finding. No exceptions.
+5. Wait for JK approval before opening the next file
+
+### Forbidden Shortcuts
+
+- Batch reading multiple files before outputting findings
+- Pattern-matching on section headers without reading full content
+- Logging a finding without quoted supporting text from the source file
+- Assuming GOSPEL doesn't cover a topic without reading the full GOSPEL document
+- Moving to the next file before JK approves current file's findings
+- Declaring "0 findings" without cross-referencing against all previously-read specs in the domain
+
+### Learned Rules
+
+- When reading any spec file, always cross-reference against BOTH (a) the full GOSPEL document AND (b) every other spec file already read in the current domain. Step 3 is a reconciliation matrix — spec-to-spec conflicts are the primary deliverable, not just GOSPEL contradictions. Declaring "0 findings" without checking cross-spec consistency is a protocol violation because it misses the core purpose of reconciliation.
+
+### Self-Improvement Gate
+
+After any finding is corrected by JK:
+- Immediately identify which forbidden shortcut caused the error
+- Add a specific rule to this section preventing the same mistake
+- Format: "When [situation], always [action] because [reason]"
+- Do not proceed until the rule is written

@@ -220,3 +220,25 @@ If JK pastes new CLI output without a prior commit, Claude must say "Log first" 
 - New findings go to FINDINGS_056_onwards.md until it exceeds 500 lines, then create next file
 - SUBSYSTEM_MAP.md must be updated when any wiring status changes
 - Never put full finding blocks in AUDIT_LOG.md
+
+---
+
+### Self-Improvement Loop
+- After ANY correction from JK: add a rule to `spec-docs/SESSION_RULES.md`
+  under a "Lessons Learned" section that prevents the same mistake
+- Write the rule in the form: "When [situation], always [action] because [reason]"
+- Ruthlessly iterate — if the same mistake recurs, the rule wasn't specific enough; rewrite it
+- Review lessons at session start alongside the other required files
+
+### Subagent Strategy
+- Use subagents to keep main context window clean
+- Offload parallel analysis, research, and multi-file reads to subagents
+- One task per subagent — focused execution, not broad exploration
+- For complex problems, throw more compute via subagents rather than expanding main context
+
+### Verification Standard
+- Before declaring any finding, fix, or analysis complete, ask:
+  "Would a staff engineer approve this?"
+- A staff engineer would not accept: shallow section reads, assumed coverage,
+  keyword scans that miss distributed references, or "it looks correct" without proof
+- If the answer is no → do not mark complete, do not present to JK

@@ -369,7 +369,7 @@ interface Player {
   arsenal: PitchType[];               // e.g., ['4F', '2F', 'CB', 'SL', 'CH']
 
   // ── Grade (auto-calculated from ratings per §5.6) ────────
-  overallGrade: Grade;
+  // NOTE: Grade is computed-only via computeGrade() — never stored directly
 
   // ── Traits (max 2) ───────────────────────────────────────
   trait1?: Trait;
@@ -988,7 +988,7 @@ interface RulesPreset {
   // ═══════════════════════════════════════════════════════
   game: {
     inningsPerGame: number;       // 1-9 (bounded range, fully custom)
-    extraInningsRule: 'standard' | 'runner_on_second' | 'sudden_death';
+    extraInningsRule: 'none' | 'ghost_runner' | 'standard';
     mercyRule: {
       enabled: boolean;
       runDifferential: number;
@@ -1240,7 +1240,7 @@ Configure regular season parameters. Starts with the selected league's default r
 interface Step2Data {
   gamesPerTeam: number;           // 8-200 (presets: 16, 32, 40, 80, 128, 162 per C-071)
   inningsPerGame: number;         // 1-9 (bounded range)
-  extraInningsRule: 'standard' | 'runner_on_second' | 'sudden_death';
+  extraInningsRule: 'none' | 'ghost_runner' | 'standard';
   allStarGame: boolean;
   tradeDeadline: boolean;
   mercyRule: boolean;

@@ -44,7 +44,7 @@ The Almanac appears as a primary navigation item:
 
 ### 2.1 Storage Architecture
 
-The Almanac reads from four IndexedDB stores within the active franchise database (`kbl-franchise-{id}`):
+The Almanac reads from multiple IndexedDB stores within the active franchise database (`kbl-franchise-{id}`):
 
 ```typescript
 interface AlmanacDataSources {
@@ -59,6 +59,25 @@ interface AlmanacDataSources {
 
   /** All trades, signings, draft picks, releases, retirements */
   transactionLog: TransactionLogStore;
+
+  /** Transaction event stream (trades, FA signings, roster moves) */
+  transactionEventStream: TransactionEventStreamStore;
+
+  /** Manager stats and managing WAR (mWAR) decisions */
+  managingStats: ManagingStatsStore;
+
+  /** Stadium analytics and park factor historical data */
+  stadiumHistory: StadiumHistoryStore;
+  parkFactorHistory: ParkFactorHistoryStore;
+
+  /** Dynamic designation history (Fan Favorite, Albatross, Cornerstone, etc.) */
+  dynamicDesignationHistory: DynamicDesignationHistoryStore;
+
+  /** Chemistry rebalancing records */
+  chemistryRebalancingRecords: ChemistryRebalancingStore;
+
+  /** Farm system call-up and send-down records */
+  farmSystemLog: FarmSystemLogStore;
 }
 ```
 

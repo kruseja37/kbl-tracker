@@ -266,7 +266,8 @@ interface AtBatEvent {
 **Shared Enums:**
 
 ```typescript
-type MojoLevel = 'Rattled' | 'Tense' | 'Neutral' | 'LockedIn' | 'Jacked';
+type MojoLevel = 'Cold' | 'Cool' | 'Warm' | 'Hot' | 'OnFire';
+// See SPINE_ARCHITECTURE.md for canonical MojoLevel type and MOJO_VALUES numeric mapping
 type FitnessLevel = 'Hurt' | 'Weak' | 'Strained' | 'Well' | 'Fit' | 'Juiced';
 type FameLevel = 'unknown' | 'rising' | 'notable' | 'star' | 'superstar' | 'legend';
 
@@ -2024,6 +2025,7 @@ Each team has one beat reporter. The reporter's hidden personality drives narrat
 
 ```typescript
 interface BeatReporter {
+  // See SPINE_ARCHITECTURE.md §12 for canonical BeatReporter interface
   id: string;
   firstName: string;
   lastName: string;
@@ -2951,6 +2953,7 @@ interface ParkFactors {
   rightHandedHR: number;
   leftHandedAVG: number;
   rightHandedAVG: number;
+  directionFactors: Record<Direction, number>;  // Spray zone direction factors
   gamesIncluded: number;
   confidence: 'LOW' | 'MEDIUM' | 'HIGH';
   source: 'SEED' | 'CALCULATED' | 'BLENDED';
