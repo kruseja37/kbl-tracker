@@ -85,18 +85,17 @@ interface Player {
   position: Position;
   jerseyNumber: number;
 
-  // Ratings (0–99 scale)
-  grade: Grade;                  // Computed from ratings (see §3.7)
+  // Ratings (0–99 scale) — grade is NOT stored; derive via computeGrade(batterRatings, pitcherRatings)
   batterRatings: BatterRatings;
   pitcherRatings: PitcherRatings;
 
   // Personality & Traits (per MODE_1 §6)
   personality: PersonalityType;  // 7 types
   hiddenModifiers: {
-    leadership: number;          // 0–100
-    charisma: number;            // 0–100
-    composure: number;           // 0–100
-    ambition: number;            // 0–100
+    loyalty: number;             // 0–100: FA preference, trade request likelihood
+    ambition: number;            // 0–100: Development speed, willingness to change teams
+    resilience: number;          // 0–100: Morale recovery, retirement probability
+    charisma: number;            // 0–100: Teammate morale, captain selection, mentorship
   };
   traits: PlayerTrait[];         // Assigned in Mode 3 awards ceremony
 
@@ -105,15 +104,25 @@ interface Player {
   salary: number;
   contractYears: number;
   status: PlayerStatus;
-  fameLevel: FameLevel;          // Dropdown, not slider (C-078)
+  fameLevel: FameLevel;          // Always starts Unknown; earned through gameplay (C-078 dropdown for display only)
 
   // In-game transient (Mode 2 only, not persisted between games)
-  mojoLevel?: MojoLevel;         // -2 to +2
-  fitnessState?: FitnessState;   // Juiced through Hurt
+  mojoLevel?: MojoLevel;         // Rattled → Jacked (see §3.6 for enum + numeric mapping)
+  fitnessState?: FitnessState;   // Hurt through Juiced (Fit is neutral default)
 
-  // Stats (accumulated)
-  seasonStats: BattingStats & PitchingStats;
-  gameStats: BattingStats & PitchingStats;
+  // Stats (accumulated per-season — reset each season, career stats carry forward)
+  seasonStats: {
+    batting: BattingStats;
+    pitching: PitchingStats;
+    fielding: FieldingStats;
+    running: RunningStats;
+  };
+  gameStats: {
+    batting: BattingStats;
+    pitching: PitchingStats;
+    fielding: FieldingStats;
+    running: RunningStats;
+  };
   careerStats?: CareerStats;     // Written by stats pipeline
 }
 ```
@@ -185,13 +194,77 @@ interface FranchiseMetadata {
 }
 
 interface RulesPreset {
-  gamesPerTeam: number;          // 16 | 32 | 64 | 128 | 162
-  inningsPerGame: number;        // Default 9
-  extraInningsRule: 'standard' | 'runner_on_second' | 'none';
-  dhRule: boolean;
-  mercyRule: { enabled: boolean; runDiff: number; afterInning: number };
-  tradeDeadline: { enabled: boolean; gameNumber: number };
-  playoffFormat: PlayoffFormat;
+  id: string;
+  name: string;
+  description: string;
+  isDefault: boolean;
+  isEditable: boolean;               // Built-in presets are read-only
+
+  // Game Settings
+  game: {
+    inningsPerGame: number;          // 1–9 (fully custom)
+    extraInningsRule: 'standard' | 'runner_on_second' | 'none';
+    mercyRule: { enabled: boolean; runDifferential: number; afterInning: number };
+    pitchCounts: { enabled: boolean; starterLimit: number; relieverLimit: number };
+    moundVisits: { enabled: boolean; perGame: number };
+  };
+
+  // Season Settings — gamesPerTeam is user-input (2–200), no preset enum
+  season: {
+    gamesPerTeam: number;            // 2–200 (user inputs any number)
+    allStarGame: boolean;
+    allStarTiming: number;           // Percentage of season (0.6 = 60%)
+    tradeDeadline: { enabled: boolean; timing: number };  // Percentage of season (0.7 = 70%)
+  };
+
+  // Playoff Settings
+  playoffs: {
+    teamsQualify: 2 | 4 | 6 | 8 | 10 | 12;
+    format: 'bracket' | 'pool' | 'best_record_bye';
+    wildcardSeries: { games: 1 | 3 | 5 | 7 | 9; homeGames: number };
+    divisionSeries: { games: 1 | 3 | 5 | 7 | 9; homeGames: number };
+    championshipSeries: { games: 1 | 3 | 5 | 7 | 9; homeGames: number };
+    worldSeries: { games: 1 | 3 | 5 | 7 | 9; homeGames: number };
+    homeFieldAdvantage: '2-3-2' | '2-2-1' | 'alternating';
+    tiebreakers: 'run_differential';  // If still tied, prompt user to decide
+  };
+
+  // Designated Hitter
+  dh: {
+    rule: 'always' | 'never' | 'league_specific';
+    leagueSettings?: Record<string, boolean>;  // conferenceId → DH enabled
+  };
+
+  // Roster Rules
+  roster: {
+    mlbRosterSize: number;           // Default: 22
+    farmRosterSize: number;          // Default: 10
+  };
+
+  // Awards Ceremony
+  awardsCeremony: 'full' | 'team_only' | 'off';
+
+  // AI Behavior (Sliders)
+  ai: {
+    tradeAggressiveness: number;
+    tradeAcceptanceThreshold: number;
+    rebuildThreshold: number;
+    prospectValuation: number;
+    winNowBias: number;
+    positionScarcityAwareness: number;
+  };
+
+  // Offseason
+  offseason: {
+    draftEnabled: boolean;
+    draftRounds: number;
+    draftOrder: 'inverse_salary' | 'lottery' | 'snake';
+    freeAgencyEnabled: boolean;
+    freeAgencyDuration: number;
+    ratingsAdjustmentEnabled: boolean;
+    retirementEnabled: boolean;
+    expansionEnabled: boolean;       // Expansion only (no contraction in v1)
+  };
 }
 ```
 
@@ -213,15 +286,20 @@ interface SeasonState {
   standings: StandingsEntry[];
 }
 
+type FictionalDate = string;     // Format: "Month Day, Year N" (e.g., "April 3, Year 1")
+
 interface ScheduleGame {
   gameId: string;
   homeTeamId: string;
   awayTeamId: string;
   gameNumber: number;            // 1-based within season
+  fictionalDate: FictionalDate;  // Human-readable fictional date (per MODE_1 §10)
   isComplete: boolean;
   result?: GameResult;
   isPlayoff: boolean;
 }
+// NOTE: Schedule is created manually via schedule wizard or populated from uploaded CSV.
+// Engine does NOT auto-generate schedules (supersedes C-079).
 
 interface GameResult {
   homeScore: number;
@@ -252,14 +330,18 @@ interface StandingsEntry {
 ### 3.6 Shared Enumerations
 
 ```typescript
-// Position — 11 positions
-type Position = 'C' | '1B' | '2B' | '3B' | 'SS' | 'LF' | 'CF' | 'RF' | 'SP' | 'RP' | 'DH';
+// Position — fielding positions + compound roles; DH is a batting-order slot, NOT a position (per MODE_1 §5)
+type Position = 'C' | '1B' | '2B' | '3B' | 'SS' | 'LF' | 'CF' | 'RF'
+  | 'SP' | 'RP' | 'CP'            // Pitching roles (CP = closer)
+  | 'IF' | 'OF'                    // Generic infield/outfield
+  | 'SP/RP' | 'IF/OF' | '1B/OF'; // Compound dual-role positions
+type BattingSlot = Position | 'DH'; // DH is valid in batting order only
 
 // Grade — 13-tier scale (C-074/C-087)
 type Grade = 'S' | 'A+' | 'A' | 'A-' | 'B+' | 'B' | 'B-' | 'C+' | 'C' | 'C-' | 'D+' | 'D' | 'D-';
 
-// Personality — 7 types only (C-070)
-type PersonalityType = 'Leader' | 'Maverick' | 'Stoic' | 'Fiery' | 'Prankster' | 'Mentor' | 'Enigma';
+// Personality — 7 types only (C-070, SMB4-authentic names)
+type PersonalityType = 'Competitive' | 'Relaxed' | 'Droopy' | 'Jolly' | 'Tough' | 'Timid' | 'Egotistical';
 
 // Fame — Dropdown levels (C-078)
 type FameLevel = 'Unknown' | 'Local' | 'Regional' | 'National' | 'Superstar' | 'Legend';
@@ -271,11 +353,15 @@ type PlayerStatus = 'active' | 'injured' | 'minors' | 'free_agent' | 'retired';
 type SeasonPhase = 'SETUP' | 'PRE_SEASON' | 'REGULAR_SEASON' | 'ALL_STAR_BREAK'
   | 'POST_DEADLINE' | 'PLAYOFFS' | 'OFFSEASON';
 
-// Mojo — 5 levels (per MODE_2 §14)
-type MojoLevel = -2 | -1 | 0 | 1 | 2;
+// Mojo — 5 named levels with numeric mapping (per MODE_2 §14)
+type MojoLevel = 'Rattled' | 'Tense' | 'Neutral' | 'LockedIn' | 'Jacked';
+// Numeric mapping: Rattled = -2, Tense = -1, Neutral = 0, LockedIn = +1, Jacked = +2
+const MOJO_VALUES: Record<MojoLevel, number> = {
+  Rattled: -2, Tense: -1, Neutral: 0, LockedIn: 1, Jacked: 2
+};
 
-// Fitness — 6 states (per MODE_2 §14)
-type FitnessState = 'Juiced' | 'Fresh' | 'Normal' | 'Tired' | 'Gassed' | 'Hurt';
+// Fitness — 6 states (lowest to highest, Fit is the neutral/default state)
+type FitnessState = 'Hurt' | 'Weak' | 'Strained' | 'Well' | 'Fit' | 'Juiced';
 
 // Chemistry — 5 real SMB4 types (F-124)
 type ChemistryType = 'Competitive' | 'Crafty' | 'Disciplined' | 'Spirited' | 'Scholarly';
@@ -305,7 +391,70 @@ interface PitcherRatings {
 }
 ```
 
-**Grade derivation** from ratings uses the algorithm defined in MODE_1_LEAGUE_BUILDER.md §5.3. The grade is a display convenience — engines use raw ratings for calculations.
+**Grade derivation** from ratings uses the algorithm defined in MODE_1_LEAGUE_BUILDER.md §5.3. Grade is **never stored** on the Player object — it is always computed via `computeGrade(batterRatings, pitcherRatings)`. Engines use raw ratings for all calculations; grade is a display convenience only.
+
+### 3.8 Core Shared Types
+
+These types are used across multiple interfaces and defined here as the canonical source:
+
+```typescript
+// Half-inning
+type HalfInning = 'TOP' | 'BOTTOM';
+
+// Base state — which bases are occupied (null = empty)
+interface Bases {
+  first: string | null;          // playerId or null
+  second: string | null;
+  third: string | null;
+}
+
+// At-bat result — all possible plate appearance outcomes (per MODE_2 §2–3)
+type AtBatResult = 'K' | 'Kc' | 'GO' | 'FO' | 'LO' | 'PO'
+  | '1B' | '2B' | '3B' | 'HR'
+  | 'BB' | 'HBP' | 'IBB'
+  | 'E' | 'FC' | 'DP' | 'TP'
+  | 'SAC' | 'SF'
+  | 'WP_K' | 'PB_K';
+// Kc = called strikeout (looking); WP_K/PB_K are hybrid types per C-005; TP per C-011
+
+// Batted ball direction
+type Direction = 'LEFT_LINE' | 'LEFT_FIELD' | 'LEFT_CENTER'
+  | 'CENTER'
+  | 'RIGHT_CENTER' | 'RIGHT_FIELD' | 'RIGHT_LINE';
+
+// Exit type classification
+type ExitType = 'GROUND_BALL' | 'LINE_DRIVE' | 'FLY_BALL' | 'POPUP' | 'BUNT';
+
+// Fielding data attached to an AtBatEvent
+interface FieldingData {
+  fielderId: string;
+  playType?: 'diving' | 'leaping' | 'sliding' | 'over_shoulder' | 'robbed_hr' | 'routine';
+  putouts: string[];             // playerIds who recorded putouts
+  assists: string[];             // playerIds who recorded assists
+  errors: string[];              // playerIds who committed errors
+}
+
+// Between-play event types (per MODE_2 §5)
+type GameEvent = 'stolen_base' | 'caught_stealing' | 'pickoff' | 'wild_pitch'
+  | 'passed_ball' | 'balk' | 'defensive_indifference'
+  | 'pitcher_change' | 'substitution' | 'position_change'
+  | 'mojo_change' | 'fitness_change' | 'injury'
+  | 'pitch_count_update' | 'manager_moment';
+
+// Playoff format — full structure per MODE_1 §9
+// (PlayoffFormat is an alias for the RulesPreset.playoffs sub-interface)
+type PlayoffFormat = RulesPreset['playoffs'];
+```
+
+**Types defined in mode-specific gospels (not duplicated here):**
+
+- `PlayoffBracket` — Defined in MODE_2_FRANCHISE_SEASON.md §21 (bracket state machine)
+- `SalaryEntry` — Defined in MODE_3_OFFSEASON_WORKSHOP.md §5 (salary ledger record)
+- `PlayerSeasonStats` — Defined in MODE_2_FRANCHISE_SEASON.md §8 (per-game accumulator)
+- `NarrativeSummary` — Defined in MODE_2_FRANCHISE_SEASON.md §16 (season-end narrative digest)
+- `AchievedMilestone` — Defined in MODE_2_FRANCHISE_SEASON.md §18 (milestone record)
+- `Storyline` — Defined in MODE_2_FRANCHISE_SEASON.md §16 (multi-game narrative arc)
+- `HOFEntry` — Defined in ALMANAC.md §3.4 (Hall of Fame eligibility and records; Almanac-only)
 
 ---
 
@@ -316,6 +465,7 @@ interface PitcherRatings {
 ```typescript
 interface BattingStats {
   gamesPlayed: number;
+  plateAppearances: number;
   atBats: number;
   hits: number;
   singles: number;
@@ -326,15 +476,13 @@ interface BattingStats {
   runs: number;
   walks: number;
   strikeouts: number;
-  stolenBases: number;
-  caughtStealing: number;
-  errors: number;
   hitByPitch: number;
   sacFlies: number;
   sacBunts: number;
   intentionalWalks: number;
   gidp: number;
-  plateAppearances: number;
+  errors: number;                // Batting errors (e.g., running interference)
+  // NOTE: stolenBases/caughtStealing moved to RunningStats (§4.4) — no duplication
 }
 ```
 
@@ -345,8 +493,6 @@ interface PitchingStats {
   gamesStarted: number;
   gamesPitched: number;
   inningsPitched: number;       // Stored as total outs / 3
-  pitchCount: number;
-  battersFaced: number;
   hitsAllowed: number;
   runsAllowed: number;
   earnedRuns: number;
@@ -354,16 +500,23 @@ interface PitchingStats {
   strikeoutsPitching: number;
   homeRunsAllowed: number;
   hitBatters: number;
+  wildPitches: number;
   wins: number;
   losses: number;
   saves: number;
+  blownSaves: number;
   holds: number;
   completeGames: number;
   shutouts: number;
   qualityStarts: number;
   inheritedRunners: number;
   inheritedRunnersScored: number;
-  highLeverageOuts: number;
+
+  // Derived stats (NOT stored — computed from AtBatEvent stream):
+  // - pitchCount, battersFaced → tracked per-game, aggregated from events
+  // - hitsAllowed by type (singles, doubles, triples, HR) → derivable from event result
+  // - strikeoutsLooking (Kc) vs strikeoutsSwinging (Ks) → AtBatResult distinguishes 'K' vs 'Kc'
+  // - hit direction distribution → derivable from event direction field
 }
 ```
 
@@ -372,20 +525,53 @@ interface PitchingStats {
 ```typescript
 interface FieldingStats {
   games: number;
-  innings: number;
+  outsByPosition: Record<Position, number>;  // Track outs (not games) for partial-inning credit; derive innings via outs/3
   putouts: number;
   assists: number;
   errors: number;
   doublePlays: number;
   divingPlays: number;
-  wallCatches: number;
+  missedDives: number;
+  webGems: number;
+  leapingCatches: number;
+  missedLeap: number;
   robbedHRs: number;
-  position: Position;
-  gamesByPosition: Record<Position, number>;
+  position: Position;               // Primary position
 }
 ```
 
-### 4.4 Career Stats
+### 4.4 Running Stats
+
+```typescript
+interface RunningStats {
+  stolenBases: number;
+  caughtStealing: number;
+  stolenBaseAttempts: number;
+  extraBasesTaken: number;        // Advancing beyond minimum on hits/outs
+  extraBasesOpportunities: number;
+  firstToThird: number;           // Single → reached third
+  firstToHome: number;            // Double → scored from first
+  taggedOutAdvancing: number;     // Thrown out trying to take extra base
+}
+```
+
+### 4.5 Managing Stats
+
+```typescript
+interface ManagingStats {
+  gamesManaged: number;
+  wins: number;
+  losses: number;
+  challengesUsed: number;
+  challengesWon: number;
+  pitchingChanges: number;
+  defensiveSubstitutions: number;
+  pinchHittersUsed: number;
+  pinchRunnersUsed: number;
+}
+```
+
+### 4.6 Career Stats
 
 ```typescript
 interface CareerStats {
@@ -394,15 +580,26 @@ interface CareerStats {
   careerBatting: BattingStats;
   careerPitching: PitchingStats;
   careerFielding: FieldingStats;
-  careerWAR: {
-    bWAR: number;
-    pWAR: number;
-    fWAR: number;
-    rWAR: number;
-    mWAR: number;
-    total: number;
-  };
+  careerRunning: RunningStats;
+  careerManaging?: ManagingStats;  // Only for user (manager); stored in mwarDecisions store
+  careerWAR: PlayerWAR | ManagerWAR;
   seasonHistory: PlayerSeasonSummary[];
+}
+
+// Players accumulate bWAR/pWAR/fWAR/rWAR; managers accumulate mWAR only
+interface PlayerWAR {
+  type: 'player';
+  bWAR: number;
+  pWAR: number;
+  fWAR: number;
+  rWAR: number;
+  total: number;
+}
+
+interface ManagerWAR {
+  type: 'manager';
+  mWAR: number;
+  total: number;    // Same as mWAR for managers
 }
 
 interface PlayerSeasonSummary {
@@ -412,6 +609,7 @@ interface PlayerSeasonSummary {
   batting: BattingStats;
   pitching: PitchingStats;
   fielding: FieldingStats;
+  running: RunningStats;
   war: number;                  // Total WAR that season
   awards: string[];             // Award names won
   designations: string[];       // Designations held at season end
@@ -500,9 +698,21 @@ interface TransactionEvent {
   timestamp: number;
 }
 
-type TransactionType = 'TRADE' | 'FREE_AGENT_SIGNING' | 'DRAFT_PICK' | 'RELEASE'
-  | 'DFA' | 'CALL_UP' | 'SEND_DOWN' | 'RETIREMENT' | 'IL_PLACEMENT' | 'IL_RETURN'
-  | 'WAIVER_CLAIM' | 'EXPANSION_DRAFT';
+type TransactionType =
+  // Roster moves (Mode 2 + Mode 3)
+  | 'TRADE' | 'FREE_AGENT_SIGNING' | 'DRAFT_PICK' | 'RELEASE'
+  | 'DFA' | 'CALL_UP' | 'SEND_DOWN' | 'RETIREMENT'
+  | 'IL_MOVE'                        // Covers both placement and return (detail.direction: 'to'|'from')
+  | 'WAIVER_CLAIM' | 'EXPANSION_DRAFT'
+  | 'CONTRACT_EXTENSION'             // Mid-season or offseason contract extensions
+  // Player profile changes (Mode 3 primarily)
+  | 'SALARY_CHANGE' | 'TRAIT_ADDED' | 'TRAIT_REMOVED'
+  | 'RATINGS_CHANGE' | 'POSITION_CHANGE'
+  | 'NAME_CHANGE' | 'NUMBER_CHANGE'
+  // Team/franchise changes
+  | 'TEAM_RENAME' | 'STADIUM_CHANGE' | 'JERSEY_RETIRED'
+  // Designation changes
+  | 'DESIGNATION_AWARDED' | 'DESIGNATION_REMOVED';
 ```
 
 **Source:** MODE_2_FRANCHISE_SEASON.md §26, MODE_3_OFFSEASON_WORKSHOP.md §6–§9
@@ -522,6 +732,7 @@ kbl-app-meta/                    # GLOBAL — shared across all franchises
   ├── leagueTemplates            # Reusable league configurations
   ├── teamPool                   # Global team definitions (pre-franchise)
   ├── playerPool                 # Global player definitions (pre-franchise)
+  ├── playerNamePool             # SMB4 Names Database for player name generation (first/last names SMB4 can announce)
   ├── rulesPresets               # Saved rules configurations
   ├── appSettings                # App-level preferences
   └── lastUsedFranchise          # Quick-resume pointer
@@ -545,7 +756,10 @@ kbl-franchise-{id}/              # PER-FRANCHISE — isolated per franchise
   ├── milestones                 # Achieved milestones
   ├── narrativeState             # Reporter relationships, storylines
   ├── fanMorale                  # Per-team fan morale state
-  ├── parkFactors                # Stadium park factors by season
+  ├── stadiums                   # Stadium entities (dimensions, parkFactors, historicalFactors, records, spray charts)
+  #                               NOTE: parkFactors live ON the Stadium entity (§13.1); no separate parkFactors store
+  ├── playerMorale               # Per-player morale state (distinct from team-level fanMorale)
+  ├── relationships              # Player-to-player and player-to-team relationships (rivals, mentors, married, etc.)
   ├── mwarDecisions              # Manager decision log
   ├── currentGame                # Active game snapshot (autosave)
   └── completedGames             # Archived game results
@@ -621,7 +835,7 @@ interface SeasonSummary {
   allPlayerCareerStats: CareerStats[];
 
   // Subsystem state
-  designations: TeamDesignationState[];
+  designations: DesignationState[];    // Per §10
   fanMorale: TeamFanMorale[];
   milestones: AchievedMilestone[];
   parkFactors: Record<string, ParkFactors>;
@@ -635,8 +849,16 @@ interface SeasonClassification {
   mvpCandidates: { playerId: string; war: number }[];
   cyYoungCandidates: { playerId: string; pWAR: number }[];
   rookieOfYearCandidates: { playerId: string; war: number }[];
+  managerOfYearCandidates: { managerId: string; mWAR: number }[];
+  relieverOfYearCandidates: { playerId: string; saves: number; holds: number; era: number }[];
+  comebackPlayerCandidates: { playerId: string; warDelta: number }[];
   goldGloveCandidates: Record<Position, { playerId: string; fWAR: number }[]>;
   silverSluggerCandidates: Record<Position, { playerId: string; ops: number }[]>;
+  platinumGloveCandidates: { playerId: string; fWAR: number }[];            // Best overall fielder (from Gold Glove winners)
+  boogerGloveCandidates: { playerId: string; errors: number; fWAR: number }[]; // Worst fielder
+  benchPlayerCandidates: { playerId: string; war: number; startPct: number }[]; // <50% starts eligible
+  karaKawaguchiCandidates: { playerId: string; warPerMillion: number }[];   // Best value (highest WAR/$M)
+  bustOfYearCandidates: { playerId: string; warPerMillion: number; salary: number }[]; // Worst value (high salary, low WAR)
 }
 ```
 
@@ -694,13 +916,27 @@ This single value normalizes all comparisons to a 162-game, 9-inning baseline. I
 - Stored in `FranchiseMetadata`
 - Referenced by: Mode 2 (milestones, designations, adaptive standards), Mode 3 (awards thresholds), Almanac (qualifying minimums)
 
-### 8.2 WAR Scaling
+### 8.2 WAR Scaling & Grades
 
 ```typescript
 const runsPerWin = 10 * (seasonGames / 162);
 ```
 
 WAR grades normalize to 162-game equivalents for display. Raw WAR uses actual season length.
+
+**WAR Grade Thresholds (162-game equivalent):**
+
+| Grade | WAR Range | Meaning |
+|-------|-----------|---------|
+| MVP | 7.0+ | Generational season |
+| Superstar | 5.0–6.9 | All-Star starter |
+| All-Star | 3.5–4.9 | All-Star caliber |
+| Starter | 2.0–3.4 | Quality regular |
+| Role Player | 1.0–1.9 | Platoon/utility |
+| Bench | 0.0–0.9 | Replacement-level contributor |
+| Liability | < 0.0 | Below replacement |
+
+For shortened seasons, multiply thresholds by `opportunityFactor`.
 
 ### 8.3 SMB4-Calibrated Constants
 
@@ -722,26 +958,79 @@ interface PlayerTrait {
   traitId: string;
   name: string;
   chemistryType: ChemistryType;  // Which of 5 types (F-124)
-  tier: 'gold' | 'silver' | 'bronze';
-  potency: number;               // Numeric strength value
-  effects: TraitEffect[];
+  effects: TraitEffect[];        // Base effects before potency scaling
 }
 
 interface TraitEffect {
-  target: string;                // Which stat/system is affected
-  modifier: number;              // How much
-  condition?: string;            // When it applies (optional)
+  target: string;                // Which stat/system is affected (e.g., 'mojo', 'clutch', 'speed')
+  baseModifier: number;          // Base effect magnitude before potency scaling
+  condition?: string;            // When it applies (e.g., 'high_leverage', 'home_games')
 }
 ```
 
-### 9.2 Trait Lifecycle
+### 9.2 Chemistry & Potency Mechanics
+
+Chemistry is a **team-level property** derived from the collective chemistry types of all rostered players. It determines how strong traits are — never which traits are available (C-086/C-064).
+
+```typescript
+interface TeamChemistry {
+  teamId: string;
+  composition: Record<ChemistryType, number>;  // Count per type
+  percentages: Record<ChemistryType, number>;  // Percentage per type
+  dominantType: ChemistryType;                 // Plurality winner
+  tier: ChemistryTier;                         // Based on concentration
+  potencyMultiplier: number;                   // Applied to all trait effects
+}
+
+type ChemistryTier = 1 | 2 | 3 | 4;
+```
+
+**Chemistry Tiers (determined by concentration of dominant type):**
+
+| Tier | Condition | Potency Multiplier | Meaning |
+|------|-----------|-------------------|---------|
+| 1 | No type > 30% | 1.00× (no bonus) | Mixed roster, no chemistry synergy |
+| 2 | One type 30–44% | 1.25× | Emerging identity |
+| 3 | One type 45–59% | 1.50× | Strong team identity |
+| 4 | One type ≥ 60% | 1.75× | Elite chemistry synergy |
+
+**How potency works:**
+
+1. Each trait has a `baseModifier` on each of its effects (e.g., +5 to clutch).
+2. The player's team chemistry tier determines the `potencyMultiplier`.
+3. **Effective modifier = baseModifier × potencyMultiplier** (rounded to nearest integer).
+4. Chemistry affects **all traits equally** — not just traits matching the dominant type.
+5. When a player is traded mid-season, their traits immediately recalculate potency based on the new team's chemistry.
+
+**Example:** A trait with `baseModifier: +8 clutch` on a Tier 3 team (1.50×) produces an effective +12 clutch bonus. Same trait on a Tier 1 team produces +8 (no bonus).
+
+**Potency in salary calculation (Mode 3 §5):** Trait modifier in salary formula is scaled by potency multiplier: Elite +10%, Good +5%, Minor +2% — each multiplied by team chemistry tier.
+
+### 9.3 Trait Distribution (initial assignment)
+
+Distribution at player creation (Mode 1): 30% gold / 50% silver / 20% bronze.
+
+> **NOTE:** The 30/50/20 distribution is pending re-analysis against the 506 standard league players once that data is imported. Ratios may be adjusted.
+
+**Gold/silver/bronze is a trait quality label, NOT the same as chemistry tier:**
+
+| Quality | Meaning | Typical baseModifier range |
+|---------|---------|--------------------------|
+| Gold | Elite trait — strong base effects | ±8–12 |
+| Silver | Standard trait — moderate effects | ±4–7 |
+| Bronze | Minor trait — small effects | ±1–3 |
+
+Quality is intrinsic to the trait itself (defined in the trait catalogue). Chemistry potency then scales the effective modifier.
+
+### 9.4 Trait Lifecycle
 
 | Phase | Mode | What Happens |
 |-------|------|-------------|
-| Initial assignment | Mode 1 | 30/50/20 distribution (gold/silver/bronze) per team chemistry |
+| Initial assignment | Mode 1 | Traits assigned from catalogue; quality (gold/silver/bronze) comes from catalogue |
 | Hidden on farm | Mode 1 + Mode 2 | Traits exist but are not revealed to user (C-054) |
 | Revealed at call-up | Mode 2 | When prospect promoted to active roster |
-| Added/removed | Mode 3 | Awards ceremony wheel spin (C-086), potency-only |
+| Potency recalculated | Mode 2 + Mode 3 | On roster change or chemistry rebalancing (Phase 12) |
+| Added/removed | Mode 3 | Awards ceremony wheel spin (C-086), potency-only — chemistry affects strength not eligibility |
 | Career display | Almanac | All traits ever held shown in player profile |
 
 ---
@@ -760,7 +1049,7 @@ interface DesignationState {
   albatross: string | null;
   cornerstone: string[];         // Multiple allowed
   teamCaptain: string | null;    // Per C-057
-  youngPlayer: string | null;    // Per C-047 — top-3 farm prospect
+  fanHopeful: string | null;     // Per C-047 — top-3 farm prospect (renamed from youngPlayer)
 }
 ```
 
@@ -803,47 +1092,219 @@ Narrative state persists across seasons.
 
 ```typescript
 interface NarrativeCarryover {
-  reporters: ReporterState[];    // Personality, alignment, trust level
-  activeStorylines: Storyline[]; // In-progress multi-game arcs
+  reporters: BeatReporter[];     // Full reporter state (persists across seasons)
+  activeStorylines: Storyline[]; // In-progress multi-game arcs (defined in MODE_2 §16)
   revealedInsiders: string[];    // Reporter IDs with permanent INSIDER status (C-068)
 }
 
-interface ReporterState {
-  reporterId: string;
-  personality: ReporterPersonality;  // 10 types
+// Reporter personality — 10 types (hidden from user)
+type ReporterPersonality =
+  | 'OPTIMIST' | 'PESSIMIST' | 'BALANCED' | 'DRAMATIC' | 'ANALYTICAL'
+  | 'HOMER' | 'CONTRARIAN' | 'INSIDER' | 'OLD_SCHOOL' | 'HOT_TAKE';
+
+// Canonical reporter entity — merges Spine and Mode 2 fields
+interface BeatReporter {
+  id: string;
+  firstName: string;
+  lastName: string;
+  teamId: string;
+  personality: ReporterPersonality;     // Hidden from user
   alignment: 'FRIENDLY' | 'NEUTRAL' | 'HOSTILE';
-  moraleInfluence: number;       // Capped ±3 per game (C-069)
-  revealLevel: 'SURFACE' | 'BEAT' | 'INSIDER';
-  trustScore: number;
+  revealLevel: 'SURFACE' | 'BEAT' | 'INSIDER';  // INSIDER = permanent per C-068
+  trustScore: number;                   // 0–100
+  moraleInfluence: number;              // Cumulative this season, capped ±3 per game (C-069)
+  tenure: number;                       // Seasons covering this team
+  reputation: 'ROOKIE' | 'ESTABLISHED' | 'VETERAN' | 'LEGENDARY';
+  storiesWritten: number;
+  hiredDate: FictionalDate;
 }
 ```
 
-**Owned by:** Mode 2 (per-game updates)
-**Carried over:** Mode 3 → Mode 2 (relationships persist)
+**Owned by:** Mode 2 (per-game updates to alignment, revealLevel, trustScore, moraleInfluence)
+**Carried over:** Mode 3 → Mode 2 (reporter relationships persist; moraleInfluence resets)
 **Read by:** Almanac (narrative highlights)
 
 ---
 
-## 13. Park Factor Contract
+## 13. Stadium & Park Factor Contracts
+
+### 13.1 Stadium Entity
+
+The Stadium is a shared entity — created in Mode 1, live-updated in Mode 2, archived for Almanac.
+
+```typescript
+interface Stadium {
+  id: string;
+  name: string;
+  teamId: string;
+
+  // Physical dimensions (immutable after creation)
+  dimensions: StadiumDimensions;
+
+  // Live park factors (recalculated during Mode 2)
+  parkFactors: ParkFactors;
+
+  // Historical snapshots (one per season)
+  historicalFactors: SeasonParkFactors[];
+
+  // Spray chart aggregate data
+  sprayChart: SprayChartData;
+
+  // Stadium records (single-game, career, HR distance)
+  records: StadiumRecords;
+
+  // Metadata
+  surface: 'Grass' | 'Turf';
+  roofType: 'Open' | 'Retractable' | 'Dome';
+}
+```
+
+**Owned by:** Mode 1 (creation, dimensions), Mode 2 (parkFactors, sprayChart, records), Mode 3 (season snapshot)
+**Read by:** Almanac (historical factors, records, career stats at stadium)
+
+### 13.2 Stadium Dimensions
+
+```typescript
+interface StadiumDimensions {
+  leftField: DimensionZone;
+  leftCenter: DimensionZone;
+  center: DimensionZone;
+  rightCenter: DimensionZone;
+  rightField: DimensionZone;
+  foulTerritory: 'Small' | 'Medium' | 'Large';
+  features: StadiumFeature[];     // Named quirks (e.g., 'Green Monster', 'The Cove')
+}
+
+interface DimensionZone {
+  distance: number;                // Feet to wall
+  wallHeight: 'Low' | 'Med' | 'High' | 'Monster';
+  wallHeightFeet?: number;         // Specific height if notable
+}
+
+interface StadiumFeature {
+  name: string;
+  zone: SprayZone;
+  effect: string;                  // Description of gameplay impact
+}
+```
+
+### 13.3 Spray Zones
+
+```typescript
+type SprayZone =
+  | 'LEFT_LINE' | 'LEFT_FIELD' | 'LEFT_CENTER'
+  | 'CENTER'
+  | 'RIGHT_CENTER' | 'RIGHT_FIELD' | 'RIGHT_LINE';
+```
+
+### 13.4 Park Factors
 
 ```typescript
 interface ParkFactors {
   stadiumId: string;
-  overall: number;               // 0.80–1.20 scale
+
+  // Overall composite
+  overall: number;                 // 0.80–1.20 typical range
+
+  // Offensive factors
   runs: number;
   homeRuns: number;
+  hits: number;                    // BABIP-ish
+  doubles: number;
+  triples: number;
+
+  // Plate discipline
+  strikeouts: number;
+  walks: number;
+
+  // Handedness splits
   leftHandedHR: number;
   rightHandedHR: number;
   leftHandedAVG: number;
   rightHandedAVG: number;
+
+  // Hit direction factors (per spray zone, derived from spray chart data)
+  directionFactors: Record<SprayZone, number>;
+
+  // Confidence — determines blend ratio between seed and calculated values
+  // LOW (<10 home games): 70% seed / 30% calculated
+  // MEDIUM (10–80 home games): 30% seed / 70% calculated
+  // HIGH (81+ home games): 0% seed / 100% calculated (per C-088)
   confidence: 'LOW' | 'MEDIUM' | 'HIGH';
+  gamesIncluded: number;
+  source: 'SEED' | 'CALCULATED' | 'BLENDED';
+}
+
+interface SeasonParkFactors {
+  seasonNumber: number;
+  parkFactors: ParkFactors;
+  gamesPlayed: number;
 }
 ```
 
-**Seeded by:** Mode 1 (from PARK_FACTOR_SEED_SPEC)
-**Updated by:** Mode 2 (confidence-based blending per C-088: LOW=70% seed, MEDIUM=30% seed, HIGH=0% seed)
+**Seeded by:** Mode 1 (dimensions-derived via PARK_FACTOR_SEED_SPEC; wall height per zone feeds HR/hit factors)
+**Updated by:** Mode 2 (recalculated after every home game; confidence-based blending per C-088)
 **Snapshotted by:** Mode 3 season end (archived per season)
-**Read by:** Almanac (historical park factors)
+**Read by:** Almanac (historical park factors, cross-season trends)
+
+### 13.5 Stadium Records
+
+```typescript
+interface StadiumRecords {
+  singleGame: {
+    mostRuns: RecordEntry;
+    mostHits: RecordEntry;
+    mostHomeRuns: RecordEntry;
+    mostHitsByPlayer: RecordEntry;
+    mostRBIsByPlayer: RecordEntry;
+    mostHRsByPlayer: RecordEntry;
+    mostStrikeouts: RecordEntry;
+  };
+  homeRuns: {
+    longestOverall: HRDistanceRecord;
+    longestByZone: Record<SprayZone, HRDistanceRecord>;
+    mostCareerHRs: { playerId: string; count: number }[];
+    grandSlams: { playerId: string; gameId: string; inning: number; season: number }[];
+  };
+}
+
+interface RecordEntry {
+  value: number;
+  holderId: string;
+  holderName: string;
+  gameId: string;
+  seasonNumber: number;
+}
+
+interface HRDistanceRecord {
+  distance: number;
+  playerId: string;
+  zone: SprayZone;
+  gameId: string;
+  seasonNumber: number;
+}
+```
+
+### 13.6 Spray Chart Data
+
+```typescript
+interface SprayChartData {
+  zones: Record<SprayZone, SprayZoneStats>;
+  byHandedness: {
+    left: Record<SprayZone, SprayZoneStats>;
+    right: Record<SprayZone, SprayZoneStats>;
+  };
+}
+
+interface SprayZoneStats {
+  totalBattedBalls: number;
+  hits: number;
+  outs: number;
+  homeRuns: number;
+  doubles: number;
+  triples: number;
+}
+```
 
 ---
 
@@ -851,13 +1312,13 @@ interface ParkFactors {
 
 ### Gospel Documents
 
-| Document | Lines | Sections | Decisions |
-|----------|-------|----------|-----------|
-| MODE_1_LEAGUE_BUILDER.md | ~1,767 | 16 | 12 (10 Mode 1 + 2 cross-cutting) |
-| MODE_2_FRANCHISE_SEASON.md | ~3,269 | 28 | 33 + 3 cross-cutting |
-| MODE_3_OFFSEASON_WORKSHOP.md | ~1,319 | 21 | 17 + 8 findings |
-| ALMANAC.md | ~350 | 10 | 0 (read-only consumer) |
-| SPINE_ARCHITECTURE.md (this) | ~550 | 14 | 1 (C-045) |
+| Document | Sections | Decisions |
+|----------|----------|-----------|
+| MODE_1_LEAGUE_BUILDER.md | 16 | 12 (10 Mode 1 + 2 cross-cutting) |
+| MODE_2_FRANCHISE_SEASON.md | 28 | 33 + 3 cross-cutting |
+| MODE_3_OFFSEASON_WORKSHOP.md | 21 | 17 + 8 findings |
+| ALMANAC.md | 10 | 0 (read-only consumer) |
+| SPINE_ARCHITECTURE.md (this) | 14 | 1 (C-045) |
 
 ### STEP4 Decision in This Document
 
@@ -879,6 +1340,11 @@ interface ParkFactors {
 | C-084 | Mode 2 + Mode 3 | §11 (fan morale EOS modifier) |
 | C-086 | Mode 3 | §9.2 (trait wheel spin) |
 | C-088 | Mode 2 | §13 (park factor blending) |
+| C-005 | Mode 2 | §3.8 (WP_K/PB_K hybrid types) |
+| C-011 | Mode 2 | §3.8 (TP in overflow menu) |
+| C-068 | Mode 2 | §12 (INSIDER = permanent) |
+| C-069 | Mode 2 | §12 (morale influence ±3 cap) |
+| C-071 | Mode 1 | §3.4 (gamesPerTeam: 2–200 custom) |
 | F-124 | Reconciliation | §3.6 (5 SMB4 chemistry types) |
 | F-127 | Reconciliation | §7.1 (draft-round-based salary) |
 | F-128 | Reconciliation | §3.5 (run differential tiebreaker) |

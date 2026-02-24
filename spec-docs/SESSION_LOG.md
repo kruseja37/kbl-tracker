@@ -1277,3 +1277,208 @@ Gospel documentation only.
 - Commit MODE_2, ALMANAC, SPINE_ARCHITECTURE, SESSION_LOG, CURRENT_STATE
 - Archive superseded specs (per GOSPEL_CONSOLIDATION_MAP.md "Pending Archive" and "NOT Gospel Material" sections)
 - Resume Phase 2 fix execution (code changes)
+
+---
+
+## Session: 2026-02-24 — SMB4 Player Database: Full MLB Roster Integration
+
+### Context
+Continuing multi-session project to populate KBL Tracker's player database with verified SMB4 roster data. Previous sessions established Yankees + Blue Jays. This session completed all remaining 28 MLB teams using Gemini-extracted CSV data.
+
+### Accomplished
+
+**Position Type Extension:**
+- Added `'SP/RP'`, `'IF/OF'`, `'1B/OF'` to Position union type in `src/types/game.ts`
+- Resolves compound position values used by dual-role pitchers and multi-position players in SMB4
+
+**AL East + AL Central (8 teams — prior context, carried over):**
+- Generated from single CSV: Orioles, Rays, Red Sox, White Sox, Twins, Indians, Royals, Tigers
+- Applied Cleveland data fixes (3 missing OVRs: Yates C-, Shambles B-, Avery B-)
+- Fixed apostrophe escaping in O'Connell and O'Cherio player names
+
+**AL West (5 teams):**
+- CSV: `MLB Teams AL-West DATA for KBL - Sheet1.csv` (110 rows, 5 teams × 22 players)
+- Generated: `marinersPlayers.ts`, `astrosPlayers.ts`, `angelsPlayers.ts`, `rangersPlayers.ts`, `athleticsPlayers.ts`
+- Compound positions handled: Knoggin 1B/OF, Ventura 1B/OF, Black SP/RP, Gordon IF/OF, Kelly SP/RP, Smith IF/OF, Dixon 1B/OF, Eckersley SP/RP
+
+**NL East (5 teams):**
+- CSV: `MLB Teams NL-East DATA for KBL spreadsheet - Sheet1.csv` (110 rows)
+- Generated: `marlinsPlayers.ts`, `exposPlayers.ts`, `philliesPlayers.ts`, `metsPlayers.ts`, `bravesPlayers.ts`
+- Apostrophe handled: Chucky O'Connell (Phillies)
+- Initial CSV had extra POS column (lineup position); user re-uploaded clean version
+
+**NL Central (5 teams):**
+- CSV: `MLB Teams NL- Central DATA for KBL spreadsheet - Sheet1.csv` (110 rows)
+- Generated: `cardinalsPlayers.ts`, `redsPlayers.ts`, `brewersPlayers.ts`, `piratesPlayers.ts`, `cubsPlayers.ts`
+- Handled "-" as empty S_POS (Brewers/Pirates used dashes instead of blank)
+- Apostrophe handled: Hander O'Speciallo (Reds + Pirates)
+
+**NL West (5 teams):**
+- 5 individual CSVs: `padres_roster.csv`, `dodgers_roster.csv`, `dbacks_roster.csv`, `rockies_roster.csv`, `giants_roster.csv`
+- Generated: `padresPlayers.ts`, `dodgersPlayers.ts`, `diamondbacksPlayers.ts`, `rockiesPlayers.ts`, `giantsPlayers.ts`
+
+### Build Status
+- All 30 team files compile with zero type errors
+- Only pre-existing FieldingModal/fieldingLogic errors remain (unrelated to player data)
+
+### Files Created/Modified
+- `src/types/game.ts` — Position type extended with SP/RP, IF/OF, 1B/OF
+- 28 new files in `src/data/players/mlb/` (Yankees + Blue Jays were prior session)
+- 4 generator scripts in `/sessions/` working directory (not committed)
+
+### Total Player Data
+- **30 MLB teams × 22 players = 660 players** — all in `src/data/players/mlb/`
+- Data source: Gemini CSV extraction from SMB4 screenshots (validated against manually-verified Yankees data — 100% numerical accuracy)
+
+### Trust Decision
+- JK directive: "trust gemini on everything" — all CSV values accepted wholesale after Yankees cross-check showed 100% match on ratings
+
+### Pending
+- 20 standard league teams (506 players) — awaiting CSVs, will go in `src/data/players/standard/`
+- Team files not yet wired into playerDatabase.ts imports/exports
+- No git commit made this session (JK to handle)
+
+---
+
+## Session: 2026-02-24 — SPINE_ARCHITECTURE.md Comprehensive Review & Corrections
+
+### Context
+JK provided detailed section-by-section feedback on SPINE_ARCHITECTURE.md (sections 3.1 through 13), uploaded STADIUM_ANALYTICS_SPEC.md for stadium data expansion. Session covered three phases: outright error fixes, design decision resolution (11 questions), and remaining gap fills.
+
+### Accomplished
+
+**Phase 1 — Outright Error Fixes (3):**
+1. §3.6 PersonalityType: Replaced hallucinated names with SMB4-authentic: `'Competitive' | 'Relaxed' | 'Droopy' | 'Jolly' | 'Tough' | 'Timid' | 'Egotistical'` (verified against MODE_1_LEAGUE_BUILDER.md)
+2. §3.6 FitnessState: Fixed order to `'Hurt' | 'Weak' | 'Strained' | 'Well' | 'Fit' | 'Juiced'`
+3. §4.3 FieldingStats: Removed `wallCatches` (not in SMB4), added `divingPlays`, `missedDives`, `webGems`, `leapingCatches`, `missedLeap`, `robbedHRs`; replaced `gamesByPosition` with `outsByPosition: Record<Position, number>` for partial-inning credit
+
+**Phase 2 — Design Decisions Resolved (11):**
+- Q16: FameLevel → All start Unknown (earned through gameplay, C-078 dropdown display only)
+- Q17: SeasonPhase gating → Mode 2 owns it
+- Q18: RulesPreset expansion → Mode 1 owns it
+- Q19: Grade → Computed only via `computeGrade()`, removed `grade: Grade` from Player interface
+- Q20: MLB salary reference → Per SALARY_SYSTEM_SPEC
+- Q21: Schedule → Manual wizard + CSV only (supersedes C-079, no auto-generation)
+- Q22: `youngPlayer` → Renamed to `fanHopeful` everywhere
+- Q23: WAR → Split into `PlayerWAR` (bWAR/pWAR/fWAR/rWAR) and `ManagerWAR` (mWAR) discriminated union
+- Q24: Chemistry → Full §9 rewrite with `TeamChemistry` interface, 4-tier potency (1.00×–1.75×), trait quality vs chemistry distinction
+- Q25: 30/50/20 trait split → Re-analyze after standard player import
+- Q26: Reporter revealLevel → Mode 2 Narrative section
+
+**Phase 3 — Remaining Gap Fills (8):**
+1. §13 complete replacement: Thin ParkFactors-only → full Stadium entity with `Stadium`, `StadiumDimensions`, `DimensionZone`, `SprayZone`, expanded `ParkFactors` (with `directionFactors`, `gamesIncluded`, `source`), `StadiumRecords`, `SprayChartData` — pulled from STADIUM_ANALYTICS_SPEC.md
+2. §5.3 TransactionType expanded: Added 13 new event types (SALARY_CHANGE, TRAIT_ADDED/REMOVED, RATINGS_CHANGE, POSITION_CHANGE, NAME_CHANGE, NUMBER_CHANGE, TEAM_RENAME, STADIUM_CHANGE, JERSEY_RETIRED, DESIGNATION_AWARDED/REMOVED)
+3. §6.1 kbl-app-meta: Added `playerNamePool` store
+4. §6.1 kbl-franchise: Added `stadiums`, `playerMorale`, `relationships` stores
+5. §7.2 SeasonClassification: Added `managerOfYearCandidates`, `relieverOfYearCandidates`, `comebackPlayerCandidates`
+6. §8.2 WAR grade thresholds table: MVP 7.0+ → Liability <0.0
+7. §4.2 PitchingStats: Added Kc (strikeouts looking) derivation note
+8. §4.4–4.5 new sections: `RunningStats` and `ManagingStats` interfaces
+9. §4.6 `CareerStats`: Added `careerRunning: RunningStats`
+10. §3.5 `ScheduleGame`: Added `scheduledDate: string` field + manual-only note
+
+**Phase 4 — Final Verification:**
+- All 14 sections present (§1–§14)
+- §13 has 6 subsections (13.1–13.6) all verified
+- `youngPlayer` → `fanHopeful` confirmed (zero stale references)
+- `wallCatches` confirmed removed
+- `grade: Grade` confirmed removed from Player; `computeGrade` derivation note present in §3 + §4
+- `PlayerWAR`/`ManagerWAR` split confirmed
+- `ChemistryTier` defined in §9
+
+### Design Decision: Stadium Analytics Placement
+- Spine gets data shape (entity interfaces)
+- Mode 2 owns behavior (calculations, accumulation)
+- Almanac owns historical queries
+
+### Files Modified
+- spec-docs/SPINE_ARCHITECTURE.md — extensive edits across all 14 sections
+
+### Files Referenced (not modified)
+- STADIUM_ANALYTICS_SPEC.md (uploaded, 1,342 lines) — source for §13 expansion
+- MODE_1_LEAGUE_BUILDER.md — verified PersonalityType
+- MODE_3_OFFSEASON_WORKSHOP.md — verified chemistry tier/potency
+
+### No Code Changes This Session
+Spec documentation only.
+
+### Remaining Items Not Addressed
+- Modifier/enhancement representation in event data (§5.1/5.2) — deferred
+- SMB4 Names Database Excel uploaded but not yet read/integrated
+
+---
+
+## Session: 2026-02-24 (cont.) — SPINE Cross-Gospel Verification & Reconciliation
+
+### Context
+Continuation. Full section-by-section re-read of SPINE_ARCHITECTURE.md with cross-referencing against all four gospels (Mode 1, Mode 2, Mode 3, Almanac). Identified 29 findings: 13 contradictions, 10 gaps, 6 clarity issues.
+
+### Audit Findings (29 total)
+
+**Category A — Cross-Gospel Contradictions (13):**
+- A-1: hiddenModifiers — Spine had `leadership/composure`, Mode 1 has `loyalty/resilience` → **FIXED: Mode 1 wins**
+- A-2: Grade storage — Spine says computed-only, Mode 1 stores `overallGrade` → **Spine correct; Mode 1 needs update (deferred)**
+- A-3: gamesPerTeam — Spine had preset enum → **FIXED: custom number 2–200 per JK**
+- A-4: extraInningsRule — Spine had `'none'`, Mode 1 had `'sudden_death'` → **FIXED: Spine wins, kept 'none'**
+- A-5: DH rule — Spine had `boolean`, Mode 1 has detailed struct → **FIXED: Mode 1 structure adopted**
+- A-6: Trade deadline — Spine had `gameNumber`, Mode 1 has `timing` (percentage) → **FIXED: Mode 1 structure adopted**
+- A-7: Position type — Spine had 11 + DH, Mode 1 has compounds → **FIXED: DH removed from Position, added CP/SP/RP/IF/OF compounds, new BattingSlot type**
+- A-8: MojoLevel — Spine numeric vs Mode 2 string enum → **FIXED: String enum + MOJO_VALUES mapping constant**
+- A-9: Reporter interface — completely different fields → **FIXED: Merged into one canonical BeatReporter with all fields from both**
+- A-10: BattingStats field names — different between Spine and Mode 2 → **FIXED: Spine keeps full field names (authoritative); SB/CS removed (running-only)**
+- A-11: PitchingStats — Mode 2 adds wildPitches/blownSaves, Spine had highLeverageOuts → **FIXED: Added wildPitches/blownSaves, removed highLeverageOuts, moved pitchCount/battersFaced to derived**
+- A-12: ScheduleGame date — different format → **FIXED: Adopted Mode 1's `fictionalDate: FictionalDate` format**
+- A-13: TransactionType — Mode 2 subset → **FIXED: Collapsed IL_PLACEMENT/IL_RETURN to IL_MOVE, added CONTRACT_EXTENSION**
+
+**Category B — Gaps Filled (10):**
+- B-1: 17 undefined types → **FIXED: Defined 10 core types in new §3.8 (HalfInning, Bases, AtBatResult, Direction, ExitType, FieldingData, GameEvent, PlayoffFormat). Added mode-specific pointers for 7 others.**
+- B-2: No HOF interface → **FIXED: Added pointer to ALMANAC.md §3.4 (Almanac-only per JK)**
+- B-3: Almanac data sources incomplete → **Noted (Almanac fix, not Spine)**
+- B-4: RunningStats not in Player.seasonStats → **FIXED: seasonStats now {batting, pitching, fielding, running}**
+- B-5: FieldingStats not in Player.seasonStats → **FIXED: same as B-4**
+- B-6: ManagingStats no accumulation path → **FIXED: Added `careerManaging?: ManagingStats` to CareerStats, stored in mwarDecisions store**
+- B-7: SB/CS duplicated in BattingStats + RunningStats → **FIXED: Removed from BattingStats, RunningStats is sole owner**
+- B-8: Fan morale weights not in Spine → **Already present as comments (60/20/10/10)**
+- B-9: Mode 2 ParkFactors missing directionFactors → **Noted (Mode 2 fix, not Spine)**
+- B-10: 5 extra awards not in SeasonClassification → **FIXED: Added platinumGlove, boogerGlove, benchPlayer, karaKawaguchi, bustOfYear candidate lists**
+
+**Category C — Clarity Fixes (6):**
+- C-1: seasonStats was BattingStats & PitchingStats intersection → **FIXED: Now explicit {batting, pitching, fielding, running} object**
+- C-2: FitnessState neutral state unclear → **FIXED: Comment clarifies "Fit is the neutral/default state"**
+- C-3: Stale line counts in §14 → **FIXED: Removed line count column entirely**
+- C-4: Dual parkFactors storage → **FIXED: Removed separate parkFactors store from §6.1, parkFactors live on Stadium entity**
+- C-5: TeamDesignationState vs DesignationState naming → **FIXED: Aligned to DesignationState**
+- C-6: Chemistry potency clarity → **No action needed, design point is well-documented**
+
+### JK Decisions Made This Session
+- gamesPerTeam: custom number 2–200, no preset enum
+- extraInningsRule: Spine wins (`'none'` stays, Mode 1 loses `'sudden_death'`)
+- DH + trade deadline: Mode 1's detailed structures adopted
+- ScheduleGame: Mode 1's `fictionalDate: FictionalDate` format adopted
+- hiddenModifiers: Mode 1 wins (`loyalty`, `ambition`, `resilience`, `charisma`)
+- Position: Remove DH from Position, add compounds (SP/RP, IF/OF, 1B/OF, CP)
+- MojoLevel: Both — string enum + numeric mapping constant
+- Stats: Full alignment — SB/CS running-only, add wildPitches/blownSaves, remove highLeverageOuts, ManagingStats → CareerStats
+- FitnessState: Fit is neutral (confirmed)
+- Reporter: Merge into one canonical BeatReporter with all fields
+- TransactionType: Simplify IL to IL_MOVE, add CONTRACT_EXTENSION
+- Undefined types: Define core in Spine, pointers for mode-specific
+- HOF: Almanac-only
+- Extra awards: Add to Spine SeasonClassification
+
+### Files Modified
+- spec-docs/SPINE_ARCHITECTURE.md — 29 findings resolved
+- spec-docs/SESSION_LOG.md — this entry
+
+### Deferred Items (require updates to OTHER gospels, not Spine)
+- A-2: Mode 1 `overallGrade` field needs removal (Spine is correct: computed-only)
+- B-3: Almanac §2.1 data sources list needs expanding
+- B-9: Mode 2 §24 ParkFactors needs `directionFactors` field added
+- Mode 1 `extraInningsRule` needs `'sudden_death'` removed, `'none'` added
+- Mode 2 `MojoLevel` should reference Spine's canonical type
+- Mode 2 `BeatReporter` interface should align with Spine §12
+
+### Next Action
+- Commit SPINE_ARCHITECTURE.md changes to main
+- Apply deferred fixes to Mode 1, Mode 2, Mode 3, Almanac gospels
+- Import SMB4 Names Database when ready
