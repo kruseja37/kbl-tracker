@@ -1482,3 +1482,136 @@ Continuation. Full section-by-section re-read of SPINE_ARCHITECTURE.md with cros
 - Commit SPINE_ARCHITECTURE.md changes to main
 - Apply deferred fixes to Mode 1, Mode 2, Mode 3, Almanac gospels
 - Import SMB4 Names Database when ready
+
+---
+
+## Session: 2026-02-25 — Mode 2 Gospel JK Review Pass (v1.0 → v1.1)
+
+### Context
+JK provided comprehensive feedback on MODE_2_FRANCHISE_SEASON.md covering all 26 sections (~40+ items). Two-phase session: (1) discussion/Q&A on all feedback items, (2) apply confirmed fixes.
+
+### Accomplished
+Applied ~35+ fixes to MODE_2_FRANCHISE_SEASON.md, upgrading from v1.0 to v1.1. Key changes:
+
+**Structural:**
+- §1.3: Clarified immutability language (outcome-level immutable, versioned edits for enrichment/runners)
+- §2.1: Removed orphaned `isClutchProfile`, removed `traits` snapshot from contexts, expanded `parkContext` with full ParkFactors reference + dimensions, renamed `clutchValue` → `wpa`, fixed `MilestoneEvent[]` → `AchievedMilestone[]`
+- §2.1: Fixed `FameLevel` to align with Mode 1 (Unknown/Local/Regional/National/Superstar/Legend)
+- §2.1: Fixed `PlayerPersonality` to align with Mode 1's 7-type model + 4 hidden modifiers (C-070)
+- §2.2: Split substitution `position` into `outPosition` + `inPosition`
+- §7.1: Added position swap as single event (not two linked events)
+
+**Game Logic:**
+- §3.7: Fenway Board now includes game score/inning/outs, replaces separate scoreboard bar
+- §6.2: Removed CI from at-bat counting (not in SMB4)
+- §6.7: Added note that BB includes IBB in OBP formula
+- §23.4: PA qualification now scales by `inningsPerGame/9`
+
+**Stats & Achievements:**
+- §8.3: Added `clutchWPA`, `per9` rates (scaled for inningsPerGame), `fieldingPct` (includes missedDives/missedLeaps in denominator), 5-hit/6-hit games, webGems, goldenSombreros, titaniumSombreros, madduxGames, immaculateInnings to season stats
+- §9.7: Added CGSO, 20K game (scaled), back-to-back shutouts, save/win streaks
+- §10.4: Made crystal clear that star play categories are user-selected enrichments via [+fielding] button; web gems are engine-derived from fWAR threshold (NOT user-tagged)
+- §10.5: Added effort error classification (50% reduced penalty for errors on difficult attempts)
+- §10.7: Updated fWAR formula to include `√(LI)` for situational context; added context window note (closes at end of half-inning)
+
+**Clutch & WAR:**
+- §13.1: Replaced `baseValue × contactQuality × √(LI)` with straight WPA. Explained LI vs WPA distinction.
+- §13.8: Renamed to "Clutch Stats (WPA-Based)" with `totalWPA`, `positiveWPA`, `negativeWPA`
+
+**Mojo/Fitness (MAJOR REFRAME):**
+- §14 header: Added critical user-only paradigm note — engine tracks but never initiates state changes
+- §14.2: Replaced Mojo Carryover formula with "User-Observed" tracking description
+- §14.3: Removed Mojo Amplification (engine doesn't calculate this)
+- §14.5: Replaced Fitness Decay/Recovery with "User-Observed" tracking description
+- §14.8: Replaced Injury Risk with "User-Observed" tracking description
+- Preserved §14.11 data schema with tracking fields (gamesAtJuiced, splits)
+
+**Narrative & Designations:**
+- §16.1: Added name generation note for managers/scouts (Mode 1), all names user-editable
+- §16.10: NEW — Narrative UI Surfaces table (X feed, Tootwhistle Times, Post-Game Summary, Pop-Up Notifications)
+- §17.7: Renamed "Young Player" → "Fan Hopeful" per Spine; yellow on baby blue badge
+- §17.14: NEW — Player Morale System (0-100 per-player, morale inputs table, rating change suggestions, morale does NOT directly affect clutch)
+
+**Milestones & Scaling:**
+- §18.2: Added 5-hit (+1.5), 6-hit (+2.0), CGSO, Maddux, golden sombrero, mental error, terrible pitcher outing, 0-for-5 fame events
+- §18.3: Fixed club scaling direction — clubs now scale DOWN by opportunity factor (KBL harder than MLB, not easier); removed 25-25, kept 30-30, 40-40, added 50-50
+- §18.5: Set minimumPA=25, minimumIP=20 for franchise leader boards; activate at game 4
+- §18.7: Trade aftermath swings both ways (trading Albatross improves playerMorale)
+- §23.5: Raised universal floor to 10 (no milestone below 10)
+
+**Fan Morale:**
+- §20.3: Walk-off always major for fanMorale; playerMorale fires for own milestones even if minor
+- §20.5: Trade scrutiny affects both fanMorale AND playerMorale
+- §20.8: Updated personality references to Mode 1 types (EGOTIST, TEAM_PLAYER)
+
+**Deferrals:**
+- §25: AI Game Engine marked as DEFERRED TO V2 (v1 uses simplified box-score generator)
+- §27: Added AI Game Engine to V2 deferred table
+
+### Open Items from Discussion (Not Yet Applied)
+1. **WAR deep audit** — JK wants separate dedicated session to verify WAR math across all 5 components
+2. **Mode 3 flow-through** — WPA simplification needs to be reflected in MODE_3_OFFSEASON_WORKSHOP.md
+3. **Mode 1 name generation** — Name generation for managers/scouts needs to be added to MODE_1_LEAGUE_BUILDER.md
+4. **True Value - Contract wiring** — Need to verify if the calculation for Fan Favorite/Albatross (True Value − Contract) is wired in code
+5. **V1 deferral tracking** — Need comprehensive list of all V2 deferrals across all gospels
+
+### JK Decisions Made This Session
+- Remove isClutchProfile (orphaned, no backing logic)
+- WPA replaces custom clutch formula (§13.1)
+- Web gems = engine-derived, NOT user-tagged
+- Star play categories = user enrichments in [+fielding] button
+- Mojo/fitness = user-only paradigm (engine tracks, never initiates)
+- Keep engine tracking of games at various mojo/fitness states (feeds splits + narrative)
+- Club scaling: DOWN by opportunity factor; remove 25-25; minimum floor 10
+- minimumPA=25, minimumIP=20 for franchise leaders
+- playerMorale: 0-100 per-player, can suggest rating changes, does NOT directly affect clutch
+- Effort errors: 50% reduced fWAR penalty
+- Fan Hopeful: renamed from Young Player per Spine
+- Walk-off: ALWAYS major for fanMorale
+- AI Game Engine: deferred to V2
+
+### Files Modified
+- spec-docs/MODE_2_FRANCHISE_SEASON.md — v1.0 → v1.1 (35+ edits)
+- spec-docs/SESSION_LOG.md — this entry
+
+### Next Action
+- Commit MODE_2_FRANCHISE_SEASON.md v1.1 to main
+- WAR deep audit session (separate prompt)
+- Apply WPA flow-through to Mode 3 spec
+- Add name generation to Mode 1 spec
+- Verify True Value - Contract wiring in code
+
+---
+
+## Session: 2026-02-25 (NFL Audit of Mode 2 Gospel v1.1)
+
+**Context:** Continuation session after compaction. Completed the NFL audit JK requested.
+
+### Task
+Audit all 48 confirmed changes from the JK review pass to ensure 100% were applied to MODE_2_FRANCHISE_SEASON.md v1.1.
+
+### Findings
+- **48/48 confirmed changes verified present** in the spec file
+- **2 gaps identified and fixed:**
+  1. §6.3 line 802: "Appeal play on preceding runner" lacked SMB4 note → Added: *(Note: appeal outs do not exist in SMB4 — included for baseball rules completeness only)*
+  2. §17 header: Missing explicit statement that projected designations recalculate game-by-game → Added: "Projected vs Locked" paragraph clarifying projected designations recalculate after every completed game
+- **1 item deferred (not a spec edit):** True Value - Contract wiring verification requires code inspection, not spec change
+
+### NFL Steps Performed
+1. Read entire 3,370-line spec file in full (8 parallel chunks)
+2. Cross-referenced every confirmed change from session summary against actual file content
+3. Verified line numbers for each change
+4. Identified 2 gaps where confirmed feedback was not applied
+5. Applied both fixes
+6. Re-read the fixed lines to verify edits landed correctly
+
+### Files Modified
+- spec-docs/MODE_2_FRANCHISE_SEASON.md — 2 gap fixes (§6.3, §17)
+- spec-docs/SESSION_LOG.md — this entry
+
+### Next Action
+- Commit MODE_2_FRANCHISE_SEASON.md to main
+- WAR deep audit session (separate prompt)
+- Apply WPA flow-through to Mode 3 spec
+- Add name generation to Mode 1 spec
+- Verify True Value - Contract wiring in code

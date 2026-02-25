@@ -1,6 +1,6 @@
 # MODE 2: FRANCHISE SEASON — Gospel Specification
 
-**Version:** 1.0 (Gospel)
+**Version:** 1.1 (Gospel — JK Review Pass)
 **Status:** CANONICAL — This document is the single source of truth for Mode 2
 **Created:** 2026-02-23
 **Supersedes:** KBL_UNIFIED_ARCHITECTURE_SPEC.md (GameTracker sections), STAT_TRACKING_ARCHITECTURE_SPEC.md, PITCHER_STATS_TRACKING_SPEC.md, PITCH_COUNT_TRACKING_SPEC.md, INHERITED_RUNNERS_SPEC.md, FIELDING_SYSTEM_SPEC.md, FIELDING_PIPELINE_MAPPINGS.md, RUNNER_ADVANCEMENT_RULES.md, BWAR_SPEC.md, PWAR_SPEC.md, FWAR_SPEC.md, RWAR_SPEC.md, MWAR_SPEC.md, LEVERAGE_INDEX_SPEC.md, CLUTCH_ATTRIBUTION_SPEC.md, NARRATIVE_SYSTEM_SPEC.md, DYNAMIC_DESIGNATIONS_SPEC.md, MILESTONE_SYSTEM_SPEC.md, FAN_FAVORITE_SYSTEM_SPEC.md, FAN_MORALE_SYSTEM_SPEC.md, MOJO_FITNESS_SYSTEM_SPEC.md, GAME_SIMULATION_SPEC.md (renamed AI_GAME_ENGINE per C-048/C-082), PLAYOFF_SYSTEM_SPEC.md, PLAYOFFS_FIGMA_SPEC.md, SPECIAL_EVENTS_SPEC.md, ADAPTIVE_STANDARDS_ENGINE_SPEC.md, STADIUM_ANALYTICS_SPEC.md, PARK_FACTOR_SEED_SPEC.md, MASTER_BASEBALL_RULES_AND_LOGIC.md, SUBSTITUTION_FLOW_SPEC.md, GAMETRACKER_DRAGDROP_SPEC.md (flow sections), GAMETRACKER_BUGS.md, GAMETRACKER_UX_COMPETITIVE_ANALYSIS.md
@@ -71,7 +71,7 @@ KBL has three immutable event streams. Everything in the franchise experience co
 | **Franchise Manager** | User manages roster | TransactionEvent | Between games |
 | **Offseason Engine** | Mode 3 processing | OffseasonEvent | Between seasons |
 
-**Architectural guarantee:** All events are immutable once saved (enrichment adds fields, never changes outcomes). All downstream state is derivable from events (replay guarantee). The modifier registry is the extension point (new quirks without touching core flow).
+**Architectural guarantee:** All events are immutable at the outcome level — once an at-bat result is saved, the outcome (`result` field) never changes. Enrichment adds optional fields (spray location, fielding sequence, exit type) via versioned edits tracked in `editHistory[]`. Runner positions can be corrected post-save via the same versioning mechanism. All downstream state is derivable from events (replay guarantee). The modifier registry is the extension point (new quirks without touching core flow).
 
 ### 1.4 What Mode 2 Receives from Mode 1
 
@@ -192,8 +192,6 @@ interface AtBatEvent {
     careerHits: number;
     careerHR: number;
     fameLevel: FameLevel;
-    traits: string[];
-    isClutchProfile: boolean;
     personality?: PlayerPersonality;  // Hidden from user
   };
 
@@ -212,7 +210,6 @@ interface AtBatEvent {
     careerWins: number;
     inheritedRunners: number;
     fameLevel: FameLevel;
-    traits: string[];
     personality?: PlayerPersonality;
   };
 
@@ -225,8 +222,9 @@ interface AtBatEvent {
 
   parkContext: {
     stadiumId: string;
-    parkFactors?: { ba: number; hr: number; doubles: number; triples: number };
+    parkFactors?: ParkFactors;  // Full ParkFactors from §24.1 (overall, runs, HR, hits, doubles, triples, K, BB, handedness splits, directionFactors, confidence, gamesIncluded, source)
     lighting: 'day' | 'night' | 'hazy';
+    dimensions?: { avgDistance: number; wallHeight: number; foulTerritory: 'small' | 'medium' | 'large' };
   };
 
   // === COMPUTED AT SAVE ===
@@ -235,8 +233,8 @@ interface AtBatEvent {
   runsScored: string[];
   outsRecorded: number;
   isQualityAtBat: boolean;
-  milestoneTriggered?: MilestoneEvent[];
-  clutchValue?: number;
+  milestoneTriggered?: AchievedMilestone[];  // See §18.8 for interface
+  wpa?: number;  // Win Probability Added = winProbabilityAfter - winProbabilityBefore
 
   // === ENRICHMENT (optional, added later) ===
   fieldLocation?: { x: number; y: number };
@@ -270,15 +268,23 @@ type MojoLevel = 'Rattled' | 'Tense' | 'Neutral' | 'LockedIn' | 'Jacked';
 // Canonical type from SPINE_ARCHITECTURE.md §3.6
 // Numeric mapping: Rattled = -2, Tense = -1, Neutral = 0, LockedIn = +1, Jacked = +2
 type FitnessLevel = 'Hurt' | 'Weak' | 'Strained' | 'Well' | 'Fit' | 'Juiced';
-type FameLevel = 'unknown' | 'rising' | 'notable' | 'star' | 'superstar' | 'legend';
+// Canonical fitness type — PascalCase values aligned with MojoLevel convention
+// UPPERCASE alias (FitnessState) retired; use FitnessLevel everywhere
+type FameLevel = 'Unknown' | 'Local' | 'Regional' | 'National' | 'Superstar' | 'Legend';
+// Aligned with MODE_1_LEAGUE_BUILDER.md fame tiers
+
+// Aligned with MODE_1_LEAGUE_BUILDER.md personality model (C-070)
+type PlayerPersonalityType =
+  | 'LEADER' | 'TEAM_PLAYER' | 'LONER' | 'HOTHEAD'
+  | 'JOKESTER' | 'MENTOR' | 'EGOTIST';
 
 interface PlayerPersonality {
-  leadership: number;       // 1-200 per OOTP model
+  type: PlayerPersonalityType;
+  // Hidden modifiers (0-100, not visible to user)
   loyalty: number;
-  desireForWinner: number;
-  greed: number;
+  charisma: number;
   workEthic: number;
-  intelligence: number;
+  composure: number;
 }
 ```
 
@@ -332,9 +338,10 @@ interface BetweenPlayEvent {
         | 'position_change' | 'double_switch';
     // Per C-002: 2 entry points — Lineup card + Diamond tap
     outPlayerId: string;
+    outPosition: FieldPosition;      // Position the departing player was playing
     inPlayerId: string;
-    position: FieldPosition;
-    previousPosition?: FieldPosition;
+    inPosition: FieldPosition;       // Position the entering player will play
+    previousPosition?: FieldPosition; // For position_change: what position they had before
   };
 
   playerStateChange?: {
@@ -595,25 +602,26 @@ When `outs === 3`, inning changes automatically. Optional brief between-inning s
 
 **Primary platform:** iPad in landscape mode (browser-based).
 
+The Fenway Board (top-left) replaces the previous enhanced field space. It includes the live game scoreboard (score, inning, outs) alongside pitcher/batter context, leveraging the existing scoreboard UI component.
+
 ```
 ┌──────────────────────────────────────────────────────────────────┐
-│ BEE 3  │ T7  2 OUT │  SIR 2  │  Hayata vs Bender (3-7, .429)  │
-│─────────────────────────────────────────────────────────────────│
-│                    │                            │ PLAY LOG      │
-│   FENWAY BOARD     │      DIAMOND DISPLAY       │               │
-│                    │                            │ T7 Sato   K   │
-│  Pitcher: Bender   │   (runners, outs, bases)   │ T7 Tanaka GO  │
-│  PC: 97  ERA: 3.42 │                            │ T7 Yamada 2B  │
-│  Mojo: ❄ Cold      │   [tap runner to act]      │   [+loc][+fld]│
-│                    │   [tap field to enrich]    │ T6 Park   BB  │
-│  Batter: Hayata    │                            │ T6 Kim    FO  │
-│  AVG: .287 HR: 12  │                            │   [+loc][+fld]│
-│  Mojo: 🔥 Hot      │                            │               │
-│  🎯 1 from 500 hits│                            │               │
-│  ⚡ vs Bender: 3/7  │                            │               │
-│────────────────────│────────────────────────────│───────────────│
+│ ┌─FENWAY BOARD──────────────────┐                               │
+│ │ BEE 3  │ T7  2 OUT │  SIR 2  │  Hayata vs Bender (3-7, .429)│
+│ │                               │                               │
+│ │  Pitcher: Bender              │      DIAMOND DISPLAY    │PLAY │
+│ │  PC: 97  ERA: 3.42            │                         │LOG  │
+│ │  Mojo: Tense                  │  (runners, outs, bases) │     │
+│ │                               │                         │T7 K │
+│ │  Batter: Hayata               │  [tap runner to act]    │T7 GO│
+│ │  AVG: .287 HR: 12             │  [tap field to enrich]  │T7 2B│
+│ │  Mojo: Locked In              │                         │  [+]│
+│ │  1 from 500 hits              │                         │T6 BB│
+│ │  vs Bender: 3/7               │                         │T6 FO│
+│ └───────────────────────────────┘                         │  [+]│
+│────────────────────────────────────────────────────────────│─────│
 │  Quick Bar (left thumb zone)       │  Modifiers + Actions (right)│
-│  [ K ] [ GO ] [ FO ] [ 1B ] [ BB ] │  [ 🥜 ] [ 💀 ] [ 💎 ] [ ⚙ ]│
+│  [ K ] [ GO ] [ FO ] [ 1B ] [ BB ] │  [ +fld ] [ +mod ] [ ⚙ ]  │
 │  [ 2B ] [ 3B ] [ HR ] [ ··· ]     │  [ 🏃R1 ] [ 🏃R3 ]  [ + ] │
 └──────────────────────────────────────────────────────────────────┘
 ```
@@ -622,12 +630,11 @@ When `outs === 3`, inning changes automatically. Optional brief between-inning s
 
 | Zone | Position | Purpose |
 |------|----------|---------|
-| Scoreboard | Top bar | Score, inning, outs, matchup — glance only |
-| Fenway Board | Left panel | KBL-branded context: pitcher stats, batter stats, milestone proximity, matchup history |
+| Fenway Board | Top-left panel | KBL-branded scoreboard + context: **game score, inning, outs**, pitcher stats, batter stats, milestone proximity, matchup history. Replaces previous separate scoreboard bar. |
 | Diamond | Center | Runner positions, field visualization — tap runner for actions |
 | Play Log | Right panel | Recent plays with enrichment badges — tap to enrich/edit |
 | Quick Bar | Bottom left | Outcome buttons (thumb zone) — primary 1-tap input |
-| Modifier/Action | Bottom right | SMB4 quirks + runner actions — secondary input |
+| Modifier/Action | Bottom right | Fielding enrichment, modifiers, runner actions — secondary input |
 
 ---
 
@@ -688,7 +695,8 @@ Tapping any play entry opens enrichment panel. Plays with no enrichment option (
 
 **Modifiers:**
 - Applied from modifier tray (§15)
-- Attached as metadata: `modifiers: ['nut_shot', 'web_gem']`
+- Attached as metadata: `modifiers: ['nut_shot', 'killed']`
+- Note: `web_gem` is NOT a modifier — web gems are engine-derived from fWAR thresholds (§10.4)
 
 ### 4.4 Enrichment Timing
 
@@ -785,14 +793,15 @@ type SpecialResult = 'SF' | 'SAC' | 'DP' | 'TP' | 'FC' | 'E'
 
 **At-Bat counting:**
 - IS an AB: Hits, outs, FC, errors
-- NOT an AB: BB, IBB, HBP, SF, SAC, CI
+- NOT an AB: BB, IBB, HBP, SF, SAC
+- Note: CI (catcher's interference) does not exist in SMB4 — removed from event model
 
 ### 6.3 Run Scoring Rules
 
 **Third Out Exceptions — run does NOT score when:**
 1. Batter out before reaching 1B
 2. ANY force out at any base (even if runner crossed home before force)
-3. Appeal play on preceding runner
+3. Appeal play on preceding runner *(Note: appeal outs do not exist in SMB4 — included for baseball rules completeness only)*
 
 **Time Play (tag out for 3rd out):** Runner scores if crossed home BEFORE tag applied.
 
@@ -875,7 +884,7 @@ function isForced(base: number, runners: RunnerState, event: string): boolean {
 
 ```
 AVG = Hits / At-Bats
-OBP = (H + BB + HBP) / (AB + BB + HBP + SF)
+OBP = (H + BB + HBP) / (AB + BB + HBP + SF)   // Note: BB includes IBB for OBP purposes
 SLG = Total Bases / At-Bats   // TB = (1B×1) + (2B×2) + (3B×3) + (HR×4)
 OPS = OBP + SLG
 ERA = (Earned Runs × 9) / Innings Pitched
@@ -907,6 +916,9 @@ D3K: disabled when 1B occupied AND <2 outs
 | Defensive Sub | Between innings | Fielder | Bench player |
 | Pitching Change | Any time | Pitcher | Reliever |
 | Double Switch | Usually w/ pitch change | Pitcher + fielder | Reliever + position player |
+| Position Swap | Between innings | N/A (no one leaves) | N/A (no one enters) |
+
+**Position Swap:** Two players swap defensive positions mid-game (e.g., SS↔3B). No new player enters — recorded as a single `substitution` event with `type: 'position_change'` containing both players' old and new positions. NOT two separate events.
 
 ### 7.2 Entry Points (Per C-002)
 
@@ -1024,6 +1036,14 @@ interface PlayerSeasonStats {
   calculated: {
     avg: number; obp: number; slg: number; ops: number;
     era: number; whip: number; war: number;
+    clutchWPA: number;        // Sum of all event WPA — season clutch measure
+    per9: {                   // Per-9-innings rates, scaled by inningsPerGame
+      k9: number;            // (K × 9 × (9/inningsPerGame)) / IP
+      bb9: number;
+      hr9: number;
+      h9: number;
+    };
+    fieldingPct: number;     // (PO + A) / (PO + A + E + missedDives + missedLeaps)
   };
 
   achievements: {
@@ -1031,6 +1051,13 @@ interface PlayerSeasonStats {
     shutouts: number; noHitters: number;
     perfectGames: number; cycles: number;
     multiHRGames: number;
+    fiveHitGames: number;    // +1.5 fame per occurrence
+    sixHitGames: number;     // +2.0 fame per occurrence
+    webGems: number;         // Total count (engine-derived from fWAR threshold, see §10.4)
+    goldenSombreros: number; // 4K game, -1.5 fame
+    titaniumSombreros: number; // 6K game, -3.0 fame
+    madduxGames: number;     // CGSO under pitch threshold
+    immaculateInnings: number;
   };
 
   fame: {
@@ -1193,6 +1220,22 @@ function isPerfectGame(pitcher, game): boolean {
     && pitcher.hitByPitch === 0
     && game.getErrorsWhilePitcherOnMound(pitcher.id) === 0;
 }
+
+function isCGSO(pitcher, game): boolean {
+  return isCompleteGame(pitcher, game) && pitcher.earnedRuns === 0 && pitcher.runsAllowed === 0;
+}
+
+function is20KGame(pitcher, game): boolean {
+  // Scaled: ceil(20 × (inningsPerGame/9)). For 6-inning: ceil(13.3) = 14K threshold
+  const threshold = Math.ceil(20 * (game.scheduledInnings / 9));
+  return pitcher.strikeouts >= threshold;
+}
+
+// Additional pitcher achievements tracked:
+// - Back-to-back shutouts (consecutive starts)
+// - 10+ K game (scaled by innings)
+// - Save streak (consecutive save opportunities converted)
+// - Win streak (consecutive decisions are wins)
 ```
 
 ### 9.8 Pitch Count Tracking
@@ -1275,25 +1318,32 @@ When user doesn't specify fielder via enrichment, system infers from ball direct
 
 ### 10.4 Star Play Categories & fWAR Impact
 
-| Category | fWAR Multiplier | Fame | Description |
-|----------|----------------|------|-------------|
-| Routine | 1.0× | — | Standard play |
-| Running | 1.5× | — | Covered significant ground |
-| Diving Catch | 2.5× | +1 | Horizontal extension |
-| Leaping Catch | 2.0× | +1 | Leaps to catch |
-| Wall Catch | 2.5× | +1 | At the wall |
-| Sliding Catch | 2.5× | +1 | Sliding in outfield |
-| Over-Shoulder | 2.0× | +1 | Over-the-shoulder |
-| **Robbed HR** | **5.0×** | **+2** | **Catch over wall** |
+**CRITICAL DESIGN:** Star play categories are **user-selected enrichments** via the `[+fielding]` button on each play log entry. The user selects the difficulty category (diving, leaping, wall catch, etc.) as part of fielding enrichment. The engine then applies the corresponding fWAR multiplier automatically.
+
+**Web Gems** are **engine-derived**, NOT user-tagged. When a fielding play's calculated fWAR exceeds a threshold (top ~5% of all fielding plays by fWAR value), the engine automatically flags it as a web gem. Web gems are counted as a total (not per-game), tracked in `achievements.webGems`.
+
+| Category | fWAR Multiplier | Fame | Description | User Input |
+|----------|----------------|------|-------------|------------|
+| Routine | 1.0× | — | Standard play | Default (no enrichment needed) |
+| Running | 1.5× | — | Covered significant ground | [+fielding] → Running |
+| Diving Catch | 2.5× | +1 | Horizontal extension | [+fielding] → Diving |
+| Leaping Catch | 2.0× | +1 | Leaps to catch | [+fielding] → Leaping |
+| Wall Catch | 2.5× | +1 | At the wall | [+fielding] → Wall |
+| Sliding Catch | 2.5× | +1 | Sliding in outfield | [+fielding] → Sliding |
+| Over-Shoulder | 2.0× | +1 | Over-the-shoulder | [+fielding] → Over-Shoulder |
+| **Robbed HR** | **5.0×** | **+2** | **Catch over wall** | **[+fielding] → Robbed HR** |
 
 ### 10.5 Error Categories
 
 | Category | Base fWAR Penalty | Fame | Context Modifiers |
 |----------|------------------|------|-------------------|
-| Fielding Error | -0.15 runs | -1 | ×1.5 if allowed run, ×1.2 if routine |
+| Fielding Error (routine) | -0.15 runs | -1 | ×1.5 if allowed run, ×1.2 if routine |
+| Fielding Error (effort) | -0.075 runs | -0.5 | Error on a difficult attempt — 50% reduced penalty |
 | Throwing Error | -0.20 runs | -1 | ×0.7 if difficult play |
 | Mental Error | -0.25 runs | -1 | Highest penalty — wrong base, etc. |
-| Missed Dive | 0 | 0 | Good effort, no penalty |
+| Missed Dive/Leap | 0 | 0 | Good effort, no penalty. Counts in fielding % denominator. |
+
+**Effort Error Classification:** When a user logs an error, they can tag it as "on a difficult play" vs routine via the error enrichment flow. An error on a diving attempt (player went for a play others wouldn't) receives 50% of the normal fWAR penalty, because the attempt itself had value. Terrible pitcher outings (5+ runs allowed) receive -0.5 fame.
 
 ### 10.6 Run Value Constants
 
@@ -1318,13 +1368,20 @@ const POSITION_MODIFIERS = {
 ### 10.7 Per-Play fWAR Calculation
 
 ```typescript
-function calculatePlayFWAR(event) {
+function calculatePlayFWAR(event, leverageIndex: number) {
   const base = FIELDING_RUN_VALUES[event.type][event.playType] || 0.03;
   const posMod = POSITION_MODIFIERS[event.type][event.position] || 1.0;
-  const diffMod = DIFFICULTY_MULTIPLIERS[event.difficulty] || 1.0;
-  return base * posMod * diffMod;
+  const diffMod = getDifficultyMultiplier(event.starPlayCategory);  // From §10.4 user enrichment
+  const liMod = Math.sqrt(leverageIndex);  // Situational context weight
+  return base * posMod * diffMod * liMod;
 }
+
+// diffMod maps to §10.4 star play categories:
+// 'routine'→1.0, 'running'→1.5, 'diving'→2.5, 'leaping'→2.0,
+// 'wall'→2.5, 'sliding'→2.5, 'over_shoulder'→2.0, 'robbed_hr'→5.0
 ```
+
+**Context window:** fWAR credit for a play is calculated using the leverage index at the moment of the play. The context window closes at the end of the half-inning — runs that score later do not retroactively change fWAR for plays in earlier half-innings.
 
 ### 10.8 Fielding Play Record
 
@@ -1581,13 +1638,20 @@ Stored on every AtBatEvent. Used for: Player of the Game (ranked by WPA), top mo
 
 ## 13. Clutch Attribution
 
-### 13.1 Core Formula
+### 13.1 Core Formula — WPA-Based Simplification
+
+**Clutch attribution uses straight WPA (Win Probability Added).** WPA already bakes in leverage context (high-leverage plays produce larger WPA swings) and outcome quality (better outcomes produce larger positive WPA). This replaces the previous `baseValue × contactQuality × √(LI)` formula.
 
 ```
-clutchValue = baseValue × contactQuality × √(leverageIndex)
+clutchWPA (per play) = winProbabilityAfter - winProbabilityBefore
+clutchWPA (season)   = Σ(all event WPA for player)
 ```
 
-**Per C-025:** Contact Quality (CQ) weighted by LI — CQ tiers with LI as multiplier.
+WPA captures exactly what we want: how much a player's actions changed the team's probability of winning. A bases-loaded walk-off double might be +0.45 WPA. A leadoff single in the 2nd inning might be +0.03. No separate clutch formula needed.
+
+**Relationship to LI:** LI measures situation importance (how much win probability CAN swing). WPA measures what actually happened (how much win probability DID swing). LI is the context weight; WPA is the realized outcome. They are complementary, not redundant.
+
+**Per C-025:** Contact Quality (CQ) is retained for the attribution split between batter/pitcher/fielder (§13.3) but is no longer part of the top-level clutch formula.
 
 ### 13.2 Contact Quality System (0.1 to 1.0)
 
@@ -1677,18 +1741,18 @@ const PLAYOFF_MULTIPLIERS = {
 // WS Game 7 (both): 2.0 + 0.5 + 0.25 = 2.75×
 ```
 
-### 13.8 Net Clutch Rating
+### 13.8 Clutch Stats (WPA-Based)
 
 ```typescript
 interface PlayerClutchStats {
-  clutchPoints: number;
-  chokePoints: number;
-  netClutch: number;
-  clutchMoments: number;
-  chokeMoments: number;
-  totalLI: number;
+  totalWPA: number;          // Sum of all event WPA — the primary clutch metric
+  positiveWPA: number;       // Sum of positive WPA events (clutch contributions)
+  negativeWPA: number;       // Sum of negative WPA events (choke moments)
+  clutchMoments: number;     // Count of high-LI events (LI > 2.0)
+  chokeMoments: number;      // Count of high-LI negative events
+  totalLI: number;           // Sum of all LI faced
   plateAppearances: number;
-  gmLI: number;  // totalLI / PA
+  gmLI: number;              // totalLI / PA — average leverage faced
 }
 ```
 
@@ -1696,9 +1760,11 @@ interface PlayerClutchStats {
 
 ## 14. Mojo & Fitness System
 
-Mojo tracks in-game momentum. Fitness tracks physical wear across games. Both modify stat performance, WAR credit, Fame credit, and clutch attribution.
+Mojo tracks in-game momentum. Fitness tracks physical wear across games. Both feed into WAR credit, Fame credit, clutch attribution, narrative, and performance splits.
 
-**Per C-081:** Mojo and fitness apply ONLY to user-played games. AI-simulated games do not run mojo/fitness calculations — they use baseline stat performance.
+**CRITICAL USER-ONLY PARADIGM:** The KBL engine **never initiates** mojo or fitness changes. All state changes come from the **user** reflecting what they observe in SMB4. The engine's role is to **track and record** these states, computing their downstream effects on WAR, Fame, narrative, and performance splits. AI-simulated games do not run mojo/fitness calculations — they use baseline stat performance (per C-081).
+
+**User workflow:** User observes a player's mojo/fitness state in SMB4 → taps the player token on the diamond → selects new state → engine records the change as a BetweenPlayEvent and updates all downstream calculations.
 
 ### 14.1 Mojo Levels
 
@@ -1712,29 +1778,14 @@ Five-level scale with internal values -2 to +2:
 | Tense | -1 | LOW | -8-10% | 😰 |
 | Rattled | -2 | VERY_LOW | -15-20%, hard to escape | 😱 |
 
-### 14.2 Mojo Carryover
+### 14.2 Mojo State Changes (User-Observed)
 
-```typescript
-const MOJO_CARRYOVER_RATE = 0.3;  // 30% of excess carries
+Mojo changes are observed by the user in SMB4 and recorded in KBL. The engine does NOT auto-calculate carryover or amplification — these are SMB4 game mechanics that the user inputs. The engine tracks:
 
-function calculateStartingMojo(endOfLastGame: number): number {
-  const carryover = endOfLastGame * MOJO_CARRYOVER_RATE;
-  return Math.round(carryover);
-  // +2 → +1 (Locked In), -2 → -1 (Tense), ±1 → 0 (Normal)
-}
-```
-
-### 14.3 Mojo Amplification
-
-High-pressure situations amplify mojo effects:
-
-| Situation | Amplification |
-|-----------|---------------|
-| Tie game, late innings (8th/9th) | 1.5× |
-| RISP, 2 outs | 1.3× |
-| Close game (1-2 runs) | 1.2× |
-| Playoff game | 1.5× |
-| Bases loaded | 1.4× |
+- Starting mojo each game (user sets before first pitch)
+- Mojo changes during the game (user taps player → new state)
+- Performance splits by mojo state (batting/pitching stats segmented by mojo level)
+- Games at each mojo level (for narrative and designation purposes)
 
 ### 14.4 Fitness States
 
@@ -1749,61 +1800,16 @@ Six categorical states:
 | Weak | 40% | 0.70× | ⚠️ | High injury risk |
 | Hurt | 0% | N/A | ❌ | On IL |
 
-### 14.5 Fitness Decay
+### 14.5 Fitness State Changes (User-Observed)
 
-```typescript
-interface FitnessDecay {
-  positionPlayer: {
-    started: -3,
-    pinchHit: -1,
-    defensiveReplacement: -1,
-    didNotPlay: +2,
-  },
-  pitcher: {
-    starter: { base: -15, perInning: -2, highPitchCount: -5 },  // 100+ pitches
-    reliever: { base: -5, perInning: -3, backToBack: -3 },
-    closer: { base: -8, perInning: -2, backToBack: -5 },
-    didNotPlay: +5,
-  },
-  catcher: {
-    started: -5,
-    perInning: -0.5,
-    didNotPlay: +3,
-  }
-}
-```
+Fitness changes are observed by the user in SMB4 and recorded in KBL. The engine does NOT auto-calculate decay or recovery — these are SMB4 game mechanics that the user inputs. The engine tracks:
 
-### 14.6 Fitness Recovery
+- Current fitness state per player (user updates between games or during games)
+- Games played at each fitness state (for performance splits and narrative)
+- Consecutive days off (user records rest days for context)
+- Fitness history timeline (feeds injury/fatigue narrative)
 
-```typescript
-const DAILY_RECOVERY = {
-  positionPlayer: 5,   // +5% per rest day
-  pitcher: 8,          // +8% per rest day
-  catcher: 6,          // +6% per rest day
-};
-const MAX_DAILY_RECOVERY = 15;
-
-const TRAIT_MODIFIERS = {
-  'Durable': 1.5,       // 50% faster
-  'Injury Prone': 0.7,  // 30% slower
-};
-
-const CONSECUTIVE_REST_BONUS = {
-  2: 1.10,   // 2 days off = +10%
-  3: 1.20,   // 3 days off = +20%
-  4: 1.25,   // 4+ days off = +25% (cap)
-};
-
-function calculateRecovery(player: Player, daysOff: number, currentFitness: number): number {
-  let base = DAILY_RECOVERY[player.positionType];
-  if (player.traits.includes('Durable')) base *= 1.5;
-  else if (player.traits.includes('Injury Prone')) base *= 0.7;
-  const restBonus = CONSECUTIVE_REST_BONUS[Math.min(daysOff, 4)] || 1;
-  base *= restBonus;
-  base = Math.min(base, MAX_DAILY_RECOVERY);
-  return Math.min(currentFitness + base, 100);  // Cannot exceed Fit through natural recovery
-}
-```
+The six fitness states (§14.4) remain the canonical levels the user selects from.
 
 ### 14.7 Juiced State
 
@@ -1826,17 +1832,9 @@ function checkJuicedEligibility(player: Player): boolean {
 }
 ```
 
-### 14.8 Injury Risk
+### 14.8 Injury Tracking (User-Observed)
 
-| Fitness State | Chance/Game | Severity |
-|---------------|-------------|----------|
-| Juiced | 0.5% | 0.5× (quick) |
-| Fit | 1% | 1.0× |
-| Well | 2% | 1.0× |
-| Strained | 5% | 1.5× |
-| Weak | 15% | 2.0× |
-
-**Modifiers:** Catcher ×1.3, Pitcher ×1.1, Durable ×0.6, Injury Prone ×1.8, Age 35+ ×1.3, Age 38+ ×1.6.
+Injuries are observed by the user in SMB4 and recorded in KBL as fitness state changes (typically to 'HURT' or 'WEAK'). The engine does NOT auto-calculate injury risk — injuries happen in SMB4, and the user records them. The engine tracks injury events in fitness history for narrative and performance analysis.
 
 ### 14.9 Fame Integration
 
@@ -1855,7 +1853,7 @@ function getMojoFameModifier(mojo: number): number {
 **Combined Calculation:**
 
 ```typescript
-function calculateAdjustedFame(baseFame: number, mojo: number, fitness: FitnessState): number {
+function calculateAdjustedFame(baseFame: number, mojo: number, fitness: FitnessLevel): number {
   let adjusted = baseFame * getMojoFameModifier(mojo);
   if (fitness === 'JUICED') adjusted *= 0.5;
   if (fitness === 'STRAINED') adjusted *= 1.15;  // Playing hurt bonus
@@ -1867,7 +1865,7 @@ function calculateAdjustedFame(baseFame: number, mojo: number, fitness: FitnessS
 ### 14.10 WAR & Clutch Adjustments
 
 ```typescript
-function getWARMultiplier(mojo: number, fitness: FitnessState): number {
+function getWARMultiplier(mojo: number, fitness: FitnessLevel): number {
   let mult = 1.0;
   // Mojo: Rattled +15%, Tense +7%, Normal 0%, Locked In -5%, Jacked -10%
   const mojoMult = { [-2]: 1.15, [-1]: 1.07, [0]: 1.00, [1]: 0.95, [2]: 0.90 };
@@ -1891,7 +1889,7 @@ function getClutchMultiplier(mojo: number): number {
 interface PlayerMojoFitness {
   playerId: string;
   currentMojo: number;                       // -2 to +2
-  currentFitness: FitnessState;
+  currentFitness: FitnessLevel;
   mojoHistory: MojoEntry[];
   fitnessHistory: FitnessEntry[];
   gamesAtJuiced: number;
@@ -1899,9 +1897,9 @@ interface PlayerMojoFitness {
   juicedCooldown: number;                    // Games until can be Juiced again
   consecutiveDaysOff: number;
   battingSplitsByMojo: Map<number, BattingStats>;
-  battingSplitsByFitness: Map<FitnessState, BattingStats>;
+  battingSplitsByFitness: Map<FitnessLevel, BattingStats>;
   pitchingSplitsByMojo?: Map<number, PitchingStats>;
-  pitchingSplitsByFitness?: Map<FitnessState, PitchingStats>;
+  pitchingSplitsByFitness?: Map<FitnessLevel, PitchingStats>;
 }
 
 interface MojoEntry {
@@ -1915,11 +1913,10 @@ interface MojoEntry {
 
 interface FitnessEntry {
   date: string;
-  state: FitnessState;
+  state: FitnessLevel;
   reason: 'GAME_PLAYED' | 'REST_DAY' | 'INJURY' | 'RECOVERY' | 'RANDOM_EVENT';
 }
-
-type FitnessState = 'JUICED' | 'FIT' | 'WELL' | 'STRAINED' | 'WEAK' | 'HURT';
+// FitnessLevel defined in §2.1: 'Hurt' | 'Weak' | 'Strained' | 'Well' | 'Fit' | 'Juiced'
 ```
 
 ---
@@ -2023,6 +2020,8 @@ const HOT_STREAK: Modifier = {
 ### 16.1 Beat Reporter Entity
 
 Each team has one beat reporter. The reporter's hidden personality drives narrative tone and fan morale influence.
+
+**Name Generation:** Beat reporter names are auto-generated using the same name generation system as players (Mode 1). This system also generates names for **managers** and **scouts** in Mode 1. All generated names are user-editable — users can rename any reporter, manager, or scout at any time.
 
 ```typescript
 interface BeatReporter {
@@ -2192,11 +2191,26 @@ type NarrativeTone =
   | 'ANALYTICAL' | 'HOPEFUL' | 'CONCERNED' | 'NOSTALGIC';
 ```
 
+### 16.10 Narrative UI Surfaces
+
+Narrative content appears in multiple locations throughout the app:
+
+| Surface | Location | Content | Behavior |
+|---------|----------|---------|----------|
+| **"X" Feed** | GameTracker (in-game) | Live play-by-play moments, milestone alerts, clutch highlights | Auto-scrolling feed during game; unexpected narrative events "pop up" as toast notifications |
+| **The Tootwhistle Times** | Franchise Home Page | Beat reporter stories, league headlines, trade reactions, season updates | Filterable by team/league; scrollable newspaper-style layout |
+| **Post-Game Summary** | After game completion | Game recap, Player of the Game, top moments, beat reporter story | May need dedicated UI panel; includes WPA chart |
+| **Pop-Up Notifications** | Any screen | Unexpected narrative events (milestone approaching, trade rumor, morale shift) | Toast-style overlays that don't block flow |
+
+**Narrative → playerMorale:** All narrative events that reference a specific player can influence that player's morale (§17.14). Positive stories boost morale; critical/negative stories reduce it.
+
 ---
 
 ## 17. Dynamic Designations
 
 Six designation types that update during the season, influencing fan morale, Fame, narrative, and free agency.
+
+**Projected vs Locked:** All performance-based designations (MVP, Ace, Fan Favorite, Albatross) **recalculate after every completed game**. Mid-season values are always "projected" (dotted border badge). Designations only become "locked" (solid border) at season end. Projected holders can change game-by-game — the actual designation is not awarded until the season concludes.
 
 ### 17.1 Team MVP
 
@@ -2256,13 +2270,14 @@ Six designation types that update during the season, influencing fan morale, Fam
 - **Effect on Charisma:** Captain's Charisma counts **double** toward teammate morale effects.
 - **Effect on Narrative:** Per C-067, Captain referenced in leadership/chemistry storylines with ±50% morale swing amplification.
 
-### 17.7 Young Player Designation (Per C-047)
+### 17.7 Fan Hopeful Designation (Per C-047, renamed per Spine)
 
 - **Criteria:** Random selection from team's top-3 farm prospects.
 - **Purpose:** Highlights promising youth for narrative and fan engagement.
-- **Assignment:** At season start, one prospect per team is designated "Young Player to Watch".
-- **Display:** Informational badge — no mechanical effects on stats.
+- **Assignment:** At season start, one prospect per team is designated "Fan Hopeful".
+- **Display:** Yellow on baby blue badge — informational, no mechanical effects on stats.
 - **Narrative:** Beat reporter references in prospect/development storylines.
+- **playerMorale:** Fan Hopeful designation provides +5 initial playerMorale boost.
 
 ### 17.8 Badge Visual Design
 
@@ -2274,6 +2289,7 @@ Six designation types that update during the season, influencing fan morale, Fam
 | Albatross | Red (#EF4444) | Light red |
 | Cornerstone | Bronze (#CD7F32) | Gold→bronze gradient |
 | Team Captain | Purple (#7C3AED) | Light purple |
+| Fan Hopeful | Yellow (#FACC15) | Baby blue (#93C5FD) |
 
 Mid-season: dotted border. Locked (season end): solid border.
 
@@ -2378,6 +2394,63 @@ interface TeamDesignationState {
 }
 ```
 
+### 17.14 Player Morale System
+
+**Player morale** is a per-player 0-100 value tracking each player's emotional/motivational state. Distinct from fan morale (§20), which is per-team.
+
+```typescript
+interface PlayerMorale {
+  playerId: string;
+  current: number;           // 0-100
+  previous: number;
+  trend: 'RISING' | 'STABLE' | 'FALLING';
+  state: PlayerMoraleState;
+  history: MoraleChangeEntry[];
+}
+
+type PlayerMoraleState =
+  | 'ECSTATIC'     // 85-100: Peak confidence, performing at best
+  | 'MOTIVATED'    // 65-84: Engaged, positive attitude
+  | 'CONTENT'      // 45-64: Baseline, neutral
+  | 'FRUSTRATED'   // 25-44: Struggling, losing confidence
+  | 'DEMORALIZED'; // 0-24: Checked out, performance suffering
+```
+
+**Morale Inputs (what affects playerMorale):**
+
+| Factor | Effect | Notes |
+|--------|--------|-------|
+| Personal milestone (own) | +3 to +8 | Always fires, even for minor milestones |
+| Team win | +1 | +2 if player contributed (hit, save, etc.) |
+| Team loss | -1 | -2 if player responsible (error, blown save) |
+| Win streak (team) | +1 per 3-game streak | Caps at +5 |
+| Lose streak (team) | -1 per 3-game streak | Personality modifies: HOTHEAD ×1.5 |
+| Fan morale ≥ 80 | +3 adjustment | Per §20.8 |
+| Fan morale ≤ 30 | -3 adjustment | Per §20.8 |
+| Positive narrative about player | +1 to +3 | Beat reporter coverage |
+| Negative narrative about player | -1 to -3 | Beat reporter coverage |
+| Designation earned (MVP, Ace) | +5 | Positive recognition |
+| Designated Albatross | -5 | Negative label |
+| Fan Hopeful designation | +5 | Excitement of being highlighted |
+| Trade away (player traded) | -3 to +3 | Varies by personality: TEAM_PLAYER -5, LONER +2 |
+| Teammate traded away | -1 to -3 | Relationship strength modifies |
+| Albatross traded away | +2 | Team morale relief |
+| Captain performance | ±2 | Captain's clutch/choke ripples to teammates |
+| Relationship events | ±2 | Mentor/mentee, rivalry, friendship |
+| Personality alignment | varies | LEADER boosts team morale, EGOTIST only self |
+
+**Morale → Rating Change Suggestions:**
+
+When playerMorale hits sustained thresholds, the engine generates a **Rating Change Suggestion** surfaced as a narrative event:
+
+- **Morale ≥ 85 for 10+ games:** Suggest +1 to a relevant rating. Narrative: "Player X's confidence is sky-high after his recent tear."
+- **Morale ≤ 25 for 10+ games:** Suggest -1 to a relevant rating. Narrative: "Player X looks defeated at the plate — his mechanics are slipping."
+- **Morale swing > 40 points in 5 games:** Suggest temporary ±1. Narrative: "Player X is riding an emotional rollercoaster."
+
+These are **suggestions only** — surfaced in the X feed / Tootwhistle Times. The user decides whether to apply the change in SMB4 and log it as a transaction event. This preserves the "user is the bridge" paradigm.
+
+**Morale does NOT directly affect clutch.** But sustained morale states can lead to rating change suggestions that the user then inputs into SMB4's player database, creating an indirect gameplay loop.
+
 ---
 
 ## 18. Milestone System
@@ -2431,27 +2504,37 @@ function getCombinedScalingFactor(config: MilestoneConfig): number {
 | Walk-Off Grand Slam | Bases-loaded walk-off HR | +3.0 | Major |
 | Immaculate Inning | 3K on 9 pitches | +1.5 | Major |
 | Unassisted Triple Play | 3 outs solo | +5.0 | Legendary |
+| 5-Hit Game | 5 hits in a game | +1.5 | Major |
+| 6-Hit Game | 6+ hits in a game | +2.0 | Major |
+| CGSO | Complete game shutout | +2.0 | Major |
+| Maddux | CGSO under pitch threshold | +3.0 | Major |
 
 **Negative (Fame Boner):**
 
 | Milestone | Requirement | Fame | Notes |
 |-----------|-------------|------|-------|
+| Golden Sombrero | 4 K in a game | -1.5 | Ugly day |
 | Titanium Sombrero | 6 K | -3.0 | Historic futility |
 | 4+ Error Game | 4+ errors | -3.0 | Defensive meltdown |
+| Mental Error | Wrong base, missed cutoff, etc. | -0.5 | Per §10.5 |
 | Epic Blown Save | Blow 3+ run lead in 9th | -1.5 | Devastating |
 | Wild Pitch Walk-Off | WP scores winning run | -1.5 | Crushing |
+| Terrible Pitcher Outing | 5+ runs allowed in a start | -0.5 | Bad day on the mound |
+| 0-for-5+ Game | 0 hits in 5+ AB | -0.3 | Minor boner |
 
 ### 18.3 Season Milestones (Selected, Scaled for 128g/6inn)
 
-**Batting Clubs (literal scaled numbers):**
+**Batting Clubs (scaled by opportunity factor for shorter season — achieving these thresholds requires a higher per-game rate than MLB, making KBL milestones proportionally harder to reach):**
 
-| Club | Requirement | Fame | MLB Equivalent |
-|------|-------------|------|----------------|
-| 25-25 Club | 25 HR + 25 SB | +2.0 | ~32-32 |
-| 30-30 Club | 30 HR + 30 SB | +3.5 | ~38-38 |
-| 40-40 Club | 40 HR + 40 SB | +6.0 | ~51-51 |
-| .400 Season | .400+ BA | +6.0 | Rate stat |
-| Triple Crown | Lead AVG+HR+RBI | +8.0 | Same |
+| Club | MLB Threshold | KBL Scaled (128g/6inn) | Fame | Min Floor |
+|------|--------------|----------------------|------|-----------|
+| 30-30 Club | 30 HR + 30 SB | 16 HR + 16 SB | +3.5 | 10 each |
+| 40-40 Club | 40 HR + 40 SB | 21 HR + 21 SB | +6.0 | 10 each |
+| 50-50 Club | 50 HR + 50 SB | 27 HR + 27 SB | +8.0 | 10 each |
+| .400 Season | .400+ BA | .400+ BA (rate stat, no scaling) | +6.0 | — |
+| Triple Crown | Lead AVG+HR+RBI | Same (lead league) | +8.0 | — |
+
+**Scaling rule:** Club thresholds scale by `opportunityFactor` (§23.1). A minimum floor of **10** applies to any individual threshold — no milestone should trigger for trivially small numbers (e.g., not 1 blown save in a 32-game season).
 
 **WAR-Based Season Milestones (NO scaling — WAR already time-adjusted):**
 
@@ -2487,7 +2570,12 @@ function getEffectiveThreshold(stat: string, franchiseHistory: FranchiseHistory)
 
 **Franchise Firsts:** First player to achieve any milestone gets bonus Fame (+0.5 to +3.0).
 
-**Franchise Leaders:** Taking the lead in a career stat category = +0.75 to +1.5 Fame. Holding the lead at season end = +0.2 to +0.3 annual bonus.
+**Franchise Leaders:** Activate at **game 4** of the season. Taking the lead in a career stat category = +0.75 to +1.5 Fame. Holding the lead at season end = +0.2 to +0.3 annual bonus.
+
+**Qualification minimums for franchise leader boards:**
+- **minimumPA:** 25 (batting leaders)
+- **minimumIP:** 20 (pitching leaders)
+- These thresholds prevent small-sample flukes from appearing on leader boards.
 
 ### 18.6 Legacy Status Tiers
 
@@ -2509,6 +2597,8 @@ WAR accumulated with same team only. Evaluated at season end. Persists after ret
 | Dynasty | 3+ titles in 5yr | +8.0 | +60% |
 | 100-Loss Season | 79+ losses | -0.5 | -20% |
 | Blown 3-0 Lead | Lose series after 3-0 | -2.0 | -30% |
+
+**Trade aftermath playerMorale:** Trading away an Albatross **improves** remaining players' morale (+2 team-wide). Trading away a Fan Favorite or Cornerstone **reduces** morale (-3 to -5). Trade scrutiny (§20.5) tracks both fan morale AND player morale effects.
 
 ### 18.8 Milestone Data Structures
 
@@ -2613,7 +2703,7 @@ type FanState =
 
 ### 20.3 Event Catalog (Selected)
 
-**Game Results:** Win +1, Loss -1, Walk-off ±3, No-hitter +5, Shutout ±2.
+**Game Results:** Win +1, Loss -1, Walk-off ±3 (ALWAYS major event for fanMorale regardless of context), No-hitter +5, Shutout ±2.
 **Streaks:** 3-game ±2, 5-game ±5, 7+ game ±8/±10.
 **Trades:** Acquire star +8, Trade away star -10, Salary dump -8.
 **Roster:** Top prospect call-up +5, Star to IL -5, Star returns +5.
@@ -2629,7 +2719,7 @@ type FanState =
 
 ### 20.5 Trade Scrutiny System
 
-14-game tracking period after each trade. Fan verdict evolves: TOO_EARLY → LOOKING_GOOD / JURY_OUT / LOOKING_BAD / DISASTER. Wins/losses during scrutiny are amplified based on verdict direction.
+14-game tracking period (scaled by `gameFactor`) after each trade. Fan verdict evolves: TOO_EARLY → LOOKING_GOOD / JURY_OUT / LOOKING_BAD / DISASTER. Wins/losses during scrutiny are amplified based on verdict direction. Trade aftermath affects **both** fanMorale (§20) and playerMorale (§17.14) — trading away an Albatross improves player morale team-wide, while trading away a beloved player reduces it.
 
 ### 20.6 Morale Decay & Recovery
 
@@ -2654,7 +2744,7 @@ function getFranchiseHealthWarning(team: Team): FranchiseWarning | null {
 
 ### 20.8 Consequences of Morale
 
-**Player Morale:** Fan morale ≥80 → +3 player morale adjustment. ≤30 → -3. Personality modifiers apply (Egotistical ×1.5, Relaxed ×0.5).
+**Player Morale:** Fan morale ≥80 → +3 playerMorale adjustment. ≤30 → -3 playerMorale adjustment. Personality modifiers apply (EGOTIST ×1.5, TEAM_PLAYER ×0.5). See §17.14 for full playerMorale system. playerMorale fires for a player's own milestones even if minor (e.g., personal hitting streak, first career HR).
 
 **FA Attractiveness (Per C-093):** Baseline formula only — `(fanMorale - 50) × 0.5`. State-based bonuses REMOVED per C-093. Euphoric = +5 bonus, Hostile = -10 penalty. No state-based FA bonuses beyond the baseline formula.
 
@@ -2901,11 +2991,12 @@ const SMB4_DEFAULTS = {
 
 ```typescript
 function getQualifyingPA(config: FranchiseConfig): number {
-  return Math.floor(3.1 * config.gamesPerTeam);
+  // 3.1 PA/game is MLB standard for 9-inning games; scale for shorter innings
+  return Math.floor(3.1 * config.gamesPerTeam * (config.inningsPerGame / 9));
 }
 
 function getQualifyingIP(config: FranchiseConfig): number {
-  return config.gamesPerTeam;  // 1 IP per team game
+  return Math.floor(config.gamesPerTeam * (config.inningsPerGame / 9));
 }
 ```
 
@@ -2917,7 +3008,8 @@ const MINIMUM_FLOORS = {
   seasonHits: 20,    // Never less than 20 hits
   seasonWins: 3,     // Never less than 3 pitcher wins
   careerHR: 20,      // Never less than 20 career HR
-  clubMinimum: 5,    // Any "X-Y Club" requires at least 5 in each category
+  clubMinimum: 10,   // Any "X-Y Club" requires at least 10 in each category
+  universalFloor: 10, // NO milestone threshold can scale below 10 — prevents trivial achievements
 };
 ```
 
@@ -3015,9 +3107,11 @@ Park factors are essential for fair WAR comparisons. Home stats are adjusted by 
 
 ---
 
-## 25. AI Game Engine (Per C-048 / C-082)
+## 25. AI Game Engine (Per C-048 / C-082) — DEFERRED TO V2
 
 **Per C-048:** Game simulation renamed to **AI Game Engine**. **Per C-082:** Scoped to **AI-controlled games ONLY** — never user-played games.
+
+**V2 DEFERRAL:** The full AI Game Engine (probability model, at-bat resolution, variance configuration) is deferred to V2. V1 will use a simplified box-score generator that produces realistic stat lines from player ratings without simulating individual at-bats. The interfaces and output contract below represent the target V2 architecture.
 
 ### 25.1 Scope
 
@@ -3198,6 +3292,7 @@ The following features are documented in input specs but explicitly deferred fro
 
 | Feature | Reason | Decision |
 |---------|--------|----------|
+| AI Game Engine (full) | V1 uses simplified box-score generator | §25 |
 | Contraction | Removed from v1 | C-072 |
 | WAR configurable weights | Removed — WAR uses fixed formula | C-075 |
 | Full adaptive learning (ASE) | Static v1 defaults sufficient | Spec status |
@@ -3272,5 +3367,6 @@ All STEP4 decisions consumed during Mode 2 gospel drafting:
 
 ---
 
-*MODE_2_FRANCHISE_SEASON.md — Gospel v1.0 — 2026-02-23*
+*MODE_2_FRANCHISE_SEASON.md — Gospel v1.1 — 2026-02-25*
 *Consolidates 39 input specs and 33 decision IDs into the authoritative Mode 2 reference.*
+*v1.1: JK review pass — WPA-based clutch simplification, user-only mojo/fitness paradigm, playerMorale §17.14, Fan Hopeful rename, web gems engine-derived, effort error classification, club scaling fixes, milestone floor of 10, per9 scaling, expanded parkContext, name generation for managers/scouts, narrative UI surfaces.*
