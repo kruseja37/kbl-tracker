@@ -266,8 +266,9 @@ interface AtBatEvent {
 **Shared Enums:**
 
 ```typescript
-type MojoLevel = 'Cold' | 'Cool' | 'Warm' | 'Hot' | 'OnFire';
-// See SPINE_ARCHITECTURE.md for canonical MojoLevel type and MOJO_VALUES numeric mapping
+type MojoLevel = 'Rattled' | 'Tense' | 'Neutral' | 'LockedIn' | 'Jacked';
+// Canonical type from SPINE_ARCHITECTURE.md §3.6
+// Numeric mapping: Rattled = -2, Tense = -1, Neutral = 0, LockedIn = +1, Jacked = +2
 type FitnessLevel = 'Hurt' | 'Weak' | 'Strained' | 'Well' | 'Fit' | 'Juiced';
 type FameLevel = 'unknown' | 'rising' | 'notable' | 'star' | 'superstar' | 'legend';
 
@@ -2025,17 +2026,20 @@ Each team has one beat reporter. The reporter's hidden personality drives narrat
 
 ```typescript
 interface BeatReporter {
-  // See SPINE_ARCHITECTURE.md §12 for canonical BeatReporter interface
+  // Canonical interface — aligned with SPINE_ARCHITECTURE.md §12
   id: string;
   firstName: string;
   lastName: string;
   teamId: string;
-  personality: ReporterPersonality;      // Hidden from user
-  tenure: number;                         // Seasons covering team
+  personality: ReporterPersonality;       // Hidden from user
+  alignment: 'FRIENDLY' | 'NEUTRAL' | 'HOSTILE';
+  revealLevel: 'SURFACE' | 'BEAT' | 'INSIDER';  // INSIDER = permanent per C-068
+  trustScore: number;                     // 0–100
+  moraleInfluence: number;                // Cumulative this season, capped ±3 per game (C-069)
+  tenure: number;                         // Seasons covering this team
   reputation: 'ROOKIE' | 'ESTABLISHED' | 'VETERAN' | 'LEGENDARY';
   storiesWritten: number;
-  fanMoraleInfluence: number;            // Cumulative this season
-  hiredDate: GameDate;
+  hiredDate: FictionalDate;
 }
 
 type ReporterPersonality =

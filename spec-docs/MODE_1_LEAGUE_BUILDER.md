@@ -988,7 +988,7 @@ interface RulesPreset {
   // ═══════════════════════════════════════════════════════
   game: {
     inningsPerGame: number;       // 1-9 (bounded range, fully custom)
-    extraInningsRule: 'none' | 'ghost_runner' | 'standard';
+    extraInningsRule: 'none' | 'runner_on_second' | 'standard';
     mercyRule: {
       enabled: boolean;
       runDifferential: number;
@@ -1240,7 +1240,7 @@ Configure regular season parameters. Starts with the selected league's default r
 interface Step2Data {
   gamesPerTeam: number;           // 8-200 (presets: 16, 32, 40, 80, 128, 162 per C-071)
   inningsPerGame: number;         // 1-9 (bounded range)
-  extraInningsRule: 'none' | 'ghost_runner' | 'standard';
+  extraInningsRule: 'none' | 'runner_on_second' | 'standard';
   allStarGame: boolean;
   tradeDeadline: boolean;
   mercyRule: boolean;
