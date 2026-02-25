@@ -120,6 +120,6 @@ Player order: Lineup (1-9) → Bench (BN) → Rotation (ROT) → Bullpen (PEN), 
 | 15 | Buzzards | ✅ | 22 |
 | 16 | Crocs | ✅ | 22 |
 | 17 | Nemesis | ✅ | 22 |
-| 18 | | ⬜ | |
-| 19 | | ⬜ | |
-| 20 | | ⬜ | |
+| 18 | Jacks | ✅ | 22 |
+| 19 | Sirloins | ✅ | 22 |
+| 20 | Beewolves | ✅ | 22 |

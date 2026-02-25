@@ -500,3 +500,61 @@
 | Ellain Munstar | F | 23 | B+ | RP | | L | R | Spirited | 15 | 5 | 11 | 35 | - | 90 | 39 | 73 | 4F\|2F\|CB | | |
 | Kisha Musharra | F | 26 | C- | RP | | R | R | Spirited | 12 | 12 | 41 | 58 | - | 68 | 13 | 32 | 4F\|2F\|CH | Elite CH | |
 | Chico Lapada | M | 31 | A- | CP | | L | R | Scholarly | 8 | 17 | 24 | 71 | - | 79 | 96 | 62 | 4F\|CF\|SL | BB Prone | Easy Jumps |
+
+---
+
+## Sirloins (22 players)
+
+| Name | Gender | Age | OVR | P.Pos | S.Pos | Bat | Thr | Chem | POW | CON | SPD | FLD | ARM | VEL | JNK | ACC | Arsenal | Trait 1 | Trait 2 |
+|------|--------|-----|-----|-------|-------|-----|-----|------|-----|-----|-----|-----|-----|-----|-----|-----|---------|---------|---------| 
+| Kat Stanza | F | 31 | B+ | 1B | C | L | R | Disciplined | 90 | 71 | 58 | 42 | 65 | - | - | - | | | |
+| Hammer Longballo | M | 29 | A+ | RF | 1B/OF | L | R | Competitive | 99 | 78 | 60 | 58 | 75 | - | - | - | | POW vs RHP | Fastball Hitter |
+| Lloyd Cook | M | 32 | A- | 2B | 3B | L | R | Spirited | 80 | 52 | 83 | 72 | 33 | - | - | - | | High Pitch | |
+| Filet Jones | M | 20 | C+ | LF | RF | R | R | Spirited | 97 | 41 | 44 | 55 | 25 | - | - | - | | Noodle Arm | |
+| Madoka Hayata | F | 36 | B | 3B | SS | R | R | Scholarly | 48 | 84 | 97 | 43 | 45 | - | - | - | | Wild Thrower | |
+| Willard Wiggins | M | 21 | B | SS | 2B | L | R | Competitive | 66 | 50 | 64 | 46 | 68 | - | - | - | | RBI Hero | Dive Wizard |
+| Preston Addonomus | M | 37 | B- | C | 1B | S | R | Spirited | 84 | 19 | 48 | 64 | 69 | - | - | - | | | |
+| Damien Rush | M | 31 | B | CF | OF | R | R | Scholarly | 89 | 12 | 93 | 57 | 70 | - | - | - | | Sprinter | Magic Hands |
+| Momo Tobo | M | 29 | C+ | C | | R | R | Scholarly | 50 | 48 | 37 | 70 | 80 | - | - | - | | | |
+| Tish Balin | F | 22 | B- | CF | OF | R | L | Disciplined | 58 | 33 | 68 | 70 | 90 | - | - | - | | Utility | |
+| Boomer Plattune | M | 34 | B | 3B | 2B | S | R | Spirited | 70 | 54 | 54 | 41 | 80 | - | - | - | | | |
+| Javier Cortez | M | 27 | C+ | LF | OF | L | L | Scholarly | 65 | 32 | 46 | 44 | 64 | - | - | - | | Stealer | |
+| Mick Steeyle | M | 27 | C+ | 1B | | L | R | Spirited | 84 | 35 | 45 | 28 | 21 | - | - | - | | Pinch Perfect | |
+| Manny Kays | M | 25 | A+ | SP | | L | L | Disciplined | 11 | 2 | 67 | 88 | - | 75 | 88 | 77 | 4F\|2F\|CB\|CH | Elite 2F | |
+| Bugsy Snugs | M | 31 | B+ | SP | | R | R | Scholarly | 18 | 6 | 15 | 37 | - | 77 | 64 | 64 | 4F\|2F\|CF\|SL | BB Prone | |
+| Slip Van'Derwink | M | 30 | B+ | SP | | L | L | Competitive | 44 | 2 | 14 | 46 | - | 60 | 76 | 71 | 4F\|CB\|SL\|CH\|FK | Easy Jumps | |
+| Kayo Niomo | F | 38 | B | SP | | R | R | Spirited | 6 | 1 | 73 | 60 | - | 70 | 49 | 56 | 4F\|CF\|SL\|CH | Pick Officer | |
+| Split Seemerson | M | 21 | C+ | SP/RP | | R | R | Spirited | 15 | 9 | 8 | 51 | - | 35 | 65 | 55 | 4F\|SB\|CH\|FK | Elite FK | Injury Prone |
+| Shay Dee | F | 31 | A | RP | | L | L | Crafty | 29 | 17 | 32 | 94 | - | 84 | 51 | 95 | 4F\|CF\|CB\|CH | Falls Behind | Stimulated |
+| Linus Digby | M | 27 | C | RP | | L | R | Competitive | 21 | 6 | 54 | 89 | - | 50 | 55 | 19 | 4F\|CB\|SL\|CH | | |
+| Miguel Duke | M | 29 | C | RP | | L | R | Competitive | 9 | 13 | 47 | 39 | - | 30 | 86 | 18 | 4F\|CB\|SL | | |
+| Franz Zilla | M | 32 | C+ | CP | | R | R | Scholarly | 5 | 2 | 19 | 58 | - | 85 | 39 | 25 | 4F\|SL | K Collector | |
+
+---
+
+## Beewolves (22 players)
+
+| Name | Gender | Age | OVR | P.Pos | S.Pos | Bat | Thr | Chem | POW | CON | SPD | FLD | ARM | VEL | JNK | ACC | Arsenal | Trait 1 | Trait 2 |
+|------|--------|-----|-----|-------|-------|-----|-----|------|-----|-----|-----|-----|-----|-----|-----|-----|---------|---------|---------| 
+| Gina Torrens | F | 36 | B+ | 2B | SS | L | R | Crafty | 25 | 87 | 91 | 80 | 20 | - | - | - | | PWR vs RHP | Butter Fingers |
+| Handley Dexterez | M | 29 | S | SS | IF/OF | S | R | Spirited | 63 | 87 | 87 | 97 | 74 | - | - | - | | Utility | Fastball Hitter |
+| Kobe Kingman | M | 31 | B | 1B | RF | S | R | Competitive | 95 | 27 | 51 | 68 | 63 | - | - | - | | | |
+| Buster Bigs | M | 31 | B | LF | C | L | R | Scholarly | 74 | 68 | 77 | 44 | 40 | - | - | - | | Base Jogger | |
+| Billy LeBoink | M | 32 | B | RF | LF | R | R | Competitive | 56 | 74 | 28 | 73 | 97 | - | - | - | | | |
+| Magic Moore | M | 22 | B | CF | OF | S | L | Spirited | 56 | 40 | 87 | 61 | 69 | - | - | - | | | |
+| Bertha Banks | F | 29 | B- | 3B | 1B | L | R | Scholarly | 64 | 56 | 51 | 67 | 52 | - | - | - | | Big Hack | Slow Poke |
+| Johnson Swanson | M | 31 | B- | C | | R | R | Spirited | 62 | 43 | 72 | 73 | 70 | - | - | - | | Little Hack | |
+| Freddie Knox | M | 38 | B- | 2B | | R | R | Spirited | 23 | 81 | 95 | 43 | 56 | - | - | - | | Bad Ball Hitter | |
+| Ruby Greene | F | 26 | B | 1B | 3B | L | R | Spirited | 63 | 69 | 54 | 18 | 51 | - | - | - | | Mind Gamer | |
+| Steve Monstur | M | 32 | B- | C | 1B | L | R | Crafty | 69 | 45 | 56 | 52 | 53 | - | - | - | | Whiffer | First Pitch Slayer |
+| Benny Balmer | M | 29 | C+ | LF | OF | S | L | Crafty | 32 | 40 | 58 | 89 | 84 | - | - | - | | Clutch | |
+| Poke Foster | M | 24 | C | RF | OF | R | R | Spirited | 25 | 76 | 24 | 68 | 66 | - | - | - | | Bunter | |
+| Hurley Bender | M | 23 | S | SP | | L | R | Disciplined | 12 | 8 | 23 | 67 | - | 73 | 99 | 86 | 4F\|2F\|CF\|CB\|SL | Elite CB | |
+| Bevis Ortiz | M | 28 | B+ | SP | | L | R | Spirited | 4 | 7 | 65 | 70 | - | 63 | 66 | 63 | 4F\|CB\|SL\|FK | Elite FK | |
+| Fran Gipani | F | 37 | B | SP | | R | R | Disciplined | 2 | 38 | 35 | 98 | - | 66 | 54 | 46 | 4F\|2F\|CB\|SL\|CH | Elite 2F | Volatile |
+| Deshaun Levonn | M | 28 | C+ | SP | | L | L | Scholarly | 54 | 24 | 5 | 60 | - | 42 | 41 | 68 | 4F\|2F\|SL\|CH | | |
+| Buzz Pastimm | M | 31 | B+ | SP/RP | | R | L | Spirited | 14 | 26 | 3 | 56 | - | 87 | 29 | 65 | 4F\|2F\|SB\|CH | Specialist | Elite 4 |
+| Benson Rushmore | M | 26 | C+ | RP | | R | R | Crafty | 25 | 8 | 8 | 39 | - | 62 | 59 | 31 | 4F\|2F\|CB\|SL | | |
+| Dusty Winder | M | 28 | C+ | RP | | L | R | Scholarly | 12 | 3 | 13 | 76 | - | 62 | 42 | 46 | 4F\|CB\|CH | | |
+| Tatts Balfour | M | 37 | C+ | RP | | R | R | Scholarly | 2 | 13 | 41 | 90 | - | 49 | 64 | 38 | 4F\|CB\|SL | BB Prone | |
+| Smack Avery | M | 20 | C+ | CP | | L | L | Disciplined | 3 | 4 | 19 | 80 | - | 72 | 36 | 40 | 4F\|CB | K Collector | |
