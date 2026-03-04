@@ -6,11 +6,11 @@
 |---|---|---|---|---|
 | MODE_2_FRANCHISE_SEASON | ✅ COMPLETE | 28 | 28 | 0 |
 | MODE_1_LEAGUE_BUILDER | ✅ COMPLETE | 16 | 16 | 0 |
-| MODE_3_OFFSEASON_WORKSHOP | NOT STARTED | 21 | 0 | 21 |
+| MODE_3_OFFSEASON_WORKSHOP | ✅ COMPLETE | 21 | 21 | 0 |
 | ALMANAC | NOT STARTED | 10 | 0 | 10 |
 
 **Current Phase:** A — Spec Triage
-**Next Action:** Begin Mode 3 triage at §1 of MODE_3_OFFSEASON_WORKSHOP
+**Next Action:** Begin Almanac triage at §1 of ALMANAC
 
 ---
 
@@ -118,3 +118,42 @@
 **Resume point:** Begin Mode 3 triage at §1 of MODE_3_OFFSEASON_WORKSHOP
 **Open questions:** None.
 **Spec gaps accumulated (Mode 1 total):** Auction draft mechanics (§8), LeagueTemplate preset field removal (§9→§3.3).
+
+## Session 8 — 2026-03-04
+**Document:** MODE_3_OFFSEASON_WORKSHOP
+**Sections completed:** §1 through §8
+**Key decisions:**
+- §1 KEEP AS-IS: Full 13-phase structure, all 12 outputs, all 7 principles. Cosmetic correction to §1.3 AI simulation reference.
+- §2 SIMPLIFY: Game Night Mode only (Streamlined deferred). Offseason scope expanded to 3-value selector (default/human-only/all-teams). MODE 1 §2 CORRECTION: offseasonScope type changes from binary to 3-value.
+- §3 KEEP AS-IS (spec corrections): Championship fame bonus +1→+3. Fitness reset added alongside mojo reset in Phase 1.
+- §4 SIMPLIFY: All 13 award screens keep. Defer 5% regular player trait lottery. Team Captain REMOVED from Awards Ceremony — moves to Phase 13 (Finalize & Advance) after all roster changes.
+- §5 KEEP AS-IS: Full EOS ratings + salary recalc #1. All formulas, position detection, manager distribution, farm call-up threshold.
+- §6 SIMPLIFY: Full expansion draft keeps. Stadium change keeps. Remove "create custom" stadium option (no basis in SMB4).
+- §7 SIMPLIFY: Three dice roll rounds per team (not one). Defer un-retirement (retired stays retired in v1).
+- §8 SIMPLIFY: Full 2-round FA with dice rolls + personality destinations. Revised fallback: user selects exchange player if ±30% fails. REMOVED §8.4 Free Agent Pool Signing entirely — incompatible with 1-for-1 exchange model (spec error from prior hallucination).
+**Resume point:** §9 — Phase 7: Draft of MODE_3_OFFSEASON_WORKSHOP
+**Open questions:** None.
+**Spec corrections accumulated:** Mode 1 §2 offseasonScope 3-value expansion, championship fame +3, fitness reset in Phase 1, Team Captain → Phase 13, custom stadium removed, 3 retirement rounds, FA pool signing removed.
+
+## Session 9 — 2026-03-04
+**Document:** MODE_3_OFFSEASON_WORKSHOP
+**Sections completed:** §9 through §21 — **MODE 3 TRIAGE COMPLETE**
+**Key decisions:**
+- §9 SIMPLIFY: Remove Screen 1 (un-retirement via draft, per §7 ruling). 8-screen flow. Traits HIDDEN at draft — only scouted grade, primary/secondary position, chemistry, personality, potential ceiling visible. True ratings + traits revealed at call-up. Full scouting accuracy system + auto-draft for AI teams kept.
+- §10 KEEP AS-IS: Salary recalc #2 — pass 2 of 3, same formula on updated rosters.
+- §11 SIMPLIFY: 7-screen flow (remove AI-initiated trade proposals, Screens 5–6). V1 is user-initiated only. AI trade logic (5-factor weighted) kept for AI-controlled teams responding to user proposals. Waiver wire source corrected: cut players from offseason phases, NOT retirements.
+- §12 KEEP AS-IS: Salary recalc #3 — pass 3 of 3, locks definitive baseline.
+- §13 KEEP AS-IS: Farm reconciliation — 10-player max enforcement, option counter reset, farm morale update (4 factors, no recentPerformance).
+- §14 KEEP AS-IS: Chemistry rebalancing — composition count, 4-tier table, trait potency multiplier. 3 screens.
+- §15 KEEP AS-IS (spec correction): 12 screens (added Team Captain Designation as Screen 9, per §4 ruling). Call-up reveals traits + true ratings. Demotion retirement risk (5-factor table). Full SeasonArchive interface (11 fields).
+- §16 KEEP AS-IS (2 corrections): Team Captain reference → Phase 13. Remove un-retirement from §16.6 prospect generation.
+- §17 KEEP AS-IS (1 correction): Phase 9 AI resolution description corrected for user-initiated only.
+- §18 KEEP AS-IS: 8 IndexedDB stores, 3 cross-store patterns, sequential state machine.
+- §19 KEEP AS-IS (updated): V2 table expanded with 5 new deferrals from triage. V2_DEFERRED_BACKLOG.md noted as authoritative.
+- §20 KEEP AS-IS: Cross-references appendix.
+- §21 KEEP AS-IS (1 correction): C-053 section reference updated to §15.2 Screen 9.
+**Cross-reference reconciliation:** PASSED — no DEFER ENTIRELY rulings. All SIMPLIFY removals are self-contained with no downstream breaks.
+**Mode 3 final tally:** 13 KEEP AS-IS, 7 SIMPLIFY, 0 DEFER ENTIRELY, 1 updated reference (§19)
+**Resume point:** Begin Almanac triage at §1 of ALMANAC
+**Open questions:** None.
+**Spec corrections accumulated (Mode 3 total):** AI simulation reference (§1), offseasonScope 3-value (§2), championship fame +3 (§3), fitness reset (§3), Team Captain → Phase 13 (§4/§15/§16/§21), 5% trait lottery removed (§4), custom stadium removed (§6), 3 retirement rounds (§7), un-retirement removed (§7/§9/§16), FA pool signing removed (§8), draft trait visibility hidden (§9), primary+secondary position on draft board (§9), AI-initiated proposals deferred (§11/§17), waiver wire source corrected (§11), V2 table updated (§19).
