@@ -1615,3 +1615,77 @@ Audit all 48 confirmed changes from the JK review pass to ensure 100% were appli
 - Apply WPA flow-through to Mode 3 spec
 - Add name generation to Mode 1 spec
 - Verify True Value - Contract wiring in code
+
+---
+
+## Session: 2026-03-03 (V1 Simplification — Mode 2 Triage Complete)
+
+**Context:** V1 Simplification Phase A. Completed final 5 sections of Mode 2 triage + cross-reference reconciliation.
+
+### Task
+Triage §24–§28 of MODE_2_FRANCHISE_SEASON_UPDATED, run cross-reference reconciliation, close out Mode 2.
+
+### Rulings
+- §24 SIMPLIFY: Full park factors + spray chart with heat map viz (per-player, per-team, pitcher matchup). Remove exit velocity (can't observe in SMB4). Keep confidence blending (40% activation floor, 3-tier blend).
+- §25 DEFER ENTIRELY: No simulation in v1. No "simplified box-score generator." All 4 interfaces stripped until v2.
+- §26 SIMPLIFY: Keep data flow diagram + SeasonSummary handoff contract. Defer Cold storage export + seasonClassification field.
+- §27 DEFER ENTIRELY: V2_DEFERRED_BACKLOG.md is authoritative. §27 summary table stale/redundant.
+- §28 KEEP AS-IS: Decision traceability appendix. Zero code cost, aids provenance.
+
+### Cross-Reference Reconciliation
+PASSED — no blocking conflicts found. All KEEP sections have dependencies satisfied.
+5 spec gaps identified for v1 draft consolidation:
+1. Fame System canonical section (no home)
+2. Random Event Catalog (no catalog)
+3. Box score UI on schedule (no UI surface)
+4. INSIDER reveal (Mode 1 hidden attributes dependency)
+5. "Rest of roster" True Value (Mode 1 salary dependency)
+
+### Mode 2 Final Tally
+- KEEP AS-IS: 10 sections (§3, §5, §6, §12, §16, §17, §21, §23, §28)
+- SIMPLIFY: 15 sections (§1, §2, §4, §7, §8, §9, §10, §11, §13, §14, §15, §18, §20, §22, §24, §26)
+- DEFER ENTIRELY: 3 sections (§19, §25, §27)
+
+### Files Modified
+- spec-docs/v1-simplification/MODE_2_V1_DRAFT.md — §24–§28 rulings + triage summary + reconciliation results
+- spec-docs/v1-simplification/V2_DEFERRED_BACKLOG.md — 4 new entries (exit velocity, AI Game Engine, Cold storage, seasonClassification)
+- spec-docs/v1-simplification/V1_SIMPLIFICATION_TRACKER.md — Session 5 entry + Mode 2 status COMPLETE
+- spec-docs/CURRENT_STATE.md — full rewrite for session end
+- spec-docs/SESSION_LOG.md — this entry
+
+### Next Action
+- Begin Mode 1 triage at §1 of MODE_1_LEAGUE_BUILDER
+- Mode 1 resolves cross-mode dependencies: hidden attributes, salary/True Value, stadium dimensions
+
+---
+
+## Session: 2026-03-04 (V1 Simplification — Mode 1 Triage Complete)
+
+**Context:** V1 Simplification Phase A. Completed remaining 7 sections of Mode 1 triage (§10–§16) + cross-reference reconciliation.
+
+### Rulings
+- §10 SIMPLIFY: CSV upload + manual entry. OCR deferred. SIMULATED stripped from GameStatus (not dormant).
+- §11 SIMPLIFY: Full 6-step wizard. Preset references stripped (per §9). §2 corrections propagated (aiScoreEntry removed, offseasonScope simplified). Salary calculation before any draft type. Playoff Mode deferred per §1.
+- §12 KEEP AS-IS (3 spec corrections): Full 11-step init. rulesPresetId → inline config. aiScoreEntry removed. offseasonPhaseScopes → simplified.
+- §13 SIMPLIFY: Full 2-tier data architecture. Legacy migration removed (v1 = fresh start). rulesPresets global store removed.
+- §14 DEFER ENTIRELY: V2 table redundant with V2_DEFERRED_BACKLOG.md.
+- §15 KEEP AS-IS: Cross-references appendix.
+- §16 KEEP AS-IS: Decision traceability appendix.
+
+### Mode 1 Final Tally
+- KEEP AS-IS: 7 (§3, §5, §6, §7, §8, §15, §16) + 1 with corrections (§12)
+- SIMPLIFY: 7 (§1, §2, §4, §9, §10, §11, §13)
+- DEFER ENTIRELY: 1 (§14)
+
+### Cross-Reference Reconciliation
+PASSED — no blocking conflicts. All KEEP sections have dependencies satisfied. Spec corrections internally consistent. No new blockers for Mode 3/Almanac.
+
+### Files Modified
+- spec-docs/v1-simplification/MODE_1_V1_DRAFT.md — §10–§16 rulings + triage complete
+- spec-docs/v1-simplification/V1_SIMPLIFICATION_TRACKER.md — Session 7 entry + Mode 1 status COMPLETE
+- spec-docs/v1-simplification/V2_DEFERRED_BACKLOG.md — 6 new entries (OCR, SIMULATED, Playoff Mode wizard, legacy migration, V2 table)
+- spec-docs/CURRENT_STATE.md — full rewrite for session end
+- spec-docs/SESSION_LOG.md — this entry
+
+### Next Action
+- Begin Mode 3 triage at §1 of MODE_3_OFFSEASON_WORKSHOP (21 sections)

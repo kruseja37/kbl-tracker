@@ -1,141 +1,128 @@
 # CURRENT_STATE.md
 
-**Last Updated:** 2026-02-23
-**Phase:** Gospel Consolidation — ALL 5 GOSPELS DRAFTED
+**Last Updated:** 2026-03-04
+**Phase:** V1 Simplification — Phase A (Spec Triage)
 
 ---
 
-## Current Status
+## Current Phase and Step
 
-All five gospel documents are drafted. The consolidation of 71+ fragmented spec documents into 5 canonical gospels is complete at the drafting level. Three documents are committed (Mode 1, Mode 3), two are pending commit (Mode 2, Almanac, Spine Architecture).
+Phase A — Spec Triage. Mode 2 COMPLETE. Mode 1 COMPLETE. Mode 3 next.
+
+## Last Completed Action
+
+Session 7 (2026-03-04): Triaged Mode 1 §10–§16, completing Mode 1 triage.
+- §10 SIMPLIFY: CSV upload + manual entry. OCR deferred. SIMULATED stripped from GameStatus.
+- §11 SIMPLIFY: Full 6-step wizard. Preset references stripped. §2 corrections propagated. Salary before any draft.
+- §12 KEEP AS-IS (3 spec corrections): Full init sequence. Stale preset/aiScoreEntry/phaseScope refs corrected.
+- §13 SIMPLIFY: Full data architecture. Legacy migration removed (fresh start). rulesPresets store removed.
+- §14 DEFER ENTIRELY: V2 table redundant with V2_DEFERRED_BACKLOG.md.
+- §15 KEEP AS-IS: Cross-references appendix.
+- §16 KEEP AS-IS: Decision traceability appendix.
+- Cross-reference reconciliation: PASSED — no blocking conflicts.
 
 ## Next Action
 
-**Commit all pending gospel documents** (requires removing `.git/index.lock` first):
-```
-spec-docs/MODE_2_FRANCHISE_SEASON.md (new, 3,269 lines)
-spec-docs/ALMANAC.md (new, ~350 lines)
-spec-docs/SPINE_ARCHITECTURE.md (new, ~550 lines)
-spec-docs/SESSION_LOG.md (appended)
-spec-docs/CURRENT_STATE.md (updated)
-```
+**Begin Mode 3 triage at §1 of MODE_3_OFFSEASON_WORKSHOP.**
+21 sections to triage. Mode 3 scope depends on Mode 1 + Mode 2 rulings.
 
-After commit, proceed to:
-- Archive superseded specs (per GOSPEL_CONSOLIDATION_MAP.md "Pending Archive" section)
-- Resume Phase 2 fix execution (code changes)
+## V1 Simplification Status
 
-## Gospel Status
+| Document | Status | Triaged | Remaining |
+|----------|--------|---------|-----------|
+| MODE_2_FRANCHISE_SEASON | ✅ COMPLETE | 28/28 | 0 |
+| MODE_1_LEAGUE_BUILDER | ✅ COMPLETE | 16/16 | 0 |
+| MODE_3_OFFSEASON_WORKSHOP | NOT STARTED | 0/21 | 21 |
+| ALMANAC | NOT STARTED | 0/10 | 10 |
 
-| Gospel | Input Specs | Decisions | Lines | Status |
-|--------|------------|-----------|-------|--------|
-| MODE_1_LEAGUE_BUILDER.md | 13 | 12 (10 Mode 1 + 2 cross-cutting) | 1,767 | ✅ COMMITTED |
-| MODE_3_OFFSEASON_WORKSHOP.md | 17 | 17 + 8 findings | 1,319 | ✅ COMMITTED |
-| MODE_2_FRANCHISE_SEASON.md | 39 | 33 + 3 cross-cutting | 3,269 | ✅ DRAFTED — pending commit |
-| ALMANAC.md | 2 | 0 (read-only consumer) | ~350 | ✅ DRAFTED — pending commit |
-| SPINE_ARCHITECTURE.md | Cross-cutting | C-045 | ~550 | ✅ DRAFTED — pending commit |
-| **TOTAL** | **71+ specs** | **62 decision IDs** | **~7,255** | **5/5 DRAFTED** |
+## Mode 1 Final Tally
 
-## Git Issue
+| Ruling | Count |
+|--------|-------|
+| KEEP AS-IS | 7 (§3, §5, §6, §7, §8, §15, §16) |
+| SIMPLIFY | 7 (§1, §2, §4, §9, §10, §11, §13) |
+| DEFER ENTIRELY | 1 (§14) |
+| KEEP AS-IS (spec corrections) | 1 (§12) |
 
-A stale `.git/index.lock` file from a previous session prevents git operations from the VM. JK needs to run:
-```bash
-rm /Users/johnkruse/Projects/kbl-tracker/.git/index.lock
-```
-Then commit pending files.
+## Mode 2 Final Tally
 
-## Almanac Structure (10 Sections)
+| Ruling | Count |
+|--------|-------|
+| KEEP AS-IS | 10 (§3, §5, §6, §12, §16, §17, §21, §23, §28) |
+| SIMPLIFY | 15 (§1, §2, §4, §7, §8, §9, §10, §11, §13, §14, §15, §18, §20, §22, §24, §26) |
+| DEFER ENTIRELY | 3 (§19, §25, §27) |
 
-1. Overview & Purpose
-2. Data Sources
-3. Almanac Sections (Leaderboards, Records, Awards, HOF, Team History, Transactions)
-4. Cross-Season Query Interface
-5. Career Player Profile
-6. Implementation Priority
-7. Franchise Isolation
-8. V2 / Deferred Material
-9. Cross-References
-10. Decision Traceability
+## Spec Gaps for V1 Draft Consolidation
 
-## Spine Architecture Structure (14 Sections)
+1. **Fame System canonical section** — no home section (sources in §10.4, §13.6, §14.9, §17, §18; accumulator §8.3)
+2. **Random Event Catalog** — §15 has registry architecture but no event catalog
+3. **Box score UI on schedule** — tapping completed game should show box score; data exists, needs UI surface
+4. **§16.3 INSIDER reveal** — requires Mode 1 hidden player attributes with `revealed` boolean
+5. **§20.1 "rest of roster" True Value** — requires Mode 1 salary system — CONFIRMED v1 (§5 ruling)
+6. **Auction draft mechanics** — budget per team, bidding rules, tie to salary system for competitive balance (§8)
+7. **LeagueTemplate preset field removal** — `defaultRulesPresetId` no longer needed (§9→§3.3 impact)
 
-1. Purpose
-2. Three-Mode Architecture
-3. Core Entity Models (Player, Team, League, Franchise, Season, Enumerations, Ratings)
-4. Stats Contracts (Batting, Pitching, Fielding, Career)
-5. Event Streams (AtBatEvent, BetweenPlayEvent, TransactionEvent)
-6. Storage Architecture (Two-Database Model, Franchise Isolation, Estimates)
-7. Mode Transition Contracts (Mode 1→2, Mode 2→3, Mode 3→2)
-8. Adaptive Scaling (opportunityFactor, WAR scaling, SMB4 constants)
-9. Shared Trait Contract
-10. Designation Contract
-11. Fan Morale Contract
-12. Narrative Contract
-13. Park Factor Contract
-14. Cross-References
+## Active Spec Corrections (from triage)
 
-## Mode 2 Structure (28 Sections)
+### Mode 2 corrections (1-11):
+1. §13.6 relabeled "Fame Trigger Stacking" (stays in §13, routes to fame accumulator)
+2. Fame System needs canonical home section (post-triage consolidation)
+3. Random Event Catalog needs scoping (post-triage)
+4. §15.4 examples need rewriting to comply with mojo/fitness hard boundary
+5. §19.2 Fan Favorite designation does NOT carry over on trade (designations never transfer)
+6. §20.1 formula revised: 50% team perf + 20% designated player perf + 10% rest of roster (True Value) + 10% reporter + 10% random
+7. §22.3 No SIMULATE button — all games get "Score" or "Skip" only
+8. §24.5 Exit velocity removed from spray chart record (can't observe in SMB4)
+9. §25 No "simplified box-score generator" — box scores are display of GameTracker data
+10. §26.3 SeasonSummary handoff: `seasonClassification` field removed (always PRIMARY)
+11. §27 removed from v1 spec — V2_DEFERRED_BACKLOG.md is authoritative
 
-1. Overview & Mode Definition
-2. Event Model (AtBatEvent, BetweenPlayEvent, TransactionEvent)
-3. GameTracker 1-Tap Recording
-4. Enrichment System
-5. Between-Play Events
-6. Baseball Rules & Logic
-7. Substitution System
-8. Stats Pipeline (4-layer)
-9. Pitcher Stats & Decisions
-10. Fielding System
-11. WAR System (bWAR, pWAR, fWAR, rWAR, mWAR)
-12. Leverage Index & Win Probability
-13. Clutch Attribution
-14. Mojo & Fitness
-15. Modifier Registry & Special Events
-16. Narrative System
-17. Dynamic Designations
-18. Milestone System
-19. Fan Favorite & Albatross Trade Mechanics
-20. Fan Morale System
-21. Standings & Playoffs
-22. Schedule System
-23. Adaptive Standards Engine
-24. Stadium Analytics & Park Factors
-25. AI Game Engine
-26. Franchise Data Flow
-27. V2 / Deferred Material
-28. Decision Traceability
-
-## Mode 3 Minor Gaps (follow-up refinement)
-
-1. §6.2 Expansion draft protection/selection algorithm needs detail (medium)
-2. §11.2 AI trade proposal generation logic thin (minor)
-3. §4.2 Eye test voting UI mechanics underspecified (minor)
-4. §11.2/§15.2 Beat reporter warning list incomplete (minor)
+### Mode 1 corrections (12-22):
+12. §5.5 / §6.1 SML players now have trait data — remove stale "missing trait data" notes
+13. §6.1/§6.4 Trait generation only for generated players; all players get personality + hidden modifiers
+14. §3.3 Remove `defaultRulesPresetId` from LeagueTemplate (presets removed in §9)
+15. §3.4 Step 4 "Select Rules Preset" → "Configure Rules"
+16. §10.1 GameStatus enum: SIMULATED stripped (not dormant)
+17. §11.2 Step1Data: remove `defaultRulesPreset` field
+18. §11.3: remove preset references ("Quick presets: Standard, Quick Play, Full Season, Custom")
+19. §11.5 Step4Data: remove `aiScoreEntry`, replace `offseasonPhaseScopes` with `offseasonScope` + `awardsCeremony`
+20. §12.1 step 5: `copyRulesPreset(setup.rulesPresetId)` → copy inline rules config
+21. §12.1 step 10 metadata: remove `aiScoreEntry`, replace `offseasonPhaseScopes` with simplified fields
+22. §13.2: remove `rulesPresets` from kbl-app-meta stores (6 stores remain)
 
 ## Key Resolved Decisions (Cumulative)
 
-- Offseason = 13 phases (not 11, not 14) per C-049
-- Spine = standalone 5th document per C-045
-- Franchise Types = configuration layer (Solo/Co-Op/Custom)
-- Step 5 (granular spec updates) skipped → went straight to gospel consolidation
-- 13-grade scale authoritative (S through D-) per C-074/C-087
-- Personality = 7 types only (not 12) per C-070
-- Fame = FameLevel dropdown (not slider) per C-078
-- No contraction in v1 per C-072
-- No WAR configurable weights per C-075
-- Handoff = copy-not-reference per C-076
-- Chemistry types = real SMB4 names (5 types) per F-124
-- FA exchange = ±20% True Value, no position restriction per F-125
-- Rookie salary = draft-round-based, locked per F-127
-- Trait assignment = wheel spin, potency-only per C-086
-- wOBA scale = 1.7821, FIP constant = 3.28 (SMB4 calibrated) per C-058/C-059
-- Juiced only via events/traits, rest path removed per C-092
-- INSIDER reporter reveal is permanent per C-068
-- Reporter morale capped ±3/game per C-069
-- Albatross trade discount = 15% (not 30%) per C-056
-- FA attractiveness: state-based bonuses removed per C-093
+All prior decisions from gospel consolidation still apply.
+From V1 Simplification:
+- No AI game simulation in v1 (V1 Litmus Test)
+- Mojo/fitness are user-observed only — engine reads, never sets
+- Random events cannot modify mojo/fitness/Juiced state
+- Juiced eligibility deferred — engine treats as pure state read
+- Designations never carry over on trade
+- Trade morale effects belong in fan morale (§20), scaled by True Value
+- Dynamic career thresholds deferred (fixed floors only in v1)
+- Legacy status tiers deferred (multi-season, invisible in season 1)
+- Exit velocity removed from spray chart (can't observe in SMB4)
+- No box-score generator — played games display via existing data pipeline
+- Cold storage export deferred (unscoped feature)
+- V2_DEFERRED_BACKLOG.md is authoritative deferral record (§27 table dropped)
+- Salary and True Value confirmed v1 — non-negotiable
+- SML players now have trait data (stale spec notes corrected)
+- Scout is v1 (critical for drafting farm team in Mode 1 and Mode 3)
+- No rules presets — user configures to match SMB4 console settings
+- AI behavior sliders deferred — hardcoded defaults in v1
+- Auction draft format stays v1 but needs full spec (budget tied to salary)
+- All 3 AI draft strategies needed + team archetypes for decision-making
+- CSV upload sufficient for schedule — OCR deferred
+- SIMULATED stripped from GameStatus enum (not dormant)
+- Salary calculation runs before any draft type (values players correctly)
+- v1 is a fresh start — no legacy data migration needed
+- rulesPresets global store removed (rules inline on league templates)
 
-## Blueprint Files
+## Working Documents
 
-- GOSPEL_CONSOLIDATION_MAP.md — master routing of specs → gospels
-- FRANCHISE_TYPE_DESIGN_NOTE.md — Solo/Co-Op/Custom design
-- STEP4_DECISIONS.md — all 62 decision IDs (consumed during drafting)
+- `spec-docs/v1-simplification/MODE_1_V1_DRAFT.md` — complete Mode 1 rulings (16/16)
+- `spec-docs/v1-simplification/MODE_2_V1_DRAFT.md` — complete Mode 2 rulings (28/28)
+- `spec-docs/v1-simplification/V1_SIMPLIFICATION_TRACKER.md` — session progress
+- `spec-docs/v1-simplification/V2_DEFERRED_BACKLOG.md` — everything deferred (authoritative)
+- `spec-docs/V1_SIMPLIFICATION_SESSION_RULES.md` — governing principles
