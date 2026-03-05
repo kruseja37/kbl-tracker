@@ -1689,3 +1689,102 @@ PASSED — no blocking conflicts. All KEEP sections have dependencies satisfied.
 
 ### Next Action
 - Begin Mode 3 triage at §1 of MODE_3_OFFSEASON_WORKSHOP (21 sections)
+
+---
+
+## Session: 2026-03-04 (V1 Simplification — Mode 3 Triage §1–§8)
+
+**Context:** V1 Simplification Phase A. Began Mode 3 triage. Completed 8 of 21 sections (§1 through §8, covering Phases 1–6 of the 13-phase offseason).
+
+### Rulings
+- §1 KEEP AS-IS: Full 13-phase structure, all 12 outputs, all 7 principles. Cosmetic correction to AI simulation reference in §1.3.
+- §2 SIMPLIFY: Game Night Mode only for v1 (Streamlined deferred). Offseason scope expanded from binary toggle to 3-value selector (default/human-only/all-teams) — Mode 1 §2 correction propagated.
+- §3 KEEP AS-IS (2 spec corrections): Championship fame bonus bumped from +1 to +3. Fitness reset added alongside mojo reset in Phase 1 (clean slate for both systems).
+- §4 SIMPLIFY (2 spec corrections): All 13 award screens keep with full ceremony. 5% regular player trait lottery deferred (unfocused wheel spins). Team Captain removed from Awards Ceremony — moved to Phase 13 (Finalize & Advance) after all roster changes complete.
+- §5 KEEP AS-IS: Full EOS ratings adjustment + salary recalculation #1. All formulas, position detection algorithm, manager distribution, farm call-up threshold.
+- §6 SIMPLIFY: Full expansion draft keeps. Stadium change keeps. "Create custom" stadium option removed (no basis in SMB4).
+- §7 SIMPLIFY (2 spec corrections): Three dice roll rounds per team (increases retirement rate for young rosters). Un-retirement deferred (retired stays retired in v1).
+- §8 SIMPLIFY (2 spec corrections): Full 2-round FA with dice rolls + personality-driven destinations. Fallback revised: user selects exchange player if ±30% True Value match fails. §8.4 Free Agent Pool Signing removed entirely — incompatible with 1-for-1 exchange model (spec error from prior hallucination).
+
+### Mode 3 Tally So Far (8/21)
+- KEEP AS-IS: 3 (§1, §3, §5) — all with spec corrections
+- SIMPLIFY: 5 (§2, §4, §6, §7, §8)
+- DEFER ENTIRELY: 0
+
+### Cross-Mode Spec Corrections Identified
+- Mode 1 §2: `offseasonScope` type expands from `'all-teams' | 'human-only'` to `'default' | 'human-only' | 'all-teams'`. Propagates to §2.3, §2.5, §11.5, §12.1.
+
+### Files Modified
+- spec-docs/v1-simplification/MODE_3_V1_DRAFT.md — created + §1–§8 rulings
+- spec-docs/v1-simplification/V1_SIMPLIFICATION_TRACKER.md — Session 8 entry + Mode 3 status IN PROGRESS
+- spec-docs/CURRENT_STATE.md — full rewrite for session end
+- spec-docs/SESSION_LOG.md — this entry
+
+### Next Action
+- Continue Mode 3 triage at §9 (Phase 7: Draft) of MODE_3_OFFSEASON_WORKSHOP. 13 sections remaining.
+
+## Session: 2026-03-04 (V1 Simplification — Mode 3 Triage §9–§21 COMPLETE)
+
+**Context:** V1 Simplification Phase A. Completed Mode 3 triage — sections §9 through §21 (13 remaining sections). Cross-reference reconciliation passed.
+
+### Rulings
+- §9 SIMPLIFY: Remove Screen 1 (un-retirement via draft, per §7 ruling). 8-screen flow. Traits HIDDEN at draft — only scouted grade, primary/secondary position, chemistry, personality, potential ceiling visible. True ratings + traits revealed at call-up. Full scouting accuracy system + auto-draft for AI teams kept.
+- §10 KEEP AS-IS: Salary recalc #2 — pass 2 of 3, same formula on updated rosters.
+- §11 SIMPLIFY: 7-screen flow (remove AI-initiated trade proposals, Screens 5–6). V1 is user-initiated only. AI trade logic (5-factor weighted) kept for AI-controlled teams responding to user proposals. Waiver wire source corrected: cut players from offseason phases, NOT retirements.
+- §12 KEEP AS-IS: Salary recalc #3 — pass 3 of 3, locks definitive baseline.
+- §13 KEEP AS-IS: Farm reconciliation — 10-player max enforcement, option counter reset, farm morale update (4 factors, no recentPerformance).
+- §14 KEEP AS-IS: Chemistry rebalancing — composition count, 4-tier table, trait potency multiplier. 3 screens.
+- §15 KEEP AS-IS (spec correction): 12 screens (added Team Captain Designation as Screen 9, per §4 ruling). Call-up reveals traits + true ratings. Demotion retirement risk (5-factor table). Full SeasonArchive interface (11 fields).
+- §16 KEEP AS-IS (2 corrections): Team Captain reference → Phase 13. Remove un-retirement from §16.6 prospect generation.
+- §17 KEEP AS-IS (1 correction): Phase 9 AI resolution description corrected for user-initiated only.
+- §18 KEEP AS-IS: 8 IndexedDB stores, 3 cross-store patterns, sequential state machine.
+- §19 KEEP AS-IS (updated): V2 table expanded with 5 new deferrals from triage. V2_DEFERRED_BACKLOG.md noted as authoritative.
+- §20 KEEP AS-IS: Cross-references appendix.
+- §21 KEEP AS-IS (1 correction): C-053 section reference updated to §15.2 Screen 9.
+
+### Mode 3 Final Tally
+- KEEP AS-IS: 13 | SIMPLIFY: 7 | DEFER ENTIRELY: 0 | Updated reference: 1
+- Cross-reference reconciliation: PASSED — no DEFER ENTIRELY rulings, all SIMPLIFY removals self-contained.
+
+### Spec Corrections Accumulated (Mode 3 Total)
+AI simulation reference (§1), offseasonScope 3-value (§2), championship fame +3 (§3), fitness reset (§3), Team Captain → Phase 13 (§4/§15/§16/§21), 5% trait lottery removed (§4), custom stadium removed (§6), 3 retirement rounds (§7), un-retirement removed (§7/§9/§16), FA pool signing removed (§8), draft trait visibility hidden (§9), primary+secondary position on draft board (§9), AI-initiated proposals deferred (§11/§17), waiver wire source corrected (§11), V2 table updated (§19).
+
+### Files Modified
+- spec-docs/v1-simplification/MODE_3_V1_DRAFT.md — §9–§21 rulings + cross-reference reconciliation
+- spec-docs/v1-simplification/V1_SIMPLIFICATION_TRACKER.md — Session 9 entry, Mode 3 marked COMPLETE
+- spec-docs/CURRENT_STATE.md — updated
+
+### Next Action
+- Begin Almanac triage at §1 of ALMANAC. Final document in Phase A.
+
+## Session: 2026-03-05 (V1 Simplification — Almanac Triage COMPLETE + Phase A COMPLETE)
+
+**Context:** V1 Simplification Phase A. Completed Almanac triage — all 10 sections. This completes Phase A (Spec Triage) across all four gospel documents.
+
+### Rulings
+- §1 SIMPLIFY: Almanac accessible from app home screen. Cross-franchise querying. Custom views (saved filters + column selection). Custom dashboards v2.
+- §2 SIMPLIFY: 12th store (franchiseRegistry) added. V1 data gap annotations. Two-store transaction design confirmed.
+- §3 SIMPLIFY: Awards expanded to all 13 categories. Transaction types corrected to 8. HOF empty-state placeholder.
+- §4 SIMPLIFY: franchiseFilter + displayColumns added. Tiered performance targets (100ms/300ms/best-effort).
+- §5 SIMPLIFY: mWAR labeled distinctly. Franchise badge on profiles. Cross-franchise disambiguation page.
+- §6 SIMPLIFY: Phase 0 (cross-franchise infra) added. Phase 7 expanded (custom views + data export). Empty state from creation.
+- §7 SIMPLIFY: Full rewrite — cross-franchise default. Dual entry point behavior.
+- §8 SIMPLIFY: Data export (CSV/PDF/JSON) moved to v1. V2 list clarified.
+- §9 SIMPLIFY: References corrected and expanded. Cross-franchise divergence note.
+- §10 SIMPLIFY: Trait history source-agnostic. Triage ruling T-001 added.
+
+### Almanac Final Tally
+- KEEP AS-IS: 0 | SIMPLIFY: 10 | DEFER ENTIRELY: 0
+- Cross-reference reconciliation: PASSED
+
+### Phase A Final Summary
+All 4 documents triaged across 10 sessions. 75 total sections: 32 KEEP, 37 SIMPLIFY, 5 DEFER. 1 new feature added (cross-franchise Almanac with custom views + data export).
+
+### Files Modified
+- spec-docs/v1-simplification/ALMANAC_V1_DRAFT.md — created + all 10 rulings + reconciliation
+- spec-docs/v1-simplification/V1_SIMPLIFICATION_TRACKER.md — Session 10 entry, Almanac marked COMPLETE, Phase A summary table
+- spec-docs/SESSION_LOG.md — this entry + Session 9 backfill
+- spec-docs/CURRENT_STATE.md — to be updated
+
+### Next Action
+- Begin Phase B — V1 Spec Assembly: produce four _V1_FINAL.md documents + V2_DEFERRED_BACKLOG.md

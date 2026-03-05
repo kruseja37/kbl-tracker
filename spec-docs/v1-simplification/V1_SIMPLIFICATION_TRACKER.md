@@ -7,10 +7,10 @@
 | MODE_2_FRANCHISE_SEASON | ✅ COMPLETE | 28 | 28 | 0 |
 | MODE_1_LEAGUE_BUILDER | ✅ COMPLETE | 16 | 16 | 0 |
 | MODE_3_OFFSEASON_WORKSHOP | ✅ COMPLETE | 21 | 21 | 0 |
-| ALMANAC | NOT STARTED | 10 | 0 | 10 |
+| ALMANAC | ✅ COMPLETE | 10 | 10 | 0 |
 
-**Current Phase:** A — Spec Triage
-**Next Action:** Begin Almanac triage at §1 of ALMANAC
+**Current Phase:** A — Spec Triage — ✅ COMPLETE
+**Next Action:** Begin Phase B — V1 Spec Assembly (produce four _V1_FINAL.md documents + V2_DEFERRED_BACKLOG.md)
 
 ---
 
@@ -157,3 +157,34 @@
 **Resume point:** Begin Almanac triage at §1 of ALMANAC
 **Open questions:** None.
 **Spec corrections accumulated (Mode 3 total):** AI simulation reference (§1), offseasonScope 3-value (§2), championship fame +3 (§3), fitness reset (§3), Team Captain → Phase 13 (§4/§15/§16/§21), 5% trait lottery removed (§4), custom stadium removed (§6), 3 retirement rounds (§7), un-retirement removed (§7/§9/§16), FA pool signing removed (§8), draft trait visibility hidden (§9), primary+secondary position on draft board (§9), AI-initiated proposals deferred (§11/§17), waiver wire source corrected (§11), V2 table updated (§19).
+
+## Session 10 — 2026-03-05
+**Document:** ALMANAC — **ALMANAC TRIAGE COMPLETE**
+**Sections completed:** §1 through §10 (all 10 sections)
+**Key decisions:**
+- §1 SIMPLIFY: Almanac accessible from app home screen (not just inside franchises). Cross-franchise querying across all saved franchises with filtering. Custom views (saved filter presets + custom leaderboard column selection) added to v1. Custom dashboards deferred to v2.
+- §2 SIMPLIFY: All 11 stores kept. 12th store added (franchiseRegistry — top-level metadata). Two-store transaction design confirmed. V1 data gap annotations added (pitch counts, 8 of 11 transaction types).
+- §3 SIMPLIFY: Awards history expanded from 8 to all 13 award categories. Transaction types corrected to 8 (DFA removed). HOF Museum gets empty-state placeholder with eligibility preview.
+- §4 SIMPLIFY: franchiseFilter and displayColumns added to AlmanacQuery. Filter behavior table expanded to all fields. Tiered performance targets (100ms single, 300ms ≤5 franchises, best-effort 6+).
+- §5 SIMPLIFY: mWAR labeled distinctly. Franchise badge on every profile. Cross-franchise disambiguation page for multi-franchise players.
+- §6 SIMPLIFY: Phase 0 added (cross-franchise infrastructure). Phase 7 expanded (custom views + data export). Almanac nav button present from franchise creation with empty state.
+- §7 SIMPLIFY: Full rewrite — all 4 isolation rules replaced. Cross-franchise is default. Dual entry point (app home = all franchises, in-franchise nav = pre-filtered).
+- §8 SIMPLIFY: Data export (CSV, PDF, JSON) moved to v1. Cross-franchise and custom query builder lines clarified for v1/v2 split.
+- §9 SIMPLIFY: Mode 2 reference corrected (§17 not §19). Mode 3 references expanded to full list. Cross-franchise divergence note added.
+- §10 SIMPLIFY: C-086 updated for source-agnostic trait history. New triage ruling T-001 (cross-franchise query model) added.
+**Cross-reference reconciliation:** PASSED — two minor count/label gaps fixed, no structural conflicts.
+**Almanac final tally:** 0 KEEP AS-IS, 10 SIMPLIFY, 0 DEFER ENTIRELY
+**Resume point:** Phase A COMPLETE. Begin Phase B — V1 Spec Assembly.
+**Open questions:** None.
+
+---
+
+## PHASE A COMPLETE — ALL FOUR DOCUMENTS TRIAGED
+
+| Document | Sections | KEEP | SIMPLIFY | DEFER | Sessions |
+|---|---|---|---|---|---|
+| MODE_2_FRANCHISE_SEASON | 28 | 12 | 14 | 2 | 1–5 |
+| MODE_1_LEAGUE_BUILDER | 16 | 7 | 6 | 3 | 6–7 |
+| MODE_3_OFFSEASON_WORKSHOP | 21 | 13 | 7 | 0 | 8–9 |
+| ALMANAC | 10 | 0 | 10 | 0 | 10 |
+| **TOTAL** | **75** | **32** | **37** | **5** | **10 sessions** |
