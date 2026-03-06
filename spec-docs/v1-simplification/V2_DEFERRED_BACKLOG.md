@@ -143,85 +143,175 @@ Items deferred from v1 during spec triage. Organized by source section.
 ## MODE 1 Deferrals
 
 ### Playoff Mode Entry Point
-- **Source:** MODE_1 §1.4 / §11.7
-- **What it does:** Abbreviated franchise creation wizard that skips season settings and goes straight to playoffs
+- **Source:** MODE_1 §1.4 / §11.8
+- **What it does:** "Playoff Mode" main menu entry point leading to abbreviated 5-step wizard (no season settings, no draft, teams use current League Builder rosters)
 - **Why deferred:** Not essential for v1 couch experience. "New Franchise" and "League Builder" cover all v1 use cases.
 - **Dependencies for v2:** None
-- **Preserves data from:** N/A
+- **Original length:** §11.8 = 14 lines
 
 ### `aiScoreEntry` Toggle
-- **Source:** MODE_1 §2.3
-- **What it does:** Boolean flag allowing manual W/L entry for AI-vs-AI games
+- **Source:** MODE_1 §2.3 / §2.4 / §11.5
+- **What it does:** Boolean flag on FranchiseTypeConfig allowing manual W/L entry for AI-vs-AI games
 - **Why deferred:** Redundant — v1 has Score/Skip for ALL games per Mode 2 §22. Toggle serves no purpose.
 - **Dependencies for v2:** None
-- **Preserves data from:** N/A
+- **Original length:** 1 field + preset references
 
 ### Per-Phase Offseason Scope Configuration
 - **Source:** MODE_1 §2.5
-- **What it does:** 13-row table with per-phase scope (all-teams vs human-only), per-phase aiResolution (auto/skip), and OffseasonPhaseConfig interface
+- **What it does:** 13-row per-phase scope table with per-phase `aiResolution` setting, `OffseasonPhaseConfig` interface, and `PhaseScope` type
 - **Why deferred:** Over-configuration for v1. Single global toggle (all-teams vs human-only) is sufficient. Awards Ceremony toggle preserved as standalone.
 - **Dependencies for v2:** Mode 3 per-phase scoping
-- **Preserves data from:** N/A
+- **Original length:** ~30 lines (interface + table)
 
 ### Team Metadata Fields
 - **Source:** MODE_1 §4.3
-- **What it does:** Three optional fields on Team model: foundedYear, championships, retiredNumbers
+- **What it does:** Three optional fields on Team model: `foundedYear`, `championships`, `retiredNumbers`
 - **Why deferred:** Franchise-specific history, not team template branding data. Don't belong on reusable templates.
-- **Dependencies for v2:** None
-- **Preserves data from:** N/A
+- **Dependencies for v2:** Franchise history tracking system
+- **Original length:** 3 lines
 
 ### AI Behavior Sliders
 - **Source:** MODE_1 §9.2
-- **What it does:** 6 configurable sliders: tradeAggressiveness, tradeAcceptanceThreshold, rebuildThreshold, prospectValuation, winNowBias, positionScarcityAwareness
+- **What it does:** 6 configurable sliders on RulesPreset: `tradeAggressiveness`, `tradeAcceptanceThreshold`, `rebuildThreshold`, `prospectValuation`, `winNowBias`, `positionScarcityAwareness`
 - **Why deferred:** AI teams in v1 use sensible hardcoded defaults. Sliders are over-configuration for v1 AI behavior depth.
 - **Dependencies for v2:** AI trade logic, AI roster management
-- **Preserves data from:** N/A
+- **Original length:** ~13 lines
 
 ### Pitch Count & Mound Visit Rule Settings
 - **Source:** MODE_1 §9.2
-- **What it does:** Game rule toggles for pitch count limits (starter/reliever) and mound visit limits (per game)
-- **Why deferred:** No Mode 2 system reads these. Pitch count estimation deferred in Mode 2 §9 (manual entry with skip). Mound visits not tracked.
+- **What it does:** Game rule objects for pitch count limits (starter/reliever) and mound visit limits (per game)
+- **Why deferred:** No Mode 2 system reads these. Pitch count estimation deferred in Mode 2 §9. Mound visits not tracked.
 - **Dependencies for v2:** Mode 2 pitch count estimation system
-- **Preserves data from:** N/A
+- **Original length:** ~10 lines
 
 ### Rules Presets System
 - **Source:** MODE_1 §9.3
 - **What it does:** 4 built-in read-only presets (Standard Season, Quick Play, Full Simulation, Arcade Mode) with preset selection UI and `defaultRulesPresetId` on LeagueTemplate
-- **Why deferred:** User configures rules directly to match their SMB4 console settings. Presets add no value — every franchise setup is unique to the user's SMB4 configuration.
+- **Why deferred:** User configures rules directly to match their SMB4 console settings. Presets add no value — every franchise setup is unique to the user's configuration.
 - **Dependencies for v2:** None
-- **Preserves data from:** N/A
+- **Original length:** 53 lines
 
 ### Screenshot/OCR Schedule Extraction
 - **Source:** MODE_1 §10.1
 - **What it does:** User takes screenshot of SMB4 schedule, app uses OCR to extract game data, user reviews and confirms parsed results
 - **Why deferred:** Requires OCR pipeline (likely cloud-based). CSV upload + manual game entry is sufficient for v1.
 - **Dependencies for v2:** OCR service integration
-- **Preserves data from:** N/A
+- **Original length:** 1 input method entry
 
 ### SIMULATED GameStatus Value
 - **Source:** MODE_1 §10.1
 - **What it does:** GameStatus enum value for AI-simulated games
 - **Why deferred:** No AI simulation in v1. Stripped (not dormant) to avoid confusion. Consistent with Mode 2 §22 and §25 deferrals.
 - **Dependencies for v2:** Mode 2 AI Game Engine (§25)
-- **Preserves data from:** N/A
-
-### Playoff Mode Wizard
-- **Source:** MODE_1 §11.8
-- **What it does:** Abbreviated 5-step wizard for standalone playoffs (no season settings, no draft, teams use current League Builder rosters)
-- **Why deferred:** Per §1 ruling — "Playoff Mode" entry point deferred
-- **Dependencies for v2:** None
-- **Preserves data from:** N/A
+- **Original length:** 1 enum value + 1 comment reference
 
 ### Legacy Data Migration
-- **Source:** MODE_1 §13.7
-- **What it does:** Detects pre-franchise legacy data, creates "Default Franchise," migrates all data, shows migration complete message
+- **Source:** MODE_1 §13.7, lines 1734-1743
+- **What it does:** Detects pre-franchise legacy data on first launch, creates "Default Franchise," migrates all data, shows migration complete
 - **Why deferred:** v1 is a fresh start for all users. No pre-franchise data exists to migrate.
 - **Dependencies for v2:** Only relevant if v1 ships and later needs migration for v2 schema changes
-- **Preserves data from:** N/A
+- **Original length:** 10 lines
 
 ### V2 Material Reference Table
-- **Source:** MODE_1 §14
+- **Source:** MODE_1 §14, lines 1744-1762
 - **What it does:** 10-row table listing pre-tagged V2 features (salary cap, contraction, cloud sync, franchise templates, etc.)
-- **Why deferred:** Redundant with this document (V2_DEFERRED_BACKLOG.md). Same ruling as Mode 2 §27.
+- **Why deferred:** Redundant with V2_DEFERRED_BACKLOG.md. Same ruling as Mode 2 §27.
 - **Dependencies for v2:** N/A
-- **Preserves data from:** N/A
+- **Original length:** 19 lines
+
+
+
+## MODE 3 Deferrals
+
+### Streamlined Mode
+- **Source:** MODE_3 §2.4, lines 123-132
+- **What it does:** Batch processing offseason mode with condensed UI — ~60% time reduction vs Game Night Mode. Key ceremonies still get reveals; minor awards show summary tables.
+- **Why deferred:** Game Night Mode (full ceremony experience) is the core v1 offseason. Streamlined Mode is a UX optimization that can come later.
+- **Dependencies for v2:** All 13 offseason phases implemented (v1 provides this)
+- **Original length:** 10 lines
+
+### 5% Regular Player Trait Lottery
+- **Source:** MODE_3 §4.3, line 82
+- **What it does:** End-of-season development lottery where 5% of regular (non-award-winning) players receive a trait via wheel spin
+- **Why deferred:** Creates too many unfocused wheel spins for players the user may not care about. v1 trait rewards reserved for award winners (60%) and top performers (30%) only.
+- **Dependencies for v2:** None — just an additional wheel spin trigger
+- **Original length:** 1 line (within §4.3 trait distribution list)
+
+### Custom Stadium Creation
+- **Source:** MODE_3 §6.3, line 452
+- **What it does:** Option to create custom stadiums during the expansion/stadium change phase
+- **Why deferred:** SMB4 doesn't support custom stadiums — the stadium pool is the existing SMB4 stadiums. No basis for this feature.
+- **Dependencies for v2:** Custom stadium dimension data (would need to be invented, not SMB4-sourced)
+- **Original length:** partial line within §6.3
+
+### Un-Retirement via Draft Class
+- **Source:** MODE_3 §7.4 / §9.2, lines 531-551 / 654-688
+- **What it does:** Retired players can optionally be re-added to future draft class pools. Pre-Draft Inactive Player Selection screen (original Screen 1 of draft flow) lets user pick returning players.
+- **Why deferred:** Novelty feature — retired stays retired in v1. Simplifies retirement as a permanent, meaningful decision.
+- **Dependencies for v2:** Retired Player Database (exists in v1)
+- **Original length:** 1 line in §7.4 + Screen 1 in §9.2 (2 lines)
+
+### AI-Initiated Trade Proposals
+- **Source:** MODE_3 §11.2 (Screens 5–6), lines 824-829
+- **What it does:** AI-controlled teams proactively generate trade proposals that the user receives in an inbox. Includes AI Proposal Detail screen for review.
+- **Why deferred:** v1 trades are user-initiated only. AI teams respond to user proposals (accept/reject/counter) but do not proactively propose. Reduces AI complexity for v1.
+- **Dependencies for v2:** AI trade logic (the 5-factor evaluation exists in v1 for AI responses; needs extension for proactive proposal generation)
+- **Original length:** 5 lines (2 screens)
+
+---
+
+## ALMANAC.md Deferred Items
+
+### ALMANAC-D1: Custom Dashboards / Composite Multi-Widget Views
+- **Source:** ALMANAC §1 (ruling — High tier custom views)
+- **What it does:** Composite dashboard views that combine multiple Almanac widgets (leaderboards, charts, records) into user-designed layouts.
+- **Why deferred:** High complexity tier. v1 ships custom views (saved filter presets + column selection) which cover Low + Medium tiers. Dashboards require widget framework, layout persistence, and drag-and-drop composition.
+- **Dependencies for v2:** Custom views infrastructure (ships in v1 Phase 7), widget component library
+
+### ALMANAC-D2: Cold Storage Tier
+- **Source:** ALMANAC §2 (per Mode 2 §26 SIMPLIFY)
+- **What it does:** Tiered storage model where older season data migrates from warm (active IndexedDB) to cold (compressed archive) tier for performance.
+- **Why deferred:** Warm tier is sufficient for v1. Cold storage needed only when franchise histories grow large enough to impact query performance (estimated 50+ seasons).
+- **Dependencies for v2:** Performance profiling data from v1 usage, storage compression strategy
+
+### ALMANAC-D3: DFA / Waiver / Contract Extension Transaction Types
+- **Source:** ALMANAC §3.6 (per Mode 2 §2 SIMPLIFY)
+- **What it does:** Three additional transaction types: Designation for Assignment (DFA), waiver wire claims, and contract extensions.
+- **Why deferred:** These transaction types are not implemented in v1's Mode 2 engine. The Almanac transaction UI should not expose filter options for types that cannot exist.
+- **Dependencies for v2:** Mode 2 transaction type expansion (DFA, waiver, contract_extension)
+
+### ALMANAC-D4: Cross-Franchise Side-by-Side Comparison Dashboards
+- **Source:** ALMANAC §7 (Rule 3), §8
+- **What it does:** Direct side-by-side franchise comparison views — place two franchise stat tables next to each other for visual comparison.
+- **Why deferred:** v1 ships implicit comparison (tagged results in shared leaderboards). Explicit side-by-side requires composite widget views (ALMANAC-D1 dashboards).
+- **Dependencies for v2:** ALMANAC-D1 (dashboard framework)
+
+### ALMANAC-D5: SQL-Like Free-Form Query Builder
+- **Source:** ALMANAC §8
+- **What it does:** Advanced query interface allowing users to write SQL-like queries against Almanac data (e.g., "players with 30+ HR and .300+ AVG in the same season").
+- **Why deferred:** Basic filters + custom views (saved presets, column selection) are sufficient for v1. SQL-like queries add significant UX complexity.
+- **Dependencies for v2:** Full query engine (ships incrementally in v1), query parser, syntax validation UI
+
+### ALMANAC-D6: Historical "What-If" Queries
+- **Source:** ALMANAC §8
+- **What it does:** Alternate-timeline simulation queries (e.g., "what if Player X had stayed on Team Y for 3 more seasons?").
+- **Why deferred:** Requires alternate-timeline simulation engine that does not exist in v1.
+- **Dependencies for v2:** Season simulation engine, stat projection models
+
+### ALMANAC-D7: Almanac Sharing / Screenshots
+- **Source:** ALMANAC §8
+- **What it does:** Share Almanac views, leaderboards, and player profiles as images or links (social features).
+- **Why deferred:** Social/sharing features deferred across all modes in v1.
+- **Dependencies for v2:** Image generation from views, sharing URL generation, screenshot capture
+
+### ALMANAC-D8: Franchise Merge
+- **Source:** ALMANAC §8
+- **What it does:** Merge two separate franchise databases into one combined history.
+- **Why deferred:** Would violate per-franchise DB isolation model. Merging requires resolving player identity conflicts (same SMB4 player imported differently), season numbering collisions, and duplicate detection.
+- **Dependencies for v2:** Player identity resolution system, merge conflict UI, data deduplication engine
+
+### ALMANAC-D9: 5% Regular Player Trait Lottery (Almanac Display)
+- **Source:** ALMANAC §10 (C-086 update) — deferred with Mode 3 §4
+- **What it does:** Non-award-winning players have a 5% chance of receiving a personality trait each offseason. The Almanac would display these trait changes in player profiles.
+- **Why deferred:** Trait lottery mechanic deferred in Mode 3 §4 SIMPLIFY. Almanac's trait history read layer is source-agnostic — when v2 adds the lottery, those events will display automatically with no Almanac code changes.
+- **Dependencies for v2:** Mode 3 5% trait lottery implementation
