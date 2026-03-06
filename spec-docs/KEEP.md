@@ -64,11 +64,14 @@ src/data/                         (entire directory)
 src/src_figma/config/teamColors.ts
 ```
 
-## Protected: Test Infrastructure (DO NOT MODIFY)
+## Protected: Test Infrastructure
 ```
-vite.config.ts                    (test config)
+vite.config.ts                    (build + test config)
 src/test-setup.ts
+tsconfig.app.json                 (TypeScript build config)
 ```
+
+**Exception:** Additive exclusion changes to `vite.config.ts` and `tsconfig.app.json` are permitted (adding paths to `exclude` arrays) when quarantining dead code. Logic changes, plugin changes, and alias changes are NOT permitted.
 
 ## Protected: Mode 3 Offseason Flows (DO NOT REWRITE)
 These flows are ~98% complete per JK assessment. Changes only for specific bugs.
