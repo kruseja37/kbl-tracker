@@ -12,7 +12,7 @@ export type BatterHand = 'L' | 'R' | 'S';
 export type AtBatResult =
   | '1B' | '2B' | '3B' | 'HR' | 'BB' | 'IBB' | 'K' | 'Kc'
   | 'GO' | 'FO' | 'LO' | 'PO' | 'DP' | 'TP' | 'SF' | 'SAC' | 'HBP' | 'E' | 'FC'
-  | 'D3K' | 'WP_K' | 'PB_K';
+  | 'D3K' | 'WP_K' | 'PB_K' | 'GRD'; // GRD = Ground Rule Double (GAP-GT-6-D)
 
 export type GameEvent = 'SB' | 'CS' | 'WP' | 'PB' | 'PK' | 'PITCH_CHANGE' | 'PINCH_HIT' | 'PINCH_RUN' | 'DEF_SUB' | 'POS_SWITCH';
 // Special play types for outs and hits
@@ -168,8 +168,8 @@ export function hasRISP(bases: Bases): boolean { return bases.second !== null ||
 export function isBasesLoaded(bases: Bases): boolean { return bases.first !== null && bases.second !== null && bases.third !== null; }
 
 export function isOut(result: AtBatResult): boolean { return ['K', 'Kc', 'GO', 'FO', 'LO', 'PO', 'DP', 'SF', 'SAC'].includes(result); }
-export function isHit(result: AtBatResult): boolean { return ['1B', '2B', '3B', 'HR'].includes(result); }
-export function reachesBase(result: AtBatResult): boolean { return ['1B', '2B', '3B', 'HR', 'BB', 'IBB', 'HBP', 'E', 'FC', 'D3K', 'WP_K', 'PB_K'].includes(result); }
+export function isHit(result: AtBatResult): boolean { return ['1B', '2B', '3B', 'HR', 'GRD'].includes(result); }
+export function reachesBase(result: AtBatResult): boolean { return ['1B', '2B', '3B', 'HR', 'BB', 'IBB', 'HBP', 'E', 'FC', 'D3K', 'WP_K', 'PB_K', 'GRD'].includes(result); }
 export function requiresBallInPlayData(result: AtBatResult): boolean { return ['1B', '2B', '3B', 'HR', 'GO', 'FO', 'LO', 'PO', 'DP', 'FC', 'E'].includes(result); }
 
 export function inferFielder(result: AtBatResult, direction: Direction): Position | null {

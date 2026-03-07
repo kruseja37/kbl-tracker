@@ -22,20 +22,22 @@
  * (Configured via seasons.csv gamesPerTeam and league numTeams)
  */
 
-import type { AtBatResult, Position, HalfInning, SpecialPlayType } from '../types/game';
+import type { AtBatResult, Position, HalfInning, SpecialPlayType, MojoLevelLabel, FitnessLevelLabel, FameLevel, SpecPitcherRole, HiddenModifiers } from '../types/game';
+import type { ParkFactors } from '../types/war';
 
 // ============================================
 // DATABASE SETUP
 // ============================================
 
 const DB_NAME = 'kbl-event-log';
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 
 const STORES = {
   GAME_HEADERS: 'gameHeaders',      // Game metadata and aggregation status
   AT_BAT_EVENTS: 'atBatEvents',     // Individual at-bat events
   PITCHING_APPEARANCES: 'pitchingAppearances',  // Pitcher entry/exit for inherited runners
   FIELDING_EVENTS: 'fieldingEvents', // Fielding plays for FWAR
+  BETWEEN_PLAY_EVENTS: 'betweenPlayEvents', // Between-play events (SB, WP, subs, etc.)
 };
 
 let dbInstance: IDBDatabase | null = null;
@@ -90,6 +92,13 @@ async function initEventLogDB(): Promise<IDBDatabase> {
         fieldingStore.createIndex('gameId', 'gameId', { unique: false });
         fieldingStore.createIndex('playerId', 'playerId', { unique: false });
         fieldingStore.createIndex('atBatEventId', 'atBatEventId', { unique: false });
+      }
+
+      // Between-play events - SB, WP, substitutions, mojo/fitness changes, etc.
+      if (!db.objectStoreNames.contains(STORES.BETWEEN_PLAY_EVENTS)) {
+        const bpStore = db.createObjectStore(STORES.BETWEEN_PLAY_EVENTS, { keyPath: 'eventId' });
+        bpStore.createIndex('gameId', 'gameId', { unique: false });
+        bpStore.createIndex('type', 'type', { unique: false });
       }
     };
   });
@@ -177,6 +186,231 @@ export interface AtBatEvent {
   isLeadoff: boolean;            // First batter of inning
   isClutch: boolean;             // High leverage situation
   isWalkOff: boolean;            // Ended the game
+
+  // === LAYER 1B: CONTEXT SNAPSHOT FIELDS (all optional) ===
+
+  // 1.9 (GAP-GT-2-A): Identity fields
+  seasonId?: string;
+  franchiseId?: string;
+  leagueId?: string;
+
+  // 1.10 (GAP-GT-2-G): Park context
+  parkContext?: {
+    stadiumId: string;
+    stadiumName: string;
+    parkFactors?: ParkFactors;
+    lighting?: 'day' | 'night';
+  };
+
+  // 1.11 (GAP-GT-2-C): Team context
+  teamContext?: {
+    battingTeam: {
+      teamId: string;
+      teamName: string;
+      record?: { w: number; l: number };
+      streak?: number;
+      divisionRank?: number;
+    };
+    fieldingTeam: {
+      teamId: string;
+      teamName: string;
+      record?: { w: number; l: number };
+      streak?: number;
+      divisionRank?: number;
+    };
+    isRivalryGame?: boolean;
+    seriesContext?: {
+      game: number;
+      of: number;
+      seriesScore?: { home: number; away: number };
+    };
+  };
+
+  // 1.12 (GAP-GT-2-D): Batter context snapshot
+  batterContext?: {
+    playerId: string;
+    playerName: string;
+    position?: string;
+    battingOrder?: number;
+    handedness?: 'L' | 'R' | 'S';
+    enteredAs?: 'starter' | 'pinch_hit' | 'pinch_run' | 'defensive_replacement';
+    replacedPlayer?: string;
+    mojoState?: MojoLevelLabel;
+    fitnessLevel?: FitnessLevelLabel;
+    currentGameStats?: { ab: number; h: number; hr: number; rbi: number };
+    currentSeasonAvg?: number;
+    currentSeasonOPS?: number;
+    currentStreak?: number;
+    seasonHits?: number;
+    seasonHR?: number;
+    careerHits?: number;
+    careerHR?: number;
+    fameLevel?: FameLevel;
+    personality?: string;
+    hiddenModifiers?: HiddenModifiers;
+  };
+
+  // 1.13 (GAP-GT-2-E): Pitcher context snapshot
+  pitcherContext?: {
+    playerId: string;
+    playerName: string;
+    handedness?: 'L' | 'R';
+    role?: SpecPitcherRole;
+    mojoState?: MojoLevelLabel;
+    fitnessLevel?: FitnessLevelLabel;
+    pitchCount?: number;
+    currentGameStats?: { ip: number; h: number; er: number; k: number; bb: number };
+    currentSeasonERA?: number;
+    currentSeasonWHIP?: number;
+    seasonStrikeouts?: number;
+    careerStrikeouts?: number;
+    careerWins?: number;
+    inheritedRunners?: number;
+    fameLevel?: FameLevel;
+    personality?: string;
+    hiddenModifiers?: HiddenModifiers;
+  };
+
+  // 1.14 (GAP-GT-2-F): Matchup context
+  matchupContext?: {
+    platoonAdvantage?: 'batter' | 'pitcher' | 'neutral';
+    isRivalry?: boolean;
+    previousMatchupsThisGame?: { ab: number; h: number };
+  };
+
+  // 1.15 (GAP-GT-2-H): Computed fields
+  runnerOutcomes?: Array<{
+    runnerId: string;
+    runnerName: string;
+    fromBase: 'first' | 'second' | 'third';
+    toBase: 'second' | 'third' | 'home' | 'out';
+  }>;
+  outsRecorded?: number;
+  isQualityAtBat?: boolean;
+  milestoneTriggered?: Array<{ type: string; description: string }>;
+
+  // 1.16 (GAP-GT-2-J): Enrichment fields
+  enrichment?: {
+    fieldLocation?: { x: number; y: number; zone?: string };
+    exitType?: 'ground_ball' | 'fly_ball' | 'line_drive' | 'popup' | 'bunt' | string;
+    fieldingSequence?: number[];
+    putouts?: number[];
+    assists?: number[];
+    errors?: Array<{ position: number; type: 'fielding' | 'throwing' | 'mental' }>;
+    hrDistance?: number;
+    pitchType?: string;
+    pitchesInAtBat?: number;
+    modifiers?: string[];
+  };
+
+  // 1.17 (GAP-GT-2-K): Versioning
+  version?: number;
+  editHistory?: Array<{
+    field: string;
+    oldValue: unknown;
+    newValue: unknown;
+    timestamp: number;
+  }>;
+}
+
+// ============================================
+// LAYER 1C: BETWEEN-PLAY EVENT (§2.2)
+// ============================================
+
+/** Discriminated union type for all between-play event types */
+export type BetweenPlayEventType =
+  | 'stolen_base' | 'caught_stealing' | 'pickoff'
+  | 'wild_pitch' | 'passed_ball' | 'balk'
+  | 'defensive_indifference'
+  | 'pitcher_change' | 'substitution' | 'position_change'
+  | 'mojo_change' | 'fitness_change' | 'injury'
+  | 'pitch_count_update' | 'manager_moment';
+
+/** Formal between-play event interface per spec §2.2 */
+export interface BetweenPlayEvent {
+  eventId: string;
+  gameId: string;
+  seasonId?: string;
+  franchiseId?: string;
+  timestamp: number;
+  eventIndex: number;              // Interleaved with AtBatEvent indices
+
+  type: BetweenPlayEventType;
+
+  // Game state snapshot at time of event
+  gameState?: {
+    inning: number;
+    halfInning: 'TOP' | 'BOTTOM';
+    outs: number;
+    score: { away: number; home: number };
+    runnersOn?: {
+      first?: string;
+      second?: string;
+      third?: string;
+    };
+  };
+
+  // Type-specific payloads (only the one matching `type` is populated)
+  stolenBase?: {
+    runnerId: string;
+    runnerName?: string;
+    fromBase: 1 | 2 | 3;
+    toBase: 2 | 3 | 4;
+    isSuccessful: boolean;
+    caughtBy?: number;           // Position number
+  };
+
+  pitcherChange?: {
+    outgoingPitcherId: string;
+    outgoingPitcherName?: string;
+    incomingPitcherId: string;
+    incomingPitcherName?: string;
+    inheritedRunners: number;
+    outgoingPitchCount?: number;
+    outgoingIP?: number;
+  };
+
+  substitution?: {
+    subType: 'pinch_hit' | 'pinch_run' | 'defensive_replacement' | 'position_change';
+    outPlayerId: string;
+    outPlayerName?: string;
+    outPosition?: string;
+    inPlayerId: string;
+    inPlayerName?: string;
+    inPosition?: string;
+    previousPosition?: string;   // For position_change
+  };
+
+  playerStateChange?: {
+    playerId: string;
+    playerName?: string;
+    stateType: 'mojo' | 'fitness';
+    previousValue: string | number;
+    newValue: string | number;
+    reason?: string;
+  };
+
+  wildPitchOrPassedBall?: {
+    wpOrPb: 'wild_pitch' | 'passed_ball';
+    pitcherId: string;
+    catcherId?: string;
+    runnersAdvanced?: Array<{ runnerId: string; fromBase: number; toBase: number }>;
+    runScored?: string;          // Player ID who scored
+  };
+
+  pitchCountUpdate?: {
+    pitcherId: string;
+    pitchCount: number;
+    timing: 'end_of_half_inning' | 'pitcher_removed' | 'end_of_game';
+  };
+
+  managerMoment?: {
+    leverageIndex: number;
+    decisionType: string;
+    context?: string;
+    outcomeEventId?: string;
+    outcomeWPA?: number;
+  };
 }
 
 /** Runner state for situational tracking */
@@ -374,6 +608,22 @@ export async function logFieldingEvent(event: FieldingEvent): Promise<void> {
 }
 
 /**
+ * Log a between-play event (SB, WP, substitution, mojo change, etc.)
+ */
+export async function logBetweenPlayEvent(event: BetweenPlayEvent): Promise<void> {
+  const db = await initEventLogDB();
+
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(STORES.BETWEEN_PLAY_EVENTS, 'readwrite');
+    const store = transaction.objectStore(STORES.BETWEEN_PLAY_EVENTS);
+    const request = store.put(event);
+
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => resolve();
+  });
+}
+
+/**
  * Mark game as complete
  */
 export async function completeGame(
@@ -541,6 +791,26 @@ export async function getGameFieldingEvents(gameId: string): Promise<FieldingEve
 }
 
 /**
+ * Get between-play events for a game
+ */
+export async function getBetweenPlayEvents(gameId: string): Promise<BetweenPlayEvent[]> {
+  const db = await initEventLogDB();
+
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(STORES.BETWEEN_PLAY_EVENTS, 'readonly');
+    const store = transaction.objectStore(STORES.BETWEEN_PLAY_EVENTS);
+    const index = store.index('gameId');
+    const request = index.getAll(gameId);
+
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => {
+      const events = (request.result as BetweenPlayEvent[]).sort((a, b) => a.eventIndex - b.eventIndex);
+      resolve(events);
+    };
+  });
+}
+
+/**
  * Get game header
  */
 export async function getGameHeader(gameId: string): Promise<GameHeader | null> {
@@ -677,8 +947,9 @@ export async function generateBoxScore(gameId: string): Promise<BoxScore | null>
     }
     const batter = batterStats.get(batterId)!;
 
-    // Count at-bat (walks, HBP, sac don't count as AB)
-    const isAB = !['BB', 'HBP', 'SF', 'SH'].includes(event.result);
+    // Count at-bat (walks, HBP, IBB, sac don't count as AB)
+    // GAP-GT-6-F: Added IBB, changed SH→SAC (AtBatResult uses 'SAC' not 'SH')
+    const isAB = !['BB', 'IBB', 'HBP', 'SF', 'SAC'].includes(event.result);
     if (isAB) batter.ab++;
 
     // Count hit

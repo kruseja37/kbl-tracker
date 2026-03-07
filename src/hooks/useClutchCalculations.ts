@@ -111,6 +111,7 @@ function mapResultToPlayResult(result: AtBatResult): PlayResult {
     'D3K': 'strikeout_swinging', // Dropped third strike
     'WP_K': 'strikeout_swinging', // Wild pitch strikeout
     'PB_K': 'strikeout_swinging', // Passed ball strikeout
+    'GRD': 'double', // Ground Rule Double counts as a double (GAP-GT-6-D)
   };
   return mapping[result] || 'ground_out';
 }

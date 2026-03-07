@@ -452,16 +452,17 @@ describe('Out Defaults - Fielders Choice (FC)', () => {
 describe('Out Defaults - Fly Out (FO) - Tag Up Rules', () => {
   const foPlay = createPlayData({ type: 'out', outType: 'FO', fieldingSequence: [8] });
 
-  test('R3, 0 outs - R3 tags and scores on fly out', () => {
+  // GAP-GT-6-E: Tag-up enforcement — runners hold by default on fly outs.
+  // User taps runner → [Advance] if they tagged up in the actual game.
+  test('R3, 0 outs - R3 holds by default (tap to advance if tagged up)', () => {
     const bases: GameBases = { first: false, second: false, third: true };
     const result = calculateRunnerDefaults(foPlay, bases, 0);
 
     expect(result.batter.to).toBe('out');
-    expect(result.third?.to).toBe('home');
-    expect(result.third?.reason).toContain('Tags');
+    expect(result.third?.to).toBe('third');
   });
 
-  test('R3, 2 outs - R3 holds (cannot tag with 2 outs, 3rd out ends inning)', () => {
+  test('R3, 2 outs - R3 holds', () => {
     const bases: GameBases = { first: false, second: false, third: true };
     const result = calculateRunnerDefaults(foPlay, bases, 2);
 
@@ -469,12 +470,12 @@ describe('Out Defaults - Fly Out (FO) - Tag Up Rules', () => {
     expect(result.third?.to).toBe('third');
   });
 
-  test('R2, 0 outs - R2 tags to 3B on deep fly', () => {
+  test('R2, 0 outs - R2 holds by default on fly out (tap to advance if tagged up)', () => {
     const bases: GameBases = { first: false, second: true, third: false };
     const result = calculateRunnerDefaults(foPlay, bases, 0);
 
     expect(result.batter.to).toBe('out');
-    expect(result.second?.to).toBe('third');
+    expect(result.second?.to).toBe('second');
   });
 
   test('R2, 2 outs - R2 holds', () => {

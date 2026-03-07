@@ -63,6 +63,7 @@ import { completeGame as completeScheduleGame } from '../../../utils/scheduleSto
 // Fielding pipeline: extract fielding events from PlayData and log to IndexedDB
 import { extractFieldingEvents, type FieldingExtractionContext } from '../utils/fieldingEventExtractor';
 import { logFieldingEvent } from '../../../utils/eventLog';
+import { captureStartingLineups, type LineupEntry } from '../../../utils/gameStorage';
 import { POSITION_MAP } from '../components/fielderInference';
 import { calculateRunnerDefaults, type RunnerDefaults } from '../components/runnerDefaults';
 
@@ -163,6 +164,9 @@ export function GameTracker() {
   // This ref ensures handleEndGame only executes once per game.
   const gameEndingRef = useRef(false);
 
+  // Layer 1C: Captured starting lineups for GameRecord archive
+  const startingLineupsRef = useRef<{ away: LineupEntry[]; home: LineupEntry[] } | null>(null);
+
   // Update elapsed time every minute
   useEffect(() => {
     const interval = setInterval(() => {
@@ -210,6 +214,7 @@ export function GameTracker() {
     dismissAutoEndPrompt,
     setPlayoffContext,
     setStadiumName,
+    setNextEventEnrichment,
   } = useGameState(gameId);
   const [gameInitialized, setGameInitialized] = useState(false);
 
@@ -761,7 +766,15 @@ export function GameTracker() {
           totalInnings: navigationState?.totalInnings || 9,
           seasonNumber: navigationState?.seasonNumber || 1,
           stadiumName: selectedStadium || undefined,
+          // Layer 1B: Context snapshot config
+          franchiseId: navigationState?.franchiseId,
+          leagueId: navigationState?.leagueId || 'sml',
+          awayRecord: (() => { const [w, l] = awayRecord.split('-').map(Number); return { w: w || 0, l: l || 0 }; })(),
+          homeRecord: (() => { const [w, l] = homeRecord.split('-').map(Number); return { w: w || 0, l: l || 0 }; })(),
         });
+
+        // Layer 1C: Snapshot starting lineups for GameRecord archive
+        startingLineupsRef.current = captureStartingLineups(awayLineup, homeLineup);
 
         if (!cancelled) {
           setGameInitialized(true);
@@ -1337,6 +1350,18 @@ export function GameTracker() {
                             playData.runnerOutcomes?.batter?.to !== undefined;
 
       // ============================================
+      // STEP 3.5: Inject enrichment data before record call (Layer 1B §1.16)
+      // ============================================
+      setNextEventEnrichment({
+        fieldLocation: playData.ballLocation
+          ? { x: playData.ballLocation.x, y: playData.ballLocation.y, zone: playData.spraySector }
+          : undefined,
+        exitType: playData.hrType || undefined,
+        fieldingSequence: playData.fieldingSequence?.length ? playData.fieldingSequence : undefined,
+        hrDistance: playData.hrDistance || undefined,
+      });
+
+      // ============================================
       // STEP 4: Record the play type (hit/out/etc)
       // CRITICAL: Pass runnerAdvancement so recordHit/recordOut properly updates bases!
       // ============================================
@@ -1745,7 +1770,7 @@ export function GameTracker() {
     } catch (error) {
       console.error('Failed to record enhanced play:', error);
     }
-  }, [recordHit, recordOut, recordWalk, recordError, advanceCount, gameState, undoSystem, playerStats, pitcherStats, fameTrackingHook, playerStateHook, runnerNames, buildGameStateForLI, mwarHook, pendingMWARDecisions, inferFielderCredits, pushPlayLogEntry, shortInningLabel]);
+  }, [recordHit, recordOut, recordWalk, recordError, advanceCount, gameState, undoSystem, playerStats, pitcherStats, fameTrackingHook, playerStateHook, runnerNames, buildGameStateForLI, mwarHook, pendingMWARDecisions, inferFielderCredits, pushPlayLogEntry, shortInningLabel, setNextEventEnrichment]);
 
   // ══════════════════════════════════════════════════════════════
   // QUICK BAR HANDLER — §3.2 one-tap execution flow
@@ -1755,7 +1780,7 @@ export function GameTracker() {
   // ══════════════════════════════════════════════════════════════
 
   // Outcome classification for Quick Bar buttons
-  const QUICK_BAR_HITS: readonly string[] = ['1B', '2B', '3B', 'HR'];
+  const QUICK_BAR_HITS: readonly string[] = ['1B', '2B', '3B', 'HR', 'GRD']; // GRD = Ground Rule Double
   const QUICK_BAR_OUTS: readonly string[] = ['K', 'GO', 'FO', 'LO', 'PO', 'DP', 'TP', 'SF', 'SAC'];
   const QUICK_BAR_WALKS: readonly string[] = ['BB', 'HBP', 'IBB'];
 
@@ -1771,6 +1796,10 @@ export function GameTracker() {
       if (QUICK_BAR_HITS.includes(outcome)) {
         if (outcome === 'HR') {
           return { type: 'hr' as const, hitType: 'HR' as const, outType: undefined, fieldingSequence: [] as number[] };
+        }
+        if (outcome === 'GRD') {
+          // Ground Rule Double: batter to 2B, runners advance 2 bases (same defaults as 2B)
+          return { type: 'hit' as const, hitType: '2B' as const, outType: undefined, fieldingSequence: [] as number[] };
         }
         return { type: 'hit' as const, hitType: outcome as '1B' | '2B' | '3B', outType: undefined, fieldingSequence: [] as number[] };
       }
@@ -1988,6 +2017,16 @@ export function GameTracker() {
       const batterReached = playData.runnerOutcomes?.batter?.to !== 'out' &&
                             playData.runnerOutcomes?.batter?.to !== undefined;
 
+      // Layer 1B: Inject enrichment before record call (same as handleEnhancedPlayComplete)
+      setNextEventEnrichment({
+        fieldLocation: playData.ballLocation
+          ? { x: playData.ballLocation.x, y: playData.ballLocation.y, zone: playData.spraySector }
+          : undefined,
+        exitType: playData.hrType || undefined,
+        fieldingSequence: playData.fieldingSequence?.length ? playData.fieldingSequence : undefined,
+        hrDistance: playData.hrDistance || undefined,
+      });
+
       // Record the play
       if (playData.type === 'hr') {
         const rbi = calculateRBIFromOutcomes();
@@ -2044,7 +2083,7 @@ export function GameTracker() {
     } catch (error) {
       console.error('[EXH-016] Failed to record play:', error);
     }
-  }, [pendingPlayForFielderCredit, gameState, undoSystem, recordHit, recordOut, recordD3K, recordWalk]);
+  }, [pendingPlayForFielderCredit, gameState, undoSystem, recordHit, recordOut, recordD3K, recordWalk, setNextEventEnrichment]);
 
   // EXH-016: Handle fielder credit modal close (skip credits)
   const handleFielderCreditClose = useCallback(() => {

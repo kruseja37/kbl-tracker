@@ -234,29 +234,24 @@ function calculateOutDefaults(
     };
   }
 
-  // Fly out - tag up opportunities
-  if (outType === 'FO' || outType === 'LO') {
-    const isDeepFly = outType === 'FO'; // Assume FO is catchable fly
+  // Sacrifice fly — R3 scores, all other runners hold (GAP-GT-6-E)
+  if (outType === 'SF') {
+    return {
+      batter: { from: 'batter', to: 'out', isDefault: true, reason: 'Sacrifice fly' },
+      ...(bases.third && { third: { from: 'third', to: 'home', isDefault: true, reason: 'Tags and scores (SF)' } }),
+      ...(bases.second && { second: { from: 'second', to: 'second', isDefault: true, reason: 'Holds' } }),
+      ...(bases.first && { first: { from: 'first', to: 'first', isDefault: true, reason: 'Holds' } }),
+    };
+  }
 
+  // Fly out / Line out — tag-up enforcement: all runners hold by default (GAP-GT-6-E)
+  // User taps runner → [Advance] if they tagged up in the actual game
+  if (outType === 'FO' || outType === 'LO') {
     return {
       batter: { from: 'batter', to: 'out', isDefault: true, reason: 'Fly out' },
-      // R3 can tag up with less than 2 outs on deep fly
-      ...(bases.third && outs < 2 && isDeepFly && {
-        third: { from: 'third', to: 'home', isDefault: true, reason: 'Tags and scores' }
-      }),
-      // R3 holds on shallow fly or with 2 outs
-      ...(bases.third && (outs >= 2 || !isDeepFly) && {
-        third: { from: 'third', to: 'third', isDefault: true, reason: 'Holds' }
-      }),
-      // R2 may advance to 3B on deep fly with less than 2 outs
-      ...(bases.second && outs < 2 && isDeepFly && {
-        second: { from: 'second', to: 'third', isDefault: true, reason: 'Tags to 3B' }
-      }),
-      ...(bases.second && (outs >= 2 || !isDeepFly) && {
-        second: { from: 'second', to: 'second', isDefault: true, reason: 'Holds' }
-      }),
-      // R1 rarely advances on fly ball
-      ...(bases.first && { first: { from: 'first', to: 'first', isDefault: true, reason: 'Holds' } }),
+      ...(bases.first && { first: { from: 'first', to: 'first', isDefault: true, reason: 'Holds (tap to advance if tagged up)' } }),
+      ...(bases.second && { second: { from: 'second', to: 'second', isDefault: true, reason: 'Holds (tap to advance if tagged up)' } }),
+      ...(bases.third && { third: { from: 'third', to: 'third', isDefault: true, reason: 'Holds (tap to advance if tagged up)' } }),
     };
   }
 

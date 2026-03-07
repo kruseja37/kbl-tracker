@@ -11,7 +11,7 @@ const PRIMARY_BUTTONS = ['K', 'GO', 'FO', 'LO', '1B', 'BB', '2B', 'HR'] as const
 /** Secondary outcomes shown in the overflow menu */
 const OVERFLOW_BUTTONS = [
   'PO', '3B', 'HBP', 'E', 'FC', 'DP', 'TP',
-  'SAC', 'SF', 'IBB', 'WP_K', 'PB_K', 'D3K',
+  'SAC', 'SF', 'IBB', 'WP_K', 'PB_K', 'D3K', 'GRD',
 ] as const;
 
 /** Color mapping for button types — SNES retro aesthetic */
@@ -41,6 +41,7 @@ const BUTTON_COLORS: Record<string, { bg: string; border: string }> = {
   D3K:    { bg: '#7d6608', border: '#f4d03f' },
   WP_K:   { bg: '#7d6608', border: '#f4d03f' },
   PB_K:   { bg: '#7d6608', border: '#f4d03f' },
+  GRD:  { bg: '#1a5276', border: '#5dade2' }, // Ground Rule Double — blue like other hits
   // Overflow trigger
   '···': { bg: '#333333', border: '#888888' },
 };

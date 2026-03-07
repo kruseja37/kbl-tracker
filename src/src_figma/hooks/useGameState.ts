@@ -155,7 +155,7 @@ export interface RunnerAdvancement {
   fromThird?: 'home' | 'out';
 }
 
-export type HitType = '1B' | '2B' | '3B' | 'HR';
+export type HitType = '1B' | '2B' | '3B' | 'HR' | 'GRD'; // GRD = Ground Rule Double (GAP-GT-6-D)
 export type OutType = 'K' | 'Kc' | 'GO' | 'FO' | 'LO' | 'PO' | 'DP' | 'TP' | 'FC' | 'SF' | 'SH' | 'D3K';
 export type WalkType = 'BB' | 'HBP' | 'IBB';
 export type ReachOnErrorType = 'E'; // Batter reaches base on fielding error
@@ -208,6 +208,9 @@ export interface UseGameStateReturn {
   pitchCountPrompt: PitchCountPrompt | null;
   confirmPitchCount: (pitcherId: string, finalCount: number) => { immaculateInning?: { pitcherId: string; pitcherName: string } };
   dismissPitchCountPrompt: () => void;
+
+  // Enrichment injection (Layer 1B)
+  setNextEventEnrichment: (data: AtBatEvent['enrichment']) => void;
 
   // Initialization
   initializeGame: (config: GameInitConfig) => Promise<void>;
@@ -279,6 +282,12 @@ export interface GameInitConfig {
   totalInnings?: number;
   stadiumName?: string | null;
   seasonNumber: number;
+  // Layer 1B: Context snapshot identity fields
+  franchiseId?: string;
+  leagueId?: string;
+  // Layer 1B: Team records for context snapshot
+  awayRecord?: { w: number; l: number };
+  homeRecord?: { w: number; l: number };
 }
 
 function parseSeasonNumberFromId(seasonId: string): number {
@@ -333,6 +342,25 @@ function createEmptyPlayerStats(): PlayerGameStats {
 }
 
 // ============================================
+// LAYER 1B: CONTEXT SNAPSHOT HELPERS
+// ============================================
+
+/** Derive outs recorded from an AtBatResult type */
+function calculateOutsFromResult(result: AtBatResult): number {
+  switch (result) {
+    case 'K': case 'Kc': case 'GO': case 'FO': case 'LO': case 'PO':
+    case 'FC': case 'SF': case 'SAC': case 'D3K':
+      return 1;
+    case 'DP':
+      return 2;
+    case 'TP':
+      return 3;
+    default:
+      return 0; // Hits, walks, errors, HBP = 0 outs
+  }
+}
+
+// ============================================
 // BASEBALL RULES LOGIC
 // Ported from src/components/GameTracker/AtBatFlow.tsx
 // ============================================
@@ -367,8 +395,8 @@ export function isRunnerForced(
     return false;
   }
 
-  // On doubles, batter takes 2B so R1 and R2 are forced
-  if (result === '2B') {
+  // On doubles and GRD, batter takes 2B so R1 and R2 are forced
+  if (result === '2B' || result === 'GRD') {
     if (base === 'first') return true;
     if (base === 'second') return true;
     return false;
@@ -1072,6 +1100,13 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
   const awayLineupRef = useRef<{ playerId: string; playerName: string; position: string }[]>([]);
   const homeLineupRef = useRef<{ playerId: string; playerName: string; position: string }[]>([]);
   const seasonIdRef = useRef<string>('');
+  // Layer 1B: Identity + team context refs
+  const franchiseIdRef = useRef<string | undefined>(undefined);
+  const leagueIdRef = useRef<string | undefined>(undefined);
+  const awayRecordRef = useRef<{ w: number; l: number } | undefined>(undefined);
+  const homeRecordRef = useRef<{ w: number; l: number } | undefined>(undefined);
+  // Layer 1B: Enrichment data ref — set from GameTracker before record calls
+  const pendingEnrichmentRef = useRef<AtBatEvent['enrichment']>(undefined);
 
   // MAJ-09: Full LineupState tracking for substitution validation
   const awayLineupStateRef = useRef<LineupState>({
@@ -1160,6 +1195,137 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
   const inningPitchesRef = useRef({ pitches: 0, strikeouts: 0, pitcherId: '' });
 
   // ============================================
+  // LAYER 1B: CONTEXT SNAPSHOT BUILDER
+  // ============================================
+
+  /** Build context snapshot fields for AtBatEvent. Populates what's available; leaves rest undefined. */
+  const buildContextSnapshot = useCallback((
+    result: AtBatResult,
+    pitchCount?: number,
+  ): Partial<AtBatEvent> => {
+    const isBatterAway = gameState.isTop;
+    const battingTeamId = isBatterAway ? gameState.awayTeamId : gameState.homeTeamId;
+    const battingTeamName = isBatterAway ? gameState.awayTeamName : gameState.homeTeamName;
+    const fieldingTeamId = isBatterAway ? gameState.homeTeamId : gameState.awayTeamId;
+    const fieldingTeamName = isBatterAway ? gameState.homeTeamName : gameState.awayTeamName;
+
+    // Look up batter in lineup state for position/order/enteredAs
+    const batterLineupState = isBatterAway ? awayLineupStateRef.current : homeLineupStateRef.current;
+    const batterInLineup = batterLineupState.lineup.find(p => p.playerId === gameState.currentBatterId);
+
+    // Look up pitcher in lineup state
+    const pitcherLineupState = isBatterAway ? homeLineupStateRef.current : awayLineupStateRef.current;
+    const pitcherInLineup = pitcherLineupState.currentPitcher;
+
+    // Batter game stats
+    const bStats = playerStats.get(gameState.currentBatterId);
+
+    // Pitcher game stats
+    const pStats = pitcherStats.get(gameState.currentPitcherId);
+
+    // Batting/fielding team records
+    const battingRecord = isBatterAway ? awayRecordRef.current : homeRecordRef.current;
+    const fieldingRecord = isBatterAway ? homeRecordRef.current : awayRecordRef.current;
+
+    // Determine enteredAs from lineup data
+    let enteredAs: 'starter' | 'pinch_hit' | 'pinch_run' | 'defensive_replacement' | undefined;
+    if (batterInLineup) {
+      if (batterInLineup.isStarter) {
+        enteredAs = 'starter';
+      } else if (batterInLineup.enteredFor) {
+        // Check substitution log for how they entered
+        const subEntry = substitutionLog.find(s => s.incomingPlayerId === gameState.currentBatterId);
+        if (subEntry) {
+          switch (subEntry.type) {
+            case 'pinch_hit': enteredAs = 'pinch_hit'; break;
+            case 'pinch_run': enteredAs = 'pinch_run'; break;
+            case 'defensive_sub': enteredAs = 'defensive_replacement'; break;
+            default: enteredAs = 'starter'; // fallback
+          }
+        }
+      }
+    }
+
+    return {
+      // 1.9: Identity
+      seasonId: seasonIdRef.current || undefined,
+      franchiseId: franchiseIdRef.current,
+      leagueId: leagueIdRef.current,
+
+      // 1.10: Park context
+      parkContext: gameState.stadiumName ? {
+        stadiumId: gameState.stadiumName, // Use name as ID — no separate stadiumId system yet
+        stadiumName: gameState.stadiumName,
+      } : undefined,
+
+      // 1.11: Team context
+      teamContext: {
+        battingTeam: {
+          teamId: battingTeamId,
+          teamName: battingTeamName,
+          record: battingRecord,
+        },
+        fieldingTeam: {
+          teamId: fieldingTeamId,
+          teamName: fieldingTeamName,
+          record: fieldingRecord,
+        },
+      },
+
+      // 1.12: Batter context
+      batterContext: {
+        playerId: gameState.currentBatterId,
+        playerName: gameState.currentBatterName,
+        position: batterInLineup?.position,
+        battingOrder: batterInLineup?.battingOrder,
+        enteredAs,
+        replacedPlayer: batterInLineup?.enteredFor,
+        currentGameStats: bStats ? {
+          ab: bStats.ab,
+          h: bStats.h,
+          hr: bStats.hr,
+          rbi: bStats.rbi,
+        } : undefined,
+      },
+
+      // 1.13: Pitcher context
+      pitcherContext: {
+        playerId: gameState.currentPitcherId,
+        playerName: gameState.currentPitcherName,
+        pitchCount: pStats?.pitchCount,
+        currentGameStats: pStats ? {
+          ip: pStats.outsRecorded / 3,
+          h: pStats.hitsAllowed,
+          er: pStats.earnedRuns,
+          k: pStats.strikeoutsThrown,
+          bb: pStats.walksAllowed,
+        } : undefined,
+        inheritedRunners: pStats?.inheritedRunners,
+      },
+
+      // 1.14: Matchup context — leave platoonAdvantage/isRivalry empty (no handedness/rivalry data in hook)
+      // previousMatchupsThisGame left empty — requires querying event log
+
+      // 1.15: Computed fields
+      outsRecorded: calculateOutsFromResult(result),
+      isQualityAtBat: (pitchCount !== undefined && pitchCount >= 7) ||
+        ['1B', '2B', '3B', 'HR', 'BB', 'HBP', 'IBB'].includes(result) ||
+        undefined, // undefined if we can't determine
+
+      // 1.16: Enrichment — consume pending enrichment data if set
+      enrichment: pendingEnrichmentRef.current || undefined,
+
+      // 1.17: Versioning
+      version: 1,
+    };
+  }, [gameState, playerStats, pitcherStats, substitutionLog]);
+
+  /** Set enrichment data to attach to the next recorded event */
+  const setNextEventEnrichment = useCallback((data: AtBatEvent['enrichment']) => {
+    pendingEnrichmentRef.current = data;
+  }, []);
+
+  // ============================================
   // INITIALIZATION
   // ============================================
 
@@ -1188,6 +1354,10 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     awayLineupRef.current = config.awayLineup;
     homeLineupRef.current = config.homeLineup;
     seasonIdRef.current = config.seasonId;
+    franchiseIdRef.current = config.franchiseId;
+    leagueIdRef.current = config.leagueId;
+    awayRecordRef.current = config.awayRecord;
+    homeRecordRef.current = config.homeRecord;
     totalInningsRef.current = config.totalInnings || 9;
 
     // MAJ-09: Initialize full LineupState for substitution validation
@@ -1395,6 +1565,14 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         }
         if (savedSnapshot.seasonId) {
           seasonIdRef.current = savedSnapshot.seasonId;
+        }
+        // Layer 1B: Restore identity refs from snapshot (if available)
+        const snapshotAny = savedSnapshot as unknown as Record<string, unknown>;
+        if (snapshotAny.franchiseId) {
+          franchiseIdRef.current = snapshotAny.franchiseId as string;
+        }
+        if (snapshotAny.leagueId) {
+          leagueIdRef.current = snapshotAny.leagueId as string;
         }
 
         const restoredPlayerStats = new Map<string, PlayerGameStats>();
@@ -2121,7 +2299,8 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       tracker = hrResult.state;
       if (hrResult.scoredEvent) scoredEvents.push(hrResult.scoredEvent);
     } else {
-      const batterBase = hitType === '1B' ? '1B' : hitType === '2B' ? '2B' : '3B';
+      // GRD (Ground Rule Double) puts batter at 2B like a regular double
+      const batterBase = hitType === '1B' ? '1B' : (hitType === '2B' || hitType === 'GRD') ? '2B' : '3B';
       tracker = trackerAddRunner(tracker, gameState.currentBatterId, gameState.currentBatterName, batterBase, howReached);
     }
 
@@ -2217,11 +2396,13 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       fameEvents: [],
       isLeadoff: gameState.outs === 0 && !gameState.bases.first && !gameState.bases.second && !gameState.bases.third,
       isClutch,
-      isWalkOff
+      isWalkOff,
+      ...buildContextSnapshot(mapAtBatResultFromHit(hitType), pitchCount),
     };
 
     // Log to IndexedDB
     await logAtBatEvent(event);
+    pendingEnrichmentRef.current = undefined;
 
     // Update player stats
     setPlayerStats(prev => {
@@ -2231,7 +2412,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       batterStats.ab++;
       batterStats.h++;
       if (hitType === '1B') batterStats.singles++;
-      if (hitType === '2B') batterStats.doubles++;
+      if (hitType === '2B' || hitType === 'GRD') batterStats.doubles++; // GRD counts as a double
       if (hitType === '3B') batterStats.triples++;
       if (hitType === 'HR') batterStats.hr++;
       batterStats.rbi += calculatedRbi;
@@ -2537,9 +2718,11 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       isLeadoff: gameState.outs === 0 && !gameState.bases.first && !gameState.bases.second && !gameState.bases.third,
       isClutch,
       isWalkOff: false, // Outs never cause walk-offs
+      ...buildContextSnapshot(effectiveResult, pitchCount),
     };
 
     await logAtBatEvent(event);
+    pendingEnrichmentRef.current = undefined;
 
     // Update player stats — MAJ-07: use effectiveResult for corrected type
     const statResult = effectiveResult; // corrected: e.g. FO→SF, GO→DP
@@ -2771,9 +2954,11 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       isLeadoff: false,
       isClutch,
       isWalkOff,
+      ...buildContextSnapshot(mapAtBatResultFromWalk(walkType), pitchCount),
     };
 
     await logAtBatEvent(event);
+    pendingEnrichmentRef.current = undefined;
 
     // Update player stats — MAJ-07: Track HBP separately from BB
     setPlayerStats(prev => {
@@ -2949,9 +3134,11 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       isLeadoff: false,
       isClutch: false,
       isWalkOff: false,
+      ...buildContextSnapshot(result, pitchCount),
     };
 
     await logAtBatEvent(event);
+    pendingEnrichmentRef.current = undefined;
 
     // Update batter stats - ALWAYS count K, PA, AB
     setPlayerStats(prev => {
@@ -3106,9 +3293,11 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       isLeadoff: false,
       isClutch: false,
       isWalkOff: false,
+      ...buildContextSnapshot('E' as AtBatResult, pitchCount),
     };
 
     await logAtBatEvent(event);
+    pendingEnrichmentRef.current = undefined;
 
     // Update player stats (PA but no AB for ROE)
     setPlayerStats(prev => {
@@ -4645,5 +4834,6 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     dismissAutoEndPrompt: useCallback(() => setShowAutoEndPrompt(false), []),
     setPlayoffContext,
     setStadiumName,
+    setNextEventEnrichment,
   };
 }
