@@ -36,6 +36,25 @@ function convertToRosterPlayer(
       k: 0,
     },
     battingHand: player.bats === 'S' ? 'S' : (player.bats as 'L' | 'R'),
+    // Step 0: Pass through League Builder fields for engine access
+    playerId: player.id,
+    power: player.power,
+    contact: player.contact,
+    speed: player.speed,
+    fieldingRating: player.fielding,
+    arm: player.arm,
+    velocity: player.velocity,
+    junk: player.junk,
+    accuracy: player.accuracy,
+    arsenal: player.arsenal as string[] | undefined,
+    overallGrade: player.overallGrade,
+    trait1: player.trait1,
+    trait2: player.trait2,
+    personality: player.personality,
+    chemistry: player.chemistry,
+    age: player.age,
+    throws: player.throws,
+    secondaryPosition: player.secondaryPosition,
   };
 }
 
@@ -62,6 +81,24 @@ function convertToRosterPitcher(
     throwingHand: player.throws,
     isStarter: isStarter ?? player.primaryPosition === 'SP',
     isActive,
+    // Step 0: Pass through League Builder fields for engine access
+    playerId: player.id,
+    velocity: player.velocity,
+    junk: player.junk,
+    accuracy: player.accuracy,
+    arsenal: player.arsenal as string[] | undefined,
+    overallGrade: player.overallGrade,
+    trait1: player.trait1,
+    trait2: player.trait2,
+    personality: player.personality,
+    chemistry: player.chemistry,
+    age: player.age,
+    secondaryPosition: player.secondaryPosition,
+    power: player.power,
+    contact: player.contact,
+    speed: player.speed,
+    fieldingRating: player.fielding,
+    arm: player.arm,
   };
 }
 

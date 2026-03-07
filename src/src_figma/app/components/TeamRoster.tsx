@@ -43,6 +43,25 @@ export interface Player {
   mojo?: MojoLevel;
   fitness?: FitnessState;
   isOutOfGame?: boolean; // Track if player was substituted out
+  // Step 0: League Builder passthrough fields for engine access
+  playerId?: string;              // League Builder player ID (stable across sessions)
+  power?: number;                 // Batting ratings (0-99)
+  contact?: number;
+  speed?: number;
+  fieldingRating?: number;        // Named to avoid collision with 'fielding' position concept
+  arm?: number;
+  velocity?: number;              // Pitching ratings (for two-way players)
+  junk?: number;
+  accuracy?: number;
+  arsenal?: string[];             // Pitch types (e.g., ['4F', 'CB', 'SL'])
+  overallGrade?: string;          // Letter grade: S, A+, A, ..., D
+  trait1?: string;
+  trait2?: string;
+  personality?: string;
+  chemistry?: string;
+  age?: number;
+  throws?: 'L' | 'R';
+  secondaryPosition?: string;
 }
 
 export interface Pitcher {
@@ -54,6 +73,25 @@ export interface Pitcher {
   isStarter?: boolean;
   isActive?: boolean; // Currently pitching in the game
   isOutOfGame?: boolean; // Track if pitcher was substituted out
+  // Step 0: League Builder passthrough fields for engine access
+  playerId?: string;              // League Builder player ID
+  velocity?: number;              // Pitching ratings (0-99)
+  junk?: number;
+  accuracy?: number;
+  arsenal?: string[];             // Pitch types (CRITICAL for enrichment filtering)
+  overallGrade?: string;          // Letter grade
+  trait1?: string;
+  trait2?: string;
+  personality?: string;
+  chemistry?: string;
+  age?: number;
+  secondaryPosition?: string;
+  // Batting ratings (for pitchers who bat)
+  power?: number;
+  contact?: number;
+  speed?: number;
+  fieldingRating?: number;
+  arm?: number;
 }
 
 interface TeamRosterProps {

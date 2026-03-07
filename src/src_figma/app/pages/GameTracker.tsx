@@ -525,6 +525,8 @@ export function GameTracker() {
   const fielderColor2 = fieldingTeamColors.secondary;
 
   // EXH-036: Helper to generate consistent player IDs (must match playerStateHook registration)
+  // Step 0: LB playerId available on Player/Pitcher.playerId for cross-referencing.
+  // Game-session IDs remain name-based for backward compatibility.
   const generatePlayerId = (name: string, team: 'home' | 'away') =>
     `${team}-${name.replace(/\s+/g, '-').toLowerCase()}`;
 
@@ -834,18 +836,20 @@ export function GameTracker() {
       `${teamPrefix}-${name.replace(/\s+/g, '-').toLowerCase()}`;
 
     // Register all away team batters
+    // Step 0: Pass real traits and age from League Builder data (no longer hardcoded)
     awayTeamPlayers.forEach((player) => {
       const playerId = getPlayerId(player.name, 'away');
       // Only register if not already registered
       if (!playerStateHook.getPlayer(playerId)) {
+        const traits = [player.trait1, player.trait2].filter((t): t is string => !!t);
         playerStateHook.registerPlayer(
           playerId,
           player.name,
           (player.position || 'DH') as import('../../../engines/fitnessEngine').PlayerPosition,
           0, // Starting mojo: Normal
           'FIT', // Starting fitness: FIT
-          [], // Traits (not available in current Player type)
-          25 // Default age
+          traits,
+          player.age ?? 25
         );
       }
     });
@@ -854,14 +858,15 @@ export function GameTracker() {
     homeTeamPlayers.forEach((player) => {
       const playerId = getPlayerId(player.name, 'home');
       if (!playerStateHook.getPlayer(playerId)) {
+        const traits = [player.trait1, player.trait2].filter((t): t is string => !!t);
         playerStateHook.registerPlayer(
           playerId,
           player.name,
           (player.position || 'DH') as import('../../../engines/fitnessEngine').PlayerPosition,
           0,
           'FIT',
-          [],
-          25
+          traits,
+          player.age ?? 25
         );
       }
     });
@@ -870,28 +875,30 @@ export function GameTracker() {
     if (awayPitcher) {
       const pitcherId = getPlayerId(awayPitcher.name, 'away');
       if (!playerStateHook.getPlayer(pitcherId)) {
+        const traits = [awayPitcher.trait1, awayPitcher.trait2].filter((t): t is string => !!t);
         playerStateHook.registerPlayer(
           pitcherId,
           awayPitcher.name,
           'SP',
           0,
           'FIT',
-          [],
-          25
+          traits,
+          awayPitcher.age ?? 25
         );
       }
     }
     if (homePitcher) {
       const pitcherId = getPlayerId(homePitcher.name, 'home');
       if (!playerStateHook.getPlayer(pitcherId)) {
+        const traits = [homePitcher.trait1, homePitcher.trait2].filter((t): t is string => !!t);
         playerStateHook.registerPlayer(
           pitcherId,
           homePitcher.name,
           'SP',
           0,
           'FIT',
-          [],
-          25
+          traits,
+          homePitcher.age ?? 25
         );
       }
     }
