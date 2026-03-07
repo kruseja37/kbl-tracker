@@ -11,7 +11,15 @@ Phase B — V1 Spec Assembly — **COMPLETE.** Four V1_FINAL.md build specs prod
 
 ## Last Completed Action
 
-Session 2026-03-07 (F): Completed GameTracker Delta Layer 5 — Enrichment & Play Log.
+Session 2026-03-07 (G): Completed Elimination Mode Step 0 — Data Integrity Audit.
+
+- Added 15 optional fields to TeamRoster.Player, 14 to Pitcher (ratings, traits, arsenal, grade, etc.)
+- lineupLoader now passes through all League Builder fields
+- GameTracker registerPlayer uses real traits and age (was hardcoded)
+- Full audit report: `spec-docs/DATA_INTEGRITY_AUDIT.md`
+- Commit: 5c2d53e (merged to main)
+
+Previously: Session 2026-03-07 (F): Completed GameTracker Delta Layer 5 — Enrichment & Play Log.
 
 - **TICKET 5.1 (GAP-GT-4-A/B/C/D)**: EnrichmentPanel.tsx + onEntryTap wiring (field location, fielding sequence, HR distance)
 - **TICKET 5.2 (GAP-GT-4-E)**: K/Kc inline toggle badge in PlayLog + handler
@@ -25,8 +33,9 @@ Session 2026-03-07 (F): Completed GameTracker Delta Layer 5 — Enrichment & Pla
 
 ## Next Action
 
-**All 5 GameTracker Delta Layers COMPLETE.** Next:
-- Continue **Phase C — Code Alignment** (V1 spec → code gap analysis)
+**All 5 GameTracker Delta Layers COMPLETE. Elimination Mode Step 0 COMPLETE.** Next:
+- Elimination Mode Steps 1-8 per `ELIMINATION_MODE_SPEC.md`
+- OR **Phase C — Code Alignment** (V1 spec → code gap analysis)
 - OR browser-test Layer 5 enrichment UI (UNVERIFIED — no live testing done yet)
 
 ## GameTracker Delta Progress

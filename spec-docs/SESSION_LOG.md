@@ -1,6 +1,46 @@
 # KBL TRACKER — SESSION LOG
 # Previous sessions archived at: spec-docs/archive/SESSION_LOG_through_2026-02-11.md
 ---
+## Session: 2026-03-07 (G) — Elimination Mode Step 0: Data Integrity Audit
+
+### What Was Accomplished
+- ✅ Full field-by-field data flow audit: `playerDatabase.ts` → `convertPlayer()` → `lineupLoader.ts` → `GameTracker.tsx`
+- ✅ **TeamRoster.Player**: Added 15 optional fields (playerId, power, contact, speed, fieldingRating, arm, velocity, junk, accuracy, arsenal, overallGrade, trait1, trait2, personality, chemistry, age, throws, secondaryPosition)
+- ✅ **TeamRoster.Pitcher**: Added 14 optional fields (same pattern + batting ratings for pitchers who bat)
+- ✅ **lineupLoader.ts**: `convertToRosterPlayer()` and `convertToRosterPitcher()` now pass through all League Builder fields
+- ✅ **GameTracker.tsx**: `registerPlayer()` calls use real `trait1`/`trait2` and `age` (was hardcoded `[]` and `25`)
+- ✅ Audit report: `spec-docs/DATA_INTEGRITY_AUDIT.md`
+
+### Decisions Made
+- Game-session IDs remain name-hash based (`{team}-{normalized-name}`) for backward compatibility. LB `playerId` available on Player/Pitcher for cross-referencing but not used as session ID.
+- `personality` hardcoded to `'Competitive'` is acceptable — SMB4 doesn't expose personality separately from chemistry.
+- `morale` (75), `mojo` ('Normal'), `fame` (0) are correct starting baselines — managed by engines at runtime.
+- FIERY/GRITTY chemistry codes mapped to `Competitive` in `CHEMISTRY_MAP` — acceptable default.
+
+### NFL Results
+- Tier 1 (Code): ✅ Build exit 0, 4,028 tests pass
+- Tier 2 (Data Flow): ✅ Complete field-by-field trace in DATA_INTEGRITY_AUDIT.md
+- **Day Status**: COMPLETE
+
+### Files Modified
+- `src/src_figma/app/components/TeamRoster.tsx` — Player/Pitcher interface extensions
+- `src/src_figma/utils/lineupLoader.ts` — Field passthrough in both convert functions
+- `src/src_figma/app/pages/GameTracker.tsx` — Real traits/age in registerPlayer
+
+### Files Created
+- `spec-docs/DATA_INTEGRITY_AUDIT.md` — Full audit report
+
+### Build/Test Baseline
+- Build: PASS (exit 0)
+- Tests: 4,028 pass / 0 fail / 103 files
+- Commit: 5c2d53e (merged to main, pushed)
+
+### Pending / Next Steps
+- [ ] Elimination Mode Steps 1-8 per ELIMINATION_MODE_SPEC.md
+- [ ] Browser-test Layer 5 enrichment UI
+- [ ] Phase C: Code Alignment
+
+---
 ## Session: 2026-03-07 (F) — Layer 5: Enrichment & Play Log
 
 ### What Was Accomplished
