@@ -2121,3 +2121,85 @@ All 4 documents triaged across 10 sessions. 75 total sections: 32 KEEP, 37 SIMPL
 
 ### Next Action
 - Begin Phase C — Code Alignment (governed by V1_CODE_ALIGNMENT_PLAN.md)
+
+---
+
+## Session: 2026-03-07 — GameTracker Delta Complete + Elimination Mode Steps 0-2
+
+### Context
+Phase C pivoted from full code alignment to targeted GameTracker delta + Elimination Mode build. See GAMETRACKER_DELTA_PLAN.md for the full plan.
+
+### Accomplished (GameTracker Delta — ALL 55 TICKETS COMPLETE)
+
+**Phase 1: Quick Wins (11 tickets)** — Branch: `feature/gt-quick-wins`
+- Undo depth 5→10, game-end undo prevention, sac fly prompt, button availability fixes (SF/DP/TP/D3K), SAC no-runners disable, time play rule, lineup size validation, PH-must-bat, ❌ on used players, Manager Moment WPA verify, IFR auto-prompt
+
+**Layer 1A: Type Definitions (8 tickets)** — Branch: `feature/gt-layer1-tier1a-types`
+- KL→Kc rename (31 files, 69 occurrences), WP_K/PB_K added, sequence→eventIndex, runsScored number→string[], MojoLevelLabel/FitnessLevelLabel/FameLevel/SpecPitcherRole/HiddenModifiers adapter types
+
+**Layer 1B: Event Fields (9 tickets)** — Branch: `feature/gt-layer1b-event-fields`
+- AtBatEvent extended with ~100 lines of optional context snapshots: identity (seasonId/franchiseId/leagueId), parkContext, teamContext, batterContext (16 fields), pitcherContext (15 fields), matchupContext, computed fields, enrichment group, versioning
+- `buildContextSnapshot()` helper in useGameState.ts, wired at all 5 event construction sites
+- `setNextEventEnrichment()` exposed for field-path enrichment injection
+
+**Layer 1C: New Interfaces (2 tickets, 1 deferred)** — Branch: `feature/gt-layer1c-event-interfaces`
+- BetweenPlayEvent discriminated union (15 types) + betweenPlayEvents IndexedDB store (DB_VERSION 2→3)
+- GameRecord interface (extends CompletedGameRecord) + LineupEntry + captureStartingLineups()
+- TransactionEvent DEFERRED (franchise offseason, not needed for gameplay)
+
+**Layer 2: 5-Zone Layout (4 sessions)** — Branches: `feature/gt-layer2a` through `feature/gt-layer2d`
+- Session A: CSS Grid scaffold (320px / 1fr / 180px), FenwayBoard.tsx, QuickBar.tsx, PlayLogPanel.tsx shells
+- Session B: Quick Bar wired as primary 1-tap input, handleQuickBarOutcome with calculateRunnerDefaults, overflow menu with 13 secondary outcomes
+- Session C: Fenway Board with live data — batter/pitcher stats, mojo/fitness labels+colors, matchup record, milestone alert
+- Session D: Structured Play Log — PlayLogEntry interface, color-coded results, enrichment badges ([+fld], [+loc], [K?], [Q]), undo integration
+
+**Layer 3: Baseball Rules (3 tickets)** — Branch: `feature/gt-layer3-baseball-rules`
+- isAB filter fix (added IBB, SH→SAC), GRD (Ground Rule Double) fully implemented, tag-up enforcement (FO/LO hold by default, SF exception)
+
+**Layer 4: Between-Play + Subs (7 tickets)** — Branch: `feature/gt-layer4-between-play-subs`
+- RunnerPopover.tsx (tap runner → Steal/Advance/WP/PB/Pickoff/Substitute)
+- FielderPopover.tsx (tap fielder → PinchHit/Substitute/MovePosition)
+- FenwayBoard pitcher tap → pitching change
+- Position innings tracking (positionInningsRef in useGameState)
+
+**Layer 5: Enrichment (8 tickets)** — Branch: `feature/gt-layer5-enrichment`
+- EnrichmentPanel.tsx (MiniDiamond SVG, FieldingSequenceInput, pitch type selector, HR distance)
+- K/Kc inline toggle badge, QAB detection (7+ pitches/walks/hits)
+- Between-inning enrichment prompt, post-game enrichment summary
+- updateAtBatEvent() function in eventLog.ts
+
+### Accomplished (Elimination Mode — Steps 0-2)
+
+**Step 0: League Builder Data Integrity Audit** — Branch: `feature/elim-step0-data-integrity`
+- Full field-by-field pipeline audit: playerDatabase → convertPlayer → lineupLoader → GameTracker
+- Added 15 optional fields to TeamRoster.Player, 14 to Pitcher (ratings, traits, arsenal, grade, etc.)
+- lineupLoader now passes through all League Builder fields
+- GameTracker registerPlayer uses real traits + age
+- Audit report: spec-docs/DATA_INTEGRITY_AUDIT.md
+
+**Step 1: DB Migrations** — Branch: `feature/elim-step1-db-migrations`
+- kbl-playoffs v1→v2: dropped unique constraint on seasonNumber, added sourceType + eliminationId to PlayoffConfig
+- kbl-app-meta v2→v3: added eliminationList store
+- kbl-tracker v3→v4: added rosterSnapshots + mojoFitnessSnapshots stores
+
+**Step 2: Rename WorldSeries → EliminationHome** — Branch: `feature/elim-step2-rename`
+- WorldSeries.tsx → EliminationHome.tsx (file + export rename)
+- Routes: /world-series → /elimination/:eliminationId
+- Placeholder routes for /elimination/select and /elimination/setup
+- AppHome nav link updated
+
+### Key Specs Created This Session
+- `spec-docs/ELIMINATION_MODE_SPEC.md` (v2, 472 lines) — Super-lite wrapper over existing infrastructure
+- `spec-docs/GAMETRACKER_DELTA_PLAN.md` — Full 5-step plan with routing table
+- `spec-docs/GAMETRACKER_DELTA_REPORT.md` — Sessions 1-3 delta assessment
+- `spec-docs/GAMETRACKER_BUILD_PLAN.md` — 55 tickets organized by layer
+- `spec-docs/DATA_INTEGRITY_AUDIT.md` — Player data flow audit
+- `spec-docs/KEEP.md` — Protected files list (updated with config exception)
+
+### Build Status Throughout
+- Build: PASS at every step
+- Tests: 4,028 pass / 0 fail / 103 files at every step
+
+### Next Action
+**Elimination Mode Step 3:** Build `eliminationManager.ts` — CRUD for elimination instances.
+Then Steps 4-14 per ELIMINATION_MODE_SPEC.md §11.
