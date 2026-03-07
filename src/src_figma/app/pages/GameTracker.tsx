@@ -7,6 +7,8 @@ import { HTML5Backend } from "react-dnd-html5-backend";
 // import { BaserunnerDragDrop, type RunnerMoveData as LegacyRunnerMoveData } from "@/app/components/BaserunnerDragDrop";
 import { EnhancedInteractiveField, type PlayData, type SpecialEventData } from "@/app/components/EnhancedInteractiveField";
 import { type RunnerMoveData } from "@/app/components/RunnerDragDrop";
+import { RunnerPopover, type RunnerBase } from "@/app/components/RunnerPopover";
+import { FielderPopover, type FielderInfo, type BenchPlayerInfo } from "@/app/components/FielderPopover";
 import { LineupCard, type SubstitutionData, type LineupPlayer, type BenchPlayer, type BullpenPitcher } from "@/app/components/LineupCard";
 import { UndoButton, useUndoSystem, type GameSnapshot } from "@/app/components/UndoSystem";
 import { TeamRoster, type Player, type Pitcher } from "@/app/components/TeamRoster";
@@ -389,6 +391,18 @@ export function GameTracker() {
       return prev;
     });
   }, [gameState.bases.first, gameState.bases.second, gameState.bases.third, runnerIdentityVersion, getBaseRunnerNames]);
+
+  // ============================================
+  // POPOVER STATE — Runner & Fielder tap menus (Layer 4)
+  // ============================================
+  const [activeRunnerPopover, setActiveRunnerPopover] = useState<{
+    base: RunnerBase;
+    anchorPosition: { left: string; top: string };
+  } | null>(null);
+  const [activeFielderPopover, setActiveFielderPopover] = useState<{
+    fielder: FielderInfo;
+    anchorPosition: { left: string; top: string };
+  } | null>(null);
 
   // MAJ-03: Detection system state — pending prompts for user confirmation
   const [pendingDetections, setPendingDetections] = useState<UIDetectionResult[]>([]);
@@ -2267,6 +2281,135 @@ export function GameTracker() {
   }, []);
 
   // ============================================
+  // RUNNER POPOVER HANDLERS (Layer 4 — tickets 4.1, 4.2, 4.4)
+  // ============================================
+
+  const handleRunnerTap = useCallback((base: 'first' | 'second' | 'third', anchorPosition: { left: string; top: string }) => {
+    setActiveFielderPopover(null); // Close any open fielder popover
+    setActiveRunnerPopover({ base, anchorPosition });
+  }, []);
+
+  const closeRunnerPopover = useCallback(() => {
+    setActiveRunnerPopover(null);
+  }, []);
+
+  const nextBaseMap: Record<RunnerBase, 'second' | 'third' | 'home'> = {
+    first: 'second', second: 'third', third: 'home',
+  };
+
+  const handleRunnerSteal = useCallback((base: RunnerBase) => {
+    undoSystem.captureSnapshot(`SB: ${base} → ${nextBaseMap[base]}`);
+    advanceRunner(base, nextBaseMap[base], 'safe');
+    recordEvent('SB');
+    setActiveRunnerPopover(null);
+  }, [advanceRunner, recordEvent, undoSystem]);
+
+  const handleRunnerAdvance = useCallback((base: RunnerBase) => {
+    undoSystem.captureSnapshot(`Advance: ${base} → ${nextBaseMap[base]}`);
+    advanceRunner(base, nextBaseMap[base], 'safe');
+    setActiveRunnerPopover(null);
+  }, [advanceRunner, undoSystem]);
+
+  const handleRunnerWP = useCallback((base: RunnerBase, dest?: 'second' | 'third' | 'home') => {
+    const to = dest || nextBaseMap[base];
+    undoSystem.captureSnapshot(`WP: ${base} → ${to}`);
+    advanceRunner(base, to, 'safe');
+    recordEvent('WP');
+    setActiveRunnerPopover(null);
+  }, [advanceRunner, recordEvent, undoSystem]);
+
+  const handleRunnerPB = useCallback((base: RunnerBase, dest?: 'second' | 'third' | 'home') => {
+    const to = dest || nextBaseMap[base];
+    undoSystem.captureSnapshot(`PB: ${base} → ${to}`);
+    advanceRunner(base, to, 'safe');
+    recordEvent('PB');
+    setActiveRunnerPopover(null);
+  }, [advanceRunner, recordEvent, undoSystem]);
+
+  const handleRunnerPickoff = useCallback((base: RunnerBase) => {
+    undoSystem.captureSnapshot(`Pickoff: ${base}`);
+    // Pickoff = runner is out at their current base
+    advanceRunner(base, nextBaseMap[base], 'out');
+    recordEvent('PICK');
+    setActiveRunnerPopover(null);
+  }, [advanceRunner, recordEvent, undoSystem]);
+
+  const handleRunnerSubstitute = useCallback((base: RunnerBase) => {
+    // Close runner popover — user will use the LineupCard for the actual pinch runner selection
+    // TODO: Could open a dedicated pinch-runner picker modal inline
+    setActiveRunnerPopover(null);
+    console.log(`[GameTracker] Pinch runner requested at ${base} — use LineupCard to complete`);
+  }, []);
+
+  // ============================================
+  // FIELDER POPOVER HANDLERS (Layer 4 — tickets 4.3, 4.5)
+  // ============================================
+
+  const handleFielderTap = useCallback((positionNumber: number, playerName: string, anchorPosition: { left: string; top: string }) => {
+    setActiveRunnerPopover(null); // Close any open runner popover
+    // Map position number to label
+    const posLabels: Record<number, string> = { 1: 'P', 2: 'C', 3: '1B', 4: '2B', 5: '3B', 6: 'SS', 7: 'LF', 8: 'CF', 9: 'RF' };
+    const positionLabel = posLabels[positionNumber] || `P${positionNumber}`;
+    const playerId = generatePlayerId(playerName, fieldingTeam);
+    const isCurrentBatter = playerName === gameState.currentBatterName;
+
+    setActiveFielderPopover({
+      fielder: { positionNumber, positionLabel, playerName, playerId, isCurrentBatter },
+      anchorPosition,
+    });
+  }, [fieldingTeam, gameState.currentBatterName, generatePlayerId]);
+
+  const closeFielderPopover = useCallback(() => {
+    setActiveFielderPopover(null);
+  }, []);
+
+  const handleFielderSubstitute = useCallback((benchPlayerId: string, benchPlayerName: string, fielderId: string, fielderName: string) => {
+    handleSubstitution(fieldingTeam, benchPlayerName, fielderName);
+    setActiveFielderPopover(null);
+  }, [fieldingTeam, handleSubstitution]);
+
+  const handleFielderPinchHit = useCallback((benchPlayerId: string, benchPlayerName: string, fielderId: string, fielderName: string) => {
+    // Pinch hit = batting team sub (current batter replaced)
+    handleSubstitution(battingTeam, benchPlayerName, fielderName);
+    setActiveFielderPopover(null);
+  }, [battingTeam, handleSubstitution]);
+
+  const handleFielderMovePosition = useCallback((playerId: string, newPosition: string) => {
+    switchPositions([{ playerId, newPosition }]);
+    setActiveFielderPopover(null);
+  }, [switchPositions]);
+
+  // ============================================
+  // PITCHER TAP HANDLER (Layer 4 — ticket 4.6)
+  // ============================================
+
+  const handlePitcherTap = useCallback(() => {
+    // If there are available pitchers, trigger pitching change
+    if (availablePitchers.length > 0) {
+      const firstAvailable = availablePitchers[0];
+      // Use existing handlePitcherSubstitution with the first available pitcher
+      // In future, could open a pitcher picker modal. For now, log the intent.
+      console.log('[GameTracker] Pitcher tap — available pitchers:', availablePitchers.map(p => p.name).join(', '));
+      // Open a simple pitcher picker by triggering the lineup card's bullpen section
+      // For now, trigger the change with the first available pitcher
+      handlePitcherSubstitution(fieldingTeam, firstAvailable.name, gameState.currentPitcherName, 'pitcher');
+    }
+  }, [availablePitchers, fieldingTeam, gameState.currentPitcherName, handlePitcherSubstitution]);
+
+  // Bench players for fielder popover (fielding team bench)
+  const fielderPopoverBenchPlayers: BenchPlayerInfo[] = useMemo(() => {
+    const fieldingPlayers = fieldingTeam === 'home' ? homeTeamPlayers : awayTeamPlayers;
+    return fieldingPlayers
+      .filter(p => p.battingOrder === undefined)
+      .map(p => ({
+        id: generatePlayerId(p.name, fieldingTeam),
+        name: p.name,
+        position: p.position || 'UT',
+        isUsed: p.isOutOfGame || false,
+      }));
+  }, [fieldingTeam, homeTeamPlayers, awayTeamPlayers, generatePlayerId]);
+
+  // ============================================
   // OUTCOME RECORDING HANDLERS
   // ============================================
 
@@ -2773,6 +2916,7 @@ export function GameTracker() {
               const pitcher = gameState.isTop ? homePitcher : awayPitcher;
               return pitcher?.throwingHand;
             })()}
+            onPitcherTap={availablePitchers.length > 0 ? handlePitcherTap : undefined}
           />
         </div>
 
@@ -2807,7 +2951,38 @@ export function GameTracker() {
             runnerNames={runnerNames}
             currentBatterName={gameState.currentBatterName}
             zoomLevel={fieldZoomLevel}
+            onRunnerTap={handleRunnerTap}
+            onFielderTap={handleFielderTap}
           />
+
+          {/* Runner Popover — tap runner on diamond → action menu (§5.1) */}
+          {activeRunnerPopover && (
+            <RunnerPopover
+              base={activeRunnerPopover.base}
+              runnerName={runnerNames[activeRunnerPopover.base] || `R${activeRunnerPopover.base === 'first' ? '1' : activeRunnerPopover.base === 'second' ? '2' : '3'}`}
+              anchorPosition={activeRunnerPopover.anchorPosition}
+              onSteal={handleRunnerSteal}
+              onAdvance={handleRunnerAdvance}
+              onWildPitch={handleRunnerWP}
+              onPassedBall={handleRunnerPB}
+              onPickoff={handleRunnerPickoff}
+              onSubstitute={handleRunnerSubstitute}
+              onClose={closeRunnerPopover}
+            />
+          )}
+
+          {/* Fielder Popover — tap fielder on diamond → substitution menu (§7.2) */}
+          {activeFielderPopover && (
+            <FielderPopover
+              fielder={activeFielderPopover.fielder}
+              anchorPosition={activeFielderPopover.anchorPosition}
+              benchPlayers={fielderPopoverBenchPlayers}
+              onSubstitute={handleFielderSubstitute}
+              onPinchHit={handleFielderPinchHit}
+              onMovePosition={handleFielderMovePosition}
+              onClose={closeFielderPopover}
+            />
+          )}
         </div>
 
         {/* ZONE 3: Play Log — right panel, spans both rows */}

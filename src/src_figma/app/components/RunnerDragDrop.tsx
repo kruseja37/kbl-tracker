@@ -8,7 +8,7 @@
  * - Error mode for fielding errors on runner plays
  */
 
-import { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import { useDrag, useDrop } from 'react-dnd';
 import {
   normalizedToSvg,
@@ -46,6 +46,8 @@ export interface RunnerDragDropProps {
   onDragStart?: (from: Exclude<BaseId, 'home'>) => void;
   /** Callback when runner drag ends (to hide drop zones) */
   onDragEnd?: () => void;
+  /** Callback when runner is tapped (not dragged) — opens popover per §5.1 */
+  onRunnerTap?: (base: Exclude<BaseId, 'home'>, anchorPosition: { left: string; top: string }) => void;
   /** Field dimensions for positioning */
   fieldWidth?: number;
   fieldHeight?: number;
@@ -103,15 +105,22 @@ interface RunnerIconProps {
   runnerName?: string;
   onDragStart?: () => void;
   onDragEnd?: () => void;
+  /** Callback for tap (not drag) — opens popover */
+  onTap?: (anchorPosition: { left: string; top: string }) => void;
 }
 
-function RunnerIcon({ base, runnerName, onDragStart, onDragEnd }: RunnerIconProps) {
+function RunnerIcon({ base, runnerName, onDragStart, onDragEnd, onTap }: RunnerIconProps) {
   // Get current viewBox from context (for dynamic zoom support)
   const viewBox = useViewBox();
+
+  // Tap detection: track pointer down time + position to distinguish tap from drag
+  const pointerDownRef = useRef<{ time: number; x: number; y: number } | null>(null);
+  const didDragRef = useRef(false);
 
   const [{ isDragging }, drag] = useDrag(() => ({
     type: ItemTypes.RUNNER,
     item: (): DragItem => {
+      didDragRef.current = true;
       onDragStart?.();
       return { type: 'RUNNER', fromBase: base };
     },
@@ -138,6 +147,26 @@ function RunnerIcon({ base, runnerName, onDragStart, onDragEnd }: RunnerIconProp
     ? runnerName.split(' ').pop()?.toUpperCase() || `R${baseLabel}`
     : `R${baseLabel}`;
 
+  const handlePointerDown = useCallback((e: React.PointerEvent) => {
+    didDragRef.current = false;
+    pointerDownRef.current = { time: Date.now(), x: e.clientX, y: e.clientY };
+  }, []);
+
+  const handlePointerUp = useCallback((e: React.PointerEvent) => {
+    if (!pointerDownRef.current || didDragRef.current) {
+      pointerDownRef.current = null;
+      return;
+    }
+    const elapsed = Date.now() - pointerDownRef.current.time;
+    const dx = Math.abs(e.clientX - pointerDownRef.current.x);
+    const dy = Math.abs(e.clientY - pointerDownRef.current.y);
+    pointerDownRef.current = null;
+    // Tap: < 300ms, moved < 8px
+    if (elapsed < 300 && dx < 8 && dy < 8 && onTap) {
+      onTap({ left, top });
+    }
+  }, [onTap, left, top]);
+
   return (
     <div
       ref={drag as DndRef}
@@ -145,6 +174,8 @@ function RunnerIcon({ base, runnerName, onDragStart, onDragEnd }: RunnerIconProp
         isDragging ? 'opacity-50' : ''
       }`}
       style={{ left, top }}
+      onPointerDown={handlePointerDown}
+      onPointerUp={handlePointerUp}
     >
       {/* Runner icon - baseball player silhouette style */}
       <div
@@ -353,6 +384,7 @@ export function RunnerDragDrop({
   onRunnerMove,
   onDragStart,
   onDragEnd,
+  onRunnerTap,
 }: RunnerDragDropProps) {
   // Track when a runner is being dragged to show drop zones
   const [isDragging, setIsDragging] = useState(false);
@@ -420,6 +452,7 @@ export function RunnerDragDrop({
           runnerName={runnerNames.first}
           onDragStart={() => handleDragStart('first')}
           onDragEnd={handleDragEnd}
+          onTap={onRunnerTap ? (pos) => onRunnerTap('first', pos) : undefined}
         />
       )}
       {bases.second && (
@@ -428,6 +461,7 @@ export function RunnerDragDrop({
           runnerName={runnerNames.second}
           onDragStart={() => handleDragStart('second')}
           onDragEnd={handleDragEnd}
+          onTap={onRunnerTap ? (pos) => onRunnerTap('second', pos) : undefined}
         />
       )}
       {bases.third && (
@@ -436,6 +470,7 @@ export function RunnerDragDrop({
           runnerName={runnerNames.third}
           onDragStart={() => handleDragStart('third')}
           onDragEnd={handleDragEnd}
+          onTap={onRunnerTap ? (pos) => onRunnerTap('third', pos) : undefined}
         />
       )}
 

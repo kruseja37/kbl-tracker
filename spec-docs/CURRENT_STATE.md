@@ -1,7 +1,7 @@
 # CURRENT_STATE.md
 
-**Last Updated:** 2026-03-06
-**Phase:** V1 Simplification — Phase B COMPLETE → Phase C Next | GameTracker Delta: Layer 3 COMPLETE
+**Last Updated:** 2026-03-07
+**Phase:** V1 Simplification — Phase B COMPLETE → Phase C Next | GameTracker Delta: Layer 4 COMPLETE
 
 ---
 
@@ -11,28 +11,20 @@ Phase B — V1 Spec Assembly — **COMPLETE.** Four V1_FINAL.md build specs prod
 
 ## Last Completed Action
 
-Session 2026-03-06 (D): Completed GameTracker Delta Layer 3 — Baseball Rules.
+Session 2026-03-07 (E): Completed GameTracker Delta Layer 4 — Between-Play Events & Substitutions.
 
-- **TICKET 3.1 (GAP-GT-6-F)**: Fixed `isAB` filter in `src/utils/eventLog.ts:951` — added IBB, changed SH→SAC
-- **TICKET 3.5 (GAP-GT-6-D)**: Added GRD (Ground Rule Double) to AtBatResult, HitType, QuickBar overflow, runner defaults, clutch mapping
-- **TICKET 3.6 (GAP-GT-6-E)**: Tag-up enforcement — FO/LO runners hold by default (was auto-advancing); explicit SF case added (R3 scores)
-- Commit: `070affc` — 9 files, 544 insertions/46 deletions, 4028 tests pass
-
-Deliverables produced:
-- `MODE_2_V1_FINAL.md` (3,428 lines) — heart of the app, all 25 v1 sections with full data models/formulas/interfaces
-- `MODE_1_V1_FINAL.md` (1,682 lines) — league builder with all corrections applied (presets removed, 3-value offseasonScope, franchiseRegistry store added)
-- `MODE_3_V1_FINAL.md` (1,619 lines) — 13-phase offseason with all corrections (Team Captain moved to Phase 13, un-retirement removed, 3-value offseasonScope)
-- `ALMANAC_V1_FINAL.md` (610 lines) — cross-franchise Almanac with franchise registry, custom views, data export
-- `V2_DEFERRED_BACKLOG.md` updated with Mode 3 + Almanac deferrals (was missing these from Phase A)
-
-Cross-reference reconciliation resolved 3 blocking conflicts:
-1. MODE_2 SeasonSummary `seasonClassification` field removed (was deferred but still present)
-2. MODE_1 `offseasonScope` corrected from 2-value to 3-value (`'default' | 'human-only' | 'all-teams'`) to match Mode 3
-3. MODE_1 global stores: `franchiseRegistry` added (required by Almanac cross-franchise queries)
+- **TICKET 4.1 (GAP-GT-5-A)**: Runner tap → popover (Steal/Advance/WP/PB/Pickoff/Substitute)
+- **TICKET 4.2 (GAP-GT-5-B)**: WP/PB destination picker (non-standard advance)
+- **TICKET 4.3 (GAP-GT-7-A)**: Fielder tap → substitution flow (SubstitutionModalBase)
+- **TICKET 4.4 (GAP-GT-5-C)**: Pinch runner [Substitute] in runner popover
+- **TICKET 4.5 (GAP-GT-5-F)**: [Move Position] in fielder popover
+- **TICKET 4.6 (GAP-GT-5-E)**: Tappable pitcher in FenwayBoard → pitching change
+- **TICKET 4.10 (GAP-GT-5-G)**: Position innings tracking (positionInningsRef)
+- Branch: `feature/gt-layer4-between-play-subs` — build pass, 4,028 tests pass
 
 ## Next Action
 
-**GameTracker Delta Layer 4** — Wire BetweenPlayEvent to useGameState.ts; Wire startingLineupsRef into archive flow.
+**GameTracker Delta Layer 5** — Special Events (TOOTBLAN, Web Gem, Nut Shot auto-detect).
 OR continue **Phase C — Code Alignment** (V1 spec → code gap analysis).
 
 ## GameTracker Delta Progress
@@ -46,7 +38,7 @@ OR continue **Phase C — Code Alignment** (V1 spec → code gap analysis).
 | Layer 2B: Quick Bar | ✅ COMPLETE | 512e7ea |
 | Layer 2C+D: Fenway Board + Play Log | ✅ COMPLETE | 8077ddc |
 | Layer 3: Baseball Rules | ✅ COMPLETE | 070affc |
-| Layer 4: Between-Play Wiring | ⬜ NOT STARTED | — |
+| Layer 4: Between-Play Wiring | ✅ COMPLETE | (branch: feature/gt-layer4-between-play-subs) |
 | Layer 5: Special Events | ⬜ NOT STARTED | — |
 
 ---

@@ -40,6 +40,9 @@ interface FenwayBoardProps {
 
   // Milestone proximity
   milestoneAlert?: string;  // "1 from 500 hits" or null
+
+  /** Callback when pitcher name is tapped — triggers pitching change per §5.2 / ticket 4.6 */
+  onPitcherTap?: () => void;
 }
 
 /** Format IP from outs recorded: 6 outs → "2.0", 7 outs → "2.1" */
@@ -84,6 +87,7 @@ export function FenwayBoard({
   matchupRecord,
   matchupAvg,
   milestoneAlert,
+  onPitcherTap,
 }: FenwayBoardProps) {
   return (
     <div className="bg-[#556B55] border-[3px] border-[#3d5240] h-full overflow-hidden flex flex-col">
@@ -156,7 +160,13 @@ export function FenwayBoard({
               </span>
             )}
           </div>
-          <div className="text-[11px] text-[#E8E8D8] font-bold leading-tight">{currentPitcherName || '—'}</div>
+          <div
+            className={`text-[11px] text-[#E8E8D8] font-bold leading-tight${onPitcherTap ? ' cursor-pointer hover:text-[#5dade2] hover:underline transition-colors' : ''}`}
+            onClick={onPitcherTap}
+            title={onPitcherTap ? 'Tap for pitching change' : undefined}
+          >
+            {currentPitcherName || '—'}
+          </div>
           {pitcherPitchCount !== undefined && (
             <div className="flex gap-2 mt-0.5">
               <span className="text-[8px] text-[#aaccaa]">

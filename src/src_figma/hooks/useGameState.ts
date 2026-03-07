@@ -212,6 +212,9 @@ export interface UseGameStateReturn {
   // Enrichment injection (Layer 1B)
   setNextEventEnrichment: (data: AtBatEvent['enrichment']) => void;
 
+  /** Position innings map: playerId → { [position]: halfInningsPlayed } (ticket 4.10) */
+  positionInnings: Map<string, Record<string, number>>;
+
   // Initialization
   initializeGame: (config: GameInitConfig) => Promise<void>;
   loadExistingGame: () => Promise<boolean>;
@@ -1115,6 +1118,13 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
   const homeLineupStateRef = useRef<LineupState>({
     lineup: [], bench: [], usedPlayers: [], currentPitcher: null,
   });
+
+  // ============================================
+  // POSITION INNINGS TRACKING (ticket 4.10 — Gold Glove / dWAR)
+  // Maps playerId → { [position]: halfInningsPlayed }
+  // Incremented at end of each half-inning for the fielding team
+  // ============================================
+  const positionInningsRef = useRef<Map<string, Record<string, number>>>(new Map());
 
   // Playoff context refs (set from GameTracker navigation state)
   const playoffSeriesIdRef = useRef<string | null>(null);
@@ -4165,6 +4175,24 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       console.log(`[T0-01] Tied ${homeScore}-${awayScore} after regulation. Extra innings.`);
     }
 
+    // Ticket 4.10: Record position innings for the fielding team at end of half-inning
+    // When isTop = true, home team was fielding; when isTop = false, away team was fielding
+    const fieldingLineupState = isTop ? homeLineupStateRef.current : awayLineupStateRef.current;
+    for (const player of fieldingLineupState.lineup) {
+      if (player.position && player.position !== 'DH') {
+        const existing = positionInningsRef.current.get(player.playerId) || {};
+        existing[player.position] = (existing[player.position] || 0) + 1;
+        positionInningsRef.current.set(player.playerId, existing);
+      }
+    }
+    // Also record position innings for the current pitcher
+    const fieldingPitcher = fieldingLineupState.currentPitcher;
+    if (fieldingPitcher) {
+      const existing = positionInningsRef.current.get(fieldingPitcher.playerId) || {};
+      existing['P'] = (existing['P'] || 0) + 1;
+      positionInningsRef.current.set(fieldingPitcher.playerId, existing);
+    }
+
     // CRIT-02: Clear runner tracker for new half-inning and update inning number
     let endTracker = trackerClearBases(runnerTrackerRef.current);
     endTracker = trackerNextInning(endTracker);
@@ -4835,5 +4863,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     setPlayoffContext,
     setStadiumName,
     setNextEventEnrichment,
+    /** Position innings map: playerId → { [position]: halfInningsPlayed } (ticket 4.10) */
+    positionInnings: positionInningsRef.current,
   };
 }

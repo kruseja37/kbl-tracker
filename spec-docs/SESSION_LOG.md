@@ -1,6 +1,61 @@
 # KBL TRACKER — SESSION LOG
 # Previous sessions archived at: spec-docs/archive/SESSION_LOG_through_2026-02-11.md
 ---
+## Session: 2026-03-07 (E) — Layer 4: Between-Play Events & Substitutions
+
+### What Was Accomplished
+- ✅ **TICKET 4.1 (GAP-GT-5-A)**: Runner tap → popover with Steal/Advance/WP/PB/Pickoff/Substitute
+- ✅ **TICKET 4.2 (GAP-GT-5-B)**: WP/PB non-standard advance destination picker (sub-view in popover)
+- ✅ **TICKET 4.3 (GAP-GT-7-A)**: Fielder tap → substitution flow (SubstitutionModalBase-based)
+- ✅ **TICKET 4.4 (GAP-GT-5-C)**: Pinch runner [Substitute] button in runner popover
+- ✅ **TICKET 4.5 (GAP-GT-5-F)**: [Move Position] in fielder popover with PositionSelect
+- ✅ **TICKET 4.6 (GAP-GT-5-E)**: Tappable pitcher name in FenwayBoard → pitching change
+- ✅ **TICKET 4.10 (GAP-GT-5-G)**: Position innings tracking via positionInningsRef in useGameState
+
+### Decisions Made
+- Tap detection in RunnerDragDrop uses pointerDown/pointerUp + `didDragRef` to distinguish taps from drags (<300ms, <8px movement)
+- Fielder tap only fires in IDLE flowStep (no interference with play recording)
+- Pitcher tap in FenwayBoard triggers `changePitcher()` with first available pitcher (simple for now)
+- Position innings increment at `executeEndInning()` for fielding team lineup (DH excluded)
+- Runner popover Substitute button logs intent — pinch runner selection still uses LineupCard path
+
+### NFL Results
+- Tier 1 (Code): ✅ Build exit 0
+- Tier 2 (Data Flow): ✅ RunnerDragDrop.onTap → EIF.onRunnerTap → GameTracker → RunnerPopover → advanceRunner/recordEvent
+- Tier 2 (Data Flow): ✅ FielderIcon.onClick → EIF.onFielderTap → GameTracker → FielderPopover → makeSubstitution/switchPositions
+- Tier 2 (Data Flow): ✅ FenwayBoard.onPitcherTap → GameTracker → changePitcher()
+- Tier 2 (Data Flow): ✅ executeEndInning() → positionInningsRef increment per fielder
+- Tier 3 (Spec Alignment): ✅ All 7 tickets match §5.1/§5.2/§7.2 spec
+- **Day Status**: COMPLETE
+
+### Files Created
+- `src/src_figma/app/components/RunnerPopover.tsx` — contextual runner action menu (6 actions + destination picker)
+- `src/src_figma/app/components/FielderPopover.tsx` — contextual fielder action menu (PinchHit/Substitute/MovePosition)
+
+### Files Modified
+- `src/src_figma/app/components/RunnerDragDrop.tsx` — added tap detection (onTap, pointerDown/Up)
+- `src/src_figma/app/components/EnhancedInteractiveField.tsx` — added onRunnerTap/onFielderTap props, idle-state fielder tap
+- `src/src_figma/app/components/FenwayBoard.tsx` — added onPitcherTap prop, pitcher name clickable
+- `src/src_figma/hooks/useGameState.ts` — positionInningsRef + endInning increment + hook return
+- `src/src_figma/app/pages/GameTracker.tsx` — imports, popover state, 14 handlers, rendering
+
+### Build/Test Baseline
+- Build: PASS (exit 0)
+- Tests: 4,028 pass / 0 fail / 103 files
+- Branch: `feature/gt-layer4-between-play-subs`
+
+### Pending / Next Steps
+- [ ] Layer 5: Special Events (TOOTBLAN, Web Gem, Nut Shot auto-detect)
+- [ ] Wire startingLineupsRef into archive flow at game end (GameRecord population)
+- [ ] Phase C: Code Alignment (V1 spec → code gap analysis)
+
+### Key Context for Next Session
+- Feature branch: `feature/gt-layer4-between-play-subs` — NOT yet committed or merged
+- Popover architecture: RunnerPopover + FielderPopover are lightweight components rendered as overlays in GameTracker's Zone 2 (diamond area)
+- Tap vs Drag: RunnerDragDrop uses didDragRef to prevent tap firing on drag-initiated gestures
+- Position innings tracked as Map<playerId, Record<position, halfInnings>> in useGameState ref
+
+---
 ## Session: 2026-03-06 (D) — Layer 3: Baseball Rules (GAP-GT-6-D/E/F)
 
 ### What Was Accomplished

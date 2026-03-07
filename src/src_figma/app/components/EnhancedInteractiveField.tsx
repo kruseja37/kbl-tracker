@@ -497,6 +497,10 @@ export interface EnhancedInteractiveFieldProps {
    * Default: 0 (full field view)
    */
   zoomLevel?: number;
+  /** Callback when a runner is tapped (not dragged) — opens runner popover per §5.1 */
+  onRunnerTap?: (base: 'first' | 'second' | 'third', anchorPosition: { left: string; top: string }) => void;
+  /** Callback when a fielder is tapped in idle state — opens fielder popover per §7.2 */
+  onFielderTap?: (positionNumber: number, playerName: string, anchorPosition: { left: string; top: string }) => void;
 }
 
 // Re-export RunnerMoveData for consumers
@@ -1668,6 +1672,8 @@ export function EnhancedInteractiveField({
   runnerNames = {},
   currentBatterName = 'BATTER',
   zoomLevel = 0,
+  onRunnerTap,
+  onFielderTap,
 }: EnhancedInteractiveFieldProps) {
   // ============================================
   // NEW 5-STEP FLOW STATE (per GAMETRACKER_UI_DESIGN.md)
@@ -2470,7 +2476,7 @@ export function EnhancedInteractiveField({
     setBatterPosition(null);
   }, []);
 
-  // Handle fielder click (add to throw sequence OR attribute error)
+  // Handle fielder click (add to throw sequence OR attribute error OR idle-state tap)
   const handleFielderClick = useCallback(
     (fielder: FielderData) => {
       // Error flow: If awaiting error fielder, capture it and show ErrorTypePopup
@@ -2479,6 +2485,19 @@ export function EnhancedInteractiveField({
         setErrorFielder(fielder);
         setAwaitingErrorFielder(false);
         setShowErrorTypePopup(true);
+        return;
+      }
+
+      // Idle-state tap → open fielder popover (substitution/move per §7.2)
+      if (flowStep === 'IDLE' && placedFielders.length === 0 && onFielderTap) {
+        // Get fielder position for anchor
+        const pos = FIELDER_POSITIONS[fielder.positionNumber];
+        if (pos) {
+          const svgCoords = { svgX: pos.x * SVG_WIDTH, svgY: pos.y * SVG_HEIGHT };
+          const leftPct = (svgCoords.svgX / SVG_WIDTH) * 100;
+          const topPct = (svgCoords.svgY / SVG_HEIGHT) * 100;
+          onFielderTap(fielder.positionNumber, fielder.name, { left: `${leftPct}%`, top: `${topPct}%` });
+        }
         return;
       }
 
@@ -2492,7 +2511,7 @@ export function EnhancedInteractiveField({
       const newSequence = [...throwSequence, fielder];
       setThrowSequence(newSequence);
     },
-    [placedFielders.length, throwSequence, awaitingErrorFielder]
+    [placedFielders.length, throwSequence, awaitingErrorFielder, flowStep, onFielderTap]
   );
 
   // Get sequence number for a fielder
@@ -3922,6 +3941,7 @@ export function EnhancedInteractiveField({
               bases={gameSituation.bases}
               runnerNames={runnerNames}
               onRunnerMove={onRunnerMove}
+              onRunnerTap={flowStep === 'IDLE' ? onRunnerTap : undefined}
             />
           )}
 
