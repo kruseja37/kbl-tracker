@@ -1,116 +1,89 @@
 # CURRENT_STATE.md
 
-**Last Updated:** 2026-03-05
-**Phase:** V1 Simplification — Phase A COMPLETE → Phase B Next
+**Last Updated:** 2026-03-06
+**Phase:** V1 Simplification — Phase B COMPLETE → Phase C Next | GameTracker Delta: Layer 3 COMPLETE
 
 ---
 
 ## Current Phase and Step
 
-Phase A — Spec Triage — **COMPLETE.** All four gospel documents triaged across 10 sessions (75 sections total). Phase B — V1 Spec Assembly is next.
+Phase B — V1 Spec Assembly — **COMPLETE.** Four V1_FINAL.md build specs produced, V2_DEFERRED_BACKLOG.md updated, cross-reference reconciliation passed (3 conflicts found and resolved). Phase C — Code Alignment is next.
 
 ## Last Completed Action
 
-Session 10 (2026-03-05): Completed Almanac triage — all 10 sections. Phase A is now complete.
+Session 2026-03-06 (D): Completed GameTracker Delta Layer 3 — Baseball Rules.
 
-Key Almanac decisions:
-- Almanac accessible from app home screen (not just inside franchises)
-- Cross-franchise querying across all saved franchises with franchise filter
-- Custom views: saved filter presets + custom leaderboard column selection (v1)
-- Data export: CSV, PDF, JSON from any Almanac view (v1)
-- Franchise registry store (12th IndexedDB store, top-level)
-- HOF empty-state placeholder with eligibility preview
-- Awards history shows all 13 award categories
-- Player profiles with franchise badge + cross-franchise disambiguation page
-- Trait history is source-agnostic (consumes all trait change events)
-- Tiered performance: 100ms single-franchise, 300ms ≤5 franchises, best-effort 6+
+- **TICKET 3.1 (GAP-GT-6-F)**: Fixed `isAB` filter in `src/utils/eventLog.ts:951` — added IBB, changed SH→SAC
+- **TICKET 3.5 (GAP-GT-6-D)**: Added GRD (Ground Rule Double) to AtBatResult, HitType, QuickBar overflow, runner defaults, clutch mapping
+- **TICKET 3.6 (GAP-GT-6-E)**: Tag-up enforcement — FO/LO runners hold by default (was auto-advancing); explicit SF case added (R3 scores)
+- Commit: `070affc` — 9 files, 544 insertions/46 deletions, 4028 tests pass
+
+Deliverables produced:
+- `MODE_2_V1_FINAL.md` (3,428 lines) — heart of the app, all 25 v1 sections with full data models/formulas/interfaces
+- `MODE_1_V1_FINAL.md` (1,682 lines) — league builder with all corrections applied (presets removed, 3-value offseasonScope, franchiseRegistry store added)
+- `MODE_3_V1_FINAL.md` (1,619 lines) — 13-phase offseason with all corrections (Team Captain moved to Phase 13, un-retirement removed, 3-value offseasonScope)
+- `ALMANAC_V1_FINAL.md` (610 lines) — cross-franchise Almanac with franchise registry, custom views, data export
+- `V2_DEFERRED_BACKLOG.md` updated with Mode 3 + Almanac deferrals (was missing these from Phase A)
+
+Cross-reference reconciliation resolved 3 blocking conflicts:
+1. MODE_2 SeasonSummary `seasonClassification` field removed (was deferred but still present)
+2. MODE_1 `offseasonScope` corrected from 2-value to 3-value (`'default' | 'human-only' | 'all-teams'`) to match Mode 3
+3. MODE_1 global stores: `franchiseRegistry` added (required by Almanac cross-franchise queries)
 
 ## Next Action
 
-**Begin Phase B — V1 Spec Assembly.**
+**GameTracker Delta Layer 4** — Wire BetweenPlayEvent to useGameState.ts; Wire startingLineupsRef into archive flow.
+OR continue **Phase C — Code Alignment** (V1 spec → code gap analysis).
+
+## GameTracker Delta Progress
+
+| Layer | Status | Commit |
+|-------|--------|--------|
+| Layer 1: Type Definitions | ✅ COMPLETE | ecce786 |
+| Layer 1B: Context Snapshot | ✅ COMPLETE | (session C) |
+| Layer 1C: New Interfaces | ✅ COMPLETE | (session C) |
+| Layer 2A: Grid Scaffold | ✅ COMPLETE | 9a28ef0 |
+| Layer 2B: Quick Bar | ✅ COMPLETE | 512e7ea |
+| Layer 2C+D: Fenway Board + Play Log | ✅ COMPLETE | 8077ddc |
+| Layer 3: Baseball Rules | ✅ COMPLETE | 070affc |
+| Layer 4: Between-Play Wiring | ⬜ NOT STARTED | — |
+| Layer 5: Special Events | ⬜ NOT STARTED | — |
+
+---
+
+**Begin Phase C — Code Alignment.**
 Per V1_SIMPLIFICATION_SESSION_RULES.md:
-1. Produce four `_V1_FINAL.md` documents containing only v1 content
-2. Produce `V2_DEFERRED_BACKLOG.md` with everything cut
-3. Cross-reference reconciliation pass across all four finals
+1. Map every v1 spec section to existing code (or identify as a build gap)
+2. Quarantine v2 code (identify and catalog code that implements deferred features)
+3. Gap-analyze and produce build plan for any v1 sections not yet implemented
+Governed by `V1_CODE_ALIGNMENT_PLAN.md`.
 
-## Phase A Final Summary
+## Phase B Summary
 
-| Document | Sections | KEEP | SIMPLIFY | DEFER | Sessions |
-|----------|----------|------|----------|-------|----------|
-| MODE_2_FRANCHISE_SEASON | 28 | 12 | 14 | 2 | 1–5 |
-| MODE_1_LEAGUE_BUILDER | 16 | 7 | 6 | 3 | 6–7 |
-| MODE_3_OFFSEASON_WORKSHOP | 21 | 13 | 7 | 0 | 8–9 |
-| ALMANAC | 10 | 0 | 10 | 0 | 10 |
-| **TOTAL** | **75** | **32** | **37** | **5** | **10 sessions** |
-
-## Spec Gaps for V1 Draft Consolidation
-
-1. **Fame System canonical section** — no home section (sources in §10.4, §13.6, §14.9, §17, §18; accumulator §8.3)
-2. **Random Event Catalog** — §15 has registry architecture but no event catalog
-3. **Box score UI on schedule** — tapping completed game should show box score; data exists, needs UI surface
-4. **§16.3 INSIDER reveal** — requires Mode 1 hidden player attributes with `revealed` boolean
-5. **§20.1 "rest of roster" True Value** — requires Mode 1 salary system — CONFIRMED v1 (§5 ruling)
-6. **Auction draft mechanics** — budget per team, bidding rules, tie to salary system for competitive balance (§8)
-7. **LeagueTemplate preset field removal** — `defaultRulesPresetId` no longer needed (§9→§3.3 impact)
+| Deliverable | Lines | Status |
+|---|---|---|
+| MODE_2_V1_FINAL.md | 3,428 | ✅ Complete |
+| MODE_1_V1_FINAL.md | 1,682 | ✅ Complete |
+| MODE_3_V1_FINAL.md | 1,619 | ✅ Complete |
+| ALMANAC_V1_FINAL.md | 610 | ✅ Complete |
+| V2_DEFERRED_BACKLOG.md | ~340 | ✅ Complete |
+| Cross-ref reconciliation | — | ✅ 3 conflicts resolved, 12 checks passed |
 
 ## Key Resolved Decisions (Cumulative)
 
-All prior decisions from gospel consolidation still apply.
-From V1 Simplification:
-- No AI game simulation in v1 (V1 Litmus Test)
-- Mojo/fitness are user-observed only — engine reads, never sets
-- Random events cannot modify mojo/fitness/Juiced state
-- Juiced eligibility deferred — engine treats as pure state read
-- Designations never carry over on trade
-- Trade morale effects belong in fan morale (§20), scaled by True Value
-- Dynamic career thresholds deferred (fixed floors only in v1)
-- Legacy status tiers deferred (multi-season, invisible in season 1)
-- Exit velocity removed from spray chart (can't observe in SMB4)
-- No box-score generator — played games display via existing data pipeline
-- Cold storage export deferred (unscoped feature)
-- V2_DEFERRED_BACKLOG.md is authoritative deferral record (§27 table dropped)
-- Salary and True Value confirmed v1 — non-negotiable
-- SML players now have trait data (stale spec notes corrected)
-- Scout is v1 (critical for drafting farm team in Mode 1 and Mode 3)
-- No rules presets — user configures to match SMB4 console settings
-- AI behavior sliders deferred — hardcoded defaults in v1
-- Auction draft format stays v1 but needs full spec (budget tied to salary)
-- All 3 AI draft strategies needed + team archetypes for decision-making
-- CSV upload sufficient for schedule — OCR deferred
-- SIMULATED stripped from GameStatus enum (not dormant)
-- Salary calculation runs before any draft type (values players correctly)
-- v1 is a fresh start — no legacy data migration needed
-- rulesPresets global store removed (rules inline on league templates)
-- Offseason scope is 3-value selector (default/human-only/all-teams), not binary
-- Game Night Mode only in v1 — Streamlined Mode deferred
-- Championship fame bonus = +3 (not +1)
-- Mojo + Fitness both reset to neutral at season boundary
-- Team Captain assigned in Phase 13 (after all roster changes), not Phase 2
-- 5% regular player trait lottery deferred — trait rewards for recognized performers only
-- No custom stadium creation (SMB4 stadiums only)
-- Three retirement dice roll rounds per team
-- Retired players stay retired in v1 (no un-retirement)
-- FA is 1-for-1 exchange — no free agent pool accumulates
-- FA fallback: user selects exchange player if ±30% True Value match fails
-- Traits hidden at draft, revealed at call-up (alongside true ratings)
-- Primary + secondary position visible on draft board
-- V1 trades are user-initiated only — AI responds but doesn't propose
-- Waiver wire source: players cut during offseason phases (not retirements)
-- Live IndexedDB stores after Phase 13 = post-offseason roster (no separate snapshot)
-- §19 V2 table updated with all triage deferrals; V2_DEFERRED_BACKLOG.md remains authoritative
-- Almanac is cross-franchise by default (queries all saved franchise DBs)
-- Almanac has dual entry point (app home = all franchises, in-franchise nav = pre-filtered)
-- Custom views (saved filter presets + column selection) are v1
-- Data export (CSV, PDF, JSON) is v1
-- Franchise registry store is new top-level IndexedDB store
-- Trait history is source-agnostic (all change events, not just award-linked)
+All prior decisions from Phase A still apply. From Phase B:
+- SeasonSummary interface has NO `seasonClassification` field in v1 (always PRIMARY, field removed)
+- `offseasonScope` is 3-value everywhere: `'default' | 'human-only' | 'all-teams'`
+- `franchiseRegistry` is the 7th global store in kbl-app-meta (required for Almanac cross-franchise)
+- V2_DEFERRED_BACKLOG.md is the authoritative, complete deferral record across all 4 modes + Almanac
 
 ## Working Documents
 
-- `spec-docs/v1-simplification/MODE_1_V1_DRAFT.md` — complete Mode 1 rulings (16/16)
-- `spec-docs/v1-simplification/MODE_2_V1_DRAFT.md` — complete Mode 2 rulings (28/28)
-- `spec-docs/v1-simplification/MODE_3_V1_DRAFT.md` — complete Mode 3 rulings (21/21)
-- `spec-docs/v1-simplification/ALMANAC_V1_DRAFT.md` — complete Almanac rulings (10/10)
+- `spec-docs/v1-simplification/MODE_1_V1_FINAL.md` — ✅ v1 build spec for League Builder
+- `spec-docs/v1-simplification/MODE_2_V1_FINAL.md` — ✅ v1 build spec for Franchise Season
+- `spec-docs/v1-simplification/MODE_3_V1_FINAL.md` — ✅ v1 build spec for Offseason Workshop
+- `spec-docs/v1-simplification/ALMANAC_V1_FINAL.md` — ✅ v1 build spec for Almanac
+- `spec-docs/v1-simplification/V2_DEFERRED_BACKLOG.md` — ✅ complete deferral record
 - `spec-docs/v1-simplification/V1_SIMPLIFICATION_TRACKER.md` — session progress
-- `spec-docs/v1-simplification/V2_DEFERRED_BACKLOG.md` — everything deferred (authoritative)
 - `spec-docs/V1_SIMPLIFICATION_SESSION_RULES.md` — governing principles
+- `spec-docs/V1_CODE_ALIGNMENT_PLAN.md` — Phase C governance (next)

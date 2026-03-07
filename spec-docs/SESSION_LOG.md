@@ -1,6 +1,158 @@
 # KBL TRACKER — SESSION LOG
 # Previous sessions archived at: spec-docs/archive/SESSION_LOG_through_2026-02-11.md
 ---
+## Session: 2026-03-06 (D) — Layer 3: Baseball Rules (GAP-GT-6-D/E/F)
+
+### What Was Accomplished
+- ✅ **TICKET 3.1 (GAP-GT-6-F)**: Fixed `isAB` filter — added IBB, changed SH→SAC
+- ✅ **TICKET 3.5 (GAP-GT-6-D)**: GRD (Ground Rule Double) fully implemented end-to-end
+- ✅ **TICKET 3.6 (GAP-GT-6-E)**: Tag-up enforcement — FO/LO hold by default, SF case added
+
+### Decisions Made
+- GRD runner defaults reuse '2B' path in `buildPlayData()` — `recordHit('GRD')` passes hitType='2B' for defaults, GRD is stored as its own AtBatResult
+- FO/LO: ALL runners hold by default. R3 no longer auto-scores on fly outs — user must tap to advance taggers
+- SF: explicit case added: R3 scores, R2/R1 hold. Was previously falling to "all hold" default
+
+### NFL Results
+- Tier 1 (Code): ✅ Build exit 0
+- Tier 2 (Data Flow): ✅ GRD flows QuickBar → buildPlayData → recordHit → stat counted as double; isAB filter applied at eventLog storage
+- Tier 3 (Spec Alignment): ✅ All 3 tickets match GAP-GT-6-D/E/F spec
+- **Day Status**: COMPLETE
+
+### Bugs Fixed
+- isAB filter had 'SH' (non-existent AtBatResult) instead of 'SAC', and was missing IBB
+- 2 runnerMovement tests expected OLD auto-advance FO behavior — updated to match new spec
+
+### Files Modified
+- `src/utils/eventLog.ts:951` — isAB filter fix
+- `src/types/game.ts` — GRD added to AtBatResult, isHit(), reachesBase()
+- `src/src_figma/app/types/game.ts` — same (duplicate type file)
+- `src/src_figma/hooks/useGameState.ts` — HitType+'GRD', batterBase, doubles stat, force-out logic
+- `src/hooks/useClutchCalculations.ts` — 'GRD': 'double' in exhaustive Record mapping
+- `src/src_figma/app/components/QuickBar.tsx` — GRD in OVERFLOW_BUTTONS + BUTTON_COLORS
+- `src/src_figma/app/pages/GameTracker.tsx` — GRD in QUICK_BAR_HITS + buildPlayData() case
+- `src/src_figma/app/components/runnerDefaults.ts` — SF case added; FO/LO changed to hold-by-default
+- `src/src_figma/__tests__/baseballLogic/runnerMovement.test.ts` — 2 tests updated to new spec
+
+### Pending / Next Steps
+- [ ] Layer 4: Wire BetweenPlayEvent to useGameState.ts (between-play recording)
+- [ ] Wire startingLineupsRef into archive flow at game end (GameRecord population)
+- [ ] Layer 5: Special Events (TOOTBLAN, Web Gem, Nut Shot auto-detect)
+- [ ] Phase C: Code Alignment (V1 spec → code gap analysis)
+
+### Key Context for Next Session
+- All Layer 3 code committed to main as `070affc`
+- Feature branch `feature/gt-layer3-baseball-rules` was never created — work done directly on main
+- AtBatResult has TWO copies that must stay in sync: `src/types/game.ts` + `src/src_figma/app/types/game.ts`
+- Test baseline: 4028 pass / 0 fail / 103 files
+
+---
+## Session: 2026-03-06 (C) — Layer 1B completion + Layer 1C: New Event Interfaces
+
+### Accomplished
+- **Layer 1B completion** (continued from previous session): AtBatEvent field additions
+  - Wired `buildContextSnapshot` at all 5 event construction sites in useGameState.ts
+  - Exposed `setNextEventEnrichment` from hook, wired in GameTracker.tsx
+  - Fixed 4 build errors (ParkFactors import, zone field, exitType union, PersistedGameState cast)
+
+- **Layer 1C Ticket 1.18 (GAP-GT-2-M)**: BetweenPlayEvent interface — type-only
+  - Added `BetweenPlayEventType` (15 types) + `BetweenPlayEvent` interface in eventLog.ts
+  - Added `betweenPlayEvents` IndexedDB store (DB_VERSION 2→3) with gameId + type indexes
+  - Added `logBetweenPlayEvent()` + `getBetweenPlayEvents()` CRUD functions
+  - NOT wired to useGameState — Layer 4 does that
+
+- **Layer 1C Ticket 1.20 (GAP-GT-2-O)**: GameRecord + LineupEntry interfaces — runtime change
+  - Added `LineupEntry` interface + `GameRecord` (extends CompletedGameRecord) in gameStorage.ts
+  - Added `captureStartingLineups()` helper function
+  - Wired lineup capture in GameTracker.tsx after initializeGame call
+  - `startingLineupsRef` stores captured lineups for archive-time use
+
+- **Ticket 1.19 (TransactionEvent)**: Deferred (franchise offseason, not gameplay)
+
+- **Test fix**: specialEvents.test.ts hardcoded DB version 2→3
+
+### Verification
+- Build: exit 0 (tsc -b + vite build)
+- Tests: 4,028 passed / 0 failed / 103 files
+
+### Files Modified
+- `src/utils/eventLog.ts` — BetweenPlayEvent interface, DB_VERSION 3, betweenPlayEvents store, CRUD functions
+- `src/utils/gameStorage.ts` — LineupEntry, GameRecord interfaces, captureStartingLineups helper
+- `src/src_figma/app/pages/GameTracker.tsx` — import captureStartingLineups, startingLineupsRef, lineup capture wiring
+- `src/src_figma/hooks/useGameState.ts` — (Layer 1B) buildContextSnapshot wiring, setNextEventEnrichment
+- `src/src_figma/__tests__/gameTracker/specialEvents.test.ts` — DB version 2→3
+
+### Pending / Next Steps
+- [ ] Layer 2 work continues (Grid scaffold + Quick Bar already committed)
+- [ ] Layer 3: Game rules engine
+- [ ] Layer 4: Wire BetweenPlayEvent to useGameState.ts (between-play recording)
+- [ ] Wire startingLineupsRef into archive flow at game end (GameRecord population)
+
+---
+
+## Session: 2026-03-06 (B) — Layer 2: Grid Scaffold + Quick Bar Wiring
+
+### Accomplished
+- **Layer 2A** (commit 9a28ef0): 5-zone CSS Grid scaffold for GameTracker
+  - Created `FenwayBoard.tsx` (Zone 1 — compact scoreboard + batter/pitcher context shells)
+  - Created `QuickBar.tsx` (Zone 4 — 8 primary outcome buttons + ··· overflow trigger)
+  - Created `PlayLogPanel.tsx` (Zone 3 — scrollable activity log, most recent at top)
+  - Restructured GameTracker.tsx render section from scrollable layout → CSS Grid (`320px 1fr 180px` / `1fr auto`)
+  - Old layout preserved in `{false && (...)}` disabled block for reference
+  - EnhancedInteractiveField continues working in Zone 2
+
+- **Layer 2B** (commit 512e7ea): Wire Quick Bar as primary input (§3.2 one-tap flow)
+  - Built `handleQuickBarOutcome` in GameTracker.tsx (~100 lines)
+  - Flow: tap → snapshot context → calculateRunnerDefaults → capture undo → calculate RBI → record play → log → update diamond
+  - Outcome routing: HITS→recordHit, OUTS→recordOut, WALKS→recordWalk, E→recordError, D3K/WP_K/PB_K→recordD3K
+  - Added overflow menu to QuickBar with 13 secondary outcomes (PO, 3B, HBP, E, FC, DP, TP, SAC, SF, IBB, WP_K, PB_K, D3K)
+  - Color-coded by category: red (outs), blue (on-base), purple (HR), amber (hybrid)
+  - Both Quick Bar and EnhancedInteractiveField coexist as input paths
+
+### Verification
+- Build: exit 0 (tsc -b + vite build)
+- Tests: 4,028 passed / 0 failed / 103 files
+
+### Files Modified
+- `src/src_figma/app/components/FenwayBoard.tsx` — NEW (110 lines, Zone 1 shell)
+- `src/src_figma/app/components/QuickBar.tsx` — NEW → updated (58→117 lines, overflow menu added)
+- `src/src_figma/app/components/PlayLogPanel.tsx` — NEW (43 lines, Zone 3 shell)
+- `src/src_figma/app/pages/GameTracker.tsx` — Grid layout + handleQuickBarOutcome handler
+
+### Pending / Next Steps
+- [ ] Layer 3: Game rules engine (inning transitions, auto-end detection in grid mode)
+- [ ] Layer 4: Between-play features (pitch count modal, substitution flow in grid mode)
+- [ ] Layer 5: Enrichment (fame popups, detection prompts, mWAR banner in grid mode)
+- [ ] FenwayBoard context cards need wiring (batter stats, pitcher stats, matchup history)
+- [ ] PlayLogPanel enrichment badges ([+ fielding], [+ location]) per §4.2
+
+---
+
+## Session: 2026-03-06 — GameTracker Delta Plan Phases 1 & 2
+### Accomplished
+- **Phase 1 Quick Wins** (commit 177373d): 11 zero-dependency GAP tickets
+  - Added tsconfig.app.json exclusions for dead code paths
+  - Various quick-fix type and spec alignment items
+- **Phase 2 Layer 1 Tier 1A** (commit ecce786): 8 type definition fixes
+  - GAP-GT-2-L: Renamed KL→Kc across 31 files (69 occurrences), added WP_K/PB_K to AtBatResult + reachesBase()
+  - GAP-GT-2-B: Renamed sequence→eventIndex in AtBatEvent + IndexedDB index, bumped event log DB_VERSION 1→2
+  - GAP-GT-2-I: Changed AtBatEvent.runsScored from number to string[]|number (union for backward compat)
+  - GAP-GT-2-P: Created MojoLevelLabel adapter type + toMojoLabel() converter
+  - GAP-GT-2-Q: Created FitnessLevelLabel adapter type + toFitnessLabel() converter
+  - GAP-GT-2-R: Created FameLevel type (6-tier)
+  - GAP-GT-2-T: Created SpecPitcherRole type + toSpecPitcherRole() converter
+  - GAP-GT-2-S: Created HiddenModifiers interface
+  - All adapter types in src/types/game.ts SPEC ADAPTER TYPES section. No KEEP.md-protected files modified.
+### Verification
+- Build: exit 0 (tsc -b + vite build)
+- Tests: 4,028 passed / 0 failed / 103 files
+### Notes
+- WP_K/PB_K are reach-base events (like D3K), NOT outs — added to reachesBase(), not isOut()
+- FieldingEvent.sequence and PitchingAppearance.entrySequence are separate fields, intentionally NOT renamed
+- walkoffDetector.ts has its own PlayEvent interface (not AtBatEvent), so runsScored type change had no impact there
+- MojoLevelLabel includes 6 labels but engine only has 5 levels — 'On Fire' has no engine equivalent
+- Added missing 'TP' to src/src_figma/app/types/game.ts AtBatResult union (was already in src/types/game.ts)
+
 ## Session: 2026-02-18 — Persistence/Rehydration Hardening (GameTracker Figma Path)
 ### Accomplished
 - Investigated refresh regression where large scoreboard values leaked from prior sessions and lead runners intermittently disappeared.
@@ -1788,3 +1940,37 @@ All 4 documents triaged across 10 sessions. 75 total sections: 32 KEEP, 37 SIMPL
 
 ### Next Action
 - Begin Phase B — V1 Spec Assembly: produce four _V1_FINAL.md documents + V2_DEFERRED_BACKLOG.md
+
+## Session: 2026-03-05 (V1 Simplification — Phase B COMPLETE)
+
+**Context:** V1 Simplification Phase B — V1 Spec Assembly. Produced all four V1_FINAL.md build specs from gospel sources + Phase A triage rulings.
+
+### Accomplished
+- Produced MODE_2_V1_FINAL.md (3,428 lines) — 25 v1 sections with full data models, formulas, interfaces, screen flows
+- Produced MODE_1_V1_FINAL.md (1,682 lines) — 13 v1 sections with all corrections (presets removed, 3-value offseasonScope, franchiseRegistry added)
+- Produced MODE_3_V1_FINAL.md (1,619 lines) — 21 v1 sections with all corrections (Team Captain → Phase 13, un-retirement removed, FA pool signing removed)
+- Produced ALMANAC_V1_FINAL.md (610 lines) — 10 v1 sections with cross-franchise model, custom views, data export
+- Updated V2_DEFERRED_BACKLOG.md — added Mode 3 deferrals (Streamlined Mode, 5% trait lottery, custom stadiums, un-retirement, AI trade proposals) and Almanac deferrals (dashboards, SQL queries, what-if, sharing, franchise merge)
+- Cross-reference reconciliation: 3 blocking conflicts found and resolved
+  1. MODE_2 SeasonSummary `seasonClassification` field removed (deferred but still present in interface)
+  2. MODE_1 `offseasonScope` corrected from 2-value to 3-value to match Mode 3 expectation
+  3. MODE_1 global stores: `franchiseRegistry` added (7th store, required for Almanac cross-franchise)
+- 12 non-blocking checks all passed (WAR components, salary system, awards count, transaction types, SIMULATED removal, presets removal, un-retirement removal, etc.)
+
+### Files Modified
+- spec-docs/v1-simplification/MODE_2_V1_FINAL.md — created (3,428 lines)
+- spec-docs/v1-simplification/MODE_1_V1_FINAL.md — created (1,682 lines)
+- spec-docs/v1-simplification/MODE_3_V1_FINAL.md — created (1,619 lines)
+- spec-docs/v1-simplification/ALMANAC_V1_FINAL.md — created (610 lines)
+- spec-docs/v1-simplification/V2_DEFERRED_BACKLOG.md — Mode 3 + Almanac deferrals added
+- spec-docs/v1-simplification/V1_SIMPLIFICATION_TRACKER.md — Session 11 entry, Phase B marked COMPLETE
+- spec-docs/CURRENT_STATE.md — updated for Phase B completion
+- spec-docs/SESSION_LOG.md — this entry
+
+### Phase B Success Criteria
+- [x] Four _V1_FINAL.md documents exist with only v1 content
+- [x] V2_DEFERRED_BACKLOG.md is complete (all 4 modes + Almanac)
+- [x] Cross-reference reconciliation pass is clean (3 conflicts resolved)
+
+### Next Action
+- Begin Phase C — Code Alignment (governed by V1_CODE_ALIGNMENT_PLAN.md)
