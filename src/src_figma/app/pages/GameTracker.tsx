@@ -11,6 +11,9 @@ import { LineupCard, type SubstitutionData, type LineupPlayer, type BenchPlayer,
 import { UndoButton, useUndoSystem, type GameSnapshot } from "@/app/components/UndoSystem";
 import { TeamRoster, type Player, type Pitcher } from "@/app/components/TeamRoster";
 import { MiniScoreboard } from "@/app/components/MiniScoreboard";
+import { FenwayBoard } from "@/app/components/FenwayBoard";
+import { QuickBar } from "@/app/components/QuickBar";
+import { PlayLogPanel } from "@/app/components/PlayLogPanel";
 import { getTeamColors, getFielderBorderColors } from "@/config/teamColors";
 
 const ordinalSuffix = (num: number) => {
@@ -2422,10 +2425,30 @@ export function GameTracker() {
         </div>
       )}
 
-      <div className="min-h-screen bg-[#6B9462] text-white overflow-y-auto">
-        {/* Scoreboard - toggleable between full and mini */}
-        {isScoreboardMinimized ? (
-          <MiniScoreboard
+      {/* ═══════════════════════════════════════════════════════════════
+           §3.7 FIVE-ZONE CSS GRID LAYOUT (Layer 2A: Grid Scaffold)
+           ┌─────────────────────────────┬───────────────────────┬──────┐
+           │ FENWAY BOARD (top-left)     │ DIAMOND (center)      │ PLAY │
+           │ scoreboard + context cards  │ EnhancedInteractive   │ LOG  │
+           │                             │ Field                 │(right│
+           │                             │                       │panel)│
+           ├─────────────────────────────┼───────────────────────┤      │
+           │ QUICK BAR (bottom-left)     │ MODIFIERS (bot-right) │      │
+           │ outcome buttons             │ undo + end game       │      │
+           └─────────────────────────────┴───────────────────────┴──────┘
+           ═══════════════════════════════════════════════════════════════ */}
+      <div
+        className="h-screen bg-[#6B9462] text-white overflow-hidden"
+        style={{
+          display: 'grid',
+          gridTemplateColumns: '320px 1fr 180px',
+          gridTemplateRows: '1fr auto',
+          gap: '0px',
+        }}
+      >
+        {/* ZONE 1: Fenway Board — top left */}
+        <div style={{ gridColumn: '1', gridRow: '1' }}>
+          <FenwayBoard
             awayTeamName={awayTeamName.toUpperCase()}
             homeTeamName={homeTeamName.toUpperCase()}
             awayRuns={scoreboard.away.runs}
@@ -2435,456 +2458,220 @@ export function GameTracker() {
             inning={gameState.inning}
             isTop={gameState.isTop}
             outs={gameState.outs}
-            onExpand={() => setIsScoreboardMinimized(false)}
+            currentBatterName={gameState.currentBatterName}
+            currentPitcherName={gameState.currentPitcherName}
           />
-        ) : (
-        /* Game header with scoreboard - compact sticky header */
-        <div className="bg-[#6B9462] border-b-[4px] border-[#3d5240] px-4 py-2 sticky top-0 z-10">
-          <div className="max-w-7xl mx-auto">
-            {/* Scoreboard row */}
-            <div className="relative flex items-center justify-between bg-[rgb(133,181,229)] border-[4px] border-[#1a3020] p-2">
-              {/* Mini button - absolute positioned top-right */}
-              <button
-                onClick={() => setIsScoreboardMinimized(true)}
-                className="absolute top-1 right-1 flex items-center gap-1 px-2 py-0.5 bg-[#3d5240] border-2 border-[#2a3a2d] hover:bg-[#4a6a4a] transition-colors z-10"
-                title="Minimize Scoreboard"
-              >
-                <ChevronUp className="w-3 h-3 text-[#E8E8D8]" />
-                <span className="text-[#E8E8D8] text-[8px] font-bold">MINI</span>
-              </button>
-
-              {/* Super Mega Baseball Logo */}
-              <div className="flex items-center gap-2">
-                <div className="bg-white border-[4px] border-[#0066FF] px-[10px] py-[4px] shadow-[3px_3px_0px_0px_#DD0000]">
-                  <div className="text-[10px] text-[#DD0000] tracking-wide leading-tight">SUPER MEGA</div>
-                  <div className="text-xs text-[#0066FF] tracking-wide leading-tight">BASEBALL</div>
-                </div>
-              </div>
-
-              {/* Fenway-style scoreboard in the middle - compact for more field visibility */}
-              <div className="mx-2">
-                <div className="bg-[#556B55] border-[3px] border-[#3d5240] p-1.5 shadow-[3px_3px_0px_0px_rgba(0,0,0,0.5)]">
-                  {/* Stadium name header */}
-                  <div className="text-center text-[#E8E8D8] text-xs font-bold tracking-[0.3em] mb-1">
-                    <div>{scoreboardStadiumLabel}</div>
-                    {showStadiumSelector && parkNames.length > 0 && (
-                      <select
-                        value={selectedStadium ?? ''}
-                        onChange={(event) => setSelectedStadium(event.target.value || null)}
-                        className="mt-1 text-[9px] text-[#E8E8D8] bg-[#1a1a1a] border-2 border-[#2a3a2d] rounded px-1 py-0.5 w-full"
-                      >
-                        <option value="">Select Stadium</option>
-                        {parkNames.map((park) => (
-                          <option key={park} value={park}>{park}</option>
-                        ))}
-                      </select>
-                    )}
-                  </div>
-                  
-                  {/* Scoreboard grid */}
-                  <div className="grid gap-[1px] mb-2" style={{ gridTemplateColumns: '26px 110px repeat(9, 22px) 22px 6px 26px 26px 26px 6px 48px 8px auto' }}>
-                    {/* Header row */}
-                    <div className="text-[#E8E8D8] text-[9px] font-bold">P</div>
-                    <div></div>
-                    {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(inning => (
-                      <div key={inning} className="text-[#E8E8D8] text-[9px] font-bold text-center">{inning}</div>
-                    ))}
-                    <div className="text-[#E8E8D8] text-[9px] font-bold text-center">10</div>
-                    <div></div>
-                    <div className="text-[#E8E8D8] text-[9px] font-bold text-center">R</div>
-                    <div className="text-[#E8E8D8] text-[9px] font-bold text-center">H</div>
-                    <div className="text-[#E8E8D8] text-[9px] font-bold text-center">E</div>
-                    <div></div>
-                    <div className="text-[#E8E8D8] text-[9px] font-bold text-center">REC</div>
-                    <div></div>
-                    <div></div>
-                    
-                    {/* Away team row */}
-                    {/* P column: shows pitcher position number (1) - jersey numbers not yet in data model */}
-                    <div className="bg-[#3d5240] border-2 border-[#2a3a2d] min-h-[20px] flex items-center justify-center">
-                      <span className="text-[#E8E8D8] text-xs font-bold">1</span>
-                    </div>
-                    <div
-                      className="text-[#E8E8D8] font-bold flex items-center pl-1 overflow-hidden whitespace-nowrap text-ellipsis"
-                      style={{
-                        textShadow: '1px 1px 0px rgba(0,0,0,0.7)',
-                        fontSize: awayTeamName.length > 12 ? '8px' : awayTeamName.length > 9 ? '9px' : awayTeamName.length > 6 ? '10px' : '11px',
-                      }}
-                    >{awayTeamName.toUpperCase()}</div>
-                    {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(inning => {
-                      const awayScore = scoreboard.innings[inning - 1]?.away;
-                      const isCurrentInning = gameState.inning === inning && gameState.isTop;
-                      return (
-                        <div key={inning} className={`bg-[#3d5240] border-2 border-[#2a3a2d] ${isCurrentInning ? 'text-[#FFD700]' : 'text-[#E8E8D8]'} text-xs font-bold min-h-[20px] flex items-center justify-center`}>
-                          {awayScore !== undefined ? awayScore : ''}
-                        </div>
-                      );
-                    })}
-                    <div className="bg-[#3d5240] border-2 border-[#2a3a2d] min-h-[20px]"></div>
-                    <div></div>
-                    <div className="bg-[#3d5240] border-2 border-[#2a3a2d] text-[#E8E8D8] text-xs font-bold flex items-center justify-center">{scoreboard.away.runs}</div>
-                    <div className="bg-[#3d5240] border-2 border-[#2a3a2d] text-[#E8E8D8] text-xs font-bold flex items-center justify-center">{scoreboard.away.hits}</div>
-                    <div className="bg-[#3d5240] border-2 border-[#2a3a2d] text-[#E8E8D8] text-xs font-bold flex items-center justify-center">{scoreboard.away.errors}</div>
-                    <div></div>
-                    <div className="bg-[#3d5240] border-2 border-[#2a3a2d] text-[#E8E8D8] text-[9px] font-bold flex items-center justify-center">{awayRecord}</div>
-                    <div></div>
-                    <div className="row-span-2 flex items-center gap-3 px-[15px] py-[0px]">
-                      {/* Concessions Section */}
-                      <div className="flex flex-col items-start justify-center">
-                        <div className="text-[#C4A853] text-[8px] font-bold tracking-wider mb-0.5" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.8)' }}>CONCESSIONS</div>
-                        <div className="text-[#E8E8D8] text-[9px] leading-tight" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.8)' }}>HOT DOG • 10¢</div>
-                        <div className="text-[#E8E8D8] text-[9px] leading-tight" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.8)' }}>PEANUTS • 5¢</div>
-                        <div className="text-[#E8E8D8] text-[9px] leading-tight" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.8)' }}>CRACKER JACK • 15¢</div>
-                      </div>
-                      
-                      {/* Kruse Cola Ad */}
-                      <div className="border-2 border-[#E8E8D8] px-3 py-2">
-                        <div className="text-[#E8E8D8] text-[10px] font-bold tracking-wider text-center" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.8)' }}>KRUSE COLA</div>
-                        <div className="text-[#C4A853] text-[7px] font-bold text-center mt-0.5" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.8)' }}>ICE COLD • 5¢</div>
-                      </div>
-                    </div>
-                    
-                    {/* Home team row */}
-                    {/* P column: shows pitcher position number (1) - jersey numbers not yet in data model */}
-                    <div className="bg-[#3d5240] border-2 border-[#2a3a2d] min-h-[20px] flex items-center justify-center">
-                      <span className="text-[#E8E8D8] text-xs font-bold">1</span>
-                    </div>
-                    <div
-                      className="text-[#E8E8D8] font-bold flex items-center pl-1 overflow-hidden whitespace-nowrap text-ellipsis"
-                      style={{
-                        textShadow: '1px 1px 0px rgba(0,0,0,0.7)',
-                        fontSize: homeTeamName.length > 12 ? '8px' : homeTeamName.length > 9 ? '9px' : homeTeamName.length > 6 ? '10px' : '11px',
-                      }}
-                    >{homeTeamName.toUpperCase()}</div>
-                    {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(inning => {
-                      const homeScore = scoreboard.innings[inning - 1]?.home;
-                      const isCurrentInning = gameState.inning === inning && !gameState.isTop;
-                      return (
-                        <div key={inning} className={`bg-[#3d5240] border-2 border-[#2a3a2d] ${isCurrentInning ? 'text-[#FFD700]' : 'text-[#E8E8D8]'} text-xs font-bold min-h-[20px] flex items-center justify-center`}>
-                          {homeScore !== undefined ? homeScore : ''}
-                        </div>
-                      );
-                    })}
-                    <div className="bg-[#3d5240] border-2 border-[#2a3a2d] min-h-[20px]"></div>
-                    <div></div>
-                    <div className="bg-[#3d5240] border-2 border-[#2a3a2d] text-[#E8E8D8] text-xs font-bold flex items-center justify-center">{scoreboard.home.runs}</div>
-                    <div className="bg-[#3d5240] border-2 border-[#2a3a2d] text-[#E8E8D8] text-xs font-bold flex items-center justify-center">{scoreboard.home.hits}</div>
-                    <div className="bg-[#3d5240] border-2 border-[#2a3a2d] text-[#E8E8D8] text-xs font-bold flex items-center justify-center">{scoreboard.home.errors}</div>
-                    <div></div>
-                    <div className="bg-[#3d5240] border-2 border-[#2a3a2d] text-[#E8E8D8] text-[9px] font-bold flex items-center justify-center">{homeRecord}</div>
-                    <div></div>
-                  </div>
-                  
-                  {/* Bottom indicator row */}
-                  <div className="border-t-2 border-[#E8E8D8] pt-2 flex items-center gap-3 text-[#E8E8D8]">
-                    {/* AT BAT */}
-                    <div className="flex items-center gap-2">
-                      <span className="text-[11px] font-bold tracking-wide" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.7)' }}>AT BAT</span>
-                      <span className="text-[#E8E8D8] text-lg">—</span>
-                      <div className="flex gap-0.5">
-                        {atBatDigit1 && (
-                          <div className="bg-[#1a1a1a] border-2 border-[#2a3a2d] px-1.5 py-1 min-w-[20px]">
-                            <span className="text-[#E8E8D8] text-sm font-bold">{atBatDigit1}</span>
-                          </div>
-                        )}
-                        <div className="bg-[#1a1a1a] border-2 border-[#2a3a2d] px-1.5 py-1 min-w-[20px]">
-                          <span className="text-[#E8E8D8] text-sm font-bold">{atBatDigit2}</span>
-                        </div>
-                      </div>
-                    </div>
-                    
-                    {/* BALL */}
-                    <div className="flex items-center gap-2">
-                      <span className="text-[11px] font-bold tracking-wide" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.7)' }}>BALL</span>
-                      <span className="text-[#E8E8D8] text-lg">—</span>
-                      <div className="flex gap-1.5">
-                        {[0, 1, 2].map((i) => (
-                          <div
-                            key={i}
-                            className="w-6 h-6 rounded-full border-2 bg-[#1a1a1a] border-[#2a3a2d]"
-                          />
-                        ))}
-                      </div>
-                    </div>
-                    
-                    {/* STRIKE */}
-                    <div className="flex items-center gap-2">
-                      <span className="text-[11px] font-bold tracking-wide" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.7)' }}>STRIKE</span>
-                      <span className="text-[#E8E8D8] text-lg">—</span>
-                      <div className="flex gap-1.5">
-                        {[0, 1, 2].map((i) => (
-                          <div
-                            key={i}
-                            className="w-6 h-6 rounded-full border-2 bg-[#1a1a1a] border-[#2a3a2d]"
-                          />
-                        ))}
-                      </div>
-                    </div>
-                    
-                    {/* OUT */}
-                    <div className="flex items-center gap-2">
-                      <span className="text-[11px] font-bold tracking-wide" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.7)' }}>OUT</span>
-                      <span className="text-[#E8E8D8] text-lg">—</span>
-                      <div className="flex gap-1.5">
-                        {[0, 1, 2].map((i) => (
-                          <div
-                            key={i}
-                            className={`w-6 h-6 rounded-full border-2 ${
-                              i < gameState.outs
-                                ? 'bg-[#DC3545] border-[#2a3a2d] shadow-[inset_0_2px_4px_rgba(0,0,0,0.3)]'
-                                : 'bg-[#1a1a1a] border-[#2a3a2d]'
-                            }`}
-                          />
-                        ))}
-                      </div>
-                    </div>
-                    
-                    {/* Home indicator */}
-                    <div className="flex items-center gap-1.5 ml-2">
-                      <span className="text-[10px] font-bold">(H)</span>
-                      <div className={`w-6 h-6 rounded-full border-2 ${
-                        !gameState.isTop
-                          ? 'bg-[#4CAF50] border-[#2a3a2d] shadow-[inset_0_2px_4px_rgba(0,0,0,0.3)]'
-                          : 'bg-[#1a1a1a] border-[#2a3a2d]'
-                      }`} />
-                    </div>
-                    
-                    {/* Error indicator */}
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-[10px] font-bold">—</span>
-                      <span className="text-[10px] font-bold">(E)</span>
-                      <div className="bg-[#1a1a1a] border-2 border-[#2a3a2d] px-2 py-1 min-w-[24px] text-center">
-                      </div>
-                    </div>
-                  </div>
-                  
-                  {/* Game info below scoreboard */}
-                  <div className="mt-2 flex justify-between items-center text-[7px] text-[#E8E8D8]">
-                    <span>{gameStartTime.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }).toUpperCase()}</span>
-                    <span>TIME: {Math.floor(elapsedMinutes / 60)}:{(elapsedMinutes % 60).toString().padStart(2, '0')}</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Menu button */}
-              <button className="p-2 hover:bg-[#3d6444] border-2 border-[#C4A853] bg-[#1a3020] transition-colors">
-                <Menu className="w-5 h-5 text-[#C4A853]" />
-              </button>
-            </div>{/* Close flex items-center justify-between */}
-          </div>{/* Close max-w-7xl mx-auto */}
         </div>
+
+        {/* ZONE 2: Diamond — center (EnhancedInteractiveField, same props) */}
+        <div style={{ gridColumn: '2', gridRow: '1' }} className="bg-[#6B9462] relative overflow-hidden">
+          <EnhancedInteractiveField
+            gameSituation={{
+              outs: gameState.outs,
+              bases: gameState.bases,
+              inning: gameState.inning,
+              isTop: gameState.isTop,
+            }}
+            fieldPositions={fieldPositions}
+            onPlayComplete={handleEnhancedPlayComplete}
+            onSpecialEvent={handleSpecialEvent}
+            onRunnerMove={handleEnhancedRunnerMove}
+            onBatchRunnerMove={handleBatchRunnerMove}
+            fielderBorderColors={[fielderColor1, fielderColor2]}
+            batterBackgroundColor={battingTeamColors.primary}
+            batterBorderColor={battingTeamColors.secondary}
+            playerNames={{
+              1: fieldPositions.find(fp => fp.number === '1')?.name || 'P',
+              2: fieldPositions.find(fp => fp.number === '2')?.name || 'C',
+              3: fieldPositions.find(fp => fp.number === '3')?.name || '1B',
+              4: fieldPositions.find(fp => fp.number === '4')?.name || '2B',
+              5: fieldPositions.find(fp => fp.number === '5')?.name || '3B',
+              6: fieldPositions.find(fp => fp.number === '6')?.name || 'SS',
+              7: fieldPositions.find(fp => fp.number === '7')?.name || 'LF',
+              8: fieldPositions.find(fp => fp.number === '8')?.name || 'CF',
+              9: fieldPositions.find(fp => fp.number === '9')?.name || 'RF',
+            }}
+            runnerNames={runnerNames}
+            currentBatterName={gameState.currentBatterName}
+            zoomLevel={fieldZoomLevel}
+          />
+        </div>
+
+        {/* ZONE 3: Play Log — right panel, spans both rows */}
+        <div style={{ gridColumn: '3', gridRow: '1 / 3' }}>
+          <PlayLogPanel entries={activityLog} />
+        </div>
+
+        {/* ZONE 4: Quick Bar — bottom left */}
+        <div style={{ gridColumn: '1', gridRow: '2' }}>
+          <QuickBar disabled={!gameInitialized} />
+        </div>
+
+        {/* ZONE 5: Modifiers + Actions — bottom center */}
+        <div style={{ gridColumn: '2', gridRow: '2' }} className="bg-[#2a3a2d] border-t-[3px] border-[#3d5240]">
+          <div className="flex gap-2 p-2 items-center justify-end h-full">
+            <undoSystem.UndoButtonComponent />
+            <button
+              onClick={() => setShowEndGameConfirmation(true)}
+              className="bg-[#DD0000] border-[3px] border-white px-4 py-2.5 text-white text-sm font-bold
+                         shadow-[2px_2px_0px_0px_rgba(0,0,0,0.5)] active:scale-95 transition-transform
+                         hover:bg-[#FF0000]"
+            >
+              END
+            </button>
+          </div>
+        </div>
+
+        {/* ══════════════════════════════════════════════════════════════
+             BELOW: Modals and overlays render inside the grid container
+             but are position:fixed so they float above. Also the disabled
+             reference code block from the old layout.
+           ══════════════════════════════════════════════════════════════ */}
+
+        {/* Player Card Modal - EXH-036: Now with mojo/fitness editing */}
+        {selectedPlayer && (
+          <PlayerCardModal
+            player={selectedPlayer}
+            onClose={() => setSelectedPlayer(null)}
+            currentMojo={playerStateHook.getPlayer(selectedPlayer.playerId)?.gameState.currentMojo}
+            currentFitness={playerStateHook.getPlayer(selectedPlayer.playerId)?.fitnessProfile.currentFitness}
+            onMojoChange={(newMojo) => playerStateHook.setMojo(selectedPlayer.playerId, newMojo)}
+            onFitnessChange={(newFitness) => playerStateHook.setFitness(selectedPlayer.playerId, newFitness)}
+          />
         )}
 
-        {/* Field Section - FULL WIDTH, PRIMARY ELEMENT */}
-        <div className="bg-[#6B9462]">
-          {/* Field controls - floating over field */}
-          <div className="absolute top-4 left-4 z-30 flex gap-2">
-            <undoSystem.UndoButtonComponent />
-          </div>
+        {/* Play Location Overlay - REMOVED (now using drag-drop interface) */}
 
-          {/* Enhanced Interactive Field - FULL VIEWPORT, field spans entire screen
-              Stands should extend to edges of viewport
-              Height adjusts based on scoreboard state: mini (52px) vs full (240px) */}
-          <div className="bg-[#6B9462] relative w-full" style={{ height: isScoreboardMinimized ? 'calc(100vh - 52px)' : 'calc(100vh - 200px)', minHeight: '400px' }}>
-            <EnhancedInteractiveField
-              gameSituation={{
-                outs: gameState.outs,
-                bases: gameState.bases,
-                inning: gameState.inning,
-                isTop: gameState.isTop,
-              }}
-              fieldPositions={fieldPositions}
-              onPlayComplete={handleEnhancedPlayComplete}
-              onSpecialEvent={handleSpecialEvent}
-              onRunnerMove={handleEnhancedRunnerMove}
-              onBatchRunnerMove={handleBatchRunnerMove}
-              fielderBorderColors={[fielderColor1, fielderColor2]}
-              batterBackgroundColor={battingTeamColors.primary}
-              batterBorderColor={battingTeamColors.secondary}
-              playerNames={{
-                1: fieldPositions.find(fp => fp.number === '1')?.name || 'P',
-                2: fieldPositions.find(fp => fp.number === '2')?.name || 'C',
-                3: fieldPositions.find(fp => fp.number === '3')?.name || '1B',
-                4: fieldPositions.find(fp => fp.number === '4')?.name || '2B',
-                5: fieldPositions.find(fp => fp.number === '5')?.name || '3B',
-                6: fieldPositions.find(fp => fp.number === '6')?.name || 'SS',
-                7: fieldPositions.find(fp => fp.number === '7')?.name || 'LF',
-                8: fieldPositions.find(fp => fp.number === '8')?.name || 'CF',
-                9: fieldPositions.find(fp => fp.number === '9')?.name || 'RF',
-              }}
-              runnerNames={runnerNames}
-              currentBatterName={gameState.currentBatterName}
-              zoomLevel={fieldZoomLevel}
-            />
-          </div>
-        </div>
-
-          {/* Content below field - scrollable */}
-          <div className="p-4 space-y-4">
-          {/* Player info boxes - reorganized */}
-          <div className="grid grid-cols-3 gap-3">
-            {/* Current Batter - clickable - shows LIVE data from gameState */}
-            <button
-              onClick={() => setSelectedPlayer({ name: gameState.currentBatterName || 'Unknown', type: 'batter', playerId: gameState.currentBatterId })}
-              className="bg-[#4A6A42] border-[4px] border-[#E8E8D8] p-2 text-left hover:scale-105 transition-transform cursor-pointer shadow-[4px_4px_0px_0px_rgba(0,0,0,0.3)] relative"
+        {/* End Game Confirmation */}
+        {showEndGameConfirmation && (
+          <div
+            className="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center z-50"
+            onClick={() => setShowEndGameConfirmation(false)}
+          >
+            <div
+              className="bg-[#556B55] border-[6px] border-[#4A6844] p-4 w-[340px] shadow-[8px_8px_0px_0px_rgba(0,0,0,0.8)]"
+              onClick={(e) => e.stopPropagation()}
             >
-              <div className="absolute top-1 right-2 text-[7px] text-[#E8E8D8] font-bold" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>
-                {gameState.isTop ? awayTeamName.toUpperCase() : homeTeamName.toUpperCase()}
-              </div>
-              <div className="text-[7px] text-[#E8E8D8]" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>▶ AT BAT</div>
-              <div className="text-xs text-[#E8E8D8] font-bold" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>{currentBatterDisplayName}</div>
-              <div className="text-[7px] text-[#E8E8D8]" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>{batterFieldingPosition} • {batterGrade} | {batterHits}-{batterAB}</div>
-            </button>
-
-            {/* Score/Inning Display - Shrunken version */}
-            <div className="bg-[#556B55] border-[4px] border-[#E8E8D8] p-1 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.3)]">
-              <div className="flex items-center justify-center gap-4 text-[8px]">
-                <div className="text-center">
-                  <div className="font-bold text-sm text-[#E8E8D8]" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>
-                    {awayTeamName.toUpperCase()}
+              {/* Header */}
+              <div className="bg-[#3d5240] border-[4px] border-[#E8E8D8] p-2 mb-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="text-xs text-[#E8E8D8] font-bold">END GAME CONFIRMATION</div>
                   </div>
-                  <div className="text-base text-[#E8E8D8] font-bold mt-1" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>{gameState.awayScore}</div>
-                </div>
-
-                <div className="text-center px-4">
-                  <div className="text-[#E8E8D8] text-sm font-bold mb-1" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>{gameState.isTop ? "▲" : "▼"} {gameState.inning}</div>
-                  <div className="flex gap-1 justify-center items-center">
-                    <div className="text-[#E8E8D8] text-[8px]" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>OUTS</div>
-                    <div className="flex gap-[2px]">
-                      <div className={`w-2 h-2 rounded-full ${gameState.outs >= 1 ? 'bg-[#E8E8D8]' : 'bg-black'}`} />
-                      <div className={`w-2 h-2 rounded-full ${gameState.outs >= 2 ? 'bg-[#E8E8D8]' : 'bg-black'}`} />
-                      <div className={`w-2 h-2 rounded-full ${gameState.outs >= 3 ? 'bg-[#E8E8D8]' : 'bg-black'}`} />
-                    </div>
-                  </div>
-                </div>
-
-                <div className="text-center">
-                  <div className="font-bold text-sm text-[#E8E8D8]" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>
-                    {homeTeamName.toUpperCase()}
-                  </div>
-                  <div className="text-base text-[#E8E8D8] font-bold mt-1" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>{gameState.homeScore}</div>
-                </div>
-              </div>
-            </div>
-
-            {/* Current Pitcher - clickable - shows LIVE data from gameState */}
-            <button
-              onClick={() => setSelectedPlayer({ name: gameState.currentPitcherName || 'Unknown', type: 'pitcher', playerId: gameState.currentPitcherId })}
-              className="bg-[#4A6A42] border-[4px] border-[#E8E8D8] p-2 text-left hover:scale-105 transition-transform cursor-pointer shadow-[4px_4px_0px_0px_rgba(0,0,0,0.3)] relative"
-            >
-              <div className="absolute top-1 right-2 text-[7px] text-[#E8E8D8] font-bold" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>
-                {gameState.isTop ? homeTeamName.toUpperCase() : awayTeamName.toUpperCase()}
-              </div>
-              <div className="text-[7px] text-[#E8E8D8]" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>PITCHING</div>
-              <div className="text-xs text-[#E8E8D8] font-bold" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>{currentPitcherDisplayName}</div>
-              <div className="text-[7px] text-[#E8E8D8]" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>{pitcherPitchCount} Pitches • ⚪</div>
-            </button>
-          </div>
-
-          {/* Beat Reporters Feed */}
-          <div className="bg-black border-[4px] border-white p-3">
-            <div className="text-[8px] text-white font-bold mb-2 flex items-center gap-1">
-              <span>𝕏</span> BEAT REPORTERS
-            </div>
-            <div className="space-y-2">
-              {/* Away Beat Reporter */}
-              <div className="bg-white border-[2px] border-[#333] p-2">
-                <div className="flex items-start gap-2 mb-1">
-                  <div className="w-6 h-6 bg-[#DD0000] border-[2px] border-black flex items-center justify-center text-white text-[8px] font-bold flex-shrink-0">
-                    {awayTeamName.slice(0, 2).toUpperCase()}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="text-[8px] text-black font-bold leading-tight">@{awayTeamName.replace(/\s+/g, '')}Insider</div>
-                    <div className="text-[7px] text-[#666] leading-tight">2m ago</div>
-                  </div>
-                </div>
-                <div className="text-[8px] text-black leading-snug">
-                  {gameState.currentPitcherName || 'Pitcher'} struggling in the {gameState.inning > 1 ? `${gameState.inning}th` : '1st'}. {awayTeamName} down. Bullpen warming up.
+                  <button
+                    onClick={() => setShowEndGameConfirmation(false)}
+                    className="bg-[#5A8352] border-[3px] border-[#E8E8D8] px-2 py-1 text-[#E8E8D8] text-xs hover:bg-[#4A6844]"
+                  >
+                    ✕
+                  </button>
                 </div>
               </div>
 
-              {/* Home Beat Reporter */}
-              <div className="bg-white border-[2px] border-[#333] p-2">
-                <div className="flex items-start gap-2 mb-1">
-                  <div className="w-6 h-6 bg-[#0066FF] border-[2px] border-black flex items-center justify-center text-white text-[8px] font-bold flex-shrink-0">
-                    {homeTeamName.slice(0, 2).toUpperCase()}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="text-[8px] text-black font-bold leading-tight">@{homeTeamName.replace(/\s+/g, '')}Beat</div>
-                    <div className="text-[7px] text-[#666] leading-tight">5m ago</div>
-                  </div>
-                </div>
-                <div className="text-[8px] text-black leading-snug">
-                  {homeTeamName} offense showing signs of life. Good at-bats up and down the lineup.
-                </div>
+              {/* Confirmation Message */}
+              <div className="text-[8px] text-[#E8E8D8] font-bold mb-4">
+                Are you sure you want to end the game? This action cannot be undone.
               </div>
 
-              {/* Away Beat Reporter 2 */}
-              <div className="bg-white border-[2px] border-[#333] p-2">
-                <div className="flex items-start gap-2 mb-1">
-                  <div className="w-6 h-6 bg-[#DD0000] border-[2px] border-black flex items-center justify-center text-white text-[8px] font-bold flex-shrink-0">
-                    {awayTeamName.slice(0, 2).toUpperCase()}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="text-[8px] text-black font-bold leading-tight">@{awayTeamName.replace(/\s+/g, '')}Insider</div>
-                    <div className="text-[7px] text-[#666] leading-tight">8m ago</div>
-                  </div>
-                </div>
-                <div className="text-[8px] text-black leading-snug">
-                  Clutch RBI double in the {gameState.inning > 2 ? `${gameState.inning - 1}th` : '1st'}. The bats are coming alive.
-                </div>
+              {/* Buttons */}
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setShowEndGameConfirmation(false)}
+                  className="flex-1 bg-[#3d5240] border-[5px] border-[#E8E8D8] py-4 text-[#E8E8D8] text-sm hover:bg-[#4A6844] active:scale-95 transition-transform"
+                >
+                  CANCEL
+                </button>
+                <button
+                  onClick={handleEndGame}
+                  className="flex-1 bg-[#DD0000] border-[5px] border-white py-4 text-white text-sm hover:bg-[#FF0000] active:scale-95 transition-transform"
+                >
+                  END GAME
+                </button>
               </div>
             </div>
           </div>
+        )}
 
-          {/* Team Rosters - EXH-036: Now with mojo/fitness editing support */}
-          <div className="grid grid-cols-2 gap-3">
-            <TeamRoster
-              teamName={awayTeamName.toUpperCase()}
-              teamColor={awayTeamColor}
-              teamBorderColor={awayTeamBorderColor}
-              players={awayTeamPlayers}
-              pitchers={awayTeamPitchers}
-              isAway={true}
-              isInGame={true}
-              onSubstitution={(benchPlayerName, lineupPlayerName) =>
-                handleSubstitution('away', benchPlayerName, lineupPlayerName)
+        {/* Undo toast notification */}
+        <undoSystem.ToastComponent />
+
+        {/* Pitch Count Prompt Modal (per PITCH_COUNT_TRACKING_SPEC.md) */}
+        {pitchCountPrompt && (
+          <PitchCountModal
+            prompt={pitchCountPrompt}
+            onConfirm={(pitcherId: string, finalCount: number) => {
+              const result = confirmPitchCount(pitcherId, finalCount);
+              if (result.immaculateInning) {
+                fameTrackingHook.recordFameEvent(
+                  'IMMACULATE_INNING' as FameEventType,
+                  result.immaculateInning.pitcherId,
+                  result.immaculateInning.pitcherName,
+                  gameState.inning,
+                  gameState.isTop ? 'TOP' : 'BOTTOM',
+                  1.0
+                );
               }
-              onPitcherSubstitution={(newPitcherName, replacedName, replacedType) =>
-                handlePitcherSubstitution('away', newPitcherName, replacedName, replacedType)
-              }
-              onPositionSwap={(player1Name, player2Name) =>
-                handlePositionSwap('away', player1Name, player2Name)
-              }
-              getPlayerMojo={(playerName) => getPlayerMojoByName(playerName, 'away')}
-              getPlayerFitness={(playerName) => getPlayerFitnessByName(playerName, 'away')}
-              onMojoChange={(playerName, newMojo) => setPlayerMojoByName(playerName, 'away', newMojo)}
-              onFitnessChange={(playerName, newFitness) => setPlayerFitnessByName(playerName, 'away', newFitness)}
-            />
-            <TeamRoster
-              teamName={homeTeamName.toUpperCase()}
-              teamColor={homeTeamColor}
-              teamBorderColor={homeTeamBorderColor}
-              players={homeTeamPlayers}
-              pitchers={homeTeamPitchers}
-              isAway={false}
-              isInGame={true}
-              onSubstitution={(benchPlayerName, lineupPlayerName) =>
-                handleSubstitution('home', benchPlayerName, lineupPlayerName)
-              }
-              onPitcherSubstitution={(newPitcherName, replacedName, replacedType) =>
-                handlePitcherSubstitution('home', newPitcherName, replacedName, replacedType)
-              }
-              onPositionSwap={(player1Name, player2Name) =>
-                handlePositionSwap('home', player1Name, player2Name)
-              }
-              getPlayerMojo={(playerName) => getPlayerMojoByName(playerName, 'home')}
-              getPlayerFitness={(playerName) => getPlayerFitnessByName(playerName, 'home')}
-              onMojoChange={(playerName, newMojo) => setPlayerMojoByName(playerName, 'home', newMojo)}
-              onFitnessChange={(playerName, newFitness) => setPlayerFitnessByName(playerName, 'home', newFitness)}
-            />
+            }}
+            onDismiss={dismissPitchCountPrompt}
+          />
+        )}
+
+        {/* EXH-016: Fielder Credit Modal for thrown-out runners */}
+        <FielderCreditModal
+          isOpen={fielderCreditModalOpen}
+          onClose={handleFielderCreditClose}
+          onConfirm={handleFielderCreditConfirm}
+          runnersOut={runnersOutForCredit}
+        />
+
+        {/* EXH-025: Error on Advance Modal for extra base advancement */}
+        <ErrorOnAdvanceModal
+          isOpen={errorOnAdvanceModalOpen}
+          onClose={handleErrorOnAdvanceClose}
+          onConfirm={handleErrorOnAdvanceConfirm}
+          runnersWithExtraAdvance={runnersWithExtraAdvance}
+        />
+
+        {/* MAJ-03: Detection prompt notifications */}
+        {pendingDetections.length > 0 && (
+          <div className="fixed bottom-24 right-4 z-50 flex flex-col gap-2 max-w-[320px]">
+            {pendingDetections.map((detection, idx) => (
+              <div
+                key={`${detection.eventType}-${idx}`}
+                className="bg-[#1a1a1a] border-2 border-[#C4A853] rounded-lg p-3 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.4)] animate-fade-in"
+              >
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-lg">{detection.icon}</span>
+                  <span className="text-xs font-bold text-[#C4A853] uppercase tracking-wider">
+                    {detection.eventType.replace(/_/g, ' ')}
+                  </span>
+                </div>
+                <p className="text-[11px] text-[#ccc] mb-2">{detection.message}</p>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => handleDetectionConfirm(detection)}
+                    className="flex-1 px-3 py-1.5 bg-[#2E7D32] text-white text-[10px] font-bold uppercase rounded border border-[#4CAF50] hover:bg-[#388E3C] active:scale-95 transition-all"
+                  >
+                    Confirm
+                  </button>
+                  <button
+                    onClick={() => handleDetectionDismiss(detection)}
+                    className="flex-1 px-3 py-1.5 bg-[#333] text-[#888] text-[10px] font-bold uppercase rounded border border-[#555] hover:bg-[#444] active:scale-95 transition-all"
+                  >
+                    Dismiss
+                  </button>
+                </div>
+              </div>
+            ))}
           </div>
+        )}
+      </div>{/* Close 5-zone grid */}
 
+      {/* ══════════════════════════════════════════════════════════════
+           PRESERVED: Old below-field content (disabled reference code).
+           Kept as reference for future Layer 2 sessions that will
+           wire the Quick Bar to these handlers.
+         ══════════════════════════════════════════════════════════════ */}
+      {false && (<div>
           {/* Expandable sections - REMOVED, replaced with drag-drop interface */}
           {/* The game tracker now uses direct field interaction instead of buttons */}
           {false && (
@@ -3551,145 +3338,7 @@ export function GameTracker() {
               🏁 END GAME
             </button>
           </div>
-          </div>{/* Close p-4 space-y-4 wrapper */}
-
-        {/* Player Card Modal - EXH-036: Now with mojo/fitness editing */}
-        {selectedPlayer && (
-          <PlayerCardModal
-            player={selectedPlayer}
-            onClose={() => setSelectedPlayer(null)}
-            currentMojo={playerStateHook.getPlayer(selectedPlayer.playerId)?.gameState.currentMojo}
-            currentFitness={playerStateHook.getPlayer(selectedPlayer.playerId)?.fitnessProfile.currentFitness}
-            onMojoChange={(newMojo) => playerStateHook.setMojo(selectedPlayer.playerId, newMojo)}
-            onFitnessChange={(newFitness) => playerStateHook.setFitness(selectedPlayer.playerId, newFitness)}
-          />
-        )}
-
-        {/* Play Location Overlay - REMOVED (now using drag-drop interface) */}
-
-        {/* End Game Confirmation */}
-        {showEndGameConfirmation && (
-          <div 
-            className="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center z-50"
-            onClick={() => setShowEndGameConfirmation(false)}
-          >
-            <div 
-              className="bg-[#556B55] border-[6px] border-[#4A6844] p-4 w-[340px] shadow-[8px_8px_0px_0px_rgba(0,0,0,0.8)]"
-              onClick={(e) => e.stopPropagation()}
-            >
-              {/* Header */}
-              <div className="bg-[#3d5240] border-[4px] border-[#E8E8D8] p-2 mb-3">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="text-xs text-[#E8E8D8] font-bold">END GAME CONFIRMATION</div>
-                  </div>
-                  <button
-                    onClick={() => setShowEndGameConfirmation(false)}
-                    className="bg-[#5A8352] border-[3px] border-[#E8E8D8] px-2 py-1 text-[#E8E8D8] text-xs hover:bg-[#4A6844]"
-                  >
-                    ✕
-                  </button>
-                </div>
-              </div>
-
-              {/* Confirmation Message */}
-              <div className="text-[8px] text-[#E8E8D8] font-bold mb-4">
-                Are you sure you want to end the game? This action cannot be undone.
-              </div>
-
-              {/* Buttons */}
-              <div className="flex gap-2">
-                <button
-                  onClick={() => setShowEndGameConfirmation(false)}
-                  className="flex-1 bg-[#3d5240] border-[5px] border-[#E8E8D8] py-4 text-[#E8E8D8] text-sm hover:bg-[#4A6844] active:scale-95 transition-transform"
-                >
-                  CANCEL
-                </button>
-                <button
-                  onClick={handleEndGame}
-                  className="flex-1 bg-[#DD0000] border-[5px] border-white py-4 text-white text-sm hover:bg-[#FF0000] active:scale-95 transition-transform"
-                >
-                  END GAME
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Undo toast notification */}
-        <undoSystem.ToastComponent />
-
-        {/* Pitch Count Prompt Modal (per PITCH_COUNT_TRACKING_SPEC.md) */}
-        {pitchCountPrompt && (
-          <PitchCountModal
-            prompt={pitchCountPrompt}
-            onConfirm={(pitcherId: string, finalCount: number) => {
-              const result = confirmPitchCount(pitcherId, finalCount);
-              if (result.immaculateInning) {
-                fameTrackingHook.recordFameEvent(
-                  'IMMACULATE_INNING' as FameEventType,
-                  result.immaculateInning.pitcherId,
-                  result.immaculateInning.pitcherName,
-                  gameState.inning,
-                  gameState.isTop ? 'TOP' : 'BOTTOM',
-                  1.0
-                );
-              }
-            }}
-            onDismiss={dismissPitchCountPrompt}
-          />
-        )}
-
-        {/* EXH-016: Fielder Credit Modal for thrown-out runners */}
-        <FielderCreditModal
-          isOpen={fielderCreditModalOpen}
-          onClose={handleFielderCreditClose}
-          onConfirm={handleFielderCreditConfirm}
-          runnersOut={runnersOutForCredit}
-        />
-
-        {/* EXH-025: Error on Advance Modal for extra base advancement */}
-        <ErrorOnAdvanceModal
-          isOpen={errorOnAdvanceModalOpen}
-          onClose={handleErrorOnAdvanceClose}
-          onConfirm={handleErrorOnAdvanceConfirm}
-          runnersWithExtraAdvance={runnersWithExtraAdvance}
-        />
-
-        {/* MAJ-03: Detection prompt notifications */}
-        {pendingDetections.length > 0 && (
-          <div className="fixed bottom-24 right-4 z-50 flex flex-col gap-2 max-w-[320px]">
-            {pendingDetections.map((detection, idx) => (
-              <div
-                key={`${detection.eventType}-${idx}`}
-                className="bg-[#1a1a1a] border-2 border-[#C4A853] rounded-lg p-3 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.4)] animate-fade-in"
-              >
-                <div className="flex items-center gap-2 mb-2">
-                  <span className="text-lg">{detection.icon}</span>
-                  <span className="text-xs font-bold text-[#C4A853] uppercase tracking-wider">
-                    {detection.eventType.replace(/_/g, ' ')}
-                  </span>
-                </div>
-                <p className="text-[11px] text-[#ccc] mb-2">{detection.message}</p>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => handleDetectionConfirm(detection)}
-                    className="flex-1 px-3 py-1.5 bg-[#2E7D32] text-white text-[10px] font-bold uppercase rounded border border-[#4CAF50] hover:bg-[#388E3C] active:scale-95 transition-all"
-                  >
-                    Confirm
-                  </button>
-                  <button
-                    onClick={() => handleDetectionDismiss(detection)}
-                    className="flex-1 px-3 py-1.5 bg-[#333] text-[#888] text-[10px] font-bold uppercase rounded border border-[#555] hover:bg-[#444] active:scale-95 transition-all"
-                  >
-                    Dismiss
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+      </div>)}{/* Close outer {false && (<div>)} disabled reference block */}
     </DndProvider>
   );
 }
