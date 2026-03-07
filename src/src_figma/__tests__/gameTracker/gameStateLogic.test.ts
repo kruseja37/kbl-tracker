@@ -72,7 +72,7 @@ interface PitcherGameStats {
 }
 
 type HitType = '1B' | '2B' | '3B' | 'HR';
-type OutType = 'K' | 'KL' | 'GO' | 'FO' | 'LO' | 'PO' | 'DP' | 'TP' | 'FC' | 'SF' | 'SH' | 'D3K';
+type OutType = 'K' | 'Kc' | 'GO' | 'FO' | 'LO' | 'PO' | 'DP' | 'TP' | 'FC' | 'SF' | 'SH' | 'D3K';
 type WalkType = 'BB' | 'HBP' | 'IBB';
 
 // ============================================

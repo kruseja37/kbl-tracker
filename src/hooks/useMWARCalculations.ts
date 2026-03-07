@@ -297,7 +297,7 @@ export function detectDecisionType(event: string): DecisionType | null {
  */
 export function evaluatePinchHitterOutcome(result: string): DecisionOutcome {
   const successResults = ['1B', '2B', '3B', 'HR', 'BB', 'HBP', 'SF', 'SAC'];
-  const failureResults = ['K', 'KL', 'DP'];
+  const failureResults = ['K', 'Kc', 'DP'];
 
   if (successResults.includes(result)) return 'success';
   if (failureResults.includes(result)) return 'failure';

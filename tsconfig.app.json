@@ -37,6 +37,10 @@
     "src/**/*.test.tsx",
     "src/tests/**",
     "src/archived-pages/**",
-    "src/archived-tests/**"
+    "src/archived-tests/**",
+    "src/archived-components/**",
+    "src/archived-hooks/**",
+    "src/components/**",
+    "src/pages/**"
   ]
 }

@@ -17,7 +17,7 @@ import { useState } from 'react';
 
 export type PrimaryAction = 'HIT' | 'OUT' | 'OTHER';
 
-export type StrikeoutType = 'K' | 'KL';
+export type StrikeoutType = 'K' | 'Kc';
 
 export type OtherAction =
   | 'BB'    // Walk
@@ -201,7 +201,7 @@ export function ActionSelector({
             </button>
             {/* Strikeout Looking */}
             <button
-              onClick={() => handleStrikeout('KL')}
+              onClick={() => handleStrikeout('Kc')}
               className={`${otherBtnBase} bg-gradient-to-b from-[#6A1B9A] to-[#38006B] text-[#F3E5F5] min-w-[100px]`}
               title="Strikeout Looking"
             >

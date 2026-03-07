@@ -460,7 +460,7 @@ const gameReducer = (state: GameState, action: GameAction): GameState => {
         }
       }
 
-      const isStrikeout = result === 'K' || result === 'KL';
+      const isStrikeout = result === 'K' || result === 'Kc';
       const nextInningStrikeouts = isStrikeout ? state.inningStrikeouts + 1 : state.inningStrikeouts;
 
       let nextConsecutiveHRCount = 0;
@@ -1932,7 +1932,7 @@ export default function GameTracker({ onGameEnd }: GameTrackerProps = {}) {
       case 'K':
         log += 'Strikes out swinging.';
         break;
-      case 'KL':
+      case 'Kc':
         log += 'Strikes out looking.';
         break;
       case 'GO':

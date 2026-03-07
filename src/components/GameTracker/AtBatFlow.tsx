@@ -235,7 +235,7 @@ const reducer = (state: AtBatState, action: AtBatAction): AtBatState => {
   switch (action.type) {
     case 'SET_DIRECTION': {
       const direction = action.payload;
-      const needsFielder = isOut(state.result) && !['K', 'KL'].includes(state.result);
+      const needsFielder = isOut(state.result) && !['K', 'Kc'].includes(state.result);
       return {
         ...state,
         direction,
@@ -469,7 +469,7 @@ export default function AtBatFlow({
   // Exit type is now handled in FieldingModal for hits, and auto-inferred for outs
   // So we no longer require it in the AtBatFlow for outs
   const needsExitType = false; // Exit type moved to FieldingModal (S-A022)
-  const needsFielder = isOut(result) && !['K', 'KL'].includes(result);
+  const needsFielder = isOut(result) && !['K', 'Kc'].includes(result);
   const needsHRDistance = result === 'HR';
   const needsDPType = result === 'DP';
   const needsRunnerConfirmation = (bases.first || bases.second || bases.third) && result !== 'HR';
@@ -485,7 +485,7 @@ export default function AtBatFlow({
   const isOutOrErrorResult = isOut(result) || result === 'E' || result === 'D3K';
   const hitWithFieldingAttempt = isHitResult && specialPlay !== null && specialPlay !== 'Clean';
   const needsFieldingConfirmation =
-    (isOutOrErrorResult && !['K', 'KL'].includes(result)) || hitWithFieldingAttempt;
+    (isOutOrErrorResult && !['K', 'Kc'].includes(result)) || hitWithFieldingAttempt;
 
   // Auto-infer fielder when direction is selected
   const handleDirectionSelect = (dir: Direction) => {

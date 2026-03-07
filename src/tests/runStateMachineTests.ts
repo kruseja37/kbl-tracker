@@ -92,7 +92,7 @@ function getDefaultOutcome(
     return 'HELD';
   }
   // STRIKEOUTS
-  if (['K', 'KL', 'D3K'].includes(result)) return 'HELD';
+  if (['K', 'Kc', 'D3K'].includes(result)) return 'HELD';
   // GO
   if (result === 'GO') return 'HELD';
   // FO, LO, PO
@@ -165,7 +165,7 @@ function isExtraAdvancement(
       }
     }
   }
-  if (['K', 'KL'].includes(result)) return true;
+  if (['K', 'Kc'].includes(result)) return true;
   if (result === '1B') {
     if (base === 'first' && destination === 'HOME') return true;
   }

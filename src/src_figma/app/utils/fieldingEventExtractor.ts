@@ -217,7 +217,7 @@ export function extractFieldingEvents(
 
     // Strikeouts: no fielding event (not a ball in play)
     // Exception: D3K with catcher involved (seq includes position 2)
-    if (outType === 'K' || outType === 'KL') {
+    if (outType === 'K' || outType === 'Kc') {
       // D3K: catcher (2) throwing to first baseman (3)
       if (seq.length >= 2 && seq[0] === 2) {
         events.push(makeEvent(2, 'assist', 0)); // Catcher assist

@@ -39,7 +39,7 @@ interface GameHeader {
 interface AtBatEvent {
   eventId: string;
   gameId: string;
-  sequence: number;
+  eventIndex: number;
   inning: number;
   halfInning: 'TOP' | 'BOTTOM';
   outs: number;
@@ -174,7 +174,7 @@ function createMockAtBatEvent(overrides: Partial<AtBatEvent> = {}): AtBatEvent {
   return {
     eventId: `event-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
     gameId: 'game-123',
-    sequence: 1,
+    eventIndex: 1,
     inning: 1,
     halfInning: 'TOP',
     outs: 0,
@@ -244,9 +244,9 @@ describe('Database Constants', () => {
     expect(DB_NAME).toBe('kbl-event-log');
   });
 
-  test('DB_VERSION is 1', () => {
-    const DB_VERSION = 1;
-    expect(DB_VERSION).toBe(1);
+  test('DB_VERSION is 2', () => {
+    const DB_VERSION = 2;
+    expect(DB_VERSION).toBe(2);
   });
 
   test('STORES contains all required stores', () => {
@@ -342,11 +342,11 @@ describe('AtBatEvent Structure', () => {
     expect(event1.eventId).not.toBe(event2.eventId);
   });
 
-  test('has game and sequence for ordering', () => {
-    const event = createMockAtBatEvent({ gameId: 'game-1', sequence: 5 });
+  test('has game and eventIndex for ordering', () => {
+    const event = createMockAtBatEvent({ gameId: 'game-1', eventIndex: 5 });
 
     expect(event.gameId).toBe('game-1');
-    expect(event.sequence).toBe(5);
+    expect(event.eventIndex).toBe(5);
   });
 
   test('has game situation context', () => {
@@ -702,31 +702,31 @@ describe('Data Integrity', () => {
     expect(header.eventCount).toBe(68);
   });
 
-  test('sequence numbers are unique within game', () => {
+  test('eventIndex values are unique within game', () => {
     const events = [
-      createMockAtBatEvent({ gameId: 'game-1', sequence: 1 }),
-      createMockAtBatEvent({ gameId: 'game-1', sequence: 2 }),
-      createMockAtBatEvent({ gameId: 'game-1', sequence: 3 }),
+      createMockAtBatEvent({ gameId: 'game-1', eventIndex: 1 }),
+      createMockAtBatEvent({ gameId: 'game-1', eventIndex: 2 }),
+      createMockAtBatEvent({ gameId: 'game-1', eventIndex: 3 }),
     ];
 
-    const sequences = events.map((e) => e.sequence);
-    const uniqueSequences = new Set(sequences);
+    const eventIndexes = events.map((e) => e.eventIndex);
+    const uniqueEventIndexes = new Set(eventIndexes);
 
-    expect(uniqueSequences.size).toBe(events.length);
+    expect(uniqueEventIndexes.size).toBe(events.length);
   });
 
-  test('events can be ordered by sequence', () => {
+  test('events can be ordered by eventIndex', () => {
     const events = [
-      createMockAtBatEvent({ sequence: 3 }),
-      createMockAtBatEvent({ sequence: 1 }),
-      createMockAtBatEvent({ sequence: 2 }),
+      createMockAtBatEvent({ eventIndex: 3 }),
+      createMockAtBatEvent({ eventIndex: 1 }),
+      createMockAtBatEvent({ eventIndex: 2 }),
     ];
 
-    const sorted = [...events].sort((a, b) => a.sequence - b.sequence);
+    const sorted = [...events].sort((a, b) => a.eventIndex - b.eventIndex);
 
-    expect(sorted[0].sequence).toBe(1);
-    expect(sorted[1].sequence).toBe(2);
-    expect(sorted[2].sequence).toBe(3);
+    expect(sorted[0].eventIndex).toBe(1);
+    expect(sorted[1].eventIndex).toBe(2);
+    expect(sorted[2].eventIndex).toBe(3);
   });
 });
 

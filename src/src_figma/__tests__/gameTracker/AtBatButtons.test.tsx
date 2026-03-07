@@ -54,7 +54,7 @@ describe('AtBatButtons Component', () => {
     test('renders out buttons', () => {
       render(<AtBatButtons {...defaultProps} />);
       expect(screen.getByText('K')).toBeInTheDocument();
-      expect(screen.getByText('KL')).toBeInTheDocument();
+      expect(screen.getByText('Kc')).toBeInTheDocument();
       expect(screen.getByText('GO')).toBeInTheDocument();
       expect(screen.getByText('FO')).toBeInTheDocument();
       expect(screen.getByText('LO')).toBeInTheDocument();

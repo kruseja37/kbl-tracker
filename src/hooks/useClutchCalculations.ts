@@ -96,7 +96,7 @@ function mapResultToPlayResult(result: AtBatResult): PlayResult {
     'BB': 'walk',
     'IBB': 'intentional_walk',
     'K': 'strikeout_swinging',
-    'KL': 'strikeout_looking',
+    'Kc': 'strikeout_looking',
     'GO': 'ground_out',
     'FO': 'fly_out',
     'LO': 'line_out',
@@ -109,6 +109,8 @@ function mapResultToPlayResult(result: AtBatResult): PlayResult {
     'E': 'error',
     'FC': 'fielders_choice',
     'D3K': 'strikeout_swinging', // Dropped third strike
+    'WP_K': 'strikeout_swinging', // Wild pitch strikeout
+    'PB_K': 'strikeout_swinging', // Passed ball strikeout
   };
   return mapping[result] || 'ground_out';
 }

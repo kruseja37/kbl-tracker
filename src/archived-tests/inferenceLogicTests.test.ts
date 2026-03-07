@@ -22,7 +22,7 @@ export type Direction = 'Left' | 'Left-Center' | 'Center' | 'Right-Center' | 'Ri
 type FairDirection = 'Left' | 'Left-Center' | 'Center' | 'Right-Center' | 'Right';
 export type ExitType = 'Ground' | 'Line Drive' | 'Fly Ball' | 'Pop Up';
 export type Position = 'P' | 'C' | '1B' | '2B' | '3B' | 'SS' | 'LF' | 'CF' | 'RF';
-export type AtBatResult = '1B' | '2B' | '3B' | 'HR' | 'BB' | 'IBB' | 'K' | 'KL'
+export type AtBatResult = '1B' | '2B' | '3B' | 'HR' | 'BB' | 'IBB' | 'K' | 'Kc'
   | 'GO' | 'FO' | 'LO' | 'PO' | 'DP' | 'SF' | 'SAC' | 'HBP' | 'E' | 'FC' | 'D3K';
 
 interface InferenceResult {

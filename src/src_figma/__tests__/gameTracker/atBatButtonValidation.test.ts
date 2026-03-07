@@ -397,7 +397,7 @@ describe('Complex Game Scenarios', () => {
 describe('Button Configuration Validation', () => {
   const allResults = [
     '1B', '2B', '3B', 'HR', 'BB', 'IBB', 'K',
-    'KL', 'GO', 'FO', 'LO', 'PO', 'DP', 'SF',
+    'Kc', 'GO', 'FO', 'LO', 'PO', 'DP', 'SF',
     'SAC', 'HBP', 'E', 'FC', 'D3K',
   ];
 

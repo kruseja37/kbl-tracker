@@ -29,7 +29,7 @@ import type { AtBatResult, Position, HalfInning, SpecialPlayType } from '../type
 // ============================================
 
 const DB_NAME = 'kbl-event-log';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 const STORES = {
   GAME_HEADERS: 'gameHeaders',      // Game metadata and aggregation status
@@ -72,7 +72,7 @@ async function initEventLogDB(): Promise<IDBDatabase> {
       if (!db.objectStoreNames.contains(STORES.AT_BAT_EVENTS)) {
         const eventStore = db.createObjectStore(STORES.AT_BAT_EVENTS, { keyPath: 'eventId' });
         eventStore.createIndex('gameId', 'gameId', { unique: false });
-        eventStore.createIndex('gameId_sequence', ['gameId', 'sequence'], { unique: true });
+        eventStore.createIndex('gameId_eventIndex', ['gameId', 'eventIndex'], { unique: true });
         eventStore.createIndex('batterId', 'batterId', { unique: false });
         eventStore.createIndex('pitcherId', 'pitcherId', { unique: false });
       }
@@ -129,9 +129,9 @@ export interface GameHeader {
 
 /** Full situational context for an at-bat */
 export interface AtBatEvent {
-  eventId: string;               // Unique ID: `${gameId}_${sequence}`
+  eventId: string;               // Unique ID: `${gameId}_${eventIndex}`
   gameId: string;
-  sequence: number;              // 1, 2, 3... order within game
+  eventIndex: number;            // 1, 2, 3... order within game
   timestamp: number;
 
   // Who
@@ -145,7 +145,7 @@ export interface AtBatEvent {
   // Result
   result: AtBatResult;
   rbiCount: number;
-  runsScored: number;            // Total runs scored on this play
+  runsScored: string[] | number;  // Spec: string[] of player IDs who scored; legacy: number count. Resolve to string[] only in Tier 1B+.
 
   // Situation BEFORE at-bat (for Leverage Index, Clutch)
   inning: number;
@@ -499,8 +499,8 @@ export async function getGameEvents(gameId: string): Promise<AtBatEvent[]> {
 
     request.onerror = () => reject(request.error);
     request.onsuccess = () => {
-      // Sort by sequence
-      const events = (request.result as AtBatEvent[]).sort((a, b) => a.sequence - b.sequence);
+      // Sort by eventIndex
+      const events = (request.result as AtBatEvent[]).sort((a, b) => a.eventIndex - b.eventIndex);
       resolve(events);
     };
   });
@@ -688,7 +688,7 @@ export async function generateBoxScore(gameId: string): Promise<BoxScore | null>
     // Other stats
     batter.rbi += event.rbiCount;
     if (event.result === 'BB' || event.result === 'IBB') batter.walks++;
-    if (event.result === 'K' || event.result === 'KL') batter.strikeouts++;
+    if (event.result === 'K' || event.result === 'Kc') batter.strikeouts++;
 
     // Line score tracking
     if (event.inning > currentInning) {

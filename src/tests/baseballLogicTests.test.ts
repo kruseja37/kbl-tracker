@@ -16,7 +16,7 @@ import { describe, it, expect } from 'vitest';
 // ============================================
 
 export type AtBatResult =
-  | '1B' | '2B' | '3B' | 'HR' | 'BB' | 'IBB' | 'K' | 'KL'
+  | '1B' | '2B' | '3B' | 'HR' | 'BB' | 'IBB' | 'K' | 'Kc'
   | 'GO' | 'FO' | 'LO' | 'PO' | 'DP' | 'SF' | 'SAC' | 'HBP' | 'E' | 'FC' | 'D3K';
 
 export type RunnerOutcome = 'SCORED' | 'TO_3B' | 'TO_2B' | 'HELD' | 'OUT_HOME' | 'OUT_3B' | 'OUT_2B';
@@ -154,7 +154,7 @@ export function getDefaultRunnerOutcome(
   }
 
   // STRIKEOUTS (K, KL): Runners almost always hold
-  if (['K', 'KL', 'D3K'].includes(result)) {
+  if (['K', 'Kc', 'D3K'].includes(result)) {
     return 'HELD';
   }
 
@@ -322,7 +322,7 @@ export function isExtraAdvancement(
   }
 
   // STRIKEOUTS: Any advancement requires extra event
-  if (['K', 'KL'].includes(result)) {
+  if (['K', 'Kc'].includes(result)) {
     return true;
   }
 

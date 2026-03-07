@@ -116,7 +116,7 @@ export const isExtraAdvancement = (
     }
   }
 
-  if (['K', 'KL'].includes(result)) {
+  if (['K', 'Kc'].includes(result)) {
     return true;
   }
 
@@ -165,7 +165,7 @@ export const getDefaultOutcome = (
     return 'HELD';
   }
 
-  if (['K', 'KL', 'D3K'].includes(result)) {
+  if (['K', 'Kc', 'D3K'].includes(result)) {
     return 'HELD';
   }
 

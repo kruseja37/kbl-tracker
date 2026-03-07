@@ -265,7 +265,7 @@ export const updatePitcherStats = ({
       updated.consecutiveHRsAllowed += 1;
       break;
     case 'K':
-    case 'KL':
+    case 'Kc':
       updated.strikeoutsThrown += 1;
       updated.outsRecorded += 1;
       updated.consecutiveHRsAllowed = 0;

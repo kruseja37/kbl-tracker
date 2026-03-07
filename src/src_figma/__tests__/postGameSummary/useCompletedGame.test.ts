@@ -371,7 +371,7 @@ function aggregateBatterStats(events: AtBatEvent[]): Map<string, BatterStatAccum
     if (['BB', 'IBB', 'HBP'].includes(result)) batterStats.walks++;
 
     // Count strikeouts
-    if (['K', 'KL'].includes(result)) batterStats.strikeouts++;
+    if (['K', 'Kc'].includes(result)) batterStats.strikeouts++;
 
     // Count RBI and runs
     batterStats.rbi += event.rbiCount || 0;
@@ -413,7 +413,7 @@ function aggregatePitcherStats(events: AtBatEvent[]): Map<string, PitcherStatAcc
     if (result === 'HR') pitcherStats.homeRuns++;
 
     // Count strikeouts
-    if (['K', 'KL'].includes(result)) pitcherStats.strikeouts++;
+    if (['K', 'Kc'].includes(result)) pitcherStats.strikeouts++;
 
     // Count walks
     if (['BB', 'IBB', 'HBP'].includes(result)) pitcherStats.walks++;

@@ -158,7 +158,7 @@ interface FieldPosition {
 }
 
 export type HitType = '1B' | '2B' | '3B' | 'HR';
-export type OutType = 'GO' | 'FO' | 'LO' | 'PO' | 'FLO' | 'DP' | 'TP' | 'K' | 'KL' | 'FC' | 'SAC' | 'SF';
+export type OutType = 'GO' | 'FO' | 'LO' | 'PO' | 'FLO' | 'DP' | 'TP' | 'K' | 'Kc' | 'FC' | 'SAC' | 'SF';
 
 export type WalkType = 'BB' | 'IBB' | 'HBP';
 
@@ -1143,7 +1143,7 @@ interface ContextualButton {
 }
 
 // GT-007: Quick result type for non-ball-in-play outcomes
-export type QuickResultType = 'BB' | 'IBB' | 'K' | 'KL' | 'HBP' | 'D3K';
+export type QuickResultType = 'BB' | 'IBB' | 'K' | 'Kc' | 'HBP' | 'D3K';
 
 // ============================================
 // LEFT FOUL ZONE: Result Buttons (BB, K, HBP, HR)
@@ -1579,7 +1579,7 @@ function QuickButtons({
             K
           </button>
           <button
-            onClick={() => onQuickResult('KL')}
+            onClick={() => onQuickResult('Kc')}
             className={`bg-[#8B0000] border-white text-white ${btnBase}`}
             title="Strikeout Looking"
           >
@@ -3159,10 +3159,10 @@ export function EnhancedInteractiveField({
         setRunnerOutcomes(kDefaults);
         return;
 
-      case 'KL':
+      case 'Kc':
         // KL now handled by handleStrikeout, but keep as fallback
         playData.type = 'out';
-        playData.outType = 'KL';
+        playData.outType = 'Kc';
         playData.fieldingSequence = []; // Empty - no fielding on regular strikeout
         console.log('[QuickResult] Strikeout Looking (KL) → RUNNER_OUTCOMES');
         setLastClassifiedPlay(playData);
@@ -3305,10 +3305,10 @@ export function EnhancedInteractiveField({
   // Updated to accept StrikeoutType from ActionSelector submenu
   // ============================================
   const handleStrikeout = useCallback((type: StrikeoutType) => {
-    const looking = type === 'KL';
+    const looking = type === 'Kc';
     const playData: PlayData = {
       type: 'out',
-      outType: looking ? 'KL' : 'K',
+      outType: looking ? 'Kc' : 'K',
       fieldingSequence: [], // Empty - no fielding on regular strikeout (D3K uses [2, 3])
       spraySector: 'CF',
     };

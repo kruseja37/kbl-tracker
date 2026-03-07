@@ -22,7 +22,7 @@ const resultButtons: { result: AtBatResult; label: string; color: string }[][] =
   ],
   // Row 2: Outs
   [
-    { result: 'KL', label: 'KL', color: '#E53935' },
+    { result: 'Kc', label: 'Kc', color: '#E53935' },
     { result: 'GO', label: 'GO', color: '#757575' },
     { result: 'FO', label: 'FO', color: '#9E9E9E' },
     { result: 'LO', label: 'LO', color: '#BDBDBD' },

@@ -377,7 +377,7 @@ export function shouldTriggerD3KFlow(
 ): boolean {
   // D3K only happens on strikeouts (K or KL)
   if (!isPitchResult) return false;
-  if (outType !== 'K' && outType !== 'KL') return false;
+  if (outType !== 'K' && outType !== 'Kc') return false;
   return true;
 }
 

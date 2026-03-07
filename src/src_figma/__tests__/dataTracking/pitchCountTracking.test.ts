@@ -313,7 +313,7 @@ describe('Pitch Count UI Requirements', () => {
 
     const inferPitchCount = (result: string): number => {
       switch (result) {
-        case 'K': case 'KL': return 4;
+        case 'K': case 'Kc': return 4;
         case 'BB': return 5;
         case 'HBP': return 1;
         case '1B': case '2B': case '3B': case 'HR': return 3;

@@ -123,7 +123,7 @@ async function aggregateGameFromEventLog(
         batter.hitByPitch++;
         break;
       case 'K':
-      case 'KL':
+      case 'Kc':
         batter.ab++; batter.strikeouts++;
         break;
       case 'SF':

@@ -493,7 +493,7 @@ describe('shouldTriggerD3KFlow', () => {
   });
 
   test('returns true for KL with pitch result', () => {
-    expect(shouldTriggerD3KFlow('KL', true)).toBe(true);
+    expect(shouldTriggerD3KFlow('Kc', true)).toBe(true);
   });
 
   test('returns false for non-strikeout', () => {

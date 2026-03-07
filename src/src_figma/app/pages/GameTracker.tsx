@@ -1343,7 +1343,7 @@ export function GameTracker() {
           await recordD3K(true);
           console.log(`D3K recorded: Batter reached first (K stat counted, no out recorded)`);
           logAction(`D3K (batter reached first)`);
-        } else if (outType === 'K' || outType === 'KL') {
+        } else if (outType === 'K' || outType === 'Kc') {
           // Normal strikeout OR D3K where batter didn't reach (thrown out at first)
           // Check if this is D3K thrown out scenario - D3K has catcher throwing to first: [2, 3]
           // Regular strikeouts have empty fieldingSequence []
@@ -1557,7 +1557,7 @@ export function GameTracker() {
       //     : playData.hitType === '3B' ? 'TRIPLE'
       //     : 'SINGLE';
       //   playerStateHook.updateMojo(gameState.currentBatterId, hitTrigger, gameSituation);
-      // } else if (playData.type === 'out' && (playData.outType === 'K' || playData.outType === 'KL')) {
+      // } else if (playData.type === 'out' && (playData.outType === 'K' || playData.outType === 'Kc')) {
       //   playerStateHook.updateMojo(gameState.currentBatterId, 'STRIKEOUT', gameSituation);
       // }
 
@@ -1639,7 +1639,7 @@ export function GameTracker() {
               // PH success: hit, walk, HBP; failure: K, GIDP
               const isHit = playData.type === 'hit' || playData.type === 'hr';
               const isWalk = playData.type === 'walk';
-              const isK = playData.type === 'out' && (playData.outType === 'K' || playData.outType === 'KL');
+              const isK = playData.type === 'out' && (playData.outType === 'K' || playData.outType === 'Kc');
               outcome = isHit || isWalk ? 'success' : isK ? 'failure' : 'neutral';
             } else if (pending.decisionType === 'pitching_change') {
               // Pitching change success: out recorded; failure: hit/walk/run scored
@@ -1778,7 +1778,7 @@ export function GameTracker() {
         const outType = playData.outType || 'GO';
         if (outType === 'K' && batterReached) {
           await recordD3K(true);
-        } else if (outType === 'K' || outType === 'KL') {
+        } else if (outType === 'K' || outType === 'Kc') {
           const isD3KThrownOut = playData.fieldingSequence.length >= 2 &&
                                   playData.fieldingSequence[0] === 2 &&
                                   playData.fieldingSequence[1] === 3;
@@ -3126,10 +3126,10 @@ export function GameTracker() {
                     onClick={() => { toggleOutcomeDetail('K'); handleOutSelect('K'); }}
                   />
                   <OutcomeButton
-                    label="KL"
+                    label="Kc"
                     color="red"
-                    isExpanded={expandedOutcome === 'KL'}
-                    onClick={() => { toggleOutcomeDetail('KL'); handleOutSelect('KL'); }}
+                    isExpanded={expandedOutcome === 'Kc'}
+                    onClick={() => { toggleOutcomeDetail('Kc'); handleOutSelect('Kc'); }}
                   />
                   <OutcomeButton
                     label="GO"
@@ -3152,7 +3152,7 @@ export function GameTracker() {
                 </div>
 
                 {/* K/KL Quick Record (no additional details needed) */}
-                {(expandedOutcome === 'K' || expandedOutcome === 'KL') && (
+                {(expandedOutcome === 'K' || expandedOutcome === 'Kc') && (
                   <OutcomeDetailPanel title={expandedOutcome === 'K' ? 'STRIKEOUT (SWINGING)' : 'STRIKEOUT (LOOKING)'}>
                     <div className="grid grid-cols-2 gap-2 pt-2">
                       <button

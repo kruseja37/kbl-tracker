@@ -39,7 +39,7 @@ describe('BUG-008: ROE Type Cast', () => {
 
       // The fix ensures this assignment works without type errors
       expect(errorResult).toBe('E');
-      expect(['1B', '2B', '3B', 'HR', 'BB', 'IBB', 'K', 'KL', 'GO', 'FO', 'LO', 'PO', 'DP', 'SF', 'SAC', 'HBP', 'E', 'FC', 'D3K']).toContain(errorResult);
+      expect(['1B', '2B', '3B', 'HR', 'BB', 'IBB', 'K', 'Kc', 'GO', 'FO', 'LO', 'PO', 'DP', 'SF', 'SAC', 'HBP', 'E', 'FC', 'D3K']).toContain(errorResult);
     });
   });
 
@@ -52,9 +52,9 @@ describe('BUG-008: ROE Type Cast', () => {
     });
 
     test('AtBatResult includes all expected out types', () => {
-      const outTypes: AtBatResult[] = ['K', 'KL', 'GO', 'FO', 'LO', 'PO', 'DP', 'SF', 'SAC', 'FC', 'D3K'];
+      const outTypes: AtBatResult[] = ['K', 'Kc', 'GO', 'FO', 'LO', 'PO', 'DP', 'SF', 'SAC', 'FC', 'D3K'];
       outTypes.forEach(type => {
-        expect(['K', 'KL', 'GO', 'FO', 'LO', 'PO', 'DP', 'SF', 'SAC', 'FC', 'D3K']).toContain(type);
+        expect(['K', 'Kc', 'GO', 'FO', 'LO', 'PO', 'DP', 'SF', 'SAC', 'FC', 'D3K']).toContain(type);
       });
     });
 
@@ -171,7 +171,7 @@ describe('Type Safety Verification', () => {
     const results: AtBatResult[] = [
       '1B', '2B', '3B', 'HR',
       'BB', 'IBB', 'HBP',
-      'K', 'KL', 'GO', 'FO', 'LO', 'PO', 'DP', 'SF', 'SAC', 'FC', 'D3K',
+      'K', 'Kc', 'GO', 'FO', 'LO', 'PO', 'DP', 'SF', 'SAC', 'FC', 'D3K',
       'E'
     ];
 
@@ -279,7 +279,7 @@ describe('Backward Compatibility', () => {
     const existingTypes: AtBatResult[] = [
       '1B', '2B', '3B', 'HR',
       'BB', 'IBB',
-      'K', 'KL', 'GO', 'FO', 'LO', 'PO', 'DP', 'SF', 'SAC', 'HBP', 'FC', 'D3K'
+      'K', 'Kc', 'GO', 'FO', 'LO', 'PO', 'DP', 'SF', 'SAC', 'HBP', 'FC', 'D3K'
     ];
 
     // All existing types should still be valid
@@ -293,7 +293,7 @@ describe('Backward Compatibility', () => {
     const allTypes: AtBatResult[] = [
       '1B', '2B', '3B', 'HR',
       'BB', 'IBB', 'HBP',
-      'K', 'KL', 'GO', 'FO', 'LO', 'PO', 'DP', 'SF', 'SAC', 'FC', 'D3K',
+      'K', 'Kc', 'GO', 'FO', 'LO', 'PO', 'DP', 'SF', 'SAC', 'FC', 'D3K',
       'E' // New addition
     ];
 

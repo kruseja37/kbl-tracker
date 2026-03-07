@@ -17,7 +17,7 @@ import { useState, useEffect } from 'react';
 // ============================================
 
 export type HitType = '1B' | '2B' | '3B' | 'HR';
-export type OutType = 'GO' | 'FO' | 'LO' | 'PO' | 'FLO' | 'K' | 'KL' | 'DP' | 'TP' | 'FC' | 'E';
+export type OutType = 'GO' | 'FO' | 'LO' | 'PO' | 'FLO' | 'K' | 'Kc' | 'DP' | 'TP' | 'FC' | 'E';
 export type HitModifier = 'BUNT' | 'IS' | '7+';
 export type OutModifier = 'SF' | 'SAC' | 'IFR' | 'RD' | 'E' | '7+';
 export type SpecialEvent = 'KP' | 'NUT' | 'WEB';
@@ -125,7 +125,7 @@ const OUT_TYPES_ROW1: { type: OutType; label: string }[] = [
 
 const OUT_TYPES_ROW2: { type: OutType; label: string }[] = [
   { type: 'K', label: 'K' },
-  { type: 'KL', label: 'KL' },
+  { type: 'Kc', label: 'Kc' },
   { type: 'DP', label: 'DP' },
   { type: 'TP', label: 'TP' },
   { type: 'FC', label: 'FC' },

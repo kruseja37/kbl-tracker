@@ -10,8 +10,9 @@ export type Position = 'P' | 'C' | '1B' | '2B' | '3B' | 'SS' | 'LF' | 'CF' | 'RF
 export type BatterHand = 'L' | 'R' | 'S';
 
 export type AtBatResult =
-  | '1B' | '2B' | '3B' | 'HR' | 'BB' | 'IBB' | 'K' | 'KL'
-  | 'GO' | 'FO' | 'LO' | 'PO' | 'DP' | 'TP' | 'SF' | 'SAC' | 'HBP' | 'E' | 'FC' | 'D3K';
+  | '1B' | '2B' | '3B' | 'HR' | 'BB' | 'IBB' | 'K' | 'Kc'
+  | 'GO' | 'FO' | 'LO' | 'PO' | 'DP' | 'TP' | 'SF' | 'SAC' | 'HBP' | 'E' | 'FC'
+  | 'D3K' | 'WP_K' | 'PB_K';
 
 export type GameEvent = 'SB' | 'CS' | 'WP' | 'PB' | 'PK' | 'PITCH_CHANGE' | 'PINCH_HIT' | 'PINCH_RUN' | 'DEF_SUB' | 'POS_SWITCH';
 // Special play types for outs and hits
@@ -30,6 +31,73 @@ export interface ExtraEvent {
   from: '1B' | '2B' | '3B';
   to: '2B' | '3B' | 'HOME';
   event: ExtraEventType;
+}
+
+// ============================================
+// SPEC ADAPTER TYPES - Per MODE_2_V1_FINAL.md
+// These adapt protected engine types to spec-aligned labels
+// without modifying the engine files themselves.
+// ============================================
+
+// GAP-GT-2-P: MojoLevelLabel — spec uses string labels, engine uses numeric MojoLevel
+// Spec: 6-tier ('Rattled'|'Tense'|'Neutral'|'Locked-In'|'On Fire'|'Jacked')
+// Engine: 5-tier numeric (-2|-1|0|1|2) — 'On Fire' has no engine equivalent
+export type MojoLevelLabel = 'Rattled' | 'Tense' | 'Neutral' | 'Locked-In' | 'On Fire' | 'Jacked';
+
+/** Convert engine MojoLevel (-2..+2) to spec display label */
+export function toMojoLabel(level: MojoLevel): MojoLevelLabel {
+  const map: Record<MojoLevel, MojoLevelLabel> = {
+    [-2]: 'Rattled',
+    [-1]: 'Tense',
+    [0]: 'Neutral',
+    [1]: 'Locked-In',
+    [2]: 'Jacked',
+  };
+  return map[level];
+}
+
+// GAP-GT-2-Q: FitnessLevelLabel — spec uses PascalCase, engine uses UPPERCASE FitnessState
+// Spec: 'Hurt'|'Weak'|'Strained'|'Well'|'Fit'|'Juiced'
+// Engine: 'HURT'|'WEAK'|'STRAINED'|'WELL'|'FIT'|'JUICED'
+export type FitnessLevelLabel = 'Hurt' | 'Weak' | 'Strained' | 'Well' | 'Fit' | 'Juiced';
+
+/** Convert engine FitnessState (UPPERCASE) to spec display label (PascalCase) */
+export function toFitnessLabel(state: FitnessState): FitnessLevelLabel {
+  const map: Record<FitnessState, FitnessLevelLabel> = {
+    'HURT': 'Hurt',
+    'WEAK': 'Weak',
+    'STRAINED': 'Strained',
+    'WELL': 'Well',
+    'FIT': 'Fit',
+    'JUICED': 'Juiced',
+  };
+  return map[state];
+}
+
+// GAP-GT-2-R: FameLevel — 6-tier fame classification
+export type FameLevel = 'Unknown' | 'Local' | 'Regional' | 'National' | 'Superstar' | 'Legend';
+
+// GAP-GT-2-T: SpecPitcherRole — spec's 5-value in-game role classification
+// Distinct from roster-level PitcherRole ('SP'|'RP'|'CP'|'SP/RP') in playerDatabase.ts
+// and in-game PitcherRole ('SP'|'RP'|'CL') in substitution.ts
+export type SpecPitcherRole = 'starter' | 'closer' | 'setup' | 'middle' | 'mop_up';
+
+/** Convert roster-level pitcher role codes to spec role classification */
+export function toSpecPitcherRole(rosterRole: 'SP' | 'RP' | 'CP' | 'SP/RP' | 'CL'): SpecPitcherRole {
+  switch (rosterRole) {
+    case 'SP': return 'starter';
+    case 'CP': case 'CL': return 'closer';
+    case 'SP/RP': return 'starter'; // Default SP/RP to starter; usage patterns can refine
+    case 'RP': return 'middle';     // Default RP to middle; could be setup/mop_up based on usage
+  }
+}
+
+// GAP-GT-2-S: HiddenModifiers — personality modifiers (0-100 scale)
+export interface HiddenModifiers {
+  loyalty: number;     // 0-100
+  ambition: number;    // 0-100
+  resilience: number;  // 0-100
+  charisma: number;    // 0-100
 }
 
 // ============================================
@@ -166,9 +234,9 @@ export function countRunners(bases: Bases): number { return [bases.first, bases.
 export function hasRISP(bases: Bases): boolean { return bases.second !== null || bases.third !== null; }
 export function isBasesLoaded(bases: Bases): boolean { return bases.first !== null && bases.second !== null && bases.third !== null; }
 
-export function isOut(result: AtBatResult): boolean { return ['K', 'KL', 'GO', 'FO', 'LO', 'PO', 'DP', 'TP', 'SF', 'SAC'].includes(result); }
+export function isOut(result: AtBatResult): boolean { return ['K', 'Kc', 'GO', 'FO', 'LO', 'PO', 'DP', 'TP', 'SF', 'SAC'].includes(result); }
 export function isHit(result: AtBatResult): boolean { return ['1B', '2B', '3B', 'HR'].includes(result); }
-export function reachesBase(result: AtBatResult): boolean { return ['1B', '2B', '3B', 'HR', 'BB', 'IBB', 'HBP', 'E', 'FC', 'D3K'].includes(result); }
+export function reachesBase(result: AtBatResult): boolean { return ['1B', '2B', '3B', 'HR', 'BB', 'IBB', 'HBP', 'E', 'FC', 'D3K', 'WP_K', 'PB_K'].includes(result); }
 export function requiresBallInPlayData(result: AtBatResult): boolean { return ['1B', '2B', '3B', 'HR', 'GO', 'FO', 'LO', 'PO', 'DP', 'TP', 'FC', 'E'].includes(result); }
 
 export function inferFielder(result: AtBatResult, direction: Direction): Position | null {

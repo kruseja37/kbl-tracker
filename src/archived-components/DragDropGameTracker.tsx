@@ -545,7 +545,7 @@ export function InteractiveField({ gameSituation, fieldPositions, onPlayComplete
               <div className="text-[10px] text-black font-bold mb-2 text-center">SELECT OUT TYPE:</div>
               <div className="grid grid-cols-2 gap-1">
                 <button onClick={() => handleOutcomeSelect('K')} className="bg-[#DD0000] border-[2px] border-[#AA0000] px-2 py-1 text-white text-[9px] font-bold hover:scale-105">K</button>
-                <button onClick={() => handleOutcomeSelect('KL')} className="bg-[#DD0000] border-[2px] border-[#AA0000] px-2 py-1 text-white text-[9px] font-bold hover:scale-105">KL</button>
+                <button onClick={() => handleOutcomeSelect('Kc')} className="bg-[#DD0000] border-[2px] border-[#AA0000] px-2 py-1 text-white text-[9px] font-bold hover:scale-105">KL</button>
                 <button onClick={() => handleOutcomeSelect('GO')} className="bg-[#DD0000] border-[2px] border-[#AA0000] px-2 py-1 text-white text-[9px] font-bold hover:scale-105">GO</button>
                 <button onClick={() => handleOutcomeSelect('FO')} className="bg-[#DD0000] border-[2px] border-[#AA0000] px-2 py-1 text-white text-[9px] font-bold hover:scale-105">FO</button>
                 <button onClick={() => handleOutcomeSelect('LO')} className="bg-[#DD0000] border-[2px] border-[#AA0000] px-2 py-1 text-white text-[9px] font-bold hover:scale-105">LO</button>

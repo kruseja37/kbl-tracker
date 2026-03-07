@@ -156,7 +156,7 @@ export interface RunnerAdvancement {
 }
 
 export type HitType = '1B' | '2B' | '3B' | 'HR';
-export type OutType = 'K' | 'KL' | 'GO' | 'FO' | 'LO' | 'PO' | 'DP' | 'TP' | 'FC' | 'SF' | 'SH' | 'D3K';
+export type OutType = 'K' | 'Kc' | 'GO' | 'FO' | 'LO' | 'PO' | 'DP' | 'TP' | 'FC' | 'SF' | 'SH' | 'D3K';
 export type WalkType = 'BB' | 'HBP' | 'IBB';
 export type ReachOnErrorType = 'E'; // Batter reaches base on fielding error
 export type EventType =
@@ -299,10 +299,10 @@ function mapAtBatResultFromHit(hitType: HitType): AtBatResult {
 }
 
 function mapAtBatResultFromOut(outType: OutType): AtBatResult {
-  // AtBatResult types per game.ts: 'K', 'KL', 'GO', 'FO', 'LO', 'PO', 'DP', 'TP', 'SF', 'SAC', 'FC', 'D3K'
+  // AtBatResult types per game.ts: 'K', 'Kc', 'GO', 'FO', 'LO', 'PO', 'DP', 'TP', 'SF', 'SAC', 'FC', 'D3K'
   switch (outType) {
     case 'K': return 'K';
-    case 'KL': return 'KL';
+    case 'Kc': return 'Kc';
     case 'GO': return 'GO';
     case 'FO': return 'FO';
     case 'LO': return 'LO';
@@ -477,7 +477,7 @@ export function getDefaultRunnerOutcome(
   // ============================================
 
   // STRIKEOUTS (K, KL): Runners almost always hold
-  if (['K', 'KL', 'D3K'].includes(result)) {
+  if (['K', 'Kc', 'D3K'].includes(result)) {
     return 'HELD';
   }
 
@@ -631,7 +631,7 @@ export function isExtraAdvancement(
   }
 
   // STRIKEOUTS (K, KL): Any advancement requires WP, PB, or SB
-  if (['K', 'KL'].includes(result)) {
+  if (['K', 'Kc'].includes(result)) {
     return true; // Any advancement on K requires extra event
   }
 
@@ -724,7 +724,7 @@ function shouldInvalidateRunsOnThirdOut(
  * Helper type definitions matching src/types/game.ts
  */
 export function isOut(result: AtBatResult): boolean {
-  return ['K', 'KL', 'GO', 'FO', 'LO', 'PO', 'DP', 'TP', 'SF', 'SAC'].includes(result);
+  return ['K', 'Kc', 'GO', 'FO', 'LO', 'PO', 'DP', 'TP', 'SF', 'SAC'].includes(result);
 }
 
 export function isHit(result: AtBatResult): boolean {
@@ -1613,7 +1613,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
           } else {
             stats.consecutiveHRsAllowed = 0;
           }
-          if (event.result === 'K' || event.result === 'KL') {
+          if (event.result === 'K' || event.result === 'Kc') {
             stats.strikeoutsThrown += 1;
           }
           if (event.result === 'BB') {
@@ -2174,7 +2174,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     const event: AtBatEvent = {
       eventId: `${gameState.gameId}_${newSequence}`,
       gameId: gameState.gameId,
-      sequence: newSequence,
+      eventIndex: newSequence,
       timestamp: Date.now(),
       batterId: gameState.currentBatterId,
       batterName: gameState.currentBatterName,
@@ -2348,7 +2348,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
 
     // Track inning strikeouts for immaculate inning detection
     // (Pitch count will be confirmed by user at end of inning)
-    if (outType === 'K' || outType === 'KL') {
+    if (outType === 'K' || outType === 'Kc') {
       inningPitchesRef.current.strikeouts++;
     }
 
@@ -2492,7 +2492,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     const event: AtBatEvent = {
       eventId: `${gameState.gameId}_${newSequence}`,
       gameId: gameState.gameId,
-      sequence: newSequence,
+      eventIndex: newSequence,
       timestamp: Date.now(),
       batterId: gameState.currentBatterId,
       batterName: gameState.currentBatterName,
@@ -2550,7 +2550,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       if (statResult !== 'SF' && statResult !== 'SAC') {
         batterStats.ab++;
       }
-      if (statResult === 'K' || statResult === 'KL' || statResult === 'D3K') {
+      if (statResult === 'K' || statResult === 'Kc' || statResult === 'D3K') {
         batterStats.k++;
       }
       batterStats.rbi += rbiCount;
@@ -2574,7 +2574,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       pStats.outsRecorded += outsOnPlay;
       pStats.battersFaced++;
       pStats.pitchCount += pitchCount;
-      if (outType === 'K' || outType === 'KL' || outType === 'D3K') {
+      if (outType === 'K' || outType === 'Kc' || outType === 'D3K') {
         pStats.strikeoutsThrown++;
       }
       pStats.consecutiveHRsAllowed = 0; // Out breaks HR streak
@@ -2728,7 +2728,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     const event: AtBatEvent = {
       eventId: `${gameState.gameId}_${newSequence}`,
       gameId: gameState.gameId,
-      sequence: newSequence,
+      eventIndex: newSequence,
       timestamp: Date.now(),
       batterId: gameState.currentBatterId,
       batterName: gameState.currentBatterName,
@@ -2894,7 +2894,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     const event: AtBatEvent = {
       eventId: `${gameState.gameId}_${newSequence}`,
       gameId: gameState.gameId,
-      sequence: newSequence,
+      eventIndex: newSequence,
       timestamp: Date.now(),
       batterId: gameState.currentBatterId,
       batterName: gameState.currentBatterName,
@@ -3055,7 +3055,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     const event: AtBatEvent = {
       eventId: `${gameState.gameId}_${newSequence}`,
       gameId: gameState.gameId,
-      sequence: newSequence,
+      eventIndex: newSequence,
       timestamp: Date.now(),
       batterId: gameState.currentBatterId,
       batterName: gameState.currentBatterName,

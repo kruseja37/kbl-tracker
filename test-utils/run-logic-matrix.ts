@@ -64,7 +64,7 @@ const goldenCasesRaw = JSON.parse(
 // 20 outcomes — EXACT values from AtBatResult type (src/types/game.ts:12-14)
 const OUTCOMES: AtBatResult[] = [
   '1B', '2B', '3B', 'HR',           // Hits (4)
-  'K', 'KL', 'GO', 'FO', 'LO',     // Outs (12)
+  'K', 'Kc', 'GO', 'FO', 'LO',     // Outs (12)
   'PO', 'DP', 'TP', 'FC', 'SF',
   'SAC', 'D3K',
   'BB', 'HBP', 'IBB',               // Walks (3)

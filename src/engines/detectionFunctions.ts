@@ -724,7 +724,7 @@ export function detectIBBStrikeout(
   }
 
   // Pitcher IBB'd to pitch to this batter, and this batter struck out
-  if (currentResult === 'K' || currentResult === 'KL') {
+  if (currentResult === 'K' || currentResult === 'Kc') {
     return null; // This is expected - the batter striking out validates the IBB
   }
 

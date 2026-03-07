@@ -31,7 +31,7 @@ describe('AtBatEvent Interface Completeness', () => {
       // Identity
       eventId: 'game001_1',
       gameId: 'game001',
-      sequence: 1,
+      eventIndex: 1,
       timestamp: Date.now(),
 
       // Who
@@ -96,7 +96,7 @@ describe('AtBatEvent Interface Completeness', () => {
     // Verify all required fields exist
     expect(atBatEvent.eventId).toBeDefined();
     expect(atBatEvent.gameId).toBeDefined();
-    expect(atBatEvent.sequence).toBeDefined();
+    expect(atBatEvent.eventIndex).toBeDefined();
     expect(atBatEvent.batterId).toBeDefined();
     expect(atBatEvent.pitcherId).toBeDefined();
     expect(atBatEvent.result).toBeDefined();
@@ -107,25 +107,25 @@ describe('AtBatEvent Interface Completeness', () => {
     expect(atBatEvent.fameEvents).toBeDefined();
   });
 
-  test('eventId format is gameId_sequence', () => {
+  test('eventId format is gameId_eventIndex', () => {
     const event: Partial<AtBatEvent> = {
       eventId: 'game123_5',
       gameId: 'game123',
-      sequence: 5,
+      eventIndex: 5,
     };
 
-    expect(event.eventId).toBe(`${event.gameId}_${event.sequence}`);
+    expect(event.eventId).toBe(`${event.gameId}_${event.eventIndex}`);
   });
 
-  test('sequence is monotonically increasing', () => {
+  test('eventIndex is monotonically increasing', () => {
     const events: Partial<AtBatEvent>[] = [
-      { eventId: 'g1_1', sequence: 1 },
-      { eventId: 'g1_2', sequence: 2 },
-      { eventId: 'g1_3', sequence: 3 },
+      { eventId: 'g1_1', eventIndex: 1 },
+      { eventId: 'g1_2', eventIndex: 2 },
+      { eventId: 'g1_3', eventIndex: 3 },
     ];
 
     for (let i = 1; i < events.length; i++) {
-      expect(events[i].sequence).toBeGreaterThan(events[i - 1].sequence!);
+      expect(events[i].eventIndex).toBeGreaterThan(events[i - 1].eventIndex!);
     }
   });
 });
@@ -520,7 +520,7 @@ describe('Data Flow Requirements', () => {
     const event: AtBatEvent = {
       eventId: 'g1_1',
       gameId: 'g1',
-      sequence: 1,
+      eventIndex: 1,
       timestamp: Date.now(),
       batterId: 'b1',
       batterName: 'Batter',
@@ -555,7 +555,7 @@ describe('Data Flow Requirements', () => {
     // Verify the event has all fields needed for persistence
     expect(event.eventId).toBeTruthy();
     expect(event.gameId).toBeTruthy();
-    expect(typeof event.sequence).toBe('number');
+    expect(typeof event.eventIndex).toBe('number');
     expect(typeof event.timestamp).toBe('number');
 
     // Verify JSON serialization works (needed for IndexedDB)
@@ -570,9 +570,9 @@ describe('Data Flow Requirements', () => {
     // "Events queryable by gameId"
 
     const gameEvents: AtBatEvent[] = [
-      { eventId: 'g1_1', gameId: 'g1', sequence: 1 } as AtBatEvent,
-      { eventId: 'g1_2', gameId: 'g1', sequence: 2 } as AtBatEvent,
-      { eventId: 'g2_1', gameId: 'g2', sequence: 1 } as AtBatEvent,
+      { eventId: 'g1_1', gameId: 'g1', eventIndex: 1 } as AtBatEvent,
+      { eventId: 'g1_2', gameId: 'g1', eventIndex: 2 } as AtBatEvent,
+      { eventId: 'g2_1', gameId: 'g2', eventIndex: 1 } as AtBatEvent,
     ];
 
     // Filter by gameId (what IndexedDB index would do)
