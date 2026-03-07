@@ -64,6 +64,7 @@ import { completeGame as completeScheduleGame } from '../../../utils/scheduleSto
 import { extractFieldingEvents, type FieldingExtractionContext } from '../utils/fieldingEventExtractor';
 import { logFieldingEvent } from '../../../utils/eventLog';
 import { POSITION_MAP } from '../components/fielderInference';
+import { calculateRunnerDefaults, type RunnerDefaults } from '../components/runnerDefaults';
 
 // Note: Using GameState from useGameState hook instead of local interface
 // This interface is deprecated but kept for reference during migration
@@ -1687,6 +1688,145 @@ export function GameTracker() {
     }
   }, [recordHit, recordOut, recordWalk, recordError, advanceCount, gameState, undoSystem, playerStats, pitcherStats, fameTrackingHook, playerStateHook, runnerNames, buildGameStateForLI, mwarHook, pendingMWARDecisions, inferFielderCredits]);
 
+  // ══════════════════════════════════════════════════════════════
+  // QUICK BAR HANDLER — §3.2 one-tap execution flow
+  // Tap → snapshot context → calculateRunnerDefaults → capture undo
+  // → calculate RBI → record play → log → update diamond
+  // EnhancedInteractiveField remains as alternate input path.
+  // ══════════════════════════════════════════════════════════════
+
+  // Outcome classification for Quick Bar buttons
+  const QUICK_BAR_HITS: readonly string[] = ['1B', '2B', '3B', 'HR'];
+  const QUICK_BAR_OUTS: readonly string[] = ['K', 'GO', 'FO', 'LO', 'PO', 'DP', 'TP', 'SF', 'SAC'];
+  const QUICK_BAR_WALKS: readonly string[] = ['BB', 'HBP', 'IBB'];
+
+  const handleQuickBarOutcome = useCallback(async (outcome: string) => {
+    if (!gameInitialized) return;
+
+    // 1. Snapshot current context
+    const bases = { ...gameState.bases };
+    const outs = gameState.outs;
+
+    // 2. Build a minimal PlayData for calculateRunnerDefaults
+    const buildPlayData = () => {
+      if (QUICK_BAR_HITS.includes(outcome)) {
+        if (outcome === 'HR') {
+          return { type: 'hr' as const, hitType: 'HR' as const, outType: undefined, fieldingSequence: [] as number[] };
+        }
+        return { type: 'hit' as const, hitType: outcome as '1B' | '2B' | '3B', outType: undefined, fieldingSequence: [] as number[] };
+      }
+      if (QUICK_BAR_OUTS.includes(outcome)) {
+        return { type: 'out' as const, hitType: undefined, outType: outcome as PlayData['outType'], fieldingSequence: [] as number[] };
+      }
+      // Walk/HBP/IBB — handled separately below
+      return { type: 'walk' as const, hitType: undefined, outType: undefined, fieldingSequence: [] as number[] };
+    };
+
+    // 3. Calculate runner defaults
+    const minimalPlay = buildPlayData();
+    const defaults: RunnerDefaults = calculateRunnerDefaults(
+      minimalPlay as PlayData,
+      bases,
+      outs
+    );
+
+    // 4. Calculate RBI from defaults (count runners scoring)
+    const calculateRBI = (): number => {
+      let rbi = 0;
+      if (defaults.third?.to === 'home') rbi++;
+      if (defaults.second?.to === 'home') rbi++;
+      if (defaults.first?.to === 'home') rbi++;
+      if (defaults.batter?.to === 'home') rbi++;
+      return rbi;
+    };
+
+    // 5. Convert RunnerDefaults to RunnerAdvancement for recordHit/recordOut
+    const toRunnerAdvancement = (): RunnerAdvancement | undefined => {
+      const adv: RunnerAdvancement = {};
+      if (defaults.first && defaults.first.to !== 'first') {
+        adv.fromFirst = defaults.first.to === 'out' ? 'out' : defaults.first.to as 'second' | 'third' | 'home';
+      }
+      if (defaults.second && defaults.second.to !== 'second') {
+        adv.fromSecond = defaults.second.to === 'out' ? 'out' : defaults.second.to as 'third' | 'home';
+      }
+      if (defaults.third && defaults.third.to !== 'third') {
+        adv.fromThird = defaults.third.to === 'out' ? 'out' : defaults.third.to as 'home';
+      }
+      return Object.keys(adv).length > 0 ? adv : undefined;
+    };
+
+    // 6. Capture undo snapshot
+    undoSystem.captureSnapshot(`Quick: ${outcome}`);
+
+    try {
+      const runnerAdv = toRunnerAdvancement();
+      const rbi = calculateRBI();
+
+      // 7. Route to correct recording function
+      if (QUICK_BAR_HITS.includes(outcome)) {
+        await recordHit(outcome as HitType, rbi, runnerAdv);
+        logAction(`${outcome}${rbi > 0 ? ` — ${rbi} RBI` : ''}`);
+
+      } else if (QUICK_BAR_WALKS.includes(outcome)) {
+        await recordWalk(outcome as WalkType);
+        logAction(`${outcome}`);
+
+      } else if (outcome === 'E') {
+        // Error: recordError(rbi, runnerAdv) — minimal for now
+        await recordError(0, undefined);
+        logAction('E (reached on error)');
+
+      } else if (outcome === 'FC') {
+        // Fielder's Choice: batter reaches, lead runner out
+        await recordOut('FC' as OutType, runnerAdv);
+        logAction('FC');
+
+      } else if (outcome === 'D3K') {
+        // Dropped 3rd strike — batter reached (1B empty or 2 outs)
+        const d3kLegal = !bases.first || outs >= 2;
+        await recordD3K(d3kLegal);
+        logAction(d3kLegal ? 'D3K (batter reached)' : 'D3K (batter out)');
+
+      } else if (outcome === 'WP_K' || outcome === 'PB_K') {
+        // Wild pitch / passed ball strikeout — K but batter reaches
+        await recordD3K(true);
+        logAction(`${outcome} (K, batter reached)`);
+
+      } else if (QUICK_BAR_OUTS.includes(outcome)) {
+        await recordOut(outcome as OutType, runnerAdv);
+        logAction(`${outcome}`);
+
+      } else {
+        // Unknown — just log
+        logAction(`[QB] ${outcome}`);
+      }
+
+      // 8. Update runner names from defaults
+      const newNames: { first?: string; second?: string; third?: string } = {};
+      const batterName = gameState.currentBatterName;
+
+      // Map existing runners to their new positions
+      if (defaults.third?.to === 'third') newNames.third = runnerNames.third;
+      if (defaults.second?.to === 'second') newNames.second = runnerNames.second;
+      if (defaults.second?.to === 'third') newNames.third = runnerNames.second;
+      if (defaults.first?.to === 'first') newNames.first = runnerNames.first;
+      if (defaults.first?.to === 'second') newNames.second = runnerNames.first;
+      if (defaults.first?.to === 'third') newNames.third = runnerNames.first;
+
+      // Place batter
+      if (defaults.batter?.to === 'first') newNames.first = batterName;
+      else if (defaults.batter?.to === 'second') newNames.second = batterName;
+      else if (defaults.batter?.to === 'third') newNames.third = batterName;
+
+      setRunnerNames(newNames);
+
+      console.log(`[QuickBar] Recorded: ${outcome}, RBI: ${rbi}, runners:`, newNames);
+
+    } catch (error) {
+      console.error(`[QuickBar] Failed to record ${outcome}:`, error);
+    }
+  }, [gameInitialized, gameState, recordHit, recordOut, recordWalk, recordError, recordD3K, undoSystem, logAction, runnerNames]);
+
   // EXH-016: Handle fielder credit confirmation - continue processing the play with credits
   const handleFielderCreditConfirm = useCallback(async (credits: FielderCredit[]) => {
     console.log('[EXH-016] Fielder credits confirmed:', credits);
@@ -2504,7 +2644,7 @@ export function GameTracker() {
 
         {/* ZONE 4: Quick Bar — bottom left */}
         <div style={{ gridColumn: '1', gridRow: '2' }}>
-          <QuickBar disabled={!gameInitialized} />
+          <QuickBar disabled={!gameInitialized} onOutcome={handleQuickBarOutcome} />
         </div>
 
         {/* ZONE 5: Modifiers + Actions — bottom center */}
