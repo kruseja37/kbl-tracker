@@ -26,7 +26,7 @@ interface PlayoffSettings {
   dhRule: "yes" | "no" | "nl-only";
 }
 
-export function WorldSeries() {
+export function EliminationHome() {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<PlayoffTab>("setup");
   const [settings, setSettings] = useState<PlayoffSettings>({
@@ -139,7 +139,7 @@ function SetupTab({
           );
         }
       } catch (err) {
-        console.error('[WorldSeries] Failed to load leagues:', err);
+        console.error('[EliminationHome] Failed to load leagues:', err);
       }
     }
     loadLeagues();

@@ -66,7 +66,7 @@ export function AppHome() {
           </Link>
 
           <Link
-            to="/world-series"
+            to="/elimination/select"
             className="bg-[#CC44CC] h-[71.102px] relative block w-full"
           >
             <div aria-hidden="true" className="absolute border-[#992299] border-[5.556px] border-solid inset-0 pointer-events-none shadow-[6px_6px_0px_0px_rgba(0,0,0,0.8)]" />

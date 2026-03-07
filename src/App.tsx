@@ -14,7 +14,7 @@ import { FranchiseHome } from './src_figma/app/pages/FranchiseHome';
 import { GameTracker } from './src_figma/app/pages/GameTracker';
 import { PostGameSummary } from './src_figma/app/pages/PostGameSummary';
 import { ExhibitionGame } from './src_figma/app/pages/ExhibitionGame';
-import { WorldSeries } from './src_figma/app/pages/WorldSeries';
+import { EliminationHome } from './src_figma/app/pages/EliminationHome';
 import { SeasonSummary } from './src_figma/app/pages/SeasonSummary';
 import { LeagueBuilder } from './src_figma/app/pages/LeagueBuilder';
 import { LeagueBuilderLeagues } from './src_figma/app/pages/LeagueBuilderLeagues';
@@ -58,8 +58,10 @@ function App() {
         {/* Exhibition Game - Figma Design */}
         <Route path="/exhibition" element={<ExhibitionGame />} />
 
-        {/* Playoffs/World Series - Figma Design */}
-        <Route path="/world-series" element={<WorldSeries />} />
+        {/* Elimination Mode (Playoffs) - Figma Design */}
+        <Route path="/elimination/select" element={<div>Elimination Select — Coming Soon</div>} />
+        <Route path="/elimination/setup" element={<div>Elimination Setup — Coming Soon</div>} />
+        <Route path="/elimination/:eliminationId" element={<EliminationHome />} />
 
         {/* League Builder - Figma Design */}
         <Route path="/league-builder" element={<LeagueBuilder />} />

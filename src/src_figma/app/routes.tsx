@@ -13,7 +13,7 @@ import { FranchiseSetup } from "@/app/pages/FranchiseSetup";
 import { GameTracker } from "@/app/pages/GameTracker";
 import { PostGameSummary } from "@/app/pages/PostGameSummary";
 import { ExhibitionGame } from "@/app/pages/ExhibitionGame";
-import { WorldSeries } from "@/app/pages/WorldSeries";
+import { EliminationHome } from "@/app/pages/EliminationHome";
 import { SeasonSummary } from "@/app/pages/SeasonSummary";
 
 export const router = createBrowserRouter([
@@ -78,7 +78,7 @@ export const router = createBrowserRouter([
     Component: ExhibitionGame,
   },
   {
-    path: "/world-series",
-    Component: WorldSeries,
+    path: "/elimination/:eliminationId",
+    Component: EliminationHome,
   },
 ]);
