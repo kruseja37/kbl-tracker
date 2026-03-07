@@ -624,6 +624,51 @@ export async function logBetweenPlayEvent(event: BetweenPlayEvent): Promise<void
 }
 
 /**
+ * Update an existing AtBatEvent in IndexedDB (for post-hoc enrichment).
+ * Uses put() which overwrites the record at the same eventId key.
+ */
+export async function updateAtBatEvent(
+  eventId: string,
+  updates: Partial<Pick<AtBatEvent, 'enrichment' | 'result' | 'isQualityAtBat' | 'version' | 'editHistory'>>
+): Promise<void> {
+  const db = await initEventLogDB();
+
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(STORES.AT_BAT_EVENTS, 'readwrite');
+    const store = transaction.objectStore(STORES.AT_BAT_EVENTS);
+    const getRequest = store.get(eventId);
+
+    getRequest.onsuccess = () => {
+      const existing = getRequest.result as AtBatEvent | undefined;
+      if (!existing) {
+        reject(new Error(`AtBatEvent not found: ${eventId}`));
+        return;
+      }
+
+      // Merge enrichment (shallow merge into existing enrichment object)
+      if (updates.enrichment) {
+        existing.enrichment = { ...(existing.enrichment || {}), ...updates.enrichment };
+      }
+      // Direct field updates
+      if (updates.result !== undefined) existing.result = updates.result;
+      if (updates.isQualityAtBat !== undefined) existing.isQualityAtBat = updates.isQualityAtBat;
+      if (updates.version !== undefined) existing.version = updates.version;
+
+      // Append to edit history
+      if (updates.editHistory) {
+        existing.editHistory = [...(existing.editHistory || []), ...updates.editHistory];
+      }
+
+      store.put(existing);
+    };
+
+    getRequest.onerror = () => reject(getRequest.error);
+    transaction.oncomplete = () => resolve();
+    transaction.onerror = () => reject(transaction.error);
+  });
+}
+
+/**
  * Mark game as complete
  */
 export async function completeGame(

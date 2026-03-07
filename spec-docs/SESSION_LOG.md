@@ -1,6 +1,58 @@
 # KBL TRACKER — SESSION LOG
 # Previous sessions archived at: spec-docs/archive/SESSION_LOG_through_2026-02-11.md
 ---
+## Session: 2026-03-07 (F) — Layer 5: Enrichment & Play Log
+
+### What Was Accomplished
+- ✅ **TICKET 5.1 (GAP-GT-4-A/B/C/D)**: EnrichmentPanel.tsx — MiniDiamond SVG (tap-to-place field location), FieldingSequenceInput (position number chain), HR distance input, all wired via onEntryTap in GameTracker
+- ✅ **TICKET 5.2 (GAP-GT-4-E)**: K/Kc inline toggle badge in PlayLog — tapping "K?" toggles K↔Kc directly on AtBatEvent.result via updateAtBatEvent()
+- ✅ **TICKET 5.3 (GAP-GT-4-F)**: Pitch type selector — 9 types (4F, 2F, CB, SL, CH, FK, CF, SB, UNK) as button grid in EnrichmentPanel
+- ✅ **TICKET 5.4 (GAP-GT-4-I)**: QAB detection — 7+ pitches OR walk (BB/IBB/HBP) OR hit = Quality At-Bat, shown as "Q" badge in PlayLog
+- ✅ **TICKET 5.5 (GAP-GT-4-G)**: Batter position persisted — verified already wired at useGameState.ts:1289 (batterInLineup?.position)
+- ✅ **TICKET 5.6 (GAP-GT-4-H)**: IFR auto-prompt — verified still working at GameTracker.tsx:3886 (PO + 2+ runners + <2 outs)
+- ✅ **TICKET 5.7 (GAP-GT-4-J)**: Between-inning enrichment prompt — non-blocking gold banner shows unenriched count at end of half-inning
+- ✅ **TICKET 5.8 (GAP-GT-4-K)**: Post-game enrichment summary — unenriched count shown in end-game confirmation modal with Enrich/Continue options
+
+### Key Implementation Details
+- Added `updateAtBatEvent()` to eventLog.ts — first post-hoc update function (get-then-put on IndexedDB, shallow merge for enrichment)
+- PlayLogEntry interface extended with eventId, hasPitchCount, hasPitchType, isQAB
+- EnrichmentPanel replaces PlayLogPanel conditionally in Zone 3 (right panel)
+- Each enrichment field auto-saves immediately to IndexedDB (no explicit Save button)
+- enrichmentCache (Map) tracks local state to avoid re-reading IndexedDB on every panel open
+
+### Decisions Made
+- Enrichment is NEVER blocking — all prompts are dismissible, core stats unaffected
+- Auto-save per field (not per panel close) — matches spec §4.1 "save immediately"
+- QAB badge uses green "Q" pill in PlayLog row 1
+- K/Kc toggle updates AtBatEvent.result field directly (not enrichment sub-field)
+- Between-inning prompt only shows if unenriched count > 0 and user hasn't dismissed
+
+### NFL Results
+- Tier 1 (Code): ✅ Build exit 0, 4,028 tests pass
+- Tier 2 (Data Flow): ✅ PlayLog.onEntryTap → GameTracker.handleEntryTap → EnrichmentPanel → handleEnrichmentUpdate → updateAtBatEvent() → IndexedDB
+- Tier 2 (Data Flow): ✅ K? badge → handleKToggle → updateAtBatEvent(result) → PlayLogEntry update
+- Tier 3 (Spec Alignment): ✅ All 8 tickets match §4.1/§4.2/§4.3 spec
+- **Browser Testing**: UNVERIFIED — no live testing performed
+- **Day Status**: COMPLETE (code-level)
+
+### Files Created
+- `src/src_figma/app/components/EnrichmentPanel.tsx` — MiniDiamond, FieldingSequenceInput, EnrichmentPanel, pitch types
+
+### Files Modified
+- `src/utils/eventLog.ts` — added updateAtBatEvent()
+- `src/src_figma/app/components/PlayLogPanel.tsx` — extended interface + badges + K toggle + QAB
+- `src/src_figma/app/pages/GameTracker.tsx` — enrichment state, handlers, Zone 3 conditional rendering, prompts
+
+### Build/Test Baseline
+- Build: PASS (exit 0)
+- Tests: 4,028 pass / 0 fail / 103 files
+
+### Pending / Next Steps
+- [ ] Browser-test Layer 5 enrichment UI (tap play → panel opens, field location, pitch type, etc.)
+- [ ] Phase C: Code Alignment (V1 spec → code gap analysis)
+- [ ] Wire startingLineupsRef into archive flow at game end (GameRecord population)
+
+---
 ## Session: 2026-03-07 (E) — Layer 4: Between-Play Events & Substitutions
 
 ### What Was Accomplished

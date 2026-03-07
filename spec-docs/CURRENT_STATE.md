@@ -1,7 +1,7 @@
 # CURRENT_STATE.md
 
 **Last Updated:** 2026-03-07
-**Phase:** V1 Simplification — Phase B COMPLETE → Phase C Next | GameTracker Delta: Layer 4 COMPLETE
+**Phase:** V1 Simplification — Phase B COMPLETE → Phase C Next | GameTracker Delta: Layer 5 COMPLETE
 
 ---
 
@@ -11,21 +11,23 @@ Phase B — V1 Spec Assembly — **COMPLETE.** Four V1_FINAL.md build specs prod
 
 ## Last Completed Action
 
-Session 2026-03-07 (E): Completed GameTracker Delta Layer 4 — Between-Play Events & Substitutions.
+Session 2026-03-07 (F): Completed GameTracker Delta Layer 5 — Enrichment & Play Log.
 
-- **TICKET 4.1 (GAP-GT-5-A)**: Runner tap → popover (Steal/Advance/WP/PB/Pickoff/Substitute)
-- **TICKET 4.2 (GAP-GT-5-B)**: WP/PB destination picker (non-standard advance)
-- **TICKET 4.3 (GAP-GT-7-A)**: Fielder tap → substitution flow (SubstitutionModalBase)
-- **TICKET 4.4 (GAP-GT-5-C)**: Pinch runner [Substitute] in runner popover
-- **TICKET 4.5 (GAP-GT-5-F)**: [Move Position] in fielder popover
-- **TICKET 4.6 (GAP-GT-5-E)**: Tappable pitcher in FenwayBoard → pitching change
-- **TICKET 4.10 (GAP-GT-5-G)**: Position innings tracking (positionInningsRef)
-- Branch: `feature/gt-layer4-between-play-subs` — build pass, 4,028 tests pass
+- **TICKET 5.1 (GAP-GT-4-A/B/C/D)**: EnrichmentPanel.tsx + onEntryTap wiring (field location, fielding sequence, HR distance)
+- **TICKET 5.2 (GAP-GT-4-E)**: K/Kc inline toggle badge in PlayLog + handler
+- **TICKET 5.3 (GAP-GT-4-F)**: Pitch type selector (9 types: 4F, 2F, CB, SL, CH, FK, CF, SB, UNK)
+- **TICKET 5.4 (GAP-GT-4-I)**: QAB detection (7+ pitches, walks, hits)
+- **TICKET 5.5 (GAP-GT-4-G)**: Batter position in AtBatEvent — verified already wired (useGameState.ts:1289)
+- **TICKET 5.6 (GAP-GT-4-H)**: IFR auto-prompt — verified still working (GameTracker.tsx:3886)
+- **TICKET 5.7 (GAP-GT-4-J)**: Between-inning enrichment prompt (non-blocking banner)
+- **TICKET 5.8 (GAP-GT-4-K)**: Post-game enrichment summary (unenriched count in end-game modal)
+- Build: PASS, Tests: 4,028 pass / 0 fail / 103 files
 
 ## Next Action
 
-**GameTracker Delta Layer 5** — Special Events (TOOTBLAN, Web Gem, Nut Shot auto-detect).
-OR continue **Phase C — Code Alignment** (V1 spec → code gap analysis).
+**All 5 GameTracker Delta Layers COMPLETE.** Next:
+- Continue **Phase C — Code Alignment** (V1 spec → code gap analysis)
+- OR browser-test Layer 5 enrichment UI (UNVERIFIED — no live testing done yet)
 
 ## GameTracker Delta Progress
 
@@ -38,8 +40,8 @@ OR continue **Phase C — Code Alignment** (V1 spec → code gap analysis).
 | Layer 2B: Quick Bar | ✅ COMPLETE | 512e7ea |
 | Layer 2C+D: Fenway Board + Play Log | ✅ COMPLETE | 8077ddc |
 | Layer 3: Baseball Rules | ✅ COMPLETE | 070affc |
-| Layer 4: Between-Play Wiring | ✅ COMPLETE | (branch: feature/gt-layer4-between-play-subs) |
-| Layer 5: Special Events | ⬜ NOT STARTED | — |
+| Layer 4: Between-Play Wiring | ✅ COMPLETE | a7a4b93 |
+| Layer 5: Enrichment & Play Log | ✅ COMPLETE | (this session) |
 
 ---
 

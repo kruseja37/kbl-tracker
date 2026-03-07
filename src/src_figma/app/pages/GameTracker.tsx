@@ -16,6 +16,8 @@ import { MiniScoreboard } from "@/app/components/MiniScoreboard";
 import { FenwayBoard } from "@/app/components/FenwayBoard";
 import { QuickBar } from "@/app/components/QuickBar";
 import { PlayLogPanel, type PlayLogEntry } from "@/app/components/PlayLogPanel";
+import { EnrichmentPanel, type EnrichmentUpdate } from "@/app/components/EnrichmentPanel";
+import { updateAtBatEvent } from "../../../utils/eventLog";
 import { getTeamColors, getFielderBorderColors } from "@/config/teamColors";
 
 const ordinalSuffix = (num: number) => {
@@ -217,6 +219,7 @@ export function GameTracker() {
     setPlayoffContext,
     setStadiumName,
     setNextEventEnrichment,
+    atBatSequence,
   } = useGameState(gameId);
   const [gameInitialized, setGameInitialized] = useState(false);
 
@@ -266,6 +269,16 @@ export function GameTracker() {
       timestamp: Date.now(),
     }]);
   }, []);
+
+  // Layer 5: Enrichment Panel state
+  const [enrichingEntry, setEnrichingEntry] = useState<PlayLogEntry | null>(null);
+  const [enrichmentCache, setEnrichmentCache] = useState<Record<string, NonNullable<import('../../../utils/eventLog').AtBatEvent['enrichment']>>>({});
+  // Between-inning enrichment prompt
+  const [showEnrichmentPrompt, setShowEnrichmentPrompt] = useState(false);
+  const [unenrichedCount, setUnenrichedCount] = useState(0);
+  // Post-game enrichment prompt
+  const [showPostGameEnrichPrompt, setShowPostGameEnrichPrompt] = useState(false);
+  const [postGameUnenrichedCount, setPostGameUnenrichedCount] = useState(0);
 
   const logAction = useCallback((entry: string) => {
     pushActivityLog(`${inningLabel()}: ${entry}`);
@@ -1480,6 +1493,7 @@ export function GameTracker() {
         }
 
         pushPlayLogEntry({
+          eventId: `${gameState.gameId}_${atBatSequence}`,
           inningLabel: shortInningLabel(),
           batterName: gameState.currentBatterName,
           result: efResult,
@@ -1490,7 +1504,10 @@ export function GameTracker() {
           hasFieldingData: (playData.fieldingSequence?.length ?? 0) > 0,
           hasLocationData: !!playData.ballLocation,
           hasKType: playData.outType === 'Kc',
+          hasPitchCount: false,
+          hasPitchType: false,
           isEnrichable: !efNonEnrichable.includes(efResult),
+          isQAB: ['BB', 'IBB', 'HBP'].includes(efResult) || efCategory === 'hit',
           fieldingSequence: efFieldingSeq,
         });
       }
@@ -1911,6 +1928,7 @@ export function GameTracker() {
         (outcome === 'D3K' || outcome === 'WP_K' || outcome === 'PB_K') ? 'special' : 'out';
       const qbNonEnrichable = ['BB', 'HBP', 'IBB', 'K', 'Kc'];
       pushPlayLogEntry({
+        eventId: `${gameState.gameId}_${atBatSequence}`,
         inningLabel: shortInningLabel(),
         batterName: gameState.currentBatterName,
         result: outcome,
@@ -1920,7 +1938,10 @@ export function GameTracker() {
         hasFieldingData: false,
         hasLocationData: false,
         hasKType: outcome === 'Kc', // Kc is already typed; plain K needs distinction
+        hasPitchCount: false,
+        hasPitchType: false,
         isEnrichable: !qbNonEnrichable.includes(outcome),
+        isQAB: ['BB', 'IBB', 'HBP'].includes(outcome) || QUICK_BAR_HITS.includes(outcome),
       });
 
       // 8. Update runner names from defaults
@@ -2485,10 +2506,119 @@ export function GameTracker() {
 
   // Handle end of inning
   const handleEndInning = useCallback(() => {
+    // Layer 5 (§4.4): Check for unenriched plays before transitioning
+    const currentHalfPlays = playLogEntries.filter(e => e.inningLabel === shortInningLabel());
+    const unenriched = currentHalfPlays.filter(e =>
+      e.isEnrichable && (!e.hasPitchType || !e.hasLocationData || !e.hasFieldingData)
+    );
+    if (unenriched.length > 0) {
+      setUnenrichedCount(unenriched.length);
+      setShowEnrichmentPrompt(true);
+    }
+
     endInning();
     // Clear runner names when inning ends (bases are cleared)
     setRunnerNames({});
-  }, [endInning]);
+  }, [endInning, playLogEntries, shortInningLabel]);
+
+  // ══════════════════════════════════════════════════════════════
+  // LAYER 5: ENRICHMENT HANDLERS
+  // ══════════════════════════════════════════════════════════════
+
+  // 5.1: Open enrichment panel for a play log entry
+  const handleEntryTap = useCallback((entry: PlayLogEntry) => {
+    if (!entry.isEnrichable) return;
+    setEnrichingEntry(prev => prev?.id === entry.id ? null : entry);
+  }, []);
+
+  // 5.1: Save enrichment field immediately (auto-save on change)
+  const handleEnrichmentUpdate = useCallback(async (field: keyof EnrichmentUpdate, value: unknown) => {
+    if (!enrichingEntry?.eventId) return;
+
+    const update: Partial<import('../../../utils/eventLog').AtBatEvent['enrichment']> = {
+      [field]: value,
+    };
+
+    try {
+      // Update IndexedDB
+      await updateAtBatEvent(enrichingEntry.eventId, { enrichment: update as NonNullable<import('../../../utils/eventLog').AtBatEvent['enrichment']> });
+
+      // Update local cache
+      setEnrichmentCache(prev => ({
+        ...prev,
+        [enrichingEntry.eventId!]: { ...(prev[enrichingEntry.eventId!] || {}), ...update },
+      }));
+
+      // Update PlayLogEntry flags
+      setPlayLogEntries(prev => prev.map(e => {
+        if (e.id !== enrichingEntry.id) return e;
+        const updated = { ...e };
+        if (field === 'fieldLocation') updated.hasLocationData = true;
+        if (field === 'fieldingSequence') updated.hasFieldingData = true;
+        if (field === 'pitchType') updated.hasPitchType = true;
+        if (field === 'pitchesInAtBat') {
+          updated.hasPitchCount = true;
+          // Ticket 5.4: QAB detection
+          const pitches = value as number;
+          if (pitches >= 7) {
+            updated.isQAB = true;
+            updateAtBatEvent(enrichingEntry.eventId!, { isQualityAtBat: true });
+          }
+        }
+        return updated;
+      }));
+
+      // Update the enrichingEntry itself so panel reflects changes
+      setEnrichingEntry(prev => prev ? { ...prev,
+        hasLocationData: field === 'fieldLocation' ? true : prev.hasLocationData,
+        hasFieldingData: field === 'fieldingSequence' ? true : prev.hasFieldingData,
+        hasPitchType: field === 'pitchType' ? true : prev.hasPitchType,
+        hasPitchCount: field === 'pitchesInAtBat' ? true : prev.hasPitchCount,
+        isQAB: field === 'pitchesInAtBat' && (value as number) >= 7 ? true : prev.isQAB,
+      } : null);
+
+    } catch (err) {
+      console.error('[Enrichment] Failed to save:', err);
+    }
+  }, [enrichingEntry]);
+
+  // 5.2: K/Kc toggle — updates result field on AtBatEvent
+  const handleKToggle = useCallback(async (entry: PlayLogEntry) => {
+    if (!entry.eventId) return;
+    const newResult = entry.result === 'K' ? 'Kc' : 'K';
+    try {
+      await updateAtBatEvent(entry.eventId, {
+        result: newResult as import('../../../types/game').AtBatResult,
+        editHistory: [{ field: 'result', oldValue: entry.result, newValue: newResult, timestamp: Date.now() }],
+      });
+      setPlayLogEntries(prev => prev.map(e =>
+        e.id === entry.id ? { ...e, result: newResult, hasKType: true } : e
+      ));
+    } catch (err) {
+      console.error('[K Toggle] Failed:', err);
+    }
+  }, []);
+
+  // 5.1: Close enrichment panel
+  const handleEnrichmentClose = useCallback(() => {
+    setEnrichingEntry(null);
+  }, []);
+
+  // 5.7: Dismiss between-inning enrichment prompt
+  const handleEnrichmentPromptYes = useCallback(() => {
+    setShowEnrichmentPrompt(false);
+    // Find first unenriched play and open its panel
+    const firstUnenriched = playLogEntries.find(e =>
+      e.isEnrichable && (!e.hasPitchType || !e.hasLocationData || !e.hasFieldingData)
+    );
+    if (firstUnenriched) {
+      setEnrichingEntry(firstUnenriched);
+    }
+  }, [playLogEntries]);
+
+  const handleEnrichmentPromptSkip = useCallback(() => {
+    setShowEnrichmentPrompt(false);
+  }, []);
 
   // Handle end game with navigation
   const handleEndGame = useCallback(async () => {
@@ -2985,9 +3115,44 @@ export function GameTracker() {
           )}
         </div>
 
-        {/* ZONE 3: Play Log — right panel, spans both rows */}
-        <div style={{ gridColumn: '3', gridRow: '1 / 3' }}>
-          <PlayLogPanel entries={playLogEntries} />
+        {/* ZONE 3: Play Log + Enrichment Panel — right panel, spans both rows */}
+        <div style={{ gridColumn: '3', gridRow: '1 / 3' }} className="flex flex-col h-full overflow-hidden">
+          {/* Between-inning enrichment prompt (Ticket 5.7) */}
+          {showEnrichmentPrompt && (
+            <div className="bg-[#C4A853]/20 border-b border-[#C4A853] px-2 py-1 flex items-center gap-1 flex-shrink-0">
+              <span className="text-[8px] text-[#C4A853] flex-1">
+                {unenrichedCount} play{unenrichedCount !== 1 ? 's' : ''} unenriched
+              </span>
+              <button
+                onClick={handleEnrichmentPromptYes}
+                className="text-[7px] text-[#34d399] bg-[#064e3b]/60 px-1.5 py-0.5 rounded hover:bg-[#064e3b]"
+              >
+                Enrich
+              </button>
+              <button
+                onClick={handleEnrichmentPromptSkip}
+                className="text-[7px] text-[#6b7280] bg-[#1f2937]/60 px-1.5 py-0.5 rounded hover:bg-[#1f2937]"
+              >
+                Skip
+              </button>
+            </div>
+          )}
+
+          {enrichingEntry !== null ? (
+            /* Enrichment panel replaces play log when active */
+            <EnrichmentPanel
+              entry={enrichingEntry}
+              currentEnrichment={enrichingEntry.eventId ? enrichmentCache[enrichingEntry.eventId] : undefined}
+              onUpdate={handleEnrichmentUpdate}
+              onClose={handleEnrichmentClose}
+            />
+          ) : (
+            <PlayLogPanel
+              entries={playLogEntries}
+              onEntryTap={handleEntryTap}
+              onKToggle={handleKToggle}
+            />
+          )}
         </div>
 
         {/* ZONE 4: Quick Bar — bottom left */}
@@ -3030,8 +3195,8 @@ export function GameTracker() {
 
         {/* Play Location Overlay - REMOVED (now using drag-drop interface) */}
 
-        {/* End Game Confirmation */}
-        {showEndGameConfirmation && (
+        {/* End Game Confirmation — with post-game enrichment prompt (Ticket 5.8) */}
+        {showEndGameConfirmation && !showPostGameEnrichPrompt && (
           <div
             className="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center z-50"
             onClick={() => setShowEndGameConfirmation(false)}
@@ -3060,6 +3225,19 @@ export function GameTracker() {
                 Are you sure you want to end the game? This action cannot be undone.
               </div>
 
+              {/* Unenriched count (Ticket 5.8) */}
+              {(() => {
+                const totalEnrichable = playLogEntries.filter(e => e.isEnrichable).length;
+                const unenriched = playLogEntries.filter(e =>
+                  e.isEnrichable && (!e.hasPitchType || !e.hasLocationData)
+                ).length;
+                return unenriched > 0 ? (
+                  <div className="text-[8px] text-[#C4A853] mb-3">
+                    {unenriched} of {totalEnrichable} plays unenriched.
+                  </div>
+                ) : null;
+              })()}
+
               {/* Buttons */}
               <div className="flex gap-2">
                 <button
@@ -3069,10 +3247,63 @@ export function GameTracker() {
                   CANCEL
                 </button>
                 <button
-                  onClick={handleEndGame}
+                  onClick={() => {
+                    // Check for unenriched plays
+                    const unenriched = playLogEntries.filter(e =>
+                      e.isEnrichable && (!e.hasPitchType || !e.hasLocationData)
+                    ).length;
+                    if (unenriched > 0) {
+                      setPostGameUnenrichedCount(unenriched);
+                      setShowPostGameEnrichPrompt(true);
+                    } else {
+                      handleEndGame();
+                    }
+                  }}
                   className="flex-1 bg-[#DD0000] border-[5px] border-white py-4 text-white text-sm hover:bg-[#FF0000] active:scale-95 transition-transform"
                 >
                   END GAME
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Post-game enrichment prompt (Ticket 5.8) */}
+        {showPostGameEnrichPrompt && (
+          <div
+            className="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center z-50"
+            onClick={() => { setShowPostGameEnrichPrompt(false); handleEndGame(); }}
+          >
+            <div
+              className="bg-[#556B55] border-[6px] border-[#4A6844] p-4 w-[340px] shadow-[8px_8px_0px_0px_rgba(0,0,0,0.8)]"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="bg-[#3d5240] border-[4px] border-[#E8E8D8] p-2 mb-3">
+                <div className="text-xs text-[#E8E8D8] font-bold">ENRICHMENT</div>
+              </div>
+              <div className="text-[9px] text-[#E8E8D8] mb-4">
+                {postGameUnenrichedCount} play{postGameUnenrichedCount !== 1 ? 's' : ''} unenriched. Enrich now or continue?
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => {
+                    setShowPostGameEnrichPrompt(false);
+                    setShowEndGameConfirmation(false);
+                    // Open enrichment on first unenriched play
+                    const firstUnenriched = playLogEntries.find(e =>
+                      e.isEnrichable && (!e.hasPitchType || !e.hasLocationData)
+                    );
+                    if (firstUnenriched) setEnrichingEntry(firstUnenriched);
+                  }}
+                  className="flex-1 bg-[#3d5240] border-[5px] border-[#C4A853] py-3 text-[#C4A853] text-sm hover:bg-[#4A6844] active:scale-95 transition-transform"
+                >
+                  ENRICH
+                </button>
+                <button
+                  onClick={() => { setShowPostGameEnrichPrompt(false); handleEndGame(); }}
+                  className="flex-1 bg-[#DD0000] border-[5px] border-white py-3 text-white text-sm hover:bg-[#FF0000] active:scale-95 transition-transform"
+                >
+                  CONTINUE
                 </button>
               </div>
             </div>
