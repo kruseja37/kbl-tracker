@@ -13,7 +13,7 @@ import { TeamRoster, type Player, type Pitcher } from "@/app/components/TeamRost
 import { MiniScoreboard } from "@/app/components/MiniScoreboard";
 import { FenwayBoard } from "@/app/components/FenwayBoard";
 import { QuickBar } from "@/app/components/QuickBar";
-import { PlayLogPanel } from "@/app/components/PlayLogPanel";
+import { PlayLogPanel, type PlayLogEntry } from "@/app/components/PlayLogPanel";
 import { getTeamColors, getFielderBorderColors } from "@/config/teamColors";
 
 const ordinalSuffix = (num: number) => {
@@ -49,7 +49,7 @@ import type { PitcherRunnerStats } from "../engines/inheritedRunnerTracker";
 import { ErrorOnAdvanceModal, type RunnerAdvanceInfo, type ErrorOnAdvanceResult } from "../components/modals/ErrorOnAdvanceModal";
 // MAJ-03: Wire detection system
 import { runPlayDetections, type UIDetectionResult } from "../engines/detectionIntegration";
-import type { FameEventType } from "../../../types/game";
+import { toMojoLabel, toFitnessLabel, type FameEventType } from "../../../types/game";
 // MAJ-02: Wire fan morale to UI
 import { useFanMorale, type GameResult as FanMoraleGameResult } from "../hooks/useFanMorale";
 // MAJ-04: Wire narrative engine
@@ -246,6 +246,20 @@ export function GameTracker() {
     return formatInningLabel(gameState.isTop, Math.max(1, gameState.inning));
   }, [gameState.inning, gameState.isTop]);
 
+  // §4.2 Structured Play Log — parallel to activityLog (which other systems still use)
+  const [playLogEntries, setPlayLogEntries] = useState<PlayLogEntry[]>([]);
+  const shortInningLabel = useCallback(() => {
+    return `${gameState.isTop ? 'T' : 'B'}${Math.max(1, gameState.inning)}`;
+  }, [gameState.isTop, gameState.inning]);
+
+  const pushPlayLogEntry = useCallback((entry: Omit<PlayLogEntry, 'id' | 'timestamp'>) => {
+    setPlayLogEntries(prev => [...prev, {
+      ...entry,
+      id: `play-${Date.now()}-${prev.length}`,
+      timestamp: Date.now(),
+    }]);
+  }, []);
+
   const logAction = useCallback((entry: string) => {
     pushActivityLog(`${inningLabel()}: ${entry}`);
   }, [inningLabel, pushActivityLog]);
@@ -416,6 +430,8 @@ export function GameTracker() {
         runnerTrackerState,
       });
       console.log("State restored successfully (including player/pitcher stats + runner tracker)");
+      // §4.2: Pop last play log entry on undo
+      setPlayLogEntries(prev => prev.length > 0 ? prev.slice(0, -1) : prev);
     } else {
       console.warn("Incomplete snapshot - cannot restore", snapshot);
     }
@@ -1397,6 +1413,49 @@ export function GameTracker() {
       // Note: Runner outcomes are now handled by runnerAdvancement parameter
       // No need to call applyRunnerOutcomes() separately
 
+      // §4.2: Push structured play log entry for enhanced field plays
+      // Skip foul balls — they aren't at-bat results
+      if (playData.type !== 'foul_ball') {
+        const efResultMap: Record<string, string> = {
+          'hr': 'HR', 'hit': playData.hitType || '1B', 'out': playData.outType || 'GO',
+          'foul_out': 'FO', 'walk': playData.walkType || 'BB', 'error': 'E',
+        };
+        const efResult = efResultMap[playData.type] || playData.type;
+        const efCategory: PlayLogEntry['resultCategory'] =
+          playData.type === 'hr' || playData.type === 'hit' ? 'hit' :
+          playData.type === 'walk' ? 'walk' :
+          playData.type === 'error' ? 'error' :
+          'out';
+        const efNonEnrichable = ['BB', 'HBP', 'IBB'];
+        const efFieldingSeq = playData.fieldingSequence?.length > 0
+          ? playData.fieldingSequence.join('-')
+          : undefined;
+
+        // Count runs scored from runner outcomes
+        let efRunsScored = 0;
+        if (playData.runnerOutcomes) {
+          if (playData.runnerOutcomes.first?.to === 'home') efRunsScored++;
+          if (playData.runnerOutcomes.second?.to === 'home') efRunsScored++;
+          if (playData.runnerOutcomes.third?.to === 'home') efRunsScored++;
+          if (playData.runnerOutcomes.batter?.to === 'home') efRunsScored++;
+        }
+
+        pushPlayLogEntry({
+          inningLabel: shortInningLabel(),
+          batterName: gameState.currentBatterName,
+          result: efResult,
+          resultCategory: efCategory,
+          rbi: playData.type === 'hr' || playData.type === 'hit' || playData.type === 'error'
+            ? (efRunsScored > 0 ? efRunsScored : 0) : 0,
+          runsScored: efRunsScored,
+          hasFieldingData: (playData.fieldingSequence?.length ?? 0) > 0,
+          hasLocationData: !!playData.ballLocation,
+          hasKType: playData.outType === 'Kc',
+          isEnrichable: !efNonEnrichable.includes(efResult),
+          fieldingSequence: efFieldingSeq,
+        });
+      }
+
       // ============================================
       // STEP 4.5: Log fielding events for fWAR pipeline
       // Extracts putouts/assists/errors from PlayData and writes to IndexedDB
@@ -1686,7 +1745,7 @@ export function GameTracker() {
     } catch (error) {
       console.error('Failed to record enhanced play:', error);
     }
-  }, [recordHit, recordOut, recordWalk, recordError, advanceCount, gameState, undoSystem, playerStats, pitcherStats, fameTrackingHook, playerStateHook, runnerNames, buildGameStateForLI, mwarHook, pendingMWARDecisions, inferFielderCredits]);
+  }, [recordHit, recordOut, recordWalk, recordError, advanceCount, gameState, undoSystem, playerStats, pitcherStats, fameTrackingHook, playerStateHook, runnerNames, buildGameStateForLI, mwarHook, pendingMWARDecisions, inferFielderCredits, pushPlayLogEntry, shortInningLabel]);
 
   // ══════════════════════════════════════════════════════════════
   // QUICK BAR HANDLER — §3.2 one-tap execution flow
@@ -1801,6 +1860,26 @@ export function GameTracker() {
         logAction(`[QB] ${outcome}`);
       }
 
+      // §4.2: Push structured play log entry for Quick Bar plays
+      const qbResultCategory: PlayLogEntry['resultCategory'] =
+        QUICK_BAR_HITS.includes(outcome) ? 'hit' :
+        QUICK_BAR_WALKS.includes(outcome) ? 'walk' :
+        outcome === 'E' ? 'error' :
+        (outcome === 'D3K' || outcome === 'WP_K' || outcome === 'PB_K') ? 'special' : 'out';
+      const qbNonEnrichable = ['BB', 'HBP', 'IBB', 'K', 'Kc'];
+      pushPlayLogEntry({
+        inningLabel: shortInningLabel(),
+        batterName: gameState.currentBatterName,
+        result: outcome,
+        resultCategory: qbResultCategory,
+        rbi: QUICK_BAR_HITS.includes(outcome) ? rbi : 0,
+        runsScored: rbi, // Quick Bar: runs scored = RBI (no separate tracking)
+        hasFieldingData: false,
+        hasLocationData: false,
+        hasKType: outcome === 'Kc', // Kc is already typed; plain K needs distinction
+        isEnrichable: !qbNonEnrichable.includes(outcome),
+      });
+
       // 8. Update runner names from defaults
       const newNames: { first?: string; second?: string; third?: string } = {};
       const batterName = gameState.currentBatterName;
@@ -1825,7 +1904,7 @@ export function GameTracker() {
     } catch (error) {
       console.error(`[QuickBar] Failed to record ${outcome}:`, error);
     }
-  }, [gameInitialized, gameState, recordHit, recordOut, recordWalk, recordError, recordD3K, undoSystem, logAction, runnerNames]);
+  }, [gameInitialized, gameState, recordHit, recordOut, recordWalk, recordError, recordD3K, undoSystem, logAction, runnerNames, pushPlayLogEntry, shortInningLabel]);
 
   // EXH-016: Handle fielder credit confirmation - continue processing the play with credits
   const handleFielderCreditConfirm = useCallback(async (credits: FielderCredit[]) => {
@@ -2600,6 +2679,61 @@ export function GameTracker() {
             outs={gameState.outs}
             currentBatterName={gameState.currentBatterName}
             currentPitcherName={gameState.currentPitcherName}
+            batterStats={currentBatterStats ? {
+              ab: currentBatterStats.ab,
+              h: currentBatterStats.h,
+              hr: currentBatterStats.hr,
+              rbi: currentBatterStats.rbi,
+              bb: currentBatterStats.bb,
+              k: currentBatterStats.k,
+            } : undefined}
+            batterAvg={batterAB > 0 ? (batterHits / batterAB).toFixed(3).replace(/^0/, '') : '.000'}
+            batterMojo={(() => {
+              const team = gameState.isTop ? 'away' : 'home';
+              const mojo = getPlayerMojoByName(gameState.currentBatterName, team);
+              return mojo !== undefined ? toMojoLabel(mojo) : undefined;
+            })()}
+            batterMojoColor={(() => {
+              const team = gameState.isTop ? 'away' : 'home';
+              const mojo = getPlayerMojoByName(gameState.currentBatterName, team);
+              return mojo !== undefined ? getMojoColor(mojo) : undefined;
+            })()}
+            batterFitness={(() => {
+              const team = gameState.isTop ? 'away' : 'home';
+              const fitness = getPlayerFitnessByName(gameState.currentBatterName, team);
+              return fitness ? toFitnessLabel(fitness) : undefined;
+            })()}
+            batterHand={currentBatterData?.battingHand}
+            pitcherPitchCount={pitcherPitchCount}
+            pitcherGameERA={(() => {
+              if (!currentPitcherStats) return undefined;
+              const outsRec = currentPitcherStats.outsRecorded;
+              if (outsRec === 0) return '-.--';
+              return ((currentPitcherStats.earnedRuns / outsRec) * 27).toFixed(2);
+            })()}
+            pitcherOuts={currentPitcherStats?.outsRecorded}
+            pitcherHits={currentPitcherStats?.hitsAllowed}
+            pitcherK={currentPitcherStats?.strikeoutsThrown}
+            pitcherBB={currentPitcherStats?.walksAllowed}
+            pitcherMojo={(() => {
+              const team = gameState.isTop ? 'home' : 'away';
+              const mojo = getPlayerMojoByName(gameState.currentPitcherName, team);
+              return mojo !== undefined ? toMojoLabel(mojo) : undefined;
+            })()}
+            pitcherMojoColor={(() => {
+              const team = gameState.isTop ? 'home' : 'away';
+              const mojo = getPlayerMojoByName(gameState.currentPitcherName, team);
+              return mojo !== undefined ? getMojoColor(mojo) : undefined;
+            })()}
+            pitcherFitness={(() => {
+              const team = gameState.isTop ? 'home' : 'away';
+              const fitness = getPlayerFitnessByName(gameState.currentPitcherName, team);
+              return fitness ? toFitnessLabel(fitness) : undefined;
+            })()}
+            pitcherHand={(() => {
+              const pitcher = gameState.isTop ? homePitcher : awayPitcher;
+              return pitcher?.throwingHand;
+            })()}
           />
         </div>
 
@@ -2639,7 +2773,7 @@ export function GameTracker() {
 
         {/* ZONE 3: Play Log — right panel, spans both rows */}
         <div style={{ gridColumn: '3', gridRow: '1 / 3' }}>
-          <PlayLogPanel entries={activityLog} />
+          <PlayLogPanel entries={playLogEntries} />
         </div>
 
         {/* ZONE 4: Quick Bar — bottom left */}
