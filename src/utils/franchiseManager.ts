@@ -70,7 +70,7 @@ export interface AppSettings {
 // ============================================
 
 const META_DB_NAME = 'kbl-app-meta';
-const META_DB_VERSION = 2;
+const META_DB_VERSION = 3;
 const DB_PREFIX = 'kbl-franchise-';
 const CURRENT_SCHEMA_VERSION = 1;
 const APP_VERSION = '1.0.0';
@@ -79,6 +79,7 @@ const META_STORES = {
   franchiseList: 'franchiseList',
   appSettings: 'appSettings',
   franchiseConfigs: 'franchiseConfigs',
+  eliminationList: 'eliminationList',
 };
 
 // ============================================
@@ -124,6 +125,11 @@ export async function initMetaDatabase(): Promise<IDBDatabase> {
       // v2: Add franchiseConfigs store
       if (!db.objectStoreNames.contains(META_STORES.franchiseConfigs)) {
         db.createObjectStore(META_STORES.franchiseConfigs, { keyPath: 'franchiseId' });
+      }
+
+      // v3: Add eliminationList store for Elimination Mode save slots
+      if (!db.objectStoreNames.contains(META_STORES.eliminationList)) {
+        db.createObjectStore(META_STORES.eliminationList, { keyPath: 'eliminationId' });
       }
     };
 

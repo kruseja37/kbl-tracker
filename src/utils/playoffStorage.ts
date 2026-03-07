@@ -9,7 +9,7 @@
  */
 
 const DB_NAME = 'kbl-playoffs';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 const STORES = {
   PLAYOFFS: 'playoffs',           // Playoff instances (one per season)
@@ -49,6 +49,10 @@ export interface PlayoffConfig {
   currentRound: number;
   champion?: string;               // Team ID of winner
   mvp?: PlayoffMVP;
+
+  // Source discriminator (Elimination Mode coexistence)
+  sourceType?: 'franchise' | 'elimination';  // Defaults to 'franchise' for existing records
+  eliminationId?: string;                     // Links to elimination instance
 
   // Timestamps
   createdAt: number;
@@ -134,6 +138,7 @@ export interface PlayoffPlayerStats {
   playerId: string;
   playerName: string;
   teamId: string;
+  sourceType?: 'franchise' | 'elimination';  // Defaults to 'franchise' for existing records
 
   // Batting
   games: number;
@@ -227,6 +232,18 @@ export async function initPlayoffDatabase(): Promise<IDBDatabase> {
         statsStore.createIndex('playoffId', 'playoffId', { unique: false });
         statsStore.createIndex('playerId', 'playerId', { unique: false });
         statsStore.createIndex('teamId', 'teamId', { unique: false });
+      }
+
+      // ── v2 migration: Drop unique constraint on seasonNumber ──
+      // Elimination brackets and franchise playoffs must coexist with
+      // the same seasonNumber values. The unique index prevents this.
+      if (event.oldVersion < 2) {
+        const tx = (event.target as IDBOpenDBRequest).transaction!;
+        const playoffsStore = tx.objectStore(STORES.PLAYOFFS);
+        if (playoffsStore.indexNames.contains('seasonNumber')) {
+          playoffsStore.deleteIndex('seasonNumber');
+        }
+        playoffsStore.createIndex('seasonNumber', 'seasonNumber', { unique: false });
       }
     };
   });

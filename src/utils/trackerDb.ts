@@ -14,7 +14,7 @@
  */
 
 const DB_NAME = 'kbl-tracker';
-const DB_VERSION = 3; // Must be the highest version any consumer ever used
+const DB_VERSION = 4; // Must be the highest version any consumer ever used
 
 let dbInstance: IDBDatabase | null = null;
 
@@ -133,6 +133,23 @@ export async function getTrackerDb(): Promise<IDBDatabase> {
         milestoneStore.createIndex('playerId', 'playerId', { unique: false });
         milestoneStore.createIndex('milestoneType', 'milestoneType', { unique: false });
         milestoneStore.createIndex('achievedDate', 'achievedDate', { unique: false });
+      }
+
+      // ── v4: Elimination Mode stores ─────────────────────────────
+
+      // Roster snapshots — frozen rosters for Elimination brackets
+      if (!db.objectStoreNames.contains('rosterSnapshots')) {
+        const snapshotStore = db.createObjectStore('rosterSnapshots', { keyPath: 'key' });
+        snapshotStore.createIndex('eliminationId', 'eliminationId', { unique: false });
+        snapshotStore.createIndex('teamId', 'teamId', { unique: false });
+      }
+
+      // Mojo/Fitness snapshots — persist between Elimination bracket games
+      if (!db.objectStoreNames.contains('mojoFitnessSnapshots')) {
+        const mojoStore = db.createObjectStore('mojoFitnessSnapshots', {
+          keyPath: ['eliminationId', 'playerId'],
+        });
+        mojoStore.createIndex('eliminationId', 'eliminationId', { unique: false });
       }
     };
   });
