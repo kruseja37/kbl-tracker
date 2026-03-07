@@ -317,7 +317,14 @@ export function GameTracker() {
     subType: string;
     direction?: string;
     rbi?: number;
+    modifiers?: { ifr?: boolean }; // GAP-GT-4-H: IFR flag
   } | null>(null);
+
+  // GAP-GT-6-A: Time play override — when user indicates the 3rd-out tag occurred before the runner scored
+  const [timePlayNoRun, setTimePlayNoRun] = useState(false);
+
+  // GAP-GT-7-C: Track pending PH — PH must bat before they can be removed from lineup
+  const [pendingPH, setPendingPH] = useState<string | null>(null);
 
   // Player card modal state - EXH-036: Added playerId for mojo/fitness editing
   const [selectedPlayer, setSelectedPlayer] = useState<{ name: string; type: 'batter' | 'pitcher'; playerId: string } | null>(null);
@@ -410,7 +417,7 @@ export function GameTracker() {
     }
   }, [restoreState]);
 
-  const undoSystem = useUndoSystem(5, handleUndo);
+  const undoSystem = useUndoSystem(10, handleUndo); // GAP-GT-3-B: increased from 5 to 10
 
   // Keep undo system current state in sync with game state
   // CRIT-01 fix: Include playerStats and pitcherStats as serializable entries
@@ -447,6 +454,10 @@ export function GameTracker() {
   // Determine which team is batting and which is fielding
   const battingTeamId = gameState.isTop ? awayTeamId : homeTeamId;
   const fieldingTeamId = gameState.isTop ? homeTeamId : awayTeamId;
+
+  // GAP-GT-6-G / GAP-GT-6-C: Derived runner state for button availability
+  const hasRunners = !!(gameState.bases.first || gameState.bases.second || gameState.bases.third);
+  const runnerCount = (gameState.bases.first ? 1 : 0) + (gameState.bases.second ? 1 : 0) + (gameState.bases.third ? 1 : 0);
 
   // Get team colors - use navigation state (from database) if available, fall back to static config
   // This ensures teams loaded from IndexedDB show correct colors
@@ -533,13 +544,21 @@ export function GameTracker() {
       batting: p.name === gameState.currentBatterName,
     }));
 
+  // GAP-GT-7-B: Lineup size validation — warn if lineup is not exactly 9 (or 10 with DH)
+  const lineupSizeOk = currentLineup.length >= 9 && currentLineup.length <= 10;
+  if (!lineupSizeOk && currentLineup.length > 0) {
+    console.warn(`[GameTracker] Lineup size ${currentLineup.length} — expected 9 or 10 (with DH)`);
+  }
+
+  // GAP-GT-7-D: Include isOutOfGame players — they display with ❌ so user can see who was used
   const benchPlayers = battingTeamPlayersRaw
-    .filter(p => p.battingOrder === undefined && !p.isOutOfGame)
+    .filter(p => p.battingOrder === undefined)
     .map(p => ({
       name: p.name,
       pos: p.position || 'UT',
       hand: p.battingHand,
       avg: '.000',
+      isOutOfGame: p.isOutOfGame || false,
     }));
 
   const availablePitchers = fieldingTeamPitchersRaw
@@ -566,7 +585,7 @@ export function GameTracker() {
     name: player.name,
     positions: [player.pos],
     battingHand: player.hand as 'L' | 'R' | 'S',
-    isUsed: false,
+    isUsed: player.isOutOfGame, // GAP-GT-7-D: ❌ for players already used/out of game
   }));
 
   const bullpenCardData: BullpenPitcher[] = availablePitchers.map((pitcher) => ({
@@ -929,6 +948,13 @@ export function GameTracker() {
   const handleLineupCardSubstitution = useCallback((sub: SubstitutionData) => {
     console.log("LineupCard substitution:", sub);
 
+    // GAP-GT-7-C: Block substitution if the outgoing player is a pending PH who hasn't batted yet
+    if (pendingPH && pendingPH === sub.outgoingPlayerId) {
+      console.warn(`[GameTracker] Substitution blocked: PH ${sub.outgoingPlayerName} must bat before being replaced`);
+      // TODO: Show UI toast to user
+      return;
+    }
+
     // Capture snapshot for undo
     undoSystem.captureSnapshot(`${sub.type}: ${sub.incomingPlayerId} for ${sub.outgoingPlayerId}`);
 
@@ -969,6 +995,8 @@ export function GameTracker() {
         if (isPinchHitter) {
           // Resolve pinch hitter after next AB
           setPendingMWARDecisions(prev => new Map(prev).set(decisionId, { decisionId, decisionType: 'pinch_hitter', involvedPlayers: [sub.incomingPlayerId], resolveAfterNextPlay: true }));
+          // GAP-GT-7-C: Mark PH as pending — they must bat before being removed
+          setPendingPH(sub.incomingPlayerId);
         }
         console.log(`[mWAR] Recorded ${decisionType} decision: ${decisionId}`);
       } catch (e) { console.warn('[mWAR] Decision recording error (non-blocking):', e); }
@@ -1012,7 +1040,7 @@ export function GameTracker() {
         updateTeamRoster(homeTeamPlayers, setHomeTeamPlayers);
       }
     }
-  }, [changePitcher, makeSubstitution, switchPositions, awayTeamPlayers, homeTeamPlayers]);
+  }, [changePitcher, makeSubstitution, switchPositions, awayTeamPlayers, homeTeamPlayers, pendingPH, setPendingPH]);
 
   // T1-05: Auto-infer fielder credits from fieldingSequence
   // Standard baseball rules: last fielder = putout, others = assists
@@ -2024,12 +2052,17 @@ export function GameTracker() {
         );
         logAction(`${pendingOutcome.subType} (manual) — ${pendingOutcome.rbi || 0} RBI`);
       } else if (pendingOutcome.type === 'out') {
-        await recordOut(pendingOutcome.subType as OutType);
-        logAction(`Out (${pendingOutcome.subType}) (manual entry)`);
+        // GAP-GT-6-A: Pass forceNoRuns when user has toggled the time play override
+        await recordOut(pendingOutcome.subType as OutType, undefined, undefined, timePlayNoRun ? { forceNoRuns: true } : undefined);
+        logAction(`Out (${pendingOutcome.subType}) (manual entry)${timePlayNoRun ? ' [time play — no run]' : ''}`);
+        setTimePlayNoRun(false); // Reset time play toggle after recording
       } else if (pendingOutcome.type === 'walk') {
         await recordWalk(pendingOutcome.subType as WalkType);
         logAction(`${pendingOutcome.subType} walk (manual)`);
       }
+
+      // GAP-GT-7-C: Clear pendingPH after any at-bat result — the PH has batted
+      setPendingPH(null);
 
       // Clear pending outcome and close panels
       setPendingOutcome(null);
@@ -2037,12 +2070,13 @@ export function GameTracker() {
     } catch (error) {
       console.error('Failed to record outcome:', error);
     }
-  }, [pendingOutcome, recordHit, recordOut, recordWalk]);
+  }, [pendingOutcome, recordHit, recordOut, recordWalk, timePlayNoRun]);
 
   // Cancel pending outcome
   const handleCancelOutcome = useCallback(() => {
     setPendingOutcome(null);
     setExpandedOutcome(null);
+    setTimePlayNoRun(false); // GAP-GT-6-A: Always reset on cancel
   }, []);
 
   // Handle end of inning
@@ -2198,6 +2232,15 @@ export function GameTracker() {
             50, // Default season games
           );
           console.log(`[mWAR] Persisted ${mwarHook.gameStats.decisions.length} decisions, mWAR: ${mwarHook.formatCurrentMWAR()}`);
+          // GAP-GT-5-D: Log best/worst decisions by clutchImpact for later aggregation verification
+          const resolvedDecisions = mwarHook.gameStats.decisions.filter(d => d.resolved);
+          if (resolvedDecisions.length > 0) {
+            const sorted = [...resolvedDecisions].sort((a, b) => b.clutchImpact - a.clutchImpact);
+            const best = sorted[0];
+            const worst = sorted[sorted.length - 1];
+            console.log(`[mWAR-WPA] Best decision: ${best.decisionType} (LI=${best.leverageIndex.toFixed(2)}, clutchImpact=${best.clutchImpact.toFixed(3)})`);
+            console.log(`[mWAR-WPA] Worst decision: ${worst.decisionType} (LI=${worst.leverageIndex.toFixed(2)}, clutchImpact=${worst.clutchImpact.toFixed(3)})`);
+          }
         }
       } catch (mwarError) {
         console.warn('[mWAR] Persistence error (non-blocking):', mwarError);
@@ -2238,6 +2281,9 @@ export function GameTracker() {
           console.error('[T0-05] Schedule completion failed:', schedErr);
         }
       }
+
+      // GAP-GT-3-J: Clear undo stack — game is over, undo must not be possible after navigation
+      undoSystem.clearHistory();
 
       // Pass game mode and narratives so PostGameSummary can display them
       navigate(`/post-game/${gameId}`, {
@@ -3168,6 +3214,39 @@ export function GameTracker() {
                           <DetailButton label="LEAPING" onClick={() => {}} />
                         </div>
                       </div>
+                      {/* GAP-GT-3-H: Sac fly prompt — FO with R3 occupied and <2 outs */}
+                      {gameState.bases.third && gameState.outs < 2 && (
+                        <div className="p-1 bg-[#2a4a2a] border border-[#44AA44] mt-1">
+                          <div className="text-[8px] text-[#88FF88] font-bold mb-1">🏃 RUNNER ON 3RD — SAC FLY?</div>
+                          <button
+                            onClick={async () => {
+                              // Record as SF directly (cleaner than mutating pendingOutcome)
+                              try {
+                                await recordOut('SF');
+                                logAction('SF (sac fly via prompt)');
+                                setPendingOutcome(null);
+                                setExpandedOutcome(null);
+                              } catch (e) { console.error('Failed to record SF:', e); }
+                            }}
+                            disabled={isSaving}
+                            className="w-full text-[9px] py-1 bg-[#336633] border border-[#44AA44] text-[#88FF88] font-bold hover:bg-[#447744] disabled:opacity-50"
+                          >
+                            RECORD AS SAC FLY (SF)
+                          </button>
+                        </div>
+                      )}
+                      {/* GAP-GT-6-A: Time play toggle — only relevant on 3rd out with runners */}
+                      {gameState.outs === 2 && hasRunners && (
+                        <div className="p-1 bg-[#3a2a1a] border border-[#AA6644] mt-1">
+                          <div className="text-[8px] text-[#FFAA66] font-bold mb-1">⏱ TIME PLAY — 3RD OUT</div>
+                          <button
+                            onClick={() => setTimePlayNoRun(prev => !prev)}
+                            className={`w-full text-[9px] py-1 border font-bold ${timePlayNoRun ? 'bg-[#8B4513] border-[#AA6644] text-[#FFD700]' : 'bg-[#333] border-[#555] text-[#AAA]'}`}
+                          >
+                            {timePlayNoRun ? '✓ OUT BEFORE RUN — NO RUNS COUNT' : 'Runner scored before out? (tap to negate)'}
+                          </button>
+                        </div>
+                      )}
                       {/* RECORD Button */}
                       <div className="grid grid-cols-2 gap-2 pt-2">
                         <button
@@ -3208,6 +3287,18 @@ export function GameTracker() {
                           <DetailButton label="RF" onClick={() => {}} />
                         </div>
                       </div>
+                      {/* GAP-GT-6-A: Time play toggle — only relevant on 3rd out with runners */}
+                      {gameState.outs === 2 && hasRunners && (
+                        <div className="p-1 bg-[#3a2a1a] border border-[#AA6644]">
+                          <div className="text-[8px] text-[#FFAA66] font-bold mb-1">⏱ TIME PLAY — 3RD OUT</div>
+                          <button
+                            onClick={() => setTimePlayNoRun(prev => !prev)}
+                            className={`w-full text-[9px] py-1 border font-bold ${timePlayNoRun ? 'bg-[#8B4513] border-[#AA6644] text-[#FFD700]' : 'bg-[#333] border-[#555] text-[#AAA]'}`}
+                          >
+                            {timePlayNoRun ? '✓ OUT BEFORE RUN — NO RUNS COUNT' : 'Runner scored before out? (tap to negate)'}
+                          </button>
+                        </div>
+                      )}
                       {/* RECORD Button */}
                       <div className="grid grid-cols-2 gap-2 pt-2">
                         <button
@@ -3228,6 +3319,7 @@ export function GameTracker() {
                   </OutcomeDetailPanel>
                 )}
 
+                {/* GAP-GT-6-G / GAP-GT-6-C: Button availability enforcement */}
                 <div className="grid grid-cols-5 gap-1">
                   <OutcomeButton
                     label="PO"
@@ -3240,6 +3332,7 @@ export function GameTracker() {
                     color="red"
                     isExpanded={expandedOutcome === 'DP'}
                     onClick={() => { toggleOutcomeDetail('DP'); handleOutSelect('DP'); }}
+                    disabled={gameState.outs >= 2} // DP impossible with 2 outs
                   />
                   <OutcomeButton
                     label="FC"
@@ -3252,18 +3345,62 @@ export function GameTracker() {
                     color="purple"
                     isExpanded={expandedOutcome === 'SF'}
                     onClick={() => { toggleOutcomeDetail('SF'); handleOutSelect('SF'); }}
+                    disabled={gameState.outs >= 2} // SF impossible with 2 outs
                   />
                   <OutcomeButton
                     label="SH"
                     color="purple"
                     isExpanded={expandedOutcome === 'SH'}
                     onClick={() => { toggleOutcomeDetail('SH'); handleOutSelect('SH'); }}
+                    disabled={!hasRunners} // GAP-GT-6-C: SAC requires runners
                   />
                 </div>
 
-                {/* PO/DP/FC/SF/SH Quick Record */}
-                {(expandedOutcome === 'PO' || expandedOutcome === 'DP' || expandedOutcome === 'FC' || expandedOutcome === 'SF' || expandedOutcome === 'SH') && (
+                {/* TP button — needs ≥2 runners AND 0 outs (GAP-GT-6-G) */}
+                <div className="grid grid-cols-2 gap-1">
+                  <OutcomeButton
+                    label="TP"
+                    color="red"
+                    isExpanded={expandedOutcome === 'TP'}
+                    onClick={() => { toggleOutcomeDetail('TP'); handleOutSelect('TP'); }}
+                    disabled={runnerCount < 2 || gameState.outs > 0}
+                  />
+                  <OutcomeButton
+                    label="D3K"
+                    color="purple"
+                    isExpanded={expandedOutcome === 'D3K'}
+                    onClick={() => { toggleOutcomeDetail('D3K'); handleOutSelect('D3K'); }}
+                    disabled={!!gameState.bases.first && gameState.outs < 2} // D3K illegal when 1B occupied & <2 outs
+                  />
+                </div>
+
+                {/* PO/DP/FC/SF/SH/TP Quick Record */}
+                {(expandedOutcome === 'PO' || expandedOutcome === 'DP' || expandedOutcome === 'FC' || expandedOutcome === 'SF' || expandedOutcome === 'SH' || expandedOutcome === 'TP') && (
                   <OutcomeDetailPanel title={`${expandedOutcome} DETAILS`}>
+                    {/* GAP-GT-4-H: IFR auto-prompt when PO + R1+R2 (or loaded) + <2 outs */}
+                    {expandedOutcome === 'PO' && runnerCount >= 2 && gameState.outs < 2 && (
+                      <div className="mb-2 p-1 bg-[#2a2a4a] border border-[#8888FF]">
+                        <div className="text-[8px] text-[#AAAAFF] font-bold mb-1">⚑ INFIELD FLY RULE?</div>
+                        <div className="grid grid-cols-2 gap-1">
+                          <button
+                            onClick={() => {
+                              setPendingOutcome(prev => prev ? { ...prev, modifiers: { ...prev.modifiers, ifr: true } } as typeof prev : prev);
+                            }}
+                            className={`text-[9px] py-1 border font-bold ${(pendingOutcome as { modifiers?: { ifr?: boolean } })?.modifiers?.ifr ? 'bg-[#6666FF] border-[#4444DD] text-white' : 'bg-[#333] border-[#555] text-[#AAA]'}`}
+                          >
+                            YES — IFR
+                          </button>
+                          <button
+                            onClick={() => {
+                              setPendingOutcome(prev => prev ? { ...prev, modifiers: { ...prev.modifiers, ifr: false } } as typeof prev : prev);
+                            }}
+                            className={`text-[9px] py-1 border font-bold ${(pendingOutcome as { modifiers?: { ifr?: boolean } })?.modifiers?.ifr === false ? 'bg-[#555] border-[#777] text-white' : 'bg-[#333] border-[#555] text-[#AAA]'}`}
+                          >
+                            NO
+                          </button>
+                        </div>
+                      </div>
+                    )}
                     <div className="grid grid-cols-2 gap-2 pt-2">
                       <button
                         onClick={handleCancelOutcome}
@@ -3282,18 +3419,14 @@ export function GameTracker() {
                   </OutcomeDetailPanel>
                 )}
 
-                <div className="grid grid-cols-1 gap-1">
-                  <OutcomeButton
-                    label="D3K"
-                    color="purple"
-                    isExpanded={expandedOutcome === 'D3K'}
-                    onClick={() => { toggleOutcomeDetail('D3K'); handleOutSelect('D3K'); }}
-                  />
-                </div>
-
                 {/* D3K Quick Record */}
                 {expandedOutcome === 'D3K' && (
                   <OutcomeDetailPanel title="DROPPED 3RD STRIKE">
+                    <div className="text-[8px] text-[#AAAACC] mb-1">
+                      {gameState.bases.first && gameState.outs < 2
+                        ? '⚠ D3K disabled: 1B occupied with <2 outs (batter is automatically out)'
+                        : 'Batter may run to 1B'}
+                    </div>
                     <div className="grid grid-cols-2 gap-2 pt-2">
                       <button
                         onClick={handleCancelOutcome}
@@ -3376,6 +3509,12 @@ export function GameTracker() {
               isExpanded={expandedSections.substitutions}
               onToggle={() => toggleSection('substitutions')}
             >
+              {/* GAP-GT-7-B: Lineup size warning — display if not 9 or 10 players */}
+              {!lineupSizeOk && currentLineup.length > 0 && (
+                <div className="mb-1 px-2 py-1 bg-[#4A2A00] border border-[#FF8800] text-[#FFAA44] text-[8px] font-bold">
+                  ⚠ LINEUP SIZE: {currentLineup.length} — expected 9 (or 10 with DH)
+                </div>
+              )}
               {/* LineupCard - Drag-drop substitution interface (Per spec: no buttons) */}
               {/* EXH-036: Added onPlayerClick to allow mojo/fitness editing from lineup cards */}
               <LineupCard
@@ -4022,9 +4161,10 @@ interface OutcomeButtonProps {
   color: "blue" | "red" | "purple" | "lightblue" | "magenta";
   isExpanded: boolean;
   onClick: () => void;
+  disabled?: boolean; // GAP-GT-6-G / GAP-GT-6-C: button availability enforcement
 }
 
-function OutcomeButton({ label, color, isExpanded, onClick }: OutcomeButtonProps) {
+function OutcomeButton({ label, color, isExpanded, onClick, disabled }: OutcomeButtonProps) {
   const colorClasses = {
     blue: "bg-[#3366FF] border-[#1A44BB] text-white hover:bg-[#4477FF]",
     red: "bg-[#DD0000] border-[#AA0000] text-white hover:bg-[#FF0000]",
@@ -4032,6 +4172,18 @@ function OutcomeButton({ label, color, isExpanded, onClick }: OutcomeButtonProps
     lightblue: "bg-[#5599FF] border-[#3366CC] text-white hover:bg-[#66AAFF]",
     magenta: "bg-[#CC44CC] border-[#992299] text-white hover:bg-[#DD55DD]",
   };
+
+  if (disabled) {
+    return (
+      <button
+        disabled
+        className="bg-[#333] border-[#444] text-[#555] border-[5px] py-4 text-base cursor-not-allowed shadow-none opacity-50"
+        title={`${label} not available in this situation`}
+      >
+        {label}
+      </button>
+    );
+  }
 
   return (
     <button

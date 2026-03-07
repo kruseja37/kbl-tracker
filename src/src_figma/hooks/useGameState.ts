@@ -188,7 +188,7 @@ export interface UseGameStateReturn {
 
   // Actions
   recordHit: (hitType: HitType, rbi: number, runnerData?: RunnerAdvancement, pitchCount?: number) => Promise<void>;
-  recordOut: (outType: OutType, runnerData?: RunnerAdvancement, pitchCount?: number) => Promise<void>;
+  recordOut: (outType: OutType, runnerData?: RunnerAdvancement, pitchCount?: number, options?: { forceNoRuns?: boolean }) => Promise<void>;
   recordWalk: (walkType: WalkType, pitchCount?: number) => Promise<void>;
   recordD3K: (batterReached: boolean, pitchCount?: number) => Promise<void>;
   recordError: (rbi?: number, runnerData?: RunnerAdvancement, pitchCount?: number) => Promise<void>;
@@ -2342,7 +2342,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     setLastSavedAt(Date.now());
   }, [gameState, atBatSequence, advanceToNextBatter]);
 
-  const recordOut = useCallback(async (outType: OutType, runnerData?: RunnerAdvancement, pitchCount: number = 1) => {
+  const recordOut = useCallback(async (outType: OutType, runnerData?: RunnerAdvancement, pitchCount: number = 1, options?: { forceNoRuns?: boolean }) => {
     const newSequence = atBatSequence + 1;
     setAtBatSequence(newSequence);
 
@@ -2481,8 +2481,10 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       gameState.bases,
       runnerData
     );
-    const runsScored = runsInvalidatedByThirdOutRule ? 0 : rawRunsScored;
-    const rbiCount = runsInvalidatedByThirdOutRule
+    // GAP-GT-6-A: Time play rule — user can override to negate runs when out was recorded before runner scored
+    const runsInvalidated = runsInvalidatedByThirdOutRule || (options?.forceNoRuns === true);
+    const runsScored = runsInvalidated ? 0 : rawRunsScored;
+    const rbiCount = runsInvalidated
       ? 0
       : calculateRBIs(effectiveResult, runnerOutcomesForCorrection, gameState.bases);
 
@@ -2581,7 +2583,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       return newStats;
     });
     // Attribute runs/ER to responsible pitcher via tracker
-    if (!runsInvalidatedByThirdOutRule && outScoredEvents.length > 0) {
+    if (!runsInvalidated && outScoredEvents.length > 0) {
       processTrackerScoredEvents(outScoredEvents, setPitcherStats, createEmptyPitcherStats);
     }
 
