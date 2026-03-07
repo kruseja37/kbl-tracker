@@ -9,8 +9,8 @@
 | MODE_3_OFFSEASON_WORKSHOP | ✅ COMPLETE | 21 | 21 | 0 |
 | ALMANAC | ✅ COMPLETE | 10 | 10 | 0 |
 
-**Current Phase:** A — Spec Triage — ✅ COMPLETE
-**Next Action:** Begin Phase B — V1 Spec Assembly (produce four _V1_FINAL.md documents + V2_DEFERRED_BACKLOG.md)
+**Current Phase:** B — V1 Spec Assembly — ✅ COMPLETE
+**Next Action:** Begin Phase C — Code Alignment (governed by V1_CODE_ALIGNMENT_PLAN.md)
 
 ---
 
@@ -179,6 +179,27 @@
 
 ---
 
+## Session 11 — 2026-03-05
+
+**Phase:** B — V1 Spec Assembly
+**Actions completed:**
+- Produced all four V1_FINAL.md build specs from gospel sources + Phase A triage rulings:
+  - MODE_2_V1_FINAL.md (3,428 lines) — 10 KEEP, 14 SIMPLIFY, 3 DEFER applied
+  - MODE_1_V1_FINAL.md (1,682 lines) — 7 KEEP, 6 SIMPLIFY, 3 DEFER applied
+  - MODE_3_V1_FINAL.md (1,619 lines) — 13 KEEP, 7 SIMPLIFY, 0 DEFER applied
+  - ALMANAC_V1_FINAL.md (610 lines) — 0 KEEP, 10 SIMPLIFY, 0 DEFER applied
+- Updated V2_DEFERRED_BACKLOG.md with Mode 3 + Almanac deferrals (was missing these)
+- Cross-reference reconciliation: 3 blocking conflicts found and resolved:
+  1. MODE_2 SeasonSummary still had deferred `seasonClassification` field → removed
+  2. MODE_1 `offseasonScope` was 2-value ('all-teams' | 'human-only'), Mode 3 expected 3-value → corrected to 'default' | 'human-only' | 'all-teams'
+  3. MODE_1 global stores missing `franchiseRegistry` (required by Almanac cross-franchise) → added
+- 12 non-blocking checks all passed (WAR components, salary, awards, transaction types, SIMULATED removal, presets removal, etc.)
+
+**Resume point:** Phase B COMPLETE. Begin Phase C — Code Alignment.
+**Open questions:** None.
+
+---
+
 ## PHASE A COMPLETE — ALL FOUR DOCUMENTS TRIAGED
 
 | Document | Sections | KEEP | SIMPLIFY | DEFER | Sessions |
@@ -188,3 +209,14 @@
 | MODE_3_OFFSEASON_WORKSHOP | 21 | 13 | 7 | 0 | 8–9 |
 | ALMANAC | 10 | 0 | 10 | 0 | 10 |
 | **TOTAL** | **75** | **32** | **37** | **5** | **10 sessions** |
+
+## PHASE B COMPLETE — V1 SPEC ASSEMBLY
+
+| Deliverable | Lines | Status |
+|---|---|---|
+| MODE_2_V1_FINAL.md | 3,428 | ✅ Complete |
+| MODE_1_V1_FINAL.md | 1,682 | ✅ Complete |
+| MODE_3_V1_FINAL.md | 1,619 | ✅ Complete |
+| ALMANAC_V1_FINAL.md | 610 | ✅ Complete |
+| V2_DEFERRED_BACKLOG.md | ~340 | ✅ Complete (Mode 3 + Almanac added) |
+| Cross-ref reconciliation | — | ✅ 3 conflicts resolved, 12 checks passed |
