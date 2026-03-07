@@ -406,10 +406,35 @@ All in one commit, before any new Elimination code. Clean break.
 
 ## 11. Implementation Priority
 
+### Step 0 Prerequisite: League Builder Data Integrity
+
+Before Elimination Mode can work, player data must flow completely from `playerDatabase.ts` → League Builder IndexedDB (`leagueBuilderStorage.ts`) → GameTracker. Verify:
+
+1. **Player import:** When players are imported into League Builder, ALL attributes are captured:
+   - **Identity:** firstName, lastName, nickname, age, gender
+   - **Handedness:** bats (L/R/S), throws (L/R)
+   - **Position:** primaryPosition, secondaryPosition
+   - **Batting ratings:** power, contact, speed, fielding, arm
+   - **Pitching ratings:** velocity, junk, accuracy
+   - **Arsenal:** pitch types array (4F, 2F, CB, SL, CH, FK, CF, SB, etc.)
+   - **Grade:** overallGrade (S through D-)
+   - **Traits:** trait1, trait2
+   - **Personality & Chemistry:** personality (11 types), chemistry (5 types)
+   - **State:** morale, mojo, fame
+   - **Contract:** salary, contractYears
+   - **Roster:** currentTeamId, rosterStatus (MLB/FARM/FREE_AGENT/RETIRED)
+2. **Player editing:** League Builder UI pages allow viewing/editing all attributes. No fields silently dropped.
+3. **Lineup loading:** When `lineupLoader.ts` builds rosters for GameTracker, player ratings, traits, personality, chemistry, and arsenal are accessible (not just name/position).
+4. **Roster snapshot fidelity:** The full `Player` object from `leagueBuilderStorage.ts` must be what gets snapshotted at bracket creation. If the snapshot only captures name/position, the engines (WAR, mojo, fitness, fame) can't function.
+5. **Type alignment:** `leagueBuilderStorage.Player` fields must map cleanly to `playerDatabase.PlayerData` fields for any engine that expects the latter format. Build adapters if needed.
+
+This is an audit-then-fix task. The audit may reveal no issues (data already flows correctly) or may find fields that are dropped during import/conversion.
+
 Build in this order. Each step is a branch → build → test → merge.
 
 | # | Task | New Code | Existing Changes | Route |
 |---|---|---|---|---|
+| 0 | League Builder data integrity — verify all player attributes flow from playerDatabase → League Builder storage → GameTracker | Audit + fixes | LeagueBuilder pages, leagueBuilderStorage.ts, lineupLoader.ts | Claude Code CLI \| opus |
 | 1 | DB migrations (kbl-playoffs v2, kbl-app-meta v3, kbl-tracker v4) | Migration handlers | Version bumps + new stores | Claude Code CLI \| opus |
 | 2 | Rename WorldSeries → EliminationHome + route changes | — | 3 files | Claude Code CLI \| sonnet |
 | 3 | `eliminationManager.ts` — CRUD (~100-150 lines) | New file | — | Codex \| 5.3 \| high |
