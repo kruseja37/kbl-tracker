@@ -117,7 +117,7 @@ export function GameTracker() {
     stadiumName?: string;
     awayRecord?: string;
     homeRecord?: string;
-    gameMode?: 'exhibition' | 'franchise' | 'playoff';
+    gameMode?: 'exhibition' | 'franchise' | 'playoff' | 'elimination';
     leagueId?: string;
     homeManagerId?: string;
     homeManagerName?: string;
@@ -127,7 +127,9 @@ export function GameTracker() {
     // Playoff context (for recording series results)
     playoffSeriesId?: string;
     playoffGameNumber?: number;
+    playoffId?: string;
     franchiseId?: string;
+    eliminationId?: string;
     seasonId?: string;
     // T0-05: Schedule persistence context
     scheduleGameId?: string;
@@ -224,15 +226,16 @@ export function GameTracker() {
   const [gameInitialized, setGameInitialized] = useState(false);
 
   // Set playoff context from navigation state (if this is a playoff game)
-  const isPlayoffGame = navigationState?.gameMode === 'playoff';
+  const isPlayoffGame = navigationState?.gameMode === 'playoff' || navigationState?.gameMode === 'elimination';
   useEffect(() => {
     if (navigationState?.playoffSeriesId) {
       setPlayoffContext(
         navigationState.playoffSeriesId,
-        navigationState.playoffGameNumber ?? null
+        navigationState.playoffGameNumber ?? null,
+        navigationState.playoffId ?? null
       );
     }
-  }, [navigationState?.playoffSeriesId, navigationState?.playoffGameNumber, setPlayoffContext]);
+  }, [navigationState?.playoffSeriesId, navigationState?.playoffGameNumber, navigationState?.playoffId, setPlayoffContext]);
 
   useEffect(() => {
     const navStadium = navigationState?.stadiumName;
@@ -830,81 +833,114 @@ export function GameTracker() {
   // This runs once after game is initialized to set up all players with default states
   useEffect(() => {
     if (!gameInitialized) return;
+    let cancelled = false;
 
-    // Helper to get player ID from name (consistent with how gameState creates IDs)
-    const getPlayerId = (name: string, teamPrefix: string) =>
-      `${teamPrefix}-${name.replace(/\s+/g, '-').toLowerCase()}`;
+    const registerPlayersWithSnapshots = async () => {
+      // Helper to get player ID from name (consistent with how gameState creates IDs)
+      const getPlayerId = (name: string, teamPrefix: string) =>
+        `${teamPrefix}-${name.replace(/\s+/g, '-').toLowerCase()}`;
 
-    // Register all away team batters
-    // Step 0: Pass real traits and age from League Builder data (no longer hardcoded)
-    awayTeamPlayers.forEach((player) => {
-      const playerId = getPlayerId(player.name, 'away');
-      // Only register if not already registered
-      if (!playerStateHook.getPlayer(playerId)) {
-        const traits = [player.trait1, player.trait2].filter((t): t is string => !!t);
-        playerStateHook.registerPlayer(
-          playerId,
-          player.name,
-          (player.position || 'DH') as import('../../../engines/fitnessEngine').PlayerPosition,
-          0, // Starting mojo: Normal
-          'FIT', // Starting fitness: FIT
-          traits,
-          player.age ?? 25
-        );
+      // Load mojo/fitness from snapshots for elimination games (inter-game persistence per §8)
+      let mojoFitnessMap: Map<string, { mojoLevel: MojoLevel; fitnessState: FitnessState }> | null = null;
+      if (navigationState?.gameMode === 'elimination' && navigationState?.eliminationId) {
+        try {
+          const { loadMojoFitnessSnapshots } = await import('../../../utils/mojoFitnessStorage');
+          const snapshots = await loadMojoFitnessSnapshots(navigationState.eliminationId);
+          if (cancelled) return;
+          mojoFitnessMap = new Map(
+            snapshots.map((s) => [
+              s.playerId,
+              { mojoLevel: s.mojoLevel, fitnessState: s.fitnessState },
+            ])
+          );
+          console.log(`[Elimination] Loaded mojo/fitness snapshots for ${snapshots.length} players`);
+        } catch (err) {
+          console.error('[Elimination] Failed to load mojo/fitness snapshots:', err);
+        }
       }
-    });
 
-    // Register all home team batters
-    homeTeamPlayers.forEach((player) => {
-      const playerId = getPlayerId(player.name, 'home');
-      if (!playerStateHook.getPlayer(playerId)) {
-        const traits = [player.trait1, player.trait2].filter((t): t is string => !!t);
-        playerStateHook.registerPlayer(
-          playerId,
-          player.name,
-          (player.position || 'DH') as import('../../../engines/fitnessEngine').PlayerPosition,
-          0,
-          'FIT',
-          traits,
-          player.age ?? 25
-        );
-      }
-    });
+      if (cancelled) return;
 
-    // Register pitchers
-    if (awayPitcher) {
-      const pitcherId = getPlayerId(awayPitcher.name, 'away');
-      if (!playerStateHook.getPlayer(pitcherId)) {
-        const traits = [awayPitcher.trait1, awayPitcher.trait2].filter((t): t is string => !!t);
-        playerStateHook.registerPlayer(
-          pitcherId,
-          awayPitcher.name,
-          'SP',
-          0,
-          'FIT',
-          traits,
-          awayPitcher.age ?? 25
-        );
-      }
-    }
-    if (homePitcher) {
-      const pitcherId = getPlayerId(homePitcher.name, 'home');
-      if (!playerStateHook.getPlayer(pitcherId)) {
-        const traits = [homePitcher.trait1, homePitcher.trait2].filter((t): t is string => !!t);
-        playerStateHook.registerPlayer(
-          pitcherId,
-          homePitcher.name,
-          'SP',
-          0,
-          'FIT',
-          traits,
-          homePitcher.age ?? 25
-        );
-      }
-    }
+      // Register all away team batters
+      // Step 0: Pass real traits and age from League Builder data (no longer hardcoded)
+      awayTeamPlayers.forEach((player) => {
+        const playerId = getPlayerId(player.name, 'away');
+        if (!playerStateHook.getPlayer(playerId)) {
+          const traits = [player.trait1, player.trait2].filter((t): t is string => !!t);
+          const snapshot = mojoFitnessMap?.get(playerId);
+          playerStateHook.registerPlayer(
+            playerId,
+            player.name,
+            (player.position || 'DH') as import('../../../engines/fitnessEngine').PlayerPosition,
+            snapshot?.mojoLevel ?? 0,
+            snapshot?.fitnessState ?? 'FIT',
+            traits,
+            player.age ?? 25
+          );
+        }
+      });
 
-    console.log('[GameTracker] Registered players with playerStateHook for mojo/fitness tracking');
-  }, [gameInitialized, awayTeamPlayers, homeTeamPlayers, awayPitcher, homePitcher, playerStateHook]);
+      // Register all home team batters
+      homeTeamPlayers.forEach((player) => {
+        const playerId = getPlayerId(player.name, 'home');
+        if (!playerStateHook.getPlayer(playerId)) {
+          const traits = [player.trait1, player.trait2].filter((t): t is string => !!t);
+          const snapshot = mojoFitnessMap?.get(playerId);
+          playerStateHook.registerPlayer(
+            playerId,
+            player.name,
+            (player.position || 'DH') as import('../../../engines/fitnessEngine').PlayerPosition,
+            snapshot?.mojoLevel ?? 0,
+            snapshot?.fitnessState ?? 'FIT',
+            traits,
+            player.age ?? 25
+          );
+        }
+      });
+
+      // Register pitchers
+      if (awayPitcher) {
+        const pitcherId = getPlayerId(awayPitcher.name, 'away');
+        if (!playerStateHook.getPlayer(pitcherId)) {
+          const traits = [awayPitcher.trait1, awayPitcher.trait2].filter((t): t is string => !!t);
+          const snapshot = mojoFitnessMap?.get(pitcherId);
+          playerStateHook.registerPlayer(
+            pitcherId,
+            awayPitcher.name,
+            'SP',
+            snapshot?.mojoLevel ?? 0,
+            snapshot?.fitnessState ?? 'FIT',
+            traits,
+            awayPitcher.age ?? 25
+          );
+        }
+      }
+      if (homePitcher) {
+        const pitcherId = getPlayerId(homePitcher.name, 'home');
+        if (!playerStateHook.getPlayer(pitcherId)) {
+          const traits = [homePitcher.trait1, homePitcher.trait2].filter((t): t is string => !!t);
+          const snapshot = mojoFitnessMap?.get(pitcherId);
+          playerStateHook.registerPlayer(
+            pitcherId,
+            homePitcher.name,
+            'SP',
+            snapshot?.mojoLevel ?? 0,
+            snapshot?.fitnessState ?? 'FIT',
+            traits,
+            homePitcher.age ?? 25
+          );
+        }
+      }
+
+      console.log('[GameTracker] Registered players with playerStateHook for mojo/fitness tracking');
+    };
+
+    void registerPlayersWithSnapshots();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [gameInitialized, awayTeamPlayers, homeTeamPlayers, awayPitcher, homePitcher, playerStateHook, navigationState?.gameMode, navigationState?.eliminationId]);
 
   // EXH-036: Helper functions to get/set mojo/fitness by player name and team
   // These are used by TeamRoster components to enable mojo/fitness editing in player cards
@@ -2800,8 +2836,27 @@ export function GameTracker() {
       franchiseId: navigationState?.franchiseId,
       currentSeason: navigationState?.seasonNumber ?? 1,
       stadiumName: selectedStadium,
-    };
+      };
       await hookEndGame(endGameOptions);
+
+      // Save mojo/fitness snapshots for elimination inter-game persistence
+      if (navigationState?.gameMode === 'elimination' && navigationState?.eliminationId) {
+        try {
+          const { saveMojoFitnessSnapshots } = await import('../../../utils/mojoFitnessStorage');
+          const allPlayers = playerStateHook.getAllPlayers();
+          await saveMojoFitnessSnapshots(
+            navigationState.eliminationId,
+            allPlayers.map((p) => ({
+              playerId: p.playerId,
+              mojoLevel: p.gameState.currentMojo,
+              fitnessState: p.fitnessProfile.currentFitness,
+            }))
+          );
+          console.log(`[Elimination] Saved mojo/fitness snapshots for ${allPlayers.length} players`);
+        } catch (err) {
+          console.error('[Elimination] Failed to save mojo/fitness snapshots:', err);
+        }
+      }
 
       // T0-05 FIX: Mark the schedule game as COMPLETED (franchise mode only)
       // The SIM path does this in FranchiseHome.tsx, but the PLAY path was missing it entirely.
@@ -2831,6 +2886,7 @@ export function GameTracker() {
         state: {
           gameMode: navigationState?.gameMode || 'franchise',
           franchiseId: navigationState?.franchiseId || gameId?.replace('franchise-', '') || '1',
+          eliminationId: navigationState?.eliminationId,
           gameNarrative,
           awayNarrative,
         }
@@ -2844,7 +2900,7 @@ export function GameTracker() {
         gameEndingRef.current = false;
       }
     }
-  }, [hookEndGame, navigate, gameId, navigationState?.gameMode, gameMode, gameState, pitcherStats, fameTrackingHook, homeFanMorale, awayFanMorale, homeTeamName, awayTeamName, mwarHook, homeManagerId, homeTeamId, activityLog, pushActivityLog]);
+  }, [hookEndGame, navigate, gameId, navigationState?.gameMode, navigationState?.eliminationId, gameMode, gameState, pitcherStats, fameTrackingHook, homeFanMorale, awayFanMorale, homeTeamName, awayTeamName, mwarHook, homeManagerId, homeTeamId, activityLog, pushActivityLog, playerStateHook]);
 
   // T0-01: Auto-trigger endGame when regulation ends
   useEffect(() => {

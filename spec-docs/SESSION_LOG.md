@@ -1,6 +1,217 @@
 # KBL TRACKER — SESSION LOG
 # Previous sessions archived at: spec-docs/archive/SESSION_LOG_through_2026-02-11.md
 ---
+## Session: 2026-03-07 (M) — Elimination Mode Shipped (Steps 11-13)
+
+### Context
+Final Elimination Mode implementation pass. Steps 11-13 executed via Codex 5.4; Step 14 was already completed earlier in Step 2.
+
+### Accomplished
+
+**Step 11: Mojo/Fitness inter-game persistence** — Branch: main
+- New `src/utils/mojoFitnessStorage.ts` for save/load/delete on `mojoFitnessSnapshots`
+- GameTracker now loads elimination snapshots before player registration and saves them before post-game navigation
+- Elimination-only behavior; franchise/exhibition flows unchanged
+
+**Step 12: PostGameSummary return navigation**
+- Added `elimination` to PostGameSummary nav state type
+- DONE/CONTINUE now returns elimination games to `/elimination/{eliminationId}`
+
+**Step 13: Awards computation**
+- New `src/utils/eliminationAwards.ts`
+- AWARDS tab in EliminationHome now computes and renders v1 elimination awards from playoff stats
+- Placeholder removed; incomplete brackets still show the gated message
+
+**Step 14: Home screen button wiring**
+- Already completed earlier in Step 2 (route and home navigation wiring)
+
+### Build Status
+- Build: PASS (0 errors)
+
+### Files Modified
+- `src/utils/mojoFitnessStorage.ts` — new snapshot persistence helper
+- `src/src_figma/app/pages/GameTracker.tsx` — snapshot save/load wiring
+- `src/src_figma/app/pages/PostGameSummary.tsx` — elimination return nav
+- `src/utils/eliminationAwards.ts` — new awards computation helper
+- `src/src_figma/app/pages/EliminationHome.tsx` — AWARDS tab implementation
+
+### Next Action
+**Browser Testing:** Validate Elimination Mode end-to-end in the browser.
+
+---
+
+## Session: 2026-03-07 (L) — Elimination Mode Step 10
+
+### Context
+Continued Elimination Mode build. Step 10 executed via Codex 5.4 on high reasoning.
+
+### Accomplished
+
+**Step 10: aggregateGameToPlayoffStats** — Branch: main
+- New exported function in playoffStorage.ts (~80 lines): upserts batting/pitching counting stats by playerId into playoffStats store
+- Handles merged records (same player can have both batting and pitching stats)
+- Recalculates derived stats: AVG, OBP (with HBP+SF), SLG, OPS, ERA, WHIP
+- Added cumulative hitByPitch, sacrificeFlies, hitsAllowed fields for correct multi-game recomputation
+- Wired in useGameState.ts: added playoffIdRef, extended setPlayoffContext(seriesId, gameNumber, playoffId), dynamic import after recordSeriesGame
+- Guarded by !alreadyAggregated to prevent double-counting on repeated completion paths
+- GameTracker.tsx: added playoffId to nav state type, passed to setPlayoffContext
+
+### Build Status
+- Build: PASS (0 errors)
+
+### Files Modified
+- `src/utils/playoffStorage.ts` — added aggregateGameToPlayoffStats + PersistedGameState import
+- `src/src_figma/hooks/useGameState.ts` — playoffIdRef + setPlayoffContext extension + aggregation call
+- `src/src_figma/app/pages/GameTracker.tsx` — playoffId type + setPlayoffContext call update
+
+### Next Action
+**Step 11:** Mojo/fitness inter-game persistence.
+Then Steps 12-13 per ELIMINATION_MODE_SPEC.md §11. Step 14 already done (routes wired in Step 2).
+
+---
+
+## Session: 2026-03-07 (K) — Elimination Mode Step 9
+
+### Context
+Continued Elimination Mode build. Step 9 executed via Codex 5.4 on high reasoning.
+
+### Accomplished
+
+**Step 9: GameTracker mode checks** — Branch: main
+- 4 surgical edits to GameTracker.tsx per ELIMINATION_MODE_SPEC §7.3
+- Change 1: gameMode type union expanded with `'elimination'`
+- Change 2: `eliminationId?: string` added to navigation state interface
+- Change 3: `isPlayoffGame` updated to include `gameMode === 'elimination'` — elimination games treated as playoff games for display (series context, playoff badge)
+- Change 4: Post-game nav state passes `eliminationId` through to PostGameSummary
+- Verified NO CHANGE to schedule marking check (line 2809) — correctly excludes elimination per Pitfall #6
+- Verified NO CHANGE to `gameMode !== 'exhibition'` guard — already catches elimination
+- Verified NO CHANGE to useGameState.ts playoffSeriesIdRef — triggers on any non-null seriesId
+
+### Build Status
+- Build: PASS (0 errors)
+
+### Files Modified
+- `src/src_figma/app/pages/GameTracker.tsx` — 4 edits (type, isPlayoffGame, eliminationId field, post-game nav)
+
+### Next Action
+**Step 10:** Build `aggregateGameToPlayoffStats()` — the missing write to kbl-playoffs playoffStats store.
+Then Steps 11-14 per ELIMINATION_MODE_SPEC.md §11.
+
+---
+## Session: 2026-03-07 (J) — Elimination Mode Step 8
+
+### Context
+Continued Elimination Mode build. Step 8 executed via Codex 5.4 on high reasoning.
+
+### Accomplished
+
+**Step 8: EliminationTeamHub.tsx** — Branch: main
+- New standalone component built from scratch per ELIMINATION_MODE_SPEC §6.3
+- Team selector: loads all bracket team snapshots, switches between teams
+- Roster display: split into POSITION PLAYERS and PITCHERS sections with name, position, grade, bats/throws
+- Lineup editor: shows batting order 1-9 with up/down reorder buttons, field position display, bench players listed below
+- Starting pitcher selector: rotation list with tap-to-promote to top of rotation
+- All edits persist via updateEliminationRosterSnapshot() — lineup and startingRotation only
+- Zero franchise coupling: no FranchiseDataContext, no TeamHubContent, no useFranchiseData imports
+- Zero League Builder reads: all data from roster snapshots only
+- Wired into EliminationHome.tsx: replaced "COMING IN STEP 8" placeholder with real component
+
+### Build Status
+- Build: PASS (0 errors)
+- Module count: 1901 (up from 1900 — one new component)
+
+### Files Created
+- `src/src_figma/app/components/EliminationTeamHub.tsx`
+
+### Files Modified
+- `src/src_figma/app/pages/EliminationHome.tsx` — import + TEAM HUB tab wiring
+
+### Next Action
+**Step 9:** GameTracker `elimination` mode — type definition + 5 mode checks.
+Then Steps 10-14 per ELIMINATION_MODE_SPEC.md §11.
+
+---
+
+## Session: 2026-03-07 (I) — Elimination Mode Step 7
+
+### Context
+Continued Elimination Mode build. Step 7 executed via Codex 5.4 on high reasoning.
+
+### Accomplished
+
+**Step 7: EliminationHome.tsx full rewrite** — Branch: main
+- Fully rewrote EliminationHome.tsx from ~530 lines of legacy placeholder code to real IndexedDB-backed elimination bracket viewer
+- Loads EliminationMetadata via getElimination(), finds PlayoffConfig by sourceType + eliminationId, loads PlayoffSeries[]
+- 5-tab structure: BRACKET (default), TEAM HUB (placeholder), LEADERS, AWARDS (placeholder), HISTORY
+- BRACKET tab: rounds grouped with getRoundName(), clickable series cards with score/winner display, selected-series detail panel with "PLAY GAME" button
+- PLAY GAME navigates to GameTracker with full elimination nav state: gameMode: 'elimination', seasonId: 'elimination-{id}', seriesId, gameNumber, home/away teams
+- LEADERS tab scoped to current bracket's playoffId (not "most recent playoff")
+- HISTORY tab filters to sourceType === 'elimination' completed brackets
+- Removed dead SetupTab, BracketView, PlayoffLeadersContent, PlayoffHistoryContent sub-components
+- Back button navigates to /elimination/select
+
+### Build Status
+- Build: PASS (0 errors)
+
+### Files Modified
+- `src/src_figma/app/pages/EliminationHome.tsx` — full rewrite
+
+### Next Action
+**Step 8:** Build EliminationTeamHub — roster view + lineup editing from roster snapshots.
+Then Steps 9-14 per ELIMINATION_MODE_SPEC.md §11.
+
+---
+
+## Session: 2026-03-07 (H) — Elimination Mode Steps 3-6
+
+### Context
+Continued Elimination Mode build. Steps 3-6 executed via Codex 5.4 on high reasoning.
+
+### Accomplished
+
+**Step 3: eliminationManager.ts** — Branch: main
+- CRUD for elimination bracket instances in `kbl-app-meta` → `eliminationList` store
+- Functions: createElimination, loadElimination, deleteElimination, listEliminations, updateElimination
+- ~100-150 lines, new file `src/utils/eliminationManager.ts`
+
+**Step 4: EliminationSelector.tsx** — Branch: main
+- Save slot picker page at `/elimination/select`
+- Lists saved brackets, New/Load/Delete actions
+- Mirrors FranchiseSelector pattern
+- New file `src/src_figma/app/pages/EliminationSelector.tsx`
+
+**Step 5: EliminationSetup.tsx** — Branch: main
+- 5-step wizard: Select League → Playoff Settings → Team Control → Seeding → Confirm
+- 527 lines with clean component decomposition (step renderers extracted as sub-components)
+- Full 7-step persistence chain: createElimination → build teams → createPlayoff → createSeries loop → startPlayoff → updateElimination → navigate
+- New file `src/src_figma/app/pages/EliminationSetup.tsx`
+
+**Step 6: eliminationRosterStorage.ts** — Branch: main
+- Roster snapshot CRUD: createRosterSnapshots, getEliminationRosterSnapshot, getAllEliminationRosterSnapshots, updateEliminationRosterSnapshot, deleteEliminationRosterSnapshots
+- Freezes full League Builder Player objects (ratings, traits, arsenal, grade, personality, chemistry, age) at bracket creation
+- Uses existing `kbl-tracker` → `rosterSnapshots` store (DB_VERSION 4, Step 1)
+- Wired into EliminationSetup.tsx handleStartPlayoffs: createRosterSnapshots called after createElimination, before createPlayoff
+- New file `src/utils/eliminationRosterStorage.ts`
+
+### Build Status
+- Build: PASS (0 errors)
+- Tests: 4,028 pass / 0 fail / 103 files
+
+### Files Created
+- `src/utils/eliminationManager.ts`
+- `src/src_figma/app/pages/EliminationSelector.tsx`
+- `src/src_figma/app/pages/EliminationSetup.tsx`
+- `src/utils/eliminationRosterStorage.ts`
+
+### Files Modified
+- `src/src_figma/app/pages/EliminationSetup.tsx` — added createRosterSnapshots import + call in handleStartPlayoffs
+
+### Next Action
+**Step 7:** Adapt EliminationHome — bracket view with Team Hub tab.
+Then Steps 8-14 per ELIMINATION_MODE_SPEC.md §11.
+
+---
+
 ## Session: 2026-03-07 (G) — Elimination Mode Step 0: Data Integrity Audit
 
 ### What Was Accomplished

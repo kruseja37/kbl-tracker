@@ -1,27 +1,27 @@
 # CURRENT_STATE.md
 
 **Last Updated:** 2026-03-07
-**Phase:** Elimination Mode Build — Step 2 COMPLETE, Step 3 Next
+**Phase:** Elimination Mode Build — ALL 15 STEPS COMPLETE
 
 ---
 
 ## Current Phase and Step
 
 **GameTracker Delta Build — ALL 55 TICKETS COMPLETE.**
-**Elimination Mode — Steps 0-2 COMPLETE. Step 3 (eliminationManager.ts) is next.**
+**Elimination Mode — Steps 0-14 COMPLETE. Elimination Mode is shipped. Browser testing is next.**
 
 ## Last Completed Action
 
-Session 2026-03-07: Completed Elimination Mode Step 2 — Rename WorldSeries → EliminationHome.
-- `WorldSeries.tsx` → `EliminationHome.tsx` (file + export rename)
-- Routes updated: `/world-series` → `/elimination/:eliminationId`
-- Placeholder routes added: `/elimination/select`, `/elimination/setup`
-- AppHome nav link updated
-- Build: PASS, Tests: 4,028 pass / 0 fail / 103 files
+Session 2026-03-07: Completed Elimination Mode Steps 11-13 via Codex 5.4. Elimination Mode is now shipped.
+- Step 11: Mojo/fitness inter-game persistence via new `mojoFitnessStorage.ts` + GameTracker save/load wiring
+- Step 12: PostGameSummary elimination return navigation to `/elimination/{eliminationId}`
+- Step 13: Awards computation via new `eliminationAwards.ts` + real AWARDS tab in EliminationHome
+- Step 14 was already completed earlier via Step 2 route and AppHome wiring
+- Build: PASS
 
 ## Next Action
 
-**Elimination Mode Step 3:** Build `eliminationManager.ts` — CRUD for elimination instances (~100-150 lines).
+**Browser Testing:** Validate Elimination Mode end-to-end in the browser (setup, team hub, game flow, post-game return, awards, history).
 
 Per `ELIMINATION_MODE_SPEC.md` §11 implementation priority:
 
@@ -30,18 +30,18 @@ Per `ELIMINATION_MODE_SPEC.md` §11 implementation priority:
 | 0 | League Builder data integrity audit | ✅ COMPLETE |
 | 1 | DB migrations (kbl-playoffs v2, kbl-app-meta v3, kbl-tracker v4) | ✅ COMPLETE |
 | 2 | Rename WorldSeries → EliminationHome + route changes | ✅ COMPLETE |
-| 3 | `eliminationManager.ts` — CRUD (~100-150 lines) | **NEXT** |
-| 4 | EliminationSelector page — save slot picker | Pending |
-| 5 | EliminationSetup wizard — 5-step flow | Pending |
-| 6 | Roster snapshot logic — create + read + update | Pending |
-| 7 | EliminationHome — adapt bracket view, add Team Hub tab | Pending |
-| 8 | EliminationTeamHub — roster view + lineup editing | Pending |
-| 9 | GameTracker `elimination` mode — type + mode checks | Pending |
-| 10 | `aggregateGameToPlayoffStats()` — the missing write | Pending |
-| 11 | Mojo/fitness inter-game persistence | Pending |
-| 12 | PostGameSummary elimination return nav | Pending |
-| 13 | Awards computation | Pending |
-| 14 | Home screen button wiring | Pending |
+| 3 | `eliminationManager.ts` — CRUD (~100-150 lines) | ✅ COMPLETE |
+| 4 | EliminationSelector page — save slot picker | ✅ COMPLETE |
+| 5 | EliminationSetup wizard — 5-step flow | ✅ COMPLETE |
+| 6 | Roster snapshot logic — create + read + update | ✅ COMPLETE |
+| 7 | EliminationHome — adapt bracket view, add Team Hub tab | ✅ COMPLETE |
+| 8 | EliminationTeamHub — roster view + lineup editing | ✅ COMPLETE |
+| 9 | GameTracker `elimination` mode — type + mode checks | ✅ COMPLETE |
+| 10 | `aggregateGameToPlayoffStats()` — the missing write | ✅ COMPLETE |
+| 11 | Mojo/fitness inter-game persistence | ✅ COMPLETE |
+| 12 | PostGameSummary elimination return nav | ✅ COMPLETE |
+| 13 | Awards computation | ✅ COMPLETE |
+| 14 | Home screen button wiring | ✅ COMPLETE |
 
 ## GameTracker Delta — COMPLETE
 

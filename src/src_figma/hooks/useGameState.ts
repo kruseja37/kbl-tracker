@@ -257,7 +257,7 @@ export interface UseGameStateReturn {
   dismissAutoEndPrompt: () => void;
 
   // Playoff context setter (called from GameTracker with navigation state)
-  setPlayoffContext: (seriesId: string | null, gameNumber: number | null) => void;
+  setPlayoffContext: (seriesId: string | null, gameNumber: number | null, playoffId?: string | null) => void;
   // Stadium selector helper
   setStadiumName: (stadiumName: string | null) => void;
 }
@@ -1129,6 +1129,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
   // Playoff context refs (set from GameTracker navigation state)
   const playoffSeriesIdRef = useRef<string | null>(null);
   const playoffGameNumberRef = useRef<number | null>(null);
+  const playoffIdRef = useRef<string | null>(null);
 
   const [gameState, setGameState] = useState<GameState>({
     gameId: initialGameId || '',
@@ -4502,6 +4503,17 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       }
     }
 
+    // Aggregate player stats to playoff stats store (populates Leaders tab)
+    if (!alreadyAggregated && playoffIdRef.current) {
+      try {
+        const { aggregateGameToPlayoffStats } = await import('../../utils/playoffStorage');
+        await aggregateGameToPlayoffStats(playoffIdRef.current, persistedState);
+        console.log(`[Playoff] Aggregated player stats to playoff stats: ${playoffIdRef.current}`);
+      } catch (err) {
+        console.error('[Playoff] Failed to aggregate playoff stats:', err);
+      }
+    }
+
     // Archive completed game with full stats for post-game summary (EXH-011)
     // T1-08: Only archive if not already done by endGame() — the archive is idempotent
     // but skipping avoids unnecessary IndexedDB writes
@@ -4815,11 +4827,12 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
   }, [initialGameId]);
 
   // Playoff context setter (for GameTracker to set from navigation state)
-  const setPlayoffContext = useCallback((seriesId: string | null, gameNumber: number | null) => {
+  const setPlayoffContext = useCallback((seriesId: string | null, gameNumber: number | null, playoffId?: string | null) => {
     playoffSeriesIdRef.current = seriesId;
     playoffGameNumberRef.current = gameNumber;
+    playoffIdRef.current = playoffId ?? null;
     if (seriesId) {
-      console.log(`[Playoff] Context set: series=${seriesId}, game=${gameNumber}`);
+      console.log(`[Playoff] Context set: series=${seriesId}, game=${gameNumber}, playoff=${playoffIdRef.current}`);
     }
   }, []);
 

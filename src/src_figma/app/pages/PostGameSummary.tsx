@@ -182,13 +182,15 @@ export function PostGameSummary({ gameId: gameIdProp }: { gameId?: string } = {}
 
   // Get game mode from navigation state to route back appropriately
   const navigationState = (location.state ?? {}) as {
-    gameMode?: 'exhibition' | 'franchise' | 'playoff';
+    gameMode?: 'exhibition' | 'franchise' | 'playoff' | 'elimination';
     franchiseId?: string;
+    eliminationId?: string;
     seasonId?: string;
   };
 
   const gameMode = navigationState?.gameMode || 'franchise';
   const franchiseId = navigationState?.franchiseId || '1';
+  const eliminationId = navigationState?.eliminationId;
   const baseNavigationState = {
     ...navigationState,
     gameMode,
@@ -701,9 +703,20 @@ export function PostGameSummary({ gameId: gameIdProp }: { gameId?: string } = {}
             onClick={() => {
               // Route based on game mode
               if (gameMode === 'exhibition') {
-      navigate("/exhibition");
-            } else if (gameMode === 'playoff') {
-              // Return to franchise home (bracket tab) — NOT /world-series
+                navigate("/exhibition");
+              } else if (gameMode === 'elimination' && eliminationId) {
+                // Return to elimination bracket home
+                navigate(`/elimination/${eliminationId}`);
+              } else if (gameMode === 'playoff') {
+                // Return to franchise home (bracket tab)
+                navigate(`/franchise/${franchiseId}`, {
+                  state: {
+                    ...baseNavigationState,
+                    refreshAfterGame: true,
+                    refreshToken: Date.now(),
+                  },
+                });
+              } else {
               navigate(`/franchise/${franchiseId}`, {
                 state: {
                   ...baseNavigationState,
@@ -711,16 +724,8 @@ export function PostGameSummary({ gameId: gameIdProp }: { gameId?: string } = {}
                   refreshToken: Date.now(),
                 },
               });
-            } else {
-              navigate(`/franchise/${franchiseId}`, {
-                state: {
-                  ...baseNavigationState,
-                  refreshAfterGame: true,
-                  refreshToken: Date.now(),
-                },
-              });
-            }
-          }}
+              }
+            }}
             className="bg-[#556B55] border-[5px] border-white py-[16px] text-sm text-[#E8E8D8] hover:bg-[#6B9462] active:scale-95 transition-transform shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)] m-[0px] px-[10px]"
           >
             CONTINUE

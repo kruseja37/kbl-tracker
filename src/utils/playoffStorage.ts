@@ -8,6 +8,8 @@
  * - Historical playoff data
  */
 
+import type { PersistedGameState } from './gameStorage';
+
 const DB_NAME = 'kbl-playoffs';
 const DB_VERSION = 2;
 
@@ -153,6 +155,8 @@ export interface PlayoffPlayerStats {
   strikeouts: number;
   stolenBases: number;
   caughtStealing: number;
+  hitByPitch?: number;
+  sacrificeFlies?: number;
 
   // Derived
   avg: number;
@@ -169,6 +173,7 @@ export interface PlayoffPlayerStats {
   earnedRuns?: number;
   pitchingStrikeouts?: number;
   pitchingWalks?: number;
+  hitsAllowed?: number;
   era?: number;
   whip?: number;
 }
@@ -721,6 +726,190 @@ export async function getPlayoffLeaders(
       return bVal - aVal;
     })
     .slice(0, limit);
+}
+
+export async function aggregateGameToPlayoffStats(
+  playoffId: string,
+  gameState: PersistedGameState
+): Promise<void> {
+  const db = await initPlayoffDatabase();
+
+  const battingByPlayer = new Map<string, {
+    playerName: string;
+    teamId: string;
+    games: number;
+    atBats: number;
+    hits: number;
+    doubles: number;
+    triples: number;
+    homeRuns: number;
+    rbi: number;
+    runs: number;
+    walks: number;
+    strikeouts: number;
+    stolenBases: number;
+    caughtStealing: number;
+    hitByPitch: number;
+    sacrificeFlies: number;
+  }>();
+
+  for (const [playerId, stats] of Object.entries(gameState.playerStats)) {
+    battingByPlayer.set(playerId, {
+      playerName: stats.playerName,
+      teamId: stats.teamId,
+      games: 1,
+      atBats: stats.ab,
+      hits: stats.h,
+      doubles: stats.doubles,
+      triples: stats.triples,
+      homeRuns: stats.hr,
+      rbi: stats.rbi,
+      runs: stats.r,
+      walks: stats.bb,
+      strikeouts: stats.k,
+      stolenBases: stats.sb,
+      caughtStealing: stats.cs,
+      hitByPitch: stats.hbp,
+      sacrificeFlies: stats.sf,
+    });
+  }
+
+  const pitchingByPlayer = new Map<string, {
+    pitcherName: string;
+    teamId: string;
+    pitchingGames: number;
+    wins: number;
+    losses: number;
+    saves: number;
+    inningsPitched: number;
+    earnedRuns: number;
+    pitchingStrikeouts: number;
+    pitchingWalks: number;
+    hitsAllowed: number;
+  }>();
+
+  for (const stats of gameState.pitcherGameStats) {
+    const existing = pitchingByPlayer.get(stats.pitcherId);
+    if (existing) {
+      existing.pitchingGames += 1;
+      existing.wins += stats.decision === 'W' ? 1 : 0;
+      existing.losses += stats.decision === 'L' ? 1 : 0;
+      existing.saves += stats.save ? 1 : 0;
+      existing.inningsPitched += stats.outsRecorded / 3;
+      existing.earnedRuns += stats.earnedRuns;
+      existing.pitchingStrikeouts += stats.strikeoutsThrown;
+      existing.pitchingWalks += stats.walksAllowed;
+      existing.hitsAllowed += stats.hitsAllowed;
+      continue;
+    }
+
+    pitchingByPlayer.set(stats.pitcherId, {
+      pitcherName: stats.pitcherName,
+      teamId: stats.teamId,
+      pitchingGames: 1,
+      wins: stats.decision === 'W' ? 1 : 0,
+      losses: stats.decision === 'L' ? 1 : 0,
+      saves: stats.save ? 1 : 0,
+      inningsPitched: stats.outsRecorded / 3,
+      earnedRuns: stats.earnedRuns,
+      pitchingStrikeouts: stats.strikeoutsThrown,
+      pitchingWalks: stats.walksAllowed,
+      hitsAllowed: stats.hitsAllowed,
+    });
+  }
+
+  const allPlayerIds = new Set([
+    ...battingByPlayer.keys(),
+    ...pitchingByPlayer.keys(),
+  ]);
+
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORES.PLAYOFF_STATS, 'readwrite');
+    const store = tx.objectStore(STORES.PLAYOFF_STATS);
+    const index = store.index('playoffId');
+    const request = index.getAll(playoffId);
+
+    request.onsuccess = () => {
+      const existingByPlayerId = new Map<string, PlayoffPlayerStats>(
+        (request.result || []).map(record => [record.playerId, record])
+      );
+
+      for (const playerId of allPlayerIds) {
+        const batting = battingByPlayer.get(playerId);
+        const pitching = pitchingByPlayer.get(playerId);
+        const existing = existingByPlayerId.get(playerId);
+
+        const updated: PlayoffPlayerStats = {
+          id: existing?.id || `${playoffId}-${playerId}`,
+          playoffId,
+          playerId,
+          playerName: batting?.playerName || pitching?.pitcherName || existing?.playerName || 'Unknown Player',
+          teamId: batting?.teamId || pitching?.teamId || existing?.teamId || 'unknown',
+          sourceType: existing?.sourceType,
+          games: (existing?.games || 0) + (batting?.games || 0),
+          atBats: (existing?.atBats || 0) + (batting?.atBats || 0),
+          hits: (existing?.hits || 0) + (batting?.hits || 0),
+          doubles: (existing?.doubles || 0) + (batting?.doubles || 0),
+          triples: (existing?.triples || 0) + (batting?.triples || 0),
+          homeRuns: (existing?.homeRuns || 0) + (batting?.homeRuns || 0),
+          rbi: (existing?.rbi || 0) + (batting?.rbi || 0),
+          runs: (existing?.runs || 0) + (batting?.runs || 0),
+          walks: (existing?.walks || 0) + (batting?.walks || 0),
+          strikeouts: (existing?.strikeouts || 0) + (batting?.strikeouts || 0),
+          stolenBases: (existing?.stolenBases || 0) + (batting?.stolenBases || 0),
+          caughtStealing: (existing?.caughtStealing || 0) + (batting?.caughtStealing || 0),
+          hitByPitch: (existing?.hitByPitch || 0) + (batting?.hitByPitch || 0),
+          sacrificeFlies: (existing?.sacrificeFlies || 0) + (batting?.sacrificeFlies || 0),
+          avg: 0,
+          obp: 0,
+          slg: 0,
+          ops: 0,
+          pitchingGames: (existing?.pitchingGames || 0) + (pitching?.pitchingGames || 0),
+          wins: (existing?.wins || 0) + (pitching?.wins || 0),
+          losses: (existing?.losses || 0) + (pitching?.losses || 0),
+          saves: (existing?.saves || 0) + (pitching?.saves || 0),
+          inningsPitched: (existing?.inningsPitched || 0) + (pitching?.inningsPitched || 0),
+          earnedRuns: (existing?.earnedRuns || 0) + (pitching?.earnedRuns || 0),
+          pitchingStrikeouts: (existing?.pitchingStrikeouts || 0) + (pitching?.pitchingStrikeouts || 0),
+          pitchingWalks: (existing?.pitchingWalks || 0) + (pitching?.pitchingWalks || 0),
+          hitsAllowed: (existing?.hitsAllowed || 0) + (pitching?.hitsAllowed || 0),
+          era: 0,
+          whip: 0,
+        };
+
+        const totalBases =
+          (updated.hits - updated.doubles - updated.triples - updated.homeRuns) +
+          (updated.doubles * 2) +
+          (updated.triples * 3) +
+          (updated.homeRuns * 4);
+        const obpDenominator =
+          updated.atBats +
+          updated.walks +
+          (updated.hitByPitch || 0) +
+          (updated.sacrificeFlies || 0);
+
+        updated.avg = updated.atBats > 0 ? updated.hits / updated.atBats : 0;
+        updated.obp = obpDenominator > 0
+          ? (updated.hits + updated.walks + (updated.hitByPitch || 0)) / obpDenominator
+          : 0;
+        updated.slg = updated.atBats > 0 ? totalBases / updated.atBats : 0;
+        updated.ops = updated.obp + updated.slg;
+
+        const inningsPitched = updated.inningsPitched || 0;
+        updated.era = inningsPitched > 0 ? (updated.earnedRuns || 0) * 9 / inningsPitched : 0;
+        updated.whip = inningsPitched > 0
+          ? (((updated.hitsAllowed || 0) + (updated.pitchingWalks || 0)) / inningsPitched)
+          : 0;
+
+        store.put(updated);
+      }
+    };
+
+    request.onerror = () => reject(request.error);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error);
+  });
 }
 
 // ============================================
