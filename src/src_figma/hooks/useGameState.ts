@@ -160,7 +160,7 @@ export type OutType = 'K' | 'Kc' | 'GO' | 'FO' | 'LO' | 'PO' | 'DP' | 'TP' | 'FC
 export type WalkType = 'BB' | 'HBP' | 'IBB';
 export type ReachOnErrorType = 'E'; // Batter reaches base on fielding error
 export type EventType =
-  | 'SB' | 'CS' | 'WP' | 'PB' | 'PICK'
+  | 'SB' | 'CS' | 'WP' | 'PB' | 'PICK' | 'PICK_SAFE' | 'PICK_E'
   | 'KILLED' | 'NUTSHOT'
   | 'WEB_GEM' | 'ROBBERY'
   | 'TOOTBLAN'
@@ -597,18 +597,9 @@ export function autoCorrectResult(
     };
   }
 
-  // GO → DP: If GO with a runner out, and total outs = 2
-  if (initialResult === 'GO' && outs < 2) {
-    const runnerOutsCount = countRunnerOuts();
-
-    // If a runner is out, and we'd record 2 total outs (batter + runner)
-    if (runnerOutsCount >= 1) {
-      return {
-        correctedResult: 'DP',
-        explanation: 'Auto-corrected to Double Play (2 outs recorded: batter + runner)',
-      };
-    }
-  }
+  // D-6: GO → DP auto-correction REMOVED per C-017 reconciliation.
+  // GO→DP is now handled via an inline prompt in GameTracker.tsx (handleDpPromptAnswer).
+  // The user explicitly chooses DP vs GO — no silent auto-correction.
 
   return null;
 }
@@ -1670,6 +1661,46 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
           pitcherNamesRef.current = rebuiltPitcherNames;
         }
 
+        const playerNameById = new Map<string, string>();
+        const registerPlayerName = (playerId?: string, playerName?: string) => {
+          if (playerId && playerName) {
+            playerNameById.set(playerId, playerName);
+          }
+        };
+
+        for (const player of savedSnapshot.awayLineup || []) {
+          registerPlayerName(player.playerId, player.playerName);
+        }
+        for (const player of savedSnapshot.homeLineup || []) {
+          registerPlayerName(player.playerId, player.playerName);
+        }
+        for (const player of savedSnapshot.awayLineupState?.lineup || []) {
+          registerPlayerName(player.playerId, player.playerName);
+        }
+        for (const player of savedSnapshot.homeLineupState?.lineup || []) {
+          registerPlayerName(player.playerId, player.playerName);
+        }
+        for (const player of savedSnapshot.awayLineupState?.bench || []) {
+          registerPlayerName(player.playerId, player.playerName);
+        }
+        for (const player of savedSnapshot.homeLineupState?.bench || []) {
+          registerPlayerName(player.playerId, player.playerName);
+        }
+        registerPlayerName(
+          savedSnapshot.awayLineupState?.currentPitcher?.playerId,
+          savedSnapshot.awayLineupState?.currentPitcher?.playerName
+        );
+        registerPlayerName(
+          savedSnapshot.homeLineupState?.currentPitcher?.playerId,
+          savedSnapshot.homeLineupState?.currentPitcher?.playerName
+        );
+        for (const [playerId, stats] of Object.entries(savedSnapshot.playerStats || {})) {
+          registerPlayerName(playerId, stats.playerName);
+        }
+        for (const pitcher of savedSnapshot.pitcherGameStats || []) {
+          registerPlayerName(pitcher.pitcherId, pitcher.pitcherName);
+        }
+
         const snapshotPitcherId =
           savedSnapshot.currentPitcherId ||
           savedSnapshot.runnerTrackerSnapshot?.currentPitcherId ||
@@ -1677,13 +1708,27 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         const snapshotPitcherName =
           savedSnapshot.currentPitcherName ||
           savedSnapshot.runnerTrackerSnapshot?.currentPitcherName ||
+          playerNameById.get(snapshotPitcherId) ||
+          pitcherNamesRef.current.get(snapshotPitcherId) ||
+          '';
+        const snapshotBatterId = savedSnapshot.currentBatterId ?? '';
+        const snapshotBatterName =
+          savedSnapshot.currentBatterName ||
+          playerNameById.get(snapshotBatterId) ||
           '';
 
         if (savedSnapshot.runnerTrackerSnapshot) {
           runnerTrackerRef.current = {
-            runners: savedSnapshot.runnerTrackerSnapshot.runners as RunnerTrackingState['runners'],
+            runners: savedSnapshot.runnerTrackerSnapshot.runners.map((runner) => ({
+              ...runner,
+              runnerName: runner.runnerName || playerNameById.get(runner.runnerId) || runner.runnerId,
+              responsiblePitcherName:
+                runner.responsiblePitcherName ||
+                playerNameById.get(runner.responsiblePitcherId) ||
+                runner.responsiblePitcherId,
+            })) as RunnerTrackingState['runners'],
             currentPitcherId: savedSnapshot.runnerTrackerSnapshot.currentPitcherId,
-            currentPitcherName: savedSnapshot.runnerTrackerSnapshot.currentPitcherName,
+            currentPitcherName: savedSnapshot.runnerTrackerSnapshot.currentPitcherName || snapshotPitcherName,
             pitcherStats: new Map(
               savedSnapshot.runnerTrackerSnapshot.pitcherStatsEntries as [string, PitcherRunnerStats][]
             ),
@@ -1748,8 +1793,8 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
             second: !!savedSnapshot.bases.second,
             third: !!savedSnapshot.bases.third,
           },
-          currentBatterId: savedSnapshot.currentBatterId ?? '',
-          currentBatterName: savedSnapshot.currentBatterName ?? '',
+          currentBatterId: snapshotBatterId,
+          currentBatterName: snapshotBatterName,
           currentPitcherId: snapshotPitcherId,
           currentPitcherName: snapshotPitcherName,
           awayTeamId: savedSnapshot.awayTeamId,

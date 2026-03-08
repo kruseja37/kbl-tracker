@@ -11,6 +11,9 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 
 export type RunnerBase = 'first' | 'second' | 'third';
 
+/** D-2: Pickoff outcome sub-options per §5.1 */
+export type PickoffOutcome = 'safe' | 'out' | 'error';
+
 export interface RunnerPopoverProps {
   /** Which base the runner is on */
   base: RunnerBase;
@@ -20,21 +23,23 @@ export interface RunnerPopoverProps {
   anchorPosition: { left: string; top: string };
   /** Handler: stolen base attempt */
   onSteal: (base: RunnerBase) => void;
-  /** Handler: advance runner (one base or score) */
-  onAdvance: (base: RunnerBase) => void;
+  /** Handler: advance runner. D-11: optional destination for non-standard advance. */
+  onAdvance: (base: RunnerBase, destinationBase?: 'second' | 'third' | 'home') => void;
   /** Handler: wild pitch — all runners advance. If destinationBase provided, non-standard advance. */
   onWildPitch: (base: RunnerBase, destinationBase?: 'second' | 'third' | 'home') => void;
   /** Handler: passed ball — same as WP but charged to catcher */
   onPassedBall: (base: RunnerBase, destinationBase?: 'second' | 'third' | 'home') => void;
-  /** Handler: pickoff attempt */
-  onPickoff: (base: RunnerBase) => void;
+  /** Handler: pickoff attempt. D-2: outcome = safe (attempt logged) | out | error (runner advances) */
+  onPickoff: (base: RunnerBase, outcome: PickoffOutcome) => void;
   /** Handler: pinch runner substitution */
   onSubstitute: (base: RunnerBase) => void;
+  /** Open player card for the active runner */
+  onViewPlayerCard?: () => void;
   /** Close the popover */
   onClose: () => void;
 }
 
-type DestinationMode = 'wp' | 'pb' | null;
+type DestinationMode = 'wp' | 'pb' | 'advance' | null;
 
 const BASE_LABELS: Record<RunnerBase, string> = {
   first: '1B',
@@ -76,10 +81,12 @@ export function RunnerPopover({
   onPassedBall,
   onPickoff,
   onSubstitute,
+  onViewPlayerCard,
   onClose,
 }: RunnerPopoverProps) {
   const popoverRef = useRef<HTMLDivElement>(null);
   const [destinationMode, setDestinationMode] = useState<DestinationMode>(null);
+  const [pickoffSubMenu, setPickoffSubMenu] = useState(false);
 
   // Close on outside click
   useEffect(() => {
@@ -123,15 +130,26 @@ export function RunnerPopover({
       onWildPitch(base, dest);
     } else if (destinationMode === 'pb') {
       onPassedBall(base, dest);
+    } else if (destinationMode === 'advance') {
+      onAdvance(base, dest);
     }
-  }, [destinationMode, base, onWildPitch, onPassedBall]);
+  }, [destinationMode, base, onWildPitch, onPassedBall, onAdvance]);
+
+  // D-11: Advance opens destination picker (unless runner on third → just score)
+  const handleAdvance = useCallback(() => {
+    if (base === 'third') {
+      onAdvance(base);
+    } else {
+      setDestinationMode('advance');
+    }
+  }, [base, onAdvance]);
 
   const displayName = runnerName.split(' ').pop()?.toUpperCase() || `R${BASE_LABELS[base]}`;
 
   // Destination picker sub-view (ticket 4.2)
   if (destinationMode) {
     const destinations = getDestinations(base);
-    const label = destinationMode === 'wp' ? 'WILD PITCH' : 'PASSED BALL';
+    const label = destinationMode === 'wp' ? 'WILD PITCH' : destinationMode === 'pb' ? 'PASSED BALL' : 'ADVANCE';
     return (
       <div
         ref={popoverRef}
@@ -170,6 +188,47 @@ export function RunnerPopover({
     );
   }
 
+  // D-2: Pickoff sub-menu — Safe / Out / Error
+  if (pickoffSubMenu) {
+    return (
+      <div
+        ref={popoverRef}
+        className="absolute z-50 transform -translate-x-1/2"
+        style={{ left: anchorPosition.left, top: anchorPosition.top }}
+      >
+        <div className="bg-[#333] border-[3px] border-[#C4A853] p-2 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.5)] min-w-[140px]">
+          <div className="text-[8px] text-[#C4A853] font-bold mb-1.5">PICKOFF — RESULT?</div>
+          <div className="flex flex-col gap-1">
+            <button
+              onClick={() => onPickoff(base, 'safe')}
+              className="bg-[#1a5276] border-[2px] border-[#5dade2] px-2 py-1.5 text-[10px] font-bold text-white hover:scale-105 transition-transform"
+            >
+              Safe (attempt logged)
+            </button>
+            <button
+              onClick={() => onPickoff(base, 'out')}
+              className="bg-[#8B0000] border-[2px] border-[#FF4444] px-2 py-1.5 text-[10px] font-bold text-white hover:scale-105 transition-transform"
+            >
+              Out
+            </button>
+            <button
+              onClick={() => onPickoff(base, 'error')}
+              className="bg-[#7d6608] border-[2px] border-[#f4d03f] px-2 py-1.5 text-[10px] font-bold text-white hover:scale-105 transition-transform"
+            >
+              Error (runner advances)
+            </button>
+          </div>
+          <button
+            onClick={() => setPickoffSubMenu(false)}
+            className="mt-1.5 w-full bg-[#555] border-[2px] border-[#888] px-2 py-1 text-[9px] text-[#E8E8D8] font-bold hover:bg-[#666]"
+          >
+            BACK
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   // Main popover
   return (
     <div
@@ -196,7 +255,7 @@ export function RunnerPopover({
             label={nextBase(base) === 'Score' ? 'Score' : 'Advance'}
             color="bg-[#1a5276]"
             border="border-[#5dade2]"
-            onClick={() => onAdvance(base)}
+            onClick={handleAdvance}
           />
           <PopoverButton
             label="WP"
@@ -214,7 +273,7 @@ export function RunnerPopover({
             label="Pickoff"
             color="bg-[#8B0000]"
             border="border-[#FF4444]"
-            onClick={() => onPickoff(base)}
+            onClick={() => setPickoffSubMenu(true)}
           />
           <PopoverButton
             label="Sub"
@@ -222,6 +281,14 @@ export function RunnerPopover({
             border="border-[#88AA88]"
             onClick={() => onSubstitute(base)}
           />
+          {onViewPlayerCard && (
+            <PopoverButton
+              label="Card"
+              color="bg-[#6c3483]"
+              border="border-[#af7ac5]"
+              onClick={onViewPlayerCard}
+            />
+          )}
         </div>
       </div>
     </div>

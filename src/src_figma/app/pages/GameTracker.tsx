@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useNavigate, useParams, useLocation } from "react-router";
-import { Menu, ChevronUp } from "lucide-react";
+import { Menu, ChevronUp, X } from "lucide-react";
 import { DndProvider } from "react-dnd";
 import { HTML5Backend } from "react-dnd-html5-backend";
 // REMOVED: BUG-009 - BaserunnerDragDrop was a placeholder that did nothing
@@ -12,11 +12,11 @@ import { FielderPopover, type FielderInfo, type BenchPlayerInfo } from "@/app/co
 import { LineupCard, type SubstitutionData, type LineupPlayer, type BenchPlayer, type BullpenPitcher } from "@/app/components/LineupCard";
 import { UndoButton, useUndoSystem, type GameSnapshot } from "@/app/components/UndoSystem";
 import { TeamRoster, type Player, type Pitcher } from "@/app/components/TeamRoster";
-import { MiniScoreboard } from "@/app/components/MiniScoreboard";
+// D-9: MiniScoreboard removed from diamond zone — scoreboard now in FenwayBoard left panel
 import { FenwayBoard } from "@/app/components/FenwayBoard";
 import { QuickBar } from "@/app/components/QuickBar";
 import { PlayLogPanel, type PlayLogEntry } from "@/app/components/PlayLogPanel";
-import { EnrichmentPanel, type EnrichmentUpdate } from "@/app/components/EnrichmentPanel";
+import { EnrichmentPanel, PITCH_TYPES, type EnrichmentUpdate } from "@/app/components/EnrichmentPanel";
 import { updateAtBatEvent } from "../../../utils/eventLog";
 import { getTeamColors, getFielderBorderColors } from "@/config/teamColors";
 
@@ -413,22 +413,64 @@ export function GameTracker() {
   // ============================================
   const [activeRunnerPopover, setActiveRunnerPopover] = useState<{
     base: RunnerBase;
+    runnerName: string;
+    playerId: string;
     anchorPosition: { left: string; top: string };
   } | null>(null);
   const [activeFielderPopover, setActiveFielderPopover] = useState<{
     fielder: FielderInfo;
     anchorPosition: { left: string; top: string };
   } | null>(null);
+  const [showLineupOverlay, setShowLineupOverlay] = useState(false);
+  const [lineupOverlayHint, setLineupOverlayHint] = useState<string | null>(null);
+  const [showModifierTray, setShowModifierTray] = useState(false);
+  const [showManagerMomentPanel, setShowManagerMomentPanel] = useState(false);
 
   // MAJ-03: Detection system state — pending prompts for user confirmation
   const [pendingDetections, setPendingDetections] = useState<UIDetectionResult[]>([]);
 
-  // Scoreboard minimization toggle - allows field to expand
-  const [isScoreboardMinimized, setIsScoreboardMinimized] = useState(false);
+  // D-4: HR inline prompt state (distance + pitch type before recording)
+  const [hrPrompt, setHrPrompt] = useState<{
+    rbi: number;
+    runnerAdv: RunnerAdvancement | undefined;
+    defaults: RunnerDefaults;
+    distance: string;
+    pitchType: string;
+  } | null>(null);
 
-  // Field zoom level (0-1): 0 = full field, 1 = zoomed on infield
-  // When scoreboard is minimized, auto-zoom to 0.35 for better infield visibility
-  const fieldZoomLevel = isScoreboardMinimized ? 0.35 : 0;
+  // D-3: Error flow prompt state (base → fielder → type)
+  const [errorFlow, setErrorFlow] = useState<{
+    step: 'base' | 'fielder' | 'type';
+    baseReached: '1B' | '2B' | '3B';
+    fielderPosition: number;
+    defaults: RunnerDefaults;
+  } | null>(null);
+
+  // D-5: SF prompt state — shown when FO + R3 + <2 outs
+  const [sfPrompt, setSfPrompt] = useState<{
+    runnerAdv: RunnerAdvancement | undefined;
+    defaults: RunnerDefaults;
+  } | null>(null);
+
+  // D-6: GO→DP prompt state — shown when GO + runner out detected
+  const [dpPrompt, setDpPrompt] = useState<{
+    runnerAdv: RunnerAdvancement | undefined;
+    rbi: number;
+    defaults: RunnerDefaults;
+  } | null>(null);
+
+  // D-7: IFR prompt state — shown when PO + R1+R2 or loaded + <2 outs
+  const [ifrPrompt, setIfrPrompt] = useState<{
+    runnerAdv: RunnerAdvancement | undefined;
+    defaults: RunnerDefaults;
+  } | null>(null);
+
+  // Scoreboard minimization toggle - allows field to expand
+  const [isScoreboardMinimized, setIsScoreboardMinimized] = useState(true);
+
+  // Field zoom level tuned for the spec's iPad landscape layout.
+  // Keep the playable field prominent while retaining enough outfield for taps/enrichment.
+  const fieldZoomLevel = isScoreboardMinimized ? 1 : 0.82;
 
   // Undo system - restore game state on undo
   // CRIT-01 fix: Now restores playerStats, pitcherStats Maps, and runner tracker alongside gameState/scoreboard
@@ -588,6 +630,31 @@ export function GameTracker() {
     { name: 'W. COLLINS', stats: { ip: '0.0', h: 0, r: 0, er: 0, bb: 0, k: 0, pitches: 0 }, throwingHand: 'R' as const },
   ];
 
+  const resolveRosterNameByGameId = useCallback((playerId?: string): string | undefined => {
+    if (!playerId) return undefined;
+
+    const awayPlayer = awayTeamPlayers.find((player) => generatePlayerId(player.name, 'away') === playerId);
+    if (awayPlayer) return awayPlayer.name;
+
+    const homePlayer = homeTeamPlayers.find((player) => generatePlayerId(player.name, 'home') === playerId);
+    if (homePlayer) return homePlayer.name;
+
+    const awayPitcherMatch = awayTeamPitchers.find((pitcher) => generatePlayerId(pitcher.name, 'away') === playerId);
+    if (awayPitcherMatch) return awayPitcherMatch.name;
+
+    const homePitcherMatch = homeTeamPitchers.find((pitcher) => generatePlayerId(pitcher.name, 'home') === playerId);
+    return homePitcherMatch?.name;
+  }, [awayTeamPitchers, awayTeamPlayers, generatePlayerId, homeTeamPitchers, homeTeamPlayers]);
+
+  const resolvedCurrentBatterName =
+    gameState.currentBatterName ||
+    resolveRosterNameByGameId(gameState.currentBatterId) ||
+    'BATTER';
+  const resolvedCurrentPitcherName =
+    gameState.currentPitcherName ||
+    resolveRosterNameByGameId(gameState.currentPitcherId) ||
+    'PITCHER';
+
   // T0-08: Derive lineup/bench/bullpen from actual team data (dynamic, not hardcoded)
   const battingTeamPlayersRaw = gameState.isTop ? awayTeamPlayers : homeTeamPlayers;
   const fieldingTeamPitchersRaw = gameState.isTop ? homeTeamPitchers : awayTeamPitchers;
@@ -598,7 +665,7 @@ export function GameTracker() {
     .map((p) => ({
       name: p.name,
       pos: p.position || 'DH',
-      batting: p.name === gameState.currentBatterName,
+      batting: p.name === resolvedCurrentBatterName,
     }));
 
   // GAP-GT-7-B: Lineup size validation — warn if lineup is not exactly 9 (or 10 with DH)
@@ -973,7 +1040,9 @@ export function GameTracker() {
   // Get current batter's lineup position
   const battingTeamPlayers = gameState.isTop ? awayTeamPlayers : homeTeamPlayers;
   const pitchingTeamPlayers = gameState.isTop ? homeTeamPlayers : awayTeamPlayers;
-  const currentBatterData = battingTeamPlayers.find(p => p.battingOrder && p.name === gameState.currentBatterName);
+  const currentBatterData = battingTeamPlayers.find(
+    p => (p.battingOrder && p.name === resolvedCurrentBatterName) || generatePlayerId(p.name, battingTeam) === gameState.currentBatterId
+  );
   const currentBatterPosition = currentBatterData?.battingOrder || 1;
   const currentBatterPositionStr = currentBatterPosition.toString();
   const atBatDigit1 = currentBatterPositionStr.length > 1 ? currentBatterPositionStr[0] : '';
@@ -1001,8 +1070,12 @@ export function GameTracker() {
     return name.toUpperCase();
   };
 
-  const currentBatterDisplayName = formatDisplayName(gameState.currentBatterName);
-  const currentPitcherDisplayName = formatDisplayName(gameState.currentPitcherName);
+  const currentBatterDisplayName = formatDisplayName(resolvedCurrentBatterName);
+  const currentPitcherDisplayName = formatDisplayName(resolvedCurrentPitcherName);
+  const openPlayerCard = useCallback((playerName: string, team: 'away' | 'home', type: 'batter' | 'pitcher' = 'batter') => {
+    const playerId = getPlayerIdFromName(playerName, team);
+    setSelectedPlayer({ name: playerName, type, playerId });
+  }, [getPlayerIdFromName]);
 
   // Get current batter's fielding position (e.g., "SS", "CF")
   const batterFieldingPosition = currentBatterData?.position || '?';
@@ -1925,18 +1998,44 @@ export function GameTracker() {
       const rbi = calculateRBI();
 
       // 7. Route to correct recording function
-      if (QUICK_BAR_HITS.includes(outcome)) {
+      if (outcome === 'HR') {
+        // D-4: Show inline HR prompt for distance + pitch type before recording
+        setHrPrompt({ rbi, runnerAdv, defaults, distance: '', pitchType: '' });
+        return; // Recording deferred to handleHrPromptDone
+
+      } else if (outcome === 'E') {
+        // D-3: Show error flow prompts (base → fielder → type)
+        setErrorFlow({ step: 'base', baseReached: '1B', fielderPosition: 0, defaults });
+        return; // Recording deferred to handleErrorFlowComplete
+
+      } else if (outcome === 'FO' && bases.third && outs < 2) {
+        // D-5: FO with R3 + <2 outs → SF prompt
+        setSfPrompt({ runnerAdv, defaults });
+        return; // Deferred to handleSfPromptAnswer
+
+      } else if (outcome === 'GO' && (bases.first || bases.second || bases.third) && outs < 2) {
+        // D-6: GO with runners + <2 outs → check if runner default shows out → DP prompt
+        const hasRunnerOut = (defaults.first?.to === 'out') || (defaults.second?.to === 'out') || (defaults.third?.to === 'out');
+        if (hasRunnerOut) {
+          setDpPrompt({ runnerAdv, rbi, defaults });
+          return; // Deferred to handleDpPromptAnswer
+        }
+        // No runner out in defaults → standard GO, fall through
+        await recordOut('GO' as OutType, runnerAdv);
+        logAction('GO');
+
+      } else if (outcome === 'PO' && outs < 2 && bases.first && bases.second) {
+        // D-7: PO with R1+R2 (or loaded) + <2 outs → IFR prompt
+        setIfrPrompt({ runnerAdv, defaults });
+        return; // Deferred to handleIfrPromptAnswer
+
+      } else if (QUICK_BAR_HITS.includes(outcome)) {
         await recordHit(outcome as HitType, rbi, runnerAdv);
         logAction(`${outcome}${rbi > 0 ? ` — ${rbi} RBI` : ''}`);
 
       } else if (QUICK_BAR_WALKS.includes(outcome)) {
         await recordWalk(outcome as WalkType);
         logAction(`${outcome}`);
-
-      } else if (outcome === 'E') {
-        // Error: recordError(rbi, runnerAdv) — minimal for now
-        await recordError(0, undefined);
-        logAction('E (reached on error)');
 
       } else if (outcome === 'FC') {
         // Fielder's Choice: batter reaches, lead runner out
@@ -2012,6 +2111,307 @@ export function GameTracker() {
       console.error(`[QuickBar] Failed to record ${outcome}:`, error);
     }
   }, [gameInitialized, gameState, recordHit, recordOut, recordWalk, recordError, recordD3K, undoSystem, logAction, runnerNames, pushPlayLogEntry, shortInningLabel]);
+
+  // ═══════════════════════════════════════════════════════════
+  // D-4: HR inline prompt completion
+  // ═══════════════════════════════════════════════════════════
+  const handleHrPromptDone = useCallback(async () => {
+    if (!hrPrompt) return;
+    const { rbi, runnerAdv, defaults, distance, pitchType } = hrPrompt;
+
+    // Attach enrichment if distance or pitch type provided
+    if (distance || pitchType) {
+      const enrichment: Record<string, unknown> = {};
+      if (distance) enrichment.hrDistance = parseInt(distance, 10);
+      if (pitchType) enrichment.pitchType = pitchType;
+      setNextEventEnrichment(enrichment as NonNullable<import('../../../utils/eventLog').AtBatEvent['enrichment']>);
+    }
+
+    try {
+      await recordHit('HR' as HitType, rbi, runnerAdv);
+      logAction(`HR${rbi > 0 ? ` — ${rbi} RBI` : ''}${distance ? ` (${distance} ft)` : ''}`);
+
+      pushPlayLogEntry({
+        eventId: `${gameState.gameId}_${atBatSequence}`,
+        inningLabel: shortInningLabel(),
+        batterName: gameState.currentBatterName,
+        result: 'HR',
+        resultCategory: 'hit',
+        rbi,
+        runsScored: rbi,
+        hasFieldingData: false,
+        hasLocationData: false,
+        hasKType: false,
+        hasPitchCount: false,
+        hasPitchType: !!pitchType,
+        isEnrichable: true,
+        isQAB: true,
+      });
+
+      // Update runner names (HR: all score, batter scores)
+      setRunnerNames({});
+    } catch (error) {
+      console.error('[D-4] Failed to record HR:', error);
+    }
+    setHrPrompt(null);
+  }, [hrPrompt, recordHit, logAction, pushPlayLogEntry, gameState, atBatSequence, shortInningLabel, setNextEventEnrichment]);
+
+  const handleHrPromptSkip = useCallback(async () => {
+    if (!hrPrompt) return;
+    const { rbi, runnerAdv } = hrPrompt;
+    try {
+      await recordHit('HR' as HitType, rbi, runnerAdv);
+      logAction(`HR${rbi > 0 ? ` — ${rbi} RBI` : ''}`);
+
+      pushPlayLogEntry({
+        eventId: `${gameState.gameId}_${atBatSequence}`,
+        inningLabel: shortInningLabel(),
+        batterName: gameState.currentBatterName,
+        result: 'HR',
+        resultCategory: 'hit',
+        rbi,
+        runsScored: rbi,
+        hasFieldingData: false,
+        hasLocationData: false,
+        hasKType: false,
+        hasPitchCount: false,
+        hasPitchType: false,
+        isEnrichable: true,
+        isQAB: true,
+      });
+      setRunnerNames({});
+    } catch (error) {
+      console.error('[D-4] Failed to record HR (skip):', error);
+    }
+    setHrPrompt(null);
+  }, [hrPrompt, recordHit, logAction, pushPlayLogEntry, gameState, atBatSequence, shortInningLabel]);
+
+  // ═══════════════════════════════════════════════════════════
+  // D-3: Error flow prompt completion
+  // ═══════════════════════════════════════════════════════════
+  const handleErrorFlowComplete = useCallback(async (
+    baseReached: string,
+    fielderPosition: number,
+    errorType: string,
+  ) => {
+    if (!errorFlow) return;
+
+    undoSystem.captureSnapshot('Quick: E');
+
+    // Build runner advancement for error (batter reaches specified base)
+    // Runners use standard defaults for the error
+    const runnerAdv: RunnerAdvancement = {};
+    const bases = gameState.bases;
+    // On error, advance existing runners by 1 base (standard default)
+    if (bases.third) runnerAdv.fromThird = 'home';
+    if (bases.second) runnerAdv.fromSecond = 'third';
+    if (bases.first) runnerAdv.fromFirst = 'second';
+
+    const rbi = 0; // Errors never get RBI per baseball rules
+
+    // Set enrichment with fielder and error type info
+    const enrichment: Record<string, unknown> = {};
+    if (fielderPosition > 0) {
+      enrichment.fieldingSequence = [fielderPosition];
+      enrichment.errorFielder = fielderPosition;
+    }
+    if (errorType) enrichment.errorType = errorType;
+    setNextEventEnrichment(enrichment as NonNullable<import('../../../utils/eventLog').AtBatEvent['enrichment']>);
+
+    try {
+      await recordError(rbi, runnerAdv);
+      logAction(`E${fielderPosition || ''}${errorType ? ` (${errorType})` : ''} — batter to ${baseReached}`);
+
+      pushPlayLogEntry({
+        eventId: `${gameState.gameId}_${atBatSequence}`,
+        inningLabel: shortInningLabel(),
+        batterName: gameState.currentBatterName,
+        result: 'E',
+        resultCategory: 'error',
+        rbi: 0,
+        runsScored: bases.third ? 1 : 0,
+        hasFieldingData: fielderPosition > 0,
+        hasLocationData: false,
+        hasKType: false,
+        hasPitchCount: false,
+        hasPitchType: false,
+        isEnrichable: true,
+        isQAB: false,
+      });
+
+      // Update runner names
+      const newNames: { first?: string; second?: string; third?: string } = {};
+      const batterName = gameState.currentBatterName;
+      if (bases.second && !bases.third) newNames.third = runnerNames.second;
+      if (bases.first && !bases.second) newNames.second = runnerNames.first;
+      // Place batter
+      if (baseReached === '1B') newNames.first = batterName;
+      else if (baseReached === '2B') newNames.second = batterName;
+      else if (baseReached === '3B') newNames.third = batterName;
+      setRunnerNames(newNames);
+    } catch (error) {
+      console.error('[D-3] Failed to record error:', error);
+    }
+    setErrorFlow(null);
+  }, [errorFlow, gameState, recordError, logAction, pushPlayLogEntry, atBatSequence, shortInningLabel, runnerNames, undoSystem, setNextEventEnrichment]);
+
+  // ═══════════════════════════════════════════════════════════
+  // D-5: SF prompt answer — "Sac fly — run scores?"
+  // ═══════════════════════════════════════════════════════════
+  const handleSfPromptAnswer = useCallback(async (isYes: boolean) => {
+    if (!sfPrompt) return;
+    const { runnerAdv, defaults } = sfPrompt;
+    try {
+      if (isYes) {
+        // SF: runner scores from 3rd, batter out, not an AB
+        const sfAdv: RunnerAdvancement = { ...runnerAdv, fromThird: 'home' };
+        await recordOut('SF' as OutType, sfAdv);
+        logAction('SF — run scores');
+
+        pushPlayLogEntry({
+          eventId: `${gameState.gameId}_${atBatSequence}`,
+          inningLabel: shortInningLabel(),
+          batterName: gameState.currentBatterName,
+          result: 'SF',
+          resultCategory: 'out',
+          rbi: 1,
+          runsScored: 1,
+          hasFieldingData: false, hasLocationData: false, hasKType: false,
+          hasPitchCount: false, hasPitchType: false,
+          isEnrichable: true, isQAB: false,
+        });
+      } else {
+        // FO: runner holds, standard fly out
+        const foAdv: RunnerAdvancement = { ...runnerAdv, fromThird: undefined };
+        await recordOut('FO' as OutType, Object.keys(foAdv).length > 0 ? foAdv : undefined);
+        logAction('FO (R3 held)');
+
+        pushPlayLogEntry({
+          eventId: `${gameState.gameId}_${atBatSequence}`,
+          inningLabel: shortInningLabel(),
+          batterName: gameState.currentBatterName,
+          result: 'FO',
+          resultCategory: 'out',
+          rbi: 0, runsScored: 0,
+          hasFieldingData: false, hasLocationData: false, hasKType: false,
+          hasPitchCount: false, hasPitchType: false,
+          isEnrichable: true, isQAB: false,
+        });
+      }
+
+      // Update runner names
+      const newNames: { first?: string; second?: string; third?: string } = {};
+      if (isYes) {
+        // R3 scored, others hold on FO (tag-up default)
+        if (defaults.second?.to === 'second') newNames.second = runnerNames.second;
+        if (defaults.first?.to === 'first') newNames.first = runnerNames.first;
+      } else {
+        // R3 held
+        newNames.third = runnerNames.third;
+        if (defaults.second?.to === 'second') newNames.second = runnerNames.second;
+        if (defaults.first?.to === 'first') newNames.first = runnerNames.first;
+      }
+      setRunnerNames(newNames);
+    } catch (error) {
+      console.error('[D-5] Failed to record SF/FO:', error);
+    }
+    setSfPrompt(null);
+  }, [sfPrompt, recordOut, logAction, pushPlayLogEntry, gameState, atBatSequence, shortInningLabel, runnerNames]);
+
+  // ═══════════════════════════════════════════════════════════
+  // D-6: GO→DP prompt answer — "Double play?"
+  // ═══════════════════════════════════════════════════════════
+  const handleDpPromptAnswer = useCallback(async (isDP: boolean) => {
+    if (!dpPrompt) return;
+    const { runnerAdv, rbi, defaults } = dpPrompt;
+    try {
+      if (isDP) {
+        await recordOut('DP' as OutType, runnerAdv);
+        logAction(`DP${rbi > 0 ? ` — ${rbi} RBI` : ''}`);
+
+        pushPlayLogEntry({
+          eventId: `${gameState.gameId}_${atBatSequence}`,
+          inningLabel: shortInningLabel(),
+          batterName: gameState.currentBatterName,
+          result: 'DP',
+          resultCategory: 'out',
+          rbi: 0, runsScored: 0, // DP never gets RBI
+          hasFieldingData: false, hasLocationData: false, hasKType: false,
+          hasPitchCount: false, hasPitchType: false,
+          isEnrichable: true, isQAB: false,
+        });
+      } else {
+        // Standard GO, no DP
+        await recordOut('GO' as OutType, runnerAdv);
+        logAction('GO');
+
+        pushPlayLogEntry({
+          eventId: `${gameState.gameId}_${atBatSequence}`,
+          inningLabel: shortInningLabel(),
+          batterName: gameState.currentBatterName,
+          result: 'GO',
+          resultCategory: 'out',
+          rbi: rbi > 0 ? rbi : 0,
+          runsScored: rbi,
+          hasFieldingData: false, hasLocationData: false, hasKType: false,
+          hasPitchCount: false, hasPitchType: false,
+          isEnrichable: true, isQAB: false,
+        });
+      }
+
+      // Update runner names from defaults
+      const newNames: { first?: string; second?: string; third?: string } = {};
+      if (defaults.third?.to === 'third') newNames.third = runnerNames.third;
+      if (defaults.second?.to === 'second') newNames.second = runnerNames.second;
+      if (defaults.second?.to === 'third') newNames.third = runnerNames.second;
+      if (defaults.first?.to === 'first') newNames.first = runnerNames.first;
+      if (defaults.first?.to === 'second') newNames.second = runnerNames.first;
+      setRunnerNames(newNames);
+    } catch (error) {
+      console.error('[D-6] Failed to record GO/DP:', error);
+    }
+    setDpPrompt(null);
+  }, [dpPrompt, recordOut, logAction, pushPlayLogEntry, gameState, atBatSequence, shortInningLabel, runnerNames]);
+
+  // ═══════════════════════════════════════════════════════════
+  // D-7: IFR prompt answer — "Infield Fly Rule?"
+  // ═══════════════════════════════════════════════════════════
+  const handleIfrPromptAnswer = useCallback(async (isIFR: boolean) => {
+    if (!ifrPrompt) return;
+    const { runnerAdv, defaults } = ifrPrompt;
+    try {
+      if (isIFR) {
+        // IFR: batter OUT immediately, removes force on runners
+        // Set enrichment with IFR modifier
+        setNextEventEnrichment({ modifiers: ['ifr'] } as NonNullable<import('../../../utils/eventLog').AtBatEvent['enrichment']>);
+      }
+      // Either way it's a PO — IFR just adds the modifier
+      await recordOut('PO' as OutType, runnerAdv);
+      logAction(`PO${isIFR ? ' (IFR)' : ''}`);
+
+      pushPlayLogEntry({
+        eventId: `${gameState.gameId}_${atBatSequence}`,
+        inningLabel: shortInningLabel(),
+        batterName: gameState.currentBatterName,
+        result: 'PO',
+        resultCategory: 'out',
+        rbi: 0, runsScored: 0,
+        hasFieldingData: false, hasLocationData: false, hasKType: false,
+        hasPitchCount: false, hasPitchType: false,
+        isEnrichable: true, isQAB: false,
+      });
+
+      // Update runner names (runners hold on PO)
+      const newNames: { first?: string; second?: string; third?: string } = {};
+      if (defaults.third?.to === 'third') newNames.third = runnerNames.third;
+      if (defaults.second?.to === 'second') newNames.second = runnerNames.second;
+      if (defaults.first?.to === 'first') newNames.first = runnerNames.first;
+      setRunnerNames(newNames);
+    } catch (error) {
+      console.error('[D-7] Failed to record PO/IFR:', error);
+    }
+    setIfrPrompt(null);
+  }, [ifrPrompt, recordOut, logAction, pushPlayLogEntry, gameState, atBatSequence, shortInningLabel, runnerNames, setNextEventEnrichment]);
 
   // EXH-016: Handle fielder credit confirmation - continue processing the play with credits
   const handleFielderCreditConfirm = useCallback(async (credits: FielderCredit[]) => {
@@ -2247,6 +2647,19 @@ export function GameTracker() {
     }
   }, [recordEvent, undoSystem]);
 
+  const triggerManualSpecialEvent = useCallback((eventType: SpecialEventData['eventType']) => {
+    const leadRunnerBase = gameState.bases.third ? 'third' : gameState.bases.second ? 'second' : gameState.bases.first ? 'first' : null;
+    const runnerName = leadRunnerBase ? runnerNames[leadRunnerBase] : undefined;
+    const runnerId = leadRunnerBase && runnerName ? getPlayerIdFromName(runnerName, battingTeam) : undefined;
+
+    void handleSpecialEvent({
+      eventType,
+      runnerId: eventType === 'TOOTBLAN' ? runnerId : undefined,
+      fielderPosition: eventType === 'KILLED_PITCHER' || eventType === 'NUT_SHOT' ? 1 : undefined,
+      fielderName: eventType === 'KILLED_PITCHER' || eventType === 'NUT_SHOT' ? resolvedCurrentPitcherName : undefined,
+    });
+  }, [battingTeam, gameState.bases.first, gameState.bases.second, gameState.bases.third, getPlayerIdFromName, handleSpecialEvent, resolvedCurrentPitcherName, runnerNames]);
+
   const handleSubstitution = useCallback((teamType: 'away' | 'home', benchPlayerName: string, lineupPlayerName: string) => {
     console.log(`Substitution: ${benchPlayerName} replacing ${lineupPlayerName} on ${teamType} team`);
 
@@ -2350,8 +2763,14 @@ export function GameTracker() {
 
   const handleRunnerTap = useCallback((base: 'first' | 'second' | 'third', anchorPosition: { left: string; top: string }) => {
     setActiveFielderPopover(null); // Close any open fielder popover
-    setActiveRunnerPopover({ base, anchorPosition });
-  }, []);
+    const runnerName = runnerNames[base] || `R${base === 'first' ? '1' : base === 'second' ? '2' : '3'}`;
+    setActiveRunnerPopover({
+      base,
+      runnerName,
+      playerId: getPlayerIdFromName(runnerName, battingTeam),
+      anchorPosition,
+    });
+  }, [battingTeam, getPlayerIdFromName, runnerNames]);
 
   const closeRunnerPopover = useCallback(() => {
     setActiveRunnerPopover(null);
@@ -2368,9 +2787,10 @@ export function GameTracker() {
     setActiveRunnerPopover(null);
   }, [advanceRunner, recordEvent, undoSystem]);
 
-  const handleRunnerAdvance = useCallback((base: RunnerBase) => {
-    undoSystem.captureSnapshot(`Advance: ${base} → ${nextBaseMap[base]}`);
-    advanceRunner(base, nextBaseMap[base], 'safe');
+  const handleRunnerAdvance = useCallback((base: RunnerBase, dest?: 'second' | 'third' | 'home') => {
+    const to = dest || nextBaseMap[base];
+    undoSystem.captureSnapshot(`Advance: ${base} → ${to}`);
+    advanceRunner(base, to, 'safe');
     setActiveRunnerPopover(null);
   }, [advanceRunner, undoSystem]);
 
@@ -2390,19 +2810,27 @@ export function GameTracker() {
     setActiveRunnerPopover(null);
   }, [advanceRunner, recordEvent, undoSystem]);
 
-  const handleRunnerPickoff = useCallback((base: RunnerBase) => {
-    undoSystem.captureSnapshot(`Pickoff: ${base}`);
-    // Pickoff = runner is out at their current base
-    advanceRunner(base, nextBaseMap[base], 'out');
-    recordEvent('PICK');
+  const handleRunnerPickoff = useCallback((base: RunnerBase, outcome: 'safe' | 'out' | 'error') => {
+    undoSystem.captureSnapshot(`Pickoff ${outcome}: ${base}`);
+    if (outcome === 'out') {
+      // D-2: Runner is out at their current base
+      advanceRunner(base, nextBaseMap[base], 'out');
+      recordEvent('PICK');
+    } else if (outcome === 'error') {
+      // D-2: Error on pickoff — runner advances one base
+      advanceRunner(base, nextBaseMap[base], 'safe');
+      recordEvent('PICK_E');
+    } else {
+      // D-2: Safe — attempt logged, runner stays
+      recordEvent('PICK_SAFE');
+    }
     setActiveRunnerPopover(null);
   }, [advanceRunner, recordEvent, undoSystem]);
 
   const handleRunnerSubstitute = useCallback((base: RunnerBase) => {
-    // Close runner popover — user will use the LineupCard for the actual pinch runner selection
-    // TODO: Could open a dedicated pinch-runner picker modal inline
     setActiveRunnerPopover(null);
-    console.log(`[GameTracker] Pinch runner requested at ${base} — use LineupCard to complete`);
+    setLineupOverlayHint(`Pinch runner requested for ${base.toUpperCase()}. Use the LINEUP panel to complete the substitution.`);
+    setShowLineupOverlay(true);
   }, []);
 
   // ============================================
@@ -2415,28 +2843,61 @@ export function GameTracker() {
     const posLabels: Record<number, string> = { 1: 'P', 2: 'C', 3: '1B', 4: '2B', 5: '3B', 6: 'SS', 7: 'LF', 8: 'CF', 9: 'RF' };
     const positionLabel = posLabels[positionNumber] || `P${positionNumber}`;
     const playerId = generatePlayerId(playerName, fieldingTeam);
-    const isCurrentBatter = playerName === gameState.currentBatterName;
+    const isCurrentBatter = playerName === resolvedCurrentBatterName;
 
     setActiveFielderPopover({
       fielder: { positionNumber, positionLabel, playerName, playerId, isCurrentBatter },
       anchorPosition,
     });
-  }, [fieldingTeam, gameState.currentBatterName, generatePlayerId]);
+  }, [fieldingTeam, generatePlayerId, resolvedCurrentBatterName]);
+
+  const handleFielderPlayerCard = useCallback(() => {
+    if (!activeFielderPopover) return;
+    openPlayerCard(activeFielderPopover.fielder.playerName, fieldingTeam, activeFielderPopover.fielder.positionNumber === 1 ? 'pitcher' : 'batter');
+    setActiveFielderPopover(null);
+  }, [activeFielderPopover, fieldingTeam, openPlayerCard]);
+
+  const handleRunnerPlayerCard = useCallback(() => {
+    if (!activeRunnerPopover) return;
+    setSelectedPlayer({ name: activeRunnerPopover.runnerName, type: 'batter', playerId: activeRunnerPopover.playerId });
+    setActiveRunnerPopover(null);
+  }, [activeRunnerPopover]);
 
   const closeFielderPopover = useCallback(() => {
     setActiveFielderPopover(null);
   }, []);
 
   const handleFielderSubstitute = useCallback((benchPlayerId: string, benchPlayerName: string, fielderId: string, fielderName: string) => {
-    handleSubstitution(fieldingTeam, benchPlayerName, fielderName);
+    const fieldingPlayers = fieldingTeam === 'home' ? homeTeamPlayers : awayTeamPlayers;
+    const outgoingPlayer = fieldingPlayers.find((player) => player.name === fielderName);
+
+    handleLineupCardSubstitution({
+      type: 'player_sub',
+      incomingPlayerId: benchPlayerId,
+      incomingPlayerName: benchPlayerName,
+      outgoingPlayerId: fielderId,
+      outgoingPlayerName: fielderName,
+      newPosition: outgoingPlayer?.position,
+      lineupSpot: outgoingPlayer?.battingOrder,
+    });
     setActiveFielderPopover(null);
-  }, [fieldingTeam, handleSubstitution]);
+  }, [awayTeamPlayers, fieldingTeam, handleLineupCardSubstitution, homeTeamPlayers]);
 
   const handleFielderPinchHit = useCallback((benchPlayerId: string, benchPlayerName: string, fielderId: string, fielderName: string) => {
-    // Pinch hit = batting team sub (current batter replaced)
-    handleSubstitution(battingTeam, benchPlayerName, fielderName);
+    const battingPlayers = battingTeam === 'home' ? homeTeamPlayers : awayTeamPlayers;
+    const outgoingPlayer = battingPlayers.find((player) => player.name === fielderName);
+
+    handleLineupCardSubstitution({
+      type: 'player_sub',
+      incomingPlayerId: benchPlayerId,
+      incomingPlayerName: benchPlayerName,
+      outgoingPlayerId: fielderId,
+      outgoingPlayerName: fielderName,
+      newPosition: outgoingPlayer?.position,
+      lineupSpot: outgoingPlayer?.battingOrder,
+    });
     setActiveFielderPopover(null);
-  }, [battingTeam, handleSubstitution]);
+  }, [awayTeamPlayers, battingTeam, handleLineupCardSubstitution, homeTeamPlayers]);
 
   const handleFielderMovePosition = useCallback((playerId: string, newPosition: string) => {
     switchPositions([{ playerId, newPosition }]);
@@ -2456,9 +2917,13 @@ export function GameTracker() {
       console.log('[GameTracker] Pitcher tap — available pitchers:', availablePitchers.map(p => p.name).join(', '));
       // Open a simple pitcher picker by triggering the lineup card's bullpen section
       // For now, trigger the change with the first available pitcher
-      handlePitcherSubstitution(fieldingTeam, firstAvailable.name, gameState.currentPitcherName, 'pitcher');
+      handlePitcherSubstitution(fieldingTeam, firstAvailable.name, resolvedCurrentPitcherName, 'pitcher');
     }
-  }, [availablePitchers, fieldingTeam, gameState.currentPitcherName, handlePitcherSubstitution]);
+  }, [availablePitchers, fieldingTeam, handlePitcherSubstitution, resolvedCurrentPitcherName]);
+
+  const handleBatterTap = useCallback(() => {
+    openPlayerCard(resolvedCurrentBatterName, battingTeam, 'batter');
+  }, [battingTeam, openPlayerCard, resolvedCurrentBatterName]);
 
   // Bench players for fielder popover (fielding team bench)
   const fielderPopoverBenchPlayers: BenchPlayerInfo[] = useMemo(() => {
@@ -2574,6 +3039,8 @@ export function GameTracker() {
     setEnrichingEntry(prev => prev?.id === entry.id ? null : entry);
   }, []);
 
+  const canUseMainFieldLocation = !!enrichingEntry && ['1B', '2B', '3B', 'GRD', 'HR', 'GO', 'FO', 'LO', 'PO', 'DP', 'TP', 'FC', 'SF', 'SAC'].includes(enrichingEntry.result);
+
   // 5.1: Save enrichment field immediately (auto-save on change)
   const handleEnrichmentUpdate = useCallback(async (field: keyof EnrichmentUpdate, value: unknown) => {
     if (!enrichingEntry?.eventId) return;
@@ -2624,6 +3091,14 @@ export function GameTracker() {
       console.error('[Enrichment] Failed to save:', err);
     }
   }, [enrichingEntry]);
+
+  const handleMainFieldLocationPick = useCallback((coord: { x: number; y: number }) => {
+    if (!canUseMainFieldLocation || !enrichingEntry) return;
+    void handleEnrichmentUpdate('fieldLocation', {
+      x: Math.round(coord.x * 100),
+      y: Math.round((1 - coord.y) * 100),
+    });
+  }, [canUseMainFieldLocation, enrichingEntry, handleEnrichmentUpdate]);
 
   // 5.2: K/Kc toggle — updates result field on AtBatEvent
   const handleKToggle = useCallback(async (entry: PlayLogEntry) => {
@@ -2953,47 +3428,8 @@ export function GameTracker() {
         </div>
       )}
 
-      {/* mWAR: Manager Moment Notification — shows at LI ≥ 2.0 */}
-      {mwarHook.managerMoment.isTriggered && (
-        <div className="fixed bottom-4 left-4 right-4 z-50 max-w-md mx-auto">
-          <div className="bg-[#4A6A42] border-4 border-[#FFD700] p-3 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.5)]">
-            <div className="flex items-center justify-between mb-1">
-              <div className="text-xs font-bold text-[#FFD700]">
-                ⚡ MANAGER MOMENT (LI: {mwarHook.managerMoment.leverageIndex.toFixed(1)})
-              </div>
-              <button
-                onClick={() => mwarHook.dismissManagerMoment()}
-                className="text-[#E8E8D8]/60 hover:text-[#E8E8D8] text-xs px-1"
-              >
-                ✕
-              </button>
-            </div>
-            <div className="text-sm text-[#E8E8D8] mb-2">{mwarHook.managerMoment.context}</div>
-            {mwarHook.managerMoment.decisionType && (
-              <div className="flex gap-2">
-                <button
-                  onClick={() => {
-                    const gsLI = buildGameStateForLI();
-                    const decisionId = mwarHook.recordDecision(mwarHook.managerMoment.decisionType!, gsLI, [], mwarHook.managerMoment.suggestedAction || '');
-                    setPendingMWARDecisions(prev => new Map(prev).set(decisionId, { decisionId, decisionType: mwarHook.managerMoment.decisionType!, involvedPlayers: [], resolveAfterNextPlay: true }));
-                    mwarHook.dismissManagerMoment();
-                    console.log(`[mWAR] User called ${mwarHook.managerMoment.decisionType}: ${decisionId}`);
-                  }}
-                  className="flex-1 py-1.5 text-xs bg-[#FFD700] text-[#2A3A22] font-bold border-2 border-[#B8960A] hover:bg-[#E8C400] active:scale-95 transition-transform"
-                >
-                  Call {mwarHook.managerMoment.decisionType?.replace(/_/g, ' ')}
-                </button>
-                <button
-                  onClick={() => mwarHook.dismissManagerMoment()}
-                  className="flex-1 py-1.5 text-xs bg-[#5A8352] text-[#E8E8D8] border-2 border-[#4A6844] hover:bg-[#4F7D4B] active:scale-95 transition-transform"
-                >
-                  Skip
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
+      {/* D-17: Manager Moment — now a subtle indicator on QuickBar (see QuickBar managerMomentActive prop) */}
+      {/* The inline Call/Skip panel opens in ZONE 4 when user taps the lightning indicator */}
 
       {/* Player State Notifications - Shows Mojo/Fitness changes */}
       {playerStateHook.notifications.length > 0 && (
@@ -3035,7 +3471,7 @@ export function GameTracker() {
         className="h-screen bg-[#6B9462] text-white overflow-hidden"
         style={{
           display: 'grid',
-          gridTemplateColumns: '320px 1fr 180px',
+          gridTemplateColumns: 'minmax(248px, 300px) 1fr minmax(184px, 228px)',
           gridTemplateRows: '1fr auto',
           gap: '0px',
         }}
@@ -3052,8 +3488,8 @@ export function GameTracker() {
             inning={gameState.inning}
             isTop={gameState.isTop}
             outs={gameState.outs}
-            currentBatterName={gameState.currentBatterName}
-            currentPitcherName={gameState.currentPitcherName}
+            currentBatterName={currentBatterDisplayName}
+            currentPitcherName={currentPitcherDisplayName}
             batterStats={currentBatterStats ? {
               ab: currentBatterStats.ab,
               h: currentBatterStats.h,
@@ -3065,17 +3501,17 @@ export function GameTracker() {
             batterAvg={batterAB > 0 ? (batterHits / batterAB).toFixed(3).replace(/^0/, '') : '.000'}
             batterMojo={(() => {
               const team = gameState.isTop ? 'away' : 'home';
-              const mojo = getPlayerMojoByName(gameState.currentBatterName, team);
+              const mojo = getPlayerMojoByName(resolvedCurrentBatterName, team);
               return mojo !== undefined ? toMojoLabel(mojo) : undefined;
             })()}
             batterMojoColor={(() => {
               const team = gameState.isTop ? 'away' : 'home';
-              const mojo = getPlayerMojoByName(gameState.currentBatterName, team);
+              const mojo = getPlayerMojoByName(resolvedCurrentBatterName, team);
               return mojo !== undefined ? getMojoColor(mojo) : undefined;
             })()}
             batterFitness={(() => {
               const team = gameState.isTop ? 'away' : 'home';
-              const fitness = getPlayerFitnessByName(gameState.currentBatterName, team);
+              const fitness = getPlayerFitnessByName(resolvedCurrentBatterName, team);
               return fitness ? toFitnessLabel(fitness) : undefined;
             })()}
             batterHand={currentBatterData?.battingHand}
@@ -3092,28 +3528,30 @@ export function GameTracker() {
             pitcherBB={currentPitcherStats?.walksAllowed}
             pitcherMojo={(() => {
               const team = gameState.isTop ? 'home' : 'away';
-              const mojo = getPlayerMojoByName(gameState.currentPitcherName, team);
+              const mojo = getPlayerMojoByName(resolvedCurrentPitcherName, team);
               return mojo !== undefined ? toMojoLabel(mojo) : undefined;
             })()}
             pitcherMojoColor={(() => {
               const team = gameState.isTop ? 'home' : 'away';
-              const mojo = getPlayerMojoByName(gameState.currentPitcherName, team);
+              const mojo = getPlayerMojoByName(resolvedCurrentPitcherName, team);
               return mojo !== undefined ? getMojoColor(mojo) : undefined;
             })()}
             pitcherFitness={(() => {
               const team = gameState.isTop ? 'home' : 'away';
-              const fitness = getPlayerFitnessByName(gameState.currentPitcherName, team);
+              const fitness = getPlayerFitnessByName(resolvedCurrentPitcherName, team);
               return fitness ? toFitnessLabel(fitness) : undefined;
             })()}
             pitcherHand={(() => {
               const pitcher = gameState.isTop ? homePitcher : awayPitcher;
               return pitcher?.throwingHand;
             })()}
+            showScoreboard={true}
+            onBatterTap={handleBatterTap}
             onPitcherTap={availablePitchers.length > 0 ? handlePitcherTap : undefined}
           />
         </div>
 
-        {/* ZONE 2: Diamond — center (EnhancedInteractiveField, same props) */}
+        {/* ZONE 2: Diamond — center (D-9: scoreboard moved to FenwayBoard left panel) */}
         <div style={{ gridColumn: '2', gridRow: '1' }} className="bg-[#6B9462] relative overflow-hidden">
           <EnhancedInteractiveField
             gameSituation={{
@@ -3142,17 +3580,20 @@ export function GameTracker() {
               9: fieldPositions.find(fp => fp.number === '9')?.name || 'RF',
             }}
             runnerNames={runnerNames}
-            currentBatterName={gameState.currentBatterName}
+            currentBatterName={currentBatterDisplayName}
             zoomLevel={fieldZoomLevel}
             onRunnerTap={handleRunnerTap}
             onFielderTap={handleFielderTap}
+            onBatterTap={handleBatterTap}
+            onFieldTap={(coord) => handleMainFieldLocationPick(coord)}
+            hideActionSelector={true}
           />
 
           {/* Runner Popover — tap runner on diamond → action menu (§5.1) */}
           {activeRunnerPopover && (
             <RunnerPopover
               base={activeRunnerPopover.base}
-              runnerName={runnerNames[activeRunnerPopover.base] || `R${activeRunnerPopover.base === 'first' ? '1' : activeRunnerPopover.base === 'second' ? '2' : '3'}`}
+              runnerName={activeRunnerPopover.runnerName}
               anchorPosition={activeRunnerPopover.anchorPosition}
               onSteal={handleRunnerSteal}
               onAdvance={handleRunnerAdvance}
@@ -3160,6 +3601,7 @@ export function GameTracker() {
               onPassedBall={handleRunnerPB}
               onPickoff={handleRunnerPickoff}
               onSubstitute={handleRunnerSubstitute}
+              onViewPlayerCard={handleRunnerPlayerCard}
               onClose={closeRunnerPopover}
             />
           )}
@@ -3173,6 +3615,7 @@ export function GameTracker() {
               onSubstitute={handleFielderSubstitute}
               onPinchHit={handleFielderPinchHit}
               onMovePosition={handleFielderMovePosition}
+              onViewPlayerCard={handleFielderPlayerCard}
               onClose={closeFielderPopover}
             />
           )}
@@ -3208,6 +3651,7 @@ export function GameTracker() {
               currentEnrichment={enrichingEntry.eventId ? enrichmentCache[enrichingEntry.eventId] : undefined}
               onUpdate={handleEnrichmentUpdate}
               onClose={handleEnrichmentClose}
+              useMainFieldForLocation={canUseMainFieldLocation}
             />
           ) : (
             <PlayLogPanel
@@ -3219,22 +3663,135 @@ export function GameTracker() {
         </div>
 
         {/* ZONE 4: Quick Bar — bottom left */}
-        <div style={{ gridColumn: '1', gridRow: '2' }}>
-          <QuickBar disabled={!gameInitialized} onOutcome={handleQuickBarOutcome} />
+        <div style={{ gridColumn: '1', gridRow: '2' }} className="relative">
+          <QuickBar
+            disabled={!gameInitialized}
+            onOutcome={handleQuickBarOutcome}
+            gameSituation={{ outs: gameState.outs, bases: gameState.bases }}
+            managerMomentActive={mwarHook.managerMoment.isTriggered}
+            onManagerMomentTap={() => setShowManagerMomentPanel(prev => !prev)}
+          />
+          {/* D-17: Manager Moment inline Call/Skip panel — non-blocking */}
+          {showManagerMomentPanel && mwarHook.managerMoment.isTriggered && (
+            <div className="absolute bottom-full left-0 right-0 mb-1 bg-[#4A6A42] border-[3px] border-[#FFD700] p-2 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.6)] z-40">
+              <div className="text-[9px] text-[#FFD700] font-bold mb-1">
+                MANAGER MOMENT (LI: {mwarHook.managerMoment.leverageIndex.toFixed(1)})
+              </div>
+              <div className="text-[10px] text-[#E8E8D8] mb-2">{mwarHook.managerMoment.context}</div>
+              {mwarHook.managerMoment.decisionType && (
+                <div className="flex gap-1.5">
+                  <button
+                    onClick={() => {
+                      const gsLI = buildGameStateForLI();
+                      const decisionId = mwarHook.recordDecision(mwarHook.managerMoment.decisionType!, gsLI, [], mwarHook.managerMoment.suggestedAction || '');
+                      setPendingMWARDecisions(prev => new Map(prev).set(decisionId, { decisionId, decisionType: mwarHook.managerMoment.decisionType!, involvedPlayers: [], resolveAfterNextPlay: true }));
+                      mwarHook.dismissManagerMoment();
+                      setShowManagerMomentPanel(false);
+                      console.log(`[mWAR] User called ${mwarHook.managerMoment.decisionType}: ${decisionId}`);
+                    }}
+                    className="flex-1 py-1.5 text-[10px] bg-[#FFD700] text-[#2A3A22] font-bold border-2 border-[#B8960A] hover:bg-[#E8C400] active:scale-95 transition-transform"
+                  >
+                    Call {mwarHook.managerMoment.decisionType?.replace(/_/g, ' ')}
+                  </button>
+                  <button
+                    onClick={() => {
+                      mwarHook.dismissManagerMoment();
+                      setShowManagerMomentPanel(false);
+                    }}
+                    className="flex-1 py-1.5 text-[10px] bg-[#5A8352] text-[#E8E8D8] border-2 border-[#4A6844] hover:bg-[#4F7D4B] active:scale-95 transition-transform"
+                  >
+                    Skip
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* ZONE 5: Modifiers + Actions — bottom center */}
         <div style={{ gridColumn: '2', gridRow: '2' }} className="bg-[#2a3a2d] border-t-[3px] border-[#3d5240]">
-          <div className="flex gap-2 p-2 items-center justify-end h-full">
-            <undoSystem.UndoButtonComponent />
-            <button
-              onClick={() => setShowEndGameConfirmation(true)}
-              className="bg-[#DD0000] border-[3px] border-white px-4 py-2.5 text-white text-sm font-bold
-                         shadow-[2px_2px_0px_0px_rgba(0,0,0,0.5)] active:scale-95 transition-transform
-                         hover:bg-[#FF0000]"
-            >
-              END
-            </button>
+          <div className="relative flex gap-2 p-2 items-center justify-between h-full">
+            <div className="flex items-center gap-2 min-w-0">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <button
+                  onClick={() => {
+                    setLineupOverlayHint('Use LINEUP for batting order, bench players, pinch runners, and pitching changes.');
+                    setShowLineupOverlay(true);
+                  }}
+                  className="bg-[#1a5276] border-[3px] border-[#5dade2] px-4 py-2.5 text-white text-sm font-bold
+                             shadow-[2px_2px_0px_0px_rgba(0,0,0,0.5)] active:scale-95 transition-transform
+                             hover:bg-[#21618c]"
+                >
+                  LINEUP
+                </button>
+                <button
+                  onClick={() => {
+                    const firstUnenriched = [...playLogEntries].reverse().find(entry =>
+                      entry.isEnrichable &&
+                      (!entry.hasFieldingData || !entry.hasLocationData || !entry.hasPitchType || !entry.hasPitchCount)
+                    );
+                    if (firstUnenriched) {
+                      setEnrichingEntry(firstUnenriched);
+                    }
+                    setLineupOverlayHint('Tap the main field to set spray/location. Use the play log panel for pitch and sequence edits.');
+                  }}
+                  className="bg-[#4A6844] border-[3px] border-[#88AA88] px-3 py-2.5 text-white text-xs font-bold
+                             shadow-[2px_2px_0px_0px_rgba(0,0,0,0.5)] active:scale-95 transition-transform
+                             hover:bg-[#5A8352]"
+                >
+                  +FLD
+                </button>
+                <button
+                  onClick={() => setShowModifierTray(prev => !prev)}
+                  className="bg-[#6c3483] border-[3px] border-[#af7ac5] px-3 py-2.5 text-white text-xs font-bold
+                             shadow-[2px_2px_0px_0px_rgba(0,0,0,0.5)] active:scale-95 transition-transform
+                             hover:bg-[#7d3c98]"
+                >
+                  +MOD
+                </button>
+              </div>
+              <div className="text-[8px] text-[#C4A853] min-w-0 truncate">
+                {canUseMainFieldLocation
+                  ? 'Location enrichment is active: tap the main field. K/Kc stays in the play log.'
+                  : lineupOverlayHint ?? 'Tap a play to enrich. Use the main field for +loc and LINEUP for substitutions.'}
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <undoSystem.UndoButtonComponent />
+              <button
+                onClick={() => setShowEndGameConfirmation(true)}
+                className="bg-[#DD0000] border-[3px] border-white px-4 py-2.5 text-white text-sm font-bold
+                           shadow-[2px_2px_0px_0px_rgba(0,0,0,0.5)] active:scale-95 transition-transform
+                           hover:bg-[#FF0000]"
+              >
+                END
+              </button>
+            </div>
+            {showModifierTray && (
+              <div className="absolute bottom-full left-2 right-2 mb-2 bg-[#1a1a1a]/95 border-[3px] border-[#C4A853] p-2 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.6)] z-30">
+                <div className="text-[8px] text-[#C4A853] font-bold tracking-[0.12em] mb-2">MODIFIERS + ENHANCEMENTS</div>
+                <div className="grid grid-cols-4 gap-1">
+                  {/* D-14: WG removed — contextual WEB GEM button lives in EnhancedInteractiveField */}
+                  {[
+                    ['7+', 'SEVEN_PLUS_PITCH_AB'],
+                    ['ROB', 'ROBBERY'],
+                    ['KP', 'KILLED_PITCHER'],
+                    ['NUT', 'NUT_SHOT'],
+                    ['BT', 'BEAT_THROW'],
+                    ['BUNT', 'BUNT'],
+                    ['TBL', 'TOOTBLAN'],
+                  ].map(([label, eventType]) => (
+                    <button
+                      key={label}
+                      onClick={() => triggerManualSpecialEvent(eventType as SpecialEventData['eventType'])}
+                      className="bg-[#333] border-[2px] border-[#C4A853] px-2 py-2 text-[10px] font-bold text-[#E8E8D8] hover:bg-[#444] active:scale-95 transition-transform"
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
@@ -3254,6 +3811,51 @@ export function GameTracker() {
             onMojoChange={(newMojo) => playerStateHook.setMojo(selectedPlayer.playerId, newMojo)}
             onFitnessChange={(newFitness) => playerStateHook.setFitness(selectedPlayer.playerId, newFitness)}
           />
+        )}
+
+        {showLineupOverlay && (
+          <div
+            className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4"
+            onClick={() => setShowLineupOverlay(false)}
+          >
+            <div
+              className="w-full max-w-[980px] max-h-[90vh] bg-[#2a3a2d] border-[6px] border-[#3d5240]
+                         shadow-[8px_8px_0_rgba(0,0,0,0.7)] flex flex-col"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between px-4 py-3 bg-[#3d5240] border-b-[3px] border-[#1a2a1d]">
+                <div>
+                  <div className="text-sm font-bold text-[#E8E8D8]">LINEUP</div>
+                  <div className="text-[9px] text-[#C4A853]">
+                    {lineupOverlayHint ?? 'Manage batting order, bench players, and pitching changes.'}
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowLineupOverlay(false)}
+                  className="bg-[#556B55] border-[3px] border-[#E8E8D8] px-2 py-1 text-[#E8E8D8] hover:bg-[#6a846a]"
+                  title="Close lineup"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+              <div className="p-4 overflow-y-auto">
+                {!lineupSizeOk && currentLineup.length > 0 && (
+                  <div className="mb-2 px-2 py-1 bg-[#4A2A00] border border-[#FF8800] text-[#FFAA44] text-[10px] font-bold">
+                    LINEUP SIZE: {currentLineup.length} — expected 9 (or 10 with DH)
+                  </div>
+                )}
+                <LineupCard
+                  lineup={lineupCardData}
+                  bench={benchCardData}
+                  bullpen={bullpenCardData}
+                  currentPitcher={currentPitcherData}
+                  onSubstitution={handleLineupCardSubstitution}
+                  isExpanded={true}
+                  onPlayerClick={(playerId, playerName, type) => setSelectedPlayer({ name: playerName, type, playerId })}
+                />
+              </div>
+            </div>
+          </div>
         )}
 
         {/* Play Location Overlay - REMOVED (now using drag-drop interface) */}
@@ -3412,6 +4014,177 @@ export function GameTracker() {
           onConfirm={handleErrorOnAdvanceConfirm}
           runnersWithExtraAdvance={runnersWithExtraAdvance}
         />
+
+        {/* D-4: HR Inline Prompt — distance + pitch type (both optional) */}
+        {hrPrompt && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+               onClick={handleHrPromptSkip}>
+            <div className="bg-[#1a2a1d] border-[3px] border-[#C4A853] rounded-lg p-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.6)] w-[280px]"
+                 onClick={(e) => e.stopPropagation()}>
+              <div className="text-xs font-bold text-[#C4A853] tracking-wider mb-3">HOME RUN</div>
+              <div className="mb-3">
+                <label className="text-[9px] text-[#88AA88] font-bold tracking-wider block mb-1">DISTANCE (ft)</label>
+                <input
+                  type="number"
+                  min={200} max={600}
+                  value={hrPrompt.distance}
+                  onChange={(e) => setHrPrompt(p => p ? { ...p, distance: e.target.value } : p)}
+                  placeholder="e.g. 420"
+                  className="w-full bg-[#0d1a0f] border-2 border-[#3d5240] text-white text-sm px-2 py-1.5 rounded focus:border-[#C4A853] outline-none"
+                  autoFocus
+                />
+              </div>
+              <div className="mb-3">
+                <label className="text-[9px] text-[#88AA88] font-bold tracking-wider block mb-1">PITCH TYPE</label>
+                <div className="flex flex-wrap gap-1">
+                  {PITCH_TYPES.filter(pt => pt.abbr !== 'UNK').map((pt) => (
+                    <button key={pt.abbr}
+                      onClick={() => setHrPrompt(p => p ? { ...p, pitchType: p.pitchType === pt.abbr ? '' : pt.abbr } : p)}
+                      className={`text-[8px] px-1.5 py-0.5 rounded border transition-colors
+                        ${hrPrompt.pitchType === pt.abbr
+                          ? 'bg-[#C4A853]/30 border-[#C4A853] text-[#C4A853]'
+                          : 'bg-[#333] border-[#555] text-[#888] hover:border-[#777]'}`}
+                    >{pt.abbr}</button>
+                  ))}
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <button onClick={handleHrPromptDone}
+                  className="flex-1 px-3 py-1.5 bg-[#6c3483] text-white text-[10px] font-bold uppercase rounded border border-[#af7ac5] hover:bg-[#7d3c98] active:scale-95 transition-all">
+                  Done
+                </button>
+                <button onClick={handleHrPromptSkip}
+                  className="flex-1 px-3 py-1.5 bg-[#333] text-[#888] text-[10px] font-bold uppercase rounded border border-[#555] hover:bg-[#444] active:scale-95 transition-all">
+                  Skip
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* D-3: Error Flow Prompt — base → fielder → type */}
+        {errorFlow && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+            <div className="bg-[#1a2a1d] border-[3px] border-[#f4d03f] rounded-lg p-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.6)] w-[280px]">
+              <div className="text-xs font-bold text-[#f4d03f] tracking-wider mb-3">ERROR</div>
+
+              {errorFlow.step === 'base' && (
+                <>
+                  <div className="text-[10px] text-[#ccc] mb-2">Batter reached which base?</div>
+                  <div className="flex gap-2">
+                    {(['1B', '2B', '3B'] as const).map((b) => (
+                      <button key={b}
+                        onClick={() => setErrorFlow(f => f ? { ...f, step: 'fielder', baseReached: b } : f)}
+                        className="flex-1 px-3 py-2 bg-[#7d6608] text-white text-xs font-bold rounded border-2 border-[#f4d03f] hover:bg-[#8d7618] active:scale-95 transition-all">
+                        {b}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+
+              {errorFlow.step === 'fielder' && (
+                <>
+                  <div className="text-[10px] text-[#ccc] mb-2">Error by which fielder?</div>
+                  <div className="grid grid-cols-3 gap-1.5">
+                    {[
+                      { pos: 1, label: 'P' }, { pos: 2, label: 'C' }, { pos: 3, label: '1B' },
+                      { pos: 4, label: '2B' }, { pos: 5, label: '3B' }, { pos: 6, label: 'SS' },
+                      { pos: 7, label: 'LF' }, { pos: 8, label: 'CF' }, { pos: 9, label: 'RF' },
+                    ].map(({ pos, label }) => (
+                      <button key={pos}
+                        onClick={() => setErrorFlow(f => f ? { ...f, step: 'type', fielderPosition: pos } : f)}
+                        className="px-2 py-1.5 bg-[#333] text-white text-[10px] font-bold rounded border border-[#555] hover:border-[#f4d03f] hover:bg-[#444] active:scale-95 transition-all">
+                        {pos} {label}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+
+              {errorFlow.step === 'type' && (
+                <>
+                  <div className="text-[10px] text-[#ccc] mb-2">Error type?</div>
+                  <div className="flex gap-2">
+                    {['Fielding', 'Throwing', 'Mental'].map((t) => (
+                      <button key={t}
+                        onClick={() => handleErrorFlowComplete(errorFlow.baseReached, errorFlow.fielderPosition, t.toLowerCase())}
+                        className="flex-1 px-2 py-2 bg-[#7d6608] text-white text-[10px] font-bold rounded border-2 border-[#f4d03f] hover:bg-[#8d7618] active:scale-95 transition-all">
+                        {t}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+
+              <button
+                onClick={() => setErrorFlow(null)}
+                className="w-full mt-3 px-3 py-1 bg-[#333] text-[#888] text-[9px] font-bold uppercase rounded border border-[#555] hover:bg-[#444] active:scale-95 transition-all">
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* D-5: SF Prompt — "Sac fly — run scores?" */}
+        {sfPrompt && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+            <div className="bg-[#1a2a1d] border-[3px] border-[#FF4444] rounded-lg p-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.6)] w-[260px]">
+              <div className="text-xs font-bold text-[#FF4444] tracking-wider mb-2">FLY OUT + R3</div>
+              <div className="text-[11px] text-[#ccc] mb-3">Sac fly — run scores?</div>
+              <div className="flex gap-2">
+                <button onClick={() => handleSfPromptAnswer(true)}
+                  className="flex-1 px-3 py-2 bg-[#2E7D32] text-white text-xs font-bold uppercase rounded border border-[#4CAF50] hover:bg-[#388E3C] active:scale-95 transition-all">
+                  Yes — SF
+                </button>
+                <button onClick={() => handleSfPromptAnswer(false)}
+                  className="flex-1 px-3 py-2 bg-[#8B0000] text-white text-xs font-bold uppercase rounded border border-[#FF4444] hover:bg-[#a00] active:scale-95 transition-all">
+                  No — FO
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* D-6: GO→DP Prompt — "Double play?" */}
+        {dpPrompt && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+            <div className="bg-[#1a2a1d] border-[3px] border-[#FF4444] rounded-lg p-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.6)] w-[260px]">
+              <div className="text-xs font-bold text-[#FF4444] tracking-wider mb-2">GROUND OUT + RUNNER OUT</div>
+              <div className="text-[11px] text-[#ccc] mb-3">Double play?</div>
+              <div className="flex gap-2">
+                <button onClick={() => handleDpPromptAnswer(true)}
+                  className="flex-1 px-3 py-2 bg-[#8B0000] text-white text-xs font-bold uppercase rounded border border-[#FF4444] hover:bg-[#a00] active:scale-95 transition-all">
+                  Yes — DP
+                </button>
+                <button onClick={() => handleDpPromptAnswer(false)}
+                  className="flex-1 px-3 py-2 bg-[#333] text-white text-xs font-bold uppercase rounded border border-[#555] hover:bg-[#444] active:scale-95 transition-all">
+                  No — GO
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* D-7: IFR Prompt — "Infield Fly Rule?" */}
+        {ifrPrompt && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+            <div className="bg-[#1a2a1d] border-[3px] border-[#6666FF] rounded-lg p-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.6)] w-[260px]">
+              <div className="text-xs font-bold text-[#AAAAFF] tracking-wider mb-2">POP OUT — R1 + R2</div>
+              <div className="text-[11px] text-[#ccc] mb-3">Infield Fly Rule?</div>
+              <div className="flex gap-2">
+                <button onClick={() => handleIfrPromptAnswer(true)}
+                  className="flex-1 px-3 py-2 bg-[#4444AA] text-white text-xs font-bold uppercase rounded border border-[#6666FF] hover:bg-[#5555BB] active:scale-95 transition-all">
+                  Yes — IFR
+                </button>
+                <button onClick={() => handleIfrPromptAnswer(false)}
+                  className="flex-1 px-3 py-2 bg-[#333] text-white text-xs font-bold uppercase rounded border border-[#555] hover:bg-[#444] active:scale-95 transition-all">
+                  No — PO
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* MAJ-03: Detection prompt notifications */}
         {pendingDetections.length > 0 && (
