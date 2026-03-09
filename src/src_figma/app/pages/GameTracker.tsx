@@ -19,6 +19,11 @@ import { PlayLogPanel, type PlayLogEntry } from "@/app/components/PlayLogPanel";
 import { EnrichmentPanel, PITCH_TYPES, type EnrichmentUpdate } from "@/app/components/EnrichmentPanel";
 import { updateAtBatEvent } from "../../../utils/eventLog";
 import { getTeamColors, getFielderBorderColors } from "@/config/teamColors";
+import { buildFallbackRuntimePlayerId, getRuntimeRosterEntityId } from "../utils/runtimePlayerIdentity";
+import { areRivals } from '../../../data/leagueStructure';
+import { getParkNames } from "../../../data/parkLookup";
+import { useGameState, type HitType, type OutType, type WalkType, type RunnerAdvancement, type PlayerGameStats, type PitcherGameStats } from "@/hooks/useGameState";
+import { usePlayerState, type PlayerStateData, getStateBadge, formatMultiplier } from "@/app/hooks/usePlayerState";
 
 const ordinalSuffix = (num: number) => {
   if (num % 100 >= 11 && num % 100 <= 13) return "th";
@@ -38,10 +43,6 @@ const formatInningLabel = (isTop: boolean, inning: number) => {
   const half = isTop ? "Top" : "Bottom";
   return `${half} ${inning}${ordinalSuffix(inning)}`;
 };
-import { areRivals } from '../../../data/leagueStructure';
-import { getParkNames } from "../../../data/parkLookup";
-import { useGameState, type HitType, type OutType, type WalkType, type RunnerAdvancement, type PlayerGameStats, type PitcherGameStats } from "@/hooks/useGameState";
-import { usePlayerState, type PlayerStateData, getStateBadge, formatMultiplier } from "@/app/hooks/usePlayerState";
 // EXH-036: Import Mojo/Fitness types for PlayerCardModal editing
 import type { MojoLevel } from "../../../engines/mojoEngine";
 import type { FitnessState } from "../../../engines/fitnessEngine";
@@ -586,12 +587,6 @@ export function GameTracker() {
   const fielderColor1 = fieldingTeamColors.primary;
   const fielderColor2 = fieldingTeamColors.secondary;
 
-  // EXH-036: Helper to generate consistent player IDs (must match playerStateHook registration)
-  // Step 0: LB playerId available on Player/Pitcher.playerId for cross-referencing.
-  // Game-session IDs remain name-based for backward compatibility.
-  const generatePlayerId = (name: string, team: 'home' | 'away') =>
-    `${team}-${name.replace(/\s+/g, '-').toLowerCase()}`;
-
   // EXH-036: Determine current team batting (for ID generation)
   // When it's top of inning, away team bats; bottom of inning, home team bats
   const battingTeam: 'home' | 'away' = gameState.isTop ? 'away' : 'home';
@@ -647,21 +642,57 @@ export function GameTracker() {
     { name: 'W. COLLINS', stats: { ip: '0.0', h: 0, r: 0, er: 0, bb: 0, k: 0, pitches: 0 }, throwingHand: 'R' as const },
   ];
 
+  const getRosterEntityId = useCallback((entity: { name: string; playerId?: string }, team: 'away' | 'home') => {
+    return getRuntimeRosterEntityId(entity, team);
+  }, []);
+
+  const rosterIdLookups = useMemo(() => ({
+    away: {
+      players: new Map(awayTeamPlayers.map((player) => [player.name, getRosterEntityId(player, 'away')])),
+      pitchers: new Map(awayTeamPitchers.map((pitcher) => [pitcher.name, getRosterEntityId(pitcher, 'away')])),
+    },
+    home: {
+      players: new Map(homeTeamPlayers.map((player) => [player.name, getRosterEntityId(player, 'home')])),
+      pitchers: new Map(homeTeamPitchers.map((pitcher) => [pitcher.name, getRosterEntityId(pitcher, 'home')])),
+    },
+  }), [awayTeamPitchers, awayTeamPlayers, getRosterEntityId, homeTeamPitchers, homeTeamPlayers]);
+
+  const getRosterIdFromName = useCallback((
+    name: string,
+    team: 'away' | 'home',
+    role: 'any' | 'player' | 'pitcher' = 'any'
+  ) => {
+    const teamLookups = rosterIdLookups[team];
+    if (role === 'player') {
+      return teamLookups.players.get(name) || buildFallbackRuntimePlayerId(name, team);
+    }
+    if (role === 'pitcher') {
+      return teamLookups.pitchers.get(name) || teamLookups.players.get(name) || buildFallbackRuntimePlayerId(name, team);
+    }
+    return teamLookups.players.get(name) || teamLookups.pitchers.get(name) || buildFallbackRuntimePlayerId(name, team);
+  }, [rosterIdLookups]);
+
+  const rosterNameById = useMemo(() => {
+    const entries: Array<[string, string]> = [];
+    for (const player of awayTeamPlayers) {
+      entries.push([getRosterEntityId(player, 'away'), player.name]);
+    }
+    for (const player of homeTeamPlayers) {
+      entries.push([getRosterEntityId(player, 'home'), player.name]);
+    }
+    for (const pitcher of awayTeamPitchers) {
+      entries.push([getRosterEntityId(pitcher, 'away'), pitcher.name]);
+    }
+    for (const pitcher of homeTeamPitchers) {
+      entries.push([getRosterEntityId(pitcher, 'home'), pitcher.name]);
+    }
+    return new Map(entries);
+  }, [awayTeamPitchers, awayTeamPlayers, getRosterEntityId, homeTeamPitchers, homeTeamPlayers]);
+
   const resolveRosterNameByGameId = useCallback((playerId?: string): string | undefined => {
     if (!playerId) return undefined;
-
-    const awayPlayer = awayTeamPlayers.find((player) => generatePlayerId(player.name, 'away') === playerId);
-    if (awayPlayer) return awayPlayer.name;
-
-    const homePlayer = homeTeamPlayers.find((player) => generatePlayerId(player.name, 'home') === playerId);
-    if (homePlayer) return homePlayer.name;
-
-    const awayPitcherMatch = awayTeamPitchers.find((pitcher) => generatePlayerId(pitcher.name, 'away') === playerId);
-    if (awayPitcherMatch) return awayPitcherMatch.name;
-
-    const homePitcherMatch = homeTeamPitchers.find((pitcher) => generatePlayerId(pitcher.name, 'home') === playerId);
-    return homePitcherMatch?.name;
-  }, [awayTeamPitchers, awayTeamPlayers, generatePlayerId, homeTeamPitchers, homeTeamPlayers]);
+    return rosterNameById.get(playerId);
+  }, [rosterNameById]);
 
   const resolvedCurrentBatterName =
     gameState.currentBatterName ||
@@ -713,7 +744,7 @@ export function GameTracker() {
   // LineupCard data derived from current team data
   // EXH-036: Use consistent IDs that match playerStateHook registration
   const lineupCardData: LineupPlayer[] = currentLineup.map((player, idx) => ({
-    id: generatePlayerId(player.name, battingTeam),
+    id: getRosterIdFromName(player.name, battingTeam),
     name: player.name,
     position: player.pos,
     battingOrder: idx + 1,
@@ -722,7 +753,7 @@ export function GameTracker() {
   }));
 
   const benchCardData: BenchPlayer[] = benchPlayers.map((player) => ({
-    id: generatePlayerId(player.name, battingTeam),
+    id: getRosterIdFromName(player.name, battingTeam),
     name: player.name,
     positions: [player.pos],
     battingHand: player.hand as 'L' | 'R' | 'S',
@@ -730,7 +761,7 @@ export function GameTracker() {
   }));
 
   const bullpenCardData: BullpenPitcher[] = availablePitchers.map((pitcher) => ({
-    id: generatePlayerId(pitcher.name, fieldingTeam),
+    id: getRosterIdFromName(pitcher.name, fieldingTeam, 'pitcher'),
     name: pitcher.name,
     throwingHand: pitcher.hand as 'L' | 'R',
     fitness: 'FIT' as const,
@@ -741,7 +772,9 @@ export function GameTracker() {
   // Derive current pitcher from actual pitcher data
   const activePitcher = fieldingTeamPitchersRaw.find(p => p.isActive) || fieldingTeamPitchersRaw.find(p => p.isStarter) || fieldingTeamPitchersRaw[0];
   const currentPitcherData: BullpenPitcher = {
-    id: generatePlayerId(activePitcher?.name || 'PITCHER', fieldingTeam),
+    id: activePitcher
+      ? getRosterEntityId(activePitcher, fieldingTeam)
+      : buildFallbackRuntimePlayerId('pitcher', fieldingTeam),
     name: activePitcher?.name || 'PITCHER',
     throwingHand: (activePitcher?.throwingHand || 'R') as 'L' | 'R',
     fitness: 'FIT',
@@ -819,7 +852,7 @@ export function GameTracker() {
           .filter(p => p.battingOrder && p.position) // Only players in batting order with positions
           .sort((a, b) => (a.battingOrder || 0) - (b.battingOrder || 0))
           .map(p => ({
-            playerId: `away-${p.name.replace(/\s+/g, '-').toLowerCase()}`,
+            playerId: getRosterEntityId(p, 'away'),
             playerName: p.name,
             position: p.position!, // Safe - filtered above
           }));
@@ -828,7 +861,7 @@ export function GameTracker() {
           .filter(p => p.battingOrder && p.position) // Only players in batting order with positions
           .sort((a, b) => (a.battingOrder || 0) - (b.battingOrder || 0))
           .map(p => ({
-            playerId: `home-${p.name.replace(/\s+/g, '-').toLowerCase()}`,
+            playerId: getRosterEntityId(p, 'home'),
             playerName: p.name,
             position: p.position!, // Safe - filtered above
           }));
@@ -836,20 +869,20 @@ export function GameTracker() {
         // MAJ-09: Extract bench players (players without batting order = not in starting lineup)
         const awayStarterIds = new Set(awayLineup.map(p => p.playerId));
         const awayBench = awayTeamPlayers
-          .filter(p => !awayStarterIds.has(`away-${p.name.replace(/\s+/g, '-').toLowerCase()}`))
+          .filter(p => !awayStarterIds.has(getRosterEntityId(p, 'away')))
           .filter(p => !p.isOutOfGame) // Don't include already-removed players
           .map(p => ({
-            playerId: `away-${p.name.replace(/\s+/g, '-').toLowerCase()}`,
+            playerId: getRosterEntityId(p, 'away'),
             playerName: p.name,
             positions: [p.position || 'DH'].filter(Boolean),
           }));
 
         const homeStarterIds = new Set(homeLineup.map(p => p.playerId));
         const homeBench = homeTeamPlayers
-          .filter(p => !homeStarterIds.has(`home-${p.name.replace(/\s+/g, '-').toLowerCase()}`))
+          .filter(p => !homeStarterIds.has(getRosterEntityId(p, 'home')))
           .filter(p => !p.isOutOfGame)
           .map(p => ({
-            playerId: `home-${p.name.replace(/\s+/g, '-').toLowerCase()}`,
+            playerId: getRosterEntityId(p, 'home'),
             playerName: p.name,
             positions: [p.position || 'DH'].filter(Boolean),
           }));
@@ -881,9 +914,13 @@ export function GameTracker() {
           homeLineup,
           awayBench,
           homeBench,
-          awayStartingPitcherId: `away-${awayPitcher?.name.replace(/\s+/g, '-').toLowerCase() || 'pitcher'}`,
+          awayStartingPitcherId: awayPitcher
+            ? getRosterEntityId(awayPitcher, 'away')
+            : buildFallbackRuntimePlayerId('pitcher', 'away'),
           awayStartingPitcherName: awayPitcher?.name || 'Pitcher',
-          homeStartingPitcherId: `home-${homePitcher?.name.replace(/\s+/g, '-').toLowerCase() || 'pitcher'}`,
+          homeStartingPitcherId: homePitcher
+            ? getRosterEntityId(homePitcher, 'home')
+            : buildFallbackRuntimePlayerId('pitcher', 'home'),
           homeStartingPitcherName: homePitcher?.name || 'Pitcher',
           // T0-01: Pass total innings for auto game-end detection (default 9 for exhibition)
           totalInnings: navigationState?.totalInnings || 9,
@@ -918,7 +955,7 @@ export function GameTracker() {
       cancelled = true;
       initInProgressRef.current = false;
     };
-  }, [gameInitialized, awayTeamPlayers, homeTeamPlayers, awayPitcher, homePitcher, awayTeamId, homeTeamId, gameId, initializeGame, loadExistingGame, selectedStadium, navigationState?.franchiseId, navigationState?.seasonNumber, navigationState?.totalInnings, awayTeamName, homeTeamName, competitionType, competitionId, statsScopeId]);
+  }, [competitionId, competitionType, gameId, gameInitialized, getRosterEntityId, homePitcher, homeTeamId, homeTeamName, homeTeamPlayers, initializeGame, loadExistingGame, navigationState?.franchiseId, navigationState?.seasonNumber, navigationState?.totalInnings, selectedStadium, statsScopeId, awayPitcher, awayTeamId, awayTeamName, awayTeamPlayers]);
 
   // EXH-036: Register players with playerStateHook for mojo/fitness tracking
   // This runs once after game is initialized to set up all players with default states
@@ -927,10 +964,6 @@ export function GameTracker() {
     let cancelled = false;
 
     const registerPlayersWithSnapshots = async () => {
-      // Helper to get player ID from name (consistent with how gameState creates IDs)
-      const getPlayerId = (name: string, teamPrefix: string) =>
-        `${teamPrefix}-${name.replace(/\s+/g, '-').toLowerCase()}`;
-
       // Load mojo/fitness from snapshots for elimination games (inter-game persistence per §8)
       let mojoFitnessMap: Map<string, { mojoLevel: MojoLevel; fitnessState: FitnessState }> | null = null;
       if (navigationState?.gameMode === 'elimination' && navigationState?.eliminationId) {
@@ -955,7 +988,7 @@ export function GameTracker() {
       // Register all away team batters
       // Step 0: Pass real traits and age from League Builder data (no longer hardcoded)
       awayTeamPlayers.forEach((player) => {
-        const playerId = getPlayerId(player.name, 'away');
+        const playerId = getRosterEntityId(player, 'away');
         if (!playerStateHook.getPlayer(playerId)) {
           const traits = [player.trait1, player.trait2].filter((t): t is string => !!t);
           const snapshot = mojoFitnessMap?.get(playerId);
@@ -973,7 +1006,7 @@ export function GameTracker() {
 
       // Register all home team batters
       homeTeamPlayers.forEach((player) => {
-        const playerId = getPlayerId(player.name, 'home');
+        const playerId = getRosterEntityId(player, 'home');
         if (!playerStateHook.getPlayer(playerId)) {
           const traits = [player.trait1, player.trait2].filter((t): t is string => !!t);
           const snapshot = mojoFitnessMap?.get(playerId);
@@ -991,7 +1024,7 @@ export function GameTracker() {
 
       // Register pitchers
       if (awayPitcher) {
-        const pitcherId = getPlayerId(awayPitcher.name, 'away');
+        const pitcherId = getRosterEntityId(awayPitcher, 'away');
         if (!playerStateHook.getPlayer(pitcherId)) {
           const traits = [awayPitcher.trait1, awayPitcher.trait2].filter((t): t is string => !!t);
           const snapshot = mojoFitnessMap?.get(pitcherId);
@@ -1007,7 +1040,7 @@ export function GameTracker() {
         }
       }
       if (homePitcher) {
-        const pitcherId = getPlayerId(homePitcher.name, 'home');
+        const pitcherId = getRosterEntityId(homePitcher, 'home');
         if (!playerStateHook.getPlayer(pitcherId)) {
           const traits = [homePitcher.trait1, homePitcher.trait2].filter((t): t is string => !!t);
           const snapshot = mojoFitnessMap?.get(pitcherId);
@@ -1031,13 +1064,17 @@ export function GameTracker() {
     return () => {
       cancelled = true;
     };
-  }, [gameInitialized, awayTeamPlayers, homeTeamPlayers, awayPitcher, homePitcher, playerStateHook, navigationState?.gameMode, navigationState?.eliminationId]);
+  }, [awayPitcher, awayTeamPlayers, gameInitialized, getRosterEntityId, homePitcher, homeTeamPlayers, navigationState?.eliminationId, navigationState?.gameMode, playerStateHook]);
 
   // EXH-036: Helper functions to get/set mojo/fitness by player name and team
   // These are used by TeamRoster components to enable mojo/fitness editing in player cards
   const getPlayerIdFromName = useCallback((name: string, team: 'away' | 'home') => {
-    return `${team}-${name.replace(/\s+/g, '-').toLowerCase()}`;
-  }, []);
+    return getRosterIdFromName(name, team);
+  }, [getRosterIdFromName]);
+
+  const getPitcherIdFromName = useCallback((name: string, team: 'away' | 'home') => {
+    return getRosterIdFromName(name, team, 'pitcher');
+  }, [getRosterIdFromName]);
 
   const getPlayerMojoByName = useCallback((name: string, team: 'away' | 'home') => {
     const playerId = getPlayerIdFromName(name, team);
@@ -1065,7 +1102,7 @@ export function GameTracker() {
   const battingTeamPlayers = gameState.isTop ? awayTeamPlayers : homeTeamPlayers;
   const pitchingTeamPlayers = gameState.isTop ? homeTeamPlayers : awayTeamPlayers;
   const currentBatterData = battingTeamPlayers.find(
-    p => (p.battingOrder && p.name === resolvedCurrentBatterName) || generatePlayerId(p.name, battingTeam) === gameState.currentBatterId
+    p => (p.battingOrder && p.name === resolvedCurrentBatterName) || getRosterIdFromName(p.name, battingTeam) === gameState.currentBatterId
   );
   const currentBatterPosition = currentBatterData?.battingOrder || 1;
   const currentBatterPositionStr = currentBatterPosition.toString();
@@ -1097,9 +1134,11 @@ export function GameTracker() {
   const currentBatterDisplayName = formatDisplayName(resolvedCurrentBatterName);
   const currentPitcherDisplayName = formatDisplayName(resolvedCurrentPitcherName);
   const openPlayerCard = useCallback((playerName: string, team: 'away' | 'home', type: 'batter' | 'pitcher' = 'batter') => {
-    const playerId = getPlayerIdFromName(playerName, team);
+    const playerId = type === 'pitcher'
+      ? getPitcherIdFromName(playerName, team)
+      : getPlayerIdFromName(playerName, team);
     setSelectedPlayer({ name: playerName, type, playerId });
-  }, [getPlayerIdFromName]);
+  }, [getPitcherIdFromName, getPlayerIdFromName]);
 
   // Get current batter's fielding position (e.g., "SS", "CF")
   const batterFieldingPosition = currentBatterData?.position || '?';
@@ -2687,9 +2726,8 @@ export function GameTracker() {
   const handleSubstitution = useCallback((teamType: 'away' | 'home', benchPlayerName: string, lineupPlayerName: string) => {
     console.log(`Substitution: ${benchPlayerName} replacing ${lineupPlayerName} on ${teamType} team`);
 
-    // Generate player IDs in same format as initializeGame
-    const benchPlayerId = `${teamType}-${benchPlayerName.replace(/\s+/g, '-').toLowerCase()}`;
-    const lineupPlayerId = `${teamType}-${lineupPlayerName.replace(/\s+/g, '-').toLowerCase()}`;
+    const benchPlayerId = getPlayerIdFromName(benchPlayerName, teamType);
+    const lineupPlayerId = getPlayerIdFromName(lineupPlayerName, teamType);
 
     // MAJ-06: Call with enriched options for proper sub type logging
     // MAJ-09: Check validation result before updating UI
@@ -2734,14 +2772,13 @@ export function GameTracker() {
         return updated;
       });
     }
-  }, [makeSubstitution, awayTeamPlayers, homeTeamPlayers]);
+  }, [awayTeamPlayers, getPlayerIdFromName, homeTeamPlayers, makeSubstitution]);
 
   const handlePitcherSubstitution = (teamType: 'away' | 'home', newPitcherName: string, replacedName: string, replacedType: 'player' | 'pitcher') => {
     console.log(`Pitcher Substitution: ${newPitcherName} replacing ${replacedName} (${replacedType}) on ${teamType} team`);
 
-    // Generate player IDs in same format as initializeGame
-    const newPitcherId = `${teamType}-${newPitcherName.replace(/\s+/g, '-').toLowerCase()}`;
-    const exitingPitcherId = `${teamType}-${replacedName.replace(/\s+/g, '-').toLowerCase()}`;
+    const newPitcherId = getPitcherIdFromName(newPitcherName, teamType);
+    const exitingPitcherId = getPitcherIdFromName(replacedName, teamType);
 
     // Call the hook's changePitcher function which will:
     // 1. Show pitch count prompt for exiting pitcher
@@ -2866,14 +2903,14 @@ export function GameTracker() {
     // Map position number to label
     const posLabels: Record<number, string> = { 1: 'P', 2: 'C', 3: '1B', 4: '2B', 5: '3B', 6: 'SS', 7: 'LF', 8: 'CF', 9: 'RF' };
     const positionLabel = posLabels[positionNumber] || `P${positionNumber}`;
-    const playerId = generatePlayerId(playerName, fieldingTeam);
+    const playerId = getRosterIdFromName(playerName, fieldingTeam);
     const isCurrentBatter = playerName === resolvedCurrentBatterName;
 
     setActiveFielderPopover({
       fielder: { positionNumber, positionLabel, playerName, playerId, isCurrentBatter },
       anchorPosition,
     });
-  }, [fieldingTeam, generatePlayerId, resolvedCurrentBatterName]);
+  }, [fieldingTeam, getRosterIdFromName, resolvedCurrentBatterName]);
 
   const handleFielderPlayerCard = useCallback(() => {
     if (!activeFielderPopover) return;
@@ -2955,12 +2992,12 @@ export function GameTracker() {
     return fieldingPlayers
       .filter(p => p.battingOrder === undefined)
       .map(p => ({
-        id: generatePlayerId(p.name, fieldingTeam),
+        id: getRosterIdFromName(p.name, fieldingTeam),
         name: p.name,
         position: p.position || 'UT',
         isUsed: p.isOutOfGame || false,
       }));
-  }, [fieldingTeam, homeTeamPlayers, awayTeamPlayers, generatePlayerId]);
+  }, [awayTeamPlayers, fieldingTeam, getRosterIdFromName, homeTeamPlayers]);
 
   // ============================================
   // OUTCOME RECORDING HANDLERS
