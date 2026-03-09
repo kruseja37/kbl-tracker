@@ -369,6 +369,84 @@ export interface CompletedGameRecord {
   moraleShifts?: PersistedGameState['moraleShifts'];
 }
 
+// ============================================
+// LAYER 1C: GAME RECORD & LINEUP ENTRY (§2.4)
+// ============================================
+
+/** Lineup slot snapshot captured at game start */
+export interface LineupEntry {
+  playerId: string;
+  playerName: string;
+  battingOrder: number;              // 1-9
+  fieldPosition: string;            // Position on field (e.g. 'SS', 'CF')
+  primaryPosition?: string;         // Roster position (for display context)
+}
+
+/**
+ * Extended game record with enriched metadata.
+ * Extends CompletedGameRecord with lineup snapshots, narrative fields,
+ * and cross-references. All new fields are optional so existing records
+ * remain valid.
+ */
+export interface GameRecord extends CompletedGameRecord {
+  // Cross-references
+  franchiseId?: string;
+  leagueId?: string;
+  scheduleGameId?: string;
+
+  // Starting lineup snapshots (captured at game init)
+  startingLineups?: {
+    away: LineupEntry[];
+    home: LineupEntry[];
+  };
+
+  // Starting pitcher snapshot
+  startingPitchers?: {
+    away: { playerId: string; playerName: string };
+    home: { playerId: string; playerName: string };
+  };
+
+  // Game environment
+  lighting?: 'day' | 'night' | 'hazy';
+
+  // Narrative enrichment (populated at game end)
+  playersOfTheGame?: {
+    first: string;
+    second?: string;
+    third?: string;
+  };
+  gameStoryArc?: 'blowout' | 'pitchers_duel' | 'comeback'
+               | 'walk_off' | 'extra_innings' | 'slugfest';
+  topMoments?: { eventId: string; wpa: number; description: string }[];
+  managerMoments?: string[];
+  beatReporterRecap?: string;
+  depthScore?: number;
+}
+
+/**
+ * Capture starting lineups from the lineup state at game initialization.
+ * Returns a startingLineups object suitable for GameRecord.
+ */
+export function captureStartingLineups(
+  awayLineup: Array<{ playerId: string; playerName: string; position: string; battingOrder?: number }>,
+  homeLineup: Array<{ playerId: string; playerName: string; position: string; battingOrder?: number }>,
+): { away: LineupEntry[]; home: LineupEntry[] } {
+  const mapToLineupEntry = (
+    players: Array<{ playerId: string; playerName: string; position: string; battingOrder?: number }>,
+  ): LineupEntry[] =>
+    players.map((p, i) => ({
+      playerId: p.playerId,
+      playerName: p.playerName,
+      battingOrder: p.battingOrder ?? (i + 1),
+      fieldPosition: p.position,
+    }));
+
+  return {
+    away: mapToLineupEntry(awayLineup),
+    home: mapToLineupEntry(homeLineup),
+  };
+}
+
 /**
  * Archive a completed game
  */
