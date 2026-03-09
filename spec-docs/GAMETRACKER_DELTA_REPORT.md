@@ -551,7 +551,483 @@ This means the entire §3.1 Quick Bar design and §3.2 1-Tap execution flow are 
 
 ---
 
-## Remaining Sessions
+---
 
-- **Session 2:** §4 Enrichment + §5 Between-Play Events + §6 Baseball Rules
-- **Session 3:** §7 Substitution System + consolidate full gap list
+# SESSION 2: §4 Enrichment + §5 Between-Play Events + §6 Baseball Rules
+
+**Date:** 2026-03-06
+**Context:** GAP-GT-3-A RESOLVED — Hybrid Quick Bar (primary WHAT input) + EnhancedInteractiveField (enrichment WHERE/WHO surface). EnhancedInteractiveField already captures: ballLocation, fieldingSequence, errorType/Fielder, exitType, spraySector, runnerOutcomes, dpType, playDifficulty, hrDistance. These are enrichment assets.
+
+---
+
+## §4 Enrichment System
+
+### §4.2 Play Log Entry Point
+
+**Spec:** Scrollable play log showing each completed play (e.g., "T7 Hayata 1B [+fielding] [+location]"). Tapping any entry opens enrichment panel. K/Kc and pitches badges always shown.
+
+**Code:**
+- `activityLog` state exists at GameTracker.tsx:237 — entries pushed via `pushActivityLog()`
+- Entries ARE logged (fielding events at GT:1385, fame events at GT:271)
+- But `activityLog` is **NOT rendered** in the UI — only passed to `endGameOptions` at GT:2214 for game completion
+- No enrichment panel exists to tap into from play log
+- No K/Kc badge — code uses 'K' and 'KL' (not Kc), no UI prompt for distinction
+- No [pitches?] badge
+
+| Requirement | Status | Evidence |
+|---|---|---|
+| Scrollable play log visible in UI | MISSING | activityLog state exists but not rendered |
+| Tap entry → enrichment panel | MISSING | No enrichment panel component |
+| K/Kc badge on strikeouts | MISSING | No K→Kc distinction UI |
+| [pitches?] badge on all plays | MISSING | No badge UI |
+
+**GAP-GT-4-A:** Build visible Play Log component with enrichment panel entry point (L)
+**GAP-GT-4-B:** Add K/Kc toggle badge on strikeout plays (S) — ties to GAP-GT-3-E
+
+### §4.3 Enrichment Types
+
+**Spec:** Field location, fielding sequence, HR distance, pitch type, pitch count per AB, pitch count per half-inning, modifiers.
+
+**Code — Enrichment assets that EXIST (via EnhancedInteractiveField):**
+
+| Enrichment | Status | Evidence | Notes |
+|---|---|---|---|
+| Field Location / Spray Chart | DIFFERENT | PlayData has `spraySector`, `sprayDirection`, `ballLocation` in EnhancedInteractiveField | Captured via drag-drop on full field, not via "tap mini-diamond" from play log. These become post-hoc enrichment assets once Play Log exists. |
+| Fielding Sequence | DIFFERENT | `fieldingSequence` array in PlayData | Captured via drag-drop, not "tap numbered fielder icons in order" from play log. Same resolution as above. |
+| HR Distance | DIFFERENT | `hrDistance?: number` in PlayData, set at EnhancedInteractiveField | Field exists but no standalone numeric input form — collected as part of field interaction flow. |
+| Pitch Type selector | MISSING | — | `pitchType` only in LeagueBuilder context (player abilities). No per-at-bat pitch type recording. No 4F\|2F\|CF\|SL\|CB\|CH\|SB\|FK\|UNK selector. |
+| Pitch Count Per At-Bat | PARTIAL | `pitchCount` param on `recordHit()`, `recordOut()`, etc. (useGameState.ts:190-194) | Field plumbed through recording functions. No QAB (7+ pitch = quality AB) detection logic found. |
+| Pitch Count Per Half-Inning | EXISTS | PitchCountModal inline in GameTracker.tsx:3571. Prompts for types: 'end_inning', 'pitching_change', 'end_game' | ✅ Modal prompts at inning end, pitcher change, game end. Includes immaculate inning detection (GT:3870). |
+| Modifiers | EXISTS | ModifierButtonBar component, `activeModifiers` Set in EnhancedInteractiveField | Nut shot, killed, TOOTBLAN etc. working. web_gem correctly NOT a modifier. |
+
+**GAP-GT-4-C:** Add pitch type selector (4F\|2F\|CF\|SL\|CB\|CH\|SB\|FK\|UNK) per at-bat, filtered by pitcher repertoire (M)
+**GAP-GT-4-D:** Add QAB detection — 7+ pitches = quality at-bat regardless of outcome (S)
+
+### §4.4 Enrichment Timing
+
+| Timing | Status | Evidence |
+|---|---|---|
+| Immediately after play | DIFFERENT | EnhancedInteractiveField captures enrichment inline during play recording, not from play log after. Works, but different UX. |
+| Between innings prompt | MISSING | No between-inning screen showing unenriched plays |
+| After game enrichment count | MISSING | No post-game screen with unenriched count |
+| Never (core stats still correct) | EXISTS | Core counting stats work without enrichment ✅ |
+
+**GAP-GT-4-E:** Build between-inning enrichment prompt for unenriched plays (M)
+**GAP-GT-4-F:** Build post-game enrichment summary with unenriched count (S)
+
+### §4.5 Enrichment for Positional Tracking
+
+**Spec:** Every at-bat records batter's current position and defensive alignment. Every fielding enrichment tagged with fielder's position. Position changes as between-play events. IFR as modifier on PO.
+
+| Requirement | Status | Evidence |
+|---|---|---|
+| Batter position per at-bat | PARTIAL | `batterFieldingPosition` collected at GT:886 area. Not confirmed persisted to AtBatEvent. |
+| Defensive alignment per at-bat | MISSING | No alignment snapshot recorded per event |
+| Fielding enrichment tagged with position | PARTIAL | fieldingSequence uses position numbers but not player-position mapping |
+| IFR as modifier on PO | PARTIAL | IFR in modifier buttons. No auto-prompt when PO + R1+R2/loaded + <2 outs. |
+
+**GAP-GT-4-G:** Persist batter position + defensive alignment to AtBatEvent (S) — ties to GAP-GT-2-E
+**GAP-GT-4-H:** Auto-prompt IFR when PO with R1+R2 or bases loaded and <2 outs (S)
+
+---
+
+## §5 Between-Play Events
+
+### §5.1 Runner Actions
+
+**Spec:** Tapping runner on diamond opens popover: [Steal] [Pickoff] [Wild Pitch] [Passed Ball] [Advance ▼]
+
+**Code:**
+- EnhancedInteractiveField uses **drag-drop** for runners, not tap-to-popover
+- ActionSelector.tsx provides SB, CS, PK, WP, PB buttons — but these are in the EnhancedInteractiveField action panel, NOT triggered by tapping a runner
+- No runner tap → popover menu exists
+
+| Action | Status | Evidence | Notes |
+|---|---|---|---|
+| Runner tap → popover | MISSING | — | Drag-drop exists, not tap-to-menu per spec |
+| Steal (SB/CS) | EXISTS | ActionSelector.tsx:89-90, EnhancedInteractiveField:3249-3285 | Routes through RUNNER_CONFIRM flow. 1-2 taps via modal. |
+| Pickoff (PK) | EXISTS | ActionSelector.tsx:91, routed through RUNNER_CONFIRM | Sub-options in RunnerOutcomesDisplay |
+| Wild Pitch (WP) | DIFFERENT | EnhancedInteractiveField:3208-3247 | Auto-advances all runners one base. Spec allows "tap destination" option too. |
+| Passed Ball (PB) | DIFFERENT | EnhancedInteractiveField:3208-3247 | Same as WP — auto-advance only, no destination choice. |
+| Steal → mWAR decision | EXISTS | mwarIntegration.ts — `steal_call` decision type | ✅ Manager decision tracking |
+
+**GAP-GT-5-A:** Runner tap → popover menu with [Steal] [Pickoff] [WP] [PB] [Advance] (M) — depends on Quick Bar architecture (GAP-GT-3-A resolved: field is enrichment surface, so runner tap popover fits)
+**GAP-GT-5-B:** WP/PB: add "tap destination" option for non-standard advances (S)
+
+### §5.2 Substitutions
+
+**Spec:** Two entry points: (a) Lineup card (comprehensive drag-drop), (b) Diamond tap → [Substitute] → select from roster.
+
+| Entry Point | Status | Evidence |
+|---|---|---|
+| Lineup card (comprehensive) | EXISTS | LineupCard.tsx — drag-drop lineup management, SubstitutionData includes 'player_sub'\|'position_swap'\|'pitching_change'\|'double_switch' |
+| Diamond tap (quick contextual) | PARTIAL | PlayerCardModal at GT:3419-3425 has onMojoChange/onFitnessChange but no explicit [Substitute] popover entry |
+
+**GAP-GT-5-C:** Add [Substitute] option to diamond tap PlayerCardModal (S)
+
+### §5.3 Manager Moments
+
+**Spec:** When LI ≥ 2.0, mark as Manager Moment. Subtle visual indicator (pulsing border or ⚡). Track across season.
+
+**Code:** ✅ **FULLY IMPLEMENTED**
+- `checkManagerMoment()` at mwarIntegration.ts:158 — triggers when LI ≥ threshold
+- UI notification at GT:2313-2347 — ⚡ MANAGER MOMENT banner with LI display, decision recording, dismiss button
+- `recordDecision()` wired at GT:2334 — records decision type with game state
+- Season tracking: managerStorage.ts persists decisions. useMWARCalculations.ts tracks state.
+- `inferRelevantDecisionType()` at mwarIntegration.ts:170 auto-infers decision type from game state
+
+| Requirement | Status | Evidence |
+|---|---|---|
+| LI threshold detection | EXISTS | mwarIntegration.ts:158, HIGH_LEVERAGE_THRESHOLD |
+| Visual indicator | EXISTS | GT:2313 — ⚡ banner (spec says "pulsing border or ⚡") |
+| Decision recording | EXISTS | GT:2334 `recordDecision()` |
+| Season tracking | EXISTS | managerStorage.ts, useMWARCalculations hooks |
+| Best/Worst Moment | UNVERIFIED | Not confirmed in season aggregation |
+
+**GAP-GT-5-D:** Verify Manager Moment best/worst WPA tracking in season aggregation (S)
+
+### §5.4 Pitcher Changes
+
+**Spec:** Pitcher name in scoreboard always tappable → [Change Pitcher]. Records outgoing pitch count, IP, inherited runners.
+
+**Code:**
+- PITCH_CHANGE event type at game.ts:16 ✅
+- PitchingChangeEvent type at substitution.ts:112 ✅
+- LineupCard bullpen section handles pitching changes ✅
+- PitchCountModal prompts for outgoing pitcher's count on change ✅
+- **Tappable pitcher name in scoreboard:** UNVERIFIED — not confirmed if scoreboard pitcher name is tappable
+
+**GAP-GT-5-E:** Verify/add tappable pitcher name in scoreboard → [Change Pitcher] flow (S)
+
+### §5.5 Position Changes (Non-Substitution)
+
+**Spec:** Player moves SS→3B mid-game (no new player). Diamond tap → [Move Position]. Tracks innings at each position.
+
+**Code:**
+- POS_SWITCH type at game.ts:16 ✅
+- PositionSwitchEvent type at substitution.ts:208 ✅
+- **UI entry point "diamond tap → [Move Position]":** NOT FOUND in EnhancedInteractiveField
+- Innings-at-position tracking: NOT VERIFIED
+
+**GAP-GT-5-F:** Add [Move Position] to diamond tap popover for non-substitution position changes (S)
+**GAP-GT-5-G:** Track innings at each position for Gold Glove / dWAR (M)
+
+### §5.6 Mojo & Fitness Changes
+
+**Spec:** Player tokens on diamond tappable → state popover. Changes save as BetweenPlayEvent.
+
+**Code:** ✅ **IMPLEMENTED**
+- PlayerCardModal at GT:3419-3425 with onMojoChange/onFitnessChange
+- playerStateIntegration.ts:481-524 — saves as 'mojo_change' and 'fitness_change' event types
+- `setMojo()` and `setFitness()` at GT:843,848
+
+No gap — this is working.
+
+---
+
+## §6 Baseball Rules & Logic
+
+### §6.1 Game Structure
+
+**Status:** EXISTS ✅
+- 9-inning games with configurable innings via LeagueBuilderRules
+- Extra innings with configurable rules (standard, runner_on_second, sudden_death) at franchise.ts
+- Top/bottom, 3 outs per half — auto-end on 3rd out at useGameState.ts:2650-2654
+- Home team bats bottom — standard in game state
+
+### §6.2 At-Bat Results
+
+**Status:** DIFFERENT ⚠️ (already detailed in Session 1 GAP-GT-2-B)
+
+Spec: `'K'|'Kc'|'GO'|'FO'|'LO'|'PO'` + `'WP_K'|'PB_K'`
+Code: `'K'|'KL'|'GO'|'FO'|'LO'|'PO'|'D3K'` — no Kc, no WP_K/PB_K
+
+Covered by GAP-GT-2-B — no new ticket needed.
+
+### §6.3 Run Scoring & Third Out Exceptions
+
+**Status:** EXISTS ✅
+
+**Key functions in useGameState.ts:**
+- `shouldInvalidateRunsOnThirdOut()` at line 700 — checks:
+  - `outsAfterPlay < 3` → no invalidation
+  - GO (batter out before 1B) → invalidate ALL runs ✅
+  - Any `isForceOutRunner()` → invalidate ALL runs ✅
+- `isForceOutRunner()` at line 682 — implements force chain:
+  - R1 always forced ✅
+  - R2 forced if R1 occupied ✅
+  - R3 forced if R1 + R2 occupied ✅
+- Called from `recordOut` at line 2477 — wired correctly
+
+| Requirement | Status | Evidence |
+|---|---|---|
+| Batter out before 1B → no runs | EXISTS | useGameState.ts:711 `if (outType === 'GO') return true` |
+| Force out → no runs | EXISTS | useGameState.ts:716-720 checks all 3 bases |
+| Force chain rule | EXISTS | isForceOutRunner():682-698 |
+| Time play (tag out timing) | MISSING | No timing logic for "runner crossed before tag" |
+
+**GAP-GT-6-A:** Time play rule — runner scores if crossed home before tag on non-force 3rd out (S) — edge case, low priority for SMB4
+
+### §6.4 RBI Credit Rules
+
+**Status:** EXISTS ✅ (mostly)
+
+`calculateRBIs()` at useGameState.ts:652:
+- Counts SCORED runners from outcomes ✅
+- HR → all runners + batter ✅
+- Errors → 0 RBI ✅
+- DP/TP → 0 RBI ✅
+- BB/HBP/IBB force-in: Implicit — forced runner advancement naturally produces SCORED outcome, function counts it ✅
+- WP/PB no RBI: Moot — WP/PB are between-play events, not at-bat results, so they don't flow through calculateRBIs() ✅
+
+No gap needed — logic is correct.
+
+### §6.5 Runner Advancement Defaults
+
+**Status:** EXISTS ✅ (verified in Session 1)
+
+- Hit defaults: runnerDefaults.ts:99-157 — all correct
+- Walk/HBP forced advancement: runnerDefaults.ts:323-355 — chain correct
+
+No gap needed.
+
+### §6.6 Special Plays
+
+| Special Play | Status | Evidence | Notes |
+|---|---|---|---|
+| D3K legality | EXISTS | d3kTracker.ts:118-125 | 1B unoccupied OR 2 outs ✅ |
+| D3K as K+WP / K+PB / K+E2 | DIFFERENT | D3K is separate result type, not hybrid | Covered by GAP-GT-2-B |
+| IFR detection | PARTIAL | game.ts:86 `infieldFlyRule` field, test file exists | No auto-detection logic implemented |
+| Sacrifice Fly rules | PARTIAL | OutcomeButtons.tsx:202-204 | SF disabled when !bases.third ✅. MISSING: outs ≥ 2 check |
+| Sacrifice Bunt rules | PARTIAL | OutcomeButtons.tsx:199-201 | SAC disabled when outs ≥ 2 ✅. MISSING: runner on base check |
+| Ground Rule Double | MISSING | — | No GRD type or runner advancement logic |
+| Tag-Up rule | MISSING | — | No "return to base before advancing" enforcement |
+
+**GAP-GT-6-B:** SF button: add outs ≥ 2 disable check (S)
+**GAP-GT-6-C:** SAC button: add "no runners on base" disable check (S)
+**GAP-GT-6-D:** Add GRD (Ground Rule Double) result type + 2-base runner advancement (M)
+**GAP-GT-6-E:** Tag-up enforcement on fly outs — runners must return before advancing (M) — may be low priority for SMB4 where engine handles this
+
+### §6.7 Statistical Definitions
+
+**Status:** EXISTS ✅
+
+- AVG, OBP, SLG, OPS, ERA, WHIP — standard formulas in bwarCalculator and stat engines
+- IP stored as outsRecorded / 3 ✅
+- `isAB` at eventLog.ts:681: `!['BB', 'HBP', 'SF', 'SH'].includes(result)` — DIFFERENT: uses 'SH' instead of 'SAC', missing 'IBB'
+
+**GAP-GT-6-F:** Fix isAB filter: add 'IBB', change 'SH' to 'SAC' to match spec types (S)
+
+### §6.8 Button Availability Rules
+
+**Status:** PARTIAL ⚠️
+
+| Rule | Spec | Code | Status |
+|---|---|---|---|
+| SAC: disabled when 2 outs | ✅ | OutcomeButtons.tsx:199-201 | EXISTS |
+| SF: disabled when 2 outs OR no R3 | Only !bases.third | OutcomeButtons.tsx:202-204 | PARTIAL — missing outs check |
+| DP: disabled when 2 outs OR no runners | Only !hasRunners | OutcomeButtons.tsx:185-188 | PARTIAL — missing outs check |
+| TP: disabled when <2 runners | Only !hasRunners | OutcomeButtons.tsx:186-188 | DIFFERENT — should be <2 runners not 0 runners |
+| D3K: disabled when 1B occupied AND <2 outs | Not found | — | MISSING |
+
+**GAP-GT-6-G:** Fix button availability: SF add outs≥2 check, DP add outs≥2 check, TP require ≥2 runners, D3K disable when 1B occupied & <2 outs (S)
+
+---
+
+## Session 2 Gap Summary
+
+### New Gap Tickets (Session 2)
+
+| ID | Description | Effort | Priority | Section |
+|----|-------------|--------|----------|---------|
+| GAP-GT-4-A | Build visible Play Log component with enrichment panel entry | L | HIGH | §4.2 |
+| GAP-GT-4-B | K/Kc toggle badge on strikeout plays | S | HIGH | §4.2 |
+| GAP-GT-4-C | Pitch type selector per at-bat (4F\|2F\|CF etc.), filtered by repertoire | M | MEDIUM | §4.3 |
+| GAP-GT-4-D | QAB detection — 7+ pitches = quality at-bat | S | LOW | §4.3 |
+| GAP-GT-4-E | Between-inning enrichment prompt for unenriched plays | M | MEDIUM | §4.4 |
+| GAP-GT-4-F | Post-game enrichment summary with unenriched count | S | LOW | §4.4 |
+| GAP-GT-4-G | Persist batter position + defensive alignment per AtBatEvent | S | MEDIUM | §4.5 |
+| GAP-GT-4-H | Auto-prompt IFR when PO + R1+R2/loaded + <2 outs | S | MEDIUM | §4.5 |
+| GAP-GT-5-A | Runner tap → popover menu (Steal/Pickoff/WP/PB/Advance) | M | HIGH | §5.1 |
+| GAP-GT-5-B | WP/PB: add "tap destination" for non-standard advances | S | LOW | §5.1 |
+| GAP-GT-5-C | Add [Substitute] option to diamond tap PlayerCardModal | S | MEDIUM | §5.2 |
+| GAP-GT-5-D | Verify Manager Moment best/worst WPA in season aggregation | S | LOW | §5.3 |
+| GAP-GT-5-E | Verify/add tappable pitcher name in scoreboard → Change Pitcher | S | MEDIUM | §5.4 |
+| GAP-GT-5-F | Add [Move Position] to diamond tap popover | S | MEDIUM | §5.5 |
+| GAP-GT-5-G | Track innings at each position for Gold Glove / dWAR | M | MEDIUM | §5.5 |
+| GAP-GT-6-A | Time play rule — runner scores if crossed home before tag | S | LOW | §6.3 |
+| GAP-GT-6-B | SF button: add outs ≥ 2 disable check | S | HIGH | §6.6 |
+| GAP-GT-6-C | SAC button: add "no runners" disable check | S | HIGH | §6.6 |
+| GAP-GT-6-D | GRD (Ground Rule Double) result type + 2-base advancement | M | MEDIUM | §6.6 |
+| GAP-GT-6-E | Tag-up enforcement on fly outs | M | LOW | §6.6 |
+| GAP-GT-6-F | Fix isAB filter: add IBB, change SH→SAC | S | HIGH | §6.7 |
+| GAP-GT-6-G | Fix button availability: SF/DP outs check, TP ≥2 runners, D3K | S | HIGH | §6.8 |
+
+### Session 2 Effort Summary
+- **S (Small):** 14 tickets
+- **M (Medium):** 6 tickets
+- **L (Large):** 2 tickets (Play Log + enrichment panel)
+
+### Cumulative Totals (Sessions 1+2)
+- **Session 1:** 30 gap tickets (S:15, M:10, L:5)
+- **Session 2:** 22 gap tickets (S:14, M:6, L:2)
+- **Total so far:** 52 gap tickets
+
+---
+
+# SESSION 3: §7 Substitution System + Consolidation
+
+**Date:** 2026-03-06
+**Note:** Double switch was REMOVED in v1 triage, replaced with batting order swap. Double switch references in code are artifacts — not a gap.
+
+---
+
+## §7 Substitution System
+
+### §7.1 Substitution Types
+
+| Type | Status | Evidence | Notes |
+|---|---|---|---|
+| Pinch Hitter (PINCH_HIT) | EXISTS | substitution.ts:129-137, useGameState.ts:3574-3620 | Type + handler ✅ |
+| Pinch Runner (PINCH_RUN) | EXISTS | substitution.ts:143-155, useGameState.ts:3695 | Type + handler, tracks pitcher responsibility ✅ |
+| Defensive Sub (DEF_SUB) | EXISTS | substitution.ts:170-173 | Type defined, stored in substitutionLog ✅ |
+| Pitching Change (PITCH_CHANGE) | EXISTS | substitution.ts:111-122 | Complete: bequeathedRunners, inheritedRunners, outgoingPitchCount ✅ |
+| Position Swap (POS_SWITCH) | EXISTS | substitution.ts:207-210 | Single event with array of switches (not two events) ✅ |
+| Double Switch | N/A | — | Removed in v1 triage — code has artifact `double_switch` in SubstitutionData. Not a gap. |
+
+### §7.2 Entry Points (Per C-002)
+
+**Spec:** Two entry points: (a) Lineup card with drag-drop, (b) Diamond tap → [Substitute] → select from roster.
+
+| Entry Point | Status | Evidence | Notes |
+|---|---|---|---|
+| Lineup Card (comprehensive) | EXISTS | LineupCard.tsx:1-150, GT:2804-2923 | Fully wired: drag-drop bench→lineup, current batter card (GT:3381), current pitcher drop zone (GT:3385), bullpen section (GT:2853-2923) ✅ |
+| Bullpen panel for relievers | EXISTS | GT:2853-2923 | Separate section, wired to changePitcher() ✅ |
+| Diamond Tap → [Substitute] | MISSING | — | 6 modal files (PinchHitterModal, PinchRunnerModal, DefensiveSubModal, PitchingChangeModal, PositionSwitchModal, DoubleSwitchModal) exist in INACTIVE `src/components/GameTracker/` but are NOT rendered in active GameTracker.tsx |
+
+**SubstitutionModalBase infrastructure EXISTS** in active path:
+- `src/src_figma/app/components/modals/SubstitutionModalBase.tsx` — Base component with 9 reusable sub-components (ModalSection, PlayerSelect, PositionSelect, NumberInput, etc.)
+- `src/src_figma/app/components/modals/index.ts` — All helpers exported
+
+**GAP-GT-7-A:** Wire diamond tap → substitution flow using SubstitutionModalBase + modals (M)
+- SubstitutionModalBase already exists in active path
+- 6 specific modals exist in INACTIVE path — need porting to src_figma/app/components/modals/
+- Wire PlayerCardModal to show [Substitute] option → open appropriate modal
+- Ties to GAP-GT-5-C (add [Substitute] to PlayerCardModal)
+
+### §7.3 Pinch Runner Critical Rule
+
+**Spec:** PR replaces baserunner but pitcher responsibility does NOT change. If PR scores, run charged to pitcher who allowed original batter.
+
+**Status:** EXISTS ✅
+
+- `inheritedRunnerTracker.ts:366-404` — `handlePinchRunner()` copies `responsiblePitcherId` from original runner (line 383-384): "Keep the same pitcher responsibility!"
+- `inheritedRunnerTracker.ts:222-225` — When runner scores: `chargedToPitcherId: runner.responsiblePitcherId` → ER attributed to original pitcher
+- `responsiblePitcherId` tracked throughout useGameState.ts runner state (lines 777-807)
+
+No gap — correctly implemented.
+
+### §7.4 Pitching Change Flow
+
+| Step | Status | Evidence | Notes |
+|---|---|---|---|
+| 1. Pitch count from outgoing pitcher | EXISTS | PitchCountModal at GT:3571, prompted at GT:3752 before changePitcher() | ✅ Modal enforced |
+| 2. Capture outgoing stats + inherited runners + IP | EXISTS | useGameState.ts:3747-3810 — logs outgoingPitcherId, pitchCount, inherited count | ✅ |
+| 3. New pitcher init: isStarter=false, entryInning=current | EXISTS | PitcherGameStats:134 `isStarter: boolean`, :135 `entryInning: number` | ✅ |
+| 4. Inherited runner ERA tracking | EXISTS | inheritedRunnerTracker.ts:207-225 — chargedToPitcherId = responsiblePitcherId | ✅ |
+| 5. Manager decision logged for mWAR | EXISTS | GT:938-943 `mwarHook.recordDecision('pitching_change', ...)` | ✅ |
+
+No gap — pitching change flow fully implemented.
+
+### §7.5 Validation Constraints
+
+| Constraint | Status | Evidence | Notes |
+|---|---|---|---|
+| noReEntry (each player enters once) | EXISTS | substitution.ts:57 `usedPlayers: string[]`, useGameState.ts:3640-3650 updates used set | ✅ |
+| minLineupSize: 9, maxLineupSize: 9 | MISSING | — | No runtime validation that lineup stays at 9 |
+| phMustBat: true (PH bats before position assigned) | MISSING | — | No validation preventing position assignment before PH bats |
+| pitchCountRequired: true | EXISTS | GT:3752 PitchCountModal enforced on pitching change | ✅ |
+| Player states: In Game / Available / Used | PARTIAL | LineupCard.tsx:95-150 — `isUsed` styling (gray, strikethrough) | Missing ❌ emoji on used players per spec |
+
+**GAP-GT-7-B:** Add lineup size validation — min/max 9 enforcement on substitutions (S)
+**GAP-GT-7-C:** Add PH-must-bat-first validation — block position assignment until PH has batted (S)
+**GAP-GT-7-D:** Add ❌ emoji to used player display in lineup/bench (S)
+
+---
+
+## Session 3 Gap Summary
+
+### New Gap Tickets (Session 3)
+
+| ID | Description | Effort | Priority | Section |
+|----|-------------|--------|----------|---------|
+| GAP-GT-7-A | Wire diamond tap → substitution flow using SubstitutionModalBase + port modals | M | HIGH | §7.2 |
+| GAP-GT-7-B | Lineup size validation — min/max 9 enforcement | S | MEDIUM | §7.5 |
+| GAP-GT-7-C | PH-must-bat-first validation | S | MEDIUM | §7.5 |
+| GAP-GT-7-D | Add ❌ emoji to used player display | S | LOW | §7.5 |
+
+### Session 3 Effort Summary
+- **S (Small):** 3 tickets
+- **M (Medium):** 1 ticket
+- **L (Large):** 0 tickets
+
+### §7 Overall Assessment: **70-75% implemented**
+
+**What WORKS (strong foundation):**
+- All 5 substitution types defined with proper event types ✅
+- LineupCard drag-drop fully wired (batter card, pitcher drop zone, bench, bullpen) ✅
+- Pinch runner pitcher responsibility correctly tracked ✅
+- Pitching change flow complete (pitch count modal, stats capture, inherited runner ER, mWAR) ✅
+- No-reentry tracking with usedPlayers set ✅
+- SubstitutionModalBase infrastructure ready in active path ✅
+
+**What's MISSING (25-30%):**
+- Diamond tap → substitution modals (6 modals orphaned in inactive path)
+- Lineup size validation
+- PH-must-bat-first validation
+- ❌ emoji on used players
+
+---
+
+## FINAL CONSOLIDATED GAP SUMMARY (All 3 Sessions)
+
+### By Session
+
+| Session | Tickets | S | M | L |
+|---------|---------|---|---|---|
+| Session 1 (§2 + §3) | 30 | 15 | 10 | 5 |
+| Session 2 (§4 + §5 + §6) | 22 | 14 | 6 | 2 |
+| Session 3 (§7) | 4 | 3 | 1 | 0 |
+| **TOTAL** | **56** | **32** | **17** | **7** |
+
+*Note: GAP-GT-3-A RESOLVED (not counted). Actual actionable tickets: **55**.*
+
+### By Spec Section
+
+| Section | Tickets | Key Gap |
+|---------|---------|---------|
+| §2 Event Model | 20 | AtBatEvent 26% coverage → needs 70+ fields |
+| §3 1-Tap Recording | 9 | 5-zone layout + Quick Bar |
+| §4 Enrichment | 8 | Play Log + enrichment panel |
+| §5 Between-Play | 7 | Runner tap popover |
+| §6 Baseball Rules | 7 | Button availability, GRD, tag-up |
+| §7 Substitution | 4 | Diamond tap modals |
+
+### By Effort
+
+| Effort | Count | Estimated Hours |
+|--------|-------|----------------|
+| S (Small) | 32 | ~32-48 hrs (1-1.5 hr each) |
+| M (Medium) | 17 | ~34-68 hrs (2-4 hr each) |
+| L (Large) | 7 | ~42-70 hrs (6-10 hr each) |
+| **Total** | **56** | **~108-186 hrs** |
+
+### Critical Path
+
+1. **Layer 1 — Event Model (§2):** Must come first — all other layers depend on correct AtBatEvent shape
+2. **Layer 2 — Quick Bar + Layout (§3):** Architectural change — 5-zone layout is the scaffold everything attaches to
+3. **Layer 3 — Baseball Rules (§6):** Button availability + type fixes enable correct 1-tap recording
+4. **Layer 4 — Between-Play + Subs (§5, §7):** Runner actions + substitution modals
+5. **Layer 5 — Enrichment (§4):** Play log + enrichment panel — only possible after Quick Bar + layout exist
+
+**See `GAMETRACKER_BUILD_PLAN.md` for ordered ticket list with dependencies.**

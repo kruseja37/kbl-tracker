@@ -119,13 +119,31 @@ Close gaps in this order — each layer feeds the next:
 
 ## Step 3: Playoff Pipeline Build
 
-After the GameTracker matches spec, build the full playoff pipeline. This is NOT simple wiring — the plumbing between GameTracker and Playoffs doesn't exist yet.
+After the GameTracker matches spec, build **Elimination Mode** — a standalone playoff bracket system that is a PEER to Franchise Mode, not a sub-feature of it. Mirrors SMB4's "Elimination" mode. Has its own storage namespace (`kbl-elimination-{id}`), its own save slots, its own awards, and its own almanac presence. Persists past testing as a permanent app mode.
+
+**Full spec:** `spec-docs/ELIMINATION_MODE_SPEC.md`
+
+**Why its own mode, not a lightweight franchise:** Elimination Mode needs its own storage scope so almanac can distinguish franchise playoffs from standalone brackets. It has Elimination-specific awards (Postseason MVP, Best Pitcher, Best Fielder, Best Runner, Clutch Performer, Series MVP) that are distinct from franchise season awards. The GameTracker gets a new `gameMode: 'elimination'` value that activates ALL Mode 2 in-game systems (stats, WAR, mojo, fitness, fame, morale, narrative, designations, milestones) scoped to the elimination instance.
+
+**Architecture:** Mirrors franchise patterns with its own namespace. New files: `eliminationManager.ts`, `eliminationStorage.ts`, `EliminationSelector.tsx`, elimination wizard page. Reuses directly: all engines, all GameTracker components, event logging, types, player data. The bracket CRUD logic from `playoffStorage.ts` is the foundation.
+
+### Spec Sources
+- **Mode 1 §11.8** — Playoff Mode abbreviated flow (setup entry point)
+- **Mode 1 §11.4** — Step 3 Playoff Settings (teams, format, series lengths, home field pattern)
+- **Mode 2 §21.3** — Playoff bracket structure, home field to higher seed, reseeding after each round
+- **Mode 2 §8-§9** — Stats pipeline (game-level → season-level aggregation)
+- **Mode 2 §14** — Mojo/fitness per game
+- **Mode 2 §23** — Stadium analytics and park factors
+- **ExhibitionGame.tsx** — Existing pattern for standalone game launch (league → teams → rosters → GameTracker)
 
 ### Current State (Verified 2026-03-06)
 - **WorldSeries.tsx:** Full UI (Setup, Bracket, Leaders, History tabs) ✅
+- **Setup tab:** League selection + playoff structure + games per round + innings + DH ✅
 - **playoffStorage.ts:** Bracket CRUD, series tracking, game recording ✅
 - **playoffEngine.ts:** Qualification, seeding, home field, clinch detection ✅
 - **usePlayoffData.ts:** Full hook with bracket generation ✅
+- **ExhibitionGame.tsx:** Standalone game launch pattern (league → teams → rosters → GameTracker) ✅
+- **Setup missing from §11.8:** Seeding step (drag to order or auto-seed), home field pattern (2-3-2 / 2-2-1 / alternating), format options (bracket/pool/best_record_bye) ❌
 - **PLAYOFF_STATS store:** Exists in IndexedDB, can be READ — but NOTHING WRITES TO IT ❌
 - **GameTracker playoff awareness:** ZERO — doesn't know if a game is playoff ❌
 - **Game completion → bracket update:** NOT CONNECTED ❌
@@ -133,11 +151,22 @@ After the GameTracker matches spec, build the full playoff pipeline. This is NOT
 
 ### What Needs Building
 
-**Layer 1: GameTracker Playoff Context**
-- GameTracker needs to accept playoff metadata (seriesId, round, gameNumber, isPlayoff flag)
-- This context flows via route params or launch state from WorldSeries bracket
-- Event model records `isPlayoff`, `seriesId` on each AtBatEvent
-- Playoff context displayed in scoreboard (e.g., "ALCS Game 3")
+**Layer 0: Elimination Mode System (ELIMINATION_MODE_SPEC.md)**
+- Build `eliminationManager.ts` + `eliminationStorage.ts` — mirror franchise patterns with `kbl-elimination-{id}` namespace
+- Build `EliminationSelector.tsx` — save slot management (load, new, delete) — mirror FranchiseSelector
+- Build Elimination wizard — 5-step setup per §11.8: league → settings → team control → seeding → confirm
+- Seeding: drag to reorder or auto-seed from `playoffEngine.ts`
+- Home field advantage: 2-3-2 / 2-2-1 / alternating (per §11.4)
+- Rosters from League Builder (same pattern as ExhibitionGame.tsx)
+- Creates own `eliminationId` scoped to `kbl-elimination-{id}` storage
+- Wire PLAYOFFS button on home screen → `/elimination/select` route
+- Add `gameMode: 'elimination'` to GameTracker navigation state type
+
+**Layer 1: GameTracker Elimination Context**
+- GameTracker handles `gameMode: 'elimination'` — activates all Mode 2 systems scoped to elimination storage
+- Accepts elimination metadata via navigation state: `eliminationId`, `seriesId`, `gameNumber`, `roundName`
+- Event model records elimination context on each AtBatEvent
+- Fenway Board displays series context (e.g., "CHAMPIONSHIP GAME 5 — TIED 2-2")
 
 **Layer 2: Game Completion → Bracket**
 - When GameTracker completes a playoff game, call `recordSeriesGame` with the result
@@ -168,11 +197,12 @@ After the GameTracker matches spec, build the full playoff pipeline. This is NOT
 - This mirrors the SMB4 experience: games in a round are played in order through the round, but the user controls which matchup they play at any given time
 
 ### Build Order
-Layers 1-3 are the critical path (can't play through without them). Layer 4 adds stadium context. Layer 5 ties the UX together.
+Layer 0 first (setup flow must work before bracket launches games). Then Layers 1-3 (critical path — can't play through without them). Layer 4 adds stadium context. Layer 5 ties the UX together.
 
 ### Routing
 | Layer | Route | Reasoning |
 |---|---|---|
+| 0 - Elimination Mode system | Claude Code CLI \| opus | New storage namespace + manager + selector + wizard + routes |
 | 1 - Playoff context | Claude Code CLI \| opus | Touches GameTracker state (5K line file) |
 | 2 - Game → bracket | Codex \| 5.3 \| high | Defined contract, well-scoped |
 | 3 - Stats aggregation | Codex \| 5.3 \| high | New function, clear input/output |
@@ -191,12 +221,19 @@ Layers 1-3 are the critical path (can't play through without them). Layer 4 adds
 ### What to Verify During Playthrough
 Beyond basic GameTracker functionality, specifically check:
 - **Game selection:** Can you click on any active series in the round and choose to play it? Are you never forced into a specific game order?
-- **Playoff context:** Does the scoreboard show series info (e.g., "Game 3, Team leads 2-1")?
+- **Playoff context:** Does the Fenway Board show series info (e.g., "ALCS Game 3, Team leads 2-1")?
 - **Stats accumulation:** After each game, do the Leaders tab numbers update? Do batting and pitching leaders reflect reality?
 - **Bracket advancement:** When a series ends, does the bracket show the correct winner advancing? Does the next round generate correctly?
 - **Stadium display:** Is the correct stadium shown for each game? Does home field advantage follow the configured pattern (higher seed)?
+- **Mojo/Fitness:** Do player mojo states change between games based on performance? Does the Fenway Board show current mojo/fitness?
+- **Narrative/Fame:** Do fame events trigger during big moments (walkoffs, milestone hits)? Do narrative headlines generate?
+- **Fan morale:** Does team morale shift based on wins/losses across the bracket?
+- **LI/WPA:** Does the leverage index display during high-pressure situations? Do WPA values appear reasonable?
+- **Designations:** Do player designations (hot streak, cold streak, etc.) accumulate across playoff games?
+- **Milestones:** If a player approaches a career milestone during the bracket, does the system detect it?
 - **Series completion:** When the final series ends, does the championship display correctly? Is MVP selectable?
 - **History tab:** After the bracket completes, does history show the correct champion, results, and MVP?
+- **Career stats:** After the bracket completes, have playoff stats persisted? Can they be queried?
 
 ### Bug Log Template
 Create `PLAYOFF_PLAYTHROUGH_LOG.md`:
@@ -265,6 +302,7 @@ The playthrough dramatically reduces the scope of remaining work because the cor
 | Document | When | Purpose |
 |---|---|---|
 | `KEEP.md` | Now | Protects working code |
+| `ELIMINATION_MODE_SPEC.md` | Now | Gospel spec for standalone Elimination Mode |
 | `GAMETRACKER_DELTA_REPORT.md` | Step 1 (3 sessions) | Section-by-section gap list |
 | `GAMETRACKER_BUILD_PLAN.md` | After Step 1 | Ordered gap tickets with routing |
 | `PLAYOFF_PLAYTHROUGH_LOG.md` | Step 4 | Bug log from actual gameplay |
@@ -276,12 +314,16 @@ The playthrough dramatically reduces the scope of remaining work because the cor
 
 - [ ] GameTracker delta assessment complete for §2-§7
 - [ ] All gap tickets from delta resolved (build passes, tests pass)
-- [ ] Playoff pipeline layers 1-5 built and verified
+- [ ] Elimination Mode system built (storage, manager, selector, wizard, routes)
+- [ ] Elimination pipeline layers 1-5 built and verified
 - [ ] Bracket launches games with correct teams, lineups, and stadium
 - [ ] User can choose which series to play next within a round (no forced game order)
 - [ ] Game results flow back to bracket and advance series correctly
 - [ ] Playoff stats accumulate — Leaders tab shows real batting/pitching leaders
 - [ ] Stadium info displays during playoff games with seed park factors
-- [ ] JK completes a full playoff bracket without blockers
+- [ ] Mojo/fitness, narrative, fame, fan morale, LI/WPA all firing during games
+- [ ] Elimination awards compute at bracket completion (MVP, Best Pitcher/Fielder/Runner, Clutch)
+- [ ] Elimination save slots work (load, new, delete)
+- [ ] JK completes a full Elimination bracket without blockers
 - [ ] All major bugs from playthrough fixed
 - [ ] Minor/cosmetic bugs documented for later
