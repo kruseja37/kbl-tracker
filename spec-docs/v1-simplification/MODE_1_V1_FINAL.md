@@ -1,0 +1,1702 @@
+# MODE 1: LEAGUE BUILDER — Gospel Specification — V1 BUILD DOCUMENT
+
+**Version:** 1.2 (Gospel — Contradiction Resolutions Applied)
+**Status:** CANONICAL — This document is the single source of truth for Mode 1
+**Created:** 2026-02-22
+**Last Revised:** 2026-02-25 (Contradiction resolutions #5, #6, #7, #8, #10, #11, #12, #14, #17, #20, #21)
+**Supersedes:** LEAGUE_BUILDER_SPEC.md, SEASON_SETUP_SPEC.md, portions of FRANCHISE_MODE_SPEC.md, GRADE_ALGORITHM_SPEC.md, PROSPECT_GENERATION_SPEC.md, SCOUTING_SYSTEM_SPEC.md, PERSONALITY_SYSTEM_SPEC.md (assignment only), TRAIT_INTEGRATION_SPEC.md (initial distribution only), SCHEDULE_SYSTEM_FIGMA_SPEC.md (setup only), LEAGUE_BUILDER_FIGMA_SPEC.md, SEASON_SETUP_FIGMA_SPEC.md, SMB4_GAME_REFERENCE.md (import mapping), smb4_traits_reference.md (import mapping)
+**Cross-references:** SPINE_ARCHITECTURE.md (shared data contracts), MODE_2_FRANCHISE_SEASON.md (what Mode 1 hands off to), MODE_3_OFFSEASON_WORKSHOP.md (prospect generation reused at annual draft)
+
+**STEP4 Decisions Applied:** C-070, C-071, C-072, C-073, C-074, C-075, C-076, C-077, C-078, C-087. Cross-cutting: C-045, C-054.
+
+---
+
+## 1. Overview & Mode Definition
+
+> **v1 Scope:** Full section kept. Deferred: "Playoff Mode" entry point (§1.4 / §11.7 abbreviated wizard).
+
+### 1.1 What Mode 1 Is
+
+Mode 1 — the League Builder — is the **one-time setup hub** where users configure everything before a franchise begins. It runs exactly once per franchise. Once the user clicks "Start Franchise," Mode 1's work is complete and control passes to Mode 2 (Franchise Season).
+
+> **Per C-073:** The League Builder is explicitly Mode 1 of KBL's three-mode architecture. Mode 2 is the Franchise Season (play games, track stats). Mode 3 is the Offseason Workshop (between-season processing). The Almanac is a read-only historical layer available at all times. See SPINE_ARCHITECTURE.md for the shared data contracts connecting all three modes.
+
+### 1.2 What Mode 1 Produces
+
+When Mode 1 completes, it has created:
+
+1. A **franchise save slot** — an isolated IndexedDB instance containing all franchise data
+2. **League structure** — conferences, divisions, team assignments
+3. **Complete team roster data** — all players with full importable attributes: ratings (power, contact, speed, fielding, arm, velocity, junk, accuracy), traits, personality, chemistry type, arsenal, bats/throws, age, gender, positions (primary + secondary), fame level, salary
+4. **Farm rosters** — populated via Startup Prospect Draft (or empty if skipped)
+5. **Rules configuration** — season length, playoffs, roster rules, narrative toggles, awards ceremony
+6. **Schedule** — user-uploaded CSV or OCR-extracted, user-editable game schedule
+7. **Franchise type** — Solo, Couch Co-Op, or Custom (which teams are human vs AI)
+8. **Initialized subsystems** — standings tables, salary ledger, empty stats stores
+9. **Named NPCs** — one beat reporter, one manager, and one scout per team (auto-generated names, user-editable)
+
+### 1.3 What Mode 1 Does NOT Do
+
+- Track any games or at-bats (that's Mode 2)
+- Run any offseason phases (that's Mode 3)
+- Store historical data (that's the Almanac)
+- Generate narrative content (that's Mode 2's narrative engine)
+
+### 1.4 Entry Points
+
+| Entry | Flow | Description |
+|-------|------|-------------|
+| Main Menu → "New Franchise" | Full wizard (§11) | Complete 6-step setup |
+| Main Menu → "League Builder" | Standalone editor | Edit leagues/teams/players without starting a franchise |
+
+### 1.5 Key Principles
+
+1. **Teams are reusable** — A team template can exist in multiple leagues simultaneously
+2. **Players are global** — One player database shared across all league templates
+3. **Leagues are templates** — Configurations that can be instantiated into franchises
+4. **Non-destructive** — Changes in League Builder don't affect active franchises
+5. **Copy-on-create** — Franchise creation copies data from templates; subsequent template edits don't propagate (per C-076)
+
+---
+
+## 2. Franchise Type Selection
+
+> **v1 Scope:** All 3 franchise types kept. Deferred: `aiScoreEntry` toggle (redundant with v1 Score/Skip), per-phase offseason scope configuration (replaced with single global toggle).
+
+### 2.1 The Three Franchise Types
+
+Every franchise is one of three types, selected during the creation wizard (§11, Step 4). The type determines which teams are human-controlled vs AI-controlled, which affects the experience layer — not access.
+
+| Type | Human Teams | AI Teams | Default AI Score Entry | Use Case |
+|------|------------|----------|----------------------|----------|
+| **Solo (1P)** | 1 | Rest of league | Enabled | One user, one team, plays all their games in SMB4 |
+| **Couch Co-Op** | All | 0 | N/A (no AI teams) | All teams human-controlled, pure scorebook |
+| **Custom** | 2+ | Rest of league | Configurable | Multiple human teams, rest AI |
+
+### 2.2 The `controlledBy` Flag
+
+Every team in a franchise carries a control flag:
+
+```typescript
+interface FranchiseTeam {
+  // ...all Team fields from §4...
+  controlledBy: 'human' | 'ai';
+}
+```
+
+**What the flag gates — experience, not access.**
+
+All GameTracker events are tracked equally regardless of `controlledBy`. If events come from GameTracker, they're valid and enter the stats pipeline uniformly.
+
+| Aspect | Human Team | AI Team |
+|--------|-----------|---------|
+| Dashboard | Full dashboard with narrative feed, notifications | Accessible but reactive (surfaced when user needs to sync with SMB4) |
+| GameTracker | Full event tracking for all games involving this team | Same — user records events for both sides during games vs human teams |
+| Roster/Lineup | Full editing (proactive) | Full editing (reactive — sync with SMB4 reality) |
+| Mojo/Fitness | Full editing | Full editing |
+| Narrative | Rich: beat reporters, storylines, milestones | Available from GameTracker events involving this team |
+| Designations | Full tracking from all GameTracker events | Full tracking from all GameTracker events |
+| Stats | Full season stats from all GameTracker events | Full season stats from all GameTracker events |
+
+**Note:** All events entering via GameTracker are treated identically by the stats pipeline regardless of team control type.
+
+**The user is both commissioner and manager.** Commissioner powers (edit anything on any team) are always available. The `controlledBy` flag only determines which teams get the rich, proactive manager experience.
+
+### 2.3 Franchise Type Configuration
+
+```typescript
+interface FranchiseTypeConfig {
+  type: 'solo' | 'couch-coop' | 'custom';
+  humanTeams: string[];       // Team IDs controlled by humans
+  offseasonScope: 'all-teams' | 'human-only';     // Global scope for all 13 offseason phases
+  awardsCeremony: 'full' | 'team_only' | 'off';  // Standalone setting, independent of scope
+}
+```
+
+### 2.4 Presets
+
+**Solo:** User selects 1 team → that team is `human`, all others `ai`. Offseason scope defaults to human-only (configurable).
+
+**Couch Co-Op:** All teams set to `human`. All offseason phases scoped to `all-teams`. No AI logic required anywhere. Every game fully tracked. Full league standings. Pure scorebook.
+
+**Custom:** User selects 2+ teams as `human`. Configurable offseason scope (defaults from §2.5).
+
+### 2.5 Offseason Phase Scope Defaults
+
+Each of the 13 offseason phases (see MODE_3_OFFSEASON_WORKSHOP.md) has a default scope:
+
+```typescript
+offseasonScope: 'all-teams' | 'human-only'
+awardsCeremony: 'full' | 'team_only' | 'off'   // Standalone setting, independent of scope
+```
+
+A single global toggle applies the chosen scope to all 13 offseason phases. The full per-phase configuration table is deferred to v2.
+
+**Couch Co-Op override:** All phases forced to `all-teams` (no AI teams exist).
+
+### 2.6 What Franchise Type Does NOT Change
+
+The franchise type is a **configuration layer**, not a structural change. These systems are unchanged regardless of type:
+
+- GameTracker event model
+- Stats pipeline (processes whatever events exist)
+- WAR calculations (operate on available data)
+- Narrative engine (generates from available events)
+- Designation system (triggers on available data)
+- Offseason phase sequence (just adds scope gating)
+- Almanac (stores whatever data exists)
+
+---
+
+## 3. Leagues Module
+
+### 3.1 Purpose
+
+Create and manage league templates that define team groupings, conference/division structure, and default rules. League templates exist in the global League Builder space and can be instantiated into multiple franchises.
+
+### 3.2 Features
+
+| Function | Description |
+|----------|-------------|
+| **View** | Browse existing league templates |
+| **Create** | New league with name, team selection, structure |
+| **Edit** | Modify existing league configuration |
+| **Delete** | Remove league template (doesn't affect active franchises) |
+| **Duplicate** | Copy league as starting point for new one |
+
+### 3.3 League Template Data Model
+
+```typescript
+interface LeagueTemplate {
+  id: string;
+  name: string;                    // "Kruse Baseball League"
+  description?: string;
+  createdDate: string;
+  lastModified: string;
+
+  // Team Membership (references to global team pool)
+  teamIds: string[];
+
+  // Structure
+  conferences: Conference[];
+  divisions: Division[];
+
+  // Default Rules (can be overridden at franchise creation)
+  defaultRulesPresetId: string;    // Reference to rules preset (§9)
+
+  // Branding
+  logoUrl?: string;
+  themeColor?: string;             // Hex code for UI theming
+}
+
+interface Conference {
+  id: string;
+  name: string;                    // "American League", "National League"
+  abbreviation: string;            // "AL", "NL"
+  divisionIds: string[];
+}
+
+interface Division {
+  id: string;
+  name: string;                    // "East", "West", "Central"
+  conferenceId: string;
+  teamIds: string[];
+}
+```
+
+### 3.4 League Creation Flow
+
+```
+Step 1: Name & Description
+         ↓
+Step 2: Select Teams (from global team pool)
+         ↓
+Step 3: Configure Structure
+        - Number of conferences (0, 1, 2)
+        - Number of divisions per conference
+        - Assign teams to divisions
+         ↓
+Step 4: Select Default Rules Preset
+         ↓
+Step 5: Review & Save
+```
+
+### 3.5 Structural Constraints
+
+- A league must have at least 2 teams
+- Conference count: 0 (flat league), 1, or 2
+- Division count per conference: 0 (flat conference), 1, 2, or 3+
+- Every team must be assigned to exactly one division (if divisions exist)
+- Teams can belong to multiple league templates simultaneously (templates are independent)
+
+---
+
+## 4. Teams Module
+
+> **v1 Scope:** All 6 CRUD operations kept. Deferred from §4.3: `foundedYear`, `championships`, `retiredNumbers` fields (franchise history, not team template data).
+
+### 4.1 Purpose
+
+Create, edit, and manage teams in the global team pool. Teams are reusable across multiple league templates.
+
+### 4.2 Features
+
+| Function | Description |
+|----------|-------------|
+| **Create** | New team with full customization |
+| **Edit** | Modify team details |
+| **Assign** | Add/remove team from leagues |
+| **Duplicate** | Deep copy team with independent rosters — changes to duplicate don't affect original |
+| **Import** | Upload teams via CSV |
+| **Delete** | Remove team (with confirmation if assigned to leagues) |
+
+### 4.3 Team Data Model
+
+```typescript
+interface Team {
+  id: string;
+  name: string;                  // "San Francisco Giants"
+  abbreviation: string;          // "SFG"
+  location: string;              // "San Francisco"
+  nickname: string;              // "Giants"
+
+  // Branding
+  colors: {
+    primary: string;             // Hex code "#FD5A1E" — Primary color (required)
+    secondary: string;           // Hex code "#27251F" — Secondary color (required)
+    tertiary: string;            // Hex code "#FFFFFF" — Tertiary (accent) color (required)
+  };
+  logoUrl?: string;
+
+  // Venue
+  stadium: string;               // "Oracle Park"
+
+  // League Membership (global — NOT franchise-specific)
+  leagueIds: string[];           // Can be in multiple league templates
+
+  // Metadata
+  createdDate: string;
+  lastModified: string;
+}
+```
+
+**Note:** The `controlledBy` flag (§2.2) is NOT part of the global Team model. It is assigned per-franchise during the creation wizard and stored in `FranchiseTeam`, which extends `Team`.
+
+### 4.4 Team CSV Import
+
+```csv
+name,abbreviation,location,nickname,primaryColor,secondaryColor,tertiaryColor,logoUrl,stadium
+San Francisco Giants,SFG,San Francisco,Giants,#FD5A1E,#27251F,#FFFFFF,/logos/sfg.png,Oracle Park
+New York Yankees,NYY,New York,Yankees,#003087,#E4002C,#C4CED4,/logos/nyy.png,Yankee Stadium
+```
+
+**Import flow:**
+1. Upload CSV file
+2. Preview parsed data with validation
+3. Check for duplicates (by abbreviation), required fields
+4. Confirm import
+5. Teams added to global pool
+
+---
+
+## 5. Players Module
+
+### 5.1 Purpose
+
+Create, edit, and manage the global player database. All players exist in one pool and are assigned to teams via the Rosters module (§7). The initial league is populated from the SMB4 506-player database.
+
+### 5.2 Features
+
+| Function | Description |
+|----------|-------------|
+| **Create** | New player with full attribute editor |
+| **Edit** | Modify any player attribute |
+| **Generate** | Create fictional players using grade algorithm (§5.6) |
+| **Import** | Upload players via CSV |
+| **Delete** | Remove player from database |
+
+### 5.3 Complete Player Data Model
+
+```typescript
+interface Player {
+  // ── Identity ──────────────────────────────────────────────
+  id: string;
+  firstName: string;
+  lastName: string;
+  nickname?: string;
+  gender: 'M' | 'F';
+
+  // ── Physical ──────────────────────────────────────────────
+  age: number;
+  bats: 'L' | 'R' | 'S';            // Left, Right, Switch
+  throws: 'L' | 'R';
+
+  // ── Position ──────────────────────────────────────────────
+  primaryPosition: PrimaryPosition;      // Never a composite — CorePosition only
+  secondaryPosition?: SecondaryPosition; // Can be composite or core
+
+  // ── Position Player Ratings (0-99) ────────────────────────
+  power: number;
+  contact: number;
+  speed: number;
+  fielding: number;
+  arm: number;
+
+  // ── Pitcher Ratings (0-99) ────────────────────────────────
+  velocity: number;
+  junk: number;
+  accuracy: number;
+
+  // ── Pitcher Arsenal ───────────────────────────────────────
+  arsenal: PitchType[];               // e.g., ['4F', '2F', 'CB', 'SL', 'CH']
+
+  // ── Grade (auto-calculated from ratings per §5.6) ────────
+  // NOTE: Grade is computed-only via computeGrade() — never stored directly
+
+  // ── Traits (max 2) ───────────────────────────────────────
+  trait1?: Trait;
+  trait2?: Trait;
+
+  // ── Personality (§6) ─────────────────────────────────────
+  personality: PersonalityType;       // 1 of 7 visible types
+  hiddenModifiers: HiddenModifiers;   // 4 hidden 0-100 values
+
+  // ── Chemistry ─────────────────────────────────────────────
+  chemistry: ChemistryType;           // 1 of 5 SMB4 chemistry types
+
+  // ── Status ────────────────────────────────────────────────
+  fameLevel: FameLevel;               // Per C-078: dropdown, not slider
+
+  // ── Contract ──────────────────────────────────────────────
+  salary: number;                     // In millions
+  contractYears: 1;                   // Static at 1 in League Builder; Mode 3 handles multi-year contracts
+
+  // ── Team Assignment ───────────────────────────────────────
+  currentTeamId: string | null;       // null = free agent
+  rosterLevel: RosterLevel;           // Canonical 4-value UPPERCASE enum (see SPINE_ARCHITECTURE.md)
+
+  // ── Metadata ──────────────────────────────────────────────
+  createdDate: string;
+  lastModified: string;
+  isCustom: boolean;                  // User-created vs imported
+  sourceDatabase?: string;            // "SMB4", "Custom", etc.
+}
+```
+
+### 5.4 Type Definitions
+
+```typescript
+// ═══════════════════════════════════════════════════════
+// ROSTER CONTEXT — player cards, scouting, roster mgmt
+// ═══════════════════════════════════════════════════════
+
+// Core positions: valid as primary OR secondary
+type CorePosition = 'C' | '1B' | '2B' | 'SS' | '3B' | 'LF' | 'CF' | 'RF' |
+                    'SP' | 'RP' | 'CP' | 'SP/RP';
+
+// Composite designations: valid as secondary ONLY — indicate flexibility
+type CompositePosition = 'IF' | 'OF' | 'IF/OF' | '1B/OF';
+
+// What shows on the player card
+type PrimaryPosition = CorePosition;                    // Never a composite
+type SecondaryPosition = CorePosition | CompositePosition;  // Can be composite or core
+
+// ═══════════════════════════════════════════════════════
+// IN-GAME CONTEXT — lineups, subs, fielding, enrichment
+// ═══════════════════════════════════════════════════════
+
+// Where a player is RIGHT NOW on the field
+type FieldPosition = 'C' | '1B' | '2B' | 'SS' | '3B' | 'LF' | 'CF' | 'RF' | 'P' | 'DH';
+// Note: DH is a valid FieldPosition (in-game batting order slot) but is NOT a PrimaryPosition or
+// SecondaryPosition — no player has DH on their player card. It IS a valid FieldPosition used when
+// the DH rule is active. See SPINE_ARCHITECTURE.md for the FieldPosition vs PrimaryPosition/SecondaryPosition distinction.
+
+// Composite → FieldPosition eligibility mapping
+// IF → eligible at: 1B, 2B, SS, 3B
+// OF → eligible at: LF, CF, RF
+// IF/OF → eligible at: 1B, 2B, SS, 3B, LF, CF, RF
+// 1B/OF → eligible at: 1B, LF, CF, RF
+
+// Per C-074/C-087: 13 grades, S through D-. This is the authoritative scale.
+type Grade = 'S' | 'A+' | 'A' | 'A-' | 'B+' | 'B' | 'B-' |
+             'C+' | 'C' | 'C-' | 'D+' | 'D' | 'D-';
+
+// Pitch types: Final list (removed SC and KN). UNK = unknown, used in enrichment contexts where pitch type is unidentified.
+type PitchType = '4F' | '2F' | 'CB' | 'SL' | 'CH' | 'FK' | 'CF' | 'SB' | 'UNK';
+// 4F=4-seam fastball, 2F=2-seam fastball, CB=curveball, SL=slider,
+// CH=changeup, FK=forkball, CF=cutter, SB=screwball, UNK=unknown
+
+// Per C-070: 7 personality types only. Chemistry types are separate.
+type PersonalityType = 'Competitive' | 'Relaxed' | 'Droopy' | 'Jolly' |
+                       'Tough' | 'Timid' | 'Egotistical';
+
+type ChemistryType = 'Competitive' | 'Spirited' | 'Crafty' | 'Scholarly' | 'Disciplined';
+
+// RosterLevel: 4-value UPPERCASE enum (canonical — see SPINE_ARCHITECTURE.md)
+type RosterLevel = 'MLB' | 'FARM' | 'FREE_AGENT' | 'RETIRED';
+
+// MojoLevel: Canonical 6-tier mojo scale. NOT assigned in League Builder (Mode 2 only).
+// Unified across MODE_1 and MODE_2 — see MODE_2_FRANCHISE_SEASON.md §2.1
+type MojoLevel = 'Rattled' | 'Tense' | 'Neutral' | 'Locked-In' | 'On Fire' | 'Jacked';
+// Numeric mapping: Rattled = -2, Tense = -1, Neutral = 0, Locked-In = +1, On Fire = +2, Jacked = +3
+
+// Per C-078: FameLevel replaces the numeric fame slider.
+// Auto-generated prospects cap at 'National' fame level.
+// 'Superstar' and 'Legend' are reserved for established players and cannot be assigned during generation.
+type FameLevel = 'Unknown' | 'Local' | 'Regional' | 'National' | 'Superstar' | 'Legend';
+
+interface HiddenModifiers {
+  loyalty: number;       // 0-100: FA preference, trade request likelihood
+  ambition: number;      // 0-100: Development speed, willingness to change teams
+  resilience: number;    // 0-100: Morale recovery, retirement probability
+  charisma: number;      // 0-100: Teammate morale, captain selection, mentorship
+}
+```
+
+### 5.5 Trait Catalogue
+
+Traits are SMB4 assets — KBL wraps them with strategic depth (chemistry potency) but never overrides their in-game behavior. Each trait maps to one of 5 Chemistry types. See TRAIT_INTEGRATION_SPEC.md for the full mapping table.
+
+**Position-Player-Only Traits** (can only be assigned to non-pitchers):
+
+```typescript
+// Positive Batting
+type BattingTrait = 'Clutch' | 'RBI Hero' | 'Rally Starter' | 'Tough Out' |
+  'First Pitch Slayer' | 'Bad Ball Hitter' | 'Fastball Hitter' | 'Off-Speed Hitter' |
+  'Bunter' | 'Big Hack' | 'Little Hack' | 'Mind Gamer' |
+  'Sign Stealer' | 'POW vs LHP' | 'POW vs RHP' | 'CON vs LHP' | 'CON vs RHP' |
+  'High Pitch' | 'Low Pitch' | 'Inside Pitch' | 'Outside Pitch';
+
+// Positive Fielding
+type FieldingTrait = 'Magic Hands' | 'Dive Wizard' | 'Cannon Arm';
+
+// Positive Running
+type RunningTrait = 'Stealer' | 'Sprinter' | 'Base Rounder';
+
+// Negative Batting
+type NegBattingTrait = 'Choker' | 'RBI Zero' | 'First Pitch Prayer' | 'Whiffer' | 'Easy Target';
+
+// Negative Fielding
+type NegFieldingTrait = 'Butter Fingers' | 'Noodle Arm' | 'Wild Thrower';
+
+// Negative Running
+type NegRunningTrait = 'Base Jogger' | 'Slow Poke' | 'Bad Jumps';
+
+// Positive General (position-player safe)
+type GeneralPositionTrait = 'Utility' | 'Pinch Perfect' | 'Ace Exterminator';
+```
+
+**Pitcher-Only Traits** (can only be assigned to pitchers):
+
+```typescript
+// Positive Pitching
+type PitchingTrait = 'K Collector' | 'Gets Ahead' | 'Rally Stopper' | 'Composed' |
+  'Elite 4F' | 'Elite 2F' | 'Elite CB' | 'Elite SL' | 'Elite CH' |
+  'Elite FK' | 'Elite CF' | 'Elite SB';
+
+// Negative Pitching
+type NegPitchingTrait = 'K Neglecter' | 'Falls Behind' | 'BB Prone' |
+  'Wild Thing' | 'Meltdown';
+
+// Positive General (pitcher safe)
+type GeneralPitcherTrait = 'Pick Officer' | 'Two-way' | 'Surrounded' | 'Metal Head' | 'Crossed Up';
+```
+
+**Note:** The 'Two-way' trait can ONLY be assigned to pitchers (SP, RP, CP, SP/RP).
+
+**Universal Traits** (any player):
+
+```typescript
+// Positive General
+type GeneralUniversalTrait = 'Durable' | 'Consistent' | 'Stimulated';
+
+// Negative General
+type NegGeneralTrait = 'Volatile' | 'Injury Prone';
+```
+
+```typescript
+type Trait = BattingTrait | FieldingTrait | RunningTrait | PitchingTrait |
+  GeneralPositionTrait | GeneralPitcherTrait | GeneralUniversalTrait |
+  NegBattingTrait | NegFieldingTrait | NegRunningTrait | NegPitchingTrait | NegGeneralTrait;
+```
+
+### 5.6 Grade Calculation Algorithm
+
+Grade is determined by a weighted rating. The same formula is used for grade display, salary calculation, and prospect generation.
+
+**Position Players — 3:3:2:1:1 weighting:**
+
+```typescript
+function calculatePositionPlayerWeighted(ratings: {
+  power: number; contact: number; speed: number; fielding: number; arm: number;
+}): number {
+  return (
+    ratings.power * 0.30 +
+    ratings.contact * 0.30 +
+    ratings.speed * 0.20 +
+    ratings.fielding * 0.10 +
+    ratings.arm * 0.10
+  );
+}
+```
+
+**Pitchers — equal 1:1:1 weighting:**
+
+```typescript
+function calculatePitcherWeighted(ratings: {
+  velocity: number; junk: number; accuracy: number;
+}): number {
+  return (ratings.velocity + ratings.junk + ratings.accuracy) / 3;
+}
+```
+
+**Two-Way Players — both ratings combined with 1.25× premium:**
+
+```typescript
+function calculateTwoWayWeighted(posRatings: PositionPlayerRatings, pitchRatings: PitcherRatings): number {
+  return (calculatePositionPlayerWeighted(posRatings) + calculatePitcherWeighted(pitchRatings)) * 1.25;
+}
+```
+
+**Position-based and trait-based modifiers:**
+
+After calculating the weighted rating, apply:
+- **Position modifier:** Small adjustment based on positional value (e.g., SS/CF get small boost, 1B/LF get small penalty to reflect defensive spectrum)
+- **Trait modifier:** Positive traits add a small bonus (+1-3 to weighted), negative traits add a small penalty (-1-3). Net trait impact capped at ±5.
+
+Note: These modifiers require calibration against the SML 506-player database to ensure grades remain aligned.
+
+### 5.7 Grade Thresholds
+
+Per C-074/C-087: 13 grades, S through D-. This is the authoritative scale used everywhere in KBL.
+
+```typescript
+const GRADE_THRESHOLDS: { grade: Grade; minWeighted: number }[] = [
+  { grade: 'S',  minWeighted: 80 },
+  { grade: 'A+', minWeighted: 78 },
+  { grade: 'A',  minWeighted: 73 },
+  { grade: 'A-', minWeighted: 66 },
+  { grade: 'B+', minWeighted: 58 },
+  { grade: 'B',  minWeighted: 55 },
+  { grade: 'B-', minWeighted: 48 },
+  { grade: 'C+', minWeighted: 45 },
+  { grade: 'C',  minWeighted: 38 },
+  { grade: 'C-', minWeighted: 35 },
+  { grade: 'D+', minWeighted: 30 },
+  { grade: 'D',  minWeighted: 25 },
+  { grade: 'D-', minWeighted: 0 },
+];
+
+function getGrade(weighted: number): Grade {
+  for (const t of GRADE_THRESHOLDS) {
+    if (weighted >= t.minWeighted) return t.grade;
+  }
+  return 'D-';
+}
+```
+
+**Verification examples (from SMB4 data):**
+
+| Player | Grade | POW | CON | SPD | FLD | ARM | Weighted |
+|--------|-------|-----|-----|-----|-----|-----|----------|
+| Sakda Song | S | 80 | 93 | 90 | 82 | 57 | 83.8 |
+| Elvis Stanley | A | 68 | 80 | 75 | 87 | 77 | 75.8 |
+| Kobe Kingman | B | 95 | 27 | 51 | 68 | 63 | 59.9 |
+| Bertha Banks | B- | 64 | 56 | 51 | 67 | 52 | 58.1 |
+| Benny Balmer | C+ | 32 | 40 | 58 | 89 | 84 | 50.5 |
+
+### 5.8 Fictional Player Generation
+
+Used both in the League Builder (manual generation) and in the Startup Prospect Draft (§8).
+
+```typescript
+interface GeneratePlayersConfig {
+  count: number;
+  targetGrade: Grade;
+  positionDistribution: 'balanced' | 'random' | Position;
+  genderRatio: number;             // 0.25 = 25% female
+  ageRange: { min: number; max: number };
+  includeTraits: boolean;
+  traitPool: 'positive_only' | 'neutral' | 'any';
+}
+```
+
+**Position-based stat bias** — prospects at each position have realistic stat shapes. Distribution should be derived from analysis of the 506-player SML database. Placeholder values pending analysis:
+
+| Position | Bias | Rationale |
+|----------|------|-----------|
+| C | +10 FLD, +10 ARM, -10 SPD | Catchers: defense over speed |
+| 1B | +15 POW, -10 SPD, -5 FLD | First base: power sluggers |
+| 2B | +5 CON, +5 SPD, -10 POW | Second base: contact/speed |
+| SS | +10 FLD, +5 ARM, -10 POW, +5 SPD | Shortstop: defense + speed |
+| 3B | +10 POW, +5 ARM, -10 SPD | Third base: power + arm |
+| LF | +10 POW, -5 FLD, -5 ARM | Left field: offense-first |
+| CF | +15 SPD, +5 FLD, -10 POW | Center field: speed + range |
+| RF | +5 POW, +10 ARM, -5 SPD | Right field: power + arm |
+
+**Pitcher prospect stat bias:**
+
+| Role | Bias | Rationale |
+|------|------|-----------|
+| SP | +5 ACC, -2 VEL, -3 JNK | Starters: balanced, accuracy emphasis |
+| CP | +8 VEL, +5 JNK, -13 ACC | Closers: velocity + junk |
+| RP | Random archetype (power arm, crafty, or balanced) | High variance |
+
+**ALL GeneratePlayersConfig variables are user-configurable** in the setup wizard before prospect draft. Users can adjust count, target grade, position distribution, gender ratio, age range, trait inclusion, and trait pool before generation.
+
+### 5.9 FameLevel (Per C-078)
+
+Fame is a 6-tier dropdown, not a numeric slider:
+
+```typescript
+const FAME_LEVELS: { level: FameLevel; description: string }[] = [
+  { level: 'Unknown',    description: 'No public recognition' },
+  { level: 'Local',      description: 'Known in team market' },
+  { level: 'Regional',   description: 'Known across conference' },
+  { level: 'National',   description: 'Nationally recognized' },
+  { level: 'Superstar',  description: 'Household name' },
+  { level: 'Legend',      description: 'All-time great status' },
+];
+```
+
+FameLevel is set at import (based on SMB4 fame value mapping) and evolves during the franchise via the narrative engine (Mode 2).
+
+**Auto-generated prospects cap at 'National' fame level.** 'Superstar' and 'Legend' are reserved for established players and cannot be assigned during generation.
+
+---
+
+## 6. Personality & Traits — Initial Assignment
+
+### 6.1 When Assignment Happens
+
+All 506 players (or however many are imported) receive personality and trait data at league creation. Imported players who already have trait data tied to their playerID should NOT have traits reassigned. They keep existing traits. They DO receive auto-assigned personality types and hidden modifiers.
+
+**Assignment scope clarification:** Trait generation logic (§6.4 distribution rules, 15% negative, position-appropriate assignment) applies ONLY to generated players (Startup Prospect Draft farm prospects, Fantasy Draft generated prospects). Players uploaded via CSV import or already existing in the player database keep their existing traits — they are NOT reassigned. However, ALL players (imported AND generated) DO receive auto-assigned personality types (§6.2) and hidden personality modifiers (§6.3) as part of Mode 1 league creation.
+
+This is a Mode 1 operation — subsequent changes happen in Mode 2 (in-season) and Mode 3 (offseason).
+
+### 6.2 Personality: 7 Visible Types
+
+Per C-070: The personality type union is exactly 7 types. Chemistry types (`Competitive`, `Spirited`, `Crafty`, `Scholarly`, `Disciplined`) are a separate system and must NOT appear in the personality type dropdown.
+
+| Type | Weight | Behavioral Tendency |
+|------|--------|---------------------|
+| **Competitive** | 20% | Seeks contenders, responds to challenges |
+| **Relaxed** | 20% | Comfortable with status quo |
+| **Jolly** | 15% | Loves teammates, adventurous |
+| **Tough** | 15% | Bounces back, values respect |
+| **Timid** | 10% | Fears change, avoids spotlight |
+| **Droopy** | 10% | Pessimistic, prone to slumps |
+| **Egotistical** | 10% | Wants money and glory |
+
+**Personalities are randomized but balanced across the league at league creation time to ensure even distribution per these weights.**
+
+### 6.3 Personality: 4 Hidden Modifiers
+
+Generated via Gaussian distribution: μ=50, σ=20, clamped [0, 100]. Visible type creates soft bias:
+
+| Personality | Modifier Bias |
+|-------------|--------------|
+| Competitive | +10 Ambition |
+| Relaxed | +10 Resilience |
+| Jolly | +10 Charisma |
+| Tough | +10 Resilience, +5 Loyalty |
+| Timid | -10 Ambition, +5 Loyalty |
+| Droopy | -10 Resilience |
+| Egotistical | +15 Ambition, -10 Loyalty |
+
+**Hidden modifiers are NEVER shown as numbers to the user.** They surface only through behavioral signals and beat reporter hints (Mode 2). See MODE_2_FRANCHISE_SEASON.md §Narrative for surfacing rules.
+
+### 6.4 Initial Trait Distribution
+
+From the 506-player SMB4 database (and maintained for generated players):
+
+| Trait Count | Percentage |
+|-------------|-----------|
+| 0 traits | ~30% |
+| 1 trait | ~50% |
+| 2 traits | ~20% |
+
+**Trait rules at assignment:**
+- Max 2 traits per player (hard cap)
+- Traits must be position-appropriate (batting/running/fielding traits for position players, pitching traits for pitchers, both for two-way)
+- Chemistry type does NOT restrict which traits a player can receive (C-064 resolved by C-086: chemistry affects potency, not eligibility)
+- 15% of assigned traits are negative (for generated players — SMB4 imports keep their original traits)
+- **The 'Two-way' trait can ONLY be assigned to pitchers (SP, RP, CP, SP/RP).**
+
+### 6.5 Trait Visibility on Farm
+
+Per C-054: Traits are HIDDEN on farm prospects. True numeric ratings are also hidden until call-up. The scouted grade (§8.6) is the user's only indicator of a farm prospect's true ability.
+
+| Data Point | Farm (Pre-Call-Up) | MLB (Post-Call-Up) |
+|-----------|-------------------|-------------------|
+| Scouted Grade | ✅ Visible | Replaced by true grade |
+| Position | ✅ Visible | ✅ Visible |
+| Chemistry Type | ✅ Visible | ✅ Visible |
+| Traits | ❌ Hidden | ✅ Visible |
+| Personality (visible type) | ✅ Visible | ✅ Visible |
+| Personality (hidden modifiers) | ❌ Hidden | ❌ Hidden (surfaced via narrative) |
+| True numeric ratings | ❌ Hidden | ✅ Revealed at call-up |
+
+---
+
+## 7. Rosters Module
+
+### 7.1 Purpose
+
+Assign players to teams. Roster assignments in the League Builder are templates — they get copied into the franchise at creation time. Rosters module in League Builder is for player-to-team assignment ONLY. Lineups are configured in Mode 2 (in-season) and Mode 3 (pre-season advance).
+
+### 7.2 Features
+
+| Function | Description |
+|----------|-------------|
+| **Assign** | Move players between teams / free agency |
+| **Validate** | Check roster compliance |
+
+### 7.3 Roster Data Model
+
+```typescript
+interface TeamRoster {
+  teamId: string;
+
+  // Player Lists
+  mlbRoster: string[];             // Player IDs (target: 22)
+  farmRoster: string[];            // Player IDs (max: 10)
+
+  // Depth Chart (optional, for positional guidance only)
+  depthChart?: DepthChart;
+}
+
+// Depth Chart uses CorePosition keys (roster context, not in-game FieldPosition)
+interface DepthChart {
+  C: string[];
+  '1B': string[];
+  '2B': string[];
+  SS: string[];
+  '3B': string[];
+  LF: string[];
+  CF: string[];
+  RF: string[];
+  SP: string[];
+  'SP/RP': string[];
+  RP: string[];
+  CP: string[];
+}
+```
+
+### 7.4 Roster Validation Rules
+
+```typescript
+const ROSTER_RULES = {
+  mlbRosterSize: 22,               // Fixed at 22 for v1
+  farmRosterMax: 10,
+
+  positionMinimums: {
+    C: 2, '1B': 1, '2B': 1, SS: 1, '3B': 1,
+    LF: 1, CF: 1, RF: 1, SP: 4, RP: 5,
+  },
+};
+```
+
+Minimum 5 for any combo of RP + SP/RP + CP.
+
+Validation warnings (non-blocking) appear if a roster doesn't meet minimums. The user can proceed anyway — KBL doesn't force compliance at League Builder level, only warns.
+
+---
+
+## 8. Draft Module
+
+### 8.1 Purpose
+
+Two draft types operate in Mode 1:
+
+1. **Fantasy Draft** — optional alternative to using existing rosters. Snake draft to build MLB rosters from scratch.
+2. **Startup Prospect Draft** — populates farm rosters before Season 1. Final step of the creation wizard.
+
+The annual draft (each offseason) reuses the prospect generation and scouting systems defined here. See MODE_3_OFFSEASON_WORKSHOP.md §Phase 7.
+
+### 8.2 Fantasy Draft Configuration
+
+```typescript
+interface DraftConfig {
+  leagueId: string;
+
+  // Player Pool Source
+  playerPoolSource:
+    | { type: 'league'; leagueId: string }
+    | { type: 'all' }
+    | { type: 'generated'; config: GeneratePlayersConfig };
+
+  // Draft Format
+  format: 'snake' | 'straight' | 'auction';
+  rounds: number;                    // Default: 22 (full MLB roster)
+  timePerPick: number;               // Seconds (0 = unlimited)
+
+  // Team Order
+  draftOrder: string[];              // Team IDs in pick order
+
+  // User Control
+  userControlledTeams: string[];     // Which teams user drafts for
+
+  // AI Settings
+  aiDraftStrategy: 'best_available' | 'position_need' | 'balanced';
+}
+```
+
+### 8.3 Startup Prospect Draft
+
+Runs at the end of the franchise creation wizard (§11, Step 5B). Populates farm rosters so teams begin with realistic prospect pipelines.
+
+**Format:**
+- Snake draft (mirrors annual draft format)
+- Order: Reverse order of team salaries (requires salary calculation step first)
+- Rounds: 10 (default — each farm team gets 10 prospects)
+- Pool size: 3× total picks (ensures meaningful choice)
+
+**User control:**
+- User drafts for all human-controlled teams
+- AI auto-drafts for AI teams using `best_available` strategy
+- Scouts are applied — prospects have scouted grades, not true grades
+- A unique scout is assigned to each team before the draft begins, so each team will have independent scouting projections. See §8.6.
+
+**Skip option:** If skipped, all farm rosters begin empty. First annual draft (end of Season 1) is the first chance to populate farms.
+
+### 8.4 Prospect Pool Generation
+
+```typescript
+function generateStartupProspectPool(
+  numTeams: number,
+  roundsPerTeam: number
+): FarmProspect[] {
+  const totalPicks = numTeams * roundsPerTeam;
+  const poolSize = totalPicks * 3;
+
+  return generateDraftClass({
+    size: poolSize,
+    gradeDistribution: 'bell_curve',      // Centered B/B-/C+
+    positionDistribution: 'balanced',
+    chemistryDistribution: 'even_5',      // ~20% each chemistry type
+    ageRange: { min: 18, max: 23 },
+    includeInactivePlayers: false,
+  });
+}
+```
+
+### 8.5 Draft Class Grade Distribution
+
+The overall grade distribution table (with A through D grades) defines the POOL generation. Round-weighted generation uses the full grade range (A through D) with round-appropriate probabilities. Earlier rounds have higher chance of A/A- grades, later rounds have higher chance of C-/D grades.
+
+**Overall Distribution:**
+
+| Grade | % | Notes |
+|-------|---|-------|
+| A | 2% | Generational talent |
+| A- | 5% | Elite prospect |
+| B+ | 10% | Very good |
+| B | 15% | Good |
+| B- | 15% | Average |
+| C+ | 15% | Below average |
+| C | 18% | Filler/depth |
+| C- | 12% | Long shot |
+| D+ | 4% | Organizational |
+| D | 4% | Long shot |
+
+**Round-weighted generation** — earlier rounds produce better prospects:
+
+| Round | A | A- | B+ | B | B- | C+ | C | C- | D+ | D |
+|-------|---|----|----|---|----|----|----|----|----|---|
+| 1 | 4% | 8% | 15% | 20% | 22% | 18% | 8% | 3% | 1% | 1% |
+| 2-3 | 2% | 5% | 10% | 15% | 20% | 25% | 15% | 5% | 2% | 1% |
+| 4+ | 1% | 2% | 5% | 10% | 15% | 25% | 25% | 12% | 4% | 1% |
+
+### 8.6 Scout Accuracy System
+
+Prospects have hidden true ratings. The user sees only scouted grades with position-based accuracy deviation. Each team is assigned a scout with a distinct accuracy profile. Scouts have a specialty position where accuracy is +15 above baseline, and a weakness position where accuracy is -10 below baseline. The base accuracy table remains the same, but each team's scout provides unique scouting projections.
+
+```typescript
+interface ScoutProfile {
+  id: string;
+  teamId: string;
+  specialtyPosition: Position;  // +15 accuracy bonus
+  weaknessPosition: Position;   // -10 accuracy penalty
+  baseAccuracy: Record<Position, number>;  // Position-based accuracy from table below
+}
+```
+
+**Base accuracy by position:**
+
+| Position | Accuracy | σ | Typical Deviation |
+|----------|----------|---|-------------------|
+| 1B | 80 | 0.91 | Usually ±1, rare ±2 |
+| SP, 3B | 75 | 1.14 | ±1-2 common |
+| C, 2B, LF, RF | 70 | 1.36 | ±1-2 common, occasional ±3 |
+| SS, CF, RP | 65 | 1.59 | Often ±2, ±3 possible |
+| CP | 60 | 1.82 | Widest spread, ±4 possible |
+
+**Deviation formula:**
+
+```typescript
+function generateScoutedGrade(trueGrade: Grade, position: string, scout: ScoutProfile): Grade {
+  let accuracy = scout.baseAccuracy[position] || 70;
+
+  // Apply specialty/weakness modifiers
+  if (position === scout.specialtyPosition) accuracy += 15;
+  if (position === scout.weaknessPosition) accuracy -= 10;
+
+  const sigma = (100 - accuracy) / 22;
+
+  // Box-Muller normal sample
+  const u1 = Math.random();
+  const u2 = Math.random();
+  const z = Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
+
+  // Scale, round, and hard-cap at ±4 steps
+  const deviation = Math.max(-4, Math.min(4, Math.round(z * sigma)));
+
+  return adjustGradeBySteps(trueGrade, deviation);
+}
+```
+
+σ is derived from `(100 - accuracy) / 22`. The ±4 hard cap prevents impossible grades (a D prospect cannot appear as A+).
+
+### 8.7 Prospect Salary
+
+Rookie salary assigned at draft time per SALARY_SYSTEM_SPEC round-based salary table. The startup draft uses the same table as annual drafts.
+
+### 8.8 Flow Position in Franchise Creation
+
+```
+Step 1: Select League
+Step 2: Season Settings
+Step 3: Playoff Settings
+Step 4: Team Control & Franchise Type
+Step 5A: Roster Mode (existing rosters OR fantasy draft)
+Step 5B: Salary Calculation (compute initial salaries from ratings/grades)
+Step 5C: Startup Prospect Draft (if not skipped)
+Step 6: Confirm & Start Franchise
+```
+
+---
+
+## 9. Rules Configuration
+
+> **v1 Scope:** User configures all rules directly (no presets). Deferred: AI behavior sliders (6 — hardcoded defaults in v1), pitchCounts/moundVisits game settings (no Mode 2 consumer), all 4 built-in presets + preset selection concept.
+
+### 9.1 Purpose
+
+Create and manage rules presets that define gameplay, season, and economic settings. Presets are stored in the League Builder and copied into franchises at creation.
+
+### 9.2 Rules Preset Structure
+
+```typescript
+interface RulesPreset {
+  id: string;
+  name: string;
+  description: string;
+  isDefault: boolean;
+  isEditable: boolean;          // Built-in presets are read-only
+
+  // ═══════════════════════════════════════════════════════
+  // GAME SETTINGS
+  // ═══════════════════════════════════════════════════════
+  game: {
+    inningsPerGame: number;       // 1-9 (bounded range, fully custom)
+    extraInningsRule: 'none' | 'runner_on_second' | 'standard';
+    mercyRule: {
+      enabled: boolean;
+      runDifferential: number;
+      afterInning: number;
+    };
+  };
+
+  // ═══════════════════════════════════════════════════════
+  // SEASON SETTINGS
+  // Per C-071: gamesPerTeam is a number with bounds 8-200
+  // ═══════════════════════════════════════════════════════
+  season: {
+    gamesPerTeam: number;       // 8-200 (presets: 16, 32, 40, 80, 128, 162)
+    allStarGame: boolean;
+    allStarTiming: number;      // Percentage of season (0.6 = 60%)
+    tradeDeadline: {
+      enabled: boolean;
+      timing: number;           // Percentage of season (0.7 = 70%)
+    };
+  };
+
+  // ═══════════════════════════════════════════════════════
+  // PLAYOFF SETTINGS
+  // ═══════════════════════════════════════════════════════
+  playoffs: {
+    teamsQualify: 2 | 4 | 6 | 8 | 10 | 12;
+    format: 'bracket' | 'pool' | 'best_record_bye';
+    wildcardSeries: { games: 1 | 3 | 5 | 7 | 9; homeGames: number };
+    divisionSeries: { games: 1 | 3 | 5 | 7 | 9; homeGames: number };
+    championshipSeries: { games: 1 | 3 | 5 | 7 | 9; homeGames: number };
+    worldSeries: { games: 1 | 3 | 5 | 7 | 9; homeGames: number };
+    homeFieldAdvantage: '2-3-2' | '2-2-1' | 'alternating';
+    tiebreakers: 'run_differential';  // Simplified: run_differential only. If still tied, prompt user to decide.
+  };
+
+  // ═══════════════════════════════════════════════════════
+  // DESIGNATED HITTER
+  // ═══════════════════════════════════════════════════════
+  dh: {
+    rule: 'always' | 'never' | 'league_specific';
+    leagueSettings?: { [conferenceId: string]: boolean };
+  };
+
+  // ═══════════════════════════════════════════════════════
+  // ROSTER RULES
+  // ═══════════════════════════════════════════════════════
+  roster: {
+    mlbRosterSize: number;          // Default: 22
+    farmRosterSize: number;         // Default: 10
+  };
+
+  // ═══════════════════════════════════════════════════════
+  // AWARDS CEREMONY
+  // ═══════════════════════════════════════════════════════
+  awardsCeremony: 'full' | 'team_only' | 'off';
+
+  // OFFSEASON
+  // ═══════════════════════════════════════════════════════
+  offseason: {
+    draftEnabled: boolean;
+    draftRounds: number;
+    draftOrder: 'inverse_salary' | 'lottery' | 'snake';
+    freeAgencyEnabled: boolean;
+    freeAgencyDuration: number;
+    ratingsAdjustmentEnabled: boolean;
+    retirementEnabled: boolean;
+    expansionEnabled: boolean;       // Expansion only (no contraction in v1)
+  };
+}
+```
+
+
+---
+## 10. Schedule Setup
+
+> **v1 Scope:** CSV upload + manual entry + empty schedule launch. Deferred: Screenshot/OCR extraction, SIMULATED GameStatus value.
+
+### 10.1 Schedule Model
+
+KBL does NOT auto-generate schedules. Users drive schedule creation via two input methods:
+
+**Two input methods (both v1):**
+
+1. **CSV Upload:** User uploads a CSV with columns (gameNumber, homeTeam, awayTeam, fictionalDate). Setup wizard parses, validates, and populates.
+
+   ```csv
+   gameNumber,homeTeam,awayTeam,fictionalDate
+   1,SFG,LAD,April 1, Year 1
+   2,LAD,SFG,April 2, Year 1
+   3,SFG,SD,April 3, Year 1
+   ```
+
+2. **Manual entry:** Add games one at a time during the season.
+
+**Additionally:** In-season, user can add games manually one at a time.
+
+**If no schedule uploaded:** Season launches with empty schedule and user adds games manually.
+
+```typescript
+interface ScheduleConfig {
+  gamesPerTeam: number;            // From rules preset (for validation)
+  userProvidedGames: ScheduledGame[];
+}
+
+// GameStatus: 5-value UPPER_SNAKE enum (canonical — see SPINE_ARCHITECTURE.md)
+type GameStatus = 'SCHEDULED' | 'IN_PROGRESS' | 'COMPLETED' | 'SKIPPED';
+
+interface ScheduledGame {
+  id: string;                    // UUID
+  gameNumber: number;            // Sequential within schedule
+  homeTeamId: string;
+  awayTeamId: string;
+  fictionalDate: GameDate;       // "April 3, Year 1" — GameDate is canonical type name
+  dayNumber?: number;            // Day within season (for ordering)
+  time?: string;                 // Optional game time
+  status: GameStatus;              // At franchise creation, all games initialize as 'SCHEDULED'. IN_PROGRESS, COMPLETED, and SKIPPED are set by Mode 2 during gameplay.
+  seriesId?: string;               // Auto-grouped into series
+  result?: GameResult;             // null until completed
+}
+```
+
+### 10.2 User Editing
+
+After load, users can:
+- Swap home/away for any game
+- Move games to different dates
+- Add/remove games (with validation warning if total changes)
+- The schedule view in Mode 2 shows the same data with game results filled in
+
+### 10.3 Franchise Type Impact on Schedule
+
+**Solo/Custom:** Schedule shows all league games. Human team's games are primary. AI-vs-AI games shown in secondary section for optional score entry.
+
+**Couch Co-Op:** Full league schedule. "Next unplayed game" highlights any team's next game.
+
+See §2.2 and MODE_2_FRANCHISE_SEASON.md §Schedule for in-season schedule behavior.
+
+---
+
+## 11. Franchise Creation Wizard
+
+> **v1 Scope:** Full 6-step wizard kept. Deferred: §11.8 Playoff Mode wizard, `aiScoreEntry` field/toggle, per-phase offseason scope, preset references/selection.
+
+### 11.1 Overview
+
+The wizard is a 6-step flow triggered by "New Franchise" from the main menu. Each step captures configuration that feeds into franchise initialization (§12).
+
+```
+Step 1    Step 2    Step 3    Step 4    Step 5    Step 6
+[●]───────[○]───────[○]───────[○]───────[○]───────[○]
+League    Season    Playoffs   Type &    Rosters,  Confirm
+                              Teams     Salary,
+                                        & Draft
+```
+
+### 11.2 Step 1: Select League
+
+Choose which league template to use as the franchise foundation.
+
+**Data captured:**
+```typescript
+interface Step1Data {
+  selectedLeagueId: string;
+  leagueName: string;
+  teamCount: number;
+  // Rules configured inline (no presets)
+}
+```
+
+Options: select from existing league templates, or jump to League Builder to create a new one. If only one league exists, it's pre-selected.
+
+### 11.3 Step 2: Season Settings
+
+Configure regular season parameters. User sets all values directly.
+
+**Data captured:**
+```typescript
+interface Step2Data {
+  gamesPerTeam: number;           // 8-200 (per C-071)
+  inningsPerGame: number;         // 1-9 (bounded range)
+  extraInningsRule: 'none' | 'runner_on_second' | 'standard';
+  allStarGame: boolean;
+  tradeDeadline: boolean;
+  mercyRule: boolean;
+}
+```
+
+User configures all values to match their SMB4 console settings.
+
+### 11.4 Step 3: Playoff Settings
+
+**Data captured:**
+```typescript
+interface Step3Data {
+  playoffTeams: 2 | 4 | 6 | 8 | 10 | 12;
+  playoffFormat: 'bracket' | 'pool' | 'best_record_bye';
+  wildcardGames: 1 | 3 | 5 | 7 | 9;
+  divisionSeriesGames: 1 | 3 | 5 | 7 | 9;
+  championshipSeriesGames: 1 | 3 | 5 | 7 | 9;
+  worldSeriesGames: 1 | 3 | 5 | 7 | 9;
+  homeFieldAdvantage: '2-3-2' | '2-2-1' | 'alternating';
+}
+```
+
+### 11.5 Step 4: Franchise Type & Team Control
+
+This step combines franchise type selection (§2) with team control assignment.
+
+**Flow:**
+1. Select franchise type: Solo / Couch Co-Op / Custom
+2. Based on type:
+   - **Solo:** Select 1 team as human. Rest become AI.
+   - **Couch Co-Op:** All teams are human. No selection needed.
+   - **Custom:** Select 2+ teams as human. Optionally assign teams to players for multiplayer.
+3. Configure offseason scope: all-teams or human-only (defaults from §2.5)
+4. Configure awards ceremony toggle: full / team_only / off
+
+**Data captured:**
+```typescript
+interface Step4Data {
+  franchiseType: 'solo' | 'couch-coop' | 'custom';
+  humanTeamIds: string[];
+  aiTeamIds: string[];
+  isMultiplayer: boolean;
+  playerAssignments?: Record<number, string>;  // Player 1 → teamId
+  offseasonScope: 'all-teams' | 'human-only';
+  awardsCeremony: 'full' | 'team_only' | 'off';
+}
+```
+
+**Validation:**
+- At least 1 team must be human-controlled
+- Solo must have exactly 1 human team
+- Couch Co-Op must have all teams human
+- Custom must have 2+ human teams
+
+### 11.6 Step 5: Rosters, Salary & Draft
+
+Three sub-steps:
+
+**5A: Roster Mode**
+- Use existing rosters from League Builder, OR
+- Run fantasy draft to build rosters from scratch
+
+**5B: Salary Calculation**
+- Compute initial salaries from ratings/grades for all rostered players
+- This establishes the salary baseline used for draft order in 5C
+
+**5C: Startup Prospect Draft** (after 5B)
+- Run startup prospect draft to populate farm rosters (§8.3), OR
+- Skip — farms start empty
+- Draft order: reverse order of team salaries (computed in 5B)
+
+**Data captured:**
+```typescript
+interface Step5Data {
+  rosterMode: 'existing' | 'draft';
+  draftConfig?: DraftConfig;       // If fantasy draft chosen
+  salaryCalculated: boolean;       // Has salary calculation been run?
+  startupDraft: boolean;           // Run startup prospect draft?
+  startupDraftRounds?: number;     // Default: 10
+}
+```
+
+Step 6: Confirm & Start
+
+Review all settings, name the franchise, and start.
+
+**Data captured:**
+```typescript
+interface Step6Data {
+  franchiseName: string;
+  confirmed: boolean;
+}
+```
+
+**On confirm → triggers franchise initialization (§12).**
+
+### 11.9 Navigation Rules
+
+- **Back:** Always available (except Step 1)
+- **Next:** Only enabled when current step validates
+- **Cancel:** Prompts "Are you sure?" confirmation
+- **Jump to step:** Can jump back to completed steps, cannot skip ahead
+
+---
+
+## 12. Franchise Handoff & Initialization
+
+### 12.1 What Happens on "Start Franchise"
+
+Per C-076: The handoff from Mode 1 to Mode 2 must be a **copy, not a reference.** Changes to League Builder templates after franchise creation do NOT propagate to active franchises.
+
+**Initialization sequence:**
+
+```typescript
+async function initializeFranchise(setup: FranchiseSetupData): Promise<FranchiseId> {
+  // 1. Create franchise save slot (new IndexedDB instance)
+  const franchiseId = generateFranchiseId();
+  const db = await createFranchiseDB(franchiseId);
+
+  // 2. Copy league structure (conferences, divisions, teams)
+  const league = await copyLeagueTemplate(setup.leagueId);
+  await db.put('league', league);
+
+  // 3. Copy team data with controlledBy flags
+  const teams = await copyTeamsWithFlags(league.teamIds, setup.step4Data);
+  await db.putAll('teams', teams);
+
+  // 4. Copy rosters (or redirect to draft if selected)
+  if (setup.rosterMode === 'existing') {
+    await copyRosters(db, league.teamIds);
+  }
+  // If 'draft', fantasy draft runs before this point
+
+  // 5. Copy rules preset (snapshot — not a reference)
+  const rules = copyInlineRulesConfig(setup.step2Data, setup.step3Data);
+  await db.put('rules', rules);
+
+  // 6. Initialize salary ledger (per C-076)
+  // 7. Initialize empty standings tables (per C-076)
+  await initializeStandings(db, league);
+
+  // 8. Load user-uploaded schedule or initialize empty schedule for manual game entry
+  if (setup.uploadedSchedule) {
+    await db.putAll('schedule', setup.uploadedSchedule);
+  } else {
+    await db.put('schedule', { games: [] });  // Empty, user adds manually
+  }
+
+  // 9. Initialize empty stats stores
+  await initializeStatsStores(db);
+
+  // 9.5. Initialize named NPCs
+  for (const team of teams) {
+    // Beat reporter: random personality per MODE_2 §16.2 weights
+    await db.put('beatReporters', {
+      id: generateId(),
+      firstName: generateName('first'),
+      lastName: generateName('last'),
+      teamId: team.id,
+      personality: weightedRandom(REPORTER_PERSONALITY_WEIGHTS),
+      alignment: 'NEUTRAL',
+      revealLevel: 'SURFACE',
+      trustScore: 50,
+      moraleInfluence: 0,
+      tenure: 0,
+      reputation: 'ROOKIE',
+      storiesWritten: 0,
+      hiredDate: { month: 'March', year: 1 },
+    });
+
+    // Manager: name only (mechanical effects TBD)
+    await db.put('managers', {
+      id: generateId(),
+      firstName: generateName('first'),
+      lastName: generateName('last'),
+      teamId: team.id,
+    });
+
+    // Scout: specialty/weakness per §8.6
+    await db.put('scouts', createScoutProfile(team.id));
+  }
+
+  // 10. Initialize franchise metadata
+  await db.put('metadata', {
+    franchiseId,
+    name: setup.franchiseName,
+    franchiseType: setup.step4Data.franchiseType,
+    humanTeamIds: setup.step4Data.humanTeamIds,
+    offseasonScope: setup.step4Data.offseasonScope,
+    awardsCeremony: setup.step4Data.awardsCeremony,
+    currentSeason: 1,
+    createdAt: Date.now(),
+    lastPlayedAt: Date.now(),
+    schemaVersion: 1,
+  });
+
+  // 11. Set as active franchise
+  await setActiveFranchise(franchiseId);
+
+  return franchiseId;
+}
+```
+
+### 12.2 Mode Transition Screen (Per C-077)
+
+After initialization completes, a transition screen appears before entering Mode 2:
+
+```
+╔══════════════════════════════════════════════════════════════╗
+║                   FRANCHISE CREATED!                        ║
+║                                                              ║
+║  "Dynasty League — Season 1"                                ║
+║                                                              ║
+║  16 teams • 32 games • 7 innings                            ║
+║  Your team: San Francisco Giants                            ║
+║                                                              ║
+║  Season starts April 1, Year 1                              ║
+║  First game: Giants vs Dodgers                              ║
+║                                                              ║
+║                    [▶ BEGIN SEASON]                          ║
+╚══════════════════════════════════════════════════════════════╝
+```
+
+This screen serves as the boundary between Mode 1 and Mode 2. Clicking "Begin Season" navigates to the Mode 2 dashboard.
+
+### 12.3 Subsystem Initialization Detail
+
+**Salary ledger (C-076):**
+- Every player gets their initial salary recorded
+- Team payroll totals calculated
+
+**Standings tables (C-076):**
+- One row per team, initialized to the full `StandingsEntry` interface (see MODE_2 §21.1):
+
+```typescript
+// Standings initialization (per team)
+{
+  teamId: team.id,
+  wins: 0, losses: 0, winPct: 0, gamesBack: 0,
+  streak: { type: 'W', count: 0 },
+  last10: { wins: 0, losses: 0 },
+  homeRecord: { wins: 0, losses: 0 },
+  awayRecord: { wins: 0, losses: 0 },
+  divisionRecord: { wins: 0, losses: 0 },
+  runsScored: 0, runsAllowed: 0, runDifferential: 0,
+  pythagoreanWinPct: null,      // Computed after first game
+  magicNumber: null,             // Computed when applicable
+  eliminationNumber: null,       // Computed when applicable
+  playoffStatus: 'IN_HUNT',     // All teams start in hunt
+}
+```
+- Conference standings if conferences exist
+- Division standings if divisions exist
+
+**Stats stores:**
+- Empty season batting stats table
+- Empty season pitching stats table
+- Empty season fielding stats table
+- Empty event log (with betweenPlayEvents store for multi-event sequences)
+- Career stats initialized from import data (if any)
+
+**franchiseId (C-076):**
+- Every data record within the franchise includes `franchiseId` as a foreign key
+- Prevents data bleed between franchises
+
+---
+
+## 13. Data Architecture
+
+> **v1 Scope:** Full two-tier data architecture kept. Deferred: §13.7 legacy data migration (v1 is a fresh start), `rulesPresets` global store (presets removed per §9).
+
+### 13.1 Global vs Franchise Data
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│                     GLOBAL DATA (League Builder)              │
+│  Shared across all franchises, persists in kbl-app-meta DB   │
+├──────────────────────────────────────────────────────────────┤
+│                                                               │
+│  Players ──N:1── Teams ──N:M── Leagues ──1:N── Rules Presets │
+│     │              │              │                           │
+│     └── Rosters    │              │                           │
+│         (per-team) │              │                           │
+│                    │              │                           │
+└────────────────────┼──────────────┼───────────────────────────┘
+                     │              │
+                     │  "Start Franchise" (COPY, not reference)
+                     ▼              ▼
+┌──────────────────────────────────────────────────────────────┐
+│              FRANCHISE INSTANCE (per C-076)                   │
+│  Isolated IndexedDB: kbl-franchise-{id}                      │
+├──────────────────────────────────────────────────────────────┤
+│                                                               │
+│  Franchise Metadata                                          │
+│  ├── Name, type, season pointer, humanTeamIds                │
+│  ├── Rules snapshot                                          │
+│  └── Phase scopes                                            │
+│                                                               │
+│  Seasons (1, 2, 3...)                                        │
+│  ├── Season Stats (batting, pitching, fielding)              │
+│  ├── Event Logs (every at-bat with full context)             │
+│  ├── Standings & Schedule                                    │
+│  └── Playoff Results                                         │
+│                                                               │
+│  Career Stats (accumulated across seasons)                   │
+│  ├── Player career totals                                    │
+│  ├── All-time leaderboards                                   │
+│  └── Hall of Fame tracking                                   │
+│                                                               │
+│  Teams & Rosters (with controlledBy flags)                   │
+│  ├── Current rosters                                         │
+│  ├── Historical rosters by season                            │
+│  └── Retired numbers                                         │
+│                                                               │
+│  Player Data                                                 │
+│  ├── Ratings & development history                           │
+│  ├── Contract/salary history                                 │
+│  └── Awards, designations, personality                       │
+│                                                               │
+│  Transaction History                                         │
+│  ├── Trades, FA signings, draft picks, releases              │
+│  └── Retirements                                             │
+│                                                               │
+└──────────────────────────────────────────────────────────────┘
+```
+
+### 13.2 Storage Strategy: Separate IndexedDB Per Franchise
+
+Each franchise gets its own IndexedDB instance:
+
+```
+kbl-franchise-abc123/     # "Dynasty League"
+  ├── metadata
+  ├── teams
+  ├── players
+  ├── rosters
+  ├── schedule
+  ├── gameHeaders
+  ├── atBatEvents
+  ├── betweenPlayEvents
+  ├── seasonStats
+  ├── careerStats
+  ├── standings
+  ├── transactions
+  ├── salaryLedger
+  ├── beatReporters
+  ├── managers
+  └── scouts
+
+kbl-franchise-def456/     # "Experimental League"
+  └── (same structure)
+
+kbl-app-meta/             # App-level data (shared)
+  ├── franchiseList
+  ├── leagueTemplates
+  ├── teamPool
+  ├── playerPool
+  ├── appSettings
+  └── lastUsedFranchise
+```
+
+**Why separate DBs:**
+- Complete data isolation — no query discipline needed
+- Delete franchise = `deleteDatabase()` — clean and atomic
+- Export franchise = export entire DB
+- Only one franchise DB open at a time — minimal connection overhead
+
+### 13.3 Storage Estimates
+
+| Data Type | Per-Season Estimate | Formula |
+|-----------|-------------------|---------|
+| Event Log | ~18MB | (numTeams × gamesPerTeam / 2) × 35KB |
+| Season Stats | ~100KB | numPlayers × 500 bytes |
+| Game Headers | ~250KB | numGames × 500 bytes |
+| Rosters/Teams | ~100KB | Relatively static |
+| **Total/Season** | **~19MB** | |
+
+| Seasons | Estimated Size |
+|---------|----------------|
+| 1 | ~19MB |
+| 5 | ~95MB |
+| 10 | ~190MB |
+| 20 | ~380MB |
+
+IndexedDB limits: Chrome 60% of disk (typically 50GB+), Firefox 50%, Safari 1GB default. Storage is not a concern.
+
+### 13.4 Franchise Management
+
+```typescript
+interface FranchiseManager {
+  createFranchise(name: string, settings: FranchiseSetupData): Promise<FranchiseId>;
+  loadFranchise(id: FranchiseId): Promise<Franchise>;
+  deleteFranchise(id: FranchiseId): Promise<void>;
+  renameFranchise(id: FranchiseId, newName: string): Promise<void>;
+  listFranchises(): Promise<FranchiseSummary[]>;
+  exportFranchise(id: FranchiseId): Promise<Blob>;
+  importFranchise(data: Blob): Promise<FranchiseId>;
+  getActiveFranchise(): FranchiseId | null;
+  setActiveFranchise(id: FranchiseId): Promise<void>;
+}
+
+interface FranchiseSummary {
+  id: FranchiseId;
+  name: string;
+  franchiseType: 'solo' | 'couch-coop' | 'custom';
+  createdAt: Date;
+  lastPlayedAt: Date;
+  currentSeason: number;
+  totalSeasons: number;
+  humanTeamNames: string[];
+  storageUsedBytes: number;
+}
+```
+
+### 13.5 App Startup Flow
+
+```
+App Start
+    │
+    ▼
+Load kbl-app-meta DB
+    │
+    ▼
+Get Last Used Franchise
+    │
+    ├── Found → Load Franchise DB
+    │              │
+    │              ▼
+    │           Run Data Integrity Check
+    │              │
+    │              ▼
+    │           Navigate to Mode 2 Dashboard
+    │
+    └── Not Found → Show Franchise Selector
+                         │
+                         ├── Select existing franchise
+                         ├── New Franchise → Mode 1 Wizard (§11)
+                         └── Import Franchise
+```
+
+### 13.6 Franchise Switching
+
+1. Close current franchise DB connection
+2. Clear in-memory state (React state reset)
+3. Open new franchise DB
+4. Run integrity check
+5. Load initial state → Mode 2 Dashboard
+
+
+---
+
+## 14. V2 Material (Explicitly Out of Scope)
+*Deferred to v2. See V2_DEFERRED_BACKLOG.md.*
+
+---
+## 15. Cross-References
+
+| Document | Relationship |
+|----------|-------------|
+| **SPINE_ARCHITECTURE.md** | Shared data contracts (Player, Team, Event, etc.) referenced by all gospels |
+| **MODE_2_FRANCHISE_SEASON.md** | What Mode 1 hands off to. GameTracker, stats, narrative, schedule view |
+| **MODE_3_OFFSEASON_WORKSHOP.md** | Reuses prospect generation (§8) and scouting (§8.6) for annual draft. Phase scopes from §2.5 |
+| **ALMANAC.md** | Read-only consumer of all data produced by Modes 1-3 |
+
+### Source Specs Consumed
+
+This gospel supersedes the following specs for Mode 1 purposes:
+
+| Spec | What Was Consumed | Remaining Valid Content |
+|------|------------------|----------------------|
+| LEAGUE_BUILDER_SPEC.md | Entire spec | None — fully consumed |
+| LEAGUE_BUILDER_FIGMA_SPEC.md | UI wireframes | None — fully consumed |
+| SEASON_SETUP_SPEC.md | Wizard flow, data models | Playoff Mode flow (§11.8) |
+| SEASON_SETUP_FIGMA_SPEC.md | Wizard UI | None — fully consumed |
+| GRADE_ALGORITHM_SPEC.md | Grade formula, thresholds, verification | None — fully consumed |
+| PROSPECT_GENERATION_SPEC.md | Grade distribution, position weights, pool generation | Annual draft class (shared w/ Mode 3) |
+| SCOUTING_SYSTEM_SPEC.md | Accuracy by position, deviation formula, visibility rules | Annual draft scouting (shared w/ Mode 3) |
+| PERSONALITY_SYSTEM_SPEC.md | 7 types, 4 modifiers, generation, bias table | Behavioral effects (Mode 2), FA destinations (Mode 3) |
+| TRAIT_INTEGRATION_SPEC.md | Initial distribution, eligibility rules, chemistry mapping | Potency effects (Mode 2), EOS assignment (Mode 3) |
+| FRANCHISE_MODE_SPEC.md | Save slot creation, DB architecture, franchise management | Active franchise (Mode 2), season archive (Mode 3), cross-season (Almanac) |
+| SCHEDULE_SYSTEM_FIGMA_SPEC.md | Schedule setup/generation | In-season schedule view (Mode 2) |
+| SMB4_GAME_REFERENCE.md | Import mapping reference | None — fully consumed |
+| smb4_traits_reference.md | Trait definitions for import | Trait-chemistry mapping (Mode 2) |
+
+---
+
+## 16. Decision Traceability
+
+Every STEP4 decision applied in this gospel:
+
+| ID | Decision | Section |
+|----|----------|---------|
+| C-070 | Fix personality to 7 types (not 12) | §5.4, §6.2 |
+| C-071 | Add 16 + 128 game count presets | §9.2, §11.3 |
+| C-072 | Remove contraction toggle from rules | §9.2 |
+| C-073 | Add Mode 1 role description | §1.1 |
+| C-074 | 13-grade scale authoritative | §5.4, §5.7 |
+| C-075 | Remove WAR configurable weights | §9.2 |
+| C-076 | Add missing handoff steps (salary init, standings, franchiseId, copy-not-reference) | §12.1, §12.3 |
+| C-077 | Mode Transition screen | §12.2 |
+| C-078 | Fame slider → FameLevel dropdown | §5.4, §5.9 |
+| C-087 | 13-grade scale (duplicate confirmation of C-074) | §5.7 |
+| C-045 | Spine = standalone 5th document | §1.1 |
+| C-054 | Farm prospect visibility: traits AND ratings hidden until call-up (revised per JK feedback — original C-054 said traits visible, overridden) | §6.5 |
+
+---
+
+## Changelog
+
+- v1.2 (2026-02-25): Contradiction resolutions applied (MODE_1_vs_MODE_2_CONTRADICTION_RESOLUTIONS.md). #5: Added 'UNK' to PitchType. #6: GameStatus → UPPER_SNAKE 5-value enum. #7: ScheduledGame merged to canonical shape, FictionalDate → GameDate, added dayNumber/time/result fields. #8: rosterStatus → RosterLevel (UPPERCASE, 4 values including RETIRED). #10/#11: Full StandingsEntry initialization with structured streak. #12: Position split into PrimaryPosition/SecondaryPosition + FieldPosition + CompositePosition; DH clarification. #14: betweenAtBatEvents → betweenPlayEvents. #17: DH clarification note (covered by #12). #20: Free agency V2 scope clarified. #21: NPC initialization (beatReporters, managers, scouts) added to §1.2, §12.1, §13.2.
+- v1.1 (2026-02-24): JK feedback integration. Updated §1.2, §2.2, §2.5, §3.3, §4.2, §4.3, §5.2, §5.3-5.6, §5.9, §6.1, §6.4-6.5, §7.1-7.3, §8.3-8.6, §8.8, §9.2-9.3, §10.1-10.5, §11.6, §12.1, §12.3, §13.2, §14. Added awardsCeremony toggle, revised offseason phase defaults, simplified controlledBy, removed DH from positions, updated pitch types, revised trait taxonomy, enhanced scout accuracy system, user-driven schedules (CSV/OCR).
+- v1.0 (2026-02-22): Initial gospel draft. Consolidates 13 source specs + 10 STEP4 decisions + Franchise Type Design Note.
+
+---
+
+*This is a GOSPEL document. It is the single source of truth for Mode 1 (League Builder). If any source spec contradicts this document, this document wins. Source specs should be considered superseded for Mode 1 purposes.*
