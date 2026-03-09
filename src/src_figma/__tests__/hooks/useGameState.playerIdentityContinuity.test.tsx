@@ -112,6 +112,11 @@ describe('useGameState player identity continuity', () => {
     });
 
     await act(async () => {
+      await result.current.recordEvent('KILLED');
+      await vi.runAllTimersAsync();
+    });
+
+    await act(async () => {
       await result.current.endGame({
         competitionType: 'elimination',
         competitionId: 'elim-42',
@@ -131,6 +136,15 @@ describe('useGameState player identity continuity', () => {
       playerName: 'Home Center',
       teamId: 'home-team',
     });
+    expect(completedState.fameEvents).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          playerId: 'lb-away-ss',
+          playerName: 'Away Shortstop',
+          playerTeam: 'away-team',
+        }),
+      ])
+    );
     expect(completedState.pitcherGameStats).toEqual(
       expect.arrayContaining([
         expect.objectContaining({

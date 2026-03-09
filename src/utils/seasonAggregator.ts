@@ -32,6 +32,34 @@ const DEFAULT_SEASON_NUMBER = 1;
 const DEFAULT_SEASON_NAME = 'Season 1';
 const DEFAULT_TOTAL_GAMES = 162;
 
+function resolveFamePlayerMetadata(
+  gameState: PersistedGameState,
+  playerId: string,
+  fallbackName?: string,
+  fallbackTeamId?: string
+): { playerName: string; teamId: string } {
+  const battingStats = gameState.playerStats[playerId];
+  if (battingStats) {
+    return {
+      playerName: battingStats.playerName || fallbackName || playerId,
+      teamId: battingStats.teamId || fallbackTeamId || gameState.awayTeamId,
+    };
+  }
+
+  const pitchingStats = gameState.pitcherGameStats.find((pitcher) => pitcher.pitcherId === playerId);
+  if (pitchingStats) {
+    return {
+      playerName: pitchingStats.pitcherName || fallbackName || playerId,
+      teamId: pitchingStats.teamId || fallbackTeamId || gameState.awayTeamId,
+    };
+  }
+
+  return {
+    playerName: fallbackName || playerId,
+    teamId: fallbackTeamId || gameState.awayTeamId,
+  };
+}
+
 /**
  * Result returned from game aggregation including milestone detection
  */
@@ -282,9 +310,16 @@ async function aggregateFameEvents(
 ): Promise<void> {
   // Group Fame events by player
   const playerFame = new Map<string, { bonuses: number; boners: number }>();
+  const fameMetadata = new Map<string, { playerName: string; teamId: string }>();
 
   for (const event of gameState.fameEvents) {
     const current = playerFame.get(event.playerId) || { bonuses: 0, boners: 0 };
+    const metadata = resolveFamePlayerMetadata(
+      gameState,
+      event.playerId,
+      event.playerName,
+      event.playerTeam
+    );
 
     if (event.fameType === 'bonus') {
       current.bonuses += event.fameValue;
@@ -293,17 +328,19 @@ async function aggregateFameEvents(
     }
 
     playerFame.set(event.playerId, current);
+    fameMetadata.set(event.playerId, metadata);
   }
 
   // Update season stats for each player with Fame events
   for (const [playerId, fame] of playerFame) {
     // Update batting stats (most players are batters)
     try {
+      const metadata = fameMetadata.get(playerId) || resolveFamePlayerMetadata(gameState, playerId);
       const battingStats = await getOrCreateBattingStats(
         seasonId,
         playerId,
-        playerId,  // Placeholder name
-        gameState.awayTeamId  // Placeholder team
+        metadata.playerName,
+        metadata.teamId
       );
 
       await updateBattingStats({

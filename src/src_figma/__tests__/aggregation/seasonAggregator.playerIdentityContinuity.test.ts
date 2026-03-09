@@ -202,7 +202,23 @@ describe('season aggregator player identity continuity', () => {
           blownSave: false,
         },
       ],
-      fameEvents: [],
+      fameEvents: [
+        {
+          id: 'fame-1',
+          gameId: 'game-wp1',
+          eventType: 'KILLED',
+          playerId: 'lb-home-sp',
+          playerName: 'Home Starter',
+          playerTeam: 'home-team',
+          fameValue: 2,
+          fameType: 'bonus' as const,
+          inning: 9,
+          halfInning: 'BOTTOM' as const,
+          timestamp: Date.now(),
+          autoDetected: false,
+          description: 'KILLED in inning 9',
+        },
+      ],
       lastHRBatterId: null,
       consecutiveHRCount: 0,
       inningStrikeouts: 0,
@@ -230,6 +246,12 @@ describe('season aggregator player identity continuity', () => {
       })
     );
     expect(mockGetOrCreatePitchingStats).toHaveBeenCalledWith(
+      'elim-42',
+      'lb-home-sp',
+      'Home Starter',
+      'home-team'
+    );
+    expect(mockGetOrCreateBattingStats).toHaveBeenCalledWith(
       'elim-42',
       'lb-home-sp',
       'Home Starter',

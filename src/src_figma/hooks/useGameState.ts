@@ -1280,6 +1280,11 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     );
   }, [gameState.awayTeamId, gameState.homeTeamId]);
 
+  const resolvePlayerNameForId = useCallback((playerId: string | undefined, fallback?: string): string => {
+    if (!playerId) return fallback || '';
+    return playerNameByIdRef.current.get(playerId) || fallback || playerId;
+  }, []);
+
   const [playerStats, setPlayerStats] = useState<Map<string, PlayerGameStats>>(new Map());
   const [pitcherStats, setPitcherStats] = useState<Map<string, PitcherGameStats>>(new Map());
 
@@ -1288,6 +1293,27 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
 
   // Fame events tracked during game (per SPECIAL_EVENTS_SPEC.md)
   const [fameEvents, setFameEvents] = useState<FameEventRecord[]>([]);
+
+  const buildPersistedFameEvents = useCallback((
+    currentInning: number,
+    currentHalfInning: 'TOP' | 'BOTTOM'
+  ): PersistedGameState['fameEvents'] => {
+    return fameEvents.map((fe, idx) => ({
+      id: `${gameState.gameId}_fame_${idx}`,
+      gameId: gameState.gameId,
+      eventType: fe.eventType,
+      playerId: fe.playerId,
+      playerName: resolvePlayerNameForId(fe.playerId, fe.playerName),
+      playerTeam: resolveTeamIdForPlayerId(fe.playerId),
+      fameValue: fe.fameValue,
+      fameType: fe.fameType,
+      inning: currentInning,
+      halfInning: currentHalfInning,
+      timestamp: Date.now(),
+      autoDetected: false,
+      description: fe.description,
+    }));
+  }, [fameEvents, gameState.gameId, resolvePlayerNameForId, resolveTeamIdForPlayerId]);
 
   // T1-02/03/04: Counter that increments when runner identity changes (pinch runner, etc.)
   // Used as a dependency trigger for the runnerNames sync effect in GameTracker.
@@ -2342,20 +2368,12 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       currentPitcherName: gameState.currentPitcherName,
       playerStats: playerStatsRecord,
       pitcherGameStats,
-      fameEvents: fameEvents.map((fe, idx) => ({
+      fameEvents: buildPersistedFameEvents(
+        gameState.inning,
+        gameState.isTop ? 'TOP' : 'BOTTOM'
+      ).map((event, idx) => ({
+        ...event,
         id: `${gameState.gameId}_fame_live_${idx}`,
-        gameId: gameState.gameId,
-        eventType: fe.eventType,
-        playerId: fe.playerId,
-        playerName: fe.playerName,
-        playerTeam: '',
-        fameValue: fe.fameValue,
-        fameType: fe.fameType,
-        inning: gameState.inning,
-        halfInning: gameState.isTop ? 'TOP' : 'BOTTOM',
-        timestamp: Date.now(),
-        autoDetected: false,
-        description: fe.description,
       })),
       lastHRBatterId: null,
       consecutiveHRCount: 0,
@@ -2404,6 +2422,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
   }, [
     awayBatterIndex,
     atBatSequence,
+    buildPersistedFameEvents,
     fameEvents,
     gameState,
     homeBatterIndex,
@@ -4677,21 +4696,10 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       competitionId: opts?.competitionId ?? competitionIdRef.current,
       playerStats: playerStatsRecord,
       pitcherGameStats: pitcherGameStatsArray,
-      fameEvents: fameEvents.map((fe, idx) => ({
-        id: `${gameState.gameId}_fame_${idx}`,
-        gameId: gameState.gameId,
-        eventType: fe.eventType,
-        playerId: fe.playerId,
-        playerName: fe.playerName,
-        playerTeam: '', // TODO: Determine from player ID
-        fameValue: fe.fameValue,
-        fameType: fe.fameType,
-        inning: gameState.inning,
-        halfInning: gameState.isTop ? 'TOP' as const : 'BOTTOM' as const,
-        timestamp: Date.now(),
-        autoDetected: false,
-        description: fe.description,
-      })),
+      fameEvents: buildPersistedFameEvents(
+        gameState.inning,
+        gameState.isTop ? 'TOP' : 'BOTTOM'
+      ),
       lastHRBatterId: null,
       consecutiveHRCount: 0,
       inningStrikeouts: 0,
@@ -4851,6 +4859,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     setLastSavedAt(Date.now());
   }, [
     atBatSequence,
+    buildPersistedFameEvents,
     fameEvents,
     gameState,
     pitcherStats,
@@ -5025,22 +5034,12 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       competitionId: options?.competitionId ?? competitionIdRef.current,
       playerStats: playerStatsRecord,
       pitcherGameStats: pitcherGameStatsArray,
-      // Map local FameEventRecord to PersistedGameState format
-      // Note: Local FameEventRecord has fewer fields, so we use defaults for missing ones
-      fameEvents: fameEvents.map((fe, idx) => ({
-        id: `${gameState.gameId}_fame_${idx}`,
-        gameId: gameState.gameId,
-        eventType: fe.eventType,
-        playerId: fe.playerId,
-        playerName: fe.playerName,
-        playerTeam: '', // Not tracked in local FameEventRecord
-        fameValue: fe.fameValue,
-        fameType: fe.fameType,
-        inning: gameState.inning, // Use current game inning
-        halfInning: gameState.isTop ? 'TOP' as const : 'BOTTOM' as const,
-        timestamp: Date.now(),
-        autoDetected: true, // Assume auto-detected
-        description: fe.description,
+      fameEvents: buildPersistedFameEvents(
+        gameState.inning,
+        gameState.isTop ? 'TOP' : 'BOTTOM'
+      ).map((event) => ({
+        ...event,
+        autoDetected: true,
       })),
       lastHRBatterId: null,
       consecutiveHRCount: 0,
@@ -5096,6 +5095,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     }
   }, [
     atBatSequence,
+    buildPersistedFameEvents,
     completeGameInternal,
     fameEvents,
     gameState,
