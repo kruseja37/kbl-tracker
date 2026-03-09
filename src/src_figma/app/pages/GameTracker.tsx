@@ -131,6 +131,9 @@ export function GameTracker() {
     franchiseId?: string;
     eliminationId?: string;
     seasonId?: string;
+    statsScopeId?: string;
+    competitionType?: 'exhibition' | 'franchise' | 'playoff' | 'elimination';
+    competitionId?: string;
     // T0-05: Schedule persistence context
     scheduleGameId?: string;
     seasonNumber?: number;
@@ -154,6 +157,20 @@ export function GameTracker() {
   const homeManagerId = navigationState?.homeManagerId || `${homeTeamId}-manager`;
   const awayManagerId = navigationState?.awayManagerId || `${awayTeamId}-manager`;
   const userTeamSide = navigationState?.userTeamSide || 'home';
+  const competitionType =
+    navigationState?.competitionType ||
+    navigationState?.gameMode ||
+    'exhibition';
+  const competitionId =
+    navigationState?.competitionId ||
+    (competitionType === 'elimination'
+      ? navigationState?.eliminationId
+      : navigationState?.franchiseId);
+  const statsScopeId =
+    navigationState?.statsScopeId ||
+    (competitionType === 'elimination' && navigationState?.eliminationId
+      ? `elimination-${navigationState.eliminationId}`
+      : navigationState?.seasonId);
 
   // Team colors - prefer navigation state (from database), fall back to static config
   const awayTeamColor = navigationState?.awayTeamColor || getTeamColors(awayTeamId).primary;
@@ -846,9 +863,16 @@ export function GameTracker() {
 
         await initializeGame({
           gameId: gameId || `game-${Date.now()}`,
-          seasonId: navigationState?.franchiseId
+          seasonId: competitionType === 'elimination'
+            ? undefined
+            : (navigationState?.franchiseId
+              ? `${navigationState.franchiseId}-season-${navigationState?.seasonNumber || 1}`
+              : 'season-1'),
+          statsScopeId: statsScopeId || (navigationState?.franchiseId
             ? `${navigationState.franchiseId}-season-${navigationState?.seasonNumber || 1}`
-            : 'season-1',
+            : 'season-1'),
+          competitionType,
+          competitionId,
           awayTeamId: awayTeamId,
           awayTeamName: awayTeamName,
           homeTeamId: homeTeamId,
@@ -894,7 +918,7 @@ export function GameTracker() {
       cancelled = true;
       initInProgressRef.current = false;
     };
-  }, [gameInitialized, awayTeamPlayers, homeTeamPlayers, awayPitcher, homePitcher, awayTeamId, homeTeamId, gameId, initializeGame, loadExistingGame, selectedStadium, navigationState?.franchiseId, navigationState?.seasonNumber, navigationState?.totalInnings, awayTeamName, homeTeamName]);
+  }, [gameInitialized, awayTeamPlayers, homeTeamPlayers, awayPitcher, homePitcher, awayTeamId, homeTeamId, gameId, initializeGame, loadExistingGame, selectedStadium, navigationState?.franchiseId, navigationState?.seasonNumber, navigationState?.totalInnings, awayTeamName, homeTeamName, competitionType, competitionId, statsScopeId]);
 
   // EXH-036: Register players with playerStateHook for mojo/fitness tracking
   // This runs once after game is initialized to set up all players with default states
@@ -3298,16 +3322,24 @@ export function GameTracker() {
         console.warn('[mWAR] Persistence error (non-blocking):', mwarError);
       }
 
-      const computedSeasonId = navigationState?.seasonId
-        ?? (navigationState?.franchiseId
-          ? `${navigationState.franchiseId}-season-${navigationState?.seasonNumber ?? 1}`
-          : `season-${navigationState?.seasonNumber ?? 1}`);
+      const computedSeasonId = competitionType === 'elimination'
+        ? undefined
+        : (navigationState?.seasonId
+          ?? (navigationState?.franchiseId
+            ? `${navigationState.franchiseId}-season-${navigationState?.seasonNumber ?? 1}`
+            : `season-${navigationState?.seasonNumber ?? 1}`));
+      const computedStatsScopeId = statsScopeId
+        ?? computedSeasonId
+        ?? `season-${navigationState?.seasonNumber ?? 1}`;
       pushActivityLog(
         `[Game End] ${homeTeamName} ${gameState.homeScore} - ${awayTeamName} ${gameState.awayScore} (Inning ${gameState.inning})`
       );
     const endGameOptions = {
       activityLog,
       seasonId: computedSeasonId,
+      statsScopeId: computedStatsScopeId,
+      competitionType,
+      competitionId,
       franchiseId: navigationState?.franchiseId,
       currentSeason: navigationState?.seasonNumber ?? 1,
       stadiumName: selectedStadium,
@@ -3362,6 +3394,10 @@ export function GameTracker() {
           gameMode: navigationState?.gameMode || 'franchise',
           franchiseId: navigationState?.franchiseId || gameId?.replace('franchise-', '') || '1',
           eliminationId: navigationState?.eliminationId,
+          seasonId: computedSeasonId,
+          statsScopeId: computedStatsScopeId,
+          competitionType,
+          competitionId,
           gameNarrative,
           awayNarrative,
         }
@@ -3375,7 +3411,7 @@ export function GameTracker() {
         gameEndingRef.current = false;
       }
     }
-  }, [hookEndGame, navigate, gameId, navigationState?.gameMode, navigationState?.eliminationId, gameMode, gameState, pitcherStats, fameTrackingHook, homeFanMorale, awayFanMorale, homeTeamName, awayTeamName, mwarHook, homeManagerId, homeTeamId, activityLog, pushActivityLog, playerStateHook]);
+  }, [hookEndGame, navigate, gameId, navigationState?.gameMode, navigationState?.eliminationId, navigationState?.franchiseId, navigationState?.seasonId, navigationState?.seasonNumber, gameMode, gameState, pitcherStats, fameTrackingHook, homeFanMorale, awayFanMorale, homeTeamName, awayTeamName, mwarHook, homeManagerId, homeTeamId, activityLog, pushActivityLog, playerStateHook, competitionType, competitionId, statsScopeId, selectedStadium]);
 
   // T0-01: Auto-trigger endGame when regulation ends
   useEffect(() => {

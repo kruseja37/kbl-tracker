@@ -24,6 +24,7 @@
 
 import type { AtBatResult, Position, HalfInning, SpecialPlayType, MojoLevelLabel, FitnessLevelLabel, FameLevel, SpecPitcherRole, HiddenModifiers } from '../types/game';
 import type { ParkFactors } from '../types/war';
+import type { CompetitionType } from './gameStorage';
 
 // ============================================
 // DATABASE SETUP
@@ -111,7 +112,10 @@ async function initEventLogDB(): Promise<IDBDatabase> {
 /** Game header with aggregation status */
 export interface GameHeader {
   gameId: string;
-  seasonId: string;
+  seasonId?: string;
+  statsScopeId?: string;
+  competitionType?: CompetitionType;
+  competitionId?: string;
   date: number;  // timestamp
 
   // Teams
@@ -191,6 +195,9 @@ export interface AtBatEvent {
 
   // 1.9 (GAP-GT-2-A): Identity fields
   seasonId?: string;
+  statsScopeId?: string;
+  competitionType?: CompetitionType;
+  competitionId?: string;
   franchiseId?: string;
   leagueId?: string;
 
@@ -331,6 +338,9 @@ export interface BetweenPlayEvent {
   eventId: string;
   gameId: string;
   seasonId?: string;
+  statsScopeId?: string;
+  competitionType?: CompetitionType;
+  competitionId?: string;
   franchiseId?: string;
   timestamp: number;
   eventIndex: number;              // Interleaved with AtBatEvent indices

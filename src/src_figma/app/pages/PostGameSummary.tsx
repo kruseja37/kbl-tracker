@@ -186,6 +186,9 @@ export function PostGameSummary({ gameId: gameIdProp }: { gameId?: string } = {}
     franchiseId?: string;
     eliminationId?: string;
     seasonId?: string;
+    statsScopeId?: string;
+    competitionType?: 'exhibition' | 'franchise' | 'playoff' | 'elimination';
+    competitionId?: string;
   };
 
   const gameMode = navigationState?.gameMode || 'franchise';

@@ -29,6 +29,7 @@ import {
   loadCurrentGame,
   immediateSaveCurrentGame,
   clearCurrentGame,
+  type CompetitionType,
   type PersistedGameState,
 } from '../utils/gameStorage';
 import type { AtBatResult, HalfInning, LineupState, LineupPlayer, BenchPlayer, Position } from '../../types/game';
@@ -80,6 +81,9 @@ export interface GameState {
 export interface EndGameOptions {
   activityLog?: string[];
   seasonId?: string;
+  statsScopeId?: string;
+  competitionType?: CompetitionType;
+  competitionId?: string;
   franchiseId?: string;
   currentSeason?: number;
   currentGame?: number;
@@ -264,7 +268,10 @@ export interface UseGameStateReturn {
 
 export interface GameInitConfig {
   gameId: string;
-  seasonId: string;
+  seasonId?: string;
+  statsScopeId?: string;
+  competitionType?: CompetitionType;
+  competitionId?: string;
   awayTeamId: string;
   homeTeamId: string;
   awayTeamName: string;
@@ -299,6 +306,14 @@ function parseSeasonNumberFromId(seasonId: string): number {
   if (!match) return 1;
   const parsed = Number(match[1]);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 1;
+}
+
+function getFallbackSeasonNumber(scopeId?: string, explicitSeasonNumber?: number): number {
+  if (typeof explicitSeasonNumber === 'number' && explicitSeasonNumber > 0) {
+    return explicitSeasonNumber;
+  }
+  if (!scopeId) return 1;
+  return parseSeasonNumberFromId(scopeId);
 }
 
 // ============================================
@@ -1094,6 +1109,9 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
   const awayLineupRef = useRef<{ playerId: string; playerName: string; position: string }[]>([]);
   const homeLineupRef = useRef<{ playerId: string; playerName: string; position: string }[]>([]);
   const seasonIdRef = useRef<string>('');
+  const statsScopeIdRef = useRef<string>('');
+  const competitionTypeRef = useRef<CompetitionType | undefined>(undefined);
+  const competitionIdRef = useRef<string | undefined>(undefined);
   // Layer 1B: Identity + team context refs
   const franchiseIdRef = useRef<string | undefined>(undefined);
   const leagueIdRef = useRef<string | undefined>(undefined);
@@ -1251,6 +1269,9 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     return {
       // 1.9: Identity
       seasonId: seasonIdRef.current || undefined,
+      statsScopeId: statsScopeIdRef.current || seasonIdRef.current || undefined,
+      competitionType: competitionTypeRef.current,
+      competitionId: competitionIdRef.current,
       franchiseId: franchiseIdRef.current,
       leagueId: leagueIdRef.current,
 
@@ -1355,7 +1376,10 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     // Store lineup refs
     awayLineupRef.current = config.awayLineup;
     homeLineupRef.current = config.homeLineup;
-    seasonIdRef.current = config.seasonId;
+    seasonIdRef.current = config.seasonId || '';
+    statsScopeIdRef.current = config.statsScopeId || config.seasonId || '';
+    competitionTypeRef.current = config.competitionType;
+    competitionIdRef.current = config.competitionId;
     franchiseIdRef.current = config.franchiseId;
     leagueIdRef.current = config.leagueId;
     awayRecordRef.current = config.awayRecord;
@@ -1422,6 +1446,9 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     await createGameHeader({
       gameId: config.gameId,
       seasonId: config.seasonId,
+      statsScopeId: config.statsScopeId || config.seasonId,
+      competitionType: config.competitionType,
+      competitionId: config.competitionId,
       date: Date.now(),
       awayTeamId: config.awayTeamId,
       homeTeamId: config.homeTeamId,
@@ -1565,9 +1592,10 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         if (savedSnapshot.homeLineupState) {
           homeLineupStateRef.current = savedSnapshot.homeLineupState as LineupState;
         }
-        if (savedSnapshot.seasonId) {
-          seasonIdRef.current = savedSnapshot.seasonId;
-        }
+        seasonIdRef.current = savedSnapshot.seasonId || '';
+        statsScopeIdRef.current = savedSnapshot.statsScopeId || savedSnapshot.seasonId || '';
+        competitionTypeRef.current = savedSnapshot.competitionType;
+        competitionIdRef.current = savedSnapshot.competitionId;
         // Layer 1B: Restore identity refs from snapshot (if available)
         const snapshotAny = savedSnapshot as unknown as Record<string, unknown>;
         if (snapshotAny.franchiseId) {
@@ -1993,10 +2021,13 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
           awayTeamName: inProgressGame.awayTeamName,
           homeTeamName: inProgressGame.homeTeamName,
           stadiumName: inProgressGame.stadiumName ?? null,
-          seasonNumber: parseSeasonNumberFromId(inProgressGame.seasonId),
+          seasonNumber: getFallbackSeasonNumber(inProgressGame.statsScopeId ?? inProgressGame.seasonId, 1),
         });
         setAtBatSequence(events.length);
-        seasonIdRef.current = inProgressGame.seasonId;
+        seasonIdRef.current = inProgressGame.seasonId || '';
+        statsScopeIdRef.current = inProgressGame.statsScopeId || inProgressGame.seasonId || '';
+        competitionTypeRef.current = inProgressGame.competitionType;
+        competitionIdRef.current = inProgressGame.competitionId;
         setIsLoading(false);
         return true;
       }
@@ -2199,6 +2230,9 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       awayBatterIndex,
       homeBatterIndex,
       seasonId: seasonIdRef.current || undefined,
+      statsScopeId: statsScopeIdRef.current || seasonIdRef.current || undefined,
+      competitionType: competitionTypeRef.current,
+      competitionId: competitionIdRef.current,
       awayLineup: awayLineupRef.current,
       homeLineup: homeLineupRef.current,
       awayLineupState: awayLineupStateRef.current as PersistedGameState['awayLineupState'],
@@ -4474,6 +4508,10 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       homeTeamName: gameState.homeTeamName,
       seasonNumber: gameState.seasonNumber,
       stadiumName: resolvedStadium,
+      seasonId: seasonIdRef.current || undefined,
+      statsScopeId: opts?.statsScopeId ?? statsScopeIdRef.current ?? seasonIdRef.current ?? undefined,
+      competitionType: opts?.competitionType ?? competitionTypeRef.current,
+      competitionId: opts?.competitionId ?? competitionIdRef.current,
       playerStats: playerStatsRecord,
       pitcherGameStats: pitcherGameStatsArray,
       fameEvents: fameEvents.map((fe, idx) => ({
@@ -4504,10 +4542,16 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     const header = await getGameHeader(gameState.gameId);
     const alreadyAggregated = header?.aggregated === true;
 
-    const targetSeasonId = opts?.seasonId ?? seasonIdRef.current ?? 'season-1';
+    const targetStatsScopeId =
+      opts?.statsScopeId ??
+      statsScopeIdRef.current ??
+      opts?.seasonId ??
+      seasonIdRef.current ??
+      'season-1';
+    const archivedSeasonId = opts?.seasonId ?? seasonIdRef.current ?? undefined;
     const currentSeasonNumber = opts?.currentSeason ?? gameState.seasonNumber;
     const aggregationOptions: GameAggregationOptions = {
-      seasonId: targetSeasonId,
+      seasonId: targetStatsScopeId,
       detectMilestones: true,
       franchiseId: opts?.franchiseId,
       currentGame: opts?.currentGame,
@@ -4571,7 +4615,12 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         persistedState,
         { away: gameState.awayScore, home: gameState.homeScore },
         inningScores,
-        targetSeasonId
+        archivedSeasonId,
+        {
+          statsScopeId: targetStatsScopeId,
+          competitionType: opts?.competitionType ?? competitionTypeRef.current,
+          competitionId: opts?.competitionId ?? competitionIdRef.current,
+        }
       );
     }
 
@@ -4594,11 +4643,20 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     // Archive game FIRST so PostGameSummary can load it (EXH-011 fix)
     // Build persisted state for archiving — include player name and team
     const activityLog = options?.activityLog ?? [];
-    const seasonIdValue = options?.seasonId ?? seasonIdRef.current ?? 'season-1';
+    const archivedSeasonId = options?.seasonId ?? seasonIdRef.current ?? undefined;
+    const statsScopeIdValue =
+      options?.statsScopeId ??
+      statsScopeIdRef.current ??
+      options?.seasonId ??
+      seasonIdRef.current ??
+      'season-1';
     const currentSeasonNumber = options?.currentSeason ?? gameState.seasonNumber;
     const endGameOptions: EndGameOptions = {
       activityLog,
-      seasonId: seasonIdValue,
+      seasonId: archivedSeasonId,
+      statsScopeId: statsScopeIdValue,
+      competitionType: options?.competitionType ?? competitionTypeRef.current,
+      competitionId: options?.competitionId ?? competitionIdRef.current,
       franchiseId: options?.franchiseId,
       currentSeason: currentSeasonNumber,
       currentGame: options?.currentGame,
@@ -4767,12 +4825,16 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       away: inn.away ?? 0,
       home: inn.home ?? 0,
     }));
-    const seasonId = seasonIdValue;
     await archiveCompletedGame(
       persistedState,
       { away: gameState.awayScore, home: gameState.homeScore },
       inningScores,
-      seasonId
+      archivedSeasonId,
+      {
+        statsScopeId: statsScopeIdValue,
+        competitionType: options?.competitionType ?? competitionTypeRef.current,
+        competitionId: options?.competitionId ?? competitionIdRef.current,
+      }
     );
 
     console.log('[endGame] Game archived for post-game summary');
@@ -4784,6 +4846,10 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     setPitchCountPrompt({
       type: 'end_game',
       pitcherId: gameState.currentPitcherId,
+      seasonId: archivedSeasonId,
+      statsScopeId: statsScopeIdValue,
+      competitionType: options?.competitionType ?? competitionTypeRef.current,
+      competitionId: options?.competitionId ?? competitionIdRef.current,
       pitcherName: gameState.currentPitcherName || gameState.currentPitcherId,
       currentCount: currentPitcherStats.pitchCount,
       lastVerifiedInning: gameState.inning,
