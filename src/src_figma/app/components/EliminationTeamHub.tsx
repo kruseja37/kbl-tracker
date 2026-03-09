@@ -3,6 +3,7 @@ import { ChevronDown, ChevronUp, Loader2, Star } from 'lucide-react';
 import {
   getEliminationRosterSnapshot,
   getAllEliminationRosterSnapshots,
+  getNormalizedEliminationLineup,
   updateEliminationRosterSnapshot,
   type EliminationRosterSnapshot,
 } from '../../../utils/eliminationRosterStorage';
@@ -125,7 +126,10 @@ export function EliminationTeamHub({ eliminationId, teams }: EliminationTeamHubP
     [snapshot]
   );
 
-  const lineup = useMemo(() => sortLineup(snapshot?.lineup ?? []), [snapshot]);
+  const lineup = useMemo(
+    () => (snapshot ? sortLineup(getNormalizedEliminationLineup(snapshot)) : []),
+    [snapshot]
+  );
   const lineupPlayerIds = useMemo(() => new Set(lineup.map((slot) => slot.playerId)), [lineup]);
 
   const benchPlayers = useMemo(
@@ -185,6 +189,25 @@ export function EliminationTeamHub({ eliminationId, teams }: EliminationTeamHubP
     const nextLineup = lineup.map((slot, slotIndex) =>
       slotIndex === index ? { ...slot, fieldingPosition } : slot
     );
+
+    await persistUpdates(snapshot.teamId, { lineup: nextLineup });
+  }
+
+  async function handleLineupPlayerChange(index: number, playerId: string) {
+    if (!snapshot) return;
+
+    const currentLineup = [...lineup];
+    const previousIndex = currentLineup.findIndex((slot) => slot.playerId === playerId);
+    const nextLineup = currentLineup.map((slot) => ({ ...slot }));
+
+    if (previousIndex >= 0) {
+      [nextLineup[index].playerId, nextLineup[previousIndex].playerId] = [
+        nextLineup[previousIndex].playerId,
+        nextLineup[index].playerId,
+      ];
+    } else {
+      nextLineup[index] = { ...nextLineup[index], playerId };
+    }
 
     await persistUpdates(snapshot.teamId, { lineup: nextLineup });
   }
@@ -275,14 +298,29 @@ export function EliminationTeamHub({ eliminationId, teams }: EliminationTeamHubP
                 <div className="space-y-2">
                   {lineup.map((slot, index) => {
                     const player = snapshot.players.find((item) => item.id === slot.playerId);
+                    const selectablePlayers = [
+                      ...(player ? [player] : []),
+                      ...benchPlayers,
+                    ];
                     return (
                       <div
                         key={`${slot.playerId}-${slot.battingOrder}`}
-                        className="bg-[#4A6844] border-4 border-[#6B9462] p-3 grid grid-cols-[0.4fr,1.6fr,0.9fr,0.6fr] gap-2 items-center"
+                        className="bg-[#4A6844] border-4 border-[#6B9462] p-3 grid grid-cols-[0.4fr,1.7fr,0.9fr,0.6fr] gap-2 items-center"
                       >
                         <div className="text-xs">{slot.battingOrder}</div>
                         <div>
-                          <div className="text-[8px]">{player ? getPlayerName(player) : slot.playerId}</div>
+                          <select
+                            value={slot.playerId}
+                            onChange={(event) => void handleLineupPlayerChange(index, event.target.value)}
+                            disabled={isSaving}
+                            className="w-full bg-[#6B9462] border-2 border-[#E8E8D8] text-[#E8E8D8] text-[8px] px-2 py-1"
+                          >
+                            {selectablePlayers.map((optionPlayer) => (
+                              <option key={optionPlayer.id} value={optionPlayer.id}>
+                                {getPlayerName(optionPlayer)}
+                              </option>
+                            ))}
+                          </select>
                           <div className="text-[8px] text-[#E8E8D8]/60">
                             {player ? `${player.overallGrade} • ${player.bats}/${player.throws}` : 'Unknown player'}
                           </div>
@@ -325,7 +363,10 @@ export function EliminationTeamHub({ eliminationId, teams }: EliminationTeamHubP
                 {benchPlayers.length === 0 ? (
                   <div className="text-[8px] text-[#E8E8D8]/60">No extra position players outside the current lineup.</div>
                 ) : (
-                  <div className="space-y-2">{benchPlayers.map(renderPlayerRow)}</div>
+                  <>
+                    <div className="text-[8px] text-[#E8E8D8]/60 mb-2">Select a bench player in any lineup slot above to swap them into the starting nine.</div>
+                    <div className="space-y-2">{benchPlayers.map(renderPlayerRow)}</div>
+                  </>
                 )}
               </div>
 

@@ -1014,6 +1014,129 @@ function convertTeam(team: TeamData): Omit<Team, 'createdDate' | 'lastModified'>
   };
 }
 
+const LINEUP_FIELD_POSITIONS: Position[] = ['C', '1B', '2B', 'SS', '3B', 'LF', 'CF', 'RF', 'DH'];
+const PITCHING_POSITIONS: Position[] = ['SP', 'RP', 'CP', 'SP/RP'];
+const ROTATION_POSITIONS: Position[] = ['SP', 'SP/RP'];
+
+function createEmptyDepthChart(): DepthChart {
+  return {
+    C: [],
+    '1B': [],
+    '2B': [],
+    SS: [],
+    '3B': [],
+    LF: [],
+    CF: [],
+    RF: [],
+    DH: [],
+    SP: [],
+    RP: [],
+    CP: [],
+  };
+}
+
+function isPitcherPosition(position: Position): boolean {
+  return PITCHING_POSITIONS.includes(position);
+}
+
+function getPreferredFieldPosition(player: Player): Position {
+  if (LINEUP_FIELD_POSITIONS.includes(player.primaryPosition)) {
+    return player.primaryPosition;
+  }
+  if (player.secondaryPosition && LINEUP_FIELD_POSITIONS.includes(player.secondaryPosition)) {
+    return player.secondaryPosition;
+  }
+  if (player.primaryPosition === 'TWO-WAY') {
+    return 'DH';
+  }
+  return 'DH';
+}
+
+function assignLineupSlots(players: Player[]): LineupSlot[] {
+  const selectedPlayers = players.slice(0, 9);
+  const availablePositions = [...LINEUP_FIELD_POSITIONS];
+
+  return selectedPlayers.map((player, index) => {
+    const preferredPosition = getPreferredFieldPosition(player);
+    const preferredIndex = availablePositions.indexOf(preferredPosition);
+    const fieldingPosition = preferredIndex >= 0
+      ? availablePositions.splice(preferredIndex, 1)[0]
+      : availablePositions.shift() || 'DH';
+
+    return {
+      battingOrder: index + 1,
+      playerId: player.id,
+      fieldingPosition,
+    };
+  });
+}
+
+function buildDepthChart(players: Player[]): DepthChart {
+  const depthChart = createEmptyDepthChart();
+
+  for (const player of players) {
+    if (player.primaryPosition === 'TWO-WAY') {
+      depthChart.DH.push(player.id);
+      depthChart.SP.push(player.id);
+      continue;
+    }
+
+    if (player.primaryPosition in depthChart) {
+      depthChart[player.primaryPosition as keyof DepthChart].push(player.id);
+    } else {
+      depthChart.DH.push(player.id);
+    }
+
+    if (player.secondaryPosition && player.secondaryPosition in depthChart) {
+      const bucket = depthChart[player.secondaryPosition as keyof DepthChart];
+      if (!bucket.includes(player.id)) {
+        bucket.push(player.id);
+      }
+    }
+  }
+
+  return depthChart;
+}
+
+function buildSeedRoster(teamId: string, teamPlayers: Player[]): TeamRoster {
+  const positionPlayers = teamPlayers.filter((player) => !isPitcherPosition(player.primaryPosition));
+  const pitchers = teamPlayers.filter((player) => isPitcherPosition(player.primaryPosition));
+  const lineupPool = [...positionPlayers];
+
+  if (lineupPool.length < 9) {
+    const fillerPlayers = teamPlayers.filter((player) => !lineupPool.some((candidate) => candidate.id === player.id));
+    lineupPool.push(...fillerPlayers);
+  }
+
+  const lineupVsRHP = assignLineupSlots(lineupPool);
+  const startingRotation = pitchers
+    .filter((player) => ROTATION_POSITIONS.includes(player.primaryPosition))
+    .slice(0, 5)
+    .map((player) => player.id);
+  const closer = pitchers.find((player) => player.primaryPosition === 'CP') ?? pitchers[pitchers.length - 1];
+  const closingPitcher = closer?.id || '';
+  const excludedPitchers = new Set([...startingRotation, closingPitcher].filter(Boolean));
+  const setupPitchers = pitchers
+    .filter((player) => !excludedPitchers.has(player.id))
+    .map((player) => player.id);
+
+  return {
+    teamId,
+    mlbRoster: teamPlayers.map((player) => player.id),
+    farmRoster: [],
+    lineupVsRHP,
+    lineupVsLHP: lineupVsRHP.map((slot) => ({ ...slot })),
+    startingRotation,
+    closingPitcher,
+    setupPitchers,
+    depthChart: buildDepthChart(teamPlayers),
+    pinchHitOrder: [],
+    pinchRunOrder: [],
+    defensiveSubOrder: [],
+    lastModified: nowISO(),
+  };
+}
+
 /**
  * Seed the League Builder database with SMB4 teams and players
  * @param clearExisting - If true, clears existing data before seeding
@@ -1040,21 +1163,28 @@ export async function seedFromSMB4Database(clearExisting = true): Promise<{ team
 
   let teamCount = 0;
   let playerCount = 0;
+  const seededTeams: Team[] = [];
+  const seededPlayers: Player[] = [];
 
   // Seed teams (excluding free-agent pool)
   for (const teamData of Object.values(SMB4_TEAMS)) {
     if (teamData.id === 'free-agent') continue; // Skip free agent pool
 
     const team = convertTeam(teamData);
-    await saveTeam(team);
+    seededTeams.push(await saveTeam(team));
     teamCount++;
   }
 
   // Seed players
   for (const playerData of Object.values(SMB4_PLAYERS)) {
     const player = convertPlayer(playerData);
-    await savePlayer(player);
+    seededPlayers.push(await savePlayer(player));
     playerCount++;
+  }
+
+  for (const team of seededTeams) {
+    const teamPlayers = seededPlayers.filter((player) => player.currentTeamId === team.id);
+    await saveTeamRoster(buildSeedRoster(team.id, teamPlayers));
   }
 
   console.log(`[LeagueBuilder] Seeded ${teamCount} teams and ${playerCount} players from SMB4 database`);

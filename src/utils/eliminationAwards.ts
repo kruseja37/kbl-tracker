@@ -34,56 +34,55 @@ export async function computeEliminationAwards(playoffId: string): Promise<Elimi
   const qualifiedPitchers = stats.filter(
     (player) => (player.pitchingGames || 0) >= 2 && (player.inningsPitched || 0) >= 3
   );
+  const qualifiedRunners = stats.filter((player) => (player.stolenBases || 0) >= 1);
+  const qualifiedClutch = stats.filter((player) => (player.rbi || 0) >= 1);
 
-  const postseasonMvp = [...qualifiedBatters].sort((a, b) => (b.ops || 0) - (a.ops || 0))[0];
+  const postseasonMvp = [...qualifiedBatters].sort((a, b) => {
+    if ((b.ops || 0) !== (a.ops || 0)) return (b.ops || 0) - (a.ops || 0);
+    return (b.rbi || 0) - (a.rbi || 0);
+  })[0];
   if (postseasonMvp) {
     awards.push(
       buildAward(
         'Postseason MVP',
         postseasonMvp,
-        `${formatRate(postseasonMvp.ops)} OPS, ${postseasonMvp.homeRuns} HR, ${postseasonMvp.rbi} RBI`
+        `${formatRate(postseasonMvp.ops)} OPS, ${postseasonMvp.hits} H, ${postseasonMvp.rbi} RBI`
       )
     );
   }
 
-  const bestPitcher = [...qualifiedPitchers].sort((a, b) => (a.era || 0) - (b.era || 0))[0];
+  const bestPitcher = [...qualifiedPitchers].sort((a, b) => {
+    if ((a.era || 0) !== (b.era || 0)) return (a.era || 0) - (b.era || 0);
+    return (b.pitchingStrikeouts || 0) - (a.pitchingStrikeouts || 0);
+  })[0];
   if (bestPitcher) {
     awards.push(
       buildAward(
         'Best Pitcher',
         bestPitcher,
-        `${formatRate(bestPitcher.era || 0)} ERA, ${formatRate(bestPitcher.whip || 0)} WHIP, ${bestPitcher.pitchingStrikeouts || 0} K`
+        `${formatRate(bestPitcher.era || 0)} ERA, ${bestPitcher.pitchingGames || 0} G, ${bestPitcher.inningsPitched || 0} IP`
       )
     );
   }
 
-  const bestHitter = [...qualifiedBatters].sort((a, b) => (b.avg || 0) - (a.avg || 0))[0];
-  if (bestHitter) {
+  const bestRunner = [...qualifiedRunners].sort((a, b) => {
+    if ((b.stolenBases || 0) !== (a.stolenBases || 0)) return (b.stolenBases || 0) - (a.stolenBases || 0);
+    return (b.runs || 0) - (a.runs || 0);
+  })[0];
+  if (bestRunner) {
     awards.push(
       buildAward(
-        'Best Hitter',
-        bestHitter,
-        `${formatRate(bestHitter.avg)} AVG, ${bestHitter.hits} H, ${bestHitter.runs} R`
+        'Best Runner',
+        bestRunner,
+        `${bestRunner.stolenBases || 0} SB, ${bestRunner.runs || 0} R, ${bestRunner.hits || 0} H`
       )
     );
   }
 
-  const bestPower = [...stats]
-    .filter((player) => player.atBats > 0)
-    .sort((a, b) => (b.homeRuns || 0) - (a.homeRuns || 0))[0];
-  if (bestPower) {
-    awards.push(
-      buildAward(
-        'Best Power',
-        bestPower,
-        `${bestPower.homeRuns} HR, ${bestPower.hits} H, ${formatRate(bestPower.slg)} SLG`
-      )
-    );
-  }
-
-  const clutchPerformer = [...stats]
-    .filter((player) => player.atBats > 0 || (player.rbi || 0) > 0)
-    .sort((a, b) => (b.rbi || 0) - (a.rbi || 0))[0];
+  const clutchPerformer = [...qualifiedClutch].sort((a, b) => {
+    if ((b.rbi || 0) !== (a.rbi || 0)) return (b.rbi || 0) - (a.rbi || 0);
+    return (b.ops || 0) - (a.ops || 0);
+  })[0];
   if (clutchPerformer) {
     awards.push(
       buildAward(

@@ -3,6 +3,7 @@
  */
 
 import { initMetaDatabase as openMetaDatabase } from './franchiseManager';
+import type { EliminationAward } from './eliminationAwards';
 
 const ELIMINATION_STORE = 'eliminationList';
 
@@ -17,6 +18,7 @@ export interface EliminationMetadata {
   teamsCount: number;
   currentRound: number;
   champion?: string;
+  awards?: EliminationAward[];
 }
 
 function requestToPromise<T>(request: IDBRequest<T>): Promise<T> {
@@ -117,6 +119,7 @@ export async function updateElimination(
     ...updates,
     eliminationId: existing.eliminationId,
     createdAt: existing.createdAt,
+    lastPlayedAt: updates.lastPlayedAt ?? Date.now(),
   };
 
   await requestToPromise(store.put(updated));

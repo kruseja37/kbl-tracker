@@ -83,12 +83,12 @@ export interface PlayoffClutchContext {
  *
  * - 7-game: 2-3-2 pattern (Games 1-2 home, 3-5 away, 6-7 home)
  * - 5-game: 2-2-1 pattern (Games 1-2 home, 3-4 away, 5 home)
- * - 3-game: 2-1 pattern (Games 1-2 home, 3 away)
+ * - 3-game: 1-1-1 pattern (Games 1 and 3 home, 2 away)
  */
 const HOME_FIELD_PATTERNS: Record<number, boolean[]> = {
   7: [true, true, false, false, false, true, true],
   5: [true, true, false, false, true],
-  3: [true, true, false],
+  3: [true, false, true],
 };
 
 // ============================================
@@ -274,7 +274,7 @@ export function qualifyTeams(
  * Uses standard baseball home field patterns:
  * - 7-game series: 2-3-2 (Games 1-2 at higher seed, 3-5 away, 6-7 at higher seed)
  * - 5-game series: 2-2-1 (Games 1-2 at higher seed, 3-4 away, 5 at higher seed)
- * - 3-game series: 2-1 (Games 1-2 at higher seed, 3 away)
+ * - 3-game series: 1-1-1 (Games 1 and 3 at higher seed, 2 away)
  *
  * The higher seed (team with better regular season record / higher playoff seed)
  * always gets home field advantage in the pattern.

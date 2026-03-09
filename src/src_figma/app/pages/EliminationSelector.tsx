@@ -9,7 +9,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Trophy, Trash2, Plus, Loader2 } from 'lucide-react';
+import { Trophy, Trash2, Plus, Loader2, ArrowLeft } from 'lucide-react';
 import {
   listEliminations,
   deleteElimination,
@@ -80,9 +80,19 @@ export function EliminationSelector() {
   return (
     <div className="min-h-screen bg-black text-white p-6">
       <div className="max-w-3xl mx-auto">
-        <div className="text-center mb-8">
-          <div className="text-[#0066FF] text-xs tracking-widest mb-1">KBL XHD TRACKER</div>
-          <div className="text-xl tracking-wide">Select Elimination Bracket</div>
+        <div className="flex items-center justify-between gap-4 mb-8">
+          <button
+            onClick={() => navigate('/')}
+            className="px-4 py-2 bg-[#111] border border-[#333] rounded-lg hover:bg-[#1a1a1a] text-xs flex items-center gap-2"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            APP HOME
+          </button>
+          <div className="text-center flex-1">
+            <div className="text-[#0066FF] text-xs tracking-widest mb-1">KBL XHD TRACKER</div>
+            <div className="text-xl tracking-wide">Select Elimination Bracket</div>
+          </div>
+          <div className="w-[112px]" />
         </div>
 
         {error && (

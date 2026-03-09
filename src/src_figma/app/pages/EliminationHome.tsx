@@ -14,6 +14,8 @@ import {
   updateElimination,
   type EliminationMetadata,
 } from '../../../utils/eliminationManager';
+import { getTeam } from '../../../utils/leagueBuilderStorage';
+import { buildEliminationGameTrackerRoster } from '../../../utils/eliminationRosterStorage';
 import {
   getAllPlayoffs,
   getSeriesByPlayoff,
@@ -24,6 +26,7 @@ import {
   type PlayoffPlayerStats,
 } from '../../../utils/playoffStorage';
 import { computeEliminationAwards, type EliminationAward } from '../../../utils/eliminationAwards';
+import { getHomeFieldPattern } from '../../../engines/playoffEngine';
 import { EliminationTeamHub } from '../components/EliminationTeamHub';
 
 type EliminationTab = 'bracket' | 'teamhub' | 'leaders' | 'awards' | 'history';
@@ -53,7 +56,13 @@ const tabs: Array<{ id: EliminationTab; label: string; icon: ReactNode }> = [
 
 function buildSeriesCardState(eliminationId: string, series: PlayoffSeries): SeriesCardState {
   const nextGameNumber = series.higherSeedWins + series.lowerSeedWins + 1;
-  const higherSeedHome = nextGameNumber % 2 === 1;
+  const homeTeamId = getHomeFieldPattern(
+    nextGameNumber,
+    series.bestOf,
+    series.higherSeed.teamId,
+    series.lowerSeed.teamId
+  );
+  const higherSeedHome = homeTeamId === series.higherSeed.teamId;
   const homeTeam = higherSeedHome ? series.higherSeed : series.lowerSeed;
   const awayTeam = higherSeedHome ? series.lowerSeed : series.higherSeed;
 
@@ -190,6 +199,40 @@ export function EliminationHome() {
     };
   }, [eliminationId]);
 
+  useEffect(() => {
+    if (!eliminationId || !metadata || !playoffConfig) return;
+    if (metadata.status !== 'COMPLETED' || metadata.awards !== undefined) return;
+
+    const currentEliminationId = eliminationId;
+    const currentPlayoffId = playoffConfig.id;
+    let cancelled = false;
+
+    async function persistAwards() {
+      try {
+        const computedAwards = await computeEliminationAwards(currentPlayoffId);
+        if (cancelled) return;
+
+        await updateElimination(currentEliminationId, { awards: computedAwards });
+        if (cancelled) return;
+
+        setMetadata((prev) => (
+          prev && prev.eliminationId === currentEliminationId
+            ? { ...prev, awards: computedAwards }
+            : prev
+        ));
+      } catch (err) {
+        if (!cancelled) {
+          console.error('[EliminationHome] Failed to persist awards:', err);
+        }
+      }
+    }
+
+    void persistAwards();
+    return () => {
+      cancelled = true;
+    };
+  }, [eliminationId, metadata, playoffConfig]);
+
   const seriesByRound = useMemo(() => {
     const grouped = new Map<number, PlayoffSeries[]>();
     for (const series of seriesList) {
@@ -203,30 +246,58 @@ export function EliminationHome() {
     [seriesList, selectedSeriesId]
   );
 
-  const handlePlayGame = (series: PlayoffSeries) => {
+  const handlePlayGame = async (series: PlayoffSeries) => {
     if (!eliminationId || !playoffConfig) return;
 
-    const { gameId, nextGameNumber, homeTeam, awayTeam } = buildSeriesCardState(eliminationId, series);
+    try {
+      const { gameId, nextGameNumber, homeTeam, awayTeam } = buildSeriesCardState(eliminationId, series);
+      const higherSeedHome = homeTeam.teamId === series.higherSeed.teamId;
+      const [awayRoster, homeRoster, awayTeamData, homeTeamData] = await Promise.all([
+        buildEliminationGameTrackerRoster(eliminationId, awayTeam.teamId),
+        buildEliminationGameTrackerRoster(eliminationId, homeTeam.teamId),
+        getTeam(awayTeam.teamId),
+        getTeam(homeTeam.teamId),
+      ]);
 
-    navigate(`/game-tracker/${gameId}`, {
-      state: {
-        gameMode: 'elimination',
-        eliminationId: eliminationId,
-        seriesId: series.id,
-        gameNumber: nextGameNumber,
-        roundName: series.roundName,
-        seasonId: `elimination-${eliminationId}`,
-        seasonNumber: 1,
-        homeTeamId: homeTeam.teamId,
-        homeTeamName: homeTeam.teamName,
-        awayTeamId: awayTeam.teamId,
-        awayTeamName: awayTeam.teamName,
-        stadiumName: homeTeam.teamName + ' Stadium',
-        playoffSeriesId: series.id,
-        playoffGameNumber: nextGameNumber,
-        playoffId: playoffConfig.id,
-      },
-    });
+      navigate(`/game-tracker/${gameId}`, {
+        state: {
+          gameMode: 'elimination',
+          eliminationId: eliminationId,
+          seriesId: series.id,
+          gameNumber: nextGameNumber,
+          roundName: series.roundName,
+          seasonNumber: 1,
+          statsScopeId: `elimination-${eliminationId}`,
+          competitionType: 'elimination',
+          competitionId: eliminationId,
+          homeTeamId: homeTeam.teamId,
+          homeTeamName: homeTeam.teamName,
+          homeSeed: homeTeam.seed,
+          awayTeamId: awayTeam.teamId,
+          awayTeamName: awayTeam.teamName,
+          awaySeed: awayTeam.seed,
+          seriesScore: {
+            home: higherSeedHome ? series.higherSeedWins : series.lowerSeedWins,
+            away: higherSeedHome ? series.lowerSeedWins : series.higherSeedWins,
+          },
+          awayPlayers: awayRoster.players,
+          awayPitchers: awayRoster.pitchers,
+          homePlayers: homeRoster.players,
+          homePitchers: homeRoster.pitchers,
+          awayTeamColor: awayTeamData?.colors.primary,
+          awayTeamBorderColor: awayTeamData?.colors.secondary,
+          homeTeamColor: homeTeamData?.colors.primary,
+          homeTeamBorderColor: homeTeamData?.colors.secondary,
+          stadiumName: homeTeamData?.stadium || homeTeam.teamName + ' Stadium',
+          playoffSeriesId: series.id,
+          playoffGameNumber: nextGameNumber,
+          playoffId: playoffConfig.id,
+          totalInnings: playoffConfig.inningsPerGame,
+        },
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load elimination rosters for game start.');
+    }
   };
 
   if (isLoading) {
@@ -258,12 +329,20 @@ export function EliminationHome() {
     <div className="min-h-screen bg-[#6B9462] text-[#E8E8D8]">
       <div className="bg-[#5A8352] border-b-[6px] border-[#4A6844] px-4 py-3">
         <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
-          <button
-            onClick={() => navigate('/elimination/select')}
-            className="p-2 hover:bg-[#4A6844] border-2 border-[#4A6844] transition active:scale-95"
-          >
-            <ArrowLeft className="w-5 h-5 text-[#E8E8D8]" />
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => navigate('/')}
+              className="px-3 py-2 hover:bg-[#4A6844] border-2 border-[#4A6844] transition active:scale-95 text-[8px] font-bold"
+            >
+              HOME
+            </button>
+            <button
+              onClick={() => navigate('/elimination/select')}
+              className="p-2 hover:bg-[#4A6844] border-2 border-[#4A6844] transition active:scale-95"
+            >
+              <ArrowLeft className="w-5 h-5 text-[#E8E8D8]" />
+            </button>
+          </div>
           <div className="text-center flex-1">
             <div className="text-lg">{metadata.name || 'ELIMINATION BRACKET'}</div>
             <div className="text-[8px] text-[#E8E8D8]/70">
@@ -314,8 +393,8 @@ export function EliminationHome() {
 
         {activeTab === 'awards' && (
           <EliminationAwardsContent
-            playoffId={playoffConfig.id}
             isCompleted={metadata.status === 'COMPLETED'}
+            awards={metadata.awards}
           />
         )}
 
@@ -365,9 +444,17 @@ function BracketTab({
                 const nextGame = buildSeriesCardState(eliminationId, series);
 
                 return (
-                  <button
+                  <div
                     key={series.id}
+                    role="button"
+                    tabIndex={0}
                     onClick={() => onSelectSeries(series.id)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault();
+                        onSelectSeries(series.id);
+                      }
+                    }}
                     className={`text-left border-4 p-4 transition active:scale-95 ${
                       isSelected
                         ? 'bg-[#4A6844] border-[#E8E8D8]'
@@ -409,7 +496,7 @@ function BracketTab({
                         )}
                       </div>
                     )}
-                  </button>
+                  </div>
                 );
               })}
             </div>
@@ -556,47 +643,12 @@ function PlayoffLeadersContent({ playoffId }: { playoffId: string }) {
 }
 
 function EliminationAwardsContent({
-  playoffId,
   isCompleted,
+  awards,
 }: {
-  playoffId: string;
   isCompleted: boolean;
+  awards?: EliminationAward[];
 }) {
-  const [isLoading, setIsLoading] = useState(false);
-  const [awards, setAwards] = useState<EliminationAward[]>([]);
-
-  useEffect(() => {
-    if (!isCompleted) {
-      setAwards([]);
-      setIsLoading(false);
-      return;
-    }
-
-    let cancelled = false;
-
-    async function loadAwards() {
-      try {
-        setIsLoading(true);
-        const computedAwards = await computeEliminationAwards(playoffId);
-        if (!cancelled) {
-          setAwards(computedAwards);
-        }
-      } catch (err) {
-        if (!cancelled) {
-          console.error('[EliminationHome] Failed to compute awards:', err);
-          setAwards([]);
-        }
-      } finally {
-        if (!cancelled) setIsLoading(false);
-      }
-    }
-
-    void loadAwards();
-    return () => {
-      cancelled = true;
-    };
-  }, [playoffId, isCompleted]);
-
   if (!isCompleted) {
     return (
       <div className="bg-[#5A8352] border-[6px] border-[#4A6844] p-8 text-center py-12 text-[#E8E8D8]/60 text-xs">
@@ -605,11 +657,11 @@ function EliminationAwardsContent({
     );
   }
 
-  if (isLoading) {
+  if (awards === undefined) {
     return (
       <div className="bg-[#5A8352] border-[6px] border-[#4A6844] p-8 text-center">
         <Loader2 className="w-8 h-8 animate-spin text-[#E8E8D8] mx-auto mb-3" />
-        <div className="text-[8px] text-[#E8E8D8]/70">COMPUTING ELIMINATION AWARDS...</div>
+        <div className="text-[8px] text-[#E8E8D8]/70">STORING ELIMINATION AWARDS...</div>
       </div>
     );
   }

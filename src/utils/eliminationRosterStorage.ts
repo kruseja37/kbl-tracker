@@ -6,9 +6,13 @@ import {
   type LineupSlot,
   type Player,
   type TeamRoster,
+  type Position,
 } from '../utils/leagueBuilderStorage';
+import type { Player as GameTrackerPlayer, Pitcher as GameTrackerPitcher } from '../src_figma/app/components/TeamRoster';
 
 const SNAPSHOT_STORE = 'rosterSnapshots';
+const FIELD_POSITIONS: Position[] = ['C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF', 'DH'];
+const PITCHER_POSITIONS = new Set(['SP', 'RP', 'CP', 'SP/RP']);
 
 export interface EliminationRosterSnapshot {
   key: string;
@@ -19,6 +23,136 @@ export interface EliminationRosterSnapshot {
   lineup: LineupSlot[];
   startingRotation: string[];
   snapshotAt: number;
+}
+
+function isPitcher(player: Player): boolean {
+  return PITCHER_POSITIONS.has(player.primaryPosition);
+}
+
+function getPlayerName(player: Player): string {
+  return `${player.firstName} ${player.lastName}`;
+}
+
+function getBestPosition(player: Player, usedPositions: Set<Position>): Position {
+  if (player.primaryPosition && FIELD_POSITIONS.includes(player.primaryPosition) && !usedPositions.has(player.primaryPosition)) {
+    return player.primaryPosition;
+  }
+
+  if (player.secondaryPosition && FIELD_POSITIONS.includes(player.secondaryPosition) && !usedPositions.has(player.secondaryPosition)) {
+    return player.secondaryPosition;
+  }
+
+  return FIELD_POSITIONS.find((position) => !usedPositions.has(position)) ?? 'DH';
+}
+
+export function getNormalizedEliminationLineup(snapshot: EliminationRosterSnapshot): LineupSlot[] {
+  const playerMap = new Map(snapshot.players.map((player) => [player.id, player]));
+  const validExisting = [...snapshot.lineup]
+    .filter((slot) => {
+      const player = playerMap.get(slot.playerId);
+      return player && !isPitcher(player);
+    })
+    .sort((a, b) => a.battingOrder - b.battingOrder);
+
+  const normalized: LineupSlot[] = [];
+  const usedPlayerIds = new Set<string>();
+  const usedPositions = new Set<Position>();
+
+  for (const slot of validExisting) {
+    if (usedPlayerIds.has(slot.playerId)) continue;
+    normalized.push({
+      battingOrder: normalized.length + 1,
+      playerId: slot.playerId,
+      fieldingPosition: slot.fieldingPosition,
+    });
+    usedPlayerIds.add(slot.playerId);
+    usedPositions.add(slot.fieldingPosition);
+    if (normalized.length === 9) return normalized;
+  }
+
+  const availablePlayers = snapshot.players.filter((player) => !isPitcher(player) && !usedPlayerIds.has(player.id));
+  for (const player of availablePlayers) {
+    normalized.push({
+      battingOrder: normalized.length + 1,
+      playerId: player.id,
+      fieldingPosition: getBestPosition(player, usedPositions),
+    });
+    usedPlayerIds.add(player.id);
+    usedPositions.add(normalized[normalized.length - 1].fieldingPosition);
+    if (normalized.length === 9) break;
+  }
+
+  return normalized;
+}
+
+export function getNormalizedEliminationRotation(snapshot: EliminationRosterSnapshot): string[] {
+  const pitcherIds = snapshot.players.filter(isPitcher).map((player) => player.id);
+  const orderedExisting = snapshot.startingRotation.filter((playerId) => pitcherIds.includes(playerId));
+  const remaining = pitcherIds.filter((playerId) => !orderedExisting.includes(playerId));
+  return [...orderedExisting, ...remaining];
+}
+
+function convertToGameTrackerPlayer(
+  player: Player,
+  battingOrder?: number,
+  position?: string
+): GameTrackerPlayer {
+  return {
+    name: getPlayerName(player),
+    position: position || player.primaryPosition || 'DH',
+    battingOrder,
+    stats: { ab: 0, h: 0, r: 0, rbi: 0, bb: 0, k: 0 },
+    battingHand: player.bats === 'S' ? 'S' : player.bats,
+    playerId: player.id,
+    power: player.power,
+    contact: player.contact,
+    speed: player.speed,
+    fieldingRating: player.fielding,
+    arm: player.arm,
+    velocity: player.velocity,
+    junk: player.junk,
+    accuracy: player.accuracy,
+    arsenal: player.arsenal as string[] | undefined,
+    overallGrade: player.overallGrade,
+    trait1: player.trait1,
+    trait2: player.trait2,
+    personality: player.personality,
+    chemistry: player.chemistry,
+    age: player.age,
+    throws: player.throws,
+    secondaryPosition: player.secondaryPosition,
+  };
+}
+
+function convertToGameTrackerPitcher(
+  player: Player,
+  isActive: boolean,
+  isStarter: boolean
+): GameTrackerPitcher {
+  return {
+    name: getPlayerName(player),
+    stats: { ip: '0.0', h: 0, r: 0, er: 0, bb: 0, k: 0, pitches: 0 },
+    throwingHand: player.throws,
+    isStarter,
+    isActive,
+    playerId: player.id,
+    velocity: player.velocity,
+    junk: player.junk,
+    accuracy: player.accuracy,
+    arsenal: player.arsenal as string[] | undefined,
+    overallGrade: player.overallGrade,
+    trait1: player.trait1,
+    trait2: player.trait2,
+    personality: player.personality,
+    chemistry: player.chemistry,
+    age: player.age,
+    secondaryPosition: player.secondaryPosition,
+    power: player.power,
+    contact: player.contact,
+    speed: player.speed,
+    fieldingRating: player.fielding,
+    arm: player.arm,
+  };
 }
 
 function getSnapshotKey(eliminationId: string, teamId: string): string {
@@ -149,6 +283,51 @@ export async function updateEliminationRosterSnapshot(
     })
   );
   await transactionToPromise(tx);
+}
+
+export async function buildEliminationGameTrackerRoster(
+  eliminationId: string,
+  teamId: string
+): Promise<{
+  players: GameTrackerPlayer[];
+  pitchers: GameTrackerPitcher[];
+}> {
+  const snapshot = await getEliminationRosterSnapshot(eliminationId, teamId);
+  if (!snapshot) {
+    throw new Error(`Roster snapshot not found: ${eliminationId}/${teamId}`);
+  }
+
+  const normalizedLineup = getNormalizedEliminationLineup(snapshot);
+  const normalizedRotation = getNormalizedEliminationRotation(snapshot);
+  const playerMap = new Map(snapshot.players.map((player) => [player.id, player]));
+  const lineupIds = new Set(normalizedLineup.map((slot) => slot.playerId));
+
+  const players: GameTrackerPlayer[] = normalizedLineup
+    .map((slot) => {
+      const player = playerMap.get(slot.playerId);
+      return player
+        ? convertToGameTrackerPlayer(player, slot.battingOrder, slot.fieldingPosition)
+        : null;
+    })
+    .filter((player): player is GameTrackerPlayer => Boolean(player));
+
+  const benchPlayers = snapshot.players
+    .filter((player) => !isPitcher(player) && !lineupIds.has(player.id))
+    .map((player) => convertToGameTrackerPlayer(player));
+
+  const pitchers = normalizedRotation
+    .map((playerId, index) => {
+      const player = playerMap.get(playerId);
+      return player
+        ? convertToGameTrackerPitcher(player, index === 0, index === 0 || player.primaryPosition === 'SP')
+        : null;
+    })
+    .filter((player): player is GameTrackerPitcher => Boolean(player));
+
+  return {
+    players: [...players, ...benchPlayers],
+    pitchers,
+  };
 }
 
 /**

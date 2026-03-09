@@ -260,6 +260,7 @@ export async function initPlayoffDatabase(): Promise<IDBDatabase> {
 
 export async function createPlayoff(config: Omit<PlayoffConfig, 'id' | 'createdAt'>): Promise<PlayoffConfig> {
   const db = await initPlayoffDatabase();
+  const newSourceType = config.sourceType || 'franchise';
 
   const playoff: PlayoffConfig = {
     ...config,
@@ -277,7 +278,11 @@ export async function createPlayoff(config: Omit<PlayoffConfig, 'id' | 'createdA
     cursorReq.onsuccess = () => {
       const cursor = cursorReq.result;
       if (cursor) {
-        cursor.delete();
+        const record = cursor.value as PlayoffConfig;
+        const existingSourceType = record.sourceType || 'franchise';
+        if (existingSourceType === newSourceType) {
+          cursor.delete();
+        }
         cursor.continue();
       } else {
         // All existing records for this season deleted, now add the new one
@@ -303,16 +308,39 @@ export async function getPlayoff(playoffId: string): Promise<PlayoffConfig | nul
   });
 }
 
-export async function getPlayoffBySeason(seasonNumber: number): Promise<PlayoffConfig | null> {
+export async function getPlayoffBySeason(
+  seasonNumber: number,
+  sourceType?: 'franchise' | 'elimination'
+): Promise<PlayoffConfig | null> {
   const db = await initPlayoffDatabase();
 
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORES.PLAYOFFS, 'readonly');
     const store = tx.objectStore(STORES.PLAYOFFS);
     const index = store.index('seasonNumber');
-    const request = index.get(seasonNumber);
+    const request = index.openCursor(seasonNumber);
 
-    request.onsuccess = () => resolve(request.result || null);
+    request.onsuccess = () => {
+      const cursor = request.result;
+      if (!cursor) {
+        resolve(null);
+        return;
+      }
+
+      const playoff = cursor.value as PlayoffConfig;
+      if (!sourceType) {
+        resolve(playoff);
+        return;
+      }
+
+      const existingSourceType = playoff.sourceType || 'franchise';
+      if (existingSourceType === sourceType) {
+        resolve(playoff);
+        return;
+      }
+
+      cursor.continue();
+    };
     request.onerror = () => reject(request.error);
   });
 }

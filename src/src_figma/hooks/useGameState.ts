@@ -4572,7 +4572,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         const { recordSeriesGame } = await import('../../utils/playoffStorage');
         const winnerId = gameState.homeScore > gameState.awayScore
           ? gameState.homeTeamId : gameState.awayTeamId;
-        await recordSeriesGame(playoffSeriesIdRef.current, {
+        const updatedSeries = await recordSeriesGame(playoffSeriesIdRef.current, {
           gameNumber: playoffGameNumberRef.current || 1,
           homeTeamId: gameState.homeTeamId,
           awayTeamId: gameState.awayTeamId,
@@ -4586,6 +4586,55 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
           gameLogId: gameState.gameId,
           playedAt: Date.now(),
         });
+
+        if (updatedSeries.status === 'COMPLETED' && updatedSeries.winner && playoffIdRef.current) {
+          const { completePlayoff, createNextRoundSeries, getPlayoff, getSeriesByRound, updatePlayoff } = await import('../../utils/playoffStorage');
+          const playoff = await getPlayoff(playoffIdRef.current);
+
+          if (playoff) {
+            const loserId = updatedSeries.winner === updatedSeries.higherSeed.teamId
+              ? updatedSeries.lowerSeed.teamId
+              : updatedSeries.higherSeed.teamId;
+            const updatedTeams = playoff.teams.map((team) =>
+              team.teamId === loserId
+                ? { ...team, eliminated: true, eliminatedInRound: updatedSeries.round }
+                : team
+            );
+            await updatePlayoff(playoff.id, { teams: updatedTeams });
+
+            const roundSeries = await getSeriesByRound(playoff.id, updatedSeries.round);
+            const allRoundComplete = roundSeries.every((series) => series.status === 'COMPLETED');
+
+            if (allRoundComplete) {
+              if (updatedSeries.round === playoff.rounds) {
+                const champSeries = roundSeries.find((series) => series.winner);
+                if (champSeries?.winner) {
+                  await completePlayoff(playoff.id, champSeries.winner);
+
+                  if (playoff.eliminationId) {
+                    const { updateElimination } = await import('../../utils/eliminationManager');
+                    const championName = playoff.teams.find((team) => team.teamId === champSeries.winner)?.teamName || 'Champion';
+                    await updateElimination(playoff.eliminationId, {
+                      status: 'COMPLETED',
+                      champion: championName,
+                    });
+                  }
+                }
+              } else {
+                await createNextRoundSeries(playoff.id, updatedSeries.round, playoff);
+                await updatePlayoff(playoff.id, { currentRound: updatedSeries.round + 1 });
+
+                if (playoff.eliminationId) {
+                  const { updateElimination } = await import('../../utils/eliminationManager');
+                  await updateElimination(playoff.eliminationId, {
+                    currentRound: updatedSeries.round + 1,
+                  });
+                }
+              }
+            }
+          }
+        }
+
         console.log(`[Playoff] Recorded series game: ${playoffSeriesIdRef.current} G${playoffGameNumberRef.current}, winner: ${winnerId}`);
       } catch (err) {
         console.error('[Playoff] Failed to record series game:', err);
@@ -4793,6 +4842,10 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       homeTeamName: gameState.homeTeamName,
       seasonNumber: currentSeasonNumber,
       stadiumName: resolvedStadium,
+      seasonId: archivedSeasonId,
+      statsScopeId: statsScopeIdValue,
+      competitionType: options?.competitionType ?? competitionTypeRef.current,
+      competitionId: options?.competitionId ?? competitionIdRef.current,
       playerStats: playerStatsRecord,
       pitcherGameStats: pitcherGameStatsArray,
       // Map local FameEventRecord to PersistedGameState format
@@ -4846,10 +4899,6 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     setPitchCountPrompt({
       type: 'end_game',
       pitcherId: gameState.currentPitcherId,
-      seasonId: archivedSeasonId,
-      statsScopeId: statsScopeIdValue,
-      competitionType: options?.competitionType ?? competitionTypeRef.current,
-      competitionId: options?.competitionId ?? competitionIdRef.current,
       pitcherName: gameState.currentPitcherName || gameState.currentPitcherId,
       currentCount: currentPitcherStats.pitchCount,
       lastVerifiedInning: gameState.inning,
