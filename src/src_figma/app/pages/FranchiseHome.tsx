@@ -39,7 +39,7 @@ import { useOffseasonState } from "@/hooks/useOffseasonState";
 import { generateNewSeasonSchedule } from "../../../utils/franchiseInitializer";
 import { executeSeasonTransition } from "../../../engines/seasonTransitionEngine";
 import { updateFranchiseMetadata } from "../../../utils/franchiseManager";
-import { getPlayersByTeam } from "../../../utils/leagueBuilderStorage";
+import { getPlayersByTeam, getTeam } from "../../../utils/leagueBuilderStorage";
 import { getRecentGames } from "../../utils/gameStorage";
 import { generateGameRecap } from "../engines/narrativeIntegration";
 import type { Player as TeamRosterPlayer, Pitcher as TeamRosterPitcher } from "@/app/components/TeamRoster";
@@ -720,9 +720,11 @@ export function FranchiseHome() {
     const homeTeamName = isHigherSeedHome ? series.higherSeed.teamName : series.lowerSeed.teamName;
 
     // T0-08: Load real rosters from IndexedDB for both teams
-    const [awayRoster, homeRoster] = await Promise.all([
+    const [awayRoster, homeRoster, awayTeamData, homeTeamData] = await Promise.all([
       buildGameTrackerRoster(awayTeamId, { franchiseId, leagueId: franchiseLeagueId }),
       buildGameTrackerRoster(homeTeamId, { franchiseId, leagueId: franchiseLeagueId }),
+      getTeam(awayTeamId),
+      getTeam(homeTeamId),
     ]);
 
     navigate(`/game-tracker/playoff-${series.id}-g${nextGameNumber}`, {
@@ -738,6 +740,10 @@ export function FranchiseHome() {
         awayPitchers: awayRoster.pitchers.length > 0 ? awayRoster.pitchers : undefined,
         homePlayers: homeRoster.players.length > 0 ? homeRoster.players : undefined,
         homePitchers: homeRoster.pitchers.length > 0 ? homeRoster.pitchers : undefined,
+        awayTeamColor: awayTeamData?.colors.primary || getTeamColors(awayTeamId).primary,
+        awayTeamBorderColor: awayTeamData?.colors.secondary || getTeamColors(awayTeamId).secondary,
+        homeTeamColor: homeTeamData?.colors.primary || getTeamColors(homeTeamId).primary,
+        homeTeamBorderColor: homeTeamData?.colors.secondary || getTeamColors(homeTeamId).secondary,
         awayRecord: getTeamRecord(awayTeamId), // MAJ-15: Pass actual team records to GameTracker
         homeRecord: getTeamRecord(homeTeamId), // MAJ-15: Pass actual team records to GameTracker
         franchiseId,
@@ -2836,9 +2842,14 @@ function GameDayContent({ scheduleData, currentSeason, onDataRefresh }: GameDayC
   };
 
   // T3-01: Launch game with selected starters from pre-game screen
-  const handleLaunchGame = () => {
+  const handleLaunchGame = async () => {
     if (!preGameData) return;
     const { awayPlayers, awayPitchers, homePlayers, homePitchers } = preGameData;
+
+    const [awayTeamData, homeTeamData] = await Promise.all([
+      getTeam(preGameData.awayTeamId),
+      getTeam(preGameData.homeTeamId),
+    ]);
 
     // Apply selected starter: mark the chosen pitcher as isStarter/isActive
     const finalAwayPitchers = awayPitchers.map((p, i) => ({
@@ -2863,6 +2874,10 @@ function GameDayContent({ scheduleData, currentSeason, onDataRefresh }: GameDayC
         awayPitchers: finalAwayPitchers.length > 0 ? finalAwayPitchers : undefined,
         homePlayers: homePlayers.length > 0 ? homePlayers : undefined,
         homePitchers: finalHomePitchers.length > 0 ? finalHomePitchers : undefined,
+        awayTeamColor: awayTeamData?.colors.primary || getTeamColors(preGameData.awayTeamId).primary,
+        awayTeamBorderColor: awayTeamData?.colors.secondary || getTeamColors(preGameData.awayTeamId).secondary,
+        homeTeamColor: homeTeamData?.colors.primary || getTeamColors(preGameData.homeTeamId).primary,
+        homeTeamBorderColor: homeTeamData?.colors.secondary || getTeamColors(preGameData.homeTeamId).secondary,
         awayRecord: getTeamRecord(preGameData.awayTeamId),
         homeRecord: getTeamRecord(preGameData.homeTeamId),
         stadiumName: franchiseData.stadiumMap?.[preGameData.homeTeamId] ?? preGameData.homeTeamName,
