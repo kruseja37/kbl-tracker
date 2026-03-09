@@ -1,6 +1,6 @@
 # MODE 2: FRANCHISE SEASON — Gospel Specification
 
-**Version:** 1.1 (Gospel — JK Review Pass)
+**Version:** 1.2 (Gospel — Contradiction Resolutions Applied)
 **Status:** CANONICAL — This document is the single source of truth for Mode 2
 **Created:** 2026-02-23
 **Supersedes:** KBL_UNIFIED_ARCHITECTURE_SPEC.md (GameTracker sections), STAT_TRACKING_ARCHITECTURE_SPEC.md, PITCHER_STATS_TRACKING_SPEC.md, PITCH_COUNT_TRACKING_SPEC.md, INHERITED_RUNNERS_SPEC.md, FIELDING_SYSTEM_SPEC.md, FIELDING_PIPELINE_MAPPINGS.md, RUNNER_ADVANCEMENT_RULES.md, BWAR_SPEC.md, PWAR_SPEC.md, FWAR_SPEC.md, RWAR_SPEC.md, MWAR_SPEC.md, LEVERAGE_INDEX_SPEC.md, CLUTCH_ATTRIBUTION_SPEC.md, NARRATIVE_SYSTEM_SPEC.md, DYNAMIC_DESIGNATIONS_SPEC.md, MILESTONE_SYSTEM_SPEC.md, FAN_FAVORITE_SYSTEM_SPEC.md, FAN_MORALE_SYSTEM_SPEC.md, MOJO_FITNESS_SYSTEM_SPEC.md, GAME_SIMULATION_SPEC.md (renamed AI_GAME_ENGINE per C-048/C-082), PLAYOFF_SYSTEM_SPEC.md, PLAYOFFS_FIGMA_SPEC.md, SPECIAL_EVENTS_SPEC.md, ADAPTIVE_STANDARDS_ENGINE_SPEC.md, STADIUM_ANALYTICS_SPEC.md, PARK_FACTOR_SEED_SPEC.md, MASTER_BASEBALL_RULES_AND_LOGIC.md, SUBSTITUTION_FLOW_SPEC.md, GAMETRACKER_DRAGDROP_SPEC.md (flow sections), GAMETRACKER_BUGS.md, GAMETRACKER_UX_COMPETITIVE_ANALYSIS.md
@@ -82,7 +82,7 @@ When Mode 1 completes, Mode 2 receives:
 3. **Complete rosters** — all players with ratings, traits, personalities, salaries
 4. **Farm rosters** — populated via Startup Prospect Draft
 5. **Rules configuration** — season length, playoffs, roster rules, narrative toggles
-6. **Schedule** — pre-generated, user-editable game schedule (per C-079)
+6. **Schedule** — user-provided, editable game schedule (per C-079 and MODE_1 §10)
 7. **Franchise type** — Solo/Co-Op/Custom with `controlledBy` flags
 8. **Initialized subsystems** — standings tables, salary ledger, empty stats stores
 
@@ -192,14 +192,15 @@ interface AtBatEvent {
     careerHits: number;
     careerHR: number;
     fameLevel: FameLevel;
-    personality?: PlayerPersonality;  // Hidden from user
+    personality?: PersonalityType;           // visible type snapshot
+    hiddenModifiers?: HiddenModifiers;       // snapshot for engine use, never shown
   };
 
   pitcherContext: {
     playerId: string;
     playerName: string;
     handedness: 'L' | 'R';
-    role: 'starter' | 'reliever' | 'closer' | 'setup';
+    role: PitcherRole;             // 5-value enum: 'starter' | 'closer' | 'setup' | 'middle' | 'mop_up'
     mojoState: MojoLevel;
     fitnessLevel: FitnessLevel;
     pitchCount: number;
@@ -210,7 +211,8 @@ interface AtBatEvent {
     careerWins: number;
     inheritedRunners: number;
     fameLevel: FameLevel;
-    personality?: PlayerPersonality;
+    personality?: PersonalityType;           // visible type snapshot
+    hiddenModifiers?: HiddenModifiers;       // snapshot for engine use, never shown
   };
 
   matchupContext: {
@@ -244,8 +246,8 @@ interface AtBatEvent {
   assists?: number[];
   errors?: { position: number; type: 'fielding' | 'throwing' | 'mental' }[];
   hrDistance?: number;
-  pitchType?: '4-seam' | '2-seam' | 'cutter' | 'slider' | 'curve' |
-              'changeup' | 'screwball' | 'forkball' | 'unknown';
+  pitchType?: PitchType;           // Abbreviation stored; UI displays full names
+  // PitchType = '4F' | '2F' | 'CB' | 'SL' | 'CH' | 'FK' | 'CF' | 'SB' | 'UNK'
   pitchesInAtBat?: number;
   modifiers?: string[];
 
@@ -264,27 +266,45 @@ interface AtBatEvent {
 **Shared Enums:**
 
 ```typescript
-type MojoLevel = 'Rattled' | 'Tense' | 'Neutral' | 'LockedIn' | 'Jacked';
-// Canonical type from SPINE_ARCHITECTURE.md §3.6
-// Numeric mapping: Rattled = -2, Tense = -1, Neutral = 0, LockedIn = +1, Jacked = +2
+type MojoLevel = 'Rattled' | 'Tense' | 'Neutral' | 'Locked-In' | 'On Fire' | 'Jacked';
+// Canonical 6-tier mojo scale — unified across MODE_1 and MODE_2
+// Numeric mapping: Rattled = -2, Tense = -1, Neutral = 0, Locked-In = +1, On Fire = +2, Jacked = +3
 type FitnessLevel = 'Hurt' | 'Weak' | 'Strained' | 'Well' | 'Fit' | 'Juiced';
 // Canonical fitness type — PascalCase values aligned with MojoLevel convention
 // UPPERCASE alias (FitnessState) retired; use FitnessLevel everywhere
 type FameLevel = 'Unknown' | 'Local' | 'Regional' | 'National' | 'Superstar' | 'Legend';
 // Aligned with MODE_1_LEAGUE_BUILDER.md fame tiers
 
-// Aligned with MODE_1_LEAGUE_BUILDER.md personality model (C-070)
-type PlayerPersonalityType =
-  | 'LEADER' | 'TEAM_PLAYER' | 'LONER' | 'HOTHEAD'
-  | 'JOKESTER' | 'MENTOR' | 'EGOTIST';
+// Position type hierarchy (canonical — see SPINE_ARCHITECTURE.md)
+// ROSTER CONTEXT: PrimaryPosition = CorePosition; SecondaryPosition = CorePosition | CompositePosition
+type CorePosition = 'C' | '1B' | '2B' | 'SS' | '3B' | 'LF' | 'CF' | 'RF' |
+                    'SP' | 'RP' | 'CP' | 'SP/RP';
+type CompositePosition = 'IF' | 'OF' | 'IF/OF' | '1B/OF';
+type PrimaryPosition = CorePosition;
+type SecondaryPosition = CorePosition | CompositePosition;
+// IN-GAME CONTEXT: where a player is RIGHT NOW on the field
+type FieldPosition = 'C' | '1B' | '2B' | 'SS' | '3B' | 'LF' | 'CF' | 'RF' | 'P' | 'DH';
 
-interface PlayerPersonality {
-  type: PlayerPersonalityType;
-  // Hidden modifiers (0-100, not visible to user)
-  loyalty: number;
-  charisma: number;
-  workEthic: number;
-  composure: number;
+// PitcherRole: 5-value in-game role derived from usage patterns (canonical — see SPINE_ARCHITECTURE.md)
+type PitcherRole = 'starter' | 'closer' | 'setup' | 'middle' | 'mop_up';
+// Role is derived at runtime from actual usage (average LI, save opportunities, entry inning),
+// not user-assigned. RosterPosition (RP/CP/SP/RP) sets initial expectations; PitcherRole is the season classification.
+
+// ChemistryType: 5-value PascalCase (aligned with MODE_1_LEAGUE_BUILDER.md §5.4)
+type ChemistryType = 'Competitive' | 'Spirited' | 'Crafty' | 'Scholarly' | 'Disciplined';
+
+// Per C-070: 7 SMB4-native personality types — authoritative source is MODE_1_LEAGUE_BUILDER.md §5.4
+type PersonalityType = 'Competitive' | 'Relaxed' | 'Droopy' | 'Jolly' |
+                       'Tough' | 'Timid' | 'Egotistical';
+
+// Canonical personality shape (flat — aligned with MODE_1 §5.4 Player interface)
+// Player.personality: PersonalityType — visible to user
+// Player.hiddenModifiers: HiddenModifiers — never shown as numbers
+interface HiddenModifiers {
+  loyalty: number;       // 0-100: FA preference, trade request likelihood
+  ambition: number;      // 0-100: Development speed, willingness to change teams
+  resilience: number;    // 0-100: Morale recovery, retirement probability
+  charisma: number;      // 0-100: Teammate morale, captain selection, mentorship
 }
 ```
 
@@ -413,7 +433,7 @@ interface TransactionEvent {
   freeAgent?: {
     playerId: string;
     signingTeamId: string;
-    contractYears: number;
+    contractYears: 1;              // All contracts are 1 year in v1 (per MODE_1 §5.3). Multi-year contracts are V2.
     annualSalary: number;
     previousTeamId?: string;
   };
@@ -421,8 +441,8 @@ interface TransactionEvent {
   rosterMove?: {
     playerId: string;
     teamId: string;
-    fromLevel: 'mlb' | 'farm' | 'free_agent' | 'retired';
-    toLevel: 'mlb' | 'farm' | 'free_agent' | 'retired';
+    fromLevel: RosterLevel;       // 'MLB' | 'FARM' | 'FREE_AGENT' | 'RETIRED' — UPPERCASE per SPINE
+    toLevel: RosterLevel;
   };
 
   draftPick?: {
@@ -438,7 +458,18 @@ interface TransactionEvent {
 
 ### 2.4 GameRecord Interface
 
+> **Note:** See SPINE_ARCHITECTURE.md for the canonical `LineupEntry` interface.
+
 ```typescript
+// LineupEntry (canonical — see SPINE_ARCHITECTURE.md)
+interface LineupEntry {
+  playerId: string;
+  playerName: string;
+  battingOrder: number;              // 1-9
+  fieldPosition: FieldPosition;      // Where they play in this game
+  primaryPosition: PrimaryPosition;  // Roster position (for display context)
+}
+
 interface GameRecord {
   gameId: string;
   seasonId: string;
@@ -678,7 +709,8 @@ Tapping any play entry opens enrichment panel. Plays with no enrichment option (
 - Feeds park factor calculations, power metrics, Fenway scoreboard display
 
 **Pitch Type (optional for all plays):**
-- Selector: `4-seam | 2-seam | Cutter | Slider | Curve | Changeup | Screwball | Forkball | Unknown`
+- Selector: `4F | 2F | CF | SL | CB | CH | SB | FK | UNK`
+  (UI displays full names; stored value is abbreviation)
 - Filtered by current pitcher's repertoire (from League Builder)
 - Prompted inline after HR distance
 - Builds scouting reports and rivalry matchup data
@@ -776,7 +808,7 @@ This section codifies the authoritative baseball rules governing all GameTracker
 
 ### 6.1 Game Structure
 
-- Standard 9 innings (configurable to 7 or other values via League Rules)
+- Standard 9 innings (configurable 1-9 per League Rules; see MODE_1 §9.2).
 - Top/Bottom per inning; 3 outs per half-inning
 - Extra innings if tied after regulation
 - 9-batter lineup (DH optional per League Rules)
@@ -1085,7 +1117,7 @@ interface PlayerSeasonStats {
 | Career stats | IndexedDB | Permanent |
 | Historical games | IndexedDB (compressed) | Archival |
 
-**Storage cost:** ~500 bytes per at-bat, ~70 per game = ~35KB/game, ~5.7MB for 162-game season.
+**Storage cost:** ~500 bytes per at-bat event, ~35KB per completed game. Per-season league-wide total: `(numTeams × gamesPerTeam / 2) × 35KB`. For a 16-team, 32-game league: ~9MB. For a 32-team, 162-game league: ~91MB. See MODE_1 §13.3 for full storage projections.
 
 ---
 
@@ -1262,6 +1294,8 @@ const PITCHES_PER_BATTER_ESTIMATE = {
 ## 10. Fielding System
 
 ### 10.1 Fielding Chance Rules
+
+> **Note:** Tables in this section use `FieldPosition` values (in-game defensive slots). Composite roster designations (IF, OF, IF/OF, 1B/OF) are resolved to concrete FieldPosition slots at game time.
 
 A fielding chance is recorded **ONLY when a fielder attempts to make a play on the ball.**
 
@@ -1480,6 +1514,8 @@ Closer (LI 1.8)→1.40, Setup (LI 1.3)→1.15, Middle (LI 0.9)→0.95, Mop-up (L
 **Per C-060:** Fielding chance vs fWAR credit boundary defined: a fielding play generates fWAR credit only when the play is a chance (see §10.1). Hits with no fielder attempt generate zero fWAR.
 
 **Positional Adjustments (per 48 games):**
+
+> **Note:** These adjustments use `FieldPosition` values (in-game slots). Composite roster designations are resolved to concrete slots at game time.
 
 | Position | Runs | WAR |
 |----------|------|-----|
@@ -1768,15 +1804,16 @@ Mojo tracks in-game momentum. Fitness tracks physical wear across games. Both fe
 
 ### 14.1 Mojo Levels
 
-Five-level scale with internal values -2 to +2:
+Six-level scale with internal values -2 to +3 (canonical — see SPINE_ARCHITECTURE.md):
 
-| Level | Value | Enum | Stat Effect | Visual |
-|-------|-------|------|-------------|--------|
-| Jacked | +2 | VERY_HIGH | +15-20% | 🔥🔥🔥 |
-| Locked In | +1 | HIGH | +8-10% | 🔥🔥 |
-| Normal | 0 | NEUTRAL | Baseline | ➖ |
-| Tense | -1 | LOW | -8-10% | 😰 |
-| Rattled | -2 | VERY_LOW | -15-20%, hard to escape | 😱 |
+| Level | Value | Stat Effect | Visual |
+|-------|-------|-------------|--------|
+| Rattled | -2 | -15-20%, hard to escape | 😱 |
+| Tense | -1 | -8-10% | 😰 |
+| Neutral | 0 | Baseline | ➖ |
+| Locked-In | +1 | +8-10% | 🔥 |
+| On Fire | +2 | +12-15% | 🔥🔥 |
+| Jacked | +3 | +15-20% | 🔥🔥🔥 |
 
 ### 14.2 Mojo State Changes (User-Observed)
 
@@ -1826,15 +1863,15 @@ Juiced (120%) is achieved ONLY through:
 ```typescript
 function checkJuicedEligibility(player: Player): boolean {
   return (
-    player.fitness === 100 &&            // Must be Fit
-    player.recentlyJuiced === false       // 20-game cooldown
+    player.currentFitness === 'Fit' &&    // Must be at Fit level
+    player.juicedCooldown === 0            // 20-game cooldown expired
   );
 }
 ```
 
 ### 14.8 Injury Tracking (User-Observed)
 
-Injuries are observed by the user in SMB4 and recorded in KBL as fitness state changes (typically to 'HURT' or 'WEAK'). The engine does NOT auto-calculate injury risk — injuries happen in SMB4, and the user records them. The engine tracks injury events in fitness history for narrative and performance analysis.
+Injuries are observed by the user in SMB4 and recorded in KBL as fitness state changes (typically to 'Hurt' or 'Weak'). The engine does NOT auto-calculate injury risk — injuries happen in SMB4, and the user records them. The engine tracks injury events in fitness history for narrative and performance analysis.
 
 ### 14.9 Fame Integration
 
@@ -1844,10 +1881,10 @@ Injuries are observed by the user in SMB4 and recorded in KBL as fitness state c
 
 ```typescript
 function getMojoFameModifier(mojo: number): number {
-  const MODIFIERS = { [-2]: 1.30, [-1]: 1.15, [0]: 1.00, [1]: 0.90, [2]: 0.80 };
+  const MODIFIERS = { [-2]: 1.30, [-1]: 1.15, [0]: 1.00, [1]: 0.90, [2]: 0.85, [3]: 0.80 };
   return MODIFIERS[mojo] || 1.00;
 }
-// Rattled +30% (overcoming pressure), Jacked -20% (easy when hot)
+// Rattled +30% (overcoming pressure), On Fire -15%, Jacked -20% (easy when hot)
 ```
 
 **Combined Calculation:**
@@ -1855,9 +1892,9 @@ function getMojoFameModifier(mojo: number): number {
 ```typescript
 function calculateAdjustedFame(baseFame: number, mojo: number, fitness: FitnessLevel): number {
   let adjusted = baseFame * getMojoFameModifier(mojo);
-  if (fitness === 'JUICED') adjusted *= 0.5;
-  if (fitness === 'STRAINED') adjusted *= 1.15;  // Playing hurt bonus
-  if (fitness === 'WEAK') adjusted *= 1.25;       // Gutsy performance
+  if (fitness === 'Juiced') adjusted *= 0.5;
+  if (fitness === 'Strained') adjusted *= 1.15;  // Playing hurt bonus
+  if (fitness === 'Weak') adjusted *= 1.25;       // Gutsy performance
   return Math.round(adjusted);
 }
 ```
@@ -1867,18 +1904,18 @@ function calculateAdjustedFame(baseFame: number, mojo: number, fitness: FitnessL
 ```typescript
 function getWARMultiplier(mojo: number, fitness: FitnessLevel): number {
   let mult = 1.0;
-  // Mojo: Rattled +15%, Tense +7%, Normal 0%, Locked In -5%, Jacked -10%
-  const mojoMult = { [-2]: 1.15, [-1]: 1.07, [0]: 1.00, [1]: 0.95, [2]: 0.90 };
+  // Mojo: Rattled +15%, Tense +7%, Neutral 0%, Locked-In -5%, On Fire -8%, Jacked -10%
+  const mojoMult = { [-2]: 1.15, [-1]: 1.07, [0]: 1.00, [1]: 0.95, [2]: 0.92, [3]: 0.90 };
   mult *= mojoMult[mojo] || 1.00;
   // Fitness: Juiced -15%, Strained +10%, Weak +20%
-  if (fitness === 'JUICED') mult *= 0.85;
-  else if (fitness === 'STRAINED') mult *= 1.10;
-  else if (fitness === 'WEAK') mult *= 1.20;
+  if (fitness === 'Juiced') mult *= 0.85;
+  else if (fitness === 'Strained') mult *= 1.10;
+  else if (fitness === 'Weak') mult *= 1.20;
   return mult;
 }
 
 function getClutchMultiplier(mojo: number): number {
-  const mults = { [-2]: 1.30, [-1]: 1.15, [0]: 1.00, [1]: 0.90, [2]: 0.85 };
+  const mults = { [-2]: 1.30, [-1]: 1.15, [0]: 1.00, [1]: 0.90, [2]: 0.87, [3]: 0.85 };
   return mults[mojo] || 1.00;
 }
 ```
@@ -1888,7 +1925,7 @@ function getClutchMultiplier(mojo: number): number {
 ```typescript
 interface PlayerMojoFitness {
   playerId: string;
-  currentMojo: number;                       // -2 to +2
+  currentMojo: number;                       // -2 to +3 (6-tier: Rattled to Jacked)
   currentFitness: FitnessLevel;
   mojoHistory: MojoEntry[];
   fitnessHistory: FitnessEntry[];
@@ -2002,8 +2039,8 @@ const HOT_STREAK: Modifier = {
   scope: 'PLAYER',
   trigger: 'RANDOM_EVENT',
   probability: 0.02,  // 2% per game
-  conditions: [{ type: 'FITNESS_STATE', value: 'FIT' }],
-  effects: [{ type: 'FITNESS_CHANGE', target: 'FITNESS', value: 'JUICED' }],
+  conditions: [{ type: 'FITNESS_STATE', value: 'Fit' }],
+  effects: [{ type: 'FITNESS_CHANGE', target: 'FITNESS', value: 'Juiced' }],
   duration: 5,
   stackable: false,
   maxStacks: 1,
@@ -2012,6 +2049,24 @@ const HOT_STREAK: Modifier = {
   narrativeTag: 'HOT_STREAK'
 };
 ```
+
+### 15.5 Chemistry-Trait Potency System
+
+Trait Potency is a Team-Aggregate Mechanic. A player’s individual trait power is determined by the collective "Chemistry" of the entire active roster.
+
+**The Potency Tiers:**
+Each player is assigned one of the five Chemistry Types (Competitive, Spirited, Crafty, Scholarly, Disciplined). Every trait is mapped to one of these five categories. The potency of a trait is determined by the number of players on the roster sharing the same Chemistry category as that trait.
+
+| Tier | Team Chemistry Count | Potency Level | Mechanical Impact |
+| :--- | :--- | :--- | :--- |
+| **Level 1** | **< 3 players** | **Minor** | Nominal or no effect when trait activates. |
+| **Level 2** | **3 – 6 players** | **Standard** | Standard mechanical benefit (SMB4 baseline). |
+| **Level 3** | **> 6 players** | **Maximum** | Significant enhancement; Maximum potency activation. |
+
+**System Wiring:**
+1. **Aggregate Contribution:** Every player's assigned Chemistry type contributes to the team's total count for that category.
+2. **Global Activation:** The Potency Level applies to *all* traits within a category team-wide. If a team has 7 players in a category, every player on that team possessing a trait tied to that category operates at Level 3 Maximum Potency.
+3. **Salary Impact:** Trait Potency is calculated at the moment of salary generation. A higher Potency Level results in a higher salary valuation for traits in that category, reflecting the significant competitive advantage provided by maximized chemistry.
 
 ---
 
@@ -2038,7 +2093,7 @@ interface BeatReporter {
   tenure: number;                         // Seasons covering this team
   reputation: 'ROOKIE' | 'ESTABLISHED' | 'VETERAN' | 'LEGENDARY';
   storiesWritten: number;
-  hiredDate: FictionalDate;
+  hiredDate: GameDate;
 }
 
 type ReporterPersonality =
@@ -2145,9 +2200,10 @@ const NARRATIVE_ROUTING = {
 
 ```typescript
 function generatePlayerQuote(player: Player, situation: QuoteSituation, useLLM: boolean): PlayerQuote {
+  // 80/20 rule: player aligns with visible personality 80% of the time, goes off-brand 20%
   const effectivePersonality = Math.random() < 0.80
-    ? player.hiddenPersonality
-    : getOffBrandPersonality(player);
+    ? player.personality              // Visible PersonalityType
+    : getOffBrandPersonality(player); // Random different type
 
   if (!useLLM) {
     return { quote: pickRandom(QUOTE_TEMPLATES[effectivePersonality][situation.type]) };
@@ -2233,7 +2289,7 @@ Six designation types that update during the season, influencing fan morale, Fam
 
 ### 17.3 Fan Favorite
 
-- **Criteria:** Highest positive Value Delta (True Value − Contract).
+- **Criteria:** Highest positive Value Delta (True Value − Contract). Value Delta = True Value − Contract. True Value calculated per SALARY_SYSTEM_SPEC (WAR-based market valuation). See salary system gospel for formula.
 - **Min Games:** 10% of season (min 3).
 - **Mid-Season:** Dotted border badge, "Proj. Fan Fav".
 - **Season End:** Solid border badge, "Fan Favorite".
@@ -2242,7 +2298,7 @@ Six designation types that update during the season, influencing fan morale, Fam
 
 ### 17.4 Albatross
 
-- **Criteria:** Most negative Value Delta (True Value − Contract).
+- **Criteria:** Most negative Value Delta (True Value − Contract). Value Delta = True Value − Contract. True Value calculated per SALARY_SYSTEM_SPEC (WAR-based market valuation). See salary system gospel for formula.
 - **Min Games:** 10% of season (min 3).
 - **Mid-Season:** Dotted border badge, "Proj. Albatross".
 - **Season End:** Solid border badge, "Albatross".
@@ -2424,7 +2480,7 @@ type PlayerMoraleState =
 | Team win | +1 | +2 if player contributed (hit, save, etc.) |
 | Team loss | -1 | -2 if player responsible (error, blown save) |
 | Win streak (team) | +1 per 3-game streak | Caps at +5 |
-| Lose streak (team) | -1 per 3-game streak | Personality modifies: HOTHEAD ×1.5 |
+| Lose streak (team) | -1 per 3-game streak | Personality modifies: Tough ×1.5 |
 | Fan morale ≥ 80 | +3 adjustment | Per §20.8 |
 | Fan morale ≤ 30 | -3 adjustment | Per §20.8 |
 | Positive narrative about player | +1 to +3 | Beat reporter coverage |
@@ -2432,12 +2488,12 @@ type PlayerMoraleState =
 | Designation earned (MVP, Ace) | +5 | Positive recognition |
 | Designated Albatross | -5 | Negative label |
 | Fan Hopeful designation | +5 | Excitement of being highlighted |
-| Trade away (player traded) | -3 to +3 | Varies by personality: TEAM_PLAYER -5, LONER +2 |
+| Trade away (player traded) | -3 to +3 | Varies by personality: Jolly -5, Timid +2 |
 | Teammate traded away | -1 to -3 | Relationship strength modifies |
 | Albatross traded away | +2 | Team morale relief |
 | Captain performance | ±2 | Captain's clutch/choke ripples to teammates |
 | Relationship events | ±2 | Mentor/mentee, rivalry, friendship |
-| Personality alignment | varies | LEADER boosts team morale, EGOTIST only self |
+| Personality alignment | varies | Competitive boosts team morale, Egotistical only self |
 
 **Morale → Rating Change Suggestions:**
 
@@ -2463,8 +2519,8 @@ All thresholds stored as MLB baselines, scaled at runtime using dual-factor syst
 
 ```typescript
 interface MilestoneConfig {
-  gamesPerSeason: number;    // e.g., 128 for SMB4
-  inningsPerGame: number;    // e.g., 6 for SMB4
+  gamesPerSeason: number;    // e.g., 32 for Standard Preset
+  inningsPerGame: number;    // e.g., 7 for Standard Preset
 }
 
 const MLB_BASELINE_GAMES = 162;
@@ -2523,6 +2579,8 @@ function getCombinedScalingFactor(config: MilestoneConfig): number {
 | 0-for-5+ Game | 0 hits in 5+ AB | -0.3 | Minor boner |
 
 ### 18.3 Season Milestones (Selected, Scaled for 128g/6inn)
+
+> **Note:** Examples below use 128g/6inn configuration to demonstrate scaling math. The Standard Preset is 32g/7inn (factor = 0.154). See MODE_1 §9.3 for all preset configurations.
 
 **Batting Clubs (scaled by opportunity factor for shorter season — achieving these thresholds requires a higher per-game rate than MLB, making KBL milestones proportionally harder to reach):**
 
@@ -2643,13 +2701,16 @@ interface AchievedMilestone {
 
 When a player carries the Albatross designation, other teams demand **15% less** in trade value to acquire them.
 
+Trade base value calculated per SALARY_SYSTEM_SPEC. The Albatross 15% discount applies after base value calculation.
+
 ```typescript
 function getAlbatrossTradeDiscount(player: Player): number {
   if (player.designation === 'ALBATROSS') return 0.15;  // 15% discount
   return 0;
 }
 
-function calculateTradeValue(player: Player, baseValue: number): number {
+function calculateTradeValue(player: Player): number {
+  const baseValue = calculateTradeBaseValue(player);  // From SALARY_SYSTEM_SPEC
   const discount = getAlbatrossTradeDiscount(player);
   return baseValue * (1 - discount);
 }
@@ -2744,7 +2805,7 @@ function getFranchiseHealthWarning(team: Team): FranchiseWarning | null {
 
 ### 20.8 Consequences of Morale
 
-**Player Morale:** Fan morale ≥80 → +3 playerMorale adjustment. ≤30 → -3 playerMorale adjustment. Personality modifiers apply (EGOTIST ×1.5, TEAM_PLAYER ×0.5). See §17.14 for full playerMorale system. playerMorale fires for a player's own milestones even if minor (e.g., personal hitting streak, first career HR).
+**Player Morale:** Fan morale ≥80 → +3 playerMorale adjustment. ≤30 → -3 playerMorale adjustment. Personality modifiers apply (Egotistical ×1.5, Jolly ×0.5). See §17.14 for full playerMorale system. playerMorale fires for a player's own milestones even if minor (e.g., personal hitting streak, first career HR).
 
 **FA Attractiveness (Per C-093):** Baseline formula only — `(fanMorale - 50) × 0.5`. State-based bonuses REMOVED per C-093. Euphoric = +5 bonus, Hostile = -10 penalty. No state-based FA bonuses beyond the baseline formula.
 
@@ -2824,23 +2885,11 @@ type PlayoffStatus =
 
 ### 21.2 Tiebreakers
 
-When teams finish with identical records:
-
-1. Head-to-head record
-2. Division record (if same division)
-3. Record vs common opponents
-4. Run differential
-5. Last 20 games record
-6. Coin flip (randomized)
+**Tiebreaker:** Run differential. If teams are still tied after run differential, the user is prompted to decide the outcome. No automated cascade beyond run differential in v1.
 
 ### 21.3 Playoff Bracket
 
-Playoff structure configurable in Mode 1. Standard format:
-
-- **Wild Card Round:** Best-of-3
-- **Division Series:** Best-of-5
-- **Championship Series:** Best-of-7
-- **World Series:** Best-of-7
+Playoff structure (number of teams, series lengths, home-field format) is fully configurable in Mode 1's rules preset (see MODE_1 §9.2). Each playoff round (Wild Card, Division Series, Championship Series, World Series) can independently be set to 1, 3, 5, 7, or 9 games. Mode 2 reads the active franchise's rules snapshot and enforces it. See MODE_1 §9.3 for default preset values.
 
 Home-field advantage to higher seed. Reseeding after each round.
 
@@ -2867,20 +2916,23 @@ Standings recompute after every completed game. Playoff clinch/elimination event
 
 ## 22. Schedule System
 
-### 22.1 Schedule Generation (Per C-079)
+### 22.1 Schedule (Per C-079)
 
-**Per C-079:** Schedule is **pre-generated + editable**. Generated at season start based on league structure, then user can manually adjust.
+**Per C-079:** Schedule is **user-provided and editable**. Users create the schedule during franchise setup via CSV upload, Screenshot/OCR extraction, or manual game-by-game entry (see MODE_1 §10). If no schedule was provided during franchise creation, the season starts with an empty schedule and users add games manually. In-season, users can add, edit, swap home/away, move, or remove games at any time.
 
 ```typescript
-interface ScheduleEntry {
-  gameNumber: number;
-  dayNumber: number;
-  date: GameDate;
-  time?: string;
-  awayTeamId: string;
+// See SPINE_ARCHITECTURE.md for canonical ScheduledGame interface
+interface ScheduledGame {
+  id: string;                    // UUID
+  gameNumber: number;            // Sequential within schedule
   homeTeamId: string;
+  awayTeamId: string;
+  fictionalDate: GameDate;       // "April 3, Year 1" — GameDate is canonical type name
+  dayNumber?: number;            // Day within season (for ordering)
+  time?: string;                 // Optional game time
   status: GameStatus;
-  result?: GameResult;
+  seriesId?: string;             // Auto-grouped into series
+  result?: GameResult;           // null until completed
 }
 
 type GameStatus = 'SCHEDULED' | 'IN_PROGRESS' | 'COMPLETED' | 'SIMULATED' | 'SKIPPED';
@@ -2889,7 +2941,7 @@ type GameStatus = 'SCHEDULED' | 'IN_PROGRESS' | 'COMPLETED' | 'SIMULATED' | 'SKI
 ### 22.2 Auto-Pull Logic
 
 ```typescript
-function getNextScheduledGame(schedule: ScheduleEntry[], teamId?: string): ScheduleEntry | null {
+function getNextScheduledGame(schedule: ScheduledGame[], teamId?: string): ScheduledGame | null {
   return schedule
     .filter(g => g.status === 'SCHEDULED')
     .filter(g => !teamId || g.awayTeamId === teamId || g.homeTeamId === teamId)
@@ -2917,6 +2969,26 @@ type SeasonClassification = 'PRIMARY' | 'MIXED' | 'SIMULATED';
 ### 22.5 Game Increment
 
 New games auto-increment: `newGameNumber = maxGameNumber + 1`. Empty state (season start): 0 games, filled via Add Game modal or schedule generation.
+
+### 22.6 Trade Deadline Enforcement
+
+If `rules.season.tradeDeadline.enabled` (from Mode 1 rules preset):
+
+**Deadline calculation:**
+```typescript
+function getTradeDeadlineGame(totalGames: number, timing: number): number {
+  return Math.floor(totalGames * timing);  // e.g., 32 × 0.7 = game 22
+}
+```
+
+**Enforcement:** Trade transactions (`TransactionEvent` with `type: 'trade'`) are **rejected** after the deadline game is completed. The UI disables the trade interface and shows "Trade deadline has passed."
+
+**Narrative triggers:**
+- 7 games before deadline: "Trade deadline approaching" narrative event
+- At deadline: "Trade deadline passes" narrative event with summary of deadline deals
+- Attempted trade after deadline: "Trade blocked — deadline has passed" user message
+
+**Scope:** Only trades are blocked. Free agent signings (if any exist in-season), call-ups, send-downs, DFA, and IL moves remain available after the trade deadline.
 
 ---
 
@@ -2955,6 +3027,8 @@ function calculateScalingFactors(config: FranchiseConfig): ScalingFactors {
 | 40 HR season (counting) | 32 HR | counting |
 | .300 AVG | .300 | none (rate stat) |
 | 3.00 ERA | 3.00 | none (rate stat) |
+
+**Standard Preset (32g × 7inn, factor = 0.154):** 500 HR career → 77 HR. 3000 Hits → 462 Hits. 200 K pitcher season → 31 K.
 
 ### 23.2 Scaling Rules
 
@@ -3014,6 +3088,8 @@ const MINIMUM_FLOORS = {
 ```
 
 ### 23.6 Position-Specific Adjustments
+
+> **Note:** These multipliers use `FieldPosition` values (in-game slots). Composite roster designations are resolved to concrete slots at game time.
 
 ```typescript
 const POSITIONAL_MULTIPLIERS = {
@@ -3131,7 +3207,7 @@ It DOES:
 ```typescript
 interface AIGameEngine {
   simulateGame(
-    game: ScheduleEntry,
+    game: ScheduledGame,
     awayRoster: SimRoster,
     homeRoster: SimRoster,
     options?: SimulationOptions
@@ -3302,6 +3378,7 @@ The following features are documented in input specs but explicitly deferred fro
 | Real-time multiplayer | Beyond v1 scope | Architecture |
 | Franchise relocation | Beyond v1 scope | Offseason spec |
 | Custom awards | Beyond v1 scope | Milestone spec |
+| Multi-year contracts | All contracts 1 year in v1 | MODE_1 §5.3 |
 
 ---
 
@@ -3334,7 +3411,7 @@ All STEP4 decisions consumed during Mode 2 gospel drafting:
 | C-067 | Captain storylines in narrative | §16.5 | ✅ Applied |
 | C-068 | INSIDER reveal permanent | §16.3 | ✅ Applied |
 | C-069 | Reporter morale cap ±3/game | §16.4 | ✅ Applied |
-| C-079 | Schedule pre-generated + editable | §22.1 | ✅ Applied |
+| C-079 | Schedule user-provided + editable | §22.1 | ✅ Applied |
 | C-080 | SIMULATE button AI-only | §22.3 | ✅ Applied |
 | C-081 | Remove mojo/fitness simulation section | §14 (header) | ✅ Applied |
 | C-082 | AI Game Engine AI-only scope | §25.1 | ✅ Applied |
@@ -3367,6 +3444,7 @@ All STEP4 decisions consumed during Mode 2 gospel drafting:
 
 ---
 
-*MODE_2_FRANCHISE_SEASON.md — Gospel v1.1 — 2026-02-25*
+*MODE_2_FRANCHISE_SEASON.md — Gospel v1.2 — 2026-02-25*
 *Consolidates 39 input specs and 33 decision IDs into the authoritative Mode 2 reference.*
+*v1.2: Contradiction resolutions applied — #1 (mojo 6-tier), #2/#22 (schedule user-provided), #3 (tiebreakers simplified), #4 (playoff series deferral), #5 (PitchType abbreviations + UNK), #7 (ScheduledGame canonical), #8 (RosterLevel UPPERCASE), #9 (FitnessLevel PascalCase), #12 (FieldPosition type hierarchy), #13 (PitcherRole 5 values), #15 (personality flat structure), #16 (storage estimate league-wide), #18 (scaling labels fixed), #19 (innings 1-9), #23 (LineupEntry), #24 (True Value → SALARY_SYSTEM_SPEC), #25 (ChemistryType + chemistry-trait potency), #26 (trade deadline enforcement), #27 (contractYears always 1).*
 *v1.1: JK review pass — WPA-based clutch simplification, user-only mojo/fitness paradigm, playerMorale §17.14, Fan Hopeful rename, web gems engine-derived, effort error classification, club scaling fixes, milestone floor of 10, per9 scaling, expanded parkContext, name generation for managers/scouts, narrative UI surfaces.*

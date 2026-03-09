@@ -871,77 +871,42 @@ Salary also recalculates immediately during the season when:
 
 ## Chemistry-Tier Trait Potency Factor
 
-> **NEW February 2026**: Traits have a POTENCY that scales with the team's count of the trait's Chemistry type. This affects both salary and gameplay impact.
+Traits have a POTENCY that scales with the team's aggregate count of players sharing the trait's Chemistry type. This determines the trait's financial value and gameplay impact.
 
-### How It Works
+### Potency Tiers
+Team counts determine which Potency Level is active for all traits in a given Chemistry category.
 
-Each trait belongs to a Chemistry type (e.g., Clutch → Spirited, Stealer → Crafty). The more players of that Chemistry type on the team, the more potent the trait becomes.
+| Tier | Team Chemistry Count | Potency Level | Salary Multiplier |
+| :--- | :--- | :--- | :--- |
+| **1** | **< 3 players** | **Level 1 (Minor)** | 0.50x (Reduced impact) |
+| **2** | **3 – 6 players** | **Level 2 (Standard)** | 1.00x (Baseline impact) |
+| **3** | **> 6 players** | **Level 3 (Maximum)** | 2.00x (Doubled impact) |
 
-```typescript
-interface TraitPotency {
-  traitName: string;
-  traitChemistryType: ChemistryType;  // Which Chemistry type this trait belongs to
-  teamChemistryCount: number;          // How many players of that Chemistry type on team
-  potencyTier: 1 | 2 | 3 | 4;         // Tier based on count
-  salaryMultiplier: number;            // Adjusted trait salary impact
-}
+### Salary Wiring
+At the moment of salary generation (Season Start or Offseason Phases), the engine calculates the team's chemistry aggregates to determine the active Potency Level for each category.
 
-const CHEMISTRY_TIER_THRESHOLDS = {
-  1: { min: 0, max: 3 },    // Tier 1: 0-3 players of that Chemistry
-  2: { min: 4, max: 7 },    // Tier 2: 4-7 players
-  3: { min: 8, max: 11 },   // Tier 3: 8-11 players
-  4: { min: 12, max: 99 },  // Tier 4: 12+ players (rare, large roster)
-};
-
-function getChemistryTier(teamChemistryCount: number): number {
-  if (teamChemistryCount >= 12) return 4;
-  if (teamChemistryCount >= 8) return 3;
-  if (teamChemistryCount >= 4) return 2;
-  return 1;
-}
-```
-
-### Potency Effect on Salary
-
-Higher potency tiers amplify the trait's salary modifier:
-
-```typescript
-const POTENCY_SALARY_MULTIPLIERS = {
-  1: 1.0,   // Base impact (same as existing trait tiers)
-  2: 1.25,  // +25% amplification
-  3: 1.50,  // +50% amplification
-  4: 1.75,  // +75% amplification (rare)
-};
-
-function calculateTraitModifierWithPotency(player: Player, team: Team): number {
+```javascript
+function calculateTraitModifierWithPotency(player, team) {
   let modifier = 1.0;
 
   for (const trait of player.traits) {
-    const baseTierMultiplier = getTraitTierMultiplier(trait);  // Existing tier system
-    const traitChemistry = getTraitChemistryType(trait);
-    const teamCount = countChemistryType(team.roster, traitChemistry);
+    const baseImpact = getTraitBaseImpact(trait); // e.g., 1.05 for a +5% trait
+    const traitCategory = getTraitChemistryCategory(trait);
+    const teamCount = countChemistryType(team.roster, traitCategory);
     
-    // Player's own Chemistry counts toward team total if it matches
-    const selfContributes = player.chemistryType === traitChemistry;
-    const effectiveCount = selfContributes ? teamCount : teamCount;
-    // Note: player is already in team.roster, so they're counted
+    const potencyLevel = getPotencyLevel(teamCount);
+    const salaryMultiplier = getPotencySalaryMultiplier(potencyLevel);
     
-    const potencyTier = getChemistryTier(effectiveCount);
-    const potencyMultiplier = POTENCY_SALARY_MULTIPLIERS[potencyTier];
-    
-    // Apply potency to the bonus/penalty portion only
-    const traitEffect = baseTierMultiplier - 1.0;  // e.g., 0.10 for +10%
-    modifier *= 1.0 + (traitEffect * potencyMultiplier);
+    // Apply multiplier to the bonus/penalty portion of the trait
+    const adjustedImpact = 1.0 + (baseImpact - 1.0) * salaryMultiplier;
+    modifier *= adjustedImpact;
   }
 
   return modifier;
 }
 ```
 
-### Example: Potency Impact
-
-| Trait | Base Impact | Team Chemistry Count | Potency Tier | Adjusted Impact |
-|-------|------------|---------------------|-------------|----------------|
+-------|------------|---------------------|-------------|----------------|
 | Clutch (Spirited) | +10% | 2 Spirited players | Tier 1 | +10% (base) |
 | Clutch (Spirited) | +10% | 5 Spirited players | Tier 2 | +12.5% |
 | Clutch (Spirited) | +10% | 9 Spirited players | Tier 3 | +15% |

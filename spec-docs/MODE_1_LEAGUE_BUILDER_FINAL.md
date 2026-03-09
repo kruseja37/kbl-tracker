@@ -1,9 +1,9 @@
 # MODE 1: LEAGUE BUILDER — Gospel Specification
 
-**Version:** 1.1 (Gospel)
+**Version:** 1.2 (Gospel — Contradiction Resolutions Applied)
 **Status:** CANONICAL — This document is the single source of truth for Mode 1
 **Created:** 2026-02-22
-**Last Revised:** 2026-02-24 (JK feedback integration)
+**Last Revised:** 2026-02-25 (Contradiction resolutions #5, #6, #7, #8, #10, #11, #12, #14, #17, #20, #21)
 **Supersedes:** LEAGUE_BUILDER_SPEC.md, SEASON_SETUP_SPEC.md, portions of FRANCHISE_MODE_SPEC.md, GRADE_ALGORITHM_SPEC.md, PROSPECT_GENERATION_SPEC.md, SCOUTING_SYSTEM_SPEC.md, PERSONALITY_SYSTEM_SPEC.md (assignment only), TRAIT_INTEGRATION_SPEC.md (initial distribution only), SCHEDULE_SYSTEM_FIGMA_SPEC.md (setup only), LEAGUE_BUILDER_FIGMA_SPEC.md, SEASON_SETUP_FIGMA_SPEC.md, SMB4_GAME_REFERENCE.md (import mapping), smb4_traits_reference.md (import mapping)
 **Cross-references:** SPINE_ARCHITECTURE.md (shared data contracts), MODE_2_FRANCHISE_SEASON.md (what Mode 1 hands off to), MODE_3_OFFSEASON_WORKSHOP.md (prospect generation reused at annual draft)
 
@@ -31,6 +31,7 @@ When Mode 1 completes, it has created:
 6. **Schedule** — user-uploaded CSV or OCR-extracted, user-editable game schedule
 7. **Franchise type** — Solo, Couch Co-Op, or Custom (which teams are human vs AI)
 8. **Initialized subsystems** — standings tables, salary ledger, empty stats stores
+9. **Named NPCs** — one beat reporter, one manager, and one scout per team (auto-generated names, user-editable)
 
 ### 1.3 What Mode 1 Does NOT Do
 
@@ -145,8 +146,8 @@ interface OffseasonPhaseConfig {
 | 8 | Salary Recalculation #2 | human-only | Requires full season stats |
 | 9 | Offseason Trades | all-teams | AI available as trade partners |
 | 10 | Salary Recalculation #3 | human-only | Requires full season stats |
-| 11 | Farm Reconciliation | all-teams | Operates on roster data, not full season stats |
-| 12 | Chemistry Rebalancing | all-teams | Operates on roster composition, not full season stats |
+| 11 | Chemistry Rebalancing | all-teams | Operates on roster composition, not full season stats |
+| 12 | Farm Reconciliation | all-teams | Operates on roster data, not full season stats |
 | 13 | Finalize & Advance | all-teams | Roster compliance |
 
 **Couch Co-Op override:** All phases forced to `all-teams` (no AI teams exist).
@@ -350,8 +351,8 @@ interface Player {
   throws: 'L' | 'R';
 
   // ── Position ──────────────────────────────────────────────
-  primaryPosition: Position;
-  secondaryPosition?: Position;
+  primaryPosition: PrimaryPosition;      // Never a composite — CorePosition only
+  secondaryPosition?: SecondaryPosition; // Can be composite or core
 
   // ── Position Player Ratings (0-99) ────────────────────────
   power: number;
@@ -391,7 +392,7 @@ interface Player {
 
   // ── Team Assignment ───────────────────────────────────────
   currentTeamId: string | null;       // null = free agent
-  rosterStatus: 'MLB' | 'FARM' | 'FREE_AGENT';
+  rosterLevel: RosterLevel;           // Canonical 4-value UPPERCASE enum (see SPINE_ARCHITECTURE.md)
 
   // ── Metadata ──────────────────────────────────────────────
   createdDate: string;
@@ -404,20 +405,45 @@ interface Player {
 ### 5.4 Type Definitions
 
 ```typescript
-// Per C-074/C-087: Position types. DH is a batting order slot, not a player position.
-// No player has DH as primary or secondary position.
-// IF, OF, IF/OF, 1B/OF are valid as secondary positions ONLY, never primary.
-// SP/RP is valid as primary position for pitchers.
-type Position = 'C' | '1B' | '2B' | 'SS' | '3B' | 'LF' | 'CF' | 'RF' |
-                'SP' | 'RP' | 'CP' | 'SP/RP' |
-                'IF' | 'OF' | 'IF/OF' | '1B/OF';
+// ═══════════════════════════════════════════════════════
+// ROSTER CONTEXT — player cards, scouting, roster mgmt
+// ═══════════════════════════════════════════════════════
+
+// Core positions: valid as primary OR secondary
+type CorePosition = 'C' | '1B' | '2B' | 'SS' | '3B' | 'LF' | 'CF' | 'RF' |
+                    'SP' | 'RP' | 'CP' | 'SP/RP';
+
+// Composite designations: valid as secondary ONLY — indicate flexibility
+type CompositePosition = 'IF' | 'OF' | 'IF/OF' | '1B/OF';
+
+// What shows on the player card
+type PrimaryPosition = CorePosition;                    // Never a composite
+type SecondaryPosition = CorePosition | CompositePosition;  // Can be composite or core
+
+// ═══════════════════════════════════════════════════════
+// IN-GAME CONTEXT — lineups, subs, fielding, enrichment
+// ═══════════════════════════════════════════════════════
+
+// Where a player is RIGHT NOW on the field
+type FieldPosition = 'C' | '1B' | '2B' | 'SS' | '3B' | 'LF' | 'CF' | 'RF' | 'P' | 'DH';
+// Note: DH is a valid FieldPosition (in-game batting order slot) but is NOT a PrimaryPosition or
+// SecondaryPosition — no player has DH on their player card. It IS a valid FieldPosition used when
+// the DH rule is active. See SPINE_ARCHITECTURE.md for the FieldPosition vs PrimaryPosition/SecondaryPosition distinction.
+
+// Composite → FieldPosition eligibility mapping
+// IF → eligible at: 1B, 2B, SS, 3B
+// OF → eligible at: LF, CF, RF
+// IF/OF → eligible at: 1B, 2B, SS, 3B, LF, CF, RF
+// 1B/OF → eligible at: 1B, LF, CF, RF
 
 // Per C-074/C-087: 13 grades, S through D-. This is the authoritative scale.
 type Grade = 'S' | 'A+' | 'A' | 'A-' | 'B+' | 'B' | 'B-' |
              'C+' | 'C' | 'C-' | 'D+' | 'D' | 'D-';
 
-// Pitch types: Final list (removed SC and KN)
-type PitchType = '4F' | '2F' | 'CB' | 'SL' | 'CH' | 'FK' | 'CF' | 'SB';
+// Pitch types: Final list (removed SC and KN). UNK = unknown, used in enrichment contexts where pitch type is unidentified.
+type PitchType = '4F' | '2F' | 'CB' | 'SL' | 'CH' | 'FK' | 'CF' | 'SB' | 'UNK';
+// 4F=4-seam fastball, 2F=2-seam fastball, CB=curveball, SL=slider,
+// CH=changeup, FK=forkball, CF=cutter, SB=screwball, UNK=unknown
 
 // Per C-070: 7 personality types only. Chemistry types are separate.
 type PersonalityType = 'Competitive' | 'Relaxed' | 'Droopy' | 'Jolly' |
@@ -425,10 +451,13 @@ type PersonalityType = 'Competitive' | 'Relaxed' | 'Droopy' | 'Jolly' |
 
 type ChemistryType = 'Competitive' | 'Spirited' | 'Crafty' | 'Scholarly' | 'Disciplined';
 
-// MojoState: Defined for SPINE reference but NOT assigned in League Builder (Mode 2 only).
-// Changed terminology per feedback: On Fire → On Fire, Hot → Locked-In,
-// Normal → Normal, Cold → Tense, Ice Cold → Rattled
-type MojoState = 'On Fire' | 'Locked-In' | 'Normal' | 'Tense' | 'Rattled';
+// RosterLevel: 4-value UPPERCASE enum (canonical — see SPINE_ARCHITECTURE.md)
+type RosterLevel = 'MLB' | 'FARM' | 'FREE_AGENT' | 'RETIRED';
+
+// MojoLevel: Canonical 6-tier mojo scale. NOT assigned in League Builder (Mode 2 only).
+// Unified across MODE_1 and MODE_2 — see MODE_2_FRANCHISE_SEASON.md §2.1
+type MojoLevel = 'Rattled' | 'Tense' | 'Neutral' | 'Locked-In' | 'On Fire' | 'Jacked';
+// Numeric mapping: Rattled = -2, Tense = -1, Neutral = 0, Locked-In = +1, On Fire = +2, Jacked = +3
 
 // Per C-078: FameLevel replaces the numeric fame slider.
 // Auto-generated prospects cap at 'National' fame level.
@@ -757,6 +786,7 @@ interface TeamRoster {
   depthChart?: DepthChart;
 }
 
+// Depth Chart uses CorePosition keys (roster context, not in-game FieldPosition)
 interface DepthChart {
   C: string[];
   '1B': string[];
@@ -1164,26 +1194,24 @@ interface ScheduleConfig {
   userProvidedGames: ScheduledGame[];
 }
 
+// GameStatus: 5-value UPPER_SNAKE enum (canonical — see SPINE_ARCHITECTURE.md)
+type GameStatus = 'SCHEDULED' | 'IN_PROGRESS' | 'COMPLETED' | 'SIMULATED' | 'SKIPPED';
+
 interface ScheduledGame {
-  id: string;
-  gameNumber: number;              // Sequential within schedule
+  id: string;                    // UUID
+  gameNumber: number;            // Sequential within schedule
   homeTeamId: string;
   awayTeamId: string;
-  fictionalDate: FictionalDate;    // "April 3, Year 1"
-  status: 'scheduled' | 'completed' | 'skipped';
+  fictionalDate: GameDate;       // "April 3, Year 1" — GameDate is canonical type name
+  dayNumber?: number;            // Day within season (for ordering)
+  time?: string;                 // Optional game time
+  status: GameStatus;              // At franchise creation, all games initialize as 'SCHEDULED'. IN_PROGRESS, COMPLETED, SIMULATED, and SKIPPED are set by Mode 2 during gameplay.
   seriesId?: string;               // Auto-grouped into series
+  result?: GameResult;             // null until completed
 }
 ```
 
-### 10.2 Fictional Date System
-
-KBL uses fictional dates, not tied to real-world calendar:
-- Season 1 starts "April 1, Year 1"
-- Each game advances ~2 days (adjusted for season length to fit April → September)
-- Offseason: October → March
-- All-Star break and trade deadline placed at configured percentages
-
-### 10.3 User Editing
+### 10.2 User Editing
 
 After load/OCR, users can:
 - Swap home/away for any game
@@ -1191,7 +1219,7 @@ After load/OCR, users can:
 - Add/remove games (with validation warning if total changes)
 - The schedule view in Mode 2 shows the same data with game results filled in
 
-### 10.4 Franchise Type Impact on Schedule
+### 10.3 Franchise Type Impact on Schedule
 
 **Solo/Custom:** Schedule shows all league games. Human team's games are primary. AI-vs-AI games shown in secondary section for optional score entry.
 
@@ -1324,7 +1352,7 @@ interface Step5Data {
 }
 ```
 
-### 11.7 Step 6: Confirm & Start
+Step 6: Confirm & Start
 
 Review all settings, name the franchise, and start.
 
@@ -1394,8 +1422,6 @@ async function initializeFranchise(setup: FranchiseSetupData): Promise<Franchise
   await db.put('rules', rules);
 
   // 6. Initialize salary ledger (per C-076)
-  await initializeSalaryLedger(db, teams);
-
   // 7. Initialize empty standings tables (per C-076)
   await initializeStandings(db, league);
 
@@ -1408,6 +1434,37 @@ async function initializeFranchise(setup: FranchiseSetupData): Promise<Franchise
 
   // 9. Initialize empty stats stores
   await initializeStatsStores(db);
+
+  // 9.5. Initialize named NPCs
+  for (const team of teams) {
+    // Beat reporter: random personality per MODE_2 §16.2 weights
+    await db.put('beatReporters', {
+      id: generateId(),
+      firstName: generateName('first'),
+      lastName: generateName('last'),
+      teamId: team.id,
+      personality: weightedRandom(REPORTER_PERSONALITY_WEIGHTS),
+      alignment: 'NEUTRAL',
+      revealLevel: 'SURFACE',
+      trustScore: 50,
+      moraleInfluence: 0,
+      tenure: 0,
+      reputation: 'ROOKIE',
+      storiesWritten: 0,
+      hiredDate: { month: 'March', year: 1 },
+    });
+
+    // Manager: name only (mechanical effects TBD)
+    await db.put('managers', {
+      id: generateId(),
+      firstName: generateName('first'),
+      lastName: generateName('last'),
+      teamId: team.id,
+    });
+
+    // Scout: specialty/weakness per §8.6
+    await db.put('scouts', createScoutProfile(team.id));
+  }
 
   // 10. Initialize franchise metadata
   await db.put('metadata', {
@@ -1459,16 +1516,33 @@ This screen serves as the boundary between Mode 1 and Mode 2. Clicking "Begin Se
 - Team payroll totals calculated
 
 **Standings tables (C-076):**
-- One row per team: W, L, PCT, GB, RS, RA, DIFF, streak, L10
+- One row per team, initialized to the full `StandingsEntry` interface (see MODE_2 §21.1):
+
+```typescript
+// Standings initialization (per team)
+{
+  teamId: team.id,
+  wins: 0, losses: 0, winPct: 0, gamesBack: 0,
+  streak: { type: 'W', count: 0 },
+  last10: { wins: 0, losses: 0 },
+  homeRecord: { wins: 0, losses: 0 },
+  awayRecord: { wins: 0, losses: 0 },
+  divisionRecord: { wins: 0, losses: 0 },
+  runsScored: 0, runsAllowed: 0, runDifferential: 0,
+  pythagoreanWinPct: null,      // Computed after first game
+  magicNumber: null,             // Computed when applicable
+  eliminationNumber: null,       // Computed when applicable
+  playoffStatus: 'IN_HUNT',     // All teams start in hunt
+}
+```
 - Conference standings if conferences exist
 - Division standings if divisions exist
-- All zeros at initialization
 
 **Stats stores:**
 - Empty season batting stats table
 - Empty season pitching stats table
 - Empty season fielding stats table
-- Empty event log (with betweenAtBatEvents store for multi-event sequences)
+- Empty event log (with betweenPlayEvents store for multi-event sequences)
 - Career stats initialized from import data (if any)
 
 **franchiseId (C-076):**
@@ -1547,12 +1621,15 @@ kbl-franchise-abc123/     # "Dynasty League"
   ├── schedule
   ├── gameHeaders
   ├── atBatEvents
-  ├── betweenAtBatEvents
+  ├── betweenPlayEvents
   ├── seasonStats
   ├── careerStats
   ├── standings
   ├── transactions
-  └── salaryLedger
+  ├── salaryLedger
+  ├── beatReporters
+  ├── managers
+  └── scouts
 
 kbl-franchise-def456/     # "Experimental League"
   └── (same structure)
@@ -1679,7 +1756,7 @@ These features are referenced in source specs but are NOT part of v1:
 | Arbitration | Future | Offseason economics |
 | Multiplayer turn management | V2 | Couch Co-Op handles coordination via SMB4 game order |
 | Schedule auto-generation algorithms | V2 | User-driven schedule in v1 (CSV/OCR) |
-| Free agent pool management | V2 | Deferred — no free agent pool in v1 |
+| Free agent marketplace UI (browsing, bidding, market dynamics) | V2 | Free agency as an offseason phase exists in v1 (see §2.5 Phase 6 and MODE_3). The V2 deferral is for the persistent marketplace with AI bidding, browse/search UI, and market dynamics — not the basic free agent signing transaction. |
 
 ---
 
@@ -1737,6 +1814,7 @@ Every STEP4 decision applied in this gospel:
 
 ## Changelog
 
+- v1.2 (2026-02-25): Contradiction resolutions applied (MODE_1_vs_MODE_2_CONTRADICTION_RESOLUTIONS.md). #5: Added 'UNK' to PitchType. #6: GameStatus → UPPER_SNAKE 5-value enum. #7: ScheduledGame merged to canonical shape, FictionalDate → GameDate, added dayNumber/time/result fields. #8: rosterStatus → RosterLevel (UPPERCASE, 4 values including RETIRED). #10/#11: Full StandingsEntry initialization with structured streak. #12: Position split into PrimaryPosition/SecondaryPosition + FieldPosition + CompositePosition; DH clarification. #14: betweenAtBatEvents → betweenPlayEvents. #17: DH clarification note (covered by #12). #20: Free agency V2 scope clarified. #21: NPC initialization (beatReporters, managers, scouts) added to §1.2, §12.1, §13.2.
 - v1.1 (2026-02-24): JK feedback integration. Updated §1.2, §2.2, §2.5, §3.3, §4.2, §4.3, §5.2, §5.3-5.6, §5.9, §6.1, §6.4-6.5, §7.1-7.3, §8.3-8.6, §8.8, §9.2-9.3, §10.1-10.5, §11.6, §12.1, §12.3, §13.2, §14. Added awardsCeremony toggle, revised offseason phase defaults, simplified controlledBy, removed DH from positions, updated pitch types, revised trait taxonomy, enhanced scout accuracy system, user-driven schedules (CSV/OCR).
 - v1.0 (2026-02-22): Initial gospel draft. Consolidates 13 source specs + 10 STEP4 decisions + Franchise Type Design Note.
 
