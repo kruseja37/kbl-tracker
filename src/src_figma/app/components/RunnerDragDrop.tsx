@@ -51,6 +51,8 @@ export interface RunnerDragDropProps {
   /** Field dimensions for positioning */
   fieldWidth?: number;
   fieldHeight?: number;
+  /** Whether drag interactions are enabled */
+  draggable?: boolean;
 }
 
 interface DragItem {
@@ -107,9 +109,11 @@ interface RunnerIconProps {
   onDragEnd?: () => void;
   /** Callback for tap (not drag) — opens popover */
   onTap?: (anchorPosition: { left: string; top: string }) => void;
+  /** Whether drag interactions are enabled */
+  draggable?: boolean;
 }
 
-function RunnerIcon({ base, runnerName, onDragStart, onDragEnd, onTap }: RunnerIconProps) {
+function RunnerIcon({ base, runnerName, onDragStart, onDragEnd, onTap, draggable = true }: RunnerIconProps) {
   // Get current viewBox from context (for dynamic zoom support)
   const viewBox = useViewBox();
 
@@ -119,6 +123,7 @@ function RunnerIcon({ base, runnerName, onDragStart, onDragEnd, onTap }: RunnerI
 
   const [{ isDragging }, drag] = useDrag(() => ({
     type: ItemTypes.RUNNER,
+    canDrag: draggable,
     item: (): DragItem => {
       didDragRef.current = true;
       onDragStart?.();
@@ -130,7 +135,7 @@ function RunnerIcon({ base, runnerName, onDragStart, onDragEnd, onTap }: RunnerI
     collect: (monitor) => ({
       isDragging: monitor.isDragging(),
     }),
-  }), [base, onDragStart, onDragEnd]);
+  }), [base, draggable, onDragStart, onDragEnd]);
 
   const position = RUNNER_POSITIONS[base];
 
@@ -169,11 +174,17 @@ function RunnerIcon({ base, runnerName, onDragStart, onDragEnd, onTap }: RunnerI
 
   return (
     <div
-      ref={drag as DndRef}
-      className={`absolute transform -translate-x-1/2 -translate-y-1/2 cursor-grab active:cursor-grabbing z-30 ${
+      ref={draggable ? (drag as DndRef) : undefined}
+      className={`absolute transform -translate-x-1/2 -translate-y-1/2 z-30 ${
         isDragging ? 'opacity-50' : ''
       }`}
-      style={{ left, top }}
+      style={{
+        left,
+        top,
+        cursor: draggable ? 'grab' : 'pointer',
+        pointerEvents: 'auto',
+        touchAction: draggable ? 'none' : 'manipulation',
+      }}
       onPointerDown={handlePointerDown}
       onPointerUp={handlePointerUp}
     >
@@ -385,6 +396,7 @@ export function RunnerDragDrop({
   onDragStart,
   onDragEnd,
   onRunnerTap,
+  draggable = true,
 }: RunnerDragDropProps) {
   // Track when a runner is being dragged to show drop zones
   const [isDragging, setIsDragging] = useState(false);
@@ -453,6 +465,7 @@ export function RunnerDragDrop({
           onDragStart={() => handleDragStart('first')}
           onDragEnd={handleDragEnd}
           onTap={onRunnerTap ? (pos) => onRunnerTap('first', pos) : undefined}
+          draggable={draggable}
         />
       )}
       {bases.second && (
@@ -462,6 +475,7 @@ export function RunnerDragDrop({
           onDragStart={() => handleDragStart('second')}
           onDragEnd={handleDragEnd}
           onTap={onRunnerTap ? (pos) => onRunnerTap('second', pos) : undefined}
+          draggable={draggable}
         />
       )}
       {bases.third && (
@@ -471,6 +485,7 @@ export function RunnerDragDrop({
           onDragStart={() => handleDragStart('third')}
           onDragEnd={handleDragEnd}
           onTap={onRunnerTap ? (pos) => onRunnerTap('third', pos) : undefined}
+          draggable={draggable}
         />
       )}
 

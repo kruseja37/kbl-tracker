@@ -145,9 +145,16 @@ interface EnrichmentPanelProps {
   currentEnrichment?: AtBatEvent['enrichment'];
   onUpdate: (field: keyof EnrichmentUpdate, value: unknown) => void;
   onClose: () => void;
+  useMainFieldForLocation?: boolean;
 }
 
-export function EnrichmentPanel({ entry, currentEnrichment, onUpdate, onClose }: EnrichmentPanelProps) {
+export function EnrichmentPanel({
+  entry,
+  currentEnrichment,
+  onUpdate,
+  onClose,
+  useMainFieldForLocation = false,
+}: EnrichmentPanelProps) {
   const [localFieldingSeq, setLocalFieldingSeq] = useState<number[]>(
     currentEnrichment?.fieldingSequence || []
   );
@@ -191,10 +198,24 @@ export function EnrichmentPanel({ entry, currentEnrichment, onUpdate, onClose }:
         {/* Field Location (spray chart) */}
         {showFieldLocation && (
           <EnrichmentSection label="Field Location" filled={!!currentEnrichment?.fieldLocation}>
-            <MiniDiamond
-              location={currentEnrichment?.fieldLocation}
-              onTap={(pos) => onUpdate('fieldLocation', pos)}
-            />
+            {useMainFieldForLocation ? (
+              <div className="bg-[#2a5a2d]/60 rounded border border-[#4a6a4a] px-2 py-2">
+                <div className="text-[8px] text-[#E8E8D8] font-bold">Tap the main field to place spray/location.</div>
+                <div className="text-[7px] text-[#88AA88] mt-1">
+                  Fielding, pitch type, and pitch count still update here.
+                </div>
+                {currentEnrichment?.fieldLocation && (
+                  <div className="text-[7px] text-[#C4A853] mt-1 font-mono">
+                    Saved: X {currentEnrichment.fieldLocation.x} / Y {currentEnrichment.fieldLocation.y}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <MiniDiamond
+                location={currentEnrichment?.fieldLocation}
+                onTap={(pos) => onUpdate('fieldLocation', pos)}
+              />
+            )}
           </EnrichmentSection>
         )}
 

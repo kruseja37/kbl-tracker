@@ -1,5 +1,16 @@
 import React from 'react';
 
+function abbreviateTeamName(name: string): string {
+  const cleaned = name.trim().toUpperCase();
+  if (cleaned.length <= 4) return cleaned;
+  const words = cleaned.split(/\s+/).filter(Boolean);
+  if (words.length > 1) {
+    const initials = words.map((word) => word[0]).join('');
+    if (initials.length >= 2 && initials.length <= 4) return initials;
+  }
+  return cleaned.slice(0, 4);
+}
+
 interface FenwayBoardProps {
   // Scoreboard props
   awayTeamName: string;
@@ -40,6 +51,8 @@ interface FenwayBoardProps {
 
   // Milestone proximity
   milestoneAlert?: string;  // "1 from 500 hits" or null
+  showScoreboard?: boolean;
+  onBatterTap?: () => void;
 
   /** Callback when pitcher name is tapped — triggers pitching change per §5.2 / ticket 4.6 */
   onPitcherTap?: () => void;
@@ -87,57 +100,56 @@ export function FenwayBoard({
   matchupRecord,
   matchupAvg,
   milestoneAlert,
+  showScoreboard = true,
+  onBatterTap,
   onPitcherTap,
 }: FenwayBoardProps) {
+  const awayLabel = abbreviateTeamName(awayTeamName);
+  const homeLabel = abbreviateTeamName(homeTeamName);
+
   return (
     <div className="bg-[#556B55] border-[3px] border-[#3d5240] h-full overflow-hidden flex flex-col">
-      {/* Compact scoreboard */}
-      <div className="bg-[rgb(133,181,229)] border-b-[3px] border-[#1a3020] px-3 py-1.5">
-        <div className="flex items-center justify-center gap-3">
-          {/* Away */}
-          <div className="flex items-center gap-1.5">
-            <span className="text-[#1a3020] text-xs font-bold tracking-wide">{awayTeamName}</span>
-            <div className="bg-[#3d5240] border-2 border-[#2a3a2d] px-2 py-0.5 min-w-[28px] text-center">
-              <span className="text-[#E8E8D8] text-sm font-bold">{awayRuns}</span>
+      {showScoreboard && (
+        <div className="bg-[rgb(133,181,229)] border-b-[3px] border-[#1a3020] px-3 py-1.5">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-1.5 min-w-0 flex-1">
+              <span className="text-[#1a3020] text-[11px] font-bold tracking-wide truncate">{awayLabel}</span>
+              <div className="bg-[#3d5240] border-2 border-[#2a3a2d] px-2 py-0.5 min-w-[28px] text-center">
+                <span className="text-[#E8E8D8] text-sm font-bold">{awayRuns}</span>
+              </div>
+              {awayErrors > 0 && (
+                <span className="text-[#DC3545] text-[9px] font-bold flex-shrink-0">E:{awayErrors}</span>
+              )}
             </div>
-            {awayErrors > 0 && (
-              <span className="text-[#DC3545] text-[9px] font-bold">E:{awayErrors}</span>
-            )}
-          </div>
 
-          <span className="text-[#1a3020] text-sm font-bold">|</span>
-
-          {/* Inning + Outs */}
-          <div className="flex items-center gap-1">
-            <span className="text-[#1a3020] text-sm font-bold">{isTop ? '▲' : '▼'}{inning}</span>
-            <div className="flex gap-0.5 ml-1">
-              {[0, 1, 2].map((i) => (
-                <div
-                  key={i}
-                  className={`w-3 h-3 rounded-full border-[1.5px] ${
-                    i < outs
-                      ? 'bg-[#DC3545] border-[#8B0000]'
-                      : 'bg-[#1a1a1a] border-[#2a3a2d]'
-                  }`}
-                />
-              ))}
+            <div className="flex items-center gap-1 flex-shrink-0">
+              <span className="text-[#1a3020] text-sm font-bold">{isTop ? '▲' : '▼'}{inning}</span>
+              <div className="flex gap-0.5 ml-1">
+                {[0, 1, 2].map((i) => (
+                  <div
+                    key={i}
+                    className={`w-3 h-3 rounded-full border-[1.5px] ${
+                      i < outs
+                        ? 'bg-[#DC3545] border-[#8B0000]'
+                        : 'bg-[#1a1a1a] border-[#2a3a2d]'
+                    }`}
+                  />
+                ))}
+              </div>
             </div>
-          </div>
 
-          <span className="text-[#1a3020] text-sm font-bold">|</span>
-
-          {/* Home */}
-          <div className="flex items-center gap-1.5">
-            {homeErrors > 0 && (
-              <span className="text-[#DC3545] text-[9px] font-bold">E:{homeErrors}</span>
-            )}
-            <div className="bg-[#3d5240] border-2 border-[#2a3a2d] px-2 py-0.5 min-w-[28px] text-center">
-              <span className="text-[#E8E8D8] text-sm font-bold">{homeRuns}</span>
+            <div className="flex items-center justify-end gap-1.5 min-w-0 flex-1">
+              {homeErrors > 0 && (
+                <span className="text-[#DC3545] text-[9px] font-bold flex-shrink-0">E:{homeErrors}</span>
+              )}
+              <div className="bg-[#3d5240] border-2 border-[#2a3a2d] px-2 py-0.5 min-w-[28px] text-center">
+                <span className="text-[#E8E8D8] text-sm font-bold">{homeRuns}</span>
+              </div>
+              <span className="text-[#1a3020] text-[11px] font-bold tracking-wide truncate">{homeLabel}</span>
             </div>
-            <span className="text-[#1a3020] text-xs font-bold tracking-wide">{homeTeamName}</span>
           </div>
         </div>
-      </div>
+      )}
 
       {/* Context cards */}
       <div className="flex-1 px-2 py-1.5 space-y-1 overflow-y-auto">
@@ -161,7 +173,7 @@ export function FenwayBoard({
             )}
           </div>
           <div
-            className={`text-[11px] text-[#E8E8D8] font-bold leading-tight${onPitcherTap ? ' cursor-pointer hover:text-[#5dade2] hover:underline transition-colors' : ''}`}
+            className={`text-[12px] text-[#E8E8D8] font-bold leading-tight${onPitcherTap ? ' cursor-pointer hover:text-[#5dade2] hover:underline transition-colors' : ''}`}
             onClick={onPitcherTap}
             title={onPitcherTap ? 'Tap for pitching change' : undefined}
           >
@@ -226,7 +238,13 @@ export function FenwayBoard({
               </span>
             )}
           </div>
-          <div className="text-[11px] text-[#E8E8D8] font-bold leading-tight">{currentBatterName || '—'}</div>
+          <div
+            className={`text-[12px] text-[#E8E8D8] font-bold leading-tight${onBatterTap ? ' cursor-pointer hover:text-[#5dade2] hover:underline transition-colors' : ''}`}
+            onClick={onBatterTap}
+            title={onBatterTap ? 'Tap for player card' : undefined}
+          >
+            {currentBatterName || '—'}
+          </div>
           {batterStats && (
             <>
               <div className="flex gap-2 mt-0.5">
@@ -268,10 +286,10 @@ export function FenwayBoard({
           )}
         </div>
 
-        {/* Matchup card — batter vs pitcher this game */}
-        {(matchupRecord || currentBatterName) && currentPitcherName && (
+        {/* Matchup card — batter vs pitcher this game + milestone */}
+        {(matchupRecord || currentBatterName || milestoneAlert) && currentPitcherName && (
           <div className="bg-[#2a3a2d] border border-[#1a2a1d] px-2 py-1">
-            <div className="text-[8px] text-[#88AA88] leading-tight">
+            <div className="text-[8px] text-[#88AA88] leading-tight mb-1">
               {matchupRecord ? (
                 <>
                   <span className="text-[#aaccaa]">vs {currentPitcherName}: </span>
@@ -284,15 +302,11 @@ export function FenwayBoard({
                 <span className="text-[#aaccaa]">vs {currentPitcherName}: <span className="italic">First meeting</span></span>
               )}
             </div>
-          </div>
-        )}
-
-        {/* Milestone proximity alert */}
-        {milestoneAlert && (
-          <div className="bg-[#92400e] border border-[#b45309] px-2 py-1 rounded">
-            <div className="text-[8px] text-[#fbbf24] font-bold">
-              ⚡ {milestoneAlert}
-            </div>
+            {milestoneAlert && (
+              <div className="text-[8px] text-[#fbbf24] font-bold">
+                ⚡ {milestoneAlert}
+              </div>
+            )}
           </div>
         )}
       </div>

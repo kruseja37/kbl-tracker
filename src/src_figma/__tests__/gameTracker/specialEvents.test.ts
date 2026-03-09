@@ -23,7 +23,7 @@ const deleteEventLogDB = () => new Promise<void>((resolve) => {
 
 const getFieldingEvents = (): Promise<FieldingEvent[]> => {
   return new Promise((resolve, reject) => {
-    const request = indexedDB.open('kbl-event-log', 2);
+    const request = indexedDB.open('kbl-event-log', 3);
     request.onerror = () => reject(request.error);
     request.onsuccess = () => {
       const db = request.result;

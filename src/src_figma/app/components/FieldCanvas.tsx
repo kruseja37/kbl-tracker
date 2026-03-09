@@ -81,18 +81,15 @@ const FENCE_RCF = 380; // Right-center gap
 // Wall scraper: just over fence (~0-10ft in)
 // Deep HR: ~10-25ft into stands
 // Bomb: 25ft+ (back of stands, 440ft+ HRs)
-const STANDS_DEPTH = 40; // ft of stands behind fence - allows 440ft+ bombs
-
-// Foul territory width (narrowed for iPad view)
-const FOUL_TERRITORY_WIDTH = 20; // ft visible along foul lines
+const STANDS_DEPTH = 12; // ft of stands behind fence - aggressive crop for iPad landscape gameplay
 
 // ============================================
 // SVG GEOMETRY - "Little League" Style
 // ============================================
 
-// SVG dimensions - wider for iPad horizontal view
+// SVG dimensions tuned for iPad horizontal view without wasting side space
 // EXPORTED: These must be used by any component doing coordinate conversion
-export const SVG_WIDTH = 1600;
+export const SVG_WIDTH = 1280;
 export const SVG_HEIGHT = 900; // Shorter height = wider aspect ratio (16:9)
 
 // Home plate position in SVG (bottom center)
@@ -579,16 +576,12 @@ export function FieldCanvas({
   // Calculate scale and translation based on zoomLevel
   const zoomConfig = useMemo(() => {
     // At zoomLevel 0: scale=1.0, no translation
-    // At zoomLevel 1: scale=1.05, very modest zoom keeping full field visible
-    // Keep scale minimal so CF home run area stays accessible
-    // Using 1.05 instead of 1.1 to prevent clipping at CF
-    const scale = 1 + zoomLevel * 0.05; // 1.0 to 1.05 (very subtle zoom)
+    // At zoomLevel 1: modest zoom that prioritizes the playable field over deep foul/stands.
+    const scale = 1 + zoomLevel * 0.12; // 1.0 to 1.12
 
     // With transformOrigin: 'center bottom', scaling up pushes top content up
-    // Apply negative translateY to pull expanded content back into view
-    // At scale 1.05, top extends by 5% of container, but we're centered so it's ~2.5% each way
-    // Small negative translation to keep top visible
-    const translateY = zoomLevel * -1.5; // -1.5% at max zoom
+    // Pull slightly downward compensation so the infield stays centered and CF remains visible.
+    const translateY = zoomLevel * -3.5; // -3.5% at max zoom
 
     return { scale, translateY };
   }, [zoomLevel]);
@@ -629,8 +622,8 @@ export function FieldCanvas({
     const pitcher = fieldToSvg(PITCHER_FEET.x, PITCHER_FEET.y);
 
     // Foul lines - extend from home to past the fence
-    const foulRightEnd = fieldToSvg(FENCE_RF + 50, 0);
-    const foulLeftEnd = fieldToSvg(0, FENCE_LF + 50);
+    const foulRightEnd = fieldToSvg(FENCE_RF + 8, 0);
+    const foulLeftEnd = fieldToSvg(0, FENCE_LF + 8);
 
     // Generate fence path (arc from RF pole to LF pole)
     const fencePoints: string[] = [];
@@ -914,7 +907,7 @@ export function FieldCanvas({
       {children && (
         <ViewBoxContext.Provider value={viewBox}>
           <div className="absolute inset-0 pointer-events-none">
-            <div className="relative w-full h-full pointer-events-auto">
+            <div className="relative w-full h-full pointer-events-none">
               {children}
             </div>
           </div>

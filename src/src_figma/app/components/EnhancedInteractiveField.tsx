@@ -501,6 +501,12 @@ export interface EnhancedInteractiveFieldProps {
   onRunnerTap?: (base: 'first' | 'second' | 'third', anchorPosition: { left: string; top: string }) => void;
   /** Callback when a fielder is tapped in idle state — opens fielder popover per §7.2 */
   onFielderTap?: (positionNumber: number, playerName: string, anchorPosition: { left: string; top: string }) => void;
+  /** Callback when the batter icon is tapped — opens player card */
+  onBatterTap?: () => void;
+  /** Callback when the large field is tapped — used for main-field enrichment */
+  onFieldTap?: (coord: FieldCoordinate, isFoul: boolean) => void;
+  /** Hide the legacy HIT/OUT/OTHER selector when Quick Bar is active in the outer layout */
+  hideActionSelector?: boolean;
 }
 
 // Re-export RunnerMoveData for consumers
@@ -522,13 +528,16 @@ interface FieldDropZoneProps {
   onBatterDrop: (position: FieldCoordinate) => void;
   /** Callback when batter drag state changes (Story 10) */
   onBatterDragChange?: (isDragging: boolean) => void;
+  enabled?: boolean;
 }
 
-function FieldDropZone({ children, onFielderDrop, onBatterDrop, onBatterDragChange }: FieldDropZoneProps) {
+function FieldDropZone({ children, onFielderDrop, onBatterDrop, onBatterDragChange, enabled = true }: FieldDropZoneProps) {
   const [{ isOver, canDrop, itemType }, drop] = useDrop(
     () => ({
       accept: [ItemTypes.FIELDER, ItemTypes.BATTER],
+      canDrop: () => enabled,
       drop: (item: { fielder?: FielderData; type?: string }, monitor) => {
+        if (!enabled) return;
         const offset = monitor.getClientOffset();
         const element = document.getElementById('enhanced-field-drop-zone');
         if (offset && element) {
@@ -556,11 +565,11 @@ function FieldDropZone({ children, onFielderDrop, onBatterDrop, onBatterDragChan
         itemType: monitor.getItemType(),
       }),
     }),
-    [onFielderDrop, onBatterDrop]
+    [enabled, onFielderDrop, onBatterDrop]
   );
 
   // Story 10: Notify parent when batter is being dragged
-  const isBatterDragging = canDrop && itemType === ItemTypes.BATTER;
+  const isBatterDragging = enabled && canDrop && itemType === ItemTypes.BATTER;
 
   // Use effect to notify parent of drag state changes
   useEffect(() => {
@@ -570,10 +579,10 @@ function FieldDropZone({ children, onFielderDrop, onBatterDrop, onBatterDragChan
   return (
     <div
       id="enhanced-field-drop-zone"
-      ref={drop as DndRef}
+      ref={enabled ? (drop as DndRef) : undefined}
       className="relative w-full h-full"
       style={{
-        outline: isOver ? '3px dashed #5599FF' : 'none',
+        outline: enabled && isOver ? '3px dashed #5599FF' : 'none',
       }}
     >
       {children}
@@ -1674,6 +1683,9 @@ export function EnhancedInteractiveField({
   zoomLevel = 0,
   onRunnerTap,
   onFielderTap,
+  onBatterTap,
+  onFieldTap,
+  hideActionSelector = false,
 }: EnhancedInteractiveFieldProps) {
   // ============================================
   // NEW 5-STEP FLOW STATE (per GAMETRACKER_UI_DESIGN.md)
@@ -1696,6 +1708,8 @@ export function EnhancedInteractiveField({
 
   // Phase 5B: Full play context for contextual button inference (southern foul territory buttons)
   const [lastPlayContext, setLastPlayContext] = useState<PlayContext | null>(null);
+  const legacyFieldFlowEnabled = !hideActionSelector;
+  const popoverTapEnabled = flowStep === 'IDLE' || !legacyFieldFlowEnabled;
 
   // Phase 5B: Auto-dismiss contextual buttons after timeout
   // This useEffect triggers a re-render to hide buttons after CONTEXTUAL_BUTTONS_TIMEOUT
@@ -1707,6 +1721,17 @@ export function EnhancedInteractiveField({
       return () => clearTimeout(timer);
     }
   }, [lastPlayContext]);
+
+  useEffect(() => {
+    if (legacyFieldFlowEnabled) return;
+
+    setFlowStep('IDLE');
+    setActiveAction(null);
+    setPlacedFielders([]);
+    setThrowSequence([]);
+    setBatterPosition(null);
+    setBallLocation(null);
+  }, [legacyFieldFlowEnabled]);
 
   // Modal state
   const [showPlayTypeModal, setShowPlayTypeModal] = useState(false);
@@ -2489,7 +2514,7 @@ export function EnhancedInteractiveField({
       }
 
       // Idle-state tap → open fielder popover (substitution/move per §7.2)
-      if (flowStep === 'IDLE' && placedFielders.length === 0 && onFielderTap) {
+      if (popoverTapEnabled && placedFielders.length === 0 && onFielderTap) {
         // Get fielder position for anchor
         const pos = FIELDER_POSITIONS[fielder.positionNumber];
         if (pos) {
@@ -2511,7 +2536,7 @@ export function EnhancedInteractiveField({
       const newSequence = [...throwSequence, fielder];
       setThrowSequence(newSequence);
     },
-    [placedFielders.length, throwSequence, awaitingErrorFielder, flowStep, onFielderTap]
+    [placedFielders.length, throwSequence, awaitingErrorFielder, onFielderTap, popoverTapEnabled]
   );
 
   // Get sequence number for a fielder
@@ -3829,10 +3854,9 @@ export function EnhancedInteractiveField({
       : 'hit'
     : 'hit';
 
-  // Get border color for fielders - use primary team color for all fielders
-  const getBorderColor = (_positionNumber: number) => {
-    // All fielders use the primary team color (first color in the array)
-    return fielderBorderColors[0];
+  // Alternate primary/secondary borders so team identity remains visible at a glance.
+  const getBorderColor = (positionNumber: number) => {
+    return fielderBorderColors[(positionNumber - 1) % fielderBorderColors.length];
   };
 
   return (
@@ -3843,6 +3867,7 @@ export function EnhancedInteractiveField({
         {/* Inner container maintains 16:9 aspect ratio (SVG is 1600x900) */}
         <div className="relative w-full h-full" style={{ maxWidth: '100%', aspectRatio: '16/9' }}>
           <FieldDropZone
+          enabled={legacyFieldFlowEnabled}
           onFielderDrop={handleFielderDrop}
           onBatterDrop={handleBatterDrop}
           onBatterDragChange={setIsDraggingBatter}
@@ -3852,6 +3877,7 @@ export function EnhancedInteractiveField({
             shadeFoulTerritory={true}
             className="w-full h-full"
             zoomLevel={zoomLevel}
+            onFieldClick={onFieldTap}
           >
           {/* Story 10: Drop zone highlights during batter drag */}
           {isDraggingBatter && (
@@ -3886,6 +3912,7 @@ export function EnhancedInteractiveField({
               isPlaced={isFielderPlaced(fielder)}
               onClick={handleFielderClick}
               borderColor={getBorderColor(fielder.positionNumber)}
+              draggable={legacyFieldFlowEnabled}
             />
           ))}
 
@@ -3897,7 +3924,7 @@ export function EnhancedInteractiveField({
               placedPosition={pf.position}
               sequenceNumber={pf.sequenceNumber}
               onClick={handleFielderClick}
-              borderColor="#C4A853"
+              borderColor={getBorderColor(pf.fielder.positionNumber)}
             />
           ))}
 
@@ -3907,6 +3934,8 @@ export function EnhancedInteractiveField({
             isDragged={batterPosition !== null}
             backgroundColor={batterBackgroundColor}
             borderColor={batterBorderColor}
+            onClick={onBatterTap}
+            draggable={legacyFieldFlowEnabled}
           />
 
           {/* Ball landing marker */}
@@ -3941,7 +3970,8 @@ export function EnhancedInteractiveField({
               bases={gameSituation.bases}
               runnerNames={runnerNames}
               onRunnerMove={onRunnerMove}
-              onRunnerTap={flowStep === 'IDLE' ? onRunnerTap : undefined}
+              onRunnerTap={popoverTapEnabled ? onRunnerTap : undefined}
+              draggable={legacyFieldFlowEnabled}
             />
           )}
 
@@ -4132,7 +4162,7 @@ export function EnhancedInteractiveField({
 
         {/* LEFT FOUL ZONE: Action Selection (Step 1) */}
         <div className="absolute bottom-16 left-2 z-30">
-          {flowStep === 'IDLE' && (
+          {flowStep === 'IDLE' && !hideActionSelector && (
             <ActionSelector
               onHit={handleHitAction}
               onOut={handleOutAction}

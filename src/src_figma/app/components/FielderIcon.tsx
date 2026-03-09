@@ -8,6 +8,7 @@
  * - Visual states: normal, selected (in sequence), placed
  */
 
+import { useCallback, useRef } from 'react';
 import { useDrag } from 'react-dnd';
 import {
   type FieldCoordinate,
@@ -53,6 +54,8 @@ export interface FielderIconProps {
   containerHeight?: number;
   /** Whether fielder is in error mode (long-pressed) */
   isErrorMode?: boolean;
+  /** Whether drag interactions are enabled */
+  draggable?: boolean;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -72,9 +75,12 @@ export function FielderIcon({
   containerWidth = 400,
   containerHeight = 560,
   isErrorMode = false,
+  draggable = true,
 }: FielderIconProps) {
   // Get current viewBox from context (for dynamic zoom support)
   const viewBox = useViewBox();
+  const pointerDownRef = useRef<{ time: number; x: number; y: number } | null>(null);
+  const didDragRef = useRef(false);
 
   // Get default position if not provided
   const defaultPosition = FIELDER_POSITIONS[fielder.positionNumber];
@@ -89,12 +95,16 @@ export function FielderIcon({
   const [{ isDragging }, drag] = useDrag(
     () => ({
       type: ItemTypes.FIELDER,
-      item: { fielder, originalPosition: fieldPosition },
+      canDrag: draggable,
+      item: () => {
+        didDragRef.current = true;
+        return { fielder, originalPosition: fieldPosition };
+      },
       collect: (monitor) => ({
         isDragging: monitor.isDragging(),
       }),
     }),
-    [fielder, fieldPosition]
+    [draggable, fielder, fieldPosition]
   );
 
   // Get position label
@@ -109,24 +119,45 @@ export function FielderIcon({
     bgColor = '#FF6600'; // Orange for error mode
   }
 
+  const handlePointerDown = useCallback((e: React.PointerEvent) => {
+    didDragRef.current = false;
+    pointerDownRef.current = { time: Date.now(), x: e.clientX, y: e.clientY };
+  }, []);
+
+  const handlePointerUp = useCallback((e: React.PointerEvent) => {
+    if (!pointerDownRef.current || didDragRef.current) {
+      pointerDownRef.current = null;
+      return;
+    }
+
+    const elapsed = Date.now() - pointerDownRef.current.time;
+    const dx = Math.abs(e.clientX - pointerDownRef.current.x);
+    const dy = Math.abs(e.clientY - pointerDownRef.current.y);
+    pointerDownRef.current = null;
+
+    if (elapsed < 300 && dx < 8 && dy < 8) {
+      e.stopPropagation();
+      onClick?.(fielder);
+    }
+  }, [fielder, onClick]);
+
   return (
     <div
-      ref={drag as DndRef}
-      onClick={(e) => {
-        e.stopPropagation();
-        onClick?.(fielder);
-      }}
+      ref={draggable ? (drag as DndRef) : undefined}
+      onPointerDown={handlePointerDown}
+      onPointerUp={handlePointerUp}
       style={{
         position: 'absolute',
         left: `${leftPercent}%`,
         top: `${topPercent}%`,
         transform: 'translate(-50%, -50%)',
-        cursor: isDragging ? 'grabbing' : 'pointer',
+        cursor: draggable ? (isDragging ? 'grabbing' : 'grab') : 'pointer',
         // GT-005 FIX: Fully hide fielder at original position when placed
         // Previously showed at 0.3 opacity which caused duplication confusion
         opacity: isPlaced ? 0 : isDragging ? 0.5 : 1,
         pointerEvents: isPlaced ? 'none' : 'auto',
         zIndex: isDragging ? 100 : 35,
+        touchAction: draggable ? 'none' : 'manipulation',
         transition: isDragging ? 'none' : 'opacity 0.2s',
       }}
     >
@@ -232,6 +263,7 @@ export function PlacedFielder({
 }: PlacedFielderProps) {
   // Get current viewBox from context (for dynamic zoom support)
   const viewBox = useViewBox();
+  const pointerDownRef = useRef<{ time: number; x: number; y: number } | null>(null);
 
   // Calculate screen position using viewBox-aware conversion
   const svgCoords = normalizedToSvg(placedPosition.x, placedPosition.y);
@@ -241,12 +273,28 @@ export function PlacedFielder({
   const defaultPosition = FIELDER_POSITIONS[fielder.positionNumber];
   const positionLabel = defaultPosition?.label || `P${fielder.positionNumber}`;
 
+  const handlePointerDown = useCallback((e: React.PointerEvent) => {
+    pointerDownRef.current = { time: Date.now(), x: e.clientX, y: e.clientY };
+  }, []);
+
+  const handlePointerUp = useCallback((e: React.PointerEvent) => {
+    if (!pointerDownRef.current) return;
+
+    const elapsed = Date.now() - pointerDownRef.current.time;
+    const dx = Math.abs(e.clientX - pointerDownRef.current.x);
+    const dy = Math.abs(e.clientY - pointerDownRef.current.y);
+    pointerDownRef.current = null;
+
+    if (elapsed < 300 && dx < 8 && dy < 8) {
+      e.stopPropagation();
+      onClick?.(fielder);
+    }
+  }, [fielder, onClick]);
+
   return (
     <div
-      onClick={(e) => {
-        e.stopPropagation();
-        onClick?.(fielder);
-      }}
+      onPointerDown={handlePointerDown}
+      onPointerUp={handlePointerUp}
       style={{
         position: 'absolute',
         left: `${leftPercent}%`,
@@ -254,6 +302,8 @@ export function PlacedFielder({
         transform: 'translate(-50%, -50%)',
         cursor: 'pointer',
         zIndex: 40,
+        pointerEvents: 'auto',
+        touchAction: 'manipulation',
       }}
     >
       <div
@@ -331,24 +381,27 @@ export interface BatterIconProps {
   borderColor?: string;
   /** Click handler */
   onClick?: () => void;
+  /** Whether drag interactions are enabled */
+  draggable?: boolean;
 }
 
 /**
  * BatterIcon - Draggable batter at home plate
  */
-export function BatterIcon({ name = 'BATTER', isDragged = false, backgroundColor = '#2563EB', borderColor = '#C4A853', onClick }: BatterIconProps) {
+export function BatterIcon({ name = 'BATTER', isDragged = false, backgroundColor = '#2563EB', borderColor = '#C4A853', onClick, draggable = true }: BatterIconProps) {
   // Get current viewBox from context (for dynamic zoom support)
   const viewBox = useViewBox();
 
   const [{ isDragging }, drag] = useDrag(
     () => ({
       type: ItemTypes.BATTER,
+      canDrag: draggable,
       item: { type: 'batter', name },
       collect: (monitor) => ({
         isDragging: monitor.isDragging(),
       }),
     }),
-    [name]
+    [draggable, name]
   );
 
   if (isDragged) return null;
@@ -362,7 +415,7 @@ export function BatterIcon({ name = 'BATTER', isDragged = false, backgroundColor
 
   return (
     <div
-      ref={drag as DndRef}
+      ref={draggable ? (drag as DndRef) : undefined}
       onClick={(e) => {
         e.stopPropagation();
         onClick?.();
@@ -372,9 +425,11 @@ export function BatterIcon({ name = 'BATTER', isDragged = false, backgroundColor
         left: `${leftPercent}%`,
         top: `${topPercent}%`,
         transform: 'translate(-50%, -50%)',
-        cursor: isDragging ? 'grabbing' : 'grab',
+        cursor: draggable ? (isDragging ? 'grabbing' : 'grab') : 'pointer',
         opacity: isDragging ? 0.5 : 1,
         zIndex: 35,
+        pointerEvents: 'auto',
+        touchAction: draggable ? 'none' : 'manipulation',
       }}
     >
       <div

@@ -44,6 +44,8 @@ export interface FielderPopoverProps {
   onPinchHit: (benchPlayerId: string, benchPlayerName: string, fielderId: string, fielderName: string) => void;
   /** Handler: position change — fielder moves to new position */
   onMovePosition: (playerId: string, newPosition: string) => void;
+  /** Open player card for the selected fielder */
+  onViewPlayerCard?: () => void;
   /** Close the popover */
   onClose: () => void;
 }
@@ -59,6 +61,7 @@ export function FielderPopover({
   onSubstitute,
   onPinchHit,
   onMovePosition,
+  onViewPlayerCard,
   onClose,
 }: FielderPopoverProps) {
   const popoverRef = useRef<HTMLDivElement>(null);
@@ -214,6 +217,14 @@ export function FielderPopover({
           >
             Move Position
           </button>
+          {onViewPlayerCard && (
+            <button
+              onClick={onViewPlayerCard}
+              className="w-full bg-[#6c3483] border-[2px] border-[#af7ac5] px-2 py-1.5 text-[10px] font-bold text-white hover:scale-105 transition-transform shadow-[2px_2px_0px_0px_rgba(0,0,0,0.3)]"
+            >
+              Player Card
+            </button>
+          )}
         </div>
       </div>
     </div>
