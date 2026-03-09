@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kbl-tracker.local/smb4/generation_request.schema.json",
+  "title": "SMB4 Player Generation Request",
+  "type": "object",
+  "additionalProperties": true,
+  "properties": {
+    "count": { "type": "integer", "minimum": 1, "maximum": 500 },
+    "targetGrade": {
+      "type": "string",
+      "enum": ["S", "A+", "A", "A-", "B+", "B", "B-", "C+", "C", "C-", "D+", "D", "D-", "E+", "E", "E-", "F"]
+    },
+    "kind": {
+      "type": "string",
+      "enum": ["hitter", "pitcher", "mixed"]
+    },
+    "primaryPosition": {
+      "type": "string",
+      "enum": ["C", "1B", "2B", "3B", "SS", "LF", "CF", "RF", "SP", "RP", "CP", "SP/RP"]
+    },
+    "secondaryPosition": {
+      "type": "string",
+      "enum": ["", "(none)", "1B", "1B/OF", "2B", "3B", "C", "IF", "IF/OF", "LF", "OF", "RF", "SS"]
+    },
+    "bats": {
+      "type": "string",
+      "enum": ["R", "L", "S"]
+    },
+    "throws": {
+      "type": "string",
+      "enum": ["R", "L"]
+    },
+    "trait1": { "type": "string" },
+    "trait2": { "type": "string" },
+    "archetype": {
+      "type": "string",
+      "enum": ["balanced", "power-heavy", "speed-defense", "bullpen-heavy"]
+    },
+    "notes": { "type": "string" }
+  },
+  "required": ["count", "targetGrade", "kind"]
+}

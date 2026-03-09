@@ -1,0 +1,14 @@
+{
+  "name": "Example Hitter",
+  "primaryPosition": "SS",
+  "secondaryPosition": "IF/OF",
+  "bats": "S",
+  "throws": "R",
+  "trait1": "Utility",
+  "trait2": "Fastball Hitter",
+  "power": 62,
+  "contact": 78,
+  "speed": 80,
+  "fielding": 84,
+  "arm": 70
+}

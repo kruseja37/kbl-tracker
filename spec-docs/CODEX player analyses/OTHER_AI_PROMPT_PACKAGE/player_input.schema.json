@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kbl-tracker.local/smb4/player_input.schema.json",
+  "title": "SMB4 Player Input",
+  "type": "object",
+  "additionalProperties": true,
+  "properties": {
+    "name": { "type": "string" },
+    "primaryPosition": {
+      "type": "string",
+      "enum": ["C", "1B", "2B", "3B", "SS", "LF", "CF", "RF", "SP", "RP", "CP", "SP/RP"]
+    },
+    "secondaryPosition": {
+      "type": "string",
+      "enum": ["", "(none)", "1B", "1B/OF", "2B", "3B", "C", "IF", "IF/OF", "LF", "OF", "RF", "SS"]
+    },
+    "bats": {
+      "type": "string",
+      "enum": ["R", "L", "S"]
+    },
+    "throws": {
+      "type": "string",
+      "enum": ["R", "L"]
+    },
+    "trait1": { "type": "string" },
+    "trait2": { "type": "string" },
+    "arsenal": {
+      "oneOf": [
+        { "type": "string" },
+        {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["2F", "4F", "CB", "CF", "CH", "FK", "SB", "SL"]
+          }
+        }
+      ]
+    },
+    "power": { "type": "number", "minimum": 0, "maximum": 99 },
+    "contact": { "type": "number", "minimum": 0, "maximum": 99 },
+    "speed": { "type": "number", "minimum": 0, "maximum": 99 },
+    "fielding": { "type": "number", "minimum": 0, "maximum": 99 },
+    "arm": { "type": "number", "minimum": 0, "maximum": 99 },
+    "velocity": { "type": "number", "minimum": 0, "maximum": 99 },
+    "junk": { "type": "number", "minimum": 0, "maximum": 99 },
+    "accuracy": { "type": "number", "minimum": 0, "maximum": 99 }
+  },
+  "required": ["primaryPosition"],
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "primaryPosition": { "enum": ["SP", "RP", "CP", "SP/RP"] }
+        },
+        "required": ["primaryPosition"]
+      },
+      "then": {
+        "properties": {
+          "secondaryPosition": { "enum": ["", "(none)"] }
+        }
+      }
+    }
+  ]
+}

@@ -25,7 +25,7 @@
 | Joeffrey Rockman | M | 36 | B+ | SP | | L | L | Disciplined | 6 | 3 | 10 | 65 | - | 72 | 32 | 95 | 4F\|2F\|SL\|CH | | |
 | Sancha Silvio | F | 21 | B | SP | | R | R | Scholarly | 7 | 3 | 9 | 76 | - | 68 | 42 | 89 | 4F\|CB\|CH\|FK | Wild Thing | |
 | Raul Strikes | M | 28 | B | SP | | R | R | Scholarly | 42 | 10 | 9 | 65 | - | 38 | 64 | 71 | 4F\|CB\|SL\|CH | Gets Ahead | |
-| Swirly Cutstiff | M | 21 | B | SP/RP | | L | L | Scholarly | 18 | 44 | 37 | 57 | - | 67 | 83 | 35 | CF\|CB\|SL\|SB | Elite CF | Choker |
+| Swirly Cutstiff | F | 21 | B | SP/RP | | L | L | Scholarly | 18 | 44 | 37 | 57 | - | 67 | 83 | 35 | CF\|CB\|SL\|SB | Elite CF | Choker |
 | Felix Farmhand | M | 19 | C- | SP/RP | | L | R | Spirited | 30 | 7 | 29 | 40 | - | 26 | 28 | 59 | 4F\|SL\|CH | | |
 | Charlie Best | M | 31 | A+ | RP | | L | L | Competitive | 3 | 13 | 5 | 82 | - | 74 | 93 | 86 | 4F\|2F\|CB\|CH | Elite CB | |
 | Carla Tolbert | F | 29 | B- | RP | | R | R | Scholarly | 4 | 2 | 8 | 43 | - | 65 | 76 | 43 | 4F\|CF\|CH | K Neglecter | |
@@ -48,7 +48,7 @@
 | Whopper Batsman | M | 23 | C | 2B | | R | R | Disciplined | 81 | 15 | 50 | 49 | 37 | - | - | - | | Tough Out | |
 | Stevo Reeves | M | 29 | C+ | LF | 1B | R | R | Spirited | 12 | 88 | 74 | 56 | 65 | - | - | - | | Pinch Perfect | |
 | Chilli Little | M | 21 | C+ | RF | OF | L | L | Competitive | 73 | 29 | 47 | 49 | 69 | - | - | - | | Mind Gamer | |
-| Gem Qualita | M | 32 | A- | SP | | R | R | Scholarly | 19 | 74 | 33 | 94 | - | 72 | 57 | 78 | 4F\|2F\|CF\|CB\|SL | Composed | Easy Jumps |
+| Gem Qualita | F | 32 | A- | SP | | R | R | Scholarly | 19 | 74 | 33 | 94 | - | 72 | 57 | 78 | 4F\|2F\|CF\|CB\|SL | Composed | Easy Jumps |
 | Dick Lukas | M | 21 | B+ | SP | | R | R | Spirited | 6 | 34 | 63 | 73 | - | 46 | 73 | 66 | 4F\|CB\|SL\|CH\|FK | Gets Ahead | |
 | Olaff Slakov | M | 36 | B | SP | | L | R | Disciplined | 33 | 4 | 13 | 62 | - | 83 | 20 | 72 | 4F\|SL\|CH\|FK | Elite 4F | Volatile |
 | Tussker Fuss | M | 29 | B | SP | | R | R | Disciplined | 11 | 34 | 52 | 38 | - | 68 | 44 | 75 | 4F\|2F\|CB\|CH | Meltdown | |
@@ -76,7 +76,7 @@
 | Enrique Goyo | M | 19 | C+ | LF | | L | R | Scholarly | 51 | 46 | 73 | 49 | 25 | - | - | - | | Bad Jumps | Base Rounder |
 | Godfried Storm | M | 21 | C+ | CF | 1B/OF | L | L | Competitive | 48 | 37 | 55 | 35 | 83 | - | - | - | | Utility | |
 | Wes Yogurt | M | 29 | A | SP | | R | R | Competitive | 8 | 3 | 33 | 17 | - | 74 | 75 | 85 | 4F\|CF\|CH | Elite CH | |
-| Hugs Lovell | M | 36 | B | SP | | L | L | Spirited | 33 | 4 | 74 | 38 | - | 52 | 55 | 70 | 4F\|CB\|SL\|SB\|CH | Elite SB | |
+| Hugs Lovell | F | 36 | B | SP | | L | L | Spirited | 33 | 4 | 74 | 38 | - | 52 | 55 | 70 | 4F\|CB\|SL\|SB\|CH | Elite SB | |
 | Durbin Holmes | M | 21 | B | SP | | R | R | Competitive | 4 | 15 | 17 | 55 | - | 39 | 85 | 64 | 4F\|CB\|SL\|CH | | |
 | Wiff Smesson | M | 31 | B | SP | | L | R | Scholarly | 2 | 39 | 13 | 44 | - | 47 | 65 | 53 | 4F\|2F\|CB\|CH\|FK | Composed | Elite FK |
 | Cutter Crackebarrel | M | 29 | B- | SP/RP | | L | R | Scholarly | 24 | 28 | 4 | 30 | - | 89 | 37 | 39 | CF\|CB\|SL\|CH | Elite CF | |
@@ -110,7 +110,7 @@
 | Steamboat Wisselle | M | 28 | A | RP | | R | R | Competitive | 2 | 12 | 33 | 32 | - | 86 | 79 | 62 | 4F\|2F\|CB | Gets Ahead | Elite 4F |
 | Grace Loopinovich | F | 36 | A- | RP | | R | R | Spirited | 2 | 2 | 32 | 50 | - | 65 | 72 | 68 | 4F\|CF\|CB\|CH | Specialist | Elite CF |
 | Ryder McPride | M | 29 | B | RP | | R | R | Spirited | 11 | 7 | 9 | 97 | - | 64 | 33 | 78 | 4F\|2F\|CH | Rally Stopper | Clutch |
-| Kay Frequin | M | 31 | S | CP | | R | L | Crafty | 8 | 2 | 32 | 34 | - | 99 | 84 | 97 | 2F\|SB | K Collector | Elite 2F |
+| Kay Frequin | F | 31 | S | CP | | R | L | Crafty | 8 | 2 | 32 | 34 | - | 99 | 84 | 97 | 2F\|SB | K Collector | Elite 2F |
 
 ## Hot Corners (22 players)
 
@@ -203,7 +203,7 @@
 | Johnny Bags | M | 23 | B+ | RF | LF | S | R | Disciplined | 66 | 73 | 75 | 35 | 70 | - | - | - | | Clutch | |
 | Jon Ronero | M | 28 | B+ | SS | 2B | R | R | Crafty | 90 | 58 | 69 | 74 | 19 | - | - | - | | Bad Jumps | Big Hack |
 | Pex Flext | M | 29 | B | C | RF | L | R | Disciplined | 62 | 73 | 15 | 69 | 75 | - | - | - | | Sign Stealer | |
-| Mattie Batts | M | 36 | B | CF | OF | L | L | Scholarly | 62 | 64 | 73 | 52 | 40 | - | - | - | | Pinch Perfect | Noodle Arm |
+| Mattie Batts | F | 36 | B | CF | OF | L | L | Scholarly | 62 | 64 | 73 | 52 | 40 | - | - | - | | Pinch Perfect | Noodle Arm |
 | DP Turner | M | 32 | B- | 2B | IF | L | R | Crafty | 61 | 55 | 43 | 80 | 46 | - | - | - | | Cannon Arm | Dive Wizard |
 | Cathy Culdesac | F | 21 | B- | LF | RF | L | R | Spirited | 50 | 52 | 64 | 88 | 48 | - | - | - | | CON vs RHP | |
 | Junior Young Sr | M | 42 | B- | C | 1B | R | R | Spirited | 70 | 41 | 38 | 76 | 92 | - | - | - | | CON vs LHP | |
@@ -228,7 +228,7 @@
 | Dolf Steak | M | 27 | A- | CF | 1B/OF | L | L | Competitive | 42 | 68 | 87 | 87 | 88 | - | - | - | | POW vs RHP | CON vs RHP |
 | Marsha Brown | F | 22 | A | RF | OF | L | L | Crafty | 82 | 76 | 87 | 58 | 52 | - | - | - | | Tough Out | |
 | Hercules Bentley | M | 31 | B | 1B | C | R | R | Crafty | 88 | 66 | 13 | 78 | 56 | - | - | - | | | |
-| Jess Fowl | M | 22 | B | 1B | 3B | R | R | Disciplined | 62 | 35 | 88 | 90 | 64 | - | - | - | | Low Pitch | |
+| Jess Fowl | F | 22 | B | 1B | 3B | R | R | Disciplined | 62 | 35 | 88 | 90 | 64 | - | - | - | | Low Pitch | |
 | Super Sampson | M | 29 | B | CF | OF | R | R | Competitive | 24 | 57 | 98 | 97 | 97 | - | - | - | | Consistent | |
 | Gia Axelson | F | 28 | C+ | LF | OF | L | L | Disciplined | 33 | 76 | 59 | 43 | 32 | - | - | - | | RBI Zero | |
 | Knox Oxensocksen | M | 29 | B | C | LF | R | R | Competitive | 11 | 96 | 79 | 92 | 77 | - | - | - | | Little Hack | |
@@ -289,7 +289,7 @@
 | Tugboat Thomas | M | 32 | B- | C | | R | R | Disciplined | 59 | 62 | 24 | 79 | 68 | - | - | - | | | |
 | Chase Tibuhle | M | 37 | C | C | 1B | R | R | Competitive | 27 | 30 | 57 | 74 | 93 | - | - | - | | First Pitch Slayer | |
 | Kerry Cartman | M | 34 | B- | 2B | SS | R | R | Spirited | 39 | 60 | 84 | 60 | 64 | - | - | - | | Big Hack | |
-| Sky Rodriguez | M | 27 | C+ | 3B | | R | R | Spirited | 94 | 38 | 43 | 8 | 58 | - | - | - | | CON vs LHP | |
+| Sky Rodriguez | F | 27 | C+ | 3B | | R | R | Spirited | 94 | 38 | 43 | 8 | 58 | - | - | - | | CON vs LHP | |
 | Linda Hand | F | 31 | B- | RF | OF | L | R | Disciplined | 53 | 38 | 82 | 60 | 95 | - | - | - | | Magic Hands | |
 | Ace von Acesson | M | 29 | A | SP | | R | L | Spirited | 15 | 32 | 16 | 96 | - | 65 | 84 | 78 | 4F\|2F\|CB\|SL\|CH | K Collector | |
 | Stooby Tubrek | M | 31 | B+ | SP | | L | R | Scholarly | 4 | 37 | 9 | 65 | - | 57 | 46 | 87 | 4F\|2F\|CB\|CH | Elite CH | |
@@ -309,8 +309,8 @@
 | Devon Godsendez | M | 23 | A- | 1B | 3B | L | R | Scholarly | 92 | 95 | 51 | 30 | 40 | - | - | - | | | |
 | Marco Demarco | M | 36 | B | CF | OF | L | L | Spirited | 71 | 37 | 86 | 67 | 66 | - | - | - | | Whiffer | Big Hack |
 | Joven Bambino | M | 27 | A- | RF | LF | L | R | Scholarly | 94 | 60 | 76 | 71 | 80 | - | - | - | | Bad Jumps | |
-| Kelby King | M | 31 | B | RF | LF | R | R | Crafty | 89 | 43 | 64 | 21 | 75 | - | - | - | | Mind Gamer | |
-| Zoom Delacruz | M | 28 | B- | 2B | SS | R | R | Crafty | 59 | 9 | 97 | 94 | 46 | - | - | - | | Little Hack | |
+| Kelby King | F | 31 | B | RF | LF | R | R | Crafty | 89 | 43 | 64 | 21 | 75 | - | - | - | | Mind Gamer | |
+| Zoom Delacruz | F | 28 | B- | 2B | SS | R | R | Crafty | 59 | 9 | 97 | 94 | 46 | - | - | - | | Little Hack | |
 | Ian Fielder | M | 31 | B- | 3B | IF | R | R | Spirited | 45 | 70 | 60 | 57 | 63 | - | - | - | | Utility | |
 | Eduardo Electro | M | 29 | C+ | SS | 2B | R | R | Spirited | 60 | 8 | 81 | 76 | 78 | - | - | - | | Fastball Hitter | |
 | Grizz Senioro | M | 39 | C | C | | L | R | Disciplined | 15 | 32 | 63 | 71 | 90 | - | - | - | | Sign Stealer | |
@@ -339,21 +339,21 @@
 | Mantonio Laevo | M | 32 | B | 1B | LF | S | R | Competitive | 83 | 67 | 39 | 21 | 45 | - | - | - | | | |
 | Carlton Starr | M | 22 | A- | SS | 2B | L | R | Competitive | 42 | 84 | 71 | 85 | 73 | - | - | - | | First Pitch Slayer | |
 | Hank Hart | M | 37 | B | C | | L | R | Spirited | 36 | 84 | 54 | 74 | 88 | - | - | - | | First Pitch Prayer | |
-| Kimme Smoke | M | 25 | B | C | 1B | L | R | Competitive | 53 | 54 | 78 | 68 | 50 | - | - | - | | Volatile | |
+| Kimme Smoke | F | 25 | B | C | 1B | L | R | Competitive | 53 | 54 | 78 | 68 | 50 | - | - | - | | Volatile | |
 | Dion Bass | M | 31 | B- | 2B | SS | R | R | Crafty | 33 | 73 | 82 | 71 | 75 | - | - | - | | RBI Zero | Base Rounder |
 | Volt Bolter | M | 38 | B- | CF | 1B/OF | S | R | Scholarly | 24 | 45 | 96 | 63 | 79 | - | - | - | | | |
 | Maggie Rags | F | 28 | C+ | 2B | IF/OF | S | R | Scholarly | 26 | 17 | 67 | 92 | 98 | - | - | - | | Utility | |
-| Buscha Digman | M | 31 | C+ | SS | 3B | R | R | Crafty | 75 | 17 | 49 | 77 | 74 | - | - | - | | CON vs LHP | |
+| Buscha Digman | F | 31 | C+ | SS | 3B | R | R | Crafty | 75 | 17 | 49 | 77 | 74 | - | - | - | | CON vs LHP | |
 | Bubbles Garcia | M | 26 | C+ | LF | RF | L | L | Crafty | 78 | 47 | 37 | 47 | 45 | - | - | - | | Easy Target | |
 | Murky Nubswubbles | M | 28 | C | RF | | L | L | Scholarly | 57 | 29 | 64 | 15 | 65 | - | - | - | | Sign Stealer | |
 | Elmo Slayer | M | 23 | S | SP | | L | L | Crafty | 16 | 0 | 7 | 79 | - | 72 | 94 | 95 | 4F\|CB\|SL\|CH\|FK | K Collector | |
 | Bishop Fuller | M | 37 | A | SP | | L | L | Crafty | 5 | 47 | 54 | 52 | - | 75 | 83 | 72 | 4F\|2F\|CB\|SL\|CH | Elite 2F | |
-| Air Lovestone | M | 36 | B- | SP | | R | R | Spirited | 5 | 11 | 34 | 44 | - | 39 | 42 | 72 | 4F\|2F\|CB\|SL\|FK | Elite FK | Workhorse |
+| Air Lovestone | F | 36 | B- | SP | | R | R | Spirited | 5 | 11 | 34 | 44 | - | 39 | 42 | 72 | 4F\|2F\|CB\|SL\|FK | Elite FK | Workhorse |
 | Pan Knibbles | M | 26 | C- | SP | | R | R | Disciplined | 16 | 7 | 6 | 47 | - | 40 | 19 | 58 | 4F\|2F\|CB\|CH | | |
 | Boris Biggsworth | M | 26 | C- | SP/RP | | R | R | Crafty | 7 | 5 | 0 | 77 | - | 52 | 35 | 34 | 4F\|SL\|CH | Consistent | |
 | Derr Neverwocker | M | 21 | A+ | RP | | R | R | Crafty | 5 | 15 | 54 | 71 | - | 90 | 87 | 73 | 4F\|2F\|CB\|SL | Composed | |
 | Splash Cashmore | M | 37 | B- | RP | | L | R | Spirited | 18 | 2 | 50 | 52 | - | 74 | 13 | 67 | 4F\|CF\|CH | Reverse Splits | |
-| Simba Delano | M | 26 | C- | RP | | R | R | Disciplined | 12 | 12 | 53 | 24 | - | 58 | 32 | 29 | 4F\|CH | Rally Stopper | |
+| Simba Delano | F | 26 | C- | RP | | R | R | Disciplined | 12 | 12 | 53 | 24 | - | 58 | 32 | 29 | 4F\|CH | Rally Stopper | |
 | Huck Enduck | M | 23 | C- | RP | | L | R | Competitive | 69 | 8 | 20 | 8 | - | 43 | 35 | 42 | 4F\|CB\|SL | Wild Thing | |
 
 ---
@@ -404,8 +404,8 @@
 | Emilio Idoya | M | 31 | B- | 2B | IF/OF | L | R | Crafty | 28 | 35 | 82 | 85 | 81 | - | - | - | | Outside Pitch | Utility |
 | Ham Slamous | M | 22 | B | SS | 2B | L | R | Competitive | 73 | 56 | 46 | 53 | 75 | - | - | - | | | |
 | Spits McKinny | M | 36 | B- | LF | RF | R | R | Competitive | 30 | 84 | 69 | 75 | 56 | - | - | - | | RBI Hero | |
-| Punchie Patterson | M | 27 | A- | SP | | R | R | Competitive | 30 | 12 | 25 | 72 | - | 89 | 89 | 34 | 4F\|CB\|SL\|CH | K Collector | Easy Jumps |
-| Meow Bubbkins | M | 29 | B | SP | | R | L | Scholarly | 4 | 26 | 16 | 77 | - | 44 | 53 | 75 | 4F\|CB\|SL\|SB\|CH | Elite SB | Volatile |
+| Punchie Patterson | F | 27 | A- | SP | | R | R | Competitive | 30 | 12 | 25 | 72 | - | 89 | 89 | 34 | 4F\|CB\|SL\|CH | K Collector | Easy Jumps |
+| Meow Bubbkins | F | 29 | B | SP | | R | L | Scholarly | 4 | 26 | 16 | 77 | - | 44 | 53 | 75 | 4F\|CB\|SL\|SB\|CH | Elite SB | Volatile |
 | Erlang Elwood | M | 29 | C+ | SP | | L | L | Scholarly | 5 | 10 | 14 | 84 | - | 52 | 41 | 46 | 4F\|2F\|CB\|SL\|CH | Elite 2F | |
 | Hannah Hogswind | F | 27 | C- | SP | | R | R | Crafty | 4 | 19 | 56 | 98 | - | 32 | 15 | 61 | 4F\|CF\|CB\|CH | | |
 | Bradley Bowler | M | 29 | B | SP/RP | | R | R | Competitive | 14 | 1 | 17 | 71 | - | 62 | 68 | 53 | 4F\|2F\|SL\|CH | | |
@@ -424,7 +424,7 @@
 | Andre Candela | M | 25 | A- | 2B | IF | S | R | Competitive | 67 | 72 | 71 | 76 | 22 | - | - | - | | Sprinter | Consistent |
 | Terra Lionerre | F | 28 | B | C | 1B | L | R | Spirited | 74 | 60 | 39 | 50 | 63 | - | - | - | | Wild Thrower | |
 | Norm Fenomeno | M | 23 | A | SP/RP | | L | R | Spirited | 77 | 79 | 23 | 78 | - | 54 | 76 | 67 | 4F\|CF\|CB\|SL | Elite 4F | Two Way (IF) |
-| Runda Thurd | M | 31 | B+ | 3B | SS | R | R | Disciplined | 78 | 53 | 95 | 61 | 61 | - | - | - | | Base Rounder | |
+| Runda Thurd | F | 31 | B+ | 3B | SS | R | R | Disciplined | 78 | 53 | 95 | 61 | 61 | - | - | - | | Base Rounder | |
 | Vinnie Vortex | M | 29 | B+ | RF | OF | L | R | Scholarly | 35 | 80 | 93 | 56 | 64 | - | - | - | | | |
 | Gordon Fruitwell | M | 29 | B | CF | OF | L | R | Competitive | 42 | 63 | 88 | 49 | 59 | - | - | - | | | |
 | Juanita Hernandez | F | 31 | B | RF | LF | R | R | Disciplined | 48 | 69 | 65 | 89 | 96 | - | - | - | | Cannon Arm | |
@@ -437,7 +437,7 @@
 | Jovita Pulo | F | 29 | S | SP | | L | R | Scholarly | 8 | 10 | 49 | 63 | - | 97 | 89 | 85 | 4F\|2F\|SL\|CH | | |
 | Maurice Brick | M | 22 | A | SP | | L | L | Competitive | 16 | 15 | 13 | 81 | - | 76 | 96 | 52 | 4F\|2F\|CB\|SL\|FK | Workhorse | Volatile |
 | Jerry Kapps | M | 37 | A- | SP | | R | R | Crafty | 2 | 36 | 7 | 88 | - | 64 | 70 | 74 | 4F\|2F\|CF\|SL\|CH | | |
-| Bae Paul | M | 27 | C+ | SP | | L | R | Competitive | 7 | 28 | 33 | 75 | - | 9 | 75 | 52 | 4F\|2F\|CB\|CH | Elite 2F | |
+| Bae Paul | F | 27 | C+ | SP | | L | R | Competitive | 7 | 28 | 33 | 75 | - | 9 | 75 | 52 | 4F\|2F\|CB\|CH | Elite 2F | |
 | Woody Ano | M | 38 | B | RP | | R | R | Crafty | 5 | 30 | 10 | 76 | - | 85 | 89 | 15 | 4F\|2F\|SL | Crossed Up | |
 | Tia Mayfair | F | 32 | C | RP | | L | R | Crafty | 2 | 19 | 13 | 98 | - | 73 | 48 | 24 | 4F\|CB\|CH | K Neglecter | |
 | Lou DaBaziz | M | 26 | D+ | RP | | R | R | Spirited | 1 | 15 | 8 | 22 | - | 39 | 29 | 43 | 4F\|CB\|FK | Falls Behind | |
@@ -495,7 +495,7 @@
 | Alberto Roberto | M | 37 | B- | SP | | L | R | Crafty | 11 | 18 | 20 | 43 | - | 16 | 72 | 64 | 4F\|CB\|SL\|CH\|FK | Elite FK | |
 | Bella Mietballe | F | 32 | C | SP | | L | L | Competitive | 39 | 64 | 11 | 93 | - | 14 | 25 | 34 | 4F\|2F\|CB\|SL\|CH | Meltdown | |
 | Barry Ozone | M | 24 | C | SP | | L | R | Scholarly | 30 | 5 | 18 | 59 | - | 27 | 66 | 34 | 4F\|2F\|CB\|SB | Elite SB | |
-| Stitch Gripowski | M | 23 | B+ | SP/RP | | S | L | Competitive | 13 | 42 | 16 | 47 | - | 46 | 67 | 83 | 4F\|CF\|CH\|FK | Surrounded | Elite CF |
+| Stitch Gripowski | F | 23 | B+ | SP/RP | | S | L | Competitive | 13 | 42 | 16 | 47 | - | 46 | 67 | 83 | 4F\|CF\|CH\|FK | Surrounded | Elite CF |
 | Immaculo Spectaculo | M | 25 | A+ | RP | | R | R | Spirited | 2 | 12 | 11 | 56 | - | 84 | 95 | 79 | 4F\|SL\|CH | Crossed Up | |
 | Ellain Munstar | F | 23 | B+ | RP | | L | R | Spirited | 15 | 5 | 11 | 35 | - | 90 | 39 | 73 | 4F\|2F\|CB | | |
 | Kisha Musharra | F | 26 | C- | RP | | R | R | Spirited | 12 | 12 | 41 | 58 | - | 68 | 13 | 32 | 4F\|2F\|CH | Elite CH | |

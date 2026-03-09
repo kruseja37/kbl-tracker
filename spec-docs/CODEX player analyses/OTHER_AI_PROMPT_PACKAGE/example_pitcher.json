@@ -1,0 +1,16 @@
+{
+  "name": "Example Pitcher",
+  "primaryPosition": "SP",
+  "secondaryPosition": "",
+  "bats": "L",
+  "throws": "R",
+  "trait1": "Elite CF",
+  "trait2": "Specialist",
+  "arsenal": "4F|CF|SL|CH|CB",
+  "power": 12,
+  "contact": 18,
+  "speed": 25,
+  "velocity": 82,
+  "junk": 88,
+  "accuracy": 79
+}

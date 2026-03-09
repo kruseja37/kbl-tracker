@@ -1,0 +1,12 @@
+{
+  "count": 5,
+  "targetGrade": "B+",
+  "kind": "hitter",
+  "primaryPosition": "CF",
+  "secondaryPosition": "OF",
+  "bats": "L",
+  "throws": "R",
+  "trait1": "Sprinter",
+  "trait2": "Magic Hands",
+  "notes": "Generate rangy defensive center fielders with enough contact and speed to stay near B+."
+}
