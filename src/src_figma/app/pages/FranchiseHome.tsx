@@ -21,8 +21,6 @@ import { useFranchiseData, type UseFranchiseDataReturn } from "@/hooks/useFranch
 import { useScheduleData, type ScheduledGame } from "@/hooks/useScheduleData";
 import { usePlayoffData, type PlayoffTeam } from "@/hooks/usePlayoffData";
 import { getHomeFieldPattern, detectClinch } from "../../../engines/playoffEngine";
-import type { MojoLevel } from "../../../engines/mojoEngine";
-import type { FitnessState } from "../../../engines/fitnessEngine";
 import { SimulationOverlay } from "@/app/components/SimulationOverlay";
 import { BatchOperationOverlay, type BatchOperationType } from "@/app/components/BatchOperationOverlay";
 import {
@@ -39,7 +37,7 @@ import { useOffseasonState } from "@/hooks/useOffseasonState";
 import { generateNewSeasonSchedule } from "../../../utils/franchiseInitializer";
 import { executeSeasonTransition } from "../../../engines/seasonTransitionEngine";
 import { updateFranchiseMetadata } from "../../../utils/franchiseManager";
-import { getPlayersByTeam, getTeam } from "../../../utils/leagueBuilderStorage";
+import { getTeam } from "../../../utils/leagueBuilderStorage";
 import { getRecentGames } from "../../utils/gameStorage";
 import { generateGameRecap } from "../engines/narrativeIntegration";
 import type { Player as TeamRosterPlayer, Pitcher as TeamRosterPitcher } from "@/app/components/TeamRoster";
@@ -48,130 +46,7 @@ import { MilestoneWatchPanel } from "@/app/components/MilestoneWatchPanel";
 import { getApproachingMilestones, type MilestoneWatch } from "../../../utils/milestoneDetector";
 import { getAllCareerBatting, getAllCareerPitching } from "../../../utils/careerStorage";
 import { getSeasonBattingStats, getSeasonPitchingStats, getActiveSeason } from "../../../utils/seasonStorage";
-
-// Pitcher positions for separating roster
-const PITCHER_POS = new Set(['SP', 'RP', 'CP', 'P', 'SP/RP', 'TWO-WAY']);
-
-/**
- * Load real players from IndexedDB and convert to GameTracker format.
- * Returns { players, pitchers } ready for navigation state.
- *
- * Falls back to empty arrays if no data (GameTracker.tsx will use its defaults).
- */
-async function buildGameTrackerRoster(
-  teamId: string,
-  context: { franchiseId?: string; leagueId?: string } = {},
-): Promise<{
-  players: TeamRosterPlayer[];
-  pitchers: TeamRosterPitcher[];
-}> {
-  let dbPlayers;
-  void context;
-  try {
-    dbPlayers = await getPlayersByTeam(teamId);
-  } catch {
-    return { players: [], pitchers: [] };
-  }
-
-  if (!dbPlayers || dbPlayers.length === 0) {
-    return { players: [], pitchers: [] };
-  }
-
-  // Format name as "F. LASTNAME" — matches GameTracker convention
-  const formatName = (first: string, last: string) => {
-    const initial = first?.charAt(0)?.toUpperCase() || '?';
-    const upper = last?.toUpperCase() || 'PLAYER';
-    return `${initial}. ${upper}`;
-  };
-
-  const emptyBatterStats = { ab: 0, h: 0, r: 0, rbi: 0, bb: 0, k: 0 };
-  const emptyPitcherStats = { ip: '0.0', h: 0, r: 0, er: 0, bb: 0, k: 0, pitches: 0 };
-
-  // Split into position players and pitchers
-  const positionPlayers = dbPlayers.filter(p => !PITCHER_POS.has(p.primaryPosition));
-  const pitcherPlayers = dbPlayers.filter(p => PITCHER_POS.has(p.primaryPosition));
-
-  // Build position-valid lineup: fill each defensive position exactly once
-  const FIELD_POS = ['C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF'] as const;
-  const assigned = new Set<typeof positionPlayers[number]>();
-  const filledPositions = new Map<string, typeof positionPlayers[number]>();
-
-  // Pass 1: Fill with primary position matches
-  for (const pos of FIELD_POS) {
-    const candidate = positionPlayers.find(p => !assigned.has(p) && p.primaryPosition === pos);
-    if (candidate) { filledPositions.set(pos, candidate); assigned.add(candidate); }
-  }
-  // Pass 2: Fill remaining with secondary position matches
-  for (const pos of FIELD_POS) {
-    if (filledPositions.has(pos)) continue;
-    const candidate = positionPlayers.find(p => !assigned.has(p) && p.secondaryPosition === pos);
-    if (candidate) { filledPositions.set(pos, candidate); assigned.add(candidate); }
-  }
-  // Pass 3: Fill any still-empty with best available
-  for (const pos of FIELD_POS) {
-    if (filledPositions.has(pos)) continue;
-    const candidate = positionPlayers.find(p => !assigned.has(p));
-    if (candidate) { filledPositions.set(pos, candidate); assigned.add(candidate); }
-  }
-
-  const players: TeamRosterPlayer[] = [];
-  let order = 1;
-  for (const [pos, p] of filledPositions) {
-    players.push({
-      name: formatName(p.firstName, p.lastName),
-      position: pos,
-      battingOrder: order++,
-      stats: { ...emptyBatterStats },
-      battingHand: p.bats,
-      mojo: 0 as MojoLevel,
-      fitness: 'FIT' as FitnessState,
-    });
-  }
-
-  // Add pitcher to batting 9th spot (pitcher bats last in lineup)
-  if (pitcherPlayers.length > 0) {
-    const starter = pitcherPlayers.find(p => p.primaryPosition === 'SP') || pitcherPlayers[0];
-    players.push({
-      name: formatName(starter.firstName, starter.lastName),
-      position: 'P',
-      battingOrder: order++,
-      stats: { ...emptyBatterStats },
-      battingHand: starter.bats,
-    });
-  }
-
-  // Remaining position players become bench
-  const benchPlayers = positionPlayers.filter(p => !assigned.has(p));
-  for (const p of benchPlayers) {
-    players.push({
-      name: formatName(p.firstName, p.lastName),
-      position: p.primaryPosition,
-      battingOrder: undefined,
-      stats: { ...emptyBatterStats },
-      battingHand: p.bats,
-      mojo: 0 as MojoLevel,
-      fitness: 'FIT' as FitnessState,
-    });
-  }
-
-  // Build pitcher roster
-  const pitchers: TeamRosterPitcher[] = [];
-  const starterPitcher = pitcherPlayers.find(p => p.primaryPosition === 'SP') || pitcherPlayers[0];
-  pitcherPlayers.forEach(p => {
-    const isStarter = starterPitcher && p.id === starterPitcher.id;
-    pitchers.push({
-      name: formatName(p.firstName, p.lastName),
-      stats: { ...emptyPitcherStats },
-      throwingHand: p.throws,
-      isStarter: isStarter || false,
-      isActive: isStarter || false,
-      mojo: 0 as MojoLevel,
-      fitness: 'FIT' as FitnessState,
-    });
-  });
-
-  return { players, pitchers };
-}
+import { buildFranchiseGameTrackerRoster, collectFranchiseRosterPlayerIds } from "../utils/franchiseGameTrackerRoster";
 
 // Context for passing franchise data to child components
 const FranchiseDataContext = createContext<UseFranchiseDataReturn | null>(null);
@@ -721,8 +596,8 @@ export function FranchiseHome() {
 
     // T0-08: Load real rosters from IndexedDB for both teams
     const [awayRoster, homeRoster, awayTeamData, homeTeamData] = await Promise.all([
-      buildGameTrackerRoster(awayTeamId, { franchiseId, leagueId: franchiseLeagueId }),
-      buildGameTrackerRoster(homeTeamId, { franchiseId, leagueId: franchiseLeagueId }),
+      buildFranchiseGameTrackerRoster(awayTeamId, { franchiseId, leagueId: franchiseLeagueId }),
+      buildFranchiseGameTrackerRoster(homeTeamId, { franchiseId, leagueId: franchiseLeagueId }),
       getTeam(awayTeamId),
       getTeam(homeTeamId),
     ]);
@@ -2763,8 +2638,8 @@ function GameDayContent({ scheduleData, currentSeason, onDataRefresh }: GameDayC
 
     // Load real rosters from IndexedDB for both teams
     const [awayRoster, homeRoster] = await Promise.all([
-      buildGameTrackerRoster(away, { franchiseId, leagueId: franchiseLeagueId }),
-      buildGameTrackerRoster(home, { franchiseId, leagueId: franchiseLeagueId }),
+      buildFranchiseGameTrackerRoster(away, { franchiseId, leagueId: franchiseLeagueId }),
+      buildFranchiseGameTrackerRoster(home, { franchiseId, leagueId: franchiseLeagueId }),
     ]);
 
     // Find default starter indices (first SP)
@@ -2810,14 +2685,7 @@ function GameDayContent({ scheduleData, currentSeason, onDataRefresh }: GameDayC
         const seasonPitMap = new Map(seasonPitchers.map(p => [p.playerId, p]));
         const achieved = new Set<string>(); // TODO: load from careerStorage milestones
 
-        // Collect player IDs from both rosters
-        const playerIds = new Set<string>();
-        for (const p of [...awayRoster.players, ...homeRoster.players]) {
-          if (p.name) playerIds.add(p.name); // name is used as playerId
-        }
-        for (const p of [...awayRoster.pitchers, ...homeRoster.pitchers]) {
-          if (p.name) playerIds.add(p.name);
-        }
+        const playerIds = collectFranchiseRosterPlayerIds([awayRoster, homeRoster]);
 
         const watches: MilestoneWatch[] = [];
         for (const pid of playerIds) {
