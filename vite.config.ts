@@ -22,6 +22,9 @@ export default defineConfig({
       '**/.claude/worktrees/**',
       'src/archived-tests/**',
       '.worktrees/**/archived-tests/**',
+      // Dead legacy code — not routed by App.tsx
+      'src/components/**',
+      'src/pages/**',
     ],
   },
 })
