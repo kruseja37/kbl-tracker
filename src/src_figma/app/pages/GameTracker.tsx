@@ -44,7 +44,7 @@ import {
 } from "../utils/gameTrackerEventDispatch";
 import { areRivals } from '../../../data/leagueStructure';
 import { getParkNames } from "../../../data/parkLookup";
-import { useGameState, type HitType, type OutType, type WalkType, type RunnerAdvancement, type PlayerGameStats, type PitcherGameStats, type PlateAppearanceAction } from "@/hooks/useGameState";
+import { useGameState, type GameLineupSnapshot, type HitType, type OutType, type WalkType, type RunnerAdvancement, type PlayerGameStats, type PitcherGameStats, type PlateAppearanceAction } from "@/hooks/useGameState";
 import { usePlayerState, type PlayerStateData, getStateBadge, formatMultiplier } from "@/app/hooks/usePlayerState";
 
 const ordinalSuffix = (num: number) => {
@@ -98,6 +98,7 @@ import { POSITION_MAP, POSITION_NUMBER } from '../components/fielderInference';
 import { calculateRunnerDefaults, type RunnerDefaults } from '../components/runnerDefaults';
 import type { PlayLogEntry } from '../utils/playLogTypes';
 import { buildPlayLogEntries } from '../utils/gameTrackerPlayLog';
+import { reconcileTeamPlayersWithLineupSnapshot } from '../utils/gameTrackerRosterSync';
 import {
   applyRunnerDefaultsToNames,
   buildRunnerCorrectionForQuickBarOutcome,
@@ -282,6 +283,7 @@ export function GameTracker() {
     initializeGame,
     loadExistingGame,
     undoLastAction,
+    getLineupStateSnapshot,
     getRunnerTrackerSnapshot,
     getBaseRunnerNames,
     runnerIdentityVersion,
@@ -847,6 +849,16 @@ export function GameTracker() {
     return new Map(entries);
   }, [awayTeamPitchers, awayTeamPlayers, getRosterEntityId, homeTeamPitchers, homeTeamPlayers]);
 
+  const syncDisplayedRostersToLineupSnapshot = useCallback((snapshot?: GameLineupSnapshot) => {
+    const lineupSnapshot = snapshot || getLineupStateSnapshot();
+    setAwayTeamPlayers((previous) =>
+      reconcileTeamPlayersWithLineupSnapshot(previous, lineupSnapshot.away, 'away', getRosterEntityId)
+    );
+    setHomeTeamPlayers((previous) =>
+      reconcileTeamPlayersWithLineupSnapshot(previous, lineupSnapshot.home, 'home', getRosterEntityId)
+    );
+  }, [getLineupStateSnapshot, getRosterEntityId]);
+
   const resolveRosterNameByGameId = useCallback((playerId?: string): string | undefined => {
     if (!playerId) return undefined;
     return rosterNameById.get(playerId);
@@ -1376,6 +1388,7 @@ export function GameTracker() {
 
         if (hasExistingGame) {
           console.log('[GameTracker] Loaded existing game from IndexedDB');
+          syncDisplayedRostersToLineupSnapshot();
           setGameInitialized(true);
           return;
         }
@@ -1491,7 +1504,7 @@ export function GameTracker() {
       cancelled = true;
       initInProgressRef.current = false;
     };
-  }, [competitionId, competitionType, gameId, gameInitialized, getRosterEntityId, homePitcher, homeTeamId, homeTeamName, homeTeamPlayers, initializeGame, loadExistingGame, navigationState?.franchiseId, navigationState?.seasonNumber, navigationState?.totalInnings, selectedStadium, statsScopeId, awayPitcher, awayTeamId, awayTeamName, awayTeamPlayers]);
+  }, [competitionId, competitionType, gameId, gameInitialized, getRosterEntityId, homePitcher, homeTeamId, homeTeamName, homeTeamPlayers, initializeGame, loadExistingGame, navigationState?.franchiseId, navigationState?.seasonNumber, navigationState?.totalInnings, selectedStadium, statsScopeId, syncDisplayedRostersToLineupSnapshot, awayPitcher, awayTeamId, awayTeamName, awayTeamPlayers]);
 
   // EXH-036: Register players with playerStateHook for mojo/fitness tracking
   // This runs once after game is initialized to set up all players with default states
@@ -2655,6 +2668,59 @@ export function GameTracker() {
       setSelectedBetweenPlayEventSaving(false);
     }
   }, [queuePlayLogRefresh, selectedBetweenPlayEvent]);
+
+  const handleHistoricalPositionChange = useCallback(async (newPosition: string) => {
+    if (selectedBetweenPlayEvent?.type !== 'position_change' || !selectedBetweenPlayEvent.substitution) {
+      return;
+    }
+
+    const previousValue =
+      selectedBetweenPlayEvent.substitution.inPosition ||
+      selectedBetweenPlayEvent.substitution.previousPosition ||
+      null;
+    if (previousValue === newPosition) return;
+
+    const timestamp = Date.now();
+    const nextEvent: BetweenPlayEvent = {
+      ...selectedBetweenPlayEvent,
+      version: (selectedBetweenPlayEvent.version ?? 1) + 1,
+      editHistory: [
+        ...(selectedBetweenPlayEvent.editHistory || []),
+        {
+          field: 'substitution.inPosition',
+          oldValue: previousValue,
+          newValue: newPosition,
+          timestamp,
+        },
+      ],
+      substitution: {
+        ...selectedBetweenPlayEvent.substitution,
+        inPosition: newPosition,
+      },
+    };
+
+    setSelectedBetweenPlayEventSaving(true);
+    try {
+      await updateBetweenPlayEvent(selectedBetweenPlayEvent.eventId, {
+        version: nextEvent.version,
+        editHistory: nextEvent.editHistory?.slice(-1),
+        substitution: nextEvent.substitution,
+      });
+
+      const reloaded = await loadExistingGame({ preferSnapshot: false });
+      if (!reloaded) {
+        throw new Error('Failed to reload game from durable event log after lineup edit');
+      }
+
+      syncDisplayedRostersToLineupSnapshot();
+      setSelectedBetweenPlayEvent(nextEvent);
+      queuePlayLogRefresh(0);
+    } catch (error) {
+      console.error('[Historical Lineup Edit] Failed to update position change:', error);
+    } finally {
+      setSelectedBetweenPlayEventSaving(false);
+    }
+  }, [loadExistingGame, queuePlayLogRefresh, selectedBetweenPlayEvent, syncDisplayedRostersToLineupSnapshot]);
 
   const handleQuickBarOutcome = useCallback(async (outcome: string) => {
     if (!gameInitialized) return;
@@ -4524,6 +4590,7 @@ export function GameTracker() {
               saving={selectedBetweenPlayEventSaving}
               onReturnToLive={handleReturnToLiveAtBat}
               onRunnerCaughtByChange={handleRunnerCaughtByChange}
+              onLineupPositionChange={handleHistoricalPositionChange}
             />
           ) : enrichingEntry !== null ? (
             /* Enrichment panel replaces play log when active */

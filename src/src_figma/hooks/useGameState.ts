@@ -266,8 +266,9 @@ export interface UseGameStateReturn {
 
   // Initialization
   initializeGame: (config: GameInitConfig) => Promise<void>;
-  loadExistingGame: () => Promise<boolean>;
+  loadExistingGame: (options?: LoadExistingGameOptions) => Promise<boolean>;
   undoLastAction: () => Promise<boolean>;
+  getLineupStateSnapshot: () => GameLineupSnapshot;
 
   // Undo support
   restoreState: (snapshot: {
@@ -344,6 +345,22 @@ export interface GameInitConfig {
   // Layer 1B: Team records for context snapshot
   awayRecord?: { w: number; l: number };
   homeRecord?: { w: number; l: number };
+}
+
+export interface LoadExistingGameOptions {
+  preferSnapshot?: boolean;
+}
+
+export interface TeamLineupSnapshot {
+  lineup: LineupPlayer[];
+  bench: BenchPlayer[];
+  usedPlayers: string[];
+  currentPitcher: LineupPlayer | null;
+}
+
+export interface GameLineupSnapshot {
+  away: TeamLineupSnapshot;
+  home: TeamLineupSnapshot;
 }
 
 function parseSeasonNumberFromId(seasonId: string): number {
@@ -2110,7 +2127,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     setIsLoading(false);
   }, [registerIdentityForSide]);
 
-  const loadExistingGame = useCallback(async (): Promise<boolean> => {
+  const loadExistingGame = useCallback(async (options?: LoadExistingGameOptions): Promise<boolean> => {
     setIsLoading(true);
     latestPersistedRef.current = null;
     if (autoSaveTimeoutRef.current) {
@@ -2126,15 +2143,25 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
 
       const header = await getGameHeader(targetGameId);
       const inProgressGame = header && !header.isComplete ? header : null;
+      const preferSnapshot = options?.preferSnapshot ?? true;
 
       // Primary rehydration path: restore exact in-progress snapshot from currentGame store.
       // This preserves non-at-bat runner movement + full scoreboard state across refresh.
-      const savedSnapshot = await loadCurrentGame();
-      if (savedSnapshot && (savedSnapshot.gameId !== targetGameId || !inProgressGame)) {
+      let savedSnapshot = null;
+      if (preferSnapshot) {
+        savedSnapshot = await loadCurrentGame();
+        if (savedSnapshot && (savedSnapshot.gameId !== targetGameId || !inProgressGame)) {
+          try {
+            await clearCurrentGame();
+          } catch (err) {
+            console.warn('[useGameState] Failed to clear stale currentGame snapshot:', err);
+          }
+        }
+      } else {
         try {
           await clearCurrentGame();
         } catch (err) {
-          console.warn('[useGameState] Failed to clear stale currentGame snapshot:', err);
+          console.warn('[useGameState] Failed to clear currentGame snapshot before durable replay:', err);
         }
       }
       const hasUsableLiveSnapshot = !!(
@@ -5928,6 +5955,25 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     return result;
   }, []);
 
+  const getLineupStateSnapshot = useCallback((): GameLineupSnapshot => ({
+    away: {
+      lineup: awayLineupStateRef.current.lineup.map(player => ({ ...player })),
+      bench: awayLineupStateRef.current.bench.map(player => ({ ...player })),
+      usedPlayers: [...awayLineupStateRef.current.usedPlayers],
+      currentPitcher: awayLineupStateRef.current.currentPitcher
+        ? { ...awayLineupStateRef.current.currentPitcher }
+        : null,
+    },
+    home: {
+      lineup: homeLineupStateRef.current.lineup.map(player => ({ ...player })),
+      bench: homeLineupStateRef.current.bench.map(player => ({ ...player })),
+      usedPlayers: [...homeLineupStateRef.current.usedPlayers],
+      currentPitcher: homeLineupStateRef.current.currentPitcher
+        ? { ...homeLineupStateRef.current.currentPitcher }
+        : null,
+    },
+  }), []);
+
   // Restore state from undo snapshot (Phase 7 - Undo System)
   // CRIT-01 fix: Now also restores playerStats and pitcherStats Maps
   // Runner tracker undo fix: Also restores runnerTrackerRef for correct ER attribution
@@ -6005,6 +6051,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     initializeGame,
     loadExistingGame,
     undoLastAction,
+    getLineupStateSnapshot,
     restoreState,
     getRunnerTrackerSnapshot,
     getBaseRunnerNames,

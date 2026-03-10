@@ -234,4 +234,50 @@ describe('useGameState recover between-play ledger', () => {
       second: 'Away Batter 1',
     });
   });
+
+  test('can force durable replay even when a stale live snapshot exists', async () => {
+    mockLoadCurrentGame.mockResolvedValue({
+      gameId: 'recovery-game',
+      inning: 4,
+      halfInning: 'BOTTOM',
+      outs: 2,
+      awayScore: 5,
+      homeScore: 4,
+      bases: { first: null, second: null, third: null },
+      scoreboard: {
+        innings: [{ away: 5, home: 4 }],
+        away: { runs: 5, hits: 8, errors: 0 },
+        home: { runs: 4, hits: 7, errors: 0 },
+      },
+      currentPitcherId: 'snapshot-pitcher',
+      currentPitcherName: 'Snapshot Pitcher',
+      currentBatterId: 'snapshot-batter',
+      currentBatterName: 'Snapshot Batter',
+      awayLineup: [],
+      homeLineup: [],
+      awayLineupState: undefined,
+      homeLineupState: undefined,
+      playerStats: {},
+      pitcherGameStats: [],
+      fameEvents: [],
+      savedAt: 9999,
+    });
+
+    const { result } = renderHook(() => useGameState('recovery-game'));
+
+    await act(async () => {
+      const loaded = await result.current.loadExistingGame({ preferSnapshot: false });
+      expect(loaded).toBe(true);
+      await vi.runAllTimersAsync();
+    });
+
+    expect(mockClearCurrentGame).toHaveBeenCalled();
+    expect(result.current.gameState.currentPitcherId).toBe('home-rp');
+    expect(result.current.gameState.currentBatterId).toBe('away-batter-2');
+    expect(result.current.gameState.bases).toEqual({
+      first: false,
+      second: true,
+      third: false,
+    });
+  });
 });

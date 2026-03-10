@@ -10,7 +10,10 @@ interface HistoricalEventEditorProps {
   saving?: boolean;
   onReturnToLive: () => void;
   onRunnerCaughtByChange?: (caughtBy: number | null) => void;
+  onLineupPositionChange?: (position: string) => void;
 }
+
+const POSITION_OPTIONS = ['P', 'C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF'] as const;
 
 function FieldRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
@@ -36,6 +39,7 @@ export function HistoricalEventEditor({
   saving = false,
   onReturnToLive,
   onRunnerCaughtByChange,
+  onLineupPositionChange,
 }: HistoricalEventEditorProps) {
   const title = entry.editorType === 'runner'
     ? 'Runner Event'
@@ -117,8 +121,39 @@ export function HistoricalEventEditor({
             {entry.editorType === 'lineup_pitching' && (
               <>
                 <div className="text-[8px] text-[#C4A853] bg-[#2f3b21] border border-[#5a6b38] px-2 py-1 rounded">
-                  Historical lineup edits are replay-driven and will land with replay-from-checkpoint wiring.
+                  Lineup edits version this row, then replay forward from this event.
                 </div>
+                {event.type === 'position_change' && event.substitution && (
+                  <div className="space-y-2">
+                    <div className="bg-[#1f2937]/50 border border-[#4a6a4a] rounded px-2 py-2">
+                      <FieldRow label="Player" value={event.substitution.inPlayerName || event.substitution.inPlayerId} />
+                      <FieldRow label="Previous" value={event.substitution.previousPosition || '—'} />
+                      <FieldRow label="Current" value={event.substitution.inPosition || event.substitution.previousPosition || '—'} />
+                    </div>
+                    <div>
+                      <div className="text-[8px] text-[#88AA88] font-bold uppercase tracking-wide mb-1">Defensive Position</div>
+                      <div className="flex flex-wrap gap-1">
+                        {POSITION_OPTIONS.map((position) => (
+                          <button
+                            key={position}
+                            onClick={() => onLineupPositionChange?.(position)}
+                            disabled={saving}
+                            className={`text-[8px] px-2 py-1 rounded border ${
+                              (event.substitution?.inPosition || event.substitution?.previousPosition) === position
+                                ? 'bg-[#C4A853]/20 border-[#C4A853] text-[#C4A853]'
+                                : 'bg-[#1f2937]/60 border-[#4a6a4a] text-[#88AA88]'
+                            }`}
+                          >
+                            {position}
+                          </button>
+                        ))}
+                      </div>
+                      <div className="text-[7px] text-[#88AA88] mt-1">
+                        {saving ? 'Saving and replaying…' : 'Position changes replay the ledger from this point forward.'}
+                      </div>
+                    </div>
+                  </div>
+                )}
                 {event.substitution && (
                   <div className="bg-[#1f2937]/50 border border-[#4a6a4a] rounded px-2 py-2">
                     <FieldRow label="Out" value={event.substitution.outPlayerName || event.substitution.outPlayerId} />
@@ -131,6 +166,11 @@ export function HistoricalEventEditor({
                     <FieldRow label="Outgoing" value={event.pitcherChange.outgoingPitcherName || event.pitcherChange.outgoingPitcherId} />
                     <FieldRow label="Incoming" value={event.pitcherChange.incomingPitcherName || event.pitcherChange.incomingPitcherId} />
                     <FieldRow label="Inherited" value={event.pitcherChange.inheritedRunners} />
+                  </div>
+                )}
+                {event.type !== 'position_change' && (
+                  <div className="text-[8px] text-[#88AA88]">
+                    Substitution and pitcher-change editing stay view-only until their replay editors are wired.
                   </div>
                 )}
               </>
