@@ -73,7 +73,7 @@ import { completeGame as completeScheduleGame } from '../../../utils/scheduleSto
 import { extractFieldingEvents, type FieldingExtractionContext } from '../utils/fieldingEventExtractor';
 import { logFieldingEvent } from '../../../utils/eventLog';
 import { captureStartingLineups, type LineupEntry } from '../../../utils/gameStorage';
-import { POSITION_MAP } from '../components/fielderInference';
+import { POSITION_MAP, POSITION_NUMBER } from '../components/fielderInference';
 import { calculateRunnerDefaults, type RunnerDefaults } from '../components/runnerDefaults';
 
 // Note: Using GameState from useGameState hook instead of local interface
@@ -880,6 +880,30 @@ export function GameTracker() {
       atBatEventId: `${gameState.gameId}_${nextAtBatIndex}`,
     };
   }, [atBatSequence, gameState.gameId]);
+
+  const persistFieldingEventsForPlayData = useCallback(async (playData: PlayData, sourceLabel?: string) => {
+    if (playData.type === 'walk' || playData.type === 'foul_ball') {
+      return;
+    }
+
+    const pendingAtBatIdentity = getPendingAtBatIdentity();
+    const fieldingContext: FieldingExtractionContext = {
+      gameId: gameState.gameId,
+      defensiveTeamId: gameState.isTop ? gameState.homeTeamId : gameState.awayTeamId,
+      atBatEventId: pendingAtBatIdentity.atBatEventId,
+      atBatEventIndex: pendingAtBatIdentity.atBatEventIndex,
+      defendersByPosition: defensiveAlignmentByPosition,
+    };
+    const fieldingEvents = extractFieldingEvents(playData, fieldingContext);
+    for (const fe of fieldingEvents) {
+      await logFieldingEvent(fe);
+    }
+    if (fieldingEvents.length > 0) {
+      const contextLabel = sourceLabel ? ` via ${sourceLabel}` : '';
+      console.log(`[Fielding] Logged ${fieldingEvents.length} fielding event(s)${contextLabel}`);
+      pushActivityLog(`[Fielding] Logged ${fieldingEvents.length} event(s)${contextLabel}`);
+    }
+  }, [defensiveAlignmentByPosition, gameState.gameId, gameState.homeTeamId, gameState.isTop, gameState.awayTeamId, getPendingAtBatIdentity, pushActivityLog]);
 
   // Initialize game with lineup data on mount
   // FIX: BUG-007 - Try loading existing game first, only create new if none found
@@ -1778,23 +1802,8 @@ export function GameTracker() {
       // ============================================
       if (playData.type !== 'walk' && playData.type !== 'foul_ball') {
         try {
-          const pendingAtBatIdentity = getPendingAtBatIdentity();
-          const fieldingContext: FieldingExtractionContext = {
-            gameId: gameState.gameId,
-            defensiveTeamId: gameState.isTop ? gameState.homeTeamId : gameState.awayTeamId,
-            atBatEventId: pendingAtBatIdentity.atBatEventId,
-            atBatEventIndex: pendingAtBatIdentity.atBatEventIndex,
-            defendersByPosition: defensiveAlignmentByPosition,
-          };
-          const fieldingEvents = extractFieldingEvents(playData, fieldingContext);
-        for (const fe of fieldingEvents) {
-          await logFieldingEvent(fe);
-        }
-        if (fieldingEvents.length > 0) {
-          console.log(`[Fielding] Logged ${fieldingEvents.length} fielding event(s) for ${playData.type}`);
-          pushActivityLog(`[Fielding] Logged ${fieldingEvents.length} event(s) for ${playData.type}`);
-        }
-      } catch (err) {
+          await persistFieldingEventsForPlayData(playData, playData.type);
+        } catch (err) {
           console.error('[Fielding] Failed to log fielding events:', err);
         }
       }
@@ -2064,7 +2073,7 @@ export function GameTracker() {
     } catch (error) {
       console.error('Failed to record enhanced play:', error);
     }
-  }, [buildPlateAppearanceActionFromPlayData, commitPlateAppearance, gameState, undoSystem, playerStats, pitcherStats, fameTrackingHook, playerStateHook, runnerNames, buildGameStateForLI, mwarHook, pendingMWARDecisions, inferFielderCredits, pushPlayLogEntry, shortInningLabel, setNextEventEnrichment, getPendingAtBatIdentity, defensiveAlignmentByPosition]);
+  }, [buildPlateAppearanceActionFromPlayData, commitPlateAppearance, gameState, undoSystem, playerStats, pitcherStats, fameTrackingHook, playerStateHook, runnerNames, buildGameStateForLI, mwarHook, pendingMWARDecisions, inferFielderCredits, pushPlayLogEntry, shortInningLabel, setNextEventEnrichment, getPendingAtBatIdentity, persistFieldingEventsForPlayData]);
 
   // ══════════════════════════════════════════════════════════════
   // QUICK BAR HANDLER — §3.2 one-tap execution flow
@@ -2333,6 +2342,46 @@ export function GameTracker() {
     setHrPrompt(null);
   }, [commitPlateAppearance, gameState, hrPrompt, logAction, pushPlayLogEntry, shortInningLabel, getPendingAtBatIdentity]);
 
+  const handleQuickErrorDetail = useCallback(async (positionLabel: keyof typeof POSITION_NUMBER) => {
+    const fielderPosition = POSITION_NUMBER[positionLabel];
+    const eventId = getPendingAtBatIdentity().atBatEventId;
+
+    setNextEventEnrichment({
+      fieldingSequence: [fielderPosition],
+      errorFielder: fielderPosition,
+    } as NonNullable<import('../../../utils/eventLog').AtBatEvent['enrichment']>);
+
+    try {
+      await commitPlateAppearance({ type: 'error', rbi: 0 });
+      await persistFieldingEventsForPlayData({
+        type: 'error',
+        fieldingSequence: [fielderPosition],
+        errorFielder: fielderPosition,
+      }, 'quick error');
+      logAction(`E${positionLabel}`);
+      pushPlayLogEntry({
+        eventId,
+        inningLabel: shortInningLabel(),
+        batterName: gameState.currentBatterName,
+        result: 'E',
+        resultCategory: 'error',
+        rbi: 0,
+        runsScored: 0,
+        hasFieldingData: true,
+        hasLocationData: false,
+        hasKType: false,
+        hasPitchCount: false,
+        hasPitchType: false,
+        isEnrichable: true,
+        isQAB: false,
+      });
+    } catch (error) {
+      console.error('[Quick Error] Failed to record error detail:', error);
+    } finally {
+      setExpandedOutcome(null);
+    }
+  }, [commitPlateAppearance, gameState.currentBatterName, getPendingAtBatIdentity, logAction, persistFieldingEventsForPlayData, pushPlayLogEntry, setNextEventEnrichment, shortInningLabel]);
+
   // ═══════════════════════════════════════════════════════════
   // D-3: Error flow prompt completion
   // ═══════════════════════════════════════════════════════════
@@ -2367,6 +2416,12 @@ export function GameTracker() {
 
     try {
       await commitPlateAppearance({ type: 'error', rbi, runnerAdvancement: runnerAdv });
+      await persistFieldingEventsForPlayData({
+        type: 'error',
+        fieldingSequence: fielderPosition > 0 ? [fielderPosition] : [],
+        errorFielder: fielderPosition || undefined,
+        errorType: errorType || undefined,
+      });
       logAction(`E${fielderPosition || ''}${errorType ? ` (${errorType})` : ''} — batter to ${baseReached}`);
 
       pushPlayLogEntry({
@@ -2400,7 +2455,7 @@ export function GameTracker() {
       console.error('[D-3] Failed to record error:', error);
     }
     setErrorFlow(null);
-  }, [commitPlateAppearance, errorFlow, gameState, logAction, pushPlayLogEntry, runnerNames, setNextEventEnrichment, shortInningLabel, undoSystem, getPendingAtBatIdentity]);
+  }, [commitPlateAppearance, errorFlow, gameState, logAction, pushPlayLogEntry, runnerNames, setNextEventEnrichment, shortInningLabel, undoSystem, getPendingAtBatIdentity, persistFieldingEventsForPlayData]);
 
   // ═══════════════════════════════════════════════════════════
   // D-5: SF prompt answer — "Sac fly — run scores?"
@@ -2669,22 +2724,7 @@ export function GameTracker() {
       // Log fielding events for fWAR pipeline (same as handleEnhancedPlayComplete)
       if (playData.type !== 'walk' && playData.type !== 'foul_ball') {
         try {
-          const pendingAtBatIdentity = getPendingAtBatIdentity();
-          const fieldingContext: FieldingExtractionContext = {
-            gameId: gameState.gameId,
-            defensiveTeamId: gameState.isTop ? gameState.homeTeamId : gameState.awayTeamId,
-            atBatEventId: pendingAtBatIdentity.atBatEventId,
-            atBatEventIndex: pendingAtBatIdentity.atBatEventIndex,
-            defendersByPosition: defensiveAlignmentByPosition,
-          };
-          const fieldingEvents = extractFieldingEvents(playData, fieldingContext);
-          for (const fe of fieldingEvents) {
-            await logFieldingEvent(fe);
-          }
-          if (fieldingEvents.length > 0) {
-            console.log(`[Fielding] Logged ${fieldingEvents.length} fielding event(s) via fielder credit path`);
-            pushActivityLog(`[Fielding] Logged ${fieldingEvents.length} event(s) via fielder credit path`);
-          }
+          await persistFieldingEventsForPlayData(playData, 'fielder credit path');
         } catch (err) {
           console.error('[Fielding] Failed to log fielding events:', err);
         }
@@ -2694,7 +2734,7 @@ export function GameTracker() {
     } catch (error) {
       console.error('[EXH-016] Failed to record play:', error);
     }
-  }, [buildPlateAppearanceActionFromPlayData, commitPlateAppearance, gameState, pendingPlayForFielderCredit, pushActivityLog, setNextEventEnrichment, undoSystem, getPendingAtBatIdentity, defensiveAlignmentByPosition]);
+  }, [buildPlateAppearanceActionFromPlayData, commitPlateAppearance, gameState, pendingPlayForFielderCredit, setNextEventEnrichment, undoSystem, getPendingAtBatIdentity, persistFieldingEventsForPlayData]);
 
   // EXH-016: Handle fielder credit modal close (skip credits)
   const handleFielderCreditClose = useCallback(() => {
@@ -4605,17 +4645,17 @@ export function GameTracker() {
                       <div>
                         <div className="text-[7px] text-white mb-1">FIELDED BY:</div>
                         <div className="grid grid-cols-5 gap-1">
-                          <DetailButton label="P" onClick={() => { void commitPlateAppearance({ type: 'error', rbi: 0 }); setExpandedOutcome(null); }} />
-                          <DetailButton label="C" onClick={() => { void commitPlateAppearance({ type: 'error', rbi: 0 }); setExpandedOutcome(null); }} />
-                          <DetailButton label="1B" onClick={() => { void commitPlateAppearance({ type: 'error', rbi: 0 }); setExpandedOutcome(null); }} />
-                          <DetailButton label="2B" onClick={() => { void commitPlateAppearance({ type: 'error', rbi: 0 }); setExpandedOutcome(null); }} />
-                          <DetailButton label="3B" onClick={() => { void commitPlateAppearance({ type: 'error', rbi: 0 }); setExpandedOutcome(null); }} />
+                          <DetailButton label="P" onClick={() => { void handleQuickErrorDetail('P'); }} />
+                          <DetailButton label="C" onClick={() => { void handleQuickErrorDetail('C'); }} />
+                          <DetailButton label="1B" onClick={() => { void handleQuickErrorDetail('1B'); }} />
+                          <DetailButton label="2B" onClick={() => { void handleQuickErrorDetail('2B'); }} />
+                          <DetailButton label="3B" onClick={() => { void handleQuickErrorDetail('3B'); }} />
                         </div>
                         <div className="grid grid-cols-4 gap-1 mt-1">
-                          <DetailButton label="SS" onClick={() => { void commitPlateAppearance({ type: 'error', rbi: 0 }); setExpandedOutcome(null); }} />
-                          <DetailButton label="LF" onClick={() => { void commitPlateAppearance({ type: 'error', rbi: 0 }); setExpandedOutcome(null); }} />
-                          <DetailButton label="CF" onClick={() => { void commitPlateAppearance({ type: 'error', rbi: 0 }); setExpandedOutcome(null); }} />
-                          <DetailButton label="RF" onClick={() => { void commitPlateAppearance({ type: 'error', rbi: 0 }); setExpandedOutcome(null); }} />
+                          <DetailButton label="SS" onClick={() => { void handleQuickErrorDetail('SS'); }} />
+                          <DetailButton label="LF" onClick={() => { void handleQuickErrorDetail('LF'); }} />
+                          <DetailButton label="CF" onClick={() => { void handleQuickErrorDetail('CF'); }} />
+                          <DetailButton label="RF" onClick={() => { void handleQuickErrorDetail('RF'); }} />
                         </div>
                       </div>
                     </div>
