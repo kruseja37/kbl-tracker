@@ -19,7 +19,7 @@ import { AddGameModal, type GameFormData } from "@/app/components/AddGameModal";
 import { ScheduleContent } from "@/app/components/ScheduleContent";
 import { useFranchiseData, type UseFranchiseDataReturn } from "@/hooks/useFranchiseData";
 import { useScheduleData, type ScheduledGame } from "@/hooks/useScheduleData";
-import { usePlayoffData, type PlayoffTeam } from "@/hooks/usePlayoffData";
+import { usePlayoffData, type PlayoffPlayerStats, type PlayoffTeam } from "@/hooks/usePlayoffData";
 import { getHomeFieldPattern, detectClinch } from "../../../engines/playoffEngine";
 import { SimulationOverlay } from "@/app/components/SimulationOverlay";
 import { BatchOperationOverlay, type BatchOperationType } from "@/app/components/BatchOperationOverlay";
@@ -127,6 +127,10 @@ export function FranchiseHome() {
   const shouldRefreshAfterGame = Boolean(locationState.refreshAfterGame);
   const refreshToken = locationState.refreshToken ?? null;
   const lastRefreshToken = useRef<number | null>(null);
+  const [playoffLeaderBatting, setPlayoffLeaderBatting] = useState<Record<string, PlayoffPlayerStats[]>>({});
+  const [playoffLeaderPitching, setPlayoffLeaderPitching] = useState<Record<string, PlayoffPlayerStats[]>>({});
+  const [playoffLeaderFielding, setPlayoffLeaderFielding] = useState<Record<string, PlayoffPlayerStats[]>>({});
+  const [playoffLeadersLoading, setPlayoffLeadersLoading] = useState(false);
 
   useEffect(() => {
     if (!shouldRefreshAfterGame || refreshToken === null) return;
@@ -152,6 +156,78 @@ export function FranchiseHome() {
     franchiseData.refresh,
     scheduleData.refresh,
     playoffData.refresh,
+  ]);
+
+  useEffect(() => {
+    if (activeTab !== "playoff-leaders") return;
+    if (!playoffData.playoff || playoffData.playoff.status === 'NOT_STARTED') {
+      setPlayoffLeaderBatting({});
+      setPlayoffLeaderPitching({});
+      setPlayoffLeaderFielding({});
+      setPlayoffLeadersLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+
+    async function loadPlayoffLeaders() {
+      try {
+        setPlayoffLeadersLoading(true);
+
+        const battingStats = {
+          AVG: 'avg',
+          HR: 'homeRuns',
+          RBI: 'rbi',
+          OPS: 'ops',
+        } as const;
+        const pitchingStats = {
+          ERA: 'era',
+          W: 'wins',
+          K: 'pitchingStrikeouts',
+          WHIP: 'whip',
+        } as const;
+        const fieldingStats = {
+          FWAR: 'fieldingWAR',
+          RS: 'fieldingRunsSaved',
+          PLAYS: 'fieldingPlays',
+        } as const;
+
+        const [battingEntries, pitchingEntries, fieldingEntries] = await Promise.all([
+          Promise.all(
+            Object.entries(battingStats).map(async ([label, stat]) => [label, await playoffData.getBattingLeaders(stat, 5)] as const)
+          ),
+          Promise.all(
+            Object.entries(pitchingStats).map(async ([label, stat]) => [label, await playoffData.getPitchingLeaders(stat, 5)] as const)
+          ),
+          Promise.all(
+            Object.entries(fieldingStats).map(async ([label, stat]) => [label, await playoffData.getBattingLeaders(stat, 5)] as const)
+          ),
+        ]);
+
+        if (cancelled) return;
+        setPlayoffLeaderBatting(Object.fromEntries(battingEntries));
+        setPlayoffLeaderPitching(Object.fromEntries(pitchingEntries));
+        setPlayoffLeaderFielding(Object.fromEntries(fieldingEntries));
+      } catch (err) {
+        if (!cancelled) {
+          console.error('[FranchiseHome] Failed to load playoff leaders:', err);
+        }
+      } finally {
+        if (!cancelled) {
+          setPlayoffLeadersLoading(false);
+        }
+      }
+    }
+
+    void loadPlayoffLeaders();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    activeTab,
+    playoffData.playoff,
+    playoffData.getBattingLeaders,
+    playoffData.getPitchingLeaders,
   ]);
 
   // Offseason State - tracks current phase progression
@@ -1794,49 +1870,21 @@ export function FranchiseHome() {
               <div className="text-center text-[#E8E8D8]/60 py-8">No playoff data available</div>
             ) : playoffData.playoff.status === 'NOT_STARTED' ? (
               <div className="text-center text-[#E8E8D8]/60 py-8">Playoffs have not started yet</div>
+            ) : playoffLeadersLoading ? (
+              <div className="text-center text-[#E8E8D8]/60 py-8">Loading tracked playoff leaders...</div>
+            ) : !Object.values(playoffLeaderBatting).some((items) => items.length > 0)
+              && !Object.values(playoffLeaderPitching).some((items) => items.length > 0)
+              && !Object.values(playoffLeaderFielding).some((items) => items.length > 0) ? (
+              <div className="text-center text-[#E8E8D8]/60 py-8">Track playoff games via GameTracker to populate leaders</div>
             ) : (
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {/* Batting Leaders */}
-                <div className="bg-[#5A8352] border-[4px] border-[#4A6844] p-6">
-                  <div className="text-lg text-[#E8E8D8] font-bold mb-4">BATTING LEADERS</div>
-                  <div className="space-y-3">
-                    <div className="bg-[#4A6844] p-3 border-2 border-[#E8E8D8]/30">
-                      <div className="text-xs text-[#E8E8D8]/60 mb-1">Home Runs</div>
-                      <div className="text-sm text-[#E8E8D8]/60">Track games via GameTracker to see leaders</div>
-                    </div>
-                    <div className="bg-[#4A6844] p-3 border-2 border-[#E8E8D8]/30">
-                      <div className="text-xs text-[#E8E8D8]/60 mb-1">Batting Average</div>
-                      <div className="text-sm text-[#E8E8D8]/60">Track games via GameTracker to see leaders</div>
-                    </div>
-                    <div className="bg-[#4A6844] p-3 border-2 border-[#E8E8D8]/30">
-                      <div className="text-xs text-[#E8E8D8]/60 mb-1">RBIs</div>
-                      <div className="text-sm text-[#E8E8D8]/60">Track games via GameTracker to see leaders</div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Pitching Leaders */}
-                <div className="bg-[#5A8352] border-[4px] border-[#4A6844] p-6">
-                  <div className="text-lg text-[#E8E8D8] font-bold mb-4">PITCHING LEADERS</div>
-                  <div className="space-y-3">
-                    <div className="bg-[#4A6844] p-3 border-2 border-[#E8E8D8]/30">
-                      <div className="text-xs text-[#E8E8D8]/60 mb-1">Wins</div>
-                      <div className="text-sm text-[#E8E8D8]/60">Track games via GameTracker to see leaders</div>
-                    </div>
-                    <div className="bg-[#4A6844] p-3 border-2 border-[#E8E8D8]/30">
-                      <div className="text-xs text-[#E8E8D8]/60 mb-1">ERA</div>
-                      <div className="text-sm text-[#E8E8D8]/60">Track games via GameTracker to see leaders</div>
-                    </div>
-                    <div className="bg-[#4A6844] p-3 border-2 border-[#E8E8D8]/30">
-                      <div className="text-xs text-[#E8E8D8]/60 mb-1">Strikeouts</div>
-                      <div className="text-sm text-[#E8E8D8]/60">Track games via GameTracker to see leaders</div>
-                    </div>
-                  </div>
-                </div>
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <FranchisePlayoffLeaderPanel title="BATTING LEADERS" entries={playoffLeaderBatting} />
+                <FranchisePlayoffLeaderPanel title="PITCHING LEADERS" entries={playoffLeaderPitching} />
+                <FranchisePlayoffLeaderPanel title="FIELDING LEADERS" entries={playoffLeaderFielding} />
 
                 {/* Series MVP - if champion exists */}
                 {playoffData.playoff.champion && playoffData.playoff.mvp && (
-                  <div className="lg:col-span-2 bg-[#5A8352] border-[4px] border-[#FFD700] p-6">
+                  <div className="lg:col-span-3 bg-[#5A8352] border-[4px] border-[#FFD700] p-6">
                     <div className="flex items-center justify-center gap-2 mb-4">
                       <Trophy className="w-6 h-6 text-[#FFD700]" />
                       <div className="text-lg text-[#FFD700] font-bold">PLAYOFF MVP</div>
@@ -4069,4 +4117,66 @@ function BeatReporterNews() {
       )}
     </div>
   );
+}
+
+function FranchisePlayoffLeaderPanel({
+  title,
+  entries,
+}: {
+  title: string;
+  entries: Record<string, PlayoffPlayerStats[]>;
+}) {
+  return (
+    <div className="bg-[#5A8352] border-[4px] border-[#4A6844] p-6">
+      <div className="text-lg text-[#E8E8D8] font-bold mb-4">{title}</div>
+      <div className="space-y-3">
+        {Object.entries(entries).map(([label, stats]) => (
+          <div key={label} className="bg-[#4A6844] p-3 border-2 border-[#E8E8D8]/30">
+            <div className="text-xs text-[#E8E8D8]/60 mb-2">{label}</div>
+            {stats.length === 0 ? (
+              <div className="text-sm text-[#E8E8D8]/60">No data</div>
+            ) : (
+              <div className="space-y-1">
+                {stats.map((stat, index) => (
+                  <div key={`${label}-${stat.playerId}-${index}`} className="flex items-center justify-between text-[10px] text-[#E8E8D8]">
+                    <span>{index + 1}. {stat.playerName}</span>
+                    <span>{formatFranchisePlayoffLeaderValue(label, stat)}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function formatFranchisePlayoffLeaderValue(label: string, stat: PlayoffPlayerStats): string {
+  switch (label) {
+    case 'AVG':
+      return stat.avg.toFixed(3);
+    case 'OPS':
+      return stat.ops.toFixed(3);
+    case 'HR':
+      return String(stat.homeRuns);
+    case 'RBI':
+      return String(stat.rbi);
+    case 'ERA':
+      return (stat.era ?? 0).toFixed(2);
+    case 'W':
+      return String(stat.wins ?? 0);
+    case 'K':
+      return String(stat.pitchingStrikeouts ?? 0);
+    case 'WHIP':
+      return (stat.whip ?? 0).toFixed(2);
+    case 'FWAR':
+      return `${(stat.fieldingWAR ?? 0).toFixed(2)}${stat.fieldingPrimaryPosition ? ` ${stat.fieldingPrimaryPosition}` : ''}`;
+    case 'RS':
+      return `${(stat.fieldingRunsSaved ?? 0) >= 0 ? '+' : ''}${(stat.fieldingRunsSaved ?? 0).toFixed(2)}`;
+    case 'PLAYS':
+      return String(stat.fieldingPlays ?? 0);
+    default:
+      return '0';
+  }
 }
