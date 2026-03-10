@@ -269,6 +269,7 @@ export function GameTracker() {
     commitPlateAppearance,
     recordEvent,
     recordPlayerStateChange,
+    recordManagerMoment,
     advanceRunner,
     advanceRunnersBatch,
     makeSubstitution,
@@ -369,6 +370,7 @@ export function GameTracker() {
   // Post-game enrichment prompt
   const [showPostGameEnrichPrompt, setShowPostGameEnrichPrompt] = useState(false);
   const [postGameUnenrichedCount, setPostGameUnenrichedCount] = useState(0);
+  const loggedManagerMomentKeysRef = useRef<Set<string>>(new Set());
 
   const logAction = useCallback((entry: string) => {
     pushActivityLog(`${inningLabel()}: ${entry}`);
@@ -4628,6 +4630,46 @@ export function GameTracker() {
       handleEndGame();
     }
   }, [showAutoEndPrompt, dismissAutoEndPrompt, handleEndGame]);
+
+  useEffect(() => {
+    if (!mwarHook.managerMoment.isTriggered || !gameState.gameId) {
+      return;
+    }
+
+    const momentKey = [
+      gameState.inning,
+      gameState.isTop ? 'TOP' : 'BOTTOM',
+      gameState.outs,
+      mwarHook.managerMoment.decisionType || 'moment',
+      mwarHook.managerMoment.context || '',
+      mwarHook.managerMoment.leverageIndex.toFixed(2),
+    ].join('|');
+
+    if (loggedManagerMomentKeysRef.current.has(momentKey)) {
+      return;
+    }
+    loggedManagerMomentKeysRef.current.add(momentKey);
+
+    void recordManagerMoment(
+      mwarHook.managerMoment.leverageIndex,
+      mwarHook.managerMoment.decisionType || 'manager_moment',
+      mwarHook.managerMoment.context,
+    ).then(() => queuePlayLogRefresh(0))
+      .catch((error) => {
+        console.error('[GameTracker] Failed to persist manager moment:', error);
+      });
+  }, [
+    gameState.gameId,
+    gameState.inning,
+    gameState.isTop,
+    gameState.outs,
+    mwarHook.managerMoment.context,
+    mwarHook.managerMoment.decisionType,
+    mwarHook.managerMoment.isTriggered,
+    mwarHook.managerMoment.leverageIndex,
+    queuePlayLogRefresh,
+    recordManagerMoment,
+  ]);
 
   if (isLoading || !gameInitialized) {
     return (

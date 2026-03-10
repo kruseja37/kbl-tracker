@@ -326,4 +326,24 @@ describe('useGameState between-play ledger', () => {
       })],
     ]));
   });
+
+  test('logs manager moments as durable system rows', async () => {
+    const { result } = renderHook(() => useGameState());
+    await initializeGame(result);
+
+    mockLogBetweenPlayEvent.mockClear();
+
+    await act(async () => {
+      await result.current.recordManagerMoment(2.4, 'pitching_change', 'High leverage spot');
+    });
+
+    expect(mockLogBetweenPlayEvent).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'manager_moment',
+      managerMoment: expect.objectContaining({
+        leverageIndex: 2.4,
+        decisionType: 'pitching_change',
+        context: 'High leverage spot',
+      }),
+    }));
+  });
 });

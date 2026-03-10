@@ -250,6 +250,11 @@ export interface UseGameStateReturn {
     newValue: string | number,
     reason?: string,
   ) => Promise<void>;
+  recordManagerMoment: (
+    leverageIndex: number,
+    decisionType: string,
+    context?: string,
+  ) => Promise<void>;
   advanceRunner: (from: 'first' | 'second' | 'third', to: 'second' | 'third' | 'home', outcome: 'safe' | 'out') => void;
   /** Batch update runners - processes all movements atomically to avoid race conditions */
   advanceRunnersBatch: (movements: Array<{ from: 'first' | 'second' | 'third'; to: 'second' | 'third' | 'home' | 'out'; outcome: 'safe' | 'out' }>) => void;
@@ -4592,6 +4597,21 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     });
   }, [persistBetweenPlayEvent]);
 
+  const recordManagerMoment = useCallback(async (
+    leverageIndex: number,
+    decisionType: string,
+    context?: string,
+  ) => {
+    await persistBetweenPlayEvent({
+      type: 'manager_moment',
+      managerMoment: {
+        leverageIndex,
+        decisionType,
+        context,
+      },
+    });
+  }, [persistBetweenPlayEvent]);
+
   const advanceRunner = useCallback((from: 'first' | 'second' | 'third', to: 'second' | 'third' | 'home', outcome: 'safe' | 'out') => {
     // Calculate score change first so we can update both game state and scoreboard
     const runsScored = (outcome === 'safe' && to === 'home') ? 1 : 0;
@@ -6083,6 +6103,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     commitPlateAppearance,
     recordEvent,
     recordPlayerStateChange,
+    recordManagerMoment,
     advanceRunner,
     advanceRunnersBatch,
     makeSubstitution,
