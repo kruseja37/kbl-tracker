@@ -8,6 +8,12 @@
  * - Historical playoff data
  */
 
+import {
+  calculateFWARFromPersistedFieldingSet,
+  type FWARResult,
+} from '../engines/fwarCalculator';
+import type { Position } from '../types/game';
+import type { FieldingEvent as PersistedFieldingEvent, GameScopeQuery } from './eventLog';
 import type { PersistedGameState } from './gameStorage';
 
 const DB_NAME = 'kbl-playoffs';
@@ -176,6 +182,137 @@ export interface PlayoffPlayerStats {
   hitsAllowed?: number;
   era?: number;
   whip?: number;
+
+  // Fielding (derived from playoff-scoped event log when available)
+  fieldingPrimaryPosition?: Position;
+  fieldingRunsSaved?: number;
+  fieldingWAR?: number;
+  fieldingPlays?: number;
+  fieldingErrors?: number;
+}
+
+interface PlayoffFieldingSummary {
+  primaryPosition: Position;
+  plays: number;
+  errors: number;
+  runsSaved: number;
+  fWAR: number;
+}
+
+function inferPrimaryPositionFromFieldingEvents(
+  events: PersistedFieldingEvent[]
+): Position | null {
+  if (events.length === 0) return null;
+
+  const counts = new Map<Position, { plays: number; runsSaved: number }>();
+  for (const event of events) {
+    const existing = counts.get(event.position) || { plays: 0, runsSaved: 0 };
+    existing.plays += 1;
+    existing.runsSaved += event.runsPreventedOrAllowed;
+    counts.set(event.position, existing);
+  }
+
+  const ranked = [...counts.entries()].sort((a, b) => {
+    if (b[1].plays !== a[1].plays) {
+      return b[1].plays - a[1].plays;
+    }
+    return b[1].runsSaved - a[1].runsSaved;
+  });
+
+  return ranked[0]?.[0] ?? null;
+}
+
+function buildPlayoffFieldingSummary(
+  playerStats: PlayoffPlayerStats,
+  persistedEvents: PersistedFieldingEvent[],
+  playoffGamesForTeam: number
+): PlayoffFieldingSummary | null {
+  const stableIdEvents = persistedEvents.filter((event) => event.playerId === playerStats.playerId);
+  const primaryPosition = inferPrimaryPositionFromFieldingEvents(stableIdEvents);
+  if (!primaryPosition) return null;
+
+  const fieldingResult: FWARResult | null = calculateFWARFromPersistedFieldingSet(
+    persistedEvents,
+    playerStats.playerId,
+    primaryPosition,
+    Math.max(playerStats.games, playerStats.pitchingGames || 0, 1),
+    Math.max(playoffGamesForTeam, 1),
+    playerStats.teamId
+  );
+  if (!fieldingResult) return null;
+
+  return {
+    primaryPosition,
+    plays: stableIdEvents.length,
+    errors: stableIdEvents.filter((event) => event.playType === 'error').length,
+    runsSaved: fieldingResult.totalRunsSaved,
+    fWAR: fieldingResult.fWAR,
+  };
+}
+
+export function buildPlayoffFieldingScopeQuery(playoff: PlayoffConfig): GameScopeQuery {
+  if ((playoff.sourceType || 'franchise') === 'elimination') {
+    return {
+      statsScopeId: playoff.seasonId || (playoff.eliminationId ? `elimination-${playoff.eliminationId}` : undefined),
+      competitionType: 'elimination',
+      competitionId: playoff.eliminationId,
+      isComplete: true,
+    };
+  }
+
+  return {
+    statsScopeId: playoff.seasonId,
+    competitionType: 'playoff',
+    isComplete: true,
+  };
+}
+
+function buildPlayoffGamesByTeam(
+  allStats: PlayoffPlayerStats[]
+): Map<string, number> {
+  const gamesByTeam = new Map<string, number>();
+
+  for (const stat of allStats) {
+    const observedGames = Math.max(stat.games, stat.pitchingGames || 0, 0);
+    if (observedGames <= 0) continue;
+
+    const existingGames = gamesByTeam.get(stat.teamId) || 0;
+    gamesByTeam.set(stat.teamId, Math.max(existingGames, observedGames));
+  }
+
+  return gamesByTeam;
+}
+
+export function attachFieldingMetricsToPlayoffStats(
+  allStats: PlayoffPlayerStats[],
+  persistedEvents: PersistedFieldingEvent[]
+): PlayoffPlayerStats[] {
+  if (allStats.length === 0 || persistedEvents.length === 0) {
+    return allStats;
+  }
+
+  const playoffGamesByTeam = buildPlayoffGamesByTeam(allStats);
+
+  return allStats.map((stat) => {
+    const summary = buildPlayoffFieldingSummary(
+      stat,
+      persistedEvents,
+      playoffGamesByTeam.get(stat.teamId) || 0
+    );
+
+    if (!summary) {
+      return stat;
+    }
+
+    return {
+      ...stat,
+      fieldingPrimaryPosition: summary.primaryPosition,
+      fieldingRunsSaved: summary.runsSaved,
+      fieldingWAR: summary.fWAR,
+      fieldingPlays: summary.plays,
+      fieldingErrors: summary.errors,
+    };
+  });
 }
 
 // ============================================
@@ -721,7 +858,7 @@ export async function createNextRoundSeries(
 // PLAYOFF STATS
 // ============================================
 
-export async function getPlayoffStats(playoffId: string): Promise<PlayoffPlayerStats[]> {
+async function getStoredPlayoffStats(playoffId: string): Promise<PlayoffPlayerStats[]> {
   const db = await initPlayoffDatabase();
 
   return new Promise((resolve, reject) => {
@@ -733,6 +870,21 @@ export async function getPlayoffStats(playoffId: string): Promise<PlayoffPlayerS
     request.onsuccess = () => resolve(request.result || []);
     request.onerror = () => reject(request.error);
   });
+}
+
+export async function getPlayoffStats(playoffId: string): Promise<PlayoffPlayerStats[]> {
+  const [storedStats, playoff] = await Promise.all([
+    getStoredPlayoffStats(playoffId),
+    getPlayoff(playoffId),
+  ]);
+
+  if (!playoff || storedStats.length === 0) {
+    return storedStats;
+  }
+
+  const { getFieldingEventsForScope } = await import('./eventLog');
+  const persistedEvents = await getFieldingEventsForScope(buildPlayoffFieldingScopeQuery(playoff));
+  return attachFieldingMetricsToPlayoffStats(storedStats, persistedEvents);
 }
 
 export async function getPlayoffLeaders(
