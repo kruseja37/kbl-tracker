@@ -268,6 +268,7 @@ export function GameTracker() {
     pitcherStats,
     commitPlateAppearance,
     recordEvent,
+    recordPlayerStateChange,
     advanceRunner,
     advanceRunnersBatch,
     makeSubstitution,
@@ -935,6 +936,20 @@ export function GameTracker() {
       }))
       .sort((a, b) => a.label.localeCompare(b.label));
   }, [awayTeamPitchers, getRosterEntityId, homeTeamPitchers, selectedHistoricalTeamSide]);
+
+  const historicalContextValueOptions = useMemo(() => {
+    if (!selectedBetweenPlayEvent?.playerStateChange) return [];
+    if (selectedBetweenPlayEvent.playerStateChange.stateType === 'mojo') {
+      return (Object.entries(MOJO_STATES) as Array<[string, typeof MOJO_STATES[MojoLevel]]>).map(([value, state]) => ({
+        value,
+        label: state.displayName,
+      }));
+    }
+    return Object.entries(FITNESS_STATES).map(([value, state]) => ({
+      value,
+      label: state.displayName,
+    }));
+  }, [selectedBetweenPlayEvent]);
 
   const rebuildPlayLogFromEventLog = useCallback(async () => {
     if (!gameState.gameId) return;
@@ -1711,13 +1726,37 @@ export function GameTracker() {
 
   const setPlayerMojoByName = useCallback((name: string, team: 'away' | 'home', newMojo: MojoLevel) => {
     const playerId = getPlayerIdFromName(name, team);
+    const currentPlayer = playerStateHook.getPlayer(playerId);
+    const previousMojo = currentPlayer?.gameState.currentMojo;
+    if (previousMojo === undefined || previousMojo === newMojo) return;
+
     playerStateHook.setMojo(playerId, newMojo);
-  }, [getPlayerIdFromName, playerStateHook]);
+    void recordPlayerStateChange(
+      playerId,
+      name,
+      'mojo',
+      previousMojo,
+      newMojo,
+      'Player card adjustment',
+    ).then(() => queuePlayLogRefresh(0));
+  }, [getPlayerIdFromName, playerStateHook, queuePlayLogRefresh, recordPlayerStateChange]);
 
   const setPlayerFitnessByName = useCallback((name: string, team: 'away' | 'home', newFitness: FitnessState) => {
     const playerId = getPlayerIdFromName(name, team);
+    const currentPlayer = playerStateHook.getPlayer(playerId);
+    const previousFitness = currentPlayer?.fitnessProfile.currentFitness;
+    if (!previousFitness || previousFitness === newFitness) return;
+
     playerStateHook.setFitness(playerId, newFitness);
-  }, [getPlayerIdFromName, playerStateHook]);
+    void recordPlayerStateChange(
+      playerId,
+      name,
+      'fitness',
+      previousFitness,
+      newFitness,
+      'Player card adjustment',
+    ).then(() => queuePlayLogRefresh(0));
+  }, [getPlayerIdFromName, playerStateHook, queuePlayLogRefresh, recordPlayerStateChange]);
 
   // Get current batter's lineup position
   const battingTeamPlayers = gameState.isTop ? awayTeamPlayers : homeTeamPlayers;
@@ -2765,6 +2804,28 @@ export function GameTracker() {
     }
   }, [loadExistingGame, queuePlayLogRefresh, syncDisplayedRostersToLineupSnapshot]);
 
+  const applyHistoricalContextEdit = useCallback(async (
+    nextEvent: BetweenPlayEvent,
+    updates: Partial<BetweenPlayEvent>,
+    errorLabel: string,
+  ) => {
+    setSelectedBetweenPlayEventSaving(true);
+    try {
+      await updateBetweenPlayEvent(nextEvent.eventId, updates);
+      if (nextEvent.playerStateChange?.stateType === 'mojo') {
+        playerStateHook.setMojo(nextEvent.playerStateChange.playerId, Number(nextEvent.playerStateChange.newValue) as MojoLevel);
+      } else if (nextEvent.playerStateChange?.stateType === 'fitness') {
+        playerStateHook.setFitness(nextEvent.playerStateChange.playerId, nextEvent.playerStateChange.newValue as FitnessState);
+      }
+      setSelectedBetweenPlayEvent(nextEvent);
+      queuePlayLogRefresh(0);
+    } catch (error) {
+      console.error(`[Historical Context Edit] Failed to ${errorLabel}:`, error);
+    } finally {
+      setSelectedBetweenPlayEventSaving(false);
+    }
+  }, [playerStateHook, queuePlayLogRefresh]);
+
   const handleHistoricalPositionChange = useCallback(async (newPosition: string) => {
     if (selectedBetweenPlayEvent?.type !== 'position_change' || !selectedBetweenPlayEvent.substitution) {
       return;
@@ -2920,6 +2981,69 @@ export function GameTracker() {
       pitcherChange: nextEvent.pitcherChange,
     }, 'update pitcher change');
   }, [applyHistoricalStructuralReplayEdit, historicalPitcherOptions, selectedBetweenPlayEvent]);
+
+  const handleHistoricalContextValueChange = useCallback(async (value: string) => {
+    if (!selectedBetweenPlayEvent?.playerStateChange) return;
+    const { playerStateChange } = selectedBetweenPlayEvent;
+    const normalizedValue = playerStateChange.stateType === 'mojo' ? Number(value) : value;
+    if (playerStateChange.newValue === normalizedValue) return;
+
+    const timestamp = Date.now();
+    const nextEvent: BetweenPlayEvent = {
+      ...selectedBetweenPlayEvent,
+      version: (selectedBetweenPlayEvent.version ?? 1) + 1,
+      editHistory: [
+        ...(selectedBetweenPlayEvent.editHistory || []),
+        {
+          field: 'playerStateChange.newValue',
+          oldValue: playerStateChange.newValue,
+          newValue: normalizedValue,
+          timestamp,
+        },
+      ],
+      playerStateChange: {
+        ...playerStateChange,
+        newValue: normalizedValue,
+      },
+    };
+
+    await applyHistoricalContextEdit(nextEvent, {
+      version: nextEvent.version,
+      editHistory: nextEvent.editHistory?.slice(-1),
+      playerStateChange: nextEvent.playerStateChange,
+    }, 'update context value');
+  }, [applyHistoricalContextEdit, selectedBetweenPlayEvent]);
+
+  const handleHistoricalContextReasonChange = useCallback(async (reason: string) => {
+    if (!selectedBetweenPlayEvent?.playerStateChange) return;
+    const previousReason = selectedBetweenPlayEvent.playerStateChange.reason || '';
+    if (previousReason === reason) return;
+
+    const timestamp = Date.now();
+    const nextEvent: BetweenPlayEvent = {
+      ...selectedBetweenPlayEvent,
+      version: (selectedBetweenPlayEvent.version ?? 1) + 1,
+      editHistory: [
+        ...(selectedBetweenPlayEvent.editHistory || []),
+        {
+          field: 'playerStateChange.reason',
+          oldValue: previousReason,
+          newValue: reason,
+          timestamp,
+        },
+      ],
+      playerStateChange: {
+        ...selectedBetweenPlayEvent.playerStateChange,
+        reason,
+      },
+    };
+
+    await applyHistoricalContextEdit(nextEvent, {
+      version: nextEvent.version,
+      editHistory: nextEvent.editHistory?.slice(-1),
+      playerStateChange: nextEvent.playerStateChange,
+    }, 'update context reason');
+  }, [applyHistoricalContextEdit, selectedBetweenPlayEvent]);
 
   const handleQuickBarOutcome = useCallback(async (outcome: string) => {
     if (!gameInitialized) return;
@@ -4817,8 +4941,11 @@ export function GameTracker() {
               onSubstitutionPlayerChange={handleHistoricalSubstitutionPlayerChange}
               onSubstitutionPositionChange={handleHistoricalSubstitutionPositionChange}
               onPitcherChange={handleHistoricalPitcherChange}
+              onContextValueChange={handleHistoricalContextValueChange}
+              onContextReasonChange={handleHistoricalContextReasonChange}
               lineupOptions={historicalLineupOptions}
               pitcherOptions={historicalPitcherOptions}
+              contextValueOptions={historicalContextValueOptions}
             />
           ) : enrichingEntry !== null ? (
             /* Enrichment panel replaces play log when active */
@@ -4991,8 +5118,14 @@ export function GameTracker() {
             onClose={() => setSelectedPlayer(null)}
             currentMojo={playerStateHook.getPlayer(selectedPlayer.playerId)?.gameState.currentMojo}
             currentFitness={playerStateHook.getPlayer(selectedPlayer.playerId)?.fitnessProfile.currentFitness}
-            onMojoChange={(newMojo) => playerStateHook.setMojo(selectedPlayer.playerId, newMojo)}
-            onFitnessChange={(newFitness) => playerStateHook.setFitness(selectedPlayer.playerId, newFitness)}
+            onMojoChange={(newMojo) => {
+              const team = resolveRosterTeamSide(selectedPlayer.playerId, selectedPlayer.name) || 'home';
+              setPlayerMojoByName(selectedPlayer.name, team, newMojo);
+            }}
+            onFitnessChange={(newFitness) => {
+              const team = resolveRosterTeamSide(selectedPlayer.playerId, selectedPlayer.name) || 'home';
+              setPlayerFitnessByName(selectedPlayer.name, team, newFitness);
+            }}
           />
         )}
 

@@ -14,8 +14,11 @@ interface HistoricalEventEditorProps {
   onSubstitutionPlayerChange?: (field: 'outPlayer' | 'inPlayer', playerId: string) => void;
   onSubstitutionPositionChange?: (position: string) => void;
   onPitcherChange?: (field: 'outgoingPitcher' | 'incomingPitcher', pitcherId: string) => void;
+  onContextValueChange?: (value: string) => void;
+  onContextReasonChange?: (reason: string) => void;
   lineupOptions?: Array<{ id: string; label: string }>;
   pitcherOptions?: Array<{ id: string; label: string }>;
+  contextValueOptions?: Array<{ value: string; label: string }>;
 }
 
 const POSITION_OPTIONS = ['P', 'C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF'] as const;
@@ -48,8 +51,11 @@ export function HistoricalEventEditor({
   onSubstitutionPlayerChange,
   onSubstitutionPositionChange,
   onPitcherChange,
+  onContextValueChange,
+  onContextReasonChange,
   lineupOptions = [],
   pitcherOptions = [],
+  contextValueOptions = [],
 }: HistoricalEventEditorProps) {
   const title = entry.editorType === 'runner'
     ? 'Runner Event'
@@ -283,9 +289,44 @@ export function HistoricalEventEditor({
 
             {entry.editorType === 'context_modifiers' && (
               <>
-                <div className="text-[8px] text-[#88AA88]">
-                  Context rows are visible and selectable. Edit wiring will attach here as those producer paths are normalized.
-                </div>
+                {(event.type === 'mojo_change' || event.type === 'fitness_change') && event.playerStateChange ? (
+                  <div className="space-y-2">
+                    <label className="text-[8px] text-[#88AA88] font-bold uppercase tracking-wide">
+                      Value
+                      <select
+                        value={String(event.playerStateChange.newValue)}
+                        onChange={(e) => onContextValueChange?.(e.target.value)}
+                        disabled={saving || contextValueOptions.length === 0}
+                        className="mt-1 w-full bg-[#1f2937]/60 border border-[#4a6a4a] rounded px-2 py-1 text-[9px] text-[#E8E8D8]"
+                      >
+                        {contextValueOptions.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="text-[8px] text-[#88AA88] font-bold uppercase tracking-wide">
+                      Reason
+                      <input
+                        key={`${event.eventId}-${event.version ?? 1}-reason`}
+                        type="text"
+                        defaultValue={event.playerStateChange.reason || ''}
+                        onBlur={(e) => onContextReasonChange?.(e.target.value)}
+                        disabled={saving}
+                        className="mt-1 w-full bg-[#1f2937]/60 border border-[#4a6a4a] rounded px-2 py-1 text-[9px] text-[#E8E8D8]"
+                        placeholder="Optional note"
+                      />
+                    </label>
+                    <div className="text-[7px] text-[#88AA88]">
+                      {saving ? 'Saving…' : 'Context edits version this row in place without replay.'}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-[8px] text-[#88AA88]">
+                    Context rows are visible and selectable. Edit wiring will attach here as those producer paths are normalized.
+                  </div>
+                )}
                 {event.playerStateChange && (
                   <div className="bg-[#1f2937]/50 border border-[#4a6a4a] rounded px-2 py-2">
                     <FieldRow label="Type" value={event.playerStateChange.stateType} />

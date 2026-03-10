@@ -242,6 +242,14 @@ export interface UseGameStateReturn {
   recordError: (rbi?: number, runnerData?: RunnerAdvancement, pitchCount?: number) => Promise<void>;
   commitPlateAppearance: (action: PlateAppearanceAction) => Promise<void>;
   recordEvent: (eventType: EventType, runnerId?: string, details?: BetweenPlayEventDetails) => Promise<void>;
+  recordPlayerStateChange: (
+    playerId: string,
+    playerName: string,
+    stateType: 'mojo' | 'fitness',
+    previousValue: string | number,
+    newValue: string | number,
+    reason?: string,
+  ) => Promise<void>;
   advanceRunner: (from: 'first' | 'second' | 'third', to: 'second' | 'third' | 'home', outcome: 'safe' | 'out') => void;
   /** Batch update runners - processes all movements atomically to avoid race conditions */
   advanceRunnersBatch: (movements: Array<{ from: 'first' | 'second' | 'third'; to: 'second' | 'third' | 'home' | 'out'; outcome: 'safe' | 'out' }>) => void;
@@ -4562,6 +4570,28 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     }
   }, [appendFameEvent, gameState.bases, gameState.currentBatterId, gameState.currentBatterName, gameState.currentPitcherId, gameState.inning, gameState.outs, getCurrentLeverageIndex, persistBetweenPlayEvent, resolvePlayerNameForId]);
 
+  const recordPlayerStateChange = useCallback(async (
+    playerId: string,
+    playerName: string,
+    stateType: 'mojo' | 'fitness',
+    previousValue: string | number,
+    newValue: string | number,
+    reason?: string,
+  ) => {
+    const type: BetweenPlayEventType = stateType === 'mojo' ? 'mojo_change' : 'fitness_change';
+    await persistBetweenPlayEvent({
+      type,
+      playerStateChange: {
+        playerId,
+        playerName,
+        stateType,
+        previousValue,
+        newValue,
+        reason,
+      },
+    });
+  }, [persistBetweenPlayEvent]);
+
   const advanceRunner = useCallback((from: 'first' | 'second' | 'third', to: 'second' | 'third' | 'home', outcome: 'safe' | 'out') => {
     // Calculate score change first so we can update both game state and scoreboard
     const runsScored = (outcome === 'safe' && to === 'home') ? 1 : 0;
@@ -5207,6 +5237,23 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
 
     console.log(`[useGameState] Pitch count confirmed: ${pitcherId} = ${finalCount} pitches`);
 
+    const timing =
+      pitchCountPrompt?.type === 'pitching_change'
+        ? 'pitcher_removed'
+        : pitchCountPrompt?.type === 'end_game'
+        ? 'end_of_game'
+        : 'end_of_half_inning';
+    void persistBetweenPlayEvent({
+      type: 'pitch_count_update',
+      pitchCountUpdate: {
+        pitcherId,
+        pitchCount: finalCount,
+        timing,
+      },
+    }).catch((error) => {
+      console.error('[useGameState] Failed to log pitch-count update:', error);
+    });
+
     // Execute the pending action (pitching change, end inning, or end game)
     if (pendingActionRef.current) {
       pendingActionRef.current();
@@ -5216,7 +5263,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     // Clear the prompt
     setPitchCountPrompt(null);
     return result;
-  }, [appendFameEvent, pitchCountPrompt, gameState.inning, gameState.isTop]);
+  }, [appendFameEvent, gameState.inning, gameState.isTop, persistBetweenPlayEvent, pitchCountPrompt]);
 
   // Dismiss pitch count prompt without confirming
   // For end_inning: still transitions the inning (just skips pitch count update)
@@ -6035,6 +6082,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     recordError,
     commitPlateAppearance,
     recordEvent,
+    recordPlayerStateChange,
     advanceRunner,
     advanceRunnersBatch,
     makeSubstitution,

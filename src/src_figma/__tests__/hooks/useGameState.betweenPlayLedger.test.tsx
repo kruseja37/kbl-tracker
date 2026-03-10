@@ -212,6 +212,7 @@ describe('useGameState between-play ledger', () => {
       'substitution',
       'position_change',
       'pitcher_change',
+      'pitch_count_update',
     ]));
 
     expect(mockLogBetweenPlayEvent.mock.calls).toEqual(expect.arrayContaining([
@@ -236,6 +237,14 @@ describe('useGameState between-play ledger', () => {
         pitcherChange: expect.objectContaining({
           outgoingPitcherId: 'home-sp',
           incomingPitcherId: 'home-rp',
+        }),
+      })],
+      [expect.objectContaining({
+        type: 'pitch_count_update',
+        pitchCountUpdate: expect.objectContaining({
+          pitcherId: 'home-sp',
+          pitchCount: 17,
+          timing: expect.any(String),
         }),
       })],
     ]));
@@ -269,5 +278,52 @@ describe('useGameState between-play ledger', () => {
     expect(result.current.positionInnings.get('home-bench-1')).toMatchObject({ '2B': 1 });
     expect(result.current.positionInnings.get('home-batter-2')).toMatchObject({ RF: 2 });
     expect(result.current.positionInnings.get('home-sp')).toMatchObject({ P: 2 });
+  });
+
+  test('logs manual mojo and fitness changes as durable context rows', async () => {
+    const { result } = renderHook(() => useGameState());
+    await initializeGame(result);
+
+    mockLogBetweenPlayEvent.mockClear();
+
+    await act(async () => {
+      await result.current.recordPlayerStateChange(
+        'away-batter-1',
+        'Away Batter 1',
+        'mojo',
+        0,
+        1,
+        'Player card adjustment',
+      );
+      await result.current.recordPlayerStateChange(
+        'home-sp',
+        'Home Starter',
+        'fitness',
+        'FIT',
+        'STRAINED',
+        'Player card adjustment',
+      );
+    });
+
+    expect(mockLogBetweenPlayEvent.mock.calls).toEqual(expect.arrayContaining([
+      [expect.objectContaining({
+        type: 'mojo_change',
+        playerStateChange: expect.objectContaining({
+          playerId: 'away-batter-1',
+          stateType: 'mojo',
+          previousValue: 0,
+          newValue: 1,
+        }),
+      })],
+      [expect.objectContaining({
+        type: 'fitness_change',
+        playerStateChange: expect.objectContaining({
+          playerId: 'home-sp',
+          stateType: 'fitness',
+          previousValue: 'FIT',
+          newValue: 'STRAINED',
+        }),
+      })],
+    ]));
   });
 });

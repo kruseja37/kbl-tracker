@@ -130,4 +130,32 @@ describe('gameTrackerPlayLog', () => {
     expect(entries.map((entry) => entry.result)).toEqual(['SAC', 'SB', 'MM']);
     expect(entries[2].visibility).toBe('system');
   });
+
+  test('maps manual context rows into default-visible play log entries', () => {
+    const entry = mapBetweenPlayEventToPlayLogEntry(createBetweenPlayEvent({
+      eventId: 'game-1_bp_ctx_1',
+      eventIndex: 1.003,
+      timestamp: 103,
+      type: 'mojo_change',
+      runnerAction: undefined,
+      stolenBase: undefined,
+      playerStateChange: {
+        playerId: 'runner-1',
+        playerName: 'Garcia',
+        stateType: 'mojo',
+        previousValue: 0,
+        newValue: 1,
+        reason: 'Player card adjustment',
+      },
+    }));
+
+    expect(entry).toMatchObject({
+      eventType: 'mojo_change',
+      editorType: 'context_modifiers',
+      visibility: 'default',
+      result: 'MOJO',
+      batterName: 'Garcia',
+      description: '0 -> 1',
+    });
+  });
 });
