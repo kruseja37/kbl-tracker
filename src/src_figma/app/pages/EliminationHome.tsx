@@ -563,6 +563,7 @@ function PlayoffLeadersContent({ playoffId }: { playoffId: string }) {
   const [isLoading, setIsLoading] = useState(true);
   const [batting, setBatting] = useState<Record<string, PlayoffPlayerStats[]>>({});
   const [pitching, setPitching] = useState<Record<string, PlayoffPlayerStats[]>>({});
+  const [fielding, setFielding] = useState<Record<string, PlayoffPlayerStats[]>>({});
 
   useEffect(() => {
     let cancelled = false;
@@ -585,19 +586,28 @@ function PlayoffLeadersContent({ playoffId }: { playoffId: string }) {
           WHIP: 'whip',
           SV: 'saves',
         } as const;
+        const fieldingStats = {
+          FWAR: 'fieldingWAR',
+          RS: 'fieldingRunsSaved',
+          PLAYS: 'fieldingPlays',
+        } as const;
 
-        const [battingEntries, pitchingEntries] = await Promise.all([
+        const [battingEntries, pitchingEntries, fieldingEntries] = await Promise.all([
           Promise.all(
             Object.entries(battingStats).map(async ([label, stat]) => [label, await getPlayoffLeaders(playoffId, stat, 5)] as const)
           ),
           Promise.all(
             Object.entries(pitchingStats).map(async ([label, stat]) => [label, await getPlayoffLeaders(playoffId, stat, 5)] as const)
           ),
+          Promise.all(
+            Object.entries(fieldingStats).map(async ([label, stat]) => [label, await getPlayoffLeaders(playoffId, stat, 5)] as const)
+          ),
         ]);
 
         if (cancelled) return;
         setBatting(Object.fromEntries(battingEntries));
         setPitching(Object.fromEntries(pitchingEntries));
+        setFielding(Object.fromEntries(fieldingEntries));
       } catch (err) {
         if (!cancelled) {
           console.error('[EliminationHome] Failed to load leaders:', err);
@@ -614,7 +624,9 @@ function PlayoffLeadersContent({ playoffId }: { playoffId: string }) {
   }, [playoffId]);
 
   const hasData =
-    Object.values(batting).some((items) => items.length > 0) || Object.values(pitching).some((items) => items.length > 0);
+    Object.values(batting).some((items) => items.length > 0) ||
+    Object.values(pitching).some((items) => items.length > 0) ||
+    Object.values(fielding).some((items) => items.length > 0);
 
   if (isLoading) {
     return (
@@ -635,9 +647,10 @@ function PlayoffLeadersContent({ playoffId }: { playoffId: string }) {
   }
 
   return (
-    <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+    <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
       <LeaderPanel title="BATTING LEADERS" entries={batting} />
       <LeaderPanel title="PITCHING LEADERS" entries={pitching} />
+      <LeaderPanel title="FIELDING LEADERS" entries={fielding} />
     </div>
   );
 }
@@ -734,6 +747,12 @@ function formatLeaderValue(label: string, stat: PlayoffPlayerStats): string {
       return stat.avg.toFixed(3);
     case 'OPS':
       return stat.ops.toFixed(3);
+    case 'FWAR':
+      return `${(stat.fieldingWAR ?? 0).toFixed(2)}${stat.fieldingPrimaryPosition ? ` ${stat.fieldingPrimaryPosition}` : ''}`;
+    case 'RS':
+      return `${(stat.fieldingRunsSaved ?? 0) >= 0 ? '+' : ''}${(stat.fieldingRunsSaved ?? 0).toFixed(2)}`;
+    case 'PLAYS':
+      return String(stat.fieldingPlays ?? 0);
     case 'ERA':
       return (stat.era ?? 0).toFixed(2);
     case 'WHIP':
