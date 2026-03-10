@@ -1,6 +1,6 @@
 import React, { useCallback, useState } from 'react';
-import type { PlayLogEntry } from './PlayLogPanel';
 import type { AtBatEvent } from '../../../utils/eventLog';
+import type { PlayLogEntry } from '../utils/playLogTypes';
 
 // ──────────────────────────────────────────────────────────────
 // Pitch Type Constants (§4.3)

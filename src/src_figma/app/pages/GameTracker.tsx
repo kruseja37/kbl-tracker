@@ -15,12 +15,13 @@ import { TeamRoster, type Player, type Pitcher } from "@/app/components/TeamRost
 // D-9: MiniScoreboard removed from diamond zone — scoreboard now in FenwayBoard left panel
 import { FenwayBoard } from "@/app/components/FenwayBoard";
 import { QuickBar } from "@/app/components/QuickBar";
-import { PlayLogPanel, type PlayLogEntry } from "@/app/components/PlayLogPanel";
+import { PlayLogPanel } from "@/app/components/PlayLogPanel";
 import { EnrichmentPanel, PITCH_TYPES, type EnrichmentUpdate } from "@/app/components/EnrichmentPanel";
 import {
   getAtBatEvent,
   getBetweenPlayEvents,
   getFieldingEventsForAtBat,
+  getGameEvents,
   getGameHeader,
   logFieldingEvent,
   updateAtBatEvent,
@@ -90,6 +91,8 @@ import {
 import { captureStartingLineups, type LineupEntry } from '../../../utils/gameStorage';
 import { POSITION_MAP, POSITION_NUMBER } from '../components/fielderInference';
 import { calculateRunnerDefaults, type RunnerDefaults } from '../components/runnerDefaults';
+import type { PlayLogEntry } from '../utils/playLogTypes';
+import { buildPlayLogEntries } from '../utils/gameTrackerPlayLog';
 
 // Note: Using GameState from useGameState hook instead of local interface
 // This interface is deprecated but kept for reference during migration
@@ -321,13 +324,21 @@ export function GameTracker() {
     return `${gameState.isTop ? 'T' : 'B'}${Math.max(1, gameState.inning)}`;
   }, [gameState.isTop, gameState.inning]);
 
-  const pushPlayLogEntry = useCallback((entry: Omit<PlayLogEntry, 'id' | 'timestamp'>) => {
+  const pushPlayLogEntry = useCallback((entry: Omit<PlayLogEntry, 'id' | 'timestamp' | 'eventType' | 'editorType' | 'visibility' | 'isSelectable'> & Partial<Pick<PlayLogEntry, 'eventType' | 'editorType' | 'visibility' | 'isSelectable'>>) => {
     setPlayLogEntries(prev => [...prev, {
       ...entry,
-      id: `play-${Date.now()}-${prev.length}`,
+      eventType: entry.eventType ?? 'at_bat',
+      editorType: entry.editorType ?? 'batter_at_bat',
+      visibility: entry.visibility ?? 'default',
+      isSelectable: entry.isSelectable ?? ((entry.eventType ?? 'at_bat') === 'at_bat'),
+      id: entry.eventId || `play-${Date.now()}-${prev.length}`,
       timestamp: Date.now(),
     }]);
   }, []);
+  const playLogRefreshTimeoutRef = useRef<number | null>(null);
+  const rebuildPlayLogFromEventLogRef = useRef<() => void | Promise<void>>(() => {});
+  const queuePlayLogRefreshRef = useRef<(delayMs?: number) => void>(() => {});
+  const previousPitchCountPromptRef = useRef<typeof pitchCountPrompt>(null);
 
   // Layer 5: Enrichment Panel state
   const [enrichingEntry, setEnrichingEntry] = useState<PlayLogEntry | null>(null);
@@ -595,7 +606,7 @@ export function GameTracker() {
         console.warn("No durable action available to undo");
         return;
       }
-      setPlayLogEntries(prev => prev.length > 0 ? prev.slice(0, -1) : prev);
+      queuePlayLogRefreshRef.current(0);
     })();
   }, [undoLastAction]);
 
@@ -614,6 +625,27 @@ export function GameTracker() {
       runnerTrackerSnapshot: getRunnerTrackerSnapshot(),
     });
   }, [gameInitialized, gameState, scoreboard, playerStats, pitcherStats, getRunnerTrackerSnapshot]);
+
+  useEffect(() => {
+    if (!gameInitialized || !gameState.gameId) return;
+    void rebuildPlayLogFromEventLogRef.current();
+  }, [atBatSequence, gameInitialized, gameState.gameId]);
+
+  useEffect(() => {
+    return () => {
+      if (playLogRefreshTimeoutRef.current !== null) {
+        window.clearTimeout(playLogRefreshTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    const hadPrompt = previousPitchCountPromptRef.current !== null;
+    if (hadPrompt && !pitchCountPrompt) {
+      queuePlayLogRefreshRef.current(0);
+    }
+    previousPitchCountPromptRef.current = pitchCountPrompt;
+  }, [pitchCountPrompt]);
 
   // Expandable sections state
   const [expandedSections, setExpandedSections] = useState({
@@ -760,6 +792,30 @@ export function GameTracker() {
     if (!playerId) return undefined;
     return rosterNameById.get(playerId);
   }, [rosterNameById]);
+
+  const rebuildPlayLogFromEventLog = useCallback(async () => {
+    if (!gameState.gameId) return;
+    const [atBatEvents, betweenPlayEvents] = await Promise.all([
+      getGameEvents(gameState.gameId),
+      getBetweenPlayEvents(gameState.gameId),
+    ]);
+    setPlayLogEntries(buildPlayLogEntries(atBatEvents, betweenPlayEvents, resolveRosterNameByGameId));
+  }, [gameState.gameId, resolveRosterNameByGameId]);
+
+  const queuePlayLogRefresh = useCallback((delayMs = 40) => {
+    if (playLogRefreshTimeoutRef.current !== null) {
+      window.clearTimeout(playLogRefreshTimeoutRef.current);
+    }
+    playLogRefreshTimeoutRef.current = window.setTimeout(() => {
+      playLogRefreshTimeoutRef.current = null;
+      void rebuildPlayLogFromEventLog();
+    }, delayMs);
+  }, [rebuildPlayLogFromEventLog]);
+
+  useEffect(() => {
+    rebuildPlayLogFromEventLogRef.current = rebuildPlayLogFromEventLog;
+    queuePlayLogRefreshRef.current = queuePlayLogRefresh;
+  }, [queuePlayLogRefresh, rebuildPlayLogFromEventLog]);
 
   const resolvedCurrentBatterName =
     gameState.currentBatterName ||
@@ -1600,8 +1656,8 @@ export function GameTracker() {
       deriveRunnerEventType(data),
       runnerIdentity.runnerId,
       buildRunnerEventDetails(data, runnerIdentity.runnerId, runnerIdentity.runnerName),
-    );
-  }, [advanceRunner, getRunnerIdentityForBase, recordEvent, undoSystem]);
+    ).then(() => queuePlayLogRefresh());
+  }, [advanceRunner, getRunnerIdentityForBase, queuePlayLogRefresh, recordEvent, undoSystem]);
 
   // Handler for batch runner moves (SB/CS/PK/TBL with multiple runners)
   // This processes all runner movements atomically to avoid race conditions
@@ -1647,8 +1703,9 @@ export function GameTracker() {
           });
         }
       }
+      queuePlayLogRefresh();
     })();
-  }, [advanceRunnersBatch, getRunnerIdentityForBase, recordEvent, undoSystem]);
+  }, [advanceRunnersBatch, getRunnerIdentityForBase, queuePlayLogRefresh, recordEvent, undoSystem]);
 
   // REMOVED: BUG-009 - handleLegacyRunnerMove was for deprecated BaserunnerDragDrop placeholder
   // Runner moves are now handled by handleRunnerMove for EnhancedInteractiveField
@@ -1749,7 +1806,8 @@ export function GameTracker() {
         updateTeamRoster(homeTeamPlayers, setHomeTeamPlayers);
       }
     }
-  }, [changePitcher, makeSubstitution, switchPositions, awayTeamPlayers, homeTeamPlayers, pendingPH, setPendingPH]);
+    queuePlayLogRefresh(80);
+  }, [changePitcher, makeSubstitution, queuePlayLogRefresh, switchPositions, awayTeamPlayers, homeTeamPlayers, pendingPH, setPendingPH]);
 
   // T1-05: Auto-infer fielder credits from fieldingSequence
   // Standard baseball rules: last fielder = putout, others = assists
@@ -3317,6 +3375,7 @@ export function GameTracker() {
     // 1. Show pitch count prompt for exiting pitcher
     // 2. After confirmation, update currentPitcherId/currentPitcherName
     changePitcher(newPitcherId, exitingPitcherId, newPitcherName, replacedName);
+    queuePlayLogRefresh(80);
 
     // mWAR: Record pitching change decision
     try {
@@ -3383,9 +3442,9 @@ export function GameTracker() {
       fromBase: base,
       toBase: nextBaseMap[base],
       outcome: 'safe',
-    });
+    }).then(() => queuePlayLogRefresh());
     setActiveRunnerPopover(null);
-  }, [activeRunnerPopover?.playerId, activeRunnerPopover?.runnerName, advanceRunner, recordEvent, undoSystem]);
+  }, [activeRunnerPopover?.playerId, activeRunnerPopover?.runnerName, advanceRunner, queuePlayLogRefresh, recordEvent, undoSystem]);
 
   const handleRunnerAdvance = useCallback((base: RunnerBase, dest?: 'second' | 'third' | 'home') => {
     const to = dest || nextBaseMap[base];
@@ -3397,9 +3456,9 @@ export function GameTracker() {
       fromBase: base,
       toBase: to,
       outcome: 'safe',
-    });
+    }).then(() => queuePlayLogRefresh());
     setActiveRunnerPopover(null);
-  }, [activeRunnerPopover?.playerId, activeRunnerPopover?.runnerName, advanceRunner, recordEvent, undoSystem]);
+  }, [activeRunnerPopover?.playerId, activeRunnerPopover?.runnerName, advanceRunner, queuePlayLogRefresh, recordEvent, undoSystem]);
 
   const handleRunnerWP = useCallback((base: RunnerBase, dest?: 'second' | 'third' | 'home') => {
     const to = dest || nextBaseMap[base];
@@ -3411,9 +3470,9 @@ export function GameTracker() {
       fromBase: base,
       toBase: to,
       outcome: 'safe',
-    });
+    }).then(() => queuePlayLogRefresh());
     setActiveRunnerPopover(null);
-  }, [activeRunnerPopover?.playerId, activeRunnerPopover?.runnerName, advanceRunner, recordEvent, undoSystem]);
+  }, [activeRunnerPopover?.playerId, activeRunnerPopover?.runnerName, advanceRunner, queuePlayLogRefresh, recordEvent, undoSystem]);
 
   const handleRunnerPB = useCallback((base: RunnerBase, dest?: 'second' | 'third' | 'home') => {
     const to = dest || nextBaseMap[base];
@@ -3425,9 +3484,9 @@ export function GameTracker() {
       fromBase: base,
       toBase: to,
       outcome: 'safe',
-    });
+    }).then(() => queuePlayLogRefresh());
     setActiveRunnerPopover(null);
-  }, [activeRunnerPopover?.playerId, activeRunnerPopover?.runnerName, advanceRunner, recordEvent, undoSystem]);
+  }, [activeRunnerPopover?.playerId, activeRunnerPopover?.runnerName, advanceRunner, queuePlayLogRefresh, recordEvent, undoSystem]);
 
   const handleRunnerPickoff = useCallback((base: RunnerBase, outcome: 'safe' | 'out' | 'error') => {
     undoSystem.captureSnapshot(`Pickoff ${outcome}: ${base}`);
@@ -3440,7 +3499,7 @@ export function GameTracker() {
         fromBase: base,
         toBase: 'out',
         outcome: 'out',
-      });
+      }).then(() => queuePlayLogRefresh());
     } else if (outcome === 'error') {
       // D-2: Error on pickoff — runner advances one base
       advanceRunner(base, nextBaseMap[base], 'safe');
@@ -3450,7 +3509,7 @@ export function GameTracker() {
         fromBase: base,
         toBase: nextBaseMap[base],
         outcome: 'safe',
-      });
+      }).then(() => queuePlayLogRefresh());
     } else {
       // D-2: Safe — attempt logged, runner stays
       void recordEvent('PICK_SAFE', activeRunnerPopover?.playerId, {
@@ -3459,10 +3518,10 @@ export function GameTracker() {
         fromBase: base,
         toBase: base,
         outcome: 'safe',
-      });
+      }).then(() => queuePlayLogRefresh());
     }
     setActiveRunnerPopover(null);
-  }, [activeRunnerPopover?.playerId, activeRunnerPopover?.runnerName, advanceRunner, recordEvent, undoSystem]);
+  }, [activeRunnerPopover?.playerId, activeRunnerPopover?.runnerName, advanceRunner, queuePlayLogRefresh, recordEvent, undoSystem]);
 
   const handleRunnerSubstitute = useCallback((base: RunnerBase) => {
     setActiveRunnerPopover(null);
@@ -3539,7 +3598,8 @@ export function GameTracker() {
   const handleFielderMovePosition = useCallback((playerId: string, newPosition: string) => {
     switchPositions([{ playerId, newPosition }]);
     setActiveFielderPopover(null);
-  }, [switchPositions]);
+    queuePlayLogRefresh(80);
+  }, [queuePlayLogRefresh, switchPositions]);
 
   // ============================================
   // PITCHER TAP HANDLER (Layer 4 — ticket 4.6)

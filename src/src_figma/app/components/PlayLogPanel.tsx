@@ -1,31 +1,5 @@
 import React from 'react';
-
-// ──────────────────────────────────────────────────────────────
-// PlayLogEntry — Structured play data for the Play Log (§4.2)
-// ──────────────────────────────────────────────────────────────
-
-export interface PlayLogEntry {
-  id: string;
-  eventId?: string;                 // AtBatEvent.eventId — links to IndexedDB for enrichment updates
-  inningLabel: string;              // "T7", "B3"
-  batterName: string;
-  result: string;                   // "1B", "GO", "K", "HR", "BB", etc.
-  resultCategory: 'hit' | 'out' | 'walk' | 'error' | 'special';
-  rbi: number;
-  runsScored: number;
-
-  // Enrichment status
-  hasFieldingData: boolean;
-  hasLocationData: boolean;
-  hasKType: boolean;                // For K: was Kc distinction made?
-  hasPitchCount: boolean;           // Has pitchesInAtBat been set?
-  hasPitchType: boolean;            // Has pitchType been set?
-  isEnrichable: boolean;            // false for BB, HBP, IBB
-  isQAB: boolean;                   // Quality at-bat (7+ pitches, walks, hits, productive outs)
-  fieldingSequence?: string;        // "6-4-3" if recorded
-
-  timestamp: number;
-}
+import type { PlayLogEntry } from '../utils/playLogTypes';
 
 // ──────────────────────────────────────────────────────────────
 // Result color mapping
@@ -47,6 +21,11 @@ const RESULT_COLORS: Record<string, string> = {
   'D3K': '#f87171', 'WP_K': '#f87171', 'PB_K': '#f87171',
   // Error — yellow
   'E': '#fbbf24',
+  // Between-play events
+  'SB': '#34d399', 'CS': '#f87171', 'PK': '#f59e0b', 'WP': '#f59e0b', 'PB': '#f59e0b',
+  'ADV': '#E8E8D8', 'SUB': '#C4A853', 'POS': '#88AA88', 'PCHG': '#C4A853',
+  'MOJO': '#60a5fa', 'FIT': '#4ade80', 'INJ': '#f87171', 'MM': '#c084fc', 'PC': '#6b7280',
+  'BLK': '#f59e0b',
 };
 
 function getResultColor(result: string): string {
@@ -65,29 +44,43 @@ interface PlayLogPanelProps {
 }
 
 export function PlayLogPanel({ entries, onEntryTap, onKToggle, enrichingEntryId }: PlayLogPanelProps) {
+  const [showSystemRows, setShowSystemRows] = React.useState(false);
+  const visibleEntries = showSystemRows ? entries : entries.filter((entry) => entry.visibility === 'default');
+  const systemRowCount = entries.filter((entry) => entry.visibility === 'system').length;
+
   return (
     <div className="h-full overflow-y-auto bg-[#3d5240] border-l-[3px] border-[#2a3a2d] flex flex-col">
       {/* Header */}
       <div className="bg-[#2a3a2d] border-b-[2px] border-[#1a2a1d] px-2 py-1.5 sticky top-0 z-10">
-        <div className="text-[#C4A853] text-[10px] font-bold tracking-[0.15em]">PLAY LOG</div>
-        <div className="text-[8px] text-[#88AA88] mt-0.5">Tap a play to edit. Use the main field for +loc.</div>
+        <div className="flex items-center justify-between gap-2">
+          <div className="text-[#C4A853] text-[10px] font-bold tracking-[0.15em]">PLAY LOG</div>
+          {systemRowCount > 0 && (
+            <button
+              onClick={() => setShowSystemRows((prev) => !prev)}
+              className="text-[7px] text-[#88AA88] border border-[#4a6a4a] px-1.5 py-0.5 rounded hover:bg-[#4a6a4a]/40"
+            >
+              {showSystemRows ? 'Hide system' : `Show all (${systemRowCount})`}
+            </button>
+          )}
+        </div>
+        <div className="text-[8px] text-[#88AA88] mt-0.5">At-bats plus between-play events. Use the main field for +loc.</div>
       </div>
 
       {/* Entries — most recent at top */}
       <div className="flex-1 overflow-y-auto p-1">
-        {entries.length === 0 ? (
+        {visibleEntries.length === 0 ? (
           <div className="text-[#E8E8D8]/40 text-[10px] text-center py-4 italic">
             No plays yet
           </div>
         ) : (
-          [...entries].reverse().map((entry) => {
+          [...visibleEntries].reverse().map((entry) => {
             const isActive = enrichingEntryId === entry.id;
             return (
               <div
                 key={entry.id}
-                className={`py-0.5 px-1 border-b border-[#4a6a4a]/30 ${entry.isEnrichable ? 'cursor-pointer' : 'cursor-default'}
-                  ${isActive ? 'bg-[#4a6a4a]/40 border-l-2 border-l-[#C4A853]' : entry.isEnrichable ? 'hover:bg-[#4a6a4a]/20' : ''}`}
-                onClick={() => entry.isEnrichable && onEntryTap?.(entry)}
+                className={`py-0.5 px-1 border-b border-[#4a6a4a]/30 ${entry.isSelectable ? 'cursor-pointer' : 'cursor-default'}
+                  ${isActive ? 'bg-[#4a6a4a]/40 border-l-2 border-l-[#C4A853]' : entry.isSelectable ? 'hover:bg-[#4a6a4a]/20' : ''}`}
+                onClick={() => entry.isSelectable && onEntryTap?.(entry)}
               >
                 {/* Row 1: Inning + Name + Result + RBI + QAB */}
                 <div className="flex items-center gap-1 leading-tight">
@@ -117,13 +110,17 @@ export function PlayLogPanel({ entries, onEntryTap, onKToggle, enrichingEntryId 
 
                 {/* Row 2: Enrichment badges + fielding sequence (compact) */}
                 <div className="flex items-center gap-1 ml-[25px] flex-wrap">
-                  {entry.fieldingSequence && (
+                  {entry.description ? (
+                    <span className="text-[8px] text-[#88AA88]">
+                      {entry.description}
+                    </span>
+                  ) : entry.fieldingSequence ? (
                     <span className="text-[8px] text-[#88AA88] font-mono">
                       {entry.fieldingSequence}
                     </span>
-                  )}
+                  ) : null}
                   {/* Ticket 5.2: K/Kc toggle — inline click to toggle */}
-                  {(entry.result === 'K' || entry.result === 'Kc') && !entry.hasKType && onKToggle && (
+                  {entry.eventType === 'at_bat' && (entry.result === 'K' || entry.result === 'Kc') && !entry.hasKType && onKToggle && (
                     <span
                       className="text-[8px] text-[#f59e0b] bg-[#78350f]/60 px-1 rounded cursor-pointer hover:bg-[#78350f] active:scale-95"
                       onClick={(e) => { e.stopPropagation(); onKToggle(entry); }}
@@ -133,22 +130,22 @@ export function PlayLogPanel({ entries, onEntryTap, onKToggle, enrichingEntryId 
                     </span>
                   )}
                   {/* Unenriched badges — gray, disappear when filled */}
-                  {entry.isEnrichable && !entry.hasFieldingData && !entry.fieldingSequence && (
+                  {entry.eventType === 'at_bat' && entry.isEnrichable && !entry.hasFieldingData && !entry.fieldingSequence && (
                     <span className="text-[8px] text-[#6b7280] bg-[#1f2937]/60 px-1 rounded">
                       +fld
                     </span>
                   )}
-                  {entry.isEnrichable && !entry.hasLocationData && (
+                  {entry.eventType === 'at_bat' && entry.isEnrichable && !entry.hasLocationData && (
                     <span className="text-[8px] text-[#6b7280] bg-[#1f2937]/60 px-1 rounded">
                       +loc
                     </span>
                   )}
-                  {entry.isEnrichable && !entry.hasPitchType && (
+                  {entry.eventType === 'at_bat' && entry.isEnrichable && !entry.hasPitchType && (
                     <span className="text-[8px] text-[#6b7280] bg-[#1f2937]/60 px-1 rounded">
                       +pit
                     </span>
                   )}
-                  {entry.isEnrichable && !entry.hasPitchCount && (
+                  {entry.eventType === 'at_bat' && entry.isEnrichable && !entry.hasPitchCount && (
                     <span className="text-[8px] text-[#6b7280] bg-[#1f2937]/60 px-1 rounded">
                       +#
                     </span>
