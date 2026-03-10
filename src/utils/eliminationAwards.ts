@@ -12,6 +12,10 @@ function formatRate(value: number): string {
   return value.toFixed(3);
 }
 
+function formatSignedRate(value: number): string {
+  return `${value >= 0 ? '+' : ''}${value.toFixed(2)}`;
+}
+
 function buildAward(
   category: string,
   player: PlayoffPlayerStats,
@@ -36,6 +40,9 @@ export async function computeEliminationAwards(playoffId: string): Promise<Elimi
   );
   const qualifiedRunners = stats.filter((player) => (player.stolenBases || 0) >= 1);
   const qualifiedClutch = stats.filter((player) => (player.rbi || 0) >= 1);
+  const qualifiedFielders = stats.filter(
+    (player) => typeof player.fieldingWAR === 'number' && typeof player.fieldingPlays === 'number' && player.fieldingPlays >= 2
+  );
 
   const postseasonMvp = [...qualifiedBatters].sort((a, b) => {
     if ((b.ops || 0) !== (a.ops || 0)) return (b.ops || 0) - (a.ops || 0);
@@ -89,6 +96,21 @@ export async function computeEliminationAwards(playoffId: string): Promise<Elimi
         'Clutch Performer',
         clutchPerformer,
         `${clutchPerformer.rbi} RBI, ${clutchPerformer.hits} H, ${formatRate(clutchPerformer.ops)} OPS`
+      )
+    );
+  }
+
+  const bestFielder = [...qualifiedFielders].sort((a, b) => {
+    if ((b.fieldingWAR || 0) !== (a.fieldingWAR || 0)) return (b.fieldingWAR || 0) - (a.fieldingWAR || 0);
+    if ((b.fieldingRunsSaved || 0) !== (a.fieldingRunsSaved || 0)) return (b.fieldingRunsSaved || 0) - (a.fieldingRunsSaved || 0);
+    return (b.fieldingPlays || 0) - (a.fieldingPlays || 0);
+  })[0];
+  if (bestFielder) {
+    awards.push(
+      buildAward(
+        'Best Fielder',
+        bestFielder,
+        `${bestFielder.fieldingPrimaryPosition || 'DEF'} · ${formatSignedRate(bestFielder.fieldingWAR || 0)} fWAR · ${formatSignedRate(bestFielder.fieldingRunsSaved || 0)} RS`
       )
     );
   }
