@@ -6,6 +6,7 @@ const {
   mockLogBetweenPlayEvent,
   mockCompleteGame,
   mockGetGameEvents,
+  mockGetBetweenPlayEvents,
   mockMarkGameAggregated,
   mockGetGameFieldingEvents,
   mockGetGameHeader,
@@ -21,6 +22,7 @@ const {
   mockLogBetweenPlayEvent: vi.fn().mockResolvedValue(undefined),
   mockCompleteGame: vi.fn().mockResolvedValue(undefined),
   mockGetGameEvents: vi.fn().mockResolvedValue([]),
+  mockGetBetweenPlayEvents: vi.fn().mockResolvedValue([]),
   mockMarkGameAggregated: vi.fn().mockResolvedValue(undefined),
   mockGetGameFieldingEvents: vi.fn().mockResolvedValue([]),
   mockGetGameHeader: vi.fn().mockResolvedValue({ aggregated: false }),
@@ -41,6 +43,7 @@ vi.mock('../../../utils/eventLog', () => ({
   createGameHeader: mockCreateGameHeader,
   completeGame: mockCompleteGame,
   getGameEvents: mockGetGameEvents,
+  getBetweenPlayEvents: mockGetBetweenPlayEvents,
   markGameAggregated: mockMarkGameAggregated,
   getGameFieldingEvents: mockGetGameFieldingEvents,
   getGameHeader: mockGetGameHeader,
@@ -69,6 +72,7 @@ describe('useGameState player identity continuity', () => {
     vi.useFakeTimers();
     vi.clearAllMocks();
     mockGetGameEvents.mockResolvedValue([]);
+    mockGetBetweenPlayEvents.mockResolvedValue([]);
     mockGetGameFieldingEvents.mockResolvedValue([]);
     mockGetGameHeader.mockResolvedValue({ aggregated: false });
   });

@@ -14,6 +14,7 @@ import {
   createGameHeader,
   completeGame,
   getGameEvents,
+  getBetweenPlayEvents,
   markGameAggregated,
   getGameFieldingEvents,
   getGameHeader,
@@ -410,6 +411,15 @@ function baseToNumber(base: 'first' | 'second' | 'third' | 'home' | 'out'): 1 | 
     case 'home':
     case 'out':
       return 4;
+  }
+}
+
+function numberToBase(base: 1 | 2 | 3 | 4): 'first' | 'second' | 'third' | 'home' {
+  switch (base) {
+    case 1: return 'first';
+    case 2: return 'second';
+    case 3: return 'third';
+    case 4: return 'home';
   }
 }
 
@@ -1397,6 +1407,51 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     });
   }, [createBetweenPlayEventBase]);
 
+  const mapBetweenPlayEventsToSubstitutionLog = useCallback((events: BetweenPlayEvent[]) => {
+    return events.flatMap((event) => {
+      if (event.type === 'substitution' && event.substitution) {
+        return [{
+          type:
+            event.substitution.subType === 'pinch_hit' ? 'pinch_hit'
+            : event.substitution.subType === 'pinch_run' ? 'pinch_run'
+            : 'player_sub',
+          inning: event.gameState?.inning ?? 1,
+          halfInning: event.gameState?.halfInning ?? 'TOP',
+          outgoingPlayerId: event.substitution.outPlayerId,
+          outgoingPlayerName: event.substitution.outPlayerName || event.substitution.outPlayerId,
+          incomingPlayerId: event.substitution.inPlayerId,
+          incomingPlayerName: event.substitution.inPlayerName || event.substitution.inPlayerId,
+          timestamp: event.timestamp,
+        }];
+      }
+      if (event.type === 'position_change' && event.substitution) {
+        return [{
+          type: 'position_switch' as const,
+          inning: event.gameState?.inning ?? 1,
+          halfInning: event.gameState?.halfInning ?? 'TOP',
+          outgoingPlayerId: event.substitution.outPlayerId,
+          outgoingPlayerName: event.substitution.outPlayerName || event.substitution.outPlayerId,
+          incomingPlayerId: event.substitution.inPlayerId,
+          incomingPlayerName: event.substitution.inPlayerName || event.substitution.inPlayerId,
+          timestamp: event.timestamp,
+        }];
+      }
+      if (event.type === 'pitcher_change' && event.pitcherChange) {
+        return [{
+          type: 'pitching_change' as const,
+          inning: event.gameState?.inning ?? 1,
+          halfInning: event.gameState?.halfInning ?? 'TOP',
+          outgoingPlayerId: event.pitcherChange.outgoingPitcherId,
+          outgoingPlayerName: event.pitcherChange.outgoingPitcherName || event.pitcherChange.outgoingPitcherId,
+          incomingPlayerId: event.pitcherChange.incomingPitcherId,
+          incomingPlayerName: event.pitcherChange.incomingPitcherName || event.pitcherChange.incomingPitcherId,
+          timestamp: event.timestamp,
+        }];
+      }
+      return [];
+    });
+  }, []);
+
   const [playerStats, setPlayerStats] = useState<Map<string, PlayerGameStats>>(new Map());
   const [pitcherStats, setPitcherStats] = useState<Map<string, PitcherGameStats>>(new Map());
 
@@ -2120,9 +2175,132 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       }
 
       if (inProgressGame) {
-        // Get the last event to reconstruct current state
+        // Reconstruct from durable logs when live snapshot is unavailable.
         const events = await getGameEvents(inProgressGame.gameId);
+        const betweenPlayEvents = await getBetweenPlayEvents(inProgressGame.gameId);
         const lastEvent = events.length > 0 ? events[events.length - 1] : null;
+        const tailBetweenPlayEvents = betweenPlayEvents.filter(event =>
+          lastEvent ? event.eventIndex > lastEvent.eventIndex : true
+        );
+        const reconstructedSubstitutionLog = mapBetweenPlayEventsToSubstitutionLog(betweenPlayEvents);
+        setSubstitutionLog(reconstructedSubstitutionLog);
+
+        teamSideByPlayerIdRef.current.clear();
+        playerNameByIdRef.current.clear();
+        seasonIdRef.current = inProgressGame.seasonId || '';
+        statsScopeIdRef.current = inProgressGame.statsScopeId || inProgressGame.seasonId || '';
+        competitionTypeRef.current = inProgressGame.competitionType;
+        competitionIdRef.current = inProgressGame.competitionId;
+
+        for (const event of events) {
+          registerTrackedIdentity(
+            teamSideByPlayerIdRef.current,
+            playerNameByIdRef.current,
+            event.batterId,
+            event.batterName,
+            event.batterTeamId === inProgressGame.awayTeamId ? 'away' : 'home'
+          );
+          registerTrackedIdentity(
+            teamSideByPlayerIdRef.current,
+            playerNameByIdRef.current,
+            event.pitcherId,
+            event.pitcherName,
+            event.pitcherTeamId === inProgressGame.awayTeamId ? 'away' : 'home'
+          );
+          for (const runner of [event.runners.first, event.runners.second, event.runners.third, event.runnersAfter.first, event.runnersAfter.second, event.runnersAfter.third]) {
+            if (!runner) continue;
+            registerTrackedIdentity(
+              teamSideByPlayerIdRef.current,
+              playerNameByIdRef.current,
+              runner.runnerId,
+              runner.runnerName,
+              resolveActualTeamId(
+                runner.runnerId,
+                teamSideByPlayerIdRef.current,
+                awayLineupRef.current,
+                homeLineupRef.current,
+                awayLineupStateRef.current,
+                homeLineupStateRef.current,
+                inProgressGame.awayTeamId,
+                inProgressGame.homeTeamId
+              ) === inProgressGame.awayTeamId ? 'away' : 'home'
+            );
+          }
+        }
+        for (const event of betweenPlayEvents) {
+          if (event.stolenBase?.runnerId) {
+            registerTrackedIdentity(
+              teamSideByPlayerIdRef.current,
+              playerNameByIdRef.current,
+              event.stolenBase.runnerId,
+              event.stolenBase.runnerName,
+              resolveActualTeamId(
+                event.stolenBase.runnerId,
+                teamSideByPlayerIdRef.current,
+                awayLineupRef.current,
+                homeLineupRef.current,
+                awayLineupStateRef.current,
+                homeLineupStateRef.current,
+                inProgressGame.awayTeamId,
+                inProgressGame.homeTeamId
+              ) === inProgressGame.awayTeamId ? 'away' : 'home'
+            );
+          }
+          if (event.substitution?.outPlayerId) {
+            registerTrackedIdentity(
+              teamSideByPlayerIdRef.current,
+              playerNameByIdRef.current,
+              event.substitution.outPlayerId,
+              event.substitution.outPlayerName,
+              resolveActualTeamId(
+                event.substitution.outPlayerId,
+                teamSideByPlayerIdRef.current,
+                awayLineupRef.current,
+                homeLineupRef.current,
+                awayLineupStateRef.current,
+                homeLineupStateRef.current,
+                inProgressGame.awayTeamId,
+                inProgressGame.homeTeamId
+              ) === inProgressGame.awayTeamId ? 'away' : 'home'
+            );
+          }
+          if (event.substitution?.inPlayerId) {
+            registerTrackedIdentity(
+              teamSideByPlayerIdRef.current,
+              playerNameByIdRef.current,
+              event.substitution.inPlayerId,
+              event.substitution.inPlayerName,
+              resolveActualTeamId(
+                event.substitution.inPlayerId,
+                teamSideByPlayerIdRef.current,
+                awayLineupRef.current,
+                homeLineupRef.current,
+                awayLineupStateRef.current,
+                homeLineupStateRef.current,
+                inProgressGame.awayTeamId,
+                inProgressGame.homeTeamId
+              ) === inProgressGame.awayTeamId ? 'away' : 'home'
+            );
+          }
+          if (event.pitcherChange?.outgoingPitcherId) {
+            registerTrackedIdentity(
+              teamSideByPlayerIdRef.current,
+              playerNameByIdRef.current,
+              event.pitcherChange.outgoingPitcherId,
+              event.pitcherChange.outgoingPitcherName,
+              event.gameState?.halfInning === 'TOP' ? 'home' : 'away'
+            );
+          }
+          if (event.pitcherChange?.incomingPitcherId) {
+            registerTrackedIdentity(
+              teamSideByPlayerIdRef.current,
+              playerNameByIdRef.current,
+              event.pitcherChange.incomingPitcherId,
+              event.pitcherChange.incomingPitcherName,
+              event.gameState?.halfInning === 'TOP' ? 'home' : 'away'
+            );
+          }
+        }
 
         // Rehydrate pitcher stats as a Map keyed by pitcherId (never as array).
         const rehydratedPitcherStats = new Map<string, PitcherGameStats>();
@@ -2275,27 +2453,82 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         addTrackedRunner('2B', lastEvent?.runnersAfter.second ?? null);
         addTrackedRunner('3B', lastEvent?.runnersAfter.third ?? null);
 
+        let recoveredHomeScore = lastEvent?.homeScoreAfter ?? 0;
+        let recoveredAwayScore = lastEvent?.awayScoreAfter ?? 0;
+        let recoveredOuts = lastEvent?.outsAfter ?? 0;
+        let recoveredInning = lastEvent?.inning ?? 1;
+        let recoveredIsTop = lastEvent ? lastEvent.halfInning === 'TOP' : true;
+        let recoveredPitcherId = lastEvent?.pitcherId ?? '';
+        let recoveredPitcherName = lastEvent?.pitcherName ?? '';
+
+        const moveTrackedRunner = (runnerId: string, toBase: 'first' | 'second' | 'third' | 'home', outcome: 'safe' | 'out') => {
+          const existing = rebuiltTracker.runners.find(r => r.runnerId === runnerId && r.currentBase !== 'HOME' && r.currentBase !== 'OUT');
+          if (!existing) return;
+          if (outcome === 'out' || toBase === 'home') {
+            existing.currentBase = outcome === 'out' ? 'OUT' : 'HOME';
+            return;
+          }
+          existing.currentBase =
+            toBase === 'first' ? '1B'
+            : toBase === 'second' ? '2B'
+            : '3B';
+        };
+
+        for (const event of tailBetweenPlayEvents) {
+          if (event.gameState) {
+            recoveredInning = event.gameState.inning;
+            recoveredIsTop = event.gameState.halfInning === 'TOP';
+            recoveredOuts = event.gameState.outs;
+            recoveredAwayScore = event.gameState.score.away;
+            recoveredHomeScore = event.gameState.score.home;
+          }
+
+          if (event.runnerAction) {
+            const toBase = numberToBase(event.runnerAction.toBase);
+            moveTrackedRunner(event.runnerAction.runnerId, toBase, event.runnerAction.outcome);
+
+            if (event.runnerAction.outcome === 'out') {
+              recoveredOuts += 1;
+            }
+            if (toBase === 'home' && event.runnerAction.outcome === 'safe') {
+              if (recoveredIsTop) recoveredAwayScore += 1;
+              else recoveredHomeScore += 1;
+            }
+          }
+
+          if (event.pitcherChange) {
+            recoveredPitcherId = event.pitcherChange.incomingPitcherId;
+            recoveredPitcherName = event.pitcherChange.incomingPitcherName || event.pitcherChange.incomingPitcherId;
+            rebuiltTracker.currentPitcherId = recoveredPitcherId;
+            rebuiltTracker.currentPitcherName = recoveredPitcherName;
+          }
+        }
+
         runnerTrackerRef.current = rebuiltTracker;
         setRunnerIdentityVersion(v => v + 1);
 
+        const runnerOnFirst = rebuiltTracker.runners.find(r => r.currentBase === '1B');
+        const runnerOnSecond = rebuiltTracker.runners.find(r => r.currentBase === '2B');
+        const runnerOnThird = rebuiltTracker.runners.find(r => r.currentBase === '3B');
+
         setGameState({
           gameId: inProgressGame.gameId,
-          homeScore: lastEvent?.homeScoreAfter ?? 0,
-          awayScore: lastEvent?.awayScoreAfter ?? 0,
-          inning: lastEvent?.inning ?? 1,
-          isTop: lastEvent ? lastEvent.halfInning === 'TOP' : true,
-          outs: lastEvent?.outsAfter ?? 0,
+          homeScore: recoveredHomeScore,
+          awayScore: recoveredAwayScore,
+          inning: recoveredInning,
+          isTop: recoveredIsTop,
+          outs: recoveredOuts,
           balls: 0,
           strikes: 0,
           bases: {
-            first: !!lastEvent?.runnersAfter?.first,
-            second: !!lastEvent?.runnersAfter?.second,
-            third: !!lastEvent?.runnersAfter?.third,
+            first: !!runnerOnFirst,
+            second: !!runnerOnSecond,
+            third: !!runnerOnThird,
           },
           currentBatterId: lastEvent?.batterId ?? '',
           currentBatterName: lastEvent?.batterName ?? '',
-          currentPitcherId: lastEvent?.pitcherId ?? '',
-          currentPitcherName: lastEvent?.pitcherName ?? '',
+          currentPitcherId: recoveredPitcherId,
+          currentPitcherName: recoveredPitcherName,
           awayTeamId: inProgressGame.awayTeamId,
           homeTeamId: inProgressGame.homeTeamId,
           awayTeamName: inProgressGame.awayTeamName,
