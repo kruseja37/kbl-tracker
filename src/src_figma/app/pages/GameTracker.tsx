@@ -58,7 +58,7 @@ import { FielderCreditModal, type RunnerOutInfo, type FielderCredit } from "../c
 import { ErrorOnAdvanceModal, type RunnerAdvanceInfo, type ErrorOnAdvanceResult } from "../components/modals/ErrorOnAdvanceModal";
 // MAJ-03: Wire detection system
 import { runPlayDetections, type UIDetectionResult } from "../engines/detectionIntegration";
-import { toMojoLabel, toFitnessLabel, type FameEventType } from "../../../types/game";
+import { toMojoLabel, toFitnessLabel, type FameEventType, type Position } from "../../../types/game";
 // MAJ-02: Wire fan morale to UI
 import { useFanMorale, type GameResult as FanMoraleGameResult } from "../hooks/useFanMorale";
 // MAJ-04: Wire narrative engine
@@ -851,6 +851,27 @@ export function GameTracker() {
   // Find pitcher numbers from player rosters
   const awayPitcherPlayer = awayTeamPlayers.find(p => p.name === awayPitcher?.name);
   const homePitcherPlayer = homeTeamPlayers.find(p => p.name === homePitcher?.name);
+
+  const defensiveAlignmentByPosition = useMemo(() => {
+    const alignment: Partial<Record<Position, { playerId: string; playerName: string }>> = {};
+
+    for (const player of fieldingTeamPlayers) {
+      if (!player.position || !positionMap[player.position]) continue;
+      alignment[player.position as Position] = {
+        playerId: getRosterEntityId(player, fieldingTeam),
+        playerName: player.name,
+      };
+    }
+
+    if (activePitcher) {
+      alignment.P = {
+        playerId: getRosterEntityId(activePitcher, fieldingTeam),
+        playerName: activePitcher.name,
+      };
+    }
+
+    return alignment;
+  }, [activePitcher, fieldingTeam, fieldingTeamPlayers, getRosterEntityId]);
 
   // Initialize game with lineup data on mount
   // FIX: BUG-007 - Try loading existing game first, only create new if none found
@@ -1753,6 +1774,7 @@ export function GameTracker() {
             gameId: gameState.gameId,
             defensiveTeamId: gameState.isTop ? gameState.homeTeamId : gameState.awayTeamId,
             atBatSequence: Date.now(), // Unique per at-bat
+            defendersByPosition: defensiveAlignmentByPosition,
           };
           const fieldingEvents = extractFieldingEvents(playData, fieldingContext);
         for (const fe of fieldingEvents) {
@@ -2641,6 +2663,7 @@ export function GameTracker() {
             gameId: gameState.gameId,
             defensiveTeamId: gameState.isTop ? gameState.homeTeamId : gameState.awayTeamId,
             atBatSequence: Date.now(),
+            defendersByPosition: defensiveAlignmentByPosition,
           };
           const fieldingEvents = extractFieldingEvents(playData, fieldingContext);
           for (const fe of fieldingEvents) {

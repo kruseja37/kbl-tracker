@@ -122,13 +122,14 @@ export interface FieldingExtractionContext {
   gameId: string;
   defensiveTeamId: string;
   atBatSequence: number;
+  defendersByPosition?: Partial<Record<Position, { playerId: string; playerName: string }>>;
 }
 
 /**
  * Extract fielding events from a completed play.
  *
  * @param playData - The play data from EnhancedInteractiveField
- * @param context - Game context (gameId, defensive team, at-bat sequence)
+ * @param context - Game context (gameId, defensive team, at-bat sequence, optional defender identity map)
  * @returns Array of FieldingEvent objects to be persisted via logFieldingEvent()
  */
 export function extractFieldingEvents(
@@ -136,6 +137,16 @@ export function extractFieldingEvents(
   context: FieldingExtractionContext,
 ): FieldingEvent[] {
   const events: FieldingEvent[] = [];
+
+  const resolveDefender = (positionNum: number) => {
+    const position = positionFromNumber(positionNum);
+    const defender = context.defendersByPosition?.[position];
+    return {
+      position,
+      playerId: defender?.playerId || position,
+      playerName: defender?.playerName || position,
+    };
+  };
 
   // No fielding events for non-ball-in-play outcomes
   if (playData.type === 'walk' || playData.type === 'foul_ball') {
@@ -160,9 +171,9 @@ export function extractFieldingEvents(
     trajectory,
     zone,
     velocity: 'medium', // SMB4 doesn't expose exit velocity
-    fielderIds: playData.fieldingSequence.map(n => positionFromNumber(n)),
+    fielderIds: playData.fieldingSequence.map((n) => resolveDefender(n).playerId),
     primaryFielderId: playData.fieldingSequence.length > 0
-      ? positionFromNumber(playData.fieldingSequence[0])
+      ? resolveDefender(playData.fieldingSequence[0]).playerId
       : '',
   };
 
@@ -173,15 +184,15 @@ export function extractFieldingEvents(
     sequenceIdx: number,
     overrideDifficulty?: FieldingEvent['difficulty'],
   ): FieldingEvent => {
-    const position = positionFromNumber(positionNum);
+    const defender = resolveDefender(positionNum);
     return {
       fieldingEventId: `${context.gameId}_fe_${context.atBatSequence}_${sequenceIdx}`,
       gameId: context.gameId,
       atBatEventId: `${context.gameId}_ab_${context.atBatSequence}`,
       sequence: sequenceIdx,
-      playerId: position,  // Position-based ID; resolved to real playerId at game end
-      playerName: position,
-      position,
+      playerId: defender.playerId,
+      playerName: defender.playerName,
+      position: defender.position,
       teamId: context.defensiveTeamId,
       playType,
       difficulty: overrideDifficulty || difficulty,
