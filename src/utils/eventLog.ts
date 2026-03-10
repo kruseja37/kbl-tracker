@@ -662,6 +662,25 @@ export async function logBetweenPlayEvent(event: BetweenPlayEvent): Promise<void
   });
 }
 
+function applyAtBatEventUpdates(
+  existing: AtBatEvent,
+  updates: Partial<Pick<AtBatEvent, 'enrichment' | 'result' | 'isQualityAtBat' | 'version' | 'editHistory'>>,
+): AtBatEvent {
+  const next = { ...existing };
+
+  if (updates.enrichment) {
+    next.enrichment = { ...(next.enrichment || {}), ...updates.enrichment };
+  }
+  if (updates.result !== undefined) next.result = updates.result;
+  if (updates.isQualityAtBat !== undefined) next.isQualityAtBat = updates.isQualityAtBat;
+  if (updates.version !== undefined) next.version = updates.version;
+  if (updates.editHistory) {
+    next.editHistory = [...(next.editHistory || []), ...updates.editHistory];
+  }
+
+  return next;
+}
+
 /**
  * Update an existing AtBatEvent in IndexedDB (for post-hoc enrichment).
  * Uses put() which overwrites the record at the same eventId key.
@@ -684,24 +703,53 @@ export async function updateAtBatEvent(
         return;
       }
 
-      // Merge enrichment (shallow merge into existing enrichment object)
-      if (updates.enrichment) {
-        existing.enrichment = { ...(existing.enrichment || {}), ...updates.enrichment };
-      }
-      // Direct field updates
-      if (updates.result !== undefined) existing.result = updates.result;
-      if (updates.isQualityAtBat !== undefined) existing.isQualityAtBat = updates.isQualityAtBat;
-      if (updates.version !== undefined) existing.version = updates.version;
-
-      // Append to edit history
-      if (updates.editHistory) {
-        existing.editHistory = [...(existing.editHistory || []), ...updates.editHistory];
-      }
-
-      store.put(existing);
+      store.put(applyAtBatEventUpdates(existing, updates));
     };
 
     getRequest.onerror = () => reject(getRequest.error);
+    transaction.oncomplete = () => resolve();
+    transaction.onerror = () => reject(transaction.error);
+  });
+}
+
+export async function updateAtBatEventWithFieldingSync(
+  eventId: string,
+  updates: Partial<Pick<AtBatEvent, 'enrichment' | 'result' | 'isQualityAtBat' | 'version' | 'editHistory'>>,
+  nextFieldingEvents: FieldingEvent[],
+): Promise<void> {
+  const db = await initEventLogDB();
+
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction([STORES.AT_BAT_EVENTS, STORES.FIELDING_EVENTS], 'readwrite');
+    const atBatStore = transaction.objectStore(STORES.AT_BAT_EVENTS);
+    const fieldingStore = transaction.objectStore(STORES.FIELDING_EVENTS);
+    const fieldingIndex = fieldingStore.index('atBatEventId');
+    const atBatRequest = atBatStore.get(eventId);
+    const fieldingRequest = fieldingIndex.getAll(eventId);
+
+    atBatRequest.onerror = () => reject(atBatRequest.error);
+    fieldingRequest.onerror = () => reject(fieldingRequest.error);
+
+    atBatRequest.onsuccess = () => {
+      const existing = atBatRequest.result as AtBatEvent | undefined;
+      if (!existing) {
+        reject(new Error(`AtBatEvent not found: ${eventId}`));
+        return;
+      }
+
+      atBatStore.put(applyAtBatEventUpdates(existing, updates));
+    };
+
+    fieldingRequest.onsuccess = () => {
+      const existingFieldingEvents = fieldingRequest.result as FieldingEvent[];
+      existingFieldingEvents.forEach((event) => {
+        fieldingStore.delete(event.fieldingEventId);
+      });
+      nextFieldingEvents.forEach((event) => {
+        fieldingStore.put(event);
+      });
+    };
+
     transaction.oncomplete = () => resolve();
     transaction.onerror = () => reject(transaction.error);
   });
@@ -845,6 +893,19 @@ export async function getGameEvents(
   });
 }
 
+export async function getAtBatEvent(eventId: string): Promise<AtBatEvent | null> {
+  const db = await initEventLogDB();
+
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(STORES.AT_BAT_EVENTS, 'readonly');
+    const store = transaction.objectStore(STORES.AT_BAT_EVENTS);
+    const request = store.get(eventId);
+
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => resolve((request.result as AtBatEvent | undefined) || null);
+  });
+}
+
 /**
  * Get pitching appearances for a game
  */
@@ -876,6 +937,22 @@ export async function getGameFieldingEvents(gameId: string): Promise<FieldingEve
 
     request.onerror = () => reject(request.error);
     request.onsuccess = () => resolve(request.result as FieldingEvent[]);
+  });
+}
+
+export async function getFieldingEventsForAtBat(atBatEventId: string): Promise<FieldingEvent[]> {
+  const db = await initEventLogDB();
+
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(STORES.FIELDING_EVENTS, 'readonly');
+    const store = transaction.objectStore(STORES.FIELDING_EVENTS);
+    const index = store.index('atBatEventId');
+    const request = index.getAll(atBatEventId);
+
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => resolve(
+      (request.result as FieldingEvent[]).sort((a, b) => a.sequence - b.sequence)
+    );
   });
 }
 

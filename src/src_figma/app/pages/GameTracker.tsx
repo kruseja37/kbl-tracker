@@ -17,7 +17,18 @@ import { FenwayBoard } from "@/app/components/FenwayBoard";
 import { QuickBar } from "@/app/components/QuickBar";
 import { PlayLogPanel, type PlayLogEntry } from "@/app/components/PlayLogPanel";
 import { EnrichmentPanel, PITCH_TYPES, type EnrichmentUpdate } from "@/app/components/EnrichmentPanel";
-import { updateAtBatEvent } from "../../../utils/eventLog";
+import {
+  getAtBatEvent,
+  getBetweenPlayEvents,
+  getFieldingEventsForAtBat,
+  getGameHeader,
+  logFieldingEvent,
+  updateAtBatEvent,
+  updateAtBatEventWithFieldingSync,
+  type AtBatEvent,
+  type FieldingEvent,
+  type GameHeader,
+} from "../../../utils/eventLog";
 import { getTeamColors, getFielderBorderColors } from "@/config/teamColors";
 import { buildFallbackRuntimePlayerId, getRuntimeRosterEntityId } from "../utils/runtimePlayerIdentity";
 import {
@@ -76,7 +87,6 @@ import {
   extractSupplementalRunnerOutFieldingEvents,
   type FieldingExtractionContext,
 } from '../utils/fieldingEventExtractor';
-import { logFieldingEvent } from '../../../utils/eventLog';
 import { captureStartingLineups, type LineupEntry } from '../../../utils/gameStorage';
 import { POSITION_MAP, POSITION_NUMBER } from '../components/fielderInference';
 import { calculateRunnerDefaults, type RunnerDefaults } from '../components/runnerDefaults';
@@ -114,6 +124,17 @@ interface PendingFielderCreditPlay {
   playData: PlayData;
   atBatEventId: string;
   atBatEventIndex: number;
+}
+
+interface HistoricalLineupSlot {
+  playerId: string;
+  playerName: string;
+  position: Position;
+}
+
+interface HistoricalPitcher {
+  playerId: string;
+  playerName: string;
 }
 
 export function GameTracker() {
@@ -983,6 +1004,207 @@ export function GameTracker() {
 
     pushActivityLog(`[Fielding] Logged ${supplementalEvents.length} runner-out credit event(s)`);
   }, [buildFieldingContext, pushActivityLog]);
+
+  const buildPlayDataFromAtBatEvent = useCallback((
+    atBatEvent: AtBatEvent,
+    fieldingSequence: number[],
+  ): PlayData | null => {
+    const enrichment = atBatEvent.enrichment || {};
+    const ballLocation = enrichment.fieldLocation
+      ? { x: enrichment.fieldLocation.x, y: enrichment.fieldLocation.y }
+      : undefined;
+    const exitType = enrichment.exitType === 'ground_ball' ? 'Ground'
+      : enrichment.exitType === 'line_drive' ? 'Line Drive'
+      : enrichment.exitType === 'fly_ball' ? 'Fly Ball'
+      : enrichment.exitType === 'popup' ? 'Pop Up'
+      : undefined;
+    const common = {
+      fieldingSequence,
+      ballLocation,
+      spraySector: enrichment.fieldLocation?.zone,
+      exitType,
+    } as const;
+
+    if (['1B', '2B', '3B', 'GRD'].includes(atBatEvent.result)) {
+      return {
+        ...common,
+        type: 'hit',
+        hitType: (atBatEvent.result === 'GRD' ? '2B' : atBatEvent.result) as PlayData['hitType'],
+      };
+    }
+    if (atBatEvent.result === 'HR') {
+      return {
+        ...common,
+        type: 'hr',
+        hitType: 'HR',
+      };
+    }
+    if (['GO', 'FO', 'LO', 'PO', 'DP', 'TP', 'FC', 'SF', 'SAC', 'K', 'Kc'].includes(atBatEvent.result)) {
+      return {
+        ...common,
+        type: 'out',
+        outType: atBatEvent.result as PlayData['outType'],
+      };
+    }
+    if (atBatEvent.result === 'E') {
+      return {
+        ...common,
+        type: 'error',
+        errorFielder: atBatEvent.enrichment?.errors?.[0]?.position,
+        errorType: atBatEvent.enrichment?.errors?.[0]?.type?.toUpperCase() as PlayData['errorType'],
+      };
+    }
+    return null;
+  }, []);
+
+  const buildHistoricalDefensiveAlignment = useCallback(async (
+    atBatEvent: AtBatEvent,
+    linkedFieldingEvents: FieldingEvent[],
+  ) => {
+    const header = await getGameHeader(atBatEvent.gameId);
+    const fallbackAlignment = linkedFieldingEvents.reduce<Partial<Record<Position, { playerId: string; playerName: string }>>>((acc, event) => {
+      acc[event.position] = {
+        playerId: event.playerId,
+        playerName: event.playerName,
+      };
+      return acc;
+    }, {});
+
+    if (!header?.startingLineups) {
+      return fallbackAlignment;
+    }
+
+    const toSlots = (players: NonNullable<GameHeader['startingLineups']>['away']): HistoricalLineupSlot[] =>
+      players
+        .slice()
+        .sort((a, b) => a.battingOrder - b.battingOrder)
+        .map((player) => ({
+          playerId: player.playerId,
+          playerName: player.playerName,
+          position: player.position as Position,
+        }));
+
+    let awayLineup = toSlots(header.startingLineups.away);
+    let homeLineup = toSlots(header.startingLineups.home);
+    let awayPitcher: HistoricalPitcher | null = header.startingPitchers?.away || null;
+    let homePitcher: HistoricalPitcher | null = header.startingPitchers?.home || null;
+    const awayBenchIds = new Set((header.benchRosters?.away || []).map((player) => player.playerId));
+    const homeBenchIds = new Set((header.benchRosters?.home || []).map((player) => player.playerId));
+    const betweenPlayEvents = await getBetweenPlayEvents(atBatEvent.gameId);
+
+    const findTeamSide = (playerId?: string) => {
+      if (!playerId) return null;
+      if (awayLineup.some((player) => player.playerId === playerId) || awayBenchIds.has(playerId) || awayPitcher?.playerId === playerId) return 'away' as const;
+      if (homeLineup.some((player) => player.playerId === playerId) || homeBenchIds.has(playerId) || homePitcher?.playerId === playerId) return 'home' as const;
+      return null;
+    };
+
+    betweenPlayEvents
+      .filter((event) =>
+        event.eventIndex < atBatEvent.eventIndex ||
+        (event.eventIndex === atBatEvent.eventIndex && event.timestamp <= atBatEvent.timestamp)
+      )
+      .forEach((event) => {
+        if (event.type === 'substitution' && event.substitution) {
+          const side = findTeamSide(event.substitution.outPlayerId) || findTeamSide(event.substitution.inPlayerId);
+          if (!side) return;
+          const lineup = side === 'away' ? awayLineup : homeLineup;
+          const lineupIndex = lineup.findIndex((player) => player.playerId === event.substitution.outPlayerId);
+          if (lineupIndex >= 0) {
+            lineup[lineupIndex] = {
+              playerId: event.substitution.inPlayerId,
+              playerName: event.substitution.inPlayerName || event.substitution.inPlayerId,
+              position: (event.substitution.inPosition || event.substitution.outPosition || lineup[lineupIndex].position) as Position,
+            };
+          }
+          return;
+        }
+
+        if (event.type === 'position_change' && event.substitution) {
+          const side = findTeamSide(event.substitution.inPlayerId) || findTeamSide(event.substitution.outPlayerId);
+          if (!side) return;
+          const lineup = side === 'away' ? awayLineup : homeLineup;
+          const lineupIndex = lineup.findIndex((player) => player.playerId === event.substitution.inPlayerId);
+          if (lineupIndex >= 0) {
+            lineup[lineupIndex] = {
+              ...lineup[lineupIndex],
+              position: (event.substitution.inPosition || lineup[lineupIndex].position) as Position,
+            };
+          }
+          return;
+        }
+
+        if (event.type === 'pitcher_change' && event.pitcherChange) {
+          const side = event.gameState?.halfInning === 'TOP' ? 'home' : 'away';
+          const nextPitcher = {
+            playerId: event.pitcherChange.incomingPitcherId,
+            playerName: event.pitcherChange.incomingPitcherName || event.pitcherChange.incomingPitcherId,
+          };
+          if (side === 'away') awayPitcher = nextPitcher;
+          else homePitcher = nextPitcher;
+        }
+      });
+
+    const defensiveSide = atBatEvent.halfInning === 'TOP' ? 'home' : 'away';
+    const alignment = (defensiveSide === 'away' ? awayLineup : homeLineup).reduce<Partial<Record<Position, { playerId: string; playerName: string }>>>((acc, player) => {
+      acc[player.position] = {
+        playerId: player.playerId,
+        playerName: player.playerName,
+      };
+      return acc;
+    }, {});
+    const activePitcher = defensiveSide === 'away' ? awayPitcher : homePitcher;
+    if (activePitcher) {
+      alignment.P = {
+        playerId: activePitcher.playerId,
+        playerName: activePitcher.playerName,
+      };
+    }
+
+    return {
+      ...alignment,
+      ...fallbackAlignment,
+    };
+  }, []);
+
+  const buildFieldingSyncEventsForSequenceEdit = useCallback(async (
+    atBatEvent: AtBatEvent,
+    nextFieldingSequence: number[],
+  ) => {
+    const linkedFieldingEvents = await getFieldingEventsForAtBat(atBatEvent.eventId);
+    const defendersByPosition = await buildHistoricalDefensiveAlignment(atBatEvent, linkedFieldingEvents);
+    const fieldingContext: FieldingExtractionContext = {
+      gameId: atBatEvent.gameId,
+      defensiveTeamId: atBatEvent.pitcherTeamId,
+      atBatEventId: atBatEvent.eventId,
+      atBatEventIndex: atBatEvent.eventIndex,
+      defendersByPosition,
+    };
+    const previousPlayData = buildPlayDataFromAtBatEvent(
+      atBatEvent,
+      atBatEvent.enrichment?.fieldingSequence || [],
+    );
+    const nextPlayData = buildPlayDataFromAtBatEvent(atBatEvent, nextFieldingSequence);
+    const previousBaseCount = previousPlayData
+      ? extractFieldingEvents(previousPlayData, fieldingContext).length
+      : 0;
+    const nextBaseEvents = nextPlayData
+      ? extractFieldingEvents(nextPlayData, fieldingContext)
+      : [];
+
+    const preservedSupplementals = linkedFieldingEvents
+      .filter((event) => event.sequence >= previousBaseCount)
+      .map((event, index) => {
+        const sequence = nextBaseEvents.length + index;
+        return {
+          ...event,
+          sequence,
+          fieldingEventId: `${atBatEvent.gameId}_${atBatEvent.eventIndex}_fe_${sequence}`,
+        };
+      });
+
+    return [...nextBaseEvents, ...preservedSupplementals];
+  }, [buildHistoricalDefensiveAlignment, buildPlayDataFromAtBatEvent]);
 
   // Initialize game with lineup data on mount
   // FIX: BUG-007 - Try loading existing game first, only create new if none found
@@ -3422,8 +3644,41 @@ export function GameTracker() {
     };
 
     try {
-      // Update IndexedDB
-      await updateAtBatEvent(enrichingEntry.eventId, { enrichment: update as NonNullable<import('../../../utils/eventLog').AtBatEvent['enrichment']> });
+      const existingAtBat = await getAtBatEvent(enrichingEntry.eventId);
+      if (!existingAtBat) {
+        return;
+      }
+
+      const timestamp = Date.now();
+      const nextVersion = (existingAtBat.version ?? 1) + 1;
+      const editHistory = [{
+        field: `enrichment.${String(field)}`,
+        oldValue: existingAtBat.enrichment?.[field as keyof NonNullable<AtBatEvent['enrichment']>] ?? null,
+        newValue: value,
+        timestamp,
+      }];
+
+      if (field === 'fieldingSequence') {
+        const syncedFieldingEvents = await buildFieldingSyncEventsForSequenceEdit(
+          existingAtBat,
+          value as number[],
+        );
+        await updateAtBatEventWithFieldingSync(
+          enrichingEntry.eventId,
+          {
+            enrichment: update as NonNullable<AtBatEvent['enrichment']>,
+            version: nextVersion,
+            editHistory,
+          },
+          syncedFieldingEvents,
+        );
+      } else {
+        await updateAtBatEvent(enrichingEntry.eventId, {
+          enrichment: update as NonNullable<AtBatEvent['enrichment']>,
+          version: nextVersion,
+          editHistory,
+        });
+      }
 
       // Update local cache
       setEnrichmentCache(prev => ({
@@ -3436,6 +3691,7 @@ export function GameTracker() {
         if (e.id !== enrichingEntry.id) return e;
         const updated = { ...e };
         if (field === 'fieldLocation') updated.hasLocationData = true;
+        if (field === 'fieldingSequence') updated.hasFieldingData = true;
         if (field === 'pitchType') updated.hasPitchType = true;
         if (field === 'pitchesInAtBat') {
           updated.hasPitchCount = true;
@@ -3452,6 +3708,7 @@ export function GameTracker() {
       // Update the enrichingEntry itself so panel reflects changes
       setEnrichingEntry(prev => prev ? { ...prev,
         hasLocationData: field === 'fieldLocation' ? true : prev.hasLocationData,
+        hasFieldingData: field === 'fieldingSequence' ? true : prev.hasFieldingData,
         hasPitchType: field === 'pitchType' ? true : prev.hasPitchType,
         hasPitchCount: field === 'pitchesInAtBat' ? true : prev.hasPitchCount,
         isQAB: field === 'pitchesInAtBat' && (value as number) >= 7 ? true : prev.isQAB,
@@ -3460,7 +3717,7 @@ export function GameTracker() {
     } catch (err) {
       console.error('[Enrichment] Failed to save:', err);
     }
-  }, [enrichingEntry]);
+  }, [buildFieldingSyncEventsForSequenceEdit, enrichingEntry]);
 
   const handleMainFieldLocationPick = useCallback((coord: { x: number; y: number }) => {
     if (!canUseMainFieldLocation || !enrichingEntry) return;
