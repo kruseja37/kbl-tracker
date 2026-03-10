@@ -952,6 +952,7 @@ export function GameTracker() {
     playData: PlayData,
     credits: FielderCredit[],
     atBatIdentity: { atBatEventId: string; atBatEventIndex: number },
+    options?: { recordUserEdit?: boolean },
   ) => {
     if (credits.length === 0) {
       return;
@@ -974,10 +975,6 @@ export function GameTracker() {
       startingSequence,
     );
 
-    for (const event of supplementalEvents) {
-      await logFieldingEvent(event);
-    }
-
     const enrichmentUpdate = {
       fieldingSequence: supplementalEvents.map((event) => POSITION_NUMBER[event.position as keyof typeof POSITION_NUMBER]),
       putouts: credits
@@ -990,9 +987,50 @@ export function GameTracker() {
       ),
     } as NonNullable<import('../../../utils/eventLog').AtBatEvent['enrichment']>;
 
-    await updateAtBatEvent(atBatIdentity.atBatEventId, {
-      enrichment: enrichmentUpdate,
-    });
+    if (options?.recordUserEdit) {
+      const existingAtBat = await getAtBatEvent(atBatIdentity.atBatEventId);
+      const existingFieldingEvents = await getFieldingEventsForAtBat(atBatIdentity.atBatEventId);
+      if (existingAtBat) {
+        const timestamp = Date.now();
+        const nextVersion = (existingAtBat.version ?? 1) + 1;
+        await updateAtBatEventWithFieldingSync(
+          atBatIdentity.atBatEventId,
+          {
+            enrichment: enrichmentUpdate,
+            version: nextVersion,
+            editHistory: [
+              {
+                field: 'enrichment.fieldingSequence',
+                oldValue: existingAtBat.enrichment?.fieldingSequence ?? null,
+                newValue: enrichmentUpdate.fieldingSequence,
+                timestamp,
+              },
+              {
+                field: 'enrichment.putouts',
+                oldValue: existingAtBat.enrichment?.putouts ?? null,
+                newValue: enrichmentUpdate.putouts,
+                timestamp,
+              },
+              {
+                field: 'enrichment.assists',
+                oldValue: existingAtBat.enrichment?.assists ?? null,
+                newValue: enrichmentUpdate.assists,
+                timestamp,
+              },
+            ],
+          },
+          [...existingFieldingEvents, ...supplementalEvents],
+        );
+      }
+    } else {
+      for (const event of supplementalEvents) {
+        await logFieldingEvent(event);
+      }
+
+      await updateAtBatEvent(atBatIdentity.atBatEventId, {
+        enrichment: enrichmentUpdate,
+      });
+    }
 
     setEnrichmentCache((prev) => ({
       ...prev,
@@ -3037,7 +3075,7 @@ export function GameTracker() {
       if (playData.type !== 'walk' && playData.type !== 'foul_ball') {
         try {
           await persistFieldingEventsForPlayData(playData, 'fielder credit path', atBatIdentity);
-          await persistRunnerOutCredits(playData, credits, atBatIdentity);
+          await persistRunnerOutCredits(playData, credits, atBatIdentity, { recordUserEdit: true });
         } catch (err) {
           console.error('[Fielding] Failed to log fielding events:', err);
         }
@@ -3081,6 +3119,7 @@ export function GameTracker() {
 
     if (pendingPlayForErrorOnAdvance && attributedErrors.length > 0) {
       try {
+        const existingAtBat = await getAtBatEvent(pendingPlayForErrorOnAdvance.atBatEventId);
         const fieldingContext = buildFieldingContext(pendingPlayForErrorOnAdvance);
         const startingSequence = extractFieldingEvents(
           pendingPlayForErrorOnAdvance.playData,
@@ -3095,21 +3134,30 @@ export function GameTracker() {
           })),
           fieldingContext,
         );
-
-        for (const event of supplementalEvents) {
-          await logFieldingEvent(event);
-        }
-
         const enrichmentErrors = attributedErrors.map((result) => ({
           position: POSITION_NUMBER[result.errorFielder as keyof typeof POSITION_NUMBER],
           type: result.errorType!.toLowerCase() as 'fielding' | 'throwing' | 'mental',
         }));
-
-        await updateAtBatEvent(pendingPlayForErrorOnAdvance.atBatEventId, {
-          enrichment: {
-            errors: enrichmentErrors,
-          },
-        });
+        const existingFieldingEvents = await getFieldingEventsForAtBat(pendingPlayForErrorOnAdvance.atBatEventId);
+        if (existingAtBat) {
+          const timestamp = Date.now();
+          await updateAtBatEventWithFieldingSync(
+            pendingPlayForErrorOnAdvance.atBatEventId,
+            {
+              enrichment: {
+                errors: enrichmentErrors,
+              },
+              version: (existingAtBat.version ?? 1) + 1,
+              editHistory: [{
+                field: 'enrichment.errors',
+                oldValue: existingAtBat.enrichment?.errors ?? null,
+                newValue: enrichmentErrors,
+                timestamp,
+              }],
+            },
+            [...existingFieldingEvents, ...supplementalEvents],
+          );
+        }
 
         setEnrichmentCache((prev) => ({
           ...prev,
@@ -3651,12 +3699,21 @@ export function GameTracker() {
 
       const timestamp = Date.now();
       const nextVersion = (existingAtBat.version ?? 1) + 1;
-      const editHistory = [{
+      const editHistory: NonNullable<AtBatEvent['editHistory']> = [{
         field: `enrichment.${String(field)}`,
         oldValue: existingAtBat.enrichment?.[field as keyof NonNullable<AtBatEvent['enrichment']>] ?? null,
         newValue: value,
         timestamp,
       }];
+      const shouldMarkQualityAtBat = field === 'pitchesInAtBat' && (value as number) >= 7 && !existingAtBat.isQualityAtBat;
+      if (shouldMarkQualityAtBat) {
+        editHistory.push({
+          field: 'isQualityAtBat',
+          oldValue: existingAtBat.isQualityAtBat ?? false,
+          newValue: true,
+          timestamp,
+        });
+      }
 
       if (field === 'fieldingSequence') {
         const syncedFieldingEvents = await buildFieldingSyncEventsForSequenceEdit(
@@ -3669,6 +3726,7 @@ export function GameTracker() {
             enrichment: update as NonNullable<AtBatEvent['enrichment']>,
             version: nextVersion,
             editHistory,
+            ...(shouldMarkQualityAtBat ? { isQualityAtBat: true } : {}),
           },
           syncedFieldingEvents,
         );
@@ -3677,6 +3735,7 @@ export function GameTracker() {
           enrichment: update as NonNullable<AtBatEvent['enrichment']>,
           version: nextVersion,
           editHistory,
+          ...(shouldMarkQualityAtBat ? { isQualityAtBat: true } : {}),
         });
       }
 
@@ -3695,11 +3754,8 @@ export function GameTracker() {
         if (field === 'pitchType') updated.hasPitchType = true;
         if (field === 'pitchesInAtBat') {
           updated.hasPitchCount = true;
-          // Ticket 5.4: QAB detection
-          const pitches = value as number;
-          if (pitches >= 7) {
+          if (shouldMarkQualityAtBat) {
             updated.isQAB = true;
-            updateAtBatEvent(enrichingEntry.eventId!, { isQualityAtBat: true });
           }
         }
         return updated;
@@ -3711,7 +3767,7 @@ export function GameTracker() {
         hasFieldingData: field === 'fieldingSequence' ? true : prev.hasFieldingData,
         hasPitchType: field === 'pitchType' ? true : prev.hasPitchType,
         hasPitchCount: field === 'pitchesInAtBat' ? true : prev.hasPitchCount,
-        isQAB: field === 'pitchesInAtBat' && (value as number) >= 7 ? true : prev.isQAB,
+        isQAB: shouldMarkQualityAtBat ? true : prev.isQAB,
       } : null);
 
     } catch (err) {
@@ -3732,9 +3788,15 @@ export function GameTracker() {
     if (!entry.eventId) return;
     const newResult = entry.result === 'K' ? 'Kc' : 'K';
     try {
+      const existingAtBat = await getAtBatEvent(entry.eventId);
+      if (!existingAtBat) {
+        return;
+      }
+      const timestamp = Date.now();
       await updateAtBatEvent(entry.eventId, {
         result: newResult as import('../../../types/game').AtBatResult,
-        editHistory: [{ field: 'result', oldValue: entry.result, newValue: newResult, timestamp: Date.now() }],
+        version: (existingAtBat.version ?? 1) + 1,
+        editHistory: [{ field: 'result', oldValue: existingAtBat.result, newValue: newResult, timestamp }],
       });
       setPlayLogEntries(prev => prev.map(e =>
         e.id === entry.id ? { ...e, result: newResult, hasKType: true } : e
