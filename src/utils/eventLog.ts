@@ -358,6 +358,13 @@ export interface BetweenPlayEvent {
   timestamp: number;
   eventIndex: number;              // Interleaved with AtBatEvent indices
   undoneAt?: number | null;
+  version?: number;
+  editHistory?: Array<{
+    field: string;
+    oldValue: unknown;
+    newValue: unknown;
+    timestamp: number;
+  }>;
 
   type: BetweenPlayEventType;
 
@@ -595,7 +602,11 @@ export async function logAtBatEvent(event: AtBatEvent): Promise<void> {
 
     // Add the event
     const eventStore = transaction.objectStore(STORES.AT_BAT_EVENTS);
-    eventStore.put(event);
+    eventStore.put({
+      ...event,
+      version: event.version ?? 1,
+      editHistory: event.editHistory ?? [],
+    });
 
     // Increment event count in header
     const headerStore = transaction.objectStore(STORES.GAME_HEADERS);
@@ -655,11 +666,34 @@ export async function logBetweenPlayEvent(event: BetweenPlayEvent): Promise<void
   return new Promise((resolve, reject) => {
     const transaction = db.transaction(STORES.BETWEEN_PLAY_EVENTS, 'readwrite');
     const store = transaction.objectStore(STORES.BETWEEN_PLAY_EVENTS);
-    const request = store.put(event);
+    const request = store.put({
+      ...event,
+      version: event.version ?? 1,
+      editHistory: event.editHistory ?? [],
+    });
 
     request.onerror = () => reject(request.error);
     request.onsuccess = () => resolve();
   });
+}
+
+function applyBetweenPlayEventUpdates(
+  existing: BetweenPlayEvent,
+  updates: Partial<BetweenPlayEvent>,
+): BetweenPlayEvent {
+  const next = { ...existing, ...updates };
+
+  if (updates.editHistory) {
+    next.editHistory = [...(existing.editHistory || []), ...updates.editHistory];
+  } else if (!next.editHistory) {
+    next.editHistory = existing.editHistory || [];
+  }
+
+  if (updates.version === undefined) {
+    next.version = existing.version ?? 1;
+  }
+
+  return next;
 }
 
 function applyAtBatEventUpdates(
@@ -748,6 +782,33 @@ export async function updateAtBatEventWithFieldingSync(
       nextFieldingEvents.forEach((event) => {
         fieldingStore.put(event);
       });
+    };
+
+    transaction.oncomplete = () => resolve();
+    transaction.onerror = () => reject(transaction.error);
+  });
+}
+
+export async function updateBetweenPlayEvent(
+  eventId: string,
+  updates: Partial<BetweenPlayEvent>,
+): Promise<void> {
+  const db = await initEventLogDB();
+
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(STORES.BETWEEN_PLAY_EVENTS, 'readwrite');
+    const store = transaction.objectStore(STORES.BETWEEN_PLAY_EVENTS);
+    const getRequest = store.get(eventId);
+
+    getRequest.onerror = () => reject(getRequest.error);
+    getRequest.onsuccess = () => {
+      const existing = getRequest.result as BetweenPlayEvent | undefined;
+      if (!existing) {
+        reject(new Error(`BetweenPlayEvent not found: ${eventId}`));
+        return;
+      }
+
+      store.put(applyBetweenPlayEventUpdates(existing, updates));
     };
 
     transaction.oncomplete = () => resolve();
@@ -903,6 +964,19 @@ export async function getAtBatEvent(eventId: string): Promise<AtBatEvent | null>
 
     request.onerror = () => reject(request.error);
     request.onsuccess = () => resolve((request.result as AtBatEvent | undefined) || null);
+  });
+}
+
+export async function getBetweenPlayEvent(eventId: string): Promise<BetweenPlayEvent | null> {
+  const db = await initEventLogDB();
+
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(STORES.BETWEEN_PLAY_EVENTS, 'readonly');
+    const store = transaction.objectStore(STORES.BETWEEN_PLAY_EVENTS);
+    const request = store.get(eventId);
+
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => resolve((request.result as BetweenPlayEvent | undefined) || null);
   });
 }
 
