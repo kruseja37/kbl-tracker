@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useCallback } from 'react';
 import type { PlayLogEntry } from './PlayLogPanel';
 import type { AtBatEvent } from '../../../utils/eventLog';
 
@@ -26,7 +26,6 @@ export type PitchTypeAbbr = typeof PITCH_TYPES[number]['abbr'];
 
 export interface EnrichmentUpdate {
   fieldLocation?: { x: number; y: number };
-  fieldingSequence?: number[];
   hrDistance?: number;
   pitchType?: string;
   pitchesInAtBat?: number;
@@ -74,10 +73,6 @@ function MiniDiamond({
   );
 }
 
-// ──────────────────────────────────────────────────────────────
-// Fielding Sequence Input
-// ──────────────────────────────────────────────────────────────
-
 const FIELDER_POSITIONS = [
   { num: 1, label: 'P' },
   { num: 2, label: 'C' },
@@ -89,52 +84,6 @@ const FIELDER_POSITIONS = [
   { num: 8, label: 'CF' },
   { num: 9, label: 'RF' },
 ];
-
-function FieldingSequenceInput({
-  sequence,
-  onChange,
-}: {
-  sequence: number[];
-  onChange: (seq: number[]) => void;
-}) {
-  return (
-    <div>
-      <div className="flex gap-0.5 flex-wrap mb-1">
-        {FIELDER_POSITIONS.map((f) => (
-          <button
-            key={f.num}
-            className={`text-[7px] px-1 py-0.5 rounded border
-              ${sequence.includes(f.num)
-                ? 'bg-[#C4A853]/30 border-[#C4A853] text-[#C4A853]'
-                : 'bg-[#1f2937]/60 border-[#4a6a4a] text-[#88AA88] hover:bg-[#4a6a4a]/40'}`}
-            onClick={() => onChange([...sequence, f.num])}
-          >
-            {f.num}
-          </button>
-        ))}
-      </div>
-      {sequence.length > 0 && (
-        <div className="flex items-center gap-1">
-          <span className="text-[8px] text-[#88AA88] font-mono">
-            {sequence.join('-')}
-          </span>
-          <button
-            className="text-[7px] text-[#f87171] hover:text-[#ef4444]"
-            onClick={() => onChange(sequence.slice(0, -1))}
-          >
-            undo
-          </button>
-          <button
-            className="text-[7px] text-[#f87171] hover:text-[#ef4444]"
-            onClick={() => onChange([])}
-          >
-            clear
-          </button>
-        </div>
-      )}
-    </div>
-  );
-}
 
 // ──────────────────────────────────────────────────────────────
 // EnrichmentPanel Component (§4.2 — opens on Play Log entry tap)
@@ -155,23 +104,17 @@ export function EnrichmentPanel({
   onClose,
   useMainFieldForLocation = false,
 }: EnrichmentPanelProps) {
-  const [localFieldingSeq, setLocalFieldingSeq] = useState<number[]>(
-    currentEnrichment?.fieldingSequence || []
-  );
-
   const isHit = ['1B', '2B', '3B', 'GRD'].includes(entry.result);
   const isHR = entry.result === 'HR';
   const isOut = ['GO', 'FO', 'LO', 'PO', 'DP', 'TP', 'FC', 'SF', 'SAC'].includes(entry.result);
   const isK = entry.result === 'K' || entry.result === 'Kc';
   const showFieldLocation = isHit || isOut || isHR;
-  const showFieldingSeq = isHit || isOut;
-
-  const handleFieldingSeqChange = useCallback((seq: number[]) => {
-    setLocalFieldingSeq(seq);
-    if (seq.length > 0) {
-      onUpdate('fieldingSequence', seq);
-    }
-  }, [onUpdate]);
+  const showFieldingAttribution = isHit || isOut;
+  const positionLabel = (num: number) => FIELDER_POSITIONS.find((fielder) => fielder.num === num)?.label || `${num}`;
+  const sequenceLabel = currentEnrichment?.fieldingSequence?.map(positionLabel).join('-');
+  const putoutLabel = currentEnrichment?.putouts?.map(positionLabel).join(', ');
+  const assistLabel = currentEnrichment?.assists?.map(positionLabel).join(', ');
+  const errorLabel = currentEnrichment?.errors?.map((error) => `${positionLabel(error.position)} (${error.type})`).join(', ');
 
   return (
     <div className="bg-[#2a3a2d] border-l-2 border-[#C4A853] flex flex-col h-full">
@@ -219,13 +162,37 @@ export function EnrichmentPanel({
           </EnrichmentSection>
         )}
 
-        {/* Fielding Sequence */}
-        {showFieldingSeq && (
-          <EnrichmentSection label="Fielding Sequence" filled={(currentEnrichment?.fieldingSequence?.length ?? 0) > 0}>
-            <FieldingSequenceInput
-              sequence={localFieldingSeq}
-              onChange={handleFieldingSeqChange}
-            />
+        {/* Fielding Attribution */}
+        {showFieldingAttribution && (
+          <EnrichmentSection label="Fielding Attribution" filled={!!(sequenceLabel || putoutLabel || assistLabel || errorLabel)}>
+            <div className="bg-[#1f2937]/60 border border-[#4a6a4a] rounded px-2 py-2 space-y-1">
+              <div className="text-[8px] text-[#88AA88]">
+                Fielding data is recorded from the live event ledger and is not edited here.
+              </div>
+              {sequenceLabel && (
+                <div className="text-[8px] text-[#E8E8D8]">
+                  Sequence: <span className="font-mono text-[#C4A853]">{sequenceLabel}</span>
+                </div>
+              )}
+              {putoutLabel && (
+                <div className="text-[8px] text-[#E8E8D8]">
+                  Putouts: <span className="font-mono text-[#C4A853]">{putoutLabel}</span>
+                </div>
+              )}
+              {assistLabel && (
+                <div className="text-[8px] text-[#E8E8D8]">
+                  Assists: <span className="font-mono text-[#C4A853]">{assistLabel}</span>
+                </div>
+              )}
+              {errorLabel && (
+                <div className="text-[8px] text-[#E8E8D8]">
+                  Errors: <span className="font-mono text-[#f59e0b]">{errorLabel}</span>
+                </div>
+              )}
+              {!sequenceLabel && !putoutLabel && !assistLabel && !errorLabel && (
+                <div className="text-[8px] text-[#88AA88]">No fielding attribution recorded for this play.</div>
+              )}
+            </div>
           </EnrichmentSection>
         )}
 

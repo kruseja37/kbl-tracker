@@ -3436,7 +3436,6 @@ export function GameTracker() {
         if (e.id !== enrichingEntry.id) return e;
         const updated = { ...e };
         if (field === 'fieldLocation') updated.hasLocationData = true;
-        if (field === 'fieldingSequence') updated.hasFieldingData = true;
         if (field === 'pitchType') updated.hasPitchType = true;
         if (field === 'pitchesInAtBat') {
           updated.hasPitchCount = true;
@@ -3453,7 +3452,6 @@ export function GameTracker() {
       // Update the enrichingEntry itself so panel reflects changes
       setEnrichingEntry(prev => prev ? { ...prev,
         hasLocationData: field === 'fieldLocation' ? true : prev.hasLocationData,
-        hasFieldingData: field === 'fieldingSequence' ? true : prev.hasFieldingData,
         hasPitchType: field === 'pitchType' ? true : prev.hasPitchType,
         hasPitchCount: field === 'pitchesInAtBat' ? true : prev.hasPitchCount,
         isQAB: field === 'pitchesInAtBat' && (value as number) >= 7 ? true : prev.isQAB,
