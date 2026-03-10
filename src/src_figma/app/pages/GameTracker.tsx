@@ -2855,9 +2855,15 @@ export function GameTracker() {
   const handleRunnerSteal = useCallback((base: RunnerBase) => {
     undoSystem.captureSnapshot(`SB: ${base} → ${nextBaseMap[base]}`);
     advanceRunner(base, nextBaseMap[base], 'safe');
-    recordEvent('SB');
+    void recordEvent('SB', activeRunnerPopover?.playerId, {
+      runnerId: activeRunnerPopover?.playerId,
+      runnerName: activeRunnerPopover?.runnerName,
+      fromBase: base,
+      toBase: nextBaseMap[base],
+      outcome: 'safe',
+    });
     setActiveRunnerPopover(null);
-  }, [advanceRunner, recordEvent, undoSystem]);
+  }, [activeRunnerPopover?.playerId, activeRunnerPopover?.runnerName, advanceRunner, recordEvent, undoSystem]);
 
   const handleRunnerAdvance = useCallback((base: RunnerBase, dest?: 'second' | 'third' | 'home') => {
     const to = dest || nextBaseMap[base];
@@ -2870,34 +2876,64 @@ export function GameTracker() {
     const to = dest || nextBaseMap[base];
     undoSystem.captureSnapshot(`WP: ${base} → ${to}`);
     advanceRunner(base, to, 'safe');
-    recordEvent('WP');
+    void recordEvent('WP', activeRunnerPopover?.playerId, {
+      runnerId: activeRunnerPopover?.playerId,
+      runnerName: activeRunnerPopover?.runnerName,
+      fromBase: base,
+      toBase: to,
+      outcome: 'safe',
+    });
     setActiveRunnerPopover(null);
-  }, [advanceRunner, recordEvent, undoSystem]);
+  }, [activeRunnerPopover?.playerId, activeRunnerPopover?.runnerName, advanceRunner, recordEvent, undoSystem]);
 
   const handleRunnerPB = useCallback((base: RunnerBase, dest?: 'second' | 'third' | 'home') => {
     const to = dest || nextBaseMap[base];
     undoSystem.captureSnapshot(`PB: ${base} → ${to}`);
     advanceRunner(base, to, 'safe');
-    recordEvent('PB');
+    void recordEvent('PB', activeRunnerPopover?.playerId, {
+      runnerId: activeRunnerPopover?.playerId,
+      runnerName: activeRunnerPopover?.runnerName,
+      fromBase: base,
+      toBase: to,
+      outcome: 'safe',
+    });
     setActiveRunnerPopover(null);
-  }, [advanceRunner, recordEvent, undoSystem]);
+  }, [activeRunnerPopover?.playerId, activeRunnerPopover?.runnerName, advanceRunner, recordEvent, undoSystem]);
 
   const handleRunnerPickoff = useCallback((base: RunnerBase, outcome: 'safe' | 'out' | 'error') => {
     undoSystem.captureSnapshot(`Pickoff ${outcome}: ${base}`);
     if (outcome === 'out') {
       // D-2: Runner is out at their current base
       advanceRunner(base, nextBaseMap[base], 'out');
-      recordEvent('PICK');
+      void recordEvent('PICK', activeRunnerPopover?.playerId, {
+        runnerId: activeRunnerPopover?.playerId,
+        runnerName: activeRunnerPopover?.runnerName,
+        fromBase: base,
+        toBase: 'out',
+        outcome: 'out',
+      });
     } else if (outcome === 'error') {
       // D-2: Error on pickoff — runner advances one base
       advanceRunner(base, nextBaseMap[base], 'safe');
-      recordEvent('PICK_E');
+      void recordEvent('PICK_E', activeRunnerPopover?.playerId, {
+        runnerId: activeRunnerPopover?.playerId,
+        runnerName: activeRunnerPopover?.runnerName,
+        fromBase: base,
+        toBase: nextBaseMap[base],
+        outcome: 'safe',
+      });
     } else {
       // D-2: Safe — attempt logged, runner stays
-      recordEvent('PICK_SAFE');
+      void recordEvent('PICK_SAFE', activeRunnerPopover?.playerId, {
+        runnerId: activeRunnerPopover?.playerId,
+        runnerName: activeRunnerPopover?.runnerName,
+        fromBase: base,
+        toBase: base,
+        outcome: 'safe',
+      });
     }
     setActiveRunnerPopover(null);
-  }, [advanceRunner, recordEvent, undoSystem]);
+  }, [activeRunnerPopover?.playerId, activeRunnerPopover?.runnerName, advanceRunner, recordEvent, undoSystem]);
 
   const handleRunnerSubstitute = useCallback((base: RunnerBase) => {
     setActiveRunnerPopover(null);

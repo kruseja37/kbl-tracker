@@ -370,6 +370,15 @@ export interface BetweenPlayEvent {
     caughtBy?: number;           // Position number
   };
 
+  runnerAction?: {
+    runnerId: string;
+    runnerName?: string;
+    fromBase: 1 | 2 | 3;
+    toBase: 1 | 2 | 3 | 4;
+    outcome: 'safe' | 'out';
+    reason: 'stolen_base' | 'caught_stealing' | 'pickoff' | 'wild_pitch' | 'passed_ball' | 'advance';
+  };
+
   pitcherChange?: {
     outgoingPitcherId: string;
     outgoingPitcherName?: string;

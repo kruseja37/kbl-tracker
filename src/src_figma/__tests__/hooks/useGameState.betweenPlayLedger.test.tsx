@@ -69,7 +69,7 @@ import { useGameState } from '../../hooks/useGameState';
 async function initializeGame(result: ReturnType<typeof renderHook<typeof useGameState>>['result']) {
   await act(async () => {
     await result.current.initializeGame({
-      gameId: 'game-wp2',
+      gameId: 'game-between-play',
       awayTeamId: 'away-team',
       awayTeamName: 'Away Team',
       homeTeamId: 'home-team',
@@ -86,14 +86,18 @@ async function initializeGame(result: ReturnType<typeof renderHook<typeof useGam
         { playerId: 'home-batter-1', playerName: 'Home Batter 1', position: '2B' },
         { playerId: 'home-batter-2', playerName: 'Home Batter 2', position: 'RF' },
       ],
-      awayBench: [],
-      homeBench: [],
+      awayBench: [
+        { playerId: 'away-bench-1', playerName: 'Away Bench 1', positions: ['IF'] },
+      ],
+      homeBench: [
+        { playerId: 'home-rp', playerName: 'Home Reliever', positions: ['P'] },
+      ],
       seasonNumber: 1,
     });
   });
 }
 
-describe('useGameState commitPlateAppearance', () => {
+describe('useGameState between-play ledger', () => {
   beforeEach(() => {
     vi.useFakeTimers();
     vi.clearAllMocks();
@@ -102,56 +106,95 @@ describe('useGameState commitPlateAppearance', () => {
     mockGetGameHeader.mockResolvedValue({ aggregated: false });
   });
 
-  test('normalizes UI-native SAC into a canonical at-bat event and batter SH stat', async () => {
+  test('logs stolen-base runner metadata to the between-play ledger', async () => {
     const { result } = renderHook(() => useGameState());
     await initializeGame(result);
 
     await act(async () => {
-      await result.current.commitPlateAppearance({ type: 'out', outType: 'SAC' });
+      await result.current.commitPlateAppearance({ type: 'hit', hitType: '1B', rbi: 0 });
     });
 
-    expect(mockLogAtBatEvent).toHaveBeenCalledTimes(1);
-    expect(mockLogAtBatEvent.mock.calls[0][0]).toMatchObject({
-      batterId: 'away-batter-1',
-      pitcherId: 'home-sp',
-      result: 'SAC',
-      outsAfter: 1,
-    });
-    expect(result.current.playerStats.get('away-batter-1')).toMatchObject({
-      pa: 1,
-      ab: 0,
-      sh: 1,
-      k: 0,
-    });
-    expect(result.current.gameState.outs).toBe(1);
-  });
-
-  test('routes dropped-third-strike metadata through the canonical recorder', async () => {
-    const { result } = renderHook(() => useGameState());
-    await initializeGame(result);
+    mockLogBetweenPlayEvent.mockClear();
 
     await act(async () => {
-      await result.current.commitPlateAppearance({
-        type: 'out',
-        outType: 'K',
-        batterReached: true,
-        isDroppedThirdStrike: true,
+      result.current.advanceRunner('first', 'second', 'safe');
+      await result.current.recordEvent('SB', 'away-batter-1', {
+        runnerId: 'away-batter-1',
+        runnerName: 'Away Batter 1',
+        fromBase: 'first',
+        toBase: 'second',
+        outcome: 'safe',
       });
     });
 
-    expect(mockLogAtBatEvent).toHaveBeenCalledTimes(1);
-    expect(mockLogAtBatEvent.mock.calls[0][0]).toMatchObject({
-      batterId: 'away-batter-1',
-      pitcherId: 'home-sp',
-      result: 'K',
-      outsAfter: 0,
+    expect(mockLogBetweenPlayEvent).toHaveBeenCalledWith(expect.objectContaining({
+      gameId: 'game-between-play',
+      type: 'stolen_base',
+      stolenBase: expect.objectContaining({
+        runnerId: 'away-batter-1',
+        fromBase: 1,
+        toBase: 2,
+        isSuccessful: true,
+      }),
+      runnerAction: expect.objectContaining({
+        runnerId: 'away-batter-1',
+        fromBase: 1,
+        toBase: 2,
+        reason: 'stolen_base',
+      }),
+    }));
+  });
+
+  test('logs roster changes as between-play ledger rows', async () => {
+    const { result } = renderHook(() => useGameState());
+    await initializeGame(result);
+
+    await act(async () => {
+      const subResult = result.current.makeSubstitution(
+        'away-bench-1',
+        'away-batter-1',
+        'Away Bench 1',
+        'Away Batter 1',
+        { subType: 'pinch_hit', isPinchHitter: true, newPosition: 'SS' },
+      );
+      expect(subResult).toEqual({ success: true });
+      result.current.switchPositions([{ playerId: 'home-batter-1', newPosition: 'SS' }]);
+      result.current.changePitcher('home-rp', 'home-sp', 'Home Reliever', 'Home Starter');
+      result.current.confirmPitchCount('home-sp', 17);
+      await Promise.resolve();
     });
-    expect(result.current.playerStats.get('away-batter-1')).toMatchObject({
-      pa: 1,
-      ab: 1,
-      k: 1,
-    });
-    expect(result.current.gameState.outs).toBe(0);
-    expect(result.current.gameState.bases.first).toBe(true);
+
+    const ledgerTypes = mockLogBetweenPlayEvent.mock.calls.map(call => call[0]?.type);
+    expect(ledgerTypes).toEqual(expect.arrayContaining([
+      'substitution',
+      'position_change',
+      'pitcher_change',
+    ]));
+
+    expect(mockLogBetweenPlayEvent.mock.calls).toEqual(expect.arrayContaining([
+      [expect.objectContaining({
+        type: 'substitution',
+        substitution: expect.objectContaining({
+          subType: 'pinch_hit',
+          outPlayerId: 'away-batter-1',
+          inPlayerId: 'away-bench-1',
+        }),
+      })],
+      [expect.objectContaining({
+        type: 'position_change',
+        substitution: expect.objectContaining({
+          subType: 'position_change',
+          outPlayerId: 'home-batter-1',
+          inPosition: 'SS',
+        }),
+      })],
+      [expect.objectContaining({
+        type: 'pitcher_change',
+        pitcherChange: expect.objectContaining({
+          outgoingPitcherId: 'home-sp',
+          incomingPitcherId: 'home-rp',
+        }),
+      })],
+    ]));
   });
 });

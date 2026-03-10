@@ -10,6 +10,7 @@ import { getTeamColors } from '@/config/teamColors';
 // Import from src/ persistence layer
 import {
   logAtBatEvent,
+  logBetweenPlayEvent,
   createGameHeader,
   completeGame,
   getGameEvents,
@@ -17,6 +18,8 @@ import {
   getGameFieldingEvents,
   getGameHeader,
   type AtBatEvent,
+  type BetweenPlayEvent,
+  type BetweenPlayEventType,
   type RunnerState,
   type GameHeader,
   type FameEventRecord,
@@ -200,6 +203,17 @@ export type EventType =
   | 'STRIKEOUT' | 'STRIKEOUT_LOOKING' | 'DROPPED_3RD_STRIKE'
   | 'SEVEN_PLUS_PITCH_AB';
 
+export interface BetweenPlayEventDetails {
+  runnerId?: string;
+  runnerName?: string;
+  fromBase?: 'first' | 'second' | 'third';
+  toBase?: 'first' | 'second' | 'third' | 'home' | 'out';
+  outcome?: 'safe' | 'out';
+  fielderPosition?: number;
+  fielderId?: string;
+  fielderName?: string;
+}
+
 // Pitch count prompt types per PITCH_COUNT_TRACKING_SPEC.md
 export interface PitchCountPrompt {
   type: 'pitching_change' | 'end_game' | 'end_inning';
@@ -225,7 +239,7 @@ export interface UseGameStateReturn {
   recordD3K: (batterReached: boolean, pitchCount?: number) => Promise<void>;
   recordError: (rbi?: number, runnerData?: RunnerAdvancement, pitchCount?: number) => Promise<void>;
   commitPlateAppearance: (action: PlateAppearanceAction) => Promise<void>;
-  recordEvent: (eventType: EventType, runnerId?: string) => Promise<void>;
+  recordEvent: (eventType: EventType, runnerId?: string, details?: BetweenPlayEventDetails) => Promise<void>;
   advanceRunner: (from: 'first' | 'second' | 'third', to: 'second' | 'third' | 'home', outcome: 'safe' | 'out') => void;
   /** Batch update runners - processes all movements atomically to avoid race conditions */
   advanceRunnersBatch: (movements: Array<{ from: 'first' | 'second' | 'third'; to: 'second' | 'third' | 'home' | 'out'; outcome: 'safe' | 'out' }>) => void;
@@ -386,6 +400,17 @@ function createEmptyPlayerStats(): PlayerGameStats {
     pa: 0, ab: 0, h: 0, singles: 0, doubles: 0, triples: 0, hr: 0,
     r: 0, rbi: 0, bb: 0, hbp: 0, k: 0, sb: 0, cs: 0, sf: 0, sh: 0, gidp: 0,
   };
+}
+
+function baseToNumber(base: 'first' | 'second' | 'third' | 'home' | 'out'): 1 | 2 | 3 | 4 {
+  switch (base) {
+    case 'first': return 1;
+    case 'second': return 2;
+    case 'third': return 3;
+    case 'home':
+    case 'out':
+      return 4;
+  }
 }
 
 // ============================================
@@ -1205,6 +1230,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
   // T0-01: Auto game-end detection prompt
   const [showAutoEndPrompt, setShowAutoEndPrompt] = useState(false);
   const [atBatSequence, setAtBatSequence] = useState(0);
+  const betweenPlayOrdinalRef = useRef(0);
 
   // Current batter index for each team
   const [awayBatterIndex, setAwayBatterIndex] = useState(0);
@@ -1271,6 +1297,10 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
 
   const [scoreboard, setScoreboard] = useState<ScoreboardState>(createEmptyScoreboardState);
 
+  useEffect(() => {
+    betweenPlayOrdinalRef.current = 0;
+  }, [atBatSequence]);
+
   const setStadiumName = useCallback((name: string | null) => {
     setGameState(prev => ({ ...prev, stadiumName: name }));
   }, []);
@@ -1313,6 +1343,59 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     if (!playerId) return fallback || '';
     return playerNameByIdRef.current.get(playerId) || fallback || playerId;
   }, []);
+
+  const buildBetweenPlayRunnersOn = useCallback((): NonNullable<BetweenPlayEvent['gameState']>['runnersOn'] => {
+    const runnersOn: NonNullable<BetweenPlayEvent['gameState']>['runnersOn'] = {};
+    for (const runner of runnerTrackerRef.current.runners) {
+      if (runner.currentBase === '1B') runnersOn.first = runner.runnerId;
+      if (runner.currentBase === '2B') runnersOn.second = runner.runnerId;
+      if (runner.currentBase === '3B') runnersOn.third = runner.runnerId;
+    }
+    return runnersOn;
+  }, []);
+
+  const nextBetweenPlayEventIndex = useCallback((): number => {
+    betweenPlayOrdinalRef.current += 1;
+    return atBatSequence + betweenPlayOrdinalRef.current / 1000;
+  }, [atBatSequence]);
+
+  const createBetweenPlayEventBase = useCallback((type: BetweenPlayEventType): Omit<BetweenPlayEvent, 'eventId' | 'timestamp' | 'eventIndex'> & { eventId?: string; timestamp?: number; eventIndex?: number } => {
+    const timestamp = Date.now();
+    const ordinal = betweenPlayOrdinalRef.current + 1;
+    const eventIndex = nextBetweenPlayEventIndex();
+
+    return {
+      eventId: `${gameState.gameId}_bp_${atBatSequence}_${ordinal}_${timestamp}`,
+      gameId: gameState.gameId,
+      seasonId: seasonIdRef.current || undefined,
+      statsScopeId: statsScopeIdRef.current || seasonIdRef.current || undefined,
+      competitionType: competitionTypeRef.current,
+      competitionId: competitionIdRef.current,
+      franchiseId: franchiseIdRef.current,
+      timestamp,
+      eventIndex,
+      type,
+      gameState: {
+        inning: gameState.inning,
+        halfInning: gameState.isTop ? 'TOP' : 'BOTTOM',
+        outs: gameState.outs,
+        score: { away: gameState.awayScore, home: gameState.homeScore },
+        runnersOn: buildBetweenPlayRunnersOn(),
+      },
+    };
+  }, [atBatSequence, buildBetweenPlayRunnersOn, gameState.awayScore, gameState.gameId, gameState.homeScore, gameState.inning, gameState.isTop, gameState.outs, nextBetweenPlayEventIndex]);
+
+  const persistBetweenPlayEvent = useCallback(async (event: Omit<BetweenPlayEvent, 'eventId' | 'timestamp' | 'eventIndex'>) => {
+    const base = createBetweenPlayEventBase(event.type);
+    await logBetweenPlayEvent({
+      ...base,
+      ...event,
+      eventId: base.eventId!,
+      timestamp: base.timestamp!,
+      eventIndex: base.eventIndex!,
+      gameState: event.gameState ?? base.gameState,
+    });
+  }, [createBetweenPlayEventBase]);
 
   const [playerStats, setPlayerStats] = useState<Map<string, PlayerGameStats>>(new Map());
   const [pitcherStats, setPitcherStats] = useState<Map<string, PitcherGameStats>>(new Map());
@@ -3703,7 +3786,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     console.log(`[useGameState] Recorded error: ${fieldingTeamKey} team, ${runsScored} runs (unearned)`);
   }, [gameState, atBatSequence, advanceToNextBatter]);
 
-  const recordEvent = useCallback(async (eventType: EventType, runnerId?: string) => {
+  const recordEvent = useCallback(async (eventType: EventType, runnerId?: string, details?: BetweenPlayEventDetails) => {
     // Non-at-bat events like stolen bases, wild pitches, special events
     console.log(`[useGameState] recordEvent: ${eventType}`, runnerId);
 
@@ -3821,8 +3904,88 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       });
     }
 
-    // TODO: Log to separate event store
-  }, [gameState.outs, gameState.bases, gameState.currentPitcherId]);
+    const resolvedRunnerId = runnerId || details?.runnerId;
+    const resolvedRunnerName = resolvePlayerNameForId(resolvedRunnerId, details?.runnerName);
+    const fromBaseNumber = details?.fromBase ? baseToNumber(details.fromBase) : undefined;
+    const toBaseNumber = details?.toBase ? baseToNumber(details.toBase) : undefined;
+
+    if (eventType === 'SB' && resolvedRunnerId && fromBaseNumber && toBaseNumber) {
+      await persistBetweenPlayEvent({
+        type: 'stolen_base',
+        stolenBase: {
+          runnerId: resolvedRunnerId,
+          runnerName: resolvedRunnerName,
+          fromBase: fromBaseNumber,
+          toBase: toBaseNumber as 2 | 3 | 4,
+          isSuccessful: true,
+          caughtBy: details?.fielderPosition,
+        },
+        runnerAction: {
+          runnerId: resolvedRunnerId,
+          runnerName: resolvedRunnerName,
+          fromBase: fromBaseNumber,
+          toBase: toBaseNumber,
+          outcome: 'safe',
+          reason: 'stolen_base',
+        },
+      });
+    } else if (eventType === 'CS' && resolvedRunnerId && fromBaseNumber && toBaseNumber) {
+      await persistBetweenPlayEvent({
+        type: 'caught_stealing',
+        stolenBase: {
+          runnerId: resolvedRunnerId,
+          runnerName: resolvedRunnerName,
+          fromBase: fromBaseNumber,
+          toBase: toBaseNumber as 2 | 3 | 4,
+          isSuccessful: false,
+          caughtBy: details?.fielderPosition,
+        },
+        runnerAction: {
+          runnerId: resolvedRunnerId,
+          runnerName: resolvedRunnerName,
+          fromBase: fromBaseNumber,
+          toBase: toBaseNumber,
+          outcome: 'out',
+          reason: 'caught_stealing',
+        },
+      });
+    } else if ((eventType === 'PICK' || eventType === 'PICK_SAFE' || eventType === 'PICK_E') && resolvedRunnerId && fromBaseNumber) {
+      await persistBetweenPlayEvent({
+        type: 'pickoff',
+        runnerAction: {
+          runnerId: resolvedRunnerId,
+          runnerName: resolvedRunnerName,
+          fromBase: fromBaseNumber,
+          toBase: toBaseNumber ?? fromBaseNumber,
+          outcome: eventType === 'PICK' ? 'out' : 'safe',
+          reason: 'pickoff',
+        },
+      });
+    } else if ((eventType === 'WP' || eventType === 'PB') && resolvedRunnerId && fromBaseNumber && toBaseNumber) {
+      const bpType: BetweenPlayEventType = eventType === 'WP' ? 'wild_pitch' : 'passed_ball';
+      await persistBetweenPlayEvent({
+        type: bpType,
+        wildPitchOrPassedBall: {
+          wpOrPb: bpType,
+          pitcherId: gameState.currentPitcherId,
+          runnersAdvanced: [{
+            runnerId: resolvedRunnerId,
+            fromBase: fromBaseNumber,
+            toBase: toBaseNumber,
+          }],
+          runScored: details?.toBase === 'home' ? resolvedRunnerId : undefined,
+        },
+        runnerAction: {
+          runnerId: resolvedRunnerId,
+          runnerName: resolvedRunnerName,
+          fromBase: fromBaseNumber,
+          toBase: toBaseNumber,
+          outcome: 'safe',
+          reason: eventType === 'WP' ? 'wild_pitch' : 'passed_ball',
+        },
+      });
+    }
+  }, [gameState.bases, gameState.currentPitcherId, gameState.outs, persistBetweenPlayEvent, resolvePlayerNameForId]);
 
   const advanceRunner = useCallback((from: 'first' | 'second' | 'third', to: 'second' | 'third' | 'home', outcome: 'safe' | 'out') => {
     // Calculate score change first so we can update both game state and scoreboard
@@ -4114,6 +4277,26 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       timestamp: Date.now(),
     }]);
 
+    void persistBetweenPlayEvent({
+      type: 'substitution',
+      substitution: {
+        subType:
+          subType === 'pinch_run' ? 'pinch_run'
+          : subType === 'pinch_hit' || options?.isPinchHitter ? 'pinch_hit'
+          : 'defensive_replacement',
+        outPlayerId: lineupPlayerId,
+        outPlayerName: lineupPlayerName || lineupPlayerId,
+        outPosition: isAwayTeam
+          ? awayLineupRef.current[awayIndex]?.position
+          : homeLineupRef.current.find(p => p.playerId === lineupPlayerId)?.position,
+        inPlayerId: benchPlayerId,
+        inPlayerName: benchPlayerName || benchPlayerId,
+        inPosition: options?.newPosition,
+      },
+    }).catch(err => {
+      console.error('[useGameState] Failed to log substitution between-play event:', err);
+    });
+
     // Update lineup refs to swap the players
     const homeIndex = homeLineupRef.current.findIndex(p => p.playerId === lineupPlayerId);
 
@@ -4219,20 +4402,23 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
 
     console.log(`[useGameState] Substitution (${subType}): ${benchPlayerName || benchPlayerId} replaces ${lineupPlayerName || lineupPlayerId} in inning ${gameState.inning}`);
     return { success: true };
-  }, [gameState.currentBatterId, gameState.inning, gameState.isTop, registerIdentityForSide]);
+  }, [gameState.currentBatterId, gameState.inning, gameState.isTop, persistBetweenPlayEvent, registerIdentityForSide]);
 
   // MAJ-06: Position switch (no new players, just position reassignment)
   const switchPositions = useCallback((switches: Array<{ playerId: string; newPosition: string }>) => {
+    const previousPositions = new Map<string, string>();
     for (const sw of switches) {
       const awayIdx = awayLineupRef.current.findIndex(p => p.playerId === sw.playerId);
       const homeIdx = homeLineupRef.current.findIndex(p => p.playerId === sw.playerId);
 
       if (awayIdx >= 0) {
+        previousPositions.set(sw.playerId, awayLineupRef.current[awayIdx].position);
         awayLineupRef.current[awayIdx] = {
           ...awayLineupRef.current[awayIdx],
           position: sw.newPosition,
         };
       } else if (homeIdx >= 0) {
+        previousPositions.set(sw.playerId, homeLineupRef.current[homeIdx].position);
         homeLineupRef.current[homeIdx] = {
           ...homeLineupRef.current[homeIdx],
           position: sw.newPosition,
@@ -4251,8 +4437,25 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       timestamp: Date.now(),
     }]);
 
+    for (const sw of switches) {
+      void persistBetweenPlayEvent({
+        type: 'position_change',
+        substitution: {
+          subType: 'position_change',
+          outPlayerId: sw.playerId,
+          outPlayerName: resolvePlayerNameForId(sw.playerId),
+          inPlayerId: sw.playerId,
+          inPlayerName: resolvePlayerNameForId(sw.playerId),
+          inPosition: sw.newPosition,
+          previousPosition: previousPositions.get(sw.playerId),
+        },
+      }).catch(err => {
+        console.error('[useGameState] Failed to log position-change between-play event:', err);
+      });
+    }
+
     console.log(`[useGameState] Position switch: ${switches.map(s => `${s.playerId}->${s.newPosition}`).join(', ')}`);
-  }, [gameState.inning, gameState.isTop]);
+  }, [gameState.inning, gameState.isTop, persistBetweenPlayEvent, resolvePlayerNameForId]);
 
   const changePitcher = useCallback((newPitcherId: string, exitingPitcherId: string, newPitcherName?: string, exitingPitcherName?: string) => {
     // Per PITCH_COUNT_TRACKING_SPEC.md: Mandatory pitch count capture on pitching change
@@ -4285,6 +4488,22 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         incomingPlayerName: newPitcherName || newPitcherId,
         timestamp: Date.now(),
       }]);
+
+      void persistBetweenPlayEvent({
+        type: 'pitcher_change',
+        pitcherChange: {
+          outgoingPitcherId: exitingPitcherId,
+          outgoingPitcherName: exitingPitcherName || exitingPitcherId,
+          incomingPitcherId: newPitcherId,
+          incomingPitcherName: newPitcherName || newPitcherId,
+          inheritedRunners: runnerTrackerRef.current.runners.filter(
+            r => r.currentBase && r.currentBase !== 'HOME' && r.currentBase !== 'OUT'
+          ).length,
+          outgoingPitchCount: exitingStats.pitchCount,
+        },
+      }).catch(err => {
+        console.error('[useGameState] Failed to log pitcher-change between-play event:', err);
+      });
 
       // MAJ-07: Set exit info on outgoing pitcher and bequeathed runners
       setPitcherStats(prev => {
@@ -4375,7 +4594,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
 
       console.log(`[useGameState] Pitching change logged: ${newPitcherName || newPitcherId} replaces ${exitingPitcherName || exitingPitcherId} in inning ${gameState.inning}`);
     };
-  }, [gameState.inning, gameState.isTop, gameState.outs, pitcherStats, registerIdentityForSide]);
+  }, [gameState.inning, gameState.isTop, gameState.outs, persistBetweenPlayEvent, pitcherStats, registerIdentityForSide]);
 
   // Confirm pitch count and execute pending action (per PITCH_COUNT_TRACKING_SPEC.md)
   const confirmPitchCount = useCallback((pitcherId: string, finalCount: number): { immaculateInning?: { pitcherId: string; pitcherName: string } } => {
