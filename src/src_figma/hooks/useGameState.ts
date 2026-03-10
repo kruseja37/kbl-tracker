@@ -39,7 +39,7 @@ import {
 } from '../utils/gameStorage';
 import type { AtBatResult, HalfInning, LineupState, LineupPlayer, BenchPlayer, Position } from '../../types/game';
 import { validateSubstitution } from '../../types/game';
-import { getBaseOutLI, type BaseState } from '../../engines/leverageCalculator';
+import { calculateLeverageIndex } from '../../engines/leverageCalculator';
 import { calculateWPA } from '../../engines/wpaCalculator';
 import {
   createRunnerTrackingState,
@@ -1317,6 +1317,26 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     setGameState(prev => ({ ...prev, stadiumName: name }));
   }, []);
 
+  const getCurrentLeverageIndex = useCallback((overrides?: {
+    inning?: number;
+    isTop?: boolean;
+    outs?: number;
+    bases?: { first: boolean; second: boolean; third: boolean };
+    homeScore?: number;
+    awayScore?: number;
+  }) => {
+    const outs = Math.max(0, Math.min(overrides?.outs ?? gameState.outs, 2)) as 0 | 1 | 2;
+    return calculateLeverageIndex({
+      inning: overrides?.inning ?? gameState.inning,
+      halfInning: (overrides?.isTop ?? gameState.isTop) ? 'TOP' : 'BOTTOM',
+      outs,
+      runners: overrides?.bases ?? gameState.bases,
+      homeScore: overrides?.homeScore ?? gameState.homeScore,
+      awayScore: overrides?.awayScore ?? gameState.awayScore,
+      totalInnings: totalInningsRef.current,
+    }).leverageIndex;
+  }, [gameState.awayScore, gameState.bases, gameState.homeScore, gameState.inning, gameState.isTop, gameState.outs]);
+
   const registerIdentityForSide = useCallback((playerId: string | undefined, playerName: string | undefined, teamSide: TeamSide) => {
     registerTrackedIdentity(
       teamSideByPlayerIdRef.current,
@@ -1641,13 +1661,25 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
   const pitcherNamesRef = useRef<Map<string, string>>(new Map());
 
   // Fame events tracked during game (per SPECIAL_EVENTS_SPEC.md)
-  const [fameEvents, setFameEvents] = useState<FameEventRecord[]>([]);
+  const [, setFameEvents] = useState<FameEventRecord[]>([]);
+  const fameEventsRef = useRef<FameEventRecord[]>([]);
+
+  const replaceFameEvents = useCallback((events: FameEventRecord[]) => {
+    fameEventsRef.current = events;
+    setFameEvents(events);
+  }, []);
+
+  const appendFameEvent = useCallback((event: FameEventRecord) => {
+    const nextEvents = [...fameEventsRef.current, event];
+    fameEventsRef.current = nextEvents;
+    setFameEvents(nextEvents);
+  }, []);
 
   const buildPersistedFameEvents = useCallback((
     currentInning: number,
     currentHalfInning: 'TOP' | 'BOTTOM'
   ): PersistedGameState['fameEvents'] => {
-    return fameEvents.map((fe, idx) => ({
+    return fameEventsRef.current.map((fe, idx) => ({
       id: `${gameState.gameId}_fame_${idx}`,
       gameId: gameState.gameId,
       eventType: fe.eventType,
@@ -1662,7 +1694,33 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       autoDetected: false,
       description: fe.description,
     }));
-  }, [fameEvents, gameState.gameId, resolvePlayerNameForId, resolveTeamIdForPlayerId]);
+  }, [gameState.gameId, resolvePlayerNameForId, resolveTeamIdForPlayerId]);
+
+  const creditFieldingOutsToPositions = useCallback((outsRecorded: number) => {
+    if (outsRecorded <= 0) return;
+
+    const fieldingLineupState = gameState.isTop ? homeLineupStateRef.current : awayLineupStateRef.current;
+    const activePitcherId = fieldingLineupState.currentPitcher?.playerId;
+    let pitcherCredited = false;
+
+    for (const player of fieldingLineupState.lineup) {
+      if (!player.position || player.position === 'DH') continue;
+
+      const existing = positionInningsRef.current.get(player.playerId) || {};
+      existing[player.position] = (existing[player.position] || 0) + outsRecorded;
+      positionInningsRef.current.set(player.playerId, existing);
+
+      if (player.playerId === activePitcherId && player.position === 'P') {
+        pitcherCredited = true;
+      }
+    }
+
+    if (fieldingLineupState.currentPitcher && !pitcherCredited) {
+      const existing = positionInningsRef.current.get(fieldingLineupState.currentPitcher.playerId) || {};
+      existing.P = (existing.P || 0) + outsRecorded;
+      positionInningsRef.current.set(fieldingLineupState.currentPitcher.playerId, existing);
+    }
+  }, [gameState.isTop]);
 
   // T1-02/03/04: Counter that increments when runner identity changes (pinch runner, etc.)
   // Used as a dependency trigger for the runnerNames sync effect in GameTracker.
@@ -1853,7 +1911,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     }
 
     // Clear all state from previous game (fix for stale data issue EXH-011)
-    setFameEvents([]);
+    replaceFameEvents([]);
     setSubstitutionLog([]);
     setPitchCountPrompt(null);
     pitcherNamesRef.current.clear();
@@ -2200,7 +2258,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         }
         setPitcherStats(restoredPitcherStats);
 
-        setFameEvents(
+        replaceFameEvents(
           (savedSnapshot.fameEvents || []).map(fe => ({
             eventType: fe.eventType,
             fameType: fe.fameType,
@@ -2814,7 +2872,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     }
     setIsLoading(false);
     return false;
-  }, [gameState.gameId, initialGameId, mapBetweenPlayEventsToSubstitutionLog, replayRosterChangeEvent, seedLineupStateFromHeader]);
+  }, [gameState.gameId, initialGameId, mapBetweenPlayEventsToSubstitutionLog, replayRosterChangeEvent, replaceFameEvents, seedLineupStateFromHeader]);
 
   const undoLastAction = useCallback(async (): Promise<boolean> => {
     const targetGameId = gameState.gameId || initialGameId;
@@ -3053,7 +3111,6 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     awayBatterIndex,
     atBatSequence,
     buildPersistedFameEvents,
-    fameEvents,
     gameState,
     homeBatterIndex,
     isLoading,
@@ -3191,14 +3248,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     tracker = trackerNextAtBat(tracker);
     runnerTrackerRef.current = tracker;
 
-    // Calculate leverage index from base-out state
-    const baseState: BaseState = (
-      (gameState.bases.first ? 1 : 0) +
-      (gameState.bases.second ? 2 : 0) +
-      (gameState.bases.third ? 4 : 0)
-    ) as BaseState;
-    const outs = Math.min(gameState.outs, 2) as 0 | 1 | 2;
-    const leverageIndex = getBaseOutLI(baseState, outs);
+    const leverageIndex = getCurrentLeverageIndex();
 
     // Detect walk-off: home team batting in bottom of 9+ and takes the lead
     const isBottom = !gameState.isTop;
@@ -3404,7 +3454,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     // Advance to next batter
     advanceToNextBatter();
     setLastSavedAt(Date.now());
-  }, [gameState, atBatSequence, advanceToNextBatter]);
+  }, [advanceToNextBatter, atBatSequence, creditFieldingOutsToPositions, gameState, getCurrentLeverageIndex]);
 
   const recordOut = useCallback(async (outType: OutType, runnerData?: RunnerAdvancement, pitchCount: number = 1, options?: { forceNoRuns?: boolean }) => {
     const newSequence = atBatSequence + 1;
@@ -3495,14 +3545,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     outTracker = trackerNextAtBat(outTracker);
     runnerTrackerRef.current = outTracker;
 
-    // Calculate leverage index from base-out state
-    const baseState: BaseState = (
-      (gameState.bases.first ? 1 : 0) +
-      (gameState.bases.second ? 2 : 0) +
-      (gameState.bases.third ? 4 : 0)
-    ) as BaseState;
-    const outsForLI = Math.min(gameState.outs, 2) as 0 | 1 | 2;
-    const leverageIndex = getBaseOutLI(baseState, outsForLI);
+    const leverageIndex = getCurrentLeverageIndex();
 
     // Clutch = high leverage (LI >= 1.5)
     const isClutch = leverageIndex >= 1.5;
@@ -3648,6 +3691,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       newStats.set(gameState.currentPitcherId, pStats);
       return newStats;
     });
+    creditFieldingOutsToPositions(outsOnPlay);
     // Attribute runs/ER to responsible pitcher via tracker
     if (!runsInvalidated && outScoredEvents.length > 0) {
       processTrackerScoredEvents(outScoredEvents, setPitcherStats, createEmptyPitcherStats);
@@ -3726,7 +3770,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     }
 
     setLastSavedAt(Date.now());
-  }, [gameState, atBatSequence, advanceToNextBatter]);
+  }, [advanceToNextBatter, atBatSequence, creditFieldingOutsToPositions, gameState, getCurrentLeverageIndex]);
 
   const recordWalk = useCallback(async (walkType: WalkType, pitchCount: number = 4) => {
     const newSequence = atBatSequence + 1;
@@ -3773,14 +3817,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     walkTracker = trackerNextAtBat(walkTracker);
     runnerTrackerRef.current = walkTracker;
 
-    // Calculate leverage index from base-out state
-    const baseState: BaseState = (
-      (gameState.bases.first ? 1 : 0) +
-      (gameState.bases.second ? 2 : 0) +
-      (gameState.bases.third ? 4 : 0)
-    ) as BaseState;
-    const outs = Math.min(gameState.outs, 2) as 0 | 1 | 2;
-    const leverageIndex = getBaseOutLI(baseState, outs);
+    const leverageIndex = getCurrentLeverageIndex();
 
     // Detect walk-off: home team batting in bottom of 9+ with bases loaded walk taking lead
     const isBottom = !gameState.isTop;
@@ -3924,7 +3961,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
 
     advanceToNextBatter();
     setLastSavedAt(Date.now());
-  }, [gameState, atBatSequence, advanceToNextBatter]);
+  }, [advanceToNextBatter, atBatSequence, gameState, getCurrentLeverageIndex]);
 
   /**
    * Record Dropped Third Strike (D3K)
@@ -3989,15 +4026,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       homeScoreAfter: gameState.homeScore,
       // D-05 FIX: Calculate leverageIndex from base-out state instead of hardcoding 1.0
       // Same pattern as recordHit (lines 1167-1173) and recordOut
-      leverageIndex: (() => {
-        const bs: BaseState = (
-          (gameState.bases.first ? 1 : 0) +
-          (gameState.bases.second ? 2 : 0) +
-          (gameState.bases.third ? 4 : 0)
-        ) as BaseState;
-        const o = Math.min(gameState.outs, 2) as 0 | 1 | 2;
-        return getBaseOutLI(bs, o);
-      })(),
+      leverageIndex: getCurrentLeverageIndex(),
       // MAJ-12: WPA from win expectancy table
       ...(() => {
         const rAfter = newOuts >= 3
@@ -4047,6 +4076,9 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       newStats.set(gameState.currentPitcherId, pStats);
       return newStats;
     });
+    if (!batterReached) {
+      creditFieldingOutsToPositions(1);
+    }
 
     // (Runner tracker already updated before event creation above)
 
@@ -4075,7 +4107,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
 
     setLastSavedAt(Date.now());
     console.log(`[useGameState] D3K recorded: batterReached=${batterReached}, K counted, ${batterReached ? 'no out' : 'out recorded'}`);
-  }, [gameState, atBatSequence, advanceToNextBatter]);
+  }, [advanceToNextBatter, atBatSequence, gameState, getCurrentLeverageIndex]);
 
   // Record batter reaching base on fielding error
   const recordError = useCallback(async (rbi: number = 0, runnerData?: RunnerAdvancement, pitchCount: number = 1) => {
@@ -4151,15 +4183,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       awayScoreAfter: gameState.isTop ? gameState.awayScore + runsScored : gameState.awayScore,
       homeScoreAfter: gameState.isTop ? gameState.homeScore : gameState.homeScore + runsScored,
       // MAJ-12: Calculate leverageIndex and WPA from game state
-      leverageIndex: (() => {
-        const bs: BaseState = (
-          (gameState.bases.first ? 1 : 0) +
-          (gameState.bases.second ? 2 : 0) +
-          (gameState.bases.third ? 4 : 0)
-        ) as BaseState;
-        const o = Math.min(gameState.outs, 2) as 0 | 1 | 2;
-        return getBaseOutLI(bs, o);
-      })(),
+      leverageIndex: getCurrentLeverageIndex(),
       ...(() => {
         const rAfter = buildRunnersAfter(runnerTrackerRef.current);
         return calculateWPA(
@@ -4302,7 +4326,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     advanceToNextBatter();
     setLastSavedAt(Date.now());
     console.log(`[useGameState] Recorded error: ${fieldingTeamKey} team, ${runsScored} runs (unearned)`);
-  }, [gameState, atBatSequence, advanceToNextBatter]);
+  }, [advanceToNextBatter, atBatSequence, gameState, getCurrentLeverageIndex]);
 
   const recordEvent = useCallback(async (eventType: EventType, runnerId?: string, details?: BetweenPlayEventDetails) => {
     // Non-at-bat events like stolen bases, wild pitches, special events
@@ -4310,20 +4334,14 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
 
     // Calculate base-out leverage index for Fame weighting
     // Encode bases as BaseState (0-7): 1=1st, 2=2nd, 4=3rd, combinations sum
-    const baseState: BaseState = (
-      (gameState.bases.first ? 1 : 0) +
-      (gameState.bases.second ? 2 : 0) +
-      (gameState.bases.third ? 4 : 0)
-    ) as BaseState;
-    const outs = Math.min(gameState.outs, 2) as 0 | 1 | 2;
-    const li = getBaseOutLI(baseState, outs);
+    const li = getCurrentLeverageIndex();
     const fameMultiplier = Math.sqrt(li);
 
     // Fame base values per kbl-detection-philosophy.md and SPECIAL_EVENTS_SPEC.md
     // Formula: fameValue = baseFame × √LI × playoffMultiplier
     const FAME_VALUES: Record<string, number> = {
       // Fielding events (fielder receives Fame)
-      WEB_GEM: 1.0,         // Spectacular catch (0.8 < y ≤ 0.95)
+      WEB_GEM: 0.75,        // Spectacular catch (0.8 < y ≤ 0.95)
       ROBBERY: 1.0,         // HR denied at wall (y > 0.95) — CRIT-06: spec v3.3 standardized to +1
 
       // Baserunning events (runner receives Fame)
@@ -4386,7 +4404,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         description: `${eventType} in inning ${gameState.inning} (LI: ${li.toFixed(2)})`,
       };
 
-      setFameEvents(prev => [...prev, fameEvent]);
+      appendFameEvent(fameEvent);
       console.log(`[Fame] Recorded: ${eventType} for ${recipientName}, value=${adjustedFame.toFixed(2)} (${fameEvent.fameType})`);
     }
 
@@ -4515,7 +4533,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         },
       });
     }
-  }, [gameState.bases, gameState.currentPitcherId, gameState.outs, persistBetweenPlayEvent, resolvePlayerNameForId]);
+  }, [appendFameEvent, gameState.bases, gameState.currentBatterId, gameState.currentBatterName, gameState.currentPitcherId, gameState.inning, gameState.outs, getCurrentLeverageIndex, persistBetweenPlayEvent, resolvePlayerNameForId]);
 
   const advanceRunner = useCallback((from: 'first' | 'second' | 'third', to: 'second' | 'third' | 'home', outcome: 'safe' | 'out') => {
     // Calculate score change first so we can update both game state and scoreboard
@@ -4596,7 +4614,10 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         endInningRef.current?.();
       }, 500);
     }
-  }, [gameState.isTop, gameState.inning, gameState.outs, gameState.currentPitcherId, gameState.currentPitcherName]);
+    if (outcome === 'out') {
+      creditFieldingOutsToPositions(1);
+    }
+  }, [creditFieldingOutsToPositions, gameState.isTop, gameState.inning, gameState.outs, gameState.currentPitcherId, gameState.currentPitcherName]);
 
   /**
    * Batch update runners - processes all movements atomically
@@ -4704,13 +4725,16 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
 
     // T0-03 FIX: Check if batch runner outs caused 3rd out (same pattern as advanceRunner).
     const totalOuts = movements.filter(m => m.outcome === 'out').length;
+    if (totalOuts > 0) {
+      creditFieldingOutsToPositions(totalOuts);
+    }
     if (totalOuts > 0 && gameState.outs + totalOuts >= 3) {
       console.log('[advanceRunnersBatch] T0-03: Baserunning out(s) caused 3rd out — triggering end of inning');
       setTimeout(() => {
         endInningRef.current?.();
       }, 500);
     }
-  }, [gameState.isTop, gameState.inning, gameState.outs, gameState.currentPitcherId, gameState.currentPitcherName]);
+  }, [creditFieldingOutsToPositions, gameState.isTop, gameState.inning, gameState.outs, gameState.currentPitcherId, gameState.currentPitcherName]);
 
   const advanceCount = useCallback((type: 'ball' | 'strike' | 'foul') => {
     setGameState(prev => {
@@ -5140,7 +5164,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         playerName: pitchCountPrompt.pitcherName,
         description: `Immaculate inning in inning ${gameState.inning} (${gameState.isTop ? 'top' : 'bottom'})`,
       };
-      setFameEvents(prev => [...prev, immaculateFameEvent]);
+      appendFameEvent(immaculateFameEvent);
       result = { immaculateInning: { pitcherId, pitcherName: pitchCountPrompt.pitcherName } };
       console.log(`[Fame] Immaculate inning detected! Pitcher: ${pitchCountPrompt.pitcherName}, pitches: ${finalCount}, K: 3`);
     }
@@ -5165,7 +5189,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     // Clear the prompt
     setPitchCountPrompt(null);
     return result;
-  }, [pitchCountPrompt, gameState.inning, gameState.isTop]);
+  }, [appendFameEvent, pitchCountPrompt, gameState.inning, gameState.isTop]);
 
   // Dismiss pitch count prompt without confirming
   // For end_inning: still transitions the inning (just skips pitch count update)
@@ -5236,24 +5260,6 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     // If tied after regulation, continue to extra innings (normal transition)
     if (!isTop && inning >= totalInnings && homeScore === awayScore) {
       console.log(`[T0-01] Tied ${homeScore}-${awayScore} after regulation. Extra innings.`);
-    }
-
-    // Ticket 4.10: Record position innings for the fielding team at end of half-inning
-    // When isTop = true, home team was fielding; when isTop = false, away team was fielding
-    const fieldingLineupState = isTop ? homeLineupStateRef.current : awayLineupStateRef.current;
-    for (const player of fieldingLineupState.lineup) {
-      if (player.position && player.position !== 'DH') {
-        const existing = positionInningsRef.current.get(player.playerId) || {};
-        existing[player.position] = (existing[player.position] || 0) + 1;
-        positionInningsRef.current.set(player.playerId, existing);
-      }
-    }
-    // Also record position innings for the current pitcher
-    const fieldingPitcher = fieldingLineupState.currentPitcher;
-    if (fieldingPitcher) {
-      const existing = positionInningsRef.current.get(fieldingPitcher.playerId) || {};
-      existing['P'] = (existing['P'] || 0) + 1;
-      positionInningsRef.current.set(fieldingPitcher.playerId, existing);
     }
 
     // CRIT-02: Clear runner tracker for new half-inning and update inning number
@@ -5672,7 +5678,6 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
   }, [
     atBatSequence,
     buildPersistedFameEvents,
-    fameEvents,
     gameState,
     pitcherStats,
     playerStats,
@@ -5909,7 +5914,6 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     atBatSequence,
     buildPersistedFameEvents,
     completeGameInternal,
-    fameEvents,
     gameState,
     pitcherStats,
     playerStats,
@@ -6037,7 +6041,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     setPlayoffContext,
     setStadiumName,
     setNextEventEnrichment,
-    /** Position innings map: playerId → { [position]: halfInningsPlayed } (ticket 4.10) */
+    /** Position usage map: playerId → { [position]: outsPlayed } (convert to innings via / 3) */
     positionInnings: positionInningsRef.current,
   };
 }

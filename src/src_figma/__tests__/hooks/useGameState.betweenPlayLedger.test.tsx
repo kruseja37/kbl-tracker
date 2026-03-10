@@ -96,6 +96,7 @@ async function initializeGame(result: ReturnType<typeof renderHook<typeof useGam
         { playerId: 'away-bench-1', playerName: 'Away Bench 1', positions: ['IF'] },
       ],
       homeBench: [
+        { playerId: 'home-bench-1', playerName: 'Home Bench 1', positions: ['2B'] },
         { playerId: 'home-rp', playerName: 'Home Reliever', positions: ['P'] },
       ],
       seasonNumber: 1,
@@ -238,5 +239,35 @@ describe('useGameState between-play ledger', () => {
         }),
       })],
     ]));
+  });
+
+  test('tracks defensive position usage per out instead of per half-inning', async () => {
+    const { result } = renderHook(() => useGameState());
+    await initializeGame(result);
+
+    await act(async () => {
+      await result.current.commitPlateAppearance({ type: 'out', outType: 'GO' });
+    });
+
+    expect(result.current.positionInnings.get('home-batter-1')).toMatchObject({ '2B': 1 });
+    expect(result.current.positionInnings.get('home-batter-2')).toMatchObject({ RF: 1 });
+    expect(result.current.positionInnings.get('home-sp')).toMatchObject({ P: 1 });
+
+    await act(async () => {
+      const subResult = result.current.makeSubstitution(
+        'home-bench-1',
+        'home-batter-1',
+        'Home Bench 1',
+        'Home Batter 1',
+        { subType: 'defensive_sub', newPosition: '2B' },
+      );
+      expect(subResult).toEqual({ success: true });
+      await result.current.commitPlateAppearance({ type: 'out', outType: 'FO' });
+    });
+
+    expect(result.current.positionInnings.get('home-batter-1')).toMatchObject({ '2B': 1 });
+    expect(result.current.positionInnings.get('home-bench-1')).toMatchObject({ '2B': 1 });
+    expect(result.current.positionInnings.get('home-batter-2')).toMatchObject({ RF: 2 });
+    expect(result.current.positionInnings.get('home-sp')).toMatchObject({ P: 2 });
   });
 });

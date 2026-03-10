@@ -1,5 +1,6 @@
 import { act, renderHook } from '@testing-library/react';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
+import { calculateLeverageIndex } from '../../../engines/leverageCalculator';
 
 const {
   mockLogAtBatEvent,
@@ -160,5 +161,91 @@ describe('useGameState commitPlateAppearance', () => {
     });
     expect(result.current.gameState.outs).toBe(0);
     expect(result.current.gameState.bases.first).toBe(true);
+  });
+
+  test('stores full leverage index on at-bat events instead of base-out LI only', async () => {
+    const { result } = renderHook(() => useGameState());
+    await initializeGame(result);
+
+    act(() => {
+      result.current.restoreState({
+        gameState: {
+          ...result.current.gameState,
+          inning: 9,
+          isTop: false,
+          outs: 2,
+          bases: { first: true, second: true, third: true },
+          awayScore: 3,
+          homeScore: 2,
+          currentBatterId: 'home-batter-1',
+          currentBatterName: 'Home Batter 1',
+          currentPitcherId: 'away-sp',
+          currentPitcherName: 'Away Starter',
+        },
+        scoreboard: result.current.scoreboard,
+      });
+    });
+
+    await act(async () => {
+      await result.current.commitPlateAppearance({ type: 'walk', walkType: 'BB' });
+    });
+
+    const expectedLI = calculateLeverageIndex({
+      inning: 9,
+      halfInning: 'BOTTOM',
+      outs: 2,
+      runners: { first: true, second: true, third: true },
+      homeScore: 2,
+      awayScore: 3,
+      totalInnings: 9,
+    }).leverageIndex;
+
+    expect(mockLogAtBatEvent).toHaveBeenCalledTimes(1);
+    expect(mockLogAtBatEvent.mock.calls[0][0].leverageIndex).toBeCloseTo(expectedLI, 5);
+    expect(mockLogAtBatEvent.mock.calls[0][0].leverageIndex).toBeGreaterThan(2.67);
+  });
+
+  test('uses the corrected WEB_GEM fame base value', async () => {
+    const { result } = renderHook(() => useGameState());
+    await initializeGame(result);
+
+    act(() => {
+      result.current.restoreState({
+        gameState: {
+          ...result.current.gameState,
+          inning: 9,
+          isTop: false,
+          outs: 2,
+          bases: { first: true, second: false, third: true },
+          awayScore: 4,
+          homeScore: 3,
+        },
+        scoreboard: result.current.scoreboard,
+      });
+    });
+
+    mockArchiveCompletedGame.mockClear();
+
+    await act(async () => {
+      await result.current.recordEvent('WEB_GEM', 'home-batter-2');
+      await result.current.endGame();
+    });
+
+    const expectedLI = calculateLeverageIndex({
+      inning: 9,
+      halfInning: 'BOTTOM',
+      outs: 2,
+      runners: { first: true, second: false, third: true },
+      homeScore: 3,
+      awayScore: 4,
+      totalInnings: 9,
+    }).leverageIndex;
+    const archivedGame = mockArchiveCompletedGame.mock.calls.at(-1)?.[0];
+
+    expect(archivedGame?.fameEvents?.[0]).toMatchObject({
+      eventType: 'WEB_GEM',
+      playerId: 'home-batter-2',
+    });
+    expect(archivedGame?.fameEvents?.[0].fameValue).toBeCloseTo(0.75 * Math.sqrt(expectedLI), 5);
   });
 });
