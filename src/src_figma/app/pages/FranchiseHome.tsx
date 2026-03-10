@@ -159,7 +159,7 @@ export function FranchiseHome() {
   ]);
 
   useEffect(() => {
-    if (activeTab !== "playoff-leaders") return;
+    if (activeTab !== "playoff-leaders" && activeTab !== "playoff-stats") return;
     if (!playoffData.playoff || playoffData.playoff.status === 'NOT_STARTED') {
       setPlayoffLeaderBatting({});
       setPlayoffLeaderPitching({});
@@ -1843,14 +1843,38 @@ export function FranchiseHome() {
                   </div>
                 </div>
 
-                {/* Player Stats Placeholder */}
                 <div className="bg-[#5A8352] border-[4px] border-[#4A6844] p-6">
                   <div className="text-lg text-[#E8E8D8] font-bold mb-4">TOP PERFORMERS</div>
-                  <div className="bg-[#4A6844] p-4">
-                    <div className="text-xs text-[#E8E8D8]/60 text-center py-4">
-                      Individual player stats will be tracked when games are played via GameTracker
+                  {playoffLeadersLoading ? (
+                    <div className="bg-[#4A6844] p-4">
+                      <div className="text-xs text-[#E8E8D8]/60 text-center py-4">
+                        Loading tracked playoff performers...
+                      </div>
                     </div>
-                  </div>
+                  ) : !Object.values(playoffLeaderBatting).some((items) => items.length > 0)
+                    && !Object.values(playoffLeaderPitching).some((items) => items.length > 0)
+                    && !Object.values(playoffLeaderFielding).some((items) => items.length > 0) ? (
+                    <div className="bg-[#4A6844] p-4">
+                      <div className="text-xs text-[#E8E8D8]/60 text-center py-4">
+                        Track playoff games via GameTracker to populate player performance
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
+                      {buildPlayoffTopPerformerCards(
+                        playoffLeaderBatting,
+                        playoffLeaderPitching,
+                        playoffLeaderFielding
+                      ).map((card) => (
+                        <div key={card.label} className="bg-[#4A6844] p-4 border-2 border-[#E8E8D8]/30">
+                          <div className="text-[10px] text-[#E8E8D8]/60 mb-2">{card.label}</div>
+                          <div className="text-sm text-[#E8E8D8] font-bold mb-1">{card.playerName}</div>
+                          <div className="text-[10px] text-[#E8E8D8]/70 mb-2">{card.teamId}</div>
+                          <div className="text-[10px] text-[#E8E8D8]/90">{card.value}</div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
             )}
@@ -4179,4 +4203,54 @@ function formatFranchisePlayoffLeaderValue(label: string, stat: PlayoffPlayerSta
     default:
       return '0';
   }
+}
+
+function buildPlayoffTopPerformerCards(
+  batting: Record<string, PlayoffPlayerStats[]>,
+  pitching: Record<string, PlayoffPlayerStats[]>,
+  fielding: Record<string, PlayoffPlayerStats[]>
+): Array<{ label: string; playerName: string; teamId: string; value: string }> {
+  const cards: Array<{ label: string; playerName: string; teamId: string; value: string }> = [];
+
+  const mvpBat = batting.OPS?.[0];
+  if (mvpBat) {
+    cards.push({
+      label: 'TOP BAT',
+      playerName: mvpBat.playerName,
+      teamId: mvpBat.teamId,
+      value: `${mvpBat.ops.toFixed(3)} OPS · ${mvpBat.rbi} RBI · ${mvpBat.homeRuns} HR`,
+    });
+  }
+
+  const slugger = batting.HR?.[0];
+  if (slugger) {
+    cards.push({
+      label: 'POWER BAT',
+      playerName: slugger.playerName,
+      teamId: slugger.teamId,
+      value: `${slugger.homeRuns} HR · ${slugger.hits} H · ${slugger.slg.toFixed(3)} SLG`,
+    });
+  }
+
+  const ace = pitching.ERA?.[0];
+  if (ace) {
+    cards.push({
+      label: 'TOP ARM',
+      playerName: ace.playerName,
+      teamId: ace.teamId,
+      value: `${(ace.era ?? 0).toFixed(2)} ERA · ${ace.pitchingStrikeouts ?? 0} K · ${ace.inningsPitched ?? 0} IP`,
+    });
+  }
+
+  const fielder = fielding.FWAR?.[0];
+  if (fielder) {
+    cards.push({
+      label: 'TOP GLOVE',
+      playerName: fielder.playerName,
+      teamId: fielder.teamId,
+      value: `${(fielder.fieldingWAR ?? 0).toFixed(2)} fWAR${fielder.fieldingPrimaryPosition ? ` · ${fielder.fieldingPrimaryPosition}` : ''}`,
+    });
+  }
+
+  return cards;
 }
