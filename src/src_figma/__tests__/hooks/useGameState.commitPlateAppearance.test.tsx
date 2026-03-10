@@ -1,0 +1,154 @@
+import { act, renderHook } from '@testing-library/react';
+import { beforeEach, describe, expect, test, vi } from 'vitest';
+
+const {
+  mockLogAtBatEvent,
+  mockCreateGameHeader,
+  mockCompleteGame,
+  mockGetGameEvents,
+  mockMarkGameAggregated,
+  mockGetGameFieldingEvents,
+  mockGetGameHeader,
+  mockArchiveCompletedGame,
+  mockSaveCurrentGame,
+  mockLoadCurrentGame,
+  mockImmediateSaveCurrentGame,
+  mockClearCurrentGame,
+  mockProcessCompletedGame,
+  mockAggregateGameToPlayoffStats,
+} = vi.hoisted(() => ({
+  mockLogAtBatEvent: vi.fn().mockResolvedValue(undefined),
+  mockCreateGameHeader: vi.fn().mockResolvedValue(undefined),
+  mockCompleteGame: vi.fn().mockResolvedValue(undefined),
+  mockGetGameEvents: vi.fn().mockResolvedValue([]),
+  mockMarkGameAggregated: vi.fn().mockResolvedValue(undefined),
+  mockGetGameFieldingEvents: vi.fn().mockResolvedValue([]),
+  mockGetGameHeader: vi.fn().mockResolvedValue({ aggregated: false }),
+  mockArchiveCompletedGame: vi.fn().mockResolvedValue(undefined),
+  mockSaveCurrentGame: vi.fn().mockResolvedValue(undefined),
+  mockLoadCurrentGame: vi.fn().mockResolvedValue(null),
+  mockImmediateSaveCurrentGame: vi.fn().mockResolvedValue(undefined),
+  mockClearCurrentGame: vi.fn().mockResolvedValue(undefined),
+  mockProcessCompletedGame: vi.fn().mockResolvedValue({
+    aggregation: { success: true, milestones: null },
+  }),
+  mockAggregateGameToPlayoffStats: vi.fn().mockResolvedValue(undefined),
+}));
+
+vi.mock('../../../utils/eventLog', () => ({
+  logAtBatEvent: mockLogAtBatEvent,
+  createGameHeader: mockCreateGameHeader,
+  completeGame: mockCompleteGame,
+  getGameEvents: mockGetGameEvents,
+  markGameAggregated: mockMarkGameAggregated,
+  getGameFieldingEvents: mockGetGameFieldingEvents,
+  getGameHeader: mockGetGameHeader,
+}));
+
+vi.mock('../../utils/gameStorage', () => ({
+  archiveCompletedGame: mockArchiveCompletedGame,
+  saveCurrentGame: mockSaveCurrentGame,
+  loadCurrentGame: mockLoadCurrentGame,
+  immediateSaveCurrentGame: mockImmediateSaveCurrentGame,
+  clearCurrentGame: mockClearCurrentGame,
+}));
+
+vi.mock('../../../utils/processCompletedGame', () => ({
+  processCompletedGame: mockProcessCompletedGame,
+}));
+
+vi.mock('../../../utils/playoffStorage', () => ({
+  aggregateGameToPlayoffStats: mockAggregateGameToPlayoffStats,
+}));
+
+import { useGameState } from '../../hooks/useGameState';
+
+async function initializeGame(result: ReturnType<typeof renderHook<typeof useGameState>>['result']) {
+  await act(async () => {
+    await result.current.initializeGame({
+      gameId: 'game-wp2',
+      awayTeamId: 'away-team',
+      awayTeamName: 'Away Team',
+      homeTeamId: 'home-team',
+      homeTeamName: 'Home Team',
+      awayStartingPitcherId: 'away-sp',
+      awayStartingPitcherName: 'Away Starter',
+      homeStartingPitcherId: 'home-sp',
+      homeStartingPitcherName: 'Home Starter',
+      awayLineup: [
+        { playerId: 'away-batter-1', playerName: 'Away Batter 1', position: 'SS' },
+        { playerId: 'away-batter-2', playerName: 'Away Batter 2', position: 'CF' },
+      ],
+      homeLineup: [
+        { playerId: 'home-batter-1', playerName: 'Home Batter 1', position: '2B' },
+        { playerId: 'home-batter-2', playerName: 'Home Batter 2', position: 'RF' },
+      ],
+      awayBench: [],
+      homeBench: [],
+      seasonNumber: 1,
+    });
+  });
+}
+
+describe('useGameState commitPlateAppearance', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.clearAllMocks();
+    mockGetGameEvents.mockResolvedValue([]);
+    mockGetGameFieldingEvents.mockResolvedValue([]);
+    mockGetGameHeader.mockResolvedValue({ aggregated: false });
+  });
+
+  test('normalizes UI-native SAC into a canonical at-bat event and batter SH stat', async () => {
+    const { result } = renderHook(() => useGameState());
+    await initializeGame(result);
+
+    await act(async () => {
+      await result.current.commitPlateAppearance({ type: 'out', outType: 'SAC' });
+    });
+
+    expect(mockLogAtBatEvent).toHaveBeenCalledTimes(1);
+    expect(mockLogAtBatEvent.mock.calls[0][0]).toMatchObject({
+      batterId: 'away-batter-1',
+      pitcherId: 'home-sp',
+      result: 'SAC',
+      outsAfter: 1,
+    });
+    expect(result.current.playerStats.get('away-batter-1')).toMatchObject({
+      pa: 1,
+      ab: 0,
+      sh: 1,
+      k: 0,
+    });
+    expect(result.current.gameState.outs).toBe(1);
+  });
+
+  test('routes dropped-third-strike metadata through the canonical recorder', async () => {
+    const { result } = renderHook(() => useGameState());
+    await initializeGame(result);
+
+    await act(async () => {
+      await result.current.commitPlateAppearance({
+        type: 'out',
+        outType: 'K',
+        batterReached: true,
+        isDroppedThirdStrike: true,
+      });
+    });
+
+    expect(mockLogAtBatEvent).toHaveBeenCalledTimes(1);
+    expect(mockLogAtBatEvent.mock.calls[0][0]).toMatchObject({
+      batterId: 'away-batter-1',
+      pitcherId: 'home-sp',
+      result: 'K',
+      outsAfter: 0,
+    });
+    expect(result.current.playerStats.get('away-batter-1')).toMatchObject({
+      pa: 1,
+      ab: 1,
+      k: 1,
+    });
+    expect(result.current.gameState.outs).toBe(0);
+    expect(result.current.gameState.bases.first).toBe(true);
+  });
+});

@@ -163,6 +163,34 @@ export type HitType = '1B' | '2B' | '3B' | 'HR' | 'GRD'; // GRD = Ground Rule Do
 export type OutType = 'K' | 'Kc' | 'GO' | 'FO' | 'LO' | 'PO' | 'DP' | 'TP' | 'FC' | 'SF' | 'SH' | 'D3K';
 export type WalkType = 'BB' | 'HBP' | 'IBB';
 export type ReachOnErrorType = 'E'; // Batter reaches base on fielding error
+export type PlateAppearanceOutType = OutType | 'SAC';
+export type PlateAppearanceAction =
+  | {
+      type: 'hit';
+      hitType: HitType;
+      rbi: number;
+      runnerAdvancement?: RunnerAdvancement;
+    }
+  | {
+      type: 'out';
+      outType: PlateAppearanceOutType;
+      runnerAdvancement?: RunnerAdvancement;
+      batterReached?: boolean;
+      isDroppedThirdStrike?: boolean;
+      forceNoRuns?: boolean;
+    }
+  | {
+      type: 'walk';
+      walkType: WalkType;
+    }
+  | {
+      type: 'error';
+      rbi?: number;
+      runnerAdvancement?: RunnerAdvancement;
+    }
+  | {
+      type: 'foul_ball';
+    };
 export type EventType =
   | 'SB' | 'CS' | 'WP' | 'PB' | 'PICK' | 'PICK_SAFE' | 'PICK_E'
   | 'KILLED' | 'NUTSHOT'
@@ -196,6 +224,7 @@ export interface UseGameStateReturn {
   recordWalk: (walkType: WalkType, pitchCount?: number) => Promise<void>;
   recordD3K: (batterReached: boolean, pitchCount?: number) => Promise<void>;
   recordError: (rbi?: number, runnerData?: RunnerAdvancement, pitchCount?: number) => Promise<void>;
+  commitPlateAppearance: (action: PlateAppearanceAction) => Promise<void>;
   recordEvent: (eventType: EventType, runnerId?: string) => Promise<void>;
   advanceRunner: (from: 'first' | 'second' | 'third', to: 'second' | 'third' | 'home', outcome: 'safe' | 'out') => void;
   /** Batch update runners - processes all movements atomically to avoid race conditions */
@@ -4007,6 +4036,40 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     setGameState(prev => ({ ...prev, balls: 0, strikes: 0 }));
   }, []);
 
+  const commitPlateAppearance = useCallback(async (action: PlateAppearanceAction) => {
+    switch (action.type) {
+      case 'hit':
+        await recordHit(action.hitType, action.rbi, action.runnerAdvancement);
+        return;
+      case 'walk':
+        await recordWalk(action.walkType);
+        return;
+      case 'error':
+        await recordError(action.rbi ?? 0, action.runnerAdvancement);
+        return;
+      case 'foul_ball':
+        advanceCount('strike');
+        return;
+      case 'out': {
+        const normalizedOutType: OutType = action.outType === 'SAC' ? 'SH' : action.outType;
+        const isStrikeout = normalizedOutType === 'K' || normalizedOutType === 'Kc';
+
+        if (isStrikeout && (action.isDroppedThirdStrike || action.batterReached)) {
+          await recordD3K(action.batterReached === true);
+          return;
+        }
+
+        await recordOut(
+          normalizedOutType,
+          action.runnerAdvancement,
+          undefined,
+          action.forceNoRuns ? { forceNoRuns: true } : undefined,
+        );
+        return;
+      }
+    }
+  }, [advanceCount, recordD3K, recordError, recordHit, recordOut, recordWalk]);
+
   // MAJ-09: Substitution with validation via LineupState tracking
   const makeSubstitution = useCallback((
     benchPlayerId: string,
@@ -5193,6 +5256,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     recordWalk,
     recordD3K,
     recordError,
+    commitPlateAppearance,
     recordEvent,
     advanceRunner,
     advanceRunnersBatch,

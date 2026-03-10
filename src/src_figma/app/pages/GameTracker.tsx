@@ -22,7 +22,7 @@ import { getTeamColors, getFielderBorderColors } from "@/config/teamColors";
 import { buildFallbackRuntimePlayerId, getRuntimeRosterEntityId } from "../utils/runtimePlayerIdentity";
 import { areRivals } from '../../../data/leagueStructure';
 import { getParkNames } from "../../../data/parkLookup";
-import { useGameState, type HitType, type OutType, type WalkType, type RunnerAdvancement, type PlayerGameStats, type PitcherGameStats } from "@/hooks/useGameState";
+import { useGameState, type HitType, type OutType, type WalkType, type RunnerAdvancement, type PlayerGameStats, type PitcherGameStats, type PlateAppearanceAction } from "@/hooks/useGameState";
 import { usePlayerState, type PlayerStateData, getStateBadge, formatMultiplier } from "@/app/hooks/usePlayerState";
 
 const ordinalSuffix = (num: number) => {
@@ -207,11 +207,7 @@ export function GameTracker() {
     scoreboard,
     playerStats,
     pitcherStats,
-    recordHit,
-    recordOut,
-    recordWalk,
-    recordD3K,
-    recordError,
+    commitPlateAppearance,
     recordEvent,
     advanceRunner,
     advanceRunnersBatch,
@@ -304,6 +300,64 @@ export function GameTracker() {
   const logAction = useCallback((entry: string) => {
     pushActivityLog(`${inningLabel()}: ${entry}`);
   }, [inningLabel, pushActivityLog]);
+
+  const buildPlateAppearanceActionFromPlayData = useCallback((
+    playData: PlayData,
+    runnerAdvancement?: RunnerAdvancement,
+  ): PlateAppearanceAction => {
+    const batterReached = playData.runnerOutcomes?.batter?.to !== 'out' &&
+      playData.runnerOutcomes?.batter?.to !== undefined;
+    const isDroppedThirdStrike = (playData.outType === 'K' || playData.outType === 'Kc') &&
+      playData.fieldingSequence.length >= 2 &&
+      playData.fieldingSequence[0] === 2 &&
+      playData.fieldingSequence[1] === 3;
+
+    switch (playData.type) {
+      case 'hr':
+        return {
+          type: 'hit',
+          hitType: 'HR',
+          rbi: 0,
+          runnerAdvancement,
+        };
+      case 'hit':
+        return {
+          type: 'hit',
+          hitType: playData.hitType || '1B',
+          rbi: 0,
+          runnerAdvancement,
+        };
+      case 'out':
+        return {
+          type: 'out',
+          outType: playData.outType || 'GO',
+          runnerAdvancement,
+          batterReached,
+          isDroppedThirdStrike,
+        };
+      case 'foul_out':
+        return {
+          type: 'out',
+          outType: 'FO',
+          runnerAdvancement,
+        };
+      case 'foul_ball':
+        return {
+          type: 'foul_ball',
+        };
+      case 'walk':
+        return {
+          type: 'walk',
+          walkType: playData.walkType || 'BB',
+        };
+      case 'error':
+        return {
+          type: 'error',
+          rbi: 0,
+          runnerAdvancement,
+        };
+    }
+  }, []);
 
   // Player state management (Mojo, Fitness, Clutch)
   const playerStateHook = usePlayerState({
@@ -1550,10 +1604,7 @@ export function GameTracker() {
       };
 
       const runnerAdvancement = convertToRunnerAdvancement();
-
-      // Check if batter actually reached base (important for D3K, FC, E)
-      const batterReached = playData.runnerOutcomes?.batter?.to !== 'out' &&
-                            playData.runnerOutcomes?.batter?.to !== undefined;
+      const baseAction = buildPlateAppearanceActionFromPlayData(playData, runnerAdvancement);
 
       // ============================================
       // STEP 3.5: Inject enrichment data before record call (Layer 1B §1.16)
@@ -1573,70 +1624,47 @@ export function GameTracker() {
       // ============================================
       if (playData.type === 'hr') {
         const rbi = calculateRBIFromOutcomes();
-        await recordHit('HR', rbi, runnerAdvancement);
+        await commitPlateAppearance({ ...baseAction, type: 'hit', hitType: 'HR', rbi });
         console.log(`HR recorded: ${playData.hrDistance}ft, type: ${playData.hrType}, sector: ${playData.spraySector}, RBI: ${rbi}`);
         logAction(`HR (${playData.hrDistance ?? '??'}ft${playData.spraySector ? ` ${playData.spraySector}` : ''}) — ${rbi} RBI`);
       } else if (playData.type === 'hit') {
         const hitType = playData.hitType || '1B';
         const rbi = calculateRBIFromOutcomes();
-        await recordHit(hitType as HitType, rbi, runnerAdvancement);
+        await commitPlateAppearance({ ...baseAction, type: 'hit', hitType: hitType as HitType, rbi });
         console.log(`Hit recorded: ${hitType}, sector: ${playData.spraySector}, sequence: ${playData.fieldingSequence.join('-')}, RBI: ${rbi}`);
         logAction(`${hitType} hit${playData.spraySector ? ` to ${playData.spraySector}` : ''} — ${rbi} RBI`);
       } else if (playData.type === 'out') {
         const outType = playData.outType || 'GO';
-
-        // D3K Special Case: If batter reached, it's a K stat but NOT an out
-        // FIX: BUG-004 - Use proper recordD3K() instead of recordWalk workaround
-        // D3K is legal when: first base empty OR 2 outs
-        if (outType === 'K' && batterReached) {
-          // This is D3K where batter reached first
-          // recordD3K correctly: counts K for both batter and pitcher, NO out, batter reaches 1B
-          await recordD3K(true);
-          console.log(`D3K recorded: Batter reached first (K stat counted, no out recorded)`);
-          logAction(`D3K (batter reached first)`);
-        } else if (outType === 'K' || outType === 'Kc') {
-          // Normal strikeout OR D3K where batter didn't reach (thrown out at first)
-          // Check if this is D3K thrown out scenario - D3K has catcher throwing to first: [2, 3]
-          // Regular strikeouts have empty fieldingSequence []
-          const isD3KThrownOut = playData.fieldingSequence.length >= 2 &&
-                                  playData.fieldingSequence[0] === 2 &&
-                                  playData.fieldingSequence[1] === 3;
-          if (isD3KThrownOut && !batterReached) {
-            // D3K where batter was thrown out - still counts K for batter/pitcher, but also out
-            await recordD3K(false);
-            console.log(`D3K recorded: Batter thrown out (K stat counted, out recorded)`);
-            logAction(`D3K (batter thrown out)`);
-          } else {
-            // Normal strikeout
-            await recordOut(outType as OutType, runnerAdvancement);
-            console.log(`Strikeout recorded: ${outType}`);
-            logAction(`Strikeout (${outType})`);
-          }
+        const isDroppedThirdStrike = baseAction.type === 'out' && baseAction.isDroppedThirdStrike;
+        const batterReached = baseAction.type === 'out' && baseAction.batterReached;
+        await commitPlateAppearance(baseAction);
+        if ((outType === 'K' || outType === 'Kc') && (batterReached || isDroppedThirdStrike)) {
+          console.log(`D3K recorded: Batter ${batterReached ? 'reached first' : 'thrown out'} (K stat counted)`);
+          logAction(`D3K (${batterReached ? 'batter reached first' : 'batter thrown out'})`);
         } else {
-          // Normal out (non-strikeout)
-          await recordOut(outType as OutType, runnerAdvancement);
           console.log(`Out recorded: ${outType}, sequence: ${playData.fieldingSequence.join('-')}, sector: ${playData.spraySector}`);
-          logAction(`Out (${outType})${playData.fieldingSequence.length ? ` via ${playData.fieldingSequence.join('-')}` : ''}`);
+          if (outType === 'K' || outType === 'Kc') {
+            logAction(`Strikeout (${outType})`);
+          } else {
+            logAction(`Out (${outType})${playData.fieldingSequence.length ? ` via ${playData.fieldingSequence.join('-')}` : ''}`);
+          }
         }
       } else if (playData.type === 'foul_out') {
-        await recordOut('FO', runnerAdvancement);
+        await commitPlateAppearance(baseAction);
         console.log(`Foul out recorded: ${playData.foulType}, fielder: ${playData.fieldingSequence[0]}`);
         logAction(`Foul out (${playData.foulType})`);
       } else if (playData.type === 'foul_ball') {
-        await advanceCount('strike');
+        await commitPlateAppearance(baseAction);
         console.log(`Foul ball (strike) recorded`);
         logAction('Foul ball (strike)');
       } else if (playData.type === 'walk') {
-        // FIX: BUG-001/002/003 - Walks now properly route to recordWalk()
-        // This correctly tracks PA without AB or H
+        await commitPlateAppearance(baseAction);
         const walkType = playData.walkType || 'BB';
-        await recordWalk(walkType as WalkType);
         console.log(`Walk recorded: ${walkType}`);
         logAction(`${walkType} walk`);
       } else if (playData.type === 'error') {
-        // ROE (Reached On Error) - batter reaches base, no out, AB counted, no hit
         const rbi = calculateRBIFromOutcomes();
-        await recordError(rbi, runnerAdvancement);
+        await commitPlateAppearance({ ...baseAction, type: 'error', rbi });
         console.log(`Error recorded: ${playData.errorType} error by fielder #${playData.errorFielder}, RBI: ${rbi}`);
         logAction(`${playData.errorType} error by fielder ${playData.errorFielder} — ${rbi} RBI`);
       }
@@ -1980,7 +2008,7 @@ export function GameTracker() {
     } catch (error) {
       console.error('Failed to record enhanced play:', error);
     }
-  }, [recordHit, recordOut, recordWalk, recordError, advanceCount, gameState, undoSystem, playerStats, pitcherStats, fameTrackingHook, playerStateHook, runnerNames, buildGameStateForLI, mwarHook, pendingMWARDecisions, inferFielderCredits, pushPlayLogEntry, shortInningLabel, setNextEventEnrichment]);
+  }, [buildPlateAppearanceActionFromPlayData, commitPlateAppearance, gameState, undoSystem, playerStats, pitcherStats, fameTrackingHook, playerStateHook, runnerNames, buildGameStateForLI, mwarHook, pendingMWARDecisions, inferFielderCredits, pushPlayLogEntry, shortInningLabel, setNextEventEnrichment]);
 
   // ══════════════════════════════════════════════════════════════
   // QUICK BAR HANDLER — §3.2 one-tap execution flow
@@ -2084,7 +2112,7 @@ export function GameTracker() {
           return; // Deferred to handleDpPromptAnswer
         }
         // No runner out in defaults → standard GO, fall through
-        await recordOut('GO' as OutType, runnerAdv);
+        await commitPlateAppearance({ type: 'out', outType: 'GO', runnerAdvancement: runnerAdv });
         logAction('GO');
 
       } else if (outcome === 'PO' && outs < 2 && bases.first && bases.second) {
@@ -2093,31 +2121,31 @@ export function GameTracker() {
         return; // Deferred to handleIfrPromptAnswer
 
       } else if (QUICK_BAR_HITS.includes(outcome)) {
-        await recordHit(outcome as HitType, rbi, runnerAdv);
+        await commitPlateAppearance({ type: 'hit', hitType: outcome as HitType, rbi, runnerAdvancement: runnerAdv });
         logAction(`${outcome}${rbi > 0 ? ` — ${rbi} RBI` : ''}`);
 
       } else if (QUICK_BAR_WALKS.includes(outcome)) {
-        await recordWalk(outcome as WalkType);
+        await commitPlateAppearance({ type: 'walk', walkType: outcome as WalkType });
         logAction(`${outcome}`);
 
       } else if (outcome === 'FC') {
         // Fielder's Choice: batter reaches, lead runner out
-        await recordOut('FC' as OutType, runnerAdv);
+        await commitPlateAppearance({ type: 'out', outType: 'FC', runnerAdvancement: runnerAdv });
         logAction('FC');
 
       } else if (outcome === 'D3K') {
         // Dropped 3rd strike — batter reached (1B empty or 2 outs)
         const d3kLegal = !bases.first || outs >= 2;
-        await recordD3K(d3kLegal);
+        await commitPlateAppearance({ type: 'out', outType: 'K', batterReached: d3kLegal, isDroppedThirdStrike: true });
         logAction(d3kLegal ? 'D3K (batter reached)' : 'D3K (batter out)');
 
       } else if (outcome === 'WP_K' || outcome === 'PB_K') {
         // Wild pitch / passed ball strikeout — K but batter reaches
-        await recordD3K(true);
+        await commitPlateAppearance({ type: 'out', outType: 'K', batterReached: true, isDroppedThirdStrike: true });
         logAction(`${outcome} (K, batter reached)`);
 
       } else if (QUICK_BAR_OUTS.includes(outcome)) {
-        await recordOut(outcome as OutType, runnerAdv);
+        await commitPlateAppearance({ type: 'out', outType: outcome as 'K' | 'GO' | 'FO' | 'LO' | 'PO' | 'DP' | 'TP' | 'SF' | 'SAC', runnerAdvancement: runnerAdv });
         logAction(`${outcome}`);
 
       } else {
@@ -2173,7 +2201,7 @@ export function GameTracker() {
     } catch (error) {
       console.error(`[QuickBar] Failed to record ${outcome}:`, error);
     }
-  }, [gameInitialized, gameState, recordHit, recordOut, recordWalk, recordError, recordD3K, undoSystem, logAction, runnerNames, pushPlayLogEntry, shortInningLabel]);
+  }, [commitPlateAppearance, gameInitialized, gameState, undoSystem, logAction, runnerNames, pushPlayLogEntry, shortInningLabel]);
 
   // ═══════════════════════════════════════════════════════════
   // D-4: HR inline prompt completion
@@ -2191,7 +2219,7 @@ export function GameTracker() {
     }
 
     try {
-      await recordHit('HR' as HitType, rbi, runnerAdv);
+      await commitPlateAppearance({ type: 'hit', hitType: 'HR', rbi, runnerAdvancement: runnerAdv });
       logAction(`HR${rbi > 0 ? ` — ${rbi} RBI` : ''}${distance ? ` (${distance} ft)` : ''}`);
 
       pushPlayLogEntry({
@@ -2217,13 +2245,13 @@ export function GameTracker() {
       console.error('[D-4] Failed to record HR:', error);
     }
     setHrPrompt(null);
-  }, [hrPrompt, recordHit, logAction, pushPlayLogEntry, gameState, atBatSequence, shortInningLabel, setNextEventEnrichment]);
+  }, [atBatSequence, commitPlateAppearance, gameState, hrPrompt, logAction, pushPlayLogEntry, setNextEventEnrichment, shortInningLabel]);
 
   const handleHrPromptSkip = useCallback(async () => {
     if (!hrPrompt) return;
     const { rbi, runnerAdv } = hrPrompt;
     try {
-      await recordHit('HR' as HitType, rbi, runnerAdv);
+      await commitPlateAppearance({ type: 'hit', hitType: 'HR', rbi, runnerAdvancement: runnerAdv });
       logAction(`HR${rbi > 0 ? ` — ${rbi} RBI` : ''}`);
 
       pushPlayLogEntry({
@@ -2247,7 +2275,7 @@ export function GameTracker() {
       console.error('[D-4] Failed to record HR (skip):', error);
     }
     setHrPrompt(null);
-  }, [hrPrompt, recordHit, logAction, pushPlayLogEntry, gameState, atBatSequence, shortInningLabel]);
+  }, [atBatSequence, commitPlateAppearance, gameState, hrPrompt, logAction, pushPlayLogEntry, shortInningLabel]);
 
   // ═══════════════════════════════════════════════════════════
   // D-3: Error flow prompt completion
@@ -2282,7 +2310,7 @@ export function GameTracker() {
     setNextEventEnrichment(enrichment as NonNullable<import('../../../utils/eventLog').AtBatEvent['enrichment']>);
 
     try {
-      await recordError(rbi, runnerAdv);
+      await commitPlateAppearance({ type: 'error', rbi, runnerAdvancement: runnerAdv });
       logAction(`E${fielderPosition || ''}${errorType ? ` (${errorType})` : ''} — batter to ${baseReached}`);
 
       pushPlayLogEntry({
@@ -2316,7 +2344,7 @@ export function GameTracker() {
       console.error('[D-3] Failed to record error:', error);
     }
     setErrorFlow(null);
-  }, [errorFlow, gameState, recordError, logAction, pushPlayLogEntry, atBatSequence, shortInningLabel, runnerNames, undoSystem, setNextEventEnrichment]);
+  }, [atBatSequence, commitPlateAppearance, errorFlow, gameState, logAction, pushPlayLogEntry, runnerNames, setNextEventEnrichment, shortInningLabel, undoSystem]);
 
   // ═══════════════════════════════════════════════════════════
   // D-5: SF prompt answer — "Sac fly — run scores?"
@@ -2328,7 +2356,7 @@ export function GameTracker() {
       if (isYes) {
         // SF: runner scores from 3rd, batter out, not an AB
         const sfAdv: RunnerAdvancement = { ...runnerAdv, fromThird: 'home' };
-        await recordOut('SF' as OutType, sfAdv);
+        await commitPlateAppearance({ type: 'out', outType: 'SF', runnerAdvancement: sfAdv });
         logAction('SF — run scores');
 
         pushPlayLogEntry({
@@ -2346,7 +2374,7 @@ export function GameTracker() {
       } else {
         // FO: runner holds, standard fly out
         const foAdv: RunnerAdvancement = { ...runnerAdv, fromThird: undefined };
-        await recordOut('FO' as OutType, Object.keys(foAdv).length > 0 ? foAdv : undefined);
+        await commitPlateAppearance({ type: 'out', outType: 'FO', runnerAdvancement: Object.keys(foAdv).length > 0 ? foAdv : undefined });
         logAction('FO (R3 held)');
 
         pushPlayLogEntry({
@@ -2379,7 +2407,7 @@ export function GameTracker() {
       console.error('[D-5] Failed to record SF/FO:', error);
     }
     setSfPrompt(null);
-  }, [sfPrompt, recordOut, logAction, pushPlayLogEntry, gameState, atBatSequence, shortInningLabel, runnerNames]);
+  }, [atBatSequence, commitPlateAppearance, gameState, logAction, pushPlayLogEntry, runnerNames, sfPrompt, shortInningLabel]);
 
   // ═══════════════════════════════════════════════════════════
   // D-6: GO→DP prompt answer — "Double play?"
@@ -2389,7 +2417,7 @@ export function GameTracker() {
     const { runnerAdv, rbi, defaults } = dpPrompt;
     try {
       if (isDP) {
-        await recordOut('DP' as OutType, runnerAdv);
+        await commitPlateAppearance({ type: 'out', outType: 'DP', runnerAdvancement: runnerAdv });
         logAction(`DP${rbi > 0 ? ` — ${rbi} RBI` : ''}`);
 
         pushPlayLogEntry({
@@ -2405,7 +2433,7 @@ export function GameTracker() {
         });
       } else {
         // Standard GO, no DP
-        await recordOut('GO' as OutType, runnerAdv);
+        await commitPlateAppearance({ type: 'out', outType: 'GO', runnerAdvancement: runnerAdv });
         logAction('GO');
 
         pushPlayLogEntry({
@@ -2434,7 +2462,7 @@ export function GameTracker() {
       console.error('[D-6] Failed to record GO/DP:', error);
     }
     setDpPrompt(null);
-  }, [dpPrompt, recordOut, logAction, pushPlayLogEntry, gameState, atBatSequence, shortInningLabel, runnerNames]);
+  }, [atBatSequence, commitPlateAppearance, dpPrompt, gameState, logAction, pushPlayLogEntry, runnerNames, shortInningLabel]);
 
   // ═══════════════════════════════════════════════════════════
   // D-7: IFR prompt answer — "Infield Fly Rule?"
@@ -2449,7 +2477,7 @@ export function GameTracker() {
         setNextEventEnrichment({ modifiers: ['ifr'] } as NonNullable<import('../../../utils/eventLog').AtBatEvent['enrichment']>);
       }
       // Either way it's a PO — IFR just adds the modifier
-      await recordOut('PO' as OutType, runnerAdv);
+      await commitPlateAppearance({ type: 'out', outType: 'PO', runnerAdvancement: runnerAdv });
       logAction(`PO${isIFR ? ' (IFR)' : ''}`);
 
       pushPlayLogEntry({
@@ -2474,7 +2502,7 @@ export function GameTracker() {
       console.error('[D-7] Failed to record PO/IFR:', error);
     }
     setIfrPrompt(null);
-  }, [ifrPrompt, recordOut, logAction, pushPlayLogEntry, gameState, atBatSequence, shortInningLabel, runnerNames, setNextEventEnrichment]);
+  }, [atBatSequence, commitPlateAppearance, gameState, ifrPrompt, logAction, pushPlayLogEntry, runnerNames, setNextEventEnrichment, shortInningLabel]);
 
   // EXH-016: Handle fielder credit confirmation - continue processing the play with credits
   const handleFielderCreditConfirm = useCallback(async (credits: FielderCredit[]) => {
@@ -2555,8 +2583,6 @@ export function GameTracker() {
       };
 
       const runnerAdvancement = convertToRunnerAdvancement();
-      const batterReached = playData.runnerOutcomes?.batter?.to !== 'out' &&
-                            playData.runnerOutcomes?.batter?.to !== undefined;
 
       // Layer 1B: Inject enrichment before record call (same as handleEnhancedPlayComplete)
       setNextEventEnrichment({
@@ -2571,32 +2597,17 @@ export function GameTracker() {
       // Record the play
       if (playData.type === 'hr') {
         const rbi = calculateRBIFromOutcomes();
-        await recordHit('HR', rbi, runnerAdvancement);
+        await commitPlateAppearance({ type: 'hit', hitType: 'HR', rbi, runnerAdvancement });
       } else if (playData.type === 'hit') {
         const hitType = playData.hitType || '1B';
         const rbi = calculateRBIFromOutcomes();
-        await recordHit(hitType as HitType, rbi, runnerAdvancement);
+        await commitPlateAppearance({ type: 'hit', hitType: hitType as HitType, rbi, runnerAdvancement });
       } else if (playData.type === 'out') {
-        const outType = playData.outType || 'GO';
-        if (outType === 'K' && batterReached) {
-          await recordD3K(true);
-        } else if (outType === 'K' || outType === 'Kc') {
-          const isD3KThrownOut = playData.fieldingSequence.length >= 2 &&
-                                  playData.fieldingSequence[0] === 2 &&
-                                  playData.fieldingSequence[1] === 3;
-          if (isD3KThrownOut && !batterReached) {
-            await recordD3K(false);
-          } else {
-            await recordOut(outType as OutType, runnerAdvancement);
-          }
-        } else {
-          await recordOut(outType as OutType, runnerAdvancement);
-        }
+        await commitPlateAppearance(buildPlateAppearanceActionFromPlayData(playData, runnerAdvancement));
       } else if (playData.type === 'foul_out') {
-        await recordOut('FO', runnerAdvancement);
+        await commitPlateAppearance({ type: 'out', outType: 'FO', runnerAdvancement });
       } else if (playData.type === 'walk') {
-        const walkType = playData.walkType || 'BB';
-        await recordWalk(walkType as WalkType);
+        await commitPlateAppearance({ type: 'walk', walkType: playData.walkType || 'BB' });
       }
 
       // Log fielding events for fWAR pipeline (same as handleEnhancedPlayComplete)
@@ -2624,7 +2635,7 @@ export function GameTracker() {
     } catch (error) {
       console.error('[EXH-016] Failed to record play:', error);
     }
-  }, [pendingPlayForFielderCredit, gameState, undoSystem, recordHit, recordOut, recordD3K, recordWalk, setNextEventEnrichment]);
+  }, [buildPlateAppearanceActionFromPlayData, commitPlateAppearance, gameState, pendingPlayForFielderCredit, pushActivityLog, setNextEventEnrichment, undoSystem]);
 
   // EXH-016: Handle fielder credit modal close (skip credits)
   const handleFielderCreditClose = useCallback(() => {
@@ -3040,18 +3051,23 @@ export function GameTracker() {
 
     try {
       if (pendingOutcome.type === 'hit') {
-        await recordHit(
-          pendingOutcome.subType as HitType,
-          pendingOutcome.rbi || 0
-        );
+        await commitPlateAppearance({
+          type: 'hit',
+          hitType: pendingOutcome.subType as HitType,
+          rbi: pendingOutcome.rbi || 0,
+        });
         logAction(`${pendingOutcome.subType} (manual) — ${pendingOutcome.rbi || 0} RBI`);
       } else if (pendingOutcome.type === 'out') {
         // GAP-GT-6-A: Pass forceNoRuns when user has toggled the time play override
-        await recordOut(pendingOutcome.subType as OutType, undefined, undefined, timePlayNoRun ? { forceNoRuns: true } : undefined);
+        await commitPlateAppearance({
+          type: 'out',
+          outType: pendingOutcome.subType as OutType,
+          forceNoRuns: timePlayNoRun,
+        });
         logAction(`Out (${pendingOutcome.subType}) (manual entry)${timePlayNoRun ? ' [time play — no run]' : ''}`);
         setTimePlayNoRun(false); // Reset time play toggle after recording
       } else if (pendingOutcome.type === 'walk') {
-        await recordWalk(pendingOutcome.subType as WalkType);
+        await commitPlateAppearance({ type: 'walk', walkType: pendingOutcome.subType as WalkType });
         logAction(`${pendingOutcome.subType} walk (manual)`);
       }
 
@@ -3064,7 +3080,7 @@ export function GameTracker() {
     } catch (error) {
       console.error('Failed to record outcome:', error);
     }
-  }, [pendingOutcome, recordHit, recordOut, recordWalk, timePlayNoRun]);
+  }, [commitPlateAppearance, logAction, pendingOutcome, timePlayNoRun]);
 
   // Cancel pending outcome
   const handleCancelOutcome = useCallback(() => {
@@ -4471,17 +4487,17 @@ export function GameTracker() {
                       <div>
                         <div className="text-[7px] text-white mb-1">FIELDED BY:</div>
                         <div className="grid grid-cols-5 gap-1">
-                          <DetailButton label="P" onClick={() => { recordError(0); setExpandedOutcome(null); }} />
-                          <DetailButton label="C" onClick={() => { recordError(0); setExpandedOutcome(null); }} />
-                          <DetailButton label="1B" onClick={() => { recordError(0); setExpandedOutcome(null); }} />
-                          <DetailButton label="2B" onClick={() => { recordError(0); setExpandedOutcome(null); }} />
-                          <DetailButton label="3B" onClick={() => { recordError(0); setExpandedOutcome(null); }} />
+                          <DetailButton label="P" onClick={() => { void commitPlateAppearance({ type: 'error', rbi: 0 }); setExpandedOutcome(null); }} />
+                          <DetailButton label="C" onClick={() => { void commitPlateAppearance({ type: 'error', rbi: 0 }); setExpandedOutcome(null); }} />
+                          <DetailButton label="1B" onClick={() => { void commitPlateAppearance({ type: 'error', rbi: 0 }); setExpandedOutcome(null); }} />
+                          <DetailButton label="2B" onClick={() => { void commitPlateAppearance({ type: 'error', rbi: 0 }); setExpandedOutcome(null); }} />
+                          <DetailButton label="3B" onClick={() => { void commitPlateAppearance({ type: 'error', rbi: 0 }); setExpandedOutcome(null); }} />
                         </div>
                         <div className="grid grid-cols-4 gap-1 mt-1">
-                          <DetailButton label="SS" onClick={() => { recordError(0); setExpandedOutcome(null); }} />
-                          <DetailButton label="LF" onClick={() => { recordError(0); setExpandedOutcome(null); }} />
-                          <DetailButton label="CF" onClick={() => { recordError(0); setExpandedOutcome(null); }} />
-                          <DetailButton label="RF" onClick={() => { recordError(0); setExpandedOutcome(null); }} />
+                          <DetailButton label="SS" onClick={() => { void commitPlateAppearance({ type: 'error', rbi: 0 }); setExpandedOutcome(null); }} />
+                          <DetailButton label="LF" onClick={() => { void commitPlateAppearance({ type: 'error', rbi: 0 }); setExpandedOutcome(null); }} />
+                          <DetailButton label="CF" onClick={() => { void commitPlateAppearance({ type: 'error', rbi: 0 }); setExpandedOutcome(null); }} />
+                          <DetailButton label="RF" onClick={() => { void commitPlateAppearance({ type: 'error', rbi: 0 }); setExpandedOutcome(null); }} />
                         </div>
                       </div>
                     </div>
@@ -4637,7 +4653,7 @@ export function GameTracker() {
                             onClick={async () => {
                               // Record as SF directly (cleaner than mutating pendingOutcome)
                               try {
-                                await recordOut('SF');
+                                await commitPlateAppearance({ type: 'out', outType: 'SF' });
                                 logAction('SF (sac fly via prompt)');
                                 setPendingOutcome(null);
                                 setExpandedOutcome(null);
