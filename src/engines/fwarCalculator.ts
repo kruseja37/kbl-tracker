@@ -87,6 +87,10 @@ export const DIFFICULTY_MULTIPLIERS = {
   robbedHR: 5.0,
   overShoulder: 2.0,
   sliding: 2.5,
+  beatRunner: 1.2,
+  beatThrow: 0.0,
+  missedDive: 0.0,
+  missedLeap: 0.0,
 } as const;
 
 /**
@@ -114,7 +118,20 @@ export type PutoutType = 'infield' | 'outfield' | 'lineout' | 'foulout';
 export type AssistType = 'infield' | 'outfield' | 'relay' | 'cutoff';
 export type DPRole = 'turned' | 'started' | 'completed' | 'unassisted';
 export type ErrorType = 'fielding' | 'throwing' | 'mental' | 'collision' | 'passedBall' | 'missed_catch';
-export type Difficulty = 'routine' | 'charging' | 'running' | 'diving' | 'leaping' | 'wall' | 'robbedHR' | 'overShoulder' | 'sliding';
+export type Difficulty =
+  | 'routine'
+  | 'charging'
+  | 'running'
+  | 'diving'
+  | 'leaping'
+  | 'wall'
+  | 'robbedHR'
+  | 'overShoulder'
+  | 'sliding'
+  | 'beatRunner'
+  | 'beatThrow'
+  | 'missedDive'
+  | 'missedLeap';
 
 /**
  * A single fielding event
@@ -272,10 +289,11 @@ export function calculateErrorValue(
     wasDifficult?: boolean;
     isClutch?: boolean;
     missedDive?: boolean;
+    missedLeap?: boolean;
   } = {}
 ): number {
-  // Missed dive = no penalty (player attempted extraordinary play)
-  if (context.missedDive) return 0;
+  // Missed dive/leap = no penalty (player attempted extraordinary play)
+  if (context.missedDive || context.missedLeap) return 0;
 
   const basePenalty = FIELDING_RUN_VALUES.error[errorType] || -0.15;
   const posMod = POSITION_MODIFIERS.error[position] || 1.0;

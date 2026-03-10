@@ -47,4 +47,13 @@ describe('calculateErrorValue — missedDive (GAP-B1-005)', () => {
       expect(calculateErrorValue(errorType, 'SS', { missedDive: true })).toBe(0);
     }
   });
+
+  test('missedLeap=true also returns 0 penalty', () => {
+    const result = calculateErrorValue('fielding', 'CF', {
+      missedLeap: true,
+      allowedRun: true,
+      isClutch: true,
+    });
+    expect(result).toBe(0);
+  });
 });

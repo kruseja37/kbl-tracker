@@ -207,6 +207,19 @@ describe('Difficulty Multipliers Constants', () => {
   test('robbedHR is 5.0 (highest)', () => {
     expect(DIFFICULTY_MULTIPLIERS.robbedHR).toBe(5.0);
   });
+
+  test('beatRunner is 1.2', () => {
+    expect(DIFFICULTY_MULTIPLIERS.beatRunner).toBe(1.2);
+  });
+
+  test('beatThrow is 0.0', () => {
+    expect(DIFFICULTY_MULTIPLIERS.beatThrow).toBe(0.0);
+  });
+
+  test('missedDive and missedLeap are zero-credit difficulty markers', () => {
+    expect(DIFFICULTY_MULTIPLIERS.missedDive).toBe(0.0);
+    expect(DIFFICULTY_MULTIPLIERS.missedLeap).toBe(0.0);
+  });
 });
 
 describe('Positional Adjustments Constants', () => {
