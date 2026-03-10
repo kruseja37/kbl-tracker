@@ -73,6 +73,7 @@ import { completeGame as completeScheduleGame } from '../../../utils/scheduleSto
 import {
   extractFieldingEvents,
   extractSupplementalAdvanceErrorEvents,
+  extractSupplementalRunnerOutFieldingEvents,
   type FieldingExtractionContext,
 } from '../utils/fieldingEventExtractor';
 import { logFieldingEvent } from '../../../utils/eventLog';
@@ -104,6 +105,12 @@ interface FieldPosition {
 }
 
 interface PendingErrorOnAdvanceAttribution {
+  playData: PlayData;
+  atBatEventId: string;
+  atBatEventIndex: number;
+}
+
+interface PendingFielderCreditPlay {
   playData: PlayData;
   atBatEventId: string;
   atBatEventIndex: number;
@@ -461,7 +468,7 @@ export function GameTracker() {
 
   // EXH-016: Fielder credit modal state for thrown-out runners
   const [fielderCreditModalOpen, setFielderCreditModalOpen] = useState(false);
-  const [pendingPlayForFielderCredit, setPendingPlayForFielderCredit] = useState<PlayData | null>(null);
+  const [pendingPlayForFielderCredit, setPendingPlayForFielderCredit] = useState<PendingFielderCreditPlay | null>(null);
   const [runnersOutForCredit, setRunnersOutForCredit] = useState<RunnerOutInfo[]>([]);
 
   // EXH-025: Error on advance modal state
@@ -919,6 +926,63 @@ export function GameTracker() {
       pushActivityLog(`[Fielding] Logged ${fieldingEvents.length} event(s)${contextLabel}`);
     }
   }, [buildFieldingContext, getPendingAtBatIdentity, pushActivityLog]);
+
+  const persistRunnerOutCredits = useCallback(async (
+    playData: PlayData,
+    credits: FielderCredit[],
+    atBatIdentity: { atBatEventId: string; atBatEventIndex: number },
+  ) => {
+    if (credits.length === 0) {
+      return;
+    }
+
+    const fieldingContext = buildFieldingContext(atBatIdentity);
+    const startingSequence = extractFieldingEvents(playData, fieldingContext).length;
+    const supplementalEvents = extractSupplementalRunnerOutFieldingEvents(
+      playData,
+      credits
+        .filter((credit) =>
+          credit.putoutBy in POSITION_NUMBER &&
+          credit.assistBy.every((position) => position in POSITION_NUMBER),
+        )
+        .map((credit) => ({
+          putoutBy: credit.putoutBy as Position,
+          assistBy: credit.assistBy as Position[],
+        })),
+      fieldingContext,
+      startingSequence,
+    );
+
+    for (const event of supplementalEvents) {
+      await logFieldingEvent(event);
+    }
+
+    const enrichmentUpdate = {
+      fieldingSequence: supplementalEvents.map((event) => POSITION_NUMBER[event.position as keyof typeof POSITION_NUMBER]),
+      putouts: credits
+        .filter((credit) => credit.putoutBy in POSITION_NUMBER)
+        .map((credit) => POSITION_NUMBER[credit.putoutBy as keyof typeof POSITION_NUMBER]),
+      assists: credits.flatMap((credit) =>
+        credit.assistBy
+          .filter((position) => position in POSITION_NUMBER)
+          .map((position) => POSITION_NUMBER[position as keyof typeof POSITION_NUMBER]),
+      ),
+    } as NonNullable<import('../../../utils/eventLog').AtBatEvent['enrichment']>;
+
+    await updateAtBatEvent(atBatIdentity.atBatEventId, {
+      enrichment: enrichmentUpdate,
+    });
+
+    setEnrichmentCache((prev) => ({
+      ...prev,
+      [atBatIdentity.atBatEventId]: {
+        ...(prev[atBatIdentity.atBatEventId] || {}),
+        ...enrichmentUpdate,
+      },
+    }));
+
+    pushActivityLog(`[Fielding] Logged ${supplementalEvents.length} runner-out credit event(s)`);
+  }, [buildFieldingContext, pushActivityLog]);
 
   // Initialize game with lineup data on mount
   // FIX: BUG-007 - Try loading existing game first, only create new if none found
@@ -1475,10 +1539,12 @@ export function GameTracker() {
   const handleEnhancedPlayComplete = useCallback(async (playData: PlayData) => {
     console.log("Enhanced play complete:", playData);
     console.log("Runner outcomes:", playData.runnerOutcomes);
+    const pendingAtBatIdentity = getPendingAtBatIdentity();
 
     // T1-06: Clear stale error-on-advance state from previous plays
     // Use local variable to track within this function call (avoids stale React state in closure)
     let localExtraAdvances: RunnerAdvanceInfo[] = [];
+    let localFielderCredits: FielderCredit[] = [];
     setRunnersWithExtraAdvance([]);
     setPendingPlayForErrorOnAdvance(null);
 
@@ -1517,14 +1583,18 @@ export function GameTracker() {
       if (runnersOut.length > 0) {
         const autoCredits = inferFielderCredits(runnersOut, playData.fieldingSequence, playData.outType);
         if (autoCredits) {
-          // T1-05: Auto-inferred — skip modal, log credits directly
+          // T1-05: Auto-inferred — persist credits against the same at-bat after recording.
           console.log('[EXH-016] Auto-inferred fielder credits:', autoCredits);
-          // Continue processing — credits are logged but play proceeds without modal
+          localFielderCredits = autoCredits;
         } else {
           // Can't auto-infer — fall back to manual modal
           console.log('[EXH-016] Cannot auto-infer, prompting for fielder credit:', runnersOut);
           setRunnersOutForCredit(runnersOut);
-          setPendingPlayForFielderCredit(playData);
+          setPendingPlayForFielderCredit({
+            playData,
+            atBatEventId: pendingAtBatIdentity.atBatEventId,
+            atBatEventIndex: pendingAtBatIdentity.atBatEventIndex,
+          });
           setFielderCreditModalOpen(true);
           return; // Exit early - will continue in handleFielderCreditConfirm
         }
@@ -1696,7 +1766,6 @@ export function GameTracker() {
 
       const runnerAdvancement = convertToRunnerAdvancement();
       const baseAction = buildPlateAppearanceActionFromPlayData(playData, runnerAdvancement);
-      const pendingAtBatIdentity = getPendingAtBatIdentity();
 
       // ============================================
       // STEP 3.5: Inject enrichment data before record call (Layer 1B §1.16)
@@ -1820,6 +1889,14 @@ export function GameTracker() {
           await persistFieldingEventsForPlayData(playData, playData.type, pendingAtBatIdentity);
         } catch (err) {
           console.error('[Fielding] Failed to log fielding events:', err);
+        }
+      }
+
+      if (localFielderCredits.length > 0) {
+        try {
+          await persistRunnerOutCredits(playData, localFielderCredits, pendingAtBatIdentity);
+        } catch (err) {
+          console.error('[Fielding] Failed to log runner-out credits:', err);
         }
       }
 
@@ -2077,7 +2154,7 @@ export function GameTracker() {
 
       // ============================================
       // EXH-025: Show error attribution modal AFTER play is recorded
-      // This is informational - the play has already been processed
+      // The play is already recorded; the modal persists any supplemental error attribution.
       // T1-06: Use local variable (not stale React state from closure)
       // ============================================
       if (localExtraAdvances.length > 0) {
@@ -2093,7 +2170,7 @@ export function GameTracker() {
     } catch (error) {
       console.error('Failed to record enhanced play:', error);
     }
-  }, [buildPlateAppearanceActionFromPlayData, commitPlateAppearance, gameState, undoSystem, playerStats, pitcherStats, fameTrackingHook, playerStateHook, runnerNames, buildGameStateForLI, mwarHook, pendingMWARDecisions, inferFielderCredits, pushPlayLogEntry, shortInningLabel, setNextEventEnrichment, getPendingAtBatIdentity, persistFieldingEventsForPlayData]);
+  }, [buildPlateAppearanceActionFromPlayData, commitPlateAppearance, gameState, undoSystem, playerStats, pitcherStats, fameTrackingHook, playerStateHook, runnerNames, buildGameStateForLI, mwarHook, pendingMWARDecisions, inferFielderCredits, pushPlayLogEntry, shortInningLabel, setNextEventEnrichment, getPendingAtBatIdentity, persistFieldingEventsForPlayData, persistRunnerOutCredits]);
 
   // ══════════════════════════════════════════════════════════════
   // QUICK BAR HANDLER — §3.2 one-tap execution flow
@@ -2641,24 +2718,16 @@ export function GameTracker() {
     setFielderCreditModalOpen(false);
 
     // Get the pending play data
-    const playData = pendingPlayForFielderCredit;
-    if (!playData) {
+    const pendingPlay = pendingPlayForFielderCredit;
+    if (!pendingPlay) {
       console.error('[EXH-016] No pending play data for fielder credit');
       return;
     }
-
-    // Store the fielder credits with the play data for later processing
-    // TODO: Integrate credits into player stats (assists, putouts)
-    // For now, we log them and continue with the play
+    const { playData, atBatEventId, atBatEventIndex } = pendingPlay;
 
     // Clear the pending state
     setPendingPlayForFielderCredit(null);
     setRunnersOutForCredit([]);
-
-    // Re-call the enhanced play handler with the same play data
-    // The modal is now closed, so it won't trigger again
-    // Actually, we need to process the play directly here to avoid infinite loop
-    // Let's extract the core play processing logic
 
     try {
       // RBI calculation (copied from handleEnhancedPlayComplete)
@@ -2714,6 +2783,7 @@ export function GameTracker() {
       };
 
       const runnerAdvancement = convertToRunnerAdvancement();
+      const atBatIdentity = { atBatEventId, atBatEventIndex };
 
       // Layer 1B: Inject enrichment before record call (same as handleEnhancedPlayComplete)
       setNextEventEnrichment({
@@ -2744,7 +2814,8 @@ export function GameTracker() {
       // Log fielding events for fWAR pipeline (same as handleEnhancedPlayComplete)
       if (playData.type !== 'walk' && playData.type !== 'foul_ball') {
         try {
-          await persistFieldingEventsForPlayData(playData, 'fielder credit path');
+          await persistFieldingEventsForPlayData(playData, 'fielder credit path', atBatIdentity);
+          await persistRunnerOutCredits(playData, credits, atBatIdentity);
         } catch (err) {
           console.error('[Fielding] Failed to log fielding events:', err);
         }
@@ -2754,7 +2825,7 @@ export function GameTracker() {
     } catch (error) {
       console.error('[EXH-016] Failed to record play:', error);
     }
-  }, [buildPlateAppearanceActionFromPlayData, commitPlateAppearance, gameState, pendingPlayForFielderCredit, setNextEventEnrichment, undoSystem, getPendingAtBatIdentity, persistFieldingEventsForPlayData]);
+  }, [buildPlateAppearanceActionFromPlayData, commitPlateAppearance, gameState, pendingPlayForFielderCredit, setNextEventEnrichment, undoSystem, persistFieldingEventsForPlayData, persistRunnerOutCredits]);
 
   // EXH-016: Handle fielder credit modal close (skip credits)
   const handleFielderCreditClose = useCallback(() => {

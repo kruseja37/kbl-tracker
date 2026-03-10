@@ -3,6 +3,7 @@
  *
  * EXH-016: When a runner is thrown out on a play, this modal prompts the user
  * to assign which fielder recorded the putout and which fielders assisted.
+ * Confirmed credits are persisted onto the at-bat and fielding ledger.
  *
  * Design: Uses SubstitutionModalBase for consistent look-and-feel.
  */

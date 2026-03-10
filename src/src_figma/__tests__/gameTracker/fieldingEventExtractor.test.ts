@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   extractFieldingEvents,
   extractSupplementalAdvanceErrorEvents,
+  extractSupplementalRunnerOutFieldingEvents,
   type FieldingExtractionContext,
 } from '../../app/utils/fieldingEventExtractor';
 import type { PlayData } from '../../app/components/EnhancedInteractiveField';
@@ -111,5 +112,63 @@ describe('extractFieldingEvents', () => {
     expect(events[0].ballInPlay.fielderIds).toEqual(['home-lf-7', 'home-ss-6']);
     expect(events[0].ballInPlay.primaryFielderId).toBe('home-lf-7');
     expect(events[1].ballInPlay.primaryFielderId).toBe('home-ss-6');
+  });
+
+  it('creates supplemental runner-out credits against the canonical at-bat id', () => {
+    const playData: PlayData = {
+      type: 'hit',
+      hitType: '1B',
+      fieldingSequence: [7, 2],
+      exitType: 'Line Drive',
+      spraySector: 'Left',
+      playDifficulty: 'likely',
+    };
+    const context: FieldingExtractionContext = {
+      gameId: 'game-4',
+      defensiveTeamId: 'TEAM-H',
+      atBatEventId: 'game-4_15',
+      atBatEventIndex: 15,
+      defendersByPosition: {
+        LF: { playerId: 'home-lf-7', playerName: 'Lou Left' },
+        C: { playerId: 'home-c-2', playerName: 'Cal Catch' },
+        SS: { playerId: 'home-ss-6', playerName: 'Sid Short' },
+      },
+    };
+
+    const events = extractSupplementalRunnerOutFieldingEvents(
+      playData,
+      [
+        { assistBy: ['LF'], putoutBy: 'C' },
+        { assistBy: ['LF', 'SS'], putoutBy: 'C' },
+      ],
+      context,
+    );
+
+    expect(events).toHaveLength(5);
+    expect(events.map((event) => event.atBatEventId)).toEqual([
+      'game-4_15',
+      'game-4_15',
+      'game-4_15',
+      'game-4_15',
+      'game-4_15',
+    ]);
+    expect(events.map((event) => event.fieldingEventId)).toEqual([
+      'game-4_15_fe_0',
+      'game-4_15_fe_1',
+      'game-4_15_fe_2',
+      'game-4_15_fe_3',
+      'game-4_15_fe_4',
+    ]);
+    expect(events.map((event) => event.playType)).toEqual([
+      'outfield_assist',
+      'putout',
+      'outfield_assist',
+      'assist',
+      'putout',
+    ]);
+    expect(events[0].playerId).toBe('home-lf-7');
+    expect(events[1].playerId).toBe('home-c-2');
+    expect(events[3].playerId).toBe('home-ss-6');
+    expect(events[4].ballInPlay.fielderIds).toEqual(['home-lf-7', 'home-ss-6', 'home-c-2']);
   });
 });

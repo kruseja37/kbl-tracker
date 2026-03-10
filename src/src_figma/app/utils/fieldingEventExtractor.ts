@@ -132,6 +132,11 @@ export interface SupplementalAdvanceErrorInput {
   sequence: number;
 }
 
+export interface SupplementalRunnerOutCreditInput {
+  putoutBy: Position;
+  assistBy: Position[];
+}
+
 function resolveDefenderIdentity(
   position: Position,
   defendersByPosition?: Partial<Record<Position, { playerId: string; playerName: string }>>,
@@ -335,10 +340,9 @@ export function extractFieldingEvents(
   }
 
   if (playData.type === 'hit') {
-    // Hits: no fielding credit for the defense (they failed to get an out)
-    // However, on hits where a runner is thrown out, the fielder credit
-    // is handled by the fielder credit modal (handleFielderCreditConfirm)
-    // which calls this function separately for the runner-out play.
+    // Plain hits do not credit the defense.
+    // Runner-thrown-out cases are handled through the supplemental
+    // runner-out credit helper below so they can share the same at-bat id.
     return events;
   }
 
@@ -389,4 +393,87 @@ export function extractSupplementalAdvanceErrorEvents(
       runsPreventedOrAllowed: 0,
     };
   });
+}
+
+export function extractSupplementalRunnerOutFieldingEvents(
+  playData: PlayData,
+  credits: SupplementalRunnerOutCreditInput[],
+  context: FieldingExtractionContext,
+  startingSequence: number = 0,
+): FieldingEvent[] {
+  if (credits.length === 0) {
+    return [];
+  }
+
+  const trajectory = playData.exitType
+    ? mapExitTypeToTrajectory(playData.exitType)
+    : inferTrajectoryFromOutType(playData.outType);
+  const difficulty = mapPlayDifficulty(playData.playDifficulty);
+  const zone = mapSpraySectorToZone(playData.spraySector);
+  const events: FieldingEvent[] = [];
+  let sequence = startingSequence;
+
+  for (const credit of credits) {
+    const assistPositions = credit.assistBy.filter(Boolean);
+    const assistIds = assistPositions.map((position) =>
+      resolveDefenderIdentity(position, context.defendersByPosition).playerId,
+    );
+    const putoutDefender = resolveDefenderIdentity(credit.putoutBy, context.defendersByPosition);
+    const chainIds = assistIds.length > 0 ? [...assistIds, putoutDefender.playerId] : [putoutDefender.playerId];
+    const baseBallInPlay: BallInPlayData = {
+      trajectory,
+      zone,
+      velocity: 'medium',
+      fielderIds: chainIds,
+      primaryFielderId: chainIds[0],
+    };
+
+    assistPositions.forEach((position, assistIndex) => {
+      const defender = resolveDefenderIdentity(position, context.defendersByPosition);
+      const isOutfieldAssist = assistIndex === 0 && ['LF', 'CF', 'RF'].includes(position);
+      events.push({
+        fieldingEventId: `${context.gameId}_${context.atBatEventIndex}_fe_${sequence}`,
+        gameId: context.gameId,
+        atBatEventId: context.atBatEventId,
+        sequence,
+        playerId: defender.playerId,
+        playerName: defender.playerName,
+        position: defender.position,
+        teamId: context.defensiveTeamId,
+        playType: isOutfieldAssist ? 'outfield_assist' : 'assist',
+        difficulty,
+        ballInPlay: {
+          ...baseBallInPlay,
+          primaryFielderId: defender.playerId,
+        },
+        success: true,
+        specialPlayType: null,
+        runsPreventedOrAllowed: 0,
+      });
+      sequence += 1;
+    });
+
+    events.push({
+      fieldingEventId: `${context.gameId}_${context.atBatEventIndex}_fe_${sequence}`,
+      gameId: context.gameId,
+      atBatEventId: context.atBatEventId,
+      sequence,
+      playerId: putoutDefender.playerId,
+      playerName: putoutDefender.playerName,
+      position: putoutDefender.position,
+      teamId: context.defensiveTeamId,
+      playType: 'putout',
+      difficulty,
+      ballInPlay: {
+        ...baseBallInPlay,
+        primaryFielderId: putoutDefender.playerId,
+      },
+      success: true,
+      specialPlayType: null,
+      runsPreventedOrAllowed: 0,
+    });
+    sequence += 1;
+  }
+
+  return events;
 }
