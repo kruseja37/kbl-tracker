@@ -10,6 +10,7 @@
  */
 
 import { SMB4_BASELINES } from '../types/war';
+import type { CompetitionType } from '../utils/gameStorage';
 
 // ============================================
 // CONSTANTS
@@ -682,6 +683,33 @@ export function convertPersistedEventsToCalculator(
   return persistedEvents.map(convertPersistedToCalculatorEvent);
 }
 
+export function getPersistedFieldingEventsForPlayer(
+  persistedEvents: PersistedFieldingEvent[],
+  playerId: string,
+  position: Position,
+  teamId?: string
+): PersistedFieldingEvent[] {
+  return persistedEvents.filter((event) =>
+    event.playerId === playerId ||
+    (!!teamId && event.playerId === position && event.position === position && event.teamId === teamId)
+  );
+}
+
+export function calculateFWARFromPersistedFieldingSet(
+  persistedEvents: PersistedFieldingEvent[],
+  playerId: string,
+  position: Position,
+  gamesPlayed: number,
+  seasonGames: number,
+  teamId?: string
+): FWARResult | null {
+  const playerEvents = getPersistedFieldingEventsForPlayer(persistedEvents, playerId, position, teamId);
+  if (playerEvents.length === 0) return null;
+
+  const calculatorEvents = convertPersistedEventsToCalculator(playerEvents);
+  return calculateSeasonFWAR(calculatorEvents, position, gamesPlayed, seasonGames);
+}
+
 /**
  * Calculate fWAR from persisted fielding events
  * This is the main entry point for calculating fWAR from stored game data
@@ -691,20 +719,54 @@ export async function calculateFWARFromPersistedEvents(
   playerId: string,
   position: Position,
   gamesPlayed: number,
-  seasonGames: number
+  seasonGames: number,
+  teamId?: string
 ): Promise<FWARResult> {
   // Dynamic import to avoid circular dependency
   const { getGameFieldingEvents } = await import('../utils/eventLog');
 
   // Get all fielding events for this game
   const persistedEvents = await getGameFieldingEvents(gameId);
+  return calculateFWARFromPersistedFieldingSet(
+    persistedEvents,
+    playerId,
+    position,
+    gamesPlayed,
+    seasonGames,
+    teamId
+  ) ?? calculateSeasonFWAR([], position, gamesPlayed, seasonGames);
+}
 
-  // Filter to this player's events (by position since we store position not playerId)
-  const playerEvents = persistedEvents.filter(e => e.position === position);
+export interface ScopedFWARCalculationOptions {
+  statsScopeId: string;
+  seasonId?: string;
+  competitionType?: CompetitionType;
+  competitionId?: string;
+  teamId?: string;
+}
 
-  // Convert to calculator format
-  const calculatorEvents = convertPersistedEventsToCalculator(playerEvents);
+export async function calculateFWARFromScopedEvents(
+  playerId: string,
+  position: Position,
+  gamesPlayed: number,
+  seasonGames: number,
+  options: ScopedFWARCalculationOptions
+): Promise<FWARResult | null> {
+  const { getFieldingEventsForScope } = await import('../utils/eventLog');
 
-  // Calculate fWAR
-  return calculateSeasonFWAR(calculatorEvents, position, gamesPlayed, seasonGames);
+  const persistedEvents = await getFieldingEventsForScope({
+    statsScopeId: options.statsScopeId,
+    seasonId: options.seasonId,
+    competitionType: options.competitionType,
+    competitionId: options.competitionId,
+    isComplete: true,
+  });
+  return calculateFWARFromPersistedFieldingSet(
+    persistedEvents,
+    playerId,
+    position,
+    gamesPlayed,
+    seasonGames,
+    options.teamId
+  );
 }

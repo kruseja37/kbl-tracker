@@ -6,7 +6,7 @@
  * WAR is computed on-the-fly from season stats (no schema migration).
  */
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   type PlayerSeasonBatting,
   type PlayerSeasonPitching,
@@ -25,9 +25,11 @@ import {
 // WAR calculator imports
 import { calculateBWARSimplified } from '../engines/bwarCalculator';
 import { calculatePWARSimplified, type PitchingStatsForWAR } from '../engines/pwarCalculator';
-import { calculateFWARFromStats, type Position } from '../engines/fwarCalculator';
+import { calculateFWARFromPersistedFieldingSet, calculateFWARFromStats, type Position } from '../engines/fwarCalculator';
 import { calculateRWARSimplified, type BaserunningStats } from '../engines/rwarCalculator';
 import type { BattingStatsForWAR } from '../types/war';
+import type { CompetitionType } from '../utils/gameStorage';
+import { getFieldingEventsForScope } from '../utils/eventLog';
 
 // Default season
 const DEFAULT_SEASON_ID = 'season-1';
@@ -171,6 +173,11 @@ function getPrimaryPosition(fielding: PlayerSeasonFielding | undefined): Positio
   return primaryPos;
 }
 
+function inferCompetitionTypeForScope(scopeId: string): CompetitionType | undefined {
+  if (scopeId.startsWith('elimination-')) return 'elimination';
+  return 'franchise';
+}
+
 // ============================================
 // HELPER FUNCTIONS
 // ============================================
@@ -191,13 +198,13 @@ function toBattingLeaderEntry(
   stats: PlayerSeasonBatting,
   rank: number,
   seasonGames: number,
-  fielding: PlayerSeasonFielding | undefined
+  fieldingWAR: number
 ): BattingLeaderEntry {
   const derived = calculateBattingDerived(stats);
 
   // Compute WAR components
   let bWAR = 0;
-  let fWAR = 0;
+  const fWAR = fieldingWAR;
   let rWAR = 0;
 
   try {
@@ -206,19 +213,6 @@ function toBattingLeaderEntry(
       bWAR = bwarResult.bWAR;
     }
   } catch { /* WAR calc may fail for edge cases — default to 0 */ }
-
-  try {
-    if (fielding && fielding.games > 0) {
-      const pos = getPrimaryPosition(fielding);
-      const fwarResult = calculateFWARFromStats(
-        { putouts: fielding.putouts, assists: fielding.assists, errors: fielding.errors, doublePlays: fielding.doublePlays },
-        pos,
-        fielding.games,
-        seasonGames
-      );
-      fWAR = fwarResult.fWAR;
-    }
-  } catch { /* fWAR calc may fail — default to 0 */ }
 
   try {
     if (stats.stolenBases > 0 || stats.caughtStealing > 0 || stats.gidp > 0) {
@@ -332,15 +326,7 @@ export function useSeasonStats(seasonId: string = DEFAULT_SEASON_ID): UseSeasonS
   const [battingStats, setBattingStats] = useState<PlayerSeasonBatting[]>([]);
   const [pitchingStats, setPitchingStats] = useState<PlayerSeasonPitching[]>([]);
   const [fieldingStats, setFieldingStats] = useState<PlayerSeasonFielding[]>([]);
-
-  // Fielding lookup by playerId for WAR computation
-  const fieldingByPlayer = useMemo(() => {
-    const map = new Map<string, PlayerSeasonFielding>();
-    for (const f of fieldingStats) {
-      map.set(f.playerId, f);
-    }
-    return map;
-  }, [fieldingStats]);
+  const [fieldingWARByPlayer, setFieldingWARByPlayer] = useState<Map<string, number>>(new Map());
 
   const seasonGames = seasonMetadata?.totalGames ?? DEFAULT_TOTAL_GAMES;
 
@@ -361,10 +347,48 @@ export function useSeasonStats(seasonId: string = DEFAULT_SEASON_ID): UseSeasonS
         getAllFieldingStats(seasonId),
       ]);
 
+      const inferredCompetitionType = inferCompetitionTypeForScope(seasonId);
+      const scopedFieldingEvents = await getFieldingEventsForScope({
+        statsScopeId: seasonId,
+        seasonId,
+        competitionType: inferredCompetitionType,
+        isComplete: true,
+      });
+      const scopedFieldingWAR = await Promise.all(fielding.map(async (stats) => {
+        if (stats.games === 0) return null;
+
+        const position = getPrimaryPosition(stats);
+        let result = calculateFWARFromPersistedFieldingSet(
+          scopedFieldingEvents,
+          stats.playerId,
+          position,
+          stats.games,
+          metadata?.totalGames ?? DEFAULT_TOTAL_GAMES,
+          stats.teamId
+        );
+
+        if (!result) {
+          result = calculateFWARFromStats(
+            {
+              putouts: stats.putouts,
+              assists: stats.assists,
+              errors: stats.errors,
+              doublePlays: stats.doublePlays,
+            },
+            position,
+            stats.games,
+            metadata?.totalGames ?? DEFAULT_TOTAL_GAMES
+          );
+        }
+
+        return [stats.playerId, result.fWAR] as const;
+      }));
+
       setSeasonMetadata(metadata);
       setBattingStats(batting);
       setPitchingStats(pitching);
       setFieldingStats(fielding);
+      setFieldingWARByPlayer(new Map(scopedFieldingWAR.filter((entry): entry is readonly [string, number] => entry !== null)));
     } catch (err) {
       console.error('Failed to load season stats:', err);
       setError(err instanceof Error ? err.message : 'Failed to load stats');
@@ -389,7 +413,7 @@ export function useSeasonStats(seasonId: string = DEFAULT_SEASON_ID): UseSeasonS
 
     // Pre-compute all entries with WAR
     const entries = qualified.map((s, _i) =>
-      toBattingLeaderEntry(s, 0, seasonGames, fieldingByPlayer.get(s.playerId))
+      toBattingLeaderEntry(s, 0, seasonGames, fieldingWARByPlayer.get(s.playerId) ?? 0)
     );
 
     // Lower-is-better stats (none for batting currently)
@@ -399,7 +423,7 @@ export function useSeasonStats(seasonId: string = DEFAULT_SEASON_ID): UseSeasonS
 
     // Re-assign ranks after sort
     return sorted.slice(0, limit).map((entry, i) => ({ ...entry, rank: i + 1 }));
-  }, [battingStats, seasonGames, fieldingByPlayer]);
+  }, [battingStats, fieldingWARByPlayer, seasonGames]);
 
   // Get pitching leaderboard sorted by specified stat
   const getPitchingLeaders = useCallback((sortBy: PitchingSortKey, limit: number = 10): PitchingLeaderEntry[] => {

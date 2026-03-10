@@ -1006,6 +1006,68 @@ export async function getGameHeader(gameId: string): Promise<GameHeader | null> 
   });
 }
 
+export interface GameScopeQuery {
+  statsScopeId?: string;
+  seasonId?: string;
+  competitionType?: CompetitionType;
+  competitionId?: string;
+  isComplete?: boolean;
+}
+
+export async function getGameHeadersForScope(query: GameScopeQuery): Promise<GameHeader[]> {
+  const db = await initEventLogDB();
+
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(STORES.GAME_HEADERS, 'readonly');
+    const store = transaction.objectStore(STORES.GAME_HEADERS);
+    let request: IDBRequest<GameHeader[]>;
+
+    if (!query.statsScopeId && query.seasonId) {
+      request = store.index('seasonId').getAll(query.seasonId);
+    } else {
+      request = store.getAll() as IDBRequest<GameHeader[]>;
+    }
+
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => {
+      const headers = (request.result || []).filter((header) => {
+        const headerScopeId = header.statsScopeId ?? header.seasonId;
+        if (query.statsScopeId && headerScopeId !== query.statsScopeId) {
+          return false;
+        }
+        if (!query.statsScopeId && query.seasonId) {
+          const matchesSeason = header.seasonId === query.seasonId || headerScopeId === query.seasonId;
+          if (!matchesSeason) return false;
+        }
+        if (query.competitionType && header.competitionType !== query.competitionType) {
+          return false;
+        }
+        if (query.competitionId && header.competitionId !== query.competitionId) {
+          return false;
+        }
+        if (typeof query.isComplete === 'boolean' && header.isComplete !== query.isComplete) {
+          return false;
+        }
+        return true;
+      });
+
+      resolve(headers.sort((a, b) => a.date - b.date));
+    };
+  });
+}
+
+export async function getFieldingEventsForScope(query: GameScopeQuery): Promise<FieldingEvent[]> {
+  const headers = await getGameHeadersForScope({
+    ...query,
+    isComplete: query.isComplete ?? true,
+  });
+
+  if (headers.length === 0) return [];
+
+  const events = await Promise.all(headers.map((header) => getGameFieldingEvents(header.gameId)));
+  return events.flat();
+}
+
 /**
  * Get all games for a season (for box score access)
  */

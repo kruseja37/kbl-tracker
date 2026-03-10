@@ -14,7 +14,7 @@
 // WAR Calculators
 import { calculateBWAR } from '../../../engines/bwarCalculator';
 import { calculatePWAR, createDefaultPitchingContext } from '../../../engines/pwarCalculator';
-import { calculateFWARFromStats, type Position } from '../../../engines/fwarCalculator';
+import { calculateFWARFromPersistedFieldingSet, calculateFWARFromStats, type Position } from '../../../engines/fwarCalculator';
 import { calculateRWARSimplified } from '../../../engines/rwarCalculator';
 
 // Types
@@ -40,6 +40,8 @@ import {
   updateBattingStats,
   updatePitchingStats,
 } from '../../../utils/seasonStorage';
+import type { CompetitionType } from '../../../utils/gameStorage';
+import { getFieldingEventsForScope } from '../../../utils/eventLog';
 
 // ============================================
 // TYPES
@@ -134,6 +136,11 @@ function mapBaserunningStats(stats: PlayerSeasonBatting): BaserunningStats {
   };
 }
 
+function inferCompetitionTypeForScope(scopeId: string): CompetitionType | undefined {
+  if (scopeId.startsWith('elimination-')) return 'elimination';
+  return 'franchise';
+}
+
 // ============================================
 // MAIN ORCHESTRATOR
 // ============================================
@@ -182,6 +189,13 @@ export async function calculateAndPersistSeasonWAR(
   // Create league contexts
   const leagueContext = createDefaultLeagueContext(seasonId, seasonGames);
   const pitchingContext = createDefaultPitchingContext(seasonId, seasonGames);
+  const inferredCompetitionType = inferCompetitionTypeForScope(seasonId);
+  const scopedFieldingEvents = await getFieldingEventsForScope({
+    statsScopeId: seasonId,
+    seasonId,
+    competitionType: inferredCompetitionType,
+    isComplete: true,
+  });
 
   // Calculate WAR for all players with season data (not just participants)
   // This ensures cumulative WAR is correct across the full roster
@@ -219,17 +233,27 @@ export async function calculateAndPersistSeasonWAR(
     const position = normalizePosition(posStr);
     if (fielding && fielding.games > 0) {
       try {
-        fwarResult = calculateFWARFromStats(
-          {
-            putouts: fielding.putouts,
-            assists: fielding.assists,
-            errors: fielding.errors,
-            doublePlays: fielding.doublePlays,
-          },
+        fwarResult = calculateFWARFromPersistedFieldingSet(
+          scopedFieldingEvents,
+          batting.playerId,
           position,
           fielding.games,
-          seasonGames
+          seasonGames,
+          fielding.teamId
         );
+        if (!fwarResult) {
+          fwarResult = calculateFWARFromStats(
+            {
+              putouts: fielding.putouts,
+              assists: fielding.assists,
+              errors: fielding.errors,
+              doublePlays: fielding.doublePlays,
+            },
+            position,
+            fielding.games,
+            seasonGames
+          );
+        }
       } catch (e) {
         console.warn(`[WAR] fWAR calc failed for ${batting.playerName}:`, e);
       }

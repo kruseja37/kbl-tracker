@@ -28,10 +28,13 @@ import {
   type PWARResult,
 } from '../engines/pwarCalculator';
 import {
+  calculateFWARFromPersistedFieldingSet,
   calculateFWARFromStats,
   type FWARResult,
   type Position,
 } from '../engines/fwarCalculator';
+import type { CompetitionType } from '../utils/gameStorage';
+import { getFieldingEventsForScope } from '../utils/eventLog';
 import {
   calculateRWARSimplified,
   type RWARResult,
@@ -221,6 +224,12 @@ function getPrimaryPosition(stats: PlayerSeasonFielding): Position {
   return positions[0][0] as Position;
 }
 
+function inferCompetitionTypeForScope(scopeId: string | null): CompetitionType | undefined {
+  if (!scopeId) return undefined;
+  if (scopeId.startsWith('elimination-')) return 'elimination';
+  return 'franchise';
+}
+
 // ============================================
 // MINIMUM THRESHOLDS
 // ============================================
@@ -289,12 +298,6 @@ export function useWARCalculations(): UseWARCalculationsResult {
         getAllFieldingStats(activeSeason.seasonId),
       ]);
 
-      // Create maps for easy lookup
-      const fieldingByPlayer = new Map<string, PlayerSeasonFielding>();
-      for (const fs of fieldingStats) {
-        fieldingByPlayer.set(fs.playerId, fs);
-      }
-
       // Calculate bWAR for all batters
       const newBattingWARMap = new Map<string, PlayerBWAR>();
       const battingWARList: PlayerBWAR[] = [];
@@ -348,24 +351,42 @@ export function useWARCalculations(): UseWARCalculationsResult {
       // Calculate fWAR for all fielders
       const newFieldingWARMap = new Map<string, PlayerFWAR>();
       const fieldingWARList: PlayerFWAR[] = [];
+      const inferredCompetitionType = inferCompetitionTypeForScope(activeSeason.seasonId);
+      const scopedFieldingEvents = await getFieldingEventsForScope({
+        statsScopeId: activeSeason.seasonId,
+        seasonId: activeSeason.seasonId,
+        competitionType: inferredCompetitionType,
+        isComplete: true,
+      });
 
-      for (const stats of fieldingStats) {
-        if (stats.games === 0) continue; // Skip players with no fielding games
+      const fieldingResults = await Promise.all(fieldingStats.map(async (stats) => {
+        if (stats.games === 0) return null;
 
         const position = getPrimaryPosition(stats);
-        const result = calculateFWARFromStats(
-          {
-            putouts: stats.putouts,
-            assists: stats.assists,
-            errors: stats.errors,
-            doublePlays: stats.doublePlays,
-          },
+        let result = calculateFWARFromPersistedFieldingSet(
+          scopedFieldingEvents,
+          stats.playerId,
           position,
           stats.games,
-          activeSeason.totalGames
+          activeSeason.totalGames,
+          stats.teamId
         );
 
-        const playerFWAR: PlayerFWAR = {
+        if (!result) {
+          result = calculateFWARFromStats(
+            {
+              putouts: stats.putouts,
+              assists: stats.assists,
+              errors: stats.errors,
+              doublePlays: stats.doublePlays,
+            },
+            position,
+            stats.games,
+            activeSeason.totalGames
+          );
+        }
+
+        return {
           playerId: stats.playerId,
           playerName: stats.playerName,
           teamId: stats.teamId,
@@ -374,9 +395,12 @@ export function useWARCalculations(): UseWARCalculationsResult {
           games: stats.games,
           position,
           result,
-        };
+        } satisfies PlayerFWAR;
+      }));
 
-        newFieldingWARMap.set(stats.playerId, playerFWAR);
+      for (const playerFWAR of fieldingResults) {
+        if (!playerFWAR) continue;
+        newFieldingWARMap.set(playerFWAR.playerId, playerFWAR);
         fieldingWARList.push(playerFWAR);
       }
 
