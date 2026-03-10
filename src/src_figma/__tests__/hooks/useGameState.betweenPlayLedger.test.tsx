@@ -152,6 +152,41 @@ describe('useGameState between-play ledger', () => {
     }));
   });
 
+  test('logs generic runner advances as durable between-play rows', async () => {
+    const { result } = renderHook(() => useGameState());
+    await initializeGame(result);
+
+    await act(async () => {
+      await result.current.commitPlateAppearance({ type: 'hit', hitType: '1B', rbi: 0 });
+    });
+
+    mockLogBetweenPlayEvent.mockClear();
+
+    await act(async () => {
+      result.current.advanceRunner('first', 'second', 'safe');
+      await result.current.recordEvent('ADVANCE', 'away-batter-1', {
+        runnerId: 'away-batter-1',
+        runnerName: 'Away Batter 1',
+        fromBase: 'first',
+        toBase: 'second',
+        outcome: 'safe',
+      });
+    });
+
+    expect(mockLogBetweenPlayEvent).toHaveBeenCalledWith(expect.objectContaining({
+      gameId: 'game-between-play',
+      type: 'runner_advance',
+      runnerAction: expect.objectContaining({
+        runnerId: 'away-batter-1',
+        runnerName: 'Away Batter 1',
+        fromBase: 1,
+        toBase: 2,
+        outcome: 'safe',
+        reason: 'advance',
+      }),
+    }));
+  });
+
   test('logs roster changes as between-play ledger rows', async () => {
     const { result } = renderHook(() => useGameState());
     await initializeGame(result);

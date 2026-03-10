@@ -341,7 +341,7 @@ export interface AtBatEvent {
 export type BetweenPlayEventType =
   | 'stolen_base' | 'caught_stealing' | 'pickoff'
   | 'wild_pitch' | 'passed_ball' | 'balk'
-  | 'defensive_indifference'
+  | 'defensive_indifference' | 'runner_advance'
   | 'pitcher_change' | 'substitution' | 'position_change'
   | 'mojo_change' | 'fitness_change' | 'injury'
   | 'pitch_count_update' | 'manager_moment';

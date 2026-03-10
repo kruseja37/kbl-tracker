@@ -197,7 +197,7 @@ export type PlateAppearanceAction =
       type: 'foul_ball';
     };
 export type EventType =
-  | 'SB' | 'CS' | 'WP' | 'PB' | 'PICK' | 'PICK_SAFE' | 'PICK_E'
+  | 'SB' | 'CS' | 'WP' | 'PB' | 'PICK' | 'PICK_SAFE' | 'PICK_E' | 'ADVANCE'
   | 'KILLED' | 'NUTSHOT'
   | 'WEB_GEM' | 'ROBBERY'
   | 'TOOTBLAN'
@@ -4477,6 +4477,18 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
           toBase: toBaseNumber ?? fromBaseNumber,
           outcome: eventType === 'PICK' ? 'out' : 'safe',
           reason: 'pickoff',
+        },
+      });
+    } else if (eventType === 'ADVANCE' && resolvedRunnerId && fromBaseNumber && toBaseNumber) {
+      await persistBetweenPlayEvent({
+        type: 'runner_advance',
+        runnerAction: {
+          runnerId: resolvedRunnerId,
+          runnerName: resolvedRunnerName,
+          fromBase: fromBaseNumber,
+          toBase: toBaseNumber,
+          outcome: details?.outcome || 'safe',
+          reason: 'advance',
         },
       });
     } else if ((eventType === 'WP' || eventType === 'PB') && resolvedRunnerId && fromBaseNumber && toBaseNumber) {

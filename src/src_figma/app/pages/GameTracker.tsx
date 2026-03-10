@@ -2839,8 +2839,15 @@ export function GameTracker() {
     const to = dest || nextBaseMap[base];
     undoSystem.captureSnapshot(`Advance: ${base} → ${to}`);
     advanceRunner(base, to, 'safe');
+    void recordEvent('ADVANCE', activeRunnerPopover?.playerId, {
+      runnerId: activeRunnerPopover?.playerId,
+      runnerName: activeRunnerPopover?.runnerName,
+      fromBase: base,
+      toBase: to,
+      outcome: 'safe',
+    });
     setActiveRunnerPopover(null);
-  }, [advanceRunner, undoSystem]);
+  }, [activeRunnerPopover?.playerId, activeRunnerPopover?.runnerName, advanceRunner, recordEvent, undoSystem]);
 
   const handleRunnerWP = useCallback((base: RunnerBase, dest?: 'second' | 'third' | 'home') => {
     const to = dest || nextBaseMap[base];
