@@ -873,6 +873,14 @@ export function GameTracker() {
     return alignment;
   }, [activePitcher, fieldingTeam, fieldingTeamPlayers, getRosterEntityId]);
 
+  const getPendingAtBatIdentity = useCallback(() => {
+    const nextAtBatIndex = atBatSequence + 1;
+    return {
+      atBatEventIndex: nextAtBatIndex,
+      atBatEventId: `${gameState.gameId}_${nextAtBatIndex}`,
+    };
+  }, [atBatSequence, gameState.gameId]);
+
   // Initialize game with lineup data on mount
   // FIX: BUG-007 - Try loading existing game first, only create new if none found
   // This ensures each batter has a unique ID and stats are tracked separately
@@ -1745,7 +1753,7 @@ export function GameTracker() {
         }
 
         pushPlayLogEntry({
-          eventId: `${gameState.gameId}_${atBatSequence}`,
+          eventId: getPendingAtBatIdentity().atBatEventId,
           inningLabel: shortInningLabel(),
           batterName: gameState.currentBatterName,
           result: efResult,
@@ -1770,10 +1778,12 @@ export function GameTracker() {
       // ============================================
       if (playData.type !== 'walk' && playData.type !== 'foul_ball') {
         try {
+          const pendingAtBatIdentity = getPendingAtBatIdentity();
           const fieldingContext: FieldingExtractionContext = {
             gameId: gameState.gameId,
             defensiveTeamId: gameState.isTop ? gameState.homeTeamId : gameState.awayTeamId,
-            atBatSequence: Date.now(), // Unique per at-bat
+            atBatEventId: pendingAtBatIdentity.atBatEventId,
+            atBatEventIndex: pendingAtBatIdentity.atBatEventIndex,
             defendersByPosition: defensiveAlignmentByPosition,
           };
           const fieldingEvents = extractFieldingEvents(playData, fieldingContext);
@@ -2054,7 +2064,7 @@ export function GameTracker() {
     } catch (error) {
       console.error('Failed to record enhanced play:', error);
     }
-  }, [buildPlateAppearanceActionFromPlayData, commitPlateAppearance, gameState, undoSystem, playerStats, pitcherStats, fameTrackingHook, playerStateHook, runnerNames, buildGameStateForLI, mwarHook, pendingMWARDecisions, inferFielderCredits, pushPlayLogEntry, shortInningLabel, setNextEventEnrichment]);
+  }, [buildPlateAppearanceActionFromPlayData, commitPlateAppearance, gameState, undoSystem, playerStats, pitcherStats, fameTrackingHook, playerStateHook, runnerNames, buildGameStateForLI, mwarHook, pendingMWARDecisions, inferFielderCredits, pushPlayLogEntry, shortInningLabel, setNextEventEnrichment, getPendingAtBatIdentity, defensiveAlignmentByPosition]);
 
   // ══════════════════════════════════════════════════════════════
   // QUICK BAR HANDLER — §3.2 one-tap execution flow
@@ -2207,7 +2217,7 @@ export function GameTracker() {
         (outcome === 'D3K' || outcome === 'WP_K' || outcome === 'PB_K') ? 'special' : 'out';
       const qbNonEnrichable = ['BB', 'HBP', 'IBB', 'K', 'Kc'];
       pushPlayLogEntry({
-        eventId: `${gameState.gameId}_${atBatSequence}`,
+        eventId: getPendingAtBatIdentity().atBatEventId,
         inningLabel: shortInningLabel(),
         batterName: gameState.currentBatterName,
         result: outcome,
@@ -2247,7 +2257,7 @@ export function GameTracker() {
     } catch (error) {
       console.error(`[QuickBar] Failed to record ${outcome}:`, error);
     }
-  }, [commitPlateAppearance, gameInitialized, gameState, undoSystem, logAction, runnerNames, pushPlayLogEntry, shortInningLabel]);
+  }, [commitPlateAppearance, gameInitialized, gameState, undoSystem, logAction, runnerNames, pushPlayLogEntry, shortInningLabel, getPendingAtBatIdentity]);
 
   // ═══════════════════════════════════════════════════════════
   // D-4: HR inline prompt completion
@@ -2269,7 +2279,7 @@ export function GameTracker() {
       logAction(`HR${rbi > 0 ? ` — ${rbi} RBI` : ''}${distance ? ` (${distance} ft)` : ''}`);
 
       pushPlayLogEntry({
-        eventId: `${gameState.gameId}_${atBatSequence}`,
+        eventId: getPendingAtBatIdentity().atBatEventId,
         inningLabel: shortInningLabel(),
         batterName: gameState.currentBatterName,
         result: 'HR',
@@ -2291,7 +2301,7 @@ export function GameTracker() {
       console.error('[D-4] Failed to record HR:', error);
     }
     setHrPrompt(null);
-  }, [atBatSequence, commitPlateAppearance, gameState, hrPrompt, logAction, pushPlayLogEntry, setNextEventEnrichment, shortInningLabel]);
+  }, [commitPlateAppearance, gameState, hrPrompt, logAction, pushPlayLogEntry, setNextEventEnrichment, shortInningLabel, getPendingAtBatIdentity]);
 
   const handleHrPromptSkip = useCallback(async () => {
     if (!hrPrompt) return;
@@ -2301,7 +2311,7 @@ export function GameTracker() {
       logAction(`HR${rbi > 0 ? ` — ${rbi} RBI` : ''}`);
 
       pushPlayLogEntry({
-        eventId: `${gameState.gameId}_${atBatSequence}`,
+        eventId: getPendingAtBatIdentity().atBatEventId,
         inningLabel: shortInningLabel(),
         batterName: gameState.currentBatterName,
         result: 'HR',
@@ -2321,7 +2331,7 @@ export function GameTracker() {
       console.error('[D-4] Failed to record HR (skip):', error);
     }
     setHrPrompt(null);
-  }, [atBatSequence, commitPlateAppearance, gameState, hrPrompt, logAction, pushPlayLogEntry, shortInningLabel]);
+  }, [commitPlateAppearance, gameState, hrPrompt, logAction, pushPlayLogEntry, shortInningLabel, getPendingAtBatIdentity]);
 
   // ═══════════════════════════════════════════════════════════
   // D-3: Error flow prompt completion
@@ -2360,7 +2370,7 @@ export function GameTracker() {
       logAction(`E${fielderPosition || ''}${errorType ? ` (${errorType})` : ''} — batter to ${baseReached}`);
 
       pushPlayLogEntry({
-        eventId: `${gameState.gameId}_${atBatSequence}`,
+        eventId: getPendingAtBatIdentity().atBatEventId,
         inningLabel: shortInningLabel(),
         batterName: gameState.currentBatterName,
         result: 'E',
@@ -2390,7 +2400,7 @@ export function GameTracker() {
       console.error('[D-3] Failed to record error:', error);
     }
     setErrorFlow(null);
-  }, [atBatSequence, commitPlateAppearance, errorFlow, gameState, logAction, pushPlayLogEntry, runnerNames, setNextEventEnrichment, shortInningLabel, undoSystem]);
+  }, [commitPlateAppearance, errorFlow, gameState, logAction, pushPlayLogEntry, runnerNames, setNextEventEnrichment, shortInningLabel, undoSystem, getPendingAtBatIdentity]);
 
   // ═══════════════════════════════════════════════════════════
   // D-5: SF prompt answer — "Sac fly — run scores?"
@@ -2406,7 +2416,7 @@ export function GameTracker() {
         logAction('SF — run scores');
 
         pushPlayLogEntry({
-          eventId: `${gameState.gameId}_${atBatSequence}`,
+          eventId: getPendingAtBatIdentity().atBatEventId,
           inningLabel: shortInningLabel(),
           batterName: gameState.currentBatterName,
           result: 'SF',
@@ -2424,7 +2434,7 @@ export function GameTracker() {
         logAction('FO (R3 held)');
 
         pushPlayLogEntry({
-          eventId: `${gameState.gameId}_${atBatSequence}`,
+          eventId: getPendingAtBatIdentity().atBatEventId,
           inningLabel: shortInningLabel(),
           batterName: gameState.currentBatterName,
           result: 'FO',
@@ -2453,7 +2463,7 @@ export function GameTracker() {
       console.error('[D-5] Failed to record SF/FO:', error);
     }
     setSfPrompt(null);
-  }, [atBatSequence, commitPlateAppearance, gameState, logAction, pushPlayLogEntry, runnerNames, sfPrompt, shortInningLabel]);
+  }, [commitPlateAppearance, gameState, logAction, pushPlayLogEntry, runnerNames, sfPrompt, shortInningLabel, getPendingAtBatIdentity]);
 
   // ═══════════════════════════════════════════════════════════
   // D-6: GO→DP prompt answer — "Double play?"
@@ -2467,7 +2477,7 @@ export function GameTracker() {
         logAction(`DP${rbi > 0 ? ` — ${rbi} RBI` : ''}`);
 
         pushPlayLogEntry({
-          eventId: `${gameState.gameId}_${atBatSequence}`,
+          eventId: getPendingAtBatIdentity().atBatEventId,
           inningLabel: shortInningLabel(),
           batterName: gameState.currentBatterName,
           result: 'DP',
@@ -2483,7 +2493,7 @@ export function GameTracker() {
         logAction('GO');
 
         pushPlayLogEntry({
-          eventId: `${gameState.gameId}_${atBatSequence}`,
+          eventId: getPendingAtBatIdentity().atBatEventId,
           inningLabel: shortInningLabel(),
           batterName: gameState.currentBatterName,
           result: 'GO',
@@ -2508,7 +2518,7 @@ export function GameTracker() {
       console.error('[D-6] Failed to record GO/DP:', error);
     }
     setDpPrompt(null);
-  }, [atBatSequence, commitPlateAppearance, dpPrompt, gameState, logAction, pushPlayLogEntry, runnerNames, shortInningLabel]);
+  }, [commitPlateAppearance, dpPrompt, gameState, logAction, pushPlayLogEntry, runnerNames, shortInningLabel, getPendingAtBatIdentity]);
 
   // ═══════════════════════════════════════════════════════════
   // D-7: IFR prompt answer — "Infield Fly Rule?"
@@ -2527,7 +2537,7 @@ export function GameTracker() {
       logAction(`PO${isIFR ? ' (IFR)' : ''}`);
 
       pushPlayLogEntry({
-        eventId: `${gameState.gameId}_${atBatSequence}`,
+        eventId: getPendingAtBatIdentity().atBatEventId,
         inningLabel: shortInningLabel(),
         batterName: gameState.currentBatterName,
         result: 'PO',
@@ -2548,7 +2558,7 @@ export function GameTracker() {
       console.error('[D-7] Failed to record PO/IFR:', error);
     }
     setIfrPrompt(null);
-  }, [atBatSequence, commitPlateAppearance, gameState, ifrPrompt, logAction, pushPlayLogEntry, runnerNames, setNextEventEnrichment, shortInningLabel]);
+  }, [commitPlateAppearance, gameState, ifrPrompt, logAction, pushPlayLogEntry, runnerNames, setNextEventEnrichment, shortInningLabel, getPendingAtBatIdentity]);
 
   // EXH-016: Handle fielder credit confirmation - continue processing the play with credits
   const handleFielderCreditConfirm = useCallback(async (credits: FielderCredit[]) => {
@@ -2659,10 +2669,12 @@ export function GameTracker() {
       // Log fielding events for fWAR pipeline (same as handleEnhancedPlayComplete)
       if (playData.type !== 'walk' && playData.type !== 'foul_ball') {
         try {
+          const pendingAtBatIdentity = getPendingAtBatIdentity();
           const fieldingContext: FieldingExtractionContext = {
             gameId: gameState.gameId,
             defensiveTeamId: gameState.isTop ? gameState.homeTeamId : gameState.awayTeamId,
-            atBatSequence: Date.now(),
+            atBatEventId: pendingAtBatIdentity.atBatEventId,
+            atBatEventIndex: pendingAtBatIdentity.atBatEventIndex,
             defendersByPosition: defensiveAlignmentByPosition,
           };
           const fieldingEvents = extractFieldingEvents(playData, fieldingContext);
@@ -2682,7 +2694,7 @@ export function GameTracker() {
     } catch (error) {
       console.error('[EXH-016] Failed to record play:', error);
     }
-  }, [buildPlateAppearanceActionFromPlayData, commitPlateAppearance, gameState, pendingPlayForFielderCredit, pushActivityLog, setNextEventEnrichment, undoSystem]);
+  }, [buildPlateAppearanceActionFromPlayData, commitPlateAppearance, gameState, pendingPlayForFielderCredit, pushActivityLog, setNextEventEnrichment, undoSystem, getPendingAtBatIdentity, defensiveAlignmentByPosition]);
 
   // EXH-016: Handle fielder credit modal close (skip credits)
   const handleFielderCreditClose = useCallback(() => {

@@ -13,7 +13,8 @@ describe('extractFieldingEvents', () => {
     const context: FieldingExtractionContext = {
       gameId: 'game-1',
       defensiveTeamId: 'TEAM-H',
-      atBatSequence: 42,
+      atBatEventId: 'game-1_42',
+      atBatEventIndex: 42,
       defendersByPosition: {
         SS: { playerId: 'home-ss-12', playerName: 'Sam Short' },
         '2B': { playerId: 'home-2b-4', playerName: 'Ben Turn' },
@@ -24,6 +25,8 @@ describe('extractFieldingEvents', () => {
     const events = extractFieldingEvents(playData, context);
 
     expect(events).toHaveLength(3);
+    expect(events[0].atBatEventId).toBe('game-1_42');
+    expect(events[0].fieldingEventId).toBe('game-1_42_fe_0');
     expect(events.map((event) => event.playerId)).toEqual([
       'home-ss-12',
       'home-2b-4',
@@ -52,7 +55,8 @@ describe('extractFieldingEvents', () => {
     const context: FieldingExtractionContext = {
       gameId: 'game-2',
       defensiveTeamId: 'TEAM-A',
-      atBatSequence: 7,
+      atBatEventId: 'game-2_7',
+      atBatEventIndex: 7,
     };
 
     const events = extractFieldingEvents(playData, context);

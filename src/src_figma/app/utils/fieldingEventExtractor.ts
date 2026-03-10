@@ -121,7 +121,8 @@ function inferTrajectoryFromOutType(outType?: string): BallInPlayData['trajector
 export interface FieldingExtractionContext {
   gameId: string;
   defensiveTeamId: string;
-  atBatSequence: number;
+  atBatEventId: string;
+  atBatEventIndex: number;
   defendersByPosition?: Partial<Record<Position, { playerId: string; playerName: string }>>;
 }
 
@@ -129,7 +130,7 @@ export interface FieldingExtractionContext {
  * Extract fielding events from a completed play.
  *
  * @param playData - The play data from EnhancedInteractiveField
- * @param context - Game context (gameId, defensive team, at-bat sequence, optional defender identity map)
+ * @param context - Game context (gameId, defensive team, canonical at-bat id/index, optional defender identity map)
  * @returns Array of FieldingEvent objects to be persisted via logFieldingEvent()
  */
 export function extractFieldingEvents(
@@ -186,9 +187,9 @@ export function extractFieldingEvents(
   ): FieldingEvent => {
     const defender = resolveDefender(positionNum);
     return {
-      fieldingEventId: `${context.gameId}_fe_${context.atBatSequence}_${sequenceIdx}`,
+      fieldingEventId: `${context.gameId}_${context.atBatEventIndex}_fe_${sequenceIdx}`,
       gameId: context.gameId,
-      atBatEventId: `${context.gameId}_ab_${context.atBatSequence}`,
+      atBatEventId: context.atBatEventId,
       sequence: sequenceIdx,
       playerId: defender.playerId,
       playerName: defender.playerName,
