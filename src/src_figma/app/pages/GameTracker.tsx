@@ -20,6 +20,11 @@ import { EnrichmentPanel, PITCH_TYPES, type EnrichmentUpdate } from "@/app/compo
 import { updateAtBatEvent } from "../../../utils/eventLog";
 import { getTeamColors, getFielderBorderColors } from "@/config/teamColors";
 import { buildFallbackRuntimePlayerId, getRuntimeRosterEntityId } from "../utils/runtimePlayerIdentity";
+import {
+  buildRunnerEventDetails,
+  deriveRunnerEventType,
+  normalizeSpecialEventType,
+} from "../utils/gameTrackerEventDispatch";
 import { areRivals } from '../../../data/leagueStructure';
 import { getParkNames } from "../../../data/parkLookup";
 import { useGameState, type HitType, type OutType, type WalkType, type RunnerAdvancement, type PlayerGameStats, type PitcherGameStats, type PlateAppearanceAction } from "@/hooks/useGameState";
@@ -1170,6 +1175,22 @@ export function GameTracker() {
   // Get batter's grade (from player data if available)
   const batterGrade = 'A'; // TODO: Get from player database when available
 
+  const getRunnerIdentityForBase = useCallback((base: RunnerBase | 'first' | 'second' | 'third') => {
+    const runnerName = runnerNames[base] || `R${base === 'first' ? '1' : base === 'second' ? '2' : '3'}`;
+    return {
+      runnerName,
+      runnerId: getPlayerIdFromName(runnerName, battingTeam),
+    };
+  }, [battingTeam, getPlayerIdFromName, runnerNames]);
+
+  const getLeadRunnerIdentity = useCallback(() => {
+    const leadRunnerBase = gameState.bases.third ? 'third' : gameState.bases.second ? 'second' : gameState.bases.first ? 'first' : null;
+    if (!leadRunnerBase) {
+      return { runnerId: undefined, runnerName: undefined };
+    }
+    return getRunnerIdentityForBase(leadRunnerBase);
+  }, [gameState.bases.first, gameState.bases.second, gameState.bases.third, getRunnerIdentityForBase]);
+
   // Handler for enhanced runner drag-drop (Phase 5)
   const handleEnhancedRunnerMove = useCallback((data: RunnerMoveData) => {
     console.log("Enhanced runner move:", data);
@@ -1179,14 +1200,16 @@ export function GameTracker() {
 
     // Use the hook's advanceRunner function
     const fromBase = data.from;
-    const toBase = data.to as 'second' | 'third' | 'home';
+    const toBase = (data.to === 'first' ? 'second' : data.to) as 'second' | 'third' | 'home';
+    const runnerIdentity = getRunnerIdentityForBase(fromBase);
     advanceRunner(fromBase, toBase, data.outcome);
 
-    // Log the play type for potential event recording
-    if (data.playType === 'SB' || data.playType === 'CS') {
-      console.log(`Record ${data.playType}: ${data.outcome === 'safe' ? 'Success' : 'Out'}`);
-    }
-  }, [advanceRunner]);
+    void recordEvent(
+      deriveRunnerEventType(data),
+      runnerIdentity.runnerId,
+      buildRunnerEventDetails(data, runnerIdentity.runnerId, runnerIdentity.runnerName),
+    );
+  }, [advanceRunner, getRunnerIdentityForBase, recordEvent, undoSystem]);
 
   // Handler for batch runner moves (SB/CS/PK/TBL with multiple runners)
   // This processes all runner movements atomically to avoid race conditions
@@ -1200,9 +1223,40 @@ export function GameTracker() {
     const moveDesc = movements.map(m => `${m.from}→${m.to}`).join(', ');
     undoSystem.captureSnapshot(`Runner ${playType}: ${moveDesc}`);
 
+    const movementContext = movements.map((movement) => {
+      const runnerIdentity = getRunnerIdentityForBase(movement.from);
+      const moveData: RunnerMoveData = {
+        from: movement.from,
+        to: movement.to === 'out' ? movement.from : movement.to,
+        outcome: movement.outcome,
+        playType: playType === 'PK' ? 'PICK' : playType === 'TBL' ? 'ADV' : playType as RunnerMoveData['playType'],
+      };
+      return { movement, moveData, runnerIdentity };
+    });
+
     // Use the batch function to process all movements atomically
     advanceRunnersBatch(movements);
-  }, [advanceRunnersBatch]);
+
+    void (async () => {
+      for (const entry of movementContext) {
+        await recordEvent(
+          deriveRunnerEventType(entry.moveData),
+          entry.runnerIdentity.runnerId,
+          buildRunnerEventDetails(entry.moveData, entry.runnerIdentity.runnerId, entry.runnerIdentity.runnerName),
+        );
+
+        if (playType === 'TBL' && entry.movement.outcome === 'out') {
+          await recordEvent('TOOTBLAN', entry.runnerIdentity.runnerId, {
+            runnerId: entry.runnerIdentity.runnerId,
+            runnerName: entry.runnerIdentity.runnerName,
+            fromBase: entry.movement.from,
+            toBase: 'out',
+            outcome: 'out',
+          });
+        }
+      }
+    })();
+  }, [advanceRunnersBatch, getRunnerIdentityForBase, recordEvent, undoSystem]);
 
   // REMOVED: BUG-009 - handleLegacyRunnerMove was for deprecated BaserunnerDragDrop placeholder
   // Runner moves are now handled by handleRunnerMove for EnhancedInteractiveField
@@ -2682,27 +2736,43 @@ export function GameTracker() {
       const actor = event.fielderName || event.runnerId || 'player';
       undoSystem.captureSnapshot(`${eventLabel} by ${actor}`);
 
-      // All special events are recorded through recordEvent
-      // The useGameState hook handles the Fame integration with LI weighting
-      await recordEvent(event.eventType as 'WEB_GEM' | 'ROBBERY');
+      const normalizedEventType = normalizeSpecialEventType(event.eventType);
+      if (!normalizedEventType) {
+        return;
+      }
+
+      const leadRunner = getLeadRunnerIdentity();
+      const resolvedRunnerId = event.runnerId || (normalizedEventType === 'TOOTBLAN' ? leadRunner.runnerId : undefined);
+      const resolvedRunnerName = normalizedEventType === 'TOOTBLAN' ? leadRunner.runnerName : undefined;
+      const fielderId = event.fielderName
+        ? getRosterIdFromName(event.fielderName, fieldingTeam, event.fielderPosition === 1 ? 'pitcher' : 'player')
+        : undefined;
+      const actorId = normalizedEventType === 'WEB_GEM' || normalizedEventType === 'ROBBERY'
+        ? fielderId
+        : resolvedRunnerId;
+
+      await recordEvent(normalizedEventType, actorId, {
+        runnerId: resolvedRunnerId,
+        runnerName: resolvedRunnerName,
+        fielderId,
+        fielderName: event.fielderName,
+        fielderPosition: event.fielderPosition,
+      });
       console.log(`${event.eventType} recorded - fielder: ${event.fielderName}, position: ${event.fielderPosition}, runner: ${event.runnerId}`);
     } catch (error) {
       console.error('Failed to record special event:', error);
     }
-  }, [recordEvent, undoSystem]);
+  }, [fieldingTeam, getLeadRunnerIdentity, getRosterIdFromName, recordEvent, undoSystem]);
 
   const triggerManualSpecialEvent = useCallback((eventType: SpecialEventData['eventType']) => {
-    const leadRunnerBase = gameState.bases.third ? 'third' : gameState.bases.second ? 'second' : gameState.bases.first ? 'first' : null;
-    const runnerName = leadRunnerBase ? runnerNames[leadRunnerBase] : undefined;
-    const runnerId = leadRunnerBase && runnerName ? getPlayerIdFromName(runnerName, battingTeam) : undefined;
-
+    const leadRunner = getLeadRunnerIdentity();
     void handleSpecialEvent({
       eventType,
-      runnerId: eventType === 'TOOTBLAN' ? runnerId : undefined,
+      runnerId: eventType === 'TOOTBLAN' ? leadRunner.runnerId : undefined,
       fielderPosition: eventType === 'KILLED_PITCHER' || eventType === 'NUT_SHOT' ? 1 : undefined,
       fielderName: eventType === 'KILLED_PITCHER' || eventType === 'NUT_SHOT' ? resolvedCurrentPitcherName : undefined,
     });
-  }, [battingTeam, gameState.bases.first, gameState.bases.second, gameState.bases.third, getPlayerIdFromName, handleSpecialEvent, resolvedCurrentPitcherName, runnerNames]);
+  }, [getLeadRunnerIdentity, handleSpecialEvent, resolvedCurrentPitcherName]);
 
   const handleSubstitution = useCallback((teamType: 'away' | 'home', benchPlayerName: string, lineupPlayerName: string) => {
     console.log(`Substitution: ${benchPlayerName} replacing ${lineupPlayerName} on ${teamType} team`);
