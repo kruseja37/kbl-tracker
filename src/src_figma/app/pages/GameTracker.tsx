@@ -98,7 +98,7 @@ import { POSITION_MAP, POSITION_NUMBER } from '../components/fielderInference';
 import { calculateRunnerDefaults, type RunnerDefaults } from '../components/runnerDefaults';
 import type { PlayLogEntry } from '../utils/playLogTypes';
 import { buildPlayLogEntries } from '../utils/gameTrackerPlayLog';
-import { reconcileTeamPlayersWithLineupSnapshot } from '../utils/gameTrackerRosterSync';
+import { reconcileTeamPitchersWithLineupSnapshot, reconcileTeamPlayersWithLineupSnapshot } from '../utils/gameTrackerRosterSync';
 import {
   applyRunnerDefaultsToNames,
   buildRunnerCorrectionForQuickBarOutcome,
@@ -770,12 +770,12 @@ export function GameTracker() {
     { name: 'C. THOMAS', position: 'OF', stats: { ab: 0, h: 0, r: 0, rbi: 0, bb: 0, k: 0 }, battingHand: 'R' as const },
   ]);
 
-  const awayTeamPitchers = navigationState?.awayPitchers || [
+  const [awayTeamPitchers, setAwayTeamPitchers] = useState<Pitcher[]>(navigationState?.awayPitchers || [
     { name: 'R. LOPEZ', stats: { ip: '0.0', h: 0, r: 0, er: 0, bb: 0, k: 0, pitches: 0 }, throwingHand: 'R' as const, isStarter: true, isActive: true },
     { name: 'T. JOHNSON', stats: { ip: '0.0', h: 0, r: 0, er: 0, bb: 0, k: 0, pitches: 0 }, throwingHand: 'R' as const },
     { name: 'M. WILLIAMS', stats: { ip: '0.0', h: 0, r: 0, er: 0, bb: 0, k: 0, pitches: 0 }, throwingHand: 'L' as const },
     { name: 'K. DAVIS', stats: { ip: '0.0', h: 0, r: 0, er: 0, bb: 0, k: 0, pitches: 0 }, throwingHand: 'R' as const },
-  ];
+  ]);
 
   // Fallback roster data for Home Team (exhibition mode) — ZERO stats for new game
   // Use useState so we can update the roster when substitutions are made
@@ -795,12 +795,12 @@ export function GameTracker() {
     { name: 'G. EVANS', position: 'C', stats: { ab: 0, h: 0, r: 0, rbi: 0, bb: 0, k: 0 }, battingHand: 'R' as const },
   ]);
 
-  const homeTeamPitchers = navigationState?.homePitchers || [
+  const [homeTeamPitchers, setHomeTeamPitchers] = useState<Pitcher[]>(navigationState?.homePitchers || [
     { name: 'S. WHITE', stats: { ip: '0.0', h: 0, r: 0, er: 0, bb: 0, k: 0, pitches: 0 }, throwingHand: 'R' as const, isStarter: true, isActive: true },
     { name: 'U. PARKER', stats: { ip: '0.0', h: 0, r: 0, er: 0, bb: 0, k: 0, pitches: 0 }, throwingHand: 'L' as const },
     { name: 'V. TURNER', stats: { ip: '0.0', h: 0, r: 0, er: 0, bb: 0, k: 0, pitches: 0 }, throwingHand: 'R' as const },
     { name: 'W. COLLINS', stats: { ip: '0.0', h: 0, r: 0, er: 0, bb: 0, k: 0, pitches: 0 }, throwingHand: 'R' as const },
-  ];
+  ]);
 
   const getRosterEntityId = useCallback((entity: { name: string; playerId?: string }, team: 'away' | 'home') => {
     return getRuntimeRosterEntityId(entity, team);
@@ -857,12 +857,84 @@ export function GameTracker() {
     setHomeTeamPlayers((previous) =>
       reconcileTeamPlayersWithLineupSnapshot(previous, lineupSnapshot.home, 'home', getRosterEntityId)
     );
-  }, [getLineupStateSnapshot, getRosterEntityId]);
+    setAwayTeamPitchers((previous) =>
+      reconcileTeamPitchersWithLineupSnapshot(previous, awayTeamPlayers, lineupSnapshot.away, 'away', getRosterEntityId)
+    );
+    setHomeTeamPitchers((previous) =>
+      reconcileTeamPitchersWithLineupSnapshot(previous, homeTeamPlayers, lineupSnapshot.home, 'home', getRosterEntityId)
+    );
+  }, [awayTeamPlayers, getLineupStateSnapshot, getRosterEntityId, homeTeamPlayers]);
 
   const resolveRosterNameByGameId = useCallback((playerId?: string): string | undefined => {
     if (!playerId) return undefined;
     return rosterNameById.get(playerId);
   }, [rosterNameById]);
+
+  const resolveRosterTeamSide = useCallback((playerId?: string, playerName?: string): 'away' | 'home' | null => {
+    if (!playerId && !playerName) return null;
+
+    const matches = (
+      teamPlayers: Player[],
+      teamPitchers: Pitcher[],
+      team: 'away' | 'home',
+    ) => {
+      const playerMatch = teamPlayers.some((player) =>
+        (playerId && getRosterEntityId(player, team) === playerId) ||
+        (playerName && player.name === playerName)
+      );
+      if (playerMatch) return true;
+      return teamPitchers.some((pitcher) =>
+        (playerId && getRosterEntityId(pitcher, team) === playerId) ||
+        (playerName && pitcher.name === playerName)
+      );
+    };
+
+    if (matches(awayTeamPlayers, awayTeamPitchers, 'away')) return 'away';
+    if (matches(homeTeamPlayers, homeTeamPitchers, 'home')) return 'home';
+    return null;
+  }, [awayTeamPitchers, awayTeamPlayers, getRosterEntityId, homeTeamPitchers, homeTeamPlayers]);
+
+  const selectedHistoricalTeamSide = useMemo(() => {
+    if (!selectedBetweenPlayEvent) return null;
+    if (selectedBetweenPlayEvent.type === 'pitcher_change') {
+      return selectedBetweenPlayEvent.gameState?.halfInning === 'TOP' ? 'home' : 'away';
+    }
+    if (selectedBetweenPlayEvent.substitution) {
+      return (
+        resolveRosterTeamSide(
+          selectedBetweenPlayEvent.substitution.outPlayerId,
+          selectedBetweenPlayEvent.substitution.outPlayerName,
+        ) ||
+        resolveRosterTeamSide(
+          selectedBetweenPlayEvent.substitution.inPlayerId,
+          selectedBetweenPlayEvent.substitution.inPlayerName,
+        )
+      );
+    }
+    return null;
+  }, [resolveRosterTeamSide, selectedBetweenPlayEvent]);
+
+  const historicalLineupOptions = useMemo(() => {
+    if (!selectedHistoricalTeamSide) return [];
+    const players = selectedHistoricalTeamSide === 'away' ? awayTeamPlayers : homeTeamPlayers;
+    return players
+      .map((player) => ({
+        id: getRosterEntityId(player, selectedHistoricalTeamSide),
+        label: player.name,
+      }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }, [awayTeamPlayers, getRosterEntityId, homeTeamPlayers, selectedHistoricalTeamSide]);
+
+  const historicalPitcherOptions = useMemo(() => {
+    if (!selectedHistoricalTeamSide) return [];
+    const pitchers = selectedHistoricalTeamSide === 'away' ? awayTeamPitchers : homeTeamPitchers;
+    return pitchers
+      .map((pitcher) => ({
+        id: getRosterEntityId(pitcher, selectedHistoricalTeamSide),
+        label: pitcher.name,
+      }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }, [awayTeamPitchers, getRosterEntityId, homeTeamPitchers, selectedHistoricalTeamSide]);
 
   const rebuildPlayLogFromEventLog = useCallback(async () => {
     if (!gameState.gameId) return;
@@ -2669,6 +2741,30 @@ export function GameTracker() {
     }
   }, [queuePlayLogRefresh, selectedBetweenPlayEvent]);
 
+  const applyHistoricalStructuralReplayEdit = useCallback(async (
+    nextEvent: BetweenPlayEvent,
+    updates: Partial<BetweenPlayEvent>,
+    errorLabel: string,
+  ) => {
+    setSelectedBetweenPlayEventSaving(true);
+    try {
+      await updateBetweenPlayEvent(nextEvent.eventId, updates);
+
+      const reloaded = await loadExistingGame({ preferSnapshot: false });
+      if (!reloaded) {
+        throw new Error(`Failed to reload game from durable event log after ${errorLabel}`);
+      }
+
+      syncDisplayedRostersToLineupSnapshot();
+      setSelectedBetweenPlayEvent(nextEvent);
+      queuePlayLogRefresh(0);
+    } catch (error) {
+      console.error(`[Historical Lineup Edit] Failed to ${errorLabel}:`, error);
+    } finally {
+      setSelectedBetweenPlayEventSaving(false);
+    }
+  }, [loadExistingGame, queuePlayLogRefresh, syncDisplayedRostersToLineupSnapshot]);
+
   const handleHistoricalPositionChange = useCallback(async (newPosition: string) => {
     if (selectedBetweenPlayEvent?.type !== 'position_change' || !selectedBetweenPlayEvent.substitution) {
       return;
@@ -2698,29 +2794,132 @@ export function GameTracker() {
         inPosition: newPosition,
       },
     };
+    await applyHistoricalStructuralReplayEdit(nextEvent, {
+      version: nextEvent.version,
+      editHistory: nextEvent.editHistory?.slice(-1),
+      substitution: nextEvent.substitution,
+    }, 'update position change');
+  }, [applyHistoricalStructuralReplayEdit, selectedBetweenPlayEvent]);
 
-    setSelectedBetweenPlayEventSaving(true);
-    try {
-      await updateBetweenPlayEvent(selectedBetweenPlayEvent.eventId, {
-        version: nextEvent.version,
-        editHistory: nextEvent.editHistory?.slice(-1),
-        substitution: nextEvent.substitution,
-      });
-
-      const reloaded = await loadExistingGame({ preferSnapshot: false });
-      if (!reloaded) {
-        throw new Error('Failed to reload game from durable event log after lineup edit');
-      }
-
-      syncDisplayedRostersToLineupSnapshot();
-      setSelectedBetweenPlayEvent(nextEvent);
-      queuePlayLogRefresh(0);
-    } catch (error) {
-      console.error('[Historical Lineup Edit] Failed to update position change:', error);
-    } finally {
-      setSelectedBetweenPlayEventSaving(false);
+  const handleHistoricalSubstitutionPlayerChange = useCallback(async (
+    field: 'outPlayer' | 'inPlayer',
+    playerId: string,
+  ) => {
+    if (selectedBetweenPlayEvent?.type !== 'substitution' || !selectedBetweenPlayEvent.substitution || !selectedHistoricalTeamSide) {
+      return;
     }
-  }, [loadExistingGame, queuePlayLogRefresh, selectedBetweenPlayEvent, syncDisplayedRostersToLineupSnapshot]);
+
+    const selectedPlayer = historicalLineupOptions.find((option) => option.id === playerId);
+    if (!selectedPlayer) return;
+
+    const fieldKey = field === 'outPlayer' ? 'outPlayerId' : 'inPlayerId';
+    const nameKey = field === 'outPlayer' ? 'outPlayerName' : 'inPlayerName';
+    const previousValue = selectedBetweenPlayEvent.substitution[fieldKey];
+    if (previousValue === playerId) return;
+
+    const timestamp = Date.now();
+    const nextEvent: BetweenPlayEvent = {
+      ...selectedBetweenPlayEvent,
+      version: (selectedBetweenPlayEvent.version ?? 1) + 1,
+      editHistory: [
+        ...(selectedBetweenPlayEvent.editHistory || []),
+        {
+          field: `substitution.${fieldKey}`,
+          oldValue: previousValue,
+          newValue: playerId,
+          timestamp,
+        },
+      ],
+      substitution: {
+        ...selectedBetweenPlayEvent.substitution,
+        [fieldKey]: playerId,
+        [nameKey]: selectedPlayer.label,
+      },
+    };
+
+    await applyHistoricalStructuralReplayEdit(nextEvent, {
+      version: nextEvent.version,
+      editHistory: nextEvent.editHistory?.slice(-1),
+      substitution: nextEvent.substitution,
+    }, 'update substitution player');
+  }, [applyHistoricalStructuralReplayEdit, historicalLineupOptions, selectedBetweenPlayEvent, selectedHistoricalTeamSide]);
+
+  const handleHistoricalSubstitutionPositionChange = useCallback(async (newPosition: string) => {
+    if (selectedBetweenPlayEvent?.type !== 'substitution' || !selectedBetweenPlayEvent.substitution) {
+      return;
+    }
+
+    const previousValue = selectedBetweenPlayEvent.substitution.inPosition || selectedBetweenPlayEvent.substitution.outPosition || null;
+    if (previousValue === newPosition) return;
+
+    const timestamp = Date.now();
+    const nextEvent: BetweenPlayEvent = {
+      ...selectedBetweenPlayEvent,
+      version: (selectedBetweenPlayEvent.version ?? 1) + 1,
+      editHistory: [
+        ...(selectedBetweenPlayEvent.editHistory || []),
+        {
+          field: 'substitution.inPosition',
+          oldValue: previousValue,
+          newValue: newPosition,
+          timestamp,
+        },
+      ],
+      substitution: {
+        ...selectedBetweenPlayEvent.substitution,
+        inPosition: newPosition,
+      },
+    };
+
+    await applyHistoricalStructuralReplayEdit(nextEvent, {
+      version: nextEvent.version,
+      editHistory: nextEvent.editHistory?.slice(-1),
+      substitution: nextEvent.substitution,
+    }, 'update substitution position');
+  }, [applyHistoricalStructuralReplayEdit, selectedBetweenPlayEvent]);
+
+  const handleHistoricalPitcherChange = useCallback(async (
+    field: 'outgoingPitcher' | 'incomingPitcher',
+    pitcherId: string,
+  ) => {
+    if (selectedBetweenPlayEvent?.type !== 'pitcher_change' || !selectedBetweenPlayEvent.pitcherChange) {
+      return;
+    }
+
+    const selectedPitcher = historicalPitcherOptions.find((option) => option.id === pitcherId);
+    if (!selectedPitcher) return;
+
+    const fieldKey = field === 'outgoingPitcher' ? 'outgoingPitcherId' : 'incomingPitcherId';
+    const nameKey = field === 'outgoingPitcher' ? 'outgoingPitcherName' : 'incomingPitcherName';
+    const previousValue = selectedBetweenPlayEvent.pitcherChange[fieldKey];
+    if (previousValue === pitcherId) return;
+
+    const timestamp = Date.now();
+    const nextEvent: BetweenPlayEvent = {
+      ...selectedBetweenPlayEvent,
+      version: (selectedBetweenPlayEvent.version ?? 1) + 1,
+      editHistory: [
+        ...(selectedBetweenPlayEvent.editHistory || []),
+        {
+          field: `pitcherChange.${fieldKey}`,
+          oldValue: previousValue,
+          newValue: pitcherId,
+          timestamp,
+        },
+      ],
+      pitcherChange: {
+        ...selectedBetweenPlayEvent.pitcherChange,
+        [fieldKey]: pitcherId,
+        [nameKey]: selectedPitcher.label,
+      },
+    };
+
+    await applyHistoricalStructuralReplayEdit(nextEvent, {
+      version: nextEvent.version,
+      editHistory: nextEvent.editHistory?.slice(-1),
+      pitcherChange: nextEvent.pitcherChange,
+    }, 'update pitcher change');
+  }, [applyHistoricalStructuralReplayEdit, historicalPitcherOptions, selectedBetweenPlayEvent]);
 
   const handleQuickBarOutcome = useCallback(async (outcome: string) => {
     if (!gameInitialized) return;
@@ -3489,6 +3688,30 @@ export function GameTracker() {
     // 2. After confirmation, update currentPitcherId/currentPitcherName
     changePitcher(newPitcherId, exitingPitcherId, newPitcherName, replacedName);
     queuePlayLogRefresh(80);
+
+    const setPitchers = teamType === 'away' ? setAwayTeamPitchers : setHomeTeamPitchers;
+    setPitchers((previous) =>
+      previous.map((pitcher) => {
+        if (pitcher.name === newPitcherName) {
+          return {
+            ...pitcher,
+            isActive: true,
+            isOutOfGame: false,
+          };
+        }
+        if (pitcher.name === replacedName) {
+          return {
+            ...pitcher,
+            isActive: false,
+            isOutOfGame: true,
+          };
+        }
+        return {
+          ...pitcher,
+          isActive: false,
+        };
+      })
+    );
 
     // mWAR: Record pitching change decision
     try {
@@ -4591,6 +4814,11 @@ export function GameTracker() {
               onReturnToLive={handleReturnToLiveAtBat}
               onRunnerCaughtByChange={handleRunnerCaughtByChange}
               onLineupPositionChange={handleHistoricalPositionChange}
+              onSubstitutionPlayerChange={handleHistoricalSubstitutionPlayerChange}
+              onSubstitutionPositionChange={handleHistoricalSubstitutionPositionChange}
+              onPitcherChange={handleHistoricalPitcherChange}
+              lineupOptions={historicalLineupOptions}
+              pitcherOptions={historicalPitcherOptions}
             />
           ) : enrichingEntry !== null ? (
             /* Enrichment panel replaces play log when active */

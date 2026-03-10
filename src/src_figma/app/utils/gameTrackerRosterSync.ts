@@ -1,4 +1,4 @@
-import type { Player } from "@/app/components/TeamRoster";
+import type { Pitcher, Player } from "@/app/components/TeamRoster";
 import type { TeamLineupSnapshot } from "@/hooks/useGameState";
 
 type TeamSide = 'away' | 'home';
@@ -85,4 +85,60 @@ export function reconcileTeamPlayersWithLineupSnapshot(
   }
 
   return nextPlayers;
+}
+
+export function reconcileTeamPitchersWithLineupSnapshot(
+  existingPitchers: Pitcher[],
+  players: Player[],
+  snapshot: TeamLineupSnapshot,
+  team: TeamSide,
+  getRosterEntityId: RosterIdentityResolver,
+): Pitcher[] {
+  const currentPitcherId = snapshot.currentPitcher?.playerId || null;
+  const usedPlayers = new Set(snapshot.usedPlayers);
+  const seenPitcherIds = new Set<string>();
+
+  const nextPitchers = existingPitchers.map((pitcher, index) => {
+    const pitcherId = getRosterEntityId(pitcher, team);
+    seenPitcherIds.add(pitcherId);
+
+    return {
+      ...pitcher,
+      playerId: pitcherId,
+      isStarter: index === 0,
+      isActive: currentPitcherId === pitcherId,
+      isOutOfGame: currentPitcherId === pitcherId ? false : usedPlayers.has(pitcherId),
+    };
+  });
+
+  if (currentPitcherId && !seenPitcherIds.has(currentPitcherId)) {
+    const matchingPlayer = players.find((player) => getRosterEntityId(player, team) === currentPitcherId);
+    nextPitchers.push({
+      name: snapshot.currentPitcher?.playerName || matchingPlayer?.name || currentPitcherId,
+      playerId: currentPitcherId,
+      stats: { ip: '0.0', h: 0, r: 0, er: 0, bb: 0, k: 0, pitches: 0 },
+      throwingHand: matchingPlayer?.throws || 'R',
+      isStarter: false,
+      isActive: true,
+      isOutOfGame: false,
+      velocity: matchingPlayer?.velocity,
+      junk: matchingPlayer?.junk,
+      accuracy: matchingPlayer?.accuracy,
+      arsenal: matchingPlayer?.arsenal,
+      overallGrade: matchingPlayer?.overallGrade,
+      trait1: matchingPlayer?.trait1,
+      trait2: matchingPlayer?.trait2,
+      personality: matchingPlayer?.personality,
+      chemistry: matchingPlayer?.chemistry,
+      age: matchingPlayer?.age,
+      secondaryPosition: matchingPlayer?.secondaryPosition,
+      power: matchingPlayer?.power,
+      contact: matchingPlayer?.contact,
+      speed: matchingPlayer?.speed,
+      fieldingRating: matchingPlayer?.fieldingRating,
+      arm: matchingPlayer?.arm,
+    });
+  }
+
+  return nextPitchers;
 }

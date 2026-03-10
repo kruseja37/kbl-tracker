@@ -2,7 +2,8 @@ import { describe, expect, test } from 'vitest';
 
 import type { Player } from '../../app/components/TeamRoster';
 import type { TeamLineupSnapshot } from '../../hooks/useGameState';
-import { reconcileTeamPlayersWithLineupSnapshot } from '../../app/utils/gameTrackerRosterSync';
+import type { Pitcher } from '../../app/components/TeamRoster';
+import { reconcileTeamPitchersWithLineupSnapshot, reconcileTeamPlayersWithLineupSnapshot } from '../../app/utils/gameTrackerRosterSync';
 
 function createPlayer(overrides: Partial<Player> = {}): Player {
   return {
@@ -38,6 +39,18 @@ function createSnapshot(overrides: Partial<TeamLineupSnapshot> = {}): TeamLineup
     ],
     usedPlayers: [],
     currentPitcher: null,
+    ...overrides,
+  };
+}
+
+function createPitcher(overrides: Partial<Pitcher> = {}): Pitcher {
+  return {
+    name: 'Pitcher One',
+    playerId: 'pitcher-1',
+    stats: { ip: '0.0', h: 0, r: 0, er: 0, bb: 0, k: 0, pitches: 0 },
+    throwingHand: 'R',
+    isStarter: true,
+    isActive: true,
     ...overrides,
   };
 }
@@ -109,6 +122,44 @@ describe('gameTrackerRosterSync', () => {
     expect(nextPlayers.find((player) => player.playerId === 'player-1')).toMatchObject({
       battingOrder: undefined,
       isOutOfGame: true,
+    });
+  });
+
+  test('syncs active and used pitchers from replayed lineup snapshot', () => {
+    const pitchers = [
+      createPitcher({ name: 'Starter', playerId: 'starter-1', isStarter: true, isActive: true }),
+      createPitcher({ name: 'Reliever', playerId: 'reliever-1', isStarter: false, isActive: false }),
+    ];
+    const players = [
+      createPlayer({ name: 'Starter', playerId: 'starter-1', position: 'P' }),
+      createPlayer({ name: 'Reliever', playerId: 'reliever-1', position: 'P' }),
+    ];
+
+    const nextPitchers = reconcileTeamPitchersWithLineupSnapshot(
+      pitchers,
+      players,
+      createSnapshot({
+        usedPlayers: ['starter-1'],
+        currentPitcher: {
+          playerId: 'reliever-1',
+          playerName: 'Reliever',
+          position: 'P',
+          battingOrder: 9,
+          enteredInning: 7,
+          isStarter: false,
+        },
+      }),
+      'away',
+      (entity) => entity.playerId || entity.name,
+    );
+
+    expect(nextPitchers.find((pitcher) => pitcher.playerId === 'starter-1')).toMatchObject({
+      isActive: false,
+      isOutOfGame: true,
+    });
+    expect(nextPitchers.find((pitcher) => pitcher.playerId === 'reliever-1')).toMatchObject({
+      isActive: true,
+      isOutOfGame: false,
     });
   });
 });
