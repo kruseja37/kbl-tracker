@@ -70,7 +70,11 @@ import { saveGameDecisions, aggregateManagerGameToSeason } from '../../../utils/
 // T0-05: Schedule persistence — mark played games as COMPLETED
 import { completeGame as completeScheduleGame } from '../../../utils/scheduleStorage';
 // Fielding pipeline: extract fielding events from PlayData and log to IndexedDB
-import { extractFieldingEvents, type FieldingExtractionContext } from '../utils/fieldingEventExtractor';
+import {
+  extractFieldingEvents,
+  extractSupplementalAdvanceErrorEvents,
+  type FieldingExtractionContext,
+} from '../utils/fieldingEventExtractor';
 import { logFieldingEvent } from '../../../utils/eventLog';
 import { captureStartingLineups, type LineupEntry } from '../../../utils/gameStorage';
 import { POSITION_MAP, POSITION_NUMBER } from '../components/fielderInference';
@@ -97,6 +101,12 @@ interface FieldPosition {
   number: string;
   svgX: number;
   svgY: number;
+}
+
+interface PendingErrorOnAdvanceAttribution {
+  playData: PlayData;
+  atBatEventId: string;
+  atBatEventIndex: number;
 }
 
 export function GameTracker() {
@@ -456,7 +466,7 @@ export function GameTracker() {
 
   // EXH-025: Error on advance modal state
   const [errorOnAdvanceModalOpen, setErrorOnAdvanceModalOpen] = useState(false);
-  const [pendingPlayForErrorOnAdvance, setPendingPlayForErrorOnAdvance] = useState<PlayData | null>(null);
+  const [pendingPlayForErrorOnAdvance, setPendingPlayForErrorOnAdvance] = useState<PendingErrorOnAdvanceAttribution | null>(null);
   const [runnersWithExtraAdvance, setRunnersWithExtraAdvance] = useState<RunnerAdvanceInfo[]>([]);
 
   // Runner names tracking - who is on each base
@@ -881,19 +891,24 @@ export function GameTracker() {
     };
   }, [atBatSequence, gameState.gameId]);
 
-  const persistFieldingEventsForPlayData = useCallback(async (playData: PlayData, sourceLabel?: string) => {
+  const buildFieldingContext = useCallback((atBatIdentity: { atBatEventId: string; atBatEventIndex: number }): FieldingExtractionContext => ({
+    gameId: gameState.gameId,
+    defensiveTeamId: gameState.isTop ? gameState.homeTeamId : gameState.awayTeamId,
+    atBatEventId: atBatIdentity.atBatEventId,
+    atBatEventIndex: atBatIdentity.atBatEventIndex,
+    defendersByPosition: defensiveAlignmentByPosition,
+  }), [defensiveAlignmentByPosition, gameState.awayTeamId, gameState.gameId, gameState.homeTeamId, gameState.isTop]);
+
+  const persistFieldingEventsForPlayData = useCallback(async (
+    playData: PlayData,
+    sourceLabel?: string,
+    atBatIdentity = getPendingAtBatIdentity(),
+  ) => {
     if (playData.type === 'walk' || playData.type === 'foul_ball') {
       return;
     }
 
-    const pendingAtBatIdentity = getPendingAtBatIdentity();
-    const fieldingContext: FieldingExtractionContext = {
-      gameId: gameState.gameId,
-      defensiveTeamId: gameState.isTop ? gameState.homeTeamId : gameState.awayTeamId,
-      atBatEventId: pendingAtBatIdentity.atBatEventId,
-      atBatEventIndex: pendingAtBatIdentity.atBatEventIndex,
-      defendersByPosition: defensiveAlignmentByPosition,
-    };
+    const fieldingContext = buildFieldingContext(atBatIdentity);
     const fieldingEvents = extractFieldingEvents(playData, fieldingContext);
     for (const fe of fieldingEvents) {
       await logFieldingEvent(fe);
@@ -903,7 +918,7 @@ export function GameTracker() {
       console.log(`[Fielding] Logged ${fieldingEvents.length} fielding event(s)${contextLabel}`);
       pushActivityLog(`[Fielding] Logged ${fieldingEvents.length} event(s)${contextLabel}`);
     }
-  }, [defensiveAlignmentByPosition, gameState.gameId, gameState.homeTeamId, gameState.isTop, gameState.awayTeamId, getPendingAtBatIdentity, pushActivityLog]);
+  }, [buildFieldingContext, getPendingAtBatIdentity, pushActivityLog]);
 
   // Initialize game with lineup data on mount
   // FIX: BUG-007 - Try loading existing game first, only create new if none found
@@ -1602,7 +1617,6 @@ export function GameTracker() {
       if (extraAdvances.length > 0) {
         console.log('[EXH-025] Extra advances detected - will prompt for error attribution after play:', extraAdvances);
         setRunnersWithExtraAdvance(extraAdvances);
-        setPendingPlayForErrorOnAdvance(playData);
         localExtraAdvances = extraAdvances;
         // Modal will be shown after play recording completes (see end of function)
       }
@@ -1682,6 +1696,7 @@ export function GameTracker() {
 
       const runnerAdvancement = convertToRunnerAdvancement();
       const baseAction = buildPlateAppearanceActionFromPlayData(playData, runnerAdvancement);
+      const pendingAtBatIdentity = getPendingAtBatIdentity();
 
       // ============================================
       // STEP 3.5: Inject enrichment data before record call (Layer 1B §1.16)
@@ -1777,7 +1792,7 @@ export function GameTracker() {
         }
 
         pushPlayLogEntry({
-          eventId: getPendingAtBatIdentity().atBatEventId,
+          eventId: pendingAtBatIdentity.atBatEventId,
           inningLabel: shortInningLabel(),
           batterName: gameState.currentBatterName,
           result: efResult,
@@ -1802,7 +1817,7 @@ export function GameTracker() {
       // ============================================
       if (playData.type !== 'walk' && playData.type !== 'foul_ball') {
         try {
-          await persistFieldingEventsForPlayData(playData, playData.type);
+          await persistFieldingEventsForPlayData(playData, playData.type, pendingAtBatIdentity);
         } catch (err) {
           console.error('[Fielding] Failed to log fielding events:', err);
         }
@@ -2067,6 +2082,11 @@ export function GameTracker() {
       // ============================================
       if (localExtraAdvances.length > 0) {
         console.log('[EXH-025] Opening error attribution modal after play recorded');
+        setPendingPlayForErrorOnAdvance({
+          playData,
+          atBatEventId: pendingAtBatIdentity.atBatEventId,
+          atBatEventIndex: pendingAtBatIdentity.atBatEventIndex,
+        });
         setErrorOnAdvanceModalOpen(true);
       }
 
@@ -2747,11 +2767,17 @@ export function GameTracker() {
   }, [runnersOutForCredit, handleFielderCreditConfirm]);
 
   // EXH-025: Handle error on advance modal confirmation
-  const handleErrorOnAdvanceConfirm = useCallback((results: ErrorOnAdvanceResult[]) => {
+  const handleErrorOnAdvanceConfirm = useCallback(async (results: ErrorOnAdvanceResult[]) => {
     setErrorOnAdvanceModalOpen(false);
 
-    // Log error attributions for now (full integration will record to game state)
-    results.forEach(result => {
+    const attributedErrors = results.filter((result) =>
+      result.wasError &&
+      !!result.errorType &&
+      !!result.errorFielder &&
+      result.errorFielder in POSITION_NUMBER
+    );
+
+    results.forEach((result) => {
       if (result.wasError && result.errorType && result.errorFielder) {
         console.log(`[EXH-025] Error on advance: ${result.runnerName} ${result.fromBase} → ${result.toBase}, ` +
           `${result.errorType} error by ${result.errorFielder}`);
@@ -2760,15 +2786,55 @@ export function GameTracker() {
       }
     });
 
-    // Process the pending play now that we have error attribution
-    if (pendingPlayForErrorOnAdvance) {
-      // TODO: Add error attribution to play data before recording
-      // For now, the play was already processed - this modal is informational
+    if (pendingPlayForErrorOnAdvance && attributedErrors.length > 0) {
+      try {
+        const fieldingContext = buildFieldingContext(pendingPlayForErrorOnAdvance);
+        const startingSequence = extractFieldingEvents(
+          pendingPlayForErrorOnAdvance.playData,
+          fieldingContext,
+        ).length;
+        const supplementalEvents = extractSupplementalAdvanceErrorEvents(
+          pendingPlayForErrorOnAdvance.playData,
+          attributedErrors.map((result, index) => ({
+            errorFielder: result.errorFielder as Position,
+            errorType: result.errorType,
+            sequence: startingSequence + index,
+          })),
+          fieldingContext,
+        );
+
+        for (const event of supplementalEvents) {
+          await logFieldingEvent(event);
+        }
+
+        const enrichmentErrors = attributedErrors.map((result) => ({
+          position: POSITION_NUMBER[result.errorFielder as keyof typeof POSITION_NUMBER],
+          type: result.errorType!.toLowerCase() as 'fielding' | 'throwing' | 'mental',
+        }));
+
+        await updateAtBatEvent(pendingPlayForErrorOnAdvance.atBatEventId, {
+          enrichment: {
+            errors: enrichmentErrors,
+          },
+        });
+
+        setEnrichmentCache((prev) => ({
+          ...prev,
+          [pendingPlayForErrorOnAdvance.atBatEventId]: {
+            ...(prev[pendingPlayForErrorOnAdvance.atBatEventId] || {}),
+            errors: enrichmentErrors,
+          },
+        }));
+
+        pushActivityLog(`[Fielding] Logged ${supplementalEvents.length} advancement error attribution event(s)`);
+      } catch (error) {
+        console.error('[EXH-025] Failed to persist advancement error attribution:', error);
+      }
     }
 
     setPendingPlayForErrorOnAdvance(null);
     setRunnersWithExtraAdvance([]);
-  }, [pendingPlayForErrorOnAdvance]);
+  }, [buildFieldingContext, pendingPlayForErrorOnAdvance, pushActivityLog]);
 
   // EXH-025: Handle error on advance modal close (assume no errors)
   const handleErrorOnAdvanceClose = useCallback(() => {

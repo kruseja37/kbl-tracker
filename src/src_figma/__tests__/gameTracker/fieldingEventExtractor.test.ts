@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
-import { extractFieldingEvents, type FieldingExtractionContext } from '../../app/utils/fieldingEventExtractor';
+import {
+  extractFieldingEvents,
+  extractSupplementalAdvanceErrorEvents,
+  type FieldingExtractionContext,
+} from '../../app/utils/fieldingEventExtractor';
 import type { PlayData } from '../../app/components/EnhancedInteractiveField';
 
 describe('extractFieldingEvents', () => {
@@ -65,5 +69,47 @@ describe('extractFieldingEvents', () => {
     expect(events[0].playerId).toBe('3B');
     expect(events[0].playerName).toBe('3B');
     expect(events[0].position).toBe('3B');
+  });
+
+  it('creates supplemental extra-advance errors against the canonical at-bat id', () => {
+    const playData: PlayData = {
+      type: 'hit',
+      hitType: '1B',
+      fieldingSequence: [7, 6],
+      exitType: 'Line Drive',
+      spraySector: 'Left',
+      playDifficulty: 'likely',
+    };
+    const context: FieldingExtractionContext = {
+      gameId: 'game-3',
+      defensiveTeamId: 'TEAM-H',
+      atBatEventId: 'game-3_12',
+      atBatEventIndex: 12,
+      defendersByPosition: {
+        LF: { playerId: 'home-lf-7', playerName: 'Lou Left' },
+        SS: { playerId: 'home-ss-6', playerName: 'Sid Short' },
+      },
+    };
+
+    const events = extractSupplementalAdvanceErrorEvents(
+      playData,
+      [
+        { errorFielder: 'LF', errorType: 'THROWING', sequence: 0 },
+        { errorFielder: 'SS', errorType: 'FIELDING', sequence: 1 },
+      ],
+      context,
+    );
+
+    expect(events).toHaveLength(2);
+    expect(events.map((event) => event.atBatEventId)).toEqual(['game-3_12', 'game-3_12']);
+    expect(events.map((event) => event.fieldingEventId)).toEqual([
+      'game-3_12_fe_0',
+      'game-3_12_fe_1',
+    ]);
+    expect(events.map((event) => event.playerId)).toEqual(['home-lf-7', 'home-ss-6']);
+    expect(events.map((event) => event.playType)).toEqual(['error', 'error']);
+    expect(events[0].ballInPlay.fielderIds).toEqual(['home-lf-7', 'home-ss-6']);
+    expect(events[0].ballInPlay.primaryFielderId).toBe('home-lf-7');
+    expect(events[1].ballInPlay.primaryFielderId).toBe('home-ss-6');
   });
 });

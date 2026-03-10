@@ -6,8 +6,8 @@
  * or good baserunning.
  *
  * Design: Uses SubstitutionModalBase for consistent look-and-feel.
- * This modal is INFORMATIONAL — the play has already been recorded.
- * Error attribution feeds into fielding stats (errors, fWAR) and earned/unearned run tracking.
+ * This modal is post-record attribution: the play has already been recorded,
+ * but confirmed advancement errors are persisted back onto the at-bat and fielding ledger.
  */
 
 import { useState, useCallback } from 'react';

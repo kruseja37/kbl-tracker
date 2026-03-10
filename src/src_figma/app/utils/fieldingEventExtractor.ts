@@ -126,6 +126,24 @@ export interface FieldingExtractionContext {
   defendersByPosition?: Partial<Record<Position, { playerId: string; playerName: string }>>;
 }
 
+export interface SupplementalAdvanceErrorInput {
+  errorFielder: Position;
+  errorType?: 'FIELDING' | 'THROWING' | 'MENTAL' | string;
+  sequence: number;
+}
+
+function resolveDefenderIdentity(
+  position: Position,
+  defendersByPosition?: Partial<Record<Position, { playerId: string; playerName: string }>>,
+) {
+  const defender = defendersByPosition?.[position];
+  return {
+    position,
+    playerId: defender?.playerId || position,
+    playerName: defender?.playerName || position,
+  };
+}
+
 /**
  * Extract fielding events from a completed play.
  *
@@ -141,12 +159,7 @@ export function extractFieldingEvents(
 
   const resolveDefender = (positionNum: number) => {
     const position = positionFromNumber(positionNum);
-    const defender = context.defendersByPosition?.[position];
-    return {
-      position,
-      playerId: defender?.playerId || position,
-      playerName: defender?.playerName || position,
-    };
+    return resolveDefenderIdentity(position, context.defendersByPosition);
   };
 
   // No fielding events for non-ball-in-play outcomes
@@ -331,4 +344,49 @@ export function extractFieldingEvents(
 
   // Default: no events for unrecognized play types
   return events;
+}
+
+export function extractSupplementalAdvanceErrorEvents(
+  playData: PlayData,
+  errors: SupplementalAdvanceErrorInput[],
+  context: FieldingExtractionContext,
+): FieldingEvent[] {
+  if (errors.length === 0) {
+    return [];
+  }
+
+  const trajectory = playData.exitType
+    ? mapExitTypeToTrajectory(playData.exitType)
+    : inferTrajectoryFromOutType(playData.outType);
+  const difficulty = mapPlayDifficulty(playData.playDifficulty);
+  const zone = mapSpraySectorToZone(playData.spraySector);
+  const sequenceDefenderIds = playData.fieldingSequence
+    .map((positionNum) => resolveDefenderIdentity(positionFromNumber(positionNum), context.defendersByPosition).playerId);
+
+  return errors.map(({ errorFielder, errorType, sequence }) => {
+    const defender = resolveDefenderIdentity(errorFielder, context.defendersByPosition);
+
+    return {
+      fieldingEventId: `${context.gameId}_${context.atBatEventIndex}_fe_${sequence}`,
+      gameId: context.gameId,
+      atBatEventId: context.atBatEventId,
+      sequence,
+      playerId: defender.playerId,
+      playerName: defender.playerName,
+      position: defender.position,
+      teamId: context.defensiveTeamId,
+      playType: 'error',
+      difficulty,
+      ballInPlay: {
+        trajectory,
+        zone,
+        velocity: 'medium',
+        fielderIds: sequenceDefenderIds.length > 0 ? sequenceDefenderIds : [defender.playerId],
+        primaryFielderId: defender.playerId,
+      },
+      success: false,
+      specialPlayType: null,
+      runsPreventedOrAllowed: 0,
+    };
+  });
 }
