@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, test, vi } from 'vitest';
 const {
   mockLogAtBatEvent,
   mockLogBetweenPlayEvent,
+  mockUndoMostRecentGameAction,
   mockCreateGameHeader,
   mockCompleteGame,
   mockGetGameEvents,
@@ -21,6 +22,7 @@ const {
 } = vi.hoisted(() => ({
   mockLogAtBatEvent: vi.fn().mockResolvedValue(undefined),
   mockLogBetweenPlayEvent: vi.fn().mockResolvedValue(undefined),
+  mockUndoMostRecentGameAction: vi.fn().mockResolvedValue(null),
   mockCreateGameHeader: vi.fn().mockResolvedValue(undefined),
   mockCompleteGame: vi.fn().mockResolvedValue(undefined),
   mockGetGameEvents: vi.fn().mockResolvedValue([]),
@@ -42,6 +44,7 @@ const {
 vi.mock('../../../utils/eventLog', () => ({
   logAtBatEvent: mockLogAtBatEvent,
   logBetweenPlayEvent: mockLogBetweenPlayEvent,
+  undoMostRecentGameAction: mockUndoMostRecentGameAction,
   createGameHeader: mockCreateGameHeader,
   completeGame: mockCompleteGame,
   getGameEvents: mockGetGameEvents,

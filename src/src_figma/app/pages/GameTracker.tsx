@@ -50,7 +50,6 @@ import { MOJO_STATES, getMojoColor } from "../../../engines/mojoEngine";
 import { FITNESS_STATES } from "../../../engines/fitnessEngine";
 import { useFameTracking, type FameEventDisplay, formatFameValue, getFameColor, getLITier } from "@/app/hooks/useFameTracking";
 import { FielderCreditModal, type RunnerOutInfo, type FielderCredit } from "../components/modals/FielderCreditModal";
-import type { PitcherRunnerStats } from "../engines/inheritedRunnerTracker";
 import { ErrorOnAdvanceModal, type RunnerAdvanceInfo, type ErrorOnAdvanceResult } from "../components/modals/ErrorOnAdvanceModal";
 // MAJ-03: Wire detection system
 import { runPlayDetections, type UIDetectionResult } from "../engines/detectionIntegration";
@@ -223,7 +222,7 @@ export function GameTracker() {
     dismissPitchCountPrompt,
     initializeGame,
     loadExistingGame,
-    restoreState,
+    undoLastAction,
     getRunnerTrackerSnapshot,
     getBaseRunnerNames,
     runnerIdentityVersion,
@@ -545,46 +544,17 @@ export function GameTracker() {
   const fieldZoomLevel = isScoreboardMinimized ? 1 : 0.82;
 
   // Undo system - restore game state on undo
-  // CRIT-01 fix: Now restores playerStats, pitcherStats Maps, and runner tracker alongside gameState/scoreboard
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const handleUndo = useCallback((snapshot: GameSnapshot) => {
-    console.log("Restoring game state from snapshot:", snapshot.playDescription);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const storedState = snapshot.gameState as any;
-    if (storedState && storedState.gameState && storedState.scoreboard) {
-      // Reconstruct runner tracker from serialized snapshot (Map from entries)
-      // Note: Types are loosened due to JSON serialization; restoreState validates internally
-      const runnerTrackerState = storedState.runnerTrackerSnapshot
-        ? {
-            runners: storedState.runnerTrackerSnapshot.runners,
-            currentPitcherId: storedState.runnerTrackerSnapshot.currentPitcherId as string,
-            currentPitcherName: storedState.runnerTrackerSnapshot.currentPitcherName as string,
-            pitcherStats: new Map(storedState.runnerTrackerSnapshot.pitcherStatsEntries) as Map<string, PitcherRunnerStats>,
-            inning: storedState.runnerTrackerSnapshot.inning as number,
-            atBatNumber: storedState.runnerTrackerSnapshot.atBatNumber as number,
-          }
-        : undefined;
-
-      restoreState({
-        gameState: storedState.gameState,
-        scoreboard: storedState.scoreboard,
-        // Reconstruct Maps from serialized entries (Maps don't survive JSON.stringify)
-        playerStats: storedState.playerStatsEntries
-          ? new Map(storedState.playerStatsEntries)
-          : undefined,
-        pitcherStats: storedState.pitcherStatsEntries
-          ? new Map(storedState.pitcherStatsEntries)
-          : undefined,
-        // Restore runner tracker for correct ER attribution after undo
-        runnerTrackerState,
-      });
-      console.log("State restored successfully (including player/pitcher stats + runner tracker)");
-      // §4.2: Pop last play log entry on undo
+    console.log("Undoing durable game action:", snapshot.playDescription);
+    void (async () => {
+      const undone = await undoLastAction();
+      if (!undone) {
+        console.warn("No durable action available to undo");
+        return;
+      }
       setPlayLogEntries(prev => prev.length > 0 ? prev.slice(0, -1) : prev);
-    } else {
-      console.warn("Incomplete snapshot - cannot restore", snapshot);
-    }
-  }, [restoreState]);
+    })();
+  }, [undoLastAction]);
 
   const undoSystem = useUndoSystem(10, handleUndo); // GAP-GT-3-B: increased from 5 to 10
 

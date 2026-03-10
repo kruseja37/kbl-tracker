@@ -158,6 +158,7 @@ export interface AtBatEvent {
   gameId: string;
   eventIndex: number;            // 1, 2, 3... order within game
   timestamp: number;
+  undoneAt?: number | null;
 
   // Who
   batterId: string;
@@ -356,6 +357,7 @@ export interface BetweenPlayEvent {
   franchiseId?: string;
   timestamp: number;
   eventIndex: number;              // Interleaved with AtBatEvent indices
+  undoneAt?: number | null;
 
   type: BetweenPlayEventType;
 
@@ -516,6 +518,12 @@ export interface PitchingAppearance {
   hitBatsmen: number;
   wildPitches: number;
   battersFaced: number;
+}
+
+export interface UndoneGameAction {
+  kind: 'atBat' | 'betweenPlay';
+  eventId: string;
+  eventIndex: number;
 }
 
 /** Fielding event for FWAR */
@@ -814,7 +822,10 @@ export async function getUnaggregatedGames(seasonId?: string): Promise<GameHeade
 /**
  * Get all at-bat events for a game
  */
-export async function getGameEvents(gameId: string): Promise<AtBatEvent[]> {
+export async function getGameEvents(
+  gameId: string,
+  options?: { includeUndone?: boolean }
+): Promise<AtBatEvent[]> {
   const db = await initEventLogDB();
 
   return new Promise((resolve, reject) => {
@@ -826,7 +837,9 @@ export async function getGameEvents(gameId: string): Promise<AtBatEvent[]> {
     request.onerror = () => reject(request.error);
     request.onsuccess = () => {
       // Sort by eventIndex
-      const events = (request.result as AtBatEvent[]).sort((a, b) => a.eventIndex - b.eventIndex);
+      const events = (request.result as AtBatEvent[])
+        .filter(event => options?.includeUndone || !event.undoneAt)
+        .sort((a, b) => a.eventIndex - b.eventIndex);
       resolve(events);
     };
   });
@@ -869,7 +882,10 @@ export async function getGameFieldingEvents(gameId: string): Promise<FieldingEve
 /**
  * Get between-play events for a game
  */
-export async function getBetweenPlayEvents(gameId: string): Promise<BetweenPlayEvent[]> {
+export async function getBetweenPlayEvents(
+  gameId: string,
+  options?: { includeUndone?: boolean }
+): Promise<BetweenPlayEvent[]> {
   const db = await initEventLogDB();
 
   return new Promise((resolve, reject) => {
@@ -880,9 +896,97 @@ export async function getBetweenPlayEvents(gameId: string): Promise<BetweenPlayE
 
     request.onerror = () => reject(request.error);
     request.onsuccess = () => {
-      const events = (request.result as BetweenPlayEvent[]).sort((a, b) => a.eventIndex - b.eventIndex);
+      const events = (request.result as BetweenPlayEvent[])
+        .filter(event => options?.includeUndone || !event.undoneAt)
+        .sort((a, b) => a.eventIndex - b.eventIndex);
       resolve(events);
     };
+  });
+}
+
+export async function undoMostRecentGameAction(gameId: string): Promise<UndoneGameAction | null> {
+  const [atBatEvents, betweenPlayEvents] = await Promise.all([
+    getGameEvents(gameId),
+    getBetweenPlayEvents(gameId),
+  ]);
+
+  const candidates = [
+    atBatEvents.length > 0
+      ? {
+          kind: 'atBat' as const,
+          eventId: atBatEvents[atBatEvents.length - 1].eventId,
+          eventIndex: atBatEvents[atBatEvents.length - 1].eventIndex,
+          timestamp: atBatEvents[atBatEvents.length - 1].timestamp,
+        }
+      : null,
+    betweenPlayEvents.length > 0
+      ? {
+          kind: 'betweenPlay' as const,
+          eventId: betweenPlayEvents[betweenPlayEvents.length - 1].eventId,
+          eventIndex: betweenPlayEvents[betweenPlayEvents.length - 1].eventIndex,
+          timestamp: betweenPlayEvents[betweenPlayEvents.length - 1].timestamp,
+        }
+      : null,
+  ].filter(Boolean) as Array<UndoneGameAction & { timestamp: number }>;
+
+  const target = candidates.sort((a, b) => {
+    if (a.eventIndex === b.eventIndex) {
+      return a.timestamp - b.timestamp;
+    }
+    return a.eventIndex - b.eventIndex;
+  })[candidates.length - 1];
+
+  if (!target) {
+    return null;
+  }
+
+  const db = await initEventLogDB();
+
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(
+      [
+        target.kind === 'atBat' ? STORES.AT_BAT_EVENTS : STORES.BETWEEN_PLAY_EVENTS,
+        STORES.GAME_HEADERS,
+      ],
+      'readwrite'
+    );
+    const actionStore = transaction.objectStore(
+      target.kind === 'atBat' ? STORES.AT_BAT_EVENTS : STORES.BETWEEN_PLAY_EVENTS
+    );
+    const actionRequest = actionStore.get(target.eventId);
+    let undoneAction: UndoneGameAction | null = null;
+
+    actionRequest.onerror = () => reject(actionRequest.error);
+    actionRequest.onsuccess = () => {
+      const existing = actionRequest.result as (AtBatEvent | BetweenPlayEvent | undefined);
+      if (!existing || existing.undoneAt) {
+        return;
+      }
+
+      existing.undoneAt = Date.now();
+      actionStore.put(existing);
+      undoneAction = {
+        kind: target.kind,
+        eventId: target.eventId,
+        eventIndex: target.eventIndex,
+      };
+
+      if (target.kind !== 'atBat') {
+        return;
+      }
+
+      const headerStore = transaction.objectStore(STORES.GAME_HEADERS);
+      const headerRequest = headerStore.get(gameId);
+      headerRequest.onsuccess = () => {
+        const header = headerRequest.result as GameHeader | undefined;
+        if (!header) return;
+        header.eventCount = Math.max(0, header.eventCount - 1);
+        headerStore.put(header);
+      };
+    };
+
+    transaction.oncomplete = () => resolve(undoneAction);
+    transaction.onerror = () => reject(transaction.error);
   });
 }
 

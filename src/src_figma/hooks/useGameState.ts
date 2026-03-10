@@ -11,6 +11,7 @@ import { getTeamColors } from '@/config/teamColors';
 import {
   logAtBatEvent,
   logBetweenPlayEvent,
+  undoMostRecentGameAction,
   createGameHeader,
   completeGame,
   getGameEvents,
@@ -266,6 +267,7 @@ export interface UseGameStateReturn {
   // Initialization
   initializeGame: (config: GameInitConfig) => Promise<void>;
   loadExistingGame: () => Promise<boolean>;
+  undoLastAction: () => Promise<boolean>;
 
   // Undo support
   restoreState: (snapshot: {
@@ -2058,18 +2060,19 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       autoSaveTimeoutRef.current = null;
     }
     try {
-      if (!initialGameId) {
+      const targetGameId = initialGameId || gameState.gameId;
+      if (!targetGameId) {
         setIsLoading(false);
         return false;
       }
 
-      const header = await getGameHeader(initialGameId);
+      const header = await getGameHeader(targetGameId);
       const inProgressGame = header && !header.isComplete ? header : null;
 
       // Primary rehydration path: restore exact in-progress snapshot from currentGame store.
       // This preserves non-at-bat runner movement + full scoreboard state across refresh.
       const savedSnapshot = await loadCurrentGame();
-      if (savedSnapshot && (savedSnapshot.gameId !== initialGameId || !inProgressGame)) {
+      if (savedSnapshot && (savedSnapshot.gameId !== targetGameId || !inProgressGame)) {
         try {
           await clearCurrentGame();
         } catch (err) {
@@ -2084,7 +2087,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       );
       if (
         savedSnapshot &&
-        savedSnapshot.gameId === initialGameId &&
+        savedSnapshot.gameId === targetGameId &&
         hasUsableLiveSnapshot &&
         inProgressGame
       ) {
@@ -2624,8 +2627,11 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
 
         // Rebuild runner tracker from last known runners-after state so base identities
         // (used by runnerNames/UI) survive refresh.
-        const trackerPitcherId = lastEvent?.pitcherId ?? '';
-        const trackerPitcherName = lastEvent?.pitcherName ?? '';
+        const trackerPitcherFallback = (lastEvent?.halfInning ?? 'TOP') === 'TOP'
+          ? homeLineupStateRef.current.currentPitcher
+          : awayLineupStateRef.current.currentPitcher;
+        const trackerPitcherId = lastEvent?.pitcherId ?? trackerPitcherFallback?.playerId ?? '';
+        const trackerPitcherName = lastEvent?.pitcherName ?? trackerPitcherFallback?.playerName ?? '';
         const rebuiltTracker = createRunnerTrackingState(trackerPitcherId, trackerPitcherName);
         rebuiltTracker.inning = lastEvent?.inning ?? 1;
         rebuiltTracker.atBatNumber = events.length + 1;
@@ -2679,16 +2685,15 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         let recoveredIsTop = endedHalfOnLastAtBat
           ? (lastEvent?.halfInning === 'BOTTOM')
           : (lastEvent ? lastEvent.halfInning === 'TOP' : true);
+        const recoveredDefensivePitcher = recoveredIsTop
+          ? homeLineupStateRef.current.currentPitcher
+          : awayLineupStateRef.current.currentPitcher;
         let recoveredPitcherId = endedHalfOnLastAtBat
-          ? (lastEvent?.halfInning === 'TOP'
-            ? (awayLineupStateRef.current.currentPitcher?.playerId || lastEvent?.pitcherId || '')
-            : (homeLineupStateRef.current.currentPitcher?.playerId || lastEvent?.pitcherId || ''))
-          : (lastEvent?.pitcherId ?? '');
+          ? (recoveredDefensivePitcher?.playerId || lastEvent?.pitcherId || '')
+          : (lastEvent?.pitcherId ?? recoveredDefensivePitcher?.playerId ?? '');
         let recoveredPitcherName = endedHalfOnLastAtBat
-          ? (lastEvent?.halfInning === 'TOP'
-            ? (awayLineupStateRef.current.currentPitcher?.playerName || lastEvent?.pitcherName || '')
-            : (homeLineupStateRef.current.currentPitcher?.playerName || lastEvent?.pitcherName || ''))
-          : (lastEvent?.pitcherName ?? '');
+          ? (recoveredDefensivePitcher?.playerName || lastEvent?.pitcherName || '')
+          : (lastEvent?.pitcherName ?? recoveredDefensivePitcher?.playerName ?? '');
         let recoveredAwayBatterIndex = 0;
         let recoveredHomeBatterIndex = 0;
 
@@ -2754,6 +2759,10 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
           }
         }
 
+        rebuiltTracker.currentPitcherId = recoveredPitcherId;
+        rebuiltTracker.currentPitcherName = recoveredPitcherName;
+        rebuiltTracker.inning = recoveredInning;
+
         runnerTrackerRef.current = rebuiltTracker;
         setRunnerIdentityVersion(v => v + 1);
 
@@ -2805,7 +2814,27 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     }
     setIsLoading(false);
     return false;
-  }, [initialGameId, mapBetweenPlayEventsToSubstitutionLog, replayRosterChangeEvent, seedLineupStateFromHeader]);
+  }, [gameState.gameId, initialGameId, mapBetweenPlayEventsToSubstitutionLog, replayRosterChangeEvent, seedLineupStateFromHeader]);
+
+  const undoLastAction = useCallback(async (): Promise<boolean> => {
+    const targetGameId = gameState.gameId || initialGameId;
+    if (!targetGameId) {
+      return false;
+    }
+
+    try {
+      const undone = await undoMostRecentGameAction(targetGameId);
+      if (!undone) {
+        return false;
+      }
+
+      await clearCurrentGame();
+      return await loadExistingGame();
+    } catch (err) {
+      console.error('[useGameState] Failed to undo last action:', err);
+      return false;
+    }
+  }, [gameState.gameId, initialGameId, loadExistingGame]);
 
   // Keep a live snapshot in currentGame so refresh restores exact state
   // (including runner identities and full scoreboard, not only at-bat events).
@@ -5981,6 +6010,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     dismissPitchCountPrompt,
     initializeGame,
     loadExistingGame,
+    undoLastAction,
     restoreState,
     getRunnerTrackerSnapshot,
     getBaseRunnerNames,
