@@ -19,6 +19,7 @@ import { PlayLogPanel } from "@/app/components/PlayLogPanel";
 import { EnrichmentPanel, PITCH_TYPES, type EnrichmentUpdate } from "@/app/components/EnrichmentPanel";
 import { RunnerOutcomesDisplay } from "@/app/components/RunnerOutcomesDisplay";
 import { HistoricalEventEditor } from "@/app/components/HistoricalEventEditor";
+import { InjuryPrompt, type InjuryResult, type MojoResult } from "@/app/components/InjuryPrompt";
 import {
   getAtBatEvent,
   getBetweenPlayEvent,
@@ -67,6 +68,7 @@ const formatInningLabel = (isTop: boolean, inning: number) => {
 };
 // EXH-036: Import Mojo/Fitness types for PlayerCardModal editing
 import type { MojoLevel } from "../../../engines/mojoEngine";
+import { clampMojo } from "../../../engines/mojoEngine";
 import type { FitnessState } from "../../../engines/fitnessEngine";
 import { MOJO_STATES, getMojoColor } from "../../../engines/mojoEngine";
 import { FITNESS_STATES } from "../../../engines/fitnessEngine";
@@ -141,6 +143,11 @@ interface PendingFielderCreditPlay {
   playData: PlayData;
   atBatEventId: string;
   atBatEventIndex: number;
+}
+
+interface PendingManualSpecialPrompt {
+  type: 'KP' | 'NUT';
+  event: SpecialEventData;
 }
 
 interface HistoricalLineupSlot {
@@ -571,6 +578,7 @@ export function GameTracker() {
   const [showLineupOverlay, setShowLineupOverlay] = useState(false);
   const [lineupOverlayHint, setLineupOverlayHint] = useState<string | null>(null);
   const [showModifierTray, setShowModifierTray] = useState(false);
+  const [pendingManualSpecialPrompt, setPendingManualSpecialPrompt] = useState<PendingManualSpecialPrompt | null>(null);
   const [showManagerMomentPanel, setShowManagerMomentPanel] = useState(false);
 
   // MAJ-03: Detection system state — pending prompts for user confirmation
@@ -3736,21 +3744,125 @@ export function GameTracker() {
         fielderName: event.fielderName,
         fielderPosition: event.fielderPosition,
       });
+
+      const sourceBatterId = event.batterId || gameState.currentBatterId;
+      const sourceBatterName = event.batterName || resolvedCurrentBatterName || gameState.currentBatterName;
+      const pitcherId = event.fielderPosition === 1 && fielderId ? fielderId : gameState.currentPitcherId;
+      const pitcherName = event.fielderPosition === 1 && event.fielderName
+        ? event.fielderName
+        : resolvedCurrentPitcherName || gameState.currentPitcherName;
+
+      if (normalizedEventType === 'KILLED_PITCHER' && pitcherId && pitcherName && event.newFitness) {
+        const previousFitness = playerStateHook.getPlayer(pitcherId)?.fitnessProfile.currentFitness ?? 'FIT';
+        const reason = `Killed pitcher by ${sourceBatterName}`;
+
+        await recordPlayerStateChange(
+          pitcherId,
+          pitcherName,
+          'injury',
+          previousFitness,
+          event.newFitness,
+          reason,
+          {
+            eventType: 'injury',
+            sourceEventType: 'KILLED_PITCHER',
+            causedByPlayerId: sourceBatterId,
+            causedByPlayerName: sourceBatterName,
+            stayedIn: event.injuryStayedIn,
+          },
+        );
+        await recordPlayerStateChange(
+          pitcherId,
+          pitcherName,
+          'fitness',
+          previousFitness,
+          event.newFitness,
+          reason,
+          {
+            sourceEventType: 'KILLED_PITCHER',
+            causedByPlayerId: sourceBatterId,
+            causedByPlayerName: sourceBatterName,
+            stayedIn: event.injuryStayedIn,
+          },
+        );
+        playerStateHook.setFitness(pitcherId, event.newFitness);
+        queuePlayLogRefresh(0);
+      } else if (normalizedEventType === 'NUT_SHOT' && pitcherId && pitcherName && event.mojoImpact) {
+        const previousMojo = playerStateHook.getPlayer(pitcherId)?.gameState.currentMojo ?? 0;
+        const mojoDelta = event.mojoImpact === 'RATTLED' ? -2 : -1;
+        const nextMojo = clampMojo(previousMojo + mojoDelta);
+        const reason = `Nut shot by ${sourceBatterName}`;
+
+        await recordPlayerStateChange(
+          pitcherId,
+          pitcherName,
+          'mojo',
+          previousMojo,
+          nextMojo,
+          reason,
+          {
+            sourceEventType: 'NUT_SHOT',
+            causedByPlayerId: sourceBatterId,
+            causedByPlayerName: sourceBatterName,
+          },
+        );
+        playerStateHook.setMojo(pitcherId, nextMojo);
+        queuePlayLogRefresh(0);
+      }
+
       console.log(`${event.eventType} recorded - fielder: ${event.fielderName}, position: ${event.fielderPosition}, runner: ${event.runnerId}`);
     } catch (error) {
       console.error('Failed to record special event:', error);
     }
-  }, [fieldingTeam, getLeadRunnerIdentity, getRosterIdFromName, recordEvent, undoSystem]);
+  }, [fieldingTeam, gameState.currentBatterId, gameState.currentBatterName, gameState.currentPitcherId, gameState.currentPitcherName, getLeadRunnerIdentity, getRosterIdFromName, playerStateHook, queuePlayLogRefresh, recordEvent, recordPlayerStateChange, resolvedCurrentBatterName, resolvedCurrentPitcherName, undoSystem]);
 
   const triggerManualSpecialEvent = useCallback((eventType: SpecialEventData['eventType']) => {
     const leadRunner = getLeadRunnerIdentity();
-    void handleSpecialEvent({
+    const event: SpecialEventData = {
       eventType,
       runnerId: eventType === 'TOOTBLAN' ? leadRunner.runnerId : undefined,
       fielderPosition: eventType === 'KILLED_PITCHER' || eventType === 'NUT_SHOT' ? 1 : undefined,
       fielderName: eventType === 'KILLED_PITCHER' || eventType === 'NUT_SHOT' ? resolvedCurrentPitcherName : undefined,
+      batterId: gameState.currentBatterId,
+      batterName: resolvedCurrentBatterName || gameState.currentBatterName,
+    };
+
+    if (eventType === 'KILLED_PITCHER' || eventType === 'NUT_SHOT') {
+      setPendingManualSpecialPrompt({
+        type: eventType === 'KILLED_PITCHER' ? 'KP' : 'NUT',
+        event,
+      });
+      setShowModifierTray(false);
+      return;
+    }
+
+    void handleSpecialEvent(event);
+  }, [gameState.currentBatterId, gameState.currentBatterName, getLeadRunnerIdentity, handleSpecialEvent, resolvedCurrentBatterName, resolvedCurrentPitcherName]);
+
+  const handleManualSpecialPromptComplete = useCallback((result: InjuryResult | MojoResult) => {
+    if (!pendingManualSpecialPrompt) {
+      return;
+    }
+
+    const baseEvent = pendingManualSpecialPrompt.event;
+    setPendingManualSpecialPrompt(null);
+
+    if (pendingManualSpecialPrompt.type === 'KP') {
+      const injuryResult = result as InjuryResult;
+      void handleSpecialEvent({
+        ...baseEvent,
+        injuryStayedIn: injuryResult.stayedIn,
+        newFitness: injuryResult.newFitness,
+      });
+      return;
+    }
+
+    const mojoResult = result as MojoResult;
+    void handleSpecialEvent({
+      ...baseEvent,
+      mojoImpact: mojoResult.mojoImpact,
     });
-  }, [getLeadRunnerIdentity, handleSpecialEvent, resolvedCurrentPitcherName]);
+  }, [handleSpecialEvent, pendingManualSpecialPrompt]);
 
   const handleSubstitution = useCallback((teamType: 'away' | 'home', benchPlayerName: string, lineupPlayerName: string) => {
     console.log(`Substitution: ${benchPlayerName} replacing ${lineupPlayerName} on ${teamType} team`);
@@ -4866,6 +4978,8 @@ export function GameTracker() {
             }}
             runnerNames={runnerNames}
             currentBatterName={currentBatterDisplayName}
+            currentBatterId={gameState.currentBatterId}
+            currentBatterRecordedName={resolvedCurrentBatterName}
             zoomLevel={fieldZoomLevel}
             onRunnerTap={handleRunnerTap}
             onFielderTap={handleFielderTap}
@@ -5335,6 +5449,15 @@ export function GameTracker() {
 
         {/* Undo toast notification */}
         <undoSystem.ToastComponent />
+
+        {pendingManualSpecialPrompt && (
+          <InjuryPrompt
+            type={pendingManualSpecialPrompt.type}
+            pitcherName={resolvedCurrentPitcherName}
+            onComplete={handleManualSpecialPromptComplete}
+            onCancel={() => setPendingManualSpecialPrompt(null)}
+          />
+        )}
 
         {/* Pitch Count Prompt Modal (per PITCH_COUNT_TRACKING_SPEC.md) */}
         {pitchCountPrompt && (

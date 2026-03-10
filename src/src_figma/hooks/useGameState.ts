@@ -245,10 +245,11 @@ export interface UseGameStateReturn {
   recordPlayerStateChange: (
     playerId: string,
     playerName: string,
-    stateType: 'mojo' | 'fitness',
+    stateType: 'mojo' | 'fitness' | 'injury',
     previousValue: string | number,
     newValue: string | number,
     reason?: string,
+    options?: PlayerStateChangeOptions,
   ) => Promise<void>;
   recordManagerMoment: (
     leverageIndex: number,
@@ -374,6 +375,14 @@ export interface TeamLineupSnapshot {
 export interface GameLineupSnapshot {
   away: TeamLineupSnapshot;
   home: TeamLineupSnapshot;
+}
+
+export interface PlayerStateChangeOptions {
+  eventType?: BetweenPlayEventType;
+  sourceEventType?: string;
+  causedByPlayerId?: string;
+  causedByPlayerName?: string;
+  stayedIn?: boolean;
 }
 
 function parseSeasonNumberFromId(seasonId: string): number {
@@ -4578,12 +4587,17 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
   const recordPlayerStateChange = useCallback(async (
     playerId: string,
     playerName: string,
-    stateType: 'mojo' | 'fitness',
+    stateType: 'mojo' | 'fitness' | 'injury',
     previousValue: string | number,
     newValue: string | number,
     reason?: string,
+    options?: PlayerStateChangeOptions,
   ) => {
-    const type: BetweenPlayEventType = stateType === 'mojo' ? 'mojo_change' : 'fitness_change';
+    const type: BetweenPlayEventType =
+      options?.eventType ??
+      (stateType === 'mojo' ? 'mojo_change'
+        : stateType === 'injury' ? 'injury'
+        : 'fitness_change');
     await persistBetweenPlayEvent({
       type,
       playerStateChange: {
@@ -4593,6 +4607,10 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         previousValue,
         newValue,
         reason,
+        sourceEventType: options?.sourceEventType,
+        causedByPlayerId: options?.causedByPlayerId,
+        causedByPlayerName: options?.causedByPlayerName,
+        stayedIn: options?.stayedIn,
       },
     });
   }, [persistBetweenPlayEvent]);

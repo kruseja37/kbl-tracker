@@ -424,10 +424,14 @@ export interface BetweenPlayEvent {
   playerStateChange?: {
     playerId: string;
     playerName?: string;
-    stateType: 'mojo' | 'fitness';
+    stateType: 'mojo' | 'fitness' | 'injury';
     previousValue: string | number;
     newValue: string | number;
     reason?: string;
+    sourceEventType?: string;
+    causedByPlayerId?: string;
+    causedByPlayerName?: string;
+    stayedIn?: boolean;
   };
 
   wildPitchOrPassedBall?: {

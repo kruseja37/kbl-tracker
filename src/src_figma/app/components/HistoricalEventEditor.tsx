@@ -332,6 +332,11 @@ export function HistoricalEventEditor({
                     <FieldRow label="Type" value={event.playerStateChange.stateType} />
                     <FieldRow label="Previous" value={String(event.playerStateChange.previousValue)} />
                     <FieldRow label="New" value={String(event.playerStateChange.newValue)} />
+                    {event.playerStateChange.sourceEventType && <FieldRow label="Source" value={event.playerStateChange.sourceEventType} />}
+                    {event.playerStateChange.causedByPlayerName && <FieldRow label="Caused By" value={event.playerStateChange.causedByPlayerName} />}
+                    {typeof event.playerStateChange.stayedIn === 'boolean' && (
+                      <FieldRow label="Stayed In" value={event.playerStateChange.stayedIn ? 'Yes' : 'No'} />
+                    )}
                     {event.playerStateChange.reason && <FieldRow label="Reason" value={event.playerStateChange.reason} />}
                   </div>
                 )}

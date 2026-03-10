@@ -72,6 +72,8 @@ import {
   type InjuryResult,
   type MojoResult,
 } from './InjuryPrompt';
+import type { FitnessState } from '../../../engines/fitnessEngine';
+import type { MojoLevel } from '../../../engines/mojoEngine';
 import {
   StarPlaySubtypePopup,
   type StarPlaySubtype,
@@ -306,7 +308,12 @@ export interface SpecialEventData {
   fielderPosition?: number;
   fielderName?: string;
   batterId?: string;
+  batterName?: string;
   runnerId?: string;
+  injuryStayedIn?: boolean;
+  newFitness?: Extract<FitnessState, 'STRAINED' | 'WEAK' | 'HURT'>;
+  mojoImpact?: 'TENSE' | 'RATTLED';
+  newMojo?: MojoLevel;
 
   // ============================================
   // LEVERAGE INDEX & FAME CONTEXT
@@ -490,6 +497,8 @@ export interface EnhancedInteractiveFieldProps {
   runnerNames?: { first?: string; second?: string; third?: string };
   /** Current batter's name (for display on batter icon) */
   currentBatterName?: string;
+  currentBatterId?: string;
+  currentBatterRecordedName?: string;
   /**
    * Zoom level for the field view (0-1)
    * 0 = full field view (shows fence and stands)
@@ -1680,6 +1689,8 @@ export function EnhancedInteractiveField({
   playerNames = {},
   runnerNames = {},
   currentBatterName = 'BATTER',
+  currentBatterId,
+  currentBatterRecordedName,
   zoomLevel = 0,
   onRunnerTap,
   onFielderTap,
@@ -2984,14 +2995,6 @@ export function EnhancedInteractiveField({
       spraySector: ballLocation ? getSpraySector(ballLocation.x, ballLocation.y).sector : undefined,
     };
 
-    // Check for special events
-    if (outcome.specialEvents.includes('KP')) {
-      onSpecialEvent?.({ eventType: 'KILLED_PITCHER' });
-    }
-    if (outcome.specialEvents.includes('NUT')) {
-      onSpecialEvent?.({ eventType: 'NUT_SHOT' });
-    }
-
     // Handle HR - needs distance input
     if (outcome.type === 'HR') {
       setPendingHRData({
@@ -3006,9 +3009,20 @@ export function EnhancedInteractiveField({
     setLastClassifiedPlay(playData);
     const defaults = calculateRunnerDefaults(playData, gameSituation.bases, gameSituation.outs);
     setRunnerOutcomes(defaults);
+    const injuryPromptType = outcome.specialEvents.includes('KP')
+      ? 'KP'
+      : outcome.specialEvents.includes('NUT')
+      ? 'NUT'
+      : null;
+    if (injuryPromptType) {
+      setPendingInjuryPrompt(injuryPromptType);
+      console.log('[Flow] Injury prompt required before runner confirmation:', injuryPromptType);
+      return;
+    }
+
     setFlowStep('RUNNER_CONFIRM');
     console.log('[Flow] → RUNNER_CONFIRM with defaults:', defaults);
-  }, [ballLocation, placedFielders, gameSituation, onSpecialEvent]);
+  }, [ballLocation, gameSituation.bases, gameSituation.outs, placedFielders]);
 
   /**
    * Step 3 Handler: OUT outcome selected
@@ -3567,11 +3581,12 @@ export function EnhancedInteractiveField({
         break;
     }
 
-    // Notify parent of special event
+    // Notify parent of special event. KP/NUT wait for InjuryPrompt completion
+    // so the parent receives the user-entered severity with batter attribution.
     if (onSpecialEvent) {
       const eventTypeMap: Record<ModifierId, SpecialEventType | null> = {
-        'KP': 'KILLED_PITCHER',
-        'NUT': 'NUT_SHOT',
+        'KP': null,
+        'NUT': null,
         'WG': 'WEB_GEM',
         'ROB': 'ROBBERY',
         'BT': 'BEAT_THROW',
@@ -3588,10 +3603,12 @@ export function EnhancedInteractiveField({
           fielderName: lastClassifiedPlay?.fieldingSequence?.[0]
             ? playerNames[lastClassifiedPlay.fieldingSequence[0]]
             : undefined,
+          batterId: currentBatterId,
+          batterName: currentBatterRecordedName || currentBatterName,
         });
       }
     }
-  }, [activeModifiers, lastClassifiedPlay, onSpecialEvent, playerNames]);
+  }, [activeModifiers, currentBatterId, currentBatterName, currentBatterRecordedName, lastClassifiedPlay, onSpecialEvent, playerNames]);
 
   // ============================================
   // NEW: Handle InjuryPrompt completion (KP or NUT)
@@ -3602,21 +3619,28 @@ export function EnhancedInteractiveField({
 
     if (pendingInjuryPrompt === 'KP') {
       const injuryResult = result as InjuryResult;
-      if (injuryResult.stayedIn) {
-        console.log('[KP] Pitcher stayed in game');
-      } else {
-        console.log('[KP] Pitcher left game with severity:', injuryResult.severity);
-        // EXH-034: Fitness update would go here
-        // The InjuryPrompt already captures the severity (HURT/INJURED/WOUNDED)
-        // which maps to fitness states. Parent component should handle the actual
-        // fitness update via onSpecialEvent callback.
-      }
+      console.log('[KP] Injury result:', injuryResult);
+      onSpecialEvent?.({
+        eventType: 'KILLED_PITCHER',
+        fielderPosition: 1,
+        fielderName: playerNames[1],
+        batterId: currentBatterId,
+        batterName: currentBatterRecordedName || currentBatterName,
+        injuryStayedIn: injuryResult.stayedIn,
+        newFitness: injuryResult.newFitness,
+      });
     } else if (pendingInjuryPrompt === 'NUT') {
       const mojoResult = result as MojoResult;
       console.log('[NUT] Mojo impact:', mojoResult.mojoImpact);
-      // EXH-034: Mojo update would go here
-      // The InjuryPrompt already captures the mojo impact (NONE/TENSE/RATTLED)
-      // Parent component should handle the actual mojo update.
+      onSpecialEvent?.({
+        eventType: 'NUT_SHOT',
+        fielderPosition: 1,
+        fielderName: playerNames[1],
+        batterId: currentBatterId,
+        batterName: currentBatterRecordedName || currentBatterName,
+        mojoImpact: mojoResult.mojoImpact,
+        newMojo: mojoResult.mojoImpact === 'RATTLED' ? -2 : -1,
+      });
     }
 
     // Clear the prompt
@@ -3650,7 +3674,7 @@ export function EnhancedInteractiveField({
         handleReset();
       }
     }
-  }, [pendingInjuryPrompt, currentPromptIndex, pendingPrompts, handleReset, lastClassifiedPlay, runnerOutcomes]);
+  }, [currentBatterId, currentBatterName, currentBatterRecordedName, currentPromptIndex, handleReset, lastClassifiedPlay, onSpecialEvent, pendingInjuryPrompt, pendingPrompts, playerNames, runnerOutcomes]);
 
   // Handle InjuryPrompt cancel
   const handleInjuryPromptCancel = useCallback(() => {
@@ -4288,27 +4312,11 @@ export function EnhancedInteractiveField({
                 // Close the prompt modal, show InjuryPrompt for KP
                 setShowSpecialEventPrompt(false);
                 setPendingInjuryPrompt('KP');
-                // Record the special event
-                if (onSpecialEvent) {
-                  onSpecialEvent({
-                    eventType: 'KILLED_PITCHER',
-                    fielderPosition: lastPlayFirstFielder?.positionNumber,
-                    fielderName: lastPlayFirstFielder?.name,
-                  });
-                }
                 return; // Don't move to next prompt yet - InjuryPrompt will handle completion
               } else if (currentPrompt.eventType === 'NUT_SHOT') {
                 // Close the prompt modal, show InjuryPrompt for NUT
                 setShowSpecialEventPrompt(false);
                 setPendingInjuryPrompt('NUT');
-                // Record the special event
-                if (onSpecialEvent) {
-                  onSpecialEvent({
-                    eventType: 'NUT_SHOT',
-                    fielderPosition: lastPlayFirstFielder?.positionNumber,
-                    fielderName: lastPlayFirstFielder?.name,
-                  });
-                }
                 return; // Don't move to next prompt yet - InjuryPrompt will handle completion
               }
             }

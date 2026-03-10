@@ -327,6 +327,45 @@ describe('useGameState between-play ledger', () => {
     ]));
   });
 
+  test('logs injury context rows with causing batter attribution', async () => {
+    const { result } = renderHook(() => useGameState());
+    await initializeGame(result);
+
+    mockLogBetweenPlayEvent.mockClear();
+
+    await act(async () => {
+      await result.current.recordPlayerStateChange(
+        'home-sp',
+        'Home Starter',
+        'injury',
+        'FIT',
+        'WEAK',
+        'Killed pitcher by Away Batter 1',
+        {
+          eventType: 'injury',
+          sourceEventType: 'KILLED_PITCHER',
+          causedByPlayerId: 'away-batter-1',
+          causedByPlayerName: 'Away Batter 1',
+          stayedIn: false,
+        },
+      );
+    });
+
+    expect(mockLogBetweenPlayEvent).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'injury',
+      playerStateChange: expect.objectContaining({
+        playerId: 'home-sp',
+        stateType: 'injury',
+        previousValue: 'FIT',
+        newValue: 'WEAK',
+        sourceEventType: 'KILLED_PITCHER',
+        causedByPlayerId: 'away-batter-1',
+        causedByPlayerName: 'Away Batter 1',
+        stayedIn: false,
+      }),
+    }));
+  });
+
   test('logs manager moments as durable system rows', async () => {
     const { result } = renderHook(() => useGameState());
     await initializeGame(result);
