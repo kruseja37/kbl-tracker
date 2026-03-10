@@ -534,8 +534,8 @@ export interface FieldingEvent {
   sequence: number;
 
   // Fielder identification
-  // NOTE: playerId/playerName may be position-based if lineup lookup unavailable
-  // fWAR calculator should use position + teamId to resolve to actual player
+  // NOTE: new fielding rows should carry stable runtime player identity.
+  // Older local test data may still contain position-shaped IDs.
   playerId: string;
   playerName: string;
   position: Position;

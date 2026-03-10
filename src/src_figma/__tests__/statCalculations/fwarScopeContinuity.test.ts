@@ -92,7 +92,7 @@ describe('calculateFWARFromScopedEvents', () => {
     expect(result?.totalRunsSaved).toBeCloseTo(expected.totalRunsSaved, 5);
   });
 
-  test('falls back to same-team legacy position-coded fielding rows', async () => {
+  test('ignores legacy position-coded fielding rows without a stable player id match', async () => {
     const sameTeamLegacyEvent = makePersistedFieldingEvent({
       fieldingEventId: 'legacy-same-team',
       playerId: 'SS',
@@ -122,15 +122,7 @@ describe('calculateFWARFromScopedEvents', () => {
       teamId: 'team-a',
     });
 
-    const expected = calculateSeasonFWAR(
-      convertPersistedEventsToCalculator([sameTeamLegacyEvent]),
-      'SS',
-      8,
-      48
-    );
-
-    expect(result?.fWAR).toBeCloseTo(expected.fWAR, 5);
-    expect(result?.totalRunsSaved).toBeCloseTo(expected.totalRunsSaved, 5);
+    expect(result).toBeNull();
   });
 
   test('returns null when the scope has no matching fielding events for the player', async () => {

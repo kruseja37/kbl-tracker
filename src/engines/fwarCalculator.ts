@@ -689,10 +689,9 @@ export function getPersistedFieldingEventsForPlayer(
   position: Position,
   teamId?: string
 ): PersistedFieldingEvent[] {
-  return persistedEvents.filter((event) =>
-    event.playerId === playerId ||
-    (!!teamId && event.playerId === position && event.position === position && event.teamId === teamId)
-  );
+  void position;
+  void teamId;
+  return persistedEvents.filter((event) => event.playerId === playerId);
 }
 
 export function calculateFWARFromPersistedFieldingSet(

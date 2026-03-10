@@ -5359,30 +5359,18 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     }
 
     // CRIT-05 FIX: Query fielding events from IndexedDB and tally per player
-    // Fielding events are stored with position-based playerIds (e.g., "SS", "CF")
-    // We need to map them back to real player IDs via lineup refs
+    // New fielding rows carry stable defender IDs directly.
     const fieldingEvents = await getGameFieldingEvents(gameState.gameId);
-    const positionToPlayerIdMap = new Map<string, string>(); // "SS_teamId" → playerId
-    for (const p of [...awayLineupRef.current, ...homeLineupRef.current]) {
-      if (p.position) {
-        const teamId = resolveTeamIdForPlayerId(p.playerId);
-        positionToPlayerIdMap.set(`${p.position}_${teamId}`, p.playerId);
-      }
-    }
 
     // Build per-player fielding tally
     const playerFieldingTally = new Map<string, { putouts: number; assists: number; errors: number }>();
     for (const fe of fieldingEvents) {
-      // Try to resolve position-based ID to real player ID
-      const resolvedId = positionToPlayerIdMap.get(`${fe.playerId}_${fe.teamId}`) ||
-                          positionToPlayerIdMap.get(`${fe.position}_${fe.teamId}`) ||
-                          fe.playerId;
-      const tally = playerFieldingTally.get(resolvedId) || { putouts: 0, assists: 0, errors: 0 };
+      const tally = playerFieldingTally.get(fe.playerId) || { putouts: 0, assists: 0, errors: 0 };
       if (fe.playType === 'putout') tally.putouts++;
       else if (fe.playType === 'assist' || fe.playType === 'outfield_assist') tally.assists++;
       else if (fe.playType === 'error') tally.errors++;
       else if (fe.playType === 'double_play_pivot') tally.assists++; // Pivot = assist
-      playerFieldingTally.set(resolvedId, tally);
+      playerFieldingTally.set(fe.playerId, tally);
     }
 
     const playerStatsRecord: Record<string, {
@@ -5730,25 +5718,15 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
 
     // CRIT-05 FIX: Query fielding events for endGame path too
     const endGameFieldingEvents = await getGameFieldingEvents(gameState.gameId);
-    const endGamePosToPlayerMap = new Map<string, string>();
-    for (const p of [...awayLineupRef.current, ...homeLineupRef.current]) {
-      if (p.position) {
-        const teamId = resolveTeamIdForPlayerId(p.playerId);
-        endGamePosToPlayerMap.set(`${p.position}_${teamId}`, p.playerId);
-      }
-    }
 
     const endGameFieldingTally = new Map<string, { putouts: number; assists: number; errors: number }>();
     for (const fe of endGameFieldingEvents) {
-      const resolvedId = endGamePosToPlayerMap.get(`${fe.playerId}_${fe.teamId}`) ||
-                          endGamePosToPlayerMap.get(`${fe.position}_${fe.teamId}`) ||
-                          fe.playerId;
-      const tally = endGameFieldingTally.get(resolvedId) || { putouts: 0, assists: 0, errors: 0 };
+      const tally = endGameFieldingTally.get(fe.playerId) || { putouts: 0, assists: 0, errors: 0 };
       if (fe.playType === 'putout') tally.putouts++;
       else if (fe.playType === 'assist' || fe.playType === 'outfield_assist') tally.assists++;
       else if (fe.playType === 'error') tally.errors++;
       else if (fe.playType === 'double_play_pivot') tally.assists++;
-      endGameFieldingTally.set(resolvedId, tally);
+      endGameFieldingTally.set(fe.playerId, tally);
     }
 
     const playerStatsRecord: Record<string, {
