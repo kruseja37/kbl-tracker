@@ -124,6 +124,18 @@ export interface GameHeader {
   homeTeamId: string;
   homeTeamName: string;
   stadiumName?: string | null;
+  startingLineups?: {
+    away: Array<{ playerId: string; playerName: string; position: string; battingOrder: number }>;
+    home: Array<{ playerId: string; playerName: string; position: string; battingOrder: number }>;
+  };
+  benchRosters?: {
+    away: Array<{ playerId: string; playerName: string; positions: string[] }>;
+    home: Array<{ playerId: string; playerName: string; positions: string[] }>;
+  };
+  startingPitchers?: {
+    away: { playerId: string; playerName: string };
+    home: { playerId: string; playerName: string };
+  };
 
   // Final state
   finalScore: { away: number; home: number } | null;  // null if game in progress

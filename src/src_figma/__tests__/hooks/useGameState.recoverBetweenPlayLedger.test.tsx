@@ -83,6 +83,24 @@ describe('useGameState recover between-play ledger', () => {
       homeTeamId: 'home-team',
       homeTeamName: 'Home Team',
       stadiumName: 'Test Park',
+      startingLineups: {
+        away: [
+          { playerId: 'away-batter-1', playerName: 'Away Batter 1', position: 'SS', battingOrder: 1 },
+          { playerId: 'away-batter-2', playerName: 'Away Batter 2', position: 'CF', battingOrder: 2 },
+        ],
+        home: [
+          { playerId: 'home-batter-1', playerName: 'Home Batter 1', position: '2B', battingOrder: 1 },
+          { playerId: 'home-batter-2', playerName: 'Home Batter 2', position: 'RF', battingOrder: 2 },
+        ],
+      },
+      benchRosters: {
+        away: [],
+        home: [],
+      },
+      startingPitchers: {
+        away: { playerId: 'away-sp', playerName: 'Away Starter' },
+        home: { playerId: 'home-sp', playerName: 'Home Starter' },
+      },
       finalScore: null,
       finalInning: 1,
       isComplete: false,
@@ -202,6 +220,8 @@ describe('useGameState recover between-play ledger', () => {
 
     expect(result.current.gameState.currentPitcherId).toBe('home-rp');
     expect(result.current.gameState.currentPitcherName).toBe('Home Reliever');
+    expect(result.current.gameState.currentBatterId).toBe('away-batter-2');
+    expect(result.current.gameState.currentBatterName).toBe('Away Batter 2');
     expect(result.current.gameState.bases).toEqual({
       first: false,
       second: true,
