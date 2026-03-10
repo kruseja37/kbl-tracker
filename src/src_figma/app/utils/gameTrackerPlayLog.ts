@@ -54,7 +54,7 @@ const createBaseEntry = (
   eventId: overrides.eventId,
   editorType: getEditorType(overrides.eventType),
   visibility: getVisibility(overrides.eventType),
-  isSelectable: overrides.eventType === 'at_bat',
+  isSelectable: true,
   resultCategory: 'special',
   rbi: 0,
   runsScored: 0,

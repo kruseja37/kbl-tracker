@@ -1,0 +1,174 @@
+import React from 'react';
+
+import type { BetweenPlayEvent } from '../../../utils/eventLog';
+import type { PlayLogEntry } from '../utils/playLogTypes';
+
+interface HistoricalEventEditorProps {
+  entry: PlayLogEntry;
+  event: BetweenPlayEvent | null;
+  loading?: boolean;
+  saving?: boolean;
+  onReturnToLive: () => void;
+  onRunnerCaughtByChange?: (caughtBy: number | null) => void;
+}
+
+function FieldRow({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div className="flex items-start justify-between gap-3 py-1 border-b border-[#4a6a4a]/40 last:border-b-0">
+      <div className="text-[8px] text-[#88AA88] uppercase tracking-wide">{label}</div>
+      <div className="text-[9px] text-[#E8E8D8] text-right">{value}</div>
+    </div>
+  );
+}
+
+function LockedOutcomeNotice() {
+  return (
+    <div className="text-[8px] text-[#C4A853] bg-[#2f3b21] border border-[#5a6b38] px-2 py-1 rounded">
+      Tap undo to change outcome.
+    </div>
+  );
+}
+
+export function HistoricalEventEditor({
+  entry,
+  event,
+  loading = false,
+  saving = false,
+  onReturnToLive,
+  onRunnerCaughtByChange,
+}: HistoricalEventEditorProps) {
+  const title = entry.editorType === 'runner'
+    ? 'Runner Event'
+    : entry.editorType === 'lineup_pitching'
+    ? 'Lineup / Pitching'
+    : 'Context / Modifiers';
+
+  const runnerAction = event?.runnerAction;
+  const canEditCaughtBy = !!event?.stolenBase && (event.type === 'stolen_base' || event.type === 'caught_stealing');
+
+  return (
+    <div className="bg-[#2a3a2d] border-l-2 border-[#C4A853] flex flex-col h-full">
+      <div className="flex items-center justify-between px-2 py-1 bg-[#1a2a1d] border-b border-[#4a6a4a]">
+        <div className="min-w-0">
+          <div className="text-[8px] text-[#88AA88] font-mono">{entry.inningLabel}</div>
+          <div className="text-[9px] text-[#E8E8D8] font-bold truncate">{title}: {entry.result}</div>
+        </div>
+        <button
+          onClick={onReturnToLive}
+          className="text-[8px] text-[#E8E8D8] bg-[#3d5240] border border-[#4a6a4a] px-1.5 py-0.5 rounded hover:bg-[#4a6a4a]"
+        >
+          Return to live
+        </button>
+      </div>
+
+      <div className="flex-1 overflow-y-auto p-2 space-y-2">
+        {loading ? (
+          <div className="text-[9px] text-[#88AA88]">Loading event…</div>
+        ) : !event ? (
+          <div className="text-[9px] text-[#fca5a5]">Recorded event not found.</div>
+        ) : (
+          <>
+            <FieldRow label="Actor" value={entry.batterName} />
+            {entry.description && <FieldRow label="Summary" value={entry.description} />}
+
+            {entry.editorType === 'runner' && (
+              <>
+                <LockedOutcomeNotice />
+                <div className="bg-[#1f2937]/50 border border-[#4a6a4a] rounded px-2 py-2 space-y-1">
+                  <FieldRow label="From" value={runnerAction ? `${runnerAction.fromBase}B` : '—'} />
+                  <FieldRow label="To" value={runnerAction ? (runnerAction.outcome === 'out' ? 'OUT' : `${runnerAction.toBase === 4 ? 'HOME' : `${runnerAction.toBase}B`}`) : '—'} />
+                  <FieldRow label="Outcome" value={runnerAction?.outcome || '—'} />
+                </div>
+
+                {canEditCaughtBy ? (
+                  <div>
+                    <div className="text-[8px] text-[#88AA88] font-bold uppercase tracking-wide mb-1">Fielder Involved</div>
+                    <div className="flex flex-wrap gap-1">
+                      <button
+                        onClick={() => onRunnerCaughtByChange?.(null)}
+                        disabled={saving}
+                        className={`text-[8px] px-2 py-1 rounded border ${event.stolenBase?.caughtBy == null ? 'bg-[#C4A853]/20 border-[#C4A853] text-[#C4A853]' : 'bg-[#1f2937]/60 border-[#4a6a4a] text-[#88AA88]'}`}
+                      >
+                        None
+                      </button>
+                      {Array.from({ length: 9 }, (_, index) => index + 1).map((position) => (
+                        <button
+                          key={position}
+                          onClick={() => onRunnerCaughtByChange?.(position)}
+                          disabled={saving}
+                          className={`text-[8px] px-2 py-1 rounded border ${event.stolenBase?.caughtBy === position ? 'bg-[#C4A853]/20 border-[#C4A853] text-[#C4A853]' : 'bg-[#1f2937]/60 border-[#4a6a4a] text-[#88AA88]'}`}
+                        >
+                          {position}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="text-[7px] text-[#88AA88] mt-1">
+                      {saving ? 'Saving…' : 'Editable enrichment only. Outcome stays locked.'}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-[8px] text-[#88AA88]">
+                    No editable enrichment fields are wired for this runner event yet.
+                  </div>
+                )}
+              </>
+            )}
+
+            {entry.editorType === 'lineup_pitching' && (
+              <>
+                <div className="text-[8px] text-[#C4A853] bg-[#2f3b21] border border-[#5a6b38] px-2 py-1 rounded">
+                  Historical lineup edits are replay-driven and will land with replay-from-checkpoint wiring.
+                </div>
+                {event.substitution && (
+                  <div className="bg-[#1f2937]/50 border border-[#4a6a4a] rounded px-2 py-2">
+                    <FieldRow label="Out" value={event.substitution.outPlayerName || event.substitution.outPlayerId} />
+                    <FieldRow label="In" value={event.substitution.inPlayerName || event.substitution.inPlayerId} />
+                    <FieldRow label="Position" value={event.substitution.inPosition || event.substitution.outPosition || '—'} />
+                  </div>
+                )}
+                {event.pitcherChange && (
+                  <div className="bg-[#1f2937]/50 border border-[#4a6a4a] rounded px-2 py-2">
+                    <FieldRow label="Outgoing" value={event.pitcherChange.outgoingPitcherName || event.pitcherChange.outgoingPitcherId} />
+                    <FieldRow label="Incoming" value={event.pitcherChange.incomingPitcherName || event.pitcherChange.incomingPitcherId} />
+                    <FieldRow label="Inherited" value={event.pitcherChange.inheritedRunners} />
+                  </div>
+                )}
+              </>
+            )}
+
+            {entry.editorType === 'context_modifiers' && (
+              <>
+                <div className="text-[8px] text-[#88AA88]">
+                  Context rows are visible and selectable. Edit wiring will attach here as those producer paths are normalized.
+                </div>
+                {event.playerStateChange && (
+                  <div className="bg-[#1f2937]/50 border border-[#4a6a4a] rounded px-2 py-2">
+                    <FieldRow label="Type" value={event.playerStateChange.stateType} />
+                    <FieldRow label="Previous" value={String(event.playerStateChange.previousValue)} />
+                    <FieldRow label="New" value={String(event.playerStateChange.newValue)} />
+                    {event.playerStateChange.reason && <FieldRow label="Reason" value={event.playerStateChange.reason} />}
+                  </div>
+                )}
+                {event.managerMoment && (
+                  <div className="bg-[#1f2937]/50 border border-[#4a6a4a] rounded px-2 py-2">
+                    <FieldRow label="Decision" value={event.managerMoment.decisionType} />
+                    <FieldRow label="Leverage" value={event.managerMoment.leverageIndex.toFixed(1)} />
+                    {event.managerMoment.context && <FieldRow label="Context" value={event.managerMoment.context} />}
+                  </div>
+                )}
+                {event.pitchCountUpdate && (
+                  <div className="bg-[#1f2937]/50 border border-[#4a6a4a] rounded px-2 py-2">
+                    <FieldRow label="Pitch Count" value={event.pitchCountUpdate.pitchCount} />
+                    <FieldRow label="Timing" value={event.pitchCountUpdate.timing} />
+                  </div>
+                )}
+              </>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+export default HistoricalEventEditor;

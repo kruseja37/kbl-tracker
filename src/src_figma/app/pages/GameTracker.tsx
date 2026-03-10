@@ -18,8 +18,10 @@ import { QuickBar } from "@/app/components/QuickBar";
 import { PlayLogPanel } from "@/app/components/PlayLogPanel";
 import { EnrichmentPanel, PITCH_TYPES, type EnrichmentUpdate } from "@/app/components/EnrichmentPanel";
 import { RunnerOutcomesDisplay } from "@/app/components/RunnerOutcomesDisplay";
+import { HistoricalEventEditor } from "@/app/components/HistoricalEventEditor";
 import {
   getAtBatEvent,
+  getBetweenPlayEvent,
   getBetweenPlayEvents,
   getFieldingEventsForAtBat,
   getGameEvents,
@@ -27,7 +29,9 @@ import {
   logFieldingEvent,
   updateAtBatEvent,
   updateAtBatEventWithFieldingSync,
+  updateBetweenPlayEvent,
   type AtBatEvent,
+  type BetweenPlayEvent,
   type FieldingEvent,
   type GameHeader,
 } from "../../../utils/eventLog";
@@ -351,6 +355,10 @@ export function GameTracker() {
 
   // Layer 5: Enrichment Panel state
   const [enrichingEntry, setEnrichingEntry] = useState<PlayLogEntry | null>(null);
+  const [selectedPlayLogEntry, setSelectedPlayLogEntry] = useState<PlayLogEntry | null>(null);
+  const [selectedBetweenPlayEvent, setSelectedBetweenPlayEvent] = useState<BetweenPlayEvent | null>(null);
+  const [selectedBetweenPlayEventLoading, setSelectedBetweenPlayEventLoading] = useState(false);
+  const [selectedBetweenPlayEventSaving, setSelectedBetweenPlayEventSaving] = useState(false);
   const [enrichmentCache, setEnrichmentCache] = useState<Record<string, NonNullable<import('../../../utils/eventLog').AtBatEvent['enrichment']>>>({});
   // Between-inning enrichment prompt
   const [showEnrichmentPrompt, setShowEnrichmentPrompt] = useState(false);
@@ -656,6 +664,47 @@ export function GameTracker() {
     }
     previousPitchCountPromptRef.current = pitchCountPrompt;
   }, [pitchCountPrompt]);
+
+  useEffect(() => {
+    if (!selectedPlayLogEntry?.eventId || selectedPlayLogEntry.eventType === 'at_bat') {
+      setSelectedBetweenPlayEvent(null);
+      setSelectedBetweenPlayEventLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setSelectedBetweenPlayEventLoading(true);
+    void getBetweenPlayEvent(selectedPlayLogEntry.eventId)
+      .then((event) => {
+        if (cancelled) return;
+        setSelectedBetweenPlayEvent(event);
+      })
+      .finally(() => {
+        if (cancelled) return;
+        setSelectedBetweenPlayEventLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedPlayLogEntry]);
+
+  useEffect(() => {
+    if (!selectedPlayLogEntry) return;
+    const nextEntry = playLogEntries.find((entry) => entry.id === selectedPlayLogEntry.id);
+    if (!nextEntry) {
+      setSelectedPlayLogEntry(null);
+      setEnrichingEntry(null);
+      setSelectedBetweenPlayEvent(null);
+      return;
+    }
+    if (nextEntry !== selectedPlayLogEntry) {
+      setSelectedPlayLogEntry(nextEntry);
+      if (nextEntry.eventType === 'at_bat') {
+        setEnrichingEntry(nextEntry);
+      }
+    }
+  }, [playLogEntries, selectedPlayLogEntry]);
 
   // Expandable sections state
   const [expandedSections, setExpandedSections] = useState({
@@ -2566,6 +2615,47 @@ export function GameTracker() {
     }
   }, [commitPlateAppearance, gameState.currentBatterName, logAction, pendingRunnerCorrection, runnerNames]);
 
+  const handleRunnerCaughtByChange = useCallback(async (caughtBy: number | null) => {
+    if (!selectedBetweenPlayEvent?.stolenBase) return;
+
+    const previousValue = selectedBetweenPlayEvent.stolenBase.caughtBy ?? null;
+    if (previousValue === caughtBy) return;
+
+    const timestamp = Date.now();
+    const nextEvent: BetweenPlayEvent = {
+      ...selectedBetweenPlayEvent,
+      version: (selectedBetweenPlayEvent.version ?? 1) + 1,
+      editHistory: [
+        ...(selectedBetweenPlayEvent.editHistory || []),
+        {
+          field: 'stolenBase.caughtBy',
+          oldValue: previousValue,
+          newValue: caughtBy,
+          timestamp,
+        },
+      ],
+      stolenBase: {
+        ...selectedBetweenPlayEvent.stolenBase,
+        ...(caughtBy == null ? { caughtBy: undefined } : { caughtBy }),
+      },
+    };
+
+    setSelectedBetweenPlayEventSaving(true);
+    try {
+      await updateBetweenPlayEvent(selectedBetweenPlayEvent.eventId, {
+        version: nextEvent.version,
+        editHistory: nextEvent.editHistory?.slice(-1),
+        stolenBase: nextEvent.stolenBase,
+      });
+      setSelectedBetweenPlayEvent(nextEvent);
+      queuePlayLogRefresh(0);
+    } catch (error) {
+      console.error('[Historical Runner Edit] Failed to update fielder attribution:', error);
+    } finally {
+      setSelectedBetweenPlayEventSaving(false);
+    }
+  }, [queuePlayLogRefresh, selectedBetweenPlayEvent]);
+
   const handleQuickBarOutcome = useCallback(async (outcome: string) => {
     if (!gameInitialized) return;
 
@@ -3694,8 +3784,21 @@ export function GameTracker() {
 
   // 5.1: Open enrichment panel for a play log entry
   const handleEntryTap = useCallback((entry: PlayLogEntry) => {
-    if (!entry.isEnrichable) return;
-    setEnrichingEntry(prev => prev?.id === entry.id ? null : entry);
+    setSelectedPlayLogEntry((prev) => {
+      if (prev?.id === entry.id) {
+        setEnrichingEntry(null);
+        setSelectedBetweenPlayEvent(null);
+        return null;
+      }
+
+      if (entry.eventType === 'at_bat') {
+        setEnrichingEntry(entry);
+      } else {
+        setEnrichingEntry(null);
+      }
+
+      return entry;
+    });
   }, []);
 
   const canUseMainFieldLocation = !!enrichingEntry && ['1B', '2B', '3B', 'GRD', 'HR', 'GO', 'FO', 'LO', 'PO', 'DP', 'TP', 'FC', 'SF', 'SAC'].includes(enrichingEntry.result);
@@ -3825,6 +3928,14 @@ export function GameTracker() {
 
   // 5.1: Close enrichment panel
   const handleEnrichmentClose = useCallback(() => {
+    setSelectedPlayLogEntry(null);
+    setSelectedBetweenPlayEvent(null);
+    setEnrichingEntry(null);
+  }, []);
+
+  const handleReturnToLiveAtBat = useCallback(() => {
+    setSelectedPlayLogEntry(null);
+    setSelectedBetweenPlayEvent(null);
     setEnrichingEntry(null);
   }, []);
 
@@ -3836,6 +3947,7 @@ export function GameTracker() {
       e.isEnrichable && (!e.hasPitchType || !e.hasLocationData || !e.hasFieldingData)
     );
     if (firstUnenriched) {
+      setSelectedPlayLogEntry(firstUnenriched);
       setEnrichingEntry(firstUnenriched);
     }
   }, [playLogEntries]);
@@ -4404,6 +4516,15 @@ export function GameTracker() {
                 </button>
               </div>
             </div>
+          ) : selectedPlayLogEntry !== null && selectedPlayLogEntry.eventType !== 'at_bat' ? (
+            <HistoricalEventEditor
+              entry={selectedPlayLogEntry}
+              event={selectedBetweenPlayEvent}
+              loading={selectedBetweenPlayEventLoading}
+              saving={selectedBetweenPlayEventSaving}
+              onReturnToLive={handleReturnToLiveAtBat}
+              onRunnerCaughtByChange={handleRunnerCaughtByChange}
+            />
           ) : enrichingEntry !== null ? (
             /* Enrichment panel replaces play log when active */
             <EnrichmentPanel
@@ -4412,12 +4533,14 @@ export function GameTracker() {
               onUpdate={handleEnrichmentUpdate}
               onClose={handleEnrichmentClose}
               useMainFieldForLocation={canUseMainFieldLocation}
+              closeLabel="Return to live"
             />
           ) : (
             <PlayLogPanel
               entries={playLogEntries}
               onEntryTap={handleEntryTap}
               onKToggle={handleKToggle}
+              enrichingEntryId={selectedPlayLogEntry?.id || null}
             />
           )}
         </div>
@@ -4425,12 +4548,17 @@ export function GameTracker() {
         {/* ZONE 4: Quick Bar — bottom left */}
         <div style={{ gridColumn: '1', gridRow: '2' }} className="relative">
           <QuickBar
-            disabled={!gameInitialized || !!pendingRunnerCorrection}
+            disabled={!gameInitialized || !!pendingRunnerCorrection || !!selectedPlayLogEntry}
             onOutcome={handleQuickBarOutcome}
             gameSituation={{ outs: gameState.outs, bases: gameState.bases }}
             managerMomentActive={mwarHook.managerMoment.isTriggered}
             onManagerMomentTap={() => setShowManagerMomentPanel(prev => !prev)}
           />
+          {selectedPlayLogEntry && !pendingRunnerCorrection && (
+            <div className="absolute bottom-full left-0 right-0 mb-1 bg-[#2f3b21] border border-[#5a6b38] px-2 py-1 text-[8px] text-[#C4A853]">
+              Editing historical play. Return to live at-bat to score the next pitch.
+            </div>
+          )}
           {/* D-17: Manager Moment inline Call/Skip panel — non-blocking */}
           {showManagerMomentPanel && mwarHook.managerMoment.isTriggered && (
             <div className="absolute bottom-full left-0 right-0 mb-1 bg-[#4A6A42] border-[3px] border-[#FFD700] p-2 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.6)] z-40">

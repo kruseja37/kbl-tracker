@@ -142,6 +142,7 @@ interface EnrichmentPanelProps {
   onUpdate: (field: keyof EnrichmentUpdate, value: unknown) => void;
   onClose: () => void;
   useMainFieldForLocation?: boolean;
+  closeLabel?: string;
 }
 
 export function EnrichmentPanel({
@@ -150,6 +151,7 @@ export function EnrichmentPanel({
   onUpdate,
   onClose,
   useMainFieldForLocation = false,
+  closeLabel = 'Done',
 }: EnrichmentPanelProps) {
   const [localFieldingSeq, setLocalFieldingSeq] = useState<number[]>(
     currentEnrichment?.fieldingSequence || []
@@ -184,7 +186,7 @@ export function EnrichmentPanel({
           onClick={onClose}
           className="text-[8px] text-[#E8E8D8] bg-[#3d5240] border border-[#4a6a4a] px-1.5 py-0.5 rounded hover:bg-[#4a6a4a]"
         >
-          Done
+          {closeLabel}
         </button>
       </div>
 
