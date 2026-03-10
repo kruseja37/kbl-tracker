@@ -17,6 +17,7 @@ import { FenwayBoard } from "@/app/components/FenwayBoard";
 import { QuickBar } from "@/app/components/QuickBar";
 import { PlayLogPanel } from "@/app/components/PlayLogPanel";
 import { EnrichmentPanel, PITCH_TYPES, type EnrichmentUpdate } from "@/app/components/EnrichmentPanel";
+import { RunnerOutcomesDisplay } from "@/app/components/RunnerOutcomesDisplay";
 import {
   getAtBatEvent,
   getBetweenPlayEvents,
@@ -93,6 +94,14 @@ import { POSITION_MAP, POSITION_NUMBER } from '../components/fielderInference';
 import { calculateRunnerDefaults, type RunnerDefaults } from '../components/runnerDefaults';
 import type { PlayLogEntry } from '../utils/playLogTypes';
 import { buildPlayLogEntries } from '../utils/gameTrackerPlayLog';
+import {
+  applyRunnerDefaultsToNames,
+  buildRunnerCorrectionForQuickBarOutcome,
+  countRbiFromDefaults,
+  getBatterDestinationOptions,
+  runnerDefaultsToAdvancement,
+  type PendingRunnerCorrectionAction,
+} from '../utils/gameTrackerRunnerCorrection';
 
 // Note: Using GameState from useGameState hook instead of local interface
 // This interface is deprecated but kept for reference during migration
@@ -589,6 +598,7 @@ export function GameTracker() {
     runnerAdv: RunnerAdvancement | undefined;
     defaults: RunnerDefaults;
   } | null>(null);
+  const [pendingRunnerCorrection, setPendingRunnerCorrection] = useState<PendingRunnerCorrectionAction | null>(null);
 
   // Scoreboard minimization toggle - allows field to expand
   const [isScoreboardMinimized, setIsScoreboardMinimized] = useState(true);
@@ -2502,6 +2512,60 @@ export function GameTracker() {
   const QUICK_BAR_OUTS: readonly string[] = ['K', 'GO', 'FO', 'LO', 'PO', 'DP', 'TP', 'SF', 'SAC'];
   const QUICK_BAR_WALKS: readonly string[] = ['BB', 'HBP', 'IBB'];
 
+  const handleRunnerCorrectionChange = useCallback((updated: RunnerDefaults) => {
+    setPendingRunnerCorrection(prev => prev ? { ...prev, defaults: updated } : prev);
+  }, []);
+
+  const handleRunnerCorrectionCancel = useCallback(() => {
+    setPendingRunnerCorrection(null);
+  }, []);
+
+  const handleRunnerCorrectionCommit = useCallback(async () => {
+    if (!pendingRunnerCorrection) return;
+
+    const runnerAdvancement = runnerDefaultsToAdvancement(pendingRunnerCorrection.defaults);
+    const rbi = countRbiFromDefaults(pendingRunnerCorrection.defaults, pendingRunnerCorrection.action);
+
+    try {
+      if (pendingRunnerCorrection.action.type === 'hit') {
+        await commitPlateAppearance({
+          type: 'hit',
+          hitType: pendingRunnerCorrection.action.hitType,
+          rbi,
+          runnerAdvancement,
+        });
+      } else if (pendingRunnerCorrection.action.type === 'walk') {
+        await commitPlateAppearance({
+          type: 'walk',
+          walkType: pendingRunnerCorrection.action.walkType,
+        });
+      } else {
+        await commitPlateAppearance({
+          type: 'out',
+          outType: pendingRunnerCorrection.action.outType,
+          runnerAdvancement,
+          batterReached: pendingRunnerCorrection.action.batterReached,
+          isDroppedThirdStrike: pendingRunnerCorrection.action.isDroppedThirdStrike,
+          forceNoRuns: pendingRunnerCorrection.action.forceNoRuns,
+        });
+      }
+
+      const resultText = pendingRunnerCorrection.action.type === 'hit' && rbi > 0
+        ? `${pendingRunnerCorrection.outcomeLabel} — ${rbi} RBI`
+        : pendingRunnerCorrection.outcomeLabel;
+      logAction(resultText);
+
+      setRunnerNames(applyRunnerDefaultsToNames(
+        pendingRunnerCorrection.defaults,
+        runnerNames,
+        gameState.currentBatterName,
+      ));
+      setPendingRunnerCorrection(null);
+    } catch (error) {
+      console.error('[Runner Correction] Failed to commit at-bat:', error);
+    }
+  }, [commitPlateAppearance, gameState.currentBatterName, logAction, pendingRunnerCorrection, runnerNames]);
+
   const handleQuickBarOutcome = useCallback(async (outcome: string) => {
     if (!gameInitialized) return;
 
@@ -2509,83 +2573,44 @@ export function GameTracker() {
     const bases = { ...gameState.bases };
     const outs = gameState.outs;
 
-    // 2. Build a minimal PlayData for calculateRunnerDefaults
-    const buildPlayData = () => {
-      if (QUICK_BAR_HITS.includes(outcome)) {
-        if (outcome === 'HR') {
-          return { type: 'hr' as const, hitType: 'HR' as const, outType: undefined, fieldingSequence: [] as number[] };
-        }
-        if (outcome === 'GRD') {
-          // Ground Rule Double: batter to 2B, runners advance 2 bases (same defaults as 2B)
-          return { type: 'hit' as const, hitType: '2B' as const, outType: undefined, fieldingSequence: [] as number[] };
-        }
-        return { type: 'hit' as const, hitType: outcome as '1B' | '2B' | '3B', outType: undefined, fieldingSequence: [] as number[] };
-      }
-      if (QUICK_BAR_OUTS.includes(outcome)) {
-        return { type: 'out' as const, hitType: undefined, outType: outcome as PlayData['outType'], fieldingSequence: [] as number[] };
-      }
-      // Walk/HBP/IBB — handled separately below
-      return { type: 'walk' as const, hitType: undefined, outType: undefined, fieldingSequence: [] as number[] };
-    };
-
-    // 3. Calculate runner defaults
-    const minimalPlay = buildPlayData();
-    const defaults: RunnerDefaults = calculateRunnerDefaults(
-      minimalPlay as PlayData,
-      bases,
-      outs
-    );
-
-    // 4. Calculate RBI from defaults (count runners scoring)
-    const calculateRBI = (): number => {
-      let rbi = 0;
-      if (defaults.third?.to === 'home') rbi++;
-      if (defaults.second?.to === 'home') rbi++;
-      if (defaults.first?.to === 'home') rbi++;
-      if (defaults.batter?.to === 'home') rbi++;
-      return rbi;
-    };
-
-    // 5. Convert RunnerDefaults to RunnerAdvancement for recordHit/recordOut
-    const toRunnerAdvancement = (): RunnerAdvancement | undefined => {
-      const adv: RunnerAdvancement = {};
-      if (defaults.first && defaults.first.to !== 'first') {
-        adv.fromFirst = defaults.first.to === 'out' ? 'out' : defaults.first.to as 'second' | 'third' | 'home';
-      }
-      if (defaults.second && defaults.second.to !== 'second') {
-        adv.fromSecond = defaults.second.to === 'out' ? 'out' : defaults.second.to as 'third' | 'home';
-      }
-      if (defaults.third && defaults.third.to !== 'third') {
-        adv.fromThird = defaults.third.to === 'out' ? 'out' : defaults.third.to as 'home';
-      }
-      return Object.keys(adv).length > 0 ? adv : undefined;
-    };
+    const correction = buildRunnerCorrectionForQuickBarOutcome(outcome, bases, outs);
+    const defaults = correction?.defaults;
+    const promptDefaults = defaults
+      || (outcome === 'HR'
+        ? calculateRunnerDefaults({ type: 'hr', hitType: 'HR', fieldingSequence: [] } as PlayData, bases, outs)
+        : outcome === 'E'
+        ? calculateRunnerDefaults({ type: 'error', fieldingSequence: [] } as PlayData, bases, outs)
+        : undefined);
 
     // 6. Capture undo snapshot
     undoSystem.captureSnapshot(`Quick: ${outcome}`);
 
     try {
-      const runnerAdv = toRunnerAdvancement();
-      const rbi = calculateRBI();
+      const runnerAdv = defaults ? runnerDefaultsToAdvancement(defaults) : undefined;
+      const rbi = correction ? countRbiFromDefaults(correction.defaults, correction.action) : 0;
 
       // 7. Route to correct recording function
       if (outcome === 'HR') {
         // D-4: Show inline HR prompt for distance + pitch type before recording
-        setHrPrompt({ rbi, runnerAdv, defaults, distance: '', pitchType: '' });
+        if (!promptDefaults) return;
+        setHrPrompt({ rbi, runnerAdv, defaults: promptDefaults, distance: '', pitchType: '' });
         return; // Recording deferred to handleHrPromptDone
 
       } else if (outcome === 'E') {
         // D-3: Show error flow prompts (base → fielder → type)
-        setErrorFlow({ step: 'base', baseReached: '1B', fielderPosition: 0, defaults });
+        if (!promptDefaults) return;
+        setErrorFlow({ step: 'base', baseReached: '1B', fielderPosition: 0, defaults: promptDefaults });
         return; // Recording deferred to handleErrorFlowComplete
 
       } else if (outcome === 'FO' && bases.third && outs < 2) {
         // D-5: FO with R3 + <2 outs → SF prompt
+        if (!defaults) return;
         setSfPrompt({ runnerAdv, defaults });
         return; // Deferred to handleSfPromptAnswer
 
       } else if (outcome === 'GO' && (bases.first || bases.second || bases.third) && outs < 2) {
         // D-6: GO with runners + <2 outs → check if runner default shows out → DP prompt
+        if (!defaults) return;
         const hasRunnerOut = (defaults.first?.to === 'out') || (defaults.second?.to === 'out') || (defaults.third?.to === 'out');
         if (hasRunnerOut) {
           setDpPrompt({ runnerAdv, rbi, defaults });
@@ -2597,91 +2622,23 @@ export function GameTracker() {
 
       } else if (outcome === 'PO' && outs < 2 && bases.first && bases.second) {
         // D-7: PO with R1+R2 (or loaded) + <2 outs → IFR prompt
+        if (!defaults) return;
         setIfrPrompt({ runnerAdv, defaults });
         return; // Deferred to handleIfrPromptAnswer
 
-      } else if (QUICK_BAR_HITS.includes(outcome)) {
-        await commitPlateAppearance({ type: 'hit', hitType: outcome as HitType, rbi, runnerAdvancement: runnerAdv });
-        logAction(`${outcome}${rbi > 0 ? ` — ${rbi} RBI` : ''}`);
-
-      } else if (QUICK_BAR_WALKS.includes(outcome)) {
-        await commitPlateAppearance({ type: 'walk', walkType: outcome as WalkType });
-        logAction(`${outcome}`);
-
-      } else if (outcome === 'FC') {
-        // Fielder's Choice: batter reaches, lead runner out
-        await commitPlateAppearance({ type: 'out', outType: 'FC', runnerAdvancement: runnerAdv });
-        logAction('FC');
-
-      } else if (outcome === 'D3K') {
-        // Dropped 3rd strike — batter reached (1B empty or 2 outs)
-        const d3kLegal = !bases.first || outs >= 2;
-        await commitPlateAppearance({ type: 'out', outType: 'K', batterReached: d3kLegal, isDroppedThirdStrike: true });
-        logAction(d3kLegal ? 'D3K (batter reached)' : 'D3K (batter out)');
-
-      } else if (outcome === 'WP_K' || outcome === 'PB_K') {
-        // Wild pitch / passed ball strikeout — K but batter reaches
-        await commitPlateAppearance({ type: 'out', outType: 'K', batterReached: true, isDroppedThirdStrike: true });
-        logAction(`${outcome} (K, batter reached)`);
-
-      } else if (QUICK_BAR_OUTS.includes(outcome)) {
-        await commitPlateAppearance({ type: 'out', outType: outcome as 'K' | 'GO' | 'FO' | 'LO' | 'PO' | 'DP' | 'TP' | 'SF' | 'SAC', runnerAdvancement: runnerAdv });
-        logAction(`${outcome}`);
+      } else if (correction) {
+        setPendingRunnerCorrection(correction);
+        return;
 
       } else {
         // Unknown — just log
         logAction(`[QB] ${outcome}`);
       }
 
-      // §4.2: Push structured play log entry for Quick Bar plays
-      const qbResultCategory: PlayLogEntry['resultCategory'] =
-        QUICK_BAR_HITS.includes(outcome) ? 'hit' :
-        QUICK_BAR_WALKS.includes(outcome) ? 'walk' :
-        outcome === 'E' ? 'error' :
-        (outcome === 'D3K' || outcome === 'WP_K' || outcome === 'PB_K') ? 'special' : 'out';
-      const qbNonEnrichable = ['BB', 'HBP', 'IBB', 'K', 'Kc'];
-      pushPlayLogEntry({
-        eventId: getPendingAtBatIdentity().atBatEventId,
-        inningLabel: shortInningLabel(),
-        batterName: gameState.currentBatterName,
-        result: outcome,
-        resultCategory: qbResultCategory,
-        rbi: QUICK_BAR_HITS.includes(outcome) ? rbi : 0,
-        runsScored: rbi, // Quick Bar: runs scored = RBI (no separate tracking)
-        hasFieldingData: false,
-        hasLocationData: false,
-        hasKType: outcome === 'Kc', // Kc is already typed; plain K needs distinction
-        hasPitchCount: false,
-        hasPitchType: false,
-        isEnrichable: !qbNonEnrichable.includes(outcome),
-        isQAB: ['BB', 'IBB', 'HBP'].includes(outcome) || QUICK_BAR_HITS.includes(outcome),
-      });
-
-      // 8. Update runner names from defaults
-      const newNames: { first?: string; second?: string; third?: string } = {};
-      const batterName = gameState.currentBatterName;
-
-      // Map existing runners to their new positions
-      if (defaults.third?.to === 'third') newNames.third = runnerNames.third;
-      if (defaults.second?.to === 'second') newNames.second = runnerNames.second;
-      if (defaults.second?.to === 'third') newNames.third = runnerNames.second;
-      if (defaults.first?.to === 'first') newNames.first = runnerNames.first;
-      if (defaults.first?.to === 'second') newNames.second = runnerNames.first;
-      if (defaults.first?.to === 'third') newNames.third = runnerNames.first;
-
-      // Place batter
-      if (defaults.batter?.to === 'first') newNames.first = batterName;
-      else if (defaults.batter?.to === 'second') newNames.second = batterName;
-      else if (defaults.batter?.to === 'third') newNames.third = batterName;
-
-      setRunnerNames(newNames);
-
-      console.log(`[QuickBar] Recorded: ${outcome}, RBI: ${rbi}, runners:`, newNames);
-
     } catch (error) {
       console.error(`[QuickBar] Failed to record ${outcome}:`, error);
     }
-  }, [commitPlateAppearance, gameInitialized, gameState, undoSystem, logAction, runnerNames, pushPlayLogEntry, shortInningLabel, getPendingAtBatIdentity]);
+  }, [gameInitialized, gameState, undoSystem, logAction]);
 
   // ═══════════════════════════════════════════════════════════
   // D-4: HR inline prompt completion
@@ -4385,7 +4342,7 @@ export function GameTracker() {
         {/* ZONE 3: Play Log + Enrichment Panel — right panel, spans both rows */}
         <div style={{ gridColumn: '3', gridRow: '1 / 3' }} className="flex flex-col h-full overflow-hidden">
           {/* Between-inning enrichment prompt (Ticket 5.7) */}
-          {showEnrichmentPrompt && (
+        {showEnrichmentPrompt && !pendingRunnerCorrection && (
             <div className="bg-[#C4A853]/20 border-b border-[#C4A853] px-2 py-1 flex items-center gap-1 flex-shrink-0">
               <span className="text-[8px] text-[#C4A853] flex-1">
                 {unenrichedCount} play{unenrichedCount !== 1 ? 's' : ''} unenriched
@@ -4405,7 +4362,49 @@ export function GameTracker() {
             </div>
           )}
 
-          {enrichingEntry !== null ? (
+          {pendingRunnerCorrection !== null ? (
+            <div className="bg-[#2a3a2d] border-l-2 border-[#C4A853] flex flex-col h-full">
+              <div className="flex items-center justify-between px-2 py-1 bg-[#1a2a1d] border-b border-[#4a6a4a]">
+                <div>
+                  <div className="text-[8px] text-[#88AA88] font-mono">LIVE AT-BAT</div>
+                  <div className="text-[9px] text-[#E8E8D8] font-bold">Runner Correction</div>
+                </div>
+                <button
+                  onClick={handleRunnerCorrectionCancel}
+                  className="text-[8px] text-[#E8E8D8] bg-[#3d5240] border border-[#4a6a4a] px-1.5 py-0.5 rounded hover:bg-[#4a6a4a]"
+                >
+                  Cancel
+                </button>
+              </div>
+              <div className="flex-1 overflow-y-auto p-2 space-y-2">
+                <div className="text-[8px] text-[#C4A853]">
+                  Verify runner movement before committing <span className="font-bold">{pendingRunnerCorrection.outcomeLabel}</span>.
+                </div>
+                <RunnerOutcomesDisplay
+                  outcomes={pendingRunnerCorrection.defaults}
+                  onOutcomeChange={handleRunnerCorrectionChange}
+                  playType={pendingRunnerCorrection.outcomeLabel}
+                  destinationOptions={{
+                    batter: getBatterDestinationOptions(pendingRunnerCorrection.action),
+                  }}
+                  labels={{
+                    batter: gameState.currentBatterName || 'BATTER',
+                    first: runnerNames.first ? `R1 ${runnerNames.first}` : 'R1 (1B)',
+                    second: runnerNames.second ? `R2 ${runnerNames.second}` : 'R2 (2B)',
+                    third: runnerNames.third ? `R3 ${runnerNames.third}` : 'R3 (3B)',
+                  }}
+                />
+              </div>
+              <div className="p-2 border-t border-[#4a6a4a]">
+                <button
+                  onClick={() => void handleRunnerCorrectionCommit()}
+                  className="w-full bg-[#34d399] text-[#062b1f] font-bold text-[11px] py-2 border-2 border-[#10b981] hover:bg-[#6ee7b7] active:scale-[0.99] transition-transform"
+                >
+                  END AT-BAT
+                </button>
+              </div>
+            </div>
+          ) : enrichingEntry !== null ? (
             /* Enrichment panel replaces play log when active */
             <EnrichmentPanel
               entry={enrichingEntry}
@@ -4426,7 +4425,7 @@ export function GameTracker() {
         {/* ZONE 4: Quick Bar — bottom left */}
         <div style={{ gridColumn: '1', gridRow: '2' }} className="relative">
           <QuickBar
-            disabled={!gameInitialized}
+            disabled={!gameInitialized || !!pendingRunnerCorrection}
             onOutcome={handleQuickBarOutcome}
             gameSituation={{ outs: gameState.outs, bases: gameState.bases }}
             managerMomentActive={mwarHook.managerMoment.isTriggered}

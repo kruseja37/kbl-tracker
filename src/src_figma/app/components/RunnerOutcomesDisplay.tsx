@@ -11,7 +11,7 @@
  * - Allow quick adjustments via tap
  */
 
-import { useState, useCallback } from 'react';
+import { useCallback } from 'react';
 import type { RunnerDefaults, RunnerOutcome, BaseId } from './runnerDefaults';
 
 // ============================================
@@ -24,6 +24,8 @@ interface RunnerOutcomesDisplayProps {
   playType: string;
   /** If true, this is a runner event (SB/CS/PK/TBL) - hides batter row since at-bat continues */
   isRunnerEvent?: boolean;
+  destinationOptions?: Partial<Record<'batter' | 'first' | 'second' | 'third', BaseId[]>>;
+  labels?: Partial<Record<'batter' | 'first' | 'second' | 'third', string>>;
 }
 
 interface OutcomeRowProps {
@@ -109,6 +111,8 @@ export function RunnerOutcomesDisplay({
   onOutcomeChange,
   playType,
   isRunnerEvent = false,
+  destinationOptions,
+  labels,
 }: RunnerOutcomesDisplayProps) {
   // Get possible destinations for each runner
   const getBatterDestinations = (): BaseId[] => {
@@ -130,9 +134,9 @@ export function RunnerOutcomesDisplay({
       const outcome = key === 'batter' ? outcomes.batter : outcomes[key];
       if (!outcome) return;
 
-      const destinations = key === 'batter'
+      const destinations = destinationOptions?.[key] || (key === 'batter'
         ? getBatterDestinations()
-        : getRunnerDestinations(key as 'first' | 'second' | 'third');
+        : getRunnerDestinations(key as 'first' | 'second' | 'third'));
 
       const currentIndex = destinations.indexOf(outcome.to);
       const nextIndex = (currentIndex + 1) % destinations.length;
@@ -203,40 +207,40 @@ export function RunnerOutcomesDisplay({
         {/* Batter outcome - hidden for runner events since at-bat continues */}
         {!isRunnerEvent && (
           <OutcomeRow
-            label="BATTER"
+            label={labels?.batter || 'BATTER'}
             outcome={outcomes.batter}
             onToggle={() => cycleDestination('batter')}
-            possibleDestinations={getBatterDestinations()}
+            possibleDestinations={destinationOptions?.batter || getBatterDestinations()}
           />
         )}
 
         {/* Runner on first */}
         {outcomes.first && (
           <OutcomeRow
-            label="R1 (1B)"
+            label={labels?.first || 'R1 (1B)'}
             outcome={outcomes.first}
             onToggle={() => cycleDestination('first')}
-            possibleDestinations={getRunnerDestinations('first')}
+            possibleDestinations={destinationOptions?.first || getRunnerDestinations('first')}
           />
         )}
 
         {/* Runner on second */}
         {outcomes.second && (
           <OutcomeRow
-            label="R2 (2B)"
+            label={labels?.second || 'R2 (2B)'}
             outcome={outcomes.second}
             onToggle={() => cycleDestination('second')}
-            possibleDestinations={getRunnerDestinations('second')}
+            possibleDestinations={destinationOptions?.second || getRunnerDestinations('second')}
           />
         )}
 
         {/* Runner on third */}
         {outcomes.third && (
           <OutcomeRow
-            label="R3 (3B)"
+            label={labels?.third || 'R3 (3B)'}
             outcome={outcomes.third}
             onToggle={() => cycleDestination('third')}
-            possibleDestinations={getRunnerDestinations('third')}
+            possibleDestinations={destinationOptions?.third || getRunnerDestinations('third')}
           />
         )}
       </div>
