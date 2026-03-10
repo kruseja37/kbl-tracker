@@ -1235,8 +1235,12 @@ export async function generateBoxScore(gameId: string): Promise<BoxScore | null>
   }
 
   // Count team errors from fielding events
-  const awayErrors = fieldingEvents.filter(f => !f.success && f.playType === 'error').length;
-  const homeErrors = fieldingEvents.filter(f => !f.success && f.playType === 'error').length;
+  const awayErrors = fieldingEvents.filter(
+    (f) => !f.success && f.playType === 'error' && f.teamId === header.awayTeamId
+  ).length;
+  const homeErrors = fieldingEvents.filter(
+    (f) => !f.success && f.playType === 'error' && f.teamId === header.homeTeamId
+  ).length;
 
   // Split batters and pitchers by team
   const awayBatters = Array.from(batterStats.values())
