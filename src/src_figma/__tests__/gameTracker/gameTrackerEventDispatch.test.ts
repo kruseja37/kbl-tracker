@@ -7,7 +7,7 @@ import {
 } from '../../app/utils/gameTrackerEventDispatch';
 
 describe('gameTrackerEventDispatch', () => {
-  test('normalizes EnhancedInteractiveField special-event aliases to hook event types', () => {
+  test('normalizes game tracker field special-event aliases to hook event types', () => {
     expect(normalizeSpecialEventType('KILLED_PITCHER')).toBe('KILLED');
     expect(normalizeSpecialEventType('NUT_SHOT')).toBe('NUTSHOT');
     expect(normalizeSpecialEventType('WEB_GEM')).toBe('WEB_GEM');
