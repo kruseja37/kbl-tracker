@@ -19,6 +19,7 @@ import { PlayLogPanel } from "@/app/components/PlayLogPanel";
 import { EnrichmentPanel, PITCH_TYPES, type EnrichmentUpdate } from "@/app/components/EnrichmentPanel";
 import { RunnerOutcomesDisplay } from "@/app/components/RunnerOutcomesDisplay";
 import { HistoricalEventEditor } from "@/app/components/HistoricalEventEditor";
+import { LiveRunnerAttributionPanel } from "@/app/components/LiveRunnerAttributionPanel";
 import { InjuryPrompt, type InjuryResult, type MojoResult } from "@/app/components/InjuryPrompt";
 import {
   getAtBatEvent,
@@ -137,6 +138,24 @@ interface PendingErrorOnAdvanceAttribution {
   playData: PlayData;
   atBatEventId: string;
   atBatEventIndex: number;
+}
+
+interface PendingRunnerAttributionAction {
+  eventType: 'SB' | 'ADVANCE' | 'WP' | 'PB' | 'PICK' | 'PICK_SAFE' | 'PICK_E';
+  title: string;
+  summary: string;
+  snapshotLabel: string;
+  runnerId?: string;
+  runnerName?: string;
+  fromBase: RunnerBase;
+  recordToBase: 'second' | 'third' | 'home' | 'out' | RunnerBase;
+  advanceToBase?: 'second' | 'third' | 'home';
+  outcome: 'safe' | 'out';
+  pitcherId: string;
+  pitcherName?: string;
+  catcherId?: string;
+  catcherName?: string;
+  fielderId?: string;
 }
 
 interface PendingFielderCreditPlay {
@@ -572,6 +591,8 @@ export function GameTracker() {
     playerId: string;
     anchorPosition: { left: string; top: string };
   } | null>(null);
+  const [pendingRunnerAttribution, setPendingRunnerAttribution] = useState<PendingRunnerAttributionAction | null>(null);
+  const [pendingRunnerAttributionSaving, setPendingRunnerAttributionSaving] = useState(false);
   const [activeFielderPopover, setActiveFielderPopover] = useState<{
     fielder: FielderInfo;
     anchorPosition: { left: string; top: string };
@@ -980,6 +1001,23 @@ export function GameTracker() {
       }))
       .sort((a, b) => a.label.localeCompare(b.label));
   }, [awayTeamPlayers, getRosterEntityId, homeTeamPlayers, selectedHistoricalTeamSide]);
+
+  const liveRunnerFielderOptions = useMemo(() => {
+    return Object.entries(defensiveAlignmentByPosition)
+      .map(([position, defender]) => ({
+        id: defender.playerId,
+        label: `${position} — ${defender.playerName}`,
+      }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }, [defensiveAlignmentByPosition]);
+
+  const liveRunnerFielderById = useMemo(() => {
+    const entries = Object.entries(defensiveAlignmentByPosition).map(([position, defender]) => ([
+      defender.playerId,
+      { position: position as Position, name: defender.playerName },
+    ] as const));
+    return new Map(entries);
+  }, [defensiveAlignmentByPosition]);
 
   const historicalContextValueOptions = useMemo(() => {
     if (!selectedBetweenPlayEvent?.playerStateChange) return [];
@@ -4256,127 +4294,202 @@ export function GameTracker() {
     setActiveRunnerPopover(null);
   }, []);
 
+  const beginRunnerAttributionCapture = useCallback((action: PendingRunnerAttributionAction) => {
+    setSelectedPlayLogEntry(null);
+    setSelectedBetweenPlayEvent(null);
+    setEnrichingEntry(null);
+    setPendingRunnerAttribution(action);
+    setActiveRunnerPopover(null);
+  }, []);
+
+  const handlePendingRunnerFielderChange = useCallback((fielderId: string) => {
+    setPendingRunnerAttribution((current) => current ? { ...current, fielderId: fielderId || undefined } : current);
+  }, []);
+
+  const handlePendingRunnerAttributionCancel = useCallback(() => {
+    setPendingRunnerAttribution(null);
+    setPendingRunnerAttributionSaving(false);
+  }, []);
+
   const nextBaseMap: Record<RunnerBase, 'second' | 'third' | 'home'> = {
     first: 'second', second: 'third', third: 'home',
   };
 
+  const handlePendingRunnerAttributionCommit = useCallback(async () => {
+    if (!pendingRunnerAttribution) return;
+
+    const selectedFielder = pendingRunnerAttribution.fielderId
+      ? liveRunnerFielderById.get(pendingRunnerAttribution.fielderId)
+      : undefined;
+
+    setPendingRunnerAttributionSaving(true);
+    try {
+      undoSystem.captureSnapshot(pendingRunnerAttribution.snapshotLabel);
+
+      if (pendingRunnerAttribution.advanceToBase) {
+        advanceRunner(
+          pendingRunnerAttribution.fromBase,
+          pendingRunnerAttribution.advanceToBase,
+          pendingRunnerAttribution.outcome,
+        );
+      }
+
+      await recordEvent(pendingRunnerAttribution.eventType, pendingRunnerAttribution.runnerId, {
+        runnerId: pendingRunnerAttribution.runnerId,
+        runnerName: pendingRunnerAttribution.runnerName,
+        fromBase: pendingRunnerAttribution.fromBase,
+        toBase: pendingRunnerAttribution.recordToBase,
+        outcome: pendingRunnerAttribution.outcome,
+        pitcherId: pendingRunnerAttribution.pitcherId,
+        pitcherName: pendingRunnerAttribution.pitcherName,
+        catcherId: pendingRunnerAttribution.catcherId,
+        catcherName: pendingRunnerAttribution.catcherName,
+        fielderId: pendingRunnerAttribution.fielderId,
+        fielderName: selectedFielder?.name,
+        fielderPosition: selectedFielder ? POSITION_NUMBER[selectedFielder.position] : undefined,
+      });
+
+      setPendingRunnerAttribution(null);
+      queuePlayLogRefresh();
+    } catch (error) {
+      console.error('[Runner Attribution] Failed to record runner event:', error);
+    } finally {
+      setPendingRunnerAttributionSaving(false);
+    }
+  }, [advanceRunner, liveRunnerFielderById, pendingRunnerAttribution, queuePlayLogRefresh, recordEvent, undoSystem]);
+
   const handleRunnerSteal = useCallback((base: RunnerBase) => {
-    undoSystem.captureSnapshot(`SB: ${base} → ${nextBaseMap[base]}`);
-    advanceRunner(base, nextBaseMap[base], 'safe');
-    void recordEvent('SB', activeRunnerPopover?.playerId, {
+    beginRunnerAttributionCapture({
+      eventType: 'SB',
+      title: 'Stolen Base',
+      summary: `${activeRunnerPopover?.runnerName || 'Runner'}: ${base.toUpperCase()} -> ${nextBaseMap[base].toUpperCase()}`,
+      snapshotLabel: `SB: ${base} → ${nextBaseMap[base]}`,
       runnerId: activeRunnerPopover?.playerId,
       runnerName: activeRunnerPopover?.runnerName,
       fromBase: base,
-      toBase: nextBaseMap[base],
+      recordToBase: nextBaseMap[base],
+      advanceToBase: nextBaseMap[base],
       outcome: 'safe',
       pitcherId: gameState.currentPitcherId,
       pitcherName: resolvedCurrentPitcherName,
       catcherId: defensiveAlignmentByPosition.C?.playerId,
       catcherName: defensiveAlignmentByPosition.C?.playerName,
-    }).then(() => queuePlayLogRefresh());
-    setActiveRunnerPopover(null);
-  }, [activeRunnerPopover?.playerId, activeRunnerPopover?.runnerName, advanceRunner, defensiveAlignmentByPosition, gameState.currentPitcherId, queuePlayLogRefresh, recordEvent, resolvedCurrentPitcherName, undoSystem]);
+    });
+  }, [activeRunnerPopover?.playerId, activeRunnerPopover?.runnerName, beginRunnerAttributionCapture, defensiveAlignmentByPosition, gameState.currentPitcherId, resolvedCurrentPitcherName]);
 
   const handleRunnerAdvance = useCallback((base: RunnerBase, dest?: 'second' | 'third' | 'home') => {
     const to = dest || nextBaseMap[base];
-    undoSystem.captureSnapshot(`Advance: ${base} → ${to}`);
-    advanceRunner(base, to, 'safe');
-    void recordEvent('ADVANCE', activeRunnerPopover?.playerId, {
+    beginRunnerAttributionCapture({
+      eventType: 'ADVANCE',
+      title: 'Runner Advance',
+      summary: `${activeRunnerPopover?.runnerName || 'Runner'}: ${base.toUpperCase()} -> ${to.toUpperCase()}`,
+      snapshotLabel: `Advance: ${base} → ${to}`,
       runnerId: activeRunnerPopover?.playerId,
       runnerName: activeRunnerPopover?.runnerName,
       fromBase: base,
-      toBase: to,
+      recordToBase: to,
+      advanceToBase: to,
       outcome: 'safe',
       pitcherId: gameState.currentPitcherId,
       pitcherName: resolvedCurrentPitcherName,
       catcherId: defensiveAlignmentByPosition.C?.playerId,
       catcherName: defensiveAlignmentByPosition.C?.playerName,
-    }).then(() => queuePlayLogRefresh());
-    setActiveRunnerPopover(null);
-  }, [activeRunnerPopover?.playerId, activeRunnerPopover?.runnerName, advanceRunner, defensiveAlignmentByPosition, gameState.currentPitcherId, queuePlayLogRefresh, recordEvent, resolvedCurrentPitcherName, undoSystem]);
+    });
+  }, [activeRunnerPopover?.playerId, activeRunnerPopover?.runnerName, beginRunnerAttributionCapture, defensiveAlignmentByPosition, gameState.currentPitcherId, resolvedCurrentPitcherName]);
 
   const handleRunnerWP = useCallback((base: RunnerBase, dest?: 'second' | 'third' | 'home') => {
     const to = dest || nextBaseMap[base];
-    undoSystem.captureSnapshot(`WP: ${base} → ${to}`);
-    advanceRunner(base, to, 'safe');
-    void recordEvent('WP', activeRunnerPopover?.playerId, {
+    beginRunnerAttributionCapture({
+      eventType: 'WP',
+      title: 'Wild Pitch',
+      summary: `${activeRunnerPopover?.runnerName || 'Runner'}: ${base.toUpperCase()} -> ${to.toUpperCase()}`,
+      snapshotLabel: `WP: ${base} → ${to}`,
       runnerId: activeRunnerPopover?.playerId,
       runnerName: activeRunnerPopover?.runnerName,
       fromBase: base,
-      toBase: to,
+      recordToBase: to,
+      advanceToBase: to,
       outcome: 'safe',
       pitcherId: gameState.currentPitcherId,
       pitcherName: resolvedCurrentPitcherName,
       catcherId: defensiveAlignmentByPosition.C?.playerId,
       catcherName: defensiveAlignmentByPosition.C?.playerName,
-    }).then(() => queuePlayLogRefresh());
-    setActiveRunnerPopover(null);
-  }, [activeRunnerPopover?.playerId, activeRunnerPopover?.runnerName, advanceRunner, defensiveAlignmentByPosition, gameState.currentPitcherId, queuePlayLogRefresh, recordEvent, resolvedCurrentPitcherName, undoSystem]);
+    });
+  }, [activeRunnerPopover?.playerId, activeRunnerPopover?.runnerName, beginRunnerAttributionCapture, defensiveAlignmentByPosition, gameState.currentPitcherId, resolvedCurrentPitcherName]);
 
   const handleRunnerPB = useCallback((base: RunnerBase, dest?: 'second' | 'third' | 'home') => {
     const to = dest || nextBaseMap[base];
-    undoSystem.captureSnapshot(`PB: ${base} → ${to}`);
-    advanceRunner(base, to, 'safe');
-    void recordEvent('PB', activeRunnerPopover?.playerId, {
+    beginRunnerAttributionCapture({
+      eventType: 'PB',
+      title: 'Passed Ball',
+      summary: `${activeRunnerPopover?.runnerName || 'Runner'}: ${base.toUpperCase()} -> ${to.toUpperCase()}`,
+      snapshotLabel: `PB: ${base} → ${to}`,
       runnerId: activeRunnerPopover?.playerId,
       runnerName: activeRunnerPopover?.runnerName,
       fromBase: base,
-      toBase: to,
+      recordToBase: to,
+      advanceToBase: to,
       outcome: 'safe',
       pitcherId: gameState.currentPitcherId,
       pitcherName: resolvedCurrentPitcherName,
       catcherId: defensiveAlignmentByPosition.C?.playerId,
       catcherName: defensiveAlignmentByPosition.C?.playerName,
-    }).then(() => queuePlayLogRefresh());
-    setActiveRunnerPopover(null);
-  }, [activeRunnerPopover?.playerId, activeRunnerPopover?.runnerName, advanceRunner, defensiveAlignmentByPosition, gameState.currentPitcherId, queuePlayLogRefresh, recordEvent, resolvedCurrentPitcherName, undoSystem]);
+    });
+  }, [activeRunnerPopover?.playerId, activeRunnerPopover?.runnerName, beginRunnerAttributionCapture, defensiveAlignmentByPosition, gameState.currentPitcherId, resolvedCurrentPitcherName]);
 
   const handleRunnerPickoff = useCallback((base: RunnerBase, outcome: 'safe' | 'out' | 'error') => {
-    undoSystem.captureSnapshot(`Pickoff ${outcome}: ${base}`);
     if (outcome === 'out') {
-      // D-2: Runner is out at their current base
-      advanceRunner(base, nextBaseMap[base], 'out');
-      void recordEvent('PICK', activeRunnerPopover?.playerId, {
+      beginRunnerAttributionCapture({
+        eventType: 'PICK',
+        title: 'Pickoff',
+        summary: `${activeRunnerPopover?.runnerName || 'Runner'}: ${base.toUpperCase()} -> OUT`,
+        snapshotLabel: `Pickoff out: ${base}`,
         runnerId: activeRunnerPopover?.playerId,
         runnerName: activeRunnerPopover?.runnerName,
         fromBase: base,
-        toBase: 'out',
+        recordToBase: 'out',
+        advanceToBase: nextBaseMap[base],
         outcome: 'out',
         pitcherId: gameState.currentPitcherId,
         pitcherName: resolvedCurrentPitcherName,
         catcherId: defensiveAlignmentByPosition.C?.playerId,
         catcherName: defensiveAlignmentByPosition.C?.playerName,
-      }).then(() => queuePlayLogRefresh());
+      });
     } else if (outcome === 'error') {
-      // D-2: Error on pickoff — runner advances one base
-      advanceRunner(base, nextBaseMap[base], 'safe');
-      void recordEvent('PICK_E', activeRunnerPopover?.playerId, {
+      beginRunnerAttributionCapture({
+        eventType: 'PICK_E',
+        title: 'Pickoff Error',
+        summary: `${activeRunnerPopover?.runnerName || 'Runner'}: ${base.toUpperCase()} -> ${nextBaseMap[base].toUpperCase()}`,
+        snapshotLabel: `Pickoff error: ${base}`,
         runnerId: activeRunnerPopover?.playerId,
         runnerName: activeRunnerPopover?.runnerName,
         fromBase: base,
-        toBase: nextBaseMap[base],
+        recordToBase: nextBaseMap[base],
+        advanceToBase: nextBaseMap[base],
         outcome: 'safe',
         pitcherId: gameState.currentPitcherId,
         pitcherName: resolvedCurrentPitcherName,
         catcherId: defensiveAlignmentByPosition.C?.playerId,
         catcherName: defensiveAlignmentByPosition.C?.playerName,
-      }).then(() => queuePlayLogRefresh());
+      });
     } else {
-      // D-2: Safe — attempt logged, runner stays
-      void recordEvent('PICK_SAFE', activeRunnerPopover?.playerId, {
+      beginRunnerAttributionCapture({
+        eventType: 'PICK_SAFE',
+        title: 'Pickoff Attempt',
+        summary: `${activeRunnerPopover?.runnerName || 'Runner'}: ${base.toUpperCase()} stays`,
+        snapshotLabel: `Pickoff safe: ${base}`,
         runnerId: activeRunnerPopover?.playerId,
         runnerName: activeRunnerPopover?.runnerName,
         fromBase: base,
-        toBase: base,
+        recordToBase: base,
         outcome: 'safe',
         pitcherId: gameState.currentPitcherId,
         pitcherName: resolvedCurrentPitcherName,
         catcherId: defensiveAlignmentByPosition.C?.playerId,
         catcherName: defensiveAlignmentByPosition.C?.playerName,
-      }).then(() => queuePlayLogRefresh());
+      });
     }
-    setActiveRunnerPopover(null);
-  }, [activeRunnerPopover?.playerId, activeRunnerPopover?.runnerName, advanceRunner, defensiveAlignmentByPosition, gameState.currentPitcherId, queuePlayLogRefresh, recordEvent, resolvedCurrentPitcherName, undoSystem]);
+  }, [activeRunnerPopover?.playerId, activeRunnerPopover?.runnerName, beginRunnerAttributionCapture, defensiveAlignmentByPosition, gameState.currentPitcherId, resolvedCurrentPitcherName]);
 
   const handleRunnerSubstitute = useCallback((base: RunnerBase) => {
     setActiveRunnerPopover(null);
@@ -5304,7 +5417,7 @@ export function GameTracker() {
         {/* ZONE 3: Play Log + Enrichment Panel — right panel, spans both rows */}
         <div style={{ gridColumn: '3', gridRow: '1 / 3' }} className="flex flex-col h-full overflow-hidden">
           {/* Between-inning enrichment prompt (Ticket 5.7) */}
-        {showEnrichmentPrompt && !pendingRunnerCorrection && (
+        {showEnrichmentPrompt && !pendingRunnerCorrection && !pendingRunnerAttribution && (
             <div className="bg-[#C4A853]/20 border-b border-[#C4A853] px-2 py-1 flex items-center gap-1 flex-shrink-0">
               <span className="text-[8px] text-[#C4A853] flex-1">
                 {unenrichedCount} play{unenrichedCount !== 1 ? 's' : ''} unenriched
@@ -5366,6 +5479,19 @@ export function GameTracker() {
                 </button>
               </div>
             </div>
+          ) : pendingRunnerAttribution !== null ? (
+            <LiveRunnerAttributionPanel
+              title={pendingRunnerAttribution.title}
+              summary={pendingRunnerAttribution.summary}
+              pitcherName={pendingRunnerAttribution.pitcherName}
+              catcherName={pendingRunnerAttribution.catcherName}
+              fielderId={pendingRunnerAttribution.fielderId || ''}
+              fielderOptions={liveRunnerFielderOptions}
+              saving={pendingRunnerAttributionSaving}
+              onFielderChange={handlePendingRunnerFielderChange}
+              onCancel={handlePendingRunnerAttributionCancel}
+              onCommit={() => void handlePendingRunnerAttributionCommit()}
+            />
           ) : selectedPlayLogEntry !== null && selectedPlayLogEntry.eventType !== 'at_bat' ? (
             <HistoricalEventEditor
               entry={selectedPlayLogEntry}
@@ -5415,13 +5541,17 @@ export function GameTracker() {
         {/* ZONE 4: Quick Bar — bottom left */}
         <div style={{ gridColumn: '1', gridRow: '2' }} className="relative">
           <QuickBar
-            disabled={!gameInitialized || !!pendingRunnerCorrection || !!selectedPlayLogEntry}
+            disabled={!gameInitialized || !!pendingRunnerCorrection || !!pendingRunnerAttribution || !!selectedPlayLogEntry}
             onOutcome={handleQuickBarOutcome}
             gameSituation={{ outs: gameState.outs, bases: gameState.bases }}
             managerMomentActive={mwarHook.managerMoment.isTriggered}
             onManagerMomentTap={() => setShowManagerMomentPanel(prev => !prev)}
           />
-          {selectedPlayLogEntry && !pendingRunnerCorrection && (
+          {pendingRunnerAttribution && !pendingRunnerCorrection ? (
+            <div className="absolute bottom-full left-0 right-0 mb-1 bg-[#2f3b21] border border-[#5a6b38] px-2 py-1 text-[8px] text-[#C4A853]">
+              Completing live runner attribution. Commit or cancel the runner event before scoring the next pitch.
+            </div>
+          ) : selectedPlayLogEntry && !pendingRunnerCorrection ? (
             <div className="absolute bottom-full left-0 right-0 mb-1 bg-[#2f3b21] border border-[#5a6b38] px-2 py-1 text-[8px] text-[#C4A853]">
               Editing historical play. Return to live at-bat to score the next pitch.
             </div>
