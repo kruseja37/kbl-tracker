@@ -20,12 +20,23 @@ export const PITCH_TYPES = [
 
 export type PitchTypeAbbr = typeof PITCH_TYPES[number]['abbr'];
 
+export const EXIT_TYPE_OPTIONS = [
+  { value: 'ground_ball', label: 'Ground' },
+  { value: 'line_drive', label: 'Line Drive' },
+  { value: 'fly_ball', label: 'Fly Ball' },
+  { value: 'popup', label: 'Pop Up' },
+  { value: 'bunt', label: 'Bunt' },
+] as const;
+
+export type ExitTypeValue = typeof EXIT_TYPE_OPTIONS[number]['value'];
+
 // ──────────────────────────────────────────────────────────────
 // Enrichment data that can be saved
 // ──────────────────────────────────────────────────────────────
 
 export interface EnrichmentUpdate {
   fieldLocation?: { x: number; y: number };
+  exitType?: ExitTypeValue;
   fieldingSequence?: number[];
   hrDistance?: number;
   pitchType?: string;
@@ -159,7 +170,9 @@ export function EnrichmentPanel({
   const isHit = ['1B', '2B', '3B', 'GRD'].includes(entry.result);
   const isHR = entry.result === 'HR';
   const isOut = ['GO', 'FO', 'LO', 'PO', 'DP', 'TP', 'FC', 'SF', 'SAC'].includes(entry.result);
+  const isK = entry.result === 'K' || entry.result === 'Kc';
   const showFieldLocation = isHit || isOut || isHR;
+  const showExitType = isHit || isOut || isHR;
   const showFieldingAttribution = isHit || isOut;
   const positionLabel = (num: number) => FIELDER_POSITIONS.find((fielder) => fielder.num === num)?.label || `${num}`;
   const putoutLabel = currentEnrichment?.putouts?.map(positionLabel).join(', ');
@@ -214,6 +227,25 @@ export function EnrichmentPanel({
                 onTap={(pos) => onUpdate('fieldLocation', pos)}
               />
             )}
+          </EnrichmentSection>
+        )}
+
+        {showExitType && (
+          <EnrichmentSection label="Exit Type" filled={!!currentEnrichment?.exitType}>
+            <div className="flex flex-wrap gap-0.5">
+              {EXIT_TYPE_OPTIONS.map((exitType) => (
+                <button
+                  key={exitType.value}
+                  className={`text-[7px] px-1.5 py-0.5 rounded border transition-colors
+                    ${currentEnrichment?.exitType === exitType.value
+                      ? 'bg-[#C4A853]/30 border-[#C4A853] text-[#C4A853]'
+                      : 'bg-[#1f2937]/60 border-[#4a6a4a] text-[#88AA88] hover:bg-[#4a6a4a]/40'}`}
+                  onClick={() => onUpdate('exitType', exitType.value)}
+                >
+                  {exitType.label}
+                </button>
+              ))}
+            </div>
           </EnrichmentSection>
         )}
 
