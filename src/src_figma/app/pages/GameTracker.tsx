@@ -6,7 +6,6 @@ import { HTML5Backend } from "react-dnd-html5-backend";
 // REMOVED: BUG-009 - BaserunnerDragDrop was a placeholder that did nothing
 // import { BaserunnerDragDrop, type RunnerMoveData as LegacyRunnerMoveData } from "@/app/components/BaserunnerDragDrop";
 import { type PlayData, type SpecialEventData } from "@/app/components/EnhancedInteractiveField";
-import { type RunnerMoveData } from "@/app/components/RunnerDragDrop";
 import { RunnerPopover, type RunnerBase } from "@/app/components/RunnerPopover";
 import { FielderPopover, type FielderInfo, type BenchPlayerInfo } from "@/app/components/FielderPopover";
 import { LineupCard, type SubstitutionData, type LineupPlayer, type BenchPlayer, type BullpenPitcher } from "@/app/components/LineupCard";
@@ -716,6 +715,31 @@ export function GameTracker() {
       cancelled = true;
     };
   }, [selectedPlayLogEntry]);
+
+  useEffect(() => {
+    if (!enrichingEntry?.eventId) {
+      return;
+    }
+
+    let cancelled = false;
+    void getAtBatEvent(enrichingEntry.eventId).then((event) => {
+      if (cancelled || !event?.enrichment) {
+        return;
+      }
+
+      setEnrichmentCache((prev) => ({
+        ...prev,
+        [enrichingEntry.eventId!]: {
+          ...(prev[enrichingEntry.eventId!] || {}),
+          ...event.enrichment,
+        },
+      }));
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [enrichingEntry?.eventId]);
 
   useEffect(() => {
     if (!selectedPlayLogEntry) return;
@@ -1900,77 +1924,6 @@ export function GameTracker() {
     }
     return getRunnerIdentityForBase(leadRunnerBase);
   }, [gameState.bases.first, gameState.bases.second, gameState.bases.third, getRunnerIdentityForBase]);
-
-  // Handler for enhanced runner drag-drop (Phase 5)
-  const handleEnhancedRunnerMove = useCallback((data: RunnerMoveData) => {
-    console.log("Enhanced runner move:", data);
-
-    // Capture snapshot for undo before making the change
-    undoSystem.captureSnapshot(`Runner ${data.playType}: ${data.from} → ${data.to} (${data.outcome})`);
-
-    // Use the hook's advanceRunner function
-    const fromBase = data.from;
-    const toBase = (data.to === 'first' ? 'second' : data.to) as 'second' | 'third' | 'home';
-    const runnerIdentity = getRunnerIdentityForBase(fromBase);
-    advanceRunner(fromBase, toBase, data.outcome);
-
-    void recordEvent(
-      deriveRunnerEventType(data),
-      runnerIdentity.runnerId,
-      buildRunnerEventDetails(data, runnerIdentity.runnerId, runnerIdentity.runnerName),
-    ).then(() => queuePlayLogRefresh());
-  }, [advanceRunner, getRunnerIdentityForBase, queuePlayLogRefresh, recordEvent, undoSystem]);
-
-  // Handler for batch runner moves (SB/CS/PK/TBL with multiple runners)
-  // This processes all runner movements atomically to avoid race conditions
-  const handleBatchRunnerMove = useCallback((
-    movements: Array<{ from: 'first' | 'second' | 'third'; to: 'second' | 'third' | 'home' | 'out'; outcome: 'safe' | 'out' }>,
-    playType: string
-  ) => {
-    console.log("Batch runner move:", movements, "type:", playType);
-
-    // Capture snapshot for undo
-    const moveDesc = movements.map(m => `${m.from}→${m.to}`).join(', ');
-    undoSystem.captureSnapshot(`Runner ${playType}: ${moveDesc}`);
-
-    const movementContext = movements.map((movement) => {
-      const runnerIdentity = getRunnerIdentityForBase(movement.from);
-      const moveData: RunnerMoveData = {
-        from: movement.from,
-        to: movement.to === 'out' ? movement.from : movement.to,
-        outcome: movement.outcome,
-        playType: playType === 'PK' ? 'PICK' : playType === 'TBL' ? 'ADV' : playType as RunnerMoveData['playType'],
-      };
-      return { movement, moveData, runnerIdentity };
-    });
-
-    // Use the batch function to process all movements atomically
-    advanceRunnersBatch(movements);
-
-    void (async () => {
-      for (const entry of movementContext) {
-        await recordEvent(
-          deriveRunnerEventType(entry.moveData),
-          entry.runnerIdentity.runnerId,
-          buildRunnerEventDetails(entry.moveData, entry.runnerIdentity.runnerId, entry.runnerIdentity.runnerName),
-        );
-
-        if (playType === 'TBL' && entry.movement.outcome === 'out') {
-          await recordEvent('TOOTBLAN', entry.runnerIdentity.runnerId, {
-            runnerId: entry.runnerIdentity.runnerId,
-            runnerName: entry.runnerIdentity.runnerName,
-            fromBase: entry.movement.from,
-            toBase: 'out',
-            outcome: 'out',
-          });
-        }
-      }
-      queuePlayLogRefresh();
-    })();
-  }, [advanceRunnersBatch, getRunnerIdentityForBase, queuePlayLogRefresh, recordEvent, undoSystem]);
-
-  // REMOVED: BUG-009 - handleLegacyRunnerMove was for deprecated BaserunnerDragDrop placeholder
-  // Runner moves are now handled by handleRunnerMove for EnhancedInteractiveField
 
   // Handler for lineup card substitutions (Phase 6)
   const handleLineupCardSubstitution = useCallback((sub: SubstitutionData) => {
@@ -4495,20 +4448,6 @@ export function GameTracker() {
   // FIELDER POPOVER HANDLERS (Layer 4 — tickets 4.3, 4.5)
   // ============================================
 
-  const handleFielderTap = useCallback((positionNumber: number, playerName: string, anchorPosition: { left: string; top: string }) => {
-    setActiveRunnerPopover(null); // Close any open runner popover
-    // Map position number to label
-    const posLabels: Record<number, string> = { 1: 'P', 2: 'C', 3: '1B', 4: '2B', 5: '3B', 6: 'SS', 7: 'LF', 8: 'CF', 9: 'RF' };
-    const positionLabel = posLabels[positionNumber] || `P${positionNumber}`;
-    const playerId = getRosterIdFromName(playerName, fieldingTeam);
-    const isCurrentBatter = playerName === resolvedCurrentBatterName;
-
-    setActiveFielderPopover({
-      fielder: { positionNumber, positionLabel, playerName, playerId, isCurrentBatter },
-      anchorPosition,
-    });
-  }, [fieldingTeam, getRosterIdFromName, resolvedCurrentBatterName]);
-
   const handleFielderPlayerCard = useCallback(() => {
     if (!activeFielderPopover) return;
     openPlayerCard(activeFielderPopover.fielder.playerName, fieldingTeam, activeFielderPopover.fielder.positionNumber === 1 ? 'pitcher' : 'batter');
@@ -4717,6 +4656,12 @@ export function GameTracker() {
   }, []);
 
   const canUseMainFieldLocation = !!enrichingEntry && ['1B', '2B', '3B', 'GRD', 'HR', 'GO', 'FO', 'LO', 'PO', 'DP', 'TP', 'FC', 'SF', 'SAC'].includes(enrichingEntry.result);
+  const activeDiamondFieldingSequence = useMemo(() => {
+    if (!enrichingEntry?.eventId) {
+      return [];
+    }
+    return enrichmentCache[enrichingEntry.eventId]?.fieldingSequence || [];
+  }, [enrichingEntry?.eventId, enrichmentCache]);
 
   // 5.1: Save enrichment field immediately (auto-save on change)
   const handleEnrichmentUpdate = useCallback(async (field: keyof EnrichmentUpdate, value: unknown) => {
@@ -4817,6 +4762,39 @@ export function GameTracker() {
       y: Math.round((1 - coord.y) * 100),
     });
   }, [canUseMainFieldLocation, enrichingEntry, handleEnrichmentUpdate]);
+
+  const handleDiamondFieldingSequenceUndo = useCallback(() => {
+    if (!enrichingEntry?.eventId) return;
+    const currentSequence = enrichmentCache[enrichingEntry.eventId]?.fieldingSequence || [];
+    if (currentSequence.length === 0) return;
+    void handleEnrichmentUpdate('fieldingSequence', currentSequence.slice(0, -1));
+  }, [enrichingEntry?.eventId, enrichmentCache, handleEnrichmentUpdate]);
+
+  const handleDiamondFieldingSequenceClear = useCallback(() => {
+    if (!enrichingEntry?.eventId) return;
+    void handleEnrichmentUpdate('fieldingSequence', []);
+  }, [enrichingEntry?.eventId, handleEnrichmentUpdate]);
+
+  const handleFielderTap = useCallback((positionNumber: number, playerName: string, anchorPosition: { left: string; top: string }) => {
+    if (enrichingEntry?.eventId) {
+      setActiveRunnerPopover(null);
+      setActiveFielderPopover(null);
+      const currentSequence = enrichmentCache[enrichingEntry.eventId]?.fieldingSequence || [];
+      void handleEnrichmentUpdate('fieldingSequence', [...currentSequence, positionNumber]);
+      return;
+    }
+
+    setActiveRunnerPopover(null);
+    const posLabels: Record<number, string> = { 1: 'P', 2: 'C', 3: '1B', 4: '2B', 5: '3B', 6: 'SS', 7: 'LF', 8: 'CF', 9: 'RF' };
+    const positionLabel = posLabels[positionNumber] || `P${positionNumber}`;
+    const playerId = getRosterIdFromName(playerName, fieldingTeam);
+    const isCurrentBatter = playerName === resolvedCurrentBatterName;
+
+    setActiveFielderPopover({
+      fielder: { positionNumber, positionLabel, playerName, playerId, isCurrentBatter },
+      anchorPosition,
+    });
+  }, [enrichingEntry?.eventId, enrichmentCache, fieldingTeam, getRosterIdFromName, handleEnrichmentUpdate, resolvedCurrentBatterName]);
 
   // 5.2: K/Kc toggle — updates result field on AtBatEvent
   const handleKToggle = useCallback(async (entry: PlayLogEntry) => {
@@ -5344,6 +5322,10 @@ export function GameTracker() {
             runnerNames={runnerNames}
             currentBatterName={currentBatterDisplayName}
             fielders={gameDiamondFielders}
+            enhancementSequence={activeDiamondFieldingSequence}
+            enhancementHelpText={enrichingEntry
+              ? 'Tap fielders to build throw sequence. Tap the field to save spray/location.'
+              : undefined}
             fielderBorderColors={[fielderColor1, fielderColor2]}
             batterBackgroundColor={battingTeamColors.primary}
             batterBorderColor={battingTeamColors.secondary}
@@ -5352,6 +5334,8 @@ export function GameTracker() {
             onFielderTap={handleFielderTap}
             onBatterTap={handleBatterTap}
             onFieldTap={handleMainFieldLocationPick}
+            onEnhancementSequenceUndo={enrichingEntry ? handleDiamondFieldingSequenceUndo : undefined}
+            onEnhancementSequenceClear={enrichingEntry ? handleDiamondFieldingSequenceClear : undefined}
           />
 
           {/* Runner Popover — tap runner on diamond → action menu (§5.1) */}

@@ -50,4 +50,51 @@ describe('GameDiamond', () => {
     }));
     expect(onBatterTap).toHaveBeenCalledTimes(1);
   });
+
+  test('shows enhancement sequence controls and forwards undo/clear actions', () => {
+    const onUndo = vi.fn();
+    const onClear = vi.fn();
+
+    render(
+      <DndProvider backend={HTML5Backend}>
+        <div style={{ width: 900, height: 600 }}>
+          <GameDiamond
+            mode="enhancement"
+            bases={{ first: false, second: false, third: false }}
+            currentBatterName="Johnson"
+            fielders={[
+              {
+                positionNumber: 6,
+                playerId: 'ss-1',
+                fullName: 'K. Washington',
+                displayName: 'WASHINGTON',
+                position: 'SS',
+              },
+              {
+                positionNumber: 4,
+                playerId: '2b-1',
+                fullName: 'L. Diaz',
+                displayName: 'DIAZ',
+                position: '2B',
+              },
+            ]}
+            enhancementSequence={[6, 4]}
+            enhancementHelpText="Tap fielders to build throw sequence."
+            onEnhancementSequenceUndo={onUndo}
+            onEnhancementSequenceClear={onClear}
+          />
+        </div>
+      </DndProvider>
+    );
+
+    expect(screen.getByText('Enhancement Mode')).toBeInTheDocument();
+    expect(screen.getByText('Fielding Sequence')).toBeInTheDocument();
+    expect(screen.getByText('6-4')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Undo' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Clear' }));
+
+    expect(onUndo).toHaveBeenCalledTimes(1);
+    expect(onClear).toHaveBeenCalledTimes(1);
+  });
 });

@@ -21,6 +21,8 @@ interface GameDiamondProps {
   runnerNames?: { first?: string; second?: string; third?: string };
   currentBatterName: string;
   fielders: GameDiamondFielder[];
+  enhancementSequence?: number[];
+  enhancementHelpText?: string;
   fielderBorderColors?: [string, string];
   batterBackgroundColor?: string;
   batterBorderColor?: string;
@@ -29,6 +31,8 @@ interface GameDiamondProps {
   onFielderTap?: (positionNumber: number, playerName: string, anchorPosition: { left: string; top: string }) => void;
   onBatterTap?: () => void;
   onFieldTap?: (coord: { x: number; y: number }) => void;
+  onEnhancementSequenceUndo?: () => void;
+  onEnhancementSequenceClear?: () => void;
 }
 
 function BatterIcon({
@@ -67,10 +71,12 @@ function BatterIcon({
 function DiamondFielder({
   fielder,
   borderColor,
+  sequenceNumber,
   onTap,
 }: {
   fielder: GameDiamondFielder;
   borderColor: string;
+  sequenceNumber?: number;
   onTap?: (positionNumber: number, playerName: string, anchorPosition: { left: string; top: string }) => void;
 }) {
   const viewBox = useViewBox();
@@ -89,6 +95,7 @@ function DiamondFielder({
       fielder={fielderData}
       borderColor={borderColor}
       draggable={false}
+      sequenceNumber={sequenceNumber}
       onClick={() => onTap?.(fielder.positionNumber, fielder.fullName, { left: `${anchor.leftPercent}%`, top: `${anchor.topPercent}%` })}
     />
   );
@@ -100,6 +107,8 @@ export function GameDiamond({
   runnerNames,
   currentBatterName,
   fielders,
+  enhancementSequence = [],
+  enhancementHelpText,
   fielderBorderColors = ['#E8E8D8', '#88AA88'],
   batterBackgroundColor,
   batterBorderColor,
@@ -108,10 +117,23 @@ export function GameDiamond({
   onFielderTap,
   onBatterTap,
   onFieldTap,
+  onEnhancementSequenceUndo,
+  onEnhancementSequenceClear,
 }: GameDiamondProps) {
   const fieldersByNumber = useMemo(() => {
     return [...fielders].sort((a, b) => a.positionNumber - b.positionNumber);
   }, [fielders]);
+  const sequenceBadges = useMemo(() => {
+    const badges = new Map<number, number>();
+    enhancementSequence.forEach((positionNumber, index) => {
+      if (!badges.has(positionNumber)) {
+        badges.set(positionNumber, index + 1);
+      }
+    });
+    return badges;
+  }, [enhancementSequence]);
+  const canUndoSequence = enhancementSequence.length > 0 && !!onEnhancementSequenceUndo;
+  const canClearSequence = enhancementSequence.length > 0 && !!onEnhancementSequenceClear;
 
   return (
     <div className="absolute inset-0">
@@ -131,6 +153,7 @@ export function GameDiamond({
               fielder={fielder}
               borderColor={fielderBorderColors[index % fielderBorderColors.length]}
               onTap={onFielderTap}
+              sequenceNumber={sequenceBadges.get(fielder.positionNumber)}
             />
           );
         })}
@@ -154,6 +177,38 @@ export function GameDiamond({
       <div className="absolute left-3 top-3 z-40 border border-[#4a6a4a] bg-[#1a2a1d]/85 px-2 py-1 text-[8px] font-bold uppercase tracking-[0.18em] text-[#E8E8D8]">
         {mode === 'enhancement' ? 'Enhancement Mode' : 'Info Mode'}
       </div>
+
+      {mode === 'enhancement' && (
+        <div className="absolute right-3 top-3 z-40 max-w-[220px] border border-[#4a6a4a] bg-[#1a2a1d]/90 px-2 py-2 text-[8px] text-[#E8E8D8] shadow-[2px_2px_0px_0px_rgba(0,0,0,0.35)]">
+          <div className="font-bold uppercase tracking-[0.14em] text-[#C4A853]">Fielding Sequence</div>
+          <div className="mt-1 font-mono text-[10px]">
+            {enhancementSequence.length > 0 ? enhancementSequence.join('-') : 'Tap fielders on the diamond'}
+          </div>
+          <div className="mt-1 text-[7px] text-[#88AA88]">
+            {enhancementHelpText || 'Tap fielders to build the sequence. Tap the field to set location.'}
+          </div>
+          {(canUndoSequence || canClearSequence) && (
+            <div className="mt-2 flex gap-1">
+              <button
+                type="button"
+                onClick={onEnhancementSequenceUndo}
+                disabled={!canUndoSequence}
+                className="flex-1 border border-[#5a6b38] bg-[#2f3b21] px-1.5 py-1 text-[8px] font-bold text-[#E8E8D8] disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Undo
+              </button>
+              <button
+                type="button"
+                onClick={onEnhancementSequenceClear}
+                disabled={!canClearSequence}
+                className="flex-1 border border-[#7b2d2d] bg-[#3b2121] px-1.5 py-1 text-[8px] font-bold text-[#fca5a5] disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Clear
+              </button>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
