@@ -3130,6 +3130,72 @@ export function GameTracker() {
     }
   }, [applyHistoricalContextEdit, selectedBetweenPlayEvent, syncLinkedPlayerStateEvent]);
 
+  const handleHistoricalManagerMomentChange = useCallback(async (
+    field: 'decisionType' | 'context' | 'leverageIndex',
+    value: string,
+  ) => {
+    if (selectedBetweenPlayEvent?.type !== 'manager_moment' || !selectedBetweenPlayEvent.managerMoment) return;
+
+    const normalizedValue = field === 'leverageIndex' ? Number(value) : value;
+    if (selectedBetweenPlayEvent.managerMoment[field] === normalizedValue) return;
+
+    const timestamp = Date.now();
+    const nextEvent: BetweenPlayEvent = {
+      ...selectedBetweenPlayEvent,
+      version: (selectedBetweenPlayEvent.version ?? 1) + 1,
+      editHistory: [
+        ...(selectedBetweenPlayEvent.editHistory || []),
+        {
+          field: `managerMoment.${field}`,
+          oldValue: selectedBetweenPlayEvent.managerMoment[field],
+          newValue: normalizedValue,
+          timestamp,
+        },
+      ],
+      managerMoment: {
+        ...selectedBetweenPlayEvent.managerMoment,
+        [field]: normalizedValue,
+      },
+    };
+
+    await applyHistoricalContextEdit(nextEvent, {
+      version: nextEvent.version,
+      editHistory: nextEvent.editHistory?.slice(-1),
+      managerMoment: nextEvent.managerMoment,
+    }, 'update manager moment');
+  }, [applyHistoricalContextEdit, selectedBetweenPlayEvent]);
+
+  const handleHistoricalPitchCountValueChange = useCallback(async (pitchCount: number) => {
+    if (!Number.isFinite(pitchCount)) return;
+    if (selectedBetweenPlayEvent?.type !== 'pitch_count_update' || !selectedBetweenPlayEvent.pitchCountUpdate) return;
+    if (selectedBetweenPlayEvent.pitchCountUpdate.pitchCount === pitchCount) return;
+
+    const timestamp = Date.now();
+    const nextEvent: BetweenPlayEvent = {
+      ...selectedBetweenPlayEvent,
+      version: (selectedBetweenPlayEvent.version ?? 1) + 1,
+      editHistory: [
+        ...(selectedBetweenPlayEvent.editHistory || []),
+        {
+          field: 'pitchCountUpdate.pitchCount',
+          oldValue: selectedBetweenPlayEvent.pitchCountUpdate.pitchCount,
+          newValue: pitchCount,
+          timestamp,
+        },
+      ],
+      pitchCountUpdate: {
+        ...selectedBetweenPlayEvent.pitchCountUpdate,
+        pitchCount,
+      },
+    };
+
+    await applyHistoricalContextEdit(nextEvent, {
+      version: nextEvent.version,
+      editHistory: nextEvent.editHistory?.slice(-1),
+      pitchCountUpdate: nextEvent.pitchCountUpdate,
+    }, 'update pitch count');
+  }, [applyHistoricalContextEdit, selectedBetweenPlayEvent]);
+
   const handleQuickBarOutcome = useCallback(async (outcome: string) => {
     if (!gameInitialized) return;
 
@@ -5181,6 +5247,8 @@ export function GameTracker() {
               onContextValueChange={handleHistoricalContextValueChange}
               onContextReasonChange={handleHistoricalContextReasonChange}
               onInjuryStayedInChange={handleHistoricalInjuryStayedInChange}
+              onManagerMomentChange={handleHistoricalManagerMomentChange}
+              onPitchCountValueChange={handleHistoricalPitchCountValueChange}
               lineupOptions={historicalLineupOptions}
               pitcherOptions={historicalPitcherOptions}
               contextValueOptions={historicalContextValueOptions}

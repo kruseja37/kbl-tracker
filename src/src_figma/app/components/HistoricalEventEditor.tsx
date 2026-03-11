@@ -17,6 +17,8 @@ interface HistoricalEventEditorProps {
   onContextValueChange?: (value: string) => void;
   onContextReasonChange?: (reason: string) => void;
   onInjuryStayedInChange?: (stayedIn: boolean) => void;
+  onManagerMomentChange?: (field: 'decisionType' | 'context' | 'leverageIndex', value: string) => void;
+  onPitchCountValueChange?: (pitchCount: number) => void;
   lineupOptions?: Array<{ id: string; label: string }>;
   pitcherOptions?: Array<{ id: string; label: string }>;
   contextValueOptions?: Array<{ value: string; label: string }>;
@@ -55,6 +57,8 @@ export function HistoricalEventEditor({
   onContextValueChange,
   onContextReasonChange,
   onInjuryStayedInChange,
+  onManagerMomentChange,
+  onPitchCountValueChange,
   lineupOptions = [],
   pitcherOptions = [],
   contextValueOptions = [],
@@ -377,6 +381,71 @@ export function HistoricalEventEditor({
                 ) : (
                   <div className="text-[8px] text-[#88AA88]">
                     Context rows are visible and selectable. Edit wiring will attach here as those producer paths are normalized.
+                  </div>
+                )}
+                {event.managerMoment && (
+                  <div className="space-y-2">
+                    <label className="text-[8px] text-[#88AA88] font-bold uppercase tracking-wide">
+                      Decision
+                      <input
+                        key={`${event.eventId}-${event.version ?? 1}-decision`}
+                        type="text"
+                        defaultValue={event.managerMoment.decisionType}
+                        onBlur={(e) => onManagerMomentChange?.('decisionType', e.target.value)}
+                        disabled={saving}
+                        className="mt-1 w-full bg-[#1f2937]/60 border border-[#4a6a4a] rounded px-2 py-1 text-[9px] text-[#E8E8D8]"
+                        placeholder="Decision type"
+                      />
+                    </label>
+                    <label className="text-[8px] text-[#88AA88] font-bold uppercase tracking-wide">
+                      Leverage
+                      <input
+                        key={`${event.eventId}-${event.version ?? 1}-li`}
+                        type="number"
+                        min="0"
+                        max="10"
+                        step="0.1"
+                        defaultValue={event.managerMoment.leverageIndex}
+                        onBlur={(e) => onManagerMomentChange?.('leverageIndex', e.target.value)}
+                        disabled={saving}
+                        className="mt-1 w-full bg-[#1f2937]/60 border border-[#4a6a4a] rounded px-2 py-1 text-[9px] text-[#E8E8D8]"
+                      />
+                    </label>
+                    <label className="text-[8px] text-[#88AA88] font-bold uppercase tracking-wide">
+                      Context
+                      <input
+                        key={`${event.eventId}-${event.version ?? 1}-context`}
+                        type="text"
+                        defaultValue={event.managerMoment.context || ''}
+                        onBlur={(e) => onManagerMomentChange?.('context', e.target.value)}
+                        disabled={saving}
+                        className="mt-1 w-full bg-[#1f2937]/60 border border-[#4a6a4a] rounded px-2 py-1 text-[9px] text-[#E8E8D8]"
+                        placeholder="Optional note"
+                      />
+                    </label>
+                    <div className="text-[7px] text-[#88AA88]">
+                      {saving ? 'Saving…' : 'System annotations version this row in place without replay.'}
+                    </div>
+                  </div>
+                )}
+                {event.pitchCountUpdate && (
+                  <div className="space-y-2">
+                    <label className="text-[8px] text-[#88AA88] font-bold uppercase tracking-wide">
+                      Pitch Count
+                      <input
+                        key={`${event.eventId}-${event.version ?? 1}-pitch-count`}
+                        type="number"
+                        min="0"
+                        step="1"
+                        defaultValue={event.pitchCountUpdate.pitchCount}
+                        onBlur={(e) => onPitchCountValueChange?.(Number(e.target.value))}
+                        disabled={saving}
+                        className="mt-1 w-full bg-[#1f2937]/60 border border-[#4a6a4a] rounded px-2 py-1 text-[9px] text-[#E8E8D8]"
+                      />
+                    </label>
+                    <div className="text-[7px] text-[#88AA88]">
+                      {saving ? 'Saving…' : 'Pitch-count corrections version this row in place without replay.'}
+                    </div>
                   </div>
                 )}
                 {event.playerStateChange && (
