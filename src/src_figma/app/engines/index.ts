@@ -5,22 +5,6 @@
  * Central export for all game tracking engines
  */
 
-// Phase 1.1 - Adaptive Learning (existing)
-export {
-  recordFieldingEvent,
-  predictFielder,
-  getInferenceAccuracy,
-  getZoneAccuracy,
-  getOverridePatterns,
-  clearLearningData,
-  exportLearningData,
-  importLearningData,
-  buildHitZone,
-  type FieldingEvent,
-  type LearningStats,
-  type ZoneProbability,
-} from './adaptiveLearningEngine';
-
 // Phase 1.2 - Save/Blown Save Detection
 export {
   isSaveOpportunity,
@@ -73,17 +57,6 @@ export {
   type D3KStats,
   type CatcherD3KStats,
 } from './d3kTracker';
-
-// Phase 3 - Detection Functions Integration
-export {
-  convertPlayDataToPlayResult,
-  convertGameStateToContext,
-  mapDetectionToUI,
-  runPlayDetections,
-  isSpectacularCatch,
-  isPotentialRobbery,
-  type UIDetectionResult,
-} from './detectionIntegration';
 
 // Phase 4 - Fame System Integration
 export {

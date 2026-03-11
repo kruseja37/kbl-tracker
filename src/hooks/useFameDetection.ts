@@ -1382,10 +1382,18 @@ export function useFameDetection({
 
     const specialPlayFameMap: Record<SpecialPlayType, FameEventType | null> = {
       Routine: null,
+      Charging: null,
       Diving: 'WEB_GEM',
       'Wall Catch': 'WEB_GEM',
       Running: 'WEB_GEM',
       Leaping: 'WEB_GEM',
+      Sliding: 'WEB_GEM',
+      'Over Shoulder': 'WEB_GEM',
+      'Robbed HR': 'ROBBERY',
+      'Beat Runner': null,
+      'Beat Throw': null,
+      'Missed Dive': null,
+      'Missed Leap': null,
       Clean: null,
       'Robbery Attempt': 'ROBBERY',
       'Over Fence': null,

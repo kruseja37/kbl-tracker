@@ -1,13 +1,13 @@
 import type { MojoLevel } from '../../../engines/mojoEngine';
 import type { FitnessState } from '../../../engines/fitnessEngine';
 import type { FieldCoordinate } from '../components/FieldCanvas';
-import type { ErrorType } from '../components/ErrorTypePopup';
 import type { RunnerDefaults } from '../components/runnerDefaults';
 import type { PlayType as FieldingPlayType } from '../types/game';
 
 export type HitType = '1B' | '2B' | '3B' | 'HR';
 export type OutType = 'GO' | 'FO' | 'LO' | 'PO' | 'FLO' | 'DP' | 'TP' | 'K' | 'Kc' | 'FC' | 'SAC' | 'SF';
 export type WalkType = 'BB' | 'IBB' | 'HBP';
+export type ErrorType = 'FIELDING' | 'THROWING' | 'MENTAL';
 
 export interface PlayData {
   type: 'hit' | 'out' | 'hr' | 'foul_out' | 'foul_ball' | 'error' | 'walk';

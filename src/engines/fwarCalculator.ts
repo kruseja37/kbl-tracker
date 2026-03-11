@@ -587,6 +587,10 @@ export function getStarPlayFameBonus(difficulty: Difficulty): number {
     robbedHR: 2,
     overShoulder: 1,
     sliding: 1,
+    beatRunner: 0,
+    beatThrow: 0,
+    missedDive: 0,
+    missedLeap: 0,
   };
   return fameValues[difficulty] || 0;
 }

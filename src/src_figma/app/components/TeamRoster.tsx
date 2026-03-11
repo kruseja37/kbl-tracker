@@ -68,6 +68,7 @@ export interface Pitcher {
   name: string;
   stats: PitcherStats;
   throwingHand: 'L' | 'R';
+  throws?: 'L' | 'R';
   mojo?: MojoLevel;
   fitness?: FitnessState;
   isStarter?: boolean;

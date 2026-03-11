@@ -11,6 +11,7 @@
 import {
   calculateFWARFromPersistedFieldingSet,
   type FWARResult,
+  type Position as FWARPosition,
 } from '../engines/fwarCalculator';
 import type { Position } from '../types/game';
 import type { FieldingEvent as PersistedFieldingEvent, GameScopeQuery } from './eventLog';
@@ -201,15 +202,16 @@ interface PlayoffFieldingSummary {
 
 function inferPrimaryPositionFromFieldingEvents(
   events: PersistedFieldingEvent[]
-): Position | null {
+): FWARPosition | null {
   if (events.length === 0) return null;
 
-  const counts = new Map<Position, { plays: number; runsSaved: number }>();
+  const counts = new Map<FWARPosition, { plays: number; runsSaved: number }>();
   for (const event of events) {
-    const existing = counts.get(event.position) || { plays: 0, runsSaved: 0 };
+    const position = event.position as FWARPosition;
+    const existing = counts.get(position) || { plays: 0, runsSaved: 0 };
     existing.plays += 1;
     existing.runsSaved += event.runsPreventedOrAllowed;
-    counts.set(event.position, existing);
+    counts.set(position, existing);
   }
 
   const ranked = [...counts.entries()].sort((a, b) => {

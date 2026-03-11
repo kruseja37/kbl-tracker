@@ -3,14 +3,11 @@ import { useNavigate, useParams, useLocation } from "react-router";
 import { Menu, ChevronUp, X } from "lucide-react";
 import { DndProvider } from "react-dnd";
 import { HTML5Backend } from "react-dnd-html5-backend";
-// REMOVED: BUG-009 - BaserunnerDragDrop was a placeholder that did nothing
-// import { BaserunnerDragDrop, type RunnerMoveData as LegacyRunnerMoveData } from "@/app/components/BaserunnerDragDrop";
 import { RunnerPopover, type RunnerBase } from "@/app/components/RunnerPopover";
 import { FielderPopover, type FielderInfo, type BenchPlayerInfo } from "@/app/components/FielderPopover";
 import { LineupCard, type SubstitutionData, type LineupPlayer, type BenchPlayer, type BullpenPitcher } from "@/app/components/LineupCard";
 import { UndoButton, useUndoSystem, type GameSnapshot } from "@/app/components/UndoSystem";
 import { TeamRoster, type Player, type Pitcher } from "@/app/components/TeamRoster";
-// D-9: MiniScoreboard removed from diamond zone — scoreboard now in FenwayBoard left panel
 import { FenwayBoard } from "@/app/components/FenwayBoard";
 import { FullFenwayScoreboard } from "@/app/components/FullFenwayScoreboard";
 import { QuickBar } from "@/app/components/QuickBar";
@@ -74,8 +71,6 @@ import type { FitnessState } from "../../../engines/fitnessEngine";
 import { MOJO_STATES, getMojoColor } from "../../../engines/mojoEngine";
 import { FITNESS_STATES } from "../../../engines/fitnessEngine";
 import { useFameTracking, type FameEventDisplay, formatFameValue, getFameColor, getLITier } from "@/app/hooks/useFameTracking";
-// MAJ-03: Wire detection system
-import { runPlayDetections, type UIDetectionResult } from "../engines/detectionIntegration";
 import { toMojoLabel, toFitnessLabel, type FameEventType, type Position } from "../../../types/game";
 // MAJ-02: Wire fan morale to UI
 import { useFanMorale, type GameResult as FanMoraleGameResult } from "../hooks/useFanMorale";
@@ -97,7 +92,7 @@ import {
   type FieldingExtractionContext,
 } from '../utils/fieldingEventExtractor';
 import { captureStartingLineups, type LineupEntry } from '../../../utils/gameStorage';
-import { POSITION_NUMBER } from '../components/fielderInference';
+import { POSITION_NUMBER } from '../utils/positionConstants';
 import { calculateRunnerDefaults, type RunnerDefaults } from '../components/runnerDefaults';
 import type { PlayLogEntry } from '../utils/playLogTypes';
 import { buildPlayLogEntries } from '../utils/gameTrackerPlayLog';
@@ -513,7 +508,7 @@ export function GameTracker() {
       case 'out':
         return {
           type: 'out',
-          outType: playData.outType || 'GO',
+          outType: playData.outType === 'FLO' ? 'FO' : (playData.outType || 'GO'),
           runnerAdvancement,
           batterReached,
           isDroppedThirdStrike,
@@ -679,9 +674,6 @@ export function GameTracker() {
     historicalMatchupAvg?: string;
     milestoneAlerts: string[];
   }>({ milestoneAlerts: [] });
-
-  // MAJ-03: Detection system state — pending prompts for user confirmation
-  const [pendingDetections, setPendingDetections] = useState<UIDetectionResult[]>([]);
 
   // D-4: HR inline prompt state (distance + pitch type before recording)
   const [hrPrompt, setHrPrompt] = useState<{
@@ -1101,23 +1093,6 @@ export function GameTracker() {
       .sort((a, b) => a.label.localeCompare(b.label));
   }, [awayTeamPlayers, getRosterEntityId, homeTeamPlayers, selectedHistoricalTeamSide]);
 
-  const liveRunnerFielderOptions = useMemo(() => {
-    return Object.entries(defensiveAlignmentByPosition)
-      .map(([position, defender]) => ({
-        id: defender.playerId,
-        label: `${position} — ${defender.playerName}`,
-      }))
-      .sort((a, b) => a.label.localeCompare(b.label));
-  }, [defensiveAlignmentByPosition]);
-
-  const liveRunnerFielderById = useMemo(() => {
-    const entries = Object.entries(defensiveAlignmentByPosition).map(([position, defender]) => ([
-      defender.playerId,
-      { position: position as Position, name: defender.playerName },
-    ] as const));
-    return new Map(entries);
-  }, [defensiveAlignmentByPosition]);
-
   const historicalContextValueOptions = useMemo(() => {
     if (!selectedBetweenPlayEvent?.playerStateChange) return [];
     if (selectedBetweenPlayEvent.playerStateChange.stateType === 'mojo') {
@@ -1309,6 +1284,23 @@ export function GameTracker() {
 
     return alignment;
   }, [activePitcher, fieldingTeam, fieldingTeamPlayers, getRosterEntityId]);
+
+  const liveRunnerFielderOptions = useMemo(() => {
+    return Object.entries(defensiveAlignmentByPosition)
+      .map(([position, defender]) => ({
+        id: defender.playerId,
+        label: `${position} — ${defender.playerName}`,
+      }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }, [defensiveAlignmentByPosition]);
+
+  const liveRunnerFielderById = useMemo(() => {
+    const entries = Object.entries(defensiveAlignmentByPosition).map(([position, defender]) => ([
+      defender.playerId,
+      { position: position as Position, name: defender.playerName },
+    ] as const));
+    return new Map(entries);
+  }, [defensiveAlignmentByPosition]);
 
   const getPendingAtBatIdentity = useCallback(() => {
     const nextAtBatIndex = atBatSequence + 1;
@@ -1550,29 +1542,31 @@ export function GameTracker() {
       )
       .forEach((event) => {
         if (event.type === 'substitution' && event.substitution) {
-          const side = findTeamSide(event.substitution.outPlayerId) || findTeamSide(event.substitution.inPlayerId);
+          const substitution = event.substitution;
+          const side = findTeamSide(substitution.outPlayerId) || findTeamSide(substitution.inPlayerId);
           if (!side) return;
           const lineup = side === 'away' ? awayLineup : homeLineup;
-          const lineupIndex = lineup.findIndex((player) => player.playerId === event.substitution.outPlayerId);
+          const lineupIndex = lineup.findIndex((player) => player.playerId === substitution.outPlayerId);
           if (lineupIndex >= 0) {
             lineup[lineupIndex] = {
-              playerId: event.substitution.inPlayerId,
-              playerName: event.substitution.inPlayerName || event.substitution.inPlayerId,
-              position: (event.substitution.inPosition || event.substitution.outPosition || lineup[lineupIndex].position) as Position,
+              playerId: substitution.inPlayerId,
+              playerName: substitution.inPlayerName || substitution.inPlayerId,
+              position: (substitution.inPosition || substitution.outPosition || lineup[lineupIndex].position) as Position,
             };
           }
           return;
         }
 
         if (event.type === 'position_change' && event.substitution) {
-          const side = findTeamSide(event.substitution.inPlayerId) || findTeamSide(event.substitution.outPlayerId);
+          const substitution = event.substitution;
+          const side = findTeamSide(substitution.inPlayerId) || findTeamSide(substitution.outPlayerId);
           if (!side) return;
           const lineup = side === 'away' ? awayLineup : homeLineup;
-          const lineupIndex = lineup.findIndex((player) => player.playerId === event.substitution.inPlayerId);
+          const lineupIndex = lineup.findIndex((player) => player.playerId === substitution.inPlayerId);
           if (lineupIndex >= 0) {
             lineup[lineupIndex] = {
               ...lineup[lineupIndex],
-              position: (event.substitution.inPosition || lineup[lineupIndex].position) as Position,
+              position: (substitution.inPosition || lineup[lineupIndex].position) as Position,
             };
           }
           return;
@@ -3012,7 +3006,7 @@ export function GameTracker() {
       await commitPlateAppearance({ type: 'error', rbi: 0 });
       await persistFieldingEventsForPlayData({
         type: 'error',
-        fieldingSequence: [fielderPosition],
+        fieldingSequence: [fielderPosition!],
         errorFielder: fielderPosition,
       }, 'quick error');
       logAction(`E${positionLabel}`);
@@ -3045,7 +3039,7 @@ export function GameTracker() {
   const handleErrorFlowComplete = useCallback(async (
     baseReached: string,
     fielderPosition: number,
-    errorType: string,
+    errorType: PlayData['errorType'],
   ) => {
     if (!errorFlow) return;
 
@@ -3272,28 +3266,6 @@ export function GameTracker() {
     setIfrPrompt(null);
   }, [commitPlateAppearance, gameState, ifrPrompt, logAction, pushPlayLogEntry, runnerNames, setNextEventEnrichment, shortInningLabel, getPendingAtBatIdentity]);
 
-  // MAJ-03: Handle detection prompt confirmation — user confirms a detected event
-  const handleDetectionConfirm = useCallback((detection: UIDetectionResult) => {
-    // Record as Fame event
-    fameTrackingHook.recordFameEvent(
-      detection.eventType as FameEventType,
-      gameState.currentBatterId,
-      gameState.currentBatterName,
-      gameState.inning,
-      gameState.isTop ? 'TOP' : 'BOTTOM',
-      1.0 // Default LI — detection was triggered per-play
-    );
-    // Remove from pending
-    setPendingDetections(prev => prev.filter(d => d !== detection));
-    console.log(`[MAJ-03] User confirmed detection: ${detection.eventType}`);
-  }, [fameTrackingHook, gameState]);
-
-  // MAJ-03: Handle detection prompt dismissal — user declines a detected event
-  const handleDetectionDismiss = useCallback((detection: UIDetectionResult) => {
-    setPendingDetections(prev => prev.filter(d => d !== detection));
-    console.log(`[MAJ-03] User dismissed detection: ${detection.eventType}`);
-  }, []);
-
   // Handle special events (Web Gem, Robbery, TOOTBLAN, etc.) from the canonical tracker modifier flow
   // Phase 5B: Extended to handle all contextual button events
   const handleSpecialEvent = useCallback(async (event: SpecialEventData, sourceAtBat?: AtBatEvent) => {
@@ -3344,7 +3316,7 @@ export function GameTracker() {
         ? event.fielderName
         : sourceAtBat?.pitcherName || resolvedCurrentPitcherName || gameState.currentPitcherName;
 
-      if (normalizedEventType === 'KILLED_PITCHER' && pitcherId && pitcherName && event.newFitness) {
+      if (normalizedEventType === 'KILLED' && pitcherId && pitcherName && event.newFitness) {
         const previousFitness = playerStateHook.getPlayer(pitcherId)?.fitnessProfile.currentFitness ?? 'FIT';
         const reason = `Killed pitcher by ${sourceBatterName}`;
         const eventGroupId = `${gameState.gameId}_kp_${Date.now()}`;
@@ -3385,7 +3357,7 @@ export function GameTracker() {
         });
         playerStateHook.setFitness(pitcherId, event.newFitness);
         queuePlayLogRefresh(0);
-      } else if (normalizedEventType === 'NUT_SHOT' && pitcherId && pitcherName && event.mojoImpact) {
+      } else if (normalizedEventType === 'NUTSHOT' && pitcherId && pitcherName && event.mojoImpact) {
         const previousMojo = playerStateHook.getPlayer(pitcherId)?.gameState.currentMojo ?? 0;
         const mojoDelta = event.mojoImpact === 'RATTLED' ? -2 : -1;
         const nextMojo = clampMojo(previousMojo + mojoDelta);
@@ -3692,7 +3664,7 @@ export function GameTracker() {
         catcherName: pendingRunnerAttribution.catcherName,
         fielderId: pendingRunnerAttribution.fielderId,
         fielderName: selectedFielder?.name,
-        fielderPosition: selectedFielder ? POSITION_NUMBER[selectedFielder.position] : undefined,
+        fielderPosition: selectedFielder ? POSITION_NUMBER[selectedFielder.position as keyof typeof POSITION_NUMBER] : undefined,
       });
 
       setPendingRunnerAttribution(null);
@@ -4940,7 +4912,7 @@ export function GameTracker() {
             <div className="absolute bottom-full left-0 right-0 mb-1 bg-[#2f3b21] border border-[#5a6b38] px-2 py-1 text-[8px] text-[#C4A853]">
               Editing historical play. Return to live at-bat to score the next pitch.
             </div>
-          )}
+          ) : null}
           {/* D-17: Manager Moment inline Call/Skip panel — non-blocking */}
           {showManagerMomentPanel && mwarHook.managerMoment.isTriggered && (
             <div className="absolute bottom-full left-0 right-0 mb-1 bg-[#4A6A42] border-[3px] border-[#FFD700] p-2 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.6)] z-40">
@@ -5358,7 +5330,7 @@ export function GameTracker() {
                   <div className="flex gap-2">
                     {['Fielding', 'Throwing', 'Mental'].map((t) => (
                       <button key={t}
-                        onClick={() => handleErrorFlowComplete(errorFlow.baseReached, errorFlow.fielderPosition, t.toLowerCase())}
+                        onClick={() => handleErrorFlowComplete(errorFlow.baseReached, errorFlow.fielderPosition, t.toUpperCase() as PlayData['errorType'])}
                         className="flex-1 px-2 py-2 bg-[#7d6608] text-white text-[10px] font-bold rounded border-2 border-[#f4d03f] hover:bg-[#8d7618] active:scale-95 transition-all">
                         {t}
                       </button>
@@ -5436,39 +5408,6 @@ export function GameTracker() {
           </div>
         )}
 
-        {/* MAJ-03: Detection prompt notifications */}
-        {pendingDetections.length > 0 && (
-          <div className="fixed bottom-24 right-4 z-50 flex flex-col gap-2 max-w-[320px]">
-            {pendingDetections.map((detection, idx) => (
-              <div
-                key={`${detection.eventType}-${idx}`}
-                className="bg-[#1a1a1a] border-2 border-[#C4A853] rounded-lg p-3 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.4)] animate-fade-in"
-              >
-                <div className="flex items-center gap-2 mb-2">
-                  <span className="text-lg">{detection.icon}</span>
-                  <span className="text-xs font-bold text-[#C4A853] uppercase tracking-wider">
-                    {detection.eventType.replace(/_/g, ' ')}
-                  </span>
-                </div>
-                <p className="text-[11px] text-[#ccc] mb-2">{detection.message}</p>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => handleDetectionConfirm(detection)}
-                    className="flex-1 px-3 py-1.5 bg-[#2E7D32] text-white text-[10px] font-bold uppercase rounded border border-[#4CAF50] hover:bg-[#388E3C] active:scale-95 transition-all"
-                  >
-                    Confirm
-                  </button>
-                  <button
-                    onClick={() => handleDetectionDismiss(detection)}
-                    className="flex-1 px-3 py-1.5 bg-[#333] text-[#888] text-[10px] font-bold uppercase rounded border border-[#555] hover:bg-[#444] active:scale-95 transition-all"
-                  >
-                    Dismiss
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
       </div>{/* Close 5-zone grid */}
 
       {/* ══════════════════════════════════════════════════════════════
@@ -6144,6 +6083,7 @@ export function GameTracker() {
             </button>
           </div>
       </div>)}{/* Close outer {false && (<div>)} disabled reference block */}
+      </div>
     </DndProvider>
   );
 }
@@ -6242,7 +6182,6 @@ function PitchCountModal({ prompt, onConfirm, onDismiss }: PitchCountModalProps)
               Cancel
             </button>
           )}
-        </div>
         </div>
       </div>
     </div>
