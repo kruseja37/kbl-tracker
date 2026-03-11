@@ -330,9 +330,6 @@ export function GameTracker() {
     setStadiumName(selectedStadium);
   }, [selectedStadium, setStadiumName]);
 
-  const scoreboardStadiumLabel =
-    selectedStadium || getTeamColors(homeTeamId).stadium || 'BALLPARK';
-
   const [activityLog, setActivityLog] = useState<string[]>([]);
   const pushActivityLog = useCallback((entry: string) => {
     setActivityLog(prev => [entry, ...prev].slice(0, 20));
@@ -612,12 +609,9 @@ export function GameTracker() {
   } | null>(null);
   const [pendingRunnerCorrection, setPendingRunnerCorrection] = useState<PendingRunnerCorrectionAction | null>(null);
 
-  // Scoreboard minimization toggle - allows field to expand
-  const [isScoreboardMinimized, setIsScoreboardMinimized] = useState(true);
-
-  // Field zoom level tuned for the spec's iPad landscape layout.
-  // Keep the playable field prominent while retaining enough outfield for taps/enrichment.
-  const fieldZoomLevel = isScoreboardMinimized ? 1 : 0.82;
+  // Field zoom level tuned for the post-EIF iPad landscape layout.
+  // Keep the playable field prominent while retaining the full GameDiamond tap surface.
+  const fieldZoomLevel = 1;
 
   // Undo system - restore game state on undo
   const handleUndo = useCallback((snapshot: GameSnapshot) => {
