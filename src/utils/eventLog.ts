@@ -436,6 +436,16 @@ export interface BetweenPlayEvent {
     stayedIn?: boolean;
   };
 
+  runnerAttribution?: {
+    pitcherId?: string;
+    pitcherName?: string;
+    catcherId?: string;
+    catcherName?: string;
+    fielderId?: string;
+    fielderName?: string;
+    fielderPosition?: number;
+  };
+
   wildPitchOrPassedBall?: {
     wpOrPb: 'wild_pitch' | 'passed_ball';
     pitcherId: string;

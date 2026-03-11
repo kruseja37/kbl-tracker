@@ -157,6 +157,9 @@ describe('useGameState between-play ledger', () => {
         toBase: 2,
         reason: 'stolen_base',
       }),
+      runnerAttribution: expect.objectContaining({
+        pitcherId: 'home-sp',
+      }),
     }));
   });
 
@@ -191,6 +194,9 @@ describe('useGameState between-play ledger', () => {
         toBase: 2,
         outcome: 'safe',
         reason: 'advance',
+      }),
+      runnerAttribution: expect.objectContaining({
+        pitcherId: 'home-sp',
       }),
     }));
   });
@@ -427,6 +433,19 @@ describe('useGameState between-play ledger', () => {
         outs: 0,
         score: { away: 0, home: 0 },
       },
+      runnerAction: {
+        runnerId: 'away-batter-1',
+        runnerName: 'Away Batter 1',
+        fromBase: 1,
+        toBase: 2,
+        outcome: 'safe',
+        reason: 'wild_pitch',
+      },
+      runnerAttribution: {
+        pitcherId: 'home-sp',
+        pitcherName: 'Home Starter',
+        catcherId: 'home-batter-1',
+      },
       wildPitchOrPassedBall: {
         wpOrPb: 'wild_pitch',
         pitcherId: 'home-sp',
@@ -443,11 +462,69 @@ describe('useGameState between-play ledger', () => {
     });
 
     expect(mockUpdateBetweenPlayEvent).toHaveBeenCalledWith('bp-wp-1', expect.objectContaining({
+      runnerAttribution: expect.objectContaining({
+        pitcherId: 'home-rp',
+      }),
       wildPitchOrPassedBall: expect.objectContaining({
         pitcherId: 'home-rp',
       }),
     }));
     expect(result.current.pitcherStats.get('home-sp')?.wildPitches).toBe(0);
     expect(result.current.pitcherStats.get('home-rp')?.wildPitches).toBe(1);
+  });
+
+  test('reassigns pickoff attribution fields without replaying game state', async () => {
+    const { result } = renderHook(() => useGameState());
+    await initializeGame(result);
+
+    mockGetBetweenPlayEvent.mockResolvedValue({
+      eventId: 'bp-pk-1',
+      gameId: 'game-between-play',
+      timestamp: 123,
+      eventIndex: 1.002,
+      type: 'pickoff',
+      version: 1,
+      gameState: {
+        inning: 1,
+        halfInning: 'TOP',
+        outs: 0,
+        score: { away: 0, home: 0 },
+      },
+      runnerAction: {
+        runnerId: 'away-batter-1',
+        runnerName: 'Away Batter 1',
+        fromBase: 1,
+        toBase: 1,
+        outcome: 'safe',
+        reason: 'pickoff',
+      },
+      runnerAttribution: {
+        pitcherId: 'home-sp',
+        pitcherName: 'Home Starter',
+        catcherId: 'home-batter-1',
+        catcherName: 'Home Batter 1',
+        fielderId: 'home-batter-2',
+        fielderName: 'Home Batter 2',
+      },
+    });
+
+    await act(async () => {
+      await result.current.reassignRunnerEventAttribution('bp-pk-1', {
+        pitcherId: 'home-rp',
+        pitcherName: 'Home Reliever',
+        catcherId: 'home-batter-2',
+        catcherName: 'Home Batter 2',
+        fielderId: 'home-batter-1',
+        fielderName: 'Home Batter 1',
+      });
+    });
+
+    expect(mockUpdateBetweenPlayEvent).toHaveBeenCalledWith('bp-pk-1', expect.objectContaining({
+      runnerAttribution: expect.objectContaining({
+        pitcherId: 'home-rp',
+        catcherId: 'home-batter-2',
+        fielderId: 'home-batter-1',
+      }),
+    }));
   });
 });

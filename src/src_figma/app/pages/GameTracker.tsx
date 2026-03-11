@@ -911,7 +911,14 @@ export function GameTracker() {
     if (selectedBetweenPlayEvent.type === 'pitcher_change') {
       return selectedBetweenPlayEvent.gameState?.halfInning === 'TOP' ? 'home' : 'away';
     }
-    if (selectedBetweenPlayEvent.type === 'wild_pitch' || selectedBetweenPlayEvent.type === 'passed_ball') {
+    if (
+      selectedBetweenPlayEvent.type === 'stolen_base'
+      || selectedBetweenPlayEvent.type === 'caught_stealing'
+      || selectedBetweenPlayEvent.type === 'pickoff'
+      || selectedBetweenPlayEvent.type === 'wild_pitch'
+      || selectedBetweenPlayEvent.type === 'passed_ball'
+      || selectedBetweenPlayEvent.type === 'runner_advance'
+    ) {
       return selectedBetweenPlayEvent.gameState?.halfInning === 'TOP' ? 'home' : 'away';
     }
     if (selectedBetweenPlayEvent.substitution) {
@@ -956,6 +963,17 @@ export function GameTracker() {
     const players = selectedHistoricalTeamSide === 'away' ? awayTeamPlayers : homeTeamPlayers;
     return players
       .filter((player) => player.position === 'C')
+      .map((player) => ({
+        id: getRosterEntityId(player, selectedHistoricalTeamSide),
+        label: player.name,
+      }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }, [awayTeamPlayers, getRosterEntityId, homeTeamPlayers, selectedHistoricalTeamSide]);
+
+  const historicalFielderOptions = useMemo(() => {
+    if (!selectedHistoricalTeamSide) return [];
+    const players = selectedHistoricalTeamSide === 'away' ? awayTeamPlayers : homeTeamPlayers;
+    return players
       .map((player) => ({
         id: getRosterEntityId(player, selectedHistoricalTeamSide),
         label: player.name,
@@ -2810,8 +2828,10 @@ export function GameTracker() {
   }, [queuePlayLogRefresh, selectedBetweenPlayEvent]);
 
   const handleRunnerPitcherAttributionChange = useCallback(async (pitcherId: string) => {
-    if (!selectedBetweenPlayEvent?.wildPitchOrPassedBall) return;
-    if (selectedBetweenPlayEvent.wildPitchOrPassedBall.pitcherId === pitcherId) return;
+    if (!selectedBetweenPlayEvent?.runnerAction) return;
+    const previousPitcherId = selectedBetweenPlayEvent.runnerAttribution?.pitcherId
+      || selectedBetweenPlayEvent.wildPitchOrPassedBall?.pitcherId;
+    if (previousPitcherId === pitcherId) return;
 
     const pitcherLabel = historicalPitcherOptions.find((option) => option.id === pitcherId)?.label;
     setSelectedBetweenPlayEventSaving(true);
@@ -2832,9 +2852,11 @@ export function GameTracker() {
   }, [historicalPitcherOptions, queuePlayLogRefresh, reassignRunnerEventAttribution, selectedBetweenPlayEvent]);
 
   const handleRunnerCatcherAttributionChange = useCallback(async (catcherId: string) => {
-    if (selectedBetweenPlayEvent?.type !== 'passed_ball' || !selectedBetweenPlayEvent.wildPitchOrPassedBall) return;
+    if (!selectedBetweenPlayEvent?.runnerAction) return;
     const normalizedCatcherId = catcherId || undefined;
-    if (selectedBetweenPlayEvent.wildPitchOrPassedBall.catcherId === normalizedCatcherId) return;
+    const previousCatcherId = selectedBetweenPlayEvent.runnerAttribution?.catcherId
+      || selectedBetweenPlayEvent.wildPitchOrPassedBall?.catcherId;
+    if (previousCatcherId === normalizedCatcherId) return;
 
     const catcherLabel = historicalCatcherOptions.find((option) => option.id === catcherId)?.label;
     setSelectedBetweenPlayEventSaving(true);
@@ -2853,6 +2875,29 @@ export function GameTracker() {
       setSelectedBetweenPlayEventSaving(false);
     }
   }, [historicalCatcherOptions, queuePlayLogRefresh, reassignRunnerEventAttribution, selectedBetweenPlayEvent]);
+
+  const handleRunnerFielderAttributionChange = useCallback(async (fielderId: string) => {
+    if (!selectedBetweenPlayEvent?.runnerAction) return;
+    const normalizedFielderId = fielderId || undefined;
+    if (selectedBetweenPlayEvent.runnerAttribution?.fielderId === normalizedFielderId) return;
+
+    const fielderOption = historicalFielderOptions.find((option) => option.id === fielderId);
+    setSelectedBetweenPlayEventSaving(true);
+    try {
+      const nextEvent = await reassignRunnerEventAttribution(selectedBetweenPlayEvent.eventId, {
+        fielderId: normalizedFielderId,
+        fielderName: fielderOption?.label,
+      });
+      if (nextEvent) {
+        setSelectedBetweenPlayEvent(nextEvent);
+      }
+      queuePlayLogRefresh(0);
+    } catch (error) {
+      console.error('[Historical Runner Edit] Failed to update runner-event fielder attribution:', error);
+    } finally {
+      setSelectedBetweenPlayEventSaving(false);
+    }
+  }, [historicalFielderOptions, queuePlayLogRefresh, reassignRunnerEventAttribution, selectedBetweenPlayEvent]);
 
   const applyHistoricalStructuralReplayEdit = useCallback(async (
     nextEvent: BetweenPlayEvent,
@@ -4224,9 +4269,13 @@ export function GameTracker() {
       fromBase: base,
       toBase: nextBaseMap[base],
       outcome: 'safe',
+      pitcherId: gameState.currentPitcherId,
+      pitcherName: resolvedCurrentPitcherName,
+      catcherId: defensiveAlignmentByPosition.C?.playerId,
+      catcherName: defensiveAlignmentByPosition.C?.playerName,
     }).then(() => queuePlayLogRefresh());
     setActiveRunnerPopover(null);
-  }, [activeRunnerPopover?.playerId, activeRunnerPopover?.runnerName, advanceRunner, queuePlayLogRefresh, recordEvent, undoSystem]);
+  }, [activeRunnerPopover?.playerId, activeRunnerPopover?.runnerName, advanceRunner, defensiveAlignmentByPosition, gameState.currentPitcherId, queuePlayLogRefresh, recordEvent, resolvedCurrentPitcherName, undoSystem]);
 
   const handleRunnerAdvance = useCallback((base: RunnerBase, dest?: 'second' | 'third' | 'home') => {
     const to = dest || nextBaseMap[base];
@@ -4238,9 +4287,13 @@ export function GameTracker() {
       fromBase: base,
       toBase: to,
       outcome: 'safe',
+      pitcherId: gameState.currentPitcherId,
+      pitcherName: resolvedCurrentPitcherName,
+      catcherId: defensiveAlignmentByPosition.C?.playerId,
+      catcherName: defensiveAlignmentByPosition.C?.playerName,
     }).then(() => queuePlayLogRefresh());
     setActiveRunnerPopover(null);
-  }, [activeRunnerPopover?.playerId, activeRunnerPopover?.runnerName, advanceRunner, queuePlayLogRefresh, recordEvent, undoSystem]);
+  }, [activeRunnerPopover?.playerId, activeRunnerPopover?.runnerName, advanceRunner, defensiveAlignmentByPosition, gameState.currentPitcherId, queuePlayLogRefresh, recordEvent, resolvedCurrentPitcherName, undoSystem]);
 
   const handleRunnerWP = useCallback((base: RunnerBase, dest?: 'second' | 'third' | 'home') => {
     const to = dest || nextBaseMap[base];
@@ -4254,9 +4307,11 @@ export function GameTracker() {
       outcome: 'safe',
       pitcherId: gameState.currentPitcherId,
       pitcherName: resolvedCurrentPitcherName,
+      catcherId: defensiveAlignmentByPosition.C?.playerId,
+      catcherName: defensiveAlignmentByPosition.C?.playerName,
     }).then(() => queuePlayLogRefresh());
     setActiveRunnerPopover(null);
-  }, [activeRunnerPopover?.playerId, activeRunnerPopover?.runnerName, advanceRunner, gameState.currentPitcherId, queuePlayLogRefresh, recordEvent, resolvedCurrentPitcherName, undoSystem]);
+  }, [activeRunnerPopover?.playerId, activeRunnerPopover?.runnerName, advanceRunner, defensiveAlignmentByPosition, gameState.currentPitcherId, queuePlayLogRefresh, recordEvent, resolvedCurrentPitcherName, undoSystem]);
 
   const handleRunnerPB = useCallback((base: RunnerBase, dest?: 'second' | 'third' | 'home') => {
     const to = dest || nextBaseMap[base];
@@ -4287,6 +4342,10 @@ export function GameTracker() {
         fromBase: base,
         toBase: 'out',
         outcome: 'out',
+        pitcherId: gameState.currentPitcherId,
+        pitcherName: resolvedCurrentPitcherName,
+        catcherId: defensiveAlignmentByPosition.C?.playerId,
+        catcherName: defensiveAlignmentByPosition.C?.playerName,
       }).then(() => queuePlayLogRefresh());
     } else if (outcome === 'error') {
       // D-2: Error on pickoff — runner advances one base
@@ -4297,6 +4356,10 @@ export function GameTracker() {
         fromBase: base,
         toBase: nextBaseMap[base],
         outcome: 'safe',
+        pitcherId: gameState.currentPitcherId,
+        pitcherName: resolvedCurrentPitcherName,
+        catcherId: defensiveAlignmentByPosition.C?.playerId,
+        catcherName: defensiveAlignmentByPosition.C?.playerName,
       }).then(() => queuePlayLogRefresh());
     } else {
       // D-2: Safe — attempt logged, runner stays
@@ -4306,10 +4369,14 @@ export function GameTracker() {
         fromBase: base,
         toBase: base,
         outcome: 'safe',
+        pitcherId: gameState.currentPitcherId,
+        pitcherName: resolvedCurrentPitcherName,
+        catcherId: defensiveAlignmentByPosition.C?.playerId,
+        catcherName: defensiveAlignmentByPosition.C?.playerName,
       }).then(() => queuePlayLogRefresh());
     }
     setActiveRunnerPopover(null);
-  }, [activeRunnerPopover?.playerId, activeRunnerPopover?.runnerName, advanceRunner, queuePlayLogRefresh, recordEvent, undoSystem]);
+  }, [activeRunnerPopover?.playerId, activeRunnerPopover?.runnerName, advanceRunner, defensiveAlignmentByPosition, gameState.currentPitcherId, queuePlayLogRefresh, recordEvent, resolvedCurrentPitcherName, undoSystem]);
 
   const handleRunnerSubstitute = useCallback((base: RunnerBase) => {
     setActiveRunnerPopover(null);
@@ -5309,6 +5376,7 @@ export function GameTracker() {
               onRunnerCaughtByChange={handleRunnerCaughtByChange}
               onRunnerPitcherChange={handleRunnerPitcherAttributionChange}
               onRunnerCatcherChange={handleRunnerCatcherAttributionChange}
+              onRunnerFielderChange={handleRunnerFielderAttributionChange}
               onLineupPositionChange={handleHistoricalPositionChange}
               onSubstitutionPlayerChange={handleHistoricalSubstitutionPlayerChange}
               onSubstitutionPositionChange={handleHistoricalSubstitutionPositionChange}
@@ -5321,6 +5389,7 @@ export function GameTracker() {
               lineupOptions={historicalLineupOptions}
               pitcherOptions={historicalPitcherOptions}
               catcherOptions={historicalCatcherOptions}
+              fielderOptions={historicalFielderOptions}
               contextValueOptions={historicalContextValueOptions}
             />
           ) : enrichingEntry !== null ? (

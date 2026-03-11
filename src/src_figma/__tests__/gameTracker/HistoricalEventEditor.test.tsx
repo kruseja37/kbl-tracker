@@ -169,7 +169,7 @@ describe('HistoricalEventEditor', () => {
     expect(screen.getByText('Pitch-count corrections version this row in place without replay.')).toBeInTheDocument();
   });
 
-  test('renders battery attribution controls for wild pitch and passed ball rows', () => {
+  test('renders shared runner attribution controls for wild pitch, passed ball, and pickoff rows', () => {
     const { rerender } = render(
       <HistoricalEventEditor
         {...baseProps}
@@ -196,16 +196,32 @@ describe('HistoricalEventEditor', () => {
             catcherId: 'catcher-1',
             runnersAdvanced: [{ runnerId: 'runner-1', fromBase: 1, toBase: 2 }],
           },
+          runnerAttribution: {
+            pitcherId: 'pitcher-1',
+            pitcherName: 'Pitcher One',
+            catcherId: 'catcher-1',
+            catcherName: 'Catcher One',
+          },
         })}
         pitcherOptions={[
           { id: 'pitcher-1', label: 'Pitcher One' },
           { id: 'pitcher-2', label: 'Pitcher Two' },
         ]}
+        catcherOptions={[
+          { id: 'catcher-1', label: 'Catcher One' },
+        ]}
+        fielderOptions={[
+          { id: 'fielder-1', label: 'Fielder One' },
+        ]}
         onRunnerPitcherChange={vi.fn()}
+        onRunnerCatcherChange={vi.fn()}
+        onRunnerFielderChange={vi.fn()}
       />
     );
 
     expect(screen.getByText('Charged Pitcher')).toBeInTheDocument();
+    expect(screen.getByText('Catcher')).toBeInTheDocument();
+    expect(screen.getByText('Fielder')).toBeInTheDocument();
     expect(screen.getByText('Attribution edits reassign credit without replaying the game state.')).toBeInTheDocument();
 
     rerender(
@@ -234,6 +250,14 @@ describe('HistoricalEventEditor', () => {
             catcherId: 'catcher-1',
             runnersAdvanced: [{ runnerId: 'runner-1', fromBase: 1, toBase: 2 }],
           },
+          runnerAttribution: {
+            pitcherId: 'pitcher-1',
+            pitcherName: 'Pitcher One',
+            catcherId: 'catcher-1',
+            catcherName: 'Catcher One',
+            fielderId: 'fielder-1',
+            fielderName: 'Fielder One',
+          },
         })}
         pitcherOptions={[
           { id: 'pitcher-1', label: 'Pitcher One' },
@@ -242,12 +266,64 @@ describe('HistoricalEventEditor', () => {
           { id: 'catcher-1', label: 'Catcher One' },
           { id: 'catcher-2', label: 'Catcher Two' },
         ]}
+        fielderOptions={[
+          { id: 'fielder-1', label: 'Fielder One' },
+          { id: 'fielder-2', label: 'Fielder Two' },
+        ]}
         onRunnerPitcherChange={vi.fn()}
         onRunnerCatcherChange={vi.fn()}
+        onRunnerFielderChange={vi.fn()}
       />
     );
 
-    expect(screen.getByText('Charged Catcher')).toBeInTheDocument();
     expect(screen.getByDisplayValue('Catcher One')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('Fielder One')).toBeInTheDocument();
+
+    rerender(
+      <HistoricalEventEditor
+        {...baseProps}
+        entry={createEntry({
+          eventType: 'pickoff',
+          editorType: 'runner',
+          result: 'PK',
+          batterName: 'Garcia',
+        })}
+        event={createEvent({
+          type: 'pickoff',
+          playerStateChange: undefined,
+          runnerAction: {
+            runnerId: 'runner-1',
+            runnerName: 'Garcia',
+            fromBase: 1,
+            toBase: 1,
+            outcome: 'safe',
+            reason: 'pickoff',
+          },
+          runnerAttribution: {
+            pitcherId: 'pitcher-1',
+            pitcherName: 'Pitcher One',
+            catcherId: 'catcher-1',
+            catcherName: 'Catcher One',
+            fielderId: 'fielder-2',
+            fielderName: 'Fielder Two',
+          },
+        })}
+        pitcherOptions={[
+          { id: 'pitcher-1', label: 'Pitcher One' },
+        ]}
+        catcherOptions={[
+          { id: 'catcher-1', label: 'Catcher One' },
+        ]}
+        fielderOptions={[
+          { id: 'fielder-1', label: 'Fielder One' },
+          { id: 'fielder-2', label: 'Fielder Two' },
+        ]}
+        onRunnerPitcherChange={vi.fn()}
+        onRunnerCatcherChange={vi.fn()}
+        onRunnerFielderChange={vi.fn()}
+      />
+    );
+
+    expect(screen.getByDisplayValue('Fielder Two')).toBeInTheDocument();
   });
 });

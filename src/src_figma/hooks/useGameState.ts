@@ -264,6 +264,9 @@ export interface UseGameStateReturn {
       pitcherName?: string;
       catcherId?: string;
       catcherName?: string;
+      fielderId?: string;
+      fielderName?: string;
+      fielderPosition?: number;
     },
   ) => Promise<BetweenPlayEvent | null>;
   recordManagerMoment: (
@@ -4532,6 +4535,15 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
           outcome: 'safe',
           reason: 'stolen_base',
         },
+        runnerAttribution: {
+          pitcherId: details?.pitcherId || gameState.currentPitcherId,
+          pitcherName: resolvePlayerNameForId(details?.pitcherId || gameState.currentPitcherId, details?.pitcherName),
+          catcherId: details?.catcherId,
+          catcherName: resolvePlayerNameForId(details?.catcherId, details?.catcherName),
+          fielderId: details?.fielderId,
+          fielderName: resolvePlayerNameForId(details?.fielderId, details?.fielderName),
+          fielderPosition: details?.fielderPosition,
+        },
       });
     } else if (eventType === 'CS' && resolvedRunnerId && fromBaseNumber && toBaseNumber) {
       await persistBetweenPlayEvent({
@@ -4552,6 +4564,15 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
           outcome: 'out',
           reason: 'caught_stealing',
         },
+        runnerAttribution: {
+          pitcherId: details?.pitcherId || gameState.currentPitcherId,
+          pitcherName: resolvePlayerNameForId(details?.pitcherId || gameState.currentPitcherId, details?.pitcherName),
+          catcherId: details?.catcherId,
+          catcherName: resolvePlayerNameForId(details?.catcherId, details?.catcherName),
+          fielderId: details?.fielderId,
+          fielderName: resolvePlayerNameForId(details?.fielderId, details?.fielderName),
+          fielderPosition: details?.fielderPosition,
+        },
       });
     } else if ((eventType === 'PICK' || eventType === 'PICK_SAFE' || eventType === 'PICK_E') && resolvedRunnerId && fromBaseNumber) {
       await persistBetweenPlayEvent({
@@ -4564,6 +4585,15 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
           outcome: eventType === 'PICK' ? 'out' : 'safe',
           reason: 'pickoff',
         },
+        runnerAttribution: {
+          pitcherId: details?.pitcherId || gameState.currentPitcherId,
+          pitcherName: resolvePlayerNameForId(details?.pitcherId || gameState.currentPitcherId, details?.pitcherName),
+          catcherId: details?.catcherId,
+          catcherName: resolvePlayerNameForId(details?.catcherId, details?.catcherName),
+          fielderId: details?.fielderId,
+          fielderName: resolvePlayerNameForId(details?.fielderId, details?.fielderName),
+          fielderPosition: details?.fielderPosition,
+        },
       });
     } else if (eventType === 'ADVANCE' && resolvedRunnerId && fromBaseNumber && toBaseNumber) {
       await persistBetweenPlayEvent({
@@ -4575,6 +4605,15 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
           toBase: toBaseNumber,
           outcome: details?.outcome || 'safe',
           reason: 'advance',
+        },
+        runnerAttribution: {
+          pitcherId: details?.pitcherId || gameState.currentPitcherId,
+          pitcherName: resolvePlayerNameForId(details?.pitcherId || gameState.currentPitcherId, details?.pitcherName),
+          catcherId: details?.catcherId,
+          catcherName: resolvePlayerNameForId(details?.catcherId, details?.catcherName),
+          fielderId: details?.fielderId,
+          fielderName: resolvePlayerNameForId(details?.fielderId, details?.fielderName),
+          fielderPosition: details?.fielderPosition,
         },
       });
     } else if ((eventType === 'WP' || eventType === 'PB') && resolvedRunnerId && fromBaseNumber && toBaseNumber) {
@@ -4599,6 +4638,15 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
           toBase: toBaseNumber,
           outcome: 'safe',
           reason: eventType === 'WP' ? 'wild_pitch' : 'passed_ball',
+        },
+        runnerAttribution: {
+          pitcherId: details?.pitcherId || gameState.currentPitcherId,
+          pitcherName: resolvePlayerNameForId(details?.pitcherId || gameState.currentPitcherId, details?.pitcherName),
+          catcherId: details?.catcherId,
+          catcherName: resolvePlayerNameForId(details?.catcherId, details?.catcherName),
+          fielderId: details?.fielderId,
+          fielderName: resolvePlayerNameForId(details?.fielderId, details?.fielderName),
+          fielderPosition: details?.fielderPosition,
         },
       });
     }
@@ -4644,23 +4692,32 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       pitcherName?: string;
       catcherId?: string;
       catcherName?: string;
+      fielderId?: string;
+      fielderName?: string;
+      fielderPosition?: number;
     },
   ): Promise<BetweenPlayEvent | null> => {
     const existing = await getBetweenPlayEvent(eventId);
-    if (!existing?.wildPitchOrPassedBall) {
+    if (!existing?.runnerAction) {
       return null;
     }
 
-    const previousPitcherId = existing.wildPitchOrPassedBall.pitcherId;
+    const previousPitcherId = existing.runnerAttribution?.pitcherId
+      || existing.wildPitchOrPassedBall?.pitcherId;
     const nextPitcherId = updates.pitcherId || previousPitcherId;
-    const previousCatcherId = existing.wildPitchOrPassedBall.catcherId;
+    const previousCatcherId = existing.runnerAttribution?.catcherId
+      || existing.wildPitchOrPassedBall?.catcherId;
     const nextCatcherId = updates.catcherId ?? previousCatcherId;
+    const previousFielderId = existing.runnerAttribution?.fielderId;
+    const nextFielderId = updates.fielderId ?? previousFielderId;
+    const previousFielderPosition = existing.runnerAttribution?.fielderPosition;
+    const nextFielderPosition = updates.fielderPosition ?? previousFielderPosition;
 
     const timestamp = Date.now();
     const editHistory: NonNullable<BetweenPlayEvent['editHistory']> = [];
     if (nextPitcherId !== previousPitcherId) {
       editHistory.push({
-        field: 'wildPitchOrPassedBall.pitcherId',
+        field: 'runnerAttribution.pitcherId',
         oldValue: previousPitcherId,
         newValue: nextPitcherId,
         timestamp,
@@ -4668,9 +4725,25 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     }
     if (nextCatcherId !== previousCatcherId) {
       editHistory.push({
-        field: 'wildPitchOrPassedBall.catcherId',
+        field: 'runnerAttribution.catcherId',
         oldValue: previousCatcherId ?? null,
         newValue: nextCatcherId ?? null,
+        timestamp,
+      });
+    }
+    if (nextFielderId !== previousFielderId) {
+      editHistory.push({
+        field: 'runnerAttribution.fielderId',
+        oldValue: previousFielderId ?? null,
+        newValue: nextFielderId ?? null,
+        timestamp,
+      });
+    }
+    if (nextFielderPosition !== previousFielderPosition) {
+      editHistory.push({
+        field: 'runnerAttribution.fielderPosition',
+        oldValue: previousFielderPosition ?? null,
+        newValue: nextFielderPosition ?? null,
         timestamp,
       });
     }
@@ -4683,16 +4756,35 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       ...existing,
       version: (existing.version ?? 1) + 1,
       editHistory: [...(existing.editHistory || []), ...editHistory],
-      wildPitchOrPassedBall: {
-        ...existing.wildPitchOrPassedBall,
+      runnerAttribution: {
+        ...existing.runnerAttribution,
         pitcherId: nextPitcherId,
+        pitcherName: nextPitcherId
+          ? (updates.pitcherName || existing.runnerAttribution?.pitcherName || resolvePlayerNameForId(nextPitcherId))
+          : undefined,
         catcherId: nextCatcherId,
+        catcherName: nextCatcherId
+          ? (updates.catcherName || existing.runnerAttribution?.catcherName || resolvePlayerNameForId(nextCatcherId))
+          : undefined,
+        fielderId: nextFielderId,
+        fielderName: nextFielderId
+          ? (updates.fielderName || existing.runnerAttribution?.fielderName || resolvePlayerNameForId(nextFielderId))
+          : undefined,
+        fielderPosition: nextFielderPosition,
       },
+      wildPitchOrPassedBall: existing.wildPitchOrPassedBall
+        ? {
+            ...existing.wildPitchOrPassedBall,
+            pitcherId: nextPitcherId || existing.wildPitchOrPassedBall.pitcherId,
+            catcherId: nextCatcherId,
+          }
+        : undefined,
     };
 
     await updateBetweenPlayEvent(eventId, {
       version: nextEvent.version,
       editHistory,
+      runnerAttribution: nextEvent.runnerAttribution,
       wildPitchOrPassedBall: nextEvent.wildPitchOrPassedBall,
     });
 
@@ -4716,6 +4808,9 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     }
     if (nextCatcherId) {
       registerIdentityForSide(nextCatcherId, updates.catcherName || resolvePlayerNameForId(nextCatcherId), teamSide);
+    }
+    if (nextFielderId) {
+      registerIdentityForSide(nextFielderId, updates.fielderName || resolvePlayerNameForId(nextFielderId), teamSide);
     }
 
     return nextEvent;
