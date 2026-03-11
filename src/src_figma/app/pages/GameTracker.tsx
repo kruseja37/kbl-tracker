@@ -5,7 +5,7 @@ import { DndProvider } from "react-dnd";
 import { HTML5Backend } from "react-dnd-html5-backend";
 // REMOVED: BUG-009 - BaserunnerDragDrop was a placeholder that did nothing
 // import { BaserunnerDragDrop, type RunnerMoveData as LegacyRunnerMoveData } from "@/app/components/BaserunnerDragDrop";
-import { EnhancedInteractiveField, type PlayData, type SpecialEventData } from "@/app/components/EnhancedInteractiveField";
+import { type PlayData, type SpecialEventData } from "@/app/components/EnhancedInteractiveField";
 import { type RunnerMoveData } from "@/app/components/RunnerDragDrop";
 import { RunnerPopover, type RunnerBase } from "@/app/components/RunnerPopover";
 import { FielderPopover, type FielderInfo, type BenchPlayerInfo } from "@/app/components/FielderPopover";
@@ -20,6 +20,7 @@ import { EnrichmentPanel, PITCH_TYPES, type EnrichmentUpdate } from "@/app/compo
 import { RunnerOutcomesDisplay } from "@/app/components/RunnerOutcomesDisplay";
 import { HistoricalEventEditor } from "@/app/components/HistoricalEventEditor";
 import { LiveRunnerAttributionPanel } from "@/app/components/LiveRunnerAttributionPanel";
+import { GameDiamond } from "@/app/components/GameDiamond";
 import { InjuryPrompt, type InjuryResult, type MojoResult } from "@/app/components/InjuryPrompt";
 import {
   getAtBatEvent,
@@ -124,14 +125,6 @@ interface _DeprecatedGameState {
   bases: { first: boolean; second: boolean; third: boolean };
   currentBatter: string;
   currentPitcher: string;
-}
-
-interface FieldPosition {
-  name: string;
-  position: string;
-  number: string;
-  svgX: number;
-  svgY: number;
 }
 
 interface PendingErrorOnAdvanceAttribution {
@@ -1165,21 +1158,22 @@ export function GameTracker() {
   };
 
   // Build field positions from fielding team's lineup (first 9 players with valid positions)
-  const fieldPositions: FieldPosition[] = fieldingTeamPlayers
-    .filter(player => player.position && positionMap[player.position])
-    .slice(0, 9)
-    .map(player => {
-      const posData = positionMap[player.position!];
-      // Extract last name for display (e.g., "J. MARTINEZ" -> "MARTINEZ")
-      const lastName = player.name.split(' ').pop() || player.name;
-      return {
-        name: lastName.toUpperCase(),
-        position: player.position!,
-        number: posData.number,
-        svgX: posData.svgX,
-        svgY: posData.svgY,
-      };
-    });
+  const gameDiamondFielders = useMemo(() => {
+    return fieldingTeamPlayers
+      .filter((player) => player.position && positionMap[player.position])
+      .slice(0, 9)
+      .map((player) => {
+        const posData = positionMap[player.position!];
+        const lastName = player.name.split(' ').pop() || player.name;
+        return {
+          positionNumber: Number(posData.number),
+          playerId: getRosterEntityId(player, fieldingTeam),
+          fullName: player.name,
+          displayName: lastName.toUpperCase(),
+          position: player.position!,
+        };
+      });
+  }, [fieldingTeam, fieldingTeamPlayers, getRosterEntityId]);
 
   // Get current pitcher numbers
   const awayPitcher = awayTeamPitchers.find(p => p.isActive);
@@ -5344,42 +5338,20 @@ export function GameTracker() {
 
         {/* ZONE 2: Diamond — center (D-9: scoreboard moved to FenwayBoard left panel) */}
         <div style={{ gridColumn: '2', gridRow: '1' }} className="bg-[#6B9462] relative overflow-hidden">
-          <EnhancedInteractiveField
-            gameSituation={{
-              outs: gameState.outs,
-              bases: gameState.bases,
-              inning: gameState.inning,
-              isTop: gameState.isTop,
-            }}
-            fieldPositions={fieldPositions}
-            onPlayComplete={handleEnhancedPlayComplete}
-            onSpecialEvent={handleSpecialEvent}
-            onRunnerMove={handleEnhancedRunnerMove}
-            onBatchRunnerMove={handleBatchRunnerMove}
+          <GameDiamond
+            mode={enrichingEntry || selectedPlayLogEntry?.eventType === 'at_bat' ? 'enhancement' : 'info'}
+            bases={gameState.bases}
+            runnerNames={runnerNames}
+            currentBatterName={currentBatterDisplayName}
+            fielders={gameDiamondFielders}
             fielderBorderColors={[fielderColor1, fielderColor2]}
             batterBackgroundColor={battingTeamColors.primary}
             batterBorderColor={battingTeamColors.secondary}
-            playerNames={{
-              1: fieldPositions.find(fp => fp.number === '1')?.name || 'P',
-              2: fieldPositions.find(fp => fp.number === '2')?.name || 'C',
-              3: fieldPositions.find(fp => fp.number === '3')?.name || '1B',
-              4: fieldPositions.find(fp => fp.number === '4')?.name || '2B',
-              5: fieldPositions.find(fp => fp.number === '5')?.name || '3B',
-              6: fieldPositions.find(fp => fp.number === '6')?.name || 'SS',
-              7: fieldPositions.find(fp => fp.number === '7')?.name || 'LF',
-              8: fieldPositions.find(fp => fp.number === '8')?.name || 'CF',
-              9: fieldPositions.find(fp => fp.number === '9')?.name || 'RF',
-            }}
-            runnerNames={runnerNames}
-            currentBatterName={currentBatterDisplayName}
-            currentBatterId={gameState.currentBatterId}
-            currentBatterRecordedName={resolvedCurrentBatterName}
             zoomLevel={fieldZoomLevel}
             onRunnerTap={handleRunnerTap}
             onFielderTap={handleFielderTap}
             onBatterTap={handleBatterTap}
-            onFieldTap={(coord) => handleMainFieldLocationPick(coord)}
-            hideActionSelector={true}
+            onFieldTap={handleMainFieldLocationPick}
           />
 
           {/* Runner Popover — tap runner on diamond → action menu (§5.1) */}

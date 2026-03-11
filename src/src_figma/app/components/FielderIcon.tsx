@@ -32,6 +32,8 @@ export interface FielderData {
   positionNumber: number;
   name: string;
   playerId?: string;
+  position?: string;
+  fwar?: number;
 }
 
 export interface FielderIconProps {
@@ -108,7 +110,10 @@ export function FielderIcon({
   );
 
   // Get position label
-  const positionLabel = defaultPosition?.label || `P${fielder.positionNumber}`;
+  const positionLabel = fielder.position || defaultPosition?.label || `P${fielder.positionNumber}`;
+  const fwarLabel = typeof fielder.fwar === 'number'
+    ? `${fielder.fwar >= 0 ? fielder.fwar.toFixed(1) : `-${Math.abs(fielder.fwar).toFixed(1)}`}`
+    : null;
 
   // Determine background color based on state
   let bgColor = '#6B9462'; // Default green
@@ -186,7 +191,7 @@ export function FielderIcon({
           {fielder.name}
         </div>
 
-        {/* Position and number */}
+        {/* Position and season fielding value */}
         <div
           style={{
             color: sequenceNumber || isErrorMode ? 'white' : '#E8E8D8',
@@ -197,7 +202,7 @@ export function FielderIcon({
             textAlign: 'center',
           }}
         >
-          {positionLabel} • {fielder.positionNumber}
+          {fwarLabel ? `${positionLabel} · ${fwarLabel}` : positionLabel}
         </div>
 
         {/* Sequence badge */}
