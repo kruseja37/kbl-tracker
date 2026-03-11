@@ -14,7 +14,7 @@
 // WAR Calculators
 import { calculateBWAR } from '../../../engines/bwarCalculator';
 import { calculatePWAR, createDefaultPitchingContext } from '../../../engines/pwarCalculator';
-import { calculateFWARFromPersistedFieldingSet, calculateFWARFromStats, type Position } from '../../../engines/fwarCalculator';
+import { calculatePreferredFWARFromPersistedFieldingSet, type Position } from '../../../engines/fwarCalculator';
 import { calculateRWARSimplified } from '../../../engines/rwarCalculator';
 
 // Types
@@ -233,27 +233,22 @@ export async function calculateAndPersistSeasonWAR(
     const position = normalizePosition(posStr);
     if (fielding && fielding.games > 0) {
       try {
-        fwarResult = calculateFWARFromPersistedFieldingSet(
+        fwarResult = calculatePreferredFWARFromPersistedFieldingSet(
           scopedFieldingEvents,
           batting.playerId,
           position,
           fielding.games,
           seasonGames,
-          fielding.teamId
-        );
-        if (!fwarResult) {
-          fwarResult = calculateFWARFromStats(
-            {
+          {
+            teamId: fielding.teamId,
+            fallbackStats: {
               putouts: fielding.putouts,
               assists: fielding.assists,
               errors: fielding.errors,
               doublePlays: fielding.doublePlays,
             },
-            position,
-            fielding.games,
-            seasonGames
-          );
-        }
+          }
+        );
       } catch (e) {
         console.warn(`[WAR] fWAR calc failed for ${batting.playerName}:`, e);
       }

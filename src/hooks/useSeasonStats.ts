@@ -25,7 +25,7 @@ import {
 // WAR calculator imports
 import { calculateBWARSimplified } from '../engines/bwarCalculator';
 import { calculatePWARSimplified, type PitchingStatsForWAR } from '../engines/pwarCalculator';
-import { calculateFWARFromPersistedFieldingSet, calculateFWARFromStats, type Position } from '../engines/fwarCalculator';
+import { calculatePreferredFWARFromPersistedFieldingSet, type Position } from '../engines/fwarCalculator';
 import { calculateRWARSimplified, type BaserunningStats } from '../engines/rwarCalculator';
 import type { BattingStatsForWAR } from '../types/war';
 import type { CompetitionType } from '../utils/gameStorage';
@@ -358,28 +358,23 @@ export function useSeasonStats(seasonId: string = DEFAULT_SEASON_ID): UseSeasonS
         if (stats.games === 0) return null;
 
         const position = getPrimaryPosition(stats);
-        let result = calculateFWARFromPersistedFieldingSet(
+        const result = calculatePreferredFWARFromPersistedFieldingSet(
           scopedFieldingEvents,
           stats.playerId,
           position,
           stats.games,
           metadata?.totalGames ?? DEFAULT_TOTAL_GAMES,
-          stats.teamId
-        );
-
-        if (!result) {
-          result = calculateFWARFromStats(
-            {
+          {
+            teamId: stats.teamId,
+            fallbackStats: {
               putouts: stats.putouts,
               assists: stats.assists,
               errors: stats.errors,
               doublePlays: stats.doublePlays,
             },
-            position,
-            stats.games,
-            metadata?.totalGames ?? DEFAULT_TOTAL_GAMES
-          );
-        }
+          }
+        );
+        if (!result) return null;
 
         return [stats.playerId, result.fWAR] as const;
       }));

@@ -744,6 +744,51 @@ export interface ScopedFWARCalculationOptions {
   teamId?: string;
 }
 
+export interface FWARFallbackStats {
+  putouts: number;
+  assists: number;
+  errors: number;
+  doublePlays: number;
+}
+
+export interface PreferredPersistedFWAROptions {
+  teamId?: string;
+  fallbackStats?: FWARFallbackStats;
+}
+
+export function calculatePreferredFWARFromPersistedFieldingSet(
+  persistedEvents: PersistedFieldingEvent[],
+  playerId: string,
+  position: Position,
+  gamesPlayed: number,
+  seasonGames: number,
+  options: PreferredPersistedFWAROptions = {}
+): FWARResult | null {
+  const persistedResult = calculateFWARFromPersistedFieldingSet(
+    persistedEvents,
+    playerId,
+    position,
+    gamesPlayed,
+    seasonGames,
+    options.teamId
+  );
+
+  if (persistedResult) {
+    return persistedResult;
+  }
+
+  if (options.fallbackStats) {
+    return calculateFWARFromStats(
+      options.fallbackStats,
+      position,
+      gamesPlayed,
+      seasonGames
+    );
+  }
+
+  return null;
+}
+
 export async function calculateFWARFromScopedEvents(
   playerId: string,
   position: Position,

@@ -28,8 +28,7 @@ import {
   type PWARResult,
 } from '../engines/pwarCalculator';
 import {
-  calculateFWARFromPersistedFieldingSet,
-  calculateFWARFromStats,
+  calculatePreferredFWARFromPersistedFieldingSet,
   type FWARResult,
   type Position,
 } from '../engines/fwarCalculator';
@@ -363,28 +362,23 @@ export function useWARCalculations(): UseWARCalculationsResult {
         if (stats.games === 0) return null;
 
         const position = getPrimaryPosition(stats);
-        let result = calculateFWARFromPersistedFieldingSet(
+        const result = calculatePreferredFWARFromPersistedFieldingSet(
           scopedFieldingEvents,
           stats.playerId,
           position,
           stats.games,
           activeSeason.totalGames,
-          stats.teamId
-        );
-
-        if (!result) {
-          result = calculateFWARFromStats(
-            {
+          {
+            teamId: stats.teamId,
+            fallbackStats: {
               putouts: stats.putouts,
               assists: stats.assists,
               errors: stats.errors,
               doublePlays: stats.doublePlays,
             },
-            position,
-            stats.games,
-            activeSeason.totalGames
-          );
-        }
+          }
+        );
+        if (!result) return null;
 
         return {
           playerId: stats.playerId,

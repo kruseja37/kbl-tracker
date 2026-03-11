@@ -1,5 +1,6 @@
 import { describe, expect, test, vi, beforeEach } from 'vitest';
 import {
+  calculatePreferredFWARFromPersistedFieldingSet,
   calculateFWARFromScopedEvents,
   calculateSeasonFWAR,
   convertPersistedEventsToCalculator,
@@ -141,5 +142,60 @@ describe('calculateFWARFromScopedEvents', () => {
     });
 
     expect(result).toBeNull();
+  });
+
+  test('prefers persisted events and only falls back to counting stats when none match', () => {
+    const stablePlayerEvent = makePersistedFieldingEvent({
+      fieldingEventId: 'stable-2',
+      playerId: 'player-ss',
+      teamId: 'team-a',
+      position: 'SS',
+      playType: 'assist',
+    });
+
+    const preferred = calculatePreferredFWARFromPersistedFieldingSet(
+      [stablePlayerEvent],
+      'player-ss',
+      'SS',
+      12,
+      48,
+      {
+        teamId: 'team-a',
+        fallbackStats: {
+          putouts: 99,
+          assists: 99,
+          errors: 0,
+          doublePlays: 99,
+        },
+      }
+    );
+
+    const expected = calculateSeasonFWAR(
+      convertPersistedEventsToCalculator([stablePlayerEvent]),
+      'SS',
+      12,
+      48
+    );
+
+    expect(preferred?.fWAR).toBeCloseTo(expected.fWAR, 5);
+
+    const fallback = calculatePreferredFWARFromPersistedFieldingSet(
+      [],
+      'player-ss',
+      'SS',
+      12,
+      48,
+      {
+        fallbackStats: {
+          putouts: 24,
+          assists: 30,
+          errors: 2,
+          doublePlays: 7,
+        },
+      }
+    );
+
+    expect(fallback).not.toBeNull();
+    expect(fallback?.starPlayRuns).toBe(0);
   });
 });
