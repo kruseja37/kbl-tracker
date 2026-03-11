@@ -9,7 +9,7 @@
  * based on real baseball gameplay intuition.
  */
 
-import type { PlayData } from './EnhancedInteractiveField';
+import type { PlayData } from '../utils/gameTrackerFieldTypes';
 
 // ============================================
 // TYPES

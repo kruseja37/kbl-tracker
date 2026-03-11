@@ -1,7 +1,7 @@
 /**
  * Fielding Event Extractor
  *
- * Maps PlayData (from EnhancedInteractiveField drag-and-drop) to
+ * Maps canonical GameTracker PlayData to
  * FieldingEvent[] (for eventLog.ts / IndexedDB persistence).
  *
  * This bridges the gap between the UI capture layer and the storage layer,
@@ -152,7 +152,7 @@ function resolveDefenderIdentity(
 /**
  * Extract fielding events from a completed play.
  *
- * @param playData - The play data from EnhancedInteractiveField
+ * @param playData - Canonical GameTracker play data
  * @param context - Game context (gameId, defensive team, canonical at-bat id/index, optional defender identity map)
  * @returns Array of FieldingEvent objects to be persisted via logFieldingEvent()
  */

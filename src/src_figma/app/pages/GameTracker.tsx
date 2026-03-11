@@ -3022,7 +3022,7 @@ export function GameTracker() {
     console.log(`[MAJ-03] User dismissed detection: ${detection.eventType}`);
   }, []);
 
-  // Handle special events (Web Gem, Robbery, TOOTBLAN, etc.) from EnhancedInteractiveField
+  // Handle special events (Web Gem, Robbery, TOOTBLAN, etc.) from the canonical tracker modifier flow
   // Phase 5B: Extended to handle all contextual button events
   const handleSpecialEvent = useCallback(async (event: SpecialEventData) => {
     console.log("Special event:", event);
@@ -4691,7 +4691,7 @@ export function GameTracker() {
               <div className="absolute bottom-full left-2 right-2 mb-2 bg-[#1a1a1a]/95 border-[3px] border-[#C4A853] p-2 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.6)] z-30">
                 <div className="text-[8px] text-[#C4A853] font-bold tracking-[0.12em] mb-2">MODIFIERS + ENHANCEMENTS</div>
                 <div className="grid grid-cols-4 gap-1">
-                  {/* D-14: WG removed — contextual WEB GEM button lives in EnhancedInteractiveField */}
+                  {/* D-14: WG removed — contextual WEB GEM entry is deferred with the remaining field replacement work */}
                   {[
                     ['7+', 'SEVEN_PLUS_PITCH_AB'],
                     ['ROB', 'ROBBERY'],
