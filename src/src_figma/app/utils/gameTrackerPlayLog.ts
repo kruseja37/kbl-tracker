@@ -48,6 +48,30 @@ const getEditorType = (eventType: PlayLogEventType): PlayLogEditorType => {
 const getVisibility = (eventType: PlayLogEventType): 'default' | 'system' =>
   eventType === 'manager_moment' || eventType === 'pitch_count_update' ? 'system' : 'default';
 
+const buildPlayerStateDescription = (event: BetweenPlayEvent): string => {
+  const change = event.playerStateChange;
+  if (!change) return '';
+
+  const transition = `${change.previousValue ?? '?'} -> ${change.newValue ?? '?'}`;
+  const causedBy = change.causedByPlayerName ? ` by ${change.causedByPlayerName}` : '';
+
+  if (change.sourceEventType === 'KILLED_PITCHER') {
+    const stayedInText = typeof change.stayedIn === 'boolean'
+      ? change.stayedIn ? ' (stayed in)' : ' (left game)'
+      : '';
+    if (event.type === 'injury') {
+      return `KILLED PITCHER${causedBy}${stayedInText}`;
+    }
+    return `${transition} from KILLED PITCHER${causedBy}${stayedInText}`;
+  }
+
+  if (change.sourceEventType === 'NUT_SHOT') {
+    return `${transition} from NUT SHOT${causedBy}`;
+  }
+
+  return transition;
+};
+
 const createBaseEntry = (
   overrides: Partial<PlayLogEntry> & Pick<PlayLogEntry, 'id' | 'eventType' | 'inningLabel' | 'batterName' | 'result' | 'timestamp'>,
 ): PlayLogEntry => ({
@@ -224,7 +248,7 @@ export function mapBetweenPlayEventToPlayLogEntry(
         inningLabel,
         batterName: actorName(event.playerStateChange?.playerId, event.playerStateChange?.playerName),
         result: 'MOJO',
-        description: `${event.playerStateChange?.previousValue ?? '?'} -> ${event.playerStateChange?.newValue ?? '?'}`,
+        description: buildPlayerStateDescription(event),
         timestamp: event.timestamp,
       });
     case 'fitness_change':
@@ -235,7 +259,7 @@ export function mapBetweenPlayEventToPlayLogEntry(
         inningLabel,
         batterName: actorName(event.playerStateChange?.playerId, event.playerStateChange?.playerName),
         result: 'FIT',
-        description: `${event.playerStateChange?.previousValue ?? '?'} -> ${event.playerStateChange?.newValue ?? '?'}`,
+        description: buildPlayerStateDescription(event),
         timestamp: event.timestamp,
       });
     case 'injury':
@@ -246,7 +270,7 @@ export function mapBetweenPlayEventToPlayLogEntry(
         inningLabel,
         batterName: actorName(event.playerStateChange?.playerId, event.playerStateChange?.playerName),
         result: 'INJ',
-        description: event.playerStateChange?.reason || 'Injury recorded',
+        description: buildPlayerStateDescription(event) || event.playerStateChange?.reason || 'Injury recorded',
         timestamp: event.timestamp,
       });
     case 'manager_moment':

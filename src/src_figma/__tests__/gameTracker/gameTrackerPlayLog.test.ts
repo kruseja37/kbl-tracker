@@ -158,4 +158,53 @@ describe('gameTrackerPlayLog', () => {
       description: '0 -> 1',
     });
   });
+
+  test('surfaces killed-pitcher context rows with causing batter detail', () => {
+    const injuryEntry = mapBetweenPlayEventToPlayLogEntry(createBetweenPlayEvent({
+      eventId: 'game-1_bp_ctx_2',
+      eventIndex: 1.004,
+      timestamp: 104,
+      type: 'injury',
+      runnerAction: undefined,
+      stolenBase: undefined,
+      playerStateChange: {
+        playerId: 'pitcher-1',
+        playerName: 'Anderson',
+        stateType: 'injury',
+        previousValue: 'FIT',
+        newValue: 'WEAK',
+        sourceEventType: 'KILLED_PITCHER',
+        causedByPlayerName: 'Johnson',
+        stayedIn: false,
+      },
+    }));
+
+    const fitnessEntry = mapBetweenPlayEventToPlayLogEntry(createBetweenPlayEvent({
+      eventId: 'game-1_bp_ctx_3',
+      eventIndex: 1.005,
+      timestamp: 105,
+      type: 'fitness_change',
+      runnerAction: undefined,
+      stolenBase: undefined,
+      playerStateChange: {
+        playerId: 'pitcher-1',
+        playerName: 'Anderson',
+        stateType: 'fitness',
+        previousValue: 'FIT',
+        newValue: 'WEAK',
+        sourceEventType: 'KILLED_PITCHER',
+        causedByPlayerName: 'Johnson',
+        stayedIn: false,
+      },
+    }));
+
+    expect(injuryEntry).toMatchObject({
+      eventType: 'injury',
+      description: 'KILLED PITCHER by Johnson (left game)',
+    });
+    expect(fitnessEntry).toMatchObject({
+      eventType: 'fitness_change',
+      description: 'FIT -> WEAK from KILLED PITCHER by Johnson (left game)',
+    });
+  });
 });
