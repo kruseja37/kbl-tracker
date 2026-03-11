@@ -8,10 +8,12 @@ const {
   mockCreateGameHeader,
   mockCompleteGame,
   mockGetGameEvents,
+  mockGetBetweenPlayEvent,
   mockGetBetweenPlayEvents,
   mockMarkGameAggregated,
   mockGetGameFieldingEvents,
   mockGetGameHeader,
+  mockUpdateBetweenPlayEvent,
   mockArchiveCompletedGame,
   mockSaveCurrentGame,
   mockLoadCurrentGame,
@@ -26,10 +28,12 @@ const {
   mockCreateGameHeader: vi.fn().mockResolvedValue(undefined),
   mockCompleteGame: vi.fn().mockResolvedValue(undefined),
   mockGetGameEvents: vi.fn().mockResolvedValue([]),
+  mockGetBetweenPlayEvent: vi.fn().mockResolvedValue(null),
   mockGetBetweenPlayEvents: vi.fn().mockResolvedValue([]),
   mockMarkGameAggregated: vi.fn().mockResolvedValue(undefined),
   mockGetGameFieldingEvents: vi.fn().mockResolvedValue([]),
   mockGetGameHeader: vi.fn().mockResolvedValue({ aggregated: false }),
+  mockUpdateBetweenPlayEvent: vi.fn().mockResolvedValue(undefined),
   mockArchiveCompletedGame: vi.fn().mockResolvedValue(undefined),
   mockSaveCurrentGame: vi.fn().mockResolvedValue(undefined),
   mockLoadCurrentGame: vi.fn().mockResolvedValue(null),
@@ -48,10 +52,12 @@ vi.mock('../../../utils/eventLog', () => ({
   createGameHeader: mockCreateGameHeader,
   completeGame: mockCompleteGame,
   getGameEvents: mockGetGameEvents,
+  getBetweenPlayEvent: mockGetBetweenPlayEvent,
   getBetweenPlayEvents: mockGetBetweenPlayEvents,
   markGameAggregated: mockMarkGameAggregated,
   getGameFieldingEvents: mockGetGameFieldingEvents,
   getGameHeader: mockGetGameHeader,
+  updateBetweenPlayEvent: mockUpdateBetweenPlayEvent,
 }));
 
 vi.mock('../../utils/gameStorage', () => ({
@@ -109,6 +115,7 @@ describe('useGameState between-play ledger', () => {
     vi.useFakeTimers();
     vi.clearAllMocks();
     mockGetGameEvents.mockResolvedValue([]);
+    mockGetBetweenPlayEvent.mockResolvedValue(null);
     mockGetBetweenPlayEvents.mockResolvedValue([]);
     mockGetGameFieldingEvents.mockResolvedValue([]);
     mockGetGameHeader.mockResolvedValue({ aggregated: false });
@@ -388,5 +395,59 @@ describe('useGameState between-play ledger', () => {
         context: 'High leverage spot',
       }),
     }));
+  });
+
+  test('reassigns wild pitch attribution without replaying game state', async () => {
+    const { result } = renderHook(() => useGameState());
+    await initializeGame(result);
+
+    await act(async () => {
+      await result.current.commitPlateAppearance({ type: 'hit', hitType: '1B', rbi: 0 });
+      await result.current.recordEvent('WP', 'away-batter-1', {
+        runnerId: 'away-batter-1',
+        runnerName: 'Away Batter 1',
+        fromBase: 'first',
+        toBase: 'second',
+        outcome: 'safe',
+        pitcherId: 'home-sp',
+        pitcherName: 'Home Starter',
+      });
+    });
+
+    mockGetBetweenPlayEvent.mockResolvedValue({
+      eventId: 'bp-wp-1',
+      gameId: 'game-between-play',
+      timestamp: 123,
+      eventIndex: 1.001,
+      type: 'wild_pitch',
+      version: 1,
+      gameState: {
+        inning: 1,
+        halfInning: 'TOP',
+        outs: 0,
+        score: { away: 0, home: 0 },
+      },
+      wildPitchOrPassedBall: {
+        wpOrPb: 'wild_pitch',
+        pitcherId: 'home-sp',
+        catcherId: 'home-batter-1',
+        runnersAdvanced: [{ runnerId: 'away-batter-1', fromBase: 1, toBase: 2 }],
+      },
+    });
+
+    await act(async () => {
+      await result.current.reassignRunnerEventAttribution('bp-wp-1', {
+        pitcherId: 'home-rp',
+        pitcherName: 'Home Reliever',
+      });
+    });
+
+    expect(mockUpdateBetweenPlayEvent).toHaveBeenCalledWith('bp-wp-1', expect.objectContaining({
+      wildPitchOrPassedBall: expect.objectContaining({
+        pitcherId: 'home-rp',
+      }),
+    }));
+    expect(result.current.pitcherStats.get('home-sp')?.wildPitches).toBe(0);
+    expect(result.current.pitcherStats.get('home-rp')?.wildPitches).toBe(1);
   });
 });

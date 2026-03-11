@@ -15,10 +15,12 @@ import {
   createGameHeader,
   completeGame,
   getGameEvents,
+  getBetweenPlayEvent,
   getBetweenPlayEvents,
   markGameAggregated,
   getGameFieldingEvents,
   getGameHeader,
+  updateBetweenPlayEvent,
   type AtBatEvent,
   type BetweenPlayEvent,
   type BetweenPlayEventType,
@@ -214,6 +216,10 @@ export interface BetweenPlayEventDetails {
   fielderPosition?: number;
   fielderId?: string;
   fielderName?: string;
+  pitcherId?: string;
+  pitcherName?: string;
+  catcherId?: string;
+  catcherName?: string;
 }
 
 // Pitch count prompt types per PITCH_COUNT_TRACKING_SPEC.md
@@ -251,6 +257,15 @@ export interface UseGameStateReturn {
     reason?: string,
     options?: PlayerStateChangeOptions,
   ) => Promise<BetweenPlayEvent>;
+  reassignRunnerEventAttribution: (
+    eventId: string,
+    updates: {
+      pitcherId?: string;
+      pitcherName?: string;
+      catcherId?: string;
+      catcherName?: string;
+    },
+  ) => Promise<BetweenPlayEvent | null>;
   recordManagerMoment: (
     leverageIndex: number,
     decisionType: string,
@@ -4568,7 +4583,8 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         type: bpType,
         wildPitchOrPassedBall: {
           wpOrPb: bpType,
-          pitcherId: gameState.currentPitcherId,
+          pitcherId: details?.pitcherId || gameState.currentPitcherId,
+          catcherId: details?.catcherId,
           runnersAdvanced: [{
             runnerId: resolvedRunnerId,
             fromBase: fromBaseNumber,
@@ -4620,6 +4636,90 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       },
     });
   }, [persistBetweenPlayEvent]);
+
+  const reassignRunnerEventAttribution = useCallback(async (
+    eventId: string,
+    updates: {
+      pitcherId?: string;
+      pitcherName?: string;
+      catcherId?: string;
+      catcherName?: string;
+    },
+  ): Promise<BetweenPlayEvent | null> => {
+    const existing = await getBetweenPlayEvent(eventId);
+    if (!existing?.wildPitchOrPassedBall) {
+      return null;
+    }
+
+    const previousPitcherId = existing.wildPitchOrPassedBall.pitcherId;
+    const nextPitcherId = updates.pitcherId || previousPitcherId;
+    const previousCatcherId = existing.wildPitchOrPassedBall.catcherId;
+    const nextCatcherId = updates.catcherId ?? previousCatcherId;
+
+    const timestamp = Date.now();
+    const editHistory: NonNullable<BetweenPlayEvent['editHistory']> = [];
+    if (nextPitcherId !== previousPitcherId) {
+      editHistory.push({
+        field: 'wildPitchOrPassedBall.pitcherId',
+        oldValue: previousPitcherId,
+        newValue: nextPitcherId,
+        timestamp,
+      });
+    }
+    if (nextCatcherId !== previousCatcherId) {
+      editHistory.push({
+        field: 'wildPitchOrPassedBall.catcherId',
+        oldValue: previousCatcherId ?? null,
+        newValue: nextCatcherId ?? null,
+        timestamp,
+      });
+    }
+
+    if (editHistory.length === 0) {
+      return existing;
+    }
+
+    const nextEvent: BetweenPlayEvent = {
+      ...existing,
+      version: (existing.version ?? 1) + 1,
+      editHistory: [...(existing.editHistory || []), ...editHistory],
+      wildPitchOrPassedBall: {
+        ...existing.wildPitchOrPassedBall,
+        pitcherId: nextPitcherId,
+        catcherId: nextCatcherId,
+      },
+    };
+
+    await updateBetweenPlayEvent(eventId, {
+      version: nextEvent.version,
+      editHistory,
+      wildPitchOrPassedBall: nextEvent.wildPitchOrPassedBall,
+    });
+
+    if (existing.type === 'wild_pitch' && nextPitcherId !== previousPitcherId) {
+      setPitcherStats(prev => {
+        const next = new Map(prev);
+        const previousStats = { ...(next.get(previousPitcherId) || createEmptyPitcherStats()) };
+        previousStats.wildPitches = Math.max(0, previousStats.wildPitches - 1);
+        next.set(previousPitcherId, previousStats);
+
+        const nextStats = { ...(next.get(nextPitcherId) || createEmptyPitcherStats()) };
+        nextStats.wildPitches += 1;
+        next.set(nextPitcherId, nextStats);
+        return next;
+      });
+    }
+
+    const teamSide = existing.gameState?.halfInning === 'TOP' ? 'home' : 'away';
+    if (nextPitcherId) {
+      registerIdentityForSide(nextPitcherId, updates.pitcherName || resolvePlayerNameForId(nextPitcherId), teamSide);
+    }
+    if (nextCatcherId) {
+      registerIdentityForSide(nextCatcherId, updates.catcherName || resolvePlayerNameForId(nextCatcherId), teamSide);
+    }
+
+    return nextEvent;
+  }, [registerIdentityForSide, resolvePlayerNameForId]);
 
   const recordManagerMoment = useCallback(async (
     leverageIndex: number,
@@ -6127,6 +6227,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     commitPlateAppearance,
     recordEvent,
     recordPlayerStateChange,
+    reassignRunnerEventAttribution,
     recordManagerMoment,
     advanceRunner,
     advanceRunnersBatch,

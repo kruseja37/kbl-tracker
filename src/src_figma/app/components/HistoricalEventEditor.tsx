@@ -10,6 +10,8 @@ interface HistoricalEventEditorProps {
   saving?: boolean;
   onReturnToLive: () => void;
   onRunnerCaughtByChange?: (caughtBy: number | null) => void;
+  onRunnerPitcherChange?: (pitcherId: string) => void;
+  onRunnerCatcherChange?: (catcherId: string) => void;
   onLineupPositionChange?: (position: string) => void;
   onSubstitutionPlayerChange?: (field: 'outPlayer' | 'inPlayer', playerId: string) => void;
   onSubstitutionPositionChange?: (position: string) => void;
@@ -21,6 +23,7 @@ interface HistoricalEventEditorProps {
   onPitchCountValueChange?: (pitchCount: number) => void;
   lineupOptions?: Array<{ id: string; label: string }>;
   pitcherOptions?: Array<{ id: string; label: string }>;
+  catcherOptions?: Array<{ id: string; label: string }>;
   contextValueOptions?: Array<{ value: string; label: string }>;
 }
 
@@ -50,6 +53,8 @@ export function HistoricalEventEditor({
   saving = false,
   onReturnToLive,
   onRunnerCaughtByChange,
+  onRunnerPitcherChange,
+  onRunnerCatcherChange,
   onLineupPositionChange,
   onSubstitutionPlayerChange,
   onSubstitutionPositionChange,
@@ -61,6 +66,7 @@ export function HistoricalEventEditor({
   onPitchCountValueChange,
   lineupOptions = [],
   pitcherOptions = [],
+  catcherOptions = [],
   contextValueOptions = [],
 }: HistoricalEventEditorProps) {
   const title = entry.editorType === 'runner'
@@ -71,6 +77,7 @@ export function HistoricalEventEditor({
 
   const runnerAction = event?.runnerAction;
   const canEditCaughtBy = !!event?.stolenBase && (event.type === 'stolen_base' || event.type === 'caught_stealing');
+  const canEditBatteryAttribution = event?.type === 'wild_pitch' || event?.type === 'passed_ball';
   const isLinkedKilledPitcherFitness = event?.type === 'fitness_change'
     && event.playerStateChange?.sourceEventType === 'KILLED_PITCHER'
     && !!event.linkedEventId;
@@ -135,9 +142,49 @@ export function HistoricalEventEditor({
                       {saving ? 'Saving…' : 'Editable enrichment only. Outcome stays locked.'}
                     </div>
                   </div>
-                ) : (
+                ) : !canEditBatteryAttribution ? (
                   <div className="text-[8px] text-[#88AA88]">
                     No editable enrichment fields are wired for this runner event yet.
+                  </div>
+                ) : null}
+                {canEditBatteryAttribution && event.wildPitchOrPassedBall && (
+                  <div className="space-y-2">
+                    <label className="text-[8px] text-[#88AA88] font-bold uppercase tracking-wide">
+                      Charged Pitcher
+                      <select
+                        value={event.wildPitchOrPassedBall.pitcherId}
+                        onChange={(e) => onRunnerPitcherChange?.(e.target.value)}
+                        disabled={saving || pitcherOptions.length === 0}
+                        className="mt-1 w-full bg-[#1f2937]/60 border border-[#4a6a4a] rounded px-2 py-1 text-[9px] text-[#E8E8D8]"
+                      >
+                        {pitcherOptions.map((option) => (
+                          <option key={option.id} value={option.id}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    {event.type === 'passed_ball' && (
+                      <label className="text-[8px] text-[#88AA88] font-bold uppercase tracking-wide">
+                        Charged Catcher
+                        <select
+                          value={event.wildPitchOrPassedBall.catcherId || ''}
+                          onChange={(e) => onRunnerCatcherChange?.(e.target.value)}
+                          disabled={saving || catcherOptions.length === 0}
+                          className="mt-1 w-full bg-[#1f2937]/60 border border-[#4a6a4a] rounded px-2 py-1 text-[9px] text-[#E8E8D8]"
+                        >
+                          <option value="">Unknown catcher</option>
+                          {catcherOptions.map((option) => (
+                            <option key={option.id} value={option.id}>
+                              {option.label}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    )}
+                    <div className="text-[7px] text-[#88AA88]">
+                      {saving ? 'Saving…' : 'Attribution edits reassign credit without replaying the game state.'}
+                    </div>
                   </div>
                 )}
               </>

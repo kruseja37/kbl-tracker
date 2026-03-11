@@ -168,4 +168,86 @@ describe('HistoricalEventEditor', () => {
     expect(screen.getByDisplayValue('27')).toBeInTheDocument();
     expect(screen.getByText('Pitch-count corrections version this row in place without replay.')).toBeInTheDocument();
   });
+
+  test('renders battery attribution controls for wild pitch and passed ball rows', () => {
+    const { rerender } = render(
+      <HistoricalEventEditor
+        {...baseProps}
+        entry={createEntry({
+          eventType: 'wild_pitch',
+          editorType: 'runner',
+          result: 'WP',
+          batterName: 'Garcia',
+        })}
+        event={createEvent({
+          type: 'wild_pitch',
+          playerStateChange: undefined,
+          runnerAction: {
+            runnerId: 'runner-1',
+            runnerName: 'Garcia',
+            fromBase: 1,
+            toBase: 2,
+            outcome: 'safe',
+            reason: 'wild_pitch',
+          },
+          wildPitchOrPassedBall: {
+            wpOrPb: 'wild_pitch',
+            pitcherId: 'pitcher-1',
+            catcherId: 'catcher-1',
+            runnersAdvanced: [{ runnerId: 'runner-1', fromBase: 1, toBase: 2 }],
+          },
+        })}
+        pitcherOptions={[
+          { id: 'pitcher-1', label: 'Pitcher One' },
+          { id: 'pitcher-2', label: 'Pitcher Two' },
+        ]}
+        onRunnerPitcherChange={vi.fn()}
+      />
+    );
+
+    expect(screen.getByText('Charged Pitcher')).toBeInTheDocument();
+    expect(screen.getByText('Attribution edits reassign credit without replaying the game state.')).toBeInTheDocument();
+
+    rerender(
+      <HistoricalEventEditor
+        {...baseProps}
+        entry={createEntry({
+          eventType: 'passed_ball',
+          editorType: 'runner',
+          result: 'PB',
+          batterName: 'Garcia',
+        })}
+        event={createEvent({
+          type: 'passed_ball',
+          playerStateChange: undefined,
+          runnerAction: {
+            runnerId: 'runner-1',
+            runnerName: 'Garcia',
+            fromBase: 1,
+            toBase: 2,
+            outcome: 'safe',
+            reason: 'passed_ball',
+          },
+          wildPitchOrPassedBall: {
+            wpOrPb: 'passed_ball',
+            pitcherId: 'pitcher-1',
+            catcherId: 'catcher-1',
+            runnersAdvanced: [{ runnerId: 'runner-1', fromBase: 1, toBase: 2 }],
+          },
+        })}
+        pitcherOptions={[
+          { id: 'pitcher-1', label: 'Pitcher One' },
+        ]}
+        catcherOptions={[
+          { id: 'catcher-1', label: 'Catcher One' },
+          { id: 'catcher-2', label: 'Catcher Two' },
+        ]}
+        onRunnerPitcherChange={vi.fn()}
+        onRunnerCatcherChange={vi.fn()}
+      />
+    );
+
+    expect(screen.getByText('Charged Catcher')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('Catcher One')).toBeInTheDocument();
+  });
 });
