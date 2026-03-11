@@ -7,8 +7,8 @@
  * This bridges the gap between the UI capture layer and the storage layer,
  * enabling fWAR calculation and season fielding stat aggregation.
  *
- * Called from GameTracker.tsx handleEnhancedPlayComplete() after each
- * ball-in-play at-bat is recorded.
+ * Called from GameTracker.tsx after each
+ * ball-in-play at-bat is recorded or edited.
  */
 
 import type { FieldingEvent, BallInPlayData } from '../../../utils/eventLog';

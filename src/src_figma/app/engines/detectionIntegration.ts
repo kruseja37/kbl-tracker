@@ -65,6 +65,32 @@ import type {
   PlayResult as LegacyPlayResult,
 } from '../../../engines/detectionFunctions';
 
+function mapFieldingPlayTypeToCatchType(
+  fieldingPlayType?: PlayData['fieldingPlayType']
+): 'DIVING_CATCH' | 'WALL_CATCH' | 'LEAPING_CATCH' | 'ROUTINE' | undefined {
+  switch (fieldingPlayType) {
+    case 'diving':
+    case 'sliding':
+    case 'missed_dive':
+      return 'DIVING_CATCH';
+    case 'leaping':
+    case 'over_shoulder':
+    case 'missed_leap':
+      return 'LEAPING_CATCH';
+    case 'wall':
+    case 'robbed_hr':
+      return 'WALL_CATCH';
+    case 'routine':
+    case 'charging':
+    case 'running':
+    case 'beat_runner':
+    case 'beat_throw':
+      return 'ROUTINE';
+    default:
+      return undefined;
+  }
+}
+
 /**
  * Convert Figma PlayData to legacy PlayResult for detection functions
  */
@@ -83,20 +109,10 @@ export function convertPlayDataToPlayResult(
         ? (playData.outType || 'GO')
         : 'GO';
 
-  // Determine catch type from location if it's a fly out
-  let catchType: 'DIVING_CATCH' | 'WALL_CATCH' | 'LEAPING_CATCH' | 'ROUTINE' | undefined;
-  if (playData.type === 'out' && playData.ballLocation) {
-    const y = playData.ballLocation.y;
-    if (y > 0.95) {
-      catchType = 'WALL_CATCH';
-    } else if (y > 0.8 && playData.playDifficulty === 'difficult') {
-      catchType = 'DIVING_CATCH';
-    } else if (playData.playDifficulty === 'difficult') {
-      catchType = 'LEAPING_CATCH';
-    } else {
-      catchType = 'ROUTINE';
-    }
-  }
+  const catchType =
+    playData.type === 'out' || playData.type === 'foul_out'
+      ? mapFieldingPlayTypeToCatchType(playData.fieldingPlayType)
+      : undefined;
 
   return {
     result: result as any,
@@ -326,11 +342,13 @@ export function runPlayDetections(
  */
 export function isSpectacularCatch(playData: PlayData): boolean {
   if (playData.type !== 'out' && playData.type !== 'foul_out') return false;
-  if (!playData.ballLocation) return false;
-
-  const y = playData.ballLocation.y;
   return (
-    y > 0.8 || // Deep outfield
+    playData.fieldingPlayType === 'diving' ||
+    playData.fieldingPlayType === 'leaping' ||
+    playData.fieldingPlayType === 'sliding' ||
+    playData.fieldingPlayType === 'wall' ||
+    playData.fieldingPlayType === 'robbed_hr' ||
+    playData.fieldingPlayType === 'over_shoulder' ||
     playData.playDifficulty === 'difficult' ||
     playData.playDifficulty === 'impossible'
   );
@@ -341,8 +359,5 @@ export function isSpectacularCatch(playData: PlayData): boolean {
  */
 export function isPotentialRobbery(playData: PlayData): boolean {
   if (playData.type !== 'out' && playData.type !== 'foul_out') return false;
-  if (!playData.ballLocation) return false;
-
-  const y = playData.ballLocation.y;
-  return y > 0.95; // At the wall
+  return playData.fieldingPlayType === 'robbed_hr' || playData.fieldingPlayType === 'wall';
 }

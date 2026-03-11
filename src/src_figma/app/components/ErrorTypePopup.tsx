@@ -3,9 +3,9 @@
  *
  * Per GAME_TRACKER_IMPLEMENTATION_ADDENDUM.md:
  * Error Flow:
- * 1. User selects "E" in BatterReachedPopup
- * 2. User taps ball location
- * 3. User taps fielder who made the error
+ * 1. User records or edits an error play
+ * 2. User taps/assigns the fielder who made the error
+ * 3. User selects the error classification
  * 4. ErrorTypePopup shows (this component)
  * 5. User selects error type → RUNNER_OUTCOMES
  *
