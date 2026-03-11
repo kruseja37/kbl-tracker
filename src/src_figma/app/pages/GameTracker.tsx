@@ -12,6 +12,7 @@ import { UndoButton, useUndoSystem, type GameSnapshot } from "@/app/components/U
 import { TeamRoster, type Player, type Pitcher } from "@/app/components/TeamRoster";
 // D-9: MiniScoreboard removed from diamond zone — scoreboard now in FenwayBoard left panel
 import { FenwayBoard } from "@/app/components/FenwayBoard";
+import { FullFenwayScoreboard } from "@/app/components/FullFenwayScoreboard";
 import { QuickBar } from "@/app/components/QuickBar";
 import { PlayLogPanel } from "@/app/components/PlayLogPanel";
 import { EnrichmentPanel, PITCH_TYPES, type AtBatModifierValue, type EnrichmentUpdate } from "@/app/components/EnrichmentPanel";
@@ -4628,15 +4629,39 @@ export function GameTracker() {
            │ outcome buttons             │ undo + end game       │      │
            └─────────────────────────────┴───────────────────────┴──────┘
            ═══════════════════════════════════════════════════════════════ */}
-      <div
-        className="h-screen bg-[#6B9462] text-white overflow-hidden"
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'minmax(248px, 300px) 1fr minmax(184px, 228px)',
-          gridTemplateRows: '1fr auto',
-          gap: '0px',
-        }}
-      >
+      <div className="flex h-screen flex-col overflow-hidden bg-[#6B9462] text-white">
+        <FullFenwayScoreboard
+          awayTeamName={awayTeamName.toUpperCase()}
+          homeTeamName={homeTeamName.toUpperCase()}
+          awayRecord={awayRecord}
+          homeRecord={homeRecord}
+          innings={scoreboard.innings}
+          awayRuns={scoreboard.away.runs}
+          homeRuns={scoreboard.home.runs}
+          awayHits={scoreboard.away.hits}
+          homeHits={scoreboard.home.hits}
+          awayErrors={scoreboard.away.errors}
+          homeErrors={scoreboard.home.errors}
+          inning={gameState.inning}
+          isTop={gameState.isTop}
+          balls={gameState.balls}
+          strikes={gameState.strikes}
+          outs={gameState.outs}
+          stadiumName={selectedStadium}
+          currentBatterName={currentBatterDisplayName}
+          gameDate={gameStartTime}
+          elapsedMinutes={elapsedMinutes}
+        />
+
+        <div
+          className="min-h-0 flex-1"
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'minmax(248px, 300px) 1fr minmax(184px, 228px)',
+            gridTemplateRows: '1fr auto',
+            gap: '0px',
+          }}
+        >
         {/* ZONE 1: Fenway Board — top left */}
         <div style={{ gridColumn: '1', gridRow: '1' }}>
           <FenwayBoard
@@ -4711,7 +4736,7 @@ export function GameTracker() {
             historicalMatchupRecord={fenwayContext.historicalMatchupRecord}
             historicalMatchupAvg={fenwayContext.historicalMatchupAvg}
             milestoneAlerts={fenwayContext.milestoneAlerts}
-            showScoreboard={true}
+            showScoreboard={false}
             onBatterTap={handleBatterTap}
             onPitcherTap={availablePitchers.length > 0 ? handlePitcherTap : undefined}
           />
@@ -6217,6 +6242,7 @@ function PitchCountModal({ prompt, onConfirm, onDismiss }: PitchCountModalProps)
               Cancel
             </button>
           )}
+        </div>
         </div>
       </div>
     </div>
