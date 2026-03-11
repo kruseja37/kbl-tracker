@@ -347,12 +347,16 @@ describe('useGameState between-play ledger', () => {
           causedByPlayerId: 'away-batter-1',
           causedByPlayerName: 'Away Batter 1',
           stayedIn: false,
+          linkedEventId: 'game-between-play_bp_1_2_123',
+          eventGroupId: 'game-between-play_kp_123',
         },
       );
     });
 
     expect(mockLogBetweenPlayEvent).toHaveBeenCalledWith(expect.objectContaining({
       type: 'injury',
+      linkedEventId: 'game-between-play_bp_1_2_123',
+      eventGroupId: 'game-between-play_kp_123',
       playerStateChange: expect.objectContaining({
         playerId: 'home-sp',
         stateType: 'injury',

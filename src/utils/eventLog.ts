@@ -359,6 +359,8 @@ export interface BetweenPlayEvent {
   eventIndex: number;              // Interleaved with AtBatEvent indices
   undoneAt?: number | null;
   version?: number;
+  linkedEventId?: string;
+  eventGroupId?: string;
   editHistory?: Array<{
     field: string;
     oldValue: unknown;

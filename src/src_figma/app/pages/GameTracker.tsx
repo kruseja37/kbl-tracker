@@ -955,6 +955,9 @@ export function GameTracker() {
         label: state.displayName,
       }));
     }
+    if (selectedBetweenPlayEvent.playerStateChange.stateType === 'injury') {
+      return [];
+    }
     return Object.entries(FITNESS_STATES).map(([value, state]) => ({
       value,
       label: state.displayName,
@@ -2836,6 +2839,66 @@ export function GameTracker() {
     }
   }, [playerStateHook, queuePlayLogRefresh]);
 
+  const syncLinkedPlayerStateEvent = useCallback(async (
+    sourceEvent: BetweenPlayEvent,
+    field: 'newValue' | 'reason' | 'stayedIn',
+    newValue: string | number | boolean | undefined,
+  ) => {
+    if (!sourceEvent.linkedEventId) return;
+
+    const linkedEvent = await getBetweenPlayEvent(sourceEvent.linkedEventId);
+    if (!linkedEvent?.playerStateChange) return;
+
+    const previousValue = linkedEvent.playerStateChange[field];
+    if (previousValue === newValue) return;
+
+    const timestamp = Date.now();
+    await updateBetweenPlayEvent(linkedEvent.eventId, {
+      version: (linkedEvent.version ?? 1) + 1,
+      editHistory: [{
+        field: `playerStateChange.${field}`,
+        oldValue: previousValue,
+        newValue,
+        timestamp,
+      }],
+      playerStateChange: {
+        ...linkedEvent.playerStateChange,
+        [field]: newValue,
+      },
+    });
+  }, []);
+
+  const handleHistoricalInjuryStayedInChange = useCallback(async (stayedIn: boolean) => {
+    if (selectedBetweenPlayEvent?.type !== 'injury' || !selectedBetweenPlayEvent.playerStateChange) return;
+    if (selectedBetweenPlayEvent.playerStateChange.stayedIn === stayedIn) return;
+
+    const timestamp = Date.now();
+    const nextEvent: BetweenPlayEvent = {
+      ...selectedBetweenPlayEvent,
+      version: (selectedBetweenPlayEvent.version ?? 1) + 1,
+      editHistory: [
+        ...(selectedBetweenPlayEvent.editHistory || []),
+        {
+          field: 'playerStateChange.stayedIn',
+          oldValue: selectedBetweenPlayEvent.playerStateChange.stayedIn,
+          newValue: stayedIn,
+          timestamp,
+        },
+      ],
+      playerStateChange: {
+        ...selectedBetweenPlayEvent.playerStateChange,
+        stayedIn,
+      },
+    };
+
+    await applyHistoricalContextEdit(nextEvent, {
+      version: nextEvent.version,
+      editHistory: nextEvent.editHistory?.slice(-1),
+      playerStateChange: nextEvent.playerStateChange,
+    }, 'update injury stayed-in flag');
+    await syncLinkedPlayerStateEvent(nextEvent, 'stayedIn', stayedIn);
+  }, [applyHistoricalContextEdit, selectedBetweenPlayEvent, syncLinkedPlayerStateEvent]);
+
   const handleHistoricalPositionChange = useCallback(async (newPosition: string) => {
     if (selectedBetweenPlayEvent?.type !== 'position_change' || !selectedBetweenPlayEvent.substitution) {
       return;
@@ -2995,6 +3058,7 @@ export function GameTracker() {
   const handleHistoricalContextValueChange = useCallback(async (value: string) => {
     if (!selectedBetweenPlayEvent?.playerStateChange) return;
     const { playerStateChange } = selectedBetweenPlayEvent;
+    if (playerStateChange.stateType === 'injury') return;
     const normalizedValue = playerStateChange.stateType === 'mojo' ? Number(value) : value;
     if (playerStateChange.newValue === normalizedValue) return;
 
@@ -3022,10 +3086,18 @@ export function GameTracker() {
       editHistory: nextEvent.editHistory?.slice(-1),
       playerStateChange: nextEvent.playerStateChange,
     }, 'update context value');
-  }, [applyHistoricalContextEdit, selectedBetweenPlayEvent]);
+    if (playerStateChange.stateType === 'fitness' && playerStateChange.sourceEventType === 'KILLED_PITCHER') {
+      await syncLinkedPlayerStateEvent(nextEvent, 'newValue', normalizedValue);
+    }
+  }, [applyHistoricalContextEdit, selectedBetweenPlayEvent, syncLinkedPlayerStateEvent]);
 
   const handleHistoricalContextReasonChange = useCallback(async (reason: string) => {
     if (!selectedBetweenPlayEvent?.playerStateChange) return;
+    if (selectedBetweenPlayEvent.playerStateChange.stateType === 'fitness'
+      && selectedBetweenPlayEvent.playerStateChange.sourceEventType === 'KILLED_PITCHER'
+      && selectedBetweenPlayEvent.linkedEventId) {
+      return;
+    }
     const previousReason = selectedBetweenPlayEvent.playerStateChange.reason || '';
     if (previousReason === reason) return;
 
@@ -3053,7 +3125,10 @@ export function GameTracker() {
       editHistory: nextEvent.editHistory?.slice(-1),
       playerStateChange: nextEvent.playerStateChange,
     }, 'update context reason');
-  }, [applyHistoricalContextEdit, selectedBetweenPlayEvent]);
+    if (selectedBetweenPlayEvent.playerStateChange.stateType === 'injury') {
+      await syncLinkedPlayerStateEvent(nextEvent, 'reason', reason);
+    }
+  }, [applyHistoricalContextEdit, selectedBetweenPlayEvent, syncLinkedPlayerStateEvent]);
 
   const handleQuickBarOutcome = useCallback(async (outcome: string) => {
     if (!gameInitialized) return;
@@ -3755,8 +3830,8 @@ export function GameTracker() {
       if (normalizedEventType === 'KILLED_PITCHER' && pitcherId && pitcherName && event.newFitness) {
         const previousFitness = playerStateHook.getPlayer(pitcherId)?.fitnessProfile.currentFitness ?? 'FIT';
         const reason = `Killed pitcher by ${sourceBatterName}`;
-
-        await recordPlayerStateChange(
+        const eventGroupId = `${gameState.gameId}_kp_${Date.now()}`;
+        const injuryEvent = await recordPlayerStateChange(
           pitcherId,
           pitcherName,
           'injury',
@@ -3769,9 +3844,10 @@ export function GameTracker() {
             causedByPlayerId: sourceBatterId,
             causedByPlayerName: sourceBatterName,
             stayedIn: event.injuryStayedIn,
+            eventGroupId,
           },
         );
-        await recordPlayerStateChange(
+        const fitnessEvent = await recordPlayerStateChange(
           pitcherId,
           pitcherName,
           'fitness',
@@ -3783,8 +3859,13 @@ export function GameTracker() {
             causedByPlayerId: sourceBatterId,
             causedByPlayerName: sourceBatterName,
             stayedIn: event.injuryStayedIn,
+            linkedEventId: injuryEvent.eventId,
+            eventGroupId,
           },
         );
+        await updateBetweenPlayEvent(injuryEvent.eventId, {
+          linkedEventId: fitnessEvent.eventId,
+        });
         playerStateHook.setFitness(pitcherId, event.newFitness);
         queuePlayLogRefresh(0);
       } else if (normalizedEventType === 'NUT_SHOT' && pitcherId && pitcherName && event.mojoImpact) {
@@ -5099,6 +5180,7 @@ export function GameTracker() {
               onPitcherChange={handleHistoricalPitcherChange}
               onContextValueChange={handleHistoricalContextValueChange}
               onContextReasonChange={handleHistoricalContextReasonChange}
+              onInjuryStayedInChange={handleHistoricalInjuryStayedInChange}
               lineupOptions={historicalLineupOptions}
               pitcherOptions={historicalPitcherOptions}
               contextValueOptions={historicalContextValueOptions}

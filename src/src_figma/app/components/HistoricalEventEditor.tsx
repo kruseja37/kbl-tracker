@@ -16,6 +16,7 @@ interface HistoricalEventEditorProps {
   onPitcherChange?: (field: 'outgoingPitcher' | 'incomingPitcher', pitcherId: string) => void;
   onContextValueChange?: (value: string) => void;
   onContextReasonChange?: (reason: string) => void;
+  onInjuryStayedInChange?: (stayedIn: boolean) => void;
   lineupOptions?: Array<{ id: string; label: string }>;
   pitcherOptions?: Array<{ id: string; label: string }>;
   contextValueOptions?: Array<{ value: string; label: string }>;
@@ -53,6 +54,7 @@ export function HistoricalEventEditor({
   onPitcherChange,
   onContextValueChange,
   onContextReasonChange,
+  onInjuryStayedInChange,
   lineupOptions = [],
   pitcherOptions = [],
   contextValueOptions = [],
@@ -65,6 +67,9 @@ export function HistoricalEventEditor({
 
   const runnerAction = event?.runnerAction;
   const canEditCaughtBy = !!event?.stolenBase && (event.type === 'stolen_base' || event.type === 'caught_stealing');
+  const isLinkedKilledPitcherFitness = event?.type === 'fitness_change'
+    && event.playerStateChange?.sourceEventType === 'KILLED_PITCHER'
+    && !!event.linkedEventId;
 
   return (
     <div className="bg-[#2a3a2d] border-l-2 border-[#C4A853] flex flex-col h-full">
@@ -306,6 +311,53 @@ export function HistoricalEventEditor({
                         ))}
                       </select>
                     </label>
+                    {isLinkedKilledPitcherFitness ? (
+                      <div className="text-[8px] text-[#88AA88]">
+                        Injury note and stayed-in status live on the linked injury row.
+                      </div>
+                    ) : (
+                      <label className="text-[8px] text-[#88AA88] font-bold uppercase tracking-wide">
+                        Reason
+                        <input
+                          key={`${event.eventId}-${event.version ?? 1}-reason`}
+                          type="text"
+                          defaultValue={event.playerStateChange.reason || ''}
+                          onBlur={(e) => onContextReasonChange?.(e.target.value)}
+                          disabled={saving}
+                          className="mt-1 w-full bg-[#1f2937]/60 border border-[#4a6a4a] rounded px-2 py-1 text-[9px] text-[#E8E8D8]"
+                          placeholder="Optional note"
+                        />
+                      </label>
+                    )}
+                    <div className="text-[7px] text-[#88AA88]">
+                      {saving ? 'Saving…' : isLinkedKilledPitcherFitness ? 'Fitness edits sync the linked injury row value.' : 'Context edits version this row in place without replay.'}
+                    </div>
+                  </div>
+                ) : event.type === 'injury' && event.playerStateChange ? (
+                  <div className="space-y-2">
+                    <LockedOutcomeNotice />
+                    <div className="text-[8px] text-[#88AA88]">
+                      Fitness changes live on the linked fitness row. Injury rows only own annotation fields.
+                    </div>
+                    <div>
+                      <div className="text-[8px] text-[#88AA88] font-bold uppercase tracking-wide mb-1">Stayed In</div>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => onInjuryStayedInChange?.(true)}
+                          disabled={saving}
+                          className={`flex-1 text-[8px] px-2 py-1 rounded border ${event.playerStateChange.stayedIn ? 'bg-[#C4A853]/20 border-[#C4A853] text-[#C4A853]' : 'bg-[#1f2937]/60 border-[#4a6a4a] text-[#88AA88]'}`}
+                        >
+                          Yes
+                        </button>
+                        <button
+                          onClick={() => onInjuryStayedInChange?.(false)}
+                          disabled={saving}
+                          className={`flex-1 text-[8px] px-2 py-1 rounded border ${event.playerStateChange.stayedIn === false ? 'bg-[#C4A853]/20 border-[#C4A853] text-[#C4A853]' : 'bg-[#1f2937]/60 border-[#4a6a4a] text-[#88AA88]'}`}
+                        >
+                          No
+                        </button>
+                      </div>
+                    </div>
                     <label className="text-[8px] text-[#88AA88] font-bold uppercase tracking-wide">
                       Reason
                       <input
@@ -319,7 +371,7 @@ export function HistoricalEventEditor({
                       />
                     </label>
                     <div className="text-[7px] text-[#88AA88]">
-                      {saving ? 'Saving…' : 'Context edits version this row in place without replay.'}
+                      {saving ? 'Saving…' : 'Annotation edits version this row in place without replay.'}
                     </div>
                   </div>
                 ) : (
@@ -337,6 +389,7 @@ export function HistoricalEventEditor({
                     {typeof event.playerStateChange.stayedIn === 'boolean' && (
                       <FieldRow label="Stayed In" value={event.playerStateChange.stayedIn ? 'Yes' : 'No'} />
                     )}
+                    {event.linkedEventId && <FieldRow label="Linked Row" value={event.linkedEventId} />}
                     {event.playerStateChange.reason && <FieldRow label="Reason" value={event.playerStateChange.reason} />}
                   </div>
                 )}

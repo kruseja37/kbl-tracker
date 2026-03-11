@@ -250,7 +250,7 @@ export interface UseGameStateReturn {
     newValue: string | number,
     reason?: string,
     options?: PlayerStateChangeOptions,
-  ) => Promise<void>;
+  ) => Promise<BetweenPlayEvent>;
   recordManagerMoment: (
     leverageIndex: number,
     decisionType: string,
@@ -383,6 +383,8 @@ export interface PlayerStateChangeOptions {
   causedByPlayerId?: string;
   causedByPlayerName?: string;
   stayedIn?: boolean;
+  linkedEventId?: string;
+  eventGroupId?: string;
 }
 
 function parseSeasonNumberFromId(seasonId: string): number {
@@ -1458,14 +1460,16 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
 
   const persistBetweenPlayEvent = useCallback(async (event: Omit<BetweenPlayEvent, 'eventId' | 'timestamp' | 'eventIndex'>) => {
     const base = createBetweenPlayEventBase(event.type);
-    await logBetweenPlayEvent({
+    const nextEvent: BetweenPlayEvent = {
       ...base,
       ...event,
       eventId: base.eventId!,
       timestamp: base.timestamp!,
       eventIndex: base.eventIndex!,
       gameState: event.gameState ?? base.gameState,
-    });
+    };
+    await logBetweenPlayEvent(nextEvent);
+    return nextEvent;
   }, [createBetweenPlayEventBase]);
 
   const mapBetweenPlayEventsToSubstitutionLog = useCallback((events: BetweenPlayEvent[]) => {
@@ -4598,8 +4602,10 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       (stateType === 'mojo' ? 'mojo_change'
         : stateType === 'injury' ? 'injury'
         : 'fitness_change');
-    await persistBetweenPlayEvent({
+    return persistBetweenPlayEvent({
       type,
+      linkedEventId: options?.linkedEventId,
+      eventGroupId: options?.eventGroupId,
       playerStateChange: {
         playerId,
         playerName,
