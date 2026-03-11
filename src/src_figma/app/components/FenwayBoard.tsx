@@ -48,9 +48,11 @@ interface FenwayBoardProps {
   // Matchup (batter vs pitcher this game)
   matchupRecord?: string;   // "3-7" or null
   matchupAvg?: string;      // ".429" or null
+  historicalMatchupRecord?: string;
+  historicalMatchupAvg?: string;
 
   // Milestone proximity
-  milestoneAlert?: string;  // "1 from 500 hits" or null
+  milestoneAlerts?: string[];
   showScoreboard?: boolean;
   onBatterTap?: () => void;
 
@@ -99,7 +101,9 @@ export function FenwayBoard({
   pitcherHand,
   matchupRecord,
   matchupAvg,
-  milestoneAlert,
+  historicalMatchupRecord,
+  historicalMatchupAvg,
+  milestoneAlerts,
   showScoreboard = true,
   onBatterTap,
   onPitcherTap,
@@ -287,24 +291,37 @@ export function FenwayBoard({
         </div>
 
         {/* Matchup card — batter vs pitcher this game + milestone */}
-        {(matchupRecord || currentBatterName || milestoneAlert) && currentPitcherName && (
+        {(matchupRecord || historicalMatchupRecord || currentBatterName || (milestoneAlerts?.length ?? 0) > 0) && currentPitcherName && (
           <div className="bg-[#2a3a2d] border border-[#1a2a1d] px-2 py-1">
-            <div className="text-[8px] text-[#88AA88] leading-tight mb-1">
+            <div className="text-[8px] text-[#88AA88] leading-tight">
               {matchupRecord ? (
                 <>
-                  <span className="text-[#aaccaa]">vs {currentPitcherName}: </span>
+                  <span className="text-[#aaccaa]">This game vs {currentPitcherName}: </span>
                   <span className="text-[#E8E8D8] font-bold">{matchupRecord}</span>
                   {matchupAvg && (
                     <span className="text-[#aaccaa]"> ({matchupAvg})</span>
                   )}
                 </>
               ) : (
-                <span className="text-[#aaccaa]">vs {currentPitcherName}: <span className="italic">First meeting</span></span>
+                <span className="text-[#aaccaa]">This game vs {currentPitcherName}: <span className="italic">First meeting</span></span>
               )}
             </div>
-            {milestoneAlert && (
-              <div className="text-[8px] text-[#fbbf24] font-bold">
-                ⚡ {milestoneAlert}
+            {historicalMatchupRecord && (
+              <div className="text-[8px] text-[#88AA88] leading-tight mt-0.5">
+                <span className="text-[#aaccaa]">History vs {currentPitcherName}: </span>
+                <span className="text-[#E8E8D8] font-bold">{historicalMatchupRecord}</span>
+                {historicalMatchupAvg && (
+                  <span className="text-[#aaccaa]"> ({historicalMatchupAvg})</span>
+                )}
+              </div>
+            )}
+            {(milestoneAlerts?.length ?? 0) > 0 && (
+              <div className="mt-1 space-y-0.5">
+                {milestoneAlerts?.map((alert) => (
+                  <div key={alert} className="text-[8px] text-[#fbbf24] font-bold">
+                    ⚡ {alert}
+                  </div>
+                ))}
               </div>
             )}
           </div>

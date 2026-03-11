@@ -27,6 +27,7 @@ import {
   getFieldingEventsForAtBat,
   getGameEvents,
   getGameHeader,
+  getMatchupEvents,
   logFieldingEvent,
   updateAtBatEvent,
   updateAtBatEventWithFieldingSync,
@@ -83,6 +84,9 @@ import { generateGameRecap } from "../engines/narrativeIntegration";
 import { useMWARCalculations } from "../hooks/useMWARCalculations";
 import type { GameStateForLI } from "../../../engines/leverageCalculator";
 import { saveGameDecisions, aggregateManagerGameToSeason } from '../../../utils/managerStorage';
+import { getCareerStats, type PlayerCareerBatting, type PlayerCareerPitching } from '../../../utils/careerStorage';
+import { getApproachingMilestones } from '../../../utils/milestoneDetector';
+import { getSeasonBattingStats, getSeasonPitchingStats, type PlayerSeasonBatting, type PlayerSeasonPitching } from '../../../utils/seasonStorage';
 // T0-05: Schedule persistence — mark played games as COMPLETED
 import { completeGame as completeScheduleGame } from '../../../utils/scheduleStorage';
 // Fielding pipeline: extract fielding events from PlayData and log to IndexedDB
@@ -101,6 +105,11 @@ import {
   mapFieldingPlayTypeToPlayDifficulty,
   type FieldingPlayTypeValue,
 } from '../utils/fieldingPlayType';
+import {
+  buildFenwayMatchupSummary,
+  formatFenwayMilestoneAlert,
+  pickFenwayMilestoneWatches,
+} from '../utils/fenwayBoardContext';
 import {
   applyRunnerDefaultsToNames,
   buildRunnerCorrectionForQuickBarOutcome,
@@ -160,6 +169,98 @@ interface HistoricalLineupSlot {
 interface HistoricalPitcher {
   playerId: string;
   playerName: string;
+}
+
+function mergeSeasonBattingWithGameStats(
+  seasonBatting: PlayerSeasonBatting | null,
+  gameStats?: PlayerGameStats,
+): PlayerSeasonBatting | null {
+  if (!seasonBatting || !gameStats) return seasonBatting;
+  return {
+    ...seasonBatting,
+    pa: seasonBatting.pa + gameStats.pa,
+    ab: seasonBatting.ab + gameStats.ab,
+    hits: seasonBatting.hits + gameStats.h,
+    singles: seasonBatting.singles + gameStats.singles,
+    doubles: seasonBatting.doubles + gameStats.doubles,
+    triples: seasonBatting.triples + gameStats.triples,
+    homeRuns: seasonBatting.homeRuns + gameStats.hr,
+    rbi: seasonBatting.rbi + gameStats.rbi,
+    runs: seasonBatting.runs + gameStats.r,
+    walks: seasonBatting.walks + gameStats.bb,
+    strikeouts: seasonBatting.strikeouts + gameStats.k,
+    hitByPitch: seasonBatting.hitByPitch + gameStats.hbp,
+    sacFlies: seasonBatting.sacFlies + gameStats.sf,
+    sacBunts: seasonBatting.sacBunts + gameStats.sh,
+    stolenBases: seasonBatting.stolenBases + gameStats.sb,
+    caughtStealing: seasonBatting.caughtStealing + gameStats.cs,
+    gidp: seasonBatting.gidp + gameStats.gidp,
+  };
+}
+
+function mergeCareerBattingWithGameStats(
+  careerBatting: PlayerCareerBatting | null,
+  gameStats?: PlayerGameStats,
+): PlayerCareerBatting | null {
+  if (!careerBatting || !gameStats) return careerBatting;
+  return {
+    ...careerBatting,
+    pa: careerBatting.pa + gameStats.pa,
+    ab: careerBatting.ab + gameStats.ab,
+    hits: careerBatting.hits + gameStats.h,
+    singles: careerBatting.singles + gameStats.singles,
+    doubles: careerBatting.doubles + gameStats.doubles,
+    triples: careerBatting.triples + gameStats.triples,
+    homeRuns: careerBatting.homeRuns + gameStats.hr,
+    rbi: careerBatting.rbi + gameStats.rbi,
+    runs: careerBatting.runs + gameStats.r,
+    walks: careerBatting.walks + gameStats.bb,
+    strikeouts: careerBatting.strikeouts + gameStats.k,
+    hitByPitch: careerBatting.hitByPitch + gameStats.hbp,
+    sacFlies: careerBatting.sacFlies + gameStats.sf,
+    sacBunts: careerBatting.sacBunts + gameStats.sh,
+    stolenBases: careerBatting.stolenBases + gameStats.sb,
+    caughtStealing: careerBatting.caughtStealing + gameStats.cs,
+    gidp: careerBatting.gidp + gameStats.gidp,
+  };
+}
+
+function mergeSeasonPitchingWithGameStats(
+  seasonPitching: PlayerSeasonPitching | null,
+  gameStats?: PitcherGameStats,
+): PlayerSeasonPitching | null {
+  if (!seasonPitching || !gameStats) return seasonPitching;
+  return {
+    ...seasonPitching,
+    outsRecorded: seasonPitching.outsRecorded + gameStats.outsRecorded,
+    hitsAllowed: seasonPitching.hitsAllowed + gameStats.hitsAllowed,
+    runsAllowed: seasonPitching.runsAllowed + gameStats.runsAllowed,
+    earnedRuns: seasonPitching.earnedRuns + gameStats.earnedRuns,
+    walksAllowed: seasonPitching.walksAllowed + gameStats.walksAllowed,
+    strikeouts: seasonPitching.strikeouts + gameStats.strikeoutsThrown,
+    homeRunsAllowed: seasonPitching.homeRunsAllowed + gameStats.homeRunsAllowed,
+    hitBatters: seasonPitching.hitBatters + gameStats.hitByPitch,
+    wildPitches: seasonPitching.wildPitches + gameStats.wildPitches,
+  };
+}
+
+function mergeCareerPitchingWithGameStats(
+  careerPitching: PlayerCareerPitching | null,
+  gameStats?: PitcherGameStats,
+): PlayerCareerPitching | null {
+  if (!careerPitching || !gameStats) return careerPitching;
+  return {
+    ...careerPitching,
+    outsRecorded: careerPitching.outsRecorded + gameStats.outsRecorded,
+    hitsAllowed: careerPitching.hitsAllowed + gameStats.hitsAllowed,
+    runsAllowed: careerPitching.runsAllowed + gameStats.runsAllowed,
+    earnedRuns: careerPitching.earnedRuns + gameStats.earnedRuns,
+    walksAllowed: careerPitching.walksAllowed + gameStats.walksAllowed,
+    strikeouts: careerPitching.strikeouts + gameStats.strikeoutsThrown,
+    homeRunsAllowed: careerPitching.homeRunsAllowed + gameStats.homeRunsAllowed,
+    hitBatters: careerPitching.hitBatters + gameStats.hitByPitch,
+    wildPitches: careerPitching.wildPitches + gameStats.wildPitches,
+  };
 }
 
 export function GameTracker() {
@@ -570,6 +671,13 @@ export function GameTracker() {
   const [lineupOverlayHint, setLineupOverlayHint] = useState<string | null>(null);
   const [pendingManualSpecialPrompt, setPendingManualSpecialPrompt] = useState<PendingManualSpecialPrompt | null>(null);
   const [showManagerMomentPanel, setShowManagerMomentPanel] = useState(false);
+  const [fenwayContext, setFenwayContext] = useState<{
+    matchupRecord?: string;
+    matchupAvg?: string;
+    historicalMatchupRecord?: string;
+    historicalMatchupAvg?: string;
+    milestoneAlerts: string[];
+  }>({ milestoneAlerts: [] });
 
   // MAJ-03: Detection system state — pending prompts for user confirmation
   const [pendingDetections, setPendingDetections] = useState<UIDetectionResult[]>([]);
@@ -1919,6 +2027,119 @@ export function GameTracker() {
 
   const currentBatterDisplayName = formatDisplayName(resolvedCurrentBatterName);
   const currentPitcherDisplayName = formatDisplayName(resolvedCurrentPitcherName);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadFenwayContext = async () => {
+      if (!gameState.gameId || !gameState.currentBatterId || !gameState.currentPitcherId) {
+        if (!cancelled) {
+          setFenwayContext({ milestoneAlerts: [] });
+        }
+        return;
+      }
+
+      try {
+        const seasonId = navigationState?.seasonId;
+        const [
+          currentGameEvents,
+          historicalMatchupEvents,
+          batterCareer,
+          pitcherCareer,
+          seasonBattingRows,
+          seasonPitchingRows,
+        ] = await Promise.all([
+          getGameEvents(gameState.gameId),
+          getMatchupEvents(gameState.currentBatterId, gameState.currentPitcherId, { excludeGameId: gameState.gameId }),
+          getCareerStats(gameState.currentBatterId),
+          getCareerStats(gameState.currentPitcherId),
+          seasonId ? getSeasonBattingStats(seasonId) : Promise.resolve([]),
+          seasonId ? getSeasonPitchingStats(seasonId) : Promise.resolve([]),
+        ]);
+
+        if (cancelled) {
+          return;
+        }
+
+        const currentMatchup = buildFenwayMatchupSummary(
+          currentGameEvents,
+          gameState.currentBatterId,
+          gameState.currentPitcherId,
+        );
+        const historicalMatchup = buildFenwayMatchupSummary(
+          historicalMatchupEvents,
+          gameState.currentBatterId,
+          gameState.currentPitcherId,
+        );
+
+        const batterSeason = seasonId
+          ? seasonBattingRows.find((row) => row.playerId === gameState.currentBatterId) || null
+          : null;
+        const pitcherSeason = seasonId
+          ? seasonPitchingRows.find((row) => row.playerId === gameState.currentPitcherId) || null
+          : null;
+
+        const batterWatches = getApproachingMilestones(
+          mergeCareerBattingWithGameStats(batterCareer.batting, currentBatterStats),
+          null,
+          mergeSeasonBattingWithGameStats(batterSeason, currentBatterStats),
+          null,
+          new Set<string>(),
+        );
+        const pitcherWatches = getApproachingMilestones(
+          null,
+          mergeCareerPitchingWithGameStats(pitcherCareer.pitching, currentPitcherStats),
+          null,
+          mergeSeasonPitchingWithGameStats(pitcherSeason, currentPitcherStats),
+          new Set<string>(),
+        );
+        const selectedWatches = pickFenwayMilestoneWatches(
+          [...batterWatches, ...pitcherWatches],
+          gameState.currentBatterId,
+          2,
+        );
+        const multiplePlayers = new Set(selectedWatches.map((watch) => watch.playerId)).size > 1;
+
+        setFenwayContext({
+          matchupRecord: currentMatchup.matchupRecord,
+          matchupAvg: currentMatchup.matchupAvg,
+          historicalMatchupRecord: historicalMatchup.matchupRecord,
+          historicalMatchupAvg: historicalMatchup.matchupAvg,
+          milestoneAlerts: selectedWatches.map((watch) =>
+            formatFenwayMilestoneAlert(
+              watch,
+              multiplePlayers || watch.playerId !== gameState.currentBatterId,
+            )
+          ),
+        });
+      } catch (error) {
+        console.warn('[GameTracker] Failed to build Fenway board context:', error);
+        if (!cancelled) {
+          setFenwayContext({
+            matchupRecord: undefined,
+            matchupAvg: undefined,
+            historicalMatchupRecord: undefined,
+            historicalMatchupAvg: undefined,
+            milestoneAlerts: [],
+          });
+        }
+      }
+    };
+
+    void loadFenwayContext();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    currentBatterStats,
+    currentPitcherStats,
+    gameState.currentBatterId,
+    gameState.currentPitcherId,
+    gameState.gameId,
+    navigationState?.seasonId,
+  ]);
+
   const openPlayerCard = useCallback((playerName: string, team: 'away' | 'home', type: 'batter' | 'pitcher' = 'batter') => {
     const playerId = type === 'pitcher'
       ? getPitcherIdFromName(playerName, team)
@@ -4485,6 +4706,11 @@ export function GameTracker() {
               const pitcher = gameState.isTop ? homePitcher : awayPitcher;
               return pitcher?.throwingHand;
             })()}
+            matchupRecord={fenwayContext.matchupRecord}
+            matchupAvg={fenwayContext.matchupAvg}
+            historicalMatchupRecord={fenwayContext.historicalMatchupRecord}
+            historicalMatchupAvg={fenwayContext.historicalMatchupAvg}
+            milestoneAlerts={fenwayContext.milestoneAlerts}
             showScoreboard={true}
             onBatterTap={handleBatterTap}
             onPitcherTap={availablePitchers.length > 0 ? handlePitcherTap : undefined}

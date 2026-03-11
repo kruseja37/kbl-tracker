@@ -996,6 +996,33 @@ export async function getAtBatEvent(eventId: string): Promise<AtBatEvent | null>
   });
 }
 
+export async function getMatchupEvents(
+  batterId: string,
+  pitcherId: string,
+  options?: { excludeGameId?: string; includeUndone?: boolean }
+): Promise<AtBatEvent[]> {
+  const db = await initEventLogDB();
+
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(STORES.AT_BAT_EVENTS, 'readonly');
+    const store = transaction.objectStore(STORES.AT_BAT_EVENTS);
+    const index = store.index('batterId');
+    const request = index.getAll(batterId);
+
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => {
+      const events = (request.result as AtBatEvent[])
+        .filter((event) =>
+          event.pitcherId === pitcherId &&
+          (options?.includeUndone || !event.undoneAt) &&
+          (!options?.excludeGameId || event.gameId !== options.excludeGameId)
+        )
+        .sort((a, b) => a.timestamp - b.timestamp || a.eventIndex - b.eventIndex);
+      resolve(events);
+    };
+  });
+}
+
 export async function getBetweenPlayEvent(eventId: string): Promise<BetweenPlayEvent | null> {
   const db = await initEventLogDB();
 
