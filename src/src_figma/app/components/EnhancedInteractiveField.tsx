@@ -134,6 +134,13 @@ import {
   type SpecialEventType,
   type SpecialEventData,
 } from '../utils/gameTrackerFieldTypes';
+import {
+  CONTEXTUAL_BUTTONS_TIMEOUT,
+  inferContextualButtons,
+  getEventEmoji,
+  getEventLabel,
+  type PlayContext,
+} from '../utils/gameTrackerContextualEvents';
 
 // ============================================
 // TYPES
@@ -170,144 +177,6 @@ interface FieldPosition {
 // ============================================
 // CONTEXTUAL BUTTONS INFERENCE (Phase 5B)
 // ============================================
-
-/**
- * PlayContext captures all data needed to infer which special event buttons to show.
- * Per GAMETRACKER_DRAGDROP_SPEC.md lines 54-65.
- */
-interface PlayContext {
-  playType: 'FO' | 'LO' | 'GO' | 'K' | '1B' | '2B' | '3B' | 'HR' | 'FC' | null;
-  firstFielder: number | null;       // 1-9 position number
-  ballLocationY: number | null;      // normalized 0-1 (relative to field depth)
-  throwSequence: number[];           // e.g., [2, 3] for strikeout
-  runnerOut: boolean;                // was a runner also put out on this play?
-  throwTarget: number | null;        // target base if throw after catch
-  timestamp: number;                 // when play completed (for auto-dismiss)
-}
-
-/**
- * Infer which contextual special event buttons to show based on play context.
- *
- * Inference Logic Table (per GAMETRACKER_DRAGDROP_SPEC.md):
- * | Play Detected | First Fielder | Location (y) | Buttons Shown | Inference |
- * |---------------|---------------|--------------|---------------|-----------|
- * | FO/LO         | 7,8,9         | y > 0.95     | ROBBERY       | Wall catch |
- * | FO/LO         | 7,8,9         | 0.8 < y ≤ 0.95 | WEB_GEM     | Deep catch |
- * | K (2-3 seq)   | 2             | —            | K/Ꝅ           | Strikeout  |
- * | GO/FC (1-X)   | 1             | —            | KILLED/NUTSHOT| Comebacker |
- * | Out + runner  | Any           | —            | TOOTBLAN      | Runner out |
- */
-function inferContextualButtons(ctx: PlayContext | null): SpecialEventType[] {
-  const buttons: SpecialEventType[] = [];
-
-  // 7+ Pitch is ALWAYS available (no pitch tracking, user knows)
-  buttons.push('SEVEN_PLUS_PITCH_AB');
-
-  if (!ctx) {
-    console.log('[ContextualButtons] No context, returning only 7+ PITCH');
-    return buttons;
-  }
-
-  console.log('[ContextualButtons] Inferring from context:', {
-    playType: ctx.playType,
-    firstFielder: ctx.firstFielder,
-    ballLocationY: ctx.ballLocationY?.toFixed(2),
-    throwSequence: ctx.throwSequence,
-    runnerOut: ctx.runnerOut,
-    throwTarget: ctx.throwTarget,
-  });
-
-  const isOutfielder = [7, 8, 9].includes(ctx.firstFielder ?? 0);
-  const isInfielder = [1, 2, 3, 4, 5, 6].includes(ctx.firstFielder ?? 0);
-  const isDeepFly = ctx.ballLocationY !== null && ctx.ballLocationY > 0.7; // Lowered from 0.8
-  const isWallCatch = ctx.ballLocationY !== null && ctx.ballLocationY > 0.9; // Lowered from 0.95
-
-  // FO/LO by outfielder → offer both ROBBERY and WEB GEM
-  // Let the user decide which applies based on what they saw
-  if (['FO', 'LO'].includes(ctx.playType ?? '') && isOutfielder) {
-    if (isWallCatch) {
-      buttons.push('ROBBERY');
-      buttons.push('WEB_GEM');
-    } else if (isDeepFly) {
-      buttons.push('WEB_GEM');
-    }
-  }
-
-  // Any fly ball to outfield deep enough could be a web gem
-  // Even if play type isn't exactly FO/LO (might be FC, etc.)
-  if (isOutfielder && isDeepFly && !buttons.includes('WEB_GEM')) {
-    buttons.push('WEB_GEM');
-  }
-
-  // Pitcher involvement (first fielder = 1) → KILLED / NUTSHOT options
-  // Any groundball/FC to pitcher could be a comebacker
-  if (ctx.firstFielder === 1) {
-    buttons.push('KILLED_PITCHER');
-    buttons.push('NUT_SHOT');
-  }
-
-  // Any out play → offer TOOTBLAN option (user knows if baserunning was bad)
-  if (['FO', 'LO', 'GO', 'FC'].includes(ctx.playType ?? '')) {
-    buttons.push('TOOTBLAN');
-  }
-
-  // Runner out on same play → definitely show TOOTBLAN
-  if (ctx.runnerOut && !buttons.includes('TOOTBLAN')) {
-    buttons.push('TOOTBLAN');
-  }
-
-  // Infield hit options (any hit in infield area)
-  if (ctx.playType === '1B' && ctx.ballLocationY !== null && ctx.ballLocationY < 0.5) {
-    buttons.push('BEAT_THROW');
-    buttons.push('BUNT');
-  }
-
-  console.log('[ContextualButtons] Inferred buttons:', buttons);
-  return buttons;
-}
-
-/**
- * Get emoji for special event type
- */
-function getEventEmoji(eventType: SpecialEventType): string {
-  switch (eventType) {
-    case 'ROBBERY': return '🎭';
-    case 'WEB_GEM': return '⭐';
-    case 'TOOTBLAN': return '🤦';
-    case 'KILLED_PITCHER': return '💥';
-    case 'NUT_SHOT': return '🥜';
-    case 'BEAT_THROW': return '🏃';
-    case 'BUNT': return '🏏';
-    case 'STRIKEOUT': return 'K';
-    case 'STRIKEOUT_LOOKING': return 'Ꝅ';
-    case 'DROPPED_3RD_STRIKE': return 'D3K';
-    case 'SEVEN_PLUS_PITCH_AB': return '7️⃣';
-    default: return '❓';
-  }
-}
-
-/**
- * Get display label for special event type
- */
-function getEventLabel(eventType: SpecialEventType): string {
-  switch (eventType) {
-    case 'ROBBERY': return 'ROBBERY';
-    case 'WEB_GEM': return 'WEB GEM';
-    case 'TOOTBLAN': return 'TOOTBLAN';
-    case 'KILLED_PITCHER': return 'KILLED';
-    case 'NUT_SHOT': return 'NUTSHOT';
-    case 'BEAT_THROW': return 'BEAT THROW';
-    case 'BUNT': return 'BUNT';
-    case 'STRIKEOUT': return 'K';
-    case 'STRIKEOUT_LOOKING': return 'LOOKING';
-    case 'DROPPED_3RD_STRIKE': return 'D3K';
-    case 'SEVEN_PLUS_PITCH_AB': return '7+ PITCH';
-    default: return eventType;
-  }
-}
-
-// Auto-dismiss timeout for contextual buttons (milliseconds)
-const CONTEXTUAL_BUTTONS_TIMEOUT = 3000;
 
 export interface EnhancedInteractiveFieldProps {
   gameSituation: GameSituation;
