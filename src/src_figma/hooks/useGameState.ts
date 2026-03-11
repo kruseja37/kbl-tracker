@@ -220,6 +220,11 @@ export interface BetweenPlayEventDetails {
   pitcherName?: string;
   catcherId?: string;
   catcherName?: string;
+  actorId?: string;
+  actorName?: string;
+  leverageIndex?: number;
+  inning?: number;
+  halfInning?: 'TOP' | 'BOTTOM';
 }
 
 // Pitch count prompt types per PITCH_COUNT_TRACKING_SPEC.md
@@ -4405,7 +4410,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
 
     // Calculate base-out leverage index for Fame weighting
     // Encode bases as BaseState (0-7): 1=1st, 2=2nd, 4=3rd, combinations sum
-    const li = getCurrentLeverageIndex();
+    const li = details?.leverageIndex ?? getCurrentLeverageIndex();
     const fameMultiplier = Math.sqrt(li);
 
     // Fame base values per kbl-detection-philosophy.md and SPECIAL_EVENTS_SPEC.md
@@ -4458,12 +4463,12 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         recipientName = runnerId || 'Unknown Runner';
       } else if (eventType === 'WEB_GEM' || eventType === 'ROBBERY') {
         // Fielding events - fielder receives Fame (would need fielder ID)
-        recipientId = runnerId || 'fielder'; // Use runnerId as fielder ID for now
-        recipientName = runnerId || 'Fielder';
+        recipientId = details?.actorId || runnerId || 'fielder';
+        recipientName = details?.actorName || runnerId || 'Fielder';
       } else {
         // Default: batter receives Fame (KILLED, NUTSHOT, etc.)
-        recipientId = gameState.currentBatterId;
-        recipientName = gameState.currentBatterName;
+        recipientId = details?.actorId || gameState.currentBatterId;
+        recipientName = details?.actorName || gameState.currentBatterName;
       }
 
       const fameEvent: FameEventRecord = {
@@ -4472,7 +4477,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         fameValue: Math.abs(adjustedFame),
         playerId: recipientId,
         playerName: recipientName,
-        description: `${eventType} in inning ${gameState.inning} (LI: ${li.toFixed(2)})`,
+        description: `${eventType} in inning ${details?.inning || gameState.inning} (LI: ${li.toFixed(2)})`,
       };
 
       appendFameEvent(fameEvent);

@@ -14,7 +14,7 @@ import { TeamRoster, type Player, type Pitcher } from "@/app/components/TeamRost
 import { FenwayBoard } from "@/app/components/FenwayBoard";
 import { QuickBar } from "@/app/components/QuickBar";
 import { PlayLogPanel } from "@/app/components/PlayLogPanel";
-import { EnrichmentPanel, PITCH_TYPES, type EnrichmentUpdate } from "@/app/components/EnrichmentPanel";
+import { EnrichmentPanel, PITCH_TYPES, type AtBatModifierValue, type EnrichmentUpdate } from "@/app/components/EnrichmentPanel";
 import { RunnerOutcomesDisplay } from "@/app/components/RunnerOutcomesDisplay";
 import { HistoricalEventEditor } from "@/app/components/HistoricalEventEditor";
 import { LiveRunnerAttributionPanel } from "@/app/components/LiveRunnerAttributionPanel";
@@ -24,6 +24,7 @@ import {
   getAtBatEvent,
   getBetweenPlayEvent,
   getBetweenPlayEvents,
+  getFieldingEventsForAtBat,
   getGameEvents,
   getGameHeader,
   logFieldingEvent,
@@ -146,6 +147,8 @@ interface PendingRunnerAttributionAction {
 interface PendingManualSpecialPrompt {
   type: 'KP' | 'NUT';
   event: SpecialEventData;
+  atBatEventId?: string;
+  modifierValue?: AtBatModifierValue;
 }
 
 interface HistoricalLineupSlot {
@@ -565,7 +568,6 @@ export function GameTracker() {
   } | null>(null);
   const [showLineupOverlay, setShowLineupOverlay] = useState(false);
   const [lineupOverlayHint, setLineupOverlayHint] = useState<string | null>(null);
-  const [showModifierTray, setShowModifierTray] = useState(false);
   const [pendingManualSpecialPrompt, setPendingManualSpecialPrompt] = useState<PendingManualSpecialPrompt | null>(null);
   const [showManagerMomentPanel, setShowManagerMomentPanel] = useState(false);
 
@@ -1535,6 +1537,52 @@ export function GameTracker() {
 
     return [...nextBaseEvents, ...preservedSupplementals];
   }, [buildHistoricalDefensiveAlignment, buildPlayDataFromAtBatEvent]);
+
+  const appendModifierToAtBatEvent = useCallback(async (
+    atBatEventId: string,
+    modifier: AtBatModifierValue,
+  ) => {
+    const existingAtBat = await getAtBatEvent(atBatEventId);
+    if (!existingAtBat) {
+      return null;
+    }
+
+    const existingModifiers = existingAtBat.enrichment?.modifiers || [];
+    if (existingModifiers.includes(modifier)) {
+      return existingAtBat;
+    }
+
+    const nextModifiers = [...existingModifiers, modifier];
+    const timestamp = Date.now();
+    await updateAtBatEvent(atBatEventId, {
+      enrichment: {
+        modifiers: nextModifiers,
+      },
+      version: (existingAtBat.version ?? 1) + 1,
+      editHistory: [{
+        field: 'enrichment.modifiers',
+        oldValue: existingModifiers,
+        newValue: nextModifiers,
+        timestamp,
+      }],
+    });
+
+    setEnrichmentCache((prev) => ({
+      ...prev,
+      [atBatEventId]: {
+        ...(prev[atBatEventId] || {}),
+        modifiers: nextModifiers,
+      },
+    }));
+
+    return {
+      ...existingAtBat,
+      enrichment: {
+        ...(existingAtBat.enrichment || {}),
+        modifiers: nextModifiers,
+      },
+    };
+  }, []);
 
   // Initialize game with lineup data on mount
   // FIX: BUG-007 - Try loading existing game first, only create new if none found
@@ -3026,7 +3074,7 @@ export function GameTracker() {
 
   // Handle special events (Web Gem, Robbery, TOOTBLAN, etc.) from the canonical tracker modifier flow
   // Phase 5B: Extended to handle all contextual button events
-  const handleSpecialEvent = useCallback(async (event: SpecialEventData) => {
+  const handleSpecialEvent = useCallback(async (event: SpecialEventData, sourceAtBat?: AtBatEvent) => {
     console.log("Special event:", event);
 
     try {
@@ -3056,14 +3104,23 @@ export function GameTracker() {
         fielderId,
         fielderName: event.fielderName,
         fielderPosition: event.fielderPosition,
+        actorId: normalizedEventType === 'WEB_GEM' || normalizedEventType === 'ROBBERY'
+          ? fielderId
+          : sourceAtBat?.batterId || event.batterId,
+        actorName: normalizedEventType === 'WEB_GEM' || normalizedEventType === 'ROBBERY'
+          ? event.fielderName
+          : sourceAtBat?.batterName || event.batterName,
+        leverageIndex: sourceAtBat?.leverageIndex,
+        inning: sourceAtBat?.inning,
+        halfInning: sourceAtBat?.halfInning,
       });
 
-      const sourceBatterId = event.batterId || gameState.currentBatterId;
-      const sourceBatterName = event.batterName || resolvedCurrentBatterName || gameState.currentBatterName;
-      const pitcherId = event.fielderPosition === 1 && fielderId ? fielderId : gameState.currentPitcherId;
+      const sourceBatterId = sourceAtBat?.batterId || event.batterId || gameState.currentBatterId;
+      const sourceBatterName = sourceAtBat?.batterName || event.batterName || resolvedCurrentBatterName || gameState.currentBatterName;
+      const pitcherId = event.fielderPosition === 1 && fielderId ? fielderId : sourceAtBat?.pitcherId || gameState.currentPitcherId;
       const pitcherName = event.fielderPosition === 1 && event.fielderName
         ? event.fielderName
-        : resolvedCurrentPitcherName || gameState.currentPitcherName;
+        : sourceAtBat?.pitcherName || resolvedCurrentPitcherName || gameState.currentPitcherName;
 
       if (normalizedEventType === 'KILLED_PITCHER' && pitcherId && pitcherName && event.newFitness) {
         const previousFitness = playerStateHook.getPlayer(pitcherId)?.fitnessProfile.currentFitness ?? 'FIT';
@@ -3135,28 +3192,57 @@ export function GameTracker() {
     }
   }, [fieldingTeam, gameState.currentBatterId, gameState.currentBatterName, gameState.currentPitcherId, gameState.currentPitcherName, getLeadRunnerIdentity, getRosterIdFromName, playerStateHook, queuePlayLogRefresh, recordEvent, recordPlayerStateChange, resolvedCurrentBatterName, resolvedCurrentPitcherName, undoSystem]);
 
-  const triggerManualSpecialEvent = useCallback((eventType: SpecialEventData['eventType']) => {
-    const leadRunner = getLeadRunnerIdentity();
-    const event: SpecialEventData = {
-      eventType,
-      runnerId: eventType === 'TOOTBLAN' ? leadRunner.runnerId : undefined,
-      fielderPosition: eventType === 'KILLED_PITCHER' || eventType === 'NUT_SHOT' ? 1 : undefined,
-      fielderName: eventType === 'KILLED_PITCHER' || eventType === 'NUT_SHOT' ? resolvedCurrentPitcherName : undefined,
-      batterId: gameState.currentBatterId,
-      batterName: resolvedCurrentBatterName || gameState.currentBatterName,
-    };
-
-    if (eventType === 'KILLED_PITCHER' || eventType === 'NUT_SHOT') {
-      setPendingManualSpecialPrompt({
-        type: eventType === 'KILLED_PITCHER' ? 'KP' : 'NUT',
-        event,
-      });
-      setShowModifierTray(false);
+  const handleAtBatModifierRecord = useCallback(async (modifier: AtBatModifierValue) => {
+    if (!enrichingEntry?.eventId) {
       return;
     }
 
-    void handleSpecialEvent(event);
-  }, [gameState.currentBatterId, gameState.currentBatterName, getLeadRunnerIdentity, handleSpecialEvent, resolvedCurrentBatterName, resolvedCurrentPitcherName]);
+    const atBatEvent = await getAtBatEvent(enrichingEntry.eventId);
+    if (!atBatEvent) {
+      return;
+    }
+
+    const existingModifiers = atBatEvent.enrichment?.modifiers || [];
+    if (existingModifiers.includes(modifier)) {
+      return;
+    }
+
+    const linkedFieldingEvents = await getFieldingEventsForAtBat(atBatEvent.eventId);
+    const defenders = await buildHistoricalDefensiveAlignment(atBatEvent, linkedFieldingEvents);
+    const sequence = atBatEvent.enrichment?.fieldingSequence || [];
+    const primaryPosition = sequence.length > 0 ? (Object.entries(POSITION_NUMBER).find(([, num]) => num === sequence[0])?.[0] as Position | undefined) : undefined;
+    const primaryDefender = primaryPosition ? defenders[primaryPosition] : undefined;
+    const runnerOut = atBatEvent.runnerOutcomes?.find((outcome) => outcome.toBase === 'out');
+
+    const event: SpecialEventData = {
+      eventType: modifier,
+      batterId: atBatEvent.batterId,
+      batterName: atBatEvent.batterName,
+      runnerId: modifier === 'TOOTBLAN' ? runnerOut?.runnerId : undefined,
+      fielderPosition: primaryPosition ? POSITION_NUMBER[primaryPosition as keyof typeof POSITION_NUMBER] : undefined,
+      fielderName: primaryDefender?.playerName,
+    };
+
+    if (modifier === 'KILLED_PITCHER' || modifier === 'NUT_SHOT') {
+      setPendingManualSpecialPrompt({
+        type: modifier === 'KILLED_PITCHER' ? 'KP' : 'NUT',
+        event: {
+          ...event,
+          fielderPosition: 1,
+          fielderName: atBatEvent.pitcherName,
+        },
+        atBatEventId: atBatEvent.eventId,
+        modifierValue: modifier,
+      });
+      return;
+    }
+
+    const updatedAtBat = await appendModifierToAtBatEvent(atBatEvent.eventId, modifier);
+    if (!updatedAtBat) {
+      return;
+    }
+    await handleSpecialEvent(event, updatedAtBat);
+  }, [appendModifierToAtBatEvent, buildHistoricalDefensiveAlignment, enrichingEntry?.eventId, handleSpecialEvent]);
 
   const handleManualSpecialPromptComplete = useCallback((result: InjuryResult | MojoResult) => {
     if (!pendingManualSpecialPrompt) {
@@ -3164,11 +3250,21 @@ export function GameTracker() {
     }
 
     const baseEvent = pendingManualSpecialPrompt.event;
+    const sourceAtBatEventId = pendingManualSpecialPrompt.atBatEventId;
     setPendingManualSpecialPrompt(null);
+
+    const finish = async (nextEvent: SpecialEventData) => {
+      const sourceAtBat = sourceAtBatEventId ? await getAtBatEvent(sourceAtBatEventId) : null;
+      const modifierValue = pendingManualSpecialPrompt.modifierValue;
+      const updatedAtBat = sourceAtBat && modifierValue
+        ? await appendModifierToAtBatEvent(sourceAtBat.eventId, modifierValue)
+        : sourceAtBat;
+      await handleSpecialEvent(nextEvent, updatedAtBat || undefined);
+    };
 
     if (pendingManualSpecialPrompt.type === 'KP') {
       const injuryResult = result as InjuryResult;
-      void handleSpecialEvent({
+      void finish({
         ...baseEvent,
         injuryStayedIn: injuryResult.stayedIn,
         newFitness: injuryResult.newFitness,
@@ -3177,7 +3273,7 @@ export function GameTracker() {
     }
 
     const mojoResult = result as MojoResult;
-    void handleSpecialEvent({
+    void finish({
       ...baseEvent,
       mojoImpact: mojoResult.mojoImpact,
     });
@@ -4561,6 +4657,7 @@ export function GameTracker() {
               entry={enrichingEntry}
               currentEnrichment={enrichingEntry.eventId ? enrichmentCache[enrichingEntry.eventId] : undefined}
               onUpdate={handleEnrichmentUpdate}
+              onModifierRecord={(modifier) => void handleAtBatModifierRecord(modifier)}
               onClose={handleEnrichmentClose}
               useMainFieldForLocation={canUseMainFieldLocation}
               closeLabel="Return to live"
@@ -4664,7 +4761,13 @@ export function GameTracker() {
                   +FLD
                 </button>
                 <button
-                  onClick={() => setShowModifierTray(prev => !prev)}
+                  onClick={() => {
+                    const latestAtBat = [...playLogEntries].reverse().find((entry) => entry.eventType === 'at_bat' && entry.isEnrichable);
+                    if (latestAtBat) {
+                      setEnrichingEntry(latestAtBat);
+                    }
+                    setLineupOverlayHint('Use the at-bat editor for modifiers and special-event enhancements.');
+                  }}
                   className="bg-[#6c3483] border-[3px] border-[#af7ac5] px-3 py-2.5 text-white text-xs font-bold
                              shadow-[2px_2px_0px_0px_rgba(0,0,0,0.5)] active:scale-95 transition-transform
                              hover:bg-[#7d3c98]"
@@ -4689,31 +4792,6 @@ export function GameTracker() {
                 END
               </button>
             </div>
-            {showModifierTray && (
-              <div className="absolute bottom-full left-2 right-2 mb-2 bg-[#1a1a1a]/95 border-[3px] border-[#C4A853] p-2 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.6)] z-30">
-                <div className="text-[8px] text-[#C4A853] font-bold tracking-[0.12em] mb-2">MODIFIERS + ENHANCEMENTS</div>
-                <div className="grid grid-cols-4 gap-1">
-                  {/* D-14: WG removed — contextual WEB GEM entry is deferred with the remaining field replacement work */}
-                  {[
-                    ['7+', 'SEVEN_PLUS_PITCH_AB'],
-                    ['ROB', 'ROBBERY'],
-                    ['KP', 'KILLED_PITCHER'],
-                    ['NUT', 'NUT_SHOT'],
-                    ['BT', 'BEAT_THROW'],
-                    ['BUNT', 'BUNT'],
-                    ['TBL', 'TOOTBLAN'],
-                  ].map(([label, eventType]) => (
-                    <button
-                      key={label}
-                      onClick={() => triggerManualSpecialEvent(eventType as SpecialEventData['eventType'])}
-                      className="bg-[#333] border-[2px] border-[#C4A853] px-2 py-2 text-[10px] font-bold text-[#E8E8D8] hover:bg-[#444] active:scale-95 transition-transform"
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
           </div>
         </div>
 

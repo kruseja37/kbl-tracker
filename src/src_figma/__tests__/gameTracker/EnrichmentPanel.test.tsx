@@ -82,4 +82,25 @@ describe('EnrichmentPanel', () => {
 
     expect(onUpdate).toHaveBeenCalledWith('fieldingPlayType', 'wall');
   });
+
+  test('routes modifier clicks through the at-bat modifier handler', () => {
+    const onModifierRecord = vi.fn();
+
+    render(
+      <EnrichmentPanel
+        entry={buildEntry('FO')}
+        currentEnrichment={{ modifiers: ['BUNT'] }}
+        onUpdate={() => {}}
+        onModifierRecord={onModifierRecord}
+        onClose={() => {}}
+      />
+    );
+
+    expect(screen.getByText('Modifiers')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'BUNT' })).toBeDisabled();
+
+    fireEvent.click(screen.getByRole('button', { name: 'ROB' }));
+
+    expect(onModifierRecord).toHaveBeenCalledWith('ROBBERY');
+  });
 });

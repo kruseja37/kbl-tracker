@@ -48,6 +48,18 @@ export interface EnrichmentUpdate {
   pitchesInAtBat?: number;
 }
 
+const MODIFIER_OPTIONS = [
+  { value: 'SEVEN_PLUS_PITCH_AB', label: '7+' },
+  { value: 'ROBBERY', label: 'ROB' },
+  { value: 'KILLED_PITCHER', label: 'KP' },
+  { value: 'NUT_SHOT', label: 'NUT' },
+  { value: 'BEAT_THROW', label: 'BT' },
+  { value: 'BUNT', label: 'BUNT' },
+  { value: 'TOOTBLAN', label: 'TBL' },
+] as const;
+
+export type AtBatModifierValue = typeof MODIFIER_OPTIONS[number]['value'];
+
 // ──────────────────────────────────────────────────────────────
 // Mini Diamond SVG for field location (simple tap-to-place)
 // ──────────────────────────────────────────────────────────────
@@ -156,6 +168,7 @@ interface EnrichmentPanelProps {
   entry: PlayLogEntry;
   currentEnrichment?: AtBatEvent['enrichment'];
   onUpdate: (field: keyof EnrichmentUpdate, value: unknown) => void;
+  onModifierRecord?: (modifier: AtBatModifierValue) => void;
   onClose: () => void;
   useMainFieldForLocation?: boolean;
   closeLabel?: string;
@@ -165,6 +178,7 @@ export function EnrichmentPanel({
   entry,
   currentEnrichment,
   onUpdate,
+  onModifierRecord,
   onClose,
   useMainFieldForLocation = false,
   closeLabel = 'Done',
@@ -356,6 +370,27 @@ export function EnrichmentPanel({
           {(currentEnrichment?.pitchesInAtBat ?? 0) >= 7 && (
             <div className="text-[7px] text-[#34d399] mt-0.5">Quality At-Bat (7+ pitches)</div>
           )}
+        </EnrichmentSection>
+
+        <EnrichmentSection label="Modifiers" filled={(currentEnrichment?.modifiers?.length ?? 0) > 0}>
+          <div className="flex flex-wrap gap-0.5">
+            {MODIFIER_OPTIONS.map((modifier) => {
+              const isActive = currentEnrichment?.modifiers?.includes(modifier.value) ?? false;
+              return (
+                <button
+                  key={modifier.value}
+                  className={`text-[7px] px-1.5 py-0.5 rounded border transition-colors
+                    ${isActive
+                      ? 'bg-[#6c3483]/40 border-[#af7ac5] text-[#f5e9ff]'
+                      : 'bg-[#1f2937]/60 border-[#4a6a4a] text-[#88AA88] hover:bg-[#4a6a4a]/40'}`}
+                  disabled={isActive || !onModifierRecord}
+                  onClick={() => onModifierRecord?.(modifier.value)}
+                >
+                  {modifier.label}
+                </button>
+              );
+            })}
+          </div>
         </EnrichmentSection>
 
         {/* K/Kc distinction (shown only for strikeouts without type set) */}
