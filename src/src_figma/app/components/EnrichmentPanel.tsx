@@ -1,6 +1,10 @@
 import React, { useCallback, useState } from 'react';
 import type { AtBatEvent } from '../../../utils/eventLog';
 import type { PlayLogEntry } from '../utils/playLogTypes';
+import {
+  FIELDING_PLAY_TYPE_OPTIONS,
+  type FieldingPlayTypeValue,
+} from '../utils/fieldingPlayType';
 
 // ──────────────────────────────────────────────────────────────
 // Pitch Type Constants (§4.3)
@@ -38,6 +42,7 @@ export interface EnrichmentUpdate {
   fieldLocation?: { x: number; y: number };
   exitType?: ExitTypeValue;
   fieldingSequence?: number[];
+  fieldingPlayType?: FieldingPlayTypeValue;
   hrDistance?: number;
   pitchType?: string;
   pitchesInAtBat?: number;
@@ -275,6 +280,25 @@ export function EnrichmentPanel({
                 )}
               </div>
             )}
+          </EnrichmentSection>
+        )}
+
+        {showFieldingAttribution && (
+          <EnrichmentSection label="Fielding Play Type" filled={!!currentEnrichment?.fieldingPlayType}>
+            <div className="flex flex-wrap gap-0.5">
+              {FIELDING_PLAY_TYPE_OPTIONS.map((playType) => (
+                <button
+                  key={playType.value}
+                  className={`text-[7px] px-1.5 py-0.5 rounded border transition-colors
+                    ${currentEnrichment?.fieldingPlayType === playType.value
+                      ? 'bg-[#C4A853]/30 border-[#C4A853] text-[#C4A853]'
+                      : 'bg-[#1f2937]/60 border-[#4a6a4a] text-[#88AA88] hover:bg-[#4a6a4a]/40'}`}
+                  onClick={() => onUpdate('fieldingPlayType', playType.value)}
+                >
+                  {playType.label}
+                </button>
+              ))}
+            </div>
           </EnrichmentSection>
         )}
 

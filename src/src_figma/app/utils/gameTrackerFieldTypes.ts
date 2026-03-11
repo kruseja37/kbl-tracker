@@ -3,6 +3,7 @@ import type { FitnessState } from '../../../engines/fitnessEngine';
 import type { FieldCoordinate } from '../components/FieldCanvas';
 import type { ErrorType } from '../components/ErrorTypePopup';
 import type { RunnerDefaults } from '../components/runnerDefaults';
+import type { PlayType as FieldingPlayType } from '../types/game';
 
 export type HitType = '1B' | '2B' | '3B' | 'HR';
 export type OutType = 'GO' | 'FO' | 'LO' | 'PO' | 'FLO' | 'DP' | 'TP' | 'K' | 'Kc' | 'FC' | 'SAC' | 'SF';
@@ -26,6 +27,7 @@ export interface PlayData {
   runnerOutcomes?: RunnerDefaults;
   exitType?: 'Ground' | 'Line Drive' | 'Fly Ball' | 'Pop Up';
   playDifficulty?: 'routine' | 'likely' | 'difficult' | 'impossible';
+  fieldingPlayType?: Extract<FieldingPlayType, 'routine' | 'charging' | 'running' | 'diving' | 'leaping' | 'sliding' | 'wall' | 'over_shoulder' | 'robbed_hr' | 'beat_throw' | 'missed_dive' | 'missed_leap'>;
   sprayDirection?: 'Left' | 'Left-Center' | 'Center' | 'Right-Center' | 'Right';
   inferredFielder?: number;
   wasOverridden?: boolean;

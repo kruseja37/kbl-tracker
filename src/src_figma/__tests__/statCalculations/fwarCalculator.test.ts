@@ -30,6 +30,7 @@ import {
   calculateGameFWAR,
   calculateSeasonFWAR,
   calculateFWARFromStats,
+  convertPersistedToCalculatorEvent,
   getFWARTier,
   getStarPlayFameBonus,
   isWebGem,
@@ -41,6 +42,7 @@ import {
   type Difficulty,
   type FieldingEvent,
 } from '../../../engines/fwarCalculator';
+import type { FieldingEvent as PersistedFieldingEvent } from '../../../utils/eventLog';
 
 // ============================================
 // TEST DATA HELPERS
@@ -219,6 +221,36 @@ describe('Difficulty Multipliers Constants', () => {
   test('missedDive and missedLeap are zero-credit difficulty markers', () => {
     expect(DIFFICULTY_MULTIPLIERS.missedDive).toBe(0.0);
     expect(DIFFICULTY_MULTIPLIERS.missedLeap).toBe(0.0);
+  });
+
+  test('prefers persisted special play type over coarse difficulty buckets', () => {
+    const persisted: PersistedFieldingEvent = {
+      fieldingEventId: 'game-1_1_fe_0',
+      gameId: 'game-1',
+      atBatEventId: 'game-1_1',
+      sequence: 0,
+      playerId: 'player-8',
+      playerName: 'Casey Center',
+      position: 'CF',
+      teamId: 'TEAM-H',
+      playType: 'putout',
+      difficulty: '50-50',
+      specialPlayType: 'Leaping',
+      ballInPlay: {
+        trajectory: 'fly',
+        zone: 4,
+        velocity: 'medium',
+        fielderIds: ['player-8'],
+        primaryFielderId: 'player-8',
+      },
+      success: true,
+      runsPreventedOrAllowed: 0,
+    };
+
+    const converted = convertPersistedToCalculatorEvent(persisted);
+
+    expect(converted.difficulty).toBe('leaping');
+    expect(converted.type).toBe('starPlay');
   });
 });
 

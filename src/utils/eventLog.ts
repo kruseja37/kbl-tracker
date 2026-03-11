@@ -314,6 +314,19 @@ export interface AtBatEvent {
     fieldLocation?: { x: number; y: number; zone?: string };
     exitType?: 'ground_ball' | 'fly_ball' | 'line_drive' | 'popup' | 'bunt' | string;
     fieldingSequence?: number[];
+    fieldingPlayType?:
+      | 'routine'
+      | 'charging'
+      | 'running'
+      | 'diving'
+      | 'leaping'
+      | 'sliding'
+      | 'wall'
+      | 'over_shoulder'
+      | 'robbed_hr'
+      | 'beat_throw'
+      | 'missed_dive'
+      | 'missed_leap';
     putouts?: number[];
     assists?: number[];
     errors?: Array<{ position: number; type: 'fielding' | 'throwing' | 'mental' }>;

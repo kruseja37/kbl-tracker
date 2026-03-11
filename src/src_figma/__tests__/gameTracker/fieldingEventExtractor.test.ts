@@ -171,4 +171,30 @@ describe('extractFieldingEvents', () => {
     expect(events[3].playerId).toBe('home-ss-6');
     expect(events[4].ballInPlay.fielderIds).toEqual(['home-lf-7', 'home-ss-6', 'home-c-2']);
   });
+
+  it('maps fielding play type enrichment into special play metadata and persisted difficulty', () => {
+    const playData: PlayData = {
+      type: 'out',
+      outType: 'FO',
+      fieldingSequence: [8],
+      fieldingPlayType: 'robbed_hr',
+      exitType: 'Fly Ball',
+      spraySector: 'Center',
+    };
+    const context: FieldingExtractionContext = {
+      gameId: 'game-5',
+      defensiveTeamId: 'TEAM-H',
+      atBatEventId: 'game-5_21',
+      atBatEventIndex: 21,
+      defendersByPosition: {
+        CF: { playerId: 'home-cf-8', playerName: 'Casey Center' },
+      },
+    };
+
+    const events = extractFieldingEvents(playData, context);
+
+    expect(events).toHaveLength(1);
+    expect(events[0].difficulty).toBe('spectacular');
+    expect(events[0].specialPlayType).toBe('Robbed HR');
+  });
 });

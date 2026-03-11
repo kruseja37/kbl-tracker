@@ -19,7 +19,23 @@ export type GameEvent = 'SB' | 'CS' | 'WP' | 'PB' | 'PK' | 'PITCH_CHANGE' | 'PIN
 // For outs: Routine, Diving, Wall Catch, Running, Leaping
 // For hits: Clean (no fielding attempt), Diving, Leaping, Robbery Attempt
 // For HRs: Over Fence (default), Robbery Attempt, Wall Scraper (BUG-015)
-export type SpecialPlayType = 'Routine' | 'Diving' | 'Wall Catch' | 'Running' | 'Leaping' | 'Clean' | 'Robbery Attempt' | 'Over Fence' | 'Wall Scraper';
+export type SpecialPlayType =
+  | 'Routine'
+  | 'Charging'
+  | 'Running'
+  | 'Diving'
+  | 'Leaping'
+  | 'Sliding'
+  | 'Over Shoulder'
+  | 'Wall Catch'
+  | 'Robbed HR'
+  | 'Beat Throw'
+  | 'Missed Dive'
+  | 'Missed Leap'
+  | 'Clean'
+  | 'Robbery Attempt'
+  | 'Over Fence'
+  | 'Wall Scraper';
 export type RunnerOutcome = 'SCORED' | 'TO_3B' | 'TO_2B' | 'HELD' | 'OUT_HOME' | 'OUT_3B' | 'OUT_2B';
 
 // Extra event types for inferred advancement events
@@ -39,7 +55,8 @@ export interface ExtraEvent {
 
 export type PlayType = 'routine' | 'diving' | 'leaping' | 'wall' | 'charging' |
                        'running' | 'sliding' | 'over_shoulder' |
-                       'error' | 'robbed_hr' | 'failed_robbery';
+                       'error' | 'robbed_hr' | 'failed_robbery' |
+                       'beat_throw' | 'missed_dive' | 'missed_leap';
 export type ErrorType = 'fielding' | 'throwing' | 'mental' | 'missed_catch' | 'collision';
 export type D3KOutcome = 'OUT' | 'WP' | 'PB' | 'E_CATCHER' | 'E_1B';
 export type DepthType = 'shallow' | 'infield' | 'outfield' | 'deep';

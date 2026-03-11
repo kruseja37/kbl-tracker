@@ -97,6 +97,10 @@ import type { PlayLogEntry } from '../utils/playLogTypes';
 import { buildPlayLogEntries } from '../utils/gameTrackerPlayLog';
 import { reconcileTeamPitchersWithLineupSnapshot, reconcileTeamPlayersWithLineupSnapshot } from '../utils/gameTrackerRosterSync';
 import {
+  mapFieldingPlayTypeToPlayDifficulty,
+  type FieldingPlayTypeValue,
+} from '../utils/fieldingPlayType';
+import {
   applyRunnerDefaultsToNames,
   buildRunnerCorrectionForQuickBarOutcome,
   countRbiFromDefaults,
@@ -1335,9 +1339,12 @@ export function GameTracker() {
 
   const buildPlayDataFromAtBatEvent = useCallback((
     atBatEvent: AtBatEvent,
-    fieldingSequence: number[],
+    enrichmentOverrides?: Partial<NonNullable<AtBatEvent['enrichment']>>,
   ): PlayData | null => {
-    const enrichment = atBatEvent.enrichment || {};
+    const enrichment = {
+      ...(atBatEvent.enrichment || {}),
+      ...(enrichmentOverrides || {}),
+    };
     const ballLocation = enrichment.fieldLocation
       ? { x: enrichment.fieldLocation.x, y: enrichment.fieldLocation.y }
       : undefined;
@@ -1347,10 +1354,14 @@ export function GameTracker() {
       : enrichment.exitType === 'popup' ? 'Pop Up'
       : undefined;
     const common = {
-      fieldingSequence,
+      fieldingSequence: enrichment.fieldingSequence || [],
       ballLocation,
       spraySector: enrichment.fieldLocation?.zone,
       exitType,
+      playDifficulty: mapFieldingPlayTypeToPlayDifficulty(
+        enrichment.fieldingPlayType as FieldingPlayTypeValue | undefined,
+      ),
+      fieldingPlayType: enrichment.fieldingPlayType as FieldingPlayTypeValue | undefined,
     } as const;
 
     if (['1B', '2B', '3B', 'GRD'].includes(atBatEvent.result)) {
@@ -1497,7 +1508,7 @@ export function GameTracker() {
 
   const buildFieldingSyncEventsForSequenceEdit = useCallback(async (
     atBatEvent: AtBatEvent,
-    nextFieldingSequence: number[],
+    enrichmentOverrides: Partial<NonNullable<AtBatEvent['enrichment']>>,
   ) => {
     const linkedFieldingEvents = await getFieldingEventsForAtBat(atBatEvent.eventId);
     const defendersByPosition = await buildHistoricalDefensiveAlignment(atBatEvent, linkedFieldingEvents);
@@ -1508,11 +1519,8 @@ export function GameTracker() {
       atBatEventIndex: atBatEvent.eventIndex,
       defendersByPosition,
     };
-    const previousPlayData = buildPlayDataFromAtBatEvent(
-      atBatEvent,
-      atBatEvent.enrichment?.fieldingSequence || [],
-    );
-    const nextPlayData = buildPlayDataFromAtBatEvent(atBatEvent, nextFieldingSequence);
+    const previousPlayData = buildPlayDataFromAtBatEvent(atBatEvent);
+    const nextPlayData = buildPlayDataFromAtBatEvent(atBatEvent, enrichmentOverrides);
     const previousBaseCount = previousPlayData
       ? extractFieldingEvents(previousPlayData, fieldingContext).length
       : 0;
@@ -3774,10 +3782,10 @@ export function GameTracker() {
         });
       }
 
-      if (field === 'fieldingSequence') {
+      if (field === 'fieldingSequence' || field === 'fieldingPlayType') {
         const syncedFieldingEvents = await buildFieldingSyncEventsForSequenceEdit(
           existingAtBat,
-          value as number[],
+          update as Partial<NonNullable<AtBatEvent['enrichment']>>,
         );
         await updateAtBatEventWithFieldingSync(
           enrichingEntry.eventId,
@@ -3809,7 +3817,7 @@ export function GameTracker() {
         if (e.id !== enrichingEntry.id) return e;
         const updated = { ...e };
         if (field === 'fieldLocation') updated.hasLocationData = true;
-        if (field === 'fieldingSequence') updated.hasFieldingData = true;
+        if (field === 'fieldingSequence' || field === 'fieldingPlayType') updated.hasFieldingData = true;
         if (field === 'pitchType') updated.hasPitchType = true;
         if (field === 'pitchesInAtBat') {
           updated.hasPitchCount = true;
@@ -3823,7 +3831,7 @@ export function GameTracker() {
       // Update the enrichingEntry itself so panel reflects changes
       setEnrichingEntry(prev => prev ? { ...prev,
         hasLocationData: field === 'fieldLocation' ? true : prev.hasLocationData,
-        hasFieldingData: field === 'fieldingSequence' ? true : prev.hasFieldingData,
+        hasFieldingData: field === 'fieldingSequence' || field === 'fieldingPlayType' ? true : prev.hasFieldingData,
         hasPitchType: field === 'pitchType' ? true : prev.hasPitchType,
         hasPitchCount: field === 'pitchesInAtBat' ? true : prev.hasPitchCount,
         isQAB: shouldMarkQualityAtBat ? true : prev.isQAB,

@@ -62,4 +62,24 @@ describe('EnrichmentPanel', () => {
 
     expect(screen.queryByText('Exit Type')).not.toBeInTheDocument();
   });
+
+  test('shows fielding play type controls for outs and saves normalized value', () => {
+    const onUpdate = vi.fn();
+
+    render(
+      <EnrichmentPanel
+        entry={buildEntry('FO')}
+        currentEnrichment={{ fieldingPlayType: 'diving' }}
+        onUpdate={onUpdate}
+        onClose={() => {}}
+      />
+    );
+
+    expect(screen.getByText('Fielding Play Type')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Diving' })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Wall Catch' }));
+
+    expect(onUpdate).toHaveBeenCalledWith('fieldingPlayType', 'wall');
+  });
 });

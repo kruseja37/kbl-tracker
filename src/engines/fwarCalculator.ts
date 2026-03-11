@@ -621,6 +621,43 @@ function mapPersistedDifficulty(
   return mapping[difficulty] || 'routine';
 }
 
+function mapPersistedSpecialPlayType(
+  specialPlayType?: PersistedFieldingEvent['specialPlayType'] | null,
+): Difficulty | null {
+  switch (specialPlayType) {
+    case 'Routine':
+    case 'Clean':
+    case 'Over Fence':
+    case 'Wall Scraper':
+      return 'routine';
+    case 'Charging':
+      return 'charging';
+    case 'Running':
+      return 'running';
+    case 'Diving':
+      return 'diving';
+    case 'Leaping':
+      return 'leaping';
+    case 'Sliding':
+      return 'sliding';
+    case 'Over Shoulder':
+      return 'overShoulder';
+    case 'Wall Catch':
+      return 'wall';
+    case 'Robbed HR':
+    case 'Robbery Attempt':
+      return 'robbedHR';
+    case 'Beat Throw':
+      return 'beatThrow';
+    case 'Missed Dive':
+      return 'missedDive';
+    case 'Missed Leap':
+      return 'missedLeap';
+    default:
+      return null;
+  }
+}
+
 /**
  * Map persisted playType to calculator event type
  */
@@ -644,7 +681,8 @@ function mapPersistedPlayType(
 export function convertPersistedToCalculatorEvent(
   persisted: PersistedFieldingEvent
 ): FieldingEvent {
-  const calculatorDifficulty = mapPersistedDifficulty(persisted.difficulty);
+  const calculatorDifficulty = mapPersistedSpecialPlayType(persisted.specialPlayType)
+    || mapPersistedDifficulty(persisted.difficulty);
   const calculatorType = mapPersistedPlayType(persisted.playType);
 
   // Determine if this is a star play based on difficulty

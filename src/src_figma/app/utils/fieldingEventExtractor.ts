@@ -15,6 +15,10 @@ import type { FieldingEvent, BallInPlayData } from '../../../utils/eventLog';
 import type { Position } from '../../../types/game';
 import type { PlayData } from './gameTrackerFieldTypes';
 import { POSITION_MAP } from '../components/fielderInference';
+import {
+  mapFieldingPlayTypeToPersistedDifficulty,
+  mapFieldingPlayTypeToSpecialPlayType,
+} from './fieldingPlayType';
 
 // ============================================
 // MAPPING HELPERS
@@ -182,7 +186,12 @@ export function extractFieldingEvents(
     ? mapExitTypeToTrajectory(playData.exitType)
     : inferTrajectoryFromOutType(playData.outType);
 
-  const difficulty = mapPlayDifficulty(playData.playDifficulty);
+  const difficulty = playData.fieldingPlayType
+    ? mapFieldingPlayTypeToPersistedDifficulty(playData.fieldingPlayType)
+    : mapPlayDifficulty(playData.playDifficulty);
+  const specialPlayType = playData.fieldingPlayType
+    ? mapFieldingPlayTypeToSpecialPlayType(playData.fieldingPlayType)
+    : null;
   const zone = mapSpraySectorToZone(playData.spraySector);
 
   // Build the ball-in-play data shared across all events on this play
@@ -215,6 +224,7 @@ export function extractFieldingEvents(
       teamId: context.defensiveTeamId,
       playType,
       difficulty: overrideDifficulty || difficulty,
+      specialPlayType,
       ballInPlay,
       success: playType !== 'error',
       runsPreventedOrAllowed: 0, // Would need LI integration for real values
@@ -362,7 +372,12 @@ export function extractSupplementalAdvanceErrorEvents(
   const trajectory = playData.exitType
     ? mapExitTypeToTrajectory(playData.exitType)
     : inferTrajectoryFromOutType(playData.outType);
-  const difficulty = mapPlayDifficulty(playData.playDifficulty);
+  const difficulty = playData.fieldingPlayType
+    ? mapFieldingPlayTypeToPersistedDifficulty(playData.fieldingPlayType)
+    : mapPlayDifficulty(playData.playDifficulty);
+  const specialPlayType = playData.fieldingPlayType
+    ? mapFieldingPlayTypeToSpecialPlayType(playData.fieldingPlayType)
+    : null;
   const zone = mapSpraySectorToZone(playData.spraySector);
   const sequenceDefenderIds = playData.fieldingSequence
     .map((positionNum) => resolveDefenderIdentity(positionFromNumber(positionNum), context.defendersByPosition).playerId);
@@ -389,7 +404,7 @@ export function extractSupplementalAdvanceErrorEvents(
         primaryFielderId: defender.playerId,
       },
       success: false,
-      specialPlayType: null,
+      specialPlayType,
       runsPreventedOrAllowed: 0,
     };
   });
@@ -408,7 +423,12 @@ export function extractSupplementalRunnerOutFieldingEvents(
   const trajectory = playData.exitType
     ? mapExitTypeToTrajectory(playData.exitType)
     : inferTrajectoryFromOutType(playData.outType);
-  const difficulty = mapPlayDifficulty(playData.playDifficulty);
+  const difficulty = playData.fieldingPlayType
+    ? mapFieldingPlayTypeToPersistedDifficulty(playData.fieldingPlayType)
+    : mapPlayDifficulty(playData.playDifficulty);
+  const specialPlayType = playData.fieldingPlayType
+    ? mapFieldingPlayTypeToSpecialPlayType(playData.fieldingPlayType)
+    : null;
   const zone = mapSpraySectorToZone(playData.spraySector);
   const events: FieldingEvent[] = [];
   let sequence = startingSequence;
@@ -447,7 +467,7 @@ export function extractSupplementalRunnerOutFieldingEvents(
           primaryFielderId: defender.playerId,
         },
         success: true,
-        specialPlayType: null,
+        specialPlayType,
         runsPreventedOrAllowed: 0,
       });
       sequence += 1;
@@ -469,7 +489,7 @@ export function extractSupplementalRunnerOutFieldingEvents(
         primaryFielderId: putoutDefender.playerId,
       },
       success: true,
-      specialPlayType: null,
+      specialPlayType,
       runsPreventedOrAllowed: 0,
     });
     sequence += 1;
