@@ -27,7 +27,7 @@ export interface PlayData {
   runnerOutcomes?: RunnerDefaults;
   exitType?: 'Ground' | 'Line Drive' | 'Fly Ball' | 'Pop Up';
   playDifficulty?: 'routine' | 'likely' | 'difficult' | 'impossible';
-  fieldingPlayType?: Extract<FieldingPlayType, 'routine' | 'charging' | 'running' | 'diving' | 'leaping' | 'sliding' | 'wall' | 'over_shoulder' | 'robbed_hr' | 'beat_throw' | 'missed_dive' | 'missed_leap'>;
+  fieldingPlayType?: Extract<FieldingPlayType, 'routine' | 'charging' | 'running' | 'diving' | 'leaping' | 'sliding' | 'wall' | 'over_shoulder' | 'robbed_hr' | 'beat_runner' | 'beat_throw' | 'missed_dive' | 'missed_leap'>;
   sprayDirection?: 'Left' | 'Left-Center' | 'Center' | 'Right-Center' | 'Right';
   inferredFielder?: number;
   wasOverridden?: boolean;

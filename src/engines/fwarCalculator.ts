@@ -647,6 +647,8 @@ function mapPersistedSpecialPlayType(
     case 'Robbed HR':
     case 'Robbery Attempt':
       return 'robbedHR';
+    case 'Beat Runner':
+      return 'beatRunner';
     case 'Beat Throw':
       return 'beatThrow';
     case 'Missed Dive':

@@ -29,6 +29,7 @@ export type SpecialPlayType =
   | 'Over Shoulder'
   | 'Wall Catch'
   | 'Robbed HR'
+  | 'Beat Runner'
   | 'Beat Throw'
   | 'Missed Dive'
   | 'Missed Leap'
@@ -123,7 +124,7 @@ export interface HiddenModifiers {
 export type PlayType = 'routine' | 'diving' | 'leaping' | 'wall' | 'charging' |
                        'running' | 'sliding' | 'over_shoulder' |
                        'error' | 'robbed_hr' | 'failed_robbery' |
-                       'beat_throw' | 'missed_dive' | 'missed_leap';
+                       'beat_runner' | 'beat_throw' | 'missed_dive' | 'missed_leap';
 export type ErrorType = 'fielding' | 'throwing' | 'mental' | 'missed_catch' | 'collision';
 export type D3KOutcome = 'OUT' | 'WP' | 'PB' | 'E_CATCHER' | 'E_1B';
 export type DepthType = 'shallow' | 'infield' | 'outfield' | 'deep';

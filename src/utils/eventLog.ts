@@ -324,6 +324,7 @@ export interface AtBatEvent {
       | 'wall'
       | 'over_shoulder'
       | 'robbed_hr'
+      | 'beat_runner'
       | 'beat_throw'
       | 'missed_dive'
       | 'missed_leap';

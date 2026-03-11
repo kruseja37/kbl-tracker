@@ -11,6 +11,7 @@ export type FieldingPlayTypeValue =
   | 'wall'
   | 'over_shoulder'
   | 'robbed_hr'
+  | 'beat_runner'
   | 'beat_throw'
   | 'missed_dive'
   | 'missed_leap';
@@ -28,6 +29,7 @@ export const FIELDING_PLAY_TYPE_OPTIONS: Array<{
   { value: 'wall', label: 'Wall Catch' },
   { value: 'over_shoulder', label: 'Over Shoulder' },
   { value: 'robbed_hr', label: 'Robbed HR' },
+  { value: 'beat_runner', label: 'Beat Runner' },
   { value: 'beat_throw', label: 'Beat Throw' },
   { value: 'missed_dive', label: 'Missed Dive' },
   { value: 'missed_leap', label: 'Missed Leap' },
@@ -41,6 +43,7 @@ export function mapFieldingPlayTypeToPlayDifficulty(
       return 'routine';
     case 'charging':
     case 'running':
+    case 'beat_runner':
     case 'beat_throw':
       return 'likely';
     case 'diving':
@@ -67,6 +70,7 @@ export function mapFieldingPlayTypeToPersistedDifficulty(
       return 'routine';
     case 'charging':
     case 'running':
+    case 'beat_runner':
     case 'beat_throw':
       return 'likely';
     case 'diving':
@@ -107,6 +111,8 @@ export function mapFieldingPlayTypeToSpecialPlayType(
       return 'Over Shoulder';
     case 'robbed_hr':
       return 'Robbed HR';
+    case 'beat_runner':
+      return 'Beat Runner';
     case 'beat_throw':
       return 'Beat Throw';
     case 'missed_dive':

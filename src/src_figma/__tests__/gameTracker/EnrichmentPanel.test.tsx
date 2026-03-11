@@ -63,7 +63,7 @@ describe('EnrichmentPanel', () => {
     expect(screen.queryByText('Exit Type')).not.toBeInTheDocument();
   });
 
-  test('shows fielding play type controls for outs and saves normalized value', () => {
+  test('shows catch type controls for outs and saves normalized value', () => {
     const onUpdate = vi.fn();
 
     render(
@@ -75,8 +75,9 @@ describe('EnrichmentPanel', () => {
       />
     );
 
-    expect(screen.getByText('Fielding Play Type')).toBeInTheDocument();
+    expect(screen.getByText('Catch Type / Difficulty')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Diving' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Beat Runner' })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Wall Catch' }));
 

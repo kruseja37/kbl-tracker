@@ -298,7 +298,10 @@ export function EnrichmentPanel({
         )}
 
         {showFieldingAttribution && (
-          <EnrichmentSection label="Fielding Play Type" filled={!!currentEnrichment?.fieldingPlayType}>
+          <EnrichmentSection label="Catch Type / Difficulty" filled={!!currentEnrichment?.fieldingPlayType}>
+            <div className="mb-1 text-[7px] text-[#88AA88]">
+              Select the objective fielding difficulty for this recorded play.
+            </div>
             <div className="flex flex-wrap gap-0.5">
               {FIELDING_PLAY_TYPE_OPTIONS.map((playType) => (
                 <button
