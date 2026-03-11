@@ -6,7 +6,7 @@ import {
   type GameBases,
   type RunnerDefaults,
 } from '../components/runnerDefaults';
-import type { PlayData } from '../components/EnhancedInteractiveField';
+import type { PlayData } from './gameTrackerFieldTypes';
 import type { HitType, OutType, RunnerAdvancement, WalkType } from '../../hooks/useGameState';
 
 export interface PendingRunnerCorrectionAction {

@@ -13,7 +13,7 @@
 
 import type { FieldingEvent, BallInPlayData } from '../../../utils/eventLog';
 import type { Position } from '../../../types/game';
-import type { PlayData } from '../components/EnhancedInteractiveField';
+import type { PlayData } from './gameTrackerFieldTypes';
 import { POSITION_MAP } from '../components/fielderInference';
 
 // ============================================

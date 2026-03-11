@@ -6,7 +6,7 @@ import {
   extractSupplementalRunnerOutFieldingEvents,
   type FieldingExtractionContext,
 } from '../../app/utils/fieldingEventExtractor';
-import type { PlayData } from '../../app/components/EnhancedInteractiveField';
+import type { PlayData } from '../../app/utils/gameTrackerFieldTypes';
 
 describe('extractFieldingEvents', () => {
   it('uses runtime defender identity when alignment data is available', () => {

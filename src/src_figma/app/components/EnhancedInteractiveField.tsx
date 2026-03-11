@@ -126,6 +126,14 @@ import {
   type HitOutcome,
   type OutOutcome,
 } from './OutcomeButtons';
+import {
+  type HitType,
+  type OutType,
+  type WalkType,
+  type PlayData,
+  type SpecialEventType,
+  type SpecialEventData,
+} from '../utils/gameTrackerFieldTypes';
 
 // ============================================
 // TYPES
@@ -157,179 +165,6 @@ interface FieldPosition {
   number: string;
   svgX: number;
   svgY: number;
-}
-
-export type HitType = '1B' | '2B' | '3B' | 'HR';
-export type OutType = 'GO' | 'FO' | 'LO' | 'PO' | 'FLO' | 'DP' | 'TP' | 'K' | 'Kc' | 'FC' | 'SAC' | 'SF';
-
-export type WalkType = 'BB' | 'IBB' | 'HBP';
-
-export interface PlayData {
-  type: 'hit' | 'out' | 'hr' | 'foul_out' | 'foul_ball' | 'error' | 'walk';
-  hitType?: HitType;
-  outType?: OutType;
-  walkType?: WalkType;
-  fieldingSequence: number[]; // Position numbers in sequence (e.g., [6, 4, 3])
-  ballLocation?: FieldCoordinate;
-  batterLocation?: FieldCoordinate;
-  isFoul?: boolean;
-  foulType?: string;
-  hrDistance?: number;
-  hrType?: string;
-  spraySector?: string;
-  /** Error type (FIELDING, THROWING, MENTAL) - only for type: 'error' */
-  errorType?: ErrorType;
-  /** Position number of fielder who made the error */
-  errorFielder?: number;
-  /**
-   * Runner outcomes - where each runner ends up after the play
-   * This captures user adjustments made during RUNNER_CONFIRM step
-   * CRITICAL: This field MUST be populated for proper stat tracking
-   */
-  runnerOutcomes?: RunnerDefaults;
-
-  // ============================================
-  // ADVANCED METRICS FIELDS (per INFERENTIAL_LOGIC_GAP_ANALYSIS.md)
-  // ============================================
-
-  /**
-   * How the ball left the bat - inferred from result or location
-   * Used for fielding metrics (UZR, OAA) and spray chart analysis
-   */
-  exitType?: 'Ground' | 'Line Drive' | 'Fly Ball' | 'Pop Up';
-
-  /**
-   * Play difficulty rating based on location and fielder
-   * Used for fielding value calculations
-   */
-  playDifficulty?: 'routine' | 'likely' | 'difficult' | 'impossible';
-
-  /**
-   * Spray direction from batter's perspective
-   * More granular than spraySector for hitting analysis
-   */
-  sprayDirection?: 'Left' | 'Left-Center' | 'Center' | 'Right-Center' | 'Right';
-
-  /**
-   * System's predicted fielder (before user selection)
-   * Used for adaptive learning and inference improvement
-   */
-  inferredFielder?: number;
-
-  /**
-   * Whether user overrode the system's inference
-   * Used for adaptive learning - if true, system was wrong
-   */
-  wasOverridden?: boolean;
-
-  /**
-   * Confidence level of the inference (0-1)
-   * Higher = more certain about fielder prediction
-   */
-  inferenceConfidence?: number;
-
-  /**
-   * For double plays: the DP notation (e.g., '6-4-3')
-   */
-  dpType?: string;
-
-  // ============================================
-  // LEVERAGE INDEX & FAME CONTEXT (per LEVERAGE_INDEX_SPEC.md)
-  // ============================================
-
-  /**
-   * Leverage Index at time of play (0.1-10.0)
-   * Used for LI-weighted Fame calculations
-   * Formula: baseFame × √LI × playoffMultiplier
-   */
-  leverageIndex?: number;
-
-  /**
-   * LI category for quick classification
-   * LOW (<0.85), MEDIUM (0.85-2.0), HIGH (2.0-5.0), EXTREME (>5.0)
-   */
-  leverageCategory?: 'LOW' | 'MEDIUM' | 'HIGH' | 'EXTREME';
-
-  /**
-   * Game situation snapshot at time of play
-   * Required for LI calculation and clutch/choke tracking
-   */
-  gameSituation?: {
-    inning: number;
-    isTop: boolean;
-    outs: number;
-    bases: { first: boolean; second: boolean; third: boolean };
-    homeScore: number;
-    awayScore: number;
-  };
-
-  /**
-   * Whether this was a clutch situation (LI >= 1.5)
-   */
-  isClutchSituation?: boolean;
-
-  /**
-   * Playoff context for Fame multiplier
-   */
-  playoffContext?: {
-    isPlayoffs: boolean;
-    round?: 'wild_card' | 'division_series' | 'championship_series' | 'world_series';
-    isEliminationGame?: boolean;
-    isClinchGame?: boolean;
-  };
-
-  /**
-   * Calculated Fame value for this play (if applicable)
-   * Already weighted by LI and playoff multipliers
-   */
-  fameValue?: number;
-
-  /**
-   * Fame event type for special events (WEB_GEM, ROBBERY, etc.)
-   */
-  fameEventType?: string;
-}
-
-export type SpecialEventType =
-  | 'WEB_GEM'
-  | 'ROBBERY'
-  | 'TOOTBLAN'
-  | 'KILLED_PITCHER'
-  | 'NUT_SHOT'
-  | 'BEAT_THROW'
-  | 'BUNT'
-  | 'STRIKEOUT'
-  | 'STRIKEOUT_LOOKING'
-  | 'DROPPED_3RD_STRIKE'
-  | 'SEVEN_PLUS_PITCH_AB';
-
-export interface SpecialEventData {
-  eventType: SpecialEventType;
-  fielderPosition?: number;
-  fielderName?: string;
-  batterId?: string;
-  batterName?: string;
-  runnerId?: string;
-  injuryStayedIn?: boolean;
-  newFitness?: Extract<FitnessState, 'STRAINED' | 'WEAK' | 'HURT'>;
-  mojoImpact?: 'TENSE' | 'RATTLED';
-  newMojo?: MojoLevel;
-
-  // ============================================
-  // LEVERAGE INDEX & FAME CONTEXT
-  // Per LEVERAGE_INDEX_SPEC.md and SPECIAL_EVENTS_SPEC.md
-  // ============================================
-
-  /** Leverage Index at time of event (0.1-10.0) */
-  leverageIndex?: number;
-  /** LI category: LOW, MEDIUM, HIGH, EXTREME */
-  leverageCategory?: 'LOW' | 'MEDIUM' | 'HIGH' | 'EXTREME';
-  /** Whether this was a clutch situation (LI >= 1.5) */
-  isClutchSituation?: boolean;
-  /** Calculated Fame value (base × √LI × playoffMultiplier) */
-  fameValue?: number;
-  /** Base Fame value before LI weighting */
-  baseFame?: number;
 }
 
 // ============================================

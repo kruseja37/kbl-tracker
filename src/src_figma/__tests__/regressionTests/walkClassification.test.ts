@@ -15,7 +15,7 @@
 
 import { describe, test, expect, beforeEach } from 'vitest';
 import { calculateRunnerDefaults, type GameBases } from '../../app/components/runnerDefaults';
-import type { PlayData } from '../../app/components/EnhancedInteractiveField';
+import type { PlayData } from '../../app/utils/gameTrackerFieldTypes';
 
 // ============================================
 // TEST HELPERS

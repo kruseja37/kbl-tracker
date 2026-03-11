@@ -5,7 +5,6 @@ import { DndProvider } from "react-dnd";
 import { HTML5Backend } from "react-dnd-html5-backend";
 // REMOVED: BUG-009 - BaserunnerDragDrop was a placeholder that did nothing
 // import { BaserunnerDragDrop, type RunnerMoveData as LegacyRunnerMoveData } from "@/app/components/BaserunnerDragDrop";
-import { type PlayData, type SpecialEventData } from "@/app/components/EnhancedInteractiveField";
 import { RunnerPopover, type RunnerBase } from "@/app/components/RunnerPopover";
 import { FielderPopover, type FielderInfo, type BenchPlayerInfo } from "@/app/components/FielderPopover";
 import { LineupCard, type SubstitutionData, type LineupPlayer, type BenchPlayer, type BullpenPitcher } from "@/app/components/LineupCard";
@@ -41,6 +40,7 @@ import { buildFallbackRuntimePlayerId, getRuntimeRosterEntityId } from "../utils
 import {
   normalizeSpecialEventType,
 } from "../utils/gameTrackerEventDispatch";
+import { type PlayData, type SpecialEventData } from "../utils/gameTrackerFieldTypes";
 import { areRivals } from '../../../data/leagueStructure';
 import { getParkNames } from "../../../data/parkLookup";
 import { useGameState, type GameLineupSnapshot, type HitType, type OutType, type WalkType, type RunnerAdvancement, type PlayerGameStats, type PitcherGameStats, type PlateAppearanceAction } from "@/hooks/useGameState";

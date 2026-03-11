@@ -25,7 +25,7 @@ import {
   type GameBases,
   type RunnerDefaults,
 } from '../../app/components/runnerDefaults';
-import type { PlayData } from '../../app/components/EnhancedInteractiveField';
+import type { PlayData } from '../../app/utils/gameTrackerFieldTypes';
 
 // ============================================
 // HELPER FUNCTIONS

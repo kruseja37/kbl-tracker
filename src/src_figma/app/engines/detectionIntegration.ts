@@ -59,7 +59,7 @@ export {
 // ADDITIONAL FIGMA-SPECIFIC DETECTION WRAPPERS
 // ============================================
 
-import type { PlayData } from '../components/EnhancedInteractiveField';
+import type { PlayData } from '../utils/gameTrackerFieldTypes';
 import type {
   DetectionContext as LegacyDetectionContext,
   PlayResult as LegacyPlayResult,

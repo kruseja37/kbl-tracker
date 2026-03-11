@@ -1,6 +1,6 @@
 import type { BetweenPlayEventDetails, EventType } from '@/hooks/useGameState';
 import type { RunnerMoveData } from '@/app/components/RunnerDragDrop';
-import type { SpecialEventData } from '@/app/components/EnhancedInteractiveField';
+import type { SpecialEventData } from '@/app/utils/gameTrackerFieldTypes';
 
 export function normalizeSpecialEventType(eventType: SpecialEventData['eventType']): EventType | null {
   switch (eventType) {
