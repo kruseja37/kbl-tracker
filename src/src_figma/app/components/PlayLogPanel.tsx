@@ -45,6 +45,8 @@ interface PlayLogPanelProps {
 
 export function PlayLogPanel({ entries, onEntryTap, onKToggle, enrichingEntryId }: PlayLogPanelProps) {
   const [showSystemRows, setShowSystemRows] = React.useState(false);
+  const prefersTouchMode =
+    typeof window !== 'undefined' && window.matchMedia('(pointer: coarse)').matches;
   const visibleEntries = showSystemRows ? entries : entries.filter((entry) => entry.visibility === 'default');
   const systemRowCount = entries.filter((entry) => entry.visibility === 'system').length;
 
@@ -75,13 +77,8 @@ export function PlayLogPanel({ entries, onEntryTap, onKToggle, enrichingEntryId 
         ) : (
           [...visibleEntries].reverse().map((entry) => {
             const isActive = enrichingEntryId === entry.id;
-            return (
-              <div
-                key={entry.id}
-                className={`py-0.5 px-1 border-b border-[#4a6a4a]/30 ${entry.isSelectable ? 'cursor-pointer' : 'cursor-default'}
-                  ${isActive ? 'bg-[#4a6a4a]/40 border-l-2 border-l-[#C4A853]' : entry.isSelectable ? 'hover:bg-[#4a6a4a]/20' : ''}`}
-                onClick={() => entry.isSelectable && onEntryTap?.(entry)}
-              >
+            const rowContent = (
+              <>
                 {/* Row 1: Inning + Name + Result + RBI + QAB */}
                 <div className="flex items-center gap-1 leading-tight">
                   <span className="text-[10px] text-[#88AA88] font-mono w-[24px] flex-shrink-0">
@@ -106,6 +103,11 @@ export function PlayLogPanel({ entries, onEntryTap, onKToggle, enrichingEntryId 
                       Q
                     </span>
                   )}
+                  {prefersTouchMode && entry.isSelectable && (
+                    <span className="ml-auto flex-shrink-0 rounded border border-[#5a6b38] bg-[#2f3b21] px-1.5 py-0.5 text-[7px] font-bold text-[#C4A853]">
+                      OPEN
+                    </span>
+                  )}
                 </div>
 
                 {/* Row 2: Enrichment badges + fielding sequence (compact) */}
@@ -119,8 +121,7 @@ export function PlayLogPanel({ entries, onEntryTap, onKToggle, enrichingEntryId 
                       {entry.fieldingSequence}
                     </span>
                   ) : null}
-                  {/* Ticket 5.2: K/Kc toggle — inline click to toggle */}
-                  {entry.eventType === 'at_bat' && (entry.result === 'K' || entry.result === 'Kc') && !entry.hasKType && onKToggle && (
+                  {!prefersTouchMode && entry.eventType === 'at_bat' && (entry.result === 'K' || entry.result === 'Kc') && !entry.hasKType && onKToggle && (
                     <span
                       className="text-[8px] text-[#f59e0b] bg-[#78350f]/60 px-1 rounded cursor-pointer hover:bg-[#78350f] active:scale-95"
                       onClick={(e) => { e.stopPropagation(); onKToggle(entry); }}
@@ -129,7 +130,6 @@ export function PlayLogPanel({ entries, onEntryTap, onKToggle, enrichingEntryId 
                       K?
                     </span>
                   )}
-                  {/* Unenriched badges — gray, disappear when filled */}
                   {entry.eventType === 'at_bat' && entry.isEnrichable && !entry.hasFieldingData && !entry.fieldingSequence && (
                     <span className="text-[8px] text-[#6b7280] bg-[#1f2937]/60 px-1 rounded">
                       +fld
@@ -151,6 +151,33 @@ export function PlayLogPanel({ entries, onEntryTap, onKToggle, enrichingEntryId 
                     </span>
                   )}
                 </div>
+              </>
+            );
+
+            if (prefersTouchMode && entry.isSelectable) {
+              return (
+                <button
+                  key={entry.id}
+                  type="button"
+                  data-play-log-entry={entry.id}
+                  className={`w-full py-0.5 px-1 text-left border-b border-[#4a6a4a]/30 relative z-10 touch-manipulation
+                    ${isActive ? 'bg-[#4a6a4a]/40 border-l-2 border-l-[#C4A853]' : 'hover:bg-[#4a6a4a]/20'}`}
+                  onClick={() => onEntryTap?.(entry)}
+                >
+                  {rowContent}
+                </button>
+              );
+            }
+
+            return (
+              <div
+                key={entry.id}
+                data-play-log-entry={entry.id}
+                className={`py-0.5 px-1 border-b border-[#4a6a4a]/30 ${entry.isSelectable ? 'cursor-pointer' : 'cursor-default'}
+                  ${isActive ? 'bg-[#4a6a4a]/40 border-l-2 border-l-[#C4A853]' : entry.isSelectable ? 'hover:bg-[#4a6a4a]/20' : ''} relative z-10 pointer-events-auto touch-manipulation`}
+                onClick={() => entry.isSelectable && onEntryTap?.(entry)}
+              >
+                {rowContent}
               </div>
             );
           })

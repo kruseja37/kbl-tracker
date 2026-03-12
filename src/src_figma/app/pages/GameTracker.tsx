@@ -665,6 +665,7 @@ export function GameTracker() {
   } | null>(null);
   const [showLineupOverlay, setShowLineupOverlay] = useState(false);
   const [lineupOverlayHint, setLineupOverlayHint] = useState<string | null>(null);
+  const [showTouchPlayReview, setShowTouchPlayReview] = useState(false);
   const [pendingManualSpecialPrompt, setPendingManualSpecialPrompt] = useState<PendingManualSpecialPrompt | null>(null);
   const [showManagerMomentPanel, setShowManagerMomentPanel] = useState(false);
   const [fenwayContext, setFenwayContext] = useState<{
@@ -4520,6 +4521,18 @@ export function GameTracker() {
     recordManagerMoment,
   ]);
 
+  const rightPanelOwnsInteraction =
+    pendingRunnerCorrection !== null ||
+    pendingRunnerAttribution !== null ||
+    (selectedPlayLogEntry !== null && selectedPlayLogEntry.eventType !== 'at_bat');
+  const prefersTouchPanels =
+    typeof window !== 'undefined' && window.matchMedia('(pointer: coarse)').matches;
+  const touchReviewEntries = prefersTouchPanels
+    ? [...playLogEntries]
+        .reverse()
+        .filter((entry) => entry.isSelectable && entry.visibility === 'default')
+    : [];
+
   if (isLoading || !gameInitialized) {
     return (
       <div className="min-h-screen bg-[#6B9462] flex items-center justify-center">
@@ -4715,7 +4728,10 @@ export function GameTracker() {
         </div>
 
         {/* ZONE 2: Diamond — center (D-9: scoreboard moved to FenwayBoard left panel) */}
-        <div style={{ gridColumn: '2', gridRow: '1' }} className="bg-[#6B9462] relative overflow-hidden">
+        <div
+          style={{ gridColumn: '2', gridRow: '1' }}
+          className={`bg-[#6B9462] relative overflow-hidden z-0 ${rightPanelOwnsInteraction ? 'pointer-events-none' : ''}`}
+        >
           <GameDiamond
             mode={enrichingEntry || selectedPlayLogEntry?.eventType === 'at_bat' ? 'enhancement' : 'info'}
             bases={gameState.bases}
@@ -4771,7 +4787,7 @@ export function GameTracker() {
         </div>
 
         {/* ZONE 3: Play Log + Enrichment Panel — right panel, spans both rows */}
-        <div style={{ gridColumn: '3', gridRow: '1 / 3' }} className="flex flex-col h-full overflow-hidden">
+        <div style={{ gridColumn: '3', gridRow: '1 / 3' }} className="relative z-20 isolate pointer-events-auto flex flex-col h-full overflow-hidden">
           {/* Between-inning enrichment prompt (Ticket 5.7) */}
         {showEnrichmentPrompt && !pendingRunnerCorrection && !pendingRunnerAttribution && (
             <div className="bg-[#C4A853]/20 border-b border-[#C4A853] px-2 py-1 flex items-center gap-1 flex-shrink-0">
@@ -4794,6 +4810,9 @@ export function GameTracker() {
           )}
 
           {pendingRunnerCorrection !== null ? (
+            prefersTouchPanels ? (
+              <div className="flex-1 bg-[#2a3a2d]" />
+            ) : (
             <div className="bg-[#2a3a2d] border-l-2 border-[#C4A853] flex flex-col h-full">
               <div className="flex items-center justify-between px-2 py-1 bg-[#1a2a1d] border-b border-[#4a6a4a]">
                 <div>
@@ -4835,6 +4854,7 @@ export function GameTracker() {
                 </button>
               </div>
             </div>
+            )
           ) : pendingRunnerAttribution !== null ? (
             <LiveRunnerAttributionPanel
               title={pendingRunnerAttribution.title}
@@ -4951,10 +4971,23 @@ export function GameTracker() {
         </div>
 
         {/* ZONE 5: Modifiers + Actions — bottom center */}
-        <div style={{ gridColumn: '2', gridRow: '2' }} className="bg-[#2a3a2d] border-t-[3px] border-[#3d5240]">
+        <div
+          style={{ gridColumn: '2', gridRow: '2' }}
+          className={`bg-[#2a3a2d] border-t-[3px] border-[#3d5240] relative z-0 ${rightPanelOwnsInteraction ? 'pointer-events-none' : ''}`}
+        >
           <div className="relative flex gap-2 p-2 items-center justify-between h-full">
             <div className="flex items-center gap-2 min-w-0">
               <div className="flex items-center gap-1.5 flex-wrap">
+                {prefersTouchPanels && touchReviewEntries.length > 0 && !pendingRunnerCorrection && !pendingRunnerAttribution && (
+                  <button
+                    onClick={() => setShowTouchPlayReview(true)}
+                    className="bg-[#2f3b21] border-[3px] border-[#5a6b38] px-3 py-2.5 text-[#E8E8D8] text-xs font-bold
+                               shadow-[2px_2px_0px_0px_rgba(0,0,0,0.5)] active:scale-95 transition-transform
+                               hover:bg-[#374728]"
+                  >
+                    REVIEW
+                  </button>
+                )}
                 <button
                   onClick={() => {
                     setLineupOverlayHint('Use LINEUP for batting order, bench players, pinch runners, and pitching changes.');
@@ -5023,6 +5056,94 @@ export function GameTracker() {
              but are position:fixed so they float above. Also the disabled
              reference code block from the old layout.
            ══════════════════════════════════════════════════════════════ */}
+
+        {prefersTouchPanels && pendingRunnerCorrection !== null && (
+          <div className="fixed inset-0 z-40 bg-black/45 flex items-center justify-center p-4">
+            <div className="w-[320px] max-w-[88vw] max-h-[85vh] bg-[#2a3a2d] border-2 border-[#C4A853] flex flex-col shadow-[0_8px_24px_rgba(0,0,0,0.55)] pointer-events-auto">
+              <div className="flex items-center justify-between px-2 py-1 bg-[#1a2a1d] border-b border-[#4a6a4a]">
+                <div>
+                  <div className="text-[8px] text-[#88AA88] font-mono">LIVE AT-BAT</div>
+                  <div className="text-[9px] text-[#E8E8D8] font-bold">Runner Correction</div>
+                </div>
+                <button
+                  onClick={handleRunnerCorrectionCancel}
+                  className="text-[8px] text-[#E8E8D8] bg-[#3d5240] border border-[#4a6a4a] px-1.5 py-0.5 rounded hover:bg-[#4a6a4a]"
+                >
+                  Cancel
+                </button>
+              </div>
+              <div className="flex-1 min-h-0 overflow-y-auto p-2 space-y-2">
+                <div className="text-[8px] text-[#C4A853]">
+                  Verify runner movement before committing <span className="font-bold">{pendingRunnerCorrection.outcomeLabel}</span>.
+                </div>
+                <RunnerOutcomesDisplay
+                  outcomes={pendingRunnerCorrection.defaults}
+                  onOutcomeChange={handleRunnerCorrectionChange}
+                  playType={pendingRunnerCorrection.outcomeLabel}
+                  destinationOptions={{
+                    batter: getBatterDestinationOptions(pendingRunnerCorrection.action),
+                  }}
+                  labels={{
+                    batter: gameState.currentBatterName || 'BATTER',
+                    first: runnerNames.first ? `R1 ${runnerNames.first}` : 'R1 (1B)',
+                    second: runnerNames.second ? `R2 ${runnerNames.second}` : 'R2 (2B)',
+                    third: runnerNames.third ? `R3 ${runnerNames.third}` : 'R3 (3B)',
+                  }}
+                />
+              </div>
+              <div className="flex-shrink-0 p-2 border-t border-[#4a6a4a] bg-[#2a3a2d]">
+                <button
+                  onClick={() => void handleRunnerCorrectionCommit()}
+                  className="w-full bg-[#34d399] text-[#062b1f] font-bold text-[11px] py-2 border-2 border-[#10b981] hover:bg-[#6ee7b7] active:scale-[0.99] transition-transform"
+                >
+                  END AT-BAT
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {prefersTouchPanels && showTouchPlayReview && (
+          <div className="fixed inset-0 z-40 bg-black/60 flex items-center justify-center p-4">
+            <div className="w-full max-w-[360px] max-h-[80vh] bg-[#2a3a2d] border-2 border-[#C4A853] shadow-[0_8px_24px_rgba(0,0,0,0.45)] flex flex-col">
+              <div className="flex items-center justify-between px-3 py-2 border-b border-[#4a6a4a] bg-[#1a2a1d]">
+                <div>
+                  <div className="text-[10px] font-bold text-[#E8E8D8]">Review Plays</div>
+                  <div className="text-[8px] text-[#88AA88]">Tap a recorded play to open its editor.</div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowTouchPlayReview(false)}
+                  className="text-[8px] text-[#E8E8D8] bg-[#3d5240] border border-[#4a6a4a] px-2 py-1 rounded"
+                >
+                  Close
+                </button>
+              </div>
+              <div className="flex-1 overflow-y-auto p-2 space-y-1">
+                {touchReviewEntries.map((entry) => (
+                  <button
+                    key={`touch-review-${entry.id}`}
+                    type="button"
+                    className="w-full text-left rounded border border-[#4a6a4a] bg-[#334236] px-2 py-2 active:scale-[0.99]"
+                    onClick={() => {
+                      setShowTouchPlayReview(false);
+                      handleEntryTap(entry);
+                    }}
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="text-[9px] text-[#88AA88] font-mono w-[26px] flex-shrink-0">{entry.inningLabel}</span>
+                      <span className="text-[10px] text-[#E8E8D8] flex-1 truncate">{entry.batterName}</span>
+                      <span className="text-[10px] font-bold text-[#E8E8D8]">{entry.result}</span>
+                    </div>
+                    {entry.description && (
+                      <div className="ml-[28px] mt-1 text-[8px] text-[#88AA88]">{entry.description}</div>
+                    )}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Player Card Modal - EXH-036: Now with mojo/fitness editing */}
         {selectedPlayer && (

@@ -90,9 +90,12 @@ interface LineupSlotProps {
   onDrop: (incomingPlayer: { id: string; type: string; from: 'lineup' | 'bench' }, targetPlayer: LineupPlayer) => void;
   /** EXH-036: Callback when player row is clicked */
   onPlayerClick?: (playerId: string, playerName: string) => void;
+  touchMode?: boolean;
+  touchSelected?: boolean;
+  onTouchTap?: (player: LineupPlayer) => void;
 }
 
-function LineupSlot({ player, onDrop, onPlayerClick }: LineupSlotProps) {
+function LineupSlot({ player, onDrop, onPlayerClick, touchMode = false, touchSelected = false, onTouchTap }: LineupSlotProps) {
   const [{ isDragging }, drag] = useDrag(() => ({
     type: ItemTypes.LINEUP_PLAYER,
     item: { id: player.id, type: ItemTypes.LINEUP_PLAYER, from: 'lineup' as const, player },
@@ -131,7 +134,10 @@ function LineupSlot({ player, onDrop, onPlayerClick }: LineupSlotProps) {
 
   // EXH-036: Handle click to open player card
   const handleClick = (e: React.MouseEvent) => {
-    // Only trigger if not dragging
+    if (touchMode && !isDragging && onTouchTap) {
+      onTouchTap(player);
+      return;
+    }
     if (!isDragging && onPlayerClick) {
       onPlayerClick(player.id, player.name);
     }
@@ -143,7 +149,9 @@ function LineupSlot({ player, onDrop, onPlayerClick }: LineupSlotProps) {
       onClick={handleClick}
       className={`flex items-center gap-2 px-2 py-1.5 border-b border-[#444] transition-all ${
         isDragging ? 'opacity-50' : ''
-      } ${player.isUsed ? 'opacity-60' : 'cursor-grab active:cursor-grabbing'} ${onPlayerClick ? 'hover:bg-[#3a3a3a]' : ''}`}
+      } ${player.isUsed ? 'opacity-60' : touchMode ? 'cursor-pointer active:scale-[0.99]' : 'cursor-grab active:cursor-grabbing'} ${onPlayerClick || onTouchTap ? 'hover:bg-[#3a3a3a]' : ''} ${
+        touchSelected ? 'ring-2 ring-[#FFD700] ring-inset' : ''
+      }`}
       style={{ backgroundColor: bgColor }}
     >
       {/* Batting order */}
@@ -191,9 +199,12 @@ interface BenchPlayerItemProps {
   player: BenchPlayer;
   /** EXH-036: Callback when player row is clicked */
   onPlayerClick?: (playerId: string, playerName: string) => void;
+  touchMode?: boolean;
+  touchSelected?: boolean;
+  onTouchTap?: (player: BenchPlayer) => void;
 }
 
-function BenchPlayerItem({ player, onPlayerClick }: BenchPlayerItemProps) {
+function BenchPlayerItem({ player, onPlayerClick, touchMode = false, touchSelected = false, onTouchTap }: BenchPlayerItemProps) {
   const [{ isDragging }, drag] = useDrag(() => ({
     type: ItemTypes.BENCH_PLAYER,
     item: { id: player.id, type: ItemTypes.BENCH_PLAYER, from: 'bench' as const, player },
@@ -205,6 +216,10 @@ function BenchPlayerItem({ player, onPlayerClick }: BenchPlayerItemProps) {
 
   // EXH-036: Handle click to open player card
   const handleClick = () => {
+    if (touchMode && !isDragging && onTouchTap) {
+      onTouchTap(player);
+      return;
+    }
     if (!isDragging && onPlayerClick) {
       onPlayerClick(player.id, player.name);
     }
@@ -218,8 +233,10 @@ function BenchPlayerItem({ player, onPlayerClick }: BenchPlayerItemProps) {
         isDragging ? 'opacity-50' : ''
       } ${player.isUsed
         ? 'bg-[#333] opacity-60 cursor-not-allowed'
+        : touchMode
+        ? 'bg-[#3a5a3d] cursor-pointer hover:bg-[#4a6a4d]'
         : 'bg-[#3a5a3d] cursor-grab active:cursor-grabbing hover:bg-[#4a6a4d]'
-      }`}
+      } ${touchSelected ? 'ring-2 ring-[#FFD700]' : ''}`}
     >
       <div className={`text-[9px] font-bold ${player.isUsed ? 'text-[#666] line-through' : 'text-[#E8E8D8]'}`}>
         {player.name}
@@ -245,9 +262,12 @@ interface BullpenPitcherItemProps {
   pitcher: BullpenPitcher;
   /** EXH-036: Callback when pitcher row is clicked */
   onPlayerClick?: (playerId: string, playerName: string) => void;
+  touchMode?: boolean;
+  touchSelected?: boolean;
+  onTouchTap?: (pitcher: BullpenPitcher) => void;
 }
 
-function BullpenPitcherItem({ pitcher, onPlayerClick }: BullpenPitcherItemProps) {
+function BullpenPitcherItem({ pitcher, onPlayerClick, touchMode = false, touchSelected = false, onTouchTap }: BullpenPitcherItemProps) {
   const [{ isDragging }, drag] = useDrag(() => ({
     type: ItemTypes.BULLPEN_PITCHER,
     item: { id: pitcher.id, type: ItemTypes.BULLPEN_PITCHER, pitcher },
@@ -268,6 +288,10 @@ function BullpenPitcherItem({ pitcher, onPlayerClick }: BullpenPitcherItemProps)
 
   // EXH-036: Handle click to open player card
   const handleClick = () => {
+    if (touchMode && !isDragging && onTouchTap) {
+      onTouchTap(pitcher);
+      return;
+    }
     if (!isDragging && onPlayerClick) {
       onPlayerClick(pitcher.id, pitcher.name);
     }
@@ -286,7 +310,7 @@ function BullpenPitcherItem({ pitcher, onPlayerClick }: BullpenPitcherItemProps)
         : canDrag
         ? 'bg-[#3a3a5a] cursor-grab active:cursor-grabbing hover:bg-[#4a4a6a]'
         : 'bg-[#333]'
-      } ${onPlayerClick ? 'hover:ring-1 hover:ring-[#C4A853]' : ''}`}
+      } ${onPlayerClick || onTouchTap ? 'hover:ring-1 hover:ring-[#C4A853]' : ''} ${touchSelected ? 'ring-2 ring-[#FFD700]' : ''}`}
     >
       <div className={`text-[9px] font-bold ${
         pitcher.isUsed ? 'text-[#666] line-through' : 'text-[#E8E8D8]'
@@ -425,6 +449,9 @@ export function LineupCard({
   onToggleExpanded,
   onPlayerClick,
 }: LineupCardProps) {
+  const prefersTouchMode =
+    typeof window !== 'undefined' && window.matchMedia('(pointer: coarse)').matches;
+
   // Pending substitution for confirmation
   const [pendingSub, setPendingSub] = useState<{
     type: 'player_sub' | 'position_swap' | 'pitching_change';
@@ -434,6 +461,11 @@ export function LineupCard({
     outgoingName: string;
     newPosition?: string;
     lineupSpot?: number;
+  } | null>(null);
+  const [touchSelection, setTouchSelection] = useState<{
+    from: 'bench' | 'lineup';
+    id: string;
+    name: string;
   } | null>(null);
 
   // Handle drop on lineup slot
@@ -485,6 +517,63 @@ export function LineupCard({
     }
   }, [bullpen, currentPitcher]);
 
+  const handleTouchBenchTap = useCallback((player: BenchPlayer) => {
+    if (!prefersTouchMode || player.isUsed) return;
+    setTouchSelection({
+      from: 'bench',
+      id: player.id,
+      name: player.name,
+    });
+  }, [prefersTouchMode]);
+
+  const handleTouchLineupTap = useCallback((player: LineupPlayer) => {
+    if (!prefersTouchMode || player.isUsed) return;
+
+    if (touchSelection?.from === 'bench') {
+      setPendingSub({
+        type: 'player_sub',
+        incomingId: touchSelection.id,
+        incomingName: touchSelection.name,
+        outgoingId: player.id,
+        outgoingName: player.name,
+        newPosition: player.position,
+        lineupSpot: player.battingOrder,
+      });
+      setTouchSelection(null);
+      return;
+    }
+
+    if (touchSelection?.from === 'lineup' && touchSelection.id !== player.id) {
+      setPendingSub({
+        type: 'position_swap',
+        incomingId: touchSelection.id,
+        incomingName: touchSelection.name,
+        outgoingId: player.id,
+        outgoingName: player.name,
+      });
+      setTouchSelection(null);
+      return;
+    }
+
+    setTouchSelection({
+      from: 'lineup',
+      id: player.id,
+      name: player.name,
+    });
+  }, [prefersTouchMode, touchSelection]);
+
+  const handleTouchBullpenTap = useCallback((pitcher: BullpenPitcher) => {
+    if (!prefersTouchMode || pitcher.isUsed || pitcher.isCurrentPitcher) return;
+    setPendingSub({
+      type: 'pitching_change',
+      incomingId: pitcher.id,
+      incomingName: pitcher.name,
+      outgoingId: currentPitcher.id,
+      outgoingName: currentPitcher.name,
+    });
+    setTouchSelection(null);
+  }, [currentPitcher.id, currentPitcher.name, prefersTouchMode]);
+
   // Confirm substitution
   const handleConfirmSub = useCallback(() => {
     if (pendingSub) {
@@ -498,12 +587,14 @@ export function LineupCard({
         lineupSpot: pendingSub.lineupSpot,
       });
       setPendingSub(null);
+      setTouchSelection(null);
     }
   }, [pendingSub, onSubstitution]);
 
   // Cancel substitution
   const handleCancelSub = useCallback(() => {
     setPendingSub(null);
+    setTouchSelection(null);
   }, []);
 
   return (
@@ -519,6 +610,15 @@ export function LineupCard({
 
       {isExpanded && (
         <div className="p-2 space-y-3">
+          {prefersTouchMode && (
+            <div className="rounded border border-[#5a6b38] bg-[#2f3b21] px-2 py-1.5 text-[8px] text-[#C4A853]">
+              {touchSelection
+                ? touchSelection.from === 'bench'
+                  ? `Selected bench player: ${touchSelection.name}. Tap a lineup slot to substitute.`
+                  : `Selected lineup player: ${touchSelection.name}. Tap another lineup slot to swap positions.`
+                : 'Touch mode: tap a bench player, then a lineup slot to substitute. Tap a bullpen pitcher to change pitchers.'}
+            </div>
+          )}
           {/* Lineup */}
           <div>
             <div className="text-[8px] text-[#888] mb-1 px-1">BATTING ORDER</div>
@@ -528,6 +628,9 @@ export function LineupCard({
                   key={player.id}
                   player={player}
                   onDrop={handleLineupDrop}
+                  touchMode={prefersTouchMode}
+                  touchSelected={touchSelection?.from === 'lineup' && touchSelection.id === player.id}
+                  onTouchTap={handleTouchLineupTap}
                   onPlayerClick={onPlayerClick ? (id, name) => onPlayerClick(id, name, 'batter') : undefined}
                 />
               ))}
@@ -542,6 +645,9 @@ export function LineupCard({
                 <BenchPlayerItem
                   key={player.id}
                   player={player}
+                  touchMode={prefersTouchMode}
+                  touchSelected={touchSelection?.from === 'bench' && touchSelection.id === player.id}
+                  onTouchTap={handleTouchBenchTap}
                   onPlayerClick={onPlayerClick ? (id, name) => onPlayerClick(id, name, 'batter') : undefined}
                 />
               ))}
@@ -563,6 +669,9 @@ export function LineupCard({
                 <BullpenPitcherItem
                   key={pitcher.id}
                   pitcher={pitcher}
+                  touchMode={prefersTouchMode}
+                  touchSelected={false}
+                  onTouchTap={handleTouchBullpenTap}
                   onPlayerClick={onPlayerClick ? (id, name) => onPlayerClick(id, name, 'pitcher') : undefined}
                 />
               ))}
