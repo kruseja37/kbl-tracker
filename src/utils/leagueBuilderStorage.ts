@@ -347,8 +347,9 @@ export async function saveLeagueTemplate(template: Omit<LeagueTemplate, 'id' | '
     const store = tx.objectStore(STORES.LEAGUE_TEMPLATES);
     const request = store.put(fullTemplate);
 
-    request.onsuccess = () => resolve(fullTemplate);
     request.onerror = () => reject(request.error);
+    tx.oncomplete = () => resolve(fullTemplate);
+    tx.onerror = () => reject(tx.error);
   });
 }
 
@@ -411,8 +412,9 @@ export async function saveTeam(team: Omit<Team, 'id' | 'createdDate' | 'lastModi
     const store = tx.objectStore(STORES.GLOBAL_TEAMS);
     const request = store.put(fullTeam);
 
-    request.onsuccess = () => resolve(fullTeam);
     request.onerror = () => reject(request.error);
+    tx.oncomplete = () => resolve(fullTeam);
+    tx.onerror = () => reject(tx.error);
   });
 }
 
@@ -489,8 +491,9 @@ export async function savePlayer(player: Omit<Player, 'id' | 'createdDate' | 'la
     const store = tx.objectStore(STORES.GLOBAL_PLAYERS);
     const request = store.put(fullPlayer);
 
-    request.onsuccess = () => resolve(fullPlayer);
     request.onerror = () => reject(request.error);
+    tx.oncomplete = () => resolve(fullPlayer);
+    tx.onerror = () => reject(tx.error);
   });
 }
 
@@ -682,8 +685,9 @@ export async function saveRulesPreset(preset: Omit<RulesPreset, 'id' | 'createdD
     const store = tx.objectStore(STORES.RULES_PRESETS);
     const request = store.put(fullPreset);
 
-    request.onsuccess = () => resolve(fullPreset);
     request.onerror = () => reject(request.error);
+    tx.oncomplete = () => resolve(fullPreset);
+    tx.onerror = () => reject(tx.error);
   });
 }
 
@@ -731,8 +735,9 @@ export async function saveTeamRoster(roster: TeamRoster): Promise<TeamRoster> {
     const store = tx.objectStore(STORES.TEAM_ROSTERS);
     const request = store.put(fullRoster);
 
-    request.onsuccess = () => resolve(fullRoster);
     request.onerror = () => reject(request.error);
+    tx.oncomplete = () => resolve(fullRoster);
+    tx.onerror = () => reject(tx.error);
   });
 }
 

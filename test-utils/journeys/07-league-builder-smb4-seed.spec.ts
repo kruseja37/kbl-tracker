@@ -21,9 +21,14 @@ async function importSMB4Data(page: import('@playwright/test').Page): Promise<bo
     return false;
   }
 
+  page.once('dialog', async dialog => {
+    await dialog.accept();
+  });
   await importBtn.click();
-  // Give plenty of time for 200+ players to write to IndexedDB
-  await page.waitForTimeout(8000);
+  await page.waitForFunction(
+    () => document.body.innerText.includes('Loaded: 20 teams, 506 players'),
+    { timeout: 30000 }
+  );
   return true;
 }
 
@@ -85,13 +90,7 @@ test.describe('Journey 7: SMB4 Data Import', () => {
         });
       });
       console.log(`IndexedDB team count: ${dbCount}`);
-      // FINDING: Import button clickable but IndexedDB has 0 teams after click.
-      // seedFromSMB4Database may fail silently after DB clear in same session.
-      if (dbCount <= 0) {
-        console.log('FINDING: SMB4 import failed silently — 0 teams in IndexedDB');
-      }
-      // Soft assertion — documents behavior, always passes
-      expect(true).toBeTruthy();
+      expect(dbCount).toBeGreaterThan(0);
     } else {
       expect(teamsFound).toBeGreaterThan(0);
     }
@@ -154,13 +153,8 @@ test.describe('Journey 7: SMB4 Data Import', () => {
     });
 
     console.log(`IndexedDB counts after import: ${counts.teams} teams, ${counts.players} players, dbExists: ${counts.dbExists}`);
-    // FINDING: After clicking "IMPORT SMB4 DATA", verify data was written.
-    // If counts are 0, the import failed silently — document this.
-    if (counts.teams <= 0 || counts.players <= 0) {
-      console.log('FINDING: SMB4 import produced 0 records in IndexedDB');
-      console.log('Root cause: seedFromSMB4Database may not work after DB deletion in same session');
-    }
-    // Soft assertion — documents import behavior
     expect(counts.dbExists).toBeTruthy();
+    expect(counts.teams).toBeGreaterThan(0);
+    expect(counts.players).toBeGreaterThan(0);
   });
 });
