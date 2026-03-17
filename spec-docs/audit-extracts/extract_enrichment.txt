@@ -1,0 +1,1691 @@
+12-import { FullFenwayScoreboard } from "@/app/components/FullFenwayScoreboard";
+13-import { QuickBar } from "@/app/components/QuickBar";
+14-import { PlayLogPanel } from "@/app/components/PlayLogPanel";
+15:import { EnrichmentPanel, PITCH_TYPES, type AtBatModifierValue, type EnrichmentUpdate } from "@/app/components/EnrichmentPanel";
+16-import { RunnerOutcomesDisplay } from "@/app/components/RunnerOutcomesDisplay";
+17-import { HistoricalEventEditor } from "@/app/components/HistoricalEventEditor";
+18-import { LiveRunnerAttributionPanel } from "@/app/components/LiveRunnerAttributionPanel";
+19-import { GameDiamond } from "@/app/components/GameDiamond";
+20-import { InjuryPrompt, type InjuryResult, type MojoResult } from "@/app/components/InjuryPrompt";
+21-import {
+22-  getAtBatEvent,
+23-  getBetweenPlayEvent,
+24-  getBetweenPlayEvents,
+25-  getFieldingEventsForAtBat,
+--
+43-import { type PlayData, type SpecialEventData } from "../utils/gameTrackerFieldTypes";
+44-import { areRivals } from '../../../data/leagueStructure';
+45-import { getParkNames } from "../../../data/parkLookup";
+46:import { useGameState, type GameLineupSnapshot, type HitType, type OutType, type WalkType, type RunnerAdvancement, type PlayerGameStats, type PitcherGameStats, type PlateAppearanceAction } from "@/hooks/useGameState";
+47-import { usePlayerState, type PlayerStateData, getStateBadge, formatMultiplier } from "@/app/hooks/usePlayerState";
+48-
+49-const ordinalSuffix = (num: number) => {
+50-  if (num % 100 >= 11 && num % 100 <= 13) return "th";
+51-  switch (num % 10) {
+52-    case 1:
+53-      return "st";
+54-    case 2:
+55-      return "nd";
+56-    case 3:
+--
+150-}
+151-
+152-interface PendingManualSpecialPrompt {
+153:  type: 'KP' | 'NUT';
+154-  event: SpecialEventData;
+155-  atBatEventId?: string;
+156:  modifierValue?: AtBatModifierValue;
+157-}
+158-
+159-interface HistoricalLineupSlot {
+160-  playerId: string;
+161-  playerName: string;
+162-  position: Position;
+163-}
+164-
+165-interface HistoricalPitcher {
+166-  playerId: string;
+--
+187-    strikeouts: seasonBatting.strikeouts + gameStats.k,
+188-    hitByPitch: seasonBatting.hitByPitch + gameStats.hbp,
+189-    sacFlies: seasonBatting.sacFlies + gameStats.sf,
+190:    sacBunts: seasonBatting.sacBunts + gameStats.sh,
+191-    stolenBases: seasonBatting.stolenBases + gameStats.sb,
+192-    caughtStealing: seasonBatting.caughtStealing + gameStats.cs,
+193-    gidp: seasonBatting.gidp + gameStats.gidp,
+194-  };
+195-}
+196-
+197-function mergeCareerBattingWithGameStats(
+198-  careerBatting: PlayerCareerBatting | null,
+199-  gameStats?: PlayerGameStats,
+200-): PlayerCareerBatting | null {
+--
+214-    strikeouts: careerBatting.strikeouts + gameStats.k,
+215-    hitByPitch: careerBatting.hitByPitch + gameStats.hbp,
+216-    sacFlies: careerBatting.sacFlies + gameStats.sf,
+217:    sacBunts: careerBatting.sacBunts + gameStats.sh,
+218-    stolenBases: careerBatting.stolenBases + gameStats.sb,
+219-    caughtStealing: careerBatting.caughtStealing + gameStats.cs,
+220-    gidp: careerBatting.gidp + gameStats.gidp,
+221-  };
+222-}
+223-
+224-function mergeSeasonPitchingWithGameStats(
+225-  seasonPitching: PlayerSeasonPitching | null,
+226-  gameStats?: PitcherGameStats,
+227-): PlayerSeasonPitching | null {
+--
+345-
+346-  // Game timer state
+347-  const [gameStartTime] = useState(() => new Date());
+348:  const [elapsedMinutes, setElapsedMinutes] = useState(0);
+349-
+350-  // T1-08 FIX: Guard against double end-game execution
+351-  // The auto-end useEffect can re-fire due to volatile deps in handleEndGame's useCallback.
+352-  // This ref ensures handleEndGame only executes once per game.
+353-  const gameEndingRef = useRef(false);
+354-
+355-  // Layer 1C: Captured starting lineups for GameRecord archive
+356-  const startingLineupsRef = useRef<{ away: LineupEntry[]; home: LineupEntry[] } | null>(null);
+357-
+358:  // Update elapsed time every minute
+359-  useEffect(() => {
+360-    const interval = setInterval(() => {
+361-      const now = new Date();
+362-      const diff = Math.floor((now.getTime() - gameStartTime.getTime()) / 60000);
+363:      setElapsedMinutes(diff);
+364-    }, 60000);
+365-    return () => clearInterval(interval);
+366-  }, [gameStartTime]);
+367-
+368-  // Use the game state hook for real data persistence
+369-  const {
+370-    gameState,
+371-    scoreboard,
+372-    playerStats,
+373-    pitcherStats,
+--
+402-    dismissAutoEndPrompt,
+403-    setPlayoffContext,
+404-    setStadiumName,
+405:    setNextEventEnrichment,
+406-    atBatSequence,
+407-  } = useGameState(gameId);
+408-  const [gameInitialized, setGameInitialized] = useState(false);
+409-
+410-  // Set playoff context from navigation state (if this is a playoff game)
+411-  const isPlayoffGame = navigationState?.gameMode === 'playoff' || navigationState?.gameMode === 'elimination';
+412-  useEffect(() => {
+413-    if (navigationState?.playoffSeriesId) {
+414-      setPlayoffContext(
+415-        navigationState.playoffSeriesId,
+--
+460-  const queuePlayLogRefreshRef = useRef<(delayMs?: number) => void>(() => {});
+461-  const previousPitchCountPromptRef = useRef<typeof pitchCountPrompt>(null);
+462-
+463:  // Layer 5: Enrichment Panel state
+464-  const [enrichingEntry, setEnrichingEntry] = useState<PlayLogEntry | null>(null);
+465-  const [selectedPlayLogEntry, setSelectedPlayLogEntry] = useState<PlayLogEntry | null>(null);
+466-  const [selectedBetweenPlayEvent, setSelectedBetweenPlayEvent] = useState<BetweenPlayEvent | null>(null);
+467-  const [selectedBetweenPlayEventLoading, setSelectedBetweenPlayEventLoading] = useState(false);
+468-  const [selectedBetweenPlayEventSaving, setSelectedBetweenPlayEventSaving] = useState(false);
+469:  const [enrichmentCache, setEnrichmentCache] = useState<Record<string, NonNullable<import('../../../utils/eventLog').AtBatEvent['enrichment']>>>({});
+470:  // Between-inning enrichment prompt
+471:  const [showEnrichmentPrompt, setShowEnrichmentPrompt] = useState(false);
+472-  const [unenrichedCount, setUnenrichedCount] = useState(0);
+473:  // Post-game enrichment prompt
+474-  const [showPostGameEnrichPrompt, setShowPostGameEnrichPrompt] = useState(false);
+475-  const [postGameUnenrichedCount, setPostGameUnenrichedCount] = useState(0);
+476-  const loggedManagerMomentKeysRef = useRef<Set<string>>(new Set());
+477-
+478-  const logAction = useCallback((entry: string) => {
+479-    pushActivityLog(`${inningLabel()}: ${entry}`);
+480-  }, [inningLabel, pushActivityLog]);
+481-
+482-  const buildPlateAppearanceActionFromPlayData = useCallback((
+483-    playData: PlayData,
+--
+486-    const batterReached = playData.runnerOutcomes?.batter?.to !== 'out' &&
+487-      playData.runnerOutcomes?.batter?.to !== undefined;
+488-    const isDroppedThirdStrike = (playData.outType === 'K' || playData.outType === 'Kc') &&
+489:      playData.fieldingSequence.length >= 2 &&
+490:      playData.fieldingSequence[0] === 2 &&
+491:      playData.fieldingSequence[1] === 3;
+492-
+493-    switch (playData.type) {
+494-      case 'hr':
+495-        return {
+496-          type: 'hit',
+497:          hitType: 'HR',
+498-          rbi: 0,
+499-          runnerAdvancement,
+500-        };
+501-      case 'hit':
+502-        return {
+503-          type: 'hit',
+504:          hitType: playData.hitType || '1B',
+505-          rbi: 0,
+506-          runnerAdvancement,
+507-        };
+508-      case 'out':
+509-        return {
+510-          type: 'out',
+511-          outType: playData.outType || 'GO',
+512-          runnerAdvancement,
+513-          batterReached,
+514-          isDroppedThirdStrike,
+--
+608-    subType: string;
+609-    direction?: string;
+610-    rbi?: number;
+611:    modifiers?: { ifr?: boolean }; // GAP-GT-4-H: IFR flag
+612-  } | null>(null);
+613-
+614-  // GAP-GT-6-A: Time play override — when user indicates the 3rd-out tag occurred before the runner scored
+615-  const [timePlayNoRun, setTimePlayNoRun] = useState(false);
+616-
+617-  // GAP-GT-7-C: Track pending PH — PH must bat before they can be removed from lineup
+618-  const [pendingPH, setPendingPH] = useState<string | null>(null);
+619-
+620-  // Player card modal state - EXH-036: Added playerId for mojo/fitness editing
+621-  const [selectedPlayer, setSelectedPlayer] = useState<{ name: string; type: 'batter' | 'pitcher'; playerId: string } | null>(null);
+--
+798-
+799-    let cancelled = false;
+800-    void getAtBatEvent(enrichingEntry.eventId).then((event) => {
+801:      if (cancelled || !event?.enrichment) {
+802-        return;
+803-      }
+804-
+805:      setEnrichmentCache((prev) => ({
+806-        ...prev,
+807-        [enrichingEntry.eventId!]: {
+808-          ...(prev[enrichingEntry.eventId!] || {}),
+809:          ...event.enrichment,
+810-        },
+811-      }));
+812-    });
+813-
+814-    return () => {
+815-      cancelled = true;
+816-    };
+817-  }, [enrichingEntry?.eventId]);
+818-
+819-  useEffect(() => {
+--
+1367-      startingSequence,
+1368-    );
+1369-
+1370:    const enrichmentUpdate = {
+1371:      fieldingSequence: supplementalEvents.map((event) => POSITION_NUMBER[event.position as keyof typeof POSITION_NUMBER]),
+1372-      putouts: credits
+1373-        .filter((credit) => credit.putoutBy in POSITION_NUMBER)
+1374-        .map((credit) => POSITION_NUMBER[credit.putoutBy as keyof typeof POSITION_NUMBER]),
+1375-      assists: credits.flatMap((credit) =>
+1376-        credit.assistBy
+1377-          .filter((position) => position in POSITION_NUMBER)
+1378-          .map((position) => POSITION_NUMBER[position as keyof typeof POSITION_NUMBER]),
+1379-      ),
+1380:    } as NonNullable<import('../../../utils/eventLog').AtBatEvent['enrichment']>;
+1381-
+1382-    if (options?.recordUserEdit) {
+1383-      const existingAtBat = await getAtBatEvent(atBatIdentity.atBatEventId);
+1384-      const existingFieldingEvents = await getFieldingEventsForAtBat(atBatIdentity.atBatEventId);
+1385-      if (existingAtBat) {
+1386-        const timestamp = Date.now();
+1387-        const nextVersion = (existingAtBat.version ?? 1) + 1;
+1388-        await updateAtBatEventWithFieldingSync(
+1389-          atBatIdentity.atBatEventId,
+1390-          {
+1391:            enrichment: enrichmentUpdate,
+1392-            version: nextVersion,
+1393-            editHistory: [
+1394-              {
+1395:                field: 'enrichment.fieldingSequence',
+1396:                oldValue: existingAtBat.enrichment?.fieldingSequence ?? null,
+1397:                newValue: enrichmentUpdate.fieldingSequence,
+1398-                timestamp,
+1399-              },
+1400-              {
+1401:                field: 'enrichment.putouts',
+1402:                oldValue: existingAtBat.enrichment?.putouts ?? null,
+1403:                newValue: enrichmentUpdate.putouts,
+1404-                timestamp,
+1405-              },
+1406-              {
+1407:                field: 'enrichment.assists',
+1408:                oldValue: existingAtBat.enrichment?.assists ?? null,
+1409:                newValue: enrichmentUpdate.assists,
+1410-                timestamp,
+1411-              },
+1412-            ],
+1413-          },
+1414-          [...existingFieldingEvents, ...supplementalEvents],
+1415-        );
+1416-      }
+1417-    } else {
+1418-      for (const event of supplementalEvents) {
+1419-        await logFieldingEvent(event);
+1420-      }
+1421-
+1422-      await updateAtBatEvent(atBatIdentity.atBatEventId, {
+1423:        enrichment: enrichmentUpdate,
+1424-      });
+1425-    }
+1426-
+1427:    setEnrichmentCache((prev) => ({
+1428-      ...prev,
+1429-      [atBatIdentity.atBatEventId]: {
+1430-        ...(prev[atBatIdentity.atBatEventId] || {}),
+1431:        ...enrichmentUpdate,
+1432-      },
+1433-    }));
+1434-
+1435-    pushActivityLog(`[Fielding] Logged ${supplementalEvents.length} runner-out credit event(s)`);
+1436-  }, [buildFieldingContext, pushActivityLog]);
+1437-
+1438-  const buildPlayDataFromAtBatEvent = useCallback((
+1439-    atBatEvent: AtBatEvent,
+1440:    enrichmentOverrides?: Partial<NonNullable<AtBatEvent['enrichment']>>,
+1441-  ): PlayData | null => {
+1442:    const enrichment = {
+1443:      ...(atBatEvent.enrichment || {}),
+1444:      ...(enrichmentOverrides || {}),
+1445-    };
+1446:    const ballLocation = enrichment.fieldLocation
+1447:      ? { x: enrichment.fieldLocation.x, y: enrichment.fieldLocation.y }
+1448-      : undefined;
+1449:    const exitType = enrichment.exitType === 'ground_ball' ? 'Ground'
+1450:      : enrichment.exitType === 'line_drive' ? 'Line Drive'
+1451:      : enrichment.exitType === 'fly_ball' ? 'Fly Ball'
+1452:      : enrichment.exitType === 'popup' ? 'Pop Up'
+1453-      : undefined;
+1454-    const common = {
+1455:      fieldingSequence: enrichment.fieldingSequence || [],
+1456-      ballLocation,
+1457:      spraySector: enrichment.fieldLocation?.zone,
+1458:      exitType,
+1459-      playDifficulty: mapFieldingPlayTypeToPlayDifficulty(
+1460:        enrichment.fieldingPlayType as FieldingPlayTypeValue | undefined,
+1461-      ),
+1462:      fieldingPlayType: enrichment.fieldingPlayType as FieldingPlayTypeValue | undefined,
+1463-    } as const;
+1464-
+1465-    if (['1B', '2B', '3B', 'GRD'].includes(atBatEvent.result)) {
+1466-      return {
+1467-        ...common,
+1468-        type: 'hit',
+1469:        hitType: (atBatEvent.result === 'GRD' ? '2B' : atBatEvent.result) as PlayData['hitType'],
+1470-      };
+1471-    }
+1472-    if (atBatEvent.result === 'HR') {
+1473-      return {
+1474-        ...common,
+1475-        type: 'hr',
+1476:        hitType: 'HR',
+1477-      };
+1478-    }
+1479-    if (['GO', 'FO', 'LO', 'PO', 'DP', 'TP', 'FC', 'SF', 'SAC', 'K', 'Kc'].includes(atBatEvent.result)) {
+1480-      return {
+1481-        ...common,
+1482-        type: 'out',
+1483-        outType: atBatEvent.result as PlayData['outType'],
+1484-      };
+1485-    }
+1486-    if (atBatEvent.result === 'E') {
+1487-      return {
+1488-        ...common,
+1489-        type: 'error',
+1490:        errorFielder: atBatEvent.enrichment?.errors?.[0]?.position,
+1491:        errorType: atBatEvent.enrichment?.errors?.[0]?.type?.toUpperCase() as PlayData['errorType'],
+1492-      };
+1493-    }
+1494-    return null;
+1495-  }, []);
+1496-
+1497-  const buildHistoricalDefensiveAlignment = useCallback(async (
+1498-    atBatEvent: AtBatEvent,
+1499-    linkedFieldingEvents: FieldingEvent[],
+1500-  ) => {
+1501-    const header = await getGameHeader(atBatEvent.gameId);
+--
+1606-    };
+1607-  }, []);
+1608-
+1609:  const buildFieldingSyncEventsForSequenceEdit = useCallback(async (
+1610-    atBatEvent: AtBatEvent,
+1611:    enrichmentOverrides: Partial<NonNullable<AtBatEvent['enrichment']>>,
+1612-  ) => {
+1613-    const linkedFieldingEvents = await getFieldingEventsForAtBat(atBatEvent.eventId);
+1614-    const defendersByPosition = await buildHistoricalDefensiveAlignment(atBatEvent, linkedFieldingEvents);
+1615-    const fieldingContext: FieldingExtractionContext = {
+1616-      gameId: atBatEvent.gameId,
+1617-      defensiveTeamId: atBatEvent.pitcherTeamId,
+1618-      atBatEventId: atBatEvent.eventId,
+1619-      atBatEventIndex: atBatEvent.eventIndex,
+1620-      defendersByPosition,
+1621-    };
+1622-    const previousPlayData = buildPlayDataFromAtBatEvent(atBatEvent);
+1623:    const nextPlayData = buildPlayDataFromAtBatEvent(atBatEvent, enrichmentOverrides);
+1624-    const previousBaseCount = previousPlayData
+1625-      ? extractFieldingEvents(previousPlayData, fieldingContext).length
+1626-      : 0;
+1627-    const nextBaseEvents = nextPlayData
+1628-      ? extractFieldingEvents(nextPlayData, fieldingContext)
+1629-      : [];
+1630-
+1631-    const preservedSupplementals = linkedFieldingEvents
+1632-      .filter((event) => event.sequence >= previousBaseCount)
+1633-      .map((event, index) => {
+--
+1635-        return {
+1636-          ...event,
+1637-          sequence,
+1638:          fieldingEventId: `${atBatEvent.gameId}_${atBatEvent.eventIndex}_fe_${sequence}`,
+1639-        };
+1640-      });
+1641-
+1642-    return [...nextBaseEvents, ...preservedSupplementals];
+1643-  }, [buildHistoricalDefensiveAlignment, buildPlayDataFromAtBatEvent]);
+1644-
+1645:  const appendModifierToAtBatEvent = useCallback(async (
+1646-    atBatEventId: string,
+1647:    modifier: AtBatModifierValue,
+1648-  ) => {
+1649-    const existingAtBat = await getAtBatEvent(atBatEventId);
+1650-    if (!existingAtBat) {
+1651-      return null;
+1652-    }
+1653-
+1654:    const existingModifiers = existingAtBat.enrichment?.modifiers || [];
+1655:    if (existingModifiers.includes(modifier)) {
+1656-      return existingAtBat;
+1657-    }
+1658-
+1659:    const nextModifiers = [...existingModifiers, modifier];
+1660-    const timestamp = Date.now();
+1661-    await updateAtBatEvent(atBatEventId, {
+1662:      enrichment: {
+1663:        modifiers: nextModifiers,
+1664-      },
+1665-      version: (existingAtBat.version ?? 1) + 1,
+1666-      editHistory: [{
+1667:        field: 'enrichment.modifiers',
+1668:        oldValue: existingModifiers,
+1669:        newValue: nextModifiers,
+1670-        timestamp,
+1671-      }],
+1672-    });
+1673-
+1674:    setEnrichmentCache((prev) => ({
+1675-      ...prev,
+1676-      [atBatEventId]: {
+1677-        ...(prev[atBatEventId] || {}),
+1678:        modifiers: nextModifiers,
+1679-      },
+1680-    }));
+1681-
+1682-    return {
+1683-      ...existingAtBat,
+1684:      enrichment: {
+1685:        ...(existingAtBat.enrichment || {}),
+1686:        modifiers: nextModifiers,
+1687-      },
+1688-    };
+1689-  }, []);
+1690-
+1691-  // Initialize game with lineup data on mount
+1692-  // FIX: BUG-007 - Try loading existing game first, only create new if none found
+1693-  // This ensures each batter has a unique ID and stats are tracked separately
+1694-  const initInProgressRef = useRef(false);
+1695-  useEffect(() => {
+1696-    if (gameInitialized || initInProgressRef.current) return;
+--
+2294-      if (pendingRunnerCorrection.action.type === 'hit') {
+2295-        await commitPlateAppearance({
+2296-          type: 'hit',
+2297:          hitType: pendingRunnerCorrection.action.hitType,
+2298-          rbi,
+2299-          runnerAdvancement,
+2300-        });
+2301-      } else if (pendingRunnerCorrection.action.type === 'walk') {
+2302-        await commitPlateAppearance({
+2303-          type: 'walk',
+2304-          walkType: pendingRunnerCorrection.action.walkType,
+2305-        });
+2306-      } else {
+2307-        await commitPlateAppearance({
+--
+2857-    const defaults = correction?.defaults;
+2858-    const promptDefaults = defaults
+2859-      || (outcome === 'HR'
+2860:        ? calculateRunnerDefaults({ type: 'hr', hitType: 'HR', fieldingSequence: [] } as PlayData, bases, outs)
+2861-        : outcome === 'E'
+2862:        ? calculateRunnerDefaults({ type: 'error', fieldingSequence: [] } as PlayData, bases, outs)
+2863-        : undefined);
+2864-
+2865-    // 6. Capture undo snapshot
+2866-    undoSystem.captureSnapshot(`Quick: ${outcome}`);
+2867-
+2868-    try {
+2869-      const runnerAdv = defaults ? runnerDefaultsToAdvancement(defaults) : undefined;
+2870-      const rbi = correction ? countRbiFromDefaults(correction.defaults, correction.action) : 0;
+2871-
+2872-      // 7. Route to correct recording function
+--
+2927-    if (!hrPrompt) return;
+2928-    const { rbi, runnerAdv, defaults, distance, pitchType } = hrPrompt;
+2929-
+2930:    // Attach enrichment if distance or pitch type provided
+2931-    if (distance || pitchType) {
+2932:      const enrichment: Record<string, unknown> = {};
+2933:      if (distance) enrichment.hrDistance = parseInt(distance, 10);
+2934:      if (pitchType) enrichment.pitchType = pitchType;
+2935:      setNextEventEnrichment(enrichment as NonNullable<import('../../../utils/eventLog').AtBatEvent['enrichment']>);
+2936-    }
+2937-
+2938-    try {
+2939:      await commitPlateAppearance({ type: 'hit', hitType: 'HR', rbi, runnerAdvancement: runnerAdv });
+2940-      logAction(`HR${rbi > 0 ? ` — ${rbi} RBI` : ''}${distance ? ` (${distance} ft)` : ''}`);
+2941-
+2942-      pushPlayLogEntry({
+2943-        eventId: getPendingAtBatIdentity().atBatEventId,
+2944-        inningLabel: shortInningLabel(),
+2945-        batterName: gameState.currentBatterName,
+2946-        result: 'HR',
+2947-        resultCategory: 'hit',
+2948-        rbi,
+2949-        runsScored: rbi,
+--
+2962-      console.error('[D-4] Failed to record HR:', error);
+2963-    }
+2964-    setHrPrompt(null);
+2965:  }, [commitPlateAppearance, gameState, hrPrompt, logAction, pushPlayLogEntry, setNextEventEnrichment, shortInningLabel, getPendingAtBatIdentity]);
+2966-
+2967-  const handleHrPromptSkip = useCallback(async () => {
+2968-    if (!hrPrompt) return;
+2969-    const { rbi, runnerAdv } = hrPrompt;
+2970-    try {
+2971:      await commitPlateAppearance({ type: 'hit', hitType: 'HR', rbi, runnerAdvancement: runnerAdv });
+2972-      logAction(`HR${rbi > 0 ? ` — ${rbi} RBI` : ''}`);
+2973-
+2974-      pushPlayLogEntry({
+2975-        eventId: getPendingAtBatIdentity().atBatEventId,
+2976-        inningLabel: shortInningLabel(),
+2977-        batterName: gameState.currentBatterName,
+2978-        result: 'HR',
+2979-        resultCategory: 'hit',
+2980-        rbi,
+2981-        runsScored: rbi,
+--
+2998-    const fielderPosition = POSITION_NUMBER[positionLabel];
+2999-    const eventId = getPendingAtBatIdentity().atBatEventId;
+3000-
+3001:    setNextEventEnrichment({
+3002:      fieldingSequence: [fielderPosition],
+3003-      errorFielder: fielderPosition,
+3004:    } as NonNullable<import('../../../utils/eventLog').AtBatEvent['enrichment']>);
+3005-
+3006-    try {
+3007-      await commitPlateAppearance({ type: 'error', rbi: 0 });
+3008-      await persistFieldingEventsForPlayData({
+3009-        type: 'error',
+3010:        fieldingSequence: [fielderPosition!],
+3011-        errorFielder: fielderPosition,
+3012-      }, 'quick error');
+3013-      logAction(`E${positionLabel}`);
+3014-      pushPlayLogEntry({
+3015-        eventId,
+3016-        inningLabel: shortInningLabel(),
+3017-        batterName: gameState.currentBatterName,
+3018-        result: 'E',
+3019-        resultCategory: 'error',
+3020-        rbi: 0,
+--
+3032-    } finally {
+3033-      setExpandedOutcome(null);
+3034-    }
+3035:  }, [commitPlateAppearance, gameState.currentBatterName, getPendingAtBatIdentity, logAction, persistFieldingEventsForPlayData, pushPlayLogEntry, setNextEventEnrichment, shortInningLabel]);
+3036-
+3037-  // ═══════════════════════════════════════════════════════════
+3038-  // D-3: Error flow prompt completion
+3039-  // ═══════════════════════════════════════════════════════════
+3040-  const handleErrorFlowComplete = useCallback(async (
+3041-    baseReached: string,
+3042-    fielderPosition: number,
+3043-    errorType: PlayData['errorType'],
+3044-  ) => {
+3045-    if (!errorFlow) return;
+--
+3057-
+3058-    const rbi = 0; // Errors never get RBI per baseball rules
+3059-
+3060:    // Set enrichment with fielder and error type info
+3061:    const enrichment: Record<string, unknown> = {};
+3062-    if (fielderPosition > 0) {
+3063:      enrichment.fieldingSequence = [fielderPosition];
+3064:      enrichment.errorFielder = fielderPosition;
+3065-    }
+3066:    if (errorType) enrichment.errorType = errorType;
+3067:    setNextEventEnrichment(enrichment as NonNullable<import('../../../utils/eventLog').AtBatEvent['enrichment']>);
+3068-
+3069-    try {
+3070-      await commitPlateAppearance({ type: 'error', rbi, runnerAdvancement: runnerAdv });
+3071-      await persistFieldingEventsForPlayData({
+3072-        type: 'error',
+3073:        fieldingSequence: fielderPosition > 0 ? [fielderPosition] : [],
+3074-        errorFielder: fielderPosition || undefined,
+3075-        errorType: errorType || undefined,
+3076-      });
+3077-      logAction(`E${fielderPosition || ''}${errorType ? ` (${errorType})` : ''} — batter to ${baseReached}`);
+3078-
+3079-      pushPlayLogEntry({
+3080-        eventId: getPendingAtBatIdentity().atBatEventId,
+3081-        inningLabel: shortInningLabel(),
+3082-        batterName: gameState.currentBatterName,
+3083-        result: 'E',
+--
+3107-      console.error('[D-3] Failed to record error:', error);
+3108-    }
+3109-    setErrorFlow(null);
+3110:  }, [commitPlateAppearance, errorFlow, gameState, logAction, pushPlayLogEntry, runnerNames, setNextEventEnrichment, shortInningLabel, undoSystem, getPendingAtBatIdentity, persistFieldingEventsForPlayData]);
+3111-
+3112-  // ═══════════════════════════════════════════════════════════
+3113-  // D-5: SF prompt answer — "Sac fly — run scores?"
+3114-  // ═══════════════════════════════════════════════════════════
+3115-  const handleSfPromptAnswer = useCallback(async (isYes: boolean) => {
+3116-    if (!sfPrompt) return;
+3117-    const { runnerAdv, defaults } = sfPrompt;
+3118-    try {
+3119-      if (isYes) {
+3120-        // SF: runner scores from 3rd, batter out, not an AB
+--
+3130-          resultCategory: 'out',
+3131-          rbi: 1,
+3132-          runsScored: 1,
+3133:          hasFieldingData: false, hasLocationData: false, hasKType: false,
+3134-          hasPitchCount: false, hasPitchType: false,
+3135-          isEnrichable: true, isQAB: false,
+3136-        });
+3137-      } else {
+3138-        // FO: runner holds, standard fly out
+3139-        const foAdv: RunnerAdvancement = { ...runnerAdv, fromThird: undefined };
+3140-        await commitPlateAppearance({ type: 'out', outType: 'FO', runnerAdvancement: Object.keys(foAdv).length > 0 ? foAdv : undefined });
+3141-        logAction('FO (R3 held)');
+3142-
+3143-        pushPlayLogEntry({
+--
+3147-          result: 'FO',
+3148-          resultCategory: 'out',
+3149-          rbi: 0, runsScored: 0,
+3150:          hasFieldingData: false, hasLocationData: false, hasKType: false,
+3151-          hasPitchCount: false, hasPitchType: false,
+3152-          isEnrichable: true, isQAB: false,
+3153-        });
+3154-      }
+3155-
+3156-      // Update runner names
+3157-      const newNames: { first?: string; second?: string; third?: string } = {};
+3158-      if (isYes) {
+3159-        // R3 scored, others hold on FO (tag-up default)
+3160-        if (defaults.second?.to === 'second') newNames.second = runnerNames.second;
+--
+3190-          result: 'DP',
+3191-          resultCategory: 'out',
+3192-          rbi: 0, runsScored: 0, // DP never gets RBI
+3193:          hasFieldingData: false, hasLocationData: false, hasKType: false,
+3194-          hasPitchCount: false, hasPitchType: false,
+3195-          isEnrichable: true, isQAB: false,
+3196-        });
+3197-      } else {
+3198-        // Standard GO, no DP
+3199-        await commitPlateAppearance({ type: 'out', outType: 'GO', runnerAdvancement: runnerAdv });
+3200-        logAction('GO');
+3201-
+3202-        pushPlayLogEntry({
+3203-          eventId: getPendingAtBatIdentity().atBatEventId,
+--
+3207-          resultCategory: 'out',
+3208-          rbi: rbi > 0 ? rbi : 0,
+3209-          runsScored: rbi,
+3210:          hasFieldingData: false, hasLocationData: false, hasKType: false,
+3211-          hasPitchCount: false, hasPitchType: false,
+3212-          isEnrichable: true, isQAB: false,
+3213-        });
+3214-      }
+3215-
+3216-      // Update runner names from defaults
+3217-      const newNames: { first?: string; second?: string; third?: string } = {};
+3218-      if (defaults.third?.to === 'third') newNames.third = runnerNames.third;
+3219-      if (defaults.second?.to === 'second') newNames.second = runnerNames.second;
+3220-      if (defaults.second?.to === 'third') newNames.third = runnerNames.second;
+--
+3236-    try {
+3237-      if (isIFR) {
+3238-        // IFR: batter OUT immediately, removes force on runners
+3239:        // Set enrichment with IFR modifier
+3240:        setNextEventEnrichment({ modifiers: ['ifr'] } as NonNullable<import('../../../utils/eventLog').AtBatEvent['enrichment']>);
+3241-      }
+3242:      // Either way it's a PO — IFR just adds the modifier
+3243-      await commitPlateAppearance({ type: 'out', outType: 'PO', runnerAdvancement: runnerAdv });
+3244-      logAction(`PO${isIFR ? ' (IFR)' : ''}`);
+3245-
+3246-      pushPlayLogEntry({
+3247-        eventId: getPendingAtBatIdentity().atBatEventId,
+3248-        inningLabel: shortInningLabel(),
+3249-        batterName: gameState.currentBatterName,
+3250-        result: 'PO',
+3251-        resultCategory: 'out',
+3252-        rbi: 0, runsScored: 0,
+3253:        hasFieldingData: false, hasLocationData: false, hasKType: false,
+3254-        hasPitchCount: false, hasPitchType: false,
+3255-        isEnrichable: true, isQAB: false,
+3256-      });
+3257-
+3258-      // Update runner names (runners hold on PO)
+3259-      const newNames: { first?: string; second?: string; third?: string } = {};
+3260-      if (defaults.third?.to === 'third') newNames.third = runnerNames.third;
+3261-      if (defaults.second?.to === 'second') newNames.second = runnerNames.second;
+3262-      if (defaults.first?.to === 'first') newNames.first = runnerNames.first;
+3263-      setRunnerNames(newNames);
+--
+3265-      console.error('[D-7] Failed to record PO/IFR:', error);
+3266-    }
+3267-    setIfrPrompt(null);
+3268:  }, [commitPlateAppearance, gameState, ifrPrompt, logAction, pushPlayLogEntry, runnerNames, setNextEventEnrichment, shortInningLabel, getPendingAtBatIdentity]);
+3269-
+3270:  // Handle special events (Web Gem, Robbery, TOOTBLAN, etc.) from the canonical tracker modifier flow
+3271-  // Phase 5B: Extended to handle all contextual button events
+3272-  const handleSpecialEvent = useCallback(async (event: SpecialEventData, sourceAtBat?: AtBatEvent) => {
+3273-    console.log("Special event:", event);
+3274-
+3275-    try {
+3276-      // Capture undo snapshot before recording
+3277-      const eventLabel = event.eventType.replace(/_/g, ' ');
+3278-      const actor = event.fielderName || event.runnerId || 'player';
+3279-      undoSystem.captureSnapshot(`${eventLabel} by ${actor}`);
+3280-
+--
+3284-      }
+3285-
+3286-      const leadRunner = getLeadRunnerIdentity();
+3287:      const resolvedRunnerId = event.runnerId || (normalizedEventType === 'TOOTBLAN' ? leadRunner.runnerId : undefined);
+3288:      const resolvedRunnerName = normalizedEventType === 'TOOTBLAN' ? leadRunner.runnerName : undefined;
+3289-      const fielderId = event.fielderName
+3290-        ? getRosterIdFromName(event.fielderName, fieldingTeam, event.fielderPosition === 1 ? 'pitcher' : 'player')
+3291-        : undefined;
+3292-      const actorId = normalizedEventType === 'WEB_GEM' || normalizedEventType === 'ROBBERY'
+3293-        ? fielderId
+3294-        : resolvedRunnerId;
+3295-
+3296-      await recordEvent(normalizedEventType, actorId, {
+3297-        runnerId: resolvedRunnerId,
+3298-        runnerName: resolvedRunnerName,
+--
+3320-      if (normalizedEventType === 'KILLED' && pitcherId && pitcherName && event.newFitness) {
+3321-        const previousFitness = playerStateHook.getPlayer(pitcherId)?.fitnessProfile.currentFitness ?? 'FIT';
+3322-        const reason = `Killed pitcher by ${sourceBatterName}`;
+3323:        const eventGroupId = `${gameState.gameId}_kp_${Date.now()}`;
+3324-        const injuryEvent = await recordPlayerStateChange(
+3325-          pitcherId,
+3326-          pitcherName,
+3327-          'injury',
+3328-          previousFitness,
+3329-          event.newFitness,
+3330-          reason,
+3331-          {
+3332-            eventType: 'injury',
+3333-            sourceEventType: 'KILLED_PITCHER',
+--
+3358-        });
+3359-        playerStateHook.setFitness(pitcherId, event.newFitness);
+3360-        queuePlayLogRefresh(0);
+3361:      } else if (normalizedEventType === 'NUTSHOT' && pitcherId && pitcherName && event.mojoImpact) {
+3362-        const previousMojo = playerStateHook.getPlayer(pitcherId)?.gameState.currentMojo ?? 0;
+3363-        const mojoDelta = event.mojoImpact === 'RATTLED' ? -2 : -1;
+3364-        const nextMojo = clampMojo(previousMojo + mojoDelta);
+3365:        const reason = `Nut shot by ${sourceBatterName}`;
+3366-
+3367-        await recordPlayerStateChange(
+3368-          pitcherId,
+3369-          pitcherName,
+3370-          'mojo',
+3371-          previousMojo,
+3372-          nextMojo,
+3373-          reason,
+3374-          {
+3375:            sourceEventType: 'NUT_SHOT',
+3376-            causedByPlayerId: sourceBatterId,
+3377-            causedByPlayerName: sourceBatterName,
+3378-          },
+3379-        );
+3380-        playerStateHook.setMojo(pitcherId, nextMojo);
+3381-        queuePlayLogRefresh(0);
+3382-      }
+3383-
+3384-      console.log(`${event.eventType} recorded - fielder: ${event.fielderName}, position: ${event.fielderPosition}, runner: ${event.runnerId}`);
+3385-    } catch (error) {
+--
+3387-    }
+3388-  }, [fieldingTeam, gameState.currentBatterId, gameState.currentBatterName, gameState.currentPitcherId, gameState.currentPitcherName, getLeadRunnerIdentity, getRosterIdFromName, playerStateHook, queuePlayLogRefresh, recordEvent, recordPlayerStateChange, resolvedCurrentBatterName, resolvedCurrentPitcherName, undoSystem]);
+3389-
+3390:  const handleAtBatModifierRecord = useCallback(async (modifier: AtBatModifierValue) => {
+3391-    if (!enrichingEntry?.eventId) {
+3392-      return;
+3393-    }
+3394-
+3395-    const atBatEvent = await getAtBatEvent(enrichingEntry.eventId);
+3396-    if (!atBatEvent) {
+3397-      return;
+3398-    }
+3399-
+3400:    const existingModifiers = atBatEvent.enrichment?.modifiers || [];
+3401:    if (existingModifiers.includes(modifier)) {
+3402-      return;
+3403-    }
+3404-
+3405-    const linkedFieldingEvents = await getFieldingEventsForAtBat(atBatEvent.eventId);
+3406-    const defenders = await buildHistoricalDefensiveAlignment(atBatEvent, linkedFieldingEvents);
+3407:    const sequence = atBatEvent.enrichment?.fieldingSequence || [];
+3408-    const primaryPosition = sequence.length > 0 ? (Object.entries(POSITION_NUMBER).find(([, num]) => num === sequence[0])?.[0] as Position | undefined) : undefined;
+3409-    const primaryDefender = primaryPosition ? defenders[primaryPosition] : undefined;
+3410-    const runnerOut = atBatEvent.runnerOutcomes?.find((outcome) => outcome.toBase === 'out');
+3411-
+3412-    const event: SpecialEventData = {
+3413:      eventType: modifier,
+3414-      batterId: atBatEvent.batterId,
+3415-      batterName: atBatEvent.batterName,
+3416:      runnerId: modifier === 'TOOTBLAN' ? runnerOut?.runnerId : undefined,
+3417-      fielderPosition: primaryPosition ? POSITION_NUMBER[primaryPosition as keyof typeof POSITION_NUMBER] : undefined,
+3418-      fielderName: primaryDefender?.playerName,
+3419-    };
+3420-
+3421:    if (modifier === 'KILLED_PITCHER' || modifier === 'NUT_SHOT') {
+3422-      setPendingManualSpecialPrompt({
+3423:        type: modifier === 'KILLED_PITCHER' ? 'KP' : 'NUT',
+3424-        event: {
+3425-          ...event,
+3426-          fielderPosition: 1,
+3427-          fielderName: atBatEvent.pitcherName,
+3428-        },
+3429-        atBatEventId: atBatEvent.eventId,
+3430:        modifierValue: modifier,
+3431-      });
+3432-      return;
+3433-    }
+3434-
+3435:    const updatedAtBat = await appendModifierToAtBatEvent(atBatEvent.eventId, modifier);
+3436-    if (!updatedAtBat) {
+3437-      return;
+3438-    }
+3439-    await handleSpecialEvent(event, updatedAtBat);
+3440:  }, [appendModifierToAtBatEvent, buildHistoricalDefensiveAlignment, enrichingEntry?.eventId, handleSpecialEvent]);
+3441-
+3442-  const handleManualSpecialPromptComplete = useCallback((result: InjuryResult | MojoResult) => {
+3443-    if (!pendingManualSpecialPrompt) {
+3444-      return;
+3445-    }
+3446-
+3447-    const baseEvent = pendingManualSpecialPrompt.event;
+3448-    const sourceAtBatEventId = pendingManualSpecialPrompt.atBatEventId;
+3449-    setPendingManualSpecialPrompt(null);
+3450-
+3451-    const finish = async (nextEvent: SpecialEventData) => {
+3452-      const sourceAtBat = sourceAtBatEventId ? await getAtBatEvent(sourceAtBatEventId) : null;
+3453:      const modifierValue = pendingManualSpecialPrompt.modifierValue;
+3454:      const updatedAtBat = sourceAtBat && modifierValue
+3455:        ? await appendModifierToAtBatEvent(sourceAtBat.eventId, modifierValue)
+3456-        : sourceAtBat;
+3457-      await handleSpecialEvent(nextEvent, updatedAtBat || undefined);
+3458-    };
+3459-
+3460:    if (pendingManualSpecialPrompt.type === 'KP') {
+3461-      const injuryResult = result as InjuryResult;
+3462-      void finish({
+3463-        ...baseEvent,
+3464-        injuryStayedIn: injuryResult.stayedIn,
+3465-        newFitness: injuryResult.newFitness,
+3466-      });
+3467-      return;
+3468-    }
+3469-
+3470-    const mojoResult = result as MojoResult;
+--
+3529-    console.log(`Pitcher Substitution: ${newPitcherName} replacing ${replacedName} (${replacedType}) on ${teamType} team`);
+3530-
+3531-    const newPitcherId = getPitcherIdFromName(newPitcherName, teamType);
+3532:    const exitingPitcherId = getPitcherIdFromName(replacedName, teamType);
+3533-
+3534-    // Call the hook's changePitcher function which will:
+3535-    // 1. Show pitch count prompt for exiting pitcher
+3536-    // 2. After confirmation, update currentPitcherId/currentPitcherName
+3537-    changePitcher(newPitcherId, exitingPitcherId, newPitcherName, replacedName);
+3538-    queuePlayLogRefresh(80);
+3539-
+3540-    const setPitchers = teamType === 'away' ? setAwayTeamPitchers : setHomeTeamPitchers;
+3541-    setPitchers((previous) =>
+3542-      previous.map((pitcher) => {
+--
+3913-  // ============================================
+3914-
+3915-  // Start recording a hit - sets pending state, waits for RECORD button
+3916:  const handleHitSelect = useCallback((hitType: HitType) => {
+3917-    setPendingOutcome({
+3918-      type: 'hit',
+3919:      subType: hitType,
+3920:      rbi: hitType === 'HR' ? 1 : 0, // Default 1 RBI for HR, 0 for others
+3921-    });
+3922-    // Keep the outcome detail panel open
+3923-  }, []);
+3924-
+3925-  // Start recording an out
+3926-  const handleOutSelect = useCallback((outType: OutType) => {
+3927-    setPendingOutcome({
+3928-      type: 'out',
+3929-      subType: outType,
+3930-    });
+--
+3951-      if (pendingOutcome.type === 'hit') {
+3952-        await commitPlateAppearance({
+3953-          type: 'hit',
+3954:          hitType: pendingOutcome.subType as HitType,
+3955-          rbi: pendingOutcome.rbi || 0,
+3956-        });
+3957-        logAction(`${pendingOutcome.subType} (manual) — ${pendingOutcome.rbi || 0} RBI`);
+3958-      } else if (pendingOutcome.type === 'out') {
+3959-        // GAP-GT-6-A: Pass forceNoRuns when user has toggled the time play override
+3960-        await commitPlateAppearance({
+3961-          type: 'out',
+3962-          outType: pendingOutcome.subType as OutType,
+3963-          forceNoRuns: timePlayNoRun,
+3964-        });
+--
+3996-    );
+3997-    if (unenriched.length > 0) {
+3998-      setUnenrichedCount(unenriched.length);
+3999:      setShowEnrichmentPrompt(true);
+4000-    }
+4001-
+4002-    endInning();
+4003-    // Clear runner names when inning ends (bases are cleared)
+4004-    setRunnerNames({});
+4005-  }, [endInning, playLogEntries, shortInningLabel]);
+4006-
+4007-  // ══════════════════════════════════════════════════════════════
+4008:  // LAYER 5: ENRICHMENT HANDLERS
+4009-  // ══════════════════════════════════════════════════════════════
+4010-
+4011:  // 5.1: Open enrichment panel for a play log entry
+4012-  const handleEntryTap = useCallback((entry: PlayLogEntry) => {
+4013-    setSelectedPlayLogEntry((prev) => {
+4014-      if (prev?.id === entry.id) {
+4015-        setEnrichingEntry(null);
+4016-        setSelectedBetweenPlayEvent(null);
+4017-        return null;
+4018-      }
+4019-
+4020-      if (entry.eventType === 'at_bat') {
+4021-        setEnrichingEntry(entry);
+--
+4027-    });
+4028-  }, []);
+4029-
+4030:  const canUseMainFieldLocation = !!enrichingEntry && ['1B', '2B', '3B', 'GRD', 'HR', 'GO', 'FO', 'LO', 'PO', 'DP', 'TP', 'FC', 'SF', 'SAC'].includes(enrichingEntry.result);
+4031:  const activeDiamondFieldingSequence = useMemo(() => {
+4032-    if (!enrichingEntry?.eventId) {
+4033-      return [];
+4034-    }
+4035:    return enrichmentCache[enrichingEntry.eventId]?.fieldingSequence || [];
+4036:  }, [enrichingEntry?.eventId, enrichmentCache]);
+4037-
+4038:  // 5.1: Save enrichment field immediately (auto-save on change)
+4039:  const handleEnrichmentUpdate = useCallback(async (field: keyof EnrichmentUpdate, value: unknown) => {
+4040-    if (!enrichingEntry?.eventId) return;
+4041-
+4042:    const update: Partial<import('../../../utils/eventLog').AtBatEvent['enrichment']> = {
+4043-      [field]: value,
+4044-    };
+4045-
+4046-    try {
+4047-      const existingAtBat = await getAtBatEvent(enrichingEntry.eventId);
+4048-      if (!existingAtBat) {
+4049-        return;
+4050-      }
+4051-
+4052-      const timestamp = Date.now();
+4053-      const nextVersion = (existingAtBat.version ?? 1) + 1;
+4054-      const editHistory: NonNullable<AtBatEvent['editHistory']> = [{
+4055:        field: `enrichment.${String(field)}`,
+4056:        oldValue: existingAtBat.enrichment?.[field as keyof NonNullable<AtBatEvent['enrichment']>] ?? null,
+4057-        newValue: value,
+4058-        timestamp,
+4059-      }];
+4060-      const shouldMarkQualityAtBat = field === 'pitchesInAtBat' && (value as number) >= 7 && !existingAtBat.isQualityAtBat;
+4061-      if (shouldMarkQualityAtBat) {
+4062-        editHistory.push({
+4063-          field: 'isQualityAtBat',
+4064-          oldValue: existingAtBat.isQualityAtBat ?? false,
+4065-          newValue: true,
+4066-          timestamp,
+4067-        });
+4068-      }
+4069-
+4070:      if (field === 'fieldingSequence' || field === 'fieldingPlayType') {
+4071:        const syncedFieldingEvents = await buildFieldingSyncEventsForSequenceEdit(
+4072-          existingAtBat,
+4073:          update as Partial<NonNullable<AtBatEvent['enrichment']>>,
+4074-        );
+4075-        await updateAtBatEventWithFieldingSync(
+4076-          enrichingEntry.eventId,
+4077-          {
+4078:            enrichment: update as NonNullable<AtBatEvent['enrichment']>,
+4079-            version: nextVersion,
+4080-            editHistory,
+4081-            ...(shouldMarkQualityAtBat ? { isQualityAtBat: true } : {}),
+4082-          },
+4083-          syncedFieldingEvents,
+4084-        );
+4085-      } else {
+4086-        await updateAtBatEvent(enrichingEntry.eventId, {
+4087:          enrichment: update as NonNullable<AtBatEvent['enrichment']>,
+4088-          version: nextVersion,
+4089-          editHistory,
+4090-          ...(shouldMarkQualityAtBat ? { isQualityAtBat: true } : {}),
+4091-        });
+4092-      }
+4093-
+4094-      // Update local cache
+4095:      setEnrichmentCache(prev => ({
+4096-        ...prev,
+4097-        [enrichingEntry.eventId!]: { ...(prev[enrichingEntry.eventId!] || {}), ...update },
+4098-      }));
+4099-
+4100-      // Update PlayLogEntry flags
+4101-      setPlayLogEntries(prev => prev.map(e => {
+4102-        if (e.id !== enrichingEntry.id) return e;
+4103-        const updated = { ...e };
+4104:        if (field === 'fieldLocation') updated.hasLocationData = true;
+4105:        if (field === 'fieldingSequence' || field === 'fieldingPlayType') updated.hasFieldingData = true;
+4106-        if (field === 'pitchType') updated.hasPitchType = true;
+4107-        if (field === 'pitchesInAtBat') {
+4108-          updated.hasPitchCount = true;
+4109-          if (shouldMarkQualityAtBat) {
+4110-            updated.isQAB = true;
+4111-          }
+4112-        }
+4113-        return updated;
+4114-      }));
+4115-
+4116-      // Update the enrichingEntry itself so panel reflects changes
+4117-      setEnrichingEntry(prev => prev ? { ...prev,
+4118:        hasLocationData: field === 'fieldLocation' ? true : prev.hasLocationData,
+4119:        hasFieldingData: field === 'fieldingSequence' || field === 'fieldingPlayType' ? true : prev.hasFieldingData,
+4120-        hasPitchType: field === 'pitchType' ? true : prev.hasPitchType,
+4121-        hasPitchCount: field === 'pitchesInAtBat' ? true : prev.hasPitchCount,
+4122-        isQAB: shouldMarkQualityAtBat ? true : prev.isQAB,
+4123-      } : null);
+4124-
+4125-    } catch (err) {
+4126:      console.error('[Enrichment] Failed to save:', err);
+4127-    }
+4128:  }, [buildFieldingSyncEventsForSequenceEdit, enrichingEntry]);
+4129-
+4130:  const handleMainFieldLocationPick = useCallback((coord: { x: number; y: number }) => {
+4131:    if (!canUseMainFieldLocation || !enrichingEntry) return;
+4132:    void handleEnrichmentUpdate('fieldLocation', {
+4133-      x: Math.round(coord.x * 100),
+4134-      y: Math.round((1 - coord.y) * 100),
+4135-    });
+4136:  }, [canUseMainFieldLocation, enrichingEntry, handleEnrichmentUpdate]);
+4137-
+4138:  const handleDiamondFieldingSequenceUndo = useCallback(() => {
+4139-    if (!enrichingEntry?.eventId) return;
+4140:    const currentSequence = enrichmentCache[enrichingEntry.eventId]?.fieldingSequence || [];
+4141-    if (currentSequence.length === 0) return;
+4142:    void handleEnrichmentUpdate('fieldingSequence', currentSequence.slice(0, -1));
+4143:  }, [enrichingEntry?.eventId, enrichmentCache, handleEnrichmentUpdate]);
+4144-
+4145:  const handleDiamondFieldingSequenceClear = useCallback(() => {
+4146-    if (!enrichingEntry?.eventId) return;
+4147:    void handleEnrichmentUpdate('fieldingSequence', []);
+4148:  }, [enrichingEntry?.eventId, handleEnrichmentUpdate]);
+4149-
+4150-  const handleFielderTap = useCallback((positionNumber: number, playerName: string, anchorPosition: { left: string; top: string }) => {
+4151-    if (enrichingEntry?.eventId) {
+4152-      setActiveRunnerPopover(null);
+4153-      setActiveFielderPopover(null);
+4154:      const currentSequence = enrichmentCache[enrichingEntry.eventId]?.fieldingSequence || [];
+4155:      void handleEnrichmentUpdate('fieldingSequence', [...currentSequence, positionNumber]);
+4156-      return;
+4157-    }
+4158-
+4159-    setActiveRunnerPopover(null);
+4160-    const posLabels: Record<number, string> = { 1: 'P', 2: 'C', 3: '1B', 4: '2B', 5: '3B', 6: 'SS', 7: 'LF', 8: 'CF', 9: 'RF' };
+4161-    const positionLabel = posLabels[positionNumber] || `P${positionNumber}`;
+4162-    const playerId = getRosterIdFromName(playerName, fieldingTeam);
+4163-    const isCurrentBatter = playerName === resolvedCurrentBatterName;
+4164-
+4165-    setActiveFielderPopover({
+4166-      fielder: { positionNumber, positionLabel, playerName, playerId, isCurrentBatter },
+4167-      anchorPosition,
+4168-    });
+4169:  }, [enrichingEntry?.eventId, enrichmentCache, fieldingTeam, getRosterIdFromName, handleEnrichmentUpdate, resolvedCurrentBatterName]);
+4170-
+4171-  // 5.2: K/Kc toggle — updates result field on AtBatEvent
+4172-  const handleKToggle = useCallback(async (entry: PlayLogEntry) => {
+4173-    if (!entry.eventId) return;
+4174-    const newResult = entry.result === 'K' ? 'Kc' : 'K';
+4175-    try {
+4176-      const existingAtBat = await getAtBatEvent(entry.eventId);
+4177-      if (!existingAtBat) {
+4178-        return;
+4179-      }
+--
+4191-    }
+4192-  }, []);
+4193-
+4194:  // 5.1: Close enrichment panel
+4195:  const handleEnrichmentClose = useCallback(() => {
+4196-    setSelectedPlayLogEntry(null);
+4197-    setSelectedBetweenPlayEvent(null);
+4198-    setEnrichingEntry(null);
+4199-  }, []);
+4200-
+4201-  const handleReturnToLiveAtBat = useCallback(() => {
+4202-    setSelectedPlayLogEntry(null);
+4203-    setSelectedBetweenPlayEvent(null);
+4204-    setEnrichingEntry(null);
+4205-  }, []);
+4206-
+4207:  // 5.7: Dismiss between-inning enrichment prompt
+4208:  const handleEnrichmentPromptYes = useCallback(() => {
+4209:    setShowEnrichmentPrompt(false);
+4210-    // Find first unenriched play and open its panel
+4211-    const firstUnenriched = playLogEntries.find(e =>
+4212-      e.isEnrichable && (!e.hasPitchType || !e.hasLocationData || !e.hasFieldingData)
+4213-    );
+4214-    if (firstUnenriched) {
+4215-      setSelectedPlayLogEntry(firstUnenriched);
+4216-      setEnrichingEntry(firstUnenriched);
+4217-    }
+4218-  }, [playLogEntries]);
+4219-
+4220:  const handleEnrichmentPromptSkip = useCallback(() => {
+4221:    setShowEnrichmentPrompt(false);
+4222-  }, []);
+4223-
+4224-  // Handle end game with navigation
+4225-  const handleEndGame = useCallback(async () => {
+4226-    // T1-08 FIX: Prevent double execution from useEffect re-firing
+4227-    if (gameEndingRef.current) {
+4228-      console.log('[T1-08] handleEndGame already in progress — skipping duplicate call');
+4229-      return;
+4230-    }
+4231-    gameEndingRef.current = true;
+--
+4254-            fameTrackingHook.recordFameEvent('PERFECT_GAME' as FameEventType, pitcherId, pitcherName, gameState.inning, gameState.isTop ? 'TOP' : 'BOTTOM', 1.0);
+4255-            console.log(`[MAJ-09] Perfect Game detected for ${pitcherId}`);
+4256-          } else if (isNoHitter) {
+4257:            fameTrackingHook.recordFameEvent('NO_HITTER' as FameEventType, pitcherId, pitcherName, gameState.inning, gameState.isTop ? 'TOP' : 'BOTTOM', 1.0);
+4258-            console.log(`[MAJ-09] No-Hitter detected for ${pitcherId}`);
+4259-          } else if (isMaddux) {
+4260-            fameTrackingHook.recordFameEvent('MADDUX' as FameEventType, pitcherId, pitcherName, gameState.inning, gameState.isTop ? 'TOP' : 'BOTTOM', 1.0);
+4261-            console.log(`[MAJ-09] Maddux detected for ${pitcherId}`);
+4262-          } else if (isShutout) {
+4263-            fameTrackingHook.recordFameEvent('SHUTOUT' as FameEventType, pitcherId, pitcherName, gameState.inning, gameState.isTop ? 'TOP' : 'BOTTOM', 1.0);
+4264-            console.log(`[MAJ-09] Complete Game Shutout detected for ${pitcherId}`);
+4265-          } else {
+4266-            fameTrackingHook.recordFameEvent('COMPLETE_GAME' as FameEventType, pitcherId, pitcherName, gameState.inning, gameState.isTop ? 'TOP' : 'BOTTOM', 1.0);
+4267-            console.log(`[MAJ-09] Complete Game detected for ${pitcherId}`);
+--
+4610-           │                             │ Field                 │(right│
+4611-           │                             │                       │panel)│
+4612-           ├─────────────────────────────┼───────────────────────┤      │
+4613:           │ QUICK BAR (bottom-left)     │ MODIFIERS (bot-right) │      │
+4614-           │ outcome buttons             │ undo + end game       │      │
+4615-           └─────────────────────────────┴───────────────────────┴──────┘
+4616-           ═══════════════════════════════════════════════════════════════ */}
+4617-      <div className="flex h-screen flex-col overflow-hidden bg-[#6B9462] text-white">
+4618-        <FullFenwayScoreboard
+4619-          awayTeamName={awayTeamName.toUpperCase()}
+4620-          homeTeamName={homeTeamName.toUpperCase()}
+4621-          awayRecord={awayRecord}
+4622-          homeRecord={homeRecord}
+4623-          innings={scoreboard.innings}
+--
+4635-          stadiumName={selectedStadium}
+4636-          currentBatterName={currentBatterDisplayName}
+4637-          gameDate={gameStartTime}
+4638:          elapsedMinutes={elapsedMinutes}
+4639-        />
+4640-
+4641-        <div
+4642-          className="min-h-0 flex-1"
+4643-          style={{
+4644-            display: 'grid',
+4645-            gridTemplateColumns: 'minmax(248px, 300px) 1fr minmax(184px, 228px)',
+4646-            gridTemplateRows: '1fr auto',
+4647-            gap: '0px',
+4648-          }}
+--
+4738-            runnerNames={runnerNames}
+4739-            currentBatterName={currentBatterDisplayName}
+4740-            fielders={gameDiamondFielders}
+4741:            enhancementSequence={activeDiamondFieldingSequence}
+4742-            enhancementHelpText={enrichingEntry
+4743:              ? 'Tap fielders to build throw sequence. Tap the field to save spray/location.'
+4744-              : undefined}
+4745-            fielderBorderColors={[fielderColor1, fielderColor2]}
+4746-            batterBackgroundColor={battingTeamColors.primary}
+4747-            batterBorderColor={battingTeamColors.secondary}
+4748-            zoomLevel={fieldZoomLevel}
+4749-            onRunnerTap={handleRunnerTap}
+4750-            onFielderTap={handleFielderTap}
+4751-            onBatterTap={handleBatterTap}
+4752:            onFieldTap={handleMainFieldLocationPick}
+4753:            onEnhancementSequenceUndo={enrichingEntry ? handleDiamondFieldingSequenceUndo : undefined}
+4754:            onEnhancementSequenceClear={enrichingEntry ? handleDiamondFieldingSequenceClear : undefined}
+4755-          />
+4756-
+4757-          {/* Runner Popover — tap runner on diamond → action menu (§5.1) */}
+4758-          {activeRunnerPopover && (
+4759-            <RunnerPopover
+4760-              base={activeRunnerPopover.base}
+4761-              runnerName={activeRunnerPopover.runnerName}
+4762-              anchorPosition={activeRunnerPopover.anchorPosition}
+4763-              onSteal={handleRunnerSteal}
+4764-              onAdvance={handleRunnerAdvance}
+--
+4786-          )}
+4787-        </div>
+4788-
+4789:        {/* ZONE 3: Play Log + Enrichment Panel — right panel, spans both rows */}
+4790-        <div style={{ gridColumn: '3', gridRow: '1 / 3' }} className="relative z-20 isolate pointer-events-auto flex flex-col h-full overflow-hidden">
+4791:          {/* Between-inning enrichment prompt (Ticket 5.7) */}
+4792:        {showEnrichmentPrompt && !pendingRunnerCorrection && !pendingRunnerAttribution && (
+4793-            <div className="bg-[#C4A853]/20 border-b border-[#C4A853] px-2 py-1 flex items-center gap-1 flex-shrink-0">
+4794-              <span className="text-[8px] text-[#C4A853] flex-1">
+4795-                {unenrichedCount} play{unenrichedCount !== 1 ? 's' : ''} unenriched
+4796-              </span>
+4797-              <button
+4798:                onClick={handleEnrichmentPromptYes}
+4799-                className="text-[7px] text-[#34d399] bg-[#064e3b]/60 px-1.5 py-0.5 rounded hover:bg-[#064e3b]"
+4800-              >
+4801-                Enrich
+4802-              </button>
+4803-              <button
+4804:                onClick={handleEnrichmentPromptSkip}
+4805-                className="text-[7px] text-[#6b7280] bg-[#1f2937]/60 px-1.5 py-0.5 rounded hover:bg-[#1f2937]"
+4806-              >
+4807-                Skip
+4808-              </button>
+4809-            </div>
+4810-          )}
+4811-
+4812-          {pendingRunnerCorrection !== null ? (
+4813-            prefersTouchPanels ? (
+4814-              <div className="flex-1 bg-[#2a3a2d]" />
+--
+4895-              contextValueOptions={historicalContextValueOptions}
+4896-            />
+4897-          ) : enrichingEntry !== null ? (
+4898:            /* Enrichment panel replaces play log when active */
+4899:            <EnrichmentPanel
+4900-              entry={enrichingEntry}
+4901:              currentEnrichment={enrichingEntry.eventId ? enrichmentCache[enrichingEntry.eventId] : undefined}
+4902:              onUpdate={handleEnrichmentUpdate}
+4903:              onModifierRecord={(modifier) => void handleAtBatModifierRecord(modifier)}
+4904:              onClose={handleEnrichmentClose}
+4905:              useMainFieldForLocation={canUseMainFieldLocation}
+4906-              closeLabel="Return to live"
+4907-            />
+4908-          ) : (
+4909-            <PlayLogPanel
+4910-              entries={playLogEntries}
+4911-              onEntryTap={handleEntryTap}
+4912-              onKToggle={handleKToggle}
+4913-              enrichingEntryId={selectedPlayLogEntry?.id || null}
+4914-            />
+4915-          )}
+--
+4970-          )}
+4971-        </div>
+4972-
+4973:        {/* ZONE 5: Modifiers + Actions — bottom center */}
+4974-        <div
+4975-          style={{ gridColumn: '2', gridRow: '2' }}
+4976-          className={`bg-[#2a3a2d] border-t-[3px] border-[#3d5240] relative z-0 ${rightPanelOwnsInteraction ? 'pointer-events-none' : ''}`}
+4977-        >
+4978-          <div className="relative flex gap-2 p-2 items-center justify-between h-full">
+4979-            <div className="flex items-center gap-2 min-w-0">
+4980-              <div className="flex items-center gap-1.5 flex-wrap">
+4981-                {prefersTouchPanels && touchReviewEntries.length > 0 && !pendingRunnerCorrection && !pendingRunnerAttribution && (
+4982-                  <button
+4983-                    onClick={() => setShowTouchPlayReview(true)}
+--
+5003-                  onClick={() => {
+5004-                    const firstUnenriched = [...playLogEntries].reverse().find(entry =>
+5005-                      entry.isEnrichable &&
+5006:                      (!entry.hasFieldingData || !entry.hasLocationData || !entry.hasPitchType || !entry.hasPitchCount)
+5007-                    );
+5008-                    if (firstUnenriched) {
+5009-                      setEnrichingEntry(firstUnenriched);
+5010-                    }
+5011:                    setLineupOverlayHint('Tap the main field to set spray/location. Use the play log panel for pitch and sequence edits.');
+5012-                  }}
+5013-                  className="bg-[#4A6844] border-[3px] border-[#88AA88] px-3 py-2.5 text-white text-xs font-bold
+5014-                             shadow-[2px_2px_0px_0px_rgba(0,0,0,0.5)] active:scale-95 transition-transform
+5015-                             hover:bg-[#5A8352]"
+5016-                >
+5017-                  +FLD
+5018-                </button>
+5019-                <button
+5020-                  onClick={() => {
+5021-                    const latestAtBat = [...playLogEntries].reverse().find((entry) => entry.eventType === 'at_bat' && entry.isEnrichable);
+5022-                    if (latestAtBat) {
+5023-                      setEnrichingEntry(latestAtBat);
+5024-                    }
+5025:                    setLineupOverlayHint('Use the at-bat editor for modifiers and special-event enhancements.');
+5026-                  }}
+5027-                  className="bg-[#6c3483] border-[3px] border-[#af7ac5] px-3 py-2.5 text-white text-xs font-bold
+5028-                             shadow-[2px_2px_0px_0px_rgba(0,0,0,0.5)] active:scale-95 transition-transform
+5029-                             hover:bg-[#7d3c98]"
+5030-                >
+5031-                  +MOD
+5032-                </button>
+5033-              </div>
+5034-              <div className="text-[8px] text-[#C4A853] min-w-0 truncate">
+5035:                {canUseMainFieldLocation
+5036:                  ? 'Location enrichment is active: tap the main field. K/Kc stays in the play log.'
+5037-                  : lineupOverlayHint ?? 'Tap a play to enrich. Use the main field for +loc and LINEUP for substitutions.'}
+5038-              </div>
+5039-            </div>
+5040-            <div className="flex items-center gap-2">
+5041-              <undoSystem.UndoButtonComponent />
+5042-              <button
+5043-                onClick={() => setShowEndGameConfirmation(true)}
+5044-                className="bg-[#DD0000] border-[3px] border-white px-4 py-2.5 text-white text-sm font-bold
+5045-                           shadow-[2px_2px_0px_0px_rgba(0,0,0,0.5)] active:scale-95 transition-transform
+5046-                           hover:bg-[#FF0000]"
+--
+5210-
+5211-        {/* Play Location Overlay - REMOVED (now using drag-drop interface) */}
+5212-
+5213:        {/* End Game Confirmation — with post-game enrichment prompt (Ticket 5.8) */}
+5214-        {showEndGameConfirmation && !showPostGameEnrichPrompt && (
+5215-          <div
+5216-            className="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center z-50"
+5217-            onClick={() => setShowEndGameConfirmation(false)}
+5218-          >
+5219-            <div
+5220-              className="bg-[#556B55] border-[6px] border-[#4A6844] p-4 w-[340px] shadow-[8px_8px_0px_0px_rgba(0,0,0,0.8)]"
+5221-              onClick={(e) => e.stopPropagation()}
+5222-            >
+5223-              {/* Header */}
+--
+5283-          </div>
+5284-        )}
+5285-
+5286:        {/* Post-game enrichment prompt (Ticket 5.8) */}
+5287-        {showPostGameEnrichPrompt && (
+5288-          <div
+5289-            className="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center z-50"
+5290-            onClick={() => { setShowPostGameEnrichPrompt(false); handleEndGame(); }}
+5291-          >
+5292-            <div
+5293-              className="bg-[#556B55] border-[6px] border-[#4A6844] p-4 w-[340px] shadow-[8px_8px_0px_0px_rgba(0,0,0,0.8)]"
+5294-              onClick={(e) => e.stopPropagation()}
+5295-            >
+5296-              <div className="bg-[#3d5240] border-[4px] border-[#E8E8D8] p-2 mb-3">
+5297:                <div className="text-xs text-[#E8E8D8] font-bold">ENRICHMENT</div>
+5298-              </div>
+5299-              <div className="text-[9px] text-[#E8E8D8] mb-4">
+5300-                {postGameUnenrichedCount} play{postGameUnenrichedCount !== 1 ? 's' : ''} unenriched. Enrich now or continue?
+5301-              </div>
+5302-              <div className="flex gap-2">
+5303-                <button
+5304-                  onClick={() => {
+5305-                    setShowPostGameEnrichPrompt(false);
+5306-                    setShowEndGameConfirmation(false);
+5307:                    // Open enrichment on first unenriched play
+5308-                    const firstUnenriched = playLogEntries.find(e =>
+5309-                      e.isEnrichable && (!e.hasPitchType || !e.hasLocationData)
+5310-                    );
+5311-                    if (firstUnenriched) setEnrichingEntry(firstUnenriched);
+5312-                  }}
+5313-                  className="flex-1 bg-[#3d5240] border-[5px] border-[#C4A853] py-3 text-[#C4A853] text-sm hover:bg-[#4A6844] active:scale-95 transition-transform"
+5314-                >
+5315-                  ENRICH
+5316-                </button>
+5317-                <button
+--
+5660-                        </div>
+5661-                      </div>
+5662-                      <div>
+5663:                        <div className="text-[7px] text-white mb-1">HIT TYPE:</div>
+5664-                        <div className="grid grid-cols-3 gap-1">
+5665-                          <DetailButton label="GROUND" onClick={() => {}} />
+5666-                          <DetailButton label="LINE" onClick={() => {}} />
+5667-                          <DetailButton label="FLY" onClick={() => {}} />
+5668-                        </div>
+5669-                      </div>
+5670-                      {/* RBI Selection */}
+5671-                      <div>
+5672-                        <div className="text-[7px] text-white mb-1">RBI:</div>
+5673-                        <div className="grid grid-cols-5 gap-1">
+--
+5857-                      <div>
+5858-                        <div className="text-[7px] text-white mb-1">SPECIAL PLAY:</div>
+5859-                        <div className="grid grid-cols-3 gap-1">
+5860:                          <DetailButton label="ROUTINE" onClick={() => {}} />
+5861:                          <DetailButton label="DIVING" onClick={() => {}} />
+5862-                          <DetailButton label="WALL" onClick={() => {}} />
+5863-                        </div>
+5864-                        <div className="grid grid-cols-2 gap-1 mt-1">
+5865-                          <DetailButton label="RUNNING" onClick={() => {}} />
+5866-                          <DetailButton label="LEAPING" onClick={() => {}} />
+5867-                        </div>
+5868-                      </div>
+5869-                      {/* GAP-GT-3-H: Sac fly prompt — FO with R3 occupied and <2 outs */}
+5870-                      {gameState.bases.third && gameState.outs < 2 && (
+5871-                        <div className="p-1 bg-[#2a4a2a] border border-[#44AA44] mt-1">
+--
+6036-                        <div className="grid grid-cols-2 gap-1">
+6037-                          <button
+6038-                            onClick={() => {
+6039:                              setPendingOutcome(prev => prev ? { ...prev, modifiers: { ...prev.modifiers, ifr: true } } as typeof prev : prev);
+6040-                            }}
+6041:                            className={`text-[9px] py-1 border font-bold ${(pendingOutcome as { modifiers?: { ifr?: boolean } })?.modifiers?.ifr ? 'bg-[#6666FF] border-[#4444DD] text-white' : 'bg-[#333] border-[#555] text-[#AAA]'}`}
+6042-                          >
+6043-                            YES — IFR
+6044-                          </button>
+6045-                          <button
+6046-                            onClick={() => {
+6047:                              setPendingOutcome(prev => prev ? { ...prev, modifiers: { ...prev.modifiers, ifr: false } } as typeof prev : prev);
+6048-                            }}
+6049:                            className={`text-[9px] py-1 border font-bold ${(pendingOutcome as { modifiers?: { ifr?: boolean } })?.modifiers?.ifr === false ? 'bg-[#555] border-[#777] text-white' : 'bg-[#333] border-[#555] text-[#AAA]'}`}
+6050-                          >
+6051-                            NO
+6052-                          </button>
+6053-                        </div>
+6054-                      </div>
+6055-                    )}
+6056-                    <div className="grid grid-cols-2 gap-2 pt-2">
+6057-                      <button
+6058-                        onClick={handleCancelOutcome}
+6059-                        className="bg-gray-600 text-white text-xs py-2 px-4 border-2 border-gray-400 hover:bg-gray-500"
+--
+6146-                    onClick={() => toggleOutcomeDetail('KILLED')} 
+6147-                  />
+6148-                  <OutcomeButton 
+6149:                    label="NUTSHOT" 
+6150-                    color="purple" 
+6151:                    isExpanded={expandedOutcome === 'NUTSHOT'}
+6152:                    onClick={() => toggleOutcomeDetail('NUTSHOT')} 
+6153-                  />
+6154-                </div>
+6155-              </div>
+6156-            </ExpandablePanel>
+6157-
+6158-            {/* LINEUP Section - Drag-and-Drop Only */}
+6159-            <ExpandablePanel
+6160-              title="LINEUP"
+6161-              isExpanded={expandedSections.substitutions}
+6162-              onToggle={() => toggleSection('substitutions')}
+--- useGameState.ts ---
+200-    };
+201-export type EventType =
+202-  | 'SB' | 'CS' | 'WP' | 'PB' | 'PICK' | 'PICK_SAFE' | 'PICK_E' | 'ADVANCE'
+203:  | 'KILLED' | 'NUTSHOT'
+204-  | 'WEB_GEM' | 'ROBBERY'
+205:  | 'TOOTBLAN'
+206-  | 'BEAT_THROW' | 'BUNT'
+207-  | 'STRIKEOUT' | 'STRIKEOUT_LOOKING' | 'DROPPED_3RD_STRIKE'
+208-  | 'SEVEN_PLUS_PITCH_AB';
+209-
+210-type SubstitutionLogEntry = {
+211-  type: 'player_sub' | 'pitching_change' | 'pinch_hit' | 'pinch_run' | 'defensive_sub' | 'position_switch' | 'double_switch';
+212-  inning: number;
+213-  halfInning: 'TOP' | 'BOTTOM';
+214-  outgoingPlayerId: string;
+215-  outgoingPlayerName: string;
+--
+306-  confirmPitchCount: (pitcherId: string, finalCount: number) => { immaculateInning?: { pitcherId: string; pitcherName: string } };
+307-  dismissPitchCountPrompt: () => void;
+308-
+309:  // Enrichment injection (Layer 1B)
+310:  setNextEventEnrichment: (data: AtBatEvent['enrichment']) => void;
+311-
+312-  /** Position innings map: playerId → { [position]: halfInningsPlayed } (ticket 4.10) */
+313-  positionInnings: Map<string, Record<string, number>>;
+314-
+315-  // Initialization
+316-  initializeGame: (config: GameInitConfig) => Promise<void>;
+317-  loadExistingGame: (options?: LoadExistingGameOptions) => Promise<boolean>;
+318-  undoLastAction: () => Promise<boolean>;
+319-  getLineupStateSnapshot: () => GameLineupSnapshot;
+320-
+--
+982-  trackerState: RunnerTrackingState,
+983-  base: 'first' | 'second' | 'third',
+984-  occupied: boolean,
+985:  fallbackPitcherId: string,
+986-): { runnerId: string; runnerName: string; responsiblePitcherId: string } | null {
+987-  if (!occupied) return null;
+988-  const trackerBase = baseToTrackerBase(base);
+989-  const runner = trackerState.runners.find(r => r.currentBase === trackerBase);
+990-  return {
+991-    runnerId: runner?.runnerId ?? '',
+992-    runnerName: runner?.runnerName ?? '',
+993:    responsiblePitcherId: runner?.responsiblePitcherId ?? fallbackPitcherId,
+994-  };
+995-}
+996-
+997-/**
+998- * Build runnersAfter snapshot from the tracker state.
+999- * Call AFTER tracker has been updated with all runner movements for this play.
+1000- */
+1001-function buildRunnersAfter(
+1002-  trackerState: RunnerTrackingState,
+1003-): { first: { runnerId: string; runnerName: string; responsiblePitcherId: string } | null;
+--
+1365-  const leagueIdRef = useRef<string | undefined>(undefined);
+1366-  const awayRecordRef = useRef<{ w: number; l: number } | undefined>(undefined);
+1367-  const homeRecordRef = useRef<{ w: number; l: number } | undefined>(undefined);
+1368:  // Layer 1B: Enrichment data ref — set from GameTracker before record calls
+1369:  const pendingEnrichmentRef = useRef<AtBatEvent['enrichment']>(undefined);
+1370-
+1371-  // MAJ-09: Full LineupState tracking for substitution validation
+1372-  const awayLineupStateRef = useRef<LineupState>({
+1373-    lineup: [], bench: [], usedPlayers: [], currentPitcher: null,
+1374-  });
+1375-  const homeLineupStateRef = useRef<LineupState>({
+1376-    lineup: [], bench: [], usedPlayers: [], currentPitcher: null,
+1377-  });
+1378-
+1379-  // ============================================
+--
+1986-        ['1B', '2B', '3B', 'HR', 'BB', 'HBP', 'IBB'].includes(result) ||
+1987-        undefined, // undefined if we can't determine
+1988-
+1989:      // 1.16: Enrichment — consume pending enrichment data if set
+1990:      enrichment: pendingEnrichmentRef.current || undefined,
+1991-
+1992-      // 1.17: Versioning
+1993-      version: 1,
+1994-    };
+1995-  }, [gameState, playerStats, pitcherStats, substitutionLog]);
+1996-
+1997:  /** Set enrichment data to attach to the next recorded event */
+1998:  const setNextEventEnrichment = useCallback((data: AtBatEvent['enrichment']) => {
+1999:    pendingEnrichmentRef.current = data;
+2000-  }, []);
+2001-
+2002-  // ============================================
+2003-  // INITIALIZATION
+2004-  // ============================================
+2005-
+2006-  const initializeGame = useCallback(async (config: GameInitConfig) => {
+2007-    setIsLoading(true);
+2008-    latestPersistedRef.current = null;
+2009-    if (autoSaveTimeoutRef.current) {
+--
+3451-
+3452-    // Log to IndexedDB
+3453-    await logAtBatEvent(event);
+3454:    pendingEnrichmentRef.current = undefined;
+3455-
+3456-    // Update player stats
+3457-    setPlayerStats(prev => {
+3458-      const newStats = new Map(prev);
+3459-      const batterStats = { ...(newStats.get(gameState.currentBatterId) || createEmptyPlayerStats()) };
+3460-      batterStats.pa++;
+3461-      batterStats.ab++;
+3462-      batterStats.h++;
+3463-      if (hitType === '1B') batterStats.singles++;
+3464-      if (hitType === '2B' || hitType === 'GRD') batterStats.doubles++; // GRD counts as a double
+--
+3764-    };
+3765-
+3766-    await logAtBatEvent(event);
+3767:    pendingEnrichmentRef.current = undefined;
+3768-
+3769-    // Update player stats — MAJ-07: use effectiveResult for corrected type
+3770-    const statResult = effectiveResult; // corrected: e.g. FO→SF, GO→DP
+3771-    setPlayerStats(prev => {
+3772-      const newStats = new Map(prev);
+3773-      const batterStats = { ...(newStats.get(gameState.currentBatterId) || createEmptyPlayerStats()) };
+3774-      batterStats.pa++;
+3775-      if (statResult !== 'SF' && statResult !== 'SAC') {
+3776-        batterStats.ab++;
+3777-      }
+--
+3994-    };
+3995-
+3996-    await logAtBatEvent(event);
+3997:    pendingEnrichmentRef.current = undefined;
+3998-
+3999-    // Update player stats — MAJ-07: Track HBP separately from BB
+4000-    setPlayerStats(prev => {
+4001-      const newStats = new Map(prev);
+4002-      const batterStats = { ...(newStats.get(gameState.currentBatterId) || createEmptyPlayerStats()) };
+4003-      batterStats.pa++;
+4004-      if (walkType === 'HBP') {
+4005-        batterStats.hbp = (batterStats.hbp || 0) + 1;
+4006-      } else {
+4007-        batterStats.bb++;  // BB and IBB count as walks for batter
+--
+4166-    };
+4167-
+4168-    await logAtBatEvent(event);
+4169:    pendingEnrichmentRef.current = undefined;
+4170-
+4171-    // Update batter stats - ALWAYS count K, PA, AB
+4172-    setPlayerStats(prev => {
+4173-      const newStats = new Map(prev);
+4174-      const batterStats = { ...(newStats.get(gameState.currentBatterId) || createEmptyPlayerStats()) };
+4175-      batterStats.pa++;
+4176-      batterStats.ab++; // K counts as AB
+4177-      batterStats.k++;  // Always count the strikeout
+4178-      newStats.set(gameState.currentBatterId, batterStats);
+4179-      return newStats;
+--
+4320-    };
+4321-
+4322-    await logAtBatEvent(event);
+4323:    pendingEnrichmentRef.current = undefined;
+4324-
+4325-    // Update player stats (PA but no AB for ROE)
+4326-    setPlayerStats(prev => {
+4327-      const newStats = new Map(prev);
+4328-      const batterStats = { ...(newStats.get(gameState.currentBatterId) || createEmptyPlayerStats()) };
+4329-      batterStats.pa++;
+4330-      batterStats.ab++; // Reach on error is an at-bat per Project Bible.
+4331-      // D-04 FIX: Errors NEVER credit RBI per baseball rules and calculateRBIs().
+4332-      // The rbi parameter is kept in the signature for backward compat but ignored.
+4333-      // batterStats.rbi += rbi; // REMOVED — was D-04 bug
+--
+4461-      ROBBERY: 1.0,         // HR denied at wall (y > 0.95) — CRIT-06: spec v3.3 standardized to +1
+4462-
+4463-      // Baserunning events (runner receives Fame)
+4464:      // D-07 FIX: TOOTBLAN uses tiered fame, not flat -3.0.
+4465-      // Sentinel value — actual fame computed below based on rally-killer check.
+4466:      TOOTBLAN: -0.5,       // Base value; overridden to -2.0 if rally killer
+4467-
+4468-      // Comebacker events (batter receives Fame)
+4469-      KILLED: 3.0,          // Killed pitcher (+3 Fame to batter)
+4470:      NUTSHOT: 1.0,         // Nut shot (+1 Fame to batter)
+4471-      KILLED_PITCHER: 3.0,  // Alias for KILLED
+4472:      NUT_SHOT: 1.0,        // Alias for NUTSHOT
+4473-
+4474-      // Informational events (no Fame impact, just tracking)
+4475-      BEAT_THROW: 0,        // Infield hit - beat the throw (speed)
+4476-      BUNT: 0,              // Bunt single (recorded but no Fame)
+4477-      STRIKEOUT: 0,         // K swinging
+4478-      STRIKEOUT_LOOKING: 0, // K looking
+4479-      DROPPED_3RD_STRIKE: 0, // D3K
+4480-      SEVEN_PLUS_PITCH_AB: 0, // Tough AB (7+ pitches)
+4481-    };
+4482-
+4483-    if (FAME_VALUES[eventType] !== undefined && FAME_VALUES[eventType] !== 0) {
+4484-      let baseFame = FAME_VALUES[eventType];
+4485-
+4486:      // D-07 FIX: TOOTBLAN tiered fame per SPECIAL_EVENTS_SPEC.md
+4487-      // Rally killer: runner was in scoring position (2B or 3B) with <2 outs → -2.0
+4488-      // Standard: -0.5
+4489:      if (eventType === 'TOOTBLAN') {
+4490-        const isRallyKiller = (gameState.bases.second || gameState.bases.third) && gameState.outs < 2;
+4491-        baseFame = isRallyKiller ? -2.0 : -0.5;
+4492-      }
+4493-
+4494-      const adjustedFame = baseFame * fameMultiplier;
+4495-
+4496-      // Determine who receives the Fame
+4497-      let recipientId = '';
+4498-      let recipientName = '';
+4499-
+4500:      if (eventType === 'TOOTBLAN' || eventType === 'SB' || eventType === 'CS') {
+4501-        // Baserunning events - runner receives Fame
+4502-        recipientId = runnerId || '';
+4503-        recipientName = runnerId || 'Unknown Runner';
+4504-      } else if (eventType === 'WEB_GEM' || eventType === 'ROBBERY') {
+4505-        // Fielding events - fielder receives Fame (would need fielder ID)
+4506-        recipientId = details?.actorId || runnerId || 'fielder';
+4507-        recipientName = details?.actorName || runnerId || 'Fielder';
+4508-      } else {
+4509:        // Default: batter receives Fame (KILLED, NUTSHOT, etc.)
+4510-        recipientId = details?.actorId || gameState.currentBatterId;
+4511-        recipientName = details?.actorName || gameState.currentBatterName;
+4512-      }
+4513-
+4514-      const fameEvent: FameEventRecord = {
+4515-        eventType,
+4516-        fameType: adjustedFame >= 0 ? 'bonus' : 'boner',
+4517-        fameValue: Math.abs(adjustedFame),
+4518-        playerId: recipientId,
+4519-        playerName: recipientName,
+--
+4946-      });
+4947-    }
+4948-
+4949:    // T0-03 FIX: Check if baserunning out (CS, pickoff, TOOTBLAN, etc.) caused 3rd out.
+4950-    // advanceRunner increments outs via setGameState but never checked for inning end.
+4951-    // Uses same pattern as recordOut (line 1826): setTimeout to let UI update before flip.
+4952-    if (outcome === 'out' && gameState.outs + 1 >= 3) {
+4953-      console.log('[advanceRunner] T0-03: Baserunning out caused 3rd out — triggering end of inning');
+4954-      setTimeout(() => {
+4955-        endInningRef.current?.();
+4956-      }, 500);
+4957-    }
+4958-    if (outcome === 'out') {
+4959-      creditFieldingOutsToPositions(1);
+--
+6399-    dismissAutoEndPrompt: useCallback(() => setShowAutoEndPrompt(false), []),
+6400-    setPlayoffContext,
+6401-    setStadiumName,
+6402:    setNextEventEnrichment,
+6403-    /** Position usage map: playerId → { [position]: outsPlayed } (convert to innings via / 3) */
+6404-    positionInnings: positionInningsRef.current,
+6405-  };
+6406-}

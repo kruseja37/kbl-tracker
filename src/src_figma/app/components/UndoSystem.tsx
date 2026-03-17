@@ -41,6 +41,12 @@ export interface UndoSystemHandle {
   undoCount: number;
   /** Clear all undo history */
   clearHistory: () => void;
+  /** Perform undo — pops the most recent snapshot and restores it */
+  performUndo: () => void;
+  /** UX-055: Timestamp of the oldest snapshot in the undo stack, or null if empty.
+   *  Events created after this timestamp are within undo depth (full correction).
+   *  Events created before are beyond undo depth (enrichment-only editing). */
+  undoBoundaryTimestamp: number | null;
 }
 
 // ============================================
@@ -176,6 +182,9 @@ export function useUndoSystem(
     canUndo: stack.length > 0,
     undoCount: stack.length,
     clearHistory,
+    performUndo,
+    // UX-055: Expose the oldest snapshot timestamp for undo-depth-aware locking
+    undoBoundaryTimestamp: stack.length > 0 ? stack[0].timestamp : null,
     UndoButtonComponent,
     ToastComponent,
     setCurrentState,

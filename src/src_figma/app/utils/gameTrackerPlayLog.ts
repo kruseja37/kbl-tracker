@@ -1,5 +1,8 @@
 import type { AtBatEvent, BetweenPlayEvent } from '../../../utils/eventLog';
-import type { PlayLogEditorType, PlayLogEntry, PlayLogEventType, PlayLogResultCategory } from './playLogTypes';
+import type { PlayLogEditorType, PlayLogEntry, PlayLogEventType, PlayLogResultCategory, RunnerSubEntry } from './playLogTypes';
+import {
+  getRunnerDisplayDestination,
+} from './gameTrackerRunnerCorrection';
 
 const WALK_RESULTS = new Set(['BB', 'IBB', 'HBP']);
 const HIT_RESULTS = new Set(['1B', '2B', '3B', 'HR', 'GRD']);
@@ -92,10 +95,160 @@ const createBaseEntry = (
   ...overrides,
 });
 
+type RunnerBaseKey = 'first' | 'second' | 'third';
+const RUNNER_BASES: RunnerBaseKey[] = ['first', 'second', 'third'];
+
+/**
+ * Derive runner sub-entries from AtBatEvent data.
+ * Prefers explicit runnerOutcomes[] when available.
+ * Falls back to inferring from runners (before) vs runnersAfter (after).
+ */
+function buildRunnerSubEntries(event: AtBatEvent): RunnerSubEntry[] | undefined {
+  // Path 1: Explicit runnerOutcomes[] exists
+  if (event.runnerOutcomes?.length) {
+    return event.runnerOutcomes.map((ro, idx) => ({
+      id: `${event.eventId}-runner-${idx}`,
+      parentEventId: event.eventId,
+      runnerId: ro.runnerId,
+      runnerName: ro.runnerName,
+      fromBase: ro.fromBase,
+      toBase: getRunnerDisplayDestination(ro),
+      isEnrichable: true,
+      fieldingSequence: ro.fieldingSequence,
+      playMechanic: ro.playMechanic,
+      isTootblan: ro.isTootblan,
+      isOutAdvancing: ro.isOutAdvancing,
+    }));
+  }
+
+  // Path 2: Infer from runners/runnersAfter
+  if (!event.runners || !event.runnersAfter) return undefined;
+
+  const subEntries: RunnerSubEntry[] = [];
+  let idx = 0;
+
+  // Build a map of runnersAfter for lookup
+  const afterMap = new Map<string, RunnerBaseKey>();
+  for (const base of RUNNER_BASES) {
+    const r = event.runnersAfter[base];
+    if (r?.runnerId) afterMap.set(r.runnerId, base);
+  }
+
+  // Collect scored runner IDs
+  const scoredIds = new Set<string>();
+  if (Array.isArray(event.runsScored)) {
+    for (const r of event.runsScored) {
+      const runner = r as { runnerId?: string };
+      if (runner.runnerId) scoredIds.add(runner.runnerId);
+    }
+  }
+
+  for (const fromBase of RUNNER_BASES) {
+    const runnerBefore = event.runners[fromBase];
+    if (!runnerBefore) continue;
+
+    let runnerId = runnerBefore.runnerId;
+    let runnerName = runnerBefore.runnerName;
+
+    // If runner data is empty, try to identify from runnersAfter
+    // Find a runner in runnersAfter who wasn't on that same base before (i.e., they advanced)
+    if (!runnerId && !runnerName) {
+      for (const afterBase of RUNNER_BASES) {
+        if (afterBase === fromBase) continue; // Skip same base
+        const afterRunner = event.runnersAfter[afterBase];
+        if (!afterRunner?.runnerId) continue;
+        // Skip the batter (they're new to the bases)
+        if (afterRunner.runnerId === event.batterId) continue;
+        // Check this runner wasn't already on a different occupied base before
+        const wasOnAnotherBase = RUNNER_BASES.some(b => b !== fromBase && event.runners[b]?.runnerId === afterRunner.runnerId);
+        if (wasOnAnotherBase) continue;
+        // This runner must have come from fromBase
+        runnerId = afterRunner.runnerId;
+        runnerName = afterRunner.runnerName;
+        break;
+      }
+      // Still empty? Try scored runners
+      if (!runnerId && !runnerName && scoredIds.size > 0) {
+        // If runs scored is numeric (not array), we can't identify the runner
+        if (Array.isArray(event.runsScored)) {
+          for (const r of event.runsScored) {
+            const runner = r as { runnerId?: string; runnerName?: string };
+            if (!runner.runnerId) continue;
+            if (runner.runnerId === event.batterId) continue;
+            runnerId = runner.runnerId;
+            runnerName = runner.runnerName || '';
+            break;
+          }
+        }
+      }
+      // If still can't identify, skip this entry
+      if (!runnerId && !runnerName) continue;
+    }
+
+    // Determine destination
+    let toBase: 'second' | 'third' | 'home' | 'out' | null = null;
+
+    // Check runnersAfter for this runner
+    const afterBase = runnerId ? afterMap.get(runnerId) : undefined;
+    if (afterBase) {
+      toBase = afterBase as 'second' | 'third';
+    }
+
+    // Check if they scored
+    if (!toBase && runnerId && scoredIds.has(runnerId)) {
+      toBase = 'home';
+    }
+
+    // Check numeric runsScored as fallback for home
+    if (!toBase && typeof event.runsScored === 'number' && event.runsScored > 0) {
+      // Can't attribute specific runner, but if outs didn't increase and runner disappeared, they likely scored
+      const inAfter = afterBase !== undefined;
+      if (!inAfter) toBase = 'home';
+    }
+
+    // If not found anywhere, they were out
+    if (!toBase) toBase = 'out';
+
+    // Skip no-movement entries (stayed on same base)
+    if (toBase === fromBase) continue;
+
+    subEntries.push({
+      id: `${event.eventId}-runner-${idx}`,
+      parentEventId: event.eventId,
+      runnerId: runnerId || '',
+      runnerName: runnerName || 'Unknown',
+      fromBase,
+      toBase,
+      isEnrichable: true,
+    });
+    idx++;
+  }
+
+  return subEntries.length > 0 ? subEntries : undefined;
+}
+
 export function mapAtBatEventToPlayLogEntry(event: AtBatEvent): PlayLogEntry {
-  const displayResult = toDisplayResult(event.result);
-  const runsScored = Array.isArray(event.runsScored) ? event.runsScored.length : event.runsScored;
+  const baseDisplayResult = toDisplayResult(event.result);
+  const displayResult = event.enrichment?.batterOutAdvancing
+    ? `${baseDisplayResult} OA`
+    : baseDisplayResult;
+  const scoreDerivedRuns = event.halfInning === 'TOP'
+    ? Math.max(0, event.awayScoreAfter - event.awayScore)
+    : Math.max(0, event.homeScoreAfter - event.homeScore);
+  const rawRunsScored = Array.isArray(event.runsScored) ? event.runsScored.length : event.runsScored;
+  const runsScored = event.runnerOutcomes?.length ? scoreDerivedRuns : rawRunsScored;
   const fieldingSequence = event.enrichment?.fieldingSequence?.join('-');
+  const enrichmentAny = event.enrichment as (NonNullable<AtBatEvent['enrichment']> & {
+    fieldingAttemptType?: string;
+    fieldingAttemptOutcome?: string;
+    playMechanic?: string;
+  }) | undefined;
+  const hasFieldingDefaults = !!(
+    event.enrichment?.fieldingPlayType ||
+    enrichmentAny?.fieldingAttemptType ||
+    enrichmentAny?.fieldingAttemptOutcome ||
+    enrichmentAny?.playMechanic
+  );
 
   return createBaseEntry({
     id: event.eventId,
@@ -104,10 +257,10 @@ export function mapAtBatEventToPlayLogEntry(event: AtBatEvent): PlayLogEntry {
     inningLabel: toShortInningLabel(event.halfInning, event.inning),
     batterName: event.batterName,
     result: displayResult,
-    resultCategory: getResultCategory(displayResult),
-    rbi: event.rbiCount,
+    resultCategory: getResultCategory(baseDisplayResult),
+    rbi: Math.max(0, event.rbiCount),
     runsScored,
-    hasFieldingData: !!fieldingSequence || !!event.enrichment?.putouts?.length || !!event.enrichment?.assists?.length || !!event.enrichment?.errors?.length,
+    hasFieldingData: !!fieldingSequence || !!event.enrichment?.putouts?.length || !!event.enrichment?.assists?.length || !!event.enrichment?.errors?.length || hasFieldingDefaults,
     hasLocationData: !!event.enrichment?.fieldLocation,
     hasKType: displayResult === 'Kc',
     hasPitchCount: typeof event.enrichment?.pitchesInAtBat === 'number',
@@ -116,6 +269,7 @@ export function mapAtBatEventToPlayLogEntry(event: AtBatEvent): PlayLogEntry {
     isQAB: !!event.isQualityAtBat,
     fieldingSequence,
     timestamp: event.timestamp,
+    runnerSubEntries: buildRunnerSubEntries(event),
   });
 }
 

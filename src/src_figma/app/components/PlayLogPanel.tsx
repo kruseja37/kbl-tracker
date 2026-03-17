@@ -1,5 +1,5 @@
 import React from 'react';
-import type { PlayLogEntry } from '../utils/playLogTypes';
+import type { PlayLogEntry, RunnerSubEntry } from '../utils/playLogTypes';
 
 // ──────────────────────────────────────────────────────────────
 // Result color mapping
@@ -33,25 +33,120 @@ function getResultColor(result: string): string {
 }
 
 // ──────────────────────────────────────────────────────────────
+// Runner sub-entry base label formatting
+// ──────────────────────────────────────────────────────────────
+
+const BASE_DISPLAY: Record<string, string> = {
+  first: '1B', second: '2B', third: '3B', home: 'HOME', out: 'OUT',
+};
+
+function formatRunnerTransition(fromBase: string, toBase: string): string {
+  return `${BASE_DISPLAY[fromBase] || fromBase}→${BASE_DISPLAY[toBase] || toBase}`;
+}
+
+// ──────────────────────────────────────────────────────────────
 // PlayLogPanel Component
 // ──────────────────────────────────────────────────────────────
 
 interface PlayLogPanelProps {
   entries: PlayLogEntry[];
   onEntryTap?: (entry: PlayLogEntry) => void;
-  onKToggle?: (entry: PlayLogEntry) => void;  // Ticket 5.2: inline K/Kc toggle
-  enrichingEntryId?: string | null;           // Currently open enrichment panel entry
+  onRunnerSubEntryTap?: (subEntry: RunnerSubEntry, parentEntry: PlayLogEntry) => void;
+  enrichingEntryId?: string | null;
+  enrichingRunnerSubEntryId?: string | null;
+  teamColors?: { away: string; home: string };
+  isTop?: boolean;
 }
 
-export function PlayLogPanel({ entries, onEntryTap, onKToggle, enrichingEntryId }: PlayLogPanelProps) {
+function getBattingTeamColor(
+  inningLabel: string,
+  teamColors?: { away: string; home: string },
+  isTop?: boolean,
+): string | undefined {
+  if (!teamColors) {
+    return undefined;
+  }
+
+  if (inningLabel.startsWith('T')) {
+    return teamColors.away;
+  }
+
+  if (inningLabel.startsWith('B')) {
+    return teamColors.home;
+  }
+
+  return isTop === undefined ? undefined : isTop ? teamColors.away : teamColors.home;
+}
+
+export function PlayLogPanel({
+  entries,
+  onEntryTap,
+  onRunnerSubEntryTap,
+  enrichingEntryId,
+  enrichingRunnerSubEntryId,
+  teamColors,
+  isTop,
+}: PlayLogPanelProps) {
   const [showSystemRows, setShowSystemRows] = React.useState(false);
+  const [animatingEntryId, setAnimatingEntryId] = React.useState<string | null>(null);
+  const [lockedResultTooltipEntryId, setLockedResultTooltipEntryId] = React.useState<string | null>(null);
   const prefersTouchMode =
     typeof window !== 'undefined' && window.matchMedia('(pointer: coarse)').matches;
   const visibleEntries = showSystemRows ? entries : entries.filter((entry) => entry.visibility === 'default');
   const systemRowCount = entries.filter((entry) => entry.visibility === 'system').length;
+  const newestVisibleEntryId = visibleEntries.length > 0 ? visibleEntries[visibleEntries.length - 1].id : null;
+  const previousNewestEntryId = React.useRef<string | null>(newestVisibleEntryId);
+
+  React.useEffect(() => {
+    if (newestVisibleEntryId && previousNewestEntryId.current && newestVisibleEntryId !== previousNewestEntryId.current) {
+      setAnimatingEntryId(newestVisibleEntryId);
+    }
+
+    previousNewestEntryId.current = newestVisibleEntryId;
+  }, [newestVisibleEntryId]);
+
+  React.useEffect(() => {
+    if (!lockedResultTooltipEntryId) {
+      return undefined;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setLockedResultTooltipEntryId(null);
+    }, 2000);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [lockedResultTooltipEntryId]);
+
+  const handleLockedResultTooltip = React.useCallback((
+    event: React.MouseEvent<HTMLElement>,
+    entry: PlayLogEntry,
+  ) => {
+    const resultField = (event.target as HTMLElement).closest('[data-play-log-result="true"]');
+    const isLockedAtBatResult = entry.eventType === 'at_bat' && !entry.isEnrichable;
+
+    if (!resultField || !isLockedAtBatResult) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    setLockedResultTooltipEntryId(entry.id);
+  }, []);
 
   return (
     <div className="h-full overflow-y-auto bg-[#3d5240] border-l-[3px] border-[#2a3a2d] flex flex-col">
+      <style>{`
+        @keyframes playlog-entry-fade-in {
+          0% {
+            opacity: 0;
+            transform: translateY(-6px);
+          }
+          100% {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+      `}</style>
       {/* Header */}
       <div className="bg-[#2a3a2d] border-b-[2px] border-[#1a2a1d] px-2 py-1.5 sticky top-0 z-10">
         <div className="flex items-center justify-between gap-2">
@@ -77,6 +172,8 @@ export function PlayLogPanel({ entries, onEntryTap, onKToggle, enrichingEntryId 
         ) : (
           [...visibleEntries].reverse().map((entry) => {
             const isActive = enrichingEntryId === entry.id;
+            const teamColor = getBattingTeamColor(entry.inningLabel, teamColors, isTop);
+            const shouldAnimateEntry = animatingEntryId === entry.id;
             const rowContent = (
               <>
                 {/* Row 1: Inning + Name + Result + RBI + QAB */}
@@ -84,14 +181,25 @@ export function PlayLogPanel({ entries, onEntryTap, onKToggle, enrichingEntryId 
                   <span className="text-[10px] text-[#88AA88] font-mono w-[24px] flex-shrink-0">
                     {entry.inningLabel}
                   </span>
-                  <span className="text-[10px] text-[#E8E8D8] truncate flex-1 min-w-0">
+                  <span
+                    className="text-[10px] truncate flex-1 min-w-0"
+                    style={{ color: teamColor ?? '#E8E8D8' }}
+                  >
                     {entry.batterName}
                   </span>
                   <span
-                    className="text-[10px] font-bold flex-shrink-0"
+                    data-play-log-result="true"
+                    className="relative text-[10px] font-bold flex-shrink-0"
                     style={{ color: getResultColor(entry.result) }}
                   >
-                    {entry.result}
+                    {entry.result === 'Kc' || entry.result === 'Ꝁ'
+                      ? <span style={{ display: 'inline-block', transform: 'scaleX(-1)' }}>K</span>
+                      : entry.result}
+                    {lockedResultTooltipEntryId === entry.id && (
+                      <span className="absolute right-0 top-full z-20 mt-1 whitespace-nowrap rounded border border-[#C4A853] bg-[#1f2a20] px-2 py-1 text-[8px] font-medium text-[#E8E8D8] shadow-[0_2px_6px_rgba(0,0,0,0.35)] pointer-events-none">
+                        Use ↩ Undo to change result
+                      </span>
+                    )}
                   </span>
                   {entry.rbi > 0 && (
                     <span className="text-[8px] text-[#fbbf24] font-bold flex-shrink-0">
@@ -121,15 +229,7 @@ export function PlayLogPanel({ entries, onEntryTap, onKToggle, enrichingEntryId 
                       {entry.fieldingSequence}
                     </span>
                   ) : null}
-                  {!prefersTouchMode && entry.eventType === 'at_bat' && (entry.result === 'K' || entry.result === 'Kc') && !entry.hasKType && onKToggle && (
-                    <span
-                      className="text-[8px] text-[#f59e0b] bg-[#78350f]/60 px-1 rounded cursor-pointer hover:bg-[#78350f] active:scale-95"
-                      onClick={(e) => { e.stopPropagation(); onKToggle(entry); }}
-                      title="Toggle K (swinging) / Kc (called)"
-                    >
-                      K?
-                    </span>
-                  )}
+                  {/* K/Kc toggle removed per UX-048: K and Ꝁ are now separate Quick Bar buttons */}
                   {entry.eventType === 'at_bat' && entry.isEnrichable && !entry.hasFieldingData && !entry.fieldingSequence && (
                     <span className="text-[8px] text-[#6b7280] bg-[#1f2937]/60 px-1 rounded">
                       +fld
@@ -154,30 +254,102 @@ export function PlayLogPanel({ entries, onEntryTap, onKToggle, enrichingEntryId 
               </>
             );
 
+            // Render runner sub-entries below the parent at-bat
+            const runnerSubRows = entry.runnerSubEntries?.map((sub) => {
+              const isSubActive = enrichingRunnerSubEntryId === sub.id;
+              const isScored = sub.toBase === 'home';
+              const isOut = sub.toBase === 'out';
+              const hasEnrichment = !!(sub.fieldingSequence?.length || sub.playMechanic || sub.isTootblan || sub.isOutAdvancing);
+
+              const subContent = (
+                <div className="flex items-center gap-1 leading-tight">
+                  <span className="text-[9px] text-[#6b7280] w-[24px] flex-shrink-0 text-right pr-0.5">└</span>
+                  <span className={`text-[9px] truncate flex-1 min-w-0 ${
+                    isScored ? 'text-[#34d399]' : isOut ? 'text-[#f87171]/80' : 'text-[#E8E8D8]/70'
+                  }`}>
+                    {sub.runnerName}
+                  </span>
+                  <span className={`text-[8px] font-mono flex-shrink-0 ${
+                    isScored ? 'text-[#34d399]' : isOut ? 'text-[#f87171]/80' : 'text-[#88AA88]'
+                  }`}>
+                    {formatRunnerTransition(sub.fromBase, sub.toBase)}
+                  </span>
+                  {sub.isTootblan && (
+                    <span className="text-[7px] text-[#f87171] bg-[#7f1d1d]/40 px-0.5 rounded flex-shrink-0">TB</span>
+                  )}
+                  {sub.isOutAdvancing && (
+                    <span className="text-[7px] text-[#f59e0b] bg-[#78350f]/40 px-0.5 rounded flex-shrink-0">OA</span>
+                  )}
+                  {hasEnrichment ? (
+                    <span className="text-[6px] text-[#34d399] flex-shrink-0">&#10003;</span>
+                  ) : (
+                    <span className="text-[7px] text-[#6b7280] bg-[#1f2937]/60 px-0.5 rounded flex-shrink-0">+</span>
+                  )}
+                </div>
+              );
+
+              return (
+                <div
+                  key={sub.id}
+                  data-runner-sub-entry={sub.id}
+                  className={`py-0.5 pl-3 pr-1 cursor-pointer
+                    ${isSubActive ? 'bg-[#4a6a4a]/40 border-l-2 border-l-[#C4A853]' : 'hover:bg-[#4a6a4a]/15'}`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onRunnerSubEntryTap?.(sub, entry);
+                  }}
+                >
+                  {subContent}
+                </div>
+              );
+            });
+
             if (prefersTouchMode && entry.isSelectable) {
               return (
-                <button
+                <div
                   key={entry.id}
-                  type="button"
-                  data-play-log-entry={entry.id}
-                  className={`w-full py-0.5 px-1 text-left border-b border-[#4a6a4a]/30 relative z-10 touch-manipulation
-                    ${isActive ? 'bg-[#4a6a4a]/40 border-l-2 border-l-[#C4A853]' : 'hover:bg-[#4a6a4a]/20'}`}
-                  onClick={() => onEntryTap?.(entry)}
+                  style={shouldAnimateEntry ? { animation: 'playlog-entry-fade-in 300ms ease-out' } : undefined}
+                  onAnimationEnd={() => {
+                    if (shouldAnimateEntry) {
+                      setAnimatingEntryId(null);
+                    }
+                  }}
                 >
-                  {rowContent}
-                </button>
+                  <button
+                    type="button"
+                    data-play-log-entry={entry.id}
+                    className={`w-full py-0.5 px-1 text-left border-b border-[#4a6a4a]/30 relative z-10 touch-manipulation
+                      ${isActive ? 'bg-[#4a6a4a]/40 border-l-2 border-l-[#C4A853]' : 'hover:bg-[#4a6a4a]/20'}`}
+                    onClickCapture={(event) => handleLockedResultTooltip(event, entry)}
+                    onClick={() => onEntryTap?.(entry)}
+                  >
+                    {rowContent}
+                  </button>
+                  {runnerSubRows}
+                </div>
               );
             }
 
             return (
               <div
                 key={entry.id}
-                data-play-log-entry={entry.id}
-                className={`py-0.5 px-1 border-b border-[#4a6a4a]/30 ${entry.isSelectable ? 'cursor-pointer' : 'cursor-default'}
-                  ${isActive ? 'bg-[#4a6a4a]/40 border-l-2 border-l-[#C4A853]' : entry.isSelectable ? 'hover:bg-[#4a6a4a]/20' : ''} relative z-10 pointer-events-auto touch-manipulation`}
-                onClick={() => entry.isSelectable && onEntryTap?.(entry)}
+                style={shouldAnimateEntry ? { animation: 'playlog-entry-fade-in 300ms ease-out' } : undefined}
+                onAnimationEnd={() => {
+                  if (shouldAnimateEntry) {
+                    setAnimatingEntryId(null);
+                  }
+                }}
               >
-                {rowContent}
+                <div
+                  data-play-log-entry={entry.id}
+                  className={`py-0.5 px-1 border-b border-[#4a6a4a]/30 ${entry.isSelectable ? 'cursor-pointer' : 'cursor-default'}
+                    ${isActive ? 'bg-[#4a6a4a]/40 border-l-2 border-l-[#C4A853]' : entry.isSelectable ? 'hover:bg-[#4a6a4a]/20' : ''} relative z-10 pointer-events-auto touch-manipulation`}
+                  onClickCapture={(event) => handleLockedResultTooltip(event, entry)}
+                  onClick={() => entry.isSelectable && onEntryTap?.(entry)}
+                >
+                  {rowContent}
+                </div>
+                {runnerSubRows}
               </div>
             );
           })

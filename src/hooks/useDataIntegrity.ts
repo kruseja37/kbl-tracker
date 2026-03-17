@@ -113,6 +113,7 @@ async function aggregateGameFromEventLog(
         batter.ab++; batter.hits++; batter.triples++;
         break;
       case 'HR':
+      case 'ITPHR':
         batter.ab++; batter.hits++; batter.homeRuns++;
         break;
       case 'BB':
@@ -124,6 +125,7 @@ async function aggregateGameFromEventLog(
         break;
       case 'K':
       case 'Kc':
+      case 'Ꝁ':
         batter.ab++; batter.strikeouts++;
         break;
       case 'SF':

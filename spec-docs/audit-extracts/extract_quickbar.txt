@@ -1,0 +1,1857 @@
+10-import { TeamRoster, type Player, type Pitcher } from "@/app/components/TeamRoster";
+11-import { FenwayBoard } from "@/app/components/FenwayBoard";
+12-import { FullFenwayScoreboard } from "@/app/components/FullFenwayScoreboard";
+13:import { QuickBar } from "@/app/components/QuickBar";
+14-import { PlayLogPanel } from "@/app/components/PlayLogPanel";
+15-import { EnrichmentPanel, PITCH_TYPES, type AtBatModifierValue, type EnrichmentUpdate } from "@/app/components/EnrichmentPanel";
+16:import { RunnerOutcomesDisplay } from "@/app/components/RunnerOutcomesDisplay";
+17-import { HistoricalEventEditor } from "@/app/components/HistoricalEventEditor";
+18-import { LiveRunnerAttributionPanel } from "@/app/components/LiveRunnerAttributionPanel";
+19-import { GameDiamond } from "@/app/components/GameDiamond";
+20-import { InjuryPrompt, type InjuryResult, type MojoResult } from "@/app/components/InjuryPrompt";
+21-import {
+22-  getAtBatEvent,
+23-  getBetweenPlayEvent,
+24-  getBetweenPlayEvents,
+25-  getFieldingEventsForAtBat,
+26-  getGameEvents,
+--
+108-} from '../utils/fenwayBoardContext';
+109-import {
+110-  applyRunnerDefaultsToNames,
+111:  buildRunnerCorrectionForQuickBarOutcome,
+112-  countRbiFromDefaults,
+113-  getBatterDestinationOptions,
+114-  runnerDefaultsToAdvancement,
+115-  type PendingRunnerCorrectionAction,
+116-} from '../utils/gameTrackerRunnerCorrection';
+117-import type { FielderCredit } from "../components/modals/FielderCreditModal";
+118-
+119-// Note: Using GameState from useGameState hook instead of local interface
+120-// This interface is deprecated but kept for reference during migration
+121-interface _DeprecatedGameState {
+--
+141-  fromBase: RunnerBase;
+142-  recordToBase: 'second' | 'third' | 'home' | 'out' | RunnerBase;
+143-  advanceToBase?: 'second' | 'third' | 'home';
+144:  outcome: 'safe' | 'out';
+145-  pitcherId: string;
+146-  pitcherName?: string;
+147-  catcherId?: string;
+148-  catcherName?: string;
+149-  fielderId?: string;
+150-}
+151-
+152-interface PendingManualSpecialPrompt {
+153-  type: 'KP' | 'NUT';
+154-  event: SpecialEventData;
+--
+348-  const [elapsedMinutes, setElapsedMinutes] = useState(0);
+349-
+350-  // T1-08 FIX: Guard against double end-game execution
+351:  // The auto-end useEffect can re-fire due to volatile deps in handleEndGame's useCallback.
+352:  // This ref ensures handleEndGame only executes once per game.
+353-  const gameEndingRef = useRef(false);
+354-
+355-  // Layer 1C: Captured starting lineups for GameRecord archive
+356-  const startingLineupsRef = useRef<{ away: LineupEntry[]; home: LineupEntry[] } | null>(null);
+357-
+358-  // Update elapsed time every minute
+359-  useEffect(() => {
+360-    const interval = setInterval(() => {
+361-      const now = new Date();
+362-      const diff = Math.floor((now.getTime() - gameStartTime.getTime()) / 60000);
+--
+384-    advanceCount,
+385-    resetCount,
+386-    endInning,
+387:    endGame: hookEndGame,
+388-    pitchCountPrompt,
+389-    confirmPitchCount,
+390-    dismissPitchCountPrompt,
+391-    initializeGame,
+392-    loadExistingGame,
+393-    undoLastAction,
+394-    getLineupStateSnapshot,
+395-    getRunnerTrackerSnapshot,
+396-    getBaseRunnerNames,
+397-    runnerIdentityVersion,
+--
+483-    playData: PlayData,
+484-    runnerAdvancement?: RunnerAdvancement,
+485-  ): PlateAppearanceAction => {
+486:    const batterReached = playData.runnerOutcomes?.batter?.to !== 'out' &&
+487:      playData.runnerOutcomes?.batter?.to !== undefined;
+488-    const isDroppedThirdStrike = (playData.outType === 'K' || playData.outType === 'Kc') &&
+489-      playData.fieldingSequence.length >= 2 &&
+490-      playData.fieldingSequence[0] === 2 &&
+491-      playData.fieldingSequence[1] === 3;
+492-
+493-    switch (playData.type) {
+494-      case 'hr':
+495-        return {
+496-          type: 'hit',
+497-          hitType: 'HR',
+--
+594-    awayScore: gameState?.awayScore ?? 0,
+595-  }), [gameState]);
+596-
+597:  // Track pending mWAR decisions for outcome resolution
+598-  const [pendingMWARDecisions, setPendingMWARDecisions] = useState<Map<string, {
+599-    decisionId: string;
+600-    decisionType: string;
+601-    involvedPlayers: string[];
+602-    resolveAfterNextPlay: boolean;
+603-  }>>(new Map());
+604-
+605-  // Track selected hit/out/walk details for the two-step record flow
+606:  const [pendingOutcome, setPendingOutcome] = useState<{
+607-    type: 'hit' | 'out' | 'walk';
+608-    subType: string;
+609-    direction?: string;
+610-    rbi?: number;
+611-    modifiers?: { ifr?: boolean }; // GAP-GT-4-H: IFR flag
+612-  } | null>(null);
+613-
+614-  // GAP-GT-6-A: Time play override — when user indicates the 3rd-out tag occurred before the runner scored
+615-  const [timePlayNoRun, setTimePlayNoRun] = useState(false);
+616-
+--
+621-  const [selectedPlayer, setSelectedPlayer] = useState<{ name: string; type: 'batter' | 'pitcher'; playerId: string } | null>(null);
+622-
+623-  // End game confirmation state
+624:  const [showEndGameConfirmation, setShowEndGameConfirmation] = useState(false);
+625-
+626-  // Runner names tracking - who is on each base
+627-  // Updated when batters reach base via hit, walk, error, etc.
+628-  const [runnerNames, setRunnerNames] = useState<{
+629-    first?: string;
+630-    second?: string;
+631-    third?: string;
+632-  }>({});
+633-
+634-  // T1-02/03/04 FIX: Sync runnerNames from the runner tracker whenever bases change.
+--
+841-    events: false,
+842-    substitutions: false,
+843-  });
+844:  const [expandedOutcome, setExpandedOutcome] = useState<string | null>(null);
+845-
+846-  const toggleSection = (section: keyof typeof expandedSections) => {
+847-    setExpandedSections(prev => ({ ...prev, [section]: !prev[section] }));
+848-  };
+849-
+850:  const toggleOutcomeDetail = (outcome: string) => {
+851:    setExpandedOutcome(prev => prev === outcome ? null : outcome);
+852-  };
+853-
+854-  // Determine which team is batting and which is fielding
+855-  const battingTeamId = gameState.isTop ? awayTeamId : homeTeamId;
+856-  const fieldingTeamId = gameState.isTop ? homeTeamId : awayTeamId;
+857-
+858-  // GAP-GT-6-G / GAP-GT-6-C: Derived runner state for button availability
+859-  const hasRunners = !!(gameState.bases.first || gameState.bases.second || gameState.bases.third);
+860-  const runnerCount = (gameState.bases.first ? 1 : 0) + (gameState.bases.second ? 1 : 0) + (gameState.bases.third ? 1 : 0);
+861-
+--
+2165-    return getRunnerIdentityForBase(leadRunnerBase);
+2166-  }, [gameState.bases.first, gameState.bases.second, gameState.bases.third, getRunnerIdentityForBase]);
+2167-
+2168:  // Handler for lineup card substitutions (Phase 6)
+2169-  const handleLineupCardSubstitution = useCallback((sub: SubstitutionData) => {
+2170-    console.log("LineupCard substitution:", sub);
+2171-
+2172-    // GAP-GT-7-C: Block substitution if the outgoing player is a pending PH who hasn't batted yet
+2173-    if (pendingPH && pendingPH === sub.outgoingPlayerId) {
+2174-      console.warn(`[GameTracker] Substitution blocked: PH ${sub.outgoingPlayerName} must bat before being replaced`);
+2175-      // TODO: Show UI toast to user
+2176-      return;
+2177-    }
+2178-
+--
+2265-  }, [changePitcher, makeSubstitution, queuePlayLogRefresh, switchPositions, awayTeamPlayers, homeTeamPlayers, pendingPH, setPendingPH]);
+2266-
+2267-  // ══════════════════════════════════════════════════════════════
+2268:  // QUICK BAR HANDLER — §3.2 one-tap execution flow
+2269-  // Tap → snapshot context → calculateRunnerDefaults → capture undo
+2270-  // → calculate RBI → record play → log → update diamond
+2271:  // QuickBar remains the canonical live at-bat creation path.
+2272-  // ══════════════════════════════════════════════════════════════
+2273-
+2274:  // Outcome classification for Quick Bar buttons
+2275:  const QUICK_BAR_HITS: readonly string[] = ['1B', '2B', '3B', 'HR', 'GRD']; // GRD = Ground Rule Double
+2276:  const QUICK_BAR_OUTS: readonly string[] = ['K', 'GO', 'FO', 'LO', 'PO', 'DP', 'TP', 'SF', 'SAC'];
+2277:  const QUICK_BAR_WALKS: readonly string[] = ['BB', 'HBP', 'IBB'];
+2278-
+2279-  const handleRunnerCorrectionChange = useCallback((updated: RunnerDefaults) => {
+2280-    setPendingRunnerCorrection(prev => prev ? { ...prev, defaults: updated } : prev);
+2281-  }, []);
+2282-
+2283-  const handleRunnerCorrectionCancel = useCallback(() => {
+2284-    setPendingRunnerCorrection(null);
+2285-  }, []);
+2286-
+2287-  const handleRunnerCorrectionCommit = useCallback(async () => {
+--
+2315-      }
+2316-
+2317-      const resultText = pendingRunnerCorrection.action.type === 'hit' && rbi > 0
+2318:        ? `${pendingRunnerCorrection.outcomeLabel} — ${rbi} RBI`
+2319:        : pendingRunnerCorrection.outcomeLabel;
+2320-      logAction(resultText);
+2321-
+2322-      setRunnerNames(applyRunnerDefaultsToNames(
+2323-        pendingRunnerCorrection.defaults,
+2324-        runnerNames,
+2325-        gameState.currentBatterName,
+2326-      ));
+2327-      setPendingRunnerCorrection(null);
+2328-    } catch (error) {
+2329-      console.error('[Runner Correction] Failed to commit at-bat:', error);
+--
+2846-    }, 'update pitch count');
+2847-  }, [applyHistoricalContextEdit, selectedBetweenPlayEvent]);
+2848-
+2849:  const handleQuickBarOutcome = useCallback(async (outcome: string) => {
+2850-    if (!gameInitialized) return;
+2851-
+2852-    // 1. Snapshot current context
+2853-    const bases = { ...gameState.bases };
+2854-    const outs = gameState.outs;
+2855-
+2856:    const correction = buildRunnerCorrectionForQuickBarOutcome(outcome, bases, outs);
+2857-    const defaults = correction?.defaults;
+2858-    const promptDefaults = defaults
+2859:      || (outcome === 'HR'
+2860-        ? calculateRunnerDefaults({ type: 'hr', hitType: 'HR', fieldingSequence: [] } as PlayData, bases, outs)
+2861:        : outcome === 'E'
+2862-        ? calculateRunnerDefaults({ type: 'error', fieldingSequence: [] } as PlayData, bases, outs)
+2863-        : undefined);
+2864-
+2865-    // 6. Capture undo snapshot
+2866:    undoSystem.captureSnapshot(`Quick: ${outcome}`);
+2867-
+2868-    try {
+2869-      const runnerAdv = defaults ? runnerDefaultsToAdvancement(defaults) : undefined;
+2870-      const rbi = correction ? countRbiFromDefaults(correction.defaults, correction.action) : 0;
+2871-
+2872-      // 7. Route to correct recording function
+2873:      if (outcome === 'HR') {
+2874-        // D-4: Show inline HR prompt for distance + pitch type before recording
+2875-        if (!promptDefaults) return;
+2876-        setHrPrompt({ rbi, runnerAdv, defaults: promptDefaults, distance: '', pitchType: '' });
+2877-        return; // Recording deferred to handleHrPromptDone
+2878-
+2879:      } else if (outcome === 'E') {
+2880-        // D-3: Show error flow prompts (base → fielder → type)
+2881-        if (!promptDefaults) return;
+2882-        setErrorFlow({ step: 'base', baseReached: '1B', fielderPosition: 0, defaults: promptDefaults });
+2883-        return; // Recording deferred to handleErrorFlowComplete
+2884-
+2885:      } else if (outcome === 'FO' && bases.third && outs < 2) {
+2886-        // D-5: FO with R3 + <2 outs → SF prompt
+2887-        if (!defaults) return;
+2888-        setSfPrompt({ runnerAdv, defaults });
+2889-        return; // Deferred to handleSfPromptAnswer
+2890-
+2891:      } else if (outcome === 'GO' && (bases.first || bases.second || bases.third) && outs < 2) {
+2892-        // D-6: GO with runners + <2 outs → check if runner default shows out → DP prompt
+2893-        if (!defaults) return;
+2894-        const hasRunnerOut = (defaults.first?.to === 'out') || (defaults.second?.to === 'out') || (defaults.third?.to === 'out');
+2895-        if (hasRunnerOut) {
+2896-          setDpPrompt({ runnerAdv, rbi, defaults });
+2897-          return; // Deferred to handleDpPromptAnswer
+2898-        }
+2899-        // No runner out in defaults → standard GO, fall through
+2900-        await commitPlateAppearance({ type: 'out', outType: 'GO', runnerAdvancement: runnerAdv });
+2901-        logAction('GO');
+2902-
+2903:      } else if (outcome === 'PO' && outs < 2 && bases.first && bases.second) {
+2904-        // D-7: PO with R1+R2 (or loaded) + <2 outs → IFR prompt
+2905-        if (!defaults) return;
+2906-        setIfrPrompt({ runnerAdv, defaults });
+2907-        return; // Deferred to handleIfrPromptAnswer
+2908-
+2909-      } else if (correction) {
+2910-        setPendingRunnerCorrection(correction);
+2911-        return;
+2912-
+2913-      } else {
+2914-        // Unknown — just log
+2915:        logAction(`[QB] ${outcome}`);
+2916-      }
+2917-
+2918-    } catch (error) {
+2919:      console.error(`[QuickBar] Failed to record ${outcome}:`, error);
+2920-    }
+2921-  }, [gameInitialized, gameState, undoSystem, logAction]);
+2922-
+2923-  // ═══════════════════════════════════════════════════════════
+2924-  // D-4: HR inline prompt completion
+2925-  // ═══════════════════════════════════════════════════════════
+2926-  const handleHrPromptDone = useCallback(async () => {
+2927-    if (!hrPrompt) return;
+2928-    const { rbi, runnerAdv, defaults, distance, pitchType } = hrPrompt;
+2929-
+--
+3030-    } catch (error) {
+3031-      console.error('[Quick Error] Failed to record error detail:', error);
+3032-    } finally {
+3033:      setExpandedOutcome(null);
+3034-    }
+3035-  }, [commitPlateAppearance, gameState.currentBatterName, getPendingAtBatIdentity, logAction, persistFieldingEventsForPlayData, pushPlayLogEntry, setNextEventEnrichment, shortInningLabel]);
+3036-
+3037-  // ═══════════════════════════════════════════════════════════
+3038-  // D-3: Error flow prompt completion
+3039-  // ═══════════════════════════════════════════════════════════
+3040-  const handleErrorFlowComplete = useCallback(async (
+3041-    baseReached: string,
+3042-    fielderPosition: number,
+3043-    errorType: PlayData['errorType'],
+--
+3268-  }, [commitPlateAppearance, gameState, ifrPrompt, logAction, pushPlayLogEntry, runnerNames, setNextEventEnrichment, shortInningLabel, getPendingAtBatIdentity]);
+3269-
+3270-  // Handle special events (Web Gem, Robbery, TOOTBLAN, etc.) from the canonical tracker modifier flow
+3271:  // Phase 5B: Extended to handle all contextual button events
+3272-  const handleSpecialEvent = useCallback(async (event: SpecialEventData, sourceAtBat?: AtBatEvent) => {
+3273-    console.log("Special event:", event);
+3274-
+3275-    try {
+3276-      // Capture undo snapshot before recording
+3277-      const eventLabel = event.eventType.replace(/_/g, ' ');
+3278-      const actor = event.fielderName || event.runnerId || 'player';
+3279-      undoSystem.captureSnapshot(`${eventLabel} by ${actor}`);
+3280-
+3281-      const normalizedEventType = normalizeSpecialEventType(event.eventType);
+--
+3407-    const sequence = atBatEvent.enrichment?.fieldingSequence || [];
+3408-    const primaryPosition = sequence.length > 0 ? (Object.entries(POSITION_NUMBER).find(([, num]) => num === sequence[0])?.[0] as Position | undefined) : undefined;
+3409-    const primaryDefender = primaryPosition ? defenders[primaryPosition] : undefined;
+3410:    const runnerOut = atBatEvent.runnerOutcomes?.find((outcome) => outcome.toBase === 'out');
+3411-
+3412-    const event: SpecialEventData = {
+3413-      eventType: modifier,
+3414-      batterId: atBatEvent.batterId,
+3415-      batterName: atBatEvent.batterName,
+3416-      runnerId: modifier === 'TOOTBLAN' ? runnerOut?.runnerId : undefined,
+3417-      fielderPosition: primaryPosition ? POSITION_NUMBER[primaryPosition as keyof typeof POSITION_NUMBER] : undefined,
+3418-      fielderName: primaryDefender?.playerName,
+3419-    };
+3420-
+--
+3649-        advanceRunner(
+3650-          pendingRunnerAttribution.fromBase,
+3651-          pendingRunnerAttribution.advanceToBase,
+3652:          pendingRunnerAttribution.outcome,
+3653-        );
+3654-      }
+3655-
+3656-      await recordEvent(pendingRunnerAttribution.eventType, pendingRunnerAttribution.runnerId, {
+3657-        runnerId: pendingRunnerAttribution.runnerId,
+3658-        runnerName: pendingRunnerAttribution.runnerName,
+3659-        fromBase: pendingRunnerAttribution.fromBase,
+3660-        toBase: pendingRunnerAttribution.recordToBase,
+3661:        outcome: pendingRunnerAttribution.outcome,
+3662-        pitcherId: pendingRunnerAttribution.pitcherId,
+3663-        pitcherName: pendingRunnerAttribution.pitcherName,
+3664-        catcherId: pendingRunnerAttribution.catcherId,
+3665-        catcherName: pendingRunnerAttribution.catcherName,
+3666-        fielderId: pendingRunnerAttribution.fielderId,
+3667-        fielderName: selectedFielder?.name,
+3668-        fielderPosition: selectedFielder ? POSITION_NUMBER[selectedFielder.position as keyof typeof POSITION_NUMBER] : undefined,
+3669-      });
+3670-
+3671-      setPendingRunnerAttribution(null);
+--
+3688-      fromBase: base,
+3689-      recordToBase: nextBaseMap[base],
+3690-      advanceToBase: nextBaseMap[base],
+3691:      outcome: 'safe',
+3692-      pitcherId: gameState.currentPitcherId,
+3693-      pitcherName: resolvedCurrentPitcherName,
+3694-      catcherId: defensiveAlignmentByPosition.C?.playerId,
+3695-      catcherName: defensiveAlignmentByPosition.C?.playerName,
+3696-    });
+3697-  }, [activeRunnerPopover?.playerId, activeRunnerPopover?.runnerName, beginRunnerAttributionCapture, defensiveAlignmentByPosition, gameState.currentPitcherId, resolvedCurrentPitcherName]);
+3698-
+3699-  const handleRunnerAdvance = useCallback((base: RunnerBase, dest?: 'second' | 'third' | 'home') => {
+3700-    const to = dest || nextBaseMap[base];
+3701-    beginRunnerAttributionCapture({
+--
+3708-      fromBase: base,
+3709-      recordToBase: to,
+3710-      advanceToBase: to,
+3711:      outcome: 'safe',
+3712-      pitcherId: gameState.currentPitcherId,
+3713-      pitcherName: resolvedCurrentPitcherName,
+3714-      catcherId: defensiveAlignmentByPosition.C?.playerId,
+3715-      catcherName: defensiveAlignmentByPosition.C?.playerName,
+3716-    });
+3717-  }, [activeRunnerPopover?.playerId, activeRunnerPopover?.runnerName, beginRunnerAttributionCapture, defensiveAlignmentByPosition, gameState.currentPitcherId, resolvedCurrentPitcherName]);
+3718-
+3719-  const handleRunnerWP = useCallback((base: RunnerBase, dest?: 'second' | 'third' | 'home') => {
+3720-    const to = dest || nextBaseMap[base];
+3721-    beginRunnerAttributionCapture({
+--
+3728-      fromBase: base,
+3729-      recordToBase: to,
+3730-      advanceToBase: to,
+3731:      outcome: 'safe',
+3732-      pitcherId: gameState.currentPitcherId,
+3733-      pitcherName: resolvedCurrentPitcherName,
+3734-      catcherId: defensiveAlignmentByPosition.C?.playerId,
+3735-      catcherName: defensiveAlignmentByPosition.C?.playerName,
+3736-    });
+3737-  }, [activeRunnerPopover?.playerId, activeRunnerPopover?.runnerName, beginRunnerAttributionCapture, defensiveAlignmentByPosition, gameState.currentPitcherId, resolvedCurrentPitcherName]);
+3738-
+3739-  const handleRunnerPB = useCallback((base: RunnerBase, dest?: 'second' | 'third' | 'home') => {
+3740-    const to = dest || nextBaseMap[base];
+3741-    beginRunnerAttributionCapture({
+--
+3748-      fromBase: base,
+3749-      recordToBase: to,
+3750-      advanceToBase: to,
+3751:      outcome: 'safe',
+3752-      pitcherId: gameState.currentPitcherId,
+3753-      pitcherName: resolvedCurrentPitcherName,
+3754-      catcherId: defensiveAlignmentByPosition.C?.playerId,
+3755-      catcherName: defensiveAlignmentByPosition.C?.playerName,
+3756-    });
+3757-  }, [activeRunnerPopover?.playerId, activeRunnerPopover?.runnerName, beginRunnerAttributionCapture, defensiveAlignmentByPosition, gameState.currentPitcherId, resolvedCurrentPitcherName]);
+3758-
+3759:  const handleRunnerPickoff = useCallback((base: RunnerBase, outcome: 'safe' | 'out' | 'error') => {
+3760:    if (outcome === 'out') {
+3761-      beginRunnerAttributionCapture({
+3762-        eventType: 'PICK',
+3763-        title: 'Pickoff',
+3764-        summary: `${activeRunnerPopover?.runnerName || 'Runner'}: ${base.toUpperCase()} -> OUT`,
+3765-        snapshotLabel: `Pickoff out: ${base}`,
+3766-        runnerId: activeRunnerPopover?.playerId,
+3767-        runnerName: activeRunnerPopover?.runnerName,
+3768-        fromBase: base,
+3769-        recordToBase: 'out',
+3770-        advanceToBase: nextBaseMap[base],
+3771:        outcome: 'out',
+3772-        pitcherId: gameState.currentPitcherId,
+3773-        pitcherName: resolvedCurrentPitcherName,
+3774-        catcherId: defensiveAlignmentByPosition.C?.playerId,
+3775-        catcherName: defensiveAlignmentByPosition.C?.playerName,
+3776-      });
+3777:    } else if (outcome === 'error') {
+3778-      beginRunnerAttributionCapture({
+3779-        eventType: 'PICK_E',
+3780-        title: 'Pickoff Error',
+3781-        summary: `${activeRunnerPopover?.runnerName || 'Runner'}: ${base.toUpperCase()} -> ${nextBaseMap[base].toUpperCase()}`,
+3782-        snapshotLabel: `Pickoff error: ${base}`,
+3783-        runnerId: activeRunnerPopover?.playerId,
+3784-        runnerName: activeRunnerPopover?.runnerName,
+3785-        fromBase: base,
+3786-        recordToBase: nextBaseMap[base],
+3787-        advanceToBase: nextBaseMap[base],
+3788:        outcome: 'safe',
+3789-        pitcherId: gameState.currentPitcherId,
+3790-        pitcherName: resolvedCurrentPitcherName,
+3791-        catcherId: defensiveAlignmentByPosition.C?.playerId,
+3792-        catcherName: defensiveAlignmentByPosition.C?.playerName,
+3793-      });
+3794-    } else {
+3795-      beginRunnerAttributionCapture({
+3796-        eventType: 'PICK_SAFE',
+3797-        title: 'Pickoff Attempt',
+3798-        summary: `${activeRunnerPopover?.runnerName || 'Runner'}: ${base.toUpperCase()} stays`,
+--
+3801-        runnerName: activeRunnerPopover?.runnerName,
+3802-        fromBase: base,
+3803-        recordToBase: base,
+3804:        outcome: 'safe',
+3805-        pitcherId: gameState.currentPitcherId,
+3806-        pitcherName: resolvedCurrentPitcherName,
+3807-        catcherId: defensiveAlignmentByPosition.C?.playerId,
+3808-        catcherName: defensiveAlignmentByPosition.C?.playerName,
+3809-      });
+3810-    }
+3811-  }, [activeRunnerPopover?.playerId, activeRunnerPopover?.runnerName, beginRunnerAttributionCapture, defensiveAlignmentByPosition, gameState.currentPitcherId, resolvedCurrentPitcherName]);
+3812-
+3813-  const handleRunnerSubstitute = useCallback((base: RunnerBase) => {
+3814-    setActiveRunnerPopover(null);
+--
+3909-  }, [awayTeamPlayers, fieldingTeam, getRosterIdFromName, homeTeamPlayers]);
+3910-
+3911-  // ============================================
+3912:  // OUTCOME RECORDING HANDLERS
+3913-  // ============================================
+3914-
+3915-  // Start recording a hit - sets pending state, waits for RECORD button
+3916-  const handleHitSelect = useCallback((hitType: HitType) => {
+3917:    setPendingOutcome({
+3918-      type: 'hit',
+3919-      subType: hitType,
+3920-      rbi: hitType === 'HR' ? 1 : 0, // Default 1 RBI for HR, 0 for others
+3921-    });
+3922:    // Keep the outcome detail panel open
+3923-  }, []);
+3924-
+3925-  // Start recording an out
+3926-  const handleOutSelect = useCallback((outType: OutType) => {
+3927:    setPendingOutcome({
+3928-      type: 'out',
+3929-      subType: outType,
+3930-    });
+3931-  }, []);
+3932-
+3933-  // Start recording a walk
+3934-  const handleWalkSelect = useCallback((walkType: WalkType) => {
+3935:    setPendingOutcome({
+3936-      type: 'walk',
+3937-      subType: walkType,
+3938-    });
+3939-  }, []);
+3940-
+3941:  // Update RBI count for pending outcome
+3942-  const handleRbiChange = useCallback((rbi: number) => {
+3943:    setPendingOutcome(prev => prev ? { ...prev, rbi } : null);
+3944-  }, []);
+3945-
+3946:  // Record the pending outcome to IndexedDB
+3947:  const handleRecordOutcome = useCallback(async () => {
+3948:    if (!pendingOutcome) return;
+3949-
+3950-    try {
+3951:      if (pendingOutcome.type === 'hit') {
+3952-        await commitPlateAppearance({
+3953-          type: 'hit',
+3954:          hitType: pendingOutcome.subType as HitType,
+3955:          rbi: pendingOutcome.rbi || 0,
+3956-        });
+3957:        logAction(`${pendingOutcome.subType} (manual) — ${pendingOutcome.rbi || 0} RBI`);
+3958:      } else if (pendingOutcome.type === 'out') {
+3959-        // GAP-GT-6-A: Pass forceNoRuns when user has toggled the time play override
+3960-        await commitPlateAppearance({
+3961-          type: 'out',
+3962:          outType: pendingOutcome.subType as OutType,
+3963-          forceNoRuns: timePlayNoRun,
+3964-        });
+3965:        logAction(`Out (${pendingOutcome.subType}) (manual entry)${timePlayNoRun ? ' [time play — no run]' : ''}`);
+3966-        setTimePlayNoRun(false); // Reset time play toggle after recording
+3967:      } else if (pendingOutcome.type === 'walk') {
+3968:        await commitPlateAppearance({ type: 'walk', walkType: pendingOutcome.subType as WalkType });
+3969:        logAction(`${pendingOutcome.subType} walk (manual)`);
+3970-      }
+3971-
+3972-      // GAP-GT-7-C: Clear pendingPH after any at-bat result — the PH has batted
+3973-      setPendingPH(null);
+3974-
+3975:      // Clear pending outcome and close panels
+3976:      setPendingOutcome(null);
+3977:      setExpandedOutcome(null);
+3978-    } catch (error) {
+3979:      console.error('Failed to record outcome:', error);
+3980-    }
+3981:  }, [commitPlateAppearance, logAction, pendingOutcome, timePlayNoRun]);
+3982-
+3983:  // Cancel pending outcome
+3984:  const handleCancelOutcome = useCallback(() => {
+3985:    setPendingOutcome(null);
+3986:    setExpandedOutcome(null);
+3987-    setTimePlayNoRun(false); // GAP-GT-6-A: Always reset on cancel
+3988-  }, []);
+3989-
+3990-  // Handle end of inning
+3991-  const handleEndInning = useCallback(() => {
+3992-    // Layer 5 (§4.4): Check for unenriched plays before transitioning
+3993-    const currentHalfPlays = playLogEntries.filter(e => e.inningLabel === shortInningLabel());
+3994-    const unenriched = currentHalfPlays.filter(e =>
+3995-      e.isEnrichable && (!e.hasPitchType || !e.hasLocationData || !e.hasFieldingData)
+3996-    );
+--
+4222-  }, []);
+4223-
+4224-  // Handle end game with navigation
+4225:  const handleEndGame = useCallback(async () => {
+4226-    // T1-08 FIX: Prevent double execution from useEffect re-firing
+4227-    if (gameEndingRef.current) {
+4228:      console.log('[T1-08] handleEndGame already in progress — skipping duplicate call');
+4229-      return;
+4230-    }
+4231-    gameEndingRef.current = true;
+4232:    let endGameCompleted = false;
+4233-
+4234-    try {
+4235-      // MAJ-09: End-of-game achievement detection (No-Hitter, Perfect Game, Maddux, CG, Shutout)
+4236-      try {
+4237-        const totalGameOuts = gameState.inning * 3; // Approximate from current inning
+4238-        for (const [pitcherId, pStats] of pitcherStats.entries()) {
+4239-          if (!pStats.isStarter) continue; // Only starters can have CG/NH/PG
+4240-
+4241-          const ipOuts = pStats.outsRecorded;
+4242-          // Complete game: starter must have pitched the entire game (≥ scheduled innings × 3 outs)
+--
+4393-      pushActivityLog(
+4394-        `[Game End] ${homeTeamName} ${gameState.homeScore} - ${awayTeamName} ${gameState.awayScore} (Inning ${gameState.inning})`
+4395-      );
+4396:    const endGameOptions = {
+4397-      activityLog,
+4398-      seasonId: computedSeasonId,
+4399-      statsScopeId: computedStatsScopeId,
+4400-      competitionType,
+4401-      competitionId,
+4402-      franchiseId: navigationState?.franchiseId,
+4403-      currentSeason: navigationState?.seasonNumber ?? 1,
+4404-      stadiumName: selectedStadium,
+4405-      };
+4406:      await hookEndGame(endGameOptions);
+4407-
+4408-      // Save mojo/fitness snapshots for elimination inter-game persistence
+4409-      if (navigationState?.gameMode === 'elimination' && navigationState?.eliminationId) {
+4410-        try {
+4411-          const { saveMojoFitnessSnapshots } = await import('../../../utils/mojoFitnessStorage');
+4412-          const allPlayers = playerStateHook.getAllPlayers();
+4413-          await saveMojoFitnessSnapshots(
+4414-            navigationState.eliminationId,
+4415-            allPlayers.map((p) => ({
+4416-              playerId: p.playerId,
+--
+4461-          awayNarrative,
+4462-        }
+4463-      });
+4464:      endGameCompleted = true;
+4465-    } catch (err) {
+4466-      console.error('[GameTracker] End game flow failed:', err);
+4467-    } finally {
+4468-      // Release the guard lock if end-game did not complete, so user can retry.
+4469:      if (!endGameCompleted) {
+4470-        gameEndingRef.current = false;
+4471-      }
+4472-    }
+4473:  }, [hookEndGame, navigate, gameId, navigationState?.gameMode, navigationState?.eliminationId, navigationState?.franchiseId, navigationState?.seasonId, navigationState?.seasonNumber, gameMode, gameState, pitcherStats, fameTrackingHook, homeFanMorale, awayFanMorale, homeTeamName, awayTeamName, mwarHook, homeManagerId, homeTeamId, activityLog, pushActivityLog, playerStateHook, competitionType, competitionId, statsScopeId, selectedStadium]);
+4474-
+4475:  // T0-01: Auto-trigger endGame when regulation ends
+4476-  useEffect(() => {
+4477-    if (showAutoEndPrompt) {
+4478:      console.log('[T0-01] Auto game-end detected — triggering handleEndGame');
+4479-      dismissAutoEndPrompt();
+4480:      handleEndGame();
+4481-    }
+4482:  }, [showAutoEndPrompt, dismissAutoEndPrompt, handleEndGame]);
+4483-
+4484-  useEffect(() => {
+4485-    if (!mwarHook.managerMoment.isTriggered || !gameState.gameId) {
+4486-      return;
+4487-    }
+4488-
+4489-    const momentKey = [
+4490-      gameState.inning,
+4491-      gameState.isTop ? 'TOP' : 'BOTTOM',
+4492-      gameState.outs,
+--
+4575-        </div>
+4576-      )}
+4577-
+4578:      {/* D-17: Manager Moment — now a subtle indicator on QuickBar (see QuickBar managerMomentActive prop) */}
+4579-      {/* The inline Call/Skip panel opens in ZONE 4 when user taps the lightning indicator */}
+4580-
+4581-      {/* Player State Notifications - Shows Mojo/Fitness changes */}
+4582-      {playerStateHook.notifications.length > 0 && (
+4583-        <div className="fixed top-20 left-4 z-50 space-y-2">
+4584-          {playerStateHook.notifications.slice(0, 3).map((notification, idx) => (
+4585-            <div
+4586-              key={idx}
+4587-              className={`px-3 py-2 bg-[#333] border-2 shadow-[3px_3px_0px_0px_rgba(0,0,0,0.5)] cursor-pointer ${
+4588-                notification.severity === 'critical' ? 'border-red-500' :
+--
+4610-           │                             │ Field                 │(right│
+4611-           │                             │                       │panel)│
+4612-           ├─────────────────────────────┼───────────────────────┤      │
+4613:           │ QUICK BAR (bottom-left)     │ MODIFIERS (bot-right) │      │
+4614:           │ outcome buttons             │ undo + end game       │      │
+4615-           └─────────────────────────────┴───────────────────────┴──────┘
+4616-           ═══════════════════════════════════════════════════════════════ */}
+4617:      <div className="flex h-screen flex-col overflow-hidden bg-[#6B9462] text-white">
+4618-        <FullFenwayScoreboard
+4619-          awayTeamName={awayTeamName.toUpperCase()}
+4620-          homeTeamName={homeTeamName.toUpperCase()}
+4621-          awayRecord={awayRecord}
+4622-          homeRecord={homeRecord}
+4623-          innings={scoreboard.innings}
+4624-          awayRuns={scoreboard.away.runs}
+4625-          homeRuns={scoreboard.home.runs}
+4626-          awayHits={scoreboard.away.hits}
+4627-          homeHits={scoreboard.home.hits}
+--
+4730-        {/* ZONE 2: Diamond — center (D-9: scoreboard moved to FenwayBoard left panel) */}
+4731-        <div
+4732-          style={{ gridColumn: '2', gridRow: '1' }}
+4733:          className={`bg-[#6B9462] relative overflow-hidden z-0 ${rightPanelOwnsInteraction ? 'pointer-events-none' : ''}`}
+4734-        >
+4735-          <GameDiamond
+4736-            mode={enrichingEntry || selectedPlayLogEntry?.eventType === 'at_bat' ? 'enhancement' : 'info'}
+4737-            bases={gameState.bases}
+4738-            runnerNames={runnerNames}
+4739-            currentBatterName={currentBatterDisplayName}
+4740-            fielders={gameDiamondFielders}
+4741-            enhancementSequence={activeDiamondFieldingSequence}
+4742-            enhancementHelpText={enrichingEntry
+4743-              ? 'Tap fielders to build throw sequence. Tap the field to save spray/location.'
+--
+4787-        </div>
+4788-
+4789-        {/* ZONE 3: Play Log + Enrichment Panel — right panel, spans both rows */}
+4790:        <div style={{ gridColumn: '3', gridRow: '1 / 3' }} className="relative z-20 isolate pointer-events-auto flex flex-col h-full overflow-hidden">
+4791-          {/* Between-inning enrichment prompt (Ticket 5.7) */}
+4792-        {showEnrichmentPrompt && !pendingRunnerCorrection && !pendingRunnerAttribution && (
+4793-            <div className="bg-[#C4A853]/20 border-b border-[#C4A853] px-2 py-1 flex items-center gap-1 flex-shrink-0">
+4794-              <span className="text-[8px] text-[#C4A853] flex-1">
+4795-                {unenrichedCount} play{unenrichedCount !== 1 ? 's' : ''} unenriched
+4796-              </span>
+4797-              <button
+4798-                onClick={handleEnrichmentPromptYes}
+4799-                className="text-[7px] text-[#34d399] bg-[#064e3b]/60 px-1.5 py-0.5 rounded hover:bg-[#064e3b]"
+4800-              >
+--
+4826-                  Cancel
+4827-                </button>
+4828-              </div>
+4829:              <div className="flex-1 overflow-y-auto p-2 space-y-2">
+4830-                <div className="text-[8px] text-[#C4A853]">
+4831:                  Verify runner movement before committing <span className="font-bold">{pendingRunnerCorrection.outcomeLabel}</span>.
+4832-                </div>
+4833:                <RunnerOutcomesDisplay
+4834:                  outcomes={pendingRunnerCorrection.defaults}
+4835:                  onOutcomeChange={handleRunnerCorrectionChange}
+4836:                  playType={pendingRunnerCorrection.outcomeLabel}
+4837-                  destinationOptions={{
+4838-                    batter: getBatterDestinationOptions(pendingRunnerCorrection.action),
+4839-                  }}
+4840-                  labels={{
+4841-                    batter: gameState.currentBatterName || 'BATTER',
+4842-                    first: runnerNames.first ? `R1 ${runnerNames.first}` : 'R1 (1B)',
+4843-                    second: runnerNames.second ? `R2 ${runnerNames.second}` : 'R2 (2B)',
+4844-                    third: runnerNames.third ? `R3 ${runnerNames.third}` : 'R3 (3B)',
+4845-                  }}
+4846-                />
+--
+4915-          )}
+4916-        </div>
+4917-
+4918:        {/* ZONE 4: Quick Bar — bottom left */}
+4919-        <div style={{ gridColumn: '1', gridRow: '2' }} className="relative">
+4920:          <QuickBar
+4921-            disabled={!gameInitialized || !!pendingRunnerCorrection || !!pendingRunnerAttribution || !!selectedPlayLogEntry}
+4922:            onOutcome={handleQuickBarOutcome}
+4923-            gameSituation={{ outs: gameState.outs, bases: gameState.bases }}
+4924-            managerMomentActive={mwarHook.managerMoment.isTriggered}
+4925-            onManagerMomentTap={() => setShowManagerMomentPanel(prev => !prev)}
+4926-          />
+4927-          {pendingRunnerAttribution && !pendingRunnerCorrection ? (
+4928-            <div className="absolute bottom-full left-0 right-0 mb-1 bg-[#2f3b21] border border-[#5a6b38] px-2 py-1 text-[8px] text-[#C4A853]">
+4929-              Completing live runner attribution. Commit or cancel the runner event before scoring the next pitch.
+4930-            </div>
+4931-          ) : selectedPlayLogEntry && !pendingRunnerCorrection ? (
+4932-            <div className="absolute bottom-full left-0 right-0 mb-1 bg-[#2f3b21] border border-[#5a6b38] px-2 py-1 text-[8px] text-[#C4A853]">
+--
+5040-            <div className="flex items-center gap-2">
+5041-              <undoSystem.UndoButtonComponent />
+5042-              <button
+5043:                onClick={() => setShowEndGameConfirmation(true)}
+5044-                className="bg-[#DD0000] border-[3px] border-white px-4 py-2.5 text-white text-sm font-bold
+5045-                           shadow-[2px_2px_0px_0px_rgba(0,0,0,0.5)] active:scale-95 transition-transform
+5046-                           hover:bg-[#FF0000]"
+5047-              >
+5048-                END
+5049-              </button>
+5050-            </div>
+5051-          </div>
+5052-        </div>
+5053-
+--
+5072-                  Cancel
+5073-                </button>
+5074-              </div>
+5075:              <div className="flex-1 min-h-0 overflow-y-auto p-2 space-y-2">
+5076-                <div className="text-[8px] text-[#C4A853]">
+5077:                  Verify runner movement before committing <span className="font-bold">{pendingRunnerCorrection.outcomeLabel}</span>.
+5078-                </div>
+5079:                <RunnerOutcomesDisplay
+5080:                  outcomes={pendingRunnerCorrection.defaults}
+5081:                  onOutcomeChange={handleRunnerCorrectionChange}
+5082:                  playType={pendingRunnerCorrection.outcomeLabel}
+5083-                  destinationOptions={{
+5084-                    batter: getBatterDestinationOptions(pendingRunnerCorrection.action),
+5085-                  }}
+5086-                  labels={{
+5087-                    batter: gameState.currentBatterName || 'BATTER',
+5088-                    first: runnerNames.first ? `R1 ${runnerNames.first}` : 'R1 (1B)',
+5089-                    second: runnerNames.second ? `R2 ${runnerNames.second}` : 'R2 (2B)',
+5090-                    third: runnerNames.third ? `R3 ${runnerNames.third}` : 'R3 (3B)',
+5091-                  }}
+5092-                />
+--
+5119-                  Close
+5120-                </button>
+5121-              </div>
+5122:              <div className="flex-1 overflow-y-auto p-2 space-y-1">
+5123-                {touchReviewEntries.map((entry) => (
+5124-                  <button
+5125-                    key={`touch-review-${entry.id}`}
+5126-                    type="button"
+5127-                    className="w-full text-left rounded border border-[#4a6a4a] bg-[#334236] px-2 py-2 active:scale-[0.99]"
+5128-                    onClick={() => {
+5129-                      setShowTouchPlayReview(false);
+5130-                      handleEntryTap(entry);
+5131-                    }}
+5132-                  >
+--
+5188-                  <X className="w-4 h-4" />
+5189-                </button>
+5190-              </div>
+5191:              <div className="p-4 overflow-y-auto">
+5192-                {!lineupSizeOk && currentLineup.length > 0 && (
+5193-                  <div className="mb-2 px-2 py-1 bg-[#4A2A00] border border-[#FF8800] text-[#FFAA44] text-[10px] font-bold">
+5194-                    LINEUP SIZE: {currentLineup.length} — expected 9 (or 10 with DH)
+5195-                  </div>
+5196-                )}
+5197-                <LineupCard
+5198-                  lineup={lineupCardData}
+5199-                  bench={benchCardData}
+5200-                  bullpen={bullpenCardData}
+5201-                  currentPitcher={currentPitcherData}
+--
+5211-        {/* Play Location Overlay - REMOVED (now using drag-drop interface) */}
+5212-
+5213-        {/* End Game Confirmation — with post-game enrichment prompt (Ticket 5.8) */}
+5214:        {showEndGameConfirmation && !showPostGameEnrichPrompt && (
+5215-          <div
+5216-            className="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center z-50"
+5217:            onClick={() => setShowEndGameConfirmation(false)}
+5218-          >
+5219-            <div
+5220-              className="bg-[#556B55] border-[6px] border-[#4A6844] p-4 w-[340px] shadow-[8px_8px_0px_0px_rgba(0,0,0,0.8)]"
+5221-              onClick={(e) => e.stopPropagation()}
+5222-            >
+5223-              {/* Header */}
+5224-              <div className="bg-[#3d5240] border-[4px] border-[#E8E8D8] p-2 mb-3">
+5225-                <div className="flex items-center justify-between">
+5226-                  <div>
+5227-                    <div className="text-xs text-[#E8E8D8] font-bold">END GAME CONFIRMATION</div>
+5228-                  </div>
+5229-                  <button
+5230:                    onClick={() => setShowEndGameConfirmation(false)}
+5231-                    className="bg-[#5A8352] border-[3px] border-[#E8E8D8] px-2 py-1 text-[#E8E8D8] text-xs hover:bg-[#4A6844]"
+5232-                  >
+5233-                    ✕
+5234-                  </button>
+5235-                </div>
+5236-              </div>
+5237-
+5238-              {/* Confirmation Message */}
+5239-              <div className="text-[8px] text-[#E8E8D8] font-bold mb-4">
+5240-                Are you sure you want to end the game? This action cannot be undone.
+--
+5256-              {/* Buttons */}
+5257-              <div className="flex gap-2">
+5258-                <button
+5259:                  onClick={() => setShowEndGameConfirmation(false)}
+5260-                  className="flex-1 bg-[#3d5240] border-[5px] border-[#E8E8D8] py-4 text-[#E8E8D8] text-sm hover:bg-[#4A6844] active:scale-95 transition-transform"
+5261-                >
+5262-                  CANCEL
+5263-                </button>
+5264-                <button
+5265-                  onClick={() => {
+5266-                    // Check for unenriched plays
+5267-                    const unenriched = playLogEntries.filter(e =>
+5268-                      e.isEnrichable && (!e.hasPitchType || !e.hasLocationData)
+5269-                    ).length;
+--
+5271-                      setPostGameUnenrichedCount(unenriched);
+5272-                      setShowPostGameEnrichPrompt(true);
+5273-                    } else {
+5274:                      handleEndGame();
+5275-                    }
+5276-                  }}
+5277-                  className="flex-1 bg-[#DD0000] border-[5px] border-white py-4 text-white text-sm hover:bg-[#FF0000] active:scale-95 transition-transform"
+5278-                >
+5279-                  END GAME
+5280-                </button>
+5281-              </div>
+5282-            </div>
+5283-          </div>
+5284-        )}
+--
+5287-        {showPostGameEnrichPrompt && (
+5288-          <div
+5289-            className="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center z-50"
+5290:            onClick={() => { setShowPostGameEnrichPrompt(false); handleEndGame(); }}
+5291-          >
+5292-            <div
+5293-              className="bg-[#556B55] border-[6px] border-[#4A6844] p-4 w-[340px] shadow-[8px_8px_0px_0px_rgba(0,0,0,0.8)]"
+5294-              onClick={(e) => e.stopPropagation()}
+5295-            >
+5296-              <div className="bg-[#3d5240] border-[4px] border-[#E8E8D8] p-2 mb-3">
+5297-                <div className="text-xs text-[#E8E8D8] font-bold">ENRICHMENT</div>
+5298-              </div>
+5299-              <div className="text-[9px] text-[#E8E8D8] mb-4">
+5300-                {postGameUnenrichedCount} play{postGameUnenrichedCount !== 1 ? 's' : ''} unenriched. Enrich now or continue?
+--
+5303-                <button
+5304-                  onClick={() => {
+5305-                    setShowPostGameEnrichPrompt(false);
+5306:                    setShowEndGameConfirmation(false);
+5307-                    // Open enrichment on first unenriched play
+5308-                    const firstUnenriched = playLogEntries.find(e =>
+5309-                      e.isEnrichable && (!e.hasPitchType || !e.hasLocationData)
+5310-                    );
+5311-                    if (firstUnenriched) setEnrichingEntry(firstUnenriched);
+5312-                  }}
+5313-                  className="flex-1 bg-[#3d5240] border-[5px] border-[#C4A853] py-3 text-[#C4A853] text-sm hover:bg-[#4A6844] active:scale-95 transition-transform"
+5314-                >
+5315-                  ENRICH
+5316-                </button>
+5317-                <button
+5318:                  onClick={() => { setShowPostGameEnrichPrompt(false); handleEndGame(); }}
+5319-                  className="flex-1 bg-[#DD0000] border-[5px] border-white py-3 text-white text-sm hover:bg-[#FF0000] active:scale-95 transition-transform"
+5320-                >
+5321-                  CONTINUE
+5322-                </button>
+5323-              </div>
+5324-            </div>
+5325-          </div>
+5326-        )}
+5327-
+5328-        {/* Undo toast notification */}
+--
+5534-      {/* ══════════════════════════════════════════════════════════════
+5535-           PRESERVED: Old below-field content (disabled reference code).
+5536-           Kept as reference for future Layer 2 sessions that will
+5537:           wire the Quick Bar to these handlers.
+5538-         ══════════════════════════════════════════════════════════════ */}
+5539-      {false && (<div>
+5540-          {/* Expandable sections - REMOVED, replaced with drag-drop interface */}
+5541-          {/* The game tracker now uses direct field interaction instead of buttons */}
+5542-          {false && (
+5543:            <div className="space-y-2 max-h-[60vh] overflow-y-auto">
+5544-            {/* HITS Section */}
+5545-            <ExpandablePanel 
+5546-              title="HITS" 
+5547-              isExpanded={expandedSections.hits}
+5548-              onToggle={() => toggleSection('hits')}
+5549-            >
+5550-              <div className="space-y-1">
+5551-                <div className="grid grid-cols-5 gap-1">
+5552:                  <OutcomeButton
+5553-                    label="1B"
+5554-                    color="lightblue"
+5555:                    isExpanded={expandedOutcome === '1B'}
+5556:                    onClick={() => { toggleOutcomeDetail('1B'); handleHitSelect('1B'); }}
+5557-                  />
+5558:                  <OutcomeButton
+5559-                    label="2B"
+5560-                    color="lightblue"
+5561:                    isExpanded={expandedOutcome === '2B'}
+5562:                    onClick={() => { toggleOutcomeDetail('2B'); handleHitSelect('2B'); }}
+5563-                  />
+5564:                  <OutcomeButton
+5565-                    label="3B"
+5566-                    color="lightblue"
+5567:                    isExpanded={expandedOutcome === '3B'}
+5568:                    onClick={() => { toggleOutcomeDetail('3B'); handleHitSelect('3B'); }}
+5569-                  />
+5570:                  <OutcomeButton
+5571-                    label="HR"
+5572-                    color="magenta"
+5573:                    isExpanded={expandedOutcome === 'HR'}
+5574:                    onClick={() => { toggleOutcomeDetail('HR'); handleHitSelect('HR'); }}
+5575-                  />
+5576:                  <OutcomeButton
+5577-                    label="E"
+5578-                    color="purple"
+5579:                    isExpanded={expandedOutcome === 'E'}
+5580:                    onClick={() => toggleOutcomeDetail('E')}
+5581-                  />
+5582-                </div>
+5583-                
+5584-                {/* HR Details */}
+5585:                {expandedOutcome === 'HR' && (
+5586:                  <OutcomeDetailPanel title="HOME RUN DETAILS">
+5587-                    <div className="space-y-2">
+5588-                      <div>
+5589-                        <div className="text-[7px] text-white mb-1">DIRECTION:</div>
+5590-                        <div className="grid grid-cols-5 gap-1">
+5591-                          <DetailButton label="L" onClick={() => {}} />
+5592-                          <DetailButton label="LC" onClick={() => {}} />
+5593-                          <DetailButton label="C" onClick={() => {}} />
+5594-                          <DetailButton label="RC" onClick={() => {}} />
+5595-                          <DetailButton label="R" onClick={() => {}} />
+5596-                        </div>
+--
+5619-                            <DetailButton
+5620-                              key={num}
+5621-                              label={num.toString()}
+5622:                              isSelected={pendingOutcome?.rbi === num}
+5623-                              onClick={() => handleRbiChange(num)}
+5624-                            />
+5625-                          ))}
+5626-                        </div>
+5627-                      </div>
+5628-                      {/* RECORD Button */}
+5629-                      <div className="grid grid-cols-2 gap-2 pt-2">
+5630-                        <button
+5631:                          onClick={handleCancelOutcome}
+5632-                          className="bg-gray-600 text-white text-xs py-2 px-4 border-2 border-gray-400 hover:bg-gray-500"
+5633-                        >
+5634-                          CANCEL
+5635-                        </button>
+5636-                        <button
+5637:                          onClick={handleRecordOutcome}
+5638-                          disabled={isSaving}
+5639-                          className="bg-green-600 text-white text-xs py-2 px-4 border-2 border-green-400 hover:bg-green-500 disabled:opacity-50"
+5640-                        >
+5641-                          {isSaving ? 'SAVING...' : 'RECORD HR'}
+5642-                        </button>
+5643-                      </div>
+5644-                    </div>
+5645:                  </OutcomeDetailPanel>
+5646-                )}
+5647-
+5648-                {/* 1B, 2B, 3B Details */}
+5649:                {(expandedOutcome === '1B' || expandedOutcome === '2B' || expandedOutcome === '3B') && (
+5650:                  <OutcomeDetailPanel title={`${expandedOutcome} DETAILS`}>
+5651-                    <div className="space-y-2">
+5652-                      <div>
+5653-                        <div className="text-[7px] text-white mb-1">DIRECTION:</div>
+5654-                        <div className="grid grid-cols-5 gap-1">
+5655-                          <DetailButton label="L" onClick={() => {}} />
+5656-                          <DetailButton label="LC" onClick={() => {}} />
+5657-                          <DetailButton label="C" onClick={() => {}} />
+5658-                          <DetailButton label="RC" onClick={() => {}} />
+5659-                          <DetailButton label="R" onClick={() => {}} />
+5660-                        </div>
+--
+5675-                            <DetailButton
+5676-                              key={num}
+5677-                              label={num.toString()}
+5678:                              isSelected={pendingOutcome?.rbi === num}
+5679-                              onClick={() => handleRbiChange(num)}
+5680-                            />
+5681-                          ))}
+5682-                        </div>
+5683-                      </div>
+5684-                      {/* RECORD Button */}
+5685-                      <div className="grid grid-cols-2 gap-2 pt-2">
+5686-                        <button
+5687:                          onClick={handleCancelOutcome}
+5688-                          className="bg-gray-600 text-white text-xs py-2 px-4 border-2 border-gray-400 hover:bg-gray-500"
+5689-                        >
+5690-                          CANCEL
+5691-                        </button>
+5692-                        <button
+5693:                          onClick={handleRecordOutcome}
+5694-                          disabled={isSaving}
+5695-                          className="bg-green-600 text-white text-xs py-2 px-4 border-2 border-green-400 hover:bg-green-500 disabled:opacity-50"
+5696-                        >
+5697:                          {isSaving ? 'SAVING...' : `RECORD ${expandedOutcome}`}
+5698-                        </button>
+5699-                      </div>
+5700-                    </div>
+5701:                  </OutcomeDetailPanel>
+5702-                )}
+5703-
+5704-                {/* Error Details — T0-04 FIX: Wire position buttons to recordError */}
+5705:                {expandedOutcome === 'E' && (
+5706:                  <OutcomeDetailPanel title="ERROR DETAILS">
+5707-                    <div className="space-y-2">
+5708-                      <div>
+5709-                        <div className="text-[7px] text-white mb-1">FIELDED BY:</div>
+5710-                        <div className="grid grid-cols-5 gap-1">
+5711-                          <DetailButton label="P" onClick={() => { void handleQuickErrorDetail('P'); }} />
+5712-                          <DetailButton label="C" onClick={() => { void handleQuickErrorDetail('C'); }} />
+5713-                          <DetailButton label="1B" onClick={() => { void handleQuickErrorDetail('1B'); }} />
+5714-                          <DetailButton label="2B" onClick={() => { void handleQuickErrorDetail('2B'); }} />
+5715-                          <DetailButton label="3B" onClick={() => { void handleQuickErrorDetail('3B'); }} />
+5716-                        </div>
+--
+5722-                        </div>
+5723-                      </div>
+5724-                    </div>
+5725:                  </OutcomeDetailPanel>
+5726-                )}
+5727-
+5728-                <div className="grid grid-cols-2 gap-1">
+5729:                  <OutcomeButton
+5730-                    label="BB"
+5731-                    color="blue"
+5732:                    isExpanded={expandedOutcome === 'BB'}
+5733:                    onClick={() => { toggleOutcomeDetail('BB'); handleWalkSelect('BB'); }}
+5734-                  />
+5735:                  <OutcomeButton
+5736-                    label="HBP"
+5737-                    color="blue"
+5738:                    isExpanded={expandedOutcome === 'HBP'}
+5739:                    onClick={() => { toggleOutcomeDetail('HBP'); handleWalkSelect('HBP'); }}
+5740-                  />
+5741-                </div>
+5742-
+5743-                {/* BB/HBP Quick Record */}
+5744:                {(expandedOutcome === 'BB' || expandedOutcome === 'HBP') && (
+5745:                  <OutcomeDetailPanel title={expandedOutcome === 'BB' ? 'WALK' : 'HIT BY PITCH'}>
+5746-                    <div className="grid grid-cols-2 gap-2 pt-2">
+5747-                      <button
+5748:                        onClick={handleCancelOutcome}
+5749-                        className="bg-gray-600 text-white text-xs py-2 px-4 border-2 border-gray-400 hover:bg-gray-500"
+5750-                      >
+5751-                        CANCEL
+5752-                      </button>
+5753-                      <button
+5754:                        onClick={handleRecordOutcome}
+5755-                        disabled={isSaving}
+5756-                        className="bg-green-600 text-white text-xs py-2 px-4 border-2 border-green-400 hover:bg-green-500 disabled:opacity-50"
+5757-                      >
+5758:                        {isSaving ? 'SAVING...' : `RECORD ${expandedOutcome}`}
+5759-                      </button>
+5760-                    </div>
+5761:                  </OutcomeDetailPanel>
+5762-                )}
+5763-              </div>
+5764-            </ExpandablePanel>
+5765-
+5766-            {/* OUTS Section */}
+5767-            <ExpandablePanel 
+5768-              title="OUTS" 
+5769-              isExpanded={expandedSections.outs}
+5770-              onToggle={() => toggleSection('outs')}
+5771-            >
+5772-              <div className="space-y-1">
+5773-                <div className="grid grid-cols-5 gap-1">
+5774:                  <OutcomeButton
+5775-                    label="K"
+5776-                    color="red"
+5777:                    isExpanded={expandedOutcome === 'K'}
+5778:                    onClick={() => { toggleOutcomeDetail('K'); handleOutSelect('K'); }}
+5779-                  />
+5780:                  <OutcomeButton
+5781-                    label="Kc"
+5782-                    color="red"
+5783:                    isExpanded={expandedOutcome === 'Kc'}
+5784:                    onClick={() => { toggleOutcomeDetail('Kc'); handleOutSelect('Kc'); }}
+5785-                  />
+5786:                  <OutcomeButton
+5787-                    label="GO"
+5788-                    color="red"
+5789:                    isExpanded={expandedOutcome === 'GO'}
+5790:                    onClick={() => { toggleOutcomeDetail('GO'); handleOutSelect('GO'); }}
+5791-                  />
+5792:                  <OutcomeButton
+5793-                    label="FO"
+5794-                    color="red"
+5795:                    isExpanded={expandedOutcome === 'FO'}
+5796:                    onClick={() => { toggleOutcomeDetail('FO'); handleOutSelect('FO'); }}
+5797-                  />
+5798:                  <OutcomeButton
+5799-                    label="LO"
+5800-                    color="red"
+5801:                    isExpanded={expandedOutcome === 'LO'}
+5802:                    onClick={() => { toggleOutcomeDetail('LO'); handleOutSelect('LO'); }}
+5803-                  />
+5804-                </div>
+5805-
+5806-                {/* K/KL Quick Record (no additional details needed) */}
+5807:                {(expandedOutcome === 'K' || expandedOutcome === 'Kc') && (
+5808:                  <OutcomeDetailPanel title={expandedOutcome === 'K' ? 'STRIKEOUT (SWINGING)' : 'STRIKEOUT (LOOKING)'}>
+5809-                    <div className="grid grid-cols-2 gap-2 pt-2">
+5810-                      <button
+5811:                        onClick={handleCancelOutcome}
+5812-                        className="bg-gray-600 text-white text-xs py-2 px-4 border-2 border-gray-400 hover:bg-gray-500"
+5813-                      >
+5814-                        CANCEL
+5815-                      </button>
+5816-                      <button
+5817:                        onClick={handleRecordOutcome}
+5818-                        disabled={isSaving}
+5819-                        className="bg-green-600 text-white text-xs py-2 px-4 border-2 border-green-400 hover:bg-green-500 disabled:opacity-50"
+5820-                      >
+5821:                        {isSaving ? 'SAVING...' : `RECORD ${expandedOutcome}`}
+5822-                      </button>
+5823-                    </div>
+5824:                  </OutcomeDetailPanel>
+5825-                )}
+5826-
+5827-                {/* FO Details */}
+5828:                {expandedOutcome === 'FO' && (
+5829:                  <OutcomeDetailPanel title="FLY OUT DETAILS">
+5830-                    <div className="space-y-2">
+5831-                      <div>
+5832-                        <div className="text-[7px] text-white mb-1">DIRECTION:</div>
+5833-                        <div className="grid grid-cols-5 gap-1">
+5834-                          <DetailButton label="L" onClick={() => {}} />
+5835-                          <DetailButton label="LC" onClick={() => {}} />
+5836-                          <DetailButton label="C" onClick={() => {}} />
+5837-                          <DetailButton label="RC" onClick={() => {}} />
+5838-                          <DetailButton label="R" onClick={() => {}} />
+5839-                        </div>
+--
+5872-                          <div className="text-[8px] text-[#88FF88] font-bold mb-1">🏃 RUNNER ON 3RD — SAC FLY?</div>
+5873-                          <button
+5874-                            onClick={async () => {
+5875:                              // Record as SF directly (cleaner than mutating pendingOutcome)
+5876-                              try {
+5877-                                await commitPlateAppearance({ type: 'out', outType: 'SF' });
+5878-                                logAction('SF (sac fly via prompt)');
+5879:                                setPendingOutcome(null);
+5880:                                setExpandedOutcome(null);
+5881-                              } catch (e) { console.error('Failed to record SF:', e); }
+5882-                            }}
+5883-                            disabled={isSaving}
+5884-                            className="w-full text-[9px] py-1 bg-[#336633] border border-[#44AA44] text-[#88FF88] font-bold hover:bg-[#447744] disabled:opacity-50"
+5885-                          >
+5886-                            RECORD AS SAC FLY (SF)
+5887-                          </button>
+5888-                        </div>
+5889-                      )}
+5890-                      {/* GAP-GT-6-A: Time play toggle — only relevant on 3rd out with runners */}
+--
+5902-                      {/* RECORD Button */}
+5903-                      <div className="grid grid-cols-2 gap-2 pt-2">
+5904-                        <button
+5905:                          onClick={handleCancelOutcome}
+5906-                          className="bg-gray-600 text-white text-xs py-2 px-4 border-2 border-gray-400 hover:bg-gray-500"
+5907-                        >
+5908-                          CANCEL
+5909-                        </button>
+5910-                        <button
+5911:                          onClick={handleRecordOutcome}
+5912-                          disabled={isSaving}
+5913-                          className="bg-green-600 text-white text-xs py-2 px-4 border-2 border-green-400 hover:bg-green-500 disabled:opacity-50"
+5914-                        >
+5915-                          {isSaving ? 'SAVING...' : 'RECORD FO'}
+5916-                        </button>
+5917-                      </div>
+5918-                    </div>
+5919:                  </OutcomeDetailPanel>
+5920-                )}
+5921-
+5922-                {/* GO, LO Details */}
+5923:                {(expandedOutcome === 'GO' || expandedOutcome === 'LO') && (
+5924:                  <OutcomeDetailPanel title={`${expandedOutcome === 'GO' ? 'GROUND' : 'LINE'} OUT DETAILS`}>
+5925-                    <div className="space-y-2">
+5926-                      <div>
+5927-                        <div className="text-[7px] text-white mb-1">FIELDED BY:</div>
+5928-                        <div className="grid grid-cols-5 gap-1">
+5929-                          <DetailButton label="P" onClick={() => {}} />
+5930-                          <DetailButton label="C" onClick={() => {}} />
+5931-                          <DetailButton label="1B" onClick={() => {}} />
+5932-                          <DetailButton label="2B" onClick={() => {}} />
+5933-                          <DetailButton label="3B" onClick={() => {}} />
+5934-                        </div>
+--
+5954-                      {/* RECORD Button */}
+5955-                      <div className="grid grid-cols-2 gap-2 pt-2">
+5956-                        <button
+5957:                          onClick={handleCancelOutcome}
+5958-                          className="bg-gray-600 text-white text-xs py-2 px-4 border-2 border-gray-400 hover:bg-gray-500"
+5959-                        >
+5960-                          CANCEL
+5961-                        </button>
+5962-                        <button
+5963:                          onClick={handleRecordOutcome}
+5964-                          disabled={isSaving}
+5965-                          className="bg-green-600 text-white text-xs py-2 px-4 border-2 border-green-400 hover:bg-green-500 disabled:opacity-50"
+5966-                        >
+5967:                          {isSaving ? 'SAVING...' : `RECORD ${expandedOutcome}`}
+5968-                        </button>
+5969-                      </div>
+5970-                    </div>
+5971:                  </OutcomeDetailPanel>
+5972-                )}
+5973-
+5974-                {/* GAP-GT-6-G / GAP-GT-6-C: Button availability enforcement */}
+5975-                <div className="grid grid-cols-5 gap-1">
+5976:                  <OutcomeButton
+5977-                    label="PO"
+5978-                    color="red"
+5979:                    isExpanded={expandedOutcome === 'PO'}
+5980:                    onClick={() => { toggleOutcomeDetail('PO'); handleOutSelect('PO'); }}
+5981-                  />
+5982:                  <OutcomeButton
+5983-                    label="DP"
+5984-                    color="red"
+5985:                    isExpanded={expandedOutcome === 'DP'}
+5986:                    onClick={() => { toggleOutcomeDetail('DP'); handleOutSelect('DP'); }}
+5987-                    disabled={gameState.outs >= 2} // DP impossible with 2 outs
+5988-                  />
+5989:                  <OutcomeButton
+5990-                    label="FC"
+5991-                    color="purple"
+5992:                    isExpanded={expandedOutcome === 'FC'}
+5993:                    onClick={() => { toggleOutcomeDetail('FC'); handleOutSelect('FC'); }}
+5994-                  />
+5995:                  <OutcomeButton
+5996-                    label="SF"
+5997-                    color="purple"
+5998:                    isExpanded={expandedOutcome === 'SF'}
+5999:                    onClick={() => { toggleOutcomeDetail('SF'); handleOutSelect('SF'); }}
+6000-                    disabled={gameState.outs >= 2} // SF impossible with 2 outs
+6001-                  />
+6002:                  <OutcomeButton
+6003-                    label="SH"
+6004-                    color="purple"
+6005:                    isExpanded={expandedOutcome === 'SH'}
+6006:                    onClick={() => { toggleOutcomeDetail('SH'); handleOutSelect('SH'); }}
+6007-                    disabled={!hasRunners} // GAP-GT-6-C: SAC requires runners
+6008-                  />
+6009-                </div>
+6010-
+6011-                {/* TP button — needs ≥2 runners AND 0 outs (GAP-GT-6-G) */}
+6012-                <div className="grid grid-cols-2 gap-1">
+6013:                  <OutcomeButton
+6014-                    label="TP"
+6015-                    color="red"
+6016:                    isExpanded={expandedOutcome === 'TP'}
+6017:                    onClick={() => { toggleOutcomeDetail('TP'); handleOutSelect('TP'); }}
+6018-                    disabled={runnerCount < 2 || gameState.outs > 0}
+6019-                  />
+6020:                  <OutcomeButton
+6021-                    label="D3K"
+6022-                    color="purple"
+6023:                    isExpanded={expandedOutcome === 'D3K'}
+6024:                    onClick={() => { toggleOutcomeDetail('D3K'); handleOutSelect('D3K'); }}
+6025-                    disabled={!!gameState.bases.first && gameState.outs < 2} // D3K illegal when 1B occupied & <2 outs
+6026-                  />
+6027-                </div>
+6028-
+6029-                {/* PO/DP/FC/SF/SH/TP Quick Record */}
+6030:                {(expandedOutcome === 'PO' || expandedOutcome === 'DP' || expandedOutcome === 'FC' || expandedOutcome === 'SF' || expandedOutcome === 'SH' || expandedOutcome === 'TP') && (
+6031:                  <OutcomeDetailPanel title={`${expandedOutcome} DETAILS`}>
+6032-                    {/* GAP-GT-4-H: IFR auto-prompt when PO + R1+R2 (or loaded) + <2 outs */}
+6033:                    {expandedOutcome === 'PO' && runnerCount >= 2 && gameState.outs < 2 && (
+6034-                      <div className="mb-2 p-1 bg-[#2a2a4a] border border-[#8888FF]">
+6035-                        <div className="text-[8px] text-[#AAAAFF] font-bold mb-1">⚑ INFIELD FLY RULE?</div>
+6036-                        <div className="grid grid-cols-2 gap-1">
+6037-                          <button
+6038-                            onClick={() => {
+6039:                              setPendingOutcome(prev => prev ? { ...prev, modifiers: { ...prev.modifiers, ifr: true } } as typeof prev : prev);
+6040-                            }}
+6041:                            className={`text-[9px] py-1 border font-bold ${(pendingOutcome as { modifiers?: { ifr?: boolean } })?.modifiers?.ifr ? 'bg-[#6666FF] border-[#4444DD] text-white' : 'bg-[#333] border-[#555] text-[#AAA]'}`}
+6042-                          >
+6043-                            YES — IFR
+6044-                          </button>
+6045-                          <button
+6046-                            onClick={() => {
+6047:                              setPendingOutcome(prev => prev ? { ...prev, modifiers: { ...prev.modifiers, ifr: false } } as typeof prev : prev);
+6048-                            }}
+6049:                            className={`text-[9px] py-1 border font-bold ${(pendingOutcome as { modifiers?: { ifr?: boolean } })?.modifiers?.ifr === false ? 'bg-[#555] border-[#777] text-white' : 'bg-[#333] border-[#555] text-[#AAA]'}`}
+6050-                          >
+6051-                            NO
+6052-                          </button>
+6053-                        </div>
+6054-                      </div>
+6055-                    )}
+6056-                    <div className="grid grid-cols-2 gap-2 pt-2">
+6057-                      <button
+6058:                        onClick={handleCancelOutcome}
+6059-                        className="bg-gray-600 text-white text-xs py-2 px-4 border-2 border-gray-400 hover:bg-gray-500"
+6060-                      >
+6061-                        CANCEL
+6062-                      </button>
+6063-                      <button
+6064:                        onClick={handleRecordOutcome}
+6065-                        disabled={isSaving}
+6066-                        className="bg-green-600 text-white text-xs py-2 px-4 border-2 border-green-400 hover:bg-green-500 disabled:opacity-50"
+6067-                      >
+6068:                        {isSaving ? 'SAVING...' : `RECORD ${expandedOutcome}`}
+6069-                      </button>
+6070-                    </div>
+6071:                  </OutcomeDetailPanel>
+6072-                )}
+6073-
+6074-                {/* D3K Quick Record */}
+6075:                {expandedOutcome === 'D3K' && (
+6076:                  <OutcomeDetailPanel title="DROPPED 3RD STRIKE">
+6077-                    <div className="text-[8px] text-[#AAAACC] mb-1">
+6078-                      {gameState.bases.first && gameState.outs < 2
+6079-                        ? '⚠ D3K disabled: 1B occupied with <2 outs (batter is automatically out)'
+6080-                        : 'Batter may run to 1B'}
+6081-                    </div>
+6082-                    <div className="grid grid-cols-2 gap-2 pt-2">
+6083-                      <button
+6084:                        onClick={handleCancelOutcome}
+6085-                        className="bg-gray-600 text-white text-xs py-2 px-4 border-2 border-gray-400 hover:bg-gray-500"
+6086-                      >
+6087-                        CANCEL
+6088-                      </button>
+6089-                      <button
+6090:                        onClick={handleRecordOutcome}
+6091-                        disabled={isSaving}
+6092-                        className="bg-green-600 text-white text-xs py-2 px-4 border-2 border-green-400 hover:bg-green-500 disabled:opacity-50"
+6093-                      >
+6094-                        {isSaving ? 'SAVING...' : 'RECORD D3K'}
+6095-                      </button>
+6096-                    </div>
+6097:                  </OutcomeDetailPanel>
+6098-                )}
+6099-              </div>
+6100-            </ExpandablePanel>
+6101-
+6102-            {/* EVENTS Section */}
+6103-            <ExpandablePanel 
+6104-              title="EVENTS" 
+6105-              isExpanded={expandedSections.events}
+6106-              onToggle={() => toggleSection('events')}
+6107-            >
+6108-              <div className="space-y-1">
+6109-                <div className="grid grid-cols-4 gap-1">
+6110:                  <OutcomeButton 
+6111-                    label="SB" 
+6112-                    color="lightblue" 
+6113:                    isExpanded={expandedOutcome === 'SB'}
+6114:                    onClick={() => toggleOutcomeDetail('SB')} 
+6115-                  />
+6116:                  <OutcomeButton 
+6117-                    label="CS" 
+6118-                    color="red" 
+6119:                    isExpanded={expandedOutcome === 'CS'}
+6120:                    onClick={() => toggleOutcomeDetail('CS')} 
+6121-                  />
+6122:                  <OutcomeButton 
+6123-                    label="WP" 
+6124-                    color="purple" 
+6125:                    isExpanded={expandedOutcome === 'WP'}
+6126:                    onClick={() => toggleOutcomeDetail('WP')} 
+6127-                  />
+6128:                  <OutcomeButton 
+6129-                    label="PB" 
+6130-                    color="purple" 
+6131:                    isExpanded={expandedOutcome === 'PB'}
+6132:                    onClick={() => toggleOutcomeDetail('PB')} 
+6133-                  />
+6134-                </div>
+6135-                <div className="grid grid-cols-3 gap-1">
+6136:                  <OutcomeButton 
+6137-                    label="PICK" 
+6138-                    color="red" 
+6139:                    isExpanded={expandedOutcome === 'PICK'}
+6140:                    onClick={() => toggleOutcomeDetail('PICK')} 
+6141-                  />
+6142:                  <OutcomeButton 
+6143-                    label="KILLED" 
+6144-                    color="purple" 
+6145:                    isExpanded={expandedOutcome === 'KILLED'}
+6146:                    onClick={() => toggleOutcomeDetail('KILLED')} 
+6147-                  />
+6148:                  <OutcomeButton 
+6149-                    label="NUTSHOT" 
+6150-                    color="purple" 
+6151:                    isExpanded={expandedOutcome === 'NUTSHOT'}
+6152:                    onClick={() => toggleOutcomeDetail('NUTSHOT')} 
+6153-                  />
+6154-                </div>
+6155-              </div>
+6156-            </ExpandablePanel>
+6157-
+6158-            {/* LINEUP Section - Drag-and-Drop Only */}
+6159-            <ExpandablePanel
+6160-              title="LINEUP"
+6161-              isExpanded={expandedSections.substitutions}
+6162-              onToggle={() => toggleSection('substitutions')}
+--
+6197-            </div>
+6198-
+6199-            <button
+6200:              onClick={() => setShowEndGameConfirmation(true)}
+6201-              className="flex-1 bg-[#DD0000] border-[5px] border-white py-4 text-white text-base font-bold hover:bg-[#FF0000] active:scale-95 transition-transform shadow-[4px_4px_0px_0px_#0066FF]"
+6202-            >
+6203-              🏁 END GAME
+6204-            </button>
+6205-          </div>
+6206-      </div>)}{/* Close outer {false && (<div>)} disabled reference block */}
+6207-      </div>
+6208-    </DndProvider>
+6209-  );
+6210-}
+--
+6212-// Pitch Count Modal Component (per PITCH_COUNT_TRACKING_SPEC.md §5)
+6213-interface PitchCountModalProps {
+6214-  prompt: {
+6215:    type: 'pitching_change' | 'end_game' | 'end_inning';
+6216-    pitcherId: string;
+6217-    pitcherName: string;
+6218-    currentCount: number;
+6219-    lastVerifiedInning: number;
+6220-  };
+6221-  onConfirm: (pitcherId: string, finalCount: number) => void;
+6222-  onDismiss: () => void;
+6223-}
+6224-
+6225-function PitchCountModal({ prompt, onConfirm, onDismiss }: PitchCountModalProps) {
+--
+6234-
+6235-  const title = prompt.type === 'pitching_change'
+6236-    ? '⚠️ PITCHING CHANGE - PITCH COUNT REQUIRED'
+6237:    : prompt.type === 'end_game'
+6238-    ? '🏁 FINAL PITCH COUNT'
+6239-    : '📊 END OF INNING - UPDATE PITCH COUNT?';
+6240-
+6241-  const isRequired = prompt.type !== 'end_inning';
+6242-
+6243-  return (
+6244-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+6245-      <div className="bg-[#556B55] border-4 border-[#3d5240] p-4 max-w-md w-full mx-4 shadow-lg">
+6246-        <div className="text-[#FFD700] text-sm font-bold mb-3">{title}</div>
+6247-
+--
+6671-  );
+6672-}
+6673-
+6674:interface OutcomeButtonProps {
+6675-  label: string;
+6676-  color: "blue" | "red" | "purple" | "lightblue" | "magenta";
+6677-  isExpanded: boolean;
+6678-  onClick: () => void;
+6679:  disabled?: boolean; // GAP-GT-6-G / GAP-GT-6-C: button availability enforcement
+6680-}
+6681-
+6682:function OutcomeButton({ label, color, isExpanded, onClick, disabled }: OutcomeButtonProps) {
+6683-  const colorClasses = {
+6684-    blue: "bg-[#3366FF] border-[#1A44BB] text-white hover:bg-[#4477FF]",
+6685-    red: "bg-[#DD0000] border-[#AA0000] text-white hover:bg-[#FF0000]",
+6686-    purple: "bg-[#7733DD] border-[#5522AA] text-white hover:bg-[#8844EE]",
+6687-    lightblue: "bg-[#5599FF] border-[#3366CC] text-white hover:bg-[#66AAFF]",
+6688-    magenta: "bg-[#CC44CC] border-[#992299] text-white hover:bg-[#DD55DD]",
+6689-  };
+6690-
+6691-  if (disabled) {
+6692-    return (
+--
+6710-  );
+6711-}
+6712-
+6713:interface OutcomeDetailPanelProps {
+6714-  title: string;
+6715-  children: React.ReactNode;
+6716-}
+6717-
+6718:function OutcomeDetailPanel({ title, children }: OutcomeDetailPanelProps) {
+6719-  return (
+6720-    <div className="bg-[#3366FF] border-[4px] border-white p-2 mt-1">
+6721-      <div className="text-[8px] text-white font-bold mb-1">{title}</div>
+6722-      {children}
+6723-    </div>
+6724-  );
+6725-}
+6726-
+6727-interface DetailButtonProps {
+6728-  label: string;
+--- useGameState.ts ---
+85-  seasonNumber: number;
+86-}
+87-
+88:export interface EndGameOptions {
+89-  activityLog?: string[];
+90-  seasonId?: string;
+91-  statsScopeId?: string;
+92-  competitionType?: CompetitionType;
+93-  competitionId?: string;
+94-  franchiseId?: string;
+95-  currentSeason?: number;
+96-  currentGame?: number;
+97-  stadiumName?: string | null;
+98-}
+--
+240-
+241-// Pitch count prompt types per PITCH_COUNT_TRACKING_SPEC.md
+242-export interface PitchCountPrompt {
+243:  type: 'pitching_change' | 'end_game' | 'end_inning';
+244-  pitcherId: string;
+245-  pitcherName: string;
+246-  currentCount: number;
+247-  lastVerifiedInning: number;
+248-  // For pitching change only
+249-  newPitcherId?: string;
+250-}
+251-
+252-export interface UseGameStateReturn {
+253-  // Game state
+--
+299-  advanceCount: (type: 'ball' | 'strike' | 'foul') => void;
+300-  resetCount: () => void;
+301-  endInning: () => void;
+302:  endGame: (options?: EndGameOptions) => Promise<void>;
+303-
+304-  // Pitch count prompts (per PITCH_COUNT_TRACKING_SPEC.md)
+305-  pitchCountPrompt: PitchCountPrompt | null;
+306-  confirmPitchCount: (pitcherId: string, finalCount: number) => { immaculateInning?: { pitcherId: string; pitcherName: string } };
+307-  dismissPitchCountPrompt: () => void;
+308-
+309-  // Enrichment injection (Layer 1B)
+310-  setNextEventEnrichment: (data: AtBatEvent['enrichment']) => void;
+311-
+312-  /** Position innings map: playerId → { [position]: halfInningsPlayed } (ticket 4.10) */
+--
+5524-    const timing =
+5525-      pitchCountPrompt?.type === 'pitching_change'
+5526-        ? 'pitcher_removed'
+5527:        : pitchCountPrompt?.type === 'end_game'
+5528-        ? 'end_of_game'
+5529-        : 'end_of_half_inning';
+5530-    void persistBetweenPlayEvent({
+5531-      type: 'pitch_count_update',
+5532-      pitchCountUpdate: {
+5533-        pitcherId,
+5534-        pitchCount: finalCount,
+5535-        timing,
+5536-      },
+5537-    }).catch((error) => {
+--
+5551-
+5552-  // Dismiss pitch count prompt without confirming
+5553-  // For end_inning: still transitions the inning (just skips pitch count update)
+5554:  // For pitching_change/end_game: cancels the pending action
+5555-  const dismissPitchCountPrompt = useCallback(() => {
+5556-    if (pitchCountPrompt?.type === 'end_inning') {
+5557-      // Still execute the inning transition, just don't update pitch count
+5558-      if (pendingActionRef.current) {
+5559-        pendingActionRef.current();
+5560-        pendingActionRef.current = null;
+5561-      }
+5562-      console.log('[useGameState] Pitch count prompt dismissed — inning transition proceeding without count update');
+5563-    } else {
+5564-      pendingActionRef.current = null;
+--
+5599-    // (Home team doesn't need to bat if already ahead)
+5600-    if (isTop && inning >= totalInnings && homeScore > awayScore) {
+5601-      console.log(`[T0-01] Auto game-end: Home leads ${homeScore}-${awayScore} after top of inning ${inning}. Game over.`);
+5602:      // Trigger endGame flow after a small delay
+5603-      setTimeout(() => {
+5604-        setShowAutoEndPrompt(true);
+5605-      }, 300);
+5606-      return; // Don't transition to next half-inning
+5607-    }
+5608-
+5609-    // After BOTTOM of regulation final inning (or later): if not tied, game is over
+5610-    if (!isTop && inning >= totalInnings && homeScore !== awayScore) {
+5611-      console.log(`[T0-01] Auto game-end: Score ${awayScore}-${homeScore} after bottom of inning ${inning}. Game over.`);
+5612-      setTimeout(() => {
+--
+5686-  endInningRef.current = endInning;
+5687-
+5688-  // Internal function to complete game after pitch counts confirmed
+5689:  const completeGameInternal = useCallback(async (opts?: EndGameOptions) => {
+5690-    const activityLog = opts?.activityLog ?? [];
+5691-    setIsSaving(true);
+5692-
+5693-    // Mark game as complete in event log
+5694-    await completeGame(
+5695-      gameState.gameId,
+5696-      { away: gameState.awayScore, home: gameState.homeScore },
+5697-      gameState.inning
+5698-    );
+5699-
+--
+5796-        hitsAllowed: stats.hitsAllowed,
+5797-        runsAllowed: stats.runsAllowed,
+5798-        earnedRuns: stats.earnedRuns,
+5799:        walksAllowed: stats.walksAllowed + stats.intentionalWalks, // Combine BB+IBB (matches endGame path)
+5800-        strikeoutsThrown: stats.strikeoutsThrown,
+5801-        homeRunsAllowed: stats.homeRunsAllowed,
+5802-        hitBatters: stats.hitByPitch,
+5803-        basesReachedViaError: (() => {
+5804-          // CRIT-06: Count runners who reached via error from runner tracker
+5805-          // Note: Undercounts runners who reached via error but were later put out (removed from tracker)
+5806-          const trackerPitcherStats = runnerTrackerRef.current.pitcherStats.get(pitcherId);
+5807-          if (!trackerPitcherStats) return 0;
+5808-          const onBase = trackerPitcherStats.runnersOnBase.filter(r => r.howReached === 'error').length;
+5809-          const scored = trackerPitcherStats.runnersScored.filter(r => r.howReached === 'error').length;
+--
+5873-    };
+5874-
+5875-    // T1-08 FIX: Check if already aggregated (idempotency guard)
+5876:    // Prevents double aggregation when endGame's useEffect re-fires
+5877-    const header = await getGameHeader(gameState.gameId);
+5878-    const alreadyAggregated = header?.aggregated === true;
+5879-
+5880-    const targetStatsScopeId =
+5881-      opts?.statsScopeId ??
+5882-      statsScopeIdRef.current ??
+5883-      opts?.seasonId ??
+5884-      seasonIdRef.current ??
+5885-      'season-1';
+5886-    const archivedSeasonId = opts?.seasonId ?? seasonIdRef.current ?? undefined;
+--
+5988-    }
+5989-
+5990-    // Archive completed game with full stats for post-game summary (EXH-011)
+5991:    // T1-08: Only archive if not already done by endGame() — the archive is idempotent
+5992-    // but skipping avoids unnecessary IndexedDB writes
+5993-    if (!alreadyAggregated) {
+5994-      const inningScores = scoreboard.innings.map(inn => ({
+5995-        away: inn.away ?? 0,
+5996-        home: inn.home ?? 0,
+5997-      }));
+5998-      await archiveCompletedGame(
+5999-        persistedState,
+6000-        { away: gameState.awayScore, home: gameState.homeScore },
+6001-        inningScores,
+--
+6033-    scoreboard,
+6034-  ]);
+6035-
+6036:  const endGame = useCallback(async (options?: EndGameOptions) => {
+6037-    // Archive game FIRST so PostGameSummary can load it (EXH-011 fix)
+6038-    // Build persisted state for archiving — include player name and team
+6039-    const activityLog = options?.activityLog ?? [];
+6040-    const archivedSeasonId = options?.seasonId ?? seasonIdRef.current ?? undefined;
+6041-    const statsScopeIdValue =
+6042-      options?.statsScopeId ??
+6043-      statsScopeIdRef.current ??
+6044-      options?.seasonId ??
+6045-      seasonIdRef.current ??
+6046-      'season-1';
+6047-    const currentSeasonNumber = options?.currentSeason ?? gameState.seasonNumber;
+6048:    const endGameOptions: EndGameOptions = {
+6049-      activityLog,
+6050-      seasonId: archivedSeasonId,
+6051-      statsScopeId: statsScopeIdValue,
+6052-      competitionType: options?.competitionType ?? competitionTypeRef.current,
+6053-      competitionId: options?.competitionId ?? competitionIdRef.current,
+6054-      franchiseId: options?.franchiseId,
+6055-      currentSeason: currentSeasonNumber,
+6056-      currentGame: options?.currentGame,
+6057-      stadiumName: options?.stadiumName,
+6058-    };
+6059:    const playerNameLookupForEndGame = new Map<string, string>();
+6060-    for (const p of awayLineupRef.current) {
+6061-      registerIdentityForSide(p.playerId, p.playerName, 'away');
+6062:      playerNameLookupForEndGame.set(p.playerId, p.playerName);
+6063-    }
+6064-    for (const p of homeLineupRef.current) {
+6065-      registerIdentityForSide(p.playerId, p.playerName, 'home');
+6066:      playerNameLookupForEndGame.set(p.playerId, p.playerName);
+6067-    }
+6068-    for (const b of awayLineupStateRef.current.bench) {
+6069-      registerIdentityForSide(b.playerId, b.playerName, 'away');
+6070:      playerNameLookupForEndGame.set(b.playerId, b.playerName);
+6071-    }
+6072-    for (const b of homeLineupStateRef.current.bench) {
+6073-      registerIdentityForSide(b.playerId, b.playerName, 'home');
+6074:      playerNameLookupForEndGame.set(b.playerId, b.playerName);
+6075-    }
+6076-
+6077:    // CRIT-05 FIX: Query fielding events for endGame path too
+6078:    const endGameFieldingEvents = await getGameFieldingEvents(gameState.gameId);
+6079-
+6080:    const endGameFieldingTally = new Map<string, { putouts: number; assists: number; errors: number }>();
+6081:    for (const fe of endGameFieldingEvents) {
+6082:      const tally = endGameFieldingTally.get(fe.playerId) || { putouts: 0, assists: 0, errors: 0 };
+6083-      if (fe.playType === 'putout') tally.putouts++;
+6084-      else if (fe.playType === 'assist' || fe.playType === 'outfield_assist') tally.assists++;
+6085-      else if (fe.playType === 'error') tally.errors++;
+6086-      else if (fe.playType === 'double_play_pivot') tally.assists++;
+6087:      endGameFieldingTally.set(fe.playerId, tally);
+6088-    }
+6089-
+6090-    const playerStatsRecord: Record<string, {
+6091-      playerName: string; teamId: string;
+6092-      pa: number; ab: number; h: number; singles: number; doubles: number;
+6093-      triples: number; hr: number; rbi: number; r: number; bb: number;
+6094-      hbp: number; k: number; sb: number; cs: number;
+6095-      sf: number; sh: number; gidp: number; // MAJ-11
+6096-      putouts: number; assists: number; fieldingErrors: number;
+6097-    }> = {};
+6098-    playerStats.forEach((stats, playerId) => {
+6099:      const fieldingTally = endGameFieldingTally.get(playerId) || { putouts: 0, assists: 0, errors: 0 };
+6100-      playerStatsRecord[playerId] = {
+6101-        ...stats,
+6102:        playerName: playerNameLookupForEndGame.get(playerId) || playerNameByIdRef.current.get(playerId) || playerId,
+6103-        teamId: resolveTeamIdForPlayerId(playerId),
+6104-        // CRIT-05 FIXED: Fielding stats from IndexedDB
+6105-        putouts: fieldingTally.putouts,
+6106-        assists: fieldingTally.assists,
+6107-        fieldingErrors: fieldingTally.errors,
+6108-      };
+6109-    });
+6110-
+6111-    const pitcherGameStatsArray = Array.from(pitcherStats.entries()).map(([pitcherId, stats], idx) => {
+6112-      const pitcherName = pitcherNamesRef.current.get(pitcherId) ||
+--
+6143-        firstInningRuns: stats.firstInningRuns,
+6144-        basesLoadedWalks: stats.basesLoadedWalks,
+6145-        inningsComplete: Math.floor(stats.outsRecorded / 3),
+6146:        // MAJ-08: Pitcher decisions (not yet calculated at endGame time — set to null/false)
+6147-        // Decisions are calculated in completeGameInternal after pitch count confirmation
+6148-        decision: stats.decision,
+6149-        save: stats.save,
+6150-        hold: stats.hold,
+6151-        blownSave: stats.blownSave,
+6152-      };
+6153-    });
+6154-
+6155-    const resolvedStadium =
+6156-      options?.stadiumName ??
+--
+6219-      }
+6220-    );
+6221-
+6222:    console.log('[endGame] Game archived for post-game summary');
+6223-
+6224-    // Per PITCH_COUNT_TRACKING_SPEC.md: Mandatory pitch count capture at end of game
+6225-    // Show prompt for current pitcher (simplified - full spec requires all pitchers)
+6226-    const currentPitcherStats = pitcherStats.get(gameState.currentPitcherId) || createEmptyPitcherStats();
+6227-
+6228-    setPitchCountPrompt({
+6229:      type: 'end_game',
+6230-      pitcherId: gameState.currentPitcherId,
+6231-      pitcherName: gameState.currentPitcherName || gameState.currentPitcherId,
+6232-      currentCount: currentPitcherStats.pitchCount,
+6233-      lastVerifiedInning: gameState.inning,
+6234-    });
+6235-
+6236-    // Store the pending action (for season aggregation, etc.)
+6237:    pendingActionRef.current = () => completeGameInternal(endGameOptions);
+6238-
+6239-    // T0-05 FIX: Call completeGameInternal directly instead of deferring to pitch count prompt.
+6240:    // The GameTracker navigates to PostGameSummary immediately after endGame() returns,
+6241-    // which unmounts the component before the pitch count prompt can render/fire.
+6242-    // This ensures processCompletedGame, markGameAggregated, and archiveCompletedGame run.
+6243-    try {
+6244:      await completeGameInternal(endGameOptions);
+6245:      console.log('[endGame] T0-05: completeGameInternal executed — stats aggregated');
+6246-    } catch (err) {
+6247:      console.error('[endGame] T0-05: completeGameInternal failed:', err);
+6248-    }
+6249-  }, [
+6250-    atBatSequence,
+6251-    buildPersistedFameEvents,
+6252-    completeGameInternal,
+6253-    gameState,
+6254-    pitcherStats,
+6255-    playerStats,
+6256-    registerIdentityForSide,
+6257-    resolveTeamIdForPlayerId,
+--
+6305-    },
+6306-  }), []);
+6307-
+6308:  // Restore state from undo snapshot (Phase 7 - Undo System)
+6309-  // CRIT-01 fix: Now also restores playerStats and pitcherStats Maps
+6310-  // Runner tracker undo fix: Also restores runnerTrackerRef for correct ER attribution
+6311-  const restoreState = useCallback((snapshot: {
+6312-    gameState: GameState;
+6313-    scoreboard: ScoreboardState;
+6314-    playerStats?: Map<string, PlayerGameStats>;
+6315-    pitcherStats?: Map<string, PitcherGameStats>;
+6316-    runnerTrackerState?: {
+6317-      runners: RunnerTrackingState['runners'];
+6318-      currentPitcherId: string;
+--
+6377-    advanceCount,
+6378-    resetCount,
+6379-    endInning,
+6380:    endGame,
+6381-    // Pitch count prompts (per PITCH_COUNT_TRACKING_SPEC.md)
+6382-    pitchCountPrompt,
+6383-    confirmPitchCount,
+6384-    dismissPitchCountPrompt,
+6385-    initializeGame,
+6386-    loadExistingGame,
+6387-    undoLastAction,
+6388-    getLineupStateSnapshot,
+6389-    restoreState,
+6390-    getRunnerTrackerSnapshot,

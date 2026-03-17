@@ -19,8 +19,6 @@ interface FullFenwayScoreboardProps {
   homeErrors: number;
   inning: number;
   isTop: boolean;
-  balls: number;
-  strikes: number;
   outs: number;
   stadiumName?: string | null;
   currentBatterName?: string;
@@ -157,8 +155,6 @@ export function FullFenwayScoreboard({
   homeErrors,
   inning,
   isTop,
-  balls,
-  strikes,
   outs,
   stadiumName,
   currentBatterName,
@@ -234,14 +230,6 @@ export function FullFenwayScoreboard({
                   <div className="min-w-[120px] bg-[#3E5340] px-2 py-1 text-[11px] font-black">
                     {currentBatterName || '—'}
                   </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-[11px] font-black tracking-[0.16em]">BALL</span>
-                  <CountDots count={balls} total={4} fill={COLORS.green} border={COLORS.greenBorder} />
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-[11px] font-black tracking-[0.16em]">STRIKE</span>
-                  <CountDots count={strikes} total={3} fill={COLORS.yellow} border="#C08C00" />
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="text-[11px] font-black tracking-[0.16em]">OUT</span>

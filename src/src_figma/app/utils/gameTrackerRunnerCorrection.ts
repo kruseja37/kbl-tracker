@@ -1,5 +1,6 @@
 import {
   calculateD3KDefaults,
+  calculateDroppedThirdStrikeAdvanceDefaults,
   calculateRunnerDefaults,
   calculateWalkDefaults,
   type BaseId,
@@ -8,6 +9,8 @@ import {
 } from '../components/runnerDefaults';
 import type { PlayData } from './gameTrackerFieldTypes';
 import type { HitType, OutType, RunnerAdvancement, WalkType } from '../../hooks/useGameState';
+import type { AtBatEvent } from '../../../utils/eventLog';
+import type { RunnerBase, RunnerDestination } from './playLogTypes';
 
 export interface PendingRunnerCorrectionAction {
   outcomeLabel: string;
@@ -15,7 +18,14 @@ export interface PendingRunnerCorrectionAction {
   action:
     | { type: 'hit'; hitType: HitType }
     | { type: 'walk'; walkType: WalkType }
-    | { type: 'out'; outType: OutType; batterReached?: boolean; isDroppedThirdStrike?: boolean; forceNoRuns?: boolean };
+    | {
+        type: 'out';
+        outType: OutType;
+        batterReached?: boolean;
+        isDroppedThirdStrike?: boolean;
+        forceNoRuns?: boolean;
+        dropReason?: 'wild_pitch' | 'passed_ball';
+      };
   defaults: RunnerDefaults;
 }
 
@@ -33,12 +43,28 @@ export function buildRunnerCorrectionForQuickBarOutcome(
     };
   }
 
-  if (outcome === 'D3K' || outcome === 'WP_K' || outcome === 'PB_K') {
+  if (outcome === 'D3K') {
     return {
       outcomeLabel: outcome,
       resultCategory: 'special',
       action: { type: 'out', outType: 'K', batterReached: true, isDroppedThirdStrike: true },
       defaults: calculateD3KDefaults(bases, outs),
+    };
+  }
+
+  if (outcome === 'WP_K' || outcome === 'PB_K') {
+    const batterReached = !bases.first || outs >= 2;
+    return {
+      outcomeLabel: outcome,
+      resultCategory: 'special',
+      action: {
+        type: 'out',
+        outType: 'K',
+        batterReached,
+        isDroppedThirdStrike: true,
+        dropReason: outcome === 'WP_K' ? 'wild_pitch' : 'passed_ball',
+      },
+      defaults: calculateDroppedThirdStrikeAdvanceDefaults(bases, outs),
     };
   }
 
@@ -56,7 +82,7 @@ export function buildRunnerCorrectionForQuickBarOutcome(
     };
   }
 
-  if (['K', 'GO', 'FO', 'LO', 'PO', 'FC', 'SAC', 'SF', 'DP', 'TP'].includes(outcome)) {
+  if (['K', 'Kc', 'GO', 'FO', 'LO', 'PO', 'FC', 'SAC', 'SF', 'DP', 'TP'].includes(outcome)) {
     const playData: PlayData = {
       type: 'out',
       outType: outcome === 'SAC' ? 'SAC' : outcome as PlayData['outType'],
@@ -151,4 +177,33 @@ export function getBatterDestinationOptions(
     return ['out'];
   }
   return ['out'];
+}
+
+export type PersistedRunnerOutcome = NonNullable<AtBatEvent['runnerOutcomes']>[number];
+
+export function runnerOutcomeCountsAsRun(outcome: Pick<PersistedRunnerOutcome, 'toBase' | 'isTootblan' | 'isOutAdvancing'>): boolean {
+  return Boolean(outcome.toBase === 'home' && !outcome.isTootblan && !outcome.isOutAdvancing);
+}
+
+export function runnerOutcomeCountsAsOut(outcome: Pick<PersistedRunnerOutcome, 'toBase' | 'isTootblan' | 'isOutAdvancing'>): boolean {
+  return Boolean(outcome.toBase === 'out' || (outcome.toBase === 'home' && (outcome.isTootblan || outcome.isOutAdvancing)));
+}
+
+export function getRunnerDisplayDestination(
+  outcome: Pick<PersistedRunnerOutcome, 'toBase' | 'isTootblan' | 'isOutAdvancing'>,
+): RunnerDestination {
+  return runnerOutcomeCountsAsOut(outcome) ? 'out' : (outcome.toBase as RunnerDestination);
+}
+
+export function getRunnerDestinationOptions(fromBase: RunnerBase): RunnerDestination[] {
+  switch (fromBase) {
+    case 'first':
+      return ['first', 'second', 'third', 'home', 'out'];
+    case 'second':
+      return ['second', 'third', 'home', 'out'];
+    case 'third':
+      return ['third', 'home', 'out'];
+    default:
+      return ['out'];
+  }
 }

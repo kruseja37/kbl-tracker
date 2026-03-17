@@ -18,10 +18,31 @@ export function reconcileTeamPlayersWithLineupSnapshot(
   const benchById = new Map(snapshot.bench.map(player => [player.playerId, player]));
   const usedPlayers = new Set(snapshot.usedPlayers);
   const seenPlayerIds = new Set<string>();
+  const currentPitcher = snapshot.currentPitcher;
+  const currentPitcherAlreadyInLineup = !!(currentPitcher && lineupById.has(currentPitcher.playerId));
 
   const nextPlayers = existingPlayers.map((player) => {
     const playerId = getRosterEntityId(player, team);
     seenPlayerIds.add(playerId);
+
+    if (
+      currentPitcher &&
+      !currentPitcherAlreadyInLineup &&
+      (
+        playerId === currentPitcher.playerId ||
+        player.position === 'P' ||
+        player.battingOrder === currentPitcher.battingOrder
+      )
+    ) {
+      return {
+        ...player,
+        playerId: currentPitcher.playerId,
+        name: currentPitcher.playerName,
+        position: 'P',
+        battingOrder: currentPitcher.battingOrder,
+        isOutOfGame: false,
+      };
+    }
 
     const lineupEntry = lineupById.get(playerId);
     if (lineupEntry) {
@@ -82,6 +103,57 @@ export function reconcileTeamPlayersWithLineupSnapshot(
       battingHand: 'R',
       isOutOfGame: !benchEntry.isAvailable,
     });
+  }
+
+  if (
+    currentPitcher &&
+    !currentPitcherAlreadyInLineup &&
+    !nextPlayers.some((player) => getRosterEntityId(player, team) === currentPitcher.playerId)
+  ) {
+    nextPlayers.push({
+      name: currentPitcher.playerName,
+      playerId: currentPitcher.playerId,
+      position: 'P',
+      battingOrder: currentPitcher.battingOrder,
+      stats: { ab: 0, h: 0, r: 0, rbi: 0, bb: 0, k: 0 },
+      battingHand: 'R',
+      isOutOfGame: false,
+    });
+  }
+
+  if (currentPitcher && !currentPitcherAlreadyInLineup) {
+    const existingPitcherSlot = nextPlayers.find((player) => {
+      const playerId = getRosterEntityId(player, team);
+      return (
+        playerId === currentPitcher.playerId ||
+        player.position === 'P' ||
+        player.battingOrder === currentPitcher.battingOrder
+      );
+    });
+
+    const normalizedPitcherSlot: Player = {
+      ...(existingPitcherSlot || {
+        stats: { ab: 0, h: 0, r: 0, rbi: 0, bb: 0, k: 0 },
+        battingHand: 'R' as const,
+      }),
+      playerId: currentPitcher.playerId,
+      name: currentPitcher.playerName,
+      position: 'P',
+      battingOrder: currentPitcher.battingOrder,
+      isOutOfGame: false,
+    };
+
+    return nextPlayers
+      .filter((player) => {
+        const playerId = getRosterEntityId(player, team);
+        return !(
+          playerId === currentPitcher.playerId ||
+          player.position === 'P' ||
+          player.battingOrder === currentPitcher.battingOrder
+        );
+      })
+      .concat(normalizedPitcherSlot)
+      .sort((left, right) => (left.battingOrder || 99) - (right.battingOrder || 99));
   }
 
   return nextPlayers;

@@ -303,7 +303,12 @@ export interface AtBatEvent {
     runnerId: string;
     runnerName: string;
     fromBase: 'first' | 'second' | 'third';
-    toBase: 'second' | 'third' | 'home' | 'out';
+    toBase: 'first' | 'second' | 'third' | 'home' | 'out';
+    // Runner-level enrichment (UX-050 / §8.6)
+    fieldingSequence?: number[];
+    playMechanic?: string;
+    isTootblan?: boolean;
+    isOutAdvancing?: boolean;
   }>;
   outsRecorded?: number;
   isQualityAtBat?: boolean;
@@ -331,6 +336,7 @@ export interface AtBatEvent {
     putouts?: number[];
     assists?: number[];
     errors?: Array<{ position: number; type: 'fielding' | 'throwing' | 'mental' }>;
+    batterOutAdvancing?: boolean;
     hrDistance?: number;
     pitchType?: string;
     pitchesInAtBat?: number;
@@ -728,7 +734,22 @@ function applyBetweenPlayEventUpdates(
 
 function applyAtBatEventUpdates(
   existing: AtBatEvent,
-  updates: Partial<Pick<AtBatEvent, 'enrichment' | 'result' | 'isQualityAtBat' | 'version' | 'editHistory'>>,
+  updates: Partial<Pick<
+    AtBatEvent,
+    | 'enrichment'
+    | 'result'
+    | 'isQualityAtBat'
+    | 'version'
+    | 'editHistory'
+    | 'runnerOutcomes'
+    | 'rbiCount'
+    | 'runsScored'
+    | 'outsAfter'
+    | 'runnersAfter'
+    | 'awayScoreAfter'
+    | 'homeScoreAfter'
+    | 'outsRecorded'
+  >>,
 ): AtBatEvent {
   const next = { ...existing };
 
@@ -737,6 +758,14 @@ function applyAtBatEventUpdates(
   }
   if (updates.result !== undefined) next.result = updates.result;
   if (updates.isQualityAtBat !== undefined) next.isQualityAtBat = updates.isQualityAtBat;
+  if (updates.runnerOutcomes !== undefined) next.runnerOutcomes = updates.runnerOutcomes;
+  if (updates.rbiCount !== undefined) next.rbiCount = updates.rbiCount;
+  if (updates.runsScored !== undefined) next.runsScored = updates.runsScored;
+  if (updates.outsAfter !== undefined) next.outsAfter = updates.outsAfter;
+  if (updates.runnersAfter !== undefined) next.runnersAfter = updates.runnersAfter;
+  if (updates.awayScoreAfter !== undefined) next.awayScoreAfter = updates.awayScoreAfter;
+  if (updates.homeScoreAfter !== undefined) next.homeScoreAfter = updates.homeScoreAfter;
+  if (updates.outsRecorded !== undefined) next.outsRecorded = updates.outsRecorded;
   if (updates.version !== undefined) next.version = updates.version;
   if (updates.editHistory) {
     next.editHistory = [...(next.editHistory || []), ...updates.editHistory];
@@ -751,7 +780,22 @@ function applyAtBatEventUpdates(
  */
 export async function updateAtBatEvent(
   eventId: string,
-  updates: Partial<Pick<AtBatEvent, 'enrichment' | 'result' | 'isQualityAtBat' | 'version' | 'editHistory'>>
+  updates: Partial<Pick<
+    AtBatEvent,
+    | 'enrichment'
+    | 'result'
+    | 'isQualityAtBat'
+    | 'version'
+    | 'editHistory'
+    | 'runnerOutcomes'
+    | 'rbiCount'
+    | 'runsScored'
+    | 'outsAfter'
+    | 'runnersAfter'
+    | 'awayScoreAfter'
+    | 'homeScoreAfter'
+    | 'outsRecorded'
+  >>
 ): Promise<void> {
   const db = await initEventLogDB();
 

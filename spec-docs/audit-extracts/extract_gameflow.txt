@@ -1,0 +1,2098 @@
+62-
+63-const formatInningLabel = (isTop: boolean, inning: number) => {
+64-  const half = isTop ? "Top" : "Bottom";
+65:  return `${half} ${inning}${ordinalSuffix(inning)}`;
+66-};
+67-// EXH-036: Import Mojo/Fitness types for PlayerCardModal editing
+68-import type { MojoLevel } from "../../../engines/mojoEngine";
+69-import { clampMojo } from "../../../engines/mojoEngine";
+70-import type { FitnessState } from "../../../engines/fitnessEngine";
+71-import { MOJO_STATES, getMojoColor } from "../../../engines/mojoEngine";
+72-import { FITNESS_STATES } from "../../../engines/fitnessEngine";
+73-import { useFameTracking, type FameEventDisplay, formatFameValue, getFameColor, getLITier } from "@/app/hooks/useFameTracking";
+74-import { toMojoLabel, toFitnessLabel, type FameEventType, type Position } from "../../../types/game";
+75-// MAJ-02: Wire fan morale to UI
+--
+91-  extractSupplementalRunnerOutFieldingEvents,
+92-  type FieldingExtractionContext,
+93-} from '../utils/fieldingEventExtractor';
+94:import { captureStartingLineups, type LineupEntry } from '../../../utils/gameStorage';
+95-import { POSITION_NUMBER } from '../utils/positionConstants';
+96-import { calculateRunnerDefaults, type RunnerDefaults } from '../components/runnerDefaults';
+97-import type { PlayLogEntry } from '../utils/playLogTypes';
+98-import { buildPlayLogEntries } from '../utils/gameTrackerPlayLog';
+99-import { reconcileTeamPitchersWithLineupSnapshot, reconcileTeamPlayersWithLineupSnapshot } from '../utils/gameTrackerRosterSync';
+100-import {
+101-  mapFieldingPlayTypeToPlayDifficulty,
+102-  type FieldingPlayTypeValue,
+103-} from '../utils/fieldingPlayType';
+104-import {
+--
+118-
+119-// Note: Using GameState from useGameState hook instead of local interface
+120-// This interface is deprecated but kept for reference during migration
+121:interface _DeprecatedGameState {
+122-  homeScore: number;
+123-  awayScore: number;
+124-  inning: number;
+125-  isTop: boolean;
+126-  outs: number;
+127-  balls: number;
+128-  strikes: number;
+129-  bases: { first: boolean; second: boolean; third: boolean };
+130-  currentBatter: string;
+131-  currentPitcher: string;
+--
+347-  const [gameStartTime] = useState(() => new Date());
+348-  const [elapsedMinutes, setElapsedMinutes] = useState(0);
+349-
+350:  // T1-08 FIX: Guard against double end-game execution
+351:  // The auto-end useEffect can re-fire due to volatile deps in handleEndGame's useCallback.
+352:  // This ref ensures handleEndGame only executes once per game.
+353-  const gameEndingRef = useRef(false);
+354-
+355:  // Layer 1C: Captured starting lineups for GameRecord archive
+356-  const startingLineupsRef = useRef<{ away: LineupEntry[]; home: LineupEntry[] } | null>(null);
+357-
+358-  // Update elapsed time every minute
+359-  useEffect(() => {
+360-    const interval = setInterval(() => {
+361-      const now = new Date();
+362-      const diff = Math.floor((now.getTime() - gameStartTime.getTime()) / 60000);
+363-      setElapsedMinutes(diff);
+364-    }, 60000);
+365-    return () => clearInterval(interval);
+--
+384-    advanceCount,
+385-    resetCount,
+386-    endInning,
+387:    endGame: hookEndGame,
+388:    pitchCountPrompt,
+389-    confirmPitchCount,
+390:    dismissPitchCountPrompt,
+391-    initializeGame,
+392-    loadExistingGame,
+393-    undoLastAction,
+394-    getLineupStateSnapshot,
+395-    getRunnerTrackerSnapshot,
+396-    getBaseRunnerNames,
+397-    runnerIdentityVersion,
+398-    isLoading,
+399-    isSaving,
+400-    // T0-01: Auto game-end detection
+--
+458-  const playLogRefreshTimeoutRef = useRef<number | null>(null);
+459-  const rebuildPlayLogFromEventLogRef = useRef<() => void | Promise<void>>(() => {});
+460-  const queuePlayLogRefreshRef = useRef<(delayMs?: number) => void>(() => {});
+461:  const previousPitchCountPromptRef = useRef<typeof pitchCountPrompt>(null);
+462-
+463-  // Layer 5: Enrichment Panel state
+464-  const [enrichingEntry, setEnrichingEntry] = useState<PlayLogEntry | null>(null);
+465-  const [selectedPlayLogEntry, setSelectedPlayLogEntry] = useState<PlayLogEntry | null>(null);
+466-  const [selectedBetweenPlayEvent, setSelectedBetweenPlayEvent] = useState<BetweenPlayEvent | null>(null);
+467-  const [selectedBetweenPlayEventLoading, setSelectedBetweenPlayEventLoading] = useState(false);
+468-  const [selectedBetweenPlayEventSaving, setSelectedBetweenPlayEventSaving] = useState(false);
+469-  const [enrichmentCache, setEnrichmentCache] = useState<Record<string, NonNullable<import('../../../utils/eventLog').AtBatEvent['enrichment']>>>({});
+470-  // Between-inning enrichment prompt
+471-  const [showEnrichmentPrompt, setShowEnrichmentPrompt] = useState(false);
+--
+583-  // Helper to build GameStateForLI from current game state for mWAR/LI calculations
+584-  const buildGameStateForLI = useCallback((): GameStateForLI => ({
+585-    inning: gameState?.inning ?? 1,
+586:    halfInning: gameState?.isTop ? 'TOP' : 'BOTTOM',
+587-    outs: (gameState?.outs ?? 0) as 0 | 1 | 2,
+588-    runners: {
+589-      first: !!gameState?.bases?.first,
+590-      second: !!gameState?.bases?.second,
+591-      third: !!gameState?.bases?.third,
+592-    },
+593-    homeScore: gameState?.homeScore ?? 0,
+594-    awayScore: gameState?.awayScore ?? 0,
+595-  }), [gameState]);
+596-
+--
+620-  // Player card modal state - EXH-036: Added playerId for mojo/fitness editing
+621-  const [selectedPlayer, setSelectedPlayer] = useState<{ name: string; type: 'batter' | 'pitcher'; playerId: string } | null>(null);
+622-
+623:  // End game confirmation state
+624:  const [showEndGameConfirmation, setShowEndGameConfirmation] = useState(false);
+625-
+626-  // Runner names tracking - who is on each base
+627-  // Updated when batters reach base via hit, walk, error, etc.
+628-  const [runnerNames, setRunnerNames] = useState<{
+629-    first?: string;
+630-    second?: string;
+631-    third?: string;
+632-  }>({});
+633-
+634-  // T1-02/03/04 FIX: Sync runnerNames from the runner tracker whenever bases change.
+--
+760-  }, []);
+761-
+762-  useEffect(() => {
+763:    const hadPrompt = previousPitchCountPromptRef.current !== null;
+764:    if (hadPrompt && !pitchCountPrompt) {
+765-      queuePlayLogRefreshRef.current(0);
+766-    }
+767:    previousPitchCountPromptRef.current = pitchCountPrompt;
+768:  }, [pitchCountPrompt]);
+769-
+770-  useEffect(() => {
+771-    if (!selectedPlayLogEntry?.eventId || selectedPlayLogEntry.eventType === 'at_bat') {
+772-      setSelectedBetweenPlayEvent(null);
+773-      setSelectedBetweenPlayEventLoading(false);
+774-      return;
+775-    }
+776-
+777-    let cancelled = false;
+778-    setSelectedBetweenPlayEventLoading(true);
+--
+1022-  const selectedHistoricalTeamSide = useMemo(() => {
+1023-    if (!selectedBetweenPlayEvent) return null;
+1024-    if (selectedBetweenPlayEvent.type === 'pitcher_change') {
+1025:      return selectedBetweenPlayEvent.gameState?.halfInning === 'TOP' ? 'home' : 'away';
+1026-    }
+1027-    if (
+1028-      selectedBetweenPlayEvent.type === 'stolen_base'
+1029-      || selectedBetweenPlayEvent.type === 'caught_stealing'
+1030-      || selectedBetweenPlayEvent.type === 'pickoff'
+1031-      || selectedBetweenPlayEvent.type === 'wild_pitch'
+1032-      || selectedBetweenPlayEvent.type === 'passed_ball'
+1033-      || selectedBetweenPlayEvent.type === 'runner_advance'
+1034-    ) {
+1035:      return selectedBetweenPlayEvent.gameState?.halfInning === 'TOP' ? 'home' : 'away';
+1036-    }
+1037-    if (selectedBetweenPlayEvent.substitution) {
+1038-      return (
+1039-        resolveRosterTeamSide(
+1040-          selectedBetweenPlayEvent.substitution.outPlayerId,
+1041-          selectedBetweenPlayEvent.substitution.outPlayerName,
+1042-        ) ||
+1043-        resolveRosterTeamSide(
+1044-          selectedBetweenPlayEvent.substitution.inPlayerId,
+1045-          selectedBetweenPlayEvent.substitution.inPlayerName,
+--
+1574-        }
+1575-
+1576-        if (event.type === 'pitcher_change' && event.pitcherChange) {
+1577:          const side = event.gameState?.halfInning === 'TOP' ? 'home' : 'away';
+1578-          const nextPitcher = {
+1579-            playerId: event.pitcherChange.incomingPitcherId,
+1580-            playerName: event.pitcherChange.incomingPitcherName || event.pitcherChange.incomingPitcherId,
+1581-          };
+1582-          if (side === 'away') awayPitcher = nextPitcher;
+1583-          else homePitcher = nextPitcher;
+1584-        }
+1585-      });
+1586-
+1587:    const defensiveSide = atBatEvent.halfInning === 'TOP' ? 'home' : 'away';
+1588-    const alignment = (defensiveSide === 'away' ? awayLineup : homeLineup).reduce<Partial<Record<Position, { playerId: string; playerName: string }>>>((acc, player) => {
+1589-      acc[player.position] = {
+1590-        playerId: player.playerId,
+1591-        playerName: player.playerName,
+1592-      };
+1593-      return acc;
+1594-    }, {});
+1595-    const activePitcher = defensiveSide === 'away' ? awayPitcher : homePitcher;
+1596-    if (activePitcher) {
+1597-      alignment.P = {
+--
+1799-          homeRecord: (() => { const [w, l] = homeRecord.split('-').map(Number); return { w: w || 0, l: l || 0 }; })(),
+1800-        });
+1801-
+1802:        // Layer 1C: Snapshot starting lineups for GameRecord archive
+1803-        startingLineupsRef.current = captureStartingLineups(awayLineup, homeLineup);
+1804-
+1805-        if (!cancelled) {
+1806-          setGameInitialized(true);
+1807-        }
+1808-      } catch (err) {
+1809-        console.error('[GameTracker] Failed to initialize/load game:', err);
+1810-        // Fail-open so a transient persistence error cannot black-screen the UI.
+1811-        if (!cancelled) {
+1812-          setGameInitialized(true);
+--
+1957-  const setPlayerMojoByName = useCallback((name: string, team: 'away' | 'home', newMojo: MojoLevel) => {
+1958-    const playerId = getPlayerIdFromName(name, team);
+1959-    const currentPlayer = playerStateHook.getPlayer(playerId);
+1960:    const previousMojo = currentPlayer?.gameState.currentMojo;
+1961-    if (previousMojo === undefined || previousMojo === newMojo) return;
+1962-
+1963-    playerStateHook.setMojo(playerId, newMojo);
+1964-    void recordPlayerStateChange(
+1965-      playerId,
+1966-      name,
+1967-      'mojo',
+1968-      previousMojo,
+1969-      newMojo,
+1970-      'Player card adjustment',
+--
+2165-    return getRunnerIdentityForBase(leadRunnerBase);
+2166-  }, [gameState.bases.first, gameState.bases.second, gameState.bases.third, getRunnerIdentityForBase]);
+2167-
+2168:  // Handler for lineup card substitutions (Phase 6)
+2169-  const handleLineupCardSubstitution = useCallback((sub: SubstitutionData) => {
+2170-    console.log("LineupCard substitution:", sub);
+2171-
+2172-    // GAP-GT-7-C: Block substitution if the outgoing player is a pending PH who hasn't batted yet
+2173-    if (pendingPH && pendingPH === sub.outgoingPlayerId) {
+2174-      console.warn(`[GameTracker] Substitution blocked: PH ${sub.outgoingPlayerName} must bat before being replaced`);
+2175-      // TODO: Show UI toast to user
+2176-      return;
+2177-    }
+2178-
+--
+3268-  }, [commitPlateAppearance, gameState, ifrPrompt, logAction, pushPlayLogEntry, runnerNames, setNextEventEnrichment, shortInningLabel, getPendingAtBatIdentity]);
+3269-
+3270-  // Handle special events (Web Gem, Robbery, TOOTBLAN, etc.) from the canonical tracker modifier flow
+3271:  // Phase 5B: Extended to handle all contextual button events
+3272-  const handleSpecialEvent = useCallback(async (event: SpecialEventData, sourceAtBat?: AtBatEvent) => {
+3273-    console.log("Special event:", event);
+3274-
+3275-    try {
+3276-      // Capture undo snapshot before recording
+3277-      const eventLabel = event.eventType.replace(/_/g, ' ');
+3278-      const actor = event.fielderName || event.runnerId || 'player';
+3279-      undoSystem.captureSnapshot(`${eventLabel} by ${actor}`);
+3280-
+3281-      const normalizedEventType = normalizeSpecialEventType(event.eventType);
+--
+3307-          : sourceAtBat?.batterName || event.batterName,
+3308-        leverageIndex: sourceAtBat?.leverageIndex,
+3309-        inning: sourceAtBat?.inning,
+3310:        halfInning: sourceAtBat?.halfInning,
+3311-      });
+3312-
+3313-      const sourceBatterId = sourceAtBat?.batterId || event.batterId || gameState.currentBatterId;
+3314-      const sourceBatterName = sourceAtBat?.batterName || event.batterName || resolvedCurrentBatterName || gameState.currentBatterName;
+3315-      const pitcherId = event.fielderPosition === 1 && fielderId ? fielderId : sourceAtBat?.pitcherId || gameState.currentPitcherId;
+3316-      const pitcherName = event.fielderPosition === 1 && event.fielderName
+3317-        ? event.fielderName
+3318-        : sourceAtBat?.pitcherName || resolvedCurrentPitcherName || gameState.currentPitcherName;
+3319-
+3320-      if (normalizedEventType === 'KILLED' && pitcherId && pitcherName && event.newFitness) {
+--
+3359-        playerStateHook.setFitness(pitcherId, event.newFitness);
+3360-        queuePlayLogRefresh(0);
+3361-      } else if (normalizedEventType === 'NUTSHOT' && pitcherId && pitcherName && event.mojoImpact) {
+3362:        const previousMojo = playerStateHook.getPlayer(pitcherId)?.gameState.currentMojo ?? 0;
+3363-        const mojoDelta = event.mojoImpact === 'RATTLED' ? -2 : -1;
+3364-        const nextMojo = clampMojo(previousMojo + mojoDelta);
+3365-        const reason = `Nut shot by ${sourceBatterName}`;
+3366-
+3367-        await recordPlayerStateChange(
+3368-          pitcherId,
+3369-          pitcherName,
+3370-          'mojo',
+3371-          previousMojo,
+3372-          nextMojo,
+--
+3989-
+3990-  // Handle end of inning
+3991-  const handleEndInning = useCallback(() => {
+3992:    // Layer 5 (§4.4): Check for unenriched plays before transitioning
+3993:    const currentHalfPlays = playLogEntries.filter(e => e.inningLabel === shortInningLabel());
+3994-    const unenriched = currentHalfPlays.filter(e =>
+3995-      e.isEnrichable && (!e.hasPitchType || !e.hasLocationData || !e.hasFieldingData)
+3996-    );
+3997-    if (unenriched.length > 0) {
+3998-      setUnenrichedCount(unenriched.length);
+3999-      setShowEnrichmentPrompt(true);
+4000-    }
+4001-
+4002-    endInning();
+4003-    // Clear runner names when inning ends (bases are cleared)
+--
+4221-    setShowEnrichmentPrompt(false);
+4222-  }, []);
+4223-
+4224:  // Handle end game with navigation
+4225:  const handleEndGame = useCallback(async () => {
+4226-    // T1-08 FIX: Prevent double execution from useEffect re-firing
+4227-    if (gameEndingRef.current) {
+4228:      console.log('[T1-08] handleEndGame already in progress — skipping duplicate call');
+4229-      return;
+4230-    }
+4231-    gameEndingRef.current = true;
+4232:    let endGameCompleted = false;
+4233-
+4234-    try {
+4235:      // MAJ-09: End-of-game achievement detection (No-Hitter, Perfect Game, Maddux, CG, Shutout)
+4236-      try {
+4237-        const totalGameOuts = gameState.inning * 3; // Approximate from current inning
+4238-        for (const [pitcherId, pStats] of pitcherStats.entries()) {
+4239-          if (!pStats.isStarter) continue; // Only starters can have CG/NH/PG
+4240-
+4241-          const ipOuts = pStats.outsRecorded;
+4242:          // Complete game: starter must have pitched the entire game (≥ scheduled innings × 3 outs)
+4243-          const scheduledOuts = 9 * 3; // 9-inning game standard
+4244:          const isCompleteGame = ipOuts >= scheduledOuts;
+4245:          if (!isCompleteGame) continue;
+4246-
+4247-          const pitcherName = pitcherId; // ID contains name info from game state tracking
+4248:          const isShutout = isCompleteGame && pStats.runsAllowed === 0;
+4249-          const isNoHitter = isShutout && pStats.hitsAllowed === 0;
+4250-          const isPerfectGame = isNoHitter && pStats.walksAllowed === 0 && (pStats.hitByPitch || 0) === 0;
+4251-          const isMaddux = isShutout && pStats.pitchCount < 100;
+4252-
+4253-          if (isPerfectGame) {
+4254-            fameTrackingHook.recordFameEvent('PERFECT_GAME' as FameEventType, pitcherId, pitcherName, gameState.inning, gameState.isTop ? 'TOP' : 'BOTTOM', 1.0);
+4255-            console.log(`[MAJ-09] Perfect Game detected for ${pitcherId}`);
+4256-          } else if (isNoHitter) {
+4257-            fameTrackingHook.recordFameEvent('NO_HITTER' as FameEventType, pitcherId, pitcherName, gameState.inning, gameState.isTop ? 'TOP' : 'BOTTOM', 1.0);
+4258-            console.log(`[MAJ-09] No-Hitter detected for ${pitcherId}`);
+--
+4268-          }
+4269-        }
+4270-      } catch (detectionError) {
+4271:        console.warn('[MAJ-09] End-of-game detection error (non-blocking):', detectionError);
+4272-      }
+4273-
+4274-      // MAJ-02: Update fan morale at game end (franchise/playoff only — no morale in exhibition)
+4275-      if (gameMode !== 'exhibition') {
+4276-        try {
+4277-          const homeWon = gameState.homeScore > gameState.awayScore;
+4278-          const homeRunDiff = gameState.homeScore - gameState.awayScore;
+4279-          const isBlowout = Math.abs(homeRunDiff) >= 7;
+4280-          const isRivalMatchup = areRivals(leagueId, homeTeamId, awayTeamId);
+4281-
+--
+4289-            }
+4290-          }
+4291-
+4292:          // MAJ-14: Walk-off = home team wins in the bottom half (scored go-ahead run in their last at-bat)
+4293:          const isWalkOff = homeWon && !gameState.isTop;
+4294-
+4295-          // Home team perspective
+4296-          const homeResult: FanMoraleGameResult = {
+4297-            gameId: gameId || 'demo-game',
+4298-            won: homeWon,
+4299:            isWalkOff, // MAJ-14: Use real walk-off detection
+4300-            isNoHitter: isNoHitter && homeWon, // Only counts for the winning side
+4301-            isShutout: isShutout && homeWon,
+4302-            isBlowout,
+4303-            vsRival: isRivalMatchup,
+4304-            runDifferential: homeRunDiff,
+4305-            playerPerformances: [],
+4306-          };
+4307-          homeFanMorale.processGameResult(homeResult, { season: 1, game: 1 }, isRivalMatchup ? awayTeamName : undefined);
+4308-
+4309-          // Away team perspective (opposite won/runDiff, mirrored no-hitter/shutout)
+4310-          const awayResult: FanMoraleGameResult = {
+4311-            gameId: gameId || 'demo-game',
+4312-            won: !homeWon,
+4313:            isWalkOff, // MAJ-14: Same walk-off flag (away team experienced it too)
+4314-            isNoHitter: isNoHitter && !homeWon,
+4315-            isShutout: isShutout && !homeWon,
+4316-            isBlowout,
+4317-            vsRival: isRivalMatchup,
+4318-            runDifferential: -homeRunDiff,
+4319-            playerPerformances: [],
+4320-          };
+4321-          awayFanMorale.processGameResult(awayResult, { season: 1, game: 1 }, isRivalMatchup ? homeTeamName : undefined);
+4322-
+4323-          console.log(`[MAJ-02] Fan morale updated (both teams) — homeWon: ${homeWon}, diff: ${homeRunDiff}, shutout: ${isShutout}`);
+--
+4391-        ?? computedSeasonId
+4392-        ?? `season-${navigationState?.seasonNumber ?? 1}`;
+4393-      pushActivityLog(
+4394:        `[Game End] ${homeTeamName} ${gameState.homeScore} - ${awayTeamName} ${gameState.awayScore} (Inning ${gameState.inning})`
+4395-      );
+4396:    const endGameOptions = {
+4397-      activityLog,
+4398-      seasonId: computedSeasonId,
+4399-      statsScopeId: computedStatsScopeId,
+4400-      competitionType,
+4401-      competitionId,
+4402-      franchiseId: navigationState?.franchiseId,
+4403-      currentSeason: navigationState?.seasonNumber ?? 1,
+4404-      stadiumName: selectedStadium,
+4405-      };
+4406:      await hookEndGame(endGameOptions);
+4407-
+4408-      // Save mojo/fitness snapshots for elimination inter-game persistence
+4409-      if (navigationState?.gameMode === 'elimination' && navigationState?.eliminationId) {
+4410-        try {
+4411-          const { saveMojoFitnessSnapshots } = await import('../../../utils/mojoFitnessStorage');
+4412-          const allPlayers = playerStateHook.getAllPlayers();
+4413-          await saveMojoFitnessSnapshots(
+4414-            navigationState.eliminationId,
+4415-            allPlayers.map((p) => ({
+4416-              playerId: p.playerId,
+--
+4444-        }
+4445-      }
+4446-
+4447:      // GAP-GT-3-J: Clear undo stack — game is over, undo must not be possible after navigation
+4448-      undoSystem.clearHistory();
+4449-
+4450-      // Pass game mode and narratives so PostGameSummary can display them
+4451-      navigate(`/post-game/${gameId}`, {
+4452-        state: {
+4453-          gameMode: navigationState?.gameMode || 'franchise',
+4454-          franchiseId: navigationState?.franchiseId || gameId?.replace('franchise-', '') || '1',
+4455-          eliminationId: navigationState?.eliminationId,
+4456-          seasonId: computedSeasonId,
+4457-          statsScopeId: computedStatsScopeId,
+--
+4461-          awayNarrative,
+4462-        }
+4463-      });
+4464:      endGameCompleted = true;
+4465-    } catch (err) {
+4466:      console.error('[GameTracker] End game flow failed:', err);
+4467-    } finally {
+4468:      // Release the guard lock if end-game did not complete, so user can retry.
+4469:      if (!endGameCompleted) {
+4470-        gameEndingRef.current = false;
+4471-      }
+4472-    }
+4473:  }, [hookEndGame, navigate, gameId, navigationState?.gameMode, navigationState?.eliminationId, navigationState?.franchiseId, navigationState?.seasonId, navigationState?.seasonNumber, gameMode, gameState, pitcherStats, fameTrackingHook, homeFanMorale, awayFanMorale, homeTeamName, awayTeamName, mwarHook, homeManagerId, homeTeamId, activityLog, pushActivityLog, playerStateHook, competitionType, competitionId, statsScopeId, selectedStadium]);
+4474-
+4475:  // T0-01: Auto-trigger endGame when regulation ends
+4476-  useEffect(() => {
+4477-    if (showAutoEndPrompt) {
+4478:      console.log('[T0-01] Auto game-end detected — triggering handleEndGame');
+4479-      dismissAutoEndPrompt();
+4480:      handleEndGame();
+4481-    }
+4482:  }, [showAutoEndPrompt, dismissAutoEndPrompt, handleEndGame]);
+4483-
+4484-  useEffect(() => {
+4485-    if (!mwarHook.managerMoment.isTriggered || !gameState.gameId) {
+4486-      return;
+4487-    }
+4488-
+4489-    const momentKey = [
+4490-      gameState.inning,
+4491-      gameState.isTop ? 'TOP' : 'BOTTOM',
+4492-      gameState.outs,
+--
+4611-           │                             │                       │panel)│
+4612-           ├─────────────────────────────┼───────────────────────┤      │
+4613-           │ QUICK BAR (bottom-left)     │ MODIFIERS (bot-right) │      │
+4614:           │ outcome buttons             │ undo + end game       │      │
+4615-           └─────────────────────────────┴───────────────────────┴──────┘
+4616-           ═══════════════════════════════════════════════════════════════ */}
+4617-      <div className="flex h-screen flex-col overflow-hidden bg-[#6B9462] text-white">
+4618-        <FullFenwayScoreboard
+4619-          awayTeamName={awayTeamName.toUpperCase()}
+4620-          homeTeamName={homeTeamName.toUpperCase()}
+4621-          awayRecord={awayRecord}
+4622-          homeRecord={homeRecord}
+4623-          innings={scoreboard.innings}
+4624-          awayRuns={scoreboard.away.runs}
+--
+4848-              <div className="p-2 border-t border-[#4a6a4a]">
+4849-                <button
+4850-                  onClick={() => void handleRunnerCorrectionCommit()}
+4851:                  className="w-full bg-[#34d399] text-[#062b1f] font-bold text-[11px] py-2 border-2 border-[#10b981] hover:bg-[#6ee7b7] active:scale-[0.99] transition-transform"
+4852-                >
+4853-                  END AT-BAT
+4854-                </button>
+4855-              </div>
+4856-            </div>
+4857-            )
+4858-          ) : pendingRunnerAttribution !== null ? (
+4859-            <LiveRunnerAttributionPanel
+4860-              title={pendingRunnerAttribution.title}
+4861-              summary={pendingRunnerAttribution.summary}
+--
+4951-                      setShowManagerMomentPanel(false);
+4952-                      console.log(`[mWAR] User called ${mwarHook.managerMoment.decisionType}: ${decisionId}`);
+4953-                    }}
+4954:                    className="flex-1 py-1.5 text-[10px] bg-[#FFD700] text-[#2A3A22] font-bold border-2 border-[#B8960A] hover:bg-[#E8C400] active:scale-95 transition-transform"
+4955-                  >
+4956-                    Call {mwarHook.managerMoment.decisionType?.replace(/_/g, ' ')}
+4957-                  </button>
+4958-                  <button
+4959-                    onClick={() => {
+4960-                      mwarHook.dismissManagerMoment();
+4961-                      setShowManagerMomentPanel(false);
+4962-                    }}
+4963:                    className="flex-1 py-1.5 text-[10px] bg-[#5A8352] text-[#E8E8D8] border-2 border-[#4A6844] hover:bg-[#4F7D4B] active:scale-95 transition-transform"
+4964-                  >
+4965-                    Skip
+4966-                  </button>
+4967-                </div>
+4968-              )}
+4969-            </div>
+4970-          )}
+4971-        </div>
+4972-
+4973-        {/* ZONE 5: Modifiers + Actions — bottom center */}
+--
+4982-                  <button
+4983-                    onClick={() => setShowTouchPlayReview(true)}
+4984-                    className="bg-[#2f3b21] border-[3px] border-[#5a6b38] px-3 py-2.5 text-[#E8E8D8] text-xs font-bold
+4985:                               shadow-[2px_2px_0px_0px_rgba(0,0,0,0.5)] active:scale-95 transition-transform
+4986-                               hover:bg-[#374728]"
+4987-                  >
+4988-                    REVIEW
+4989-                  </button>
+4990-                )}
+4991-                <button
+4992-                  onClick={() => {
+4993-                    setLineupOverlayHint('Use LINEUP for batting order, bench players, pinch runners, and pitching changes.');
+4994-                    setShowLineupOverlay(true);
+4995-                  }}
+4996-                  className="bg-[#1a5276] border-[3px] border-[#5dade2] px-4 py-2.5 text-white text-sm font-bold
+4997:                             shadow-[2px_2px_0px_0px_rgba(0,0,0,0.5)] active:scale-95 transition-transform
+4998-                             hover:bg-[#21618c]"
+4999-                >
+5000-                  LINEUP
+5001-                </button>
+5002-                <button
+5003-                  onClick={() => {
+5004-                    const firstUnenriched = [...playLogEntries].reverse().find(entry =>
+5005-                      entry.isEnrichable &&
+5006-                      (!entry.hasFieldingData || !entry.hasLocationData || !entry.hasPitchType || !entry.hasPitchCount)
+5007-                    );
+--
+5011-                    setLineupOverlayHint('Tap the main field to set spray/location. Use the play log panel for pitch and sequence edits.');
+5012-                  }}
+5013-                  className="bg-[#4A6844] border-[3px] border-[#88AA88] px-3 py-2.5 text-white text-xs font-bold
+5014:                             shadow-[2px_2px_0px_0px_rgba(0,0,0,0.5)] active:scale-95 transition-transform
+5015-                             hover:bg-[#5A8352]"
+5016-                >
+5017-                  +FLD
+5018-                </button>
+5019-                <button
+5020-                  onClick={() => {
+5021-                    const latestAtBat = [...playLogEntries].reverse().find((entry) => entry.eventType === 'at_bat' && entry.isEnrichable);
+5022-                    if (latestAtBat) {
+5023-                      setEnrichingEntry(latestAtBat);
+5024-                    }
+5025-                    setLineupOverlayHint('Use the at-bat editor for modifiers and special-event enhancements.');
+5026-                  }}
+5027-                  className="bg-[#6c3483] border-[3px] border-[#af7ac5] px-3 py-2.5 text-white text-xs font-bold
+5028:                             shadow-[2px_2px_0px_0px_rgba(0,0,0,0.5)] active:scale-95 transition-transform
+5029-                             hover:bg-[#7d3c98]"
+5030-                >
+5031-                  +MOD
+5032-                </button>
+5033-              </div>
+5034-              <div className="text-[8px] text-[#C4A853] min-w-0 truncate">
+5035-                {canUseMainFieldLocation
+5036-                  ? 'Location enrichment is active: tap the main field. K/Kc stays in the play log.'
+5037-                  : lineupOverlayHint ?? 'Tap a play to enrich. Use the main field for +loc and LINEUP for substitutions.'}
+5038-              </div>
+--
+5040-            <div className="flex items-center gap-2">
+5041-              <undoSystem.UndoButtonComponent />
+5042-              <button
+5043:                onClick={() => setShowEndGameConfirmation(true)}
+5044-                className="bg-[#DD0000] border-[3px] border-white px-4 py-2.5 text-white text-sm font-bold
+5045:                           shadow-[2px_2px_0px_0px_rgba(0,0,0,0.5)] active:scale-95 transition-transform
+5046-                           hover:bg-[#FF0000]"
+5047-              >
+5048-                END
+5049-              </button>
+5050-            </div>
+5051-          </div>
+5052-        </div>
+5053-
+5054-        {/* ══════════════════════════════════════════════════════════════
+5055-             BELOW: Modals and overlays render inside the grid container
+--
+5094-              <div className="flex-shrink-0 p-2 border-t border-[#4a6a4a] bg-[#2a3a2d]">
+5095-                <button
+5096-                  onClick={() => void handleRunnerCorrectionCommit()}
+5097:                  className="w-full bg-[#34d399] text-[#062b1f] font-bold text-[11px] py-2 border-2 border-[#10b981] hover:bg-[#6ee7b7] active:scale-[0.99] transition-transform"
+5098-                >
+5099-                  END AT-BAT
+5100-                </button>
+5101-              </div>
+5102-            </div>
+5103-          </div>
+5104-        )}
+5105-
+5106-        {prefersTouchPanels && showTouchPlayReview && (
+5107-          <div className="fixed inset-0 z-40 bg-black/60 flex items-center justify-center p-4">
+--
+5210-
+5211-        {/* Play Location Overlay - REMOVED (now using drag-drop interface) */}
+5212-
+5213:        {/* End Game Confirmation — with post-game enrichment prompt (Ticket 5.8) */}
+5214:        {showEndGameConfirmation && !showPostGameEnrichPrompt && (
+5215-          <div
+5216-            className="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center z-50"
+5217:            onClick={() => setShowEndGameConfirmation(false)}
+5218-          >
+5219-            <div
+5220-              className="bg-[#556B55] border-[6px] border-[#4A6844] p-4 w-[340px] shadow-[8px_8px_0px_0px_rgba(0,0,0,0.8)]"
+5221-              onClick={(e) => e.stopPropagation()}
+5222-            >
+5223-              {/* Header */}
+5224-              <div className="bg-[#3d5240] border-[4px] border-[#E8E8D8] p-2 mb-3">
+5225-                <div className="flex items-center justify-between">
+5226-                  <div>
+5227:                    <div className="text-xs text-[#E8E8D8] font-bold">END GAME CONFIRMATION</div>
+5228-                  </div>
+5229-                  <button
+5230:                    onClick={() => setShowEndGameConfirmation(false)}
+5231-                    className="bg-[#5A8352] border-[3px] border-[#E8E8D8] px-2 py-1 text-[#E8E8D8] text-xs hover:bg-[#4A6844]"
+5232-                  >
+5233-                    ✕
+5234-                  </button>
+5235-                </div>
+5236-              </div>
+5237-
+5238-              {/* Confirmation Message */}
+5239-              <div className="text-[8px] text-[#E8E8D8] font-bold mb-4">
+5240:                Are you sure you want to end the game? This action cannot be undone.
+5241-              </div>
+5242-
+5243-              {/* Unenriched count (Ticket 5.8) */}
+5244-              {(() => {
+5245-                const totalEnrichable = playLogEntries.filter(e => e.isEnrichable).length;
+5246-                const unenriched = playLogEntries.filter(e =>
+5247-                  e.isEnrichable && (!e.hasPitchType || !e.hasLocationData)
+5248-                ).length;
+5249-                return unenriched > 0 ? (
+5250-                  <div className="text-[8px] text-[#C4A853] mb-3">
+--
+5256-              {/* Buttons */}
+5257-              <div className="flex gap-2">
+5258-                <button
+5259:                  onClick={() => setShowEndGameConfirmation(false)}
+5260:                  className="flex-1 bg-[#3d5240] border-[5px] border-[#E8E8D8] py-4 text-[#E8E8D8] text-sm hover:bg-[#4A6844] active:scale-95 transition-transform"
+5261-                >
+5262-                  CANCEL
+5263-                </button>
+5264-                <button
+5265-                  onClick={() => {
+5266-                    // Check for unenriched plays
+5267-                    const unenriched = playLogEntries.filter(e =>
+5268-                      e.isEnrichable && (!e.hasPitchType || !e.hasLocationData)
+5269-                    ).length;
+5270-                    if (unenriched > 0) {
+5271-                      setPostGameUnenrichedCount(unenriched);
+5272-                      setShowPostGameEnrichPrompt(true);
+5273-                    } else {
+5274:                      handleEndGame();
+5275-                    }
+5276-                  }}
+5277:                  className="flex-1 bg-[#DD0000] border-[5px] border-white py-4 text-white text-sm hover:bg-[#FF0000] active:scale-95 transition-transform"
+5278-                >
+5279:                  END GAME
+5280-                </button>
+5281-              </div>
+5282-            </div>
+5283-          </div>
+5284-        )}
+5285-
+5286-        {/* Post-game enrichment prompt (Ticket 5.8) */}
+5287-        {showPostGameEnrichPrompt && (
+5288-          <div
+5289-            className="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center z-50"
+5290:            onClick={() => { setShowPostGameEnrichPrompt(false); handleEndGame(); }}
+5291-          >
+5292-            <div
+5293-              className="bg-[#556B55] border-[6px] border-[#4A6844] p-4 w-[340px] shadow-[8px_8px_0px_0px_rgba(0,0,0,0.8)]"
+5294-              onClick={(e) => e.stopPropagation()}
+5295-            >
+5296-              <div className="bg-[#3d5240] border-[4px] border-[#E8E8D8] p-2 mb-3">
+5297-                <div className="text-xs text-[#E8E8D8] font-bold">ENRICHMENT</div>
+5298-              </div>
+5299-              <div className="text-[9px] text-[#E8E8D8] mb-4">
+5300-                {postGameUnenrichedCount} play{postGameUnenrichedCount !== 1 ? 's' : ''} unenriched. Enrich now or continue?
+--
+5303-                <button
+5304-                  onClick={() => {
+5305-                    setShowPostGameEnrichPrompt(false);
+5306:                    setShowEndGameConfirmation(false);
+5307-                    // Open enrichment on first unenriched play
+5308-                    const firstUnenriched = playLogEntries.find(e =>
+5309-                      e.isEnrichable && (!e.hasPitchType || !e.hasLocationData)
+5310-                    );
+5311-                    if (firstUnenriched) setEnrichingEntry(firstUnenriched);
+5312-                  }}
+5313:                  className="flex-1 bg-[#3d5240] border-[5px] border-[#C4A853] py-3 text-[#C4A853] text-sm hover:bg-[#4A6844] active:scale-95 transition-transform"
+5314-                >
+5315-                  ENRICH
+5316-                </button>
+5317-                <button
+5318:                  onClick={() => { setShowPostGameEnrichPrompt(false); handleEndGame(); }}
+5319:                  className="flex-1 bg-[#DD0000] border-[5px] border-white py-3 text-white text-sm hover:bg-[#FF0000] active:scale-95 transition-transform"
+5320-                >
+5321-                  CONTINUE
+5322-                </button>
+5323-              </div>
+5324-            </div>
+5325-          </div>
+5326-        )}
+5327-
+5328-        {/* Undo toast notification */}
+5329-        <undoSystem.ToastComponent />
+--
+5337-          />
+5338-        )}
+5339-
+5340:        {/* Pitch Count Prompt Modal (per PITCH_COUNT_TRACKING_SPEC.md) */}
+5341:        {pitchCountPrompt && (
+5342:          <PitchCountModal
+5343:            prompt={pitchCountPrompt}
+5344-            onConfirm={(pitcherId: string, finalCount: number) => {
+5345-              const result = confirmPitchCount(pitcherId, finalCount);
+5346-              if (result.immaculateInning) {
+5347-                fameTrackingHook.recordFameEvent(
+5348-                  'IMMACULATE_INNING' as FameEventType,
+5349-                  result.immaculateInning.pitcherId,
+5350-                  result.immaculateInning.pitcherName,
+5351-                  gameState.inning,
+5352-                  gameState.isTop ? 'TOP' : 'BOTTOM',
+5353-                  1.0
+5354-                );
+5355-              }
+5356-            }}
+5357:            onDismiss={dismissPitchCountPrompt}
+5358-          />
+5359-        )}
+5360-
+5361-        {/* D-4: HR Inline Prompt — distance + pitch type (both optional) */}
+5362-        {hrPrompt && (
+5363-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+5364-               onClick={handleHrPromptSkip}>
+5365-            <div className="bg-[#1a2a1d] border-[3px] border-[#C4A853] rounded-lg p-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.6)] w-[280px]"
+5366-                 onClick={(e) => e.stopPropagation()}>
+5367-              <div className="text-xs font-bold text-[#C4A853] tracking-wider mb-3">HOME RUN</div>
+--
+5383-                  {PITCH_TYPES.filter(pt => pt.abbr !== 'UNK').map((pt) => (
+5384-                    <button key={pt.abbr}
+5385-                      onClick={() => setHrPrompt(p => p ? { ...p, pitchType: p.pitchType === pt.abbr ? '' : pt.abbr } : p)}
+5386:                      className={`text-[8px] px-1.5 py-0.5 rounded border transition-colors
+5387-                        ${hrPrompt.pitchType === pt.abbr
+5388-                          ? 'bg-[#C4A853]/30 border-[#C4A853] text-[#C4A853]'
+5389-                          : 'bg-[#333] border-[#555] text-[#888] hover:border-[#777]'}`}
+5390-                    >{pt.abbr}</button>
+5391-                  ))}
+5392-                </div>
+5393-              </div>
+5394-              <div className="flex gap-2">
+5395-                <button onClick={handleHrPromptDone}
+5396:                  className="flex-1 px-3 py-1.5 bg-[#6c3483] text-white text-[10px] font-bold uppercase rounded border border-[#af7ac5] hover:bg-[#7d3c98] active:scale-95 transition-all">
+5397-                  Done
+5398-                </button>
+5399-                <button onClick={handleHrPromptSkip}
+5400:                  className="flex-1 px-3 py-1.5 bg-[#333] text-[#888] text-[10px] font-bold uppercase rounded border border-[#555] hover:bg-[#444] active:scale-95 transition-all">
+5401-                  Skip
+5402-                </button>
+5403-              </div>
+5404-            </div>
+5405-          </div>
+5406-        )}
+5407-
+5408-        {/* D-3: Error Flow Prompt — base → fielder → type */}
+5409-        {errorFlow && (
+5410-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+--
+5418-                    {(['1B', '2B', '3B'] as const).map((b) => (
+5419-                      <button key={b}
+5420-                        onClick={() => setErrorFlow(f => f ? { ...f, step: 'fielder', baseReached: b } : f)}
+5421:                        className="flex-1 px-3 py-2 bg-[#7d6608] text-white text-xs font-bold rounded border-2 border-[#f4d03f] hover:bg-[#8d7618] active:scale-95 transition-all">
+5422-                        {b}
+5423-                      </button>
+5424-                    ))}
+5425-                  </div>
+5426-                </>
+5427-              )}
+5428-
+5429-              {errorFlow.step === 'fielder' && (
+5430-                <>
+5431-                  <div className="text-[10px] text-[#ccc] mb-2">Error by which fielder?</div>
+--
+5437-                    ].map(({ pos, label }) => (
+5438-                      <button key={pos}
+5439-                        onClick={() => setErrorFlow(f => f ? { ...f, step: 'type', fielderPosition: pos } : f)}
+5440:                        className="px-2 py-1.5 bg-[#333] text-white text-[10px] font-bold rounded border border-[#555] hover:border-[#f4d03f] hover:bg-[#444] active:scale-95 transition-all">
+5441-                        {pos} {label}
+5442-                      </button>
+5443-                    ))}
+5444-                  </div>
+5445-                </>
+5446-              )}
+5447-
+5448-              {errorFlow.step === 'type' && (
+5449-                <>
+5450-                  <div className="text-[10px] text-[#ccc] mb-2">Error type?</div>
+--
+5452-                    {['Fielding', 'Throwing', 'Mental'].map((t) => (
+5453-                      <button key={t}
+5454-                        onClick={() => handleErrorFlowComplete(errorFlow.baseReached, errorFlow.fielderPosition, t.toUpperCase() as PlayData['errorType'])}
+5455:                        className="flex-1 px-2 py-2 bg-[#7d6608] text-white text-[10px] font-bold rounded border-2 border-[#f4d03f] hover:bg-[#8d7618] active:scale-95 transition-all">
+5456-                        {t}
+5457-                      </button>
+5458-                    ))}
+5459-                  </div>
+5460-                </>
+5461-              )}
+5462-
+5463-              <button
+5464-                onClick={() => setErrorFlow(null)}
+5465:                className="w-full mt-3 px-3 py-1 bg-[#333] text-[#888] text-[9px] font-bold uppercase rounded border border-[#555] hover:bg-[#444] active:scale-95 transition-all">
+5466-                Cancel
+5467-              </button>
+5468-            </div>
+5469-          </div>
+5470-        )}
+5471-
+5472-        {/* D-5: SF Prompt — "Sac fly — run scores?" */}
+5473-        {sfPrompt && (
+5474-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+5475-            <div className="bg-[#1a2a1d] border-[3px] border-[#FF4444] rounded-lg p-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.6)] w-[260px]">
+--
+5477-              <div className="text-[11px] text-[#ccc] mb-3">Sac fly — run scores?</div>
+5478-              <div className="flex gap-2">
+5479-                <button onClick={() => handleSfPromptAnswer(true)}
+5480:                  className="flex-1 px-3 py-2 bg-[#2E7D32] text-white text-xs font-bold uppercase rounded border border-[#4CAF50] hover:bg-[#388E3C] active:scale-95 transition-all">
+5481-                  Yes — SF
+5482-                </button>
+5483-                <button onClick={() => handleSfPromptAnswer(false)}
+5484:                  className="flex-1 px-3 py-2 bg-[#8B0000] text-white text-xs font-bold uppercase rounded border border-[#FF4444] hover:bg-[#a00] active:scale-95 transition-all">
+5485-                  No — FO
+5486-                </button>
+5487-              </div>
+5488-            </div>
+5489-          </div>
+5490-        )}
+5491-
+5492-        {/* D-6: GO→DP Prompt — "Double play?" */}
+5493-        {dpPrompt && (
+5494-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+--
+5497-              <div className="text-[11px] text-[#ccc] mb-3">Double play?</div>
+5498-              <div className="flex gap-2">
+5499-                <button onClick={() => handleDpPromptAnswer(true)}
+5500:                  className="flex-1 px-3 py-2 bg-[#8B0000] text-white text-xs font-bold uppercase rounded border border-[#FF4444] hover:bg-[#a00] active:scale-95 transition-all">
+5501-                  Yes — DP
+5502-                </button>
+5503-                <button onClick={() => handleDpPromptAnswer(false)}
+5504:                  className="flex-1 px-3 py-2 bg-[#333] text-white text-xs font-bold uppercase rounded border border-[#555] hover:bg-[#444] active:scale-95 transition-all">
+5505-                  No — GO
+5506-                </button>
+5507-              </div>
+5508-            </div>
+5509-          </div>
+5510-        )}
+5511-
+5512-        {/* D-7: IFR Prompt — "Infield Fly Rule?" */}
+5513-        {ifrPrompt && (
+5514-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+--
+5517-              <div className="text-[11px] text-[#ccc] mb-3">Infield Fly Rule?</div>
+5518-              <div className="flex gap-2">
+5519-                <button onClick={() => handleIfrPromptAnswer(true)}
+5520:                  className="flex-1 px-3 py-2 bg-[#4444AA] text-white text-xs font-bold uppercase rounded border border-[#6666FF] hover:bg-[#5555BB] active:scale-95 transition-all">
+5521-                  Yes — IFR
+5522-                </button>
+5523-                <button onClick={() => handleIfrPromptAnswer(false)}
+5524:                  className="flex-1 px-3 py-2 bg-[#333] text-white text-xs font-bold uppercase rounded border border-[#555] hover:bg-[#444] active:scale-95 transition-all">
+5525-                  No — PO
+5526-                </button>
+5527-              </div>
+5528-            </div>
+5529-          </div>
+5530-        )}
+5531-
+5532-      </div>{/* Close 5-zone grid */}
+5533-
+5534-      {/* ══════════════════════════════════════════════════════════════
+--
+6182-          </div>
+6183-          )}
+6184-
+6185:          {/* Control buttons - UNDO and END GAME */}
+6186-          <div className="flex gap-3 items-center">
+6187-            <button
+6188:              className="flex-1 bg-[#808080] border-[5px] border-white py-4 text-white text-base font-bold hover:bg-[#999999] active:scale-95 transition-transform shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)]"
+6189-            >
+6190-              ⟲ UNDO
+6191-            </button>
+6192-
+6193-            {/* Logo between buttons */}
+6194-            <div className="bg-white border-[4px] border-[#0066FF] px-3 py-1 shadow-[4px_4px_0px_0px_#DD0000]">
+6195-              <div className="text-xs text-[#DD0000] tracking-wide leading-tight">SUPER MEGA</div>
+6196-              <div className="text-sm text-[#0066FF] tracking-wide leading-tight">BASEBALL</div>
+6197-            </div>
+6198-
+6199-            <button
+6200:              onClick={() => setShowEndGameConfirmation(true)}
+6201:              className="flex-1 bg-[#DD0000] border-[5px] border-white py-4 text-white text-base font-bold hover:bg-[#FF0000] active:scale-95 transition-transform shadow-[4px_4px_0px_0px_#0066FF]"
+6202-            >
+6203:              🏁 END GAME
+6204-            </button>
+6205-          </div>
+6206-      </div>)}{/* Close outer {false && (<div>)} disabled reference block */}
+6207-      </div>
+6208-    </DndProvider>
+6209-  );
+6210-}
+6211-
+6212:// Pitch Count Modal Component (per PITCH_COUNT_TRACKING_SPEC.md §5)
+6213:interface PitchCountModalProps {
+6214-  prompt: {
+6215:    type: 'pitching_change' | 'end_game' | 'end_inning';
+6216-    pitcherId: string;
+6217-    pitcherName: string;
+6218-    currentCount: number;
+6219-    lastVerifiedInning: number;
+6220-  };
+6221-  onConfirm: (pitcherId: string, finalCount: number) => void;
+6222-  onDismiss: () => void;
+6223-}
+6224-
+6225:function PitchCountModal({ prompt, onConfirm, onDismiss }: PitchCountModalProps) {
+6226:  const [pitchCount, setPitchCount] = React.useState(prompt.currentCount.toString());
+6227-
+6228-  const handleConfirm = () => {
+6229-    const count = parseInt(pitchCount, 10);
+6230-    if (!isNaN(count) && count >= 0) {
+6231-      onConfirm(prompt.pitcherId, count);
+6232-    }
+6233-  };
+6234-
+6235-  const title = prompt.type === 'pitching_change'
+6236-    ? '⚠️ PITCHING CHANGE - PITCH COUNT REQUIRED'
+6237:    : prompt.type === 'end_game'
+6238-    ? '🏁 FINAL PITCH COUNT'
+6239-    : '📊 END OF INNING - UPDATE PITCH COUNT?';
+6240-
+6241-  const isRequired = prompt.type !== 'end_inning';
+6242-
+6243-  return (
+6244-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+6245-      <div className="bg-[#556B55] border-4 border-[#3d5240] p-4 max-w-md w-full mx-4 shadow-lg">
+6246-        <div className="text-[#FFD700] text-sm font-bold mb-3">{title}</div>
+6247-
+--
+6320-function PlayerBox({ name, number, position, style, highlighted = false }: PlayerBoxProps) {
+6321-  return (
+6322-    <div
+6323:      className="absolute pointer-events-auto cursor-pointer bg-[#3366FF] border-[#5599FF] border-[3px] px-3 py-2 text-[9px] text-white hover:scale-110 transition-transform"
+6324-      style={style}
+6325-    >
+6326-      <div className="whitespace-nowrap font-bold">{name}</div>
+6327-      <div className="text-[8px] text-white">{position} {number}</div>
+6328-    </div>
+6329-  );
+6330-}
+6331-
+6332-interface SNESButtonProps {
+6333-  label: string;
+--
+6347-  return (
+6348-    <button
+6349-      onClick={onClick}
+6350:      className={`${colorClasses[color]} border-[5px] py-4 text-base active:scale-95 transition-transform shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)]`}
+6351-    >
+6352-      {label}
+6353-    </button>
+6354-  );
+6355-}
+6356-
+6357-interface ExpandablePanelProps {
+6358-  title: string;
+6359-  isExpanded: boolean;
+6360-  onToggle: () => void;
+--
+6578-                          onMojoChange(level);
+6579-                          setIsEditingMojo(false);
+6580-                        }}
+6581:                        className={`px-2 py-1 text-[8px] font-bold border-2 transition-all ${
+6582-                          level === currentMojo
+6583-                            ? 'border-[#C4A853] bg-[#C4A853]/30'
+6584-                            : 'border-[#E8E8D8]/50 hover:border-[#E8E8D8]'
+6585-                        }`}
+6586-                        style={{ color: getMojoColor(level) }}
+6587-                      >
+6588-                        {MOJO_STATES[level].emoji} {MOJO_STATES[level].displayName}
+6589-                      </button>
+6590-                    ))}
+6591-                    <button
+--
+6628-                          onFitnessChange(state);
+6629-                          setIsEditingFitness(false);
+6630-                        }}
+6631:                        className={`px-2 py-1 text-[8px] font-bold border-2 transition-all ${
+6632-                          state === currentFitness
+6633-                            ? 'border-[#C4A853] bg-[#C4A853]/30'
+6634-                            : 'border-[#E8E8D8]/50 hover:border-[#E8E8D8]'
+6635-                        }`}
+6636-                        style={{ color: FITNESS_STATES[state].color }}
+6637-                      >
+6638-                        {FITNESS_STATES[state].emoji} {FITNESS_STATES[state].displayName}
+6639-                      </button>
+6640-                    ))}
+6641-                    <button
+--
+6703-  return (
+6704-    <button
+6705-      onClick={onClick}
+6706:      className={`${colorClasses[color]} border-[5px] py-4 text-base active:scale-95 transition-transform shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)] ${isExpanded ? 'border-[#FF0000]' : ''}`}
+6707-    >
+6708-      {label}
+6709-    </button>
+6710-  );
+6711-}
+6712-
+6713-interface OutcomeDetailPanelProps {
+6714-  title: string;
+6715-  children: React.ReactNode;
+6716-}
+--
+6734-  return (
+6735-    <button
+6736-      onClick={onClick}
+6737:      className={`${isSelected ? 'bg-[#FFD700] border-[#CC9900] text-black' : 'bg-[#5599FF] border-[#3366CC] text-white hover:bg-[#66AAFF]'} border-[5px] py-4 text-base active:scale-95 transition-transform shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)]`}
+6738-    >
+6739-      {label}
+6740-    </button>
+6741-  );
+6742-}
+--- useGameState.ts ---
+39-  type CompetitionType,
+40-  type PersistedGameState,
+41-} from '../utils/gameStorage';
+42:import type { AtBatResult, HalfInning, LineupState, LineupPlayer, BenchPlayer, Position } from '../../types/game';
+43-import { validateSubstitution } from '../../types/game';
+44-import { calculateLeverageIndex } from '../../engines/leverageCalculator';
+45-import { calculateWPA } from '../../engines/wpaCalculator';
+46-import {
+47-  createRunnerTrackingState,
+48-  addRunner as trackerAddRunner,
+49-  advanceRunner as trackerAdvanceRunner,
+50-  runnerOut as trackerRunnerOut,
+51-  handlePitchingChange as trackerHandlePitchingChange,
+52-  clearBases as trackerClearBases,
+--
+85-  seasonNumber: number;
+86-}
+87-
+88:export interface EndGameOptions {
+89-  activityLog?: string[];
+90-  seasonId?: string;
+91-  statsScopeId?: string;
+92-  competitionType?: CompetitionType;
+93-  competitionId?: string;
+94-  franchiseId?: string;
+95-  currentSeason?: number;
+96-  currentGame?: number;
+97-  stadiumName?: string | null;
+98-}
+--
+210-type SubstitutionLogEntry = {
+211-  type: 'player_sub' | 'pitching_change' | 'pinch_hit' | 'pinch_run' | 'defensive_sub' | 'position_switch' | 'double_switch';
+212-  inning: number;
+213:  halfInning: 'TOP' | 'BOTTOM';
+214-  outgoingPlayerId: string;
+215-  outgoingPlayerName: string;
+216-  incomingPlayerId: string;
+217-  incomingPlayerName: string;
+218-  timestamp: number;
+219-};
+220-
+221-export interface BetweenPlayEventDetails {
+222-  runnerId?: string;
+223-  runnerName?: string;
+--
+235-  actorName?: string;
+236-  leverageIndex?: number;
+237-  inning?: number;
+238:  halfInning?: 'TOP' | 'BOTTOM';
+239-}
+240-
+241-// Pitch count prompt types per PITCH_COUNT_TRACKING_SPEC.md
+242-export interface PitchCountPrompt {
+243:  type: 'pitching_change' | 'end_game' | 'end_inning';
+244-  pitcherId: string;
+245-  pitcherName: string;
+246-  currentCount: number;
+247-  lastVerifiedInning: number;
+248-  // For pitching change only
+249-  newPitcherId?: string;
+250-}
+251-
+252-export interface UseGameStateReturn {
+253-  // Game state
+--
+299-  advanceCount: (type: 'ball' | 'strike' | 'foul') => void;
+300-  resetCount: () => void;
+301-  endInning: () => void;
+302:  endGame: (options?: EndGameOptions) => Promise<void>;
+303-
+304-  // Pitch count prompts (per PITCH_COUNT_TRACKING_SPEC.md)
+305-  pitchCountPrompt: PitchCountPrompt | null;
+306-  confirmPitchCount: (pitcherId: string, finalCount: number) => { immaculateInning?: { pitcherId: string; pitcherName: string } };
+307-  dismissPitchCountPrompt: () => void;
+308-
+309-  // Enrichment injection (Layer 1B)
+310-  setNextEventEnrichment: (data: AtBatEvent['enrichment']) => void;
+311-
+312:  /** Position innings map: playerId → { [position]: halfInningsPlayed } (ticket 4.10) */
+313-  positionInnings: Map<string, Record<string, number>>;
+314-
+315-  // Initialization
+316-  initializeGame: (config: GameInitConfig) => Promise<void>;
+317-  loadExistingGame: (options?: LoadExistingGameOptions) => Promise<boolean>;
+318-  undoLastAction: () => Promise<boolean>;
+319-  getLineupStateSnapshot: () => GameLineupSnapshot;
+320-
+321-  // Undo support
+322-  restoreState: (snapshot: {
+--
+957-
+958-/**
+959- * Ensure the tracker's current pitcher matches the game state's current pitcher.
+960: * This is necessary after half-inning transitions where endInning() clears bases
+961- * but doesn't know about the opposing team's pitcher.
+962- */
+963-function syncTrackerPitcher(state: RunnerTrackingState, pitcherId: string, pitcherName: string): RunnerTrackingState {
+964-  if (state.currentPitcherId === pitcherId) return state;
+965-  return { ...state, currentPitcherId: pitcherId, currentPitcherName: pitcherName };
+966-}
+967-
+968-/**
+969- * Find a runner in the tracker by their current base position
+970- */
+--
+1378-
+1379-  // ============================================
+1380-  // POSITION INNINGS TRACKING (ticket 4.10 — Gold Glove / dWAR)
+1381:  // Maps playerId → { [position]: halfInningsPlayed }
+1382:  // Incremented at end of each half-inning for the fielding team
+1383-  // ============================================
+1384-  const positionInningsRef = useRef<Map<string, Record<string, number>>>(new Map());
+1385-
+1386-  // Playoff context refs (set from GameTracker navigation state)
+1387-  const playoffSeriesIdRef = useRef<string | null>(null);
+1388-  const playoffGameNumberRef = useRef<number | null>(null);
+1389-  const playoffIdRef = useRef<string | null>(null);
+1390-
+1391-  const [gameState, setGameState] = useState<GameState>({
+1392-    gameId: initialGameId || '',
+--
+1431-    const outs = Math.max(0, Math.min(overrides?.outs ?? gameState.outs, 2)) as 0 | 1 | 2;
+1432-    return calculateLeverageIndex({
+1433-      inning: overrides?.inning ?? gameState.inning,
+1434:      halfInning: (overrides?.isTop ?? gameState.isTop) ? 'TOP' : 'BOTTOM',
+1435-      outs,
+1436-      runners: overrides?.bases ?? gameState.bases,
+1437-      homeScore: overrides?.homeScore ?? gameState.homeScore,
+1438-      awayScore: overrides?.awayScore ?? gameState.awayScore,
+1439-      totalInnings: totalInningsRef.current,
+1440-    }).leverageIndex;
+1441-  }, [gameState.awayScore, gameState.bases, gameState.homeScore, gameState.inning, gameState.isTop, gameState.outs]);
+1442-
+1443-  const registerIdentityForSide = useCallback((playerId: string | undefined, playerName: string | undefined, teamSide: TeamSide) => {
+1444-    registerTrackedIdentity(
+--
+1512-      type,
+1513-      gameState: {
+1514-        inning: gameState.inning,
+1515:        halfInning: gameState.isTop ? 'TOP' : 'BOTTOM',
+1516-        outs: gameState.outs,
+1517-        score: { away: gameState.awayScore, home: gameState.homeScore },
+1518-        runnersOn: buildBetweenPlayRunnersOn(),
+1519-      },
+1520-    };
+1521-  }, [atBatSequence, buildBetweenPlayRunnersOn, gameState.awayScore, gameState.gameId, gameState.homeScore, gameState.inning, gameState.isTop, gameState.outs, nextBetweenPlayEventIndex]);
+1522-
+1523-  const persistBetweenPlayEvent = useCallback(async (
+1524-    event: Omit<
+1525-      BetweenPlayEvent,
+--
+1548-            : event.substitution.subType === 'pinch_run' ? 'pinch_run'
+1549-            : 'player_sub',
+1550-          inning: event.gameState?.inning ?? 1,
+1551:          halfInning: event.gameState?.halfInning ?? 'TOP',
+1552-          outgoingPlayerId: event.substitution.outPlayerId,
+1553-          outgoingPlayerName: event.substitution.outPlayerName || event.substitution.outPlayerId,
+1554-          incomingPlayerId: event.substitution.inPlayerId,
+1555-          incomingPlayerName: event.substitution.inPlayerName || event.substitution.inPlayerId,
+1556-          timestamp: event.timestamp,
+1557-        });
+1558-        return log;
+1559-      }
+1560-      if (event.type === 'position_change' && event.substitution) {
+1561-        log.push({
+1562-          type: 'position_switch' as const,
+1563-          inning: event.gameState?.inning ?? 1,
+1564:          halfInning: event.gameState?.halfInning ?? 'TOP',
+1565-          outgoingPlayerId: event.substitution.outPlayerId,
+1566-          outgoingPlayerName: event.substitution.outPlayerName || event.substitution.outPlayerId,
+1567-          incomingPlayerId: event.substitution.inPlayerId,
+1568-          incomingPlayerName: event.substitution.inPlayerName || event.substitution.inPlayerId,
+1569-          timestamp: event.timestamp,
+1570-        });
+1571-        return log;
+1572-      }
+1573-      if (event.type === 'pitcher_change' && event.pitcherChange) {
+1574-        log.push({
+1575-          type: 'pitching_change' as const,
+1576-          inning: event.gameState?.inning ?? 1,
+1577:          halfInning: event.gameState?.halfInning ?? 'TOP',
+1578-          outgoingPlayerId: event.pitcherChange.outgoingPitcherId,
+1579-          outgoingPlayerName: event.pitcherChange.outgoingPitcherName || event.pitcherChange.outgoingPitcherId,
+1580-          incomingPlayerId: event.pitcherChange.incomingPitcherId,
+1581-          incomingPlayerName: event.pitcherChange.incomingPitcherName || event.pitcherChange.incomingPitcherId,
+1582-          timestamp: event.timestamp,
+1583-        });
+1584-        return log;
+1585-      }
+1586-      return log;
+1587-    }, []);
+--
+1751-    }
+1752-
+1753-    if (event.type === 'pitcher_change' && event.pitcherChange) {
+1754:      const teamSide = event.gameState?.halfInning === 'TOP' ? 'home' : 'away';
+1755-      const lineupStateRef = teamSide === 'away' ? awayLineupStateRef : homeLineupStateRef;
+1756-      registerIdentityForSide(event.pitcherChange.incomingPitcherId, event.pitcherChange.incomingPitcherName, teamSide);
+1757-      registerIdentityForSide(event.pitcherChange.outgoingPitcherId, event.pitcherChange.outgoingPitcherName, teamSide);
+1758-      lineupStateRef.current = {
+1759-        ...lineupStateRef.current,
+1760-        currentPitcher: {
+1761-          playerId: event.pitcherChange.incomingPitcherId,
+1762-          playerName: event.pitcherChange.incomingPitcherName || event.pitcherChange.incomingPitcherId,
+1763-          position: 'P',
+1764-          battingOrder: lineupStateRef.current.currentPitcher?.battingOrder || 1,
+--
+1792-
+1793-  const buildPersistedFameEvents = useCallback((
+1794-    currentInning: number,
+1795:    currentHalfInning: 'TOP' | 'BOTTOM'
+1796-  ): PersistedGameState['fameEvents'] => {
+1797-    return fameEventsRef.current.map((fe, idx) => ({
+1798-      id: `${gameState.gameId}_fame_${idx}`,
+1799-      gameId: gameState.gameId,
+1800-      eventType: fe.eventType,
+1801-      playerId: fe.playerId,
+1802-      playerName: resolvePlayerNameForId(fe.playerId, fe.playerName),
+1803-      playerTeam: resolveTeamIdForPlayerId(fe.playerId),
+1804-      fameValue: fe.fameValue,
+1805-      fameType: fe.fameType,
+1806-      inning: currentInning,
+1807:      halfInning: currentHalfInning,
+1808-      timestamp: Date.now(),
+1809-      autoDetected: false,
+1810-      description: fe.description,
+1811-    }));
+1812-  }, [gameState.gameId, resolvePlayerNameForId, resolveTeamIdForPlayerId]);
+1813-
+1814-  const creditFieldingOutsToPositions = useCallback((outsRecorded: number) => {
+1815-    if (outsRecorded <= 0) return;
+1816-
+1817-    const fieldingLineupState = gameState.isTop ? homeLineupStateRef.current : awayLineupStateRef.current;
+--
+1862-  );
+1863-
+1864-  // Inning-level pitch tracking for immaculate inning detection
+1865:  // Tracks total pitches and strikeouts per half-inning
+1866-  const inningPitchesRef = useRef({ pitches: 0, strikeouts: 0, pitcherId: '' });
+1867-
+1868-  // ============================================
+1869-  // LAYER 1B: CONTEXT SNAPSHOT BUILDER
+1870-  // ============================================
+1871-
+1872-  /** Build context snapshot fields for AtBatEvent. Populates what's available; leaves rest undefined. */
+1873-  const buildContextSnapshot = useCallback((
+1874-    result: AtBatResult,
+1875-    pitchCount?: number,
+--
+2152-      },
+2153-      finalScore: null,
+2154-      finalInning: 9,
+2155:      isComplete: false,
+2156-    });
+2157-
+2158-    // Initialize player stats for all lineup players
+2159-    const initialPlayerStats = new Map<string, PlayerGameStats>();
+2160-    for (const player of [...config.awayLineup, ...config.homeLineup]) {
+2161-      initialPlayerStats.set(player.playerId, createEmptyPlayerStats());
+2162-    }
+2163-    setPlayerStats(initialPlayerStats);
+2164-
+2165-    // Initialize pitcher stats and name mapping
+--
+2231-      }
+2232-
+2233-      const header = await getGameHeader(targetGameId);
+2234:      const inProgressGame = header && !header.isComplete ? header : null;
+2235-      const preferSnapshot = options?.preferSnapshot ?? true;
+2236-
+2237-      // Primary rehydration path: restore exact in-progress snapshot from currentGame store.
+2238-      // This preserves non-at-bat runner movement + full scoreboard state across refresh.
+2239-      let savedSnapshot = null;
+2240-      if (preferSnapshot) {
+2241-        savedSnapshot = await loadCurrentGame();
+2242-        if (savedSnapshot && (savedSnapshot.gameId !== targetGameId || !inProgressGame)) {
+2243-          try {
+2244-            await clearCurrentGame();
+--
+2518-
+2519-        setAwayBatterIndex(
+2520-          savedSnapshot.awayBatterIndex ??
+2521:          (savedSnapshot.halfInning === 'TOP' ? savedSnapshot.currentBatterIndex ?? 0 : 0)
+2522-        );
+2523-        setHomeBatterIndex(
+2524-          savedSnapshot.homeBatterIndex ??
+2525:          (savedSnapshot.halfInning === 'BOTTOM' ? savedSnapshot.currentBatterIndex ?? 0 : 0)
+2526-        );
+2527-        setAtBatSequence(savedSnapshot.atBatCount ?? 0);
+2528-        inningPitchesRef.current = savedSnapshot.currentInningPitches || { pitches: 0, strikeouts: 0, pitcherId: '' };
+2529-
+2530-        setGameState({
+2531-          gameId: savedSnapshot.gameId,
+2532-          homeScore: savedSnapshot.homeScore ?? 0,
+2533-          awayScore: savedSnapshot.awayScore ?? 0,
+2534-          inning: savedSnapshot.inning ?? 1,
+2535:          isTop: (savedSnapshot.halfInning ?? 'TOP') === 'TOP',
+2536-          outs: savedSnapshot.outs ?? 0,
+2537-          balls: 0,
+2538-          strikes: 0,
+2539-          bases: {
+2540-            first: !!savedSnapshot.bases.first,
+2541-            second: !!savedSnapshot.bases.second,
+2542-            third: !!savedSnapshot.bases.third,
+2543-          },
+2544-          currentBatterId: snapshotBatterId,
+2545-          currentBatterName: snapshotBatterName,
+--
+2677-              playerNameByIdRef.current,
+2678-              event.pitcherChange.outgoingPitcherId,
+2679-              event.pitcherChange.outgoingPitcherName,
+2680:              event.gameState?.halfInning === 'TOP' ? 'home' : 'away'
+2681-            );
+2682-          }
+2683-          if (event.pitcherChange?.incomingPitcherId) {
+2684-            registerTrackedIdentity(
+2685-              teamSideByPlayerIdRef.current,
+2686-              playerNameByIdRef.current,
+2687-              event.pitcherChange.incomingPitcherId,
+2688-              event.pitcherChange.incomingPitcherName,
+2689:              event.gameState?.halfInning === 'TOP' ? 'home' : 'away'
+2690-            );
+2691-          }
+2692-        }
+2693-
+2694-        for (const event of betweenPlayEvents) {
+2695-          replayRosterChangeEvent(event);
+2696-        }
+2697-
+2698-        // Rehydrate pitcher stats as a Map keyed by pitcherId (never as array).
+2699-        const rehydratedPitcherStats = new Map<string, PitcherGameStats>();
+--
+2776-          }
+2777-
+2778-          if (['1B', '2B', '3B', 'HR'].includes(event.result)) {
+2779:            if (event.halfInning === 'TOP') awayHits += 1;
+2780-            else homeHits += 1;
+2781-          }
+2782-          if (event.result === 'E') {
+2783:            if (event.halfInning === 'TOP') homeErrors += 1;
+2784-            else awayErrors += 1;
+2785-          }
+2786-        }
+2787-
+2788-        setScoreboard({
+2789-          innings: rebuiltInnings,
+2790-          away: {
+2791-            runs: lastEvent?.awayScoreAfter ?? 0,
+2792-            hits: awayHits,
+2793-            errors: awayErrors,
+--
+2801-
+2802-        // Rebuild runner tracker from last known runners-after state so base identities
+2803-        // (used by runnerNames/UI) survive refresh.
+2804:        const trackerPitcherFallback = (lastEvent?.halfInning ?? 'TOP') === 'TOP'
+2805-          ? homeLineupStateRef.current.currentPitcher
+2806-          : awayLineupStateRef.current.currentPitcher;
+2807-        const trackerPitcherId = lastEvent?.pitcherId ?? trackerPitcherFallback?.playerId ?? '';
+2808-        const trackerPitcherName = lastEvent?.pitcherName ?? trackerPitcherFallback?.playerName ?? '';
+2809-        const rebuiltTracker = createRunnerTrackingState(trackerPitcherId, trackerPitcherName);
+2810-        rebuiltTracker.inning = lastEvent?.inning ?? 1;
+2811-        rebuiltTracker.atBatNumber = events.length + 1;
+2812-
+2813-        const addTrackedRunner = (
+2814-          base: '1B' | '2B' | '3B',
+--
+2854-        const endedHalfOnLastAtBat = !!lastEvent && lastEvent.outsAfter >= 3;
+2855-        let recoveredOuts = endedHalfOnLastAtBat ? 0 : (lastEvent?.outsAfter ?? 0);
+2856-        let recoveredInning = endedHalfOnLastAtBat
+2857:          ? (lastEvent?.halfInning === 'BOTTOM' ? (lastEvent?.inning ?? 1) + 1 : (lastEvent?.inning ?? 1))
+2858-          : (lastEvent?.inning ?? 1);
+2859-        let recoveredIsTop = endedHalfOnLastAtBat
+2860:          ? (lastEvent?.halfInning === 'BOTTOM')
+2861:          : (lastEvent ? lastEvent.halfInning === 'TOP' : true);
+2862-        const recoveredDefensivePitcher = recoveredIsTop
+2863-          ? homeLineupStateRef.current.currentPitcher
+2864-          : awayLineupStateRef.current.currentPitcher;
+2865-        let recoveredPitcherId = endedHalfOnLastAtBat
+2866-          ? (recoveredDefensivePitcher?.playerId || lastEvent?.pitcherId || '')
+2867-          : (lastEvent?.pitcherId ?? recoveredDefensivePitcher?.playerId ?? '');
+2868-        let recoveredPitcherName = endedHalfOnLastAtBat
+2869-          ? (recoveredDefensivePitcher?.playerName || lastEvent?.pitcherName || '')
+2870-          : (lastEvent?.pitcherName ?? recoveredDefensivePitcher?.playerName ?? '');
+2871-        let recoveredAwayBatterIndex = 0;
+--
+2876-        }
+2877-
+2878-        for (const event of events) {
+2879:          const battingTeamKey = event.halfInning === 'TOP' ? 'away' : 'home';
+2880-          const lineupRef = battingTeamKey === 'away' ? awayLineupRef : homeLineupRef;
+2881-          const battingOrder = event.batterContext?.battingOrder
+2882-            || lineupRef.current.findIndex(player => player.playerId === event.batterId) + 1;
+2883-          const nextIndex = lineupRef.current.length > 0
+2884-            ? battingOrder % lineupRef.current.length
+2885-            : 0;
+2886-          if (battingTeamKey === 'away') {
+2887-            recoveredAwayBatterIndex = nextIndex;
+2888-          } else {
+2889-            recoveredHomeBatterIndex = nextIndex;
+--
+2906-        for (const event of tailBetweenPlayEvents) {
+2907-          if (event.gameState) {
+2908-            recoveredInning = event.gameState.inning;
+2909:            recoveredIsTop = event.gameState.halfInning === 'TOP';
+2910-            recoveredOuts = event.gameState.outs;
+2911-            recoveredAwayScore = event.gameState.score.away;
+2912-            recoveredHomeScore = event.gameState.score.home;
+2913-          }
+2914-
+2915-          if (event.runnerAction) {
+2916-            const toBase = numberToBase(event.runnerAction.toBase);
+2917-            moveTrackedRunner(event.runnerAction.runnerId, toBase, event.runnerAction.outcome);
+2918-
+2919-            if (event.runnerAction.outcome === 'out') {
+--
+3153-      gameId: gameState.gameId,
+3154-      savedAt: Date.now(),
+3155-      inning: gameState.inning,
+3156:      halfInning: gameState.isTop ? 'TOP' : 'BOTTOM',
+3157-      outs: gameState.outs,
+3158-      homeScore: gameState.homeScore,
+3159-      awayScore: gameState.awayScore,
+3160-      bases: baseRunners,
+3161-      currentBatterIndex: gameState.isTop ? awayBatterIndex : homeBatterIndex,
+3162-      atBatCount: atBatSequence,
+3163-      awayTeamId: gameState.awayTeamId,
+3164-      homeTeamId: gameState.homeTeamId,
+3165-      awayTeamName: gameState.awayTeamName,
+3166-      homeTeamName: gameState.homeTeamName,
+--
+3371-    const isLateGame = gameState.inning >= 9;
+3372-    const homeScoreAfter = isBottom ? gameState.homeScore + runsScored : gameState.homeScore;
+3373-    const awayScoreAfter = gameState.isTop ? gameState.awayScore + runsScored : gameState.awayScore;
+3374:    const isWalkOff = isBottom && isLateGame && homeScoreAfter > awayScoreAfter && gameState.homeScore <= gameState.awayScore;
+3375-
+3376-    // Clutch = high leverage (LI >= 1.5)
+3377-    const isClutch = leverageIndex >= 1.5;
+3378-
+3379-    const runnerOutcomesForRbi: { first: RunnerOutcome | null; second: RunnerOutcome | null; third: RunnerOutcome | null } = {
+3380-      first: !gameState.bases.first ? null
+3381-        : (hitType === 'HR' && !runnerData) ? 'SCORED'
+3382-        : runnerData?.fromFirst === 'home' ? 'SCORED'
+3383-        : runnerData?.fromFirst === 'third' ? 'TO_3B'
+3384-        : runnerData?.fromFirst === 'second' ? 'TO_2B'
+--
+3414-      rbiCount: calculatedRbi,
+3415-      runsScored,
+3416-      inning: gameState.inning,
+3417:      halfInning: gameState.isTop ? 'TOP' : 'BOTTOM',
+3418-      outs: gameState.outs,
+3419-      runners: {
+3420-        first: buildRunnerInfo(runnerTrackerRef.current, 'first', !!gameState.bases.first, gameState.currentPitcherId),
+3421-        second: buildRunnerInfo(runnerTrackerRef.current, 'second', !!gameState.bases.second, gameState.currentPitcherId),
+3422-        third: buildRunnerInfo(runnerTrackerRef.current, 'third', !!gameState.bases.third, gameState.currentPitcherId),
+3423-      },
+3424-      awayScore: gameState.awayScore,
+3425-      homeScore: gameState.homeScore,
+3426-      outsAfter: gameState.outs,
+3427-      runnersAfter: buildRunnersAfter(runnerTrackerRef.current),
+--
+3445-      fameEvents: [],
+3446-      isLeadoff: gameState.outs === 0 && !gameState.bases.first && !gameState.bases.second && !gameState.bases.third,
+3447-      isClutch,
+3448:      isWalkOff,
+3449-      ...buildContextSnapshot(mapAtBatResultFromHit(hitType), pitchCount),
+3450-    };
+3451-
+3452-    // Log to IndexedDB
+3453-    await logAtBatEvent(event);
+3454-    pendingEnrichmentRef.current = undefined;
+3455-
+3456-    // Update player stats
+3457-    setPlayerStats(prev => {
+3458-      const newStats = new Map(prev);
+--
+3727-      rbiCount,
+3728-      runsScored,
+3729-      inning: gameState.inning,
+3730:      halfInning: gameState.isTop ? 'TOP' : 'BOTTOM',
+3731-      outs: gameState.outs,
+3732-      runners: {
+3733-        first: buildRunnerInfo(runnerTrackerRef.current, 'first', !!gameState.bases.first, gameState.currentPitcherId),
+3734-        second: buildRunnerInfo(runnerTrackerRef.current, 'second', !!gameState.bases.second, gameState.currentPitcherId),
+3735-        third: buildRunnerInfo(runnerTrackerRef.current, 'third', !!gameState.bases.third, gameState.currentPitcherId),
+3736-      },
+3737-      awayScore: gameState.awayScore,
+3738-      homeScore: gameState.homeScore,
+3739-      outsAfter: Math.min(newOuts, 3),
+3740-      runnersAfter: newOuts >= 3 ? { first: null, second: null, third: null } : buildRunnersAfter(runnerTrackerRef.current),
+--
+3759-      fameEvents: [],
+3760-      isLeadoff: gameState.outs === 0 && !gameState.bases.first && !gameState.bases.second && !gameState.bases.third,
+3761-      isClutch,
+3762:      isWalkOff: false, // Outs never cause walk-offs
+3763-      ...buildContextSnapshot(effectiveResult, pitchCount),
+3764-    };
+3765-
+3766-    await logAtBatEvent(event);
+3767-    pendingEnrichmentRef.current = undefined;
+3768-
+3769-    // Update player stats — MAJ-07: use effectiveResult for corrected type
+3770-    const statResult = effectiveResult; // corrected: e.g. FO→SF, GO→DP
+3771-    setPlayerStats(prev => {
+3772-      const newStats = new Map(prev);
+--
+3939-    const isBottom = !gameState.isTop;
+3940-    const isLateGame = gameState.inning >= 9;
+3941-    const homeScoreAfter = isBottom ? gameState.homeScore + runsScored : gameState.homeScore;
+3942:    const isWalkOff = isBottom && isLateGame && basesLoaded && homeScoreAfter > gameState.awayScore && gameState.homeScore <= gameState.awayScore;
+3943-
+3944-    // Clutch = high leverage (LI >= 1.5)
+3945-    const isClutch = leverageIndex >= 1.5;
+3946-
+3947-    const event: AtBatEvent = {
+3948-      eventId: `${gameState.gameId}_${newSequence}`,
+3949-      gameId: gameState.gameId,
+3950-      eventIndex: newSequence,
+3951-      timestamp: Date.now(),
+3952-      batterId: gameState.currentBatterId,
+--
+3959-      rbiCount: runsScored,
+3960-      runsScored,
+3961-      inning: gameState.inning,
+3962:      halfInning: gameState.isTop ? 'TOP' : 'BOTTOM',
+3963-      outs: gameState.outs,
+3964-      runners: {
+3965-        first: buildRunnerInfo(runnerTrackerRef.current, 'first', !!gameState.bases.first, gameState.currentPitcherId),
+3966-        second: buildRunnerInfo(runnerTrackerRef.current, 'second', !!gameState.bases.second, gameState.currentPitcherId),
+3967-        third: buildRunnerInfo(runnerTrackerRef.current, 'third', !!gameState.bases.third, gameState.currentPitcherId),
+3968-      },
+3969-      awayScore: gameState.awayScore,
+3970-      homeScore: gameState.homeScore,
+3971-      outsAfter: gameState.outs,
+3972-      runnersAfter: buildRunnersAfter(runnerTrackerRef.current),
+--
+3989-      fameEvents: [],
+3990-      isLeadoff: false,
+3991-      isClutch,
+3992:      isWalkOff,
+3993-      ...buildContextSnapshot(mapAtBatResultFromWalk(walkType), pitchCount),
+3994-    };
+3995-
+3996-    await logAtBatEvent(event);
+3997-    pendingEnrichmentRef.current = undefined;
+3998-
+3999-    // Update player stats — MAJ-07: Track HBP separately from BB
+4000-    setPlayerStats(prev => {
+4001-      const newStats = new Map(prev);
+4002-      const batterStats = { ...(newStats.get(gameState.currentBatterId) || createEmptyPlayerStats()) };
+--
+4127-      rbiCount: 0,
+4128-      runsScored: 0,
+4129-      inning: gameState.inning,
+4130:      halfInning: gameState.isTop ? 'TOP' : 'BOTTOM',
+4131-      outs: gameState.outs, // Outs BEFORE the play
+4132-      runners: {
+4133-        first: buildRunnerInfo(runnerTrackerRef.current, 'first', !!gameState.bases.first, gameState.currentPitcherId),
+4134-        second: buildRunnerInfo(runnerTrackerRef.current, 'second', !!gameState.bases.second, gameState.currentPitcherId),
+4135-        third: buildRunnerInfo(runnerTrackerRef.current, 'third', !!gameState.bases.third, gameState.currentPitcherId),
+4136-      },
+4137-      awayScore: gameState.awayScore,
+4138-      homeScore: gameState.homeScore,
+4139-      outsAfter: newOuts,
+4140-      runnersAfter: newOuts >= 3 ? { first: null, second: null, third: null } : buildRunnersAfter(runnerTrackerRef.current),
+--
+4161-      fameEvents: [],
+4162-      isLeadoff: false,
+4163-      isClutch: false,
+4164:      isWalkOff: false,
+4165-      ...buildContextSnapshot(result, pitchCount),
+4166-    };
+4167-
+4168-    await logAtBatEvent(event);
+4169-    pendingEnrichmentRef.current = undefined;
+4170-
+4171-    // Update batter stats - ALWAYS count K, PA, AB
+4172-    setPlayerStats(prev => {
+4173-      const newStats = new Map(prev);
+4174-      const batterStats = { ...(newStats.get(gameState.currentBatterId) || createEmptyPlayerStats()) };
+--
+4285-      rbiCount: 0,
+4286-      runsScored,
+4287-      inning: gameState.inning,
+4288:      halfInning: gameState.isTop ? 'TOP' : 'BOTTOM',
+4289-      outs: gameState.outs,
+4290-      runners: {
+4291-        first: buildRunnerInfo(runnerTrackerRef.current, 'first', !!gameState.bases.first, gameState.currentPitcherId),
+4292-        second: buildRunnerInfo(runnerTrackerRef.current, 'second', !!gameState.bases.second, gameState.currentPitcherId),
+4293-        third: buildRunnerInfo(runnerTrackerRef.current, 'third', !!gameState.bases.third, gameState.currentPitcherId),
+4294-      },
+4295-      awayScore: gameState.awayScore,
+4296-      homeScore: gameState.homeScore,
+4297-      outsAfter: gameState.outs,
+4298-      runnersAfter: buildRunnersAfter(runnerTrackerRef.current),
+--
+4315-      fameEvents: [],
+4316-      isLeadoff: false,
+4317-      isClutch: false,
+4318:      isWalkOff: false,
+4319-      ...buildContextSnapshot('E' as AtBatResult, pitchCount),
+4320-    };
+4321-
+4322-    await logAtBatEvent(event);
+4323-    pendingEnrichmentRef.current = undefined;
+4324-
+4325-    // Update player stats (PA but no AB for ROE)
+4326-    setPlayerStats(prev => {
+4327-      const newStats = new Map(prev);
+4328-      const batterStats = { ...(newStats.get(gameState.currentBatterId) || createEmptyPlayerStats()) };
+--
+4847-      });
+4848-    }
+4849-
+4850:    const teamSide = existing.gameState?.halfInning === 'TOP' ? 'home' : 'away';
+4851-    if (nextPitcherId) {
+4852-      registerIdentityForSide(nextPitcherId, updates.pitcherName || resolvePlayerNameForId(nextPitcherId), teamSide);
+4853-    }
+4854-    if (nextCatcherId) {
+4855-      registerIdentityForSide(nextCatcherId, updates.catcherName || resolvePlayerNameForId(nextCatcherId), teamSide);
+4856-    }
+4857-    if (nextFielderId) {
+4858-      registerIdentityForSide(nextFielderId, updates.fielderName || resolvePlayerNameForId(nextFielderId), teamSide);
+4859-    }
+4860-
+--
+5164-    setSubstitutionLog(prev => [...prev, {
+5165-      type: subType,
+5166-      inning: gameState.inning,
+5167:      halfInning: gameState.isTop ? 'TOP' : 'BOTTOM',
+5168-      outgoingPlayerId: lineupPlayerId,
+5169-      outgoingPlayerName: lineupPlayerName || lineupPlayerId,
+5170-      incomingPlayerId: benchPlayerId,
+5171-      incomingPlayerName: benchPlayerName || benchPlayerId,
+5172-      timestamp: Date.now(),
+5173-    }]);
+5174-
+5175-    void persistBetweenPlayEvent({
+5176-      type: 'substitution',
+5177-      substitution: {
+--
+5324-    setSubstitutionLog(prev => [...prev, {
+5325-      type: 'position_switch',
+5326-      inning: gameState.inning,
+5327:      halfInning: gameState.isTop ? 'TOP' : 'BOTTOM',
+5328-      outgoingPlayerId: switches.map(s => s.playerId).join(','),
+5329-      outgoingPlayerName: 'Position Switch',
+5330-      incomingPlayerId: switches.map(s => s.playerId).join(','),
+5331-      incomingPlayerName: switches.map(s => `${s.playerId}->${s.newPosition}`).join(', '),
+5332-      timestamp: Date.now(),
+5333-    }]);
+5334-
+5335-    for (const sw of switches) {
+5336-      void persistBetweenPlayEvent({
+5337-        type: 'position_change',
+--
+5376-      setSubstitutionLog(prev => [...prev, {
+5377-        type: 'pitching_change',
+5378-        inning: gameState.inning,
+5379:        halfInning: gameState.isTop ? 'TOP' : 'BOTTOM',
+5380-        outgoingPlayerId: exitingPitcherId,
+5381-        outgoingPlayerName: exitingPitcherName || exitingPitcherId,
+5382-        incomingPlayerId: newPitcherId,
+5383-        incomingPlayerName: newPitcherName || newPitcherId,
+5384-        timestamp: Date.now(),
+5385-      }]);
+5386-
+5387-      void persistBetweenPlayEvent({
+5388-        type: 'pitcher_change',
+5389-        pitcherChange: {
+--
+5494-  // Confirm pitch count and execute pending action (per PITCH_COUNT_TRACKING_SPEC.md)
+5495-  const confirmPitchCount = useCallback((pitcherId: string, finalCount: number): { immaculateInning?: { pitcherId: string; pitcherName: string } } => {
+5496-    let result: { immaculateInning?: { pitcherId: string; pitcherName: string } } = {};
+5497:    // Check for immaculate inning at end of half-inning
+5498:    // Requires: user confirmed exactly 9 pitches AND we tracked 3 strikeouts this half-inning
+5499-    if (pitchCountPrompt?.type === 'end_inning' && finalCount === 9 && inningPitchesRef.current.strikeouts === 3) {
+5500-      const immaculateFameEvent: FameEventRecord = {
+5501-        eventType: 'IMMACULATE_INNING',
+5502-        fameType: 'bonus',
+5503-        fameValue: 2, // Per FAME_VALUES.IMMACULATE_INNING
+5504-        playerId: pitcherId,
+5505-        playerName: pitchCountPrompt.pitcherName,
+5506-        description: `Immaculate inning in inning ${gameState.inning} (${gameState.isTop ? 'top' : 'bottom'})`,
+5507-      };
+5508-      appendFameEvent(immaculateFameEvent);
+--
+5524-    const timing =
+5525-      pitchCountPrompt?.type === 'pitching_change'
+5526-        ? 'pitcher_removed'
+5527:        : pitchCountPrompt?.type === 'end_game'
+5528-        ? 'end_of_game'
+5529:        : 'end_of_half_inning';
+5530-    void persistBetweenPlayEvent({
+5531-      type: 'pitch_count_update',
+5532-      pitchCountUpdate: {
+5533-        pitcherId,
+5534-        pitchCount: finalCount,
+5535-        timing,
+5536-      },
+5537-    }).catch((error) => {
+5538-      console.error('[useGameState] Failed to log pitch-count update:', error);
+5539-    });
+--
+5551-
+5552-  // Dismiss pitch count prompt without confirming
+5553-  // For end_inning: still transitions the inning (just skips pitch count update)
+5554:  // For pitching_change/end_game: cancels the pending action
+5555-  const dismissPitchCountPrompt = useCallback(() => {
+5556-    if (pitchCountPrompt?.type === 'end_inning') {
+5557-      // Still execute the inning transition, just don't update pitch count
+5558-      if (pendingActionRef.current) {
+5559-        pendingActionRef.current();
+5560-        pendingActionRef.current = null;
+5561-      }
+5562-      console.log('[useGameState] Pitch count prompt dismissed — inning transition proceeding without count update');
+5563-    } else {
+5564-      pendingActionRef.current = null;
+--
+5571-  // Called after pitch count is confirmed by user
+5572-  const executeEndInning = useCallback(() => {
+5573-    // T0-01: Auto game-end detection at regulation end.
+5574:    // Check BEFORE transitioning to the next half-inning.
+5575-    const totalInnings = totalInningsRef.current;
+5576-    const { inning, isTop, homeScore, awayScore } = gameState;
+5577-    const teamKey = isTop ? 'away' : 'home';
+5578-    const inningIdx = Math.max(0, inning - 1);
+5579-
+5580:    // Ensure each completed half-inning is represented in line score, even if scoreless.
+5581-    // Without this, scoreless innings can remain undefined in GameTracker and archived inningScores.
+5582-    setScoreboard(prev => {
+5583-      const inningsCopy = [...prev.innings];
+5584-      while (inningsCopy.length <= inningIdx) {
+5585-        inningsCopy.push({ away: undefined, home: undefined });
+5586-      }
+5587-      const currentInning = inningsCopy[inningIdx] || { away: undefined, home: undefined };
+5588-      inningsCopy[inningIdx] = {
+5589-        ...currentInning,
+5590-        [teamKey]: currentInning[teamKey] ?? 0,
+--
+5599-    // (Home team doesn't need to bat if already ahead)
+5600-    if (isTop && inning >= totalInnings && homeScore > awayScore) {
+5601-      console.log(`[T0-01] Auto game-end: Home leads ${homeScore}-${awayScore} after top of inning ${inning}. Game over.`);
+5602:      // Trigger endGame flow after a small delay
+5603-      setTimeout(() => {
+5604-        setShowAutoEndPrompt(true);
+5605-      }, 300);
+5606:      return; // Don't transition to next half-inning
+5607-    }
+5608-
+5609-    // After BOTTOM of regulation final inning (or later): if not tied, game is over
+5610-    if (!isTop && inning >= totalInnings && homeScore !== awayScore) {
+5611-      console.log(`[T0-01] Auto game-end: Score ${awayScore}-${homeScore} after bottom of inning ${inning}. Game over.`);
+5612-      setTimeout(() => {
+5613-        setShowAutoEndPrompt(true);
+5614-      }, 300);
+5615:      return; // Don't transition to next half-inning
+5616-    }
+5617-
+5618-    // If tied after regulation, continue to extra innings (normal transition)
+5619-    if (!isTop && inning >= totalInnings && homeScore === awayScore) {
+5620-      console.log(`[T0-01] Tied ${homeScore}-${awayScore} after regulation. Extra innings.`);
+5621-    }
+5622-
+5623:    // CRIT-02: Clear runner tracker for new half-inning and update inning number
+5624-    let endTracker = trackerClearBases(runnerTrackerRef.current);
+5625-    endTracker = trackerNextInning(endTracker);
+5626-
+5627-    setGameState(prev => {
+5628-      const newIsTop = !prev.isTop;
+5629-      // After TOP (isTop was true, newIsTop is false): stay on same inning, switch to BOTTOM
+5630-      // After BOTTOM (isTop was false, newIsTop is true): increment inning, switch to TOP
+5631-      const newInning = newIsTop ? prev.inning + 1 : prev.inning;
+5632-
+5633-      // Get next batter
+--
+5667-  }, [awayBatterIndex, homeBatterIndex, gameState]);
+5668-
+5669-  const endInning = useCallback(() => {
+5670:    // Show pitch count prompt for the current pitcher at end of half-inning
+5671-    const currentPitcherStats = pitcherStats.get(gameState.currentPitcherId) || createEmptyPitcherStats();
+5672-
+5673-    setPitchCountPrompt({
+5674-      type: 'end_inning',
+5675-      pitcherId: gameState.currentPitcherId,
+5676-      pitcherName: gameState.currentPitcherName || gameState.currentPitcherId,
+5677-      currentCount: currentPitcherStats.pitchCount,
+5678-      lastVerifiedInning: gameState.inning,
+5679-    });
+5680-
+--
+5686-  endInningRef.current = endInning;
+5687-
+5688-  // Internal function to complete game after pitch counts confirmed
+5689:  const completeGameInternal = useCallback(async (opts?: EndGameOptions) => {
+5690-    const activityLog = opts?.activityLog ?? [];
+5691-    setIsSaving(true);
+5692-
+5693-    // Mark game as complete in event log
+5694-    await completeGame(
+5695-      gameState.gameId,
+5696-      { away: gameState.awayScore, home: gameState.homeScore },
+5697-      gameState.inning
+5698-    );
+5699-
+--
+5796-        hitsAllowed: stats.hitsAllowed,
+5797-        runsAllowed: stats.runsAllowed,
+5798-        earnedRuns: stats.earnedRuns,
+5799:        walksAllowed: stats.walksAllowed + stats.intentionalWalks, // Combine BB+IBB (matches endGame path)
+5800-        strikeoutsThrown: stats.strikeoutsThrown,
+5801-        homeRunsAllowed: stats.homeRunsAllowed,
+5802-        hitBatters: stats.hitByPitch,
+5803-        basesReachedViaError: (() => {
+5804-          // CRIT-06: Count runners who reached via error from runner tracker
+5805-          // Note: Undercounts runners who reached via error but were later put out (removed from tracker)
+5806-          const trackerPitcherStats = runnerTrackerRef.current.pitcherStats.get(pitcherId);
+5807-          if (!trackerPitcherStats) return 0;
+5808-          const onBase = trackerPitcherStats.runnersOnBase.filter(r => r.howReached === 'error').length;
+5809-          const scored = trackerPitcherStats.runnersScored.filter(r => r.howReached === 'error').length;
+--
+5837-      gameId: gameState.gameId,
+5838-      savedAt: Date.now(),
+5839-      inning: gameState.inning,
+5840:      halfInning: gameState.isTop ? 'TOP' : 'BOTTOM',
+5841-      outs: gameState.outs,
+5842-      homeScore: gameState.homeScore,
+5843-      awayScore: gameState.awayScore,
+5844-      bases: {
+5845-        first: gameState.bases.first ? { playerId: 'unknown', playerName: 'Runner' } : null,
+5846-        second: gameState.bases.second ? { playerId: 'unknown', playerName: 'Runner' } : null,
+5847-        third: gameState.bases.third ? { playerId: 'unknown', playerName: 'Runner' } : null,
+5848-      },
+5849-      currentBatterIndex: 0,
+5850-      atBatCount: atBatSequence,
+--
+5873-    };
+5874-
+5875-    // T1-08 FIX: Check if already aggregated (idempotency guard)
+5876:    // Prevents double aggregation when endGame's useEffect re-fires
+5877-    const header = await getGameHeader(gameState.gameId);
+5878-    const alreadyAggregated = header?.aggregated === true;
+5879-
+5880-    const targetStatsScopeId =
+5881-      opts?.statsScopeId ??
+5882-      statsScopeIdRef.current ??
+5883-      opts?.seasonId ??
+5884-      seasonIdRef.current ??
+5885-      'season-1';
+5886-    const archivedSeasonId = opts?.seasonId ?? seasonIdRef.current ?? undefined;
+--
+5988-    }
+5989-
+5990-    // Archive completed game with full stats for post-game summary (EXH-011)
+5991:    // T1-08: Only archive if not already done by endGame() — the archive is idempotent
+5992-    // but skipping avoids unnecessary IndexedDB writes
+5993-    if (!alreadyAggregated) {
+5994-      const inningScores = scoreboard.innings.map(inn => ({
+5995-        away: inn.away ?? 0,
+5996-        home: inn.home ?? 0,
+5997-      }));
+5998-      await archiveCompletedGame(
+5999-        persistedState,
+6000-        { away: gameState.awayScore, home: gameState.homeScore },
+6001-        inningScores,
+--
+6033-    scoreboard,
+6034-  ]);
+6035-
+6036:  const endGame = useCallback(async (options?: EndGameOptions) => {
+6037-    // Archive game FIRST so PostGameSummary can load it (EXH-011 fix)
+6038-    // Build persisted state for archiving — include player name and team
+6039-    const activityLog = options?.activityLog ?? [];
+6040-    const archivedSeasonId = options?.seasonId ?? seasonIdRef.current ?? undefined;
+6041-    const statsScopeIdValue =
+6042-      options?.statsScopeId ??
+6043-      statsScopeIdRef.current ??
+6044-      options?.seasonId ??
+6045-      seasonIdRef.current ??
+6046-      'season-1';
+6047-    const currentSeasonNumber = options?.currentSeason ?? gameState.seasonNumber;
+6048:    const endGameOptions: EndGameOptions = {
+6049-      activityLog,
+6050-      seasonId: archivedSeasonId,
+6051-      statsScopeId: statsScopeIdValue,
+6052-      competitionType: options?.competitionType ?? competitionTypeRef.current,
+6053-      competitionId: options?.competitionId ?? competitionIdRef.current,
+6054-      franchiseId: options?.franchiseId,
+6055-      currentSeason: currentSeasonNumber,
+6056-      currentGame: options?.currentGame,
+6057-      stadiumName: options?.stadiumName,
+6058-    };
+6059:    const playerNameLookupForEndGame = new Map<string, string>();
+6060-    for (const p of awayLineupRef.current) {
+6061-      registerIdentityForSide(p.playerId, p.playerName, 'away');
+6062:      playerNameLookupForEndGame.set(p.playerId, p.playerName);
+6063-    }
+6064-    for (const p of homeLineupRef.current) {
+6065-      registerIdentityForSide(p.playerId, p.playerName, 'home');
+6066:      playerNameLookupForEndGame.set(p.playerId, p.playerName);
+6067-    }
+6068-    for (const b of awayLineupStateRef.current.bench) {
+6069-      registerIdentityForSide(b.playerId, b.playerName, 'away');
+6070:      playerNameLookupForEndGame.set(b.playerId, b.playerName);
+6071-    }
+6072-    for (const b of homeLineupStateRef.current.bench) {
+6073-      registerIdentityForSide(b.playerId, b.playerName, 'home');
+6074:      playerNameLookupForEndGame.set(b.playerId, b.playerName);
+6075-    }
+6076-
+6077:    // CRIT-05 FIX: Query fielding events for endGame path too
+6078:    const endGameFieldingEvents = await getGameFieldingEvents(gameState.gameId);
+6079-
+6080:    const endGameFieldingTally = new Map<string, { putouts: number; assists: number; errors: number }>();
+6081:    for (const fe of endGameFieldingEvents) {
+6082:      const tally = endGameFieldingTally.get(fe.playerId) || { putouts: 0, assists: 0, errors: 0 };
+6083-      if (fe.playType === 'putout') tally.putouts++;
+6084-      else if (fe.playType === 'assist' || fe.playType === 'outfield_assist') tally.assists++;
+6085-      else if (fe.playType === 'error') tally.errors++;
+6086-      else if (fe.playType === 'double_play_pivot') tally.assists++;
+6087:      endGameFieldingTally.set(fe.playerId, tally);
+6088-    }
+6089-
+6090-    const playerStatsRecord: Record<string, {
+6091-      playerName: string; teamId: string;
+6092-      pa: number; ab: number; h: number; singles: number; doubles: number;
+6093-      triples: number; hr: number; rbi: number; r: number; bb: number;
+6094-      hbp: number; k: number; sb: number; cs: number;
+6095-      sf: number; sh: number; gidp: number; // MAJ-11
+6096-      putouts: number; assists: number; fieldingErrors: number;
+6097-    }> = {};
+6098-    playerStats.forEach((stats, playerId) => {
+6099:      const fieldingTally = endGameFieldingTally.get(playerId) || { putouts: 0, assists: 0, errors: 0 };
+6100-      playerStatsRecord[playerId] = {
+6101-        ...stats,
+6102:        playerName: playerNameLookupForEndGame.get(playerId) || playerNameByIdRef.current.get(playerId) || playerId,
+6103-        teamId: resolveTeamIdForPlayerId(playerId),
+6104-        // CRIT-05 FIXED: Fielding stats from IndexedDB
+6105-        putouts: fieldingTally.putouts,
+6106-        assists: fieldingTally.assists,
+6107-        fieldingErrors: fieldingTally.errors,
+6108-      };
+6109-    });
+6110-
+6111-    const pitcherGameStatsArray = Array.from(pitcherStats.entries()).map(([pitcherId, stats], idx) => {
+6112-      const pitcherName = pitcherNamesRef.current.get(pitcherId) ||
+--
+6143-        firstInningRuns: stats.firstInningRuns,
+6144-        basesLoadedWalks: stats.basesLoadedWalks,
+6145-        inningsComplete: Math.floor(stats.outsRecorded / 3),
+6146:        // MAJ-08: Pitcher decisions (not yet calculated at endGame time — set to null/false)
+6147-        // Decisions are calculated in completeGameInternal after pitch count confirmation
+6148-        decision: stats.decision,
+6149-        save: stats.save,
+6150-        hold: stats.hold,
+6151-        blownSave: stats.blownSave,
+6152-      };
+6153-    });
+6154-
+6155-    const resolvedStadium =
+6156-      options?.stadiumName ??
+--
+6164-      gameId: gameState.gameId,
+6165-      savedAt: Date.now(),
+6166-      inning: gameState.inning,
+6167:      halfInning: gameState.isTop ? 'TOP' : 'BOTTOM',
+6168-      outs: gameState.outs,
+6169-      homeScore: gameState.homeScore,
+6170-      awayScore: gameState.awayScore,
+6171-      bases: {
+6172-        first: gameState.bases.first ? { playerId: 'r1', playerName: 'R1' } : null,
+6173-        second: gameState.bases.second ? { playerId: 'r2', playerName: 'R2' } : null,
+6174-        third: gameState.bases.third ? { playerId: 'r3', playerName: 'R3' } : null,
+6175-      },
+6176-      currentBatterIndex: 0,
+6177-      atBatCount: atBatSequence,
+--
+6219-      }
+6220-    );
+6221-
+6222:    console.log('[endGame] Game archived for post-game summary');
+6223-
+6224-    // Per PITCH_COUNT_TRACKING_SPEC.md: Mandatory pitch count capture at end of game
+6225-    // Show prompt for current pitcher (simplified - full spec requires all pitchers)
+6226-    const currentPitcherStats = pitcherStats.get(gameState.currentPitcherId) || createEmptyPitcherStats();
+6227-
+6228-    setPitchCountPrompt({
+6229:      type: 'end_game',
+6230-      pitcherId: gameState.currentPitcherId,
+6231-      pitcherName: gameState.currentPitcherName || gameState.currentPitcherId,
+6232-      currentCount: currentPitcherStats.pitchCount,
+6233-      lastVerifiedInning: gameState.inning,
+6234-    });
+6235-
+6236-    // Store the pending action (for season aggregation, etc.)
+6237:    pendingActionRef.current = () => completeGameInternal(endGameOptions);
+6238-
+6239-    // T0-05 FIX: Call completeGameInternal directly instead of deferring to pitch count prompt.
+6240:    // The GameTracker navigates to PostGameSummary immediately after endGame() returns,
+6241-    // which unmounts the component before the pitch count prompt can render/fire.
+6242-    // This ensures processCompletedGame, markGameAggregated, and archiveCompletedGame run.
+6243-    try {
+6244:      await completeGameInternal(endGameOptions);
+6245:      console.log('[endGame] T0-05: completeGameInternal executed — stats aggregated');
+6246-    } catch (err) {
+6247:      console.error('[endGame] T0-05: completeGameInternal failed:', err);
+6248-    }
+6249-  }, [
+6250-    atBatSequence,
+6251-    buildPersistedFameEvents,
+6252-    completeGameInternal,
+6253-    gameState,
+6254-    pitcherStats,
+6255-    playerStats,
+6256-    registerIdentityForSide,
+6257-    resolveTeamIdForPlayerId,
+--
+6305-    },
+6306-  }), []);
+6307-
+6308:  // Restore state from undo snapshot (Phase 7 - Undo System)
+6309-  // CRIT-01 fix: Now also restores playerStats and pitcherStats Maps
+6310-  // Runner tracker undo fix: Also restores runnerTrackerRef for correct ER attribution
+6311-  const restoreState = useCallback((snapshot: {
+6312-    gameState: GameState;
+6313-    scoreboard: ScoreboardState;
+6314-    playerStats?: Map<string, PlayerGameStats>;
+6315-    pitcherStats?: Map<string, PitcherGameStats>;
+6316-    runnerTrackerState?: {
+6317-      runners: RunnerTrackingState['runners'];
+6318-      currentPitcherId: string;
+--
+6377-    advanceCount,
+6378-    resetCount,
+6379-    endInning,
+6380:    endGame,
+6381-    // Pitch count prompts (per PITCH_COUNT_TRACKING_SPEC.md)
+6382-    pitchCountPrompt,
+6383-    confirmPitchCount,
+6384-    dismissPitchCountPrompt,
+6385-    initializeGame,
+6386-    loadExistingGame,
+6387-    undoLastAction,
+6388-    getLineupStateSnapshot,
+6389-    restoreState,
+6390-    getRunnerTrackerSnapshot,

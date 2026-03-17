@@ -1,0 +1,303 @@
+--- First 300 lines ---
+     1	import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
+     2	import { useNavigate, useParams, useLocation } from "react-router";
+     3	import { Menu, ChevronUp, X } from "lucide-react";
+     4	import { DndProvider } from "react-dnd";
+     5	import { HTML5Backend } from "react-dnd-html5-backend";
+     6	import { RunnerPopover, type RunnerBase } from "@/app/components/RunnerPopover";
+     7	import { FielderPopover, type FielderInfo, type BenchPlayerInfo } from "@/app/components/FielderPopover";
+     8	import { LineupCard, type SubstitutionData, type LineupPlayer, type BenchPlayer, type BullpenPitcher } from "@/app/components/LineupCard";
+     9	import { UndoButton, useUndoSystem, type GameSnapshot } from "@/app/components/UndoSystem";
+    10	import { TeamRoster, type Player, type Pitcher } from "@/app/components/TeamRoster";
+    11	import { FenwayBoard } from "@/app/components/FenwayBoard";
+    12	import { FullFenwayScoreboard } from "@/app/components/FullFenwayScoreboard";
+    13	import { QuickBar } from "@/app/components/QuickBar";
+    14	import { PlayLogPanel } from "@/app/components/PlayLogPanel";
+    15	import { EnrichmentPanel, PITCH_TYPES, type AtBatModifierValue, type EnrichmentUpdate } from "@/app/components/EnrichmentPanel";
+    16	import { RunnerOutcomesDisplay } from "@/app/components/RunnerOutcomesDisplay";
+    17	import { HistoricalEventEditor } from "@/app/components/HistoricalEventEditor";
+    18	import { LiveRunnerAttributionPanel } from "@/app/components/LiveRunnerAttributionPanel";
+    19	import { GameDiamond } from "@/app/components/GameDiamond";
+    20	import { InjuryPrompt, type InjuryResult, type MojoResult } from "@/app/components/InjuryPrompt";
+    21	import {
+    22	  getAtBatEvent,
+    23	  getBetweenPlayEvent,
+    24	  getBetweenPlayEvents,
+    25	  getFieldingEventsForAtBat,
+    26	  getGameEvents,
+    27	  getGameHeader,
+    28	  getMatchupEvents,
+    29	  logFieldingEvent,
+    30	  updateAtBatEvent,
+    31	  updateAtBatEventWithFieldingSync,
+    32	  updateBetweenPlayEvent,
+    33	  type AtBatEvent,
+    34	  type BetweenPlayEvent,
+    35	  type FieldingEvent,
+    36	  type GameHeader,
+    37	} from "../../../utils/eventLog";
+    38	import { getTeamColors, getFielderBorderColors } from "@/config/teamColors";
+    39	import { buildFallbackRuntimePlayerId, getRuntimeRosterEntityId } from "../utils/runtimePlayerIdentity";
+    40	import {
+    41	  normalizeSpecialEventType,
+    42	} from "../utils/gameTrackerEventDispatch";
+    43	import { type PlayData, type SpecialEventData } from "../utils/gameTrackerFieldTypes";
+    44	import { areRivals } from '../../../data/leagueStructure';
+    45	import { getParkNames } from "../../../data/parkLookup";
+    46	import { useGameState, type GameLineupSnapshot, type HitType, type OutType, type WalkType, type RunnerAdvancement, type PlayerGameStats, type PitcherGameStats, type PlateAppearanceAction } from "@/hooks/useGameState";
+    47	import { usePlayerState, type PlayerStateData, getStateBadge, formatMultiplier } from "@/app/hooks/usePlayerState";
+    48	
+    49	const ordinalSuffix = (num: number) => {
+    50	  if (num % 100 >= 11 && num % 100 <= 13) return "th";
+    51	  switch (num % 10) {
+    52	    case 1:
+    53	      return "st";
+    54	    case 2:
+    55	      return "nd";
+    56	    case 3:
+    57	      return "rd";
+    58	    default:
+    59	      return "th";
+    60	  }
+    61	};
+    62	
+    63	const formatInningLabel = (isTop: boolean, inning: number) => {
+    64	  const half = isTop ? "Top" : "Bottom";
+    65	  return `${half} ${inning}${ordinalSuffix(inning)}`;
+    66	};
+    67	// EXH-036: Import Mojo/Fitness types for PlayerCardModal editing
+    68	import type { MojoLevel } from "../../../engines/mojoEngine";
+    69	import { clampMojo } from "../../../engines/mojoEngine";
+    70	import type { FitnessState } from "../../../engines/fitnessEngine";
+    71	import { MOJO_STATES, getMojoColor } from "../../../engines/mojoEngine";
+    72	import { FITNESS_STATES } from "../../../engines/fitnessEngine";
+    73	import { useFameTracking, type FameEventDisplay, formatFameValue, getFameColor, getLITier } from "@/app/hooks/useFameTracking";
+    74	import { toMojoLabel, toFitnessLabel, type FameEventType, type Position } from "../../../types/game";
+    75	// MAJ-02: Wire fan morale to UI
+    76	import { useFanMorale, type GameResult as FanMoraleGameResult } from "../hooks/useFanMorale";
+    77	// MAJ-04: Wire narrative engine
+    78	import { generateGameRecap } from "../engines/narrativeIntegration";
+    79	// mWAR: Manager decision tracking
+    80	import { useMWARCalculations } from "../hooks/useMWARCalculations";
+    81	import type { GameStateForLI } from "../../../engines/leverageCalculator";
+    82	import { saveGameDecisions, aggregateManagerGameToSeason } from '../../../utils/managerStorage';
+    83	import { getCareerStats, type PlayerCareerBatting, type PlayerCareerPitching } from '../../../utils/careerStorage';
+    84	import { getApproachingMilestones } from '../../../utils/milestoneDetector';
+    85	import { getSeasonBattingStats, getSeasonPitchingStats, type PlayerSeasonBatting, type PlayerSeasonPitching } from '../../../utils/seasonStorage';
+    86	// T0-05: Schedule persistence — mark played games as COMPLETED
+    87	import { completeGame as completeScheduleGame } from '../../../utils/scheduleStorage';
+    88	// Fielding pipeline: extract fielding events from PlayData and log to IndexedDB
+    89	import {
+    90	  extractFieldingEvents,
+    91	  extractSupplementalRunnerOutFieldingEvents,
+    92	  type FieldingExtractionContext,
+    93	} from '../utils/fieldingEventExtractor';
+    94	import { captureStartingLineups, type LineupEntry } from '../../../utils/gameStorage';
+    95	import { POSITION_NUMBER } from '../utils/positionConstants';
+    96	import { calculateRunnerDefaults, type RunnerDefaults } from '../components/runnerDefaults';
+    97	import type { PlayLogEntry } from '../utils/playLogTypes';
+    98	import { buildPlayLogEntries } from '../utils/gameTrackerPlayLog';
+    99	import { reconcileTeamPitchersWithLineupSnapshot, reconcileTeamPlayersWithLineupSnapshot } from '../utils/gameTrackerRosterSync';
+   100	import {
+   101	  mapFieldingPlayTypeToPlayDifficulty,
+   102	  type FieldingPlayTypeValue,
+   103	} from '../utils/fieldingPlayType';
+   104	import {
+   105	  buildFenwayMatchupSummary,
+   106	  formatFenwayMilestoneAlert,
+   107	  pickFenwayMilestoneWatches,
+   108	} from '../utils/fenwayBoardContext';
+   109	import {
+   110	  applyRunnerDefaultsToNames,
+   111	  buildRunnerCorrectionForQuickBarOutcome,
+   112	  countRbiFromDefaults,
+   113	  getBatterDestinationOptions,
+   114	  runnerDefaultsToAdvancement,
+   115	  type PendingRunnerCorrectionAction,
+   116	} from '../utils/gameTrackerRunnerCorrection';
+   117	import type { FielderCredit } from "../components/modals/FielderCreditModal";
+   118	
+   119	// Note: Using GameState from useGameState hook instead of local interface
+   120	// This interface is deprecated but kept for reference during migration
+   121	interface _DeprecatedGameState {
+   122	  homeScore: number;
+   123	  awayScore: number;
+   124	  inning: number;
+   125	  isTop: boolean;
+   126	  outs: number;
+   127	  balls: number;
+   128	  strikes: number;
+   129	  bases: { first: boolean; second: boolean; third: boolean };
+   130	  currentBatter: string;
+   131	  currentPitcher: string;
+   132	}
+   133	
+   134	interface PendingRunnerAttributionAction {
+   135	  eventType: 'SB' | 'ADVANCE' | 'WP' | 'PB' | 'PICK' | 'PICK_SAFE' | 'PICK_E';
+   136	  title: string;
+   137	  summary: string;
+   138	  snapshotLabel: string;
+   139	  runnerId?: string;
+   140	  runnerName?: string;
+   141	  fromBase: RunnerBase;
+   142	  recordToBase: 'second' | 'third' | 'home' | 'out' | RunnerBase;
+   143	  advanceToBase?: 'second' | 'third' | 'home';
+   144	  outcome: 'safe' | 'out';
+   145	  pitcherId: string;
+   146	  pitcherName?: string;
+   147	  catcherId?: string;
+   148	  catcherName?: string;
+   149	  fielderId?: string;
+   150	}
+   151	
+   152	interface PendingManualSpecialPrompt {
+   153	  type: 'KP' | 'NUT';
+   154	  event: SpecialEventData;
+   155	  atBatEventId?: string;
+   156	  modifierValue?: AtBatModifierValue;
+   157	}
+   158	
+   159	interface HistoricalLineupSlot {
+   160	  playerId: string;
+   161	  playerName: string;
+   162	  position: Position;
+   163	}
+   164	
+   165	interface HistoricalPitcher {
+   166	  playerId: string;
+   167	  playerName: string;
+   168	}
+   169	
+   170	function mergeSeasonBattingWithGameStats(
+   171	  seasonBatting: PlayerSeasonBatting | null,
+   172	  gameStats?: PlayerGameStats,
+   173	): PlayerSeasonBatting | null {
+   174	  if (!seasonBatting || !gameStats) return seasonBatting;
+   175	  return {
+   176	    ...seasonBatting,
+   177	    pa: seasonBatting.pa + gameStats.pa,
+   178	    ab: seasonBatting.ab + gameStats.ab,
+   179	    hits: seasonBatting.hits + gameStats.h,
+   180	    singles: seasonBatting.singles + gameStats.singles,
+   181	    doubles: seasonBatting.doubles + gameStats.doubles,
+   182	    triples: seasonBatting.triples + gameStats.triples,
+   183	    homeRuns: seasonBatting.homeRuns + gameStats.hr,
+   184	    rbi: seasonBatting.rbi + gameStats.rbi,
+   185	    runs: seasonBatting.runs + gameStats.r,
+   186	    walks: seasonBatting.walks + gameStats.bb,
+   187	    strikeouts: seasonBatting.strikeouts + gameStats.k,
+   188	    hitByPitch: seasonBatting.hitByPitch + gameStats.hbp,
+   189	    sacFlies: seasonBatting.sacFlies + gameStats.sf,
+   190	    sacBunts: seasonBatting.sacBunts + gameStats.sh,
+   191	    stolenBases: seasonBatting.stolenBases + gameStats.sb,
+   192	    caughtStealing: seasonBatting.caughtStealing + gameStats.cs,
+   193	    gidp: seasonBatting.gidp + gameStats.gidp,
+   194	  };
+   195	}
+   196	
+   197	function mergeCareerBattingWithGameStats(
+   198	  careerBatting: PlayerCareerBatting | null,
+   199	  gameStats?: PlayerGameStats,
+   200	): PlayerCareerBatting | null {
+   201	  if (!careerBatting || !gameStats) return careerBatting;
+   202	  return {
+   203	    ...careerBatting,
+   204	    pa: careerBatting.pa + gameStats.pa,
+   205	    ab: careerBatting.ab + gameStats.ab,
+   206	    hits: careerBatting.hits + gameStats.h,
+   207	    singles: careerBatting.singles + gameStats.singles,
+   208	    doubles: careerBatting.doubles + gameStats.doubles,
+   209	    triples: careerBatting.triples + gameStats.triples,
+   210	    homeRuns: careerBatting.homeRuns + gameStats.hr,
+   211	    rbi: careerBatting.rbi + gameStats.rbi,
+   212	    runs: careerBatting.runs + gameStats.r,
+   213	    walks: careerBatting.walks + gameStats.bb,
+   214	    strikeouts: careerBatting.strikeouts + gameStats.k,
+   215	    hitByPitch: careerBatting.hitByPitch + gameStats.hbp,
+   216	    sacFlies: careerBatting.sacFlies + gameStats.sf,
+   217	    sacBunts: careerBatting.sacBunts + gameStats.sh,
+   218	    stolenBases: careerBatting.stolenBases + gameStats.sb,
+   219	    caughtStealing: careerBatting.caughtStealing + gameStats.cs,
+   220	    gidp: careerBatting.gidp + gameStats.gidp,
+   221	  };
+   222	}
+   223	
+   224	function mergeSeasonPitchingWithGameStats(
+   225	  seasonPitching: PlayerSeasonPitching | null,
+   226	  gameStats?: PitcherGameStats,
+   227	): PlayerSeasonPitching | null {
+   228	  if (!seasonPitching || !gameStats) return seasonPitching;
+   229	  return {
+   230	    ...seasonPitching,
+   231	    outsRecorded: seasonPitching.outsRecorded + gameStats.outsRecorded,
+   232	    hitsAllowed: seasonPitching.hitsAllowed + gameStats.hitsAllowed,
+   233	    runsAllowed: seasonPitching.runsAllowed + gameStats.runsAllowed,
+   234	    earnedRuns: seasonPitching.earnedRuns + gameStats.earnedRuns,
+   235	    walksAllowed: seasonPitching.walksAllowed + gameStats.walksAllowed,
+   236	    strikeouts: seasonPitching.strikeouts + gameStats.strikeoutsThrown,
+   237	    homeRunsAllowed: seasonPitching.homeRunsAllowed + gameStats.homeRunsAllowed,
+   238	    hitBatters: seasonPitching.hitBatters + gameStats.hitByPitch,
+   239	    wildPitches: seasonPitching.wildPitches + gameStats.wildPitches,
+   240	  };
+   241	}
+   242	
+   243	function mergeCareerPitchingWithGameStats(
+   244	  careerPitching: PlayerCareerPitching | null,
+   245	  gameStats?: PitcherGameStats,
+   246	): PlayerCareerPitching | null {
+   247	  if (!careerPitching || !gameStats) return careerPitching;
+   248	  return {
+   249	    ...careerPitching,
+   250	    outsRecorded: careerPitching.outsRecorded + gameStats.outsRecorded,
+   251	    hitsAllowed: careerPitching.hitsAllowed + gameStats.hitsAllowed,
+   252	    runsAllowed: careerPitching.runsAllowed + gameStats.runsAllowed,
+   253	    earnedRuns: careerPitching.earnedRuns + gameStats.earnedRuns,
+   254	    walksAllowed: careerPitching.walksAllowed + gameStats.walksAllowed,
+   255	    strikeouts: careerPitching.strikeouts + gameStats.strikeoutsThrown,
+   256	    homeRunsAllowed: careerPitching.homeRunsAllowed + gameStats.homeRunsAllowed,
+   257	    hitBatters: careerPitching.hitBatters + gameStats.hitByPitch,
+   258	    wildPitches: careerPitching.wildPitches + gameStats.wildPitches,
+   259	  };
+   260	}
+   261	
+   262	export function GameTracker() {
+   263	  const navigate = useNavigate();
+   264	  const { gameId } = useParams();
+   265	  const location = useLocation();
+   266	
+   267	  // Get rosters and team info from navigation state or use defaults
+   268	  const navigationState = location.state as {
+   269	    awayPlayers?: Player[];
+   270	    awayPitchers?: Pitcher[];
+   271	    homePlayers?: Player[];
+   272	    homePitchers?: Pitcher[];
+   273	    awayTeamName?: string;
+   274	    homeTeamName?: string;
+   275	    awayTeamId?: string;
+   276	    homeTeamId?: string;
+   277	    // Team colors from database (passed from ExhibitionGame)
+   278	    awayTeamColor?: string;
+   279	    awayTeamBorderColor?: string;
+   280	    homeTeamColor?: string;
+   281	    homeTeamBorderColor?: string;
+   282	    stadiumName?: string;
+   283	    awayRecord?: string;
+   284	    homeRecord?: string;
+   285	    gameMode?: 'exhibition' | 'franchise' | 'playoff' | 'elimination';
+   286	    leagueId?: string;
+   287	    homeManagerId?: string;
+   288	    homeManagerName?: string;
+   289	    awayManagerId?: string;
+   290	    awayManagerName?: string;
+   291	    userTeamSide?: 'home' | 'away';
+   292	    // Playoff context (for recording series results)
+   293	    playoffSeriesId?: string;
+   294	    playoffGameNumber?: number;
+   295	    playoffId?: string;
+   296	    franchiseId?: string;
+   297	    eliminationId?: string;
+   298	    seasonId?: string;
+   299	    statsScopeId?: string;
+   300	    competitionType?: 'exhibition' | 'franchise' | 'playoff' | 'elimination';
+
+--- Last 150 lines ---

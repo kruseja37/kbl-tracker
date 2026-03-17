@@ -1,5 +1,7 @@
 import { describe, expect, test } from 'vitest';
 
+import { calculateRunnerDefaults } from '../../app/components/runnerDefaults';
+import type { PlayData } from '../../app/utils/gameTrackerFieldTypes';
 import {
   applyRunnerDefaultsToNames,
   buildRunnerCorrectionForQuickBarOutcome,
@@ -68,5 +70,20 @@ describe('gameTrackerRunnerCorrection', () => {
     if (!d3kCorrection) throw new Error('Expected D3K correction');
 
     expect(getBatterDestinationOptions(d3kCorrection.action)).toEqual(['first', 'out']);
+  });
+
+  test('converts bases-loaded home run defaults into all-runners-home advancement and 4 RBI', () => {
+    const defaults = calculateRunnerDefaults(
+      { type: 'hr', hitType: 'HR', fieldingSequence: [] } as PlayData,
+      { first: true, second: true, third: true },
+      1,
+    );
+
+    expect(runnerDefaultsToAdvancement(defaults)).toEqual({
+      fromFirst: 'home',
+      fromSecond: 'home',
+      fromThird: 'home',
+    });
+    expect(countRbiFromDefaults(defaults, { type: 'hit', hitType: 'HR' })).toBe(4);
   });
 });

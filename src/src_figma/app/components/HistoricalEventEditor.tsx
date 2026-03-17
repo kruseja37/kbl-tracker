@@ -8,6 +8,9 @@ interface HistoricalEventEditorProps {
   event: BetweenPlayEvent | null;
   loading?: boolean;
   saving?: boolean;
+  /** UX-055: Whether this event is within the undo stack depth (most recent N events).
+   *  Within depth: outcome changeable via undo. Beyond depth: outcome locked, enrichment editable. */
+  isWithinUndoDepth?: boolean;
   onReturnToLive: () => void;
   onRunnerCaughtByChange?: (caughtBy: number | null) => void;
   onRunnerPitcherChange?: (pitcherId: string) => void;
@@ -40,10 +43,12 @@ function FieldRow({ label, value }: { label: string; value: React.ReactNode }) {
   );
 }
 
-function LockedOutcomeNotice() {
+function LockedOutcomeNotice({ isWithinUndoDepth }: { isWithinUndoDepth?: boolean }) {
   return (
     <div className="text-[8px] text-[#C4A853] bg-[#2f3b21] border border-[#5a6b38] px-2 py-1 rounded">
-      Tap undo to change outcome.
+      {isWithinUndoDepth
+        ? 'Use ↩ Undo to change outcome.'
+        : 'Outcome is locked. Enrichment fields remain editable.'}
     </div>
   );
 }
@@ -53,6 +58,7 @@ export function HistoricalEventEditor({
   event,
   loading = false,
   saving = false,
+  isWithinUndoDepth,
   onReturnToLive,
   onRunnerCaughtByChange,
   onRunnerPitcherChange,
@@ -113,7 +119,7 @@ export function HistoricalEventEditor({
 
             {entry.editorType === 'runner' && (
               <>
-                <LockedOutcomeNotice />
+                <LockedOutcomeNotice isWithinUndoDepth={isWithinUndoDepth} />
                 <div className="bg-[#1f2937]/50 border border-[#4a6a4a] rounded px-2 py-2 space-y-1">
                   <FieldRow label="From" value={runnerAction ? `${runnerAction.fromBase}B` : '—'} />
                   <FieldRow label="To" value={runnerAction ? (runnerAction.outcome === 'out' ? 'OUT' : `${runnerAction.toBase === 4 ? 'HOME' : `${runnerAction.toBase}B`}`) : '—'} />
@@ -404,7 +410,7 @@ export function HistoricalEventEditor({
                   </div>
                 ) : event.type === 'injury' && event.playerStateChange ? (
                   <div className="space-y-2">
-                    <LockedOutcomeNotice />
+                    <LockedOutcomeNotice isWithinUndoDepth={isWithinUndoDepth} />
                     <div className="text-[8px] text-[#88AA88]">
                       Fitness changes live on the linked fitness row. Injury rows only own annotation fields.
                     </div>

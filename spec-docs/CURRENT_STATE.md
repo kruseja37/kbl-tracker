@@ -1,104 +1,119 @@
 # CURRENT_STATE.md
 
-**Last Updated:** 2026-03-07
-**Phase:** Elimination Mode Build — ALL 15 STEPS COMPLETE
+**Last Updated:** 2026-03-16
+**Phase:** GameTracker UX redesign COMPLETE — pre-integration testing
 
 ---
 
-## Current Phase and Step
+## Current Phase
 
-**GameTracker Delta Build — ALL 55 TICKETS COMPLETE.**
-**Elimination Mode — Steps 0-14 COMPLETE. Elimination Mode is shipped. Browser testing is next.**
+The GameTracker UX redesign is **COMPLETE**. All 58 decisions from GAMETRACKER_UX_SPEC.md have been addressed: 48 implemented, 10 verified as already existing or N/A.
 
-## Last Completed Action
+The immediate next step is full integration testing: play a complete game start to finish on iPad Safari landscape using the new UX.
 
-Session 2026-03-07: Completed Elimination Mode Steps 11-13 via Codex 5.4. Elimination Mode is now shipped.
-- Step 11: Mojo/fitness inter-game persistence via new `mojoFitnessStorage.ts` + GameTracker save/load wiring
-- Step 12: PostGameSummary elimination return navigation to `/elimination/{eliminationId}`
-- Step 13: Awards computation via new `eliminationAwards.ts` + real AWARDS tab in EliminationHome
-- Step 14 was already completed earlier via Step 2 route and AppHome wiring
-- Build: PASS
+Current priorities:
 
-## Next Action
+1. Full game playtest on iPad Safari landscape (start to finish)
+2. Fix any issues found during playtest
+3. Resume Elimination Mode Steps 6-14 (paused during UX redesign)
+4. Wire season stats to player card (currently shows game stats only)
+5. Wire fWAR/pWAR to lineup columns (currently "—" placeholders)
 
-**Browser Testing:** Validate Elimination Mode end-to-end in the browser (setup, team hub, game flow, post-game return, awards, history).
+---
 
-Per `ELIMINATION_MODE_SPEC.md` §11 implementation priority:
+## What Was Built (UX Redesign Session — 2026-03-15/16)
 
-| Step | Task | Status |
-|------|------|--------|
-| 0 | League Builder data integrity audit | ✅ COMPLETE |
-| 1 | DB migrations (kbl-playoffs v2, kbl-app-meta v3, kbl-tracker v4) | ✅ COMPLETE |
-| 2 | Rename WorldSeries → EliminationHome + route changes | ✅ COMPLETE |
-| 3 | `eliminationManager.ts` — CRUD (~100-150 lines) | ✅ COMPLETE |
-| 4 | EliminationSelector page — save slot picker | ✅ COMPLETE |
-| 5 | EliminationSetup wizard — 5-step flow | ✅ COMPLETE |
-| 6 | Roster snapshot logic — create + read + update | ✅ COMPLETE |
-| 7 | EliminationHome — adapt bracket view, add Team Hub tab | ✅ COMPLETE |
-| 8 | EliminationTeamHub — roster view + lineup editing | ✅ COMPLETE |
-| 9 | GameTracker `elimination` mode — type + mode checks | ✅ COMPLETE |
-| 10 | `aggregateGameToPlayoffStats()` — the missing write | ✅ COMPLETE |
-| 11 | Mojo/fitness inter-game persistence | ✅ COMPLETE |
-| 12 | PostGameSummary elimination return nav | ✅ COMPLETE |
-| 13 | Awards computation | ✅ COMPLETE |
-| 14 | Home screen button wiring | ✅ COMPLETE |
+### Tier 1 — Architectural Rewrite (14 items)
+- 4-column layout: NewsBoard (1/5), Batting Lineup (1/5), Defensive Lineup (1/5), Play Log (2/5)
+- ScoreBug single-line at top with expand/collapse retro Fenway overlay
+- GameDiamond removed from render (file preserved)
+- Inline lineup columns: 9 players each, role-based swapping on half-inning
+- Three-phase lifecycle: PRE_GAME → LIVE → POST_FINAL_OUT with START GAME gate
+- Fixed viewport, no page scroll, internal column scrolling only
+- Balls/strikes removed from scoreboard
 
-## GameTracker Delta — COMPLETE
+### Tier 2 — Component Rewrites (20 items)
+- K and Ꝁ (backwards K) as separate Quick Bar buttons
+- ITPHR in overflow menu
+- Undo + End Game in Quick Bar row with visual divider
+- Processing-aware button feedback
+- Pre-commit runner correction gate removed — immediate commit with defaults
+- Player-first substitution flow (tap player → card → Sub Out → bench list)
+- Real game stats wired to player card (season stats deferred)
+- Enrichment taxonomy rewritten: contactType replaces exitType, fielding attempt restructured (Type + Outcome), play mechanic separated, per-result gating
+- Inline SVG spray graphic with context-sensitive zone counts
+- Manager moment Ⓜ in ScoreBug with Stay the Course button
+- NewsBoard verified display-only
+- Half-inning column swap verified
 
-All 55 gap tickets resolved across 5 layers:
+### Tier 3 — Polish & New Features (14 items)
+- Runner sub-entries in play log with "└" nesting, independently enrichable
+- Runner enrichment: TOOTBLAN, Out Advancing, fielding sequence, play mechanic per runner
+- currentCatcherId auto-assigned on BetweenPlayEvents
+- Undo-depth-aware locking (within 10 = full correction, beyond = structural locked, enrichment open)
+- Defensive lineup enrichment mode (column toggles to "FIELDING SEQUENCE")
+- Spray zone counts match spec §8.2 exactly
+- Pitch count triggers verified at all 3 points
+- Play log team colors
+- CSS animations (fade-in, score highlight, lineup row flash)
+- Player card initiate-only enforcement
+- Audio system (Web Audio API, 8-bit retro sounds, two toggles)
+- Undo toast format: "[inning] [batter] [result]"
+- Save indicator ✓/⚠ in ScoreBug
+- Locked result tooltip on tap
 
-| Layer | Tickets | Status |
-|-------|---------|--------|
-| Quick Wins | 11/11 | ✅ |
-| Layer 1A Types | 8/8 | ✅ |
-| Layer 1B Event Fields | 9/9 | ✅ |
-| Layer 1C Interfaces | 2/2 (+1 deferred) | ✅ |
-| Layer 2 Layout (4 sessions) | All scaffolded | ✅ |
-| Layer 3 Baseball Rules | 5/5 | ✅ |
-| Layer 4 Between-Play + Subs | 7/7 | ✅ |
-| Layer 5 Enrichment | 8/8 | ✅ |
+---
 
-## UNVERIFIED Items (Need Browser Testing)
+## Known Gaps (Not Regressions — Deferred Items)
 
-These were built without visual testing:
-- Layer 4: Runner/fielder tap popovers — visual positioning on diamond
-- Layer 4: Pitcher tap UX in FenwayBoard
-- Layer 5: Enrichment panel open/close flow
-- Layer 5: Mini diamond tap-to-place for field location
-- Layer 5: Between-inning enrichment prompt
-- Layer 5: Post-game enrichment summary
+| Gap | Status | What's Needed |
+|-----|--------|---------------|
+| FLO outcome silently dropped | Pre-existing bug | Add FLO to buildRunnerCorrectionForQuickBarOutcome out-type list |
+| Season stats not on player card | Deferred | Wire franchise data store season aggregates to PlayerCardModal |
+| Jersey numbers not shown | Data gap | Player interface doesn't include jersey number field |
+| fWAR/pWAR show "—" | Deferred | Wire WAR calculation pipeline to lineup column display |
+| Defensive next-inning leadoff | Simplified | Cross-half-inning batter tracking needs refinement |
+| Manager moment detection | Infrastructure only | leverageIndex > 2.0 threshold trigger not wired (Ⓜ ready) |
 
-## Key Spec Documents
+---
 
-| Document | Purpose |
-|----------|---------|
-| `spec-docs/ELIMINATION_MODE_SPEC.md` | Gospel spec for Elimination Mode (v2 — super-lite wrapper) |
-| `spec-docs/GAMETRACKER_DELTA_PLAN.md` | GameTracker gap assessment plan (Steps 1-5) |
-| `spec-docs/GAMETRACKER_DELTA_REPORT.md` | Full delta report — Sessions 1-3, all §2-§7 |
-| `spec-docs/GAMETRACKER_BUILD_PLAN.md` | 55 tickets organized by layer with dependencies |
-| `spec-docs/DATA_INTEGRITY_AUDIT.md` | Player data flow audit from Step 0 |
-| `spec-docs/KEEP.md` | Protected files list |
-| `spec-docs/v1-simplification/MODE_2_V1_FINAL.md` | Mode 2 gospel spec (GameTracker source of truth) |
-| `spec-docs/v1-simplification/MODE_1_V1_FINAL.md` | Mode 1 gospel spec (League Builder, §11.8 Playoff Mode) |
+## Architecture Truth (Updated)
 
-## Build Status
+### Layout
+- 3-row pinned layout: ScoreBug (top), 4-column content (middle), QuickBar (bottom)
+- Columns: NewsBoard, BattingLineupColumn, DefensiveLineupColumn, PlayLogPanel
+- Fixed viewport, no page scroll
 
-- **Build:** PASS (0 errors)
-- **Tests:** 4,028 pass / 0 fail / 103 files
-- **Branch:** main (all work merged)
+### Game Lifecycle
+- GameState.gamePhase: PRE_GAME | LIVE | POST_FINAL_OUT
+- QuickBar transforms per phase
+- Backward compat: existing saved games default to LIVE
 
-## Architecture Notes for Continuation
+### Enrichment
+- contactType (Normal/Weak/Hard/Bloop/Bunt) replaces exitType
+- Fielding Attempt: Type (8 options) + Outcome (Made/Missed)
+- Play Mechanic: separate dimension (6 options including Deflection)
+- Per-result ENRICHMENT_CONFIG gating
+- Runner-level enrichment: TOOTBLAN, Out Advancing, fielding seq, play mechanic
+- Inline SVG spray graphic with result-specific zone counts
 
-**Elimination Mode storage:** Uses existing 4 databases with key scoping — NO new databases.
-- `kbl-playoffs`: `sourceType: 'franchise' | 'elimination'` on PlayoffConfig (v2 migration done)
-- `kbl-app-meta`: `eliminationList` store added (v3 migration done)
-- `kbl-tracker`: `rosterSnapshots` + `mojoFitnessSnapshots` stores added (v4 migration done)
-- `kbl-event-log`: No changes — events scoped by gameId/seasonId prefixes
+### Substitution
+- Player-first flow: tap player → card → Sub Out → bench list → select
+- Swap Position and Swap Order (pre-game only) via player card
+- Drag-drop substitution removed
 
-**GameTracker mode:** New `gameMode: 'elimination'` value. See ELIMINATION_MODE_SPEC §7.3 for exhaustive mode check table.
+### Score Bug
+- Single-line with expand/collapse Fenway overlay
+- Ⓜ manager moment indicator + Stay the Course button
+- ✓/⚠ save indicator
+- Audio toggle icons (🔊)
 
-**Stats scoping:** Pass `seasonId: 'elimination-{eliminationId}'` via navigation state. Existing `aggregateGameToSeason()` works unchanged with this key.
+---
 
-**Roster snapshots:** Full `leagueBuilderStorage.Player` objects frozen at bracket creation. Team Hub edits write to snapshot, not League Builder. `lineupLoader` pattern adapted to read from snapshot.
+## Recommended Next Steps
 
-**15 pitfalls documented in ELIMINATION_MODE_SPEC §12** — every agent must read before touching Elimination code.
+1. **Full game playtest** on iPad Safari landscape — start to finish
+2. **Fix FLO bug** — add to out-type list in buildRunnerCorrectionForQuickBarOutcome
+3. **Resume Elimination Mode** Steps 6-14
+4. **Wire season stats** to player card
+5. **Wire WAR pipeline** to lineup columns

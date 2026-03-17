@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import type { GamePhase } from '@/hooks/useGameState';
 
 interface GameSituationForQuickBar {
   outs: number;
@@ -10,19 +11,29 @@ interface QuickBarProps {
   disabled?: boolean;
   /** Game situation for context-sensitive button disabling per §6.8 */
   gameSituation?: GameSituationForQuickBar;
-  /** D-17: Manager Moment indicator — pulsing border when active */
-  managerMomentActive?: boolean;
-  /** D-17: Callback when lightning indicator is tapped */
-  onManagerMomentTap?: () => void;
+  /** §4.6: Three-phase Quick Bar lifecycle */
+  gamePhase: GamePhase;
+  /** §10.1: Callback to transition PRE_GAME → LIVE */
+  onStartGame: () => void;
+  /** Callback for END GAME button in POST_FINAL_OUT phase */
+  onEndGame?: () => void;
+  /** §4.3: Outcome currently being processed — button stays depressed */
+  processingOutcome?: string | null;
+  /** §4.4: Undo step count */
+  undoCount?: number;
+  /** §4.4: Whether undo is available */
+  canUndo?: boolean;
+  /** §4.4: Undo callback */
+  onUndo?: () => void;
 }
 
-/** Quick Bar button config per §3.1 — primary row of outcome buttons */
-const PRIMARY_BUTTONS = ['K', 'GO', 'FO', 'LO', '1B', 'BB', '2B', 'HR'] as const;
+/** Quick Bar button config per §4.1 — primary row of outcome buttons */
+const PRIMARY_BUTTONS = ['K', 'Ꝁ', 'GO', 'FO', 'LO', '1B', 'BB', '2B', 'HR'] as const;
 
-/** Secondary outcomes shown in the overflow menu (D3K removed per D-13: redundant with WP_K/PB_K) */
+/** Secondary outcomes shown in the overflow menu */
 const OVERFLOW_BUTTONS = [
-  'PO', '3B', 'HBP', 'E', 'FC', 'DP', 'TP',
-  'SAC', 'SF', 'IBB', 'WP_K', 'PB_K', 'GRD',
+  'FLO', 'PO', '3B', 'HBP', 'E', 'FC', 'DP', 'TP',
+  'SAC', 'SF', 'IBB', 'WP_K', 'PB_K', 'GRD', 'ITPHR',
 ] as const;
 
 /** §6.8 Button availability rules — returns true if button should be disabled */
@@ -43,6 +54,7 @@ function isContextDisabled(btn: string, situation?: GameSituationForQuickBar): b
 const BUTTON_COLORS: Record<string, { bg: string; border: string }> = {
   // Outs — red family
   K:    { bg: '#8B0000', border: '#FF4444' },
+  'Ꝁ': { bg: '#8B0000', border: '#FF4444' },
   GO:   { bg: '#8B0000', border: '#FF4444' },
   FO:   { bg: '#8B0000', border: '#FF4444' },
   LO:   { bg: '#8B0000', border: '#FF4444' },
@@ -60,24 +72,32 @@ const BUTTON_COLORS: Record<string, { bg: string; border: string }> = {
   HBP:  { bg: '#1a5276', border: '#5dade2' },
   IBB:  { bg: '#1a5276', border: '#5dade2' },
   // Special — purple
-  HR:   { bg: '#6c3483', border: '#af7ac5' },
+  HR:    { bg: '#6c3483', border: '#af7ac5' },
+  ITPHR: { bg: '#6c3483', border: '#af7ac5' },
   // Hybrid / misc — amber
   E:      { bg: '#7d6608', border: '#f4d03f' },
   WP_K:   { bg: '#7d6608', border: '#f4d03f' },
   PB_K:   { bg: '#7d6608', border: '#f4d03f' },
-  GRD:  { bg: '#1a5276', border: '#5dade2' }, // Ground Rule Double — blue like other hits
+  GRD:  { bg: '#1a5276', border: '#5dade2' },
   // Overflow trigger
   '···': { bg: '#333333', border: '#888888' },
 };
 
 /**
- * Quick Bar — Bottom-left zone of the 5-zone GameTracker layout (§3.7).
+ * Quick Bar — Full-width pinned bottom zone of the GameTracker layout.
  * Primary 1-tap outcome input wired to handleQuickBarOutcome via onOutcome.
- * The [···] button opens a popover with secondary outcomes (§3.2 overflow).
+ * Phase-aware: PRE_GAME shows START GAME, LIVE shows outcomes, POST_FINAL_OUT shows END GAME.
+ * §4.4: Undo + End Game at far right with visual divider.
+ * §4.3: Processing-aware button feedback.
  */
-export function QuickBar({ onOutcome, disabled, gameSituation, managerMomentActive, onManagerMomentTap }: QuickBarProps) {
+export function QuickBar({
+  onOutcome, disabled, gameSituation,
+  gamePhase, onStartGame, onEndGame,
+  processingOutcome, undoCount = 0, canUndo = false, onUndo,
+}: QuickBarProps) {
   const [overflowOpen, setOverflowOpen] = useState(false);
   const overflowRef = useRef<HTMLDivElement>(null);
+  const [startGamePending, setStartGamePending] = useState(false);
 
   // Close overflow when clicking outside
   useEffect(() => {
@@ -94,6 +114,13 @@ export function QuickBar({ onOutcome, disabled, gameSituation, managerMomentActi
   const renderButton = (btn: string, extraClass?: string) => {
     const colors = BUTTON_COLORS[btn] || BUTTON_COLORS['···'];
     const contextOff = isContextDisabled(btn, gameSituation);
+    const isProcessing = processingOutcome === btn;
+
+    // §11.3: Ꝁ renders as mirrored K character
+    const displayLabel = btn === 'Ꝁ' ? (
+      <span style={{ display: 'inline-block', transform: 'scaleX(-1)' }}>K</span>
+    ) : btn;
+
     return (
       <button
         key={btn}
@@ -106,32 +133,83 @@ export function QuickBar({ onOutcome, disabled, gameSituation, managerMomentActi
                    border-[3px] shadow-[2px_2px_0px_0px_rgba(0,0,0,0.5)]
                    active:scale-95 active:shadow-none transition-transform
                    disabled:opacity-40 disabled:cursor-not-allowed
+                   ${isProcessing ? 'scale-95 shadow-none ring-2 ring-white/60' : ''}
                    ${extraClass || 'flex-1 min-w-[40px]'}`}
         style={{ backgroundColor: colors.bg, borderColor: colors.border }}
       >
-        {btn}
+        {displayLabel}
       </button>
     );
   };
 
-  return (
-    <div className={`bg-[#2a3a2d] border-t-[3px] p-2 h-full flex flex-col justify-center relative ${
-      managerMomentActive
-        ? 'border-[#FFD700] animate-pulse shadow-[inset_0_0_12px_rgba(255,215,0,0.3)]'
-        : 'border-[#3d5240]'
-    }`}>
-      {/* D-17: Manager Moment lightning indicator */}
-      {managerMomentActive && (
+  // §4.6 PRE_GAME phase: show START GAME button centered
+  if (gamePhase === 'PRE_GAME') {
+    return (
+      <div className="bg-[#2a3a2d] border-t-[3px] border-[#3d5240] p-2 flex items-center justify-center relative">
+        {startGamePending ? (
+          <div className="flex items-center gap-3">
+            <span className="text-[#E8E8D8] text-sm font-bold tracking-wide">Lock lineups and begin recording?</span>
+            <button
+              onClick={() => {
+                onStartGame();
+                setStartGamePending(false);
+              }}
+              className="px-6 py-2.5 text-[#1E2C23] text-sm font-black tracking-[0.16em]
+                         bg-[#34d399] border-[3px] border-[#10b981]
+                         shadow-[2px_2px_0px_0px_rgba(0,0,0,0.5)]
+                         active:scale-95 active:shadow-none transition-transform"
+            >
+              YES
+            </button>
+            <button
+              onClick={() => setStartGamePending(false)}
+              className="px-6 py-2.5 text-[#E8E8D8] text-sm font-bold tracking-wide
+                         bg-[#5C7156] border-[3px] border-[#48604A]
+                         shadow-[2px_2px_0px_0px_rgba(0,0,0,0.5)]
+                         active:scale-95 active:shadow-none transition-transform"
+            >
+              NO
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={() => setStartGamePending(true)}
+            className="px-8 py-3 text-[#1E2C23] text-lg font-black tracking-[0.16em]
+                       bg-[#E8E8D8] border-[3px] border-[#163326]
+                       shadow-[2px_2px_0px_0px_rgba(0,0,0,0.5)]
+                       active:scale-95 active:shadow-none transition-transform
+                       hover:bg-[#F0F0E0]"
+          >
+            START GAME
+          </button>
+        )}
+      </div>
+    );
+  }
+
+  // §4.6 POST_FINAL_OUT phase: show END GAME button centered
+  if (gamePhase === 'POST_FINAL_OUT') {
+    return (
+      <div className="bg-[#2a3a2d] border-t-[3px] border-[#3d5240] p-2 flex items-center justify-center relative">
         <button
-          onClick={onManagerMomentTap}
-          className="absolute -top-3 right-2 z-40 bg-[#FFD700] text-[#1a1a1a] text-[10px] font-bold px-1.5 py-0.5 rounded-sm border-2 border-[#B8960A] hover:bg-[#E8C400] active:scale-95 transition-transform animate-bounce"
-          title="Manager Moment — tap to decide"
+          onClick={onEndGame}
+          className="px-8 py-3 text-white text-lg font-black tracking-[0.16em]
+                     bg-[#DD0000] border-[3px] border-white
+                     shadow-[2px_2px_0px_0px_rgba(0,0,0,0.5)]
+                     active:scale-95 active:shadow-none transition-transform
+                     hover:bg-[#FF0000]"
         >
-          &#9889; MM
+          END GAME
         </button>
-      )}
-      {/* Primary row */}
-      <div className="flex gap-1 flex-wrap">
+      </div>
+    );
+  }
+
+  // §4.6 LIVE phase: full outcome buttons + overflow + utility buttons
+  return (
+    <div className="bg-[#2a3a2d] border-t-[3px] border-[#3d5240] p-2 h-full flex flex-col justify-center relative">
+      {/* Primary row + utility buttons */}
+      <div className="flex gap-1 flex-wrap items-stretch">
         {PRIMARY_BUTTONS.map((btn) => renderButton(btn))}
 
         {/* Overflow trigger */}
@@ -146,6 +224,38 @@ export function QuickBar({ onOutcome, disabled, gameSituation, managerMomentActi
           style={{ backgroundColor: '#333333', borderColor: '#888888' }}
         >
           ···
+        </button>
+
+        {/* §4.4: Visual divider between outcome and utility buttons */}
+        <div className="w-[2px] bg-[#555] mx-1 self-stretch" />
+
+        {/* §4.4: Undo button */}
+        <button
+          disabled={!canUndo}
+          onClick={onUndo}
+          className={`px-2 py-2.5 text-[10px] font-bold tracking-wide border-[3px]
+                     shadow-[2px_2px_0px_0px_rgba(0,0,0,0.5)]
+                     active:scale-95 active:shadow-none transition-transform
+                     ${canUndo
+                       ? 'bg-[#3a3a3a] border-[#C4A853] text-[#C4A853] hover:bg-[#4a4a4a]'
+                       : 'bg-[#333] border-[#555] text-[#666] cursor-not-allowed opacity-50'
+                     }`}
+          title={canUndo ? `Undo (${undoCount} available)` : 'Nothing to undo'}
+        >
+          ↩ {undoCount}
+        </button>
+
+        {/* §4.4: End Game button — smaller, muted to avoid accidental taps */}
+        <button
+          onClick={onEndGame}
+          className="px-2 py-2.5 text-[10px] font-bold tracking-wide
+                     bg-[#5a2020] border-[3px] border-[#8B0000] text-[#cc8888]
+                     shadow-[2px_2px_0px_0px_rgba(0,0,0,0.5)]
+                     active:scale-95 active:shadow-none transition-transform
+                     hover:bg-[#6a2828] hover:text-white"
+          title="End Game"
+        >
+          END
         </button>
       </div>
 

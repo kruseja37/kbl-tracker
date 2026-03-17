@@ -296,8 +296,8 @@ export function detectDecisionType(event: string): DecisionType | null {
  * Determine outcome based on subsequent at-bat result (for pinch hitters)
  */
 export function evaluatePinchHitterOutcome(result: string): DecisionOutcome {
-  const successResults = ['1B', '2B', '3B', 'HR', 'BB', 'HBP', 'SF', 'SAC'];
-  const failureResults = ['K', 'Kc', 'DP'];
+  const successResults = ['1B', '2B', '3B', 'HR', 'ITPHR', 'BB', 'HBP', 'SF', 'SAC'];
+  const failureResults = ['K', 'Kc', 'Ꝁ', 'DP'];
 
   if (successResults.includes(result)) return 'success';
   if (failureResults.includes(result)) return 'failure';

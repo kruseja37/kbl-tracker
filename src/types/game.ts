@@ -10,9 +10,11 @@ export type Position = 'P' | 'C' | '1B' | '2B' | '3B' | 'SS' | 'LF' | 'CF' | 'RF
 export type BatterHand = 'L' | 'R' | 'S';
 
 export type AtBatResult =
-  | '1B' | '2B' | '3B' | 'HR' | 'BB' | 'IBB' | 'K' | 'Kc'
-  | 'GO' | 'FO' | 'LO' | 'PO' | 'DP' | 'TP' | 'SF' | 'SAC' | 'HBP' | 'E' | 'FC'
+  | '1B' | '2B' | '3B' | 'HR' | 'ITPHR' | 'BB' | 'IBB' | 'K' | 'Kc' | 'Ꝁ'
+  | 'GO' | 'FO' | 'FLO' | 'LO' | 'PO' | 'DP' | 'TP' | 'SF' | 'SAC' | 'HBP' | 'E' | 'FC'
   | 'D3K' | 'WP_K' | 'PB_K' | 'GRD'; // GRD = Ground Rule Double (GAP-GT-6-D)
+  // 'Kc' retained for backward compat with pre-UX-redesign events. New events use 'Ꝁ'.
+  // 'ITPHR' = Inside-the-Park Home Run (UX-049)
 
 export type GameEvent = 'SB' | 'CS' | 'WP' | 'PB' | 'PK' | 'PITCH_CHANGE' | 'PINCH_HIT' | 'PINCH_RUN' | 'DEF_SUB' | 'POS_SWITCH';
 // Special play types for outs and hits

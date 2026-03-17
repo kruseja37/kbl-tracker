@@ -414,6 +414,36 @@ export function calculateD3KDefaults(bases: GameBases, outs: number): RunnerDefa
   };
 }
 
+/**
+ * Calculate runner defaults for WP_K / PB_K.
+ * Existing runners always advance one base on the uncaught third strike,
+ * while the batter only reaches if first is open or there are two outs.
+ */
+export function calculateDroppedThirdStrikeAdvanceDefaults(
+  bases: GameBases,
+  outs: number,
+): RunnerDefaults {
+  const batterReaches = !bases.first || outs >= 2;
+
+  return {
+    batter: {
+      from: 'batter',
+      to: batterReaches ? 'first' : 'out',
+      isDefault: batterReaches,
+      reason: batterReaches ? 'Reached on dropped third strike' : 'Strikeout recorded',
+    },
+    ...(bases.first && {
+      first: { from: 'first', to: 'second', isDefault: true, reason: 'Advances on WP/PB' },
+    }),
+    ...(bases.second && {
+      second: { from: 'second', to: 'third', isDefault: true, reason: 'Advances on WP/PB' },
+    }),
+    ...(bases.third && {
+      third: { from: 'third', to: 'home', isDefault: true, reason: 'Scores on WP/PB' },
+    }),
+  };
+}
+
 // ============================================
 // STOLEN BASE / RUNNER EVENT DEFAULTS
 // ============================================

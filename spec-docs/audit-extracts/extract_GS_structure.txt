@@ -1,0 +1,303 @@
+--- First 300 lines ---
+     1	/**
+     2	 * Game State Hook for Figma GameTracker
+     3	 *
+     4	 * This hook bridges the Figma UI to the existing KBL Tracker data layer.
+     5	 * It wraps the existing hooks and provides a simplified interface for the UI.
+     6	 */
+     7	
+     8	import { useState, useCallback, useEffect, useRef } from 'react';
+     9	import { getTeamColors } from '@/config/teamColors';
+    10	// Import from src/ persistence layer
+    11	import {
+    12	  logAtBatEvent,
+    13	  logBetweenPlayEvent,
+    14	  undoMostRecentGameAction,
+    15	  createGameHeader,
+    16	  completeGame,
+    17	  getGameEvents,
+    18	  getBetweenPlayEvent,
+    19	  getBetweenPlayEvents,
+    20	  markGameAggregated,
+    21	  getGameFieldingEvents,
+    22	  getGameHeader,
+    23	  updateBetweenPlayEvent,
+    24	  type AtBatEvent,
+    25	  type BetweenPlayEvent,
+    26	  type BetweenPlayEventType,
+    27	  type RunnerState,
+    28	  type GameHeader,
+    29	  type FameEventRecord,
+    30	} from '../../utils/eventLog';
+    31	import type { GameAggregationOptions } from '../../utils/seasonAggregator';
+    32	import { processCompletedGame } from '../../utils/processCompletedGame';
+    33	import {
+    34	  archiveCompletedGame,
+    35	  saveCurrentGame,
+    36	  loadCurrentGame,
+    37	  immediateSaveCurrentGame,
+    38	  clearCurrentGame,
+    39	  type CompetitionType,
+    40	  type PersistedGameState,
+    41	} from '../utils/gameStorage';
+    42	import type { AtBatResult, HalfInning, LineupState, LineupPlayer, BenchPlayer, Position } from '../../types/game';
+    43	import { validateSubstitution } from '../../types/game';
+    44	import { calculateLeverageIndex } from '../../engines/leverageCalculator';
+    45	import { calculateWPA } from '../../engines/wpaCalculator';
+    46	import {
+    47	  createRunnerTrackingState,
+    48	  addRunner as trackerAddRunner,
+    49	  advanceRunner as trackerAdvanceRunner,
+    50	  runnerOut as trackerRunnerOut,
+    51	  handlePitchingChange as trackerHandlePitchingChange,
+    52	  clearBases as trackerClearBases,
+    53	  nextInning as trackerNextInning,
+    54	  nextAtBat as trackerNextAtBat,
+    55	  getCurrentBases as trackerGetCurrentBases,
+    56	  type RunnerTrackingState,
+    57	  type RunnerScoredEvent,
+    58	  type PitcherRunnerStats,
+    59	} from '../app/engines/inheritedRunnerTracker';
+    60	import type { HowReached } from '../app/types/substitution';
+    61	
+    62	// ============================================
+    63	// TYPES
+    64	// ============================================
+    65	
+    66	export interface GameState {
+    67	  gameId: string;
+    68	  homeScore: number;
+    69	  awayScore: number;
+    70	  inning: number;
+    71	  isTop: boolean;
+    72	  outs: number;
+    73	  balls: number;
+    74	  strikes: number;
+    75	  bases: { first: boolean; second: boolean; third: boolean };
+    76	  currentBatterId: string;
+    77	  currentBatterName: string;
+    78	  currentPitcherId: string;
+    79	  currentPitcherName: string;
+    80	  awayTeamId: string;
+    81	  homeTeamId: string;
+    82	  awayTeamName: string;
+    83	  homeTeamName: string;
+    84	  stadiumName?: string | null;
+    85	  seasonNumber: number;
+    86	}
+    87	
+    88	export interface EndGameOptions {
+    89	  activityLog?: string[];
+    90	  seasonId?: string;
+    91	  statsScopeId?: string;
+    92	  competitionType?: CompetitionType;
+    93	  competitionId?: string;
+    94	  franchiseId?: string;
+    95	  currentSeason?: number;
+    96	  currentGame?: number;
+    97	  stadiumName?: string | null;
+    98	}
+    99	
+   100	export interface ScoreboardState {
+   101	  innings: { away: number | undefined; home: number | undefined }[];
+   102	  away: { runs: number; hits: number; errors: number };
+   103	  home: { runs: number; hits: number; errors: number };
+   104	}
+   105	
+   106	export interface PlayerGameStats {
+   107	  pa: number;
+   108	  ab: number;
+   109	  h: number;
+   110	  singles: number;
+   111	  doubles: number;
+   112	  triples: number;
+   113	  hr: number;
+   114	  r: number;
+   115	  rbi: number;
+   116	  bb: number;
+   117	  hbp: number;    // MAJ-07: Track HBP separately from BB
+   118	  k: number;
+   119	  sb: number;
+   120	  cs: number;
+   121	  sf: number;     // MAJ-11: Sacrifice flies
+   122	  sh: number;     // MAJ-11: Sacrifice bunts (SH)
+   123	  gidp: number;   // MAJ-11: Grounded into double play
+   124	}
+   125	
+   126	export interface PitcherGameStats {
+   127	  // Core counting stats (existing)
+   128	  outsRecorded: number;
+   129	  hitsAllowed: number;
+   130	  runsAllowed: number;
+   131	  earnedRuns: number;
+   132	  walksAllowed: number;         // BB only (not IBB or HBP)
+   133	  strikeoutsThrown: number;
+   134	  homeRunsAllowed: number;
+   135	  pitchCount: number;
+   136	  battersFaced: number;
+   137	  // MAJ-07: New counting stats per PITCHER_STATS_TRACKING_SPEC.md
+   138	  intentionalWalks: number;     // IBB
+   139	  hitByPitch: number;           // HBP
+   140	  wildPitches: number;          // WP
+   141	  basesLoadedWalks: number;     // BB/HBP/IBB with bases loaded
+   142	  firstInningRuns: number;      // Runs allowed in first inning (starters only)
+   143	  consecutiveHRsAllowed: number; // Current streak of consecutive HR allowed
+   144	  // Role/timing fields
+   145	  isStarter: boolean;
+   146	  entryInning: number;          // Which inning pitcher entered
+   147	  entryOuts: number;            // Outs when pitcher entered
+   148	  exitInning: number | null;    // Which inning pitcher left (null = still active)
+   149	  exitOuts: number | null;      // Outs when pitcher left
+   150	  finishedGame: boolean;
+   151	  // Inherited/bequeathed runners (from inheritedRunnerTracker)
+   152	  inheritedRunners: number;
+   153	  inheritedRunnersScored: number;
+   154	  bequeathedRunners: number;
+   155	  bequeathedRunnersScored: number;
+   156	  // MAJ-08: Pitcher decisions per PITCHER_STATS_TRACKING_SPEC.md §5-6
+   157	  decision: 'W' | 'L' | 'ND' | null;
+   158	  save: boolean;
+   159	  hold: boolean;
+   160	  blownSave: boolean;
+   161	}
+   162	
+   163	export interface RunnerAdvancement {
+   164	  fromFirst?: 'second' | 'third' | 'home' | 'out';
+   165	  fromSecond?: 'third' | 'home' | 'out';
+   166	  fromThird?: 'home' | 'out';
+   167	}
+   168	
+   169	export type HitType = '1B' | '2B' | '3B' | 'HR' | 'GRD'; // GRD = Ground Rule Double (GAP-GT-6-D)
+   170	export type OutType = 'K' | 'Kc' | 'GO' | 'FO' | 'FLO' | 'LO' | 'PO' | 'DP' | 'TP' | 'FC' | 'SF' | 'SH' | 'D3K';
+   171	export type WalkType = 'BB' | 'HBP' | 'IBB';
+   172	export type ReachOnErrorType = 'E'; // Batter reaches base on fielding error
+   173	export type PlateAppearanceOutType = OutType | 'SAC';
+   174	export type PlateAppearanceAction =
+   175	  | {
+   176	      type: 'hit';
+   177	      hitType: HitType;
+   178	      rbi: number;
+   179	      runnerAdvancement?: RunnerAdvancement;
+   180	    }
+   181	  | {
+   182	      type: 'out';
+   183	      outType: PlateAppearanceOutType;
+   184	      runnerAdvancement?: RunnerAdvancement;
+   185	      batterReached?: boolean;
+   186	      isDroppedThirdStrike?: boolean;
+   187	      forceNoRuns?: boolean;
+   188	    }
+   189	  | {
+   190	      type: 'walk';
+   191	      walkType: WalkType;
+   192	    }
+   193	  | {
+   194	      type: 'error';
+   195	      rbi?: number;
+   196	      runnerAdvancement?: RunnerAdvancement;
+   197	    }
+   198	  | {
+   199	      type: 'foul_ball';
+   200	    };
+   201	export type EventType =
+   202	  | 'SB' | 'CS' | 'WP' | 'PB' | 'PICK' | 'PICK_SAFE' | 'PICK_E' | 'ADVANCE'
+   203	  | 'KILLED' | 'NUTSHOT'
+   204	  | 'WEB_GEM' | 'ROBBERY'
+   205	  | 'TOOTBLAN'
+   206	  | 'BEAT_THROW' | 'BUNT'
+   207	  | 'STRIKEOUT' | 'STRIKEOUT_LOOKING' | 'DROPPED_3RD_STRIKE'
+   208	  | 'SEVEN_PLUS_PITCH_AB';
+   209	
+   210	type SubstitutionLogEntry = {
+   211	  type: 'player_sub' | 'pitching_change' | 'pinch_hit' | 'pinch_run' | 'defensive_sub' | 'position_switch' | 'double_switch';
+   212	  inning: number;
+   213	  halfInning: 'TOP' | 'BOTTOM';
+   214	  outgoingPlayerId: string;
+   215	  outgoingPlayerName: string;
+   216	  incomingPlayerId: string;
+   217	  incomingPlayerName: string;
+   218	  timestamp: number;
+   219	};
+   220	
+   221	export interface BetweenPlayEventDetails {
+   222	  runnerId?: string;
+   223	  runnerName?: string;
+   224	  fromBase?: 'first' | 'second' | 'third';
+   225	  toBase?: 'first' | 'second' | 'third' | 'home' | 'out';
+   226	  outcome?: 'safe' | 'out';
+   227	  fielderPosition?: number;
+   228	  fielderId?: string;
+   229	  fielderName?: string;
+   230	  pitcherId?: string;
+   231	  pitcherName?: string;
+   232	  catcherId?: string;
+   233	  catcherName?: string;
+   234	  actorId?: string;
+   235	  actorName?: string;
+   236	  leverageIndex?: number;
+   237	  inning?: number;
+   238	  halfInning?: 'TOP' | 'BOTTOM';
+   239	}
+   240	
+   241	// Pitch count prompt types per PITCH_COUNT_TRACKING_SPEC.md
+   242	export interface PitchCountPrompt {
+   243	  type: 'pitching_change' | 'end_game' | 'end_inning';
+   244	  pitcherId: string;
+   245	  pitcherName: string;
+   246	  currentCount: number;
+   247	  lastVerifiedInning: number;
+   248	  // For pitching change only
+   249	  newPitcherId?: string;
+   250	}
+   251	
+   252	export interface UseGameStateReturn {
+   253	  // Game state
+   254	  gameState: GameState;
+   255	  scoreboard: ScoreboardState;
+   256	  playerStats: Map<string, PlayerGameStats>;
+   257	  pitcherStats: Map<string, PitcherGameStats>;
+   258	
+   259	  // Actions
+   260	  recordHit: (hitType: HitType, rbi: number, runnerData?: RunnerAdvancement, pitchCount?: number) => Promise<void>;
+   261	  recordOut: (outType: OutType, runnerData?: RunnerAdvancement, pitchCount?: number, options?: { forceNoRuns?: boolean }) => Promise<void>;
+   262	  recordWalk: (walkType: WalkType, pitchCount?: number) => Promise<void>;
+   263	  recordD3K: (batterReached: boolean, pitchCount?: number) => Promise<void>;
+   264	  recordError: (rbi?: number, runnerData?: RunnerAdvancement, pitchCount?: number) => Promise<void>;
+   265	  commitPlateAppearance: (action: PlateAppearanceAction) => Promise<void>;
+   266	  recordEvent: (eventType: EventType, runnerId?: string, details?: BetweenPlayEventDetails) => Promise<void>;
+   267	  recordPlayerStateChange: (
+   268	    playerId: string,
+   269	    playerName: string,
+   270	    stateType: 'mojo' | 'fitness' | 'injury',
+   271	    previousValue: string | number,
+   272	    newValue: string | number,
+   273	    reason?: string,
+   274	    options?: PlayerStateChangeOptions,
+   275	  ) => Promise<BetweenPlayEvent>;
+   276	  reassignRunnerEventAttribution: (
+   277	    eventId: string,
+   278	    updates: {
+   279	      pitcherId?: string;
+   280	      pitcherName?: string;
+   281	      catcherId?: string;
+   282	      catcherName?: string;
+   283	      fielderId?: string;
+   284	      fielderName?: string;
+   285	      fielderPosition?: number;
+   286	    },
+   287	  ) => Promise<BetweenPlayEvent | null>;
+   288	  recordManagerMoment: (
+   289	    leverageIndex: number,
+   290	    decisionType: string,
+   291	    context?: string,
+   292	  ) => Promise<void>;
+   293	  advanceRunner: (from: 'first' | 'second' | 'third', to: 'second' | 'third' | 'home', outcome: 'safe' | 'out') => void;
+   294	  /** Batch update runners - processes all movements atomically to avoid race conditions */
+   295	  advanceRunnersBatch: (movements: Array<{ from: 'first' | 'second' | 'third'; to: 'second' | 'third' | 'home' | 'out'; outcome: 'safe' | 'out' }>) => void;
+   296	  makeSubstitution: (benchPlayerId: string, lineupPlayerId: string, benchPlayerName?: string, lineupPlayerName?: string, options?: { subType?: 'player_sub' | 'pinch_hit' | 'pinch_run' | 'defensive_sub' | 'position_switch' | 'double_switch'; newPosition?: string; base?: '1B' | '2B' | '3B'; isPinchHitter?: boolean }) => { success: boolean; error?: string };
+   297	  switchPositions: (switches: Array<{ playerId: string; newPosition: string }>) => void;
+   298	  changePitcher: (newPitcherId: string, exitingPitcherId: string, newPitcherName?: string, exitingPitcherName?: string) => void;
+   299	  advanceCount: (type: 'ball' | 'strike' | 'foul') => void;
+   300	  resetCount: () => void;
+
+--- Last 150 lines ---

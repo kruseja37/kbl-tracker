@@ -10,13 +10,18 @@ import { UndoButton, useUndoSystem, type GameSnapshot } from "@/app/components/U
 import { TeamRoster, type Player, type Pitcher } from "@/app/components/TeamRoster";
 import { FenwayBoard } from "@/app/components/FenwayBoard";
 import { FullFenwayScoreboard } from "@/app/components/FullFenwayScoreboard";
+import { ScoreBug } from "@/app/components/ScoreBug";
 import { QuickBar } from "@/app/components/QuickBar";
 import { PlayLogPanel } from "@/app/components/PlayLogPanel";
-import { EnrichmentPanel, PITCH_TYPES, type AtBatModifierValue, type EnrichmentUpdate } from "@/app/components/EnrichmentPanel";
+import { BattingLineupColumn } from "@/app/components/BattingLineupColumn";
+import { DefensiveLineupColumn, type DefensiveEnrichmentMode } from "@/app/components/DefensiveLineupColumn";
+import { NewsBoard } from "@/app/components/NewsBoard";
+import { EnrichmentPanel, RunnerEnrichmentPanel, PITCH_TYPES, type AtBatModifierValue, type EnrichmentUpdate } from "@/app/components/EnrichmentPanel";
 import { RunnerOutcomesDisplay } from "@/app/components/RunnerOutcomesDisplay";
 import { HistoricalEventEditor } from "@/app/components/HistoricalEventEditor";
 import { LiveRunnerAttributionPanel } from "@/app/components/LiveRunnerAttributionPanel";
-import { GameDiamond } from "@/app/components/GameDiamond";
+// Removed: GameDiamond de-rendered in Step 1.B (UX-004). File preserved for reference.
+// import { GameDiamond } from "@/app/components/GameDiamond";
 import { InjuryPrompt, type InjuryResult, type MojoResult } from "@/app/components/InjuryPrompt";
 import {
   getAtBatEvent,
@@ -43,7 +48,7 @@ import {
 import { type PlayData, type SpecialEventData } from "../utils/gameTrackerFieldTypes";
 import { areRivals } from '../../../data/leagueStructure';
 import { getParkNames } from "../../../data/parkLookup";
-import { useGameState, type GameLineupSnapshot, type HitType, type OutType, type WalkType, type RunnerAdvancement, type PlayerGameStats, type PitcherGameStats, type PlateAppearanceAction } from "@/hooks/useGameState";
+import { useGameState, type GamePhase, type GameLineupSnapshot, type HitType, type OutType, type WalkType, type RunnerAdvancement, type PlayerGameStats, type PitcherGameStats, type PlateAppearanceAction } from "@/hooks/useGameState";
 import { usePlayerState, type PlayerStateData, getStateBadge, formatMultiplier } from "@/app/hooks/usePlayerState";
 
 const ordinalSuffix = (num: number) => {
@@ -64,6 +69,13 @@ const formatInningLabel = (isTop: boolean, inning: number) => {
   const half = isTop ? "Top" : "Bottom";
   return `${half} ${inning}${ordinalSuffix(inning)}`;
 };
+
+function getBatterDestinationBase(result: AtBatEvent['result']): 'first' | 'second' | 'third' | null {
+  if (result === '1B') return 'first';
+  if (result === '2B' || result === 'GRD') return 'second';
+  if (result === '3B') return 'third';
+  return null;
+}
 // EXH-036: Import Mojo/Fitness types for PlayerCardModal editing
 import type { MojoLevel } from "../../../engines/mojoEngine";
 import { clampMojo } from "../../../engines/mojoEngine";
@@ -94,9 +106,11 @@ import {
 import { captureStartingLineups, type LineupEntry } from '../../../utils/gameStorage';
 import { POSITION_NUMBER } from '../utils/positionConstants';
 import { calculateRunnerDefaults, type RunnerDefaults } from '../components/runnerDefaults';
-import type { PlayLogEntry } from '../utils/playLogTypes';
-import { buildPlayLogEntries } from '../utils/gameTrackerPlayLog';
+import type { PlayLogEntry, RunnerSubEntry } from '../utils/playLogTypes';
+import { buildPlayLogEntries, mapAtBatEventToPlayLogEntry } from '../utils/gameTrackerPlayLog';
+import { AudioManager, type AudioSoundName } from '../utils/audioManager';
 import { reconcileTeamPitchersWithLineupSnapshot, reconcileTeamPlayersWithLineupSnapshot } from '../utils/gameTrackerRosterSync';
+import { buildLiveBasesFromRunnerOutcomes, buildLiveBasesFromRunnersAfter } from '../utils/liveBaseCorrection';
 import {
   mapFieldingPlayTypeToPlayDifficulty,
   type FieldingPlayTypeValue,
@@ -111,6 +125,9 @@ import {
   buildRunnerCorrectionForQuickBarOutcome,
   countRbiFromDefaults,
   getBatterDestinationOptions,
+  getRunnerDestinationOptions,
+  runnerOutcomeCountsAsOut,
+  runnerOutcomeCountsAsRun,
   runnerDefaultsToAdvancement,
   type PendingRunnerCorrectionAction,
 } from '../utils/gameTrackerRunnerCorrection';
@@ -379,12 +396,16 @@ export function GameTracker() {
     advanceRunner,
     advanceRunnersBatch,
     makeSubstitution,
+    swapBattingOrder,
     switchPositions,
     changePitcher,
     advanceCount,
     resetCount,
     endInning,
     endGame: hookEndGame,
+    applyScoreAdjustment,
+    applyBasesCorrection,
+    applyOutsAdjustment,
     pitchCountPrompt,
     confirmPitchCount,
     dismissPitchCountPrompt,
@@ -392,11 +413,15 @@ export function GameTracker() {
     loadExistingGame,
     undoLastAction,
     getLineupStateSnapshot,
+    getBatterIndicesSnapshot,
+    restoreState,
     getRunnerTrackerSnapshot,
     getBaseRunnerNames,
     runnerIdentityVersion,
     isLoading,
     isSaving,
+    // §10.1: Three-phase lifecycle
+    startGame,
     // T0-01: Auto game-end detection
     showAutoEndPrompt,
     dismissAutoEndPrompt,
@@ -443,22 +468,21 @@ export function GameTracker() {
   const shortInningLabel = useCallback(() => {
     return `${gameState.isTop ? 'T' : 'B'}${Math.max(1, gameState.inning)}`;
   }, [gameState.isTop, gameState.inning]);
+  const appendCommittedAtBatEntry = useCallback(async (eventId: string) => {
+    const committedEvent = await getAtBatEvent(eventId);
+    if (!committedEvent) {
+      queuePlayLogRefreshRef.current(0);
+      return;
+    }
 
-  const pushPlayLogEntry = useCallback((entry: Omit<PlayLogEntry, 'id' | 'timestamp' | 'eventType' | 'editorType' | 'visibility' | 'isSelectable'> & Partial<Pick<PlayLogEntry, 'eventType' | 'editorType' | 'visibility' | 'isSelectable'>>) => {
-    setPlayLogEntries(prev => [...prev, {
-      ...entry,
-      eventType: entry.eventType ?? 'at_bat',
-      editorType: entry.editorType ?? 'batter_at_bat',
-      visibility: entry.visibility ?? 'default',
-      isSelectable: entry.isSelectable ?? ((entry.eventType ?? 'at_bat') === 'at_bat'),
-      id: entry.eventId || `play-${Date.now()}-${prev.length}`,
-      timestamp: Date.now(),
-    }]);
+    const nextEntry = mapAtBatEventToPlayLogEntry(committedEvent);
+    setPlayLogEntries(prev => [...prev.filter(entry => entry.eventId !== eventId), nextEntry]);
   }, []);
   const playLogRefreshTimeoutRef = useRef<number | null>(null);
   const rebuildPlayLogFromEventLogRef = useRef<() => void | Promise<void>>(() => {});
   const queuePlayLogRefreshRef = useRef<(delayMs?: number) => void>(() => {});
   const previousPitchCountPromptRef = useRef<typeof pitchCountPrompt>(null);
+  const closedPitchCountPromptTypeRef = useRef<'pitching_change' | 'end_game' | 'end_inning' | null>(null);
 
   // Layer 5: Enrichment Panel state
   const [enrichingEntry, setEnrichingEntry] = useState<PlayLogEntry | null>(null);
@@ -467,6 +491,11 @@ export function GameTracker() {
   const [selectedBetweenPlayEventLoading, setSelectedBetweenPlayEventLoading] = useState(false);
   const [selectedBetweenPlayEventSaving, setSelectedBetweenPlayEventSaving] = useState(false);
   const [enrichmentCache, setEnrichmentCache] = useState<Record<string, NonNullable<import('../../../utils/eventLog').AtBatEvent['enrichment']>>>({});
+  // Runner sub-entry enrichment state (UX-050)
+  const [enrichingRunnerSubEntry, setEnrichingRunnerSubEntry] = useState<RunnerSubEntry | null>(null);
+  const [enrichingRunnerParentEntry, setEnrichingRunnerParentEntry] = useState<PlayLogEntry | null>(null);
+  // Fix D: Force defensiveColumnPlayers re-evaluation after roster syncs
+  const [rosterVersion, setRosterVersion] = useState(0);
   // Between-inning enrichment prompt
   const [showEnrichmentPrompt, setShowEnrichmentPrompt] = useState(false);
   const [unenrichedCount, setUnenrichedCount] = useState(0);
@@ -508,7 +537,7 @@ export function GameTracker() {
       case 'out':
         return {
           type: 'out',
-          outType: playData.outType === 'FLO' ? 'FO' : (playData.outType || 'GO'),
+          outType: playData.outType || 'GO',
           runnerAdvancement,
           batterReached,
           isDroppedThirdStrike,
@@ -516,7 +545,7 @@ export function GameTracker() {
       case 'foul_out':
         return {
           type: 'out',
-          outType: 'FO',
+          outType: 'FLO',
           runnerAdvancement,
         };
       case 'foul_ball':
@@ -618,10 +647,29 @@ export function GameTracker() {
   const [pendingPH, setPendingPH] = useState<string | null>(null);
 
   // Player card modal state - EXH-036: Added playerId for mojo/fitness editing
-  const [selectedPlayer, setSelectedPlayer] = useState<{ name: string; type: 'batter' | 'pitcher'; playerId: string } | null>(null);
+  const [selectedPlayer, setSelectedPlayer] = useState<{ name: string; type: 'batter' | 'pitcher'; playerId: string; runnerBase?: RunnerBase } | null>(null);
+  const [gameSoundsOn, setGameSoundsOn] = useState(false);
+  const [beatReporterSoundsOn, setBeatReporterSoundsOn] = useState(false);
+  const audioManagerRef = useRef(new AudioManager());
+  const previousScoreRef = useRef({ away: scoreboard.away.runs, home: scoreboard.home.runs });
+  const previousHalfInningRef = useRef(`${gameState.isTop ? 'T' : 'B'}-${gameState.inning}`);
+  const pendingScoreCelebrationSoundRef = useRef<AudioSoundName | null>(null);
+  const suppressNextHalfInningSoundRef = useRef(false);
+
+  // §2.4: Expanded scoreboard overlay toggle
+  const [isScoreboardExpanded, setIsScoreboardExpanded] = useState(false);
+
+  // §9.3: Swap Order mode — stores first player's ID, null when inactive
+  const [swapOrderMode, setSwapOrderMode] = useState<{ playerId: string; playerName: string } | null>(null);
+
+  // §9.2: Swap Position mode — like swap order but for fielding positions only (LIVE phase)
+  const [swapPositionMode, setSwapPositionMode] = useState<{ playerId: string; playerName: string } | null>(null);
 
   // End game confirmation state
   const [showEndGameConfirmation, setShowEndGameConfirmation] = useState(false);
+
+  // §4.3: Processing-aware button feedback — tracks which outcome is being processed
+  const [processingOutcome, setProcessingOutcome] = useState<string | null>(null);
 
   // Runner names tracking - who is on each base
   // Updated when batters reach base via hit, walk, error, etc.
@@ -663,8 +711,9 @@ export function GameTracker() {
     fielder: FielderInfo;
     anchorPosition: { left: string; top: string };
   } | null>(null);
-  const [showLineupOverlay, setShowLineupOverlay] = useState(false);
-  const [lineupOverlayHint, setLineupOverlayHint] = useState<string | null>(null);
+  // REMOVED per Cleanup: Lineup overlay replaced by inline lineup columns (Step 1.C).
+  // const [showLineupOverlay, setShowLineupOverlay] = useState(false);
+  // const [lineupOverlayHint, setLineupOverlayHint] = useState<string | null>(null);
   const [showTouchPlayReview, setShowTouchPlayReview] = useState(false);
   const [pendingManualSpecialPrompt, setPendingManualSpecialPrompt] = useState<PendingManualSpecialPrompt | null>(null);
   const [showManagerMomentPanel, setShowManagerMomentPanel] = useState(false);
@@ -711,24 +760,146 @@ export function GameTracker() {
     runnerAdv: RunnerAdvancement | undefined;
     defaults: RunnerDefaults;
   } | null>(null);
-  const [pendingRunnerCorrection, setPendingRunnerCorrection] = useState<PendingRunnerCorrectionAction | null>(null);
+  // REMOVED per UX-022: Pre-commit runner gate eliminated.
+  // Runner corrections are now post-commit via play log or lineup column tap.
+  // const [pendingRunnerCorrection, setPendingRunnerCorrection] = useState<PendingRunnerCorrectionAction | null>(null);
 
-  // Field zoom level tuned for the post-EIF iPad landscape layout.
-  // Keep the playable field prominent while retaining the full GameDiamond tap surface.
-  const fieldZoomLevel = 1;
+  // GameDiamond removed in Step 1.B (UX-004) — fieldZoomLevel no longer needed.
+  // const fieldZoomLevel = 1;
+
+  const playAudio = useCallback((sound: AudioSoundName) => {
+    void audioManagerRef.current.playSound(sound);
+  }, []);
+
+  useEffect(() => {
+    audioManagerRef.current.setGameSoundsEnabled(gameSoundsOn);
+  }, [gameSoundsOn]);
+
+  useEffect(() => {
+    audioManagerRef.current.setBeatReporterSoundsEnabled(beatReporterSoundsOn);
+  }, [beatReporterSoundsOn]);
+
+  useEffect(() => {
+    const currentScore = {
+      away: scoreboard.away.runs,
+      home: scoreboard.home.runs,
+    };
+
+    if (!gameInitialized) {
+      previousScoreRef.current = currentScore;
+      return;
+    }
+
+    const previousScore = previousScoreRef.current;
+    const scoredRun = currentScore.away > previousScore.away || currentScore.home > previousScore.home;
+
+    if (scoredRun) {
+      const overrideSound = pendingScoreCelebrationSoundRef.current;
+      if (overrideSound === 'homeRun') {
+        playAudio('homeRun');
+      } else {
+        playAudio('runScored');
+      }
+      pendingScoreCelebrationSoundRef.current = null;
+    }
+
+    previousScoreRef.current = currentScore;
+  }, [gameInitialized, playAudio, scoreboard.away.runs, scoreboard.home.runs]);
+
+  useEffect(() => {
+    const currentHalfInning = `${gameState.isTop ? 'T' : 'B'}-${gameState.inning}`;
+
+    if (!gameInitialized) {
+      previousHalfInningRef.current = currentHalfInning;
+      return;
+    }
+
+    const previousHalfInning = previousHalfInningRef.current;
+
+    if (currentHalfInning !== previousHalfInning) {
+      if (suppressNextHalfInningSoundRef.current) {
+        suppressNextHalfInningSoundRef.current = false;
+      } else {
+        playAudio('halfInning');
+      }
+    }
+
+    previousHalfInningRef.current = currentHalfInning;
+  }, [gameInitialized, gameState.inning, gameState.isTop, playAudio]);
 
   // Undo system - restore game state on undo
   const handleUndo = useCallback((snapshot: GameSnapshot) => {
     console.log("Undoing durable game action:", snapshot.playDescription);
+    const snapshotState = snapshot.gameState as {
+      gameState?: typeof gameState;
+      scoreboard?: typeof scoreboard;
+      playerStatsEntries?: Array<[string, PlayerGameStats]>;
+      pitcherStatsEntries?: Array<[string, PitcherGameStats]>;
+      runnerTrackerSnapshot?: ReturnType<typeof getRunnerTrackerSnapshot>;
+      lineupSnapshot?: GameLineupSnapshot;
+      batterIndices?: {
+        away: number;
+        home: number;
+      };
+      playLogEntries?: PlayLogEntry[];
+      runnerNames?: {
+        first?: string;
+        second?: string;
+        third?: string;
+      };
+    };
+
+    if (playLogRefreshTimeoutRef.current !== null) {
+      window.clearTimeout(playLogRefreshTimeoutRef.current);
+      playLogRefreshTimeoutRef.current = null;
+    }
+
+    if (snapshotState.gameState && snapshotState.scoreboard) {
+      restoreState({
+        gameState: snapshotState.gameState,
+        scoreboard: snapshotState.scoreboard,
+        playerStats: snapshotState.playerStatsEntries
+          ? new Map(snapshotState.playerStatsEntries)
+          : undefined,
+        pitcherStats: snapshotState.pitcherStatsEntries
+          ? new Map(snapshotState.pitcherStatsEntries)
+          : undefined,
+        runnerTrackerState: snapshotState.runnerTrackerSnapshot
+          ? {
+              ...snapshotState.runnerTrackerSnapshot,
+              pitcherStats: new Map(snapshotState.runnerTrackerSnapshot.pitcherStatsEntries),
+            }
+          : undefined,
+        lineupSnapshot: snapshotState.lineupSnapshot,
+        batterIndices: snapshotState.batterIndices,
+      });
+    }
+
+    setPlayLogEntries(prev => snapshotState.playLogEntries ?? prev.slice(0, -1));
+    if (snapshotState.runnerNames) {
+      setRunnerNames(snapshotState.runnerNames);
+    }
+    pendingScoreCelebrationSoundRef.current = null;
+    setProcessingOutcome(null);
+    setHrPrompt(null);
+    setErrorFlow(null);
+    setSfPrompt(null);
+    setDpPrompt(null);
+    setIfrPrompt(null);
+
     void (async () => {
       const undone = await undoLastAction();
       if (!undone) {
         console.warn("No durable action available to undo");
+        queuePlayLogRefreshRef.current(0);
         return;
       }
+      playAudio('undoBloop');
+      pendingScoreCelebrationSoundRef.current = null;
+      suppressNextHalfInningSoundRef.current = true;
       queuePlayLogRefreshRef.current(0);
     })();
-  }, [undoLastAction]);
+  }, [gameState, getRunnerTrackerSnapshot, playAudio, restoreState, scoreboard, undoLastAction]);
 
   const undoSystem = useUndoSystem(10, handleUndo); // GAP-GT-3-B: increased from 5 to 10
 
@@ -743,8 +914,23 @@ export function GameTracker() {
       playerStatsEntries: Array.from(playerStats.entries()),
       pitcherStatsEntries: Array.from(pitcherStats.entries()),
       runnerTrackerSnapshot: getRunnerTrackerSnapshot(),
+      lineupSnapshot: getLineupStateSnapshot(),
+      batterIndices: getBatterIndicesSnapshot(),
+      playLogEntries,
+      runnerNames,
     });
-  }, [gameInitialized, gameState, scoreboard, playerStats, pitcherStats, getRunnerTrackerSnapshot]);
+  }, [
+    gameInitialized,
+    gameState,
+    scoreboard,
+    playerStats,
+    pitcherStats,
+    getRunnerTrackerSnapshot,
+    getLineupStateSnapshot,
+    getBatterIndicesSnapshot,
+    playLogEntries,
+    runnerNames,
+  ]);
 
   useEffect(() => {
     if (!gameInitialized || !gameState.gameId) return;
@@ -760,8 +946,10 @@ export function GameTracker() {
   }, []);
 
   useEffect(() => {
-    const hadPrompt = previousPitchCountPromptRef.current !== null;
+    const previousPrompt = previousPitchCountPromptRef.current;
+    const hadPrompt = previousPrompt !== null;
     if (hadPrompt && !pitchCountPrompt) {
+      closedPitchCountPromptTypeRef.current = previousPrompt?.type ?? null;
       queuePlayLogRefreshRef.current(0);
     }
     previousPitchCountPromptRef.current = pitchCountPrompt;
@@ -927,6 +1115,11 @@ export function GameTracker() {
     { name: 'W. COLLINS', stats: { ip: '0.0', h: 0, r: 0, er: 0, bb: 0, k: 0, pitches: 0 }, throwingHand: 'R' as const },
   ]);
 
+  const awayTeamPlayersRef = useRef(awayTeamPlayers);
+  const homeTeamPlayersRef = useRef(homeTeamPlayers);
+  awayTeamPlayersRef.current = awayTeamPlayers;
+  homeTeamPlayersRef.current = homeTeamPlayers;
+
   const getRosterEntityId = useCallback((entity: { name: string; playerId?: string }, team: 'away' | 'home') => {
     return getRuntimeRosterEntityId(entity, team);
   }, []);
@@ -983,12 +1176,30 @@ export function GameTracker() {
       reconcileTeamPlayersWithLineupSnapshot(previous, lineupSnapshot.home, 'home', getRosterEntityId)
     );
     setAwayTeamPitchers((previous) =>
-      reconcileTeamPitchersWithLineupSnapshot(previous, awayTeamPlayers, lineupSnapshot.away, 'away', getRosterEntityId)
+      reconcileTeamPitchersWithLineupSnapshot(previous, awayTeamPlayersRef.current, lineupSnapshot.away, 'away', getRosterEntityId)
     );
     setHomeTeamPitchers((previous) =>
-      reconcileTeamPitchersWithLineupSnapshot(previous, homeTeamPlayers, lineupSnapshot.home, 'home', getRosterEntityId)
+      reconcileTeamPitchersWithLineupSnapshot(previous, homeTeamPlayersRef.current, lineupSnapshot.home, 'home', getRosterEntityId)
     );
-  }, [awayTeamPlayers, getLineupStateSnapshot, getRosterEntityId, homeTeamPlayers]);
+  }, [getLineupStateSnapshot, getRosterEntityId]);
+
+  useEffect(() => {
+    if (!gameInitialized || gameState.gamePhase !== 'LIVE') return;
+    syncDisplayedRostersToLineupSnapshot(getLineupStateSnapshot());
+  }, [
+    gameInitialized,
+    gameState.currentPitcherId,
+    gameState.gamePhase,
+    getLineupStateSnapshot,
+    syncDisplayedRostersToLineupSnapshot,
+  ]);
+
+  useEffect(() => {
+    if (closedPitchCountPromptTypeRef.current === 'pitching_change' && !pitchCountPrompt) {
+      closedPitchCountPromptTypeRef.current = null;
+      syncDisplayedRostersToLineupSnapshot(getLineupStateSnapshot());
+    }
+  }, [getLineupStateSnapshot, pitchCountPrompt, syncDisplayedRostersToLineupSnapshot]);
 
   const resolveRosterNameByGameId = useCallback((playerId?: string): string | undefined => {
     if (!playerId) return undefined;
@@ -1113,11 +1324,23 @@ export function GameTracker() {
 
   const rebuildPlayLogFromEventLog = useCallback(async () => {
     if (!gameState.gameId) return;
+    const header = await getGameHeader(gameState.gameId);
+    if (header?.aggregated || header?.isComplete) {
+      console.log('[BUG-04] Completed game header detected, keeping play log empty');
+      setPlayLogEntries([]);
+      return;
+    }
+
+    const eventStartTimestamp = header?.date ?? 0;
     const [atBatEvents, betweenPlayEvents] = await Promise.all([
       getGameEvents(gameState.gameId),
       getBetweenPlayEvents(gameState.gameId),
     ]);
-    setPlayLogEntries(buildPlayLogEntries(atBatEvents, betweenPlayEvents, resolveRosterNameByGameId));
+    setPlayLogEntries(buildPlayLogEntries(
+      atBatEvents.filter((event) => event.timestamp >= eventStartTimestamp),
+      betweenPlayEvents.filter((event) => event.timestamp >= eventStartTimestamp),
+      resolveRosterNameByGameId,
+    ));
   }, [gameState.gameId, resolveRosterNameByGameId]);
 
   const queuePlayLogRefresh = useCallback((delayMs = 40) => {
@@ -1239,23 +1462,8 @@ export function GameTracker() {
     'RF': { number: '9', svgX: 328, svgY: 72 },
   };
 
-  // Build field positions from fielding team's lineup (first 9 players with valid positions)
-  const gameDiamondFielders = useMemo(() => {
-    return fieldingTeamPlayers
-      .filter((player) => player.position && positionMap[player.position])
-      .slice(0, 9)
-      .map((player) => {
-        const posData = positionMap[player.position!];
-        const lastName = player.name.split(' ').pop() || player.name;
-        return {
-          positionNumber: Number(posData.number),
-          playerId: getRosterEntityId(player, fieldingTeam),
-          fullName: player.name,
-          displayName: lastName.toUpperCase(),
-          position: player.position!,
-        };
-      });
-  }, [fieldingTeam, fieldingTeamPlayers, getRosterEntityId]);
+  // GameDiamond removed in Step 1.B (UX-004) — gameDiamondFielders no longer needed.
+  // const gameDiamondFielders = useMemo(() => { ... }, [fieldingTeam, fieldingTeamPlayers, getRosterEntityId]);
 
   // Get current pitcher numbers
   const awayPitcher = awayTeamPitchers.find(p => p.isActive);
@@ -1446,6 +1654,9 @@ export function GameTracker() {
     const ballLocation = enrichment.fieldLocation
       ? { x: enrichment.fieldLocation.x, y: enrichment.fieldLocation.y }
       : undefined;
+    // Contact type (normal/weak/hard/bloop/bunt) stored in enrichment.exitType
+    // Trajectory is now inferred from result type (GO→ground, FO→fly, etc.)
+    // Legacy values (ground_ball, line_drive) are mapped for backward compat
     const exitType = enrichment.exitType === 'ground_ball' ? 'Ground'
       : enrichment.exitType === 'line_drive' ? 'Line Drive'
       : enrichment.exitType === 'fly_ball' ? 'Fly Ball'
@@ -1699,6 +1910,9 @@ export function GameTracker() {
 
     const initializeOrLoadGame = async () => {
       try {
+        // BUG-04: Clear stale play log before loading/creating a game.
+        setPlayLogEntries([]);
+
         // Try to load existing game first (handles page refresh)
         const hasExistingGame = await loadExistingGame();
         if (cancelled) return;
@@ -1760,8 +1974,12 @@ export function GameTracker() {
           homeBench: homeBench.map(p => p.playerName),
         });
 
+        const nextGameId = competitionType === 'exhibition'
+          ? `game-${Date.now()}`
+          : (gameId || `game-${Date.now()}`);
+
         await initializeGame({
-          gameId: gameId || `game-${Date.now()}`,
+          gameId: nextGameId,
           seasonId: competitionType === 'elimination'
             ? undefined
             : (navigationState?.franchiseId
@@ -1820,6 +2038,7 @@ export function GameTracker() {
     return () => {
       cancelled = true;
       initInProgressRef.current = false;
+      setPlayLogEntries([]);
     };
   }, [competitionId, competitionType, gameId, gameInitialized, getRosterEntityId, homePitcher, homeTeamId, homeTeamName, homeTeamPlayers, initializeGame, loadExistingGame, navigationState?.franchiseId, navigationState?.seasonNumber, navigationState?.totalInnings, selectedStadium, statsScopeId, syncDisplayedRostersToLineupSnapshot, awayPitcher, awayTeamId, awayTeamName, awayTeamPlayers]);
 
@@ -2024,6 +2243,196 @@ export function GameTracker() {
   const currentBatterDisplayName = formatDisplayName(resolvedCurrentBatterName);
   const currentPitcherDisplayName = formatDisplayName(resolvedCurrentPitcherName);
 
+  // §5: Lineup column data — role-based: column 2 = batting team, column 3 = fielding team
+  const battingColumnPlayers = useMemo(() => {
+    const players = gameState.isTop ? awayTeamPlayers : homeTeamPlayers;
+    return players
+      .filter(p => p.battingOrder !== undefined && !p.isOutOfGame)
+      .sort((a, b) => (a.battingOrder || 0) - (b.battingOrder || 0))
+      .map(p => ({
+        playerId: getRosterEntityId(p, battingTeam),
+        name: p.name,
+        position: p.position,
+        battingOrder: p.battingOrder!,
+      }));
+  }, [gameState.isTop, awayTeamPlayers, homeTeamPlayers, battingTeam, getRosterEntityId]);
+
+  const defensiveColumnPlayers = useMemo(() => {
+    const players = fieldingTeam === 'home' ? homeTeamPlayers : awayTeamPlayers;
+    const pitchers = fieldingTeam === 'home' ? homeTeamPitchers : awayTeamPitchers;
+    const activePitcherEntry = pitchers.find(p => p.isActive) || pitchers.find(p => p.isStarter) || pitchers[0];
+    const pitcherPitches = activePitcherEntry
+      ? (pitcherStats.get(getRosterEntityId(activePitcherEntry, fieldingTeam))?.pitchCount ?? 0)
+      : 0;
+
+    return players
+      .filter(p => p.battingOrder !== undefined && !p.isOutOfGame && p.position !== 'DH')
+      .sort((a, b) => (a.battingOrder || 0) - (b.battingOrder || 0))
+      .map(p => ({
+        playerId: getRosterEntityId(p, fieldingTeam),
+        name: p.name,
+        position: p.position,
+        battingOrder: p.battingOrder!,
+        isPitcher: p.name === (activePitcherEntry?.name ?? ''),
+        pitchCount: p.name === (activePitcherEntry?.name ?? '') ? pitcherPitches : undefined,
+      }));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fieldingTeam, homeTeamPlayers, awayTeamPlayers, homeTeamPitchers, awayTeamPitchers, pitcherStats, getRosterEntityId, rosterVersion]);
+
+  // §5.2: Next-inning leadoff — batter after the last batter of current half-inning
+  // This is the batter index that will lead off NEXT time this team bats
+  const battingNextLeadoff = useMemo(() => {
+    // gameState.currentBatterIndex is 0-based, batting order is 1-based
+    // The next leadoff is the current batter (they haven't completed their AB yet)
+    // In practice this is an approximation — the exact next leadoff depends on how the inning ends
+    return currentBatterPosition;
+  }, [currentBatterPosition]);
+
+  // §5.3: Next-inning leadoff for the defensive team — batter AFTER the last one who batted (wrapping 9→1)
+  const defensiveNextLeadoff = useMemo(() => {
+    const batterIndices = getBatterIndicesSnapshot();
+    const nextIndex = fieldingTeam === 'away' ? batterIndices.away : batterIndices.home;
+    // nextIndex is 0-based index of the NEXT batter due up; convert to 1-based batting order with wrap
+    return (nextIndex % 9) + 1;
+  }, [fieldingTeam, getBatterIndicesSnapshot]);
+
+  // §6.1: NewsBoard data — batter line, pitcher line, matchup summary
+  const batterGameLine = useMemo(() => {
+    const stats = playerStats.get(gameState.currentBatterId);
+    if (!stats) return '—';
+    const parts: string[] = [];
+    parts.push(`${stats.h}-for-${stats.ab}`);
+    if (stats.hr > 0) parts.push(`${stats.hr} HR`);
+    if (stats.rbi > 0) parts.push(`${stats.rbi} RBI`);
+    if (stats.bb > 0) parts.push(`${stats.bb} BB`);
+    if (stats.k > 0) parts.push(`${stats.k} K`);
+    if (stats.sb > 0) parts.push(`${stats.sb} SB`);
+    return parts.join(', ');
+  }, [playerStats, gameState.currentBatterId]);
+
+  const pitcherGameLine = useMemo(() => {
+    const stats = pitcherStats.get(gameState.currentPitcherId);
+    if (!stats) return '—';
+    const ip = `${Math.floor(stats.outsRecorded / 3)}.${stats.outsRecorded % 3}`;
+    const parts: string[] = [];
+    parts.push(`${ip} IP`);
+    parts.push(`${stats.hitsAllowed} H`);
+    parts.push(`${stats.earnedRuns} ER`);
+    parts.push(`${stats.strikeoutsThrown} K`);
+    if (stats.walksAllowed > 0) parts.push(`${stats.walksAllowed} BB`);
+    return parts.join(', ');
+  }, [pitcherStats, gameState.currentPitcherId]);
+
+  const matchupLine = useMemo(() => {
+    if (fenwayContext.matchupRecord) {
+      return `vs ${currentPitcherDisplayName}: ${fenwayContext.matchupRecord}${fenwayContext.matchupAvg ? ` (${fenwayContext.matchupAvg})` : ''}`;
+    }
+    return undefined;
+  }, [fenwayContext.matchupRecord, fenwayContext.matchupAvg, currentPitcherDisplayName]);
+
+  // §9.3: Swap Order handler — swaps batting order between two players
+  const handleSwapOrder = useCallback((secondPlayerId: string) => {
+    if (!swapOrderMode) return;
+
+    const firstId = swapOrderMode.playerId;
+    const swapped = swapBattingOrder(firstId, secondPlayerId);
+    if (swapped) {
+      syncDisplayedRostersToLineupSnapshot(getLineupStateSnapshot());
+      setRosterVersion(v => v + 1);
+    }
+
+    setSwapOrderMode(null);
+  }, [getLineupStateSnapshot, swapOrderMode, swapBattingOrder, syncDisplayedRostersToLineupSnapshot]);
+
+  // §9.2: Swap Position handler — swaps fielding positions between two in-game players
+  const handleSwapPositionComplete = useCallback((secondPlayerId: string) => {
+    if (!swapPositionMode) return;
+
+    const firstId = swapPositionMode.playerId;
+    const updatePositions = (players: Player[]) => {
+      const p1 = players.find(p => getRosterEntityId(p, battingTeam) === firstId || getRosterEntityId(p, fieldingTeam) === firstId);
+      const p2 = players.find(p => getRosterEntityId(p, battingTeam) === secondPlayerId || getRosterEntityId(p, fieldingTeam) === secondPlayerId);
+      if (p1 && p2 && p1.position && p2.position) {
+        const temp = p1.position;
+        p1.position = p2.position;
+        p2.position = temp;
+        return true;
+      }
+      return false;
+    };
+
+    const awayCopy = [...awayTeamPlayers.map(p => ({ ...p }))];
+    if (updatePositions(awayCopy)) {
+      setAwayTeamPlayers(awayCopy);
+    }
+    const homeCopy = [...homeTeamPlayers.map(p => ({ ...p }))];
+    if (updatePositions(homeCopy)) {
+      setHomeTeamPlayers(homeCopy);
+    }
+
+    // Log via switchPositions hook for BetweenPlayEvent persistence
+    switchPositions([{ playerId: firstId, newPosition: '' }, { playerId: secondPlayerId, newPosition: '' }]);
+    queuePlayLogRefresh(80);
+    setSwapPositionMode(null);
+  }, [swapPositionMode, awayTeamPlayers, homeTeamPlayers, battingTeam, fieldingTeam, getRosterEntityId, switchPositions, queuePlayLogRefresh]);
+
+  // §14: Fitness change with auto-injury logging
+  const handleFitnessChangeWithAutoInjury = useCallback((playerId: string, playerName: string, newFitness: FitnessState) => {
+    const team = resolveRosterTeamSide(playerId, playerName) || 'home';
+    const currentPlayer = playerStateHook.getPlayer(playerId);
+    const previousFitness = currentPlayer?.fitnessProfile.currentFitness;
+    if (!previousFitness || previousFitness === newFitness) return;
+
+    // Set the fitness via existing mechanism (logs fitness_change BetweenPlayEvent)
+    setPlayerFitnessByName(playerName, team, newFitness);
+
+    // §14: Auto-injury — log injury event when fitness set to WEAK, STRAINED, or HURT
+    const injuryStates: FitnessState[] = ['WEAK', 'STRAINED', 'HURT'];
+    if (injuryStates.includes(newFitness)) {
+      void recordPlayerStateChange(
+        playerId,
+        playerName,
+        'injury',
+        previousFitness,
+        newFitness,
+        `Auto-injury: fitness changed to ${newFitness}`,
+      ).then(() => queuePlayLogRefresh(0));
+    }
+  }, [resolveRosterTeamSide, playerStateHook, setPlayerFitnessByName, recordPlayerStateChange, queuePlayLogRefresh]);
+
+  const getRunnerBaseForPlayer = useCallback((playerId: string, playerName?: string): RunnerBase | null => {
+    for (const base of ['first', 'second', 'third'] as const) {
+      const runnerName = runnerNames[base];
+      if (!runnerName) continue;
+      const runnerId = getPlayerIdFromName(runnerName, battingTeam);
+      if ((runnerId && runnerId === playerId) || (playerName && runnerName === playerName)) {
+        return base;
+      }
+    }
+    return null;
+  }, [battingTeam, getPlayerIdFromName, runnerNames]);
+
+  // §9.3: Player tap handler for lineup columns — handles swap mode or opens player card
+  const handleLineupPlayerTap = useCallback((playerId: string, playerName: string) => {
+    if (swapOrderMode) {
+      handleSwapOrder(playerId);
+      return;
+    }
+    if (swapPositionMode) {
+      handleSwapPositionComplete(playerId);
+      return;
+    }
+    // Determine if player is a pitcher or batter
+    const isPitcher = fieldingTeamPitchersRaw.some(p => p.name === playerName) ||
+                      (fieldingTeam === 'home' ? homeTeamPitchers : awayTeamPitchers).some(p => p.name === playerName);
+    setSelectedPlayer({
+      name: playerName,
+      type: isPitcher ? 'pitcher' : 'batter',
+      playerId,
+      runnerBase: isPitcher ? undefined : getRunnerBaseForPlayer(playerId, playerName) || undefined,
+    });
+  }, [swapOrderMode, swapPositionMode, handleSwapOrder, handleSwapPositionComplete, fieldingTeamPitchersRaw, fieldingTeam, homeTeamPitchers, awayTeamPitchers, getRunnerBaseForPlayer]);
+
   useEffect(() => {
     let cancelled = false;
 
@@ -2181,6 +2590,35 @@ export function GameTracker() {
 
     if (sub.type === 'pitching_change') {
       changePitcher(sub.incomingPlayerId, sub.outgoingPlayerId, sub.incomingPlayerName, sub.outgoingPlayerName);
+      const pitchingTeam = resolveRosterTeamSide(sub.outgoingPlayerId, sub.outgoingPlayerName)
+        || resolveRosterTeamSide(sub.incomingPlayerId, sub.incomingPlayerName)
+        || fieldingTeam;
+      const setPitchers = pitchingTeam === 'away' ? setAwayTeamPitchers : setHomeTeamPitchers;
+      setPitchers((previous) =>
+        previous.map((pitcher) => {
+          const pitcherId = getRosterEntityId(pitcher, pitchingTeam);
+          if (pitcherId === sub.incomingPlayerId) {
+            return {
+              ...pitcher,
+              isActive: true,
+              isOutOfGame: false,
+            };
+          }
+          if (pitcherId === sub.outgoingPlayerId) {
+            return {
+              ...pitcher,
+              isActive: false,
+              isOutOfGame: true,
+            };
+          }
+          return {
+            ...pitcher,
+            isActive: false,
+          };
+        })
+      );
+      syncDisplayedRostersToLineupSnapshot(getLineupStateSnapshot());
+      setRosterVersion(v => v + 1);
       // mWAR: Record pitching change decision
       try {
         const gsLI = buildGameStateForLI();
@@ -2262,7 +2700,7 @@ export function GameTracker() {
       }
     }
     queuePlayLogRefresh(80);
-  }, [changePitcher, makeSubstitution, queuePlayLogRefresh, switchPositions, awayTeamPlayers, homeTeamPlayers, pendingPH, setPendingPH]);
+  }, [awayTeamPlayers, buildGameStateForLI, changePitcher, fieldingTeam, gameState?.currentBatterId, getLineupStateSnapshot, getRosterEntityId, homeTeamPlayers, makeSubstitution, mwarHook, pendingPH, queuePlayLogRefresh, resolveRosterTeamSide, setPendingPH, switchPositions, syncDisplayedRostersToLineupSnapshot]);
 
   // ══════════════════════════════════════════════════════════════
   // QUICK BAR HANDLER — §3.2 one-tap execution flow
@@ -2276,59 +2714,12 @@ export function GameTracker() {
   const QUICK_BAR_OUTS: readonly string[] = ['K', 'GO', 'FO', 'LO', 'PO', 'DP', 'TP', 'SF', 'SAC'];
   const QUICK_BAR_WALKS: readonly string[] = ['BB', 'HBP', 'IBB'];
 
-  const handleRunnerCorrectionChange = useCallback((updated: RunnerDefaults) => {
-    setPendingRunnerCorrection(prev => prev ? { ...prev, defaults: updated } : prev);
-  }, []);
-
-  const handleRunnerCorrectionCancel = useCallback(() => {
-    setPendingRunnerCorrection(null);
-  }, []);
-
-  const handleRunnerCorrectionCommit = useCallback(async () => {
-    if (!pendingRunnerCorrection) return;
-
-    const runnerAdvancement = runnerDefaultsToAdvancement(pendingRunnerCorrection.defaults);
-    const rbi = countRbiFromDefaults(pendingRunnerCorrection.defaults, pendingRunnerCorrection.action);
-
-    try {
-      if (pendingRunnerCorrection.action.type === 'hit') {
-        await commitPlateAppearance({
-          type: 'hit',
-          hitType: pendingRunnerCorrection.action.hitType,
-          rbi,
-          runnerAdvancement,
-        });
-      } else if (pendingRunnerCorrection.action.type === 'walk') {
-        await commitPlateAppearance({
-          type: 'walk',
-          walkType: pendingRunnerCorrection.action.walkType,
-        });
-      } else {
-        await commitPlateAppearance({
-          type: 'out',
-          outType: pendingRunnerCorrection.action.outType,
-          runnerAdvancement,
-          batterReached: pendingRunnerCorrection.action.batterReached,
-          isDroppedThirdStrike: pendingRunnerCorrection.action.isDroppedThirdStrike,
-          forceNoRuns: pendingRunnerCorrection.action.forceNoRuns,
-        });
-      }
-
-      const resultText = pendingRunnerCorrection.action.type === 'hit' && rbi > 0
-        ? `${pendingRunnerCorrection.outcomeLabel} — ${rbi} RBI`
-        : pendingRunnerCorrection.outcomeLabel;
-      logAction(resultText);
-
-      setRunnerNames(applyRunnerDefaultsToNames(
-        pendingRunnerCorrection.defaults,
-        runnerNames,
-        gameState.currentBatterName,
-      ));
-      setPendingRunnerCorrection(null);
-    } catch (error) {
-      console.error('[Runner Correction] Failed to commit at-bat:', error);
-    }
-  }, [commitPlateAppearance, gameState.currentBatterName, logAction, pendingRunnerCorrection, runnerNames]);
+  // REMOVED per UX-022: Pre-commit runner gate eliminated.
+  // Runner corrections are now post-commit via play log or lineup column tap.
+  // Keeping commented for reference during Tier 3 runner sub-entry implementation.
+  // const handleRunnerCorrectionChange = useCallback((updated: RunnerDefaults) => { ... }, []);
+  // const handleRunnerCorrectionCancel = useCallback(() => { ... }, []);
+  // const handleRunnerCorrectionCommit = useCallback(async () => { ... }, []);
 
   const handleRunnerCaughtByChange = useCallback(async (caughtBy: number | null) => {
     if (!selectedBetweenPlayEvent?.stolenBase) return;
@@ -2458,6 +2849,7 @@ export function GameTracker() {
       }
 
       syncDisplayedRostersToLineupSnapshot();
+      setRosterVersion(v => v + 1);
       setSelectedBetweenPlayEvent(nextEvent);
       queuePlayLogRefresh(0);
     } catch (error) {
@@ -2849,66 +3241,128 @@ export function GameTracker() {
   const handleQuickBarOutcome = useCallback(async (outcome: string) => {
     if (!gameInitialized) return;
 
+    playAudio('quickBarTap');
+
+    // §4.3: Set processing feedback — button stays depressed until done
+    setProcessingOutcome(outcome);
+
     // 1. Snapshot current context
     const bases = { ...gameState.bases };
     const outs = gameState.outs;
 
-    const correction = buildRunnerCorrectionForQuickBarOutcome(outcome, bases, outs);
+    // UX-048: Ꝁ (called strikeout) routes same as Kc for stat/storage purposes
+    const effectiveOutcome = outcome === 'Ꝁ' ? 'Kc' : outcome;
+    if (effectiveOutcome === 'K' || effectiveOutcome === 'Kc') {
+      playAudio('strikeout');
+    }
+    if (effectiveOutcome === 'HR' || effectiveOutcome === 'ITPHR') {
+      pendingScoreCelebrationSoundRef.current = 'homeRun';
+    }
+
+    const correction = buildRunnerCorrectionForQuickBarOutcome(effectiveOutcome, bases, outs);
     const defaults = correction?.defaults;
     const promptDefaults = defaults
-      || (outcome === 'HR'
+      || (effectiveOutcome === 'HR' || effectiveOutcome === 'ITPHR'
         ? calculateRunnerDefaults({ type: 'hr', hitType: 'HR', fieldingSequence: [] } as PlayData, bases, outs)
-        : outcome === 'E'
+        : effectiveOutcome === 'E'
         ? calculateRunnerDefaults({ type: 'error', fieldingSequence: [] } as PlayData, bases, outs)
         : undefined);
 
     // 6. Capture undo snapshot
-    undoSystem.captureSnapshot(`Quick: ${outcome}`);
+    undoSystem.captureSnapshot(`${shortInningLabel()} ${gameState.currentBatterName} ${outcome}`);
 
     try {
-      const runnerAdv = defaults ? runnerDefaultsToAdvancement(defaults) : undefined;
-      const rbi = correction ? countRbiFromDefaults(correction.defaults, correction.action) : 0;
+      const effectiveDefaults = defaults || promptDefaults;
+      const runnerAdv = effectiveDefaults ? runnerDefaultsToAdvancement(effectiveDefaults) : undefined;
+      const rbi = correction
+        ? countRbiFromDefaults(correction.defaults, correction.action)
+        : (effectiveDefaults ? countRbiFromDefaults(
+            effectiveDefaults,
+            { type: 'hit', hitType: effectiveOutcome as HitType },
+          ) : 0);
 
       // 7. Route to correct recording function
-      if (outcome === 'HR') {
+      if (effectiveOutcome === 'HR' || effectiveOutcome === 'ITPHR') {
         // D-4: Show inline HR prompt for distance + pitch type before recording
-        if (!promptDefaults) return;
+        if (!promptDefaults) { setProcessingOutcome(null); return; }
         setHrPrompt({ rbi, runnerAdv, defaults: promptDefaults, distance: '', pitchType: '' });
+        setProcessingOutcome(null);
         return; // Recording deferred to handleHrPromptDone
 
-      } else if (outcome === 'E') {
+      } else if (effectiveOutcome === 'E') {
         // D-3: Show error flow prompts (base → fielder → type)
-        if (!promptDefaults) return;
+        if (!promptDefaults) { setProcessingOutcome(null); return; }
         setErrorFlow({ step: 'base', baseReached: '1B', fielderPosition: 0, defaults: promptDefaults });
+        setProcessingOutcome(null);
         return; // Recording deferred to handleErrorFlowComplete
 
-      } else if (outcome === 'FO' && bases.third && outs < 2) {
+      } else if (effectiveOutcome === 'FO' && bases.third && outs < 2) {
         // D-5: FO with R3 + <2 outs → SF prompt
-        if (!defaults) return;
+        if (!defaults) { setProcessingOutcome(null); return; }
         setSfPrompt({ runnerAdv, defaults });
+        setProcessingOutcome(null);
         return; // Deferred to handleSfPromptAnswer
 
-      } else if (outcome === 'GO' && (bases.first || bases.second || bases.third) && outs < 2) {
+      } else if (effectiveOutcome === 'GO' && (bases.first || bases.second || bases.third) && outs < 2) {
         // D-6: GO with runners + <2 outs → check if runner default shows out → DP prompt
-        if (!defaults) return;
+        if (!defaults) { setProcessingOutcome(null); return; }
         const hasRunnerOut = (defaults.first?.to === 'out') || (defaults.second?.to === 'out') || (defaults.third?.to === 'out');
         if (hasRunnerOut) {
           setDpPrompt({ runnerAdv, rbi, defaults });
+          setProcessingOutcome(null);
           return; // Deferred to handleDpPromptAnswer
         }
         // No runner out in defaults → standard GO, fall through
         await commitPlateAppearance({ type: 'out', outType: 'GO', runnerAdvancement: runnerAdv });
         logAction('GO');
 
-      } else if (outcome === 'PO' && outs < 2 && bases.first && bases.second) {
+      } else if (effectiveOutcome === 'PO' && outs < 2 && bases.first && bases.second) {
         // D-7: PO with R1+R2 (or loaded) + <2 outs → IFR prompt
-        if (!defaults) return;
+        if (!defaults) { setProcessingOutcome(null); return; }
         setIfrPrompt({ runnerAdv, defaults });
+        setProcessingOutcome(null);
         return; // Deferred to handleIfrPromptAnswer
 
       } else if (correction) {
-        setPendingRunnerCorrection(correction);
-        return;
+        // UX-022: Immediate commit — no pre-commit runner correction gate.
+        // Runner corrections are post-commit via play log or lineup column tap.
+        const runnerAdvancement = runnerDefaultsToAdvancement(correction.defaults);
+        const immediateRbi = countRbiFromDefaults(correction.defaults, correction.action);
+
+        if (correction.action.type === 'hit') {
+          await commitPlateAppearance({
+            type: 'hit',
+            hitType: correction.action.hitType,
+            rbi: immediateRbi,
+            runnerAdvancement,
+          });
+        } else if (correction.action.type === 'walk') {
+          await commitPlateAppearance({
+            type: 'walk',
+            walkType: correction.action.walkType,
+          });
+        } else {
+          await commitPlateAppearance({
+            type: 'out',
+            outType: correction.action.outType,
+            runnerAdvancement,
+            batterReached: correction.action.batterReached,
+            isDroppedThirdStrike: correction.action.isDroppedThirdStrike,
+            forceNoRuns: correction.action.forceNoRuns,
+            dropReason: correction.action.dropReason,
+          });
+        }
+
+        const resultText = correction.action.type === 'hit' && immediateRbi > 0
+          ? `${correction.outcomeLabel} — ${immediateRbi} RBI`
+          : correction.outcomeLabel;
+        logAction(resultText);
+
+        setRunnerNames(applyRunnerDefaultsToNames(
+          correction.defaults,
+          runnerNames,
+          gameState.currentBatterName,
+        ));
 
       } else {
         // Unknown — just log
@@ -2916,9 +3370,14 @@ export function GameTracker() {
       }
 
     } catch (error) {
+      if (effectiveOutcome === 'HR' || effectiveOutcome === 'ITPHR') {
+        pendingScoreCelebrationSoundRef.current = null;
+      }
       console.error(`[QuickBar] Failed to record ${outcome}:`, error);
+    } finally {
+      setProcessingOutcome(null);
     }
-  }, [gameInitialized, gameState, undoSystem, logAction]);
+  }, [gameInitialized, gameState, undoSystem, logAction, playAudio]);
 
   // ═══════════════════════════════════════════════════════════
   // D-4: HR inline prompt completion
@@ -2926,6 +3385,7 @@ export function GameTracker() {
   const handleHrPromptDone = useCallback(async () => {
     if (!hrPrompt) return;
     const { rbi, runnerAdv, defaults, distance, pitchType } = hrPrompt;
+    const atBatEventId = getPendingAtBatIdentity().atBatEventId;
 
     // Attach enrichment if distance or pitch type provided
     if (distance || pitchType) {
@@ -2938,23 +3398,7 @@ export function GameTracker() {
     try {
       await commitPlateAppearance({ type: 'hit', hitType: 'HR', rbi, runnerAdvancement: runnerAdv });
       logAction(`HR${rbi > 0 ? ` — ${rbi} RBI` : ''}${distance ? ` (${distance} ft)` : ''}`);
-
-      pushPlayLogEntry({
-        eventId: getPendingAtBatIdentity().atBatEventId,
-        inningLabel: shortInningLabel(),
-        batterName: gameState.currentBatterName,
-        result: 'HR',
-        resultCategory: 'hit',
-        rbi,
-        runsScored: rbi,
-        hasFieldingData: false,
-        hasLocationData: false,
-        hasKType: false,
-        hasPitchCount: false,
-        hasPitchType: !!pitchType,
-        isEnrichable: true,
-        isQAB: true,
-      });
+      await appendCommittedAtBatEntry(atBatEventId);
 
       // Update runner names (HR: all score, batter scores)
       setRunnerNames({});
@@ -2962,37 +3406,22 @@ export function GameTracker() {
       console.error('[D-4] Failed to record HR:', error);
     }
     setHrPrompt(null);
-  }, [commitPlateAppearance, gameState, hrPrompt, logAction, pushPlayLogEntry, setNextEventEnrichment, shortInningLabel, getPendingAtBatIdentity]);
+  }, [appendCommittedAtBatEntry, commitPlateAppearance, getPendingAtBatIdentity, hrPrompt, logAction, setNextEventEnrichment]);
 
   const handleHrPromptSkip = useCallback(async () => {
     if (!hrPrompt) return;
     const { rbi, runnerAdv } = hrPrompt;
+    const atBatEventId = getPendingAtBatIdentity().atBatEventId;
     try {
       await commitPlateAppearance({ type: 'hit', hitType: 'HR', rbi, runnerAdvancement: runnerAdv });
       logAction(`HR${rbi > 0 ? ` — ${rbi} RBI` : ''}`);
-
-      pushPlayLogEntry({
-        eventId: getPendingAtBatIdentity().atBatEventId,
-        inningLabel: shortInningLabel(),
-        batterName: gameState.currentBatterName,
-        result: 'HR',
-        resultCategory: 'hit',
-        rbi,
-        runsScored: rbi,
-        hasFieldingData: false,
-        hasLocationData: false,
-        hasKType: false,
-        hasPitchCount: false,
-        hasPitchType: false,
-        isEnrichable: true,
-        isQAB: true,
-      });
+      await appendCommittedAtBatEntry(atBatEventId);
       setRunnerNames({});
     } catch (error) {
       console.error('[D-4] Failed to record HR (skip):', error);
     }
     setHrPrompt(null);
-  }, [commitPlateAppearance, gameState, hrPrompt, logAction, pushPlayLogEntry, shortInningLabel, getPendingAtBatIdentity]);
+  }, [appendCommittedAtBatEntry, commitPlateAppearance, getPendingAtBatIdentity, hrPrompt, logAction]);
 
   const handleQuickErrorDetail = useCallback(async (positionLabel: keyof typeof POSITION_NUMBER) => {
     const fielderPosition = POSITION_NUMBER[positionLabel];
@@ -3011,28 +3440,13 @@ export function GameTracker() {
         errorFielder: fielderPosition,
       }, 'quick error');
       logAction(`E${positionLabel}`);
-      pushPlayLogEntry({
-        eventId,
-        inningLabel: shortInningLabel(),
-        batterName: gameState.currentBatterName,
-        result: 'E',
-        resultCategory: 'error',
-        rbi: 0,
-        runsScored: 0,
-        hasFieldingData: true,
-        hasLocationData: false,
-        hasKType: false,
-        hasPitchCount: false,
-        hasPitchType: false,
-        isEnrichable: true,
-        isQAB: false,
-      });
+      await appendCommittedAtBatEntry(eventId);
     } catch (error) {
       console.error('[Quick Error] Failed to record error detail:', error);
     } finally {
       setExpandedOutcome(null);
     }
-  }, [commitPlateAppearance, gameState.currentBatterName, getPendingAtBatIdentity, logAction, persistFieldingEventsForPlayData, pushPlayLogEntry, setNextEventEnrichment, shortInningLabel]);
+  }, [appendCommittedAtBatEntry, commitPlateAppearance, getPendingAtBatIdentity, logAction, persistFieldingEventsForPlayData, setNextEventEnrichment]);
 
   // ═══════════════════════════════════════════════════════════
   // D-3: Error flow prompt completion
@@ -3043,8 +3457,7 @@ export function GameTracker() {
     errorType: PlayData['errorType'],
   ) => {
     if (!errorFlow) return;
-
-    undoSystem.captureSnapshot('Quick: E');
+    const atBatEventId = getPendingAtBatIdentity().atBatEventId;
 
     // Build runner advancement for error (batter reaches specified base)
     // Runners use standard defaults for the error
@@ -3075,23 +3488,7 @@ export function GameTracker() {
         errorType: errorType || undefined,
       });
       logAction(`E${fielderPosition || ''}${errorType ? ` (${errorType})` : ''} — batter to ${baseReached}`);
-
-      pushPlayLogEntry({
-        eventId: getPendingAtBatIdentity().atBatEventId,
-        inningLabel: shortInningLabel(),
-        batterName: gameState.currentBatterName,
-        result: 'E',
-        resultCategory: 'error',
-        rbi: 0,
-        runsScored: bases.third ? 1 : 0,
-        hasFieldingData: fielderPosition > 0,
-        hasLocationData: false,
-        hasKType: false,
-        hasPitchCount: false,
-        hasPitchType: false,
-        isEnrichable: true,
-        isQAB: false,
-      });
+      await appendCommittedAtBatEntry(atBatEventId);
 
       // Update runner names
       const newNames: { first?: string; second?: string; third?: string } = {};
@@ -3107,7 +3504,7 @@ export function GameTracker() {
       console.error('[D-3] Failed to record error:', error);
     }
     setErrorFlow(null);
-  }, [commitPlateAppearance, errorFlow, gameState, logAction, pushPlayLogEntry, runnerNames, setNextEventEnrichment, shortInningLabel, undoSystem, getPendingAtBatIdentity, persistFieldingEventsForPlayData]);
+  }, [appendCommittedAtBatEntry, commitPlateAppearance, errorFlow, gameState, getPendingAtBatIdentity, logAction, persistFieldingEventsForPlayData, runnerNames, setNextEventEnrichment, undoSystem]);
 
   // ═══════════════════════════════════════════════════════════
   // D-5: SF prompt answer — "Sac fly — run scores?"
@@ -3115,43 +3512,20 @@ export function GameTracker() {
   const handleSfPromptAnswer = useCallback(async (isYes: boolean) => {
     if (!sfPrompt) return;
     const { runnerAdv, defaults } = sfPrompt;
+    const atBatEventId = getPendingAtBatIdentity().atBatEventId;
     try {
       if (isYes) {
         // SF: runner scores from 3rd, batter out, not an AB
         const sfAdv: RunnerAdvancement = { ...runnerAdv, fromThird: 'home' };
         await commitPlateAppearance({ type: 'out', outType: 'SF', runnerAdvancement: sfAdv });
         logAction('SF — run scores');
-
-        pushPlayLogEntry({
-          eventId: getPendingAtBatIdentity().atBatEventId,
-          inningLabel: shortInningLabel(),
-          batterName: gameState.currentBatterName,
-          result: 'SF',
-          resultCategory: 'out',
-          rbi: 1,
-          runsScored: 1,
-          hasFieldingData: false, hasLocationData: false, hasKType: false,
-          hasPitchCount: false, hasPitchType: false,
-          isEnrichable: true, isQAB: false,
-        });
       } else {
         // FO: runner holds, standard fly out
         const foAdv: RunnerAdvancement = { ...runnerAdv, fromThird: undefined };
         await commitPlateAppearance({ type: 'out', outType: 'FO', runnerAdvancement: Object.keys(foAdv).length > 0 ? foAdv : undefined });
         logAction('FO (R3 held)');
-
-        pushPlayLogEntry({
-          eventId: getPendingAtBatIdentity().atBatEventId,
-          inningLabel: shortInningLabel(),
-          batterName: gameState.currentBatterName,
-          result: 'FO',
-          resultCategory: 'out',
-          rbi: 0, runsScored: 0,
-          hasFieldingData: false, hasLocationData: false, hasKType: false,
-          hasPitchCount: false, hasPitchType: false,
-          isEnrichable: true, isQAB: false,
-        });
       }
+      await appendCommittedAtBatEntry(atBatEventId);
 
       // Update runner names
       const newNames: { first?: string; second?: string; third?: string } = {};
@@ -3170,7 +3544,7 @@ export function GameTracker() {
       console.error('[D-5] Failed to record SF/FO:', error);
     }
     setSfPrompt(null);
-  }, [commitPlateAppearance, gameState, logAction, pushPlayLogEntry, runnerNames, sfPrompt, shortInningLabel, getPendingAtBatIdentity]);
+  }, [appendCommittedAtBatEntry, commitPlateAppearance, getPendingAtBatIdentity, logAction, runnerNames, sfPrompt]);
 
   // ═══════════════════════════════════════════════════════════
   // D-6: GO→DP prompt answer — "Double play?"
@@ -3178,40 +3552,17 @@ export function GameTracker() {
   const handleDpPromptAnswer = useCallback(async (isDP: boolean) => {
     if (!dpPrompt) return;
     const { runnerAdv, rbi, defaults } = dpPrompt;
+    const atBatEventId = getPendingAtBatIdentity().atBatEventId;
     try {
       if (isDP) {
         await commitPlateAppearance({ type: 'out', outType: 'DP', runnerAdvancement: runnerAdv });
         logAction(`DP${rbi > 0 ? ` — ${rbi} RBI` : ''}`);
-
-        pushPlayLogEntry({
-          eventId: getPendingAtBatIdentity().atBatEventId,
-          inningLabel: shortInningLabel(),
-          batterName: gameState.currentBatterName,
-          result: 'DP',
-          resultCategory: 'out',
-          rbi: 0, runsScored: 0, // DP never gets RBI
-          hasFieldingData: false, hasLocationData: false, hasKType: false,
-          hasPitchCount: false, hasPitchType: false,
-          isEnrichable: true, isQAB: false,
-        });
       } else {
         // Standard GO, no DP
         await commitPlateAppearance({ type: 'out', outType: 'GO', runnerAdvancement: runnerAdv });
         logAction('GO');
-
-        pushPlayLogEntry({
-          eventId: getPendingAtBatIdentity().atBatEventId,
-          inningLabel: shortInningLabel(),
-          batterName: gameState.currentBatterName,
-          result: 'GO',
-          resultCategory: 'out',
-          rbi: rbi > 0 ? rbi : 0,
-          runsScored: rbi,
-          hasFieldingData: false, hasLocationData: false, hasKType: false,
-          hasPitchCount: false, hasPitchType: false,
-          isEnrichable: true, isQAB: false,
-        });
       }
+      await appendCommittedAtBatEntry(atBatEventId);
 
       // Update runner names from defaults
       const newNames: { first?: string; second?: string; third?: string } = {};
@@ -3225,7 +3576,7 @@ export function GameTracker() {
       console.error('[D-6] Failed to record GO/DP:', error);
     }
     setDpPrompt(null);
-  }, [commitPlateAppearance, dpPrompt, gameState, logAction, pushPlayLogEntry, runnerNames, shortInningLabel, getPendingAtBatIdentity]);
+  }, [appendCommittedAtBatEntry, commitPlateAppearance, dpPrompt, getPendingAtBatIdentity, logAction, runnerNames]);
 
   // ═══════════════════════════════════════════════════════════
   // D-7: IFR prompt answer — "Infield Fly Rule?"
@@ -3233,6 +3584,7 @@ export function GameTracker() {
   const handleIfrPromptAnswer = useCallback(async (isIFR: boolean) => {
     if (!ifrPrompt) return;
     const { runnerAdv, defaults } = ifrPrompt;
+    const atBatEventId = getPendingAtBatIdentity().atBatEventId;
     try {
       if (isIFR) {
         // IFR: batter OUT immediately, removes force on runners
@@ -3242,18 +3594,7 @@ export function GameTracker() {
       // Either way it's a PO — IFR just adds the modifier
       await commitPlateAppearance({ type: 'out', outType: 'PO', runnerAdvancement: runnerAdv });
       logAction(`PO${isIFR ? ' (IFR)' : ''}`);
-
-      pushPlayLogEntry({
-        eventId: getPendingAtBatIdentity().atBatEventId,
-        inningLabel: shortInningLabel(),
-        batterName: gameState.currentBatterName,
-        result: 'PO',
-        resultCategory: 'out',
-        rbi: 0, runsScored: 0,
-        hasFieldingData: false, hasLocationData: false, hasKType: false,
-        hasPitchCount: false, hasPitchType: false,
-        isEnrichable: true, isQAB: false,
-      });
+      await appendCommittedAtBatEntry(atBatEventId);
 
       // Update runner names (runners hold on PO)
       const newNames: { first?: string; second?: string; third?: string } = {};
@@ -3265,7 +3606,7 @@ export function GameTracker() {
       console.error('[D-7] Failed to record PO/IFR:', error);
     }
     setIfrPrompt(null);
-  }, [commitPlateAppearance, gameState, ifrPrompt, logAction, pushPlayLogEntry, runnerNames, setNextEventEnrichment, shortInningLabel, getPendingAtBatIdentity]);
+  }, [appendCommittedAtBatEntry, commitPlateAppearance, getPendingAtBatIdentity, ifrPrompt, logAction, runnerNames, setNextEventEnrichment]);
 
   // Handle special events (Web Gem, Robbery, TOOTBLAN, etc.) from the canonical tracker modifier flow
   // Phase 5B: Extended to handle all contextual button events
@@ -3413,7 +3754,7 @@ export function GameTracker() {
       eventType: modifier,
       batterId: atBatEvent.batterId,
       batterName: atBatEvent.batterName,
-      runnerId: modifier === 'TOOTBLAN' ? runnerOut?.runnerId : undefined,
+      runnerId: undefined,
       fielderPosition: primaryPosition ? POSITION_NUMBER[primaryPosition as keyof typeof POSITION_NUMBER] : undefined,
       fielderName: primaryDefender?.playerName,
     };
@@ -3570,6 +3911,17 @@ export function GameTracker() {
     } catch (e) { console.warn('[mWAR] Decision recording error (non-blocking):', e); }
   };
 
+  // §9.1: Player card Sub Out handler — executes substitution from player card bench list
+  const handlePlayerCardSubOut = useCallback((outgoingPlayerId: string, outgoingName: string, incomingName: string, isPitcher: boolean) => {
+    const team = resolveRosterTeamSide(outgoingPlayerId, outgoingName) || fieldingTeam;
+
+    if (isPitcher) {
+      handlePitcherSubstitution(team, incomingName, outgoingName, 'pitcher');
+    } else {
+      handleSubstitution(team, incomingName, outgoingName);
+    }
+  }, [resolveRosterTeamSide, fieldingTeam, handlePitcherSubstitution, handleSubstitution]);
+
   const handlePositionSwap = useCallback((teamType: 'away' | 'home', player1Name: string, player2Name: string) => {
     console.log(`Position Swap: ${player1Name} and ${player2Name} swapping positions on ${teamType} team`);
 
@@ -3633,6 +3985,50 @@ export function GameTracker() {
   const nextBaseMap: Record<RunnerBase, 'second' | 'third' | 'home'> = {
     first: 'second', second: 'third', third: 'home',
   };
+
+  const recordRunnerActionFromPlayerCard = useCallback(async (
+    eventType: 'SB' | 'CS' | 'WP' | 'PB' | 'PICK' | 'PICK_SAFE' | 'PICK_E' | 'ADVANCE',
+    base: RunnerBase,
+    runnerId: string,
+    runnerName: string,
+  ) => {
+    const toBase = eventType === 'PICK'
+      ? 'out'
+      : eventType === 'PICK_SAFE'
+        ? base
+        : nextBaseMap[base];
+    const outcome = eventType === 'CS' || eventType === 'PICK' ? 'out' as const : 'safe' as const;
+    const shouldAdvanceRunner = eventType !== 'PICK_SAFE';
+
+    undoSystem.captureSnapshot(`${eventType}: ${runnerName} ${base} → ${toBase}`);
+
+    if (shouldAdvanceRunner) {
+      advanceRunner(base, nextBaseMap[base], outcome);
+    }
+
+    await recordEvent(eventType, runnerId, {
+      runnerId,
+      runnerName,
+      fromBase: base,
+      toBase,
+      outcome,
+      pitcherId: gameState.currentPitcherId,
+      pitcherName: resolvedCurrentPitcherName,
+      catcherId: defensiveAlignmentByPosition.C?.playerId,
+      catcherName: defensiveAlignmentByPosition.C?.playerName,
+    });
+
+    setSelectedPlayer(null);
+    queuePlayLogRefresh();
+  }, [
+    advanceRunner,
+    defensiveAlignmentByPosition,
+    gameState.currentPitcherId,
+    queuePlayLogRefresh,
+    recordEvent,
+    resolvedCurrentPitcherName,
+    undoSystem,
+  ]);
 
   const handlePendingRunnerAttributionCommit = useCallback(async () => {
     if (!pendingRunnerAttribution) return;
@@ -3810,11 +4206,16 @@ export function GameTracker() {
     }
   }, [activeRunnerPopover?.playerId, activeRunnerPopover?.runnerName, beginRunnerAttributionCapture, defensiveAlignmentByPosition, gameState.currentPitcherId, resolvedCurrentPitcherName]);
 
+  // REMOVED per Cleanup: Lineup overlay replaced by inline columns. Substitution flow
+  // will be reconnected in Group 2.C (player-card-first flow).
+  // §9.1 (Group 2.C): Pinch runner — opens player card for runner, user taps Sub Out → bench list
   const handleRunnerSubstitute = useCallback((base: RunnerBase) => {
+    const runner = activeRunnerPopover;
     setActiveRunnerPopover(null);
-    setLineupOverlayHint(`Pinch runner requested for ${base.toUpperCase()}. Use the LINEUP panel to complete the substitution.`);
-    setShowLineupOverlay(true);
-  }, []);
+    if (runner) {
+      setSelectedPlayer({ name: runner.runnerName, type: 'batter', playerId: runner.playerId, runnerBase: base });
+    }
+  }, [activeRunnerPopover]);
 
   // ============================================
   // FIELDER POPOVER HANDLERS (Layer 4 — tickets 4.3, 4.5)
@@ -3828,7 +4229,12 @@ export function GameTracker() {
 
   const handleRunnerPlayerCard = useCallback(() => {
     if (!activeRunnerPopover) return;
-    setSelectedPlayer({ name: activeRunnerPopover.runnerName, type: 'batter', playerId: activeRunnerPopover.playerId });
+    setSelectedPlayer({
+      name: activeRunnerPopover.runnerName,
+      type: 'batter',
+      playerId: activeRunnerPopover.playerId,
+      runnerBase: activeRunnerPopover.base,
+    });
     setActiveRunnerPopover(null);
   }, [activeRunnerPopover]);
 
@@ -3948,11 +4354,20 @@ export function GameTracker() {
     if (!pendingOutcome) return;
 
     try {
+      const defaultCorrection = buildRunnerCorrectionForQuickBarOutcome(
+        pendingOutcome.subType,
+        gameState.bases,
+        gameState.outs,
+      );
+
       if (pendingOutcome.type === 'hit') {
         await commitPlateAppearance({
           type: 'hit',
           hitType: pendingOutcome.subType as HitType,
           rbi: pendingOutcome.rbi || 0,
+          runnerAdvancement: defaultCorrection?.action.type === 'hit'
+            ? runnerDefaultsToAdvancement(defaultCorrection.defaults)
+            : undefined,
         });
         logAction(`${pendingOutcome.subType} (manual) — ${pendingOutcome.rbi || 0} RBI`);
       } else if (pendingOutcome.type === 'out') {
@@ -3960,6 +4375,18 @@ export function GameTracker() {
         await commitPlateAppearance({
           type: 'out',
           outType: pendingOutcome.subType as OutType,
+          runnerAdvancement: defaultCorrection?.action.type === 'out'
+            ? runnerDefaultsToAdvancement(defaultCorrection.defaults)
+            : undefined,
+          batterReached: defaultCorrection?.action.type === 'out'
+            ? defaultCorrection.action.batterReached
+            : undefined,
+          isDroppedThirdStrike: defaultCorrection?.action.type === 'out'
+            ? defaultCorrection.action.isDroppedThirdStrike
+            : undefined,
+          dropReason: defaultCorrection?.action.type === 'out'
+            ? defaultCorrection.action.dropReason
+            : undefined,
           forceNoRuns: timePlayNoRun,
         });
         logAction(`Out (${pendingOutcome.subType}) (manual entry)${timePlayNoRun ? ' [time play — no run]' : ''}`);
@@ -3978,7 +4405,7 @@ export function GameTracker() {
     } catch (error) {
       console.error('Failed to record outcome:', error);
     }
-  }, [commitPlateAppearance, logAction, pendingOutcome, timePlayNoRun]);
+  }, [commitPlateAppearance, gameState.bases, gameState.outs, logAction, pendingOutcome, timePlayNoRun]);
 
   // Cancel pending outcome
   const handleCancelOutcome = useCallback(() => {
@@ -4027,25 +4454,85 @@ export function GameTracker() {
     });
   }, []);
 
-  const canUseMainFieldLocation = !!enrichingEntry && ['1B', '2B', '3B', 'GRD', 'HR', 'GO', 'FO', 'LO', 'PO', 'DP', 'TP', 'FC', 'SF', 'SAC'].includes(enrichingEntry.result);
-  const activeDiamondFieldingSequence = useMemo(() => {
-    if (!enrichingEntry?.eventId) {
-      return [];
-    }
-    return enrichmentCache[enrichingEntry.eventId]?.fieldingSequence || [];
-  }, [enrichingEntry?.eventId, enrichmentCache]);
+  // GameDiamond removed in Step 1.B (UX-004) — activeDiamondFieldingSequence no longer needed.
+  // const activeDiamondFieldingSequence = useMemo(() => { ... }, [enrichingEntry?.eventId, enrichmentCache]);
 
   // 5.1: Save enrichment field immediately (auto-save on change)
   const handleEnrichmentUpdate = useCallback(async (field: keyof EnrichmentUpdate, value: unknown) => {
     if (!enrichingEntry?.eventId) return;
 
-    const update: Partial<import('../../../utils/eventLog').AtBatEvent['enrichment']> = {
-      [field]: value,
-    };
-
     try {
       const existingAtBat = await getAtBatEvent(enrichingEntry.eventId);
       if (!existingAtBat) {
+        return;
+      }
+
+      const update: Partial<import('../../../utils/eventLog').AtBatEvent['enrichment']> = {
+        [field]: value,
+      };
+
+      if (field === 'batterOutAdvancing') {
+        const batterBase = getBatterDestinationBase(existingAtBat.result);
+        if (!batterBase) {
+          return;
+        }
+
+        const nextBatterOutAdvancing = Boolean(value);
+        const previousBatterOutAdvancing = !!existingAtBat.enrichment?.batterOutAdvancing;
+        const outDelta = Number(nextBatterOutAdvancing) - Number(previousBatterOutAdvancing);
+        const nextOutsAfter = Math.max(existingAtBat.outs, Math.min(3, existingAtBat.outsAfter + outDelta));
+        const nextOutsRecorded = Math.max(
+          0,
+          (existingAtBat.outsRecorded ?? (existingAtBat.outsAfter - existingAtBat.outs)) + outDelta,
+        );
+
+        let nextRunnersAfter: AtBatEvent['runnersAfter'];
+        if (nextOutsAfter >= 3) {
+          nextRunnersAfter = { first: null, second: null, third: null };
+        } else {
+          nextRunnersAfter = { ...existingAtBat.runnersAfter };
+          if (nextBatterOutAdvancing) {
+            if (nextRunnersAfter[batterBase]?.runnerId === existingAtBat.batterId) {
+              nextRunnersAfter[batterBase] = null;
+            }
+          } else {
+            nextRunnersAfter[batterBase] = {
+              runnerId: existingAtBat.batterId,
+              runnerName: existingAtBat.batterName,
+              responsiblePitcherId: existingAtBat.pitcherId,
+            };
+          }
+        }
+
+        const timestamp = Date.now();
+        await updateAtBatEvent(enrichingEntry.eventId, {
+          enrichment: update as NonNullable<AtBatEvent['enrichment']>,
+          outsAfter: nextOutsAfter,
+          outsRecorded: nextOutsRecorded,
+          runnersAfter: nextRunnersAfter,
+          version: (existingAtBat.version ?? 1) + 1,
+          editHistory: [{
+            field: 'enrichment.batterOutAdvancing',
+            oldValue: existingAtBat.enrichment?.batterOutAdvancing ?? null,
+            newValue: nextBatterOutAdvancing,
+            timestamp,
+          }],
+        });
+
+        setEnrichmentCache(prev => ({
+          ...prev,
+          [enrichingEntry.eventId!]: { ...(prev[enrichingEntry.eventId!] || {}), ...update },
+        }));
+
+        const latestAtBatEntry = [...playLogEntries].reverse().find((entry) => entry.eventType === 'at_bat' && entry.eventId);
+        const isLatestAtBat = latestAtBatEntry?.eventId === existingAtBat.eventId;
+        if (isLatestAtBat) {
+          applyBasesCorrection(buildLiveBasesFromRunnersAfter(nextRunnersAfter), nextRunnersAfter);
+          if (outDelta !== 0) {
+            applyOutsAdjustment(outDelta);
+          }
+        }
+
         return;
       }
 
@@ -4067,7 +4554,9 @@ export function GameTracker() {
         });
       }
 
-      if (field === 'fieldingSequence' || field === 'fieldingPlayType') {
+      const isFieldingField = field === 'fieldingSequence' || field === 'fieldingPlayType'
+        || field === 'fieldingAttemptType' || field === 'fieldingAttemptOutcome' || field === 'playMechanic';
+      if (isFieldingField) {
         const syncedFieldingEvents = await buildFieldingSyncEventsForSequenceEdit(
           existingAtBat,
           update as Partial<NonNullable<AtBatEvent['enrichment']>>,
@@ -4102,7 +4591,7 @@ export function GameTracker() {
         if (e.id !== enrichingEntry.id) return e;
         const updated = { ...e };
         if (field === 'fieldLocation') updated.hasLocationData = true;
-        if (field === 'fieldingSequence' || field === 'fieldingPlayType') updated.hasFieldingData = true;
+        if (field === 'fieldingSequence' || field === 'fieldingPlayType' || field === 'fieldingAttemptType' || field === 'fieldingAttemptOutcome' || field === 'playMechanic') updated.hasFieldingData = true;
         if (field === 'pitchType') updated.hasPitchType = true;
         if (field === 'pitchesInAtBat') {
           updated.hasPitchCount = true;
@@ -4116,7 +4605,7 @@ export function GameTracker() {
       // Update the enrichingEntry itself so panel reflects changes
       setEnrichingEntry(prev => prev ? { ...prev,
         hasLocationData: field === 'fieldLocation' ? true : prev.hasLocationData,
-        hasFieldingData: field === 'fieldingSequence' || field === 'fieldingPlayType' ? true : prev.hasFieldingData,
+        hasFieldingData: (field === 'fieldingSequence' || field === 'fieldingPlayType' || field === 'fieldingAttemptType' || field === 'fieldingAttemptOutcome' || field === 'playMechanic') ? true : prev.hasFieldingData,
         hasPitchType: field === 'pitchType' ? true : prev.hasPitchType,
         hasPitchCount: field === 'pitchesInAtBat' ? true : prev.hasPitchCount,
         isQAB: shouldMarkQualityAtBat ? true : prev.isQAB,
@@ -4125,27 +4614,11 @@ export function GameTracker() {
     } catch (err) {
       console.error('[Enrichment] Failed to save:', err);
     }
-  }, [buildFieldingSyncEventsForSequenceEdit, enrichingEntry]);
+  }, [applyBasesCorrection, applyOutsAdjustment, buildFieldingSyncEventsForSequenceEdit, enrichingEntry, playLogEntries]);
 
-  const handleMainFieldLocationPick = useCallback((coord: { x: number; y: number }) => {
-    if (!canUseMainFieldLocation || !enrichingEntry) return;
-    void handleEnrichmentUpdate('fieldLocation', {
-      x: Math.round(coord.x * 100),
-      y: Math.round((1 - coord.y) * 100),
-    });
-  }, [canUseMainFieldLocation, enrichingEntry, handleEnrichmentUpdate]);
-
-  const handleDiamondFieldingSequenceUndo = useCallback(() => {
-    if (!enrichingEntry?.eventId) return;
-    const currentSequence = enrichmentCache[enrichingEntry.eventId]?.fieldingSequence || [];
-    if (currentSequence.length === 0) return;
-    void handleEnrichmentUpdate('fieldingSequence', currentSequence.slice(0, -1));
-  }, [enrichingEntry?.eventId, enrichmentCache, handleEnrichmentUpdate]);
-
-  const handleDiamondFieldingSequenceClear = useCallback(() => {
-    if (!enrichingEntry?.eventId) return;
-    void handleEnrichmentUpdate('fieldingSequence', []);
-  }, [enrichingEntry?.eventId, handleEnrichmentUpdate]);
+  // GameDiamond removed in Step 1.B (UX-004) — fielding sequence handlers no longer needed.
+  // const handleDiamondFieldingSequenceUndo = useCallback(() => { ... }, [...]);
+  // const handleDiamondFieldingSequenceClear = useCallback(() => { ... }, [...]);
 
   const handleFielderTap = useCallback((positionNumber: number, playerName: string, anchorPosition: { left: string; top: string }) => {
     if (enrichingEntry?.eventId) {
@@ -4196,13 +4669,217 @@ export function GameTracker() {
     setSelectedPlayLogEntry(null);
     setSelectedBetweenPlayEvent(null);
     setEnrichingEntry(null);
+    setEnrichingRunnerSubEntry(null);
+    setEnrichingRunnerParentEntry(null);
   }, []);
+
+  // §5.4 UX-024: Defensive lineup enrichment mode — toggles column into fielding sequence builder
+  const defensiveEnrichmentMode = useMemo((): DefensiveEnrichmentMode | undefined => {
+    const eventId = enrichingEntry?.eventId;
+    if (!eventId) return undefined;
+    const currentSequence = enrichmentCache[eventId]?.fieldingSequence || [];
+    return {
+      active: true,
+      sequence: currentSequence,
+      onFielderTap: (posNum: number) => {
+        const seq = enrichmentCache[eventId]?.fieldingSequence || [];
+        void handleEnrichmentUpdate('fieldingSequence', [...seq, posNum]);
+      },
+      onDone: () => {
+        handleEnrichmentClose();
+      },
+      onClear: () => {
+        void handleEnrichmentUpdate('fieldingSequence', []);
+      },
+    };
+  }, [enrichingEntry?.eventId, enrichmentCache, handleEnrichmentUpdate, handleEnrichmentClose]);
 
   const handleReturnToLiveAtBat = useCallback(() => {
     setSelectedPlayLogEntry(null);
     setSelectedBetweenPlayEvent(null);
     setEnrichingEntry(null);
+    setEnrichingRunnerSubEntry(null);
+    setEnrichingRunnerParentEntry(null);
   }, []);
+
+  // 5.8: Runner sub-entry tap — open runner enrichment panel (UX-050)
+  const handleRunnerSubEntryTap = useCallback((subEntry: RunnerSubEntry, parentEntry: PlayLogEntry) => {
+    if (enrichingRunnerSubEntry?.id === subEntry.id) {
+      // Toggle off
+      setEnrichingRunnerSubEntry(null);
+      setEnrichingRunnerParentEntry(null);
+      return;
+    }
+    // Close at-bat enrichment if open
+    setEnrichingEntry(null);
+    setSelectedPlayLogEntry(null);
+    setSelectedBetweenPlayEvent(null);
+    setEnrichingRunnerSubEntry(subEntry);
+    setEnrichingRunnerParentEntry(parentEntry);
+  }, [enrichingRunnerSubEntry]);
+
+  // 5.9: Runner sub-entry enrichment update — persists to AtBatEvent.runnerOutcomes[] (UX-050)
+  const handleRunnerEnrichmentUpdate = useCallback(async (
+    subEntryId: string,
+    field: 'fieldingSequence' | 'playMechanic' | 'isTootblan' | 'isOutAdvancing' | 'toBase',
+    value: unknown,
+  ) => {
+    if (!enrichingRunnerSubEntry || !enrichingRunnerParentEntry?.eventId) return;
+
+    // Parse runner index from sub-entry ID: "{eventId}-runner-{idx}"
+    const idParts = subEntryId.split('-runner-');
+    const runnerIdx = parseInt(idParts[idParts.length - 1], 10);
+    if (isNaN(runnerIdx)) return;
+
+    try {
+      const existingAtBat = await getAtBatEvent(enrichingRunnerParentEntry.eventId);
+      if (!existingAtBat?.runnerOutcomes?.[runnerIdx]) return;
+
+      const updatedOutcomes = [...existingAtBat.runnerOutcomes];
+      const previousOutcome = updatedOutcomes[runnerIdx];
+      updatedOutcomes[runnerIdx] = { ...previousOutcome, [field]: value };
+      const nextOutcome = updatedOutcomes[runnerIdx];
+
+      const previousRunCounted = runnerOutcomeCountsAsRun(previousOutcome);
+      const nextRunCounted = runnerOutcomeCountsAsRun(nextOutcome);
+      const previousOutCounted = runnerOutcomeCountsAsOut(previousOutcome);
+      const nextOutCounted = runnerOutcomeCountsAsOut(nextOutcome);
+      const scoreDelta = Number(nextRunCounted) - Number(previousRunCounted);
+      const outDelta = Number(nextOutCounted) - Number(previousOutCounted);
+
+      const nextRunsScored = Array.isArray(existingAtBat.runsScored)
+        ? (() => {
+            const scoredIds = existingAtBat.runsScored.filter((runnerId) => runnerId !== previousOutcome.runnerId);
+            if (nextRunCounted) {
+              scoredIds.push(previousOutcome.runnerId);
+            }
+            return scoredIds;
+          })()
+        : Math.max(0, existingAtBat.runsScored + scoreDelta);
+
+      const nextRunnersAfter = {
+        ...existingAtBat.runnersAfter,
+        first: existingAtBat.runnersAfter.first?.runnerId === previousOutcome.runnerId ? null : existingAtBat.runnersAfter.first,
+        second: existingAtBat.runnersAfter.second?.runnerId === previousOutcome.runnerId ? null : existingAtBat.runnersAfter.second,
+        third: existingAtBat.runnersAfter.third?.runnerId === previousOutcome.runnerId ? null : existingAtBat.runnersAfter.third,
+      };
+      const previousRunnerInfo =
+        existingAtBat.runners.first?.runnerId === previousOutcome.runnerId ? existingAtBat.runners.first
+        : existingAtBat.runners.second?.runnerId === previousOutcome.runnerId ? existingAtBat.runners.second
+        : existingAtBat.runners.third?.runnerId === previousOutcome.runnerId ? existingAtBat.runners.third
+        : existingAtBat.runnersAfter.first?.runnerId === previousOutcome.runnerId ? existingAtBat.runnersAfter.first
+        : existingAtBat.runnersAfter.second?.runnerId === previousOutcome.runnerId ? existingAtBat.runnersAfter.second
+        : existingAtBat.runnersAfter.third?.runnerId === previousOutcome.runnerId ? existingAtBat.runnersAfter.third
+        : null;
+
+      if (['first', 'second', 'third'].includes(nextOutcome.toBase) && !nextOutCounted) {
+        const destinationKey = nextOutcome.toBase as 'first' | 'second' | 'third';
+        nextRunnersAfter[destinationKey] = {
+          runnerId: previousOutcome.runnerId,
+          runnerName: previousOutcome.runnerName,
+          responsiblePitcherId: previousRunnerInfo?.responsiblePitcherId ?? existingAtBat.pitcherId,
+        };
+      }
+
+      const nextAwayScoreAfter = existingAtBat.awayScoreAfter + (existingAtBat.halfInning === 'TOP' ? scoreDelta : 0);
+      const nextHomeScoreAfter = existingAtBat.homeScoreAfter + (existingAtBat.halfInning === 'BOTTOM' ? scoreDelta : 0);
+      const nextOutsAfter = Math.max(existingAtBat.outs, existingAtBat.outsAfter + outDelta);
+      const nextOutsRecorded = Math.max(0, (existingAtBat.outsRecorded ?? (existingAtBat.outsAfter - existingAtBat.outs)) + outDelta);
+
+      const timestamp = Date.now();
+      await updateAtBatEvent(enrichingRunnerParentEntry.eventId, {
+        runnerOutcomes: updatedOutcomes,
+        rbiCount: Math.max(0, (existingAtBat.rbiCount ?? 0) + scoreDelta),
+        runsScored: nextRunsScored,
+        outsAfter: nextOutsAfter,
+        runnersAfter: nextRunnersAfter,
+        awayScoreAfter: nextAwayScoreAfter,
+        homeScoreAfter: nextHomeScoreAfter,
+        outsRecorded: nextOutsRecorded,
+        version: (existingAtBat.version ?? 1) + 1,
+        editHistory: [{
+          field: `runnerOutcomes[${runnerIdx}].${field}`,
+          oldValue: existingAtBat.runnerOutcomes[runnerIdx][field as keyof typeof existingAtBat.runnerOutcomes[0]] ?? null,
+          newValue: value,
+          timestamp,
+        }],
+      });
+
+      const latestAtBatEntry = [...playLogEntries].reverse().find((entry) => entry.eventType === 'at_bat' && entry.eventId);
+      const isLatestAtBat = latestAtBatEntry?.eventId === existingAtBat.eventId;
+
+      // Fix A: Score adjustment fires for ALL corrections — latest or historical
+      if (scoreDelta !== 0) {
+        applyScoreAdjustment(existingAtBat.inning, existingAtBat.halfInning, scoreDelta);
+      }
+
+      // Fix B: Update live base state for latest at-bat corrections
+      if (isLatestAtBat) {
+        applyBasesCorrection(buildLiveBasesFromRunnersAfter(nextRunnersAfter), nextRunnersAfter);
+      }
+
+      // Fix C: Update live outs count for latest at-bat corrections
+      if (isLatestAtBat && outDelta !== 0) {
+        applyOutsAdjustment(outDelta);
+      }
+
+      // Update the sub-entry in local state so UI reflects change immediately
+      const updatedSubEntry = {
+        ...enrichingRunnerSubEntry,
+        [field]: value,
+        toBase: nextOutCounted ? 'out' as const : nextOutcome.toBase,
+      };
+      setEnrichingRunnerSubEntry(updatedSubEntry);
+
+      // Update play log entries to reflect changed runner sub-entry data
+      setPlayLogEntries(prev => prev.map(e => {
+        if (e.id !== enrichingRunnerParentEntry.id || !e.runnerSubEntries) return e;
+        return {
+          ...e,
+          ...(scoreDelta !== 0
+            ? {
+                runsScored: Math.max(0, e.runsScored + scoreDelta),
+                rbi: Math.max(0, e.rbi + scoreDelta),
+              }
+            : {}),
+          runnerSubEntries: e.runnerSubEntries.map(sub =>
+            sub.id === subEntryId
+              ? {
+                  ...sub,
+                  [field]: value,
+                  toBase: nextOutCounted ? 'out' as const : nextOutcome.toBase,
+                }
+              : sub
+          ),
+        };
+      }));
+
+      setEnrichingRunnerParentEntry(prev => prev
+        ? {
+            ...prev,
+            ...(scoreDelta !== 0
+              ? {
+                  runsScored: Math.max(0, prev.runsScored + scoreDelta),
+                  rbi: Math.max(0, prev.rbi + scoreDelta),
+                }
+              : {}),
+          }
+        : prev);
+
+      queuePlayLogRefresh(0);
+
+    } catch (err) {
+      console.error('[Runner Enrichment] Failed to save:', err);
+    }
+  }, [
+    applyScoreAdjustment,
+    applyBasesCorrection,
+    applyOutsAdjustment,
+    enrichingRunnerSubEntry,
+    enrichingRunnerParentEntry,
+    playLogEntries,
+    queuePlayLogRefresh,
+  ]);
 
   // 5.7: Dismiss between-inning enrichment prompt
   const handleEnrichmentPromptYes = useCallback(() => {
@@ -4221,6 +4898,13 @@ export function GameTracker() {
     setShowEnrichmentPrompt(false);
   }, []);
 
+  const handleStartGame = useCallback(() => {
+    syncDisplayedRostersToLineupSnapshot(getLineupStateSnapshot());
+    setRosterVersion(v => v + 1);
+    playAudio('startGame');
+    startGame();
+  }, [getLineupStateSnapshot, playAudio, startGame, syncDisplayedRostersToLineupSnapshot]);
+
   // Handle end game with navigation
   const handleEndGame = useCallback(async () => {
     // T1-08 FIX: Prevent double execution from useEffect re-firing
@@ -4228,8 +4912,10 @@ export function GameTracker() {
       console.log('[T1-08] handleEndGame already in progress — skipping duplicate call');
       return;
     }
+    console.debug('[END-GAME] Step 1: Starting handleEndGame');
     gameEndingRef.current = true;
     let endGameCompleted = false;
+    playAudio('endGame');
 
     try {
       // MAJ-09: End-of-game achievement detection (No-Hitter, Perfect Game, Maddux, CG, Shutout)
@@ -4402,8 +5088,11 @@ export function GameTracker() {
       franchiseId: navigationState?.franchiseId,
       currentSeason: navigationState?.seasonNumber ?? 1,
       stadiumName: selectedStadium,
+      awaitPitchCountConfirmation: true,
       };
+      console.debug('[END-GAME] Step 2: Calling hookEndGame and awaiting pitch-count resolution');
       await hookEndGame(endGameOptions);
+      console.debug('[END-GAME] Step 3: hookEndGame completed');
 
       // Save mojo/fitness snapshots for elimination inter-game persistence
       if (navigationState?.gameMode === 'elimination' && navigationState?.eliminationId) {
@@ -4427,6 +5116,7 @@ export function GameTracker() {
       // T0-05 FIX: Mark the schedule game as COMPLETED (franchise mode only)
       // The SIM path does this in FranchiseHome.tsx, but the PLAY path was missing it entirely.
       // This updates standings (wins/losses) and advances the schedule to the next game.
+      const completedGameId = gameState.gameId || gameId;
       if (navigationState?.scheduleGameId && (navigationState?.gameMode === 'franchise' || navigationState?.gameMode === 'playoff')) {
         try {
           const winnerId = gameState.homeScore > gameState.awayScore ? homeTeamId : awayTeamId;
@@ -4436,7 +5126,7 @@ export function GameTracker() {
             awayScore: gameState.awayScore,
             winningTeamId: winnerId,
             losingTeamId: loserId,
-            gameLogId: gameId,
+            gameLogId: completedGameId,
           });
           console.log(`[T0-05] Schedule game ${navigationState.scheduleGameId} marked COMPLETED — winner: ${winnerId}`);
         } catch (schedErr) {
@@ -4446,9 +5136,11 @@ export function GameTracker() {
 
       // GAP-GT-3-J: Clear undo stack — game is over, undo must not be possible after navigation
       undoSystem.clearHistory();
+      console.debug('[END-GAME] Step 4: Post-hook cleanup completed');
 
       // Pass game mode and narratives so PostGameSummary can display them
-      navigate(`/post-game/${gameId}`, {
+      console.debug('[END-GAME] Step 5: Navigating to PostGameSummary');
+      navigate(`/post-game/${completedGameId}`, {
         state: {
           gameMode: navigationState?.gameMode || 'franchise',
           franchiseId: navigationState?.franchiseId || gameId?.replace('franchise-', '') || '1',
@@ -4461,8 +5153,10 @@ export function GameTracker() {
           awayNarrative,
         }
       });
+      console.debug('[END-GAME] Step 6: Navigation called');
       endGameCompleted = true;
     } catch (err) {
+      console.error('[END-GAME] Flow failed:', err);
       console.error('[GameTracker] End game flow failed:', err);
     } finally {
       // Release the guard lock if end-game did not complete, so user can retry.
@@ -4470,7 +5164,7 @@ export function GameTracker() {
         gameEndingRef.current = false;
       }
     }
-  }, [hookEndGame, navigate, gameId, navigationState?.gameMode, navigationState?.eliminationId, navigationState?.franchiseId, navigationState?.seasonId, navigationState?.seasonNumber, gameMode, gameState, pitcherStats, fameTrackingHook, homeFanMorale, awayFanMorale, homeTeamName, awayTeamName, mwarHook, homeManagerId, homeTeamId, activityLog, pushActivityLog, playerStateHook, competitionType, competitionId, statsScopeId, selectedStadium]);
+  }, [hookEndGame, navigate, gameId, navigationState?.gameMode, navigationState?.eliminationId, navigationState?.franchiseId, navigationState?.seasonId, navigationState?.seasonNumber, gameMode, gameState, pitcherStats, fameTrackingHook, homeFanMorale, awayFanMorale, homeTeamName, awayTeamName, mwarHook, homeManagerId, homeTeamId, activityLog, pushActivityLog, playerStateHook, competitionType, competitionId, statsScopeId, selectedStadium, playAudio]);
 
   // T0-01: Auto-trigger endGame when regulation ends
   useEffect(() => {
@@ -4522,7 +5216,7 @@ export function GameTracker() {
   ]);
 
   const rightPanelOwnsInteraction =
-    pendingRunnerCorrection !== null ||
+    // REMOVED per UX-022: pendingRunnerCorrection no longer exists
     pendingRunnerAttribution !== null ||
     (selectedPlayLogEntry !== null && selectedPlayLogEntry.eventType !== 'at_bat');
   const prefersTouchPanels =
@@ -4603,193 +5297,150 @@ export function GameTracker() {
       )}
 
       {/* ═══════════════════════════════════════════════════════════════
-           §3.7 FIVE-ZONE CSS GRID LAYOUT (Layer 2A: Grid Scaffold)
-           ┌─────────────────────────────┬───────────────────────┬──────┐
-           │ FENWAY BOARD (top-left)     │ DIAMOND (center)      │ PLAY │
-           │ scoreboard + context cards  │ EnhancedInteractive   │ LOG  │
-           │                             │ Field                 │(right│
-           │                             │                       │panel)│
-           ├─────────────────────────────┼───────────────────────┤      │
-           │ QUICK BAR (bottom-left)     │ MODIFIERS (bot-right) │      │
-           │ outcome buttons             │ undo + end game       │      │
-           └─────────────────────────────┴───────────────────────┴──────┘
+           §2 THREE-ROW PINNED LAYOUT (Step 1.A)
+           ┌─────────────────────────────────────────────────────────────┐
+           │ Row 1: ScoreBug (pinned top) — FullFenwayScoreboard for now│
+           ├──────────┬──────────┬──────────┬────────────────────────────┤
+           │NewsBoard │ Batting  │ Defense  │ Play Log (2/5 width)      │
+           │  1/5     │ Lineup   │ Lineup   │                            │
+           │          │  1/5     │  1/5     │                            │
+           ├──────────┴──────────┴──────────┴────────────────────────────┤
+           │ Row 3: QuickBar (pinned bottom, full width)                 │
+           └─────────────────────────────────────────────────────────────┘
            ═══════════════════════════════════════════════════════════════ */}
       <div className="flex h-screen flex-col overflow-hidden bg-[#6B9462] text-white">
-        <FullFenwayScoreboard
-          awayTeamName={awayTeamName.toUpperCase()}
-          homeTeamName={homeTeamName.toUpperCase()}
-          awayRecord={awayRecord}
-          homeRecord={homeRecord}
-          innings={scoreboard.innings}
-          awayRuns={scoreboard.away.runs}
-          homeRuns={scoreboard.home.runs}
-          awayHits={scoreboard.away.hits}
-          homeHits={scoreboard.home.hits}
-          awayErrors={scoreboard.away.errors}
-          homeErrors={scoreboard.home.errors}
+        {/* ROW 1: §3.1 ScoreBug (pinned top, single line) */}
+        <ScoreBug
+          awayTeamName={awayTeamName}
+          awayScore={scoreboard.away.runs}
+          homeTeamName={homeTeamName}
+          homeScore={scoreboard.home.runs}
+          stadiumName={gameState.stadiumName || selectedStadium || undefined}
           inning={gameState.inning}
           isTop={gameState.isTop}
-          balls={gameState.balls}
-          strikes={gameState.strikes}
           outs={gameState.outs}
-          stadiumName={selectedStadium}
-          currentBatterName={currentBatterDisplayName}
-          gameDate={gameStartTime}
-          elapsedMinutes={elapsedMinutes}
+          bases={gameState.bases}
+          isManagerMoment={mwarHook.managerMoment.isTriggered}
+          isSaving={isSaving ? undefined : false}
+          gameSoundsOn={gameSoundsOn}
+          beatReporterSoundsOn={beatReporterSoundsOn}
+          onTap={() => setIsScoreboardExpanded(prev => !prev)}
+          onToggleGameSounds={() => setGameSoundsOn((value) => !value)}
+          onToggleBeatReporter={() => setBeatReporterSoundsOn((value) => !value)}
+          onManagerMomentTap={() => setShowManagerMomentPanel(prev => !prev)}
+          onStayTheCourse={() => {
+            mwarHook.dismissManagerMoment();
+            setShowManagerMomentPanel(false);
+            void queuePlayLogRefresh(0);
+          }}
         />
 
-        <div
-          className="min-h-0 flex-1"
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'minmax(248px, 300px) 1fr minmax(184px, 228px)',
-            gridTemplateRows: '1fr auto',
-            gap: '0px',
+        {/* ROW 2: 4-Column Content Area (§2.3 — 1fr 1fr 1fr 2fr) + §2.4 Expanded Scoreboard overlay */}
+        <div className="min-h-0 flex-1 overflow-hidden relative">
+          {/* §2.4 Expanded Scoreboard overlay — drops down from ScoreBug, covers top ~25% of columns */}
+          {isScoreboardExpanded && (
+            <>
+              {/* Transparent backdrop — tap to collapse */}
+              <div
+                className="absolute inset-0 z-20"
+                onClick={() => setIsScoreboardExpanded(false)}
+              />
+              {/* Retro Fenway scoreboard overlay */}
+              <div className="absolute top-0 left-0 right-0 z-30 shadow-[0_4px_12px_rgba(0,0,0,0.4)]">
+                <FullFenwayScoreboard
+                  awayTeamName={awayTeamName.toUpperCase()}
+                  homeTeamName={homeTeamName.toUpperCase()}
+                  awayRecord={awayRecord}
+                  homeRecord={homeRecord}
+                  innings={scoreboard.innings}
+                  awayRuns={scoreboard.away.runs}
+                  homeRuns={scoreboard.home.runs}
+                  awayHits={scoreboard.away.hits}
+                  homeHits={scoreboard.home.hits}
+                  awayErrors={scoreboard.away.errors}
+                  homeErrors={scoreboard.home.errors}
+                  inning={gameState.inning}
+                  isTop={gameState.isTop}
+                  outs={gameState.outs}
+                  stadiumName={selectedStadium}
+                  currentBatterName={currentBatterDisplayName}
+                  gameDate={gameStartTime}
+                  elapsedMinutes={elapsedMinutes}
+                />
+              </div>
+            </>
+          )}
+          {/* §9.3: Swap Order mode banner */}
+          {swapOrderMode && (
+            <div className="absolute top-0 left-0 right-0 z-10 bg-[#C4A853] text-[#1a1a1a] text-[10px] font-bold text-center py-1.5 tracking-wider flex items-center justify-center gap-2">
+              <span>TAP ANOTHER PLAYER TO SWAP BATTING ORDER WITH {swapOrderMode.playerName.toUpperCase()}</span>
+              <button
+                onClick={() => setSwapOrderMode(null)}
+                className="text-[9px] bg-[#1a1a1a] text-[#C4A853] px-2 py-0.5 rounded border border-[#1a1a1a] hover:bg-[#333] active:scale-95"
+              >
+                CANCEL
+              </button>
+            </div>
+          )}
+          {/* §9.2: Swap Position banner */}
+          {swapPositionMode && (
+            <div className="absolute top-0 left-0 right-0 z-10 bg-[#5dade2] text-[#1a1a1a] text-[10px] font-bold text-center py-1.5 tracking-wider flex items-center justify-center gap-2">
+              <span>TAP ANOTHER PLAYER TO SWAP FIELDING POSITION WITH {swapPositionMode.playerName.toUpperCase()}</span>
+              <button
+                onClick={() => setSwapPositionMode(null)}
+                className="text-[9px] bg-[#1a1a1a] text-[#5dade2] px-2 py-0.5 rounded border border-[#1a1a1a] hover:bg-[#333] active:scale-95"
+              >
+                CANCEL
+              </button>
+            </div>
+          )}
+          <div
+            className="h-full"
+            style={{
+              display: 'grid',
+              gridTemplateColumns: '1fr 1fr 1fr 2fr',
+              gap: '4px',
+            }}
+          >
+        {/* Column 1: NewsBoard (§6 — display only, no click handlers) */}
+        <NewsBoard
+          currentBatterName={currentBatterDisplayName}
+          currentBatterLine={batterGameLine}
+          currentPitcherName={currentPitcherDisplayName}
+          currentPitcherLine={pitcherGameLine}
+          matchupSummary={matchupLine}
+        />
+
+        {/* Column 2: Batting Lineup (§5.2 — always the team at bat) */}
+        <BattingLineupColumn
+          players={battingColumnPlayers}
+          currentBatterIndex={currentBatterPosition}
+          runners={{
+            first: runnerNames.first ? { name: runnerNames.first } : undefined,
+            second: runnerNames.second ? { name: runnerNames.second } : undefined,
+            third: runnerNames.third ? { name: runnerNames.third } : undefined,
           }}
-        >
-        {/* ZONE 1: Fenway Board — top left */}
-        <div style={{ gridColumn: '1', gridRow: '1' }}>
-          <FenwayBoard
-            awayTeamName={awayTeamName.toUpperCase()}
-            homeTeamName={homeTeamName.toUpperCase()}
-            awayRuns={scoreboard.away.runs}
-            homeRuns={scoreboard.home.runs}
-            awayErrors={scoreboard.away.errors}
-            homeErrors={scoreboard.home.errors}
-            inning={gameState.inning}
-            isTop={gameState.isTop}
-            outs={gameState.outs}
-            currentBatterName={currentBatterDisplayName}
-            currentPitcherName={currentPitcherDisplayName}
-            batterStats={currentBatterStats ? {
-              ab: currentBatterStats.ab,
-              h: currentBatterStats.h,
-              hr: currentBatterStats.hr,
-              rbi: currentBatterStats.rbi,
-              bb: currentBatterStats.bb,
-              k: currentBatterStats.k,
-            } : undefined}
-            batterAvg={batterAB > 0 ? (batterHits / batterAB).toFixed(3).replace(/^0/, '') : '.000'}
-            batterMojo={(() => {
-              const team = gameState.isTop ? 'away' : 'home';
-              const mojo = getPlayerMojoByName(resolvedCurrentBatterName, team);
-              return mojo !== undefined ? toMojoLabel(mojo) : undefined;
-            })()}
-            batterMojoColor={(() => {
-              const team = gameState.isTop ? 'away' : 'home';
-              const mojo = getPlayerMojoByName(resolvedCurrentBatterName, team);
-              return mojo !== undefined ? getMojoColor(mojo) : undefined;
-            })()}
-            batterFitness={(() => {
-              const team = gameState.isTop ? 'away' : 'home';
-              const fitness = getPlayerFitnessByName(resolvedCurrentBatterName, team);
-              return fitness ? toFitnessLabel(fitness) : undefined;
-            })()}
-            batterHand={currentBatterData?.battingHand}
-            pitcherPitchCount={pitcherPitchCount}
-            pitcherGameERA={(() => {
-              if (!currentPitcherStats) return undefined;
-              const outsRec = currentPitcherStats.outsRecorded;
-              if (outsRec === 0) return '-.--';
-              return ((currentPitcherStats.earnedRuns / outsRec) * 27).toFixed(2);
-            })()}
-            pitcherOuts={currentPitcherStats?.outsRecorded}
-            pitcherHits={currentPitcherStats?.hitsAllowed}
-            pitcherK={currentPitcherStats?.strikeoutsThrown}
-            pitcherBB={currentPitcherStats?.walksAllowed}
-            pitcherMojo={(() => {
-              const team = gameState.isTop ? 'home' : 'away';
-              const mojo = getPlayerMojoByName(resolvedCurrentPitcherName, team);
-              return mojo !== undefined ? toMojoLabel(mojo) : undefined;
-            })()}
-            pitcherMojoColor={(() => {
-              const team = gameState.isTop ? 'home' : 'away';
-              const mojo = getPlayerMojoByName(resolvedCurrentPitcherName, team);
-              return mojo !== undefined ? getMojoColor(mojo) : undefined;
-            })()}
-            pitcherFitness={(() => {
-              const team = gameState.isTop ? 'home' : 'away';
-              const fitness = getPlayerFitnessByName(resolvedCurrentPitcherName, team);
-              return fitness ? toFitnessLabel(fitness) : undefined;
-            })()}
-            pitcherHand={(() => {
-              const pitcher = gameState.isTop ? homePitcher : awayPitcher;
-              return pitcher?.throwingHand;
-            })()}
-            matchupRecord={fenwayContext.matchupRecord}
-            matchupAvg={fenwayContext.matchupAvg}
-            historicalMatchupRecord={fenwayContext.historicalMatchupRecord}
-            historicalMatchupAvg={fenwayContext.historicalMatchupAvg}
-            milestoneAlerts={fenwayContext.milestoneAlerts}
-            showScoreboard={false}
-            onBatterTap={handleBatterTap}
-            onPitcherTap={availablePitchers.length > 0 ? handlePitcherTap : undefined}
-          />
-        </div>
+          nextLeadoffIndex={battingNextLeadoff}
+          teamPrimaryColor={battingTeamColors.primary}
+          teamSecondaryColor={battingTeamColors.secondary}
+          onPlayerTap={handleLineupPlayerTap}
+        />
 
-        {/* ZONE 2: Diamond — center (D-9: scoreboard moved to FenwayBoard left panel) */}
-        <div
-          style={{ gridColumn: '2', gridRow: '1' }}
-          className={`bg-[#6B9462] relative overflow-hidden z-0 ${rightPanelOwnsInteraction ? 'pointer-events-none' : ''}`}
-        >
-          <GameDiamond
-            mode={enrichingEntry || selectedPlayLogEntry?.eventType === 'at_bat' ? 'enhancement' : 'info'}
-            bases={gameState.bases}
-            runnerNames={runnerNames}
-            currentBatterName={currentBatterDisplayName}
-            fielders={gameDiamondFielders}
-            enhancementSequence={activeDiamondFieldingSequence}
-            enhancementHelpText={enrichingEntry
-              ? 'Tap fielders to build throw sequence. Tap the field to save spray/location.'
-              : undefined}
-            fielderBorderColors={[fielderColor1, fielderColor2]}
-            batterBackgroundColor={battingTeamColors.primary}
-            batterBorderColor={battingTeamColors.secondary}
-            zoomLevel={fieldZoomLevel}
-            onRunnerTap={handleRunnerTap}
-            onFielderTap={handleFielderTap}
-            onBatterTap={handleBatterTap}
-            onFieldTap={handleMainFieldLocationPick}
-            onEnhancementSequenceUndo={enrichingEntry ? handleDiamondFieldingSequenceUndo : undefined}
-            onEnhancementSequenceClear={enrichingEntry ? handleDiamondFieldingSequenceClear : undefined}
-          />
+        {/* Column 3: Defensive Lineup (§5.3 — always the team in field) */}
+        <DefensiveLineupColumn
+          players={defensiveColumnPlayers}
+          currentPitcherName={resolvedCurrentPitcherName}
+          nextLeadoffIndex={defensiveNextLeadoff}
+          teamPrimaryColor={fieldingTeamColors.primary}
+          teamSecondaryColor={fieldingTeamColors.secondary}
+          onPlayerTap={handleLineupPlayerTap}
+          enrichmentMode={defensiveEnrichmentMode}
+        />
 
-          {/* Runner Popover — tap runner on diamond → action menu (§5.1) */}
-          {activeRunnerPopover && (
-            <RunnerPopover
-              base={activeRunnerPopover.base}
-              runnerName={activeRunnerPopover.runnerName}
-              anchorPosition={activeRunnerPopover.anchorPosition}
-              onSteal={handleRunnerSteal}
-              onAdvance={handleRunnerAdvance}
-              onWildPitch={handleRunnerWP}
-              onPassedBall={handleRunnerPB}
-              onPickoff={handleRunnerPickoff}
-              onSubstitute={handleRunnerSubstitute}
-              onViewPlayerCard={handleRunnerPlayerCard}
-              onClose={closeRunnerPopover}
-            />
-          )}
-
-          {/* Fielder Popover — tap fielder on diamond → substitution menu (§7.2) */}
-          {activeFielderPopover && (
-            <FielderPopover
-              fielder={activeFielderPopover.fielder}
-              anchorPosition={activeFielderPopover.anchorPosition}
-              benchPlayers={fielderPopoverBenchPlayers}
-              onSubstitute={handleFielderSubstitute}
-              onPinchHit={handleFielderPinchHit}
-              onMovePosition={handleFielderMovePosition}
-              onViewPlayerCard={handleFielderPlayerCard}
-              onClose={closeFielderPopover}
-            />
-          )}
-        </div>
-
-        {/* ZONE 3: Play Log + Enrichment Panel — right panel, spans both rows */}
-        <div style={{ gridColumn: '3', gridRow: '1 / 3' }} className="relative z-20 isolate pointer-events-auto flex flex-col h-full overflow-hidden">
+        {/* Column 4: Play Log + Enrichment Panel (§2.3 — 2/5 width) */}
+        <div className="relative z-20 isolate pointer-events-auto flex flex-col h-full overflow-hidden">
           {/* Between-inning enrichment prompt (Ticket 5.7) */}
-        {showEnrichmentPrompt && !pendingRunnerCorrection && !pendingRunnerAttribution && (
+        {showEnrichmentPrompt && !pendingRunnerAttribution && (
             <div className="bg-[#C4A853]/20 border-b border-[#C4A853] px-2 py-1 flex items-center gap-1 flex-shrink-0">
               <span className="text-[8px] text-[#C4A853] flex-1">
                 {unenrichedCount} play{unenrichedCount !== 1 ? 's' : ''} unenriched
@@ -4809,53 +5460,9 @@ export function GameTracker() {
             </div>
           )}
 
-          {pendingRunnerCorrection !== null ? (
-            prefersTouchPanels ? (
-              <div className="flex-1 bg-[#2a3a2d]" />
-            ) : (
-            <div className="bg-[#2a3a2d] border-l-2 border-[#C4A853] flex flex-col h-full">
-              <div className="flex items-center justify-between px-2 py-1 bg-[#1a2a1d] border-b border-[#4a6a4a]">
-                <div>
-                  <div className="text-[8px] text-[#88AA88] font-mono">LIVE AT-BAT</div>
-                  <div className="text-[9px] text-[#E8E8D8] font-bold">Runner Correction</div>
-                </div>
-                <button
-                  onClick={handleRunnerCorrectionCancel}
-                  className="text-[8px] text-[#E8E8D8] bg-[#3d5240] border border-[#4a6a4a] px-1.5 py-0.5 rounded hover:bg-[#4a6a4a]"
-                >
-                  Cancel
-                </button>
-              </div>
-              <div className="flex-1 overflow-y-auto p-2 space-y-2">
-                <div className="text-[8px] text-[#C4A853]">
-                  Verify runner movement before committing <span className="font-bold">{pendingRunnerCorrection.outcomeLabel}</span>.
-                </div>
-                <RunnerOutcomesDisplay
-                  outcomes={pendingRunnerCorrection.defaults}
-                  onOutcomeChange={handleRunnerCorrectionChange}
-                  playType={pendingRunnerCorrection.outcomeLabel}
-                  destinationOptions={{
-                    batter: getBatterDestinationOptions(pendingRunnerCorrection.action),
-                  }}
-                  labels={{
-                    batter: gameState.currentBatterName || 'BATTER',
-                    first: runnerNames.first ? `R1 ${runnerNames.first}` : 'R1 (1B)',
-                    second: runnerNames.second ? `R2 ${runnerNames.second}` : 'R2 (2B)',
-                    third: runnerNames.third ? `R3 ${runnerNames.third}` : 'R3 (3B)',
-                  }}
-                />
-              </div>
-              <div className="p-2 border-t border-[#4a6a4a]">
-                <button
-                  onClick={() => void handleRunnerCorrectionCommit()}
-                  className="w-full bg-[#34d399] text-[#062b1f] font-bold text-[11px] py-2 border-2 border-[#10b981] hover:bg-[#6ee7b7] active:scale-[0.99] transition-transform"
-                >
-                  END AT-BAT
-                </button>
-              </div>
-            </div>
-            )
-          ) : pendingRunnerAttribution !== null ? (
+          {/* REMOVED per UX-022: Pre-commit runner correction panel eliminated.
+             Runner corrections are now post-commit via play log or lineup column tap. */}
+          {pendingRunnerAttribution !== null ? (
             <LiveRunnerAttributionPanel
               title={pendingRunnerAttribution.title}
               summary={pendingRunnerAttribution.summary}
@@ -4874,6 +5481,10 @@ export function GameTracker() {
               event={selectedBetweenPlayEvent}
               loading={selectedBetweenPlayEventLoading}
               saving={selectedBetweenPlayEventSaving}
+              isWithinUndoDepth={
+                undoSystem.undoBoundaryTimestamp !== null &&
+                selectedPlayLogEntry.timestamp >= undoSystem.undoBoundaryTimestamp
+              }
               onReturnToLive={handleReturnToLiveAtBat}
               onRunnerCaughtByChange={handleRunnerCaughtByChange}
               onRunnerPitcherChange={handleRunnerPitcherAttributionChange}
@@ -4902,152 +5513,104 @@ export function GameTracker() {
               onUpdate={handleEnrichmentUpdate}
               onModifierRecord={(modifier) => void handleAtBatModifierRecord(modifier)}
               onClose={handleEnrichmentClose}
-              useMainFieldForLocation={canUseMainFieldLocation}
               closeLabel="Return to live"
+            />
+          ) : enrichingRunnerSubEntry !== null ? (
+            /* Runner enrichment panel replaces play log when active (UX-050) */
+            <RunnerEnrichmentPanel
+              subEntry={enrichingRunnerSubEntry}
+              onUpdate={handleRunnerEnrichmentUpdate}
+              onClose={handleEnrichmentClose}
             />
           ) : (
             <PlayLogPanel
               entries={playLogEntries}
               onEntryTap={handleEntryTap}
-              onKToggle={handleKToggle}
+              onRunnerSubEntryTap={handleRunnerSubEntryTap}
               enrichingEntryId={selectedPlayLogEntry?.id || null}
+              enrichingRunnerSubEntryId={null}
             />
           )}
         </div>
 
-        {/* ZONE 4: Quick Bar — bottom left */}
-        <div style={{ gridColumn: '1', gridRow: '2' }} className="relative">
-          <QuickBar
-            disabled={!gameInitialized || !!pendingRunnerCorrection || !!pendingRunnerAttribution || !!selectedPlayLogEntry}
-            onOutcome={handleQuickBarOutcome}
-            gameSituation={{ outs: gameState.outs, bases: gameState.bases }}
-            managerMomentActive={mwarHook.managerMoment.isTriggered}
-            onManagerMomentTap={() => setShowManagerMomentPanel(prev => !prev)}
-          />
-          {pendingRunnerAttribution && !pendingRunnerCorrection ? (
-            <div className="absolute bottom-full left-0 right-0 mb-1 bg-[#2f3b21] border border-[#5a6b38] px-2 py-1 text-[8px] text-[#C4A853]">
-              Completing live runner attribution. Commit or cancel the runner event before scoring the next pitch.
-            </div>
-          ) : selectedPlayLogEntry && !pendingRunnerCorrection ? (
-            <div className="absolute bottom-full left-0 right-0 mb-1 bg-[#2f3b21] border border-[#5a6b38] px-2 py-1 text-[8px] text-[#C4A853]">
-              Editing historical play. Return to live at-bat to score the next pitch.
-            </div>
-          ) : null}
-          {/* D-17: Manager Moment inline Call/Skip panel — non-blocking */}
-          {showManagerMomentPanel && mwarHook.managerMoment.isTriggered && (
-            <div className="absolute bottom-full left-0 right-0 mb-1 bg-[#4A6A42] border-[3px] border-[#FFD700] p-2 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.6)] z-40">
-              <div className="text-[9px] text-[#FFD700] font-bold mb-1">
-                MANAGER MOMENT (LI: {mwarHook.managerMoment.leverageIndex.toFixed(1)})
-              </div>
-              <div className="text-[10px] text-[#E8E8D8] mb-2">{mwarHook.managerMoment.context}</div>
-              {mwarHook.managerMoment.decisionType && (
-                <div className="flex gap-1.5">
-                  <button
-                    onClick={() => {
-                      const gsLI = buildGameStateForLI();
-                      const decisionId = mwarHook.recordDecision(mwarHook.managerMoment.decisionType!, gsLI, [], mwarHook.managerMoment.suggestedAction || '');
-                      setPendingMWARDecisions(prev => new Map(prev).set(decisionId, { decisionId, decisionType: mwarHook.managerMoment.decisionType!, involvedPlayers: [], resolveAfterNextPlay: true }));
-                      mwarHook.dismissManagerMoment();
-                      setShowManagerMomentPanel(false);
-                      console.log(`[mWAR] User called ${mwarHook.managerMoment.decisionType}: ${decisionId}`);
-                    }}
-                    className="flex-1 py-1.5 text-[10px] bg-[#FFD700] text-[#2A3A22] font-bold border-2 border-[#B8960A] hover:bg-[#E8C400] active:scale-95 transition-transform"
-                  >
-                    Call {mwarHook.managerMoment.decisionType?.replace(/_/g, ' ')}
-                  </button>
-                  <button
-                    onClick={() => {
-                      mwarHook.dismissManagerMoment();
-                      setShowManagerMomentPanel(false);
-                    }}
-                    className="flex-1 py-1.5 text-[10px] bg-[#5A8352] text-[#E8E8D8] border-2 border-[#4A6844] hover:bg-[#4F7D4B] active:scale-95 transition-transform"
-                  >
-                    Skip
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
+        </div>{/* Close inner 4-column grid */}
+        </div>{/* Close Row 2 relative container */}
 
-        {/* ZONE 5: Modifiers + Actions — bottom center */}
-        <div
-          style={{ gridColumn: '2', gridRow: '2' }}
-          className={`bg-[#2a3a2d] border-t-[3px] border-[#3d5240] relative z-0 ${rightPanelOwnsInteraction ? 'pointer-events-none' : ''}`}
-        >
-          <div className="relative flex gap-2 p-2 items-center justify-between h-full">
-            <div className="flex items-center gap-2 min-w-0">
-              <div className="flex items-center gap-1.5 flex-wrap">
-                {prefersTouchPanels && touchReviewEntries.length > 0 && !pendingRunnerCorrection && !pendingRunnerAttribution && (
-                  <button
-                    onClick={() => setShowTouchPlayReview(true)}
-                    className="bg-[#2f3b21] border-[3px] border-[#5a6b38] px-3 py-2.5 text-[#E8E8D8] text-xs font-bold
-                               shadow-[2px_2px_0px_0px_rgba(0,0,0,0.5)] active:scale-95 transition-transform
-                               hover:bg-[#374728]"
-                  >
-                    REVIEW
-                  </button>
+        {/* ROW 3: Quick Bar + Action Buttons (pinned bottom, full width) */}
+        <div className="flex-shrink-0 flex items-stretch relative">
+          <div className="flex-1 relative">
+            <QuickBar
+              disabled={!gameInitialized || !!pendingRunnerAttribution || !!selectedPlayLogEntry}
+              onOutcome={handleQuickBarOutcome}
+              gameSituation={{ outs: gameState.outs, bases: gameState.bases }}
+              gamePhase={gameState.gamePhase}
+              onStartGame={handleStartGame}
+              onEndGame={() => setShowEndGameConfirmation(true)}
+              processingOutcome={processingOutcome}
+              undoCount={undoSystem.undoCount}
+              canUndo={undoSystem.canUndo}
+              onUndo={undoSystem.performUndo}
+            />
+            {pendingRunnerAttribution ? (
+              <div className="absolute bottom-full left-0 right-0 mb-1 bg-[#2f3b21] border border-[#5a6b38] px-2 py-1 text-[8px] text-[#C4A853]">
+                Completing live runner attribution. Commit or cancel the runner event before scoring the next pitch.
+              </div>
+            ) : selectedPlayLogEntry ? (
+              <div className="absolute bottom-full left-0 right-0 mb-1 bg-[#2f3b21] border border-[#5a6b38] px-2 py-1 text-[8px] text-[#C4A853]">
+                Editing historical play. Return to live at-bat to score the next pitch.
+              </div>
+            ) : null}
+            {/* D-17: Manager Moment inline Call/Skip panel — non-blocking */}
+            {showManagerMomentPanel && mwarHook.managerMoment.isTriggered && (
+              <div className="absolute bottom-full left-0 right-0 mb-1 bg-[#4A6A42] border-[3px] border-[#FFD700] p-2 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.6)] z-40">
+                <div className="text-[9px] text-[#FFD700] font-bold mb-1">
+                  MANAGER MOMENT (LI: {mwarHook.managerMoment.leverageIndex.toFixed(1)})
+                </div>
+                <div className="text-[10px] text-[#E8E8D8] mb-2">{mwarHook.managerMoment.context}</div>
+                {mwarHook.managerMoment.decisionType && (
+                  <div className="flex gap-1.5">
+                    <button
+                      onClick={() => {
+                        const gsLI = buildGameStateForLI();
+                        const decisionId = mwarHook.recordDecision(mwarHook.managerMoment.decisionType!, gsLI, [], mwarHook.managerMoment.suggestedAction || '');
+                        setPendingMWARDecisions(prev => new Map(prev).set(decisionId, { decisionId, decisionType: mwarHook.managerMoment.decisionType!, involvedPlayers: [], resolveAfterNextPlay: true }));
+                        mwarHook.dismissManagerMoment();
+                        setShowManagerMomentPanel(false);
+                        console.log(`[mWAR] User called ${mwarHook.managerMoment.decisionType}: ${decisionId}`);
+                      }}
+                      className="flex-1 py-1.5 text-[10px] bg-[#FFD700] text-[#2A3A22] font-bold border-2 border-[#B8960A] hover:bg-[#E8C400] active:scale-95 transition-transform"
+                    >
+                      Call {mwarHook.managerMoment.decisionType?.replace(/_/g, ' ')}
+                    </button>
+                    <button
+                      onClick={() => {
+                        mwarHook.dismissManagerMoment();
+                        setShowManagerMomentPanel(false);
+                      }}
+                      className="flex-1 py-1.5 text-[10px] bg-[#5A8352] text-[#E8E8D8] border-2 border-[#4A6844] hover:bg-[#4F7D4B] active:scale-95 transition-transform"
+                    >
+                      Skip
+                    </button>
+                  </div>
                 )}
-                <button
-                  onClick={() => {
-                    setLineupOverlayHint('Use LINEUP for batting order, bench players, pinch runners, and pitching changes.');
-                    setShowLineupOverlay(true);
-                  }}
-                  className="bg-[#1a5276] border-[3px] border-[#5dade2] px-4 py-2.5 text-white text-sm font-bold
-                             shadow-[2px_2px_0px_0px_rgba(0,0,0,0.5)] active:scale-95 transition-transform
-                             hover:bg-[#21618c]"
-                >
-                  LINEUP
-                </button>
-                <button
-                  onClick={() => {
-                    const firstUnenriched = [...playLogEntries].reverse().find(entry =>
-                      entry.isEnrichable &&
-                      (!entry.hasFieldingData || !entry.hasLocationData || !entry.hasPitchType || !entry.hasPitchCount)
-                    );
-                    if (firstUnenriched) {
-                      setEnrichingEntry(firstUnenriched);
-                    }
-                    setLineupOverlayHint('Tap the main field to set spray/location. Use the play log panel for pitch and sequence edits.');
-                  }}
-                  className="bg-[#4A6844] border-[3px] border-[#88AA88] px-3 py-2.5 text-white text-xs font-bold
-                             shadow-[2px_2px_0px_0px_rgba(0,0,0,0.5)] active:scale-95 transition-transform
-                             hover:bg-[#5A8352]"
-                >
-                  +FLD
-                </button>
-                <button
-                  onClick={() => {
-                    const latestAtBat = [...playLogEntries].reverse().find((entry) => entry.eventType === 'at_bat' && entry.isEnrichable);
-                    if (latestAtBat) {
-                      setEnrichingEntry(latestAtBat);
-                    }
-                    setLineupOverlayHint('Use the at-bat editor for modifiers and special-event enhancements.');
-                  }}
-                  className="bg-[#6c3483] border-[3px] border-[#af7ac5] px-3 py-2.5 text-white text-xs font-bold
-                             shadow-[2px_2px_0px_0px_rgba(0,0,0,0.5)] active:scale-95 transition-transform
-                             hover:bg-[#7d3c98]"
-                >
-                  +MOD
-                </button>
               </div>
-              <div className="text-[8px] text-[#C4A853] min-w-0 truncate">
-                {canUseMainFieldLocation
-                  ? 'Location enrichment is active: tap the main field. K/Kc stays in the play log.'
-                  : lineupOverlayHint ?? 'Tap a play to enrich. Use the main field for +loc and LINEUP for substitutions.'}
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <undoSystem.UndoButtonComponent />
+            )}
+          </div>
+          {/* REMOVED per UX-022/Cleanup: LINEUP, +FLD, +MOD buttons removed.
+             LINEUP replaced by inline lineup columns (Step 1.C).
+             +FLD/+MOD replaced by play log tap enrichment (Tier 2 Group 2.D).
+             REVIEW button kept for touch mode. */}
+          <div className="bg-[#2a3a2d] border-t-[3px] border-[#3d5240] flex items-center gap-1.5 px-2">
+            {prefersTouchPanels && touchReviewEntries.length > 0 && !pendingRunnerAttribution && (
               <button
-                onClick={() => setShowEndGameConfirmation(true)}
-                className="bg-[#DD0000] border-[3px] border-white px-4 py-2.5 text-white text-sm font-bold
+                onClick={() => setShowTouchPlayReview(true)}
+                className="bg-[#2f3b21] border-[3px] border-[#5a6b38] px-3 py-2.5 text-[#E8E8D8] text-xs font-bold
                            shadow-[2px_2px_0px_0px_rgba(0,0,0,0.5)] active:scale-95 transition-transform
-                           hover:bg-[#FF0000]"
+                           hover:bg-[#374728]"
               >
-                END
+                REVIEW
               </button>
-            </div>
+            )}
           </div>
         </div>
 
@@ -5057,51 +5620,7 @@ export function GameTracker() {
              reference code block from the old layout.
            ══════════════════════════════════════════════════════════════ */}
 
-        {prefersTouchPanels && pendingRunnerCorrection !== null && (
-          <div className="fixed inset-0 z-40 bg-black/45 flex items-center justify-center p-4">
-            <div className="w-[320px] max-w-[88vw] max-h-[85vh] bg-[#2a3a2d] border-2 border-[#C4A853] flex flex-col shadow-[0_8px_24px_rgba(0,0,0,0.55)] pointer-events-auto">
-              <div className="flex items-center justify-between px-2 py-1 bg-[#1a2a1d] border-b border-[#4a6a4a]">
-                <div>
-                  <div className="text-[8px] text-[#88AA88] font-mono">LIVE AT-BAT</div>
-                  <div className="text-[9px] text-[#E8E8D8] font-bold">Runner Correction</div>
-                </div>
-                <button
-                  onClick={handleRunnerCorrectionCancel}
-                  className="text-[8px] text-[#E8E8D8] bg-[#3d5240] border border-[#4a6a4a] px-1.5 py-0.5 rounded hover:bg-[#4a6a4a]"
-                >
-                  Cancel
-                </button>
-              </div>
-              <div className="flex-1 min-h-0 overflow-y-auto p-2 space-y-2">
-                <div className="text-[8px] text-[#C4A853]">
-                  Verify runner movement before committing <span className="font-bold">{pendingRunnerCorrection.outcomeLabel}</span>.
-                </div>
-                <RunnerOutcomesDisplay
-                  outcomes={pendingRunnerCorrection.defaults}
-                  onOutcomeChange={handleRunnerCorrectionChange}
-                  playType={pendingRunnerCorrection.outcomeLabel}
-                  destinationOptions={{
-                    batter: getBatterDestinationOptions(pendingRunnerCorrection.action),
-                  }}
-                  labels={{
-                    batter: gameState.currentBatterName || 'BATTER',
-                    first: runnerNames.first ? `R1 ${runnerNames.first}` : 'R1 (1B)',
-                    second: runnerNames.second ? `R2 ${runnerNames.second}` : 'R2 (2B)',
-                    third: runnerNames.third ? `R3 ${runnerNames.third}` : 'R3 (3B)',
-                  }}
-                />
-              </div>
-              <div className="flex-shrink-0 p-2 border-t border-[#4a6a4a] bg-[#2a3a2d]">
-                <button
-                  onClick={() => void handleRunnerCorrectionCommit()}
-                  className="w-full bg-[#34d399] text-[#062b1f] font-bold text-[11px] py-2 border-2 border-[#10b981] hover:bg-[#6ee7b7] active:scale-[0.99] transition-transform"
-                >
-                  END AT-BAT
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
+        {/* REMOVED per UX-022: Touch panel runner correction modal eliminated. */}
 
         {prefersTouchPanels && showTouchPlayReview && (
           <div className="fixed inset-0 z-40 bg-black/60 flex items-center justify-center p-4">
@@ -5145,68 +5664,93 @@ export function GameTracker() {
           </div>
         )}
 
-        {/* Player Card Modal - EXH-036: Now with mojo/fitness editing */}
-        {selectedPlayer && (
-          <PlayerCardModal
-            player={selectedPlayer}
-            onClose={() => setSelectedPlayer(null)}
-            currentMojo={playerStateHook.getPlayer(selectedPlayer.playerId)?.gameState.currentMojo}
-            currentFitness={playerStateHook.getPlayer(selectedPlayer.playerId)?.fitnessProfile.currentFitness}
-            onMojoChange={(newMojo) => {
-              const team = resolveRosterTeamSide(selectedPlayer.playerId, selectedPlayer.name) || 'home';
-              setPlayerMojoByName(selectedPlayer.name, team, newMojo);
-            }}
-            onFitnessChange={(newFitness) => {
-              const team = resolveRosterTeamSide(selectedPlayer.playerId, selectedPlayer.name) || 'home';
-              setPlayerFitnessByName(selectedPlayer.name, team, newFitness);
-            }}
-          />
-        )}
+        {/* §5.3: Player Card Modal — real stats, sub out, swap position, mojo/fitness */}
+        {selectedPlayer && (() => {
+          // Find the full Player object for attributes
+          const allPlayers = [...awayTeamPlayers, ...homeTeamPlayers];
+          const pd = allPlayers.find(p => p.name === selectedPlayer.name);
+          const selectedPlayerTeam = resolveRosterTeamSide(selectedPlayer.playerId, selectedPlayer.name) || 'home';
+          const teamBenchPlayers = (selectedPlayerTeam === 'away' ? awayTeamPlayers : homeTeamPlayers)
+            .filter(p => p.battingOrder === undefined)
+            .map((p) => ({
+              name: p.name,
+              pos: p.position || 'UT',
+              hand: p.battingHand,
+              isOutOfGame: p.isOutOfGame || false,
+            }));
+          const teamBenchPitchers = (selectedPlayerTeam === 'away' ? awayTeamPitchers : homeTeamPitchers)
+            .filter(p => !p.isActive)
+            .map((p) => ({
+              name: p.name,
+              pos: 'P',
+              hand: p.throwingHand,
+              isOutOfGame: p.isOutOfGame || false,
+            }));
+          const playerCardBenchEntries = [...teamBenchPlayers, ...teamBenchPitchers].filter((entry, index, entries) =>
+            entries.findIndex((candidate) => candidate.name === entry.name) === index
+          );
+          // Find real game stats from the hook's Maps
+          const bgs = selectedPlayer.type === 'batter' ? playerStats.get(selectedPlayer.playerId) : undefined;
+          const pgs = selectedPlayer.type === 'pitcher' ? pitcherStats.get(selectedPlayer.playerId) : undefined;
+          const latestRunnerOutcome = selectedPlayer.runnerBase
+            ? [...playLogEntries]
+                .reverse()
+                .flatMap((entry) => (entry.runnerSubEntries || []).map((sub) => ({ entry, sub })))
+                .find(({ sub }) =>
+                  sub.runnerId === selectedPlayer.playerId ||
+                  sub.runnerName === selectedPlayer.name
+                )
+            : undefined;
 
-        {showLineupOverlay && (
-          <div
-            className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4"
-            onClick={() => setShowLineupOverlay(false)}
-          >
-            <div
-              className="w-full max-w-[980px] max-h-[90vh] bg-[#2a3a2d] border-[6px] border-[#3d5240]
-                         shadow-[8px_8px_0_rgba(0,0,0,0.7)] flex flex-col"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="flex items-center justify-between px-4 py-3 bg-[#3d5240] border-b-[3px] border-[#1a2a1d]">
-                <div>
-                  <div className="text-sm font-bold text-[#E8E8D8]">LINEUP</div>
-                  <div className="text-[9px] text-[#C4A853]">
-                    {lineupOverlayHint ?? 'Manage batting order, bench players, and pitching changes.'}
-                  </div>
-                </div>
-                <button
-                  onClick={() => setShowLineupOverlay(false)}
-                  className="bg-[#556B55] border-[3px] border-[#E8E8D8] px-2 py-1 text-[#E8E8D8] hover:bg-[#6a846a]"
-                  title="Close lineup"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-              <div className="p-4 overflow-y-auto">
-                {!lineupSizeOk && currentLineup.length > 0 && (
-                  <div className="mb-2 px-2 py-1 bg-[#4A2A00] border border-[#FF8800] text-[#FFAA44] text-[10px] font-bold">
-                    LINEUP SIZE: {currentLineup.length} — expected 9 (or 10 with DH)
-                  </div>
-                )}
-                <LineupCard
-                  lineup={lineupCardData}
-                  bench={benchCardData}
-                  bullpen={bullpenCardData}
-                  currentPitcher={currentPitcherData}
-                  onSubstitution={handleLineupCardSubstitution}
-                  isExpanded={true}
-                  onPlayerClick={(playerId, playerName, type) => setSelectedPlayer({ name: playerName, type, playerId })}
-                />
-              </div>
-            </div>
-          </div>
-        )}
+          return (
+            <PlayerCardModal
+              player={selectedPlayer}
+              playerData={pd}
+              onClose={() => setSelectedPlayer(null)}
+              batterGameStats={bgs}
+              pitcherGameStats={pgs}
+              currentMojo={playerStateHook.getPlayer(selectedPlayer.playerId)?.gameState.currentMojo}
+              currentFitness={playerStateHook.getPlayer(selectedPlayer.playerId)?.fitnessProfile.currentFitness}
+              onMojoChange={(newMojo) => {
+                const team = resolveRosterTeamSide(selectedPlayer.playerId, selectedPlayer.name) || 'home';
+                setPlayerMojoByName(selectedPlayer.name, team, newMojo);
+              }}
+              onFitnessChange={(newFitness) => {
+                handleFitnessChangeWithAutoInjury(selectedPlayer.playerId, selectedPlayer.name, newFitness);
+              }}
+              onSubOut={handlePlayerCardSubOut}
+              benchPlayers={playerCardBenchEntries}
+              bullpenPitchers={undefined}
+              onSwapPosition={(playerId, playerName) => {
+                setSwapPositionMode({ playerId, playerName });
+              }}
+              showSwapOrder={gameState.gamePhase === 'PRE_GAME'}
+              onSwapOrder={(playerId, playerName) => {
+                setSwapOrderMode({ playerId, playerName });
+              }}
+              runnerBase={selectedPlayer.runnerBase}
+              onRunnerAction={recordRunnerActionFromPlayerCard}
+              onCorrectOutcome={latestRunnerOutcome
+                ? () => {
+                    setEnrichingEntry(null);
+                    setSelectedPlayLogEntry(null);
+                    setSelectedBetweenPlayEvent(null);
+                    setEnrichingRunnerParentEntry(latestRunnerOutcome.entry);
+                    setEnrichingRunnerSubEntry(latestRunnerOutcome.sub);
+                  }
+                : undefined}
+              gamePhase={gameState.gamePhase}
+            />
+          );
+        })()}
+
+        {/* REMOVED per Cleanup: Lineup overlay modal eliminated.
+           Lineup is now always visible in inline columns (Step 1.C).
+           Substitution flow via LineupCard will be reconnected in Group 2.C.
+           BROKEN SUBSTITUTION PATHS that referenced this overlay:
+           - handleRunnerSubstitute (pinch runner requests) — line ~3946
+           - handleLineupCardSubstitution (drag-drop subs in modal) — now only used in disabled reference block
+           These will be reconnected via the player-card-first flow in Group 2.C. */}
 
         {/* Play Location Overlay - REMOVED (now using drag-drop interface) */}
 
@@ -5528,8 +6072,6 @@ export function GameTracker() {
             </div>
           </div>
         )}
-
-      </div>{/* Close 5-zone grid */}
 
       {/* ══════════════════════════════════════════════════════════════
            PRESERVED: Old below-field content (disabled reference code).
@@ -6377,79 +6919,221 @@ function ExpandablePanel({ title, isExpanded, onToggle, children }: ExpandablePa
   );
 }
 
+interface PlayerCardBenchEntry {
+  name: string;
+  pos: string;
+  hand: string;
+  isOutOfGame: boolean;
+}
+
 interface PlayerCardModalProps {
   player: { name: string; type: 'batter' | 'pitcher'; playerId: string };
+  playerData?: Player; // Full player object with position, ratings, traits
   onClose: () => void;
-  // EXH-036: Mojo/Fitness editing
+  // §5.3: Real game stats from playerStats/pitcherStats Maps
+  batterGameStats?: PlayerGameStats;
+  pitcherGameStats?: PitcherGameStats;
+  // EXH-036: Mojo/Fitness
   currentMojo?: MojoLevel;
   currentFitness?: FitnessState;
   onMojoChange?: (newMojo: MojoLevel) => void;
   onFitnessChange?: (newFitness: FitnessState) => void;
+  // §9.1: Substitution
+  onSubOut?: (outgoingPlayerId: string, outgoingName: string, incomingName: string, isPitcher: boolean) => void;
+  benchPlayers?: PlayerCardBenchEntry[];
+  bullpenPitchers?: Array<{ name: string; hand: string }>;
+  // §9.2: Swap Position
+  onSwapPosition?: (playerId: string, playerName: string) => void;
+  // §9.3: Swap Order (pre-game only)
+  showSwapOrder?: boolean;
+  onSwapOrder?: (playerId: string, playerName: string) => void;
+  runnerBase?: RunnerBase;
+  onRunnerAction?: (
+    eventType: 'SB' | 'CS' | 'WP' | 'PB' | 'PICK' | 'PICK_SAFE' | 'PICK_E' | 'ADVANCE',
+    base: RunnerBase,
+    runnerId: string,
+    runnerName: string,
+  ) => void;
+  onCorrectOutcome?: () => void;
+  // Phase
+  gamePhase?: GamePhase;
+}
+
+/** §5.3: Stat cell helper — avoids repeating verbose Tailwind */
+function StatCell({ value, label }: { value: string | number; label: string }) {
+  return (
+    <div>
+      <div className="text-xs text-[#E8E8D8] font-bold" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>{value}</div>
+      <div className="text-[7px] text-[#E8E8D8]" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>{label}</div>
+    </div>
+  );
 }
 
 function PlayerCardModal({
   player,
+  playerData,
   onClose,
+  batterGameStats,
+  pitcherGameStats,
   currentMojo,
   currentFitness,
   onMojoChange,
-  onFitnessChange
+  onFitnessChange,
+  onSubOut,
+  benchPlayers,
+  bullpenPitchers,
+  onSwapPosition,
+  showSwapOrder,
+  onSwapOrder,
+  runnerBase,
+  onRunnerAction,
+  onCorrectOutcome,
+  gamePhase,
 }: PlayerCardModalProps) {
-  // EXH-036: State for editing mode
+  // §9.1: Sub Out flow state — 'card' shows normal card, 'bench' shows bench list
+  const [cardView, setCardView] = useState<'card' | 'bench'>('card');
+  // §5.5: Discrete mojo/fitness editing panels
   const [isEditingMojo, setIsEditingMojo] = useState(false);
   const [isEditingFitness, setIsEditingFitness] = useState(false);
 
-  // T0-09: Zero stats for player card — no phantom data
-  // TODO: Wire to actual game state (playerStats/pitcherStats Maps) for live stats
-  const batterStats = {
-    position: 'SS',
-    battingHand: 'R',
-    throwingHand: 'R',
-    avg: '.000',
-    hr: 0,
-    rbi: 0,
-    sb: 0,
-    gameStats: {
-      ab: 0,
-      hits: 0,
-      bb: 0,
-      so: 0,
-    }
-  };
+  const isLive = gamePhase === 'LIVE';
+  const isPostFinalOut = gamePhase === 'POST_FINAL_OUT';
+  const showMojoFitness = isLive || isPostFinalOut;
 
-  const pitcherStats = {
-    throwingHand: 'R',
-    era: '0.00',
-    wins: 0,
-    losses: 0,
-    so: 0,
-    gameStats: {
-      pitches: 0,
-      strikes: 0,
-      balls: 0,
-      fitness: 'Fresh',
-    }
-  };
+  // §5.3: Derive display stats from real game data
+  const position = playerData?.position || (player.type === 'pitcher' ? 'P' : '—');
+  const battingHand = playerData?.battingHand || 'R';
+  const throwingHand = playerData?.throws || (player.type === 'pitcher' ? 'R' : '—');
+  const secondaryPos = playerData?.secondaryPosition;
+  const overallGrade = playerData?.overallGrade;
+  const age = playerData?.age;
+  const trait1 = playerData?.trait1;
+  const trait2 = playerData?.trait2;
 
-  const stats = player.type === 'batter' ? batterStats : pitcherStats;
+  // §2.7: Compute batter stats from PlayerGameStats
+  const bAB = batterGameStats?.ab ?? 0;
+  const bH = batterGameStats?.h ?? 0;
+  const bHR = batterGameStats?.hr ?? 0;
+  const bRBI = batterGameStats?.rbi ?? 0;
+  const bBB = batterGameStats?.bb ?? 0;
+  const bK = batterGameStats?.k ?? 0;
+  const bSB = batterGameStats?.sb ?? 0;
+  const bSF = batterGameStats?.sf ?? 0;
+  const bHBP = batterGameStats?.hbp ?? 0;
+  const bAVG = bAB > 0 ? (bH / bAB).toFixed(3) : '.000';
+  // OPS = OBP + SLG
+  const obpDenom = bAB + bBB + bHBP + bSF;
+  const obp = obpDenom > 0 ? (bH + bBB + bHBP) / obpDenom : 0;
+  const singles = batterGameStats?.singles ?? 0;
+  const doubles = batterGameStats?.doubles ?? 0;
+  const triples = batterGameStats?.triples ?? 0;
+  const totalBases = singles + (doubles * 2) + (triples * 3) + (bHR * 4);
+  const slg = bAB > 0 ? totalBases / bAB : 0;
+  const bOPS = (obp + slg).toFixed(3);
 
+  // §2.7: Compute pitcher stats from PitcherGameStats
+  const pOuts = pitcherGameStats?.outsRecorded ?? 0;
+  const pIP = `${Math.floor(pOuts / 3)}.${pOuts % 3}`;
+  const pFullInnings = pOuts / 3;
+  const pHA = pitcherGameStats?.hitsAllowed ?? 0;
+  const pER = pitcherGameStats?.earnedRuns ?? 0;
+  const pK = pitcherGameStats?.strikeoutsThrown ?? 0;
+  const pBB = pitcherGameStats?.walksAllowed ?? 0;
+  const pPitches = pitcherGameStats?.pitchCount ?? 0;
+  const pERA = pFullInnings > 0 ? ((pER / pFullInnings) * 9).toFixed(2) : '0.00';
+  // WHIP = (BB + H) / IP
+  const pWHIP = pFullInnings > 0 ? ((pBB + pHA) / pFullInnings).toFixed(2) : '0.00';
+
+  // §9.1: Bench list for Sub Out flow
+  const availableBench = (benchPlayers || []).filter(p => !p.isOutOfGame);
+
+  // §9.1: BENCH VIEW — replaces card content when Sub Out is tapped
+  if (cardView === 'bench') {
+    return (
+      <div
+        className="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center z-50"
+        onClick={onClose}
+      >
+        <div
+          className="bg-[#6B9462] border-[6px] border-[#E8E8D8] p-4 w-[340px] max-h-[80vh] flex flex-col shadow-[8px_8px_0px_0px_rgba(0,0,0,0.5)]"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {/* Bench list header */}
+          <div className="flex items-center justify-between mb-3">
+            <div>
+              <div className="text-[8px] text-[#E8E8D8] font-bold tracking-wider" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>
+                SELECT REPLACEMENT FOR
+              </div>
+              <div className="text-xs text-[#E8E8D8] font-bold" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>
+                {player.name}
+              </div>
+            </div>
+            <button
+              onClick={() => setCardView('card')}
+              className="bg-[#E8E8D8] border-[3px] border-[#6B9462] px-2 py-1 text-[#6B9462] text-[9px] font-bold hover:bg-white"
+            >
+              BACK
+            </button>
+          </div>
+
+          {/* Scrollable bench player list */}
+          <div className="flex-1 overflow-y-auto space-y-1 min-h-0">
+            {availableBench.length === 0 ? (
+              <div className="text-[10px] text-[#E8E8D8]/70 text-center py-4">No available players</div>
+            ) : (
+              availableBench.map((bp) => (
+                <button
+                  key={bp.name}
+                  onClick={() => {
+                    onSubOut?.(player.playerId, player.name, bp.name, player.type === 'pitcher');
+                    onClose();
+                  }}
+                  className="w-full flex items-center gap-2 bg-[#5A7A52] border-[3px] border-[#E8E8D8]/50 p-2
+                             hover:bg-[#6B9462] hover:border-[#E8E8D8] active:scale-[0.98] transition-all text-left"
+                >
+                  <div className="bg-[#E8E8D8] text-[#3a5a3a] text-[8px] font-bold px-1.5 py-0.5 min-w-[24px] text-center">
+                    {bp.pos}
+                  </div>
+                  <div className="flex-1">
+                    <div className="text-[11px] text-[#E8E8D8] font-bold" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>
+                      {bp.name}
+                    </div>
+                  </div>
+                  <div className="text-[8px] text-[#E8E8D8]/70">{bp.hand}</div>
+                </button>
+              ))
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // §5.3: NORMAL CARD VIEW
   return (
-    <div 
+    <div
       className="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center z-50"
       onClick={onClose}
     >
-      <div 
-        className="bg-[#6B9462] border-[6px] border-[#E8E8D8] p-4 w-[340px] shadow-[8px_8px_0px_0px_rgba(0,0,0,0.5)]"
+      <div
+        className="bg-[#6B9462] border-[6px] border-[#E8E8D8] p-4 w-[340px] max-h-[80vh] overflow-y-auto shadow-[8px_8px_0px_0px_rgba(0,0,0,0.5)]"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Header */}
+        {/* Header — name, position, hand, grade, traits */}
         <div className="bg-[#6B9462] border-[4px] border-[#E8E8D8] p-2 mb-3">
           <div className="flex items-center justify-between">
             <div>
               <div className="text-xs text-[#E8E8D8] font-bold" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>{player.name}</div>
               <div className="text-[8px] text-[#E8E8D8]" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>
-                {player.type === 'batter' ? `${batterStats.position} • ${batterStats.battingHand}/${batterStats.throwingHand}` : `P • ${pitcherStats.throwingHand}HP`}
+                {position}{secondaryPos ? `/${secondaryPos}` : ''} {' • '} {battingHand}/{throwingHand}
+                {overallGrade ? ` • ${overallGrade}` : ''}
+                {age ? ` • Age ${age}` : ''}
               </div>
+              {(trait1 || trait2) && (
+                <div className="text-[7px] text-[#C4A853] mt-0.5" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>
+                  {[trait1, trait2].filter(Boolean).join(' • ')}
+                </div>
+              )}
             </div>
             <button
               onClick={onClose}
@@ -6460,212 +7144,214 @@ function PlayerCardModal({
           </div>
         </div>
 
+        {/* §5.3 + §2.8: Stats — game stats shown with "THIS GAME" header */}
+        {/* TODO: Wire season stats from franchise data store when available */}
         {player.type === 'batter' ? (
-          <>
-            {/* Season Stats */}
-            <div className="bg-[#6B9462] border-[4px] border-[#E8E8D8] p-2 mb-2">
-              <div className="text-[8px] text-[#E8E8D8] font-bold mb-1" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>SEASON STATS</div>
-              <div className="grid grid-cols-4 gap-2 text-center">
-                <div>
-                  <div className="text-xs text-[#E8E8D8] font-bold" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>{batterStats.avg}</div>
-                  <div className="text-[7px] text-[#E8E8D8]" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>AVG</div>
-                </div>
-                <div>
-                  <div className="text-xs text-[#E8E8D8] font-bold" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>{batterStats.hr}</div>
-                  <div className="text-[7px] text-[#E8E8D8]" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>HR</div>
-                </div>
-                <div>
-                  <div className="text-xs text-[#E8E8D8] font-bold" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>{batterStats.rbi}</div>
-                  <div className="text-[7px] text-[#E8E8D8]" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>RBI</div>
-                </div>
-                <div>
-                  <div className="text-xs text-[#E8E8D8] font-bold" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>{batterStats.sb}</div>
-                  <div className="text-[7px] text-[#E8E8D8]" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>SB</div>
-                </div>
-              </div>
+          <div className="bg-[#6B9462] border-[4px] border-[#E8E8D8] p-2 mb-2">
+            <div className="text-[8px] text-[#E8E8D8] font-bold mb-1" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>THIS GAME</div>
+            <div className="grid grid-cols-4 gap-2 text-center mb-1">
+              <StatCell value={bAVG} label="AVG" />
+              <StatCell value={bHR} label="HR" />
+              <StatCell value={bRBI} label="RBI" />
+              <StatCell value={bSB} label="SB" />
             </div>
-
-            {/* Game Stats */}
-            <div className="bg-[#6B9462] border-[4px] border-[#E8E8D8] p-2">
-              <div className="text-[8px] text-[#E8E8D8] font-bold mb-1" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>TODAY'S GAME</div>
-              <div className="grid grid-cols-4 gap-2 text-center">
-                <div>
-                  <div className="text-xs text-[#E8E8D8] font-bold" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>{batterStats.gameStats.ab}</div>
-                  <div className="text-[7px] text-[#E8E8D8]" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>AB</div>
-                </div>
-                <div>
-                  <div className="text-xs text-[#E8E8D8] font-bold" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>{batterStats.gameStats.hits}</div>
-                  <div className="text-[7px] text-[#E8E8D8]" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>H</div>
-                </div>
-                <div>
-                  <div className="text-xs text-[#E8E8D8] font-bold" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>{batterStats.gameStats.bb}</div>
-                  <div className="text-[7px] text-[#E8E8D8]" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>BB</div>
-                </div>
-                <div>
-                  <div className="text-xs text-[#E8E8D8] font-bold" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>{batterStats.gameStats.so}</div>
-                  <div className="text-[7px] text-[#E8E8D8]" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>SO</div>
-                </div>
-              </div>
+            <div className="grid grid-cols-4 gap-2 text-center">
+              <StatCell value={bOPS} label="OPS" />
+              <StatCell value={bAB} label="AB" />
+              <StatCell value={bBB} label="BB" />
+              <StatCell value={bK} label="K" />
             </div>
-          </>
+            {/* WAR not available from in-game stats */}
+            <div className="text-[7px] text-[#E8E8D8]/50 mt-1 text-right">WAR: —</div>
+          </div>
         ) : (
-          <>
-            {/* Season Stats */}
-            <div className="bg-[#6B9462] border-[4px] border-[#E8E8D8] p-2 mb-2">
-              <div className="text-[8px] text-[#E8E8D8] font-bold mb-1" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>SEASON STATS</div>
-              <div className="grid grid-cols-4 gap-2 text-center">
-                <div>
-                  <div className="text-xs text-[#E8E8D8] font-bold" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>{pitcherStats.era}</div>
-                  <div className="text-[7px] text-[#E8E8D8]" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>ERA</div>
-                </div>
-                <div>
-                  <div className="text-xs text-[#E8E8D8] font-bold" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>{pitcherStats.wins}</div>
-                  <div className="text-[7px] text-[#E8E8D8]" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>W</div>
-                </div>
-                <div>
-                  <div className="text-xs text-[#E8E8D8] font-bold" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>{pitcherStats.losses}</div>
-                  <div className="text-[7px] text-[#E8E8D8]" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>L</div>
-                </div>
-                <div>
-                  <div className="text-xs text-[#E8E8D8] font-bold" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>{pitcherStats.so}</div>
-                  <div className="text-[7px] text-[#E8E8D8]" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>SO</div>
-                </div>
-              </div>
+          <div className="bg-[#6B9462] border-[4px] border-[#E8E8D8] p-2 mb-2">
+            <div className="text-[8px] text-[#E8E8D8] font-bold mb-1" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>THIS GAME</div>
+            <div className="grid grid-cols-4 gap-2 text-center mb-1">
+              <StatCell value={pERA} label="ERA" />
+              <StatCell value={pIP} label="IP" />
+              <StatCell value={pK} label="K" />
+              <StatCell value={pBB} label="BB" />
             </div>
-
-            {/* Game Stats */}
-            <div className="bg-[#6B9462] border-[4px] border-[#E8E8D8] p-2">
-              <div className="text-[8px] text-[#E8E8D8] font-bold mb-1" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>TODAY'S GAME</div>
-              <div className="grid grid-cols-4 gap-2 text-center">
-                <div>
-                  <div className="text-xs text-[#E8E8D8] font-bold" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>{pitcherStats.gameStats.pitches}</div>
-                  <div className="text-[7px] text-[#E8E8D8]" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>PITCH</div>
-                </div>
-                <div>
-                  <div className="text-xs text-[#E8E8D8] font-bold" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>{pitcherStats.gameStats.strikes}</div>
-                  <div className="text-[7px] text-[#E8E8D8]" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>STR</div>
-                </div>
-                <div>
-                  <div className="text-xs text-[#E8E8D8] font-bold" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>{pitcherStats.gameStats.balls}</div>
-                  <div className="text-[7px] text-[#E8E8D8]" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>BALL</div>
-                </div>
-                <div>
-                  <div className="text-xs text-[#E8E8D8] font-bold" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>🟢</div>
-                  <div className="text-[7px] text-[#E8E8D8]" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>{pitcherStats.gameStats.fitness}</div>
-                </div>
-              </div>
+            <div className="grid grid-cols-4 gap-2 text-center">
+              <StatCell value={pWHIP} label="WHIP" />
+              <StatCell value={pHA} label="H" />
+              <StatCell value={pER} label="ER" />
+              <StatCell value={pPitches} label="P" />
             </div>
-          </>
+            {/* pWAR not available from in-game stats */}
+            <div className="text-[7px] text-[#E8E8D8]/50 mt-1 text-right">pWAR: —</div>
+          </div>
         )}
 
-        {/* EXH-036: Mojo/Fitness Editing Section */}
+        {/* §5.5: Condition — current mojo/fitness display (read-only summary) */}
         {(currentMojo !== undefined || currentFitness !== undefined) && (
-          <div className="bg-[#5A7A52] border-[4px] border-[#E8E8D8] p-2 mt-2 space-y-2">
+          <div className="bg-[#5A7A52] border-[4px] border-[#E8E8D8] p-2 mb-2">
             <div className="text-[8px] text-[#E8E8D8] font-bold mb-1" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>
               CONDITION
             </div>
-
-            {/* Mojo Row */}
-            {currentMojo !== undefined && onMojoChange && (
-              <div className="flex items-center gap-2">
-                <span className="text-[7px] text-[#E8E8D8] w-12" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>MOJO</span>
-                {isEditingMojo ? (
-                  <div className="flex gap-1 flex-wrap">
-                    {([-2, -1, 0, 1, 2] as MojoLevel[]).map((level) => (
-                      <button
-                        key={level}
-                        onClick={() => {
-                          onMojoChange(level);
-                          setIsEditingMojo(false);
-                        }}
-                        className={`px-2 py-1 text-[8px] font-bold border-2 transition-all ${
-                          level === currentMojo
-                            ? 'border-[#C4A853] bg-[#C4A853]/30'
-                            : 'border-[#E8E8D8]/50 hover:border-[#E8E8D8]'
-                        }`}
-                        style={{ color: getMojoColor(level) }}
-                      >
-                        {MOJO_STATES[level].emoji} {MOJO_STATES[level].displayName}
-                      </button>
-                    ))}
-                    <button
-                      onClick={() => setIsEditingMojo(false)}
-                      className="px-1 text-[#E8E8D8]/70 hover:text-[#E8E8D8]"
-                    >
-                      ✕
-                    </button>
-                  </div>
-                ) : (
-                  <div
-                    className="flex items-center gap-1 cursor-pointer hover:bg-[#6B9462] px-1 rounded"
-                    onClick={() => setIsEditingMojo(true)}
-                  >
-                    <span
-                      className="text-xs font-bold"
-                      style={{ color: getMojoColor(currentMojo), textShadow: '1px 1px 0px rgba(0,0,0,0.5)' }}
-                    >
-                      {MOJO_STATES[currentMojo].emoji} {MOJO_STATES[currentMojo].displayName}
-                    </span>
-                    <span className="text-[8px] text-[#E8E8D8]/70">
-                      ({MOJO_STATES[currentMojo].statMultiplier.toFixed(2)}x)
-                    </span>
-                    <span className="text-[8px] text-[#C4A853]">✏️</span>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Fitness Row */}
-            {currentFitness !== undefined && onFitnessChange && (
-              <div className="flex items-center gap-2">
-                <span className="text-[7px] text-[#E8E8D8] w-12" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>FITNESS</span>
-                {isEditingFitness ? (
-                  <div className="flex gap-1 flex-wrap">
-                    {(['JUICED', 'FIT', 'WELL', 'STRAINED', 'WEAK', 'HURT'] as FitnessState[]).map((state) => (
-                      <button
-                        key={state}
-                        onClick={() => {
-                          onFitnessChange(state);
-                          setIsEditingFitness(false);
-                        }}
-                        className={`px-2 py-1 text-[8px] font-bold border-2 transition-all ${
-                          state === currentFitness
-                            ? 'border-[#C4A853] bg-[#C4A853]/30'
-                            : 'border-[#E8E8D8]/50 hover:border-[#E8E8D8]'
-                        }`}
-                        style={{ color: FITNESS_STATES[state].color }}
-                      >
-                        {FITNESS_STATES[state].emoji} {FITNESS_STATES[state].displayName}
-                      </button>
-                    ))}
-                    <button
-                      onClick={() => setIsEditingFitness(false)}
-                      className="px-1 text-[#E8E8D8]/70 hover:text-[#E8E8D8]"
-                    >
-                      ✕
-                    </button>
-                  </div>
-                ) : (
-                  <div
-                    className="flex items-center gap-1 cursor-pointer hover:bg-[#6B9462] px-1 rounded"
-                    onClick={() => setIsEditingFitness(true)}
-                  >
-                    <span
-                      className="text-xs font-bold"
-                      style={{ color: FITNESS_STATES[currentFitness].color, textShadow: '1px 1px 0px rgba(0,0,0,0.5)' }}
-                    >
-                      {FITNESS_STATES[currentFitness].emoji} {FITNESS_STATES[currentFitness].displayName}
-                    </span>
-                    <span className="text-[8px] text-[#E8E8D8]/70">
-                      ({FITNESS_STATES[currentFitness].multiplier.toFixed(2)}x)
-                    </span>
-                    <span className="text-[8px] text-[#C4A853]">✏️</span>
-                  </div>
-                )}
-              </div>
-            )}
+            <div className="flex items-center gap-3">
+              {currentMojo !== undefined && (
+                <span className="text-[10px] font-bold" style={{ color: getMojoColor(currentMojo), textShadow: '1px 1px 0px rgba(0,0,0,0.5)' }}>
+                  {MOJO_STATES[currentMojo].emoji} {MOJO_STATES[currentMojo].displayName}
+                </span>
+              )}
+              {currentFitness !== undefined && (
+                <span className="text-[10px] font-bold" style={{ color: FITNESS_STATES[currentFitness].color, textShadow: '1px 1px 0px rgba(0,0,0,0.5)' }}>
+                  {FITNESS_STATES[currentFitness].emoji} {FITNESS_STATES[currentFitness].displayName}
+                </span>
+              )}
+            </div>
           </div>
         )}
+
+        {/* §5.5: Action Buttons */}
+        <div className="space-y-1.5 mt-2">
+          {/* §9.1: SUB OUT — all phases */}
+          {onSubOut && (
+            <button
+              onClick={() => setCardView('bench')}
+              className="w-full bg-[#8B0000] border-[3px] border-[#FF4444] text-white text-[10px] font-bold tracking-wider py-2
+                         hover:bg-[#AA0000] active:scale-95 transition-transform shadow-[2px_2px_0px_0px_rgba(0,0,0,0.5)]"
+            >
+              SUB OUT
+            </button>
+          )}
+
+          {/* §9.2: SWAP POSITION — LIVE only */}
+          {isLive && onSwapPosition && (
+            <button
+              onClick={() => {
+                onSwapPosition(player.playerId, player.name);
+                onClose();
+              }}
+              className="w-full bg-[#1a5276] border-[3px] border-[#5dade2] text-white text-[10px] font-bold tracking-wider py-2
+                         hover:bg-[#21618c] active:scale-95 transition-transform shadow-[2px_2px_0px_0px_rgba(0,0,0,0.5)]"
+            >
+              SWAP POSITION
+            </button>
+          )}
+
+          {/* §9.3: SWAP ORDER — PRE_GAME only */}
+          {showSwapOrder && onSwapOrder && (
+            <button
+              onClick={() => {
+                onSwapOrder(player.playerId, player.name);
+                onClose();
+              }}
+              className="w-full bg-[#C4A853] border-[3px] border-[#8B7A2E] text-[#1a1a1a] text-[10px] font-bold tracking-wider py-2
+                         hover:bg-[#D4B863] active:scale-95 transition-transform shadow-[2px_2px_0px_0px_rgba(0,0,0,0.5)]"
+            >
+              SWAP ORDER
+            </button>
+          )}
+
+          {isLive && runnerBase && onRunnerAction && (
+            <div className="grid grid-cols-2 gap-1.5">
+              {[
+                ['SB', 'STEAL'],
+                ['CS', 'CAUGHT STEALING'],
+                ['WP', 'WILD PITCH'],
+                ['PB', 'PASSED BALL'],
+                ['ADVANCE', 'ADVANCE'],
+                ['PICK', 'PICKOFF OUT'],
+                ['PICK_SAFE', 'PICKOFF SAFE'],
+                ['PICK_E', 'PICKOFF ERROR'],
+              ].map(([eventType, label]) => (
+                <button
+                  key={eventType}
+                  onClick={() => {
+                    onRunnerAction(eventType as 'SB' | 'CS' | 'WP' | 'PB' | 'PICK' | 'PICK_SAFE' | 'PICK_E' | 'ADVANCE', runnerBase, player.playerId, player.name);
+                    onClose();
+                  }}
+                  className="w-full bg-[#1f3b57] border-[3px] border-[#5dade2] text-white text-[9px] font-bold tracking-wide py-2 hover:bg-[#275177] active:scale-95 transition-transform shadow-[2px_2px_0px_0px_rgba(0,0,0,0.5)]"
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {isLive && runnerBase && onCorrectOutcome && (
+            <button
+              onClick={() => {
+                onCorrectOutcome();
+                onClose();
+              }}
+              className="w-full bg-[#5a3f1f] border-[3px] border-[#C4A853] text-[#E8E8D8] text-[10px] font-bold tracking-wider py-2 hover:bg-[#6c4d26] active:scale-95 transition-transform shadow-[2px_2px_0px_0px_rgba(0,0,0,0.5)]"
+            >
+              CORRECT OUTCOME
+            </button>
+          )}
+
+          {/* §5.5: UPDATE MOJO — LIVE + POST only */}
+          {showMojoFitness && currentMojo !== undefined && onMojoChange && (
+            <>
+              <button
+                onClick={() => { setIsEditingMojo(!isEditingMojo); setIsEditingFitness(false); }}
+                className="w-full bg-[#5A4A20] border-[3px] border-[#C4A853] text-[#C4A853] text-[10px] font-bold tracking-wider py-2
+                           hover:bg-[#6B5A30] active:scale-95 transition-transform shadow-[2px_2px_0px_0px_rgba(0,0,0,0.5)]"
+              >
+                UPDATE MOJO
+              </button>
+              {isEditingMojo && (
+                <div className="flex gap-1 flex-wrap bg-[#3a4a3a] border-[2px] border-[#C4A853]/50 p-2">
+                  {([-2, -1, 0, 1, 2] as MojoLevel[]).map((level) => (
+                    <button
+                      key={level}
+                      onClick={() => {
+                        onMojoChange(level);
+                        setIsEditingMojo(false);
+                      }}
+                      className={`px-2 py-1 text-[8px] font-bold border-2 transition-all ${
+                        level === currentMojo
+                          ? 'border-[#C4A853] bg-[#C4A853]/30'
+                          : 'border-[#E8E8D8]/50 hover:border-[#E8E8D8]'
+                      }`}
+                      style={{ color: getMojoColor(level) }}
+                    >
+                      {MOJO_STATES[level].emoji} {MOJO_STATES[level].displayName}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+
+          {/* §5.5: UPDATE FITNESS — LIVE + POST only, with auto-injury */}
+          {showMojoFitness && currentFitness !== undefined && onFitnessChange && (
+            <>
+              <button
+                onClick={() => { setIsEditingFitness(!isEditingFitness); setIsEditingMojo(false); }}
+                className="w-full bg-[#2A4A2A] border-[3px] border-[#4CAF50] text-[#4CAF50] text-[10px] font-bold tracking-wider py-2
+                           hover:bg-[#3A5A3A] active:scale-95 transition-transform shadow-[2px_2px_0px_0px_rgba(0,0,0,0.5)]"
+              >
+                UPDATE FITNESS
+              </button>
+              {isEditingFitness && (
+                <div className="flex gap-1 flex-wrap bg-[#3a4a3a] border-[2px] border-[#4CAF50]/50 p-2">
+                  {(['JUICED', 'FIT', 'WELL', 'STRAINED', 'WEAK', 'HURT'] as FitnessState[]).map((state) => (
+                    <button
+                      key={state}
+                      onClick={() => {
+                        onFitnessChange(state);
+                        setIsEditingFitness(false);
+                      }}
+                      className={`px-2 py-1 text-[8px] font-bold border-2 transition-all ${
+                        state === currentFitness
+                          ? 'border-[#C4A853] bg-[#C4A853]/30'
+                          : 'border-[#E8E8D8]/50 hover:border-[#E8E8D8]'
+                      }`}
+                      style={{ color: FITNESS_STATES[state].color }}
+                    >
+                      {FITNESS_STATES[state].emoji} {FITNESS_STATES[state].displayName}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+        </div>
       </div>
     </div>
   );

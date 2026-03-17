@@ -99,6 +99,7 @@ function mapResultToPlayResult(result: AtBatResult): PlayResult {
     'Kc': 'strikeout_looking',
     'GO': 'ground_out',
     'FO': 'fly_out',
+    'FLO': 'fly_out', // Foul out — mapped to fly_out for clutch purposes
     'LO': 'line_out',
     'PO': 'popup_out',
     'DP': 'gidp',
@@ -112,6 +113,8 @@ function mapResultToPlayResult(result: AtBatResult): PlayResult {
     'WP_K': 'strikeout_swinging', // Wild pitch strikeout
     'PB_K': 'strikeout_swinging', // Passed ball strikeout
     'GRD': 'double', // Ground Rule Double counts as a double (GAP-GT-6-D)
+    'ITPHR': 'HR', // Inside-the-Park Home Run (UX-049)
+    'Ꝁ': 'strikeout_looking', // Called strikeout — same as Kc (UX-048)
   };
   return mapping[result] || 'ground_out';
 }

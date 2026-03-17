@@ -11,7 +11,8 @@ import {
 import type { Player as GameTrackerPlayer, Pitcher as GameTrackerPitcher } from '../src_figma/app/components/TeamRoster';
 
 const SNAPSHOT_STORE = 'rosterSnapshots';
-const FIELD_POSITIONS: Position[] = ['C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF', 'DH'];
+const FIELD_POSITIONS_WITH_DH: Position[] = ['C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF', 'DH'];
+const FIELD_POSITIONS_NO_DH: Position[] = ['C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF'];
 const PITCHER_POSITIONS = new Set(['SP', 'RP', 'CP', 'SP/RP']);
 
 export interface EliminationRosterSnapshot {
@@ -33,24 +34,35 @@ function getPlayerName(player: Player): string {
   return `${player.firstName} ${player.lastName}`;
 }
 
-function getBestPosition(player: Player, usedPositions: Set<Position>): Position {
-  if (player.primaryPosition && FIELD_POSITIONS.includes(player.primaryPosition) && !usedPositions.has(player.primaryPosition)) {
+function getBestPosition(
+  player: Player,
+  usedPositions: Set<Position>,
+  availablePositions: readonly Position[],
+  fallback: Position,
+): Position {
+  if (player.primaryPosition && availablePositions.includes(player.primaryPosition) && !usedPositions.has(player.primaryPosition)) {
     return player.primaryPosition;
   }
 
-  if (player.secondaryPosition && FIELD_POSITIONS.includes(player.secondaryPosition) && !usedPositions.has(player.secondaryPosition)) {
+  if (player.secondaryPosition && availablePositions.includes(player.secondaryPosition) && !usedPositions.has(player.secondaryPosition)) {
     return player.secondaryPosition;
   }
 
-  return FIELD_POSITIONS.find((position) => !usedPositions.has(position)) ?? 'DH';
+  return availablePositions.find((position) => !usedPositions.has(position)) ?? fallback;
 }
 
-export function getNormalizedEliminationLineup(snapshot: EliminationRosterSnapshot): LineupSlot[] {
+export function getNormalizedEliminationLineup(
+  snapshot: EliminationRosterSnapshot,
+  useDH = true,
+): LineupSlot[] {
+  const fieldPositions = useDH ? FIELD_POSITIONS_WITH_DH : FIELD_POSITIONS_NO_DH;
+  const targetNonPitchers = useDH ? 9 : 8;
   const playerMap = new Map(snapshot.players.map((player) => [player.id, player]));
   const validExisting = [...snapshot.lineup]
     .filter((slot) => {
       const player = playerMap.get(slot.playerId);
-      return player && !isPitcher(player);
+      if (!player || isPitcher(player)) return false;
+      return useDH || slot.fieldingPosition !== 'DH';
     })
     .sort((a, b) => a.battingOrder - b.battingOrder);
 
@@ -67,7 +79,7 @@ export function getNormalizedEliminationLineup(snapshot: EliminationRosterSnapsh
     });
     usedPlayerIds.add(slot.playerId);
     usedPositions.add(slot.fieldingPosition);
-    if (normalized.length === 9) return normalized;
+    if (normalized.length === targetNonPitchers) break;
   }
 
   const availablePlayers = snapshot.players.filter((player) => !isPitcher(player) && !usedPlayerIds.has(player.id));
@@ -75,11 +87,28 @@ export function getNormalizedEliminationLineup(snapshot: EliminationRosterSnapsh
     normalized.push({
       battingOrder: normalized.length + 1,
       playerId: player.id,
-      fieldingPosition: getBestPosition(player, usedPositions),
+      fieldingPosition: getBestPosition(
+        player,
+        usedPositions,
+        fieldPositions,
+        useDH ? 'DH' : fieldPositions[fieldPositions.length - 1],
+      ),
     });
     usedPlayerIds.add(player.id);
     usedPositions.add(normalized[normalized.length - 1].fieldingPosition);
-    if (normalized.length === 9) break;
+    if (normalized.length === targetNonPitchers) break;
+  }
+
+  if (!useDH) {
+    const starterId = getNormalizedEliminationRotation(snapshot)[0]
+      ?? snapshot.players.find(isPitcher)?.id;
+    if (starterId && !usedPlayerIds.has(starterId)) {
+      normalized.push({
+        battingOrder: normalized.length + 1,
+        playerId: starterId,
+        fieldingPosition: 'P' as unknown as Position,
+      });
+    }
   }
 
   return normalized;
@@ -287,7 +316,8 @@ export async function updateEliminationRosterSnapshot(
 
 export async function buildEliminationGameTrackerRoster(
   eliminationId: string,
-  teamId: string
+  teamId: string,
+  useDH = true,
 ): Promise<{
   players: GameTrackerPlayer[];
   pitchers: GameTrackerPitcher[];
@@ -297,7 +327,7 @@ export async function buildEliminationGameTrackerRoster(
     throw new Error(`Roster snapshot not found: ${eliminationId}/${teamId}`);
   }
 
-  const normalizedLineup = getNormalizedEliminationLineup(snapshot);
+  const normalizedLineup = getNormalizedEliminationLineup(snapshot, useDH);
   const normalizedRotation = getNormalizedEliminationRotation(snapshot);
   const playerMap = new Map(snapshot.players.map((player) => [player.id, player]));
   const lineupIds = new Set(normalizedLineup.map((slot) => slot.playerId));

@@ -1,0 +1,762 @@
+8-import { LineupCard, type SubstitutionData, type LineupPlayer, type BenchPlayer, type BullpenPitcher } from "@/app/components/LineupCard";
+9-import { UndoButton, useUndoSystem, type GameSnapshot } from "@/app/components/UndoSystem";
+10-import { TeamRoster, type Player, type Pitcher } from "@/app/components/TeamRoster";
+11:import { FenwayBoard } from "@/app/components/FenwayBoard";
+12:import { FullFenwayScoreboard } from "@/app/components/FullFenwayScoreboard";
+13-import { QuickBar } from "@/app/components/QuickBar";
+14-import { PlayLogPanel } from "@/app/components/PlayLogPanel";
+15-import { EnrichmentPanel, PITCH_TYPES, type AtBatModifierValue, type EnrichmentUpdate } from "@/app/components/EnrichmentPanel";
+16-import { RunnerOutcomesDisplay } from "@/app/components/RunnerOutcomesDisplay";
+17-import { HistoricalEventEditor } from "@/app/components/HistoricalEventEditor";
+18-import { LiveRunnerAttributionPanel } from "@/app/components/LiveRunnerAttributionPanel";
+19-import { GameDiamond } from "@/app/components/GameDiamond";
+20-import { InjuryPrompt, type InjuryResult, type MojoResult } from "@/app/components/InjuryPrompt";
+21-import {
+22-  getAtBatEvent,
+--
+102-  type FieldingPlayTypeValue,
+103-} from '../utils/fieldingPlayType';
+104-import {
+105:  buildFenwayMatchupSummary,
+106:  formatFenwayMilestoneAlert,
+107:  pickFenwayMilestoneWatches,
+108:} from '../utils/fenwayBoardContext';
+109-import {
+110-  applyRunnerDefaultsToNames,
+111-  buildRunnerCorrectionForQuickBarOutcome,
+112-  countRbiFromDefaults,
+113-  getBatterDestinationOptions,
+114-  runnerDefaultsToAdvancement,
+115-  type PendingRunnerCorrectionAction,
+116-} from '../utils/gameTrackerRunnerCorrection';
+117-import type { FielderCredit } from "../components/modals/FielderCreditModal";
+118-
+--
+368-  // Use the game state hook for real data persistence
+369-  const {
+370-    gameState,
+371:    scoreboard,
+372-    playerStats,
+373-    pitcherStats,
+374-    commitPlateAppearance,
+375-    recordEvent,
+376-    recordPlayerStateChange,
+377-    reassignRunnerEventAttribution,
+378-    recordManagerMoment,
+379-    advanceRunner,
+380-    advanceRunnersBatch,
+381-    makeSubstitution,
+--
+663-    fielder: FielderInfo;
+664-    anchorPosition: { left: string; top: string };
+665-  } | null>(null);
+666:  const [showLineupOverlay, setShowLineupOverlay] = useState(false);
+667:  const [lineupOverlayHint, setLineupOverlayHint] = useState<string | null>(null);
+668-  const [showTouchPlayReview, setShowTouchPlayReview] = useState(false);
+669-  const [pendingManualSpecialPrompt, setPendingManualSpecialPrompt] = useState<PendingManualSpecialPrompt | null>(null);
+670-  const [showManagerMomentPanel, setShowManagerMomentPanel] = useState(false);
+671:  const [fenwayContext, setFenwayContext] = useState<{
+672-    matchupRecord?: string;
+673-    matchupAvg?: string;
+674-    historicalMatchupRecord?: string;
+675-    historicalMatchupAvg?: string;
+676-    milestoneAlerts: string[];
+677-  }>({ milestoneAlerts: [] });
+678-
+679-  // D-4: HR inline prompt state (distance + pitch type before recording)
+680-  const [hrPrompt, setHrPrompt] = useState<{
+681-    rbi: number;
+--
+713-  } | null>(null);
+714-  const [pendingRunnerCorrection, setPendingRunnerCorrection] = useState<PendingRunnerCorrectionAction | null>(null);
+715-
+716:  // Field zoom level tuned for the post-EIF iPad landscape layout.
+717-  // Keep the playable field prominent while retaining the full GameDiamond tap surface.
+718-  const fieldZoomLevel = 1;
+719-
+720-  // Undo system - restore game state on undo
+721-  const handleUndo = useCallback((snapshot: GameSnapshot) => {
+722-    console.log("Undoing durable game action:", snapshot.playDescription);
+723-    void (async () => {
+724-      const undone = await undoLastAction();
+725-      if (!undone) {
+726-        console.warn("No durable action available to undo");
+--
+739-    if (!gameInitialized) return;
+740-    undoSystem.setCurrentState({
+741-      gameState,
+742:      scoreboard,
+743-      playerStatsEntries: Array.from(playerStats.entries()),
+744-      pitcherStatsEntries: Array.from(pitcherStats.entries()),
+745-      runnerTrackerSnapshot: getRunnerTrackerSnapshot(),
+746-    });
+747:  }, [gameInitialized, gameState, scoreboard, playerStats, pitcherStats, getRunnerTrackerSnapshot]);
+748-
+749-  useEffect(() => {
+750-    if (!gameInitialized || !gameState.gameId) return;
+751-    void rebuildPlayLogFromEventLogRef.current();
+752-  }, [atBatSequence, gameInitialized, gameState.gameId]);
+753-
+754-  useEffect(() => {
+755-    return () => {
+756-      if (playLogRefreshTimeoutRef.current !== null) {
+757-        window.clearTimeout(playLogRefreshTimeoutRef.current);
+--
+2027-  useEffect(() => {
+2028-    let cancelled = false;
+2029-
+2030:    const loadFenwayContext = async () => {
+2031-      if (!gameState.gameId || !gameState.currentBatterId || !gameState.currentPitcherId) {
+2032-        if (!cancelled) {
+2033:          setFenwayContext({ milestoneAlerts: [] });
+2034-        }
+2035-        return;
+2036-      }
+2037-
+2038-      try {
+2039-        const seasonId = navigationState?.seasonId;
+2040-        const [
+2041-          currentGameEvents,
+2042-          historicalMatchupEvents,
+2043-          batterCareer,
+--
+2057-          return;
+2058-        }
+2059-
+2060:        const currentMatchup = buildFenwayMatchupSummary(
+2061-          currentGameEvents,
+2062-          gameState.currentBatterId,
+2063-          gameState.currentPitcherId,
+2064-        );
+2065:        const historicalMatchup = buildFenwayMatchupSummary(
+2066-          historicalMatchupEvents,
+2067-          gameState.currentBatterId,
+2068-          gameState.currentPitcherId,
+2069-        );
+2070-
+2071-        const batterSeason = seasonId
+2072-          ? seasonBattingRows.find((row) => row.playerId === gameState.currentBatterId) || null
+2073-          : null;
+2074-        const pitcherSeason = seasonId
+2075-          ? seasonPitchingRows.find((row) => row.playerId === gameState.currentPitcherId) || null
+--
+2089-          mergeSeasonPitchingWithGameStats(pitcherSeason, currentPitcherStats),
+2090-          new Set<string>(),
+2091-        );
+2092:        const selectedWatches = pickFenwayMilestoneWatches(
+2093-          [...batterWatches, ...pitcherWatches],
+2094-          gameState.currentBatterId,
+2095-          2,
+2096-        );
+2097-        const multiplePlayers = new Set(selectedWatches.map((watch) => watch.playerId)).size > 1;
+2098-
+2099:        setFenwayContext({
+2100-          matchupRecord: currentMatchup.matchupRecord,
+2101-          matchupAvg: currentMatchup.matchupAvg,
+2102-          historicalMatchupRecord: historicalMatchup.matchupRecord,
+2103-          historicalMatchupAvg: historicalMatchup.matchupAvg,
+2104-          milestoneAlerts: selectedWatches.map((watch) =>
+2105:            formatFenwayMilestoneAlert(
+2106-              watch,
+2107-              multiplePlayers || watch.playerId !== gameState.currentBatterId,
+2108-            )
+2109-          ),
+2110-        });
+2111-      } catch (error) {
+2112:        console.warn('[GameTracker] Failed to build Fenway board context:', error);
+2113-        if (!cancelled) {
+2114:          setFenwayContext({
+2115-            matchupRecord: undefined,
+2116-            matchupAvg: undefined,
+2117-            historicalMatchupRecord: undefined,
+2118-            historicalMatchupAvg: undefined,
+2119-            milestoneAlerts: [],
+2120-          });
+2121-        }
+2122-      }
+2123-    };
+2124-
+2125:    void loadFenwayContext();
+2126-
+2127-    return () => {
+2128-      cancelled = true;
+2129-    };
+2130-  }, [
+2131-    currentBatterStats,
+2132-    currentPitcherStats,
+2133-    gameState.currentBatterId,
+2134-    gameState.currentPitcherId,
+2135-    gameState.gameId,
+--
+3812-
+3813-  const handleRunnerSubstitute = useCallback((base: RunnerBase) => {
+3814-    setActiveRunnerPopover(null);
+3815:    setLineupOverlayHint(`Pinch runner requested for ${base.toUpperCase()}. Use the LINEUP panel to complete the substitution.`);
+3816:    setShowLineupOverlay(true);
+3817-  }, []);
+3818-
+3819-  // ============================================
+3820-  // FIELDER POPOVER HANDLERS (Layer 4 — tickets 4.3, 4.5)
+3821-  // ============================================
+3822-
+3823-  const handleFielderPlayerCard = useCallback(() => {
+3824-    if (!activeFielderPopover) return;
+3825-    openPlayerCard(activeFielderPopover.fielder.playerName, fieldingTeam, activeFielderPopover.fielder.positionNumber === 1 ? 'pitcher' : 'batter');
+3826-    setActiveFielderPopover(null);
+--
+4603-      )}
+4604-
+4605-      {/* ═══════════════════════════════════════════════════════════════
+4606:           §3.7 FIVE-ZONE CSS GRID LAYOUT (Layer 2A: Grid Scaffold)
+4607-           ┌─────────────────────────────┬───────────────────────┬──────┐
+4608:           │ FENWAY BOARD (top-left)     │ DIAMOND (center)      │ PLAY │
+4609:           │ scoreboard + context cards  │ EnhancedInteractive   │ LOG  │
+4610-           │                             │ Field                 │(right│
+4611-           │                             │                       │panel)│
+4612-           ├─────────────────────────────┼───────────────────────┤      │
+4613-           │ QUICK BAR (bottom-left)     │ MODIFIERS (bot-right) │      │
+4614-           │ outcome buttons             │ undo + end game       │      │
+4615-           └─────────────────────────────┴───────────────────────┴──────┘
+4616-           ═══════════════════════════════════════════════════════════════ */}
+4617-      <div className="flex h-screen flex-col overflow-hidden bg-[#6B9462] text-white">
+4618:        <FullFenwayScoreboard
+4619-          awayTeamName={awayTeamName.toUpperCase()}
+4620-          homeTeamName={homeTeamName.toUpperCase()}
+4621-          awayRecord={awayRecord}
+4622-          homeRecord={homeRecord}
+4623:          innings={scoreboard.innings}
+4624:          awayRuns={scoreboard.away.runs}
+4625:          homeRuns={scoreboard.home.runs}
+4626:          awayHits={scoreboard.away.hits}
+4627:          homeHits={scoreboard.home.hits}
+4628:          awayErrors={scoreboard.away.errors}
+4629:          homeErrors={scoreboard.home.errors}
+4630-          inning={gameState.inning}
+4631-          isTop={gameState.isTop}
+4632-          balls={gameState.balls}
+4633-          strikes={gameState.strikes}
+4634-          outs={gameState.outs}
+4635-          stadiumName={selectedStadium}
+4636-          currentBatterName={currentBatterDisplayName}
+4637-          gameDate={gameStartTime}
+4638-          elapsedMinutes={elapsedMinutes}
+4639-        />
+--
+4641-        <div
+4642-          className="min-h-0 flex-1"
+4643-          style={{
+4644:            display: 'grid',
+4645-            gridTemplateColumns: 'minmax(248px, 300px) 1fr minmax(184px, 228px)',
+4646-            gridTemplateRows: '1fr auto',
+4647-            gap: '0px',
+4648-          }}
+4649-        >
+4650:        {/* ZONE 1: Fenway Board — top left */}
+4651-        <div style={{ gridColumn: '1', gridRow: '1' }}>
+4652:          <FenwayBoard
+4653-            awayTeamName={awayTeamName.toUpperCase()}
+4654-            homeTeamName={homeTeamName.toUpperCase()}
+4655:            awayRuns={scoreboard.away.runs}
+4656:            homeRuns={scoreboard.home.runs}
+4657:            awayErrors={scoreboard.away.errors}
+4658:            homeErrors={scoreboard.home.errors}
+4659-            inning={gameState.inning}
+4660-            isTop={gameState.isTop}
+4661-            outs={gameState.outs}
+4662-            currentBatterName={currentBatterDisplayName}
+4663-            currentPitcherName={currentPitcherDisplayName}
+4664-            batterStats={currentBatterStats ? {
+4665-              ab: currentBatterStats.ab,
+4666-              h: currentBatterStats.h,
+4667-              hr: currentBatterStats.hr,
+4668-              rbi: currentBatterStats.rbi,
+--
+4716-              const pitcher = gameState.isTop ? homePitcher : awayPitcher;
+4717-              return pitcher?.throwingHand;
+4718-            })()}
+4719:            matchupRecord={fenwayContext.matchupRecord}
+4720:            matchupAvg={fenwayContext.matchupAvg}
+4721:            historicalMatchupRecord={fenwayContext.historicalMatchupRecord}
+4722:            historicalMatchupAvg={fenwayContext.historicalMatchupAvg}
+4723:            milestoneAlerts={fenwayContext.milestoneAlerts}
+4724:            showScoreboard={false}
+4725-            onBatterTap={handleBatterTap}
+4726-            onPitcherTap={availablePitchers.length > 0 ? handlePitcherTap : undefined}
+4727-          />
+4728-        </div>
+4729-
+4730:        {/* ZONE 2: Diamond — center (D-9: scoreboard moved to FenwayBoard left panel) */}
+4731-        <div
+4732-          style={{ gridColumn: '2', gridRow: '1' }}
+4733-          className={`bg-[#6B9462] relative overflow-hidden z-0 ${rightPanelOwnsInteraction ? 'pointer-events-none' : ''}`}
+4734-        >
+4735-          <GameDiamond
+4736-            mode={enrichingEntry || selectedPlayLogEntry?.eventType === 'at_bat' ? 'enhancement' : 'info'}
+4737-            bases={gameState.bases}
+4738-            runnerNames={runnerNames}
+4739-            currentBatterName={currentBatterDisplayName}
+4740-            fielders={gameDiamondFielders}
+--
+4990-                )}
+4991-                <button
+4992-                  onClick={() => {
+4993:                    setLineupOverlayHint('Use LINEUP for batting order, bench players, pinch runners, and pitching changes.');
+4994:                    setShowLineupOverlay(true);
+4995-                  }}
+4996-                  className="bg-[#1a5276] border-[3px] border-[#5dade2] px-4 py-2.5 text-white text-sm font-bold
+4997-                             shadow-[2px_2px_0px_0px_rgba(0,0,0,0.5)] active:scale-95 transition-transform
+4998-                             hover:bg-[#21618c]"
+4999-                >
+5000-                  LINEUP
+5001-                </button>
+5002-                <button
+5003-                  onClick={() => {
+5004-                    const firstUnenriched = [...playLogEntries].reverse().find(entry =>
+--
+5008-                    if (firstUnenriched) {
+5009-                      setEnrichingEntry(firstUnenriched);
+5010-                    }
+5011:                    setLineupOverlayHint('Tap the main field to set spray/location. Use the play log panel for pitch and sequence edits.');
+5012-                  }}
+5013-                  className="bg-[#4A6844] border-[3px] border-[#88AA88] px-3 py-2.5 text-white text-xs font-bold
+5014-                             shadow-[2px_2px_0px_0px_rgba(0,0,0,0.5)] active:scale-95 transition-transform
+5015-                             hover:bg-[#5A8352]"
+5016-                >
+5017-                  +FLD
+5018-                </button>
+5019-                <button
+5020-                  onClick={() => {
+5021-                    const latestAtBat = [...playLogEntries].reverse().find((entry) => entry.eventType === 'at_bat' && entry.isEnrichable);
+5022-                    if (latestAtBat) {
+5023-                      setEnrichingEntry(latestAtBat);
+5024-                    }
+5025:                    setLineupOverlayHint('Use the at-bat editor for modifiers and special-event enhancements.');
+5026-                  }}
+5027-                  className="bg-[#6c3483] border-[3px] border-[#af7ac5] px-3 py-2.5 text-white text-xs font-bold
+5028-                             shadow-[2px_2px_0px_0px_rgba(0,0,0,0.5)] active:scale-95 transition-transform
+5029-                             hover:bg-[#7d3c98]"
+5030-                >
+5031-                  +MOD
+5032-                </button>
+5033-              </div>
+5034-              <div className="text-[8px] text-[#C4A853] min-w-0 truncate">
+5035-                {canUseMainFieldLocation
+5036-                  ? 'Location enrichment is active: tap the main field. K/Kc stays in the play log.'
+5037:                  : lineupOverlayHint ?? 'Tap a play to enrich. Use the main field for +loc and LINEUP for substitutions.'}
+5038-              </div>
+5039-            </div>
+5040-            <div className="flex items-center gap-2">
+5041-              <undoSystem.UndoButtonComponent />
+5042-              <button
+5043-                onClick={() => setShowEndGameConfirmation(true)}
+5044-                className="bg-[#DD0000] border-[3px] border-white px-4 py-2.5 text-white text-sm font-bold
+5045-                           shadow-[2px_2px_0px_0px_rgba(0,0,0,0.5)] active:scale-95 transition-transform
+5046-                           hover:bg-[#FF0000]"
+5047-              >
+--
+5052-        </div>
+5053-
+5054-        {/* ══════════════════════════════════════════════════════════════
+5055:             BELOW: Modals and overlays render inside the grid container
+5056-             but are position:fixed so they float above. Also the disabled
+5057:             reference code block from the old layout.
+5058-           ══════════════════════════════════════════════════════════════ */}
+5059-
+5060-        {prefersTouchPanels && pendingRunnerCorrection !== null && (
+5061-          <div className="fixed inset-0 z-40 bg-black/45 flex items-center justify-center p-4">
+5062-            <div className="w-[320px] max-w-[88vw] max-h-[85vh] bg-[#2a3a2d] border-2 border-[#C4A853] flex flex-col shadow-[0_8px_24px_rgba(0,0,0,0.55)] pointer-events-auto">
+5063-              <div className="flex items-center justify-between px-2 py-1 bg-[#1a2a1d] border-b border-[#4a6a4a]">
+5064-                <div>
+5065-                  <div className="text-[8px] text-[#88AA88] font-mono">LIVE AT-BAT</div>
+5066-                  <div className="text-[9px] text-[#E8E8D8] font-bold">Runner Correction</div>
+5067-                </div>
+--
+5163-          />
+5164-        )}
+5165-
+5166:        {showLineupOverlay && (
+5167-          <div
+5168-            className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4"
+5169:            onClick={() => setShowLineupOverlay(false)}
+5170-          >
+5171-            <div
+5172-              className="w-full max-w-[980px] max-h-[90vh] bg-[#2a3a2d] border-[6px] border-[#3d5240]
+5173-                         shadow-[8px_8px_0_rgba(0,0,0,0.7)] flex flex-col"
+5174-              onClick={(e) => e.stopPropagation()}
+5175-            >
+5176-              <div className="flex items-center justify-between px-4 py-3 bg-[#3d5240] border-b-[3px] border-[#1a2a1d]">
+5177-                <div>
+5178-                  <div className="text-sm font-bold text-[#E8E8D8]">LINEUP</div>
+5179-                  <div className="text-[9px] text-[#C4A853]">
+5180:                    {lineupOverlayHint ?? 'Manage batting order, bench players, and pitching changes.'}
+5181-                  </div>
+5182-                </div>
+5183-                <button
+5184:                  onClick={() => setShowLineupOverlay(false)}
+5185-                  className="bg-[#556B55] border-[3px] border-[#E8E8D8] px-2 py-1 text-[#E8E8D8] hover:bg-[#6a846a]"
+5186-                  title="Close lineup"
+5187-                >
+5188-                  <X className="w-4 h-4" />
+5189-                </button>
+5190-              </div>
+5191-              <div className="p-4 overflow-y-auto">
+5192-                {!lineupSizeOk && currentLineup.length > 0 && (
+5193-                  <div className="mb-2 px-2 py-1 bg-[#4A2A00] border border-[#FF8800] text-[#FFAA44] text-[10px] font-bold">
+5194-                    LINEUP SIZE: {currentLineup.length} — expected 9 (or 10 with DH)
+--
+5208-          </div>
+5209-        )}
+5210-
+5211:        {/* Play Location Overlay - REMOVED (now using drag-drop interface) */}
+5212-
+5213-        {/* End Game Confirmation — with post-game enrichment prompt (Ticket 5.8) */}
+5214-        {showEndGameConfirmation && !showPostGameEnrichPrompt && (
+5215-          <div
+5216-            className="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center z-50"
+5217-            onClick={() => setShowEndGameConfirmation(false)}
+5218-          >
+5219-            <div
+5220-              className="bg-[#556B55] border-[6px] border-[#4A6844] p-4 w-[340px] shadow-[8px_8px_0px_0px_rgba(0,0,0,0.8)]"
+5221-              onClick={(e) => e.stopPropagation()}
+--
+6270-            autoFocus
+6271-          />
+6272-          <div className="text-[#88AA88] text-[10px] mt-1">
+6273:            💡 Check the broadcast or scoreboard for current count
+6274-          </div>
+6275-        </div>
+6276-
+6277-        {isRequired && (
+6278-          <div className="text-[#FF6666] text-xs mb-3">
+6279-            ⚠️ Cannot proceed without pitch count.
+6280-          </div>
+6281-        )}
+6282-
+6283-        <div className="flex gap-2">
+--- useGameState.ts ---
+97-  stadiumName?: string | null;
+98-}
+99-
+100:export interface ScoreboardState {
+101-  innings: { away: number | undefined; home: number | undefined }[];
+102-  away: { runs: number; hits: number; errors: number };
+103-  home: { runs: number; hits: number; errors: number };
+104-}
+105-
+--
+252-export interface UseGameStateReturn {
+253-  // Game state
+254-  gameState: GameState;
+255:  scoreboard: ScoreboardState;
+256-  playerStats: Map<string, PlayerGameStats>;
+257-  pitcherStats: Map<string, PitcherGameStats>;
+258-
+259-  // Actions
+260-  recordHit: (hitType: HitType, rbi: number, runnerData?: RunnerAdvancement, pitchCount?: number) => Promise<void>;
+--
+321-  // Undo support
+322-  restoreState: (snapshot: {
+323-    gameState: GameState;
+324:    scoreboard: ScoreboardState;
+325-    playerStats?: Map<string, PlayerGameStats>;
+326-    pitcherStats?: Map<string, PitcherGameStats>;
+327-    runnerTrackerState?: {
+328-      runners: RunnerTrackingState['runners'];
+329-      currentPitcherId: string;
+--
+1322-  };
+1323-}
+1324-
+1325:function createEmptyScoreboardState(): ScoreboardState {
+1326-  return {
+1327-    innings: Array(9).fill(null).map(() => ({ away: undefined, home: undefined })),
+1328-    away: { runs: 0, hits: 0, errors: 0 },
+1329-    home: { runs: 0, hits: 0, errors: 0 },
+1330-  };
+--
+1410-    seasonNumber: 1,
+1411-  });
+1412-
+1413:  const [scoreboard, setScoreboard] = useState<ScoreboardState>(createEmptyScoreboardState);
+1414-
+1415-  useEffect(() => {
+1416-    betweenPlayOrdinalRef.current = 0;
+1417-  }, [atBatSequence]);
+1418-
+--
+2024-    teamSideByPlayerIdRef.current.clear();
+2025-    playerNameByIdRef.current.clear();
+2026-    inningPitchesRef.current = { pitches: 0, strikeouts: 0, pitcherId: '' };
+2027:    setScoreboard(createEmptyScoreboardState());
+2028-
+2029-    // Store lineup refs
+2030-    awayLineupRef.current = config.awayLineup;
+2031-    homeLineupRef.current = config.homeLineup;
+2032-    seasonIdRef.current = config.seasonId || '';
+--
+2235-      const preferSnapshot = options?.preferSnapshot ?? true;
+2236-
+2237-      // Primary rehydration path: restore exact in-progress snapshot from currentGame store.
+2238:      // This preserves non-at-bat runner movement + full scoreboard state across refresh.
+2239-      let savedSnapshot = null;
+2240-      if (preferSnapshot) {
+2241-        savedSnapshot = await loadCurrentGame();
+2242-        if (savedSnapshot && (savedSnapshot.gameId !== targetGameId || !inProgressGame)) {
+2243-          try {
+--
+2254-        }
+2255-      }
+2256-      const hasUsableLiveSnapshot = !!(
+2257:        savedSnapshot?.scoreboard ||
+2258-        savedSnapshot?.runnerTrackerSnapshot ||
+2259-        savedSnapshot?.currentPitcherId ||
+2260-        savedSnapshot?.currentBatterId
+2261-      );
+2262-      if (
+--
+2265-        hasUsableLiveSnapshot &&
+2266-        inProgressGame
+2267-      ) {
+2268:        const emptyBoard = createEmptyScoreboardState();
+2269:        const snapshotBoard = savedSnapshot.scoreboard;
+2270:        const normalizedScoreboard: ScoreboardState = {
+2271-          innings: Array.isArray(snapshotBoard?.innings) && snapshotBoard!.innings.length > 0
+2272-            ? snapshotBoard!.innings.map(inn => ({
+2273-                away: inn?.away,
+2274-                home: inn?.home,
+2275-              }))
+--
+2285-            errors: snapshotBoard?.home?.errors ?? 0,
+2286-          },
+2287-        };
+2288:        setScoreboard(normalizedScoreboard);
+2289-
+2290-        if (savedSnapshot.awayLineup?.length) {
+2291-          awayLineupRef.current = savedSnapshot.awayLineup;
+2292-        }
+2293-        if (savedSnapshot.homeLineup?.length) {
+--
+2750-        }
+2751-        setPitcherStats(rehydratedPitcherStats);
+2752-
+2753:        // Rebuild scoreboard from event log so inning-by-inning line score is preserved.
+2754:        const rebuiltInnings: ScoreboardState['innings'] = Array(9).fill(null).map(() => ({
+2755-          away: undefined,
+2756-          home: undefined,
+2757-        }));
+2758-        let awayHits = 0;
+2759-        let homeHits = 0;
+--
+2785-          }
+2786-        }
+2787-
+2788:        setScoreboard({
+2789-          innings: rebuiltInnings,
+2790-          away: {
+2791-            runs: lastEvent?.awayScoreAfter ?? 0,
+2792-            hits: awayHits,
+2793-            errors: awayErrors,
+--
+3011-  }, [gameState.gameId, initialGameId, loadExistingGame]);
+3012-
+3013-  // Keep a live snapshot in currentGame so refresh restores exact state
+3014:  // (including runner identities and full scoreboard, not only at-bat events).
+3015-  useEffect(() => {
+3016-    if (isLoading) return;
+3017-    if (!gameState.gameId || !gameState.awayTeamId || !gameState.homeTeamId) return;
+3018-
+3019-    const playerNameLookup = new Map<string, string>();
+--
+3186-      maxDeficitHome: 0,
+3187-      activityLog: [],
+3188-      currentInningPitches: inningPitchesRef.current,
+3189:      scoreboard: {
+3190:        innings: scoreboard.innings.map(inn => ({ away: inn.away, home: inn.home })),
+3191:        away: { ...scoreboard.away },
+3192:        home: { ...scoreboard.home },
+3193-      },
+3194-      awayBatterIndex,
+3195-      homeBatterIndex,
+3196-      seasonId: seasonIdRef.current || undefined,
+3197-      statsScopeId: statsScopeIdRef.current || seasonIdRef.current || undefined,
+--
+3234-    playerStats,
+3235-    registerIdentityForSide,
+3236-    resolveTeamIdForPlayerId,
+3237:    scoreboard,
+3238-    substitutionLog,
+3239-  ]);
+3240-
+3241-  useEffect(() => {
+3242-    const flushSave = () => {
+--
+3496-      processTrackerScoredEvents(scoredEvents, setPitcherStats, createEmptyPitcherStats);
+3497-    }
+3498-
+3499:    // Update scoreboard
+3500:    setScoreboard(prev => {
+3501-      const teamKey = gameState.isTop ? 'away' : 'home';
+3502-      const inningIdx = gameState.inning - 1;
+3503-      const newInnings = [...prev.innings];
+3504-      const currentInningScore = newInnings[inningIdx]?.[teamKey] || 0;
+3505-      newInnings[inningIdx] = {
+--
+3813-      processTrackerScoredEvents(outScoredEvents, setPitcherStats, createEmptyPitcherStats);
+3814-    }
+3815-
+3816:    // Update scoreboard if runs scored (e.g., sac fly, DP with runner scoring from third)
+3817-    if (runsScored > 0) {
+3818:      setScoreboard(prev => {
+3819-        const teamKey = gameState.isTop ? 'away' : 'home';
+3820-        const inningIdx = gameState.inning - 1;
+3821-        const newInnings = [...prev.innings];
+3822-        const currentInningScore = newInnings[inningIdx]?.[teamKey] || 0;
+3823-        newInnings[inningIdx] = {
+--
+4037-      processTrackerScoredEvents(walkScoredEvents, setPitcherStats, createEmptyPitcherStats);
+4038-    }
+4039-
+4040:    // Update scoreboard - walks do NOT count as hits, only update runs if bases loaded
+4041:    // FIX: This was missing entirely - walks weren't updating the scoreboard at all
+4042-    if (runsScored > 0) {
+4043:      setScoreboard(prev => {
+4044-        const teamKey = gameState.isTop ? 'away' : 'home';
+4045-        const inningIdx = gameState.inning - 1;
+4046-        const newInnings = [...prev.innings];
+4047-        const currentInningScore = newInnings[inningIdx]?.[teamKey] || 0;
+4048-        newInnings[inningIdx] = {
+--
+4351-      processTrackerScoredEvents(errorScoredEvents, setPitcherStats, createEmptyPitcherStats);
+4352-    }
+4353-
+4354:    // Update scoreboard - increment errors for fielding team
+4355:    setScoreboard(prev => {
+4356-      const teamKey = gameState.isTop ? 'away' : 'home';
+4357-      const inningIdx = gameState.inning - 1;
+4358-      const newInnings = [...prev.innings];
+4359-      const currentInningScore = newInnings[inningIdx]?.[teamKey] || 0;
+4360-      newInnings[inningIdx] = {
+--
+4877-  }, [persistBetweenPlayEvent]);
+4878-
+4879-  const advanceRunner = useCallback((from: 'first' | 'second' | 'third', to: 'second' | 'third' | 'home', outcome: 'safe' | 'out') => {
+4880:    // Calculate score change first so we can update both game state and scoreboard
+4881-    const runsScored = (outcome === 'safe' && to === 'home') ? 1 : 0;
+4882-
+4883-    // CRIT-02: Update runner tracker for individual runner advancement (WP, PB, SB, etc.)
+4884-    let advTracker = syncTrackerPitcher(runnerTrackerRef.current, gameState.currentPitcherId, gameState.currentPitcherName);
+4885-    const runnerId = findRunnerOnBase(advTracker, from);
+--
+4924-      };
+4925-    });
+4926-
+4927:    // Update scoreboard inning scores if a run scored (fixes WP/PB runs not showing in line score)
+4928-    if (runsScored > 0) {
+4929:      setScoreboard(prev => {
+4930-        const teamKey = gameState.isTop ? 'away' : 'home';
+4931-        const inningIdx = gameState.inning - 1;
+4932-        const newInnings = [...prev.innings];
+4933-        const currentInningScore = newInnings[inningIdx]?.[teamKey] || 0;
+4934-        newInnings[inningIdx] = {
+--
+4972-
+4973-    console.log('[advanceRunnersBatch] Processing movements:', movements);
+4974-
+4975:    // Calculate runs scored first so we can update scoreboard
+4976-    const runsScored = movements.filter(m => m.outcome === 'safe' && m.to === 'home').length;
+4977-
+4978-    // CRIT-02: Update runner tracker for batch movements (SB, WP, PB, etc.)
+4979-    let batchTracker = syncTrackerPitcher(runnerTrackerRef.current, gameState.currentPitcherId, gameState.currentPitcherName);
+4980-    const batchScoredEvents: RunnerScoredEvent[] = [];
+--
+5042-      };
+5043-    });
+5044-
+5045:    // Update scoreboard inning scores if runs scored (fixes WP/PB runs not showing in line score)
+5046-    if (runsScored > 0) {
+5047:      setScoreboard(prev => {
+5048-        const teamKey = gameState.isTop ? 'away' : 'home';
+5049-        const inningIdx = gameState.inning - 1;
+5050-        const newInnings = [...prev.innings];
+5051-        const currentInningScore = newInnings[inningIdx]?.[teamKey] || 0;
+5052-        newInnings[inningIdx] = {
+--
+5579-
+5580-    // Ensure each completed half-inning is represented in line score, even if scoreless.
+5581-    // Without this, scoreless innings can remain undefined in GameTracker and archived inningScores.
+5582:    setScoreboard(prev => {
+5583-      const inningsCopy = [...prev.innings];
+5584-      while (inningsCopy.length <= inningIdx) {
+5585-        inningsCopy.push({ away: undefined, home: undefined });
+5586-      }
+5587-      const currentInning = inningsCopy[inningIdx] || { away: undefined, home: undefined };
+--
+5991-    // T1-08: Only archive if not already done by endGame() — the archive is idempotent
+5992-    // but skipping avoids unnecessary IndexedDB writes
+5993-    if (!alreadyAggregated) {
+5994:      const inningScores = scoreboard.innings.map(inn => ({
+5995-        away: inn.away ?? 0,
+5996-        home: inn.home ?? 0,
+5997-      }));
+5998-      await archiveCompletedGame(
+5999-        persistedState,
+--
+6030-    registerIdentityForSide,
+6031-    resolveTeamIdForPlayerId,
+6032-    resolveTeamSideForPlayerId,
+6033:    scoreboard,
+6034-  ]);
+6035-
+6036-  const endGame = useCallback(async (options?: EndGameOptions) => {
+6037-    // Archive game FIRST so PostGameSummary can load it (EXH-011 fix)
+6038-    // Build persisted state for archiving — include player name and team
+--
+6203-    };
+6204-
+6205-    // Archive game for post-game summary
+6206:    const inningScores = scoreboard.innings.map(inn => ({
+6207-      away: inn.away ?? 0,
+6208-      home: inn.home ?? 0,
+6209-    }));
+6210-    await archiveCompletedGame(
+6211-      persistedState,
+--
+6255-    playerStats,
+6256-    registerIdentityForSide,
+6257-    resolveTeamIdForPlayerId,
+6258:    scoreboard,
+6259-  ]);
+6260-
+6261-  // Snapshot runner tracker for undo system (Maps don't survive JSON.stringify)
+6262-  // Converts pitcherStats Map to serializable entries array
+6263-  const getRunnerTrackerSnapshot = useCallback(() => {
+--
+6310-  // Runner tracker undo fix: Also restores runnerTrackerRef for correct ER attribution
+6311-  const restoreState = useCallback((snapshot: {
+6312-    gameState: GameState;
+6313:    scoreboard: ScoreboardState;
+6314-    playerStats?: Map<string, PlayerGameStats>;
+6315-    pitcherStats?: Map<string, PitcherGameStats>;
+6316-    runnerTrackerState?: {
+6317-      runners: RunnerTrackingState['runners'];
+6318-      currentPitcherId: string;
+--
+6324-  }) => {
+6325-    console.log('[useGameState] Restoring state from snapshot');
+6326-    setGameState(snapshot.gameState);
+6327:    setScoreboard(snapshot.scoreboard);
+6328-    if (snapshot.playerStats) {
+6329-      setPlayerStats(snapshot.playerStats);
+6330-    }
+6331-    if (snapshot.pitcherStats) {
+6332-      setPitcherStats(snapshot.pitcherStats);
+--
+6356-
+6357-  return {
+6358-    gameState,
+6359:    scoreboard,
+6360-    playerStats,
+6361-    pitcherStats,
+6362-    recordHit,
+6363-    recordOut,
+6364-    recordWalk,

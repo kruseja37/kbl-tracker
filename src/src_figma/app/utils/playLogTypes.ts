@@ -24,6 +24,24 @@ export type PlayLogEditorType =
   | 'lineup_pitching'
   | 'context_modifiers';
 
+export type RunnerBase = 'first' | 'second' | 'third';
+export type RunnerDestination = 'first' | 'second' | 'third' | 'home' | 'out';
+
+export interface RunnerSubEntry {
+  id: string;
+  parentEventId: string;
+  runnerId: string;
+  runnerName: string;
+  fromBase: RunnerBase;
+  toBase: RunnerDestination;
+  isEnrichable: boolean;
+  // Enrichment fields (UX-050)
+  fieldingSequence?: number[];
+  playMechanic?: string;
+  isTootblan?: boolean;
+  isOutAdvancing?: boolean;
+}
+
 export interface PlayLogEntry {
   id: string;
   eventId?: string;
@@ -47,4 +65,5 @@ export interface PlayLogEntry {
   isQAB: boolean;
   fieldingSequence?: string;
   timestamp: number;
+  runnerSubEntries?: RunnerSubEntry[];
 }

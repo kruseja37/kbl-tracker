@@ -93,6 +93,20 @@ describe('gameTrackerPlayLog', () => {
     expect(entry.runsScored).toBe(1);
   });
 
+  test('adds an OA suffix when the batter was out advancing on a hit', () => {
+    const [entry] = buildPlayLogEntries([
+      createAtBatEvent({
+        result: '2B' as AtBatEvent['result'],
+        enrichment: {
+          batterOutAdvancing: true,
+        },
+      }),
+    ], []);
+
+    expect(entry.result).toBe('2B OA');
+    expect(entry.resultCategory).toBe('hit');
+  });
+
   test('maps between-play runner events into default-visible play log rows', () => {
     const entry = mapBetweenPlayEventToPlayLogEntry(createBetweenPlayEvent());
 

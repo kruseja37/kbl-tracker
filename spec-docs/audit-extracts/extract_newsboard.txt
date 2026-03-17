@@ -1,0 +1,393 @@
+5-import { HTML5Backend } from "react-dnd-html5-backend";
+6-import { RunnerPopover, type RunnerBase } from "@/app/components/RunnerPopover";
+7-import { FielderPopover, type FielderInfo, type BenchPlayerInfo } from "@/app/components/FielderPopover";
+8:import { LineupCard, type SubstitutionData, type LineupPlayer, type BenchPlayer, type BullpenPitcher } from "@/app/components/LineupCard";
+9-import { UndoButton, useUndoSystem, type GameSnapshot } from "@/app/components/UndoSystem";
+10-import { TeamRoster, type Player, type Pitcher } from "@/app/components/TeamRoster";
+11-import { FenwayBoard } from "@/app/components/FenwayBoard";
+12-import { FullFenwayScoreboard } from "@/app/components/FullFenwayScoreboard";
+13-import { QuickBar } from "@/app/components/QuickBar";
+14-import { PlayLogPanel } from "@/app/components/PlayLogPanel";
+15-import { EnrichmentPanel, PITCH_TYPES, type AtBatModifierValue, type EnrichmentUpdate } from "@/app/components/EnrichmentPanel";
+16-import { RunnerOutcomesDisplay } from "@/app/components/RunnerOutcomesDisplay";
+17-import { HistoricalEventEditor } from "@/app/components/HistoricalEventEditor";
+18-import { LiveRunnerAttributionPanel } from "@/app/components/LiveRunnerAttributionPanel";
+--
+25-  getFieldingEventsForAtBat,
+26-  getGameEvents,
+27-  getGameHeader,
+28:  getMatchupEvents,
+29-  logFieldingEvent,
+30-  updateAtBatEvent,
+31-  updateAtBatEventWithFieldingSync,
+32-  updateBetweenPlayEvent,
+33-  type AtBatEvent,
+34-  type BetweenPlayEvent,
+35-  type FieldingEvent,
+36-  type GameHeader,
+37-} from "../../../utils/eventLog";
+38-import { getTeamColors, getFielderBorderColors } from "@/config/teamColors";
+--
+43-import { type PlayData, type SpecialEventData } from "../utils/gameTrackerFieldTypes";
+44-import { areRivals } from '../../../data/leagueStructure';
+45-import { getParkNames } from "../../../data/parkLookup";
+46:import { useGameState, type GameLineupSnapshot, type HitType, type OutType, type WalkType, type RunnerAdvancement, type PlayerGameStats, type PitcherGameStats, type PlateAppearanceAction } from "@/hooks/useGameState";
+47-import { usePlayerState, type PlayerStateData, getStateBadge, formatMultiplier } from "@/app/hooks/usePlayerState";
+48-
+49-const ordinalSuffix = (num: number) => {
+50-  if (num % 100 >= 11 && num % 100 <= 13) return "th";
+51-  switch (num % 10) {
+52-    case 1:
+53-      return "st";
+54-    case 2:
+55-      return "nd";
+56-    case 3:
+--
+96-import { calculateRunnerDefaults, type RunnerDefaults } from '../components/runnerDefaults';
+97-import type { PlayLogEntry } from '../utils/playLogTypes';
+98-import { buildPlayLogEntries } from '../utils/gameTrackerPlayLog';
+99:import { reconcileTeamPitchersWithLineupSnapshot, reconcileTeamPlayersWithLineupSnapshot } from '../utils/gameTrackerRosterSync';
+100-import {
+101-  mapFieldingPlayTypeToPlayDifficulty,
+102-  type FieldingPlayTypeValue,
+103-} from '../utils/fieldingPlayType';
+104-import {
+105:  buildFenwayMatchupSummary,
+106-  formatFenwayMilestoneAlert,
+107:  pickFenwayMilestoneWatches,
+108-} from '../utils/fenwayBoardContext';
+109-import {
+110-  applyRunnerDefaultsToNames,
+111-  buildRunnerCorrectionForQuickBarOutcome,
+112-  countRbiFromDefaults,
+113-  getBatterDestinationOptions,
+114-  runnerDefaultsToAdvancement,
+115-  type PendingRunnerCorrectionAction,
+116-} from '../utils/gameTrackerRunnerCorrection';
+117-import type { FielderCredit } from "../components/modals/FielderCreditModal";
+--
+669-  const [pendingManualSpecialPrompt, setPendingManualSpecialPrompt] = useState<PendingManualSpecialPrompt | null>(null);
+670-  const [showManagerMomentPanel, setShowManagerMomentPanel] = useState(false);
+671-  const [fenwayContext, setFenwayContext] = useState<{
+672:    matchupRecord?: string;
+673:    matchupAvg?: string;
+674:    historicalMatchupRecord?: string;
+675:    historicalMatchupAvg?: string;
+676-    milestoneAlerts: string[];
+677-  }>({ milestoneAlerts: [] });
+678-
+679-  // D-4: HR inline prompt state (distance + pitch type before recording)
+680-  const [hrPrompt, setHrPrompt] = useState<{
+681-    rbi: number;
+682-    runnerAdv: RunnerAdvancement | undefined;
+683-    defaults: RunnerDefaults;
+684-    distance: string;
+685-    pitchType: string;
+--
+974-    return new Map(entries);
+975-  }, [awayTeamPitchers, awayTeamPlayers, getRosterEntityId, homeTeamPitchers, homeTeamPlayers]);
+976-
+977:  const syncDisplayedRostersToLineupSnapshot = useCallback((snapshot?: GameLineupSnapshot) => {
+978-    const lineupSnapshot = snapshot || getLineupStateSnapshot();
+979-    setAwayTeamPlayers((previous) =>
+980-      reconcileTeamPlayersWithLineupSnapshot(previous, lineupSnapshot.away, 'away', getRosterEntityId)
+981-    );
+982-    setHomeTeamPlayers((previous) =>
+983-      reconcileTeamPlayersWithLineupSnapshot(previous, lineupSnapshot.home, 'home', getRosterEntityId)
+984-    );
+985-    setAwayTeamPitchers((previous) =>
+986:      reconcileTeamPitchersWithLineupSnapshot(previous, awayTeamPlayers, lineupSnapshot.away, 'away', getRosterEntityId)
+987-    );
+988-    setHomeTeamPitchers((previous) =>
+989:      reconcileTeamPitchersWithLineupSnapshot(previous, homeTeamPlayers, lineupSnapshot.home, 'home', getRosterEntityId)
+990-    );
+991-  }, [awayTeamPlayers, getLineupStateSnapshot, getRosterEntityId, homeTeamPlayers]);
+992-
+993-  const resolveRosterNameByGameId = useCallback((playerId?: string): string | undefined => {
+994-    if (!playerId) return undefined;
+995-    return rosterNameById.get(playerId);
+996-  }, [rosterNameById]);
+997-
+998-  const resolveRosterTeamSide = useCallback((playerId?: string, playerName?: string): 'away' | 'home' | null => {
+999-    if (!playerId && !playerName) return null;
+--
+1160-  // GAP-GT-7-B: Lineup size validation — warn if lineup is not exactly 9 (or 10 with DH)
+1161-  const lineupSizeOk = currentLineup.length >= 9 && currentLineup.length <= 10;
+1162-  if (!lineupSizeOk && currentLineup.length > 0) {
+1163:    console.warn(`[GameTracker] Lineup size ${currentLineup.length} — expected 9 or 10 (with DH)`);
+1164-  }
+1165-
+1166-  // GAP-GT-7-D: Include isOutOfGame players — they display with ❌ so user can see who was used
+1167-  const benchPlayers = battingTeamPlayersRaw
+1168-    .filter(p => p.battingOrder === undefined)
+1169-    .map(p => ({
+1170-      name: p.name,
+1171-      pos: p.position || 'UT',
+1172-      hand: p.battingHand,
+1173-      avg: '.000',
+--
+1511-      return fallbackAlignment;
+1512-    }
+1513-
+1514:    const toSlots = (players: NonNullable<GameHeader['startingLineups']>['away']): HistoricalLineupSlot[] =>
+1515-      players
+1516-        .slice()
+1517-        .sort((a, b) => a.battingOrder - b.battingOrder)
+1518-        .map((player) => ({
+1519-          playerId: player.playerId,
+1520-          playerName: player.playerName,
+1521-          position: player.position as Position,
+1522-        }));
+1523-
+1524-    let awayLineup = toSlots(header.startingLineups.away);
+--
+1688-    };
+1689-  }, []);
+1690-
+1691:  // Initialize game with lineup data on mount
+1692-  // FIX: BUG-007 - Try loading existing game first, only create new if none found
+1693-  // This ensures each batter has a unique ID and stats are tracked separately
+1694-  const initInProgressRef = useRef(false);
+1695-  useEffect(() => {
+1696-    if (gameInitialized || initInProgressRef.current) return;
+1697-    initInProgressRef.current = true;
+1698-    let cancelled = false;
+1699-
+1700-    const initializeOrLoadGame = async () => {
+1701-      try {
+--
+1753-            positions: [p.position || 'DH'].filter(Boolean),
+1754-          }));
+1755-
+1756:        console.log('[GameTracker] Initializing game with lineups:', {
+1757-          away: awayLineup.map(p => p.playerName),
+1758-          home: homeLineup.map(p => p.playerName),
+1759-          awayBench: awayBench.map(p => p.playerName),
+1760-          homeBench: homeBench.map(p => p.playerName),
+1761-        });
+1762-
+1763-        await initializeGame({
+1764-          gameId: gameId || `game-${Date.now()}`,
+1765-          seasonId: competitionType === 'elimination'
+1766-            ? undefined
+--
+1821-      cancelled = true;
+1822-      initInProgressRef.current = false;
+1823-    };
+1824:  }, [competitionId, competitionType, gameId, gameInitialized, getRosterEntityId, homePitcher, homeTeamId, homeTeamName, homeTeamPlayers, initializeGame, loadExistingGame, navigationState?.franchiseId, navigationState?.seasonNumber, navigationState?.totalInnings, selectedStadium, statsScopeId, syncDisplayedRostersToLineupSnapshot, awayPitcher, awayTeamId, awayTeamName, awayTeamPlayers]);
+1825-
+1826-  // EXH-036: Register players with playerStateHook for mojo/fitness tracking
+1827-  // This runs once after game is initialized to set up all players with default states
+1828-  useEffect(() => {
+1829-    if (!gameInitialized) return;
+1830-    let cancelled = false;
+1831-
+1832-    const registerPlayersWithSnapshots = async () => {
+1833-      // Load mojo/fitness from snapshots for elimination games (inter-game persistence per §8)
+1834-      let mojoFitnessMap: Map<string, { mojoLevel: MojoLevel; fitnessState: FitnessState }> | null = null;
+--
+1988-    ).then(() => queuePlayLogRefresh(0));
+1989-  }, [getPlayerIdFromName, playerStateHook, queuePlayLogRefresh, recordPlayerStateChange]);
+1990-
+1991:  // Get current batter's lineup position
+1992-  const battingTeamPlayers = gameState.isTop ? awayTeamPlayers : homeTeamPlayers;
+1993-  const pitchingTeamPlayers = gameState.isTop ? homeTeamPlayers : awayTeamPlayers;
+1994-  const currentBatterData = battingTeamPlayers.find(
+1995-    p => (p.battingOrder && p.name === resolvedCurrentBatterName) || getRosterIdFromName(p.name, battingTeam) === gameState.currentBatterId
+1996-  );
+1997-  const currentBatterPosition = currentBatterData?.battingOrder || 1;
+1998-  const currentBatterPositionStr = currentBatterPosition.toString();
+1999-  const atBatDigit1 = currentBatterPositionStr.length > 1 ? currentBatterPositionStr[0] : '';
+2000-  const atBatDigit2 = currentBatterPositionStr.length > 1 ? currentBatterPositionStr[1] : currentBatterPositionStr[0];
+2001-
+--
+2039-        const seasonId = navigationState?.seasonId;
+2040-        const [
+2041-          currentGameEvents,
+2042:          historicalMatchupEvents,
+2043-          batterCareer,
+2044-          pitcherCareer,
+2045-          seasonBattingRows,
+2046-          seasonPitchingRows,
+2047-        ] = await Promise.all([
+2048-          getGameEvents(gameState.gameId),
+2049:          getMatchupEvents(gameState.currentBatterId, gameState.currentPitcherId, { excludeGameId: gameState.gameId }),
+2050-          getCareerStats(gameState.currentBatterId),
+2051-          getCareerStats(gameState.currentPitcherId),
+2052-          seasonId ? getSeasonBattingStats(seasonId) : Promise.resolve([]),
+2053-          seasonId ? getSeasonPitchingStats(seasonId) : Promise.resolve([]),
+2054-        ]);
+2055-
+2056-        if (cancelled) {
+2057-          return;
+2058-        }
+2059-
+2060:        const currentMatchup = buildFenwayMatchupSummary(
+2061-          currentGameEvents,
+2062-          gameState.currentBatterId,
+2063-          gameState.currentPitcherId,
+2064-        );
+2065:        const historicalMatchup = buildFenwayMatchupSummary(
+2066:          historicalMatchupEvents,
+2067-          gameState.currentBatterId,
+2068-          gameState.currentPitcherId,
+2069-        );
+2070-
+2071-        const batterSeason = seasonId
+2072-          ? seasonBattingRows.find((row) => row.playerId === gameState.currentBatterId) || null
+2073-          : null;
+2074-        const pitcherSeason = seasonId
+2075-          ? seasonPitchingRows.find((row) => row.playerId === gameState.currentPitcherId) || null
+2076-          : null;
+--
+2089-          mergeSeasonPitchingWithGameStats(pitcherSeason, currentPitcherStats),
+2090-          new Set<string>(),
+2091-        );
+2092:        const selectedWatches = pickFenwayMilestoneWatches(
+2093-          [...batterWatches, ...pitcherWatches],
+2094-          gameState.currentBatterId,
+2095-          2,
+2096-        );
+2097-        const multiplePlayers = new Set(selectedWatches.map((watch) => watch.playerId)).size > 1;
+2098-
+2099-        setFenwayContext({
+2100:          matchupRecord: currentMatchup.matchupRecord,
+2101:          matchupAvg: currentMatchup.matchupAvg,
+2102:          historicalMatchupRecord: historicalMatchup.matchupRecord,
+2103:          historicalMatchupAvg: historicalMatchup.matchupAvg,
+2104:          milestoneAlerts: selectedWatches.map((watch) =>
+2105-            formatFenwayMilestoneAlert(
+2106-              watch,
+2107-              multiplePlayers || watch.playerId !== gameState.currentBatterId,
+2108-            )
+2109-          ),
+2110-        });
+2111-      } catch (error) {
+2112-        console.warn('[GameTracker] Failed to build Fenway board context:', error);
+2113-        if (!cancelled) {
+2114-          setFenwayContext({
+2115:            matchupRecord: undefined,
+2116:            matchupAvg: undefined,
+2117:            historicalMatchupRecord: undefined,
+2118:            historicalMatchupAvg: undefined,
+2119-            milestoneAlerts: [],
+2120-          });
+2121-        }
+2122-      }
+2123-    };
+2124-
+2125-    void loadFenwayContext();
+2126-
+2127-    return () => {
+2128-      cancelled = true;
+--
+2465-    } finally {
+2466-      setSelectedBetweenPlayEventSaving(false);
+2467-    }
+2468:  }, [loadExistingGame, queuePlayLogRefresh, syncDisplayedRostersToLineupSnapshot]);
+2469-
+2470-  const applyHistoricalContextEdit = useCallback(async (
+2471-    nextEvent: BetweenPlayEvent,
+2472-    updates: Partial<BetweenPlayEvent>,
+2473-    errorLabel: string,
+2474-  ) => {
+2475-    setSelectedBetweenPlayEventSaving(true);
+2476-    try {
+2477-      await updateBetweenPlayEvent(nextEvent.eventId, updates);
+2478-      if (nextEvent.playerStateChange?.stateType === 'mojo') {
+--
+3885-      // Use existing handlePitcherSubstitution with the first available pitcher
+3886-      // In future, could open a pitcher picker modal. For now, log the intent.
+3887-      console.log('[GameTracker] Pitcher tap — available pitchers:', availablePitchers.map(p => p.name).join(', '));
+3888:      // Open a simple pitcher picker by triggering the lineup card's bullpen section
+3889-      // For now, trigger the change with the first available pitcher
+3890-      handlePitcherSubstitution(fieldingTeam, firstAvailable.name, resolvedCurrentPitcherName, 'pitcher');
+3891-    }
+3892-  }, [availablePitchers, fieldingTeam, handlePitcherSubstitution, resolvedCurrentPitcherName]);
+3893-
+3894-  const handleBatterTap = useCallback(() => {
+3895-    openPlayerCard(resolvedCurrentBatterName, battingTeam, 'batter');
+3896-  }, [battingTeam, openPlayerCard, resolvedCurrentBatterName]);
+3897-
+3898-  // Bench players for fielder popover (fielding team bench)
+--
+4277-          const homeWon = gameState.homeScore > gameState.awayScore;
+4278-          const homeRunDiff = gameState.homeScore - gameState.awayScore;
+4279-          const isBlowout = Math.abs(homeRunDiff) >= 7;
+4280:          const isRivalMatchup = areRivals(leagueId, homeTeamId, awayTeamId);
+4281-
+4282-          // Check for special game results from pitcher stats
+4283-          let isNoHitter = false;
+4284-          let isShutout = false;
+4285-          for (const [, pStats] of pitcherStats.entries()) {
+4286-            if (pStats.isStarter && pStats.outsRecorded >= 27) {
+4287-              if (pStats.hitsAllowed === 0 && pStats.runsAllowed === 0) isNoHitter = true;
+4288-              if (pStats.runsAllowed === 0) isShutout = true;
+4289-            }
+4290-          }
+--
+4300-            isNoHitter: isNoHitter && homeWon, // Only counts for the winning side
+4301-            isShutout: isShutout && homeWon,
+4302-            isBlowout,
+4303:            vsRival: isRivalMatchup,
+4304-            runDifferential: homeRunDiff,
+4305-            playerPerformances: [],
+4306-          };
+4307:          homeFanMorale.processGameResult(homeResult, { season: 1, game: 1 }, isRivalMatchup ? awayTeamName : undefined);
+4308-
+4309-          // Away team perspective (opposite won/runDiff, mirrored no-hitter/shutout)
+4310-          const awayResult: FanMoraleGameResult = {
+4311-            gameId: gameId || 'demo-game',
+4312-            won: !homeWon,
+4313-            isWalkOff, // MAJ-14: Same walk-off flag (away team experienced it too)
+4314-            isNoHitter: isNoHitter && !homeWon,
+4315-            isShutout: isShutout && !homeWon,
+4316-            isBlowout,
+4317:            vsRival: isRivalMatchup,
+4318-            runDifferential: -homeRunDiff,
+4319-            playerPerformances: [],
+4320-          };
+4321:          awayFanMorale.processGameResult(awayResult, { season: 1, game: 1 }, isRivalMatchup ? homeTeamName : undefined);
+4322-
+4323-          console.log(`[MAJ-02] Fan morale updated (both teams) — homeWon: ${homeWon}, diff: ${homeRunDiff}, shutout: ${isShutout}`);
+4324-        } catch (moraleError) {
+4325-          console.warn('[MAJ-02] Fan morale update error (non-blocking):', moraleError);
+4326-        }
+4327-      }
+4328-
+4329-      // MAJ-04: Generate game recap narratives (dual perspective)
+4330-      let gameNarrative = null;
+4331-      let awayNarrative = null;
+--
+4347-          opponentScore: gameState.homeScore,
+4348-          isShutout: gameState.homeScore === 0 && !homeWonForNarrative,
+4349-        });
+4350:        console.log(`[MAJ-04] Dual narratives: Home "${gameNarrative.headline}", Away "${awayNarrative.headline}"`);
+4351-      } catch (narrativeError) {
+4352-        console.warn('[MAJ-04] Narrative generation error (non-blocking):', narrativeError);
+4353-      }
+4354-
+4355-      // mWAR: Persist decisions and aggregate to season
+4356-      try {
+4357-        if (mwarHook.gameStats && mwarHook.gameStats.decisions.length > 0) {
+4358-          await saveGameDecisions(mwarHook.gameStats.decisions);
+4359-          // Aggregate to season with default team stats (actual record comes from season data)
+4360-          await aggregateManagerGameToSeason(
+--
+4716-              const pitcher = gameState.isTop ? homePitcher : awayPitcher;
+4717-              return pitcher?.throwingHand;
+4718-            })()}
+4719:            matchupRecord={fenwayContext.matchupRecord}
+4720:            matchupAvg={fenwayContext.matchupAvg}
+4721:            historicalMatchupRecord={fenwayContext.historicalMatchupRecord}
+4722:            historicalMatchupAvg={fenwayContext.historicalMatchupAvg}
+4723-            milestoneAlerts={fenwayContext.milestoneAlerts}
+4724-            showScoreboard={false}
+4725-            onBatterTap={handleBatterTap}
+4726-            onPitcherTap={availablePitchers.length > 0 ? handlePitcherTap : undefined}
+4727-          />
+4728-        </div>
+4729-
+4730-        {/* ZONE 2: Diamond — center (D-9: scoreboard moved to FenwayBoard left panel) */}
+4731-        <div
+4732-          style={{ gridColumn: '2', gridRow: '1' }}

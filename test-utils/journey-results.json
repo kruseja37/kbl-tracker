@@ -65,87 +65,142 @@
   },
   "suites": [
     {
-      "title": "00-preflight.spec.ts",
-      "file": "00-preflight.spec.ts",
+      "title": "07-league-builder-smb4-seed.spec.ts",
+      "file": "07-league-builder-smb4-seed.spec.ts",
       "column": 0,
       "line": 0,
-      "specs": [
+      "specs": [],
+      "suites": [
         {
-          "title": "preflight: app loads and renders home page",
-          "ok": true,
-          "tags": [],
-          "tests": [
+          "title": "Journey 7: SMB4 Data Import",
+          "file": "07-league-builder-smb4-seed.spec.ts",
+          "line": 35,
+          "column": 6,
+          "specs": [
             {
-              "timeout": 30000,
-              "annotations": [],
-              "expectedStatus": "passed",
-              "projectId": "",
-              "projectName": "",
-              "results": [
+              "title": "7a: Import SMB4 data and verify teams on Teams page",
+              "ok": true,
+              "tags": [],
+              "tests": [
                 {
-                  "workerIndex": 0,
-                  "parallelIndex": 0,
-                  "status": "passed",
-                  "duration": 3781,
-                  "errors": [],
-                  "stdout": [],
-                  "stderr": [],
-                  "retry": 0,
-                  "startTime": "2026-02-09T22:37:57.462Z",
+                  "timeout": 30000,
                   "annotations": [],
-                  "attachments": []
+                  "expectedStatus": "passed",
+                  "projectId": "",
+                  "projectName": "",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 5883,
+                      "errors": [],
+                      "stdout": [
+                        {
+                          "text": "Found 20 of 20 SMB4 teams on Teams page\n"
+                        }
+                      ],
+                      "stderr": [
+                        {
+                          "text": "(node:3767) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.\n(Use `node --trace-warnings ...` to show where the warning was created)\n"
+                        }
+                      ],
+                      "retry": 0,
+                      "startTime": "2026-03-12T17:51:00.057Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
                 }
               ],
-              "status": "expected"
-            }
-          ],
-          "id": "ef908f15a1d2ae0994e2-b592fbe9d55806e43e46",
-          "file": "00-preflight.spec.ts",
-          "line": 3,
-          "column": 1
-        },
-        {
-          "title": "preflight: can navigate to franchise setup",
-          "ok": true,
-          "tags": [],
-          "tests": [
+              "id": "ef16aa7f48f1f3b6386c-23aff63b2ff203ec248d",
+              "file": "07-league-builder-smb4-seed.spec.ts",
+              "line": 48,
+              "column": 3
+            },
             {
-              "timeout": 30000,
-              "annotations": [],
-              "expectedStatus": "passed",
-              "projectId": "",
-              "projectName": "",
-              "results": [
+              "title": "7b: Import SMB4 data and verify players on Players page",
+              "ok": true,
+              "tags": [],
+              "tests": [
                 {
-                  "workerIndex": 0,
-                  "parallelIndex": 0,
-                  "status": "passed",
-                  "duration": 1543,
-                  "errors": [],
-                  "stdout": [],
-                  "stderr": [],
-                  "retry": 0,
-                  "startTime": "2026-02-09T22:38:03.178Z",
+                  "timeout": 30000,
                   "annotations": [],
-                  "attachments": []
+                  "expectedStatus": "passed",
+                  "projectId": "",
+                  "projectName": "",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 5872,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-03-12T17:51:06.648Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
                 }
               ],
-              "status": "expected"
+              "id": "ef16aa7f48f1f3b6386c-d6046225c6240dadfc95",
+              "file": "07-league-builder-smb4-seed.spec.ts",
+              "line": 99,
+              "column": 3
+            },
+            {
+              "title": "7c: Verify IndexedDB has team and player records after import",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "",
+                  "projectName": "",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 3061,
+                      "errors": [],
+                      "stdout": [
+                        {
+                          "text": "IndexedDB counts after import: 20 teams, 506 players, dbExists: true\n"
+                        }
+                      ],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-03-12T17:51:12.528Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "ef16aa7f48f1f3b6386c-c7046d4683792095490f",
+              "file": "07-league-builder-smb4-seed.spec.ts",
+              "line": 115,
+              "column": 3
             }
-          ],
-          "id": "ef908f15a1d2ae0994e2-2bf81e1ded5f4695ce9e",
-          "file": "00-preflight.spec.ts",
-          "line": 19,
-          "column": 1
+          ]
         }
       ]
     }
   ],
   "errors": [],
   "stats": {
-    "startTime": "2026-02-09T22:37:55.966Z",
-    "duration": 8810.431999999999,
-    "expected": 2,
+    "startTime": "2026-03-12T17:50:59.352Z",
+    "duration": 16280.166000000001,
+    "expected": 3,
     "skipped": 0,
     "unexpected": 0,
     "flaky": 0

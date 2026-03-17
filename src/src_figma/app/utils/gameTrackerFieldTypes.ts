@@ -61,6 +61,7 @@ export type SpecialEventType =
   | 'KILLED_PITCHER'
   | 'NUT_SHOT'
   | 'BEAT_THROW'
+  | 'BEAT_RUNNER'
   | 'BUNT'
   | 'STRIKEOUT'
   | 'STRIKEOUT_LOOKING'

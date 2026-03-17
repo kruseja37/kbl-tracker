@@ -1,0 +1,2027 @@
+5-import { HTML5Backend } from "react-dnd-html5-backend";
+6-import { RunnerPopover, type RunnerBase } from "@/app/components/RunnerPopover";
+7-import { FielderPopover, type FielderInfo, type BenchPlayerInfo } from "@/app/components/FielderPopover";
+8:import { LineupCard, type SubstitutionData, type LineupPlayer, type BenchPlayer, type BullpenPitcher } from "@/app/components/LineupCard";
+9-import { UndoButton, useUndoSystem, type GameSnapshot } from "@/app/components/UndoSystem";
+10-import { TeamRoster, type Player, type Pitcher } from "@/app/components/TeamRoster";
+11-import { FenwayBoard } from "@/app/components/FenwayBoard";
+12-import { FullFenwayScoreboard } from "@/app/components/FullFenwayScoreboard";
+13-import { QuickBar } from "@/app/components/QuickBar";
+14-import { PlayLogPanel } from "@/app/components/PlayLogPanel";
+15-import { EnrichmentPanel, PITCH_TYPES, type AtBatModifierValue, type EnrichmentUpdate } from "@/app/components/EnrichmentPanel";
+16-import { RunnerOutcomesDisplay } from "@/app/components/RunnerOutcomesDisplay";
+17-import { HistoricalEventEditor } from "@/app/components/HistoricalEventEditor";
+18-import { LiveRunnerAttributionPanel } from "@/app/components/LiveRunnerAttributionPanel";
+--
+35-  type FieldingEvent,
+36-  type GameHeader,
+37-} from "../../../utils/eventLog";
+38:import { getTeamColors, getFielderBorderColors } from "@/config/teamColors";
+39-import { buildFallbackRuntimePlayerId, getRuntimeRosterEntityId } from "../utils/runtimePlayerIdentity";
+40-import {
+41-  normalizeSpecialEventType,
+42-} from "../utils/gameTrackerEventDispatch";
+43-import { type PlayData, type SpecialEventData } from "../utils/gameTrackerFieldTypes";
+44-import { areRivals } from '../../../data/leagueStructure';
+45-import { getParkNames } from "../../../data/parkLookup";
+46:import { useGameState, type GameLineupSnapshot, type HitType, type OutType, type WalkType, type RunnerAdvancement, type PlayerGameStats, type PitcherGameStats, type PlateAppearanceAction } from "@/hooks/useGameState";
+47-import { usePlayerState, type PlayerStateData, getStateBadge, formatMultiplier } from "@/app/hooks/usePlayerState";
+48-
+49-const ordinalSuffix = (num: number) => {
+50-  if (num % 100 >= 11 && num % 100 <= 13) return "th";
+51-  switch (num % 10) {
+52-    case 1:
+53-      return "st";
+54-    case 2:
+55-      return "nd";
+56-    case 3:
+--
+64-  const half = isTop ? "Top" : "Bottom";
+65-  return `${half} ${inning}${ordinalSuffix(inning)}`;
+66-};
+67:// EXH-036: Import Mojo/Fitness types for PlayerCardModal editing
+68-import type { MojoLevel } from "../../../engines/mojoEngine";
+69-import { clampMojo } from "../../../engines/mojoEngine";
+70-import type { FitnessState } from "../../../engines/fitnessEngine";
+71-import { MOJO_STATES, getMojoColor } from "../../../engines/mojoEngine";
+72-import { FITNESS_STATES } from "../../../engines/fitnessEngine";
+73-import { useFameTracking, type FameEventDisplay, formatFameValue, getFameColor, getLITier } from "@/app/hooks/useFameTracking";
+74-import { toMojoLabel, toFitnessLabel, type FameEventType, type Position } from "../../../types/game";
+75-// MAJ-02: Wire fan morale to UI
+76-import { useFanMorale, type GameResult as FanMoraleGameResult } from "../hooks/useFanMorale";
+77-// MAJ-04: Wire narrative engine
+--
+91-  extractSupplementalRunnerOutFieldingEvents,
+92-  type FieldingExtractionContext,
+93-} from '../utils/fieldingEventExtractor';
+94:import { captureStartingLineups, type LineupEntry } from '../../../utils/gameStorage';
+95-import { POSITION_NUMBER } from '../utils/positionConstants';
+96-import { calculateRunnerDefaults, type RunnerDefaults } from '../components/runnerDefaults';
+97-import type { PlayLogEntry } from '../utils/playLogTypes';
+98-import { buildPlayLogEntries } from '../utils/gameTrackerPlayLog';
+99:import { reconcileTeamPitchersWithLineupSnapshot, reconcileTeamPlayersWithLineupSnapshot } from '../utils/gameTrackerRosterSync';
+100-import {
+101-  mapFieldingPlayTypeToPlayDifficulty,
+102-  type FieldingPlayTypeValue,
+103-} from '../utils/fieldingPlayType';
+104-import {
+105-  buildFenwayMatchupSummary,
+106-  formatFenwayMilestoneAlert,
+107-  pickFenwayMilestoneWatches,
+108-} from '../utils/fenwayBoardContext';
+109-import {
+--
+127-  balls: number;
+128-  strikes: number;
+129-  bases: { first: boolean; second: boolean; third: boolean };
+130:  currentBatter: string;
+131-  currentPitcher: string;
+132-}
+133-
+134-interface PendingRunnerAttributionAction {
+135-  eventType: 'SB' | 'ADVANCE' | 'WP' | 'PB' | 'PICK' | 'PICK_SAFE' | 'PICK_E';
+136-  title: string;
+137-  summary: string;
+138-  snapshotLabel: string;
+139-  runnerId?: string;
+140-  runnerName?: string;
+--
+156-  modifierValue?: AtBatModifierValue;
+157-}
+158-
+159:interface HistoricalLineupSlot {
+160-  playerId: string;
+161-  playerName: string;
+162-  position: Position;
+163-}
+164-
+165-interface HistoricalPitcher {
+166-  playerId: string;
+167-  playerName: string;
+168-}
+169-
+--
+274-    homeTeamName?: string;
+275-    awayTeamId?: string;
+276-    homeTeamId?: string;
+277:    // Team colors from database (passed from ExhibitionGame)
+278:    awayTeamColor?: string;
+279:    awayTeamBorderColor?: string;
+280:    homeTeamColor?: string;
+281:    homeTeamBorderColor?: string;
+282-    stadiumName?: string;
+283-    awayRecord?: string;
+284-    homeRecord?: string;
+285-    gameMode?: 'exhibition' | 'franchise' | 'playoff' | 'elimination';
+286-    leagueId?: string;
+287-    homeManagerId?: string;
+288-    homeManagerName?: string;
+289-    awayManagerId?: string;
+290-    awayManagerName?: string;
+291-    userTeamSide?: 'home' | 'away';
+--
+337-      ? `elimination-${navigationState.eliminationId}`
+338-      : navigationState?.seasonId);
+339-
+340:  // Team colors - prefer navigation state (from database), fall back to static config
+341:  const awayTeamColor = navigationState?.awayTeamColor || getTeamColors(awayTeamId).primary;
+342:  const awayTeamBorderColor = navigationState?.awayTeamBorderColor || getTeamColors(awayTeamId).secondary;
+343:  const homeTeamColor = navigationState?.homeTeamColor || getTeamColors(homeTeamId).primary;
+344:  const homeTeamBorderColor = navigationState?.homeTeamBorderColor || getTeamColors(homeTeamId).secondary;
+345-
+346-  // Game timer state
+347-  const [gameStartTime] = useState(() => new Date());
+348-  const [elapsedMinutes, setElapsedMinutes] = useState(0);
+349-
+350-  // T1-08 FIX: Guard against double end-game execution
+351-  // The auto-end useEffect can re-fire due to volatile deps in handleEndGame's useCallback.
+352-  // This ref ensures handleEndGame only executes once per game.
+353-  const gameEndingRef = useRef(false);
+354-
+355:  // Layer 1C: Captured starting lineups for GameRecord archive
+356:  const startingLineupsRef = useRef<{ away: LineupEntry[]; home: LineupEntry[] } | null>(null);
+357-
+358-  // Update elapsed time every minute
+359-  useEffect(() => {
+360-    const interval = setInterval(() => {
+361-      const now = new Date();
+362-      const diff = Math.floor((now.getTime() - gameStartTime.getTime()) / 60000);
+363-      setElapsedMinutes(diff);
+364-    }, 60000);
+365-    return () => clearInterval(interval);
+366-  }, [gameStartTime]);
+--
+385-    resetCount,
+386-    endInning,
+387-    endGame: hookEndGame,
+388:    pitchCountPrompt,
+389:    confirmPitchCount,
+390:    dismissPitchCountPrompt,
+391-    initializeGame,
+392-    loadExistingGame,
+393-    undoLastAction,
+394:    getLineupStateSnapshot,
+395-    getRunnerTrackerSnapshot,
+396-    getBaseRunnerNames,
+397-    runnerIdentityVersion,
+398-    isLoading,
+399-    isSaving,
+400-    // T0-01: Auto game-end detection
+401-    showAutoEndPrompt,
+402-    dismissAutoEndPrompt,
+403-    setPlayoffContext,
+404-    setStadiumName,
+--
+458-  const playLogRefreshTimeoutRef = useRef<number | null>(null);
+459-  const rebuildPlayLogFromEventLogRef = useRef<() => void | Promise<void>>(() => {});
+460-  const queuePlayLogRefreshRef = useRef<(delayMs?: number) => void>(() => {});
+461:  const previousPitchCountPromptRef = useRef<typeof pitchCountPrompt>(null);
+462-
+463-  // Layer 5: Enrichment Panel state
+464-  const [enrichingEntry, setEnrichingEntry] = useState<PlayLogEntry | null>(null);
+465-  const [selectedPlayLogEntry, setSelectedPlayLogEntry] = useState<PlayLogEntry | null>(null);
+466-  const [selectedBetweenPlayEvent, setSelectedBetweenPlayEvent] = useState<BetweenPlayEvent | null>(null);
+467-  const [selectedBetweenPlayEventLoading, setSelectedBetweenPlayEventLoading] = useState(false);
+468-  const [selectedBetweenPlayEventSaving, setSelectedBetweenPlayEventSaving] = useState(false);
+469-  const [enrichmentCache, setEnrichmentCache] = useState<Record<string, NonNullable<import('../../../utils/eventLog').AtBatEvent['enrichment']>>>({});
+470-  // Between-inning enrichment prompt
+471-  const [showEnrichmentPrompt, setShowEnrichmentPrompt] = useState(false);
+--
+614-  // GAP-GT-6-A: Time play override — when user indicates the 3rd-out tag occurred before the runner scored
+615-  const [timePlayNoRun, setTimePlayNoRun] = useState(false);
+616-
+617:  // GAP-GT-7-C: Track pending PH — PH must bat before they can be removed from lineup
+618-  const [pendingPH, setPendingPH] = useState<string | null>(null);
+619-
+620:  // Player card modal state - EXH-036: Added playerId for mojo/fitness editing
+621-  const [selectedPlayer, setSelectedPlayer] = useState<{ name: string; type: 'batter' | 'pitcher'; playerId: string } | null>(null);
+622-
+623-  // End game confirmation state
+624-  const [showEndGameConfirmation, setShowEndGameConfirmation] = useState(false);
+625-
+626-  // Runner names tracking - who is on each base
+627-  // Updated when batters reach base via hit, walk, error, etc.
+628-  const [runnerNames, setRunnerNames] = useState<{
+629-    first?: string;
+630-    second?: string;
+--
+663-    fielder: FielderInfo;
+664-    anchorPosition: { left: string; top: string };
+665-  } | null>(null);
+666:  const [showLineupOverlay, setShowLineupOverlay] = useState(false);
+667:  const [lineupOverlayHint, setLineupOverlayHint] = useState<string | null>(null);
+668-  const [showTouchPlayReview, setShowTouchPlayReview] = useState(false);
+669-  const [pendingManualSpecialPrompt, setPendingManualSpecialPrompt] = useState<PendingManualSpecialPrompt | null>(null);
+670-  const [showManagerMomentPanel, setShowManagerMomentPanel] = useState(false);
+671-  const [fenwayContext, setFenwayContext] = useState<{
+672-    matchupRecord?: string;
+673-    matchupAvg?: string;
+674-    historicalMatchupRecord?: string;
+675-    historicalMatchupAvg?: string;
+676-    milestoneAlerts: string[];
+677-  }>({ milestoneAlerts: [] });
+--
+760-  }, []);
+761-
+762-  useEffect(() => {
+763:    const hadPrompt = previousPitchCountPromptRef.current !== null;
+764:    if (hadPrompt && !pitchCountPrompt) {
+765-      queuePlayLogRefreshRef.current(0);
+766-    }
+767:    previousPitchCountPromptRef.current = pitchCountPrompt;
+768:  }, [pitchCountPrompt]);
+769-
+770-  useEffect(() => {
+771-    if (!selectedPlayLogEntry?.eventId || selectedPlayLogEntry.eventType === 'at_bat') {
+772-      setSelectedBetweenPlayEvent(null);
+773-      setSelectedBetweenPlayEventLoading(false);
+774-      return;
+775-    }
+776-
+777-    let cancelled = false;
+778-    setSelectedBetweenPlayEventLoading(true);
+--
+859-  const hasRunners = !!(gameState.bases.first || gameState.bases.second || gameState.bases.third);
+860-  const runnerCount = (gameState.bases.first ? 1 : 0) + (gameState.bases.second ? 1 : 0) + (gameState.bases.third ? 1 : 0);
+861-
+862:  // Get team colors - use navigation state (from database) if available, fall back to static config
+863:  // This ensures teams loaded from IndexedDB show correct colors
+864:  const battingTeamColors = gameState.isTop
+865:    ? { primary: awayTeamColor, secondary: awayTeamBorderColor }
+866:    : { primary: homeTeamColor, secondary: homeTeamBorderColor };
+867:  const fieldingTeamColors = gameState.isTop
+868:    ? { primary: homeTeamColor, secondary: homeTeamBorderColor }
+869:    : { primary: awayTeamColor, secondary: awayTeamBorderColor };
+870-
+871-  // Fielder border colors alternate between primary and secondary
+872:  const fielderColor1 = fieldingTeamColors.primary;
+873:  const fielderColor2 = fieldingTeamColors.secondary;
+874-
+875-  // EXH-036: Determine current team batting (for ID generation)
+876-  // When it's top of inning, away team bats; bottom of inning, home team bats
+877-  const battingTeam: 'home' | 'away' = gameState.isTop ? 'away' : 'home';
+878-  const fieldingTeam: 'home' | 'away' = gameState.isTop ? 'home' : 'away';
+879-
+880-  // Roster data - use navigation state if available, otherwise use defaults with ZERO stats (new game)
+881-  // Use useState so we can update the roster when substitutions are made
+882-  const [awayTeamPlayers, setAwayTeamPlayers] = useState<Player[]>(navigationState?.awayPlayers || [
+883:    { name: 'J. MARTINEZ', position: 'SS', battingOrder: 1, stats: { ab: 0, h: 0, r: 0, rbi: 0, bb: 0, k: 0 }, battingHand: 'R' as const },
+884:    { name: 'A. SMITH', position: 'CF', battingOrder: 2, stats: { ab: 0, h: 0, r: 0, rbi: 0, bb: 0, k: 0 }, battingHand: 'L' as const },
+885:    { name: 'D. JONES', position: 'LF', battingOrder: 3, stats: { ab: 0, h: 0, r: 0, rbi: 0, bb: 0, k: 0 }, battingHand: 'R' as const },
+886:    { name: 'B. DAVIS', position: 'RF', battingOrder: 4, stats: { ab: 0, h: 0, r: 0, rbi: 0, bb: 0, k: 0 }, battingHand: 'R' as const },
+887:    { name: 'T. BROWN', position: '1B', battingOrder: 5, stats: { ab: 0, h: 0, r: 0, rbi: 0, bb: 0, k: 0 }, battingHand: 'L' as const },
+888:    { name: 'C. WILSON', position: '2B', battingOrder: 6, stats: { ab: 0, h: 0, r: 0, rbi: 0, bb: 0, k: 0 }, battingHand: 'R' as const },
+889:    { name: 'M. GARCIA', position: '3B', battingOrder: 7, stats: { ab: 0, h: 0, r: 0, rbi: 0, bb: 0, k: 0 }, battingHand: 'S' as const },
+890:    { name: 'J. MARTIN', position: 'C', battingOrder: 8, stats: { ab: 0, h: 0, r: 0, rbi: 0, bb: 0, k: 0 }, battingHand: 'R' as const },
+891:    { name: 'R. LOPEZ', position: 'P', battingOrder: 9, stats: { ab: 0, h: 0, r: 0, rbi: 0, bb: 0, k: 0 }, battingHand: 'R' as const },
+892-    // Bench players
+893-    { name: 'A. TAYLOR', position: 'C', stats: { ab: 0, h: 0, r: 0, rbi: 0, bb: 0, k: 0 }, battingHand: 'R' as const },
+894-    { name: 'B. ANDERSON', position: 'IF', stats: { ab: 0, h: 0, r: 0, rbi: 0, bb: 0, k: 0 }, battingHand: 'L' as const },
+895-    { name: 'C. THOMAS', position: 'OF', stats: { ab: 0, h: 0, r: 0, rbi: 0, bb: 0, k: 0 }, battingHand: 'R' as const },
+896-  ]);
+897-
+898-  const [awayTeamPitchers, setAwayTeamPitchers] = useState<Pitcher[]>(navigationState?.awayPitchers || [
+899-    { name: 'R. LOPEZ', stats: { ip: '0.0', h: 0, r: 0, er: 0, bb: 0, k: 0, pitches: 0 }, throwingHand: 'R' as const, isStarter: true, isActive: true },
+900-    { name: 'T. JOHNSON', stats: { ip: '0.0', h: 0, r: 0, er: 0, bb: 0, k: 0, pitches: 0 }, throwingHand: 'R' as const },
+901-    { name: 'M. WILLIAMS', stats: { ip: '0.0', h: 0, r: 0, er: 0, bb: 0, k: 0, pitches: 0 }, throwingHand: 'L' as const },
+--
+905-  // Fallback roster data for Home Team (exhibition mode) — ZERO stats for new game
+906-  // Use useState so we can update the roster when substitutions are made
+907-  const [homeTeamPlayers, setHomeTeamPlayers] = useState<Player[]>(navigationState?.homePlayers || [
+908:    { name: 'P. HERNANDEZ', position: 'CF', battingOrder: 1, stats: { ab: 0, h: 0, r: 0, rbi: 0, bb: 0, k: 0 }, battingHand: 'L' as const },
+909:    { name: 'K. WASHINGTON', position: 'SS', battingOrder: 2, stats: { ab: 0, h: 0, r: 0, rbi: 0, bb: 0, k: 0 }, battingHand: 'R' as const },
+910:    { name: 'L. RODRIGUEZ', position: 'LF', battingOrder: 3, stats: { ab: 0, h: 0, r: 0, rbi: 0, bb: 0, k: 0 }, battingHand: 'L' as const },
+911:    { name: 'M. JACKSON', position: 'RF', battingOrder: 4, stats: { ab: 0, h: 0, r: 0, rbi: 0, bb: 0, k: 0 }, battingHand: 'R' as const },
+912:    { name: 'N. MARTINEZ', position: '1B', battingOrder: 5, stats: { ab: 0, h: 0, r: 0, rbi: 0, bb: 0, k: 0 }, battingHand: 'R' as const },
+913:    { name: 'O. THOMPSON', position: '3B', battingOrder: 6, stats: { ab: 0, h: 0, r: 0, rbi: 0, bb: 0, k: 0 }, battingHand: 'S' as const },
+914:    { name: 'Q. GONZALEZ', position: '2B', battingOrder: 7, stats: { ab: 0, h: 0, r: 0, rbi: 0, bb: 0, k: 0 }, battingHand: 'R' as const },
+915:    { name: 'R. ADAMS', position: 'C', battingOrder: 8, stats: { ab: 0, h: 0, r: 0, rbi: 0, bb: 0, k: 0 }, battingHand: 'R' as const },
+916:    { name: 'S. WHITE', position: 'P', battingOrder: 9, stats: { ab: 0, h: 0, r: 0, rbi: 0, bb: 0, k: 0 }, battingHand: 'R' as const },
+917-    // Bench players
+918-    { name: 'E. CLARK', position: 'OF', stats: { ab: 0, h: 0, r: 0, rbi: 0, bb: 0, k: 0 }, battingHand: 'L' as const },
+919-    { name: 'F. MILLER', position: 'IF', stats: { ab: 0, h: 0, r: 0, rbi: 0, bb: 0, k: 0 }, battingHand: 'R' as const },
+920-    { name: 'G. EVANS', position: 'C', stats: { ab: 0, h: 0, r: 0, rbi: 0, bb: 0, k: 0 }, battingHand: 'R' as const },
+921-  ]);
+922-
+923-  const [homeTeamPitchers, setHomeTeamPitchers] = useState<Pitcher[]>(navigationState?.homePitchers || [
+924-    { name: 'S. WHITE', stats: { ip: '0.0', h: 0, r: 0, er: 0, bb: 0, k: 0, pitches: 0 }, throwingHand: 'R' as const, isStarter: true, isActive: true },
+925-    { name: 'U. PARKER', stats: { ip: '0.0', h: 0, r: 0, er: 0, bb: 0, k: 0, pitches: 0 }, throwingHand: 'L' as const },
+926-    { name: 'V. TURNER', stats: { ip: '0.0', h: 0, r: 0, er: 0, bb: 0, k: 0, pitches: 0 }, throwingHand: 'R' as const },
+--
+974-    return new Map(entries);
+975-  }, [awayTeamPitchers, awayTeamPlayers, getRosterEntityId, homeTeamPitchers, homeTeamPlayers]);
+976-
+977:  const syncDisplayedRostersToLineupSnapshot = useCallback((snapshot?: GameLineupSnapshot) => {
+978:    const lineupSnapshot = snapshot || getLineupStateSnapshot();
+979-    setAwayTeamPlayers((previous) =>
+980:      reconcileTeamPlayersWithLineupSnapshot(previous, lineupSnapshot.away, 'away', getRosterEntityId)
+981-    );
+982-    setHomeTeamPlayers((previous) =>
+983:      reconcileTeamPlayersWithLineupSnapshot(previous, lineupSnapshot.home, 'home', getRosterEntityId)
+984-    );
+985-    setAwayTeamPitchers((previous) =>
+986:      reconcileTeamPitchersWithLineupSnapshot(previous, awayTeamPlayers, lineupSnapshot.away, 'away', getRosterEntityId)
+987-    );
+988-    setHomeTeamPitchers((previous) =>
+989:      reconcileTeamPitchersWithLineupSnapshot(previous, homeTeamPlayers, lineupSnapshot.home, 'home', getRosterEntityId)
+990-    );
+991:  }, [awayTeamPlayers, getLineupStateSnapshot, getRosterEntityId, homeTeamPlayers]);
+992-
+993-  const resolveRosterNameByGameId = useCallback((playerId?: string): string | undefined => {
+994-    if (!playerId) return undefined;
+995-    return rosterNameById.get(playerId);
+996-  }, [rosterNameById]);
+997-
+998-  const resolveRosterTeamSide = useCallback((playerId?: string, playerName?: string): 'away' | 'home' | null => {
+999-    if (!playerId && !playerName) return null;
+1000-
+1001-    const matches = (
+--
+1049-    return null;
+1050-  }, [resolveRosterTeamSide, selectedBetweenPlayEvent]);
+1051-
+1052:  const historicalLineupOptions = useMemo(() => {
+1053-    if (!selectedHistoricalTeamSide) return [];
+1054-    const players = selectedHistoricalTeamSide === 'away' ? awayTeamPlayers : homeTeamPlayers;
+1055-    return players
+1056-      .map((player) => ({
+1057-        id: getRosterEntityId(player, selectedHistoricalTeamSide),
+1058-        label: player.name,
+1059-      }))
+1060-      .sort((a, b) => a.label.localeCompare(b.label));
+1061-  }, [awayTeamPlayers, getRosterEntityId, homeTeamPlayers, selectedHistoricalTeamSide]);
+1062-
+--
+1135-    queuePlayLogRefreshRef.current = queuePlayLogRefresh;
+1136-  }, [queuePlayLogRefresh, rebuildPlayLogFromEventLog]);
+1137-
+1138:  const resolvedCurrentBatterName =
+1139:    gameState.currentBatterName ||
+1140:    resolveRosterNameByGameId(gameState.currentBatterId) ||
+1141-    'BATTER';
+1142-  const resolvedCurrentPitcherName =
+1143-    gameState.currentPitcherName ||
+1144-    resolveRosterNameByGameId(gameState.currentPitcherId) ||
+1145-    'PITCHER';
+1146-
+1147:  // T0-08: Derive lineup/bench/bullpen from actual team data (dynamic, not hardcoded)
+1148-  const battingTeamPlayersRaw = gameState.isTop ? awayTeamPlayers : homeTeamPlayers;
+1149-  const fieldingTeamPitchersRaw = gameState.isTop ? homeTeamPitchers : awayTeamPitchers;
+1150-
+1151:  const currentLineup = battingTeamPlayersRaw
+1152:    .filter(p => p.battingOrder !== undefined && !p.isOutOfGame)
+1153:    .sort((a, b) => (a.battingOrder || 0) - (b.battingOrder || 0))
+1154-    .map((p) => ({
+1155-      name: p.name,
+1156-      pos: p.position || 'DH',
+1157:      batting: p.name === resolvedCurrentBatterName,
+1158-    }));
+1159-
+1160:  // GAP-GT-7-B: Lineup size validation — warn if lineup is not exactly 9 (or 10 with DH)
+1161:  const lineupSizeOk = currentLineup.length >= 9 && currentLineup.length <= 10;
+1162:  if (!lineupSizeOk && currentLineup.length > 0) {
+1163:    console.warn(`[GameTracker] Lineup size ${currentLineup.length} — expected 9 or 10 (with DH)`);
+1164-  }
+1165-
+1166-  // GAP-GT-7-D: Include isOutOfGame players — they display with ❌ so user can see who was used
+1167-  const benchPlayers = battingTeamPlayersRaw
+1168:    .filter(p => p.battingOrder === undefined)
+1169-    .map(p => ({
+1170-      name: p.name,
+1171-      pos: p.position || 'UT',
+1172-      hand: p.battingHand,
+1173-      avg: '.000',
+1174-      isOutOfGame: p.isOutOfGame || false,
+1175-    }));
+1176-
+1177-  const availablePitchers = fieldingTeamPitchersRaw
+1178-    .filter(p => !p.isActive && !p.isOutOfGame)
+--
+1182-      fitness: '🟢',
+1183-    }));
+1184-
+1185:  // LineupCard data derived from current team data
+1186-  // EXH-036: Use consistent IDs that match playerStateHook registration
+1187:  const lineupCardData: LineupPlayer[] = currentLineup.map((player, idx) => ({
+1188-    id: getRosterIdFromName(player.name, battingTeam),
+1189-    name: player.name,
+1190-    position: player.pos,
+1191:    battingOrder: idx + 1,
+1192:    isCurrentBatter: player.batting,
+1193-    battingHand: (battingTeamPlayersRaw.find(p => p.name === player.name)?.battingHand || 'R') as 'L' | 'R' | 'S',
+1194-  }));
+1195-
+1196-  const benchCardData: BenchPlayer[] = benchPlayers.map((player) => ({
+1197-    id: getRosterIdFromName(player.name, battingTeam),
+1198-    name: player.name,
+1199-    positions: [player.pos],
+1200-    battingHand: player.hand as 'L' | 'R' | 'S',
+1201-    isUsed: player.isOutOfGame, // GAP-GT-7-D: ❌ for players already used/out of game
+1202-  }));
+--
+1222-    isCurrentPitcher: true,
+1223-  };
+1224-
+1225:  // Field positions (defense) with SVG coordinates - dynamically built from fielding team's lineup
+1226-  // When isTop = true, home team is fielding; when isTop = false, away team is fielding
+1227-  const fieldingTeamPlayers = fieldingTeam === 'home' ? homeTeamPlayers : awayTeamPlayers;
+1228-
+1229-  // Map position abbreviations to position numbers and SVG coordinates
+1230-  const positionMap: Record<string, { number: string; svgX: number; svgY: number }> = {
+1231-    'P': { number: '1', svgX: 200, svgY: 165 },
+1232-    'C': { number: '2', svgX: 200, svgY: 259 },
+1233-    '1B': { number: '3', svgX: 290, svgY: 152 },
+1234-    '2B': { number: '4', svgX: 256, svgY: 120 },
+1235-    '3B': { number: '5', svgX: 110, svgY: 152 },
+--
+1239-    'RF': { number: '9', svgX: 328, svgY: 72 },
+1240-  };
+1241-
+1242:  // Build field positions from fielding team's lineup (first 9 players with valid positions)
+1243-  const gameDiamondFielders = useMemo(() => {
+1244-    return fieldingTeamPlayers
+1245-      .filter((player) => player.position && positionMap[player.position])
+1246-      .slice(0, 9)
+1247-      .map((player) => {
+1248-        const posData = positionMap[player.position!];
+1249-        const lastName = player.name.split(' ').pop() || player.name;
+1250-        return {
+1251-          positionNumber: Number(posData.number),
+1252-          playerId: getRosterEntityId(player, fieldingTeam),
+--
+1507-      return acc;
+1508-    }, {});
+1509-
+1510:    if (!header?.startingLineups) {
+1511-      return fallbackAlignment;
+1512-    }
+1513-
+1514:    const toSlots = (players: NonNullable<GameHeader['startingLineups']>['away']): HistoricalLineupSlot[] =>
+1515-      players
+1516-        .slice()
+1517:        .sort((a, b) => a.battingOrder - b.battingOrder)
+1518-        .map((player) => ({
+1519-          playerId: player.playerId,
+1520-          playerName: player.playerName,
+1521-          position: player.position as Position,
+1522-        }));
+1523-
+1524:    let awayLineup = toSlots(header.startingLineups.away);
+1525:    let homeLineup = toSlots(header.startingLineups.home);
+1526-    let awayPitcher: HistoricalPitcher | null = header.startingPitchers?.away || null;
+1527-    let homePitcher: HistoricalPitcher | null = header.startingPitchers?.home || null;
+1528-    const awayBenchIds = new Set((header.benchRosters?.away || []).map((player) => player.playerId));
+1529-    const homeBenchIds = new Set((header.benchRosters?.home || []).map((player) => player.playerId));
+1530-    const betweenPlayEvents = await getBetweenPlayEvents(atBatEvent.gameId);
+1531-
+1532-    const findTeamSide = (playerId?: string) => {
+1533-      if (!playerId) return null;
+1534:      if (awayLineup.some((player) => player.playerId === playerId) || awayBenchIds.has(playerId) || awayPitcher?.playerId === playerId) return 'away' as const;
+1535:      if (homeLineup.some((player) => player.playerId === playerId) || homeBenchIds.has(playerId) || homePitcher?.playerId === playerId) return 'home' as const;
+1536-      return null;
+1537-    };
+1538-
+1539-    betweenPlayEvents
+1540-      .filter((event) =>
+1541-        event.eventIndex < atBatEvent.eventIndex ||
+1542-        (event.eventIndex === atBatEvent.eventIndex && event.timestamp <= atBatEvent.timestamp)
+1543-      )
+1544-      .forEach((event) => {
+1545-        if (event.type === 'substitution' && event.substitution) {
+1546-          const substitution = event.substitution;
+1547-          const side = findTeamSide(substitution.outPlayerId) || findTeamSide(substitution.inPlayerId);
+1548-          if (!side) return;
+1549:          const lineup = side === 'away' ? awayLineup : homeLineup;
+1550:          const lineupIndex = lineup.findIndex((player) => player.playerId === substitution.outPlayerId);
+1551:          if (lineupIndex >= 0) {
+1552:            lineup[lineupIndex] = {
+1553-              playerId: substitution.inPlayerId,
+1554-              playerName: substitution.inPlayerName || substitution.inPlayerId,
+1555:              position: (substitution.inPosition || substitution.outPosition || lineup[lineupIndex].position) as Position,
+1556-            };
+1557-          }
+1558-          return;
+1559-        }
+1560-
+1561-        if (event.type === 'position_change' && event.substitution) {
+1562-          const substitution = event.substitution;
+1563-          const side = findTeamSide(substitution.inPlayerId) || findTeamSide(substitution.outPlayerId);
+1564-          if (!side) return;
+1565:          const lineup = side === 'away' ? awayLineup : homeLineup;
+1566:          const lineupIndex = lineup.findIndex((player) => player.playerId === substitution.inPlayerId);
+1567:          if (lineupIndex >= 0) {
+1568:            lineup[lineupIndex] = {
+1569:              ...lineup[lineupIndex],
+1570:              position: (substitution.inPosition || lineup[lineupIndex].position) as Position,
+1571-            };
+1572-          }
+1573-          return;
+1574-        }
+1575-
+1576-        if (event.type === 'pitcher_change' && event.pitcherChange) {
+1577-          const side = event.gameState?.halfInning === 'TOP' ? 'home' : 'away';
+1578-          const nextPitcher = {
+1579-            playerId: event.pitcherChange.incomingPitcherId,
+1580-            playerName: event.pitcherChange.incomingPitcherName || event.pitcherChange.incomingPitcherId,
+--
+1585-      });
+1586-
+1587-    const defensiveSide = atBatEvent.halfInning === 'TOP' ? 'home' : 'away';
+1588:    const alignment = (defensiveSide === 'away' ? awayLineup : homeLineup).reduce<Partial<Record<Position, { playerId: string; playerName: string }>>>((acc, player) => {
+1589-      acc[player.position] = {
+1590-        playerId: player.playerId,
+1591-        playerName: player.playerName,
+1592-      };
+1593-      return acc;
+1594-    }, {});
+1595-    const activePitcher = defensiveSide === 'away' ? awayPitcher : homePitcher;
+1596-    if (activePitcher) {
+1597-      alignment.P = {
+1598-        playerId: activePitcher.playerId,
+--
+1688-    };
+1689-  }, []);
+1690-
+1691:  // Initialize game with lineup data on mount
+1692-  // FIX: BUG-007 - Try loading existing game first, only create new if none found
+1693-  // This ensures each batter has a unique ID and stats are tracked separately
+1694-  const initInProgressRef = useRef(false);
+1695-  useEffect(() => {
+1696-    if (gameInitialized || initInProgressRef.current) return;
+1697-    initInProgressRef.current = true;
+1698-    let cancelled = false;
+1699-
+1700-    const initializeOrLoadGame = async () => {
+1701-      try {
+--
+1705-
+1706-        if (hasExistingGame) {
+1707-          console.log('[GameTracker] Loaded existing game from IndexedDB');
+1708:          syncDisplayedRostersToLineupSnapshot();
+1709-          setGameInitialized(true);
+1710-          return;
+1711-        }
+1712-
+1713-        // No existing game found - create new one
+1714-        console.log('[GameTracker] No existing game found, initializing new game');
+1715-
+1716:        // Convert roster to lineup format required by initializeGame
+1717:        const awayLineup = awayTeamPlayers
+1718:          .filter(p => p.battingOrder && p.position) // Only players in batting order with positions
+1719:          .sort((a, b) => (a.battingOrder || 0) - (b.battingOrder || 0))
+1720-          .map(p => ({
+1721-            playerId: getRosterEntityId(p, 'away'),
+1722-            playerName: p.name,
+1723-            position: p.position!, // Safe - filtered above
+1724-          }));
+1725-
+1726:        const homeLineup = homeTeamPlayers
+1727:          .filter(p => p.battingOrder && p.position) // Only players in batting order with positions
+1728:          .sort((a, b) => (a.battingOrder || 0) - (b.battingOrder || 0))
+1729-          .map(p => ({
+1730-            playerId: getRosterEntityId(p, 'home'),
+1731-            playerName: p.name,
+1732-            position: p.position!, // Safe - filtered above
+1733-          }));
+1734-
+1735:        // MAJ-09: Extract bench players (players without batting order = not in starting lineup)
+1736:        const awayStarterIds = new Set(awayLineup.map(p => p.playerId));
+1737-        const awayBench = awayTeamPlayers
+1738-          .filter(p => !awayStarterIds.has(getRosterEntityId(p, 'away')))
+1739-          .filter(p => !p.isOutOfGame) // Don't include already-removed players
+1740-          .map(p => ({
+1741-            playerId: getRosterEntityId(p, 'away'),
+1742-            playerName: p.name,
+1743-            positions: [p.position || 'DH'].filter(Boolean),
+1744-          }));
+1745-
+1746:        const homeStarterIds = new Set(homeLineup.map(p => p.playerId));
+1747-        const homeBench = homeTeamPlayers
+1748-          .filter(p => !homeStarterIds.has(getRosterEntityId(p, 'home')))
+1749-          .filter(p => !p.isOutOfGame)
+1750-          .map(p => ({
+1751-            playerId: getRosterEntityId(p, 'home'),
+1752-            playerName: p.name,
+1753-            positions: [p.position || 'DH'].filter(Boolean),
+1754-          }));
+1755-
+1756:        console.log('[GameTracker] Initializing game with lineups:', {
+1757:          away: awayLineup.map(p => p.playerName),
+1758:          home: homeLineup.map(p => p.playerName),
+1759-          awayBench: awayBench.map(p => p.playerName),
+1760-          homeBench: homeBench.map(p => p.playerName),
+1761-        });
+1762-
+1763-        await initializeGame({
+1764-          gameId: gameId || `game-${Date.now()}`,
+1765-          seasonId: competitionType === 'elimination'
+1766-            ? undefined
+1767-            : (navigationState?.franchiseId
+1768-              ? `${navigationState.franchiseId}-season-${navigationState?.seasonNumber || 1}`
+--
+1776-          awayTeamName: awayTeamName,
+1777-          homeTeamId: homeTeamId,
+1778-          homeTeamName: homeTeamName,
+1779:          awayLineup,
+1780:          homeLineup,
+1781-          awayBench,
+1782-          homeBench,
+1783-          awayStartingPitcherId: awayPitcher
+1784-            ? getRosterEntityId(awayPitcher, 'away')
+1785-            : buildFallbackRuntimePlayerId('pitcher', 'away'),
+1786-          awayStartingPitcherName: awayPitcher?.name || 'Pitcher',
+1787-          homeStartingPitcherId: homePitcher
+1788-            ? getRosterEntityId(homePitcher, 'home')
+1789-            : buildFallbackRuntimePlayerId('pitcher', 'home'),
+1790-          homeStartingPitcherName: homePitcher?.name || 'Pitcher',
+--
+1799-          homeRecord: (() => { const [w, l] = homeRecord.split('-').map(Number); return { w: w || 0, l: l || 0 }; })(),
+1800-        });
+1801-
+1802:        // Layer 1C: Snapshot starting lineups for GameRecord archive
+1803:        startingLineupsRef.current = captureStartingLineups(awayLineup, homeLineup);
+1804-
+1805-        if (!cancelled) {
+1806-          setGameInitialized(true);
+1807-        }
+1808-      } catch (err) {
+1809-        console.error('[GameTracker] Failed to initialize/load game:', err);
+1810-        // Fail-open so a transient persistence error cannot black-screen the UI.
+1811-        if (!cancelled) {
+1812-          setGameInitialized(true);
+1813-        }
+--
+1821-      cancelled = true;
+1822-      initInProgressRef.current = false;
+1823-    };
+1824:  }, [competitionId, competitionType, gameId, gameInitialized, getRosterEntityId, homePitcher, homeTeamId, homeTeamName, homeTeamPlayers, initializeGame, loadExistingGame, navigationState?.franchiseId, navigationState?.seasonNumber, navigationState?.totalInnings, selectedStadium, statsScopeId, syncDisplayedRostersToLineupSnapshot, awayPitcher, awayTeamId, awayTeamName, awayTeamPlayers]);
+1825-
+1826-  // EXH-036: Register players with playerStateHook for mojo/fitness tracking
+1827-  // This runs once after game is initialized to set up all players with default states
+1828-  useEffect(() => {
+1829-    if (!gameInitialized) return;
+1830-    let cancelled = false;
+1831-
+1832-    const registerPlayersWithSnapshots = async () => {
+1833-      // Load mojo/fitness from snapshots for elimination games (inter-game persistence per §8)
+1834-      let mojoFitnessMap: Map<string, { mojoLevel: MojoLevel; fitnessState: FitnessState }> | null = null;
+--
+1933-  }, [awayPitcher, awayTeamPlayers, gameInitialized, getRosterEntityId, homePitcher, homeTeamPlayers, navigationState?.eliminationId, navigationState?.gameMode, playerStateHook]);
+1934-
+1935-  // EXH-036: Helper functions to get/set mojo/fitness by player name and team
+1936:  // These are used by TeamRoster components to enable mojo/fitness editing in player cards
+1937-  const getPlayerIdFromName = useCallback((name: string, team: 'away' | 'home') => {
+1938-    return getRosterIdFromName(name, team);
+1939-  }, [getRosterIdFromName]);
+1940-
+1941-  const getPitcherIdFromName = useCallback((name: string, team: 'away' | 'home') => {
+1942-    return getRosterIdFromName(name, team, 'pitcher');
+1943-  }, [getRosterIdFromName]);
+1944-
+1945-  const getPlayerMojoByName = useCallback((name: string, team: 'away' | 'home') => {
+1946-    const playerId = getPlayerIdFromName(name, team);
+--
+1967-      'mojo',
+1968-      previousMojo,
+1969-      newMojo,
+1970:      'Player card adjustment',
+1971-    ).then(() => queuePlayLogRefresh(0));
+1972-  }, [getPlayerIdFromName, playerStateHook, queuePlayLogRefresh, recordPlayerStateChange]);
+1973-
+1974-  const setPlayerFitnessByName = useCallback((name: string, team: 'away' | 'home', newFitness: FitnessState) => {
+1975-    const playerId = getPlayerIdFromName(name, team);
+1976-    const currentPlayer = playerStateHook.getPlayer(playerId);
+1977-    const previousFitness = currentPlayer?.fitnessProfile.currentFitness;
+1978-    if (!previousFitness || previousFitness === newFitness) return;
+1979-
+1980-    playerStateHook.setFitness(playerId, newFitness);
+--
+1984-      'fitness',
+1985-      previousFitness,
+1986-      newFitness,
+1987:      'Player card adjustment',
+1988-    ).then(() => queuePlayLogRefresh(0));
+1989-  }, [getPlayerIdFromName, playerStateHook, queuePlayLogRefresh, recordPlayerStateChange]);
+1990-
+1991:  // Get current batter's lineup position
+1992-  const battingTeamPlayers = gameState.isTop ? awayTeamPlayers : homeTeamPlayers;
+1993-  const pitchingTeamPlayers = gameState.isTop ? homeTeamPlayers : awayTeamPlayers;
+1994:  const currentBatterData = battingTeamPlayers.find(
+1995:    p => (p.battingOrder && p.name === resolvedCurrentBatterName) || getRosterIdFromName(p.name, battingTeam) === gameState.currentBatterId
+1996-  );
+1997:  const currentBatterPosition = currentBatterData?.battingOrder || 1;
+1998:  const currentBatterPositionStr = currentBatterPosition.toString();
+1999:  const atBatDigit1 = currentBatterPositionStr.length > 1 ? currentBatterPositionStr[0] : '';
+2000:  const atBatDigit2 = currentBatterPositionStr.length > 1 ? currentBatterPositionStr[1] : currentBatterPositionStr[0];
+2001-
+2002:  // Get current batter's game stats from the playerStats Map
+2003:  const currentBatterStats = playerStats.get(gameState.currentBatterId);
+2004:  const batterHits = currentBatterStats?.h ?? 0;
+2005:  const batterAB = currentBatterStats?.ab ?? 0;
+2006-
+2007-  // Get current pitcher's game stats from the pitcherStats Map
+2008-  const currentPitcherStats = pitcherStats.get(gameState.currentPitcherId);
+2009:  const pitcherPitchCount = currentPitcherStats?.pitchCount ?? 0;
+2010-
+2011-  // Format display name: "J. MARTINEZ" -> show as is, or "John Martinez" -> "J. MARTINEZ"
+2012-  const formatDisplayName = (name: string | undefined): string => {
+2013-    if (!name) return 'UNKNOWN';
+2014-    // If already in "F. LAST" format, return as-is
+2015-    if (name.match(/^[A-Z]\.\s[A-Z]+$/)) return name;
+2016-    // Otherwise, format "First Last" to "F. LAST"
+2017-    const parts = name.split(' ');
+2018-    if (parts.length >= 2) {
+2019-      return `${parts[0][0]}. ${parts[parts.length - 1].toUpperCase()}`;
+--
+2021-    return name.toUpperCase();
+2022-  };
+2023-
+2024:  const currentBatterDisplayName = formatDisplayName(resolvedCurrentBatterName);
+2025-  const currentPitcherDisplayName = formatDisplayName(resolvedCurrentPitcherName);
+2026-
+2027-  useEffect(() => {
+2028-    let cancelled = false;
+2029-
+2030-    const loadFenwayContext = async () => {
+2031:      if (!gameState.gameId || !gameState.currentBatterId || !gameState.currentPitcherId) {
+2032-        if (!cancelled) {
+2033-          setFenwayContext({ milestoneAlerts: [] });
+2034-        }
+2035-        return;
+2036-      }
+2037-
+2038-      try {
+2039-        const seasonId = navigationState?.seasonId;
+2040-        const [
+2041-          currentGameEvents,
+--
+2046-          seasonPitchingRows,
+2047-        ] = await Promise.all([
+2048-          getGameEvents(gameState.gameId),
+2049:          getMatchupEvents(gameState.currentBatterId, gameState.currentPitcherId, { excludeGameId: gameState.gameId }),
+2050:          getCareerStats(gameState.currentBatterId),
+2051-          getCareerStats(gameState.currentPitcherId),
+2052-          seasonId ? getSeasonBattingStats(seasonId) : Promise.resolve([]),
+2053-          seasonId ? getSeasonPitchingStats(seasonId) : Promise.resolve([]),
+2054-        ]);
+2055-
+2056-        if (cancelled) {
+2057-          return;
+2058-        }
+2059-
+2060-        const currentMatchup = buildFenwayMatchupSummary(
+2061-          currentGameEvents,
+2062:          gameState.currentBatterId,
+2063-          gameState.currentPitcherId,
+2064-        );
+2065-        const historicalMatchup = buildFenwayMatchupSummary(
+2066-          historicalMatchupEvents,
+2067:          gameState.currentBatterId,
+2068-          gameState.currentPitcherId,
+2069-        );
+2070-
+2071-        const batterSeason = seasonId
+2072:          ? seasonBattingRows.find((row) => row.playerId === gameState.currentBatterId) || null
+2073-          : null;
+2074-        const pitcherSeason = seasonId
+2075-          ? seasonPitchingRows.find((row) => row.playerId === gameState.currentPitcherId) || null
+2076-          : null;
+2077-
+2078-        const batterWatches = getApproachingMilestones(
+2079:          mergeCareerBattingWithGameStats(batterCareer.batting, currentBatterStats),
+2080-          null,
+2081:          mergeSeasonBattingWithGameStats(batterSeason, currentBatterStats),
+2082-          null,
+2083-          new Set<string>(),
+2084-        );
+2085-        const pitcherWatches = getApproachingMilestones(
+2086-          null,
+2087-          mergeCareerPitchingWithGameStats(pitcherCareer.pitching, currentPitcherStats),
+2088-          null,
+2089-          mergeSeasonPitchingWithGameStats(pitcherSeason, currentPitcherStats),
+2090-          new Set<string>(),
+2091-        );
+2092-        const selectedWatches = pickFenwayMilestoneWatches(
+2093-          [...batterWatches, ...pitcherWatches],
+2094:          gameState.currentBatterId,
+2095-          2,
+2096-        );
+2097-        const multiplePlayers = new Set(selectedWatches.map((watch) => watch.playerId)).size > 1;
+2098-
+2099-        setFenwayContext({
+2100-          matchupRecord: currentMatchup.matchupRecord,
+2101-          matchupAvg: currentMatchup.matchupAvg,
+2102-          historicalMatchupRecord: historicalMatchup.matchupRecord,
+2103-          historicalMatchupAvg: historicalMatchup.matchupAvg,
+2104-          milestoneAlerts: selectedWatches.map((watch) =>
+2105-            formatFenwayMilestoneAlert(
+2106-              watch,
+2107:              multiplePlayers || watch.playerId !== gameState.currentBatterId,
+2108-            )
+2109-          ),
+2110-        });
+2111-      } catch (error) {
+2112-        console.warn('[GameTracker] Failed to build Fenway board context:', error);
+2113-        if (!cancelled) {
+2114-          setFenwayContext({
+2115-            matchupRecord: undefined,
+2116-            matchupAvg: undefined,
+2117-            historicalMatchupRecord: undefined,
+--
+2128-      cancelled = true;
+2129-    };
+2130-  }, [
+2131:    currentBatterStats,
+2132-    currentPitcherStats,
+2133:    gameState.currentBatterId,
+2134-    gameState.currentPitcherId,
+2135-    gameState.gameId,
+2136-    navigationState?.seasonId,
+2137-  ]);
+2138-
+2139:  const openPlayerCard = useCallback((playerName: string, team: 'away' | 'home', type: 'batter' | 'pitcher' = 'batter') => {
+2140-    const playerId = type === 'pitcher'
+2141-      ? getPitcherIdFromName(playerName, team)
+2142-      : getPlayerIdFromName(playerName, team);
+2143-    setSelectedPlayer({ name: playerName, type, playerId });
+2144-  }, [getPitcherIdFromName, getPlayerIdFromName]);
+2145-
+2146:  // Get current batter's fielding position (e.g., "SS", "CF")
+2147:  const batterFieldingPosition = currentBatterData?.position || '?';
+2148-
+2149-  // Get batter's grade (from player data if available)
+2150-  const batterGrade = 'A'; // TODO: Get from player database when available
+2151-
+2152-  const getRunnerIdentityForBase = useCallback((base: RunnerBase | 'first' | 'second' | 'third') => {
+2153-    const runnerName = runnerNames[base] || `R${base === 'first' ? '1' : base === 'second' ? '2' : '3'}`;
+2154-    return {
+2155-      runnerName,
+2156-      runnerId: getPlayerIdFromName(runnerName, battingTeam),
+2157-    };
+--
+2165-    return getRunnerIdentityForBase(leadRunnerBase);
+2166-  }, [gameState.bases.first, gameState.bases.second, gameState.bases.third, getRunnerIdentityForBase]);
+2167-
+2168:  // Handler for lineup card substitutions (Phase 6)
+2169:  const handleLineupCardSubstitution = useCallback((sub: SubstitutionData) => {
+2170:    console.log("LineupCard substitution:", sub);
+2171-
+2172-    // GAP-GT-7-C: Block substitution if the outgoing player is a pending PH who hasn't batted yet
+2173-    if (pendingPH && pendingPH === sub.outgoingPlayerId) {
+2174-      console.warn(`[GameTracker] Substitution blocked: PH ${sub.outgoingPlayerName} must bat before being replaced`);
+2175-      // TODO: Show UI toast to user
+2176-      return;
+2177-    }
+2178-
+2179-    // Capture snapshot for undo
+2180-    undoSystem.captureSnapshot(`${sub.type}: ${sub.incomingPlayerId} for ${sub.outgoingPlayerId}`);
+--
+2207-        return;
+2208-      }
+2209-
+2210:      // mWAR: Infer decision type — pinch hitter if outgoing is current batter, otherwise defensive sub
+2211-      try {
+2212-        const gsLI = buildGameStateForLI();
+2213:        const isPinchHitter = sub.outgoingPlayerId === gameState?.currentBatterId;
+2214-        const decisionType = isPinchHitter ? 'pinch_hitter' : 'defensive_sub';
+2215-        const decisionId = mwarHook.recordDecision(decisionType as any, gsLI, [sub.incomingPlayerId, sub.outgoingPlayerId], `${isPinchHitter ? 'PH' : 'Def sub'}: ${sub.incomingPlayerName} for ${sub.outgoingPlayerName}`);
+2216-        if (isPinchHitter) {
+2217-          // Resolve pinch hitter after next AB
+2218-          setPendingMWARDecisions(prev => new Map(prev).set(decisionId, { decisionId, decisionType: 'pinch_hitter', involvedPlayers: [sub.incomingPlayerId], resolveAfterNextPlay: true }));
+2219-          // GAP-GT-7-C: Mark PH as pending — they must bat before being removed
+2220-          setPendingPH(sub.incomingPlayerId);
+2221-        }
+2222-        console.log(`[mWAR] Recorded ${decisionType} decision: ${decisionId}`);
+2223-      } catch (e) { console.warn('[mWAR] Decision recording error (non-blocking):', e); }
+--
+2231-        if (outgoingIndex >= 0 && incomingIndex >= 0) {
+2232-          setPlayers(prev => {
+2233-            const updated = [...prev];
+2234:            // Transfer batting order from outgoing to incoming player
+2235:            const outgoingBattingOrder = updated[outgoingIndex].battingOrder;
+2236-            const outgoingPosition = sub.newPosition || updated[outgoingIndex].position;
+2237-
+2238:            // Incoming player takes the batting order and position
+2239-            updated[incomingIndex] = {
+2240-              ...updated[incomingIndex],
+2241:              battingOrder: outgoingBattingOrder,
+2242-              position: outgoingPosition,
+2243-            };
+2244-
+2245:            // Outgoing player loses batting order and is marked as out of game
+2246-            updated[outgoingIndex] = {
+2247-              ...updated[outgoingIndex],
+2248:              battingOrder: undefined,
+2249-              isOutOfGame: true,
+2250-            };
+2251-
+2252-            return updated;
+2253-          });
+2254-          return true;
+2255-        }
+2256-        return false;
+2257-      };
+2258-
+--
+2322-      setRunnerNames(applyRunnerDefaultsToNames(
+2323-        pendingRunnerCorrection.defaults,
+2324-        runnerNames,
+2325:        gameState.currentBatterName,
+2326-      ));
+2327-      setPendingRunnerCorrection(null);
+2328-    } catch (error) {
+2329-      console.error('[Runner Correction] Failed to commit at-bat:', error);
+2330-    }
+2331:  }, [commitPlateAppearance, gameState.currentBatterName, logAction, pendingRunnerCorrection, runnerNames]);
+2332-
+2333-  const handleRunnerCaughtByChange = useCallback(async (caughtBy: number | null) => {
+2334-    if (!selectedBetweenPlayEvent?.stolenBase) return;
+2335-
+2336-    const previousValue = selectedBetweenPlayEvent.stolenBase.caughtBy ?? null;
+2337-    if (previousValue === caughtBy) return;
+2338-
+2339-    const timestamp = Date.now();
+2340-    const nextEvent: BetweenPlayEvent = {
+2341-      ...selectedBetweenPlayEvent,
+--
+2457-        throw new Error(`Failed to reload game from durable event log after ${errorLabel}`);
+2458-      }
+2459-
+2460:      syncDisplayedRostersToLineupSnapshot();
+2461-      setSelectedBetweenPlayEvent(nextEvent);
+2462-      queuePlayLogRefresh(0);
+2463-    } catch (error) {
+2464:      console.error(`[Historical Lineup Edit] Failed to ${errorLabel}:`, error);
+2465-    } finally {
+2466-      setSelectedBetweenPlayEventSaving(false);
+2467-    }
+2468:  }, [loadExistingGame, queuePlayLogRefresh, syncDisplayedRostersToLineupSnapshot]);
+2469-
+2470-  const applyHistoricalContextEdit = useCallback(async (
+2471-    nextEvent: BetweenPlayEvent,
+2472-    updates: Partial<BetweenPlayEvent>,
+2473-    errorLabel: string,
+2474-  ) => {
+2475-    setSelectedBetweenPlayEventSaving(true);
+2476-    try {
+2477-      await updateBetweenPlayEvent(nextEvent.eventId, updates);
+2478-      if (nextEvent.playerStateChange?.stateType === 'mojo') {
+--
+2593-      return;
+2594-    }
+2595-
+2596:    const selectedPlayer = historicalLineupOptions.find((option) => option.id === playerId);
+2597-    if (!selectedPlayer) return;
+2598-
+2599-    const fieldKey = field === 'outPlayer' ? 'outPlayerId' : 'inPlayerId';
+2600-    const nameKey = field === 'outPlayer' ? 'outPlayerName' : 'inPlayerName';
+2601-    const previousValue = selectedBetweenPlayEvent.substitution[fieldKey];
+2602-    if (previousValue === playerId) return;
+2603-
+2604-    const timestamp = Date.now();
+2605-    const nextEvent: BetweenPlayEvent = {
+2606-      ...selectedBetweenPlayEvent,
+--
+2626-      editHistory: nextEvent.editHistory?.slice(-1),
+2627-      substitution: nextEvent.substitution,
+2628-    }, 'update substitution player');
+2629:  }, [applyHistoricalStructuralReplayEdit, historicalLineupOptions, selectedBetweenPlayEvent, selectedHistoricalTeamSide]);
+2630-
+2631-  const handleHistoricalSubstitutionPositionChange = useCallback(async (newPosition: string) => {
+2632-    if (selectedBetweenPlayEvent?.type !== 'substitution' || !selectedBetweenPlayEvent.substitution) {
+2633-      return;
+2634-    }
+2635-
+2636-    const previousValue = selectedBetweenPlayEvent.substitution.inPosition || selectedBetweenPlayEvent.substitution.outPosition || null;
+2637-    if (previousValue === newPosition) return;
+2638-
+2639-    const timestamp = Date.now();
+--
+2815-    }, 'update manager moment');
+2816-  }, [applyHistoricalContextEdit, selectedBetweenPlayEvent]);
+2817-
+2818:  const handleHistoricalPitchCountValueChange = useCallback(async (pitchCount: number) => {
+2819:    if (!Number.isFinite(pitchCount)) return;
+2820:    if (selectedBetweenPlayEvent?.type !== 'pitch_count_update' || !selectedBetweenPlayEvent.pitchCountUpdate) return;
+2821:    if (selectedBetweenPlayEvent.pitchCountUpdate.pitchCount === pitchCount) return;
+2822-
+2823-    const timestamp = Date.now();
+2824-    const nextEvent: BetweenPlayEvent = {
+2825-      ...selectedBetweenPlayEvent,
+2826-      version: (selectedBetweenPlayEvent.version ?? 1) + 1,
+2827-      editHistory: [
+2828-        ...(selectedBetweenPlayEvent.editHistory || []),
+2829-        {
+2830:          field: 'pitchCountUpdate.pitchCount',
+2831:          oldValue: selectedBetweenPlayEvent.pitchCountUpdate.pitchCount,
+2832:          newValue: pitchCount,
+2833-          timestamp,
+2834-        },
+2835-      ],
+2836:      pitchCountUpdate: {
+2837:        ...selectedBetweenPlayEvent.pitchCountUpdate,
+2838:        pitchCount,
+2839-      },
+2840-    };
+2841-
+2842-    await applyHistoricalContextEdit(nextEvent, {
+2843-      version: nextEvent.version,
+2844-      editHistory: nextEvent.editHistory?.slice(-1),
+2845:      pitchCountUpdate: nextEvent.pitchCountUpdate,
+2846:    }, 'update pitch count');
+2847-  }, [applyHistoricalContextEdit, selectedBetweenPlayEvent]);
+2848-
+2849-  const handleQuickBarOutcome = useCallback(async (outcome: string) => {
+2850-    if (!gameInitialized) return;
+2851-
+2852-    // 1. Snapshot current context
+2853-    const bases = { ...gameState.bases };
+2854-    const outs = gameState.outs;
+2855-
+2856-    const correction = buildRunnerCorrectionForQuickBarOutcome(outcome, bases, outs);
+--
+2942-      pushPlayLogEntry({
+2943-        eventId: getPendingAtBatIdentity().atBatEventId,
+2944-        inningLabel: shortInningLabel(),
+2945:        batterName: gameState.currentBatterName,
+2946-        result: 'HR',
+2947-        resultCategory: 'hit',
+2948-        rbi,
+2949-        runsScored: rbi,
+2950-        hasFieldingData: false,
+2951-        hasLocationData: false,
+2952-        hasKType: false,
+2953:        hasPitchCount: false,
+2954-        hasPitchType: !!pitchType,
+2955-        isEnrichable: true,
+2956-        isQAB: true,
+2957-      });
+2958-
+2959-      // Update runner names (HR: all score, batter scores)
+2960-      setRunnerNames({});
+2961-    } catch (error) {
+2962-      console.error('[D-4] Failed to record HR:', error);
+2963-    }
+2964-    setHrPrompt(null);
+2965:  }, [commitPlateAppearance, gameState, hrPrompt, logAction, pushPlayLogEntry, setNextEventEnrichment, shortInningLabel, getPendingAtBatIdentity]);
+2966-
+2967-  const handleHrPromptSkip = useCallback(async () => {
+2968-    if (!hrPrompt) return;
+2969-    const { rbi, runnerAdv } = hrPrompt;
+2970-    try {
+2971-      await commitPlateAppearance({ type: 'hit', hitType: 'HR', rbi, runnerAdvancement: runnerAdv });
+2972-      logAction(`HR${rbi > 0 ? ` — ${rbi} RBI` : ''}`);
+2973-
+2974-      pushPlayLogEntry({
+2975-        eventId: getPendingAtBatIdentity().atBatEventId,
+2976-        inningLabel: shortInningLabel(),
+2977:        batterName: gameState.currentBatterName,
+2978-        result: 'HR',
+2979-        resultCategory: 'hit',
+2980-        rbi,
+2981-        runsScored: rbi,
+2982-        hasFieldingData: false,
+2983-        hasLocationData: false,
+2984-        hasKType: false,
+2985:        hasPitchCount: false,
+2986-        hasPitchType: false,
+2987-        isEnrichable: true,
+2988-        isQAB: true,
+2989-      });
+2990-      setRunnerNames({});
+2991-    } catch (error) {
+2992-      console.error('[D-4] Failed to record HR (skip):', error);
+2993-    }
+2994-    setHrPrompt(null);
+2995-  }, [commitPlateAppearance, gameState, hrPrompt, logAction, pushPlayLogEntry, shortInningLabel, getPendingAtBatIdentity]);
+--
+3014-      pushPlayLogEntry({
+3015-        eventId,
+3016-        inningLabel: shortInningLabel(),
+3017:        batterName: gameState.currentBatterName,
+3018-        result: 'E',
+3019-        resultCategory: 'error',
+3020-        rbi: 0,
+3021-        runsScored: 0,
+3022-        hasFieldingData: true,
+3023-        hasLocationData: false,
+3024-        hasKType: false,
+3025:        hasPitchCount: false,
+3026-        hasPitchType: false,
+3027-        isEnrichable: true,
+3028-        isQAB: false,
+3029-      });
+3030-    } catch (error) {
+3031-      console.error('[Quick Error] Failed to record error detail:', error);
+3032-    } finally {
+3033-      setExpandedOutcome(null);
+3034-    }
+3035:  }, [commitPlateAppearance, gameState.currentBatterName, getPendingAtBatIdentity, logAction, persistFieldingEventsForPlayData, pushPlayLogEntry, setNextEventEnrichment, shortInningLabel]);
+3036-
+3037-  // ═══════════════════════════════════════════════════════════
+3038-  // D-3: Error flow prompt completion
+3039-  // ═══════════════════════════════════════════════════════════
+3040-  const handleErrorFlowComplete = useCallback(async (
+3041-    baseReached: string,
+3042-    fielderPosition: number,
+3043-    errorType: PlayData['errorType'],
+3044-  ) => {
+3045-    if (!errorFlow) return;
+--
+3079-      pushPlayLogEntry({
+3080-        eventId: getPendingAtBatIdentity().atBatEventId,
+3081-        inningLabel: shortInningLabel(),
+3082:        batterName: gameState.currentBatterName,
+3083-        result: 'E',
+3084-        resultCategory: 'error',
+3085-        rbi: 0,
+3086-        runsScored: bases.third ? 1 : 0,
+3087-        hasFieldingData: fielderPosition > 0,
+3088-        hasLocationData: false,
+3089-        hasKType: false,
+3090:        hasPitchCount: false,
+3091-        hasPitchType: false,
+3092-        isEnrichable: true,
+3093-        isQAB: false,
+3094-      });
+3095-
+3096-      // Update runner names
+3097-      const newNames: { first?: string; second?: string; third?: string } = {};
+3098:      const batterName = gameState.currentBatterName;
+3099-      if (bases.second && !bases.third) newNames.third = runnerNames.second;
+3100-      if (bases.first && !bases.second) newNames.second = runnerNames.first;
+3101-      // Place batter
+3102-      if (baseReached === '1B') newNames.first = batterName;
+3103-      else if (baseReached === '2B') newNames.second = batterName;
+3104-      else if (baseReached === '3B') newNames.third = batterName;
+3105-      setRunnerNames(newNames);
+3106-    } catch (error) {
+3107-      console.error('[D-3] Failed to record error:', error);
+3108-    }
+3109-    setErrorFlow(null);
+3110:  }, [commitPlateAppearance, errorFlow, gameState, logAction, pushPlayLogEntry, runnerNames, setNextEventEnrichment, shortInningLabel, undoSystem, getPendingAtBatIdentity, persistFieldingEventsForPlayData]);
+3111-
+3112-  // ═══════════════════════════════════════════════════════════
+3113-  // D-5: SF prompt answer — "Sac fly — run scores?"
+3114-  // ═══════════════════════════════════════════════════════════
+3115-  const handleSfPromptAnswer = useCallback(async (isYes: boolean) => {
+3116-    if (!sfPrompt) return;
+3117-    const { runnerAdv, defaults } = sfPrompt;
+3118-    try {
+3119-      if (isYes) {
+3120-        // SF: runner scores from 3rd, batter out, not an AB
+--
+3125-        pushPlayLogEntry({
+3126-          eventId: getPendingAtBatIdentity().atBatEventId,
+3127-          inningLabel: shortInningLabel(),
+3128:          batterName: gameState.currentBatterName,
+3129-          result: 'SF',
+3130-          resultCategory: 'out',
+3131-          rbi: 1,
+3132-          runsScored: 1,
+3133-          hasFieldingData: false, hasLocationData: false, hasKType: false,
+3134:          hasPitchCount: false, hasPitchType: false,
+3135-          isEnrichable: true, isQAB: false,
+3136-        });
+3137-      } else {
+3138-        // FO: runner holds, standard fly out
+3139-        const foAdv: RunnerAdvancement = { ...runnerAdv, fromThird: undefined };
+3140-        await commitPlateAppearance({ type: 'out', outType: 'FO', runnerAdvancement: Object.keys(foAdv).length > 0 ? foAdv : undefined });
+3141-        logAction('FO (R3 held)');
+3142-
+3143-        pushPlayLogEntry({
+3144-          eventId: getPendingAtBatIdentity().atBatEventId,
+3145-          inningLabel: shortInningLabel(),
+3146:          batterName: gameState.currentBatterName,
+3147-          result: 'FO',
+3148-          resultCategory: 'out',
+3149-          rbi: 0, runsScored: 0,
+3150-          hasFieldingData: false, hasLocationData: false, hasKType: false,
+3151:          hasPitchCount: false, hasPitchType: false,
+3152-          isEnrichable: true, isQAB: false,
+3153-        });
+3154-      }
+3155-
+3156-      // Update runner names
+3157-      const newNames: { first?: string; second?: string; third?: string } = {};
+3158-      if (isYes) {
+3159-        // R3 scored, others hold on FO (tag-up default)
+3160-        if (defaults.second?.to === 'second') newNames.second = runnerNames.second;
+3161-        if (defaults.first?.to === 'first') newNames.first = runnerNames.first;
+--
+3186-        pushPlayLogEntry({
+3187-          eventId: getPendingAtBatIdentity().atBatEventId,
+3188-          inningLabel: shortInningLabel(),
+3189:          batterName: gameState.currentBatterName,
+3190-          result: 'DP',
+3191-          resultCategory: 'out',
+3192-          rbi: 0, runsScored: 0, // DP never gets RBI
+3193-          hasFieldingData: false, hasLocationData: false, hasKType: false,
+3194:          hasPitchCount: false, hasPitchType: false,
+3195-          isEnrichable: true, isQAB: false,
+3196-        });
+3197-      } else {
+3198-        // Standard GO, no DP
+3199-        await commitPlateAppearance({ type: 'out', outType: 'GO', runnerAdvancement: runnerAdv });
+3200-        logAction('GO');
+3201-
+3202-        pushPlayLogEntry({
+3203-          eventId: getPendingAtBatIdentity().atBatEventId,
+3204-          inningLabel: shortInningLabel(),
+3205:          batterName: gameState.currentBatterName,
+3206-          result: 'GO',
+3207-          resultCategory: 'out',
+3208-          rbi: rbi > 0 ? rbi : 0,
+3209-          runsScored: rbi,
+3210-          hasFieldingData: false, hasLocationData: false, hasKType: false,
+3211:          hasPitchCount: false, hasPitchType: false,
+3212-          isEnrichable: true, isQAB: false,
+3213-        });
+3214-      }
+3215-
+3216-      // Update runner names from defaults
+3217-      const newNames: { first?: string; second?: string; third?: string } = {};
+3218-      if (defaults.third?.to === 'third') newNames.third = runnerNames.third;
+3219-      if (defaults.second?.to === 'second') newNames.second = runnerNames.second;
+3220-      if (defaults.second?.to === 'third') newNames.third = runnerNames.second;
+3221-      if (defaults.first?.to === 'first') newNames.first = runnerNames.first;
+--
+3246-      pushPlayLogEntry({
+3247-        eventId: getPendingAtBatIdentity().atBatEventId,
+3248-        inningLabel: shortInningLabel(),
+3249:        batterName: gameState.currentBatterName,
+3250-        result: 'PO',
+3251-        resultCategory: 'out',
+3252-        rbi: 0, runsScored: 0,
+3253-        hasFieldingData: false, hasLocationData: false, hasKType: false,
+3254:        hasPitchCount: false, hasPitchType: false,
+3255-        isEnrichable: true, isQAB: false,
+3256-      });
+3257-
+3258-      // Update runner names (runners hold on PO)
+3259-      const newNames: { first?: string; second?: string; third?: string } = {};
+3260-      if (defaults.third?.to === 'third') newNames.third = runnerNames.third;
+3261-      if (defaults.second?.to === 'second') newNames.second = runnerNames.second;
+3262-      if (defaults.first?.to === 'first') newNames.first = runnerNames.first;
+3263-      setRunnerNames(newNames);
+3264-    } catch (error) {
+3265-      console.error('[D-7] Failed to record PO/IFR:', error);
+3266-    }
+3267-    setIfrPrompt(null);
+3268:  }, [commitPlateAppearance, gameState, ifrPrompt, logAction, pushPlayLogEntry, runnerNames, setNextEventEnrichment, shortInningLabel, getPendingAtBatIdentity]);
+3269-
+3270-  // Handle special events (Web Gem, Robbery, TOOTBLAN, etc.) from the canonical tracker modifier flow
+3271-  // Phase 5B: Extended to handle all contextual button events
+3272-  const handleSpecialEvent = useCallback(async (event: SpecialEventData, sourceAtBat?: AtBatEvent) => {
+3273-    console.log("Special event:", event);
+3274-
+3275-    try {
+3276-      // Capture undo snapshot before recording
+3277-      const eventLabel = event.eventType.replace(/_/g, ' ');
+3278-      const actor = event.fielderName || event.runnerId || 'player';
+--
+3310-        halfInning: sourceAtBat?.halfInning,
+3311-      });
+3312-
+3313:      const sourceBatterId = sourceAtBat?.batterId || event.batterId || gameState.currentBatterId;
+3314:      const sourceBatterName = sourceAtBat?.batterName || event.batterName || resolvedCurrentBatterName || gameState.currentBatterName;
+3315-      const pitcherId = event.fielderPosition === 1 && fielderId ? fielderId : sourceAtBat?.pitcherId || gameState.currentPitcherId;
+3316-      const pitcherName = event.fielderPosition === 1 && event.fielderName
+3317-        ? event.fielderName
+3318-        : sourceAtBat?.pitcherName || resolvedCurrentPitcherName || gameState.currentPitcherName;
+3319-
+3320-      if (normalizedEventType === 'KILLED' && pitcherId && pitcherName && event.newFitness) {
+3321-        const previousFitness = playerStateHook.getPlayer(pitcherId)?.fitnessProfile.currentFitness ?? 'FIT';
+3322-        const reason = `Killed pitcher by ${sourceBatterName}`;
+3323-        const eventGroupId = `${gameState.gameId}_kp_${Date.now()}`;
+3324-        const injuryEvent = await recordPlayerStateChange(
+--
+3385-    } catch (error) {
+3386-      console.error('Failed to record special event:', error);
+3387-    }
+3388:  }, [fieldingTeam, gameState.currentBatterId, gameState.currentBatterName, gameState.currentPitcherId, gameState.currentPitcherName, getLeadRunnerIdentity, getRosterIdFromName, playerStateHook, queuePlayLogRefresh, recordEvent, recordPlayerStateChange, resolvedCurrentBatterName, resolvedCurrentPitcherName, undoSystem]);
+3389-
+3390-  const handleAtBatModifierRecord = useCallback(async (modifier: AtBatModifierValue) => {
+3391-    if (!enrichingEntry?.eventId) {
+3392-      return;
+3393-    }
+3394-
+3395-    const atBatEvent = await getAtBatEvent(enrichingEntry.eventId);
+3396-    if (!atBatEvent) {
+3397-      return;
+3398-    }
+--
+3474-    });
+3475-  }, [handleSpecialEvent, pendingManualSpecialPrompt]);
+3476-
+3477:  const handleSubstitution = useCallback((teamType: 'away' | 'home', benchPlayerName: string, lineupPlayerName: string) => {
+3478:    console.log(`Substitution: ${benchPlayerName} replacing ${lineupPlayerName} on ${teamType} team`);
+3479-
+3480-    const benchPlayerId = getPlayerIdFromName(benchPlayerName, teamType);
+3481:    const lineupPlayerId = getPlayerIdFromName(lineupPlayerName, teamType);
+3482-
+3483-    // MAJ-06: Call with enriched options for proper sub type logging
+3484-    // MAJ-09: Check validation result before updating UI
+3485:    const subResult = makeSubstitution(benchPlayerId, lineupPlayerId, benchPlayerName, lineupPlayerName, {
+3486-      subType: 'player_sub',
+3487-    });
+3488-    if (!subResult.success) {
+3489-      console.warn(`[GameTracker] Substitution rejected: ${subResult.error}`);
+3490-      // TODO: Show UI toast/notification to user
+3491-      return;
+3492-    }
+3493-
+3494-    // Update local player state for UI display
+3495-    const players = teamType === 'away' ? awayTeamPlayers : homeTeamPlayers;
+3496-    const setPlayers = teamType === 'away' ? setAwayTeamPlayers : setHomeTeamPlayers;
+3497-
+3498:    const outgoingIndex = players.findIndex(p => p.name === lineupPlayerName);
+3499-    const incomingIndex = players.findIndex(p => p.name === benchPlayerName);
+3500-
+3501-    if (outgoingIndex >= 0 && incomingIndex >= 0) {
+3502-      setPlayers(prev => {
+3503-        const updated = [...prev];
+3504:        // Transfer batting order and position from outgoing to incoming player
+3505:        const outgoingBattingOrder = updated[outgoingIndex].battingOrder;
+3506-        const outgoingPosition = updated[outgoingIndex].position;
+3507-
+3508:        // Incoming player takes the batting order and position
+3509-        updated[incomingIndex] = {
+3510-          ...updated[incomingIndex],
+3511:          battingOrder: outgoingBattingOrder,
+3512-          position: outgoingPosition,
+3513-        };
+3514-
+3515:        // Outgoing player loses batting order, position, and is marked as out of game
+3516-        updated[outgoingIndex] = {
+3517-          ...updated[outgoingIndex],
+3518:          battingOrder: undefined,
+3519-          position: undefined, // Remove position so they don't show in field
+3520-          isOutOfGame: true,
+3521-        };
+3522-
+3523-        return updated;
+3524-      });
+3525-    }
+3526-  }, [awayTeamPlayers, getPlayerIdFromName, homeTeamPlayers, makeSubstitution]);
+3527-
+3528-  const handlePitcherSubstitution = (teamType: 'away' | 'home', newPitcherName: string, replacedName: string, replacedType: 'player' | 'pitcher') => {
+--
+3532-    const exitingPitcherId = getPitcherIdFromName(replacedName, teamType);
+3533-
+3534-    // Call the hook's changePitcher function which will:
+3535:    // 1. Show pitch count prompt for exiting pitcher
+3536-    // 2. After confirmation, update currentPitcherId/currentPitcherName
+3537-    changePitcher(newPitcherId, exitingPitcherId, newPitcherName, replacedName);
+3538-    queuePlayLogRefresh(80);
+3539-
+3540-    const setPitchers = teamType === 'away' ? setAwayTeamPitchers : setHomeTeamPitchers;
+3541-    setPitchers((previous) =>
+3542-      previous.map((pitcher) => {
+3543-        if (pitcher.name === newPitcherName) {
+3544-          return {
+3545-            ...pitcher,
+--
+3582-      const player2Index = updated.findIndex(p => p.name === player2Name);
+3583-
+3584-      if (player1Index >= 0 && player2Index >= 0) {
+3585:        // Swap positions only (not batting order) during live game
+3586-        const player1Position = updated[player1Index].position;
+3587-        const player2Position = updated[player2Index].position;
+3588-
+3589-        updated[player1Index] = { ...updated[player1Index], position: player2Position };
+3590-        updated[player2Index] = { ...updated[player2Index], position: player1Position };
+3591-      }
+3592-
+3593-      return updated;
+3594-    });
+3595-  }, []);
+--
+3812-
+3813-  const handleRunnerSubstitute = useCallback((base: RunnerBase) => {
+3814-    setActiveRunnerPopover(null);
+3815:    setLineupOverlayHint(`Pinch runner requested for ${base.toUpperCase()}. Use the LINEUP panel to complete the substitution.`);
+3816:    setShowLineupOverlay(true);
+3817-  }, []);
+3818-
+3819-  // ============================================
+3820-  // FIELDER POPOVER HANDLERS (Layer 4 — tickets 4.3, 4.5)
+3821-  // ============================================
+3822-
+3823:  const handleFielderPlayerCard = useCallback(() => {
+3824-    if (!activeFielderPopover) return;
+3825:    openPlayerCard(activeFielderPopover.fielder.playerName, fieldingTeam, activeFielderPopover.fielder.positionNumber === 1 ? 'pitcher' : 'batter');
+3826-    setActiveFielderPopover(null);
+3827:  }, [activeFielderPopover, fieldingTeam, openPlayerCard]);
+3828-
+3829:  const handleRunnerPlayerCard = useCallback(() => {
+3830-    if (!activeRunnerPopover) return;
+3831-    setSelectedPlayer({ name: activeRunnerPopover.runnerName, type: 'batter', playerId: activeRunnerPopover.playerId });
+3832-    setActiveRunnerPopover(null);
+3833-  }, [activeRunnerPopover]);
+3834-
+3835-  const closeFielderPopover = useCallback(() => {
+3836-    setActiveFielderPopover(null);
+3837-  }, []);
+3838-
+3839-  const handleFielderSubstitute = useCallback((benchPlayerId: string, benchPlayerName: string, fielderId: string, fielderName: string) => {
+3840-    const fieldingPlayers = fieldingTeam === 'home' ? homeTeamPlayers : awayTeamPlayers;
+3841-    const outgoingPlayer = fieldingPlayers.find((player) => player.name === fielderName);
+3842-
+3843:    handleLineupCardSubstitution({
+3844-      type: 'player_sub',
+3845-      incomingPlayerId: benchPlayerId,
+3846-      incomingPlayerName: benchPlayerName,
+3847-      outgoingPlayerId: fielderId,
+3848-      outgoingPlayerName: fielderName,
+3849-      newPosition: outgoingPlayer?.position,
+3850:      lineupSpot: outgoingPlayer?.battingOrder,
+3851-    });
+3852-    setActiveFielderPopover(null);
+3853:  }, [awayTeamPlayers, fieldingTeam, handleLineupCardSubstitution, homeTeamPlayers]);
+3854-
+3855-  const handleFielderPinchHit = useCallback((benchPlayerId: string, benchPlayerName: string, fielderId: string, fielderName: string) => {
+3856-    const battingPlayers = battingTeam === 'home' ? homeTeamPlayers : awayTeamPlayers;
+3857-    const outgoingPlayer = battingPlayers.find((player) => player.name === fielderName);
+3858-
+3859:    handleLineupCardSubstitution({
+3860-      type: 'player_sub',
+3861-      incomingPlayerId: benchPlayerId,
+3862-      incomingPlayerName: benchPlayerName,
+3863-      outgoingPlayerId: fielderId,
+3864-      outgoingPlayerName: fielderName,
+3865-      newPosition: outgoingPlayer?.position,
+3866:      lineupSpot: outgoingPlayer?.battingOrder,
+3867-    });
+3868-    setActiveFielderPopover(null);
+3869:  }, [awayTeamPlayers, battingTeam, handleLineupCardSubstitution, homeTeamPlayers]);
+3870-
+3871-  const handleFielderMovePosition = useCallback((playerId: string, newPosition: string) => {
+3872-    switchPositions([{ playerId, newPosition }]);
+3873-    setActiveFielderPopover(null);
+3874-    queuePlayLogRefresh(80);
+3875-  }, [queuePlayLogRefresh, switchPositions]);
+3876-
+3877-  // ============================================
+3878-  // PITCHER TAP HANDLER (Layer 4 — ticket 4.6)
+3879-  // ============================================
+--
+3885-      // Use existing handlePitcherSubstitution with the first available pitcher
+3886-      // In future, could open a pitcher picker modal. For now, log the intent.
+3887-      console.log('[GameTracker] Pitcher tap — available pitchers:', availablePitchers.map(p => p.name).join(', '));
+3888:      // Open a simple pitcher picker by triggering the lineup card's bullpen section
+3889-      // For now, trigger the change with the first available pitcher
+3890-      handlePitcherSubstitution(fieldingTeam, firstAvailable.name, resolvedCurrentPitcherName, 'pitcher');
+3891-    }
+3892-  }, [availablePitchers, fieldingTeam, handlePitcherSubstitution, resolvedCurrentPitcherName]);
+3893-
+3894-  const handleBatterTap = useCallback(() => {
+3895:    openPlayerCard(resolvedCurrentBatterName, battingTeam, 'batter');
+3896:  }, [battingTeam, openPlayerCard, resolvedCurrentBatterName]);
+3897-
+3898-  // Bench players for fielder popover (fielding team bench)
+3899-  const fielderPopoverBenchPlayers: BenchPlayerInfo[] = useMemo(() => {
+3900-    const fieldingPlayers = fieldingTeam === 'home' ? homeTeamPlayers : awayTeamPlayers;
+3901-    return fieldingPlayers
+3902:      .filter(p => p.battingOrder === undefined)
+3903-      .map(p => ({
+3904-        id: getRosterIdFromName(p.name, fieldingTeam),
+3905-        name: p.name,
+3906-        position: p.position || 'UT',
+3907-        isUsed: p.isOutOfGame || false,
+3908-      }));
+3909-  }, [awayTeamPlayers, fieldingTeam, getRosterIdFromName, homeTeamPlayers]);
+3910-
+3911-  // ============================================
+3912-  // OUTCOME RECORDING HANDLERS
+--
+4105-        if (field === 'fieldingSequence' || field === 'fieldingPlayType') updated.hasFieldingData = true;
+4106-        if (field === 'pitchType') updated.hasPitchType = true;
+4107-        if (field === 'pitchesInAtBat') {
+4108:          updated.hasPitchCount = true;
+4109-          if (shouldMarkQualityAtBat) {
+4110-            updated.isQAB = true;
+4111-          }
+4112-        }
+4113-        return updated;
+4114-      }));
+4115-
+4116-      // Update the enrichingEntry itself so panel reflects changes
+4117-      setEnrichingEntry(prev => prev ? { ...prev,
+4118-        hasLocationData: field === 'fieldLocation' ? true : prev.hasLocationData,
+4119-        hasFieldingData: field === 'fieldingSequence' || field === 'fieldingPlayType' ? true : prev.hasFieldingData,
+4120-        hasPitchType: field === 'pitchType' ? true : prev.hasPitchType,
+4121:        hasPitchCount: field === 'pitchesInAtBat' ? true : prev.hasPitchCount,
+4122-        isQAB: shouldMarkQualityAtBat ? true : prev.isQAB,
+4123-      } : null);
+4124-
+4125-    } catch (err) {
+4126-      console.error('[Enrichment] Failed to save:', err);
+4127-    }
+4128-  }, [buildFieldingSyncEventsForSequenceEdit, enrichingEntry]);
+4129-
+4130-  const handleMainFieldLocationPick = useCallback((coord: { x: number; y: number }) => {
+4131-    if (!canUseMainFieldLocation || !enrichingEntry) return;
+--
+4160-    const posLabels: Record<number, string> = { 1: 'P', 2: 'C', 3: '1B', 4: '2B', 5: '3B', 6: 'SS', 7: 'LF', 8: 'CF', 9: 'RF' };
+4161-    const positionLabel = posLabels[positionNumber] || `P${positionNumber}`;
+4162-    const playerId = getRosterIdFromName(playerName, fieldingTeam);
+4163:    const isCurrentBatter = playerName === resolvedCurrentBatterName;
+4164-
+4165-    setActiveFielderPopover({
+4166:      fielder: { positionNumber, positionLabel, playerName, playerId, isCurrentBatter },
+4167-      anchorPosition,
+4168-    });
+4169:  }, [enrichingEntry?.eventId, enrichmentCache, fieldingTeam, getRosterIdFromName, handleEnrichmentUpdate, resolvedCurrentBatterName]);
+4170-
+4171-  // 5.2: K/Kc toggle — updates result field on AtBatEvent
+4172-  const handleKToggle = useCallback(async (entry: PlayLogEntry) => {
+4173-    if (!entry.eventId) return;
+4174-    const newResult = entry.result === 'K' ? 'Kc' : 'K';
+4175-    try {
+4176-      const existingAtBat = await getAtBatEvent(entry.eventId);
+4177-      if (!existingAtBat) {
+4178-        return;
+4179-      }
+--
+4248-          const isShutout = isCompleteGame && pStats.runsAllowed === 0;
+4249-          const isNoHitter = isShutout && pStats.hitsAllowed === 0;
+4250-          const isPerfectGame = isNoHitter && pStats.walksAllowed === 0 && (pStats.hitByPitch || 0) === 0;
+4251:          const isMaddux = isShutout && pStats.pitchCount < 100;
+4252-
+4253-          if (isPerfectGame) {
+4254-            fameTrackingHook.recordFameEvent('PERFECT_GAME' as FameEventType, pitcherId, pitcherName, gameState.inning, gameState.isTop ? 'TOP' : 'BOTTOM', 1.0);
+4255-            console.log(`[MAJ-09] Perfect Game detected for ${pitcherId}`);
+4256-          } else if (isNoHitter) {
+4257-            fameTrackingHook.recordFameEvent('NO_HITTER' as FameEventType, pitcherId, pitcherName, gameState.inning, gameState.isTop ? 'TOP' : 'BOTTOM', 1.0);
+4258-            console.log(`[MAJ-09] No-Hitter detected for ${pitcherId}`);
+4259-          } else if (isMaddux) {
+4260-            fameTrackingHook.recordFameEvent('MADDUX' as FameEventType, pitcherId, pitcherName, gameState.inning, gameState.isTop ? 'TOP' : 'BOTTOM', 1.0);
+4261-            console.log(`[MAJ-09] Maddux detected for ${pitcherId}`);
+--
+4633-          strikes={gameState.strikes}
+4634-          outs={gameState.outs}
+4635-          stadiumName={selectedStadium}
+4636:          currentBatterName={currentBatterDisplayName}
+4637-          gameDate={gameStartTime}
+4638-          elapsedMinutes={elapsedMinutes}
+4639-        />
+4640-
+4641-        <div
+4642-          className="min-h-0 flex-1"
+4643-          style={{
+4644-            display: 'grid',
+4645-            gridTemplateColumns: 'minmax(248px, 300px) 1fr minmax(184px, 228px)',
+4646-            gridTemplateRows: '1fr auto',
+--
+4659-            inning={gameState.inning}
+4660-            isTop={gameState.isTop}
+4661-            outs={gameState.outs}
+4662:            currentBatterName={currentBatterDisplayName}
+4663-            currentPitcherName={currentPitcherDisplayName}
+4664:            batterStats={currentBatterStats ? {
+4665:              ab: currentBatterStats.ab,
+4666:              h: currentBatterStats.h,
+4667:              hr: currentBatterStats.hr,
+4668:              rbi: currentBatterStats.rbi,
+4669:              bb: currentBatterStats.bb,
+4670:              k: currentBatterStats.k,
+4671-            } : undefined}
+4672-            batterAvg={batterAB > 0 ? (batterHits / batterAB).toFixed(3).replace(/^0/, '') : '.000'}
+4673-            batterMojo={(() => {
+4674-              const team = gameState.isTop ? 'away' : 'home';
+4675:              const mojo = getPlayerMojoByName(resolvedCurrentBatterName, team);
+4676-              return mojo !== undefined ? toMojoLabel(mojo) : undefined;
+4677-            })()}
+4678-            batterMojoColor={(() => {
+4679-              const team = gameState.isTop ? 'away' : 'home';
+4680:              const mojo = getPlayerMojoByName(resolvedCurrentBatterName, team);
+4681-              return mojo !== undefined ? getMojoColor(mojo) : undefined;
+4682-            })()}
+4683-            batterFitness={(() => {
+4684-              const team = gameState.isTop ? 'away' : 'home';
+4685:              const fitness = getPlayerFitnessByName(resolvedCurrentBatterName, team);
+4686-              return fitness ? toFitnessLabel(fitness) : undefined;
+4687-            })()}
+4688:            batterHand={currentBatterData?.battingHand}
+4689:            pitcherPitchCount={pitcherPitchCount}
+4690-            pitcherGameERA={(() => {
+4691-              if (!currentPitcherStats) return undefined;
+4692-              const outsRec = currentPitcherStats.outsRecorded;
+4693-              if (outsRec === 0) return '-.--';
+4694-              return ((currentPitcherStats.earnedRuns / outsRec) * 27).toFixed(2);
+4695-            })()}
+4696-            pitcherOuts={currentPitcherStats?.outsRecorded}
+4697-            pitcherHits={currentPitcherStats?.hitsAllowed}
+4698-            pitcherK={currentPitcherStats?.strikeoutsThrown}
+4699-            pitcherBB={currentPitcherStats?.walksAllowed}
+--
+4736-            mode={enrichingEntry || selectedPlayLogEntry?.eventType === 'at_bat' ? 'enhancement' : 'info'}
+4737-            bases={gameState.bases}
+4738-            runnerNames={runnerNames}
+4739:            currentBatterName={currentBatterDisplayName}
+4740-            fielders={gameDiamondFielders}
+4741-            enhancementSequence={activeDiamondFieldingSequence}
+4742-            enhancementHelpText={enrichingEntry
+4743-              ? 'Tap fielders to build throw sequence. Tap the field to save spray/location.'
+4744-              : undefined}
+4745-            fielderBorderColors={[fielderColor1, fielderColor2]}
+4746:            batterBackgroundColor={battingTeamColors.primary}
+4747:            batterBorderColor={battingTeamColors.secondary}
+4748-            zoomLevel={fieldZoomLevel}
+4749-            onRunnerTap={handleRunnerTap}
+4750-            onFielderTap={handleFielderTap}
+4751-            onBatterTap={handleBatterTap}
+4752-            onFieldTap={handleMainFieldLocationPick}
+4753-            onEnhancementSequenceUndo={enrichingEntry ? handleDiamondFieldingSequenceUndo : undefined}
+4754-            onEnhancementSequenceClear={enrichingEntry ? handleDiamondFieldingSequenceClear : undefined}
+4755-          />
+4756-
+4757-          {/* Runner Popover — tap runner on diamond → action menu (§5.1) */}
+--
+4766-              onPassedBall={handleRunnerPB}
+4767-              onPickoff={handleRunnerPickoff}
+4768-              onSubstitute={handleRunnerSubstitute}
+4769:              onViewPlayerCard={handleRunnerPlayerCard}
+4770-              onClose={closeRunnerPopover}
+4771-            />
+4772-          )}
+4773-
+4774-          {/* Fielder Popover — tap fielder on diamond → substitution menu (§7.2) */}
+4775-          {activeFielderPopover && (
+4776-            <FielderPopover
+4777-              fielder={activeFielderPopover.fielder}
+4778-              anchorPosition={activeFielderPopover.anchorPosition}
+4779-              benchPlayers={fielderPopoverBenchPlayers}
+4780-              onSubstitute={handleFielderSubstitute}
+4781-              onPinchHit={handleFielderPinchHit}
+4782-              onMovePosition={handleFielderMovePosition}
+4783:              onViewPlayerCard={handleFielderPlayerCard}
+4784-              onClose={closeFielderPopover}
+4785-            />
+4786-          )}
+4787-        </div>
+4788-
+4789-        {/* ZONE 3: Play Log + Enrichment Panel — right panel, spans both rows */}
+4790-        <div style={{ gridColumn: '3', gridRow: '1 / 3' }} className="relative z-20 isolate pointer-events-auto flex flex-col h-full overflow-hidden">
+4791-          {/* Between-inning enrichment prompt (Ticket 5.7) */}
+4792-        {showEnrichmentPrompt && !pendingRunnerCorrection && !pendingRunnerAttribution && (
+4793-            <div className="bg-[#C4A853]/20 border-b border-[#C4A853] px-2 py-1 flex items-center gap-1 flex-shrink-0">
+--
+4838-                    batter: getBatterDestinationOptions(pendingRunnerCorrection.action),
+4839-                  }}
+4840-                  labels={{
+4841:                    batter: gameState.currentBatterName || 'BATTER',
+4842-                    first: runnerNames.first ? `R1 ${runnerNames.first}` : 'R1 (1B)',
+4843-                    second: runnerNames.second ? `R2 ${runnerNames.second}` : 'R2 (2B)',
+4844-                    third: runnerNames.third ? `R3 ${runnerNames.third}` : 'R3 (3B)',
+4845-                  }}
+4846-                />
+4847-              </div>
+4848-              <div className="p-2 border-t border-[#4a6a4a]">
+4849-                <button
+4850-                  onClick={() => void handleRunnerCorrectionCommit()}
+4851-                  className="w-full bg-[#34d399] text-[#062b1f] font-bold text-[11px] py-2 border-2 border-[#10b981] hover:bg-[#6ee7b7] active:scale-[0.99] transition-transform"
+--
+4879-              onRunnerPitcherChange={handleRunnerPitcherAttributionChange}
+4880-              onRunnerCatcherChange={handleRunnerCatcherAttributionChange}
+4881-              onRunnerFielderChange={handleRunnerFielderAttributionChange}
+4882:              onLineupPositionChange={handleHistoricalPositionChange}
+4883-              onSubstitutionPlayerChange={handleHistoricalSubstitutionPlayerChange}
+4884-              onSubstitutionPositionChange={handleHistoricalSubstitutionPositionChange}
+4885-              onPitcherChange={handleHistoricalPitcherChange}
+4886-              onContextValueChange={handleHistoricalContextValueChange}
+4887-              onContextReasonChange={handleHistoricalContextReasonChange}
+4888-              onInjuryStayedInChange={handleHistoricalInjuryStayedInChange}
+4889-              onManagerMomentChange={handleHistoricalManagerMomentChange}
+4890:              onPitchCountValueChange={handleHistoricalPitchCountValueChange}
+4891:              lineupOptions={historicalLineupOptions}
+4892-              pitcherOptions={historicalPitcherOptions}
+4893-              catcherOptions={historicalCatcherOptions}
+4894-              fielderOptions={historicalFielderOptions}
+4895-              contextValueOptions={historicalContextValueOptions}
+4896-            />
+4897-          ) : enrichingEntry !== null ? (
+4898-            /* Enrichment panel replaces play log when active */
+4899-            <EnrichmentPanel
+4900-              entry={enrichingEntry}
+4901-              currentEnrichment={enrichingEntry.eventId ? enrichmentCache[enrichingEntry.eventId] : undefined}
+--
+4990-                )}
+4991-                <button
+4992-                  onClick={() => {
+4993:                    setLineupOverlayHint('Use LINEUP for batting order, bench players, pinch runners, and pitching changes.');
+4994:                    setShowLineupOverlay(true);
+4995-                  }}
+4996-                  className="bg-[#1a5276] border-[3px] border-[#5dade2] px-4 py-2.5 text-white text-sm font-bold
+4997-                             shadow-[2px_2px_0px_0px_rgba(0,0,0,0.5)] active:scale-95 transition-transform
+4998-                             hover:bg-[#21618c]"
+4999-                >
+5000:                  LINEUP
+5001-                </button>
+5002-                <button
+5003-                  onClick={() => {
+5004-                    const firstUnenriched = [...playLogEntries].reverse().find(entry =>
+5005-                      entry.isEnrichable &&
+5006:                      (!entry.hasFieldingData || !entry.hasLocationData || !entry.hasPitchType || !entry.hasPitchCount)
+5007-                    );
+5008-                    if (firstUnenriched) {
+5009-                      setEnrichingEntry(firstUnenriched);
+5010-                    }
+5011:                    setLineupOverlayHint('Tap the main field to set spray/location. Use the play log panel for pitch and sequence edits.');
+5012-                  }}
+5013-                  className="bg-[#4A6844] border-[3px] border-[#88AA88] px-3 py-2.5 text-white text-xs font-bold
+5014-                             shadow-[2px_2px_0px_0px_rgba(0,0,0,0.5)] active:scale-95 transition-transform
+5015-                             hover:bg-[#5A8352]"
+5016-                >
+5017-                  +FLD
+5018-                </button>
+5019-                <button
+5020-                  onClick={() => {
+5021-                    const latestAtBat = [...playLogEntries].reverse().find((entry) => entry.eventType === 'at_bat' && entry.isEnrichable);
+5022-                    if (latestAtBat) {
+5023-                      setEnrichingEntry(latestAtBat);
+5024-                    }
+5025:                    setLineupOverlayHint('Use the at-bat editor for modifiers and special-event enhancements.');
+5026-                  }}
+5027-                  className="bg-[#6c3483] border-[3px] border-[#af7ac5] px-3 py-2.5 text-white text-xs font-bold
+5028-                             shadow-[2px_2px_0px_0px_rgba(0,0,0,0.5)] active:scale-95 transition-transform
+5029-                             hover:bg-[#7d3c98]"
+5030-                >
+5031-                  +MOD
+5032-                </button>
+5033-              </div>
+5034-              <div className="text-[8px] text-[#C4A853] min-w-0 truncate">
+5035-                {canUseMainFieldLocation
+5036-                  ? 'Location enrichment is active: tap the main field. K/Kc stays in the play log.'
+5037:                  : lineupOverlayHint ?? 'Tap a play to enrich. Use the main field for +loc and LINEUP for substitutions.'}
+5038-              </div>
+5039-            </div>
+5040-            <div className="flex items-center gap-2">
+5041-              <undoSystem.UndoButtonComponent />
+5042-              <button
+5043-                onClick={() => setShowEndGameConfirmation(true)}
+5044-                className="bg-[#DD0000] border-[3px] border-white px-4 py-2.5 text-white text-sm font-bold
+5045-                           shadow-[2px_2px_0px_0px_rgba(0,0,0,0.5)] active:scale-95 transition-transform
+5046-                           hover:bg-[#FF0000]"
+5047-              >
+--
+5084-                    batter: getBatterDestinationOptions(pendingRunnerCorrection.action),
+5085-                  }}
+5086-                  labels={{
+5087:                    batter: gameState.currentBatterName || 'BATTER',
+5088-                    first: runnerNames.first ? `R1 ${runnerNames.first}` : 'R1 (1B)',
+5089-                    second: runnerNames.second ? `R2 ${runnerNames.second}` : 'R2 (2B)',
+5090-                    third: runnerNames.third ? `R3 ${runnerNames.third}` : 'R3 (3B)',
+5091-                  }}
+5092-                />
+5093-              </div>
+5094-              <div className="flex-shrink-0 p-2 border-t border-[#4a6a4a] bg-[#2a3a2d]">
+5095-                <button
+5096-                  onClick={() => void handleRunnerCorrectionCommit()}
+5097-                  className="w-full bg-[#34d399] text-[#062b1f] font-bold text-[11px] py-2 border-2 border-[#10b981] hover:bg-[#6ee7b7] active:scale-[0.99] transition-transform"
+--
+5145-          </div>
+5146-        )}
+5147-
+5148:        {/* Player Card Modal - EXH-036: Now with mojo/fitness editing */}
+5149-        {selectedPlayer && (
+5150:          <PlayerCardModal
+5151-            player={selectedPlayer}
+5152-            onClose={() => setSelectedPlayer(null)}
+5153-            currentMojo={playerStateHook.getPlayer(selectedPlayer.playerId)?.gameState.currentMojo}
+5154-            currentFitness={playerStateHook.getPlayer(selectedPlayer.playerId)?.fitnessProfile.currentFitness}
+5155-            onMojoChange={(newMojo) => {
+5156-              const team = resolveRosterTeamSide(selectedPlayer.playerId, selectedPlayer.name) || 'home';
+5157-              setPlayerMojoByName(selectedPlayer.name, team, newMojo);
+5158-            }}
+5159-            onFitnessChange={(newFitness) => {
+5160-              const team = resolveRosterTeamSide(selectedPlayer.playerId, selectedPlayer.name) || 'home';
+--
+5163-          />
+5164-        )}
+5165-
+5166:        {showLineupOverlay && (
+5167-          <div
+5168-            className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4"
+5169:            onClick={() => setShowLineupOverlay(false)}
+5170-          >
+5171-            <div
+5172-              className="w-full max-w-[980px] max-h-[90vh] bg-[#2a3a2d] border-[6px] border-[#3d5240]
+5173-                         shadow-[8px_8px_0_rgba(0,0,0,0.7)] flex flex-col"
+5174-              onClick={(e) => e.stopPropagation()}
+5175-            >
+5176-              <div className="flex items-center justify-between px-4 py-3 bg-[#3d5240] border-b-[3px] border-[#1a2a1d]">
+5177-                <div>
+5178:                  <div className="text-sm font-bold text-[#E8E8D8]">LINEUP</div>
+5179-                  <div className="text-[9px] text-[#C4A853]">
+5180:                    {lineupOverlayHint ?? 'Manage batting order, bench players, and pitching changes.'}
+5181-                  </div>
+5182-                </div>
+5183-                <button
+5184:                  onClick={() => setShowLineupOverlay(false)}
+5185-                  className="bg-[#556B55] border-[3px] border-[#E8E8D8] px-2 py-1 text-[#E8E8D8] hover:bg-[#6a846a]"
+5186:                  title="Close lineup"
+5187-                >
+5188-                  <X className="w-4 h-4" />
+5189-                </button>
+5190-              </div>
+5191-              <div className="p-4 overflow-y-auto">
+5192:                {!lineupSizeOk && currentLineup.length > 0 && (
+5193-                  <div className="mb-2 px-2 py-1 bg-[#4A2A00] border border-[#FF8800] text-[#FFAA44] text-[10px] font-bold">
+5194:                    LINEUP SIZE: {currentLineup.length} — expected 9 (or 10 with DH)
+5195-                  </div>
+5196-                )}
+5197:                <LineupCard
+5198:                  lineup={lineupCardData}
+5199-                  bench={benchCardData}
+5200-                  bullpen={bullpenCardData}
+5201-                  currentPitcher={currentPitcherData}
+5202:                  onSubstitution={handleLineupCardSubstitution}
+5203-                  isExpanded={true}
+5204-                  onPlayerClick={(playerId, playerName, type) => setSelectedPlayer({ name: playerName, type, playerId })}
+5205-                />
+5206-              </div>
+5207-            </div>
+5208-          </div>
+5209-        )}
+5210-
+5211-        {/* Play Location Overlay - REMOVED (now using drag-drop interface) */}
+5212-
+--
+5337-          />
+5338-        )}
+5339-
+5340:        {/* Pitch Count Prompt Modal (per PITCH_COUNT_TRACKING_SPEC.md) */}
+5341:        {pitchCountPrompt && (
+5342:          <PitchCountModal
+5343:            prompt={pitchCountPrompt}
+5344:            onConfirm={(pitcherId: string, finalCount: number) => {
+5345:              const result = confirmPitchCount(pitcherId, finalCount);
+5346-              if (result.immaculateInning) {
+5347-                fameTrackingHook.recordFameEvent(
+5348-                  'IMMACULATE_INNING' as FameEventType,
+5349-                  result.immaculateInning.pitcherId,
+5350-                  result.immaculateInning.pitcherName,
+5351-                  gameState.inning,
+5352-                  gameState.isTop ? 'TOP' : 'BOTTOM',
+5353-                  1.0
+5354-                );
+5355-              }
+5356-            }}
+5357:            onDismiss={dismissPitchCountPrompt}
+5358-          />
+5359-        )}
+5360-
+5361-        {/* D-4: HR Inline Prompt — distance + pitch type (both optional) */}
+5362-        {hrPrompt && (
+5363-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+5364-               onClick={handleHrPromptSkip}>
+5365-            <div className="bg-[#1a2a1d] border-[3px] border-[#C4A853] rounded-lg p-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.6)] w-[280px]"
+5366-                 onClick={(e) => e.stopPropagation()}>
+5367-              <div className="text-xs font-bold text-[#C4A853] tracking-wider mb-3">HOME RUN</div>
+--
+6155-              </div>
+6156-            </ExpandablePanel>
+6157-
+6158:            {/* LINEUP Section - Drag-and-Drop Only */}
+6159-            <ExpandablePanel
+6160:              title="LINEUP"
+6161-              isExpanded={expandedSections.substitutions}
+6162-              onToggle={() => toggleSection('substitutions')}
+6163-            >
+6164:              {/* GAP-GT-7-B: Lineup size warning — display if not 9 or 10 players */}
+6165:              {!lineupSizeOk && currentLineup.length > 0 && (
+6166-                <div className="mb-1 px-2 py-1 bg-[#4A2A00] border border-[#FF8800] text-[#FFAA44] text-[8px] font-bold">
+6167:                  ⚠ LINEUP SIZE: {currentLineup.length} — expected 9 (or 10 with DH)
+6168-                </div>
+6169-              )}
+6170:              {/* LineupCard - Drag-drop substitution interface (Per spec: no buttons) */}
+6171:              {/* EXH-036: Added onPlayerClick to allow mojo/fitness editing from lineup cards */}
+6172:              <LineupCard
+6173:                lineup={lineupCardData}
+6174-                bench={benchCardData}
+6175-                bullpen={bullpenCardData}
+6176-                currentPitcher={currentPitcherData}
+6177:                onSubstitution={handleLineupCardSubstitution}
+6178-                isExpanded={true}
+6179-                onPlayerClick={(playerId, playerName, type) => setSelectedPlayer({ name: playerName, type, playerId })}
+6180-              />
+6181-            </ExpandablePanel>
+6182-          </div>
+6183-          )}
+6184-
+6185-          {/* Control buttons - UNDO and END GAME */}
+6186-          <div className="flex gap-3 items-center">
+6187-            <button
+--
+6209-  );
+6210-}
+6211-
+6212:// Pitch Count Modal Component (per PITCH_COUNT_TRACKING_SPEC.md §5)
+6213:interface PitchCountModalProps {
+6214-  prompt: {
+6215-    type: 'pitching_change' | 'end_game' | 'end_inning';
+6216-    pitcherId: string;
+6217-    pitcherName: string;
+6218-    currentCount: number;
+6219-    lastVerifiedInning: number;
+6220-  };
+6221:  onConfirm: (pitcherId: string, finalCount: number) => void;
+6222-  onDismiss: () => void;
+6223-}
+6224-
+6225:function PitchCountModal({ prompt, onConfirm, onDismiss }: PitchCountModalProps) {
+6226:  const [pitchCount, setPitchCount] = React.useState(prompt.currentCount.toString());
+6227-
+6228-  const handleConfirm = () => {
+6229:    const count = parseInt(pitchCount, 10);
+6230-    if (!isNaN(count) && count >= 0) {
+6231:      onConfirm(prompt.pitcherId, count);
+6232-    }
+6233-  };
+6234-
+6235-  const title = prompt.type === 'pitching_change'
+6236:    ? '⚠️ PITCHING CHANGE - PITCH COUNT REQUIRED'
+6237-    : prompt.type === 'end_game'
+6238:    ? '🏁 FINAL PITCH COUNT'
+6239:    : '📊 END OF INNING - UPDATE PITCH COUNT?';
+6240-
+6241-  const isRequired = prompt.type !== 'end_inning';
+6242-
+6243-  return (
+6244-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+6245-      <div className="bg-[#556B55] border-4 border-[#3d5240] p-4 max-w-md w-full mx-4 shadow-lg">
+6246-        <div className="text-[#FFD700] text-sm font-bold mb-3">{title}</div>
+6247-
+6248-        <div className="bg-[#3d5240] p-3 mb-3">
+6249-          <div className="text-[#E8E8D8] text-xs mb-1">
+--
+6259-
+6260-        <div className="mb-4">
+6261-          <label className="text-[#E8E8D8] text-xs block mb-1">
+6262:            Enter CURRENT pitch count:
+6263-          </label>
+6264-          <input
+6265-            type="number"
+6266-            min={prompt.currentCount}
+6267:            value={pitchCount}
+6268:            onChange={(e) => setPitchCount(e.target.value)}
+6269-            className="w-full bg-[#2a3a2d] border-2 border-[#1a3020] text-white text-lg font-bold p-2 text-center"
+6270-            autoFocus
+6271-          />
+6272-          <div className="text-[#88AA88] text-[10px] mt-1">
+6273-            💡 Check the broadcast or scoreboard for current count
+6274-          </div>
+6275-        </div>
+6276-
+6277-        {isRequired && (
+6278-          <div className="text-[#FF6666] text-xs mb-3">
+6279:            ⚠️ Cannot proceed without pitch count.
+6280-          </div>
+6281-        )}
+6282-
+6283-        <div className="flex gap-2">
+6284-          {!isRequired && (
+6285-            <button
+6286-              onClick={onDismiss}
+6287-              className="flex-1 bg-[#3d5240] border-2 border-[#2a3a2d] text-[#E8E8D8] py-2 px-4 font-bold hover:bg-[#4a6a4a]"
+6288-            >
+6289-              Skip
+--
+6377-  );
+6378-}
+6379-
+6380:interface PlayerCardModalProps {
+6381-  player: { name: string; type: 'batter' | 'pitcher'; playerId: string };
+6382-  onClose: () => void;
+6383-  // EXH-036: Mojo/Fitness editing
+6384-  currentMojo?: MojoLevel;
+6385-  currentFitness?: FitnessState;
+6386-  onMojoChange?: (newMojo: MojoLevel) => void;
+6387-  onFitnessChange?: (newFitness: FitnessState) => void;
+6388-}
+6389-
+6390:function PlayerCardModal({
+6391-  player,
+6392-  onClose,
+6393-  currentMojo,
+6394-  currentFitness,
+6395-  onMojoChange,
+6396-  onFitnessChange
+6397:}: PlayerCardModalProps) {
+6398-  // EXH-036: State for editing mode
+6399-  const [isEditingMojo, setIsEditingMojo] = useState(false);
+6400-  const [isEditingFitness, setIsEditingFitness] = useState(false);
+6401-
+6402:  // T0-09: Zero stats for player card — no phantom data
+6403-  // TODO: Wire to actual game state (playerStats/pitcherStats Maps) for live stats
+6404-  const batterStats = {
+6405-    position: 'SS',
+6406-    battingHand: 'R',
+6407-    throwingHand: 'R',
+6408-    avg: '.000',
+6409-    hr: 0,
+6410-    rbi: 0,
+6411-    sb: 0,
+6412-    gameStats: {

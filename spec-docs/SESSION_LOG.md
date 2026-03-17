@@ -2991,3 +2991,40 @@ JK browser-test R5 fixes:
 - Bug Rounds 1-5 + follow-ups: 43 bugs addressed
 - Hotfixes: 1 (infinite loop)
 - Repro-fix tests: 22 automated bug tests
+
+
+### GameTracker Advanced Systems Audit — COMPLETE
+
+**Skill:** gametracker-systems-audit | **Executor:** Claude Code CLI | Opus 4.6
+**Output:** `spec-docs/GAMETRACKER_SYSTEMS_TRUTH_MAP.md`
+
+**Scorecard:**
+| # | System | C1 | C2 | C3 | C4 | Score |
+|---|--------|----|----|----|----|-------|
+| 1 | Leverage Index | ✅ | ✅ PER-PLAY | ✅ | ⚠️ | 3.5/4 |
+| 2 | WPA | ✅ | ✅ PER-PLAY | ✅ | ❌ | 3/4 |
+| 3 | Clutch Attribution | ❌ | ❌ | ⚠️ | ❌ | 0.5/4 |
+| 4 | Fame Tracking | ✅ | ✅ | ✅ | ✅ | 4/4 |
+| 5 | Milestone Detection | ✅ | ✅ EFFECT | ✅ | ⚠️ | 3.5/4 |
+| 6 | WAR (mWAR) | ✅ | ✅ PER-PLAY | ✅ | ⚠️ | 3.5/4 |
+| 7 | Mojo | ✅ | ✅ MANUAL | ✅ | ✅ | 4/4 |
+| 8 | Fitness | ✅ | ✅ MANUAL | ✅ | ✅ | 4/4 |
+| 9 | Narrative | ✅ | ✅ END-GAME | ⚠️ | ❌ | 1.5/4 |
+| 10 | Fan Morale | ✅ | ✅ END-GAME | ⚠️ | ❌ | 2/4 |
+| 11 | Designations | ❌ | ❌ | ❌ | ❌ | 0/4 |
+| 12 | Post-Game Pipeline | ✅ | ✅ | ✅ | ✅ | 4/4 |
+
+**Fully wired (4/4):** 4 systems (Fame, Mojo, Fitness, Post-Game Pipeline)
+**Partially wired:** 6 systems (LI, WPA, Milestones, WAR, Narrative, Fan Morale)
+**Not implemented:** 2 systems (Clutch Attribution, Designations)
+
+**Critical Findings:**
+1. `useClutchCalculations` — 312-line hook exists but is ORPHANED (never imported). §13 non-functional.
+2. `milestoneAlerts` — computed every batter change but never rendered.
+3. Narrative dead data path — `gameNarrative`/`awayNarrative` generated but PostGameSummary's types omit them.
+4. Fan Morale has zero IndexedDB writes — resets on navigation.
+5. Dynamic Designations — no GameTracker logic at all.
+6. Display gaps: WPA never shown, LI only in popups, mWAR console-only, milestones not in PostGameSummary.
+
+### Next Action
+Build implementation plan from truth map findings. 12 prioritized fix items.

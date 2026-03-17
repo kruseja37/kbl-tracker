@@ -253,8 +253,8 @@ export function EliminationHome() {
       const { gameId, nextGameNumber, homeTeam, awayTeam } = buildSeriesCardState(eliminationId, series);
       const higherSeedHome = homeTeam.teamId === series.higherSeed.teamId;
       const [awayRoster, homeRoster, awayTeamData, homeTeamData] = await Promise.all([
-        buildEliminationGameTrackerRoster(eliminationId, awayTeam.teamId),
-        buildEliminationGameTrackerRoster(eliminationId, homeTeam.teamId),
+        buildEliminationGameTrackerRoster(eliminationId, awayTeam.teamId, playoffConfig.useDH),
+        buildEliminationGameTrackerRoster(eliminationId, homeTeam.teamId, playoffConfig.useDH),
         getTeam(awayTeam.teamId),
         getTeam(homeTeam.teamId),
       ]);

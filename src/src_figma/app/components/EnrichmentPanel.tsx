@@ -1,10 +1,17 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import type { AtBatEvent } from '../../../utils/eventLog';
-import type { PlayLogEntry } from '../utils/playLogTypes';
+import type { PlayLogEntry, RunnerSubEntry } from '../utils/playLogTypes';
 import {
-  FIELDING_PLAY_TYPE_OPTIONS,
+  FIELDING_ATTEMPT_TYPE_OPTIONS,
+  FIELDING_ATTEMPT_OUTCOME_OPTIONS,
+  PLAY_MECHANIC_OPTIONS,
+  mapAttemptToLegacyFieldingPlayType,
+  type FieldingAttemptType,
+  type FieldingAttemptOutcome,
+  type PlayMechanic,
   type FieldingPlayTypeValue,
 } from '../utils/fieldingPlayType';
+import { getRunnerDestinationOptions } from '../utils/gameTrackerRunnerCorrection';
 
 // ──────────────────────────────────────────────────────────────
 // Pitch Type Constants (§4.3)
@@ -24,15 +31,46 @@ export const PITCH_TYPES = [
 
 export type PitchTypeAbbr = typeof PITCH_TYPES[number]['abbr'];
 
-export const EXIT_TYPE_OPTIONS = [
-  { value: 'ground_ball', label: 'Ground' },
-  { value: 'line_drive', label: 'Line Drive' },
-  { value: 'fly_ball', label: 'Fly Ball' },
-  { value: 'popup', label: 'Pop Up' },
+// ──────────────────────────────────────────────────────────────
+// Layer C — Contact Type (§8.1) — renamed from exitType
+// ──────────────────────────────────────────────────────────────
+
+export const CONTACT_TYPE_OPTIONS = [
+  { value: 'normal', label: 'Normal' },
+  { value: 'weak', label: 'Weak' },
+  { value: 'hard', label: 'Hard' },
+  { value: 'bloop', label: 'Bloop' },
   { value: 'bunt', label: 'Bunt' },
 ] as const;
 
-export type ExitTypeValue = typeof EXIT_TYPE_OPTIONS[number]['value'];
+export type ContactTypeValue = typeof CONTACT_TYPE_OPTIONS[number]['value'];
+
+/**
+ * Map UI contactType → persisted exitType for backward compatibility.
+ * eventLog.ts stores exitType as ground_ball | fly_ball | line_drive | popup | bunt | string.
+ * Contact type is orthogonal to trajectory, so we only map 'bunt' directly.
+ * Other contact types are stored as-is in the exitType field (allowed by `| string`).
+ */
+export function mapContactTypeToExitType(contactType: ContactTypeValue): string {
+  return contactType;
+}
+
+/**
+ * Map persisted exitType back to UI contactType (for loading enrichment data).
+ * Legacy values (ground_ball, fly_ball, etc.) are no longer shown as contact type —
+ * they were trajectory, not contact quality.
+ */
+export function mapExitTypeToContactType(exitType?: string): ContactTypeValue | undefined {
+  if (!exitType) return undefined;
+  const mapping: Record<string, ContactTypeValue> = {
+    normal: 'normal',
+    weak: 'weak',
+    hard: 'hard',
+    bloop: 'bloop',
+    bunt: 'bunt',
+  };
+  return mapping[exitType];
+}
 
 // ──────────────────────────────────────────────────────────────
 // Enrichment data that can be saved
@@ -40,13 +78,23 @@ export type ExitTypeValue = typeof EXIT_TYPE_OPTIONS[number]['value'];
 
 export interface EnrichmentUpdate {
   fieldLocation?: { x: number; y: number };
-  exitType?: ExitTypeValue;
+  exitType?: string; // persisted as exitType, UI shows as contactType
   fieldingSequence?: number[];
   fieldingPlayType?: FieldingPlayTypeValue;
+  fieldingAttemptType?: FieldingAttemptType;
+  fieldingAttemptOutcome?: FieldingAttemptOutcome;
+  playMechanic?: PlayMechanic;
+  batterOutAdvancing?: boolean;
   hrDistance?: number;
   pitchType?: string;
   pitchesInAtBat?: number;
 }
+
+// ──────────────────────────────────────────────────────────────
+// Layer D — Modifiers (§8.1)
+// Removed: BUNT (now contact type), TOOTBLAN (now runner-level)
+// Added: BEAT_RUNNER
+// ──────────────────────────────────────────────────────────────
 
 const MODIFIER_OPTIONS = [
   { value: 'SEVEN_PLUS_PITCH_AB', label: '7+' },
@@ -54,49 +102,282 @@ const MODIFIER_OPTIONS = [
   { value: 'KILLED_PITCHER', label: 'KP' },
   { value: 'NUT_SHOT', label: 'NUT' },
   { value: 'BEAT_THROW', label: 'BT' },
-  { value: 'BUNT', label: 'BUNT' },
-  { value: 'TOOTBLAN', label: 'TBL' },
+  { value: 'BEAT_RUNNER', label: 'BR' },
 ] as const;
 
 export type AtBatModifierValue = typeof MODIFIER_OPTIONS[number]['value'];
 
 // ──────────────────────────────────────────────────────────────
-// Mini Diamond SVG for field location (simple tap-to-place)
+// Per-result enrichment gating (§8.5 ENRICHMENT_CONFIG)
 // ──────────────────────────────────────────────────────────────
 
-function MiniDiamond({
+interface EnrichmentConfig {
+  spray: boolean;
+  /** §8.2: Context-sensitive spray zone count per result type */
+  sprayZones: number;
+  fieldingAttempt: boolean;
+  playMechanic: boolean;
+  contactType: boolean;
+  modifiers: AtBatModifierValue[];
+  hrDistance: boolean;
+}
+
+const ALL_CONTACT_MODIFIERS: AtBatModifierValue[] = ['SEVEN_PLUS_PITCH_AB', 'ROBBERY', 'KILLED_PITCHER', 'NUT_SHOT', 'BEAT_THROW', 'BEAT_RUNNER'];
+const NO_KP_NUT: AtBatModifierValue[] = ['SEVEN_PLUS_PITCH_AB', 'ROBBERY', 'BEAT_THROW', 'BEAT_RUNNER'];
+
+const ENRICHMENT_CONFIG: Record<string, EnrichmentConfig> = {
+  // Outs — §8.2 zone counts
+  GO:  { spray: true,  sprayZones: 18, fieldingAttempt: true,  playMechanic: true,  contactType: true, modifiers: ['SEVEN_PLUS_PITCH_AB', 'KILLED_PITCHER', 'NUT_SHOT', 'BEAT_RUNNER'], hrDistance: false },
+  FO:  { spray: true,  sprayZones: 27, fieldingAttempt: true,  playMechanic: true,  contactType: true, modifiers: ['SEVEN_PLUS_PITCH_AB', 'KILLED_PITCHER', 'NUT_SHOT', 'BEAT_RUNNER'], hrDistance: false },
+  LO:  { spray: true,  sprayZones: 39, fieldingAttempt: true,  playMechanic: true,  contactType: true, modifiers: ['SEVEN_PLUS_PITCH_AB', 'KILLED_PITCHER', 'NUT_SHOT', 'BEAT_RUNNER'], hrDistance: false },
+  PO:  { spray: true,  sprayZones: 27, fieldingAttempt: true,  playMechanic: true,  contactType: true, modifiers: ['SEVEN_PLUS_PITCH_AB', 'KILLED_PITCHER', 'NUT_SHOT', 'BEAT_RUNNER'], hrDistance: false },
+  DP:  { spray: true,  sprayZones: 42, fieldingAttempt: true,  playMechanic: true,  contactType: true, modifiers: ['SEVEN_PLUS_PITCH_AB', 'KILLED_PITCHER', 'NUT_SHOT', 'BEAT_RUNNER'], hrDistance: false },
+  TP:  { spray: true,  sprayZones: 42, fieldingAttempt: true,  playMechanic: true,  contactType: true, modifiers: ['SEVEN_PLUS_PITCH_AB', 'KILLED_PITCHER', 'NUT_SHOT', 'BEAT_RUNNER'], hrDistance: false },
+  FC:  { spray: true,  sprayZones: 42, fieldingAttempt: true,  playMechanic: true,  contactType: true, modifiers: ['SEVEN_PLUS_PITCH_AB', 'KILLED_PITCHER', 'NUT_SHOT', 'BEAT_RUNNER'], hrDistance: false },
+  // Hits — §8.2: 6 dirs × (3 IF + 4 OF) = 42
+  '1B': { spray: true,  sprayZones: 42, fieldingAttempt: true,  playMechanic: true,  contactType: true, modifiers: ['SEVEN_PLUS_PITCH_AB', 'KILLED_PITCHER', 'NUT_SHOT', 'BEAT_THROW'], hrDistance: false },
+  '2B': { spray: true,  sprayZones: 42, fieldingAttempt: true,  playMechanic: true,  contactType: true, modifiers: ['SEVEN_PLUS_PITCH_AB', 'KILLED_PITCHER', 'NUT_SHOT', 'BEAT_THROW'], hrDistance: false },
+  '3B': { spray: true,  sprayZones: 42, fieldingAttempt: true,  playMechanic: true,  contactType: true, modifiers: ['SEVEN_PLUS_PITCH_AB', 'KILLED_PITCHER', 'NUT_SHOT', 'BEAT_THROW'], hrDistance: false },
+  GRD: { spray: true,  sprayZones: 42, fieldingAttempt: true,  playMechanic: true,  contactType: true, modifiers: ['SEVEN_PLUS_PITCH_AB', 'KILLED_PITCHER', 'NUT_SHOT', 'BEAT_THROW'], hrDistance: false },
+  // HR — §8.2: 7 dirs × 3 depths = 21
+  HR:  { spray: true,  sprayZones: 21, fieldingAttempt: false, playMechanic: false, contactType: true, modifiers: ['SEVEN_PLUS_PITCH_AB'], hrDistance: true },
+  // Sacrifices — no KP/NUT per §8.5
+  SAC: { spray: true,  sprayZones: 42, fieldingAttempt: true,  playMechanic: true,  contactType: true, modifiers: ['SEVEN_PLUS_PITCH_AB'], hrDistance: false },
+  SF:  { spray: true,  sprayZones: 27, fieldingAttempt: true,  playMechanic: true,  contactType: true, modifiers: ['SEVEN_PLUS_PITCH_AB'], hrDistance: false },
+  // Errors — §8.2: IF + OF = 42
+  E:   { spray: true,  sprayZones: 42, fieldingAttempt: true,  playMechanic: true,  contactType: true, modifiers: ['SEVEN_PLUS_PITCH_AB', 'KILLED_PITCHER', 'NUT_SHOT'], hrDistance: false },
+  // Non-contact plays — only pitch type + pitch count
+  K:   { spray: false, sprayZones: 0,  fieldingAttempt: false, playMechanic: false, contactType: false, modifiers: [], hrDistance: false },
+  Kc:  { spray: false, sprayZones: 0,  fieldingAttempt: false, playMechanic: false, contactType: false, modifiers: [], hrDistance: false },
+  WP_K:{ spray: false, sprayZones: 0,  fieldingAttempt: true,  playMechanic: false, contactType: false, modifiers: [], hrDistance: false },
+  PB_K:{ spray: false, sprayZones: 0,  fieldingAttempt: true,  playMechanic: false, contactType: false, modifiers: [], hrDistance: false },
+  BB:  { spray: false, sprayZones: 0,  fieldingAttempt: false, playMechanic: false, contactType: false, modifiers: [], hrDistance: false },
+  IBB: { spray: false, sprayZones: 0,  fieldingAttempt: false, playMechanic: false, contactType: false, modifiers: [], hrDistance: false },
+  HBP: { spray: false, sprayZones: 0,  fieldingAttempt: false, playMechanic: false, contactType: false, modifiers: [], hrDistance: false },
+};
+
+function getEnrichmentConfig(result: string): EnrichmentConfig {
+  return ENRICHMENT_CONFIG[result] || {
+    spray: false, sprayZones: 0, fieldingAttempt: false, playMechanic: false,
+    contactType: false, modifiers: [], hrDistance: false,
+  };
+}
+
+// ──────────────────────────────────────────────────────────────
+// SprayGraphic — Fan-shaped inline SVG (§8.2)
+// Replaces MiniDiamond. Zone-based, chalk-line aesthetic.
+// Context-sensitive zone counts per result type.
+// ──────────────────────────────────────────────────────────────
+
+// §8.2: Zone layout configuration per result type
+// dirs = angular divisions, depths = radial bands, foul = extra foul zones
+interface SprayZoneLayout {
+  dirs: number;
+  depths: number;
+  foul: number;
+  /** Radial range [0..1] — 0 = home plate, 0.45 = IF boundary, 1.0 = fence */
+  innerR: number;
+  outerR: number;
+}
+
+const SPRAY_ZONE_LAYOUTS: Record<string, SprayZoneLayout> = {
+  HR:  { dirs: 7, depths: 3, foul: 0, innerR: 0.65, outerR: 1.0 },  // 21: beyond fence
+  GO:  { dirs: 6, depths: 3, foul: 0, innerR: 0.0,  outerR: 0.45 }, // 18: infield only
+  FO:  { dirs: 6, depths: 4, foul: 3, innerR: 0.4,  outerR: 1.0 },  // 27: OF + foul
+  LO:  { dirs: 6, depths: 6, foul: 3, innerR: 0.2,  outerR: 1.0 },  // 39: OF + med/deep IF + foul
+  PO:  { dirs: 6, depths: 4, foul: 3, innerR: 0.0,  outerR: 0.55 }, // 27: IF + shallow OF + foul
+  DEFAULT: { dirs: 6, depths: 7, foul: 0, innerR: 0.0, outerR: 1.0 }, // 42: IF + OF (1B/2B/3B/E/ITPHR/GRD)
+};
+
+function getZoneLayout(result: string): SprayZoneLayout {
+  if (SPRAY_ZONE_LAYOUTS[result]) return SPRAY_ZONE_LAYOUTS[result];
+  // Map result types to their layout
+  if (['1B', '2B', '3B', 'E', 'GRD', 'DP', 'TP', 'FC', 'SAC'].includes(result)) return SPRAY_ZONE_LAYOUTS.DEFAULT;
+  if (result === 'SF') return SPRAY_ZONE_LAYOUTS.FO; // SF uses same as FO (OF + foul)
+  return SPRAY_ZONE_LAYOUTS.DEFAULT;
+}
+
+// Polar-to-cartesian for zone path generation
+// Fan apex at (100, 115), full radius ≈ 110px
+const CX = 100;
+const CY = 115;
+const MAX_R = 110;
+// Fan angular range: from ~228° to ~312° (centered on 270° = straight up)
+const FAN_START = (228 * Math.PI) / 180;
+const FAN_END = (312 * Math.PI) / 180;
+
+function polarToXY(angle: number, radius: number): [number, number] {
+  return [CX + radius * Math.cos(angle), CY + radius * Math.sin(angle)];
+}
+
+function buildZonePath(a1: number, a2: number, r1: number, r2: number): string {
+  const [x1, y1] = polarToXY(a1, r1);
+  const [x2, y2] = polarToXY(a2, r1);
+  const [x3, y3] = polarToXY(a2, r2);
+  const [x4, y4] = polarToXY(a1, r2);
+  const largeArc = Math.abs(a2 - a1) > Math.PI ? 1 : 0;
+  // Inner arc → line → outer arc → close
+  return `M ${x1} ${y1} A ${r1} ${r1} 0 ${largeArc} 1 ${x2} ${y2} L ${x3} ${y3} A ${r2} ${r2} 0 ${largeArc} 0 ${x4} ${y4} Z`;
+}
+
+interface ZoneData {
+  id: string;
+  path: string;
+  centerX: number;
+  centerY: number;
+}
+
+function generateZones(layout: SprayZoneLayout): ZoneData[] {
+  const zones: ZoneData[] = [];
+  const angularSpan = FAN_END - FAN_START;
+  const dirStep = angularSpan / layout.dirs;
+  const radialSpan = (layout.outerR - layout.innerR) * MAX_R;
+  const depthStep = radialSpan / layout.depths;
+  const innerPx = layout.innerR * MAX_R;
+
+  // Main zones: dirs × depths
+  for (let d = 0; d < layout.dirs; d++) {
+    const a1 = FAN_START + d * dirStep;
+    const a2 = FAN_START + (d + 1) * dirStep;
+    const aMid = (a1 + a2) / 2;
+
+    for (let r = 0; r < layout.depths; r++) {
+      const r1 = innerPx + r * depthStep;
+      const r2 = innerPx + (r + 1) * depthStep;
+      const rMid = (r1 + r2) / 2;
+      const [cx, cy] = polarToXY(aMid, rMid);
+      zones.push({
+        id: `d${d}r${r}`,
+        path: buildZonePath(a1, a2, r1, r2),
+        centerX: cx,
+        centerY: cy,
+      });
+    }
+  }
+
+  // Foul zones: 3 zones outside the foul lines (left, right, behind plate)
+  if (layout.foul > 0) {
+    const foulR1 = innerPx + depthStep;
+    const foulR2 = innerPx + depthStep * Math.min(3, layout.depths);
+    // Left foul (beyond LF foul line)
+    const lfFoulA1 = FAN_START - (15 * Math.PI) / 180;
+    const lfFoulA2 = FAN_START;
+    const [flCx, flCy] = polarToXY((lfFoulA1 + lfFoulA2) / 2, (foulR1 + foulR2) / 2);
+    zones.push({ id: 'foul_l', path: buildZonePath(lfFoulA1, lfFoulA2, foulR1, foulR2), centerX: flCx, centerY: flCy });
+    // Right foul (beyond RF foul line)
+    const rfFoulA1 = FAN_END;
+    const rfFoulA2 = FAN_END + (15 * Math.PI) / 180;
+    const [frCx, frCy] = polarToXY((rfFoulA1 + rfFoulA2) / 2, (foulR1 + foulR2) / 2);
+    zones.push({ id: 'foul_r', path: buildZonePath(rfFoulA1, rfFoulA2, foulR1, foulR2), centerX: frCx, centerY: frCy });
+    // Behind plate (foul popup)
+    const behindA1 = FAN_START - (8 * Math.PI) / 180;
+    const behindA2 = FAN_END + (8 * Math.PI) / 180;
+    const behindR1 = 2;
+    const behindR2 = innerPx > 5 ? innerPx : 15;
+    const [bCx, bCy] = polarToXY((behindA1 + behindA2) / 2, (behindR1 + behindR2) / 2);
+    zones.push({ id: 'foul_c', path: buildZonePath(behindA1, behindA2, behindR1, behindR2), centerX: bCx, centerY: bCy });
+  }
+
+  return zones;
+}
+
+function SprayGraphic({
   location,
   onTap,
+  result,
 }: {
   location?: { x: number; y: number } | null;
   onTap: (pos: { x: number; y: number }) => void;
+  /** Result type for context-sensitive zone generation */
+  result?: string;
 }) {
-  const handleClick = useCallback((e: React.MouseEvent<SVGSVGElement>) => {
-    const svg = e.currentTarget;
-    const rect = svg.getBoundingClientRect();
-    const x = Math.round(((e.clientX - rect.left) / rect.width) * 100);
-    const y = Math.round(((e.clientY - rect.top) / rect.height) * 100);
+  const layout = result ? getZoneLayout(result) : SPRAY_ZONE_LAYOUTS.DEFAULT;
+  const zones = useMemo(() => generateZones(layout), [layout]);
+
+  const handleZoneClick = useCallback((zone: ZoneData) => {
+    // Convert zone center from SVG coords (200×120) to 0-100 percentage space
+    const x = Math.round((zone.centerX / 200) * 100);
+    const y = Math.round((zone.centerY / 120) * 100);
     onTap({ x, y });
+  }, [onTap]);
+
+  // Fallback: click anywhere on the field for free placement
+  const handleSvgClick = useCallback((e: React.MouseEvent<SVGSVGElement>) => {
+    // Only handle if clicking on the SVG background (not a zone)
+    if ((e.target as SVGElement).tagName === 'svg') {
+      const svg = e.currentTarget;
+      const rect = svg.getBoundingClientRect();
+      const x = Math.round(((e.clientX - rect.left) / rect.width) * 100);
+      const y = Math.round(((e.clientY - rect.top) / rect.height) * 100);
+      onTap({ x, y });
+    }
   }, [onTap]);
 
   return (
     <svg
-      viewBox="0 0 100 100"
-      className="w-full h-[80px] cursor-crosshair bg-[#2a5a2d]/60 rounded border border-[#4a6a4a]"
-      onClick={handleClick}
+      viewBox="0 0 200 120"
+      className="w-full h-[140px] cursor-crosshair bg-[#2a5a2d]/60 rounded border border-[#4a6a4a] touch-manipulation"
+      onClick={handleSvgClick}
     >
-      {/* Outfield arc */}
-      <path d="M 10 55 Q 50 5, 90 55" fill="none" stroke="#4a6a4a" strokeWidth="1" />
+      {/* Fan shape — outfield arc from LF foul line to RF foul line */}
+      <path
+        d="M 100 115 L 15 40 Q 100 -10 185 40 Z"
+        fill="none"
+        stroke="#5a7a5a"
+        strokeWidth="0.8"
+      />
+      {/* Warning track arc */}
+      <path
+        d="M 30 50 Q 100 5 170 50"
+        fill="none"
+        stroke="#4a6a4a"
+        strokeWidth="0.5"
+        strokeDasharray="3 2"
+      />
+      {/* Outfield boundary */}
+      <path
+        d="M 45 55 Q 100 20 155 55"
+        fill="none"
+        stroke="#4a6a4a"
+        strokeWidth="0.5"
+      />
       {/* Infield diamond */}
-      <polygon points="50,85 25,60 50,35 75,60" fill="none" stroke="#88AA88" strokeWidth="1" />
-      {/* Base positions */}
-      <rect x="48" y="83" width="4" height="4" fill="#E8E8D8" /> {/* Home */}
-      <rect x="23" y="58" width="4" height="4" fill="#E8E8D8" /> {/* 3B */}
-      <rect x="48" y="33" width="4" height="4" fill="#E8E8D8" /> {/* 2B */}
-      <rect x="73" y="58" width="4" height="4" fill="#E8E8D8" /> {/* 1B */}
+      <polygon
+        points="100,110 72,85 100,60 128,85"
+        fill="none"
+        stroke="#88AA88"
+        strokeWidth="0.8"
+      />
+      {/* Zone sectors — clickable regions per §8.2 */}
+      {zones.map((zone) => (
+        <path
+          key={zone.id}
+          d={zone.path}
+          fill={location && Math.abs(zone.centerX - location.x * 2) < 10 && Math.abs(zone.centerY - location.y * 1.2) < 8
+            ? '#f59e0b33'
+            : 'transparent'}
+          stroke="#3a5a3a"
+          strokeWidth="0.3"
+          className="cursor-pointer hover:fill-[#C4A853]/20"
+          onClick={(e) => { e.stopPropagation(); handleZoneClick(zone); }}
+        />
+      ))}
+      {/* Sector lines (6 directions: LF line, LF, LC, C, RC, RF line) */}
+      <line x1="100" y1="115" x2="15" y2="40" stroke="#4a6a4a" strokeWidth="0.3" />
+      <line x1="100" y1="115" x2="40" y2="25" stroke="#3a5a3a" strokeWidth="0.3" />
+      <line x1="100" y1="115" x2="65" y2="15" stroke="#3a5a3a" strokeWidth="0.3" />
+      <line x1="100" y1="115" x2="100" y2="5" stroke="#3a5a3a" strokeWidth="0.3" />
+      <line x1="100" y1="115" x2="135" y2="15" stroke="#3a5a3a" strokeWidth="0.3" />
+      <line x1="100" y1="115" x2="160" y2="25" stroke="#3a5a3a" strokeWidth="0.3" />
+      <line x1="100" y1="115" x2="185" y2="40" stroke="#4a6a4a" strokeWidth="0.3" />
+      {/* Base markers */}
+      <rect x="98" y="108" width="4" height="4" fill="#E8E8D8" rx="0.5" />
+      <rect x="70" y="83" width="3" height="3" fill="#E8E8D8" rx="0.5" />
+      <rect x="98" y="58" width="3" height="3" fill="#E8E8D8" rx="0.5" />
+      <rect x="126" y="83" width="3" height="3" fill="#E8E8D8" rx="0.5" />
       {/* Placed dot */}
       {location && (
-        <circle cx={location.x} cy={location.y} r="3" fill="#f59e0b" stroke="#fff" strokeWidth="0.5" />
+        <circle cx={location.x * 2} cy={location.y * 1.2} r="4" fill="#f59e0b" stroke="#fff" strokeWidth="0.7" />
       )}
     </svg>
   );
@@ -123,11 +404,11 @@ function FieldingSequenceInput({
 }) {
   return (
     <div>
-      <div className="flex gap-0.5 flex-wrap mb-1">
+      <div className="flex gap-1.5 flex-wrap mb-2">
         {FIELDER_POSITIONS.map((f) => (
           <button
             key={f.num}
-            className={`text-[7px] px-1 py-0.5 rounded border
+            className={`text-xs min-h-[36px] min-w-[36px] px-3 py-2 rounded border touch-manipulation
               ${sequence.includes(f.num)
                 ? 'bg-[#C4A853]/30 border-[#C4A853] text-[#C4A853]'
                 : 'bg-[#1f2937]/60 border-[#4a6a4a] text-[#88AA88] hover:bg-[#4a6a4a]/40'}`}
@@ -138,18 +419,18 @@ function FieldingSequenceInput({
         ))}
       </div>
       {sequence.length > 0 && (
-        <div className="flex items-center gap-1">
-          <span className="text-[8px] text-[#88AA88] font-mono">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-[10px] text-[#88AA88] font-mono">
             {sequence.join('-')}
           </span>
           <button
-            className="text-[7px] text-[#f87171] hover:text-[#ef4444]"
+            className="text-xs min-h-[36px] px-3 py-2 rounded border border-[#7f1d1d] bg-[#3f1515]/50 text-[#f87171] hover:text-[#ef4444] touch-manipulation"
             onClick={() => onChange(sequence.slice(0, -1))}
           >
             undo
           </button>
           <button
-            className="text-[7px] text-[#f87171] hover:text-[#ef4444]"
+            className="text-xs min-h-[36px] px-3 py-2 rounded border border-[#7f1d1d] bg-[#3f1515]/50 text-[#f87171] hover:text-[#ef4444] touch-manipulation"
             onClick={() => onChange([])}
           >
             clear
@@ -170,7 +451,6 @@ interface EnrichmentPanelProps {
   onUpdate: (field: keyof EnrichmentUpdate, value: unknown) => void;
   onModifierRecord?: (modifier: AtBatModifierValue) => void;
   onClose: () => void;
-  useMainFieldForLocation?: boolean;
   closeLabel?: string;
 }
 
@@ -180,27 +460,68 @@ export function EnrichmentPanel({
   onUpdate,
   onModifierRecord,
   onClose,
-  useMainFieldForLocation = false,
   closeLabel = 'Done',
 }: EnrichmentPanelProps) {
   const [localFieldingSeq, setLocalFieldingSeq] = useState<number[]>(
     currentEnrichment?.fieldingSequence || []
   );
-  const isHit = ['1B', '2B', '3B', 'GRD'].includes(entry.result);
-  const isHR = entry.result === 'HR';
-  const isOut = ['GO', 'FO', 'LO', 'PO', 'DP', 'TP', 'FC', 'SF', 'SAC'].includes(entry.result);
+
+  const config = getEnrichmentConfig(entry.result);
+
+  // Load existing attempt type/outcome — these fields may exist on persisted enrichment
+  // but are not yet on the AtBatEvent['enrichment'] TS type
+  const enrichmentAny = currentEnrichment as Record<string, unknown> | undefined;
+  const [attemptType, setAttemptType] = useState<FieldingAttemptType | undefined>(
+    enrichmentAny?.fieldingAttemptType as FieldingAttemptType | undefined
+  );
+  const [attemptOutcome, setAttemptOutcome] = useState<FieldingAttemptOutcome | undefined>(
+    enrichmentAny?.fieldingAttemptOutcome as FieldingAttemptOutcome | undefined
+  );
+  const [playMechanic, setPlayMechanic] = useState<PlayMechanic | undefined>(
+    enrichmentAny?.playMechanic as PlayMechanic | undefined
+  );
+
   const isK = entry.result === 'K' || entry.result === 'Kc';
-  const showFieldLocation = isHit || isOut || isHR;
-  const showExitType = isHit || isOut || isHR;
-  const showFieldingAttribution = isHit || isOut;
+  const supportsBatterOutAdvancing = ['1B', '2B', '3B', 'GRD'].includes(entry.result);
+
   const positionLabel = (num: number) => FIELDER_POSITIONS.find((fielder) => fielder.num === num)?.label || `${num}`;
   const putoutLabel = currentEnrichment?.putouts?.map(positionLabel).join(', ');
   const assistLabel = currentEnrichment?.assists?.map(positionLabel).join(', ');
   const errorLabel = currentEnrichment?.errors?.map((error) => `${positionLabel(error.position)} (${error.type})`).join(', ');
 
+  // Derive contactType from persisted exitType
+  const currentContactType = mapExitTypeToContactType(currentEnrichment?.exitType);
+
   const handleFieldingSeqChange = useCallback((seq: number[]) => {
     setLocalFieldingSeq(seq);
     onUpdate('fieldingSequence', seq);
+  }, [onUpdate]);
+
+  const handleAttemptTypeChange = useCallback((type: FieldingAttemptType) => {
+    setAttemptType(type);
+    onUpdate('fieldingAttemptType', type);
+    // Also write legacy fieldingPlayType for persistence compatibility
+    const outcome = attemptOutcome || 'made';
+    onUpdate('fieldingPlayType', mapAttemptToLegacyFieldingPlayType(type, outcome));
+  }, [onUpdate, attemptOutcome]);
+
+  const handleAttemptOutcomeChange = useCallback((outcome: FieldingAttemptOutcome) => {
+    setAttemptOutcome(outcome);
+    onUpdate('fieldingAttemptOutcome', outcome);
+    // Update legacy fieldingPlayType
+    if (attemptType) {
+      onUpdate('fieldingPlayType', mapAttemptToLegacyFieldingPlayType(attemptType, outcome));
+    }
+  }, [onUpdate, attemptType]);
+
+  const handlePlayMechanicChange = useCallback((mechanic: PlayMechanic) => {
+    setPlayMechanic(mechanic);
+    onUpdate('playMechanic', mechanic);
+  }, [onUpdate]);
+
+  const handleContactTypeChange = useCallback((contactType: ContactTypeValue) => {
+    // Store as exitType for persistence compatibility
+    onUpdate('exitType', mapContactTypeToExitType(contactType));
   }, [onUpdate]);
 
   return (
@@ -208,15 +529,15 @@ export function EnrichmentPanel({
       {/* Header */}
       <div className="flex items-center justify-between px-2 py-1 bg-[#1a2a1d] border-b border-[#4a6a4a]">
         <div className="flex items-center gap-1">
-          <span className="text-[8px] text-[#88AA88] font-mono">{entry.inningLabel}</span>
-          <span className="text-[9px] text-[#E8E8D8] font-bold">{entry.batterName}</span>
-          <span className="text-[9px] font-bold" style={{ color: getResultColorLocal(entry.result) }}>
+          <span className="text-[10px] text-[#88AA88] font-mono">{entry.inningLabel}</span>
+          <span className="text-[11px] text-[#E8E8D8] font-bold">{entry.batterName}</span>
+          <span className="text-[11px] font-bold" style={{ color: getResultColorLocal(entry.result) }}>
             {entry.result}
           </span>
         </div>
         <button
           onClick={onClose}
-          className="text-[8px] text-[#E8E8D8] bg-[#3d5240] border border-[#4a6a4a] px-1.5 py-0.5 rounded hover:bg-[#4a6a4a]"
+          className="text-[11px] min-h-[36px] text-[#E8E8D8] bg-[#3d5240] border border-[#4a6a4a] px-3 py-2 rounded hover:bg-[#4a6a4a] touch-manipulation"
         >
           {closeLabel}
         </button>
@@ -225,51 +546,111 @@ export function EnrichmentPanel({
       {/* Scrollable enrichment fields */}
       <div className="flex-1 overflow-y-auto p-2 space-y-2">
 
-        {/* Field Location (spray chart) */}
-        {showFieldLocation && (
+        {/* Field Location (spray chart) — §8.2 */}
+        {config.spray && (
           <EnrichmentSection label="Field Location" filled={!!currentEnrichment?.fieldLocation}>
-            {useMainFieldForLocation ? (
-              <div className="bg-[#2a5a2d]/60 rounded border border-[#4a6a4a] px-2 py-2">
-                <div className="text-[8px] text-[#E8E8D8] font-bold">Tap the main field to place spray/location.</div>
-                <div className="text-[7px] text-[#88AA88] mt-1">
-                  Fielding, pitch type, and pitch count still update here.
-                </div>
-                {currentEnrichment?.fieldLocation && (
-                  <div className="text-[7px] text-[#C4A853] mt-1 font-mono">
-                    Saved: X {currentEnrichment.fieldLocation.x} / Y {currentEnrichment.fieldLocation.y}
-                  </div>
-                )}
-              </div>
-            ) : (
-              <MiniDiamond
-                location={currentEnrichment?.fieldLocation}
-                onTap={(pos) => onUpdate('fieldLocation', pos)}
-              />
-            )}
+            <SprayGraphic
+              location={currentEnrichment?.fieldLocation}
+              onTap={(pos) => onUpdate('fieldLocation', pos)}
+              result={entry.result}
+            />
           </EnrichmentSection>
         )}
 
-        {showExitType && (
-          <EnrichmentSection label="Exit Type" filled={!!currentEnrichment?.exitType}>
-            <div className="flex flex-wrap gap-0.5">
-              {EXIT_TYPE_OPTIONS.map((exitType) => (
+        {/* Layer C — Contact Type (§8.1) */}
+        {config.contactType && (
+          <EnrichmentSection label="Contact Type" filled={!!currentContactType}>
+            <div className="flex flex-wrap gap-1.5">
+              {CONTACT_TYPE_OPTIONS.map((ct) => (
                 <button
-                  key={exitType.value}
-                  className={`text-[7px] px-1.5 py-0.5 rounded border transition-colors
-                    ${currentEnrichment?.exitType === exitType.value
+                  key={ct.value}
+                  className={`text-xs min-h-[36px] px-3 py-2 rounded border transition-colors touch-manipulation
+                    ${currentContactType === ct.value
                       ? 'bg-[#C4A853]/30 border-[#C4A853] text-[#C4A853]'
                       : 'bg-[#1f2937]/60 border-[#4a6a4a] text-[#88AA88] hover:bg-[#4a6a4a]/40'}`}
-                  onClick={() => onUpdate('exitType', exitType.value)}
+                  onClick={() => handleContactTypeChange(ct.value)}
                 >
-                  {exitType.label}
+                  {ct.label}
                 </button>
               ))}
             </div>
           </EnrichmentSection>
         )}
 
-        {/* Fielding Attribution */}
-        {showFieldingAttribution && (
+        {/* Layer A — Fielding Attempt (§8.1): Attempt Type + Outcome */}
+        {config.fieldingAttempt && (
+          <>
+            <EnrichmentSection label="Fielding Attempt" filled={!!attemptType}>
+              <div className="flex flex-wrap gap-1.5">
+                {FIELDING_ATTEMPT_TYPE_OPTIONS.map((at) => (
+                  <button
+                    key={at.value}
+                    className={`text-xs min-h-[36px] px-3 py-2 rounded border transition-colors touch-manipulation
+                      ${attemptType === at.value
+                        ? 'bg-[#C4A853]/30 border-[#C4A853] text-[#C4A853]'
+                        : 'bg-[#1f2937]/60 border-[#4a6a4a] text-[#88AA88] hover:bg-[#4a6a4a]/40'}`}
+                    onClick={() => handleAttemptTypeChange(at.value)}
+                  >
+                    {at.label}
+                  </button>
+                ))}
+              </div>
+              {attemptType && attemptType !== 'routine' && (
+                <div className="flex gap-1.5 mt-2">
+                  {FIELDING_ATTEMPT_OUTCOME_OPTIONS.map((ao) => (
+                    <button
+                      key={ao.value}
+                      className={`text-xs min-h-[36px] px-3 py-2 rounded border transition-colors flex-1 touch-manipulation
+                        ${attemptOutcome === ao.value
+                          ? 'bg-[#C4A853]/30 border-[#C4A853] text-[#C4A853]'
+                          : 'bg-[#1f2937]/60 border-[#4a6a4a] text-[#88AA88] hover:bg-[#4a6a4a]/40'}`}
+                      onClick={() => handleAttemptOutcomeChange(ao.value)}
+                    >
+                      {ao.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </EnrichmentSection>
+          </>
+        )}
+
+        {/* Layer B — Play Mechanic (§8.1) */}
+        {config.playMechanic && (
+          <EnrichmentSection label="Play Mechanic" filled={!!playMechanic && playMechanic !== 'routine'}>
+            <div className="flex flex-wrap gap-1.5">
+              {PLAY_MECHANIC_OPTIONS.map((pm) => (
+                <button
+                  key={pm.value}
+                  className={`text-xs min-h-[36px] px-3 py-2 rounded border transition-colors touch-manipulation
+                    ${playMechanic === pm.value
+                      ? 'bg-[#C4A853]/30 border-[#C4A853] text-[#C4A853]'
+                      : 'bg-[#1f2937]/60 border-[#4a6a4a] text-[#88AA88] hover:bg-[#4a6a4a]/40'}`}
+                  onClick={() => handlePlayMechanicChange(pm.value)}
+                >
+                  {pm.label}
+                </button>
+              ))}
+            </div>
+          </EnrichmentSection>
+        )}
+
+        {supportsBatterOutAdvancing && (
+          <EnrichmentSection label="Batter Result" filled={!!currentEnrichment?.batterOutAdvancing}>
+            <button
+              className={`text-xs min-h-[36px] px-3 py-2 rounded border transition-colors touch-manipulation
+                ${currentEnrichment?.batterOutAdvancing
+                  ? 'bg-[#f87171]/20 border-[#f87171] text-[#fca5a5]'
+                  : 'bg-[#1f2937]/60 border-[#4a6a4a] text-[#88AA88] hover:bg-[#4a6a4a]/40'}`}
+              onClick={() => onUpdate('batterOutAdvancing', !currentEnrichment?.batterOutAdvancing)}
+            >
+              Out Advancing
+            </button>
+          </EnrichmentSection>
+        )}
+
+        {/* Fielding Attribution (sequence + existing putout/assist/error data) */}
+        {(config.fieldingAttempt || config.playMechanic) && (
           <EnrichmentSection label="Fielding Attribution" filled={(currentEnrichment?.fieldingSequence?.length ?? 0) > 0 || !!(putoutLabel || assistLabel || errorLabel)}>
             <FieldingSequenceInput
               sequence={localFieldingSeq}
@@ -278,17 +659,17 @@ export function EnrichmentPanel({
             {(putoutLabel || assistLabel || errorLabel) && (
               <div className="mt-2 bg-[#1f2937]/60 border border-[#4a6a4a] rounded px-2 py-2 space-y-1">
                 {putoutLabel && (
-                  <div className="text-[8px] text-[#E8E8D8]">
+                  <div className="text-[10px] text-[#E8E8D8]">
                     Putouts: <span className="font-mono text-[#C4A853]">{putoutLabel}</span>
                   </div>
                 )}
                 {assistLabel && (
-                  <div className="text-[8px] text-[#E8E8D8]">
+                  <div className="text-[10px] text-[#E8E8D8]">
                     Assists: <span className="font-mono text-[#C4A853]">{assistLabel}</span>
                   </div>
                 )}
                 {errorLabel && (
-                  <div className="text-[8px] text-[#E8E8D8]">
+                  <div className="text-[10px] text-[#E8E8D8]">
                     Errors: <span className="font-mono text-[#f59e0b]">{errorLabel}</span>
                   </div>
                 )}
@@ -297,41 +678,19 @@ export function EnrichmentPanel({
           </EnrichmentSection>
         )}
 
-        {showFieldingAttribution && (
-          <EnrichmentSection label="Catch Type / Difficulty" filled={!!currentEnrichment?.fieldingPlayType}>
-            <div className="mb-1 text-[7px] text-[#88AA88]">
-              Select the objective fielding difficulty for this recorded play.
-            </div>
-            <div className="flex flex-wrap gap-0.5">
-              {FIELDING_PLAY_TYPE_OPTIONS.map((playType) => (
-                <button
-                  key={playType.value}
-                  className={`text-[7px] px-1.5 py-0.5 rounded border transition-colors
-                    ${currentEnrichment?.fieldingPlayType === playType.value
-                      ? 'bg-[#C4A853]/30 border-[#C4A853] text-[#C4A853]'
-                      : 'bg-[#1f2937]/60 border-[#4a6a4a] text-[#88AA88] hover:bg-[#4a6a4a]/40'}`}
-                  onClick={() => onUpdate('fieldingPlayType', playType.value)}
-                >
-                  {playType.label}
-                </button>
-              ))}
-            </div>
-          </EnrichmentSection>
-        )}
-
         {/* HR Distance */}
-        {isHR && (
+        {config.hrDistance && (
           <EnrichmentSection label="HR Distance (ft)" filled={!!currentEnrichment?.hrDistance}>
             <input
-              type="number"
-              min={200}
-              max={600}
-              defaultValue={currentEnrichment?.hrDistance || ''}
-              placeholder="350"
-              className="w-full bg-[#1f2937] border border-[#4a6a4a] text-[#E8E8D8] text-[10px] px-1.5 py-1 rounded"
-              onChange={(e) => {
-                const val = parseInt(e.target.value);
-                if (val >= 200 && val <= 600) onUpdate('hrDistance', val);
+            type="number"
+            min={200}
+            max={600}
+            defaultValue={currentEnrichment?.hrDistance || ''}
+            placeholder="350"
+            className="w-full min-h-[40px] bg-[#1f2937] border border-[#4a6a4a] text-[#E8E8D8] text-sm px-3 py-2 rounded"
+            onChange={(e) => {
+              const val = parseInt(e.target.value);
+              if (val >= 200 && val <= 600) onUpdate('hrDistance', val);
               }}
             />
           </EnrichmentSection>
@@ -339,11 +698,11 @@ export function EnrichmentPanel({
 
         {/* Pitch Type (§4.3) — for all enrichable plays */}
         <EnrichmentSection label="Pitch Type" filled={!!currentEnrichment?.pitchType}>
-          <div className="flex flex-wrap gap-0.5">
+          <div className="flex flex-wrap gap-1.5">
             {PITCH_TYPES.map((pt) => (
               <button
                 key={pt.abbr}
-                className={`text-[7px] px-1 py-0.5 rounded border transition-colors
+                className={`text-xs min-h-[36px] px-3 py-2 rounded border transition-colors touch-manipulation
                   ${currentEnrichment?.pitchType === pt.abbr
                     ? 'bg-[#C4A853]/30 border-[#C4A853] text-[#C4A853]'
                     : 'bg-[#1f2937]/60 border-[#4a6a4a] text-[#88AA88] hover:bg-[#4a6a4a]/40'}`}
@@ -364,44 +723,47 @@ export function EnrichmentPanel({
             max={20}
             defaultValue={currentEnrichment?.pitchesInAtBat || ''}
             placeholder="1-20"
-            className="w-full bg-[#1f2937] border border-[#4a6a4a] text-[#E8E8D8] text-[10px] px-1.5 py-1 rounded"
+            className="w-full min-h-[40px] bg-[#1f2937] border border-[#4a6a4a] text-[#E8E8D8] text-sm px-3 py-2 rounded"
             onChange={(e) => {
               const val = parseInt(e.target.value);
               if (val >= 1 && val <= 20) onUpdate('pitchesInAtBat', val);
             }}
           />
           {(currentEnrichment?.pitchesInAtBat ?? 0) >= 7 && (
-            <div className="text-[7px] text-[#34d399] mt-0.5">Quality At-Bat (7+ pitches)</div>
+            <div className="text-[10px] text-[#34d399] mt-1">Quality At-Bat (7+ pitches)</div>
           )}
         </EnrichmentSection>
 
-        <EnrichmentSection label="Modifiers" filled={(currentEnrichment?.modifiers?.length ?? 0) > 0}>
-          <div className="flex flex-wrap gap-0.5">
-            {MODIFIER_OPTIONS.map((modifier) => {
-              const isActive = currentEnrichment?.modifiers?.includes(modifier.value) ?? false;
-              return (
-                <button
-                  key={modifier.value}
-                  className={`text-[7px] px-1.5 py-0.5 rounded border transition-colors
-                    ${isActive
-                      ? 'bg-[#6c3483]/40 border-[#af7ac5] text-[#f5e9ff]'
-                      : 'bg-[#1f2937]/60 border-[#4a6a4a] text-[#88AA88] hover:bg-[#4a6a4a]/40'}`}
-                  disabled={isActive || !onModifierRecord}
-                  onClick={() => onModifierRecord?.(modifier.value)}
-                >
-                  {modifier.label}
-                </button>
-              );
-            })}
-          </div>
-        </EnrichmentSection>
+        {/* Layer D — Modifiers (§8.1) — context-sensitive per result */}
+        {config.modifiers.length > 0 && (
+          <EnrichmentSection label="Modifiers" filled={(currentEnrichment?.modifiers?.length ?? 0) > 0}>
+            <div className="flex flex-wrap gap-1.5">
+              {MODIFIER_OPTIONS.filter(m => config.modifiers.includes(m.value)).map((modifier) => {
+                const isActive = currentEnrichment?.modifiers?.includes(modifier.value) ?? false;
+                return (
+                  <button
+                    key={modifier.value}
+                    className={`text-xs min-h-[36px] px-3 py-2 rounded border transition-colors touch-manipulation
+                      ${isActive
+                        ? 'bg-[#6c3483]/40 border-[#af7ac5] text-[#f5e9ff]'
+                        : 'bg-[#1f2937]/60 border-[#4a6a4a] text-[#88AA88] hover:bg-[#4a6a4a]/40'}`}
+                    disabled={isActive || !onModifierRecord}
+                    onClick={() => onModifierRecord?.(modifier.value)}
+                  >
+                    {modifier.label}
+                  </button>
+                );
+              })}
+            </div>
+          </EnrichmentSection>
+        )}
 
         {/* K/Kc distinction (shown only for strikeouts without type set) */}
         {isK && (
           <EnrichmentSection label="Strikeout Type" filled={entry.hasKType}>
-            <div className="flex gap-1">
+            <div className="flex gap-1.5">
               <button
-                className={`text-[8px] px-2 py-1 rounded border flex-1
+                className={`text-[11px] min-h-[36px] px-3 py-2 rounded border flex-1 touch-manipulation
                   ${entry.result === 'K'
                     ? 'bg-[#f87171]/20 border-[#f87171] text-[#f87171]'
                     : 'bg-[#1f2937]/60 border-[#4a6a4a] text-[#88AA88] hover:bg-[#4a6a4a]/40'}`}
@@ -410,7 +772,7 @@ export function EnrichmentPanel({
                 K (Swinging)
               </button>
               <button
-                className={`text-[8px] px-2 py-1 rounded border flex-1
+                className={`text-[11px] min-h-[36px] px-3 py-2 rounded border flex-1 touch-manipulation
                   ${entry.result === 'Kc'
                     ? 'bg-[#f87171]/20 border-[#f87171] text-[#f87171]'
                     : 'bg-[#1f2937]/60 border-[#4a6a4a] text-[#88AA88] hover:bg-[#4a6a4a]/40'}`}
@@ -441,10 +803,10 @@ function EnrichmentSection({
 }) {
   return (
     <div>
-      <div className="flex items-center gap-1 mb-0.5">
-        <span className="text-[8px] text-[#88AA88] font-bold uppercase tracking-wider">{label}</span>
+      <div className="flex items-center gap-1.5 mb-1">
+        <span className="text-[10px] text-[#88AA88] font-bold uppercase tracking-wider">{label}</span>
         {filled && (
-          <span className="text-[6px] text-[#34d399]">&#10003;</span>
+          <span className="text-[9px] text-[#34d399]">&#10003;</span>
         )}
       </div>
       {children}
@@ -464,6 +826,129 @@ function getResultColorLocal(result: string): string {
     'E': '#fbbf24',
   };
   return colors[result] || '#E8E8D8';
+}
+
+// ──────────────────────────────────────────────────────────────
+// Runner Enrichment Panel (UX-050 / §8.6)
+// Inline enrichment for individual runner sub-entries
+// ──────────────────────────────────────────────────────────────
+
+const BASE_DISPLAY: Record<string, string> = {
+  first: '1B', second: '2B', third: '3B', home: 'HOME', out: 'OUT',
+};
+
+interface RunnerEnrichmentPanelProps {
+  subEntry: RunnerSubEntry;
+  onUpdate: (subEntryId: string, field: keyof Pick<RunnerSubEntry, 'fieldingSequence' | 'playMechanic' | 'isTootblan' | 'isOutAdvancing' | 'toBase'>, value: unknown) => void;
+  onClose: () => void;
+}
+
+export function RunnerEnrichmentPanel({ subEntry, onUpdate, onClose }: RunnerEnrichmentPanelProps) {
+  const [localFieldingSeq, setLocalFieldingSeq] = useState<number[]>(subEntry.fieldingSequence || []);
+  const destinationOptions = getRunnerDestinationOptions(subEntry.fromBase);
+
+  const handleFieldingSeqChange = useCallback((seq: number[]) => {
+    setLocalFieldingSeq(seq);
+    onUpdate(subEntry.id, 'fieldingSequence', seq);
+  }, [onUpdate, subEntry.id]);
+
+  const isScored = subEntry.toBase === 'home';
+  const isOut = subEntry.toBase === 'out';
+
+  return (
+    <div className="bg-[#2a3a2d] border-l-2 border-[#C4A853] flex flex-col h-full">
+      {/* Header */}
+      <div className="flex items-center justify-between px-2 py-1 bg-[#1a2a1d] border-b border-[#4a6a4a]">
+        <div className="flex items-center gap-1">
+          <span className="text-[10px] text-[#6b7280]">└</span>
+          <span className={`text-[11px] font-bold ${isScored ? 'text-[#34d399]' : isOut ? 'text-[#f87171]' : 'text-[#E8E8D8]'}`}>
+            {subEntry.runnerName}
+          </span>
+          <span className="text-[10px] text-[#88AA88] font-mono">
+            {BASE_DISPLAY[subEntry.fromBase]}→{BASE_DISPLAY[subEntry.toBase]}
+          </span>
+        </div>
+        <button
+          onClick={onClose}
+          className="text-[11px] min-h-[36px] text-[#E8E8D8] bg-[#3d5240] border border-[#4a6a4a] px-3 py-2 rounded hover:bg-[#4a6a4a] touch-manipulation"
+        >
+          Done
+        </button>
+      </div>
+
+      {/* Scrollable enrichment fields */}
+      <div className="flex-1 overflow-y-auto p-2 space-y-2">
+        <EnrichmentSection label="Destination" filled={subEntry.toBase !== subEntry.fromBase}>
+          <div className="flex flex-wrap gap-1.5">
+            {destinationOptions.map((destination) => (
+              <button
+                key={destination}
+                className={`text-xs min-h-[36px] px-3 py-2 rounded border transition-colors touch-manipulation
+                  ${subEntry.toBase === destination
+                    ? 'bg-[#C4A853]/30 border-[#C4A853] text-[#C4A853]'
+                    : 'bg-[#1f2937]/60 border-[#4a6a4a] text-[#88AA88] hover:bg-[#4a6a4a]/40'}`}
+                onClick={() => onUpdate(subEntry.id, 'toBase', destination)}
+              >
+                {BASE_DISPLAY[destination]}
+              </button>
+            ))}
+          </div>
+        </EnrichmentSection>
+
+        {/* TOOTBLAN toggle */}
+        <EnrichmentSection label="TOOTBLAN" filled={!!subEntry.isTootblan}>
+          <button
+            className={`text-[11px] min-h-[36px] px-3 py-2 rounded border w-full transition-colors touch-manipulation
+              ${subEntry.isTootblan
+                ? 'bg-[#f87171]/20 border-[#f87171] text-[#f87171]'
+                : 'bg-[#1f2937]/60 border-[#4a6a4a] text-[#88AA88] hover:bg-[#4a6a4a]/40'}`}
+            onClick={() => onUpdate(subEntry.id, 'isTootblan', !subEntry.isTootblan)}
+          >
+            {subEntry.isTootblan ? 'TOOTBLAN (runner fault)' : 'Mark TOOTBLAN'}
+          </button>
+        </EnrichmentSection>
+
+        {/* Out Advancing toggle */}
+        <EnrichmentSection label="Out Advancing" filled={!!subEntry.isOutAdvancing}>
+          <button
+            className={`text-[11px] min-h-[36px] px-3 py-2 rounded border w-full transition-colors touch-manipulation
+              ${subEntry.isOutAdvancing
+                ? 'bg-[#f59e0b]/20 border-[#f59e0b] text-[#f59e0b]'
+                : 'bg-[#1f2937]/60 border-[#4a6a4a] text-[#88AA88] hover:bg-[#4a6a4a]/40'}`}
+            onClick={() => onUpdate(subEntry.id, 'isOutAdvancing', !subEntry.isOutAdvancing)}
+          >
+            {subEntry.isOutAdvancing ? 'Out Advancing (mgr fault)' : 'Mark Out Advancing'}
+          </button>
+        </EnrichmentSection>
+
+        {/* Play Mechanic */}
+        <EnrichmentSection label="Play Mechanic" filled={!!subEntry.playMechanic && subEntry.playMechanic !== 'routine'}>
+          <div className="flex flex-wrap gap-1.5">
+            {PLAY_MECHANIC_OPTIONS.map((pm) => (
+              <button
+                key={pm.value}
+                className={`text-xs min-h-[36px] px-3 py-2 rounded border transition-colors touch-manipulation
+                  ${subEntry.playMechanic === pm.value
+                    ? 'bg-[#C4A853]/30 border-[#C4A853] text-[#C4A853]'
+                    : 'bg-[#1f2937]/60 border-[#4a6a4a] text-[#88AA88] hover:bg-[#4a6a4a]/40'}`}
+                onClick={() => onUpdate(subEntry.id, 'playMechanic', pm.value)}
+              >
+                {pm.label}
+              </button>
+            ))}
+          </div>
+        </EnrichmentSection>
+
+        {/* Fielding Sequence */}
+        <EnrichmentSection label="Fielding Sequence" filled={localFieldingSeq.length > 0}>
+          <FieldingSequenceInput
+            sequence={localFieldingSeq}
+            onChange={handleFieldingSeqChange}
+          />
+        </EnrichmentSection>
+      </div>
+    </div>
+  );
 }
 
 export default EnrichmentPanel;
