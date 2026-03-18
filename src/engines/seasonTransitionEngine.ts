@@ -159,9 +159,9 @@ export async function applyRookieDesignations(): Promise<{ count: number; rookie
   const rookies: string[] = [];
 
   for (const player of players) {
-    // Players on MLB roster with rosterStatus 'MLB' who haven't had a full season
-    // For now, farm players who were called up get rookie tag tracked in localStorage
-    if (player.rosterStatus === 'MLB' && player.age <= 23) {
+    // Players with an MLB assignment who haven't had a full season.
+    // For now, farm players who were called up get rookie tag tracked in localStorage.
+    if (player.leagueAssignments?.some((assignment) => assignment.rosterStatus === 'MLB') && player.age <= 23) {
       const rookieKey = `kbl_rookie_${player.id}`;
       if (!localStorage.getItem(rookieKey)) {
         localStorage.setItem(rookieKey, JSON.stringify({
@@ -312,4 +312,3 @@ export async function executeSeasonTransition(
     return { success: false, steps, summary };
   }
 }
-

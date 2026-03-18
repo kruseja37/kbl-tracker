@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 import { ChevronDown, ChevronUp, X, Search, Plus, Clock, Trophy, Star, AlertCircle, CheckCircle, Sparkles } from "lucide-react";
 import { useOffseasonData, type OffseasonTeam, type OffseasonPlayer } from "@/hooks/useOffseasonData";
 import { useOffseasonState, type DraftPick as StoredDraftPick } from "../../hooks/useOffseasonState";
-import { savePlayer, getTeamRoster, saveTeamRoster, type TeamRoster } from "../../../utils/leagueBuilderStorage";
+import { savePlayer, getTeam, getTeamRoster, saveTeamRoster, type TeamRoster } from "../../../utils/leagueBuilderStorage";
 import { getActiveFranchise, loadFranchise } from "../../../utils/franchiseManager";
 import { FIRST_NAMES, LAST_NAMES } from "../../../data/nameDatabase";
 
@@ -462,6 +462,8 @@ export function DraftFlow({ seasonId, seasonNumber = 1, onComplete, onCancel }: 
             dp => dp.prospect?.id === pick.playerId
           )?.prospect;
           if (!prospect) continue;
+          const team = await getTeam(teamId);
+          const leagueId = team?.leagueIds?.[0] ?? "";
 
           const isPitcher = prospect.position === "SP" || prospect.position === "RP" || prospect.position === "CP";
           const [firstName, ...lastParts] = prospect.name.split(' ');
@@ -492,8 +494,13 @@ export function DraftFlow({ seasonId, seasonNumber = 1, onComplete, onCancel }: 
             mojo: 'Normal',
             fame: 0,
             salary: 0.5,
-            currentTeamId: teamId,
-            rosterStatus: 'FARM',
+            leagueAssignments: leagueId
+              ? [{
+                  leagueId,
+                  teamId,
+                  rosterStatus: 'FARM',
+                }]
+              : [],
             isCustom: false,
           });
 

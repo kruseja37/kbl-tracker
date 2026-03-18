@@ -34,6 +34,7 @@ import {
   seedFromSMB4Database,
   isSMB4DatabaseSeeded,
   type LeagueTemplate,
+  type LeagueAssignment,
   type Team,
   type Player,
   type RulesPreset,
@@ -45,6 +46,7 @@ export type {
   LeagueTemplate,
   Team,
   Player,
+  LeagueAssignment,
   RulesPreset,
   TeamRoster,
   Conference,
@@ -88,7 +90,7 @@ export interface UseLeagueBuilderDataReturn {
 
   // Player operations
   getPlayerById: (id: string) => Promise<Player | null>;
-  getTeamPlayers: (teamId: string | null) => Promise<Player[]>;
+  getTeamPlayers: (teamId: string, leagueId: string) => Promise<Player[]>;
   createPlayer: (data: Omit<Player, 'id' | 'createdDate' | 'lastModified'>) => Promise<Player>;
   updatePlayer: (data: Player) => Promise<Player>;
   removePlayer: (id: string) => Promise<void>;
@@ -275,8 +277,8 @@ export function useLeagueBuilderData(): UseLeagueBuilderDataReturn {
     return getPlayer(id);
   }, []);
 
-  const getTeamPlayers = useCallback(async (teamId: string | null) => {
-    return getPlayersByTeam(teamId);
+  const getTeamPlayers = useCallback(async (teamId: string, leagueId: string) => {
+    return getPlayersByTeam(teamId, leagueId);
   }, []);
 
   const createPlayer = useCallback(async (data: Omit<Player, 'id' | 'createdDate' | 'lastModified'>) => {

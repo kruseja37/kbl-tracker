@@ -24,18 +24,23 @@ const mockUpdateRoster = vi.fn().mockResolvedValue(undefined);
 
 vi.mock('../../hooks/useLeagueBuilderData', () => ({
   useLeagueBuilderData: vi.fn(() => ({
+    leagues: [
+      { id: 'league-1', name: 'League One', teamIds: ['team-1', 'team-2'] },
+    ],
     teams: [
       {
         id: 'team-1',
         name: 'Boston Sox',
         abbreviation: 'SOX',
         colors: { primary: '#FF0000', secondary: '#FFFFFF' },
+        leagueIds: ['league-1'],
       },
       {
         id: 'team-2',
         name: 'Detroit Tigers',
         abbreviation: 'DET',
         colors: { primary: '#FF6600', secondary: '#000000' },
+        leagueIds: ['league-1'],
       },
     ],
     players: [
@@ -46,7 +51,7 @@ vi.mock('../../hooks/useLeagueBuilderData', () => ({
         primaryPosition: 'SS',
         secondaryPosition: '2B',
         overallGrade: 'A-',
-        currentTeamId: 'team-1',
+        leagueAssignments: [{ leagueId: 'league-1', teamId: 'team-1', rosterStatus: 'MLB' }],
       },
       {
         id: 'player-2',
@@ -55,7 +60,7 @@ vi.mock('../../hooks/useLeagueBuilderData', () => ({
         primaryPosition: 'SP',
         secondaryPosition: '',
         overallGrade: 'A',
-        currentTeamId: 'team-1',
+        leagueAssignments: [{ leagueId: 'league-1', teamId: 'team-1', rosterStatus: 'MLB' }],
       },
       {
         id: 'player-3',
@@ -64,7 +69,7 @@ vi.mock('../../hooks/useLeagueBuilderData', () => ({
         primaryPosition: 'CF',
         secondaryPosition: 'RF',
         overallGrade: 'A',
-        currentTeamId: 'team-2',
+        leagueAssignments: [{ leagueId: 'league-1', teamId: 'team-2', rosterStatus: 'MLB' }],
       },
     ],
     isLoading: false,

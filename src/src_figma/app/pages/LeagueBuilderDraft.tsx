@@ -26,7 +26,7 @@ interface DraftProspect {
 
 export function LeagueBuilderDraft() {
   const navigate = useNavigate();
-  const { teams, players, isLoading, error } = useLeagueBuilderData();
+  const { leagues, teams, players, isLoading, error } = useLeagueBuilderData();
 
   const [activeTab, setActiveTab] = useState<TabType>("settings");
   const [draftRounds, setDraftRounds] = useState(3);
@@ -37,15 +37,21 @@ export function LeagueBuilderDraft() {
   // Mock draft class - in production this would be generated/stored
   const [prospects, setProspects] = useState<DraftProspect[]>([]);
   const [selectedInactive, setSelectedInactive] = useState<string[]>([]);
+  const activeLeagueId = useMemo(
+    () => leagues[0]?.id ?? teams.find((team) => team.leagueIds?.[0])?.leagueIds?.[0] ?? "",
+    [leagues, teams],
+  );
 
   // Get inactive players (those without a team assignment, grade B or below)
   const inactivePlayers = useMemo(() => {
     return players.filter(
       (p) =>
-        p.currentTeamId === null &&
+        (p.leagueAssignments?.some(
+          (assignment) => assignment.leagueId === activeLeagueId && assignment.rosterStatus === 'FREE_AGENT',
+        ) ?? false) &&
         ['B', 'B-', 'C+', 'C', 'C-', 'D+', 'D', 'D-'].includes(p.overallGrade)
     );
-  }, [players]);
+  }, [players, activeLeagueId]);
 
   // Generate prospects
   const generateProspects = () => {

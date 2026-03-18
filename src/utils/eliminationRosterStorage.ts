@@ -228,10 +228,9 @@ function buildSnapshot(
 export async function createRosterSnapshots(eliminationId: string, teamIds: string[]): Promise<void> {
   const snapshots = await Promise.all(
     teamIds.map(async (teamId) => {
-      const [team, roster, players] = await Promise.all([
+      const [team, roster] = await Promise.all([
         getTeam(teamId),
         getTeamRoster(teamId),
-        getPlayersByTeam(teamId),
       ]);
 
       if (!team) {
@@ -241,6 +240,10 @@ export async function createRosterSnapshots(eliminationId: string, teamIds: stri
       if (!roster) {
         throw new Error(`League Builder roster not found for snapshot: ${teamId}`);
       }
+
+      const players = team.leagueIds?.[0]
+        ? await getPlayersByTeam(teamId, team.leagueIds[0])
+        : [];
 
       return buildSnapshot(eliminationId, teamId, team.name, players, roster);
     })

@@ -6,6 +6,7 @@
  * - leagueTemplates: League configuration templates
  * - globalTeams: Team definitions
  * - globalPlayers: Player database
+ * - leaguePlayerOverrides: Per-league player attribute overrides
  * - rulesPresets: Game rules configurations
  * - teamRosters: Roster assignments and lineups
  */
@@ -16,12 +17,13 @@ import { trackFieldChanges, type EditHistoryEntry } from './editHistoryTracker';
 export type { EditHistoryEntry } from './editHistoryTracker';
 
 const DB_NAME = 'kbl-league-builder';
-const DB_VERSION = 1;
+const DB_VERSION = 3;
 
 const STORES = {
   LEAGUE_TEMPLATES: 'leagueTemplates',
   GLOBAL_TEAMS: 'globalTeams',
   GLOBAL_PLAYERS: 'globalPlayers',
+  LEAGUE_PLAYER_OVERRIDES: 'leaguePlayerOverrides',
   RULES_PRESETS: 'rulesPresets',
   TEAM_ROSTERS: 'teamRosters',
 } as const;
@@ -46,7 +48,7 @@ export type Chemistry = 'Competitive' | 'Spirited' | 'Crafty' | 'Scholarly' | 'D
 
 export type MojoState = 'On Fire' | 'Hot' | 'Normal' | 'Cold' | 'Ice Cold';
 
-export type RosterStatus = 'MLB' | 'FARM' | 'FREE_AGENT' | 'RETIRED';
+export type RosterStatus = 'MLB' | 'FARM' | 'FREE_AGENT';
 
 // League Template
 export interface Conference {
@@ -102,6 +104,12 @@ export interface Team {
   lastModified: string;
 }
 
+export interface LeagueAssignment {
+  leagueId: string;
+  teamId: string;
+  rosterStatus: RosterStatus;
+}
+
 // Player
 export interface Player {
   id: string;
@@ -135,14 +143,46 @@ export interface Player {
   fame: number;
   salary: number;
   contractYears?: number;
-  currentTeamId: string | null;
-  rosterStatus: RosterStatus;
+  leagueAssignments?: LeagueAssignment[];
   createdDate: string;
   lastModified: string;
   isCustom: boolean;
   sourceDatabase?: string;
   hometown?: { city: string; state: string };
   editHistory?: EditHistoryEntry[];
+}
+
+export type PlayerAttributes = Pick<
+  Player,
+  | 'power'
+  | 'contact'
+  | 'speed'
+  | 'fielding'
+  | 'arm'
+  | 'velocity'
+  | 'junk'
+  | 'accuracy'
+  | 'arsenal'
+  | 'overallGrade'
+  | 'trait1'
+  | 'trait2'
+  | 'personality'
+  | 'chemistry'
+  | 'primaryPosition'
+  | 'secondaryPosition'
+  | 'age'
+  | 'bats'
+  | 'throws'
+  | 'nickname'
+  | 'hometown'
+>;
+
+export interface LeaguePlayerOverrideRecord {
+  id: string;
+  leagueId: string;
+  playerId: string;
+  overrides: Partial<PlayerAttributes>;
+  lastModified: string;
 }
 
 // Roster
@@ -233,6 +273,135 @@ export interface RulesPreset {
 // ============================================
 
 let dbInstance: IDBDatabase | null = null;
+const MIGRATION_LEAGUE_PLACEHOLDER = '__migrate__';
+
+type LegacyRosterStatus = RosterStatus | 'RETIRED';
+
+type LegacyPlayerRecord = Player & {
+  currentTeamId?: string | null;
+  rosterStatus?: LegacyRosterStatus;
+};
+
+function requestToPromise<T>(request: IDBRequest<T>): Promise<T> {
+  return new Promise((resolve, reject) => {
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+function getLeagueAssignment(player: Player, leagueId: string): LeagueAssignment | undefined {
+  return player.leagueAssignments?.find((assignment) => assignment.leagueId === leagueId);
+}
+
+export function getPlayerLeagueAssignment(player: Player, leagueId: string): LeagueAssignment | undefined {
+  return getLeagueAssignment(player, leagueId);
+}
+
+export function getPlayerTeamIdForLeague(player: Player, leagueId: string): string | null {
+  return getLeagueAssignment(player, leagueId)?.teamId ?? null;
+}
+
+export function getPlayerRosterStatusForLeague(player: Player, leagueId: string): RosterStatus | null {
+  return getLeagueAssignment(player, leagueId)?.rosterStatus ?? null;
+}
+
+function buildLeagueAssignmentsFromLegacyPlayer(player: LegacyPlayerRecord): LeagueAssignment[] {
+  if (player.leagueAssignments) {
+    return player.leagueAssignments;
+  }
+
+  if (player.rosterStatus === 'RETIRED') {
+    return [];
+  }
+
+  if (player.currentTeamId) {
+    return [{
+      leagueId: MIGRATION_LEAGUE_PLACEHOLDER,
+      teamId: player.currentTeamId,
+      rosterStatus: player.rosterStatus ?? 'MLB',
+    }];
+  }
+
+  if (player.rosterStatus === 'FREE_AGENT') {
+    return [{
+      leagueId: MIGRATION_LEAGUE_PLACEHOLDER,
+      teamId: '',
+      rosterStatus: 'FREE_AGENT',
+    }];
+  }
+
+  return [];
+}
+
+function normalizePlayerRecord(player: LegacyPlayerRecord): Player {
+  const normalized = {
+    ...player,
+    leagueAssignments: buildLeagueAssignmentsFromLegacyPlayer(player),
+  };
+
+  delete normalized.currentTeamId;
+  delete normalized.rosterStatus;
+
+  return normalized;
+}
+
+async function resolveMigratedLeagueAssignments(db: IDBDatabase): Promise<void> {
+  const tx = db.transaction(
+    [STORES.GLOBAL_PLAYERS, STORES.GLOBAL_TEAMS, STORES.LEAGUE_TEMPLATES],
+    'readwrite',
+  );
+  const playerStore = tx.objectStore(STORES.GLOBAL_PLAYERS);
+  const teamStore = tx.objectStore(STORES.GLOBAL_TEAMS);
+  const leagueStore = tx.objectStore(STORES.LEAGUE_TEMPLATES);
+
+  const [teams, leagues, players] = await Promise.all([
+    requestToPromise(teamStore.getAll()) as Promise<Team[]>,
+    requestToPromise(leagueStore.getAll()) as Promise<LeagueTemplate[]>,
+    requestToPromise(playerStore.getAll()) as Promise<LegacyPlayerRecord[]>,
+  ]);
+
+  const firstLeagueId = leagues[0]?.id ?? '';
+  const teamLeagueIdById = new Map(
+    teams.map((team) => [team.id, team.leagueIds?.[0] ?? firstLeagueId]),
+  );
+
+  for (const legacyPlayer of players) {
+    const player = normalizePlayerRecord(legacyPlayer);
+    const nextAssignments = (player.leagueAssignments ?? []).flatMap((assignment) => {
+      if (assignment.leagueId !== MIGRATION_LEAGUE_PLACEHOLDER) {
+        return assignment;
+      }
+
+      const resolvedLeagueId = assignment.teamId
+        ? teamLeagueIdById.get(assignment.teamId) ?? firstLeagueId
+        : firstLeagueId;
+
+      return resolvedLeagueId
+        ? [{ ...assignment, leagueId: resolvedLeagueId }]
+        : [];
+    });
+
+    const needsUpdate =
+      legacyPlayer.currentTeamId !== undefined ||
+      legacyPlayer.rosterStatus !== undefined ||
+      JSON.stringify(player.leagueAssignments ?? []) !== JSON.stringify(nextAssignments);
+
+    if (needsUpdate) {
+      await requestToPromise(
+        playerStore.put({
+          ...player,
+          leagueAssignments: nextAssignments,
+        }),
+      );
+    }
+  }
+
+  await new Promise<void>((resolve, reject) => {
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error);
+  });
+}
 
 export async function initLeagueBuilderDatabase(): Promise<IDBDatabase> {
   if (dbInstance) return dbInstance;
@@ -253,11 +422,15 @@ export async function initLeagueBuilderDatabase(): Promise<IDBDatabase> {
         dbInstance?.close();
         dbInstance = null;
       };
-      resolve(dbInstance);
+
+      resolveMigratedLeagueAssignments(dbInstance)
+        .then(() => resolve(dbInstance!))
+        .catch((error) => reject(error));
     };
 
     request.onupgradeneeded = (event) => {
       const db = (event.target as IDBOpenDBRequest).result;
+      const { oldVersion } = event;
 
       // League Templates store
       if (!db.objectStoreNames.contains(STORES.LEAGUE_TEMPLATES)) {
@@ -273,12 +446,36 @@ export async function initLeagueBuilderDatabase(): Promise<IDBDatabase> {
       }
 
       // Global Players store
+      let globalPlayersStore: IDBObjectStore;
       if (!db.objectStoreNames.contains(STORES.GLOBAL_PLAYERS)) {
-        const store = db.createObjectStore(STORES.GLOBAL_PLAYERS, { keyPath: 'id' });
-        store.createIndex('lastName', 'lastName', { unique: false });
-        store.createIndex('currentTeamId', 'currentTeamId', { unique: false });
-        store.createIndex('primaryPosition', 'primaryPosition', { unique: false });
-        store.createIndex('overallGrade', 'overallGrade', { unique: false });
+        globalPlayersStore = db.createObjectStore(STORES.GLOBAL_PLAYERS, { keyPath: 'id' });
+      } else {
+        globalPlayersStore = (event.target as IDBOpenDBRequest).transaction!.objectStore(STORES.GLOBAL_PLAYERS);
+      }
+
+      if (!globalPlayersStore.indexNames.contains('lastName')) {
+        globalPlayersStore.createIndex('lastName', 'lastName', { unique: false });
+      }
+      if (!globalPlayersStore.indexNames.contains('primaryPosition')) {
+        globalPlayersStore.createIndex('primaryPosition', 'primaryPosition', { unique: false });
+      }
+      if (!globalPlayersStore.indexNames.contains('overallGrade')) {
+        globalPlayersStore.createIndex('overallGrade', 'overallGrade', { unique: false });
+      }
+      if (oldVersion < 3) {
+        if (globalPlayersStore.indexNames.contains('currentTeamId')) {
+          globalPlayersStore.deleteIndex('currentTeamId');
+        }
+
+        const cursorRequest = globalPlayersStore.openCursor();
+        cursorRequest.onsuccess = () => {
+          const cursor = cursorRequest.result;
+          if (!cursor) return;
+
+          const player = normalizePlayerRecord(cursor.value as LegacyPlayerRecord);
+          cursor.update(player);
+          cursor.continue();
+        };
       }
 
       // Rules Presets store
@@ -291,6 +488,13 @@ export async function initLeagueBuilderDatabase(): Promise<IDBDatabase> {
       // Team Rosters store
       if (!db.objectStoreNames.contains(STORES.TEAM_ROSTERS)) {
         db.createObjectStore(STORES.TEAM_ROSTERS, { keyPath: 'teamId' });
+      }
+
+      // League Player Overrides store
+      if (oldVersion < 2 && !db.objectStoreNames.contains(STORES.LEAGUE_PLAYER_OVERRIDES)) {
+        const store = db.createObjectStore(STORES.LEAGUE_PLAYER_OVERRIDES, { keyPath: 'id' });
+        store.createIndex('leagueId', 'leagueId', { unique: false });
+        store.createIndex('playerId', 'playerId', { unique: false });
       }
     };
   });
@@ -450,7 +654,7 @@ export async function getAllPlayers(): Promise<Player[]> {
     const store = tx.objectStore(STORES.GLOBAL_PLAYERS);
     const request = store.getAll();
 
-    request.onsuccess = () => resolve(request.result || []);
+    request.onsuccess = () => resolve((request.result || []).map((player) => normalizePlayerRecord(player)));
     request.onerror = () => reject(request.error);
   });
 }
@@ -463,21 +667,23 @@ export async function getPlayer(id: string): Promise<Player | null> {
     const store = tx.objectStore(STORES.GLOBAL_PLAYERS);
     const request = store.get(id);
 
-    request.onsuccess = () => resolve(request.result || null);
+    request.onsuccess = () => resolve(request.result ? normalizePlayerRecord(request.result) : null);
     request.onerror = () => reject(request.error);
   });
 }
 
-export async function getPlayersByTeam(teamId: string | null): Promise<Player[]> {
+export async function getPlayersByTeam(teamId: string, leagueId: string): Promise<Player[]> {
   const db = await initLeagueBuilderDatabase();
 
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORES.GLOBAL_PLAYERS, 'readonly');
     const store = tx.objectStore(STORES.GLOBAL_PLAYERS);
-    const index = store.index('currentTeamId');
-    const request = index.getAll(teamId);
+    const request = store.getAll();
 
-    request.onsuccess = () => resolve(request.result || []);
+    request.onsuccess = () => {
+      const players = (request.result || []).map((player) => normalizePlayerRecord(player));
+      resolve(players.filter((player) => getPlayerTeamIdForLeague(player, leagueId) === teamId));
+    };
     request.onerror = () => reject(request.error);
   });
 }
@@ -505,6 +711,7 @@ export async function savePlayer(
 
   const fullPlayer: Player = {
     ...player,
+    leagueAssignments: player.leagueAssignments ?? [],
     editHistory,
     id: player.id || generateId('player'),
     createdDate: player.id ? (await getPlayer(player.id))?.createdDate || now : now,
@@ -535,39 +742,80 @@ export async function deletePlayer(id: string): Promise<void> {
   });
 }
 
-/**
- * Retire a player: mark RETIRED in the player record and remove from
- * their team roster (mlbRoster, lineups, rotation, bullpen, depth chart, etc.).
- */
-export async function retirePlayer(playerId: string): Promise<void> {
-  // 1. Update the player record
-  const player = await getPlayer(playerId);
-  if (!player) return;
+function createLeaguePlayerOverrideId(leagueId: string, playerId: string): string {
+  return `${leagueId}::${playerId}`;
+}
 
-  const previousTeamId = player.currentTeamId;
-
+export async function getLeaguePlayerOverride(
+  leagueId: string,
+  playerId: string,
+): Promise<LeaguePlayerOverrideRecord | null> {
   const db = await initLeagueBuilderDatabase();
-  const now = nowISO();
-  const updatedPlayer: Player = {
-    ...player,
-    rosterStatus: 'RETIRED',
-    currentTeamId: null,
-    lastModified: now,
+
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORES.LEAGUE_PLAYER_OVERRIDES, 'readonly');
+    const store = tx.objectStore(STORES.LEAGUE_PLAYER_OVERRIDES);
+    const request = store.get(createLeaguePlayerOverrideId(leagueId, playerId));
+
+    request.onsuccess = () => resolve(request.result || null);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+export async function setLeaguePlayerOverride(
+  leagueId: string,
+  playerId: string,
+  overrides: Partial<PlayerAttributes>,
+): Promise<LeaguePlayerOverrideRecord> {
+  const db = await initLeagueBuilderDatabase();
+
+  const record: LeaguePlayerOverrideRecord = {
+    id: createLeaguePlayerOverrideId(leagueId, playerId),
+    leagueId,
+    playerId,
+    overrides,
+    lastModified: nowISO(),
   };
-  await new Promise<void>((resolve, reject) => {
-    const tx = db.transaction(STORES.GLOBAL_PLAYERS, 'readwrite');
-    const store = tx.objectStore(STORES.GLOBAL_PLAYERS);
-    const request = store.put(updatedPlayer);
+
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORES.LEAGUE_PLAYER_OVERRIDES, 'readwrite');
+    const store = tx.objectStore(STORES.LEAGUE_PLAYER_OVERRIDES);
+    const request = store.put(record);
+
+    request.onerror = () => reject(request.error);
+    tx.oncomplete = () => resolve(record);
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+export async function removeLeaguePlayerOverride(leagueId: string, playerId: string): Promise<void> {
+  const db = await initLeagueBuilderDatabase();
+
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORES.LEAGUE_PLAYER_OVERRIDES, 'readwrite');
+    const store = tx.objectStore(STORES.LEAGUE_PLAYER_OVERRIDES);
+    const request = store.delete(createLeaguePlayerOverrideId(leagueId, playerId));
+
     request.onsuccess = () => resolve();
     request.onerror = () => reject(request.error);
   });
+}
 
-  // 2. Remove from team roster if they were on one
-  if (!previousTeamId) return;
+export async function getAllOverridesForLeague(leagueId: string): Promise<LeaguePlayerOverrideRecord[]> {
+  const db = await initLeagueBuilderDatabase();
 
-  const roster = await getTeamRoster(previousTeamId);
-  if (!roster) return;
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORES.LEAGUE_PLAYER_OVERRIDES, 'readonly');
+    const store = tx.objectStore(STORES.LEAGUE_PLAYER_OVERRIDES);
+    const index = store.index('leagueId');
+    const request = index.getAll(leagueId);
 
+    request.onsuccess = () => resolve(request.result || []);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+function removePlayerIdFromRoster(roster: TeamRoster, playerId: string): TeamRoster {
   const removeId = (arr: string[]) => arr.filter(id => id !== playerId);
   const removeFromLineup = (slots: LineupSlot[]) => slots.filter(s => s.playerId !== playerId);
   const removeFromDepth = (dc: DepthChart): DepthChart => {
@@ -578,7 +826,7 @@ export async function retirePlayer(playerId: string): Promise<void> {
     return cleaned;
   };
 
-  const cleanedRoster: TeamRoster = {
+  return {
     ...roster,
     mlbRoster: removeId(roster.mlbRoster),
     farmRoster: removeId(roster.farmRoster),
@@ -592,27 +840,24 @@ export async function retirePlayer(playerId: string): Promise<void> {
     pinchRunOrder: removeId(roster.pinchRunOrder),
     defensiveSubOrder: removeId(roster.defensiveSubOrder),
   };
-
-  await saveTeamRoster(cleanedRoster);
 }
 
 /**
- * Transfer a player from one team to another.
- * Removes from old team roster arrays, adds to new team's mlbRoster,
- * and updates the player's currentTeamId.
+ * Retire a player by removing all league assignments and clearing them from
+ * any team roster (mlbRoster, lineups, rotation, bullpen, depth chart, etc.).
  */
-export async function transferPlayer(playerId: string, newTeamId: string): Promise<void> {
+export async function retirePlayer(playerId: string): Promise<void> {
   const player = await getPlayer(playerId);
   if (!player) return;
+  const previousTeamIds = Array.from(
+    new Set((player.leagueAssignments ?? []).map((assignment) => assignment.teamId).filter(Boolean)),
+  );
 
-  const oldTeamId = player.currentTeamId;
-
-  // 1. Update player record
   const db = await initLeagueBuilderDatabase();
   const now = nowISO();
   const updatedPlayer: Player = {
     ...player,
-    currentTeamId: newTeamId,
+    leagueAssignments: [],
     lastModified: now,
   };
   await new Promise<void>((resolve, reject) => {
@@ -623,38 +868,58 @@ export async function transferPlayer(playerId: string, newTeamId: string): Promi
     request.onerror = () => reject(request.error);
   });
 
-  // 2. Remove from old team roster
+  for (const teamId of previousTeamIds) {
+    const roster = await getTeamRoster(teamId);
+    if (roster) {
+      await saveTeamRoster(removePlayerIdFromRoster(roster, playerId));
+    }
+  }
+}
+
+/**
+ * Transfer a player from one team to another.
+ * Removes from old team roster arrays, adds to new team's mlbRoster,
+ * and updates the player's assignment for the supplied league.
+ */
+export async function transferPlayer(playerId: string, newTeamId: string, leagueId: string): Promise<void> {
+  const player = await getPlayer(playerId);
+  if (!player) return;
+
+  const oldAssignment = getLeagueAssignment(player, leagueId);
+  const oldTeamId = oldAssignment?.teamId ?? null;
+
+  const db = await initLeagueBuilderDatabase();
+  const now = nowISO();
+  const remainingAssignments = (player.leagueAssignments ?? []).filter(
+    (assignment) => assignment.leagueId !== leagueId,
+  );
+  const updatedPlayer: Player = {
+    ...player,
+    leagueAssignments: [
+      ...remainingAssignments,
+      {
+        leagueId,
+        teamId: newTeamId,
+        rosterStatus: oldAssignment?.rosterStatus === 'FREE_AGENT' ? 'MLB' : oldAssignment?.rosterStatus ?? 'MLB',
+      },
+    ],
+    lastModified: now,
+  };
+  await new Promise<void>((resolve, reject) => {
+    const tx = db.transaction(STORES.GLOBAL_PLAYERS, 'readwrite');
+    const store = tx.objectStore(STORES.GLOBAL_PLAYERS);
+    const request = store.put(updatedPlayer);
+    request.onsuccess = () => resolve();
+    request.onerror = () => reject(request.error);
+  });
+
   if (oldTeamId) {
     const oldRoster = await getTeamRoster(oldTeamId);
     if (oldRoster) {
-      const removeId = (arr: string[]) => arr.filter(id => id !== playerId);
-      const removeFromLineup = (slots: LineupSlot[]) => slots.filter(s => s.playerId !== playerId);
-      const removeFromDepth = (dc: DepthChart): DepthChart => {
-        const cleaned = { ...dc };
-        for (const pos of Object.keys(cleaned) as (keyof DepthChart)[]) {
-          cleaned[pos] = removeId(cleaned[pos]);
-        }
-        return cleaned;
-      };
-
-      await saveTeamRoster({
-        ...oldRoster,
-        mlbRoster: removeId(oldRoster.mlbRoster),
-        farmRoster: removeId(oldRoster.farmRoster),
-        lineupVsRHP: removeFromLineup(oldRoster.lineupVsRHP),
-        lineupVsLHP: removeFromLineup(oldRoster.lineupVsLHP),
-        startingRotation: removeId(oldRoster.startingRotation),
-        closingPitcher: oldRoster.closingPitcher === playerId ? '' : oldRoster.closingPitcher,
-        setupPitchers: removeId(oldRoster.setupPitchers),
-        depthChart: removeFromDepth(oldRoster.depthChart),
-        pinchHitOrder: removeId(oldRoster.pinchHitOrder),
-        pinchRunOrder: removeId(oldRoster.pinchRunOrder),
-        defensiveSubOrder: removeId(oldRoster.defensiveSubOrder),
-      });
+      await saveTeamRoster(removePlayerIdFromRoster(oldRoster, playerId));
     }
   }
 
-  // 3. Add to new team roster
   const newRoster = await getTeamRoster(newTeamId);
   if (newRoster && !newRoster.mlbRoster.includes(playerId)) {
     await saveTeamRoster({
@@ -882,13 +1147,21 @@ export async function clearAllLeagueBuilderData(): Promise<void> {
 
   return new Promise((resolve, reject) => {
     const tx = db.transaction(
-      [STORES.LEAGUE_TEMPLATES, STORES.GLOBAL_TEAMS, STORES.GLOBAL_PLAYERS, STORES.RULES_PRESETS, STORES.TEAM_ROSTERS],
+      [
+        STORES.LEAGUE_TEMPLATES,
+        STORES.GLOBAL_TEAMS,
+        STORES.GLOBAL_PLAYERS,
+        STORES.LEAGUE_PLAYER_OVERRIDES,
+        STORES.RULES_PRESETS,
+        STORES.TEAM_ROSTERS,
+      ],
       'readwrite'
     );
 
     tx.objectStore(STORES.LEAGUE_TEMPLATES).clear();
     tx.objectStore(STORES.GLOBAL_TEAMS).clear();
     tx.objectStore(STORES.GLOBAL_PLAYERS).clear();
+    tx.objectStore(STORES.LEAGUE_PLAYER_OVERRIDES).clear();
     tx.objectStore(STORES.RULES_PRESETS).clear();
     tx.objectStore(STORES.TEAM_ROSTERS).clear();
 
@@ -978,12 +1251,6 @@ function convertPlayer(player: PlayerData): Omit<Player, 'createdDate' | 'lastMo
     }
   }
 
-  // Determine roster status based on role
-  let rosterStatus: RosterStatus = 'MLB';
-  if (player.role === 'BENCH' || player.role === 'BULLPEN') {
-    rosterStatus = 'MLB';
-  }
-
   return {
     id: player.id,
     firstName,
@@ -1014,8 +1281,13 @@ function convertPlayer(player: PlayerData): Omit<Player, 'createdDate' | 'lastMo
     mojo: 'Normal',
     fame: 0,
     salary: computeInitialSalary(player, primaryPosition),
-    currentTeamId: player.teamId === 'free-agent' ? null : player.teamId,
-    rosterStatus,
+    leagueAssignments: player.teamId === 'free-agent'
+      ? []
+      : [{
+          leagueId: SMB4_TEAMS[player.teamId]?.leagueId ?? '',
+          teamId: player.teamId,
+          rosterStatus: 'MLB',
+        }],
     isCustom: false,
     sourceDatabase: 'SMB4',
     hometown: generateHometown(),
@@ -1214,7 +1486,9 @@ export async function seedFromSMB4Database(clearExisting = true): Promise<{ team
   }
 
   for (const team of seededTeams) {
-    const teamPlayers = seededPlayers.filter((player) => player.currentTeamId === team.id);
+    const teamPlayers = seededPlayers.filter((player) =>
+      player.leagueAssignments?.some((assignment) => assignment.teamId === team.id),
+    );
     await saveTeamRoster(buildSeedRoster(team.id, teamPlayers));
   }
 

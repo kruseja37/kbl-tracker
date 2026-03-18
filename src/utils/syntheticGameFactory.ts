@@ -13,7 +13,8 @@
  */
 
 import type { PersistedGameState } from './gameStorage';
-import { getPlayersByTeam, getTeamRoster } from './leagueBuilderStorage';
+import { getPlayersByTeam, getTeam, getTeamRoster, type Player } from './leagueBuilderStorage';
+import { getEffectivePlayer } from './playerOverrides';
 
 // ============================================
 // ROSTER TEMPLATES
@@ -81,9 +82,17 @@ export async function buildRosterFromPlayers(
   teamName: string,
   rotationIndex: number = 0
 ): Promise<TeamRoster> {
-  let players;
+  let players: Player[];
   try {
-    players = await getPlayersByTeam(teamId);
+    const team = await getTeam(teamId);
+    const leagueId = team?.leagueIds?.[0];
+    if (!leagueId) {
+      return generateRoster(teamId, teamName);
+    }
+    const teamPlayers = await getPlayersByTeam(teamId, leagueId);
+    players = (
+      await Promise.all(teamPlayers.map((player) => getEffectivePlayer(player.id, leagueId)))
+    ).filter((player): player is Player => player !== null);
   } catch {
     // Fallback to generic roster if storage fails
     return generateRoster(teamId, teamName);

@@ -25,6 +25,9 @@ const mockRemovePlayer = vi.fn().mockResolvedValue(undefined);
 
 vi.mock('../../hooks/useLeagueBuilderData', () => ({
   useLeagueBuilderData: vi.fn(() => ({
+    leagues: [
+      { id: 'league-1', name: 'League One', teamIds: ['team-1', 'team-2'] },
+    ],
     players: [
       {
         id: 'player-1',
@@ -51,8 +54,7 @@ vi.mock('../../hooks/useLeagueBuilderData', () => ({
         trait2: 'Clutch',
         personality: 'Competitive',
         chemistry: 'Competitive',
-        currentTeamId: 'team-1',
-        rosterStatus: 'STARTER',
+        leagueAssignments: [{ leagueId: 'league-1', teamId: 'team-1', rosterStatus: 'MLB' }],
       },
       {
         id: 'player-2',
@@ -79,8 +81,7 @@ vi.mock('../../hooks/useLeagueBuilderData', () => ({
         trait2: '',
         personality: 'Disciplined',
         chemistry: 'Disciplined',
-        currentTeamId: 'team-1',
-        rosterStatus: 'ROTATION',
+        leagueAssignments: [{ leagueId: 'league-1', teamId: 'team-1', rosterStatus: 'MLB' }],
       },
       {
         id: 'player-3',
@@ -107,13 +108,12 @@ vi.mock('../../hooks/useLeagueBuilderData', () => ({
         trait2: '',
         personality: 'Spirited',
         chemistry: 'Spirited',
-        currentTeamId: '',
-        rosterStatus: 'FREE_AGENT',
+        leagueAssignments: [{ leagueId: 'league-1', teamId: '', rosterStatus: 'FREE_AGENT' }],
       },
     ],
     teams: [
-      { id: 'team-1', name: 'Sox', abbreviation: 'SOX' },
-      { id: 'team-2', name: 'Tigers', abbreviation: 'DET' },
+      { id: 'team-1', name: 'Sox', abbreviation: 'SOX', leagueIds: ['league-1'] },
+      { id: 'team-2', name: 'Tigers', abbreviation: 'DET', leagueIds: ['league-1'] },
     ],
     isLoading: false,
     error: null,

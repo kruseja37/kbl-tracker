@@ -19,6 +19,7 @@ const PITCHER_POSITIONS: Position[] = ['SP', 'RP', 'CP'];
 export function LeagueBuilderRosters() {
   const navigate = useNavigate();
   const {
+    leagues,
     teams,
     players,
     isLoading,
@@ -32,11 +33,20 @@ export function LeagueBuilderRosters() {
   const [currentRoster, setCurrentRoster] = useState<TeamRoster | null>(null);
   const [hasChanges, setHasChanges] = useState(false);
   const [saving, setSaving] = useState(false);
+  const activeLeagueId = useMemo(
+    () => leagues[0]?.id ?? teams.find((team) => team.leagueIds?.[0])?.leagueIds?.[0] ?? "",
+    [leagues, teams],
+  );
+
+  const isPlayerOnTeam = (player: Player, teamId: string) =>
+    player.leagueAssignments?.some(
+      (assignment) => assignment.leagueId === activeLeagueId && assignment.teamId === teamId,
+    ) ?? false;
 
   // Get team roster summary for team list
   const teamSummaries = useMemo(() => {
     return teams.map((team) => {
-      const roster = players.filter((p) => p.currentTeamId === team.id);
+      const roster = players.filter((player) => isPlayerOnTeam(player, team.id));
       const pitchers = roster.filter((p) =>
         ['SP', 'RP', 'CP', 'SP/RP'].includes(p.primaryPosition)
       ).length;
@@ -48,7 +58,7 @@ export function LeagueBuilderRosters() {
         batters,
       };
     });
-  }, [teams, players]);
+  }, [teams, players, activeLeagueId]);
 
   // Load roster when team is selected
   useEffect(() => {
@@ -119,8 +129,8 @@ export function LeagueBuilderRosters() {
 
   const selectedTeam = teams.find((t) => t.id === selectedTeamId);
   const teamPlayers = useMemo(
-    () => players.filter((p) => p.currentTeamId === selectedTeamId),
-    [players, selectedTeamId]
+    () => selectedTeamId ? players.filter((player) => isPlayerOnTeam(player, selectedTeamId)) : [],
+    [players, selectedTeamId, activeLeagueId]
   );
 
   if (isLoading) {

@@ -21,18 +21,23 @@ vi.mock('react-router', () => ({
 
 vi.mock('../../hooks/useLeagueBuilderData', () => ({
   useLeagueBuilderData: vi.fn(() => ({
+    leagues: [
+      { id: 'league-1', name: 'League One', teamIds: ['team-1', 'team-2'] },
+    ],
     teams: [
       {
         id: 'team-1',
         name: 'Boston Sox',
         abbreviation: 'SOX',
         colors: { primary: '#FF0000', secondary: '#FFFFFF' },
+        leagueIds: ['league-1'],
       },
       {
         id: 'team-2',
         name: 'Detroit Tigers',
         abbreviation: 'DET',
         colors: { primary: '#FF6600', secondary: '#000000' },
+        leagueIds: ['league-1'],
       },
     ],
     players: [
@@ -42,7 +47,7 @@ vi.mock('../../hooks/useLeagueBuilderData', () => ({
         lastName: 'Retired',
         primaryPosition: 'SS',
         overallGrade: 'B-',
-        currentTeamId: null,
+        leagueAssignments: [{ leagueId: 'league-1', teamId: '', rosterStatus: 'FREE_AGENT' }],
       },
       {
         id: 'player-inactive-2',
@@ -50,7 +55,7 @@ vi.mock('../../hooks/useLeagueBuilderData', () => ({
         lastName: 'Released',
         primaryPosition: 'SP',
         overallGrade: 'C+',
-        currentTeamId: null,
+        leagueAssignments: [{ leagueId: 'league-1', teamId: '', rosterStatus: 'FREE_AGENT' }],
       },
     ],
     isLoading: false,

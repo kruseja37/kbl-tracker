@@ -71,7 +71,7 @@ interface PlayerFormData {
   trait2: string;
   personality: Personality;
   chemistry: Chemistry;
-  currentTeamId: string;
+  teamId: string;
   rosterStatus: RosterStatus;
 }
 
@@ -99,7 +99,7 @@ const DEFAULT_FORM_DATA: PlayerFormData = {
   trait2: "",
   personality: 'Competitive',
   chemistry: 'Competitive',
-  currentTeamId: "",
+  teamId: "",
   rosterStatus: 'FREE_AGENT',
 };
 
@@ -110,6 +110,7 @@ const DEFAULT_FORM_DATA: PlayerFormData = {
 export function LeagueBuilderPlayers() {
   const navigate = useNavigate();
   const {
+    leagues,
     players,
     teams,
     isLoading,
@@ -128,6 +129,17 @@ export function LeagueBuilderPlayers() {
   const [searchQuery, setSearchQuery] = useState("");
   const [positionFilter, setPositionFilter] = useState<string>("ALL");
   const [teamFilter, setTeamFilter] = useState<string>("ALL");
+  const activeLeagueId = useMemo(
+    () => leagues[0]?.id ?? teams.find((team) => team.leagueIds?.[0])?.leagueIds?.[0] ?? "",
+    [leagues, teams],
+  );
+
+  const getActiveAssignment = (player: Player) => {
+    if (!player.leagueAssignments?.length) return undefined;
+    if (!activeLeagueId) return player.leagueAssignments[0];
+    return player.leagueAssignments.find((assignment) => assignment.leagueId === activeLeagueId)
+      ?? player.leagueAssignments[0];
+  };
 
   // Filter players
   const filteredPlayers = useMemo(() => {
@@ -151,9 +163,12 @@ export function LeagueBuilderPlayers() {
     // Team filter
     if (teamFilter !== "ALL") {
       if (teamFilter === "FREE_AGENT") {
-        list = list.filter(p => !p.currentTeamId);
+        list = list.filter((player) => {
+          const assignment = getActiveAssignment(player);
+          return !assignment || assignment.rosterStatus === 'FREE_AGENT' || !assignment.teamId;
+        });
       } else {
-        list = list.filter(p => p.currentTeamId === teamFilter);
+        list = list.filter((player) => getActiveAssignment(player)?.teamId === teamFilter);
       }
     }
 
@@ -161,7 +176,7 @@ export function LeagueBuilderPlayers() {
     list.sort((a, b) => a.lastName.localeCompare(b.lastName));
 
     return list.slice(0, 100); // Limit for performance
-  }, [players, searchQuery, positionFilter, teamFilter]);
+  }, [players, searchQuery, positionFilter, teamFilter, activeLeagueId]);
 
   // ============================================
   // HANDLERS
@@ -199,8 +214,8 @@ export function LeagueBuilderPlayers() {
       trait2: player.trait2 || "",
       personality: player.personality,
       chemistry: player.chemistry,
-      currentTeamId: player.currentTeamId || "",
-      rosterStatus: player.rosterStatus,
+      teamId: getActiveAssignment(player)?.teamId || "",
+      rosterStatus: getActiveAssignment(player)?.rosterStatus ?? 'FREE_AGENT',
     });
     setIsModalOpen(true);
   };
@@ -217,6 +232,12 @@ export function LeagueBuilderPlayers() {
     setIsSaving(true);
     try {
       const isPitcher = ['SP', 'RP', 'CP', 'SP/RP'].includes(formData.primaryPosition);
+
+      const resolvedLeagueId =
+        activeLeagueId ||
+        teams.find((team) => team.id === formData.teamId)?.leagueIds?.[0] ||
+        editingPlayer?.leagueAssignments?.[0]?.leagueId ||
+        "";
 
       const playerData = {
         firstName: formData.firstName.trim(),
@@ -247,8 +268,13 @@ export function LeagueBuilderPlayers() {
         fame: editingPlayer?.fame ?? 0,
         salary: editingPlayer?.salary ?? 1.0,
         contractYears: editingPlayer?.contractYears,
-        currentTeamId: formData.currentTeamId || null,
-        rosterStatus: formData.rosterStatus,
+        leagueAssignments: resolvedLeagueId
+          ? [{
+              leagueId: resolvedLeagueId,
+              teamId: formData.teamId,
+              rosterStatus: formData.teamId ? formData.rosterStatus : 'FREE_AGENT' as RosterStatus,
+            }]
+          : [],
         isCustom: true,
         sourceDatabase: 'League Builder',
       };
@@ -287,7 +313,7 @@ export function LeagueBuilderPlayers() {
     }));
   };
 
-  const getTeamName = (teamId: string | null) => {
+  const getTeamName = (teamId: string | null | undefined) => {
     if (!teamId) return "Free Agent";
     const team = teams.find(t => t.id === teamId);
     return team?.abbreviation || "Unknown";
@@ -418,7 +444,7 @@ export function LeagueBuilderPlayers() {
                       {player.nickname && <span className="text-[#E8E8D8]/50 text-xs ml-1">"{player.nickname}"</span>}
                     </td>
                     <td className="p-3 text-center text-xs">{player.primaryPosition}</td>
-                    <td className="p-3 text-center text-xs">{getTeamName(player.currentTeamId)}</td>
+                    <td className="p-3 text-center text-xs">{getTeamName(getActiveAssignment(player)?.teamId)}</td>
                     <td className="p-3 text-center font-bold">{player.overallGrade}</td>
                     <td className="p-3 text-center text-xs">{player.age}</td>
                     <td className="p-3 text-center text-xs">{player.bats}/{player.throws}</td>
@@ -725,10 +751,10 @@ export function LeagueBuilderPlayers() {
                     Team
                   </label>
                   <select
-                    value={formData.currentTeamId}
+                    value={formData.teamId}
                     onChange={(e) => setFormData(prev => ({
                       ...prev,
-                      currentTeamId: e.target.value,
+                      teamId: e.target.value,
                       rosterStatus: e.target.value ? prev.rosterStatus : 'FREE_AGENT'
                     }))}
                     className="w-full bg-[#4A6844] border-[4px] border-[#3F5A3A] p-3 text-[#E8E8D8] focus:border-[#E8E8D8] outline-none"
@@ -744,7 +770,7 @@ export function LeagueBuilderPlayers() {
                   <select
                     value={formData.rosterStatus}
                     onChange={(e) => setFormData(prev => ({ ...prev, rosterStatus: e.target.value as RosterStatus }))}
-                    disabled={!formData.currentTeamId}
+                    disabled={!formData.teamId}
                     className="w-full bg-[#4A6844] border-[4px] border-[#3F5A3A] p-3 text-[#E8E8D8] focus:border-[#E8E8D8] outline-none disabled:opacity-50"
                   >
                     <option value="FREE_AGENT">Free Agent</option>

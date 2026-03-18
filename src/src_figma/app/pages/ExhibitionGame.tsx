@@ -3,8 +3,25 @@ import { useNavigate } from "react-router";
 import { ArrowLeft, Loader2, AlertCircle } from "lucide-react";
 import type { Player as RosterPlayer, Pitcher as RosterPitcher } from "@/app/components/TeamRoster";
 import { LineupPreview } from "@/app/components/LineupPreview";
-import { useLeagueBuilderData, type LeagueTemplate, type Team, type Player as LBPlayer } from "../../hooks/useLeagueBuilderData";
+import { useLeagueBuilderData, type Player as LBPlayer } from "../../hooks/useLeagueBuilderData";
 import { loadTeamLineup } from "../../utils/lineupLoader";
+import { getEffectivePlayer } from "../../../utils/playerOverrides";
+
+async function getEffectiveTeamPlayers(
+  teamId: string,
+  leagueId: string,
+  players: LBPlayer[],
+): Promise<LBPlayer[]> {
+  const assignedPlayers = players.filter((player) =>
+    player.leagueAssignments?.some(
+      (assignment) => assignment.leagueId === leagueId && assignment.teamId === teamId,
+    ) ?? false,
+  );
+
+  return (
+    await Promise.all(assignedPlayers.map((player) => getEffectivePlayer(player.id, leagueId)))
+  ).filter((player): player is LBPlayer => player !== null);
+}
 
 export function ExhibitionGame() {
   const navigate = useNavigate();
@@ -37,42 +54,67 @@ export function ExhibitionGame() {
     return teams.filter(t => league.teamIds?.includes(t.id));
   }, [selectedLeagueId, leagues, teams]);
 
-  // Get players for a specific team (using currentTeamId)
-  const getTeamPlayersList = (teamId: string): LBPlayer[] => {
-    return players.filter(p => p.currentTeamId === teamId);
-  };
-
   // Load roster when away team is selected - uses stored lineup or auto-generates
   useEffect(() => {
-    if (selectedAwayTeamId) {
-      const teamPlayersList = getTeamPlayersList(selectedAwayTeamId);
-      setIsLoadingLineups(true);
-
-      loadTeamLineup(selectedAwayTeamId, teamPlayersList, getRoster)
-        .then(result => {
-          setAwayPlayers(result.players);
-          setAwayPitchers(result.pitchers);
-          setAwayHasStoredLineup(result.hasStoredLineup);
-        })
-        .finally(() => setIsLoadingLineups(false));
+    if (!selectedAwayTeamId || !selectedLeagueId) {
+      setAwayPlayers([]);
+      setAwayPitchers([]);
+      setAwayHasStoredLineup(false);
+      return;
     }
-  }, [selectedAwayTeamId, players, getRoster]);
+
+    let cancelled = false;
+    setIsLoadingLineups(true);
+
+    getEffectiveTeamPlayers(selectedAwayTeamId, selectedLeagueId, players)
+      .then((teamPlayersList) => loadTeamLineup(selectedAwayTeamId, teamPlayersList, getRoster))
+      .then((result) => {
+        if (cancelled) return;
+        setAwayPlayers(result.players);
+        setAwayPitchers(result.pitchers);
+        setAwayHasStoredLineup(result.hasStoredLineup);
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setIsLoadingLineups(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedAwayTeamId, selectedLeagueId, players, getRoster]);
 
   // Load roster when home team is selected - uses stored lineup or auto-generates
   useEffect(() => {
-    if (selectedHomeTeamId) {
-      const teamPlayersList = getTeamPlayersList(selectedHomeTeamId);
-      setIsLoadingLineups(true);
-
-      loadTeamLineup(selectedHomeTeamId, teamPlayersList, getRoster)
-        .then(result => {
-          setHomePlayers(result.players);
-          setHomePitchers(result.pitchers);
-          setHomeHasStoredLineup(result.hasStoredLineup);
-        })
-        .finally(() => setIsLoadingLineups(false));
+    if (!selectedHomeTeamId || !selectedLeagueId) {
+      setHomePlayers([]);
+      setHomePitchers([]);
+      setHomeHasStoredLineup(false);
+      return;
     }
-  }, [selectedHomeTeamId, players, getRoster]);
+
+    let cancelled = false;
+    setIsLoadingLineups(true);
+
+    getEffectiveTeamPlayers(selectedHomeTeamId, selectedLeagueId, players)
+      .then((teamPlayersList) => loadTeamLineup(selectedHomeTeamId, teamPlayersList, getRoster))
+      .then((result) => {
+        if (cancelled) return;
+        setHomePlayers(result.players);
+        setHomePitchers(result.pitchers);
+        setHomeHasStoredLineup(result.hasStoredLineup);
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setIsLoadingLineups(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedHomeTeamId, selectedLeagueId, players, getRoster]);
 
   // Get selected team objects
   const awayTeam = teams.find(t => t.id === selectedAwayTeamId);
@@ -109,7 +151,7 @@ export function ExhibitionGame() {
         awayRecord: '0-0',
         homeRecord: '0-0',
         gameMode: 'exhibition' as const,
-        leagueId: 'sml', // Default to Super Mega League for exhibition
+        leagueId: selectedLeagueId || leagues[0]?.id || 'sml',
         userTeamSide: 'home' as const, // Exhibition games default to user as home team
       }
     });

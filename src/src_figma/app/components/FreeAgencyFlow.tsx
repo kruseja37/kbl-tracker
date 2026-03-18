@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 import { Lock, Dice1, Dice2, Dice3, Dice4, Dice5, Dice6, Trophy, Heart, Frown, Smile, Zap, Shield, Crown, ArrowRight, ArrowLeft, CheckCircle, Star, ArrowUp, ArrowDown, RotateCcw } from "lucide-react";
 import { useOffseasonData, type OffseasonPlayer, type OffseasonTeam } from "@/hooks/useOffseasonData";
 import { useOffseasonState, type FreeAgentSigning } from "../../hooks/useOffseasonState";
+import { useLeagueBuilderData } from "../../hooks/useLeagueBuilderData";
 import { transferPlayer, retirePlayer } from "../../../utils/leagueBuilderStorage";
 
 // Types
@@ -136,6 +137,7 @@ interface FreeAgencyFlowProps {
 export function FreeAgencyFlow({ onClose, seasonId = 'season-1', seasonNumber = 1 }: FreeAgencyFlowProps) {
   // Load real data from playerDatabase via hook
   const { teams: realTeams, players: realPlayers, hasRealData, isLoading } = useOffseasonData();
+  const { leagues, teams: leagueBuilderTeams } = useLeagueBuilderData();
 
   // Wire to offseason state for persistence
   const offseasonState = useOffseasonState(seasonId, seasonNumber);
@@ -408,12 +410,20 @@ export function FreeAgencyFlow({ onClose, seasonId = 'season-1', seasonNumber = 
       // Update leagueBuilderStorage rosters for each move
       for (const move of allMoves) {
         try {
+          const defaultLeagueId = leagues[0]?.id ?? "";
+          const targetLeagueId = move.toTeam
+            ? leagueBuilderTeams.find((team) => team.id === move.toTeam!.id)?.leagueIds?.[0] ?? defaultLeagueId
+            : defaultLeagueId;
+
           if (move.outcome === 'MOVED' && move.toTeam && move.toTeam.id !== move.fromTeam.id) {
             // Transfer the departing player to the destination team
-            await transferPlayer(move.player.id, move.toTeam.id);
+            await transferPlayer(move.player.id, move.toTeam.id, targetLeagueId);
             // Transfer the return player back to the originating team
             if (move.returnPlayer) {
-              await transferPlayer(move.returnPlayer.id, move.fromTeam.id);
+              const originLeagueId =
+                leagueBuilderTeams.find((team) => team.id === move.fromTeam.id)?.leagueIds?.[0] ??
+                targetLeagueId;
+              await transferPlayer(move.returnPlayer.id, move.fromTeam.id, originLeagueId);
             }
           } else if (move.outcome === 'RETIRED') {
             await retirePlayer(move.player.id);
@@ -430,7 +440,7 @@ export function FreeAgencyFlow({ onClose, seasonId = 'season-1', seasonNumber = 
     } finally {
       setIsSaving(false);
     }
-  }, [allMoves, offseasonState, onClose]);
+  }, [allMoves, offseasonState, onClose, leagues, leagueBuilderTeams]);
 
   // Show loading state (must be after all hooks)
   if (isLoading) {
