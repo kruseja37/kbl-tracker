@@ -293,7 +293,7 @@ export function useLeagueBuilderData(): UseLeagueBuilderDataReturn {
 
   const updatePlayer = useCallback(async (data: Player) => {
     try {
-      const player = await savePlayer(data);
+      const player = await savePlayer(data, { trackChanges: true });
       await refresh();
       return player;
     } catch (err) {

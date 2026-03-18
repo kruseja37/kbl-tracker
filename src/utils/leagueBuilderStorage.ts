@@ -10,6 +10,11 @@
  * - teamRosters: Roster assignments and lineups
  */
 
+import { generateHometown } from '../data/usCities';
+import { trackFieldChanges, type EditHistoryEntry } from './editHistoryTracker';
+
+export type { EditHistoryEntry } from './editHistoryTracker';
+
 const DB_NAME = 'kbl-league-builder';
 const DB_VERSION = 1;
 
@@ -136,6 +141,8 @@ export interface Player {
   lastModified: string;
   isCustom: boolean;
   sourceDatabase?: string;
+  hometown?: { city: string; state: string };
+  editHistory?: EditHistoryEntry[];
 }
 
 // Roster
@@ -475,12 +482,30 @@ export async function getPlayersByTeam(teamId: string | null): Promise<Player[]>
   });
 }
 
-export async function savePlayer(player: Omit<Player, 'id' | 'createdDate' | 'lastModified'> & { id?: string }): Promise<Player> {
+export async function savePlayer(
+  player: Omit<Player, 'id' | 'createdDate' | 'lastModified'> & { id?: string },
+  options?: { trackChanges?: boolean },
+): Promise<Player> {
   const db = await initLeagueBuilderDatabase();
   const now = nowISO();
 
+  // If tracking changes and this is an update (has id), compute edit history diff
+  let editHistory = player.editHistory ?? [];
+  if (options?.trackChanges && player.id) {
+    const existing = await getPlayer(player.id);
+    if (existing) {
+      const newEntries = trackFieldChanges(
+        existing as unknown as Record<string, unknown>,
+        player as unknown as Record<string, unknown>,
+        'base',
+      );
+      editHistory = [...(existing.editHistory ?? []), ...newEntries];
+    }
+  }
+
   const fullPlayer: Player = {
     ...player,
+    editHistory,
     id: player.id || generateId('player'),
     createdDate: player.id ? (await getPlayer(player.id))?.createdDate || now : now,
     lastModified: now,
@@ -993,6 +1018,7 @@ function convertPlayer(player: PlayerData): Omit<Player, 'createdDate' | 'lastMo
     rosterStatus,
     isCustom: false,
     sourceDatabase: 'SMB4',
+    hometown: generateHometown(),
   };
 }
 
