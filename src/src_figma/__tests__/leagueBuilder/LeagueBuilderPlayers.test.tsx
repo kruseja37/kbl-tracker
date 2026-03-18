@@ -237,7 +237,7 @@ describe('LeagueBuilderPlayers Component', () => {
       fireEvent.click(editButtons[0]);
 
       await waitFor(() => {
-        expect(screen.getByText('Edit Player')).toBeInTheDocument();
+        expect(screen.getByText(/^Edit Player/)).toBeInTheDocument();
       });
     });
   });

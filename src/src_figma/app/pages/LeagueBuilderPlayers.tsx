@@ -1,12 +1,12 @@
 /**
  * League Builder - Players Module
- * Per LEAGUE_BUILDER_SPEC.md Section 5
+ * Per LEAGUE_BUILDER_SPEC.md Section 5 + LEAGUE_BUILDER_REFACTOR_SPEC.md §9–§10
  *
  * Create, edit, and manage the global player database.
- * All players exist in one pool and are assigned to teams via the Rosters module.
+ * Supports per-league overrides via context tabs (BASE + league tabs).
  */
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import { useNavigate } from "react-router";
 import {
   ArrowLeft,
@@ -20,6 +20,8 @@ import {
   Check,
   AlertTriangle,
   Users,
+  RotateCcw,
+  Shuffle,
 } from "lucide-react";
 import {
   useLeagueBuilderData,
@@ -32,6 +34,14 @@ import {
   type RosterStatus,
   type PitchType,
 } from "../../hooks/useLeagueBuilderData";
+import {
+  getLeaguePlayerOverride,
+  setLeaguePlayerOverride,
+  removeLeaguePlayerOverride,
+  type PlayerAttributes,
+} from "../../../utils/leagueBuilderStorage";
+import { mergePlayerOverrides } from "../../../utils/playerOverrides";
+import { generateHometown } from "../../../data/usCities";
 
 // ============================================
 // CONSTANTS
@@ -43,9 +53,23 @@ const PERSONALITIES: Personality[] = ['Competitive', 'Spirited', 'Crafty', 'Scho
 const CHEMISTRIES: Chemistry[] = ['Competitive', 'Spirited', 'Crafty', 'Scholarly', 'Disciplined'];
 const PITCH_TYPES: PitchType[] = ['4F', '2F', 'CB', 'SL', 'CH', 'FK', 'CF', 'SB', 'SC', 'KN'];
 
+/** The gold color for override indicators, per JK's design feedback */
+const OVERRIDE_GOLD = '#D4A020';
+
+/** All PlayerAttributes keys that can be overridden per-league */
+const OVERRIDABLE_FIELDS: (keyof PlayerAttributes)[] = [
+  'power', 'contact', 'speed', 'fielding', 'arm',
+  'velocity', 'junk', 'accuracy', 'arsenal', 'overallGrade',
+  'trait1', 'trait2', 'personality', 'chemistry',
+  'primaryPosition', 'secondaryPosition',
+  'age', 'bats', 'throws', 'nickname', 'hometown',
+];
+
 // ============================================
 // TYPES
 // ============================================
+
+type EditorTab = 'base' | string; // 'base' or a leagueId
 
 interface PlayerFormData {
   firstName: string;
@@ -71,6 +95,8 @@ interface PlayerFormData {
   trait2: string;
   personality: Personality;
   chemistry: Chemistry;
+  hometownCity: string;
+  hometownState: string;
   teamId: string;
   rosterStatus: RosterStatus;
 }
@@ -79,6 +105,8 @@ const DEFAULT_FORM_DATA: PlayerFormData = {
   firstName: "",
   lastName: "",
   nickname: "",
+  hometownCity: "",
+  hometownState: "",
   gender: 'M',
   age: "25",
   bats: 'R',
@@ -129,23 +157,36 @@ export function LeagueBuilderPlayers() {
   const [searchQuery, setSearchQuery] = useState("");
   const [positionFilter, setPositionFilter] = useState<string>("ALL");
   const [teamFilter, setTeamFilter] = useState<string>("ALL");
+
+  // Override state for context tabs
+  const [editorTab, setEditorTab] = useState<EditorTab>('base');
+  const [currentOverrides, setCurrentOverrides] = useState<Partial<PlayerAttributes>>({});
+  const [isLoadingOverrides, setIsLoadingOverrides] = useState(false);
+
   const activeLeagueId = useMemo(
     () => leagues[0]?.id ?? teams.find((team) => team.leagueIds?.[0])?.leagueIds?.[0] ?? "",
     [leagues, teams],
   );
 
-  const getActiveAssignment = (player: Player) => {
+  const getActiveAssignment = useCallback((player: Player) => {
     if (!player.leagueAssignments?.length) return undefined;
     if (!activeLeagueId) return player.leagueAssignments[0];
     return player.leagueAssignments.find((assignment) => assignment.leagueId === activeLeagueId)
       ?? player.leagueAssignments[0];
-  };
+  }, [activeLeagueId]);
+
+  /** Leagues the editing player is assigned to (for tab rendering) */
+  const playerLeagueIds = useMemo(() => {
+    if (!editingPlayer?.leagueAssignments) return [];
+    return editingPlayer.leagueAssignments.map(a => a.leagueId);
+  }, [editingPlayer]);
+
+  const isLeagueTab = editorTab !== 'base';
 
   // Filter players
   const filteredPlayers = useMemo(() => {
     let list = [...players];
 
-    // Search filter
     if (searchQuery) {
       const query = searchQuery.toLowerCase();
       list = list.filter(p =>
@@ -155,12 +196,10 @@ export function LeagueBuilderPlayers() {
       );
     }
 
-    // Position filter
     if (positionFilter !== "ALL") {
       list = list.filter(p => p.primaryPosition === positionFilter);
     }
 
-    // Team filter
     if (teamFilter !== "ALL") {
       if (teamFilter === "FREE_AGENT") {
         list = list.filter((player) => {
@@ -172,11 +211,125 @@ export function LeagueBuilderPlayers() {
       }
     }
 
-    // Sort by last name
     list.sort((a, b) => a.lastName.localeCompare(b.lastName));
+    return list.slice(0, 100);
+  }, [players, searchQuery, positionFilter, teamFilter, getActiveAssignment]);
 
-    return list.slice(0, 100); // Limit for performance
-  }, [players, searchQuery, positionFilter, teamFilter, activeLeagueId]);
+  // ============================================
+  // OVERRIDE HELPERS
+  // ============================================
+
+  /** Convert a Player to form data (used for both base and effective views) */
+  const playerToFormData = useCallback((player: Player): PlayerFormData => ({
+    firstName: player.firstName,
+    lastName: player.lastName,
+    nickname: player.nickname || "",
+    hometownCity: player.hometown?.city || "",
+    hometownState: player.hometown?.state || "",
+    gender: player.gender,
+    age: player.age.toString(),
+    bats: player.bats,
+    throws: player.throws,
+    primaryPosition: player.primaryPosition,
+    secondaryPosition: player.secondaryPosition || '',
+    power: player.power.toString(),
+    contact: player.contact.toString(),
+    speed: player.speed.toString(),
+    fielding: player.fielding.toString(),
+    arm: player.arm.toString(),
+    velocity: player.velocity.toString(),
+    junk: player.junk.toString(),
+    accuracy: player.accuracy.toString(),
+    arsenal: player.arsenal,
+    overallGrade: player.overallGrade,
+    trait1: player.trait1 || "",
+    trait2: player.trait2 || "",
+    personality: player.personality,
+    chemistry: player.chemistry,
+    teamId: "",
+    rosterStatus: 'FREE_AGENT',
+  }), []);
+
+  /** Check if a field has an active override in the current league tab */
+  const isFieldOverridden = useCallback((field: keyof PlayerAttributes): boolean => {
+    if (!isLeagueTab) return false;
+    return field in currentOverrides;
+  }, [isLeagueTab, currentOverrides]);
+
+  /** Get the base value of a field (from the original player, not the effective merged value) */
+  const getBaseValue = useCallback((field: keyof PlayerAttributes): string => {
+    if (!editingPlayer) return '';
+    if (field === 'hometown') {
+      const ht = editingPlayer.hometown;
+      return ht ? `${ht.city}, ${ht.state}` : '';
+    }
+    const val = editingPlayer[field as keyof Player];
+    if (val === undefined || val === null) return '';
+    if (typeof val === 'object') return JSON.stringify(val);
+    return String(val);
+  }, [editingPlayer]);
+
+  /** Load overrides when switching to a league tab */
+  const loadOverridesForLeague = useCallback(async (leagueId: string) => {
+    if (!editingPlayer) return;
+    setIsLoadingOverrides(true);
+    try {
+      const record = await getLeaguePlayerOverride(leagueId, editingPlayer.id);
+      const overrides = record?.overrides ?? {};
+      setCurrentOverrides(overrides);
+      // Show effective values (base + overrides merged)
+      const effective = mergePlayerOverrides(editingPlayer, overrides);
+      const effectiveForm = playerToFormData(effective);
+      // Preserve team assignment from the league's context
+      const leagueAssignment = editingPlayer.leagueAssignments?.find(a => a.leagueId === leagueId);
+      effectiveForm.teamId = leagueAssignment?.teamId || "";
+      effectiveForm.rosterStatus = leagueAssignment?.rosterStatus ?? 'FREE_AGENT';
+      setFormData(effectiveForm);
+    } catch (err) {
+      console.error("Failed to load overrides:", err);
+      setCurrentOverrides({});
+    } finally {
+      setIsLoadingOverrides(false);
+    }
+  }, [editingPlayer, playerToFormData]);
+
+  /** Switch to a tab */
+  const switchTab = useCallback(async (tab: EditorTab) => {
+    if (!editingPlayer) return;
+    setEditorTab(tab);
+    if (tab === 'base') {
+      setCurrentOverrides({});
+      const baseForm = playerToFormData(editingPlayer);
+      const assignment = getActiveAssignment(editingPlayer);
+      baseForm.teamId = assignment?.teamId || "";
+      baseForm.rosterStatus = assignment?.rosterStatus ?? 'FREE_AGENT';
+      setFormData(baseForm);
+    } else {
+      await loadOverridesForLeague(tab);
+    }
+  }, [editingPlayer, playerToFormData, getActiveAssignment, loadOverridesForLeague]);
+
+  /** Reset a single field override back to base */
+  const resetFieldToBase = useCallback((field: keyof PlayerAttributes) => {
+    if (!editingPlayer || !isLeagueTab) return;
+    const newOverrides = { ...currentOverrides };
+    delete newOverrides[field];
+    setCurrentOverrides(newOverrides);
+    // Restore the base value in the form
+    if (field === 'hometown') {
+      setFormData(prev => ({
+        ...prev,
+        hometownCity: editingPlayer.hometown?.city || '',
+        hometownState: editingPlayer.hometown?.state || '',
+      }));
+    } else if (field === 'arsenal') {
+      setFormData(prev => ({ ...prev, arsenal: editingPlayer.arsenal }));
+    } else {
+      const baseVal = editingPlayer[field as keyof Player];
+      const strVal = baseVal === undefined || baseVal === null ? '' : String(baseVal);
+      setFormData(prev => ({ ...prev, [field]: strVal }));
+    }
+  }, [editingPlayer, isLeagueTab, currentOverrides]);
 
   // ============================================
   // HANDLERS
@@ -185,38 +338,20 @@ export function LeagueBuilderPlayers() {
   const openCreateModal = () => {
     setEditingPlayer(null);
     setFormData(DEFAULT_FORM_DATA);
+    setEditorTab('base');
+    setCurrentOverrides({});
     setIsModalOpen(true);
   };
 
   const openEditModal = (player: Player) => {
     setEditingPlayer(player);
-    setFormData({
-      firstName: player.firstName,
-      lastName: player.lastName,
-      nickname: player.nickname || "",
-      gender: player.gender,
-      age: player.age.toString(),
-      bats: player.bats,
-      throws: player.throws,
-      primaryPosition: player.primaryPosition,
-      secondaryPosition: player.secondaryPosition || '',
-      power: player.power.toString(),
-      contact: player.contact.toString(),
-      speed: player.speed.toString(),
-      fielding: player.fielding.toString(),
-      arm: player.arm.toString(),
-      velocity: player.velocity.toString(),
-      junk: player.junk.toString(),
-      accuracy: player.accuracy.toString(),
-      arsenal: player.arsenal,
-      overallGrade: player.overallGrade,
-      trait1: player.trait1 || "",
-      trait2: player.trait2 || "",
-      personality: player.personality,
-      chemistry: player.chemistry,
-      teamId: getActiveAssignment(player)?.teamId || "",
-      rosterStatus: getActiveAssignment(player)?.rosterStatus ?? 'FREE_AGENT',
-    });
+    setEditorTab('base');
+    setCurrentOverrides({});
+    const base = playerToFormData(player);
+    const assignment = getActiveAssignment(player);
+    base.teamId = assignment?.teamId || "";
+    base.rosterStatus = assignment?.rosterStatus ?? 'FREE_AGENT';
+    setFormData(base);
     setIsModalOpen(true);
   };
 
@@ -224,70 +359,139 @@ export function LeagueBuilderPlayers() {
     setIsModalOpen(false);
     setEditingPlayer(null);
     setFormData(DEFAULT_FORM_DATA);
+    setEditorTab('base');
+    setCurrentOverrides({});
   };
+
+  /** Track which form fields changed on a league tab to build override delta */
+  const handleFormChange = useCallback((field: string, value: string | PitchType[] | Position | '') => {
+    setFormData(prev => ({ ...prev, [field]: value }));
+
+    // On league tabs, track changes as overrides (delta from base)
+    if (isLeagueTab && editingPlayer) {
+      // hometown fields map to the composite 'hometown' override
+      if (field === 'hometownCity' || field === 'hometownState') {
+        setFormData(prev => {
+          const city = field === 'hometownCity' ? (value as string) : prev.hometownCity;
+          const state = field === 'hometownState' ? (value as string) : prev.hometownState;
+          const baseHt = editingPlayer.hometown;
+          const baseCity = baseHt?.city || '';
+          const baseState = baseHt?.state || '';
+          if (city === baseCity && state === baseState) {
+            setCurrentOverrides(p => { const n = { ...p }; delete n.hometown; return n; });
+          } else {
+            setCurrentOverrides(p => ({ ...p, hometown: { city, state } }));
+          }
+          return prev; // already set above
+        });
+        return;
+      }
+
+      if (OVERRIDABLE_FIELDS.includes(field as keyof PlayerAttributes)) {
+        const baseVal = editingPlayer[field as keyof Player];
+        let parsedValue: unknown = value;
+        if (['power', 'contact', 'speed', 'fielding', 'arm', 'velocity', 'junk', 'accuracy', 'age'].includes(field)) {
+          parsedValue = parseInt(value as string, 10) || 0;
+        }
+        const baseStr = baseVal === undefined || baseVal === null ? '' : String(baseVal);
+        const newStr = String(parsedValue);
+        if (baseStr === newStr || (field === 'arsenal' && JSON.stringify(baseVal) === JSON.stringify(value))) {
+          setCurrentOverrides(prev => {
+            const next = { ...prev };
+            delete next[field as keyof PlayerAttributes];
+            return next;
+          });
+        } else {
+          setCurrentOverrides(prev => ({
+            ...prev,
+            [field]: parsedValue,
+          }));
+        }
+      }
+    }
+  }, [isLeagueTab, editingPlayer]);
 
   const handleSave = async () => {
     if (!formData.firstName.trim() || !formData.lastName.trim()) return;
 
     setIsSaving(true);
     try {
-      const isPitcher = ['SP', 'RP', 'CP', 'SP/RP'].includes(formData.primaryPosition);
-
-      const resolvedLeagueId =
-        activeLeagueId ||
-        teams.find((team) => team.id === formData.teamId)?.leagueIds?.[0] ||
-        editingPlayer?.leagueAssignments?.[0]?.leagueId ||
-        "";
-
-      const playerData = {
-        firstName: formData.firstName.trim(),
-        lastName: formData.lastName.trim(),
-        nickname: formData.nickname.trim() || undefined,
-        gender: formData.gender,
-        age: parseInt(formData.age, 10) || 25,
-        bats: formData.bats,
-        throws: formData.throws,
-        primaryPosition: formData.primaryPosition,
-        secondaryPosition: formData.secondaryPosition || undefined,
-        power: parseInt(formData.power, 10) || 50,
-        contact: parseInt(formData.contact, 10) || 50,
-        speed: parseInt(formData.speed, 10) || 50,
-        fielding: parseInt(formData.fielding, 10) || 50,
-        arm: parseInt(formData.arm, 10) || 50,
-        velocity: isPitcher ? parseInt(formData.velocity, 10) || 50 : 0,
-        junk: isPitcher ? parseInt(formData.junk, 10) || 50 : 0,
-        accuracy: isPitcher ? parseInt(formData.accuracy, 10) || 50 : 0,
-        arsenal: isPitcher ? formData.arsenal : [],
-        overallGrade: formData.overallGrade,
-        trait1: formData.trait1 || undefined,
-        trait2: formData.trait2 || undefined,
-        personality: formData.personality,
-        chemistry: formData.chemistry,
-        morale: editingPlayer?.morale ?? 75,
-        mojo: editingPlayer?.mojo ?? 'Normal' as MojoState,
-        fame: editingPlayer?.fame ?? 0,
-        salary: editingPlayer?.salary ?? 1.0,
-        contractYears: editingPlayer?.contractYears,
-        leagueAssignments: resolvedLeagueId
-          ? [{
-              leagueId: resolvedLeagueId,
-              teamId: formData.teamId,
-              rosterStatus: formData.teamId ? formData.rosterStatus : 'FREE_AGENT' as RosterStatus,
-            }]
-          : [],
-        isCustom: true,
-        sourceDatabase: 'League Builder',
-      };
-
-      if (editingPlayer) {
-        await updatePlayer({
-          ...editingPlayer,
-          ...playerData,
-        });
+      if (isLeagueTab && editingPlayer) {
+        // LEAGUE TAB: Save overrides only
+        const leagueId = editorTab;
+        if (Object.keys(currentOverrides).length > 0) {
+          await setLeaguePlayerOverride(leagueId, editingPlayer.id, currentOverrides);
+        } else {
+          // No overrides left — remove the record
+          await removeLeaguePlayerOverride(leagueId, editingPlayer.id);
+        }
+        closeModal();
       } else {
-        await createPlayer(playerData);
+        // BASE TAB: Save to player record (existing behavior)
+        const isPitcher = ['SP', 'RP', 'CP', 'SP/RP'].includes(formData.primaryPosition);
+
+        const resolvedLeagueId =
+          activeLeagueId ||
+          teams.find((team) => team.id === formData.teamId)?.leagueIds?.[0] ||
+          editingPlayer?.leagueAssignments?.[0]?.leagueId ||
+          "";
+
+        // Auto-generate hometown on create if not provided
+        const hometown = formData.hometownCity.trim() && formData.hometownState.trim()
+          ? { city: formData.hometownCity.trim(), state: formData.hometownState.trim() }
+          : !editingPlayer ? generateHometown() : editingPlayer?.hometown;
+
+        const playerData = {
+          firstName: formData.firstName.trim(),
+          lastName: formData.lastName.trim(),
+          nickname: formData.nickname.trim() || undefined,
+          hometown,
+          gender: formData.gender,
+          age: parseInt(formData.age, 10) || 25,
+          bats: formData.bats,
+          throws: formData.throws,
+          primaryPosition: formData.primaryPosition,
+          secondaryPosition: formData.secondaryPosition || undefined,
+          power: parseInt(formData.power, 10) || 50,
+          contact: parseInt(formData.contact, 10) || 50,
+          speed: parseInt(formData.speed, 10) || 50,
+          fielding: parseInt(formData.fielding, 10) || 50,
+          arm: parseInt(formData.arm, 10) || 50,
+          velocity: isPitcher ? parseInt(formData.velocity, 10) || 50 : 0,
+          junk: isPitcher ? parseInt(formData.junk, 10) || 50 : 0,
+          accuracy: isPitcher ? parseInt(formData.accuracy, 10) || 50 : 0,
+          arsenal: isPitcher ? formData.arsenal : [],
+          overallGrade: formData.overallGrade,
+          trait1: formData.trait1 || undefined,
+          trait2: formData.trait2 || undefined,
+          personality: formData.personality,
+          chemistry: formData.chemistry,
+          morale: editingPlayer?.morale ?? 75,
+          mojo: editingPlayer?.mojo ?? 'Normal' as MojoState,
+          fame: editingPlayer?.fame ?? 0,
+          salary: editingPlayer?.salary ?? 1.0,
+          contractYears: editingPlayer?.contractYears,
+          leagueAssignments: resolvedLeagueId
+            ? [{
+                leagueId: resolvedLeagueId,
+                teamId: formData.teamId,
+                rosterStatus: formData.teamId ? formData.rosterStatus : 'FREE_AGENT' as RosterStatus,
+              }]
+            : [],
+          isCustom: true,
+          sourceDatabase: 'League Builder',
+        };
+
+        if (editingPlayer) {
+          await updatePlayer({
+            ...editingPlayer,
+            ...playerData,
+          });
+        } else {
+          await createPlayer(playerData);
+        }
+        closeModal();
       }
-      closeModal();
     } catch (err) {
       console.error("Failed to save player:", err);
     } finally {
@@ -305,12 +509,10 @@ export function LeagueBuilderPlayers() {
   };
 
   const toggleArsenal = (pitch: PitchType) => {
-    setFormData(prev => ({
-      ...prev,
-      arsenal: prev.arsenal.includes(pitch)
-        ? prev.arsenal.filter(p => p !== pitch)
-        : [...prev.arsenal, pitch],
-    }));
+    const newArsenal = formData.arsenal.includes(pitch)
+      ? formData.arsenal.filter(p => p !== pitch)
+      : [...formData.arsenal, pitch];
+    handleFormChange('arsenal', newArsenal);
   };
 
   const getTeamName = (teamId: string | null | undefined) => {
@@ -319,7 +521,79 @@ export function LeagueBuilderPlayers() {
     return team?.abbreviation || "Unknown";
   };
 
+  const getLeagueName = (leagueId: string) => {
+    const league = leagues.find(l => l.id === leagueId);
+    return league?.name || leagueId;
+  };
+
   const isPitcherPosition = (pos: Position) => ['SP', 'RP', 'CP', 'SP/RP'].includes(pos);
+
+  // ============================================
+  // OVERRIDE-AWARE FIELD WRAPPER
+  // ============================================
+
+  /** Renders a form field with override indicator (gold border + badge + reset) when on league tab */
+  const OverrideField = useCallback(({ field, label, children }: {
+    field: keyof PlayerAttributes;
+    label: string;
+    children: React.ReactNode;
+  }) => {
+    const overridden = isFieldOverridden(field);
+    return (
+      <div>
+        <div className="flex items-center justify-between mb-1">
+          <label
+            className="block text-xs font-bold tracking-wide"
+            style={{ color: overridden ? OVERRIDE_GOLD : '#E8E8D8', opacity: overridden ? 1 : 0.7 }}
+          >
+            {label}
+          </label>
+          {overridden && (
+            <span
+              className="text-[9px] font-bold tracking-wide px-1.5 py-0.5 rounded-sm"
+              style={{ backgroundColor: OVERRIDE_GOLD, color: '#1a1a1a' }}
+            >
+              OVERRIDE
+            </span>
+          )}
+        </div>
+        <div className="relative">
+          <div
+            style={overridden ? {
+              borderLeft: `4px solid ${OVERRIDE_GOLD}`,
+              borderTop: `3px solid ${OVERRIDE_GOLD}`,
+              borderRight: `3px solid ${OVERRIDE_GOLD}`,
+              borderBottom: `3px solid ${OVERRIDE_GOLD}`,
+            } : undefined}
+            className={overridden ? '' : 'border-[3px] border-[#3F5A3A]'}
+          >
+            {children}
+          </div>
+          {overridden && (
+            <button
+              type="button"
+              onClick={() => resetFieldToBase(field)}
+              className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-1 px-2 py-1 text-[9px] font-semibold tracking-wide rounded-sm transition hover:opacity-80"
+              style={{
+                backgroundColor: '#3F5A3A',
+                color: OVERRIDE_GOLD,
+                border: `1px solid ${OVERRIDE_GOLD}`,
+              }}
+              title="Reset to base value"
+            >
+              <RotateCcw className="w-2.5 h-2.5" />
+              RESET
+            </button>
+          )}
+        </div>
+        {overridden && (
+          <div className="text-[10px] text-[#E8E8D8]/50 mt-0.5">
+            Base: {getBaseValue(field)}
+          </div>
+        )}
+      </div>
+    );
+  }, [isFieldOverridden, resetFieldToBase, getBaseValue]);
 
   // ============================================
   // RENDER
@@ -429,6 +703,7 @@ export function LeagueBuilderPlayers() {
                   <th className="text-center p-3">TEAM</th>
                   <th className="text-center p-3">OVR</th>
                   <th className="text-center p-3">AGE</th>
+                  <th className="text-center p-3">HOMETOWN</th>
                   <th className="text-center p-3">B/T</th>
                   <th className="text-right p-3">ACTIONS</th>
                 </tr>
@@ -447,6 +722,9 @@ export function LeagueBuilderPlayers() {
                     <td className="p-3 text-center text-xs">{getTeamName(getActiveAssignment(player)?.teamId)}</td>
                     <td className="p-3 text-center font-bold">{player.overallGrade}</td>
                     <td className="p-3 text-center text-xs">{player.age}</td>
+                    <td className="p-3 text-center text-xs">
+                      {player.hometown ? `${player.hometown.city}, ${player.hometown.state}` : '—'}
+                    </td>
                     <td className="p-3 text-center text-xs">{player.bats}/{player.throws}</td>
                     <td className="p-3 text-right">
                       <div className="flex items-center justify-end gap-1">
@@ -489,7 +767,7 @@ export function LeagueBuilderPlayers() {
                 ))}
                 {filteredPlayers.length === 0 && (
                   <tr>
-                    <td colSpan={7} className="p-8 text-center text-[#E8E8D8]/50">
+                    <td colSpan={8} className="p-8 text-center text-[#E8E8D8]/50">
                       {searchQuery || positionFilter !== "ALL" || teamFilter !== "ALL"
                         ? "No players match your filters"
                         : "No players in database"}
@@ -509,7 +787,9 @@ export function LeagueBuilderPlayers() {
             {/* Modal Header */}
             <div className="flex items-center justify-between p-4 border-b-4 border-[#4A6844]">
               <h2 className="text-xl font-bold">
-                {editingPlayer ? "Edit Player" : "Create New Player"}
+                {editingPlayer
+                  ? `Edit Player — ${editingPlayer.firstName} ${editingPlayer.lastName}`
+                  : "Create New Player"}
               </h2>
               <button
                 onClick={closeModal}
@@ -519,17 +799,72 @@ export function LeagueBuilderPlayers() {
               </button>
             </div>
 
+            {/* Context Tabs — only for editing existing players with league assignments */}
+            {editingPlayer && playerLeagueIds.length > 0 && (
+              <div className="flex items-center gap-0 bg-[#3F5A3A] px-4 py-1">
+                <button
+                  onClick={() => switchTab('base')}
+                  className={`px-5 py-2 text-xs font-bold tracking-wide transition ${
+                    editorTab === 'base'
+                      ? 'bg-[#5A8352] border-[3px] border-[#E8E8D8] text-[#E8E8D8]'
+                      : 'text-[#E8E8D8]/60 hover:text-[#E8E8D8]/80'
+                  }`}
+                >
+                  BASE
+                </button>
+                {playerLeagueIds.map(lid => (
+                  <button
+                    key={lid}
+                    onClick={() => switchTab(lid)}
+                    className={`px-4 py-2 text-xs font-bold tracking-wide transition ${
+                      editorTab === lid
+                        ? 'bg-[#5A8352] border-[3px] border-[#E8E8D8] text-[#E8E8D8]'
+                        : 'text-[#E8E8D8]/60 hover:text-[#E8E8D8]/80'
+                    }`}
+                  >
+                    {getLeagueName(lid).toUpperCase()}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* Context Banner */}
+            {editingPlayer && playerLeagueIds.length > 0 && (
+              <div
+                className="flex items-center gap-2 px-5 py-2.5"
+                style={{ backgroundColor: isLeagueTab ? '#4A4430' : '#4A6844' }}
+              >
+                <span className="text-sm" style={{ color: isLeagueTab ? OVERRIDE_GOLD : '#5599FF' }}>
+                  {isLeagueTab ? '⚡' : 'ℹ'}
+                </span>
+                <span className="text-xs" style={{ color: isLeagueTab ? '#E8D8A8' : '#E8E8D8', opacity: 0.8 }}>
+                  {isLeagueTab
+                    ? `Editing overrides for ${getLeagueName(editorTab)}. Fields with gold border have league-specific values.`
+                    : 'Editing base attributes. Changes here affect all leagues without overrides.'}
+                </span>
+              </div>
+            )}
+
+            {/* Loading overlay for tab switch */}
+            {isLoadingOverrides && (
+              <div className="flex items-center justify-center py-4">
+                <Loader2 className="w-5 h-5 animate-spin mr-2" />
+                <span className="text-sm text-[#E8E8D8]/70">Loading overrides...</span>
+              </div>
+            )}
+
             {/* Modal Content */}
             <div className="p-6 space-y-6">
-              {/* Name Row */}
+              {/* Name Row — only editable on base tab or create */}
               <div className="grid grid-cols-3 gap-4">
                 <div>
                   <label className="block text-sm font-bold mb-2">First Name *</label>
                   <input
                     type="text"
                     value={formData.firstName}
-                    onChange={(e) => setFormData(prev => ({ ...prev, firstName: e.target.value }))}
-                    className="w-full bg-[#4A6844] border-[4px] border-[#3F5A3A] p-3 text-[#E8E8D8] focus:border-[#E8E8D8] outline-none"
+                    onChange={(e) => handleFormChange('firstName', e.target.value)}
+                    disabled={isLeagueTab}
+                    className="w-full bg-[#4A6844] border-[4px] border-[#3F5A3A] p-3 text-[#E8E8D8] focus:border-[#E8E8D8] outline-none disabled:opacity-50"
                   />
                 </div>
                 <div>
@@ -537,19 +872,67 @@ export function LeagueBuilderPlayers() {
                   <input
                     type="text"
                     value={formData.lastName}
-                    onChange={(e) => setFormData(prev => ({ ...prev, lastName: e.target.value }))}
-                    className="w-full bg-[#4A6844] border-[4px] border-[#3F5A3A] p-3 text-[#E8E8D8] focus:border-[#E8E8D8] outline-none"
+                    onChange={(e) => handleFormChange('lastName', e.target.value)}
+                    disabled={isLeagueTab}
+                    className="w-full bg-[#4A6844] border-[4px] border-[#3F5A3A] p-3 text-[#E8E8D8] focus:border-[#E8E8D8] outline-none disabled:opacity-50"
                   />
                 </div>
-                <div>
-                  <label className="block text-sm font-bold mb-2">Nickname</label>
+                <OverrideField field="nickname" label="Nickname">
                   <input
                     type="text"
                     value={formData.nickname}
-                    onChange={(e) => setFormData(prev => ({ ...prev, nickname: e.target.value }))}
-                    className="w-full bg-[#4A6844] border-[4px] border-[#3F5A3A] p-3 text-[#E8E8D8] focus:border-[#E8E8D8] outline-none"
+                    onChange={(e) => handleFormChange('nickname', e.target.value)}
+                    className="w-full bg-[#4A6844] p-3 text-[#E8E8D8] focus:border-[#E8E8D8] outline-none"
+                    style={isFieldOverridden('nickname') ? { color: OVERRIDE_GOLD } : undefined}
                   />
+                </OverrideField>
+              </div>
+
+              {/* Hometown Row */}
+              <div className="flex items-end gap-4">
+                <div className="flex-1">
+                  <OverrideField field="hometown" label="Hometown">
+                    <div className="flex gap-2 bg-[#4A6844]">
+                      <input
+                        type="text"
+                        placeholder="City"
+                        value={formData.hometownCity}
+                        onChange={(e) => handleFormChange('hometownCity', e.target.value)}
+                        className="flex-1 bg-transparent p-3 text-[#E8E8D8] placeholder-[#E8E8D8]/40 focus:outline-none"
+                        style={isFieldOverridden('hometown') ? { color: OVERRIDE_GOLD, fontWeight: 700 } : undefined}
+                      />
+                      <span className="self-center text-[#E8E8D8]/30">,</span>
+                      <input
+                        type="text"
+                        placeholder="ST"
+                        value={formData.hometownState}
+                        onChange={(e) => handleFormChange('hometownState', e.target.value)}
+                        className="w-16 bg-transparent p-3 text-[#E8E8D8] placeholder-[#E8E8D8]/40 text-center focus:outline-none"
+                        style={isFieldOverridden('hometown') ? { color: OVERRIDE_GOLD, fontWeight: 700 } : undefined}
+                        maxLength={2}
+                      />
+                    </div>
+                  </OverrideField>
                 </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const ht = generateHometown();
+                    setFormData(prev => ({ ...prev, hometownCity: ht.city, hometownState: ht.state }));
+                    if (isLeagueTab && editingPlayer) {
+                      const baseHt = editingPlayer.hometown;
+                      if (ht.city !== baseHt?.city || ht.state !== baseHt?.state) {
+                        setCurrentOverrides(prev => ({ ...prev, hometown: ht }));
+                      } else {
+                        setCurrentOverrides(prev => { const n = { ...prev }; delete n.hometown; return n; });
+                      }
+                    }
+                  }}
+                  className="mb-0.5 p-2.5 bg-[#4A6844] hover:bg-[#5A8352] border-[3px] border-[#3F5A3A] transition"
+                  title="Randomize hometown"
+                >
+                  <Shuffle className="w-4 h-4 text-[#E8E8D8]" />
+                </button>
               </div>
 
               {/* Demographics Row */}
@@ -558,112 +941,113 @@ export function LeagueBuilderPlayers() {
                   <label className="block text-sm font-bold mb-2">Gender</label>
                   <select
                     value={formData.gender}
-                    onChange={(e) => setFormData(prev => ({ ...prev, gender: e.target.value as 'M' | 'F' }))}
-                    className="w-full bg-[#4A6844] border-[4px] border-[#3F5A3A] p-3 text-[#E8E8D8] focus:border-[#E8E8D8] outline-none"
+                    onChange={(e) => handleFormChange('gender', e.target.value)}
+                    disabled={isLeagueTab}
+                    className="w-full bg-[#4A6844] border-[4px] border-[#3F5A3A] p-3 text-[#E8E8D8] focus:border-[#E8E8D8] outline-none disabled:opacity-50"
                   >
                     <option value="M">Male</option>
                     <option value="F">Female</option>
                   </select>
                 </div>
-                <div>
-                  <label className="block text-sm font-bold mb-2">Age</label>
+                <OverrideField field="age" label="Age">
                   <input
                     type="number"
                     value={formData.age}
-                    onChange={(e) => setFormData(prev => ({ ...prev, age: e.target.value }))}
+                    onChange={(e) => handleFormChange('age', e.target.value)}
                     min={18}
                     max={50}
-                    className="w-full bg-[#4A6844] border-[4px] border-[#3F5A3A] p-3 text-[#E8E8D8] focus:border-[#E8E8D8] outline-none"
+                    className="w-full bg-[#4A6844] p-3 text-[#E8E8D8] focus:border-[#E8E8D8] outline-none"
+                    style={isFieldOverridden('age') ? { color: OVERRIDE_GOLD } : undefined}
                   />
-                </div>
-                <div>
-                  <label className="block text-sm font-bold mb-2">Bats</label>
+                </OverrideField>
+                <OverrideField field="bats" label="Bats">
                   <select
                     value={formData.bats}
-                    onChange={(e) => setFormData(prev => ({ ...prev, bats: e.target.value as 'L' | 'R' | 'S' }))}
-                    className="w-full bg-[#4A6844] border-[4px] border-[#3F5A3A] p-3 text-[#E8E8D8] focus:border-[#E8E8D8] outline-none"
+                    onChange={(e) => handleFormChange('bats', e.target.value)}
+                    className="w-full bg-[#4A6844] p-3 text-[#E8E8D8] focus:border-[#E8E8D8] outline-none"
+                    style={isFieldOverridden('bats') ? { color: OVERRIDE_GOLD } : undefined}
                   >
                     <option value="R">Right</option>
                     <option value="L">Left</option>
                     <option value="S">Switch</option>
                   </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-bold mb-2">Throws</label>
+                </OverrideField>
+                <OverrideField field="throws" label="Throws">
                   <select
                     value={formData.throws}
-                    onChange={(e) => setFormData(prev => ({ ...prev, throws: e.target.value as 'L' | 'R' }))}
-                    className="w-full bg-[#4A6844] border-[4px] border-[#3F5A3A] p-3 text-[#E8E8D8] focus:border-[#E8E8D8] outline-none"
+                    onChange={(e) => handleFormChange('throws', e.target.value)}
+                    className="w-full bg-[#4A6844] p-3 text-[#E8E8D8] focus:border-[#E8E8D8] outline-none"
+                    style={isFieldOverridden('throws') ? { color: OVERRIDE_GOLD } : undefined}
                   >
                     <option value="R">Right</option>
                     <option value="L">Left</option>
                   </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-bold mb-2">Grade</label>
+                </OverrideField>
+                <OverrideField field="overallGrade" label="Grade">
                   <select
                     value={formData.overallGrade}
-                    onChange={(e) => setFormData(prev => ({ ...prev, overallGrade: e.target.value as Grade }))}
-                    className="w-full bg-[#4A6844] border-[4px] border-[#3F5A3A] p-3 text-[#E8E8D8] focus:border-[#E8E8D8] outline-none"
+                    onChange={(e) => handleFormChange('overallGrade', e.target.value)}
+                    className="w-full bg-[#4A6844] p-3 text-[#E8E8D8] focus:border-[#E8E8D8] outline-none"
+                    style={isFieldOverridden('overallGrade') ? { color: OVERRIDE_GOLD } : undefined}
                   >
                     {GRADES.map(g => (
                       <option key={g} value={g}>{g}</option>
                     ))}
                   </select>
-                </div>
+                </OverrideField>
               </div>
 
               {/* Position Row */}
               <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-bold mb-2">Primary Position</label>
+                <OverrideField field="primaryPosition" label="Primary Position">
                   <select
                     value={formData.primaryPosition}
-                    onChange={(e) => setFormData(prev => ({ ...prev, primaryPosition: e.target.value as Position }))}
-                    className="w-full bg-[#4A6844] border-[4px] border-[#3F5A3A] p-3 text-[#E8E8D8] focus:border-[#E8E8D8] outline-none"
+                    onChange={(e) => handleFormChange('primaryPosition', e.target.value)}
+                    className="w-full bg-[#4A6844] p-3 text-[#E8E8D8] focus:border-[#E8E8D8] outline-none"
+                    style={isFieldOverridden('primaryPosition') ? { color: OVERRIDE_GOLD } : undefined}
                   >
                     {POSITIONS.map(pos => (
                       <option key={pos} value={pos}>{pos}</option>
                     ))}
                   </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-bold mb-2">Secondary Position</label>
+                </OverrideField>
+                <OverrideField field="secondaryPosition" label="Secondary Position">
                   <select
                     value={formData.secondaryPosition}
-                    onChange={(e) => setFormData(prev => ({ ...prev, secondaryPosition: e.target.value as Position | '' }))}
-                    className="w-full bg-[#4A6844] border-[4px] border-[#3F5A3A] p-3 text-[#E8E8D8] focus:border-[#E8E8D8] outline-none"
+                    onChange={(e) => handleFormChange('secondaryPosition', e.target.value)}
+                    className="w-full bg-[#4A6844] p-3 text-[#E8E8D8] focus:border-[#E8E8D8] outline-none"
+                    style={isFieldOverridden('secondaryPosition') ? { color: OVERRIDE_GOLD } : undefined}
                   >
                     <option value="">None</option>
                     {POSITIONS.filter(p => p !== formData.primaryPosition).map(pos => (
                       <option key={pos} value={pos}>{pos}</option>
                     ))}
                   </select>
-                </div>
+                </OverrideField>
               </div>
 
               {/* Batting Ratings */}
               <div>
                 <label className="block text-sm font-bold mb-2">Batting Ratings</label>
                 <div className="grid grid-cols-5 gap-3">
-                  {[
+                  {([
                     { key: 'power', label: 'POW' },
                     { key: 'contact', label: 'CON' },
                     { key: 'speed', label: 'SPD' },
                     { key: 'fielding', label: 'FLD' },
                     { key: 'arm', label: 'ARM' },
-                  ].map(({ key, label }) => (
-                    <div key={key}>
-                      <label className="block text-xs text-[#E8E8D8]/70 mb-1">{label}</label>
+                  ] as const).map(({ key, label }) => (
+                    <OverrideField key={key} field={key} label={label}>
                       <input
                         type="number"
-                        value={formData[key as keyof PlayerFormData] as string}
-                        onChange={(e) => setFormData(prev => ({ ...prev, [key]: e.target.value }))}
+                        value={formData[key]}
+                        onChange={(e) => handleFormChange(key, e.target.value)}
                         min={0}
                         max={99}
-                        className="w-full bg-[#4A6844] border-[3px] border-[#3F5A3A] p-2 text-center text-[#E8E8D8] focus:border-[#E8E8D8] outline-none"
+                        className="w-full bg-[#4A6844] p-2 text-center text-[#E8E8D8] focus:border-[#E8E8D8] outline-none"
+                        style={isFieldOverridden(key) ? { color: OVERRIDE_GOLD, fontWeight: 700 } : undefined}
                       />
-                    </div>
+                    </OverrideField>
                   ))}
                 </div>
               </div>
@@ -673,112 +1057,140 @@ export function LeagueBuilderPlayers() {
                 <div>
                   <label className="block text-sm font-bold mb-2">Pitching Ratings</label>
                   <div className="grid grid-cols-3 gap-3">
-                    {[
+                    {([
                       { key: 'velocity', label: 'VEL' },
                       { key: 'junk', label: 'JNK' },
                       { key: 'accuracy', label: 'ACC' },
-                    ].map(({ key, label }) => (
-                      <div key={key}>
-                        <label className="block text-xs text-[#E8E8D8]/70 mb-1">{label}</label>
+                    ] as const).map(({ key, label }) => (
+                      <OverrideField key={key} field={key} label={label}>
                         <input
                           type="number"
-                          value={formData[key as keyof PlayerFormData] as string}
-                          onChange={(e) => setFormData(prev => ({ ...prev, [key]: e.target.value }))}
+                          value={formData[key]}
+                          onChange={(e) => handleFormChange(key, e.target.value)}
                           min={0}
                           max={99}
-                          className="w-full bg-[#4A6844] border-[3px] border-[#3F5A3A] p-2 text-center text-[#E8E8D8] focus:border-[#E8E8D8] outline-none"
+                          className="w-full bg-[#4A6844] p-2 text-center text-[#E8E8D8] focus:border-[#E8E8D8] outline-none"
+                          style={isFieldOverridden(key) ? { color: OVERRIDE_GOLD, fontWeight: 700 } : undefined}
                         />
-                      </div>
+                      </OverrideField>
                     ))}
                   </div>
 
                   {/* Arsenal */}
                   <div className="mt-3">
-                    <label className="block text-xs text-[#E8E8D8]/70 mb-2">Arsenal</label>
-                    <div className="flex flex-wrap gap-2">
-                      {PITCH_TYPES.map(pitch => (
-                        <button
-                          key={pitch}
-                          type="button"
-                          onClick={() => toggleArsenal(pitch)}
-                          className={`px-3 py-1 text-xs border-2 transition ${
-                            formData.arsenal.includes(pitch)
-                              ? 'bg-[#5599FF] border-[#3366FF] text-white'
-                              : 'bg-[#4A6844] border-[#3F5A3A] text-[#E8E8D8]/70 hover:border-[#E8E8D8]/50'
-                          }`}
-                        >
-                          {pitch}
-                        </button>
-                      ))}
-                    </div>
+                    <OverrideField field="arsenal" label="Arsenal">
+                      <div className="flex flex-wrap gap-2 bg-[#4A6844] p-2">
+                        {PITCH_TYPES.map(pitch => (
+                          <button
+                            key={pitch}
+                            type="button"
+                            onClick={() => toggleArsenal(pitch)}
+                            className={`px-3 py-1 text-xs border-2 transition ${
+                              formData.arsenal.includes(pitch)
+                                ? 'bg-[#5599FF] border-[#3366FF] text-white'
+                                : 'bg-[#4A6844] border-[#3F5A3A] text-[#E8E8D8]/70 hover:border-[#E8E8D8]/50'
+                            }`}
+                          >
+                            {pitch}
+                          </button>
+                        ))}
+                      </div>
+                    </OverrideField>
                   </div>
                 </div>
               )}
 
+              {/* Traits */}
+              <div className="grid grid-cols-2 gap-4">
+                <OverrideField field="trait1" label="Trait 1">
+                  <input
+                    type="text"
+                    value={formData.trait1}
+                    onChange={(e) => handleFormChange('trait1', e.target.value)}
+                    className="w-full bg-[#4A6844] p-3 text-[#E8E8D8] focus:border-[#E8E8D8] outline-none"
+                    style={isFieldOverridden('trait1') ? { color: OVERRIDE_GOLD, fontWeight: 700 } : undefined}
+                  />
+                </OverrideField>
+                <OverrideField field="trait2" label="Trait 2">
+                  <input
+                    type="text"
+                    value={formData.trait2}
+                    onChange={(e) => handleFormChange('trait2', e.target.value)}
+                    className="w-full bg-[#4A6844] p-3 text-[#E8E8D8] focus:border-[#E8E8D8] outline-none"
+                    style={isFieldOverridden('trait2') ? { color: OVERRIDE_GOLD, fontWeight: 700 } : undefined}
+                  />
+                </OverrideField>
+              </div>
+
               {/* Personality & Chemistry */}
               <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-bold mb-2">Personality</label>
+                <OverrideField field="personality" label="Personality">
                   <select
                     value={formData.personality}
-                    onChange={(e) => setFormData(prev => ({ ...prev, personality: e.target.value as Personality }))}
-                    className="w-full bg-[#4A6844] border-[4px] border-[#3F5A3A] p-3 text-[#E8E8D8] focus:border-[#E8E8D8] outline-none"
+                    onChange={(e) => handleFormChange('personality', e.target.value)}
+                    className="w-full bg-[#4A6844] p-3 text-[#E8E8D8] focus:border-[#E8E8D8] outline-none"
+                    style={isFieldOverridden('personality') ? { color: OVERRIDE_GOLD } : undefined}
                   >
                     {PERSONALITIES.map(p => (
                       <option key={p} value={p}>{p}</option>
                     ))}
                   </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-bold mb-2">Chemistry</label>
+                </OverrideField>
+                <OverrideField field="chemistry" label="Chemistry">
                   <select
                     value={formData.chemistry}
-                    onChange={(e) => setFormData(prev => ({ ...prev, chemistry: e.target.value as Chemistry }))}
-                    className="w-full bg-[#4A6844] border-[4px] border-[#3F5A3A] p-3 text-[#E8E8D8] focus:border-[#E8E8D8] outline-none"
+                    onChange={(e) => handleFormChange('chemistry', e.target.value)}
+                    className="w-full bg-[#4A6844] p-3 text-[#E8E8D8] focus:border-[#E8E8D8] outline-none"
+                    style={isFieldOverridden('chemistry') ? { color: OVERRIDE_GOLD } : undefined}
                   >
                     {CHEMISTRIES.map(c => (
                       <option key={c} value={c}>{c}</option>
                     ))}
                   </select>
-                </div>
+                </OverrideField>
               </div>
 
-              {/* Team Assignment */}
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-bold mb-2">
-                    <Users className="w-3 h-3 inline mr-1" />
-                    Team
-                  </label>
-                  <select
-                    value={formData.teamId}
-                    onChange={(e) => setFormData(prev => ({
-                      ...prev,
-                      teamId: e.target.value,
-                      rosterStatus: e.target.value ? prev.rosterStatus : 'FREE_AGENT'
-                    }))}
-                    className="w-full bg-[#4A6844] border-[4px] border-[#3F5A3A] p-3 text-[#E8E8D8] focus:border-[#E8E8D8] outline-none"
-                  >
-                    <option value="">Free Agent</option>
-                    {teams.map(team => (
-                      <option key={team.id} value={team.id}>{team.name}</option>
-                    ))}
-                  </select>
+              {/* Team Assignment — only on base tab */}
+              {!isLeagueTab && (
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-bold mb-2">
+                      <Users className="w-3 h-3 inline mr-1" />
+                      Team
+                    </label>
+                    <select
+                      value={formData.teamId}
+                      onChange={(e) => {
+                        const newTeamId = e.target.value;
+                        setFormData(prev => ({
+                          ...prev,
+                          teamId: newTeamId,
+                          rosterStatus: newTeamId ? prev.rosterStatus : 'FREE_AGENT'
+                        }));
+                      }}
+                      className="w-full bg-[#4A6844] border-[4px] border-[#3F5A3A] p-3 text-[#E8E8D8] focus:border-[#E8E8D8] outline-none"
+                    >
+                      <option value="">Free Agent</option>
+                      {teams.map(team => (
+                        <option key={team.id} value={team.id}>{team.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-bold mb-2">Roster Status</label>
+                    <select
+                      value={formData.rosterStatus}
+                      onChange={(e) => setFormData(prev => ({ ...prev, rosterStatus: e.target.value as RosterStatus }))}
+                      disabled={!formData.teamId}
+                      className="w-full bg-[#4A6844] border-[4px] border-[#3F5A3A] p-3 text-[#E8E8D8] focus:border-[#E8E8D8] outline-none disabled:opacity-50"
+                    >
+                      <option value="FREE_AGENT">Free Agent</option>
+                      <option value="MLB">MLB Roster</option>
+                      <option value="FARM">Farm System</option>
+                    </select>
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-sm font-bold mb-2">Roster Status</label>
-                  <select
-                    value={formData.rosterStatus}
-                    onChange={(e) => setFormData(prev => ({ ...prev, rosterStatus: e.target.value as RosterStatus }))}
-                    disabled={!formData.teamId}
-                    className="w-full bg-[#4A6844] border-[4px] border-[#3F5A3A] p-3 text-[#E8E8D8] focus:border-[#E8E8D8] outline-none disabled:opacity-50"
-                  >
-                    <option value="FREE_AGENT">Free Agent</option>
-                    <option value="MLB">MLB Roster</option>
-                    <option value="FARM">Farm System</option>
-                  </select>
-                </div>
-              </div>
+              )}
             </div>
 
             {/* Modal Footer */}
@@ -791,7 +1203,7 @@ export function LeagueBuilderPlayers() {
               </button>
               <button
                 onClick={handleSave}
-                disabled={!formData.firstName.trim() || !formData.lastName.trim() || isSaving}
+                disabled={(!isLeagueTab && (!formData.firstName.trim() || !formData.lastName.trim())) || isSaving}
                 className="px-6 py-2 bg-[#5599FF] hover:bg-[#3366FF] border-[3px] border-[#E8E8D8] transition font-bold disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
               >
                 {isSaving ? (
@@ -802,7 +1214,7 @@ export function LeagueBuilderPlayers() {
                 ) : (
                   <>
                     <Check className="w-4 h-4" />
-                    {editingPlayer ? "Save Changes" : "Create Player"}
+                    {isLeagueTab ? "Save Overrides" : editingPlayer ? "Save Changes" : "Create Player"}
                   </>
                 )}
               </button>
