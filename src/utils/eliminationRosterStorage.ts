@@ -1,7 +1,5 @@
 import { getTrackerDb } from '../utils/trackerDb';
 import {
-  getPlayersByTeam,
-  getTeam,
   getTeamRoster,
   type LineupSlot,
   type Player,
@@ -9,6 +7,10 @@ import {
   type Position,
 } from '../utils/leagueBuilderStorage';
 import type { Player as GameTrackerPlayer, Pitcher as GameTrackerPitcher } from '../src_figma/app/components/TeamRoster';
+import {
+  getEliminationPlayersByTeam,
+  getEliminationTeam,
+} from './eliminationPlayerStorage';
 
 const SNAPSHOT_STORE = 'rosterSnapshots';
 const FIELD_POSITIONS_WITH_DH: Position[] = ['C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF', 'DH'];
@@ -229,21 +231,19 @@ export async function createRosterSnapshots(eliminationId: string, teamIds: stri
   const snapshots = await Promise.all(
     teamIds.map(async (teamId) => {
       const [team, roster] = await Promise.all([
-        getTeam(teamId),
+        getEliminationTeam(eliminationId, teamId),
         getTeamRoster(teamId),
       ]);
 
       if (!team) {
-        throw new Error(`League Builder team not found for snapshot: ${teamId}`);
+        throw new Error(`Elimination team not found for snapshot: ${teamId}`);
       }
 
       if (!roster) {
         throw new Error(`League Builder roster not found for snapshot: ${teamId}`);
       }
 
-      const players = team.leagueIds?.[0]
-        ? await getPlayersByTeam(teamId, team.leagueIds[0])
-        : [];
+      const players = await getEliminationPlayersByTeam(eliminationId, teamId);
 
       return buildSnapshot(eliminationId, teamId, team.name, players, roster);
     })

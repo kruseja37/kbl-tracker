@@ -12,16 +12,79 @@
  * Per FRANCHISE_API_MAP.md §11
  */
 
-import type { PersistedGameState } from './gameStorage';
+import type { PersistedGameState, PlayerRatingsSnapshot } from './gameStorage';
 import {
   aggregateGameToSeason,
   type GameAggregationOptions,
   type GameAggregationResult,
 } from './seasonAggregator';
 import { archiveCompletedGame } from './gameStorage';
+import { getEffectivePlayer } from './playerOverrides';
 
 export interface ProcessGameResult {
   aggregation: GameAggregationResult;
+}
+
+function buildPlayerRatingsSnapshot(
+  playerId: string,
+  player: NonNullable<Awaited<ReturnType<typeof getEffectivePlayer>>>
+): PlayerRatingsSnapshot {
+  return {
+    playerId,
+    firstName: player.firstName,
+    lastName: player.lastName,
+    nickname: player.nickname,
+    hometown: player.hometown,
+    age: player.age,
+    gender: player.gender,
+    bats: player.bats,
+    throws: player.throws,
+    primaryPosition: player.primaryPosition,
+    secondaryPosition: player.secondaryPosition,
+    power: player.power,
+    contact: player.contact,
+    speed: player.speed,
+    fielding: player.fielding,
+    arm: player.arm,
+    velocity: player.velocity,
+    junk: player.junk,
+    accuracy: player.accuracy,
+    arsenal: [...player.arsenal],
+    overallGrade: player.overallGrade,
+    trait1: player.trait1,
+    trait2: player.trait2,
+    personality: player.personality,
+    chemistry: player.chemistry,
+    morale: player.morale,
+    mojo: player.mojo,
+    fame: player.fame,
+    salary: player.salary,
+  };
+}
+
+async function capturePlayerRatingsSnapshots(
+  gameState: PersistedGameState,
+  leagueId: string
+): Promise<void> {
+  const playerIds = new Set<string>([
+    ...Object.keys(gameState.playerStats),
+    ...gameState.pitcherGameStats.map((stats) => stats.pitcherId),
+  ]);
+
+  const snapshots = await Promise.all(
+    Array.from(playerIds).map(async (playerId) => {
+      const effectivePlayer = await getEffectivePlayer(playerId, leagueId);
+      if (!effectivePlayer) {
+        return null;
+      }
+
+      return [playerId, buildPlayerRatingsSnapshot(playerId, effectivePlayer)] as const;
+    })
+  );
+
+  gameState.playerRatingsSnapshots = Object.fromEntries(
+    snapshots.filter((entry): entry is readonly [string, PlayerRatingsSnapshot] => entry !== null)
+  );
 }
 
 /**
@@ -33,10 +96,15 @@ export interface ProcessGameResult {
  */
 export async function processCompletedGame(
   gameState: PersistedGameState,
-  options?: GameAggregationOptions
+  options?: GameAggregationOptions,
+  leagueId?: string
 ): Promise<ProcessGameResult> {
   // Step 1: Aggregate game stats to season totals
   const aggregation = await aggregateGameToSeason(gameState, options);
+
+  if (leagueId) {
+    await capturePlayerRatingsSnapshots(gameState, leagueId);
+  }
 
   // Step 2: Archive to completedGames store
   await archiveCompletedGame(

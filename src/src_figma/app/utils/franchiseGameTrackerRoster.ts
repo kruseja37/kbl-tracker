@@ -1,6 +1,8 @@
 import type { MojoLevel } from '../../../engines/mojoEngine';
 import type { FitnessState } from '../../../engines/fitnessEngine';
 import { getPlayersByTeam, getTeam } from '../../../utils/leagueBuilderStorage';
+import type { Player as StoredPlayer } from '../../../utils/leagueBuilderStorage';
+import { getAllFranchisePlayers, getFranchiseTeam } from '../../../utils/franchisePlayerStorage';
 import type { Player as TeamRosterPlayer, Pitcher as TeamRosterPitcher } from '@/app/components/TeamRoster';
 
 const PITCHER_POS = new Set(['SP', 'RP', 'CP', 'P', 'SP/RP', 'TWO-WAY']);
@@ -45,18 +47,39 @@ export async function buildFranchiseGameTrackerRoster(
   players: TeamRosterPlayer[];
   pitchers: TeamRosterPitcher[];
 }> {
-  let dbPlayers;
+  let dbPlayers: StoredPlayer[];
   try {
-    let leagueId = context.leagueId;
-    if (!leagueId) {
-      try {
-        const team = await getTeam(teamId);
-        leagueId = team?.leagueIds?.[0];
-      } catch {
-        leagueId = undefined;
+    const { franchiseId } = context;
+
+    if (franchiseId) {
+      let leagueId = context.leagueId;
+      if (!leagueId) {
+        try {
+          const team = await getFranchiseTeam(franchiseId, teamId);
+          leagueId = team?.leagueIds?.[0];
+        } catch {
+          leagueId = undefined;
+        }
       }
+
+      const franchisePlayers = await getAllFranchisePlayers(franchiseId);
+      dbPlayers = franchisePlayers.filter((player) =>
+        player.leagueAssignments?.some((assignment) =>
+          assignment.teamId === teamId && (!leagueId || assignment.leagueId === leagueId),
+        ),
+      );
+    } else {
+      let leagueId = context.leagueId;
+      if (!leagueId) {
+        try {
+          const team = await getTeam(teamId);
+          leagueId = team?.leagueIds?.[0];
+        } catch {
+          leagueId = undefined;
+        }
+      }
+      dbPlayers = await getPlayersByTeam(teamId, leagueId ?? '');
     }
-    dbPlayers = await getPlayersByTeam(teamId, leagueId ?? '');
   } catch {
     return { players: [], pitchers: [] };
   }

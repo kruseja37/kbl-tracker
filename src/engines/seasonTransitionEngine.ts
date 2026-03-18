@@ -14,8 +14,17 @@
  * Per FINALIZE_ADVANCE_FIGMA_SPEC.md §Season Transition
  */
 
-import { getAllPlayers, savePlayer } from '../utils/leagueBuilderStorage';
-import type { Player } from '../utils/leagueBuilderStorage';
+import {
+  getAllPlayers,
+  getPlayer,
+  savePlayer,
+  type Player,
+} from '../utils/leagueBuilderStorage';
+import {
+  getAllFranchisePlayers,
+  getFranchisePlayer,
+  saveFranchisePlayer,
+} from '../utils/franchisePlayerStorage';
 import { calculateSalary } from './salaryCalculator';
 import type { PlayerForSalary } from './salaryCalculator';
 
@@ -43,6 +52,26 @@ export interface TransitionResult {
   };
 }
 
+export interface PlayerStorageAdapter {
+  getAll: () => Promise<Player[]>;
+  get: (playerId: string) => Promise<Player | null>;
+  save: (player: Omit<Player, 'id' | 'createdDate' | 'lastModified'> & { id?: string }) => Promise<Player>;
+}
+
+export const leagueBuilderPlayerStorageAdapter: PlayerStorageAdapter = {
+  getAll: getAllPlayers,
+  get: getPlayer,
+  save: savePlayer,
+};
+
+export function createFranchisePlayerStorageAdapter(franchiseId: string): PlayerStorageAdapter {
+  return {
+    getAll: () => getAllFranchisePlayers(franchiseId),
+    get: (playerId: string) => getFranchisePlayer(franchiseId, playerId),
+    save: (player) => saveFranchisePlayer(franchiseId, player),
+  };
+}
+
 // --- Step Implementations ---
 
 /** Step 1: Archive season data to localStorage */
@@ -58,8 +87,10 @@ export function archiveSeasonData(seasonNumber: number): { archived: boolean; ke
 }
 
 /** Step 2: Increment all player ages by 1 */
-export async function incrementPlayerAges(): Promise<{ count: number; players: Player[] }> {
-  const players = await getAllPlayers();
+export async function incrementPlayerAges(
+  playerStorage: PlayerStorageAdapter = leagueBuilderPlayerStorageAdapter,
+): Promise<{ count: number; players: Player[] }> {
+  const players = await playerStorage.getAll();
   const updated: Player[] = [];
 
   for (const player of players) {
@@ -68,7 +99,7 @@ export async function incrementPlayerAges(): Promise<{ count: number; players: P
       age: player.age + 1,
       lastModified: new Date().toISOString(),
     };
-    await savePlayer(updatedPlayer);
+    await playerStorage.save(updatedPlayer);
     updated.push(updatedPlayer);
   }
 
@@ -76,8 +107,10 @@ export async function incrementPlayerAges(): Promise<{ count: number; players: P
 }
 
 /** Step 3: Recalculate all player salaries based on new age/ratings */
-export async function recalculateSalaries(): Promise<{ count: number; changes: Array<{ name: string; old: number; new: number }> }> {
-  const players = await getAllPlayers();
+export async function recalculateSalaries(
+  playerStorage: PlayerStorageAdapter = leagueBuilderPlayerStorageAdapter,
+): Promise<{ count: number; changes: Array<{ name: string; old: number; new: number }> }> {
+  const players = await playerStorage.getAll();
   const changes: Array<{ name: string; old: number; new: number }> = [];
 
   for (const player of players) {
@@ -113,15 +146,17 @@ export async function recalculateSalaries(): Promise<{ count: number; changes: A
       salary: newSalary,
       lastModified: new Date().toISOString(),
     };
-    await savePlayer(updatedPlayer);
+    await playerStorage.save(updatedPlayer);
   }
 
   return { count: changes.length, changes };
 }
 
 /** Step 4: Reset all player mojo to NORMAL */
-export async function resetAllMojo(): Promise<{ count: number }> {
-  const players = await getAllPlayers();
+export async function resetAllMojo(
+  playerStorage: PlayerStorageAdapter = leagueBuilderPlayerStorageAdapter,
+): Promise<{ count: number }> {
+  const players = await playerStorage.getAll();
   let count = 0;
 
   for (const player of players) {
@@ -131,7 +166,7 @@ export async function resetAllMojo(): Promise<{ count: number }> {
         mojo: 'Normal' as const,
         lastModified: new Date().toISOString(),
       };
-      await savePlayer(updatedPlayer);
+      await playerStorage.save(updatedPlayer);
       count++;
     }
   }
@@ -154,8 +189,10 @@ export function clearSeasonalStats(seasonNumber: number): { cleared: boolean } {
 }
 
 /** Step 6: Apply rookie designations — farm players called up last season become rookies */
-export async function applyRookieDesignations(): Promise<{ count: number; rookies: string[] }> {
-  const players = await getAllPlayers();
+export async function applyRookieDesignations(
+  playerStorage: PlayerStorageAdapter = leagueBuilderPlayerStorageAdapter,
+): Promise<{ count: number; rookies: string[] }> {
+  const players = await playerStorage.getAll();
   const rookies: string[] = [];
 
   for (const player of players) {
@@ -215,7 +252,8 @@ export type TransitionProgressCallback = (step: number, stepName: string, detail
  */
 export async function executeSeasonTransition(
   currentSeason: number,
-  onProgress?: TransitionProgressCallback
+  onProgress?: TransitionProgressCallback,
+  playerStorage: PlayerStorageAdapter = leagueBuilderPlayerStorageAdapter,
 ): Promise<TransitionResult> {
   const steps: TransitionStep[] = [
     { name: 'Archive Season Data', description: 'Saving season records', status: 'pending' },
@@ -249,7 +287,7 @@ export async function executeSeasonTransition(
     // Step 2: Ages
     steps[1].status = 'running';
     onProgress?.(2, steps[1].name);
-    const ageResult = await incrementPlayerAges();
+    const ageResult = await incrementPlayerAges(playerStorage);
     summary.playersAged = ageResult.count;
     steps[1].status = 'complete';
     steps[1].details = `${ageResult.count} players aged`;
@@ -257,7 +295,7 @@ export async function executeSeasonTransition(
     // Step 3: Salaries
     steps[2].status = 'running';
     onProgress?.(3, steps[2].name);
-    const salaryResult = await recalculateSalaries();
+    const salaryResult = await recalculateSalaries(playerStorage);
     summary.salariesRecalculated = salaryResult.count;
     steps[2].status = 'complete';
     steps[2].details = `${salaryResult.count} salaries changed`;
@@ -265,7 +303,7 @@ export async function executeSeasonTransition(
     // Step 4: Mojo
     steps[3].status = 'running';
     onProgress?.(4, steps[3].name);
-    const mojoResult = await resetAllMojo();
+    const mojoResult = await resetAllMojo(playerStorage);
     summary.mojosReset = mojoResult.count;
     steps[3].status = 'complete';
     steps[3].details = `${mojoResult.count} mojos reset`;
@@ -280,7 +318,7 @@ export async function executeSeasonTransition(
     // Step 6: Rookies
     steps[5].status = 'running';
     onProgress?.(6, steps[5].name);
-    const rookieResult = await applyRookieDesignations();
+    const rookieResult = await applyRookieDesignations(playerStorage);
     summary.rookiesApplied = rookieResult.count;
     steps[5].status = 'complete';
     steps[5].details = `${rookieResult.count} rookies designated`;

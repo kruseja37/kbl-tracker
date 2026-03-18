@@ -14,8 +14,8 @@ import {
   updateElimination,
   type EliminationMetadata,
 } from '../../../utils/eliminationManager';
-import { getTeam } from '../../../utils/leagueBuilderStorage';
 import { buildEliminationGameTrackerRoster } from '../../../utils/eliminationRosterStorage';
+import { getEliminationTeam } from '../../../utils/eliminationPlayerStorage';
 import {
   getAllPlayoffs,
   getSeriesByPlayoff,
@@ -255,8 +255,8 @@ export function EliminationHome() {
       const [awayRoster, homeRoster, awayTeamData, homeTeamData] = await Promise.all([
         buildEliminationGameTrackerRoster(eliminationId, awayTeam.teamId, playoffConfig.useDH),
         buildEliminationGameTrackerRoster(eliminationId, homeTeam.teamId, playoffConfig.useDH),
-        getTeam(awayTeam.teamId),
-        getTeam(homeTeam.teamId),
+        getEliminationTeam(eliminationId, awayTeam.teamId),
+        getEliminationTeam(eliminationId, homeTeam.teamId),
       ]);
 
       navigate(`/game-tracker/${gameId}`, {

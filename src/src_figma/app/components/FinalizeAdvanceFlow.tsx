@@ -2,7 +2,11 @@ import { useState, useMemo, useCallback, useEffect } from "react";
 import { X, ChevronDown, ChevronUp, ArrowUp, ArrowDown, Trophy, BarChart3, CheckCircle, Users, FileText, Clock, TrendingUp, Award, Flame, Sunrise } from "lucide-react";
 import { useOffseasonData, type OffseasonTeam, type OffseasonPlayer } from "@/hooks/useOffseasonData";
 import { SpringTrainingFlow } from "./SpringTrainingFlow";
-import { executeSeasonTransition, type TransitionResult } from "../../../engines/seasonTransitionEngine";
+import {
+  createFranchisePlayerStorageAdapter,
+  executeSeasonTransition,
+  type TransitionResult,
+} from "../../../engines/seasonTransitionEngine";
 import { updateFranchiseMetadata, getActiveFranchise } from "../../../utils/franchiseManager";
 import { generateNewSeasonSchedule } from "../../../utils/franchiseInitializer";
 
@@ -341,15 +345,24 @@ export function FinalizeAdvanceFlow({ onClose, onAdvanceComplete, seasonNumber =
     setTransitionError(null);
 
     try {
+      const activeFranchiseId = await getActiveFranchise();
+      const playerStorage = activeFranchiseId
+        ? createFranchisePlayerStorageAdapter(activeFranchiseId)
+        : undefined;
+
       // Execute REAL season transition operations via the engine
-      const result = await executeSeasonTransition(seasonNumber, (stepNumber: number, stepName: string, details?: string) => {
-        // Map engine's 8 steps to UI's 7 display steps:
-        // Engine steps: 1=Archive, 2=Ages, 3=Salaries, 4=Mojo, 5=ClearStats, 6=Rookies, 7=Service, 8=Finalize
-        // UI steps: 1=Archive, 2=Ages, 3=Salaries, 4=Mojo, 5=ClearStats, 6=Rookies, 7=Service
-        // Engine step 8 (Finalize) maps to completing step 7 in the UI
-        const uiStep = Math.min(stepNumber, 7);
-        setProcessingStep(uiStep);
-      });
+      const result = await executeSeasonTransition(
+        seasonNumber,
+        (stepNumber: number, stepName: string, details?: string) => {
+          // Map engine's 8 steps to UI's 7 display steps:
+          // Engine steps: 1=Archive, 2=Ages, 3=Salaries, 4=Mojo, 5=ClearStats, 6=Rookies, 7=Service, 8=Finalize
+          // UI steps: 1=Archive, 2=Ages, 3=Salaries, 4=Mojo, 5=ClearStats, 6=Rookies, 7=Service
+          // Engine step 8 (Finalize) maps to completing step 7 in the UI
+          const uiStep = Math.min(stepNumber, 7);
+          setProcessingStep(uiStep);
+        },
+        playerStorage,
+      );
 
       setTransitionResult(result);
 

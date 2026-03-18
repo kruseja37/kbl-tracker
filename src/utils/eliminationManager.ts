@@ -3,6 +3,7 @@
  */
 
 import { initMetaDatabase as openMetaDatabase } from './franchiseManager';
+import { deleteEliminationDatabase } from './eliminationPlayerStorage';
 import type { EliminationAward } from './eliminationAwards';
 
 const ELIMINATION_STORE = 'eliminationList';
@@ -137,4 +138,5 @@ export async function deleteElimination(eliminationId: string): Promise<void> {
   // TODO: Delete related bracket data from kbl-playoffs and stats from kbl-tracker separately.
   await requestToPromise(store.delete(eliminationId));
   await transactionToPromise(tx);
+  await deleteEliminationDatabase(eliminationId);
 }

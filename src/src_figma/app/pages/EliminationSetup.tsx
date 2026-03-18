@@ -4,6 +4,7 @@ import { AlertCircle, ArrowLeft, Check, ChevronDown, ChevronUp, Loader2, Trophy 
 import { useLeagueBuilderData, type LeagueTemplate, type Team } from '../../hooks/useLeagueBuilderData';
 import { createElimination, updateElimination } from '../../../utils/eliminationManager';
 import { createRosterSnapshots } from '../../../utils/eliminationRosterStorage';
+import { deepCopyLeagueToBracket } from '../../../utils/eliminationPlayerStorage';
 import { createPlayoff, createSeries, startPlayoff, type PlayoffTeam } from '../../../utils/playoffStorage';
 type HomeFieldPattern = '2-3-2' | '2-2-1-1-1' | 'Home throughout';
 const STEP_LABELS = ['League', 'Settings', 'Control', 'Seeding', 'Confirm'];
@@ -412,6 +413,7 @@ export function EliminationSetup() {
       });
       const eliminationId = elimination.eliminationId;
       const teamIds = seededTeams.map((team) => team.id);
+      await deepCopyLeagueToBracket(eliminationId, selectedLeague.id);
       await createRosterSnapshots(eliminationId, teamIds);
       const playoffTeams: PlayoffTeam[] = seededTeams.map((team, index) => ({
         teamId: team.id,

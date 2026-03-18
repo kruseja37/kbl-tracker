@@ -35,7 +35,10 @@ import { getAllGames } from "../../../utils/scheduleStorage";
 import { startOffseason, OFFSEASON_PHASES, type OffseasonPhase } from "../../../utils/offseasonStorage";
 import { useOffseasonState } from "@/hooks/useOffseasonState";
 import { generateNewSeasonSchedule } from "../../../utils/franchiseInitializer";
-import { executeSeasonTransition } from "../../../engines/seasonTransitionEngine";
+import {
+  createFranchisePlayerStorageAdapter,
+  executeSeasonTransition,
+} from "../../../engines/seasonTransitionEngine";
 import { updateFranchiseMetadata } from "../../../utils/franchiseManager";
 import { getTeam } from "../../../utils/leagueBuilderStorage";
 import { getRecentGames } from "../../utils/gameStorage";
@@ -280,7 +283,10 @@ export function FranchiseHome() {
 
     // 1. Execute season transition (age players, recalculate salaries, reset mojo, etc.)
     try {
-      const result = await executeSeasonTransition(currentSeason);
+      const playerStorage = franchiseId
+        ? createFranchisePlayerStorageAdapter(franchiseId)
+        : undefined;
+      const result = await executeSeasonTransition(currentSeason, undefined, playerStorage);
       console.log(`[handleStartNewSeason] Season transition complete:`, result);
     } catch (err) {
       console.error('[handleStartNewSeason] Season transition failed:', err);

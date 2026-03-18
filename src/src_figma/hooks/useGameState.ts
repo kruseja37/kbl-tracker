@@ -100,6 +100,7 @@ export interface EndGameOptions {
   statsScopeId?: string;
   competitionType?: CompetitionType;
   competitionId?: string;
+  leagueId?: string;
   franchiseId?: string;
   currentSeason?: number;
   currentGame?: number;
@@ -6426,7 +6427,13 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     };
 
     if (!alreadyAggregated) {
-      await processCompletedGame(persistedState, aggregationOptions);
+      await processCompletedGame(
+        persistedState,
+        aggregationOptions,
+        (opts?.competitionType ?? competitionTypeRef.current) === 'exhibition'
+          ? opts?.leagueId
+          : undefined
+      );
       await markGameAggregated(gameState.gameId);
       console.log('[T1-08] Stats aggregated to season (first call)');
     } else {
@@ -6654,6 +6661,10 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       statsScopeId: statsScopeIdValue,
       competitionType: options?.competitionType ?? competitionTypeRef.current,
       competitionId: options?.competitionId ?? competitionIdRef.current,
+      leagueId:
+        (options?.competitionType ?? competitionTypeRef.current) === 'exhibition'
+          ? (options?.leagueId ?? leagueIdRef.current)
+          : undefined,
       franchiseId: options?.franchiseId,
       currentSeason: currentSeasonNumber,
       currentGame: options?.currentGame,

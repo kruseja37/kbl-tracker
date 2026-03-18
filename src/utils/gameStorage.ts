@@ -5,6 +5,14 @@
  * Provides IndexedDB storage for game state, allowing recovery after page refresh.
  */
 
+import type {
+  Chemistry,
+  Grade,
+  MojoState,
+  Personality,
+  PitchType,
+  Position,
+} from './leagueBuilderStorage';
 import { getTrackerDb } from './trackerDb';
 
 export type CompetitionType = 'exhibition' | 'franchise' | 'playoff' | 'elimination';
@@ -278,6 +286,39 @@ export interface PersistedGameState {
     incomingPlayerName: string;
     timestamp: number;
   }>;
+  playerRatingsSnapshots?: Record<string, PlayerRatingsSnapshot>;
+}
+
+export interface PlayerRatingsSnapshot {
+  playerId: string;
+  firstName: string;
+  lastName: string;
+  nickname?: string;
+  hometown?: { city: string; state: string };
+  age: number;
+  gender: 'M' | 'F';
+  bats: 'L' | 'R' | 'S';
+  throws: 'L' | 'R';
+  primaryPosition: Position;
+  secondaryPosition?: Position;
+  power: number;
+  contact: number;
+  speed: number;
+  fielding: number;
+  arm: number;
+  velocity: number;
+  junk: number;
+  accuracy: number;
+  arsenal: PitchType[];
+  overallGrade: Grade;
+  trait1?: string;
+  trait2?: string;
+  personality: Personality;
+  chemistry: Chemistry;
+  morale: number;
+  mojo: MojoState;
+  fame: number;
+  salary: number;
 }
 
 export async function saveCurrentGame(state: PersistedGameState): Promise<void> {
@@ -367,6 +408,7 @@ export interface CompletedGameRecord {
   // --- NEW: CATCH THE ADVANCED ARRAYS ---
   managerDecisions?: PersistedGameState['managerDecisions'];
   moraleShifts?: PersistedGameState['moraleShifts'];
+  playerRatingsSnapshots?: PersistedGameState['playerRatingsSnapshots'];
 }
 
 // ============================================
@@ -486,6 +528,7 @@ export async function archiveCompletedGame(
     // --- NEW: ARCHIVE THE ADVANCED ARRAYS ---
     managerDecisions: gameState.managerDecisions || [],
     moraleShifts: gameState.moraleShifts || [],
+    playerRatingsSnapshots: gameState.playerRatingsSnapshots,
   };
 
   return new Promise((resolve, reject) => {
