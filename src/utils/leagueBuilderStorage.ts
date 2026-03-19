@@ -368,7 +368,10 @@ async function resolveMigratedLeagueAssignments(db: IDBDatabase): Promise<void> 
   for (const legacyPlayer of players) {
     const player = normalizePlayerRecord(legacyPlayer);
     const nextAssignments = (player.leagueAssignments ?? []).flatMap((assignment) => {
-      if (assignment.leagueId !== MIGRATION_LEAGUE_PLACEHOLDER) {
+      if (
+        assignment.leagueId !== MIGRATION_LEAGUE_PLACEHOLDER &&
+        leagues.some((l) => l.id === assignment.leagueId)
+      ) {
         return assignment;
       }
 
@@ -1284,7 +1287,7 @@ function convertPlayer(player: PlayerData): Omit<Player, 'createdDate' | 'lastMo
     leagueAssignments: player.teamId === 'free-agent'
       ? []
       : [{
-          leagueId: SMB4_TEAMS[player.teamId]?.leagueId ?? '',
+          leagueId: 'sml',
           teamId: player.teamId,
           rosterStatus: 'MLB',
         }],
