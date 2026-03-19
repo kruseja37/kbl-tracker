@@ -20,6 +20,7 @@ import {
 } from './seasonAggregator';
 import { archiveCompletedGame } from './gameStorage';
 import { getEffectivePlayer } from './playerOverrides';
+import { registerAlmanacPlayers } from './registerAlmanacPlayers';
 
 export interface ProcessGameResult {
   aggregation: GameAggregationResult;
@@ -114,8 +115,16 @@ export async function processCompletedGame(
       home: gameState.homeScore,
     },
     [],
-    options?.seasonId
+    options?.seasonId,
+    {
+      leagueId,
+    }
   );
+
+  // Step 3: Register players in Almanac canonical registry
+  if (leagueId) {
+    await registerAlmanacPlayers(gameState, leagueId);
+  }
 
   return { aggregation };
 }

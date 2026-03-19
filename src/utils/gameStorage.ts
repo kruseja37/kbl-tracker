@@ -392,6 +392,7 @@ export interface CompletedGameRecord {
   statsScopeId?: string;
   competitionType?: CompetitionType;
   competitionId?: string;
+  leagueId?: string;
   seasonNumber?: number;
   stadiumName?: string | null;
   awayTeamId: string;
@@ -501,6 +502,7 @@ export async function archiveCompletedGame(
     statsScopeId?: string;
     competitionType?: CompetitionType;
     competitionId?: string;
+    leagueId?: string;
   }
 ): Promise<void> {
   const db = await initDatabase();
@@ -512,6 +514,7 @@ export async function archiveCompletedGame(
     statsScopeId: context?.statsScopeId ?? gameState.statsScopeId ?? seasonId,
     competitionType: context?.competitionType ?? gameState.competitionType,
     competitionId: context?.competitionId ?? gameState.competitionId,
+    leagueId: context?.leagueId,
     seasonNumber: gameState.seasonNumber,
     stadiumName: gameState.stadiumName ?? null,
     awayTeamId: gameState.awayTeamId,
@@ -634,6 +637,25 @@ export async function getCompletedGameById(gameId: string): Promise<CompletedGam
 
     request.onsuccess = () => {
       resolve(request.result || null);
+    };
+  });
+}
+
+export async function getAllCompletedGames(): Promise<CompletedGameRecord[]> {
+  const db = await initDatabase();
+
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(STORES.COMPLETED_GAMES, 'readonly');
+    const store = transaction.objectStore(STORES.COMPLETED_GAMES);
+    const request = store.getAll();
+
+    request.onerror = () => {
+      console.error('Failed to load completed games:', request.error);
+      reject(request.error);
+    };
+
+    request.onsuccess = () => {
+      resolve((request.result || []).sort((a, b) => b.date - a.date));
     };
   });
 }

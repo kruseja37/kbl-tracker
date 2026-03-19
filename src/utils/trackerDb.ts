@@ -14,7 +14,7 @@
  */
 
 const DB_NAME = 'kbl-tracker';
-const DB_VERSION = 4; // Must be the highest version any consumer ever used
+const DB_VERSION = 5; // Must be the highest version any consumer ever used
 
 let dbInstance: IDBDatabase | null = null;
 
@@ -150,6 +150,14 @@ export async function getTrackerDb(): Promise<IDBDatabase> {
           keyPath: ['eliminationId', 'playerId'],
         });
         mojoStore.createIndex('eliminationId', 'eliminationId', { unique: false });
+      }
+
+      // ── v5: Almanac canonical registry ──────────────────────────
+      if (!db.objectStoreNames.contains('almanacCanonicalPlayers')) {
+        const canonicalStore = db.createObjectStore('almanacCanonicalPlayers', {
+          keyPath: 'canonicalId',
+        });
+        canonicalStore.createIndex('playerName', 'playerName', { unique: false });
       }
     };
   });

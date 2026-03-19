@@ -1,30 +1,126 @@
+import { Suspense, lazy } from 'react';
 import { Routes, Route } from 'react-router-dom';
 
 // Global styles
 import './styles/global.css';
 
 // Legacy NavigationHeader removed - Figma pages have their own headers
-import NotFound from './pages/NotFound';
+const NotFound = lazy(() => import('./pages/NotFound'));
 
 // Figma Design Pages (exhaustive UI replacement)
-import { AppHome } from './src_figma/app/pages/AppHome';
-import { FranchiseSetup } from './src_figma/app/pages/FranchiseSetup';
-import { FranchiseSelector } from './src_figma/app/pages/FranchiseSelector';
-import { EliminationSetup } from './src_figma/app/pages/EliminationSetup';
-import { EliminationSelector } from './src_figma/app/pages/EliminationSelector';
-import { FranchiseHome } from './src_figma/app/pages/FranchiseHome';
-import { GameTracker } from './src_figma/app/pages/GameTracker';
-import { PostGameSummary } from './src_figma/app/pages/PostGameSummary';
-import { ExhibitionGame } from './src_figma/app/pages/ExhibitionGame';
-import { EliminationHome } from './src_figma/app/pages/EliminationHome';
-import { SeasonSummary } from './src_figma/app/pages/SeasonSummary';
-import { LeagueBuilder } from './src_figma/app/pages/LeagueBuilder';
-import { LeagueBuilderLeagues } from './src_figma/app/pages/LeagueBuilderLeagues';
-import { LeagueBuilderTeams } from './src_figma/app/pages/LeagueBuilderTeams';
-import { LeagueBuilderPlayers } from './src_figma/app/pages/LeagueBuilderPlayers';
-import { LeagueBuilderRosters } from './src_figma/app/pages/LeagueBuilderRosters';
-import { LeagueBuilderDraft } from './src_figma/app/pages/LeagueBuilderDraft';
-import { LeagueBuilderRules } from './src_figma/app/pages/LeagueBuilderRules';
+const AppHome = lazy(() =>
+  import('./src_figma/app/pages/AppHome').then((module) => ({ default: module.AppHome })),
+);
+const FranchiseSetup = lazy(() =>
+  import('./src_figma/app/pages/FranchiseSetup').then((module) => ({
+    default: module.FranchiseSetup,
+  })),
+);
+const FranchiseSelector = lazy(() =>
+  import('./src_figma/app/pages/FranchiseSelector').then((module) => ({
+    default: module.FranchiseSelector,
+  })),
+);
+const EliminationSetup = lazy(() =>
+  import('./src_figma/app/pages/EliminationSetup').then((module) => ({
+    default: module.EliminationSetup,
+  })),
+);
+const EliminationSelector = lazy(() =>
+  import('./src_figma/app/pages/EliminationSelector').then((module) => ({
+    default: module.EliminationSelector,
+  })),
+);
+const FranchiseHome = lazy(() =>
+  import('./src_figma/app/pages/FranchiseHome').then((module) => ({
+    default: module.FranchiseHome,
+  })),
+);
+const GameTracker = lazy(() =>
+  import('./src_figma/app/pages/GameTracker').then((module) => ({ default: module.GameTracker })),
+);
+const PostGameSummary = lazy(() =>
+  import('./src_figma/app/pages/PostGameSummary').then((module) => ({
+    default: module.PostGameSummary,
+  })),
+);
+const ExhibitionGame = lazy(() =>
+  import('./src_figma/app/pages/ExhibitionGame').then((module) => ({
+    default: module.ExhibitionGame,
+  })),
+);
+const EliminationHome = lazy(() =>
+  import('./src_figma/app/pages/EliminationHome').then((module) => ({
+    default: module.EliminationHome,
+  })),
+);
+const SeasonSummary = lazy(() =>
+  import('./src_figma/app/pages/SeasonSummary').then((module) => ({
+    default: module.SeasonSummary,
+  })),
+);
+const LeagueBuilder = lazy(() =>
+  import('./src_figma/app/pages/LeagueBuilder').then((module) => ({
+    default: module.LeagueBuilder,
+  })),
+);
+const LeagueBuilderLeagues = lazy(() =>
+  import('./src_figma/app/pages/LeagueBuilderLeagues').then((module) => ({
+    default: module.LeagueBuilderLeagues,
+  })),
+);
+const LeagueBuilderTeams = lazy(() =>
+  import('./src_figma/app/pages/LeagueBuilderTeams').then((module) => ({
+    default: module.LeagueBuilderTeams,
+  })),
+);
+const LeagueBuilderPlayers = lazy(() =>
+  import('./src_figma/app/pages/LeagueBuilderPlayers').then((module) => ({
+    default: module.LeagueBuilderPlayers,
+  })),
+);
+const LeagueBuilderRosters = lazy(() =>
+  import('./src_figma/app/pages/LeagueBuilderRosters').then((module) => ({
+    default: module.LeagueBuilderRosters,
+  })),
+);
+const LeagueBuilderDraft = lazy(() =>
+  import('./src_figma/app/pages/LeagueBuilderDraft').then((module) => ({
+    default: module.LeagueBuilderDraft,
+  })),
+);
+const LeagueBuilderRules = lazy(() =>
+  import('./src_figma/app/pages/LeagueBuilderRules').then((module) => ({
+    default: module.LeagueBuilderRules,
+  })),
+);
+const AlmanacHome = lazy(() =>
+  import('./src_figma/app/pages/AlmanacHome').then((module) => ({ default: module.AlmanacHome })),
+);
+const ExhibitionLeaders = lazy(() =>
+  import('./src_figma/app/pages/ExhibitionLeaders').then((module) => ({
+    default: module.ExhibitionLeaders,
+  })),
+);
+const GameBrowser = lazy(() =>
+  import('./src_figma/app/pages/GameBrowser').then((module) => ({ default: module.GameBrowser })),
+);
+const GameDetail = lazy(() =>
+  import('./src_figma/app/pages/GameDetail').then((module) => ({ default: module.GameDetail })),
+);
+const PlayerDirectory = lazy(() =>
+  import('./src_figma/app/pages/PlayerDirectory').then((module) => ({
+    default: module.PlayerDirectory,
+  })),
+);
+const PlayerInstanceCard = lazy(() =>
+  import('./src_figma/app/pages/PlayerInstanceCard').then((module) => ({
+    default: module.PlayerInstanceCard,
+  })),
+);
+const TeamPage = lazy(() =>
+  import('./src_figma/app/pages/TeamPage').then((module) => ({ default: module.TeamPage })),
+);
 
 /**
  * KBL Tracker - Main App
@@ -42,7 +138,13 @@ import { LeagueBuilderRules } from './src_figma/app/pages/LeagueBuilderRules';
  */
 function App() {
   return (
-    <>
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-black flex items-center justify-center text-white font-['Press_Start_2P'] text-xs">
+          LOADING...
+        </div>
+      }
+    >
       <Routes>
         {/* Main Menu - Figma Design */}
         <Route path="/" element={<AppHome />} />
@@ -74,10 +176,20 @@ function App() {
         <Route path="/league-builder/draft" element={<LeagueBuilderDraft />} />
         <Route path="/league-builder/rules" element={<LeagueBuilderRules />} />
 
+        {/* Almanac - Figma Design */}
+        <Route path="/almanac" element={<AlmanacHome />} />
+        <Route path="/almanac/exhibition" element={<ExhibitionLeaders />} />
+        <Route path="/almanac/games" element={<GameBrowser />} />
+        <Route path="/almanac/games/:gameId" element={<GameDetail />} />
+        <Route path="/almanac/players" element={<PlayerDirectory />} />
+        <Route path="/almanac/players/:canonicalId" element={<PlayerDirectory />} />
+        <Route path="/almanac/players/:canonicalId/:instanceId" element={<PlayerInstanceCard />} />
+        <Route path="/almanac/teams/:leagueId/:teamId" element={<TeamPage />} />
+
         {/* 404 */}
         <Route path="*" element={<NotFound />} />
       </Routes>
-    </>
+    </Suspense>
   );
 }
 

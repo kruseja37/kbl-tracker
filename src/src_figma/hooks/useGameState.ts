@@ -6543,6 +6543,10 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
           statsScopeId: targetStatsScopeId,
           competitionType: opts?.competitionType ?? competitionTypeRef.current,
           competitionId: opts?.competitionId ?? competitionIdRef.current,
+          leagueId:
+            (opts?.competitionType ?? competitionTypeRef.current) === 'exhibition'
+              ? (opts?.leagueId ?? leagueIdRef.current)
+              : undefined,
         }
       );
     }
