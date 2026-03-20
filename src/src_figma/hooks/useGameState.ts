@@ -8201,6 +8201,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     // Check BEFORE transitioning to the next half-inning.
     const totalInnings = totalInningsRef.current;
     const { inning, isTop, homeScore, awayScore } = gameState;
+    console.log(`[T0-01-DEBUG] executeEndInning: totalInnings=${totalInnings}, inning=${inning}, isTop=${isTop}, homeScore=${homeScore}, awayScore=${awayScore}`);
     const teamKey = isTop ? "away" : "home";
     const inningIdx = Math.max(0, inning - 1);
 

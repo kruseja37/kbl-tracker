@@ -2941,7 +2941,12 @@ export function GameTracker() {
         setPlayLogEntries([]);
 
         // Try to load existing game first (handles page refresh)
-        const hasExistingGame = await loadExistingGame();
+        // R2-7: When navigationState is present, user clicked START GAME from setup —
+        // skip snapshot restoration so we get a fresh game instead of resuming the old one.
+        const isFreshStart = !!navigationState;
+        const hasExistingGame = await loadExistingGame({
+          preferSnapshot: !isFreshStart,
+        });
         if (cancelled) return;
 
         if (hasExistingGame) {
@@ -7489,7 +7494,8 @@ export function GameTracker() {
     }
     console.debug("[END-GAME] Step 1: Starting handleEndGame");
     gameEndingRef.current = true;
-    setIsProcessingEndGame(true);
+    // R2-6 FIX: Don't show "Processing game..." overlay yet — it blocks the pitch count modal.
+    // It will be shown after hookEndGame completes (pitch count confirmed + stats aggregated).
     let endGameCompleted = false;
     playAudio("endGame");
 
@@ -7748,6 +7754,7 @@ export function GameTracker() {
       );
       await hookEndGame(endGameOptions);
       console.debug("[END-GAME] Step 3: hookEndGame completed");
+      setIsProcessingEndGame(true); // Show overlay now that pitch count is confirmed
 
       // Save mojo/fitness snapshots for elimination inter-game persistence
       if (
