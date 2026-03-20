@@ -1,6 +1,6 @@
 import { useNavigate } from "react-router";
 import { ArrowLeft, Shuffle, Play, Users, RefreshCw, Trash2, Plus, Sparkles, User } from "lucide-react";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import {
   useLeagueBuilderData,
   type Player,
@@ -37,10 +37,14 @@ export function LeagueBuilderDraft() {
   // Mock draft class - in production this would be generated/stored
   const [prospects, setProspects] = useState<DraftProspect[]>([]);
   const [selectedInactive, setSelectedInactive] = useState<string[]>([]);
-  const activeLeagueId = useMemo(
-    () => leagues[0]?.id ?? teams.find((team) => team.leagueIds?.[0])?.leagueIds?.[0] ?? "",
-    [leagues, teams],
-  );
+  const [activeLeagueId, setActiveLeagueId] = useState<string>("");
+
+  // Auto-select first league on load
+  useEffect(() => {
+    if (!activeLeagueId && leagues.length > 0) {
+      setActiveLeagueId(leagues[0].id);
+    }
+  }, [leagues, activeLeagueId]);
 
   // Get inactive players (those without a team assignment, grade B or below)
   const inactivePlayers = useMemo(() => {
@@ -150,6 +154,20 @@ export function LeagueBuilderDraft() {
                 DRAFT SETUP
               </h1>
             </div>
+            {/* League Selector */}
+            {leagues.length > 1 && (
+              <select
+                value={activeLeagueId}
+                onChange={(e) => setActiveLeagueId(e.target.value)}
+                className="bg-[#4A6844] border-4 border-[#E8E8D8] text-[#E8E8D8] px-4 py-2 text-sm font-bold tracking-wider shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)] cursor-pointer"
+              >
+                {leagues.map((league) => (
+                  <option key={league.id} value={league.id}>
+                    {league.name.toUpperCase()}
+                  </option>
+                ))}
+              </select>
+            )}
           </div>
           {prospects.length > 0 && (
             <button

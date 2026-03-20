@@ -163,10 +163,22 @@ export function LeagueBuilderPlayers() {
   const [currentOverrides, setCurrentOverrides] = useState<Partial<PlayerAttributes>>({});
   const [isLoadingOverrides, setIsLoadingOverrides] = useState(false);
 
-  const activeLeagueId = useMemo(
-    () => leagues[0]?.id ?? teams.find((team) => team.leagueIds?.[0])?.leagueIds?.[0] ?? "",
-    [leagues, teams],
-  );
+  const [activeLeagueId, setActiveLeagueId] = useState<string>("");
+
+  // Auto-select first league on load
+  useEffect(() => {
+    if (!activeLeagueId && leagues.length > 0) {
+      setActiveLeagueId(leagues[0].id);
+    }
+  }, [leagues, activeLeagueId]);
+
+  // Filter teams to only those in the selected league
+  const leagueTeams = useMemo(() => {
+    if (!activeLeagueId) return teams;
+    const league = leagues.find(l => l.id === activeLeagueId);
+    if (!league?.teamIds?.length) return teams;
+    return teams.filter(t => league.teamIds!.includes(t.id));
+  }, [activeLeagueId, leagues, teams]);
 
   const getActiveAssignment = useCallback((player: Player) => {
     if (!player.leagueAssignments?.length) return undefined;
@@ -630,6 +642,20 @@ export function LeagueBuilderPlayers() {
               PLAYERS
             </h1>
           </div>
+          {/* League Selector */}
+          {leagues.length > 1 && (
+            <select
+              value={activeLeagueId}
+              onChange={(e) => setActiveLeagueId(e.target.value)}
+              className="bg-[#4A6844] border-4 border-[#E8E8D8] text-[#E8E8D8] px-4 py-2 text-sm font-bold tracking-wider shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)] cursor-pointer"
+            >
+              {leagues.map((league) => (
+                <option key={league.id} value={league.id}>
+                  {league.name.toUpperCase()}
+                </option>
+              ))}
+            </select>
+          )}
           <div className="ml-auto text-sm text-[#E8E8D8]/70">{players.length} players</div>
         </div>
 
@@ -679,7 +705,7 @@ export function LeagueBuilderPlayers() {
             >
               <option value="ALL">All Teams</option>
               <option value="FREE_AGENT">Free Agents</option>
-              {teams.map(team => (
+              {leagueTeams.map(team => (
                 <option key={team.id} value={team.id}>{team.abbreviation}</option>
               ))}
             </select>
@@ -1171,7 +1197,7 @@ export function LeagueBuilderPlayers() {
                       className="w-full bg-[#4A6844] border-[4px] border-[#3F5A3A] p-3 text-[#E8E8D8] focus:border-[#E8E8D8] outline-none"
                     >
                       <option value="">Free Agent</option>
-                      {teams.map(team => (
+                      {leagueTeams.map(team => (
                         <option key={team.id} value={team.id}>{team.name}</option>
                       ))}
                     </select>

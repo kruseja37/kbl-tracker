@@ -33,19 +33,37 @@ export function LeagueBuilderRosters() {
   const [currentRoster, setCurrentRoster] = useState<TeamRoster | null>(null);
   const [hasChanges, setHasChanges] = useState(false);
   const [saving, setSaving] = useState(false);
-  const activeLeagueId = useMemo(
-    () => leagues[0]?.id ?? teams.find((team) => team.leagueIds?.[0])?.leagueIds?.[0] ?? "",
-    [leagues, teams],
-  );
+  const [activeLeagueId, setActiveLeagueId] = useState<string>("");
+
+  // Auto-select first league on load
+  useEffect(() => {
+    if (!activeLeagueId && leagues.length > 0) {
+      setActiveLeagueId(leagues[0].id);
+    }
+  }, [leagues, activeLeagueId]);
+
+  // Filter teams to only those in the selected league
+  const leagueTeams = useMemo(() => {
+    if (!activeLeagueId) return teams;
+    const league = leagues.find(l => l.id === activeLeagueId);
+    if (!league?.teamIds?.length) return teams;
+    return teams.filter(t => league.teamIds!.includes(t.id));
+  }, [activeLeagueId, leagues, teams]);
 
   const isPlayerOnTeam = (player: Player, teamId: string) =>
     player.leagueAssignments?.some(
       (assignment) => assignment.leagueId === activeLeagueId && assignment.teamId === teamId,
     ) ?? false;
 
+  // Reset team selection when league changes
+  useEffect(() => {
+    setSelectedTeamId(null);
+    setCurrentRoster(null);
+  }, [activeLeagueId]);
+
   // Get team roster summary for team list
   const teamSummaries = useMemo(() => {
-    return teams.map((team) => {
+    return leagueTeams.map((team) => {
       const roster = players.filter((player) => isPlayerOnTeam(player, team.id));
       const pitchers = roster.filter((p) =>
         ['SP', 'RP', 'CP', 'SP/RP'].includes(p.primaryPosition)
@@ -170,6 +188,20 @@ export function LeagueBuilderRosters() {
                 ROSTERS
               </h1>
             </div>
+            {/* League Selector */}
+            {leagues.length > 1 && (
+              <select
+                value={activeLeagueId}
+                onChange={(e) => setActiveLeagueId(e.target.value)}
+                className="bg-[#4A6844] border-4 border-[#E8E8D8] text-[#E8E8D8] px-4 py-2 text-sm font-bold tracking-wider shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)] cursor-pointer"
+              >
+                {leagues.map((league) => (
+                  <option key={league.id} value={league.id}>
+                    {league.name.toUpperCase()}
+                  </option>
+                ))}
+              </select>
+            )}
           </div>
           {selectedTeamId && hasChanges && (
             <div className="flex items-center gap-2">
