@@ -187,11 +187,13 @@ export function LeagueBuilderPlayers() {
       ?? player.leagueAssignments[0];
   }, [activeLeagueId]);
 
-  /** Leagues the editing player is assigned to (for tab rendering) */
+  /** ALL league IDs for tab rendering — player's existing assignments + all known leagues */
   const playerLeagueIds = useMemo(() => {
-    if (!editingPlayer?.leagueAssignments) return [];
-    return editingPlayer.leagueAssignments.map(a => a.leagueId);
-  }, [editingPlayer]);
+    const assignedIds = new Set(editingPlayer?.leagueAssignments?.map(a => a.leagueId) ?? []);
+    // Include all leagues so user can assign player to new leagues
+    const allIds = new Set([...assignedIds, ...leagues.map(l => l.id)]);
+    return Array.from(allIds);
+  }, [editingPlayer, leagues]);
 
   const isLeagueTab = editorTab !== 'base';
 
@@ -429,14 +431,35 @@ export function LeagueBuilderPlayers() {
     setIsSaving(true);
     try {
       if (isLeagueTab && editingPlayer) {
-        // LEAGUE TAB: Save overrides only
+        // LEAGUE TAB: Save overrides + update league assignment
         const leagueId = editorTab;
+
+        // Save attribute overrides
         if (Object.keys(currentOverrides).length > 0) {
           await setLeaguePlayerOverride(leagueId, editingPlayer.id, currentOverrides);
         } else {
-          // No overrides left — remove the record
           await removeLeaguePlayerOverride(leagueId, editingPlayer.id);
         }
+
+        // Update league assignment (team/roster for this league)
+        const existingAssignments = editingPlayer.leagueAssignments ?? [];
+        const otherAssignments = existingAssignments.filter(a => a.leagueId !== leagueId);
+        const newAssignment = {
+          leagueId,
+          teamId: formData.teamId,
+          rosterStatus: (formData.teamId ? formData.rosterStatus : 'FREE_AGENT') as RosterStatus,
+        };
+        const updatedAssignments = [...otherAssignments, newAssignment];
+
+        // Only update player record if assignments actually changed
+        const hadAssignment = existingAssignments.find(a => a.leagueId === leagueId);
+        if (!hadAssignment || hadAssignment.teamId !== formData.teamId || hadAssignment.rosterStatus !== (formData.teamId ? formData.rosterStatus : 'FREE_AGENT')) {
+          await updatePlayer({
+            ...editingPlayer,
+            leagueAssignments: updatedAssignments,
+          });
+        }
+
         closeModal();
       } else {
         // BASE TAB: Save to player record (existing behavior)
@@ -483,13 +506,19 @@ export function LeagueBuilderPlayers() {
           fame: editingPlayer?.fame ?? 0,
           salary: editingPlayer?.salary ?? 1.0,
           contractYears: editingPlayer?.contractYears,
-          leagueAssignments: resolvedLeagueId
-            ? [{
-                leagueId: resolvedLeagueId,
-                teamId: formData.teamId,
-                rosterStatus: formData.teamId ? formData.rosterStatus : 'FREE_AGENT' as RosterStatus,
-              }]
-            : [],
+          leagueAssignments: (() => {
+            // Preserve existing assignments for OTHER leagues, update current league
+            const existingOther = (editingPlayer?.leagueAssignments ?? [])
+              .filter(a => a.leagueId !== resolvedLeagueId);
+            const currentAssignment = resolvedLeagueId
+              ? [{
+                  leagueId: resolvedLeagueId,
+                  teamId: formData.teamId,
+                  rosterStatus: (formData.teamId ? formData.rosterStatus : 'FREE_AGENT') as RosterStatus,
+                }]
+              : [];
+            return [...existingOther, ...currentAssignment];
+          })(),
           isCustom: true,
           sourceDatabase: 'League Builder',
         };
@@ -1176,47 +1205,58 @@ export function LeagueBuilderPlayers() {
                 </OverrideField>
               </div>
 
-              {/* Team Assignment — only on base tab */}
-              {!isLeagueTab && (
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-bold mb-2">
-                      <Users className="w-3 h-3 inline mr-1" />
-                      Team
-                    </label>
-                    <select
-                      value={formData.teamId}
-                      onChange={(e) => {
-                        const newTeamId = e.target.value;
-                        setFormData(prev => ({
-                          ...prev,
-                          teamId: newTeamId,
-                          rosterStatus: newTeamId ? prev.rosterStatus : 'FREE_AGENT'
-                        }));
-                      }}
-                      className="w-full bg-[#4A6844] border-[4px] border-[#3F5A3A] p-3 text-[#E8E8D8] focus:border-[#E8E8D8] outline-none"
-                    >
-                      <option value="">Free Agent</option>
-                      {leagueTeams.map(team => (
-                        <option key={team.id} value={team.id}>{team.name}</option>
-                      ))}
-                    </select>
+              {/* Team Assignment — shown on all tabs */}
+              {(() => {
+                // On league tabs, show teams for THAT league; on base tab, show teams for active league
+                const tabLeagueId = isLeagueTab ? editorTab : activeLeagueId;
+                const tabLeague = leagues.find(l => l.id === tabLeagueId);
+                const tabTeams = tabLeague?.teamIds?.length
+                  ? teams.filter(t => tabLeague.teamIds!.includes(t.id))
+                  : leagueTeams;
+                const tabLabel = isLeagueTab
+                  ? `Team (${tabLeague?.name ?? tabLeagueId})`
+                  : 'Team';
+                return (
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-bold mb-2">
+                        <Users className="w-3 h-3 inline mr-1" />
+                        {tabLabel}
+                      </label>
+                      <select
+                        value={formData.teamId}
+                        onChange={(e) => {
+                          const newTeamId = e.target.value;
+                          setFormData(prev => ({
+                            ...prev,
+                            teamId: newTeamId,
+                            rosterStatus: newTeamId ? prev.rosterStatus : 'FREE_AGENT'
+                          }));
+                        }}
+                        className="w-full bg-[#4A6844] border-[4px] border-[#3F5A3A] p-3 text-[#E8E8D8] focus:border-[#E8E8D8] outline-none"
+                      >
+                        <option value="">Free Agent</option>
+                        {tabTeams.map(team => (
+                          <option key={team.id} value={team.id}>{team.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-bold mb-2">Roster Status</label>
+                      <select
+                        value={formData.rosterStatus}
+                        onChange={(e) => setFormData(prev => ({ ...prev, rosterStatus: e.target.value as RosterStatus }))}
+                        disabled={!formData.teamId}
+                        className="w-full bg-[#4A6844] border-[4px] border-[#3F5A3A] p-3 text-[#E8E8D8] focus:border-[#E8E8D8] outline-none disabled:opacity-50"
+                      >
+                        <option value="FREE_AGENT">Free Agent</option>
+                        <option value="MLB">MLB Roster</option>
+                        <option value="FARM">Farm System</option>
+                      </select>
+                    </div>
                   </div>
-                  <div>
-                    <label className="block text-sm font-bold mb-2">Roster Status</label>
-                    <select
-                      value={formData.rosterStatus}
-                      onChange={(e) => setFormData(prev => ({ ...prev, rosterStatus: e.target.value as RosterStatus }))}
-                      disabled={!formData.teamId}
-                      className="w-full bg-[#4A6844] border-[4px] border-[#3F5A3A] p-3 text-[#E8E8D8] focus:border-[#E8E8D8] outline-none disabled:opacity-50"
-                    >
-                      <option value="FREE_AGENT">Free Agent</option>
-                      <option value="MLB">MLB Roster</option>
-                      <option value="FARM">Farm System</option>
-                    </select>
-                  </div>
-                </div>
-              )}
+                );
+              })()}
             </div>
 
             {/* Modal Footer */}
