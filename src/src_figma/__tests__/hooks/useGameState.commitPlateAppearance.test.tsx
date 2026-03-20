@@ -110,9 +110,19 @@ describe('useGameState commitPlateAppearance', () => {
     mockGetGameHeader.mockResolvedValue({ aggregated: false });
   });
 
-  test('normalizes UI-native SAC into a canonical at-bat event and batter SH stat', async () => {
+  test('normalizes UI-native SAC into a canonical at-bat event, auto-advances runners, and seeds bunt enrichment', async () => {
     const { result } = renderHook(() => useGameState());
     await initializeGame(result);
+
+    act(() => {
+      result.current.restoreState({
+        gameState: {
+          ...result.current.gameState,
+          bases: { first: true, second: true, third: false },
+        },
+        scoreboard: result.current.scoreboard,
+      });
+    });
 
     await act(async () => {
       await result.current.commitPlateAppearance({ type: 'out', outType: 'SAC' });
@@ -124,6 +134,13 @@ describe('useGameState commitPlateAppearance', () => {
       pitcherId: 'home-sp',
       result: 'SAC',
       outsAfter: 1,
+      runnerOutcomes: [
+        { fromBase: 'first', toBase: 'second' },
+        { fromBase: 'second', toBase: 'third' },
+      ],
+      enrichment: expect.objectContaining({
+        exitType: 'bunt',
+      }),
     });
     expect(result.current.playerStats.get('away-batter-1')).toMatchObject({
       pa: 1,
@@ -132,6 +149,11 @@ describe('useGameState commitPlateAppearance', () => {
       k: 0,
     });
     expect(result.current.gameState.outs).toBe(1);
+    expect(result.current.gameState.bases).toEqual({
+      first: false,
+      second: true,
+      third: true,
+    });
   });
 
   test('routes dropped-third-strike metadata through the canonical recorder', async () => {

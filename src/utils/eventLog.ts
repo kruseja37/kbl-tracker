@@ -319,6 +319,7 @@ export interface AtBatEvent {
     fieldLocation?: { x: number; y: number; zone?: string };
     exitType?: 'ground_ball' | 'fly_ball' | 'line_drive' | 'popup' | 'bunt' | string;
     fieldingSequence?: number[];
+    fieldingDifficulty?: 'ROUTINE' | 'DIVING' | 'WALL' | 'RUNNING' | 'LEAPING';
     fieldingPlayType?:
       | 'routine'
       | 'charging'
@@ -749,6 +750,7 @@ function applyAtBatEventUpdates(
     | 'awayScoreAfter'
     | 'homeScoreAfter'
     | 'outsRecorded'
+    | 'isWalkOff'
   >>,
 ): AtBatEvent {
   const next = { ...existing };
@@ -766,6 +768,7 @@ function applyAtBatEventUpdates(
   if (updates.awayScoreAfter !== undefined) next.awayScoreAfter = updates.awayScoreAfter;
   if (updates.homeScoreAfter !== undefined) next.homeScoreAfter = updates.homeScoreAfter;
   if (updates.outsRecorded !== undefined) next.outsRecorded = updates.outsRecorded;
+  if (updates.isWalkOff !== undefined) next.isWalkOff = updates.isWalkOff;
   if (updates.version !== undefined) next.version = updates.version;
   if (updates.editHistory) {
     next.editHistory = [...(next.editHistory || []), ...updates.editHistory];
@@ -795,6 +798,7 @@ export async function updateAtBatEvent(
     | 'awayScoreAfter'
     | 'homeScoreAfter'
     | 'outsRecorded'
+    | 'isWalkOff'
   >>
 ): Promise<void> {
   const db = await initEventLogDB();

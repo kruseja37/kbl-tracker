@@ -4,8 +4,8 @@
  * SMB4 has a Mojo system that affects player performance.
  * This engine tracks Mojo states, triggers, effects, and carryover.
  *
- * Per MOJO_FITNESS_SYSTEM_SPEC.md:
- * - 5-level scale from -2 (Rattled) to +2 (Jacked)
+ * Per MODE_2_V1_FINAL.md:
+ * - 6-level scale from -2 (Rattled) to +3 (Jacked)
  * - Mojo affects stats by ~10% per level
  * - Mojo changes based on in-game events
  * - Partial carryover between games (30%)
@@ -17,9 +17,9 @@
 // TYPES
 // ============================================
 
-export type MojoLevel = -2 | -1 | 0 | 1 | 2;
+export type MojoLevel = -2 | -1 | 0 | 1 | 2 | 3;
 
-export type MojoName = 'RATTLED' | 'TENSE' | 'NORMAL' | 'LOCKED_IN' | 'JACKED';
+export type MojoName = 'RATTLED' | 'TENSE' | 'NORMAL' | 'LOCKED_IN' | 'ON_FIRE' | 'JACKED';
 
 export interface MojoState {
   level: MojoLevel;
@@ -106,6 +106,8 @@ export interface MojoAmplification {
  * Mojo state definitions
  * Per spec Section 2.1
  */
+export const MOJO_LEVELS: MojoLevel[] = [-2, -1, 0, 1, 2, 3];
+
 export const MOJO_STATES: Record<MojoLevel, MojoState> = {
   [-2]: {
     level: -2,
@@ -132,11 +134,18 @@ export const MOJO_STATES: Record<MojoLevel, MojoState> = {
     level: 1,
     name: 'LOCKED_IN',
     displayName: 'Locked In',
-    emoji: '🔥🔥',
+    emoji: '🔥',
     statMultiplier: 1.10, // +10%
   },
   [2]: {
     level: 2,
+    name: 'ON_FIRE',
+    displayName: 'On Fire',
+    emoji: '🔥🔥',
+    statMultiplier: 1.14, // +14%
+  },
+  [3]: {
+    level: 3,
     name: 'JACKED',
     displayName: 'Jacked',
     emoji: '🔥🔥🔥',
@@ -221,17 +230,17 @@ export function getMojoEmoji(level: MojoLevel): string {
 }
 
 /**
- * Clamp a Mojo value to valid range (-2 to +2)
+ * Clamp a Mojo value to valid range (-2 to +3)
  */
 export function clampMojo(value: number): MojoLevel {
-  return Math.max(-2, Math.min(2, Math.round(value))) as MojoLevel;
+  return Math.max(-2, Math.min(3, Math.round(value))) as MojoLevel;
 }
 
 /**
  * Check if a value is a valid MojoLevel
  */
 export function isValidMojoLevel(value: number): value is MojoLevel {
-  return value >= -2 && value <= 2 && Number.isInteger(value);
+  return value >= -2 && value <= 3 && Number.isInteger(value);
 }
 
 // ============================================
@@ -581,7 +590,8 @@ export function getMojoFameModifier(mojo: MojoLevel): number {
     [-1]: 1.15, // +15% for Tense
     [0]: 1.00,  // Baseline
     [1]: 0.90,  // -10% for Locked In
-    [2]: 0.80,  // -20% for Jacked
+    [2]: 0.85,  // -15% for On Fire
+    [3]: 0.80,  // -20% for Jacked
   };
   return modifiers[mojo];
 }
@@ -596,7 +606,8 @@ export function getMojoWARMultiplier(mojo: MojoLevel): number {
     [-1]: 1.07, // +7% for Tense
     [0]: 1.00,  // Baseline
     [1]: 0.95,  // -5% for Locked In
-    [2]: 0.90,  // -10% for Jacked
+    [2]: 0.93,  // -7% for On Fire
+    [3]: 0.90,  // -10% for Jacked
   };
   return multipliers[mojo];
 }
@@ -611,7 +622,8 @@ export function getMojoClutchMultiplier(mojo: MojoLevel): number {
     [-1]: 1.15, // +15% for Tense
     [0]: 1.00,  // Baseline
     [1]: 0.90,  // -10% for Locked In
-    [2]: 0.85,  // -15% clutch credit for Jacked
+    [2]: 0.88,  // -12% clutch credit for On Fire
+    [3]: 0.85,  // -15% clutch credit for Jacked
   };
   return multipliers[mojo];
 }
@@ -839,6 +851,7 @@ export function createPlayerMojoSplits(playerId: string, season: number): Player
       [0]: createEmptyMojoSplitStats(),
       [1]: createEmptyMojoSplitStats(),
       [2]: createEmptyMojoSplitStats(),
+      [3]: createEmptyMojoSplitStats(),
     },
   };
 }
@@ -878,6 +891,7 @@ export function getMojoColor(mojo: MojoLevel): string {
     [0]: '#6b7280',  // gray-500
     [1]: '#22c55e',  // green-500
     [2]: '#16a34a',  // green-600
+    [3]: '#15803d',  // green-700
   };
   return colors[mojo];
 }
@@ -886,8 +900,8 @@ export function getMojoColor(mojo: MojoLevel): string {
  * Get Mojo bar fill percentage (0-100)
  */
 export function getMojoBarFill(mojo: MojoLevel): number {
-  // Map -2 to +2 → 0 to 100
-  return ((mojo + 2) / 4) * 100;
+  // Map -2 to +3 → 0 to 100
+  return ((mojo + 2) / 5) * 100;
 }
 
 /**

@@ -9,6 +9,7 @@
 import { useState, useMemo } from "react";
 import {
   type MojoLevel,
+  MOJO_LEVELS,
   MOJO_STATES,
   getMojoColor,
 } from "../../../engines/mojoEngine";
@@ -39,7 +40,6 @@ interface MojoFitnessEditorProps {
   onResetAll: () => void;
 }
 
-const MOJO_LEVELS: MojoLevel[] = [-2, -1, 0, 1, 2];
 const FITNESS_STATE_LIST: FitnessState[] = ['JUICED', 'FIT', 'WELL', 'STRAINED', 'WEAK', 'HURT'];
 
 function needsRest(fitness: FitnessState): boolean {

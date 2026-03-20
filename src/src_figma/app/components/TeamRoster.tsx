@@ -3,7 +3,7 @@ import { useDrag, useDrop } from 'react-dnd';
 // EXH-036: Import Mojo/Fitness types for editing
 import type { MojoLevel } from '../../../engines/mojoEngine';
 import type { FitnessState } from '../../../engines/fitnessEngine';
-import { MOJO_STATES, getMojoColor } from '../../../engines/mojoEngine';
+import { MOJO_LEVELS, MOJO_STATES, getMojoColor } from '../../../engines/mojoEngine';
 import { FITNESS_STATES } from '../../../engines/fitnessEngine';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -36,6 +36,7 @@ interface PitcherStats {
 
 export interface Player {
   name: string;
+  fullName?: string;
   position?: string; // undefined for bench/substituted out players
   battingOrder?: number; // undefined for bench players
   stats: PlayerStats;
@@ -66,6 +67,7 @@ export interface Player {
 
 export interface Pitcher {
   name: string;
+  fullName?: string;
   stats: PitcherStats;
   throwingHand: 'L' | 'R';
   throws?: 'L' | 'R';
@@ -515,7 +517,7 @@ function PlayerCardModal({ player, pitcher, onClose, teamColor, teamName, curren
                 <span className="text-[7px] text-[#E8E8D8] w-12" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>MOJO</span>
                 {isEditingMojo ? (
                   <div className="flex gap-1 flex-wrap">
-                    {([-2, -1, 0, 1, 2] as MojoLevel[]).map((level) => (
+                    {MOJO_LEVELS.map((level) => (
                       <button
                         key={level}
                         onClick={() => {

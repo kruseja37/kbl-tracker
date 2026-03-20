@@ -6,7 +6,7 @@
  * Mojo is USER-CONTROLLED ONLY — the user sets each player's mojo
  * from the in-game roster view. No automatic changes.
  *
- * 5-level scale: -2 (Rattled) to +2 (Jacked)
+ * 6-level scale: -2 (Rattled) to +3 (Jacked)
  *
  * @see MOJO_FITNESS_SYSTEM_SPEC.md Section 2
  */
@@ -38,7 +38,7 @@ export interface UseMojoStateReturn {
   /** Set a player's mojo level (user-controlled) */
   setPlayerMojo: (playerId: string, level: MojoLevel) => void;
 
-  /** Adjust mojo by delta (clamped to -2..+2), returns new level */
+  /** Adjust mojo by delta (clamped to -2..+3), returns new level */
   adjustPlayerMojo: (playerId: string, delta: number) => MojoLevel;
 }
 

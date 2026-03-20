@@ -14,6 +14,10 @@ function formatName(first: string, last: string) {
   return `${initial}. ${upper}`;
 }
 
+function buildFullName(first: string, last: string) {
+  return `${first ?? ''} ${last ?? ''}`.trim() || formatName(first, last);
+}
+
 export function collectFranchiseRosterPlayerIds(
   rosters: Array<{ players: TeamRosterPlayer[]; pitchers: TeamRosterPitcher[] }>
 ): Set<string> {
@@ -126,9 +130,11 @@ export async function buildFranchiseGameTrackerRoster(
   const players: TeamRosterPlayer[] = [];
   let order = 1;
   for (const [pos, p] of filledPositions) {
+    const fullName = buildFullName(p.firstName, p.lastName);
     players.push({
       playerId: p.id,
       name: formatName(p.firstName, p.lastName),
+      fullName,
       position: pos,
       battingOrder: order++,
       stats: { ...emptyBatterStats },
@@ -150,9 +156,11 @@ export async function buildFranchiseGameTrackerRoster(
 
   if (pitcherPlayers.length > 0) {
     const starter = pitcherPlayers.find(p => p.primaryPosition === 'SP') || pitcherPlayers[0];
+    const fullName = buildFullName(starter.firstName, starter.lastName);
     players.push({
       playerId: starter.id,
       name: formatName(starter.firstName, starter.lastName),
+      fullName,
       position: 'P',
       battingOrder: order++,
       stats: { ...emptyBatterStats },
@@ -172,9 +180,11 @@ export async function buildFranchiseGameTrackerRoster(
 
   const benchPlayers = positionPlayers.filter(p => !assigned.has(p));
   for (const p of benchPlayers) {
+    const fullName = buildFullName(p.firstName, p.lastName);
     players.push({
       playerId: p.id,
       name: formatName(p.firstName, p.lastName),
+      fullName,
       position: p.primaryPosition,
       battingOrder: undefined,
       stats: { ...emptyBatterStats },
@@ -198,9 +208,11 @@ export async function buildFranchiseGameTrackerRoster(
   const starterPitcher = pitcherPlayers.find(p => p.primaryPosition === 'SP') || pitcherPlayers[0];
   pitcherPlayers.forEach(p => {
     const isStarter = starterPitcher && p.id === starterPitcher.id;
+    const fullName = buildFullName(p.firstName, p.lastName);
     pitchers.push({
       playerId: p.id,
       name: formatName(p.firstName, p.lastName),
+      fullName,
       stats: { ...emptyPitcherStats },
       throwingHand: p.throws,
       isStarter: isStarter || false,

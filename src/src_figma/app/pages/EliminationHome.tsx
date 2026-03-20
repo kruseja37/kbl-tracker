@@ -293,6 +293,7 @@ export function EliminationHome() {
           playoffGameNumber: nextGameNumber,
           playoffId: playoffConfig.id,
           totalInnings: playoffConfig.inningsPerGame,
+          useDH: playoffConfig.useDH,
         },
       });
     } catch (err) {

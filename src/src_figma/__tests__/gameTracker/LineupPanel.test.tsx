@@ -288,7 +288,7 @@ describe('LineupPanel Mojo/Fitness Display', () => {
       <LineupPanel
         {...defaultProps}
         playerMojoLevels={{
-          p1: 2, // Jacked - 🔥🔥🔥
+          p1: 3, // Jacked - 🔥🔥🔥
           p2: -2, // Rattled - 😱
         }}
       />

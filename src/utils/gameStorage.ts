@@ -12,17 +12,21 @@ import type {
   Personality,
   PitchType,
   Position,
-} from './leagueBuilderStorage';
-import { getTrackerDb } from './trackerDb';
+} from "./leagueBuilderStorage";
+import { getTrackerDb } from "./trackerDb";
 
-export type CompetitionType = 'exhibition' | 'franchise' | 'playoff' | 'elimination';
+export type CompetitionType =
+  | "exhibition"
+  | "franchise"
+  | "playoff"
+  | "elimination";
 
 // Store names
 const STORES = {
-  CURRENT_GAME: 'currentGame',
-  COMPLETED_GAMES: 'completedGames',
-  PLAYER_GAME_STATS: 'playerGameStats',
-  PITCHER_GAME_STATS: 'pitcherGameStats',
+  CURRENT_GAME: "currentGame",
+  COMPLETED_GAMES: "completedGames",
+  PLAYER_GAME_STATS: "playerGameStats",
+  PITCHER_GAME_STATS: "pitcherGameStats",
 } as const;
 
 // ============================================
@@ -46,20 +50,32 @@ export async function initDatabase(): Promise<IDBDatabase> {
  */
 
 export interface PersistedGameState {
-  id: string;  // Always 'current' for the active game
+  id: string; // Always 'current' for the active game
   gameId: string;
   savedAt: number;
 
   // Core game state
   inning: number;
-  halfInning: 'TOP' | 'BOTTOM';
+  halfInning: "TOP" | "BOTTOM";
   outs: number;
   homeScore: number;
   awayScore: number;
   bases: {
-    first: { playerId: string; playerName: string; inheritedFrom?: string | null } | null;
-    second: { playerId: string; playerName: string; inheritedFrom?: string | null } | null;
-    third: { playerId: string; playerName: string; inheritedFrom?: string | null } | null;
+    first: {
+      playerId: string;
+      playerName: string;
+      inheritedFrom?: string | null;
+    } | null;
+    second: {
+      playerId: string;
+      playerName: string;
+      inheritedFrom?: string | null;
+    } | null;
+    third: {
+      playerId: string;
+      playerName: string;
+      inheritedFrom?: string | null;
+    } | null;
   };
   currentBatterIndex: number;
   atBatCount: number;
@@ -77,35 +93,38 @@ export interface PersistedGameState {
   currentPitcherName?: string;
 
   // Player stats (batting)
-  playerStats: Record<string, {
-    playerName: string;
-    teamId: string;
-    pa: number;
-    ab: number;
-    h: number;
-    singles: number;
-    doubles: number;
-    triples: number;
-    hr: number;
-    rbi: number;
-    r: number;
-    bb: number;
-    hbp: number;  
-    k: number;
-    sb: number;
-    cs: number;
-    sf: number;   
-    sh: number;   
-    gidp: number; 
-    putouts: number;
-    assists: number;
-    fieldingErrors: number;
-    // --- NEW SMB4 METRICS ---
-    d3kOutcomes?: number;
-    divingCatches?: number;
-    robberies?: number;
-    nutshots?: number;
-  }>;
+  playerStats: Record<
+    string,
+    {
+      playerName: string;
+      teamId: string;
+      pa: number;
+      ab: number;
+      h: number;
+      singles: number;
+      doubles: number;
+      triples: number;
+      hr: number;
+      rbi: number;
+      r: number;
+      bb: number;
+      hbp: number;
+      k: number;
+      sb: number;
+      cs: number;
+      sf: number;
+      sh: number;
+      gidp: number;
+      putouts: number;
+      assists: number;
+      fieldingErrors: number;
+      // --- NEW SMB4 METRICS ---
+      d3kOutcomes?: number;
+      divingCatches?: number;
+      robberies?: number;
+      nutshots?: number;
+    }
+  >;
 
   // Pitcher stats (accumulated)
   pitcherGameStats: Array<{
@@ -130,7 +149,7 @@ export interface PersistedGameState {
     firstInningRuns: number;
     basesLoadedWalks: number;
     inningsComplete: number;
-    decision: 'W' | 'L' | 'ND' | null;
+    decision: "W" | "L" | "ND" | null;
     save: boolean;
     hold: boolean;
     blownSave: boolean;
@@ -147,9 +166,9 @@ export interface PersistedGameState {
     playerName: string;
     playerTeam: string;
     fameValue: number;
-    fameType: 'bonus' | 'boner';
+    fameType: "bonus" | "boner";
     inning: number;
-    halfInning: 'TOP' | 'BOTTOM';
+    halfInning: "TOP" | "BOTTOM";
     timestamp: number;
     autoDetected: boolean;
     description?: string;
@@ -162,7 +181,7 @@ export interface PersistedGameState {
     mwarImpact: number;
     description: string;
   }>;
-  
+
   moraleShifts?: Array<{
     teamId: string;
     shiftAmount: number;
@@ -199,8 +218,16 @@ export interface PersistedGameState {
   statsScopeId?: string;
   competitionType?: CompetitionType;
   competitionId?: string;
-  awayLineup?: Array<{ playerId: string; playerName: string; position: string }>;
-  homeLineup?: Array<{ playerId: string; playerName: string; position: string }>;
+  awayLineup?: Array<{
+    playerId: string;
+    playerName: string;
+    position: string;
+  }>;
+  homeLineup?: Array<{
+    playerId: string;
+    playerName: string;
+    position: string;
+  }>;
   awayLineupState?: {
     lineup: Array<{
       playerId: string;
@@ -259,8 +286,8 @@ export interface PersistedGameState {
     runners: Array<{
       runnerId: string;
       runnerName: string;
-      currentBase: '1B' | '2B' | '3B' | 'HOME' | 'OUT' | null;
-      startingBase: '1B' | '2B' | '3B' | 'HOME';
+      currentBase: "1B" | "2B" | "3B" | "HOME" | "OUT" | null;
+      startingBase: "1B" | "2B" | "3B" | "HOME";
       howReached: string;
       responsiblePitcherId: string;
       responsiblePitcherName: string;
@@ -279,7 +306,7 @@ export interface PersistedGameState {
   substitutionLog?: Array<{
     type: string;
     inning: number;
-    halfInning: 'TOP' | 'BOTTOM';
+    halfInning: "TOP" | "BOTTOM";
     outgoingPlayerId: string;
     outgoingPlayerName: string;
     incomingPlayerId: string;
@@ -296,9 +323,9 @@ export interface PlayerRatingsSnapshot {
   nickname?: string;
   hometown?: { city: string; state: string };
   age: number;
-  gender: 'M' | 'F';
-  bats: 'L' | 'R' | 'S';
-  throws: 'L' | 'R';
+  gender: "M" | "F";
+  bats: "L" | "R" | "S";
+  throws: "L" | "R";
   primaryPosition: Position;
   secondaryPosition?: Position;
   power: number;
@@ -321,21 +348,23 @@ export interface PlayerRatingsSnapshot {
   salary: number;
 }
 
-export async function saveCurrentGame(state: PersistedGameState): Promise<void> {
+export async function saveCurrentGame(
+  state: PersistedGameState,
+): Promise<void> {
   const db = await initDatabase();
   const record: PersistedGameState = {
     ...state,
-    id: 'current',
+    id: "current",
     savedAt: Date.now(),
   };
 
   return new Promise((resolve, reject) => {
-    const transaction = db.transaction(STORES.CURRENT_GAME, 'readwrite');
+    const transaction = db.transaction(STORES.CURRENT_GAME, "readwrite");
     const store = transaction.objectStore(STORES.CURRENT_GAME);
     const request = store.put(record);
 
     request.onerror = () => {
-      console.error('Failed to save current game:', request.error);
+      console.error("Failed to save current game:", request.error);
       reject(request.error);
     };
     request.onsuccess = () => resolve();
@@ -346,12 +375,12 @@ export async function loadCurrentGame(): Promise<PersistedGameState | null> {
   const db = await initDatabase();
 
   return new Promise((resolve, reject) => {
-    const transaction = db.transaction(STORES.CURRENT_GAME, 'readonly');
+    const transaction = db.transaction(STORES.CURRENT_GAME, "readonly");
     const store = transaction.objectStore(STORES.CURRENT_GAME);
-    const request = store.get('current');
+    const request = store.get("current");
 
     request.onerror = () => {
-      console.error('Failed to load current game:', request.error);
+      console.error("Failed to load current game:", request.error);
       reject(request.error);
     };
     request.onsuccess = () => {
@@ -364,12 +393,12 @@ export async function clearCurrentGame(): Promise<void> {
   const db = await initDatabase();
 
   return new Promise((resolve, reject) => {
-    const transaction = db.transaction(STORES.CURRENT_GAME, 'readwrite');
+    const transaction = db.transaction(STORES.CURRENT_GAME, "readwrite");
     const store = transaction.objectStore(STORES.CURRENT_GAME);
-    const request = store.delete('current');
+    const request = store.delete("current");
 
     request.onerror = () => {
-      console.error('Failed to clear current game:', request.error);
+      console.error("Failed to clear current game:", request.error);
       reject(request.error);
     };
     request.onsuccess = () => resolve();
@@ -401,15 +430,15 @@ export interface CompletedGameRecord {
   homeTeamName: string;
   finalScore: { away: number; home: number };
   innings: number;
-  fameEvents: PersistedGameState['fameEvents'];
-  playerStats: PersistedGameState['playerStats'];
-  pitcherGameStats: PersistedGameState['pitcherGameStats'];
+  fameEvents: PersistedGameState["fameEvents"];
+  playerStats: PersistedGameState["playerStats"];
+  pitcherGameStats: PersistedGameState["pitcherGameStats"];
   activityLog?: string[];
   inningScores?: { away: number; home: number }[];
   // --- NEW: CATCH THE ADVANCED ARRAYS ---
-  managerDecisions?: PersistedGameState['managerDecisions'];
-  moraleShifts?: PersistedGameState['moraleShifts'];
-  playerRatingsSnapshots?: PersistedGameState['playerRatingsSnapshots'];
+  managerDecisions?: PersistedGameState["managerDecisions"];
+  moraleShifts?: PersistedGameState["moraleShifts"];
+  playerRatingsSnapshots?: PersistedGameState["playerRatingsSnapshots"];
 }
 
 // ============================================
@@ -420,9 +449,9 @@ export interface CompletedGameRecord {
 export interface LineupEntry {
   playerId: string;
   playerName: string;
-  battingOrder: number;              // 1-9
-  fieldPosition: string;            // Position on field (e.g. 'SS', 'CF')
-  primaryPosition?: string;         // Roster position (for display context)
+  battingOrder: number; // 1-9
+  fieldPosition: string; // Position on field (e.g. 'SS', 'CF')
+  primaryPosition?: string; // Roster position (for display context)
 }
 
 /**
@@ -450,7 +479,7 @@ export interface GameRecord extends CompletedGameRecord {
   };
 
   // Game environment
-  lighting?: 'day' | 'night' | 'hazy';
+  lighting?: "day" | "night" | "hazy";
 
   // Narrative enrichment (populated at game end)
   playersOfTheGame?: {
@@ -458,8 +487,13 @@ export interface GameRecord extends CompletedGameRecord {
     second?: string;
     third?: string;
   };
-  gameStoryArc?: 'blowout' | 'pitchers_duel' | 'comeback'
-               | 'walk_off' | 'extra_innings' | 'slugfest';
+  gameStoryArc?:
+    | "blowout"
+    | "pitchers_duel"
+    | "comeback"
+    | "walk_off"
+    | "extra_innings"
+    | "slugfest";
   topMoments?: { eventId: string; wpa: number; description: string }[];
   managerMoments?: string[];
   beatReporterRecap?: string;
@@ -471,16 +505,31 @@ export interface GameRecord extends CompletedGameRecord {
  * Returns a startingLineups object suitable for GameRecord.
  */
 export function captureStartingLineups(
-  awayLineup: Array<{ playerId: string; playerName: string; position: string; battingOrder?: number }>,
-  homeLineup: Array<{ playerId: string; playerName: string; position: string; battingOrder?: number }>,
+  awayLineup: Array<{
+    playerId: string;
+    playerName: string;
+    position: string;
+    battingOrder?: number;
+  }>,
+  homeLineup: Array<{
+    playerId: string;
+    playerName: string;
+    position: string;
+    battingOrder?: number;
+  }>,
 ): { away: LineupEntry[]; home: LineupEntry[] } {
   const mapToLineupEntry = (
-    players: Array<{ playerId: string; playerName: string; position: string; battingOrder?: number }>,
+    players: Array<{
+      playerId: string;
+      playerName: string;
+      position: string;
+      battingOrder?: number;
+    }>,
   ): LineupEntry[] =>
     players.map((p, i) => ({
       playerId: p.playerId,
       playerName: p.playerName,
-      battingOrder: p.battingOrder ?? (i + 1),
+      battingOrder: p.battingOrder ?? i + 1,
       fieldPosition: p.position,
     }));
 
@@ -503,7 +552,7 @@ export async function archiveCompletedGame(
     competitionType?: CompetitionType;
     competitionId?: string;
     leagueId?: string;
-  }
+  },
 ): Promise<void> {
   const db = await initDatabase();
 
@@ -535,12 +584,24 @@ export async function archiveCompletedGame(
   };
 
   return new Promise((resolve, reject) => {
-    const transaction = db.transaction(STORES.COMPLETED_GAMES, 'readwrite');
+    const transaction = db.transaction(STORES.COMPLETED_GAMES, "readwrite");
     const store = transaction.objectStore(STORES.COMPLETED_GAMES);
     const request = store.put(record);
 
+    transaction.onerror = () => {
+      console.error("Failed to archive game transaction:", transaction.error);
+      reject(transaction.error);
+    };
+
+    transaction.onabort = () => {
+      console.error("Archive game transaction aborted:", transaction.error);
+      reject(
+        transaction.error ?? new Error("Archive game transaction aborted"),
+      );
+    };
+
     request.onerror = () => {
-      console.error('Failed to archive game:', request.error);
+      console.error("Failed to archive game:", request.error);
       reject(request.error);
     };
 
@@ -566,7 +627,7 @@ export async function archiveBatchGameResult(params: {
   const record: CompletedGameRecord = {
     gameId: `batch-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     date: Date.now(),
-    seasonId: params.seasonId || 'season-1',
+    seasonId: params.seasonId || "season-1",
     seasonNumber: 1,
     stadiumName: null,
     awayTeamId: params.awayTeamId,
@@ -583,7 +644,7 @@ export async function archiveBatchGameResult(params: {
   };
 
   return new Promise((resolve, reject) => {
-    const transaction = db.transaction(STORES.COMPLETED_GAMES, 'readwrite');
+    const transaction = db.transaction(STORES.COMPLETED_GAMES, "readwrite");
     const store = transaction.objectStore(STORES.COMPLETED_GAMES);
     const request = store.put(record);
     request.onerror = () => reject(request.error);
@@ -594,19 +655,21 @@ export async function archiveBatchGameResult(params: {
 /**
  * Get recent completed games
  */
-export async function getRecentGames(limit: number = 10): Promise<CompletedGameRecord[]> {
+export async function getRecentGames(
+  limit: number = 10,
+): Promise<CompletedGameRecord[]> {
   const db = await initDatabase();
 
   return new Promise((resolve, reject) => {
-    const transaction = db.transaction(STORES.COMPLETED_GAMES, 'readonly');
+    const transaction = db.transaction(STORES.COMPLETED_GAMES, "readonly");
     const store = transaction.objectStore(STORES.COMPLETED_GAMES);
-    const index = store.index('date');
-    const request = index.openCursor(null, 'prev');  // Descending by date
+    const index = store.index("date");
+    const request = index.openCursor(null, "prev"); // Descending by date
 
     const results: CompletedGameRecord[] = [];
 
     request.onerror = () => {
-      console.error('Failed to get recent games:', request.error);
+      console.error("Failed to get recent games:", request.error);
       reject(request.error);
     };
 
@@ -622,16 +685,18 @@ export async function getRecentGames(limit: number = 10): Promise<CompletedGameR
   });
 }
 
-export async function getCompletedGameById(gameId: string): Promise<CompletedGameRecord | null> {
+export async function getCompletedGameById(
+  gameId: string,
+): Promise<CompletedGameRecord | null> {
   const db = await initDatabase();
 
   return new Promise((resolve, reject) => {
-    const transaction = db.transaction(STORES.COMPLETED_GAMES, 'readonly');
+    const transaction = db.transaction(STORES.COMPLETED_GAMES, "readonly");
     const store = transaction.objectStore(STORES.COMPLETED_GAMES);
     const request = store.get(gameId);
 
     request.onerror = () => {
-      console.error('Failed to load completed game:', request.error);
+      console.error("Failed to load completed game:", request.error);
       reject(request.error);
     };
 
@@ -645,12 +710,12 @@ export async function getAllCompletedGames(): Promise<CompletedGameRecord[]> {
   const db = await initDatabase();
 
   return new Promise((resolve, reject) => {
-    const transaction = db.transaction(STORES.COMPLETED_GAMES, 'readonly');
+    const transaction = db.transaction(STORES.COMPLETED_GAMES, "readonly");
     const store = transaction.objectStore(STORES.COMPLETED_GAMES);
     const request = store.getAll();
 
     request.onerror = () => {
-      console.error('Failed to load completed games:', request.error);
+      console.error("Failed to load completed games:", request.error);
       reject(request.error);
     };
 
@@ -669,14 +734,17 @@ let saveTimeout: ReturnType<typeof setTimeout> | null = null;
 /**
  * Debounced save - prevents excessive writes during rapid state changes
  */
-export function debouncedSaveCurrentGame(state: PersistedGameState, delay: number = 500): void {
+export function debouncedSaveCurrentGame(
+  state: PersistedGameState,
+  delay: number = 500,
+): void {
   if (saveTimeout) {
     clearTimeout(saveTimeout);
   }
 
   saveTimeout = setTimeout(() => {
-    saveCurrentGame(state).catch(err => {
-      console.error('Auto-save failed:', err);
+    saveCurrentGame(state).catch((err) => {
+      console.error("Auto-save failed:", err);
     });
   }, delay);
 }
@@ -690,7 +758,7 @@ export function immediateSaveCurrentGame(state: PersistedGameState): void {
     saveTimeout = null;
   }
 
-  saveCurrentGame(state).catch(err => {
-    console.error('Immediate save failed:', err);
+  saveCurrentGame(state).catch((err) => {
+    console.error("Immediate save failed:", err);
   });
 }

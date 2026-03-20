@@ -2,13 +2,19 @@ import { useNavigate, useLocation, useParams } from "react-router";
 import { Trophy, ChevronDown, ChevronUp, Loader2 } from "lucide-react";
 import { getTeamColors } from "@/config/teamColors";
 import { useState, useEffect } from "react";
-import { getCompletedGameById, type CompletedGameRecord } from "../../utils/gameStorage";
+import {
+  getCompletedGameById,
+  type CompletedGameRecord,
+} from "../../utils/gameStorage";
+import { getGameEvents, type AtBatEvent } from "../../../utils/eventLog";
 
 // Helper to format innings pitched from outs recorded
 function formatIP(outsRecorded: number): string {
   const fullInnings = Math.floor(outsRecorded / 3);
   const partialOuts = outsRecorded % 3;
-  return partialOuts === 0 ? `${fullInnings}.0` : `${fullInnings}.${partialOuts}`;
+  return partialOuts === 0
+    ? `${fullInnings}.0`
+    : `${fullInnings}.${partialOuts}`;
 }
 
 // Helper to format batting average
@@ -29,7 +35,8 @@ interface BadgeData {
   variant?: BadgeVariant;
 }
 
-type FameEventRecord = CompletedGameRecord["fameEvents"] extends Array<infer U> ? U : never;
+type FameEventRecord =
+  CompletedGameRecord["fameEvents"] extends Array<infer U> ? U : never;
 
 const badgeVariantClasses: Record<BadgeVariant, string> = {
   default: "bg-white/10 border-white/30 text-[#E8E8D8]",
@@ -37,7 +44,13 @@ const badgeVariantClasses: Record<BadgeVariant, string> = {
   fame: "bg-[#CC44CC] border-[#CC44CC] text-white",
 };
 
-function SummaryBadge({ label, variant = "default" }: { label: string; variant?: BadgeVariant }) {
+function SummaryBadge({
+  label,
+  variant = "default",
+}: {
+  label: string;
+  variant?: BadgeVariant;
+}) {
   return (
     <span
       className={`inline-flex items-center gap-1 text-[9px] tracking-[0.3em] uppercase px-2 py-0.5 rounded-full border ${badgeVariantClasses[variant]}`}
@@ -55,7 +68,11 @@ function BadgeGroup({ badges }: { badges: BadgeData[] }) {
   return (
     <div className="flex flex-wrap gap-2 mt-2">
       {badges.map((badge, idx) => (
-        <SummaryBadge key={`${badge.label}-${idx}`} label={badge.label} variant={badge.variant} />
+        <SummaryBadge
+          key={`${badge.label}-${idx}`}
+          label={badge.label}
+          variant={badge.variant}
+        />
       ))}
     </div>
   );
@@ -67,7 +84,7 @@ function normalizeBadgeLabel(value: string | undefined): string {
     .replace(/_/g, " ")
     .split(" ")
     .filter(Boolean)
-    .map(word => word[0]?.toUpperCase() + word.slice(1).toLowerCase())
+    .map((word) => word[0]?.toUpperCase() + word.slice(1).toLowerCase())
     .join(" ");
 }
 
@@ -104,7 +121,10 @@ interface PlayerBadgeInputs {
   h: number;
 }
 
-function buildPlayerBadgeData(player: PlayerBadgeInputs, fameMap: Map<string, FameEventRecord[]>): BadgeData[] {
+function buildPlayerBadgeData(
+  player: PlayerBadgeInputs,
+  fameMap: Map<string, FameEventRecord[]>,
+): BadgeData[] {
   const badges: BadgeData[] = [];
   if (player.hr > 0) {
     badges.push({ label: `${player.hr} HR`, variant: "success" });
@@ -122,10 +142,10 @@ function buildPlayerBadgeData(player: PlayerBadgeInputs, fameMap: Map<string, Fa
     badges.push({ label: `${player.bb} BB`, variant: "default" });
   }
   const fameForPlayer = fameMap.get(player.playerId) ?? [];
-  fameForPlayer.forEach(event => {
+  fameForPlayer.forEach((event) => {
     badges.push({ label: getFameBadgeLabel(event), variant: "fame" });
   });
-  return Array.from(new Map(badges.map(b => [b.label, b])).values());
+  return Array.from(new Map(badges.map((b) => [b.label, b])).values());
 }
 
 interface PitcherBadgeInputs {
@@ -140,7 +160,7 @@ interface PitcherBadgeInputs {
 
 function getPitcherBadgeData(
   pitcher: PitcherBadgeInputs,
-  fameMap: Map<string, FameEventRecord[]>
+  fameMap: Map<string, FameEventRecord[]>,
 ): BadgeData[] {
   const badges: BadgeData[] = [];
   if (pitcher.outsRecorded >= 3) {
@@ -163,40 +183,42 @@ function getPitcherBadgeData(
   }
 
   const fameForPitcher = fameMap.get(pitcher.pitcherId) ?? [];
-  fameForPitcher.forEach(event => {
+  fameForPitcher.forEach((event) => {
     badges.push({ label: getFameBadgeLabel(event), variant: "fame" });
   });
 
-  return Array.from(new Map(badges.map(b => [b.label, b])).values());
+  return Array.from(new Map(badges.map((b) => [b.label, b])).values());
 }
 
-export function PostGameSummary({ gameId: gameIdProp }: { gameId?: string } = {}) {
+export function PostGameSummary({
+  gameId: gameIdProp,
+}: { gameId?: string } = {}) {
   const navigate = useNavigate();
   const location = useLocation();
   const { gameId: gameIdFromRoute } = useParams<{ gameId: string }>();
   const gameId = gameIdProp ?? gameIdFromRoute;
   const [boxScoreExpanded, setBoxScoreExpanded] = useState(false);
   const [gameData, setGameData] = useState<CompletedGameRecord | null>(null);
+  const [atBatEvents, setAtBatEvents] = useState<AtBatEvent[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   // Get game mode from navigation state to route back appropriately
   const navigationState = (location.state ?? {}) as {
-    gameMode?: 'exhibition' | 'franchise' | 'playoff' | 'elimination';
+    gameMode?: "exhibition" | "franchise" | "playoff" | "elimination";
     franchiseId?: string;
     eliminationId?: string;
     seasonId?: string;
     statsScopeId?: string;
-    competitionType?: 'exhibition' | 'franchise' | 'playoff' | 'elimination';
+    competitionType?: "exhibition" | "franchise" | "playoff" | "elimination";
     competitionId?: string;
   };
 
-  const gameMode = navigationState?.gameMode || 'franchise';
-  const franchiseId = navigationState?.franchiseId || '1';
+  const gameMode = navigationState?.gameMode;
+  const franchiseId = navigationState?.franchiseId || "1";
   const eliminationId = navigationState?.eliminationId;
   const baseNavigationState = {
     ...navigationState,
-    gameMode,
     franchiseId,
   };
 
@@ -207,6 +229,7 @@ export function PostGameSummary({ gameId: gameIdProp }: { gameId?: string } = {}
     async function loadGameData() {
       // Hard reset prior game state before loading next summary.
       setGameData(null);
+      setAtBatEvents([]);
       setError(null);
       setIsLoading(true);
       setBoxScoreExpanded(false);
@@ -220,10 +243,20 @@ export function PostGameSummary({ gameId: gameIdProp }: { gameId?: string } = {}
       }
 
       try {
-        const data = await getCompletedGameById(gameId);
+        const [data, events] = await Promise.all([
+          getCompletedGameById(gameId),
+          Promise.resolve(getGameEvents(gameId)).catch((eventsError) => {
+            console.warn(
+              "Failed to load at-bat events for WPA fallback:",
+              eventsError,
+            );
+            return [];
+          }),
+        ]);
         if (cancelled) return;
         if (data && data.gameId === gameId) {
           setGameData(data);
+          setAtBatEvents(Array.isArray(events) ? events : []);
         } else {
           setError("Game not found");
         }
@@ -262,7 +295,9 @@ export function PostGameSummary({ gameId: gameIdProp }: { gameId?: string } = {}
     return (
       <div className="min-h-screen bg-[#2a3a2d] text-white p-6 flex items-center justify-center">
         <div className="flex flex-col items-center gap-4">
-          <div className="text-lg text-red-400">{error || "Game data not available"}</div>
+          <div className="text-lg text-red-400">
+            {error || "Game data not available"}
+          </div>
           <button
             onClick={() => navigate("/exhibition")}
             className="bg-[#556B55] border-[3px] border-white px-6 py-3 text-sm hover:bg-[#6B9462]"
@@ -301,7 +336,8 @@ export function PostGameSummary({ gameId: gameIdProp }: { gameId?: string } = {}
       const teamId = normalizeTeamId(stats.teamId);
       const isAway = teamId === normalizedAwayTeamId;
       const plateAppearances = stats.pa;
-      const hasOffensiveLine = plateAppearances > 0 || stats.h > 0 || stats.r > 0 || stats.rbi > 0;
+      const hasOffensiveLine =
+        plateAppearances > 0 || stats.h > 0 || stats.r > 0 || stats.rbi > 0;
 
       return {
         playerId,
@@ -321,6 +357,20 @@ export function PostGameSummary({ gameId: gameIdProp }: { gameId?: string } = {}
       };
     });
 
+  const batterById = new Map(
+    allBatters.map((batter) => [batter.playerId, batter]),
+  );
+  const wpaByBatter = new Map<string, number>();
+  let hasWpaData = false;
+  for (const event of atBatEvents ?? []) {
+    if (!Number.isFinite(event.wpa)) continue;
+    hasWpaData = true;
+    wpaByBatter.set(
+      event.batterId,
+      (wpaByBatter.get(event.batterId) || 0) + event.wpa,
+    );
+  }
+
   // Build pitcher stats
   const allPitchers = gameData.pitcherGameStats
     .filter((pitcher) => {
@@ -332,7 +382,7 @@ export function PostGameSummary({ gameId: gameIdProp }: { gameId?: string } = {}
         Number.isFinite(pitcher.outsRecorded)
       );
     })
-    .map(pitcher => {
+    .map((pitcher) => {
       const teamId = normalizeTeamId(pitcher.teamId);
       const isAway = teamId === normalizedAwayTeamId;
       const outsRecorded = pitcher.outsRecorded;
@@ -357,28 +407,46 @@ export function PostGameSummary({ gameId: gameIdProp }: { gameId?: string } = {}
       };
     });
 
-  const awayPitchers = allPitchers.filter(p => p.isAway);
-  const homePitchers = allPitchers.filter(p => !p.isAway);
-  const awayBatters = allBatters.filter(b => b.isAway && b.hasOffensiveLine);
-  const homeBatters = allBatters.filter(b => !b.isAway && b.hasOffensiveLine);
+  const awayPitchers = allPitchers.filter((p) => p.isAway);
+  const homePitchers = allPitchers.filter((p) => !p.isAway);
+  const awayBatters = allBatters.filter((b) => b.isAway && b.hasOffensiveLine);
+  const homeBatters = allBatters.filter((b) => !b.isAway && b.hasOffensiveLine);
+  type Performer = (typeof allBatters)[number] & { wpa?: number };
+  type WpaPerformer = Performer & { wpa: number };
 
   // Calculate team totals strictly from this game's playerStats rows.
   const awayHits = awayBatters.reduce((sum, batter) => sum + batter.h, 0);
   const homeHits = homeBatters.reduce((sum, batter) => sum + batter.h, 0);
   const awayErrors = allBatters
     .filter((batter) => batter.isAway)
-    .reduce((sum, batter) => sum + gameData.playerStats[batter.playerId].fieldingErrors, 0);
+    .reduce(
+      (sum, batter) =>
+        sum + gameData.playerStats[batter.playerId].fieldingErrors,
+      0,
+    );
   const homeErrors = allBatters
     .filter((batter) => !batter.isAway)
-    .reduce((sum, batter) => sum + gameData.playerStats[batter.playerId].fieldingErrors, 0);
+    .reduce(
+      (sum, batter) =>
+        sum + gameData.playerStats[batter.playerId].fieldingErrors,
+      0,
+    );
 
   // Inning-by-inning scoring from this completed game only.
   const inningScores = gameData.inningScores ?? [];
   const numInnings = inningScores.length;
   const scoreboard = {
     innings: inningScores,
-    away: { runs: gameData.finalScore.away, hits: awayHits, errors: awayErrors },
-    home: { runs: gameData.finalScore.home, hits: homeHits, errors: homeErrors },
+    away: {
+      runs: gameData.finalScore.away,
+      hits: awayHits,
+      errors: awayErrors,
+    },
+    home: {
+      runs: gameData.finalScore.home,
+      hits: homeHits,
+      errors: homeErrors,
+    },
   };
 
   // Determine winner
@@ -386,14 +454,23 @@ export function PostGameSummary({ gameId: gameIdProp }: { gameId?: string } = {}
   const winnerName = homeWon ? homeTeamName : awayTeamName;
   const winnerId = homeWon ? homeTeamId : awayTeamId;
 
-  // Find players of the game from this game's saved batting lines only.
-  const sortedBatters = allBatters
-    .filter(b => b.hasOffensiveLine && Boolean(b.name))
-    .sort((a, b) => {
-    const aScore = a.h * 2 + a.rbi + a.r;
-    const bScore = b.h * 2 + b.rbi + b.r;
-    return bScore - aScore;
-  });
+  // Find players of the game from WPA when available, with batting-line fallback.
+  const sortedBatters = hasWpaData
+    ? Array.from(wpaByBatter.entries())
+        .map(([playerId, wpa]) => {
+          const batter = batterById.get(playerId);
+          return batter ? { ...batter, wpa } : null;
+        })
+        .filter((batter): batter is WpaPerformer => batter !== null)
+        .sort((a, b) => b.wpa - a.wpa || a.name.localeCompare(b.name))
+    : allBatters
+        .filter((b) => b.hasOffensiveLine && Boolean(b.name))
+        .map((batter): Performer => ({ ...batter, wpa: undefined }))
+        .sort((a, b) => {
+          const aScore = a.h * 2 + a.rbi + a.r;
+          const bScore = b.h * 2 + b.rbi + b.r;
+          return bScore - aScore || a.name.localeCompare(b.name);
+        });
 
   const topPerformers = sortedBatters.slice(0, 3);
 
@@ -413,327 +490,441 @@ export function PostGameSummary({ gameId: gameIdProp }: { gameId?: string } = {}
                     <div className="bg-[#DD0000] text-white text-[10px] font-bold px-2 py-1 border-2 border-white">
                       FINAL
                     </div>
-                    <div className="text-white text-lg font-bold tracking-wider" style={{ textShadow: '2px 2px 4px rgba(0,0,0,0.8)' }}>
+                    <div
+                      className="text-white text-lg font-bold tracking-wider"
+                      style={{ textShadow: "2px 2px 4px rgba(0,0,0,0.8)" }}
+                    >
                       POST-GAME REPORT
                     </div>
                   </div>
                   {/* Super Mega Baseball Logo */}
                   <div className="bg-white border-[4px] border-[#0066FF] px-[12px] py-[6px] shadow-[2px_2px_0px_0px_#DD0000]">
-                    <div className="text-[10px] text-[#DD0000] tracking-wide leading-tight font-bold">SUPER MEGA</div>
-                    <div className="text-[13px] text-[#0066FF] tracking-wide leading-tight font-bold">BASEBALL</div>
+                    <div className="text-[10px] text-[#DD0000] tracking-wide leading-tight font-bold">
+                      SUPER MEGA
+                    </div>
+                    <div className="text-[13px] text-[#0066FF] tracking-wide leading-tight font-bold">
+                      BASEBALL
+                    </div>
                   </div>
                 </div>
               </div>
 
               {/* Screen content */}
               <div className="bg-[#2a3a2d] p-6">
-        {/* Final Score Banner - Fenway-style Scoreboard */}
-        <div className="bg-[#556B55] border-[4px] border-[#3d5240] p-2 mb-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.5)]">
-          {/* Stadium name header */}
-          <div className="text-center text-[#E8E8D8] text-xs font-bold tracking-[0.3em] mb-1">
-            {stadiumLabel}
-          </div>
+                {/* Final Score Banner - Fenway-style Scoreboard */}
+                <div className="bg-[#556B55] border-[4px] border-[#3d5240] p-2 mb-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.5)]">
+                  {/* Stadium name header */}
+                  <div className="text-center text-[#E8E8D8] text-xs font-bold tracking-[0.3em] mb-1">
+                    {stadiumLabel}
+                  </div>
 
-          {/* Scoreboard grid */}
-          <div className="grid gap-[1px] mb-2" style={{ gridTemplateColumns: `90px repeat(${numInnings}, 24px) 6px 28px 28px 28px` }}>
-            {/* Header row */}
-            <div></div>
-            {Array.from({ length: numInnings }, (_, i) => i + 1).map(inning => (
-              <div key={inning} className="text-[#E8E8D8] text-[9px] font-bold text-center">{inning}</div>
-            ))}
-            <div></div>
-            <div className="text-[#E8E8D8] text-[9px] font-bold text-center">R</div>
-            <div className="text-[#E8E8D8] text-[9px] font-bold text-center">H</div>
-            <div className="text-[#E8E8D8] text-[9px] font-bold text-center">E</div>
-
-            {/* Away team row */}
-            <div className="text-[#E8E8D8] text-[11px] font-bold flex items-center pl-2" style={{
-              textShadow: '1px 1px 0px rgba(0,0,0,0.7)'
-            }}>{awayTeamName.toUpperCase()}</div>
-            {Array.from({ length: numInnings }, (_, idx) => {
-              const score = scoreboard.innings[idx]?.away;
-              return (
-                <div key={idx} className="bg-[#3d5240] border-2 border-[#2a3a2d] text-[#E8E8D8] text-xs font-bold min-h-[20px] flex items-center justify-center">
-                  {score !== undefined ? score : '-'}
-                </div>
-              );
-            })}
-            <div></div>
-            <div className="bg-[#3d5240] border-2 border-[#2a3a2d] text-[#E8E8D8] text-xs font-bold flex items-center justify-center">{scoreboard.away.runs}</div>
-            <div className="bg-[#3d5240] border-2 border-[#2a3a2d] text-[#E8E8D8] text-xs font-bold flex items-center justify-center">{scoreboard.away.hits}</div>
-            <div className="bg-[#3d5240] border-2 border-[#2a3a2d] text-[#E8E8D8] text-xs font-bold flex items-center justify-center">{scoreboard.away.errors}</div>
-
-            {/* Home team row */}
-            <div className="text-[#E8E8D8] text-[11px] font-bold flex items-center pl-2" style={{
-              textShadow: '1px 1px 0px rgba(0,0,0,0.7)'
-            }}>{homeTeamName.toUpperCase()}</div>
-            {Array.from({ length: numInnings }, (_, idx) => {
-              const score = scoreboard.innings[idx]?.home;
-              return (
-                <div key={idx} className="bg-[#3d5240] border-2 border-[#2a3a2d] text-[#E8E8D8] text-xs font-bold min-h-[20px] flex items-center justify-center">
-                  {score !== undefined ? score : '-'}
-                </div>
-              );
-            })}
-            <div></div>
-            <div className="bg-[#3d5240] border-2 border-[#2a3a2d] text-[#E8E8D8] text-xs font-bold flex items-center justify-center">{scoreboard.home.runs}</div>
-            <div className="bg-[#3d5240] border-2 border-[#2a3a2d] text-[#E8E8D8] text-xs font-bold flex items-center justify-center">{scoreboard.home.hits}</div>
-            <div className="bg-[#3d5240] border-2 border-[#2a3a2d] text-[#E8E8D8] text-xs font-bold flex items-center justify-center">{scoreboard.home.errors}</div>
-          </div>
-
-          {/* Bottom indicator row - FINAL message */}
-          <div className="border-t-2 border-[#E8E8D8] pt-2 text-center">
-            <div className="text-sm font-bold" style={{
-              color: getTeamColors(winnerId).secondary || '#C4A853',
-              textShadow: '1px 1px 2px black'
-            }}>★ {winnerName.toUpperCase()} WIN! ★</div>
-          </div>
-        </div>
-
-        <div className="bg-[#1f2b21] border-2 border-[#314437] rounded-md p-3 text-[#E8E8D8] text-xs flex flex-col gap-2 mb-4">
-          <div className="text-[10px] tracking-[0.4em] font-bold text-[#C4A853] uppercase">
-            Activity Log
-          </div>
-          {activityLogEntries.length > 0 ? (
-            <ul className="space-y-1 list-disc list-inside text-[#E8E8D8]">
-              {activityLogEntries.slice(0, 5).map((entry, idx) => (
-                <li key={idx}>{entry}</li>
-              ))}
-            </ul>
-          ) : (
-            <div className="text-[#A8B8A2]">No notable actions recorded during this game.</div>
-          )}
-          <div className="text-[10px] text-[#A8B8A2] uppercase tracking-[0.3em] mt-2">
-            Fame events recorded: {fameCount}
-          </div>
-        </div>
-
-        {/* Players of the game */}
-        {[0, 1, 2].map(rank => {
-          const player = topPerformers[rank];
-          if (!player || player.h === 0) return null;
-          const borderColor = rank === 0 ? '#C4A853' : rank === 1 ? '#E8E8D8' : '#FFFFFF';
-          const label = rank === 0 ? 'POG ★★★' : rank === 1 ? 'POG ★★' : 'POG ★';
-          return (
-            <div
-              key={rank}
-              className="border-[5px] p-4 mb-4"
-              style={{
-                borderColor,
-                backgroundColor: getTeamColors(player.isAway ? awayTeamId : homeTeamId).primary || '#2a3a2d'
-              }}
-            >
-              <div className="flex items-center gap-2 mb-2">
-                <Trophy className="w-5 h-5 text-white" />
-                <div className="text-sm text-white">{label}</div>
-              </div>
-              <div className="text-lg text-white">{player.name}</div>
-              <div className="text-[8px] text-white/80 space-y-1">
-                <div className="flex items-center gap-2">
-                  <span className="font-bold">{player.h}</span>
-                  <span>-</span>
-                  <span>{player.ab} AB</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span>{player.bb} BB</span>
-                  <span>•</span>
-                  <span>{player.so} SO</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span>{player.rbi} RBI</span>
-                  <span>•</span>
-                  <span>{player.r} R</span>
-                </div>
-              </div>
-            </div>
-          );
-        })}
-
-        {/* Box score preview */}
-        <div className="bg-[#6B9462] border-[5px] border-[#4A6844] p-4 mb-4">
-          <button
-            onClick={() => setBoxScoreExpanded(!boxScoreExpanded)}
-            className="w-full text-center hover:opacity-80 transition-opacity flex items-center justify-center gap-2"
-          >
-            <div className="text-sm text-[#E8E8D8]">BOX SCORE</div>
-            {boxScoreExpanded ? (
-              <ChevronUp className="w-4 h-4 text-[#E8E8D8]" />
-            ) : (
-              <ChevronDown className="w-4 h-4 text-[#E8E8D8]" />
-            )}
-          </button>
-
-          {boxScoreExpanded && (
-            <div className="space-y-4 mt-3">
-              {/* Away Team Batting */}
-              {awayBatters.length > 0 && (
-                <div>
-                  <div className="text-[10px] text-[#E8E8D8] mb-2 font-bold">{awayTeamName.toUpperCase()} BATTING</div>
-                  <div className="text-[7px]">
-                    <div className="grid grid-cols-8 gap-1 mb-1 text-[#E8E8D8]/60">
-                      <div className="col-span-2 text-left">BATTER</div>
-                      <div className="text-center">AB</div>
-                      <div className="text-center">R</div>
-                      <div className="text-center">H</div>
-                      <div className="text-center">RBI</div>
-                      <div className="text-center">BB</div>
-                      <div className="text-center">SO</div>
+                  {/* Scoreboard grid */}
+                  <div
+                    className="grid gap-[1px] mb-2"
+                    style={{
+                      gridTemplateColumns: `90px repeat(${numInnings}, 24px) 6px 28px 28px 28px`,
+                    }}
+                  >
+                    {/* Header row */}
+                    <div></div>
+                    {Array.from({ length: numInnings }, (_, i) => i + 1).map(
+                      (inning) => (
+                        <div
+                          key={inning}
+                          className="text-[#E8E8D8] text-[9px] font-bold text-center"
+                        >
+                          {inning}
+                        </div>
+                      ),
+                    )}
+                    <div></div>
+                    <div className="text-[#E8E8D8] text-[9px] font-bold text-center">
+                      R
                     </div>
-                    {awayBatters.map((batter, idx) => (
-                      <div key={`${batter.playerId}-${idx}`} className="grid grid-cols-8 gap-1 text-[#E8E8D8] py-[2px]">
-                        <div className="col-span-2 text-left">{batter.name}</div>
-                        <div className="text-center">{batter.ab}</div>
-                        <div className="text-center">{batter.r}</div>
-                        <div className="text-center">{batter.h}</div>
-                        <div className="text-center">{batter.rbi}</div>
-                        <div className="text-center">{batter.bb}</div>
-                        <div className="text-center">{batter.so}</div>
-                      </div>
-                    ))}
+                    <div className="text-[#E8E8D8] text-[9px] font-bold text-center">
+                      H
+                    </div>
+                    <div className="text-[#E8E8D8] text-[9px] font-bold text-center">
+                      E
+                    </div>
+
+                    {/* Away team row */}
+                    <div
+                      className="text-[#E8E8D8] text-[11px] font-bold flex items-center pl-2"
+                      style={{
+                        textShadow: "1px 1px 0px rgba(0,0,0,0.7)",
+                      }}
+                    >
+                      {awayTeamName.toUpperCase()}
+                    </div>
+                    {Array.from({ length: numInnings }, (_, idx) => {
+                      const score = scoreboard.innings[idx]?.away;
+                      return (
+                        <div
+                          key={idx}
+                          className="bg-[#3d5240] border-2 border-[#2a3a2d] text-[#E8E8D8] text-xs font-bold min-h-[20px] flex items-center justify-center"
+                        >
+                          {score !== undefined ? score : "-"}
+                        </div>
+                      );
+                    })}
+                    <div></div>
+                    <div className="bg-[#3d5240] border-2 border-[#2a3a2d] text-[#E8E8D8] text-xs font-bold flex items-center justify-center">
+                      {scoreboard.away.runs}
+                    </div>
+                    <div className="bg-[#3d5240] border-2 border-[#2a3a2d] text-[#E8E8D8] text-xs font-bold flex items-center justify-center">
+                      {scoreboard.away.hits}
+                    </div>
+                    <div className="bg-[#3d5240] border-2 border-[#2a3a2d] text-[#E8E8D8] text-xs font-bold flex items-center justify-center">
+                      {scoreboard.away.errors}
+                    </div>
+
+                    {/* Home team row */}
+                    <div
+                      className="text-[#E8E8D8] text-[11px] font-bold flex items-center pl-2"
+                      style={{
+                        textShadow: "1px 1px 0px rgba(0,0,0,0.7)",
+                      }}
+                    >
+                      {homeTeamName.toUpperCase()}
+                    </div>
+                    {Array.from({ length: numInnings }, (_, idx) => {
+                      const score = scoreboard.innings[idx]?.home;
+                      return (
+                        <div
+                          key={idx}
+                          className="bg-[#3d5240] border-2 border-[#2a3a2d] text-[#E8E8D8] text-xs font-bold min-h-[20px] flex items-center justify-center"
+                        >
+                          {score !== undefined ? score : "-"}
+                        </div>
+                      );
+                    })}
+                    <div></div>
+                    <div className="bg-[#3d5240] border-2 border-[#2a3a2d] text-[#E8E8D8] text-xs font-bold flex items-center justify-center">
+                      {scoreboard.home.runs}
+                    </div>
+                    <div className="bg-[#3d5240] border-2 border-[#2a3a2d] text-[#E8E8D8] text-xs font-bold flex items-center justify-center">
+                      {scoreboard.home.hits}
+                    </div>
+                    <div className="bg-[#3d5240] border-2 border-[#2a3a2d] text-[#E8E8D8] text-xs font-bold flex items-center justify-center">
+                      {scoreboard.home.errors}
+                    </div>
+                  </div>
+
+                  {/* Bottom indicator row - FINAL message */}
+                  <div className="border-t-2 border-[#E8E8D8] pt-2 text-center">
+                    <div
+                      className="text-sm font-bold"
+                      style={{
+                        color: getTeamColors(winnerId).secondary || "#C4A853",
+                        textShadow: "1px 1px 2px black",
+                      }}
+                    >
+                      ★ {winnerName.toUpperCase()} WIN! ★
+                    </div>
                   </div>
                 </div>
-              )}
 
-              {/* Divider */}
-              <div className="border-t-2 border-[#4A6844]"></div>
-
-              {/* Home Team Batting */}
-              {homeBatters.length > 0 && (
-                <div>
-                  <div className="text-[10px] text-[#E8E8D8] mb-2 font-bold">{homeTeamName.toUpperCase()} BATTING</div>
-                  <div className="text-[7px]">
-                    <div className="grid grid-cols-8 gap-1 mb-1 text-[#E8E8D8]/60">
-                      <div className="col-span-2 text-left">BATTER</div>
-                      <div className="text-center">AB</div>
-                      <div className="text-center">R</div>
-                      <div className="text-center">H</div>
-                      <div className="text-center">RBI</div>
-                      <div className="text-center">BB</div>
-                      <div className="text-center">SO</div>
+                <div className="bg-[#1f2b21] border-2 border-[#314437] rounded-md p-3 text-[#E8E8D8] text-xs flex flex-col gap-2 mb-4">
+                  <div className="text-[10px] tracking-[0.4em] font-bold text-[#C4A853] uppercase">
+                    Activity Log
+                  </div>
+                  {activityLogEntries.length > 0 ? (
+                    <ul className="space-y-1 list-disc list-inside text-[#E8E8D8]">
+                      {activityLogEntries.slice(0, 5).map((entry, idx) => (
+                        <li key={idx}>{entry}</li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <div className="text-[#A8B8A2]">
+                      No notable actions recorded during this game.
                     </div>
-                    {homeBatters.map((batter, idx) => (
-                      <div key={`${batter.playerId}-${idx}`} className="grid grid-cols-8 gap-1 text-[#E8E8D8] py-[2px]">
-                        <div className="col-span-2 text-left">{batter.name}</div>
-                        <div className="text-center">{batter.ab}</div>
-                        <div className="text-center">{batter.r}</div>
-                        <div className="text-center">{batter.h}</div>
-                        <div className="text-center">{batter.rbi}</div>
-                        <div className="text-center">{batter.bb}</div>
-                        <div className="text-center">{batter.so}</div>
-                      </div>
-                    ))}
+                  )}
+                  <div className="text-[10px] text-[#A8B8A2] uppercase tracking-[0.3em] mt-2">
+                    Fame events recorded: {fameCount}
                   </div>
                 </div>
-              )}
 
-              {/* Divider */}
-              <div className="border-t-2 border-[#4A6844]"></div>
-
-              {/* Away Team Pitching */}
-              {awayPitchers.length > 0 && (
-                <div>
-                  <div className="text-[10px] text-[#E8E8D8] mb-2 font-bold">{awayTeamName.toUpperCase()} PITCHING</div>
-                  <div className="text-[7px]">
-                    <div className="grid grid-cols-8 gap-1 mb-1 text-[#E8E8D8]/60">
-                      <div className="col-span-2 text-left">PITCHER</div>
-                      <div className="text-center">IP</div>
-                      <div className="text-center">H</div>
-                      <div className="text-center">R</div>
-                      <div className="text-center">ER</div>
-                      <div className="text-center">BB</div>
-                      <div className="text-center">SO</div>
-                    </div>
-                    {awayPitchers.map((pitcher, idx) => (
-                      <div key={idx} className="grid grid-cols-8 gap-1 text-[#E8E8D8] py-[2px]">
-                        <div className="col-span-2 text-left">{pitcher.name}</div>
-                        <div className="text-center">{pitcher.ip}</div>
-                        <div className="text-center">{pitcher.h}</div>
-                        <div className="text-center">{pitcher.r}</div>
-                        <div className="text-center">{pitcher.er}</div>
-                        <div className="text-center">{pitcher.bb}</div>
-                        <div className="text-center">{pitcher.so}</div>
+                {/* Players of the game */}
+                {[0, 1, 2].map((rank) => {
+                  const player = topPerformers[rank];
+                  if (
+                    !player ||
+                    (player.ab === 0 && player.r === 0 && player.rbi === 0)
+                  )
+                    return null;
+                  const borderColor =
+                    rank === 0 ? "#C4A853" : rank === 1 ? "#E8E8D8" : "#FFFFFF";
+                  const label =
+                    rank === 0 ? "POG ★★★" : rank === 1 ? "POG ★★" : "POG ★";
+                  return (
+                    <div
+                      key={rank}
+                      className="border-[5px] p-4 mb-4"
+                      style={{
+                        borderColor,
+                        backgroundColor:
+                          getTeamColors(player.isAway ? awayTeamId : homeTeamId)
+                            .primary || "#2a3a2d",
+                      }}
+                    >
+                      <div className="flex items-center gap-2 mb-2">
+                        <Trophy className="w-5 h-5 text-white" />
+                        <div className="text-sm text-white">{label}</div>
                       </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Divider */}
-              <div className="border-t-2 border-[#4A6844]"></div>
-
-              {/* Home Team Pitching */}
-              {homePitchers.length > 0 && (
-                <div>
-                  <div className="text-[10px] text-[#E8E8D8] mb-2 font-bold">{homeTeamName.toUpperCase()} PITCHING</div>
-                  <div className="text-[7px]">
-                    <div className="grid grid-cols-8 gap-1 mb-1 text-[#E8E8D8]/60">
-                      <div className="col-span-2 text-left">PITCHER</div>
-                      <div className="text-center">IP</div>
-                      <div className="text-center">H</div>
-                      <div className="text-center">R</div>
-                      <div className="text-center">ER</div>
-                      <div className="text-center">BB</div>
-                      <div className="text-center">SO</div>
-                    </div>
-                    {homePitchers.map((pitcher, idx) => (
-                      <div key={idx} className="grid grid-cols-8 gap-1 text-[#E8E8D8] py-[2px]">
-                        <div className="col-span-2 text-left">{pitcher.name}</div>
-                        <div className="text-center">{pitcher.ip}</div>
-                        <div className="text-center">{pitcher.h}</div>
-                        <div className="text-center">{pitcher.r}</div>
-                        <div className="text-center">{pitcher.er}</div>
-                        <div className="text-center">{pitcher.bb}</div>
-                        <div className="text-center">{pitcher.so}</div>
+                      <div className="text-lg text-white flex items-baseline gap-2">
+                        <span>{player.name}</span>
+                        {typeof player.wpa === "number" && (
+                          <span className="text-[10px] text-white/80">{`${player.wpa >= 0 ? "+" : ""}${player.wpa.toFixed(3)} WPA`}</span>
+                        )}
                       </div>
-                    ))}
-                  </div>
-                </div>
-              )}
+                      <div className="text-[8px] text-white/80 space-y-1">
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold">{player.h}</span>
+                          <span>-</span>
+                          <span>{player.ab} AB</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span>{player.bb} BB</span>
+                          <span>•</span>
+                          <span>{player.so} SO</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span>{player.rbi} RBI</span>
+                          <span>•</span>
+                          <span>{player.r} R</span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
 
-              {/* Show message if no pitcher stats */}
-              {awayPitchers.length === 0 && homePitchers.length === 0 && awayBatters.length === 0 && homeBatters.length === 0 && (
-                <div className="text-center text-[#E8E8D8]/60 text-xs py-4">
-                  No box score statistics recorded
-                </div>
-              )}
-            </div>
-          )}
-        </div>
+                {/* Box score preview */}
+                <div className="bg-[#6B9462] border-[5px] border-[#4A6844] p-4 mb-4">
+                  <button
+                    onClick={() => setBoxScoreExpanded(!boxScoreExpanded)}
+                    className="w-full text-center hover:opacity-80 transition-opacity flex items-center justify-center gap-2"
+                  >
+                    <div className="text-sm text-[#E8E8D8]">BOX SCORE</div>
+                    {boxScoreExpanded ? (
+                      <ChevronUp className="w-4 h-4 text-[#E8E8D8]" />
+                    ) : (
+                      <ChevronDown className="w-4 h-4 text-[#E8E8D8]" />
+                    )}
+                  </button>
 
-        {/* Action buttons */}
-        <div className="flex justify-end">
-          <button
-            onClick={() => {
-              // Route based on game mode
-              if (gameMode === 'exhibition') {
-                navigate("/exhibition");
-              } else if (gameMode === 'elimination' && eliminationId) {
-                // Return to elimination bracket home
-                navigate(`/elimination/${eliminationId}`);
-              } else if (gameMode === 'playoff') {
-                // Return to franchise home (bracket tab)
-                navigate(`/franchise/${franchiseId}`, {
-                  state: {
-                    ...baseNavigationState,
-                    refreshAfterGame: true,
-                    refreshToken: Date.now(),
-                  },
-                });
-              } else {
-              navigate(`/franchise/${franchiseId}`, {
-                state: {
-                  ...baseNavigationState,
-                  refreshAfterGame: true,
-                  refreshToken: Date.now(),
-                },
-              });
-              }
-            }}
-            className="bg-[#556B55] border-[5px] border-white py-[16px] text-sm text-[#E8E8D8] hover:bg-[#6B9462] active:scale-95 transition-transform shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)] m-[0px] px-[10px]"
-          >
-            CONTINUE
-          </button>
-        </div>
+                  {boxScoreExpanded && (
+                    <div className="space-y-4 mt-3">
+                      {/* Away Team Batting */}
+                      {awayBatters.length > 0 && (
+                        <div>
+                          <div className="text-[10px] text-[#E8E8D8] mb-2 font-bold">
+                            {awayTeamName.toUpperCase()} BATTING
+                          </div>
+                          <div className="text-[7px]">
+                            <div className="grid grid-cols-9 gap-1 mb-1 text-[#E8E8D8]/60">
+                              <div className="col-span-2 text-left">BATTER</div>
+                              <div className="text-center">AB</div>
+                              <div className="text-center">R</div>
+                              <div className="text-center">H</div>
+                              <div className="text-center">HR</div>
+                              <div className="text-center">RBI</div>
+                              <div className="text-center">BB</div>
+                              <div className="text-center">SO</div>
+                            </div>
+                            {awayBatters.map((batter, idx) => (
+                              <div
+                                key={`${batter.playerId}-${idx}`}
+                                className="grid grid-cols-9 gap-1 text-[#E8E8D8] py-[2px]"
+                              >
+                                <div className="col-span-2 text-left">
+                                  {batter.name}
+                                </div>
+                                <div className="text-center">{batter.ab}</div>
+                                <div className="text-center">{batter.r}</div>
+                                <div className="text-center">{batter.h}</div>
+                                <div className="text-center">{batter.hr}</div>
+                                <div className="text-center">{batter.rbi}</div>
+                                <div className="text-center">{batter.bb}</div>
+                                <div className="text-center">{batter.so}</div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Divider */}
+                      <div className="border-t-2 border-[#4A6844]"></div>
+
+                      {/* Home Team Batting */}
+                      {homeBatters.length > 0 && (
+                        <div>
+                          <div className="text-[10px] text-[#E8E8D8] mb-2 font-bold">
+                            {homeTeamName.toUpperCase()} BATTING
+                          </div>
+                          <div className="text-[7px]">
+                            <div className="grid grid-cols-9 gap-1 mb-1 text-[#E8E8D8]/60">
+                              <div className="col-span-2 text-left">BATTER</div>
+                              <div className="text-center">AB</div>
+                              <div className="text-center">R</div>
+                              <div className="text-center">H</div>
+                              <div className="text-center">HR</div>
+                              <div className="text-center">RBI</div>
+                              <div className="text-center">BB</div>
+                              <div className="text-center">SO</div>
+                            </div>
+                            {homeBatters.map((batter, idx) => (
+                              <div
+                                key={`${batter.playerId}-${idx}`}
+                                className="grid grid-cols-9 gap-1 text-[#E8E8D8] py-[2px]"
+                              >
+                                <div className="col-span-2 text-left">
+                                  {batter.name}
+                                </div>
+                                <div className="text-center">{batter.ab}</div>
+                                <div className="text-center">{batter.r}</div>
+                                <div className="text-center">{batter.h}</div>
+                                <div className="text-center">{batter.hr}</div>
+                                <div className="text-center">{batter.rbi}</div>
+                                <div className="text-center">{batter.bb}</div>
+                                <div className="text-center">{batter.so}</div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Divider */}
+                      <div className="border-t-2 border-[#4A6844]"></div>
+
+                      {/* Away Team Pitching */}
+                      {awayPitchers.length > 0 && (
+                        <div>
+                          <div className="text-[10px] text-[#E8E8D8] mb-2 font-bold">
+                            {awayTeamName.toUpperCase()} PITCHING
+                          </div>
+                          <div className="text-[7px]">
+                            <div className="grid grid-cols-8 gap-1 mb-1 text-[#E8E8D8]/60">
+                              <div className="col-span-2 text-left">
+                                PITCHER
+                              </div>
+                              <div className="text-center">IP</div>
+                              <div className="text-center">H</div>
+                              <div className="text-center">R</div>
+                              <div className="text-center">ER</div>
+                              <div className="text-center">BB</div>
+                              <div className="text-center">SO</div>
+                            </div>
+                            {awayPitchers.map((pitcher, idx) => (
+                              <div
+                                key={idx}
+                                className="grid grid-cols-8 gap-1 text-[#E8E8D8] py-[2px]"
+                              >
+                                <div className="col-span-2 text-left">
+                                  {pitcher.name}
+                                </div>
+                                <div className="text-center">{pitcher.ip}</div>
+                                <div className="text-center">{pitcher.h}</div>
+                                <div className="text-center">{pitcher.r}</div>
+                                <div className="text-center">{pitcher.er}</div>
+                                <div className="text-center">{pitcher.bb}</div>
+                                <div className="text-center">{pitcher.so}</div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Divider */}
+                      <div className="border-t-2 border-[#4A6844]"></div>
+
+                      {/* Home Team Pitching */}
+                      {homePitchers.length > 0 && (
+                        <div>
+                          <div className="text-[10px] text-[#E8E8D8] mb-2 font-bold">
+                            {homeTeamName.toUpperCase()} PITCHING
+                          </div>
+                          <div className="text-[7px]">
+                            <div className="grid grid-cols-8 gap-1 mb-1 text-[#E8E8D8]/60">
+                              <div className="col-span-2 text-left">
+                                PITCHER
+                              </div>
+                              <div className="text-center">IP</div>
+                              <div className="text-center">H</div>
+                              <div className="text-center">R</div>
+                              <div className="text-center">ER</div>
+                              <div className="text-center">BB</div>
+                              <div className="text-center">SO</div>
+                            </div>
+                            {homePitchers.map((pitcher, idx) => (
+                              <div
+                                key={idx}
+                                className="grid grid-cols-8 gap-1 text-[#E8E8D8] py-[2px]"
+                              >
+                                <div className="col-span-2 text-left">
+                                  {pitcher.name}
+                                </div>
+                                <div className="text-center">{pitcher.ip}</div>
+                                <div className="text-center">{pitcher.h}</div>
+                                <div className="text-center">{pitcher.r}</div>
+                                <div className="text-center">{pitcher.er}</div>
+                                <div className="text-center">{pitcher.bb}</div>
+                                <div className="text-center">{pitcher.so}</div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Show message if no pitcher stats */}
+                      {awayPitchers.length === 0 &&
+                        homePitchers.length === 0 &&
+                        awayBatters.length === 0 &&
+                        homeBatters.length === 0 && (
+                          <div className="text-center text-[#E8E8D8]/60 text-xs py-4">
+                            No box score statistics recorded
+                          </div>
+                        )}
+                    </div>
+                  )}
+                </div>
+
+                {/* Action buttons */}
+                <div className="flex justify-end">
+                  <button
+                    onClick={() => {
+                      // Route based on game mode
+                      if (gameMode === "exhibition") {
+                        navigate("/exhibition");
+                      } else if (gameMode === "elimination" && eliminationId) {
+                        // Return to elimination bracket home
+                        navigate(`/elimination/${eliminationId}`);
+                      } else if (gameMode === "playoff") {
+                        // Return to franchise home (bracket tab)
+                        navigate(`/franchise/${franchiseId}`, {
+                          state: {
+                            ...baseNavigationState,
+                            refreshAfterGame: true,
+                            refreshToken: Date.now(),
+                          },
+                        });
+                      } else if (gameMode === "franchise") {
+                        navigate(`/franchise/${franchiseId}`, {
+                          state: {
+                            ...baseNavigationState,
+                            refreshAfterGame: true,
+                            refreshToken: Date.now(),
+                          },
+                        });
+                      } else {
+                        navigate("/");
+                      }
+                    }}
+                    className="bg-[#556B55] border-[5px] border-white py-[16px] text-sm text-[#E8E8D8] hover:bg-[#6B9462] active:scale-95 transition-transform shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)] m-[0px] px-[10px]"
+                  >
+                    CONTINUE
+                  </button>
+                </div>
               </div>
             </div>
           </div>

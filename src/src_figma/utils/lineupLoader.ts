@@ -25,6 +25,7 @@ function convertToRosterPlayer(
   const fullName = `${player.firstName} ${player.lastName}`;
   return {
     name: fullName,
+    fullName,
     position: position || player.primaryPosition || 'DH',
     battingOrder,
     stats: {
@@ -69,6 +70,7 @@ function convertToRosterPitcher(
   const fullName = `${player.firstName} ${player.lastName}`;
   return {
     name: fullName,
+    fullName,
     stats: {
       ip: '0',
       h: 0,
@@ -104,6 +106,30 @@ function convertToRosterPitcher(
 
 // Required fielding positions (8 field positions, pitcher handled separately)
 const FIELD_POSITIONS = ['C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF'] as const;
+const PITCHER_POSITIONS = ['SP', 'RP', 'CP', 'SP/RP'] as const;
+
+function isPitcherPosition(position?: string): boolean {
+  return !!position && PITCHER_POSITIONS.includes(position as (typeof PITCHER_POSITIONS)[number]);
+}
+
+function resolveNoDhFieldingPosition(
+  player: LBPlayer,
+  requestedPosition: string | undefined,
+  usedPositions: Set<string>,
+): string {
+  const candidatePositions = [
+    requestedPosition,
+    player.secondaryPosition,
+    player.primaryPosition,
+  ].filter((position): position is string => !!position && position !== 'DH' && FIELD_POSITIONS.includes(position as (typeof FIELD_POSITIONS)[number]));
+
+  const openCandidate = candidatePositions.find((position) => !usedPositions.has(position));
+  if (openCandidate) {
+    return openCandidate;
+  }
+
+  return FIELD_POSITIONS.find((position) => !usedPositions.has(position)) || '1B';
+}
 
 /**
  * Build a valid 8-player lineup with unique positions.
@@ -249,19 +275,22 @@ export async function loadTeamLineup(
   const startingPitcherId = roster.startingRotation?.[0] || starters[0]?.id;
   const startingPitcher = teamPlayers.find(p => p.id === startingPitcherId);
 
-  // Check if lineup includes a pitcher (SMB4 doesn't have DH)
+  // Infer DH usage from the stored lineup itself. If a pitcher is in the batting order,
+  // this is treated as a no-DH lineup even if a DH-only player was saved incorrectly.
   const lineupHasPitcher = lineup.some(slot => {
     const player = playerMap.get(slot.playerId);
-    return player && ['SP', 'RP', 'CP'].includes(player.primaryPosition);
+    return player && isPitcherPosition(player.primaryPosition);
   });
+  const useDH = lineup.some(slot => slot.fieldingPosition === 'DH') && !lineupHasPitcher;
+  const usedNoDhPositions = new Set<string>();
 
   const lineupPlayers: RosterPlayer[] = [];
   for (let i = 0; i < lineup.length; i++) {
     const slot = lineup[i];
     const player = playerMap.get(slot.playerId);
 
-    // If this is spot 9 and no pitcher in lineup, replace with starting pitcher (EXH-009)
-    if (!lineupHasPitcher && slot.battingOrder === 9 && startingPitcher) {
+    // If this is spot 9 and no pitcher in lineup, replace with starting pitcher only in no-DH games.
+    if (!useDH && !lineupHasPitcher && slot.battingOrder === 9 && startingPitcher) {
       lineupPlayers.push(
         convertToRosterPlayer(startingPitcher, 9, 'P')
       );
@@ -269,14 +298,20 @@ export async function loadTeamLineup(
     }
 
     if (player) {
+      const fieldingPosition = useDH
+        ? slot.fieldingPosition
+        : resolveNoDhFieldingPosition(player, slot.fieldingPosition, usedNoDhPositions);
+      if (!useDH) {
+        usedNoDhPositions.add(fieldingPosition);
+      }
       lineupPlayers.push(
-        convertToRosterPlayer(player, slot.battingOrder, slot.fieldingPosition)
+        convertToRosterPlayer(player, slot.battingOrder, fieldingPosition)
       );
     }
   }
 
-  // If lineup has 8 players and no pitcher, add starting pitcher at 9
-  if (!lineupHasPitcher && lineupPlayers.length === 8 && startingPitcher) {
+  // If lineup has 8 players and no pitcher, add starting pitcher at 9 only in no-DH games.
+  if (!useDH && !lineupHasPitcher && lineupPlayers.length === 8 && startingPitcher) {
     lineupPlayers.push(
       convertToRosterPlayer(startingPitcher, 9, 'P')
     );
@@ -295,7 +330,10 @@ export async function loadTeamLineup(
 
     // Add to bench if in MLB roster, or if no mlbRoster defined
     if (mlbRosterIds.size === 0 || mlbRosterIds.has(player.id)) {
-      benchPlayers.push(convertToRosterPlayer(player, undefined, undefined));
+      const benchPosition = !useDH && player.primaryPosition === 'DH'
+        ? player.secondaryPosition || undefined
+        : undefined;
+      benchPlayers.push(convertToRosterPlayer(player, undefined, benchPosition));
     }
   }
 

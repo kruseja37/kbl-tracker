@@ -100,11 +100,15 @@ export async function processCompletedGame(
   options?: GameAggregationOptions,
   leagueId?: string
 ): Promise<ProcessGameResult> {
+  const resolvedLeagueId =
+    leagueId ??
+    (gameState.competitionType === 'exhibition' ? gameState.competitionId : undefined);
+
   // Step 1: Aggregate game stats to season totals
   const aggregation = await aggregateGameToSeason(gameState, options);
 
-  if (leagueId) {
-    await capturePlayerRatingsSnapshots(gameState, leagueId);
+  if (resolvedLeagueId) {
+    await capturePlayerRatingsSnapshots(gameState, resolvedLeagueId);
   }
 
   // Step 2: Archive to completedGames store
@@ -117,13 +121,13 @@ export async function processCompletedGame(
     [],
     options?.seasonId,
     {
-      leagueId,
+      leagueId: resolvedLeagueId,
     }
   );
 
   // Step 3: Register players in Almanac canonical registry
-  if (leagueId) {
-    await registerAlmanacPlayers(gameState, leagueId);
+  if (resolvedLeagueId) {
+    await registerAlmanacPlayers(gameState, resolvedLeagueId);
   }
 
   return { aggregation };

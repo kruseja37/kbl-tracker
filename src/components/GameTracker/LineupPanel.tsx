@@ -7,7 +7,7 @@
 
 import { useState } from 'react';
 import type { LineupState } from '../../types/game';
-import { MOJO_STATES, type MojoLevel } from '../../engines/mojoEngine';
+import { MOJO_LEVELS, MOJO_STATES, type MojoLevel } from '../../engines/mojoEngine';
 import { FITNESS_STATES, type FitnessState } from '../../engines/fitnessEngine';
 
 interface LineupPanelProps {
@@ -32,7 +32,8 @@ const MOJO_COLORS: Record<MojoLevel, string> = {
   [-1]: '#f97316', // orange - Tense
   [0]: '#6b7280',  // gray - Normal
   [1]: '#22c55e',  // green - Locked In
-  [2]: '#3b82f6',  // blue - Jacked
+  [2]: '#16a34a',  // green - On Fire
+  [3]: '#15803d',  // dark green - Jacked
 };
 
 const MOJO_BG_COLORS: Record<MojoLevel, string> = {
@@ -40,7 +41,8 @@ const MOJO_BG_COLORS: Record<MojoLevel, string> = {
   [-1]: 'rgba(249, 115, 22, 0.15)',
   [0]: 'rgba(107, 114, 128, 0.15)',
   [1]: 'rgba(34, 197, 94, 0.15)',
-  [2]: 'rgba(59, 130, 246, 0.15)',
+  [2]: 'rgba(22, 163, 74, 0.15)',
+  [3]: 'rgba(21, 128, 61, 0.15)',
 };
 
 interface MojoBadgeProps {
@@ -107,7 +109,7 @@ function FitnessBadge({ state, isEditing, onCycle }: FitnessBadgeProps) {
 }
 
 // All mojo levels for cycling
-const MOJO_LEVEL_ORDER: MojoLevel[] = [-2, -1, 0, 1, 2];
+const MOJO_LEVEL_ORDER: MojoLevel[] = MOJO_LEVELS;
 
 // All fitness states for cycling
 const FITNESS_STATE_ORDER: FitnessState[] = ['JUICED', 'FIT', 'WELL', 'STRAINED', 'WEAK', 'HURT'];

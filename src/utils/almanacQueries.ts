@@ -253,7 +253,7 @@ export async function getExhibitionGames(
   const fromTs = parseDateBoundary(filters.dateFrom);
   const toTs = parseDateBoundary(filters.dateTo, true);
 
-  return allGames
+  const exhibitionGames = allGames
     .filter(isExhibitionGame)
     .filter((game) => {
       if (fromTs !== null && game.date < fromTs) {
@@ -283,6 +283,10 @@ export async function getExhibitionGames(
       return game.awayTeamId === filters.opponentId || game.homeTeamId === filters.opponentId;
     })
     .sort((a, b) => b.date - a.date);
+
+  console.log('[Almanac] Exhibition games found:', exhibitionGames.length);
+
+  return exhibitionGames;
 }
 
 export async function getExhibitionBattingLeaders(

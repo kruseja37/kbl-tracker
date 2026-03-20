@@ -13,6 +13,7 @@ import { describe, test, expect } from 'vitest';
 
 import {
   MojoLevel,
+  MOJO_LEVELS,
   getMojoFameModifier,
   getMojoWARMultiplier,
   getMojoClutchMultiplier,
@@ -51,8 +52,12 @@ describe('Mojo Fame Modifiers', () => {
       expect(getMojoFameModifier(1)).toBe(0.90);
     });
 
-    test('Jacked (+2) achievement: -20% Fame credit ("anyone could do it")', () => {
-      expect(getMojoFameModifier(2)).toBe(0.80);
+    test('On Fire (+2) achievement sits between Locked In and Jacked', () => {
+      expect(getMojoFameModifier(2)).toBe(0.85);
+    });
+
+    test('Jacked (+3) achievement: -20% Fame credit ("anyone could do it")', () => {
+      expect(getMojoFameModifier(3)).toBe(0.80);
     });
   });
 
@@ -62,20 +67,23 @@ describe('Mojo Fame Modifiers', () => {
       const tense = getMojoFameModifier(-1);
       const normal = getMojoFameModifier(0);
       const lockedIn = getMojoFameModifier(1);
-      const jacked = getMojoFameModifier(2);
+      const onFire = getMojoFameModifier(2);
+      const jacked = getMojoFameModifier(3);
 
-      // Rattled > Tense > Normal > Locked In > Jacked
+      // Rattled > Tense > Normal > Locked In > On Fire > Jacked
       expect(rattled).toBeGreaterThan(tense);
       expect(tense).toBeGreaterThan(normal);
       expect(normal).toBeGreaterThan(lockedIn);
+      expect(lockedIn).toBeGreaterThan(onFire);
+      expect(onFire).toBeGreaterThan(jacked);
       expect(lockedIn).toBeGreaterThan(jacked);
     });
 
     test('Rattled modifier is highest, Jacked is lowest', () => {
-      const modifiers = [-2, -1, 0, 1, 2].map(m => getMojoFameModifier(m as MojoLevel));
+      const modifiers = MOJO_LEVELS.map(m => getMojoFameModifier(m));
 
       expect(Math.max(...modifiers)).toBe(getMojoFameModifier(-2));
-      expect(Math.min(...modifiers)).toBe(getMojoFameModifier(2));
+      expect(Math.min(...modifiers)).toBe(getMojoFameModifier(3));
     });
   });
 
@@ -85,12 +93,12 @@ describe('Mojo Fame Modifiers', () => {
     });
 
     test('Jacked gives -10% WAR penalty', () => {
-      expect(getMojoWARMultiplier(2)).toBe(0.90);
+      expect(getMojoWARMultiplier(3)).toBe(0.90);
     });
 
     test('WAR multipliers follow same pattern as Fame', () => {
       const rattledWAR = getMojoWARMultiplier(-2);
-      const jackedWAR = getMojoWARMultiplier(2);
+      const jackedWAR = getMojoWARMultiplier(3);
 
       expect(rattledWAR).toBeGreaterThan(jackedWAR);
     });
@@ -102,11 +110,11 @@ describe('Mojo Fame Modifiers', () => {
     });
 
     test('Jacked clutch performance gets -15% credit', () => {
-      expect(getMojoClutchMultiplier(2)).toBe(0.85);
+      expect(getMojoClutchMultiplier(3)).toBe(0.85);
     });
 
     test('Clutch multipliers follow same pattern', () => {
-      expect(getMojoClutchMultiplier(-2)).toBeGreaterThan(getMojoClutchMultiplier(2));
+      expect(getMojoClutchMultiplier(-2)).toBeGreaterThan(getMojoClutchMultiplier(3));
     });
   });
 });
@@ -208,7 +216,7 @@ describe('Combined Modifier Tests', () => {
 
     test('Jacked + Juiced: penalties stack (best states = least credit)', () => {
       const baseFame = 10;
-      const mojoMod = getMojoFameModifier(2); // 0.80
+      const mojoMod = getMojoFameModifier(3); // 0.80
       const fitness: FitnessState = 'JUICED'; // 0.50
 
       const adjusted = calculateAdjustedFame(baseFame, mojoMod, fitness);
@@ -230,7 +238,7 @@ describe('Combined Modifier Tests', () => {
 
     test('Jacked + Weak: mixed modifiers', () => {
       const baseFame = 10;
-      const mojoMod = getMojoFameModifier(2); // 0.80
+      const mojoMod = getMojoFameModifier(3); // 0.80
       const fitness: FitnessState = 'WEAK'; // 1.25
 
       const adjusted = calculateAdjustedFame(baseFame, mojoMod, fitness);
@@ -278,7 +286,7 @@ describe('Combined Modifier Tests', () => {
 
     test('Worst case for Fame: Jacked + Juiced', () => {
       const baseFame = 10;
-      const mojoMod = getMojoFameModifier(2); // 0.80
+      const mojoMod = getMojoFameModifier(3); // 0.80
       const fitness: FitnessState = 'JUICED'; // 0.50
 
       const adjusted = calculateAdjustedFame(baseFame, mojoMod, fitness);
@@ -288,7 +296,7 @@ describe('Combined Modifier Tests', () => {
     });
 
     test('modifier range is 0.40 to 1.625', () => {
-      const minMojo = getMojoFameModifier(2); // 0.80
+      const minMojo = getMojoFameModifier(3); // 0.80
       const maxMojo = getMojoFameModifier(-2); // 1.30
       const minFitness = getFitnessFameModifier('JUICED'); // 0.50
       const maxFitness = getFitnessFameModifier('WEAK'); // 1.25
@@ -308,9 +316,9 @@ describe('Combined Modifier Tests', () => {
 
 describe('Stat vs Fame Modifier Philosophy', () => {
   describe('Mojo: Stats Help, Fame Hurts (when high)', () => {
-    test('Jacked (+2) gives best stats but least Fame credit', () => {
-      const statMult = getMojoStatMultiplier(2);
-      const fameMod = getMojoFameModifier(2);
+    test('Jacked (+3) gives best stats but least Fame credit', () => {
+      const statMult = getMojoStatMultiplier(3);
+      const fameMod = getMojoFameModifier(3);
 
       expect(statMult).toBe(1.18); // Best stats
       expect(fameMod).toBe(0.80); // Least Fame credit
@@ -345,7 +353,7 @@ describe('Stat vs Fame Modifier Philosophy', () => {
 
   describe('Combined Stat Multipliers', () => {
     test('Jacked + Juiced = maximum stat boost (1.18 × 1.20)', () => {
-      const mojoStat = getMojoStatMultiplier(2);
+      const mojoStat = getMojoStatMultiplier(3);
       const fitnessStat = getFitnessStatMultiplier('JUICED');
 
       const combined = mojoStat * fitnessStat;
@@ -370,8 +378,8 @@ describe('Stat vs Fame Modifier Philosophy', () => {
 
 describe('WAR Modifier Integration', () => {
   test('Mojo WAR multipliers exist for all levels', () => {
-    [-2, -1, 0, 1, 2].forEach(level => {
-      const mult = getMojoWARMultiplier(level as MojoLevel);
+    MOJO_LEVELS.forEach(level => {
+      const mult = getMojoWARMultiplier(level);
       expect(mult).toBeGreaterThan(0);
     });
   });
@@ -395,7 +403,7 @@ describe('WAR Modifier Integration', () => {
   });
 
   test('Jacked + Juiced gives lowest WAR credit', () => {
-    const mojoWAR = getMojoWARMultiplier(2); // 0.90
+    const mojoWAR = getMojoWARMultiplier(3); // 0.90
     const fitnessWAR = getFitnessWARMultiplier('JUICED'); // 0.85
     const combined = mojoWAR * fitnessWAR;
 
@@ -432,7 +440,7 @@ describe('Edge Cases', () => {
 
   test('zero base Fame remains zero', () => {
     const baseFame = 0;
-    const mojoMod = getMojoFameModifier(2);
+    const mojoMod = getMojoFameModifier(3);
     const fitness: FitnessState = 'JUICED';
 
     const adjusted = calculateAdjustedFame(baseFame, mojoMod, fitness);
@@ -459,13 +467,13 @@ describe('Edge Cases', () => {
 
 describe('Constants Verification', () => {
   describe('MOJO_STATES structure', () => {
-    test('has all 5 levels', () => {
-      expect(Object.keys(MOJO_STATES)).toHaveLength(5);
+    test('has all 6 levels', () => {
+      expect(Object.keys(MOJO_STATES)).toHaveLength(6);
     });
 
     test('each state has required properties', () => {
-      [-2, -1, 0, 1, 2].forEach(level => {
-        const state = MOJO_STATES[level as MojoLevel];
+      MOJO_LEVELS.forEach(level => {
+        const state = MOJO_STATES[level];
         expect(state.level).toBe(level);
         expect(state.name).toBeDefined();
         expect(state.displayName).toBeDefined();
@@ -513,7 +521,7 @@ describe('Practical Scenarios', () => {
 
     test('Walk-off HR while Jacked is less impressive', () => {
       const baseFame = 1.5;
-      const mojoMod = getMojoFameModifier(2); // 0.80
+      const mojoMod = getMojoFameModifier(3); // 0.80
 
       const adjusted = baseFame * mojoMod;
 
@@ -535,7 +543,7 @@ describe('Practical Scenarios', () => {
 
     test('Cycle while Jacked + Juiced is suspicious', () => {
       const baseFame = 2;
-      const mojoMod = getMojoFameModifier(2); // 0.80
+      const mojoMod = getMojoFameModifier(3); // 0.80
       const fitness: FitnessState = 'JUICED'; // 0.50
 
       const adjusted = calculateAdjustedFame(baseFame, mojoMod, fitness);

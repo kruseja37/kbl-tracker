@@ -14,7 +14,13 @@ import type { CompletedGameRecord } from '../../utils/gameStorage';
 // MOCKS
 // ============================================
 
-const mockNavigate = vi.fn();
+const {
+  mockNavigate,
+  mockGetGameEvents,
+} = vi.hoisted(() => ({
+  mockNavigate: vi.fn(),
+  mockGetGameEvents: vi.fn(),
+}));
 
 vi.mock('react-router', () => ({
   useNavigate: () => mockNavigate,
@@ -33,6 +39,10 @@ vi.mock('@/config/teamColors', () => ({
     secondary: '#FFFFFF',
     stadium: teamId === 'sox' ? 'Sox Field' : 'Tiger Stadium',
   }),
+}));
+
+vi.mock('../../../utils/eventLog', () => ({
+  getGameEvents: mockGetGameEvents,
 }));
 
 // Build a complete CompletedGameRecord for mocking
@@ -179,6 +189,12 @@ const mockGameData = {
   ],
 };
 
+const mockAtBatEvents = [
+  { batterId: 'home-j-martinez', wpa: 0.300 },
+  { batterId: 'away-r-johnson', wpa: 0.220 },
+  { batterId: 'home-t-williams', wpa: 0.180 },
+] as const;
+
 const oneInningGame: CompletedGameRecord = {
   gameId: 'one-inning-game',
   date: Date.now(),
@@ -296,6 +312,7 @@ describe('PostGameSummary Component', () => {
     // Re-mock to ensure fresh data each test
     const { getCompletedGameById } = await import('../../utils/gameStorage');
     vi.mocked(getCompletedGameById).mockResolvedValue(mockGameData);
+    mockGetGameEvents.mockResolvedValue(mockAtBatEvents);
   });
 
   describe('Header', () => {
@@ -380,20 +397,18 @@ describe('PostGameSummary Component', () => {
 
     test('renders 3-star POG player name', async () => {
       render(<PostGameSummary />);
-      // J. Martinez: 3h, 4rbi, 2r → score = 3*2 + 4 + 2 = 12 (highest)
       expect(await screen.findByText('J Martinez')).toBeInTheDocument();
+      expect(screen.getByText('+0.300 WPA')).toBeInTheDocument();
     });
 
     test('renders 2-star POG player name', async () => {
       render(<PostGameSummary />);
-      // R. Johnson: 2h, 1rbi, 1r → score = 2*2 + 1 + 1 = 6
       await screen.findByText('J Martinez');
       expect(screen.getByText('R Johnson')).toBeInTheDocument();
     });
 
     test('renders 1-star POG player name', async () => {
       render(<PostGameSummary />);
-      // T. Williams: 2h, 0rbi, 1r → score = 2*2 + 0 + 1 = 5
       await screen.findByText('J Martinez');
       expect(screen.getByText('T Williams')).toBeInTheDocument();
     });
@@ -452,6 +467,13 @@ describe('PostGameSummary Component', () => {
       expect(screen.getByText('P. Garcia')).toBeInTheDocument();
       expect(screen.getByText('C. Lee')).toBeInTheDocument();
       expect(screen.getByText('A. Rodriguez')).toBeInTheDocument();
+    });
+
+    test('expanded box score shows batting HR column', async () => {
+      render(<PostGameSummary />);
+      await screen.findByText('BOX SCORE');
+      fireEvent.click(screen.getByText('BOX SCORE'));
+      expect(screen.getAllByText('HR').length).toBeGreaterThan(0);
     });
 
     test('clicking BOX SCORE again collapses it', async () => {

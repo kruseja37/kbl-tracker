@@ -205,6 +205,10 @@ describe('useGameState between-play ledger', () => {
     const { result } = renderHook(() => useGameState());
     await initializeGame(result);
 
+    act(() => {
+      result.current.startGame();
+    });
+
     await act(async () => {
       const subResult = result.current.makeSubstitution(
         'away-bench-1',
@@ -261,6 +265,52 @@ describe('useGameState between-play ledger', () => {
         }),
       })],
     ]));
+  });
+
+  test('standalone pitching changes move the batting-order pitcher slot to the reliever', async () => {
+    const { result } = renderHook(() => useGameState());
+
+    await act(async () => {
+      await result.current.initializeGame({
+        gameId: 'game-pitcher-slot',
+        awayTeamId: 'away-team',
+        awayTeamName: 'Away Team',
+        homeTeamId: 'home-team',
+        homeTeamName: 'Home Team',
+        awayStartingPitcherId: 'away-sp',
+        awayStartingPitcherName: 'Away Starter',
+        homeStartingPitcherId: 'home-sp',
+        homeStartingPitcherName: 'Home Starter',
+        awayLineup: [
+          { playerId: 'away-batter-1', playerName: 'Away Batter 1', position: 'SS' },
+          { playerId: 'away-batter-2', playerName: 'Away Batter 2', position: 'CF' },
+        ],
+        homeLineup: [
+          { playerId: 'home-batter-1', playerName: 'Home Batter 1', position: '2B' },
+          { playerId: 'home-sp', playerName: 'Home Starter', position: 'P' },
+        ],
+        awayBench: [],
+        homeBench: [
+          { playerId: 'home-rp', playerName: 'Home Reliever', positions: ['P'] },
+        ],
+        seasonNumber: 1,
+      });
+    });
+
+    act(() => {
+      result.current.startGame();
+    });
+
+    await act(async () => {
+      result.current.changePitcher('home-rp', 'home-sp', 'Home Reliever', 'Home Starter');
+      result.current.confirmPitchCount('home-sp', 17);
+      await Promise.resolve();
+    });
+
+    const homeLineup = result.current.getLineupStateSnapshot().home.lineup;
+    expect(homeLineup.some((player) => player.playerId === 'home-rp' && player.position === 'P')).toBe(true);
+    expect(homeLineup.some((player) => player.playerId === 'home-sp')).toBe(false);
+    expect(result.current.playerStats.has('home-rp')).toBe(true);
   });
 
   test('tracks defensive position usage per out instead of per half-inning', async () => {

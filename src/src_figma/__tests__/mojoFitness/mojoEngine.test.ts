@@ -3,7 +3,7 @@
  * Phase 4.1 - Mojo System
  *
  * Per MOJO_FITNESS_SYSTEM_SPEC.md Section 2:
- * - 5-level scale from -2 (Rattled) to +2 (Jacked)
+ * - 6-level scale from -2 (Rattled) to +3 (Jacked)
  * - Stat multipliers (0.82 to 1.18)
  * - Mojo triggers with base deltas
  * - Situational amplification
@@ -21,6 +21,7 @@ import {
   GameSituation,
 
   // Constants
+  MOJO_LEVELS,
   MOJO_STATES,
   MOJO_TRIGGERS,
   MOJO_AMPLIFICATION,
@@ -80,15 +81,14 @@ describe('Mojo State Constants', () => {
       expect(MOJO_STATES[-2].name).toBe('RATTLED');
     });
 
-    test('Maximum level is +2 (Jacked)', () => {
-      expect(MOJO_STATES[2]).toBeDefined();
-      expect(MOJO_STATES[2].name).toBe('JACKED');
+    test('Maximum level is +3 (Jacked)', () => {
+      expect(MOJO_STATES[3]).toBeDefined();
+      expect(MOJO_STATES[3].name).toBe('JACKED');
     });
 
-    test('Has all 5 levels (-2 to +2)', () => {
-      const levels = [-2, -1, 0, 1, 2];
-      levels.forEach(level => {
-        expect(MOJO_STATES[level as MojoLevel]).toBeDefined();
+    test('Has all 6 levels (-2 to +3)', () => {
+      MOJO_LEVELS.forEach(level => {
+        expect(MOJO_STATES[level]).toBeDefined();
       });
     });
   });
@@ -114,9 +114,14 @@ describe('Mojo State Constants', () => {
       expect(MOJO_STATES[1].displayName).toBe('Locked In');
     });
 
-    test('Jacked at +2', () => {
-      expect(MOJO_STATES[2].name).toBe('JACKED');
-      expect(MOJO_STATES[2].displayName).toBe('Jacked');
+    test('On Fire at +2', () => {
+      expect(MOJO_STATES[2].name).toBe('ON_FIRE');
+      expect(MOJO_STATES[2].displayName).toBe('On Fire');
+    });
+
+    test('Jacked at +3', () => {
+      expect(MOJO_STATES[3].name).toBe('JACKED');
+      expect(MOJO_STATES[3].displayName).toBe('Jacked');
     });
   });
 
@@ -137,8 +142,12 @@ describe('Mojo State Constants', () => {
       expect(MOJO_STATES[1].statMultiplier).toBe(1.10);
     });
 
-    test('Jacked (+2) = 1.18× (+18%)', () => {
-      expect(MOJO_STATES[2].statMultiplier).toBe(1.18);
+    test('On Fire (+2) = 1.14× (+14%)', () => {
+      expect(MOJO_STATES[2].statMultiplier).toBe(1.14);
+    });
+
+    test('Jacked (+3) = 1.18× (+18%)', () => {
+      expect(MOJO_STATES[3].statMultiplier).toBe(1.18);
     });
   });
 });
@@ -266,7 +275,8 @@ describe('Core Mojo Functions', () => {
       expect(getMojoState(-1).name).toBe('TENSE');
       expect(getMojoState(0).name).toBe('NORMAL');
       expect(getMojoState(1).name).toBe('LOCKED_IN');
-      expect(getMojoState(2).name).toBe('JACKED');
+      expect(getMojoState(2).name).toBe('ON_FIRE');
+      expect(getMojoState(3).name).toBe('JACKED');
     });
   });
 
@@ -279,10 +289,10 @@ describe('Core Mojo Functions', () => {
   });
 
   describe('clampMojo', () => {
-    test('clamps values above +2 to +2', () => {
-      expect(clampMojo(3)).toBe(2);
-      expect(clampMojo(5)).toBe(2);
-      expect(clampMojo(100)).toBe(2);
+    test('clamps values above +3 to +3', () => {
+      expect(clampMojo(3)).toBe(3);
+      expect(clampMojo(5)).toBe(3);
+      expect(clampMojo(100)).toBe(3);
     });
 
     test('clamps values below -2 to -2', () => {
@@ -311,11 +321,12 @@ describe('Core Mojo Functions', () => {
       expect(isValidMojoLevel(0)).toBe(true);
       expect(isValidMojoLevel(1)).toBe(true);
       expect(isValidMojoLevel(2)).toBe(true);
+      expect(isValidMojoLevel(3)).toBe(true);
     });
 
     test('returns false for invalid levels', () => {
       expect(isValidMojoLevel(-3)).toBe(false);
-      expect(isValidMojoLevel(3)).toBe(false);
+      expect(isValidMojoLevel(4)).toBe(false);
       expect(isValidMojoLevel(0.5)).toBe(false);
     });
   });
@@ -332,7 +343,8 @@ describe('Stat Multiplier Functions', () => {
       expect(getMojoStatMultiplier(-1)).toBe(0.90);
       expect(getMojoStatMultiplier(0)).toBe(1.00);
       expect(getMojoStatMultiplier(1)).toBe(1.10);
-      expect(getMojoStatMultiplier(2)).toBe(1.18);
+      expect(getMojoStatMultiplier(2)).toBe(1.14);
+      expect(getMojoStatMultiplier(3)).toBe(1.18);
     });
   });
 
@@ -344,7 +356,7 @@ describe('Stat Multiplier Functions', () => {
 
     test('applies Jacked bonus correctly', () => {
       // 80 * 1.18 = 94.4 → 94
-      expect(applyMojoToStat(80, 2)).toBe(94);
+      expect(applyMojoToStat(80, 3)).toBe(94);
     });
 
     test('Normal keeps stat unchanged', () => {
@@ -367,7 +379,7 @@ describe('Stat Multiplier Functions', () => {
         arm: 40,
       };
 
-      const jacked = applyMojoToAllStats(baseStats, 2);
+      const jacked = applyMojoToAllStats(baseStats, 3);
 
       expect(jacked.power).toBe(94);  // 80 * 1.18
       expect(jacked.contact).toBe(83); // 70 * 1.18 = 82.6 → 83
@@ -552,9 +564,9 @@ describe('applyMojoChange', () => {
     expect(result.newMojo).toBe(-1); // 0 + -1.0 = -1
   });
 
-  test('clamps at maximum +2', () => {
-    const result = applyMojoChange(2, 'HOME_RUN');
-    expect(result.newMojo).toBe(2);
+  test('clamps at maximum +3', () => {
+    const result = applyMojoChange(3, 'HOME_RUN');
+    expect(result.newMojo).toBe(3);
     expect(result.actualDelta).toBe(0);
   });
 
@@ -603,6 +615,10 @@ describe('calculateStartingMojo', () => {
     expect(calculateStartingMojo(2)).toBe(1);
   });
 
+  test('+3 ending → +1 starting (3 × 0.3 = 0.9 rounds to 1)', () => {
+    expect(calculateStartingMojo(3)).toBe(1);
+  });
+
   test('-2 ending → -1 starting (-2 × 0.3 = -0.6 rounds to -1)', () => {
     expect(calculateStartingMojo(-2)).toBe(-1);
   });
@@ -625,7 +641,7 @@ describe('calculateStartingMojo', () => {
 
 describe('getCarryoverExplanation', () => {
   test('provides explanation for positive carryover', () => {
-    const result = getCarryoverExplanation(2);
+    const result = getCarryoverExplanation(3);
     expect(result.startingMojo).toBe(1);
     expect(result.explanation).toContain('Jacked');
     expect(result.explanation).toContain('30%');
@@ -773,8 +789,12 @@ describe('Fame Integration', () => {
       expect(getMojoFameModifier(1)).toBe(0.90);
     });
 
+    test('On Fire sits between Locked In and Jacked', () => {
+      expect(getMojoFameModifier(2)).toBe(0.85);
+    });
+
     test('Jacked gives -20% Fame (easiest)', () => {
-      expect(getMojoFameModifier(2)).toBe(0.80);
+      expect(getMojoFameModifier(3)).toBe(0.80);
     });
   });
 
@@ -788,7 +808,7 @@ describe('Fame Integration', () => {
     });
 
     test('Jacked gives -10% WAR', () => {
-      expect(getMojoWARMultiplier(2)).toBe(0.90);
+      expect(getMojoWARMultiplier(3)).toBe(0.90);
     });
   });
 
@@ -797,8 +817,9 @@ describe('Fame Integration', () => {
       expect(getMojoClutchMultiplier(-2)).toBe(1.30);
     });
 
-    test('Jacked clutch performance gets -15% credit', () => {
-      expect(getMojoClutchMultiplier(2)).toBe(0.85);
+    test('On Fire and Jacked reduce clutch credit at the top end', () => {
+      expect(getMojoClutchMultiplier(2)).toBe(0.88);
+      expect(getMojoClutchMultiplier(3)).toBe(0.85);
     });
   });
 });
@@ -891,8 +912,9 @@ describe('Display Helpers', () => {
       expect(getMojoColor(0)).toBe('#6b7280');
     });
 
-    test('Jacked is green', () => {
+    test('On Fire and Jacked use the top green shades', () => {
       expect(getMojoColor(2)).toBe('#16a34a');
+      expect(getMojoColor(3)).toBe('#15803d');
     });
   });
 
@@ -901,18 +923,19 @@ describe('Display Helpers', () => {
       expect(getMojoBarFill(-2)).toBe(0);
     });
 
-    test('0 maps to 50%', () => {
-      expect(getMojoBarFill(0)).toBe(50);
+    test('0 maps to 40%', () => {
+      expect(getMojoBarFill(0)).toBe(40);
     });
 
-    test('+2 maps to 100%', () => {
-      expect(getMojoBarFill(2)).toBe(100);
+    test('+3 maps to 100%', () => {
+      expect(getMojoBarFill(3)).toBe(100);
     });
   });
 
   describe('formatMojo', () => {
     test('formats positive Mojo with plus sign', () => {
-      expect(formatMojo(2)).toBe('Jacked (+2)');
+      expect(formatMojo(2)).toBe('On Fire (+2)');
+      expect(formatMojo(3)).toBe('Jacked (+3)');
       expect(formatMojo(1)).toBe('Locked In (+1)');
     });
 
@@ -960,8 +983,8 @@ describe('processMojoTriggers', () => {
     const result = processMojoTriggers(0, triggers, 'game-001', 'player-001');
 
     // 0 + 1.5 (HR) = 1.5 → 2
-    // Then RBIs don't change because already at max
-    expect(result.finalMojo).toBe(2);
+    // First RBI nudges 2.5 → 3, then final RBI stays at max
+    expect(result.finalMojo).toBe(3);
     expect(result.events.length).toBeGreaterThanOrEqual(1);
   });
 
@@ -996,7 +1019,7 @@ describe('processMojoTriggers', () => {
     const result = processMojoTriggers(-1, triggers, 'game-001', 'player-001');
 
     // High amplification should push to max
-    expect(result.finalMojo).toBe(2);
+    expect(result.finalMojo).toBe(3);
   });
 });
 

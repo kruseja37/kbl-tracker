@@ -1,125 +1,138 @@
-import { Suspense, lazy } from 'react';
-import { Routes, Route } from 'react-router-dom';
+import { Suspense, lazy } from "react";
+import { Routes, Route } from "react-router-dom";
+import { PostGameRouteBoundary } from "./components/PostGameRouteBoundary";
 
 // Global styles
-import './styles/global.css';
+import "./styles/global.css";
 
 // Legacy NavigationHeader removed - Figma pages have their own headers
-const NotFound = lazy(() => import('./pages/NotFound'));
+const NotFound = lazy(() => import("./pages/NotFound"));
 
 // Figma Design Pages (exhaustive UI replacement)
 const AppHome = lazy(() =>
-  import('./src_figma/app/pages/AppHome').then((module) => ({ default: module.AppHome })),
+  import("./src_figma/app/pages/AppHome").then((module) => ({
+    default: module.AppHome,
+  })),
 );
 const FranchiseSetup = lazy(() =>
-  import('./src_figma/app/pages/FranchiseSetup').then((module) => ({
+  import("./src_figma/app/pages/FranchiseSetup").then((module) => ({
     default: module.FranchiseSetup,
   })),
 );
 const FranchiseSelector = lazy(() =>
-  import('./src_figma/app/pages/FranchiseSelector').then((module) => ({
+  import("./src_figma/app/pages/FranchiseSelector").then((module) => ({
     default: module.FranchiseSelector,
   })),
 );
 const EliminationSetup = lazy(() =>
-  import('./src_figma/app/pages/EliminationSetup').then((module) => ({
+  import("./src_figma/app/pages/EliminationSetup").then((module) => ({
     default: module.EliminationSetup,
   })),
 );
 const EliminationSelector = lazy(() =>
-  import('./src_figma/app/pages/EliminationSelector').then((module) => ({
+  import("./src_figma/app/pages/EliminationSelector").then((module) => ({
     default: module.EliminationSelector,
   })),
 );
 const FranchiseHome = lazy(() =>
-  import('./src_figma/app/pages/FranchiseHome').then((module) => ({
+  import("./src_figma/app/pages/FranchiseHome").then((module) => ({
     default: module.FranchiseHome,
   })),
 );
 const GameTracker = lazy(() =>
-  import('./src_figma/app/pages/GameTracker').then((module) => ({ default: module.GameTracker })),
+  import("./src_figma/app/pages/GameTracker").then((module) => ({
+    default: module.GameTracker,
+  })),
 );
 const PostGameSummary = lazy(() =>
-  import('./src_figma/app/pages/PostGameSummary').then((module) => ({
+  import("./src_figma/app/pages/PostGameSummary").then((module) => ({
     default: module.PostGameSummary,
   })),
 );
 const ExhibitionGame = lazy(() =>
-  import('./src_figma/app/pages/ExhibitionGame').then((module) => ({
+  import("./src_figma/app/pages/ExhibitionGame").then((module) => ({
     default: module.ExhibitionGame,
   })),
 );
 const EliminationHome = lazy(() =>
-  import('./src_figma/app/pages/EliminationHome').then((module) => ({
+  import("./src_figma/app/pages/EliminationHome").then((module) => ({
     default: module.EliminationHome,
   })),
 );
 const SeasonSummary = lazy(() =>
-  import('./src_figma/app/pages/SeasonSummary').then((module) => ({
+  import("./src_figma/app/pages/SeasonSummary").then((module) => ({
     default: module.SeasonSummary,
   })),
 );
 const LeagueBuilder = lazy(() =>
-  import('./src_figma/app/pages/LeagueBuilder').then((module) => ({
+  import("./src_figma/app/pages/LeagueBuilder").then((module) => ({
     default: module.LeagueBuilder,
   })),
 );
 const LeagueBuilderLeagues = lazy(() =>
-  import('./src_figma/app/pages/LeagueBuilderLeagues').then((module) => ({
+  import("./src_figma/app/pages/LeagueBuilderLeagues").then((module) => ({
     default: module.LeagueBuilderLeagues,
   })),
 );
 const LeagueBuilderTeams = lazy(() =>
-  import('./src_figma/app/pages/LeagueBuilderTeams').then((module) => ({
+  import("./src_figma/app/pages/LeagueBuilderTeams").then((module) => ({
     default: module.LeagueBuilderTeams,
   })),
 );
 const LeagueBuilderPlayers = lazy(() =>
-  import('./src_figma/app/pages/LeagueBuilderPlayers').then((module) => ({
+  import("./src_figma/app/pages/LeagueBuilderPlayers").then((module) => ({
     default: module.LeagueBuilderPlayers,
   })),
 );
 const LeagueBuilderRosters = lazy(() =>
-  import('./src_figma/app/pages/LeagueBuilderRosters').then((module) => ({
+  import("./src_figma/app/pages/LeagueBuilderRosters").then((module) => ({
     default: module.LeagueBuilderRosters,
   })),
 );
 const LeagueBuilderDraft = lazy(() =>
-  import('./src_figma/app/pages/LeagueBuilderDraft').then((module) => ({
+  import("./src_figma/app/pages/LeagueBuilderDraft").then((module) => ({
     default: module.LeagueBuilderDraft,
   })),
 );
 const LeagueBuilderRules = lazy(() =>
-  import('./src_figma/app/pages/LeagueBuilderRules').then((module) => ({
+  import("./src_figma/app/pages/LeagueBuilderRules").then((module) => ({
     default: module.LeagueBuilderRules,
   })),
 );
 const AlmanacHome = lazy(() =>
-  import('./src_figma/app/pages/AlmanacHome').then((module) => ({ default: module.AlmanacHome })),
+  import("./src_figma/app/pages/AlmanacHome").then((module) => ({
+    default: module.AlmanacHome,
+  })),
 );
 const ExhibitionLeaders = lazy(() =>
-  import('./src_figma/app/pages/ExhibitionLeaders').then((module) => ({
+  import("./src_figma/app/pages/ExhibitionLeaders").then((module) => ({
     default: module.ExhibitionLeaders,
   })),
 );
 const GameBrowser = lazy(() =>
-  import('./src_figma/app/pages/GameBrowser').then((module) => ({ default: module.GameBrowser })),
+  import("./src_figma/app/pages/GameBrowser").then((module) => ({
+    default: module.GameBrowser,
+  })),
 );
 const GameDetail = lazy(() =>
-  import('./src_figma/app/pages/GameDetail').then((module) => ({ default: module.GameDetail })),
+  import("./src_figma/app/pages/GameDetail").then((module) => ({
+    default: module.GameDetail,
+  })),
 );
 const PlayerDirectory = lazy(() =>
-  import('./src_figma/app/pages/PlayerDirectory').then((module) => ({
+  import("./src_figma/app/pages/PlayerDirectory").then((module) => ({
     default: module.PlayerDirectory,
   })),
 );
 const PlayerInstanceCard = lazy(() =>
-  import('./src_figma/app/pages/PlayerInstanceCard').then((module) => ({
+  import("./src_figma/app/pages/PlayerInstanceCard").then((module) => ({
     default: module.PlayerInstanceCard,
   })),
 );
 const TeamPage = lazy(() =>
-  import('./src_figma/app/pages/TeamPage').then((module) => ({ default: module.TeamPage })),
+  import("./src_figma/app/pages/TeamPage").then((module) => ({
+    default: module.TeamPage,
+  })),
 );
 
 /**
@@ -152,12 +165,22 @@ function App() {
         {/* Franchise Flow - Figma Design */}
         <Route path="/franchise/select" element={<FranchiseSelector />} />
         <Route path="/franchise/setup" element={<FranchiseSetup />} />
-        <Route path="/franchise/:franchiseId/season-summary" element={<SeasonSummary />} />
+        <Route
+          path="/franchise/:franchiseId/season-summary"
+          element={<SeasonSummary />}
+        />
         <Route path="/franchise/:franchiseId" element={<FranchiseHome />} />
 
         {/* Game Flow - Figma Design */}
         <Route path="/game-tracker/:gameId" element={<GameTracker />} />
-        <Route path="/post-game/:gameId" element={<PostGameSummary />} />
+        <Route
+          path="/post-game/:gameId"
+          element={
+            <PostGameRouteBoundary>
+              <PostGameSummary />
+            </PostGameRouteBoundary>
+          }
+        />
 
         {/* Exhibition Game - Figma Design */}
         <Route path="/exhibition" element={<ExhibitionGame />} />
@@ -165,14 +188,26 @@ function App() {
         {/* Elimination Mode (Playoffs) - Figma Design */}
         <Route path="/elimination/select" element={<EliminationSelector />} />
         <Route path="/elimination/setup" element={<EliminationSetup />} />
-        <Route path="/elimination/:eliminationId" element={<EliminationHome />} />
+        <Route
+          path="/elimination/:eliminationId"
+          element={<EliminationHome />}
+        />
 
         {/* League Builder - Figma Design */}
         <Route path="/league-builder" element={<LeagueBuilder />} />
-        <Route path="/league-builder/leagues" element={<LeagueBuilderLeagues />} />
+        <Route
+          path="/league-builder/leagues"
+          element={<LeagueBuilderLeagues />}
+        />
         <Route path="/league-builder/teams" element={<LeagueBuilderTeams />} />
-        <Route path="/league-builder/players" element={<LeagueBuilderPlayers />} />
-        <Route path="/league-builder/rosters" element={<LeagueBuilderRosters />} />
+        <Route
+          path="/league-builder/players"
+          element={<LeagueBuilderPlayers />}
+        />
+        <Route
+          path="/league-builder/rosters"
+          element={<LeagueBuilderRosters />}
+        />
         <Route path="/league-builder/draft" element={<LeagueBuilderDraft />} />
         <Route path="/league-builder/rules" element={<LeagueBuilderRules />} />
 
@@ -182,8 +217,14 @@ function App() {
         <Route path="/almanac/games" element={<GameBrowser />} />
         <Route path="/almanac/games/:gameId" element={<GameDetail />} />
         <Route path="/almanac/players" element={<PlayerDirectory />} />
-        <Route path="/almanac/players/:canonicalId" element={<PlayerDirectory />} />
-        <Route path="/almanac/players/:canonicalId/:instanceId" element={<PlayerInstanceCard />} />
+        <Route
+          path="/almanac/players/:canonicalId"
+          element={<PlayerDirectory />}
+        />
+        <Route
+          path="/almanac/players/:canonicalId/:instanceId"
+          element={<PlayerInstanceCard />}
+        />
         <Route path="/almanac/teams/:leagueId/:teamId" element={<TeamPage />} />
 
         {/* 404 */}

@@ -410,8 +410,11 @@ export function getStateBadge(
   if (fitnessState === 'JUICED') {
     return { text: 'JUICED', color: '#ffffff', bgColor: '#a855f7' };
   }
-  if (mojoLevel === 2) {
+  if (mojoLevel === 3) {
     return { text: 'JACKED', color: '#ffffff', bgColor: '#16a34a' };
+  }
+  if (mojoLevel === 2) {
+    return { text: 'ON FIRE', color: '#ffffff', bgColor: '#22c55e' };
   }
   if (mojoLevel === -2) {
     return { text: 'RATTLED', color: '#ffffff', bgColor: '#dc2626' };
@@ -498,11 +501,18 @@ export function detectStateChanges(
   if (currentMojo !== previousMojo) {
     const mojoDelta = currentMojo - previousMojo;
 
-    if (currentMojo === 2) {
+    if (currentMojo === 3) {
       notifications.push({
         type: 'mojo_change',
         severity: 'info',
         message: `${playerName} is JACKED! 🔥🔥🔥`,
+        icon: '🔥',
+      });
+    } else if (currentMojo === 2) {
+      notifications.push({
+        type: 'mojo_change',
+        severity: 'info',
+        message: `${playerName} is ON FIRE! 🔥🔥`,
         icon: '🔥',
       });
     } else if (currentMojo === -2) {

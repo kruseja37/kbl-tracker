@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import type { AtBatEvent } from '../../../utils/eventLog';
 import type { PlayLogEntry, RunnerSubEntry } from '../utils/playLogTypes';
 import {
@@ -80,6 +80,7 @@ export interface EnrichmentUpdate {
   fieldLocation?: { x: number; y: number };
   exitType?: string; // persisted as exitType, UI shows as contactType
   fieldingSequence?: number[];
+  fieldingDifficulty?: 'ROUTINE' | 'DIVING' | 'WALL' | 'RUNNING' | 'LEAPING';
   fieldingPlayType?: FieldingPlayTypeValue;
   fieldingAttemptType?: FieldingAttemptType;
   fieldingAttemptOutcome?: FieldingAttemptOutcome;
@@ -465,6 +466,16 @@ export function EnrichmentPanel({
   const [localFieldingSeq, setLocalFieldingSeq] = useState<number[]>(
     currentEnrichment?.fieldingSequence || []
   );
+
+  useEffect(() => {
+    const externalFieldingSeq = currentEnrichment?.fieldingSequence || [];
+    const hasDifferentLength = externalFieldingSeq.length !== localFieldingSeq.length;
+    const hasDifferentContents = !hasDifferentLength && externalFieldingSeq.some((value, index) => value !== localFieldingSeq[index]);
+
+    if (hasDifferentLength || hasDifferentContents) {
+      setLocalFieldingSeq(externalFieldingSeq);
+    }
+  }, [currentEnrichment?.fieldingSequence, localFieldingSeq]);
 
   const config = getEnrichmentConfig(entry.result);
 

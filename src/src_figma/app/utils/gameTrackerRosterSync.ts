@@ -20,14 +20,17 @@ export function reconcileTeamPlayersWithLineupSnapshot(
   const seenPlayerIds = new Set<string>();
   const currentPitcher = snapshot.currentPitcher;
   const currentPitcherAlreadyInLineup = !!(currentPitcher && lineupById.has(currentPitcher.playerId));
+  const separateDhInLineup = snapshot.lineup.some((player) =>
+    player.position === 'DH' && player.playerId !== currentPitcher?.playerId
+  );
+  const shouldInjectPitcherIntoLineup = !!(currentPitcher && !currentPitcherAlreadyInLineup && !separateDhInLineup);
 
   const nextPlayers = existingPlayers.map((player) => {
     const playerId = getRosterEntityId(player, team);
     seenPlayerIds.add(playerId);
 
     if (
-      currentPitcher &&
-      !currentPitcherAlreadyInLineup &&
+      shouldInjectPitcherIntoLineup &&
       (
         playerId === currentPitcher.playerId ||
         player.position === 'P' ||
@@ -106,8 +109,7 @@ export function reconcileTeamPlayersWithLineupSnapshot(
   }
 
   if (
-    currentPitcher &&
-    !currentPitcherAlreadyInLineup &&
+    shouldInjectPitcherIntoLineup &&
     !nextPlayers.some((player) => getRosterEntityId(player, team) === currentPitcher.playerId)
   ) {
     nextPlayers.push({
@@ -121,7 +123,7 @@ export function reconcileTeamPlayersWithLineupSnapshot(
     });
   }
 
-  if (currentPitcher && !currentPitcherAlreadyInLineup) {
+  if (shouldInjectPitcherIntoLineup) {
     const existingPitcherSlot = nextPlayers.find((player) => {
       const playerId = getRosterEntityId(player, team);
       return (

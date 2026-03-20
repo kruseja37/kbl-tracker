@@ -60,17 +60,18 @@ export interface ExtraEvent {
 
 // GAP-GT-2-P: MojoLevelLabel — spec uses string labels, engine uses numeric MojoLevel
 // Spec: 6-tier ('Rattled'|'Tense'|'Neutral'|'Locked-In'|'On Fire'|'Jacked')
-// Engine: 5-tier numeric (-2|-1|0|1|2) — 'On Fire' has no engine equivalent
+// Engine: 6-tier numeric (-2|-1|0|1|2|3)
 export type MojoLevelLabel = 'Rattled' | 'Tense' | 'Neutral' | 'Locked-In' | 'On Fire' | 'Jacked';
 
-/** Convert engine MojoLevel (-2..+2) to spec display label */
+/** Convert engine MojoLevel (-2..+3) to spec display label */
 export function toMojoLabel(level: MojoLevel): MojoLevelLabel {
   const map: Record<MojoLevel, MojoLevelLabel> = {
     [-2]: 'Rattled',
     [-1]: 'Tense',
     [0]: 'Neutral',
     [1]: 'Locked-In',
-    [2]: 'Jacked',
+    [2]: 'On Fire',
+    [3]: 'Jacked',
   };
   return map[level];
 }

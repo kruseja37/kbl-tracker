@@ -12,6 +12,13 @@
 
 import { useState, useCallback } from 'react';
 import { useDrag, useDrop } from 'react-dnd';
+import {
+  SubstitutionModalBase,
+  ModalSection,
+  ModalActions,
+  ModalButton,
+  PositionSelect,
+} from './modals/SubstitutionModalBase';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type DndRef = any; // React-dnd connector refs compatibility
@@ -54,7 +61,7 @@ export interface BullpenPitcher {
 }
 
 export interface SubstitutionData {
-  type: 'player_sub' | 'position_swap' | 'pitching_change' | 'double_switch';
+  type: 'player_sub' | 'position_swap' | 'position_change' | 'pitching_change' | 'double_switch';
   incomingPlayerId: string;
   incomingPlayerName?: string;
   outgoingPlayerId: string;
@@ -81,6 +88,8 @@ const ItemTypes = {
   BULLPEN_PITCHER: 'BULLPEN_PITCHER',
 };
 
+const POSITION_OPTIONS = ['C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF', 'P', 'DH'] as const;
+
 // ============================================
 // LINEUP SLOT COMPONENT
 // ============================================
@@ -88,6 +97,7 @@ const ItemTypes = {
 interface LineupSlotProps {
   player: LineupPlayer;
   onDrop: (incomingPlayer: { id: string; type: string; from: 'lineup' | 'bench' }, targetPlayer: LineupPlayer) => void;
+  onChangePosition?: (player: LineupPlayer) => void;
   /** EXH-036: Callback when player row is clicked */
   onPlayerClick?: (playerId: string, playerName: string) => void;
   touchMode?: boolean;
@@ -95,7 +105,15 @@ interface LineupSlotProps {
   onTouchTap?: (player: LineupPlayer) => void;
 }
 
-function LineupSlot({ player, onDrop, onPlayerClick, touchMode = false, touchSelected = false, onTouchTap }: LineupSlotProps) {
+function LineupSlot({
+  player,
+  onDrop,
+  onChangePosition,
+  onPlayerClick,
+  touchMode = false,
+  touchSelected = false,
+  onTouchTap,
+}: LineupSlotProps) {
   const [{ isDragging }, drag] = useDrag(() => ({
     type: ItemTypes.LINEUP_PLAYER,
     item: { id: player.id, type: ItemTypes.LINEUP_PLAYER, from: 'lineup' as const, player },
@@ -173,6 +191,19 @@ function LineupSlot({ player, onDrop, onPlayerClick, touchMode = false, touchSel
         {player.name}
         {player.isUsed && ' ❌'}
       </div>
+
+      {onChangePosition && !player.isUsed && (
+        <button
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation();
+            onChangePosition(player);
+          }}
+          className="shrink-0 rounded border border-[#5dade2] bg-[#1a5276] px-1.5 py-0.5 text-[8px] font-bold text-white hover:bg-[#21618c]"
+        >
+          POS
+        </button>
+      )}
 
       {/* Stats */}
       {player.stats?.avg && (
@@ -382,7 +413,7 @@ function CurrentPitcherSlot({ pitcher, onPitchingChange }: CurrentPitcherSlotPro
 // ============================================
 
 interface SubConfirmModalProps {
-  subType: 'player_sub' | 'position_swap' | 'pitching_change';
+  subType: 'player_sub' | 'position_swap' | 'position_change' | 'pitching_change';
   incomingPlayer: string;
   outgoingPlayer: string;
   newPosition?: string;
@@ -402,12 +433,18 @@ function SubConfirmModal({
     ? 'PITCHING CHANGE'
     : subType === 'position_swap'
     ? 'POSITION SWAP'
+    : subType === 'position_change'
+    ? 'CHANGE POSITION'
     : 'SUBSTITUTION';
 
   const description = subType === 'pitching_change'
     ? `Replace ${outgoingPlayer} with ${incomingPlayer}?`
     : subType === 'position_swap'
-    ? `Swap positions: ${incomingPlayer} ↔ ${outgoingPlayer}`
+    ? newPosition
+      ? `Move ${incomingPlayer} to ${newPosition} and swap with ${outgoingPlayer}?`
+      : `Swap positions: ${incomingPlayer} ↔ ${outgoingPlayer}`
+    : subType === 'position_change'
+    ? `${incomingPlayer} moves to ${newPosition}?`
     : `${incomingPlayer} replaces ${outgoingPlayer}${newPosition ? ` at ${newPosition}` : ''}`;
 
   return (
@@ -435,6 +472,57 @@ function SubConfirmModal({
   );
 }
 
+interface PositionChangeModalProps {
+  player: LineupPlayer;
+  lineup: LineupPlayer[];
+  onApply: (newPosition: string, occupiedPlayer?: LineupPlayer) => void;
+  onCancel: () => void;
+}
+
+function PositionChangeModal({ player, lineup, onApply, onCancel }: PositionChangeModalProps) {
+  const [selectedPosition, setSelectedPosition] = useState(player.position);
+  const occupiedPlayer = lineup.find(
+    (candidate) => candidate.id !== player.id && candidate.position === selectedPosition
+  );
+
+  return (
+    <SubstitutionModalBase
+      isOpen={true}
+      onClose={onCancel}
+      title={`Change Position — ${player.name}`}
+      icon="🧭"
+      width="sm"
+    >
+      <ModalSection title="SELECT NEW POSITION">
+        <PositionSelect
+          label="New Position"
+          value={selectedPosition}
+          onChange={setSelectedPosition}
+          positions={[...POSITION_OPTIONS]}
+        />
+        <div className="text-[10px] text-[#E8E8D8]/70">
+          Current: {player.position}
+        </div>
+        {occupiedPlayer && (
+          <div className="mt-2 border border-[#FFD700] bg-[#5a4a18] px-2 py-1.5 text-[10px] text-[#FFD700]">
+            {selectedPosition} is occupied by {occupiedPlayer.name}. Confirming will swap the two players.
+          </div>
+        )}
+      </ModalSection>
+      <ModalActions>
+        <ModalButton variant="secondary" onClick={onCancel}>Cancel</ModalButton>
+        <ModalButton
+          variant="primary"
+          disabled={!selectedPosition || selectedPosition === player.position}
+          onClick={() => onApply(selectedPosition, occupiedPlayer)}
+        >
+          {occupiedPlayer ? 'Swap Positions' : 'Change Position'}
+        </ModalButton>
+      </ModalActions>
+    </SubstitutionModalBase>
+  );
+}
+
 // ============================================
 // MAIN COMPONENT
 // ============================================
@@ -454,7 +542,7 @@ export function LineupCard({
 
   // Pending substitution for confirmation
   const [pendingSub, setPendingSub] = useState<{
-    type: 'player_sub' | 'position_swap' | 'pitching_change';
+    type: 'player_sub' | 'position_swap' | 'position_change' | 'pitching_change';
     incomingId: string;
     incomingName: string;
     outgoingId: string;
@@ -462,6 +550,7 @@ export function LineupCard({
     newPosition?: string;
     lineupSpot?: number;
   } | null>(null);
+  const [positionChangePlayer, setPositionChangePlayer] = useState<LineupPlayer | null>(null);
   const [touchSelection, setTouchSelection] = useState<{
     from: 'bench' | 'lineup';
     id: string;
@@ -516,6 +605,39 @@ export function LineupCard({
       });
     }
   }, [bullpen, currentPitcher]);
+
+  const handleOpenPositionChange = useCallback((player: LineupPlayer) => {
+    setPositionChangePlayer(player);
+    setTouchSelection(null);
+  }, []);
+
+  const handleApplyPositionChange = useCallback((newPosition: string, occupiedPlayer?: LineupPlayer) => {
+    if (!positionChangePlayer) return;
+
+    if (occupiedPlayer) {
+      setPendingSub({
+        type: 'position_swap',
+        incomingId: positionChangePlayer.id,
+        incomingName: positionChangePlayer.name,
+        outgoingId: occupiedPlayer.id,
+        outgoingName: occupiedPlayer.name,
+        newPosition,
+        lineupSpot: positionChangePlayer.battingOrder,
+      });
+    } else {
+      setPendingSub({
+        type: 'position_change',
+        incomingId: positionChangePlayer.id,
+        incomingName: positionChangePlayer.name,
+        outgoingId: positionChangePlayer.id,
+        outgoingName: positionChangePlayer.name,
+        newPosition,
+        lineupSpot: positionChangePlayer.battingOrder,
+      });
+    }
+
+    setPositionChangePlayer(null);
+  }, [positionChangePlayer]);
 
   const handleTouchBenchTap = useCallback((player: BenchPlayer) => {
     if (!prefersTouchMode || player.isUsed) return;
@@ -616,7 +738,7 @@ export function LineupCard({
                 ? touchSelection.from === 'bench'
                   ? `Selected bench player: ${touchSelection.name}. Tap a lineup slot to substitute.`
                   : `Selected lineup player: ${touchSelection.name}. Tap another lineup slot to swap positions.`
-                : 'Touch mode: tap a bench player, then a lineup slot to substitute. Tap a bullpen pitcher to change pitchers.'}
+                : 'Touch mode: tap a bench player, then a lineup slot to substitute. Use POS to change a defender without swapping. Tap a bullpen pitcher to change pitchers.'}
             </div>
           )}
           {/* Lineup */}
@@ -628,6 +750,7 @@ export function LineupCard({
                   key={player.id}
                   player={player}
                   onDrop={handleLineupDrop}
+                  onChangePosition={handleOpenPositionChange}
                   touchMode={prefersTouchMode}
                   touchSelected={touchSelection?.from === 'lineup' && touchSelection.id === player.id}
                   onTouchTap={handleTouchLineupTap}
@@ -692,6 +815,15 @@ export function LineupCard({
           newPosition={pendingSub.newPosition}
           onConfirm={handleConfirmSub}
           onCancel={handleCancelSub}
+        />
+      )}
+
+      {positionChangePlayer && (
+        <PositionChangeModal
+          player={positionChangePlayer}
+          lineup={lineup}
+          onApply={handleApplyPositionChange}
+          onCancel={() => setPositionChangePlayer(null)}
         />
       )}
     </div>

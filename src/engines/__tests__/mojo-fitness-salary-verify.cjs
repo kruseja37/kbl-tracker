@@ -21,7 +21,8 @@ const MOJO_STATES = {
   [-1]: { level: -1, name: 'TENSE', displayName: 'Tense', statMultiplier: 0.90 },
   [0]: { level: 0, name: 'NORMAL', displayName: 'Normal', statMultiplier: 1.00 },
   [1]: { level: 1, name: 'LOCKED_IN', displayName: 'Locked In', statMultiplier: 1.10 },
-  [2]: { level: 2, name: 'JACKED', displayName: 'Jacked', statMultiplier: 1.18 },
+  [2]: { level: 2, name: 'ON_FIRE', displayName: 'On Fire', statMultiplier: 1.14 },
+  [3]: { level: 3, name: 'JACKED', displayName: 'Jacked', statMultiplier: 1.18 },
 };
 
 const MOJO_TRIGGERS = {
@@ -58,7 +59,7 @@ const MOJO_AMPLIFICATION = {
 const MOJO_CARRYOVER_RATE = 0.3;
 
 function clampMojo(value) {
-  return Math.max(-2, Math.min(2, Math.round(value)));
+  return Math.max(-2, Math.min(3, Math.round(value)));
 }
 
 function getMojoStatMultiplier(mojo) {
@@ -102,7 +103,7 @@ function calculateStartingMojo(endMojo) {
 }
 
 function getMojoFameModifier(mojo) {
-  const modifiers = { [-2]: 1.30, [-1]: 1.15, [0]: 1.00, [1]: 0.90, [2]: 0.80 };
+  const modifiers = { [-2]: 1.30, [-1]: 1.15, [0]: 1.00, [1]: 0.90, [2]: 0.85, [3]: 0.80 };
   return modifiers[mojo];
 }
 
@@ -254,13 +255,14 @@ function assertClose(actual, expected, tolerance, message) {
 
 console.log('\n=== MOJO ENGINE TESTS ===\n');
 
-test('Mojo states: 5 levels from -2 to +2', () => {
-  assert.strictEqual(Object.keys(MOJO_STATES).length, 5);
+test('Mojo states: 6 levels from -2 to +3', () => {
+  assert.strictEqual(Object.keys(MOJO_STATES).length, 6);
   assert.strictEqual(MOJO_STATES[-2].name, 'RATTLED');
   assert.strictEqual(MOJO_STATES[-1].name, 'TENSE');
   assert.strictEqual(MOJO_STATES[0].name, 'NORMAL');
   assert.strictEqual(MOJO_STATES[1].name, 'LOCKED_IN');
-  assert.strictEqual(MOJO_STATES[2].name, 'JACKED');
+  assert.strictEqual(MOJO_STATES[2].name, 'ON_FIRE');
+  assert.strictEqual(MOJO_STATES[3].name, 'JACKED');
 });
 
 test('Mojo stat multipliers: correct values', () => {
@@ -268,7 +270,8 @@ test('Mojo stat multipliers: correct values', () => {
   assertClose(getMojoStatMultiplier(-1), 0.90, 0.001, 'Tense');
   assertClose(getMojoStatMultiplier(0), 1.00, 0.001, 'Normal');
   assertClose(getMojoStatMultiplier(1), 1.10, 0.001, 'Locked In');
-  assertClose(getMojoStatMultiplier(2), 1.18, 0.001, 'Jacked');
+  assertClose(getMojoStatMultiplier(2), 1.14, 0.001, 'On Fire');
+  assertClose(getMojoStatMultiplier(3), 1.18, 0.001, 'Jacked');
 });
 
 test('Mojo triggers: positive triggers have positive deltas', () => {
@@ -309,7 +312,7 @@ test('Mojo amplification: multiple factors stack', () => {
 });
 
 test('Mojo carryover: 30% rate', () => {
-  assert.strictEqual(calculateStartingMojo(2), 1);   // +2 * 0.3 = 0.6 → rounds to 1
+  assert.strictEqual(calculateStartingMojo(3), 1);   // +3 * 0.3 = 0.9 → rounds to 1
   assert.strictEqual(calculateStartingMojo(-2), -1); // -2 * 0.3 = -0.6 → rounds to -1
   assert.strictEqual(calculateStartingMojo(0), 0);   // 0 * 0.3 = 0
 });
@@ -319,14 +322,14 @@ test('Mojo Fame modifier: Rattled gets 30% bonus', () => {
 });
 
 test('Mojo Fame modifier: Jacked gets 20% penalty', () => {
-  assertClose(getMojoFameModifier(2), 0.80, 0.001, 'Jacked');
+  assertClose(getMojoFameModifier(3), 0.80, 0.001, 'Jacked');
 });
 
-test('Mojo clamp: stays in -2 to +2 range', () => {
-  assert.strictEqual(clampMojo(5), 2);
+test('Mojo clamp: stays in -2 to +3 range', () => {
+  assert.strictEqual(clampMojo(5), 3);
   assert.strictEqual(clampMojo(-5), -2);
   assert.strictEqual(clampMojo(0.4), 0);
-  assert.strictEqual(clampMojo(1.6), 2);
+  assert.strictEqual(clampMojo(2.6), 3);
 });
 
 console.log('\n=== FITNESS ENGINE TESTS ===\n');
@@ -509,7 +512,7 @@ test('True Value: medium ROI = GOOD_VALUE', () => {
 console.log('\n=== INTEGRATION TESTS ===\n');
 
 test('Combined Mojo + Fitness multiplier: Jacked + Juiced = maximum boost', () => {
-  const mojoMult = getMojoStatMultiplier(2);   // 1.18
+  const mojoMult = getMojoStatMultiplier(3);   // 1.18
   const fitMult = getFitnessStatMultiplier('JUICED');  // 1.20
   const combined = mojoMult * fitMult;
   assertClose(combined, 1.416, 0.01, 'Combined multiplier');

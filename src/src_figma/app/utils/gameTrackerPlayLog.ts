@@ -239,11 +239,13 @@ export function mapAtBatEventToPlayLogEntry(event: AtBatEvent): PlayLogEntry {
   const runsScored = event.runnerOutcomes?.length ? scoreDerivedRuns : rawRunsScored;
   const fieldingSequence = event.enrichment?.fieldingSequence?.join('-');
   const enrichmentAny = event.enrichment as (NonNullable<AtBatEvent['enrichment']> & {
+    fieldingDifficulty?: string;
     fieldingAttemptType?: string;
     fieldingAttemptOutcome?: string;
     playMechanic?: string;
   }) | undefined;
   const hasFieldingDefaults = !!(
+    enrichmentAny?.fieldingDifficulty ||
     event.enrichment?.fieldingPlayType ||
     enrichmentAny?.fieldingAttemptType ||
     enrichmentAny?.fieldingAttemptOutcome ||

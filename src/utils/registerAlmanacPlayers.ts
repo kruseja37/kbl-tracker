@@ -25,7 +25,9 @@ export async function registerAlmanacPlayers(
   ]);
 
   for (const playerId of instanceIds) {
+    console.log('[Almanac] Attempting registration for playerId:', playerId);
     const player = await getPlayer(playerId);
+    console.log('[Almanac] getPlayer result:', playerId, player ? 'FOUND' : 'NULL');
 
     if (!player) {
       console.warn(`[Almanac] Skipping canonical registration for missing player "${playerId}"`);

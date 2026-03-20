@@ -34,7 +34,7 @@ import { buildDHContext, getLeagues, getSeasonDHConfig, initializeDefaultLeagues
 import RelationshipPanel from '../RelationshipPanel';
 import AgingDisplay from '../AgingDisplay';
 import type { Relationship } from '../../engines/relationshipEngine';
-import { MOJO_STATES, getMojoColor, type MojoLevel } from '../../engines/mojoEngine';
+import { MOJO_LEVELS, MOJO_STATES, getMojoColor, type MojoLevel } from '../../engines/mojoEngine';
 import { FITNESS_STATES, type FitnessState } from '../../engines/fitnessEngine';
 
 // ============================================
@@ -352,7 +352,7 @@ export function PlayerCard({
                 <span className="font-pixel text-[0.6rem] text-gray-500 w-12">MOJO</span>
                 {isEditingMojo && allowEdit && onMojoChange ? (
                   <div className="flex gap-1 flex-wrap">
-                    {([-2, -1, 0, 1, 2] as MojoLevel[]).map((level) => (
+                    {MOJO_LEVELS.map((level) => (
                       <button
                         key={level}
                         onClick={() => {

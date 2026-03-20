@@ -1,7 +1,7 @@
 /**
  * Mojo Engine — Boundary-Value Matrix Tests
  *
- * 14 golden cases: all 5 mojo states, triggers, carryover,
+ * 14 golden cases: all 6 mojo states, triggers, carryover,
  * stat multipliers, combined modifiers, edge cases
  */
 import { describe, it, expect } from 'vitest';
@@ -16,6 +16,7 @@ import {
   inferMojoTriggers,
   clampMojo,
   isValidMojoLevel,
+  MOJO_LEVELS,
   MOJO_STATES,
   MOJO_CARRYOVER_RATE,
 } from '../../../engines/mojoEngine';
@@ -23,14 +24,15 @@ import {
 type MojoLevel = Parameters<typeof getMojoState>[0];
 
 describe('Mojo Engine — Boundary-Value Matrix', () => {
-  // ─── Case 1: All 5 mojo states ───────────────────
-  it('MJ-01: 5 mojo states have correct multipliers', () => {
+  // ─── Case 1: All 6 mojo states ───────────────────
+  it('MJ-01: 6 mojo states have correct multipliers', () => {
     const expected: [MojoLevel, number][] = [
       [-2, 0.82], // RATTLED
       [-1, 0.90], // TENSE
       [0, 1.00],  // NORMAL
       [1, 1.10],  // LOCKED IN
-      [2, 1.18],  // JACKED
+      [2, 1.14],  // ON FIRE
+      [3, 1.18],  // JACKED
     ];
 
     for (const [level, mult] of expected) {
@@ -41,10 +43,10 @@ describe('Mojo Engine — Boundary-Value Matrix', () => {
 
   // ─── Case 2: Mojo state metadata ─────────────────
   it('MJ-02: Each mojo level has a name and state', () => {
-    for (let level = -2; level <= 2; level++) {
-      const state = getMojoState(level as MojoLevel);
+    for (const level of MOJO_LEVELS) {
+      const state = getMojoState(level);
       expect(state).toBeDefined();
-      const name = getMojoDisplayName(level as MojoLevel);
+      const name = getMojoDisplayName(level);
       expect(typeof name).toBe('string');
       expect(name.length).toBeGreaterThan(0);
     }
@@ -56,12 +58,12 @@ describe('Mojo Engine — Boundary-Value Matrix', () => {
     // applyMojoToStat uses Math.round, so 80*0.82=65.6→66
     expect(applyMojoToStat(baseStat, -2)).toBe(Math.round(80 * 0.82));
     expect(applyMojoToStat(baseStat, 0)).toBe(80);
-    expect(applyMojoToStat(baseStat, 2)).toBe(Math.round(80 * 1.18));
+    expect(applyMojoToStat(baseStat, 3)).toBe(Math.round(80 * 1.18));
   });
 
   // ─── Case 4: Stat = 0 with mojo ─────────────────
   it('MJ-04: Base stat 0 → always 0 regardless of mojo', () => {
-    expect(applyMojoToStat(0, 2)).toBe(0);
+    expect(applyMojoToStat(0, 3)).toBe(0);
     expect(applyMojoToStat(0, -2)).toBe(0);
   });
 
@@ -80,9 +82,9 @@ describe('Mojo Engine — Boundary-Value Matrix', () => {
   });
 
   // ─── Case 7: Mojo clamping at ceiling ────────────
-  it('MJ-07: Mojo cannot exceed +2 (JACKED)', () => {
-    const { newMojo } = applyMojoChange(2 as MojoLevel, 'HOME_RUN' as any);
-    expect(newMojo).toBeLessThanOrEqual(2);
+  it('MJ-07: Mojo cannot exceed +3 (JACKED)', () => {
+    const { newMojo } = applyMojoChange(3 as MojoLevel, 'HOME_RUN' as any);
+    expect(newMojo).toBeLessThanOrEqual(3);
   });
 
   // ─── Case 8: Mojo clamping at floor ──────────────
@@ -93,9 +95,9 @@ describe('Mojo Engine — Boundary-Value Matrix', () => {
 
   // ─── Case 9: Carryover mechanics ─────────────────
   it('MJ-09: Starting mojo = regression toward 0', () => {
-    // JACKED (+2) → next game should start lower
-    const fromJacked = calculateStartingMojo(2 as MojoLevel);
-    expect(fromJacked).toBeLessThan(2);
+    // JACKED (+3) → next game should start lower
+    const fromJacked = calculateStartingMojo(3 as MojoLevel);
+    expect(fromJacked).toBeLessThan(3);
     expect(fromJacked).toBeGreaterThanOrEqual(-2);
 
     // RATTLED (-2) → next game should start higher
@@ -118,17 +120,18 @@ describe('Mojo Engine — Boundary-Value Matrix', () => {
     expect(isValidMojoLevel(-2)).toBe(true);
     expect(isValidMojoLevel(0)).toBe(true);
     expect(isValidMojoLevel(2)).toBe(true);
-    expect(isValidMojoLevel(3)).toBe(false);
+    expect(isValidMojoLevel(3)).toBe(true);
+    expect(isValidMojoLevel(4)).toBe(false);
     expect(isValidMojoLevel(-3)).toBe(false);
     expect(isValidMojoLevel(0.5)).toBe(false);
   });
 
   // ─── Case 12: Clamp mojo ────────────────────────
   it('MJ-12: clampMojo handles out-of-range values', () => {
-    expect(clampMojo(5)).toBe(2);
+    expect(clampMojo(5)).toBe(3);
     expect(clampMojo(-5)).toBe(-2);
     expect(clampMojo(0)).toBe(0);
-    expect(clampMojo(1.7)).toBe(2); // rounds
+    expect(clampMojo(2.6)).toBe(3); // rounds
   });
 
   // ─── Case 13: Infer triggers from play result ────
@@ -141,9 +144,9 @@ describe('Mojo Engine — Boundary-Value Matrix', () => {
   });
 
   // ─── Case 14: MOJO_STATES constant structure ─────
-  it('MJ-14: MOJO_STATES has all 5 levels', () => {
+  it('MJ-14: MOJO_STATES has all 6 levels', () => {
     expect(MOJO_STATES).toBeDefined();
     const states = Object.values(MOJO_STATES);
-    expect(states.length).toBeGreaterThanOrEqual(5);
+    expect(states.length).toBeGreaterThanOrEqual(6);
   });
 });
