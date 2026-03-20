@@ -214,7 +214,8 @@ export function advanceRunner(
 
     // Earned run if reached via hit, walk, HBP, or FC (not error)
     // CRIT-03 fix: FC runs ARE earned per baseball rules — only errors produce unearned runs
-    const wasEarnedRun = runner.howReached !== 'error';
+    const wasEarnedRun =
+      runner.howReached !== 'error' && runner.howReached !== 'ghost_runner';
 
     scoredEvent = {
       runner: updatedRunner,
@@ -469,7 +470,10 @@ export function getERSummary(state: RunnerTrackingState): Array<{
 
     for (const runner of stats.runnersScored) {
       // CRIT-03 fix: FC runs ARE earned — only errors produce unearned runs
-      if (runner.howReached !== 'error') {
+      if (
+        runner.howReached !== 'error' &&
+        runner.howReached !== 'ghost_runner'
+      ) {
         earnedRuns++;
       } else {
         unearnedRuns++;

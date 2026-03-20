@@ -554,6 +554,7 @@ export function GameTracker() {
     // T0-01: Total innings for auto game-end detection
     totalInnings?: number;
     useDH?: boolean;
+    extraInningRunner?: boolean;
   } | null;
 
   // Team IDs - use navigation state or standalone defaults
@@ -638,6 +639,7 @@ export function GameTracker() {
     recordPlayerStateChange,
     reassignRunnerEventAttribution,
     recordManagerMoment,
+    placeGhostRunner,
     advanceRunner,
     advanceRunnersBatch,
     makeSubstitution,
@@ -651,6 +653,7 @@ export function GameTracker() {
     applyScoreAdjustment,
     applyBasesCorrection,
     applyOutsAdjustment,
+    scheduleAutoEndInning,
     setRunnerOutcomeCorrectionActive,
     queueAutoEndGame,
     pitchCountPrompt,
@@ -678,6 +681,7 @@ export function GameTracker() {
     atBatSequence,
   } = useGameState(gameId);
   const [gameInitialized, setGameInitialized] = useState(false);
+  const extraInningRunnerPlacementRef = useRef<string | null>(null);
 
   // Set playoff context from navigation state (if this is a playoff game)
   const isPlayoffGame =
@@ -704,6 +708,101 @@ export function GameTracker() {
       setSelectedStadium(navStadium);
     }
   }, [navigationState?.stadiumName, selectedStadium]);
+
+  useEffect(() => {
+    const regulationInnings = navigationState?.totalInnings || 9;
+    if (
+      !navigationState?.extraInningRunner ||
+      !gameInitialized ||
+      gameState.gamePhase !== "LIVE" ||
+      gameState.inning <= regulationInnings ||
+      gameState.outs !== 0 ||
+      gameState.bases.first ||
+      gameState.bases.second ||
+      gameState.bases.third
+    ) {
+      return;
+    }
+
+    const halfKey = `${gameState.inning}-${gameState.isTop ? "TOP" : "BOTTOM"}`;
+    if (extraInningRunnerPlacementRef.current === halfKey) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const placeExtraInningRunner = async () => {
+      try {
+        const lineupSnapshot = getLineupStateSnapshot();
+        const batterIndices = getBatterIndicesSnapshot();
+        const battingSide = gameState.isTop ? "away" : "home";
+        const battingLineup = lineupSnapshot[battingSide].lineup;
+        if (battingLineup.length === 0) {
+          return;
+        }
+
+        const currentBatterIndex =
+          battingSide === "away" ? batterIndices.away : batterIndices.home;
+        const fallbackIndex =
+          (currentBatterIndex - 1 + battingLineup.length) % battingLineup.length;
+        let runnerId = battingLineup[fallbackIndex]?.playerId;
+
+        const previousHalf = gameState.isTop
+          ? { inning: gameState.inning - 1, halfInning: "BOTTOM" as const }
+          : { inning: gameState.inning, halfInning: "TOP" as const };
+        const events = await getGameEvents(gameState.gameId);
+        const previousHalfFinalEvent = [...events]
+          .reverse()
+          .find(
+            (event) =>
+              event.inning === previousHalf.inning &&
+              event.halfInning === previousHalf.halfInning &&
+              event.outsAfter >= 3,
+          );
+
+        if (
+          previousHalfFinalEvent &&
+          previousHalfFinalEvent.outs === 2 &&
+          previousHalfFinalEvent.result !== "FC"
+        ) {
+          runnerId = previousHalfFinalEvent.batterId || runnerId;
+        }
+
+        if (!runnerId || cancelled) {
+          return;
+        }
+
+        placeGhostRunner("second", runnerId);
+        extraInningRunnerPlacementRef.current = halfKey;
+      } catch (error) {
+        console.error(
+          "[GameTracker] Failed to place extra-inning runner:",
+          error,
+        );
+      }
+    };
+
+    void placeExtraInningRunner();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    gameInitialized,
+    gameState.bases.first,
+    gameState.bases.second,
+    gameState.bases.third,
+    gameState.gameId,
+    gameState.gamePhase,
+    gameState.inning,
+    gameState.isTop,
+    gameState.outs,
+    getBatterIndicesSnapshot,
+    getLineupStateSnapshot,
+    navigationState?.extraInningRunner,
+    navigationState?.totalInnings,
+    placeGhostRunner,
+  ]);
 
   useEffect(() => {
     setStadiumName(selectedStadium);
@@ -1355,13 +1454,35 @@ export function GameTracker() {
     };
   }, [selectedPlayLogEntry]);
 
-  useEffect(() => {
+  React.useLayoutEffect(() => {
     if (!enrichingEntry?.eventId) {
       return;
     }
 
+    const eventId = enrichingEntry.eventId;
+    setEnrichmentCache((prev) => {
+      if (prev[eventId]) {
+        return prev;
+      }
+
+      const enrichmentSeed = buildEnrichmentCacheSeed({
+        enrichment: undefined,
+        outsRecorded: enrichingEntry.resultCategory === "out" ? 1 : 0,
+        outsAfter: 0,
+        outs: 0,
+      } as AtBatEvent);
+      if (!enrichmentSeed) {
+        return prev;
+      }
+
+      return {
+        ...prev,
+        [eventId]: enrichmentSeed,
+      };
+    });
+
     let cancelled = false;
-    void getAtBatEvent(enrichingEntry.eventId).then((event) => {
+    void getAtBatEvent(eventId).then((event) => {
       if (cancelled || !event) {
         return;
       }
@@ -1373,8 +1494,8 @@ export function GameTracker() {
 
       setEnrichmentCache((prev) => ({
         ...prev,
-        [enrichingEntry.eventId!]: {
-          ...(prev[enrichingEntry.eventId!] || {}),
+        [eventId]: {
+          ...(prev[eventId] || {}),
           ...enrichmentSeed,
         },
       }));
@@ -1383,7 +1504,11 @@ export function GameTracker() {
     return () => {
       cancelled = true;
     };
-  }, [buildEnrichmentCacheSeed, enrichingEntry?.eventId]);
+  }, [
+    buildEnrichmentCacheSeed,
+    enrichingEntry?.eventId,
+    enrichingEntry?.resultCategory,
+  ]);
 
   useEffect(() => {
     if (!selectedPlayLogEntry) return;
@@ -6969,7 +7094,11 @@ export function GameTracker() {
     setEnrichingEntry(null);
     setEnrichingRunnerSubEntry(null);
     setEnrichingRunnerParentEntry(null);
-  }, []);
+    setRunnerOutcomeCorrectionActive(false);
+    if (gameState.outs >= 3) {
+      scheduleAutoEndInning();
+    }
+  }, [gameState.outs, scheduleAutoEndInning, setRunnerOutcomeCorrectionActive]);
 
   // §5.4 UX-024: Defensive lineup enrichment mode — toggles column into fielding sequence builder
   const defensiveEnrichmentMode = useMemo(():
@@ -7151,6 +7280,7 @@ export function GameTracker() {
           existingAtBat.inning >= 9 &&
           nextHomeScoreAfter > nextAwayScoreAfter &&
           existingAtBat.homeScore <= existingAtBat.awayScore;
+        const nextVersionBase = existingAtBat.version ?? 1;
 
         const timestamp = Date.now();
         await updateAtBatEvent(enrichingRunnerParentEntry.eventId, {
@@ -7163,7 +7293,7 @@ export function GameTracker() {
           homeScoreAfter: nextHomeScoreAfter,
           isWalkOff: nextIsWalkOff,
           outsRecorded: nextOutsRecorded,
-          version: (existingAtBat.version ?? 1) + 1,
+          version: nextVersionBase + 1,
           editHistory: [
             {
               field: `runnerOutcomes[${runnerIdx}].${field}`,
@@ -7176,6 +7306,32 @@ export function GameTracker() {
             },
           ],
         });
+
+        let correctedResult: typeof existingAtBat.result | null = null;
+        if (existingAtBat.result === "GO" && outDelta > 0) {
+          if (nextOutsRecorded >= 2) {
+            correctedResult = "DP";
+          }
+        } else if (existingAtBat.result === "DP" && outDelta < 0) {
+          if (nextOutsRecorded < 2) {
+            correctedResult = "GO";
+          }
+        }
+
+        if (correctedResult) {
+          await updateAtBatEvent(enrichingRunnerParentEntry.eventId, {
+            result: correctedResult,
+            version: nextVersionBase + 2,
+            editHistory: [
+              {
+                field: "result",
+                oldValue: existingAtBat.result,
+                newValue: correctedResult,
+                timestamp: Date.now(),
+              },
+            ],
+          });
+        }
 
         const latestAtBatEntry = [...playLogEntries]
           .reverse()
@@ -7232,6 +7388,7 @@ export function GameTracker() {
               return e;
             return {
               ...e,
+              ...(correctedResult ? { result: correctedResult } : {}),
               ...(scoreDelta !== 0
                 ? {
                     runsScored: Math.max(0, e.runsScored + scoreDelta),
@@ -7257,6 +7414,7 @@ export function GameTracker() {
           prev
             ? {
                 ...prev,
+                ...(correctedResult ? { result: correctedResult } : {}),
                 ...(scoreDelta !== 0
                   ? {
                       runsScored: Math.max(0, prev.runsScored + scoreDelta),
@@ -7716,11 +7874,13 @@ export function GameTracker() {
   // T0-01: Auto-trigger endGame when regulation ends
   useEffect(() => {
     if (showAutoEndPrompt) {
-      console.log("[T0-01] Auto game-end detected — triggering handleEndGame");
+      console.log(
+        "[T0-01] Auto game-end detected — showing end-game confirmation",
+      );
       dismissAutoEndPrompt();
-      handleEndGame();
+      setShowEndGameConfirmation(true);
     }
-  }, [showAutoEndPrompt, dismissAutoEndPrompt, handleEndGame]);
+  }, [showAutoEndPrompt, dismissAutoEndPrompt]);
 
   useEffect(() => {
     if (!mwarHook.managerMoment.isTriggered || !gameState.gameId) {

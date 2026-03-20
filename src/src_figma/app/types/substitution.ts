@@ -22,7 +22,14 @@ export type Position =
 
 export type HalfInning = 'TOP' | 'BOTTOM';
 
-export type HowReached = 'hit' | 'walk' | 'HBP' | 'error' | 'FC' | 'inherited';
+export type HowReached =
+  | 'hit'
+  | 'walk'
+  | 'HBP'
+  | 'error'
+  | 'FC'
+  | 'inherited'
+  | 'ghost_runner';
 
 export type BatterHand = 'L' | 'R' | 'S';
 

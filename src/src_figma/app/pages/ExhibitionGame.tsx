@@ -32,6 +32,9 @@ export function ExhibitionGame() {
   const [selectedLeagueId, setSelectedLeagueId] = useState<string | null>(null);
   const [selectedAwayTeamId, setSelectedAwayTeamId] = useState<string | null>(null);
   const [selectedHomeTeamId, setSelectedHomeTeamId] = useState<string | null>(null);
+  const [useDH, setUseDH] = useState(true);
+  const [totalInnings, setTotalInnings] = useState(9);
+  const [extraInningRunner, setExtraInningRunner] = useState(false);
 
   // State for rosters (loaded from League Builder)
   const [awayPlayers, setAwayPlayers] = useState<RosterPlayer[]>([]);
@@ -153,6 +156,9 @@ export function ExhibitionGame() {
         gameMode: 'exhibition' as const,
         leagueId: selectedLeagueId || leagues[0]?.id || 'sml',
         userTeamSide: 'home' as const, // Exhibition games default to user as home team
+        useDH,
+        totalInnings,
+        extraInningRunner,
       }
     });
   };
@@ -361,6 +367,88 @@ export function ExhibitionGame() {
                 />
               </div>
             )}
+
+            <div className="border-4 border-[#E8E8D8] bg-[#4A6A42] p-4 space-y-4">
+              <div>
+                <div className="text-sm text-[#E8E8D8] font-bold">GAME RULES</div>
+                <div className="text-xs text-[#E8E8D8]/60 mt-1">
+                  Set exhibition-specific rules before first pitch.
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <div className="text-xs text-[#E8E8D8]/70">Innings per game</div>
+                <div className="flex flex-wrap gap-2">
+                  {[1, 3, 5, 7, 9].map((inningOption) => (
+                    <button
+                      key={inningOption}
+                      onClick={() => setTotalInnings(inningOption)}
+                      className={`px-4 py-2 border-2 text-xs font-bold transition-all ${
+                        totalInnings === inningOption
+                          ? "border-[#C4A853] bg-[#C4A853] text-[#4A6A42]"
+                          : "border-[#E8E8D8] text-[#E8E8D8]"
+                      }`}
+                    >
+                      {inningOption}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <div className="text-sm text-[#E8E8D8]">Designated hitter</div>
+                  <div className="text-xs text-[#E8E8D8]/60 mt-1">
+                    Use the DH rule for both lineups.
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  {[
+                    { label: 'ON', value: true },
+                    { label: 'OFF', value: false },
+                  ].map((option) => (
+                    <button
+                      key={option.label}
+                      onClick={() => setUseDH(option.value)}
+                      className={`px-4 py-2 border-2 text-xs font-bold ${
+                        useDH === option.value
+                          ? 'border-[#C4A853] bg-[#C4A853] text-[#4A6A42]'
+                          : 'border-[#E8E8D8] text-[#E8E8D8]'
+                      }`}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <div className="text-sm text-[#E8E8D8]">Runner on 2nd in extras</div>
+                  <div className="text-xs text-[#E8E8D8]/60 mt-1">
+                    Place a runner on second base at the start of each extra inning half.
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  {[
+                    { label: 'ON', value: true },
+                    { label: 'OFF', value: false },
+                  ].map((option) => (
+                    <button
+                      key={option.label}
+                      onClick={() => setExtraInningRunner(option.value)}
+                      className={`px-4 py-2 border-2 text-xs font-bold ${
+                        extraInningRunner === option.value
+                          ? 'border-[#C4A853] bg-[#C4A853] text-[#4A6A42]'
+                          : 'border-[#E8E8D8] text-[#E8E8D8]'
+                      }`}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
 
             <div className="grid grid-cols-2 gap-2">
               <button

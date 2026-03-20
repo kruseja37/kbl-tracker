@@ -364,6 +364,7 @@ export interface UseGameStateReturn {
     decisionType: string,
     context?: string,
   ) => Promise<void>;
+  placeGhostRunner: (base: "second", playerId: string) => void;
   advanceRunner: (
     from: "first" | "second" | "third",
     to: "second" | "third" | "home",
@@ -419,6 +420,7 @@ export interface UseGameStateReturn {
     runnersAfter?: RunnerState,
   ) => void;
   applyOutsAdjustment: (delta: number) => void;
+  scheduleAutoEndInning: () => void;
   setRunnerOutcomeCorrectionActive: (isActive: boolean) => void;
   queueAutoEndGame: () => void;
 
@@ -1823,6 +1825,8 @@ function createEmptyScoreboardState(): ScoreboardState {
 type PersistedRunnerTrackerSnapshot = NonNullable<
   PersistedGameState["runnerTrackerSnapshot"]
 >;
+
+const PROCESSING_TIMEOUT = 10_000;
 
 // ============================================
 // MAIN HOOK
@@ -4489,6 +4493,54 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       };
     });
   }, [awayBatterIndex, homeBatterIndex]);
+
+  const placeGhostRunner = useCallback(
+    (base: "second", playerId: string) => {
+      if (!playerId) {
+        return;
+      }
+
+      const trackerBaseByUiBase = { second: "2B" } as const;
+      const playerName = resolvePlayerNameForId(playerId, playerId);
+      const trackerWithPitcher = syncTrackerPitcher(
+        runnerTrackerRef.current,
+        gameState.currentPitcherId,
+        gameState.currentPitcherName,
+      );
+      const existingRunnerId = findRunnerOnBase(trackerWithPitcher, "second");
+
+      if (existingRunnerId === playerId) {
+        return;
+      }
+
+      let nextTracker = trackerWithPitcher;
+      if (existingRunnerId) {
+        nextTracker = trackerRunnerOut(nextTracker, existingRunnerId);
+      }
+
+      nextTracker = trackerAddRunner(
+        nextTracker,
+        playerId,
+        playerName,
+        trackerBaseByUiBase[base],
+        "ghost_runner",
+      );
+      runnerTrackerRef.current = nextTracker;
+      setRunnerIdentityVersion((version) => version + 1);
+      setGameState((prev) => ({
+        ...prev,
+        bases: {
+          ...prev.bases,
+          [base]: true,
+        },
+      }));
+    },
+    [
+      gameState.currentPitcherId,
+      gameState.currentPitcherName,
+      resolvePlayerNameForId,
+    ],
+  );
 
   const recordHit = useCallback(
     async (
@@ -8570,19 +8622,40 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         };
 
         if (!alreadyAggregated) {
+          let processingTimeoutId: ReturnType<typeof setTimeout> | null = null;
           try {
-            await processCompletedGame(
-              persistedState,
-              aggregationOptions,
-              (opts?.competitionType ?? competitionTypeRef.current) ===
-                "exhibition"
-                ? (opts?.leagueId ?? leagueIdRef.current)
-                : undefined,
-            );
-            await markGameAggregated(gameState.gameId);
+            await Promise.race([
+              (async () => {
+                await processCompletedGame(
+                  persistedState,
+                  aggregationOptions,
+                  (opts?.competitionType ?? competitionTypeRef.current) ===
+                    "exhibition"
+                    ? (opts?.leagueId ?? leagueIdRef.current)
+                    : undefined,
+                );
+                await markGameAggregated(gameState.gameId);
+              })(),
+              new Promise<never>((_, reject) => {
+                processingTimeoutId = setTimeout(() => {
+                  reject(
+                    new Error(
+                      `processCompletedGame timed out after ${PROCESSING_TIMEOUT / 1000}s`,
+                    ),
+                  );
+                }, PROCESSING_TIMEOUT);
+              }),
+            ]);
             console.log("[T1-08] Stats aggregated to season (first call)");
           } catch (error) {
-            console.error("[EndGame] processCompletedGame failed:", error);
+            console.error(
+              "[EndGame] processCompletedGame failed or timed out:",
+              error,
+            );
+          } finally {
+            if (processingTimeoutId !== null) {
+              clearTimeout(processingTimeoutId);
+            }
           }
         } else {
           console.log("[T1-08] Skipping aggregation — game already aggregated");
@@ -8877,35 +8950,37 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
 
   const endGame = useCallback(
     async (options?: EndGameOptions) => {
-      // Archive game FIRST so PostGameSummary can load it (EXH-011 fix)
-      // Build persisted state for archiving — include player name and team
-      const activityLog = options?.activityLog ?? [];
-      const archivedSeasonId =
-        options?.seasonId ?? seasonIdRef.current ?? undefined;
-      const statsScopeIdValue =
-        options?.statsScopeId ??
-        statsScopeIdRef.current ??
-        options?.seasonId ??
-        seasonIdRef.current ??
-        "season-1";
-      const currentSeasonNumber =
-        options?.currentSeason ?? gameState.seasonNumber;
-      const endGameOptions: EndGameOptions = {
-        activityLog,
-        seasonId: archivedSeasonId,
-        statsScopeId: statsScopeIdValue,
-        competitionType: options?.competitionType ?? competitionTypeRef.current,
-        competitionId: options?.competitionId ?? competitionIdRef.current,
-        leagueId:
-          (options?.competitionType ?? competitionTypeRef.current) ===
-          "exhibition"
-            ? (options?.leagueId ?? leagueIdRef.current)
-            : undefined,
-        franchiseId: options?.franchiseId,
-        currentSeason: currentSeasonNumber,
-        currentGame: options?.currentGame,
-        stadiumName: options?.stadiumName,
-      };
+      try {
+        // Archive game FIRST so PostGameSummary can load it (EXH-011 fix)
+        // Build persisted state for archiving — include player name and team
+        const activityLog = options?.activityLog ?? [];
+        const archivedSeasonId =
+          options?.seasonId ?? seasonIdRef.current ?? undefined;
+        const statsScopeIdValue =
+          options?.statsScopeId ??
+          statsScopeIdRef.current ??
+          options?.seasonId ??
+          seasonIdRef.current ??
+          "season-1";
+        const currentSeasonNumber =
+          options?.currentSeason ?? gameState.seasonNumber;
+        const endGameOptions: EndGameOptions = {
+          activityLog,
+          seasonId: archivedSeasonId,
+          statsScopeId: statsScopeIdValue,
+          competitionType:
+            options?.competitionType ?? competitionTypeRef.current,
+          competitionId: options?.competitionId ?? competitionIdRef.current,
+          leagueId:
+            (options?.competitionType ?? competitionTypeRef.current) ===
+            "exhibition"
+              ? (options?.leagueId ?? leagueIdRef.current)
+              : undefined,
+          franchiseId: options?.franchiseId,
+          currentSeason: currentSeasonNumber,
+          currentGame: options?.currentGame,
+          stadiumName: options?.stadiumName,
+        };
       const playerNameLookupForEndGame = new Map<string, string>();
       for (const p of awayLineupRef.current) {
         registerIdentityForSide(p.playerId, p.playerName, "away");
@@ -9179,6 +9254,9 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       } catch (err) {
         console.error("[endGame] Direct end-game completion failed:", err);
       }
+      } finally {
+        setIsSaving(false);
+      }
     },
     [
       atBatSequence,
@@ -9422,6 +9500,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     recordPlayerStateChange,
     reassignRunnerEventAttribution,
     recordManagerMoment,
+    placeGhostRunner,
     advanceRunner,
     advanceRunnersBatch,
     makeSubstitution,
@@ -9435,6 +9514,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     applyScoreAdjustment,
     applyBasesCorrection,
     applyOutsAdjustment,
+    scheduleAutoEndInning,
     setRunnerOutcomeCorrectionActive,
     queueAutoEndGame,
     // §10.1: Three-phase lifecycle
