@@ -175,6 +175,45 @@ export function useLeagueBuilderData(): UseLeagueBuilderDataReturn {
   const createLeague = useCallback(async (data: Omit<LeagueTemplate, 'id' | 'createdDate' | 'lastModified'>) => {
     try {
       const league = await saveLeagueTemplate(data);
+
+      // Auto-assign players: for each team in the new league, find players
+      // already assigned to that team (in any league) and give them a new
+      // assignment for this league on the same team. This lets users then
+      // move players to different teams within the new league independently.
+      if (league.teamIds?.length) {
+        const allPlayers = await getAllPlayers();
+        const teamIdSet = new Set(league.teamIds);
+
+        for (const player of allPlayers) {
+          if (!player.leagueAssignments?.length) continue;
+
+          // Find any existing assignment on a team that's in this new league
+          const matchingAssignment = player.leagueAssignments.find(
+            a => teamIdSet.has(a.teamId)
+          );
+          if (!matchingAssignment) continue;
+
+          // Skip if player already has an assignment for this league
+          const alreadyAssigned = player.leagueAssignments.some(
+            a => a.leagueId === league.id
+          );
+          if (alreadyAssigned) continue;
+
+          // Add new assignment for this league, same team + roster status
+          await savePlayer({
+            ...player,
+            leagueAssignments: [
+              ...player.leagueAssignments,
+              {
+                leagueId: league.id,
+                teamId: matchingAssignment.teamId,
+                rosterStatus: matchingAssignment.rosterStatus,
+              },
+            ],
+          });
+        }
+      }
+
       await refresh();
       return league;
     } catch (err) {
