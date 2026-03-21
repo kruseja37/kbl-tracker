@@ -16,6 +16,51 @@ export function reconcileTeamPlayersWithLineupSnapshot(
 ): Player[] {
   const lineupById = new Map(snapshot.lineup.map(player => [player.playerId, player]));
   const benchById = new Map(snapshot.bench.map(player => [player.playerId, player]));
+
+  // R3: If no existing players match any snapshot entry, existing data is stale/fallback.
+  // Build the roster entirely from the snapshot to avoid mixing fallback + real players.
+  const anyExistingMatchesSnapshot = existingPlayers.some((player) => {
+    const playerId = getRosterEntityId(player, team);
+    return lineupById.has(playerId) || benchById.has(playerId) ||
+      (snapshot.currentPitcher && playerId === snapshot.currentPitcher.playerId);
+  });
+  if (!anyExistingMatchesSnapshot && snapshot.lineup.length > 0) {
+    const freshPlayers: Player[] = [];
+    for (const entry of snapshot.lineup) {
+      freshPlayers.push({
+        name: entry.playerName,
+        playerId: entry.playerId,
+        position: entry.position,
+        battingOrder: entry.battingOrder,
+        stats: { ab: 0, h: 0, r: 0, rbi: 0, bb: 0, k: 0 },
+        battingHand: 'R',
+        isOutOfGame: false,
+      });
+    }
+    for (const entry of snapshot.bench) {
+      freshPlayers.push({
+        name: entry.playerName,
+        playerId: entry.playerId,
+        position: entry.positions[0],
+        stats: { ab: 0, h: 0, r: 0, rbi: 0, bb: 0, k: 0 },
+        battingHand: 'R',
+        isOutOfGame: !entry.isAvailable,
+      });
+    }
+    // Add pitcher if not already in lineup (DH game)
+    if (snapshot.currentPitcher && !lineupById.has(snapshot.currentPitcher.playerId)) {
+      freshPlayers.push({
+        name: snapshot.currentPitcher.playerName,
+        playerId: snapshot.currentPitcher.playerId,
+        position: 'P',
+        battingOrder: snapshot.currentPitcher.battingOrder,
+        stats: { ab: 0, h: 0, r: 0, rbi: 0, bb: 0, k: 0 },
+        battingHand: 'R',
+        isOutOfGame: false,
+      });
+    }
+    return freshPlayers.sort((a, b) => (a.battingOrder || 99) - (b.battingOrder || 99));
+  }
   const usedPlayers = new Set(snapshot.usedPlayers);
   const seenPlayerIds = new Set<string>();
   const currentPitcher = snapshot.currentPitcher;
@@ -170,6 +215,26 @@ export function reconcileTeamPitchersWithLineupSnapshot(
 ): Pitcher[] {
   const currentPitcherId = snapshot.currentPitcher?.playerId || null;
   const usedPlayers = new Set(snapshot.usedPlayers);
+
+  // R3: If no existing pitchers match the snapshot's current pitcher, existing data is stale.
+  // Build from snapshot to avoid mixing fallback + real pitchers.
+  const anyPitcherMatches = existingPitchers.some((pitcher) => {
+    const pitcherId = getRosterEntityId(pitcher, team);
+    return pitcherId === currentPitcherId || usedPlayers.has(pitcherId);
+  });
+  if (!anyPitcherMatches && snapshot.currentPitcher) {
+    const freshPitcher: Pitcher = {
+      name: snapshot.currentPitcher.playerName,
+      playerId: snapshot.currentPitcher.playerId,
+      stats: { ip: '0.0', h: 0, r: 0, er: 0, bb: 0, k: 0, pitches: 0 },
+      throwingHand: 'R',
+      isStarter: true,
+      isActive: true,
+      isOutOfGame: false,
+    };
+    return [freshPitcher];
+  }
+
   const seenPitcherIds = new Set<string>();
 
   const nextPitchers = existingPitchers.map((pitcher, index) => {

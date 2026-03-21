@@ -218,6 +218,10 @@ export interface PersistedGameState {
   statsScopeId?: string;
   competitionType?: CompetitionType;
   competitionId?: string;
+  // R3: Exhibition game config (lost on refresh without these)
+  totalInnings?: number;
+  awayUsesDh?: boolean;
+  homeUsesDh?: boolean;
   awayLineup?: Array<{
     playerId: string;
     playerName: string;

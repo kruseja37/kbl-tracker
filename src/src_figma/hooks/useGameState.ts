@@ -551,6 +551,9 @@ export interface TeamLineupSnapshot {
 export interface GameLineupSnapshot {
   away: TeamLineupSnapshot;
   home: TeamLineupSnapshot;
+  // R3: Persisted DH flags for refresh survival
+  awayUsesDh?: boolean;
+  homeUsesDh?: boolean;
 }
 
 export interface PlayerStateChangeOptions {
@@ -2704,6 +2707,9 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
 
   // T0-01: Regulation innings for auto game-end detection (default 9)
   const totalInningsRef = useRef<number>(9);
+  // R3: DH flags — persisted in snapshot so they survive refresh
+  const awayUsesDhRef = useRef<boolean>(false);
+  const homeUsesDhRef = useRef<boolean>(false);
 
   // CRIT-02 + MAJ-05: Shadow state for inherited runner tracking (ER/UER attribution)
   // This ref mirrors the boolean bases but stores rich runner identity data.
@@ -2951,6 +2957,9 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       awayRecordRef.current = config.awayRecord;
       homeRecordRef.current = config.homeRecord;
       totalInningsRef.current = config.totalInnings || 9;
+      // R3: Derive DH flags from whether lineup has a DH-position player
+      awayUsesDhRef.current = config.awayLineup.some(p => p.position === "DH");
+      homeUsesDhRef.current = config.homeLineup.some(p => p.position === "DH");
 
       // MAJ-09: Initialize full LineupState for substitution validation
       awayLineupStateRef.current = {
@@ -3274,6 +3283,16 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
             savedSnapshot.statsScopeId || savedSnapshot.seasonId || "";
           competitionTypeRef.current = savedSnapshot.competitionType;
           competitionIdRef.current = savedSnapshot.competitionId;
+          // R3: Restore game config refs from snapshot
+          if (savedSnapshot.totalInnings != null) {
+            totalInningsRef.current = savedSnapshot.totalInnings;
+          }
+          if (savedSnapshot.awayUsesDh != null) {
+            awayUsesDhRef.current = savedSnapshot.awayUsesDh;
+          }
+          if (savedSnapshot.homeUsesDh != null) {
+            homeUsesDhRef.current = savedSnapshot.homeUsesDh;
+          }
           // Layer 1B: Restore identity refs from snapshot (if available)
           const snapshotAny = savedSnapshot as unknown as Record<
             string,
@@ -4389,6 +4408,10 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       statsScopeId: statsScopeIdRef.current || seasonIdRef.current || undefined,
       competitionType: competitionTypeRef.current,
       competitionId: competitionIdRef.current,
+      // R3: Persist game config that would be lost on refresh
+      totalInnings: totalInningsRef.current,
+      awayUsesDh: awayUsesDhRef.current,
+      homeUsesDh: homeUsesDhRef.current,
       awayLineup: awayLineupRef.current,
       homeLineup: homeLineupRef.current,
       awayLineupState:
@@ -9330,6 +9353,9 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
           ? { ...homeLineupStateRef.current.currentPitcher }
           : null,
       },
+      // R3: Include DH flags so GameTracker can skip heuristic inference
+      awayUsesDh: awayUsesDhRef.current,
+      homeUsesDh: homeUsesDhRef.current,
     }),
     [],
   );

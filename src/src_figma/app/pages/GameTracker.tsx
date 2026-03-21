@@ -560,8 +560,8 @@ export function GameTracker() {
   // Team IDs - use navigation state or standalone defaults
   const homeTeamId = navigationState?.homeTeamId || "home";
   const awayTeamId = navigationState?.awayTeamId || "away";
-  const homeTeamName = navigationState?.homeTeamName || "HOME";
-  const awayTeamName = navigationState?.awayTeamName || "AWAY";
+  const homeTeamName_ = navigationState?.homeTeamName || "HOME";
+  const awayTeamName_ = navigationState?.awayTeamName || "AWAY";
   const parkNames = useMemo(() => getParkNames(), []);
   const [selectedStadium, setSelectedStadium] = useState<string | null>(
     () => navigationState?.stadiumName || parkNames[0] || null,
@@ -680,7 +680,14 @@ export function GameTracker() {
     setNextEventEnrichment,
     atBatSequence,
   } = useGameState(gameId);
+  // R3: On refresh, navigationState is null — fall back to gameState (restored from snapshot)
+  const homeTeamName = homeTeamName_ !== "HOME" ? homeTeamName_ : (gameState.homeTeamName || "HOME");
+  const awayTeamName = awayTeamName_ !== "AWAY" ? awayTeamName_ : (gameState.awayTeamName || "AWAY");
   const [gameInitialized, setGameInitialized] = useState(false);
+  // R3: Persisted DH flag — survives refresh (overrides navigationState?.useDH)
+  const [persistedUseDh, setPersistedUseDh] = useState<boolean | undefined>(
+    undefined,
+  );
   const extraInningRunnerPlacementRef = useRef<string | null>(null);
 
   // Set playoff context from navigation state (if this is a playoff game)
@@ -2240,7 +2247,7 @@ export function GameTracker() {
   const battingTeamUsesDh = inferTeamUsesDh(
     battingTeamPlayersRaw,
     battingTeamPitchersRaw,
-    navigationState?.useDH,
+    persistedUseDh ?? navigationState?.useDH,
   );
 
   const currentLineup = battingTeamPlayersRaw
@@ -2951,7 +2958,12 @@ export function GameTracker() {
 
         if (hasExistingGame) {
           console.log("[GameTracker] Loaded existing game from IndexedDB");
-          syncDisplayedRostersToLineupSnapshot();
+          // R3: Extract persisted DH flags from the snapshot before syncing rosters
+          const restoredSnapshot = getLineupStateSnapshot();
+          if (restoredSnapshot.awayUsesDh != null) {
+            setPersistedUseDh(restoredSnapshot.awayUsesDh);
+          }
+          syncDisplayedRostersToLineupSnapshot(restoredSnapshot);
           setGameInitialized(true);
           return;
         }
@@ -3100,6 +3112,11 @@ export function GameTracker() {
           homeLineup,
         );
 
+        // R3: Update URL to match runtime gameId so refresh can find the snapshot
+        if (competitionType === "exhibition" && nextGameId !== gameId) {
+          window.history.replaceState(null, "", `/game-tracker/${nextGameId}`);
+        }
+
         if (!cancelled) {
           setGameInitialized(true);
         }
@@ -3138,6 +3155,7 @@ export function GameTracker() {
     selectedStadium,
     statsScopeId,
     syncDisplayedRostersToLineupSnapshot,
+    getLineupStateSnapshot,
     awayPitcher,
     awayTeamId,
     awayTeamName,
@@ -3429,7 +3447,7 @@ export function GameTracker() {
     const teamUsesDh = inferTeamUsesDh(
       players,
       pitchers,
-      navigationState?.useDH,
+      persistedUseDh ?? navigationState?.useDH,
     );
     return players
       .filter(
@@ -3457,6 +3475,7 @@ export function GameTracker() {
     homeTeamPlayers,
     battingTeam,
     getRosterEntityId,
+    persistedUseDh,
     navigationState?.useDH,
   ]);
 
@@ -4061,7 +4080,7 @@ export function GameTracker() {
         const teamUsesDh = inferTeamUsesDh(
           teamPlayers,
           teamPitchers,
-          navigationState?.useDH,
+          persistedUseDh ?? navigationState?.useDH,
         );
         const currentPosition = playerContext.player.position || "";
 
@@ -4197,7 +4216,7 @@ export function GameTracker() {
               return normalizeRosterForDh(
                 updated,
                 teamPitchers,
-                navigationState?.useDH,
+                persistedUseDh ?? navigationState?.useDH,
               );
             });
             return true;
@@ -4225,6 +4244,7 @@ export function GameTracker() {
       homeTeamPlayers,
       makeSubstitution,
       mwarHook,
+      persistedUseDh,
       navigationState?.useDH,
       pendingPH,
       queuePlayLogRefresh,
