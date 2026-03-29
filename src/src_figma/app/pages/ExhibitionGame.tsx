@@ -71,7 +71,7 @@ export function ExhibitionGame() {
     setIsLoadingLineups(true);
 
     getEffectiveTeamPlayers(selectedAwayTeamId, selectedLeagueId, players)
-      .then((teamPlayersList) => loadTeamLineup(selectedAwayTeamId, teamPlayersList, getRoster))
+      .then((teamPlayersList) => loadTeamLineup(selectedAwayTeamId, teamPlayersList, getRoster, useDH))
       .then((result) => {
         if (cancelled) return;
         setAwayPlayers(result.players);
@@ -87,7 +87,7 @@ export function ExhibitionGame() {
     return () => {
       cancelled = true;
     };
-  }, [selectedAwayTeamId, selectedLeagueId, players, getRoster]);
+  }, [selectedAwayTeamId, selectedLeagueId, players, getRoster, useDH]);
 
   // Load roster when home team is selected - uses stored lineup or auto-generates
   useEffect(() => {
@@ -102,7 +102,7 @@ export function ExhibitionGame() {
     setIsLoadingLineups(true);
 
     getEffectiveTeamPlayers(selectedHomeTeamId, selectedLeagueId, players)
-      .then((teamPlayersList) => loadTeamLineup(selectedHomeTeamId, teamPlayersList, getRoster))
+      .then((teamPlayersList) => loadTeamLineup(selectedHomeTeamId, teamPlayersList, getRoster, useDH))
       .then((result) => {
         if (cancelled) return;
         setHomePlayers(result.players);
@@ -118,7 +118,7 @@ export function ExhibitionGame() {
     return () => {
       cancelled = true;
     };
-  }, [selectedHomeTeamId, selectedLeagueId, players, getRoster]);
+  }, [selectedHomeTeamId, selectedLeagueId, players, getRoster, useDH]);
 
   // Get selected team objects
   const awayTeam = teams.find(t => t.id === selectedAwayTeamId);

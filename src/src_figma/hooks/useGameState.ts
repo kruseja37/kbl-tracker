@@ -4674,9 +4674,9 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
 
       const leverageIndex = getCurrentLeverageIndex();
 
-      // Detect walk-off: home team batting in bottom of 9+ and takes the lead
+      // Detect walk-off: home team batting in bottom of regulation-or-later and takes the lead
       const isBottom = !gameState.isTop;
-      const isLateGame = gameState.inning >= 9;
+      const isLateGame = gameState.inning >= totalInningsRef.current;
       const homeScoreAfter = isBottom
         ? gameState.homeScore + runsScored
         : gameState.homeScore;
@@ -4688,6 +4688,11 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         isLateGame &&
         homeScoreAfter > awayScoreAfter &&
         gameState.homeScore <= gameState.awayScore;
+
+      // Trigger walk-off end-game immediately when winning run scores
+      if (isWalkOff) {
+        queueAutoEndGame();
+      }
 
       // Clutch = high leverage (LI >= 1.5)
       const isClutch = leverageIndex >= 1.5;
@@ -5504,9 +5509,9 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
 
       const leverageIndex = getCurrentLeverageIndex();
 
-      // Detect walk-off: home team batting in bottom of 9+ with bases loaded walk taking lead
+      // Detect walk-off: home team batting in bottom of regulation-or-later with bases loaded walk taking lead
       const isBottom = !gameState.isTop;
-      const isLateGame = gameState.inning >= 9;
+      const isLateGame = gameState.inning >= totalInningsRef.current;
       const homeScoreAfter = isBottom
         ? gameState.homeScore + runsScored
         : gameState.homeScore;
@@ -5516,6 +5521,11 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         basesLoaded &&
         homeScoreAfter > gameState.awayScore &&
         gameState.homeScore <= gameState.awayScore;
+
+      // Trigger walk-off end-game immediately when winning run scores
+      if (isWalkOff) {
+        queueAutoEndGame();
+      }
 
       // Clutch = high leverage (LI >= 1.5)
       const isClutch = leverageIndex >= 1.5;

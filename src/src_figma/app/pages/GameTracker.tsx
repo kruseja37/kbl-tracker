@@ -7395,7 +7395,7 @@ export function GameTracker() {
           scoreDelta !== 0 &&
           gameState.gamePhase === "LIVE" &&
           !gameState.isTop &&
-          gameState.inning >= 9 &&
+          gameState.inning >= (navigationState?.totalInnings || 9) &&
           nextHomeScoreAfter > nextAwayScoreAfter &&
           gameState.homeScore <= gameState.awayScore
         ) {

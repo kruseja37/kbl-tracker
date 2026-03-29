@@ -249,7 +249,8 @@ function autoGenerateLineup(teamPlayers: LBPlayer[]): LoadedLineup {
 export async function loadTeamLineup(
   teamId: string,
   teamPlayers: LBPlayer[],
-  getRoster: (teamId: string) => Promise<TeamRoster | null>
+  getRoster: (teamId: string) => Promise<TeamRoster | null>,
+  overrideUseDH?: boolean
 ): Promise<LoadedLineup> {
   // Try to fetch stored roster
   const roster = await getRoster(teamId);
@@ -281,7 +282,9 @@ export async function loadTeamLineup(
     const player = playerMap.get(slot.playerId);
     return player && isPitcherPosition(player.primaryPosition);
   });
-  const useDH = lineup.some(slot => slot.fieldingPosition === 'DH') && !lineupHasPitcher;
+  const useDH = overrideUseDH !== undefined
+    ? overrideUseDH
+    : lineup.some(slot => slot.fieldingPosition === 'DH') && !lineupHasPitcher;
   const usedNoDhPositions = new Set<string>();
 
   const lineupPlayers: RosterPlayer[] = [];
