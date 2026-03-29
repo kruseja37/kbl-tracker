@@ -35,6 +35,7 @@ export function ExhibitionGame() {
   const [useDH, setUseDH] = useState(true);
   const [totalInnings, setTotalInnings] = useState(9);
   const [extraInningRunner, setExtraInningRunner] = useState(false);
+  const [extraInningRunnerDelay, setExtraInningRunnerDelay] = useState<1 | 2>(1);
 
   // State for rosters (loaded from League Builder)
   const [awayPlayers, setAwayPlayers] = useState<RosterPlayer[]>([]);
@@ -159,6 +160,7 @@ export function ExhibitionGame() {
         useDH,
         totalInnings,
         extraInningRunner,
+        extraInningRunnerDelay,
       }
     });
   };
@@ -379,7 +381,7 @@ export function ExhibitionGame() {
               <div className="space-y-2">
                 <div className="text-xs text-[#E8E8D8]/70">Innings per game</div>
                 <div className="flex flex-wrap gap-2">
-                  {[1, 3, 5, 7, 9].map((inningOption) => (
+                  {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((inningOption) => (
                     <button
                       key={inningOption}
                       onClick={() => setTotalInnings(inningOption)}
@@ -448,6 +450,32 @@ export function ExhibitionGame() {
                   ))}
                 </div>
               </div>
+
+              {extraInningRunner && (
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <div className="text-sm text-[#E8E8D8]">Runner starts in</div>
+                    <div className="text-xs text-[#E8E8D8]/60 mt-1">
+                      Which extra inning does the runner rule begin?
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    {([1, 2] as const).map((delay) => (
+                      <button
+                        key={delay}
+                        onClick={() => setExtraInningRunnerDelay(delay)}
+                        className={`px-4 py-2 border-2 text-xs font-bold ${
+                          extraInningRunnerDelay === delay
+                            ? 'border-[#C4A853] bg-[#C4A853] text-[#4A6A42]'
+                            : 'border-[#E8E8D8] text-[#E8E8D8]'
+                        }`}
+                      >
+                        {delay === 1 ? '1st' : '2nd'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="grid grid-cols-2 gap-2">

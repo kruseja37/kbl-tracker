@@ -555,6 +555,7 @@ export function GameTracker() {
     totalInnings?: number;
     useDH?: boolean;
     extraInningRunner?: boolean;
+    extraInningRunnerDelay?: 1 | 2;
   } | null;
 
   // Team IDs - use navigation state or standalone defaults
@@ -718,11 +719,14 @@ export function GameTracker() {
 
   useEffect(() => {
     const regulationInnings = navigationState?.totalInnings || 9;
+    const runnerDelay = navigationState?.extraInningRunnerDelay || 1;
+    // Runner rule starts in the Nth extra inning (1 = first extra, 2 = second extra)
+    const runnerStartInning = regulationInnings + runnerDelay;
     if (
       !navigationState?.extraInningRunner ||
       !gameInitialized ||
       gameState.gamePhase !== "LIVE" ||
-      gameState.inning <= regulationInnings ||
+      gameState.inning < runnerStartInning ||
       gameState.outs !== 0 ||
       gameState.bases.first ||
       gameState.bases.second ||
@@ -754,25 +758,25 @@ export function GameTracker() {
           (currentBatterIndex - 1 + battingLineup.length) % battingLineup.length;
         let runnerId = battingLineup[fallbackIndex]?.playerId;
 
-        const previousHalf = gameState.isTop
-          ? { inning: gameState.inning - 1, halfInning: "BOTTOM" as const }
-          : { inning: gameState.inning, halfInning: "TOP" as const };
+        // Find the same team's most recent half-inning (not the opposing team's)
+        // T2 Beewolves batting → look at T1 (Beewolves batting), not B1
+        // B2 Blowfish batting → look at B1 (Blowfish batting), not T2
+        const sameTeamPreviousHalf = gameState.isTop
+          ? { inning: gameState.inning - 1, halfInning: "TOP" as const }
+          : { inning: gameState.inning - 1, halfInning: "BOTTOM" as const };
         const events = await getGameEvents(gameState.gameId);
-        const previousHalfFinalEvent = [...events]
+        // Find the last completed at-bat for this team in their prior half-inning
+        const sameTeamLastBatter = [...events]
           .reverse()
           .find(
             (event) =>
-              event.inning === previousHalf.inning &&
-              event.halfInning === previousHalf.halfInning &&
-              event.outsAfter >= 3,
+              event.inning === sameTeamPreviousHalf.inning &&
+              event.halfInning === sameTeamPreviousHalf.halfInning &&
+              event.batterId,
           );
 
-        if (
-          previousHalfFinalEvent &&
-          previousHalfFinalEvent.outs === 2 &&
-          previousHalfFinalEvent.result !== "FC"
-        ) {
-          runnerId = previousHalfFinalEvent.batterId || runnerId;
+        if (sameTeamLastBatter?.batterId) {
+          runnerId = sameTeamLastBatter.batterId;
         }
 
         if (!runnerId || cancelled) {
