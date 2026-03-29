@@ -8061,7 +8061,7 @@ export function GameTracker() {
            │ Row 3: QuickBar (pinned bottom, full width)                 │
            └─────────────────────────────────────────────────────────────┘
            ═══════════════════════════════════════════════════════════════ */}
-      <div className="flex h-screen flex-col overflow-hidden bg-[#6B9462] text-white">
+      <div className="flex flex-col overflow-hidden bg-[#6B9462] text-white" style={{ height: '100dvh' }}>
         {/* ROW 1: §3.1 ScoreBug (pinned top, single line) */}
         <ScoreBug
           awayTeamName={awayTeamName}
