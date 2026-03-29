@@ -1,11 +1,12 @@
 import { useState, useMemo, useEffect } from "react";
 import { useNavigate } from "react-router";
-import { ArrowLeft, Loader2, AlertCircle } from "lucide-react";
+import { ArrowLeft, Loader2, AlertCircle, Trash2 } from "lucide-react";
 import type { Player as RosterPlayer, Pitcher as RosterPitcher } from "@/app/components/TeamRoster";
 import { LineupPreview } from "@/app/components/LineupPreview";
 import { useLeagueBuilderData, type Player as LBPlayer } from "../../hooks/useLeagueBuilderData";
 import { loadTeamLineup } from "../../utils/lineupLoader";
 import { getEffectivePlayer } from "../../../utils/playerOverrides";
+import { getTrackerDb } from "../../../utils/trackerDb";
 
 async function getEffectiveTeamPlayers(
   teamId: string,
@@ -46,6 +47,38 @@ export function ExhibitionGame() {
   // Track whether lineups came from storage
   const [awayHasStoredLineup, setAwayHasStoredLineup] = useState(false);
   const [homeHasStoredLineup, setHomeHasStoredLineup] = useState(false);
+
+  // Clear exhibition data
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const [isClearing, setIsClearing] = useState(false);
+
+  const clearExhibitionData = async () => {
+    setIsClearing(true);
+    try {
+      const db = await getTrackerDb();
+      const storeNames = [
+        'currentGame', 'completedGames', 'playerGameStats', 'pitcherGameStats',
+        'playerSeasonBatting', 'playerSeasonPitching', 'playerSeasonFielding',
+        'seasonMetadata', 'playerCareerBatting', 'playerCareerPitching',
+        'playerCareerFielding', 'careerMilestones', 'rosterSnapshots',
+        'mojoFitnessSnapshots', 'almanacCanonicalPlayers',
+      ];
+      const available = storeNames.filter(s => db.objectStoreNames.contains(s));
+      const tx = db.transaction(available, 'readwrite');
+      for (const name of available) {
+        tx.objectStore(name).clear();
+      }
+      await new Promise<void>((resolve, reject) => {
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => reject(tx.error);
+      });
+      setShowClearConfirm(false);
+    } catch (err) {
+      console.error('[ExhibitionGame] Failed to clear data:', err);
+    } finally {
+      setIsClearing(false);
+    }
+  };
 
   // Loading state for lineup fetching
   const [isLoadingLineups, setIsLoadingLineups] = useState(false);
@@ -260,6 +293,42 @@ export function ExhibitionGame() {
             >
               CONTINUE ▶
             </button>
+
+            <button
+              onClick={() => setShowClearConfirm(true)}
+              className="w-full flex items-center justify-center gap-2 border-4 border-[#DD0000]/50 py-3 text-xs font-bold text-[#DD0000] hover:bg-[#DD0000]/10 transition-all mt-2"
+            >
+              <Trash2 className="w-4 h-4" />
+              CLEAR EXHIBITION DATA
+            </button>
+          </div>
+        )}
+
+        {/* Clear Data Confirmation Modal */}
+        {showClearConfirm && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+            <div className="bg-[#4A6A42] border-[6px] border-[#E8E8D8] p-6 max-w-sm mx-4 shadow-[8px_8px_0px_0px_rgba(0,0,0,0.5)]">
+              <div className="text-sm font-bold text-[#E8E8D8] mb-3">CLEAR ALL EXHIBITION DATA?</div>
+              <div className="text-xs text-[#E8E8D8]/70 mb-4 leading-relaxed">
+                This will delete all exhibition game history, stats, and almanac records. Teams and leagues will not be affected.
+              </div>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setShowClearConfirm(false)}
+                  disabled={isClearing}
+                  className="flex-1 border-4 border-[#E8E8D8] py-3 text-xs font-bold text-[#E8E8D8] hover:bg-[#5A7A52] transition"
+                >
+                  CANCEL
+                </button>
+                <button
+                  onClick={clearExhibitionData}
+                  disabled={isClearing}
+                  className="flex-1 border-4 border-[#DD0000] bg-[#DD0000] py-3 text-xs font-bold text-white hover:bg-[#BB0000] transition"
+                >
+                  {isClearing ? 'CLEARING...' : 'YES, CLEAR'}
+                </button>
+              </div>
+            </div>
           </div>
         )}
 
