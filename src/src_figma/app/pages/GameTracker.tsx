@@ -84,11 +84,17 @@ import {
 } from "../utils/runtimePlayerIdentity";
 import { normalizeSpecialEventType } from "../utils/gameTrackerEventDispatch";
 import {
+  getDisplayedStadiumName,
+  getInitialSelectedStadium,
+  shouldSyncSelectedStadium,
+} from "../utils/stadiumSelection";
+import {
   type PlayData,
   type SpecialEventData,
 } from "../utils/gameTrackerFieldTypes";
 import { areRivals } from "../../../data/leagueStructure";
 import { getParkNames } from "../../../data/parkLookup";
+import { reconcileScoreFromEvents } from "../../../utils/scoreReconciliation";
 import {
   useGameState,
   type GamePhase,
@@ -565,7 +571,7 @@ export function GameTracker() {
   const awayTeamName_ = navigationState?.awayTeamName || "AWAY";
   const parkNames = useMemo(() => getParkNames(), []);
   const [selectedStadium, setSelectedStadium] = useState<string | null>(
-    () => navigationState?.stadiumName || parkNames[0] || null,
+    () => getInitialSelectedStadium(navigationState?.stadiumName),
   );
   const showStadiumSelector = !navigationState?.stadiumName;
   const awayRecord = navigationState?.awayRecord || "0-0"; // MAJ-15: Reads actual record from route state; defaults 0-0 for exhibition
@@ -899,7 +905,9 @@ export function GameTracker() {
   ]);
 
   useEffect(() => {
-    setStadiumName(selectedStadium);
+    if (shouldSyncSelectedStadium(selectedStadium)) {
+      setStadiumName(selectedStadium);
+    }
   }, [selectedStadium, setStadiumName]);
 
   const [activityLog, setActivityLog] = useState<string[]>([]);
@@ -7589,6 +7597,39 @@ export function GameTracker() {
             existingAtBat.halfInning,
             scoreDelta,
           );
+
+          const expectedScore = await reconcileScoreFromEvents(gameState.gameId);
+          const nextLiveAwayScore =
+            gameState.awayScore +
+            (existingAtBat.halfInning === "TOP" ? scoreDelta : 0);
+          const nextLiveHomeScore =
+            gameState.homeScore +
+            (existingAtBat.halfInning === "BOTTOM" ? scoreDelta : 0);
+
+          if (
+            expectedScore.away !== nextLiveAwayScore ||
+            expectedScore.home !== nextLiveHomeScore
+          ) {
+            const correctionMessage =
+              `Score mismatch detected. Event log shows ${awayTeamName} ${expectedScore.away}, ` +
+              `${homeTeamName} ${expectedScore.home}. Current score would be ` +
+              `${awayTeamName} ${nextLiveAwayScore}, ${homeTeamName} ${nextLiveHomeScore}. ` +
+              "Apply correction?";
+            const shouldApplyCorrection =
+              typeof window === "undefined" || window.confirm(correctionMessage);
+
+            if (shouldApplyCorrection) {
+              const awayDelta = expectedScore.away - nextLiveAwayScore;
+              const homeDelta = expectedScore.home - nextLiveHomeScore;
+
+              if (awayDelta !== 0) {
+                applyScoreAdjustment(existingAtBat.inning, "TOP", awayDelta);
+              }
+              if (homeDelta !== 0) {
+                applyScoreAdjustment(existingAtBat.inning, "BOTTOM", homeDelta);
+              }
+            }
+          }
         }
 
         // Fix B: Update live base state for latest at-bat corrections
@@ -8287,7 +8328,10 @@ export function GameTracker() {
           awayScore={scoreboard.away.runs}
           homeTeamName={homeTeamName}
           homeScore={scoreboard.home.runs}
-          stadiumName={gameState.stadiumName || selectedStadium || undefined}
+          stadiumName={getDisplayedStadiumName(
+            selectedStadium,
+            gameState.stadiumName,
+          )}
           inning={gameState.inning}
           isTop={gameState.isTop}
           outs={gameState.outs}
@@ -8336,7 +8380,10 @@ export function GameTracker() {
                   inning={gameState.inning}
                   isTop={gameState.isTop}
                   outs={gameState.outs}
-                  stadiumName={selectedStadium}
+                  stadiumName={getDisplayedStadiumName(
+                    selectedStadium,
+                    gameState.stadiumName,
+                  )}
                   currentBatterName={currentBatterDisplayName}
                   gameDate={gameStartTime}
                   elapsedMinutes={elapsedMinutes}

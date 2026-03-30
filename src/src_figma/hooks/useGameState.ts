@@ -8096,6 +8096,16 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         };
       }
 
+      if (pitchingLineupRef.current.length > 9) {
+        console.error("[useGameState] PRE_GAME pitching lineup exceeded 9 entries", {
+          pitchingTeamSide,
+          exitingPitcherId,
+          newPitcherId,
+          lineupLength: pitchingLineupRef.current.length,
+          lineup: pitchingLineupRef.current,
+        });
+      }
+
       pitchingStateRef.current = {
         ...pitchState,
         lineup: nextLineup,

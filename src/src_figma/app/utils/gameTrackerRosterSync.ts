@@ -8,6 +8,28 @@ type RosterIdentityResolver = (
   team: TeamSide,
 ) => string;
 
+const EMPTY_PLAYER_STATS = { ab: 0, h: 0, r: 0, rbi: 0, bb: 0, k: 0 };
+
+function createSnapshotPlayer(
+  player: {
+    playerId: string;
+    playerName: string;
+    position?: string;
+    battingOrder?: number;
+  },
+  isOutOfGame: boolean,
+): Player {
+  return {
+    name: player.playerName,
+    playerId: player.playerId,
+    position: player.position,
+    battingOrder: player.battingOrder,
+    stats: { ...EMPTY_PLAYER_STATS },
+    battingHand: 'R',
+    isOutOfGame,
+  };
+}
+
 export function reconcileTeamPlayersWithLineupSnapshot(
   existingPlayers: Player[],
   snapshot: TeamLineupSnapshot,
@@ -16,6 +38,20 @@ export function reconcileTeamPlayersWithLineupSnapshot(
 ): Player[] {
   const lineupById = new Map(snapshot.lineup.map(player => [player.playerId, player]));
   const benchById = new Map(snapshot.bench.map(player => [player.playerId, player]));
+  const currentPitcher = snapshot.currentPitcher;
+  const currentPitcherAlreadyInLineup = !!(currentPitcher && lineupById.has(currentPitcher.playerId));
+  const separateDhInLineup = snapshot.lineup.some((player) =>
+    player.position === 'DH' && player.playerId !== currentPitcher?.playerId
+  );
+  const shouldInjectPitcherIntoLineup = !!(currentPitcher && !currentPitcherAlreadyInLineup && !separateDhInLineup);
+  const outgoingPitcherEntry = shouldInjectPitcherIntoLineup
+    ? snapshot.lineup.find((player) =>
+        player.playerId === currentPitcher.playerId ||
+        player.position === 'P' ||
+        player.battingOrder === currentPitcher.battingOrder
+      )
+    : null;
+  const oldPitcherId = outgoingPitcherEntry?.playerId ?? null;
 
   // R3: If no existing players match any snapshot entry, existing data is stale/fallback.
   // Build the roster entirely from the snapshot to avoid mixing fallback + real players.
@@ -25,8 +61,21 @@ export function reconcileTeamPlayersWithLineupSnapshot(
       (snapshot.currentPitcher && playerId === snapshot.currentPitcher.playerId);
   });
   if (!anyExistingMatchesSnapshot && snapshot.lineup.length > 0) {
+    const freshLineup = shouldInjectPitcherIntoLineup
+      ? snapshot.lineup.map((entry) => (
+          oldPitcherId && entry.playerId === oldPitcherId
+            ? {
+                ...entry,
+                playerId: currentPitcher.playerId,
+                playerName: currentPitcher.playerName,
+                position: 'P',
+                battingOrder: currentPitcher.battingOrder,
+              }
+            : entry
+        ))
+      : snapshot.lineup;
     const freshPlayers: Player[] = [];
-    for (const entry of snapshot.lineup) {
+    for (const entry of freshLineup) {
       freshPlayers.push({
         name: entry.playerName,
         playerId: entry.playerId,
@@ -48,12 +97,15 @@ export function reconcileTeamPlayersWithLineupSnapshot(
       });
     }
     // Add pitcher if not already in lineup (DH game)
-    if (snapshot.currentPitcher && !lineupById.has(snapshot.currentPitcher.playerId)) {
+    if (
+      currentPitcher &&
+      !freshLineup.some((player) => player.playerId === currentPitcher.playerId)
+    ) {
       freshPlayers.push({
-        name: snapshot.currentPitcher.playerName,
-        playerId: snapshot.currentPitcher.playerId,
+        name: currentPitcher.playerName,
+        playerId: currentPitcher.playerId,
         position: 'P',
-        battingOrder: snapshot.currentPitcher.battingOrder,
+        battingOrder: currentPitcher.battingOrder,
         stats: { ab: 0, h: 0, r: 0, rbi: 0, bb: 0, k: 0 },
         battingHand: 'R',
         isOutOfGame: false,
@@ -63,23 +115,16 @@ export function reconcileTeamPlayersWithLineupSnapshot(
   }
   const usedPlayers = new Set(snapshot.usedPlayers);
   const seenPlayerIds = new Set<string>();
-  const currentPitcher = snapshot.currentPitcher;
-  const currentPitcherAlreadyInLineup = !!(currentPitcher && lineupById.has(currentPitcher.playerId));
-  const separateDhInLineup = snapshot.lineup.some((player) =>
-    player.position === 'DH' && player.playerId !== currentPitcher?.playerId
-  );
-  const shouldInjectPitcherIntoLineup = !!(currentPitcher && !currentPitcherAlreadyInLineup && !separateDhInLineup);
 
   const nextPlayers = existingPlayers.map((player) => {
     const playerId = getRosterEntityId(player, team);
-    seenPlayerIds.add(playerId);
 
     if (
       shouldInjectPitcherIntoLineup &&
       (
         playerId === currentPitcher.playerId ||
-        player.position === 'P' ||
-        player.battingOrder === currentPitcher.battingOrder
+        (oldPitcherId ? playerId === oldPitcherId : false) ||
+        (!oldPitcherId && player.battingOrder === currentPitcher.battingOrder)
       )
     ) {
       return {
@@ -128,44 +173,44 @@ export function reconcileTeamPlayersWithLineupSnapshot(
     return player;
   });
 
+  for (const player of nextPlayers) {
+    seenPlayerIds.add(getRosterEntityId(player, team));
+  }
+
   for (const lineupEntry of snapshot.lineup) {
+    if (
+      shouldInjectPitcherIntoLineup &&
+      oldPitcherId &&
+      lineupEntry.playerId === oldPitcherId
+    ) {
+      continue;
+    }
     if (seenPlayerIds.has(lineupEntry.playerId)) continue;
-    nextPlayers.push({
-      name: lineupEntry.playerName,
-      playerId: lineupEntry.playerId,
-      position: lineupEntry.position,
-      battingOrder: lineupEntry.battingOrder,
-      stats: { ab: 0, h: 0, r: 0, rbi: 0, bb: 0, k: 0 },
-      battingHand: 'R',
-      isOutOfGame: false,
-    });
+    nextPlayers.push(createSnapshotPlayer(lineupEntry, false));
+    seenPlayerIds.add(lineupEntry.playerId);
   }
 
   for (const benchEntry of snapshot.bench) {
     if (seenPlayerIds.has(benchEntry.playerId)) continue;
-    nextPlayers.push({
-      name: benchEntry.playerName,
+    nextPlayers.push(createSnapshotPlayer({
       playerId: benchEntry.playerId,
+      playerName: benchEntry.playerName,
       position: benchEntry.positions[0],
-      stats: { ab: 0, h: 0, r: 0, rbi: 0, bb: 0, k: 0 },
-      battingHand: 'R',
-      isOutOfGame: !benchEntry.isAvailable,
-    });
+    }, !benchEntry.isAvailable));
+    seenPlayerIds.add(benchEntry.playerId);
   }
 
   if (
     shouldInjectPitcherIntoLineup &&
-    !nextPlayers.some((player) => getRosterEntityId(player, team) === currentPitcher.playerId)
+    !seenPlayerIds.has(currentPitcher.playerId)
   ) {
-    nextPlayers.push({
-      name: currentPitcher.playerName,
+    nextPlayers.push(createSnapshotPlayer({
       playerId: currentPitcher.playerId,
+      playerName: currentPitcher.playerName,
       position: 'P',
       battingOrder: currentPitcher.battingOrder,
-      stats: { ab: 0, h: 0, r: 0, rbi: 0, bb: 0, k: 0 },
-      battingHand: 'R',
-      isOutOfGame: false,
-    });
+    }, false));
+    seenPlayerIds.add(currentPitcher.playerId);
   }
 
   if (shouldInjectPitcherIntoLineup) {
@@ -173,14 +218,14 @@ export function reconcileTeamPlayersWithLineupSnapshot(
       const playerId = getRosterEntityId(player, team);
       return (
         playerId === currentPitcher.playerId ||
-        player.position === 'P' ||
+        (oldPitcherId ? playerId === oldPitcherId : false) ||
         player.battingOrder === currentPitcher.battingOrder
       );
     });
 
     const normalizedPitcherSlot: Player = {
       ...(existingPitcherSlot || {
-        stats: { ab: 0, h: 0, r: 0, rbi: 0, bb: 0, k: 0 },
+        stats: EMPTY_PLAYER_STATS,
         battingHand: 'R' as const,
       }),
       playerId: currentPitcher.playerId,
@@ -195,7 +240,7 @@ export function reconcileTeamPlayersWithLineupSnapshot(
         const playerId = getRosterEntityId(player, team);
         return !(
           playerId === currentPitcher.playerId ||
-          player.position === 'P' ||
+          (oldPitcherId ? playerId === oldPitcherId : false) ||
           player.battingOrder === currentPitcher.battingOrder
         );
       })
@@ -240,13 +285,14 @@ export function reconcileTeamPitchersWithLineupSnapshot(
   const nextPitchers = existingPitchers.map((pitcher, index) => {
     const pitcherId = getRosterEntityId(pitcher, team);
     seenPitcherIds.add(pitcherId);
+    const wasOutOfGame = pitcher.isOutOfGame ?? false;
 
     return {
       ...pitcher,
       playerId: pitcherId,
       isStarter: index === 0,
       isActive: currentPitcherId === pitcherId,
-      isOutOfGame: currentPitcherId === pitcherId ? false : usedPlayers.has(pitcherId),
+      isOutOfGame: currentPitcherId === pitcherId ? false : wasOutOfGame || usedPlayers.has(pitcherId),
     };
   });
 

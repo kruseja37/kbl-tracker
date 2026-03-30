@@ -162,4 +162,104 @@ describe('gameTrackerRosterSync', () => {
       isOutOfGame: false,
     });
   });
+
+  test('replaces a pre-game starting pitcher without creating a duplicate ninth hitter', () => {
+    const players = [
+      createPlayer({ name: 'Lead Off', playerId: 'p1', position: 'CF', battingOrder: 1 }),
+      createPlayer({ name: 'Two Hole', playerId: 'p2', position: 'SS', battingOrder: 2 }),
+      createPlayer({ name: 'Three Hole', playerId: 'p3', position: '1B', battingOrder: 3 }),
+      createPlayer({ name: 'Cleanup', playerId: 'p4', position: 'RF', battingOrder: 4 }),
+      createPlayer({ name: 'Five Spot', playerId: 'p5', position: 'LF', battingOrder: 5 }),
+      createPlayer({ name: 'Six Spot', playerId: 'p6', position: '3B', battingOrder: 6 }),
+      createPlayer({ name: 'Seven Spot', playerId: 'p7', position: '2B', battingOrder: 7 }),
+      createPlayer({ name: 'Eight Spot', playerId: 'p8', position: 'C', battingOrder: 8 }),
+      createPlayer({ name: 'Old Pitcher', playerId: 'old-p', position: 'P', battingOrder: 9 }),
+      createPlayer({ name: 'New Pitcher', playerId: 'new-p', position: 'P' }),
+    ];
+
+    const nextPlayers = reconcileTeamPlayersWithLineupSnapshot(
+      players,
+      createSnapshot({
+        lineup: [
+          { playerId: 'p1', playerName: 'Lead Off', position: 'CF', battingOrder: 1, enteredInning: 1, isStarter: true },
+          { playerId: 'p2', playerName: 'Two Hole', position: 'SS', battingOrder: 2, enteredInning: 1, isStarter: true },
+          { playerId: 'p3', playerName: 'Three Hole', position: '1B', battingOrder: 3, enteredInning: 1, isStarter: true },
+          { playerId: 'p4', playerName: 'Cleanup', position: 'RF', battingOrder: 4, enteredInning: 1, isStarter: true },
+          { playerId: 'p5', playerName: 'Five Spot', position: 'LF', battingOrder: 5, enteredInning: 1, isStarter: true },
+          { playerId: 'p6', playerName: 'Six Spot', position: '3B', battingOrder: 6, enteredInning: 1, isStarter: true },
+          { playerId: 'p7', playerName: 'Seven Spot', position: '2B', battingOrder: 7, enteredInning: 1, isStarter: true },
+          { playerId: 'p8', playerName: 'Eight Spot', position: 'C', battingOrder: 8, enteredInning: 1, isStarter: true },
+          { playerId: 'old-p', playerName: 'Old Pitcher', position: 'P', battingOrder: 9, enteredInning: 1, isStarter: true },
+        ],
+        bench: [
+          { playerId: 'new-p', playerName: 'New Pitcher', positions: ['P'], isAvailable: true },
+        ],
+        usedPlayers: ['old-p'],
+        currentPitcher: {
+          playerId: 'new-p',
+          playerName: 'New Pitcher',
+          position: 'P',
+          battingOrder: 9,
+          enteredInning: 1,
+          enteredFor: 'Old Pitcher',
+          isStarter: true,
+        },
+      }),
+      'home',
+      (entity) => entity.playerId || entity.name,
+    );
+
+    expect(nextPlayers).toHaveLength(9);
+    expect(nextPlayers.filter((player) => player.position === 'P')).toHaveLength(1);
+    expect(nextPlayers.find((player) => player.battingOrder === 9)).toMatchObject({
+      playerId: 'new-p',
+      name: 'New Pitcher',
+      position: 'P',
+    });
+    expect(nextPlayers.some((player) => player.playerId === 'old-p')).toBe(false);
+  });
+
+  test('rebuilds stale refreshed rosters from the persisted lineup snapshot', () => {
+    const stalePlayers = [
+      createPlayer({ name: 'Fallback Pitcher', playerId: 'fallback-p', position: 'P', battingOrder: 9 }),
+      createPlayer({ name: 'Fallback Bench', playerId: 'fallback-bench', position: 'IF' }),
+    ];
+
+    const nextPlayers = reconcileTeamPlayersWithLineupSnapshot(
+      stalePlayers,
+      createSnapshot({
+        lineup: [
+          { playerId: 'p1', playerName: 'Lead Off', position: 'CF', battingOrder: 1, enteredInning: 1, isStarter: true },
+          { playerId: 'p2', playerName: 'Two Hole', position: 'SS', battingOrder: 2, enteredInning: 1, isStarter: true },
+          { playerId: 'p3', playerName: 'Three Hole', position: '1B', battingOrder: 3, enteredInning: 1, isStarter: true },
+          { playerId: 'p4', playerName: 'Cleanup', position: 'RF', battingOrder: 4, enteredInning: 1, isStarter: true },
+          { playerId: 'p5', playerName: 'Five Spot', position: 'LF', battingOrder: 5, enteredInning: 1, isStarter: true },
+          { playerId: 'p6', playerName: 'Six Spot', position: '3B', battingOrder: 6, enteredInning: 1, isStarter: true },
+          { playerId: 'p7', playerName: 'Seven Spot', position: '2B', battingOrder: 7, enteredInning: 1, isStarter: true },
+          { playerId: 'p8', playerName: 'Eight Spot', position: 'C', battingOrder: 8, enteredInning: 1, isStarter: true },
+          { playerId: 'old-p', playerName: 'Old Pitcher', position: 'P', battingOrder: 9, enteredInning: 1, isStarter: true },
+        ],
+        bench: [],
+        usedPlayers: ['old-p'],
+        currentPitcher: {
+          playerId: 'new-p',
+          playerName: 'New Pitcher',
+          position: 'P',
+          battingOrder: 9,
+          enteredInning: 7,
+          enteredFor: 'Old Pitcher',
+          isStarter: false,
+        },
+      }),
+      'away',
+      (entity) => entity.playerId || entity.name,
+    );
+
+    expect(nextPlayers).toHaveLength(9);
+    expect(nextPlayers.some((player) => player.playerId === 'fallback-p')).toBe(false);
+    expect(nextPlayers.find((player) => player.battingOrder === 9)).toMatchObject({
+      playerId: 'new-p',
+      name: 'New Pitcher',
+    });
+  });
 });

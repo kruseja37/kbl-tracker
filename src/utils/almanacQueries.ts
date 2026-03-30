@@ -159,11 +159,11 @@ function parseDateBoundary(value?: string, endOfDay: boolean = false): number | 
 }
 
 function getLeagueId(game: CompletedGameRecord): string | null {
-  return game.leagueId ?? (game.competitionType === 'exhibition' ? game.competitionId ?? null : null);
+  return game.leagueId ?? game.competitionId ?? null;
 }
 
 function isExhibitionGame(game: CompletedGameRecord): boolean {
-  return game.competitionType === 'exhibition' || (!game.competitionType && Boolean(game.leagueId));
+  return game.competitionType === 'exhibition' || (!game.competitionType && Boolean(game.leagueId ?? game.competitionId));
 }
 
 async function getCanonicalIdLookup(): Promise<Map<string, string>> {
@@ -284,7 +284,11 @@ export async function getExhibitionGames(
     })
     .sort((a, b) => b.date - a.date);
 
-  console.log('[Almanac] Exhibition games found:', exhibitionGames.length);
+  console.log('[Almanac] Exhibition games found:', exhibitionGames.length, exhibitionGames.map((game) => ({
+    gameId: game.gameId,
+    leagueId: getLeagueId(game),
+    competitionType: game.competitionType ?? null,
+  })));
 
   return exhibitionGames;
 }
@@ -498,6 +502,11 @@ export async function getPlayerExhibitionStats(
   leagueId: string
 ): Promise<{ batting: BattingLine | null; pitching: PitchingLine | null }> {
   const games = await getExhibitionGames();
+  console.log('[Almanac] Loading exhibition stats for player:', {
+    playerId,
+    leagueId,
+    totalGames: games.length,
+  });
 
   const battingTotals = {
     games: new Set<string>(),
@@ -529,11 +538,20 @@ export async function getPlayerExhibitionStats(
   };
 
   for (const game of games) {
-    if (getLeagueId(game) !== leagueId) {
+    const gameLeagueId = getLeagueId(game);
+    if (gameLeagueId !== leagueId) {
       continue;
     }
 
     const battingStats = game.playerStats[playerId];
+    console.log('[Almanac] Checking exhibition game for player stats:', {
+      gameId: game.gameId,
+      gameLeagueId,
+      playerId,
+      hasBattingStats: Boolean(battingStats),
+      battingKeys: battingStats ? undefined : Object.keys(game.playerStats),
+      pitcherIds: game.pitcherGameStats.map((pitcher) => pitcher.pitcherId),
+    });
     if (battingStats) {
       battingTotals.games.add(game.gameId);
       battingTotals.ab += battingStats.ab;
@@ -564,6 +582,14 @@ export async function getPlayerExhibitionStats(
       pitchingTotals.losses += pitchingStats.decision === 'L' ? 1 : 0;
     }
   }
+
+  console.log('[Almanac] Exhibition stats totals:', {
+    playerId,
+    leagueId,
+    battingGames: battingTotals.games.size,
+    battingRbi: battingTotals.rbi,
+    pitchingGames: pitchingTotals.games.size,
+  });
 
   const batting = battingTotals.games.size > 0
     ? {
