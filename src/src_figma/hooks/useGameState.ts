@@ -7865,7 +7865,19 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       newPitcherName?: string,
       exitingPitcherName?: string,
     ) => {
-      const pitchingTeamSide: TeamSide = gameState.isTop ? "home" : "away";
+      // R3-T0 FIX: Determine team by finding which lineup the exiting pitcher is in
+      // (was hardcoded to gameState.isTop which always resolves to "home" in PRE_GAME)
+      const isInHomePitching =
+        homeLineupStateRef.current.currentPitcher?.playerId === exitingPitcherId ||
+        homeLineupStateRef.current.lineup.some(
+          (p) => p.playerId === exitingPitcherId || (p.position === "P" && !exitingPitcherId),
+        );
+      const isInAwayPitching =
+        awayLineupStateRef.current.currentPitcher?.playerId === exitingPitcherId ||
+        awayLineupStateRef.current.lineup.some(
+          (p) => p.playerId === exitingPitcherId,
+        );
+      const pitchingTeamSide: TeamSide = isInHomePitching && !isInAwayPitching ? "home" : isInAwayPitching ? "away" : (gameState.isTop ? "home" : "away");
       const pitchingStateRef =
         pitchingTeamSide === "home" ? homeLineupStateRef : awayLineupStateRef;
       const pitchingLineupRef =

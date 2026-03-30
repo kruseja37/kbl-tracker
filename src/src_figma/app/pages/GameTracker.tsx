@@ -2057,7 +2057,8 @@ export function GameTracker() {
   );
 
   useEffect(() => {
-    if (!gameInitialized || gameState.gamePhase !== "LIVE") return;
+    if (!gameInitialized) return;
+    // R3-T0: Also sync during PRE_GAME so pre-game pitcher changes appear in UI
     syncDisplayedRostersToLineupSnapshot(getLineupStateSnapshot());
   }, [
     gameInitialized,
