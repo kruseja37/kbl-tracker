@@ -705,37 +705,44 @@ export function GameTracker() {
   );
   const extraInningRunnerPlacementRef = useRef<string | null>(null);
 
-  // R3-T0: Seed persistence refs from navigationState (first load only)
+  // R3-T0: Seed persistence refs from navigationState (fresh game only)
+  const seededNavStateRef = useRef(false);
   useEffect(() => {
-    if (navigationState) {
-      // Fresh game from exhibition setup — seed refs from navigation
-      if (navigationState.extraInningRunner != null) {
-        hookExtraInningRunnerRef.current = navigationState.extraInningRunner;
-      }
-      if (navigationState.extraInningRunnerDelay != null) {
-        hookExtraInningRunnerDelayRef.current = navigationState.extraInningRunnerDelay;
-      }
-      hookTeamColorsRef.current = {
-        awayTeamColor: navigationState.awayTeamColor,
-        awayTeamBorderColor: navigationState.awayTeamBorderColor,
-        homeTeamColor: navigationState.homeTeamColor,
-        homeTeamBorderColor: navigationState.homeTeamBorderColor,
-      };
-      hookGameStartTimestampRef.current = Date.now();
-    } else {
-      // Refresh — restore persisted state from snapshot refs
-      const persistedStart = hookGameStartTimestampRef.current;
-      if (persistedStart && persistedStart < Date.now()) {
-        setGameStartTime(new Date(persistedStart));
-      }
-      // Restore team colors from persisted snapshot
-      const colors = hookTeamColorsRef.current;
-      if (colors.awayTeamColor || colors.homeTeamColor) {
-        setPersistedTeamColors(colors);
-      }
+    if (seededNavStateRef.current || !navigationState) return;
+    seededNavStateRef.current = true;
+    // Fresh game from exhibition setup — seed refs from navigation
+    if (navigationState.extraInningRunner != null) {
+      hookExtraInningRunnerRef.current = navigationState.extraInningRunner;
     }
+    if (navigationState.extraInningRunnerDelay != null) {
+      hookExtraInningRunnerDelayRef.current = navigationState.extraInningRunnerDelay;
+    }
+    hookTeamColorsRef.current = {
+      awayTeamColor: navigationState.awayTeamColor,
+      awayTeamBorderColor: navigationState.awayTeamBorderColor,
+      homeTeamColor: navigationState.homeTeamColor,
+      homeTeamBorderColor: navigationState.homeTeamBorderColor,
+    };
+    hookGameStartTimestampRef.current = Date.now();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Intentionally run once on mount
+  }, []); // Seed once on mount for fresh games
+
+  // R3-T0: Restore persisted colors + timer AFTER async load completes
+  const restoredColorsRef = useRef(false);
+  useEffect(() => {
+    if (!gameInitialized || navigationState || restoredColorsRef.current) return;
+    restoredColorsRef.current = true;
+    // Team colors — refs now populated by loadExistingGame
+    const colors = hookTeamColorsRef.current;
+    if (colors.awayTeamColor || colors.homeTeamColor) {
+      setPersistedTeamColors(colors);
+    }
+    // Game start time
+    const persistedStart = hookGameStartTimestampRef.current;
+    if (persistedStart && persistedStart < Date.now()) {
+      setGameStartTime(new Date(persistedStart));
+    }
+  }, [gameInitialized, navigationState]); // Runs after loadExistingGame completes
 
   // Set playoff context from navigation state (if this is a playoff game)
   const isPlayoffGame =
