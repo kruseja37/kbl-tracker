@@ -467,6 +467,8 @@ export interface BetweenPlayEvent {
     fielderPosition?: number;
   };
 
+  errorChargedTo?: 'pitcher' | 'catcher' | 'fielder';
+
   wildPitchOrPassedBall?: {
     wpOrPb: 'wild_pitch' | 'passed_ball';
     pitcherId: string;

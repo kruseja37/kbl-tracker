@@ -450,11 +450,18 @@ export interface CompletedGameRecord {
   homeTeamName: string;
   finalScore: { away: number; home: number };
   innings: number;
+  totalInnings?: number;
   fameEvents: PersistedGameState["fameEvents"];
   playerStats: PersistedGameState["playerStats"];
   pitcherGameStats: PersistedGameState["pitcherGameStats"];
   activityLog?: string[];
   inningScores?: { away: number; home: number }[];
+  pogPlayerId?: string;
+  playersOfTheGame?: {
+    first?: string;
+    second?: string;
+    third?: string;
+  };
   // --- NEW: CATCH THE ADVANCED ARRAYS ---
   managerDecisions?: PersistedGameState["managerDecisions"];
   moraleShifts?: PersistedGameState["moraleShifts"];
@@ -502,11 +509,6 @@ export interface GameRecord extends CompletedGameRecord {
   lighting?: "day" | "night" | "hazy";
 
   // Narrative enrichment (populated at game end)
-  playersOfTheGame?: {
-    first: string;
-    second?: string;
-    third?: string;
-  };
   gameStoryArc?:
     | "blowout"
     | "pitchers_duel"
@@ -572,6 +574,13 @@ export async function archiveCompletedGame(
     competitionType?: CompetitionType;
     competitionId?: string;
     leagueId?: string;
+    totalInnings?: number;
+    pogPlayerId?: string;
+    playersOfTheGame?: {
+      first?: string;
+      second?: string;
+      third?: string;
+    };
   },
 ): Promise<void> {
   const db = await initDatabase();
@@ -592,11 +601,14 @@ export async function archiveCompletedGame(
     homeTeamName: gameState.homeTeamName,
     finalScore,
     innings: gameState.inning,
+    totalInnings: context?.totalInnings,
     fameEvents: gameState.fameEvents,
     playerStats: gameState.playerStats,
     pitcherGameStats: gameState.pitcherGameStats,
     activityLog: gameState.activityLog,
     inningScores,
+    pogPlayerId: context?.pogPlayerId,
+    playersOfTheGame: context?.playersOfTheGame,
     // --- NEW: ARCHIVE THE ADVANCED ARRAYS ---
     managerDecisions: gameState.managerDecisions || [],
     moraleShifts: gameState.moraleShifts || [],
@@ -656,6 +668,7 @@ export async function archiveBatchGameResult(params: {
     homeTeamName: params.homeTeamId,
     finalScore: { away: params.awayScore, home: params.homeScore },
     innings: 9,
+    totalInnings: 9,
     fameEvents: [],
     playerStats: {},
     pitcherGameStats: [],

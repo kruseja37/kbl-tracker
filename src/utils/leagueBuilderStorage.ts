@@ -1254,6 +1254,14 @@ function convertPlayer(player: PlayerData): Omit<Player, 'createdDate' | 'lastMo
     }
   }
 
+  if (player.id === 'sir-dee') {
+    console.log('[R3-R5] Seeding corrected Shay Dee pitcher profile', {
+      junk: player.pitcherRatings?.junk,
+      accuracy: player.pitcherRatings?.accuracy,
+      arsenal: player.arsenal,
+    });
+  }
+
   return {
     id: player.id,
     firstName,

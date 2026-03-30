@@ -5,6 +5,7 @@ import { getTeamColors } from "@/config/teamColors";
 import { getCompletedGameById, type CompletedGameRecord } from "../../utils/gameStorage";
 import { getAllCanonicalPlayers } from "../../../utils/almanacStorage";
 import { getGameEvents, type AtBatEvent } from "../../../utils/eventLog";
+import { rankPlayersOfTheGame } from "../../../utils/playersOfTheGame";
 import { WinProbChart } from "../components/WinProbChart";
 
 type CanonicalLookup = Record<string, string>;
@@ -322,34 +323,7 @@ export function GameDetail() {
       (left, right) => right.wpa - left.wpa || left.playerName.localeCompare(right.playerName)
     );
 
-    const maybeStoredPogId =
-      (game as CompletedGameRecord & { pogPlayerId?: string; playersOfTheGame?: { first?: string } })
-        .pogPlayerId ??
-      (game as CompletedGameRecord & { pogPlayerId?: string; playersOfTheGame?: { first?: string } })
-        .playersOfTheGame?.first;
-
-    const playersOfGame: Array<WpaEntry | (PlayerReference & { wpa?: number })> = [];
-
-    if (maybeStoredPogId) {
-      const matchingWpa = wpaLeaderboard.find((entry) => entry.playerId === maybeStoredPogId);
-      playersOfGame.push(
-        matchingWpa ?? {
-          playerId: maybeStoredPogId,
-          playerName: playerNames.get(maybeStoredPogId) ?? "Unknown Player",
-          teamId: teamByPlayer.get(maybeStoredPogId),
-        }
-      );
-    }
-
-    for (const entry of wpaLeaderboard) {
-      if (playersOfGame.some((existing) => existing.playerId === entry.playerId)) {
-        continue;
-      }
-      playersOfGame.push(entry);
-      if (playersOfGame.length === 3) {
-        break;
-      }
-    }
+    const playersOfGame = rankPlayersOfTheGame(game, atBatEvents);
 
     const battingLines = Object.entries(game.playerStats)
       .filter(([, stats]) => {
@@ -578,7 +552,7 @@ export function GameDetail() {
 
         <SectionFrame
           title="Players Of The Game"
-          subtitle="1st place uses the stored POG when available. Remaining spots come from cumulative game WPA."
+          subtitle="Archived rankings are preferred when present, with the saved game file breaking ties against live WPA recalculation."
         >
           {playersOfGame.length === 0 ? (
             <EmptyState label="No players of the game available." />
@@ -596,7 +570,7 @@ export function GameDetail() {
                   <div className="mt-4 text-[10px] leading-6 text-white">
                     <PlayerNameLink
                       playerId={player.playerId}
-                      playerName={player.playerName}
+                      playerName={player.name}
                       canonicalLookup={canonicalLookup}
                     />
                   </div>

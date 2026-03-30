@@ -852,11 +852,11 @@ export const PLAYERS: Record<string, PlayerData> = {
     pitcherRole: 'RP',
     role: 'BULLPEN',
     overall: 'A',
-    pitcherRatings: { velocity: 84, junk: 5, accuracy: 95 },
+    pitcherRatings: { velocity: 84, junk: 51, accuracy: 95 },
     batterRatings: { power: 29, contact: 17, speed: 32, fielding: 94, arm: 0 },
     chemistry: 'CRA',
     traits: { trait1: 'Falls Behind', trait2: 'Stimulated' },
-    arsenal: ['4F', 'CF', 'CH']
+    arsenal: ['4F', 'CF', 'CB', 'CH']
   },
   'sir-duke': {
     id: 'sir-duke',

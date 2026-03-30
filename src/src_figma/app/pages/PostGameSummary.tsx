@@ -7,6 +7,7 @@ import {
   type CompletedGameRecord,
 } from "../../utils/gameStorage";
 import { getGameEvents, type AtBatEvent } from "../../../utils/eventLog";
+import { rankPlayersOfTheGame } from "../../../utils/playersOfTheGame";
 
 // Helper to format innings pitched from outs recorded
 function formatIP(outsRecorded: number): string {
@@ -357,20 +358,6 @@ export function PostGameSummary({
       };
     });
 
-  const batterById = new Map(
-    allBatters.map((batter) => [batter.playerId, batter]),
-  );
-  const wpaByBatter = new Map<string, number>();
-  let hasWpaData = false;
-  for (const event of atBatEvents ?? []) {
-    if (!Number.isFinite(event.wpa)) continue;
-    hasWpaData = true;
-    wpaByBatter.set(
-      event.batterId,
-      (wpaByBatter.get(event.batterId) || 0) + event.wpa,
-    );
-  }
-
   // Build pitcher stats
   const allPitchers = gameData.pitcherGameStats
     .filter((pitcher) => {
@@ -411,8 +398,6 @@ export function PostGameSummary({
   const homePitchers = allPitchers.filter((p) => !p.isAway);
   const awayBatters = allBatters.filter((b) => b.isAway && b.hasOffensiveLine);
   const homeBatters = allBatters.filter((b) => !b.isAway && b.hasOffensiveLine);
-  type Performer = (typeof allBatters)[number] & { wpa?: number };
-  type WpaPerformer = Performer & { wpa: number };
 
   // Calculate team totals strictly from this game's playerStats rows.
   const awayHits = awayBatters.reduce((sum, batter) => sum + batter.h, 0);
@@ -433,8 +418,17 @@ export function PostGameSummary({
     );
 
   // Inning-by-inning scoring from this completed game only.
-  const inningScores = gameData.inningScores ?? [];
-  const numInnings = inningScores.length;
+  const archivedInningScores = gameData.inningScores ?? [];
+  const regulationInnings = gameData.totalInnings ?? archivedInningScores.length;
+  const playedInnings = Math.max(gameData.innings, regulationInnings);
+  const numInnings = Math.min(archivedInningScores.length, playedInnings);
+  const inningScores = archivedInningScores.slice(0, numInnings);
+  console.log("[R3-R5] Rendering archived linescore with regulation cap", {
+    gameId: gameData.gameId,
+    archivedColumns: archivedInningScores.length,
+    regulationInnings,
+    displayedColumns: numInnings,
+  });
   const scoreboard = {
     innings: inningScores,
     away: {
@@ -454,25 +448,7 @@ export function PostGameSummary({
   const winnerName = homeWon ? homeTeamName : awayTeamName;
   const winnerId = homeWon ? homeTeamId : awayTeamId;
 
-  // Find players of the game from WPA when available, with batting-line fallback.
-  const sortedBatters = hasWpaData
-    ? Array.from(wpaByBatter.entries())
-        .map(([playerId, wpa]) => {
-          const batter = batterById.get(playerId);
-          return batter ? { ...batter, wpa } : null;
-        })
-        .filter((batter): batter is WpaPerformer => batter !== null)
-        .sort((a, b) => b.wpa - a.wpa || a.name.localeCompare(b.name))
-    : allBatters
-        .filter((b) => b.hasOffensiveLine && Boolean(b.name))
-        .map((batter): Performer => ({ ...batter, wpa: undefined }))
-        .sort((a, b) => {
-          const aScore = a.h * 2 + a.rbi + a.r;
-          const bScore = b.h * 2 + b.rbi + b.r;
-          return bScore - aScore || a.name.localeCompare(b.name);
-        });
-
-  const topPerformers = sortedBatters.slice(0, 3);
+  const topPerformers = rankPlayersOfTheGame(gameData, atBatEvents);
 
   return (
     <div className="min-h-screen bg-[#2a3a2d] text-white p-6">

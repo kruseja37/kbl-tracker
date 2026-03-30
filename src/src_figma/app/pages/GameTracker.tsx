@@ -684,6 +684,7 @@ export function GameTracker() {
     getBaseRunnerNames,
     runnerIdentityVersion,
     lineupVersion,
+    substitutionLog,
     notifyPersistenceMetadataChanged,
     isLoading,
     isSaving,
@@ -1554,8 +1555,13 @@ export function GameTracker() {
 
   useEffect(() => {
     if (!gameInitialized || !gameState.gameId) return;
+    console.log("[R3-R5] Rebuilding play log after substitution-aware trigger", {
+      gameId: gameState.gameId,
+      atBatSequence,
+      substitutionCount: substitutionLog.length,
+    });
     void rebuildPlayLogFromEventLogRef.current();
-  }, [atBatSequence, gameInitialized, gameState.gameId]);
+  }, [atBatSequence, gameInitialized, gameState.gameId, substitutionLog.length]);
 
   useEffect(() => {
     return () => {

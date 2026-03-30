@@ -409,7 +409,7 @@ playerId,name,age,primaryPosition,secondaryPosition,bats,throws,chemistry,person
 408,Slip Van'Derwink,30,44,2,L,L,Competitive,,B+,0.9,14,46,60,76,71,0,0,0,,Easy Jumps,,TRUE,2024-01-01,SMB4 Sirloins,Sirloins
 409,Kayo Niomo,38,6,1,R,R,Spirited,,B,1.0,73,60,70,49,56,0,0,0,,Pick Officer,,TRUE,2024-01-01,SMB4 Sirloins,Sirloins
 410,Split Seemerson,21,15,9,R,R,Spirited,,C+,1.2,8,51,35,65,55,0,0,0,,Elite FK,Injury Prone,TRUE,2024-01-01,SMB4 Sirloins,Sirloins
-411,Shay Dee,31,29,17,L,L,Crafty,,A,0.7,32,94,84,51,95,0,0,0,,Falls Behind,Stimulated,TRUE,2024-01-01,SMB4 Sirloins,Sirloins
+411,Shay Dee,31,RP,,L,L,Crafty,,A,0.7,29,17,32,94,0,84,51,95,"4F, CF, CB, CH",Falls Behind,Stimulated,TRUE,2024-01-01,SMB4 Sirloins,Sirloins
 412,Linus Digby,27,21,6,L,R,Competitive,,C,1.3,54,89,50,55,19,0,0,0,,,,TRUE,2024-01-01,SMB4 Sirloins,Sirloins
 413,Miguel Duke,29,9,13,L,R,Competitive,,C,1.3,47,39,30,86,18,0,0,0,,,,TRUE,2024-01-01,SMB4 Sirloins,Sirloins
 414,Franz Zilla,32,5,2,R,R,Scholarly,,C+,1.2,19,58,85,39,25,0,0,0,,K Collector,,TRUE,2024-01-01,SMB4 Sirloins,Sirloins

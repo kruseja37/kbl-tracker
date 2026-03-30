@@ -39,6 +39,10 @@ import {
   type CompetitionType,
   type PersistedGameState,
 } from "../utils/gameStorage";
+import {
+  buildStoredPlayersOfTheGame,
+  rankPlayersOfTheGame,
+} from "../../utils/playersOfTheGame";
 import type {
   AtBatResult,
   HalfInning,
@@ -485,6 +489,16 @@ export interface UseGameStateReturn {
   getBaseRunnerNames: () => { first?: string; second?: string; third?: string };
   runnerIdentityVersion: number;
   lineupVersion: number;
+  substitutionLog: Array<{
+    type: string;
+    inning: number;
+    halfInning: "TOP" | "BOTTOM";
+    outgoingPlayerId: string;
+    outgoingPlayerName: string;
+    incomingPlayerId: string;
+    incomingPlayerName: string;
+    timestamp: number;
+  }>;
   notifyPersistenceMetadataChanged: (reason: string) => void;
 
   // Loading/persistence
@@ -1840,14 +1854,76 @@ function createEmptyPitcherStats(): PitcherGameStats {
   };
 }
 
-function createEmptyScoreboardState(): ScoreboardState {
+function createEmptyScoreboardState(innings = 9): ScoreboardState {
   return {
-    innings: Array(9)
+    innings: Array(innings)
       .fill(null)
       .map(() => ({ away: undefined, home: undefined })),
     away: { runs: 0, hits: 0, errors: 0 },
     home: { runs: 0, hits: 0, errors: 0 },
   };
+}
+
+type PlayerFieldingTally = {
+  putouts: number;
+  assists: number;
+  errors: number;
+};
+
+function createEmptyFieldingTally(): PlayerFieldingTally {
+  return { putouts: 0, assists: 0, errors: 0 };
+}
+
+function buildPlayerFieldingTally(
+  fieldingEvents: Awaited<ReturnType<typeof getGameFieldingEvents>>,
+  betweenPlayEvents: BetweenPlayEvent[],
+): Map<string, PlayerFieldingTally> {
+  const tallyByPlayer = new Map<string, PlayerFieldingTally>();
+
+  for (const fieldingEvent of fieldingEvents) {
+    const tally =
+      tallyByPlayer.get(fieldingEvent.playerId) ?? createEmptyFieldingTally();
+    if (fieldingEvent.playType === "putout") {
+      tally.putouts += 1;
+    } else if (
+      fieldingEvent.playType === "assist" ||
+      fieldingEvent.playType === "outfield_assist" ||
+      fieldingEvent.playType === "double_play_pivot"
+    ) {
+      tally.assists += 1;
+    } else if (fieldingEvent.playType === "error") {
+      tally.errors += 1;
+    }
+    tallyByPlayer.set(fieldingEvent.playerId, tally);
+  }
+
+  for (const betweenPlayEvent of betweenPlayEvents) {
+    if (
+      betweenPlayEvent.type !== "pickoff" ||
+      betweenPlayEvent.runnerAction?.outcome !== "safe" ||
+      betweenPlayEvent.errorChargedTo == null
+    ) {
+      continue;
+    }
+
+    const chargedPlayerId =
+      betweenPlayEvent.errorChargedTo === "pitcher"
+        ? betweenPlayEvent.runnerAttribution?.pitcherId
+        : betweenPlayEvent.errorChargedTo === "catcher"
+          ? betweenPlayEvent.runnerAttribution?.catcherId
+          : betweenPlayEvent.runnerAttribution?.fielderId;
+
+    if (!chargedPlayerId) {
+      continue;
+    }
+
+    const tally =
+      tallyByPlayer.get(chargedPlayerId) ?? createEmptyFieldingTally();
+    tally.errors += 1;
+    tallyByPlayer.set(chargedPlayerId, tally);
+  }
+
+  return tallyByPlayer;
 }
 
 type PersistedRunnerTrackerSnapshot = NonNullable<
@@ -2991,7 +3067,12 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       teamSideByPlayerIdRef.current.clear();
       playerNameByIdRef.current.clear();
       inningPitchesRef.current = { pitches: 0, strikeouts: 0, pitcherId: "" };
-      setScoreboard(createEmptyScoreboardState());
+      totalInningsRef.current = config.totalInnings || 9;
+      setScoreboard(createEmptyScoreboardState(totalInningsRef.current));
+      console.log("[R3-R5] Initialized scoreboard with regulation innings", {
+        gameId: config.gameId,
+        totalInnings: totalInningsRef.current,
+      });
 
       // Store lineup refs
       awayLineupRef.current = config.awayLineup;
@@ -3004,7 +3085,6 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       leagueIdRef.current = config.leagueId;
       awayRecordRef.current = config.awayRecord;
       homeRecordRef.current = config.homeRecord;
-      totalInningsRef.current = config.totalInnings || 9;
       // R3: Derive DH flags from whether lineup has a DH-position player
       awayUsesDhRef.current = config.awayLineup.some(p => p.position === "DH");
       homeUsesDhRef.current = config.homeLineup.some(p => p.position === "DH");
@@ -3286,7 +3366,9 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
           hasUsableLiveSnapshot &&
           inProgressGame
         ) {
-          const emptyBoard = createEmptyScoreboardState();
+          const emptyBoard = createEmptyScoreboardState(
+            savedSnapshot.totalInnings ?? totalInningsRef.current,
+          );
           const snapshotBoard = savedSnapshot.scoreboard;
           const normalizedScoreboard: ScoreboardState = {
             innings:
@@ -6806,7 +6888,15 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
             ),
             fielderPosition: details?.fielderPosition,
           },
+          errorChargedTo: eventType === "PICK_E" ? "pitcher" : undefined,
         });
+        if (eventType === "PICK_E") {
+          console.log("[R3-R5] Logged pickoff error with default attribution", {
+            gameId: gameState.gameId,
+            runnerId: resolvedRunnerId,
+            pitcherId: details?.pitcherId || gameState.currentPitcherId,
+          });
+        }
       } else if (
         eventType === "ADVANCE" &&
         resolvedRunnerId &&
@@ -7559,6 +7649,12 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       const homeIndex = homeLineupRef.current.findIndex(
         (p) => p.playerId === lineupPlayerId,
       );
+      const outgoingPosition =
+        isAwayTeam && awayIndex >= 0
+          ? awayLineupRef.current[awayIndex]?.position
+          : homeIndex >= 0
+            ? homeLineupRef.current[homeIndex]?.position
+            : "";
 
       if (isAwayTeam) {
         // MAJ-06: Use newPosition if provided, otherwise preserve outgoing position
@@ -7652,12 +7748,35 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
           if (homeIdx >= 0) return homeLineupRef.current[homeIdx].position;
           return "";
         })();
-      if (resolvedNewPosition === "C") {
+      const shouldUpdatePitcher =
+        resolvedNewPosition === "P" || outgoingPosition === "P";
+      const shouldUpdateCatcher =
+        resolvedNewPosition === "C" || outgoingPosition === "C";
+      if (shouldUpdatePitcher || shouldUpdateCatcher) {
         setGameState((prev) => ({
           ...prev,
-          currentCatcherId: benchPlayerId,
-          currentCatcherName: benchPlayerName || benchPlayerId,
+          currentPitcherId: shouldUpdatePitcher
+            ? benchPlayerId
+            : prev.currentPitcherId,
+          currentPitcherName: shouldUpdatePitcher
+            ? benchPlayerName || benchPlayerId
+            : prev.currentPitcherName,
+          currentCatcherId: shouldUpdateCatcher
+            ? benchPlayerId
+            : prev.currentCatcherId,
+          currentCatcherName: shouldUpdateCatcher
+            ? benchPlayerName || benchPlayerId
+            : prev.currentCatcherName,
         }));
+        console.log("[R3-R5] Updated live battery attribution after substitution", {
+          gameId: gameState.gameId,
+          outgoingPlayerId: lineupPlayerId,
+          incomingPlayerId: benchPlayerId,
+          outgoingPosition,
+          resolvedNewPosition,
+          shouldUpdatePitcher,
+          shouldUpdateCatcher,
+        });
       }
 
       // If the substituted player is the current batter, update current batter
@@ -7702,6 +7821,13 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         // T1-02: Increment version counter so the runnerNames sync effect fires in GameTracker.
         setRunnerIdentityVersion((v) => v + 1);
       }
+
+      console.log("[R3-R5] Substitution recorded for play-log refresh", {
+        gameId: gameState.gameId,
+        subType,
+        incomingPlayerId: benchPlayerId,
+        outgoingPlayerId: lineupPlayerId,
+      });
 
       console.log(
         `[useGameState] Substitution (${subType}): ${benchPlayerName || benchPlayerId} replaces ${lineupPlayerName || lineupPlayerId} in inning ${gameState.inning}`,
@@ -8539,31 +8665,16 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
           playerNameLookup.set(b.playerId, b.playerName);
         }
 
-        // CRIT-05 FIX: Query fielding events from IndexedDB and tally per player
-        // New fielding rows carry stable defender IDs directly.
-        const fieldingEvents = await getGameFieldingEvents(gameState.gameId);
-
-        // Build per-player fielding tally
-        const playerFieldingTally = new Map<
-          string,
-          { putouts: number; assists: number; errors: number }
-        >();
-        for (const fe of fieldingEvents) {
-          const tally = playerFieldingTally.get(fe.playerId) || {
-            putouts: 0,
-            assists: 0,
-            errors: 0,
-          };
-          if (fe.playType === "putout") tally.putouts++;
-          else if (
-            fe.playType === "assist" ||
-            fe.playType === "outfield_assist"
-          )
-            tally.assists++;
-          else if (fe.playType === "error") tally.errors++;
-          else if (fe.playType === "double_play_pivot") tally.assists++; // Pivot = assist
-          playerFieldingTally.set(fe.playerId, tally);
-        }
+        const [fieldingEvents, betweenPlayEvents, atBatEvents] =
+          await Promise.all([
+            getGameFieldingEvents(gameState.gameId),
+            getBetweenPlayEvents(gameState.gameId),
+            getGameEvents(gameState.gameId),
+          ]);
+        const playerFieldingTally = buildPlayerFieldingTally(
+          fieldingEvents,
+          betweenPlayEvents,
+        );
 
         const playerStatsRecord: Record<
           string,
@@ -8756,6 +8867,21 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
           maxDeficitHome: 0,
           activityLog: activityLog.slice(-20),
         };
+        const rankedPlayersOfTheGame = rankPlayersOfTheGame(
+          {
+            awayTeamId: gameState.awayTeamId,
+            homeTeamId: gameState.homeTeamId,
+            playerStats: playerStatsRecord,
+          },
+          atBatEvents,
+        );
+        const storedPlayersOfTheGame = buildStoredPlayersOfTheGame(
+          rankedPlayersOfTheGame,
+        );
+        console.log("[R3-R5] Archived players of the game from final event log", {
+          gameId: gameState.gameId,
+          playersOfTheGame: storedPlayersOfTheGame,
+        });
 
         // T1-08 FIX: Check if already aggregated (idempotency guard)
         // Prevents double aggregation when endGame's useEffect re-fires
@@ -8977,6 +9103,9 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
                   "exhibition"
                     ? (opts?.leagueId ?? leagueIdRef.current)
                     : undefined,
+                totalInnings: totalInningsRef.current,
+                pogPlayerId: storedPlayersOfTheGame?.first,
+                playersOfTheGame: storedPlayersOfTheGame,
               },
             );
           } catch (error) {
@@ -9224,28 +9353,16 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         playerNameLookupForEndGame.set(b.playerId, b.playerName);
       }
 
-      // CRIT-05 FIX: Query fielding events for endGame path too
-      const endGameFieldingEvents = await getGameFieldingEvents(
-        gameState.gameId,
+      const [endGameFieldingEvents, endGameBetweenPlayEvents, endGameAtBatEvents] =
+        await Promise.all([
+          getGameFieldingEvents(gameState.gameId),
+          getBetweenPlayEvents(gameState.gameId),
+          getGameEvents(gameState.gameId),
+        ]);
+      const endGameFieldingTally = buildPlayerFieldingTally(
+        endGameFieldingEvents,
+        endGameBetweenPlayEvents,
       );
-
-      const endGameFieldingTally = new Map<
-        string,
-        { putouts: number; assists: number; errors: number }
-      >();
-      for (const fe of endGameFieldingEvents) {
-        const tally = endGameFieldingTally.get(fe.playerId) || {
-          putouts: 0,
-          assists: 0,
-          errors: 0,
-        };
-        if (fe.playType === "putout") tally.putouts++;
-        else if (fe.playType === "assist" || fe.playType === "outfield_assist")
-          tally.assists++;
-        else if (fe.playType === "error") tally.errors++;
-        else if (fe.playType === "double_play_pivot") tally.assists++;
-        endGameFieldingTally.set(fe.playerId, tally);
-      }
 
       const playerStatsRecord: Record<
         string,
@@ -9409,6 +9526,22 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         maxDeficitHome: 0,
         activityLog: activityLog.slice(-20),
       };
+      const rankedPlayersOfTheGame = rankPlayersOfTheGame(
+        {
+          awayTeamId: gameState.awayTeamId,
+          homeTeamId: gameState.homeTeamId,
+          playerStats: playerStatsRecord,
+        },
+        endGameAtBatEvents,
+      );
+      const storedPlayersOfTheGame = buildStoredPlayersOfTheGame(
+        rankedPlayersOfTheGame,
+      );
+      console.log("[R3-R5] Prepared post-game archive context", {
+        gameId: gameState.gameId,
+        totalInnings: totalInningsRef.current,
+        playersOfTheGame: storedPlayersOfTheGame,
+      });
 
       // Archive game for post-game summary
       const inningScores = scoreboard.innings.map((inn) => ({
@@ -9427,6 +9560,9 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
               options?.competitionType ?? competitionTypeRef.current,
             competitionId: options?.competitionId ?? competitionIdRef.current,
             leagueId: options?.leagueId ?? leagueIdRef.current,
+            totalInnings: totalInningsRef.current,
+            pogPlayerId: storedPlayersOfTheGame?.first,
+            playersOfTheGame: storedPlayersOfTheGame,
           },
         );
 
@@ -9767,6 +9903,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     getBaseRunnerNames,
     runnerIdentityVersion,
     lineupVersion,
+    substitutionLog,
     notifyPersistenceMetadataChanged,
     isLoading,
     isSaving,

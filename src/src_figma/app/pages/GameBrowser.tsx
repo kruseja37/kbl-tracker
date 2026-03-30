@@ -76,8 +76,7 @@ function describeResult(result: AtBatEvent["result"]) {
 }
 
 function getPogName(game: CompletedGameRecord, events: AtBatEvent[]) {
-  const gameWithPog = game as CompletedGameRecord & { pogPlayerId?: string };
-  const pogPlayerId = gameWithPog.pogPlayerId;
+  const pogPlayerId = game.pogPlayerId ?? game.playersOfTheGame?.first;
 
   if (pogPlayerId) {
     const battingPlayer = game.playerStats[pogPlayerId];
