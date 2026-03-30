@@ -7911,21 +7911,14 @@ export function GameTracker() {
     syncDisplayedRostersToLineupSnapshot,
   ]);
 
-  const hasDurableUndoHistory =
-    atBatSequence > 0 || substitutionLog.length > 0 || playLogEntries.length > 0;
-  const displayedUndoCount = hasDurableUndoHistory ? 1 : 0;
+  // R3-R7: Undo requires UndoSystem snapshot to properly restore state.
+  // When stack is empty, disable undo to prevent undoing pre-game events.
+  const displayedUndoCount = undoSystem.undoCount;
   const handleUndoPress = useCallback(() => {
-    // R3-R7: Use UndoSystem's performUndo which pops the real snapshot
-    // and calls handleUndo with the pre-play state (including correct scores)
     if (undoSystem.canUndo) {
       undoSystem.performUndo();
     } else {
-      // Fallback for durable-only undo (no snapshot available)
-      handleUndo({
-        timestamp: Date.now(),
-        playDescription: "Undo durable action",
-        gameState: null,
-      } as GameSnapshot);
+      console.warn("[R3-R7] Undo blocked — no UndoSystem snapshot available");
     }
   }, [handleUndo, undoSystem]);
 
@@ -8198,7 +8191,13 @@ export function GameTracker() {
       console.debug(
         "[END-GAME] Step 2: Calling hookEndGame and awaiting pitch-count resolution",
       );
-      await hookEndGame(endGameOptions);
+      console.debug("[END-GAME] Step 2b: awaiting hookEndGame...");
+      try {
+        await hookEndGame(endGameOptions);
+      } catch (hookErr) {
+        console.error("[END-GAME] hookEndGame threw:", hookErr);
+        // Don't block navigation on hook errors — game data was already archived
+      }
       console.debug("[END-GAME] Step 3: hookEndGame completed");
       setIsProcessingEndGame(true); // Show overlay now that pitch count is confirmed
 
@@ -8747,7 +8746,7 @@ export function GameTracker() {
               onEndGame={() => setShowEndGameConfirmation(true)}
               processingOutcome={processingOutcome}
               undoCount={displayedUndoCount}
-              canUndo={hasDurableUndoHistory}
+              canUndo={undoSystem.canUndo}
               onUndo={handleUndoPress}
             />
             {pendingRunnerAttribution ? (
