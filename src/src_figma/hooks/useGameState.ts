@@ -408,6 +408,7 @@ export interface UseGameStateReturn {
   changePitcher: (
     newPitcherId: string,
     exitingPitcherId: string,
+    pitchingTeamSide: TeamSide,
     newPitcherName?: string,
     exitingPitcherName?: string,
   ) => void;
@@ -3413,6 +3414,10 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
             savedSnapshot.statsScopeId || savedSnapshot.seasonId || "";
           competitionTypeRef.current = savedSnapshot.competitionType;
           competitionIdRef.current = savedSnapshot.competitionId;
+          // R3-R7: Restore leagueId for almanac queries
+          if (savedSnapshot.leagueId) {
+            leagueIdRef.current = savedSnapshot.leagueId;
+          }
           // R3: Restore game config refs from snapshot
           if (savedSnapshot.totalInnings != null) {
             totalInningsRef.current = savedSnapshot.totalInnings;
@@ -4565,6 +4570,8 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       statsScopeId: statsScopeIdRef.current || seasonIdRef.current || undefined,
       competitionType: competitionTypeRef.current,
       competitionId: competitionIdRef.current,
+      // R3-R7: Persist leagueId for almanac queries after refresh
+      leagueId: leagueIdRef.current,
       // R3: Persist game config that would be lost on refresh
       totalInnings: totalInningsRef.current,
       awayUsesDh: awayUsesDhRef.current,
@@ -8023,22 +8030,10 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     (
       newPitcherId: string,
       exitingPitcherId: string,
+      pitchingTeamSide: TeamSide,
       newPitcherName?: string,
       exitingPitcherName?: string,
     ) => {
-      // R3-T0 FIX: Determine team by finding which lineup the exiting pitcher is in
-      // (was hardcoded to gameState.isTop which always resolves to "home" in PRE_GAME)
-      const isInHomePitching =
-        homeLineupStateRef.current.currentPitcher?.playerId === exitingPitcherId ||
-        homeLineupStateRef.current.lineup.some(
-          (p) => p.playerId === exitingPitcherId || (p.position === "P" && !exitingPitcherId),
-        );
-      const isInAwayPitching =
-        awayLineupStateRef.current.currentPitcher?.playerId === exitingPitcherId ||
-        awayLineupStateRef.current.lineup.some(
-          (p) => p.playerId === exitingPitcherId,
-        );
-      const pitchingTeamSide: TeamSide = isInHomePitching && !isInAwayPitching ? "home" : isInAwayPitching ? "away" : (gameState.isTop ? "home" : "away");
       const pitchingStateRef =
         pitchingTeamSide === "home" ? homeLineupStateRef : awayLineupStateRef;
       const pitchingLineupRef =
@@ -8158,6 +8153,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     (
       newPitcherId: string,
       exitingPitcherId: string,
+      pitchingTeamSide: TeamSide,
       newPitcherName?: string,
       exitingPitcherName?: string,
     ) => {
@@ -8165,6 +8161,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         applyPregamePitchingChange(
           newPitcherId,
           exitingPitcherId,
+          pitchingTeamSide,
           newPitcherName,
           exitingPitcherName,
         );
@@ -8187,7 +8184,6 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
 
       // Store the pending action to execute after pitch count is confirmed
       pendingActionRef.current = async () => {
-        const pitchingTeamSide: TeamSide = gameState.isTop ? "home" : "away";
         const resolvedIncomingPitcherName = resolvePlayerNameForId(
           newPitcherId,
           newPitcherName || newPitcherId,

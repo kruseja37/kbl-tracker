@@ -23,7 +23,6 @@ import {
   type BullpenPitcher,
 } from "@/app/components/LineupCard";
 import {
-  UndoButton,
   useUndoSystem,
   type GameSnapshot,
 } from "@/app/components/UndoSystem";
@@ -94,11 +93,16 @@ import {
 } from "../utils/gameTrackerFieldTypes";
 import { areRivals } from "../../../data/leagueStructure";
 import { getParkNames } from "../../../data/parkLookup";
-import { reconcileScoreFromEvents } from "../../../utils/scoreReconciliation";
+import {
+  compareScores,
+  reconcileScoreFromEvents,
+} from "../../../utils/scoreReconciliation";
 import {
   useGameState,
+  type GameState,
   type GamePhase,
   type GameLineupSnapshot,
+  type ScoreboardState,
   type HitType,
   type OutType,
   type WalkType,
@@ -131,6 +135,31 @@ const ordinalSuffix = (num: number) => {
 const formatInningLabel = (isTop: boolean, inning: number) => {
   const half = isTop ? "Top" : "Bottom";
   return `${half} ${inning}${ordinalSuffix(inning)}`;
+};
+
+const calculateMinimumResultOuts = (result: AtBatEvent["result"]): number => {
+  switch (result) {
+    case "K":
+    case "Kc":
+    case "Ꝁ":
+    case "GO":
+    case "FO":
+    case "LO":
+    case "PO":
+    case "FC":
+    case "SF":
+    case "SAC":
+    case "D3K":
+    case "WP_K":
+    case "PB_K":
+      return 1;
+    case "DP":
+      return 2;
+    case "TP":
+      return 3;
+    default:
+      return 0;
+  }
 };
 
 const FIELDING_POSITIONS = [
@@ -712,6 +741,10 @@ export function GameTracker() {
     gameStartTimestampRef: hookGameStartTimestampRef,
     restoredMojoFitness,
   } = useGameState(gameId);
+  const resolvedStadiumName = getDisplayedStadiumName(
+    selectedStadium,
+    gameState.stadiumName,
+  );
   // R3: On refresh, navigationState is null — fall back to gameState (restored from snapshot)
   const homeTeamName = homeTeamName_ !== "HOME" ? homeTeamName_ : (gameState.homeTeamName || "HOME");
   const awayTeamName = awayTeamName_ !== "AWAY" ? awayTeamName_ : (gameState.awayTeamName || "AWAY");
@@ -1186,6 +1219,15 @@ export function GameTracker() {
   // GAP-GT-6-A: Time play override — when user indicates the 3rd-out tag occurred before the runner scored
   const [timePlayNoRun, setTimePlayNoRun] = useState(false);
 
+  const [scoreCorrectionPrompt, setScoreCorrectionPrompt] = useState<null | {
+    inning: number;
+    halfInning: "TOP" | "BOTTOM";
+    current: { away: number; home: number };
+    reconciled: { away: number; home: number };
+    awayDelta: number;
+    homeDelta: number;
+  }>(null);
+
   // GAP-GT-7-C: Track pending PH — PH must bat before they can be removed from lineup
   const [pendingPH, setPendingPH] = useState<string | null>(null);
 
@@ -1445,59 +1487,10 @@ export function GameTracker() {
   // Undo system - restore game state on undo
   const handleUndo = useCallback(
     (snapshot: GameSnapshot) => {
-      console.log("Undoing durable game action:", snapshot.playDescription);
-      const snapshotState = snapshot.gameState as {
-        gameState?: typeof gameState;
-        scoreboard?: typeof scoreboard;
-        playerStatsEntries?: Array<[string, PlayerGameStats]>;
-        pitcherStatsEntries?: Array<[string, PitcherGameStats]>;
-        runnerTrackerSnapshot?: ReturnType<typeof getRunnerTrackerSnapshot>;
-        lineupSnapshot?: GameLineupSnapshot;
-        batterIndices?: {
-          away: number;
-          home: number;
-        };
-        playLogEntries?: PlayLogEntry[];
-        runnerNames?: {
-          first?: string;
-          second?: string;
-          third?: string;
-        };
-      };
-
+      console.log("[R3-R7] Undoing durable game action:", snapshot.playDescription);
       if (playLogRefreshTimeoutRef.current !== null) {
         window.clearTimeout(playLogRefreshTimeoutRef.current);
         playLogRefreshTimeoutRef.current = null;
-      }
-
-      if (snapshotState.gameState && snapshotState.scoreboard) {
-        restoreState({
-          gameState: snapshotState.gameState,
-          scoreboard: snapshotState.scoreboard,
-          playerStats: snapshotState.playerStatsEntries
-            ? new Map(snapshotState.playerStatsEntries)
-            : undefined,
-          pitcherStats: snapshotState.pitcherStatsEntries
-            ? new Map(snapshotState.pitcherStatsEntries)
-            : undefined,
-          runnerTrackerState: snapshotState.runnerTrackerSnapshot
-            ? {
-                ...snapshotState.runnerTrackerSnapshot,
-                pitcherStats: new Map(
-                  snapshotState.runnerTrackerSnapshot.pitcherStatsEntries,
-                ),
-              }
-            : undefined,
-          lineupSnapshot: snapshotState.lineupSnapshot,
-          batterIndices: snapshotState.batterIndices,
-        });
-      }
-
-      setPlayLogEntries(
-        (prev) => snapshotState.playLogEntries ?? prev.slice(0, -1),
-      );
-      if (snapshotState.runnerNames) {
-        setRunnerNames(snapshotState.runnerNames);
       }
       pendingScoreCelebrationSoundRef.current = null;
       setProcessingOutcome(null);
@@ -1506,6 +1499,7 @@ export function GameTracker() {
       setSfPrompt(null);
       setDpPrompt(null);
       setIfrPrompt(null);
+      setScoreCorrectionPrompt(null);
 
       void (async () => {
         const undone = await undoLastAction();
@@ -1514,6 +1508,47 @@ export function GameTracker() {
           queuePlayLogRefreshRef.current(0);
           return;
         }
+
+        // R3-R7: Restore pre-play state from UndoSystem snapshot (reverts score, scoreboard, stats)
+        const snapshotData = snapshot.gameState as {
+          gameState?: GameState;
+          scoreboard?: ScoreboardState;
+          playerStatsEntries?: [string, PlayerGameStats][];
+          pitcherStatsEntries?: [string, PitcherGameStats][];
+          runnerTrackerSnapshot?: ReturnType<typeof getRunnerTrackerSnapshot>;
+          lineupSnapshot?: GameLineupSnapshot;
+          batterIndices?: { away: number; home: number };
+        } | null;
+
+        if (snapshotData?.gameState && snapshotData?.scoreboard) {
+          console.log("[R3-R7] Restoring from UndoSystem snapshot — score:",
+            snapshotData.gameState.awayScore, "-", snapshotData.gameState.homeScore);
+          restoreState({
+            gameState: snapshotData.gameState,
+            scoreboard: snapshotData.scoreboard,
+            playerStats: snapshotData.playerStatsEntries
+              ? new Map(snapshotData.playerStatsEntries)
+              : undefined,
+            pitcherStats: snapshotData.pitcherStatsEntries
+              ? new Map(snapshotData.pitcherStatsEntries)
+              : undefined,
+            runnerTrackerState: snapshotData.runnerTrackerSnapshot
+              ? {
+                  runners: snapshotData.runnerTrackerSnapshot.runners,
+                  currentPitcherId: snapshotData.runnerTrackerSnapshot.currentPitcherId,
+                  currentPitcherName: snapshotData.runnerTrackerSnapshot.currentPitcherName,
+                  pitcherStats: new Map(
+                    snapshotData.runnerTrackerSnapshot.pitcherStatsEntries || [],
+                  ),
+                  inning: snapshotData.runnerTrackerSnapshot.inning,
+                  atBatNumber: snapshotData.runnerTrackerSnapshot.atBatNumber,
+                }
+              : undefined,
+            lineupSnapshot: snapshotData.lineupSnapshot,
+            batterIndices: snapshotData.batterIndices,
+          });
+        }
+
         playAudio("undoBloop");
         pendingScoreCelebrationSoundRef.current = null;
         suppressNextHalfInningSoundRef.current = true;
@@ -1521,11 +1556,8 @@ export function GameTracker() {
       })();
     },
     [
-      gameState,
-      getRunnerTrackerSnapshot,
       playAudio,
       restoreState,
-      scoreboard,
       undoLastAction,
     ],
   );
@@ -2100,42 +2132,47 @@ export function GameTracker() {
   const syncDisplayedRostersToLineupSnapshot = useCallback(
     (snapshot?: GameLineupSnapshot) => {
       const lineupSnapshot = snapshot || getLineupStateSnapshot();
-      setAwayTeamPlayers((previous) =>
-        reconcileTeamPlayersWithLineupSnapshot(
-          previous,
+      const nextAwayPlayers = reconcileTeamPlayersWithLineupSnapshot(
+        awayTeamPlayersRef.current,
+        lineupSnapshot.away,
+        "away",
+        getRosterEntityId,
+      );
+      const nextHomePlayers = reconcileTeamPlayersWithLineupSnapshot(
+        homeTeamPlayersRef.current,
+        lineupSnapshot.home,
+        "home",
+        getRosterEntityId,
+      );
+      awayTeamPlayersRef.current = nextAwayPlayers;
+      homeTeamPlayersRef.current = nextHomePlayers;
+      setAwayTeamPlayers(nextAwayPlayers);
+      setHomeTeamPlayers(nextHomePlayers);
+      setAwayTeamPitchers(
+        reconcileTeamPitchersWithLineupSnapshot(
+          awayTeamPitchers,
+          nextAwayPlayers,
           lineupSnapshot.away,
           "away",
           getRosterEntityId,
         ),
       );
-      setHomeTeamPlayers((previous) =>
-        reconcileTeamPlayersWithLineupSnapshot(
-          previous,
-          lineupSnapshot.home,
-          "home",
-          getRosterEntityId,
-        ),
-      );
-      setAwayTeamPitchers((previous) =>
+      setHomeTeamPitchers(
         reconcileTeamPitchersWithLineupSnapshot(
-          previous,
-          awayTeamPlayersRef.current,
-          lineupSnapshot.away,
-          "away",
-          getRosterEntityId,
-        ),
-      );
-      setHomeTeamPitchers((previous) =>
-        reconcileTeamPitchersWithLineupSnapshot(
-          previous,
-          homeTeamPlayersRef.current,
+          homeTeamPitchers,
+          nextHomePlayers,
           lineupSnapshot.home,
           "home",
           getRosterEntityId,
         ),
       );
     },
-    [getLineupStateSnapshot, getRosterEntityId],
+    [
+      awayTeamPitchers,
+      getLineupStateSnapshot,
+      getRosterEntityId,
+      homeTeamPitchers,
+    ],
   );
 
   useEffect(() => {
@@ -2213,6 +2250,35 @@ export function GameTracker() {
       homeTeamPitchers,
       homeTeamPlayers,
     ],
+  );
+
+  const resolvePitchingTeamSide = useCallback(
+    (playerId?: string, playerName?: string): "away" | "home" | null => {
+      if (!playerId && !playerName) return null;
+
+      const snapshot = getLineupStateSnapshot();
+      const matchesSnapshotPitcher = (team: "away" | "home") => {
+        const currentPitcher = snapshot[team].currentPitcher;
+        if (
+          (playerId && currentPitcher?.playerId === playerId) ||
+          (playerName && currentPitcher?.playerName === playerName)
+        ) {
+          return true;
+        }
+
+        return snapshot[team].lineup.some(
+          (player) =>
+            player.position === "P" &&
+            ((playerId && player.playerId === playerId) ||
+              (playerName && player.playerName === playerName)),
+        );
+      };
+
+      if (matchesSnapshotPitcher("away")) return "away";
+      if (matchesSnapshotPitcher("home")) return "home";
+      return resolveRosterTeamSide(playerId, playerName);
+    },
+    [getLineupStateSnapshot, resolveRosterTeamSide],
   );
 
   const selectedHistoricalTeamSide = useMemo(() => {
@@ -3189,17 +3255,32 @@ export function GameTracker() {
 
         // MAJ-09: Extract bench players (players without batting order = not in starting lineup)
         const awayStarterIds = new Set(awayLineup.map((p) => p.playerId));
-        const awayBench = awayTeamPlayers
+        const awayBenchPosition = awayTeamPlayers
           .filter((p) => !awayStarterIds.has(getRosterEntityId(p, "away")))
-          .filter((p) => !p.isOutOfGame) // Don't include already-removed players
+          .filter((p) => !p.isOutOfGame)
           .map((p) => ({
             playerId: getRosterEntityId(p, "away"),
             playerName: getCanonicalRosterName(p),
             positions: [p.position || "DH"].filter(Boolean),
           }));
+        // R3-R7: Include bench pitchers (from pitcher roster, not in starting lineup)
+        const awayBenchPitchers = awayTeamPitchers
+          .filter((p) => !p.isActive && !p.isOutOfGame)
+          .filter((p) => !awayStarterIds.has(getRosterEntityId(p, "away")))
+          .map((p) => ({
+            playerId: getRosterEntityId(p, "away"),
+            playerName: p.name,
+            positions: ["P"] as string[],
+          }));
+        const awayBenchSeenIds = new Set<string>();
+        const awayBench = [...awayBenchPosition, ...awayBenchPitchers].filter((p) => {
+          if (awayBenchSeenIds.has(p.playerId)) return false;
+          awayBenchSeenIds.add(p.playerId);
+          return true;
+        });
 
         const homeStarterIds = new Set(homeLineup.map((p) => p.playerId));
-        const homeBench = homeTeamPlayers
+        const homeBenchPosition = homeTeamPlayers
           .filter((p) => !homeStarterIds.has(getRosterEntityId(p, "home")))
           .filter((p) => !p.isOutOfGame)
           .map((p) => ({
@@ -3207,6 +3288,21 @@ export function GameTracker() {
             playerName: getCanonicalRosterName(p),
             positions: [p.position || "DH"].filter(Boolean),
           }));
+        // R3-R7: Include bench pitchers
+        const homeBenchPitchers = homeTeamPitchers
+          .filter((p) => !p.isActive && !p.isOutOfGame)
+          .filter((p) => !homeStarterIds.has(getRosterEntityId(p, "home")))
+          .map((p) => ({
+            playerId: getRosterEntityId(p, "home"),
+            playerName: p.name,
+            positions: ["P"] as string[],
+          }));
+        const homeBenchSeenIds = new Set<string>();
+        const homeBench = [...homeBenchPosition, ...homeBenchPitchers].filter((p) => {
+          if (homeBenchSeenIds.has(p.playerId)) return false;
+          homeBenchSeenIds.add(p.playerId);
+          return true;
+        });
 
         console.log("[GameTracker] Initializing game with lineups:", {
           away: awayLineup.map((p) => p.playerName),
@@ -3256,7 +3352,7 @@ export function GameTracker() {
           // T0-01: Pass total innings for auto game-end detection (default 9 for exhibition)
           totalInnings: navigationState?.totalInnings || 9,
           seasonNumber: navigationState?.seasonNumber || 1,
-          stadiumName: selectedStadium || undefined,
+          stadiumName: resolvedStadiumName,
           // Layer 1B: Context snapshot config
           franchiseId: navigationState?.franchiseId,
           leagueId: navigationState?.leagueId || "sml",
@@ -4187,16 +4283,24 @@ export function GameTracker() {
       };
 
       if (sub.type === "pitching_change") {
+        const pitchingTeam =
+          resolvePitchingTeamSide(sub.outgoingPlayerId, sub.outgoingPlayerName) ||
+          resolvePitchingTeamSide(sub.incomingPlayerId, sub.incomingPlayerName);
+        if (!pitchingTeam) {
+          console.warn(
+            "[GameTracker] Pitching change rejected: unable to resolve team",
+            sub,
+          );
+          return;
+        }
+
         changePitcher(
           sub.incomingPlayerId,
           sub.outgoingPlayerId,
+          pitchingTeam,
           sub.incomingPlayerName,
           sub.outgoingPlayerName,
         );
-        const pitchingTeam =
-          resolveRosterTeamSide(sub.outgoingPlayerId, sub.outgoingPlayerName) ||
-          resolveRosterTeamSide(sub.incomingPlayerId, sub.incomingPlayerName) ||
-          fieldingTeam;
         const setPitchers =
           pitchingTeam === "away" ? setAwayTeamPitchers : setHomeTeamPitchers;
         setPitchers((previous) =>
@@ -6192,15 +6296,25 @@ export function GameTracker() {
 
     const newPitcherId = getPitcherIdFromName(newPitcherName, teamType);
     const exitingPitcherId = getPitcherIdFromName(replacedName, teamType);
+    const pitchingTeamSide =
+      resolvePitchingTeamSide(exitingPitcherId, replacedName) ||
+      resolvePitchingTeamSide(newPitcherId, newPitcherName) ||
+      teamType;
 
     // Call the hook's changePitcher function which will:
     // 1. Show pitch count prompt for exiting pitcher
     // 2. After confirmation, update currentPitcherId/currentPitcherName
-    changePitcher(newPitcherId, exitingPitcherId, newPitcherName, replacedName);
+    changePitcher(
+      newPitcherId,
+      exitingPitcherId,
+      pitchingTeamSide,
+      newPitcherName,
+      replacedName,
+    );
     queuePlayLogRefresh(80);
 
     const setPitchers =
-      teamType === "away" ? setAwayTeamPitchers : setHomeTeamPitchers;
+      pitchingTeamSide === "away" ? setAwayTeamPitchers : setHomeTeamPitchers;
     setPitchers((previous) =>
       previous.map((pitcher) => {
         if (pitcher.name === newPitcherName) {
@@ -6255,8 +6369,18 @@ export function GameTracker() {
       incomingName: string,
       isPitcher: boolean,
     ) => {
-      const team =
-        resolveRosterTeamSide(outgoingPlayerId, outgoingName) || fieldingTeam;
+      const team = isPitcher
+        ? resolvePitchingTeamSide(outgoingPlayerId, outgoingName)
+        : resolveRosterTeamSide(outgoingPlayerId, outgoingName);
+      if (!team) {
+        console.warn("[GameTracker] Unable to resolve player-card substitution team", {
+          outgoingPlayerId,
+          outgoingName,
+          incomingName,
+          isPitcher,
+        });
+        return;
+      }
 
       if (isPitcher) {
         handlePitcherSubstitution(team, incomingName, outgoingName, "pitcher");
@@ -6265,8 +6389,8 @@ export function GameTracker() {
       }
     },
     [
+      resolvePitchingTeamSide,
       resolveRosterTeamSide,
-      fieldingTeam,
       handlePitcherSubstitution,
       handleSubstitution,
     ],
@@ -7384,6 +7508,32 @@ export function GameTracker() {
     setEnrichingRunnerParentEntry(null);
   }, []);
 
+  const dismissScoreCorrectionPrompt = useCallback(() => {
+    setScoreCorrectionPrompt(null);
+  }, []);
+
+  const applyScoreCorrectionPrompt = useCallback(() => {
+    if (!scoreCorrectionPrompt) return;
+
+    if (scoreCorrectionPrompt.awayDelta !== 0) {
+      applyScoreAdjustment(
+        scoreCorrectionPrompt.inning,
+        "TOP",
+        scoreCorrectionPrompt.awayDelta,
+      );
+    }
+
+    if (scoreCorrectionPrompt.homeDelta !== 0) {
+      applyScoreAdjustment(
+        scoreCorrectionPrompt.inning,
+        "BOTTOM",
+        scoreCorrectionPrompt.homeDelta,
+      );
+    }
+
+    setScoreCorrectionPrompt(null);
+  }, [applyScoreAdjustment, scoreCorrectionPrompt]);
+
   // 5.8: Runner sub-entry tap — open runner enrichment panel (UX-050)
   const handleRunnerSubEntryTap = useCallback(
     (subEntry: RunnerSubEntry, parentEntry: PlayLogEntry) => {
@@ -7431,7 +7581,15 @@ export function GameTracker() {
 
         const updatedOutcomes = [...existingAtBat.runnerOutcomes];
         const previousOutcome = updatedOutcomes[runnerIdx];
-        updatedOutcomes[runnerIdx] = { ...previousOutcome, [field]: value };
+        const nextOutcomeDraft = { ...previousOutcome, [field]: value };
+        if (
+          field === "toBase" &&
+          nextOutcomeDraft.toBase !== "out"
+        ) {
+          nextOutcomeDraft.isTootblan = false;
+          nextOutcomeDraft.isOutAdvancing = false;
+        }
+        updatedOutcomes[runnerIdx] = nextOutcomeDraft;
         const nextOutcome = updatedOutcomes[runnerIdx];
 
         const previousRunCounted = runnerOutcomeCountsAsRun(previousOutcome);
@@ -7514,14 +7672,15 @@ export function GameTracker() {
         const nextHomeScoreAfter =
           existingAtBat.homeScoreAfter +
           (existingAtBat.halfInning === "BOTTOM" ? scoreDelta : 0);
-        const nextOutsAfter = Math.max(
-          existingAtBat.outs,
-          existingAtBat.outsAfter + outDelta,
-        );
+        const minimumResultOuts = calculateMinimumResultOuts(existingAtBat.result);
         const nextOutsRecorded = Math.max(
-          0,
+          minimumResultOuts,
           (existingAtBat.outsRecorded ??
             existingAtBat.outsAfter - existingAtBat.outs) + outDelta,
+        );
+        const nextOutsAfter = Math.max(
+          existingAtBat.outs,
+          existingAtBat.outs + nextOutsRecorded,
         );
         const nextIsWalkOff =
           existingAtBat.halfInning === "BOTTOM" &&
@@ -7529,6 +7688,10 @@ export function GameTracker() {
           nextHomeScoreAfter > nextAwayScoreAfter &&
           existingAtBat.homeScore <= existingAtBat.awayScore;
         const nextVersionBase = existingAtBat.version ?? 1;
+        const normalizedRunnersAfter =
+          nextOutsAfter >= 3
+            ? { first: null, second: null, third: null }
+            : nextRunnersAfter;
 
         const timestamp = Date.now();
         await updateAtBatEvent(enrichingRunnerParentEntry.eventId, {
@@ -7536,7 +7699,7 @@ export function GameTracker() {
           rbiCount: Math.max(0, (existingAtBat.rbiCount ?? 0) + scoreDelta),
           runsScored: nextRunsScored,
           outsAfter: nextOutsAfter,
-          runnersAfter: nextRunnersAfter,
+          runnersAfter: normalizedRunnersAfter,
           awayScoreAfter: nextAwayScoreAfter,
           homeScoreAfter: nextHomeScoreAfter,
           isWalkOff: nextIsWalkOff,
@@ -7592,51 +7755,31 @@ export function GameTracker() {
 
         // Fix A: Score adjustment fires for ALL corrections — latest or historical
         if (scoreDelta !== 0) {
-          applyScoreAdjustment(
-            existingAtBat.inning,
-            existingAtBat.halfInning,
-            scoreDelta,
+          const scoreComparison = compareScores(
+            {
+              away: gameState.awayScore,
+              home: gameState.homeScore,
+            },
+            await reconcileScoreFromEvents(gameState.gameId),
           );
 
-          const expectedScore = await reconcileScoreFromEvents(gameState.gameId);
-          const nextLiveAwayScore =
-            gameState.awayScore +
-            (existingAtBat.halfInning === "TOP" ? scoreDelta : 0);
-          const nextLiveHomeScore =
-            gameState.homeScore +
-            (existingAtBat.halfInning === "BOTTOM" ? scoreDelta : 0);
-
-          if (
-            expectedScore.away !== nextLiveAwayScore ||
-            expectedScore.home !== nextLiveHomeScore
-          ) {
-            const correctionMessage =
-              `Score mismatch detected. Event log shows ${awayTeamName} ${expectedScore.away}, ` +
-              `${homeTeamName} ${expectedScore.home}. Current score would be ` +
-              `${awayTeamName} ${nextLiveAwayScore}, ${homeTeamName} ${nextLiveHomeScore}. ` +
-              "Apply correction?";
-            const shouldApplyCorrection =
-              typeof window === "undefined" || window.confirm(correctionMessage);
-
-            if (shouldApplyCorrection) {
-              const awayDelta = expectedScore.away - nextLiveAwayScore;
-              const homeDelta = expectedScore.home - nextLiveHomeScore;
-
-              if (awayDelta !== 0) {
-                applyScoreAdjustment(existingAtBat.inning, "TOP", awayDelta);
-              }
-              if (homeDelta !== 0) {
-                applyScoreAdjustment(existingAtBat.inning, "BOTTOM", homeDelta);
-              }
-            }
+          if (scoreComparison.needsCorrection) {
+            setScoreCorrectionPrompt({
+              inning: existingAtBat.inning,
+              halfInning: existingAtBat.halfInning,
+              current: scoreComparison.current,
+              reconciled: scoreComparison.reconciled,
+              awayDelta: scoreComparison.awayDelta,
+              homeDelta: scoreComparison.homeDelta,
+            });
           }
         }
 
         // Fix B: Update live base state for latest at-bat corrections
         if (isLatestAtBat) {
           applyBasesCorrection(
-            buildLiveBasesFromRunnersAfter(nextRunnersAfter),
-            nextRunnersAfter,
+            buildLiveBasesFromRunnersAfter(normalizedRunnersAfter),
+            normalizedRunnersAfter,
             {
               inning: existingAtBat.inning,
               halfInning: existingAtBat.halfInning,
@@ -7665,8 +7808,7 @@ export function GameTracker() {
         // Update the sub-entry in local state so UI reflects change immediately
         const updatedSubEntry = {
           ...enrichingRunnerSubEntry,
-          [field]: value,
-          toBase: nextOutCounted ? ("out" as const) : nextOutcome.toBase,
+          ...nextOutcome,
         };
         setEnrichingRunnerSubEntry(updatedSubEntry);
 
@@ -7688,10 +7830,7 @@ export function GameTracker() {
                 sub.id === subEntryId
                   ? {
                       ...sub,
-                      [field]: value,
-                      toBase: nextOutCounted
-                        ? ("out" as const)
-                        : nextOutcome.toBase,
+                      ...nextOutcome,
                     }
                   : sub,
               ),
@@ -7766,6 +7905,24 @@ export function GameTracker() {
     startGame,
     syncDisplayedRostersToLineupSnapshot,
   ]);
+
+  const hasDurableUndoHistory =
+    atBatSequence > 0 || substitutionLog.length > 0 || playLogEntries.length > 0;
+  const displayedUndoCount = hasDurableUndoHistory ? 1 : 0;
+  const handleUndoPress = useCallback(() => {
+    // R3-R7: Use UndoSystem's performUndo which pops the real snapshot
+    // and calls handleUndo with the pre-play state (including correct scores)
+    if (undoSystem.canUndo) {
+      undoSystem.performUndo();
+    } else {
+      // Fallback for durable-only undo (no snapshot available)
+      handleUndo({
+        timestamp: Date.now(),
+        playDescription: "Undo durable action",
+        gameState: null,
+      } as GameSnapshot);
+    }
+  }, [handleUndo, undoSystem]);
 
   // Handle end game with navigation
   const handleEndGame = useCallback(async () => {
@@ -8030,7 +8187,7 @@ export function GameTracker() {
         competitionId,
         franchiseId: navigationState?.franchiseId,
         currentSeason: navigationState?.seasonNumber ?? 1,
-        stadiumName: selectedStadium,
+        stadiumName: resolvedStadiumName,
         awaitPitchCountConfirmation: true,
       };
       console.debug(
@@ -8328,10 +8485,7 @@ export function GameTracker() {
           awayScore={scoreboard.away.runs}
           homeTeamName={homeTeamName}
           homeScore={scoreboard.home.runs}
-          stadiumName={getDisplayedStadiumName(
-            selectedStadium,
-            gameState.stadiumName,
-          )}
+          stadiumName={resolvedStadiumName}
           inning={gameState.inning}
           isTop={gameState.isTop}
           outs={gameState.outs}
@@ -8380,10 +8534,7 @@ export function GameTracker() {
                   inning={gameState.inning}
                   isTop={gameState.isTop}
                   outs={gameState.outs}
-                  stadiumName={getDisplayedStadiumName(
-                    selectedStadium,
-                    gameState.stadiumName,
-                  )}
+                  stadiumName={resolvedStadiumName}
                   currentBatterName={currentBatterDisplayName}
                   gameDate={gameStartTime}
                   elapsedMinutes={elapsedMinutes}
@@ -8590,9 +8741,9 @@ export function GameTracker() {
               onStartGame={handleStartGame}
               onEndGame={() => setShowEndGameConfirmation(true)}
               processingOutcome={processingOutcome}
-              undoCount={undoSystem.undoCount}
-              canUndo={undoSystem.canUndo}
-              onUndo={undoSystem.performUndo}
+              undoCount={displayedUndoCount}
+              canUndo={hasDurableUndoHistory}
+              onUndo={handleUndoPress}
             />
             {pendingRunnerAttribution ? (
               <div className="absolute bottom-full left-0 right-0 mb-1 bg-[#2f3b21] border border-[#5a6b38] px-2 py-1 text-[8px] text-[#C4A853]">
@@ -8747,42 +8898,56 @@ export function GameTracker() {
             // Find the full Player object for attributes
             const allPlayers = [...awayTeamPlayers, ...homeTeamPlayers];
             const pd = allPlayers.find((p) => p.name === selectedPlayer.name);
+            const lineupSnapshot = getLineupStateSnapshot();
             const selectedPlayerTeam =
-              resolveRosterTeamSide(
-                selectedPlayer.playerId,
-                selectedPlayer.name,
-              ) || "home";
-            const teamBenchPlayers = (
-              selectedPlayerTeam === "away" ? awayTeamPlayers : homeTeamPlayers
-            )
-              .filter((p) => p.battingOrder === undefined)
-              .map((p) => ({
-                name: p.name,
-                pos: p.position || "UT",
-                hand: p.battingHand,
-                isOutOfGame: p.isOutOfGame || false,
-              }));
-            const teamBenchPitchers = (
-              selectedPlayerTeam === "away"
+              (selectedPlayer.type === "pitcher"
+                ? resolvePitchingTeamSide(
+                    selectedPlayer.playerId,
+                    selectedPlayer.name,
+                  )
+                : resolveRosterTeamSide(
+                    selectedPlayer.playerId,
+                    selectedPlayer.name,
+                  )) || "home";
+            const rosterLookup = [
+              ...(selectedPlayerTeam === "away"
+                ? awayTeamPlayers
+                : homeTeamPlayers),
+              ...(selectedPlayerTeam === "away"
                 ? awayTeamPitchers
-                : homeTeamPitchers
-            )
-              .filter((p) => !p.isActive)
-              .map((p) => ({
-                name: p.name,
-                pos: "P",
-                hand: p.throwingHand,
-                isOutOfGame: p.isOutOfGame || false,
-              }));
-            const playerCardBenchEntries = [
-              ...teamBenchPlayers,
-              ...teamBenchPitchers,
-            ].filter(
+                : homeTeamPitchers),
+            ];
+            const playerCardBenchEntries = lineupSnapshot[
+              selectedPlayerTeam
+            ].bench
+              .map((benchPlayer) => {
+                const rosterPlayer = rosterLookup.find(
+                  (candidate) =>
+                    getRosterEntityId(candidate, selectedPlayerTeam) ===
+                      benchPlayer.playerId ||
+                    candidate.name === benchPlayer.playerName,
+                );
+                const hand =
+                  rosterPlayer && "throwingHand" in rosterPlayer
+                    ? rosterPlayer.throwingHand
+                    : rosterPlayer?.battingHand || "R";
+                const rosterPosition =
+                  rosterPlayer && "position" in rosterPlayer
+                    ? rosterPlayer.position
+                    : undefined;
+                return {
+                  name: benchPlayer.playerName,
+                  pos: benchPlayer.positions[0] || rosterPosition || "UT",
+                  hand,
+                  isOutOfGame: !benchPlayer.isAvailable,
+                };
+              })
+              .filter(
               (entry, index, entries) =>
                 entries.findIndex(
                   (candidate) => candidate.name === entry.name,
                 ) === index,
-            );
+              );
             // Find real game stats from the hook's Maps
             const bgs =
               selectedPlayer.type === "batter"
@@ -8877,6 +9042,53 @@ export function GameTracker() {
            These will be reconnected via the player-card-first flow in Group 2.C. */}
 
         {/* Play Location Overlay - REMOVED (now using drag-drop interface) */}
+
+        {scoreCorrectionPrompt && (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-80"
+            onClick={dismissScoreCorrectionPrompt}
+          >
+            <div
+              className="w-[360px] border-[6px] border-[#4A6844] bg-[#556B55] p-4 shadow-[8px_8px_0px_0px_rgba(0,0,0,0.8)]"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div className="mb-3 border-[4px] border-[#E8E8D8] bg-[#3d5240] p-2">
+                <div className="text-xs font-bold text-[#E8E8D8]">
+                  SCORE VERIFICATION
+                </div>
+              </div>
+
+              <div className="space-y-3 text-[9px] text-[#E8E8D8]">
+                <p>
+                  Current score: {awayTeamName} {scoreCorrectionPrompt.current.away}, {homeTeamName} {scoreCorrectionPrompt.current.home}
+                </p>
+                <p>
+                  Event log after this edit: {awayTeamName} {scoreCorrectionPrompt.reconciled.away}, {homeTeamName} {scoreCorrectionPrompt.reconciled.home}
+                </p>
+                <p className="text-[#C4A853]">
+                  Apply correction will update the scoreboard to match the edited event log.
+                </p>
+              </div>
+
+              <div className="mt-4 flex gap-2">
+                <button
+                  type="button"
+                  onClick={dismissScoreCorrectionPrompt}
+                  className="flex-1 border-[5px] border-[#E8E8D8] bg-[#3d5240] py-3 text-sm text-[#E8E8D8] hover:bg-[#4A6844]"
+                >
+                  KEEP CURRENT
+                </button>
+                <button
+                  type="button"
+                  onClick={applyScoreCorrectionPrompt}
+                  className="flex-1 border-[5px] border-white bg-[#DD0000] py-3 text-sm text-white hover:bg-[#FF0000]"
+                >
+                  APPLY CORRECTION
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* End Game Confirmation — with post-game enrichment prompt (Ticket 5.8) */}
         {showEndGameConfirmation && !showPostGameEnrichPrompt && (
