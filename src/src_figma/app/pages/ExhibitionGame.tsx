@@ -7,6 +7,7 @@ import { useLeagueBuilderData, type Player as LBPlayer } from "../../hooks/useLe
 import { loadTeamLineup } from "../../utils/lineupLoader";
 import { getEffectivePlayer } from "../../../utils/playerOverrides";
 import { getTrackerDb } from "../../../utils/trackerDb";
+import { getParkNames } from "../../../data/parkLookup";
 
 async function getEffectiveTeamPlayers(
   teamId: string,
@@ -37,6 +38,9 @@ export function ExhibitionGame() {
   const [totalInnings, setTotalInnings] = useState(9);
   const [extraInningRunner, setExtraInningRunner] = useState(false);
   const [extraInningRunnerDelay, setExtraInningRunnerDelay] = useState<1 | 2>(1);
+  const [selectedStadium, setSelectedStadium] = useState<string | null>(null);
+
+  const parkNames = useMemo(() => getParkNames(), []);
 
   // State for rosters (loaded from League Builder)
   const [awayPlayers, setAwayPlayers] = useState<RosterPlayer[]>([]);
@@ -157,6 +161,13 @@ export function ExhibitionGame() {
   const awayTeam = teams.find(t => t.id === selectedAwayTeamId);
   const homeTeam = teams.find(t => t.id === selectedHomeTeamId);
 
+  // Default stadium to home team's field when home team changes
+  useEffect(() => {
+    if (homeTeam?.stadium) {
+      setSelectedStadium(homeTeam.stadium);
+    }
+  }, [homeTeam?.stadium]);
+
   // Separate lineup from bench for preview display
   const awayLineup = awayPlayers.filter(p => p.battingOrder !== undefined);
   const awayBench = awayPlayers.filter(p => p.battingOrder === undefined);
@@ -184,7 +195,7 @@ export function ExhibitionGame() {
         awayTeamBorderColor: awayTeam?.colors?.secondary || '#E8E8D8',
         homeTeamColor: homeTeam?.colors?.primary || '#4A6A42',
         homeTeamBorderColor: homeTeam?.colors?.secondary || '#E8E8D8',
-        stadiumName: homeTeam?.stadium || homeTeam?.name,
+        stadiumName: selectedStadium || homeTeam?.stadium || homeTeam?.name,
         awayRecord: '0-0',
         homeRecord: '0-0',
         gameMode: 'exhibition' as const,
@@ -545,6 +556,21 @@ export function ExhibitionGame() {
                   </div>
                 </div>
               )}
+
+              <div className="space-y-2">
+                <div className="text-xs text-[#E8E8D8]/70">Stadium</div>
+                <select
+                  value={selectedStadium || ''}
+                  onChange={(e) => setSelectedStadium(e.target.value)}
+                  className="w-full bg-[#3A5A32] text-[#E8E8D8] border-2 border-[#E8E8D8] p-2 text-xs font-bold"
+                >
+                  {parkNames.map((name) => (
+                    <option key={name} value={name}>
+                      {name}{name === homeTeam?.stadium ? ' (Home)' : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
 
             <div className="grid grid-cols-2 gap-2">
