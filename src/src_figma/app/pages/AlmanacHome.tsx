@@ -6,6 +6,7 @@ import { searchCanonicalPlayers } from "../../../utils/almanacStorage";
 import type { CanonicalPlayer } from "../../../utils/almanacStorage";
 import { getAllTeams } from "../../../utils/leagueBuilderStorage";
 import type { Team } from "../../../utils/leagueBuilderStorage";
+import { backfillCanonicalPlayers } from "../../../utils/registerAlmanacPlayers";
 
 interface TeamResult {
   team: Team;
@@ -20,6 +21,13 @@ export function AlmanacHome() {
   const [showResults, setShowResults] = useState(false);
   const [searching, setSearching] = useState(false);
   const resultsRef = useRef<HTMLDivElement>(null);
+
+  // Backfill canonical players from any completed games missing registration
+  useEffect(() => {
+    backfillCanonicalPlayers().catch((err) =>
+      console.error('[AlmanacHome] Backfill failed:', err)
+    );
+  }, []);
 
   // Live search as user types
   useEffect(() => {
