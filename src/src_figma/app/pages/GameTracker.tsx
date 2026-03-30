@@ -705,23 +705,26 @@ export function GameTracker() {
   );
   const extraInningRunnerPlacementRef = useRef<string | null>(null);
 
+  // R3-T0: Detect fresh navigation (has real team data) vs refresh (navigationState empty/null)
+  const isFreshNavigation = !!(navigationState?.homeTeamId || navigationState?.awayTeamId);
+
   // R3-T0: Seed persistence refs from navigationState (fresh game only)
   const seededNavStateRef = useRef(false);
   useEffect(() => {
-    if (seededNavStateRef.current || !navigationState) return;
+    if (seededNavStateRef.current || !isFreshNavigation) return;
     seededNavStateRef.current = true;
     // Fresh game from exhibition setup — seed refs from navigation
-    if (navigationState.extraInningRunner != null) {
+    if (navigationState?.extraInningRunner != null) {
       hookExtraInningRunnerRef.current = navigationState.extraInningRunner;
     }
-    if (navigationState.extraInningRunnerDelay != null) {
+    if (navigationState?.extraInningRunnerDelay != null) {
       hookExtraInningRunnerDelayRef.current = navigationState.extraInningRunnerDelay;
     }
     hookTeamColorsRef.current = {
-      awayTeamColor: navigationState.awayTeamColor,
-      awayTeamBorderColor: navigationState.awayTeamBorderColor,
-      homeTeamColor: navigationState.homeTeamColor,
-      homeTeamBorderColor: navigationState.homeTeamBorderColor,
+      awayTeamColor: navigationState?.awayTeamColor,
+      awayTeamBorderColor: navigationState?.awayTeamBorderColor,
+      homeTeamColor: navigationState?.homeTeamColor,
+      homeTeamBorderColor: navigationState?.homeTeamBorderColor,
     };
     hookGameStartTimestampRef.current = Date.now();
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -730,7 +733,7 @@ export function GameTracker() {
   // R3-T0: Restore persisted colors + timer AFTER async load completes
   const restoredColorsRef = useRef(false);
   useEffect(() => {
-    if (!gameInitialized || navigationState || restoredColorsRef.current) return;
+    if (!gameInitialized || isFreshNavigation || restoredColorsRef.current) return;
     restoredColorsRef.current = true;
     // Team colors — refs now populated by loadExistingGame
     const colors = hookTeamColorsRef.current;
@@ -742,7 +745,7 @@ export function GameTracker() {
     if (persistedStart && persistedStart < Date.now()) {
       setGameStartTime(new Date(persistedStart));
     }
-  }, [gameInitialized, navigationState]); // Runs after loadExistingGame completes
+  }, [gameInitialized, isFreshNavigation]); // Runs after loadExistingGame completes
 
   // Set playoff context from navigation state (if this is a playoff game)
   const isPlayoffGame =
