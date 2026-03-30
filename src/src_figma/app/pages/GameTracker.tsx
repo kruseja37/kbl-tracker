@@ -625,12 +625,20 @@ export function GameTracker() {
 
   // Update elapsed time every minute
   useEffect(() => {
+    const updateElapsedMinutes = () => {
+      const now = Date.now();
+      const diff = Math.floor((now - gameStartTime.getTime()) / 60000);
+      const nextElapsedMinutes = Math.max(0, diff);
+      setElapsedMinutes(nextElapsedMinutes);
+      console.log("[R3-T0] Timer recomputed from persisted start time", {
+        gameStartTime: gameStartTime.toISOString(),
+        elapsedMinutes: nextElapsedMinutes,
+      });
+    };
+
+    updateElapsedMinutes();
     const interval = setInterval(() => {
-      const now = new Date();
-      const diff = Math.floor(
-        (now.getTime() - gameStartTime.getTime()) / 60000,
-      );
-      setElapsedMinutes(diff);
+      updateElapsedMinutes();
     }, 60000);
     return () => clearInterval(interval);
   }, [gameStartTime]);
@@ -675,6 +683,8 @@ export function GameTracker() {
     getRunnerTrackerSnapshot,
     getBaseRunnerNames,
     runnerIdentityVersion,
+    lineupVersion,
+    notifyPersistenceMetadataChanged,
     isLoading,
     isSaving,
     // §10.1: Three-phase lifecycle
@@ -727,6 +737,12 @@ export function GameTracker() {
       homeTeamBorderColor: navigationState?.homeTeamBorderColor,
     };
     hookGameStartTimestampRef.current = Date.now();
+    console.log("[R3-T0] Seeded persistence refs from navigation state", {
+      awayTeamColor: hookTeamColorsRef.current.awayTeamColor ?? null,
+      homeTeamColor: hookTeamColorsRef.current.homeTeamColor ?? null,
+      gameStartTimestamp: hookGameStartTimestampRef.current,
+    });
+    notifyPersistenceMetadataChanged("navigation-state-seed");
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Seed once on mount for fresh games
 
@@ -745,6 +761,14 @@ export function GameTracker() {
     if (persistedStart && persistedStart < Date.now()) {
       setGameStartTime(new Date(persistedStart));
     }
+    console.log("[R3-T0] Restored GameTracker display state from persisted refs", {
+      navigationState: navigationState ?? null,
+      isFreshNavigation,
+      gameInitialized,
+      awayTeamColor: colors.awayTeamColor ?? null,
+      homeTeamColor: colors.homeTeamColor ?? null,
+      gameStartTimestamp: persistedStart ?? null,
+    });
   }, [gameInitialized, isFreshNavigation]); // Runs after loadExistingGame completes
 
   // Set playoff context from navigation state (if this is a playoff game)
@@ -2062,11 +2086,19 @@ export function GameTracker() {
   useEffect(() => {
     if (!gameInitialized) return;
     // R3-T0: Also sync during PRE_GAME so pre-game pitcher changes appear in UI
-    syncDisplayedRostersToLineupSnapshot(getLineupStateSnapshot());
+    const lineupSnapshot = getLineupStateSnapshot();
+    syncDisplayedRostersToLineupSnapshot(lineupSnapshot);
+    console.log("[R3-T0] Synced displayed rosters from lineup snapshot", {
+      gamePhase: gameState.gamePhase,
+      lineupVersion,
+      awayCurrentPitcher: lineupSnapshot.away.currentPitcher?.playerName ?? null,
+      homeCurrentPitcher: lineupSnapshot.home.currentPitcher?.playerName ?? null,
+    });
   }, [
     gameInitialized,
     gameState.currentPitcherId,
     gameState.gamePhase,
+    lineupVersion,
     getLineupStateSnapshot,
     syncDisplayedRostersToLineupSnapshot,
   ]);
@@ -3027,7 +3059,7 @@ export function GameTracker() {
         // Try to load existing game first (handles page refresh)
         // R2-7: When navigationState is present, user clicked START GAME from setup —
         // skip snapshot restoration so we get a fresh game instead of resuming the old one.
-        const isFreshStart = !!navigationState;
+        const isFreshStart = isFreshNavigation;
         const hasExistingGame = await loadExistingGame({
           preferSnapshot: !isFreshStart,
         });
@@ -3231,6 +3263,7 @@ export function GameTracker() {
     navigationState?.totalInnings,
     selectedStadium,
     statsScopeId,
+    isFreshNavigation,
     syncDisplayedRostersToLineupSnapshot,
     getLineupStateSnapshot,
     awayPitcher,
@@ -3796,6 +3829,48 @@ export function GameTracker() {
     [battingTeam, getPlayerIdFromName, runnerNames],
   );
 
+  const isPitcherPlayer = useCallback(
+    (playerId: string, playerName: string) => {
+      const matchesPitcher = (
+        pitchers: Pitcher[],
+        team: "away" | "home",
+      ) =>
+        pitchers.some(
+          (pitcher) =>
+            getRosterEntityId(pitcher, team) === playerId ||
+            pitcher.name === playerName,
+        );
+      const matchesPitcherSlot = (
+        players: Player[],
+        team: "away" | "home",
+      ) =>
+        players.some(
+          (player) =>
+            (getRosterEntityId(player, team) === playerId ||
+              player.name === playerName) &&
+            player.position === "P",
+        );
+
+      const lineupSnapshot = getLineupStateSnapshot();
+      return (
+        matchesPitcher(awayTeamPitchers, "away") ||
+        matchesPitcher(homeTeamPitchers, "home") ||
+        matchesPitcherSlot(awayTeamPlayers, "away") ||
+        matchesPitcherSlot(homeTeamPlayers, "home") ||
+        lineupSnapshot.away.currentPitcher?.playerId === playerId ||
+        lineupSnapshot.home.currentPitcher?.playerId === playerId
+      );
+    },
+    [
+      awayTeamPitchers,
+      awayTeamPlayers,
+      getLineupStateSnapshot,
+      getRosterEntityId,
+      homeTeamPitchers,
+      homeTeamPlayers,
+    ],
+  );
+
   // §9.3: Player tap handler for lineup columns — handles swap mode or opens player card
   const handleLineupPlayerTap = useCallback(
     (playerId: string, playerName: string) => {
@@ -3807,12 +3882,13 @@ export function GameTracker() {
         handleSwapPositionComplete(playerId);
         return;
       }
-      // Determine if player is a pitcher or batter
-      const isPitcher =
-        fieldingTeamPitchersRaw.some((p) => p.name === playerName) ||
-        (fieldingTeam === "home" ? homeTeamPitchers : awayTeamPitchers).some(
-          (p) => p.name === playerName,
-        );
+      const isPitcher = isPitcherPlayer(playerId, playerName);
+      console.log("[R3-T0] Classified lineup player tap", {
+        gamePhase: gameState.gamePhase,
+        playerId,
+        playerName,
+        isPitcher,
+      });
       setSelectedPlayer({
         name: playerName,
         type: isPitcher ? "pitcher" : "batter",
@@ -3827,10 +3903,8 @@ export function GameTracker() {
       swapPositionMode,
       handleSwapOrder,
       handleSwapPositionComplete,
-      fieldingTeamPitchersRaw,
-      fieldingTeam,
-      homeTeamPitchers,
-      awayTeamPitchers,
+      gameState.gamePhase,
+      isPitcherPlayer,
       getRunnerBaseForPlayer,
     ],
   );

@@ -479,6 +479,8 @@ export interface UseGameStateReturn {
   // T1-02/03/04: Runner names from tracker (replaces fragile runnerNames state)
   getBaseRunnerNames: () => { first?: string; second?: string; third?: string };
   runnerIdentityVersion: number;
+  lineupVersion: number;
+  notifyPersistenceMetadataChanged: (reason: string) => void;
 
   // Loading/persistence
   isLoading: boolean;
@@ -1857,6 +1859,8 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [lastSavedAt, setLastSavedAt] = useState<number | null>(null);
+  const [lineupVersion, setLineupVersion] = useState(0);
+  const [persistenceMetadataVersion, setPersistenceMetadataVersion] = useState(0);
   const latestPersistedRef = useRef<PersistedGameState | null>(null);
   const autoSaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // T0-01: Auto game-end detection prompt
@@ -1935,6 +1939,10 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
   const [restoredMojoFitness, setRestoredMojoFitness] = useState<
     Record<string, { mojo: number; fitness: string }> | null
   >(null);
+  const notifyPersistenceMetadataChanged = useCallback((reason: string) => {
+    console.log("[R3-T0] Persistence metadata changed", { reason });
+    setPersistenceMetadataVersion((version) => version + 1);
+  }, []);
 
   const [gameState, setGameState] = useState<GameState>({
     gameId: initialGameId || "",
@@ -3346,6 +3354,11 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
           if (savedSnapshot.gameStartTimestamp) {
             gameStartTimestampRef.current = savedSnapshot.gameStartTimestamp;
           }
+          console.log("[R3-T0] Restored persisted metadata from snapshot", {
+            awayTeamColor: teamColorsRef.current.awayTeamColor ?? null,
+            homeTeamColor: teamColorsRef.current.homeTeamColor ?? null,
+            gameStartTimestamp: gameStartTimestampRef.current ?? null,
+          });
           // R3-T0: Restore mojo/fitness for GameTracker to re-register with playerStateHook
           if (savedSnapshot.playerMojoFitness && Object.keys(savedSnapshot.playerMojoFitness).length > 0) {
             setRestoredMojoFitness(savedSnapshot.playerMojoFitness);
@@ -4499,6 +4512,12 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     };
 
     latestPersistedRef.current = persisted;
+    console.log("[R3-T0] Queued current-game snapshot save", {
+      metadataVersion: persistenceMetadataVersion,
+      awayTeamColor: persisted.awayTeamColor ?? null,
+      homeTeamColor: persisted.homeTeamColor ?? null,
+      gameStartTimestamp: persisted.gameStartTimestamp ?? null,
+    });
     if (autoSaveTimeoutRef.current) {
       clearTimeout(autoSaveTimeoutRef.current);
     }
@@ -4521,6 +4540,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     resolveTeamIdForPlayerId,
     scoreboard,
     substitutionLog,
+    persistenceMetadataVersion,
   ]);
 
   useEffect(() => {
@@ -7605,6 +7625,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
           usedPlayers: newUsedPlayers,
           currentPitcher: newCurrentPitcher,
         };
+        setLineupVersion((version) => version + 1);
       }
 
       // UX-053: Update currentCatcherId if catcher was replaced or someone moved to C
@@ -7761,6 +7782,8 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         }
       }
 
+      setLineupVersion((version) => version + 1);
+
       return true;
     },
     [gameState.gamePhase, registerIdentityForSide],
@@ -7845,6 +7868,8 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
             resolvePlayerNameForId(newCatcher.playerId) || newCatcher.playerId,
         }));
       }
+
+      setLineupVersion((version) => version + 1);
 
       console.log(
         `[useGameState] Position switch: ${switches.map((s) => `${s.playerId}->${s.newPosition}`).join(", ")}`,
@@ -7958,15 +7983,27 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         return nextStats;
       });
 
-      setGameState((prev) => ({
-        ...prev,
-        currentPitcherId: newPitcherId,
-        currentPitcherName: newPitcherName || "",
-      }));
+      const activeDefensiveSide: TeamSide = gameState.isTop ? "home" : "away";
+      if (pitchingTeamSide === activeDefensiveSide) {
+        setGameState((prev) => ({
+          ...prev,
+          currentPitcherId: newPitcherId,
+          currentPitcherName: newPitcherName || "",
+        }));
+      }
+      setLineupVersion((version) => version + 1);
 
-      console.log(
-        `[useGameState] PRE_GAME pitcher set: ${newPitcherName || newPitcherId} replaces ${exitingPitcherName || exitingPitcherId}`,
-      );
+      console.log("[R3-T0] PRE_GAME pitcher change applied", {
+        pitchingTeamSide,
+        activeDefensiveSide,
+        lineupIndex,
+        exitingPitcherId,
+        newPitcherId,
+        currentHomePitcher:
+          homeLineupStateRef.current.currentPitcher?.playerName ?? null,
+        currentAwayPitcher:
+          awayLineupStateRef.current.currentPitcher?.playerName ?? null,
+      });
     },
     [gameState.inning, gameState.isTop, registerIdentityForSide],
   );
@@ -9647,6 +9684,8 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     getRunnerTrackerSnapshot,
     getBaseRunnerNames,
     runnerIdentityVersion,
+    lineupVersion,
+    notifyPersistenceMetadataChanged,
     isLoading,
     isSaving,
     lastSavedAt,
