@@ -11,9 +11,9 @@ interface BattingLineupColumnProps {
   players: BattingLineupPlayer[];
   currentBatterIndex: number; // 1-based batting order of current batter
   runners: {
-    first?: { name: string };
-    second?: { name: string };
-    third?: { name: string };
+    first?: { name: string; playerId?: string };
+    second?: { name: string; playerId?: string };
+    third?: { name: string; playerId?: string };
   };
   nextLeadoffIndex: number; // 1-based batting order of next inning's leadoff
   teamPrimaryColor: string;
@@ -42,11 +42,19 @@ export function BattingLineupColumn({
     previousCurrentBatterIndex.current = currentBatterIndex;
   }, [currentBatterIndex]);
 
-  // Map runner names to base exponents
+  // Prefer stable player identity for lineup markers; fall back to names if needed.
   const runnerBaseMap = new Map<string, number>();
+  if (runners.first?.playerId) runnerBaseMap.set(runners.first.playerId, 1);
+  if (runners.second?.playerId) runnerBaseMap.set(runners.second.playerId, 2);
+  if (runners.third?.playerId) runnerBaseMap.set(runners.third.playerId, 3);
   if (runners.first?.name) runnerBaseMap.set(runners.first.name, 1);
   if (runners.second?.name) runnerBaseMap.set(runners.second.name, 2);
   if (runners.third?.name) runnerBaseMap.set(runners.third.name, 3);
+  console.log('[R3-R4] BattingLineupColumn runner map:', Object.fromEntries(runnerBaseMap));
+  console.log('[R3-R4] BattingLineupColumn players:', players.map((player) => ({
+    playerId: player.playerId,
+    name: player.name,
+  })));
 
   return (
     <div className="bg-[#2a3a2d] border border-[#3d5240] flex flex-col h-full">
@@ -70,7 +78,8 @@ export function BattingLineupColumn({
         {players.map((player) => {
           const isCurrent = player.battingOrder === currentBatterIndex;
           const isNextLeadoff = player.battingOrder === nextLeadoffIndex && !isCurrent;
-          const onBase = runnerBaseMap.get(player.name);
+          const onBase =
+            runnerBaseMap.get(player.playerId) ?? runnerBaseMap.get(player.name);
           const shouldHighlightRow = highlightedBatterIndex === player.battingOrder;
 
           return (

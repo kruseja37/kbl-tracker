@@ -1231,12 +1231,52 @@ export function GameTracker() {
     third?: string;
   }>({});
 
+  const battingLineupRunners = useMemo(() => {
+    const trackerSnapshot = getRunnerTrackerSnapshot();
+    const nextRunners: {
+      first?: { name: string; playerId: string };
+      second?: { name: string; playerId: string };
+      third?: { name: string; playerId: string };
+    } = {};
+
+    for (const runner of trackerSnapshot.runners) {
+      if (runner.currentBase === "1B") {
+        nextRunners.first = {
+          name: runner.runnerName,
+          playerId: runner.runnerId,
+        };
+      } else if (runner.currentBase === "2B") {
+        nextRunners.second = {
+          name: runner.runnerName,
+          playerId: runner.runnerId,
+        };
+      } else if (runner.currentBase === "3B") {
+        nextRunners.third = {
+          name: runner.runnerName,
+          playerId: runner.runnerId,
+        };
+      }
+    }
+
+    return nextRunners;
+  }, [
+    gameState.bases.first,
+    gameState.bases.second,
+    gameState.bases.third,
+    getRunnerTrackerSnapshot,
+    runnerIdentityVersion,
+  ]);
+
   // T1-02/03/04 FIX: Sync runnerNames from the runner tracker whenever bases change.
   // The tracker is the single source of truth for runner identity (handles SB, WP, PB,
   // pinch runners, thrown-out-advancing, etc.). Without this sync, runnerNames would
   // fall out of sync and show "R1"/"R2"/"R3" or ghost runners.
   useEffect(() => {
     const trackerNames = getBaseRunnerNames();
+    console.log("[R3-R4] Runner names synced:", {
+      names: trackerNames,
+      lineupRunners: battingLineupRunners,
+    });
     setRunnerNames((prev) => {
       // Only update if different to avoid infinite render loops
       if (
@@ -1254,6 +1294,7 @@ export function GameTracker() {
     gameState.bases.third,
     runnerIdentityVersion,
     getBaseRunnerNames,
+    battingLineupRunners,
   ]);
 
   // ============================================
@@ -7037,12 +7078,19 @@ export function GameTracker() {
             .find((entry) => entry.eventType === "at_bat" && entry.eventId);
           const isLatestAtBat =
             latestAtBatEntry?.eventId === existingAtBat.eventId;
+          const targetsCurrentLiveHalf =
+            existingAtBat.inning === gameState.inning &&
+            existingAtBat.halfInning === (gameState.isTop ? "TOP" : "BOTTOM");
           if (isLatestAtBat) {
             applyBasesCorrection(
               buildLiveBasesFromRunnersAfter(nextRunnersAfter),
               nextRunnersAfter,
+              {
+                inning: existingAtBat.inning,
+                halfInning: existingAtBat.halfInning,
+              },
             );
-            if (outDelta !== 0) {
+            if (targetsCurrentLiveHalf && outDelta !== 0) {
               applyOutsAdjustment(outDelta);
             }
           }
@@ -7161,6 +7209,8 @@ export function GameTracker() {
       applyBasesCorrection,
       applyOutsAdjustment,
       buildFieldingSyncEventsForSequenceEdit,
+      gameState.inning,
+      gameState.isTop,
       enrichingEntry,
       playLogEntries,
     ],
@@ -7522,6 +7572,9 @@ export function GameTracker() {
           .find((entry) => entry.eventType === "at_bat" && entry.eventId);
         const isLatestAtBat =
           latestAtBatEntry?.eventId === existingAtBat.eventId;
+        const targetsCurrentLiveHalf =
+          existingAtBat.inning === gameState.inning &&
+          existingAtBat.halfInning === (gameState.isTop ? "TOP" : "BOTTOM");
 
         // Fix A: Score adjustment fires for ALL corrections — latest or historical
         if (scoreDelta !== 0) {
@@ -7537,16 +7590,21 @@ export function GameTracker() {
           applyBasesCorrection(
             buildLiveBasesFromRunnersAfter(nextRunnersAfter),
             nextRunnersAfter,
+            {
+              inning: existingAtBat.inning,
+              halfInning: existingAtBat.halfInning,
+            },
           );
         }
 
         // Fix C: Update live outs count for latest at-bat corrections
-        if (isLatestAtBat && outDelta !== 0) {
+        if (isLatestAtBat && targetsCurrentLiveHalf && outDelta !== 0) {
           applyOutsAdjustment(outDelta);
         }
 
         if (
           isLatestAtBat &&
+          targetsCurrentLiveHalf &&
           scoreDelta !== 0 &&
           gameState.gamePhase === "LIVE" &&
           !gameState.isTop &&
@@ -8331,17 +8389,7 @@ export function GameTracker() {
             <BattingLineupColumn
               players={battingColumnPlayers}
               currentBatterIndex={currentBatterPosition}
-              runners={{
-                first: runnerNames.first
-                  ? { name: runnerNames.first }
-                  : undefined,
-                second: runnerNames.second
-                  ? { name: runnerNames.second }
-                  : undefined,
-                third: runnerNames.third
-                  ? { name: runnerNames.third }
-                  : undefined,
-              }}
+              runners={battingLineupRunners}
               nextLeadoffIndex={battingNextLeadoff}
               teamPrimaryColor={battingTeamColors.primary}
               teamSecondaryColor={battingTeamColors.secondary}

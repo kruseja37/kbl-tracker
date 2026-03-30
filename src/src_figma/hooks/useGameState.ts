@@ -66,6 +66,7 @@ import {
 } from "../app/engines/inheritedRunnerTracker";
 import type { HowReached } from "../app/types/substitution";
 import {
+  buildLiveBasesFromRunnersAfter,
   reconcileRunnerTrackerBases,
   reconcileRunnerTrackerFromRunnersAfter,
 } from "../app/utils/liveBaseCorrection";
@@ -418,6 +419,10 @@ export interface UseGameStateReturn {
   applyBasesCorrection: (
     bases: { first: boolean; second: boolean; third: boolean },
     runnersAfter?: RunnerState,
+    correctionContext?: {
+      inning: number;
+      halfInning: HalfInning;
+    },
   ) => void;
   applyOutsAdjustment: (delta: number) => void;
   scheduleAutoEndInning: () => void;
@@ -4634,6 +4639,11 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         trackerBaseByUiBase[base],
         "ghost_runner",
       );
+      console.log("[R3-R4] Ghost runner placed:", {
+        base,
+        runnerId: playerId,
+        runnerName: playerName,
+      });
       runnerTrackerRef.current = nextTracker;
       setRunnerIdentityVersion((version) => version + 1);
       setGameState((prev) => ({
@@ -9016,19 +9026,85 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     (
       bases: { first: boolean; second: boolean; third: boolean },
       runnersAfter?: RunnerState,
+      correctionContext?: {
+        inning: number;
+        halfInning: HalfInning;
+      },
     ) => {
+      const currentHalfInning: HalfInning = gameState.isTop ? "TOP" : "BOTTOM";
+      if (
+        correctionContext &&
+        (correctionContext.inning !== gameState.inning ||
+          correctionContext.halfInning !== currentHalfInning)
+      ) {
+        console.log(
+          "[R3-R4] Skipping live base correction for completed half-inning",
+          {
+            correctionContext,
+            currentInning: gameState.inning,
+            currentHalfInning,
+          },
+        );
+        return;
+      }
+
       const syncedTracker = syncTrackerPitcher(
         runnerTrackerRef.current,
         gameState.currentPitcherId,
         gameState.currentPitcherName,
       );
-      runnerTrackerRef.current = runnersAfter
-        ? reconcileRunnerTrackerFromRunnersAfter(syncedTracker, runnersAfter)
-        : reconcileRunnerTrackerBases(syncedTracker, bases);
+      const battingTeamSide: TeamSide = gameState.isTop ? "away" : "home";
+      const filteredRunnersAfter = runnersAfter
+        ? ((
+            ["first", "second", "third"] as const
+          ).reduce<RunnerState>(
+            (accumulator, base) => {
+              const runner = runnersAfter[base];
+              if (!runner) {
+                accumulator[base] = null;
+                return accumulator;
+              }
+
+              const runnerTeamSide = teamSideByPlayerIdRef.current.get(
+                runner.runnerId,
+              );
+              if (runnerTeamSide === battingTeamSide) {
+                accumulator[base] = runner;
+                return accumulator;
+              }
+
+              console.log("[R3-R4] Filtered cross-team runner correction:", {
+                base,
+                runnerId: runner.runnerId,
+                runnerName: runner.runnerName,
+                runnerTeamSide: runnerTeamSide ?? null,
+                battingTeamSide,
+              });
+              accumulator[base] = null;
+              return accumulator;
+            },
+            { first: null, second: null, third: null },
+          ))
+        : undefined;
+      const nextBases = filteredRunnersAfter
+        ? buildLiveBasesFromRunnersAfter(filteredRunnersAfter)
+        : bases;
+
+      runnerTrackerRef.current = filteredRunnersAfter
+        ? reconcileRunnerTrackerFromRunnersAfter(
+            syncedTracker,
+            filteredRunnersAfter,
+          )
+        : reconcileRunnerTrackerBases(syncedTracker, nextBases);
       setRunnerIdentityVersion((v) => v + 1);
-      setGameState((prev) => ({ ...prev, bases }));
+      setGameState((prev) => ({ ...prev, bases: nextBases }));
     },
-    [gameState.currentPitcherId, gameState.currentPitcherName],
+    [
+      gameState.currentPitcherId,
+      gameState.currentPitcherName,
+      gameState.inning,
+      gameState.isTop,
+    ],
   );
 
   // §7.4: Runner correction — adjust live outs count directly
@@ -9350,9 +9426,15 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
             competitionType:
               options?.competitionType ?? competitionTypeRef.current,
             competitionId: options?.competitionId ?? competitionIdRef.current,
+            leagueId: options?.leagueId ?? leagueIdRef.current,
           },
         );
 
+        console.log("[R3-R4] Initial endGame archive context:", {
+          competitionType: options?.competitionType ?? competitionTypeRef.current,
+          competitionId: options?.competitionId ?? competitionIdRef.current,
+          leagueId: options?.leagueId ?? leagueIdRef.current,
+        });
         console.log("[endGame] Game archived for post-game summary");
       } catch (error) {
         console.error("[EndGame] Initial archiveCompletedGame failed:", error);
