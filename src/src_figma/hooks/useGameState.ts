@@ -451,7 +451,7 @@ export interface UseGameStateReturn {
   // Initialization
   initializeGame: (config: GameInitConfig) => Promise<void>;
   loadExistingGame: (options?: LoadExistingGameOptions) => Promise<boolean>;
-  undoLastAction: () => Promise<boolean>;
+  undoLastAction: (options?: { skipReload?: boolean }) => Promise<boolean>;
   getLineupStateSnapshot: () => GameLineupSnapshot;
   getBatterIndicesSnapshot: () => {
     away: number;
@@ -4326,7 +4326,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     ],
   );
 
-  const undoLastAction = useCallback(async (): Promise<boolean> => {
+  const undoLastAction = useCallback(async (options?: { skipReload?: boolean }): Promise<boolean> => {
     const targetGameId = gameState.gameId || initialGameId;
     if (!targetGameId) {
       return false;
@@ -4349,6 +4349,13 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
             return false;
           }
         }
+      }
+
+      // R3-R7: When caller has a snapshot to restore from, skip the full reload
+      // (loadExistingGame reloads stale scores from persisted snapshot)
+      if (options?.skipReload) {
+        console.log("[R3-R7] undoLastAction: skipping reload (caller will restore from snapshot)");
+        return true;
       }
 
       await clearCurrentGame();

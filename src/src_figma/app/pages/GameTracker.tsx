@@ -1502,14 +1502,7 @@ export function GameTracker() {
       setScoreCorrectionPrompt(null);
 
       void (async () => {
-        const undone = await undoLastAction();
-        if (!undone) {
-          console.warn("No durable action available to undo");
-          queuePlayLogRefreshRef.current(0);
-          return;
-        }
-
-        // R3-R7: Restore pre-play state from UndoSystem snapshot (reverts score, scoreboard, stats)
+        // R3-R7: Check if we have a real snapshot from UndoSystem to restore from
         const snapshotData = snapshot.gameState as {
           gameState?: GameState;
           scoreboard?: ScoreboardState;
@@ -1520,32 +1513,44 @@ export function GameTracker() {
           batterIndices?: { away: number; home: number };
         } | null;
 
-        if (snapshotData?.gameState && snapshotData?.scoreboard) {
+        const hasValidSnapshot = !!(snapshotData?.gameState && snapshotData?.scoreboard);
+
+        // Mark event as undone in DB. Skip full reload if we have a snapshot to restore from
+        // (loadExistingGame reloads stale post-play scores from persisted snapshot)
+        const undone = await undoLastAction({ skipReload: hasValidSnapshot });
+        if (!undone) {
+          console.warn("No durable action available to undo");
+          queuePlayLogRefreshRef.current(0);
+          return;
+        }
+
+        if (hasValidSnapshot) {
           console.log("[R3-R7] Restoring from UndoSystem snapshot — score:",
-            snapshotData.gameState.awayScore, "-", snapshotData.gameState.homeScore);
+            snapshotData!.gameState!.awayScore, "-", snapshotData!.gameState!.homeScore,
+            "outs:", snapshotData!.gameState!.outs);
           restoreState({
-            gameState: snapshotData.gameState,
-            scoreboard: snapshotData.scoreboard,
-            playerStats: snapshotData.playerStatsEntries
-              ? new Map(snapshotData.playerStatsEntries)
+            gameState: snapshotData!.gameState!,
+            scoreboard: snapshotData!.scoreboard!,
+            playerStats: snapshotData!.playerStatsEntries
+              ? new Map(snapshotData!.playerStatsEntries)
               : undefined,
-            pitcherStats: snapshotData.pitcherStatsEntries
-              ? new Map(snapshotData.pitcherStatsEntries)
+            pitcherStats: snapshotData!.pitcherStatsEntries
+              ? new Map(snapshotData!.pitcherStatsEntries)
               : undefined,
-            runnerTrackerState: snapshotData.runnerTrackerSnapshot
+            runnerTrackerState: snapshotData!.runnerTrackerSnapshot
               ? {
-                  runners: snapshotData.runnerTrackerSnapshot.runners,
-                  currentPitcherId: snapshotData.runnerTrackerSnapshot.currentPitcherId,
-                  currentPitcherName: snapshotData.runnerTrackerSnapshot.currentPitcherName,
+                  runners: snapshotData!.runnerTrackerSnapshot.runners,
+                  currentPitcherId: snapshotData!.runnerTrackerSnapshot.currentPitcherId,
+                  currentPitcherName: snapshotData!.runnerTrackerSnapshot.currentPitcherName,
                   pitcherStats: new Map(
-                    snapshotData.runnerTrackerSnapshot.pitcherStatsEntries || [],
+                    snapshotData!.runnerTrackerSnapshot.pitcherStatsEntries || [],
                   ),
-                  inning: snapshotData.runnerTrackerSnapshot.inning,
-                  atBatNumber: snapshotData.runnerTrackerSnapshot.atBatNumber,
+                  inning: snapshotData!.runnerTrackerSnapshot.inning,
+                  atBatNumber: snapshotData!.runnerTrackerSnapshot.atBatNumber,
                 }
               : undefined,
-            lineupSnapshot: snapshotData.lineupSnapshot,
-            batterIndices: snapshotData.batterIndices,
+            lineupSnapshot: snapshotData!.lineupSnapshot,
+            batterIndices: snapshotData!.batterIndices,
           });
         }
 
