@@ -501,6 +501,24 @@ export interface UseGameStateReturn {
   ) => void;
   // Stadium selector helper
   setStadiumName: (stadiumName: string | null) => void;
+
+  // R3-T0: Regulation innings (restored from snapshot)
+  totalInningsRef: React.MutableRefObject<number>;
+  // R3-T0: Persistence refs for exhibition config & mojo/fitness
+  extraInningRunnerRef: React.MutableRefObject<boolean>;
+  extraInningRunnerDelayRef: React.MutableRefObject<1 | 2>;
+  teamColorsRef: React.MutableRefObject<{
+    awayTeamColor?: string;
+    awayTeamBorderColor?: string;
+    homeTeamColor?: string;
+    homeTeamBorderColor?: string;
+  }>;
+  playerMojoFitnessGetterRef: React.MutableRefObject<
+    (() => Record<string, { mojo: number; fitness: string }>) | null
+  >;
+  gameStartTimestampRef: React.MutableRefObject<number>;
+  /** Restored mojo/fitness data from snapshot (null if fresh game) */
+  restoredMojoFitness: Record<string, { mojo: number; fitness: string }> | null;
 }
 
 export interface GameInitConfig {
@@ -1901,6 +1919,23 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
   const playoffGameNumberRef = useRef<number | null>(null);
   const playoffIdRef = useRef<string | null>(null);
 
+  // R3-T0: Refs for state that lives in GameTracker but must be persisted
+  const extraInningRunnerRef = useRef<boolean>(false);
+  const extraInningRunnerDelayRef = useRef<1 | 2>(1);
+  const teamColorsRef = useRef<{
+    awayTeamColor?: string;
+    awayTeamBorderColor?: string;
+    homeTeamColor?: string;
+    homeTeamBorderColor?: string;
+  }>({});
+  const playerMojoFitnessGetterRef = useRef<
+    (() => Record<string, { mojo: number; fitness: string }>) | null
+  >(null);
+  const gameStartTimestampRef = useRef<number>(Date.now());
+  const [restoredMojoFitness, setRestoredMojoFitness] = useState<
+    Record<string, { mojo: number; fitness: string }> | null
+  >(null);
+
   const [gameState, setGameState] = useState<GameState>({
     gameId: initialGameId || "",
     homeScore: 0,
@@ -3293,6 +3328,28 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
           if (savedSnapshot.homeUsesDh != null) {
             homeUsesDhRef.current = savedSnapshot.homeUsesDh;
           }
+          // R3-T0: Restore extra-inning runner config from snapshot
+          if (savedSnapshot.extraInningRunner != null) {
+            extraInningRunnerRef.current = savedSnapshot.extraInningRunner;
+          }
+          if (savedSnapshot.extraInningRunnerDelay != null) {
+            extraInningRunnerDelayRef.current = savedSnapshot.extraInningRunnerDelay;
+          }
+          // R3-T0: Restore team colors from snapshot
+          if (savedSnapshot.awayTeamColor) {
+            teamColorsRef.current.awayTeamColor = savedSnapshot.awayTeamColor;
+            teamColorsRef.current.awayTeamBorderColor = savedSnapshot.awayTeamBorderColor;
+            teamColorsRef.current.homeTeamColor = savedSnapshot.homeTeamColor;
+            teamColorsRef.current.homeTeamBorderColor = savedSnapshot.homeTeamBorderColor;
+          }
+          // R3-T0: Restore game start timestamp
+          if (savedSnapshot.gameStartTimestamp) {
+            gameStartTimestampRef.current = savedSnapshot.gameStartTimestamp;
+          }
+          // R3-T0: Restore mojo/fitness for GameTracker to re-register with playerStateHook
+          if (savedSnapshot.playerMojoFitness && Object.keys(savedSnapshot.playerMojoFitness).length > 0) {
+            setRestoredMojoFitness(savedSnapshot.playerMojoFitness);
+          }
           // Layer 1B: Restore identity refs from snapshot (if available)
           const snapshotAny = savedSnapshot as unknown as Record<
             string,
@@ -4430,6 +4487,15 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       },
       pitcherNamesEntries: Array.from(pitcherNamesRef.current.entries()),
       substitutionLog: substitutionLog as PersistedGameState["substitutionLog"],
+      // R3-T0: Persist exhibition config & cosmetic state
+      extraInningRunner: extraInningRunnerRef.current,
+      extraInningRunnerDelay: extraInningRunnerDelayRef.current,
+      awayTeamColor: teamColorsRef.current.awayTeamColor,
+      awayTeamBorderColor: teamColorsRef.current.awayTeamBorderColor,
+      homeTeamColor: teamColorsRef.current.homeTeamColor,
+      homeTeamBorderColor: teamColorsRef.current.homeTeamBorderColor,
+      playerMojoFitness: playerMojoFitnessGetterRef.current?.() ?? undefined,
+      gameStartTimestamp: gameStartTimestampRef.current,
     };
 
     latestPersistedRef.current = persisted;
@@ -9581,5 +9647,13 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     setNextEventEnrichment,
     /** Position usage map: playerId → { [position]: outsPlayed } (convert to innings via / 3) */
     positionInnings: positionInningsRef.current,
+    // R3-T0: Persistence refs for exhibition config & mojo/fitness
+    totalInningsRef,
+    extraInningRunnerRef,
+    extraInningRunnerDelayRef,
+    teamColorsRef,
+    playerMojoFitnessGetterRef,
+    gameStartTimestampRef,
+    restoredMojoFitness,
   };
 }

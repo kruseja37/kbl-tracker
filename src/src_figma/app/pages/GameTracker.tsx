@@ -591,18 +591,24 @@ export function GameTracker() {
       ? `elimination-${navigationState.eliminationId}`
       : navigationState?.seasonId);
 
-  // Team colors - prefer navigation state (from database), fall back to static config
+  // Team colors - navigation state first, persisted colors set via useEffect after hook loads
+  const [persistedTeamColors, setPersistedTeamColors] = useState<{
+    awayTeamColor?: string;
+    awayTeamBorderColor?: string;
+    homeTeamColor?: string;
+    homeTeamBorderColor?: string;
+  }>({});
   const awayTeamColor =
-    navigationState?.awayTeamColor || getTeamColors(awayTeamId).primary;
+    navigationState?.awayTeamColor || persistedTeamColors.awayTeamColor || getTeamColors(awayTeamId).primary;
   const awayTeamBorderColor =
-    navigationState?.awayTeamBorderColor || getTeamColors(awayTeamId).secondary;
+    navigationState?.awayTeamBorderColor || persistedTeamColors.awayTeamBorderColor || getTeamColors(awayTeamId).secondary;
   const homeTeamColor =
-    navigationState?.homeTeamColor || getTeamColors(homeTeamId).primary;
+    navigationState?.homeTeamColor || persistedTeamColors.homeTeamColor || getTeamColors(homeTeamId).primary;
   const homeTeamBorderColor =
-    navigationState?.homeTeamBorderColor || getTeamColors(homeTeamId).secondary;
+    navigationState?.homeTeamBorderColor || persistedTeamColors.homeTeamBorderColor || getTeamColors(homeTeamId).secondary;
 
   // Game timer state
-  const [gameStartTime] = useState(() => new Date());
+  const [gameStartTime, setGameStartTime] = useState(() => new Date());
   const [elapsedMinutes, setElapsedMinutes] = useState(0);
   const [isProcessingEndGame, setIsProcessingEndGame] = useState(false);
 
@@ -680,6 +686,14 @@ export function GameTracker() {
     setStadiumName,
     setNextEventEnrichment,
     atBatSequence,
+    // R3-T0: Persistence refs for exhibition config & mojo/fitness
+    totalInningsRef: hookTotalInningsRef,
+    extraInningRunnerRef: hookExtraInningRunnerRef,
+    extraInningRunnerDelayRef: hookExtraInningRunnerDelayRef,
+    teamColorsRef: hookTeamColorsRef,
+    playerMojoFitnessGetterRef: hookMojoFitnessGetterRef,
+    gameStartTimestampRef: hookGameStartTimestampRef,
+    restoredMojoFitness,
   } = useGameState(gameId);
   // R3: On refresh, navigationState is null — fall back to gameState (restored from snapshot)
   const homeTeamName = homeTeamName_ !== "HOME" ? homeTeamName_ : (gameState.homeTeamName || "HOME");
@@ -690,6 +704,38 @@ export function GameTracker() {
     undefined,
   );
   const extraInningRunnerPlacementRef = useRef<string | null>(null);
+
+  // R3-T0: Seed persistence refs from navigationState (first load only)
+  useEffect(() => {
+    if (navigationState) {
+      // Fresh game from exhibition setup — seed refs from navigation
+      if (navigationState.extraInningRunner != null) {
+        hookExtraInningRunnerRef.current = navigationState.extraInningRunner;
+      }
+      if (navigationState.extraInningRunnerDelay != null) {
+        hookExtraInningRunnerDelayRef.current = navigationState.extraInningRunnerDelay;
+      }
+      hookTeamColorsRef.current = {
+        awayTeamColor: navigationState.awayTeamColor,
+        awayTeamBorderColor: navigationState.awayTeamBorderColor,
+        homeTeamColor: navigationState.homeTeamColor,
+        homeTeamBorderColor: navigationState.homeTeamBorderColor,
+      };
+      hookGameStartTimestampRef.current = Date.now();
+    } else {
+      // Refresh — restore persisted state from snapshot refs
+      const persistedStart = hookGameStartTimestampRef.current;
+      if (persistedStart && persistedStart < Date.now()) {
+        setGameStartTime(new Date(persistedStart));
+      }
+      // Restore team colors from persisted snapshot
+      const colors = hookTeamColorsRef.current;
+      if (colors.awayTeamColor || colors.homeTeamColor) {
+        setPersistedTeamColors(colors);
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Intentionally run once on mount
 
   // Set playoff context from navigation state (if this is a playoff game)
   const isPlayoffGame =
@@ -711,19 +757,21 @@ export function GameTracker() {
   ]);
 
   useEffect(() => {
-    const navStadium = navigationState?.stadiumName;
+    // On refresh, navigationState is null — use persisted stadiumName from gameState
+    const navStadium = navigationState?.stadiumName || gameState.stadiumName;
     if (navStadium && navStadium !== selectedStadium) {
       setSelectedStadium(navStadium);
     }
-  }, [navigationState?.stadiumName, selectedStadium]);
+  }, [navigationState?.stadiumName, gameState.stadiumName, selectedStadium]);
 
   useEffect(() => {
-    const regulationInnings = navigationState?.totalInnings || 9;
-    const runnerDelay = navigationState?.extraInningRunnerDelay || 1;
+    const regulationInnings = navigationState?.totalInnings || hookTotalInningsRef.current || 9;
+    const runnerDelay = navigationState?.extraInningRunnerDelay || hookExtraInningRunnerDelayRef.current || 1;
+    const extraInningRunnerEnabled = navigationState?.extraInningRunner ?? hookExtraInningRunnerRef.current;
     // Runner rule starts in the Nth extra inning (1 = first extra, 2 = second extra)
     const runnerStartInning = regulationInnings + runnerDelay;
     if (
-      !navigationState?.extraInningRunner ||
+      !extraInningRunnerEnabled ||
       !gameInitialized ||
       gameState.gamePhase !== "LIVE" ||
       gameState.inning < runnerStartInning ||
@@ -999,6 +1047,20 @@ export function GameTracker() {
     gameId: gameId || "demo-game",
     isPlayoffs: isPlayoffGame,
   });
+
+  // R3-T0: Wire mojo/fitness getter for persistence
+  useEffect(() => {
+    hookMojoFitnessGetterRef.current = () => {
+      const result: Record<string, { mojo: number; fitness: string }> = {};
+      for (const player of playerStateHook.getAllPlayers()) {
+        result[player.playerId] = {
+          mojo: player.gameState.currentMojo,
+          fitness: player.fitnessProfile.currentFitness,
+        };
+      }
+      return result;
+    };
+  }, [playerStateHook, hookMojoFitnessGetterRef]);
 
   // Fame tracking
   const fameTrackingHook = useFameTracking({
@@ -3208,6 +3270,9 @@ export function GameTracker() {
 
       if (cancelled) return;
 
+      // R3-T0: Use restored mojo/fitness from persisted game state as fallback
+      const restoredMF = restoredMojoFitness;
+
       // Register all away team batters
       // Step 0: Pass real traits and age from League Builder data (no longer hardcoded)
       awayTeamPlayers.forEach((player) => {
@@ -3217,13 +3282,14 @@ export function GameTracker() {
             (t): t is string => !!t,
           );
           const snapshot = mojoFitnessMap?.get(playerId);
+          const restored = restoredMF?.[playerId];
           playerStateHook.registerPlayer(
             playerId,
             player.name,
             (player.position ||
               "DH") as import("../../../engines/fitnessEngine").PlayerPosition,
-            snapshot?.mojoLevel ?? 0,
-            snapshot?.fitnessState ?? "FIT",
+            snapshot?.mojoLevel ?? (restored?.mojo as MojoLevel) ?? 0,
+            snapshot?.fitnessState ?? (restored?.fitness as FitnessState) ?? "FIT",
             traits,
             player.age ?? 25,
           );
@@ -3238,13 +3304,14 @@ export function GameTracker() {
             (t): t is string => !!t,
           );
           const snapshot = mojoFitnessMap?.get(playerId);
+          const restored = restoredMF?.[playerId];
           playerStateHook.registerPlayer(
             playerId,
             player.name,
             (player.position ||
               "DH") as import("../../../engines/fitnessEngine").PlayerPosition,
-            snapshot?.mojoLevel ?? 0,
-            snapshot?.fitnessState ?? "FIT",
+            snapshot?.mojoLevel ?? (restored?.mojo as MojoLevel) ?? 0,
+            snapshot?.fitnessState ?? (restored?.fitness as FitnessState) ?? "FIT",
             traits,
             player.age ?? 25,
           );
@@ -3259,12 +3326,13 @@ export function GameTracker() {
             (t): t is string => !!t,
           );
           const snapshot = mojoFitnessMap?.get(pitcherId);
+          const restored = restoredMF?.[pitcherId];
           playerStateHook.registerPlayer(
             pitcherId,
             awayPitcher.name,
             "SP",
-            snapshot?.mojoLevel ?? 0,
-            snapshot?.fitnessState ?? "FIT",
+            snapshot?.mojoLevel ?? (restored?.mojo as MojoLevel) ?? 0,
+            snapshot?.fitnessState ?? (restored?.fitness as FitnessState) ?? "FIT",
             traits,
             awayPitcher.age ?? 25,
           );
@@ -3277,12 +3345,13 @@ export function GameTracker() {
             (t): t is string => !!t,
           );
           const snapshot = mojoFitnessMap?.get(pitcherId);
+          const restored = restoredMF?.[pitcherId];
           playerStateHook.registerPlayer(
             pitcherId,
             homePitcher.name,
             "SP",
-            snapshot?.mojoLevel ?? 0,
-            snapshot?.fitnessState ?? "FIT",
+            snapshot?.mojoLevel ?? (restored?.mojo as MojoLevel) ?? 0,
+            snapshot?.fitnessState ?? (restored?.fitness as FitnessState) ?? "FIT",
             traits,
             homePitcher.age ?? 25,
           );
@@ -3309,6 +3378,7 @@ export function GameTracker() {
     navigationState?.eliminationId,
     navigationState?.gameMode,
     playerStateHook,
+    restoredMojoFitness,
   ]);
 
   // EXH-036: Helper functions to get/set mojo/fitness by player name and team

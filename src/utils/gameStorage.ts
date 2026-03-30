@@ -318,6 +318,22 @@ export interface PersistedGameState {
     timestamp: number;
   }>;
   playerRatingsSnapshots?: Record<string, PlayerRatingsSnapshot>;
+
+  // R3-T0: Persist exhibition config that lives only in navigationState
+  extraInningRunner?: boolean;
+  extraInningRunnerDelay?: 1 | 2;
+
+  // R3-T0: Persist team colors (from team DB, not static config)
+  awayTeamColor?: string;
+  awayTeamBorderColor?: string;
+  homeTeamColor?: string;
+  homeTeamBorderColor?: string;
+
+  // R3-T0: Persist mojo/fitness state per player (lost on refresh otherwise)
+  playerMojoFitness?: Record<string, { mojo: number; fitness: string }>;
+
+  // R3-T0: Persist game start time for elapsed timer
+  gameStartTimestamp?: number;
 }
 
 export interface PlayerRatingsSnapshot {
