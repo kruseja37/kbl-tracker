@@ -8427,6 +8427,9 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       pendingActionRef.current = null;
       pendingActionCancelRef.current = null;
 
+      console.log("[R3-R7] confirmPitchCount: pendingAction =", pendingAction ? "FOUND" : "NULL",
+        "promptType =", pitchCountPrompt?.type);
+
       if (pendingAction) {
         console.debug(
           "[PITCH-COUNT] Pending action found, executing continuation",
@@ -9604,18 +9607,23 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       });
 
       if (options?.awaitPitchCountConfirmation) {
+        console.log("[R3-R7] endGame: awaiting pitch count confirmation...");
         await new Promise<void>((resolve, reject) => {
           pendingActionRef.current = async () => {
             pendingActionCancelRef.current = null;
+            console.log("[R3-R7] endGame: pitch count confirmed, running completeGameInternal...");
             try {
               await completeGameInternal(endGameOptions);
+              console.log("[R3-R7] endGame: completeGameInternal finished, resolving");
               resolve();
             } catch (err) {
+              console.error("[R3-R7] endGame: completeGameInternal threw:", err);
               reject(err);
               throw err;
             }
           };
           pendingActionCancelRef.current = () => {
+            console.warn("[R3-R7] endGame: pitch count dismissed");
             reject(new Error("End-game pitch count prompt dismissed"));
           };
         });
