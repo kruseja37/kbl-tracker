@@ -2153,18 +2153,20 @@ export function GameTracker() {
       homeTeamPlayersRef.current = nextHomePlayers;
       setAwayTeamPlayers(nextAwayPlayers);
       setHomeTeamPlayers(nextHomePlayers);
-      setAwayTeamPitchers(
+      // R3-R7: Use functional updater to avoid depending on awayTeamPitchers/homeTeamPitchers
+      // in this callback's deps (which caused an infinite re-render loop)
+      setAwayTeamPitchers((prev) =>
         reconcileTeamPitchersWithLineupSnapshot(
-          awayTeamPitchers,
+          prev,
           nextAwayPlayers,
           lineupSnapshot.away,
           "away",
           getRosterEntityId,
         ),
       );
-      setHomeTeamPitchers(
+      setHomeTeamPitchers((prev) =>
         reconcileTeamPitchersWithLineupSnapshot(
-          homeTeamPitchers,
+          prev,
           nextHomePlayers,
           lineupSnapshot.home,
           "home",
@@ -2173,10 +2175,8 @@ export function GameTracker() {
       );
     },
     [
-      awayTeamPitchers,
       getLineupStateSnapshot,
       getRosterEntityId,
-      homeTeamPitchers,
     ],
   );
 
