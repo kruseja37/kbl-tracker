@@ -7911,14 +7911,24 @@ export function GameTracker() {
     syncDisplayedRostersToLineupSnapshot,
   ]);
 
-  // R3-R7: Undo requires UndoSystem snapshot to properly restore state.
-  // When stack is empty, disable undo to prevent undoing pre-game events.
-  const displayedUndoCount = undoSystem.undoCount;
+  // R3-R7: Prefer UndoSystem snapshot for proper state restore (score, outs).
+  // After refresh (snapshot stack empty), allow DB-based undo as fallback
+  // but only when there are plays in the log (prevents undoing pre-game events).
+  const hasPlaysToUndo = playLogEntries.length > 0;
+  const displayedUndoCount = undoSystem.canUndo ? undoSystem.undoCount : (hasPlaysToUndo ? 1 : 0);
   const handleUndoPress = useCallback(() => {
     if (undoSystem.canUndo) {
       undoSystem.performUndo();
+    } else if (hasPlaysToUndo) {
+      // Fallback: DB undo without snapshot (after refresh). Score won't fully revert
+      // but at least the play is removed. Use dummy snapshot so handleUndo runs the DB path.
+      handleUndo({
+        timestamp: Date.now(),
+        playDescription: "Undo durable action (post-refresh)",
+        gameState: null,
+      } as GameSnapshot);
     } else {
-      console.warn("[R3-R7] Undo blocked — no UndoSystem snapshot available");
+      console.warn("[R3-R7] Undo blocked — no plays to undo");
     }
   }, [handleUndo, undoSystem]);
 
@@ -8192,14 +8202,24 @@ export function GameTracker() {
         "[END-GAME] Step 2: Calling hookEndGame and awaiting pitch-count resolution",
       );
       console.debug("[END-GAME] Step 2b: awaiting hookEndGame...");
+      let hookEndGameCompleted = false;
       try {
-        await hookEndGame(endGameOptions);
+        // R3-R7: Add a 30s safety timeout so we never hang forever
+        await Promise.race([
+          hookEndGame(endGameOptions).then(() => { hookEndGameCompleted = true; }),
+          new Promise<void>((_, reject) => setTimeout(() => {
+            if (!hookEndGameCompleted) {
+              console.error("[END-GAME] hookEndGame timed out after 30s — forcing navigation");
+              reject(new Error("hookEndGame timed out"));
+            }
+          }, 30000)),
+        ]);
       } catch (hookErr) {
-        console.error("[END-GAME] hookEndGame threw:", hookErr);
-        // Don't block navigation on hook errors — game data was already archived
+        console.error("[END-GAME] hookEndGame threw or timed out:", hookErr);
+        // Don't block navigation — game data was already archived before pitch count
       }
-      console.debug("[END-GAME] Step 3: hookEndGame completed");
-      setIsProcessingEndGame(true); // Show overlay now that pitch count is confirmed
+      console.debug("[END-GAME] Step 3: hookEndGame completed (or timed out)");
+      setIsProcessingEndGame(true);
 
       // Save mojo/fitness snapshots for elimination inter-game persistence
       if (
@@ -8746,7 +8766,7 @@ export function GameTracker() {
               onEndGame={() => setShowEndGameConfirmation(true)}
               processingOutcome={processingOutcome}
               undoCount={displayedUndoCount}
-              canUndo={undoSystem.canUndo}
+              canUndo={undoSystem.canUndo || hasPlaysToUndo}
               onUndo={handleUndoPress}
             />
             {pendingRunnerAttribution ? (
