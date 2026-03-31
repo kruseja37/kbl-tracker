@@ -8201,24 +8201,23 @@ export function GameTracker() {
       console.debug(
         "[END-GAME] Step 2: Calling hookEndGame and awaiting pitch-count resolution",
       );
-      console.debug("[END-GAME] Step 2b: awaiting hookEndGame...");
-      let hookEndGameCompleted = false;
+      // R3-R7: Await hookEndGame (shows pitch count modal, runs aggregation).
+      // Add a 30s safety timeout — game archive already saved above, so if
+      // hookEndGame hangs (IndexedDB issue, processCompletedGame timeout),
+      // navigation to PostGameSummary proceeds anyway.
+      console.debug("[END-GAME] Step 2b: awaiting hookEndGame with 30s safety...");
       try {
-        // R3-R7: Add a 30s safety timeout so we never hang forever
         await Promise.race([
-          hookEndGame(endGameOptions).then(() => { hookEndGameCompleted = true; }),
-          new Promise<void>((_, reject) => setTimeout(() => {
-            if (!hookEndGameCompleted) {
-              console.error("[END-GAME] hookEndGame timed out after 30s — forcing navigation");
-              reject(new Error("hookEndGame timed out"));
-            }
+          hookEndGame(endGameOptions),
+          new Promise<void>((resolve) => setTimeout(() => {
+            console.error("[END-GAME] hookEndGame safety timeout — forcing navigation");
+            resolve();
           }, 30000)),
         ]);
+        console.debug("[END-GAME] Step 3: hookEndGame completed");
       } catch (hookErr) {
-        console.error("[END-GAME] hookEndGame threw or timed out:", hookErr);
-        // Don't block navigation — game data was already archived before pitch count
+        console.error("[END-GAME] hookEndGame failed:", hookErr);
       }
-      console.debug("[END-GAME] Step 3: hookEndGame completed (or timed out)");
       setIsProcessingEndGame(true);
 
       // Save mojo/fitness snapshots for elimination inter-game persistence
@@ -8250,8 +8249,6 @@ export function GameTracker() {
       }
 
       // T0-05 FIX: Mark the schedule game as COMPLETED (franchise mode only)
-      // The SIM path does this in FranchiseHome.tsx, but the PLAY path was missing it entirely.
-      // This updates standings (wins/losses) and advances the schedule to the next game.
       const completedGameId = gameState.gameId || gameId;
       if (
         navigationState?.scheduleGameId &&
@@ -8278,11 +8275,10 @@ export function GameTracker() {
         }
       }
 
-      // GAP-GT-3-J: Clear undo stack — game is over, undo must not be possible after navigation
       undoSystem.clearHistory();
       console.debug("[END-GAME] Step 4: Post-hook cleanup completed");
 
-      // Pass game mode and narratives so PostGameSummary can display them
+      // Navigate immediately — don't wait for aggregation to finish
       console.debug("[END-GAME] Step 5: Navigating to PostGameSummary");
       navigate(`/post-game/${completedGameId}`, {
         state: {
