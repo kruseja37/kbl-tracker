@@ -6373,21 +6373,45 @@ export function GameTracker() {
       outgoingName: string,
       incomingName: string,
       isPitcher: boolean,
+      incomingPosition?: string,
     ) => {
-      const team = isPitcher
+      // R3-R7: Determine if this is a pitcher-for-pitcher swap or a pinch-hit
+      // isPitcher means the OUTGOING player is a pitcher. But if the INCOMING
+      // player is a position player (not "P"), it's a pinch-hit, not a pitcher change.
+      const isActualPitcherChange = isPitcher && incomingPosition === "P";
+
+      const team = isActualPitcherChange
         ? resolvePitchingTeamSide(outgoingPlayerId, outgoingName)
         : resolveRosterTeamSide(outgoingPlayerId, outgoingName);
       if (!team) {
-        console.warn("[GameTracker] Unable to resolve player-card substitution team", {
-          outgoingPlayerId,
-          outgoingName,
-          incomingName,
-          isPitcher,
-        });
+        // Fallback: try the other resolver
+        const fallbackTeam = isActualPitcherChange
+          ? resolveRosterTeamSide(outgoingPlayerId, outgoingName)
+          : resolvePitchingTeamSide(outgoingPlayerId, outgoingName);
+        if (!fallbackTeam) {
+          console.warn("[GameTracker] Unable to resolve player-card substitution team", {
+            outgoingPlayerId,
+            outgoingName,
+            incomingName,
+            isPitcher,
+            incomingPosition,
+          });
+          return;
+        }
+        // Use fallback
+        if (isActualPitcherChange) {
+          handlePitcherSubstitution(fallbackTeam, incomingName, outgoingName, "pitcher");
+        } else {
+          handleSubstitution(fallbackTeam, incomingName, outgoingName);
+        }
         return;
       }
 
-      if (isPitcher) {
+      console.log("[R3-R7] handlePlayerCardSubOut:", {
+        outgoingName, incomingName, isPitcher, incomingPosition, isActualPitcherChange, team,
+      });
+
+      if (isActualPitcherChange) {
         handlePitcherSubstitution(team, incomingName, outgoingName, "pitcher");
       } else {
         handleSubstitution(team, incomingName, outgoingName);
@@ -8937,6 +8961,10 @@ export function GameTracker() {
                 ? awayTeamPitchers
                 : homeTeamPitchers),
             ];
+            console.log("[R3-R7] Bench for", selectedPlayerTeam, ":",
+              lineupSnapshot[selectedPlayerTeam].bench.map(b => ({
+                name: b.playerName, pos: b.positions, avail: b.isAvailable,
+              })));
             const playerCardBenchEntries = lineupSnapshot[
               selectedPlayerTeam
             ].bench
@@ -10680,6 +10708,7 @@ interface PlayerCardModalProps {
     outgoingName: string,
     incomingName: string,
     isPitcher: boolean,
+    incomingPosition?: string,
   ) => void;
   benchPlayers?: PlayerCardBenchEntry[];
   bullpenPitchers?: Array<{ name: string; hand: string }>;
@@ -10861,6 +10890,7 @@ function PlayerCardModal({
                       player.name,
                       bp.name,
                       player.type === "pitcher",
+                      bp.pos,
                     );
                     onClose();
                   }}
