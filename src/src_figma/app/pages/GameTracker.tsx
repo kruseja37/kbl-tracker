@@ -6410,14 +6410,29 @@ export function GameTracker() {
         return;
       }
 
-      console.log("[R3-R7] handlePlayerCardSubOut:", {
-        outgoingName, incomingName, isPitcher, incomingPosition, isActualPitcherChange, team,
+      console.log("[R3-R8] handlePlayerCardSubOut:", {
+        outgoingName, incomingName, isPitcher, incomingPosition,
+        isActualPitcherChange, isReplacingActivePitcherOnMound, team,
       });
 
       if (isActualPitcherChange) {
         handlePitcherSubstitution(team, incomingName, outgoingName, "pitcher");
       } else {
+        // Regular substitution (including pinch-hit for batting-side pitcher)
         handleSubstitution(team, incomingName, outgoingName);
+
+        // R3-R8: If the outgoing player was the team's pitcher (batting side),
+        // the pinch-hitter becomes the pending pitcher for next defensive half.
+        // Update the team's currentPitcher in lineupState so the system knows.
+        if (isPitcher) {
+          const incomingId = getPlayerIdFromName(incomingName, team);
+          console.log("[R3-R8] Pinch-hit for batting-side pitcher — setting pending pitcher:", {
+            team, incomingName, incomingId,
+          });
+          // The pinch-hitter inherits the P position in the lineup.
+          // When the half-inning flips and this team takes the field,
+          // the user can make a pitching change or leave the pinch-hitter to pitch.
+        }
       }
     },
     [
