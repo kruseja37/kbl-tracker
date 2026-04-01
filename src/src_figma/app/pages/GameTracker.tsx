@@ -6375,10 +6375,13 @@ export function GameTracker() {
       isPitcher: boolean,
       incomingPosition?: string,
     ) => {
-      // R3-R7: Determine if this is a pitcher-for-pitcher swap or a pinch-hit
-      // isPitcher means the OUTGOING player is a pitcher. But if the INCOMING
-      // player is a position player (not "P"), it's a pinch-hit, not a pitcher change.
-      const isActualPitcherChange = isPitcher && incomingPosition === "P";
+      // R3-R8: Determine if this is a defensive pitcher change or a batting substitution.
+      // A pitcher change is ONLY when replacing the pitcher currently on the mound
+      // (the fielding team's pitcher). When the batting team's pitcher comes up to bat
+      // and is subbed out, that's a pinch-hit — even if the incoming player is also a pitcher.
+      const currentDefensivePitcherId = gameState.currentPitcherId;
+      const isReplacingActivePitcherOnMound = outgoingPlayerId === currentDefensivePitcherId;
+      const isActualPitcherChange = isPitcher && isReplacingActivePitcherOnMound;
 
       const team = isActualPitcherChange
         ? resolvePitchingTeamSide(outgoingPlayerId, outgoingName)
@@ -6418,6 +6421,7 @@ export function GameTracker() {
       }
     },
     [
+      gameState.currentPitcherId,
       resolvePitchingTeamSide,
       resolveRosterTeamSide,
       handlePitcherSubstitution,
