@@ -7762,10 +7762,15 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
           if (homeIdx >= 0) return homeLineupRef.current[homeIdx].position;
           return "";
         })();
+      // R3-R8: Only update gameState.currentPitcherId if this sub is on the FIELDING team
+      // (the team currently on the mound). Pinch-hitting for the batting team's pitcher
+      // should NOT change who is pitching in the current half-inning.
+      const fieldingTeamSide: TeamSide = gameState.isTop ? "home" : "away";
+      const isFieldingTeamSub = teamSide === fieldingTeamSide;
       const shouldUpdatePitcher =
-        resolvedNewPosition === "P" || outgoingPosition === "P";
+        isFieldingTeamSub && (resolvedNewPosition === "P" || outgoingPosition === "P");
       const shouldUpdateCatcher =
-        resolvedNewPosition === "C" || outgoingPosition === "C";
+        isFieldingTeamSub && (resolvedNewPosition === "C" || outgoingPosition === "C");
       if (shouldUpdatePitcher || shouldUpdateCatcher) {
         setGameState((prev) => ({
           ...prev,
