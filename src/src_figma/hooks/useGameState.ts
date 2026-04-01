@@ -4863,6 +4863,8 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       // Advance at-bat counter in tracker
       tracker = trackerNextAtBat(tracker);
       runnerTrackerRef.current = tracker;
+      // R3-R8: Increment runner identity version so batting lineup runner markers update
+      setRunnerIdentityVersion((v) => v + 1);
 
       const leverageIndex = getCurrentLeverageIndex();
 
@@ -5310,6 +5312,8 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       // Advance at-bat counter
       outTracker = trackerNextAtBat(outTracker);
       runnerTrackerRef.current = outTracker;
+      // R3-R8: Increment runner identity version so batting lineup runner markers update
+      setRunnerIdentityVersion((v) => v + 1);
 
       const leverageIndex = getCurrentLeverageIndex();
 
@@ -5698,6 +5702,8 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       );
       walkTracker = trackerNextAtBat(walkTracker);
       runnerTrackerRef.current = walkTracker;
+      // R3-R8: Increment runner identity version so batting lineup runner markers update
+      setRunnerIdentityVersion((v) => v + 1);
 
       const leverageIndex = getCurrentLeverageIndex();
 
@@ -6012,6 +6018,8 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       }
       d3kTracker = trackerNextAtBat(d3kTracker);
       runnerTrackerRef.current = d3kTracker;
+      // R3-R8: Increment runner identity version so batting lineup runner markers update
+      setRunnerIdentityVersion((v) => v + 1);
 
       const runnerOutcomesForCorrection: {
         first: RunnerOutcome | null;
@@ -6365,6 +6373,8 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       );
       errorTracker = trackerNextAtBat(errorTracker);
       runnerTrackerRef.current = errorTracker;
+      // R3-R8: Increment runner identity version so batting lineup runner markers update
+      setRunnerIdentityVersion((v) => v + 1);
       const runnerOutcomesForError: {
         first: RunnerOutcome | null;
         second: RunnerOutcome | null;
