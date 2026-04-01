@@ -5002,6 +5002,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
               bases: gameState.bases,
               homeScore: gameState.homeScore,
               awayScore: gameState.awayScore,
+              totalInnings: totalInningsRef.current,
             },
             {
               outs: gameState.outs,
@@ -5467,6 +5468,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
               bases: gameState.bases,
               homeScore: gameState.homeScore,
               awayScore: gameState.awayScore,
+              totalInnings: totalInningsRef.current,
             },
             {
               outs: newOuts,
@@ -5806,6 +5808,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
               bases: gameState.bases,
               homeScore: gameState.homeScore,
               awayScore: gameState.awayScore,
+              totalInnings: totalInningsRef.current,
             },
             {
               outs: gameState.outs,
@@ -6149,6 +6152,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
               bases: gameState.bases,
               homeScore: gameState.homeScore,
               awayScore: gameState.awayScore,
+              totalInnings: totalInningsRef.current,
             },
             {
               outs: newOuts,
@@ -6474,6 +6478,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
               bases: gameState.bases,
               homeScore: gameState.homeScore,
               awayScore: gameState.awayScore,
+              totalInnings: totalInningsRef.current,
             },
             {
               outs: gameState.outs,
