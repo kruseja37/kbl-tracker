@@ -22,6 +22,7 @@ function getBatterDestinationBase(
     result === 'BB' ||
     result === 'IBB' ||
     result === 'HBP' ||
+    result === 'E' ||
     result === 'WP_K' ||
     result === 'PB_K' ||
     result === 'FC' ||

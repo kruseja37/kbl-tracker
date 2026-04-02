@@ -317,6 +317,10 @@ export interface AtBatEvent {
     errorType?: 'fielding' | 'throwing' | 'mental';
     errorChargedTo?: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
   }>;
+  batterReachedOnError?: boolean;
+  batterErrorType?: 'fielding' | 'throwing' | 'mental';
+  batterErrorChargedToPosition?: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
+  batterCorrectionOriginalResult?: AtBatResult;
   outsRecorded?: number;
   isQualityAtBat?: boolean;
   milestoneTriggered?: Array<{ type: string; description: string }>;
@@ -756,6 +760,10 @@ function applyAtBatEventUpdates(
     | 'version'
     | 'editHistory'
     | 'runnerOutcomes'
+    | 'batterReachedOnError'
+    | 'batterErrorType'
+    | 'batterErrorChargedToPosition'
+    | 'batterCorrectionOriginalResult'
     | 'rbiCount'
     | 'runsScored'
     | 'outsAfter'
@@ -774,6 +782,10 @@ function applyAtBatEventUpdates(
   if (updates.result !== undefined) next.result = updates.result;
   if (updates.isQualityAtBat !== undefined) next.isQualityAtBat = updates.isQualityAtBat;
   if (updates.runnerOutcomes !== undefined) next.runnerOutcomes = updates.runnerOutcomes;
+  if (updates.batterReachedOnError !== undefined) next.batterReachedOnError = updates.batterReachedOnError;
+  if (updates.batterErrorType !== undefined) next.batterErrorType = updates.batterErrorType;
+  if (updates.batterErrorChargedToPosition !== undefined) next.batterErrorChargedToPosition = updates.batterErrorChargedToPosition;
+  if (updates.batterCorrectionOriginalResult !== undefined) next.batterCorrectionOriginalResult = updates.batterCorrectionOriginalResult;
   if (updates.rbiCount !== undefined) next.rbiCount = updates.rbiCount;
   if (updates.runsScored !== undefined) next.runsScored = updates.runsScored;
   if (updates.outsAfter !== undefined) next.outsAfter = updates.outsAfter;
@@ -804,6 +816,10 @@ export async function updateAtBatEvent(
     | 'version'
     | 'editHistory'
     | 'runnerOutcomes'
+    | 'batterReachedOnError'
+    | 'batterErrorType'
+    | 'batterErrorChargedToPosition'
+    | 'batterCorrectionOriginalResult'
     | 'rbiCount'
     | 'runsScored'
     | 'outsAfter'
@@ -846,6 +862,10 @@ export async function updateAtBatEventWithFieldingSync(
       | 'result'
       | 'isQualityAtBat'
       | 'runnerOutcomes'
+      | 'batterReachedOnError'
+      | 'batterErrorType'
+      | 'batterErrorChargedToPosition'
+      | 'batterCorrectionOriginalResult'
       | 'rbiCount'
       | 'runsScored'
       | 'outsAfter'

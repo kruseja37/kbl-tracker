@@ -22,6 +22,7 @@ import {
 import {
   getHeldByOfBaseSaved,
   getRunnerDestinationOptions,
+  isCorrectableBatterResult,
 } from '../utils/gameTrackerRunnerCorrection';
 import {
   inferAssistChain,
@@ -1275,7 +1276,10 @@ export function RunnerEnrichmentPanel({
 }: RunnerEnrichmentPanelProps) {
   const [localFieldingSeq, setLocalFieldingSeq] = useState<number[]>(subEntry.fieldingSequence || []);
   const [initialToBase, setInitialToBase] = useState(subEntry.toBase);
-  const destinationOptions = getRunnerDestinationOptions(subEntry.fromBase);
+  const isBatterOutcomeToggle = subEntry.fromBase === 'batter' && isCorrectableBatterResult(subEntry.parentResult as AtBatEvent['result'] | undefined);
+  const destinationOptions = isBatterOutcomeToggle
+    ? (['out', 'first'] as RunnerSubEntry['toBase'][])
+    : getRunnerDestinationOptions(subEntry.fromBase);
   const heldBaseSaved = getHeldByOfBaseSaved(subEntry.toBase, subEntry.parentResult);
 
   useEffect(() => {
@@ -1293,9 +1297,29 @@ export function RunnerEnrichmentPanel({
   const isHeldByOutfielder = Boolean(subEntry.heldByOf || subEntry.playMechanic === 'hold');
   const errorSelection = subEntry.errorType || 'none';
   const shouldShowErrorAttribution =
+    isScored ||
     isRunnerOutcomeOut(initialToBase) !== isRunnerOutcomeOut(subEntry.toBase) ||
     !!subEntry.errorType ||
     typeof subEntry.errorChargedTo === 'number';
+  const subjectLabel = subEntry.fromBase === 'batter'
+    ? `Batter: ${subEntry.runnerName}`
+    : subEntry.runnerName;
+
+  const getDestinationLabel = useCallback((destination: RunnerSubEntry['toBase']) => {
+    if (isBatterOutcomeToggle) {
+      if (destination === 'out') {
+        return 'OUT';
+      }
+
+      if (destination === 'first') {
+        return subEntry.parentResult === 'DP'
+          ? 'SAFE AT 1B (error broke up DP)'
+          : 'SAFE AT 1B';
+      }
+    }
+
+    return BASE_DISPLAY[destination];
+  }, [isBatterOutcomeToggle, subEntry.parentResult]);
 
   const handleHoldToggle = useCallback(async () => {
     if (isHeldByOutfielder) {
@@ -1344,7 +1368,7 @@ export function RunnerEnrichmentPanel({
         <div className="flex items-center gap-1">
           <span className="text-[10px] text-[#6b7280]">└</span>
           <span className={`text-[11px] font-bold ${isScored ? 'text-[#34d399]' : isOut ? 'text-[#f87171]' : isInningEnd ? 'text-[#fbbf24]' : 'text-[#E8E8D8]'}`}>
-            {subEntry.runnerName}
+            {subjectLabel}
           </span>
           <span className="text-[10px] text-[#88AA88] font-mono">
             {BASE_DISPLAY[subEntry.fromBase]}→{BASE_DISPLAY[subEntry.toBase]}
@@ -1371,7 +1395,7 @@ export function RunnerEnrichmentPanel({
                     : 'bg-[#1f2937]/60 border-[#4a6a4a] text-[#88AA88] hover:bg-[#4a6a4a]/40'}`}
                 onClick={() => onUpdate(subEntry.id, 'toBase', destination)}
               >
-                {BASE_DISPLAY[destination]}
+                {getDestinationLabel(destination)}
               </button>
             ))}
           </div>

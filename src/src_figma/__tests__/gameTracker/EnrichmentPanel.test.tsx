@@ -541,6 +541,61 @@ describe('EnrichmentPanel', () => {
     });
   });
 
+  test('[M3-3-v2] shows error attribution controls for scoring runners even without a boundary change', () => {
+    const onUpdate = vi.fn();
+    const subEntry: RunnerSubEntry = {
+      id: 'evt-2-runner-score',
+      parentEventId: 'evt-2',
+      runnerId: 'runner-score',
+      runnerName: 'Dash Home',
+      fromBase: 'third',
+      toBase: 'home',
+      isEnrichable: true,
+    };
+
+    render(
+      <RunnerEnrichmentPanel
+        subEntry={subEntry}
+        onUpdate={onUpdate}
+        onClose={() => {}}
+      />
+    );
+
+    expect(screen.getByText('Error on the play?')).toBeInTheDocument();
+    expect(screen.getByLabelText('No Error')).toBeChecked();
+  });
+
+  test('[M3-3-v2] limits batter correction destinations to OUT and SAFE AT 1B on out-type plays', () => {
+    const onUpdate = vi.fn();
+    const subEntry: RunnerSubEntry = {
+      id: 'evt-5-runner-batter-out',
+      parentEventId: 'evt-5',
+      runnerId: 'batter-5',
+      runnerName: 'Cleanup Hitter',
+      fromBase: 'batter',
+      toBase: 'out',
+      parentResult: 'GO',
+      isEnrichable: true,
+    };
+
+    render(
+      <RunnerEnrichmentPanel
+        subEntry={subEntry}
+        onUpdate={onUpdate}
+        onClose={() => {}}
+      />
+    );
+
+    expect(screen.getByText('Batter: Cleanup Hitter')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'OUT' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'SAFE AT 1B' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '2B' })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'SAFE AT 1B' }));
+
+    expect(onUpdate).toHaveBeenCalledWith('evt-5-runner-batter-out', 'toBase', 'first');
+  });
+
   test('[M3-1-fix] shows OF hold for an advanced runner and saves explicit hold fields', async () => {
     const onUpdate = vi.fn().mockResolvedValue(undefined);
     const subEntry: RunnerSubEntry = {

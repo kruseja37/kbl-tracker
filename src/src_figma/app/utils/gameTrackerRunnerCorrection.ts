@@ -181,6 +181,82 @@ export function getBatterDestinationOptions(
 
 export type PersistedRunnerOutcome = NonNullable<AtBatEvent['runnerOutcomes']>[number];
 
+const BATTER_SAFE_AT_FIRST_RESULTS = new Set<AtBatEvent['result']>([
+  'FC',
+  'E',
+  'D3K',
+  'WP_K',
+  'PB_K',
+]);
+
+const CORRECTABLE_BATTER_OUT_RESULTS = new Set<AtBatEvent['result']>([
+  'GO',
+  'FO',
+  'FLO',
+  'LO',
+  'PO',
+  'FC',
+  'DP',
+  'TP',
+  'K',
+  'Kc',
+  'Ꝁ',
+  'D3K',
+  'WP_K',
+  'PB_K',
+  'SF',
+  'SAC',
+]);
+
+const STRIKEOUT_RESULTS = new Set<AtBatEvent['result']>([
+  'K',
+  'Kc',
+  'Ꝁ',
+  'D3K',
+  'WP_K',
+  'PB_K',
+]);
+
+export function isCorrectableBatterResult(
+  result?: AtBatEvent['result'] | null,
+): result is AtBatEvent['result'] {
+  return !!result && CORRECTABLE_BATTER_OUT_RESULTS.has(result);
+}
+
+export function inferBatterSubEntryDestination(
+  event: Pick<
+    AtBatEvent,
+    'result' | 'enrichment' | 'batterReachedOnError'
+  >,
+): RunnerDestination | null {
+  if (event.enrichment?.batterOutAdvancing) {
+    return 'out';
+  }
+
+  if (
+    event.result === '1B' ||
+    event.result === 'E' ||
+    event.batterReachedOnError ||
+    BATTER_SAFE_AT_FIRST_RESULTS.has(event.result)
+  ) {
+    return 'first';
+  }
+
+  if (event.result === '2B' || event.result === 'GRD') {
+    return 'second';
+  }
+
+  if (event.result === '3B') {
+    return 'third';
+  }
+
+  if (isCorrectableBatterResult(event.result)) {
+    return 'out';
+  }
+
+  return null;
+}
+
 export function runnerOutcomeCountsAsRun(outcome: Pick<PersistedRunnerOutcome, 'toBase' | 'isTootblan' | 'isOutAdvancing'>): boolean {
   return Boolean(outcome.toBase === 'home' && !outcome.isTootblan && !outcome.isOutAdvancing);
 }
@@ -197,6 +273,70 @@ export function getRunnerDisplayDestination(
   outcome: Pick<PersistedRunnerOutcome, 'toBase' | 'isTootblan' | 'isOutAdvancing'>,
 ): RunnerDestination {
   return runnerOutcomeCountsAsOut(outcome) ? 'out' : (outcome.toBase as RunnerDestination);
+}
+
+function fallbackBatterOutResult(
+  baseResult: AtBatEvent['result'],
+  nextOutsRecorded: number,
+): AtBatEvent['result'] {
+  if (
+    CORRECTABLE_BATTER_OUT_RESULTS.has(baseResult) &&
+    baseResult !== 'FC' &&
+    baseResult !== 'D3K' &&
+    baseResult !== 'WP_K' &&
+    baseResult !== 'PB_K'
+  ) {
+    return baseResult;
+  }
+
+  if (STRIKEOUT_RESULTS.has(baseResult)) {
+    return 'K';
+  }
+
+  if (nextOutsRecorded >= 3) {
+    return 'TP';
+  }
+
+  if (nextOutsRecorded >= 2) {
+    return 'DP';
+  }
+
+  return 'GO';
+}
+
+export function resolveBatterOutcomeResult(args: {
+  currentResult: AtBatEvent['result'];
+  originalResult?: AtBatEvent['result'];
+  nextOutcome: Pick<PersistedRunnerOutcome, 'toBase' | 'isTootblan' | 'isOutAdvancing' | 'errorType'>;
+  nextOutsRecorded: number;
+}): AtBatEvent['result'] {
+  const baseResult = args.originalResult ?? args.currentResult;
+
+  if (runnerOutcomeCountsAsOut(args.nextOutcome)) {
+    return fallbackBatterOutResult(baseResult, args.nextOutsRecorded);
+  }
+
+  if (args.nextOutcome.toBase !== 'first') {
+    return args.currentResult;
+  }
+
+  if (args.nextOutcome.errorType) {
+    return 'E';
+  }
+
+  if (STRIKEOUT_RESULTS.has(baseResult)) {
+    return 'D3K';
+  }
+
+  if (args.nextOutsRecorded >= 2) {
+    return 'DP';
+  }
+
+  if (args.nextOutsRecorded >= 1) {
+    return 'FC';
+  }
+
+  return 'E';
 }
 
 export const OF_HOLD_ELIGIBLE_RESULTS = new Set(['1B', '2B', '3B']);

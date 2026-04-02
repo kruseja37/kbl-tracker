@@ -29,7 +29,11 @@ const RESULT_COLORS: Record<string, string> = {
 };
 
 function getResultColor(result: string): string {
-  return RESULT_COLORS[result] || '#E8E8D8';
+  const normalizedResult = result.split(' ')[0];
+  if (normalizedResult.startsWith('E')) {
+    return RESULT_COLORS.E;
+  }
+  return RESULT_COLORS[result] || RESULT_COLORS[normalizedResult] || '#E8E8D8';
 }
 
 // ──────────────────────────────────────────────────────────────
@@ -268,8 +272,13 @@ export function PlayLogPanel({
                 sub.holdingFielder ||
                 sub.baseSaved ||
                 sub.isTootblan ||
-                sub.isOutAdvancing
+                sub.isOutAdvancing ||
+                sub.errorType ||
+                typeof sub.errorChargedTo === 'number'
               );
+              const subjectLabel = sub.fromBase === 'batter'
+                ? `Batter: ${sub.runnerName}`
+                : sub.runnerName;
 
               const subContent = (
                 <div className="flex items-center gap-1 leading-tight">
@@ -277,7 +286,7 @@ export function PlayLogPanel({
                   <span className={`text-[9px] truncate flex-1 min-w-0 ${
                     isScored ? 'text-[#34d399]' : isOut ? 'text-[#f87171]/80' : isInningEnd ? 'text-[#fbbf24]/90' : 'text-[#E8E8D8]/70'
                   }`}>
-                    {sub.runnerName}
+                    {subjectLabel}
                   </span>
                   <span className={`text-[8px] font-mono flex-shrink-0 ${
                     isScored ? 'text-[#34d399]' : isOut ? 'text-[#f87171]/80' : isInningEnd ? 'text-[#fbbf24]/90' : 'text-[#88AA88]'

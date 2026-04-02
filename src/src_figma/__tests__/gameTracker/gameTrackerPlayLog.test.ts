@@ -164,6 +164,30 @@ describe('gameTrackerPlayLog', () => {
     );
   });
 
+  test('[M3-3-v2] adds a batter outcome sub-entry for out-type at-bats', () => {
+    const [entry] = buildPlayLogEntries([
+      createAtBatEvent({
+        result: 'GO' as AtBatEvent['result'],
+        rbiCount: 0,
+        runsScored: 0,
+        outsAfter: 1,
+        awayScoreAfter: 0,
+      }),
+    ], []);
+
+    expect(entry.runnerSubEntries).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          runnerId: 'batter-1',
+          runnerName: 'Johnson',
+          fromBase: 'batter',
+          toBase: 'out',
+          transitionLabel: 'BAT→OUT',
+        }),
+      ]),
+    );
+  });
+
   test('[M3-3-universal] formats runner-error sub-entries with standard error notation', () => {
     const [entry] = buildPlayLogEntries([
       createAtBatEvent({
@@ -188,6 +212,42 @@ describe('gameTrackerPlayLog', () => {
           transitionLabel: '1B→2B (E6)',
           errorType: 'throwing',
           errorChargedTo: 6,
+        }),
+      ]),
+    );
+  });
+
+  test('[M3-3-v2] displays batter reached-on-error corrections with batter error metadata', () => {
+    const [entry] = buildPlayLogEntries([
+      createAtBatEvent({
+        result: 'E' as AtBatEvent['result'],
+        batterReachedOnError: true,
+        batterErrorType: 'fielding',
+        batterErrorChargedToPosition: 6,
+        runnerOutcomes: [
+          {
+            runnerId: 'batter-1',
+            runnerName: 'Johnson',
+            fromBase: 'batter',
+            toBase: 'first',
+            errorType: 'fielding',
+            errorChargedTo: 6,
+          },
+        ],
+        outsAfter: 0,
+      }),
+    ], []);
+
+    expect(entry.result).toBe('E6');
+    expect(entry.runnerSubEntries).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          runnerId: 'batter-1',
+          fromBase: 'batter',
+          toBase: 'first',
+          errorType: 'fielding',
+          errorChargedTo: 6,
+          transitionLabel: 'BAT→1B (E6)',
         }),
       ]),
     );

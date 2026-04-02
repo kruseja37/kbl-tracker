@@ -3,6 +3,7 @@ import type { PlayLogEditorType, PlayLogEntry, PlayLogEventType, PlayLogResultCa
 import {
   getHeldByOfBaseSaved,
   getRunnerDisplayDestination,
+  inferBatterSubEntryDestination,
 } from './gameTrackerRunnerCorrection';
 
 const WALK_RESULTS = new Set(['BB', 'IBB', 'HBP']);
@@ -13,6 +14,19 @@ const toShortInningLabel = (halfInning: 'TOP' | 'BOTTOM', inning: number): strin
   `${halfInning === 'TOP' ? 'T' : 'B'}${Math.max(1, inning)}`;
 
 const toDisplayResult = (result: string): string => result === 'SH' ? 'SAC' : result;
+
+const toDisplayedAtBatResult = (event: AtBatEvent): string => {
+  const baseDisplayResult = toDisplayResult(event.result);
+  if (
+    event.result === 'E' &&
+    typeof event.batterErrorChargedToPosition === 'number' &&
+    event.batterErrorChargedToPosition >= 1 &&
+    event.batterErrorChargedToPosition <= 9
+  ) {
+    return `E${event.batterErrorChargedToPosition}`;
+  }
+  return baseDisplayResult;
+};
 
 const getResultCategory = (result: string): PlayLogResultCategory => {
   if (HIT_RESULTS.has(result)) return 'hit';
@@ -198,17 +212,7 @@ function inferHeldRunnerSubEntries(
 }
 
 function getDefaultBatterDestination(event: AtBatEvent): RunnerSubEntry['toBase'] | null {
-  if (!HIT_RESULTS_WITH_OF_HOLD.has(event.result)) {
-    return null;
-  }
-
-  if (event.enrichment?.batterOutAdvancing) {
-    return 'out';
-  }
-
-  if (event.result === '1B') return 'first';
-  if (event.result === '2B') return 'second';
-  return 'third';
+  return inferBatterSubEntryDestination(event);
 }
 
 function inferBatterRunnerSubEntry(
@@ -234,8 +238,19 @@ function inferBatterRunnerSubEntry(
     toBase,
     parentResult: event.result,
     isEnrichable: true,
+    errorType: event.batterErrorType,
+    errorChargedTo: event.batterErrorChargedToPosition,
     baseSaved: getHeldByOfBaseSaved(toBase, event.result) ?? undefined,
-    transitionLabel: formatRunnerTransitionLabel('batter', toBase),
+    transitionLabel: formatRunnerTransitionLabel(
+      'batter',
+      toBase,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      event.batterErrorType,
+      event.batterErrorChargedToPosition,
+    ),
   }];
 }
 
@@ -406,9 +421,10 @@ function buildRunnerSubEntries(event: AtBatEvent): RunnerSubEntry[] | undefined 
 
 export function mapAtBatEventToPlayLogEntry(event: AtBatEvent): PlayLogEntry {
   const baseDisplayResult = toDisplayResult(event.result);
+  const detailedDisplayResult = toDisplayedAtBatResult(event);
   const displayResult = event.enrichment?.batterOutAdvancing
-    ? `${baseDisplayResult} OA`
-    : baseDisplayResult;
+    ? `${detailedDisplayResult} OA`
+    : detailedDisplayResult;
   const scoreDerivedRuns = event.halfInning === 'TOP'
     ? Math.max(0, event.awayScoreAfter - event.awayScore)
     : Math.max(0, event.homeScoreAfter - event.homeScore);

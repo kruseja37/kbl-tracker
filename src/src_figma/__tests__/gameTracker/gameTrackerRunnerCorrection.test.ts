@@ -2,11 +2,15 @@ import { describe, expect, test } from 'vitest';
 
 import { calculateRunnerDefaults } from '../../app/components/runnerDefaults';
 import type { PlayData } from '../../app/utils/gameTrackerFieldTypes';
+import { buildLiveBasesFromRunnerOutcomes } from '../../app/utils/liveBaseCorrection';
 import {
   applyRunnerDefaultsToNames,
   buildRunnerCorrectionForQuickBarOutcome,
   countRbiFromDefaults,
   getBatterDestinationOptions,
+  inferBatterSubEntryDestination,
+  resolveBatterOutcomeResult,
+  runnerOutcomeCountsAsOut,
   runnerDefaultsToAdvancement,
 } from '../../app/utils/gameTrackerRunnerCorrection';
 
@@ -85,5 +89,49 @@ describe('gameTrackerRunnerCorrection', () => {
       fromThird: 'home',
     });
     expect(countRbiFromDefaults(defaults, { type: 'hit', hitType: 'HR' })).toBe(4);
+  });
+
+  test('[M3-3-v2] infers batter correction destinations for out plays and corrected safe results', () => {
+    expect(inferBatterSubEntryDestination({ result: 'GO', enrichment: {} })).toBe('out');
+    expect(inferBatterSubEntryDestination({ result: 'FC', enrichment: {} })).toBe('first');
+
+    expect(resolveBatterOutcomeResult({
+      currentResult: 'GO',
+      nextOutcome: { toBase: 'first' },
+      nextOutsRecorded: 1,
+    })).toBe('FC');
+
+    expect(resolveBatterOutcomeResult({
+      currentResult: 'GO',
+      nextOutcome: { toBase: 'first', errorType: 'fielding' },
+      nextOutsRecorded: 0,
+    })).toBe('E');
+  });
+
+  test('[M3-3-v2] correcting the batter to safe at first removes an out and puts the batter on first', () => {
+    const previousOutcome = {
+      runnerId: 'batter-1',
+      runnerName: 'Johnson',
+      fromBase: 'batter' as const,
+      toBase: 'out' as const,
+    };
+    const correctedOutcome = {
+      ...previousOutcome,
+      toBase: 'first' as const,
+    };
+
+    const outDelta =
+      Number(runnerOutcomeCountsAsOut(correctedOutcome)) -
+      Number(runnerOutcomeCountsAsOut(previousOutcome));
+
+    expect(outDelta).toBe(-1);
+    expect(buildLiveBasesFromRunnerOutcomes([correctedOutcome], {
+      result: 'FC',
+      enrichment: {},
+    })).toEqual({
+      first: true,
+      second: false,
+      third: false,
+    });
   });
 });

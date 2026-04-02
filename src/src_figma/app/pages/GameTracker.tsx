@@ -163,6 +163,25 @@ const calculateMinimumResultOuts = (result: AtBatEvent["result"]): number => {
   }
 };
 
+const pushEditHistoryEntry = (
+  history: NonNullable<AtBatEvent["editHistory"]>,
+  field: string,
+  oldValue: unknown,
+  newValue: unknown,
+  timestamp: number,
+) => {
+  if (oldValue === newValue) {
+    return;
+  }
+
+  history.push({
+    field,
+    oldValue: oldValue ?? null,
+    newValue: newValue ?? null,
+    timestamp,
+  });
+};
+
 const FIELDING_POSITIONS = [
   "C",
   "1B",
@@ -416,6 +435,8 @@ import {
   getBatterDestinationOptions,
   getHeldByOfBaseSaved,
   getRunnerDestinationOptions,
+  isCorrectableBatterResult,
+  resolveBatterOutcomeResult,
   runnerOutcomeCountsAsOut,
   runnerOutcomeCountsAsRun,
   runnerDefaultsToAdvancement,
@@ -8027,8 +8048,25 @@ export function GameTracker() {
         const rawNextOutsRecorded =
           (existingAtBat.outsRecorded ??
             existingAtBat.outsAfter - existingAtBat.outs) + outDelta;
+        const storedOriginalBatterResult =
+          existingAtBat.batterCorrectionOriginalResult;
+        const baseBatterResult =
+          storedOriginalBatterResult ?? existingAtBat.result;
+        const isCorrectableBatterOutcome =
+          nextOutcome.fromBase === "batter" &&
+          isCorrectableBatterResult(baseBatterResult);
         let correctedResult: typeof existingAtBat.result | null = null;
-        if (existingAtBat.result === "GO" && outDelta > 0) {
+        if (isCorrectableBatterOutcome) {
+          const resolvedBatterResult = resolveBatterOutcomeResult({
+            currentResult: existingAtBat.result,
+            originalResult: storedOriginalBatterResult,
+            nextOutcome,
+            nextOutsRecorded: rawNextOutsRecorded,
+          });
+          if (resolvedBatterResult !== existingAtBat.result) {
+            correctedResult = resolvedBatterResult;
+          }
+        } else if (existingAtBat.result === "GO" && outDelta > 0) {
           if (rawNextOutsRecorded >= 2) {
             correctedResult = "DP";
           }
@@ -8037,8 +8075,9 @@ export function GameTracker() {
             correctedResult = "GO";
           }
         }
+        const nextRecordedResult = correctedResult ?? existingAtBat.result;
         const minimumResultOuts = calculateMinimumResultOuts(
-          correctedResult ?? existingAtBat.result,
+          nextRecordedResult,
         );
         const nextOutsRecorded = Math.max(minimumResultOuts, rawNextOutsRecorded);
         const nextOutsAfter = Math.max(
@@ -8055,33 +8094,106 @@ export function GameTracker() {
           nextOutsAfter >= 3
             ? { first: null, second: null, third: null }
             : nextRunnersAfter;
+        const nextBatterReachedOnError =
+          isCorrectableBatterOutcome &&
+          nextOutcome.toBase === "first" &&
+          !!nextOutcome.errorType;
+        const nextBatterErrorType =
+          nextBatterReachedOnError ? nextOutcome.errorType : undefined;
+        const nextBatterErrorChargedToPosition =
+          nextBatterReachedOnError &&
+          typeof nextOutcome.errorChargedTo === "number"
+            ? nextOutcome.errorChargedTo
+            : undefined;
+        const nextBatterCorrectionOriginalResult =
+          isCorrectableBatterOutcome && !nextOutCounted
+            ? storedOriginalBatterResult ?? existingAtBat.result
+            : undefined;
 
         const timestamp = Date.now();
         const nextVersion =
           nextVersionBase + (correctedResult ? 2 : 1);
-        const editHistory: NonNullable<AtBatEvent["editHistory"]> = [
-          {
-            field: `runnerOutcomes[${runnerIdx}].${field}`,
-            oldValue:
-              previousOutcome[
-                field as keyof typeof previousOutcome
-              ] ?? null,
-            newValue: value,
-            timestamp,
-          },
-        ];
+        const editHistory: NonNullable<AtBatEvent["editHistory"]> = [];
+        pushEditHistoryEntry(
+          editHistory,
+          `runnerOutcomes[${runnerIdx}].${field}`,
+          previousOutcome[
+            field as keyof typeof previousOutcome
+          ],
+          value,
+          timestamp,
+        );
         if (correctedResult) {
-          editHistory.push({
-            field: "result",
-            oldValue: existingAtBat.result,
-            newValue: correctedResult,
+          pushEditHistoryEntry(
+            editHistory,
+            "result",
+            existingAtBat.result,
+            correctedResult,
             timestamp,
-          });
+          );
         }
+        if (isCorrectableBatterOutcome) {
+          pushEditHistoryEntry(
+            editHistory,
+            "batterReachedOnError",
+            existingAtBat.batterReachedOnError,
+            nextBatterReachedOnError,
+            timestamp,
+          );
+          pushEditHistoryEntry(
+            editHistory,
+            "batterErrorType",
+            existingAtBat.batterErrorType,
+            nextBatterErrorType,
+            timestamp,
+          );
+          pushEditHistoryEntry(
+            editHistory,
+            "batterErrorChargedToPosition",
+            existingAtBat.batterErrorChargedToPosition,
+            nextBatterErrorChargedToPosition,
+            timestamp,
+          );
+          pushEditHistoryEntry(
+            editHistory,
+            "batterCorrectionOriginalResult",
+            existingAtBat.batterCorrectionOriginalResult,
+            nextBatterCorrectionOriginalResult,
+            timestamp,
+          );
+        }
+
+        const nextAtBatEvent: AtBatEvent = {
+          ...existingAtBat,
+          runnerOutcomes: updatedOutcomes,
+          batterReachedOnError: isCorrectableBatterOutcome
+            ? nextBatterReachedOnError
+            : existingAtBat.batterReachedOnError,
+          batterErrorType: isCorrectableBatterOutcome
+            ? nextBatterErrorType
+            : existingAtBat.batterErrorType,
+          batterErrorChargedToPosition: isCorrectableBatterOutcome
+            ? nextBatterErrorChargedToPosition
+            : existingAtBat.batterErrorChargedToPosition,
+          batterCorrectionOriginalResult: isCorrectableBatterOutcome
+            ? nextBatterCorrectionOriginalResult
+            : existingAtBat.batterCorrectionOriginalResult,
+          rbiCount: Math.max(0, (existingAtBat.rbiCount ?? 0) + scoreDelta),
+          runsScored: nextRunsScored,
+          outsAfter: nextOutsAfter,
+          runnersAfter: normalizedRunnersAfter,
+          awayScoreAfter: nextAwayScoreAfter,
+          homeScoreAfter: nextHomeScoreAfter,
+          isWalkOff: nextIsWalkOff,
+          outsRecorded: nextOutsRecorded,
+          result: nextRecordedResult,
+          version: nextVersion,
+          editHistory: [...(existingAtBat.editHistory || []), ...editHistory],
+        };
 
         const syncedFieldingEvents =
           await buildFieldingSyncEventsForSequenceEdit(existingAtBat, {
-            result: correctedResult ?? existingAtBat.result,
+            result: nextRecordedResult,
             runnerOutcomes: updatedOutcomes,
           });
 
@@ -8095,7 +8207,13 @@ export function GameTracker() {
           enrichingRunnerParentEntry.eventId,
           {
             runnerOutcomes: updatedOutcomes,
-            rbiCount: Math.max(0, (existingAtBat.rbiCount ?? 0) + scoreDelta),
+            batterReachedOnError: nextAtBatEvent.batterReachedOnError,
+            batterErrorType: nextAtBatEvent.batterErrorType,
+            batterErrorChargedToPosition:
+              nextAtBatEvent.batterErrorChargedToPosition,
+            batterCorrectionOriginalResult:
+              nextAtBatEvent.batterCorrectionOriginalResult,
+            rbiCount: nextAtBatEvent.rbiCount,
             runsScored: nextRunsScored,
             outsAfter: nextOutsAfter,
             runnersAfter: normalizedRunnersAfter,
@@ -8103,7 +8221,7 @@ export function GameTracker() {
             homeScoreAfter: nextHomeScoreAfter,
             isWalkOff: nextIsWalkOff,
             outsRecorded: nextOutsRecorded,
-            ...(correctedResult ? { result: correctedResult } : {}),
+            result: nextRecordedResult,
             version: nextVersion,
             editHistory,
           },
@@ -8140,7 +8258,7 @@ export function GameTracker() {
           });
         }
         if (nextOutcome.errorType && typeof nextOutcome.errorChargedTo === "number") {
-          console.log("[M3-3-universal] Recorded runner outcome error charge", {
+          console.log("[M3-3-v2] Recorded runner outcome error charge", {
             eventId: enrichingRunnerParentEntry.eventId,
             runnerId: nextOutcome.runnerId,
             runnerName: nextOutcome.runnerName,
@@ -8148,6 +8266,7 @@ export function GameTracker() {
             toBase: nextOutcome.toBase,
             errorType: nextOutcome.errorType,
             errorChargedToPosition: nextOutcome.errorChargedTo,
+            recordedResult: nextRecordedResult,
           });
         }
 
@@ -8212,53 +8331,18 @@ export function GameTracker() {
           queueAutoEndGame();
         }
 
-        // Update the sub-entry in local state so UI reflects change immediately
-        const updatedSubEntry = {
-          ...enrichingRunnerSubEntry,
-          ...nextOutcome,
-        };
+        const updatedParentEntry = mapAtBatEventToPlayLogEntry(nextAtBatEvent);
+        const updatedSubEntry =
+          updatedParentEntry.runnerSubEntries?.find((sub) => sub.id === subEntryId) ??
+          null;
+
         setEnrichingRunnerSubEntry(updatedSubEntry);
-
-        // Update play log entries to reflect changed runner sub-entry data
         setPlayLogEntries((prev) =>
-          prev.map((e) => {
-            if (e.id !== enrichingRunnerParentEntry.id || !e.runnerSubEntries)
-              return e;
-            return {
-              ...e,
-              ...(correctedResult ? { result: correctedResult } : {}),
-              ...(scoreDelta !== 0
-                ? {
-                    runsScored: Math.max(0, e.runsScored + scoreDelta),
-                    rbi: Math.max(0, e.rbi + scoreDelta),
-                  }
-                : {}),
-              runnerSubEntries: e.runnerSubEntries.map((sub) =>
-                sub.id === subEntryId
-                  ? {
-                      ...sub,
-                      ...nextOutcome,
-                    }
-                  : sub,
-              ),
-            };
-          }),
+          prev.map((entry) =>
+            entry.id === enrichingRunnerParentEntry.id ? updatedParentEntry : entry,
+          ),
         );
-
-        setEnrichingRunnerParentEntry((prev) =>
-          prev
-            ? {
-                ...prev,
-                ...(correctedResult ? { result: correctedResult } : {}),
-                ...(scoreDelta !== 0
-                  ? {
-                      runsScored: Math.max(0, prev.runsScored + scoreDelta),
-                      rbi: Math.max(0, prev.rbi + scoreDelta),
-                    }
-                  : {}),
-              }
-            : prev,
-        );
+        setEnrichingRunnerParentEntry(updatedParentEntry);
 
         queuePlayLogRefresh(0);
       } catch (err) {
