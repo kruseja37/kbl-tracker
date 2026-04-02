@@ -15,7 +15,7 @@ const RESULT_COLORS: Record<string, string> = {
   // Walks — green
   'BB': '#4ade80', 'IBB': '#4ade80', 'HBP': '#4ade80',
   // Outs — red
-  'K': '#f87171', 'Kc': '#f87171', 'GO': '#f87171', 'FO': '#f87171',
+  'K': '#f87171', 'Kc': '#f87171', 'GO': '#f87171', 'FO': '#f87171', 'FLO': '#f87171',
   'LO': '#f87171', 'PO': '#f87171', 'DP': '#f87171', 'TP': '#f87171',
   'SF': '#f87171', 'SAC': '#f87171', 'FC': '#f87171',
   'D3K': '#f87171', 'WP_K': '#f87171', 'PB_K': '#f87171',
@@ -37,7 +37,7 @@ function getResultColor(result: string): string {
 // ──────────────────────────────────────────────────────────────
 
 const BASE_DISPLAY: Record<string, string> = {
-  first: '1B', second: '2B', third: '3B', home: 'HOME', out: 'OUT',
+  batter: 'BAT', first: '1B', second: '2B', third: '3B', home: 'HOME', out: 'OUT', end: 'END',
 };
 
 function formatRunnerTransition(fromBase: string, toBase: string): string {
@@ -259,20 +259,30 @@ export function PlayLogPanel({
               const isSubActive = enrichingRunnerSubEntryId === sub.id;
               const isScored = sub.toBase === 'home';
               const isOut = sub.toBase === 'out';
-              const hasEnrichment = !!(sub.fieldingSequence?.length || sub.playMechanic || sub.isTootblan || sub.isOutAdvancing);
+              const isInningEnd = sub.toBase === 'end';
+              const hasEnrichment = !!(
+                sub.fieldingSequence?.length ||
+                sub.playMechanic ||
+                sub.fielderPosition ||
+                sub.heldByOf ||
+                sub.holdingFielder ||
+                sub.baseSaved ||
+                sub.isTootblan ||
+                sub.isOutAdvancing
+              );
 
               const subContent = (
                 <div className="flex items-center gap-1 leading-tight">
                   <span className="text-[9px] text-[#6b7280] w-[24px] flex-shrink-0 text-right pr-0.5">└</span>
                   <span className={`text-[9px] truncate flex-1 min-w-0 ${
-                    isScored ? 'text-[#34d399]' : isOut ? 'text-[#f87171]/80' : 'text-[#E8E8D8]/70'
+                    isScored ? 'text-[#34d399]' : isOut ? 'text-[#f87171]/80' : isInningEnd ? 'text-[#fbbf24]/90' : 'text-[#E8E8D8]/70'
                   }`}>
                     {sub.runnerName}
                   </span>
                   <span className={`text-[8px] font-mono flex-shrink-0 ${
-                    isScored ? 'text-[#34d399]' : isOut ? 'text-[#f87171]/80' : 'text-[#88AA88]'
+                    isScored ? 'text-[#34d399]' : isOut ? 'text-[#f87171]/80' : isInningEnd ? 'text-[#fbbf24]/90' : 'text-[#88AA88]'
                   }`}>
-                    {formatRunnerTransition(sub.fromBase, sub.toBase)}
+                    {sub.transitionLabel ?? formatRunnerTransition(sub.fromBase, sub.toBase)}
                   </span>
                   {sub.isTootblan && (
                     <span className="text-[7px] text-[#f87171] bg-[#7f1d1d]/40 px-0.5 rounded flex-shrink-0">TB</span>

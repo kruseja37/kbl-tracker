@@ -214,7 +214,7 @@ function VerificationHarness({
       </button>
       <button
         onClick={() =>
-          changePitcher('away-rp', 'away-sp', 'Away Reliever', 'Away Starter')
+          changePitcher('away-rp', 'away-sp', 'away', 'Away Reliever', 'Away Starter')
         }
         type="button"
       >
@@ -222,7 +222,7 @@ function VerificationHarness({
       </button>
       <button
         onClick={() =>
-          changePitcher('home-rp', 'home-sp', 'Home Reliever', 'Home Starter')
+          changePitcher('home-rp', 'home-sp', 'home', 'Home Reliever', 'Home Starter')
         }
         type="button"
       >

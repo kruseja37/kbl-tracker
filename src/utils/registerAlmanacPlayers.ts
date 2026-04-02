@@ -1,9 +1,19 @@
 import { generateHometown } from '../data/usCities';
-import type { PersistedGameState, CompletedGameRecord } from './gameStorage';
+import type {
+  PersistedGameState,
+  CompletedGameRecord,
+  PlayerRatingsSnapshot,
+} from './gameStorage';
 import { getAllCompletedGames } from './gameStorage';
 import { getLeagueTemplate, getPlayer } from './leagueBuilderStorage';
 import type { CanonicalPlayer, CanonicalPlayerInstance } from './almanacStorage';
-import { getCanonicalPlayer, getAllCanonicalPlayers, upsertCanonicalPlayer } from './almanacStorage';
+import {
+  findCanonicalByPlayerId,
+  getAllCanonicalPlayers,
+  getCanonicalPlayer,
+  upsertCanonicalPlayer,
+} from './almanacStorage';
+import { resolveExhibitionLeagueId } from './gameStorage';
 
 function buildPlayerName(firstName: string, lastName: string): string {
   return `${firstName} ${lastName}`.trim();
@@ -11,6 +21,146 @@ function buildPlayerName(firstName: string, lastName: string): string {
 
 function buildCanonicalId(playerId: string, sourceDatabase?: string): string {
   return sourceDatabase === 'SMB4' ? `smb4_${playerId}` : `custom_${playerId}`;
+}
+
+function buildPlayerNameFromSnapshot(snapshot?: PlayerRatingsSnapshot | null): string {
+  if (!snapshot) {
+    return '';
+  }
+  return buildPlayerName(snapshot.firstName, snapshot.lastName);
+}
+
+function buildInstanceKey(
+  instance: Pick<
+    CanonicalPlayerInstance,
+    'mode' | 'instanceId' | 'playerIdInInstance'
+  >,
+): string {
+  return `${instance.mode}::${instance.instanceId}::${instance.playerIdInInstance}`;
+}
+
+function isPlaceholderPlayerName(
+  playerName: string | undefined,
+  playerId: string,
+): boolean {
+  if (!playerName) {
+    return true;
+  }
+
+  const normalized = playerName.trim().toLowerCase();
+  if (!normalized) {
+    return true;
+  }
+
+  return (
+    normalized === playerId.toLowerCase() ||
+    normalized === `custom_${playerId}`.toLowerCase() ||
+    normalized.startsWith('ply-') ||
+    normalized.startsWith('player-') ||
+    normalized.startsWith('pitcher-') ||
+    normalized.includes('unknown')
+  );
+}
+
+function hasMeaningfulHometown(
+  hometown?: { city: string; state: string } | null,
+): boolean {
+  return Boolean(
+    hometown?.city &&
+      hometown?.state &&
+      hometown.city !== 'Unknown' &&
+      hometown.state !== '--',
+  );
+}
+
+function choosePreferredPlayerName(
+  currentName: string | undefined,
+  nextName: string,
+  playerId: string,
+): string {
+  if (isPlaceholderPlayerName(currentName, playerId) && !isPlaceholderPlayerName(nextName, playerId)) {
+    return nextName;
+  }
+
+  return currentName || nextName || playerId;
+}
+
+function choosePreferredHometown(
+  currentHometown: { city: string; state: string } | undefined,
+  nextHometown: { city: string; state: string },
+): { city: string; state: string } {
+  return hasMeaningfulHometown(currentHometown) ? currentHometown! : nextHometown;
+}
+
+function normalizeRegistrationMode(
+  competitionType?: PersistedGameState['competitionType'] | CompletedGameRecord['competitionType'],
+): CanonicalPlayerInstance['mode'] {
+  if (competitionType === 'elimination') {
+    return 'elimination';
+  }
+
+  if (competitionType === 'franchise' || competitionType === 'playoff') {
+    return 'franchise';
+  }
+
+  return 'exhibition';
+}
+
+function getPersistedPlayerName(
+  game:
+    | Pick<PersistedGameState, 'playerStats' | 'pitcherGameStats'>
+    | Pick<CompletedGameRecord, 'playerStats' | 'pitcherGameStats'>,
+  playerId: string,
+): string {
+  return (
+    game.playerStats[playerId]?.playerName ||
+    game.pitcherGameStats.find((stats) => stats.pitcherId === playerId)?.pitcherName ||
+    playerId
+  );
+}
+
+async function resolveRegistrationIdentity(
+  game:
+    | Pick<PersistedGameState, 'playerStats' | 'pitcherGameStats' | 'playerRatingsSnapshots'>
+    | Pick<CompletedGameRecord, 'playerStats' | 'pitcherGameStats' | 'playerRatingsSnapshots'>,
+  playerId: string,
+): Promise<{
+  canonicalId: string;
+  playerName: string;
+  hometown: { city: string; state: string };
+}> {
+  const storedPlayer = await getPlayer(playerId);
+  if (storedPlayer) {
+    const resolved = {
+      canonicalId: buildCanonicalId(playerId, storedPlayer.sourceDatabase),
+      playerName: buildPlayerName(storedPlayer.firstName, storedPlayer.lastName),
+      hometown: storedPlayer.hometown || generateHometown(),
+    };
+    console.log('[M4-1] resolveRegistrationIdentity', {
+      playerId,
+      source: 'league-builder',
+      canonicalId: resolved.canonicalId,
+      playerName: resolved.playerName,
+    });
+    return {
+      ...resolved,
+    };
+  }
+
+  const ratingsSnapshot = game.playerRatingsSnapshots?.[playerId] ?? null;
+  const snapshotName = buildPlayerNameFromSnapshot(ratingsSnapshot);
+  const resolved = {
+    canonicalId: buildCanonicalId(playerId),
+    playerName: snapshotName || getPersistedPlayerName(game, playerId),
+    hometown: ratingsSnapshot?.hometown || generateHometown(),
+  };
+  console.log('[M4-1] resolveRegistrationIdentity', {
+    playerId,
+    source: ratingsSnapshot ? 'ratings-snapshot' : 'persisted-stats',
+    canonicalId: resolved.canonicalId,
+    playerName: resolved.playerName,
+  });
+  return resolved;
 }
 
 export async function registerAlmanacPlayers(
@@ -26,17 +176,10 @@ export async function registerAlmanacPlayers(
   ]);
 
   for (const playerId of instanceIds) {
-    console.log('[Almanac] Attempting registration for playerId:', playerId);
-    const player = await getPlayer(playerId);
-    console.log('[Almanac] getPlayer result:', playerId, player ? 'FOUND' : 'NULL');
-
-    if (!player) {
-      console.warn(`[Almanac] Skipping canonical registration for missing player "${playerId}"`);
-      continue;
-    }
-
-    const canonicalId = buildCanonicalId(playerId, player.sourceDatabase);
-    const playerName = buildPlayerName(player.firstName, player.lastName);
+    const { canonicalId, playerName, hometown } =
+      await resolveRegistrationIdentity(gameState, playerId);
+    const existingByInstance = await findCanonicalByPlayerId(playerId);
+    const targetCanonicalId = existingByInstance?.canonicalId ?? canonicalId;
     const exhibitionInstance: CanonicalPlayerInstance = {
       mode: 'exhibition',
       instanceId: leagueId,
@@ -44,7 +187,8 @@ export async function registerAlmanacPlayers(
       playerIdInInstance: playerId,
     };
 
-    const existing = await getCanonicalPlayer(canonicalId);
+    const existing =
+      existingByInstance ?? (await getCanonicalPlayer(targetCanonicalId));
 
     if (existing) {
       const hasInstance = existing.instances.some((instance) =>
@@ -52,23 +196,38 @@ export async function registerAlmanacPlayers(
         instance.instanceId === exhibitionInstance.instanceId &&
         instance.playerIdInInstance === exhibitionInstance.playerIdInInstance
       );
+      const nextPlayerName = choosePreferredPlayerName(
+        existing.playerName,
+        playerName,
+        playerId,
+      );
+      const nextHometown = choosePreferredHometown(existing.hometown, hometown);
+      const nextInstances = hasInstance
+        ? existing.instances
+        : [...existing.instances, exhibitionInstance];
 
-      await upsertCanonicalPlayer({
-        ...existing,
-        playerName: existing.playerName || playerName,
-        hometown: existing.hometown || player.hometown || generateHometown(),
-        instances: hasInstance
-          ? existing.instances
-          : [...existing.instances, exhibitionInstance],
-      });
+      if (
+        !hasInstance ||
+        nextPlayerName !== existing.playerName ||
+        nextHometown.city !== existing.hometown.city ||
+        nextHometown.state !== existing.hometown.state
+      ) {
+        await upsertCanonicalPlayer({
+          ...existing,
+          canonicalId: targetCanonicalId,
+          playerName: nextPlayerName,
+          hometown: nextHometown,
+          instances: nextInstances,
+        });
+      }
 
       continue;
     }
 
     const canonicalPlayer: CanonicalPlayer = {
-      canonicalId,
+      canonicalId: targetCanonicalId,
       playerName,
-      hometown: player.hometown || generateHometown(),
+      hometown,
       instances: [exhibitionInstance],
     };
 
@@ -85,81 +244,114 @@ export async function backfillCanonicalPlayers(): Promise<number> {
   const completedGames = await getAllCompletedGames();
   if (completedGames.length === 0) return 0;
 
-  // Build set of existing canonical player IDs for fast lookup
   const existingPlayers = await getAllCanonicalPlayers();
-  const existingPlayerIds = new Set<string>();
+  const canonicalPlayersById = new Map<string, CanonicalPlayer>();
+  const instanceOwners = new Map<string, string>();
   for (const cp of existingPlayers) {
-    for (const inst of cp.instances) {
-      existingPlayerIds.add(inst.playerIdInInstance);
+    canonicalPlayersById.set(cp.canonicalId, cp);
+    for (const instance of cp.instances) {
+      instanceOwners.set(buildInstanceKey(instance), cp.canonicalId);
     }
   }
 
   let registered = 0;
 
   for (const game of completedGames) {
-    const leagueId = game.leagueId || game.competitionId;
-    if (!leagueId) continue;
+    const leagueId = resolveExhibitionLeagueId(game);
+    if (!leagueId) {
+      console.log('[M4-1] backfillCanonicalPlayers skipped game without leagueId', {
+        gameId: game.gameId,
+        competitionType: game.competitionType ?? null,
+        competitionId: game.competitionId ?? null,
+      });
+      continue;
+    }
 
-    // Collect all player IDs from this game
     const playerIds = new Set<string>([
       ...Object.keys(game.playerStats || {}),
       ...(game.pitcherGameStats || []).map((s) => s.pitcherId),
     ]);
 
-    // Skip games where all players are already registered
-    const unregistered = [...playerIds].filter((id) => !existingPlayerIds.has(id));
-    if (unregistered.length === 0) continue;
-
     const leagueTemplate = await getLeagueTemplate(leagueId);
     const instanceName = leagueTemplate?.name ?? leagueId;
-    const rawMode = game.competitionType || 'exhibition';
-    const mode: CanonicalPlayerInstance['mode'] =
-      rawMode === 'playoff' ? 'franchise' : rawMode;
+    const mode = normalizeRegistrationMode(game.competitionType);
 
-    for (const playerId of unregistered) {
-      const player = await getPlayer(playerId);
-      if (!player) continue;
-
-      const canonicalId = buildCanonicalId(playerId, player.sourceDatabase);
-      const playerName = buildPlayerName(player.firstName, player.lastName);
+    for (const playerId of playerIds) {
+      const { canonicalId, playerName, hometown } =
+        await resolveRegistrationIdentity(game, playerId);
       const instance: CanonicalPlayerInstance = {
         mode,
         instanceId: leagueId,
         instanceName,
         playerIdInInstance: playerId,
       };
+      const instanceKey = buildInstanceKey(instance);
+      const existingCanonicalId = instanceOwners.get(instanceKey);
+      const targetCanonicalId = existingCanonicalId ?? canonicalId;
+      const existing = canonicalPlayersById.get(targetCanonicalId);
 
-      const existing = await getCanonicalPlayer(canonicalId);
       if (existing) {
+        if (existingCanonicalId && existingCanonicalId !== canonicalId) {
+          console.log('[M4-1] backfillCanonicalPlayers reused existing canonicalId for player alias', {
+            playerId,
+            leagueId,
+            candidateCanonicalId: canonicalId,
+            existingCanonicalId,
+          });
+        }
+
         const hasInstance = existing.instances.some(
           (inst) =>
             inst.mode === instance.mode &&
             inst.instanceId === instance.instanceId &&
             inst.playerIdInInstance === instance.playerIdInInstance,
         );
-        if (!hasInstance) {
-          await upsertCanonicalPlayer({
+        const nextPlayerName = choosePreferredPlayerName(
+          existing.playerName,
+          playerName,
+          playerId,
+        );
+        const nextHometown = choosePreferredHometown(existing.hometown, hometown);
+        const nextInstances = hasInstance
+          ? existing.instances
+          : [...existing.instances, instance];
+
+        if (
+          !hasInstance ||
+          nextPlayerName !== existing.playerName ||
+          nextHometown.city !== existing.hometown.city ||
+          nextHometown.state !== existing.hometown.state
+        ) {
+          const nextCanonicalPlayer = {
             ...existing,
-            instances: [...existing.instances, instance],
-          });
+            playerName: nextPlayerName,
+            hometown: nextHometown,
+            instances: nextInstances,
+          };
+          await upsertCanonicalPlayer(nextCanonicalPlayer);
+          canonicalPlayersById.set(targetCanonicalId, nextCanonicalPlayer);
         }
       } else {
-        await upsertCanonicalPlayer({
-          canonicalId,
+        const nextCanonicalPlayer = {
+          canonicalId: targetCanonicalId,
           playerName,
-          hometown: player.hometown || generateHometown(),
+          hometown,
           instances: [instance],
-        });
+        };
+        await upsertCanonicalPlayer(nextCanonicalPlayer);
+        canonicalPlayersById.set(targetCanonicalId, nextCanonicalPlayer);
         registered++;
       }
 
-      existingPlayerIds.add(playerId);
+      instanceOwners.set(instanceKey, targetCanonicalId);
     }
   }
 
-  if (registered > 0) {
-    console.log(`[Almanac] Backfilled ${registered} canonical players from ${completedGames.length} completed games`);
-  }
+  console.log('[M4-1] backfillCanonicalPlayers', {
+    completedGames: completedGames.length,
+    registered,
+    canonicalPlayers: canonicalPlayersById.size,
+  });
 
   return registered;
 }

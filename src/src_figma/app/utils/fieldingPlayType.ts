@@ -50,7 +50,8 @@ export type PlayMechanic =
   | 'rundown'
   | 'tag_play'
   | 'unassisted'
-  | 'deflection';
+  | 'deflection'
+  | 'hold';
 
 export const PLAY_MECHANIC_OPTIONS: Array<{
   value: PlayMechanic;
@@ -62,6 +63,7 @@ export const PLAY_MECHANIC_OPTIONS: Array<{
   { value: 'tag_play', label: 'Tag Play' },
   { value: 'unassisted', label: 'Unassisted' },
   { value: 'deflection', label: 'Deflection' },
+  { value: 'hold', label: 'Hold' },
 ] as const;
 
 // ──────────────────────────────────────────────────────────────
@@ -79,6 +81,7 @@ export type FieldingPlayTypeValue =
   | 'wall'
   | 'over_shoulder'
   | 'robbed_hr'
+  | 'failed_robbery'
   | 'beat_runner'
   | 'beat_throw'
   | 'missed_dive'
@@ -98,6 +101,7 @@ export const FIELDING_PLAY_TYPE_OPTIONS: Array<{
   { value: 'wall', label: 'Wall Catch' },
   { value: 'over_shoulder', label: 'Over Shoulder' },
   { value: 'robbed_hr', label: 'Robbed HR' },
+  { value: 'failed_robbery', label: 'Failed Robbery' },
   { value: 'beat_runner', label: 'Beat Runner' },
   { value: 'beat_throw', label: 'Beat Throw' },
   { value: 'missed_dive', label: 'Missed Dive' },
@@ -116,12 +120,44 @@ export function mapAttemptToLegacyFieldingPlayType(
   if (outcome === 'missed') {
     if (attemptType === 'diving') return 'missed_dive';
     if (attemptType === 'jumping') return 'missed_leap';
+    if (attemptType === 'robbed_hr') return 'failed_robbery';
     // For other missed attempts, map to closest legacy value
-    return attemptType === 'robbed_hr' ? 'robbed_hr' : attemptType as FieldingPlayTypeValue;
+    return attemptType as FieldingPlayTypeValue;
   }
   // Made attempts: direct mapping
   if (attemptType === 'jumping') return 'leaping';
   return attemptType as FieldingPlayTypeValue;
+}
+
+export function mapLegacyFieldingPlayTypeToAttempt(
+  fieldingPlayType?: FieldingPlayTypeValue,
+): {
+  attemptType?: FieldingAttemptType;
+  attemptOutcome?: FieldingAttemptOutcome;
+} {
+  switch (fieldingPlayType) {
+    case 'missed_dive':
+      return { attemptType: 'diving', attemptOutcome: 'missed' };
+    case 'missed_leap':
+      return { attemptType: 'jumping', attemptOutcome: 'missed' };
+    case 'failed_robbery':
+      return { attemptType: 'robbed_hr', attemptOutcome: 'missed' };
+    case 'leaping':
+      return { attemptType: 'jumping', attemptOutcome: 'made' };
+    case 'routine':
+    case 'charging':
+    case 'diving':
+    case 'sliding':
+    case 'wall':
+    case 'over_shoulder':
+    case 'robbed_hr':
+      return {
+        attemptType: fieldingPlayType,
+        attemptOutcome: fieldingPlayType === 'routine' ? undefined : 'made',
+      };
+    default:
+      return {};
+  }
 }
 
 // ──────────────────────────────────────────────────────────────
@@ -148,6 +184,7 @@ export function mapFieldingPlayTypeToPlayDifficulty(
     case 'wall':
       return 'difficult';
     case 'robbed_hr':
+    case 'failed_robbery':
       return 'impossible';
     default:
       return undefined;
@@ -175,6 +212,7 @@ export function mapFieldingPlayTypeToPersistedDifficulty(
     case 'wall':
       return 'unlikely';
     case 'robbed_hr':
+    case 'failed_robbery':
       return 'spectacular';
     default:
       return 'routine';
@@ -203,6 +241,8 @@ export function mapFieldingPlayTypeToSpecialPlayType(
       return 'Over Shoulder';
     case 'robbed_hr':
       return 'Robbed HR';
+    case 'failed_robbery':
+      return null;
     case 'beat_runner':
       return 'Beat Runner';
     case 'beat_throw':

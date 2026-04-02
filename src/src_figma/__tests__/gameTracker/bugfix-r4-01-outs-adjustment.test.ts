@@ -105,7 +105,7 @@ describe('bugfix R4-01: outs adjustment ending the inning', () => {
     vi.useFakeTimers();
   });
 
-  test('turns a correction-created third out into an inning transition', async () => {
+  test('turns a correction-created third out into an inning-end confirmation before transition', async () => {
     const { result } = renderHook(() => useGameState());
     await initializeGame(result);
 
@@ -121,6 +121,13 @@ describe('bugfix R4-01: outs adjustment ending the inning', () => {
       await vi.runAllTimersAsync();
     });
 
+    expect(result.current.showInningEndConfirm).toBe(true);
+    expect(result.current.gameState.isTop).toBe(true);
+
+    await act(async () => {
+      result.current.confirmInningEnd();
+    });
+
     expect(result.current.pitchCountPrompt?.type).toBe('end_inning');
 
     await act(async () => {
@@ -129,5 +136,33 @@ describe('bugfix R4-01: outs adjustment ending the inning', () => {
 
     expect(result.current.gameState.outs).toBe(0);
     expect(result.current.gameState.isTop).toBe(false);
+  });
+
+  test('declining the inning-end confirmation keeps the current half-inning active', async () => {
+    const { result } = renderHook(() => useGameState());
+    await initializeGame(result);
+
+    await act(async () => {
+      result.current.applyOutsAdjustment(3);
+      await vi.runAllTimersAsync();
+    });
+
+    expect(result.current.showInningEndConfirm).toBe(true);
+    expect(result.current.gameState.isTop).toBe(true);
+
+    await act(async () => {
+      result.current.declineInningEnd();
+    });
+
+    expect(result.current.showInningEndConfirm).toBe(false);
+    expect(result.current.pitchCountPrompt).toBeNull();
+    expect(result.current.gameState.outs).toBe(3);
+    expect(result.current.gameState.isTop).toBe(true);
+
+    await act(async () => {
+      result.current.applyOutsAdjustment(-1);
+    });
+
+    expect(result.current.gameState.outs).toBe(2);
   });
 });

@@ -252,6 +252,37 @@ describe('Difficulty Multipliers Constants', () => {
     expect(converted.difficulty).toBe('leaping');
     expect(converted.type).toBe('starPlay');
   });
+
+  test('[M3-2-fix] converts persisted hit-side base-save events into positive calculator credit', () => {
+    const persisted: PersistedFieldingEvent = {
+      fieldingEventId: 'game-1_2_fe_0',
+      gameId: 'game-1',
+      atBatEventId: 'game-1_2',
+      sequence: 0,
+      playerId: 'player-8',
+      playerName: 'Casey Center',
+      position: 'CF',
+      teamId: 'TEAM-H',
+      playType: 'base_save',
+      difficulty: '50-50',
+      specialPlayType: 'Diving',
+      ballInPlay: {
+        trajectory: 'line_drive',
+        zone: 8,
+        velocity: 'medium',
+        fielderIds: ['player-8'],
+        primaryFielderId: 'player-8',
+      },
+      success: true,
+      runsPreventedOrAllowed: 1,
+    };
+
+    const converted = convertPersistedToCalculatorEvent(persisted);
+
+    expect(converted.type).toBe('starPlay');
+    expect(converted.difficulty).toBe('diving');
+    expect(calculateEventValue(converted)).toBeGreaterThan(0);
+  });
 });
 
 describe('Positional Adjustments Constants', () => {

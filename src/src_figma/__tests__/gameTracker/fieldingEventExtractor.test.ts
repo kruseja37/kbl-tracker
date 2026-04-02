@@ -172,6 +172,42 @@ describe('extractFieldingEvents', () => {
     expect(events[4].ballInPlay.fielderIds).toEqual(['home-lf-7', 'home-ss-6', 'home-c-2']);
   });
 
+  it('[M3-2-fix] emits a defensive base-save event for saved-bases hits', () => {
+    const playData: PlayData = {
+      type: 'hit',
+      hitType: '1B',
+      fieldingSequence: [8],
+      exitType: 'Line Drive',
+      spraySector: 'Center',
+      fieldingPlayType: 'missed_dive',
+      savedRun: true,
+    };
+    const context: FieldingExtractionContext = {
+      gameId: 'game-4b',
+      defensiveTeamId: 'TEAM-H',
+      atBatEventId: 'game-4b_16',
+      atBatEventIndex: 16,
+      defendersByPosition: {
+        CF: { playerId: 'home-cf-8', playerName: 'Casey Center' },
+      },
+    };
+
+    const events = extractFieldingEvents(playData, context);
+
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({
+      atBatEventId: 'game-4b_16',
+      fieldingEventId: 'game-4b_16_fe_0',
+      playerId: 'home-cf-8',
+      playerName: 'Casey Center',
+      position: 'CF',
+      playType: 'base_save',
+      specialPlayType: 'Diving',
+      success: true,
+      runsPreventedOrAllowed: 1,
+    });
+  });
+
   it('maps fielding play type enrichment into special play metadata and persisted difficulty', () => {
     const playData: PlayData = {
       type: 'out',
@@ -196,5 +232,91 @@ describe('extractFieldingEvents', () => {
     expect(events).toHaveLength(1);
     expect(events[0].difficulty).toBe('spectacular');
     expect(events[0].specialPlayType).toBe('Robbed HR');
+  });
+
+  it('[M3-3-universal] creates a charged fielder error event from runner-level enrichment', () => {
+    const playData: PlayData = {
+      type: 'hit',
+      hitType: '1B',
+      fieldingSequence: [7, 6],
+      exitType: 'Line Drive',
+      spraySector: 'Left',
+      persistedRunnerOutcomes: [
+        {
+          runnerId: 'runner-1',
+          runnerName: 'Garcia',
+          fromBase: 'first',
+          toBase: 'second',
+          errorType: 'throwing',
+          errorChargedTo: 6,
+        },
+      ],
+    };
+    const context: FieldingExtractionContext = {
+      gameId: 'game-5b',
+      defensiveTeamId: 'TEAM-H',
+      atBatEventId: 'game-5b_22',
+      atBatEventIndex: 22,
+      defendersByPosition: {
+        LF: { playerId: 'home-lf-7', playerName: 'Lou Left' },
+        SS: { playerId: 'home-ss-6', playerName: 'Sam Short' },
+      },
+    };
+
+    const events = extractFieldingEvents(playData, context);
+
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({
+      atBatEventId: 'game-5b_22',
+      fieldingEventId: 'game-5b_22_fe_0',
+      playerId: 'home-ss-6',
+      playerName: 'Sam Short',
+      position: 'SS',
+      playType: 'error',
+      success: false,
+    });
+    expect(events[0].ballInPlay.fielderIds).toEqual(['home-lf-7', 'home-ss-6']);
+    expect(events[0].ballInPlay.primaryFielderId).toBe('home-ss-6');
+  });
+
+  it('[M2-2] keeps plain home runs empty but persists robbed-HR fielding credit', () => {
+    const context: FieldingExtractionContext = {
+      gameId: 'game-6',
+      defensiveTeamId: 'TEAM-H',
+      atBatEventId: 'game-6_8',
+      atBatEventIndex: 8,
+      defendersByPosition: {
+        CF: { playerId: 'home-cf-8', playerName: 'Casey Center' },
+      },
+    };
+
+    const plainHrEvents = extractFieldingEvents(
+      {
+        type: 'hr',
+        hitType: 'HR',
+        fieldingSequence: [],
+      },
+      context,
+    );
+
+    expect(plainHrEvents).toHaveLength(0);
+
+    const robbedHrEvents = extractFieldingEvents(
+      {
+        type: 'hr',
+        hitType: 'HR',
+        fieldingSequence: [8],
+        fieldingPlayType: 'robbed_hr',
+        exitType: 'Fly Ball',
+        spraySector: 'Center',
+      },
+      context,
+    );
+
+    expect(robbedHrEvents).toHaveLength(1);
+    expect(robbedHrEvents[0].playType).toBe('putout');
+    expect(robbedHrEvents[0].playerId).toBe('home-cf-8');
+    expect(robbedHrEvents[0].difficulty).toBe('spectacular');
+    expect(robbedHrEvents[0].specialPlayType).toBe('Robbed HR');
   });
 });

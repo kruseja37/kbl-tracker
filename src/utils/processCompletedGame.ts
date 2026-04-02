@@ -18,7 +18,7 @@ import {
   type GameAggregationOptions,
   type GameAggregationResult,
 } from './seasonAggregator';
-import { archiveCompletedGame } from './gameStorage';
+import { archiveCompletedGame, resolveExhibitionLeagueId } from './gameStorage';
 import { getEffectivePlayer } from './playerOverrides';
 import { registerAlmanacPlayers } from './registerAlmanacPlayers';
 
@@ -100,9 +100,7 @@ export async function processCompletedGame(
   options?: GameAggregationOptions,
   leagueId?: string
 ): Promise<ProcessGameResult> {
-  const resolvedLeagueId =
-    leagueId ??
-    (gameState.competitionType === 'exhibition' ? gameState.competitionId : undefined);
+  const resolvedLeagueId = leagueId ?? resolveExhibitionLeagueId(gameState);
 
   // Step 1: Aggregate game stats to season totals
   const aggregation = await aggregateGameToSeason(gameState, options);

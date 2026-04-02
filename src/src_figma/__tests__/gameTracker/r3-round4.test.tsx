@@ -71,6 +71,15 @@ vi.mock("../../utils/gameStorage", () => ({
 vi.mock("../../../utils/gameStorage", () => ({
   archiveCompletedGame: mockArchiveCompletedGame,
   getAllCompletedGames: mockGetAllCompletedGames,
+  resolveExhibitionLeagueId: (game: {
+    leagueId?: string;
+    competitionId?: string;
+    competitionType?: string;
+  }) =>
+    game.leagueId ??
+    (game.competitionType === "exhibition" || !game.competitionType
+      ? game.competitionId
+      : undefined),
 }));
 
 vi.mock("../../../utils/processCompletedGame", () => ({
@@ -86,6 +95,7 @@ vi.mock("../../../utils/almanacStorage", () => ({
 }));
 
 import { BattingLineupColumn } from "../../app/components/BattingLineupColumn";
+import { DefensiveLineupColumn } from "../../app/components/DefensiveLineupColumn";
 import { useGameState } from "../../hooks/useGameState";
 import { getExhibitionBattingLeaders } from "../../../utils/almanacQueries";
 
@@ -163,12 +173,71 @@ describe("R3 Round 4 bug fixes", () => {
         nextLeadoffIndex={1}
         teamPrimaryColor="#123456"
         teamSecondaryColor="#abcdef"
+        getMojoForPlayer={() => 0}
+        getFitnessForPlayer={() => 'FIT'}
         onPlayerTap={() => undefined}
       />,
     );
 
     const runnerRow = screen.getByRole("button", { name: /J\. SMITH/i });
     expect(within(runnerRow).getByText("2")).toBeInTheDocument();
+  });
+
+  test("Bug 1: lineup columns show compact mojo and fitness indicators", () => {
+    render(
+      <>
+        <BattingLineupColumn
+          players={[
+            {
+              playerId: "batter-1",
+              name: "J. SMITH",
+              position: "SS",
+              battingOrder: 1,
+            },
+          ]}
+          currentBatterIndex={1}
+          runners={{}}
+          nextLeadoffIndex={2}
+          teamPrimaryColor="#123456"
+          teamSecondaryColor="#abcdef"
+          getMojoForPlayer={() => 2}
+          getFitnessForPlayer={() => 'STRAINED'}
+          onPlayerTap={() => undefined}
+        />
+        <DefensiveLineupColumn
+          players={[
+            {
+              playerId: "pitcher-1",
+              name: "A. ACE",
+              position: "P",
+              battingOrder: 9,
+              isPitcher: true,
+              pitchCount: 17,
+            },
+          ]}
+          currentPitcherName="A. ACE"
+          nextLeadoffIndex={1}
+          teamPrimaryColor="#123456"
+          teamSecondaryColor="#abcdef"
+          getMojoForPlayer={() => -1}
+          getFitnessForPlayer={() => 'HURT'}
+          onPlayerTap={() => undefined}
+        />
+      </>,
+    );
+
+    const battingRow = screen.getByRole("button", { name: /J\. SMITH/i });
+    expect(within(battingRow).getByText("▲")).toBeInTheDocument();
+    expect(within(battingRow).getByText("STR")).toBeInTheDocument();
+    expect(within(battingRow).getByTitle("Mojo: On Fire")).toBeInTheDocument();
+    expect(within(battingRow).getByTitle("Fitness: Strained")).toBeInTheDocument();
+
+    const defensiveRow = screen.getByRole("button", { name: /A\. ACE/i });
+    expect(within(defensiveRow).getByText("PC: 17")).toBeInTheDocument();
+    expect(within(defensiveRow).getByText("▼")).toBeInTheDocument();
+    expect(within(defensiveRow).getByText("HRT")).toBeInTheDocument();
+    expect(within(defensiveRow).getByTitle("Mojo: Tense")).toBeInTheDocument();
+    expect(within(defensiveRow).getByTitle("Fitness: Hurt")).toBeInTheDocument();
   });
 
   test("Bug 2: prior-half corrections do not place the now-fielding team on base", async () => {
@@ -235,6 +304,30 @@ describe("R3 Round 4 bug fixes", () => {
       result.current.confirmPitchCount("home-sp", 18);
       await endGamePromise;
     });
+  });
+
+  test("Bug 3: endGame falls back from competitionId when leagueId is omitted", async () => {
+    const { result } = renderHook(() => useGameState());
+    await initializeGame(result);
+
+    await act(async () => {
+      await result.current.endGame({
+        competitionType: "exhibition",
+        competitionId: "league-exh",
+      });
+    });
+
+    expect(mockArchiveCompletedGame).toHaveBeenCalled();
+    expect(
+      mockArchiveCompletedGame.mock.calls.every(
+        (call) => call[4]?.leagueId === "league-exh",
+      ),
+    ).toBe(true);
+    expect(mockProcessCompletedGame).toHaveBeenCalledWith(
+      expect.any(Object),
+      expect.any(Object),
+      "league-exh",
+    );
   });
 
   test("Bug 3: exhibition leaders include archived games scoped by leagueId", async () => {

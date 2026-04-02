@@ -1,4 +1,8 @@
-import { getExhibitionGames } from '../../../utils/almanacQueries';
+import {
+  getExhibitionGames,
+  getExhibitionLeagueId,
+  resolveExhibitionPlayerIds,
+} from '../../../utils/almanacQueries';
 import type { CompletedGameRecord, PlayerRatingsSnapshot } from '../../../utils/gameStorage';
 import type { Player } from '../../../utils/leagueBuilderStorage';
 
@@ -56,6 +60,7 @@ export interface ExhibitionPlayerContext {
   games: CompletedGameRecord[];
   latestGame: CompletedGameRecord | null;
   latestSnapshot: PlayerRatingsSnapshot | null;
+  playerIds: string[];
   teamNames: Map<string, string>;
 }
 
@@ -64,12 +69,12 @@ export async function getExhibitionPlayerContext(
   leagueId: string,
 ): Promise<ExhibitionPlayerContext> {
   const games = await getExhibitionGames();
+  const playerIds = await resolveExhibitionPlayerIds(playerId, leagueId);
+  const playerIdSet = new Set(playerIds);
   const teamNames = new Map<string, string>();
 
   const appearanceGames = games.filter((game) => {
-    const gameLeagueId = game.leagueId ?? (
-      game.competitionType === 'exhibition' ? game.competitionId ?? null : null
-    );
+    const gameLeagueId = getExhibitionLeagueId(game);
 
     if (gameLeagueId !== leagueId) {
       return false;
@@ -78,18 +83,25 @@ export async function getExhibitionPlayerContext(
     teamNames.set(game.awayTeamId, game.awayTeamName);
     teamNames.set(game.homeTeamId, game.homeTeamName);
 
-    return Boolean(game.playerStats[playerId]) || game.pitcherGameStats.some(
-      (pitcher) => pitcher.pitcherId === playerId,
+    return Boolean(playerIds.find((candidateId) => game.playerStats[candidateId])) || game.pitcherGameStats.some(
+      (pitcher) => playerIdSet.has(pitcher.pitcherId),
     );
   });
 
   const latestGame = appearanceGames[0] ?? null;
-  const snapshotSource = appearanceGames.find((game) => game.playerRatingsSnapshots?.[playerId]) ?? null;
+  const snapshotSource = appearanceGames.find((game) =>
+    playerIds.some((candidateId) => Boolean(game.playerRatingsSnapshots?.[candidateId])),
+  ) ?? null;
+  const latestSnapshot =
+    playerIds
+      .map((candidateId) => snapshotSource?.playerRatingsSnapshots?.[candidateId] ?? null)
+      .find((snapshot): snapshot is PlayerRatingsSnapshot => snapshot !== null) ?? null;
 
   return {
     games: appearanceGames,
     latestGame,
-    latestSnapshot: snapshotSource?.playerRatingsSnapshots?.[playerId] ?? null,
+    latestSnapshot,
+    playerIds,
     teamNames,
   };
 }

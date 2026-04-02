@@ -302,13 +302,20 @@ export interface AtBatEvent {
   runnerOutcomes?: Array<{
     runnerId: string;
     runnerName: string;
-    fromBase: 'first' | 'second' | 'third';
-    toBase: 'first' | 'second' | 'third' | 'home' | 'out';
+    fromBase: 'batter' | 'first' | 'second' | 'third';
+    toBase: 'first' | 'second' | 'third' | 'home' | 'out' | 'end';
     // Runner-level enrichment (UX-050 / §8.6)
     fieldingSequence?: number[];
     playMechanic?: string;
+    fielderId?: string;
+    fielderPosition?: Extract<Position, 'LF' | 'CF' | 'RF'>;
+    heldByOf?: boolean;
+    holdingFielder?: Extract<Position, 'LF' | 'CF' | 'RF'>;
+    baseSaved?: '2B' | '3B' | 'HOME';
     isTootblan?: boolean;
     isOutAdvancing?: boolean;
+    errorType?: 'fielding' | 'throwing' | 'mental';
+    errorChargedTo?: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
   }>;
   outsRecorded?: number;
   isQualityAtBat?: boolean;
@@ -318,6 +325,7 @@ export interface AtBatEvent {
   enrichment?: {
     fieldLocation?: { x: number; y: number; zone?: string };
     exitType?: 'ground_ball' | 'fly_ball' | 'line_drive' | 'popup' | 'bunt' | string;
+    chased?: boolean;
     fieldingSequence?: number[];
     fieldingDifficulty?: 'ROUTINE' | 'DIVING' | 'WALL' | 'RUNNING' | 'LEAPING';
     fieldingPlayType?:
@@ -330,6 +338,7 @@ export interface AtBatEvent {
       | 'wall'
       | 'over_shoulder'
       | 'robbed_hr'
+      | 'failed_robbery'
       | 'beat_runner'
       | 'beat_throw'
       | 'missed_dive'
@@ -338,6 +347,8 @@ export interface AtBatEvent {
     assists?: number[];
     errors?: Array<{ position: number; type: 'fielding' | 'throwing' | 'mental' }>;
     batterOutAdvancing?: boolean;
+    basesSaved?: 1 | 2;
+    savedRun?: boolean;
     hrDistance?: number;
     pitchType?: string;
     pitchesInAtBat?: number;
@@ -587,7 +598,7 @@ export interface FieldingEvent {
   position: Position;
   teamId: string;  // Which team made the fielding play
 
-  playType: 'putout' | 'assist' | 'error' | 'double_play_pivot' | 'outfield_assist';
+  playType: 'putout' | 'assist' | 'error' | 'double_play_pivot' | 'outfield_assist' | 'base_save';
   difficulty: 'routine' | 'likely' | '50-50' | 'unlikely' | 'spectacular';
   specialPlayType?: SpecialPlayType | null;
 
@@ -828,7 +839,25 @@ export async function updateAtBatEvent(
 
 export async function updateAtBatEventWithFieldingSync(
   eventId: string,
-  updates: Partial<Pick<AtBatEvent, 'enrichment' | 'result' | 'isQualityAtBat' | 'version' | 'editHistory'>>,
+  updates: Partial<
+    Pick<
+      AtBatEvent,
+      | 'enrichment'
+      | 'result'
+      | 'isQualityAtBat'
+      | 'runnerOutcomes'
+      | 'rbiCount'
+      | 'runsScored'
+      | 'outsAfter'
+      | 'runnersAfter'
+      | 'awayScoreAfter'
+      | 'homeScoreAfter'
+      | 'isWalkOff'
+      | 'outsRecorded'
+      | 'version'
+      | 'editHistory'
+    >
+  >,
   nextFieldingEvents: FieldingEvent[],
 ): Promise<void> {
   const db = await initEventLogDB();

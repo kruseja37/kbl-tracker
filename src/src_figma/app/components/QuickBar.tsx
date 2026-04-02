@@ -57,6 +57,7 @@ const BUTTON_COLORS: Record<string, { bg: string; border: string }> = {
   'Ꝁ': { bg: '#8B0000', border: '#FF4444' },
   GO:   { bg: '#8B0000', border: '#FF4444' },
   FO:   { bg: '#8B0000', border: '#FF4444' },
+  FLO:  { bg: '#8B0000', border: '#FF4444' },
   LO:   { bg: '#8B0000', border: '#FF4444' },
   PO:   { bg: '#8B0000', border: '#FF4444' },
   DP:   { bg: '#8B0000', border: '#FF4444' },

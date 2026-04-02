@@ -25,6 +25,15 @@ vi.mock('../../../utils/seasonAggregator', () => ({
 
 vi.mock('../../../utils/gameStorage', () => ({
   archiveCompletedGame: mockArchiveCompletedGame,
+  resolveExhibitionLeagueId: (game: {
+    leagueId?: string;
+    competitionId?: string;
+    competitionType?: string;
+  }) =>
+    game.leagueId ??
+    (game.competitionType === 'exhibition' || !game.competitionType
+      ? game.competitionId
+      : undefined),
 }));
 
 vi.mock('../../../utils/playerOverrides', () => ({

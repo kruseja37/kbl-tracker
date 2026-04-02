@@ -144,6 +144,7 @@ const calculateMinimumResultOuts = (result: AtBatEvent["result"]): number => {
     case "Ꝁ":
     case "GO":
     case "FO":
+    case "FLO":
     case "LO":
     case "PO":
     case "FC":
@@ -173,6 +174,27 @@ const FIELDING_POSITIONS = [
   "RF",
   "P",
 ] as const;
+
+const RUNNER_ERROR_TYPES = ["fielding", "throwing", "mental"] as const;
+
+const POSITION_NUMBER_TO_CODE: Record<number, Position> = {
+  1: "P",
+  2: "C",
+  3: "1B",
+  4: "2B",
+  5: "3B",
+  6: "SS",
+  7: "LF",
+  8: "CF",
+  9: "RF",
+};
+
+const isRunnerOutcomeOut = (toBase: RunnerSubEntry["toBase"]) => toBase === "out";
+
+const crossesRunnerOutcomeBoundary = (
+  previousToBase: RunnerSubEntry["toBase"],
+  nextToBase: RunnerSubEntry["toBase"],
+) => isRunnerOutcomeOut(previousToBase) !== isRunnerOutcomeOut(nextToBase);
 
 function sameRosterEntity(
   entity: { playerId?: string; name: string } | null | undefined,
@@ -392,6 +414,7 @@ import {
   buildRunnerCorrectionForQuickBarOutcome,
   countRbiFromDefaults,
   getBatterDestinationOptions,
+  getHeldByOfBaseSaved,
   getRunnerDestinationOptions,
   runnerOutcomeCountsAsOut,
   runnerOutcomeCountsAsRun,
@@ -705,6 +728,7 @@ export function GameTracker() {
     applyOutsAdjustment,
     scheduleAutoEndInning,
     setRunnerOutcomeCorrectionActive,
+    adjustPlayerFieldingErrors,
     queueAutoEndGame,
     pitchCountPrompt,
     confirmPitchCount,
@@ -726,6 +750,9 @@ export function GameTracker() {
     // §10.1: Three-phase lifecycle
     startGame,
     // T0-01: Auto game-end detection
+    showInningEndConfirm,
+    confirmInningEnd,
+    declineInningEnd,
     showAutoEndPrompt,
     dismissAutoEndPrompt,
     setPlayoffContext,
@@ -1260,7 +1287,7 @@ export function GameTracker() {
     playerName: string;
   } | null>(null);
 
-  // §9.2: Swap Position mode — like swap order but for fielding positions only (LIVE phase)
+  // §9.2: Swap Position mode — like swap order but for fielding positions in live or pre-game
   const [swapPositionMode, setSwapPositionMode] = useState<{
     playerId: string;
     playerName: string;
@@ -1397,8 +1424,9 @@ export function GameTracker() {
     defaults: RunnerDefaults;
   } | null>(null);
 
-  // D-5: SF prompt state — shown when FO + R3 + <2 outs
+  // D-5: SF prompt state — shown when FO/FLO + R3 + <2 outs
   const [sfPrompt, setSfPrompt] = useState<{
+    outType: "FO" | "FLO";
     runnerAdv: RunnerAdvancement | undefined;
     defaults: RunnerDefaults;
   } | null>(null);
@@ -2833,12 +2861,19 @@ export function GameTracker() {
   const buildPlayDataFromAtBatEvent = useCallback(
     (
       atBatEvent: AtBatEvent,
-      enrichmentOverrides?: Partial<NonNullable<AtBatEvent["enrichment"]>>,
+      overrides?: {
+        enrichment?: Partial<NonNullable<AtBatEvent["enrichment"]>>;
+        result?: AtBatEvent["result"];
+        runnerOutcomes?: AtBatEvent["runnerOutcomes"];
+      },
     ): PlayData | null => {
       const enrichment = {
         ...(atBatEvent.enrichment || {}),
-        ...(enrichmentOverrides || {}),
+        ...(overrides?.enrichment || {}),
       };
+      const resolvedResult = overrides?.result ?? atBatEvent.result;
+      const resolvedRunnerOutcomes =
+        overrides?.runnerOutcomes ?? atBatEvent.runnerOutcomes;
       const ballLocation = enrichment.fieldLocation
         ? { x: enrichment.fieldLocation.x, y: enrichment.fieldLocation.y }
         : undefined;
@@ -2860,6 +2895,8 @@ export function GameTracker() {
         ballLocation,
         spraySector: enrichment.fieldLocation?.zone,
         exitType,
+        persistedRunnerOutcomes: resolvedRunnerOutcomes,
+        savedRun: !!enrichment.savedRun,
         playDifficulty: mapFieldingPlayTypeToPlayDifficulty(
           enrichment.fieldingPlayType as FieldingPlayTypeValue | undefined,
         ),
@@ -2868,16 +2905,16 @@ export function GameTracker() {
           | undefined,
       } as const;
 
-      if (["1B", "2B", "3B", "GRD"].includes(atBatEvent.result)) {
+      if (["1B", "2B", "3B", "GRD", "ITPHR"].includes(resolvedResult)) {
         return {
           ...common,
           type: "hit",
-          hitType: (atBatEvent.result === "GRD"
+          hitType: (resolvedResult === "GRD"
             ? "2B"
-            : atBatEvent.result) as PlayData["hitType"],
+            : resolvedResult) as PlayData["hitType"],
         };
       }
-      if (atBatEvent.result === "HR") {
+      if (resolvedResult === "HR") {
         return {
           ...common,
           type: "hr",
@@ -2888,6 +2925,7 @@ export function GameTracker() {
         [
           "GO",
           "FO",
+          "FLO",
           "LO",
           "PO",
           "DP",
@@ -2897,21 +2935,21 @@ export function GameTracker() {
           "SAC",
           "K",
           "Kc",
-        ].includes(atBatEvent.result)
+        ].includes(resolvedResult)
       ) {
         return {
           ...common,
           type: "out",
-          outType: atBatEvent.result as PlayData["outType"],
+          outType: resolvedResult as PlayData["outType"],
         };
       }
-      if (atBatEvent.result === "E") {
+      if (resolvedResult === "E") {
         return {
           ...common,
           type: "error",
-          errorFielder: atBatEvent.enrichment?.errors?.[0]?.position,
+          errorFielder: enrichment.errors?.[0]?.position,
           errorType:
-            atBatEvent.enrichment?.errors?.[0]?.type?.toUpperCase() as PlayData["errorType"],
+            enrichment.errors?.[0]?.type?.toUpperCase() as PlayData["errorType"],
         };
       }
       return null;
@@ -3076,7 +3114,11 @@ export function GameTracker() {
   const buildFieldingSyncEventsForSequenceEdit = useCallback(
     async (
       atBatEvent: AtBatEvent,
-      enrichmentOverrides: Partial<NonNullable<AtBatEvent["enrichment"]>>,
+      overrides: {
+        enrichment?: Partial<NonNullable<AtBatEvent["enrichment"]>>;
+        result?: AtBatEvent["result"];
+        runnerOutcomes?: AtBatEvent["runnerOutcomes"];
+      },
     ) => {
       const linkedFieldingEvents = await getFieldingEventsForAtBat(
         atBatEvent.eventId,
@@ -3093,10 +3135,7 @@ export function GameTracker() {
         defendersByPosition,
       };
       const previousPlayData = buildPlayDataFromAtBatEvent(atBatEvent);
-      const nextPlayData = buildPlayDataFromAtBatEvent(
-        atBatEvent,
-        enrichmentOverrides,
-      );
+      const nextPlayData = buildPlayDataFromAtBatEvent(atBatEvent, overrides);
       const previousBaseCount = previousPlayData
         ? extractFieldingEvents(previousPlayData, fieldingContext).length
         : 0;
@@ -3118,6 +3157,37 @@ export function GameTracker() {
       return [...nextBaseEvents, ...preservedSupplementals];
     },
     [buildHistoricalDefensiveAlignment, buildPlayDataFromAtBatEvent],
+  );
+
+  const resolveRunnerOutcomeErrorPlayerId = useCallback(
+    async (
+      atBatEvent: AtBatEvent,
+      outcome:
+        | Pick<
+            NonNullable<AtBatEvent["runnerOutcomes"]>[number],
+            "errorChargedTo"
+          >
+        | null
+        | undefined,
+    ) => {
+      const chargedPosition = outcome?.errorChargedTo;
+      if (
+        typeof chargedPosition !== "number" ||
+        !(chargedPosition in POSITION_NUMBER_TO_CODE)
+      ) {
+        return null;
+      }
+      const linkedFieldingEvents = await getFieldingEventsForAtBat(
+        atBatEvent.eventId,
+      );
+      const defendersByPosition = await buildHistoricalDefensiveAlignment(
+        atBatEvent,
+        linkedFieldingEvents,
+      );
+      const positionCode = POSITION_NUMBER_TO_CODE[chargedPosition];
+      return defendersByPosition[positionCode]?.playerId || null;
+    },
+    [buildHistoricalDefensiveAlignment],
   );
 
   const appendModifierToAtBatEvent = useCallback(
@@ -3597,22 +3667,40 @@ export function GameTracker() {
     [getRosterIdFromName],
   );
 
+  const getMojoForPlayer = useCallback(
+    (playerId: string) => {
+      const playerData = playerStateHook.getPlayer(playerId);
+      const mojo = playerData?.gameState.currentMojo;
+      console.debug("[M1-2-fix] Resolved player mojo", { playerId, mojo });
+      return mojo;
+    },
+    [playerStateHook],
+  );
+
+  const getFitnessForPlayer = useCallback(
+    (playerId: string) => {
+      const playerData = playerStateHook.getPlayer(playerId);
+      const fitness = playerData?.fitnessProfile.currentFitness;
+      console.debug("[M1-2-fix] Resolved player fitness", { playerId, fitness });
+      return fitness;
+    },
+    [playerStateHook],
+  );
+
   const getPlayerMojoByName = useCallback(
     (name: string, team: "away" | "home") => {
       const playerId = getPlayerIdFromName(name, team);
-      const playerData = playerStateHook.getPlayer(playerId);
-      return playerData?.gameState.currentMojo;
+      return getMojoForPlayer(playerId);
     },
-    [getPlayerIdFromName, playerStateHook],
+    [getMojoForPlayer, getPlayerIdFromName],
   );
 
   const getPlayerFitnessByName = useCallback(
     (name: string, team: "away" | "home") => {
       const playerId = getPlayerIdFromName(name, team);
-      const playerData = playerStateHook.getPlayer(playerId);
-      return playerData?.fitnessProfile.currentFitness;
+      return getFitnessForPlayer(playerId);
     },
-    [getPlayerIdFromName, playerStateHook],
+    [getFitnessForPlayer, getPlayerIdFromName],
   );
 
   const setPlayerMojoByName = useCallback(
@@ -3873,7 +3961,7 @@ export function GameTracker() {
     ],
   );
 
-  // §9.2: Swap Position handler — swaps fielding positions between two in-game players
+  // §9.2: Swap Position handler — swaps fielding positions between two players
   const handleSwapPositionComplete = useCallback(
     (secondPlayerId: string) => {
       if (!swapPositionMode) return;
@@ -3918,6 +4006,15 @@ export function GameTracker() {
           { playerId: firstId, newPosition: secondPosition },
           { playerId: secondPlayerId, newPosition: firstPosition },
         ]);
+        syncDisplayedRostersToLineupSnapshot(getLineupStateSnapshot());
+        setRosterVersion((v) => v + 1);
+        console.log("[M1-3-fix] Applied player-card position swap", {
+          gamePhase: gameState.gamePhase,
+          firstPlayerId: firstId,
+          secondPlayerId,
+          firstNewPosition: secondPosition,
+          secondNewPosition: firstPosition,
+        });
       }
       queuePlayLogRefresh(80);
       setSwapPositionMode(null);
@@ -3928,7 +4025,10 @@ export function GameTracker() {
       homeTeamPlayers,
       battingTeam,
       fieldingTeam,
+      gameState.gamePhase,
+      getLineupStateSnapshot,
       getRosterEntityId,
+      syncDisplayedRostersToLineupSnapshot,
       switchPositions,
       queuePlayLogRefresh,
     ],
@@ -4591,6 +4691,7 @@ export function GameTracker() {
     "K",
     "GO",
     "FO",
+    "FLO",
     "LO",
     "PO",
     "DP",
@@ -5436,13 +5537,21 @@ export function GameTracker() {
           });
           setProcessingOutcome(null);
           return; // Recording deferred to handleErrorFlowComplete
-        } else if (effectiveOutcome === "FO" && bases.third && outs < 2) {
-          // D-5: FO with R3 + <2 outs → SF prompt
+        } else if (
+          (effectiveOutcome === "FO" || effectiveOutcome === "FLO") &&
+          bases.third &&
+          outs < 2
+        ) {
+          // D-5: FO/FLO with R3 + <2 outs → SF prompt
           if (!defaults) {
             setProcessingOutcome(null);
             return;
           }
-          setSfPrompt({ runnerAdv, defaults });
+          setSfPrompt({
+            outType: effectiveOutcome,
+            runnerAdv,
+            defaults,
+          });
           setProcessingOutcome(null);
           return; // Deferred to handleSfPromptAnswer
         } else if (
@@ -5751,7 +5860,7 @@ export function GameTracker() {
   const handleSfPromptAnswer = useCallback(
     async (isYes: boolean) => {
       if (!sfPrompt) return;
-      const { runnerAdv, defaults } = sfPrompt;
+      const { outType, runnerAdv, defaults } = sfPrompt;
       const atBatEventId = getPendingAtBatIdentity().atBatEventId;
       try {
         if (isYes) {
@@ -5764,18 +5873,18 @@ export function GameTracker() {
           });
           logAction("SF — run scores");
         } else {
-          // FO: runner holds, standard fly out
-          const foAdv: RunnerAdvancement = {
+          // FO/FLO: runner holds, standard fly out
+          const flyOutAdv: RunnerAdvancement = {
             ...runnerAdv,
             fromThird: undefined,
           };
           await commitPlateAppearance({
             type: "out",
-            outType: "FO",
+            outType,
             runnerAdvancement:
-              Object.keys(foAdv).length > 0 ? foAdv : undefined,
+              Object.keys(flyOutAdv).length > 0 ? flyOutAdv : undefined,
           });
-          logAction("FO (R3 held)");
+          logAction(`${outType} (R3 held)`);
         }
         await appendCommittedAtBatEntry(atBatEventId);
 
@@ -5783,7 +5892,7 @@ export function GameTracker() {
         const newNames: { first?: string; second?: string; third?: string } =
           {};
         if (isYes) {
-          // R3 scored, others hold on FO (tag-up default)
+          // R3 scored, others hold on FO/FLO (tag-up default)
           if (defaults.second?.to === "second")
             newNames.second = runnerNames.second;
           if (defaults.first?.to === "first")
@@ -5798,7 +5907,7 @@ export function GameTracker() {
         }
         setRunnerNames(newNames);
       } catch (error) {
-        console.error("[D-5] Failed to record SF/FO:", error);
+        console.error("[M1-1][D-5] Failed to record SF/fly out:", error);
       }
       setSfPrompt(null);
     },
@@ -7009,6 +7118,35 @@ export function GameTracker() {
       }));
   }, [awayTeamPlayers, fieldingTeam, getRosterIdFromName, homeTeamPlayers]);
 
+  const runnerHoldOutfielderOptions = useMemo(() => {
+    const fieldingPlayers =
+      fieldingTeam === "home" ? homeTeamPlayers : awayTeamPlayers;
+
+    return fieldingPlayers.reduce<
+      Partial<
+        Record<
+          Extract<Position, "LF" | "CF" | "RF">,
+          { playerId: string; playerName: string }
+        >
+      >
+    >((acc, player) => {
+      if (
+        player.isOutOfGame ||
+        (player.position !== "LF" &&
+          player.position !== "CF" &&
+          player.position !== "RF")
+      ) {
+        return acc;
+      }
+
+      acc[player.position] = {
+        playerId: getRosterIdFromName(player.name, fieldingTeam),
+        playerName: player.name,
+      };
+      return acc;
+    }, {});
+  }, [awayTeamPlayers, fieldingTeam, getRosterIdFromName, homeTeamPlayers]);
+
   // ============================================
   // OUTCOME RECORDING HANDLERS
   // ============================================
@@ -7192,6 +7330,26 @@ export function GameTracker() {
           [field]: value,
         };
 
+        if (field === "basesSaved") {
+          const basesSaved =
+            value === 1 || value === 2 ? (value as 1 | 2) : undefined;
+          const savedRun =
+            basesSaved === 1
+              ? !!existingAtBat.runners.third
+              : basesSaved === 2
+                ? !!(existingAtBat.runners.third || existingAtBat.runners.second)
+                : false;
+
+          update.basesSaved = basesSaved;
+          update.savedRun = savedRun;
+
+          console.log("[M3-2] Recorded saved-bases enrichment", {
+            eventId: enrichingEntry.eventId,
+            basesSaved: basesSaved ?? null,
+            savedRun,
+          });
+        }
+
         if (field === "batterOutAdvancing") {
           const batterBase = getBatterDestinationBase(existingAtBat.result);
           if (!batterBase) {
@@ -7297,6 +7455,14 @@ export function GameTracker() {
             timestamp,
           },
         ];
+        if (field === "basesSaved") {
+          editHistory.push({
+            field: "enrichment.savedRun",
+            oldValue: existingAtBat.enrichment?.savedRun ?? null,
+            newValue: update.savedRun ?? false,
+            timestamp,
+          });
+        }
         const shouldMarkQualityAtBat =
           field === "pitchesInAtBat" &&
           (value as number) >= 7 &&
@@ -7315,14 +7481,18 @@ export function GameTracker() {
           field === "fieldingPlayType" ||
           field === "fieldingAttemptType" ||
           field === "fieldingAttemptOutcome" ||
-          field === "playMechanic";
+          field === "playMechanic" ||
+          field === "basesSaved";
         const isFieldingDataField =
           isFieldingSyncField || field === "fieldingDifficulty";
         if (isFieldingSyncField) {
           const syncedFieldingEvents =
             await buildFieldingSyncEventsForSequenceEdit(
               existingAtBat,
-              update as Partial<NonNullable<AtBatEvent["enrichment"]>>,
+              {
+                enrichment:
+                  update as Partial<NonNullable<AtBatEvent["enrichment"]>>,
+              },
             );
           await updateAtBatEventWithFieldingSync(
             enrichingEntry.eventId,
@@ -7356,7 +7526,17 @@ export function GameTracker() {
         setPlayLogEntries((prev) =>
           prev.map((e) => {
             if (e.id !== enrichingEntry.id) return e;
-            const updated = { ...e };
+            const nextAtBat: AtBatEvent = {
+              ...existingAtBat,
+              enrichment: {
+                ...(existingAtBat.enrichment || {}),
+                ...update,
+              },
+              isQualityAtBat: shouldMarkQualityAtBat
+                ? true
+                : existingAtBat.isQualityAtBat,
+            };
+            const updated = mapAtBatEventToPlayLogEntry(nextAtBat);
             if (field === "fieldLocation") updated.hasLocationData = true;
             if (isFieldingDataField) updated.hasFieldingData = true;
             if (field === "pitchType") updated.hasPitchType = true;
@@ -7608,34 +7788,158 @@ export function GameTracker() {
       field:
         | "fieldingSequence"
         | "playMechanic"
+        | "fielderId"
+        | "fielderPosition"
+        | "heldByOf"
+        | "holdingFielder"
+        | "baseSaved"
         | "isTootblan"
         | "isOutAdvancing"
+        | "errorType"
+        | "errorChargedTo"
         | "toBase",
       value: unknown,
     ) => {
       if (!enrichingRunnerSubEntry || !enrichingRunnerParentEntry?.eventId)
         return;
 
-      // Parse runner index from sub-entry ID: "{eventId}-runner-{idx}"
-      const idParts = subEntryId.split("-runner-");
-      const runnerIdx = parseInt(idParts[idParts.length - 1], 10);
-      if (isNaN(runnerIdx)) return;
-
       try {
         const existingAtBat = await getAtBatEvent(
           enrichingRunnerParentEntry.eventId,
         );
-        if (!existingAtBat?.runnerOutcomes?.[runnerIdx]) return;
+        if (!existingAtBat) return;
 
-        const updatedOutcomes = [...existingAtBat.runnerOutcomes];
-        const previousOutcome = updatedOutcomes[runnerIdx];
+        const existingOutcomeIndex =
+          existingAtBat.runnerOutcomes?.findIndex((outcome) => {
+            const sameRunnerId =
+              outcome.runnerId &&
+              enrichingRunnerSubEntry.runnerId &&
+              outcome.runnerId === enrichingRunnerSubEntry.runnerId;
+            const sameRunnerName =
+              outcome.runnerName === enrichingRunnerSubEntry.runnerName;
+            return (
+              outcome.fromBase === enrichingRunnerSubEntry.fromBase &&
+              (sameRunnerId || sameRunnerName)
+            );
+          }) ?? -1;
+
+        const updatedOutcomes = [...(existingAtBat.runnerOutcomes || [])];
+        const previousOutcome =
+          existingOutcomeIndex >= 0
+            ? updatedOutcomes[existingOutcomeIndex]
+            : {
+                runnerId: enrichingRunnerSubEntry.runnerId,
+                runnerName: enrichingRunnerSubEntry.runnerName,
+                fromBase: enrichingRunnerSubEntry.fromBase,
+                toBase: enrichingRunnerSubEntry.toBase,
+                fieldingSequence: enrichingRunnerSubEntry.fieldingSequence,
+                playMechanic: enrichingRunnerSubEntry.playMechanic,
+                fielderId: enrichingRunnerSubEntry.fielderId,
+                fielderPosition: enrichingRunnerSubEntry.fielderPosition,
+                heldByOf: enrichingRunnerSubEntry.heldByOf,
+                holdingFielder: enrichingRunnerSubEntry.holdingFielder,
+                baseSaved: enrichingRunnerSubEntry.baseSaved,
+                isTootblan: enrichingRunnerSubEntry.isTootblan,
+                isOutAdvancing: enrichingRunnerSubEntry.isOutAdvancing,
+                errorType: enrichingRunnerSubEntry.errorType,
+                errorChargedTo: enrichingRunnerSubEntry.errorChargedTo,
+              };
+        const runnerIdx =
+          existingOutcomeIndex >= 0 ? existingOutcomeIndex : updatedOutcomes.length;
         const nextOutcomeDraft = { ...previousOutcome, [field]: value };
+        const nextHeldBaseSaved = getHeldByOfBaseSaved(
+          nextOutcomeDraft.toBase,
+          existingAtBat.result,
+        );
+        const holdPosition =
+          value === "LF" || value === "CF" || value === "RF"
+            ? value
+            : undefined;
+        if (field === "playMechanic" && value !== "hold") {
+          nextOutcomeDraft.heldByOf = false;
+          nextOutcomeDraft.holdingFielder = undefined;
+          nextOutcomeDraft.baseSaved = undefined;
+          nextOutcomeDraft.fielderId = undefined;
+          nextOutcomeDraft.fielderPosition = undefined;
+        }
+        if (field === "heldByOf") {
+          if (value) {
+            nextOutcomeDraft.playMechanic = "hold";
+            nextOutcomeDraft.baseSaved = nextHeldBaseSaved ?? undefined;
+          } else {
+            nextOutcomeDraft.playMechanic = undefined;
+            nextOutcomeDraft.holdingFielder = undefined;
+            nextOutcomeDraft.baseSaved = undefined;
+            nextOutcomeDraft.fielderId = undefined;
+            nextOutcomeDraft.fielderPosition = undefined;
+          }
+        }
+        if (field === "holdingFielder") {
+          nextOutcomeDraft.heldByOf = true;
+          nextOutcomeDraft.playMechanic = "hold";
+          nextOutcomeDraft.fielderPosition = holdPosition;
+          nextOutcomeDraft.baseSaved = nextHeldBaseSaved ?? undefined;
+        }
+        if (field === "fielderPosition") {
+          nextOutcomeDraft.holdingFielder = holdPosition;
+        }
+        if (
+          field === "toBase" &&
+          nextOutcomeDraft.toBase !== nextOutcomeDraft.fromBase
+        ) {
+          nextOutcomeDraft.playMechanic = undefined;
+          nextOutcomeDraft.heldByOf = false;
+          nextOutcomeDraft.holdingFielder = undefined;
+          nextOutcomeDraft.baseSaved = undefined;
+          nextOutcomeDraft.fielderId = undefined;
+          nextOutcomeDraft.fielderPosition = undefined;
+        }
+        if (field === "toBase" && nextOutcomeDraft.heldByOf) {
+          nextOutcomeDraft.baseSaved = nextHeldBaseSaved ?? undefined;
+        }
+        if (field === "toBase" && !nextHeldBaseSaved) {
+          nextOutcomeDraft.playMechanic = undefined;
+          nextOutcomeDraft.heldByOf = false;
+          nextOutcomeDraft.holdingFielder = undefined;
+          nextOutcomeDraft.baseSaved = undefined;
+          nextOutcomeDraft.fielderId = undefined;
+          nextOutcomeDraft.fielderPosition = undefined;
+        }
         if (
           field === "toBase" &&
           nextOutcomeDraft.toBase !== "out"
         ) {
           nextOutcomeDraft.isTootblan = false;
           nextOutcomeDraft.isOutAdvancing = false;
+        }
+        if (
+          field === "toBase" &&
+          !crossesRunnerOutcomeBoundary(
+            previousOutcome.toBase,
+            nextOutcomeDraft.toBase,
+          )
+        ) {
+          nextOutcomeDraft.errorType = undefined;
+          nextOutcomeDraft.errorChargedTo = undefined;
+        }
+        if (
+          field === "errorType" &&
+          (typeof value !== "string" ||
+            !RUNNER_ERROR_TYPES.includes(
+              value as (typeof RUNNER_ERROR_TYPES)[number],
+            ))
+        ) {
+          nextOutcomeDraft.errorChargedTo = undefined;
+        }
+        if (
+          field === "errorChargedTo" &&
+          (typeof value !== "number" ||
+            !Object.prototype.hasOwnProperty.call(
+              POSITION_NUMBER_TO_CODE,
+              value,
+            ))
+        ) {
+          nextOutcomeDraft.errorChargedTo = undefined;
         }
         updatedOutcomes[runnerIdx] = nextOutcomeDraft;
         const nextOutcome = updatedOutcomes[runnerIdx];
@@ -7720,12 +8024,23 @@ export function GameTracker() {
         const nextHomeScoreAfter =
           existingAtBat.homeScoreAfter +
           (existingAtBat.halfInning === "BOTTOM" ? scoreDelta : 0);
-        const minimumResultOuts = calculateMinimumResultOuts(existingAtBat.result);
-        const nextOutsRecorded = Math.max(
-          minimumResultOuts,
+        const rawNextOutsRecorded =
           (existingAtBat.outsRecorded ??
-            existingAtBat.outsAfter - existingAtBat.outs) + outDelta,
+            existingAtBat.outsAfter - existingAtBat.outs) + outDelta;
+        let correctedResult: typeof existingAtBat.result | null = null;
+        if (existingAtBat.result === "GO" && outDelta > 0) {
+          if (rawNextOutsRecorded >= 2) {
+            correctedResult = "DP";
+          }
+        } else if (existingAtBat.result === "DP" && outDelta < 0) {
+          if (rawNextOutsRecorded < 2) {
+            correctedResult = "GO";
+          }
+        }
+        const minimumResultOuts = calculateMinimumResultOuts(
+          correctedResult ?? existingAtBat.result,
         );
+        const nextOutsRecorded = Math.max(minimumResultOuts, rawNextOutsRecorded);
         const nextOutsAfter = Math.max(
           existingAtBat.outs,
           existingAtBat.outs + nextOutsRecorded,
@@ -7742,53 +8057,97 @@ export function GameTracker() {
             : nextRunnersAfter;
 
         const timestamp = Date.now();
-        await updateAtBatEvent(enrichingRunnerParentEntry.eventId, {
-          runnerOutcomes: updatedOutcomes,
-          rbiCount: Math.max(0, (existingAtBat.rbiCount ?? 0) + scoreDelta),
-          runsScored: nextRunsScored,
-          outsAfter: nextOutsAfter,
-          runnersAfter: normalizedRunnersAfter,
-          awayScoreAfter: nextAwayScoreAfter,
-          homeScoreAfter: nextHomeScoreAfter,
-          isWalkOff: nextIsWalkOff,
-          outsRecorded: nextOutsRecorded,
-          version: nextVersionBase + 1,
-          editHistory: [
-            {
-              field: `runnerOutcomes[${runnerIdx}].${field}`,
-              oldValue:
-                existingAtBat.runnerOutcomes[runnerIdx][
-                  field as keyof (typeof existingAtBat.runnerOutcomes)[0]
-                ] ?? null,
-              newValue: value,
-              timestamp,
-            },
-          ],
-        });
-
-        let correctedResult: typeof existingAtBat.result | null = null;
-        if (existingAtBat.result === "GO" && outDelta > 0) {
-          if (nextOutsRecorded >= 2) {
-            correctedResult = "DP";
-          }
-        } else if (existingAtBat.result === "DP" && outDelta < 0) {
-          if (nextOutsRecorded < 2) {
-            correctedResult = "GO";
-          }
+        const nextVersion =
+          nextVersionBase + (correctedResult ? 2 : 1);
+        const editHistory: NonNullable<AtBatEvent["editHistory"]> = [
+          {
+            field: `runnerOutcomes[${runnerIdx}].${field}`,
+            oldValue:
+              previousOutcome[
+                field as keyof typeof previousOutcome
+              ] ?? null,
+            newValue: value,
+            timestamp,
+          },
+        ];
+        if (correctedResult) {
+          editHistory.push({
+            field: "result",
+            oldValue: existingAtBat.result,
+            newValue: correctedResult,
+            timestamp,
+          });
         }
 
-        if (correctedResult) {
-          await updateAtBatEvent(enrichingRunnerParentEntry.eventId, {
-            result: correctedResult,
-            version: nextVersionBase + 2,
-            editHistory: [
-              {
-                field: "result",
-                oldValue: existingAtBat.result,
-                newValue: correctedResult,
-                timestamp: Date.now(),
-              },
-            ],
+        const syncedFieldingEvents =
+          await buildFieldingSyncEventsForSequenceEdit(existingAtBat, {
+            result: correctedResult ?? existingAtBat.result,
+            runnerOutcomes: updatedOutcomes,
+          });
+
+        const [previousChargedPlayerId, nextChargedPlayerId] =
+          await Promise.all([
+            resolveRunnerOutcomeErrorPlayerId(existingAtBat, previousOutcome),
+            resolveRunnerOutcomeErrorPlayerId(existingAtBat, nextOutcome),
+          ]);
+
+        await updateAtBatEventWithFieldingSync(
+          enrichingRunnerParentEntry.eventId,
+          {
+            runnerOutcomes: updatedOutcomes,
+            rbiCount: Math.max(0, (existingAtBat.rbiCount ?? 0) + scoreDelta),
+            runsScored: nextRunsScored,
+            outsAfter: nextOutsAfter,
+            runnersAfter: normalizedRunnersAfter,
+            awayScoreAfter: nextAwayScoreAfter,
+            homeScoreAfter: nextHomeScoreAfter,
+            isWalkOff: nextIsWalkOff,
+            outsRecorded: nextOutsRecorded,
+            ...(correctedResult ? { result: correctedResult } : {}),
+            version: nextVersion,
+            editHistory,
+          },
+          syncedFieldingEvents,
+        );
+
+        if (
+          previousChargedPlayerId &&
+          previousChargedPlayerId !== nextChargedPlayerId
+        ) {
+          adjustPlayerFieldingErrors(previousChargedPlayerId, -1);
+        }
+        if (nextChargedPlayerId && nextChargedPlayerId !== previousChargedPlayerId) {
+          adjustPlayerFieldingErrors(nextChargedPlayerId, 1);
+        }
+
+        if (
+          nextOutcome.heldByOf &&
+          nextOutcome.baseSaved &&
+          (nextOutcome.holdingFielder || nextOutcome.fielderPosition)
+        ) {
+          console.log("[M3-1-fix] Saved OF hold enrichment", {
+            eventId: enrichingRunnerParentEntry.eventId,
+            runnerId: nextOutcome.runnerId,
+            runnerName: nextOutcome.runnerName,
+            fromBase: nextOutcome.fromBase,
+            toBase: nextOutcome.toBase,
+            baseSaved: nextOutcome.baseSaved,
+            heldByOf: nextOutcome.heldByOf,
+            holdingFielder:
+              nextOutcome.holdingFielder ?? nextOutcome.fielderPosition,
+            fielderId: nextOutcome.fielderId,
+            fielderPosition: nextOutcome.fielderPosition,
+          });
+        }
+        if (nextOutcome.errorType && typeof nextOutcome.errorChargedTo === "number") {
+          console.log("[M3-3-universal] Recorded runner outcome error charge", {
+            eventId: enrichingRunnerParentEntry.eventId,
+            runnerId: nextOutcome.runnerId,
+            runnerName: nextOutcome.runnerName,
+            fromBase: nextOutcome.fromBase,
+            toBase: nextOutcome.toBase,
+            errorType: nextOutcome.errorType,
+            errorChargedToPosition: nextOutcome.errorChargedTo,
           });
         }
 
@@ -7907,9 +8266,11 @@ export function GameTracker() {
       }
     },
     [
+      adjustPlayerFieldingErrors,
       applyScoreAdjustment,
       applyBasesCorrection,
       applyOutsAdjustment,
+      buildFieldingSyncEventsForSequenceEdit,
       gameState.gamePhase,
       gameState.homeScore,
       gameState.awayScore,
@@ -7920,6 +8281,7 @@ export function GameTracker() {
       playLogEntries,
       queueAutoEndGame,
       queuePlayLogRefresh,
+      resolveRunnerOutcomeErrorPlayerId,
     ],
   );
 
@@ -8660,6 +9022,8 @@ export function GameTracker() {
               nextLeadoffIndex={battingNextLeadoff}
               teamPrimaryColor={battingTeamColors.primary}
               teamSecondaryColor={battingTeamColors.secondary}
+              getMojoForPlayer={getMojoForPlayer}
+              getFitnessForPlayer={getFitnessForPlayer}
               onPlayerTap={handleLineupPlayerTap}
             />
 
@@ -8670,6 +9034,8 @@ export function GameTracker() {
               nextLeadoffIndex={defensiveNextLeadoff}
               teamPrimaryColor={fieldingTeamColors.primary}
               teamSecondaryColor={fieldingTeamColors.secondary}
+              getMojoForPlayer={getMojoForPlayer}
+              getFitnessForPlayer={getFitnessForPlayer}
               onPlayerTap={handleLineupPlayerTap}
               enrichmentMode={defensiveEnrichmentMode}
             />
@@ -8771,6 +9137,7 @@ export function GameTracker() {
                 /* Runner enrichment panel replaces play log when active (UX-050) */
                 <RunnerEnrichmentPanel
                   subEntry={enrichingRunnerSubEntry}
+                  outfielderByPosition={runnerHoldOutfielderOptions}
                   onUpdate={handleRunnerEnrichmentUpdate}
                   onClose={handleEnrichmentClose}
                 />
@@ -9074,8 +9441,17 @@ export function GameTracker() {
                 benchPlayers={playerCardBenchEntries}
                 bullpenPitchers={undefined}
                 onSwapPosition={(playerId, playerName) => {
+                  console.log("[M1-3-fix] Entering player-card position swap mode", {
+                    gamePhase: gameState.gamePhase,
+                    playerId,
+                    playerName,
+                  });
                   setSwapPositionMode({ playerId, playerName });
                 }}
+                showSwapPosition={
+                  gameState.gamePhase === "LIVE" ||
+                  gameState.gamePhase === "PRE_GAME"
+                }
                 showSwapOrder={gameState.gamePhase === "PRE_GAME"}
                 onSwapOrder={(playerId, playerName) => {
                   setSwapOrderMode({ playerId, playerName });
@@ -9109,6 +9485,52 @@ export function GameTracker() {
            These will be reconnected via the player-card-first flow in Group 2.C. */}
 
         {/* Play Location Overlay - REMOVED (now using drag-drop interface) */}
+
+        {showInningEndConfirm && (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-80"
+            onClick={() => declineInningEnd()}
+          >
+            <div
+              className="w-[320px] border-[6px] border-[#4A6844] bg-[#556B55] p-4 shadow-[8px_8px_0px_0px_rgba(0,0,0,0.8)]"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div className="mb-3 border-[4px] border-[#E8E8D8] bg-[#3d5240] p-2">
+                <div className="text-xs font-bold text-[#E8E8D8]">
+                  END OF INNING?
+                </div>
+              </div>
+
+              <div className="space-y-3 text-[9px] text-[#E8E8D8]">
+                <p>
+                  Three outs are on the board. Confirm before the half-inning
+                  transitions.
+                </p>
+                <p className="text-[#C4A853]">
+                  Choose NO to stay in this half-inning and correct runner
+                  outcomes from the play log.
+                </p>
+              </div>
+
+              <div className="mt-4 flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => declineInningEnd()}
+                  className="flex-1 border-[5px] border-[#E8E8D8] bg-[#3d5240] py-3 text-sm text-[#E8E8D8] hover:bg-[#4A6844]"
+                >
+                  NO
+                </button>
+                <button
+                  type="button"
+                  onClick={() => confirmInningEnd()}
+                  className="flex-1 border-[5px] border-white bg-[#DD0000] py-3 text-sm text-white hover:bg-[#FF0000]"
+                >
+                  YES
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {scoreCorrectionPrompt && (
           <div
@@ -9528,7 +9950,7 @@ export function GameTracker() {
                   onClick={() => handleSfPromptAnswer(false)}
                   className="flex-1 px-3 py-2 bg-[#8B0000] text-white text-xs font-bold uppercase rounded border border-[#FF4444] hover:bg-[#a00] active:scale-95 transition-all"
                 >
-                  No — FO
+                  {`No — ${sfPrompt.outType}`}
                 </button>
               </div>
             </div>
@@ -10732,6 +11154,7 @@ interface PlayerCardModalProps {
   benchPlayers?: PlayerCardBenchEntry[];
   bullpenPitchers?: Array<{ name: string; hand: string }>;
   // §9.2: Swap Position
+  showSwapPosition?: boolean;
   onSwapPosition?: (playerId: string, playerName: string) => void;
   // §9.3: Swap Order (pre-game only)
   showSwapOrder?: boolean;
@@ -10789,6 +11212,7 @@ function PlayerCardModal({
   onSubOut,
   benchPlayers,
   bullpenPitchers,
+  showSwapPosition,
   onSwapPosition,
   showSwapOrder,
   onSwapOrder,
@@ -11090,8 +11514,8 @@ function PlayerCardModal({
             </button>
           )}
 
-          {/* §9.2: SWAP POSITION — LIVE only */}
-          {isLive && onSwapPosition && (
+          {/* §9.2: SWAP POSITION — shared player-card flow for live and pre-game */}
+          {showSwapPosition && onSwapPosition && (
             <button
               onClick={() => {
                 onSwapPosition(player.playerId, player.name);

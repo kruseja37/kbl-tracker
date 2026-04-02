@@ -370,6 +370,25 @@ export interface PlayerRatingsSnapshot {
   salary: number;
 }
 
+type LeagueIdentitySource = Pick<
+  PersistedGameState | CompletedGameRecord,
+  "competitionType" | "competitionId" | "leagueId"
+>;
+
+export function resolveExhibitionLeagueId(
+  game: LeagueIdentitySource,
+): string | undefined {
+  if (game.leagueId) {
+    return game.leagueId;
+  }
+
+  if (game.competitionType === "exhibition" || !game.competitionType) {
+    return game.competitionId ?? undefined;
+  }
+
+  return undefined;
+}
+
 export async function saveCurrentGame(
   state: PersistedGameState,
 ): Promise<void> {
@@ -586,6 +605,13 @@ export async function archiveCompletedGame(
   },
 ): Promise<void> {
   const db = await initDatabase();
+  const resolvedLeagueId =
+    context?.leagueId ??
+    resolveExhibitionLeagueId({
+      leagueId: gameState.leagueId,
+      competitionId: context?.competitionId ?? gameState.competitionId,
+      competitionType: context?.competitionType ?? gameState.competitionType,
+    });
 
   const record: CompletedGameRecord = {
     gameId: gameState.gameId,
@@ -594,7 +620,7 @@ export async function archiveCompletedGame(
     statsScopeId: context?.statsScopeId ?? gameState.statsScopeId ?? seasonId,
     competitionType: context?.competitionType ?? gameState.competitionType,
     competitionId: context?.competitionId ?? gameState.competitionId,
-    leagueId: context?.leagueId,
+    leagueId: resolvedLeagueId,
     seasonNumber: gameState.seasonNumber,
     stadiumName: gameState.stadiumName ?? null,
     awayTeamId: gameState.awayTeamId,

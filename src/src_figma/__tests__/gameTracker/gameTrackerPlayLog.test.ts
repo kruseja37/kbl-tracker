@@ -107,6 +107,123 @@ describe('gameTrackerPlayLog', () => {
     expect(entry.resultCategory).toBe('hit');
   });
 
+  test('[M3-1-fix] formats held runner sub-entries with OF attribution after advancement', () => {
+    const [entry] = buildPlayLogEntries([
+      createAtBatEvent({
+        result: '1B' as AtBatEvent['result'],
+        runnerOutcomes: [
+          {
+            runnerId: 'runner-1',
+            runnerName: 'Garcia',
+            fromBase: 'first',
+            toBase: 'second',
+            heldByOf: true,
+            holdingFielder: 'RF',
+            baseSaved: '3B',
+            playMechanic: 'hold',
+            fielderId: 'fielder-rf',
+            fielderPosition: 'RF',
+          },
+        ],
+      }),
+    ], []);
+
+    expect(entry.runnerSubEntries).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          runnerName: 'Garcia',
+          transitionLabel: '1B→2B (held by RF)',
+          heldByOf: true,
+          holdingFielder: 'RF',
+          baseSaved: '3B',
+          playMechanic: 'hold',
+          fielderPosition: 'RF',
+        }),
+      ]),
+    );
+  });
+
+  test('[M3-1-fix] infers batter runner sub-entries on hits so batter holds can be tracked', () => {
+    const [entry] = buildPlayLogEntries([
+      createAtBatEvent({
+        result: '2B' as AtBatEvent['result'],
+      }),
+    ], []);
+
+    expect(entry.runnerSubEntries).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          runnerId: 'batter-1',
+          runnerName: 'Johnson',
+          fromBase: 'batter',
+          toBase: 'second',
+          baseSaved: '3B',
+          transitionLabel: 'BAT→2B',
+        }),
+      ]),
+    );
+  });
+
+  test('[M3-3-universal] formats runner-error sub-entries with standard error notation', () => {
+    const [entry] = buildPlayLogEntries([
+      createAtBatEvent({
+        result: '1B' as AtBatEvent['result'],
+        runnerOutcomes: [
+          {
+            runnerId: 'runner-1',
+            runnerName: 'Garcia',
+            fromBase: 'first',
+            toBase: 'second',
+            errorType: 'throwing',
+            errorChargedTo: 6,
+          },
+        ],
+      }),
+    ], []);
+
+    expect(entry.runnerSubEntries).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          runnerName: 'Garcia',
+          transitionLabel: '1B→2B (E6)',
+          errorType: 'throwing',
+          errorChargedTo: 6,
+        }),
+      ]),
+    );
+  });
+
+  test('[M3-2] appends saved-bases detail to the fielding description', () => {
+    const [entry] = buildPlayLogEntries([
+      createAtBatEvent({
+        result: 'FO' as AtBatEvent['result'],
+        enrichment: {
+          fieldingSequence: [8],
+          fieldingPlayType: 'diving',
+          basesSaved: 2,
+          savedRun: true,
+        },
+      }),
+    ], []);
+
+    expect(entry.description).toBe('8 (saved 2B)');
+    expect(entry.hasFieldingData).toBe(true);
+  });
+
+  test('[M3-4] appends chase to the play log description when the at-bat was chased', () => {
+    const [entry] = buildPlayLogEntries([
+      createAtBatEvent({
+        result: 'K' as AtBatEvent['result'],
+        enrichment: {
+          chased: true,
+        },
+      }),
+    ], []);
+
+    expect(entry.result).toBe('K');
+    expect(entry.description).toBe('chase');
+  });
+
   test('maps between-play runner events into default-visible play log rows', () => {
     const entry = mapBetweenPlayEventToPlayLogEntry(createBetweenPlayEvent());
 

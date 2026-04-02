@@ -1,8 +1,9 @@
 import type { CompletedGameRecord } from './gameStorage';
-import { getAllCompletedGames } from './gameStorage';
+import { getAllCompletedGames, resolveExhibitionLeagueId } from './gameStorage';
 import type { AtBatEvent } from './eventLog';
 import { getGameEvents } from './eventLog';
 import { getAllCanonicalPlayers } from './almanacStorage';
+import type { CanonicalPlayer } from './almanacStorage';
 
 export interface ExhibitionGameFilters {
   teamId?: string;
@@ -33,12 +34,24 @@ export type ExhibitionPitchingLeaderStat =
 
 export interface ExhibitionLeaderEntry {
   leagueId: string;
+  instanceId: string;
   playerId: string;
   playerName: string;
   teamId: string;
   teamName: string;
   canonicalId: string;
   value: number;
+}
+
+export interface ExhibitionPlayerSearchEntry {
+  playerId: string;
+  playerName: string;
+  leagueId: string;
+  instanceId: string;
+  canonicalId: string;
+  teamId: string;
+  teamName: string;
+  games: number;
 }
 
 export interface BattingLine {
@@ -74,6 +87,7 @@ export interface PitchingLine {
 
 interface BattingAggregate {
   leagueId: string;
+  canonicalId: string;
   playerId: string;
   playerName: string;
   teamId: string;
@@ -94,6 +108,7 @@ interface BattingAggregate {
 
 interface PitchingAggregate {
   leagueId: string;
+  canonicalId: string;
   playerId: string;
   playerName: string;
   teamId: string;
@@ -158,8 +173,146 @@ function parseDateBoundary(value?: string, endOfDay: boolean = false): number | 
   return parsed.getTime();
 }
 
-function getLeagueId(game: CompletedGameRecord): string | null {
-  return game.leagueId ?? game.competitionId ?? null;
+interface CanonicalRegistry {
+  canonicalIdByLeaguePlayerId: Map<string, string>;
+  canonicalIdByPlayerId: Map<string, string>;
+  playerIdsByLeagueCanonical: Map<string, Set<string>>;
+  preferredPlayerIdByLeagueCanonical: Map<string, string>;
+}
+
+function buildCanonicalRegistry(
+  canonicalPlayers: CanonicalPlayer[],
+): CanonicalRegistry {
+  const canonicalIdByLeaguePlayerId = new Map<string, string>();
+  const canonicalIdByPlayerId = new Map<string, string>();
+  const playerIdsByLeagueCanonical = new Map<string, Set<string>>();
+  const preferredPlayerIdByLeagueCanonical = new Map<string, string>();
+
+  for (const player of canonicalPlayers) {
+    for (const instance of player.instances) {
+      if (instance.mode !== 'exhibition') {
+        continue;
+      }
+
+      const leaguePlayerKey = `${instance.instanceId}::${instance.playerIdInInstance}`;
+      const leagueCanonicalKey = `${instance.instanceId}::${player.canonicalId}`;
+
+      canonicalIdByLeaguePlayerId.set(leaguePlayerKey, player.canonicalId);
+      canonicalIdByPlayerId.set(instance.playerIdInInstance, player.canonicalId);
+
+      const playerIds =
+        playerIdsByLeagueCanonical.get(leagueCanonicalKey) ?? new Set<string>();
+      playerIds.add(instance.playerIdInInstance);
+      playerIdsByLeagueCanonical.set(leagueCanonicalKey, playerIds);
+
+      if (!preferredPlayerIdByLeagueCanonical.has(leagueCanonicalKey)) {
+        preferredPlayerIdByLeagueCanonical.set(
+          leagueCanonicalKey,
+          instance.playerIdInInstance,
+        );
+      }
+    }
+  }
+
+  return {
+    canonicalIdByLeaguePlayerId,
+    canonicalIdByPlayerId,
+    playerIdsByLeagueCanonical,
+    preferredPlayerIdByLeagueCanonical,
+  };
+}
+
+async function getCanonicalRegistry(): Promise<CanonicalRegistry> {
+  return buildCanonicalRegistry(await getAllCanonicalPlayers());
+}
+
+function resolveCanonicalIdForLeague(
+  registry: CanonicalRegistry,
+  leagueId: string,
+  playerId: string,
+): string | null {
+  const byLeague = registry.canonicalIdByLeaguePlayerId.get(
+    `${leagueId}::${playerId}`,
+  );
+  if (byLeague) {
+    return byLeague;
+  }
+
+  const directCanonicalKey = `${leagueId}::${playerId}`;
+  if (registry.playerIdsByLeagueCanonical.has(directCanonicalKey)) {
+    return playerId;
+  }
+
+  return registry.canonicalIdByPlayerId.get(playerId) ?? null;
+}
+
+function resolveCanonicalAggregateIdentity(
+  registry: CanonicalRegistry,
+  leagueId: string,
+  playerId: string,
+): { aggregateKey: string; canonicalId: string; preferredPlayerId: string } {
+  const canonicalId = resolveCanonicalIdForLeague(registry, leagueId, playerId);
+
+  if (!canonicalId) {
+    return {
+      aggregateKey: playerId,
+      canonicalId: playerId,
+      preferredPlayerId: playerId,
+    };
+  }
+
+  const leagueCanonicalKey = `${leagueId}::${canonicalId}`;
+  return {
+    aggregateKey: canonicalId,
+    canonicalId,
+    preferredPlayerId:
+      registry.preferredPlayerIdByLeagueCanonical.get(leagueCanonicalKey) ??
+      playerId,
+  };
+}
+
+function resolvePlayerAliasesForLeague(
+  registry: CanonicalRegistry,
+  leagueId: string,
+  playerId: string,
+): Set<string> {
+  const canonicalId = resolveCanonicalIdForLeague(registry, leagueId, playerId);
+  if (!canonicalId) {
+    return new Set([playerId]);
+  }
+
+  const aliases = registry.playerIdsByLeagueCanonical.get(
+    `${leagueId}::${canonicalId}`,
+  );
+  return new Set([playerId, ...(aliases ?? [])]);
+}
+
+function getBattingEntryForAliases(
+  game: CompletedGameRecord,
+  playerIds: Set<string>,
+): { matchedPlayerId: string; stats: CompletedGameRecord['playerStats'][string] } | null {
+  for (const candidateId of playerIds) {
+    const stats = game.playerStats[candidateId];
+    if (stats) {
+      return { matchedPlayerId: candidateId, stats };
+    }
+  }
+
+  return null;
+}
+
+function getPitchingEntryForAliases(
+  game: CompletedGameRecord,
+  playerIds: Set<string>,
+): CompletedGameRecord['pitcherGameStats'][number] | null {
+  return (
+    game.pitcherGameStats.find((pitcher) => playerIds.has(pitcher.pitcherId)) ??
+    null
+  );
+}
+
+export function getExhibitionLeagueId(game: CompletedGameRecord): string | null {
+  return resolveExhibitionLeagueId(game) ?? null;
 }
 
 function isExhibitionGame(game: CompletedGameRecord): boolean {
@@ -183,7 +336,7 @@ function buildTeamGameCounts(games: CompletedGameRecord[]): Map<string, number> 
   const counts = new Map<string, number>();
 
   for (const game of games) {
-    const leagueId = getLeagueId(game);
+    const leagueId = getExhibitionLeagueId(game);
     if (!leagueId) {
       continue;
     }
@@ -205,7 +358,7 @@ function findTeamName(
 ): string {
   const matchingGame = games.find(
     (game) =>
-      getLeagueId(game) === leagueId &&
+      getExhibitionLeagueId(game) === leagueId &&
       (game.awayTeamId === teamId || game.homeTeamId === teamId)
   );
 
@@ -284,11 +437,15 @@ export async function getExhibitionGames(
     })
     .sort((a, b) => b.date - a.date);
 
-  console.log('[Almanac] Exhibition games found:', exhibitionGames.length, exhibitionGames.map((game) => ({
-    gameId: game.gameId,
-    leagueId: getLeagueId(game),
-    competitionType: game.competitionType ?? null,
-  })));
+  console.log('[M4-1] getExhibitionGames', {
+    filters,
+    count: exhibitionGames.length,
+    games: exhibitionGames.map((game) => ({
+      gameId: game.gameId,
+      leagueId: getExhibitionLeagueId(game),
+      competitionType: game.competitionType ?? null,
+    })),
+  });
 
   return exhibitionGames;
 }
@@ -299,21 +456,27 @@ export async function getExhibitionBattingLeaders(
   limit: number
 ): Promise<ExhibitionLeaderEntry[]> {
   const games = await getExhibitionGames();
-  const canonicalIds = await getCanonicalIdLookup();
+  const canonicalRegistry = await getCanonicalRegistry();
   const teamGameCounts = buildTeamGameCounts(games);
   const aggregates = new Map<string, BattingAggregate>();
 
   for (const game of games) {
-    const leagueId = getLeagueId(game);
+    const leagueId = getExhibitionLeagueId(game);
     if (!leagueId) {
       continue;
     }
 
     for (const [playerId, stats] of Object.entries(game.playerStats)) {
-      const key = `${leagueId}::${playerId}`;
-      const aggregate = aggregates.get(key) ?? {
+      const identity = resolveCanonicalAggregateIdentity(
+        canonicalRegistry,
         leagueId,
         playerId,
+      );
+      const key = `${leagueId}::${identity.aggregateKey}`;
+      const aggregate = aggregates.get(key) ?? {
+        leagueId,
+        canonicalId: identity.canonicalId,
+        playerId: identity.preferredPlayerId,
         playerName: stats.playerName,
         teamId: stats.teamId,
         lastSeenDate: game.date,
@@ -332,6 +495,7 @@ export async function getExhibitionBattingLeaders(
       };
 
       if (game.date >= aggregate.lastSeenDate) {
+        aggregate.playerId = identity.preferredPlayerId;
         aggregate.playerName = stats.playerName;
         aggregate.teamId = stats.teamId;
         aggregate.lastSeenDate = game.date;
@@ -380,15 +544,28 @@ export async function getExhibitionBattingLeaders(
 
       return {
         leagueId: aggregate.leagueId,
+        instanceId: aggregate.leagueId,
         playerId: aggregate.playerId,
         playerName: aggregate.playerName,
         teamId: aggregate.teamId,
         teamName: findTeamName(games, aggregate.leagueId, aggregate.teamId),
-        canonicalId: canonicalIds.get(aggregate.playerId) ?? aggregate.playerId,
+        canonicalId: aggregate.canonicalId,
         value: valueMap[stat],
       };
     })
     .sort((a, b) => b.value - a.value || a.playerName.localeCompare(b.playerName));
+
+  console.log('[M4-1] getExhibitionBattingLeaders', {
+    stat,
+    qualified,
+    limit,
+    returned: leaders.slice(0, limit).map((leader) => ({
+      canonicalId: leader.canonicalId,
+      playerId: leader.playerId,
+      leagueId: leader.leagueId,
+      value: leader.value,
+    })),
+  });
 
   return leaders.slice(0, limit);
 }
@@ -399,21 +576,27 @@ export async function getExhibitionPitchingLeaders(
   limit: number
 ): Promise<ExhibitionLeaderEntry[]> {
   const games = await getExhibitionGames();
-  const canonicalIds = await getCanonicalIdLookup();
+  const canonicalRegistry = await getCanonicalRegistry();
   const teamGameCounts = buildTeamGameCounts(games);
   const aggregates = new Map<string, PitchingAggregate>();
 
   for (const game of games) {
-    const leagueId = getLeagueId(game);
+    const leagueId = getExhibitionLeagueId(game);
     if (!leagueId) {
       continue;
     }
 
     for (const pitcher of game.pitcherGameStats) {
-      const key = `${leagueId}::${pitcher.pitcherId}`;
+      const identity = resolveCanonicalAggregateIdentity(
+        canonicalRegistry,
+        leagueId,
+        pitcher.pitcherId,
+      );
+      const key = `${leagueId}::${identity.aggregateKey}`;
       const aggregate = aggregates.get(key) ?? {
         leagueId,
-        playerId: pitcher.pitcherId,
+        canonicalId: identity.canonicalId,
+        playerId: identity.preferredPlayerId,
         playerName: pitcher.pitcherName,
         teamId: pitcher.teamId,
         lastSeenDate: game.date,
@@ -432,6 +615,7 @@ export async function getExhibitionPitchingLeaders(
       };
 
       if (game.date >= aggregate.lastSeenDate) {
+        aggregate.playerId = identity.preferredPlayerId;
         aggregate.playerName = pitcher.pitcherName;
         aggregate.teamId = pitcher.teamId;
         aggregate.lastSeenDate = game.date;
@@ -478,11 +662,12 @@ export async function getExhibitionPitchingLeaders(
 
       return {
         leagueId: aggregate.leagueId,
+        instanceId: aggregate.leagueId,
         playerId: aggregate.playerId,
         playerName: aggregate.playerName,
         teamId: aggregate.teamId,
         teamName: findTeamName(games, aggregate.leagueId, aggregate.teamId),
-        canonicalId: canonicalIds.get(aggregate.playerId) ?? aggregate.playerId,
+        canonicalId: aggregate.canonicalId,
         value: valueMap[stat],
       };
     })
@@ -494,7 +679,27 @@ export async function getExhibitionPitchingLeaders(
       return b.value - a.value || a.playerName.localeCompare(b.playerName);
     });
 
+  console.log('[M4-1] getExhibitionPitchingLeaders', {
+    stat,
+    qualified,
+    limit,
+    returned: leaders.slice(0, limit).map((leader) => ({
+      canonicalId: leader.canonicalId,
+      playerId: leader.playerId,
+      leagueId: leader.leagueId,
+      value: leader.value,
+    })),
+  });
+
   return leaders.slice(0, limit);
+}
+
+export async function resolveExhibitionPlayerIds(
+  playerId: string,
+  leagueId: string,
+): Promise<string[]> {
+  const registry = await getCanonicalRegistry();
+  return Array.from(resolvePlayerAliasesForLeague(registry, leagueId, playerId));
 }
 
 export async function getPlayerExhibitionStats(
@@ -502,10 +707,17 @@ export async function getPlayerExhibitionStats(
   leagueId: string
 ): Promise<{ batting: BattingLine | null; pitching: PitchingLine | null }> {
   const games = await getExhibitionGames();
-  console.log('[Almanac] Loading exhibition stats for player:', {
+  const canonicalRegistry = await getCanonicalRegistry();
+  const playerIds = resolvePlayerAliasesForLeague(
+    canonicalRegistry,
+    leagueId,
+    playerId,
+  );
+  console.log('[M4-1] getPlayerExhibitionStats query', {
     playerId,
     leagueId,
     totalGames: games.length,
+    aliases: Array.from(playerIds),
   });
 
   const battingTotals = {
@@ -538,21 +750,30 @@ export async function getPlayerExhibitionStats(
   };
 
   for (const game of games) {
-    const gameLeagueId = getLeagueId(game);
+    const gameLeagueId = getExhibitionLeagueId(game);
     if (gameLeagueId !== leagueId) {
       continue;
     }
 
-    const battingStats = game.playerStats[playerId];
-    console.log('[Almanac] Checking exhibition game for player stats:', {
+    const battingEntry = getBattingEntryForAliases(game, playerIds);
+    console.log('[M4-1] getPlayerExhibitionStats game scan', {
       gameId: game.gameId,
       gameLeagueId,
       playerId,
-      hasBattingStats: Boolean(battingStats),
-      battingKeys: battingStats ? undefined : Object.keys(game.playerStats),
+      matchedBattingPlayerId: battingEntry?.matchedPlayerId ?? null,
+      battingKeys: Object.keys(game.playerStats),
       pitcherIds: game.pitcherGameStats.map((pitcher) => pitcher.pitcherId),
     });
-    if (battingStats) {
+    if (battingEntry) {
+      if (battingEntry.matchedPlayerId !== playerId) {
+        console.log('[M4-1] getPlayerExhibitionStats batting alias match', {
+          queriedPlayerId: playerId,
+          matchedPlayerId: battingEntry.matchedPlayerId,
+          gameId: game.gameId,
+        });
+      }
+
+      const battingStats = battingEntry.stats;
       battingTotals.games.add(game.gameId);
       battingTotals.ab += battingStats.ab;
       battingTotals.h += battingStats.h;
@@ -566,8 +787,16 @@ export async function getPlayerExhibitionStats(
       battingTotals.so += battingStats.k;
     }
 
-    const pitchingStats = game.pitcherGameStats.find((pitcher) => pitcher.pitcherId === playerId);
+    const pitchingStats = getPitchingEntryForAliases(game, playerIds);
     if (pitchingStats) {
+      if (pitchingStats.pitcherId !== playerId) {
+        console.log('[M4-1] getPlayerExhibitionStats pitching alias match', {
+          queriedPlayerId: playerId,
+          matchedPlayerId: pitchingStats.pitcherId,
+          gameId: game.gameId,
+        });
+      }
+
       pitchingTotals.games.add(game.gameId);
       pitchingTotals.outsRecorded += pitchingStats.outsRecorded;
       pitchingTotals.hitsAllowed += pitchingStats.hitsAllowed;
@@ -583,7 +812,7 @@ export async function getPlayerExhibitionStats(
     }
   }
 
-  console.log('[Almanac] Exhibition stats totals:', {
+  console.log('[M4-1] getPlayerExhibitionStats result', {
     playerId,
     leagueId,
     battingGames: battingTotals.games.size,
@@ -632,13 +861,21 @@ export async function getPlayerExhibitionStats(
 export async function getTeamRosterFromGames(
   leagueId: string,
   teamId: string
-): Promise<Array<{ playerId: string; playerName: string; canonicalId: string; games: number }>> {
+): Promise<Array<{ playerId: string; playerName: string; canonicalId: string; instanceId: string; games: number }>> {
   const games = await getExhibitionGames({ teamId });
-  const canonicalIds = await getCanonicalIdLookup();
-  const roster = new Map<string, { playerId: string; playerName: string; games: Set<string> }>();
+  const canonicalRegistry = await getCanonicalRegistry();
+  const roster = new Map<
+    string,
+    {
+      canonicalId: string;
+      playerId: string;
+      playerName: string;
+      games: Set<string>;
+    }
+  >();
 
   for (const game of games) {
-    if (getLeagueId(game) !== leagueId) {
+    if (getExhibitionLeagueId(game) !== leagueId) {
       continue;
     }
 
@@ -647,14 +884,21 @@ export async function getTeamRosterFromGames(
         continue;
       }
 
-      const entry = roster.get(playerId) ?? {
+      const identity = resolveCanonicalAggregateIdentity(
+        canonicalRegistry,
+        leagueId,
         playerId,
+      );
+      const entry = roster.get(identity.aggregateKey) ?? {
+        canonicalId: identity.canonicalId,
+        playerId: identity.preferredPlayerId,
         playerName: stats.playerName,
         games: new Set<string>(),
       };
+      entry.playerId = identity.preferredPlayerId;
       entry.playerName = stats.playerName;
       entry.games.add(game.gameId);
-      roster.set(playerId, entry);
+      roster.set(identity.aggregateKey, entry);
     }
 
     for (const pitcher of game.pitcherGameStats) {
@@ -662,14 +906,21 @@ export async function getTeamRosterFromGames(
         continue;
       }
 
-      const entry = roster.get(pitcher.pitcherId) ?? {
-        playerId: pitcher.pitcherId,
+      const identity = resolveCanonicalAggregateIdentity(
+        canonicalRegistry,
+        leagueId,
+        pitcher.pitcherId,
+      );
+      const entry = roster.get(identity.aggregateKey) ?? {
+        canonicalId: identity.canonicalId,
+        playerId: identity.preferredPlayerId,
         playerName: pitcher.pitcherName,
         games: new Set<string>(),
       };
+      entry.playerId = identity.preferredPlayerId;
       entry.playerName = pitcher.pitcherName;
       entry.games.add(game.gameId);
-      roster.set(pitcher.pitcherId, entry);
+      roster.set(identity.aggregateKey, entry);
     }
   }
 
@@ -677,10 +928,107 @@ export async function getTeamRosterFromGames(
     .map((entry) => ({
       playerId: entry.playerId,
       playerName: entry.playerName,
-      canonicalId: canonicalIds.get(entry.playerId) ?? entry.playerId,
+      canonicalId: entry.canonicalId,
+      instanceId: leagueId,
       games: entry.games.size,
     }))
     .sort((a, b) => b.games - a.games || a.playerName.localeCompare(b.playerName));
+}
+
+export async function searchExhibitionPlayerInstances(
+  query: string,
+): Promise<ExhibitionPlayerSearchEntry[]> {
+  const normalizedQuery = query.trim().toLowerCase();
+  if (!normalizedQuery) {
+    return [];
+  }
+
+  const games = await getExhibitionGames();
+  const canonicalRegistry = await getCanonicalRegistry();
+  const players = new Map<string, ExhibitionPlayerSearchEntry>();
+
+  const upsertEntry = (
+    leagueId: string,
+    playerId: string,
+    playerName: string,
+    teamId: string,
+    teamName: string,
+  ) => {
+    if (!playerName.toLowerCase().includes(normalizedQuery)) {
+      return;
+    }
+
+    const identity = resolveCanonicalAggregateIdentity(
+      canonicalRegistry,
+      leagueId,
+      playerId,
+    );
+    const key = `${leagueId}::${identity.aggregateKey}`;
+    const existing = players.get(key);
+    if (existing) {
+      existing.games += 1;
+      existing.playerId = identity.preferredPlayerId;
+      existing.playerName = playerName;
+      existing.teamId = teamId;
+      existing.teamName = teamName;
+      return;
+    }
+
+    players.set(key, {
+      playerId: identity.preferredPlayerId,
+      playerName,
+      leagueId,
+      instanceId: leagueId,
+      canonicalId: identity.canonicalId,
+      teamId,
+      teamName,
+      games: 1,
+    });
+  };
+
+  for (const game of games) {
+    const leagueId = getExhibitionLeagueId(game);
+    if (!leagueId) {
+      continue;
+    }
+
+    for (const [playerId, stats] of Object.entries(game.playerStats)) {
+      upsertEntry(
+        leagueId,
+        playerId,
+        stats.playerName,
+        stats.teamId,
+        stats.teamId === game.awayTeamId ? game.awayTeamName : game.homeTeamName,
+      );
+    }
+
+    for (const pitcher of game.pitcherGameStats) {
+      upsertEntry(
+        leagueId,
+        pitcher.pitcherId,
+        pitcher.pitcherName,
+        pitcher.teamId,
+        pitcher.teamId === game.awayTeamId ? game.awayTeamName : game.homeTeamName,
+      );
+    }
+  }
+
+  const results = Array.from(players.values()).sort(
+    (a, b) => b.games - a.games || a.playerName.localeCompare(b.playerName),
+  );
+
+  console.log('[M4-1] searchExhibitionPlayerInstances', {
+    query,
+    normalizedQuery,
+    results: results.map((result) => ({
+      canonicalId: result.canonicalId,
+      playerId: result.playerId,
+      leagueId: result.leagueId,
+      games: result.games,
+    })),
+  });
+
+  return results;
 }
 
 export async function getGameAtBatEvents(gameId: string): Promise<AtBatEvent[]> {

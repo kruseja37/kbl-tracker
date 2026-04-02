@@ -24,8 +24,9 @@ export type PlayLogEditorType =
   | 'lineup_pitching'
   | 'context_modifiers';
 
-export type RunnerBase = 'first' | 'second' | 'third';
-export type RunnerDestination = 'first' | 'second' | 'third' | 'home' | 'out';
+export type RunnerBase = 'batter' | 'first' | 'second' | 'third';
+export type RunnerDestination = 'first' | 'second' | 'third' | 'home' | 'out' | 'end';
+export type RunnerHoldBaseSaved = '2B' | '3B' | 'HOME';
 
 export interface RunnerSubEntry {
   id: string;
@@ -34,12 +35,21 @@ export interface RunnerSubEntry {
   runnerName: string;
   fromBase: RunnerBase;
   toBase: RunnerDestination;
+  parentResult?: string;
   isEnrichable: boolean;
   // Enrichment fields (UX-050)
   fieldingSequence?: number[];
   playMechanic?: string;
+  fielderId?: string;
+  fielderPosition?: 'LF' | 'CF' | 'RF';
+  heldByOf?: boolean;
+  holdingFielder?: 'LF' | 'CF' | 'RF';
+  baseSaved?: RunnerHoldBaseSaved;
   isTootblan?: boolean;
   isOutAdvancing?: boolean;
+  errorType?: 'fielding' | 'throwing' | 'mental';
+  errorChargedTo?: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
+  transitionLabel?: string;
 }
 
 export interface PlayLogEntry {

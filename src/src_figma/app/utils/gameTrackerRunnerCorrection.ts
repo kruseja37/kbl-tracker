@@ -10,7 +10,7 @@ import {
 import type { PlayData } from './gameTrackerFieldTypes';
 import type { HitType, OutType, RunnerAdvancement, WalkType } from '../../hooks/useGameState';
 import type { AtBatEvent } from '../../../utils/eventLog';
-import type { RunnerBase, RunnerDestination } from './playLogTypes';
+import type { RunnerBase, RunnerDestination, RunnerHoldBaseSaved } from './playLogTypes';
 
 export interface PendingRunnerCorrectionAction {
   outcomeLabel: string;
@@ -82,7 +82,7 @@ export function buildRunnerCorrectionForQuickBarOutcome(
     };
   }
 
-  if (['K', 'Kc', 'GO', 'FO', 'LO', 'PO', 'FC', 'SAC', 'SF', 'DP', 'TP'].includes(outcome)) {
+  if (['K', 'Kc', 'GO', 'FO', 'FLO', 'LO', 'PO', 'FC', 'SAC', 'SF', 'DP', 'TP'].includes(outcome)) {
     const playData: PlayData = {
       type: 'out',
       outType: outcome === 'SAC' ? 'SAC' : outcome as PlayData['outType'],
@@ -186,6 +186,10 @@ export function runnerOutcomeCountsAsRun(outcome: Pick<PersistedRunnerOutcome, '
 }
 
 export function runnerOutcomeCountsAsOut(outcome: Pick<PersistedRunnerOutcome, 'toBase' | 'isTootblan' | 'isOutAdvancing'>): boolean {
+  if (outcome.toBase === 'end') {
+    return false;
+  }
+
   return Boolean(outcome.toBase === 'out' || (outcome.toBase === 'home' && (outcome.isTootblan || outcome.isOutAdvancing)));
 }
 
@@ -195,14 +199,38 @@ export function getRunnerDisplayDestination(
   return runnerOutcomeCountsAsOut(outcome) ? 'out' : (outcome.toBase as RunnerDestination);
 }
 
+export const OF_HOLD_ELIGIBLE_RESULTS = new Set(['1B', '2B', '3B']);
+
+export function getHeldByOfBaseSaved(
+  toBase: RunnerDestination,
+  parentResult?: string,
+): RunnerHoldBaseSaved | null {
+  if (!parentResult || !OF_HOLD_ELIGIBLE_RESULTS.has(parentResult)) {
+    return null;
+  }
+
+  switch (toBase) {
+    case 'first':
+      return '2B';
+    case 'second':
+      return '3B';
+    case 'third':
+      return 'HOME';
+    default:
+      return null;
+  }
+}
+
 export function getRunnerDestinationOptions(fromBase: RunnerBase): RunnerDestination[] {
   switch (fromBase) {
-    case 'first':
+    case 'batter':
       return ['first', 'second', 'third', 'home', 'out'];
+    case 'first':
+      return ['first', 'second', 'third', 'home', 'out', 'end'];
     case 'second':
-      return ['second', 'third', 'home', 'out'];
+      return ['second', 'third', 'home', 'out', 'end'];
     case 'third':
-      return ['third', 'home', 'out'];
+      return ['third', 'home', 'out', 'end'];
     default:
       return ['out'];
   }

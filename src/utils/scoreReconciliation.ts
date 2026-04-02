@@ -5,6 +5,14 @@ export interface ReconciledScore {
   home: number;
 }
 
+export interface ScoreComparison {
+  current: ReconciledScore;
+  reconciled: ReconciledScore;
+  awayDelta: number;
+  homeDelta: number;
+  needsCorrection: boolean;
+}
+
 function getRunsScoredCount(event: Pick<AtBatEvent, 'runsScored'>): number {
   return Array.isArray(event.runsScored) ? event.runsScored.length : event.runsScored;
 }
@@ -26,4 +34,20 @@ export async function reconcileScoreFromEvents(gameId: string): Promise<Reconcil
 
     return score;
   }, { away: 0, home: 0 });
+}
+
+export function compareScores(
+  current: ReconciledScore,
+  reconciled: ReconciledScore,
+): ScoreComparison {
+  const awayDelta = reconciled.away - current.away;
+  const homeDelta = reconciled.home - current.home;
+
+  return {
+    current,
+    reconciled,
+    awayDelta,
+    homeDelta,
+    needsCorrection: awayDelta !== 0 || homeDelta !== 0,
+  };
 }

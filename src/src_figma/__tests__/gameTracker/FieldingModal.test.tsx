@@ -417,15 +417,10 @@ describe('FieldingModal Component', () => {
       expect(screen.getByText(/Comebacker Injury/)).toBeInTheDocument();
     });
 
-    test('shows HR Robbery toggle for HR result', () => {
+    test('does not show legacy HR robbery controls for HR result', () => {
       render(<FieldingModal {...defaultProps} result="HR" />);
-      expect(screen.getByText('HR Robbery Attempted?')).toBeInTheDocument();
-    });
-
-    test('shows robbery failed option when robbery attempted', () => {
-      render(<FieldingModal {...defaultProps} result="HR" />);
-      fireEvent.click(screen.getByText('HR Robbery Attempted?'));
-      expect(screen.getByText(/Ball bounced off glove over fence/)).toBeInTheDocument();
+      expect(screen.queryByText('HR Robbery Attempted?')).not.toBeInTheDocument();
+      expect(screen.getByText('No special situations apply to this play.')).toBeInTheDocument();
     });
 
     test('shows no special situations message when none apply', () => {
@@ -616,26 +611,13 @@ describe('FieldingModal Edge Cases', () => {
     expect(confirmBtn).not.toBeDisabled();
   });
 
-  test('robbery failed resets when robbery not attempted', () => {
+  test('HR completion keeps legacy robbery flags false', () => {
     const onComplete = vi.fn();
-    // HR doesn't require exit type selection
     render(<FieldingModal {...defaultProps} result="HR" onComplete={onComplete} />);
 
-    // Check robbery attempted
-    fireEvent.click(screen.getByText('HR Robbery Attempted?'));
-
-    // Check robbery failed
-    fireEvent.click(screen.getByText(/Ball bounced off glove/));
-
-    // Uncheck robbery attempted
-    fireEvent.click(screen.getByText('HR Robbery Attempted?'));
-
-    // Select a fielder first (HR doesn't auto-infer fielder)
     fireEvent.click(screen.getByRole('button', { name: 'CF' }));
-
     fireEvent.click(screen.getByText('Confirm Fielding'));
 
-    // Verify the call was made with expected fielding data
     expect(onComplete).toHaveBeenCalled();
     const firstCallArgs = onComplete.mock.calls[0][0];
     expect(firstCallArgs.robberyAttempted).toBe(false);

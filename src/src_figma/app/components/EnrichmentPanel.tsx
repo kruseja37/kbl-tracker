@@ -1,17 +1,32 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import type { AtBatEvent } from '../../../utils/eventLog';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { getAtBatEvent, type AtBatEvent } from '../../../utils/eventLog';
+import {
+  inferFielder,
+  type AtBatResult,
+  type Direction,
+  type Position,
+} from '../../../types/game';
 import type { PlayLogEntry, RunnerSubEntry } from '../utils/playLogTypes';
 import {
   FIELDING_ATTEMPT_TYPE_OPTIONS,
   FIELDING_ATTEMPT_OUTCOME_OPTIONS,
+  FIELDING_PLAY_TYPE_OPTIONS,
   PLAY_MECHANIC_OPTIONS,
   mapAttemptToLegacyFieldingPlayType,
+  mapLegacyFieldingPlayTypeToAttempt,
   type FieldingAttemptType,
   type FieldingAttemptOutcome,
   type PlayMechanic,
   type FieldingPlayTypeValue,
 } from '../utils/fieldingPlayType';
-import { getRunnerDestinationOptions } from '../utils/gameTrackerRunnerCorrection';
+import {
+  getHeldByOfBaseSaved,
+  getRunnerDestinationOptions,
+} from '../utils/gameTrackerRunnerCorrection';
+import {
+  inferAssistChain,
+  type BaseOccupancy,
+} from '../utils/gameTrackerFieldTypes';
 
 // ──────────────────────────────────────────────────────────────
 // Pitch Type Constants (§4.3)
@@ -77,8 +92,9 @@ export function mapExitTypeToContactType(exitType?: string): ContactTypeValue | 
 // ──────────────────────────────────────────────────────────────
 
 export interface EnrichmentUpdate {
-  fieldLocation?: { x: number; y: number };
+  fieldLocation?: { x: number; y: number; zone?: string };
   exitType?: string; // persisted as exitType, UI shows as contactType
+  chased?: boolean;
   fieldingSequence?: number[];
   fieldingDifficulty?: 'ROUTINE' | 'DIVING' | 'WALL' | 'RUNNING' | 'LEAPING';
   fieldingPlayType?: FieldingPlayTypeValue;
@@ -86,6 +102,8 @@ export interface EnrichmentUpdate {
   fieldingAttemptOutcome?: FieldingAttemptOutcome;
   playMechanic?: PlayMechanic;
   batterOutAdvancing?: boolean;
+  basesSaved?: 1 | 2;
+  savedRun?: boolean;
   hrDistance?: number;
   pitchType?: string;
   pitchesInAtBat?: number;
@@ -116,6 +134,7 @@ interface EnrichmentConfig {
   spray: boolean;
   /** §8.2: Context-sensitive spray zone count per result type */
   sprayZones: number;
+  chase: boolean;
   fieldingAttempt: boolean;
   playMechanic: boolean;
   contactType: boolean;
@@ -125,42 +144,57 @@ interface EnrichmentConfig {
 
 const ALL_CONTACT_MODIFIERS: AtBatModifierValue[] = ['SEVEN_PLUS_PITCH_AB', 'ROBBERY', 'KILLED_PITCHER', 'NUT_SHOT', 'BEAT_THROW', 'BEAT_RUNNER'];
 const NO_KP_NUT: AtBatModifierValue[] = ['SEVEN_PLUS_PITCH_AB', 'ROBBERY', 'BEAT_THROW', 'BEAT_RUNNER'];
+const HR_FIELDING_PLAY_TYPES = new Set<FieldingPlayTypeValue>([
+  'failed_robbery',
+]);
+const SAVED_BASES_ATTEMPT_TYPES = new Set<FieldingAttemptType>([
+  'diving',
+  'sliding',
+  'charging',
+  'over_shoulder',
+]);
 
-const ENRICHMENT_CONFIG: Record<string, EnrichmentConfig> = {
+function supportsSavedBases(attemptType?: FieldingAttemptType): boolean {
+  return !!attemptType && SAVED_BASES_ATTEMPT_TYPES.has(attemptType);
+}
+
+export const ENRICHMENT_CONFIG: Record<string, EnrichmentConfig> = {
   // Outs — §8.2 zone counts
-  GO:  { spray: true,  sprayZones: 18, fieldingAttempt: true,  playMechanic: true,  contactType: true, modifiers: ['SEVEN_PLUS_PITCH_AB', 'KILLED_PITCHER', 'NUT_SHOT', 'BEAT_RUNNER'], hrDistance: false },
-  FO:  { spray: true,  sprayZones: 27, fieldingAttempt: true,  playMechanic: true,  contactType: true, modifiers: ['SEVEN_PLUS_PITCH_AB', 'KILLED_PITCHER', 'NUT_SHOT', 'BEAT_RUNNER'], hrDistance: false },
-  LO:  { spray: true,  sprayZones: 39, fieldingAttempt: true,  playMechanic: true,  contactType: true, modifiers: ['SEVEN_PLUS_PITCH_AB', 'KILLED_PITCHER', 'NUT_SHOT', 'BEAT_RUNNER'], hrDistance: false },
-  PO:  { spray: true,  sprayZones: 27, fieldingAttempt: true,  playMechanic: true,  contactType: true, modifiers: ['SEVEN_PLUS_PITCH_AB', 'KILLED_PITCHER', 'NUT_SHOT', 'BEAT_RUNNER'], hrDistance: false },
-  DP:  { spray: true,  sprayZones: 42, fieldingAttempt: true,  playMechanic: true,  contactType: true, modifiers: ['SEVEN_PLUS_PITCH_AB', 'KILLED_PITCHER', 'NUT_SHOT', 'BEAT_RUNNER'], hrDistance: false },
-  TP:  { spray: true,  sprayZones: 42, fieldingAttempt: true,  playMechanic: true,  contactType: true, modifiers: ['SEVEN_PLUS_PITCH_AB', 'KILLED_PITCHER', 'NUT_SHOT', 'BEAT_RUNNER'], hrDistance: false },
-  FC:  { spray: true,  sprayZones: 42, fieldingAttempt: true,  playMechanic: true,  contactType: true, modifiers: ['SEVEN_PLUS_PITCH_AB', 'KILLED_PITCHER', 'NUT_SHOT', 'BEAT_RUNNER'], hrDistance: false },
+  GO:  { spray: true,  sprayZones: 18, chase: true,  fieldingAttempt: true,  playMechanic: true,  contactType: true, modifiers: ['SEVEN_PLUS_PITCH_AB', 'KILLED_PITCHER', 'NUT_SHOT', 'BEAT_RUNNER'], hrDistance: false },
+  FO:  { spray: true,  sprayZones: 27, chase: true,  fieldingAttempt: true,  playMechanic: true,  contactType: true, modifiers: ['SEVEN_PLUS_PITCH_AB', 'KILLED_PITCHER', 'NUT_SHOT', 'BEAT_RUNNER'], hrDistance: false },
+  FLO: { spray: true,  sprayZones: 27, chase: true,  fieldingAttempt: true,  playMechanic: true,  contactType: true, modifiers: ['SEVEN_PLUS_PITCH_AB', 'KILLED_PITCHER', 'NUT_SHOT', 'BEAT_RUNNER'], hrDistance: false },
+  LO:  { spray: true,  sprayZones: 39, chase: true,  fieldingAttempt: true,  playMechanic: true,  contactType: true, modifiers: ['SEVEN_PLUS_PITCH_AB', 'KILLED_PITCHER', 'NUT_SHOT', 'BEAT_RUNNER'], hrDistance: false },
+  PO:  { spray: true,  sprayZones: 27, chase: true,  fieldingAttempt: true,  playMechanic: true,  contactType: true, modifiers: ['SEVEN_PLUS_PITCH_AB', 'KILLED_PITCHER', 'NUT_SHOT', 'BEAT_RUNNER'], hrDistance: false },
+  DP:  { spray: true,  sprayZones: 42, chase: true,  fieldingAttempt: true,  playMechanic: true,  contactType: true, modifiers: ['SEVEN_PLUS_PITCH_AB', 'KILLED_PITCHER', 'NUT_SHOT', 'BEAT_RUNNER'], hrDistance: false },
+  TP:  { spray: true,  sprayZones: 42, chase: true,  fieldingAttempt: true,  playMechanic: true,  contactType: true, modifiers: ['SEVEN_PLUS_PITCH_AB', 'KILLED_PITCHER', 'NUT_SHOT', 'BEAT_RUNNER'], hrDistance: false },
+  FC:  { spray: true,  sprayZones: 42, chase: true,  fieldingAttempt: true,  playMechanic: true,  contactType: true, modifiers: ['SEVEN_PLUS_PITCH_AB', 'KILLED_PITCHER', 'NUT_SHOT', 'BEAT_THROW', 'BEAT_RUNNER'], hrDistance: false },
   // Hits — §8.2: 6 dirs × (3 IF + 4 OF) = 42
-  '1B': { spray: true,  sprayZones: 42, fieldingAttempt: true,  playMechanic: true,  contactType: true, modifiers: ['SEVEN_PLUS_PITCH_AB', 'KILLED_PITCHER', 'NUT_SHOT', 'BEAT_THROW'], hrDistance: false },
-  '2B': { spray: true,  sprayZones: 42, fieldingAttempt: true,  playMechanic: true,  contactType: true, modifiers: ['SEVEN_PLUS_PITCH_AB', 'KILLED_PITCHER', 'NUT_SHOT', 'BEAT_THROW'], hrDistance: false },
-  '3B': { spray: true,  sprayZones: 42, fieldingAttempt: true,  playMechanic: true,  contactType: true, modifiers: ['SEVEN_PLUS_PITCH_AB', 'KILLED_PITCHER', 'NUT_SHOT', 'BEAT_THROW'], hrDistance: false },
-  GRD: { spray: true,  sprayZones: 42, fieldingAttempt: true,  playMechanic: true,  contactType: true, modifiers: ['SEVEN_PLUS_PITCH_AB', 'KILLED_PITCHER', 'NUT_SHOT', 'BEAT_THROW'], hrDistance: false },
+  '1B': { spray: true,  sprayZones: 42, chase: true,  fieldingAttempt: true,  playMechanic: true,  contactType: true, modifiers: ['SEVEN_PLUS_PITCH_AB', 'KILLED_PITCHER', 'NUT_SHOT', 'BEAT_THROW'], hrDistance: false },
+  '2B': { spray: true,  sprayZones: 42, chase: true,  fieldingAttempt: true,  playMechanic: true,  contactType: true, modifiers: ['SEVEN_PLUS_PITCH_AB', 'KILLED_PITCHER', 'NUT_SHOT', 'BEAT_THROW'], hrDistance: false },
+  '3B': { spray: true,  sprayZones: 42, chase: true,  fieldingAttempt: true,  playMechanic: true,  contactType: true, modifiers: ['SEVEN_PLUS_PITCH_AB', 'KILLED_PITCHER', 'NUT_SHOT', 'BEAT_THROW'], hrDistance: false },
+  GRD: { spray: true,  sprayZones: 42, chase: true,  fieldingAttempt: true,  playMechanic: true,  contactType: true, modifiers: ['SEVEN_PLUS_PITCH_AB', 'KILLED_PITCHER', 'NUT_SHOT', 'BEAT_THROW'], hrDistance: false },
+  ITPHR:{ spray: true,  sprayZones: 42, chase: true,  fieldingAttempt: true,  playMechanic: true,  contactType: true, modifiers: ['SEVEN_PLUS_PITCH_AB', 'KILLED_PITCHER', 'NUT_SHOT', 'BEAT_THROW'], hrDistance: false },
   // HR — §8.2: 7 dirs × 3 depths = 21
-  HR:  { spray: true,  sprayZones: 21, fieldingAttempt: false, playMechanic: false, contactType: true, modifiers: ['SEVEN_PLUS_PITCH_AB'], hrDistance: true },
+  HR:  { spray: true,  sprayZones: 21, chase: true,  fieldingAttempt: true,  playMechanic: false, contactType: true, modifiers: ['SEVEN_PLUS_PITCH_AB'], hrDistance: true },
   // Sacrifices — no KP/NUT per §8.5
-  SAC: { spray: true,  sprayZones: 42, fieldingAttempt: true,  playMechanic: true,  contactType: true, modifiers: ['SEVEN_PLUS_PITCH_AB'], hrDistance: false },
-  SF:  { spray: true,  sprayZones: 27, fieldingAttempt: true,  playMechanic: true,  contactType: true, modifiers: ['SEVEN_PLUS_PITCH_AB'], hrDistance: false },
+  SAC: { spray: true,  sprayZones: 42, chase: true,  fieldingAttempt: true,  playMechanic: true,  contactType: true, modifiers: ['SEVEN_PLUS_PITCH_AB'], hrDistance: false },
+  SF:  { spray: true,  sprayZones: 27, chase: true,  fieldingAttempt: true,  playMechanic: true,  contactType: true, modifiers: ['SEVEN_PLUS_PITCH_AB'], hrDistance: false },
   // Errors — §8.2: IF + OF = 42
-  E:   { spray: true,  sprayZones: 42, fieldingAttempt: true,  playMechanic: true,  contactType: true, modifiers: ['SEVEN_PLUS_PITCH_AB', 'KILLED_PITCHER', 'NUT_SHOT'], hrDistance: false },
+  E:   { spray: true,  sprayZones: 42, chase: true,  fieldingAttempt: true,  playMechanic: true,  contactType: true, modifiers: ['SEVEN_PLUS_PITCH_AB', 'KILLED_PITCHER', 'NUT_SHOT'], hrDistance: false },
   // Non-contact plays — only pitch type + pitch count
-  K:   { spray: false, sprayZones: 0,  fieldingAttempt: false, playMechanic: false, contactType: false, modifiers: [], hrDistance: false },
-  Kc:  { spray: false, sprayZones: 0,  fieldingAttempt: false, playMechanic: false, contactType: false, modifiers: [], hrDistance: false },
-  WP_K:{ spray: false, sprayZones: 0,  fieldingAttempt: true,  playMechanic: false, contactType: false, modifiers: [], hrDistance: false },
-  PB_K:{ spray: false, sprayZones: 0,  fieldingAttempt: true,  playMechanic: false, contactType: false, modifiers: [], hrDistance: false },
-  BB:  { spray: false, sprayZones: 0,  fieldingAttempt: false, playMechanic: false, contactType: false, modifiers: [], hrDistance: false },
-  IBB: { spray: false, sprayZones: 0,  fieldingAttempt: false, playMechanic: false, contactType: false, modifiers: [], hrDistance: false },
-  HBP: { spray: false, sprayZones: 0,  fieldingAttempt: false, playMechanic: false, contactType: false, modifiers: [], hrDistance: false },
+  K:   { spray: false, sprayZones: 0,  chase: true,  fieldingAttempt: false, playMechanic: false, contactType: false, modifiers: [], hrDistance: false },
+  Kc:  { spray: false, sprayZones: 0,  chase: false, fieldingAttempt: false, playMechanic: false, contactType: false, modifiers: [], hrDistance: false },
+  WP_K:{ spray: false, sprayZones: 0,  chase: true,  fieldingAttempt: true,  playMechanic: false, contactType: false, modifiers: [], hrDistance: false },
+  PB_K:{ spray: false, sprayZones: 0,  chase: true,  fieldingAttempt: true,  playMechanic: false, contactType: false, modifiers: [], hrDistance: false },
+  BB:  { spray: false, sprayZones: 0,  chase: false, fieldingAttempt: false, playMechanic: false, contactType: false, modifiers: [], hrDistance: false },
+  IBB: { spray: false, sprayZones: 0,  chase: false, fieldingAttempt: false, playMechanic: false, contactType: false, modifiers: [], hrDistance: false },
+  HBP: { spray: false, sprayZones: 0,  chase: false, fieldingAttempt: false, playMechanic: false, contactType: false, modifiers: [], hrDistance: false },
 };
 
 function getEnrichmentConfig(result: string): EnrichmentConfig {
   return ENRICHMENT_CONFIG[result] || {
     spray: false, sprayZones: 0, fieldingAttempt: false, playMechanic: false,
-    contactType: false, modifiers: [], hrDistance: false,
+    chase: false, contactType: false, modifiers: [], hrDistance: false,
   };
 }
 
@@ -185,6 +219,7 @@ const SPRAY_ZONE_LAYOUTS: Record<string, SprayZoneLayout> = {
   HR:  { dirs: 7, depths: 3, foul: 0, innerR: 0.65, outerR: 1.0 },  // 21: beyond fence
   GO:  { dirs: 6, depths: 3, foul: 0, innerR: 0.0,  outerR: 0.45 }, // 18: infield only
   FO:  { dirs: 6, depths: 4, foul: 3, innerR: 0.4,  outerR: 1.0 },  // 27: OF + foul
+  FLO: { dirs: 6, depths: 4, foul: 3, innerR: 0.4,  outerR: 1.0 },  // 27: OF + foul
   LO:  { dirs: 6, depths: 6, foul: 3, innerR: 0.2,  outerR: 1.0 },  // 39: OF + med/deep IF + foul
   PO:  { dirs: 6, depths: 4, foul: 3, innerR: 0.0,  outerR: 0.55 }, // 27: IF + shallow OF + foul
   DEFAULT: { dirs: 6, depths: 7, foul: 0, innerR: 0.0, outerR: 1.0 }, // 42: IF + OF (1B/2B/3B/E/ITPHR/GRD)
@@ -226,6 +261,74 @@ interface ZoneData {
   path: string;
   centerX: number;
   centerY: number;
+}
+
+interface SpraySelection {
+  x: number;
+  y: number;
+  zone?: string;
+  direction?: Direction | null;
+}
+
+const FAIR_SPRAY_DIRECTIONS: Direction[] = [
+  'Left',
+  'Left-Center',
+  'Center',
+  'Right-Center',
+  'Right',
+];
+
+function getDirectionFromZone(zone: ZoneData): Direction | null {
+  if (zone.id === 'foul_l') return 'Foul-Left';
+  if (zone.id === 'foul_r') return 'Foul-Right';
+  if (zone.id === 'foul_c') return null;
+
+  let angle = Math.atan2(zone.centerY - CY, zone.centerX - CX);
+  if (angle < 0) angle += Math.PI * 2;
+
+  const normalized = Math.min(
+    0.999,
+    Math.max(0, (angle - FAN_START) / (FAN_END - FAN_START))
+  );
+  const index = Math.min(
+    FAIR_SPRAY_DIRECTIONS.length - 1,
+    Math.floor(normalized * FAIR_SPRAY_DIRECTIONS.length)
+  );
+
+  return FAIR_SPRAY_DIRECTIONS[index];
+}
+
+function getStoredSprayZone(zone: ZoneData, direction: Direction | null): string | undefined {
+  if (direction) return direction;
+  if (zone.id === 'foul_c') return 'Behind-Plate';
+  return undefined;
+}
+
+function getPositionNumber(position: Position | null): number | null {
+  if (!position) return null;
+  return FIELDER_POSITIONS.find((fielder) => fielder.label === position)?.num ?? null;
+}
+
+function areSequencesEqual(a: number[], b: number[]): boolean {
+  return a.length === b.length && a.every((value, index) => value === b[index]);
+}
+
+const EMPTY_BASE_OCCUPANCY: BaseOccupancy = {
+  first: false,
+  second: false,
+  third: false,
+};
+
+function areBaseOccupanciesEqual(a: BaseOccupancy, b: BaseOccupancy): boolean {
+  return a.first === b.first && a.second === b.second && a.third === b.third;
+}
+
+function toBaseOccupancy(event?: Pick<AtBatEvent, 'runners'> | null): BaseOccupancy {
+  return {
+    first: !!event?.runners?.first,
+    second: !!event?.runners?.second,
+    third: !!event?.runners?.third,
+  };
 }
 
 function generateZones(layout: SprayZoneLayout): ZoneData[] {
@@ -288,7 +391,7 @@ function SprayGraphic({
   result,
 }: {
   location?: { x: number; y: number } | null;
-  onTap: (pos: { x: number; y: number }) => void;
+  onTap: (selection: SpraySelection) => void;
   /** Result type for context-sensitive zone generation */
   result?: string;
 }) {
@@ -299,7 +402,14 @@ function SprayGraphic({
     // Convert zone center from SVG coords (200×120) to 0-100 percentage space
     const x = Math.round((zone.centerX / 200) * 100);
     const y = Math.round((zone.centerY / 120) * 100);
-    onTap({ x, y });
+    const direction = getDirectionFromZone(zone);
+
+    onTap({
+      x,
+      y,
+      zone: getStoredSprayZone(zone, direction),
+      direction,
+    });
   }, [onTap]);
 
   // Fallback: click anywhere on the field for free placement
@@ -354,6 +464,7 @@ function SprayGraphic({
         <path
           key={zone.id}
           d={zone.path}
+          data-testid={`spray-zone-${zone.id}`}
           fill={location && Math.abs(zone.centerX - location.x * 2) < 10 && Math.abs(zone.centerY - location.y * 1.2) < 8
             ? '#f59e0b33'
             : 'transparent'}
@@ -394,6 +505,17 @@ const FIELDER_POSITIONS = [
   { num: 7, label: 'LF' },
   { num: 8, label: 'CF' },
   { num: 9, label: 'RF' },
+];
+
+type OutfieldPosition = Extract<Position, 'LF' | 'CF' | 'RF'>;
+
+const OUTFIELD_POSITION_OPTIONS: Array<{
+  value: OutfieldPosition;
+  label: string;
+}> = [
+  { value: 'LF', label: 'LF' },
+  { value: 'CF', label: 'CF' },
+  { value: 'RF', label: 'RF' },
 ];
 
 function FieldingSequenceInput({
@@ -463,34 +585,62 @@ export function EnrichmentPanel({
   onClose,
   closeLabel = 'Done',
 }: EnrichmentPanelProps) {
+  const [baseOccupancy, setBaseOccupancy] = useState<BaseOccupancy>(EMPTY_BASE_OCCUPANCY);
   const [localFieldingSeq, setLocalFieldingSeq] = useState<number[]>(
     currentEnrichment?.fieldingSequence || []
   );
+  const lastAutoInferredSeqRef = useRef<{
+    primary: number;
+    sequence: number[];
+  } | null>(null);
 
   useEffect(() => {
-    const externalFieldingSeq = currentEnrichment?.fieldingSequence || [];
-    const hasDifferentLength = externalFieldingSeq.length !== localFieldingSeq.length;
-    const hasDifferentContents = !hasDifferentLength && externalFieldingSeq.some((value, index) => value !== localFieldingSeq[index]);
+    setLocalFieldingSeq(currentEnrichment?.fieldingSequence || []);
+    lastAutoInferredSeqRef.current = null;
+  }, [currentEnrichment?.fieldingSequence]);
 
-    if (hasDifferentLength || hasDifferentContents) {
-      setLocalFieldingSeq(externalFieldingSeq);
+  useEffect(() => {
+    if (!entry.eventId) {
+      setBaseOccupancy((prev) =>
+        areBaseOccupanciesEqual(prev, EMPTY_BASE_OCCUPANCY) ? prev : EMPTY_BASE_OCCUPANCY
+      );
+      return;
     }
-  }, [currentEnrichment?.fieldingSequence, localFieldingSeq]);
+
+    let cancelled = false;
+    void getAtBatEvent(entry.eventId).then((event) => {
+      if (cancelled) return;
+      const nextBaseOccupancy = toBaseOccupancy(event);
+      setBaseOccupancy((prev) =>
+        areBaseOccupanciesEqual(prev, nextBaseOccupancy) ? prev : nextBaseOccupancy
+      );
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [entry.eventId]);
 
   const config = getEnrichmentConfig(entry.result);
+  const isHomeRunResult = entry.result === 'HR';
 
   // Load existing attempt type/outcome — these fields may exist on persisted enrichment
   // but are not yet on the AtBatEvent['enrichment'] TS type
   const enrichmentAny = currentEnrichment as Record<string, unknown> | undefined;
+  const persistedFieldingPlayType = currentEnrichment?.fieldingPlayType as FieldingPlayTypeValue | undefined;
+  const derivedAttempt = mapLegacyFieldingPlayTypeToAttempt(persistedFieldingPlayType);
   const [attemptType, setAttemptType] = useState<FieldingAttemptType | undefined>(
-    enrichmentAny?.fieldingAttemptType as FieldingAttemptType | undefined
+    (enrichmentAny?.fieldingAttemptType as FieldingAttemptType | undefined) ?? derivedAttempt.attemptType
   );
   const [attemptOutcome, setAttemptOutcome] = useState<FieldingAttemptOutcome | undefined>(
-    enrichmentAny?.fieldingAttemptOutcome as FieldingAttemptOutcome | undefined
+    (enrichmentAny?.fieldingAttemptOutcome as FieldingAttemptOutcome | undefined) ?? derivedAttempt.attemptOutcome
   );
   const [playMechanic, setPlayMechanic] = useState<PlayMechanic | undefined>(
     enrichmentAny?.playMechanic as PlayMechanic | undefined
   );
+  const basesSaved = currentEnrichment?.basesSaved;
+  const canTrackSavedBases = supportsSavedBases(attemptType);
+  const isSavedBasesEnabled = typeof basesSaved === 'number';
 
   const isK = entry.result === 'K' || entry.result === 'Kc';
   const supportsBatterOutAdvancing = ['1B', '2B', '3B', 'GRD'].includes(entry.result);
@@ -499,14 +649,117 @@ export function EnrichmentPanel({
   const putoutLabel = currentEnrichment?.putouts?.map(positionLabel).join(', ');
   const assistLabel = currentEnrichment?.assists?.map(positionLabel).join(', ');
   const errorLabel = currentEnrichment?.errors?.map((error) => `${positionLabel(error.position)} (${error.type})`).join(', ');
+  const selectedHrFieldingPlayType = persistedFieldingPlayType && HR_FIELDING_PLAY_TYPES.has(persistedFieldingPlayType)
+    ? persistedFieldingPlayType
+    : attemptType
+      ? mapAttemptToLegacyFieldingPlayType(attemptType, attemptOutcome || 'made')
+      : undefined;
+  const hrFieldingAttemptOptions = FIELDING_PLAY_TYPE_OPTIONS.filter((option) => HR_FIELDING_PLAY_TYPES.has(option.value));
 
   // Derive contactType from persisted exitType
   const currentContactType = mapExitTypeToContactType(currentEnrichment?.exitType);
+  const primaryFielderNumber = localFieldingSeq[0] ?? null;
 
-  const handleFieldingSeqChange = useCallback((seq: number[]) => {
+  const applyFieldingSequenceChange = useCallback((seq: number[]) => {
     setLocalFieldingSeq(seq);
     onUpdate('fieldingSequence', seq);
   }, [onUpdate]);
+
+  const applyInferredAssistChain = useCallback((primaryFielder: number) => {
+    const inferredSequence = inferAssistChain(
+      entry.result,
+      primaryFielder,
+      baseOccupancy
+    );
+
+    lastAutoInferredSeqRef.current = {
+      primary: primaryFielder,
+      sequence: inferredSequence,
+    };
+
+    console.log('[M2-3-fix] Inferred assist chain', {
+      eventId: entry.eventId,
+      result: entry.result,
+      primaryFielder,
+      bases: baseOccupancy,
+      sequence: inferredSequence,
+    });
+
+    applyFieldingSequenceChange(inferredSequence);
+  }, [applyFieldingSequenceChange, baseOccupancy, entry.eventId, entry.result]);
+
+  const handleFieldingSeqChange = useCallback((seq: number[]) => {
+    lastAutoInferredSeqRef.current = null;
+    applyFieldingSequenceChange(seq);
+  }, [applyFieldingSequenceChange]);
+
+  const handlePrimaryFielderChange = useCallback((positionNumber: number) => {
+    applyInferredAssistChain(positionNumber);
+  }, [applyInferredAssistChain]);
+
+  useEffect(() => {
+    const lastAutoInferred = lastAutoInferredSeqRef.current;
+    if (!lastAutoInferred) {
+      return;
+    }
+
+    if (!areSequencesEqual(localFieldingSeq, lastAutoInferred.sequence)) {
+      return;
+    }
+
+    const refinedSequence = inferAssistChain(
+      entry.result,
+      lastAutoInferred.primary,
+      baseOccupancy
+    );
+
+    if (areSequencesEqual(refinedSequence, lastAutoInferred.sequence)) {
+      return;
+    }
+
+    lastAutoInferredSeqRef.current = {
+      primary: lastAutoInferred.primary,
+      sequence: refinedSequence,
+    };
+
+    console.log('[M2-3-fix] Refined assist chain from base state', {
+      eventId: entry.eventId,
+      result: entry.result,
+      primaryFielder: lastAutoInferred.primary,
+      bases: baseOccupancy,
+      sequence: refinedSequence,
+    });
+
+    applyFieldingSequenceChange(refinedSequence);
+  }, [
+    applyFieldingSequenceChange,
+    baseOccupancy,
+    entry.eventId,
+    entry.result,
+    localFieldingSeq,
+  ]);
+
+  const handleSpraySelection = useCallback((selection: SpraySelection) => {
+    onUpdate(
+      'fieldLocation',
+      selection.zone
+        ? { x: selection.x, y: selection.y, zone: selection.zone }
+        : { x: selection.x, y: selection.y }
+    );
+
+    if (!selection.direction) return;
+
+    const inferredPrimaryFielder = inferFielder(
+      entry.result as AtBatResult,
+      selection.direction
+    );
+    const inferredPrimaryNumber = getPositionNumber(inferredPrimaryFielder);
+
+    if (!inferredPrimaryFielder || !inferredPrimaryNumber) return;
+
+    console.log(`[M2-3-fix] Inferred fielder: ${inferredPrimaryFielder}`);
+    applyInferredAssistChain(inferredPrimaryNumber);
+  }, [applyInferredAssistChain, entry.result, onUpdate]);
 
   const handleAttemptTypeChange = useCallback((type: FieldingAttemptType) => {
     setAttemptType(type);
@@ -514,6 +767,9 @@ export function EnrichmentPanel({
     // Also write legacy fieldingPlayType for persistence compatibility
     const outcome = attemptOutcome || 'made';
     onUpdate('fieldingPlayType', mapAttemptToLegacyFieldingPlayType(type, outcome));
+    if (!supportsSavedBases(type)) {
+      onUpdate('basesSaved', undefined);
+    }
   }, [onUpdate, attemptOutcome]);
 
   const handleAttemptOutcomeChange = useCallback((outcome: FieldingAttemptOutcome) => {
@@ -523,17 +779,55 @@ export function EnrichmentPanel({
     if (attemptType) {
       onUpdate('fieldingPlayType', mapAttemptToLegacyFieldingPlayType(attemptType, outcome));
     }
+    if (!supportsSavedBases(attemptType)) {
+      onUpdate('basesSaved', undefined);
+    }
   }, [onUpdate, attemptType]);
+
+  const handleHrFieldingPlayTypeChange = useCallback((playType: Extract<FieldingPlayTypeValue, 'failed_robbery'>) => {
+    const { attemptType: nextAttemptType, attemptOutcome: nextAttemptOutcome } =
+      mapLegacyFieldingPlayTypeToAttempt(playType);
+
+    setAttemptType(nextAttemptType);
+    setAttemptOutcome(nextAttemptOutcome);
+
+    if (nextAttemptType) {
+      onUpdate('fieldingAttemptType', nextAttemptType);
+    }
+    if (nextAttemptOutcome) {
+      onUpdate('fieldingAttemptOutcome', nextAttemptOutcome);
+    }
+    console.log('[M2-2-fix] HR fielding attempt selected', { playType });
+    onUpdate('fieldingPlayType', playType);
+  }, [onUpdate]);
 
   const handlePlayMechanicChange = useCallback((mechanic: PlayMechanic) => {
     setPlayMechanic(mechanic);
     onUpdate('playMechanic', mechanic);
   }, [onUpdate]);
 
+  const handleSavedBasesToggle = useCallback(() => {
+    onUpdate('basesSaved', isSavedBasesEnabled ? undefined : 1);
+  }, [isSavedBasesEnabled, onUpdate]);
+
+  const handleBasesSavedChange = useCallback((nextBasesSaved: 1 | 2) => {
+    onUpdate('basesSaved', nextBasesSaved);
+  }, [onUpdate]);
+
   const handleContactTypeChange = useCallback((contactType: ContactTypeValue) => {
     // Store as exitType for persistence compatibility
     onUpdate('exitType', mapContactTypeToExitType(contactType));
   }, [onUpdate]);
+
+  const handleChaseToggle = useCallback(() => {
+    const nextChased = !currentEnrichment?.chased;
+    console.log(`[M3-4] Chase toggled: ${nextChased ? 'ON' : 'OFF'}`, {
+      eventId: entry.eventId,
+      result: entry.result,
+      chased: nextChased,
+    });
+    onUpdate('chased', nextChased ? true : undefined);
+  }, [currentEnrichment?.chased, entry.eventId, entry.result, onUpdate]);
 
   return (
     <div className="bg-[#2a3a2d] border-l-2 border-[#C4A853] flex flex-col h-full">
@@ -562,7 +856,7 @@ export function EnrichmentPanel({
           <EnrichmentSection label="Field Location" filled={!!currentEnrichment?.fieldLocation}>
             <SprayGraphic
               location={currentEnrichment?.fieldLocation}
-              onTap={(pos) => onUpdate('fieldLocation', pos)}
+              onTap={handleSpraySelection}
               result={entry.result}
             />
           </EnrichmentSection>
@@ -591,46 +885,97 @@ export function EnrichmentPanel({
         {/* Layer A — Fielding Attempt (§8.1): Attempt Type + Outcome */}
         {config.fieldingAttempt && (
           <>
-            <EnrichmentSection label="Fielding Attempt" filled={!!attemptType}>
-              <div className="flex flex-wrap gap-1.5">
-                {FIELDING_ATTEMPT_TYPE_OPTIONS.map((at) => (
-                  <button
-                    key={at.value}
-                    className={`text-xs min-h-[36px] px-3 py-2 rounded border transition-colors touch-manipulation
-                      ${attemptType === at.value
-                        ? 'bg-[#C4A853]/30 border-[#C4A853] text-[#C4A853]'
-                        : 'bg-[#1f2937]/60 border-[#4a6a4a] text-[#88AA88] hover:bg-[#4a6a4a]/40'}`}
-                    onClick={() => handleAttemptTypeChange(at.value)}
-                  >
-                    {at.label}
-                  </button>
-                ))}
-              </div>
-              {attemptType && attemptType !== 'routine' && (
-                <div className="flex gap-1.5 mt-2">
-                  {FIELDING_ATTEMPT_OUTCOME_OPTIONS.map((ao) => (
+            <EnrichmentSection label="Fielding Attempt" filled={isHomeRunResult ? !!selectedHrFieldingPlayType : !!attemptType}>
+              {isHomeRunResult ? (
+                <div className="flex flex-wrap gap-1.5">
+                  {hrFieldingAttemptOptions.map((option) => (
                     <button
-                      key={ao.value}
-                      className={`text-xs min-h-[36px] px-3 py-2 rounded border transition-colors flex-1 touch-manipulation
-                        ${attemptOutcome === ao.value
+                      key={option.value}
+                      className={`text-xs min-h-[36px] px-3 py-2 rounded border transition-colors touch-manipulation
+                        ${selectedHrFieldingPlayType === option.value
                           ? 'bg-[#C4A853]/30 border-[#C4A853] text-[#C4A853]'
                           : 'bg-[#1f2937]/60 border-[#4a6a4a] text-[#88AA88] hover:bg-[#4a6a4a]/40'}`}
-                      onClick={() => handleAttemptOutcomeChange(ao.value)}
+                      onClick={() => handleHrFieldingPlayTypeChange(option.value as Extract<FieldingPlayTypeValue, 'failed_robbery'>)}
                     >
-                      {ao.label}
+                      {option.label}
                     </button>
                   ))}
                 </div>
+              ) : (
+                <>
+                  <div className="flex flex-wrap gap-1.5">
+                    {FIELDING_ATTEMPT_TYPE_OPTIONS.map((at) => (
+                      <button
+                        key={at.value}
+                        className={`text-xs min-h-[36px] px-3 py-2 rounded border transition-colors touch-manipulation
+                          ${attemptType === at.value
+                            ? 'bg-[#C4A853]/30 border-[#C4A853] text-[#C4A853]'
+                            : 'bg-[#1f2937]/60 border-[#4a6a4a] text-[#88AA88] hover:bg-[#4a6a4a]/40'}`}
+                        onClick={() => handleAttemptTypeChange(at.value)}
+                      >
+                        {at.label}
+                      </button>
+                    ))}
+                  </div>
+                  {attemptType && attemptType !== 'routine' && (
+                    <div className="flex gap-1.5 mt-2">
+                      {FIELDING_ATTEMPT_OUTCOME_OPTIONS.map((ao) => (
+                        <button
+                          key={ao.value}
+                          className={`text-xs min-h-[36px] px-3 py-2 rounded border transition-colors flex-1 touch-manipulation
+                            ${attemptOutcome === ao.value
+                              ? 'bg-[#C4A853]/30 border-[#C4A853] text-[#C4A853]'
+                              : 'bg-[#1f2937]/60 border-[#4a6a4a] text-[#88AA88] hover:bg-[#4a6a4a]/40'}`}
+                          onClick={() => handleAttemptOutcomeChange(ao.value)}
+                        >
+                          {ao.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </>
               )}
             </EnrichmentSection>
           </>
+        )}
+
+        {canTrackSavedBases && (
+          <EnrichmentSection label="Saved Extra Bases" filled={isSavedBasesEnabled}>
+            <div className="flex gap-1.5">
+              <button
+                className={`text-xs min-h-[36px] px-3 py-2 rounded border transition-colors flex-1 touch-manipulation
+                  ${isSavedBasesEnabled
+                    ? 'bg-[#C4A853]/30 border-[#C4A853] text-[#C4A853]'
+                    : 'bg-[#1f2937]/60 border-[#4a6a4a] text-[#88AA88] hover:bg-[#4a6a4a]/40'}`}
+                onClick={handleSavedBasesToggle}
+              >
+                Saved Extra Bases?
+              </button>
+            </div>
+            {isSavedBasesEnabled && (
+              <div className="flex gap-1.5 mt-2">
+                {[1, 2].map((option) => (
+                  <button
+                    key={option}
+                    className={`text-xs min-h-[36px] px-3 py-2 rounded border transition-colors flex-1 touch-manipulation
+                      ${basesSaved === option
+                        ? 'bg-[#C4A853]/30 border-[#C4A853] text-[#C4A853]'
+                        : 'bg-[#1f2937]/60 border-[#4a6a4a] text-[#88AA88] hover:bg-[#4a6a4a]/40'}`}
+                    onClick={() => handleBasesSavedChange(option as 1 | 2)}
+                  >
+                    {option === 1 ? '1 base' : '2 bases'}
+                  </button>
+                ))}
+              </div>
+            )}
+          </EnrichmentSection>
         )}
 
         {/* Layer B — Play Mechanic (§8.1) */}
         {config.playMechanic && (
           <EnrichmentSection label="Play Mechanic" filled={!!playMechanic && playMechanic !== 'routine'}>
             <div className="flex flex-wrap gap-1.5">
-              {PLAY_MECHANIC_OPTIONS.map((pm) => (
+              {PLAY_MECHANIC_OPTIONS.filter((pm) => pm.value !== 'hold').map((pm) => (
                 <button
                   key={pm.value}
                   className={`text-xs min-h-[36px] px-3 py-2 rounded border transition-colors touch-manipulation
@@ -663,6 +1008,33 @@ export function EnrichmentPanel({
         {/* Fielding Attribution (sequence + existing putout/assist/error data) */}
         {(config.fieldingAttempt || config.playMechanic) && (
           <EnrichmentSection label="Fielding Attribution" filled={(currentEnrichment?.fieldingSequence?.length ?? 0) > 0 || !!(putoutLabel || assistLabel || errorLabel)}>
+            <div className="mb-2">
+              <label
+                htmlFor="primary-fielder-select"
+                className="block text-[10px] text-[#88AA88] font-bold uppercase tracking-wider mb-1"
+              >
+                Primary Fielder
+              </label>
+              <select
+                id="primary-fielder-select"
+                aria-label="Primary Fielder"
+                value={primaryFielderNumber ? String(primaryFielderNumber) : ''}
+                className="w-full min-h-[40px] bg-[#1f2937] border border-[#4a6a4a] text-[#E8E8D8] text-sm px-3 py-2 rounded"
+                onChange={(e) => {
+                  const nextValue = Number(e.target.value);
+                  if (nextValue > 0) {
+                    handlePrimaryFielderChange(nextValue);
+                  }
+                }}
+              >
+                <option value="">Select primary fielder</option>
+                {FIELDER_POSITIONS.map((fielder) => (
+                  <option key={fielder.num} value={fielder.num}>
+                    {fielder.label}
+                  </option>
+                ))}
+              </select>
+            </div>
             <FieldingSequenceInput
               sequence={localFieldingSeq}
               onChange={handleFieldingSeqChange}
@@ -744,6 +1116,21 @@ export function EnrichmentPanel({
             <div className="text-[10px] text-[#34d399] mt-1">Quality At-Bat (7+ pitches)</div>
           )}
         </EnrichmentSection>
+
+        {config.chase && (
+          <EnrichmentSection label="Chase" filled={!!currentEnrichment?.chased}>
+            <button
+              aria-pressed={!!currentEnrichment?.chased}
+              className={`text-xs min-h-[36px] px-3 py-2 rounded border transition-colors touch-manipulation
+                ${currentEnrichment?.chased
+                  ? 'bg-[#f59e0b]/20 border-[#f59e0b] text-[#fbbf24]'
+                  : 'bg-[#1f2937]/60 border-[#4a6a4a] text-[#6b7280] hover:bg-[#4a6a4a]/40'}`}
+              onClick={handleChaseToggle}
+            >
+              {currentEnrichment?.chased ? 'CHASE' : 'chase'}
+            </button>
+          </EnrichmentSection>
+        )}
 
         {/* Layer D — Modifiers (§8.1) — context-sensitive per result */}
         {config.modifiers.length > 0 && (
@@ -831,7 +1218,7 @@ function getResultColorLocal(result: string): string {
     '1B': '#60a5fa', '2B': '#60a5fa', '3B': '#60a5fa', 'GRD': '#60a5fa',
     'HR': '#c084fc',
     'BB': '#4ade80', 'IBB': '#4ade80', 'HBP': '#4ade80',
-    'K': '#f87171', 'Kc': '#f87171', 'GO': '#f87171', 'FO': '#f87171',
+    'K': '#f87171', 'Kc': '#f87171', 'GO': '#f87171', 'FO': '#f87171', 'FLO': '#f87171',
     'LO': '#f87171', 'PO': '#f87171', 'DP': '#f87171', 'TP': '#f87171',
     'SF': '#f87171', 'SAC': '#f87171', 'FC': '#f87171',
     'E': '#fbbf24',
@@ -845,18 +1232,55 @@ function getResultColorLocal(result: string): string {
 // ──────────────────────────────────────────────────────────────
 
 const BASE_DISPLAY: Record<string, string> = {
-  first: '1B', second: '2B', third: '3B', home: 'HOME', out: 'OUT',
+  batter: 'BAT', first: '1B', second: '2B', third: '3B', home: 'HOME', out: 'OUT', end: 'END',
 };
+
+const RUNNER_ERROR_OPTIONS = [
+  { value: 'none', label: 'No Error' },
+  { value: 'fielding', label: 'Fielding' },
+  { value: 'throwing', label: 'Throwing' },
+  { value: 'mental', label: 'Mental' },
+] as const;
+
+const POSITION_CHARGE_OPTIONS = [
+  { value: 1, label: 'P(1)' },
+  { value: 2, label: 'C(2)' },
+  { value: 3, label: '1B(3)' },
+  { value: 4, label: '2B(4)' },
+  { value: 5, label: '3B(5)' },
+  { value: 6, label: 'SS(6)' },
+  { value: 7, label: 'LF(7)' },
+  { value: 8, label: 'CF(8)' },
+  { value: 9, label: 'RF(9)' },
+] as const;
+
+const isRunnerOutcomeOut = (toBase: RunnerSubEntry['toBase']) => toBase === 'out';
 
 interface RunnerEnrichmentPanelProps {
   subEntry: RunnerSubEntry;
-  onUpdate: (subEntryId: string, field: keyof Pick<RunnerSubEntry, 'fieldingSequence' | 'playMechanic' | 'isTootblan' | 'isOutAdvancing' | 'toBase'>, value: unknown) => void;
+  outfielderByPosition?: Partial<Record<OutfieldPosition, { playerId: string; playerName: string }>>;
+  onUpdate: (
+    subEntryId: string,
+    field: keyof Pick<RunnerSubEntry, 'fieldingSequence' | 'playMechanic' | 'fielderId' | 'fielderPosition' | 'heldByOf' | 'holdingFielder' | 'baseSaved' | 'isTootblan' | 'isOutAdvancing' | 'toBase' | 'errorType' | 'errorChargedTo'>,
+    value: unknown,
+  ) => void | Promise<void>;
   onClose: () => void;
 }
 
-export function RunnerEnrichmentPanel({ subEntry, onUpdate, onClose }: RunnerEnrichmentPanelProps) {
+export function RunnerEnrichmentPanel({
+  subEntry,
+  outfielderByPosition,
+  onUpdate,
+  onClose,
+}: RunnerEnrichmentPanelProps) {
   const [localFieldingSeq, setLocalFieldingSeq] = useState<number[]>(subEntry.fieldingSequence || []);
+  const [initialToBase, setInitialToBase] = useState(subEntry.toBase);
   const destinationOptions = getRunnerDestinationOptions(subEntry.fromBase);
+  const heldBaseSaved = getHeldByOfBaseSaved(subEntry.toBase, subEntry.parentResult);
+
+  useEffect(() => {
+    setInitialToBase(subEntry.toBase);
+  }, [subEntry.id]);
 
   const handleFieldingSeqChange = useCallback((seq: number[]) => {
     setLocalFieldingSeq(seq);
@@ -865,6 +1289,53 @@ export function RunnerEnrichmentPanel({ subEntry, onUpdate, onClose }: RunnerEnr
 
   const isScored = subEntry.toBase === 'home';
   const isOut = subEntry.toBase === 'out';
+  const isInningEnd = subEntry.toBase === 'end';
+  const isHeldByOutfielder = Boolean(subEntry.heldByOf || subEntry.playMechanic === 'hold');
+  const errorSelection = subEntry.errorType || 'none';
+  const shouldShowErrorAttribution =
+    isRunnerOutcomeOut(initialToBase) !== isRunnerOutcomeOut(subEntry.toBase) ||
+    !!subEntry.errorType ||
+    typeof subEntry.errorChargedTo === 'number';
+
+  const handleHoldToggle = useCallback(async () => {
+    if (isHeldByOutfielder) {
+      await onUpdate(subEntry.id, 'heldByOf', undefined);
+      await onUpdate(subEntry.id, 'holdingFielder', undefined);
+      await onUpdate(subEntry.id, 'baseSaved', undefined);
+      await onUpdate(subEntry.id, 'playMechanic', undefined);
+      await onUpdate(subEntry.id, 'fielderId', undefined);
+      await onUpdate(subEntry.id, 'fielderPosition', undefined);
+      return;
+    }
+
+    if (!heldBaseSaved) {
+      return;
+    }
+
+    await onUpdate(subEntry.id, 'heldByOf', true);
+    await onUpdate(subEntry.id, 'baseSaved', heldBaseSaved);
+    await onUpdate(subEntry.id, 'playMechanic', 'hold');
+  }, [heldBaseSaved, isHeldByOutfielder, onUpdate, subEntry.id]);
+
+  const handleHoldFielderSelect = useCallback(async (position: OutfieldPosition) => {
+    if (heldBaseSaved) {
+      await onUpdate(subEntry.id, 'heldByOf', true);
+      await onUpdate(subEntry.id, 'baseSaved', heldBaseSaved);
+    }
+    await onUpdate(subEntry.id, 'holdingFielder', position);
+    await onUpdate(subEntry.id, 'playMechanic', 'hold');
+    await onUpdate(subEntry.id, 'fielderPosition', position);
+    await onUpdate(subEntry.id, 'fielderId', outfielderByPosition?.[position]?.playerId);
+  }, [heldBaseSaved, onUpdate, outfielderByPosition, subEntry.id]);
+
+  const handleErrorTypeChange = useCallback(async (nextValue: 'none' | 'fielding' | 'throwing' | 'mental') => {
+    if (nextValue === 'none') {
+      await onUpdate(subEntry.id, 'errorType', undefined);
+      return;
+    }
+
+    await onUpdate(subEntry.id, 'errorType', nextValue);
+  }, [onUpdate, subEntry.id]);
 
   return (
     <div className="bg-[#2a3a2d] border-l-2 border-[#C4A853] flex flex-col h-full">
@@ -872,7 +1343,7 @@ export function RunnerEnrichmentPanel({ subEntry, onUpdate, onClose }: RunnerEnr
       <div className="flex items-center justify-between px-2 py-1 bg-[#1a2a1d] border-b border-[#4a6a4a]">
         <div className="flex items-center gap-1">
           <span className="text-[10px] text-[#6b7280]">└</span>
-          <span className={`text-[11px] font-bold ${isScored ? 'text-[#34d399]' : isOut ? 'text-[#f87171]' : 'text-[#E8E8D8]'}`}>
+          <span className={`text-[11px] font-bold ${isScored ? 'text-[#34d399]' : isOut ? 'text-[#f87171]' : isInningEnd ? 'text-[#fbbf24]' : 'text-[#E8E8D8]'}`}>
             {subEntry.runnerName}
           </span>
           <span className="text-[10px] text-[#88AA88] font-mono">
@@ -912,8 +1383,10 @@ export function RunnerEnrichmentPanel({ subEntry, onUpdate, onClose }: RunnerEnr
             className={`text-[11px] min-h-[36px] px-3 py-2 rounded border w-full transition-colors touch-manipulation
               ${subEntry.isTootblan
                 ? 'bg-[#f87171]/20 border-[#f87171] text-[#f87171]'
-                : 'bg-[#1f2937]/60 border-[#4a6a4a] text-[#88AA88] hover:bg-[#4a6a4a]/40'}`}
+                : 'bg-[#1f2937]/60 border-[#4a6a4a] text-[#88AA88] hover:bg-[#4a6a4a]/40'}
+              ${isScored || isInningEnd ? ' opacity-40 cursor-not-allowed' : ''}`}
             onClick={() => onUpdate(subEntry.id, 'isTootblan', !subEntry.isTootblan)}
+            disabled={isScored || isInningEnd}
           >
             {subEntry.isTootblan ? 'TOOTBLAN (runner fault)' : 'Mark TOOTBLAN'}
           </button>
@@ -925,17 +1398,110 @@ export function RunnerEnrichmentPanel({ subEntry, onUpdate, onClose }: RunnerEnr
             className={`text-[11px] min-h-[36px] px-3 py-2 rounded border w-full transition-colors touch-manipulation
               ${subEntry.isOutAdvancing
                 ? 'bg-[#f59e0b]/20 border-[#f59e0b] text-[#f59e0b]'
-                : 'bg-[#1f2937]/60 border-[#4a6a4a] text-[#88AA88] hover:bg-[#4a6a4a]/40'}`}
+                : 'bg-[#1f2937]/60 border-[#4a6a4a] text-[#88AA88] hover:bg-[#4a6a4a]/40'}
+              ${isScored || isInningEnd ? ' opacity-40 cursor-not-allowed' : ''}`}
             onClick={() => onUpdate(subEntry.id, 'isOutAdvancing', !subEntry.isOutAdvancing)}
+            disabled={isScored || isInningEnd}
           >
             {subEntry.isOutAdvancing ? 'Out Advancing (mgr fault)' : 'Mark Out Advancing'}
           </button>
         </EnrichmentSection>
 
+        {shouldShowErrorAttribution && (
+          <EnrichmentSection label="Error on the play?" filled={!!subEntry.errorType}>
+            <div className="grid grid-cols-2 gap-2">
+              {RUNNER_ERROR_OPTIONS.map((option) => {
+                const isSelected = errorSelection === option.value;
+                return (
+                  <label
+                    key={option.value}
+                    className={`flex min-h-[36px] cursor-pointer items-center gap-2 rounded border px-3 py-2 text-[11px] transition-colors touch-manipulation
+                      ${isSelected
+                        ? 'bg-[#C4A853]/30 border-[#C4A853] text-[#E8E8D8]'
+                        : 'bg-[#1f2937]/60 border-[#4a6a4a] text-[#88AA88] hover:bg-[#4a6a4a]/40'}`}
+                  >
+                    <input
+                      type="radio"
+                      name={`runner-error-${subEntry.id}`}
+                      checked={isSelected}
+                      onChange={() => {
+                        void handleErrorTypeChange(option.value);
+                      }}
+                      className="h-3.5 w-3.5 accent-[#C4A853]"
+                    />
+                    <span>{option.label}</span>
+                  </label>
+                );
+              })}
+            </div>
+
+            {!!subEntry.errorType && (
+              <div className="mt-2 space-y-2">
+                <div className="text-[10px] font-bold uppercase tracking-wide text-[#C4A853]">
+                  Charged To
+                </div>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {POSITION_CHARGE_OPTIONS.map((option) => {
+                    const isSelected = subEntry.errorChargedTo === option.value;
+                    return (
+                      <button
+                        key={option.value}
+                        type="button"
+                        className={`text-[11px] min-h-[36px] rounded border px-2 py-2 transition-colors touch-manipulation
+                          ${isSelected
+                            ? 'bg-[#f87171]/20 border-[#f87171] text-[#f87171]'
+                            : 'bg-[#1f2937]/60 border-[#4a6a4a] text-[#88AA88] hover:bg-[#4a6a4a]/40'}`}
+                        onClick={() => onUpdate(subEntry.id, 'errorChargedTo', option.value)}
+                      >
+                        {option.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </EnrichmentSection>
+        )}
+
+        {heldBaseSaved && (
+          <EnrichmentSection label="Held by OF" filled={isHeldByOutfielder}>
+            <button
+              className={`text-[11px] min-h-[36px] px-3 py-2 rounded border w-full transition-colors touch-manipulation
+                ${isHeldByOutfielder
+                  ? 'bg-[#C4A853]/30 border-[#C4A853] text-[#C4A853]'
+                  : 'bg-[#1f2937]/60 border-[#4a6a4a] text-[#88AA88] hover:bg-[#4a6a4a]/40'}`}
+              onClick={() => {
+                void handleHoldToggle();
+              }}
+            >
+              {isHeldByOutfielder ? 'Held by OF' : 'Mark Held by OF'}
+            </button>
+            {isHeldByOutfielder && (
+              <div className="flex gap-1.5 mt-2">
+                {OUTFIELD_POSITION_OPTIONS.map((option) => (
+                  <button
+                    key={option.value}
+                    className={`text-xs min-h-[36px] px-3 py-2 rounded border flex-1 transition-colors touch-manipulation
+                      ${(subEntry.holdingFielder || subEntry.fielderPosition) === option.value
+                        ? 'bg-[#C4A853]/30 border-[#C4A853] text-[#C4A853]'
+                        : 'bg-[#1f2937]/60 border-[#4a6a4a] text-[#88AA88] hover:bg-[#4a6a4a]/40'}`}
+                    onClick={() => {
+                      void handleHoldFielderSelect(option.value);
+                    }}
+                    title={outfielderByPosition?.[option.value]?.playerName}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </EnrichmentSection>
+        )}
+
         {/* Play Mechanic */}
         <EnrichmentSection label="Play Mechanic" filled={!!subEntry.playMechanic && subEntry.playMechanic !== 'routine'}>
           <div className="flex flex-wrap gap-1.5">
-            {PLAY_MECHANIC_OPTIONS.map((pm) => (
+            {PLAY_MECHANIC_OPTIONS.filter((pm) => pm.value !== 'hold').map((pm) => (
               <button
                 key={pm.value}
                 className={`text-xs min-h-[36px] px-3 py-2 rounded border transition-colors touch-manipulation

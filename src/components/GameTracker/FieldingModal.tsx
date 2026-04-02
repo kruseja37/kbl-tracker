@@ -317,16 +317,13 @@ export default function FieldingModal({
   // SMB4 specific
   const [nutshotEvent, setNutshotEvent] = useState(false);
   const [comebackerInjury, setComebackerInjury] = useState(false);
-  const [robberyAttempted, setRobberyAttempted] = useState(false);
-  const [robberyFailed, setRobberyFailed] = useState(false);
-
   // Update inferred fielder when exit type changes
   useEffect(() => {
     const newInferred = inferFielderEnhanced(result, direction, effectiveExitType);
     if (newInferred && !primaryFielder) {
-      setPrimaryFielder(newInferred);
+      dispatchSelection({ type: 'SET_PRIMARY', primary: newInferred });
     }
-  }, [result, direction, effectiveExitType]);
+  }, [result, direction, effectiveExitType, primaryFielder]);
 
   // Track whether the selected zone is in foul territory
   const [isFoulZone, setIsFoulZone] = useState(false);
@@ -334,7 +331,7 @@ export default function FieldingModal({
   // Handle zone selection from FieldZoneInput
   const handleZoneSelect = (zoneResult: ZoneTapResult, fielder: Position) => {
     setSelectedZoneId(zoneResult.zoneId);
-    setPrimaryFielder(fielder);
+    dispatchSelection({ type: 'SET_PRIMARY', primary: fielder });
     setIsFoulZone(zoneResult.isFoul);
 
     // Map zone depth to FieldingModal DepthType
@@ -374,9 +371,6 @@ export default function FieldingModal({
 
   // Show Comebacker Injury when: Direction = Center + comebacker scenario
   const showComebackerInjury = direction === 'Center' && ['GO', 'LO'].includes(result);
-
-  // Show Robbery options when: Result = HR
-  const showRobberyToggle = result === 'HR';
 
   // Show D3K options when: Result = D3K
   const showD3KOptions = result === 'D3K';
@@ -503,8 +497,8 @@ export default function FieldingModal({
 
       nutshotEvent,
       comebackerInjury,
-      robberyAttempted,
-      robberyFailed: robberyAttempted ? robberyFailed : false,
+      robberyAttempted: false,
+      robberyFailed: false,
 
       savedRun,
     };
@@ -581,7 +575,7 @@ export default function FieldingModal({
                   backgroundColor: primaryFielder === pos ? '#4CAF50' : '#333',
                   color: primaryFielder === pos ? '#000' : '#fff',
                 }}
-                onClick={() => setPrimaryFielder(pos)}
+                onClick={() => dispatchSelection({ type: 'SET_PRIMARY', primary: pos })}
               >
                 {pos}
               </button>
@@ -666,7 +660,7 @@ export default function FieldingModal({
                     backgroundColor: playType === pt.value ? '#4CAF50' : '#333',
                     color: playType === pt.value ? '#000' : '#fff',
                   }}
-                  onClick={() => setPlayType(pt.value)}
+                  onClick={() => dispatchSelection({ type: 'SET_PLAY_TYPE', playType: pt.value })}
                 >
                   {pt.label}
                 </button>
@@ -680,7 +674,7 @@ export default function FieldingModal({
                   <input
                     type="checkbox"
                     checked={savedRun}
-                    onChange={e => setSavedRun(e.target.checked)}
+                    onChange={e => dispatchSelection({ type: 'SET_SAVED_RUN', savedRun: e.target.checked })}
                   />
                   Saved a run?
                 </label>
@@ -901,42 +895,9 @@ export default function FieldingModal({
             </div>
           )}
 
-          {showRobberyToggle && (
-            <div style={styles.toggleSection}>
-              <div style={styles.checkboxRow}>
-                <label style={styles.checkbox}>
-                  <input
-                    type="checkbox"
-                    checked={robberyAttempted}
-                    onChange={e => {
-                      setRobberyAttempted(e.target.checked);
-                      if (!e.target.checked) setRobberyFailed(false);
-                    }}
-                  />
-                  HR Robbery Attempted?
-                </label>
-              </div>
-
-              {robberyAttempted && (
-                <div style={styles.subOptions}>
-                  <div style={styles.checkboxRow}>
-                    <label style={styles.checkbox}>
-                      <input
-                        type="checkbox"
-                        checked={robberyFailed}
-                        onChange={e => setRobberyFailed(e.target.checked)}
-                      />
-                      Ball bounced off glove over fence? (Failed robbery = -1 Fame)
-                    </label>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
           {/* No special situations message */}
           {!showIFRToggle && !showGRDToggle && !showBadHopToggle &&
-           !showNutshotToggle && !showComebackerInjury && !showRobberyToggle && (
+           !showNutshotToggle && !showComebackerInjury && (
             <div style={styles.noOptions}>No special situations apply to this play.</div>
           )}
         </div>

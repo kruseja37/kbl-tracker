@@ -9,6 +9,7 @@ interface RosterEntry {
   playerId: string;
   playerName: string;
   canonicalId: string;
+  instanceId: string;
   games: number;
 }
 
@@ -105,7 +106,7 @@ export function TeamPage() {
                     <tr key={entry.playerId} className="border-b border-[#2B2B2B]">
                       <td className="py-3 pr-6">
                         <Link
-                          to={`/almanac/players/${entry.canonicalId}`}
+                          to={`/almanac/players/${entry.canonicalId}/${entry.instanceId}`}
                           className="text-[#3366FF] transition hover:text-white"
                         >
                           {entry.playerName}

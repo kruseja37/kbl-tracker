@@ -98,7 +98,7 @@ function LeaderboardTable({
                 <td className="px-4 py-3 text-[#3366FF]">{index + 1}</td>
                 <td className="px-4 py-3">
                   <Link
-                    to={`/almanac/players/${leader.canonicalId}`}
+                    to={`/almanac/players/${leader.canonicalId}/${leader.instanceId}`}
                     className="text-white underline decoration-[#3366FF] underline-offset-4 transition hover:text-[#BFD0FF]"
                   >
                     {leader.playerName}

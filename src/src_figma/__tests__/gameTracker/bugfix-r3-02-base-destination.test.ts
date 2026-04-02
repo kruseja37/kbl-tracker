@@ -149,4 +149,42 @@ describe('Bug R3-02: Runner destination change updates bases', () => {
     expect(bases.second).toBe(false);  // Runner removed from 2B
     expect(bases.third).toBe(false);
   });
+
+  it('should treat inning-end runner removal as neither an out nor an occupied base', () => {
+    const runnerId = 'runner-1';
+    const runnerName = 'Test Runner';
+    const pitcherId = 'pitcher-1';
+
+    const nextOutcome = {
+      toBase: 'end' as const,
+      runnerId,
+      runnerName,
+      isOutAdvancing: false,
+      isTootblan: false,
+    };
+
+    expect(runnerOutcomeCountsAsOut(nextOutcome)).toBe(false);
+    expect(runnerOutcomeCountsAsRun(nextOutcome)).toBe(false);
+
+    const nextRunnersAfter = {
+      first: null as null | { runnerId: string; runnerName: string; responsiblePitcherId: string },
+      second: null as null | { runnerId: string; runnerName: string; responsiblePitcherId: string },
+      third: null as null | { runnerId: string; runnerName: string; responsiblePitcherId: string },
+    };
+
+    if (['first', 'second', 'third'].includes(nextOutcome.toBase)) {
+      const destinationKey = nextOutcome.toBase as 'first' | 'second' | 'third';
+      nextRunnersAfter[destinationKey] = {
+        runnerId,
+        runnerName,
+        responsiblePitcherId: pitcherId,
+      };
+    }
+
+    expect(nextRunnersAfter).toEqual({
+      first: null,
+      second: null,
+      third: null,
+    });
+  });
 });

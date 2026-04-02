@@ -1,8 +1,37 @@
-import { fireEvent, render, screen } from '@testing-library/react';
-import { describe, expect, test, vi } from 'vitest';
+import 'fake-indexeddb/auto';
 
-import { EnrichmentPanel, RunnerEnrichmentPanel } from '../../app/components/EnrichmentPanel';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { afterEach, describe, expect, test, vi } from 'vitest';
+
+import { ENRICHMENT_CONFIG, EnrichmentPanel, RunnerEnrichmentPanel } from '../../app/components/EnrichmentPanel';
+import { inferAssistChain } from '../../app/utils/gameTrackerFieldTypes';
 import type { PlayLogEntry, RunnerSubEntry } from '../../app/utils/playLogTypes';
+import { PLAY_MECHANIC_OPTIONS } from '../../app/utils/fieldingPlayType';
+import {
+  getAtBatEvent,
+  logAtBatEvent,
+  updateAtBatEvent,
+  type AtBatEvent,
+} from '../../../utils/eventLog';
+
+const deleteEventLogDB = () => new Promise<void>((resolve) => {
+  const request = indexedDB.deleteDatabase('kbl-event-log');
+  let finished = false;
+  const finish = () => {
+    if (finished) return;
+    finished = true;
+    resolve();
+  };
+  request.onsuccess = finish;
+  request.onerror = finish;
+  request.onblocked = finish;
+  setTimeout(finish, 50);
+});
+
+afterEach(async () => {
+  vi.restoreAllMocks();
+  await deleteEventLogDB();
+});
 
 function buildEntry(result: string): PlayLogEntry {
   return {
@@ -15,7 +44,7 @@ function buildEntry(result: string): PlayLogEntry {
     inningLabel: 'T4',
     batterName: 'Johnson',
     result,
-    resultCategory: result === 'BB' ? 'walk' : ['1B', '2B', '3B', 'HR'].includes(result) ? 'hit' : 'out',
+    resultCategory: result === 'BB' ? 'walk' : ['1B', '2B', '3B', 'HR', 'ITPHR'].includes(result) ? 'hit' : 'out',
     rbi: 0,
     runsScored: 0,
     hasFieldingData: false,
@@ -29,7 +58,63 @@ function buildEntry(result: string): PlayLogEntry {
   };
 }
 
+function buildAtBatEvent(result: AtBatEvent['result']): AtBatEvent {
+  return {
+    eventId: `event-${result}`,
+    gameId: 'game-enrichment',
+    eventIndex: 1,
+    timestamp: 1,
+    batterId: 'batter-1',
+    batterName: 'Johnson',
+    batterTeamId: 'away-team',
+    pitcherId: 'pitcher-1',
+    pitcherName: 'Anderson',
+    pitcherTeamId: 'home-team',
+    result,
+    rbiCount: 0,
+    runsScored: [],
+    inning: 4,
+    halfInning: 'TOP',
+    outs: 1,
+    runners: {
+      first: { runnerId: 'runner-1', runnerName: 'Runner One', responsiblePitcherId: 'pitcher-1' },
+      second: null,
+      third: null,
+    },
+    awayScore: 0,
+    homeScore: 0,
+    outsAfter: 2,
+    runnersAfter: {
+      first: { runnerId: 'batter-1', runnerName: 'Johnson', responsiblePitcherId: 'pitcher-1' },
+      second: null,
+      third: null,
+    },
+    awayScoreAfter: 0,
+    homeScoreAfter: 0,
+    leverageIndex: 1,
+    winProbabilityBefore: 0.5,
+    winProbabilityAfter: 0.48,
+    wpa: -0.02,
+    ballInPlay: null,
+    fameEvents: [],
+    isLeadoff: false,
+    isClutch: false,
+    isWalkOff: false,
+    version: 1,
+    editHistory: [],
+  };
+}
+
 describe('EnrichmentPanel', () => {
+  test('[M2-3-fix] infers GO, FC, and DP assist chains from the primary fielder and bases', () => {
+    expect(inferAssistChain('GO', 6, { first: false, second: false, third: false })).toEqual([6, 3]);
+    expect(inferAssistChain('GO', 3, { first: false, second: false, third: false })).toEqual([3]);
+    expect(inferAssistChain('FC', 6, { first: true, second: false, third: false })).toEqual([6, 4]);
+    expect(inferAssistChain('FC', 5, { first: false, second: true, third: false })).toEqual([5, 5]);
+    expect(inferAssistChain('DP', 6, { first: true, second: false, third: false })).toEqual([6, 4, 3]);
+    expect(inferAssistChain('DP', 1, { first: true, second: false, third: false })).toEqual([1, 6, 3]);
+  });
+
   test('shows contact type controls for hit outcomes and saves value as exitType', () => {
     const onUpdate = vi.fn();
 
@@ -86,6 +171,46 @@ describe('EnrichmentPanel', () => {
     expect(onUpdate).toHaveBeenCalledWith('fieldingPlayType', 'diving');
   });
 
+  test('includes FLO in ENRICHMENT_CONFIG with FO parity', () => {
+    expect(ENRICHMENT_CONFIG.FLO).toEqual({
+      spray: true,
+      sprayZones: 27,
+      chase: true,
+      fieldingAttempt: true,
+      playMechanic: true,
+      contactType: true,
+      modifiers: ENRICHMENT_CONFIG.FO.modifiers,
+      hrDistance: false,
+    });
+  });
+
+  test('[M2-2] gives HR robbery-only fielding enrichment and ITPHR full hit enrichment', () => {
+    expect(ENRICHMENT_CONFIG.HR).toMatchObject({
+      chase: true,
+      fieldingAttempt: true,
+      playMechanic: false,
+      contactType: true,
+      hrDistance: true,
+    });
+
+    expect(ENRICHMENT_CONFIG.ITPHR).toEqual({
+      spray: true,
+      sprayZones: 42,
+      chase: true,
+      fieldingAttempt: true,
+      playMechanic: true,
+      contactType: true,
+      modifiers: ENRICHMENT_CONFIG['1B'].modifiers,
+      hrDistance: false,
+    });
+  });
+
+  test('[M3-4] shows chase for swinging results and hides it for called-strike or no-swing results', () => {
+    expect(ENRICHMENT_CONFIG.K.chase).toBe(true);
+    expect(ENRICHMENT_CONFIG.Kc.chase).toBe(false);
+    expect(ENRICHMENT_CONFIG.BB.chase).toBe(false);
+  });
+
   test('shows play mechanic controls for outs', () => {
     render(
       <EnrichmentPanel
@@ -100,6 +225,84 @@ describe('EnrichmentPanel', () => {
     expect(screen.getByRole('button', { name: 'Relay' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Rundown' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Deflection' })).toBeInTheDocument();
+  });
+
+  test('[M2-2] limits HR fielding options to robbery-related play types', () => {
+    const onUpdate = vi.fn();
+
+    render(
+      <EnrichmentPanel
+        entry={buildEntry('HR')}
+        currentEnrichment={{}}
+        onUpdate={onUpdate}
+        onClose={() => {}}
+      />
+    );
+
+    expect(screen.getByText('Fielding Attempt')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Failed Robbery' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Robbed HR' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Wall Catch' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Missed Dive' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Routine' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Diving' })).not.toBeInTheDocument();
+    expect(screen.queryByText('Play Mechanic')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Failed Robbery' }));
+
+    expect(onUpdate).toHaveBeenCalledWith('fieldingAttemptType', 'robbed_hr');
+    expect(onUpdate).toHaveBeenCalledWith('fieldingAttemptOutcome', 'missed');
+    expect(onUpdate).toHaveBeenCalledWith('fieldingPlayType', 'failed_robbery');
+  });
+
+  test('[M2-3-fix] selecting a spray zone infers the primary fielder and throw chain', () => {
+    const onUpdate = vi.fn();
+    const consoleLogSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+    render(
+      <EnrichmentPanel
+        entry={buildEntry('GO')}
+        currentEnrichment={{}}
+        onUpdate={onUpdate}
+        onClose={() => {}}
+      />
+    );
+
+    fireEvent.click(screen.getByTestId('spray-zone-d0r0'));
+
+    expect(onUpdate).toHaveBeenCalledWith(
+      'fieldLocation',
+      expect.objectContaining({ zone: 'Left' })
+    );
+    expect(onUpdate).toHaveBeenCalledWith('fieldingSequence', [5, 3]);
+    expect(screen.getByRole('combobox', { name: 'Primary Fielder' })).toHaveValue('5');
+    expect(consoleLogSpy).toHaveBeenCalledWith('[M2-3-fix] Inferred fielder: 3B');
+
+    consoleLogSpy.mockRestore();
+  });
+
+  test('[M2-3-fix] primary fielder dropdown can override the inferred spray-zone selection', () => {
+    const onUpdate = vi.fn();
+    const consoleLogSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+    render(
+      <EnrichmentPanel
+        entry={buildEntry('GO')}
+        currentEnrichment={{}}
+        onUpdate={onUpdate}
+        onClose={() => {}}
+      />
+    );
+
+    fireEvent.click(screen.getByTestId('spray-zone-d0r0'));
+    fireEvent.change(screen.getByRole('combobox', { name: 'Primary Fielder' }), {
+      target: { value: '6' },
+    });
+
+    expect(onUpdate).toHaveBeenLastCalledWith('fieldingSequence', [6, 3]);
+    expect(screen.getByRole('combobox', { name: 'Primary Fielder' })).toHaveValue('6');
+
+    consoleLogSpy.mockRestore();
   });
 
   test('routes modifier clicks through the at-bat modifier handler and gates KP/NUT off HR', () => {
@@ -137,6 +340,84 @@ describe('EnrichmentPanel', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'KP' }));
     expect(onModifierRecord).toHaveBeenCalledWith('KILLED_PITCHER');
+  });
+
+  test('[M2-1] shows BT for FC and persists it to the event log when selected', async () => {
+    await logAtBatEvent(buildAtBatEvent('FC'));
+
+    const onModifierRecord = vi.fn(async (modifier: string) => {
+      const existing = await getAtBatEvent('event-FC');
+      if (!existing) {
+        throw new Error('Expected FC at-bat to exist in the event log');
+      }
+
+      const nextModifiers = [...(existing.enrichment?.modifiers || []), modifier];
+      await updateAtBatEvent(existing.eventId, {
+        enrichment: { modifiers: nextModifiers },
+        version: (existing.version ?? 1) + 1,
+      });
+    });
+
+    render(
+      <EnrichmentPanel
+        entry={buildEntry('FC')}
+        currentEnrichment={{}}
+        onUpdate={() => {}}
+        onModifierRecord={(modifier) => void onModifierRecord(modifier)}
+        onClose={() => {}}
+      />
+    );
+
+    expect(screen.getByRole('button', { name: 'BT' })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'BT' }));
+
+    await waitFor(async () => {
+      expect(onModifierRecord).toHaveBeenCalledWith('BEAT_THROW');
+      const persisted = await getAtBatEvent('event-FC');
+      expect(persisted?.enrichment?.modifiers).toContain('BEAT_THROW');
+    });
+  });
+
+  test('[M3-4] toggles chase and logs it from the enrichment panel', () => {
+    const consoleLogSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const onUpdate = vi.fn();
+
+    render(
+      <EnrichmentPanel
+        entry={buildEntry('K')}
+        currentEnrichment={{}}
+        onUpdate={onUpdate}
+        onClose={() => {}}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'chase' }));
+
+    expect(onUpdate).toHaveBeenCalledWith('chased', true);
+
+    expect(consoleLogSpy).toHaveBeenCalledWith('[M3-4] Chase toggled: ON', {
+      eventId: 'event-K',
+      result: 'K',
+      chased: true,
+    });
+
+    consoleLogSpy.mockRestore();
+  });
+
+  test('[M3-4] keeps chased on the at-bat event enrichment payload', () => {
+    const event = buildAtBatEvent('K');
+    const persisted: AtBatEvent = {
+      ...event,
+      enrichment: {
+        ...(event.enrichment || {}),
+        chased: true,
+      },
+    };
+
+    const roundTrip = JSON.parse(JSON.stringify(persisted)) as AtBatEvent;
+
+    expect(roundTrip.enrichment?.chased).toBe(true);
   });
 
   test('TOOTBLAN and BUNT are not in play-level modifiers', () => {
@@ -178,11 +459,170 @@ describe('EnrichmentPanel', () => {
     expect(screen.getByRole('button', { name: '3B' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'HOME' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'OUT' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'END' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '1B' })).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: '2B' }));
 
     expect(onUpdate).toHaveBeenCalledWith('evt-1-runner-0', 'toBase', 'second');
+  });
+
+  test('runner inning-end destination disables out-only flags', () => {
+    const onUpdate = vi.fn();
+    const subEntry: RunnerSubEntry = {
+      id: 'evt-2-runner-0',
+      parentEventId: 'evt-2',
+      runnerId: 'runner-2',
+      runnerName: 'Freeze Frame',
+      fromBase: 'first',
+      toBase: 'end',
+      isEnrichable: true,
+    };
+
+    render(
+      <RunnerEnrichmentPanel
+        subEntry={subEntry}
+        onUpdate={onUpdate}
+        onClose={() => {}}
+      />
+    );
+
+    expect(screen.getByRole('button', { name: 'Mark TOOTBLAN' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Mark Out Advancing' })).toBeDisabled();
+  });
+
+  test('[M3-3-universal] shows error attribution controls when a runner outcome crosses the safe/out boundary', async () => {
+    const onUpdate = vi.fn().mockResolvedValue(undefined);
+    const subEntry: RunnerSubEntry = {
+      id: 'evt-2-runner-home',
+      parentEventId: 'evt-2',
+      runnerId: 'runner-home',
+      runnerName: 'Saved At First',
+      fromBase: 'first',
+      toBase: 'out',
+      isEnrichable: true,
+    };
+
+    const { rerender } = render(
+      <RunnerEnrichmentPanel
+        subEntry={subEntry}
+        onUpdate={onUpdate}
+        onClose={() => {}}
+      />
+    );
+
+    expect(screen.queryByText('Error on the play?')).not.toBeInTheDocument();
+
+    rerender(
+      <RunnerEnrichmentPanel
+        subEntry={{ ...subEntry, toBase: 'second' }}
+        onUpdate={onUpdate}
+        onClose={() => {}}
+      />
+    );
+
+    expect(screen.getByText('Error on the play?')).toBeInTheDocument();
+    expect(screen.getByLabelText('No Error')).toBeChecked();
+
+    fireEvent.click(screen.getByLabelText('Throwing'));
+    rerender(
+      <RunnerEnrichmentPanel
+        subEntry={{ ...subEntry, toBase: 'second', errorType: 'throwing' }}
+        onUpdate={onUpdate}
+        onClose={() => {}}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'SS(6)' }));
+
+    await waitFor(() => {
+      expect(onUpdate).toHaveBeenCalledWith('evt-2-runner-home', 'errorType', 'throwing');
+      expect(onUpdate).toHaveBeenCalledWith('evt-2-runner-home', 'errorChargedTo', 6);
+    });
+  });
+
+  test('[M3-1-fix] shows OF hold for an advanced runner and saves explicit hold fields', async () => {
+    const onUpdate = vi.fn().mockResolvedValue(undefined);
+    const subEntry: RunnerSubEntry = {
+      id: 'evt-3-runner-held',
+      parentEventId: 'evt-3',
+      runnerId: 'runner-3',
+      runnerName: 'Holden',
+      fromBase: 'first',
+      toBase: 'second',
+      parentResult: '1B',
+      isEnrichable: true,
+    };
+
+    expect(PLAY_MECHANIC_OPTIONS.map((option) => option.value)).toContain('hold');
+    expect(ENRICHMENT_CONFIG['1B'].playMechanic).toBe(true);
+
+    const { rerender } = render(
+      <RunnerEnrichmentPanel
+        subEntry={subEntry}
+        outfielderByPosition={{
+          LF: { playerId: 'fielder-lf', playerName: 'Lefty' },
+          CF: { playerId: 'fielder-cf', playerName: 'Center Cut' },
+          RF: { playerId: 'fielder-rf', playerName: 'Righty' },
+        }}
+        onUpdate={onUpdate}
+        onClose={() => {}}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Mark Held by OF' }));
+
+    await waitFor(() => {
+      expect(onUpdate).toHaveBeenCalledWith('evt-3-runner-held', 'heldByOf', true);
+      expect(onUpdate).toHaveBeenCalledWith('evt-3-runner-held', 'baseSaved', '3B');
+      expect(onUpdate).toHaveBeenCalledWith('evt-3-runner-held', 'playMechanic', 'hold');
+    });
+
+    rerender(
+      <RunnerEnrichmentPanel
+        subEntry={{ ...subEntry, heldByOf: true, baseSaved: '3B', playMechanic: 'hold' }}
+        outfielderByPosition={{
+          LF: { playerId: 'fielder-lf', playerName: 'Lefty' },
+          CF: { playerId: 'fielder-cf', playerName: 'Center Cut' },
+          RF: { playerId: 'fielder-rf', playerName: 'Righty' },
+        }}
+        onUpdate={onUpdate}
+        onClose={() => {}}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'RF' }));
+
+    await waitFor(() => {
+      expect(onUpdate).toHaveBeenCalledWith('evt-3-runner-held', 'holdingFielder', 'RF');
+      expect(onUpdate).toHaveBeenCalledWith('evt-3-runner-held', 'fielderPosition', 'RF');
+      expect(onUpdate).toHaveBeenCalledWith('evt-3-runner-held', 'fielderId', 'fielder-rf');
+    });
+  });
+
+  test('[M3-1-fix] shows OF hold for batter runner sub-entries on extra-base hits', () => {
+    const onUpdate = vi.fn();
+    const subEntry: RunnerSubEntry = {
+      id: 'evt-4-runner-batter',
+      parentEventId: 'evt-4',
+      runnerId: 'batter-4',
+      runnerName: 'Stretch',
+      fromBase: 'batter',
+      toBase: 'second',
+      parentResult: '2B',
+      isEnrichable: true,
+    };
+
+    render(
+      <RunnerEnrichmentPanel
+        subEntry={subEntry}
+        onUpdate={onUpdate}
+        onClose={() => {}}
+      />
+    );
+
+    expect(screen.getByText('BAT→2B')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Mark Held by OF' })).toBeInTheDocument();
   });
 
   test('hit enrichment exposes a batter out-advancing toggle', () => {
@@ -200,5 +640,61 @@ describe('EnrichmentPanel', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Out Advancing' }));
 
     expect(onUpdate).toHaveBeenCalledWith('batterOutAdvancing', true);
+  });
+
+  test('[M3-2] shows saved-bases controls for made diving plays and rehydrates current enrichment values', () => {
+    const onUpdate = vi.fn();
+    const currentEnrichment: NonNullable<AtBatEvent['enrichment']> = {
+      fieldingAttemptType: 'diving',
+      fieldingAttemptOutcome: 'made',
+      fieldingPlayType: 'diving',
+      basesSaved: 2,
+      savedRun: true,
+    };
+
+    render(
+      <EnrichmentPanel
+        entry={buildEntry('FO')}
+        currentEnrichment={currentEnrichment}
+        onUpdate={onUpdate}
+        onClose={() => {}}
+      />
+    );
+
+    expect(screen.getByText('Saved Extra Bases')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Saved Extra Bases?' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '2 bases' })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '1 base' }));
+
+    expect(onUpdate).toHaveBeenCalledWith('basesSaved', 1);
+  });
+
+  test('[M3-2-fix] shows saved-bases controls for missed diving hits and preserves hit-side saved-bases updates', () => {
+    const onUpdate = vi.fn();
+    const currentEnrichment: NonNullable<AtBatEvent['enrichment']> = {
+      fieldingAttemptType: 'diving',
+      fieldingAttemptOutcome: 'missed',
+      fieldingPlayType: 'missed_dive',
+      basesSaved: 1,
+      savedRun: false,
+    };
+
+    render(
+      <EnrichmentPanel
+        entry={buildEntry('1B')}
+        currentEnrichment={currentEnrichment}
+        onUpdate={onUpdate}
+        onClose={() => {}}
+      />
+    );
+
+    expect(screen.getByText('Saved Extra Bases')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Saved Extra Bases?' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '1 base' })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '2 bases' }));
+
+    expect(onUpdate).toHaveBeenCalledWith('basesSaved', 2);
   });
 });

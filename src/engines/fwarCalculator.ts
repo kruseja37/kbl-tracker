@@ -668,7 +668,7 @@ function mapPersistedSpecialPlayType(
  * Map persisted playType to calculator event type
  */
 function mapPersistedPlayType(
-  playType: 'putout' | 'assist' | 'error' | 'double_play_pivot' | 'outfield_assist'
+  playType: 'putout' | 'assist' | 'error' | 'double_play_pivot' | 'outfield_assist' | 'base_save'
 ): 'putout' | 'assist' | 'doublePlay' | 'error' | 'starPlay' {
   const mapping: Record<string, 'putout' | 'assist' | 'doublePlay' | 'error' | 'starPlay'> = {
     'putout': 'putout',
@@ -676,6 +676,7 @@ function mapPersistedPlayType(
     'error': 'error',
     'double_play_pivot': 'doublePlay',
     'outfield_assist': 'assist',
+    'base_save': 'assist',
   };
   return mapping[playType] || 'putout';
 }

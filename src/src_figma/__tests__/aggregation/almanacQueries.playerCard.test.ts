@@ -10,6 +10,15 @@ const {
 
 vi.mock('../../../utils/gameStorage', () => ({
   getAllCompletedGames: mockGetAllCompletedGames,
+  resolveExhibitionLeagueId: (game: {
+    leagueId?: string;
+    competitionId?: string;
+    competitionType?: string;
+  }) =>
+    game.leagueId ??
+    (game.competitionType === 'exhibition' || !game.competitionType
+      ? game.competitionId
+      : undefined),
 }));
 
 vi.mock('../../../utils/almanacStorage', () => ({
@@ -20,7 +29,11 @@ vi.mock('../../../utils/eventLog', () => ({
   getGameEvents: vi.fn().mockResolvedValue([]),
 }));
 
-import { getPlayerExhibitionStats } from '../../../utils/almanacQueries';
+import {
+  getExhibitionBattingLeaders,
+  getPlayerExhibitionStats,
+  getTeamRosterFromGames,
+} from '../../../utils/almanacQueries';
 
 describe('almanacQueries player exhibition stats', () => {
   beforeEach(() => {
@@ -116,6 +129,203 @@ describe('almanacQueries player exhibition stats', () => {
         G: 1,
         RBI: 3,
         H: 2,
+      }),
+      pitching: null,
+    });
+  });
+
+  test('returns instance-aware leader and roster links for exhibition-only leagues', async () => {
+    mockGetAllCanonicalPlayers.mockResolvedValue([
+      {
+        canonicalId: 'beefcake',
+        playerName: 'Beefcake McStevens',
+        hometown: { city: 'Denver', state: 'CO' },
+        instances: [
+          {
+            instanceId: 'league-exh',
+            instanceName: 'League EXH',
+            mode: 'exhibition',
+            playerIdInInstance: 'player-1',
+          },
+        ],
+      },
+    ]);
+    mockGetAllCompletedGames.mockResolvedValue([
+      {
+        gameId: 'game-1',
+        date: Date.now(),
+        competitionType: 'exhibition',
+        competitionId: 'league-exh',
+        awayTeamId: 'away-team',
+        awayTeamName: 'Away Team',
+        homeTeamId: 'home-team',
+        homeTeamName: 'Home Team',
+        finalScore: { away: 5, home: 2 },
+        innings: 9,
+        fameEvents: [],
+        playerStats: {
+          'player-1': {
+            playerName: 'Beefcake McStevens',
+            teamId: 'away-team',
+            pa: 4,
+            ab: 4,
+            h: 2,
+            singles: 1,
+            doubles: 1,
+            triples: 0,
+            hr: 0,
+            rbi: 3,
+            r: 1,
+            bb: 0,
+            hbp: 0,
+            k: 1,
+            sb: 0,
+            cs: 0,
+            sf: 0,
+            sh: 0,
+            gidp: 0,
+            putouts: 0,
+            assists: 0,
+            fieldingErrors: 0,
+          },
+        },
+        pitcherGameStats: [],
+      },
+    ]);
+
+    await expect(getExhibitionBattingLeaders('rbi', true, 5)).resolves.toEqual([
+      expect.objectContaining({
+        canonicalId: 'beefcake',
+        instanceId: 'league-exh',
+        value: 3,
+      }),
+    ]);
+
+    await expect(getTeamRosterFromGames('league-exh', 'away-team')).resolves.toEqual([
+      expect.objectContaining({
+        canonicalId: 'beefcake',
+        instanceId: 'league-exh',
+        games: 1,
+      }),
+    ]);
+  });
+
+  test('aggregates player card stats across multiple exhibition games for the same canonical player', async () => {
+    mockGetAllCanonicalPlayers.mockResolvedValue([
+      {
+        canonicalId: 'beefcake',
+        playerName: 'Beefcake McStevens',
+        hometown: { city: 'Denver', state: 'CO' },
+        instances: [
+          {
+            instanceId: 'league-exh',
+            instanceName: 'League EXH',
+            mode: 'exhibition',
+            playerIdInInstance: 'player-1-old',
+          },
+          {
+            instanceId: 'league-exh',
+            instanceName: 'League EXH',
+            mode: 'exhibition',
+            playerIdInInstance: 'player-1-new',
+          },
+        ],
+      },
+    ]);
+    mockGetAllCompletedGames.mockResolvedValue([
+      {
+        gameId: 'game-1',
+        date: Date.now(),
+        competitionType: 'exhibition',
+        leagueId: 'league-exh',
+        awayTeamId: 'away-team',
+        awayTeamName: 'Away Team',
+        homeTeamId: 'home-team',
+        homeTeamName: 'Home Team',
+        finalScore: { away: 4, home: 2 },
+        innings: 9,
+        fameEvents: [],
+        playerStats: {
+          'player-1-old': {
+            playerName: 'Beefcake McStevens',
+            teamId: 'away-team',
+            pa: 4,
+            ab: 4,
+            h: 2,
+            singles: 2,
+            doubles: 0,
+            triples: 0,
+            hr: 0,
+            rbi: 1,
+            r: 1,
+            bb: 0,
+            hbp: 0,
+            k: 1,
+            sb: 0,
+            cs: 0,
+            sf: 0,
+            sh: 0,
+            gidp: 0,
+            putouts: 0,
+            assists: 0,
+            fieldingErrors: 0,
+          },
+        },
+        pitcherGameStats: [],
+      },
+      {
+        gameId: 'game-2',
+        date: Date.now() - 1000,
+        competitionType: 'exhibition',
+        leagueId: 'league-exh',
+        awayTeamId: 'away-team',
+        awayTeamName: 'Away Team',
+        homeTeamId: 'home-team',
+        homeTeamName: 'Home Team',
+        finalScore: { away: 6, home: 3 },
+        innings: 9,
+        fameEvents: [],
+        playerStats: {
+          'player-1-new': {
+            playerName: 'Beefcake McStevens',
+            teamId: 'away-team',
+            pa: 5,
+            ab: 4,
+            h: 3,
+            singles: 1,
+            doubles: 1,
+            triples: 0,
+            hr: 1,
+            rbi: 4,
+            r: 2,
+            bb: 1,
+            hbp: 0,
+            k: 0,
+            sb: 1,
+            cs: 0,
+            sf: 0,
+            sh: 0,
+            gidp: 0,
+            putouts: 0,
+            assists: 0,
+            fieldingErrors: 0,
+          },
+        },
+        pitcherGameStats: [],
+      },
+    ]);
+
+    await expect(
+      getPlayerExhibitionStats('player-1-new', 'league-exh'),
+    ).resolves.toMatchObject({
+      batting: expect.objectContaining({
+        G: 2,
+        AB: 8,
+        H: 5,
+        RBI: 5,
+        HR: 1,
+        BB: 1,
+        SB: 1,
       }),
       pitching: null,
     });

@@ -6,6 +6,10 @@ import {
   searchCanonicalPlayers,
 } from "../../../utils/almanacStorage";
 import type { CanonicalPlayer } from "../../../utils/almanacStorage";
+import {
+  searchExhibitionPlayerInstances,
+  type ExhibitionPlayerSearchEntry,
+} from "../../../utils/almanacQueries";
 
 export function PlayerDirectory() {
   const { canonicalId } = useParams<{ canonicalId: string }>();
@@ -14,8 +18,13 @@ export function PlayerDirectory() {
 
   const [player, setPlayer] = useState<CanonicalPlayer | null>(null);
   const [searchResults, setSearchResults] = useState<CanonicalPlayer[]>([]);
+  const [fallbackResults, setFallbackResults] = useState<
+    ExhibitionPlayerSearchEntry[]
+  >([]);
   const [loading, setLoading] = useState(true);
   const isSinglePlayer = Boolean(canonicalId);
+  const countUniqueInstances = (instances: CanonicalPlayer['instances']): number =>
+    new Set(instances.map((instance) => `${instance.mode}::${instance.instanceId}`)).size;
 
   useEffect(() => {
     let cancelled = false;
@@ -27,12 +36,22 @@ export function PlayerDirectory() {
         const data = await getCanonicalPlayer(canonicalId);
         if (!cancelled) {
           setPlayer(data);
+          setFallbackResults([]);
           setLoading(false);
         }
       } else {
-        const results = await searchCanonicalPlayers(queryParam);
+        const [results, archivedResults] = await Promise.all([
+          searchCanonicalPlayers(queryParam),
+          searchExhibitionPlayerInstances(queryParam),
+        ]);
         if (!cancelled) {
+          const canonicalIds = new Set(results.map((result) => result.canonicalId));
           setSearchResults(results);
+          setFallbackResults(
+            archivedResults.filter(
+              (result) => !canonicalIds.has(result.canonicalId),
+            ),
+          );
           setLoading(false);
         }
       }
@@ -104,7 +123,14 @@ export function PlayerDirectory() {
               </p>
             ) : (
               <div className="flex flex-col gap-3">
-                {player.instances.map((inst) => (
+                {Array.from(
+                  new Map(
+                    player.instances.map((instance) => [
+                      `${instance.mode}::${instance.instanceId}`,
+                      instance,
+                    ]),
+                  ).values(),
+                ).map((inst) => (
                   <Link
                     key={`${inst.instanceId}-${inst.playerIdInInstance}`}
                     to={`/almanac/players/${player.canonicalId}/${inst.instanceId}`}
@@ -150,7 +176,7 @@ export function PlayerDirectory() {
           </div>
         )}
 
-        {searchResults.length === 0 ? (
+        {searchResults.length === 0 && fallbackResults.length === 0 ? (
           <div className="border-[6px] border-[#2B2B2B] bg-[#101010] px-6 py-10 text-center text-[10px] text-[#8F96A3]">
             {queryParam
               ? "NO PLAYERS FOUND MATCHING YOUR SEARCH."
@@ -166,7 +192,19 @@ export function PlayerDirectory() {
               >
                 <div className="text-[10px] text-white">{p.playerName}</div>
                 <div className="mt-2 text-[9px] text-[#8F96A3]">
-                  {p.hometown.city}, {p.hometown.state} &bull; {p.instances.length} INSTANCE{p.instances.length !== 1 ? "S" : ""}
+                  {p.hometown.city}, {p.hometown.state} &bull; {countUniqueInstances(p.instances)} INSTANCE{countUniqueInstances(p.instances) !== 1 ? "S" : ""}
+                </div>
+              </Link>
+            ))}
+            {fallbackResults.map((p) => (
+              <Link
+                key={`${p.instanceId}-${p.playerId}`}
+                to={`/almanac/players/${p.canonicalId}/${p.instanceId}`}
+                className="border-[5px] border-[#2B2B2B] bg-[#101010] p-4 shadow-[6px_6px_0px_0px_rgba(196,168,83,0.18)] transition hover:border-[#C4A853] sm:p-5"
+              >
+                <div className="text-[10px] text-white">{p.playerName}</div>
+                <div className="mt-2 text-[9px] text-[#8F96A3]">
+                  {p.teamName} &bull; {p.games} G &bull; ARCHIVED INSTANCE
                 </div>
               </Link>
             ))}

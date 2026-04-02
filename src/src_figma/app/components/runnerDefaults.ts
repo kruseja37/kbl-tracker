@@ -244,11 +244,11 @@ function calculateOutDefaults(
     };
   }
 
-  // Fly out / Line out — tag-up enforcement: all runners hold by default (GAP-GT-6-E)
+  // Fly out / foul out / line out — tag-up enforcement: all runners hold by default (GAP-GT-6-E)
   // User taps runner → [Advance] if they tagged up in the actual game
-  if (outType === 'FO' || outType === 'LO') {
+  if (outType === 'FO' || outType === 'FLO' || outType === 'LO') {
     return {
-      batter: { from: 'batter', to: 'out', isDefault: true, reason: 'Fly out' },
+      batter: { from: 'batter', to: 'out', isDefault: true, reason: outType === 'FLO' ? 'Foul out' : 'Fly out' },
       ...(bases.first && { first: { from: 'first', to: 'first', isDefault: true, reason: 'Holds (tap to advance if tagged up)' } }),
       ...(bases.second && { second: { from: 'second', to: 'second', isDefault: true, reason: 'Holds (tap to advance if tagged up)' } }),
       ...(bases.third && { third: { from: 'third', to: 'third', isDefault: true, reason: 'Holds (tap to advance if tagged up)' } }),

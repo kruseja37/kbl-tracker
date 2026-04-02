@@ -91,7 +91,7 @@ describe('useGameState pregame pitching change', () => {
     });
 
     act(() => {
-      result.current.changePitcher('home-rp', 'home-sp', 'Home Reliever', 'Home Starter');
+      result.current.changePitcher('home-rp', 'home-sp', 'home', 'Home Reliever', 'Home Starter');
     });
 
     const homeLineup = result.current.getLineupStateSnapshot().home.lineup;
@@ -108,5 +108,47 @@ describe('useGameState pregame pitching change', () => {
     );
 
     consoleErrorSpy.mockRestore();
+  });
+
+  test('updates the pregame lineup snapshot immediately after a position swap', async () => {
+    const { result } = renderHook(() => useGameState('pregame-position-swap'));
+
+    await act(async () => {
+      await result.current.initializeGame({
+        gameId: 'pregame-position-swap',
+        awayTeamId: 'away-team',
+        awayTeamName: 'Away Team',
+        homeTeamId: 'home-team',
+        homeTeamName: 'Home Team',
+        awayStartingPitcherId: 'away-sp',
+        awayStartingPitcherName: 'Away Starter',
+        homeStartingPitcherId: 'home-sp',
+        homeStartingPitcherName: 'Home Starter',
+        awayLineup: nineSlotLineup('away'),
+        homeLineup: nineSlotLineup('home'),
+        awayBench: [{ playerId: 'away-rp', playerName: 'Away Reliever', positions: ['P'] }],
+        homeBench: [{ playerId: 'home-rp', playerName: 'Home Reliever', positions: ['P'] }],
+        seasonNumber: 1,
+      });
+    });
+
+    act(() => {
+      result.current.switchPositions([
+        { playerId: 'home-2', newPosition: 'C' },
+        { playerId: 'home-8', newPosition: 'SS' },
+      ]);
+    });
+
+    const homeLineup = result.current.getLineupStateSnapshot().home.lineup;
+    expect(homeLineup.find((player) => player.playerId === 'home-2')).toMatchObject({
+      playerId: 'home-2',
+      position: 'C',
+    });
+    expect(homeLineup.find((player) => player.playerId === 'home-8')).toMatchObject({
+      playerId: 'home-8',
+      position: 'SS',
+    });
+    expect(result.current.gameState.currentCatcherId).toBe('home-2');
+    expect(result.current.gameState.currentCatcherName).toBe('home Two');
   });
 });

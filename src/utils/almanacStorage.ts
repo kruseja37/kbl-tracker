@@ -50,10 +50,25 @@ export async function searchCanonicalPlayers(query: string): Promise<CanonicalPl
   const players = await getAllCanonicalPlayers();
 
   if (!normalizedQuery) {
+    console.log('[M4-1] searchCanonicalPlayers', {
+      query,
+      normalizedQuery,
+      results: players.map((player) => player.playerName),
+    });
     return players;
   }
 
-  return players.filter((player) => player.playerName.toLowerCase().includes(normalizedQuery));
+  const results = players.filter((player) =>
+    player.playerName.toLowerCase().includes(normalizedQuery),
+  );
+
+  console.log('[M4-1] searchCanonicalPlayers', {
+    query,
+    normalizedQuery,
+    results: results.map((player) => player.playerName),
+  });
+
+  return results;
 }
 
 export async function upsertCanonicalPlayer(player: CanonicalPlayer): Promise<void> {

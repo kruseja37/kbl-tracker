@@ -10,8 +10,8 @@ export type Position = 'P' | 'C' | '1B' | '2B' | '3B' | 'SS' | 'LF' | 'CF' | 'RF
 export type BatterHand = 'L' | 'R' | 'S';
 
 export type AtBatResult =
-  | '1B' | '2B' | '3B' | 'HR' | 'BB' | 'IBB' | 'K' | 'Kc'
-  | 'GO' | 'FO' | 'LO' | 'PO' | 'DP' | 'TP' | 'SF' | 'SAC' | 'HBP' | 'E' | 'FC'
+  | '1B' | '2B' | '3B' | 'HR' | 'ITPHR' | 'BB' | 'IBB' | 'K' | 'Kc'
+  | 'GO' | 'FO' | 'FLO' | 'LO' | 'PO' | 'DP' | 'TP' | 'SF' | 'SAC' | 'HBP' | 'E' | 'FC'
   | 'D3K' | 'WP_K' | 'PB_K' | 'GRD'; // GRD = Ground Rule Double (GAP-GT-6-D)
 
 export type GameEvent = 'SB' | 'CS' | 'WP' | 'PB' | 'PK' | 'PITCH_CHANGE' | 'PINCH_HIT' | 'PINCH_RUN' | 'DEF_SUB' | 'POS_SWITCH';
@@ -185,19 +185,54 @@ export function countRunners(bases: Bases): number { return [bases.first, bases.
 export function hasRISP(bases: Bases): boolean { return bases.second !== null || bases.third !== null; }
 export function isBasesLoaded(bases: Bases): boolean { return bases.first !== null && bases.second !== null && bases.third !== null; }
 
-export function isOut(result: AtBatResult): boolean { return ['K', 'Kc', 'GO', 'FO', 'LO', 'PO', 'DP', 'SF', 'SAC'].includes(result); }
-export function isHit(result: AtBatResult): boolean { return ['1B', '2B', '3B', 'HR', 'GRD'].includes(result); }
-export function reachesBase(result: AtBatResult): boolean { return ['1B', '2B', '3B', 'HR', 'BB', 'IBB', 'HBP', 'E', 'FC', 'D3K', 'WP_K', 'PB_K', 'GRD'].includes(result); }
-export function requiresBallInPlayData(result: AtBatResult): boolean { return ['1B', '2B', '3B', 'HR', 'GO', 'FO', 'LO', 'PO', 'DP', 'FC', 'E'].includes(result); }
+export function isOut(result: AtBatResult): boolean { return ['K', 'Kc', 'GO', 'FO', 'FLO', 'LO', 'PO', 'DP', 'SF', 'SAC'].includes(result); }
+export function isHit(result: AtBatResult): boolean { return ['1B', '2B', '3B', 'HR', 'ITPHR', 'GRD'].includes(result); }
+export function reachesBase(result: AtBatResult): boolean { return ['1B', '2B', '3B', 'HR', 'ITPHR', 'BB', 'IBB', 'HBP', 'E', 'FC', 'D3K', 'WP_K', 'PB_K', 'GRD'].includes(result); }
+export function requiresBallInPlayData(result: AtBatResult): boolean { return ['1B', '2B', '3B', 'HR', 'ITPHR', 'GO', 'FO', 'FLO', 'LO', 'PO', 'DP', 'FC', 'E'].includes(result); }
 
 export function inferFielder(result: AtBatResult, direction: Direction): Position | null {
-  const map: Record<string, Partial<Record<Direction, Position>>> = {
-    'FO': { 'Left': 'LF', 'Left-Center': 'LF', 'Center': 'CF', 'Right-Center': 'RF', 'Right': 'RF' },
-    'LO': { 'Left': 'LF', 'Left-Center': 'CF', 'Center': 'CF', 'Right-Center': 'CF', 'Right': 'RF' },
-    'PO': { 'Left': '3B', 'Left-Center': 'SS', 'Center': '2B', 'Right-Center': '2B', 'Right': '1B' },
-    'GO': { 'Left': '3B', 'Left-Center': 'SS', 'Center': 'P', 'Right-Center': '2B', 'Right': '1B' }
+  const groundBallMap: Partial<Record<Direction, Position>> = {
+    'Left': '3B',
+    'Left-Center': 'SS',
+    'Center': 'P',
+    'Right-Center': '2B',
+    'Right': '1B',
+    'Foul-Left': '3B',
+    'Foul-Right': '1B',
   };
-  return map[result]?.[direction] || null;
+  const flyBallMap: Partial<Record<Direction, Position>> = {
+    'Left': 'LF',
+    'Left-Center': 'CF',
+    'Center': 'CF',
+    'Right-Center': 'CF',
+    'Right': 'RF',
+    'Foul-Left': 'LF',
+    'Foul-Right': 'RF',
+  };
+  const lineDriveMap: Partial<Record<Direction, Position>> = {
+    'Left': '3B',
+    'Left-Center': 'SS',
+    'Center': 'P',
+    'Right-Center': '2B',
+    'Right': '1B',
+    'Foul-Left': '3B',
+    'Foul-Right': '1B',
+  };
+  const popUpMap: Partial<Record<Direction, Position>> = {
+    'Left': '3B',
+    'Left-Center': 'SS',
+    'Center': 'SS',
+    'Right-Center': '2B',
+    'Right': '1B',
+    'Foul-Left': '3B',
+    'Foul-Right': '1B',
+  };
+
+  if (['GO', 'DP', 'TP', 'FC', 'SAC'].includes(result)) return groundBallMap[direction] || null;
+  if (['FO', 'FLO', 'SF'].includes(result)) return flyBallMap[direction] || null;
+  if (result === 'LO') return lineDriveMap[direction] || null;
+  if (result === 'PO') return popUpMap[direction] || null;
+  return null;
 }
 
 // ============================================

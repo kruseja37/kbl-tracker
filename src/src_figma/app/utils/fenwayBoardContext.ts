@@ -1,7 +1,7 @@
 import type { AtBatEvent } from "../../../utils/eventLog";
 import type { MilestoneWatch } from "../../../utils/milestoneDetector";
 
-const HIT_RESULTS = new Set(['1B', '2B', '3B', 'HR']);
+const HIT_RESULTS = new Set(['1B', '2B', '3B', 'HR', 'ITPHR']);
 const NON_AB_RESULTS = new Set(['BB', 'IBB', 'HBP', 'SF', 'SAC']);
 
 const STAT_LABELS: Record<string, string> = {

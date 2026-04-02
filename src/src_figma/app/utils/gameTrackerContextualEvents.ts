@@ -1,7 +1,7 @@
 import type { SpecialEventType } from './gameTrackerFieldTypes';
 
 export interface PlayContext {
-  playType: 'FO' | 'LO' | 'GO' | 'K' | '1B' | '2B' | '3B' | 'HR' | 'FC' | null;
+  playType: 'FO' | 'FLO' | 'LO' | 'GO' | 'K' | '1B' | '2B' | '3B' | 'HR' | 'FC' | null;
   firstFielder: number | null;
   ballLocationY: number | null;
   throwSequence: number[];
@@ -35,7 +35,7 @@ export function inferContextualButtons(ctx: PlayContext | null): SpecialEventTyp
   const isDeepFly = ctx.ballLocationY !== null && ctx.ballLocationY > 0.7;
   const isWallCatch = ctx.ballLocationY !== null && ctx.ballLocationY > 0.9;
 
-  if (['FO', 'LO'].includes(ctx.playType ?? '') && isOutfielder) {
+  if (['FO', 'FLO', 'LO'].includes(ctx.playType ?? '') && isOutfielder) {
     if (isWallCatch) {
       buttons.push('ROBBERY');
       buttons.push('WEB_GEM');
@@ -53,7 +53,7 @@ export function inferContextualButtons(ctx: PlayContext | null): SpecialEventTyp
     buttons.push('NUT_SHOT');
   }
 
-  if (['FO', 'LO', 'GO', 'FC'].includes(ctx.playType ?? '')) {
+  if (['FO', 'FLO', 'LO', 'GO', 'FC'].includes(ctx.playType ?? '')) {
     buttons.push('TOOTBLAN');
   }
 

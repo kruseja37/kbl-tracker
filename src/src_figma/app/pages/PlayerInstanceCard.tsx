@@ -5,6 +5,7 @@ import type { BattingLine, PitchingLine } from '../../../utils/almanacQueries';
 import { getPlayerExhibitionStats } from '../../../utils/almanacQueries';
 import {
   getCanonicalPlayer,
+  findCanonicalByPlayerId,
   type CanonicalPlayer,
   type CanonicalPlayerInstance,
 } from '../../../utils/almanacStorage';
@@ -16,6 +17,7 @@ import {
 } from '../../../utils/leagueBuilderStorage';
 import { getEffectivePlayer } from '../../../utils/playerOverrides';
 import {
+  buildPlayerName,
   formatBattingAverage,
   formatEarnedRunAverage,
   formatHometown,
@@ -160,16 +162,39 @@ function formatEditDescription(entry: EditHistoryEntry): string {
   return `${label}: ${formatValue(entry.oldValue)} -> ${formatValue(entry.newValue)}`;
 }
 
+function getBattingAppearance(
+  game: CompletedGameRecord,
+  playerIds: string[],
+): CompletedGameRecord['playerStats'][string] | null {
+  for (const playerId of playerIds) {
+    if (game.playerStats[playerId]) {
+      return game.playerStats[playerId];
+    }
+  }
+
+  return null;
+}
+
+function getPitchingAppearance(
+  game: CompletedGameRecord,
+  playerIds: string[],
+): CompletedGameRecord['pitcherGameStats'][number] | null {
+  return (
+    game.pitcherGameStats.find((pitcher) => playerIds.includes(pitcher.pitcherId)) ??
+    null
+  );
+}
+
 function buildTeamSummaries(
   games: CompletedGameRecord[],
-  playerId: string,
+  playerIds: string[],
   teamNames: Map<string, string>,
 ): TeamSummary[] {
   const teams = new Map<string, TeamSummary>();
 
   for (const game of games) {
-    const batterTeamId = game.playerStats[playerId]?.teamId;
-    const pitcherTeamId = game.pitcherGameStats.find((pitcher) => pitcher.pitcherId === playerId)?.teamId;
+    const batterTeamId = getBattingAppearance(game, playerIds)?.teamId;
+    const pitcherTeamId = getPitchingAppearance(game, playerIds)?.teamId;
     const teamId = batterTeamId ?? pitcherTeamId;
 
     if (!teamId) {
@@ -188,9 +213,9 @@ function buildTeamSummaries(
   return Array.from(teams.values()).sort((a, b) => b.lastSeen - a.lastSeen || a.name.localeCompare(b.name));
 }
 
-function buildGameTimelineDescription(game: CompletedGameRecord, playerId: string): string {
-  const batterTeamId = game.playerStats[playerId]?.teamId;
-  const pitcherTeamId = game.pitcherGameStats.find((pitcher) => pitcher.pitcherId === playerId)?.teamId;
+function buildGameTimelineDescription(game: CompletedGameRecord, playerIds: string[]): string {
+  const batterTeamId = getBattingAppearance(game, playerIds)?.teamId;
+  const pitcherTeamId = getPitchingAppearance(game, playerIds)?.teamId;
   const teamId = batterTeamId ?? pitcherTeamId;
 
   if (!teamId) {
@@ -205,11 +230,43 @@ function buildGameTimelineDescription(game: CompletedGameRecord, playerId: strin
   return `Game completed: ${ownTeamName} ${ownScore}, ${opponentName} ${opponentScore}`;
 }
 
+function inferPlayerName(
+  playerIds: string[],
+  player: Player | null,
+  latestSnapshot: PlayerRatingsSnapshot | null,
+  games: CompletedGameRecord[],
+): string {
+  const snapshotName = buildPlayerName(latestSnapshot);
+  if (snapshotName !== 'Unknown Player') {
+    return snapshotName;
+  }
+
+  const storedName = buildPlayerName(player);
+  if (storedName !== 'Unknown Player') {
+    return storedName;
+  }
+
+  for (const game of games) {
+    for (const playerId of playerIds) {
+      const battingName = game.playerStats[playerId]?.playerName;
+      if (battingName) {
+        return battingName;
+      }
+    }
+    const pitchingName = getPitchingAppearance(game, playerIds)?.pitcherName;
+    if (pitchingName) {
+      return pitchingName;
+    }
+  }
+
+  return playerIds[0] ?? 'Unknown Player';
+}
+
 function buildTimeline(
   player: Player | null,
   instanceId: string,
   games: CompletedGameRecord[],
-  playerId: string,
+  playerIds: string[],
 ): TimelineItem[] {
   const edits = (player?.editHistory ?? [])
     .filter((entry) => entry.context === 'base' || entry.leagueId === instanceId)
@@ -222,7 +279,7 @@ function buildTimeline(
   const gameEntries = games.map<TimelineItem>((game) => ({
     timestamp: game.date,
     kind: 'game',
-    description: buildGameTimelineDescription(game, playerId),
+    description: buildGameTimelineDescription(game, playerIds),
   }));
 
   return [...edits, ...gameEntries].sort((a, b) => {
@@ -406,17 +463,16 @@ export function PlayerInstanceCard() {
           return;
         }
 
-        const canonicalPlayer = await getCanonicalPlayer(canonicalId);
-        const instance = canonicalPlayer?.instances.find((entry) => entry.instanceId === instanceId) ?? null;
-
-        if (!canonicalPlayer || !instance) {
-          if (!isCancelled) {
-            setState({ ...initialState, isLoading: false, notFound: true });
-          }
-          return;
+        let canonicalPlayer = await getCanonicalPlayer(canonicalId);
+        if (!canonicalPlayer) {
+          canonicalPlayer = await findCanonicalByPlayerId(canonicalId);
         }
 
-        if (instance.mode !== 'exhibition') {
+        let instance =
+          canonicalPlayer?.instances.find((entry) => entry.instanceId === instanceId) ?? null;
+        const playerIdInInstance = instance?.playerIdInInstance ?? canonicalId;
+
+        if (instance && instance.mode !== 'exhibition') {
           if (!isCancelled) {
             setState({
               ...initialState,
@@ -430,10 +486,54 @@ export function PlayerInstanceCard() {
         }
 
         const [player, exhibitionStats, playerContext] = await Promise.all([
-          getPlayer(instance.playerIdInInstance),
-          getPlayerExhibitionStats(instance.playerIdInInstance, instance.instanceId),
-          getExhibitionPlayerContext(instance.playerIdInInstance, instance.instanceId),
+          getPlayer(playerIdInInstance),
+          getPlayerExhibitionStats(playerIdInInstance, instanceId),
+          getExhibitionPlayerContext(playerIdInInstance, instanceId),
         ]);
+        const resolvedPlayerIds =
+          playerContext.playerIds.length > 0
+            ? playerContext.playerIds
+            : [playerIdInInstance];
+
+        if (!canonicalPlayer || !instance) {
+          const inferredName = inferPlayerName(
+            resolvedPlayerIds,
+            player,
+            playerContext.latestSnapshot,
+            playerContext.games,
+          );
+          const hasAnyArchivedData =
+            playerContext.games.length > 0 ||
+            Boolean(playerContext.latestSnapshot) ||
+            Boolean(player);
+
+          if (!hasAnyArchivedData) {
+            if (!isCancelled) {
+              setState({ ...initialState, isLoading: false, notFound: true });
+            }
+            return;
+          }
+
+          canonicalPlayer = {
+            canonicalId,
+            playerName: inferredName,
+            hometown:
+              playerContext.latestSnapshot?.hometown ||
+              player?.hometown || {
+                city: 'Unknown',
+                state: '--',
+              },
+            instances: [
+              {
+                mode: 'exhibition',
+                instanceId,
+                instanceName: instanceId,
+                playerIdInInstance,
+              },
+            ],
+          };
+          instance = canonicalPlayer.instances[0];
+        }
 
         const effectivePlayer = playerContext.latestSnapshot
           ? null
@@ -441,14 +541,14 @@ export function PlayerInstanceCard() {
         const ratingState = playerContext.latestSnapshot ?? effectivePlayer ?? player;
         const teams = buildTeamSummaries(
           playerContext.games,
-          instance.playerIdInInstance,
+          resolvedPlayerIds,
           playerContext.teamNames,
         );
         const timeline = buildTimeline(
           player,
           instance.instanceId,
           playerContext.games,
-          instance.playerIdInInstance,
+          resolvedPlayerIds,
         );
 
         if (!isCancelled) {

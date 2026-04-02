@@ -68,6 +68,9 @@ function mapSpraySectorToZone(spraySector?: string): number {
     'Center': 3,
     'Right-Center': 4,
     'Right': 5,
+    'Foul-Left': 1,
+    'Foul-Right': 5,
+    'Behind-Plate': 6,
     'Infield': 6,
   };
   return sectorMap[spraySector] || 0;
@@ -96,6 +99,91 @@ function positionFromNumber(posNum: number): Position {
   return (POSITION_MAP[posNum] as Position) || 'SS';
 }
 
+function applySavedRunCredit(events: FieldingEvent[], savedRun?: boolean): FieldingEvent[] {
+  if (!savedRun || events.length === 0) {
+    return events;
+  }
+
+  const creditIndex = events.findIndex((event) => event.playType === 'putout');
+  const targetIndex = creditIndex >= 0 ? creditIndex : 0;
+
+  return events.map((event, index) =>
+    index === targetIndex
+      ? { ...event, runsPreventedOrAllowed: 1 }
+      : event
+  );
+}
+
+function normalizeSavedBasesSpecialPlayType(
+  specialPlayType: FieldingEvent['specialPlayType'] | null | undefined,
+): FieldingEvent['specialPlayType'] | null | undefined {
+  switch (specialPlayType) {
+    case 'Missed Dive':
+      return 'Diving';
+    case 'Missed Leap':
+      return 'Leaping';
+    default:
+      return specialPlayType;
+  }
+}
+
+function appendRunnerOutcomeErrors(
+  events: FieldingEvent[],
+  playData: PlayData,
+  context: FieldingExtractionContext,
+  shared: Pick<FieldingEvent, 'difficulty' | 'specialPlayType'> & Pick<BallInPlayData, 'trajectory' | 'zone'>,
+): FieldingEvent[] {
+  const runnerErrors = (playData.persistedRunnerOutcomes || []).filter(
+    (outcome) =>
+      !!outcome.errorType &&
+      typeof outcome.errorChargedTo === 'number' &&
+      outcome.errorChargedTo >= 1 &&
+      outcome.errorChargedTo <= 9,
+  );
+
+  if (runnerErrors.length === 0) {
+    return events;
+  }
+
+  const sequenceDefenderIds = playData.fieldingSequence
+    .map((positionNum) => resolveDefenderIdentity(positionFromNumber(positionNum), context.defendersByPosition).playerId);
+  const runnerErrorEvents = runnerErrors.map((runnerError, index) => {
+    const sequence = events.length + index;
+    const chargedFielder = resolveDefenderIdentity(
+      positionFromNumber(runnerError.errorChargedTo as number),
+      context.defendersByPosition,
+    );
+    const fielderIds = sequenceDefenderIds.includes(chargedFielder.playerId)
+      ? sequenceDefenderIds
+      : [...sequenceDefenderIds, chargedFielder.playerId];
+
+    return {
+      fieldingEventId: `${context.gameId}_${context.atBatEventIndex}_fe_${sequence}`,
+      gameId: context.gameId,
+      atBatEventId: context.atBatEventId,
+      sequence,
+      playerId: chargedFielder.playerId,
+      playerName: chargedFielder.playerName,
+      position: chargedFielder.position,
+      teamId: context.defensiveTeamId,
+      playType: 'error' as const,
+      difficulty: shared.difficulty,
+      specialPlayType: shared.specialPlayType,
+      ballInPlay: {
+        trajectory: shared.trajectory,
+        zone: shared.zone,
+        velocity: 'medium' as const,
+        fielderIds: fielderIds.length > 0 ? fielderIds : [chargedFielder.playerId],
+        primaryFielderId: chargedFielder.playerId,
+      },
+      success: false,
+      runsPreventedOrAllowed: 0,
+    };
+  });
+
+  return [...events, ...runnerErrorEvents];
+}
+
 /**
  * Infer trajectory from out type when exitType not available
  */
@@ -104,6 +192,7 @@ function inferTrajectoryFromOutType(outType?: string): BallInPlayData['trajector
   const mapping: Record<string, BallInPlayData['trajectory']> = {
     'GO': 'ground',
     'FO': 'fly',
+    'FLO': 'fly',
     'LO': 'line',
     'PO': 'popup',
     'DP': 'ground',
@@ -164,8 +253,6 @@ export function extractFieldingEvents(
   playData: PlayData,
   context: FieldingExtractionContext,
 ): FieldingEvent[] {
-  const events: FieldingEvent[] = [];
-
   const resolveDefender = (positionNum: number) => {
     const position = positionFromNumber(positionNum);
     return resolveDefenderIdentity(position, context.defendersByPosition);
@@ -173,12 +260,15 @@ export function extractFieldingEvents(
 
   // No fielding events for non-ball-in-play outcomes
   if (playData.type === 'walk' || playData.type === 'foul_ball') {
-    return events;
+    return [];
   }
 
-  // No fielding events for home runs (ball leaves the park)
-  if (playData.type === 'hr') {
-    return events;
+  // Plain home runs do not credit the defense, but robbery enrichments do.
+  if (
+    playData.type === 'hr' &&
+    (!playData.fieldingPlayType || playData.fieldingSequence.length === 0)
+  ) {
+    return [];
   }
 
   // Determine trajectory
@@ -193,6 +283,13 @@ export function extractFieldingEvents(
     ? mapFieldingPlayTypeToSpecialPlayType(playData.fieldingPlayType)
     : null;
   const zone = mapSpraySectorToZone(playData.spraySector);
+  const finalizeEvents = (events: FieldingEvent[]) =>
+    appendRunnerOutcomeErrors(events, playData, context, {
+      difficulty,
+      specialPlayType,
+      trajectory,
+      zone,
+    });
 
   // Build the ball-in-play data shared across all events on this play
   const ballInPlay: BallInPlayData = {
@@ -211,6 +308,7 @@ export function extractFieldingEvents(
     playType: FieldingEvent['playType'],
     sequenceIdx: number,
     overrideDifficulty?: FieldingEvent['difficulty'],
+    overrideSpecialPlayType?: FieldingEvent['specialPlayType'] | null,
   ): FieldingEvent => {
     const defender = resolveDefender(positionNum);
     return {
@@ -224,7 +322,7 @@ export function extractFieldingEvents(
       teamId: context.defensiveTeamId,
       playType,
       difficulty: overrideDifficulty || difficulty,
-      specialPlayType,
+      specialPlayType: overrideSpecialPlayType ?? specialPlayType,
       ballInPlay,
       success: playType !== 'error',
       runsPreventedOrAllowed: 0, // Would need LI integration for real values
@@ -236,22 +334,39 @@ export function extractFieldingEvents(
   // ============================================
 
   if (playData.type === 'error') {
+    const events: FieldingEvent[] = [];
     // Error play: errorFielder gets an error event
     if (playData.errorFielder) {
       events.push(makeEvent(playData.errorFielder, 'error', 0));
     }
-    return events;
+    return finalizeEvents(events);
   }
 
   if (playData.type === 'foul_out') {
+    const events: FieldingEvent[] = [];
     // Foul out: first fielder in sequence gets a putout
     if (playData.fieldingSequence.length > 0) {
       events.push(makeEvent(playData.fieldingSequence[0], 'putout', 0));
     }
-    return events;
+    return finalizeEvents(applySavedRunCredit(events, playData.savedRun));
+  }
+
+  if (playData.type === 'hr') {
+    const events: FieldingEvent[] = [];
+    const seq = playData.fieldingSequence;
+
+    if (
+      seq.length > 0 &&
+      (playData.fieldingPlayType === 'robbed_hr' || playData.fieldingPlayType === 'wall')
+    ) {
+      events.push(makeEvent(seq[seq.length - 1], 'putout', 0));
+    }
+
+    return finalizeEvents(applySavedRunCredit(events, playData.savedRun));
   }
 
   if (playData.type === 'out') {
+    const events: FieldingEvent[] = [];
     const outType = playData.outType || 'GO';
     const seq = playData.fieldingSequence;
 
@@ -263,7 +378,7 @@ export function extractFieldingEvents(
         events.push(makeEvent(2, 'assist', 0)); // Catcher assist
         events.push(makeEvent(seq[seq.length - 1], 'putout', 1)); // 1B putout
       }
-      return events;
+      return finalizeEvents(applySavedRunCredit(events, playData.savedRun));
     }
 
     // Double play
@@ -278,7 +393,7 @@ export function extractFieldingEvents(
         // Last fielder = putout
         events.push(makeEvent(seq[seq.length - 1], 'putout', seq.length - 1));
       }
-      return events;
+      return finalizeEvents(applySavedRunCredit(events, playData.savedRun));
     }
 
     // Triple play
@@ -290,7 +405,7 @@ export function extractFieldingEvents(
         }
         events.push(makeEvent(seq[seq.length - 1], 'putout', seq.length - 1));
       }
-      return events;
+      return finalizeEvents(applySavedRunCredit(events, playData.savedRun));
     }
 
     // Sacrifice fly
@@ -303,7 +418,7 @@ export function extractFieldingEvents(
           events.push(makeEvent(seq[i], 'assist', i + 1));
         }
       }
-      return events;
+      return finalizeEvents(applySavedRunCredit(events, playData.savedRun));
     }
 
     // Fielder's choice
@@ -317,13 +432,13 @@ export function extractFieldingEvents(
       } else if (seq.length === 1) {
         events.push(makeEvent(seq[0], 'putout', 0));
       }
-      return events;
+      return finalizeEvents(applySavedRunCredit(events, playData.savedRun));
     }
 
-    // Standard outs (GO, FO, LO, PO, SAC)
+    // Standard outs (GO, FO, FLO, LO, PO, SAC)
     if (seq.length === 0) {
       // No fielding sequence — can't attribute
-      return events;
+      return finalizeEvents(events);
     }
 
     if (seq.length === 1) {
@@ -346,18 +461,32 @@ export function extractFieldingEvents(
       }
     }
 
-    return events;
+    return finalizeEvents(applySavedRunCredit(events, playData.savedRun));
   }
 
   if (playData.type === 'hit') {
-    // Plain hits do not credit the defense.
-    // Runner-thrown-out cases are handled through the supplemental
-    // runner-out credit helper below so they can share the same at-bat id.
-    return events;
+    const events: FieldingEvent[] = [];
+
+    if (playData.savedRun && playData.fieldingSequence.length > 0) {
+      events.push(
+        makeEvent(
+          playData.fieldingSequence[0],
+          'base_save',
+          0,
+          difficulty,
+          normalizeSavedBasesSpecialPlayType(specialPlayType),
+        ),
+      );
+    }
+
+    // Plain hits otherwise do not credit the defense. Runner-thrown-out cases
+    // are handled through the supplemental runner-out credit helper below so
+    // they can share the same at-bat id.
+    return finalizeEvents(applySavedRunCredit(events, playData.savedRun));
   }
 
   // Default: no events for unrecognized play types
-  return events;
+  return finalizeEvents([]);
 }
 
 export function extractSupplementalAdvanceErrorEvents(

@@ -7,6 +7,10 @@ import type { CanonicalPlayer } from "../../../utils/almanacStorage";
 import { getAllTeams } from "../../../utils/leagueBuilderStorage";
 import type { Team } from "../../../utils/leagueBuilderStorage";
 import { backfillCanonicalPlayers } from "../../../utils/registerAlmanacPlayers";
+import {
+  searchExhibitionPlayerInstances,
+  type ExhibitionPlayerSearchEntry,
+} from "../../../utils/almanacQueries";
 
 interface TeamResult {
   team: Team;
@@ -17,6 +21,9 @@ export function AlmanacHome() {
   const navigate = useNavigate();
   const [query, setQuery] = useState("");
   const [playerResults, setPlayerResults] = useState<CanonicalPlayer[]>([]);
+  const [fallbackPlayerResults, setFallbackPlayerResults] = useState<
+    ExhibitionPlayerSearchEntry[]
+  >([]);
   const [teamResults, setTeamResults] = useState<TeamResult[]>([]);
   const [showResults, setShowResults] = useState(false);
   const [searching, setSearching] = useState(false);
@@ -34,6 +41,7 @@ export function AlmanacHome() {
     const trimmed = query.trim();
     if (!trimmed) {
       setPlayerResults([]);
+      setFallbackPlayerResults([]);
       setTeamResults([]);
       setShowResults(false);
       return;
@@ -43,8 +51,9 @@ export function AlmanacHome() {
     setSearching(true);
 
     async function search() {
-      const [players, allTeams] = await Promise.all([
+      const [players, archivedPlayers, allTeams] = await Promise.all([
         searchCanonicalPlayers(trimmed),
+        searchExhibitionPlayerInstances(trimmed),
         getAllTeams(),
       ]);
 
@@ -66,7 +75,13 @@ export function AlmanacHome() {
             : [{ team: t, leagueId: "exhibition" }],
         );
 
+      const canonicalIds = new Set(players.map((player) => player.canonicalId));
       setPlayerResults(players.slice(0, 8));
+      setFallbackPlayerResults(
+        archivedPlayers
+          .filter((player) => !canonicalIds.has(player.canonicalId))
+          .slice(0, 8),
+      );
       setTeamResults(matchingTeams.slice(0, 5));
       setShowResults(true);
       setSearching(false);
@@ -104,7 +119,10 @@ export function AlmanacHome() {
     navigate(params.size > 0 ? `/almanac/players?${params.toString()}` : "/almanac/players");
   };
 
-  const hasResults = playerResults.length > 0 || teamResults.length > 0;
+  const hasResults =
+    playerResults.length > 0 ||
+    fallbackPlayerResults.length > 0 ||
+    teamResults.length > 0;
 
   return (
     <div className="min-h-screen bg-black text-white font-['Press_Start_2P'] px-4 py-6 sm:px-6">
@@ -169,6 +187,26 @@ export function AlmanacHome() {
                                 {p.playerName}
                                 <span className="ml-3 text-[8px] text-[#8F96A3]">
                                   {p.hometown.city}, {p.hometown.state}
+                                </span>
+                              </Link>
+                            ))}
+                          </div>
+                        )}
+                        {fallbackPlayerResults.length > 0 && (
+                          <div>
+                            <div className="border-b border-[#2B2B2B] px-4 py-3 text-[9px] text-[#C4A853]">
+                              ARCHIVED INSTANCES ({fallbackPlayerResults.length})
+                            </div>
+                            {fallbackPlayerResults.map((p) => (
+                              <Link
+                                key={`${p.instanceId}-${p.playerId}`}
+                                to={`/almanac/players/${p.canonicalId}/${p.instanceId}`}
+                                onClick={() => setShowResults(false)}
+                                className="block border-b border-[#2B2B2B] px-4 py-3 text-[10px] text-white transition hover:bg-[#2B2B2B]"
+                              >
+                                {p.playerName}
+                                <span className="ml-3 text-[8px] text-[#8F96A3]">
+                                  {p.teamName} • {p.games} G
                                 </span>
                               </Link>
                             ))}

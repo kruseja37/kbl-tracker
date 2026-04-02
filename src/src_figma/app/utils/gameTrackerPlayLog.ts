@@ -1,12 +1,13 @@
 import type { AtBatEvent, BetweenPlayEvent } from '../../../utils/eventLog';
 import type { PlayLogEditorType, PlayLogEntry, PlayLogEventType, PlayLogResultCategory, RunnerSubEntry } from './playLogTypes';
 import {
+  getHeldByOfBaseSaved,
   getRunnerDisplayDestination,
 } from './gameTrackerRunnerCorrection';
 
 const WALK_RESULTS = new Set(['BB', 'IBB', 'HBP']);
-const HIT_RESULTS = new Set(['1B', '2B', '3B', 'HR', 'GRD']);
-const OUT_RESULTS = new Set(['K', 'Kc', 'GO', 'FO', 'LO', 'PO', 'DP', 'TP', 'FC', 'SF', 'SAC', 'SH', 'D3K', 'WP_K', 'PB_K']);
+const HIT_RESULTS = new Set(['1B', '2B', '3B', 'HR', 'ITPHR', 'GRD']);
+const OUT_RESULTS = new Set(['K', 'Kc', 'GO', 'FO', 'FLO', 'LO', 'PO', 'DP', 'TP', 'FC', 'SF', 'SAC', 'SH', 'D3K', 'WP_K', 'PB_K']);
 
 const toShortInningLabel = (halfInning: 'TOP' | 'BOTTOM', inning: number): string =>
   `${halfInning === 'TOP' ? 'T' : 'B'}${Math.max(1, inning)}`;
@@ -97,6 +98,146 @@ const createBaseEntry = (
 
 type RunnerBaseKey = 'first' | 'second' | 'third';
 const RUNNER_BASES: RunnerBaseKey[] = ['first', 'second', 'third'];
+const HIT_RESULTS_WITH_OF_HOLD = new Set(['1B', '2B', '3B']);
+
+const formatRunnerBaseLabel = (fromBase: RunnerSubEntry['fromBase']): string =>
+  fromBase === 'batter'
+    ? 'BAT'
+    : fromBase === 'first'
+      ? '1B'
+      : fromBase === 'second'
+        ? '2B'
+        : '3B';
+
+const formatRunnerTransitionLabel = (
+  fromBase: RunnerSubEntry['fromBase'],
+  toBase: RunnerSubEntry['toBase'],
+  playMechanic?: string,
+  fielderPosition?: RunnerSubEntry['fielderPosition'],
+  heldByOf?: RunnerSubEntry['heldByOf'],
+  holdingFielder?: RunnerSubEntry['holdingFielder'],
+  errorType?: RunnerSubEntry['errorType'],
+  errorChargedTo?: RunnerSubEntry['errorChargedTo'],
+): string => {
+  const baseTransition = `${formatRunnerBaseLabel(fromBase)}→${
+    toBase === 'first'
+      ? '1B'
+      : toBase === 'second'
+        ? '2B'
+        : toBase === 'third'
+          ? '3B'
+          : toBase === 'home'
+            ? 'HOME'
+            : toBase === 'out'
+              ? 'OUT'
+              : 'END'
+  }`;
+
+  if (
+    errorType &&
+    typeof errorChargedTo === 'number' &&
+    errorChargedTo >= 1 &&
+    errorChargedTo <= 9
+  ) {
+    return `${baseTransition} (E${errorChargedTo})`;
+  }
+
+  const holdFielder = holdingFielder || fielderPosition;
+  if ((heldByOf || playMechanic === 'hold') && holdFielder) {
+    return `${baseTransition} (held by ${holdFielder})`;
+  }
+
+  return baseTransition;
+};
+
+const sameRunner = (
+  before: { runnerId?: string; runnerName?: string } | null | undefined,
+  after: { runnerId?: string; runnerName?: string } | null | undefined,
+): boolean => {
+  if (!before || !after) return false;
+  if (before.runnerId && after.runnerId) {
+    return before.runnerId === after.runnerId;
+  }
+  return !!before.runnerName && before.runnerName === after.runnerName;
+};
+
+function inferHeldRunnerSubEntries(
+  event: AtBatEvent,
+  existingKeys: Set<string>,
+): RunnerSubEntry[] {
+  if (!HIT_RESULTS_WITH_OF_HOLD.has(event.result)) {
+    return [];
+  }
+
+  return RUNNER_BASES.flatMap((fromBase, idx) => {
+    const runnerBefore = event.runners[fromBase];
+    const runnerAfter = event.runnersAfter[fromBase];
+    if (!sameRunner(runnerBefore, runnerAfter)) {
+      return [];
+    }
+
+    const runnerId = runnerBefore?.runnerId || runnerAfter?.runnerId || '';
+    const runnerName = runnerBefore?.runnerName || runnerAfter?.runnerName || 'Unknown';
+    const runnerKey = `${runnerId}:${fromBase}:${runnerName}`;
+    if (existingKeys.has(runnerKey)) {
+      return [];
+    }
+
+    return [{
+      id: `${event.eventId}-runner-held-${idx}`,
+      parentEventId: event.eventId,
+      runnerId,
+      runnerName,
+      fromBase,
+      toBase: fromBase,
+      parentResult: event.result,
+      isEnrichable: true,
+      transitionLabel: formatRunnerTransitionLabel(fromBase, fromBase),
+    }];
+  });
+}
+
+function getDefaultBatterDestination(event: AtBatEvent): RunnerSubEntry['toBase'] | null {
+  if (!HIT_RESULTS_WITH_OF_HOLD.has(event.result)) {
+    return null;
+  }
+
+  if (event.enrichment?.batterOutAdvancing) {
+    return 'out';
+  }
+
+  if (event.result === '1B') return 'first';
+  if (event.result === '2B') return 'second';
+  return 'third';
+}
+
+function inferBatterRunnerSubEntry(
+  event: AtBatEvent,
+  existingKeys: Set<string>,
+): RunnerSubEntry[] {
+  const toBase = getDefaultBatterDestination(event);
+  if (!toBase) {
+    return [];
+  }
+
+  const batterKey = `${event.batterId}:batter:${event.batterName}`;
+  if (existingKeys.has(batterKey)) {
+    return [];
+  }
+
+  return [{
+    id: `${event.eventId}-runner-batter`,
+    parentEventId: event.eventId,
+    runnerId: event.batterId,
+    runnerName: event.batterName,
+    fromBase: 'batter',
+    toBase,
+    parentResult: event.result,
+    isEnrichable: true,
+    baseSaved: getHeldByOfBaseSaved(toBase, event.result) ?? undefined,
+    transitionLabel: formatRunnerTransitionLabel('batter', toBase),
+  }];
+}
 
 /**
  * Derive runner sub-entries from AtBatEvent data.
@@ -106,19 +247,47 @@ const RUNNER_BASES: RunnerBaseKey[] = ['first', 'second', 'third'];
 function buildRunnerSubEntries(event: AtBatEvent): RunnerSubEntry[] | undefined {
   // Path 1: Explicit runnerOutcomes[] exists
   if (event.runnerOutcomes?.length) {
-    return event.runnerOutcomes.map((ro, idx) => ({
+    const persistedEntries = event.runnerOutcomes.map((ro, idx) => ({
       id: `${event.eventId}-runner-${idx}`,
       parentEventId: event.eventId,
       runnerId: ro.runnerId,
       runnerName: ro.runnerName,
       fromBase: ro.fromBase,
       toBase: getRunnerDisplayDestination(ro),
+      parentResult: event.result,
       isEnrichable: true,
       fieldingSequence: ro.fieldingSequence,
       playMechanic: ro.playMechanic,
+      fielderId: ro.fielderId,
+      fielderPosition: ro.fielderPosition,
+      heldByOf: ro.heldByOf,
+      holdingFielder: ro.holdingFielder,
+      baseSaved: ro.baseSaved,
       isTootblan: ro.isTootblan,
       isOutAdvancing: ro.isOutAdvancing,
+      errorType: ro.errorType,
+      errorChargedTo: ro.errorChargedTo,
+      transitionLabel: formatRunnerTransitionLabel(
+        ro.fromBase,
+        getRunnerDisplayDestination(ro),
+        ro.playMechanic,
+        ro.fielderPosition,
+        ro.heldByOf,
+        ro.holdingFielder,
+        ro.errorType,
+        ro.errorChargedTo,
+      ),
     }));
+
+    const existingKeys = new Set(
+      persistedEntries.map((entry) => `${entry.runnerId}:${entry.fromBase}:${entry.runnerName}`),
+    );
+
+    return [
+      ...persistedEntries,
+      ...inferHeldRunnerSubEntries(event, existingKeys),
+      ...inferBatterRunnerSubEntry(event, existingKeys),
+    ];
   }
 
   // Path 2: Infer from runners/runnersAfter
@@ -186,12 +355,12 @@ function buildRunnerSubEntries(event: AtBatEvent): RunnerSubEntry[] | undefined 
     }
 
     // Determine destination
-    let toBase: 'second' | 'third' | 'home' | 'out' | null = null;
+    let toBase: RunnerSubEntry['toBase'] | null = null;
 
     // Check runnersAfter for this runner
     const afterBase = runnerId ? afterMap.get(runnerId) : undefined;
     if (afterBase) {
-      toBase = afterBase as 'second' | 'third';
+      toBase = afterBase as RunnerBaseKey;
     }
 
     // Check if they scored
@@ -207,10 +376,11 @@ function buildRunnerSubEntries(event: AtBatEvent): RunnerSubEntry[] | undefined 
     }
 
     // If not found anywhere, they were out
-    if (!toBase) toBase = 'out';
+    if (!toBase) {
+      toBase = event.outsAfter >= 3 ? 'end' : 'out';
+    }
 
-    // Skip no-movement entries (stayed on same base)
-    if (toBase === fromBase) continue;
+    if (toBase === fromBase && !HIT_RESULTS.has(event.result)) continue;
 
     subEntries.push({
       id: `${event.eventId}-runner-${idx}`,
@@ -219,10 +389,17 @@ function buildRunnerSubEntries(event: AtBatEvent): RunnerSubEntry[] | undefined 
       runnerName: runnerName || 'Unknown',
       fromBase,
       toBase,
+      parentResult: event.result,
       isEnrichable: true,
+      transitionLabel: formatRunnerTransitionLabel(fromBase, toBase),
     });
     idx++;
   }
+
+  const existingKeys = new Set(
+    subEntries.map((entry) => `${entry.runnerId}:${entry.fromBase}:${entry.runnerName}`),
+  );
+  subEntries.push(...inferBatterRunnerSubEntry(event, existingKeys));
 
   return subEntries.length > 0 ? subEntries : undefined;
 }
@@ -243,14 +420,23 @@ export function mapAtBatEventToPlayLogEntry(event: AtBatEvent): PlayLogEntry {
     fieldingAttemptType?: string;
     fieldingAttemptOutcome?: string;
     playMechanic?: string;
+    basesSaved?: 1 | 2;
   }) | undefined;
   const hasFieldingDefaults = !!(
     enrichmentAny?.fieldingDifficulty ||
     event.enrichment?.fieldingPlayType ||
     enrichmentAny?.fieldingAttemptType ||
     enrichmentAny?.fieldingAttemptOutcome ||
-    enrichmentAny?.playMechanic
+    enrichmentAny?.playMechanic ||
+    enrichmentAny?.basesSaved
   );
+  const basesSavedSuffix = enrichmentAny?.basesSaved
+    ? ` (saved ${enrichmentAny.basesSaved}B)`
+    : '';
+  const fieldingDescription = `${fieldingSequence || ''}${basesSavedSuffix}`.trim() || undefined;
+  const description = [fieldingDescription, event.enrichment?.chased ? 'chase' : undefined]
+    .filter((value): value is string => !!value)
+    .join(' ') || undefined;
 
   return createBaseEntry({
     id: event.eventId,
@@ -269,6 +455,7 @@ export function mapAtBatEventToPlayLogEntry(event: AtBatEvent): PlayLogEntry {
     hasPitchType: !!event.enrichment?.pitchType,
     isEnrichable: !WALK_RESULTS.has(displayResult),
     isQAB: !!event.isQualityAtBat,
+    description,
     fieldingSequence,
     timestamp: event.timestamp,
     runnerSubEntries: buildRunnerSubEntries(event),

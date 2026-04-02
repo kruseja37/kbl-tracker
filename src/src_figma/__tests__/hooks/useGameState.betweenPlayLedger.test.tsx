@@ -219,7 +219,7 @@ describe('useGameState between-play ledger', () => {
       );
       expect(subResult).toEqual({ success: true });
       result.current.switchPositions([{ playerId: 'home-batter-1', newPosition: 'SS' }]);
-      result.current.changePitcher('home-rp', 'home-sp', 'Home Reliever', 'Home Starter');
+      result.current.changePitcher('home-rp', 'home-sp', 'home', 'Home Reliever', 'Home Starter');
       result.current.confirmPitchCount('home-sp', 17);
       await Promise.resolve();
     });
@@ -302,7 +302,7 @@ describe('useGameState between-play ledger', () => {
     });
 
     await act(async () => {
-      result.current.changePitcher('home-rp', 'home-sp', 'Home Reliever', 'Home Starter');
+      result.current.changePitcher('home-rp', 'home-sp', 'home', 'Home Reliever', 'Home Starter');
       result.current.confirmPitchCount('home-sp', 17);
       await Promise.resolve();
     });

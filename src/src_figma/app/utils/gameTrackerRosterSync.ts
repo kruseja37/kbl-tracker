@@ -9,6 +9,57 @@ type RosterIdentityResolver = (
 ) => string;
 
 const EMPTY_PLAYER_STATS = { ab: 0, h: 0, r: 0, rbi: 0, bb: 0, k: 0 };
+const EMPTY_PITCHER_STATS = { ip: '0.0', h: 0, r: 0, er: 0, bb: 0, k: 0, pitches: 0 };
+
+function compareRosterOrder(left: Player, right: Player): number {
+  const leftOrder = left.battingOrder ?? Number.MAX_SAFE_INTEGER;
+  const rightOrder = right.battingOrder ?? Number.MAX_SAFE_INTEGER;
+  if (leftOrder !== rightOrder) {
+    return leftOrder - rightOrder;
+  }
+  return left.name.localeCompare(right.name);
+}
+
+function createSnapshotPitcher(
+  pitcherId: string,
+  pitcherName: string,
+  existingPitcher?: Pitcher,
+  matchingPlayer?: Player,
+  overrides?: Partial<Pitcher>,
+): Pitcher {
+  return {
+    name: pitcherName,
+    playerId: pitcherId,
+    stats: existingPitcher?.stats ?? { ...EMPTY_PITCHER_STATS },
+    throwingHand:
+      existingPitcher?.throwingHand ||
+      matchingPlayer?.throws ||
+      'R',
+    throws: existingPitcher?.throws ?? matchingPlayer?.throws,
+    isStarter: existingPitcher?.isStarter ?? false,
+    isActive: existingPitcher?.isActive ?? false,
+    isOutOfGame: existingPitcher?.isOutOfGame ?? false,
+    velocity: existingPitcher?.velocity ?? matchingPlayer?.velocity,
+    junk: existingPitcher?.junk ?? matchingPlayer?.junk,
+    accuracy: existingPitcher?.accuracy ?? matchingPlayer?.accuracy,
+    arsenal: existingPitcher?.arsenal ?? matchingPlayer?.arsenal,
+    overallGrade: existingPitcher?.overallGrade ?? matchingPlayer?.overallGrade,
+    trait1: existingPitcher?.trait1 ?? matchingPlayer?.trait1,
+    trait2: existingPitcher?.trait2 ?? matchingPlayer?.trait2,
+    personality: existingPitcher?.personality ?? matchingPlayer?.personality,
+    chemistry: existingPitcher?.chemistry ?? matchingPlayer?.chemistry,
+    age: existingPitcher?.age ?? matchingPlayer?.age,
+    secondaryPosition:
+      existingPitcher?.secondaryPosition ?? matchingPlayer?.secondaryPosition,
+    power: existingPitcher?.power ?? matchingPlayer?.power,
+    contact: existingPitcher?.contact ?? matchingPlayer?.contact,
+    speed: existingPitcher?.speed ?? matchingPlayer?.speed,
+    fieldingRating:
+      existingPitcher?.fieldingRating ?? matchingPlayer?.fieldingRating,
+    arm: existingPitcher?.arm ?? matchingPlayer?.arm,
+    ...overrides,
+  };
+}
 
 function createSnapshotPlayer(
   player: {
@@ -52,169 +103,82 @@ export function reconcileTeamPlayersWithLineupSnapshot(
       )
     : null;
   const oldPitcherId = outgoingPitcherEntry?.playerId ?? null;
-
-  // R3: If no existing players match any snapshot entry, existing data is stale/fallback.
-  // Build the roster entirely from the snapshot to avoid mixing fallback + real players.
-  const anyExistingMatchesSnapshot = existingPlayers.some((player) => {
-    const playerId = getRosterEntityId(player, team);
-    return lineupById.has(playerId) || benchById.has(playerId) ||
-      (snapshot.currentPitcher && playerId === snapshot.currentPitcher.playerId);
-  });
-  if (!anyExistingMatchesSnapshot && snapshot.lineup.length > 0) {
-    const freshLineup = shouldInjectPitcherIntoLineup
-      ? snapshot.lineup.map((entry) => (
-          oldPitcherId && entry.playerId === oldPitcherId
-            ? {
-                ...entry,
-                playerId: currentPitcher.playerId,
-                playerName: currentPitcher.playerName,
-                position: 'P',
-                battingOrder: currentPitcher.battingOrder,
-              }
-            : entry
-        ))
-      : snapshot.lineup;
-    const freshPlayers: Player[] = [];
-    for (const entry of freshLineup) {
-      freshPlayers.push({
-        name: entry.playerName,
-        playerId: entry.playerId,
-        position: entry.position,
-        battingOrder: entry.battingOrder,
-        stats: { ab: 0, h: 0, r: 0, rbi: 0, bb: 0, k: 0 },
-        battingHand: 'R',
-        isOutOfGame: false,
-      });
-    }
-    for (const entry of snapshot.bench) {
-      freshPlayers.push({
-        name: entry.playerName,
-        playerId: entry.playerId,
-        position: entry.positions[0],
-        stats: { ab: 0, h: 0, r: 0, rbi: 0, bb: 0, k: 0 },
-        battingHand: 'R',
-        isOutOfGame: !entry.isAvailable,
-      });
-    }
-    // Add pitcher if not already in lineup (DH game)
-    if (
-      currentPitcher &&
-      !freshLineup.some((player) => player.playerId === currentPitcher.playerId)
-    ) {
-      freshPlayers.push({
-        name: currentPitcher.playerName,
-        playerId: currentPitcher.playerId,
-        position: 'P',
-        battingOrder: currentPitcher.battingOrder,
-        stats: { ab: 0, h: 0, r: 0, rbi: 0, bb: 0, k: 0 },
-        battingHand: 'R',
-        isOutOfGame: false,
-      });
-    }
-    return freshPlayers.sort((a, b) => (a.battingOrder || 99) - (b.battingOrder || 99));
-  }
   const usedPlayers = new Set(snapshot.usedPlayers);
+  const existingById = new Map(
+    existingPlayers.map((player) => [getRosterEntityId(player, team), player]),
+  );
+  const existingByName = new Map(existingPlayers.map((player) => [player.name, player]));
   const seenPlayerIds = new Set<string>();
+  const nextPlayers: Player[] = [];
 
-  const nextPlayers = existingPlayers.map((player) => {
-    const playerId = getRosterEntityId(player, team);
+  const findExistingPlayer = (playerId: string, playerName: string) =>
+    existingById.get(playerId) || existingByName.get(playerName);
 
-    if (
-      shouldInjectPitcherIntoLineup &&
-      (
-        playerId === currentPitcher.playerId ||
-        (oldPitcherId ? playerId === oldPitcherId : false) ||
-        (!oldPitcherId && player.battingOrder === currentPitcher.battingOrder)
+  const pushPlayer = (
+    playerId: string,
+    playerName: string,
+    position: string | undefined,
+    battingOrder: number | undefined,
+    isOutOfGame: boolean,
+    existingOverride?: Player,
+  ) => {
+    if (seenPlayerIds.has(playerId)) {
+      return;
+    }
+    const existing = existingOverride || findExistingPlayer(playerId, playerName);
+    nextPlayers.push({
+      ...(existing || {
+        stats: { ...EMPTY_PLAYER_STATS },
+        battingHand: 'R' as const,
+      }),
+      playerId,
+      name: playerName,
+      position,
+      battingOrder,
+      isOutOfGame,
+    });
+    seenPlayerIds.add(playerId);
+  };
+
+  const normalizedLineup = shouldInjectPitcherIntoLineup
+    ? snapshot.lineup.map((entry) =>
+        oldPitcherId && entry.playerId === oldPitcherId
+          ? {
+              ...entry,
+              playerId: currentPitcher.playerId,
+              playerName: currentPitcher.playerName,
+              position: 'P',
+              battingOrder: currentPitcher.battingOrder,
+            }
+          : entry,
       )
-    ) {
-      return {
-        ...player,
-        playerId: currentPitcher.playerId,
-        name: currentPitcher.playerName,
-        position: 'P',
-        battingOrder: currentPitcher.battingOrder,
-        isOutOfGame: false,
-      };
-    }
+    : snapshot.lineup;
 
-    const lineupEntry = lineupById.get(playerId);
-    if (lineupEntry) {
-      return {
-        ...player,
-        playerId: lineupEntry.playerId,
-        name: lineupEntry.playerName,
-        position: lineupEntry.position,
-        battingOrder: lineupEntry.battingOrder,
-        isOutOfGame: false,
-      };
-    }
-
-    const benchEntry = benchById.get(playerId);
-    if (benchEntry) {
-      return {
-        ...player,
-        playerId: benchEntry.playerId,
-        name: benchEntry.playerName,
-        battingOrder: undefined,
-        position: player.position || benchEntry.positions[0] || player.position,
-        isOutOfGame: !benchEntry.isAvailable,
-      };
-    }
-
-    if (usedPlayers.has(playerId)) {
-      return {
-        ...player,
-        playerId,
-        battingOrder: undefined,
-        isOutOfGame: true,
-      };
-    }
-
-    return player;
-  });
-
-  for (const player of nextPlayers) {
-    seenPlayerIds.add(getRosterEntityId(player, team));
-  }
-
-  for (const lineupEntry of snapshot.lineup) {
-    if (
-      shouldInjectPitcherIntoLineup &&
-      oldPitcherId &&
-      lineupEntry.playerId === oldPitcherId
-    ) {
-      continue;
-    }
-    if (seenPlayerIds.has(lineupEntry.playerId)) continue;
-    nextPlayers.push(createSnapshotPlayer(lineupEntry, false));
-    seenPlayerIds.add(lineupEntry.playerId);
+  for (const lineupEntry of normalizedLineup) {
+    pushPlayer(
+      lineupEntry.playerId,
+      lineupEntry.playerName,
+      lineupEntry.position,
+      lineupEntry.battingOrder,
+      false,
+    );
   }
 
   for (const benchEntry of snapshot.bench) {
-    if (seenPlayerIds.has(benchEntry.playerId)) continue;
-    nextPlayers.push(createSnapshotPlayer({
-      playerId: benchEntry.playerId,
-      playerName: benchEntry.playerName,
-      position: benchEntry.positions[0],
-    }, !benchEntry.isAvailable));
-    seenPlayerIds.add(benchEntry.playerId);
+    pushPlayer(
+      benchEntry.playerId,
+      benchEntry.playerName,
+      benchEntry.positions[0],
+      undefined,
+      !benchEntry.isAvailable,
+    );
   }
 
   if (
-    shouldInjectPitcherIntoLineup &&
+    currentPitcher &&
     !seenPlayerIds.has(currentPitcher.playerId)
   ) {
-    nextPlayers.push(createSnapshotPlayer({
-      playerId: currentPitcher.playerId,
-      playerName: currentPitcher.playerName,
-      position: 'P',
-      battingOrder: currentPitcher.battingOrder,
-    }, false));
-    seenPlayerIds.add(currentPitcher.playerId);
-  }
-
-  if (shouldInjectPitcherIntoLineup) {
-    const existingPitcherSlot = nextPlayers.find((player) => {
+    const existingPitcherSlot = existingPlayers.find((player) => {
       const playerId = getRosterEntityId(player, team);
       return (
         playerId === currentPitcher.playerId ||
@@ -222,33 +186,32 @@ export function reconcileTeamPlayersWithLineupSnapshot(
         player.battingOrder === currentPitcher.battingOrder
       );
     });
-
-    const normalizedPitcherSlot: Player = {
-      ...(existingPitcherSlot || {
-        stats: EMPTY_PLAYER_STATS,
-        battingHand: 'R' as const,
-      }),
-      playerId: currentPitcher.playerId,
-      name: currentPitcher.playerName,
-      position: 'P',
-      battingOrder: currentPitcher.battingOrder,
-      isOutOfGame: false,
-    };
-
-    return nextPlayers
-      .filter((player) => {
-        const playerId = getRosterEntityId(player, team);
-        return !(
-          playerId === currentPitcher.playerId ||
-          (oldPitcherId ? playerId === oldPitcherId : false) ||
-          player.battingOrder === currentPitcher.battingOrder
-        );
-      })
-      .concat(normalizedPitcherSlot)
-      .sort((left, right) => (left.battingOrder || 99) - (right.battingOrder || 99));
+    pushPlayer(
+      currentPitcher.playerId,
+      currentPitcher.playerName,
+      'P',
+      currentPitcher.battingOrder,
+      false,
+      existingPitcherSlot,
+    );
   }
 
-  return nextPlayers;
+  for (const player of existingPlayers) {
+    const playerId = getRosterEntityId(player, team);
+    if (!usedPlayers.has(playerId) || seenPlayerIds.has(playerId)) {
+      continue;
+    }
+    pushPlayer(
+      playerId,
+      player.name,
+      player.position,
+      undefined,
+      true,
+      player,
+    );
+  }
+
+  return nextPlayers.sort(compareRosterOrder);
 }
 
 export function reconcileTeamPitchersWithLineupSnapshot(
@@ -260,70 +223,68 @@ export function reconcileTeamPitchersWithLineupSnapshot(
 ): Pitcher[] {
   const currentPitcherId = snapshot.currentPitcher?.playerId || null;
   const usedPlayers = new Set(snapshot.usedPlayers);
-
-  // R3: If no existing pitchers match the snapshot's current pitcher, existing data is stale.
-  // Build from snapshot to avoid mixing fallback + real pitchers.
-  const anyPitcherMatches = existingPitchers.some((pitcher) => {
-    const pitcherId = getRosterEntityId(pitcher, team);
-    return pitcherId === currentPitcherId || usedPlayers.has(pitcherId);
-  });
-  if (!anyPitcherMatches && snapshot.currentPitcher) {
-    const freshPitcher: Pitcher = {
-      name: snapshot.currentPitcher.playerName,
-      playerId: snapshot.currentPitcher.playerId,
-      stats: { ip: '0.0', h: 0, r: 0, er: 0, bb: 0, k: 0, pitches: 0 },
-      throwingHand: 'R',
-      isStarter: true,
-      isActive: true,
-      isOutOfGame: false,
-    };
-    return [freshPitcher];
-  }
-
+  const benchPitchers = snapshot.bench.filter((entry) =>
+    entry.positions.some((position) => position.includes('P')),
+  );
+  const benchPitcherById = new Map(benchPitchers.map((pitcher) => [pitcher.playerId, pitcher]));
+  const existingPitcherById = new Map(
+    existingPitchers.map((pitcher) => [getRosterEntityId(pitcher, team), pitcher]),
+  );
+  const playerById = new Map(
+    players.map((player) => [getRosterEntityId(player, team), player]),
+  );
+  const orderedPitcherIds: string[] = [];
   const seenPitcherIds = new Set<string>();
 
-  const nextPitchers = existingPitchers.map((pitcher, index) => {
-    const pitcherId = getRosterEntityId(pitcher, team);
+  const pushPitcherId = (pitcherId?: string | null) => {
+    if (!pitcherId || seenPitcherIds.has(pitcherId)) {
+      return;
+    }
+    orderedPitcherIds.push(pitcherId);
     seenPitcherIds.add(pitcherId);
-    const wasOutOfGame = pitcher.isOutOfGame ?? false;
+  };
 
-    return {
-      ...pitcher,
-      playerId: pitcherId,
-      isStarter: index === 0,
-      isActive: currentPitcherId === pitcherId,
-      isOutOfGame: currentPitcherId === pitcherId ? false : wasOutOfGame || usedPlayers.has(pitcherId),
-    };
-  });
-
-  if (currentPitcherId && !seenPitcherIds.has(currentPitcherId)) {
-    const matchingPlayer = players.find((player) => getRosterEntityId(player, team) === currentPitcherId);
-    nextPitchers.push({
-      name: snapshot.currentPitcher?.playerName || matchingPlayer?.name || currentPitcherId,
-      playerId: currentPitcherId,
-      stats: { ip: '0.0', h: 0, r: 0, er: 0, bb: 0, k: 0, pitches: 0 },
-      throwingHand: matchingPlayer?.throws || 'R',
-      isStarter: false,
-      isActive: true,
-      isOutOfGame: false,
-      velocity: matchingPlayer?.velocity,
-      junk: matchingPlayer?.junk,
-      accuracy: matchingPlayer?.accuracy,
-      arsenal: matchingPlayer?.arsenal,
-      overallGrade: matchingPlayer?.overallGrade,
-      trait1: matchingPlayer?.trait1,
-      trait2: matchingPlayer?.trait2,
-      personality: matchingPlayer?.personality,
-      chemistry: matchingPlayer?.chemistry,
-      age: matchingPlayer?.age,
-      secondaryPosition: matchingPlayer?.secondaryPosition,
-      power: matchingPlayer?.power,
-      contact: matchingPlayer?.contact,
-      speed: matchingPlayer?.speed,
-      fieldingRating: matchingPlayer?.fieldingRating,
-      arm: matchingPlayer?.arm,
-    });
+  for (const pitcher of existingPitchers) {
+    const pitcherId = getRosterEntityId(pitcher, team);
+    if (
+      pitcherId === currentPitcherId ||
+      usedPlayers.has(pitcherId) ||
+      benchPitcherById.has(pitcherId)
+    ) {
+      pushPitcherId(pitcherId);
+    }
   }
 
-  return nextPitchers;
+  for (const benchPitcher of benchPitchers) {
+    pushPitcherId(benchPitcher.playerId);
+  }
+  pushPitcherId(currentPitcherId);
+
+  return orderedPitcherIds.map((pitcherId, index) => {
+    const existingPitcher = existingPitcherById.get(pitcherId);
+    const benchPitcher = benchPitcherById.get(pitcherId);
+    const matchingPlayer = playerById.get(pitcherId);
+    const pitcherName =
+      existingPitcher?.name ??
+      (snapshot.currentPitcher?.playerId === pitcherId
+        ? snapshot.currentPitcher?.playerName
+        : undefined) ??
+      benchPitcher?.playerName ??
+      matchingPlayer?.name ??
+      pitcherId;
+    const isActive = currentPitcherId === pitcherId;
+    const isUnavailableFromBench = benchPitcher ? !benchPitcher.isAvailable : false;
+
+    return createSnapshotPitcher(
+      pitcherId,
+      pitcherName as string,
+      existingPitcher,
+      matchingPlayer,
+      {
+        isStarter: existingPitcher?.isStarter ?? index === 0,
+        isActive,
+        isOutOfGame: isActive ? false : usedPlayers.has(pitcherId) || isUnavailableFromBench,
+      },
+    );
+  });
 }

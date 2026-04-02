@@ -1,4 +1,7 @@
 import React from 'react';
+import type { MojoLevel } from '../../../engines/mojoEngine';
+import type { FitnessState } from '../../../engines/fitnessEngine';
+import { toFitnessLabel, toMojoLabel } from '../../../types/game';
 
 interface DefensiveLineupPlayer {
   playerId: string;
@@ -29,9 +32,46 @@ interface DefensiveLineupColumnProps {
   nextLeadoffIndex: number; // 1-based batting order of next inning's leadoff
   teamPrimaryColor: string;
   teamSecondaryColor: string;
+  getMojoForPlayer: (playerId: string) => MojoLevel | undefined;
+  getFitnessForPlayer: (playerId: string) => FitnessState | undefined;
   onPlayerTap: (playerId: string, playerName: string) => void;
+  headerAction?: {
+    label: string;
+    onClick: () => void;
+  };
   /** §5.4: When set, column toggles into fielding sequence enrichment mode */
   enrichmentMode?: DefensiveEnrichmentMode;
+}
+
+const FITNESS_ABBREVIATIONS: Record<Exclude<FitnessState, 'FIT'>, string> = {
+  JUICED: 'JCD',
+  WELL: 'WEL',
+  STRAINED: 'STR',
+  WEAK: 'WK',
+  HURT: 'HRT',
+};
+
+function getMojoIndicator(level: MojoLevel | undefined) {
+  if (level === undefined || level === 0) {
+    return null;
+  }
+
+  return {
+    text: level > 0 ? '▲' : '▼',
+    color: level > 0 ? '#22c55e' : '#ef4444',
+    label: toMojoLabel(level),
+  };
+}
+
+function getFitnessIndicator(state: FitnessState | undefined) {
+  if (state === undefined || state === 'FIT') {
+    return null;
+  }
+
+  return {
+    text: FITNESS_ABBREVIATIONS[state],
+    label: toFitnessLabel(state),
+  };
 }
 
 /** §5.3: Defensive Lineup Column — ordered by batting order, 9 players always visible */
@@ -41,7 +81,10 @@ export function DefensiveLineupColumn({
   nextLeadoffIndex,
   teamPrimaryColor,
   teamSecondaryColor,
+  getMojoForPlayer,
+  getFitnessForPlayer,
   onPlayerTap,
+  headerAction,
   enrichmentMode,
 }: DefensiveLineupColumnProps) {
   const isEnriching = enrichmentMode?.active ?? false;
@@ -49,10 +92,21 @@ export function DefensiveLineupColumn({
   return (
     <div className="bg-[#2a3a2d] border border-[#3d5240] flex flex-col h-full">
       {/* Header — switches between DEFENSE and FIELDING SEQUENCE */}
-      <div className={`text-[10px] font-bold tracking-wider px-2 pt-1.5 pb-1 border-b border-[#3d5240] ${
+      <div className={`px-2 pt-1.5 pb-1 border-b border-[#3d5240] flex items-center justify-between gap-2 ${
         isEnriching ? 'text-[#C4A853]' : 'text-[#88AA88]'
       }`}>
-        {isEnriching ? 'FIELDING SEQUENCE' : 'DEFENSE'}
+        <div className="text-[10px] font-bold tracking-wider">
+          {isEnriching ? 'FIELDING SEQUENCE' : 'DEFENSE'}
+        </div>
+        {!isEnriching && headerAction && (
+          <button
+            type="button"
+            onClick={headerAction.onClick}
+            className="bg-[#5dade2] border border-[#d6efff] px-1.5 py-0.5 text-[8px] font-bold tracking-wider text-[#082032] hover:bg-[#7ac4f5] active:scale-95 transition-transform"
+          >
+            {headerAction.label}
+          </button>
+        )}
       </div>
 
       {/* Sequence display + controls when enriching */}
@@ -88,6 +142,8 @@ export function DefensiveLineupColumn({
           const posNum = POSITION_TO_NUMBER[player.position || ''] || 0;
           // In enrichment mode, highlight positions already in the sequence
           const isInSequence = isEnriching && posNum > 0 && enrichmentMode!.sequence.includes(posNum);
+          const mojoIndicator = getMojoIndicator(getMojoForPlayer(player.playerId));
+          const fitnessIndicator = getFitnessIndicator(getFitnessForPlayer(player.playerId));
 
           const handleClick = () => {
             if (isEnriching && posNum > 0) {
@@ -132,16 +188,37 @@ export function DefensiveLineupColumn({
                   </span>
                 )}
                 <span>{player.name}</span>
+                {!isEnriching && mojoIndicator && (
+                  <span
+                    className="ml-1 font-semibold align-baseline"
+                    style={{ color: mojoIndicator.color }}
+                    title={`Mojo: ${mojoIndicator.label}`}
+                  >
+                    {mojoIndicator.text}
+                  </span>
+                )}
+                {!isEnriching && fitnessIndicator && (
+                  <span
+                    className="ml-1 text-[#C4A853] align-baseline"
+                    title={`Fitness: ${fitnessIndicator.label}`}
+                  >
+                    {fitnessIndicator.text}
+                  </span>
+                )}
               </div>
               {/* Bottom row: in enrichment mode show position number, else pitch count / dash */}
               <div className="text-[7px] text-[#6b7b6e] leading-tight">
                 {isEnriching
                   ? posNum > 0
                     ? <span className="text-[#C4A853]/60">#{posNum}</span>
-                    : '—'
-                  : player.isPitcher && player.pitchCount !== undefined
-                    ? `PC: ${player.pitchCount}`
-                    : '—'}
+                    : null
+                  : (
+                    <div className="min-h-[10px] flex items-center gap-1">
+                      {player.isPitcher && player.pitchCount !== undefined && (
+                        <span>{`PC: ${player.pitchCount}`}</span>
+                      )}
+                    </div>
+                  )}
               </div>
             </button>
           );
