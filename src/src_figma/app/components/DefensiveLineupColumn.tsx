@@ -43,35 +43,28 @@ interface DefensiveLineupColumnProps {
   enrichmentMode?: DefensiveEnrichmentMode;
 }
 
-const FITNESS_ABBREVIATIONS: Record<Exclude<FitnessState, 'FIT'>, string> = {
-  JUICED: 'JCD',
-  WELL: 'WEL',
-  STRAINED: 'STR',
-  WEAK: 'WK',
-  HURT: 'HRT',
-};
+// Color-coded name styling replaces text indicators
 
-function getMojoIndicator(level: MojoLevel | undefined) {
-  if (level === undefined || level === 0) {
-    return null;
+/** Get player name color based on mojo level */
+function getMojoNameColor(level: MojoLevel | undefined): string | undefined {
+  switch (level) {
+    case 2: return '#F2BF16';  // Jacked — bright gold
+    case 1: return '#22c55e';  // Locked In — green
+    case -1: return '#f59e0b'; // Tense — amber warning
+    case -2: return '#ef4444'; // Rattled — red
+    default: return undefined; // Normal — use default color
   }
-
-  return {
-    text: level > 0 ? '▲' : '▼',
-    color: level > 0 ? '#22c55e' : '#ef4444',
-    label: toMojoLabel(level),
-  };
 }
 
-function getFitnessIndicator(state: FitnessState | undefined) {
-  if (state === undefined || state === 'FIT') {
-    return null;
+/** Get player name style overrides based on fitness */
+function getFitnessNameStyle(state: FitnessState | undefined): React.CSSProperties | undefined {
+  switch (state) {
+    case 'JUICED': return { fontWeight: 900 };
+    case 'STRAINED':
+    case 'WEAK': return { opacity: 0.7, textDecoration: 'underline', textDecorationStyle: 'dotted' as const };
+    case 'HURT': return { opacity: 0.5, textDecoration: 'line-through' };
+    default: return undefined;
   }
-
-  return {
-    text: FITNESS_ABBREVIATIONS[state],
-    label: toFitnessLabel(state),
-  };
 }
 
 /** §5.3: Defensive Lineup Column — ordered by batting order, 9 players always visible */
@@ -142,8 +135,8 @@ export function DefensiveLineupColumn({
           const posNum = POSITION_TO_NUMBER[player.position || ''] || 0;
           // In enrichment mode, highlight positions already in the sequence
           const isInSequence = isEnriching && posNum > 0 && enrichmentMode!.sequence.includes(posNum);
-          const mojoIndicator = getMojoIndicator(getMojoForPlayer(player.playerId));
-          const fitnessIndicator = getFitnessIndicator(getFitnessForPlayer(player.playerId));
+          const mojoColor = getMojoNameColor(getMojoForPlayer(player.playerId));
+          const fitnessStyle = getFitnessNameStyle(getFitnessForPlayer(player.playerId));
 
           const handleClick = () => {
             if (isEnriching && posNum > 0) {
@@ -187,24 +180,20 @@ export function DefensiveLineupColumn({
                     {player.position}
                   </span>
                 )}
-                <span>{player.name}</span>
-                {!isEnriching && mojoIndicator && (
-                  <span
-                    className="ml-1 font-semibold align-baseline"
-                    style={{ color: mojoIndicator.color }}
-                    title={`Mojo: ${mojoIndicator.label}`}
-                  >
-                    {mojoIndicator.text}
-                  </span>
-                )}
-                {!isEnriching && fitnessIndicator && (
-                  <span
-                    className="ml-1 text-[#C4A853] align-baseline"
-                    title={`Fitness: ${fitnessIndicator.label}`}
-                  >
-                    {fitnessIndicator.text}
-                  </span>
-                )}
+                <span
+                  style={{
+                    ...(!isEnriching && mojoColor ? { color: mojoColor } : {}),
+                    ...(!isEnriching ? fitnessStyle : {}),
+                  }}
+                  title={!isEnriching ? [
+                    getMojoForPlayer(player.playerId) !== 0 && getMojoForPlayer(player.playerId) !== undefined
+                      ? `Mojo: ${toMojoLabel(getMojoForPlayer(player.playerId)!)}`
+                      : null,
+                    getFitnessForPlayer(player.playerId) !== 'FIT' && getFitnessForPlayer(player.playerId) !== undefined
+                      ? `Fitness: ${toFitnessLabel(getFitnessForPlayer(player.playerId)!)}`
+                      : null,
+                  ].filter(Boolean).join(' | ') || undefined : undefined}
+                >{player.name}</span>
               </div>
               {/* Bottom row: in enrichment mode show position number, else pitch count / dash */}
               <div className="text-[7px] text-[#6b7b6e] leading-tight">
