@@ -29,14 +29,28 @@ interface BattingLineupColumnProps {
 // FITNESS_ABBREVIATIONS kept for reference but no longer rendered as text
 // Color-coded name styling replaces text indicators
 
-/** Get player name color based on mojo level */
+/** Get player name color based on mojo level — matches SMB4 in-game HUD colors */
 function getMojoNameColor(level: MojoLevel | undefined): string | undefined {
   switch (level) {
-    case 2: return '#F2BF16';  // Jacked — bright gold
+    case 3: return '#F2BF16';  // Jacked (best) — gold/yellow with upward arrow feel
+    case 2: return '#FF6B1A';  // On Fire — orange/flame
     case 1: return '#22c55e';  // Locked In — green
-    case -1: return '#f59e0b'; // Tense — amber warning
-    case -2: return '#ef4444'; // Rattled — red
+    case -1: return '#ef4444'; // Tense — red with downward feel
+    case -2: return '#cc0000'; // Rattled (worst) — deep red
     default: return undefined; // Normal — use default color
+  }
+}
+
+/** Get player name color based on fitness — matches SMB4 fitness state colors */
+function getFitnessNameColor(state: FitnessState | undefined): string | undefined {
+  switch (state) {
+    case 'JUICED': return '#D4AF37'; // Juiced (best) — gold glow
+    case 'FIT': return '#22c55e';    // Fit — green
+    case 'WELL': return undefined;   // Well — default (neutral)
+    case 'STRAINED': return '#f59e0b'; // Strained — orange/caution
+    case 'WEAK': return '#ef4444';   // Weak — red
+    case 'HURT': return '#cc0000';   // Hurt (worst) — deep red
+    default: return undefined;
   }
 }
 
@@ -44,10 +58,10 @@ function getMojoNameColor(level: MojoLevel | undefined): string | undefined {
 function getFitnessNameStyle(state: FitnessState | undefined): React.CSSProperties | undefined {
   switch (state) {
     case 'JUICED': return { fontWeight: 900 };
-    case 'STRAINED':
-    case 'WEAK': return { opacity: 0.7, textDecoration: 'underline', textDecorationStyle: 'dotted' as const };
-    case 'HURT': return { opacity: 0.5, textDecoration: 'line-through' };
-    default: return undefined; // FIT / WELL — no style change
+    case 'STRAINED': return { fontStyle: 'italic' as const };
+    case 'WEAK': return { opacity: 0.8, textDecoration: 'underline', textDecorationStyle: 'dotted' as const };
+    case 'HURT': return { opacity: 0.6, textDecoration: 'line-through' };
+    default: return undefined;
   }
 }
 
@@ -113,8 +127,13 @@ export function BattingLineupColumn({
           const onBase =
             runnerBaseMap.get(player.playerId) ?? runnerBaseMap.get(player.name);
           const shouldHighlightRow = highlightedBatterIndex === player.battingOrder;
-          const mojoColor = getMojoNameColor(getMojoForPlayer(player.playerId));
-          const fitnessStyle = getFitnessNameStyle(getFitnessForPlayer(player.playerId));
+          const playerMojo = getMojoForPlayer(player.playerId);
+          const playerFitness = getFitnessForPlayer(player.playerId);
+          const mojoColor = getMojoNameColor(playerMojo);
+          const fitnessColor = getFitnessNameColor(playerFitness);
+          const fitnessStyle = getFitnessNameStyle(playerFitness);
+          // Mojo color takes priority; fitness color shows only when mojo is normal
+          const nameColor = mojoColor || fitnessColor;
 
           return (
             <button
@@ -142,7 +161,7 @@ export function BattingLineupColumn({
                 )}
                 <span
                   style={{
-                    ...(mojoColor ? { color: mojoColor } : {}),
+                    ...(nameColor ? { color: nameColor } : {}),
                     ...fitnessStyle,
                   }}
                   title={[
