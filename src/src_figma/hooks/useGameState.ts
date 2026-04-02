@@ -5244,7 +5244,26 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
               gameState.outs,
               gameState.bases,
             )
-          : undefined);
+          : outType === "FC" && (gameState.bases.first || gameState.bases.second || gameState.bases.third)
+            ? (() => {
+                // R3-FC: Auto-generate default FC runner advancement.
+                // FC = fielder chose to throw to a base to get a runner instead of batter.
+                // Default: most advanced runner is out, others advance by force.
+                const fc: RunnerAdvancement = {};
+                if (gameState.bases.third) {
+                  fc.fromThird = "out"; // Throw home, runner out at plate
+                  if (gameState.bases.second) fc.fromSecond = "third";
+                  if (gameState.bases.first) fc.fromFirst = "second";
+                } else if (gameState.bases.second) {
+                  fc.fromSecond = "out"; // Throw to third, runner out
+                  if (gameState.bases.first) fc.fromFirst = "second";
+                } else if (gameState.bases.first) {
+                  fc.fromFirst = "out"; // Throw to second, runner out (force)
+                }
+                console.log("[R3-FC] Default FC runner advancement:", fc);
+                return fc;
+              })()
+            : undefined);
 
       // Track inning strikeouts for immaculate inning detection
       // (Pitch count will be confirmed by user at end of inning)
