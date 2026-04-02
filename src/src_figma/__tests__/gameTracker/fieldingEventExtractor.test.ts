@@ -279,6 +279,41 @@ describe('extractFieldingEvents', () => {
     expect(events[0].ballInPlay.primaryFielderId).toBe('home-ss-6');
   });
 
+  it('[M3-3-batter-error] creates a charged fielder error event from batter-level correction metadata', () => {
+    const playData: PlayData = {
+      type: 'error',
+      fieldingSequence: [6, 3],
+      batterReachedOnError: true,
+      batterErrorType: 'THROWING',
+      batterErrorChargedToPosition: 6,
+    };
+    const context: FieldingExtractionContext = {
+      gameId: 'game-5c',
+      defensiveTeamId: 'TEAM-H',
+      atBatEventId: 'game-5c_23',
+      atBatEventIndex: 23,
+      defendersByPosition: {
+        SS: { playerId: 'home-ss-6', playerName: 'Sam Short' },
+        '1B': { playerId: 'home-1b-3', playerName: 'Ian Scoop' },
+      },
+    };
+
+    const events = extractFieldingEvents(playData, context);
+
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({
+      atBatEventId: 'game-5c_23',
+      fieldingEventId: 'game-5c_23_fe_0',
+      playerId: 'home-ss-6',
+      playerName: 'Sam Short',
+      position: 'SS',
+      playType: 'error',
+      success: false,
+    });
+    expect(events[0].ballInPlay.fielderIds).toEqual(['home-ss-6', 'home-1b-3']);
+    expect(events[0].ballInPlay.primaryFielderId).toBe('home-ss-6');
+  });
+
   it('[M2-2] keeps plain home runs empty but persists robbed-HR fielding credit', () => {
     const context: FieldingExtractionContext = {
       gameId: 'game-6',

@@ -91,6 +91,11 @@ import {
   type PlayData,
   type SpecialEventData,
 } from "../utils/gameTrackerFieldTypes";
+import {
+  buildFieldingErrorAdjustments,
+  FIELDING_POSITION_NUMBER_TO_CODE as POSITION_NUMBER_TO_CODE,
+  resolveChargedPlayerIdFromDefensiveAlignment,
+} from "../utils/fieldingErrorAttribution";
 import { areRivals } from "../../../data/leagueStructure";
 import { getParkNames } from "../../../data/parkLookup";
 import {
@@ -195,18 +200,6 @@ const FIELDING_POSITIONS = [
 ] as const;
 
 const RUNNER_ERROR_TYPES = ["fielding", "throwing", "mental"] as const;
-
-const POSITION_NUMBER_TO_CODE: Record<number, Position> = {
-  1: "P",
-  2: "C",
-  3: "1B",
-  4: "2B",
-  5: "3B",
-  6: "SS",
-  7: "LF",
-  8: "CF",
-  9: "RF",
-};
 
 const isRunnerOutcomeOut = (toBase: RunnerSubEntry["toBase"]) => toBase === "out";
 
@@ -746,6 +739,7 @@ export function GameTracker() {
     endGame: hookEndGame,
     applyScoreAdjustment,
     applyBasesCorrection,
+    updateTrackedRunnerHowReached,
     applyOutsAdjustment,
     scheduleAutoEndInning,
     setRunnerOutcomeCorrectionActive,
@@ -2886,6 +2880,9 @@ export function GameTracker() {
         enrichment?: Partial<NonNullable<AtBatEvent["enrichment"]>>;
         result?: AtBatEvent["result"];
         runnerOutcomes?: AtBatEvent["runnerOutcomes"];
+        batterReachedOnError?: AtBatEvent["batterReachedOnError"];
+        batterErrorType?: AtBatEvent["batterErrorType"];
+        batterErrorChargedToPosition?: AtBatEvent["batterErrorChargedToPosition"];
       },
     ): PlayData | null => {
       const enrichment = {
@@ -2895,6 +2892,18 @@ export function GameTracker() {
       const resolvedResult = overrides?.result ?? atBatEvent.result;
       const resolvedRunnerOutcomes =
         overrides?.runnerOutcomes ?? atBatEvent.runnerOutcomes;
+      const resolvedBatterReachedOnError =
+        overrides && "batterReachedOnError" in overrides
+          ? overrides.batterReachedOnError
+          : atBatEvent.batterReachedOnError;
+      const resolvedBatterErrorType =
+        overrides && "batterErrorType" in overrides
+          ? overrides.batterErrorType
+          : atBatEvent.batterErrorType;
+      const resolvedBatterErrorChargedToPosition =
+        overrides && "batterErrorChargedToPosition" in overrides
+          ? overrides.batterErrorChargedToPosition
+          : atBatEvent.batterErrorChargedToPosition;
       const ballLocation = enrichment.fieldLocation
         ? { x: enrichment.fieldLocation.x, y: enrichment.fieldLocation.y }
         : undefined;
@@ -2917,6 +2926,9 @@ export function GameTracker() {
         spraySector: enrichment.fieldLocation?.zone,
         exitType,
         persistedRunnerOutcomes: resolvedRunnerOutcomes,
+        batterReachedOnError: resolvedBatterReachedOnError,
+        batterErrorType: resolvedBatterErrorType,
+        batterErrorChargedToPosition: resolvedBatterErrorChargedToPosition,
         savedRun: !!enrichment.savedRun,
         playDifficulty: mapFieldingPlayTypeToPlayDifficulty(
           enrichment.fieldingPlayType as FieldingPlayTypeValue | undefined,
@@ -3139,6 +3151,9 @@ export function GameTracker() {
         enrichment?: Partial<NonNullable<AtBatEvent["enrichment"]>>;
         result?: AtBatEvent["result"];
         runnerOutcomes?: AtBatEvent["runnerOutcomes"];
+        batterReachedOnError?: AtBatEvent["batterReachedOnError"];
+        batterErrorType?: AtBatEvent["batterErrorType"];
+        batterErrorChargedToPosition?: AtBatEvent["batterErrorChargedToPosition"];
       },
     ) => {
       const linkedFieldingEvents = await getFieldingEventsForAtBat(
@@ -3180,18 +3195,11 @@ export function GameTracker() {
     [buildHistoricalDefensiveAlignment, buildPlayDataFromAtBatEvent],
   );
 
-  const resolveRunnerOutcomeErrorPlayerId = useCallback(
+  const resolveChargedPositionPlayerId = useCallback(
     async (
       atBatEvent: AtBatEvent,
-      outcome:
-        | Pick<
-            NonNullable<AtBatEvent["runnerOutcomes"]>[number],
-            "errorChargedTo"
-          >
-        | null
-        | undefined,
+      chargedPosition: number | null | undefined,
     ) => {
-      const chargedPosition = outcome?.errorChargedTo;
       if (
         typeof chargedPosition !== "number" ||
         !(chargedPosition in POSITION_NUMBER_TO_CODE)
@@ -3205,10 +3213,45 @@ export function GameTracker() {
         atBatEvent,
         linkedFieldingEvents,
       );
-      const positionCode = POSITION_NUMBER_TO_CODE[chargedPosition];
-      return defendersByPosition[positionCode]?.playerId || null;
+      return resolveChargedPlayerIdFromDefensiveAlignment(
+        chargedPosition,
+        defendersByPosition,
+      );
     },
     [buildHistoricalDefensiveAlignment],
+  );
+
+  const resolveRunnerOutcomeErrorPlayerId = useCallback(
+    async (
+      atBatEvent: AtBatEvent,
+      outcome:
+        | Pick<
+            NonNullable<AtBatEvent["runnerOutcomes"]>[number],
+            "errorChargedTo"
+          >
+        | null
+        | undefined,
+    ) => {
+      return resolveChargedPositionPlayerId(
+        atBatEvent,
+        outcome?.errorChargedTo,
+      );
+    },
+    [resolveChargedPositionPlayerId],
+  );
+
+  const resolveBatterOutcomeErrorPlayerId = useCallback(
+    async (atBatEvent: AtBatEvent) => {
+      if (!atBatEvent.batterReachedOnError) {
+        return null;
+      }
+
+      return resolveChargedPositionPlayerId(
+        atBatEvent,
+        atBatEvent.batterErrorChargedToPosition,
+      );
+    },
+    [resolveChargedPositionPlayerId],
   );
 
   const appendModifierToAtBatEvent = useCallback(
@@ -8068,6 +8111,16 @@ export function GameTracker() {
         const nextRunCounted = runnerOutcomeCountsAsRun(nextOutcome);
         const previousOutCounted = runnerOutcomeCountsAsOut(previousOutcome);
         const nextOutCounted = runnerOutcomeCountsAsOut(nextOutcome);
+        const hadPriorOutToSafeCorrection = (existingAtBat.editHistory || []).some(
+          (entry) =>
+            entry.field === `runnerOutcomes[${runnerIdx}].toBase` &&
+            entry.oldValue === "out" &&
+            entry.newValue !== "out",
+        );
+        const runnerReachedOnError =
+          !nextOutCounted &&
+          !!nextOutcome.errorType &&
+          (previousOutCounted || hadPriorOutToSafeCorrection);
         const scoreDelta = Number(nextRunCounted) - Number(previousRunCounted);
         const outDelta = Number(nextOutCounted) - Number(previousOutCounted);
 
@@ -8294,12 +8347,23 @@ export function GameTracker() {
           await buildFieldingSyncEventsForSequenceEdit(existingAtBat, {
             result: nextRecordedResult,
             runnerOutcomes: updatedOutcomes,
+            batterReachedOnError: nextAtBatEvent.batterReachedOnError,
+            batterErrorType: nextAtBatEvent.batterErrorType,
+            batterErrorChargedToPosition:
+              nextAtBatEvent.batterErrorChargedToPosition,
           });
 
-        const [previousChargedPlayerId, nextChargedPlayerId] =
+        const [
+          previousRunnerChargedPlayerId,
+          nextRunnerChargedPlayerId,
+          previousBatterChargedPlayerId,
+          nextBatterChargedPlayerId,
+        ] =
           await Promise.all([
             resolveRunnerOutcomeErrorPlayerId(existingAtBat, previousOutcome),
             resolveRunnerOutcomeErrorPlayerId(existingAtBat, nextOutcome),
+            resolveBatterOutcomeErrorPlayerId(existingAtBat),
+            resolveBatterOutcomeErrorPlayerId(nextAtBatEvent),
           ]);
 
         await updateAtBatEventWithFieldingSync(
@@ -8327,14 +8391,17 @@ export function GameTracker() {
           syncedFieldingEvents,
         );
 
-        if (
-          previousChargedPlayerId &&
-          previousChargedPlayerId !== nextChargedPlayerId
-        ) {
-          adjustPlayerFieldingErrors(previousChargedPlayerId, -1);
+        for (const adjustment of buildFieldingErrorAdjustments(
+          previousRunnerChargedPlayerId,
+          nextRunnerChargedPlayerId,
+        )) {
+          adjustPlayerFieldingErrors(adjustment.playerId, adjustment.delta);
         }
-        if (nextChargedPlayerId && nextChargedPlayerId !== previousChargedPlayerId) {
-          adjustPlayerFieldingErrors(nextChargedPlayerId, 1);
+        for (const adjustment of buildFieldingErrorAdjustments(
+          previousBatterChargedPlayerId,
+          nextBatterChargedPlayerId,
+        )) {
+          adjustPlayerFieldingErrors(adjustment.playerId, adjustment.delta);
         }
 
         if (
@@ -8409,6 +8476,17 @@ export function GameTracker() {
               inning: existingAtBat.inning,
               halfInning: existingAtBat.halfInning,
             },
+            nextAtBatEvent.batterReachedOnError ? "error" : undefined,
+          );
+        }
+
+        if (runnerReachedOnError) {
+          updateTrackedRunnerHowReached(
+            {
+              runnerId: nextOutcome.runnerId,
+              runnerName: nextOutcome.runnerName,
+            },
+            "error",
           );
         }
 
@@ -8464,7 +8542,9 @@ export function GameTracker() {
       playLogEntries,
       queueAutoEndGame,
       queuePlayLogRefresh,
+      resolveBatterOutcomeErrorPlayerId,
       resolveRunnerOutcomeErrorPlayerId,
+      updateTrackedRunnerHowReached,
     ],
   );
 

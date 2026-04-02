@@ -56,4 +56,27 @@ describe('bugfix R5-04: batter out-advancing live correction', () => {
     ]);
     expect(reconciled.runners[1]?.runnerName).toBe('Batter One');
   });
+
+  test('uses the provided howReached override for newly reconciled runners', () => {
+    const tracker = createRunnerTrackingState('pitcher-1', 'Pitcher One');
+    const runnersAfter = {
+      first: {
+        runnerId: 'batter-1',
+        runnerName: 'Batter One',
+        responsiblePitcherId: 'pitcher-1',
+      },
+      second: null,
+      third: null,
+    };
+
+    const reconciled = reconcileRunnerTrackerFromRunnersAfter(
+      tracker,
+      runnersAfter,
+      'error',
+    );
+
+    expect(reconciled.runners).toHaveLength(1);
+    expect(reconciled.runners[0]?.runnerId).toBe('batter-1');
+    expect(reconciled.runners[0]?.howReached).toBe('error');
+  });
 });

@@ -25,6 +25,9 @@ export interface PlayData {
   spraySector?: string;
   errorType?: ErrorType;
   errorFielder?: number;
+  batterReachedOnError?: AtBatEvent['batterReachedOnError'];
+  batterErrorType?: AtBatEvent['batterErrorType'];
+  batterErrorChargedToPosition?: AtBatEvent['batterErrorChargedToPosition'];
   runnerOutcomes?: RunnerDefaults;
   persistedRunnerOutcomes?: AtBatEvent['runnerOutcomes'];
   exitType?: 'Ground' | 'Line Drive' | 'Fly Ball' | 'Pop Up';

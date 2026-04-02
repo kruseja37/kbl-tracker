@@ -184,6 +184,71 @@ function appendRunnerOutcomeErrors(
   return [...events, ...runnerErrorEvents];
 }
 
+function appendBatterErrors(
+  events: FieldingEvent[],
+  playData: PlayData,
+  context: FieldingExtractionContext,
+  shared: Pick<FieldingEvent, 'difficulty' | 'specialPlayType'> &
+    Pick<BallInPlayData, 'trajectory' | 'zone'>,
+): FieldingEvent[] {
+  const chargedPosition = playData.batterReachedOnError
+    ? playData.batterErrorChargedToPosition
+    : undefined;
+
+  if (
+    typeof chargedPosition !== 'number' ||
+    chargedPosition < 1 ||
+    chargedPosition > 9
+  ) {
+    return events;
+  }
+
+  if (playData.type === 'error' && playData.errorFielder === chargedPosition) {
+    return events;
+  }
+
+  const chargedFielder = resolveDefenderIdentity(
+    positionFromNumber(chargedPosition),
+    context.defendersByPosition,
+  );
+  const sequenceDefenderIds = playData.fieldingSequence.map((positionNum) =>
+    resolveDefenderIdentity(
+      positionFromNumber(positionNum),
+      context.defendersByPosition,
+    ).playerId,
+  );
+  const fielderIds = sequenceDefenderIds.includes(chargedFielder.playerId)
+    ? sequenceDefenderIds
+    : [...sequenceDefenderIds, chargedFielder.playerId];
+  const sequence = events.length;
+
+  return [
+    ...events,
+    {
+      fieldingEventId: `${context.gameId}_${context.atBatEventIndex}_fe_${sequence}`,
+      gameId: context.gameId,
+      atBatEventId: context.atBatEventId,
+      sequence,
+      playerId: chargedFielder.playerId,
+      playerName: chargedFielder.playerName,
+      position: chargedFielder.position,
+      teamId: context.defensiveTeamId,
+      playType: 'error',
+      difficulty: shared.difficulty,
+      specialPlayType: shared.specialPlayType,
+      ballInPlay: {
+        trajectory: shared.trajectory,
+        zone: shared.zone,
+        velocity: 'medium',
+        fielderIds: fielderIds.length > 0 ? fielderIds : [chargedFielder.playerId],
+        primaryFielderId: chargedFielder.playerId,
+      },
+      success: false,
+      runsPreventedOrAllowed: 0,
+    },
+  ];
+}
+
 /**
  * Infer trajectory from out type when exitType not available
  */
@@ -284,12 +349,22 @@ export function extractFieldingEvents(
     : null;
   const zone = mapSpraySectorToZone(playData.spraySector);
   const finalizeEvents = (events: FieldingEvent[]) =>
-    appendRunnerOutcomeErrors(events, playData, context, {
-      difficulty,
-      specialPlayType,
-      trajectory,
-      zone,
-    });
+    appendRunnerOutcomeErrors(
+      appendBatterErrors(events, playData, context, {
+        difficulty,
+        specialPlayType,
+        trajectory,
+        zone,
+      }),
+      playData,
+      context,
+      {
+        difficulty,
+        specialPlayType,
+        trajectory,
+        zone,
+      },
+    );
 
   // Build the ball-in-play data shared across all events on this play
   const ballInPlay: BallInPlayData = {

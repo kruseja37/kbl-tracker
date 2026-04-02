@@ -431,7 +431,12 @@ export interface UseGameStateReturn {
       inning: number;
       halfInning: HalfInning;
     },
+    howReachedOverride?: HowReached,
   ) => void;
+  updateTrackedRunnerHowReached: (
+    runnerIdentity: { runnerId?: string | null; runnerName?: string | null },
+    howReached: HowReached,
+  ) => boolean;
   applyOutsAdjustment: (delta: number) => void;
   scheduleAutoEndInning: () => void;
   setRunnerOutcomeCorrectionActive: (isActive: boolean) => void;
@@ -1531,6 +1536,10 @@ function processTrackerScoredEvents(
   }
 
   return { earnedRuns, totalRuns };
+}
+
+function isEarnedRunForHowReached(howReached: HowReached): boolean {
+  return howReached !== "error" && howReached !== "ghost_runner";
 }
 
 function clonePitcherStatsMap(
@@ -9319,6 +9328,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         inning: number;
         halfInning: HalfInning;
       },
+      howReachedOverride?: HowReached,
     ) => {
       const currentHalfInning: HalfInning = gameState.isTop ? "TOP" : "BOTTOM";
       if (
@@ -9383,6 +9393,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         ? reconcileRunnerTrackerFromRunnersAfter(
             syncedTracker,
             filteredRunnersAfter,
+            howReachedOverride,
           )
         : reconcileRunnerTrackerBases(syncedTracker, nextBases);
       setRunnerIdentityVersion((v) => v + 1);
@@ -9394,6 +9405,91 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       gameState.inning,
       gameState.isTop,
     ],
+  );
+
+  const updateTrackedRunnerHowReached = useCallback(
+    (
+      runnerIdentity: { runnerId?: string | null; runnerName?: string | null },
+      howReached: HowReached,
+    ): boolean => {
+      const { runnerId, runnerName } = runnerIdentity;
+      if (!runnerId && !runnerName) {
+        return false;
+      }
+
+      const matchesRunner = (runner: RunnerTrackingState["runners"][number]) => {
+        if (runnerId) {
+          return runner.runnerId === runnerId;
+        }
+        return runner.runnerName === runnerName;
+      };
+
+      const tracker = runnerTrackerRef.current;
+      const trackedRunner =
+        tracker.runners.find(matchesRunner) ??
+        Array.from(tracker.pitcherStats.values())
+          .flatMap((stats) => [
+            ...stats.runnersOnBase,
+            ...stats.runnersScored,
+            ...stats.inheritedRunners,
+            ...stats.inheritedRunnersScored,
+          ])
+          .find(matchesRunner);
+
+      if (!trackedRunner || trackedRunner.howReached === howReached) {
+        return false;
+      }
+
+      const earnedRunDelta =
+        trackedRunner.currentBase === "HOME"
+          ? Number(isEarnedRunForHowReached(howReached)) -
+            Number(isEarnedRunForHowReached(trackedRunner.howReached))
+          : 0;
+
+      const updateTrackedRunner = (
+        runner: RunnerTrackingState["runners"][number],
+      ) => (matchesRunner(runner) ? { ...runner, howReached } : runner);
+
+      runnerTrackerRef.current = {
+        ...tracker,
+        runners: tracker.runners.map(updateTrackedRunner),
+        pitcherStats: new Map(
+          Array.from(tracker.pitcherStats.entries()).map(
+            ([pitcherId, stats]) => [
+              pitcherId,
+              {
+                ...stats,
+                runnersOnBase: stats.runnersOnBase.map(updateTrackedRunner),
+                runnersScored: stats.runnersScored.map(updateTrackedRunner),
+                inheritedRunners: stats.inheritedRunners.map(updateTrackedRunner),
+                inheritedRunnersScored:
+                  stats.inheritedRunnersScored.map(updateTrackedRunner),
+              },
+            ],
+          ),
+        ),
+      };
+
+      if (earnedRunDelta !== 0) {
+        setPitcherStats((prev) => {
+          const next = new Map(prev);
+          const updatedStats = {
+            ...(next.get(trackedRunner.responsiblePitcherId) ||
+              createEmptyPitcherStats()),
+          };
+          updatedStats.earnedRuns = Math.max(
+            0,
+            updatedStats.earnedRuns + earnedRunDelta,
+          );
+          next.set(trackedRunner.responsiblePitcherId, updatedStats);
+          return next;
+        });
+      }
+
+      setRunnerIdentityVersion((v) => v + 1);
+      return true;
+    },
+    [],
   );
 
   // §7.4: Runner correction — adjust live outs count directly
@@ -10080,6 +10176,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     endGame,
     applyScoreAdjustment,
     applyBasesCorrection,
+    updateTrackedRunnerHowReached,
     applyOutsAdjustment,
     scheduleAutoEndInning,
     setRunnerOutcomeCorrectionActive,
