@@ -3627,6 +3627,16 @@ export function GameTracker() {
             traits,
             player.age ?? 25,
           );
+        } else if (restoredMF?.[playerId]) {
+          // R3-T0-fix: Player already registered with defaults — apply restored mojo/fitness
+          const restored = restoredMF[playerId];
+          const existing = playerStateHook.getPlayer(playerId)!;
+          if (existing.gameState.currentMojo !== restored.mojo) {
+            playerStateHook.setMojo(playerId, restored.mojo as MojoLevel);
+          }
+          if (existing.fitnessProfile.currentFitness !== restored.fitness) {
+            playerStateHook.setFitness(playerId, restored.fitness as FitnessState);
+          }
         }
       });
 
@@ -3649,6 +3659,15 @@ export function GameTracker() {
             traits,
             player.age ?? 25,
           );
+        } else if (restoredMF?.[playerId]) {
+          const restored = restoredMF[playerId];
+          const existing = playerStateHook.getPlayer(playerId)!;
+          if (existing.gameState.currentMojo !== restored.mojo) {
+            playerStateHook.setMojo(playerId, restored.mojo as MojoLevel);
+          }
+          if (existing.fitnessProfile.currentFitness !== restored.fitness) {
+            playerStateHook.setFitness(playerId, restored.fitness as FitnessState);
+          }
         }
       });
 
@@ -3670,6 +3689,15 @@ export function GameTracker() {
             traits,
             awayPitcher.age ?? 25,
           );
+        } else if (restoredMF?.[pitcherId]) {
+          const restored = restoredMF[pitcherId];
+          const existing = playerStateHook.getPlayer(pitcherId)!;
+          if (existing.gameState.currentMojo !== restored.mojo) {
+            playerStateHook.setMojo(pitcherId, restored.mojo as MojoLevel);
+          }
+          if (existing.fitnessProfile.currentFitness !== restored.fitness) {
+            playerStateHook.setFitness(pitcherId, restored.fitness as FitnessState);
+          }
         }
       }
       if (homePitcher) {
@@ -3689,6 +3717,15 @@ export function GameTracker() {
             traits,
             homePitcher.age ?? 25,
           );
+        } else if (restoredMF?.[pitcherId]) {
+          const restored = restoredMF[pitcherId];
+          const existing = playerStateHook.getPlayer(pitcherId)!;
+          if (existing.gameState.currentMojo !== restored.mojo) {
+            playerStateHook.setMojo(pitcherId, restored.mojo as MojoLevel);
+          }
+          if (existing.fitnessProfile.currentFitness !== restored.fitness) {
+            playerStateHook.setFitness(pitcherId, restored.fitness as FitnessState);
+          }
         }
       }
 
