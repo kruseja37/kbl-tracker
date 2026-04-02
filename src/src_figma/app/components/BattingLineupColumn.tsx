@@ -41,18 +41,7 @@ function getMojoNameColor(level: MojoLevel | undefined): string | undefined {
   }
 }
 
-/** Get player name color based on fitness — matches SMB4 fitness state colors */
-function getFitnessNameColor(state: FitnessState | undefined): string | undefined {
-  switch (state) {
-    case 'JUICED': return '#D4AF37'; // Juiced (best) — gold glow
-    case 'FIT': return '#22c55e';    // Fit — green
-    case 'WELL': return undefined;   // Well — default (neutral)
-    case 'STRAINED': return '#f59e0b'; // Strained — orange/caution
-    case 'WEAK': return '#ef4444';   // Weak — red
-    case 'HURT': return '#cc0000';   // Hurt (worst) — deep red
-    default: return undefined;
-  }
-}
+// Fitness uses style-only (no colors) to avoid collision with mojo colors
 
 /** Get player name style overrides based on fitness */
 function getFitnessNameStyle(state: FitnessState | undefined): React.CSSProperties | undefined {
@@ -129,11 +118,8 @@ export function BattingLineupColumn({
           const shouldHighlightRow = highlightedBatterIndex === player.battingOrder;
           const playerMojo = getMojoForPlayer(player.playerId);
           const playerFitness = getFitnessForPlayer(player.playerId);
-          const mojoColor = getMojoNameColor(playerMojo);
-          const fitnessColor = getFitnessNameColor(playerFitness);
+          const nameColor = getMojoNameColor(playerMojo);
           const fitnessStyle = getFitnessNameStyle(playerFitness);
-          // Mojo color takes priority; fitness color shows only when mojo is normal
-          const nameColor = mojoColor || fitnessColor;
 
           return (
             <button
