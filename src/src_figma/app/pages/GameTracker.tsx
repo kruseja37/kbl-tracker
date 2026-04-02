@@ -3688,24 +3688,123 @@ export function GameTracker() {
     [getRosterIdFromName],
   );
 
+  const resolveRosterPlayerState = useCallback(
+    (playerId: string) => {
+      const directPlayer = playerStateHook.getPlayer(playerId);
+      if (directPlayer) {
+        return {
+          playerData: directPlayer,
+          rosterMojo: undefined as MojoLevel | undefined,
+          rosterFitness: undefined as FitnessState | undefined,
+          resolvedBy: "direct",
+        };
+      }
+
+      const rosterMatches: Array<{
+        entity: { name: string; playerId?: string; mojo?: MojoLevel; fitness?: FitnessState };
+        team: "away" | "home";
+      }> = [];
+
+      for (const player of awayTeamPlayers) {
+        const fallbackId = buildFallbackRuntimePlayerId(player.name, "away");
+        if (getRosterEntityId(player, "away") === playerId || fallbackId === playerId) {
+          rosterMatches.push({ entity: player, team: "away" });
+        }
+      }
+
+      for (const player of homeTeamPlayers) {
+        const fallbackId = buildFallbackRuntimePlayerId(player.name, "home");
+        if (getRosterEntityId(player, "home") === playerId || fallbackId === playerId) {
+          rosterMatches.push({ entity: player, team: "home" });
+        }
+      }
+
+      for (const pitcher of awayTeamPitchers) {
+        const fallbackId = buildFallbackRuntimePlayerId(pitcher.name, "away");
+        if (getRosterEntityId(pitcher, "away") === playerId || fallbackId === playerId) {
+          rosterMatches.push({ entity: pitcher, team: "away" });
+        }
+      }
+
+      for (const pitcher of homeTeamPitchers) {
+        const fallbackId = buildFallbackRuntimePlayerId(pitcher.name, "home");
+        if (getRosterEntityId(pitcher, "home") === playerId || fallbackId === playerId) {
+          rosterMatches.push({ entity: pitcher, team: "home" });
+        }
+      }
+
+      for (const match of rosterMatches) {
+        const candidateIds = [
+          getRosterEntityId(match.entity, match.team),
+          buildFallbackRuntimePlayerId(match.entity.name, match.team),
+        ];
+
+        for (const candidateId of candidateIds) {
+          const candidatePlayer = playerStateHook.getPlayer(candidateId);
+          if (candidatePlayer) {
+            return {
+              playerData: candidatePlayer,
+              rosterMojo: match.entity.mojo,
+              rosterFitness: match.entity.fitness,
+              resolvedBy: candidateId === playerId ? "direct-candidate" : "fallback-id",
+            };
+          }
+        }
+
+        if (match.entity.mojo !== undefined || match.entity.fitness !== undefined) {
+          return {
+            playerData: undefined,
+            rosterMojo: match.entity.mojo,
+            rosterFitness: match.entity.fitness,
+            resolvedBy: "roster-fallback",
+          };
+        }
+      }
+
+      return {
+        playerData: undefined,
+        rosterMojo: undefined as MojoLevel | undefined,
+        rosterFitness: undefined as FitnessState | undefined,
+        resolvedBy: "missing",
+      };
+    },
+    [
+      awayTeamPitchers,
+      awayTeamPlayers,
+      getRosterEntityId,
+      homeTeamPitchers,
+      homeTeamPlayers,
+      playerStateHook,
+    ],
+  );
+
   const getMojoForPlayer = useCallback(
     (playerId: string) => {
-      const playerData = playerStateHook.getPlayer(playerId);
-      const mojo = playerData?.gameState.currentMojo;
-      console.debug("[M1-2-fix] Resolved player mojo", { playerId, mojo });
+      const resolved = resolveRosterPlayerState(playerId);
+      const mojo = resolved.playerData?.gameState.currentMojo ?? resolved.rosterMojo;
+      console.debug("[M1-2-fix] Resolved player mojo", {
+        playerId,
+        mojo,
+        resolvedBy: resolved.resolvedBy,
+      });
       return mojo;
     },
-    [playerStateHook],
+    [resolveRosterPlayerState],
   );
 
   const getFitnessForPlayer = useCallback(
     (playerId: string) => {
-      const playerData = playerStateHook.getPlayer(playerId);
-      const fitness = playerData?.fitnessProfile.currentFitness;
-      console.debug("[M1-2-fix] Resolved player fitness", { playerId, fitness });
+      const resolved = resolveRosterPlayerState(playerId);
+      const fitness =
+        resolved.playerData?.fitnessProfile.currentFitness ?? resolved.rosterFitness;
+      console.debug("[M1-2-fix] Resolved player fitness", {
+        playerId,
+        fitness,
+        resolvedBy: resolved.resolvedBy,
+      });
       return fitness;
     },
-    [playerStateHook],
+    [resolveRosterPlayerState],
   );
 
   const getPlayerMojoByName = useCallback(
