@@ -38,6 +38,7 @@ import {
   applyFitnessDecay,
   applyRecovery,
   calculateInjuryRisk,
+  getFitnessValue,
   getFitnessStatMultiplier,
   type PlayerFitnessProfile,
   type InjuryRisk,
@@ -321,7 +322,12 @@ export function usePlayerState(options: UsePlayerStateOptions) {
       const newFitnessProfile: PlayerFitnessProfile = {
         ...player.fitnessProfile,
         currentFitness: newFitness,
+        currentValue: getFitnessValue(newFitness),
       };
+
+      const newGameState = updateGamePlayerState(player.gameState, {
+        newFitness,
+      });
 
       const newCombinedState = createCombinedPlayerState(
         playerId,
@@ -335,6 +341,7 @@ export function usePlayerState(options: UsePlayerStateOptions) {
       const newMap = new Map(prev);
       newMap.set(playerId, {
         ...player,
+        gameState: newGameState,
         fitnessProfile: newFitnessProfile,
         combinedState: newCombinedState,
         injuryRisk: newInjuryRisk,

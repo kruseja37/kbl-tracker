@@ -149,6 +149,33 @@ export interface PlayerGameStats {
   fieldingErrors: number;
 }
 
+function mergePlayerMojoFitnessState(
+  baseState: Record<string, { mojo: number; fitness: string }> | null | undefined,
+  betweenPlayEvents: BetweenPlayEvent[],
+): Record<string, { mojo: number; fitness: string }> | null {
+  const merged = { ...(baseState ?? {}) } as Record<
+    string,
+    { mojo: number; fitness: string }
+  >;
+
+  for (const event of betweenPlayEvents) {
+    const change = event.playerStateChange;
+    if (!change || (change.stateType !== "mojo" && change.stateType !== "fitness")) {
+      continue;
+    }
+
+    const existing = merged[change.playerId] ?? { mojo: 0, fitness: "FIT" };
+    if (change.stateType === "mojo") {
+      existing.mojo = Number(change.newValue);
+    } else {
+      existing.fitness = String(change.newValue);
+    }
+    merged[change.playerId] = existing;
+  }
+
+  return Object.keys(merged).length > 0 ? merged : null;
+}
+
 export interface PitcherGameStats {
   // Core counting stats (existing)
   outsRecorded: number;
@@ -3415,6 +3442,9 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
           hasUsableLiveSnapshot &&
           inProgressGame
         ) {
+          const snapshotBetweenPlayEvents = await getBetweenPlayEvents(
+            resolvedGameId,
+          );
           const emptyBoard = createEmptyScoreboardState(
             savedSnapshot.totalInnings ?? totalInningsRef.current,
           );
@@ -3500,9 +3530,12 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
             gameStartTimestamp: gameStartTimestampRef.current ?? null,
           });
           // R3-T0: Restore mojo/fitness for GameTracker to re-register with playerStateHook
-          if (savedSnapshot.playerMojoFitness && Object.keys(savedSnapshot.playerMojoFitness).length > 0) {
-            setRestoredMojoFitness(savedSnapshot.playerMojoFitness);
-          }
+          setRestoredMojoFitness(
+            mergePlayerMojoFitnessState(
+              savedSnapshot.playerMojoFitness ?? null,
+              snapshotBetweenPlayEvents,
+            ),
+          );
           // Layer 1B: Restore identity refs from snapshot (if available)
           const snapshotAny = savedSnapshot as unknown as Record<
             string,
@@ -3817,6 +3850,9 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
           const events = await getGameEvents(inProgressGame.gameId);
           const betweenPlayEvents = await getBetweenPlayEvents(
             inProgressGame.gameId,
+          );
+          setRestoredMojoFitness(
+            mergePlayerMojoFitnessState(null, betweenPlayEvents),
           );
           const lastEvent =
             events.length > 0 ? events[events.length - 1] : null;

@@ -81,6 +81,7 @@ import {
   buildFallbackRuntimePlayerId,
   getRuntimeRosterEntityId,
 } from "../utils/runtimePlayerIdentity";
+import { resolveSelectedPlayerCardState } from "../utils/selectedPlayerState";
 import { normalizeSpecialEventType } from "../utils/gameTrackerEventDispatch";
 import {
   getDisplayedStadiumName,
@@ -1180,6 +1181,15 @@ export function GameTracker() {
     };
   }, [playerStateHook, hookMojoFitnessGetterRef]);
 
+  useEffect(() => {
+    if (!gameInitialized || playerStateHook.players.size === 0) return;
+    if (!hasObservedInitialPlayerStateRef.current) {
+      hasObservedInitialPlayerStateRef.current = true;
+      return;
+    }
+    notifyPersistenceMetadataChanged("player-state-change");
+  }, [gameInitialized, notifyPersistenceMetadataChanged, playerStateHook.players]);
+
   // Fame tracking
   const fameTrackingHook = useFameTracking({
     gameId: gameId || "demo-game",
@@ -1280,6 +1290,10 @@ export function GameTracker() {
     playerId: string;
     runnerBase?: RunnerBase;
   } | null>(null);
+  const lastAppliedRestoredMojoFitnessRef = useRef<
+    Record<string, { mojo: number; fitness: string }> | null
+  >(null);
+  const hasObservedInitialPlayerStateRef = useRef(false);
   const [gameSoundsOn, setGameSoundsOn] = useState(false);
   const [beatReporterSoundsOn, setBeatReporterSoundsOn] = useState(false);
   const audioManagerRef = useRef(new AudioManager());
@@ -3606,6 +3620,9 @@ export function GameTracker() {
 
       // R3-T0: Use restored mojo/fitness from persisted game state as fallback
       const restoredMF = restoredMojoFitness;
+      const shouldApplyRestoredToExisting =
+        !!restoredMF &&
+        lastAppliedRestoredMojoFitnessRef.current !== restoredMF;
 
       // Register all away team batters
       // Step 0: Pass real traits and age from League Builder data (no longer hardcoded)
@@ -3627,7 +3644,7 @@ export function GameTracker() {
             traits,
             player.age ?? 25,
           );
-        } else if (restoredMF?.[playerId]) {
+        } else if (shouldApplyRestoredToExisting && restoredMF?.[playerId]) {
           // R3-T0-fix: Player already registered with defaults — apply restored mojo/fitness
           const restored = restoredMF[playerId];
           const existing = playerStateHook.getPlayer(playerId)!;
@@ -3659,7 +3676,7 @@ export function GameTracker() {
             traits,
             player.age ?? 25,
           );
-        } else if (restoredMF?.[playerId]) {
+        } else if (shouldApplyRestoredToExisting && restoredMF?.[playerId]) {
           const restored = restoredMF[playerId];
           const existing = playerStateHook.getPlayer(playerId)!;
           if (existing.gameState.currentMojo !== restored.mojo) {
@@ -3689,7 +3706,7 @@ export function GameTracker() {
             traits,
             awayPitcher.age ?? 25,
           );
-        } else if (restoredMF?.[pitcherId]) {
+        } else if (shouldApplyRestoredToExisting && restoredMF?.[pitcherId]) {
           const restored = restoredMF[pitcherId];
           const existing = playerStateHook.getPlayer(pitcherId)!;
           if (existing.gameState.currentMojo !== restored.mojo) {
@@ -3717,7 +3734,7 @@ export function GameTracker() {
             traits,
             homePitcher.age ?? 25,
           );
-        } else if (restoredMF?.[pitcherId]) {
+        } else if (shouldApplyRestoredToExisting && restoredMF?.[pitcherId]) {
           const restored = restoredMF[pitcherId];
           const existing = playerStateHook.getPlayer(pitcherId)!;
           if (existing.gameState.currentMojo !== restored.mojo) {
@@ -3740,6 +3757,7 @@ export function GameTracker() {
       if (restoredMF) {
         console.log("[M1-2-DIAG] Restored mojo/fitness keys:", Object.keys(restoredMF));
         console.log("[M1-2-DIAG] Restored mojo/fitness sample:", Object.entries(restoredMF).slice(0, 3));
+        lastAppliedRestoredMojoFitnessRef.current = restoredMF;
       }
       console.log(
         "[GameTracker] Registered players with playerStateHook for mojo/fitness tracking",
@@ -3952,6 +3970,7 @@ export function GameTracker() {
       if (!previousFitness || previousFitness === newFitness) return;
 
       playerStateHook.setFitness(playerId, newFitness);
+      setRosterVersion((v) => v + 1);
       void recordPlayerStateChange(
         playerId,
         name,
@@ -9656,6 +9675,10 @@ export function GameTracker() {
             // Find the full Player object for attributes
             const allPlayers = [...awayTeamPlayers, ...homeTeamPlayers];
             const pd = allPlayers.find((p) => p.name === selectedPlayer.name);
+            const selectedPlayerState = resolveSelectedPlayerCardState(
+              selectedPlayer.playerId,
+              resolveRosterPlayerState(selectedPlayer.playerId),
+            );
             const lineupSnapshot = getLineupStateSnapshot();
             const selectedPlayerTeam =
               (selectedPlayer.type === "pitcher"
@@ -9742,14 +9765,8 @@ export function GameTracker() {
                 onClose={() => setSelectedPlayer(null)}
                 batterGameStats={bgs}
                 pitcherGameStats={pgs}
-                currentMojo={
-                  playerStateHook.getPlayer(selectedPlayer.playerId)?.gameState
-                    .currentMojo
-                }
-                currentFitness={
-                  playerStateHook.getPlayer(selectedPlayer.playerId)
-                    ?.fitnessProfile.currentFitness
-                }
+                currentMojo={selectedPlayerState.currentMojo}
+                currentFitness={selectedPlayerState.currentFitness}
                 onMojoChange={(newMojo) => {
                   const team =
                     resolveRosterTeamSide(
@@ -9760,7 +9777,7 @@ export function GameTracker() {
                 }}
                 onFitnessChange={(newFitness) => {
                   handleFitnessChangeWithAutoInjury(
-                    selectedPlayer.playerId,
+                    selectedPlayerState.playerId,
                     selectedPlayer.name,
                     newFitness,
                   );
