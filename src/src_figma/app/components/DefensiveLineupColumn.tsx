@@ -26,14 +26,20 @@ export interface DefensiveEnrichmentMode {
   onClear: () => void;
 }
 
+interface PlayerMojoFitness {
+  mojo: MojoLevel;
+  fitness: FitnessState;
+}
+
 interface DefensiveLineupColumnProps {
   players: DefensiveLineupPlayer[];
   currentPitcherName: string;
   nextLeadoffIndex: number; // 1-based batting order of next inning's leadoff
   teamPrimaryColor: string;
   teamSecondaryColor: string;
-  getMojoForPlayer: (playerId: string) => MojoLevel | undefined;
-  getFitnessForPlayer: (playerId: string) => FitnessState | undefined;
+  playerStates?: Record<string, PlayerMojoFitness>;
+  getMojoForPlayer?: (playerId: string) => MojoLevel | undefined;
+  getFitnessForPlayer?: (playerId: string) => FitnessState | undefined;
   onPlayerTap: (playerId: string, playerName: string) => void;
   headerAction?: {
     label: string;
@@ -77,6 +83,7 @@ export function DefensiveLineupColumn({
   nextLeadoffIndex,
   teamPrimaryColor,
   teamSecondaryColor,
+  playerStates,
   getMojoForPlayer,
   getFitnessForPlayer,
   onPlayerTap,
@@ -138,8 +145,9 @@ export function DefensiveLineupColumn({
           const posNum = POSITION_TO_NUMBER[player.position || ''] || 0;
           // In enrichment mode, highlight positions already in the sequence
           const isInSequence = isEnriching && posNum > 0 && enrichmentMode!.sequence.includes(posNum);
-          const playerMojo = getMojoForPlayer(player.playerId);
-          const playerFitness = getFitnessForPlayer(player.playerId);
+          const state = playerStates?.[player.playerId];
+          const playerMojo = state?.mojo ?? getMojoForPlayer?.(player.playerId);
+          const playerFitness = state?.fitness ?? getFitnessForPlayer?.(player.playerId);
           const nameColor = getMojoNameColor(playerMojo);
           const fitnessStyle = getFitnessNameStyle(playerFitness);
 
@@ -187,15 +195,15 @@ export function DefensiveLineupColumn({
                 )}
                 <span
                   style={{
-                    ...(!isEnriching && nameColor ? { color: nameColor } : {}),
+                    ...(!isEnriching && nameColor ? { color: nameColor, textShadow: `0 0 6px ${nameColor}` } : {}),
                     ...(!isEnriching ? fitnessStyle : {}),
                   }}
                   title={!isEnriching ? [
-                    getMojoForPlayer(player.playerId) !== 0 && getMojoForPlayer(player.playerId) !== undefined
-                      ? `Mojo: ${toMojoLabel(getMojoForPlayer(player.playerId)!)}`
+                    playerMojo !== 0 && playerMojo !== undefined
+                      ? `Mojo: ${toMojoLabel(playerMojo!)}`
                       : null,
-                    getFitnessForPlayer(player.playerId) !== 'FIT' && getFitnessForPlayer(player.playerId) !== undefined
-                      ? `Fitness: ${toFitnessLabel(getFitnessForPlayer(player.playerId)!)}`
+                    playerFitness !== 'FIT' && playerFitness !== undefined
+                      ? `Fitness: ${toFitnessLabel(playerFitness!)}`
                       : null,
                   ].filter(Boolean).join(' | ') || undefined : undefined}
                 >{player.name}</span>

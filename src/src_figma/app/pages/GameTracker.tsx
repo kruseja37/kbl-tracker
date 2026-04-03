@@ -3729,6 +3729,18 @@ export function GameTracker() {
         }
       }
 
+      // Diagnostic: dump all registered player IDs and their mojo/fitness
+      const allRegistered = playerStateHook.getAllPlayers();
+      console.log("[M1-2-DIAG] All registered players:", allRegistered.map(p => ({
+        id: p.playerId,
+        name: p.playerName,
+        mojo: p.gameState.currentMojo,
+        fitness: p.fitnessProfile.currentFitness,
+      })));
+      if (restoredMF) {
+        console.log("[M1-2-DIAG] Restored mojo/fitness keys:", Object.keys(restoredMF));
+        console.log("[M1-2-DIAG] Restored mojo/fitness sample:", Object.entries(restoredMF).slice(0, 3));
+      }
       console.log(
         "[GameTracker] Registered players with playerStateHook for mojo/fitness tracking",
       );
@@ -3862,11 +3874,10 @@ export function GameTracker() {
     (playerId: string) => {
       const resolved = resolveRosterPlayerState(playerId);
       const mojo = resolved.playerData?.gameState.currentMojo ?? resolved.rosterMojo;
-      console.debug("[M1-2-fix] Resolved player mojo", {
-        playerId,
-        mojo,
-        resolvedBy: resolved.resolvedBy,
-      });
+      // Temporary: log as console.log (not debug) so it's visible without verbose mode
+      if (mojo !== undefined && mojo !== 0) {
+        console.log("[M1-2] getMojoForPlayer NON-DEFAULT:", { playerId, mojo, resolvedBy: resolved.resolvedBy });
+      }
       return mojo;
     },
     [resolveRosterPlayerState],
@@ -3908,9 +3919,14 @@ export function GameTracker() {
       const playerId = getPlayerIdFromName(name, team);
       const currentPlayer = playerStateHook.getPlayer(playerId);
       const previousMojo = currentPlayer?.gameState.currentMojo;
+      console.log("[M1-2-DIAG] setPlayerMojoByName:", {
+        name, team, playerId, found: !!currentPlayer, previousMojo, newMojo,
+      });
       if (previousMojo === undefined || previousMojo === newMojo) return;
 
       playerStateHook.setMojo(playerId, newMojo);
+      // Force a UI refresh by updating a dummy state
+      setRosterVersion((v) => v + 1);
       void recordPlayerStateChange(
         playerId,
         name,
@@ -9315,30 +9331,42 @@ export function GameTracker() {
             />
 
             {/* Column 2: Batting Lineup (§5.2 — always the team at bat) */}
-            <BattingLineupColumn
-              players={battingColumnPlayers}
-              currentBatterIndex={currentBatterPosition}
-              runners={battingLineupRunners}
-              nextLeadoffIndex={battingNextLeadoff}
-              teamPrimaryColor={battingTeamColors.primary}
-              teamSecondaryColor={battingTeamColors.secondary}
-              getMojoForPlayer={getMojoForPlayer}
-              getFitnessForPlayer={getFitnessForPlayer}
-              onPlayerTap={handleLineupPlayerTap}
-            />
+            {/* Build live mojo/fitness data map from playerStateHook */}
+            {(() => {
+              const playerStatesMap: Record<string, { mojo: MojoLevel; fitness: FitnessState }> = {};
+              for (const p of playerStateHook.getAllPlayers()) {
+                playerStatesMap[p.playerId] = {
+                  mojo: p.gameState.currentMojo,
+                  fitness: p.fitnessProfile.currentFitness,
+                };
+              }
+              return (
+                <>
+                  <BattingLineupColumn
+                    players={battingColumnPlayers}
+                    currentBatterIndex={currentBatterPosition}
+                    runners={battingLineupRunners}
+                    nextLeadoffIndex={battingNextLeadoff}
+                    teamPrimaryColor={battingTeamColors.primary}
+                    teamSecondaryColor={battingTeamColors.secondary}
+                    playerStates={playerStatesMap}
+                    onPlayerTap={handleLineupPlayerTap}
+                  />
 
-            {/* Column 3: Defensive Lineup (§5.3 — always the team in field) */}
-            <DefensiveLineupColumn
-              players={defensiveColumnPlayers}
-              currentPitcherName={resolvedCurrentPitcherName}
-              nextLeadoffIndex={defensiveNextLeadoff}
-              teamPrimaryColor={fieldingTeamColors.primary}
-              teamSecondaryColor={fieldingTeamColors.secondary}
-              getMojoForPlayer={getMojoForPlayer}
-              getFitnessForPlayer={getFitnessForPlayer}
-              onPlayerTap={handleLineupPlayerTap}
-              enrichmentMode={defensiveEnrichmentMode}
-            />
+                  {/* Column 3: Defensive Lineup (§5.3 — always the team in field) */}
+                  <DefensiveLineupColumn
+                    players={defensiveColumnPlayers}
+                    currentPitcherName={resolvedCurrentPitcherName}
+                    nextLeadoffIndex={defensiveNextLeadoff}
+                    teamPrimaryColor={fieldingTeamColors.primary}
+                    teamSecondaryColor={fieldingTeamColors.secondary}
+                    playerStates={playerStatesMap}
+                    onPlayerTap={handleLineupPlayerTap}
+                    enrichmentMode={defensiveEnrichmentMode}
+                  />
+                </>
+              );
+            })()}
 
             {/* Column 4: Play Log + Enrichment Panel (§2.3 — 2/5 width) */}
             <div className="relative z-20 isolate pointer-events-auto flex flex-col h-full overflow-hidden">

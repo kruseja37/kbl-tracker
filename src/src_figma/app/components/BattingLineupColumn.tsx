@@ -10,6 +10,11 @@ interface BattingLineupPlayer {
   battingOrder: number;
 }
 
+interface PlayerMojoFitness {
+  mojo: MojoLevel;
+  fitness: FitnessState;
+}
+
 interface BattingLineupColumnProps {
   players: BattingLineupPlayer[];
   currentBatterIndex: number; // 1-based batting order of current batter
@@ -21,8 +26,12 @@ interface BattingLineupColumnProps {
   nextLeadoffIndex: number; // 1-based batting order of next inning's leadoff
   teamPrimaryColor: string;
   teamSecondaryColor: string;
-  getMojoForPlayer: (playerId: string) => MojoLevel | undefined;
-  getFitnessForPlayer: (playerId: string) => FitnessState | undefined;
+  /** Direct mojo/fitness data map — keyed by playerId */
+  playerStates?: Record<string, PlayerMojoFitness>;
+  /** @deprecated Use playerStates instead */
+  getMojoForPlayer?: (playerId: string) => MojoLevel | undefined;
+  /** @deprecated Use playerStates instead */
+  getFitnessForPlayer?: (playerId: string) => FitnessState | undefined;
   onPlayerTap: (playerId: string, playerName: string) => void;
 }
 
@@ -62,6 +71,7 @@ export function BattingLineupColumn({
   nextLeadoffIndex,
   teamPrimaryColor,
   teamSecondaryColor,
+  playerStates,
   getMojoForPlayer,
   getFitnessForPlayer,
   onPlayerTap,
@@ -116,8 +126,9 @@ export function BattingLineupColumn({
           const onBase =
             runnerBaseMap.get(player.playerId) ?? runnerBaseMap.get(player.name);
           const shouldHighlightRow = highlightedBatterIndex === player.battingOrder;
-          const playerMojo = getMojoForPlayer(player.playerId);
-          const playerFitness = getFitnessForPlayer(player.playerId);
+          const state = playerStates?.[player.playerId];
+          const playerMojo = state?.mojo ?? getMojoForPlayer?.(player.playerId);
+          const playerFitness = state?.fitness ?? getFitnessForPlayer?.(player.playerId);
           const nameColor = getMojoNameColor(playerMojo);
           const fitnessStyle = getFitnessNameStyle(playerFitness);
 
@@ -147,15 +158,15 @@ export function BattingLineupColumn({
                 )}
                 <span
                   style={{
-                    ...(nameColor ? { color: nameColor } : {}),
+                    ...(nameColor ? { color: nameColor, textShadow: `0 0 6px ${nameColor}` } : {}),
                     ...fitnessStyle,
                   }}
                   title={[
-                    getMojoForPlayer(player.playerId) !== 0 && getMojoForPlayer(player.playerId) !== undefined
-                      ? `Mojo: ${toMojoLabel(getMojoForPlayer(player.playerId)!)}`
+                    playerMojo !== 0 && playerMojo !== undefined
+                      ? `Mojo: ${toMojoLabel(playerMojo!)}`
                       : null,
-                    getFitnessForPlayer(player.playerId) !== 'FIT' && getFitnessForPlayer(player.playerId) !== undefined
-                      ? `Fitness: ${toFitnessLabel(getFitnessForPlayer(player.playerId)!)}`
+                    playerFitness !== 'FIT' && playerFitness !== undefined
+                      ? `Fitness: ${toFitnessLabel(playerFitness!)}`
                       : null,
                   ].filter(Boolean).join(' | ') || undefined}
                 >{player.name}</span>
