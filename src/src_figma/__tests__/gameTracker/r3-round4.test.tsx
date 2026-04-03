@@ -203,6 +203,7 @@ describe("R3 Round 4 bug fixes", () => {
           getMojoForPlayer={() => 2}
           getFitnessForPlayer={() => 'STRAINED'}
           onPlayerTap={() => undefined}
+          onMojoAdjust={() => undefined}
         />
         <DefensiveLineupColumn
           players={[
@@ -222,22 +223,35 @@ describe("R3 Round 4 bug fixes", () => {
           getMojoForPlayer={() => -1}
           getFitnessForPlayer={() => 'HURT'}
           onPlayerTap={() => undefined}
+          onMojoAdjust={() => undefined}
         />
       </>,
     );
 
-    const battingRow = screen.getByRole("button", { name: /J\. SMITH/i });
-    expect(within(battingRow).getByText("▲")).toBeInTheDocument();
-    expect(within(battingRow).getByText("STR")).toBeInTheDocument();
-    expect(within(battingRow).getByTitle("Mojo: On Fire")).toBeInTheDocument();
-    expect(within(battingRow).getByTitle("Fitness: Strained")).toBeInTheDocument();
+    const battingRow = screen.getByText("J. SMITH").closest("button");
+    expect(battingRow).not.toBeNull();
+    expect(
+      screen.getByRole("button", { name: "Increase mojo for J. SMITH" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Decrease mojo for J. SMITH" }),
+    ).toBeInTheDocument();
+    expect(
+      within(battingRow!).getByTitle("Mojo: On Fire | Fitness: Strained"),
+    ).toBeInTheDocument();
 
-    const defensiveRow = screen.getByRole("button", { name: /A\. ACE/i });
-    expect(within(defensiveRow).getByText("PC: 17")).toBeInTheDocument();
-    expect(within(defensiveRow).getByText("▼")).toBeInTheDocument();
-    expect(within(defensiveRow).getByText("HRT")).toBeInTheDocument();
-    expect(within(defensiveRow).getByTitle("Mojo: Tense")).toBeInTheDocument();
-    expect(within(defensiveRow).getByTitle("Fitness: Hurt")).toBeInTheDocument();
+    const defensiveRow = screen.getByText("A. ACE").closest("button");
+    expect(defensiveRow).not.toBeNull();
+    expect(within(defensiveRow!).getByText("PC: 17")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Increase mojo for A. ACE" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Decrease mojo for A. ACE" }),
+    ).toBeInTheDocument();
+    expect(
+      within(defensiveRow!).getByTitle("Mojo: Tense | Fitness: Hurt"),
+    ).toBeInTheDocument();
   });
 
   test("Bug 2: prior-half corrections do not place the now-fielding team on base", async () => {

@@ -356,7 +356,7 @@ describe('useGameState between-play ledger', () => {
         'mojo',
         0,
         1,
-        'Player card adjustment',
+        'Lineup quick adjust',
       );
       await result.current.recordPlayerStateChange(
         'home-sp',
@@ -376,6 +376,7 @@ describe('useGameState between-play ledger', () => {
           stateType: 'mojo',
           previousValue: 0,
           newValue: 1,
+          reason: 'Lineup quick adjust',
         }),
       })],
       [expect.objectContaining({

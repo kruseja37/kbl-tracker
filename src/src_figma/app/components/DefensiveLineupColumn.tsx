@@ -41,6 +41,7 @@ interface DefensiveLineupColumnProps {
   getMojoForPlayer?: (playerId: string) => MojoLevel | undefined;
   getFitnessForPlayer?: (playerId: string) => FitnessState | undefined;
   onPlayerTap: (playerId: string, playerName: string) => void;
+  onMojoAdjust?: (playerId: string, playerName: string, delta: -1 | 1) => void;
   headerAction?: {
     label: string;
     onClick: () => void;
@@ -87,6 +88,7 @@ export function DefensiveLineupColumn({
   getMojoForPlayer,
   getFitnessForPlayer,
   onPlayerTap,
+  onMojoAdjust,
   headerAction,
   enrichmentMode,
 }: DefensiveLineupColumnProps) {
@@ -148,6 +150,7 @@ export function DefensiveLineupColumn({
           const state = playerStates?.[player.playerId];
           const playerMojo = state?.mojo ?? getMojoForPlayer?.(player.playerId);
           const playerFitness = state?.fitness ?? getFitnessForPlayer?.(player.playerId);
+          const mojoForControls = playerMojo ?? 0;
           const nameColor = getMojoNameColor(playerMojo);
           const fitnessStyle = getFitnessNameStyle(playerFitness);
 
@@ -160,69 +163,106 @@ export function DefensiveLineupColumn({
           };
 
           return (
-            <button
+            <div
               key={player.playerId}
-              onClick={handleClick}
-              className={`text-left px-2 py-0.5 transition-colors ${
-                isEnriching
-                  ? 'hover:bg-[#C4A853]/20 active:bg-[#C4A853]/30'
-                  : 'hover:bg-[#3d5240]/50 active:bg-[#3d5240]'
-              }`}
+              className="flex items-stretch gap-1 px-2 py-0.5"
               style={{
-                borderLeft: isEnriching
-                  ? isInSequence
-                    ? '3px solid #C4A853'
-                    : '3px solid transparent'
-                  : undefined,
-                border: !isEnriching
-                  ? isPitching
-                    ? `2px solid ${teamPrimaryColor}`
-                    : isNextLeadoff
-                      ? `2px dotted ${teamSecondaryColor}`
-                      : '2px solid transparent'
-                  : undefined,
               }}
             >
-              {/* Top row: order + position + name */}
-              <div className={`text-[9px] leading-tight tracking-wide font-bold ${
-                isEnriching && isInSequence ? 'text-[#C4A853]' : 'text-[#E8E8D8]'
-              }`}>
-                <span className="text-[#88AA88] mr-0.5">{player.battingOrder}.</span>
-                {player.position && (
-                  <span className={`mr-1 ${isEnriching ? 'text-[#C4A853]' : 'text-[#C4A853]'}`}>
-                    {player.position}
-                  </span>
-                )}
-                <span
-                  style={{
-                    ...(!isEnriching && nameColor ? { color: nameColor, textShadow: `0 0 6px ${nameColor}` } : {}),
-                    ...(!isEnriching ? fitnessStyle : {}),
-                  }}
-                  title={!isEnriching ? [
-                    playerMojo !== 0 && playerMojo !== undefined
-                      ? `Mojo: ${toMojoLabel(playerMojo!)}`
-                      : null,
-                    playerFitness !== 'FIT' && playerFitness !== undefined
-                      ? `Fitness: ${toFitnessLabel(playerFitness!)}`
-                      : null,
-                  ].filter(Boolean).join(' | ') || undefined : undefined}
-                >{player.name}</span>
-              </div>
-              {/* Bottom row: in enrichment mode show position number, else pitch count / dash */}
-              <div className="text-[7px] text-[#6b7b6e] leading-tight">
-                {isEnriching
-                  ? posNum > 0
-                    ? <span className="text-[#C4A853]/60">#{posNum}</span>
-                    : null
-                  : (
-                    <div className="min-h-[10px] flex items-center gap-1">
-                      {player.isPitcher && player.pitchCount !== undefined && (
-                        <span>{`PC: ${player.pitchCount}`}</span>
-                      )}
-                    </div>
+              <button
+                type="button"
+                onClick={handleClick}
+                className={`flex-1 text-left transition-colors ${
+                  isEnriching
+                    ? 'hover:bg-[#C4A853]/20 active:bg-[#C4A853]/30'
+                    : 'hover:bg-[#3d5240]/50 active:bg-[#3d5240]'
+                }`}
+                style={{
+                  borderLeft: isEnriching
+                    ? isInSequence
+                      ? '3px solid #C4A853'
+                      : '3px solid transparent'
+                    : undefined,
+                  border: !isEnriching
+                    ? isPitching
+                      ? `2px solid ${teamPrimaryColor}`
+                      : isNextLeadoff
+                        ? `2px dotted ${teamSecondaryColor}`
+                        : '2px solid transparent'
+                    : undefined,
+                }}
+              >
+                {/* Top row: order + position + name */}
+                <div className={`text-[9px] leading-tight tracking-wide font-bold ${
+                  isEnriching && isInSequence ? 'text-[#C4A853]' : 'text-[#E8E8D8]'
+                }`}>
+                  <span className="text-[#88AA88] mr-0.5">{player.battingOrder}.</span>
+                  {player.position && (
+                    <span className="mr-1 text-[#C4A853]">
+                      {player.position}
+                    </span>
                   )}
-              </div>
-            </button>
+                  <span
+                    style={{
+                      ...(!isEnriching && nameColor ? { color: nameColor, textShadow: `0 0 6px ${nameColor}` } : {}),
+                      ...(!isEnriching ? fitnessStyle : {}),
+                    }}
+                    title={!isEnriching ? [
+                      playerMojo !== 0 && playerMojo !== undefined
+                        ? `Mojo: ${toMojoLabel(playerMojo!)}`
+                        : null,
+                      playerFitness !== 'FIT' && playerFitness !== undefined
+                        ? `Fitness: ${toFitnessLabel(playerFitness!)}`
+                        : null,
+                    ].filter(Boolean).join(' | ') || undefined : undefined}
+                  >{player.name}</span>
+                </div>
+                {/* Bottom row: in enrichment mode show position number, else pitch count / dash */}
+                <div className="text-[7px] text-[#6b7b6e] leading-tight">
+                  {isEnriching
+                    ? posNum > 0
+                      ? <span className="text-[#C4A853]/60">#{posNum}</span>
+                      : null
+                    : (
+                      <div className="min-h-[10px] flex items-center gap-1">
+                        {player.isPitcher && player.pitchCount !== undefined && (
+                          <span>{`PC: ${player.pitchCount}`}</span>
+                        )}
+                      </div>
+                    )}
+                </div>
+              </button>
+              {onMojoAdjust && (
+                <div className="flex flex-col justify-center gap-[2px]">
+                  <button
+                    type="button"
+                    aria-label={`Increase mojo for ${player.name}`}
+                    disabled={mojoForControls >= 3}
+                    onClick={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      onMojoAdjust(player.playerId, player.name, 1);
+                    }}
+                    className="h-[12px] w-[16px] border border-[#C4A853] bg-[#2f3f32] text-[8px] font-bold text-[#F2BF16] leading-none hover:bg-[#405344] disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    ▲
+                  </button>
+                  <button
+                    type="button"
+                    aria-label={`Decrease mojo for ${player.name}`}
+                    disabled={mojoForControls <= -2}
+                    onClick={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      onMojoAdjust(player.playerId, player.name, -1);
+                    }}
+                    className="h-[12px] w-[16px] border border-[#C4A853] bg-[#2f3f32] text-[8px] font-bold text-[#F2BF16] leading-none hover:bg-[#405344] disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    ▼
+                  </button>
+                </div>
+              )}
+            </div>
           );
         })}
       </div>

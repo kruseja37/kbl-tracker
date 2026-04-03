@@ -3933,7 +3933,12 @@ export function GameTracker() {
   );
 
   const setPlayerMojoByName = useCallback(
-    (name: string, team: "away" | "home", newMojo: MojoLevel) => {
+    (
+      name: string,
+      team: "away" | "home",
+      newMojo: MojoLevel,
+      reason: string = "Player card adjustment",
+    ) => {
       const playerId = getPlayerIdFromName(name, team);
       const currentPlayer = playerStateHook.getPlayer(playerId);
       const previousMojo = currentPlayer?.gameState.currentMojo;
@@ -3951,7 +3956,7 @@ export function GameTracker() {
         "mojo",
         previousMojo,
         newMojo,
-        "Player card adjustment",
+        reason,
       ).then(() => queuePlayLogRefresh(0));
     },
     [
@@ -3960,6 +3965,20 @@ export function GameTracker() {
       queuePlayLogRefresh,
       recordPlayerStateChange,
     ],
+  );
+
+  const handleLineupMojoAdjust = useCallback(
+    (playerId: string, playerName: string, delta: -1 | 1) => {
+      const team = resolveRosterTeamSide(playerId, playerName) || "home";
+      const currentMojo = getMojoForPlayer(playerId);
+      if (currentMojo === undefined) return;
+
+      const nextMojo = clampMojo(currentMojo + delta);
+      if (nextMojo === currentMojo) return;
+
+      setPlayerMojoByName(playerName, team, nextMojo, "Lineup quick adjust");
+    },
+    [getMojoForPlayer, resolveRosterTeamSide, setPlayerMojoByName],
   );
 
   const setPlayerFitnessByName = useCallback(
@@ -9370,6 +9389,7 @@ export function GameTracker() {
                     teamSecondaryColor={battingTeamColors.secondary}
                     playerStates={playerStatesMap}
                     onPlayerTap={handleLineupPlayerTap}
+                    onMojoAdjust={handleLineupMojoAdjust}
                   />
 
                   {/* Column 3: Defensive Lineup (§5.3 — always the team in field) */}
@@ -9381,6 +9401,7 @@ export function GameTracker() {
                     teamSecondaryColor={fieldingTeamColors.secondary}
                     playerStates={playerStatesMap}
                     onPlayerTap={handleLineupPlayerTap}
+                    onMojoAdjust={handleLineupMojoAdjust}
                     enrichmentMode={defensiveEnrichmentMode}
                   />
                 </>

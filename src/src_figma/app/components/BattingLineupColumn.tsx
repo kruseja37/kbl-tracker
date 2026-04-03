@@ -33,6 +33,7 @@ interface BattingLineupColumnProps {
   /** @deprecated Use playerStates instead */
   getFitnessForPlayer?: (playerId: string) => FitnessState | undefined;
   onPlayerTap: (playerId: string, playerName: string) => void;
+  onMojoAdjust?: (playerId: string, playerName: string, delta: -1 | 1) => void;
 }
 
 // FITNESS_ABBREVIATIONS kept for reference but no longer rendered as text
@@ -75,6 +76,7 @@ export function BattingLineupColumn({
   getMojoForPlayer,
   getFitnessForPlayer,
   onPlayerTap,
+  onMojoAdjust,
 }: BattingLineupColumnProps) {
   const [highlightedBatterIndex, setHighlightedBatterIndex] = React.useState<number | null>(null);
   const previousCurrentBatterIndex = React.useRef(currentBatterIndex);
@@ -129,21 +131,16 @@ export function BattingLineupColumn({
           const state = playerStates?.[player.playerId];
           const playerMojo = state?.mojo ?? getMojoForPlayer?.(player.playerId);
           const playerFitness = state?.fitness ?? getFitnessForPlayer?.(player.playerId);
+          const mojoForControls = playerMojo ?? 0;
           const nameColor = getMojoNameColor(playerMojo);
           const fitnessStyle = getFitnessNameStyle(playerFitness);
 
           return (
-            <button
+            <div
               key={player.playerId}
-              onClick={() => onPlayerTap(player.playerId, player.name)}
-              className="text-left px-2 py-0.5 transition-colors hover:bg-[#3d5240]/50 active:bg-[#3d5240]"
+              className="flex items-stretch gap-1 px-2 py-0.5"
               style={{
                 animation: shouldHighlightRow ? 'batting-lineup-row-highlight 200ms ease-out' : undefined,
-                border: isCurrent
-                  ? `2px solid ${teamPrimaryColor}`
-                  : isNextLeadoff
-                    ? `2px dotted ${teamSecondaryColor}`
-                    : '2px solid transparent',
               }}
               onAnimationEnd={() => {
                 if (shouldHighlightRow) {
@@ -151,30 +148,73 @@ export function BattingLineupColumn({
                 }
               }}
             >
-              <div className={`text-[9px] leading-tight tracking-wide ${onBase ? 'font-black text-white' : 'font-bold text-[#E8E8D8]'}`}>
-                <span className="text-[#88AA88] mr-0.5">{player.battingOrder}.</span>
-                {player.position && (
-                  <span className="text-[#C4A853] mr-1">{player.position}</span>
-                )}
-                <span
-                  style={{
-                    ...(nameColor ? { color: nameColor, textShadow: `0 0 6px ${nameColor}` } : {}),
-                    ...fitnessStyle,
-                  }}
-                  title={[
-                    playerMojo !== 0 && playerMojo !== undefined
-                      ? `Mojo: ${toMojoLabel(playerMojo!)}`
-                      : null,
-                    playerFitness !== 'FIT' && playerFitness !== undefined
-                      ? `Fitness: ${toFitnessLabel(playerFitness!)}`
-                      : null,
-                  ].filter(Boolean).join(' | ') || undefined}
-                >{player.name}</span>
-                {onBase !== undefined && (
-                  <sup className="text-[7px] text-[#F2BF16] ml-0.5">{onBase}</sup>
-                )}
-              </div>
-            </button>
+              <button
+                type="button"
+                onClick={() => onPlayerTap(player.playerId, player.name)}
+                className="flex-1 text-left px-0 py-0 transition-colors hover:bg-[#3d5240]/50 active:bg-[#3d5240]"
+                style={{
+                  border: isCurrent
+                    ? `2px solid ${teamPrimaryColor}`
+                    : isNextLeadoff
+                      ? `2px dotted ${teamSecondaryColor}`
+                      : '2px solid transparent',
+                }}
+              >
+                <div className={`text-[9px] leading-tight tracking-wide ${onBase ? 'font-black text-white' : 'font-bold text-[#E8E8D8]'}`}>
+                  <span className="text-[#88AA88] mr-0.5">{player.battingOrder}.</span>
+                  {player.position && (
+                    <span className="text-[#C4A853] mr-1">{player.position}</span>
+                  )}
+                  <span
+                    style={{
+                      ...(nameColor ? { color: nameColor, textShadow: `0 0 6px ${nameColor}` } : {}),
+                      ...fitnessStyle,
+                    }}
+                    title={[
+                      playerMojo !== 0 && playerMojo !== undefined
+                        ? `Mojo: ${toMojoLabel(playerMojo!)}`
+                        : null,
+                      playerFitness !== 'FIT' && playerFitness !== undefined
+                        ? `Fitness: ${toFitnessLabel(playerFitness!)}`
+                        : null,
+                    ].filter(Boolean).join(' | ') || undefined}
+                  >{player.name}</span>
+                  {onBase !== undefined && (
+                    <sup className="text-[7px] text-[#F2BF16] ml-0.5">{onBase}</sup>
+                  )}
+                </div>
+              </button>
+              {onMojoAdjust && (
+                <div className="flex flex-col justify-center gap-[2px]">
+                  <button
+                    type="button"
+                    aria-label={`Increase mojo for ${player.name}`}
+                    disabled={mojoForControls >= 3}
+                    onClick={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      onMojoAdjust(player.playerId, player.name, 1);
+                    }}
+                    className="h-[12px] w-[16px] border border-[#C4A853] bg-[#2f3f32] text-[8px] font-bold text-[#F2BF16] leading-none hover:bg-[#405344] disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    ▲
+                  </button>
+                  <button
+                    type="button"
+                    aria-label={`Decrease mojo for ${player.name}`}
+                    disabled={mojoForControls <= -2}
+                    onClick={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      onMojoAdjust(player.playerId, player.name, -1);
+                    }}
+                    className="h-[12px] w-[16px] border border-[#C4A853] bg-[#2f3f32] text-[8px] font-bold text-[#F2BF16] leading-none hover:bg-[#405344] disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    ▼
+                  </button>
+                </div>
+              )}
+            </div>
           );
         })}
       </div>
