@@ -411,13 +411,13 @@ export function getStateBadge(
     return { text: 'JUICED', color: '#ffffff', bgColor: '#a855f7' };
   }
   if (mojoLevel === 3) {
-    return { text: 'JACKED', color: '#ffffff', bgColor: '#16a34a' };
+    return { text: 'JACKED', color: '#ffffff', bgColor: '#FFC107' };
   }
   if (mojoLevel === 2) {
-    return { text: 'ON FIRE', color: '#ffffff', bgColor: '#22c55e' };
+    return { text: 'ON FIRE', color: '#ffffff', bgColor: '#FF9800' };
   }
   if (mojoLevel === -2) {
-    return { text: 'RATTLED', color: '#ffffff', bgColor: '#dc2626' };
+    return { text: 'RATTLED', color: '#ffffff', bgColor: '#9F1239' };
   }
   if (fitnessState === 'WEAK') {
     return { text: 'WEAK', color: '#ffffff', bgColor: '#f97316' };
@@ -426,10 +426,10 @@ export function getStateBadge(
     return { text: 'STRAINED', color: '#000000', bgColor: '#eab308' };
   }
   if (mojoLevel === 1) {
-    return { text: 'HOT', color: '#ffffff', bgColor: '#22c55e' };
+    return { text: 'HOT', color: '#000000', bgColor: '#FFEB3B' };
   }
   if (mojoLevel === -1) {
-    return { text: 'COLD', color: '#000000', bgColor: '#f97316' };
+    return { text: 'COLD', color: '#ffffff', bgColor: '#EF4444' };
   }
 
   // Default: no badge needed

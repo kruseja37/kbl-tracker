@@ -904,17 +904,17 @@ describe('Auto-Inference', () => {
 
 describe('Display Helpers', () => {
   describe('getMojoColor', () => {
-    test('Rattled is red', () => {
-      expect(getMojoColor(-2)).toBe('#dc2626');
+    test('Rattled is dark crimson', () => {
+      expect(getMojoColor(-2)).toBe('#9F1239');
     });
 
-    test('Normal is gray', () => {
-      expect(getMojoColor(0)).toBe('#6b7280');
+    test('Normal is white', () => {
+      expect(getMojoColor(0)).toBe('#FFFFFF');
     });
 
-    test('On Fire and Jacked use the top green shades', () => {
-      expect(getMojoColor(2)).toBe('#16a34a');
-      expect(getMojoColor(3)).toBe('#15803d');
+    test('On Fire is orange and Jacked is amber/gold', () => {
+      expect(getMojoColor(2)).toBe('#FF9800');
+      expect(getMojoColor(3)).toBe('#FFC107');
     });
   });
 

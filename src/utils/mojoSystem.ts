@@ -295,12 +295,12 @@ export function isGoodFitness(fitness: FitnessLevel): boolean {
  * Get display color for mojo state
  */
 export function getMojoColor(mojo: MojoLevel): string {
-  if (mojo <= -2) return '#ef4444';  // Red - struggling
-  if (mojo === -1) return '#f97316'; // Orange - slightly off
-  if (mojo === 0) return '#6b7280';  // Gray - normal
-  if (mojo === 1) return '#22c55e';  // Green - good
-  if (mojo === 2) return '#3b82f6';  // Blue - great
-  return '#a855f7';                   // Purple - exceptional
+  if (mojo <= -2) return '#9F1239';  // Dark crimson - rattled
+  if (mojo === -1) return '#EF4444'; // Red - tense
+  if (mojo === 0) return '#FFFFFF';  // White - normal
+  if (mojo === 1) return '#FFEB3B';  // Yellow - locked in
+  if (mojo === 2) return '#FF9800';  // Orange - on fire
+  return '#FFC107';                   // Amber/gold - jacked
 }
 
 /**
