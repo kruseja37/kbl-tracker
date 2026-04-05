@@ -12,6 +12,7 @@ export type FieldingAttemptType =
   | 'jumping'
   | 'sliding'
   | 'charging'
+  | 'running'
   | 'over_shoulder'
   | 'wall'
   | 'robbed_hr';
@@ -25,6 +26,7 @@ export const FIELDING_ATTEMPT_TYPE_OPTIONS: Array<{
   { value: 'jumping', label: 'Jumping' },
   { value: 'sliding', label: 'Sliding' },
   { value: 'charging', label: 'Charging' },
+  { value: 'running', label: 'Running' },
   { value: 'over_shoulder', label: 'Over Shoulder' },
   { value: 'wall', label: 'Wall' },
   { value: 'robbed_hr', label: 'Robbed HR' },
@@ -146,6 +148,7 @@ export function mapLegacyFieldingPlayTypeToAttempt(
       return { attemptType: 'jumping', attemptOutcome: 'made' };
     case 'routine':
     case 'charging':
+    case 'running':
     case 'diving':
     case 'sliding':
     case 'wall':

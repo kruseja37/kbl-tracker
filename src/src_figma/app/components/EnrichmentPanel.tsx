@@ -152,6 +152,7 @@ const SAVED_BASES_ATTEMPT_TYPES = new Set<FieldingAttemptType>([
   'diving',
   'sliding',
   'charging',
+  'running',
   'over_shoulder',
 ]);
 

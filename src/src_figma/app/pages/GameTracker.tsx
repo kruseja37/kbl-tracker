@@ -144,6 +144,18 @@ const formatInningLabel = (isTop: boolean, inning: number) => {
   return `${half} ${inning}${ordinalSuffix(inning)}`;
 };
 
+const runnerBaseToTrackerBase = (
+  base: RunnerBase | "first" | "second" | "third",
+): "1B" | "2B" | "3B" => {
+  if (base === "first") {
+    return "1B";
+  }
+  if (base === "second") {
+    return "2B";
+  }
+  return "3B";
+};
+
 const calculateMinimumResultOuts = (result: AtBatEvent["result"]): number => {
   switch (result) {
     case "K":
@@ -865,6 +877,7 @@ export function GameTracker() {
     updateTrackedRunnerHowReached,
     applyOutsAdjustment,
     scheduleAutoEndInning,
+    forceEndHalfInning,
     setRunnerOutcomeCorrectionActive,
     adjustPlayerFieldingErrors,
     queueAutoEndGame,
@@ -872,6 +885,8 @@ export function GameTracker() {
     pitchCountPrompt,
     confirmPitchCount,
     dismissPitchCountPrompt,
+    deferredPitchCounts,
+    openDeferredPitchCount,
     initializeGame,
     loadExistingGame,
     undoLastAction,
@@ -1116,6 +1131,8 @@ export function GameTracker() {
   const inningLabel = useCallback(() => {
     return formatInningLabel(gameState.isTop, Math.max(1, gameState.inning));
   }, [gameState.inning, gameState.isTop]);
+  const showManualEndHalfInningButton =
+    gameState.outs >= 3 && gameState.gamePhase === "LIVE";
 
   // §4.2 Structured Play Log — parallel to activityLog (which other systems still use)
   const [playLogEntries, setPlayLogEntries] = useState<PlayLogEntry[]>([]);
@@ -1432,6 +1449,8 @@ export function GameTracker() {
 
   // §2.4: Expanded scoreboard overlay toggle
   const [isScoreboardExpanded, setIsScoreboardExpanded] = useState(false);
+  const [showDeferredPitchCountList, setShowDeferredPitchCountList] =
+    useState(false);
 
   // §9.3: Swap Order mode — stores first player's ID, null when inactive
   const [swapOrderMode, setSwapOrderMode] = useState<{
@@ -1447,6 +1466,18 @@ export function GameTracker() {
 
   // End game confirmation state
   const [showEndGameConfirmation, setShowEndGameConfirmation] = useState(false);
+
+  useEffect(() => {
+    if (!deferredPitchCounts.length) {
+      setShowDeferredPitchCountList(false);
+    }
+  }, [deferredPitchCounts.length]);
+
+  useEffect(() => {
+    if (pitchCountPrompt) {
+      setShowDeferredPitchCountList(false);
+    }
+  }, [pitchCountPrompt]);
 
   // §4.3: Processing-aware button feedback — tracks which outcome is being processed
   const [processingOutcome, setProcessingOutcome] = useState<string | null>(
@@ -4456,19 +4487,18 @@ export function GameTracker() {
   const getRunnerBaseForPlayer = useCallback(
     (playerId: string, playerName?: string): RunnerBase | null => {
       for (const base of ["first", "second", "third"] as const) {
-        const runnerName = runnerNames[base];
-        if (!runnerName) continue;
-        const runnerId = getPlayerIdFromName(runnerName, battingTeam);
+        const trackedRunner = battingLineupRunners[base];
+        if (!trackedRunner) continue;
         if (
-          (runnerId && runnerId === playerId) ||
-          (playerName && runnerName === playerName)
+          trackedRunner.playerId === playerId ||
+          (playerName && trackedRunner.name === playerName)
         ) {
           return base;
         }
       }
       return null;
     },
-    [battingTeam, getPlayerIdFromName, runnerNames],
+    [battingLineupRunners],
   );
 
   const isPitcherPlayer = useCallback(
@@ -4708,15 +4738,20 @@ export function GameTracker() {
 
   const getRunnerIdentityForBase = useCallback(
     (base: RunnerBase | "first" | "second" | "third") => {
+      const normalizedBase = base;
+      const trackedRunner = battingLineupRunners[normalizedBase];
       const runnerName =
-        runnerNames[base] ||
-        `R${base === "first" ? "1" : base === "second" ? "2" : "3"}`;
+        trackedRunner?.name ||
+        runnerNames[normalizedBase] ||
+        `R${normalizedBase === "first" ? "1" : normalizedBase === "second" ? "2" : "3"}`;
       return {
         runnerName,
-        runnerId: getPlayerIdFromName(runnerName, battingTeam),
+        runnerId:
+          trackedRunner?.playerId ||
+          getPlayerIdFromName(runnerName, battingTeam),
       };
     },
-    [battingTeam, getPlayerIdFromName, runnerNames],
+    [battingLineupRunners, battingTeam, getPlayerIdFromName, runnerNames],
   );
 
   const getLeadRunnerIdentity = useCallback(() => {
@@ -6719,6 +6754,10 @@ export function GameTracker() {
       teamType: "away" | "home",
       benchPlayerName: string,
       lineupPlayerName: string,
+      options?: {
+        subType?: "player_sub" | "pinch_run";
+        base?: "1B" | "2B" | "3B";
+      },
     ) => {
       console.log(
         `Substitution: ${benchPlayerName} replacing ${lineupPlayerName} on ${teamType} team`,
@@ -6735,7 +6774,8 @@ export function GameTracker() {
         benchPlayerName,
         lineupPlayerName,
         {
-          subType: "player_sub",
+          subType: options?.subType || "player_sub",
+          base: options?.base,
         },
       );
       if (!subResult.success) {
@@ -6876,6 +6916,7 @@ export function GameTracker() {
       incomingName: string,
       isPitcher: boolean,
       incomingPosition?: string,
+      runnerBase?: RunnerBase,
     ) => {
       // R3-R8: Determine if this is a defensive pitcher change or a batting substitution.
       // A pitcher change is ONLY when replacing the pitcher currently on the mound
@@ -6907,7 +6948,12 @@ export function GameTracker() {
         if (isActualPitcherChange) {
           handlePitcherSubstitution(fallbackTeam, incomingName, outgoingName, "pitcher");
         } else {
-          handleSubstitution(fallbackTeam, incomingName, outgoingName);
+          handleSubstitution(fallbackTeam, incomingName, outgoingName, runnerBase
+            ? {
+                subType: "pinch_run",
+                base: runnerBaseToTrackerBase(runnerBase),
+              }
+            : undefined);
         }
         return;
       }
@@ -6921,7 +6967,12 @@ export function GameTracker() {
         handlePitcherSubstitution(team, incomingName, outgoingName, "pitcher");
       } else {
         // Regular substitution (including pinch-hit for batting-side pitcher)
-        handleSubstitution(team, incomingName, outgoingName);
+        handleSubstitution(team, incomingName, outgoingName, runnerBase
+          ? {
+              subType: "pinch_run",
+              base: runnerBaseToTrackerBase(runnerBase),
+            }
+          : undefined);
 
         // R3-R8: If the outgoing player was the team's pitcher (batting side),
         // the pinch-hitter becomes the pending pitcher for next defensive half.
@@ -6992,17 +7043,15 @@ export function GameTracker() {
       anchorPosition: { left: string; top: string },
     ) => {
       setActiveFielderPopover(null); // Close any open fielder popover
-      const runnerName =
-        runnerNames[base] ||
-        `R${base === "first" ? "1" : base === "second" ? "2" : "3"}`;
+      const { runnerId, runnerName } = getRunnerIdentityForBase(base);
       setActiveRunnerPopover({
         base,
         runnerName,
-        playerId: getPlayerIdFromName(runnerName, battingTeam),
+        playerId: runnerId || "",
         anchorPosition,
       });
     },
-    [battingTeam, getPlayerIdFromName, runnerNames],
+    [getRunnerIdentityForBase],
   );
 
   const closeRunnerPopover = useCallback(() => {
@@ -9401,32 +9450,90 @@ export function GameTracker() {
            ═══════════════════════════════════════════════════════════════ */}
       <div className="flex flex-col overflow-hidden bg-[#6B9462] text-white" style={{ height: '100dvh' }}>
         {/* ROW 1: §3.1 ScoreBug (pinned top, single line) */}
-        <ScoreBug
-          awayTeamName={awayTeamName}
-          awayScore={scoreboard.away.runs}
-          homeTeamName={homeTeamName}
-          homeScore={scoreboard.home.runs}
-          stadiumName={resolvedStadiumName}
-          inning={gameState.inning}
-          isTop={gameState.isTop}
-          outs={gameState.outs}
-          bases={gameState.bases}
-          isManagerMoment={mwarHook.managerMoment.isTriggered}
-          isSaving={isSaving ? undefined : false}
-          gameSoundsOn={gameSoundsOn}
-          beatReporterSoundsOn={beatReporterSoundsOn}
-          onTap={() => setIsScoreboardExpanded((prev) => !prev)}
-          onToggleGameSounds={() => setGameSoundsOn((value) => !value)}
-          onToggleBeatReporter={() =>
-            setBeatReporterSoundsOn((value) => !value)
-          }
-          onManagerMomentTap={() => setShowManagerMomentPanel((prev) => !prev)}
-          onStayTheCourse={() => {
-            mwarHook.dismissManagerMoment();
-            setShowManagerMomentPanel(false);
-            void queuePlayLogRefresh(0);
-          }}
-        />
+        <div className="relative z-40">
+          <ScoreBug
+            awayTeamName={awayTeamName}
+            awayScore={scoreboard.away.runs}
+            homeTeamName={homeTeamName}
+            homeScore={scoreboard.home.runs}
+            stadiumName={resolvedStadiumName}
+            inning={gameState.inning}
+            isTop={gameState.isTop}
+            outs={gameState.outs}
+            bases={gameState.bases}
+            isManagerMoment={mwarHook.managerMoment.isTriggered}
+            isSaving={isSaving ? undefined : false}
+            gameSoundsOn={gameSoundsOn}
+            beatReporterSoundsOn={beatReporterSoundsOn}
+            onTap={() => setIsScoreboardExpanded((prev) => !prev)}
+            onToggleGameSounds={() => setGameSoundsOn((value) => !value)}
+            onToggleBeatReporter={() =>
+              setBeatReporterSoundsOn((value) => !value)
+            }
+            onManagerMomentTap={() => setShowManagerMomentPanel((prev) => !prev)}
+            onStayTheCourse={() => {
+              mwarHook.dismissManagerMoment();
+              setShowManagerMomentPanel(false);
+              void queuePlayLogRefresh(0);
+            }}
+          />
+          {deferredPitchCounts.length > 0 && (
+            <div className="absolute right-3 top-full mt-2 flex flex-col items-end gap-2">
+              <button
+                type="button"
+                onClick={() =>
+                  setShowDeferredPitchCountList((prev) => !prev)
+                }
+                className="border-[3px] border-[#8B5A18] bg-[#F0C36B] px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-[#2B1B08] shadow-[4px_4px_0px_0px_rgba(0,0,0,0.35)] transition-transform hover:-translate-y-px hover:bg-[#F6CD79]"
+              >
+                ! {deferredPitchCounts.length} pending pitch count
+                {deferredPitchCounts.length === 1 ? "" : "s"}
+              </button>
+              {showDeferredPitchCountList && (
+                <div className="w-[280px] border-[4px] border-[#8B5A18] bg-[#3B2A17] p-2 shadow-[6px_6px_0px_0px_rgba(0,0,0,0.45)]">
+                  <div className="mb-2 text-[9px] font-bold uppercase tracking-[0.18em] text-[#F0C36B]">
+                    Deferred Pitch Counts
+                  </div>
+                  <div className="space-y-2">
+                    {deferredPitchCounts.map((entry) => (
+                      <button
+                        key={`${entry.pitcherId}-${entry.timestamp}`}
+                        type="button"
+                        onClick={() => {
+                          setShowDeferredPitchCountList(false);
+                          openDeferredPitchCount(entry.pitcherId);
+                        }}
+                        className="w-full border-[3px] border-[#A56A1C] bg-[#5C3C16] px-3 py-2 text-left text-[#FFF3D8] transition-colors hover:bg-[#72491B]"
+                      >
+                        <div className="text-[10px] font-bold uppercase tracking-[0.08em]">
+                          {entry.pitcherName}
+                        </div>
+                        <div className="mt-1 text-[9px] text-[#FFD58A]">
+                          {entry.halfInning === "TOP" ? "Top" : "Bottom"}{" "}
+                          {entry.inning}, last known {entry.lastKnownCount}{" "}
+                          pitches
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+        {showManualEndHalfInningButton && (
+          <div className="shrink-0 bg-[#6B9462] px-3 pb-2">
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={forceEndHalfInning}
+                className="border-[4px] border-[#8B5A18] bg-[#F0C36B] px-4 py-2 text-[10px] font-bold uppercase tracking-[0.18em] text-[#2B1B08] shadow-[4px_4px_0px_0px_rgba(0,0,0,0.35)] transition-transform hover:-translate-y-px hover:bg-[#F6CD79]"
+              >
+                End Half-Inning →
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* ROW 2: 4-Column Content Area (§2.3 — 1fr 1fr 1fr 2fr) + §2.4 Expanded Scoreboard overlay */}
         <div className="min-h-0 flex-1 overflow-hidden relative">
@@ -11658,6 +11765,7 @@ interface PlayerCardModalProps {
     incomingName: string,
     isPitcher: boolean,
     incomingPosition?: string,
+    runnerBase?: RunnerBase,
   ) => void;
   benchPlayers?: PlayerCardBenchEntry[];
   bullpenPitchers?: Array<{ name: string; hand: string }>;
@@ -11707,7 +11815,7 @@ function StatCell({ value, label }: { value: string | number; label: string }) {
   );
 }
 
-function PlayerCardModal({
+export function PlayerCardModal({
   player,
   playerData,
   onClose,
@@ -11842,6 +11950,7 @@ function PlayerCardModal({
                       bp.name,
                       player.type === "pitcher",
                       bp.pos,
+                      runnerBase,
                     );
                     onClose();
                   }}

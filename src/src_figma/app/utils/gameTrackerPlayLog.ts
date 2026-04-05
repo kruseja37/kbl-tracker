@@ -112,7 +112,15 @@ const createBaseEntry = (
 
 type RunnerBaseKey = 'first' | 'second' | 'third';
 const RUNNER_BASES: RunnerBaseKey[] = ['first', 'second', 'third'];
-const HIT_RESULTS_WITH_OF_HOLD = new Set(['1B', '2B', '3B']);
+const RESULTS_WITH_HELD_RUNNER_SUB_ENTRIES = new Set([
+  '1B',
+  '2B',
+  '3B',
+  'FO',
+  'FLO',
+  'LO',
+  'SF',
+]);
 
 const formatRunnerBaseLabel = (fromBase: RunnerSubEntry['fromBase']): string =>
   fromBase === 'batter'
@@ -179,7 +187,7 @@ function inferHeldRunnerSubEntries(
   event: AtBatEvent,
   existingKeys: Set<string>,
 ): RunnerSubEntry[] {
-  if (!HIT_RESULTS_WITH_OF_HOLD.has(event.result)) {
+  if (!RESULTS_WITH_HELD_RUNNER_SUB_ENTRIES.has(event.result)) {
     return [];
   }
 
@@ -395,7 +403,12 @@ function buildRunnerSubEntries(event: AtBatEvent): RunnerSubEntry[] | undefined 
       toBase = event.outsAfter >= 3 ? 'end' : 'out';
     }
 
-    if (toBase === fromBase && !HIT_RESULTS.has(event.result)) continue;
+    if (
+      toBase === fromBase &&
+      !RESULTS_WITH_HELD_RUNNER_SUB_ENTRIES.has(event.result)
+    ) {
+      continue;
+    }
 
     subEntries.push({
       id: `${event.eventId}-runner-${idx}`,

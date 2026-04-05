@@ -59,6 +59,7 @@ import {
   addRunner as trackerAddRunner,
   advanceRunner as trackerAdvanceRunner,
   runnerOut as trackerRunnerOut,
+  handlePinchRunner,
   handlePitchingChange as trackerHandlePitchingChange,
   clearBases as trackerClearBases,
   nextInning as trackerNextInning,
@@ -335,6 +336,16 @@ export interface PitchCountPrompt {
   newPitcherId?: string;
 }
 
+export interface DeferredPitchCountEntry {
+  pitcherId: string;
+  pitcherName: string;
+  lastKnownCount: number;
+  inning: number;
+  halfInning: HalfInning;
+  timestamp: number;
+  promptType: PitchCountPrompt["type"];
+}
+
 export type EndGameTriggerReason =
   | "walkoff"
   | "home_ahead_after_top"
@@ -477,6 +488,7 @@ export interface UseGameStateReturn {
   ) => boolean;
   applyOutsAdjustment: (delta: number) => void;
   scheduleAutoEndInning: () => void;
+  forceEndHalfInning: () => void;
   setRunnerOutcomeCorrectionActive: (isActive: boolean) => void;
   adjustPlayerFieldingErrors: (playerId: string, delta: number) => void;
   queueAutoEndGame: () => void;
@@ -497,6 +509,8 @@ export interface UseGameStateReturn {
     finalCount: number,
   ) => { immaculateInning?: { pitcherId: string; pitcherName: string } };
   dismissPitchCountPrompt: () => void;
+  deferredPitchCounts: DeferredPitchCountEntry[];
+  openDeferredPitchCount: (pitcherId: string) => void;
 
   // Enrichment injection (Layer 1B)
   setNextEventEnrichment: (data: AtBatEvent["enrichment"]) => void;
@@ -2940,6 +2954,9 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
   // Pitch count prompt state (per PITCH_COUNT_TRACKING_SPEC.md)
   const [pitchCountPrompt, setPitchCountPrompt] =
     useState<PitchCountPrompt | null>(null);
+  const [deferredPitchCounts, setDeferredPitchCounts] = useState<
+    DeferredPitchCountEntry[]
+  >([]);
   const pendingActionRef = useRef<(() => Promise<void>) | null>(null);
   const pendingActionCancelRef = useRef<(() => void) | null>(null);
 
@@ -3082,6 +3099,23 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     },
     [cancelAutoEndGameFlow, evaluateEndGameTrigger, queueAutoEndGame],
   );
+
+  const deferPitchCountPrompt = useCallback((prompt: PitchCountPrompt) => {
+    const deferredEntry: DeferredPitchCountEntry = {
+      pitcherId: prompt.pitcherId,
+      pitcherName: prompt.pitcherName,
+      lastKnownCount: prompt.currentCount,
+      inning: prompt.lastVerifiedInning,
+      halfInning: gameStateRef.current.isTop ? "TOP" : "BOTTOM",
+      timestamp: Date.now(),
+      promptType: prompt.type,
+    };
+
+    setDeferredPitchCounts((prev) => [
+      ...prev.filter((entry) => entry.pitcherId !== prompt.pitcherId),
+      deferredEntry,
+    ]);
+  }, []);
 
   // T0-01: Regulation innings for auto game-end detection (default 9)
   const totalInningsRef = useRef<number>(9);
@@ -4324,7 +4358,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
             lastEvent?.pitcherId ?? trackerPitcherFallback?.playerId ?? "";
           const trackerPitcherName =
             lastEvent?.pitcherName ?? trackerPitcherFallback?.playerName ?? "";
-          const rebuiltTracker = createRunnerTrackingState(
+          let rebuiltTracker = createRunnerTrackingState(
             trackerPitcherId,
             trackerPitcherName,
           );
@@ -4487,6 +4521,32 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
                 event.pitcherChange.incomingPitcherId;
               rebuiltTracker.currentPitcherId = recoveredPitcherId;
               rebuiltTracker.currentPitcherName = recoveredPitcherName;
+            }
+
+            if (
+              event.type === "substitution" &&
+              event.substitution?.subType === "pinch_run"
+            ) {
+              const outgoingRunnerId = event.substitution.outPlayerId;
+              const incomingRunnerId = event.substitution.inPlayerId;
+              const incomingRunnerName =
+                event.substitution.inPlayerName || incomingRunnerId;
+              const activeOutgoingRunner = rebuiltTracker.runners.find(
+                (runner) =>
+                  runner.runnerId === outgoingRunnerId &&
+                  (runner.currentBase === "1B" ||
+                    runner.currentBase === "2B" ||
+                    runner.currentBase === "3B"),
+              );
+
+              if (activeOutgoingRunner) {
+                rebuiltTracker = handlePinchRunner(
+                  rebuiltTracker,
+                  outgoingRunnerId,
+                  incomingRunnerId,
+                  incomingRunnerName,
+                );
+              }
             }
           }
 
@@ -8372,9 +8432,12 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
           (r) => r.currentBase === trackerBase,
         );
         if (oldRunner) {
-          // Swap runner identity while preserving responsible pitcher
-          oldRunner.runnerId = benchPlayerId;
-          oldRunner.runnerName = benchPlayerName || benchPlayerId;
+          runnerTrackerRef.current = handlePinchRunner(
+            runnerTrackerRef.current,
+            oldRunner.runnerId,
+            benchPlayerId,
+            benchPlayerName || benchPlayerId,
+          );
           console.log(
             `[useGameState] T1-02: Pinch runner ${benchPlayerName} replaced ${lineupPlayerName} on ${trackerBase}`,
           );
@@ -8999,6 +9062,10 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         return newStats;
       });
 
+      setDeferredPitchCounts((prev) =>
+        prev.filter((entry) => entry.pitcherId !== pitcherId),
+      );
+
       console.log(
         `[useGameState] Pitch count confirmed: ${pitcherId} = ${finalCount} pitches`,
       );
@@ -9064,10 +9131,37 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     ],
   );
 
+  const openDeferredPitchCount = useCallback((pitcherId: string) => {
+    const deferredEntry = deferredPitchCounts.find(
+      (entry) => entry.pitcherId === pitcherId,
+    );
+
+    if (!deferredEntry) {
+      return;
+    }
+
+    setDeferredPitchCounts((prev) =>
+      prev.filter((entry) => entry.pitcherId !== pitcherId),
+    );
+    pendingActionRef.current = null;
+    pendingActionCancelRef.current = null;
+    setPitchCountPrompt({
+      type: deferredEntry.promptType,
+      pitcherId: deferredEntry.pitcherId,
+      pitcherName: deferredEntry.pitcherName,
+      currentCount: deferredEntry.lastKnownCount,
+      lastVerifiedInning: deferredEntry.inning,
+    });
+  }, [deferredPitchCounts]);
+
   // Dismiss pitch count prompt without confirming
   // For end_inning: still transitions the inning (just skips pitch count update)
   // For pitching_change/end_game: cancels the pending action
   const dismissPitchCountPrompt = useCallback(() => {
+    if (pitchCountPrompt) {
+      deferPitchCountPrompt(pitchCountPrompt);
+    }
+
     if (pitchCountPrompt?.type === "end_inning") {
       // Still execute the inning transition, just don't update pitch count
       const pendingAction = pendingActionRef.current;
@@ -9093,7 +9187,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       );
     }
     setPitchCountPrompt(null);
-  }, [pitchCountPrompt]);
+  }, [deferPitchCountPrompt, pitchCountPrompt]);
 
   // Internal function that performs the actual inning transition
   // Called after pitch count is confirmed by user
@@ -9266,6 +9360,16 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     setShowInningEndConfirm(false);
     isCorrectingRunnerOutcomesRef.current = true;
   }, []);
+
+  const forceEndHalfInning = useCallback(() => {
+    if (autoEndInningTimeoutRef.current) {
+      clearTimeout(autoEndInningTimeoutRef.current);
+      autoEndInningTimeoutRef.current = null;
+    }
+    setShowInningEndConfirm(false);
+    isCorrectingRunnerOutcomesRef.current = false;
+    endInning();
+  }, [endInning]);
 
   // Internal function to complete game after pitch counts confirmed
   const completeGameInternal = useCallback(
@@ -10434,11 +10538,32 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
   // Converts pitcherStats Map to serializable entries array
   const getRunnerTrackerSnapshot = useCallback(() => {
     const tracker = runnerTrackerRef.current;
+    const pitcherStatsEntries: [string, PitcherRunnerStats][] = Array.from(
+      tracker.pitcherStats.entries(),
+    ).map(
+      ([pitcherId, stats]): [string, PitcherRunnerStats] => [
+        pitcherId,
+        {
+          ...stats,
+          runnersOnBase: stats.runnersOnBase.map((runner) => ({ ...runner })),
+          runnersScored: stats.runnersScored.map((runner) => ({
+            ...runner,
+          })),
+          inheritedRunners: stats.inheritedRunners.map((runner) => ({
+            ...runner,
+          })),
+          inheritedRunnersScored: stats.inheritedRunnersScored.map((runner) => ({
+            ...runner,
+          })),
+        },
+      ],
+    );
+
     return {
-      runners: tracker.runners,
+      runners: tracker.runners.map((runner) => ({ ...runner })),
       currentPitcherId: tracker.currentPitcherId,
       currentPitcherName: tracker.currentPitcherName,
-      pitcherStatsEntries: Array.from(tracker.pitcherStats.entries()),
+      pitcherStatsEntries,
       inning: tracker.inning,
       atBatNumber: tracker.atBatNumber,
     };
@@ -10678,6 +10803,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     updateTrackedRunnerHowReached,
     applyOutsAdjustment,
     scheduleAutoEndInning,
+    forceEndHalfInning,
     setRunnerOutcomeCorrectionActive,
     adjustPlayerFieldingErrors,
     queueAutoEndGame,
@@ -10688,6 +10814,8 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     pitchCountPrompt,
     confirmPitchCount,
     dismissPitchCountPrompt,
+    deferredPitchCounts,
+    openDeferredPitchCount,
     initializeGame,
     loadExistingGame,
     undoLastAction,
