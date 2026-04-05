@@ -176,8 +176,8 @@ export const ENRICHMENT_CONFIG: Record<string, EnrichmentConfig> = {
   '3B': { spray: true,  sprayZones: 42, chase: true,  fieldingAttempt: true,  playMechanic: true,  contactType: true, modifiers: ['SEVEN_PLUS_PITCH_AB', 'KILLED_PITCHER', 'NUT_SHOT', 'BEAT_THROW'], hrDistance: false },
   GRD: { spray: true,  sprayZones: 42, chase: true,  fieldingAttempt: true,  playMechanic: true,  contactType: true, modifiers: ['SEVEN_PLUS_PITCH_AB', 'KILLED_PITCHER', 'NUT_SHOT', 'BEAT_THROW'], hrDistance: false },
   ITPHR:{ spray: true,  sprayZones: 42, chase: true,  fieldingAttempt: true,  playMechanic: true,  contactType: true, modifiers: ['SEVEN_PLUS_PITCH_AB', 'KILLED_PITCHER', 'NUT_SHOT', 'BEAT_THROW'], hrDistance: false },
-  // HR — §8.2: 7 dirs × 3 depths = 21
-  HR:  { spray: true,  sprayZones: 21, chase: true,  fieldingAttempt: true,  playMechanic: false, contactType: true, modifiers: ['SEVEN_PLUS_PITCH_AB'], hrDistance: true },
+  // HR — expanded to 9 dirs × 3 depths = 27 for easier tap targets with more detail
+  HR:  { spray: true,  sprayZones: 27, chase: true,  fieldingAttempt: true,  playMechanic: false, contactType: true, modifiers: ['SEVEN_PLUS_PITCH_AB'], hrDistance: true },
   // Sacrifices — no KP/NUT per §8.5
   SAC: { spray: true,  sprayZones: 42, chase: true,  fieldingAttempt: true,  playMechanic: true,  contactType: true, modifiers: ['SEVEN_PLUS_PITCH_AB'], hrDistance: false },
   SF:  { spray: true,  sprayZones: 27, chase: true,  fieldingAttempt: true,  playMechanic: true,  contactType: true, modifiers: ['SEVEN_PLUS_PITCH_AB'], hrDistance: false },
@@ -207,24 +207,24 @@ function getEnrichmentConfig(result: string): EnrichmentConfig {
 // ──────────────────────────────────────────────────────────────
 
 // §8.2: Zone layout configuration per result type
-// dirs = angular divisions, depths = radial bands, foul = extra foul zones
 interface SprayZoneLayout {
-  dirs: number;
-  depths: number;
-  foul: number;
+  fairDirs: number;
+  fairDepths: number;
+  foulRegions: number;
   /** Radial range [0..1] — 0 = home plate, 0.45 = IF boundary, 1.0 = fence */
   innerR: number;
   outerR: number;
+  fairLaneWeights?: number[];
 }
 
 const SPRAY_ZONE_LAYOUTS: Record<string, SprayZoneLayout> = {
-  HR:  { dirs: 7, depths: 3, foul: 0, innerR: 0.65, outerR: 1.0 },  // 21: beyond fence
-  GO:  { dirs: 6, depths: 3, foul: 0, innerR: 0.0,  outerR: 0.45 }, // 18: infield only
-  FO:  { dirs: 6, depths: 4, foul: 3, innerR: 0.4,  outerR: 1.0 },  // 27: OF + foul
-  FLO: { dirs: 6, depths: 4, foul: 3, innerR: 0.4,  outerR: 1.0 },  // 27: OF + foul
-  LO:  { dirs: 6, depths: 6, foul: 3, innerR: 0.2,  outerR: 1.0 },  // 39: OF + med/deep IF + foul
-  PO:  { dirs: 6, depths: 4, foul: 3, innerR: 0.0,  outerR: 0.55 }, // 27: IF + shallow OF + foul
-  DEFAULT: { dirs: 6, depths: 7, foul: 0, innerR: 0.0, outerR: 1.0 }, // 42: IF + OF (1B/2B/3B/E/ITPHR/GRD)
+  HR:  { fairDirs: 9, fairDepths: 3, foulRegions: 0, innerR: 0.65, outerR: 1.0, fairLaneWeights: [0.4, 0.62, 0.86, 1.02, 1.2, 1.02, 0.86, 0.62, 0.4] },  // 27: over-fence band
+  GO:  { fairDirs: 6, fairDepths: 3, foulRegions: 0, innerR: 0.0,  outerR: 0.45, fairLaneWeights: [0.42, 0.88, 1.2, 1.2, 0.88, 0.42] }, // 18: line-aware infield wedge
+  FO:  { fairDirs: 7, fairDepths: 3, foulRegions: 6, innerR: 0.4,  outerR: 1.0, fairLaneWeights: [0.34, 0.8, 1.08, 1.24, 1.08, 0.8, 0.34] },  // 21 fair + 6 foul
+  FLO: { fairDirs: 7, fairDepths: 3, foulRegions: 6, innerR: 0.4,  outerR: 1.0, fairLaneWeights: [0.34, 0.8, 1.08, 1.24, 1.08, 0.8, 0.34] },  // 21 fair + 6 foul
+  LO:  { fairDirs: 11, fairDepths: 3, foulRegions: 6, innerR: 0.2,  outerR: 1.0, fairLaneWeights: [0.24, 0.38, 0.58, 0.8, 0.98, 1.1, 0.98, 0.8, 0.58, 0.38, 0.24] }, // 33 fair + 6 foul
+  PO:  { fairDirs: 7, fairDepths: 3, foulRegions: 6, innerR: 0.0,  outerR: 0.55, fairLaneWeights: [0.34, 0.8, 1.08, 1.24, 1.08, 0.8, 0.34] }, // 21 fair/shallow + 6 foul
+  DEFAULT: { fairDirs: 6, fairDepths: 7, foulRegions: 0, innerR: 0.0, outerR: 1.0, fairLaneWeights: [0.42, 0.88, 1.2, 1.2, 0.88, 0.42] }, // 42: full fair wedge with line strips
 };
 
 function getZoneLayout(result: string): SprayZoneLayout {
@@ -235,34 +235,36 @@ function getZoneLayout(result: string): SprayZoneLayout {
   return SPRAY_ZONE_LAYOUTS.DEFAULT;
 }
 
-// Polar-to-cartesian for zone path generation
+// Polar-to-cartesian for spray region generation
 // Fan apex at (100, 115), full radius ≈ 110px
 const CX = 100;
 const CY = 115;
 const MAX_R = 110;
+const SVG_WIDTH = 200;
+const SVG_HEIGHT = 120;
 // Fan angular range: from ~228° to ~312° (centered on 270° = straight up)
 const FAN_START = (228 * Math.PI) / 180;
 const FAN_END = (312 * Math.PI) / 180;
+const LINE_FOUL_PAD = (18 * Math.PI) / 180;
+const NEAREST_REGION_EDGE_TOLERANCE = 1.5;
 
 function polarToXY(angle: number, radius: number): [number, number] {
   return [CX + radius * Math.cos(angle), CY + radius * Math.sin(angle)];
 }
 
-function buildZonePath(a1: number, a2: number, r1: number, r2: number): string {
-  const [x1, y1] = polarToXY(a1, r1);
-  const [x2, y2] = polarToXY(a2, r1);
-  const [x3, y3] = polarToXY(a2, r2);
-  const [x4, y4] = polarToXY(a1, r2);
-  const largeArc = Math.abs(a2 - a1) > Math.PI ? 1 : 0;
-  // Inner arc → line → outer arc → close
-  return `M ${x1} ${y1} A ${r1} ${r1} 0 ${largeArc} 1 ${x2} ${y2} L ${x3} ${y3} A ${r2} ${r2} 0 ${largeArc} 0 ${x4} ${y4} Z`;
+export interface SprayPoint {
+  x: number;
+  y: number;
 }
 
-interface ZoneData {
+export interface SprayRegion {
   id: string;
-  path: string;
-  centerX: number;
-  centerY: number;
+  polygon: SprayPoint[];
+  svgPoints: string;
+  center: SprayPoint;
+  storedZone?: string;
+  direction: Direction | null;
+  kind: 'fair' | 'foul-left' | 'foul-right' | 'behind-plate';
 }
 
 interface SpraySelection {
@@ -280,12 +282,142 @@ const FAIR_SPRAY_DIRECTIONS: Direction[] = [
   'Right',
 ];
 
-function getDirectionFromZone(zone: ZoneData): Direction | null {
-  if (zone.id === 'foul_l') return 'Foul-Left';
-  if (zone.id === 'foul_r') return 'Foul-Right';
-  if (zone.id === 'foul_c') return null;
+function svgToNormalizedPoint(point: { x: number; y: number }): SprayPoint {
+  return {
+    x: point.x / 2,
+    y: point.y / 1.2,
+  };
+}
 
-  let angle = Math.atan2(zone.centerY - CY, zone.centerX - CX);
+function normalizedToSvgPoint(point: SprayPoint): { x: number; y: number } {
+  return {
+    x: point.x * 2,
+    y: point.y * 1.2,
+  };
+}
+
+function polarToNormalizedPoint(angle: number, radius: number): SprayPoint {
+  const [x, y] = polarToXY(angle, radius);
+  return svgToNormalizedPoint({ x, y });
+}
+
+function buildArcPoints(angleStart: number, angleEnd: number, radius: number, steps = 4): SprayPoint[] {
+  if (steps <= 0) {
+    return [polarToNormalizedPoint(angleStart, radius)];
+  }
+
+  return Array.from({ length: steps + 1 }, (_, index) => {
+    const t = index / steps;
+    const angle = angleStart + ((angleEnd - angleStart) * t);
+    return polarToNormalizedPoint(angle, radius);
+  });
+}
+
+function buildRingSegmentPolygon(
+  angleStart: number,
+  angleEnd: number,
+  innerRadius: number,
+  outerRadius: number,
+  arcSteps = 5,
+): SprayPoint[] {
+  if (innerRadius <= 0.75) {
+    return [
+      svgToNormalizedPoint({ x: CX, y: CY }),
+      ...buildArcPoints(angleStart, angleEnd, outerRadius, arcSteps),
+    ];
+  }
+
+  return [
+    ...buildArcPoints(angleStart, angleEnd, innerRadius, arcSteps),
+    ...buildArcPoints(angleEnd, angleStart, outerRadius, arcSteps),
+  ];
+}
+
+function buildWeightedAngleBoundaries(layout: SprayZoneLayout): number[] {
+  const weights = layout.fairLaneWeights?.length === layout.fairDirs
+    ? layout.fairLaneWeights
+    : Array.from({ length: layout.fairDirs }, () => 1);
+  const totalWeight = weights.reduce((sum, weight) => sum + weight, 0);
+  const span = FAN_END - FAN_START;
+  const boundaries = [FAN_START];
+  let current = FAN_START;
+
+  weights.forEach((weight) => {
+    current += span * (weight / totalWeight);
+    boundaries.push(current);
+  });
+
+  boundaries[boundaries.length - 1] = FAN_END;
+  return boundaries;
+}
+
+function buildRadialBoundaries(innerRadius: number, outerRadius: number, segments: number): number[] {
+  return Array.from({ length: segments + 1 }, (_, index) => {
+    const t = index / segments;
+    return innerRadius + ((outerRadius - innerRadius) * t);
+  });
+}
+
+function buildSvgPointsString(points: SprayPoint[]): string {
+  return points
+    .map((point) => {
+      const svgPoint = normalizedToSvgPoint(point);
+      return `${svgPoint.x},${svgPoint.y}`;
+    })
+    .join(' ');
+}
+
+function getPolygonCenter(points: SprayPoint[]): SprayPoint {
+  const total = points.reduce(
+    (acc, point) => ({ x: acc.x + point.x, y: acc.y + point.y }),
+    { x: 0, y: 0 },
+  );
+
+  return {
+    x: total.x / points.length,
+    y: total.y / points.length,
+  };
+}
+
+function pointInPolygon(point: SprayPoint, vertices: SprayPoint[]): boolean {
+  let inside = false;
+  for (let i = 0, j = vertices.length - 1; i < vertices.length; j = i++) {
+    const xi = vertices[i].x;
+    const yi = vertices[i].y;
+    const xj = vertices[j].x;
+    const yj = vertices[j].y;
+
+    const intersects = ((yi > point.y) !== (yj > point.y)) &&
+      (point.x < ((xj - xi) * (point.y - yi)) / ((yj - yi) || Number.EPSILON) + xi);
+    if (intersects) inside = !inside;
+  }
+  return inside;
+}
+
+function distancePointToSegment(point: SprayPoint, start: SprayPoint, end: SprayPoint): number {
+  const dx = end.x - start.x;
+  const dy = end.y - start.y;
+  if (dx === 0 && dy === 0) {
+    return Math.hypot(point.x - start.x, point.y - start.y);
+  }
+
+  const t = Math.max(0, Math.min(1, ((point.x - start.x) * dx + (point.y - start.y) * dy) / (dx * dx + dy * dy)));
+  const projectedX = start.x + t * dx;
+  const projectedY = start.y + t * dy;
+  return Math.hypot(point.x - projectedX, point.y - projectedY);
+}
+
+function distanceToPolygonEdges(point: SprayPoint, polygon: SprayPoint[]): number {
+  let distance = Number.POSITIVE_INFINITY;
+  for (let index = 0; index < polygon.length; index += 1) {
+    const start = polygon[index];
+    const end = polygon[(index + 1) % polygon.length];
+    distance = Math.min(distance, distancePointToSegment(point, start, end));
+  }
+  return distance;
+}
+
+function getFairDirectionFromAngle(angle: number): Direction {
   if (angle < 0) angle += Math.PI * 2;
 
   const normalized = Math.min(
@@ -300,10 +432,180 @@ function getDirectionFromZone(zone: ZoneData): Direction | null {
   return FAIR_SPRAY_DIRECTIONS[index];
 }
 
-function getStoredSprayZone(zone: ZoneData, direction: Direction | null): string | undefined {
-  if (direction) return direction;
-  if (zone.id === 'foul_c') return 'Behind-Plate';
-  return undefined;
+function createSprayRegion(
+  id: string,
+  polygon: SprayPoint[],
+  storedZone: string | undefined,
+  direction: Direction | null,
+  kind: SprayRegion['kind'],
+): SprayRegion {
+  return {
+    id,
+    polygon,
+    svgPoints: buildSvgPointsString(polygon),
+    center: getPolygonCenter(polygon),
+    storedZone,
+    direction,
+    kind,
+  };
+}
+
+function generateFairRegions(layout: SprayZoneLayout): SprayRegion[] {
+  const angleBoundaries = buildWeightedAngleBoundaries(layout);
+  const radialBoundaries = buildRadialBoundaries(layout.innerR * MAX_R, layout.outerR * MAX_R, layout.fairDepths);
+  const regions: SprayRegion[] = [];
+
+  for (let laneIndex = 0; laneIndex < layout.fairDirs; laneIndex += 1) {
+    const angleStart = angleBoundaries[laneIndex];
+    const angleEnd = angleBoundaries[laneIndex + 1];
+    const direction = getFairDirectionFromAngle((angleStart + angleEnd) / 2);
+
+    for (let depthIndex = 0; depthIndex < layout.fairDepths; depthIndex += 1) {
+      const polygon = buildRingSegmentPolygon(
+        angleStart,
+        angleEnd,
+        radialBoundaries[depthIndex],
+        radialBoundaries[depthIndex + 1],
+      );
+      regions.push(
+        createSprayRegion(
+          `d${laneIndex}r${depthIndex}`,
+          polygon,
+          direction,
+          direction,
+          'fair',
+        ),
+      );
+    }
+  }
+
+  return regions;
+}
+
+function generateFoulRegions(layout: SprayZoneLayout): SprayRegion[] {
+  if (layout.foulRegions <= 0) {
+    return [];
+  }
+
+  const innerSvgRadius = layout.innerR * MAX_R;
+  const fairBandSize = ((layout.outerR - layout.innerR) * MAX_R) / layout.fairDepths;
+  const lineRadiusBoundaries = buildRadialBoundaries(
+    Math.max(8, innerSvgRadius + fairBandSize * 0.55),
+    innerSvgRadius + fairBandSize * 3.2,
+    2,
+  );
+  const leftAngles = [FAN_START - LINE_FOUL_PAD, FAN_START];
+  const rightAngles = [FAN_END, FAN_END + LINE_FOUL_PAD];
+  const backstopBaseY = svgToNormalizedPoint({ x: CX, y: CY }).y;
+  const backstopLeftPolygon: SprayPoint[] = [
+    { x: 50, y: backstopBaseY },
+    { x: 39, y: 96 },
+    { x: 42, y: 100 },
+    { x: 50, y: 100 },
+  ];
+  const backstopRightPolygon: SprayPoint[] = [
+    { x: 50, y: backstopBaseY },
+    { x: 61, y: 96 },
+    { x: 58, y: 100 },
+    { x: 50, y: 100 },
+  ];
+
+  return [
+    createSprayRegion(
+      'foul_l_near',
+      buildRingSegmentPolygon(leftAngles[0], leftAngles[1], lineRadiusBoundaries[0], lineRadiusBoundaries[1]),
+      'Foul-Left',
+      'Foul-Left',
+      'foul-left',
+    ),
+    createSprayRegion(
+      'foul_l_far',
+      buildRingSegmentPolygon(leftAngles[0], leftAngles[1], lineRadiusBoundaries[1], lineRadiusBoundaries[2]),
+      'Foul-Left',
+      'Foul-Left',
+      'foul-left',
+    ),
+    createSprayRegion(
+      'foul_r_near',
+      buildRingSegmentPolygon(rightAngles[0], rightAngles[1], lineRadiusBoundaries[0], lineRadiusBoundaries[1]),
+      'Foul-Right',
+      'Foul-Right',
+      'foul-right',
+    ),
+    createSprayRegion(
+      'foul_r_far',
+      buildRingSegmentPolygon(rightAngles[0], rightAngles[1], lineRadiusBoundaries[1], lineRadiusBoundaries[2]),
+      'Foul-Right',
+      'Foul-Right',
+      'foul-right',
+    ),
+    createSprayRegion(
+      'foul_c_left',
+      backstopLeftPolygon,
+      'Behind-Plate',
+      null,
+      'behind-plate',
+    ),
+    createSprayRegion(
+      'foul_c_right',
+      backstopRightPolygon,
+      'Behind-Plate',
+      null,
+      'behind-plate',
+    ),
+  ];
+}
+
+function generateSprayRegions(layout: SprayZoneLayout): SprayRegion[] {
+  return [
+    ...generateFairRegions(layout),
+    ...generateFoulRegions(layout),
+  ];
+}
+
+function findSprayRegionAtPoint(point: SprayPoint, regions: SprayRegion[]): SprayRegion | null {
+  return regions.find((region) => pointInPolygon(point, region.polygon)) ?? null;
+}
+
+function findNearestSprayRegion(point: SprayPoint, regions: SprayRegion[]): SprayRegion | null {
+  let nearestRegion: SprayRegion | null = null;
+  let nearestDistance = Number.POSITIVE_INFINITY;
+
+  regions.forEach((region) => {
+    const distance = distanceToPolygonEdges(point, region.polygon);
+    if (distance < nearestDistance) {
+      nearestDistance = distance;
+      nearestRegion = region;
+    }
+  });
+
+  if (!nearestRegion || nearestDistance > NEAREST_REGION_EDGE_TOLERANCE) {
+    return null;
+  }
+
+  return nearestRegion;
+}
+
+export function getSprayRegionsForResult(result?: string): SprayRegion[] {
+  return generateSprayRegions(getZoneLayout(result ?? ''));
+}
+
+export function resolveSprayRegionForPoint(
+  point: SprayPoint,
+  result?: string,
+  options?: { allowNearestFallback?: boolean },
+): SprayRegion | null {
+  const regions = getSprayRegionsForResult(result);
+  const exactRegion = findSprayRegionAtPoint(point, regions);
+  if (exactRegion) {
+    return exactRegion;
+  }
+
+  if (!options?.allowNearestFallback) {
+    return null;
+  }
+
+  return findNearestSprayRegion(point, regions);
 }
 
 function getPositionNumber(position: Position | null): number | null {
@@ -333,60 +635,6 @@ function toBaseOccupancy(event?: Pick<AtBatEvent, 'runners'> | null): BaseOccupa
   };
 }
 
-function generateZones(layout: SprayZoneLayout): ZoneData[] {
-  const zones: ZoneData[] = [];
-  const angularSpan = FAN_END - FAN_START;
-  const dirStep = angularSpan / layout.dirs;
-  const radialSpan = (layout.outerR - layout.innerR) * MAX_R;
-  const depthStep = radialSpan / layout.depths;
-  const innerPx = layout.innerR * MAX_R;
-
-  // Main zones: dirs × depths
-  for (let d = 0; d < layout.dirs; d++) {
-    const a1 = FAN_START + d * dirStep;
-    const a2 = FAN_START + (d + 1) * dirStep;
-    const aMid = (a1 + a2) / 2;
-
-    for (let r = 0; r < layout.depths; r++) {
-      const r1 = innerPx + r * depthStep;
-      const r2 = innerPx + (r + 1) * depthStep;
-      const rMid = (r1 + r2) / 2;
-      const [cx, cy] = polarToXY(aMid, rMid);
-      zones.push({
-        id: `d${d}r${r}`,
-        path: buildZonePath(a1, a2, r1, r2),
-        centerX: cx,
-        centerY: cy,
-      });
-    }
-  }
-
-  // Foul zones: 3 zones outside the foul lines (left, right, behind plate)
-  if (layout.foul > 0) {
-    const foulR1 = innerPx + depthStep;
-    const foulR2 = innerPx + depthStep * Math.min(3, layout.depths);
-    // Left foul (beyond LF foul line)
-    const lfFoulA1 = FAN_START - (15 * Math.PI) / 180;
-    const lfFoulA2 = FAN_START;
-    const [flCx, flCy] = polarToXY((lfFoulA1 + lfFoulA2) / 2, (foulR1 + foulR2) / 2);
-    zones.push({ id: 'foul_l', path: buildZonePath(lfFoulA1, lfFoulA2, foulR1, foulR2), centerX: flCx, centerY: flCy });
-    // Right foul (beyond RF foul line)
-    const rfFoulA1 = FAN_END;
-    const rfFoulA2 = FAN_END + (15 * Math.PI) / 180;
-    const [frCx, frCy] = polarToXY((rfFoulA1 + rfFoulA2) / 2, (foulR1 + foulR2) / 2);
-    zones.push({ id: 'foul_r', path: buildZonePath(rfFoulA1, rfFoulA2, foulR1, foulR2), centerX: frCx, centerY: frCy });
-    // Behind plate (foul popup)
-    const behindA1 = FAN_START - (8 * Math.PI) / 180;
-    const behindA2 = FAN_END + (8 * Math.PI) / 180;
-    const behindR1 = 2;
-    const behindR2 = innerPx > 5 ? innerPx : 15;
-    const [bCx, bCy] = polarToXY((behindA1 + behindA2) / 2, (behindR1 + behindR2) / 2);
-    zones.push({ id: 'foul_c', path: buildZonePath(behindA1, behindA2, behindR1, behindR2), centerX: bCx, centerY: bCy });
-  }
-
-  return zones;
-}
-
 function SprayGraphic({
   location,
   onTap,
@@ -398,38 +646,57 @@ function SprayGraphic({
   result?: string;
 }) {
   const layout = result ? getZoneLayout(result) : SPRAY_ZONE_LAYOUTS.DEFAULT;
-  const zones = useMemo(() => generateZones(layout), [layout]);
+  const regions = useMemo(() => generateSprayRegions(layout), [layout]);
+  const fairLaneAngles = useMemo(() => buildWeightedAngleBoundaries(layout), [layout]);
 
-  const handleZoneClick = useCallback((zone: ZoneData) => {
-    // Convert zone center from SVG coords (200×120) to 0-100 percentage space
-    const x = Math.round((zone.centerX / 200) * 100);
-    const y = Math.round((zone.centerY / 120) * 100);
-    const direction = getDirectionFromZone(zone);
+  const handleSvgClick = useCallback((e: React.MouseEvent<SVGSVGElement>) => {
+    const svg = e.currentTarget;
+
+    // Use the SVG coordinate transform matrix to correctly convert screen
+    // coordinates into viewBox coordinates.  This handles viewBox scaling,
+    // preserveAspectRatio centering, and any CSS transforms — the naive
+    // getBoundingClientRect() / width approach does NOT.
+    let svgX: number;
+    let svgY: number;
+    const ctm = typeof svg.getScreenCTM === 'function' ? svg.getScreenCTM() : null;
+    if (ctm && typeof svg.createSVGPoint === 'function') {
+      const pt = svg.createSVGPoint();
+      pt.x = e.clientX;
+      pt.y = e.clientY;
+      const svgPt = pt.matrixTransform(ctm.inverse());
+      svgX = svgPt.x;
+      svgY = svgPt.y;
+    } else {
+      // Fallback for environments where getScreenCTM is unavailable (e.g. jsdom)
+      const rect = svg.getBoundingClientRect();
+      svgX = ((e.clientX - rect.left) / rect.width) * SVG_WIDTH;
+      svgY = ((e.clientY - rect.top) / rect.height) * SVG_HEIGHT;
+    }
+
+    const normalizedPoint = svgToNormalizedPoint({ x: svgX, y: svgY });
+
+    const x = Math.round(Math.max(0, Math.min(100, normalizedPoint.x)));
+    const y = Math.round(Math.max(0, Math.min(100, normalizedPoint.y)));
+
+    // Best-effort zone inference — never gates whether the dot appears
+    const mappedRegion = resolveSprayRegionForPoint(
+      { x, y },
+      result,
+      { allowNearestFallback: true },
+    );
 
     onTap({
       x,
       y,
-      zone: getStoredSprayZone(zone, direction),
-      direction,
+      zone: mappedRegion?.storedZone,
+      direction: mappedRegion?.direction ?? null,
     });
-  }, [onTap]);
-
-  // Fallback: click anywhere on the field for free placement
-  const handleSvgClick = useCallback((e: React.MouseEvent<SVGSVGElement>) => {
-    // Only handle if clicking on the SVG background (not a zone)
-    if ((e.target as SVGElement).tagName === 'svg') {
-      const svg = e.currentTarget;
-      const rect = svg.getBoundingClientRect();
-      const x = Math.round(((e.clientX - rect.left) / rect.width) * 100);
-      const y = Math.round(((e.clientY - rect.top) / rect.height) * 100);
-      onTap({ x, y });
-    }
-  }, [onTap]);
+  }, [result, onTap]);
 
   return (
     <svg
       viewBox="0 0 200 120"
-      className="w-full h-[140px] cursor-crosshair bg-[#2a5a2d]/60 rounded border border-[#4a6a4a] touch-manipulation"
+      className="w-full h-[220px] cursor-crosshair bg-[#2a5a2d]/60 rounded border border-[#4a6a4a] touch-manipulation"
       onClick={handleSvgClick}
     >
       {/* Fan shape — outfield arc from LF foul line to RF foul line */}
@@ -461,35 +728,40 @@ function SprayGraphic({
         stroke="#88AA88"
         strokeWidth="0.8"
       />
-      {/* Zone sectors — clickable regions per §8.2 */}
-      {zones.map((zone) => (
-        <path
-          key={zone.id}
-          d={zone.path}
-          data-testid={`spray-zone-${zone.id}`}
-          fill={location && Math.abs(zone.centerX - location.x * 2) < 10 && Math.abs(zone.centerY - location.y * 1.2) < 8
-            ? '#f59e0b33'
-            : 'transparent'}
-          stroke="#3a5a3a"
-          strokeWidth="0.3"
-          className="cursor-pointer hover:fill-[#C4A853]/20"
-          onClick={(e) => { e.stopPropagation(); handleZoneClick(zone); }}
+      {/* Hidden polygon grid for zone inference — not interactive, kept for test hooks */}
+      {regions.map((region) => (
+        <polygon
+          key={region.id}
+          points={region.svgPoints}
+          data-testid={`spray-zone-${region.id}`}
+          fill="transparent"
+          stroke="none"
+          pointerEvents="none"
         />
       ))}
-      {/* Sector lines (6 directions: LF line, LF, LC, C, RC, RF line) */}
-      <line x1="100" y1="115" x2="15" y2="40" stroke="#4a6a4a" strokeWidth="0.3" />
-      <line x1="100" y1="115" x2="40" y2="25" stroke="#3a5a3a" strokeWidth="0.3" />
-      <line x1="100" y1="115" x2="65" y2="15" stroke="#3a5a3a" strokeWidth="0.3" />
-      <line x1="100" y1="115" x2="100" y2="5" stroke="#3a5a3a" strokeWidth="0.3" />
-      <line x1="100" y1="115" x2="135" y2="15" stroke="#3a5a3a" strokeWidth="0.3" />
-      <line x1="100" y1="115" x2="160" y2="25" stroke="#3a5a3a" strokeWidth="0.3" />
-      <line x1="100" y1="115" x2="185" y2="40" stroke="#4a6a4a" strokeWidth="0.3" />
+      {/* Fair-territory guide lines */}
+      {fairLaneAngles.map((angle, index) => {
+        const [x, y] = polarToXY(angle, MAX_R);
+        const isBoundary = index === 0 || index === fairLaneAngles.length - 1;
+        return (
+          <line
+            key={`sector-${index}`}
+            x1="100"
+            y1="115"
+            x2={x}
+            y2={y}
+            stroke={isBoundary ? '#4a6a4a' : '#3a5a3a'}
+            strokeWidth="0.3"
+            pointerEvents="none"
+          />
+        );
+      })}
       {/* Base markers */}
       <rect x="98" y="108" width="4" height="4" fill="#E8E8D8" rx="0.5" />
       <rect x="70" y="83" width="3" height="3" fill="#E8E8D8" rx="0.5" />
       <rect x="98" y="58" width="3" height="3" fill="#E8E8D8" rx="0.5" />
       <rect x="126" y="83" width="3" height="3" fill="#E8E8D8" rx="0.5" />
-      {/* Placed dot */}
+      {/* Placed dot — always at the exact tap point */}
       {location && (
         <circle cx={location.x * 2} cy={location.y * 1.2} r="4" fill="#f59e0b" stroke="#fff" strokeWidth="0.7" />
       )}

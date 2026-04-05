@@ -3,7 +3,13 @@ import 'fake-indexeddb/auto';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 
-import { ENRICHMENT_CONFIG, EnrichmentPanel, RunnerEnrichmentPanel } from '../../app/components/EnrichmentPanel';
+import {
+  ENRICHMENT_CONFIG,
+  EnrichmentPanel,
+  RunnerEnrichmentPanel,
+  getSprayRegionsForResult,
+  resolveSprayRegionForPoint,
+} from '../../app/components/EnrichmentPanel';
 import { inferAssistChain } from '../../app/utils/gameTrackerFieldTypes';
 import type { PlayLogEntry, RunnerSubEntry } from '../../app/utils/playLogTypes';
 import { PLAY_MECHANIC_OPTIONS } from '../../app/utils/fieldingPlayType';
@@ -103,6 +109,40 @@ function buildAtBatEvent(result: AtBatEvent['result']): AtBatEvent {
     version: 1,
     editHistory: [],
   };
+}
+
+function getSprayRegion(result: string, id: string) {
+  const region = getSprayRegionsForResult(result).find((candidate) => candidate.id === id);
+  if (!region) {
+    throw new Error(`Missing spray region ${id} for result ${result}`);
+  }
+  return region;
+}
+
+function mockSvgRect(svg: SVGSVGElement) {
+  vi.spyOn(svg, 'getBoundingClientRect').mockReturnValue({
+    x: 0,
+    y: 0,
+    left: 0,
+    top: 0,
+    right: 200,
+    bottom: 120,
+    width: 200,
+    height: 120,
+    toJSON: () => ({}),
+  } as DOMRect);
+}
+
+/** Click the spray SVG at the center of a given region. */
+function clickSvgAtRegion(container: HTMLElement, result: string, regionId: string) {
+  const svg = container.querySelector('svg');
+  if (!(svg instanceof SVGSVGElement)) throw new Error('Expected spray SVG');
+  mockSvgRect(svg);
+  const region = getSprayRegion(result, regionId);
+  fireEvent.click(svg, {
+    clientX: region.center.x * 2,
+    clientY: region.center.y * 1.2,
+  });
 }
 
 describe('EnrichmentPanel', () => {
@@ -285,11 +325,91 @@ describe('EnrichmentPanel', () => {
     expect(onUpdate).toHaveBeenCalledWith('fieldingPlayType', 'failed_robbery');
   });
 
+  test('renders expanded HR spray zones with 27 tappable regions', () => {
+    render(
+      <EnrichmentPanel
+        entry={buildEntry('HR')}
+        currentEnrichment={{}}
+        onUpdate={() => {}}
+        onClose={() => {}}
+      />
+    );
+
+    expect(document.querySelectorAll('[data-testid^="spray-zone-"]')).toHaveLength(27);
+    expect(ENRICHMENT_CONFIG.HR.sprayZones).toBe(27);
+  });
+
+  test('renders FO and PO spray charts with 27 zones including 6 foul sub-zones', () => {
+    const { unmount } = render(
+      <EnrichmentPanel
+        entry={buildEntry('FO')}
+        currentEnrichment={{}}
+        onUpdate={() => {}}
+        onClose={() => {}}
+      />
+    );
+
+    expect(document.querySelectorAll('[data-testid^="spray-zone-"]')).toHaveLength(27);
+    expect(document.querySelectorAll('[data-testid^="spray-zone-foul_"]')).toHaveLength(6);
+
+    unmount();
+
+    render(
+      <EnrichmentPanel
+        entry={buildEntry('PO')}
+        currentEnrichment={{}}
+        onUpdate={() => {}}
+        onClose={() => {}}
+      />
+    );
+
+    expect(document.querySelectorAll('[data-testid^="spray-zone-"]')).toHaveLength(27);
+    expect(document.querySelectorAll('[data-testid^="spray-zone-foul_"]')).toHaveLength(6);
+  });
+
+  test('renders LO spray chart with 39 zones including 6 foul sub-zones', () => {
+    render(
+      <EnrichmentPanel
+        entry={buildEntry('LO')}
+        currentEnrichment={{}}
+        onUpdate={() => {}}
+        onClose={() => {}}
+      />
+    );
+
+    expect(document.querySelectorAll('[data-testid^="spray-zone-"]')).toHaveLength(39);
+    expect(document.querySelectorAll('[data-testid^="spray-zone-foul_"]')).toHaveLength(6);
+  });
+
+  test('fair line-adjacent hit regions stay in fair buckets rather than foul buckets', () => {
+    const leftLineRegion = getSprayRegion('2B', 'd0r6');
+    const rightLineRegion = getSprayRegion('2B', 'd5r6');
+
+    expect(resolveSprayRegionForPoint(leftLineRegion.center, '2B')?.storedZone).toBe('Left');
+    expect(resolveSprayRegionForPoint(leftLineRegion.center, '2B')?.kind).toBe('fair');
+    expect(resolveSprayRegionForPoint(rightLineRegion.center, '2B')?.storedZone).toBe('Right');
+    expect(resolveSprayRegionForPoint(rightLineRegion.center, '2B')?.kind).toBe('fair');
+  });
+
+  test('HR layout exposes selectable LF pole, dead-center, and RF pole regions', () => {
+    expect(resolveSprayRegionForPoint(getSprayRegion('HR', 'd0r2').center, 'HR')?.storedZone).toBe('Left');
+    expect(resolveSprayRegionForPoint(getSprayRegion('HR', 'd4r2').center, 'HR')?.storedZone).toBe('Center');
+    expect(resolveSprayRegionForPoint(getSprayRegion('HR', 'd8r2').center, 'HR')?.storedZone).toBe('Right');
+  });
+
+  test('FO, PO, and LO expose selectable foul polygons on both lines and behind the plate', () => {
+    ['FO', 'PO', 'LO'].forEach((result) => {
+      expect(resolveSprayRegionForPoint(getSprayRegion(result, 'foul_l_near').center, result)?.storedZone).toBe('Foul-Left');
+      expect(resolveSprayRegionForPoint(getSprayRegion(result, 'foul_r_near').center, result)?.storedZone).toBe('Foul-Right');
+      expect(resolveSprayRegionForPoint(getSprayRegion(result, 'foul_c_left').center, result)?.storedZone).toBe('Behind-Plate');
+    });
+  });
+
   test('[M2-3-fix] selecting a spray zone infers the primary fielder and throw chain', () => {
     const onUpdate = vi.fn();
     const consoleLogSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
 
-    render(
+    const { container } = render(
       <EnrichmentPanel
         entry={buildEntry('GO')}
         currentEnrichment={{}}
@@ -298,7 +418,7 @@ describe('EnrichmentPanel', () => {
       />
     );
 
-    fireEvent.click(screen.getByTestId('spray-zone-d0r0'));
+    clickSvgAtRegion(container, 'GO', 'd0r0');
 
     expect(onUpdate).toHaveBeenCalledWith(
       'fieldLocation',
@@ -311,11 +431,131 @@ describe('EnrichmentPanel', () => {
     consoleLogSpy.mockRestore();
   });
 
+  test('maps expanded foul-zone taps back to the existing broad persistence buckets', () => {
+    const onUpdate = vi.fn();
+
+    const { container } = render(
+      <EnrichmentPanel
+        entry={buildEntry('FO')}
+        currentEnrichment={{}}
+        onUpdate={onUpdate}
+        onClose={() => {}}
+      />
+    );
+
+    clickSvgAtRegion(container, 'FO', 'foul_l_near');
+    clickSvgAtRegion(container, 'FO', 'foul_r_near');
+    clickSvgAtRegion(container, 'FO', 'foul_c_left');
+
+    expect(onUpdate).toHaveBeenCalledWith(
+      'fieldLocation',
+      expect.objectContaining({ zone: 'Foul-Left' })
+    );
+    expect(onUpdate).toHaveBeenCalledWith(
+      'fieldLocation',
+      expect.objectContaining({ zone: 'Foul-Right' })
+    );
+    expect(onUpdate).toHaveBeenCalledWith(
+      'fieldLocation',
+      expect.objectContaining({ zone: 'Behind-Plate' })
+    );
+  });
+
+  test('left and right foul zones still infer fielders while behind-plate foul zones do not', () => {
+    const onUpdate = vi.fn();
+
+    const { container } = render(
+      <EnrichmentPanel
+        entry={buildEntry('FO')}
+        currentEnrichment={{}}
+        onUpdate={onUpdate}
+        onClose={() => {}}
+      />
+    );
+
+    clickSvgAtRegion(container, 'FO', 'foul_l_near');
+    expect(onUpdate).toHaveBeenCalledWith('fieldingSequence', [7]);
+
+    clickSvgAtRegion(container, 'FO', 'foul_r_near');
+    expect(onUpdate).toHaveBeenCalledWith('fieldingSequence', [9]);
+
+    const fieldingSequenceCallCount = onUpdate.mock.calls.filter(
+      ([field]) => field === 'fieldingSequence'
+    ).length;
+
+    clickSvgAtRegion(container, 'FO', 'foul_c_left');
+
+    expect(
+      onUpdate.mock.calls.filter(([field]) => field === 'fieldingSequence')
+    ).toHaveLength(fieldingSequenceCallCount);
+  });
+
+  test('stores the actual click coordinates instead of snapping the selected point to a region center', () => {
+    const onUpdate = vi.fn();
+    const { container } = render(
+      <EnrichmentPanel
+        entry={buildEntry('2B')}
+        currentEnrichment={{}}
+        onUpdate={onUpdate}
+        onClose={() => {}}
+      />
+    );
+
+    // Click at a point squarely inside the left-field fair zone
+    clickSvgAtRegion(container, '2B', 'd0r6');
+    const region = getSprayRegion('2B', 'd0r6');
+    const expectedX = Math.round(region.center.x);
+    const expectedY = Math.round(region.center.y);
+
+    expect(onUpdate).toHaveBeenCalledWith(
+      'fieldLocation',
+      expect.objectContaining({ x: expectedX, y: expectedY, zone: 'Left' })
+    );
+  });
+
+  test('rehydrated saved locations render the dot at the saved coordinates', () => {
+    const region = getSprayRegion('2B', 'd0r6');
+    const savedX = Math.round(region.center.x);
+    const savedY = Math.round(region.center.y);
+
+    const { container } = render(
+      <EnrichmentPanel
+        entry={buildEntry('2B')}
+        currentEnrichment={{ fieldLocation: { x: savedX, y: savedY, zone: 'Left' } }}
+        onUpdate={() => {}}
+        onClose={() => {}}
+      />
+    );
+
+    const dot = container.querySelector('circle[fill="#f59e0b"]');
+    expect(dot).toBeTruthy();
+    expect(dot!.getAttribute('cx')).toBe(String(savedX * 2));
+    expect(dot!.getAttribute('cy')).toBe(String(savedY * 1.2));
+  });
+
+  test('coverage regression matrix resolves every region center and rejects out-of-bounds background points', () => {
+    ['GO', '2B', 'FO', 'PO', 'LO', 'HR'].forEach((result) => {
+      const regions = getSprayRegionsForResult(result);
+      regions.forEach((region) => {
+        expect(resolveSprayRegionForPoint(region.center, result)?.id).toBe(region.id);
+      });
+
+      [
+        { x: 2, y: 98 },
+        { x: 98, y: 98 },
+        { x: 2, y: 10 },
+      ].forEach((point) => {
+        expect(resolveSprayRegionForPoint(point, result)).toBeNull();
+        expect(resolveSprayRegionForPoint(point, result, { allowNearestFallback: true })).toBeNull();
+      });
+    });
+  });
+
   test('[M2-3-fix] primary fielder dropdown can override the inferred spray-zone selection', () => {
     const onUpdate = vi.fn();
     const consoleLogSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
 
-    render(
+    const { container } = render(
       <EnrichmentPanel
         entry={buildEntry('GO')}
         currentEnrichment={{}}
@@ -324,7 +564,7 @@ describe('EnrichmentPanel', () => {
       />
     );
 
-    fireEvent.click(screen.getByTestId('spray-zone-d0r0'));
+    clickSvgAtRegion(container, 'GO', 'd0r0');
     fireEvent.change(screen.getByRole('combobox', { name: 'Primary Fielder' }), {
       target: { value: '6' },
     });
