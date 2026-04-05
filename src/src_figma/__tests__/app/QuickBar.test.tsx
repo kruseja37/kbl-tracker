@@ -4,7 +4,7 @@ import { describe, expect, test, vi } from 'vitest';
 import { QuickBar } from '../../app/components/QuickBar';
 
 describe('QuickBar', () => {
-  test('shows SF as a primary live-game button', () => {
+  test('shows LO as a primary live-game button', () => {
     render(
       <QuickBar
         gamePhase="LIVE"
@@ -13,6 +13,6 @@ describe('QuickBar', () => {
       />,
     );
 
-    expect(screen.getByRole('button', { name: 'SF' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'LO' })).toBeInTheDocument();
   });
 });

@@ -28,11 +28,11 @@ interface QuickBarProps {
 }
 
 /** Quick Bar button config per §4.1 — primary row of outcome buttons */
-const PRIMARY_BUTTONS = ['K', 'Ꝁ', 'GO', 'FO', 'PO', 'BB', '1B', '2B', 'FC', 'HR'] as const;
+const PRIMARY_BUTTONS = ['K', 'Ꝁ', 'GO', 'FO', 'LO', 'PO', 'BB', '1B', '2B', 'FC', 'HR'] as const;
 
 /** Secondary outcomes shown in the overflow menu */
 const OVERFLOW_BUTTONS = [
-  'LO', 'FLO', 'SF', '3B', 'HBP', 'E', 'DP', 'TP',
+  'FLO', 'SF', '3B', 'HBP', 'E', 'DP', 'TP',
   'SAC', 'IBB', 'WP_K', 'PB_K', 'GRD', 'ITPHR',
 ] as const;
 

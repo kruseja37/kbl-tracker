@@ -1578,7 +1578,7 @@ export function GameTracker() {
   // REMOVED per Cleanup: Lineup overlay replaced by inline lineup columns (Step 1.C).
   // const [showLineupOverlay, setShowLineupOverlay] = useState(false);
   // const [lineupOverlayHint, setLineupOverlayHint] = useState<string | null>(null);
-  const [showTouchPlayReview, setShowTouchPlayReview] = useState(false);
+  // REMOVED: Touch play review panel eliminated — play log tap handles review.
   const [pendingManualSpecialPrompt, setPendingManualSpecialPrompt] =
     useState<PendingManualSpecialPrompt | null>(null);
   const [showManagerMomentPanel, setShowManagerMomentPanel] = useState(false);
@@ -9349,11 +9349,7 @@ export function GameTracker() {
   const prefersTouchPanels =
     typeof window !== "undefined" &&
     window.matchMedia("(pointer: coarse)").matches;
-  const touchReviewEntries = prefersTouchPanels
-    ? [...playLogEntries]
-        .reverse()
-        .filter((entry) => entry.isSelectable && entry.visibility === "default")
-    : [];
+  // touchReviewEntries removed — play log tap handles review.
 
   if (isLoading || !gameInitialized) {
     return (
@@ -9604,7 +9600,13 @@ export function GameTracker() {
             className="h-full"
             style={{
               display: "grid",
-              gridTemplateColumns: "1fr 1fr 1fr 2fr",
+              gridTemplateColumns:
+                enrichingEntry !== null ||
+                enrichingRunnerSubEntry !== null ||
+                (selectedPlayLogEntry !== null &&
+                  selectedPlayLogEntry.eventType !== "at_bat")
+                  ? "1fr 1fr 1fr 2.5fr"
+                  : "1fr 1fr 1fr 2fr",
               gap: "4px",
             }}
           >
@@ -9857,24 +9859,9 @@ export function GameTracker() {
               </div>
             )}
           </div>
-          {/* REMOVED per UX-022/Cleanup: LINEUP, +FLD, +MOD buttons removed.
+          {/* REMOVED per UX-022/Cleanup: LINEUP, +FLD, +MOD, REVIEW buttons removed.
              LINEUP replaced by inline lineup columns (Step 1.C).
-             +FLD/+MOD replaced by play log tap enrichment (Tier 2 Group 2.D).
-             REVIEW button kept for touch mode. */}
-          <div className="bg-[#2a3a2d] border-t-[3px] border-[#3d5240] flex items-center gap-1.5 px-2">
-            {prefersTouchPanels &&
-              touchReviewEntries.length > 0 &&
-              !pendingRunnerAttribution && (
-                <button
-                  onClick={() => setShowTouchPlayReview(true)}
-                  className="bg-[#2f3b21] border-[3px] border-[#5a6b38] px-3 py-2.5 text-[#E8E8D8] text-xs font-bold
-                           shadow-[2px_2px_0px_0px_rgba(0,0,0,0.5)] active:scale-95 transition-transform
-                           hover:bg-[#374728]"
-                >
-                  REVIEW
-                </button>
-              )}
-          </div>
+             +FLD/+MOD replaced by play log tap enrichment (Tier 2 Group 2.D). */}
         </div>
 
         {/* ══════════════════════════════════════════════════════════════
@@ -9885,59 +9872,7 @@ export function GameTracker() {
 
         {/* REMOVED per UX-022: Touch panel runner correction modal eliminated. */}
 
-        {prefersTouchPanels && showTouchPlayReview && (
-          <div className="fixed inset-0 z-40 bg-black/60 flex items-center justify-center p-4">
-            <div className="w-full max-w-[360px] max-h-[80vh] bg-[#2a3a2d] border-2 border-[#C4A853] shadow-[0_8px_24px_rgba(0,0,0,0.45)] flex flex-col">
-              <div className="flex items-center justify-between px-3 py-2 border-b border-[#4a6a4a] bg-[#1a2a1d]">
-                <div>
-                  <div className="text-[10px] font-bold text-[#E8E8D8]">
-                    Review Plays
-                  </div>
-                  <div className="text-[8px] text-[#88AA88]">
-                    Tap a recorded play to open its editor.
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setShowTouchPlayReview(false)}
-                  className="text-[8px] text-[#E8E8D8] bg-[#3d5240] border border-[#4a6a4a] px-2 py-1 rounded"
-                >
-                  Close
-                </button>
-              </div>
-              <div className="flex-1 overflow-y-auto p-2 space-y-1">
-                {touchReviewEntries.map((entry) => (
-                  <button
-                    key={`touch-review-${entry.id}`}
-                    type="button"
-                    className="w-full text-left rounded border border-[#4a6a4a] bg-[#334236] px-2 py-2 active:scale-[0.99]"
-                    onClick={() => {
-                      setShowTouchPlayReview(false);
-                      handleEntryTap(entry);
-                    }}
-                  >
-                    <div className="flex items-center gap-2">
-                      <span className="text-[9px] text-[#88AA88] font-mono w-[26px] flex-shrink-0">
-                        {entry.inningLabel}
-                      </span>
-                      <span className="text-[10px] text-[#E8E8D8] flex-1 truncate">
-                        {entry.batterName}
-                      </span>
-                      <span className="text-[10px] font-bold text-[#E8E8D8]">
-                        {entry.result}
-                      </span>
-                    </div>
-                    {entry.description && (
-                      <div className="ml-[28px] mt-1 text-[8px] text-[#88AA88]">
-                        {entry.description}
-                      </div>
-                    )}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-        )}
+        {/* Touch play review panel removed — play log tap handles review. */}
 
         {/* §5.3: Player Card Modal — real stats, sub out, swap position, mojo/fitness */}
         {selectedPlayer &&
