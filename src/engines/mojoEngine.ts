@@ -887,11 +887,11 @@ export function recalculateSplitRates(stats: MojoSplitStats): MojoSplitStats {
 export function getMojoColor(mojo: MojoLevel): string {
   const colors: Record<MojoLevel, string> = {
     [-2]: '#9F1239', // dark crimson (rattled)
-    [-1]: '#EF4444', // red (tense)
+    [-1]: '#7DD3FC', // light blue (tense)
     [0]: '#FFFFFF',  // white (normal)
     [1]: '#FFEB3B',  // yellow (locked in)
     [2]: '#FF9800',  // orange (on fire)
-    [3]: '#FFC107',  // amber/gold (jacked)
+    [3]: '#a855f7',  // purple (jacked)
   };
   return colors[mojo];
 }

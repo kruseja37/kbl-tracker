@@ -1,5 +1,5 @@
 import React from 'react';
-import type { MojoLevel } from '../../../engines/mojoEngine';
+import { getMojoColor, type MojoLevel } from '../../../engines/mojoEngine';
 import type { FitnessState } from '../../../engines/fitnessEngine';
 import { toFitnessLabel, toMojoLabel } from '../../../types/game';
 
@@ -39,16 +39,16 @@ interface BattingLineupColumnProps {
 // FITNESS_ABBREVIATIONS kept for reference but no longer rendered as text
 // Color-coded name styling replaces text indicators
 
-/** Get player name color based on mojo level — matches SMB4 in-game HUD colors */
-function getMojoNameColor(level: MojoLevel | undefined): string | undefined {
-  switch (level) {
-    case 3: return '#F2BF16';  // Jacked (best) — gold/yellow with upward arrow feel
-    case 2: return '#FF6B1A';  // On Fire — orange/flame
-    case 1: return '#22c55e';  // Locked In — green
-    case -1: return '#ef4444'; // Tense — red with downward feel
-    case -2: return '#cc0000'; // Rattled (worst) — deep red
-    default: return undefined; // Normal — use default color
+/** Get player name styles based on mojo level — use canonical palette for all defined states */
+function getMojoNameStyle(level: MojoLevel | undefined): React.CSSProperties | undefined {
+  if (level === undefined) {
+    return undefined;
   }
+
+  const color = getMojoColor(level);
+  return {
+    color,
+  };
 }
 
 // Fitness uses style-only (no colors) to avoid collision with mojo colors
@@ -132,7 +132,7 @@ export function BattingLineupColumn({
           const playerMojo = state?.mojo ?? getMojoForPlayer?.(player.playerId);
           const playerFitness = state?.fitness ?? getFitnessForPlayer?.(player.playerId);
           const mojoForControls = playerMojo ?? 0;
-          const nameColor = getMojoNameColor(playerMojo);
+          const mojoStyle = getMojoNameStyle(playerMojo);
           const fitnessStyle = getFitnessNameStyle(playerFitness);
 
           return (
@@ -167,7 +167,7 @@ export function BattingLineupColumn({
                   )}
                   <span
                     style={{
-                      ...(nameColor ? { color: nameColor, textShadow: `0 0 6px ${nameColor}` } : {}),
+                      ...mojoStyle,
                       ...fitnessStyle,
                     }}
                     title={[

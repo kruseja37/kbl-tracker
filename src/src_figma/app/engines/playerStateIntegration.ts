@@ -240,6 +240,10 @@ import { getMojoStatMultiplier, getMojoColor, getMojoEmoji } from '../../../engi
 import { getFitnessStatMultiplier, getFitnessColor, getFitnessEmoji } from '../../../engines/fitnessEngine';
 import { getClutchTier } from '../../../engines/clutchCalculator';
 
+function getMojoBadgeTextColor(level: MojoLevel): string {
+  return level < 0 ? '#ffffff' : '#000000';
+}
+
 /**
  * Combined player state for UI display
  */
@@ -411,13 +415,13 @@ export function getStateBadge(
     return { text: 'JUICED', color: '#ffffff', bgColor: '#a855f7' };
   }
   if (mojoLevel === 3) {
-    return { text: 'JACKED', color: '#ffffff', bgColor: '#FFC107' };
+    return { text: 'JACKED', color: getMojoBadgeTextColor(mojoLevel), bgColor: getMojoColor(mojoLevel) };
   }
   if (mojoLevel === 2) {
-    return { text: 'ON FIRE', color: '#ffffff', bgColor: '#FF9800' };
+    return { text: 'ON FIRE', color: getMojoBadgeTextColor(mojoLevel), bgColor: getMojoColor(mojoLevel) };
   }
   if (mojoLevel === -2) {
-    return { text: 'RATTLED', color: '#ffffff', bgColor: '#9F1239' };
+    return { text: 'RATTLED', color: getMojoBadgeTextColor(mojoLevel), bgColor: getMojoColor(mojoLevel) };
   }
   if (fitnessState === 'WEAK') {
     return { text: 'WEAK', color: '#ffffff', bgColor: '#f97316' };
@@ -426,10 +430,10 @@ export function getStateBadge(
     return { text: 'STRAINED', color: '#000000', bgColor: '#eab308' };
   }
   if (mojoLevel === 1) {
-    return { text: 'HOT', color: '#000000', bgColor: '#FFEB3B' };
+    return { text: 'HOT', color: getMojoBadgeTextColor(mojoLevel), bgColor: getMojoColor(mojoLevel) };
   }
   if (mojoLevel === -1) {
-    return { text: 'COLD', color: '#ffffff', bgColor: '#EF4444' };
+    return { text: 'COLD', color: getMojoBadgeTextColor(mojoLevel), bgColor: getMojoColor(mojoLevel) };
   }
 
   // Default: no badge needed
@@ -448,19 +452,19 @@ export function getMultiplierIndicator(
   const combined = mojoMult * fitnessMult;
 
   if (combined >= 1.3) {
-    return { symbol: '⬆⬆', color: '#16a34a', value: combined };
+    return { symbol: '⬆⬆', color: getMojoColor(3), value: combined };
   }
   if (combined >= 1.1) {
-    return { symbol: '⬆', color: '#22c55e', value: combined };
+    return { symbol: '⬆', color: getMojoColor(1), value: combined };
   }
   if (combined <= 0.7) {
-    return { symbol: '⬇⬇', color: '#dc2626', value: combined };
+    return { symbol: '⬇⬇', color: getMojoColor(-2), value: combined };
   }
   if (combined <= 0.9) {
-    return { symbol: '⬇', color: '#f97316', value: combined };
+    return { symbol: '⬇', color: getMojoColor(-1), value: combined };
   }
 
-  return { symbol: '', color: '#6b7280', value: combined };
+  return { symbol: '', color: getMojoColor(0), value: combined };
 }
 
 /**

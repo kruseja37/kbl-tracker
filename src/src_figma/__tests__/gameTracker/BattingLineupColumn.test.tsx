@@ -2,6 +2,7 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, test, vi } from 'vitest';
 
 import { BattingLineupColumn } from '../../app/components/BattingLineupColumn';
+import { getMojoColor } from '../../../engines/mojoEngine';
 
 const baseProps = {
   players: [
@@ -62,5 +63,18 @@ describe('BattingLineupColumn', () => {
     expect(
       screen.getByRole('button', { name: 'Decrease mojo for Away Starter' }),
     ).not.toBeDisabled();
+  });
+
+  test('uses the canonical mojo palette for normal-state lineup names', () => {
+    render(
+      <BattingLineupColumn
+        {...baseProps}
+        playerStates={{ 'away-1': { mojo: 0, fitness: 'FIT' } }}
+      />,
+    );
+
+    expect(screen.getByText('Away Starter')).toHaveStyle({
+      color: getMojoColor(0),
+    });
   });
 });

@@ -74,6 +74,7 @@ Current priorities:
 | fWAR/pWAR show "—" | Deferred | Wire WAR calculation pipeline to lineup column display |
 | Defensive next-inning leadoff | Simplified | Cross-half-inning batter tracking needs refinement |
 | Manager moment detection | Infrastructure only | leverageIndex > 2.0 threshold trigger not wired (Ⓜ ready) |
+| Mojo state font colors not rendering | RESOLVED | Root cause: BattingLineupColumn.tsx and DefensiveLineupColumn.tsx had hardcoded old mojo palettes bypassing getMojoColor(). Fixed by Codex — both columns now use canonical engine color map. Regression tests added. |
 
 ---
 

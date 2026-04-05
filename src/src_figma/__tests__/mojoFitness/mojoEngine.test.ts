@@ -914,7 +914,7 @@ describe('Display Helpers', () => {
 
     test('On Fire is orange and Jacked is amber/gold', () => {
       expect(getMojoColor(2)).toBe('#FF9800');
-      expect(getMojoColor(3)).toBe('#FFC107');
+      expect(getMojoColor(3)).toBe('#a855f7');
     });
   });
 

@@ -335,6 +335,17 @@ export interface PitchCountPrompt {
   newPitcherId?: string;
 }
 
+export type EndGameTriggerReason =
+  | "walkoff"
+  | "home_ahead_after_top"
+  | "final_inning_complete";
+
+export interface EndGameTriggerEvaluation {
+  shouldEndGame: boolean;
+  reason: EndGameTriggerReason | null;
+  isWalkOff: boolean;
+}
+
 export interface UseGameStateReturn {
   // Game state
   gameState: GameState;
@@ -469,6 +480,15 @@ export interface UseGameStateReturn {
   setRunnerOutcomeCorrectionActive: (isActive: boolean) => void;
   adjustPlayerFieldingErrors: (playerId: string, delta: number) => void;
   queueAutoEndGame: () => void;
+  evaluateEndGameTrigger: (params: {
+    inning: number;
+    isTop: boolean;
+    homeScoreBefore: number;
+    awayScoreBefore: number;
+    homeScoreAfter: number;
+    awayScoreAfter: number;
+    context: "live_play" | "half_inning_end";
+  }) => EndGameTriggerEvaluation;
 
   // Pitch count prompts (per PITCH_COUNT_TRACKING_SPEC.md)
   pitchCountPrompt: PitchCountPrompt | null;
@@ -662,6 +682,63 @@ function getFallbackSeasonNumber(
   }
   if (!scopeId) return 1;
   return parseSeasonNumberFromId(scopeId);
+}
+
+export function evaluateEndGameTriggerWithTotalInnings(params: {
+  inning: number;
+  isTop: boolean;
+  homeScoreBefore: number;
+  awayScoreBefore: number;
+  homeScoreAfter: number;
+  awayScoreAfter: number;
+  totalInnings: number;
+  context: "live_play" | "half_inning_end";
+}): EndGameTriggerEvaluation {
+  const {
+    inning,
+    isTop,
+    homeScoreBefore,
+    awayScoreBefore,
+    homeScoreAfter,
+    awayScoreAfter,
+    totalInnings,
+    context,
+  } = params;
+
+  if (inning < totalInnings) {
+    return { shouldEndGame: false, reason: null, isWalkOff: false };
+  }
+
+  if (context === "live_play") {
+    const isWalkOff =
+      !isTop &&
+      homeScoreAfter > awayScoreAfter &&
+      homeScoreBefore <= awayScoreBefore;
+
+    return {
+      shouldEndGame: isWalkOff,
+      reason: isWalkOff ? "walkoff" : null,
+      isWalkOff,
+    };
+  }
+
+  if (isTop && homeScoreAfter > awayScoreAfter) {
+    return {
+      shouldEndGame: true,
+      reason: "home_ahead_after_top",
+      isWalkOff: false,
+    };
+  }
+
+  if (!isTop && homeScoreAfter !== awayScoreAfter) {
+    return {
+      shouldEndGame: true,
+      reason: "final_inning_complete",
+      isWalkOff: false,
+    };
+  }
+
+  return { shouldEndGame: false, reason: null, isWalkOff: false };
 }
 
 // ============================================
@@ -1996,6 +2073,9 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
   const autoEndInningTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
     null,
   );
+  const autoEndGameTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
   // T0-01: Auto game-end detection prompt
   const [showInningEndConfirm, setShowInningEndConfirm] = useState(false);
   const [showAutoEndPrompt, setShowAutoEndPrompt] = useState(false);
@@ -2104,10 +2184,15 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     seasonNumber: 1,
     gamePhase: "PRE_GAME",
   });
+  const gameStateRef = useRef(gameState);
 
   const [scoreboard, setScoreboard] = useState<ScoreboardState>(
     createEmptyScoreboardState,
   );
+
+  useEffect(() => {
+    gameStateRef.current = gameState;
+  }, [gameState]);
 
   useEffect(() => {
     betweenPlayOrdinalRef.current = 0;
@@ -2588,6 +2673,10 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
           : null,
       };
 
+      // Infer DH status from starting lineups (mirrors initializeGame logic)
+      awayUsesDhRef.current = awayStarters.some((p) => p.position === "DH");
+      homeUsesDhRef.current = homeStarters.some((p) => p.position === "DH");
+
       for (const player of awayStarters)
         registerIdentityForSide(player.playerId, player.playerName, "away");
       for (const player of homeStarters)
@@ -2891,19 +2980,108 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
   }, [showInningEndConfirm]);
 
   const queueAutoEndGame = useCallback(() => {
-    if (autoEndGameQueuedRef.current) {
+    if (
+      autoEndGameQueuedRef.current ||
+      autoEndGameTimeoutRef.current ||
+      gameStateRef.current.gamePhase === "POST_FINAL_OUT"
+    ) {
       return;
     }
     autoEndGameQueuedRef.current = true;
+    gameStateRef.current = {
+      ...gameStateRef.current,
+      gamePhase: "POST_FINAL_OUT",
+    };
     setGameState((prev) => ({
       ...prev,
       gamePhase: "POST_FINAL_OUT",
     }));
-    setTimeout(() => {
+    autoEndGameTimeoutRef.current = setTimeout(() => {
       autoEndGameQueuedRef.current = false;
+      autoEndGameTimeoutRef.current = null;
       setShowAutoEndPrompt(true);
     }, 300);
   }, []);
+
+  const cancelAutoEndGameFlow = useCallback(() => {
+    autoEndGameQueuedRef.current = false;
+    if (autoEndGameTimeoutRef.current) {
+      clearTimeout(autoEndGameTimeoutRef.current);
+      autoEndGameTimeoutRef.current = null;
+    }
+    setShowAutoEndPrompt(false);
+    if (gameStateRef.current.gamePhase !== "POST_FINAL_OUT") {
+      return;
+    }
+    gameStateRef.current = {
+      ...gameStateRef.current,
+      gamePhase: "LIVE",
+    };
+    setGameState((prev) =>
+      prev.gamePhase === "POST_FINAL_OUT"
+        ? {
+            ...prev,
+            gamePhase: "LIVE",
+          }
+        : prev,
+    );
+  }, []);
+
+  const evaluateEndGameTrigger = useCallback(
+    (params: {
+      inning: number;
+      isTop: boolean;
+      homeScoreBefore: number;
+      awayScoreBefore: number;
+      homeScoreAfter: number;
+      awayScoreAfter: number;
+      context: "live_play" | "half_inning_end";
+    }) =>
+      evaluateEndGameTriggerWithTotalInnings({
+        ...params,
+        totalInnings: totalInningsRef.current,
+      }),
+    [],
+  );
+
+  const reconcileEndGameAfterCorrection = useCallback(
+    (params: {
+      inning: number;
+      isTop: boolean;
+      outs: number;
+      homeScoreBefore: number;
+      awayScoreBefore: number;
+      homeScoreAfter: number;
+      awayScoreAfter: number;
+      gamePhase: GamePhase;
+    }) => {
+      const context: "live_play" | "half_inning_end" =
+        params.outs >= 3 ? "half_inning_end" : "live_play";
+      const evaluation = evaluateEndGameTrigger({
+        inning: params.inning,
+        isTop: params.isTop,
+        homeScoreBefore: params.homeScoreBefore,
+        awayScoreBefore: params.awayScoreBefore,
+        homeScoreAfter: params.homeScoreAfter,
+        awayScoreAfter: params.awayScoreAfter,
+        context,
+      });
+
+      if (evaluation.shouldEndGame) {
+        if (params.gamePhase === "LIVE") {
+          queueAutoEndGame();
+        }
+        return evaluation;
+      }
+
+      if (params.gamePhase === "POST_FINAL_OUT") {
+        cancelAutoEndGameFlow();
+      }
+
+      return evaluation;
+    },
+    [cancelAutoEndGameFlow, evaluateEndGameTrigger, queueAutoEndGame],
+  );
 
   // T0-01: Regulation innings for auto game-end detection (default 9)
   const totalInningsRef = useRef<number>(9);
@@ -4955,24 +5133,23 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       setRunnerIdentityVersion((v) => v + 1);
 
       const leverageIndex = getCurrentLeverageIndex();
-
-      // Detect walk-off: home team batting in bottom of regulation-or-later and takes the lead
-      const isBottom = !gameState.isTop;
-      const isLateGame = gameState.inning >= totalInningsRef.current;
-      const homeScoreAfter = isBottom
-        ? gameState.homeScore + runsScored
-        : gameState.homeScore;
+      const homeScoreAfter = gameState.isTop
+        ? gameState.homeScore
+        : gameState.homeScore + runsScored;
       const awayScoreAfter = gameState.isTop
         ? gameState.awayScore + runsScored
         : gameState.awayScore;
-      const isWalkOff =
-        isBottom &&
-        isLateGame &&
-        homeScoreAfter > awayScoreAfter &&
-        gameState.homeScore <= gameState.awayScore;
+      const endGameEvaluation = evaluateEndGameTrigger({
+        inning: gameState.inning,
+        isTop: gameState.isTop,
+        homeScoreBefore: gameState.homeScore,
+        awayScoreBefore: gameState.awayScore,
+        homeScoreAfter,
+        awayScoreAfter,
+        context: "live_play",
+      });
 
-      // Trigger walk-off end-game immediately when winning run scores
-      if (isWalkOff) {
+      if (endGameEvaluation.shouldEndGame) {
         queueAutoEndGame();
       }
 
@@ -5066,12 +5243,8 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         homeScore: gameState.homeScore,
         outsAfter: gameState.outs,
         runnersAfter: buildRunnersAfter(tracker),
-        awayScoreAfter: gameState.isTop
-          ? gameState.awayScore + runsScored
-          : gameState.awayScore,
-        homeScoreAfter: gameState.isTop
-          ? gameState.homeScore
-          : gameState.homeScore + runsScored,
+        awayScoreAfter,
+        homeScoreAfter,
         runnerOutcomes: buildEventRunnerOutcomes(
           trackerBeforePlay,
           gameState.bases,
@@ -5117,7 +5290,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
           !gameState.bases.second &&
           !gameState.bases.third,
         isClutch,
-        isWalkOff,
+        isWalkOff: endGameEvaluation.isWalkOff,
         ...buildContextSnapshot(mapAtBatResultFromHit(hitType), pitchCount),
       };
 
@@ -5266,8 +5439,10 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       advanceToNextBatter,
       atBatSequence,
       creditFieldingOutsToPositions,
+      evaluateEndGameTrigger,
       gameState,
       getCurrentLeverageIndex,
+      queueAutoEndGame,
     ],
   );
 
@@ -5488,6 +5663,21 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       const runsInvalidated =
         runsInvalidatedByThirdOutRule || options?.forceNoRuns === true;
       const runsScored = runsInvalidated ? 0 : rawRunsScored;
+      const homeScoreAfter = gameState.isTop
+        ? gameState.homeScore
+        : gameState.homeScore + runsScored;
+      const awayScoreAfter = gameState.isTop
+        ? gameState.awayScore + runsScored
+        : gameState.awayScore;
+      const endGameEvaluation = evaluateEndGameTrigger({
+        inning: gameState.inning,
+        isTop: gameState.isTop,
+        homeScoreBefore: gameState.homeScore,
+        awayScoreBefore: gameState.awayScore,
+        homeScoreAfter,
+        awayScoreAfter,
+        context: "live_play",
+      });
       const rbiCount = runsInvalidated
         ? 0
         : calculateRBIs(
@@ -5541,12 +5731,8 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
           newOuts >= 3
             ? { first: null, second: null, third: null }
             : buildRunnersAfter(outTracker),
-        awayScoreAfter: gameState.isTop
-          ? gameState.awayScore + runsScored
-          : gameState.awayScore,
-        homeScoreAfter: gameState.isTop
-          ? gameState.homeScore
-          : gameState.homeScore + runsScored,
+        awayScoreAfter,
+        homeScoreAfter,
         runnerOutcomes: buildEventRunnerOutcomes(
           trackerBeforePlay,
           gameState.bases,
@@ -5597,9 +5783,13 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
           !gameState.bases.second &&
           !gameState.bases.third,
         isClutch,
-        isWalkOff: false, // Outs never cause walk-offs
+        isWalkOff: endGameEvaluation.isWalkOff,
         ...buildContextSnapshot(effectiveResult, pitchCount),
       };
+
+      if (endGameEvaluation.shouldEndGame) {
+        queueAutoEndGame();
+      }
 
       await logAtBatEvent(event);
       pendingEnrichmentRef.current = undefined;
@@ -5683,6 +5873,24 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         });
       }
 
+      if (
+        evaluateEndGameTrigger({
+          inning: gameState.inning,
+          isTop: gameState.isTop,
+          homeScoreBefore: gameState.homeScore,
+          awayScoreBefore: gameState.awayScore,
+          homeScoreAfter: gameState.isTop
+            ? gameState.homeScore
+            : gameState.homeScore + runsScored,
+          awayScoreAfter: gameState.isTop
+            ? gameState.awayScore + runsScored
+            : gameState.awayScore,
+          context: "live_play",
+        }).shouldEndGame
+      ) {
+        queueAutoEndGame();
+      }
+
       // Update game state (including bases from runnerData)
       setGameState((prev) => {
         // Start with current bases (runners don't automatically clear on outs)
@@ -5742,8 +5950,10 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       advanceToNextBatter,
       atBatSequence,
       creditFieldingOutsToPositions,
+      evaluateEndGameTrigger,
       gameState,
       getCurrentLeverageIndex,
+      queueAutoEndGame,
       scheduleAutoEndInning,
     ],
   );
@@ -5816,21 +6026,23 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
 
       const leverageIndex = getCurrentLeverageIndex();
 
-      // Detect walk-off: home team batting in bottom of regulation-or-later with bases loaded walk taking lead
-      const isBottom = !gameState.isTop;
-      const isLateGame = gameState.inning >= totalInningsRef.current;
-      const homeScoreAfter = isBottom
-        ? gameState.homeScore + runsScored
-        : gameState.homeScore;
-      const isWalkOff =
-        isBottom &&
-        isLateGame &&
-        basesLoaded &&
-        homeScoreAfter > gameState.awayScore &&
-        gameState.homeScore <= gameState.awayScore;
+      const homeScoreAfter = gameState.isTop
+        ? gameState.homeScore
+        : gameState.homeScore + runsScored;
+      const awayScoreAfter = gameState.isTop
+        ? gameState.awayScore + runsScored
+        : gameState.awayScore;
+      const endGameEvaluation = evaluateEndGameTrigger({
+        inning: gameState.inning,
+        isTop: gameState.isTop,
+        homeScoreBefore: gameState.homeScore,
+        awayScoreBefore: gameState.awayScore,
+        homeScoreAfter,
+        awayScoreAfter,
+        context: "live_play",
+      });
 
-      // Trigger walk-off end-game immediately when winning run scores
-      if (isWalkOff) {
+      if (endGameEvaluation.shouldEndGame) {
         queueAutoEndGame();
       }
 
@@ -5891,12 +6103,8 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         homeScore: gameState.homeScore,
         outsAfter: gameState.outs,
         runnersAfter: buildRunnersAfter(walkTracker),
-        awayScoreAfter: gameState.isTop
-          ? gameState.awayScore + runsScored
-          : gameState.awayScore,
-        homeScoreAfter: isBottom
-          ? homeScoreAfter
-          : gameState.homeScore + runsScored,
+        awayScoreAfter,
+        homeScoreAfter,
         runnerOutcomes: buildEventRunnerOutcomes(
           trackerBeforePlay,
           gameState.bases,
@@ -5924,12 +6132,8 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
                 second: !!rAfter.second,
                 third: !!rAfter.third,
               },
-              homeScore: isBottom
-                ? gameState.homeScore + runsScored
-                : gameState.homeScore,
-              awayScore: gameState.isTop
-                ? gameState.awayScore + runsScored
-                : gameState.awayScore,
+              homeScore: homeScoreAfter,
+              awayScore: awayScoreAfter,
             },
           );
         })(),
@@ -5937,7 +6141,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         fameEvents: [],
         isLeadoff: false,
         isClutch,
-        isWalkOff,
+        isWalkOff: endGameEvaluation.isWalkOff,
         ...buildContextSnapshot(mapAtBatResultFromWalk(walkType), pitchCount),
       };
 
@@ -6036,7 +6240,14 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       advanceToNextBatter();
       setLastSavedAt(Date.now());
     },
-    [advanceToNextBatter, atBatSequence, gameState, getCurrentLeverageIndex],
+    [
+      advanceToNextBatter,
+      atBatSequence,
+      evaluateEndGameTrigger,
+      gameState,
+      getCurrentLeverageIndex,
+      queueAutoEndGame,
+    ],
   );
 
   /**
@@ -6082,6 +6293,21 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         runnerData?.fromSecond,
         runnerData?.fromThird,
       ].filter((destination) => destination === "home").length;
+      const homeScoreAfter = gameState.isTop
+        ? gameState.homeScore
+        : gameState.homeScore + runsScored;
+      const awayScoreAfter = gameState.isTop
+        ? gameState.awayScore + runsScored
+        : gameState.awayScore;
+      const endGameEvaluation = evaluateEndGameTrigger({
+        inning: gameState.inning,
+        isTop: gameState.isTop,
+        homeScoreBefore: gameState.homeScore,
+        awayScoreBefore: gameState.awayScore,
+        homeScoreAfter,
+        awayScoreAfter,
+        context: "live_play",
+      });
 
       // Update runner tracker BEFORE event creation so runnersAfter is correct
       const d3kScoredEvents: RunnerScoredEvent[] = [];
@@ -6223,12 +6449,8 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
           newOuts >= 3
             ? { first: null, second: null, third: null }
             : buildRunnersAfter(d3kTracker),
-        awayScoreAfter: gameState.isTop
-          ? gameState.awayScore + runsScored
-          : gameState.awayScore,
-        homeScoreAfter: gameState.isTop
-          ? gameState.homeScore
-          : gameState.homeScore + runsScored,
+        awayScoreAfter,
+        homeScoreAfter,
         runnerOutcomes: buildEventRunnerOutcomes(
           trackerBeforePlay,
           gameState.bases,
@@ -6277,10 +6499,14 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         fameEvents: [],
         isLeadoff: false,
         isClutch: false,
-        isWalkOff: false,
+        isWalkOff: endGameEvaluation.isWalkOff,
         ...contextSnapshot,
         enrichment,
       };
+
+      if (endGameEvaluation.shouldEndGame) {
+        queueAutoEndGame();
+      }
 
       await logAtBatEvent(event);
       pendingEnrichmentRef.current = undefined;
@@ -6406,9 +6632,11 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       atBatSequence,
       buildContextSnapshot,
       creditFieldingOutsToPositions,
+      evaluateEndGameTrigger,
       gameState,
       getCurrentLeverageIndex,
       processTrackerScoredEvents,
+      queueAutoEndGame,
       scheduleAutoEndInning,
     ],
   );
@@ -6436,6 +6664,21 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       if (runnerData?.fromFirst === "home") runsScored++;
       if (runnerData?.fromSecond === "home") runsScored++;
       if (runnerData?.fromThird === "home") runsScored++;
+      const homeScoreAfter = gameState.isTop
+        ? gameState.homeScore
+        : gameState.homeScore + runsScored;
+      const awayScoreAfter = gameState.isTop
+        ? gameState.awayScore + runsScored
+        : gameState.awayScore;
+      const endGameEvaluation = evaluateEndGameTrigger({
+        inning: gameState.inning,
+        isTop: gameState.isTop,
+        homeScoreBefore: gameState.homeScore,
+        awayScoreBefore: gameState.awayScore,
+        homeScoreAfter,
+        awayScoreAfter,
+        context: "live_play",
+      });
 
       // CRIT-02: Update runner tracker for errors
       const errorScoredEvents: RunnerScoredEvent[] = [];
@@ -6561,12 +6804,8 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         homeScore: gameState.homeScore,
         outsAfter: gameState.outs,
         runnersAfter: buildRunnersAfter(errorTracker),
-        awayScoreAfter: gameState.isTop
-          ? gameState.awayScore + runsScored
-          : gameState.awayScore,
-        homeScoreAfter: gameState.isTop
-          ? gameState.homeScore
-          : gameState.homeScore + runsScored,
+        awayScoreAfter,
+        homeScoreAfter,
         runnerOutcomes: buildEventRunnerOutcomes(
           trackerBeforePlay,
           gameState.bases,
@@ -6607,9 +6846,13 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         fameEvents: [],
         isLeadoff: false,
         isClutch: false,
-        isWalkOff: false,
+        isWalkOff: endGameEvaluation.isWalkOff,
         ...buildContextSnapshot("E" as AtBatResult, pitchCount),
       };
+
+      if (endGameEvaluation.shouldEndGame) {
+        queueAutoEndGame();
+      }
 
       await logAtBatEvent(event);
       pendingEnrichmentRef.current = undefined;
@@ -6761,7 +7004,14 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         `[useGameState] Recorded error: ${fieldingTeamKey} team, ${runsScored} runs (unearned)`,
       );
     },
-    [advanceToNextBatter, atBatSequence, gameState, getCurrentLeverageIndex],
+    [
+      advanceToNextBatter,
+      atBatSequence,
+      evaluateEndGameTrigger,
+      gameState,
+      getCurrentLeverageIndex,
+      queueAutoEndGame,
+    ],
   );
 
   const recordEvent = useCallback(
@@ -7445,6 +7695,24 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         });
       }
 
+      const endGameEvaluation = evaluateEndGameTrigger({
+        inning: gameState.inning,
+        isTop: gameState.isTop,
+        homeScoreBefore: gameState.homeScore,
+        awayScoreBefore: gameState.awayScore,
+        homeScoreAfter: gameState.isTop
+          ? gameState.homeScore
+          : gameState.homeScore + runsScored,
+        awayScoreAfter: gameState.isTop
+          ? gameState.awayScore + runsScored
+          : gameState.awayScore,
+        context: "live_play",
+      });
+
+      if (endGameEvaluation.shouldEndGame) {
+        queueAutoEndGame();
+      }
+
       // T0-03 FIX: Check if baserunning out (CS, pickoff, TOOTBLAN, etc.) caused 3rd out.
       // advanceRunner increments outs via setGameState but never checked for inning end.
       // Uses same pattern as recordOut (line 1826): setTimeout to let UI update before flip.
@@ -7460,11 +7728,13 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     },
     [
       creditFieldingOutsToPositions,
+      evaluateEndGameTrigger,
       gameState.isTop,
       gameState.inning,
       gameState.outs,
       gameState.currentPitcherId,
       gameState.currentPitcherName,
+      queueAutoEndGame,
       scheduleAutoEndInning,
     ],
   );
@@ -7601,6 +7871,24 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         });
       }
 
+      if (
+        evaluateEndGameTrigger({
+          inning: gameState.inning,
+          isTop: gameState.isTop,
+          homeScoreBefore: gameState.homeScore,
+          awayScoreBefore: gameState.awayScore,
+          homeScoreAfter: gameState.isTop
+            ? gameState.homeScore
+            : gameState.homeScore + runsScored,
+          awayScoreAfter: gameState.isTop
+            ? gameState.awayScore + runsScored
+            : gameState.awayScore,
+          context: "live_play",
+        }).shouldEndGame
+      ) {
+        queueAutoEndGame();
+      }
+
       // T0-03 FIX: Check if batch runner outs caused 3rd out (same pattern as advanceRunner).
       const totalOuts = movements.filter((m) => m.outcome === "out").length;
       if (totalOuts > 0) {
@@ -7615,11 +7903,13 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     },
     [
       creditFieldingOutsToPositions,
+      evaluateEndGameTrigger,
       gameState.isTop,
       gameState.inning,
       gameState.outs,
       gameState.currentPitcherId,
       gameState.currentPitcherName,
+      queueAutoEndGame,
       scheduleAutoEndInning,
     ],
   );
@@ -7740,6 +8030,146 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         }
       }
 
+      const homeIndex = homeLineupRef.current.findIndex(
+        (p) => p.playerId === lineupPlayerId,
+      );
+      const outgoingPosition =
+        isAwayTeam && awayIndex >= 0
+          ? awayLineupRef.current[awayIndex]?.position
+          : homeIndex >= 0
+            ? homeLineupRef.current[homeIndex]?.position
+            : "";
+
+      if (gameState.gamePhase === "PRE_GAME") {
+        const currentState = lineupStateRef.current;
+        const lineupIdx = currentState.lineup.findIndex(
+          (p) => p.playerId === lineupPlayerId,
+        );
+        if (lineupIdx < 0) {
+          return { success: false, error: "Lineup player not found" };
+        }
+
+        const removedPlayer = currentState.lineup[lineupIdx];
+        const newPosition = (options?.newPosition ||
+          removedPlayer.position) as Position;
+        const newLineup = [...currentState.lineup];
+        newLineup[lineupIdx] = {
+          playerId: benchPlayerId,
+          playerName: benchPlayerName || benchPlayerId,
+          position: newPosition,
+          battingOrder: removedPlayer.battingOrder,
+          enteredInning: 1,
+          isStarter: true,
+        };
+
+        const nextBench = currentState.bench
+          .filter((player) => player.playerId !== benchPlayerId)
+          .map((player) => ({ ...player }));
+        if (!nextBench.some((player) => player.playerId === lineupPlayerId)) {
+          nextBench.push({
+            playerId: lineupPlayerId,
+            playerName: lineupPlayerName || lineupPlayerId,
+            positions: [removedPlayer.position],
+            isAvailable: true,
+          });
+        }
+
+        lineupStateRef.current = {
+          ...currentState,
+          lineup: newLineup,
+          bench: nextBench,
+          currentPitcher:
+            removedPlayer.position === "P" || newPosition === "P"
+              ? newLineup[lineupIdx]
+              : currentState.currentPitcher,
+        };
+
+        if (isAwayTeam) {
+          awayLineupRef.current[awayIndex] = {
+            playerId: benchPlayerId,
+            playerName: benchPlayerName || benchPlayerId,
+            position: newPosition,
+          };
+        } else if (homeIndex >= 0) {
+          homeLineupRef.current[homeIndex] = {
+            playerId: benchPlayerId,
+            playerName: benchPlayerName || benchPlayerId,
+            position: newPosition,
+          };
+        }
+
+        registerIdentityForSide(
+          benchPlayerId,
+          benchPlayerName || benchPlayerId,
+          teamSide,
+        );
+        registerIdentityForSide(
+          lineupPlayerId,
+          lineupPlayerName || lineupPlayerId,
+          teamSide,
+        );
+
+        const activeDefensiveSide: TeamSide = gameState.isTop ? "home" : "away";
+        const shouldUpdateBattery = teamSide === activeDefensiveSide;
+
+        if (lineupPlayerId === gameState.currentBatterId) {
+          setGameState((prev) => ({
+            ...prev,
+            currentBatterId: benchPlayerId,
+            currentBatterName: benchPlayerName || benchPlayerId,
+            currentPitcherId:
+              shouldUpdateBattery &&
+              (newPosition === "P" || removedPlayer.position === "P")
+                ? benchPlayerId
+                : prev.currentPitcherId,
+            currentPitcherName:
+              shouldUpdateBattery &&
+              (newPosition === "P" || removedPlayer.position === "P")
+                ? benchPlayerName || benchPlayerId
+                : prev.currentPitcherName,
+            currentCatcherId:
+              shouldUpdateBattery &&
+              (newPosition === "C" || removedPlayer.position === "C")
+                ? benchPlayerId
+                : prev.currentCatcherId,
+            currentCatcherName:
+              shouldUpdateBattery &&
+              (newPosition === "C" || removedPlayer.position === "C")
+                ? benchPlayerName || benchPlayerId
+                : prev.currentCatcherName,
+          }));
+        } else if (
+          shouldUpdateBattery &&
+          (newPosition === "P" ||
+            removedPlayer.position === "P" ||
+            newPosition === "C" ||
+            removedPlayer.position === "C")
+        ) {
+          setGameState((prev) => ({
+            ...prev,
+            currentPitcherId:
+              newPosition === "P" || removedPlayer.position === "P"
+                ? benchPlayerId
+                : prev.currentPitcherId,
+            currentPitcherName:
+              newPosition === "P" || removedPlayer.position === "P"
+                ? benchPlayerName || benchPlayerId
+                : prev.currentPitcherName,
+            currentCatcherId:
+              newPosition === "C" || removedPlayer.position === "C"
+                ? benchPlayerId
+                : prev.currentCatcherId,
+            currentCatcherName:
+              newPosition === "C" || removedPlayer.position === "C"
+                ? benchPlayerName || benchPlayerId
+                : prev.currentCatcherName,
+          }));
+        }
+
+        setLineupVersion((version) => version + 1);
+        return { success: true };
+      }
+
       // Log substitution event
       setSubstitutionLog((prev) => [
         ...prev,
@@ -7782,16 +8212,6 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       });
 
       // Update lineup refs to swap the players
-      const homeIndex = homeLineupRef.current.findIndex(
-        (p) => p.playerId === lineupPlayerId,
-      );
-      const outgoingPosition =
-        isAwayTeam && awayIndex >= 0
-          ? awayLineupRef.current[awayIndex]?.position
-          : homeIndex >= 0
-            ? homeLineupRef.current[homeIndex]?.position
-            : "";
-
       if (isAwayTeam) {
         // MAJ-06: Use newPosition if provided, otherwise preserve outgoing position
         const position =
@@ -7977,6 +8397,12 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     },
     [
       gameState.currentBatterId,
+      gameState.currentCatcherId,
+      gameState.currentCatcherName,
+      gameState.currentPitcherId,
+      gameState.currentPitcherName,
+      gameState.gameId,
+      gameState.gamePhase,
       gameState.inning,
       gameState.isTop,
       persistBetweenPlayEvent,
@@ -8216,9 +8642,6 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         (player) =>
           player.playerId === exitingPitcherId || player.position === "P",
       );
-      const nextUsedPlayers = pitchState.usedPlayers.includes(exitingPitcherId)
-        ? pitchState.usedPlayers
-        : [...pitchState.usedPlayers, exitingPitcherId];
 
       registerIdentityForSide(
         newPitcherId,
@@ -8233,6 +8656,9 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
 
       let nextLineup = pitchState.lineup;
       let nextCurrentPitcher: LineupPlayer;
+      const nextBench = pitchState.bench
+        .filter((player) => player.playerId !== newPitcherId)
+        .map((player) => ({ ...player }));
 
       if (lineupIndex >= 0) {
         const outgoingPitcher = pitchState.lineup[lineupIndex];
@@ -8252,6 +8678,15 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
           playerName: newPitcherName || newPitcherId,
           position: "P",
         };
+
+        if (!nextBench.some((player) => player.playerId === exitingPitcherId)) {
+          nextBench.push({
+            playerId: exitingPitcherId,
+            playerName: exitingPitcherName || exitingPitcherId,
+            positions: ["P"],
+            isAvailable: true,
+          });
+        }
       } else {
         nextCurrentPitcher = {
           playerId: newPitcherId,
@@ -8277,8 +8712,8 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       pitchingStateRef.current = {
         ...pitchState,
         lineup: nextLineup,
+        bench: nextBench,
         currentPitcher: nextCurrentPitcher,
-        usedPlayers: nextUsedPlayers,
       };
 
       if (newPitcherName) {
@@ -8302,7 +8737,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         setGameState((prev) => ({
           ...prev,
           currentPitcherId: newPitcherId,
-          currentPitcherName: newPitcherName || "",
+          currentPitcherName: newPitcherName || newPitcherId,
         }));
       }
       setLineupVersion((version) => version + 1);
@@ -8663,11 +9098,19 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
   // Internal function that performs the actual inning transition
   // Called after pitch count is confirmed by user
   const executeEndInning = useCallback(() => {
-    // T0-01: Auto game-end detection at regulation end.
-    // Check BEFORE transitioning to the next half-inning.
-    const totalInnings = totalInningsRef.current;
     const { inning, isTop, homeScore, awayScore } = gameState;
-    console.log(`[T0-01-DEBUG] executeEndInning: totalInnings=${totalInnings}, inning=${inning}, isTop=${isTop}, homeScore=${homeScore}, awayScore=${awayScore}`);
+    const endGameEvaluation = evaluateEndGameTrigger({
+      inning,
+      isTop,
+      homeScoreBefore: homeScore,
+      awayScoreBefore: awayScore,
+      homeScoreAfter: homeScore,
+      awayScoreAfter: awayScore,
+      context: "half_inning_end",
+    });
+    console.log(
+      `[T0-01-DEBUG] executeEndInning: totalInnings=${totalInningsRef.current}, inning=${inning}, isTop=${isTop}, homeScore=${homeScore}, awayScore=${awayScore}, reason=${endGameEvaluation.reason}`,
+    );
     const teamKey = isTop ? "away" : "home";
     const inningIdx = Math.max(0, inning - 1);
 
@@ -8692,34 +9135,15 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       };
     });
 
-    // After TOP of regulation final inning (or later): if home team leads, game is over
-    // (Home team doesn't need to bat if already ahead)
-    if (isTop && inning >= totalInnings && homeScore > awayScore) {
+    if (endGameEvaluation.shouldEndGame) {
       console.log(
-        `[T0-01] Auto game-end: Home leads ${homeScore}-${awayScore} after top of inning ${inning}. Game over.`,
+        `[T0-01] Auto game-end: ${endGameEvaluation.reason} at ${awayScore}-${homeScore} after ${isTop ? "top" : "bottom"} of inning ${inning}.`,
       );
-      setGameState((prev) => ({ ...prev, gamePhase: "POST_FINAL_OUT" }));
-      // Trigger endGame flow after a small delay
-      setTimeout(() => {
-        setShowAutoEndPrompt(true);
-      }, 300);
-      return; // Don't transition to next half-inning
+      queueAutoEndGame();
+      return;
     }
 
-    // After BOTTOM of regulation final inning (or later): if not tied, game is over
-    if (!isTop && inning >= totalInnings && homeScore !== awayScore) {
-      console.log(
-        `[T0-01] Auto game-end: Score ${awayScore}-${homeScore} after bottom of inning ${inning}. Game over.`,
-      );
-      setGameState((prev) => ({ ...prev, gamePhase: "POST_FINAL_OUT" }));
-      setTimeout(() => {
-        setShowAutoEndPrompt(true);
-      }, 300);
-      return; // Don't transition to next half-inning
-    }
-
-    // If tied after regulation, continue to extra innings (normal transition)
-    if (!isTop && inning >= totalInnings && homeScore === awayScore) {
+    if (!isTop && inning >= totalInningsRef.current && homeScore === awayScore) {
       console.log(
         `[T0-01] Tied ${homeScore}-${awayScore} after regulation. Extra innings.`,
       );
@@ -8787,7 +9211,13 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         currentCatcherName: newCatcherName,
       };
     });
-  }, [awayBatterIndex, homeBatterIndex, gameState]);
+  }, [
+    awayBatterIndex,
+    evaluateEndGameTrigger,
+    gameState,
+    homeBatterIndex,
+    queueAutoEndGame,
+  ]);
 
   const endInning = useCallback(() => {
     // Show pitch count prompt for the current pitcher at end of half-inning
@@ -9532,11 +9962,16 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
   const applyOutsAdjustment = useCallback(
     (delta: number) => {
       if (!delta) return;
-      const nextOuts = Math.max(0, Math.min(3, gameState.outs + delta));
+      const currentGameState = gameStateRef.current;
+      const nextOuts = Math.max(0, Math.min(3, currentGameState.outs + delta));
       liveOutsRef.current = nextOuts;
+      gameStateRef.current = {
+        ...currentGameState,
+        outs: nextOuts,
+      };
       setGameState((prev) => ({
         ...prev,
-        outs: Math.max(0, Math.min(3, prev.outs + delta)),
+        outs: nextOuts,
       }));
       if (nextOuts < 3) {
         isCorrectingRunnerOutcomesRef.current = false;
@@ -9546,11 +9981,21 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
           autoEndInningTimeoutRef.current = null;
         }
       }
-      if (nextOuts >= 3 && gameState.outs < 3) {
+      if (nextOuts >= 3 && currentGameState.outs < 3) {
         scheduleAutoEndInning();
       }
+      reconcileEndGameAfterCorrection({
+        inning: currentGameState.inning,
+        isTop: currentGameState.isTop,
+        outs: nextOuts,
+        homeScoreBefore: currentGameState.homeScore,
+        awayScoreBefore: currentGameState.awayScore,
+        homeScoreAfter: currentGameState.homeScore,
+        awayScoreAfter: currentGameState.awayScore,
+        gamePhase: currentGameState.gamePhase,
+      });
     },
-    [gameState.outs, scheduleAutoEndInning],
+    [reconcileEndGameAfterCorrection, scheduleAutoEndInning],
   );
 
   const setRunnerOutcomeCorrectionActive = useCallback((isActive: boolean) => {
@@ -9581,17 +10026,24 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
 
       const teamKey = halfInning === "TOP" ? "away" : "home";
       const inningIdx = Math.max(0, inning - 1);
-
-      setGameState((prev) => ({
-        ...prev,
+      const currentGameState = gameStateRef.current;
+      const nextGameState = {
+        ...currentGameState,
         awayScore:
           teamKey === "away"
-            ? Math.max(0, prev.awayScore + delta)
-            : prev.awayScore,
+            ? Math.max(0, currentGameState.awayScore + delta)
+            : currentGameState.awayScore,
         homeScore:
           teamKey === "home"
-            ? Math.max(0, prev.homeScore + delta)
-            : prev.homeScore,
+            ? Math.max(0, currentGameState.homeScore + delta)
+            : currentGameState.homeScore,
+      };
+
+      gameStateRef.current = nextGameState;
+      setGameState((prev) => ({
+        ...prev,
+        awayScore: nextGameState.awayScore,
+        homeScore: nextGameState.homeScore,
       }));
 
       setScoreboard((prev) => {
@@ -9617,8 +10069,19 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
           },
         };
       });
+
+      reconcileEndGameAfterCorrection({
+        inning: nextGameState.inning,
+        isTop: nextGameState.isTop,
+        outs: nextGameState.outs,
+        homeScoreBefore: currentGameState.homeScore,
+        awayScoreBefore: currentGameState.awayScore,
+        homeScoreAfter: nextGameState.homeScore,
+        awayScoreAfter: nextGameState.awayScore,
+        gamePhase: currentGameState.gamePhase,
+      });
     },
-    [],
+    [reconcileEndGameAfterCorrection],
   );
 
   const endGame = useCallback(
@@ -10218,6 +10681,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     setRunnerOutcomeCorrectionActive,
     adjustPlayerFieldingErrors,
     queueAutoEndGame,
+    evaluateEndGameTrigger,
     // §10.1: Three-phase lifecycle
     startGame,
     // Pitch count prompts (per PITCH_COUNT_TRACKING_SPEC.md)

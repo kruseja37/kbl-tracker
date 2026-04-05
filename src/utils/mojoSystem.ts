@@ -296,11 +296,11 @@ export function isGoodFitness(fitness: FitnessLevel): boolean {
  */
 export function getMojoColor(mojo: MojoLevel): string {
   if (mojo <= -2) return '#9F1239';  // Dark crimson - rattled
-  if (mojo === -1) return '#EF4444'; // Red - tense
+  if (mojo === -1) return '#7DD3FC'; // Light blue - tense
   if (mojo === 0) return '#FFFFFF';  // White - normal
   if (mojo === 1) return '#FFEB3B';  // Yellow - locked in
   if (mojo === 2) return '#FF9800';  // Orange - on fire
-  return '#FFC107';                   // Amber/gold - jacked
+  return '#a855f7';                   // Purple - jacked
 }
 
 /**

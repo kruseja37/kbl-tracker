@@ -2,6 +2,7 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, test, vi } from 'vitest';
 
 import { DefensiveLineupColumn } from '../../app/components/DefensiveLineupColumn';
+import { getMojoColor } from '../../../engines/mojoEngine';
 
 const baseProps = {
   players: [
@@ -114,5 +115,21 @@ describe('DefensiveLineupColumn', () => {
     expect(
       screen.getByRole('button', { name: 'Increase mojo for Home Starter' }),
     ).not.toBeDisabled();
+  });
+
+  test('uses the canonical mojo palette for normal-state defensive names', () => {
+    render(
+      <DefensiveLineupColumn
+        {...baseProps}
+        playerStates={{
+          'home-1': { mojo: 0, fitness: 'FIT' },
+          'home-2': { mojo: 0, fitness: 'FIT' },
+        }}
+      />,
+    );
+
+    expect(screen.getByText('Home Starter')).toHaveStyle({
+      color: getMojoColor(0),
+    });
   });
 });
