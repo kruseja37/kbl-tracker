@@ -5,6 +5,26 @@ import { getFitnessValue } from '../../../engines/fitnessEngine';
 import { usePlayerState } from '../../app/hooks/usePlayerState';
 
 describe('usePlayerState manual player-card setters', () => {
+  test('setMojo updates the player state without queuing a toast notification', () => {
+    const { result } = renderHook(() =>
+      usePlayerState({
+        gameId: 'manual-state-test',
+      }),
+    );
+
+    act(() => {
+      result.current.registerPlayer('player-1', 'Test Player', 'CF', 0, 'FIT');
+    });
+
+    act(() => {
+      result.current.setMojo('player-1', 2);
+    });
+
+    const player = result.current.getPlayer('player-1');
+    expect(player?.gameState.currentMojo).toBe(2);
+    expect(result.current.notifications).toEqual([]);
+  });
+
   test('setFitness keeps tracked fitness state in sync for engine consumers', () => {
     const { result } = renderHook(() =>
       usePlayerState({

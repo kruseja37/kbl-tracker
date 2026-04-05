@@ -108,6 +108,7 @@ import {
   type GameState,
   type GamePhase,
   type GameLineupSnapshot,
+  type TeamLineupSnapshot,
   type ScoreboardState,
   type HitType,
   type OutType,
@@ -258,6 +259,24 @@ function inferTeamUsesDh(
   );
 }
 
+function inferSnapshotUsesDh(
+  lineupSnapshot?: TeamLineupSnapshot,
+): boolean | undefined {
+  if (!lineupSnapshot) {
+    return undefined;
+  }
+
+  if (lineupSnapshot.lineup.some((player) => player.position === "DH")) {
+    return true;
+  }
+
+  if (lineupSnapshot.lineup.some((player) => player.position === "P")) {
+    return false;
+  }
+
+  return undefined;
+}
+
 function normalizeRosterForDh(
   players: Player[],
   pitchers: Pitcher[],
@@ -323,6 +342,109 @@ function shouldHidePitcherFromBattingDisplay(
     return false;
   }
   return sameRosterEntity(player, activePitcher) && player.position !== "DH";
+}
+
+export function buildDefensiveColumnPlayersForDisplay(args: {
+  players: Player[];
+  pitchers: Pitcher[];
+  fieldingTeam: "away" | "home";
+  pitcherStats: Map<string, PitcherGameStats>;
+  getRosterEntityId: (
+    entity: { name: string; playerId?: string },
+    team: "away" | "home",
+  ) => string;
+  explicitUseDh?: boolean;
+  lineupSnapshot?: TeamLineupSnapshot;
+}) {
+  const {
+    players,
+    pitchers,
+    fieldingTeam,
+    pitcherStats,
+    getRosterEntityId,
+    explicitUseDh,
+    lineupSnapshot,
+  } = args;
+  const teamUsesDh =
+    explicitUseDh ??
+    inferSnapshotUsesDh(lineupSnapshot) ??
+    inferTeamUsesDh(players, pitchers);
+  const activePitcherEntry =
+    pitchers.find((p) => p.isActive) ||
+    pitchers.find((p) => p.isStarter) ||
+    pitchers[0];
+  const snapshotLineup = lineupSnapshot?.lineup
+    ?.filter((player) => player.battingOrder !== undefined)
+    .sort((a, b) => a.battingOrder - b.battingOrder)
+    .map((player) => ({
+      playerId: player.playerId,
+      name: player.playerName,
+      position: player.position,
+      battingOrder: player.battingOrder,
+    }));
+  const activeLineup =
+    snapshotLineup && snapshotLineup.length > 0
+      ? snapshotLineup
+      : players
+          .filter(
+            (player) =>
+              player.battingOrder !== undefined &&
+              !player.isOutOfGame &&
+              !shouldHidePitcherFromBattingDisplay(
+                player,
+                activePitcherEntry,
+                teamUsesDh,
+              ),
+          )
+          .sort((a, b) => (a.battingOrder || 0) - (b.battingOrder || 0))
+          .map((player) => ({
+            playerId: getRosterEntityId(player, fieldingTeam),
+            name: player.name,
+            position: player.position,
+            battingOrder: player.battingOrder!,
+          }));
+
+  const defensivePlayers = activeLineup
+    .filter((player) => !teamUsesDh || player.position !== "DH")
+    .map((player) => ({ ...player }));
+
+  const activePitcherId =
+    lineupSnapshot?.currentPitcher?.playerId ||
+    (activePitcherEntry
+      ? getRosterEntityId(activePitcherEntry, fieldingTeam)
+      : undefined);
+  const activePitcherName =
+    lineupSnapshot?.currentPitcher?.playerName || activePitcherEntry?.name;
+  const activePitcherBattingOrder =
+    lineupSnapshot?.currentPitcher?.battingOrder ??
+    players.find((player) => sameRosterEntity(player, activePitcherEntry))
+      ?.battingOrder ??
+    9;
+
+  if (teamUsesDh && activePitcherId && activePitcherName) {
+    if (!defensivePlayers.some((player) => player.playerId === activePitcherId)) {
+      defensivePlayers.push({
+        playerId: activePitcherId,
+        name: activePitcherName,
+        position: "P",
+        battingOrder: activePitcherBattingOrder,
+      });
+    }
+  }
+
+  return defensivePlayers
+    .sort((a, b) => a.battingOrder - b.battingOrder)
+    .map((player) => {
+      const isPitcher = !!activePitcherId && player.playerId === activePitcherId;
+      return {
+        ...player,
+        isPitcher,
+        pitchCount:
+          isPitcher && activePitcherId
+            ? pitcherStats.get(activePitcherId)?.pitchCount ?? 0
+            : undefined,
+      };
+    });
 }
 
 function getBatterDestinationBase(
@@ -746,6 +868,7 @@ export function GameTracker() {
     setRunnerOutcomeCorrectionActive,
     adjustPlayerFieldingErrors,
     queueAutoEndGame,
+    evaluateEndGameTrigger,
     pitchCountPrompt,
     confirmPitchCount,
     dismissPitchCountPrompt,
@@ -2530,6 +2653,11 @@ export function GameTracker() {
   const battingTeamPitchersRaw = gameState.isTop
     ? awayTeamPitchers
     : homeTeamPitchers;
+  const runtimeLineupSnapshot = getLineupStateSnapshot();
+  const battingTeamSnapshot =
+    battingTeam === "away"
+      ? runtimeLineupSnapshot.away
+      : runtimeLineupSnapshot.home;
   const fieldingTeamPitchersRaw = gameState.isTop
     ? homeTeamPitchers
     : awayTeamPitchers;
@@ -2539,7 +2667,9 @@ export function GameTracker() {
   const battingTeamUsesDh = inferTeamUsesDh(
     battingTeamPlayersRaw,
     battingTeamPitchersRaw,
-    persistedUseDh ?? navigationState?.useDH,
+    persistedUseDh ??
+      inferSnapshotUsesDh(battingTeamSnapshot) ??
+      navigationState?.useDH,
   );
 
   const currentLineup = battingTeamPlayersRaw
@@ -3343,8 +3473,13 @@ export function GameTracker() {
           console.log("[GameTracker] Loaded existing game from IndexedDB");
           // R3: Extract persisted DH flags from the snapshot before syncing rosters
           const restoredSnapshot = getLineupStateSnapshot();
-          if (restoredSnapshot.awayUsesDh != null) {
-            setPersistedUseDh(restoredSnapshot.awayUsesDh);
+          const restoredUseDh =
+            restoredSnapshot.awayUsesDh ??
+            restoredSnapshot.homeUsesDh ??
+            inferSnapshotUsesDh(restoredSnapshot.away) ??
+            inferSnapshotUsesDh(restoredSnapshot.home);
+          if (restoredUseDh != null) {
+            setPersistedUseDh(restoredUseDh);
           }
           syncDisplayedRostersToLineupSnapshot(restoredSnapshot);
           setGameInitialized(true);
@@ -4059,11 +4194,16 @@ export function GameTracker() {
   const battingColumnPlayers = useMemo(() => {
     const players = gameState.isTop ? awayTeamPlayers : homeTeamPlayers;
     const pitchers = gameState.isTop ? awayTeamPitchers : homeTeamPitchers;
+    const lineupSnapshot = getLineupStateSnapshot();
+    const battingSnapshot =
+      battingTeam === "away" ? lineupSnapshot.away : lineupSnapshot.home;
     const activePitcher = getPreferredActivePitcher(pitchers);
     const teamUsesDh = inferTeamUsesDh(
       players,
       pitchers,
-      persistedUseDh ?? navigationState?.useDH,
+      persistedUseDh ??
+        inferSnapshotUsesDh(battingSnapshot) ??
+        navigationState?.useDH,
     );
     return players
       .filter(
@@ -4099,41 +4239,33 @@ export function GameTracker() {
     const players = fieldingTeam === "home" ? homeTeamPlayers : awayTeamPlayers;
     const pitchers =
       fieldingTeam === "home" ? homeTeamPitchers : awayTeamPitchers;
-    const activePitcherEntry =
-      pitchers.find((p) => p.isActive) ||
-      pitchers.find((p) => p.isStarter) ||
-      pitchers[0];
-    const pitcherPitches = activePitcherEntry
-      ? (pitcherStats.get(getRosterEntityId(activePitcherEntry, fieldingTeam))
-          ?.pitchCount ?? 0)
-      : 0;
+    const lineupSnapshot = getLineupStateSnapshot();
 
-    return players
-      .filter(
-        (p) =>
-          p.battingOrder !== undefined && !p.isOutOfGame && p.position !== "DH",
-      )
-      .sort((a, b) => (a.battingOrder || 0) - (b.battingOrder || 0))
-      .map((p) => ({
-        playerId: getRosterEntityId(p, fieldingTeam),
-        name: p.name,
-        position: p.position,
-        battingOrder: p.battingOrder!,
-        isPitcher: p.name === (activePitcherEntry?.name ?? ""),
-        pitchCount:
-          p.name === (activePitcherEntry?.name ?? "")
-            ? pitcherPitches
-            : undefined,
-      }));
+    return buildDefensiveColumnPlayersForDisplay({
+      players,
+      pitchers,
+      fieldingTeam,
+      pitcherStats,
+      getRosterEntityId,
+      lineupSnapshot:
+        fieldingTeam === "away" ? lineupSnapshot.away : lineupSnapshot.home,
+      explicitUseDh:
+        fieldingTeam === "away"
+          ? lineupSnapshot.awayUsesDh ?? persistedUseDh ?? navigationState?.useDH
+          : lineupSnapshot.homeUsesDh ?? persistedUseDh ?? navigationState?.useDH,
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     fieldingTeam,
+    getLineupStateSnapshot,
+    getRosterEntityId,
     homeTeamPlayers,
     awayTeamPlayers,
     homeTeamPitchers,
     awayTeamPitchers,
+    navigationState?.useDH,
+    persistedUseDh,
     pitcherStats,
-    getRosterEntityId,
     rosterVersion,
   ]);
 
@@ -4676,7 +4808,7 @@ export function GameTracker() {
               return {
                 ...pitcher,
                 isActive: false,
-                isOutOfGame: true,
+                isOutOfGame: gameState.gamePhase === "LIVE",
               };
             }
             return {
@@ -4879,11 +5011,11 @@ export function GameTracker() {
                 position: outgoingPosition,
               };
 
-              // Outgoing player loses batting order and is marked as out of game
+              // Outgoing player leaves the lineup slot; only live-game subs burn them.
               updated[outgoingIndex] = {
                 ...updated[outgoingIndex],
                 battingOrder: undefined,
-                isOutOfGame: true,
+                isOutOfGame: gameState.gamePhase === "LIVE",
               };
 
               const teamPitchers =
@@ -4915,6 +5047,7 @@ export function GameTracker() {
       changePitcher,
       fieldingTeam,
       gameState?.currentBatterId,
+      gameState.gamePhase,
       getLineupStateSnapshot,
       getRosterEntityId,
       homeTeamPitchers,
@@ -6637,19 +6770,25 @@ export function GameTracker() {
             position: outgoingPosition,
           };
 
-          // Outgoing player loses batting order, position, and is marked as out of game
+          // Outgoing player leaves the lineup slot; only live-game subs burn them.
           updated[outgoingIndex] = {
             ...updated[outgoingIndex],
             battingOrder: undefined,
             position: undefined, // Remove position so they don't show in field
-            isOutOfGame: true,
+            isOutOfGame: gameState.gamePhase === "LIVE",
           };
 
           return updated;
         });
       }
     },
-    [awayTeamPlayers, getPlayerIdFromName, homeTeamPlayers, makeSubstitution],
+    [
+      awayTeamPlayers,
+      gameState.gamePhase,
+      getPlayerIdFromName,
+      homeTeamPlayers,
+      makeSubstitution,
+    ],
   );
 
   const handlePitcherSubstitution = (
@@ -6696,7 +6835,7 @@ export function GameTracker() {
           return {
             ...pitcher,
             isActive: false,
-            isOutOfGame: true,
+            isOutOfGame: gameState.gamePhase === "LIVE",
           };
         }
         return {
@@ -8327,11 +8466,16 @@ export function GameTracker() {
           existingAtBat.outs,
           existingAtBat.outs + nextOutsRecorded,
         );
-        const nextIsWalkOff =
-          existingAtBat.halfInning === "BOTTOM" &&
-          existingAtBat.inning >= 9 &&
-          nextHomeScoreAfter > nextAwayScoreAfter &&
-          existingAtBat.homeScore <= existingAtBat.awayScore;
+        const nextEndGameEvaluation = evaluateEndGameTrigger({
+          inning: existingAtBat.inning,
+          isTop: existingAtBat.halfInning === "TOP",
+          homeScoreBefore: existingAtBat.homeScore,
+          awayScoreBefore: existingAtBat.awayScore,
+          homeScoreAfter: nextHomeScoreAfter,
+          awayScoreAfter: nextAwayScoreAfter,
+          context: "live_play",
+        });
+        const nextIsWalkOff = nextEndGameEvaluation.isWalkOff;
         const nextVersionBase = existingAtBat.version ?? 1;
         const normalizedRunnersAfter =
           nextOutsAfter >= 3
@@ -8591,10 +8735,7 @@ export function GameTracker() {
           targetsCurrentLiveHalf &&
           scoreDelta !== 0 &&
           gameState.gamePhase === "LIVE" &&
-          !gameState.isTop &&
-          gameState.inning >= (navigationState?.totalInnings || 9) &&
-          nextHomeScoreAfter > nextAwayScoreAfter &&
-          gameState.homeScore <= gameState.awayScore
+          nextEndGameEvaluation.shouldEndGame
         ) {
           queueAutoEndGame();
         }
@@ -8623,6 +8764,7 @@ export function GameTracker() {
       applyBasesCorrection,
       applyOutsAdjustment,
       buildFieldingSyncEventsForSequenceEdit,
+      evaluateEndGameTrigger,
       gameState.gamePhase,
       gameState.homeScore,
       gameState.awayScore,

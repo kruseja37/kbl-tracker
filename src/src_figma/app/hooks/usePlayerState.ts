@@ -144,20 +144,6 @@ export function usePlayerState(options: UsePlayerStateOptions) {
 
       if (actualDelta === 0) return prev;
 
-      // Detect state changes for notifications
-      const changes = detectStateChanges(
-        playerId,
-        player.playerName,
-        player.gameState.currentMojo,
-        newMojo,
-        player.gameState.currentFitness,
-        player.gameState.currentFitness
-      );
-
-      if (changes.length > 0) {
-        setNotifications(n => [...n, ...changes]);
-      }
-
       // Update state
       const newGameState = updateGamePlayerState(player.gameState, { newMojo });
 
@@ -253,19 +239,8 @@ export function usePlayerState(options: UsePlayerStateOptions) {
       if (!player) return prev;
 
       const previousMojo = player.gameState.currentMojo;
-
-      // Detect state changes for notification
-      const changes = detectStateChanges(
-        playerId,
-        player.playerName,
-        previousMojo,
-        newMojo,
-        player.fitnessProfile.currentFitness,
-        player.fitnessProfile.currentFitness
-      );
-
-      if (changes.length > 0) {
-        setNotifications(n => [...n, ...changes]);
+      if (previousMojo === newMojo) {
+        return prev;
       }
 
       // Update state
