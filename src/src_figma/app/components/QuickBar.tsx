@@ -28,7 +28,7 @@ interface QuickBarProps {
 }
 
 /** Quick Bar button config per §4.1 — primary row of outcome buttons */
-const PRIMARY_BUTTONS = ['K', 'Ꝁ', 'GO', 'FO', 'LO', 'PO', 'BB', '1B', '2B', 'FC', 'HR'] as const;
+const PRIMARY_BUTTONS = ['K', 'Ꝁ', 'GO', 'FC', 'PO', 'LO', 'FO', 'BB', '1B', '2B', 'HR'] as const;
 
 /** Secondary outcomes shown in the overflow menu */
 const OVERFLOW_BUTTONS = [
@@ -50,36 +50,39 @@ function isContextDisabled(btn: string, situation?: GameSituationForQuickBar): b
   }
 }
 
-/** Color mapping for button types — SNES retro aesthetic */
+/** Color mapping — SMB4 home page palette with alternating out colors.
+ *  K/Ꝁ stay red. Outs alternate blue/purple. On-base uses light blue.
+ *  HR/ITPHR get magenta. Errors/misc get amber. */
 const BUTTON_COLORS: Record<string, { bg: string; border: string }> = {
-  // Outs — red family
-  K:    { bg: '#8B0000', border: '#FF4444' },
-  'Ꝁ': { bg: '#8B0000', border: '#FF4444' },
-  GO:   { bg: '#8B0000', border: '#FF4444' },
-  FO:   { bg: '#8B0000', border: '#FF4444' },
-  FLO:  { bg: '#8B0000', border: '#FF4444' },
-  LO:   { bg: '#8B0000', border: '#FF4444' },
-  PO:   { bg: '#8B0000', border: '#FF4444' },
-  DP:   { bg: '#8B0000', border: '#FF4444' },
-  TP:   { bg: '#8B0000', border: '#FF4444' },
-  SAC:  { bg: '#8B0000', border: '#FF4444' },
-  SF:   { bg: '#8B0000', border: '#FF4444' },
-  FC:   { bg: '#8B0000', border: '#FF4444' },
-  // On-base — blue family
-  '1B': { bg: '#1a5276', border: '#5dade2' },
-  '2B': { bg: '#1a5276', border: '#5dade2' },
-  '3B': { bg: '#1a5276', border: '#5dade2' },
-  BB:   { bg: '#1a5276', border: '#5dade2' },
-  HBP:  { bg: '#1a5276', border: '#5dade2' },
-  IBB:  { bg: '#1a5276', border: '#5dade2' },
-  // Special — purple
-  HR:    { bg: '#6c3483', border: '#af7ac5' },
-  ITPHR: { bg: '#6c3483', border: '#af7ac5' },
-  // Hybrid / misc — amber
+  // Strikeouts — red (always)
+  K:    { bg: '#DD0000', border: '#AA0000' },
+  'Ꝁ': { bg: '#DD0000', border: '#AA0000' },
+  // Outs — alternating blue ↔ purple from SMB4 palette
+  GO:   { bg: '#1A44CC', border: '#113399' },  // dark blue
+  FC:   { bg: '#7733DD', border: '#5522AA' },  // purple
+  PO:   { bg: '#3366FF', border: '#1A44BB' },  // medium blue
+  LO:   { bg: '#7733DD', border: '#5522AA' },  // purple
+  FO:   { bg: '#1A44CC', border: '#113399' },  // dark blue
+  FLO:  { bg: '#3366FF', border: '#1A44BB' },  // medium blue
+  DP:   { bg: '#1A44CC', border: '#113399' },  // dark blue
+  TP:   { bg: '#7733DD', border: '#5522AA' },  // purple
+  SAC:  { bg: '#3366FF', border: '#1A44BB' },  // medium blue
+  SF:   { bg: '#1A44CC', border: '#113399' },  // dark blue
+  // On-base — light blue from SMB4
+  BB:   { bg: '#5599FF', border: '#3366CC' },
+  '1B': { bg: '#5599FF', border: '#3366CC' },
+  '2B': { bg: '#5599FF', border: '#3366CC' },
+  '3B': { bg: '#5599FF', border: '#3366CC' },
+  HBP:  { bg: '#5599FF', border: '#3366CC' },
+  IBB:  { bg: '#5599FF', border: '#3366CC' },
+  GRD:  { bg: '#5599FF', border: '#3366CC' },
+  // HR — magenta from SMB4
+  HR:    { bg: '#CC44CC', border: '#992299' },
+  ITPHR: { bg: '#CC44CC', border: '#992299' },
+  // Errors / misc — amber
   E:      { bg: '#7d6608', border: '#f4d03f' },
   WP_K:   { bg: '#7d6608', border: '#f4d03f' },
   PB_K:   { bg: '#7d6608', border: '#f4d03f' },
-  GRD:  { bg: '#1a5276', border: '#5dade2' },
   // Overflow trigger
   '···': { bg: '#333333', border: '#888888' },
 };
