@@ -50,41 +50,43 @@ function isContextDisabled(btn: string, situation?: GameSituationForQuickBar): b
   }
 }
 
-/** Color mapping — SMB4 home page palette with alternating out colors.
- *  K/Ꝁ stay red. Outs alternate blue/purple. On-base uses light blue.
- *  HR/ITPHR get magenta. Errors/misc get amber. */
+/** Color mapping — Chalk scoreboard theme with gravity-based shading.
+ *  Greens darken with outcome gravity (GO darkest → FO lightest).
+ *  Golds brighten with on-base value (BB muted → HR vivid).
+ *  K/Ꝁ deep red. Errors amber. All text chalk white. */
 const BUTTON_COLORS: Record<string, { bg: string; border: string }> = {
-  // Strikeouts — red (always)
-  K:    { bg: '#DD0000', border: '#AA0000' },
-  'Ꝁ': { bg: '#DD0000', border: '#AA0000' },
-  // Outs — alternating blue ↔ purple from SMB4 palette
-  GO:   { bg: '#1A44CC', border: '#113399' },  // dark blue
-  FC:   { bg: '#7733DD', border: '#5522AA' },  // purple
-  PO:   { bg: '#3366FF', border: '#1A44BB' },  // medium blue
-  LO:   { bg: '#7733DD', border: '#5522AA' },  // purple
-  FO:   { bg: '#1A44CC', border: '#113399' },  // dark blue
-  FLO:  { bg: '#3366FF', border: '#1A44BB' },  // medium blue
-  DP:   { bg: '#1A44CC', border: '#113399' },  // dark blue
-  TP:   { bg: '#7733DD', border: '#5522AA' },  // purple
-  SAC:  { bg: '#3366FF', border: '#1A44BB' },  // medium blue
-  SF:   { bg: '#1A44CC', border: '#113399' },  // dark blue
-  // On-base — light blue from SMB4
-  BB:   { bg: '#5599FF', border: '#3366CC' },
-  '1B': { bg: '#5599FF', border: '#3366CC' },
-  '2B': { bg: '#5599FF', border: '#3366CC' },
-  '3B': { bg: '#5599FF', border: '#3366CC' },
-  HBP:  { bg: '#5599FF', border: '#3366CC' },
-  IBB:  { bg: '#5599FF', border: '#3366CC' },
-  GRD:  { bg: '#5599FF', border: '#3366CC' },
-  // HR — magenta from SMB4
-  HR:    { bg: '#CC44CC', border: '#992299' },
-  ITPHR: { bg: '#CC44CC', border: '#992299' },
+  // Strikeouts — deep red
+  K:    { bg: '#4A1818', border: '#6B2222' },
+  'Ꝁ': { bg: '#4A1818', border: '#6B2222' },
+  // Outs — green gradient: darker = worse for batter
+  GO:   { bg: '#152a1a', border: '#253a2a' },  // darkest — routine ground out
+  FC:   { bg: '#1c3222', border: '#2c4232' },  // dark — out + runner advance
+  PO:   { bg: '#243a2a', border: '#344a3a' },  // medium-dark
+  LO:   { bg: '#2c4232', border: '#3c5a42' },  // medium
+  FO:   { bg: '#344a3a', border: '#44624a' },  // lightest — can be productive
+  // Overflow outs — same gravity logic
+  DP:   { bg: '#102218', border: '#203228' },  // devastating
+  TP:   { bg: '#0c1c14', border: '#1c2c24' },  // most devastating
+  FLO:  { bg: '#2c4232', border: '#3c5a42' },  // like LO
+  SF:   { bg: '#344a3a', border: '#44624a' },  // productive out
+  SAC:  { bg: '#344a3a', border: '#44624a' },  // productive out
+  // On-base — warm gold gradient: brighter = better for batter
+  BB:   { bg: '#2e2a18', border: '#4a4228' },  // muted — free base
+  '1B': { bg: '#38301a', border: '#55481e' },  // warm
+  '2B': { bg: '#44381c', border: '#604e1e' },  // bright
+  '3B': { bg: '#4a3a1c', border: '#6a5420' },  // vivid
+  HBP:  { bg: '#2e2a18', border: '#4a4228' },  // like BB
+  IBB:  { bg: '#2e2a18', border: '#4a4228' },  // like BB
+  GRD:  { bg: '#44381c', border: '#604e1e' },  // like 2B
+  // HR — brightest gold
+  HR:    { bg: '#524018', border: '#6a5420' },
+  ITPHR: { bg: '#524018', border: '#6a5420' },
   // Errors / misc — amber
-  E:      { bg: '#7d6608', border: '#f4d03f' },
-  WP_K:   { bg: '#7d6608', border: '#f4d03f' },
-  PB_K:   { bg: '#7d6608', border: '#f4d03f' },
+  E:      { bg: '#4a3510', border: '#7a5818' },
+  WP_K:   { bg: '#4A1818', border: '#6B2222' },  // strikeout variant — red
+  PB_K:   { bg: '#4A1818', border: '#6B2222' },  // strikeout variant — red
   // Overflow trigger
-  '···': { bg: '#333333', border: '#888888' },
+  '···': { bg: '#1a2a1d', border: '#3d5240' },
 };
 
 /**
