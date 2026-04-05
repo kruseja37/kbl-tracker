@@ -1101,6 +1101,21 @@ export function EnrichmentPanel({
 
         {/* Pitches in At-Bat */}
         <EnrichmentSection label="Pitches in AB" filled={!!currentEnrichment?.pitchesInAtBat}>
+          {entry.result === 'BB' && (
+            <div className="mb-2 flex gap-1.5">
+              <button
+                type="button"
+                className={`text-xs min-h-[36px] px-3 py-2 rounded border transition-colors touch-manipulation ${
+                  currentEnrichment?.pitchesInAtBat === 4
+                    ? 'bg-[#C4A853]/30 border-[#C4A853] text-[#C4A853]'
+                    : 'bg-[#1f2937]/60 border-[#4a6a4a] text-[#88AA88] hover:bg-[#4a6a4a]/40'
+                }`}
+                onClick={() => onUpdate('pitchesInAtBat', 4)}
+              >
+                4P WALK
+              </button>
+            </div>
+          )}
           <input
             type="number"
             min={1}

@@ -149,6 +149,36 @@ describe('EnrichmentPanel', () => {
     expect(screen.queryByText('Contact Type')).not.toBeInTheDocument();
   });
 
+  test('shows a 4-pitch walk quick action for BB and saves pitchesInAtBat = 4', () => {
+    const onUpdate = vi.fn();
+
+    render(
+      <EnrichmentPanel
+        entry={buildEntry('BB')}
+        currentEnrichment={{}}
+        onUpdate={onUpdate}
+        onClose={() => {}}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '4P WALK' }));
+
+    expect(onUpdate).toHaveBeenCalledWith('pitchesInAtBat', 4);
+  });
+
+  test('does not show the 4-pitch walk quick action for HBP', () => {
+    render(
+      <EnrichmentPanel
+        entry={buildEntry('HBP')}
+        currentEnrichment={{}}
+        onUpdate={() => {}}
+        onClose={() => {}}
+      />
+    );
+
+    expect(screen.queryByRole('button', { name: '4P WALK' })).not.toBeInTheDocument();
+  });
+
   test('shows fielding attempt controls for outs with attempt type and outcome', () => {
     const onUpdate = vi.fn();
 

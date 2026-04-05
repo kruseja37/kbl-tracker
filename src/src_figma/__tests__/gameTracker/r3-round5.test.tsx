@@ -107,6 +107,10 @@ vi.mock("../../../utils/playoffStorage", () => ({
 }));
 
 import { PostGameSummary } from "../../app/pages/PostGameSummary";
+import {
+  addRunner,
+  createRunnerTrackingState,
+} from "../../app/engines/inheritedRunnerTracker";
 import { useGameState } from "../../hooks/useGameState";
 
 async function initializeGame(
@@ -335,10 +339,150 @@ describe("R3 Round 5 bug fixes", () => {
 
     expect(result.current.gameState.currentCatcherId).toBe("home-c2");
     expect(result.current.substitutionLog).toHaveLength(2);
+    expect(result.current.getLineupStateSnapshot().home.usedPlayers).toEqual([
+      "home-sp",
+      "home-c",
+    ]);
     expect(result.current.substitutionLog[1]).toMatchObject({
       outgoingPlayerId: "home-c",
       incomingPlayerId: "home-c2",
     });
+  });
+
+  test("treats pre-game substitutions as lineup edits instead of permanent usage", async () => {
+    const { result } = renderHook(() => useGameState());
+    await initializeGame(result, 7);
+
+    act(() => {
+      const catcherSub = result.current.makeSubstitution(
+        "home-c2",
+        "home-c",
+        "Backup Catcher",
+        "Home Catcher",
+        { subType: "defensive_sub", newPosition: "C" },
+      );
+      expect(catcherSub).toEqual({ success: true });
+    });
+
+    const lineupSnapshot = result.current.getLineupStateSnapshot();
+    expect(result.current.substitutionLog).toHaveLength(0);
+    expect(lineupSnapshot.home.usedPlayers).toEqual([]);
+    expect(lineupSnapshot.home.lineup).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          playerId: "home-c2",
+          playerName: "Backup Catcher",
+          position: "C",
+          isStarter: true,
+        }),
+      ]),
+    );
+    expect(lineupSnapshot.home.bench).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          playerId: "home-c",
+          playerName: "Home Catcher",
+          isAvailable: true,
+        }),
+      ]),
+    );
+    expect(result.current.gameState.currentCatcherId).toBe("home-c2");
+  });
+
+  test("keeps pre-game pitcher swaps available for later use", async () => {
+    const { result } = renderHook(() => useGameState());
+    await initializeGame(result, 7);
+
+    act(() => {
+      result.current.changePitcher(
+        "home-rp",
+        "home-sp",
+        "home",
+        "Home Reliever",
+        "Home Starter",
+      );
+    });
+
+    const lineupSnapshot = result.current.getLineupStateSnapshot();
+    expect(lineupSnapshot.home.usedPlayers).toEqual([]);
+    expect(lineupSnapshot.home.currentPitcher).toMatchObject({
+      playerId: "home-rp",
+      playerName: "Home Reliever",
+      position: "P",
+      isStarter: true,
+    });
+    expect(lineupSnapshot.home.bench).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          playerId: "home-sp",
+          playerName: "Home Starter",
+          positions: ["P"],
+          isAvailable: true,
+        }),
+      ]),
+    );
+    expect(lineupSnapshot.home.bench.some((player) => player.playerId === "home-rp")).toBe(false);
+    expect(result.current.gameState.currentPitcherId).toBe("home-rp");
+  });
+
+  test("routes walk-off errors through the shared end-game evaluator", async () => {
+    const { result } = renderHook(() => useGameState());
+    await initializeGame(result, 7);
+
+    act(() => {
+      result.current.startGame();
+    });
+
+    let runnerTrackerState = createRunnerTrackingState("away-sp", "Away Starter");
+    runnerTrackerState = addRunner(
+      runnerTrackerState,
+      "home-sp",
+      "Home Starter",
+      "3B",
+      "hit",
+    );
+
+    await act(async () => {
+      result.current.restoreState({
+        gameState: {
+          ...result.current.gameState,
+          inning: 7,
+          isTop: false,
+          outs: 1,
+          awayScore: 3,
+          homeScore: 3,
+          bases: { first: false, second: false, third: true },
+          currentBatterId: "home-c",
+          currentBatterName: "Home Catcher",
+          currentPitcherId: "away-sp",
+          currentPitcherName: "Away Starter",
+          gamePhase: "LIVE",
+        },
+        scoreboard: result.current.scoreboard,
+        playerStats: buildPlayerStatsMap(),
+        pitcherStats: result.current.pitcherStats,
+        runnerTrackerState: {
+          ...runnerTrackerState,
+          inning: 7,
+        },
+        lineupSnapshot: result.current.getLineupStateSnapshot(),
+        batterIndices: result.current.getBatterIndicesSnapshot(),
+      });
+    });
+
+    await act(async () => {
+      await result.current.recordError(0, { fromThird: "home" });
+    });
+
+    expect(mockLogAtBatEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        result: "E",
+        isWalkOff: true,
+        homeScoreAfter: 4,
+        awayScoreAfter: 3,
+      }),
+    );
+    expect(result.current.gameState.gamePhase).toBe("POST_FINAL_OUT");
   });
 
   test("defaults pickoff errors to the pitcher and applies archived fielding errors to the charged player", async () => {

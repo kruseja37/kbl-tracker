@@ -5,6 +5,7 @@
 import { initMetaDatabase as openMetaDatabase } from './franchiseManager';
 import { deleteEliminationDatabase } from './eliminationPlayerStorage';
 import type { EliminationAward } from './eliminationAwards';
+import { syncEngine } from './syncEngine';
 
 const ELIMINATION_STORE = 'eliminationList';
 
@@ -72,6 +73,7 @@ export async function createElimination(params: {
 
   await requestToPromise(store.put(metadata));
   await transactionToPromise(tx);
+  if (!syncEngine.isSuppressed()) syncEngine.upsert('kbl-app-meta', 'eliminationList', metadata.eliminationId, metadata);
   return metadata;
 }
 
@@ -125,6 +127,7 @@ export async function updateElimination(
 
   await requestToPromise(store.put(updated));
   await transactionToPromise(tx);
+  if (!syncEngine.isSuppressed()) syncEngine.upsert('kbl-app-meta', 'eliminationList', updated.eliminationId, updated);
 }
 
 /**
@@ -138,5 +141,6 @@ export async function deleteElimination(eliminationId: string): Promise<void> {
   // TODO: Delete related bracket data from kbl-playoffs and stats from kbl-tracker separately.
   await requestToPromise(store.delete(eliminationId));
   await transactionToPromise(tx);
+  if (!syncEngine.isSuppressed()) syncEngine.remove('kbl-app-meta', 'eliminationList', eliminationId);
   await deleteEliminationDatabase(eliminationId);
 }

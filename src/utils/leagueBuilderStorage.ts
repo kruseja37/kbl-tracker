@@ -13,6 +13,7 @@
 
 import { generateHometown } from '../data/usCities';
 import { trackFieldChanges, type EditHistoryEntry } from './editHistoryTracker';
+import { syncEngine } from './syncEngine';
 
 export type { EditHistoryEntry } from './editHistoryTracker';
 
@@ -562,7 +563,10 @@ export async function saveLeagueTemplate(template: Omit<LeagueTemplate, 'id' | '
     const request = store.put(fullTemplate);
 
     request.onerror = () => reject(request.error);
-    tx.oncomplete = () => resolve(fullTemplate);
+    tx.oncomplete = () => {
+      if (!syncEngine.isSuppressed()) syncEngine.upsert('kbl-league-builder', 'leagueTemplates', fullTemplate.id, fullTemplate);
+      resolve(fullTemplate);
+    };
     tx.onerror = () => reject(tx.error);
   });
 }
@@ -575,7 +579,10 @@ export async function deleteLeagueTemplate(id: string): Promise<void> {
     const store = tx.objectStore(STORES.LEAGUE_TEMPLATES);
     const request = store.delete(id);
 
-    request.onsuccess = () => resolve();
+    request.onsuccess = () => {
+      if (!syncEngine.isSuppressed()) syncEngine.remove('kbl-league-builder', 'leagueTemplates', id);
+      resolve();
+    };
     request.onerror = () => reject(request.error);
   });
 }
@@ -627,7 +634,10 @@ export async function saveTeam(team: Omit<Team, 'id' | 'createdDate' | 'lastModi
     const request = store.put(fullTeam);
 
     request.onerror = () => reject(request.error);
-    tx.oncomplete = () => resolve(fullTeam);
+    tx.oncomplete = () => {
+      if (!syncEngine.isSuppressed()) syncEngine.upsert('kbl-league-builder', 'globalTeams', fullTeam.id, fullTeam);
+      resolve(fullTeam);
+    };
     tx.onerror = () => reject(tx.error);
   });
 }
@@ -640,7 +650,10 @@ export async function deleteTeam(id: string): Promise<void> {
     const store = tx.objectStore(STORES.GLOBAL_TEAMS);
     const request = store.delete(id);
 
-    request.onsuccess = () => resolve();
+    request.onsuccess = () => {
+      if (!syncEngine.isSuppressed()) syncEngine.remove('kbl-league-builder', 'globalTeams', id);
+      resolve();
+    };
     request.onerror = () => reject(request.error);
   });
 }
@@ -727,7 +740,10 @@ export async function savePlayer(
     const request = store.put(fullPlayer);
 
     request.onerror = () => reject(request.error);
-    tx.oncomplete = () => resolve(fullPlayer);
+    tx.oncomplete = () => {
+      if (!syncEngine.isSuppressed()) syncEngine.upsert('kbl-league-builder', 'globalPlayers', fullPlayer.id, fullPlayer);
+      resolve(fullPlayer);
+    };
     tx.onerror = () => reject(tx.error);
   });
 }
@@ -740,7 +756,10 @@ export async function deletePlayer(id: string): Promise<void> {
     const store = tx.objectStore(STORES.GLOBAL_PLAYERS);
     const request = store.delete(id);
 
-    request.onsuccess = () => resolve();
+    request.onsuccess = () => {
+      if (!syncEngine.isSuppressed()) syncEngine.remove('kbl-league-builder', 'globalPlayers', id);
+      resolve();
+    };
     request.onerror = () => reject(request.error);
   });
 }
@@ -786,7 +805,10 @@ export async function setLeaguePlayerOverride(
     const request = store.put(record);
 
     request.onerror = () => reject(request.error);
-    tx.oncomplete = () => resolve(record);
+    tx.oncomplete = () => {
+      if (!syncEngine.isSuppressed()) syncEngine.upsert('kbl-league-builder', 'leaguePlayerOverrides', record.id, record);
+      resolve(record);
+    };
     tx.onerror = () => reject(tx.error);
   });
 }
@@ -797,9 +819,13 @@ export async function removeLeaguePlayerOverride(leagueId: string, playerId: str
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORES.LEAGUE_PLAYER_OVERRIDES, 'readwrite');
     const store = tx.objectStore(STORES.LEAGUE_PLAYER_OVERRIDES);
-    const request = store.delete(createLeaguePlayerOverrideId(leagueId, playerId));
+    const overrideId = createLeaguePlayerOverrideId(leagueId, playerId);
+    const request = store.delete(overrideId);
 
-    request.onsuccess = () => resolve();
+    request.onsuccess = () => {
+      if (!syncEngine.isSuppressed()) syncEngine.remove('kbl-league-builder', 'leaguePlayerOverrides', overrideId);
+      resolve();
+    };
     request.onerror = () => reject(request.error);
   });
 }
@@ -867,7 +893,10 @@ export async function retirePlayer(playerId: string): Promise<void> {
     const tx = db.transaction(STORES.GLOBAL_PLAYERS, 'readwrite');
     const store = tx.objectStore(STORES.GLOBAL_PLAYERS);
     const request = store.put(updatedPlayer);
-    request.onsuccess = () => resolve();
+    request.onsuccess = () => {
+      if (!syncEngine.isSuppressed()) syncEngine.upsert('kbl-league-builder', 'globalPlayers', updatedPlayer.id, updatedPlayer);
+      resolve();
+    };
     request.onerror = () => reject(request.error);
   });
 
@@ -912,7 +941,10 @@ export async function transferPlayer(playerId: string, newTeamId: string, league
     const tx = db.transaction(STORES.GLOBAL_PLAYERS, 'readwrite');
     const store = tx.objectStore(STORES.GLOBAL_PLAYERS);
     const request = store.put(updatedPlayer);
-    request.onsuccess = () => resolve();
+    request.onsuccess = () => {
+      if (!syncEngine.isSuppressed()) syncEngine.upsert('kbl-league-builder', 'globalPlayers', updatedPlayer.id, updatedPlayer);
+      resolve();
+    };
     request.onerror = () => reject(request.error);
   });
 
@@ -979,7 +1011,10 @@ export async function saveRulesPreset(preset: Omit<RulesPreset, 'id' | 'createdD
     const request = store.put(fullPreset);
 
     request.onerror = () => reject(request.error);
-    tx.oncomplete = () => resolve(fullPreset);
+    tx.oncomplete = () => {
+      if (!syncEngine.isSuppressed()) syncEngine.upsert('kbl-league-builder', 'rulesPresets', fullPreset.id, fullPreset);
+      resolve(fullPreset);
+    };
     tx.onerror = () => reject(tx.error);
   });
 }
@@ -992,7 +1027,10 @@ export async function deleteRulesPreset(id: string): Promise<void> {
     const store = tx.objectStore(STORES.RULES_PRESETS);
     const request = store.delete(id);
 
-    request.onsuccess = () => resolve();
+    request.onsuccess = () => {
+      if (!syncEngine.isSuppressed()) syncEngine.remove('kbl-league-builder', 'rulesPresets', id);
+      resolve();
+    };
     request.onerror = () => reject(request.error);
   });
 }
@@ -1029,7 +1067,10 @@ export async function saveTeamRoster(roster: TeamRoster): Promise<TeamRoster> {
     const request = store.put(fullRoster);
 
     request.onerror = () => reject(request.error);
-    tx.oncomplete = () => resolve(fullRoster);
+    tx.oncomplete = () => {
+      if (!syncEngine.isSuppressed()) syncEngine.upsert('kbl-league-builder', 'teamRosters', fullRoster.teamId, fullRoster);
+      resolve(fullRoster);
+    };
     tx.onerror = () => reject(tx.error);
   });
 }
@@ -1042,7 +1083,10 @@ export async function deleteTeamRoster(teamId: string): Promise<void> {
     const store = tx.objectStore(STORES.TEAM_ROSTERS);
     const request = store.delete(teamId);
 
-    request.onsuccess = () => resolve();
+    request.onsuccess = () => {
+      if (!syncEngine.isSuppressed()) syncEngine.remove('kbl-league-builder', 'teamRosters', teamId);
+      resolve();
+    };
     request.onerror = () => reject(request.error);
   });
 }
@@ -1147,6 +1191,28 @@ export async function initializeDefaultPresets(): Promise<void> {
 
 export async function clearAllLeagueBuilderData(): Promise<void> {
   const db = await initLeagueBuilderDatabase();
+
+  // Push tombstones for all existing records before clearing
+  if (!syncEngine.isSuppressed()) {
+    const storeConfigs: Array<{ store: string; keyField: string }> = [
+      { store: STORES.LEAGUE_TEMPLATES, keyField: 'id' },
+      { store: STORES.GLOBAL_TEAMS, keyField: 'id' },
+      { store: STORES.GLOBAL_PLAYERS, keyField: 'id' },
+      { store: STORES.LEAGUE_PLAYER_OVERRIDES, keyField: 'id' },
+      { store: STORES.RULES_PRESETS, keyField: 'id' },
+      { store: STORES.TEAM_ROSTERS, keyField: 'teamId' },
+    ];
+
+    for (const { store: storeName, keyField } of storeConfigs) {
+      const records: Array<Record<string, unknown>> = await new Promise((resolve, reject) => {
+        const tx = db.transaction(storeName, 'readonly');
+        const req = tx.objectStore(storeName).getAll();
+        req.onsuccess = () => resolve(req.result || []);
+        req.onerror = () => reject(req.error);
+      });
+      for (const r of records) syncEngine.remove('kbl-league-builder', storeName, r[keyField] as string);
+    }
+  }
 
   return new Promise((resolve, reject) => {
     const tx = db.transaction(
@@ -1465,6 +1531,14 @@ export async function seedFromSMB4Database(clearExisting = true): Promise<{ team
   const db = await initLeagueBuilderDatabase();
 
   if (clearExisting) {
+    // Push tombstones for existing records before clearing
+    if (!syncEngine.isSuppressed()) {
+      const existingTeams = await getAllTeams();
+      const existingPlayers = await getAllPlayers();
+      for (const t of existingTeams) syncEngine.remove('kbl-league-builder', 'globalTeams', t.id);
+      for (const p of existingPlayers) syncEngine.remove('kbl-league-builder', 'globalPlayers', p.id);
+    }
+
     // Clear existing teams and players only (preserve leagues, rules, rosters)
     await new Promise<void>((resolve, reject) => {
       const tx = db.transaction([STORES.GLOBAL_TEAMS, STORES.GLOBAL_PLAYERS], 'readwrite');

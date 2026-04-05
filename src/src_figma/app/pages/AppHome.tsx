@@ -1,16 +1,25 @@
+import { useState } from "react";
 import { Link } from "react-router";
 import { Trophy, Gamepad2, Users, Globe, Database, Book } from "lucide-react";
+import { SyncModal, SyncStatusIcon } from "../components/SyncModal";
 
 export function AppHome() {
+  const [syncOpen, setSyncOpen] = useState(false);
+
   return (
     <div className="min-h-screen bg-black text-white p-6">
       {/* SNES-style header */}
       <div className="max-w-4xl mx-auto">
         {/* Upper left corner text */}
-        <div className="mb-8">
-          <div className="text-[#0066FF] text-xs tracking-widest">KRUSE FAMILY</div>
-          <div className="text-[#FF0000] text-lg tracking-wide">BASEBALL</div>
+        <div className="mb-8 flex items-start justify-between">
+          <div>
+            <div className="text-[#0066FF] text-xs tracking-widest">KRUSE FAMILY</div>
+            <div className="text-[#FF0000] text-lg tracking-wide">BASEBALL</div>
+          </div>
+          <SyncStatusIcon onClick={() => setSyncOpen(true)} />
         </div>
+
+        <SyncModal isOpen={syncOpen} onClose={() => setSyncOpen(false)} />
 
         <div className="text-center mb-12">
           {/* Title box with SNES aesthetic */}
@@ -101,9 +110,8 @@ export function AppHome() {
             <div className="content-stretch flex flex-col items-start pb-[5.556px] pt-[21.554px] px-[21.554px] relative size-full">
               <div className="flex gap-4 h-[27.995px] items-center w-full">
                 <Book className="w-4 h-4 text-black shrink-0" />
-                <p className="font-['Press_Start_2P'] leading-[20px] text-[14px] tracking-[0.7px] uppercase flex-1">
-                  <span className="text-[#3366FF]">SMB</span>{" "}
-                  <span className="text-white">ALMANAC</span>
+                <p className="font-['Press_Start_2P'] leading-[20px] text-[14px] tracking-[0.7px] uppercase flex-1 text-white">
+                  SMB ALMANAC
                 </p>
                 <p className="font-['Press_Start_2P'] leading-[28px] text-[20px] text-black">▶</p>
               </div>

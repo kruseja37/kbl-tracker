@@ -14,6 +14,7 @@ import type {
   Position,
 } from "./leagueBuilderStorage";
 import { getTrackerDb } from "./trackerDb";
+import { syncEngine } from "./syncEngine";
 
 export type CompetitionType =
   | "exhibition"
@@ -666,6 +667,9 @@ export async function archiveCompletedGame(
     };
 
     request.onsuccess = () => {
+      if (!syncEngine.isSuppressed()) {
+        syncEngine.upsert('kbl-tracker', 'completedGames', record.gameId, record);
+      }
       resolve();
     };
   });
@@ -709,7 +713,12 @@ export async function archiveBatchGameResult(params: {
     const store = transaction.objectStore(STORES.COMPLETED_GAMES);
     const request = store.put(record);
     request.onerror = () => reject(request.error);
-    request.onsuccess = () => resolve();
+    request.onsuccess = () => {
+      if (!syncEngine.isSuppressed()) {
+        syncEngine.upsert('kbl-tracker', 'completedGames', record.gameId, record);
+      }
+      resolve();
+    };
   });
 }
 

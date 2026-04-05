@@ -11,6 +11,8 @@
  *   kbl-franchise-{id} → gameHeaders, atBatEvents, seasonStats, careerStats, ...
  */
 
+import { syncEngine } from './syncEngine';
+
 // ============================================
 // TYPES
 // ============================================
@@ -165,7 +167,10 @@ export async function createFranchise(name: string): Promise<FranchiseId> {
     const request = store.put(metadata);
 
     request.onerror = () => reject(request.error);
-    request.onsuccess = () => resolve(franchiseId);
+    request.onsuccess = () => {
+      if (!syncEngine.isSuppressed()) syncEngine.upsert('kbl-app-meta', 'franchiseList', franchiseId, metadata);
+      resolve(franchiseId);
+    };
   });
 }
 
@@ -191,6 +196,22 @@ export async function loadFranchise(franchiseId: FranchiseId): Promise<Franchise
 export async function deleteFranchise(franchiseId: FranchiseId): Promise<void> {
   const db = await initMetaDatabase();
 
+  // Push cascade tombstones for franchise player/team data before DB deletion
+  if (!syncEngine.isSuppressed()) {
+    try {
+      const { getAllFranchisePlayers, getAllFranchiseTeams } = await import('./franchisePlayerStorage');
+      const dbName = `kbl-franchise-${franchiseId}`;
+      const [players, teams] = await Promise.all([
+        getAllFranchisePlayers(franchiseId),
+        getAllFranchiseTeams(franchiseId),
+      ]);
+      for (const p of players) syncEngine.remove(dbName, 'players', p.id);
+      for (const t of teams) syncEngine.remove(dbName, 'teams', t.id);
+    } catch {
+      // Franchise DB may not exist yet — ignore
+    }
+  }
+
   // Remove from meta DB (franchise metadata)
   await new Promise<void>((resolve, reject) => {
     const tx = db.transaction(META_STORES.franchiseList, 'readwrite');
@@ -198,7 +219,10 @@ export async function deleteFranchise(franchiseId: FranchiseId): Promise<void> {
     const request = store.delete(franchiseId);
 
     request.onerror = () => reject(request.error);
-    request.onsuccess = () => resolve();
+    request.onsuccess = () => {
+      if (!syncEngine.isSuppressed()) syncEngine.remove('kbl-app-meta', 'franchiseList', franchiseId);
+      resolve();
+    };
   });
 
   // Remove franchise config from meta DB
@@ -209,7 +233,10 @@ export async function deleteFranchise(franchiseId: FranchiseId): Promise<void> {
       const request = store.delete(franchiseId);
 
       request.onerror = () => reject(request.error);
-      request.onsuccess = () => resolve();
+      request.onsuccess = () => {
+        if (!syncEngine.isSuppressed()) syncEngine.remove('kbl-app-meta', 'franchiseConfigs', franchiseId);
+        resolve();
+      };
     });
   } catch {
     // Config store may not exist in v1 databases — ignore
@@ -255,7 +282,10 @@ export async function renameFranchise(
     const request = store.put(metadata);
 
     request.onerror = () => reject(request.error);
-    request.onsuccess = () => resolve();
+    request.onsuccess = () => {
+      if (!syncEngine.isSuppressed()) syncEngine.upsert('kbl-app-meta', 'franchiseList', franchiseId, metadata);
+      resolve();
+    };
   });
 }
 
@@ -337,7 +367,10 @@ export async function setActiveFranchise(franchiseId: FranchiseId): Promise<void
       const request = store.put(metadata);
 
       request.onerror = () => reject(request.error);
-      request.onsuccess = () => resolve();
+      request.onsuccess = () => {
+        if (!syncEngine.isSuppressed()) syncEngine.upsert('kbl-app-meta', 'franchiseList', franchiseId, metadata);
+        resolve();
+      };
     });
   }
 }
@@ -358,7 +391,10 @@ export async function saveFranchiseConfig(config: StoredFranchiseConfig): Promis
     const request = store.put(config);
 
     request.onerror = () => reject(request.error);
-    request.onsuccess = () => resolve();
+    request.onsuccess = () => {
+      if (!syncEngine.isSuppressed()) syncEngine.upsert('kbl-app-meta', 'franchiseConfigs', config.franchiseId, config);
+      resolve();
+    };
   });
 }
 
@@ -397,7 +433,10 @@ export async function updateFranchiseMetadata(
     const request = store.put(metadata);
 
     request.onerror = () => reject(request.error);
-    request.onsuccess = () => resolve();
+    request.onsuccess = () => {
+      if (!syncEngine.isSuppressed()) syncEngine.upsert('kbl-app-meta', 'franchiseList', franchiseId, metadata);
+      resolve();
+    };
   });
 }
 

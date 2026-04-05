@@ -7,6 +7,8 @@ import { useLeagueBuilderData, type Player as LBPlayer } from "../../hooks/useLe
 import { loadTeamLineup } from "../../utils/lineupLoader";
 import { getEffectivePlayer } from "../../../utils/playerOverrides";
 import { getTrackerDb } from "../../../utils/trackerDb";
+import { syncEngine } from "../../../utils/syncEngine";
+import { SYNC_REGISTRY, extractKey } from "../../../utils/syncConfig";
 import { getParkNames } from "../../../data/parkLookup";
 
 async function getEffectiveTeamPlayers(
@@ -68,6 +70,26 @@ export function ExhibitionGame() {
         'mojoFitnessSnapshots', 'almanacCanonicalPlayers',
       ];
       const available = storeNames.filter(s => db.objectStoreNames.contains(s));
+
+      // Push sync tombstones for all synced stores before clearing
+      const syncedStores = SYNC_REGISTRY['kbl-tracker'] || {};
+      const syncedAvailable = available.filter(s => s in syncedStores);
+      if (syncedAvailable.length > 0 && !syncEngine.isSuppressed()) {
+        const readTx = db.transaction(syncedAvailable, 'readonly');
+        for (const storeName of syncedAvailable) {
+          const keyPath = syncedStores[storeName];
+          const records: Record<string, unknown>[] = await new Promise((resolve, reject) => {
+            const req = readTx.objectStore(storeName).getAll();
+            req.onsuccess = () => resolve(req.result);
+            req.onerror = () => reject(req.error);
+          });
+          for (const record of records) {
+            const key = extractKey(record, keyPath);
+            syncEngine.remove('kbl-tracker', storeName, key);
+          }
+        }
+      }
+
       const tx = db.transaction(available, 'readwrite');
       for (const name of available) {
         tx.objectStore(name).clear();

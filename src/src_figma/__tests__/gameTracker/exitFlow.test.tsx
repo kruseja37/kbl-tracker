@@ -35,6 +35,7 @@ describe('@franchise-game-tracker AtBatFlow exit modal', () => {
 
     const directionButton = screen.getByRole('button', { name: 'Left' });
     fireEvent.click(directionButton);
+    fireEvent.click(screen.getByRole('button', { name: /continue to fielding/i }));
 
     expect(screen.getAllByTestId('fielding-modal')).toHaveLength(1);
 

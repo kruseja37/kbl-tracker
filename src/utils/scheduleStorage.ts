@@ -9,6 +9,8 @@
  * - Auto-pull next scheduled game
  */
 
+import { syncEngine } from './syncEngine';
+
 const DB_NAME = 'kbl-schedule';
 const DB_VERSION = 2;
 
@@ -224,6 +226,7 @@ export async function addGame(input: AddGameInput): Promise<ScheduledGame> {
     const request = store.add(game);
 
     request.onsuccess = () => {
+      if (!syncEngine.isSuppressed()) syncEngine.upsert('kbl-schedule', 'scheduledGames', game.id, game);
       updateMetadata(input.seasonNumber);
       resolve(game);
     };
@@ -279,6 +282,7 @@ export async function updateGameStatus(gameId: string, status: GameStatus): Prom
 
       const putRequest = store.put(game);
       putRequest.onsuccess = () => {
+        if (!syncEngine.isSuppressed()) syncEngine.upsert('kbl-schedule', 'scheduledGames', gameId, game);
         updateMetadata(game.seasonNumber);
         resolve();
       };
@@ -314,6 +318,7 @@ export async function completeGame(gameId: string, result: GameResult): Promise<
 
       const putRequest = store.put(game);
       putRequest.onsuccess = () => {
+        if (!syncEngine.isSuppressed()) syncEngine.upsert('kbl-schedule', 'scheduledGames', gameId, game);
         updateMetadata(game.seasonNumber);
         resolve();
       };
@@ -342,6 +347,7 @@ export async function deleteGame(gameId: string): Promise<void> {
 
       const deleteRequest = store.delete(gameId);
       deleteRequest.onsuccess = () => {
+        if (!syncEngine.isSuppressed()) syncEngine.remove('kbl-schedule', 'scheduledGames', gameId);
         if (seasonNumber) {
           updateMetadata(seasonNumber);
         }
@@ -389,7 +395,10 @@ async function updateMetadata(seasonNumber: number): Promise<void> {
     const store = tx.objectStore(STORES.SCHEDULE_METADATA);
     const request = store.put(metadata);
 
-    request.onsuccess = () => resolve();
+    request.onsuccess = () => {
+      if (!syncEngine.isSuppressed()) syncEngine.upsert('kbl-schedule', 'scheduleMetadata', seasonNumber, metadata);
+      resolve();
+    };
     request.onerror = () => reject(request.error);
   });
 }
@@ -460,6 +469,26 @@ export async function clearSeasonSchedule(seasonNumber: number): Promise<void> {
 export async function clearAllSchedules(): Promise<void> {
   const db = await initScheduleDatabase();
 
+  // Push tombstones for existing records before clearing
+  if (!syncEngine.isSuppressed()) {
+    const [games, metadata] = await Promise.all([
+      new Promise<ScheduledGame[]>((resolve, reject) => {
+        const tx = db.transaction(STORES.SCHEDULED_GAMES, 'readonly');
+        const req = tx.objectStore(STORES.SCHEDULED_GAMES).getAll();
+        req.onsuccess = () => resolve(req.result || []);
+        req.onerror = () => reject(req.error);
+      }),
+      new Promise<ScheduleMetadata[]>((resolve, reject) => {
+        const tx = db.transaction(STORES.SCHEDULE_METADATA, 'readonly');
+        const req = tx.objectStore(STORES.SCHEDULE_METADATA).getAll();
+        req.onsuccess = () => resolve(req.result || []);
+        req.onerror = () => reject(req.error);
+      }),
+    ]);
+    for (const g of games) syncEngine.remove('kbl-schedule', 'scheduledGames', g.id);
+    for (const m of metadata) syncEngine.remove('kbl-schedule', 'scheduleMetadata', m.seasonNumber);
+  }
+
   return new Promise((resolve, reject) => {
     const tx = db.transaction([STORES.SCHEDULED_GAMES, STORES.SCHEDULE_METADATA], 'readwrite');
 
@@ -524,7 +553,9 @@ export async function getNextFranchiseGame(
 export async function clearFranchiseSchedule(franchiseId: string): Promise<void> {
   const db = await initScheduleDatabase();
 
-  return new Promise((resolve, reject) => {
+  const affectedSeasons = new Set<number>();
+
+  await new Promise<void>((resolve, reject) => {
     const tx = db.transaction(STORES.SCHEDULED_GAMES, 'readwrite');
     const store = tx.objectStore(STORES.SCHEDULED_GAMES);
     const request = store.getAll();
@@ -535,7 +566,9 @@ export async function clearFranchiseSchedule(franchiseId: string): Promise<void>
       );
 
       for (const game of games) {
+        affectedSeasons.add(game.seasonNumber);
         store.delete(game.id);
+        if (!syncEngine.isSuppressed()) syncEngine.remove('kbl-schedule', 'scheduledGames', game.id);
       }
 
       tx.oncomplete = () => resolve();
@@ -544,4 +577,9 @@ export async function clearFranchiseSchedule(franchiseId: string): Promise<void>
     request.onerror = () => reject(request.error);
     tx.onerror = () => reject(tx.error);
   });
+
+  // Recalculate metadata for affected seasons (removes stale counts)
+  for (const seasonNumber of affectedSeasons) {
+    await updateMetadata(seasonNumber);
+  }
 }

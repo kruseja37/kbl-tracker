@@ -1,4 +1,5 @@
 import React from 'react';
+import { getMojoColor, type MojoLevel } from '../../../engines/mojoEngine';
 
 function abbreviateTeamName(name: string): string {
   const cleaned = name.trim().toUpperCase();
@@ -67,6 +68,37 @@ function formatIP(outs: number): string {
   return `${full}.${partial}`;
 }
 
+function inferMojoLevelFromLabel(label?: string): MojoLevel | undefined {
+  switch (label?.trim().toLowerCase()) {
+    case 'rattled':
+      return -2;
+    case 'tense':
+    case 'cold':
+      return -1;
+    case 'normal':
+    case 'neutral':
+      return 0;
+    case 'locked in':
+    case 'hot':
+      return 1;
+    case 'on fire':
+      return 2;
+    case 'jacked':
+      return 3;
+    default:
+      return undefined;
+  }
+}
+
+function resolveMojoColor(label?: string, color?: string): string {
+  if (color) {
+    return color;
+  }
+
+  const inferredLevel = inferMojoLevelFromLabel(label);
+  return getMojoColor(inferredLevel ?? 0);
+}
+
 /**
  * Fenway Board — Top-left zone of the 5-zone GameTracker layout (§3.7).
  * Contains: scoreboard, pitcher context, batter context, matchup history, milestone proximity.
@@ -110,6 +142,8 @@ export function FenwayBoard({
 }: FenwayBoardProps) {
   const awayLabel = abbreviateTeamName(awayTeamName);
   const homeLabel = abbreviateTeamName(homeTeamName);
+  const resolvedPitcherMojoColor = resolveMojoColor(pitcherMojo, pitcherMojoColor);
+  const resolvedBatterMojoColor = resolveMojoColor(batterMojo, batterMojoColor);
 
   return (
     <div className="bg-[#556B55] border-[3px] border-[#3d5240] h-full overflow-hidden flex flex-col">
@@ -170,7 +204,7 @@ export function FenwayBoard({
             {pitcherMojo && pitcherMojo !== 'Neutral' && (
               <span
                 className="text-[7px] font-bold px-1 rounded"
-                style={{ color: pitcherMojoColor || '#6b7280', backgroundColor: 'rgba(0,0,0,0.3)' }}
+                style={{ color: resolvedPitcherMojoColor, backgroundColor: 'rgba(0,0,0,0.3)' }}
               >
                 {pitcherMojo}
               </span>
@@ -236,7 +270,7 @@ export function FenwayBoard({
             {batterMojo && batterMojo !== 'Neutral' && (
               <span
                 className="text-[7px] font-bold px-1 rounded"
-                style={{ color: batterMojoColor || '#6b7280', backgroundColor: 'rgba(0,0,0,0.3)' }}
+                style={{ color: resolvedBatterMojoColor, backgroundColor: 'rgba(0,0,0,0.3)' }}
               >
                 {batterMojo}
               </span>

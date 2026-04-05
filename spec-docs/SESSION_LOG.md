@@ -1,6 +1,40 @@
 # KBL TRACKER — SESSION LOG
 # Previous sessions archived at: spec-docs/archive/SESSION_LOG_through_2026-02-11.md
 ---
+## Session: 2026-04-04 (F) — Supabase Sync: Clear Exhibition Data Fix + E2E Testing
+
+### What Was Done
+1. **Fixed "Clear Exhibition Data" button to push sync tombstones** (ExhibitionGame.tsx:59-97)
+   - Previously: `clearExhibitionData()` called `store.clear()` on 15 stores without sync
+   - Now: Pre-reads all records from synced stores, pushes `syncEngine.remove()` tombstone for each, then clears
+   - Added imports: `syncEngine`, `SYNC_REGISTRY`, `extractKey`
+   - 10 synced stores get tombstones; 5 non-synced stores (`currentGame`, `playerGameStats`, `pitcherGameStats`, `rosterSnapshots`, `mojoFitnessSnapshots`) clear without tombstones
+
+2. **End-to-end sync testing completed**
+   - Upload from laptop → Supabase: ✅ Working
+   - Download from iPad → local: ✅ Working
+   - "Replace cloud with local" to clean stale data: ✅ Working
+   - Verified via SQL queries that tombstones appear and non-deleted counts are correct
+   - Post-cleanup state: only `almanacCanonicalPlayers` (18 records) remain in kbl-tracker — correct
+
+### Note on "Clear Exhibition Data" Tombstone Fix
+- Code is wired but wasn't directly tested this session (local stores were already empty when fix deployed)
+- Used "Replace cloud with local" as workaround to clean stale cloud data
+- User reports all sync testing is complete — incremental, delete, iPad/Safari all verified
+
+### Supabase Sync Overall Status
+- **Plan:** `/Users/johnkruse/.claude/plans/gleaming-plotting-sky.md`
+- **Phases 0-4: COMPLETE** — All storage files wired to syncEngine
+- **E2E testing: COMPLETE** — Upload, download, incremental, delete, iPad/Safari all verified by user
+- **Phase 5 (Polish): NOT STARTED** — Progress UI refinement, count verification after replaceCloudWithLocal
+
+### Files Changed This Session
+- `src/src_figma/app/pages/ExhibitionGame.tsx` — Added sync tombstone logic to `clearExhibitionData()`
+
+### Build Status
+- `npm run build`: ✅ Exit 0 (5.56s)
+
+---
 ## Session: 2026-03-07 (M) — Elimination Mode Shipped (Steps 11-13)
 
 ### Context

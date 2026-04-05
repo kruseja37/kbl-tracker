@@ -1,4 +1,5 @@
 import { getTrackerDb } from './trackerDb';
+import { syncEngine } from './syncEngine';
 
 const STORE_NAME = 'almanacCanonicalPlayers';
 
@@ -79,7 +80,10 @@ export async function upsertCanonicalPlayer(player: CanonicalPlayer): Promise<vo
     const store = tx.objectStore(STORE_NAME);
     const request = store.put(player);
 
-    request.onsuccess = () => resolve();
+    request.onsuccess = () => {
+      if (!syncEngine.isSuppressed()) syncEngine.upsert('kbl-tracker', 'almanacCanonicalPlayers', player.canonicalId, player);
+      resolve();
+    };
     request.onerror = () => reject(request.error);
   });
 }

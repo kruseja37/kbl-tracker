@@ -13,6 +13,7 @@ import {
   type FWARResult,
   type Position as FWARPosition,
 } from '../engines/fwarCalculator';
+import { syncEngine } from './syncEngine';
 import type { Position } from '../types/game';
 import type { FieldingEvent as PersistedFieldingEvent, GameScopeQuery } from './eventLog';
 import type { PersistedGameState } from './gameStorage';
@@ -407,7 +408,10 @@ export async function createPlayoff(config: Omit<PlayoffConfig, 'id' | 'createdA
     createdAt: Date.now(),
   };
 
-  return new Promise((resolve, reject) => {
+  // Track replaced playoff IDs so we can cascade-delete their series/stats
+  const replacedPlayoffIds: string[] = [];
+
+  await new Promise<void>((resolve, reject) => {
     const tx = db.transaction(STORES.PLAYOFFS, 'readwrite');
     const store = tx.objectStore(STORES.PLAYOFFS);
 
@@ -420,18 +424,30 @@ export async function createPlayoff(config: Omit<PlayoffConfig, 'id' | 'createdA
         const record = cursor.value as PlayoffConfig;
         const existingSourceType = record.sourceType || 'franchise';
         if (existingSourceType === newSourceType) {
+          replacedPlayoffIds.push(record.id);
+          if (!syncEngine.isSuppressed()) syncEngine.remove('kbl-playoffs', 'playoffs', record.id);
           cursor.delete();
         }
         cursor.continue();
       } else {
         // All existing records for this season deleted, now add the new one
         const addReq = store.add(playoff);
-        addReq.onsuccess = () => resolve(playoff);
+        addReq.onsuccess = () => {
+          if (!syncEngine.isSuppressed()) syncEngine.upsert('kbl-playoffs', 'playoffs', playoff.id, playoff);
+          resolve();
+        };
         addReq.onerror = () => reject(addReq.error);
       }
     };
     cursorReq.onerror = () => reject(cursorReq.error);
   });
+
+  // Cascade-delete orphaned series and stats for replaced playoffs
+  for (const oldId of replacedPlayoffIds) {
+    await cascadeDeletePlayoffChildren(db, oldId);
+  }
+
+  return playoff;
 }
 
 export async function getPlayoff(playoffId: string): Promise<PlayoffConfig | null> {
@@ -513,7 +529,10 @@ export async function updatePlayoff(playoffId: string, updates: Partial<PlayoffC
     const store = tx.objectStore(STORES.PLAYOFFS);
     const request = store.put(updated);
 
-    request.onsuccess = () => resolve(updated);
+    request.onsuccess = () => {
+      if (!syncEngine.isSuppressed()) syncEngine.upsert('kbl-playoffs', 'playoffs', updated.id, updated);
+      resolve(updated);
+    };
     request.onerror = () => reject(request.error);
   });
 }
@@ -555,7 +574,10 @@ export async function createSeries(series: Omit<PlayoffSeries, 'id' | 'createdAt
     const store = tx.objectStore(STORES.SERIES);
     const request = store.add(newSeries);
 
-    request.onsuccess = () => resolve(newSeries);
+    request.onsuccess = () => {
+      if (!syncEngine.isSuppressed()) syncEngine.upsert('kbl-playoffs', 'series', newSeries.id, newSeries);
+      resolve(newSeries);
+    };
     request.onerror = () => reject(request.error);
   });
 }
@@ -607,7 +629,10 @@ export async function updateSeries(seriesId: string, updates: Partial<PlayoffSer
     const store = tx.objectStore(STORES.SERIES);
     const request = store.put(updated);
 
-    request.onsuccess = () => resolve(updated);
+    request.onsuccess = () => {
+      if (!syncEngine.isSuppressed()) syncEngine.upsert('kbl-playoffs', 'series', updated.id, updated);
+      resolve(updated);
+    };
     request.onerror = () => reject(request.error);
   });
 }
@@ -1084,6 +1109,7 @@ export async function aggregateGameToPlayoffStats(
           : 0;
 
         store.put(updated);
+        if (!syncEngine.isSuppressed()) syncEngine.upsert('kbl-playoffs', 'playoffStats', updated.id, updated);
       }
     };
 
@@ -1130,37 +1156,44 @@ export async function deletePlayoffBySeason(seasonNumber: number): Promise<void>
   }
 }
 
-export async function deletePlayoff(playoffId: string): Promise<void> {
-  const db = await initPlayoffDatabase();
-
+/**
+ * Delete series, playoffGames, and playoffStats for a given playoff ID.
+ * Used by both deletePlayoff (full cascade) and createPlayoff (replacing old playoff).
+ */
+async function cascadeDeletePlayoffChildren(db: IDBDatabase, playoffId: string): Promise<void> {
   return new Promise((resolve, reject) => {
     const tx = db.transaction(
-      [STORES.PLAYOFFS, STORES.SERIES, STORES.PLAYOFF_GAMES, STORES.PLAYOFF_STATS],
+      [STORES.SERIES, STORES.PLAYOFF_GAMES, STORES.PLAYOFF_STATS],
       'readwrite'
     );
 
-    // Delete playoff
-    tx.objectStore(STORES.PLAYOFFS).delete(playoffId);
-
-    // Delete related series
     const seriesStore = tx.objectStore(STORES.SERIES);
-    const seriesIndex = seriesStore.index('playoffId');
-    const seriesCursor = seriesIndex.openCursor(playoffId);
+    const seriesCursor = seriesStore.index('playoffId').openCursor(playoffId);
     seriesCursor.onsuccess = () => {
       const cursor = seriesCursor.result;
+      if (cursor) {
+        if (!syncEngine.isSuppressed()) syncEngine.remove('kbl-playoffs', 'series', (cursor.value as { id: string }).id);
+        cursor.delete();
+        cursor.continue();
+      }
+    };
+
+    const gamesStore = tx.objectStore(STORES.PLAYOFF_GAMES);
+    const gamesCursor = gamesStore.index('playoffId').openCursor(playoffId);
+    gamesCursor.onsuccess = () => {
+      const cursor = gamesCursor.result;
       if (cursor) {
         cursor.delete();
         cursor.continue();
       }
     };
 
-    // Delete related stats
     const statsStore = tx.objectStore(STORES.PLAYOFF_STATS);
-    const statsIndex = statsStore.index('playoffId');
-    const statsCursor = statsIndex.openCursor(playoffId);
+    const statsCursor = statsStore.index('playoffId').openCursor(playoffId);
     statsCursor.onsuccess = () => {
       const cursor = statsCursor.result;
       if (cursor) {
+        if (!syncEngine.isSuppressed()) syncEngine.remove('kbl-playoffs', 'playoffStats', (cursor.value as { id: string }).id);
         cursor.delete();
         cursor.continue();
       }
@@ -1169,4 +1202,20 @@ export async function deletePlayoff(playoffId: string): Promise<void> {
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);
   });
+}
+
+export async function deletePlayoff(playoffId: string): Promise<void> {
+  const db = await initPlayoffDatabase();
+
+  // Delete the playoff record itself
+  await new Promise<void>((resolve, reject) => {
+    const tx = db.transaction(STORES.PLAYOFFS, 'readwrite');
+    tx.objectStore(STORES.PLAYOFFS).delete(playoffId);
+    if (!syncEngine.isSuppressed()) syncEngine.remove('kbl-playoffs', 'playoffs', playoffId);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+
+  // Cascade-delete series, playoffGames, and stats
+  await cascadeDeletePlayoffChildren(db, playoffId);
 }

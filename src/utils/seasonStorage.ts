@@ -7,6 +7,7 @@
  */
 
 import { getTrackerDb } from './trackerDb';
+import { syncEngine } from './syncEngine';
 
 // Store names
 const STORES = {
@@ -296,7 +297,10 @@ export async function getOrCreateBattingStats(
         const newStats = createInitialBattingStats(seasonId, playerId, playerName, teamId);
         const putRequest = store.put(newStats);
         putRequest.onerror = () => reject(putRequest.error);
-        putRequest.onsuccess = () => resolve(newStats);
+        putRequest.onsuccess = () => {
+          if (!syncEngine.isSuppressed()) syncEngine.upsert('kbl-tracker', 'playerSeasonBatting', [seasonId, playerId], newStats);
+          resolve(newStats);
+        };
       }
     };
   });
@@ -311,10 +315,14 @@ export async function updateBattingStats(stats: PlayerSeasonBatting): Promise<vo
   return new Promise((resolve, reject) => {
     const transaction = db.transaction(STORES.PLAYER_SEASON_BATTING, 'readwrite');
     const store = transaction.objectStore(STORES.PLAYER_SEASON_BATTING);
-    const request = store.put({ ...stats, lastUpdated: Date.now() });
+    const record = { ...stats, lastUpdated: Date.now() };
+    const request = store.put(record);
 
     request.onerror = () => reject(request.error);
-    request.onsuccess = () => resolve();
+    request.onsuccess = () => {
+      if (!syncEngine.isSuppressed()) syncEngine.upsert('kbl-tracker', 'playerSeasonBatting', [stats.seasonId, stats.playerId], record);
+      resolve();
+    };
   });
 }
 
@@ -364,7 +372,10 @@ export async function getOrCreatePitchingStats(
         const newStats = createInitialPitchingStats(seasonId, playerId, playerName, teamId);
         const putRequest = store.put(newStats);
         putRequest.onerror = () => reject(putRequest.error);
-        putRequest.onsuccess = () => resolve(newStats);
+        putRequest.onsuccess = () => {
+          if (!syncEngine.isSuppressed()) syncEngine.upsert('kbl-tracker', 'playerSeasonPitching', [seasonId, playerId], newStats);
+          resolve(newStats);
+        };
       }
     };
   });
@@ -379,10 +390,14 @@ export async function updatePitchingStats(stats: PlayerSeasonPitching): Promise<
   return new Promise((resolve, reject) => {
     const transaction = db.transaction(STORES.PLAYER_SEASON_PITCHING, 'readwrite');
     const store = transaction.objectStore(STORES.PLAYER_SEASON_PITCHING);
-    const request = store.put({ ...stats, lastUpdated: Date.now() });
+    const record = { ...stats, lastUpdated: Date.now() };
+    const request = store.put(record);
 
     request.onerror = () => reject(request.error);
-    request.onsuccess = () => resolve();
+    request.onsuccess = () => {
+      if (!syncEngine.isSuppressed()) syncEngine.upsert('kbl-tracker', 'playerSeasonPitching', [stats.seasonId, stats.playerId], record);
+      resolve();
+    };
   });
 }
 
@@ -432,7 +447,10 @@ export async function getOrCreateFieldingStats(
         const newStats = createInitialFieldingStats(seasonId, playerId, playerName, teamId);
         const putRequest = store.put(newStats);
         putRequest.onerror = () => reject(putRequest.error);
-        putRequest.onsuccess = () => resolve(newStats);
+        putRequest.onsuccess = () => {
+          if (!syncEngine.isSuppressed()) syncEngine.upsert('kbl-tracker', 'playerSeasonFielding', [seasonId, playerId], newStats);
+          resolve(newStats);
+        };
       }
     };
   });
@@ -447,10 +465,14 @@ export async function updateFieldingStats(stats: PlayerSeasonFielding): Promise<
   return new Promise((resolve, reject) => {
     const transaction = db.transaction(STORES.PLAYER_SEASON_FIELDING, 'readwrite');
     const store = transaction.objectStore(STORES.PLAYER_SEASON_FIELDING);
-    const request = store.put({ ...stats, lastUpdated: Date.now() });
+    const record = { ...stats, lastUpdated: Date.now() };
+    const request = store.put(record);
 
     request.onerror = () => reject(request.error);
-    request.onsuccess = () => resolve();
+    request.onsuccess = () => {
+      if (!syncEngine.isSuppressed()) syncEngine.upsert('kbl-tracker', 'playerSeasonFielding', [stats.seasonId, stats.playerId], record);
+      resolve();
+    };
   });
 }
 
@@ -491,7 +513,10 @@ export async function getOrCreateSeason(
         };
         const putRequest = store.put(newSeason);
         putRequest.onerror = () => reject(putRequest.error);
-        putRequest.onsuccess = () => resolve(newSeason);
+        putRequest.onsuccess = () => {
+          if (!syncEngine.isSuppressed()) syncEngine.upsert('kbl-tracker', 'seasonMetadata', seasonId, newSeason);
+          resolve(newSeason);
+        };
       }
     };
   });
@@ -515,7 +540,10 @@ export async function incrementSeasonGames(seasonId: string): Promise<void> {
         const updated = { ...request.result, gamesPlayed: request.result.gamesPlayed + 1 };
         const putRequest = store.put(updated);
         putRequest.onerror = () => reject(putRequest.error);
-        putRequest.onsuccess = () => resolve();
+        putRequest.onsuccess = () => {
+          if (!syncEngine.isSuppressed()) syncEngine.upsert('kbl-tracker', 'seasonMetadata', seasonId, updated);
+          resolve();
+        };
       } else {
         resolve();  // Season doesn't exist, ignore
       }
@@ -546,7 +574,10 @@ export async function markSeasonComplete(seasonId: string): Promise<void> {
         };
         const putRequest = store.put(updated);
         putRequest.onerror = () => reject(putRequest.error);
-        putRequest.onsuccess = () => resolve();
+        putRequest.onsuccess = () => {
+          if (!syncEngine.isSuppressed()) syncEngine.upsert('kbl-tracker', 'seasonMetadata', seasonId, updated);
+          resolve();
+        };
       } else {
         resolve(); // Season doesn't exist, ignore
       }

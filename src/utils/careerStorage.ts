@@ -8,6 +8,7 @@
  */
 
 import { getTrackerDb } from './trackerDb';
+import { syncEngine } from './syncEngine';
 
 // Store names
 const STORES = {
@@ -330,7 +331,10 @@ export async function getOrCreateCareerBatting(
         const newStats = createInitialCareerBatting(playerId, playerName, teamId);
         const putRequest = store.put(newStats);
         putRequest.onerror = () => reject(putRequest.error);
-        putRequest.onsuccess = () => resolve(newStats);
+        putRequest.onsuccess = () => {
+          if (!syncEngine.isSuppressed()) syncEngine.upsert('kbl-tracker', 'playerCareerBatting', playerId, newStats);
+          resolve(newStats);
+        };
       }
     };
   });
@@ -345,10 +349,14 @@ export async function updateCareerBatting(stats: PlayerCareerBatting): Promise<v
   return new Promise((resolve, reject) => {
     const transaction = db.transaction(STORES.PLAYER_CAREER_BATTING, 'readwrite');
     const store = transaction.objectStore(STORES.PLAYER_CAREER_BATTING);
-    const request = store.put({ ...stats, lastUpdated: Date.now() });
+    const record = { ...stats, lastUpdated: Date.now() };
+    const request = store.put(record);
 
     request.onerror = () => reject(request.error);
-    request.onsuccess = () => resolve();
+    request.onsuccess = () => {
+      if (!syncEngine.isSuppressed()) syncEngine.upsert('kbl-tracker', 'playerCareerBatting', stats.playerId, record);
+      resolve();
+    };
   });
 }
 
@@ -396,7 +404,10 @@ export async function getOrCreateCareerPitching(
         const newStats = createInitialCareerPitching(playerId, playerName, teamId);
         const putRequest = store.put(newStats);
         putRequest.onerror = () => reject(putRequest.error);
-        putRequest.onsuccess = () => resolve(newStats);
+        putRequest.onsuccess = () => {
+          if (!syncEngine.isSuppressed()) syncEngine.upsert('kbl-tracker', 'playerCareerPitching', playerId, newStats);
+          resolve(newStats);
+        };
       }
     };
   });
@@ -411,10 +422,14 @@ export async function updateCareerPitching(stats: PlayerCareerPitching): Promise
   return new Promise((resolve, reject) => {
     const transaction = db.transaction(STORES.PLAYER_CAREER_PITCHING, 'readwrite');
     const store = transaction.objectStore(STORES.PLAYER_CAREER_PITCHING);
-    const request = store.put({ ...stats, lastUpdated: Date.now() });
+    const record = { ...stats, lastUpdated: Date.now() };
+    const request = store.put(record);
 
     request.onerror = () => reject(request.error);
-    request.onsuccess = () => resolve();
+    request.onsuccess = () => {
+      if (!syncEngine.isSuppressed()) syncEngine.upsert('kbl-tracker', 'playerCareerPitching', stats.playerId, record);
+      resolve();
+    };
   });
 }
 
@@ -462,7 +477,10 @@ export async function getOrCreateCareerFielding(
         const newStats = createInitialCareerFielding(playerId, playerName, teamId);
         const putRequest = store.put(newStats);
         putRequest.onerror = () => reject(putRequest.error);
-        putRequest.onsuccess = () => resolve(newStats);
+        putRequest.onsuccess = () => {
+          if (!syncEngine.isSuppressed()) syncEngine.upsert('kbl-tracker', 'playerCareerFielding', playerId, newStats);
+          resolve(newStats);
+        };
       }
     };
   });
@@ -477,10 +495,14 @@ export async function updateCareerFielding(stats: PlayerCareerFielding): Promise
   return new Promise((resolve, reject) => {
     const transaction = db.transaction(STORES.PLAYER_CAREER_FIELDING, 'readwrite');
     const store = transaction.objectStore(STORES.PLAYER_CAREER_FIELDING);
-    const request = store.put({ ...stats, lastUpdated: Date.now() });
+    const record = { ...stats, lastUpdated: Date.now() };
+    const request = store.put(record);
 
     request.onerror = () => reject(request.error);
-    request.onsuccess = () => resolve();
+    request.onsuccess = () => {
+      if (!syncEngine.isSuppressed()) syncEngine.upsert('kbl-tracker', 'playerCareerFielding', stats.playerId, record);
+      resolve();
+    };
   });
 }
 
@@ -500,7 +522,10 @@ export async function recordCareerMilestone(milestone: CareerMilestone): Promise
     const request = store.put(milestone);
 
     request.onerror = () => reject(request.error);
-    request.onsuccess = () => resolve();
+    request.onsuccess = () => {
+      if (!syncEngine.isSuppressed()) syncEngine.upsert('kbl-tracker', 'careerMilestones', milestone.id, milestone);
+      resolve();
+    };
   });
 }
 

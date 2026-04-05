@@ -6,6 +6,7 @@ import {
   type Team,
 } from './leagueBuilderStorage';
 import { getEffectivePlayer } from './playerOverrides';
+import { syncEngine } from './syncEngine';
 
 export type { Player, Team } from './leagueBuilderStorage';
 
@@ -129,6 +130,8 @@ export async function saveFranchisePlayer(
   tx.objectStore(STORES.PLAYERS).put(fullPlayer);
   await transactionToPromise(tx);
 
+  if (!syncEngine.isSuppressed()) syncEngine.upsert(`kbl-franchise-${franchiseId}`, 'players', fullPlayer.id, fullPlayer);
+
   return fullPlayer;
 }
 
@@ -166,6 +169,8 @@ export async function saveFranchiseTeam(
   const tx = db.transaction(STORES.TEAMS, 'readwrite');
   tx.objectStore(STORES.TEAMS).put(fullTeam);
   await transactionToPromise(tx);
+
+  if (!syncEngine.isSuppressed()) syncEngine.upsert(`kbl-franchise-${franchiseId}`, 'teams', fullTeam.id, fullTeam);
 
   return fullTeam;
 }
@@ -235,6 +240,15 @@ export async function deepCopyLeagueToFranchise(franchiseId: string, leagueId: s
     }),
   );
 
+  // Push tombstones for existing records before clearing
+  if (!syncEngine.isSuppressed()) {
+    const dbName = `kbl-franchise-${franchiseId}`;
+    const existingPlayers = await getAllFranchisePlayers(franchiseId);
+    const existingTeams = await getAllFranchiseTeams(franchiseId);
+    for (const p of existingPlayers) syncEngine.remove(dbName, 'players', p.id);
+    for (const t of existingTeams) syncEngine.remove(dbName, 'teams', t.id);
+  }
+
   const tx = db.transaction([STORES.PLAYERS, STORES.TEAMS], 'readwrite');
   const playerStore = tx.objectStore(STORES.PLAYERS);
   const teamStore = tx.objectStore(STORES.TEAMS);
@@ -251,4 +265,10 @@ export async function deepCopyLeagueToFranchise(franchiseId: string, leagueId: s
   }
 
   await transactionToPromise(tx);
+
+  if (!syncEngine.isSuppressed()) {
+    const dbName = `kbl-franchise-${franchiseId}`;
+    for (const player of playersToCopy) syncEngine.upsert(dbName, 'players', player.id, player);
+    for (const team of teamsToCopy) syncEngine.upsert(dbName, 'teams', team.id, team);
+  }
 }

@@ -66,7 +66,10 @@ export interface DHContext {
 // Storage Keys and Defaults
 // ============================================================================
 
-const LEAGUES_KEY = 'kbl-leagues';
+import { syncEngine } from './syncEngine';
+
+const LEAGUES_KEY = 'kbl-league-dh-config';
+const LEGACY_LEAGUES_KEY = 'kbl-leagues'; // Old key — shared with leagueStorage.ts, migrated away
 const SEASON_DH_CONFIG_KEY = 'kbl-season-dh-config';
 
 /**
@@ -109,13 +112,27 @@ export const PITCHER_ROTATION_FACTOR = 0.25;
 // ============================================================================
 
 /**
- * Get all leagues from storage
+ * Get all leagues from storage.
+ * On first call, migrates LeagueData[] from legacy 'kbl-leagues' key
+ * to 'kbl-league-dh-config' (the old key is now owned by leagueStorage.ts).
  */
 export function getLeagues(): LeagueData[] {
   try {
     const stored = localStorage.getItem(LEAGUES_KEY);
     if (stored) {
       return JSON.parse(stored);
+    }
+
+    // One-time migration: check legacy key for LeagueData[]-shaped data
+    const legacy = localStorage.getItem(LEGACY_LEAGUES_KEY);
+    if (legacy) {
+      const parsed = JSON.parse(legacy);
+      if (Array.isArray(parsed) && parsed.length > 0 && 'usesDesignatedHitter' in parsed[0]) {
+        // Legacy data is LeagueData[] — migrate to new key
+        localStorage.setItem(LEAGUES_KEY, legacy);
+        if (!syncEngine.isSuppressed()) syncEngine.upsertLocal(LEAGUES_KEY, parsed);
+        return parsed;
+      }
     }
   } catch (error) {
     console.error('Error loading leagues:', error);
@@ -137,6 +154,7 @@ export function saveLeague(league: LeagueData): void {
   }
 
   localStorage.setItem(LEAGUES_KEY, JSON.stringify(leagues));
+  if (!syncEngine.isSuppressed()) syncEngine.upsertLocal(LEAGUES_KEY, leagues);
 }
 
 /**
@@ -145,6 +163,7 @@ export function saveLeague(league: LeagueData): void {
 export function deleteLeague(leagueId: string): void {
   const leagues = getLeagues().filter(l => l.id !== leagueId);
   localStorage.setItem(LEAGUES_KEY, JSON.stringify(leagues));
+  if (!syncEngine.isSuppressed()) syncEngine.upsertLocal(LEAGUES_KEY, leagues);
 }
 
 /**
@@ -158,9 +177,13 @@ export function getLeagueById(leagueId: string): LeagueData | undefined {
  * Initialize default leagues if none exist
  */
 export function initializeDefaultLeagues(): void {
+  // Check new key first, then fall back to migration via getLeagues()
   const stored = localStorage.getItem(LEAGUES_KEY);
   if (!stored) {
-    localStorage.setItem(LEAGUES_KEY, JSON.stringify(DEFAULT_LEAGUES));
+    // getLeagues() handles migration from legacy key + defaults
+    const leagues = getLeagues();
+    localStorage.setItem(LEAGUES_KEY, JSON.stringify(leagues));
+    if (!syncEngine.isSuppressed()) syncEngine.upsertLocal(LEAGUES_KEY, leagues);
   }
 }
 
@@ -188,6 +211,7 @@ export function getSeasonDHConfig(): SeasonDHConfig {
  */
 export function setSeasonDHConfig(config: SeasonDHConfig): void {
   localStorage.setItem(SEASON_DH_CONFIG_KEY, JSON.stringify(config));
+  if (!syncEngine.isSuppressed()) syncEngine.upsertLocal(SEASON_DH_CONFIG_KEY, config);
 }
 
 // ============================================================================

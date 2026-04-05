@@ -5,6 +5,8 @@
  * A league is a user-defined group of teams for a season.
  */
 
+import { syncEngine } from './syncEngine';
+
 const STORAGE_KEY = 'kbl-leagues';
 
 export interface LeagueConfig {
@@ -64,6 +66,7 @@ export function saveLeague(league: LeagueConfig): void {
     }
 
     localStorage.setItem(STORAGE_KEY, JSON.stringify(leagues));
+    if (!syncEngine.isSuppressed()) syncEngine.upsertLocal(STORAGE_KEY, leagues);
   } catch (err) {
     console.warn('[leagueStorage] Failed to save league:', err);
   }
@@ -76,6 +79,7 @@ export function deleteLeague(leagueId: string): void {
   try {
     const leagues = getAllLeagues().filter(l => l.id !== leagueId);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(leagues));
+    if (!syncEngine.isSuppressed()) syncEngine.upsertLocal(STORAGE_KEY, leagues);
   } catch (err) {
     console.warn('[leagueStorage] Failed to delete league:', err);
   }
