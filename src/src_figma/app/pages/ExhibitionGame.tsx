@@ -200,6 +200,14 @@ export function ExhibitionGame() {
   const awayStartingPitcher = awayPitchers.find(p => p.isActive);
   const homeStartingPitcher = homePitchers.find(p => p.isActive);
 
+  // Reorder lineup via drag-and-drop — merges reordered starters back with bench
+  const handleAwayReorder = (reordered: RosterPlayer[]) => {
+    setAwayPlayers([...reordered, ...awayBench]);
+  };
+  const handleHomeReorder = (reordered: RosterPlayer[]) => {
+    setHomePlayers([...reordered, ...homeBench]);
+  };
+
   const handleStartGame = () => {
     // Pass the configured rosters and team info to the game tracker
     navigate("/game-tracker/exhibition-1", {
@@ -435,8 +443,8 @@ export function ExhibitionGame() {
               <div className="text-sm text-[#E8E8D8] mb-2 font-bold tracking-wide" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>STARTING LINEUPS</div>
               <div className="text-xs text-[#E8E8D8]/80" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.2)' }}>
                 {awayHasStoredLineup || homeHasStoredLineup
-                  ? "Lineups loaded from League Builder. Edit lineups in League Builder > Rosters."
-                  : "Default lineups. Configure custom lineups in League Builder > Rosters."}
+                  ? "Lineups loaded from League Builder. Drag to reorder batting order."
+                  : "Default lineups. Drag to reorder batting order."}
               </div>
             </div>
 
@@ -459,6 +467,7 @@ export function ExhibitionGame() {
                   teamColor={awayTeam.colors?.primary || '#4A6A42'}
                   teamBorderColor={awayTeam.colors?.secondary || '#E8E8D8'}
                   isAway={true}
+                  onReorder={handleAwayReorder}
                 />
                 <LineupPreview
                   teamName={homeTeam.name.toUpperCase()}
@@ -468,6 +477,7 @@ export function ExhibitionGame() {
                   teamColor={homeTeam.colors?.primary || '#4A6A42'}
                   teamBorderColor={homeTeam.colors?.secondary || '#E8E8D8'}
                   isAway={false}
+                  onReorder={handleHomeReorder}
                 />
               </div>
             )}
