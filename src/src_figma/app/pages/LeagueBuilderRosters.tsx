@@ -88,12 +88,58 @@ export function LeagueBuilderRosters() {
   const loadRoster = async (teamId: string) => {
     const roster = await getRoster(teamId);
     if (roster) {
-      setCurrentRoster(roster);
+      setCurrentRoster(migratePitcherBuckets(roster, players));
     } else {
-      // Create empty roster
       setCurrentRoster(createEmptyRoster(teamId));
     }
     setHasChanges(false);
+  };
+
+  // Migrate legacy rosters where SP/RP pitchers were placed in startingRotation
+  // before the longRelievers bucket existed. Only re-sorts if a misplaced pitcher is detected.
+  const migratePitcherBuckets = (roster: TeamRoster, allPlayers: Player[]): TeamRoster => {
+    const playerMap = new Map(allPlayers.map((p) => [p.id, p]));
+
+    // Check if any pitcher in startingRotation has a non-SP position (SP/RP, RP, CP)
+    const hasMisplacedPitcher = roster.startingRotation.some((id) => {
+      const player = playerMap.get(id);
+      return player && player.primaryPosition !== 'SP';
+    });
+
+    if (!hasMisplacedPitcher) return roster;
+
+    const allBucketIds = [
+      ...roster.startingRotation,
+      ...(roster.longRelievers || []),
+      ...roster.setupPitchers,
+      ...(roster.closingPitcher ? [roster.closingPitcher] : []),
+    ].filter(Boolean);
+
+    if (allBucketIds.length === 0) return roster;
+
+    const starters: string[] = [];
+    const longRelievers: string[] = [];
+    const relievers: string[] = [];
+    let closer = '';
+
+    for (const id of allBucketIds) {
+      const player = playerMap.get(id);
+      if (!player) continue;
+      switch (player.primaryPosition) {
+        case 'SP': starters.push(id); break;
+        case 'SP/RP': longRelievers.push(id); break;
+        case 'CP': closer = id; break;
+        default: relievers.push(id); break;
+      }
+    }
+
+    return {
+      ...roster,
+      startingRotation: starters,
+      longRelievers,
+      setupPitchers: relievers,
+      closingPitcher: closer,
+    };
   };
 
   const createEmptyRoster = (teamId: string): TeamRoster => ({
@@ -103,6 +149,7 @@ export function LeagueBuilderRosters() {
     lineupWithDH: [],
     lineupWithoutDH: [],
     startingRotation: [],
+    longRelievers: [],
     closingPitcher: '',
     setupPitchers: [],
     depthChart: {
@@ -593,32 +640,56 @@ function LineupTab({ roster, players, onUpdate }: LineupTabProps) {
     setLineup(newLineup);
   };
 
-  const moveUp = (battingOrder: number) => {
-    if (battingOrder <= 1) return;
-    // In No DH, don't allow moving into or out of the pitcher's 9th slot
-    if (!isDH && (battingOrder === 9 || battingOrder - 1 === 0)) return;
-    const newLineup = [...userSlots];
-    const idx = newLineup.findIndex((s) => s.battingOrder === battingOrder);
-    const prevIdx = newLineup.findIndex((s) => s.battingOrder === battingOrder - 1);
-    if (idx >= 0 && prevIdx >= 0) {
-      newLineup[idx].battingOrder = battingOrder - 1;
-      newLineup[prevIdx].battingOrder = battingOrder;
-    }
-    setLineup(newLineup.sort((a, b) => a.battingOrder - b.battingOrder));
+  // Drag-and-drop reordering state
+  const [dragFrom, setDragFrom] = useState<number | null>(null);
+  const [dragOver, setDragOver] = useState<number | null>(null);
+
+  const reorderLineup = (fromOrder: number, toOrder: number) => {
+    if (fromOrder === toOrder) return;
+    // Don't reorder into the pitcher's locked 9th slot
+    if (!isDH && (fromOrder === 9 || toOrder === 9)) return;
+
+    const sorted = [...userSlots].sort((a, b) => a.battingOrder - b.battingOrder);
+    const fromIdx = sorted.findIndex((s) => s.battingOrder === fromOrder);
+    const toIdx = sorted.findIndex((s) => s.battingOrder === toOrder);
+    if (fromIdx < 0 || toIdx < 0) return;
+
+    // Remove the dragged item and insert at the new position
+    const [moved] = sorted.splice(fromIdx, 1);
+    sorted.splice(toIdx, 0, moved);
+
+    // Reassign batting orders sequentially
+    const reordered = sorted.map((s, idx) => ({ ...s, battingOrder: idx + 1 }));
+    setLineup(reordered);
   };
 
-  const moveDown = (battingOrder: number) => {
-    // In No DH, slots 1-8 are user-managed; don't allow moving into pitcher's slot
-    const maxMovable = isDH ? currentLineup.length : Math.min(userSlots.length, 8);
-    if (battingOrder >= maxMovable) return;
-    const newLineup = [...userSlots];
-    const idx = newLineup.findIndex((s) => s.battingOrder === battingOrder);
-    const nextIdx = newLineup.findIndex((s) => s.battingOrder === battingOrder + 1);
-    if (idx >= 0 && nextIdx >= 0) {
-      newLineup[idx].battingOrder = battingOrder + 1;
-      newLineup[nextIdx].battingOrder = battingOrder;
+  const handleDragStart = (e: React.DragEvent, battingOrder: number) => {
+    setDragFrom(battingOrder);
+    e.dataTransfer.effectAllowed = 'move';
+    // Make the drag image slightly transparent
+    if (e.currentTarget instanceof HTMLElement) {
+      e.dataTransfer.setDragImage(e.currentTarget, 0, 0);
     }
-    setLineup(newLineup.sort((a, b) => a.battingOrder - b.battingOrder));
+  };
+
+  const handleDragOver = (e: React.DragEvent, battingOrder: number) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    setDragOver(battingOrder);
+  };
+
+  const handleDrop = (e: React.DragEvent, battingOrder: number) => {
+    e.preventDefault();
+    if (dragFrom !== null) {
+      reorderLineup(dragFrom, battingOrder);
+    }
+    setDragFrom(null);
+    setDragOver(null);
+  };
+
+  const handleDragEnd = () => {
+    setDragFrom(null);
+    setDragOver(null);
   };
 
   const usedPlayerIds = currentLineup.map((s) => s.playerId);
@@ -665,18 +736,32 @@ function LineupTab({ roster, players, onUpdate }: LineupTabProps) {
                 const player = players.find((p) => p.id === slot.playerId);
                 if (!player) return null;
                 const isPitcherSlot = !isDH && slot.fieldingPosition === ('P' as unknown as Position);
+                const isDragging = dragFrom === slot.battingOrder;
+                const isDropTarget = dragOver === slot.battingOrder && dragFrom !== slot.battingOrder;
                 return (
                   <div
                     key={`${slot.battingOrder}-${slot.playerId}`}
-                    className={`flex items-center gap-2 border-2 p-2 ${
+                    draggable={!isPitcherSlot}
+                    onDragStart={(e) => !isPitcherSlot && handleDragStart(e, slot.battingOrder)}
+                    onDragOver={(e) => !isPitcherSlot && handleDragOver(e, slot.battingOrder)}
+                    onDrop={(e) => !isPitcherSlot && handleDrop(e, slot.battingOrder)}
+                    onDragEnd={handleDragEnd}
+                    className={`flex items-center gap-2 border-2 p-2 transition-all ${
                       isPitcherSlot
                         ? "bg-[#3A5A3A] border-[#E8E8D8]/40 opacity-80"
-                        : "bg-[#556B55] border-[#E8E8D8]/20"
-                    }`}
+                        : isDragging
+                          ? "bg-[#556B55]/50 border-[#E8E8D8]/10 opacity-40"
+                          : isDropTarget
+                            ? "bg-[#5A8352] border-[#FFD700] border-2"
+                            : "bg-[#556B55] border-[#E8E8D8]/20"
+                    } ${!isPitcherSlot ? "cursor-grab active:cursor-grabbing" : ""}`}
                   >
                     <span className="w-6 h-6 bg-[#DD0000] flex items-center justify-center font-bold text-sm">
                       {slot.battingOrder}
                     </span>
+                    {!isPitcherSlot && (
+                      <span className="text-[#E8E8D8]/40 text-sm select-none" title="Drag to reorder">⠿</span>
+                    )}
                     <span className="px-2 py-0.5 bg-[#4A6844] text-xs font-bold">
                       {slot.fieldingPosition}
                     </span>
@@ -685,28 +770,12 @@ function LineupTab({ roster, players, onUpdate }: LineupTabProps) {
                       {isPitcherSlot && <span className="text-[#E8E8D8]/50 text-xs ml-1">(auto)</span>}
                     </span>
                     {!isPitcherSlot && (
-                      <div className="flex gap-1">
-                        <button
-                          onClick={() => moveUp(slot.battingOrder)}
-                          className="p-1 bg-[#4A6844] hover:bg-[#5A8352] text-xs"
-                          disabled={slot.battingOrder === 1}
-                        >
-                          ▲
-                        </button>
-                        <button
-                          onClick={() => moveDown(slot.battingOrder)}
-                          className="p-1 bg-[#4A6844] hover:bg-[#5A8352] text-xs"
-                          disabled={slot.battingOrder === currentLineup.length}
-                        >
-                          ▼
-                        </button>
-                        <button
-                          onClick={() => removeFromLineup(slot.battingOrder)}
-                          className="p-1 bg-[#DD0000] hover:bg-[#FF2222] text-xs"
-                        >
-                          ✕
-                        </button>
-                      </div>
+                      <button
+                        onClick={() => removeFromLineup(slot.battingOrder)}
+                        className="p-1 bg-[#DD0000] hover:bg-[#FF2222] text-xs"
+                      >
+                        ✕
+                      </button>
                     )}
                   </div>
                 );
@@ -783,7 +852,11 @@ function RotationTab({ roster, players, onUpdate }: RotationTabProps) {
     .map((id) => players.find((p) => p.id === id))
     .filter(Boolean) as Player[];
 
-  const setupPitchers = roster.setupPitchers
+  const longRelievers = (roster.longRelievers || [])
+    .map((id) => players.find((p) => p.id === id))
+    .filter(Boolean) as Player[];
+
+  const relievers = roster.setupPitchers
     .map((id) => players.find((p) => p.id === id))
     .filter(Boolean) as Player[];
 
@@ -791,165 +864,155 @@ function RotationTab({ roster, players, onUpdate }: RotationTabProps) {
 
   const usedIds = [
     ...roster.startingRotation,
+    ...(roster.longRelievers || []),
     ...roster.setupPitchers,
     roster.closingPitcher,
   ].filter(Boolean);
   const availablePitchers = pitchers.filter((p) => !usedIds.includes(p.id));
 
-  const addStarter = (playerId: string) => {
-    onUpdate({ startingRotation: [...roster.startingRotation, playerId] });
+  const addTo = (bucket: 'startingRotation' | 'longRelievers' | 'setupPitchers', playerId: string) => {
+    onUpdate({ [bucket]: [...(roster[bucket] || []), playerId] });
   };
 
-  const removeStarter = (playerId: string) => {
-    onUpdate({
-      startingRotation: roster.startingRotation.filter((id) => id !== playerId),
-    });
+  const removeFrom = (bucket: 'startingRotation' | 'longRelievers' | 'setupPitchers', playerId: string) => {
+    onUpdate({ [bucket]: (roster[bucket] || []).filter((id: string) => id !== playerId) });
   };
 
   const setCloser = (playerId: string) => {
     onUpdate({ closingPitcher: playerId });
   };
 
-  const addSetup = (playerId: string) => {
-    onUpdate({ setupPitchers: [...roster.setupPitchers, playerId] });
+  type BucketConfig = {
+    key: 'startingRotation' | 'longRelievers' | 'setupPitchers';
+    label: string;
+    badge: string;
+    color: string;
+    items: Player[];
+    numbered?: boolean;
   };
 
-  const removeSetup = (playerId: string) => {
-    onUpdate({
-      setupPitchers: roster.setupPitchers.filter((id) => id !== playerId),
-    });
-  };
+  const buckets: BucketConfig[] = [
+    { key: 'startingRotation', label: 'STARTERS', badge: 'SP', color: '#0066FF', items: starters, numbered: true },
+    { key: 'longRelievers', label: 'LONG RELIEVERS', badge: 'LR', color: '#8855CC', items: longRelievers },
+    { key: 'setupPitchers', label: 'RELIEVERS', badge: 'RP', color: '#FF6600', items: relievers },
+  ];
 
   return (
-    <div className="space-y-6">
-      <div className="grid grid-cols-2 gap-6">
-        {/* Starting Rotation */}
-        <div className="bg-[#4A6844] border-4 border-[#E8E8D8]/30 p-4">
-          <h4 className="font-bold mb-3 text-sm border-b border-[#E8E8D8]/20 pb-2">
-            STARTING ROTATION ({starters.length})
-          </h4>
-          <div className="space-y-2">
-            {starters.map((player, idx) => (
-              <div
-                key={player.id}
-                className="flex items-center gap-2 bg-[#556B55] border-2 border-[#E8E8D8]/20 p-2"
-              >
-                <span className="w-6 h-6 bg-[#0066FF] flex items-center justify-center font-bold text-sm">
-                  {idx + 1}
-                </span>
-                <span className="flex-1 font-bold text-sm truncate">
-                  {player.firstName} {player.lastName}
-                </span>
-                <button
-                  onClick={() => removeStarter(player.id)}
-                  className="p-1 bg-[#DD0000] hover:bg-[#FF2222] text-xs"
-                >
-                  ✕
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Bullpen */}
-        <div className="space-y-4">
-          {/* Closer */}
-          <div className="bg-[#4A6844] border-4 border-[#E8E8D8]/30 p-4">
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 gap-4">
+        {buckets.map((bucket) => (
+          <div key={bucket.key} className="bg-[#4A6844] border-4 border-[#E8E8D8]/30 p-4">
             <h4 className="font-bold mb-3 text-sm border-b border-[#E8E8D8]/20 pb-2">
-              CLOSER
-            </h4>
-            {closerPlayer ? (
-              <div className="flex items-center gap-2 bg-[#556B55] border-2 border-[#DD0000] p-2">
-                <span className="w-6 h-6 bg-[#DD0000] flex items-center justify-center font-bold text-sm">
-                  CP
-                </span>
-                <span className="flex-1 font-bold text-sm">{closerPlayer.firstName} {closerPlayer.lastName}</span>
-                <button
-                  onClick={() => setCloser("")}
-                  className="p-1 bg-[#DD0000] hover:bg-[#FF2222] text-xs"
-                >
-                  ✕
-                </button>
-              </div>
-            ) : (
-              <p className="text-center text-[#E8E8D8]/50 py-2 text-sm">
-                No closer assigned
-              </p>
-            )}
-          </div>
-
-          {/* Setup */}
-          <div className="bg-[#4A6844] border-4 border-[#E8E8D8]/30 p-4">
-            <h4 className="font-bold mb-3 text-sm border-b border-[#E8E8D8]/20 pb-2">
-              SETUP ({setupPitchers.length})
+              {bucket.label} ({bucket.items.length})
             </h4>
             <div className="space-y-2">
-              {setupPitchers.map((player) => (
+              {bucket.items.map((player, idx) => (
                 <div
                   key={player.id}
                   className="flex items-center gap-2 bg-[#556B55] border-2 border-[#E8E8D8]/20 p-2"
                 >
-                  <span className="w-6 h-6 bg-[#FF6600] flex items-center justify-center font-bold text-sm">
-                    SU
+                  <span
+                    className="w-6 h-6 flex items-center justify-center font-bold text-sm"
+                    style={{ backgroundColor: bucket.color }}
+                  >
+                    {bucket.numbered ? idx + 1 : bucket.badge}
                   </span>
                   <span className="flex-1 font-bold text-sm truncate">
                     {player.firstName} {player.lastName}
                   </span>
                   <button
-                    onClick={() => removeSetup(player.id)}
+                    onClick={() => removeFrom(bucket.key, player.id)}
                     className="p-1 bg-[#DD0000] hover:bg-[#FF2222] text-xs"
                   >
                     ✕
                   </button>
                 </div>
               ))}
+              {bucket.items.length === 0 && (
+                <p className="text-center text-[#E8E8D8]/50 py-2 text-sm">None assigned</p>
+              )}
             </div>
           </div>
+        ))}
+
+        {/* Closer */}
+        <div className="bg-[#4A6844] border-4 border-[#E8E8D8]/30 p-4">
+          <h4 className="font-bold mb-3 text-sm border-b border-[#E8E8D8]/20 pb-2">
+            CLOSER
+          </h4>
+          {closerPlayer ? (
+            <div className="flex items-center gap-2 bg-[#556B55] border-2 border-[#DD0000] p-2">
+              <span className="w-6 h-6 bg-[#DD0000] flex items-center justify-center font-bold text-sm">
+                CP
+              </span>
+              <span className="flex-1 font-bold text-sm">{closerPlayer.firstName} {closerPlayer.lastName}</span>
+              <button
+                onClick={() => setCloser("")}
+                className="p-1 bg-[#DD0000] hover:bg-[#FF2222] text-xs"
+              >
+                ✕
+              </button>
+            </div>
+          ) : (
+            <p className="text-center text-[#E8E8D8]/50 py-2 text-sm">No closer assigned</p>
+          )}
         </div>
       </div>
 
       {/* Available Pitchers */}
-      <div className="bg-[#4A6844] border-4 border-[#E8E8D8]/30 p-4">
-        <h4 className="font-bold mb-3 text-sm border-b border-[#E8E8D8]/20 pb-2">
-          AVAILABLE PITCHERS ({availablePitchers.length})
-        </h4>
-        <div className="grid grid-cols-3 gap-2">
-          {availablePitchers.map((player) => (
-            <div
-              key={player.id}
-              className="flex items-center gap-2 bg-[#556B55] border-2 border-[#E8E8D8]/20 p-2"
-            >
-              <span className="px-2 py-0.5 bg-[#4A6844] text-xs font-bold">
-                {player.primaryPosition}
-              </span>
-              <span className="flex-1 font-bold text-sm truncate">{player.firstName} {player.lastName}</span>
-              <div className="flex gap-1">
-                <button
-                  onClick={() => addStarter(player.id)}
-                  className="px-2 py-1 bg-[#0066FF] hover:bg-[#0088FF] text-xs font-bold"
-                  title="Add to Rotation"
-                >
-                  SP
-                </button>
-                <button
-                  onClick={() => setCloser(player.id)}
-                  className="px-2 py-1 bg-[#DD0000] hover:bg-[#FF2222] text-xs font-bold"
-                  title="Set as Closer"
-                >
-                  CP
-                </button>
-                <button
-                  onClick={() => addSetup(player.id)}
-                  className="px-2 py-1 bg-[#FF6600] hover:bg-[#FF8800] text-xs font-bold"
-                  title="Add to Setup"
-                >
-                  SU
-                </button>
+      {availablePitchers.length > 0 && (
+        <div className="bg-[#4A6844] border-4 border-[#E8E8D8]/30 p-4">
+          <h4 className="font-bold mb-3 text-sm border-b border-[#E8E8D8]/20 pb-2">
+            UNASSIGNED ({availablePitchers.length})
+          </h4>
+          <div className="grid grid-cols-2 gap-2">
+            {availablePitchers.map((player) => (
+              <div
+                key={player.id}
+                className="flex items-center gap-2 bg-[#556B55] border-2 border-[#E8E8D8]/20 p-2"
+              >
+                <span className="px-2 py-0.5 bg-[#4A6844] text-xs font-bold">
+                  {player.primaryPosition}
+                </span>
+                <span className="flex-1 font-bold text-sm truncate">{player.firstName} {player.lastName}</span>
+                <div className="flex gap-1">
+                  <button
+                    onClick={() => addTo('startingRotation', player.id)}
+                    className="px-2 py-1 text-xs font-bold"
+                    style={{ backgroundColor: '#0066FF' }}
+                    title="Starter"
+                  >
+                    SP
+                  </button>
+                  <button
+                    onClick={() => addTo('longRelievers', player.id)}
+                    className="px-2 py-1 text-xs font-bold"
+                    style={{ backgroundColor: '#8855CC' }}
+                    title="Long Reliever"
+                  >
+                    LR
+                  </button>
+                  <button
+                    onClick={() => addTo('setupPitchers', player.id)}
+                    className="px-2 py-1 text-xs font-bold"
+                    style={{ backgroundColor: '#FF6600' }}
+                    title="Reliever"
+                  >
+                    RP
+                  </button>
+                  <button
+                    onClick={() => setCloser(player.id)}
+                    className="px-2 py-1 text-xs font-bold bg-[#DD0000]"
+                    title="Closer"
+                  >
+                    CP
+                  </button>
+                </div>
               </div>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

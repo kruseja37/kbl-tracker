@@ -215,6 +215,7 @@ export interface TeamRoster {
   lineupWithDH: LineupSlot[];
   lineupWithoutDH: LineupSlot[];
   startingRotation: string[];
+  longRelievers: string[];
   closingPitcher: string;
   setupPitchers: string[];
   depthChart: DepthChart;
@@ -862,6 +863,7 @@ function removePlayerIdFromRoster(roster: TeamRoster, playerId: string): TeamRos
     lineupWithDH: removeFromLineup(roster.lineupWithDH),
     lineupWithoutDH: removeFromLineup(roster.lineupWithoutDH),
     startingRotation: removeId(roster.startingRotation),
+    longRelievers: removeId(roster.longRelievers || []),
     closingPitcher: roster.closingPitcher === playerId ? '' : roster.closingPitcher,
     setupPitchers: removeId(roster.setupPitchers),
     depthChart: removeFromDepth(roster.depthChart),
@@ -1060,6 +1062,7 @@ export async function getTeamRoster(teamId: string): Promise<TeamRoster | null> 
       }
       if (!migrated.lineupWithDH) migrated.lineupWithDH = [];
       if (!migrated.lineupWithoutDH) migrated.lineupWithoutDH = [];
+      if (!migrated.longRelievers) migrated.longRelievers = [];
       resolve(migrated as TeamRoster);
     };
     request.onerror = () => reject(request.error);
@@ -1550,7 +1553,7 @@ function buildDepthChart(players: Player[]): DepthChart {
   return depthChart;
 }
 
-function buildSeedRoster(teamId: string, teamPlayers: Player[]): TeamRoster {
+function buildSeedRoster(teamId: string, teamPlayers: Player[], sourceData?: Record<string, PlayerData>): TeamRoster {
   const positionPlayers = teamPlayers.filter((player) => !isPitcherPosition(player.primaryPosition));
   const pitchers = teamPlayers.filter((player) => isPitcherPosition(player.primaryPosition));
   const lineupPool = [...positionPlayers];
@@ -1561,15 +1564,20 @@ function buildSeedRoster(teamId: string, teamPlayers: Player[]): TeamRoster {
   }
 
   const lineupWithDH = assignLineupSlots(lineupPool);
+
+  // Use source PlayerData role to distinguish rotation SP from bullpen SP
+  const getSourceRole = (id: string) => sourceData?.[id]?.role;
+
   const startingRotation = pitchers
-    .filter((player) => ROTATION_POSITIONS.includes(player.primaryPosition))
-    .slice(0, 5)
+    .filter((player) => player.primaryPosition === 'SP' && getSourceRole(player.id) !== 'BULLPEN')
     .map((player) => player.id);
-  const closer = pitchers.find((player) => player.primaryPosition === 'CP') ?? pitchers[pitchers.length - 1];
-  const closingPitcher = closer?.id || '';
-  const excludedPitchers = new Set([...startingRotation, closingPitcher].filter(Boolean));
+  const longRelievers = pitchers
+    .filter((player) => player.primaryPosition === 'SP/RP')
+    .map((player) => player.id);
+  const closingPitcher = pitchers.find((player) => player.primaryPosition === 'CP')?.id || '';
+  const assignedIds = new Set([...startingRotation, ...longRelievers, closingPitcher].filter(Boolean));
   const setupPitchers = pitchers
-    .filter((player) => !excludedPitchers.has(player.id))
+    .filter((player) => !assignedIds.has(player.id))
     .map((player) => player.id);
 
   return {
@@ -1579,6 +1587,7 @@ function buildSeedRoster(teamId: string, teamPlayers: Player[]): TeamRoster {
     lineupWithDH,
     lineupWithoutDH: lineupWithDH.map((slot) => ({ ...slot })),
     startingRotation,
+    longRelievers,
     closingPitcher,
     setupPitchers,
     depthChart: buildDepthChart(teamPlayers),
@@ -1645,7 +1654,7 @@ export async function seedFromSMB4Database(clearExisting = true): Promise<{ team
     const teamPlayers = seededPlayers.filter((player) =>
       player.leagueAssignments?.some((assignment) => assignment.teamId === team.id),
     );
-    await saveTeamRoster(buildSeedRoster(team.id, teamPlayers));
+    await saveTeamRoster(buildSeedRoster(team.id, teamPlayers, SMB4_PLAYERS));
   }
 
   console.log(`[LeagueBuilder] Seeded ${teamCount} teams and ${playerCount} players from SMB4 database`);
@@ -1771,11 +1780,12 @@ export async function seedFromMLBDatabase(clearExisting = true): Promise<{ teams
   }
 
   // Build rosters for each team
+  const mlbPlayerMap = Object.fromEntries(ALL_MLB_PLAYERS.map((p) => [p.id, p]));
   for (const team of seededTeams) {
     const teamPlayers = seededPlayers.filter((player) =>
       player.leagueAssignments?.some((assignment) => assignment.teamId === team.id),
     );
-    await saveTeamRoster(buildSeedRoster(team.id, teamPlayers));
+    await saveTeamRoster(buildSeedRoster(team.id, teamPlayers, mlbPlayerMap));
   }
 
   console.log(`[LeagueBuilder] Seeded ${teamCount} MLB teams and ${playerCount} MLB players`);

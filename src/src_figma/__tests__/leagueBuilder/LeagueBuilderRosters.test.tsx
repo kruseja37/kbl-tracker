@@ -190,7 +190,7 @@ describe('LeagueBuilderRosters Component', () => {
       fireEvent.click(screen.getByRole('button', { name: 'ROTATION' }));
 
       await waitFor(() => {
-        expect(screen.getByText('STARTING ROTATION (0)')).toBeInTheDocument();
+        expect(screen.getByText('STARTERS (0)')).toBeInTheDocument();
         expect(screen.getByText('CLOSER')).toBeInTheDocument();
       });
     });
