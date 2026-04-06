@@ -54,7 +54,7 @@ export const GIANTS_PLAYERS: PlayerData[] = [
     traits: {},
   },
   {
-    id: 'sf-clark',
+    id: 'sf-wclark',
     name: 'Will Clark',
     teamId: 'giants',
     age: 20,
@@ -104,7 +104,7 @@ export const GIANTS_PLAYERS: PlayerData[] = [
     },
   },
   {
-    id: 'sf-clark',
+    id: 'sf-jclark',
     name: 'Jack Clark',
     teamId: 'giants',
     age: 38,

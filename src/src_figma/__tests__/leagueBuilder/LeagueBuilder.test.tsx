@@ -64,6 +64,8 @@ function createMockHookReturn(overrides: Record<string, unknown> = {}) {
     removeRoster: vi.fn(),
     seedSMB4Data: vi.fn(() => Promise.resolve({ teams: 0, players: 0 })),
     isSMB4Seeded: vi.fn(() => Promise.resolve(false)),
+    seedMLBData: vi.fn(() => Promise.resolve({ teams: 0, players: 0 })),
+    isMLBSeeded: vi.fn(() => Promise.resolve(false)),
     refresh: vi.fn(),
     ...overrides,
   };

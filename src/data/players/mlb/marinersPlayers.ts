@@ -8,7 +8,7 @@ import type { PlayerData } from '../../playerDatabase';
 export const MARINERS_PLAYERS: PlayerData[] = [
   // ── STARTERS ──
   {
-    id: 'sea-martinez',
+    id: 'sea-tmartinez',
     name: 'Tino Martinez',
     teamId: 'mariners',
     age: 36,
@@ -82,7 +82,7 @@ export const MARINERS_PLAYERS: PlayerData[] = [
     },
   },
   {
-    id: 'sea-martinez',
+    id: 'sea-emartinez',
     name: 'Edgar Martinez',
     teamId: 'mariners',
     age: 26,

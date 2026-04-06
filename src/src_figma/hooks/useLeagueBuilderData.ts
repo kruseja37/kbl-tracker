@@ -33,6 +33,8 @@ import {
   deleteTeamRoster,
   seedFromSMB4Database,
   isSMB4DatabaseSeeded,
+  seedFromMLBDatabase,
+  isMLBDatabaseSeeded,
   type LeagueTemplate,
   type LeagueAssignment,
   type Team,
@@ -109,6 +111,10 @@ export interface UseLeagueBuilderDataReturn {
   // SMB4 Database Seeding
   seedSMB4Data: (clearExisting?: boolean) => Promise<{ teams: number; players: number }>;
   isSMB4Seeded: () => Promise<boolean>;
+
+  // MLB Database Seeding
+  seedMLBData: (clearExisting?: boolean) => Promise<{ teams: number; players: number }>;
+  isMLBSeeded: () => Promise<boolean>;
 
   // Utility
   refresh: () => Promise<void>;
@@ -450,6 +456,29 @@ export function useLeagueBuilderData(): UseLeagueBuilderDataReturn {
     return isSMB4DatabaseSeeded();
   }, []);
 
+  // ============================================
+  // MLB DATABASE SEEDING
+  // ============================================
+
+  const seedMLBData = useCallback(async (clearExisting = true) => {
+    try {
+      setIsLoading(true);
+      const result = await seedFromMLBDatabase(clearExisting);
+      await refresh();
+      return result;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to seed MLB data';
+      setError(message);
+      throw err;
+    } finally {
+      setIsLoading(false);
+    }
+  }, [refresh]);
+
+  const isMLBSeeded = useCallback(async () => {
+    return isMLBDatabaseSeeded();
+  }, []);
+
   return {
     // State
     leagues,
@@ -493,6 +522,10 @@ export function useLeagueBuilderData(): UseLeagueBuilderDataReturn {
     // SMB4 Database Seeding
     seedSMB4Data,
     isSMB4Seeded,
+
+    // MLB Database Seeding
+    seedMLBData,
+    isMLBSeeded,
 
     // Utility
     refresh,

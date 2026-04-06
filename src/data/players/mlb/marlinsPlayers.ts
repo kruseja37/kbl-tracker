@@ -109,7 +109,7 @@ export const MARLINS_PLAYERS: PlayerData[] = [
     },
   },
   {
-    id: 'fla-burnett',
+    id: 'fla-bburnett',
     name: 'Bash Burnett',
     teamId: 'marlins',
     age: 34,
@@ -398,7 +398,7 @@ export const MARLINS_PLAYERS: PlayerData[] = [
     },
   },
   {
-    id: 'fla-burnett',
+    id: 'fla-ajburnett',
     name: 'A.J. Burnett',
     teamId: 'marlins',
     age: 29,

@@ -84,7 +84,7 @@ export const BRAVES_PLAYERS: PlayerData[] = [
     },
   },
   {
-    id: 'atl-jones',
+    id: 'atl-cjones',
     name: 'Chipper Jones',
     teamId: 'braves',
     age: 26,
@@ -134,7 +134,7 @@ export const BRAVES_PLAYERS: PlayerData[] = [
     },
   },
   {
-    id: 'atl-jones',
+    id: 'atl-ajones',
     name: 'Andruw Jones',
     teamId: 'braves',
     age: 32,

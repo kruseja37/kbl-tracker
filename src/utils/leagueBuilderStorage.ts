@@ -1244,7 +1244,9 @@ export async function clearAllLeagueBuilderData(): Promise<void> {
 // ============================================
 
 import { TEAMS as SMB4_TEAMS, PLAYERS as SMB4_PLAYERS, type PlayerData, type TeamData } from '../data/playerDatabase';
-import { SUPER_MEGA_LEAGUE } from '../data/leagueStructure';
+import { SUPER_MEGA_LEAGUE, MAJOR_LEAGUE_BASEBALL } from '../data/leagueStructure';
+import { MLB_TEAMS } from '../data/teams/mlbTeams';
+import { ALL_MLB_PLAYERS } from '../data/players/mlb';
 import { calculateSalary, type PlayerForSalary, type PlayerPosition as SalaryPosition } from '../engines/salaryCalculator';
 
 /**
@@ -1296,7 +1298,7 @@ function computeInitialSalary(player: PlayerData, primaryPosition: Position): nu
 /**
  * Convert SMB4 PlayerData to League Builder Player format
  */
-function convertPlayer(player: PlayerData): Omit<Player, 'createdDate' | 'lastModified'> {
+function convertPlayer(player: PlayerData, leagueId = 'sml'): Omit<Player, 'createdDate' | 'lastModified'> {
   // Split name into first/last
   const nameParts = player.name.split(' ');
   const firstName = nameParts[0] || 'Unknown';
@@ -1361,7 +1363,7 @@ function convertPlayer(player: PlayerData): Omit<Player, 'createdDate' | 'lastMo
     leagueAssignments: player.teamId === 'free-agent'
       ? []
       : [{
-          leagueId: 'sml',
+          leagueId,
           teamId: player.teamId,
           rosterStatus: 'MLB',
         }],
@@ -1370,6 +1372,62 @@ function convertPlayer(player: PlayerData): Omit<Player, 'createdDate' | 'lastMo
     hometown: generateHometown(),
   };
 }
+
+// Team abbreviations for scorebug display
+const TEAM_ABBREVIATIONS: Record<string, string> = {
+  // SML teams (4-letter)
+  'beewolves': 'BEES',
+  'blowfish': 'FISH',
+  'buzzards': 'BUZZ',
+  'crocodons': 'DONS',
+  'freebooters': 'ARGH',
+  'grapplers': 'GRAP',
+  'heaters': 'HEAT',
+  'herbisaurs': 'HERB',
+  'hot-corners': 'CORN',
+  'jacks': 'JACK',
+  'moonstars': 'STARS',
+  'moose': 'MOOS',
+  'nemesis': 'NEMS',
+  'overdogs': 'DOGS',
+  'platypi': 'PLAT',
+  'sand-cats': 'CATS',
+  'sawteeth': 'SAWS',
+  'sirloins': 'LOIN',
+  'wideloads': 'LOAD',
+  'wild-pigs': 'PIGS',
+  // MLB teams (real broadcast scorebug)
+  'blue-jays': 'TOR',
+  'yankees': 'NYY',
+  'orioles': 'BAL',
+  'rays': 'TB',
+  'red-sox': 'BOS',
+  'white-sox': 'CWS',
+  'twins': 'MIN',
+  'indians': 'CLE',
+  'royals': 'KC',
+  'tigers': 'DET',
+  'mariners': 'SEA',
+  'astros': 'HOU',
+  'angels': 'LAA',
+  'rangers': 'TEX',
+  'athletics': 'OAK',
+  'marlins': 'FLA',
+  'expos': 'MTL',
+  'phillies': 'PHI',
+  'mets': 'NYM',
+  'braves': 'ATL',
+  'cardinals': 'STL',
+  'reds': 'CIN',
+  'brewers': 'MIL',
+  'pirates': 'PIT',
+  'cubs': 'CHC',
+  'padres': 'SD',
+  'dodgers': 'LAD',
+  'diamondbacks': 'ARI',
+  'rockies': 'COL',
+  'giants': 'SF',
+};
 
 /**
  * Convert SMB4 TeamData to League Builder Team format
@@ -1382,7 +1440,7 @@ function convertTeam(team: TeamData): Omit<Team, 'createdDate' | 'lastModified'>
   return {
     id: team.id,
     name: team.name,
-    abbreviation: team.id.substring(0, 3).toUpperCase(),
+    abbreviation: TEAM_ABBREVIATIONS[team.id] || team.id.substring(0, 3).toUpperCase(),
     location: '', // SMB4 teams don't have locations
     nickname: name,
     colors: {
@@ -1519,7 +1577,7 @@ function buildSeedRoster(teamId: string, teamPlayers: Player[]): TeamRoster {
 
 /**
  * Seed the League Builder database with SMB4 teams and players
- * @param clearExisting - If true, clears existing data before seeding
+ * @param clearExisting - If true, removes existing SML teams/players before seeding (preserves other leagues)
  * @returns Object with counts of seeded teams and players
  */
 export async function seedFromSMB4Database(clearExisting = true): Promise<{ teams: number; players: number }> {
@@ -1528,25 +1586,24 @@ export async function seedFromSMB4Database(clearExisting = true): Promise<{ team
   // (e.g., via devtools) and the cached connection is stale.
   dbInstance = null;
 
-  const db = await initLeagueBuilderDatabase();
+  await initLeagueBuilderDatabase();
 
   if (clearExisting) {
-    // Push tombstones for existing records before clearing
-    if (!syncEngine.isSuppressed()) {
-      const existingTeams = await getAllTeams();
-      const existingPlayers = await getAllPlayers();
-      for (const t of existingTeams) syncEngine.remove('kbl-league-builder', 'globalTeams', t.id);
-      for (const p of existingPlayers) syncEngine.remove('kbl-league-builder', 'globalPlayers', p.id);
-    }
+    // Only remove SML teams/players — preserve other leagues (e.g., MLB)
+    const smlTeamIds = new Set(Object.values(SMB4_TEAMS).map(t => t.id).filter(id => id !== 'free-agent'));
+    const existingTeams = await getAllTeams();
+    const existingPlayers = await getAllPlayers();
 
-    // Clear existing teams and players only (preserve leagues, rules, rosters)
-    await new Promise<void>((resolve, reject) => {
-      const tx = db.transaction([STORES.GLOBAL_TEAMS, STORES.GLOBAL_PLAYERS], 'readwrite');
-      tx.objectStore(STORES.GLOBAL_TEAMS).clear();
-      tx.objectStore(STORES.GLOBAL_PLAYERS).clear();
-      tx.oncomplete = () => resolve();
-      tx.onerror = () => reject(tx.error);
-    });
+    for (const t of existingTeams) {
+      if (smlTeamIds.has(t.id)) {
+        await deleteTeam(t.id);
+      }
+    }
+    for (const p of existingPlayers) {
+      if (p.leagueAssignments?.some(a => a.leagueId === 'sml') || (p.leagueAssignments?.[0]?.teamId && smlTeamIds.has(p.leagueAssignments[0].teamId))) {
+        await deletePlayer(p.id);
+      }
+    }
   }
 
   let teamCount = 0;
@@ -1647,4 +1704,133 @@ export async function seedFromSMB4Database(clearExisting = true): Promise<{ team
 export async function isSMB4DatabaseSeeded(): Promise<boolean> {
   const players = await getAllPlayers();
   return players.some(p => p.sourceDatabase === 'SMB4');
+}
+
+// ============================================
+// MLB DATABASE SEEDING
+// ============================================
+
+/**
+ * Seed the League Builder database with MLB teams and players (30 teams, 660 players)
+ * @param clearExisting - If true, removes existing MLB teams/players before seeding (preserves other leagues)
+ * @returns Object with counts of seeded teams and players
+ */
+export async function seedFromMLBDatabase(clearExisting = true): Promise<{ teams: number; players: number }> {
+  dbInstance = null;
+  await initLeagueBuilderDatabase();
+
+  if (clearExisting) {
+    // Only remove MLB teams/players — preserve other leagues (e.g., SML)
+    const mlbTeamIds = new Set(Object.keys(MLB_TEAMS));
+    const existingTeams = await getAllTeams();
+    const existingPlayers = await getAllPlayers();
+
+    for (const t of existingTeams) {
+      if (mlbTeamIds.has(t.id)) {
+        await deleteTeam(t.id);
+      }
+    }
+    for (const p of existingPlayers) {
+      if (p.leagueAssignments?.some(a => a.leagueId === 'mlb') || (p.leagueAssignments?.[0]?.teamId && mlbTeamIds.has(p.leagueAssignments[0].teamId))) {
+        await deletePlayer(p.id);
+      }
+    }
+  }
+
+  let teamCount = 0;
+  let playerCount = 0;
+  const seededTeams: Team[] = [];
+  const seededPlayers: Player[] = [];
+
+  // Seed 30 MLB teams
+  for (const teamData of Object.values(MLB_TEAMS)) {
+    const team = convertTeam(teamData);
+    seededTeams.push(await saveTeam(team));
+    teamCount++;
+  }
+
+  // Convert ALL_MLB_PLAYERS array to record for iteration
+  for (const playerData of ALL_MLB_PLAYERS) {
+    const player = convertPlayer(playerData, 'mlb');
+    seededPlayers.push(await savePlayer(player));
+    playerCount++;
+  }
+
+  // Build rosters for each team
+  for (const team of seededTeams) {
+    const teamPlayers = seededPlayers.filter((player) =>
+      player.leagueAssignments?.some((assignment) => assignment.teamId === team.id),
+    );
+    await saveTeamRoster(buildSeedRoster(team.id, teamPlayers));
+  }
+
+  console.log(`[LeagueBuilder] Seeded ${teamCount} MLB teams and ${playerCount} MLB players`);
+
+  // Post-seed verification
+  const verifyTeams = await getAllTeams();
+  const verifyPlayers = await getAllPlayers();
+  const persistedTeams = verifyTeams.length;
+  const persistedPlayers = verifyPlayers.length;
+
+  if (persistedTeams === 0 && teamCount > 0) {
+    throw new Error(
+      `MLB import verification failed: wrote ${teamCount} teams but read back 0. ` +
+      `Database may have been cleared externally. Please try again.`
+    );
+  }
+  if (persistedPlayers === 0 && playerCount > 0) {
+    throw new Error(
+      `MLB import verification failed: wrote ${playerCount} players but read back 0. ` +
+      `Database may have been cleared externally. Please try again.`
+    );
+  }
+
+  console.log(`[LeagueBuilder] Verified: ${persistedTeams} teams, ${persistedPlayers} players in DB`);
+
+  // Auto-create "Major League Baseball" league template
+  const allTeamIds: string[] = [];
+  const conferences: Conference[] = [];
+  const divisions: Division[] = [];
+
+  for (const conf of MAJOR_LEAGUE_BASEBALL.conferences) {
+    const divisionIds: string[] = [];
+    for (const div of conf.divisions) {
+      divisionIds.push(div.id);
+      allTeamIds.push(...div.teamIds);
+      divisions.push({
+        id: div.id,
+        name: div.name,
+        conferenceId: conf.id,
+        teamIds: [...div.teamIds],
+      });
+    }
+    conferences.push({
+      id: conf.id,
+      name: conf.name,
+      abbreviation: conf.name === 'American League' ? 'AL' : 'NL',
+      divisionIds,
+    });
+  }
+
+  await saveLeagueTemplate({
+    id: 'mlb',
+    name: MAJOR_LEAGUE_BASEBALL.name,
+    description: 'MLB league — 30 teams, 2 conferences (AL/NL), 6 divisions',
+    teamIds: allTeamIds,
+    conferences,
+    divisions,
+    defaultRulesPreset: 'standard',
+  });
+
+  console.log(`[LeagueBuilder] Created "${MAJOR_LEAGUE_BASEBALL.name}" league template with ${allTeamIds.length} teams`);
+
+  return { teams: persistedTeams, players: persistedPlayers };
+}
+
+/**
+ * Check if the database has been seeded with MLB data
+ */
+export async function isMLBDatabaseSeeded(): Promise<boolean> {
+  const teams = await getAllTeams();
+  return teams.some(t => t.id === 'yankees' || t.id === 'dodgers');
 }

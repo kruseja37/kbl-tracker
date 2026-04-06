@@ -5,43 +5,52 @@ import { useLeagueBuilderData } from "../../hooks/useLeagueBuilderData";
 
 export function LeagueBuilder() {
   const navigate = useNavigate();
-  const { leagues, teams, players, rulesPresets, isLoading, error, seedSMB4Data, isSMB4Seeded } = useLeagueBuilderData();
+  const { leagues, teams, players, rulesPresets, isLoading, error, seedSMB4Data, isSMB4Seeded, seedMLBData, isMLBSeeded } = useLeagueBuilderData();
 
-  const [isSeeding, setIsSeeding] = useState(false);
-  const [seedResult, setSeedResult] = useState<{ teams: number; players: number } | null>(null);
+  const [isSeeding, setIsSeeding] = useState<'sml' | 'mlb' | null>(null);
+  const [seedResult, setSeedResult] = useState<{ source: string; teams: number; players: number } | null>(null);
   const [seedError, setSeedError] = useState<string | null>(null);
-  const [isAlreadySeeded, setIsAlreadySeeded] = useState(false);
+  const [isSMLSeeded, setIsSMLSeeded] = useState(false);
+  const [isMLBSeededState, setIsMLBSeededState] = useState(false);
 
   // Check if already seeded on mount
   useEffect(() => {
-    isSMB4Seeded().then(setIsAlreadySeeded);
-  }, [isSMB4Seeded, players]);
+    isSMB4Seeded().then(setIsSMLSeeded);
+    isMLBSeeded().then(setIsMLBSeededState);
+  }, [isSMB4Seeded, isMLBSeeded, players]);
 
-  const handleSeedDatabase = async () => {
+  const handleSeedDatabase = async (source: 'sml' | 'mlb') => {
     if (isSeeding) return;
 
+    const label = source === 'sml' ? 'Super Mega League (20 teams)' : 'Major League Baseball (30 teams)';
     const confirmed = window.confirm(
-      'This will import all SMB4 teams and players into the League Builder database.\n\n' +
-      'Any existing teams and players will be REPLACED.\n\n' +
+      `This will import all ${label} teams and players into the League Builder database.\n\n` +
+      `Any existing ${source.toUpperCase()} teams/players will be refreshed. Other leagues are preserved.\n\n` +
       'Continue?'
     );
 
     if (!confirmed) return;
 
-    setIsSeeding(true);
+    setIsSeeding(source);
     setSeedResult(null);
     setSeedError(null);
 
     try {
-      const result = await seedSMB4Data(true);
-      setSeedResult(result);
-      setIsAlreadySeeded(true);
+      const result = source === 'sml'
+        ? await seedSMB4Data(true)
+        : await seedMLBData(true);
+      setSeedResult({ source: label, ...result });
+      if (source === 'sml') setIsSMLSeeded(true);
+      else setIsMLBSeededState(true);
+      // Re-check both since clearing replaces all data
+      isSMB4Seeded().then(setIsSMLSeeded);
+      isMLBSeeded().then(setIsMLBSeededState);
     } catch (err) {
-      console.error('Failed to seed database:', err);
+      console.error(`Failed to seed ${source} database:`, err);
       const message = err instanceof Error ? err.message : 'Unknown error';
       setSeedError(message);
     } finally {
-      setIsSeeding(false);
+      setIsSeeding(null);
     }
   };
 
@@ -61,64 +70,99 @@ export function LeagueBuilder() {
           </div>
         </div>
 
-        {/* SMB4 Database Import Banner */}
-        <div className="bg-[#556B55] border-[4px] border-[#C4A853] p-4 mb-8 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)]">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <Database className="w-6 h-6 text-[#C4A853]" />
-              <div>
-                <div className="text-sm font-bold text-[#E8E8D8]">SMB4 Player Database</div>
-                <div className="text-xs text-[#E8E8D8]/70">
-                  {isAlreadySeeded
-                    ? `✓ Loaded: ${teams.length} teams, ${players.length} players`
-                    : 'Import real SMB4 teams and players'}
+        {/* Database Import Banners */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+          {/* SML Import */}
+          <div className="bg-[#556B55] border-[4px] border-[#C4A853] p-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)]">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3 min-w-0">
+                <Database className="w-6 h-6 text-[#C4A853] shrink-0" />
+                <div className="min-w-0">
+                  <div className="text-sm font-bold text-[#E8E8D8]">Super Mega League</div>
+                  <div className="text-xs text-[#E8E8D8]/70">
+                    {isSMLSeeded
+                      ? '20 teams, ~440 players'
+                      : 'Import 20 SML teams + players'}
+                  </div>
                 </div>
               </div>
-            </div>
 
-            <button
-              onClick={handleSeedDatabase}
-              disabled={isSeeding}
-              className={`flex items-center gap-2 px-6 py-3 border-4 font-bold text-sm transition-all active:scale-95 shadow-[3px_3px_0px_0px_rgba(0,0,0,0.8)] ${
-                isSeeding
-                  ? 'bg-[#4A6844] border-[#E8E8D8]/30 text-[#E8E8D8]/50 cursor-wait'
-                  : isAlreadySeeded
-                    ? 'bg-[#4A6844] border-[#5A8352] text-[#E8E8D8] hover:bg-[#5A8352]'
-                    : 'bg-[#C4A853] border-[#E8E8D8] text-[#1A1A1A] hover:bg-[#D4B863]'
-              }`}
-            >
-              {isSeeding ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  IMPORTING...
-                </>
-              ) : isAlreadySeeded ? (
-                <>
-                  <CheckCircle className="w-4 h-4" />
-                  REIMPORT
-                </>
-              ) : (
-                <>
-                  <Download className="w-4 h-4" />
-                  IMPORT SMB4 DATA
-                </>
-              )}
-            </button>
+              <button
+                onClick={() => handleSeedDatabase('sml')}
+                disabled={!!isSeeding}
+                className={`flex items-center gap-2 px-4 py-2 border-4 font-bold text-xs transition-all active:scale-95 shadow-[3px_3px_0px_0px_rgba(0,0,0,0.8)] shrink-0 ${
+                  isSeeding
+                    ? 'bg-[#4A6844] border-[#E8E8D8]/30 text-[#E8E8D8]/50 cursor-wait'
+                    : isSMLSeeded
+                      ? 'bg-[#4A6844] border-[#5A8352] text-[#E8E8D8] hover:bg-[#5A8352]'
+                      : 'bg-[#C4A853] border-[#E8E8D8] text-[#1A1A1A] hover:bg-[#D4B863]'
+                }`}
+              >
+                {isSeeding === 'sml' ? (
+                  <><Loader2 className="w-4 h-4 animate-spin" /> IMPORTING...</>
+                ) : isSMLSeeded ? (
+                  <><CheckCircle className="w-4 h-4" /> REIMPORT</>
+                ) : (
+                  <><Download className="w-4 h-4" /> IMPORT SML</>
+                )}
+              </button>
+            </div>
           </div>
 
-          {seedResult && (
-            <div className="mt-3 pt-3 border-t border-[#E8E8D8]/30 text-xs text-[#4CAF50]">
-              ✓ Successfully imported {seedResult.teams} teams and {seedResult.players} players!
-            </div>
-          )}
+          {/* MLB Import */}
+          <div className="bg-[#556B55] border-[4px] border-[#3B7DD8] p-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)]">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3 min-w-0">
+                <Database className="w-6 h-6 text-[#3B7DD8] shrink-0" />
+                <div className="min-w-0">
+                  <div className="text-sm font-bold text-[#E8E8D8]">Major League Baseball</div>
+                  <div className="text-xs text-[#E8E8D8]/70">
+                    {isMLBSeededState
+                      ? '30 teams, ~660 players'
+                      : 'Import 30 MLB teams + players'}
+                  </div>
+                </div>
+              </div>
 
-          {seedError && (
-            <div className="mt-3 pt-3 border-t border-[#E8E8D8]/30 text-xs text-[#F44336] flex items-start gap-2">
-              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-              <span>Import failed: {seedError}</span>
+              <button
+                onClick={() => handleSeedDatabase('mlb')}
+                disabled={!!isSeeding}
+                className={`flex items-center gap-2 px-4 py-2 border-4 font-bold text-xs transition-all active:scale-95 shadow-[3px_3px_0px_0px_rgba(0,0,0,0.8)] shrink-0 ${
+                  isSeeding
+                    ? 'bg-[#4A6844] border-[#E8E8D8]/30 text-[#E8E8D8]/50 cursor-wait'
+                    : isMLBSeededState
+                      ? 'bg-[#4A6844] border-[#3B7DD8] text-[#E8E8D8] hover:bg-[#5A8352]'
+                      : 'bg-[#3B7DD8] border-[#E8E8D8] text-[#E8E8D8] hover:bg-[#4B8DE8]'
+                }`}
+              >
+                {isSeeding === 'mlb' ? (
+                  <><Loader2 className="w-4 h-4 animate-spin" /> IMPORTING...</>
+                ) : isMLBSeededState ? (
+                  <><CheckCircle className="w-4 h-4" /> REIMPORT</>
+                ) : (
+                  <><Download className="w-4 h-4" /> IMPORT MLB</>
+                )}
+              </button>
             </div>
-          )}
+          </div>
         </div>
+
+        {/* Import status messages */}
+        {(seedResult || seedError) && (
+          <div className="mb-8 -mt-4">
+            {seedResult && (
+              <div className="bg-[#556B55] border-[2px] border-[#4CAF50] p-3 text-xs text-[#4CAF50]">
+                Successfully imported {seedResult.source}: {seedResult.teams} teams and {seedResult.players} players!
+              </div>
+            )}
+            {seedError && (
+              <div className="bg-[#556B55] border-[2px] border-[#F44336] p-3 text-xs text-[#F44336] flex items-start gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                <span>Import failed: {seedError}</span>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Module Cards Grid */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 mb-12">
