@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router";
-import { Trophy, Gamepad2, Users, Globe, Database, Book } from "lucide-react";
+import { Trophy, Users, Globe, Database, Book } from "lucide-react";
 import { SyncModal, SyncStatusIcon } from "../components/SyncModal";
 
 export function AppHome() {
@@ -39,22 +39,8 @@ export function AppHome() {
             <div aria-hidden="true" className="absolute border-[#3366CC] border-[5.556px] border-solid inset-0 pointer-events-none shadow-[6px_6px_0px_0px_rgba(0,0,0,0.8)]" />
             <div className="content-stretch flex flex-col items-start pb-[5.556px] pt-[21.554px] px-[21.554px] relative size-full">
               <div className="flex gap-4 h-[27.995px] items-center w-full">
-                <Gamepad2 className="w-4 h-4 text-black shrink-0" />
-                <p className="font-['Press_Start_2P'] leading-[20px] text-[14px] text-black tracking-[0.7px] uppercase flex-1">LOAD FRANCHISE</p>
-                <p className="font-['Press_Start_2P'] leading-[28px] text-[20px] text-black">▶</p>
-              </div>
-            </div>
-          </Link>
-
-          <Link
-            to="/franchise/setup"
-            className="bg-[#3366FF] h-[71.102px] relative block w-full"
-          >
-            <div aria-hidden="true" className="absolute border-[#1A44BB] border-[5.556px] border-solid inset-0 pointer-events-none shadow-[6px_6px_0px_0px_rgba(0,0,0,0.8)]" />
-            <div className="content-stretch flex flex-col items-start pb-[5.556px] pt-[21.554px] px-[21.554px] relative size-full">
-              <div className="flex gap-4 h-[27.995px] items-center w-full">
                 <Trophy className="w-4 h-4 text-black shrink-0" />
-                <p className="font-['Press_Start_2P'] leading-[20px] text-[14px] text-black tracking-[0.7px] uppercase flex-1">NEW FRANCHISE</p>
+                <p className="font-['Press_Start_2P'] leading-[20px] text-[14px] text-black tracking-[0.7px] uppercase flex-1">FRANCHISE</p>
                 <p className="font-['Press_Start_2P'] leading-[28px] text-[20px] text-black">▶</p>
               </div>
             </div>
