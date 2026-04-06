@@ -256,7 +256,7 @@ export async function loadTeamLineup(
   const roster = await getRoster(teamId);
 
   // If no roster or no lineup configured, auto-generate
-  if (!roster || !roster.lineupVsRHP || roster.lineupVsRHP.length < 9) {
+  if (!roster || !roster.lineupWithDH || roster.lineupWithDH.length < 9) {
     return autoGenerateLineup(teamPlayers);
   }
 
@@ -264,8 +264,12 @@ export async function loadTeamLineup(
   const playerMap = new Map<string, LBPlayer>();
   teamPlayers.forEach(p => playerMap.set(p.id, p));
 
-  // Build lineup from stored LineupSlots (default to vs RHP)
-  const lineup = roster.lineupVsRHP;
+  // Select the correct stored lineup variant based on DH preference.
+  // Fall back to DH lineup if No-DH lineup isn't configured.
+  const useDH = overrideUseDH !== undefined ? overrideUseDH : true;
+  const lineup = (!useDH && roster.lineupWithoutDH && roster.lineupWithoutDH.length >= 8)
+    ? roster.lineupWithoutDH
+    : roster.lineupWithDH;
   const lineupPlayerIds = new Set(lineup.map(slot => slot.playerId));
 
   // Find starting pitcher
@@ -276,15 +280,11 @@ export async function loadTeamLineup(
   const startingPitcherId = roster.startingRotation?.[0] || starters[0]?.id;
   const startingPitcher = teamPlayers.find(p => p.id === startingPitcherId);
 
-  // Infer DH usage from the stored lineup itself. If a pitcher is in the batting order,
-  // this is treated as a no-DH lineup even if a DH-only player was saved incorrectly.
+  // Check if the loaded lineup already includes a pitcher in the batting order
   const lineupHasPitcher = lineup.some(slot => {
     const player = playerMap.get(slot.playerId);
     return player && isPitcherPosition(player.primaryPosition);
   });
-  const useDH = overrideUseDH !== undefined
-    ? overrideUseDH
-    : lineup.some(slot => slot.fieldingPosition === 'DH') && !lineupHasPitcher;
   const usedNoDhPositions = new Set<string>();
 
   const lineupPlayers: RosterPlayer[] = [];

@@ -173,9 +173,9 @@ describe('LeagueBuilderRosters Component', () => {
       fireEvent.click(screen.getByRole('button', { name: 'LINEUP' }));
 
       await waitFor(() => {
-        // Lineup tab shows vs RHP/LHP options
-        expect(screen.getByText('vs RHP')).toBeInTheDocument();
-        expect(screen.getByText('vs LHP')).toBeInTheDocument();
+        // Lineup tab shows DH/No DH options
+        expect(screen.getByText('DH')).toBeInTheDocument();
+        expect(screen.getByText('No DH')).toBeInTheDocument();
       });
     });
 

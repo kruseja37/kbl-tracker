@@ -212,8 +212,8 @@ export interface TeamRoster {
   teamId: string;
   mlbRoster: string[];
   farmRoster: string[];
-  lineupVsRHP: LineupSlot[];
-  lineupVsLHP: LineupSlot[];
+  lineupWithDH: LineupSlot[];
+  lineupWithoutDH: LineupSlot[];
   startingRotation: string[];
   closingPitcher: string;
   setupPitchers: string[];
@@ -859,8 +859,8 @@ function removePlayerIdFromRoster(roster: TeamRoster, playerId: string): TeamRos
     ...roster,
     mlbRoster: removeId(roster.mlbRoster),
     farmRoster: removeId(roster.farmRoster),
-    lineupVsRHP: removeFromLineup(roster.lineupVsRHP),
-    lineupVsLHP: removeFromLineup(roster.lineupVsLHP),
+    lineupWithDH: removeFromLineup(roster.lineupWithDH),
+    lineupWithoutDH: removeFromLineup(roster.lineupWithoutDH),
     startingRotation: removeId(roster.startingRotation),
     closingPitcher: roster.closingPitcher === playerId ? '' : roster.closingPitcher,
     setupPitchers: removeId(roster.setupPitchers),
@@ -1047,7 +1047,21 @@ export async function getTeamRoster(teamId: string): Promise<TeamRoster | null> 
     const store = tx.objectStore(STORES.TEAM_ROSTERS);
     const request = store.get(teamId);
 
-    request.onsuccess = () => resolve(request.result || null);
+    request.onsuccess = () => {
+      const raw = request.result;
+      if (!raw) return resolve(null);
+      // Migrate old lineupVsRHP/lineupVsLHP → lineupWithDH/lineupWithoutDH
+      const migrated = { ...raw } as TeamRoster & Record<string, unknown>;
+      if (!migrated.lineupWithDH && (raw as Record<string, unknown>).lineupVsRHP) {
+        migrated.lineupWithDH = (raw as Record<string, unknown>).lineupVsRHP as LineupSlot[];
+      }
+      if (!migrated.lineupWithoutDH && (raw as Record<string, unknown>).lineupVsLHP) {
+        migrated.lineupWithoutDH = (raw as Record<string, unknown>).lineupVsLHP as LineupSlot[];
+      }
+      if (!migrated.lineupWithDH) migrated.lineupWithDH = [];
+      if (!migrated.lineupWithoutDH) migrated.lineupWithoutDH = [];
+      resolve(migrated as TeamRoster);
+    };
     request.onerror = () => reject(request.error);
   });
 }
@@ -1546,7 +1560,7 @@ function buildSeedRoster(teamId: string, teamPlayers: Player[]): TeamRoster {
     lineupPool.push(...fillerPlayers);
   }
 
-  const lineupVsRHP = assignLineupSlots(lineupPool);
+  const lineupWithDH = assignLineupSlots(lineupPool);
   const startingRotation = pitchers
     .filter((player) => ROTATION_POSITIONS.includes(player.primaryPosition))
     .slice(0, 5)
@@ -1562,8 +1576,8 @@ function buildSeedRoster(teamId: string, teamPlayers: Player[]): TeamRoster {
     teamId,
     mlbRoster: teamPlayers.map((player) => player.id),
     farmRoster: [],
-    lineupVsRHP,
-    lineupVsLHP: lineupVsRHP.map((slot) => ({ ...slot })),
+    lineupWithDH,
+    lineupWithoutDH: lineupWithDH.map((slot) => ({ ...slot })),
     startingRotation,
     closingPitcher,
     setupPitchers,

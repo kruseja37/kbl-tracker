@@ -100,8 +100,8 @@ export function LeagueBuilderRosters() {
     teamId,
     mlbRoster: [],
     farmRoster: [],
-    lineupVsRHP: [],
-    lineupVsLHP: [],
+    lineupWithDH: [],
+    lineupWithoutDH: [],
     startingRotation: [],
     closingPitcher: '',
     setupPitchers: [],
@@ -516,42 +516,88 @@ interface LineupTabProps {
 }
 
 function LineupTab({ roster, players, onUpdate }: LineupTabProps) {
-  const [vsHandedness, setVsHandedness] = useState<"RHP" | "LHP">("RHP");
-  const currentLineup = vsHandedness === "RHP" ? roster.lineupVsRHP : roster.lineupVsLHP;
+  const [lineupMode, setLineupMode] = useState<"DH" | "NO_DH">("DH");
+  const isDH = lineupMode === "DH";
 
   const mlbPlayers = players.filter((p) => roster.mlbRoster.includes(p.id));
   const positionPlayers = mlbPlayers.filter(
     (p) => !PITCHER_POSITIONS.includes(p.primaryPosition)
   );
 
+  // In No DH mode, the starting pitcher is auto-locked at batting order 9
+  const startingPitcherId = roster.startingRotation?.[0] || mlbPlayers.find(
+    (p) => p.primaryPosition === 'SP'
+  )?.id;
+  const startingPitcher = startingPitcherId ? players.find((p) => p.id === startingPitcherId) : null;
+
+  // Build the displayed lineup: stored slots + pitcher lock for No DH
+  const storedLineup = isDH ? roster.lineupWithDH : roster.lineupWithoutDH;
+  const maxUserSlots = isDH ? 9 : 8;
+  // In No DH, filter out pitcher slots, DH slots, and the auto-locked starting pitcher, then cap at 8
+  const userSlots = isDH
+    ? storedLineup
+    : storedLineup
+        .filter((s) =>
+          s.fieldingPosition !== ('P' as unknown as Position)
+          && s.fieldingPosition !== 'DH'
+          && s.playerId !== startingPitcherId
+        )
+        .slice(0, maxUserSlots)
+        .map((s, idx) => ({ ...s, battingOrder: idx + 1 }));
+
+  // The full lineup shown to the user (user slots + pitcher lock at 9th)
+  const currentLineup = isDH
+    ? userSlots
+    : [
+        ...userSlots,
+        ...(startingPitcher ? [{
+          battingOrder: 9,
+          playerId: startingPitcher.id,
+          fieldingPosition: 'P' as unknown as Position,
+        }] : []),
+      ];
+
+  // Positions available for assignment
+  const noDhFieldPositions: Position[] = ['C', '1B', '2B', 'SS', '3B', 'LF', 'CF', 'RF'];
+  const availablePositions = isDH ? FIELDING_POSITIONS : noDhFieldPositions;
+
   const setLineup = (lineup: LineupSlot[]) => {
-    if (vsHandedness === "RHP") {
-      onUpdate({ lineupVsRHP: lineup });
+    if (isDH) {
+      onUpdate({ lineupWithDH: lineup });
     } else {
-      onUpdate({ lineupVsLHP: lineup });
+      // Strip the auto-locked pitcher slot before saving
+      const withoutPitcher = lineup.filter((s) => s.fieldingPosition !== ('P' as unknown as Position));
+      onUpdate({ lineupWithoutDH: withoutPitcher });
     }
   };
 
   const addToLineup = (playerId: string, position: Position) => {
-    const nextOrder = currentLineup.length + 1;
-    if (nextOrder > 9) return;
+    const nextOrder = userSlots.length + 1;
+    if (nextOrder > maxUserSlots) return;
 
-    setLineup([
-      ...currentLineup,
+    const newSlots = [
+      ...userSlots,
       { battingOrder: nextOrder, playerId, fieldingPosition: position },
-    ]);
+    ];
+    setLineup(newSlots);
   };
 
   const removeFromLineup = (battingOrder: number) => {
-    const newLineup = currentLineup
-      .filter((slot) => slot.battingOrder !== battingOrder)
-      .map((slot, idx) => ({ ...slot, battingOrder: idx + 1 }));
+    // Don't allow removing the pitcher in No DH mode
+    const slot = currentLineup.find((s) => s.battingOrder === battingOrder);
+    if (!isDH && slot?.fieldingPosition === ('P' as unknown as Position)) return;
+
+    const newLineup = userSlots
+      .filter((s) => s.battingOrder !== battingOrder)
+      .map((s, idx) => ({ ...s, battingOrder: idx + 1 }));
     setLineup(newLineup);
   };
 
   const moveUp = (battingOrder: number) => {
     if (battingOrder <= 1) return;
-    const newLineup = [...currentLineup];
+    // In No DH, don't allow moving into or out of the pitcher's 9th slot
+    if (!isDH && (battingOrder === 9 || battingOrder - 1 === 0)) return;
+    const newLineup = [...userSlots];
     const idx = newLineup.findIndex((s) => s.battingOrder === battingOrder);
     const prevIdx = newLineup.findIndex((s) => s.battingOrder === battingOrder - 1);
     if (idx >= 0 && prevIdx >= 0) {
@@ -562,8 +608,10 @@ function LineupTab({ roster, players, onUpdate }: LineupTabProps) {
   };
 
   const moveDown = (battingOrder: number) => {
-    if (battingOrder >= currentLineup.length) return;
-    const newLineup = [...currentLineup];
+    // In No DH, slots 1-8 are user-managed; don't allow moving into pitcher's slot
+    const maxMovable = isDH ? currentLineup.length : Math.min(userSlots.length, 8);
+    if (battingOrder >= maxMovable) return;
+    const newLineup = [...userSlots];
     const idx = newLineup.findIndex((s) => s.battingOrder === battingOrder);
     const nextIdx = newLineup.findIndex((s) => s.battingOrder === battingOrder + 1);
     if (idx >= 0 && nextIdx >= 0) {
@@ -580,27 +628,27 @@ function LineupTab({ roster, players, onUpdate }: LineupTabProps) {
 
   return (
     <div className="space-y-4">
-      {/* Handedness Toggle */}
+      {/* DH Toggle */}
       <div className="flex gap-2">
         <button
-          onClick={() => setVsHandedness("RHP")}
+          onClick={() => setLineupMode("DH")}
           className={`px-4 py-2 font-bold transition ${
-            vsHandedness === "RHP"
+            lineupMode === "DH"
               ? "bg-[#DD0000] border-4 border-[#E8E8D8]"
               : "bg-[#4A6844] border-4 border-[#E8E8D8]/30"
           }`}
         >
-          vs RHP
+          DH
         </button>
         <button
-          onClick={() => setVsHandedness("LHP")}
+          onClick={() => setLineupMode("NO_DH")}
           className={`px-4 py-2 font-bold transition ${
-            vsHandedness === "LHP"
+            lineupMode === "NO_DH"
               ? "bg-[#DD0000] border-4 border-[#E8E8D8]"
               : "bg-[#4A6844] border-4 border-[#E8E8D8]/30"
           }`}
         >
-          vs LHP
+          No DH
         </button>
       </div>
 
@@ -608,7 +656,7 @@ function LineupTab({ roster, players, onUpdate }: LineupTabProps) {
         {/* Current Lineup */}
         <div className="bg-[#4A6844] border-4 border-[#E8E8D8]/30 p-4">
           <h4 className="font-bold mb-3 text-sm border-b border-[#E8E8D8]/20 pb-2">
-            LINEUP vs {vsHandedness} ({currentLineup.length}/9)
+            LINEUP {isDH ? "(DH)" : "(No DH)"} ({currentLineup.length}/9)
           </h4>
           <div className="space-y-2">
             {currentLineup
@@ -616,10 +664,15 @@ function LineupTab({ roster, players, onUpdate }: LineupTabProps) {
               .map((slot) => {
                 const player = players.find((p) => p.id === slot.playerId);
                 if (!player) return null;
+                const isPitcherSlot = !isDH && slot.fieldingPosition === ('P' as unknown as Position);
                 return (
                   <div
-                    key={slot.battingOrder}
-                    className="flex items-center gap-2 bg-[#556B55] border-2 border-[#E8E8D8]/20 p-2"
+                    key={`${slot.battingOrder}-${slot.playerId}`}
+                    className={`flex items-center gap-2 border-2 p-2 ${
+                      isPitcherSlot
+                        ? "bg-[#3A5A3A] border-[#E8E8D8]/40 opacity-80"
+                        : "bg-[#556B55] border-[#E8E8D8]/20"
+                    }`}
                   >
                     <span className="w-6 h-6 bg-[#DD0000] flex items-center justify-center font-bold text-sm">
                       {slot.battingOrder}
@@ -629,29 +682,32 @@ function LineupTab({ roster, players, onUpdate }: LineupTabProps) {
                     </span>
                     <span className="flex-1 font-bold text-sm truncate">
                       {player.firstName} {player.lastName}
+                      {isPitcherSlot && <span className="text-[#E8E8D8]/50 text-xs ml-1">(auto)</span>}
                     </span>
-                    <div className="flex gap-1">
-                      <button
-                        onClick={() => moveUp(slot.battingOrder)}
-                        className="p-1 bg-[#4A6844] hover:bg-[#5A8352] text-xs"
-                        disabled={slot.battingOrder === 1}
-                      >
-                        ▲
-                      </button>
-                      <button
-                        onClick={() => moveDown(slot.battingOrder)}
-                        className="p-1 bg-[#4A6844] hover:bg-[#5A8352] text-xs"
-                        disabled={slot.battingOrder === currentLineup.length}
-                      >
-                        ▼
-                      </button>
-                      <button
-                        onClick={() => removeFromLineup(slot.battingOrder)}
-                        className="p-1 bg-[#DD0000] hover:bg-[#FF2222] text-xs"
-                      >
-                        ✕
-                      </button>
-                    </div>
+                    {!isPitcherSlot && (
+                      <div className="flex gap-1">
+                        <button
+                          onClick={() => moveUp(slot.battingOrder)}
+                          className="p-1 bg-[#4A6844] hover:bg-[#5A8352] text-xs"
+                          disabled={slot.battingOrder === 1}
+                        >
+                          ▲
+                        </button>
+                        <button
+                          onClick={() => moveDown(slot.battingOrder)}
+                          className="p-1 bg-[#4A6844] hover:bg-[#5A8352] text-xs"
+                          disabled={slot.battingOrder === currentLineup.length}
+                        >
+                          ▼
+                        </button>
+                        <button
+                          onClick={() => removeFromLineup(slot.battingOrder)}
+                          className="p-1 bg-[#DD0000] hover:bg-[#FF2222] text-xs"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -689,9 +745,10 @@ function LineupTab({ roster, players, onUpdate }: LineupTabProps) {
                   }}
                   className="bg-[#4A6844] border-2 border-[#E8E8D8]/30 px-2 py-1 text-xs"
                   defaultValue=""
+                  disabled={userSlots.length >= maxUserSlots}
                 >
                   <option value="">Add at...</option>
-                  {FIELDING_POSITIONS.map((pos) => (
+                  {availablePositions.map((pos) => (
                     <option key={pos} value={pos}>
                       {pos}
                     </option>

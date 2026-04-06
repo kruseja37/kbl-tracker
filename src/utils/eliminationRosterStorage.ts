@@ -24,6 +24,7 @@ export interface EliminationRosterSnapshot {
   teamName: string;
   players: Player[];
   lineup: LineupSlot[];
+  lineupWithoutDH?: LineupSlot[];
   startingRotation: string[];
   snapshotAt: number;
 }
@@ -60,7 +61,11 @@ export function getNormalizedEliminationLineup(
   const fieldPositions = useDH ? FIELD_POSITIONS_WITH_DH : FIELD_POSITIONS_NO_DH;
   const targetNonPitchers = useDH ? 9 : 8;
   const playerMap = new Map(snapshot.players.map((player) => [player.id, player]));
-  const validExisting = [...snapshot.lineup]
+  // Select the correct stored lineup variant; fall back to DH lineup if no-DH isn't configured
+  const sourceLineup = (!useDH && snapshot.lineupWithoutDH && snapshot.lineupWithoutDH.length > 0)
+    ? snapshot.lineupWithoutDH
+    : snapshot.lineup;
+  const validExisting = [...sourceLineup]
     .filter((slot) => {
       const player = playerMap.get(slot.playerId);
       if (!player || isPitcher(player)) return false;
@@ -218,7 +223,8 @@ function buildSnapshot(
     teamId,
     teamName,
     players,
-    lineup: roster.lineupVsRHP,
+    lineup: roster.lineupWithDH,
+    lineupWithoutDH: roster.lineupWithoutDH,
     startingRotation: roster.startingRotation,
     snapshotAt: Date.now(),
   };
@@ -296,7 +302,7 @@ export async function getAllEliminationRosterSnapshots(
 export async function updateEliminationRosterSnapshot(
   eliminationId: string,
   teamId: string,
-  updates: Partial<Pick<EliminationRosterSnapshot, 'lineup' | 'startingRotation'>>
+  updates: Partial<Pick<EliminationRosterSnapshot, 'lineup' | 'lineupWithoutDH' | 'startingRotation'>>
 ): Promise<void> {
   const existing = await getEliminationRosterSnapshot(eliminationId, teamId);
 
