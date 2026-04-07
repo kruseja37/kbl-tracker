@@ -1426,7 +1426,7 @@ const TEAM_ABBREVIATIONS: Record<string, string> = {
   'tigers': 'DET',
   'mariners': 'SEA',
   'astros': 'HOU',
-  'angels': 'LAA',
+  'angels': 'CAL',
   'rangers': 'TEX',
   'athletics': 'OAK',
   'marlins': 'FLA',
