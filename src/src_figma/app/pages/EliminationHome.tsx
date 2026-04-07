@@ -247,7 +247,7 @@ export function EliminationHome() {
   );
 
   const handlePlayGame = async (series: PlayoffSeries) => {
-    if (!eliminationId || !playoffConfig) return;
+    if (!eliminationId || !playoffConfig || !metadata) return;
 
     try {
       const { gameId, nextGameNumber, homeTeam, awayTeam } = buildSeriesCardState(eliminationId, series);
@@ -270,6 +270,7 @@ export function EliminationHome() {
           statsScopeId: `elimination-${eliminationId}`,
           competitionType: 'elimination',
           competitionId: eliminationId,
+          leagueId: metadata.leagueId,
           homeTeamId: homeTeam.teamId,
           homeTeamName: homeTeam.teamName,
           homeSeed: homeTeam.seed,

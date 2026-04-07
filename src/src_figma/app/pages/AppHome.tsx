@@ -1,10 +1,20 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link } from "react-router";
 import { Trophy, Users, Globe, Database, Book } from "lucide-react";
 import { SyncModal, SyncStatusIcon } from "../components/SyncModal";
+import { useDataIntegrity } from "../../../hooks/useDataIntegrity";
 
 export function AppHome() {
   const [syncOpen, setSyncOpen] = useState(false);
+  const { status, recoverUnaggregatedGames } = useDataIntegrity();
+
+  // Auto-recover unaggregated games on startup
+  useEffect(() => {
+    if (status.checked && (status.needsAggregation > 0 || status.hasErrors > 0)) {
+      console.log(`[AppHome] Auto-recovering ${status.needsAggregation + status.hasErrors} unaggregated games`);
+      recoverUnaggregatedGames().catch(console.error);
+    }
+  }, [status.checked, status.needsAggregation, status.hasErrors, recoverUnaggregatedGames]);
 
   return (
     <div className="min-h-screen bg-black text-white p-6">

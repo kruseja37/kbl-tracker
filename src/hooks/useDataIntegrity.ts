@@ -11,14 +11,14 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   checkDataIntegrity,
-  getGameEvents,
-  getGamePitchingAppearances,
   markGameAggregated,
   markAggregationFailed,
   type GameHeader,
-  type AtBatEvent,
-  type PitchingAppearance,
 } from '../utils/eventLog';
+import { getCompletedGameById, type PersistedGameState } from '../utils/gameStorage';
+import { aggregateGameToSeason } from '../utils/seasonAggregator';
+import { registerAlmanacPlayers } from '../utils/registerAlmanacPlayers';
+import { resolveExhibitionLeagueId } from '../utils/gameStorage';
 
 // ============================================
 // TYPES
@@ -50,134 +50,67 @@ export interface UseDataIntegrityReturn {
 // ============================================
 
 /**
- * Recalculate season stats from event log
- * This is the recovery path - it reads raw events and rebuilds everything
+ * Re-aggregate a completed game from its archived record.
+ *
+ * Loads the CompletedGameRecord from IndexedDB and runs it through
+ * the real aggregation pipeline (aggregateGameToSeason + registerAlmanacPlayers).
+ * This is the recovery path for games where processCompletedGame failed or timed out.
  */
-async function aggregateGameFromEventLog(
-  header: GameHeader,
-  events: AtBatEvent[],
-  pitchingAppearances: PitchingAppearance[]
-): Promise<void> {
-  // TODO: This will call into seasonStorage to aggregate
-  // For now, we'll build the player stats from events
-
-  const batterStats = new Map<string, {
-    odlcli: string;
-    playerName: string;
-    teamId: string;
-    pa: number;
-    ab: number;
-    hits: number;
-    singles: number;
-    doubles: number;
-    triples: number;
-    homeRuns: number;
-    rbi: number;
-    runs: number;
-    walks: number;
-    strikeouts: number;
-    hitByPitch: number;
-    sacFlies: number;
-    sacBunts: number;
-    stolenBases: number;
-    caughtStealing: number;
-  }>();
-
-  // Process each at-bat event
-  for (const event of events) {
-    // Batter stats
-    if (!batterStats.has(event.batterId)) {
-      batterStats.set(event.batterId, {
-        odlcli: event.batterId,
-        playerName: event.batterName,
-        teamId: event.batterTeamId,
-        pa: 0, ab: 0, hits: 0, singles: 0, doubles: 0, triples: 0, homeRuns: 0,
-        rbi: 0, runs: 0, walks: 0, strikeouts: 0, hitByPitch: 0,
-        sacFlies: 0, sacBunts: 0, stolenBases: 0, caughtStealing: 0,
-      });
-    }
-    const batter = batterStats.get(event.batterId)!;
-
-    // Plate appearance
-    batter.pa++;
-
-    // Result-based stats
-    switch (event.result) {
-      case '1B':
-        batter.ab++; batter.hits++; batter.singles++;
-        break;
-      case '2B':
-        batter.ab++; batter.hits++; batter.doubles++;
-        break;
-      case '3B':
-        batter.ab++; batter.hits++; batter.triples++;
-        break;
-      case 'HR':
-      case 'ITPHR':
-        batter.ab++; batter.hits++; batter.homeRuns++;
-        break;
-      case 'BB':
-      case 'IBB':
-        batter.walks++;
-        break;
-      case 'HBP':
-        batter.hitByPitch++;
-        break;
-      case 'K':
-      case 'Kc':
-      case 'Ꝁ':
-        batter.ab++; batter.strikeouts++;
-        break;
-      case 'SF':
-        batter.sacFlies++;
-        break;
-      case 'SAC':
-        batter.sacBunts++;
-        break;
-      default:
-        // Ground outs, fly outs, etc.
-        batter.ab++;
-        break;
-    }
-
-    batter.rbi += event.rbiCount;
+async function reAggregateFromArchive(header: GameHeader): Promise<boolean> {
+  const archived = await getCompletedGameById(header.gameId);
+  if (!archived) {
+    console.warn(`[DataIntegrity] Game ${header.gameId} not found in completedGames — cannot recover`);
+    return false;
   }
 
-  // Process pitching appearances (already have accumulated stats)
-  const pitcherStats = pitchingAppearances.map(app => ({
-    pitcherId: app.pitcherId,
-    pitcherName: app.pitcherName,
-    teamId: app.teamId,
-    isStarter: app.isStarter,
-    outsRecorded: app.outsRecorded,
-    hitsAllowed: app.hitsAllowed,
-    runsAllowed: app.runsAllowed,
-    earnedRuns: app.earnedRuns,
-    walksAllowed: app.walksAllowed,
-    strikeouts: app.strikeouts,
-    homeRunsAllowed: app.homeRunsAllowed,
-    hitBatsmen: app.hitBatsmen,
-    wildPitches: app.wildPitches,
-    battersFaced: app.battersFaced,
-    inheritedRunners: app.inheritedRunners.length,
-    inheritedRunnersScored: app.inheritedRunnersScored,
-    bequeathedRunners: app.bequeathedRunners.length,
-    bequeathedRunnersScored: app.bequeathedRunnersScored,
-  }));
+  // Build a minimal PersistedGameState from the archived record
+  const gameStateForAggregation: PersistedGameState = {
+    id: 'recovery',
+    gameId: archived.gameId,
+    savedAt: archived.date,
+    inning: archived.innings,
+    halfInning: 'BOTTOM',
+    outs: 3,
+    homeScore: archived.finalScore.home,
+    awayScore: archived.finalScore.away,
+    bases: { first: null, second: null, third: null },
+    currentBatterIndex: 0,
+    atBatCount: 0,
+    awayTeamId: archived.awayTeamId,
+    homeTeamId: archived.homeTeamId,
+    awayTeamName: archived.awayTeamName,
+    homeTeamName: archived.homeTeamName,
+    seasonNumber: archived.seasonNumber ?? 1,
+    playerStats: archived.playerStats,
+    pitcherGameStats: archived.pitcherGameStats,
+    fameEvents: archived.fameEvents,
+    lastHRBatterId: null,
+    consecutiveHRCount: 0,
+    inningStrikeouts: 0,
+    maxDeficitAway: 0,
+    maxDeficitHome: 0,
+    activityLog: [],
+    // Preserve scope fields for correct aggregation target
+    seasonId: archived.seasonId,
+    statsScopeId: archived.statsScopeId,
+    competitionType: archived.competitionType,
+    competitionId: archived.competitionId,
+    leagueId: archived.leagueId,
+  };
 
-  // Collect fame events
-  const fameEvents = events.flatMap(e => e.fameEvents);
-
-  // TODO: Call actual season aggregation with rebuilt stats
-  // For now, we're just validating we can rebuild the data
-  console.log(`[Recovery] Rebuilt stats for game ${header.gameId}:`, {
-    batters: batterStats.size,
-    pitchers: pitcherStats.length,
-    fameEvents: fameEvents.length,
+  // Run through real aggregation pipeline
+  await aggregateGameToSeason(gameStateForAggregation, {
+    seasonId: archived.statsScopeId || archived.seasonId,
   });
 
-  // In full implementation, this would call:
-  // await aggregateToSeason(header.seasonId, batterStats, pitcherStats, fameEvents);
+  // Register players in Almanac
+  const resolvedLeagueId = resolveExhibitionLeagueId(archived);
+  if (resolvedLeagueId) {
+    await registerAlmanacPlayers(gameStateForAggregation, resolvedLeagueId);
+  }
+
+  console.log(`[DataIntegrity] Re-aggregated game ${header.gameId} to season stats`);
+  return true;
 }
 
 // ============================================
@@ -259,12 +192,11 @@ export function useDataIntegrity(): UseDataIntegrityReturn {
         try {
           console.log(`[DataIntegrity] Recovering game ${game.gameId} (${i + 1}/${gamesToProcess.length})`);
 
-          // Load all events for this game
-          const events = await getGameEvents(game.gameId);
-          const pitchingAppearances = await getGamePitchingAppearances(game.gameId);
-
-          // Re-aggregate from events
-          await aggregateGameFromEventLog(game, events, pitchingAppearances);
+          // Re-aggregate from archived CompletedGameRecord
+          const success = await reAggregateFromArchive(game);
+          if (!success) {
+            throw new Error('Game not found in completedGames archive');
+          }
 
           // Mark as aggregated
           await markGameAggregated(game.gameId);
