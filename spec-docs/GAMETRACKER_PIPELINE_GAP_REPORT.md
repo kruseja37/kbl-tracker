@@ -8,39 +8,20 @@
 
 ## CRITICAL (data loss or wrong results)
 
-### GAP-01: Elimination games have no `leagueId` — breaks almanac registration + ratings snapshots
-- **Severity:** CRITICAL
-- **Affected modes:** Elimination → Almanac
-- **Root cause:** `EliminationHome.tsx` does NOT pass `leagueId` in navigation state. Franchise passes it (line 2831), but elimination does not.
-- **Impact:**
-  - `resolveExhibitionLeagueId()` (`gameStorage.ts:379-391`) returns `undefined` for `competitionType='elimination'`
-  - `processCompletedGame.ts:108` skips `capturePlayerRatingsSnapshots` when leagueId is falsy
-  - `registerAlmanacPlayers.ts:260-268` skips game entirely when leagueId resolves to undefined
-  - Elimination players never appear in Almanac canonical registry via primary path
-- **Safety net:** `backfillCanonicalPlayers()` runs on AlmanacHome mount, but it calls the same `resolveExhibitionLeagueId` — so it also skips elimination games
-- **Fix:** Pass `leagueId` from elimination bracket config in `EliminationHome.tsx` `handlePlayGame` navigate state
+### GAP-01: ~~Elimination games have no `leagueId`~~ ✅ FIXED (5f7f942)
+- **Fix applied:** Pass `leagueId: metadata.leagueId` in `EliminationHome.tsx:273` navigate state
+- **Verified:** Build pass, tests pass (5373/5373)
 
-### GAP-02: No aggregation retry for failed `processCompletedGame`
-- **Severity:** CRITICAL
-- **Affected modes:** All (Franchise, Elimination, Almanac)
-- **Root cause:** `useDataIntegrity.ts` has `recoverUnaggregatedGames()` but it's only called from archived `src/archived-pages/GamePage.tsx` — the active app never calls it
-- **Impact:** If `processCompletedGame` fails or times out (wrapped in `Promise.race` at ~line 9658):
-  - Game archives to `completedGames` (second `archiveCompletedGame` still runs)
-  - Season stats are NOT updated — batting/pitching leaders missing the game
-  - Career milestones not triggered
-  - Event log `aggregated` flag stays `false`, but nothing ever retries
-- **Fix:** Wire `recoverUnaggregatedGames()` into app startup (e.g., `App.tsx` or `AppHome.tsx`)
+### GAP-02: ~~No aggregation retry for failed `processCompletedGame`~~ ✅ FIXED (5f7f942)
+- **Fix applied:** Replaced incomplete `aggregateGameFromEventLog` with `reAggregateFromArchive` that loads CompletedGameRecord and re-runs real pipeline. Wired `useDataIntegrity` into `AppHome.tsx` with auto-recovery on mount.
+- **Verified:** Build pass, tests pass (5373/5373)
 
-### GAP-03: Playoff stats capture is ~50% complete
-- **Severity:** CRITICAL
-- **Affected modes:** Elimination, Franchise Playoffs
-- **Root cause:** `aggregateGameToPlayoffStats()` in `playoffStorage.ts:938-1121` uses minimal field extraction
-- **Missing batting fields:** `pa`, `singles`, `sh`, `gidp`
-- **Missing ALL fielding stats:** `putouts`, `assists`, `fieldingErrors` — zero fielding in playoff stats
-- **Missing pitching fields:** `hitBatters`, `wildPitches`, `pitchCount`, `battersFaced`, `runsAllowed`, `hold`, `blownSave`, and 8+ others
-- **Missing fame events:** `gameState.fameEvents` never processed for playoff stats
-- **Impact:** Elimination Leaders tab shows incomplete stats. Franchise playoff leaders missing key categories.
-- **Fix:** Expand `aggregateGameToPlayoffStats` to capture all fields from `PersistedGameState`
+### GAP-03: ~~Playoff stats capture is ~50% complete~~ ⚠️ REASSESSED (severity downgraded)
+- **Original severity:** CRITICAL → **Revised severity:** LOW
+- **Analysis:** All fields displayed in the Elimination Leaders UI (`avg`, `homeRuns`, `rbi`, `stolenBases`, `ops`, `era`, `wins`, `pitchingStrikeouts`, `whip`, `saves`) ARE being aggregated correctly. Fielding stats (`fieldingWAR`, `fieldingRunsSaved`, `fieldingPlays`, `fieldingPrimaryPosition`) are enriched at read-time via `attachFieldingMetricsToPlayoffStats` from persisted fielding events — also working.
+- **What's actually missing:** `pa`, `singles`, `sh`, `gidp` for batting and several pitching fields — but these are NOT in the `PlayoffPlayerStats` type because the UI doesn't display them. No data loss for currently displayed stats.
+- **True remaining gap:** `pWAR` not computed for playoff MVP ranking — but this is a Franchise-specific feature, not a pipeline gap.
+- **Status:** No immediate fix needed. Expand type + aggregation only when UI needs additional stat categories.
 
 ---
 
@@ -54,19 +35,13 @@
 - **Impact:** Season and career stats always show 0 for these categories
 - **Note:** These are SMB4-specific advanced metrics that may require UI prompt integration (per detection philosophy) before they can be tracked
 
-### GAP-05: `grandSlams` not tracked — career milestone counter stays 0
-- **Severity:** MODERATE
-- **Affected modes:** Franchise (career milestones)
-- **Root cause:** `grandSlams` is expected by `milestoneAggregator.ts` (line ~127) but no field tracks grand slams in `PlayerGameStats` during gameplay
-- **Impact:** Career grand slam milestone achievements never trigger
-- **Fix:** Add grand slam detection in `commitPlateAppearance` when HR with bases loaded
+### GAP-05: ~~`grandSlams` not tracked~~ ✅ FIXED (89a34c8)
+- **Fix applied:** Added `grandSlams` field to `PlayerGameStats`, `createEmptyPlayerStats()`, snapshot restore, and `PersistedGameState.playerStats` type. HR with all bases occupied increments counter in `recordHit()`.
+- **Verified:** Build pass, tests pass (5373/5373)
 
-### GAP-06: Fame events only write to batting records
-- **Severity:** MODERATE
-- **Affected modes:** Franchise (season stats)
-- **Root cause:** `aggregateFameEvents()` in `seasonAggregator.ts:307-356` only calls `getOrCreateBattingStats()` / `updateBattingStats()`
-- **Impact:** Pitcher-only players (pure relievers who never bat in DH leagues) can earn fame bonuses/boners during a game, but the fame data has nowhere to be written — it's silently lost
-- **Fix:** Fall through to `getOrCreatePitchingStats()` when no batting record exists for the player
+### GAP-06: ~~Fame events only write to batting records~~ ❌ FALSE POSITIVE
+- **Analysis:** `getOrCreateBattingStats` creates a batting record if one doesn't exist, so fame data for pitcher-only players IS written — it creates a zero-stat batting record with the fame values. Not ideal architecturally but no data loss occurs.
+- **Status:** No fix needed
 
 ### GAP-07: Orphaned IndexedDB stores never written to
 - **Severity:** MODERATE (wasted schema space)
@@ -74,11 +49,9 @@
 - **Root cause:** Stores were created in the v1 schema but game stats are embedded inline in `completedGames` records instead
 - **Impact:** No functional impact — stores exist but are empty. Could be cleaned up in a future DB version bump.
 
-### GAP-08: Double `archiveCompletedGame` call per game
-- **Severity:** MODERATE (wasteful, minor data risk)
-- **Root cause:** `processCompletedGame.ts:113` archives with `inningScores: []`, then `completeGameInternal` at line 9834 archives again with real `inningScores` and `playersOfTheGame`
-- **Impact:** If second call fails but first succeeds, `completedGames` has a record with empty `inningScores`. Functionally correct due to `store.put()` overwrite, but wasteful.
-- **Fix:** Remove archive call from `processCompletedGame` and let `completeGameInternal` handle it exclusively
+### GAP-08: ~~Double `archiveCompletedGame` call per game~~ ❌ FALSE POSITIVE (intentional)
+- **Analysis:** The two-phase archive is intentional. `endGame()` archives first (line 10450) so PostGameSummary can load the game immediately. Then `processCompletedGame` archives again with full aggregation data. Both use `store.put()` (idempotent overwrite). Removing the first archive would break PostGameSummary.
+- **Status:** No fix needed — working as designed
 
 ---
 
@@ -119,12 +92,20 @@
 
 ---
 
-## Priority Fix Order
+## Priority Fix Order (Updated 2026-04-07)
 
-1. **GAP-01** — Pass `leagueId` in elimination navigate state (1-line fix, unblocks almanac for elimination)
-2. **GAP-02** — Wire `recoverUnaggregatedGames` into active app startup (prevents silent stat loss)
-3. **GAP-03** — Expand `aggregateGameToPlayoffStats` field coverage (comprehensive but contained change)
-4. **GAP-05** — Add grand slam tracking in `commitPlateAppearance` (targeted)
-5. **GAP-06** — Add pitching record fallback for fame aggregation (targeted)
-6. **GAP-08** — Remove redundant first `archiveCompletedGame` call (cleanup)
-7. **GAP-04** — SMB4 metrics require gameplay tracking infrastructure (larger scope, can defer)
+| Gap | Status | Commit |
+|-----|--------|--------|
+| GAP-01 | ✅ FIXED | 5f7f942 |
+| GAP-02 | ✅ FIXED | 5f7f942 |
+| GAP-05 | ✅ FIXED | 89a34c8 |
+| GAP-06 | ❌ FALSE POSITIVE | N/A |
+| GAP-08 | ❌ FALSE POSITIVE | N/A |
+
+### Remaining Gaps
+1. **GAP-03** — Expand `aggregateGameToPlayoffStats` field coverage (CRITICAL — comprehensive but contained)
+2. **GAP-04** — SMB4 metrics require gameplay tracking infrastructure (MODERATE — larger scope, can defer)
+3. **GAP-07** — Orphaned IndexedDB stores (MODERATE — cosmetic cleanup, can defer)
+4. **GAP-09** — Manager decisions tracking (LOW — future feature scaffolding)
+5. **GAP-10** — Ratings snapshots for elimination (LOW — resolved by GAP-01 fix)
+6. **GAP-11** — WAR orchestrator dead code (LOW — cleanup)
