@@ -200,12 +200,48 @@ export function ExhibitionGame() {
   const awayStartingPitcher = awayPitchers.find(p => p.isActive);
   const homeStartingPitcher = homePitchers.find(p => p.isActive);
 
-  // Reorder lineup via drag-and-drop — merges reordered starters back with bench
+  // Reorder lineup via drag-and-drop or tap-swap — merges reordered starters back with bench
   const handleAwayReorder = (reordered: RosterPlayer[]) => {
     setAwayPlayers([...reordered, ...awayBench]);
   };
   const handleHomeReorder = (reordered: RosterPlayer[]) => {
     setHomePlayers([...reordered, ...homeBench]);
+  };
+
+  // Position swap — swap defensive positions between two lineup players
+  const handleAwayPositionSwap = (a: RosterPlayer, b: RosterPlayer) => {
+    setAwayPlayers(prev => prev.map(p => {
+      if (p.playerId === a.playerId) return { ...p, position: b.position };
+      if (p.playerId === b.playerId) return { ...p, position: a.position };
+      return p;
+    }));
+  };
+  const handleHomePositionSwap = (a: RosterPlayer, b: RosterPlayer) => {
+    setHomePlayers(prev => prev.map(p => {
+      if (p.playerId === a.playerId) return { ...p, position: b.position };
+      if (p.playerId === b.playerId) return { ...p, position: a.position };
+      return p;
+    }));
+  };
+
+  // Bench substitution — swap a lineup player with a bench player (pre-game only)
+  const handleAwayBenchSub = (lineupPlayer: RosterPlayer, benchPlayer: RosterPlayer) => {
+    setAwayPlayers(prev => prev.map(p => {
+      if (p.playerId === lineupPlayer.playerId)
+        return { ...p, battingOrder: undefined, position: undefined };
+      if (p.playerId === benchPlayer.playerId)
+        return { ...p, battingOrder: lineupPlayer.battingOrder, position: lineupPlayer.position };
+      return p;
+    }));
+  };
+  const handleHomeBenchSub = (lineupPlayer: RosterPlayer, benchPlayer: RosterPlayer) => {
+    setHomePlayers(prev => prev.map(p => {
+      if (p.playerId === lineupPlayer.playerId)
+        return { ...p, battingOrder: undefined, position: undefined };
+      if (p.playerId === benchPlayer.playerId)
+        return { ...p, battingOrder: lineupPlayer.battingOrder, position: lineupPlayer.position };
+      return p;
+    }));
   };
 
   const handleStartGame = () => {
@@ -468,6 +504,8 @@ export function ExhibitionGame() {
                   teamBorderColor={awayTeam.colors?.secondary || '#E8E8D8'}
                   isAway={true}
                   onReorder={handleAwayReorder}
+                  onPositionSwap={handleAwayPositionSwap}
+                  onBenchSub={handleAwayBenchSub}
                 />
                 <LineupPreview
                   teamName={homeTeam.name.toUpperCase()}
@@ -478,6 +516,8 @@ export function ExhibitionGame() {
                   teamBorderColor={homeTeam.colors?.secondary || '#E8E8D8'}
                   isAway={false}
                   onReorder={handleHomeReorder}
+                  onPositionSwap={handleHomePositionSwap}
+                  onBenchSub={handleHomeBenchSub}
                 />
               </div>
             )}
