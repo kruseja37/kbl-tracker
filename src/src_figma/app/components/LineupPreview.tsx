@@ -20,7 +20,8 @@ type Selection =
 interface LineupPreviewProps {
   teamName: string;
   lineup: RosterPlayer[];         // Players with battingOrder defined
-  bench: RosterPlayer[];          // Players without battingOrder
+  bench: RosterPlayer[];          // Players without battingOrder (position players)
+  benchPitchers?: RosterPitcher[];  // Non-active pitchers available for sub
   startingPitcher?: RosterPitcher;
   teamColor: string;
   teamBorderColor?: string;
@@ -28,12 +29,14 @@ interface LineupPreviewProps {
   onReorder?: (reorderedLineup: RosterPlayer[]) => void;
   onPositionSwap?: (playerA: RosterPlayer, playerB: RosterPlayer) => void;
   onBenchSub?: (lineupPlayer: RosterPlayer, benchPlayer: RosterPlayer) => void;
+  onPitcherSub?: (newPitcher: RosterPitcher) => void;
 }
 
 export function LineupPreview({
   teamName,
   lineup,
   bench,
+  benchPitchers = [],
   startingPitcher,
   teamColor,
   teamBorderColor = '#E8E8D8',
@@ -41,11 +44,13 @@ export function LineupPreview({
   onReorder,
   onPositionSwap,
   onBenchSub,
+  onPitcherSub,
 }: LineupPreviewProps) {
   const [dragFrom, setDragFrom] = useState<number | null>(null);
   const [dragOver, setDragOver] = useState<number | null>(null);
   const [selection, setSelection] = useState<Selection>(null);
   const [benchPopoverIndex, setBenchPopoverIndex] = useState<number | null>(null);
+  const [pitcherPopoverOpen, setPitcherPopoverOpen] = useState(false);
   const [isTouch, setIsTouch] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -332,7 +337,18 @@ export function LineupPreview({
           );
 
           // Wrap in popover for bench substitution on touch
-          if (isTouch && onBenchSub && bench.length > 0) {
+          const allBenchOptions = [...bench, ...benchPitchers.map(bp => ({
+            name: bp.name,
+            fullName: bp.fullName,
+            playerId: bp.playerId,
+            battingHand: (bp.throwingHand || 'R') as 'L' | 'R' | 'S',
+            position: undefined,
+            battingOrder: undefined,
+            stats: { ab: 0, h: 0, r: 0, rbi: 0, bb: 0, k: 0 },
+            _isPitcher: true,
+          } as RosterPlayer & { _isPitcher?: boolean }))];
+
+          if (isTouch && onBenchSub && allBenchOptions.length > 0) {
             return (
               <PopoverPrimitive.Root
                 key={player.playerId || player.name}
@@ -359,7 +375,7 @@ export function LineupPreview({
                       SUBSTITUTE FOR {player.name.split(' ').pop()?.toUpperCase()}
                     </div>
                     <div className="space-y-0.5">
-                      {bench.map((bp) => (
+                      {allBenchOptions.map((bp) => (
                         <button
                           key={bp.playerId || bp.name}
                           type="button"
@@ -376,7 +392,7 @@ export function LineupPreview({
                             className="text-[7px] text-[#E8E8D8]/60"
                             style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}
                           >
-                            {bp.battingHand}
+                            {'_isPitcher' in bp ? 'P' : bp.battingHand}
                           </span>
                         </button>
                       ))}
@@ -400,20 +416,94 @@ export function LineupPreview({
           >
             STARTING PITCHER
           </div>
-          <div className="flex items-center justify-between bg-[#5A7A52] px-2 py-1.5 border-2 border-[#C4A853]">
-            <span
-              className="text-[10px] text-[#E8E8D8] font-bold"
-              style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}
+          {isTouch && onPitcherSub && benchPitchers.length > 0 ? (
+            <PopoverPrimitive.Root
+              open={pitcherPopoverOpen}
+              onOpenChange={setPitcherPopoverOpen}
             >
-              {startingPitcher.name}
-            </span>
-            <span
-              className="text-[8px] text-[#E8E8D8]/80"
-              style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}
-            >
-              P • {startingPitcher.throwingHand}
-            </span>
-          </div>
+              <PopoverPrimitive.Anchor asChild>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelection(null);
+                    setBenchPopoverIndex(null);
+                    setPitcherPopoverOpen(!pitcherPopoverOpen);
+                  }}
+                  className="w-full flex items-center justify-between bg-[#5A7A52] px-2 py-1.5 border-2 border-[#C4A853] active:bg-[#6A8A62] transition-colors"
+                >
+                  <span
+                    className="text-[10px] text-[#E8E8D8] font-bold"
+                    style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}
+                  >
+                    {startingPitcher.name}
+                  </span>
+                  <span
+                    className="text-[8px] text-[#E8E8D8]/80"
+                    style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}
+                  >
+                    P • {startingPitcher.throwingHand}
+                  </span>
+                </button>
+              </PopoverPrimitive.Anchor>
+              <PopoverPrimitive.Portal>
+                <PopoverPrimitive.Content
+                  side="right"
+                  sideOffset={8}
+                  align="start"
+                  avoidCollisions
+                  className="z-50 bg-[#3A5A32] border-2 border-[#C4A853] rounded shadow-lg p-2 w-48 max-h-64 overflow-y-auto"
+                >
+                  <div
+                    className="text-[8px] text-[#C4A853] font-bold mb-1.5 pb-1 border-b border-[#C4A853]/30"
+                    style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}
+                  >
+                    CHANGE STARTING PITCHER
+                  </div>
+                  <div className="space-y-0.5">
+                    {benchPitchers.map((bp) => (
+                      <button
+                        key={bp.playerId || bp.name}
+                        type="button"
+                        onClick={() => {
+                          onPitcherSub(bp);
+                          setPitcherPopoverOpen(false);
+                        }}
+                        className="w-full flex items-center justify-between px-2 py-1.5 text-left bg-[#4A6A42] hover:bg-[#5A7A52] active:bg-[#6A8A62] border border-[#E8E8D8]/20 rounded transition-colors"
+                      >
+                        <span
+                          className="text-[9px] text-[#E8E8D8] font-bold"
+                          style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}
+                        >
+                          {bp.name}
+                        </span>
+                        <span
+                          className="text-[7px] text-[#E8E8D8]/60"
+                          style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}
+                        >
+                          {bp.throwingHand}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </PopoverPrimitive.Content>
+              </PopoverPrimitive.Portal>
+            </PopoverPrimitive.Root>
+          ) : (
+            <div className="flex items-center justify-between bg-[#5A7A52] px-2 py-1.5 border-2 border-[#C4A853]">
+              <span
+                className="text-[10px] text-[#E8E8D8] font-bold"
+                style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}
+              >
+                {startingPitcher.name}
+              </span>
+              <span
+                className="text-[8px] text-[#E8E8D8]/80"
+                style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}
+              >
+                P • {startingPitcher.throwingHand}
+              </span>
+            </div>
+          )}
         </div>
       )}
 

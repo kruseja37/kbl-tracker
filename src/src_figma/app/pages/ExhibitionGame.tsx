@@ -244,6 +244,20 @@ export function ExhibitionGame() {
     }));
   };
 
+  // Starting pitcher substitution — swap isActive flag between current and new pitcher
+  const handleAwayPitcherSub = (newPitcher: RosterPitcher) => {
+    setAwayPitchers(prev => prev.map(p => ({
+      ...p,
+      isActive: p.playerId === newPitcher.playerId || p.name === newPitcher.name,
+    })));
+  };
+  const handleHomePitcherSub = (newPitcher: RosterPitcher) => {
+    setHomePitchers(prev => prev.map(p => ({
+      ...p,
+      isActive: p.playerId === newPitcher.playerId || p.name === newPitcher.name,
+    })));
+  };
+
   const handleStartGame = () => {
     // Pass the configured rosters and team info to the game tracker
     navigate("/game-tracker/exhibition-1", {
@@ -499,6 +513,7 @@ export function ExhibitionGame() {
                   teamName={awayTeam.name.toUpperCase()}
                   lineup={awayLineup}
                   bench={awayBench}
+                  benchPitchers={awayPitchers.filter(p => !p.isActive)}
                   startingPitcher={awayStartingPitcher}
                   teamColor={awayTeam.colors?.primary || '#4A6A42'}
                   teamBorderColor={awayTeam.colors?.secondary || '#E8E8D8'}
@@ -506,11 +521,13 @@ export function ExhibitionGame() {
                   onReorder={handleAwayReorder}
                   onPositionSwap={handleAwayPositionSwap}
                   onBenchSub={handleAwayBenchSub}
+                  onPitcherSub={handleAwayPitcherSub}
                 />
                 <LineupPreview
                   teamName={homeTeam.name.toUpperCase()}
                   lineup={homeLineup}
                   bench={homeBench}
+                  benchPitchers={homePitchers.filter(p => !p.isActive)}
                   startingPitcher={homeStartingPitcher}
                   teamColor={homeTeam.colors?.primary || '#4A6A42'}
                   teamBorderColor={homeTeam.colors?.secondary || '#E8E8D8'}
@@ -518,6 +535,7 @@ export function ExhibitionGame() {
                   onReorder={handleHomeReorder}
                   onPositionSwap={handleHomePositionSwap}
                   onBenchSub={handleHomeBenchSub}
+                  onPitcherSub={handleHomePitcherSub}
                 />
               </div>
             )}
