@@ -172,22 +172,19 @@ export function LineupPreview({
     setBenchPopoverIndex(null);
   };
 
-  // Clear selection on outside click
+  // Clear selection on outside click (selection only, not popover — Radix handles that)
   useEffect(() => {
-    if (!selection && benchPopoverIndex === null) return;
-    const handleClick = (e: MouseEvent | TouchEvent) => {
+    if (!selection) return;
+    const handleClick = (e: MouseEvent) => {
       if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
         setSelection(null);
-        setBenchPopoverIndex(null);
       }
     };
     document.addEventListener('mousedown', handleClick);
-    document.addEventListener('touchstart', handleClick);
     return () => {
       document.removeEventListener('mousedown', handleClick);
-      document.removeEventListener('touchstart', handleClick);
     };
-  }, [selection, benchPopoverIndex]);
+  }, [selection]);
 
   const isReorderSelected = (battingOrder: number) =>
     selection?.mode === 'reorder' && selection.battingOrder === battingOrder;
@@ -366,7 +363,11 @@ export function LineupPreview({
                     sideOffset={8}
                     align="start"
                     avoidCollisions
-                    className="z-50 bg-[#3A5A32] border-2 border-[#C4A853] rounded shadow-lg p-2 w-48 max-h-64 overflow-y-auto"
+                    onOpenAutoFocus={(e) => e.preventDefault()}
+                    onPointerDownOutside={(e) => {
+                      // Let Radix handle dismiss — don't interfere with scroll
+                    }}
+                    className="z-50 bg-[#3A5A32] border-2 border-[#C4A853] rounded shadow-lg p-2 w-48"
                   >
                     <div
                       className="text-[8px] text-[#C4A853] font-bold mb-1.5 pb-1 border-b border-[#C4A853]/30"
@@ -374,7 +375,10 @@ export function LineupPreview({
                     >
                       SUBSTITUTE FOR {player.name.split(' ').pop()?.toUpperCase()}
                     </div>
-                    <div className="space-y-0.5">
+                    <div
+                      className="space-y-0.5 max-h-[50vh] overflow-y-auto overscroll-contain"
+                      onTouchMove={(e) => e.stopPropagation()}
+                    >
                       {allBenchOptions.map((bp) => (
                         <button
                           key={bp.playerId || bp.name}
