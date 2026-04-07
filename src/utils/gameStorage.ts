@@ -119,6 +119,7 @@ export interface PersistedGameState {
       putouts: number;
       assists: number;
       fieldingErrors: number;
+      grandSlams?: number; // GAP-05: Grand slam counter for career milestones
       // --- NEW SMB4 METRICS ---
       d3kOutcomes?: number;
       divingCatches?: number;

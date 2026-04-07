@@ -145,6 +145,7 @@ export interface PlayerGameStats {
   sf: number; // MAJ-11: Sacrifice flies
   sh: number; // MAJ-11: Sacrifice bunts (SH)
   gidp: number; // MAJ-11: Grounded into double play
+  grandSlams: number; // GAP-05: Track grand slams for career milestones
   putouts: number;
   assists: number;
   fieldingErrors: number;
@@ -827,6 +828,7 @@ function createEmptyPlayerStats(): PlayerGameStats {
     sf: 0,
     sh: 0,
     gidp: 0,
+    grandSlams: 0,
     putouts: 0,
     assists: 0,
     fieldingErrors: 0,
@@ -3782,6 +3784,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
               sf: stats.sf ?? 0,
               sh: stats.sh ?? 0,
               gidp: stats.gidp ?? 0,
+              grandSlams: stats.grandSlams ?? 0,
               putouts: stats.putouts ?? 0,
               assists: stats.assists ?? 0,
               fieldingErrors: stats.fieldingErrors ?? 0,
@@ -5372,6 +5375,10 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         if (hitType === "2B" || hitType === "GRD") batterStats.doubles++; // GRD counts as a double
         if (hitType === "3B") batterStats.triples++;
         if (isHomeRunHit) batterStats.hr++;
+        // GAP-05: Track grand slams — HR with all bases occupied pre-play
+        if (isHomeRunHit && gameState.bases.first && gameState.bases.second && gameState.bases.third) {
+          batterStats.grandSlams++;
+        }
         batterStats.rbi += calculatedRbi;
         if (isHomeRunHit) batterStats.r++; // Batter scores on home run
         newStats.set(gameState.currentBatterId, batterStats);
