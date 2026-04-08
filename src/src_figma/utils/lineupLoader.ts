@@ -321,6 +321,9 @@ export async function loadTeamLineup(
   }
 
   // Bench players: all non-pitcher, non-lineup players on the team
+  // Rebuild lineup IDs from actual lineupPlayers (not stored slots) since no-DH may have
+  // replaced the slot 9 player with the starting pitcher
+  const actualLineupIds = new Set(lineupPlayers.map(p => p.playerId).filter(Boolean));
   const benchPlayers: RosterPlayer[] = [];
 
   for (const player of teamPlayers) {
@@ -328,7 +331,7 @@ export async function loadTeamLineup(
     if (['SP', 'RP', 'CP', 'SP/RP'].includes(player.primaryPosition)) continue;
 
     // Skip if already in lineup
-    if (lineupPlayerIds.has(player.id)) continue;
+    if (actualLineupIds.has(player.id)) continue;
 
     const benchPosition = !useDH && player.primaryPosition === 'DH'
       ? player.secondaryPosition || undefined
