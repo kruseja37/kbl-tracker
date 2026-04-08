@@ -3493,28 +3493,30 @@ export function GameTracker() {
 
         // Try to load existing game first (handles page refresh)
         // R2-7: When navigationState is present, user clicked START GAME from setup —
-        // skip snapshot restoration so we get a fresh game instead of resuming the old one.
+        // skip loading the old game entirely so the new lineup from nav state is used.
         const isFreshStart = isFreshNavigation;
-        const hasExistingGame = await loadExistingGame({
-          preferSnapshot: !isFreshStart,
-        });
-        if (cancelled) return;
+        if (!isFreshStart) {
+          const hasExistingGame = await loadExistingGame({
+            preferSnapshot: true,
+          });
+          if (cancelled) return;
 
-        if (hasExistingGame) {
-          console.log("[GameTracker] Loaded existing game from IndexedDB");
-          // R3: Extract persisted DH flags from the snapshot before syncing rosters
-          const restoredSnapshot = getLineupStateSnapshot();
-          const restoredUseDh =
-            restoredSnapshot.awayUsesDh ??
-            restoredSnapshot.homeUsesDh ??
-            inferSnapshotUsesDh(restoredSnapshot.away) ??
-            inferSnapshotUsesDh(restoredSnapshot.home);
-          if (restoredUseDh != null) {
-            setPersistedUseDh(restoredUseDh);
+          if (hasExistingGame) {
+            console.log("[GameTracker] Loaded existing game from IndexedDB");
+            // R3: Extract persisted DH flags from the snapshot before syncing rosters
+            const restoredSnapshot = getLineupStateSnapshot();
+            const restoredUseDh =
+              restoredSnapshot.awayUsesDh ??
+              restoredSnapshot.homeUsesDh ??
+              inferSnapshotUsesDh(restoredSnapshot.away) ??
+              inferSnapshotUsesDh(restoredSnapshot.home);
+            if (restoredUseDh != null) {
+              setPersistedUseDh(restoredUseDh);
+            }
+            syncDisplayedRostersToLineupSnapshot(restoredSnapshot);
+            setGameInitialized(true);
+            return;
           }
-          syncDisplayedRostersToLineupSnapshot(restoredSnapshot);
-          setGameInitialized(true);
-          return;
         }
 
         // No existing game found - create new one
