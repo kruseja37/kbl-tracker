@@ -38,10 +38,10 @@ export function ExhibitionGame() {
   const [selectedLeagueId, setSelectedLeagueId] = useState<string | null>(null);
   const [selectedAwayTeamId, setSelectedAwayTeamId] = useState<string | null>(null);
   const [selectedHomeTeamId, setSelectedHomeTeamId] = useState<string | null>(null);
-  const [useDH, setUseDH] = useState(true);
+  const [useDH, setUseDH] = useState(false);
   const [totalInnings, setTotalInnings] = useState(9);
-  const [extraInningRunner, setExtraInningRunner] = useState(false);
-  const [extraInningRunnerDelay, setExtraInningRunnerDelay] = useState<1 | 2>(1);
+  const [extraInningRunner, setExtraInningRunner] = useState(true);
+  const [extraInningRunnerDelay, setExtraInningRunnerDelay] = useState<1 | 2>(2);
   const [selectedStadium, setSelectedStadium] = useState<string | null>(null);
 
   const parkNames = useMemo(() => getParkNames(), []);
