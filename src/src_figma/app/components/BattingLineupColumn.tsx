@@ -104,7 +104,7 @@ export function BattingLineupColumn({
   })));
 
   return (
-    <div className="bg-[#2a3a2d] border border-[#3d5240] flex flex-col h-full">
+    <div className="bg-[#2E4228] border-[3px] border-[#6A8A60] flex flex-col h-full" style={{ fontFamily: "'Press Start 2P', monospace" }}>
       <style>{`
         @keyframes batting-lineup-row-highlight {
           0% {
@@ -118,7 +118,7 @@ export function BattingLineupColumn({
           }
         }
       `}</style>
-      <div className="text-[10px] text-[#88AA88] font-bold tracking-wider px-2 pt-1.5 pb-1 border-b border-[#3d5240]">
+      <div className="text-[10px] text-[#D4B85A] font-bold tracking-wider px-2 pt-1.5 pb-1 border-b-[2px] border-[#6A8A60] bg-[#1E3218]">
         BATTING
       </div>
       <div className="flex flex-col flex-1 justify-evenly">
@@ -151,7 +151,7 @@ export function BattingLineupColumn({
               <button
                 type="button"
                 onClick={() => onPlayerTap(player.playerId, player.name)}
-                className="flex-1 text-left px-0 py-0 transition-colors hover:bg-[#3d5240]/50 active:bg-[#3d5240]"
+                className="flex-1 text-left px-0 py-0 transition-colors hover:bg-[#1E3218]/50 active:bg-[#1E3218]"
                 style={{
                   border: isCurrent
                     ? `2px solid ${teamPrimaryColor}`
@@ -161,9 +161,9 @@ export function BattingLineupColumn({
                 }}
               >
                 <div className={`text-[9px] leading-tight tracking-wide ${onBase ? 'font-black text-white' : 'font-bold text-[#E8E8D8]'}`}>
-                  <span className="text-[#88AA88] mr-0.5">{player.battingOrder}.</span>
+                  <span className="text-[#E8E8D8] mr-0.5">{player.battingOrder}.</span>
                   {player.position && (
-                    <span className="text-[#C4A853] mr-1">{player.position}</span>
+                    <span className="text-[#D4B85A] text-[7px] mr-1">{player.position}</span>
                   )}
                   <span
                     style={{
@@ -195,7 +195,7 @@ export function BattingLineupColumn({
                       event.stopPropagation();
                       onMojoAdjust(player.playerId, player.name, 1);
                     }}
-                    className="h-[12px] w-[16px] border border-[#C4A853] bg-[#2f3f32] text-[8px] font-bold text-[#F2BF16] leading-none hover:bg-[#405344] disabled:cursor-not-allowed disabled:opacity-40"
+                    className="h-[12px] w-[16px] border border-[#6A8A60] bg-[#1E3218] text-[8px] font-bold text-[#D4B85A] leading-none hover:bg-[#2E4228] disabled:cursor-not-allowed disabled:opacity-40"
                   >
                     ▲
                   </button>
@@ -208,7 +208,7 @@ export function BattingLineupColumn({
                       event.stopPropagation();
                       onMojoAdjust(player.playerId, player.name, -1);
                     }}
-                    className="h-[12px] w-[16px] border border-[#C4A853] bg-[#2f3f32] text-[8px] font-bold text-[#F2BF16] leading-none hover:bg-[#405344] disabled:cursor-not-allowed disabled:opacity-40"
+                    className="h-[12px] w-[16px] border border-[#6A8A60] bg-[#1E3218] text-[8px] font-bold text-[#D4B85A] leading-none hover:bg-[#2E4228] disabled:cursor-not-allowed disabled:opacity-40"
                   >
                     ▼
                   </button>
