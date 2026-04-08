@@ -320,24 +320,20 @@ export async function loadTeamLineup(
     );
   }
 
-  // Bench players: MLB roster minus lineup players
-  const mlbRosterIds = new Set(roster.mlbRoster || []);
+  // Bench players: all non-pitcher, non-lineup players on the team
   const benchPlayers: RosterPlayer[] = [];
 
   for (const player of teamPlayers) {
-    // Skip pitchers (they go in pitchers list)
+    // Skip pitchers (they go in pitchers/bullpen list)
     if (['SP', 'RP', 'CP', 'SP/RP'].includes(player.primaryPosition)) continue;
 
     // Skip if already in lineup
     if (lineupPlayerIds.has(player.id)) continue;
 
-    // Add to bench if in MLB roster, or if no mlbRoster defined
-    if (mlbRosterIds.size === 0 || mlbRosterIds.has(player.id)) {
-      const benchPosition = !useDH && player.primaryPosition === 'DH'
-        ? player.secondaryPosition || undefined
-        : undefined;
-      benchPlayers.push(convertToRosterPlayer(player, undefined, benchPosition));
-    }
+    const benchPosition = !useDH && player.primaryPosition === 'DH'
+      ? player.secondaryPosition || undefined
+      : undefined;
+    benchPlayers.push(convertToRosterPlayer(player, undefined, benchPosition));
   }
 
   // Build pitcher list (reuse pitcherPlayers from above)
