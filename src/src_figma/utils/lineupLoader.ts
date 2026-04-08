@@ -326,7 +326,7 @@ export async function loadTeamLineup(
 
   for (const player of teamPlayers) {
     // Skip pitchers (they go in pitchers list)
-    if (['SP', 'RP', 'CP'].includes(player.primaryPosition)) continue;
+    if (['SP', 'RP', 'CP', 'SP/RP'].includes(player.primaryPosition)) continue;
 
     // Skip if already in lineup
     if (lineupPlayerIds.has(player.id)) continue;

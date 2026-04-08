@@ -246,18 +246,104 @@ export function ExhibitionGame() {
     }));
   };
 
-  // Starting pitcher substitution — swap isActive flag between current and new pitcher
+  // Starting pitcher substitution — swap isActive flag and update batting order in no-DH
   const handleAwayPitcherSub = (newPitcher: RosterPitcher) => {
+    const oldPitcher = awayPitchers.find(p => p.isActive);
     setAwayPitchers(prev => prev.map(p => ({
       ...p,
       isActive: p.playerId === newPitcher.playerId || p.name === newPitcher.name,
     })));
+    // In no-DH mode, the pitcher is in the batting order — swap them in the players array too
+    if (oldPitcher) {
+      setAwayPlayers(prev => {
+        const oldInLineup = prev.find(p =>
+          (p.playerId && p.playerId === oldPitcher.playerId) || p.name === oldPitcher.name
+        );
+        if (!oldInLineup || oldInLineup.battingOrder === undefined) return prev;
+        const newPitcherInPlayers = prev.some(p =>
+          (p.playerId && p.playerId === newPitcher.playerId) || p.name === newPitcher.name
+        );
+        const updated = prev.map(p => {
+          if ((p.playerId && p.playerId === oldPitcher.playerId) || p.name === oldPitcher.name) {
+            return { ...p, battingOrder: undefined, position: undefined };
+          }
+          if ((p.playerId && p.playerId === newPitcher.playerId) || p.name === newPitcher.name) {
+            return { ...p, battingOrder: oldInLineup.battingOrder, position: 'P' };
+          }
+          return p;
+        });
+        // New pitcher may only exist in pitchers array — add to players array
+        if (!newPitcherInPlayers) {
+          updated.push({
+            name: newPitcher.name,
+            fullName: newPitcher.fullName,
+            playerId: newPitcher.playerId,
+            position: 'P',
+            battingOrder: oldInLineup.battingOrder,
+            battingHand: (newPitcher.throwingHand || 'R') as 'L' | 'R' | 'S',
+            stats: { pa: 0, ab: 0, h: 0, singles: 0, doubles: 0, triples: 0, hr: 0, r: 0, rbi: 0, bb: 0, hbp: 0, k: 0, sb: 0, cs: 0, sf: 0, sh: 0, gidp: 0, grandSlams: 0 },
+            mojo: newPitcher.mojo,
+            fitness: newPitcher.fitness,
+            trait1: newPitcher.trait1,
+            trait2: newPitcher.trait2,
+            age: newPitcher.age,
+            throws: newPitcher.throwingHand,
+            velocity: newPitcher.velocity,
+            junk: newPitcher.junk,
+            accuracy: newPitcher.accuracy,
+          } as RosterPlayer);
+        }
+        return updated;
+      });
+    }
   };
   const handleHomePitcherSub = (newPitcher: RosterPitcher) => {
+    const oldPitcher = homePitchers.find(p => p.isActive);
     setHomePitchers(prev => prev.map(p => ({
       ...p,
       isActive: p.playerId === newPitcher.playerId || p.name === newPitcher.name,
     })));
+    if (oldPitcher) {
+      setHomePlayers(prev => {
+        const oldInLineup = prev.find(p =>
+          (p.playerId && p.playerId === oldPitcher.playerId) || p.name === oldPitcher.name
+        );
+        if (!oldInLineup || oldInLineup.battingOrder === undefined) return prev;
+        const newPitcherInPlayers = prev.some(p =>
+          (p.playerId && p.playerId === newPitcher.playerId) || p.name === newPitcher.name
+        );
+        const updated = prev.map(p => {
+          if ((p.playerId && p.playerId === oldPitcher.playerId) || p.name === oldPitcher.name) {
+            return { ...p, battingOrder: undefined, position: undefined };
+          }
+          if ((p.playerId && p.playerId === newPitcher.playerId) || p.name === newPitcher.name) {
+            return { ...p, battingOrder: oldInLineup.battingOrder, position: 'P' };
+          }
+          return p;
+        });
+        if (!newPitcherInPlayers) {
+          updated.push({
+            name: newPitcher.name,
+            fullName: newPitcher.fullName,
+            playerId: newPitcher.playerId,
+            position: 'P',
+            battingOrder: oldInLineup.battingOrder,
+            battingHand: (newPitcher.throwingHand || 'R') as 'L' | 'R' | 'S',
+            stats: { pa: 0, ab: 0, h: 0, singles: 0, doubles: 0, triples: 0, hr: 0, r: 0, rbi: 0, bb: 0, hbp: 0, k: 0, sb: 0, cs: 0, sf: 0, sh: 0, gidp: 0, grandSlams: 0 },
+            mojo: newPitcher.mojo,
+            fitness: newPitcher.fitness,
+            trait1: newPitcher.trait1,
+            trait2: newPitcher.trait2,
+            age: newPitcher.age,
+            throws: newPitcher.throwingHand,
+            velocity: newPitcher.velocity,
+            junk: newPitcher.junk,
+            accuracy: newPitcher.accuracy,
+          } as RosterPlayer);
+        }
+        return updated;
+      });
+    }
   };
 
   // Mojo/Fitness handlers — update player/pitcher objects so GameTracker receives correct values
