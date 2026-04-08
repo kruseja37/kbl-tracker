@@ -2,6 +2,8 @@ import { useState, useMemo, useEffect } from "react";
 import { useNavigate } from "react-router";
 import { ArrowLeft, Loader2, AlertCircle, Trash2 } from "lucide-react";
 import type { Player as RosterPlayer, Pitcher as RosterPitcher } from "@/app/components/TeamRoster";
+import type { MojoLevel } from "../../../engines/mojoEngine";
+import type { FitnessState } from "../../../engines/fitnessEngine";
 import { LineupPreview } from "@/app/components/LineupPreview";
 import { useLeagueBuilderData, type Player as LBPlayer } from "../../hooks/useLeagueBuilderData";
 import { loadTeamLineup } from "../../utils/lineupLoader";
@@ -256,6 +258,36 @@ export function ExhibitionGame() {
       ...p,
       isActive: p.playerId === newPitcher.playerId || p.name === newPitcher.name,
     })));
+  };
+
+  // Mojo/Fitness handlers — update player/pitcher objects so GameTracker receives correct values
+  const handleMojoChange = (playerId: string, newMojo: MojoLevel) => {
+    setAwayPlayers(prev => prev.map(p =>
+      (p.playerId || p.name) === playerId ? { ...p, mojo: newMojo } : p
+    ));
+    setHomePlayers(prev => prev.map(p =>
+      (p.playerId || p.name) === playerId ? { ...p, mojo: newMojo } : p
+    ));
+    setAwayPitchers(prev => prev.map(p =>
+      (p.playerId || p.name) === playerId ? { ...p, mojo: newMojo } : p
+    ));
+    setHomePitchers(prev => prev.map(p =>
+      (p.playerId || p.name) === playerId ? { ...p, mojo: newMojo } : p
+    ));
+  };
+  const handleFitnessChange = (playerId: string, newFitness: FitnessState) => {
+    setAwayPlayers(prev => prev.map(p =>
+      (p.playerId || p.name) === playerId ? { ...p, fitness: newFitness } : p
+    ));
+    setHomePlayers(prev => prev.map(p =>
+      (p.playerId || p.name) === playerId ? { ...p, fitness: newFitness } : p
+    ));
+    setAwayPitchers(prev => prev.map(p =>
+      (p.playerId || p.name) === playerId ? { ...p, fitness: newFitness } : p
+    ));
+    setHomePitchers(prev => prev.map(p =>
+      (p.playerId || p.name) === playerId ? { ...p, fitness: newFitness } : p
+    ));
   };
 
   const handleStartGame = () => {
@@ -522,6 +554,8 @@ export function ExhibitionGame() {
                   onPositionSwap={handleAwayPositionSwap}
                   onBenchSub={handleAwayBenchSub}
                   onPitcherSub={handleAwayPitcherSub}
+                  onMojoChange={handleMojoChange}
+                  onFitnessChange={handleFitnessChange}
                 />
                 <LineupPreview
                   teamName={homeTeam.name.toUpperCase()}
@@ -536,6 +570,8 @@ export function ExhibitionGame() {
                   onPositionSwap={handleHomePositionSwap}
                   onBenchSub={handleHomeBenchSub}
                   onPitcherSub={handleHomePitcherSub}
+                  onMojoChange={handleMojoChange}
+                  onFitnessChange={handleFitnessChange}
                 />
               </div>
             )}

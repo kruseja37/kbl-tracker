@@ -11,6 +11,28 @@
 
 import { useState, useEffect, useRef } from 'react';
 import type { Player as RosterPlayer, Pitcher as RosterPitcher } from './TeamRoster';
+import type { MojoLevel } from '../../../engines/mojoEngine';
+import type { FitnessState } from '../../../engines/fitnessEngine';
+
+const MOJO_LABELS: Record<MojoLevel, { label: string; color: string }> = {
+  [-2]: { label: 'RTL', color: '#FF4444' },
+  [-1]: { label: 'TNS', color: '#FF8844' },
+  [0]:  { label: 'NRM', color: '#E8E8D8' },
+  [1]:  { label: 'LKD', color: '#88DD44' },
+  [2]:  { label: 'FIR', color: '#FFD700' },
+  [3]:  { label: 'JKD', color: '#FF44FF' },
+};
+const MOJO_ORDER: MojoLevel[] = [-2, -1, 0, 1, 2, 3];
+
+const FITNESS_LABELS: Record<FitnessState, { label: string; color: string }> = {
+  'JUICED':   { label: 'JCD', color: '#FF44FF' },
+  'FIT':      { label: 'FIT', color: '#88DD44' },
+  'WELL':     { label: 'WEL', color: '#E8E8D8' },
+  'STRAINED': { label: 'STR', color: '#FF8844' },
+  'WEAK':     { label: 'WEK', color: '#FF4444' },
+  'HURT':     { label: 'HRT', color: '#AA0000' },
+};
+const FITNESS_ORDER: FitnessState[] = ['JUICED', 'FIT', 'WELL', 'STRAINED', 'WEAK', 'HURT'];
 
 type Selection =
   | { mode: 'reorder'; battingOrder: number }
@@ -32,6 +54,8 @@ interface LineupPreviewProps {
   onPositionSwap?: (playerA: RosterPlayer, playerB: RosterPlayer) => void;
   onBenchSub?: (lineupPlayer: RosterPlayer, benchPlayer: RosterPlayer) => void;
   onPitcherSub?: (newPitcher: RosterPitcher) => void;
+  onMojoChange?: (playerId: string, newMojo: MojoLevel) => void;
+  onFitnessChange?: (playerId: string, newFitness: FitnessState) => void;
 }
 
 export function LineupPreview({
@@ -47,6 +71,8 @@ export function LineupPreview({
   onPositionSwap,
   onBenchSub,
   onPitcherSub,
+  onMojoChange,
+  onFitnessChange,
 }: LineupPreviewProps) {
   const [dragFrom, setDragFrom] = useState<number | null>(null);
   const [dragOver, setDragOver] = useState<number | null>(null);
@@ -156,6 +182,22 @@ export function LineupPreview({
       onPitcherSub(pitcher);
       setSelection(null);
     }
+  };
+
+  // Cycle mojo/fitness on tap
+  const cycleMojo = (playerId: string, current: MojoLevel | undefined) => {
+    if (!onMojoChange) return;
+    const cur = current ?? 0;
+    const idx = MOJO_ORDER.indexOf(cur);
+    const next = MOJO_ORDER[(idx + 1) % MOJO_ORDER.length];
+    onMojoChange(playerId, next);
+  };
+  const cycleFitness = (playerId: string, current: FitnessState | undefined) => {
+    if (!onFitnessChange) return;
+    const cur = current ?? 'FIT';
+    const idx = FITNESS_ORDER.indexOf(cur);
+    const next = FITNESS_ORDER[(idx + 1) % FITNESS_ORDER.length];
+    onFitnessChange(playerId, next);
   };
 
   // Clear selection on outside click
@@ -279,8 +321,8 @@ export function LineupPreview({
                 )}
               </div>
 
-              {/* Position badge */}
-              <div className="flex items-center gap-2 shrink-0">
+              {/* Position badge + mojo/fitness */}
+              <div className="flex items-center gap-1.5 shrink-0">
                 {isTouch && onPositionSwap ? (
                   <button
                     type="button"
@@ -299,6 +341,28 @@ export function LineupPreview({
                     style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>
                     {player.position} • {player.battingHand}
                   </span>
+                )}
+                {onMojoChange && (
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); cycleMojo(player.playerId || player.name, player.mojo); }}
+                    className="text-[7px] px-1 py-0.5 rounded bg-[#3A5A32] border border-[#E8E8D8]/20 font-bold"
+                    style={{ color: MOJO_LABELS[player.mojo ?? 0].color, textShadow: '1px 1px 0px rgba(0,0,0,0.5)' }}
+                    title={`Mojo: ${MOJO_LABELS[player.mojo ?? 0].label}`}
+                  >
+                    {MOJO_LABELS[player.mojo ?? 0].label}
+                  </button>
+                )}
+                {onFitnessChange && (
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); cycleFitness(player.playerId || player.name, player.fitness); }}
+                    className="text-[7px] px-1 py-0.5 rounded bg-[#3A5A32] border border-[#E8E8D8]/20 font-bold"
+                    style={{ color: FITNESS_LABELS[player.fitness ?? 'FIT'].color, textShadow: '1px 1px 0px rgba(0,0,0,0.5)' }}
+                    title={`Fitness: ${FITNESS_LABELS[player.fitness ?? 'FIT'].label}`}
+                  >
+                    {FITNESS_LABELS[player.fitness ?? 'FIT'].label}
+                  </button>
                 )}
               </div>
             </div>
@@ -325,10 +389,32 @@ export function LineupPreview({
                 style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>
                 {startingPitcher.name}
               </span>
-              <span className="text-[8px] text-[#E8E8D8]/80"
-                style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>
-                P • {startingPitcher.throwingHand}
-              </span>
+              <div className="flex items-center gap-1.5">
+                <span className="text-[8px] text-[#E8E8D8]/80"
+                  style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>
+                  P • {startingPitcher.throwingHand}
+                </span>
+                {onMojoChange && (
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); cycleMojo(startingPitcher.playerId || startingPitcher.name, startingPitcher.mojo); }}
+                    className="text-[7px] px-1 py-0.5 rounded bg-[#3A5A32] border border-[#E8E8D8]/20 font-bold"
+                    style={{ color: MOJO_LABELS[startingPitcher.mojo ?? 0].color, textShadow: '1px 1px 0px rgba(0,0,0,0.5)' }}
+                  >
+                    {MOJO_LABELS[startingPitcher.mojo ?? 0].label}
+                  </button>
+                )}
+                {onFitnessChange && (
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); cycleFitness(startingPitcher.playerId || startingPitcher.name, startingPitcher.fitness); }}
+                    className="text-[7px] px-1 py-0.5 rounded bg-[#3A5A32] border border-[#E8E8D8]/20 font-bold"
+                    style={{ color: FITNESS_LABELS[startingPitcher.fitness ?? 'FIT'].color, textShadow: '1px 1px 0px rgba(0,0,0,0.5)' }}
+                  >
+                    {FITNESS_LABELS[startingPitcher.fitness ?? 'FIT'].label}
+                  </button>
+                )}
+              </div>
             </button>
           ) : (
             <div className="flex items-center justify-between bg-[#5A7A52] px-2 py-1.5 border-2 border-[#C4A853]">
@@ -336,10 +422,32 @@ export function LineupPreview({
                 style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>
                 {startingPitcher.name}
               </span>
-              <span className="text-[8px] text-[#E8E8D8]/80"
-                style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>
-                P • {startingPitcher.throwingHand}
-              </span>
+              <div className="flex items-center gap-1.5">
+                <span className="text-[8px] text-[#E8E8D8]/80"
+                  style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>
+                  P • {startingPitcher.throwingHand}
+                </span>
+                {onMojoChange && (
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); cycleMojo(startingPitcher.playerId || startingPitcher.name, startingPitcher.mojo); }}
+                    className="text-[7px] px-1 py-0.5 rounded bg-[#3A5A32] border border-[#E8E8D8]/20 font-bold"
+                    style={{ color: MOJO_LABELS[startingPitcher.mojo ?? 0].color, textShadow: '1px 1px 0px rgba(0,0,0,0.5)' }}
+                  >
+                    {MOJO_LABELS[startingPitcher.mojo ?? 0].label}
+                  </button>
+                )}
+                {onFitnessChange && (
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); cycleFitness(startingPitcher.playerId || startingPitcher.name, startingPitcher.fitness); }}
+                    className="text-[7px] px-1 py-0.5 rounded bg-[#3A5A32] border border-[#E8E8D8]/20 font-bold"
+                    style={{ color: FITNESS_LABELS[startingPitcher.fitness ?? 'FIT'].color, textShadow: '1px 1px 0px rgba(0,0,0,0.5)' }}
+                  >
+                    {FITNESS_LABELS[startingPitcher.fitness ?? 'FIT'].label}
+                  </button>
+                )}
+              </div>
             </div>
           )}
         </div>

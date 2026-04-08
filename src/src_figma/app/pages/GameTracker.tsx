@@ -3805,8 +3805,8 @@ export function GameTracker() {
             player.name,
             (player.position ||
               "DH") as import("../../../engines/fitnessEngine").PlayerPosition,
-            snapshot?.mojoLevel ?? (restored?.mojo as MojoLevel) ?? 0,
-            snapshot?.fitnessState ?? (restored?.fitness as FitnessState) ?? "FIT",
+            snapshot?.mojoLevel ?? (restored?.mojo as MojoLevel) ?? player.mojo ?? 0,
+            snapshot?.fitnessState ?? (restored?.fitness as FitnessState) ?? player.fitness ?? "FIT",
             traits,
             player.age ?? 25,
           );
@@ -3837,8 +3837,8 @@ export function GameTracker() {
             player.name,
             (player.position ||
               "DH") as import("../../../engines/fitnessEngine").PlayerPosition,
-            snapshot?.mojoLevel ?? (restored?.mojo as MojoLevel) ?? 0,
-            snapshot?.fitnessState ?? (restored?.fitness as FitnessState) ?? "FIT",
+            snapshot?.mojoLevel ?? (restored?.mojo as MojoLevel) ?? player.mojo ?? 0,
+            snapshot?.fitnessState ?? (restored?.fitness as FitnessState) ?? player.fitness ?? "FIT",
             traits,
             player.age ?? 25,
           );
@@ -3867,8 +3867,8 @@ export function GameTracker() {
             pitcherId,
             awayPitcher.name,
             "SP",
-            snapshot?.mojoLevel ?? (restored?.mojo as MojoLevel) ?? 0,
-            snapshot?.fitnessState ?? (restored?.fitness as FitnessState) ?? "FIT",
+            snapshot?.mojoLevel ?? (restored?.mojo as MojoLevel) ?? awayPitcher.mojo ?? 0,
+            snapshot?.fitnessState ?? (restored?.fitness as FitnessState) ?? awayPitcher.fitness ?? "FIT",
             traits,
             awayPitcher.age ?? 25,
           );
@@ -3895,8 +3895,8 @@ export function GameTracker() {
             pitcherId,
             homePitcher.name,
             "SP",
-            snapshot?.mojoLevel ?? (restored?.mojo as MojoLevel) ?? 0,
-            snapshot?.fitnessState ?? (restored?.fitness as FitnessState) ?? "FIT",
+            snapshot?.mojoLevel ?? (restored?.mojo as MojoLevel) ?? homePitcher.mojo ?? 0,
+            snapshot?.fitnessState ?? (restored?.fitness as FitnessState) ?? homePitcher.fitness ?? "FIT",
             traits,
             homePitcher.age ?? 25,
           );

@@ -274,7 +274,7 @@ export async function loadTeamLineup(
 
   // Find starting pitcher
   const pitcherPlayers = teamPlayers.filter(
-    p => ['SP', 'RP', 'CP'].includes(p.primaryPosition)
+    p => ['SP', 'RP', 'CP', 'SP/RP'].includes(p.primaryPosition)
   );
   const starters = pitcherPlayers.filter(p => p.primaryPosition === 'SP');
   const startingPitcherId = roster.startingRotation?.[0] || starters[0]?.id;
