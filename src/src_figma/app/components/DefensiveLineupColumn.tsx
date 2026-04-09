@@ -95,7 +95,7 @@ export function DefensiveLineupColumn({
   const isEnriching = enrichmentMode?.active ?? false;
 
   return (
-    <div className="bg-[#2E4228] border-[3px] border-[#6A8A60] flex flex-col h-full" style={{ fontFamily: "'Press Start 2P', monospace" }}>
+    <div className="bg-[#2E4228] flex flex-col h-full">
       {/* Header — switches between FIELDING and FIELDING SEQUENCE */}
       <div className={`px-2 pt-1.5 pb-1 border-b-[2px] border-[#6A8A60] bg-[#1E3218] flex items-center justify-between gap-2 ${
         isEnriching ? 'text-[#D4B85A]' : 'text-[#D4B85A]'
@@ -193,12 +193,12 @@ export function DefensiveLineupColumn({
                 }}
               >
                 {/* Top row: order + position + name */}
-                <div className={`text-[9px] leading-tight tracking-wide font-bold ${
+                <div className={`text-[11px] leading-tight tracking-wide font-bold ${
                   isEnriching && isInSequence ? 'text-[#D4B85A]' : 'text-[#E8E8D8]'
                 }`}>
                   <span className="text-[#E8E8D8] mr-0.5">{player.battingOrder}.</span>
                   {player.position && (
-                    <span className="mr-1 text-[#D4B85A] text-[7px]">
+                    <span className="mr-1 text-[#D4B85A] text-[9px]">
                       {player.position}
                     </span>
                   )}
@@ -218,7 +218,7 @@ export function DefensiveLineupColumn({
                   >{player.name}</span>
                 </div>
                 {/* Bottom row: in enrichment mode show position number, else pitch count / dash */}
-                <div className="text-[7px] text-[#6b7b6e] leading-tight">
+                <div className="text-[9px] text-[#6b7b6e] leading-tight">
                   {isEnriching
                     ? posNum > 0
                       ? <span className="text-[#D4B85A]/60">#{posNum}</span>
@@ -243,7 +243,7 @@ export function DefensiveLineupColumn({
                       event.stopPropagation();
                       onMojoAdjust(player.playerId, player.name, 1);
                     }}
-                    className="h-[12px] w-[16px] border border-[#6A8A60] bg-[#1E3218] text-[8px] font-bold text-[#D4B85A] leading-none hover:bg-[#2E4228] disabled:cursor-not-allowed disabled:opacity-40"
+                    className="h-[12px] w-[16px] border border-[#6A8A60] bg-[#1E3218] text-[9px] font-bold text-[#D4B85A] leading-none hover:bg-[#2E4228] disabled:cursor-not-allowed disabled:opacity-40"
                   >
                     ▲
                   </button>
@@ -256,7 +256,7 @@ export function DefensiveLineupColumn({
                       event.stopPropagation();
                       onMojoAdjust(player.playerId, player.name, -1);
                     }}
-                    className="h-[12px] w-[16px] border border-[#6A8A60] bg-[#1E3218] text-[8px] font-bold text-[#D4B85A] leading-none hover:bg-[#2E4228] disabled:cursor-not-allowed disabled:opacity-40"
+                    className="h-[12px] w-[16px] border border-[#6A8A60] bg-[#1E3218] text-[9px] font-bold text-[#D4B85A] leading-none hover:bg-[#2E4228] disabled:cursor-not-allowed disabled:opacity-40"
                   >
                     ▼
                   </button>
