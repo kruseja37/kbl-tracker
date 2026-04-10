@@ -135,7 +135,7 @@ export function QuickBar({
           onOutcome?.(btn);
           setOverflowOpen(false);
         }}
-        className={`py-2.5 text-white text-xs font-bold tracking-wide
+        className={`py-2.5 text-white text-[14px] font-bold tracking-wide
                    border-[3px] shadow-[2px_2px_0px_0px_rgba(0,0,0,0.5)]
                    active:scale-95 active:shadow-none transition-transform
                    disabled:opacity-40 disabled:cursor-not-allowed
@@ -151,16 +151,16 @@ export function QuickBar({
   // §4.6 PRE_GAME phase: show START GAME button centered
   if (gamePhase === 'PRE_GAME') {
     return (
-      <div className="bg-[#2a3a2d] border-t-[3px] border-[#3d5240] p-2 flex items-center justify-center relative">
+      <div className="bg-[#2a3a2d] border-t-[3px] border-[#3d5240] p-2 flex items-center justify-center relative" style={{ fontFamily: "'Moms Typewriter', monospace", fontWeight: 700 }}>
         {startGamePending ? (
           <div className="flex items-center gap-3">
-            <span className="text-[#E8E8D8] text-sm font-bold tracking-wide">Lock lineups and begin recording?</span>
+            <span className="text-[#E8E8D8] text-[16px] font-bold tracking-wide">Lock lineups and begin recording?</span>
             <button
               onClick={() => {
                 onStartGame();
                 setStartGamePending(false);
               }}
-              className="px-6 py-2.5 text-[#1E2C23] text-sm font-black tracking-[0.16em]
+              className="px-6 py-2.5 text-[#1E2C23] text-[16px] font-black tracking-[0.16em]
                          bg-[#34d399] border-[3px] border-[#10b981]
                          shadow-[2px_2px_0px_0px_rgba(0,0,0,0.5)]
                          active:scale-95 active:shadow-none transition-transform"
@@ -169,7 +169,7 @@ export function QuickBar({
             </button>
             <button
               onClick={() => setStartGamePending(false)}
-              className="px-6 py-2.5 text-[#E8E8D8] text-sm font-bold tracking-wide
+              className="px-6 py-2.5 text-[#E8E8D8] text-[16px] font-bold tracking-wide
                          bg-[#5C7156] border-[3px] border-[#48604A]
                          shadow-[2px_2px_0px_0px_rgba(0,0,0,0.5)]
                          active:scale-95 active:shadow-none transition-transform"
@@ -180,7 +180,7 @@ export function QuickBar({
         ) : (
           <button
             onClick={() => setStartGamePending(true)}
-            className="px-8 py-3 text-[#1E2C23] text-lg font-black tracking-[0.16em]
+            className="px-8 py-3 text-[#1E2C23] text-[20px] font-black tracking-[0.16em]
                        bg-[#E8E8D8] border-[3px] border-[#163326]
                        shadow-[2px_2px_0px_0px_rgba(0,0,0,0.5)]
                        active:scale-95 active:shadow-none transition-transform
@@ -196,10 +196,10 @@ export function QuickBar({
   // §4.6 POST_FINAL_OUT phase: show END GAME button centered
   if (gamePhase === 'POST_FINAL_OUT') {
     return (
-      <div className="bg-[#2a3a2d] border-t-[3px] border-[#3d5240] p-2 flex items-center justify-center relative">
+      <div className="bg-[#2a3a2d] border-t-[3px] border-[#3d5240] p-2 flex items-center justify-center relative" style={{ fontFamily: "'Moms Typewriter', monospace", fontWeight: 700 }}>
         <button
           onClick={onEndGame}
-          className="px-8 py-3 text-white text-lg font-black tracking-[0.16em]
+          className="px-8 py-3 text-white text-[20px] font-black tracking-[0.16em]
                      bg-[#DD0000] border-[3px] border-white
                      shadow-[2px_2px_0px_0px_rgba(0,0,0,0.5)]
                      active:scale-95 active:shadow-none transition-transform
@@ -213,7 +213,7 @@ export function QuickBar({
 
   // §4.6 LIVE phase: full outcome buttons + overflow + utility buttons
   return (
-    <div className="bg-[#2a3a2d] border-t-[3px] border-[#3d5240] p-2 h-full flex flex-col justify-center relative">
+    <div className="bg-[#2a3a2d] border-t-[3px] border-[#3d5240] p-2 h-full flex flex-col justify-center relative" style={{ fontFamily: "'Moms Typewriter', monospace", fontWeight: 700 }}>
       {/* Primary row + utility buttons */}
       <div className="flex gap-1 flex-wrap items-stretch">
         {PRIMARY_BUTTONS.map((btn) => renderButton(btn))}
@@ -222,7 +222,7 @@ export function QuickBar({
         <button
           disabled={disabled}
           onClick={() => setOverflowOpen((v) => !v)}
-          className={`flex-1 min-w-[40px] py-2.5 text-white text-xs font-bold tracking-wide
+          className={`flex-1 min-w-[40px] py-2.5 text-white text-[14px] font-bold tracking-wide
                      border-[3px] shadow-[2px_2px_0px_0px_rgba(0,0,0,0.5)]
                      active:scale-95 active:shadow-none transition-transform
                      disabled:opacity-40 disabled:cursor-not-allowed
@@ -239,7 +239,7 @@ export function QuickBar({
         <button
           disabled={!canUndo}
           onClick={onUndo}
-          className={`px-2 py-2.5 text-[10px] font-bold tracking-wide border-[3px]
+          className={`px-2 py-2.5 text-[12px] font-bold tracking-wide border-[3px]
                      shadow-[2px_2px_0px_0px_rgba(0,0,0,0.5)]
                      active:scale-95 active:shadow-none transition-transform
                      ${canUndo
@@ -254,7 +254,7 @@ export function QuickBar({
         {/* §4.4: End Game button — smaller, muted to avoid accidental taps */}
         <button
           onClick={onEndGame}
-          className="px-2 py-2.5 text-[10px] font-bold tracking-wide
+          className="px-2 py-2.5 text-[12px] font-bold tracking-wide
                      bg-[#5a2020] border-[3px] border-[#8B0000] text-[#cc8888]
                      shadow-[2px_2px_0px_0px_rgba(0,0,0,0.5)]
                      active:scale-95 active:shadow-none transition-transform
@@ -272,9 +272,9 @@ export function QuickBar({
           className="absolute bottom-full left-0 right-0 mb-1 bg-[#1a2a1d] border-[3px] border-[#3d5240]
                      p-2 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.6)] z-30"
         >
-          <div className="text-[8px] text-[#88AA88] font-bold tracking-wider mb-1.5">MORE OUTCOMES</div>
+          <div className="text-[10px] text-[#88AA88] font-bold tracking-wider mb-1.5">MORE OUTCOMES</div>
           <div className="grid grid-cols-5 gap-1">
-            {OVERFLOW_BUTTONS.map((btn) => renderButton(btn, 'px-1.5 py-2 text-[10px]'))}
+            {OVERFLOW_BUTTONS.map((btn) => renderButton(btn, 'px-1.5 py-2 text-[12px]'))}
           </div>
         </div>
       )}

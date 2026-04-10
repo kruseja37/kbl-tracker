@@ -28,8 +28,8 @@ interface ScoreBugProps {
 function BaseStateDiamond({ bases }: { bases: { first: boolean; second: boolean; third: boolean } }) {
   const size = 8;
   const filled = '#F2BF16';
-  const empty = '#3B4F56';
-  const border = '#48604A';
+  const empty = '#2a3a3d';
+  const border = '#2d4030';
   return (
     <svg width={24} height={24} viewBox="0 0 24 24" className="flex-shrink-0">
       {/* Second base (top) */}
@@ -57,8 +57,8 @@ function OutsIndicator({ outs }: { outs: number }) {
           key={i}
           className="w-2 h-2 rounded-full"
           style={{
-            backgroundColor: i < outs ? '#FF3C3C' : '#3B4F56',
-            border: `1.5px solid ${i < outs ? '#BE1E1E' : '#48604A'}`,
+            backgroundColor: i < outs ? '#FF3C3C' : '#2a3a3d',
+            border: `1.5px solid ${i < outs ? '#BE1E1E' : '#2d4030'}`,
           }}
         />
       ))}
@@ -113,61 +113,70 @@ export function ScoreBug({
   return (
     <div
       onClick={onTap}
-      className="flex-shrink-0 bg-[#2a3a2d] border-b-[2px] border-[#1E2C23] px-3 py-1.5
+      className="flex-shrink-0 bg-[#3d4a42] px-3 py-1.5
                  flex items-center justify-between gap-4 w-full cursor-pointer select-none
-                 hover:bg-[#313f34] active:bg-[#252e28] transition-colors"
+                 hover:bg-[#455550] active:bg-[#354040] transition-colors"
+      style={{ fontFamily: "'Moms Typewriter', monospace" }}
     >
       <style>{`
         @keyframes scorebug-score-flash {
           0% {
-            color: #fff6bf;
+            color: #f3f5f2;
             transform: scale(1);
           }
           35% {
-            color: #fffdf2;
+            color: #ffffff;
             transform: scale(1.12);
           }
           100% {
-            color: #F2BF16;
+            color: #F2C041;
             transform: scale(1);
           }
         }
       `}</style>
-      <div className="flex min-w-0 flex-1 items-center justify-between gap-4">
+      <div className="flex min-w-0 flex-1 items-center justify-start gap-4">
         {/* Away team + score */}
-        <div className="flex min-w-0 flex-1 items-center gap-1.5">
-          <span className={`text-[11px] font-black tracking-wider ${isTop ? 'text-[#E8E8D8]' : 'text-[#88AA88]'}`}>
+        <div className="flex min-w-0 items-center gap-1.5">
+          <span className={`text-[15px] font-black tracking-wider ${isTop ? 'text-[#E8E8D8]' : 'text-[#88AA88]'}`}>
             {isTop ? '▶' : '\u00A0\u00A0'}
           </span>
-          <span className="text-[12px] font-black text-[#E8E8D8] tracking-wide whitespace-nowrap">
+          <span
+            className="text-[16px] font-black text-[#E8E8D8] tracking-wide whitespace-nowrap"
+          >
             {awayTeamName}
           </span>
           <span
             key={`away-score-${awayScoreFlashKey}`}
-            className="text-[14px] font-black text-[#F2BF16] min-w-[16px] text-center inline-block"
-            style={awayScoreFlashKey > 0 ? { animation: 'scorebug-score-flash 200ms ease-out' } : undefined}
+            className="text-[18px] font-black text-[#F2C041] min-w-[16px] text-center inline-block"
+            style={{
+              ...(awayScoreFlashKey > 0 ? { animation: 'scorebug-score-flash 200ms ease-out' } : undefined),
+            }}
           >
             {awayScore}
           </span>
         </div>
 
         {/* Inning indicator */}
-        <span className="text-[12px] font-black text-[#E8E8D8] tracking-wider min-w-[28px] text-center flex-shrink-0">
+        <span className="text-[16px] font-black text-[#E8E8D8] tracking-wider min-w-[28px] text-center flex-shrink-0">
           {halfIndicator}{inning}
         </span>
 
         {/* Home team + score */}
-        <div className="flex min-w-0 flex-1 items-center justify-center gap-1.5">
-          <span className={`text-[11px] font-black tracking-wider ${!isTop ? 'text-[#E8E8D8]' : 'text-[#88AA88]'}`}>
+        <div className="flex min-w-0 items-center justify-start gap-1.5">
+          <span className={`text-[15px] font-black tracking-wider ${!isTop ? 'text-[#E8E8D8]' : 'text-[#88AA88]'}`}>
             {!isTop ? '▶' : '\u00A0\u00A0'}
           </span>
-          <span className="text-[12px] font-black text-[#E8E8D8] tracking-wide whitespace-nowrap">
+          <span
+            className="text-[16px] font-black text-[#E8E8D8] tracking-wide whitespace-nowrap"
+          >
             {homeTeamName}
           </span>
           <span
             key={`home-score-${homeScoreFlashKey}`}
-            className="text-[14px] font-black text-[#F2BF16] min-w-[16px] text-center inline-block"
-            style={homeScoreFlashKey > 0 ? { animation: 'scorebug-score-flash 200ms ease-out' } : undefined}
+            className="text-[18px] font-black text-[#F2C041] min-w-[16px] text-center inline-block"
+            style={{
+              ...(homeScoreFlashKey > 0 ? { animation: 'scorebug-score-flash 200ms ease-out' } : undefined),
+            }}
           >
             {homeScore}
           </span>
@@ -180,18 +189,18 @@ export function ScoreBug({
         </div>
 
         {stadiumName ? (
-          <span className="text-[10px] font-bold tracking-wide text-[#88AA88] whitespace-nowrap flex-shrink-0">
+          <span className="ml-auto flex-shrink-0 text-right text-[14px] font-bold tracking-wide text-[#CBB89C] whitespace-nowrap">
             {stadiumName}
           </span>
         ) : (
-          <div className="flex-shrink-0" />
+          null
         )}
       </div>
 
       <div className="flex items-center gap-2 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
         {/* §3.6 Save indicator */}
         <span
-          className={`text-[10px] ${hasSaveError ? 'text-[#fbbf24]' : 'text-[#88AA88]'}`}
+          className={`text-[14px] ${hasSaveError ? 'text-[#fbbf24]' : 'text-[#88AA88]'}`}
           title={hasSaveError ? 'Save warning' : 'Auto-save active'}
         >
           {hasSaveError ? '⚠' : '✓'}
@@ -202,7 +211,7 @@ export function ScoreBug({
           <div className="flex items-center gap-1">
             <button
               onClick={onManagerMomentTap}
-              className="text-[12px] text-[#FFD700] font-bold animate-pulse
+              className="text-[16px] text-[#FFD700] font-bold animate-pulse
                          bg-[#FFD700]/15 border border-[#FFD700]/50 rounded px-1
                          hover:bg-[#FFD700]/25 active:scale-95 transition-transform"
               title="Manager Moment — tap to decide"
@@ -212,7 +221,7 @@ export function ScoreBug({
             {onStayTheCourse && (
               <button
                 onClick={onStayTheCourse}
-                className="text-[8px] text-[#E8E8D8] font-bold tracking-wider
+                className="text-[12px] text-[#E8E8D8] font-bold tracking-wider
                            bg-[#5A8352] border border-[#4A6844] rounded px-1.5 py-0.5
                            hover:bg-[#4F7D4B] active:scale-95 transition-transform"
                 title="Stay the Course — no action needed"
@@ -222,7 +231,7 @@ export function ScoreBug({
             )}
           </div>
         ) : (
-          <span className="text-[10px] text-[#48604A]" title="No manager moment">
+          <span className="text-[14px] text-[#48604A]" title="No manager moment">
             Ⓜ
           </span>
         )}
@@ -232,7 +241,7 @@ export function ScoreBug({
           <button
             type="button"
             onClick={onToggleGameSounds}
-            className={`text-[11px] border rounded px-1 py-0.5 transition-colors ${
+            className={`text-[15px] border rounded px-1 py-0.5 transition-colors ${
               gameSoundsOn
                 ? 'text-[#E8E8D8] border-[#C4A853] bg-[#C4A853]/20'
                 : 'text-[#48604A] border-[#48604A]/60 bg-transparent'
@@ -244,7 +253,7 @@ export function ScoreBug({
           <button
             type="button"
             onClick={onToggleBeatReporter}
-            className={`text-[11px] border rounded px-1 py-0.5 transition-colors ${
+            className={`text-[15px] border rounded px-1 py-0.5 transition-colors ${
               beatReporterSoundsOn
                 ? 'text-[#E8E8D8] border-[#88AA88] bg-[#88AA88]/20'
                 : 'text-[#48604A] border-[#48604A]/60 bg-transparent'

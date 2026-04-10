@@ -2,6 +2,8 @@ import React from 'react';
 import { getMojoColor, type MojoLevel } from '../../../engines/mojoEngine';
 import type { FitnessState } from '../../../engines/fitnessEngine';
 import { toFitnessLabel, toMojoLabel } from '../../../types/game';
+import chalkBgImg from '../../../assets/chalk-bg.png';
+
 
 interface DefensiveLineupPlayer {
   playerId: string;
@@ -35,6 +37,7 @@ interface DefensiveLineupColumnProps {
   players: DefensiveLineupPlayer[];
   currentPitcherName: string;
   nextLeadoffIndex: number; // 1-based batting order of next inning's leadoff
+  teamName?: string;
   teamPrimaryColor: string;
   teamSecondaryColor: string;
   playerStates?: Record<string, PlayerMojoFitness>;
@@ -82,6 +85,7 @@ export function DefensiveLineupColumn({
   players,
   currentPitcherName,
   nextLeadoffIndex,
+  teamName,
   teamPrimaryColor,
   teamSecondaryColor,
   playerStates,
@@ -95,13 +99,13 @@ export function DefensiveLineupColumn({
   const isEnriching = enrichmentMode?.active ?? false;
 
   return (
-    <div className="bg-[#2E4228] border-[3px] border-[#6A8A60] flex flex-col h-full" style={{ fontFamily: "'Press Start 2P', monospace" }}>
+    <div className="bg-[#3d4a42] flex flex-col h-full">
       {/* Header — switches between FIELDING and FIELDING SEQUENCE */}
-      <div className={`px-2 pt-1.5 pb-1 border-b-[2px] border-[#6A8A60] bg-[#1E3218] flex items-center justify-between gap-2 ${
-        isEnriching ? 'text-[#D4B85A]' : 'text-[#D4B85A]'
-      }`}>
+      <div className={`px-2 pt-1.5 pb-1 flex items-center justify-center gap-2 ${
+        isEnriching ? 'text-white' : 'text-white'
+      }`} style={isEnriching ? { backgroundColor: '#1a2420' } : { backgroundImage: `url(${chalkBgImg}), linear-gradient(${teamPrimaryColor}40, ${teamPrimaryColor}40)`, backgroundRepeat: 'repeat', backgroundColor: '#1a2420' }}>
         <div className="text-[10px] font-bold tracking-wider">
-          {isEnriching ? 'FIELDING SEQUENCE' : 'FIELDING'}
+          {isEnriching ? 'FIELDING SEQUENCE' : teamName || 'FIELDING'}
         </div>
         {!isEnriching && headerAction && (
           <button
@@ -140,7 +144,7 @@ export function DefensiveLineupColumn({
         </div>
       )}
 
-      <div className="flex flex-col flex-1 justify-evenly">
+      <div className="flex flex-col flex-1 justify-evenly" style={{ borderLeft: '2px solid rgba(242, 192, 65, 0.08)' }}>
         {players.map((player) => {
           const isPitching = player.name === currentPitcherName;
           const isNextLeadoff = player.battingOrder === nextLeadoffIndex && !isPitching;
@@ -183,29 +187,19 @@ export function DefensiveLineupColumn({
                       ? '3px solid #D4B85A'
                       : '3px solid transparent'
                     : undefined,
-                  border: !isEnriching
-                    ? isPitching
-                      ? `2px solid ${teamPrimaryColor}`
-                      : isNextLeadoff
-                        ? `2px dotted ${teamSecondaryColor}`
-                        : '2px solid transparent'
-                    : undefined,
+                  border: '2px solid transparent',
                 }}
               >
                 {/* Top row: order + position + name */}
-                <div className={`text-[9px] leading-tight tracking-wide font-bold ${
+                <div className={`text-[11px] leading-tight tracking-wide font-bold ${
                   isEnriching && isInSequence ? 'text-[#D4B85A]' : 'text-[#E8E8D8]'
                 }`}>
-                  <span className="text-[#E8E8D8] mr-0.5">{player.battingOrder}.</span>
-                  {player.position && (
-                    <span className="mr-1 text-[#D4B85A] text-[7px]">
-                      {player.position}
-                    </span>
-                  )}
+                  <span className="text-[#CBB89C] mr-2">{player.battingOrder}.</span>
                   <span
                     style={{
                       ...(!isEnriching ? mojoStyle : undefined),
                       ...(!isEnriching ? fitnessStyle : {}),
+                      fontFamily: "'Tox Typewriter', monospace",
                     }}
                     title={!isEnriching ? [
                       playerMojo !== 0 && playerMojo !== undefined
@@ -216,9 +210,17 @@ export function DefensiveLineupColumn({
                         : null,
                     ].filter(Boolean).join(' | ') || undefined : undefined}
                   >{player.name}</span>
+                  {player.position && (
+                    <span className="ml-1 text-[#D4B85A] text-[9px]">
+                      {player.position}
+                    </span>
+                  )}
+                  {!isEnriching && isNextLeadoff && (
+                    <span className="text-[6px] ml-1 opacity-50" style={{ fontFamily: "'Chalk', monospace" }}>⚾</span>
+                  )}
                 </div>
                 {/* Bottom row: in enrichment mode show position number, else pitch count / dash */}
-                <div className="text-[7px] text-[#6b7b6e] leading-tight">
+                <div className="text-[9px] text-[#6b7b6e] leading-tight">
                   {isEnriching
                     ? posNum > 0
                       ? <span className="text-[#D4B85A]/60">#{posNum}</span>
@@ -243,7 +245,7 @@ export function DefensiveLineupColumn({
                       event.stopPropagation();
                       onMojoAdjust(player.playerId, player.name, 1);
                     }}
-                    className="h-[12px] w-[16px] border border-[#6A8A60] bg-[#1E3218] text-[8px] font-bold text-[#D4B85A] leading-none hover:bg-[#2E4228] disabled:cursor-not-allowed disabled:opacity-40"
+                    className="h-[10px] w-[14px] text-[8px] font-bold text-[#D4B85A]/40 leading-none hover:text-[#F2C041]/70 disabled:cursor-not-allowed disabled:opacity-40" style={{ fontFamily: "'Chalk', monospace" }}
                   >
                     ▲
                   </button>
@@ -256,7 +258,7 @@ export function DefensiveLineupColumn({
                       event.stopPropagation();
                       onMojoAdjust(player.playerId, player.name, -1);
                     }}
-                    className="h-[12px] w-[16px] border border-[#6A8A60] bg-[#1E3218] text-[8px] font-bold text-[#D4B85A] leading-none hover:bg-[#2E4228] disabled:cursor-not-allowed disabled:opacity-40"
+                    className="h-[10px] w-[14px] text-[8px] font-bold text-[#D4B85A]/40 leading-none hover:text-[#F2C041]/70 disabled:cursor-not-allowed disabled:opacity-40" style={{ fontFamily: "'Chalk', monospace" }}
                   >
                     ▼
                   </button>

@@ -9355,7 +9355,7 @@ export function GameTracker() {
 
   if (isLoading || !gameInitialized) {
     return (
-      <div className="min-h-screen bg-[#6B9462] flex items-center justify-center">
+      <div className="min-h-screen bg-[#CBB89C] flex items-center justify-center" style={{ fontFamily: "'Moms Typewriter', monospace" }}>
         <div className="bg-[#1a3020] border-4 border-[#C4A853] px-6 py-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.4)]">
           <div className="text-[#E8E8D8] text-sm font-bold tracking-wide">
             Loading game...
@@ -9446,9 +9446,28 @@ export function GameTracker() {
            │ Row 3: QuickBar (pinned bottom, full width)                 │
            └─────────────────────────────────────────────────────────────┘
            ═══════════════════════════════════════════════════════════════ */}
-      <div className="flex flex-col overflow-hidden bg-[#6B9462] text-white" style={{ height: '100dvh' }}>
+      <div className="game-tracker-font-bump flex flex-col overflow-hidden bg-[#CBB89C] text-white" style={{ height: '100dvh', fontFamily: "'Moms Typewriter', monospace" }}>
+        <style>{`
+          .game-tracker-font-bump .text-\\[6px\\]:not(.game-tracker-font-no-bump *) { font-size: 12px !important; }
+          .game-tracker-font-bump .text-\\[7px\\]:not(.game-tracker-font-no-bump *) { font-size: 13px !important; }
+          .game-tracker-font-bump .text-\\[8px\\]:not(.game-tracker-font-no-bump *) { font-size: 14px !important; }
+          .game-tracker-font-bump .text-\\[9px\\]:not(.game-tracker-font-no-bump *) { font-size: 15px !important; }
+          .game-tracker-font-bump .text-\\[10px\\]:not(.game-tracker-font-no-bump *) { font-size: 16px !important; }
+          .game-tracker-font-bump .text-\\[11px\\]:not(.game-tracker-font-no-bump *) { font-size: 17px !important; }
+          .game-tracker-font-bump .text-\\[12px\\]:not(.game-tracker-font-no-bump *) { font-size: 18px !important; }
+          .game-tracker-font-bump .text-\\[14px\\]:not(.game-tracker-font-no-bump *) { font-size: 20px !important; }
+          .game-tracker-font-bump .text-\\[16px\\]:not(.game-tracker-font-no-bump *) { font-size: 22px !important; }
+          .game-tracker-font-bump .text-\\[18px\\]:not(.game-tracker-font-no-bump *) { font-size: 24px !important; }
+          .game-tracker-font-bump .text-\\[22px\\]:not(.game-tracker-font-no-bump *) { font-size: 28px !important; }
+          .game-tracker-font-bump .text-xs:not(.game-tracker-font-no-bump *) { font-size: calc(0.75rem + 6px) !important; }
+          .game-tracker-font-bump .text-sm:not(.game-tracker-font-no-bump *) { font-size: calc(0.875rem + 6px) !important; }
+          .game-tracker-font-bump .text-base:not(.game-tracker-font-no-bump *) { font-size: calc(1rem + 6px) !important; }
+          .game-tracker-font-bump .text-lg:not(.game-tracker-font-no-bump *) { font-size: calc(1.125rem + 6px) !important; }
+          .game-tracker-font-bump .text-xl:not(.game-tracker-font-no-bump *) { font-size: calc(1.25rem + 6px) !important; }
+          .game-tracker-font-bump .text-2xl:not(.game-tracker-font-no-bump *) { font-size: calc(1.5rem + 6px) !important; }
+        `}</style>
         {/* ROW 1: §3.1 ScoreBug (pinned top, single line) */}
-        <div className="relative z-40">
+        <div className="game-tracker-font-no-bump relative z-40">
           <ScoreBug
             awayTeamName={awayTeamName}
             awayScore={scoreboard.away.runs}
@@ -9520,7 +9539,7 @@ export function GameTracker() {
           )}
         </div>
         {showManualEndHalfInningButton && (
-          <div className="shrink-0 bg-[#6B9462] px-3 pb-2">
+          <div className="shrink-0 bg-[#CBB89C] px-3 pb-2">
             <div className="flex justify-end">
               <button
                 type="button"
@@ -9534,7 +9553,7 @@ export function GameTracker() {
         )}
 
         {/* ROW 2: 4-Column Content Area (§2.3 — 1fr 1fr 1fr 2fr) + §2.4 Expanded Scoreboard overlay */}
-        <div className="min-h-0 flex-1 overflow-hidden relative">
+        <div className="min-h-0 flex-1 overflow-hidden relative bg-[#CBB89C]">
           {/* §2.4 Expanded Scoreboard overlay — drops down from ScoreBug, covers top ~25% of columns */}
           {isScoreboardExpanded && (
             <>
@@ -9599,7 +9618,7 @@ export function GameTracker() {
             </div>
           )}
           <div
-            className="h-full"
+            className="h-full bg-[#CBB89C]"
             style={{
               display: "grid",
               gridTemplateColumns:
@@ -9609,7 +9628,7 @@ export function GameTracker() {
                   selectedPlayLogEntry.eventType !== "at_bat")
                   ? "1fr 1fr 1fr 2.5fr"
                   : "1fr 1fr 1fr 2fr",
-              gap: "4px",
+              gap: "0px",
             }}
           >
             {/* Column 1: NewsBoard (§6 — display only, no click handlers) */}
@@ -9638,6 +9657,7 @@ export function GameTracker() {
                     currentBatterIndex={currentBatterPosition}
                     runners={battingLineupRunners}
                     nextLeadoffIndex={battingNextLeadoff}
+                    teamName={gameState.isTop ? awayTeamName : homeTeamName}
                     teamPrimaryColor={battingTeamColors.primary}
                     teamSecondaryColor={battingTeamColors.secondary}
                     playerStates={playerStatesMap}
@@ -9650,6 +9670,7 @@ export function GameTracker() {
                     players={defensiveColumnPlayers}
                     currentPitcherName={resolvedCurrentPitcherName}
                     nextLeadoffIndex={defensiveNextLeadoff}
+                    teamName={gameState.isTop ? homeTeamName : awayTeamName}
                     teamPrimaryColor={fieldingTeamColors.primary}
                     teamSecondaryColor={fieldingTeamColors.secondary}
                     playerStates={playerStatesMap}
@@ -9778,7 +9799,7 @@ export function GameTracker() {
         {/* Close Row 2 relative container */}
 
         {/* ROW 3: Quick Bar + Action Buttons (pinned bottom, full width) */}
-        <div className="flex-shrink-0 flex items-stretch relative">
+        <div className="game-tracker-font-no-bump flex-shrink-0 flex items-stretch relative">
           <div className="flex-1 relative">
             <QuickBar
               disabled={
