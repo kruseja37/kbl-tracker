@@ -121,7 +121,7 @@ export function BattingLineupColumn({
           }
         }
       `}</style>
-      <div className="text-[10px] text-white font-bold tracking-wider px-2 pt-1.5 pb-1 bg-[#243028] text-center">
+      <div className="text-[10px] text-white font-bold tracking-wider px-2 pt-1.5 pb-1 text-center" style={{ background: `linear-gradient(${teamPrimaryColor}40, ${teamPrimaryColor}40), #1a2420`, backgroundImage: `url(${chalkBgImg}), linear-gradient(${teamPrimaryColor}40, ${teamPrimaryColor}40)`, backgroundRepeat: 'repeat', backgroundColor: '#1a2420' }}>
         {teamName || 'BATTING'}
       </div>
       <div className="flex flex-col flex-1 justify-evenly" style={{ borderRight: '2px solid rgba(242, 192, 65, 0.08)' }}>
@@ -159,6 +159,9 @@ export function BattingLineupColumn({
                   border: !isCurrent && isNextLeadoff
                     ? `2px dotted ${teamSecondaryColor}`
                     : '2px solid transparent',
+                  backgroundImage: isCurrent ? `url(${chalkBgImg})` : undefined,
+                  backgroundRepeat: isCurrent ? 'repeat' : undefined,
+                  backgroundColor: isCurrent ? 'rgba(242, 192, 65, 0.03)' : undefined,
                 }}
               >
                 <div className={`text-[11px] leading-tight tracking-wide ${onBase ? 'font-black text-white' : 'font-bold text-[#E8E8D8]'}`}>
@@ -180,9 +183,6 @@ export function BattingLineupColumn({
                   >{player.name}</span>
                   {player.position && (
                     <span className="text-[#D4B85A] text-[9px] ml-1">{player.position}</span>
-                  )}
-                  {isCurrent && (
-                    <span className="text-[10px] ml-1 opacity-70" style={{ fontFamily: "'Chalk', monospace" }}>⚾</span>
                   )}
                   {onBase !== undefined && (
                     <sup className="text-[9px] text-[#F2BF16] ml-0.5">{onBase}</sup>
