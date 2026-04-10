@@ -169,7 +169,7 @@ export function FullFenwayScoreboard({
   return (
     <div
       className="border-b-[4px] border-[#163326] bg-[#7EA6D0] px-3 py-2 text-white shadow-[0_4px_0_0_rgba(0,0,0,0.25)]"
-      style={{ fontFamily: "'Chalk', monospace" }}
+      style={{ fontFamily: "'Moms Typewriter', monospace" }}
     >
       <div className="rounded-[10px] border-[4px] border-[#163326] bg-[#6B9462] p-2 shadow-[inset_0_0_0_2px_rgba(22,51,38,0.35)]">
         <div className="grid grid-cols-[auto_1fr_auto] items-center gap-3">

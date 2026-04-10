@@ -151,7 +151,7 @@ export function QuickBar({
   // §4.6 PRE_GAME phase: show START GAME button centered
   if (gamePhase === 'PRE_GAME') {
     return (
-      <div className="bg-[#2a3a2d] border-t-[3px] border-[#3d5240] p-2 flex items-center justify-center relative" style={{ fontFamily: "'Tox Typewriter', monospace", fontWeight: 700 }}>
+      <div className="bg-[#2a3a2d] border-t-[3px] border-[#3d5240] p-2 flex items-center justify-center relative" style={{ fontFamily: "'Moms Typewriter', monospace", fontWeight: 700 }}>
         {startGamePending ? (
           <div className="flex items-center gap-3">
             <span className="text-[#E8E8D8] text-[16px] font-bold tracking-wide">Lock lineups and begin recording?</span>
@@ -196,7 +196,7 @@ export function QuickBar({
   // §4.6 POST_FINAL_OUT phase: show END GAME button centered
   if (gamePhase === 'POST_FINAL_OUT') {
     return (
-      <div className="bg-[#2a3a2d] border-t-[3px] border-[#3d5240] p-2 flex items-center justify-center relative" style={{ fontFamily: "'Tox Typewriter', monospace", fontWeight: 700 }}>
+      <div className="bg-[#2a3a2d] border-t-[3px] border-[#3d5240] p-2 flex items-center justify-center relative" style={{ fontFamily: "'Moms Typewriter', monospace", fontWeight: 700 }}>
         <button
           onClick={onEndGame}
           className="px-8 py-3 text-white text-[20px] font-black tracking-[0.16em]
@@ -213,7 +213,7 @@ export function QuickBar({
 
   // §4.6 LIVE phase: full outcome buttons + overflow + utility buttons
   return (
-    <div className="bg-[#2a3a2d] border-t-[3px] border-[#3d5240] p-2 h-full flex flex-col justify-center relative" style={{ fontFamily: "'Tox Typewriter', monospace", fontWeight: 700 }}>
+    <div className="bg-[#2a3a2d] border-t-[3px] border-[#3d5240] p-2 h-full flex flex-col justify-center relative" style={{ fontFamily: "'Moms Typewriter', monospace", fontWeight: 700 }}>
       {/* Primary row + utility buttons */}
       <div className="flex gap-1 flex-wrap items-stretch">
         {PRIMARY_BUTTONS.map((btn) => renderButton(btn))}

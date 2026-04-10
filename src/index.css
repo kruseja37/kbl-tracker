@@ -1,4 +1,11 @@
 @font-face {
+  font-family: 'Moms Typewriter';
+  src: url('./assets/fonts/moms-typewriter.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+}
+
+@font-face {
   font-family: 'Tox Typewriter';
   src: url('./assets/fonts/tox-typewriter.ttf') format('truetype');
   font-weight: 400;

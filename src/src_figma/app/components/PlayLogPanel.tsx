@@ -138,7 +138,7 @@ export function PlayLogPanel({
   }, []);
 
   return (
-    <div className="h-full overflow-y-auto bg-[#3d5240] border-l-[3px] border-[#2a3a2d] flex flex-col">
+    <div className="h-full overflow-y-auto bg-[#2d3530] border-l-[3px] border-[#252b27] flex flex-col" style={{ boxShadow: 'inset 0 0 4px rgba(0,0,0,0.25)' }}>
       <style>{`
         @keyframes playlog-entry-fade-in {
           0% {
@@ -152,9 +152,9 @@ export function PlayLogPanel({
         }
       `}</style>
       {/* Header */}
-      <div className="bg-[#2a3a2d] border-b-[2px] border-[#1a2a1d] px-2 py-1.5 sticky top-0 z-10">
+      <div className="bg-[#232926] border-b-[2px] border-[#1a1e1b] px-2 py-1.5 sticky top-0 z-10">
         <div className="flex items-center justify-between gap-2">
-          <div className="text-[#C4A853] text-[10px] font-bold tracking-[0.15em]">PLAY LOG</div>
+          <div className="text-[#7a857c] text-[10px] font-bold tracking-[0.15em]">PLAY LOG</div>
           {systemRowCount > 0 && (
             <button
               onClick={() => setShowSystemRows((prev) => !prev)}
@@ -187,7 +187,7 @@ export function PlayLogPanel({
                   </span>
                   <span
                     className="text-[10px] truncate flex-1 min-w-0"
-                    style={{ color: teamColor ?? '#E8E8D8' }}
+                    style={{ color: teamColor ?? '#E8E8D8', fontFamily: "'Tox Typewriter', monospace" }}
                   >
                     {entry.batterName}
                   </span>
@@ -285,7 +285,7 @@ export function PlayLogPanel({
                   <span className="text-[9px] text-[#6b7280] w-[24px] flex-shrink-0 text-right pr-0.5">└</span>
                   <span className={`text-[9px] truncate flex-1 min-w-0 ${
                     isScored ? 'text-[#34d399]' : isOut ? 'text-[#f87171]/80' : isInningEnd ? 'text-[#fbbf24]/90' : 'text-[#E8E8D8]/70'
-                  }`}>
+                  }`} style={{ fontFamily: "'Tox Typewriter', monospace" }}>
                     {subjectLabel}
                   </span>
                   <span className={`text-[8px] font-mono flex-shrink-0 ${

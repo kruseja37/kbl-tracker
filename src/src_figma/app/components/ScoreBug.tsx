@@ -116,7 +116,7 @@ export function ScoreBug({
       className="flex-shrink-0 bg-[#2a3a2d] border-b-[2px] border-[#1E2C23] px-3 py-1.5
                  flex items-center justify-between gap-4 w-full cursor-pointer select-none
                  hover:bg-[#313f34] active:bg-[#252e28] transition-colors"
-      style={{ fontFamily: "'Chalk', monospace" }}
+      style={{ fontFamily: "'Moms Typewriter', monospace" }}
     >
       <style>{`
         @keyframes scorebug-score-flash {
@@ -189,7 +189,7 @@ export function ScoreBug({
         </div>
 
         {stadiumName ? (
-          <span className="ml-auto flex-shrink-0 text-right text-[14px] font-bold tracking-wide text-[#88AA88] whitespace-nowrap">
+          <span className="ml-auto flex-shrink-0 text-right text-[14px] font-bold tracking-wide text-[#CBB89C] whitespace-nowrap">
             {stadiumName}
           </span>
         ) : (

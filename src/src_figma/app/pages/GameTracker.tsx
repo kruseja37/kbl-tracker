@@ -9355,7 +9355,7 @@ export function GameTracker() {
 
   if (isLoading || !gameInitialized) {
     return (
-      <div className="min-h-screen bg-[#CBB89C] flex items-center justify-center" style={{ fontFamily: "'Tox Typewriter', monospace" }}>
+      <div className="min-h-screen bg-[#CBB89C] flex items-center justify-center" style={{ fontFamily: "'Moms Typewriter', monospace" }}>
         <div className="bg-[#1a3020] border-4 border-[#C4A853] px-6 py-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.4)]">
           <div className="text-[#E8E8D8] text-sm font-bold tracking-wide">
             Loading game...
@@ -9446,7 +9446,7 @@ export function GameTracker() {
            │ Row 3: QuickBar (pinned bottom, full width)                 │
            └─────────────────────────────────────────────────────────────┘
            ═══════════════════════════════════════════════════════════════ */}
-      <div className="game-tracker-font-bump flex flex-col overflow-hidden bg-[#CBB89C] text-white" style={{ height: '100dvh', fontFamily: "'Tox Typewriter', monospace" }}>
+      <div className="game-tracker-font-bump flex flex-col overflow-hidden bg-[#CBB89C] text-white" style={{ height: '100dvh', fontFamily: "'Moms Typewriter', monospace" }}>
         <style>{`
           .game-tracker-font-bump .text-\\[6px\\]:not(.game-tracker-font-no-bump *) { font-size: 12px !important; }
           .game-tracker-font-bump .text-\\[7px\\]:not(.game-tracker-font-no-bump *) { font-size: 13px !important; }

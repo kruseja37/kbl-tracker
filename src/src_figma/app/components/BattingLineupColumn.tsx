@@ -2,6 +2,7 @@ import React from 'react';
 import { getMojoColor, type MojoLevel } from '../../../engines/mojoEngine';
 import type { FitnessState } from '../../../engines/fitnessEngine';
 import { toFitnessLabel, toMojoLabel } from '../../../types/game';
+import chalkBgImg from '../../../assets/chalk-bg.png';
 
 interface BattingLineupPlayer {
   playerId: string;
@@ -141,6 +142,8 @@ export function BattingLineupColumn({
               className="flex items-stretch gap-1 px-2 py-0.5"
               style={{
                 animation: shouldHighlightRow ? 'batting-lineup-row-highlight 200ms ease-out' : undefined,
+                backgroundImage: isCurrent ? `url(${chalkBgImg})` : undefined,
+                backgroundRepeat: isCurrent ? 'repeat' : undefined,
               }}
               onAnimationEnd={() => {
                 if (shouldHighlightRow) {
@@ -153,22 +156,18 @@ export function BattingLineupColumn({
                 onClick={() => onPlayerTap(player.playerId, player.name)}
                 className="flex-1 text-left px-0 py-0 transition-colors hover:bg-[#1E3218]/50 active:bg-[#1E3218]"
                 style={{
-                  border: isCurrent
-                    ? `2px solid ${teamPrimaryColor}`
-                    : isNextLeadoff
-                      ? `2px dotted ${teamSecondaryColor}`
-                      : '2px solid transparent',
+                  border: !isCurrent && isNextLeadoff
+                    ? `2px dotted ${teamSecondaryColor}`
+                    : '2px solid transparent',
                 }}
               >
                 <div className={`text-[11px] leading-tight tracking-wide ${onBase ? 'font-black text-white' : 'font-bold text-[#E8E8D8]'}`}>
-                  <span className="text-[#E8E8D8] mr-0.5">{player.battingOrder}.</span>
-                  {player.position && (
-                    <span className="text-[#D4B85A] text-[9px] mr-1">{player.position}</span>
-                  )}
+                  <span className="text-[#E8E8D8] mr-2">{player.battingOrder}.</span>
                   <span
                     style={{
                       ...mojoStyle,
                       ...fitnessStyle,
+                      fontFamily: "'Tox Typewriter', monospace",
                     }}
                     title={[
                       playerMojo !== 0 && playerMojo !== undefined
@@ -179,6 +178,9 @@ export function BattingLineupColumn({
                         : null,
                     ].filter(Boolean).join(' | ') || undefined}
                   >{player.name}</span>
+                  {player.position && (
+                    <span className="text-[#D4B85A] text-[9px] ml-1">{player.position}</span>
+                  )}
                   {onBase !== undefined && (
                     <sup className="text-[9px] text-[#F2BF16] ml-0.5">{onBase}</sup>
                   )}

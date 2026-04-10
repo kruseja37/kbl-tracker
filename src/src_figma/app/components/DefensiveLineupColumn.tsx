@@ -2,6 +2,8 @@ import React from 'react';
 import { getMojoColor, type MojoLevel } from '../../../engines/mojoEngine';
 import type { FitnessState } from '../../../engines/fitnessEngine';
 import { toFitnessLabel, toMojoLabel } from '../../../types/game';
+import chalkBgImg from '../../../assets/chalk-bg.png';
+import chalkBgFaintImg from '../../../assets/chalk-bg-faint.png';
 
 interface DefensiveLineupPlayer {
   playerId: string;
@@ -167,6 +169,12 @@ export function DefensiveLineupColumn({
               key={player.playerId}
               className="flex items-stretch gap-1 px-2 py-0.5"
               style={{
+                backgroundImage: !isEnriching && isPitching
+                  ? `url(${chalkBgImg})`
+                  : !isEnriching && isNextLeadoff
+                    ? `url(${chalkBgFaintImg})`
+                    : undefined,
+                backgroundRepeat: !isEnriching && (isPitching || isNextLeadoff) ? 'repeat' : undefined,
               }}
             >
               <button
@@ -183,29 +191,19 @@ export function DefensiveLineupColumn({
                       ? '3px solid #D4B85A'
                       : '3px solid transparent'
                     : undefined,
-                  border: !isEnriching
-                    ? isPitching
-                      ? `2px solid ${teamPrimaryColor}`
-                      : isNextLeadoff
-                        ? `2px dotted ${teamSecondaryColor}`
-                        : '2px solid transparent'
-                    : undefined,
+                  border: '2px solid transparent',
                 }}
               >
                 {/* Top row: order + position + name */}
                 <div className={`text-[11px] leading-tight tracking-wide font-bold ${
                   isEnriching && isInSequence ? 'text-[#D4B85A]' : 'text-[#E8E8D8]'
                 }`}>
-                  <span className="text-[#E8E8D8] mr-0.5">{player.battingOrder}.</span>
-                  {player.position && (
-                    <span className="mr-1 text-[#D4B85A] text-[9px]">
-                      {player.position}
-                    </span>
-                  )}
+                  <span className="text-[#E8E8D8] mr-2">{player.battingOrder}.</span>
                   <span
                     style={{
                       ...(!isEnriching ? mojoStyle : undefined),
                       ...(!isEnriching ? fitnessStyle : {}),
+                      fontFamily: "'Tox Typewriter', monospace",
                     }}
                     title={!isEnriching ? [
                       playerMojo !== 0 && playerMojo !== undefined
@@ -216,6 +214,11 @@ export function DefensiveLineupColumn({
                         : null,
                     ].filter(Boolean).join(' | ') || undefined : undefined}
                   >{player.name}</span>
+                  {player.position && (
+                    <span className="ml-1 text-[#D4B85A] text-[9px]">
+                      {player.position}
+                    </span>
+                  )}
                 </div>
                 {/* Bottom row: in enrichment mode show position number, else pitch count / dash */}
                 <div className="text-[9px] text-[#6b7b6e] leading-tight">
