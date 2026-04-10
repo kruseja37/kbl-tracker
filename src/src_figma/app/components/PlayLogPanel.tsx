@@ -6,26 +6,26 @@ import type { PlayLogEntry, RunnerSubEntry } from '../utils/playLogTypes';
 // ──────────────────────────────────────────────────────────────
 
 const RESULT_COLORS: Record<string, string> = {
-  // Hits — blue
-  '1B': '#60a5fa', '2B': '#60a5fa', '3B': '#60a5fa',
-  // HR — purple
-  'HR': '#c084fc',
-  // GRD — blue (counts as double)
-  'GRD': '#60a5fa',
-  // Walks — green
-  'BB': '#4ade80', 'IBB': '#4ade80', 'HBP': '#4ade80',
-  // Outs — red
-  'K': '#f87171', 'Kc': '#f87171', 'GO': '#f87171', 'FO': '#f87171', 'FLO': '#f87171',
-  'LO': '#f87171', 'PO': '#f87171', 'DP': '#f87171', 'TP': '#f87171',
-  'SF': '#f87171', 'SAC': '#f87171', 'FC': '#f87171',
-  'D3K': '#f87171', 'WP_K': '#f87171', 'PB_K': '#f87171',
-  // Error — yellow
-  'E': '#fbbf24',
+  // Hits — muted blue
+  '1B': '#7a9ab8', '2B': '#7a9ab8', '3B': '#7a9ab8',
+  // HR — muted purple
+  'HR': '#a082b8',
+  // GRD — muted blue (counts as double)
+  'GRD': '#7a9ab8',
+  // Walks — muted green
+  'BB': '#6aad82', 'IBB': '#6aad82', 'HBP': '#6aad82',
+  // Outs — muted red
+  'K': '#b87a7a', 'Kc': '#b87a7a', 'GO': '#b87a7a', 'FO': '#b87a7a', 'FLO': '#b87a7a',
+  'LO': '#b87a7a', 'PO': '#b87a7a', 'DP': '#b87a7a', 'TP': '#b87a7a',
+  'SF': '#b87a7a', 'SAC': '#b87a7a', 'FC': '#b87a7a',
+  'D3K': '#b87a7a', 'WP_K': '#b87a7a', 'PB_K': '#b87a7a',
+  // Error — muted yellow
+  'E': '#c4a058',
   // Between-play events
-  'SB': '#34d399', 'CS': '#f87171', 'PK': '#f59e0b', 'WP': '#f59e0b', 'PB': '#f59e0b',
-  'ADV': '#E8E8D8', 'SUB': '#C4A853', 'POS': '#88AA88', 'PCHG': '#C4A853',
-  'MOJO': '#60a5fa', 'FIT': '#4ade80', 'INJ': '#f87171', 'MM': '#c084fc', 'PC': '#6b7280',
-  'BLK': '#f59e0b',
+  'SB': '#5a9e80', 'CS': '#b87a7a', 'PK': '#c49a4a', 'WP': '#c49a4a', 'PB': '#c49a4a',
+  'ADV': '#b0b0a0', 'SUB': '#a09050', 'POS': '#6b8b6b', 'PCHG': '#a09050',
+  'MOJO': '#7a9ab8', 'FIT': '#6aad82', 'INJ': '#b87a7a', 'MM': '#a082b8', 'PC': '#5a6a5e',
+  'BLK': '#c49a4a',
 };
 
 function getResultColor(result: string): string {
@@ -138,7 +138,7 @@ export function PlayLogPanel({
   }, []);
 
   return (
-    <div className="h-full overflow-y-auto bg-[#2d3530] border-l-[3px] border-[#252b27] flex flex-col" style={{ boxShadow: 'inset 0 0 4px rgba(0,0,0,0.25)' }}>
+    <div className="h-full overflow-y-auto bg-[#364038] border-l-[3px] border-[#252b27] flex flex-col" style={{ boxShadow: 'inset 0 0 4px rgba(0,0,0,0.25)', fontFamily: "'Moms Typewriter', monospace" }}>
       <style>{`
         @keyframes playlog-entry-fade-in {
           0% {
@@ -152,7 +152,7 @@ export function PlayLogPanel({
         }
       `}</style>
       {/* Header */}
-      <div className="bg-[#232926] border-b-[2px] border-[#1a1e1b] px-2 py-1.5 sticky top-0 z-10">
+      <div className="bg-[#243028] border-b-[2px] border-[#1a1e1b] px-2 py-1.5 sticky top-0 z-10">
         <div className="flex items-center justify-between gap-2">
           <div className="text-[#7a857c] text-[10px] font-bold tracking-[0.15em]">PLAY LOG</div>
           {systemRowCount > 0 && (
@@ -164,7 +164,6 @@ export function PlayLogPanel({
             </button>
           )}
         </div>
-        <div className="text-[8px] text-[#88AA88] mt-0.5">At-bats plus between-play events. Use the main field for +loc.</div>
       </div>
 
       {/* Entries — most recent at top */}
@@ -182,12 +181,12 @@ export function PlayLogPanel({
               <>
                 {/* Row 1: Inning + Name + Result + RBI + QAB */}
                 <div className="flex items-center gap-1 leading-tight">
-                  <span className="text-[10px] text-[#88AA88] font-mono w-[24px] flex-shrink-0">
+                  <span className="text-[10px] text-[#6b7b6e] w-[24px] flex-shrink-0">
                     {entry.inningLabel}
                   </span>
                   <span
                     className="text-[10px] truncate flex-1 min-w-0"
-                    style={{ color: teamColor ?? '#E8E8D8', fontFamily: "'Tox Typewriter', monospace" }}
+                    style={{ color: teamColor ?? '#a0a898', fontFamily: "'Tox Typewriter', monospace" }}
                   >
                     {entry.batterName}
                   </span>
@@ -225,11 +224,11 @@ export function PlayLogPanel({
                 {/* Row 2: Enrichment badges + fielding sequence (compact) */}
                 <div className="flex items-center gap-1 ml-[25px] flex-wrap">
                   {entry.description ? (
-                    <span className="text-[8px] text-[#88AA88]">
+                    <span className="text-[8px] text-[#6b7b6e]">
                       {entry.description}
                     </span>
                   ) : entry.fieldingSequence ? (
-                    <span className="text-[8px] text-[#88AA88] font-mono">
+                    <span className="text-[8px] text-[#6b7b6e]">
                       {entry.fieldingSequence}
                     </span>
                   ) : null}
@@ -288,7 +287,7 @@ export function PlayLogPanel({
                   }`} style={{ fontFamily: "'Tox Typewriter', monospace" }}>
                     {subjectLabel}
                   </span>
-                  <span className={`text-[8px] font-mono flex-shrink-0 ${
+                  <span className={`text-[8px] flex-shrink-0 ${
                     isScored ? 'text-[#34d399]' : isOut ? 'text-[#f87171]/80' : isInningEnd ? 'text-[#fbbf24]/90' : 'text-[#88AA88]'
                   }`}>
                     {sub.transitionLabel ?? formatRunnerTransition(sub.fromBase, sub.toBase)}

@@ -9628,7 +9628,7 @@ export function GameTracker() {
                   selectedPlayLogEntry.eventType !== "at_bat")
                   ? "1fr 1fr 1fr 2.5fr"
                   : "1fr 1fr 1fr 2fr",
-              gap: "4px",
+              gap: "0px",
             }}
           >
             {/* Column 1: NewsBoard (§6 — display only, no click handlers) */}
@@ -9657,6 +9657,7 @@ export function GameTracker() {
                     currentBatterIndex={currentBatterPosition}
                     runners={battingLineupRunners}
                     nextLeadoffIndex={battingNextLeadoff}
+                    teamName={gameState.isTop ? awayTeamName : homeTeamName}
                     teamPrimaryColor={battingTeamColors.primary}
                     teamSecondaryColor={battingTeamColors.secondary}
                     playerStates={playerStatesMap}
@@ -9669,6 +9670,7 @@ export function GameTracker() {
                     players={defensiveColumnPlayers}
                     currentPitcherName={resolvedCurrentPitcherName}
                     nextLeadoffIndex={defensiveNextLeadoff}
+                    teamName={gameState.isTop ? homeTeamName : awayTeamName}
                     teamPrimaryColor={fieldingTeamColors.primary}
                     teamSecondaryColor={fieldingTeamColors.secondary}
                     playerStates={playerStatesMap}

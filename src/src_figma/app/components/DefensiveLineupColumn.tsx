@@ -37,6 +37,7 @@ interface DefensiveLineupColumnProps {
   players: DefensiveLineupPlayer[];
   currentPitcherName: string;
   nextLeadoffIndex: number; // 1-based batting order of next inning's leadoff
+  teamName?: string;
   teamPrimaryColor: string;
   teamSecondaryColor: string;
   playerStates?: Record<string, PlayerMojoFitness>;
@@ -84,6 +85,7 @@ export function DefensiveLineupColumn({
   players,
   currentPitcherName,
   nextLeadoffIndex,
+  teamName,
   teamPrimaryColor,
   teamSecondaryColor,
   playerStates,
@@ -97,13 +99,13 @@ export function DefensiveLineupColumn({
   const isEnriching = enrichmentMode?.active ?? false;
 
   return (
-    <div className="bg-[#2E4228] flex flex-col h-full">
+    <div className="bg-[#3d4a42] flex flex-col h-full" style={{ borderLeft: '2px solid rgba(242, 192, 65, 0.08)' }}>
       {/* Header — switches between FIELDING and FIELDING SEQUENCE */}
-      <div className={`px-2 pt-1.5 pb-1 border-b-[2px] border-[#6A8A60] bg-[#1E3218] flex items-center justify-between gap-2 ${
-        isEnriching ? 'text-[#D4B85A]' : 'text-[#D4B85A]'
+      <div className={`px-2 pt-1.5 pb-1 border-b-[2px] border-[rgba(156,86,66,0.25)] bg-[#243028] flex items-center justify-center gap-2 ${
+        isEnriching ? 'text-white' : 'text-white'
       }`}>
         <div className="text-[10px] font-bold tracking-wider">
-          {isEnriching ? 'FIELDING SEQUENCE' : 'FIELDING'}
+          {isEnriching ? 'FIELDING SEQUENCE' : teamName || 'FIELDING'}
         </div>
         {!isEnriching && headerAction && (
           <button
@@ -169,12 +171,6 @@ export function DefensiveLineupColumn({
               key={player.playerId}
               className="flex items-stretch gap-1 px-2 py-0.5"
               style={{
-                backgroundImage: !isEnriching && isPitching
-                  ? `url(${chalkBgImg})`
-                  : !isEnriching && isNextLeadoff
-                    ? `url(${chalkBgFaintImg})`
-                    : undefined,
-                backgroundRepeat: !isEnriching && (isPitching || isNextLeadoff) ? 'repeat' : undefined,
               }}
             >
               <button
@@ -198,7 +194,16 @@ export function DefensiveLineupColumn({
                 <div className={`text-[11px] leading-tight tracking-wide font-bold ${
                   isEnriching && isInSequence ? 'text-[#D4B85A]' : 'text-[#E8E8D8]'
                 }`}>
-                  <span className="text-[#E8E8D8] mr-2">{player.battingOrder}.</span>
+                  <span
+                    className="text-[#CBB89C] mr-2"
+                    style={{
+                      backgroundImage: !isEnriching && isNextLeadoff
+                        ? `url(${chalkBgFaintImg})`
+                        : undefined,
+                      backgroundRepeat: !isEnriching && isNextLeadoff ? 'repeat' : undefined,
+                      padding: !isEnriching && isNextLeadoff ? '0 2px 0 6px' : undefined,
+                    }}
+                  >{player.battingOrder}.</span>
                   <span
                     style={{
                       ...(!isEnriching ? mojoStyle : undefined),
@@ -246,7 +251,7 @@ export function DefensiveLineupColumn({
                       event.stopPropagation();
                       onMojoAdjust(player.playerId, player.name, 1);
                     }}
-                    className="h-[12px] w-[16px] border border-[#6A8A60] bg-[#1E3218] text-[9px] font-bold text-[#D4B85A] leading-none hover:bg-[#2E4228] disabled:cursor-not-allowed disabled:opacity-40"
+                    className="h-[10px] w-[14px] text-[8px] font-bold text-[#D4B85A]/40 leading-none hover:text-[#F2C041]/70 disabled:cursor-not-allowed disabled:opacity-40" style={{ fontFamily: "'Chalk', monospace" }}
                   >
                     ▲
                   </button>
@@ -259,7 +264,7 @@ export function DefensiveLineupColumn({
                       event.stopPropagation();
                       onMojoAdjust(player.playerId, player.name, -1);
                     }}
-                    className="h-[12px] w-[16px] border border-[#6A8A60] bg-[#1E3218] text-[9px] font-bold text-[#D4B85A] leading-none hover:bg-[#2E4228] disabled:cursor-not-allowed disabled:opacity-40"
+                    className="h-[10px] w-[14px] text-[8px] font-bold text-[#D4B85A]/40 leading-none hover:text-[#F2C041]/70 disabled:cursor-not-allowed disabled:opacity-40" style={{ fontFamily: "'Chalk', monospace" }}
                   >
                     ▼
                   </button>

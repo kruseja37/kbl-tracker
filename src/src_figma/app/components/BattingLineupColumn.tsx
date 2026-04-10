@@ -25,6 +25,7 @@ interface BattingLineupColumnProps {
     third?: { name: string; playerId?: string };
   };
   nextLeadoffIndex: number; // 1-based batting order of next inning's leadoff
+  teamName?: string;
   teamPrimaryColor: string;
   teamSecondaryColor: string;
   /** Direct mojo/fitness data map — keyed by playerId */
@@ -71,6 +72,7 @@ export function BattingLineupColumn({
   currentBatterIndex,
   runners,
   nextLeadoffIndex,
+  teamName,
   teamPrimaryColor,
   teamSecondaryColor,
   playerStates,
@@ -105,7 +107,7 @@ export function BattingLineupColumn({
   })));
 
   return (
-    <div className="bg-[#2E4228] flex flex-col h-full">
+    <div className="bg-[#3d4a42] flex flex-col h-full" style={{ borderRight: '2px solid rgba(242, 192, 65, 0.08)' }}>
       <style>{`
         @keyframes batting-lineup-row-highlight {
           0% {
@@ -119,8 +121,8 @@ export function BattingLineupColumn({
           }
         }
       `}</style>
-      <div className="text-[10px] text-[#D4B85A] font-bold tracking-wider px-2 pt-1.5 pb-1 border-b-[2px] border-[#6A8A60] bg-[#1E3218]">
-        BATTING
+      <div className="text-[10px] text-white font-bold tracking-wider px-2 pt-1.5 pb-1 border-b-[2px] border-[rgba(156,86,66,0.25)] bg-[#243028] text-center">
+        {teamName || 'BATTING'}
       </div>
       <div className="flex flex-col flex-1 justify-evenly">
         {players.map((player) => {
@@ -142,8 +144,6 @@ export function BattingLineupColumn({
               className="flex items-stretch gap-1 px-2 py-0.5"
               style={{
                 animation: shouldHighlightRow ? 'batting-lineup-row-highlight 200ms ease-out' : undefined,
-                backgroundImage: isCurrent ? `url(${chalkBgImg})` : undefined,
-                backgroundRepeat: isCurrent ? 'repeat' : undefined,
               }}
               onAnimationEnd={() => {
                 if (shouldHighlightRow) {
@@ -162,7 +162,7 @@ export function BattingLineupColumn({
                 }}
               >
                 <div className={`text-[11px] leading-tight tracking-wide ${onBase ? 'font-black text-white' : 'font-bold text-[#E8E8D8]'}`}>
-                  <span className="text-[#E8E8D8] mr-2">{player.battingOrder}.</span>
+                  <span className="text-[#CBB89C] mr-2">{player.battingOrder}.</span>
                   <span
                     style={{
                       ...mojoStyle,
@@ -181,6 +181,9 @@ export function BattingLineupColumn({
                   {player.position && (
                     <span className="text-[#D4B85A] text-[9px] ml-1">{player.position}</span>
                   )}
+                  {isCurrent && (
+                    <span className="text-[10px] ml-1 opacity-70" style={{ fontFamily: "'Chalk', monospace" }}>⚾</span>
+                  )}
                   {onBase !== undefined && (
                     <sup className="text-[9px] text-[#F2BF16] ml-0.5">{onBase}</sup>
                   )}
@@ -197,7 +200,7 @@ export function BattingLineupColumn({
                       event.stopPropagation();
                       onMojoAdjust(player.playerId, player.name, 1);
                     }}
-                    className="h-[12px] w-[16px] border border-[#6A8A60] bg-[#1E3218] text-[9px] font-bold text-[#D4B85A] leading-none hover:bg-[#2E4228] disabled:cursor-not-allowed disabled:opacity-40"
+                    className="h-[10px] w-[14px] text-[8px] font-bold text-[#D4B85A]/40 leading-none hover:text-[#F2C041]/70 disabled:cursor-not-allowed disabled:opacity-40" style={{ fontFamily: "'Chalk', monospace" }}
                   >
                     ▲
                   </button>
@@ -210,7 +213,7 @@ export function BattingLineupColumn({
                       event.stopPropagation();
                       onMojoAdjust(player.playerId, player.name, -1);
                     }}
-                    className="h-[12px] w-[16px] border border-[#6A8A60] bg-[#1E3218] text-[9px] font-bold text-[#D4B85A] leading-none hover:bg-[#2E4228] disabled:cursor-not-allowed disabled:opacity-40"
+                    className="h-[10px] w-[14px] text-[8px] font-bold text-[#D4B85A]/40 leading-none hover:text-[#F2C041]/70 disabled:cursor-not-allowed disabled:opacity-40" style={{ fontFamily: "'Chalk', monospace" }}
                   >
                     ▼
                   </button>

@@ -28,8 +28,8 @@ interface ScoreBugProps {
 function BaseStateDiamond({ bases }: { bases: { first: boolean; second: boolean; third: boolean } }) {
   const size = 8;
   const filled = '#F2BF16';
-  const empty = '#3B4F56';
-  const border = '#48604A';
+  const empty = '#2a3a3d';
+  const border = '#2d4030';
   return (
     <svg width={24} height={24} viewBox="0 0 24 24" className="flex-shrink-0">
       {/* Second base (top) */}
@@ -57,8 +57,8 @@ function OutsIndicator({ outs }: { outs: number }) {
           key={i}
           className="w-2 h-2 rounded-full"
           style={{
-            backgroundColor: i < outs ? '#FF3C3C' : '#3B4F56',
-            border: `1.5px solid ${i < outs ? '#BE1E1E' : '#48604A'}`,
+            backgroundColor: i < outs ? '#FF3C3C' : '#2a3a3d',
+            border: `1.5px solid ${i < outs ? '#BE1E1E' : '#2d4030'}`,
           }}
         />
       ))}
@@ -113,9 +113,9 @@ export function ScoreBug({
   return (
     <div
       onClick={onTap}
-      className="flex-shrink-0 bg-[#2a3a2d] border-b-[2px] border-[#1E2C23] px-3 py-1.5
+      className="flex-shrink-0 bg-[#3d4a42] border-b-[2px] border-[#1E2C23] px-3 py-1.5
                  flex items-center justify-between gap-4 w-full cursor-pointer select-none
-                 hover:bg-[#313f34] active:bg-[#252e28] transition-colors"
+                 hover:bg-[#455550] active:bg-[#354040] transition-colors"
       style={{ fontFamily: "'Moms Typewriter', monospace" }}
     >
       <style>{`

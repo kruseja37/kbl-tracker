@@ -17,7 +17,7 @@ export function NewsBoard({
   matchupSummary,
 }: NewsBoardProps) {
   return (
-    <div className="bg-[#2a3a2d] border border-[#3d5240] flex flex-col h-full">
+    <div className="bg-[#364038] border-r-[3px] border-[#252b27] flex flex-col h-full" style={{ boxShadow: 'inset 0 0 4px rgba(0,0,0,0.25)' }}>
       {/* §6.1: Pinned header — batter line, pitcher line, matchup */}
       <div className="bg-[#243028] border-b border-[#3d5240] px-2 pt-1.5 pb-1.5 flex-shrink-0">
         <div className="text-[10px] text-[#88AA88] font-bold tracking-wider mb-1">MATCHUP</div>
