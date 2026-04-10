@@ -113,7 +113,7 @@ export function ScoreBug({
   return (
     <div
       onClick={onTap}
-      className="flex-shrink-0 bg-[#3d4a42] border-b-[2px] border-[#1E2C23] px-3 py-1.5
+      className="flex-shrink-0 bg-[#3d4a42] px-3 py-1.5
                  flex items-center justify-between gap-4 w-full cursor-pointer select-none
                  hover:bg-[#455550] active:bg-[#354040] transition-colors"
       style={{ fontFamily: "'Moms Typewriter', monospace" }}

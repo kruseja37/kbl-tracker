@@ -17,37 +17,44 @@ export function NewsBoard({
   matchupSummary,
 }: NewsBoardProps) {
   return (
-    <div className="bg-[#364038] border-r-[3px] border-[#252b27] flex flex-col h-full" style={{ boxShadow: 'inset 0 0 4px rgba(0,0,0,0.25)' }}>
+    <div className="bg-[#364038] flex flex-col h-full">
       {/* §6.1: Pinned header — batter line, pitcher line, matchup */}
-      <div className="bg-[#243028] border-b border-[#3d5240] px-2 pt-1.5 pb-1.5 flex-shrink-0">
-        <div className="text-[10px] text-[#88AA88] font-bold tracking-wider mb-1">MATCHUP</div>
-
-        {/* Current batter game line */}
-        <div className="mb-1">
-          <div className="text-[8px] text-[#C4A853] font-bold tracking-wider">AT BAT</div>
-          <div className="text-[9px] text-[#E8E8D8] font-bold leading-tight">{currentBatterName}</div>
-          <div className="text-[8px] text-[#88AA88] leading-tight">{currentBatterLine || '—'}</div>
-        </div>
-
-        {/* Current pitcher game line */}
-        <div className="mb-1">
-          <div className="text-[8px] text-[#C4A853] font-bold tracking-wider">PITCHING</div>
-          <div className="text-[9px] text-[#E8E8D8] font-bold leading-tight">{currentPitcherName}</div>
-          <div className="text-[8px] text-[#88AA88] leading-tight">{currentPitcherLine || '—'}</div>
-        </div>
-
-        {/* Matchup history */}
-        {matchupSummary && (
-          <div>
-            <div className="text-[8px] text-[#C4A853] font-bold tracking-wider">MATCHUP</div>
-            <div className="text-[8px] text-[#88AA88] leading-tight">{matchupSummary}</div>
-          </div>
-        )}
+      {/* Header row — matches lineup header height */}
+      <div className="bg-[#243028] px-2 pt-1.5 pb-1 flex-shrink-0">
+        <div className="text-[10px] text-[#88AA88] font-bold tracking-wider">MATCHUP</div>
       </div>
 
-      {/* §6.3: Scrollable beat reporter feed — placeholder for now */}
-      <div className="flex-1 overflow-y-auto px-2 py-1.5">
-        <div className="text-[8px] text-[#6b7b6e] italic">Beat Reporter Feed</div>
+      {/* Content area with recessed border */}
+      <div className="flex-1 flex flex-col overflow-hidden border-r-[3px] border-[#252b27]" style={{ boxShadow: 'inset 0 0 4px rgba(0,0,0,0.25)' }}>
+        {/* §6.1: Pinned stats — batter line, pitcher line, matchup */}
+        <div className="bg-[#243028] border-b border-[#3d5240] px-2 pt-1 pb-1.5 flex-shrink-0">
+          {/* Current batter game line */}
+          <div className="mb-1">
+            <div className="text-[8px] text-[#C4A853] font-bold tracking-wider">AT BAT</div>
+            <div className="text-[9px] text-[#E8E8D8] font-bold leading-tight">{currentBatterName}</div>
+            <div className="text-[8px] text-[#88AA88] leading-tight">{currentBatterLine || '—'}</div>
+          </div>
+
+          {/* Current pitcher game line */}
+          <div className="mb-1">
+            <div className="text-[8px] text-[#C4A853] font-bold tracking-wider">PITCHING</div>
+            <div className="text-[9px] text-[#E8E8D8] font-bold leading-tight">{currentPitcherName}</div>
+            <div className="text-[8px] text-[#88AA88] leading-tight">{currentPitcherLine || '—'}</div>
+          </div>
+
+          {/* Matchup history */}
+          {matchupSummary && (
+            <div>
+              <div className="text-[8px] text-[#C4A853] font-bold tracking-wider">MATCHUP</div>
+              <div className="text-[8px] text-[#88AA88] leading-tight">{matchupSummary}</div>
+            </div>
+          )}
+        </div>
+
+        {/* §6.3: Scrollable beat reporter feed */}
+        <div className="flex-1 overflow-y-auto px-2 py-1.5">
+          <div className="text-[8px] text-[#6b7b6e] italic">Beat Reporter Feed</div>
+        </div>
       </div>
     </div>
   );

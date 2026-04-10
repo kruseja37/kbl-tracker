@@ -99,9 +99,9 @@ export function DefensiveLineupColumn({
   const isEnriching = enrichmentMode?.active ?? false;
 
   return (
-    <div className="bg-[#3d4a42] flex flex-col h-full" style={{ borderLeft: '2px solid rgba(242, 192, 65, 0.08)' }}>
+    <div className="bg-[#3d4a42] flex flex-col h-full">
       {/* Header — switches between FIELDING and FIELDING SEQUENCE */}
-      <div className={`px-2 pt-1.5 pb-1 border-b-[2px] border-[rgba(156,86,66,0.25)] bg-[#243028] flex items-center justify-center gap-2 ${
+      <div className={`px-2 pt-1.5 pb-1 bg-[#243028] flex items-center justify-center gap-2 ${
         isEnriching ? 'text-white' : 'text-white'
       }`}>
         <div className="text-[10px] font-bold tracking-wider">
@@ -144,7 +144,7 @@ export function DefensiveLineupColumn({
         </div>
       )}
 
-      <div className="flex flex-col flex-1 justify-evenly">
+      <div className="flex flex-col flex-1 justify-evenly" style={{ borderLeft: '2px solid rgba(242, 192, 65, 0.08)' }}>
         {players.map((player) => {
           const isPitching = player.name === currentPitcherName;
           const isNextLeadoff = player.battingOrder === nextLeadoffIndex && !isPitching;
