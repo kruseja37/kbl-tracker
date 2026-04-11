@@ -27,21 +27,21 @@ interface FullFenwayScoreboardProps {
 }
 
 const COLORS = {
-  sky: '#7EA6D0',
-  frame: '#163326',
-  grass: '#6B9462',
-  board: '#5C7156',
-  boardDark: '#48604A',
-  boardCell: '#425844',
-  boardCellAlt: '#3E5340',
+  sky: '#2a3530',
+  frame: '#1a2420',
+  grass: '#3d4a42',
+  board: '#364038',
+  boardDark: '#2d3530',
+  boardCell: '#2a3530',
+  boardCellAlt: '#243028',
   cream: '#E8E8D8',
-  blackish: '#1E2C23',
+  blackish: '#1a2420',
   yellow: '#F2BF16',
   green: '#00D66B',
   greenBorder: '#009E52',
   red: '#FF3C3C',
   redBorder: '#BE1E1E',
-  dim: '#3B4F56',
+  dim: '#2a3a3d',
 } as const;
 
 function abbreviateTeamName(name: string): string {
@@ -125,18 +125,18 @@ function TeamRow({
       }}
     >
       <div className="text-center text-[11px] font-black text-[#E8E8D8]">{indicator}</div>
-      <div className="truncate bg-[#425844] px-2 py-1 text-left text-[10px] font-black text-[#E8E8D8]">
+      <div className="truncate bg-[#2a3530] px-2 py-1 text-left text-[10px] font-black text-[#E8E8D8]">
         {abbreviateTeamName(name)}
       </div>
       {innings.map((value, index) => (
-        <div key={index} className="bg-[#425844] py-1 text-center text-[10px] font-black text-[#E8E8D8]">
+        <div key={index} className="bg-[#2a3530] py-1 text-center text-[10px] font-black text-[#E8E8D8]">
           {padCellValue(value)}
         </div>
       ))}
-      <div className="bg-[#3E5340] py-1 text-center text-[10px] font-black text-[#E8E8D8]">{totals.runs}</div>
-      <div className="bg-[#3E5340] py-1 text-center text-[10px] font-black text-[#E8E8D8]">{totals.hits}</div>
-      <div className="bg-[#3E5340] py-1 text-center text-[10px] font-black text-[#E8E8D8]">{totals.errors}</div>
-      <div className="bg-[#425844] py-1 text-center text-[10px] font-black text-[#E8E8D8]">{record || '0-0'}</div>
+      <div className="bg-[#243028] py-1 text-center text-[10px] font-black text-[#E8E8D8]">{totals.runs}</div>
+      <div className="bg-[#243028] py-1 text-center text-[10px] font-black text-[#E8E8D8]">{totals.hits}</div>
+      <div className="bg-[#243028] py-1 text-center text-[10px] font-black text-[#E8E8D8]">{totals.errors}</div>
+      <div className="bg-[#2a3530] py-1 text-center text-[10px] font-black text-[#E8E8D8]">{record || '0-0'}</div>
     </div>
   );
 }
@@ -168,26 +168,26 @@ export function FullFenwayScoreboard({
 
   return (
     <div
-      className="border-b-[4px] border-[#163326] bg-[#7EA6D0] px-3 py-2 text-white shadow-[0_4px_0_0_rgba(0,0,0,0.25)]"
+      className="border-b-[4px] border-[#1a2420] bg-[#2a3530] px-3 py-2 text-white shadow-[0_4px_0_0_rgba(0,0,0,0.25)]"
       style={{ fontFamily: "'Moms Typewriter', monospace" }}
     >
-      <div className="rounded-[10px] border-[4px] border-[#163326] bg-[#6B9462] p-2 shadow-[inset_0_0_0_2px_rgba(22,51,38,0.35)]">
+      <div className="rounded-[10px] border-[4px] border-[#1a2420] bg-[#3d4a42] p-2 shadow-[inset_0_0_0_2px_rgba(22,51,38,0.35)]">
         <div className="grid grid-cols-[auto_1fr_auto] items-center gap-3">
           <button
             type="button"
             disabled
-            className="h-10 min-w-[76px] border-[3px] border-[#E8E8D8] bg-[#1E2C23] px-3 text-[11px] font-black tracking-[0.16em] text-[#E8E8D8] opacity-70"
+            className="h-10 min-w-[76px] border-[3px] border-[#E8E8D8] bg-[#1a2420] px-3 text-[11px] font-black tracking-[0.16em] text-[#E8E8D8] opacity-70"
             title="MINI toggle reserved for later layout work"
           >
             MINI
           </button>
 
-          <div className="rounded-[8px] border-[4px] border-[#48604A] bg-[#5C7156] px-3 py-2">
+          <div className="rounded-[8px] border-[4px] border-[#2d3530] bg-[#364038] px-3 py-2">
             <div className="text-center text-[16px] font-black tracking-[0.24em] text-[#E8E8D8]">
               {stadiumName ? stadiumName.toUpperCase() : 'BALLPARK'}
             </div>
 
-            <div className="mt-2 rounded-[6px] border-[3px] border-[#48604A] bg-[#48604A] p-2">
+            <div className="mt-2 rounded-[6px] border-[3px] border-[#2d3530] bg-[#2d3530] p-2">
               <div
                 className="grid items-end gap-0.5 pb-1"
                 style={{
@@ -230,7 +230,7 @@ export function FullFenwayScoreboard({
               <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-[#E8E8D8]">
                 <div className="flex items-center gap-2">
                   <span className="text-[11px] font-black tracking-[0.16em]">AT BAT</span>
-                  <div className="min-w-[120px] bg-[#3E5340] px-2 py-1 text-[11px] font-black">
+                  <div className="min-w-[120px] bg-[#243028] px-2 py-1 text-[11px] font-black">
                     {currentBatterName || '—'}
                   </div>
                 </div>
@@ -238,7 +238,7 @@ export function FullFenwayScoreboard({
                   <span className="text-[11px] font-black tracking-[0.16em]">OUT</span>
                   <CountDots count={outs} total={3} fill={COLORS.red} border={COLORS.redBorder} />
                 </div>
-                <div className="bg-[#3E5340] px-2 py-1 text-[10px] font-black">
+                <div className="bg-[#243028] px-2 py-1 text-[10px] font-black">
                   {isTop ? 'TOP' : 'BOT'} {inning}
                 </div>
               </div>
@@ -250,7 +250,7 @@ export function FullFenwayScoreboard({
             </div>
           </div>
 
-          <div className="h-10 w-10 border-[3px] border-[#163326] bg-[#5C7156] text-center text-[22px] font-black leading-[34px] text-[#1E2C23]">
+          <div className="h-10 w-10 border-[3px] border-[#1a2420] bg-[#364038] text-center text-[22px] font-black leading-[34px] text-[#E8E8D8]">
             ≡
           </div>
         </div>

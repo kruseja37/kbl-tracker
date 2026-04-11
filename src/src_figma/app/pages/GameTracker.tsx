@@ -11864,28 +11864,28 @@ export function PlayerCardModal({
         onClick={onClose}
       >
         <div
-          className="bg-[#6B9462] border-[6px] border-[#E8E8D8] p-4 w-[340px] max-h-[80vh] flex flex-col shadow-[8px_8px_0px_0px_rgba(0,0,0,0.5)]"
+          className="bg-[#3d4a42] border-[6px] border-[#243028] p-4 w-[340px] max-h-[80vh] flex flex-col shadow-[8px_8px_0px_0px_rgba(0,0,0,0.5)]"
+          style={{ fontFamily: "'Moms Typewriter', monospace" }}
           onClick={(e) => e.stopPropagation()}
         >
           {/* Bench list header */}
           <div className="flex items-center justify-between mb-3">
             <div>
               <div
-                className="text-[8px] text-[#E8E8D8] font-bold tracking-wider"
-                style={{ textShadow: "1px 1px 0px rgba(0,0,0,0.3)" }}
+                className="text-[8px] text-[#88AA88] font-bold tracking-wider"
               >
                 SELECT REPLACEMENT FOR
               </div>
               <div
                 className="text-xs text-[#E8E8D8] font-bold"
-                style={{ textShadow: "1px 1px 0px rgba(0,0,0,0.3)" }}
+                style={{ fontFamily: "'Tox Typewriter', monospace" }}
               >
                 {player.name}
               </div>
             </div>
             <button
               onClick={() => setCardView("card")}
-              className="bg-[#E8E8D8] border-[3px] border-[#6B9462] px-2 py-1 text-[#6B9462] text-[9px] font-bold hover:bg-white"
+              className="bg-[#243028] border-[3px] border-[#4a6a4a] px-2 py-1 text-[#88AA88] text-[9px] font-bold hover:bg-[#2d3530]"
             >
               BACK
             </button>
@@ -11912,21 +11912,21 @@ export function PlayerCardModal({
                     );
                     onClose();
                   }}
-                  className="w-full flex items-center gap-2 bg-[#5A7A52] border-[3px] border-[#E8E8D8]/50 p-2
-                             hover:bg-[#6B9462] hover:border-[#E8E8D8] active:scale-[0.98] transition-all text-left"
+                  className="w-full flex items-center gap-2 bg-[#2a3530] border-[3px] border-[#4a6a4a]/50 p-2
+                             hover:bg-[#364038] hover:border-[#4a6a4a] active:scale-[0.98] transition-all text-left"
                 >
-                  <div className="bg-[#E8E8D8] text-[#3a5a3a] text-[8px] font-bold px-1.5 py-0.5 min-w-[24px] text-center">
+                  <div className="bg-[#C4A853]/30 text-[#C4A853] text-[8px] font-bold px-1.5 py-0.5 min-w-[24px] text-center">
                     {bp.pos}
                   </div>
                   <div className="flex-1">
                     <div
                       className="text-[11px] text-[#E8E8D8] font-bold"
-                      style={{ textShadow: "1px 1px 0px rgba(0,0,0,0.3)" }}
+                      style={{ fontFamily: "'Tox Typewriter', monospace" }}
                     >
                       {bp.name}
                     </div>
                   </div>
-                  <div className="text-[8px] text-[#E8E8D8]/70">{bp.hand}</div>
+                  <div className="text-[8px] text-[#88AA88]/70">{bp.hand}</div>
                 </button>
               ))
             )}
@@ -11943,22 +11943,22 @@ export function PlayerCardModal({
       onClick={onClose}
     >
       <div
-        className="bg-[#6B9462] border-[6px] border-[#E8E8D8] p-4 w-[340px] max-h-[80vh] overflow-y-auto shadow-[8px_8px_0px_0px_rgba(0,0,0,0.5)]"
+        className="bg-[#3d4a42] border-[6px] border-[#243028] p-4 w-[340px] max-h-[80vh] overflow-y-auto shadow-[8px_8px_0px_0px_rgba(0,0,0,0.5)]"
+        style={{ fontFamily: "'Moms Typewriter', monospace" }}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header — name, position, hand, grade, traits */}
-        <div className="bg-[#6B9462] border-[4px] border-[#E8E8D8] p-2 mb-3">
+        <div className="bg-[#243028] border-[4px] border-[#2d3530] p-2 mb-3">
           <div className="flex items-center justify-between">
             <div>
               <div
                 className="text-xs text-[#E8E8D8] font-bold"
-                style={{ textShadow: "1px 1px 0px rgba(0,0,0,0.3)" }}
+                style={{ fontFamily: "'Tox Typewriter', monospace" }}
               >
                 {player.name}
               </div>
               <div
-                className="text-[8px] text-[#E8E8D8]"
-                style={{ textShadow: "1px 1px 0px rgba(0,0,0,0.3)" }}
+                className="text-[8px] text-[#88AA88]"
               >
                 {position}
                 {secondaryPos ? `/${secondaryPos}` : ""} {" • "} {battingHand}/
@@ -11969,7 +11969,6 @@ export function PlayerCardModal({
               {(trait1 || trait2) && (
                 <div
                   className="text-[7px] text-[#C4A853] mt-0.5"
-                  style={{ textShadow: "1px 1px 0px rgba(0,0,0,0.3)" }}
                 >
                   {[trait1, trait2].filter(Boolean).join(" • ")}
                 </div>
@@ -11977,7 +11976,7 @@ export function PlayerCardModal({
             </div>
             <button
               onClick={onClose}
-              className="bg-[#E8E8D8] border-[3px] border-[#6B9462] px-2 py-1 text-[#6B9462] text-xs hover:bg-white"
+              className="bg-[#243028] border-[3px] border-[#4a6a4a] px-2 py-1 text-[#88AA88] text-xs hover:bg-[#2d3530]"
             >
               ✕
             </button>
@@ -11987,10 +11986,9 @@ export function PlayerCardModal({
         {/* §5.3 + §2.8: Stats — game stats shown with "THIS GAME" header */}
         {/* TODO: Wire season stats from franchise data store when available */}
         {player.type === "batter" ? (
-          <div className="bg-[#6B9462] border-[4px] border-[#E8E8D8] p-2 mb-2">
+          <div className="bg-[#2a3530] border-[4px] border-[#2d3530] p-2 mb-2">
             <div
-              className="text-[8px] text-[#E8E8D8] font-bold mb-1"
-              style={{ textShadow: "1px 1px 0px rgba(0,0,0,0.3)" }}
+              className="text-[8px] text-[#88AA88] font-bold mb-1"
             >
               THIS GAME
             </div>
@@ -12012,10 +12010,9 @@ export function PlayerCardModal({
             </div>
           </div>
         ) : (
-          <div className="bg-[#6B9462] border-[4px] border-[#E8E8D8] p-2 mb-2">
+          <div className="bg-[#2a3530] border-[4px] border-[#2d3530] p-2 mb-2">
             <div
-              className="text-[8px] text-[#E8E8D8] font-bold mb-1"
-              style={{ textShadow: "1px 1px 0px rgba(0,0,0,0.3)" }}
+              className="text-[8px] text-[#88AA88] font-bold mb-1"
             >
               THIS GAME
             </div>
@@ -12040,10 +12037,9 @@ export function PlayerCardModal({
 
         {/* §5.5: Condition — current mojo/fitness display (read-only summary) */}
         {(currentMojo !== undefined || currentFitness !== undefined) && (
-          <div className="bg-[#5A7A52] border-[4px] border-[#E8E8D8] p-2 mb-2">
+          <div className="bg-[#2a3530] border-[4px] border-[#2d3530] p-2 mb-2">
             <div
-              className="text-[8px] text-[#E8E8D8] font-bold mb-1"
-              style={{ textShadow: "1px 1px 0px rgba(0,0,0,0.3)" }}
+              className="text-[8px] text-[#88AA88] font-bold mb-1"
             >
               CONDITION
             </div>
@@ -12182,7 +12178,7 @@ export function PlayerCardModal({
                 UPDATE MOJO
               </button>
               {isEditingMojo && (
-                <div className="flex gap-1 flex-wrap bg-[#3a4a3a] border-[2px] border-[#C4A853]/50 p-2">
+                <div className="flex gap-1 flex-wrap bg-[#243028] border-[2px] border-[#C4A853]/50 p-2">
                   {MOJO_LEVELS.map((level) => (
                     <button
                       key={level}
@@ -12193,7 +12189,7 @@ export function PlayerCardModal({
                       className={`px-2 py-1 text-[8px] font-bold border-2 transition-all ${
                         level === currentMojo
                           ? "border-[#C4A853] bg-[#C4A853]/30"
-                          : "border-[#E8E8D8]/50 hover:border-[#E8E8D8]"
+                          : "border-[#4a6a4a] hover:border-[#88AA88]"
                       }`}
                       style={{ color: getMojoColor(level) }}
                     >
@@ -12222,7 +12218,7 @@ export function PlayerCardModal({
                   UPDATE FITNESS
                 </button>
                 {isEditingFitness && (
-                  <div className="flex gap-1 flex-wrap bg-[#3a4a3a] border-[2px] border-[#4CAF50]/50 p-2">
+                  <div className="flex gap-1 flex-wrap bg-[#243028] border-[2px] border-[#4CAF50]/50 p-2">
                     {(
                       [
                         "JUICED",
@@ -12242,7 +12238,7 @@ export function PlayerCardModal({
                         className={`px-2 py-1 text-[8px] font-bold border-2 transition-all ${
                           state === currentFitness
                             ? "border-[#C4A853] bg-[#C4A853]/30"
-                            : "border-[#E8E8D8]/50 hover:border-[#E8E8D8]"
+                            : "border-[#4a6a4a] hover:border-[#88AA88]"
                         }`}
                         style={{ color: FITNESS_STATES[state].color }}
                       >

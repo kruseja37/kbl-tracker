@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import type { GamePhase } from '@/hooks/useGameState';
+import chalkBgFaintImg from '../../../assets/chalk-bg-faint.png';
 
 interface GameSituationForQuickBar {
   outs: number;
@@ -141,7 +142,7 @@ export function QuickBar({
                    disabled:opacity-40 disabled:cursor-not-allowed
                    ${isProcessing ? 'scale-95 shadow-none ring-2 ring-white/60' : ''}
                    ${extraClass || 'flex-1 min-w-[40px]'}`}
-        style={{ backgroundColor: colors.bg, borderColor: colors.border }}
+        style={{ backgroundColor: colors.bg, borderColor: colors.border, backgroundImage: `url(${chalkBgFaintImg})`, backgroundRepeat: 'repeat' }}
       >
         {displayLabel}
       </button>

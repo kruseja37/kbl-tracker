@@ -696,7 +696,7 @@ function SprayGraphic({
   return (
     <svg
       viewBox="0 0 200 120"
-      className="w-full h-[220px] cursor-crosshair bg-[#2a5a2d]/60 rounded border border-[#4a6a4a] touch-manipulation"
+      className="w-full h-[220px] cursor-crosshair bg-[#2d4a35]/60 rounded border border-[#4a6a4a] touch-manipulation"
       onClick={handleSvgClick}
     >
       {/* Fan shape — outfield arc from LF foul line to RF foul line */}
@@ -808,7 +808,7 @@ function FieldingSequenceInput({
             className={`text-xs min-h-[36px] min-w-[36px] px-3 py-2 rounded border touch-manipulation
               ${sequence.includes(f.num)
                 ? 'bg-[#C4A853]/30 border-[#C4A853] text-[#C4A853]'
-                : 'bg-[#1f2937]/60 border-[#4a6a4a] text-[#88AA88] hover:bg-[#4a6a4a]/40'}`}
+                : 'bg-[#2a3530]/60 border-[#4a6a4a] text-[#88AA88] hover:bg-[#4a6a4a]/40'}`}
             onClick={() => onChange([...sequence, f.num])}
           >
             {f.num}
@@ -817,7 +817,7 @@ function FieldingSequenceInput({
       </div>
       {sequence.length > 0 && (
         <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-[10px] text-[#88AA88] font-mono">
+          <span className="text-[10px] text-[#88AA88]">
             {sequence.join('-')}
           </span>
           <button
@@ -1104,19 +1104,19 @@ export function EnrichmentPanel({
   }, [currentEnrichment?.chased, entry.eventId, entry.result, onUpdate]);
 
   return (
-    <div className="bg-[#2a3a2d] border-l-2 border-[#C4A853] flex flex-col h-full">
+    <div className="bg-[#364038] border-l-2 border-[#C4A853] flex flex-col h-full" style={{ fontFamily: "'Moms Typewriter', monospace" }}>
       {/* Header */}
-      <div className="flex items-center justify-between px-2 py-1 bg-[#1a2a1d] border-b border-[#4a6a4a]">
+      <div className="flex items-center justify-between px-2 py-1 bg-[#243028]">
         <div className="flex items-center gap-1">
-          <span className="text-[10px] text-[#88AA88] font-mono">{entry.inningLabel}</span>
-          <span className="text-[11px] text-[#E8E8D8] font-bold">{entry.batterName}</span>
+          <span className="text-[10px] text-[#88AA88]">{entry.inningLabel}</span>
+          <span className="text-[11px] text-[#E8E8D8] font-bold" style={{ fontFamily: "'Tox Typewriter', monospace" }}>{entry.batterName}</span>
           <span className="text-[11px] font-bold" style={{ color: getResultColorLocal(entry.result) }}>
             {entry.result}
           </span>
         </div>
         <button
           onClick={onClose}
-          className="text-[11px] min-h-[36px] text-[#E8E8D8] bg-[#3d5240] border border-[#4a6a4a] px-3 py-2 rounded hover:bg-[#4a6a4a] touch-manipulation"
+          className="text-[11px] min-h-[36px] text-[#E8E8D8] bg-[#3d4a42] border border-[#4a6a4a] px-3 py-2 rounded hover:bg-[#4a6a4a] touch-manipulation"
         >
           {closeLabel}
         </button>
@@ -1146,7 +1146,7 @@ export function EnrichmentPanel({
                   className={`text-xs min-h-[36px] px-3 py-2 rounded border transition-colors touch-manipulation
                     ${currentContactType === ct.value
                       ? 'bg-[#C4A853]/30 border-[#C4A853] text-[#C4A853]'
-                      : 'bg-[#1f2937]/60 border-[#4a6a4a] text-[#88AA88] hover:bg-[#4a6a4a]/40'}`}
+                      : 'bg-[#2a3530]/60 border-[#4a6a4a] text-[#88AA88] hover:bg-[#4a6a4a]/40'}`}
                   onClick={() => handleContactTypeChange(ct.value)}
                 >
                   {ct.label}
@@ -1168,7 +1168,7 @@ export function EnrichmentPanel({
                       className={`text-xs min-h-[36px] px-3 py-2 rounded border transition-colors touch-manipulation
                         ${selectedHrFieldingPlayType === option.value
                           ? 'bg-[#C4A853]/30 border-[#C4A853] text-[#C4A853]'
-                          : 'bg-[#1f2937]/60 border-[#4a6a4a] text-[#88AA88] hover:bg-[#4a6a4a]/40'}`}
+                          : 'bg-[#2a3530]/60 border-[#4a6a4a] text-[#88AA88] hover:bg-[#4a6a4a]/40'}`}
                       onClick={() => handleHrFieldingPlayTypeChange(option.value as Extract<FieldingPlayTypeValue, 'failed_robbery'>)}
                     >
                       {option.label}
@@ -1184,7 +1184,7 @@ export function EnrichmentPanel({
                         className={`text-xs min-h-[36px] px-3 py-2 rounded border transition-colors touch-manipulation
                           ${attemptType === at.value
                             ? 'bg-[#C4A853]/30 border-[#C4A853] text-[#C4A853]'
-                            : 'bg-[#1f2937]/60 border-[#4a6a4a] text-[#88AA88] hover:bg-[#4a6a4a]/40'}`}
+                            : 'bg-[#2a3530]/60 border-[#4a6a4a] text-[#88AA88] hover:bg-[#4a6a4a]/40'}`}
                         onClick={() => handleAttemptTypeChange(at.value)}
                       >
                         {at.label}
@@ -1199,7 +1199,7 @@ export function EnrichmentPanel({
                           className={`text-xs min-h-[36px] px-3 py-2 rounded border transition-colors flex-1 touch-manipulation
                             ${attemptOutcome === ao.value
                               ? 'bg-[#C4A853]/30 border-[#C4A853] text-[#C4A853]'
-                              : 'bg-[#1f2937]/60 border-[#4a6a4a] text-[#88AA88] hover:bg-[#4a6a4a]/40'}`}
+                              : 'bg-[#2a3530]/60 border-[#4a6a4a] text-[#88AA88] hover:bg-[#4a6a4a]/40'}`}
                           onClick={() => handleAttemptOutcomeChange(ao.value)}
                         >
                           {ao.label}
@@ -1220,7 +1220,7 @@ export function EnrichmentPanel({
                 className={`text-xs min-h-[36px] px-3 py-2 rounded border transition-colors flex-1 touch-manipulation
                   ${isSavedBasesEnabled
                     ? 'bg-[#C4A853]/30 border-[#C4A853] text-[#C4A853]'
-                    : 'bg-[#1f2937]/60 border-[#4a6a4a] text-[#88AA88] hover:bg-[#4a6a4a]/40'}`}
+                    : 'bg-[#2a3530]/60 border-[#4a6a4a] text-[#88AA88] hover:bg-[#4a6a4a]/40'}`}
                 onClick={handleSavedBasesToggle}
               >
                 Saved Extra Bases?
@@ -1234,7 +1234,7 @@ export function EnrichmentPanel({
                     className={`text-xs min-h-[36px] px-3 py-2 rounded border transition-colors flex-1 touch-manipulation
                       ${basesSaved === option
                         ? 'bg-[#C4A853]/30 border-[#C4A853] text-[#C4A853]'
-                        : 'bg-[#1f2937]/60 border-[#4a6a4a] text-[#88AA88] hover:bg-[#4a6a4a]/40'}`}
+                        : 'bg-[#2a3530]/60 border-[#4a6a4a] text-[#88AA88] hover:bg-[#4a6a4a]/40'}`}
                     onClick={() => handleBasesSavedChange(option as 1 | 2)}
                   >
                     {option === 1 ? '1 base' : '2 bases'}
@@ -1255,7 +1255,7 @@ export function EnrichmentPanel({
                   className={`text-xs min-h-[36px] px-3 py-2 rounded border transition-colors touch-manipulation
                     ${playMechanic === pm.value
                       ? 'bg-[#C4A853]/30 border-[#C4A853] text-[#C4A853]'
-                      : 'bg-[#1f2937]/60 border-[#4a6a4a] text-[#88AA88] hover:bg-[#4a6a4a]/40'}`}
+                      : 'bg-[#2a3530]/60 border-[#4a6a4a] text-[#88AA88] hover:bg-[#4a6a4a]/40'}`}
                   onClick={() => handlePlayMechanicChange(pm.value)}
                 >
                   {pm.label}
@@ -1271,7 +1271,7 @@ export function EnrichmentPanel({
               className={`text-xs min-h-[36px] px-3 py-2 rounded border transition-colors touch-manipulation
                 ${currentEnrichment?.batterOutAdvancing
                   ? 'bg-[#f87171]/20 border-[#f87171] text-[#fca5a5]'
-                  : 'bg-[#1f2937]/60 border-[#4a6a4a] text-[#88AA88] hover:bg-[#4a6a4a]/40'}`}
+                  : 'bg-[#2a3530]/60 border-[#4a6a4a] text-[#88AA88] hover:bg-[#4a6a4a]/40'}`}
               onClick={() => onUpdate('batterOutAdvancing', !currentEnrichment?.batterOutAdvancing)}
             >
               Out Advancing
@@ -1293,7 +1293,7 @@ export function EnrichmentPanel({
                 id="primary-fielder-select"
                 aria-label="Primary Fielder"
                 value={primaryFielderNumber ? String(primaryFielderNumber) : ''}
-                className="w-full min-h-[40px] bg-[#1f2937] border border-[#4a6a4a] text-[#E8E8D8] text-sm px-3 py-2 rounded"
+                className="w-full min-h-[40px] bg-[#2a3530] border border-[#4a6a4a] text-[#E8E8D8] text-sm px-3 py-2 rounded"
                 onChange={(e) => {
                   const nextValue = Number(e.target.value);
                   if (nextValue > 0) {
@@ -1314,20 +1314,20 @@ export function EnrichmentPanel({
               onChange={handleFieldingSeqChange}
             />
             {(putoutLabel || assistLabel || errorLabel) && (
-              <div className="mt-2 bg-[#1f2937]/60 border border-[#4a6a4a] rounded px-2 py-2 space-y-1">
+              <div className="mt-2 bg-[#2a3530]/60 border border-[#4a6a4a] rounded px-2 py-2 space-y-1">
                 {putoutLabel && (
                   <div className="text-[10px] text-[#E8E8D8]">
-                    Putouts: <span className="font-mono text-[#C4A853]">{putoutLabel}</span>
+                    Putouts: <span className="text-[#C4A853]">{putoutLabel}</span>
                   </div>
                 )}
                 {assistLabel && (
                   <div className="text-[10px] text-[#E8E8D8]">
-                    Assists: <span className="font-mono text-[#C4A853]">{assistLabel}</span>
+                    Assists: <span className="text-[#C4A853]">{assistLabel}</span>
                   </div>
                 )}
                 {errorLabel && (
                   <div className="text-[10px] text-[#E8E8D8]">
-                    Errors: <span className="font-mono text-[#f59e0b]">{errorLabel}</span>
+                    Errors: <span className="text-[#f59e0b]">{errorLabel}</span>
                   </div>
                 )}
               </div>
@@ -1344,7 +1344,7 @@ export function EnrichmentPanel({
             max={600}
             defaultValue={currentEnrichment?.hrDistance || ''}
             placeholder="350"
-            className="w-full min-h-[40px] bg-[#1f2937] border border-[#4a6a4a] text-[#E8E8D8] text-sm px-3 py-2 rounded"
+            className="w-full min-h-[40px] bg-[#2a3530] border border-[#4a6a4a] text-[#E8E8D8] text-sm px-3 py-2 rounded"
             onChange={(e) => {
               const val = parseInt(e.target.value);
               if (val >= 200 && val <= 600) onUpdate('hrDistance', val);
@@ -1362,7 +1362,7 @@ export function EnrichmentPanel({
                 className={`text-xs min-h-[36px] px-3 py-2 rounded border transition-colors touch-manipulation
                   ${currentEnrichment?.pitchType === pt.abbr
                     ? 'bg-[#C4A853]/30 border-[#C4A853] text-[#C4A853]'
-                    : 'bg-[#1f2937]/60 border-[#4a6a4a] text-[#88AA88] hover:bg-[#4a6a4a]/40'}`}
+                    : 'bg-[#2a3530]/60 border-[#4a6a4a] text-[#88AA88] hover:bg-[#4a6a4a]/40'}`}
                 onClick={() => onUpdate('pitchType', pt.abbr)}
                 title={pt.label}
               >
@@ -1381,7 +1381,7 @@ export function EnrichmentPanel({
                 className={`text-xs min-h-[36px] px-3 py-2 rounded border transition-colors touch-manipulation ${
                   currentEnrichment?.pitchesInAtBat === 4
                     ? 'bg-[#C4A853]/30 border-[#C4A853] text-[#C4A853]'
-                    : 'bg-[#1f2937]/60 border-[#4a6a4a] text-[#88AA88] hover:bg-[#4a6a4a]/40'
+                    : 'bg-[#2a3530]/60 border-[#4a6a4a] text-[#88AA88] hover:bg-[#4a6a4a]/40'
                 }`}
                 onClick={() => onUpdate('pitchesInAtBat', 4)}
               >
@@ -1395,7 +1395,7 @@ export function EnrichmentPanel({
             max={20}
             defaultValue={currentEnrichment?.pitchesInAtBat || ''}
             placeholder="1-20"
-            className="w-full min-h-[40px] bg-[#1f2937] border border-[#4a6a4a] text-[#E8E8D8] text-sm px-3 py-2 rounded"
+            className="w-full min-h-[40px] bg-[#2a3530] border border-[#4a6a4a] text-[#E8E8D8] text-sm px-3 py-2 rounded"
             onChange={(e) => {
               const val = parseInt(e.target.value);
               if (val >= 1 && val <= 20) onUpdate('pitchesInAtBat', val);
@@ -1413,7 +1413,7 @@ export function EnrichmentPanel({
               className={`text-xs min-h-[36px] px-3 py-2 rounded border transition-colors touch-manipulation
                 ${currentEnrichment?.chased
                   ? 'bg-[#f59e0b]/20 border-[#f59e0b] text-[#fbbf24]'
-                  : 'bg-[#1f2937]/60 border-[#4a6a4a] text-[#6b7280] hover:bg-[#4a6a4a]/40'}`}
+                  : 'bg-[#2a3530]/60 border-[#4a6a4a] text-[#6b7280] hover:bg-[#4a6a4a]/40'}`}
               onClick={handleChaseToggle}
             >
               {currentEnrichment?.chased ? 'CHASE' : 'chase'}
@@ -1433,7 +1433,7 @@ export function EnrichmentPanel({
                     className={`text-xs min-h-[36px] px-3 py-2 rounded border transition-colors touch-manipulation
                       ${isActive
                         ? 'bg-[#6c3483]/40 border-[#af7ac5] text-[#f5e9ff]'
-                        : 'bg-[#1f2937]/60 border-[#4a6a4a] text-[#88AA88] hover:bg-[#4a6a4a]/40'}`}
+                        : 'bg-[#2a3530]/60 border-[#4a6a4a] text-[#88AA88] hover:bg-[#4a6a4a]/40'}`}
                     disabled={isActive || !onModifierRecord}
                     onClick={() => onModifierRecord?.(modifier.value)}
                   >
@@ -1453,7 +1453,7 @@ export function EnrichmentPanel({
                 className={`text-[11px] min-h-[36px] px-3 py-2 rounded border flex-1 touch-manipulation
                   ${entry.result === 'K'
                     ? 'bg-[#f87171]/20 border-[#f87171] text-[#f87171]'
-                    : 'bg-[#1f2937]/60 border-[#4a6a4a] text-[#88AA88] hover:bg-[#4a6a4a]/40'}`}
+                    : 'bg-[#2a3530]/60 border-[#4a6a4a] text-[#88AA88] hover:bg-[#4a6a4a]/40'}`}
                 onClick={() => {/* K toggle handled by parent */}}
               >
                 K (Swinging)
@@ -1462,7 +1462,7 @@ export function EnrichmentPanel({
                 className={`text-[11px] min-h-[36px] px-3 py-2 rounded border flex-1 touch-manipulation
                   ${entry.result === 'Kc'
                     ? 'bg-[#f87171]/20 border-[#f87171] text-[#f87171]'
-                    : 'bg-[#1f2937]/60 border-[#4a6a4a] text-[#88AA88] hover:bg-[#4a6a4a]/40'}`}
+                    : 'bg-[#2a3530]/60 border-[#4a6a4a] text-[#88AA88] hover:bg-[#4a6a4a]/40'}`}
                 onClick={() => {/* K toggle handled by parent */}}
               >
                 Kc (Called)
@@ -1650,21 +1650,21 @@ export function RunnerEnrichmentPanel({
   }, [onUpdate, subEntry.id]);
 
   return (
-    <div className="bg-[#2a3a2d] border-l-2 border-[#C4A853] flex flex-col h-full">
+    <div className="bg-[#364038] border-l-2 border-[#C4A853] flex flex-col h-full" style={{ fontFamily: "'Moms Typewriter', monospace" }}>
       {/* Header */}
-      <div className="flex items-center justify-between px-2 py-1 bg-[#1a2a1d] border-b border-[#4a6a4a]">
+      <div className="flex items-center justify-between px-2 py-1 bg-[#243028]">
         <div className="flex items-center gap-1">
           <span className="text-[10px] text-[#6b7280]">└</span>
-          <span className={`text-[11px] font-bold ${isScored ? 'text-[#34d399]' : isOut ? 'text-[#f87171]' : isInningEnd ? 'text-[#fbbf24]' : 'text-[#E8E8D8]'}`}>
+          <span className={`text-[11px] font-bold ${isScored ? 'text-[#34d399]' : isOut ? 'text-[#f87171]' : isInningEnd ? 'text-[#fbbf24]' : 'text-[#E8E8D8]'}`} style={{ fontFamily: "'Tox Typewriter', monospace" }}>
             {subjectLabel}
           </span>
-          <span className="text-[10px] text-[#88AA88] font-mono">
+          <span className="text-[10px] text-[#88AA88]">
             {BASE_DISPLAY[subEntry.fromBase]}→{BASE_DISPLAY[subEntry.toBase]}
           </span>
         </div>
         <button
           onClick={onClose}
-          className="text-[11px] min-h-[36px] text-[#E8E8D8] bg-[#3d5240] border border-[#4a6a4a] px-3 py-2 rounded hover:bg-[#4a6a4a] touch-manipulation"
+          className="text-[11px] min-h-[36px] text-[#E8E8D8] bg-[#3d4a42] border border-[#4a6a4a] px-3 py-2 rounded hover:bg-[#4a6a4a] touch-manipulation"
         >
           Done
         </button>
@@ -1680,7 +1680,7 @@ export function RunnerEnrichmentPanel({
                 className={`text-xs min-h-[36px] px-3 py-2 rounded border transition-colors touch-manipulation
                   ${subEntry.toBase === destination
                     ? 'bg-[#C4A853]/30 border-[#C4A853] text-[#C4A853]'
-                    : 'bg-[#1f2937]/60 border-[#4a6a4a] text-[#88AA88] hover:bg-[#4a6a4a]/40'}`}
+                    : 'bg-[#2a3530]/60 border-[#4a6a4a] text-[#88AA88] hover:bg-[#4a6a4a]/40'}`}
                 onClick={() => onUpdate(subEntry.id, 'toBase', destination)}
               >
                 {getDestinationLabel(destination)}
@@ -1695,7 +1695,7 @@ export function RunnerEnrichmentPanel({
             className={`text-[11px] min-h-[36px] px-3 py-2 rounded border w-full transition-colors touch-manipulation
               ${subEntry.isTootblan
                 ? 'bg-[#f87171]/20 border-[#f87171] text-[#f87171]'
-                : 'bg-[#1f2937]/60 border-[#4a6a4a] text-[#88AA88] hover:bg-[#4a6a4a]/40'}
+                : 'bg-[#2a3530]/60 border-[#4a6a4a] text-[#88AA88] hover:bg-[#4a6a4a]/40'}
               ${isScored || isInningEnd ? ' opacity-40 cursor-not-allowed' : ''}`}
             onClick={() => onUpdate(subEntry.id, 'isTootblan', !subEntry.isTootblan)}
             disabled={isScored || isInningEnd}
@@ -1710,7 +1710,7 @@ export function RunnerEnrichmentPanel({
             className={`text-[11px] min-h-[36px] px-3 py-2 rounded border w-full transition-colors touch-manipulation
               ${subEntry.isOutAdvancing
                 ? 'bg-[#f59e0b]/20 border-[#f59e0b] text-[#f59e0b]'
-                : 'bg-[#1f2937]/60 border-[#4a6a4a] text-[#88AA88] hover:bg-[#4a6a4a]/40'}
+                : 'bg-[#2a3530]/60 border-[#4a6a4a] text-[#88AA88] hover:bg-[#4a6a4a]/40'}
               ${isScored || isInningEnd ? ' opacity-40 cursor-not-allowed' : ''}`}
             onClick={() => onUpdate(subEntry.id, 'isOutAdvancing', !subEntry.isOutAdvancing)}
             disabled={isScored || isInningEnd}
@@ -1730,7 +1730,7 @@ export function RunnerEnrichmentPanel({
                     className={`flex min-h-[36px] cursor-pointer items-center gap-2 rounded border px-3 py-2 text-[11px] transition-colors touch-manipulation
                       ${isSelected
                         ? 'bg-[#C4A853]/30 border-[#C4A853] text-[#E8E8D8]'
-                        : 'bg-[#1f2937]/60 border-[#4a6a4a] text-[#88AA88] hover:bg-[#4a6a4a]/40'}`}
+                        : 'bg-[#2a3530]/60 border-[#4a6a4a] text-[#88AA88] hover:bg-[#4a6a4a]/40'}`}
                   >
                     <input
                       type="radio"
@@ -1762,7 +1762,7 @@ export function RunnerEnrichmentPanel({
                         className={`text-[11px] min-h-[36px] rounded border px-2 py-2 transition-colors touch-manipulation
                           ${isSelected
                             ? 'bg-[#f87171]/20 border-[#f87171] text-[#f87171]'
-                            : 'bg-[#1f2937]/60 border-[#4a6a4a] text-[#88AA88] hover:bg-[#4a6a4a]/40'}`}
+                            : 'bg-[#2a3530]/60 border-[#4a6a4a] text-[#88AA88] hover:bg-[#4a6a4a]/40'}`}
                         onClick={() => onUpdate(subEntry.id, 'errorChargedTo', option.value)}
                       >
                         {option.label}
@@ -1781,7 +1781,7 @@ export function RunnerEnrichmentPanel({
               className={`text-[11px] min-h-[36px] px-3 py-2 rounded border w-full transition-colors touch-manipulation
                 ${isHeldByOutfielder
                   ? 'bg-[#C4A853]/30 border-[#C4A853] text-[#C4A853]'
-                  : 'bg-[#1f2937]/60 border-[#4a6a4a] text-[#88AA88] hover:bg-[#4a6a4a]/40'}`}
+                  : 'bg-[#2a3530]/60 border-[#4a6a4a] text-[#88AA88] hover:bg-[#4a6a4a]/40'}`}
               onClick={() => {
                 void handleHoldToggle();
               }}
@@ -1796,7 +1796,7 @@ export function RunnerEnrichmentPanel({
                     className={`text-xs min-h-[36px] px-3 py-2 rounded border flex-1 transition-colors touch-manipulation
                       ${(subEntry.holdingFielder || subEntry.fielderPosition) === option.value
                         ? 'bg-[#C4A853]/30 border-[#C4A853] text-[#C4A853]'
-                        : 'bg-[#1f2937]/60 border-[#4a6a4a] text-[#88AA88] hover:bg-[#4a6a4a]/40'}`}
+                        : 'bg-[#2a3530]/60 border-[#4a6a4a] text-[#88AA88] hover:bg-[#4a6a4a]/40'}`}
                     onClick={() => {
                       void handleHoldFielderSelect(option.value);
                     }}
@@ -1819,7 +1819,7 @@ export function RunnerEnrichmentPanel({
                 className={`text-xs min-h-[36px] px-3 py-2 rounded border transition-colors touch-manipulation
                   ${subEntry.playMechanic === pm.value
                     ? 'bg-[#C4A853]/30 border-[#C4A853] text-[#C4A853]'
-                    : 'bg-[#1f2937]/60 border-[#4a6a4a] text-[#88AA88] hover:bg-[#4a6a4a]/40'}`}
+                    : 'bg-[#2a3530]/60 border-[#4a6a4a] text-[#88AA88] hover:bg-[#4a6a4a]/40'}`}
                 onClick={() => onUpdate(subEntry.id, 'playMechanic', pm.value)}
               >
                 {pm.label}
