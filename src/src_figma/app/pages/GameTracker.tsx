@@ -11864,7 +11864,7 @@ export function PlayerCardModal({
         onClick={onClose}
       >
         <div
-          className="bg-[#3d4a42] border-[6px] border-[#243028] p-4 w-[340px] max-h-[80vh] flex flex-col shadow-[8px_8px_0px_0px_rgba(0,0,0,0.5)]"
+          className="bg-[#3d4a42] border-[6px] border-[#243028] p-4 w-[480px] max-w-[95vw] flex flex-col shadow-[8px_8px_0px_0px_rgba(0,0,0,0.5)]"
           style={{ fontFamily: "'Moms Typewriter', monospace" }}
           onClick={(e) => e.stopPropagation()}
         >
@@ -11943,7 +11943,7 @@ export function PlayerCardModal({
       onClick={onClose}
     >
       <div
-        className="bg-[#3d4a42] border-[6px] border-[#243028] p-4 w-[340px] max-h-[80vh] overflow-y-auto shadow-[8px_8px_0px_0px_rgba(0,0,0,0.5)]"
+        className="bg-[#3d4a42] border-[6px] border-[#243028] p-4 w-[480px] max-w-[95vw] shadow-[8px_8px_0px_0px_rgba(0,0,0,0.5)]"
         style={{ fontFamily: "'Moms Typewriter', monospace" }}
         onClick={(e) => e.stopPropagation()}
       >
