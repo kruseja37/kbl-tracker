@@ -231,7 +231,7 @@ Build the reusable 5-tier Fame visual used in every downstream surface. One SVG-
 ## A3 — Effective-value utilities  `[S]`
 
 **Objective:**
-Implement the resolution utilities that downstream surfaces use to read effective Fame, relationships, and team affinities given a player + optional instance context.
+Implement the resolution utility that downstream surfaces use to read effective Fame given a player + optional instance context.
 
 **Context files to read first:**
 - `spec-docs/BEAT_REPORTER_DATA_MODEL_SPEC.md` §1.5 (resolution contract)
@@ -239,13 +239,13 @@ Implement the resolution utilities that downstream surfaces use to read effectiv
 - Output of A1
 
 **Acceptance criteria:**
-- [ ] `getEffectiveFame(player, instance?)` — returns `FameLevel`, falls back to base (default 3)
-- [ ] `getEffectiveRelationships(player, instance?)` — returns array, falls back to base (empty default)
-- [ ] `getEffectiveTeamAffinities(player, instance?)` — same pattern
-- [ ] All three live in a single utility module (`src/utils/effectiveValues.ts` or similar — Codex picks location following existing conventions)
+- [ ] `getEffectiveFame(player, instance?)` — returns `FameTier`, falls back to `baseFameTier` (default 3)
+- [ ] Lives in a single utility module (`src/utils/effectiveValues.ts` or similar — Codex picks location following existing conventions)
 - [ ] Comprehensive unit tests: base-only, override-present, override-absent, null-safe, default fallbacks
-- [ ] Tests also verify the override **replaces** rather than merges (consistent with ratings-override pattern)
+- [ ] Tests verify the override **replaces** rather than merges (consistent with ratings-override pattern)
 - [ ] Build passes, all tests pass
+
+**Deferred to v2 (per Guardrail #8):** `getEffectiveRelationships()` and `getEffectiveTeamAffinities()` — editorial relationships and team affinities are v2-scoped, so their resolution helpers ship with them.
 
 **Proof required:**
 - Build + test output
@@ -256,7 +256,7 @@ Implement the resolution utilities that downstream surfaces use to read effectiv
 - Any consumer code calling these utilities (later prompts wire them in)
 - Filtering/sorting logic (belongs in `buildReporterContext`, prompt E1)
 
-**Commit prefix:** `feat(utils): add effective-value resolution for fame, relationships, affinities`
+**Commit prefix:** `feat(utils): add effective-fame resolution utility`
 
 ---
 
