@@ -1,6 +1,62 @@
 # KBL TRACKER — SESSION LOG
 # Previous sessions archived at: spec-docs/archive/SESSION_LOG_through_2026-02-11.md
 ---
+## Session: 2026-04-13 (Su) — GameTracker Visual Theme + Beat Reporter Voice Spec
+
+### What Was Accomplished
+- ✅ GameTracker dark chalkboard visual theme applied to all panels
+- ✅ Mom's Typewriter / Tox Typewriter fonts applied consistently across GameTracker
+- ✅ Play log muted (colors + text) for visual hierarchy below lineup cards
+- ✅ Team-colored lineup headers with chalk texture overlay (using team primary color at 25% opacity)
+- ✅ Chalky golden divider between lineup columns (rgba(242,192,65,0.08))
+- ✅ Current batter chalk highlight + due-up batter ⚾ indicator
+- ✅ Dark theme extended to EnrichmentPanel, FullFenwayScoreboard, PlayerCardModal, QuickBar
+- ✅ QuickBar buttons given chalk texture backgrounds
+- ✅ Player card modals widened 340px → 480px (no scroll needed for data entry)
+- ✅ Vertical borders moved below headers (no bleeding through header row)
+- ✅ Horizontal brown divider removed between ScoreBug and headers
+- ✅ Beat Reporter Voice Spec written — 15 sections, 730 lines (spec-docs/BEAT_REPORTER_VOICE_SPEC.md)
+- ✅ Old duplicate spec file deleted (the one with # in filename)
+
+### Decisions Made
+- Team header colors use 25% opacity over dark base with chalk texture (Option 4 from 4 presented)
+- Play log stays darker (#364038) than lineup cards (#3d4a42) for recessed/elevated effect
+- NewsBoard left border creates shadow effect to match play log's right border
+- Beat Reporter: 80/20 mood drift (not 50/50) — reporter stays true to form most of the time
+- Beat Reporter: Rivalries established in League Builder (tied to team), evolve game-by-game
+- Beat Reporter: Hybrid LLM — Grok for in-game play-by-play, Claude Sonnet for post-game columns
+- Beat Reporter: Typewriter effect ~100-150ms/word with burst sound per word
+
+### NFL Results
+- Not an implementation day (visual styling + spec writing) — NFL not applicable
+
+### Files Modified
+- `src/src_figma/app/components/PlayLogPanel.tsx` — muted colors, Mom's Typewriter font, bg #364038
+- `src/src_figma/app/components/BattingLineupColumn.tsx` — team-colored header, chalk texture, bg #3d4a42
+- `src/src_figma/app/components/DefensiveLineupColumn.tsx` — team-colored header, chalk texture, bg #3d4a42
+- `src/src_figma/app/components/NewsBoard.tsx` — restructured header/content, shadow border, bg #364038
+- `src/src_figma/app/components/ScoreBug.tsx` — bg #3d4a42, darkened base/outs indicators
+- `src/src_figma/app/components/EnrichmentPanel.tsx` — dark theme, fonts, button colors
+- `src/src_figma/app/components/FullFenwayScoreboard.tsx` — all COLORS constants darkened
+- `src/src_figma/app/components/QuickBar.tsx` — chalk texture on outcome buttons
+- `src/src_figma/app/pages/GameTracker.tsx` — PlayerCardModal dark theme + widened to 480px
+- `spec-docs/BEAT_REPORTER_VOICE_SPEC.md` — NEW (complete 15-section spec)
+
+### Pending / Next Steps
+- [ ] Full game playtest on iPad Safari landscape
+- [ ] Beat Reporter backstory session — define DNA/identity/rivalries for fictional franchises
+- [ ] Beat Reporter prompt engineering — develop system prompts for each voice style
+- [ ] Grok API setup and voice quality evaluation
+- [ ] Sound design — source retro typewriter sound effects
+- [ ] Reporter name bank — build era-appropriate name lists
+- [ ] Resume Elimination Mode Steps 6-14
+
+### Key Context for Next Session
+- All visual theme changes are committed and pushed to main (commits up through 6fd100a)
+- Beat Reporter spec is approved by user — ready for Phase 1 implementation when desired
+- Supabase sync is complete (from prior session) — needed for Beat Reporter data model
+
+---
 ## Session: 2026-04-04 (F) — Supabase Sync: Clear Exhibition Data Fix + E2E Testing
 
 ### What Was Done

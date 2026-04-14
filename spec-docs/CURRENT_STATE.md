@@ -1,15 +1,37 @@
 # CURRENT_STATE.md
 
-**Last Updated:** 2026-03-16
-**Phase:** GameTracker UX redesign COMPLETE — pre-integration testing
+**Last Updated:** 2026-04-13
+**Phase:** GameTracker visual theme COMPLETE + Beat Reporter spec COMPLETE — pre-implementation
 
 ---
 
 ## Current Phase
 
-The GameTracker UX redesign is **COMPLETE**. All 58 decisions from GAMETRACKER_UX_SPEC.md have been addressed: 48 implemented, 10 verified as already existing or N/A.
+The GameTracker UX redesign is **COMPLETE** (2026-03-16). Visual theme overhaul is **COMPLETE** (2026-04-13). Beat Reporter Voice spec is **COMPLETE** (2026-04-13).
 
-The immediate next step is full integration testing: play a complete game start to finish on iPad Safari landscape using the new UX.
+### Recent Work (2026-04-07 through 2026-04-13)
+
+**GameTracker Visual Theme Overhaul:**
+- Dark chalkboard aesthetic applied across all panels
+- Mom's Typewriter font for UI, Tox Typewriter for player names
+- Team-colored lineup headers with chalk texture overlay
+- Muted play log colors for visual hierarchy (lineup cards elevated over flanking panels)
+- Chalky golden divider between lineup columns
+- Faint chalk highlight on current batter row
+- Small ⚾ indicator on due-up defensive batter
+- Dark theme extended to: EnrichmentPanel, FullFenwayScoreboard, PlayerCardModal, QuickBar
+- Player card modals widened to 480px (no scroll needed)
+
+**Beat Reporter Voice Spec (spec-docs/BEAT_REPORTER_VOICE_SPEC.md):**
+- 15-section comprehensive spec for AI beat reporter commentary system
+- 3 dimensions: Personality (9) × Voice Style (6) × Era Flavor (5) = 270 combos
+- Mood drift mechanics (80/20 true-to-form probability)
+- WPA-based notability scoring for triggering commentary
+- Hybrid LLM engine: Grok (client-side, in-game) + Claude Sonnet (server-side, post-game)
+- Dual post-game newspaper columns (beat reporter + opposing beat reporter)
+- Almanac/story archive system
+- Rivalry system (established in League Builder, evolves game-by-game)
+- Supabase data model defined
 
 Current priorities:
 
@@ -18,6 +40,7 @@ Current priorities:
 3. Resume Elimination Mode Steps 6-14 (paused during UX redesign)
 4. Wire season stats to player card (currently shows game stats only)
 5. Wire fWAR/pWAR to lineup columns (currently "—" placeholders)
+6. Beat Reporter Phase 1 implementation (when ready)
 
 ---
 
@@ -118,3 +141,4 @@ Current priorities:
 3. **Resume Elimination Mode** Steps 6-14
 4. **Wire season stats** to player card
 5. **Wire WAR pipeline** to lineup columns
+6. **Beat Reporter Phase 1** — Backstory session for fictional franchises, prompt engineering, Grok API setup
