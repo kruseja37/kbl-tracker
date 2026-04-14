@@ -31,6 +31,7 @@ import {
   type GameFameTracker,
   type FameEventDisplay,
   type PlayerFameSummary,
+  type FameGameMode,
 } from '../engines/fameIntegration';
 
 // ============================================
@@ -39,6 +40,7 @@ import {
 
 export interface UseFameTrackingOptions {
   gameId: string;
+  gameMode?: FameGameMode;
   isPlayoffs?: boolean;
   playoffRound?: 'wild_card' | 'division_series' | 'championship_series' | 'world_series';
   isEliminationGame?: boolean;
@@ -58,7 +60,14 @@ export interface FameTrackingState {
 // ============================================
 
 export function useFameTracking(options: UseFameTrackingOptions) {
-  const { gameId, isPlayoffs = false, playoffRound, isEliminationGame, isClinchGame } = options;
+  const {
+    gameId,
+    gameMode = 'exhibition',
+    isPlayoffs = false,
+    playoffRound,
+    isEliminationGame,
+    isClinchGame,
+  } = options;
 
   const [state, setState] = useState<FameTrackingState>({
     tracker: createGameFameTracker(gameId),
@@ -98,10 +107,16 @@ export function useFameTracking(options: UseFameTrackingOptions) {
         inning,
         halfInning,
         leverageIndex,
+        gameMode,
         playoffContext
       );
 
-      const display = formatFameEvent(eventType, leverageIndex, playoffContext);
+      const display = formatFameEvent(
+        eventType,
+        leverageIndex,
+        gameMode,
+        playoffContext
+      );
 
       return {
         ...prev,
@@ -110,7 +125,7 @@ export function useFameTracking(options: UseFameTrackingOptions) {
         showEventPopup: true,
       };
     });
-  }, [playoffContext]);
+  }, [gameMode, playoffContext]);
 
   /**
    * Dismiss the event popup

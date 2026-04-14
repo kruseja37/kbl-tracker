@@ -787,6 +787,7 @@ export function GameTracker() {
     navigationState?.competitionType ||
     navigationState?.gameMode ||
     "exhibition";
+  const gameMode = navigationState?.gameMode || "exhibition";
   const competitionId =
     navigationState?.competitionId ||
     (competitionType === "elimination"
@@ -1333,6 +1334,7 @@ export function GameTracker() {
   // Fame tracking
   const fameTrackingHook = useFameTracking({
     gameId: gameId || "demo-game",
+    gameMode,
     isPlayoffs: isPlayoffGame,
   });
 
@@ -1353,7 +1355,6 @@ export function GameTracker() {
 
   // MAJ-02: Fan morale tracking — one hook per team for dual-team franchise support
   // In exhibition mode these are instantiated but never called (no morale in exhibition)
-  const gameMode = navigationState?.gameMode || "exhibition";
   const homeFanMorale = useFanMorale(homeTeamId);
   const awayFanMorale = useFanMorale(awayTeamId);
 

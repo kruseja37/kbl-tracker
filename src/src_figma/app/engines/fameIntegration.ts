@@ -62,6 +62,19 @@ import {
 // FIGMA-SPECIFIC TYPES
 // ============================================
 
+export type FameGameMode = 'exhibition' | 'franchise' | 'playoff' | 'elimination';
+
+export interface FamePlayoffContext {
+  isPlayoffs: boolean;
+  round?: 'wild_card' | 'division_series' | 'championship_series' | 'world_series';
+  isEliminationGame?: boolean;
+  isClinchGame?: boolean;
+}
+
+// Elimination mode uses the wild-card baseline (1.25x) without stacking the
+// engine's extra elimination-game bonus, per the A4 implementation prompt.
+export const ELIMINATION_MODE_ROUND: NonNullable<FamePlayoffContext['round']> = 'wild_card';
+
 /**
  * UI-friendly Fame event display
  */
@@ -190,14 +203,14 @@ export function getFameIcon(eventType: FameEventType): string {
 export function formatFameEvent(
   eventType: FameEventType,
   leverageIndex: number = 1.0,
-  playoffContext?: {
-    isPlayoffs: boolean;
-    round?: 'wild_card' | 'division_series' | 'championship_series' | 'world_series';
-    isEliminationGame?: boolean;
-    isClinchGame?: boolean;
-  }
+  gameMode: FameGameMode = 'exhibition',
+  playoffContext?: FamePlayoffContext
 ): FameEventDisplay {
-  const result = calculateFame(eventType, leverageIndex, playoffContext);
+  const result = calculateFame(
+    eventType,
+    leverageIndex,
+    resolveFamePlayoffContext(gameMode, playoffContext)
+  );
 
   return {
     eventType,
@@ -292,9 +305,14 @@ export function addFameEvent(
   inning: number,
   halfInning: 'TOP' | 'BOTTOM',
   leverageIndex: number = 1.0,
-  playoffContext?: Parameters<typeof calculateFame>[2]
+  gameMode: FameGameMode = 'exhibition',
+  playoffContext?: FamePlayoffContext
 ): GameFameTracker {
-  const result = calculateFame(eventType, leverageIndex, playoffContext);
+  const result = calculateFame(
+    eventType,
+    leverageIndex,
+    resolveFamePlayoffContext(gameMode, playoffContext)
+  );
 
   return {
     ...tracker,
@@ -311,6 +329,33 @@ export function addFameEvent(
       },
     ],
   };
+}
+
+export function resolveFamePlayoffContext(
+  gameMode: FameGameMode,
+  playoffContext?: FamePlayoffContext
+): FamePlayoffContext | undefined {
+  if (gameMode === 'exhibition') {
+    return undefined;
+  }
+
+  if (gameMode === 'elimination') {
+    return {
+      isPlayoffs: true,
+      round: ELIMINATION_MODE_ROUND,
+    };
+  }
+
+  if (gameMode === 'playoff') {
+    return {
+      isPlayoffs: true,
+      round: playoffContext?.round,
+      isEliminationGame: playoffContext?.isEliminationGame,
+      isClinchGame: playoffContext?.isClinchGame,
+    };
+  }
+
+  return playoffContext?.isPlayoffs ? playoffContext : undefined;
 }
 
 /**
