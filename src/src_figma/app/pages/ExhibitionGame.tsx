@@ -12,6 +12,8 @@ import { getTrackerDb } from "../../../utils/trackerDb";
 import { syncEngine } from "../../../utils/syncEngine";
 import { SYNC_REGISTRY, extractKey } from "../../../utils/syncConfig";
 import { getParkNames } from "../../../data/parkLookup";
+import chalkBgImg from '../../../assets/chalk-bg.png';
+import chalkBgFaintImg from '../../../assets/chalk-bg-faint.png';
 
 async function getEffectiveTeamPlayers(
   teamId: string,
@@ -408,18 +410,19 @@ export function ExhibitionGame() {
   };
 
   return (
-    <div className="min-h-screen bg-[#6B9462] text-[#E8E8D8] p-6">
+    <div className="min-h-screen bg-[#2b3a2e] text-[#E8E8D8] p-6" style={{ fontFamily: "'Moms Typewriter', monospace" }}>
       <div className="max-w-4xl mx-auto">
         {/* Header */}
         <div className="flex items-center gap-4 mb-6">
           <button
             onClick={() => navigate("/")}
-            className="p-2 bg-[#4A6A42] hover:bg-[#5A7A52] border-4 border-[#E8E8D8] transition active:scale-95"
+            className="p-2 bg-[#3d4a42] hover:bg-[#4a5a50] border-2 border-[#556B55] transition active:scale-95"
+            style={{ backgroundImage: `url(${chalkBgFaintImg})`, backgroundRepeat: 'repeat' }}
           >
             <ArrowLeft className="w-5 h-5 text-[#E8E8D8]" />
           </button>
-          <div className="bg-[#4A6A42] border-[6px] border-[#E8E8D8] px-6 py-3 shadow-[8px_8px_0px_0px_rgba(0,0,0,0.5)]">
-            <h1 className="text-lg text-[#E8E8D8] tracking-wider font-bold" style={{ textShadow: '2px 2px 0px rgba(0,0,0,0.3)' }}>EXHIBITION GAME</h1>
+          <div className="bg-[#1a2420] border-2 border-[#C4A853]/30 px-6 py-3 shadow-[2px_2px_0px_0px_rgba(0,0,0,0.4)]">
+            <h1 className="text-lg text-[#E8E8D8] tracking-[0.2em] font-bold" style={{ textShadow: '1px 1px 2px rgba(0,0,0,0.8)' }}>EXHIBITION GAME</h1>
           </div>
         </div>
 
@@ -434,9 +437,9 @@ export function ExhibitionGame() {
         {/* Error State */}
         {!isLoading && error && (
           <div className="flex flex-col items-center justify-center h-64 text-center">
-            <AlertCircle className="w-8 h-8 text-[#DD0000] mb-3" />
-            <p className="text-[#DD0000] mb-2">Failed to load leagues</p>
-            <p className="text-xs text-[#E8E8D8]/70">{error}</p>
+            <AlertCircle className="w-8 h-8 text-[#CC3433] mb-3" />
+            <p className="text-[#CC3433] mb-2">Failed to load leagues</p>
+            <p className="text-xs text-[#a0a898]">{error}</p>
           </div>
         )}
 
@@ -445,10 +448,11 @@ export function ExhibitionGame() {
           <div className="flex flex-col items-center justify-center h-64 text-center">
             <AlertCircle className="w-8 h-8 text-[#C4A853] mb-3" />
             <p className="text-[#E8E8D8] mb-2">No leagues found</p>
-            <p className="text-xs text-[#E8E8D8]/70 mb-4">Create a league in League Builder first</p>
+            <p className="text-xs text-[#a0a898] mb-4">Create a league in League Builder first</p>
             <button
               onClick={() => navigate("/league-builder")}
-              className="px-6 py-3 bg-[#C4A853] border-4 border-[#E8E8D8] text-[#4A6A42] font-bold text-sm hover:bg-[#B59A4A] transition-all"
+              className="px-6 py-3 bg-[#3d4a42] border-2 border-[#C4A853] text-[#C4A853] font-bold text-sm tracking-[0.2em] hover:bg-[#4a5a50] transition-all"
+              style={{ backgroundImage: `url(${chalkBgFaintImg})`, backgroundRepeat: 'repeat' }}
             >
               GO TO LEAGUE BUILDER
             </button>
@@ -458,8 +462,8 @@ export function ExhibitionGame() {
         {/* Step 1: League Selection */}
         {!isLoading && !error && leagues.length > 0 && step === "league" && (
           <div className="space-y-4">
-            <div className="bg-[#5A7A52] border-[6px] border-[#E8E8D8] p-5 shadow-[6px_6px_0px_0px_rgba(0,0,0,0.3)]">
-              <div className="text-xs text-[#C4A853] mb-3 font-bold tracking-wide" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>SELECT LEAGUE</div>
+            <div className="bg-[#3d4a42] border-2 border-[#556B55] p-5 shadow-[2px_2px_0px_0px_rgba(0,0,0,0.4)]">
+              <div className="text-xs text-[#C4A853] mb-3 font-bold tracking-[0.25em]" style={{ textShadow: '1px 1px 2px rgba(0,0,0,0.6)' }}>SELECT LEAGUE</div>
               <div className="space-y-2">
                 {leagues.map(league => {
                   const teamCount = teams.filter(t => league.teamIds?.includes(t.id)).length;
@@ -472,16 +476,16 @@ export function ExhibitionGame() {
                         setSelectedAwayTeamId(null);
                         setSelectedHomeTeamId(null);
                       }}
-                      className={`w-full text-left p-4 border-4 transition-all ${
+                      className={`w-full text-left p-4 border-2 transition-all ${
                         isSelected
                           ? "border-[#C4A853] bg-[#C4A853]/20"
-                          : "border-[#E8E8D8] bg-[#4A6A42] hover:border-[#C4A853]"
+                          : "border-[#556B55] bg-[#1f2b21] hover:border-[#C4A853]"
                       }`}
                     >
-                      <div className="text-sm font-bold text-[#E8E8D8]" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>
+                      <div className="text-sm font-bold text-[#E8E8D8] tracking-wider">
                         {league.name.toUpperCase()}
                       </div>
-                      <div className="text-xs text-[#E8E8D8]/70" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.2)' }}>
+                      <div className="text-xs text-[#a0a898]">
                         {teamCount} teams
                       </div>
                     </button>
@@ -493,19 +497,19 @@ export function ExhibitionGame() {
             <button
               onClick={() => setStep("select")}
               disabled={!selectedLeagueId}
-              className={`w-full border-[6px] border-[#E8E8D8] py-5 text-base font-bold tracking-wide transition-transform shadow-[8px_8px_0px_0px_rgba(0,0,0,0.5)] ${
+              className={`w-full border-2 py-5 text-base font-bold tracking-[0.2em] transition-transform shadow-[2px_2px_0px_0px_rgba(0,0,0,0.4)] ${
                 selectedLeagueId
-                  ? "bg-[#C4A853] text-[#4A6A42] hover:bg-[#B59A4A] active:scale-95"
-                  : "bg-[#3A5A32] text-[#8A9A82] cursor-not-allowed"
+                  ? "border-[#C4A853] bg-[#3d4a42] text-[#C4A853] hover:bg-[#4a5a50] active:scale-95"
+                  : "border-[#556B55] bg-[#1f2b21] text-[#8A9A82] cursor-not-allowed"
               }`}
-              style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.2)' }}
+              style={{ textShadow: '1px 1px 2px rgba(0,0,0,0.6)', backgroundImage: selectedLeagueId ? `url(${chalkBgFaintImg})` : undefined, backgroundRepeat: 'repeat' }}
             >
               CONTINUE ▶
             </button>
 
             <button
               onClick={() => setShowClearConfirm(true)}
-              className="w-full flex items-center justify-center gap-2 border-4 border-[#DD0000]/50 py-3 text-xs font-bold text-[#DD0000] hover:bg-[#DD0000]/10 transition-all mt-2"
+              className="w-full flex items-center justify-center gap-2 border-2 border-[#CC3433]/50 py-3 text-xs font-bold text-[#CC3433] tracking-[0.2em] hover:bg-[#CC3433]/10 transition-all mt-2"
             >
               <Trash2 className="w-4 h-4" />
               CLEAR EXHIBITION DATA
@@ -515,24 +519,24 @@ export function ExhibitionGame() {
 
         {/* Clear Data Confirmation Modal */}
         {showClearConfirm && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
-            <div className="bg-[#4A6A42] border-[6px] border-[#E8E8D8] p-6 max-w-sm mx-4 shadow-[8px_8px_0px_0px_rgba(0,0,0,0.5)]">
-              <div className="text-sm font-bold text-[#E8E8D8] mb-3">CLEAR ALL EXHIBITION DATA?</div>
-              <div className="text-xs text-[#E8E8D8]/70 mb-4 leading-relaxed">
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70" style={{ fontFamily: "'Moms Typewriter', monospace" }}>
+            <div className="bg-[#3d4a42] border-2 border-[#556B55] p-6 max-w-sm mx-4 shadow-[2px_2px_0px_0px_rgba(0,0,0,0.5)]" style={{ backgroundImage: `url(${chalkBgImg})`, backgroundRepeat: 'repeat' }}>
+              <div className="text-sm font-bold text-[#C4A853] mb-3 tracking-[0.15em]">CLEAR ALL EXHIBITION DATA?</div>
+              <div className="text-xs text-[#a0a898] mb-4 leading-relaxed">
                 This will delete all exhibition game history, stats, and almanac records. Teams and leagues will not be affected.
               </div>
               <div className="flex gap-3">
                 <button
                   onClick={() => setShowClearConfirm(false)}
                   disabled={isClearing}
-                  className="flex-1 border-4 border-[#E8E8D8] py-3 text-xs font-bold text-[#E8E8D8] hover:bg-[#5A7A52] transition"
+                  className="flex-1 border-2 border-[#556B55] bg-[#1f2b21] py-3 text-xs font-bold text-[#E8E8D8] tracking-wider hover:bg-[#2b3a2e] transition"
                 >
                   CANCEL
                 </button>
                 <button
                   onClick={clearExhibitionData}
                   disabled={isClearing}
-                  className="flex-1 border-4 border-[#DD0000] bg-[#DD0000] py-3 text-xs font-bold text-white hover:bg-[#BB0000] transition"
+                  className="flex-1 border-2 border-[#CC3433] bg-[#CC3433]/20 py-3 text-xs font-bold text-[#CC3433] tracking-wider hover:bg-[#CC3433]/30 transition"
                 >
                   {isClearing ? 'CLEARING...' : 'YES, CLEAR'}
                 </button>
@@ -545,13 +549,12 @@ export function ExhibitionGame() {
         {!isLoading && !error && step === "select" && (
           <div className="space-y-4">
             {/* Away team selection */}
-            <div className="bg-[#5A7A52] border-[6px] border-[#E8E8D8] p-5 shadow-[6px_6px_0px_0px_rgba(0,0,0,0.3)]">
-              <div className="text-xs text-[#C4A853] mb-3 font-bold tracking-wide" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>▲ AWAY TEAM</div>
+            <div className="bg-[#3d4a42] border-2 border-[#556B55] p-5 shadow-[2px_2px_0px_0px_rgba(0,0,0,0.4)]">
+              <div className="text-xs text-[#C4A853] mb-3 font-bold tracking-[0.25em]" style={{ textShadow: '1px 1px 2px rgba(0,0,0,0.6)' }}>▲ AWAY TEAM</div>
               <select
                 value={selectedAwayTeamId || ""}
                 onChange={(e) => setSelectedAwayTeamId(e.target.value || null)}
-                className="w-full bg-[#4A6A42] border-4 border-[#E8E8D8] p-3 text-sm text-[#E8E8D8] font-bold"
-                style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}
+                className="w-full bg-[#1f2b21] border-2 border-[#556B55] p-3 text-sm text-[#E8E8D8] font-bold tracking-wider"
               >
                 <option value="">SELECT AWAY TEAM...</option>
                 {leagueTeams.map(team => (
@@ -563,13 +566,12 @@ export function ExhibitionGame() {
             </div>
 
             {/* Home team selection */}
-            <div className="bg-[#5A7A52] border-[6px] border-[#E8E8D8] p-5 shadow-[6px_6px_0px_0px_rgba(0,0,0,0.3)]">
-              <div className="text-xs text-[#C4A853] mb-3 font-bold tracking-wide" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>▼ HOME TEAM</div>
+            <div className="bg-[#3d4a42] border-2 border-[#556B55] p-5 shadow-[2px_2px_0px_0px_rgba(0,0,0,0.4)]">
+              <div className="text-xs text-[#C4A853] mb-3 font-bold tracking-[0.25em]" style={{ textShadow: '1px 1px 2px rgba(0,0,0,0.6)' }}>▼ HOME TEAM</div>
               <select
                 value={selectedHomeTeamId || ""}
                 onChange={(e) => setSelectedHomeTeamId(e.target.value || null)}
-                className="w-full bg-[#4A6A42] border-4 border-[#E8E8D8] p-3 text-sm text-[#E8E8D8] font-bold"
-                style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}
+                className="w-full bg-[#1f2b21] border-2 border-[#556B55] p-3 text-sm text-[#E8E8D8] font-bold tracking-wider"
               >
                 <option value="">SELECT HOME TEAM...</option>
                 {leagueTeams.map(team => (
@@ -583,20 +585,20 @@ export function ExhibitionGame() {
             <div className="grid grid-cols-2 gap-2">
               <button
                 onClick={() => setStep("league")}
-                className="bg-[#4A6A42] border-[5px] border-[#E8E8D8] py-4 text-sm text-[#E8E8D8] font-bold hover:bg-[#5A7A52] active:scale-95 transition-transform shadow-[4px_4px_0px_0px_rgba(0,0,0,0.5)]"
-                style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}
+                className="bg-[#3d4a42] border-2 border-[#556B55] py-4 text-sm text-[#E8E8D8] font-bold tracking-[0.2em] hover:bg-[#4a5a50] active:scale-95 transition-transform shadow-[2px_2px_0px_0px_rgba(0,0,0,0.4)]"
+                style={{ textShadow: '1px 1px 2px rgba(0,0,0,0.6)', backgroundImage: `url(${chalkBgFaintImg})`, backgroundRepeat: 'repeat' }}
               >
                 ◀ BACK
               </button>
               <button
                 onClick={() => setStep("lineups")}
                 disabled={!selectedAwayTeamId || !selectedHomeTeamId}
-                className={`border-[5px] border-[#E8E8D8] py-4 text-sm font-bold transition-transform shadow-[4px_4px_0px_0px_rgba(0,0,0,0.5)] ${
+                className={`border-2 py-4 text-sm font-bold tracking-[0.2em] transition-transform shadow-[2px_2px_0px_0px_rgba(0,0,0,0.4)] ${
                   selectedAwayTeamId && selectedHomeTeamId
-                    ? "bg-[#C4A853] text-[#4A6A42] hover:bg-[#B59A4A] active:scale-95"
-                    : "bg-[#3A5A32] text-[#8A9A82] cursor-not-allowed"
+                    ? "border-[#C4A853] bg-[#3d4a42] text-[#C4A853] hover:bg-[#4a5a50] active:scale-95"
+                    : "border-[#556B55] bg-[#1f2b21] text-[#8A9A82] cursor-not-allowed"
                 }`}
-                style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.2)' }}
+                style={{ textShadow: '1px 1px 2px rgba(0,0,0,0.6)', backgroundImage: selectedAwayTeamId && selectedHomeTeamId ? `url(${chalkBgFaintImg})` : undefined, backgroundRepeat: 'repeat' }}
               >
                 CONTINUE ▶
               </button>
@@ -607,9 +609,9 @@ export function ExhibitionGame() {
         {/* Step 3: Lineup Preview (Read-Only) */}
         {!isLoading && !error && step === "lineups" && awayTeam && homeTeam && (
           <div className="space-y-4">
-            <div className="bg-[#5A7A52] border-[6px] border-[#E8E8D8] p-5 shadow-[6px_6px_0px_0px_rgba(0,0,0,0.3)]">
-              <div className="text-sm text-[#E8E8D8] mb-2 font-bold tracking-wide" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>STARTING LINEUPS</div>
-              <div className="text-xs text-[#E8E8D8]/80" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.2)' }}>
+            <div className="bg-[#3d4a42] border-2 border-[#556B55] p-5 shadow-[2px_2px_0px_0px_rgba(0,0,0,0.4)]">
+              <div className="text-sm text-[#C4A853] mb-2 font-bold tracking-[0.2em]" style={{ textShadow: '1px 1px 2px rgba(0,0,0,0.6)' }}>STARTING LINEUPS</div>
+              <div className="text-xs text-[#a0a898]">
                 {awayHasStoredLineup || homeHasStoredLineup
                   ? "Lineups loaded from League Builder. Drag to reorder batting order."
                   : "Default lineups. Drag to reorder batting order."}
@@ -662,16 +664,16 @@ export function ExhibitionGame() {
               </div>
             )}
 
-            <div className="border-4 border-[#E8E8D8] bg-[#4A6A42] p-4 space-y-4">
+            <div className="border-2 border-[#556B55] bg-[#3d4a42] p-4 space-y-4 shadow-[2px_2px_0px_0px_rgba(0,0,0,0.4)]">
               <div>
-                <div className="text-sm text-[#E8E8D8] font-bold">GAME RULES</div>
-                <div className="text-xs text-[#E8E8D8]/60 mt-1">
+                <div className="text-sm text-[#C4A853] font-bold tracking-[0.2em]" style={{ textShadow: '1px 1px 2px rgba(0,0,0,0.6)' }}>GAME RULES</div>
+                <div className="text-xs text-[#a0a898] mt-1">
                   Set exhibition-specific rules before first pitch.
                 </div>
               </div>
 
               <div className="space-y-2">
-                <div className="text-xs text-[#E8E8D8]/70">Innings per game</div>
+                <div className="text-xs text-[#a0a898] tracking-wider">Innings per game</div>
                 <div className="flex flex-wrap gap-2">
                   {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((inningOption) => (
                     <button
@@ -679,8 +681,8 @@ export function ExhibitionGame() {
                       onClick={() => setTotalInnings(inningOption)}
                       className={`px-4 py-2 border-2 text-xs font-bold transition-all ${
                         totalInnings === inningOption
-                          ? "border-[#C4A853] bg-[#C4A853] text-[#4A6A42]"
-                          : "border-[#E8E8D8] text-[#E8E8D8]"
+                          ? "border-[#C4A853] bg-[#C4A853]/20 text-[#C4A853]"
+                          : "border-[#556B55] bg-[#1f2b21] text-[#E8E8D8] hover:border-[#C4A853]"
                       }`}
                     >
                       {inningOption}
@@ -692,7 +694,7 @@ export function ExhibitionGame() {
               <div className="flex items-center justify-between gap-4">
                 <div>
                   <div className="text-sm text-[#E8E8D8]">Designated hitter</div>
-                  <div className="text-xs text-[#E8E8D8]/60 mt-1">
+                  <div className="text-xs text-[#a0a898] mt-1">
                     Use the DH rule for both lineups.
                   </div>
                 </div>
@@ -706,8 +708,8 @@ export function ExhibitionGame() {
                       onClick={() => setUseDH(option.value)}
                       className={`px-4 py-2 border-2 text-xs font-bold ${
                         useDH === option.value
-                          ? 'border-[#C4A853] bg-[#C4A853] text-[#4A6A42]'
-                          : 'border-[#E8E8D8] text-[#E8E8D8]'
+                          ? 'border-[#C4A853] bg-[#C4A853]/20 text-[#C4A853]'
+                          : 'border-[#556B55] bg-[#1f2b21] text-[#E8E8D8] hover:border-[#C4A853]'
                       }`}
                     >
                       {option.label}
@@ -719,7 +721,7 @@ export function ExhibitionGame() {
               <div className="flex items-center justify-between gap-4">
                 <div>
                   <div className="text-sm text-[#E8E8D8]">Runner on 2nd in extras</div>
-                  <div className="text-xs text-[#E8E8D8]/60 mt-1">
+                  <div className="text-xs text-[#a0a898] mt-1">
                     Place a runner on second base at the start of each extra inning half.
                   </div>
                 </div>
@@ -733,8 +735,8 @@ export function ExhibitionGame() {
                       onClick={() => setExtraInningRunner(option.value)}
                       className={`px-4 py-2 border-2 text-xs font-bold ${
                         extraInningRunner === option.value
-                          ? 'border-[#C4A853] bg-[#C4A853] text-[#4A6A42]'
-                          : 'border-[#E8E8D8] text-[#E8E8D8]'
+                          ? 'border-[#C4A853] bg-[#C4A853]/20 text-[#C4A853]'
+                          : 'border-[#556B55] bg-[#1f2b21] text-[#E8E8D8] hover:border-[#C4A853]'
                       }`}
                     >
                       {option.label}
@@ -747,7 +749,7 @@ export function ExhibitionGame() {
                 <div className="flex items-center justify-between gap-4">
                   <div>
                     <div className="text-sm text-[#E8E8D8]">Runner starts in</div>
-                    <div className="text-xs text-[#E8E8D8]/60 mt-1">
+                    <div className="text-xs text-[#a0a898] mt-1">
                       Which extra inning does the runner rule begin?
                     </div>
                   </div>
@@ -758,8 +760,8 @@ export function ExhibitionGame() {
                         onClick={() => setExtraInningRunnerDelay(delay)}
                         className={`px-4 py-2 border-2 text-xs font-bold ${
                           extraInningRunnerDelay === delay
-                            ? 'border-[#C4A853] bg-[#C4A853] text-[#4A6A42]'
-                            : 'border-[#E8E8D8] text-[#E8E8D8]'
+                            ? 'border-[#C4A853] bg-[#C4A853]/20 text-[#C4A853]'
+                            : 'border-[#556B55] bg-[#1f2b21] text-[#E8E8D8] hover:border-[#C4A853]'
                         }`}
                       >
                         {delay === 1 ? '1st' : '2nd'}
@@ -770,11 +772,11 @@ export function ExhibitionGame() {
               )}
 
               <div className="space-y-2">
-                <div className="text-xs text-[#E8E8D8]/70">Stadium</div>
+                <div className="text-xs text-[#a0a898] tracking-wider">Stadium</div>
                 <select
                   value={selectedStadium || ''}
                   onChange={(e) => setSelectedStadium(e.target.value)}
-                  className="w-full bg-[#3A5A32] text-[#E8E8D8] border-2 border-[#E8E8D8] p-2 text-xs font-bold"
+                  className="w-full bg-[#1f2b21] text-[#E8E8D8] border-2 border-[#556B55] p-2 text-xs font-bold"
                 >
                   {parkNames.map((name) => (
                     <option key={name} value={name}>
@@ -788,20 +790,20 @@ export function ExhibitionGame() {
             <div className="grid grid-cols-2 gap-2">
               <button
                 onClick={() => setStep("select")}
-                className="bg-[#4A6A42] border-[5px] border-[#E8E8D8] py-4 text-sm text-[#E8E8D8] font-bold hover:bg-[#5A7A52] active:scale-95 transition-transform shadow-[4px_4px_0px_0px_rgba(0,0,0,0.5)]"
-                style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}
+                className="bg-[#3d4a42] border-2 border-[#556B55] py-4 text-sm text-[#E8E8D8] font-bold tracking-[0.2em] hover:bg-[#4a5a50] active:scale-95 transition-transform shadow-[2px_2px_0px_0px_rgba(0,0,0,0.4)]"
+                style={{ textShadow: '1px 1px 2px rgba(0,0,0,0.6)', backgroundImage: `url(${chalkBgFaintImg})`, backgroundRepeat: 'repeat' }}
               >
                 ◀ BACK
               </button>
               <button
                 onClick={handleStartGame}
                 disabled={awayPlayers.length === 0 || homePlayers.length === 0 || isLoadingLineups}
-                className={`border-[5px] border-[#E8E8D8] py-4 text-sm font-bold transition-transform shadow-[4px_4px_0px_0px_rgba(0,0,0,0.5)] ${
+                className={`border-2 py-4 text-sm font-bold tracking-[0.2em] transition-transform shadow-[2px_2px_0px_0px_rgba(0,0,0,0.4)] ${
                   awayPlayers.length > 0 && homePlayers.length > 0 && !isLoadingLineups
-                    ? "bg-[#C4A853] text-[#4A6A42] hover:bg-[#B59A4A] active:scale-95"
-                    : "bg-[#3A5A32] text-[#8A9A82] cursor-not-allowed"
+                    ? "border-[#C4A853] bg-[#3d4a42] text-[#C4A853] hover:bg-[#4a5a50] active:scale-95"
+                    : "border-[#556B55] bg-[#1f2b21] text-[#8A9A82] cursor-not-allowed"
                 }`}
-                style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.2)' }}
+                style={{ textShadow: '1px 1px 2px rgba(0,0,0,0.6)', backgroundImage: awayPlayers.length > 0 && homePlayers.length > 0 && !isLoadingLineups ? `url(${chalkBgFaintImg})` : undefined, backgroundRepeat: 'repeat' }}
               >
                 START GAME ▶
               </button>

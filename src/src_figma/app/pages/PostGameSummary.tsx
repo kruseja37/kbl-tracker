@@ -8,6 +8,8 @@ import {
 } from "../../utils/gameStorage";
 import { getGameEvents, type AtBatEvent } from "../../../utils/eventLog";
 import { rankPlayersOfTheGame } from "../../../utils/playersOfTheGame";
+import chalkBgImg from '../../../assets/chalk-bg.png';
+import chalkBgFaintImg from '../../../assets/chalk-bg-faint.png';
 
 // Helper to format innings pitched from outs recorded
 function formatIP(outsRecorded: number): string {
@@ -40,9 +42,9 @@ type FameEventRecord =
   CompletedGameRecord["fameEvents"] extends Array<infer U> ? U : never;
 
 const badgeVariantClasses: Record<BadgeVariant, string> = {
-  default: "bg-white/10 border-white/30 text-[#E8E8D8]",
-  success: "bg-[#C4A853] border-[#C4A853] text-[#1b2a12]",
-  fame: "bg-[#CC44CC] border-[#CC44CC] text-white",
+  default: "bg-[#2b3a2e]/60 border-[#556B55] text-[#a0a898]",
+  success: "bg-[#C4A853]/20 border-[#C4A853] text-[#C4A853]",
+  fame: "bg-[#CC44CC]/20 border-[#CC44CC] text-[#CC44CC]",
 };
 
 function SummaryBadge({
@@ -282,10 +284,10 @@ export function PostGameSummary({
   // Show loading state
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-[#2a3a2d] text-white p-6 flex items-center justify-center">
+      <div className="min-h-screen bg-[#2b3a2e] text-[#E8E8D8] p-6 flex items-center justify-center" style={{ fontFamily: "'Moms Typewriter', monospace" }}>
         <div className="flex flex-col items-center gap-4">
           <Loader2 className="w-8 h-8 animate-spin text-[#C4A853]" />
-          <div className="text-lg">Loading game summary...</div>
+          <div className="text-lg tracking-wider">Loading game summary...</div>
         </div>
       </div>
     );
@@ -294,14 +296,15 @@ export function PostGameSummary({
   // Show error state
   if (error || !gameData) {
     return (
-      <div className="min-h-screen bg-[#2a3a2d] text-white p-6 flex items-center justify-center">
+      <div className="min-h-screen bg-[#2b3a2e] text-[#E8E8D8] p-6 flex items-center justify-center" style={{ fontFamily: "'Moms Typewriter', monospace" }}>
         <div className="flex flex-col items-center gap-4">
           <div className="text-lg text-red-400">
             {error || "Game data not available"}
           </div>
           <button
             onClick={() => navigate("/exhibition")}
-            className="bg-[#556B55] border-[3px] border-white px-6 py-3 text-sm hover:bg-[#6B9462]"
+            className="bg-[#3d4a42] border-2 border-[#C4A853] px-6 py-3 text-sm text-[#E8E8D8] tracking-wider hover:bg-[#4a5a50]"
+            style={{ backgroundImage: `url(${chalkBgFaintImg})`, backgroundRepeat: 'repeat' }}
           >
             BACK TO MENU
           </button>
@@ -451,46 +454,33 @@ export function PostGameSummary({
   const topPerformers = rankPlayersOfTheGame(gameData, atBatEvents);
 
   return (
-    <div className="min-h-screen bg-[#2a3a2d] text-white p-6">
+    <div className="min-h-screen bg-[#2b3a2e] text-[#E8E8D8] p-6" style={{ fontFamily: "'Moms Typewriter', monospace" }}>
       <div className="max-w-4xl mx-auto">
-        {/* TV Frame */}
-        <div className="border-[12px] border-[#1a1a1a] bg-black rounded-lg shadow-[0_0_40px_rgba(0,0,0,0.9)] relative">
-          {/* Screen bezel shadow */}
-          <div className="border-[6px] border-[#0a0a0a] bg-[#1a1a1a] p-1">
-            {/* Inner screen glow */}
-            <div className="border-[2px] border-[#333] bg-black p-0">
-              {/* Broadcast header */}
-              <div className="bg-gradient-to-r from-[#DD0000] via-[#CC44CC] to-[#0066FF] p-3 relative">
+        {/* Chalkboard container */}
+        <div className="bg-[#3d4a42] border-2 border-[#556B55] rounded shadow-[0_0_30px_rgba(0,0,0,0.6)] relative" style={{ backgroundImage: `url(${chalkBgImg})`, backgroundRepeat: 'repeat' }}>
+              {/* Header */}
+              <div className="bg-[#1a2420] border-b border-[#C4A853]/30 px-6 py-3">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <div className="bg-[#DD0000] text-white text-[10px] font-bold px-2 py-1 border-2 border-white">
+                    <div className="bg-[#C4A853] text-[#1a2420] text-[10px] font-bold px-2 py-1 tracking-[0.2em]">
                       FINAL
                     </div>
                     <div
-                      className="text-white text-lg font-bold tracking-wider"
-                      style={{ textShadow: "2px 2px 4px rgba(0,0,0,0.8)" }}
+                      className="text-[#E8E8D8] text-lg font-bold tracking-[0.15em]"
+                      style={{ textShadow: "1px 1px 2px rgba(0,0,0,0.8)" }}
                     >
                       POST-GAME REPORT
-                    </div>
-                  </div>
-                  {/* Super Mega Baseball Logo */}
-                  <div className="bg-white border-[4px] border-[#0066FF] px-[12px] py-[6px] shadow-[2px_2px_0px_0px_#DD0000]">
-                    <div className="text-[10px] text-[#DD0000] tracking-wide leading-tight font-bold">
-                      SUPER MEGA
-                    </div>
-                    <div className="text-[13px] text-[#0066FF] tracking-wide leading-tight font-bold">
-                      BASEBALL
                     </div>
                   </div>
                 </div>
               </div>
 
               {/* Screen content */}
-              <div className="bg-[#2a3a2d] p-6">
+              <div className="p-6">
                 {/* Final Score Banner - Fenway-style Scoreboard */}
-                <div className="bg-[#556B55] border-[4px] border-[#3d5240] p-2 mb-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.5)]">
+                <div className="bg-[#1f2b21] border-2 border-[#314437] p-2 mb-4 shadow-[2px_2px_0px_0px_rgba(0,0,0,0.4)]">
                   {/* Stadium name header */}
-                  <div className="text-center text-[#E8E8D8] text-xs font-bold tracking-[0.3em] mb-1">
+                  <div className="text-center text-[#C4A853] text-xs font-bold tracking-[0.3em] mb-1">
                     {stadiumLabel}
                   </div>
 
@@ -538,7 +528,7 @@ export function PostGameSummary({
                       return (
                         <div
                           key={idx}
-                          className="bg-[#3d5240] border-2 border-[#2a3a2d] text-[#E8E8D8] text-xs font-bold min-h-[20px] flex items-center justify-center"
+                          className="bg-[#283828] border border-[#1a2420] text-[#E8E8D8] text-xs font-bold min-h-[20px] flex items-center justify-center"
                         >
                           {score !== undefined ? score : "-"}
                         </div>
@@ -569,7 +559,7 @@ export function PostGameSummary({
                       return (
                         <div
                           key={idx}
-                          className="bg-[#3d5240] border-2 border-[#2a3a2d] text-[#E8E8D8] text-xs font-bold min-h-[20px] flex items-center justify-center"
+                          className="bg-[#283828] border border-[#1a2420] text-[#E8E8D8] text-xs font-bold min-h-[20px] flex items-center justify-center"
                         >
                           {score !== undefined ? score : "-"}
                         </div>
@@ -588,11 +578,11 @@ export function PostGameSummary({
                   </div>
 
                   {/* Bottom indicator row - FINAL message */}
-                  <div className="border-t-2 border-[#E8E8D8] pt-2 text-center">
+                  <div className="border-t border-[#C4A853]/40 pt-2 text-center">
                     <div
                       className="text-sm font-bold"
                       style={{
-                        color: getTeamColors(winnerId).secondary || "#C4A853",
+                        color: "#CBB89C",
                         textShadow: "1px 1px 2px black",
                       }}
                     >
@@ -630,33 +620,35 @@ export function PostGameSummary({
                   )
                     return null;
                   const borderColor =
-                    rank === 0 ? "#C4A853" : rank === 1 ? "#E8E8D8" : "#FFFFFF";
+                    rank === 0 ? "#C4A853" : rank === 1 ? "#a0a898" : "#556B55";
                   const label =
                     rank === 0 ? "POG ★★★" : rank === 1 ? "POG ★★" : "POG ★";
+                  const teamColor = getTeamColors(player.isAway ? awayTeamId : homeTeamId).primary || "#2b3a2e";
                   return (
                     <div
                       key={rank}
-                      className="border-[5px] p-4 mb-4"
+                      className="border-2 p-4 mb-3 rounded-sm"
                       style={{
                         borderColor,
-                        backgroundColor:
-                          getTeamColors(player.isAway ? awayTeamId : homeTeamId)
-                            .primary || "#2a3a2d",
+                        background: `linear-gradient(${teamColor}30, ${teamColor}30), #1f2b21`,
+                        backgroundImage: `url(${chalkBgImg}), linear-gradient(${teamColor}30, ${teamColor}30)`,
+                        backgroundRepeat: 'repeat',
+                        backgroundColor: '#1f2b21',
                       }}
                     >
                       <div className="flex items-center gap-2 mb-2">
-                        <Trophy className="w-5 h-5 text-white" />
-                        <div className="text-sm text-white">{label}</div>
+                        <Trophy className="w-4 h-4 text-[#C4A853]" />
+                        <div className="text-xs text-[#C4A853] tracking-[0.2em] font-bold">{label}</div>
                       </div>
-                      <div className="text-lg text-white flex items-baseline gap-2">
+                      <div className="text-base text-[#E8E8D8] flex items-baseline gap-2" style={{ fontFamily: "'Tox Typewriter', monospace" }}>
                         <span>{player.name}</span>
                         {typeof player.wpa === "number" && (
-                          <span className="text-[10px] text-white/80">{`${player.wpa >= 0 ? "+" : ""}${player.wpa.toFixed(3)} WPA`}</span>
+                          <span className="text-[10px] text-[#a0a898]" style={{ fontFamily: "'Moms Typewriter', monospace" }}>{`${player.wpa >= 0 ? "+" : ""}${player.wpa.toFixed(3)} WPA`}</span>
                         )}
                       </div>
-                      <div className="text-[8px] text-white/80 space-y-1">
+                      <div className="text-[9px] text-[#a0a898] space-y-0.5 mt-1">
                         <div className="flex items-center gap-2">
-                          <span className="font-bold">{player.h}</span>
+                          <span className="font-bold text-[#E8E8D8]">{player.h}</span>
                           <span>-</span>
                           <span>{player.ab} AB</span>
                         </div>
@@ -676,12 +668,12 @@ export function PostGameSummary({
                 })}
 
                 {/* Box score preview */}
-                <div className="bg-[#6B9462] border-[5px] border-[#4A6844] p-4 mb-4">
+                <div className="bg-[#1f2b21] border-2 border-[#314437] p-4 mb-4 rounded-sm">
                   <button
                     onClick={() => setBoxScoreExpanded(!boxScoreExpanded)}
                     className="w-full text-center hover:opacity-80 transition-opacity flex items-center justify-center gap-2"
                   >
-                    <div className="text-sm text-[#E8E8D8]">BOX SCORE</div>
+                    <div className="text-xs text-[#C4A853] tracking-[0.3em] font-bold">BOX SCORE</div>
                     {boxScoreExpanded ? (
                       <ChevronUp className="w-4 h-4 text-[#E8E8D8]" />
                     ) : (
@@ -694,11 +686,11 @@ export function PostGameSummary({
                       {/* Away Team Batting */}
                       {awayBatters.length > 0 && (
                         <div>
-                          <div className="text-[10px] text-[#E8E8D8] mb-2 font-bold">
+                          <div className="text-[10px] text-[#C4A853] mb-2 font-bold tracking-[0.2em]">
                             {awayTeamName.toUpperCase()} BATTING
                           </div>
-                          <div className="text-[7px]">
-                            <div className="grid grid-cols-9 gap-1 mb-1 text-[#E8E8D8]/60">
+                          <div className="text-[8px]">
+                            <div className="grid grid-cols-9 gap-1 mb-1 text-[#a0a898]">
                               <div className="col-span-2 text-left">BATTER</div>
                               <div className="text-center">AB</div>
                               <div className="text-center">R</div>
@@ -713,7 +705,7 @@ export function PostGameSummary({
                                 key={`${batter.playerId}-${idx}`}
                                 className="grid grid-cols-9 gap-1 text-[#E8E8D8] py-[2px]"
                               >
-                                <div className="col-span-2 text-left">
+                                <div className="col-span-2 text-left" style={{ fontFamily: "'Tox Typewriter', monospace" }}>
                                   {batter.name}
                                 </div>
                                 <div className="text-center">{batter.ab}</div>
@@ -730,16 +722,16 @@ export function PostGameSummary({
                       )}
 
                       {/* Divider */}
-                      <div className="border-t-2 border-[#4A6844]"></div>
+                      <div className="border-t border-[#314437]"></div>
 
                       {/* Home Team Batting */}
                       {homeBatters.length > 0 && (
                         <div>
-                          <div className="text-[10px] text-[#E8E8D8] mb-2 font-bold">
+                          <div className="text-[10px] text-[#C4A853] mb-2 font-bold tracking-[0.2em]">
                             {homeTeamName.toUpperCase()} BATTING
                           </div>
-                          <div className="text-[7px]">
-                            <div className="grid grid-cols-9 gap-1 mb-1 text-[#E8E8D8]/60">
+                          <div className="text-[8px]">
+                            <div className="grid grid-cols-9 gap-1 mb-1 text-[#a0a898]">
                               <div className="col-span-2 text-left">BATTER</div>
                               <div className="text-center">AB</div>
                               <div className="text-center">R</div>
@@ -754,7 +746,7 @@ export function PostGameSummary({
                                 key={`${batter.playerId}-${idx}`}
                                 className="grid grid-cols-9 gap-1 text-[#E8E8D8] py-[2px]"
                               >
-                                <div className="col-span-2 text-left">
+                                <div className="col-span-2 text-left" style={{ fontFamily: "'Tox Typewriter', monospace" }}>
                                   {batter.name}
                                 </div>
                                 <div className="text-center">{batter.ab}</div>
@@ -771,16 +763,16 @@ export function PostGameSummary({
                       )}
 
                       {/* Divider */}
-                      <div className="border-t-2 border-[#4A6844]"></div>
+                      <div className="border-t border-[#314437]"></div>
 
                       {/* Away Team Pitching */}
                       {awayPitchers.length > 0 && (
                         <div>
-                          <div className="text-[10px] text-[#E8E8D8] mb-2 font-bold">
+                          <div className="text-[10px] text-[#C4A853] mb-2 font-bold tracking-[0.2em]">
                             {awayTeamName.toUpperCase()} PITCHING
                           </div>
-                          <div className="text-[7px]">
-                            <div className="grid grid-cols-8 gap-1 mb-1 text-[#E8E8D8]/60">
+                          <div className="text-[8px]">
+                            <div className="grid grid-cols-8 gap-1 mb-1 text-[#a0a898]">
                               <div className="col-span-2 text-left">
                                 PITCHER
                               </div>
@@ -796,7 +788,7 @@ export function PostGameSummary({
                                 key={idx}
                                 className="grid grid-cols-8 gap-1 text-[#E8E8D8] py-[2px]"
                               >
-                                <div className="col-span-2 text-left">
+                                <div className="col-span-2 text-left" style={{ fontFamily: "'Tox Typewriter', monospace" }}>
                                   {pitcher.name}
                                 </div>
                                 <div className="text-center">{pitcher.ip}</div>
@@ -812,16 +804,16 @@ export function PostGameSummary({
                       )}
 
                       {/* Divider */}
-                      <div className="border-t-2 border-[#4A6844]"></div>
+                      <div className="border-t border-[#314437]"></div>
 
                       {/* Home Team Pitching */}
                       {homePitchers.length > 0 && (
                         <div>
-                          <div className="text-[10px] text-[#E8E8D8] mb-2 font-bold">
+                          <div className="text-[10px] text-[#C4A853] mb-2 font-bold tracking-[0.2em]">
                             {homeTeamName.toUpperCase()} PITCHING
                           </div>
-                          <div className="text-[7px]">
-                            <div className="grid grid-cols-8 gap-1 mb-1 text-[#E8E8D8]/60">
+                          <div className="text-[8px]">
+                            <div className="grid grid-cols-8 gap-1 mb-1 text-[#a0a898]">
                               <div className="col-span-2 text-left">
                                 PITCHER
                               </div>
@@ -837,7 +829,7 @@ export function PostGameSummary({
                                 key={idx}
                                 className="grid grid-cols-8 gap-1 text-[#E8E8D8] py-[2px]"
                               >
-                                <div className="col-span-2 text-left">
+                                <div className="col-span-2 text-left" style={{ fontFamily: "'Tox Typewriter', monospace" }}>
                                   {pitcher.name}
                                 </div>
                                 <div className="text-center">{pitcher.ip}</div>
@@ -857,7 +849,7 @@ export function PostGameSummary({
                         homePitchers.length === 0 &&
                         awayBatters.length === 0 &&
                         homeBatters.length === 0 && (
-                          <div className="text-center text-[#E8E8D8]/60 text-xs py-4">
+                          <div className="text-center text-[#a0a898] text-xs py-4">
                             No box score statistics recorded
                           </div>
                         )}
@@ -866,7 +858,16 @@ export function PostGameSummary({
                 </div>
 
                 {/* Action buttons */}
-                <div className="flex justify-end">
+                <div className="flex items-stretch justify-between">
+                  {/* Super Mega Baseball Logo — keeps original branding + Press Start 2P font */}
+                  <div className="bg-white border-[3px] border-[#0066FF] px-[10px] flex flex-col items-center justify-center shadow-[1px_1px_0px_0px_#DD0000]" style={{ fontFamily: "'Press Start 2P', monospace" }}>
+                    <div className="text-[5px] text-[#DD0000] tracking-wide leading-tight">
+                      SUPER MEGA
+                    </div>
+                    <div className="text-[7px] text-[#0066FF] tracking-wide leading-tight mt-[2px]">
+                      BASEBALL
+                    </div>
+                  </div>
                   <button
                     onClick={() => {
                       // Route based on game mode
@@ -896,14 +897,13 @@ export function PostGameSummary({
                         navigate("/");
                       }
                     }}
-                    className="bg-[#556B55] border-[5px] border-white py-[16px] text-sm text-[#E8E8D8] hover:bg-[#6B9462] active:scale-95 transition-transform shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)] m-[0px] px-[10px]"
+                    className="bg-[#3d4a42] border-2 border-[#C4A853] py-3 px-6 text-sm text-[#E8E8D8] tracking-[0.2em] font-bold hover:bg-[#4a5a50] active:scale-95 transition-transform"
+                    style={{ backgroundImage: `url(${chalkBgFaintImg})`, backgroundRepeat: 'repeat' }}
                   >
                     CONTINUE
                   </button>
                 </div>
               </div>
-            </div>
-          </div>
         </div>
       </div>
     </div>

@@ -13,6 +13,7 @@ import { useState, useEffect, useRef } from 'react';
 import type { Player as RosterPlayer, Pitcher as RosterPitcher } from './TeamRoster';
 import type { MojoLevel } from '../../../engines/mojoEngine';
 import type { FitnessState } from '../../../engines/fitnessEngine';
+import chalkBgImg from '../../../assets/chalk-bg.png';
 
 const MOJO_LABELS: Record<MojoLevel, { label: string; color: string }> = {
   [-2]: { label: 'RTL', color: '#FF4444' },
@@ -227,23 +228,29 @@ export function LineupPreview({
   return (
     <div
       ref={containerRef}
-      className="bg-[#4A6A42] border-4 p-3"
-      style={{ borderColor: teamBorderColor }}
+      className="bg-[#3d4a42] border-2 p-3"
+      style={{ borderColor: '#556B55', fontFamily: "'Moms Typewriter', monospace", backgroundImage: `url(${chalkBgImg})`, backgroundRepeat: 'repeat' }}
     >
       {/* Team Header */}
       <div
-        className="text-sm font-bold mb-3 pb-2 border-b-2"
-        style={{ color: teamColor, borderColor: teamBorderColor, textShadow: '1px 1px 0px rgba(0,0,0,0.5)' }}
+        className="text-sm font-bold mb-3 pb-2 border-b text-[#E8E8D8] tracking-[0.2em]"
+        style={{
+          borderColor: `${teamColor}60`,
+          textShadow: '1px 1px 2px rgba(0,0,0,0.7)',
+          backgroundImage: `url(${chalkBgImg}), linear-gradient(${teamColor}40, ${teamColor}40)`,
+          backgroundRepeat: 'repeat',
+          padding: '6px 8px',
+          margin: '-6px -6px 12px -6px',
+        }}
       >
         {isAway ? '▲' : '▼'} {teamName}
       </div>
 
       {/* Selection hint banner */}
       {isTouch && hintText && (
-        <div className="text-[8px] text-[#C4A853] bg-[#3A5A32] px-2 py-1 mb-2 text-center rounded"
-          style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>
+        <div className="text-[8px] text-[#C4A853] bg-[#1f2b21] px-2 py-1 mb-2 text-center rounded border border-[#C4A853]/40">
           {hintText}
-          <button className="ml-2 text-[#E8E8D8]/60 underline" onClick={() => setSelection(null)}>cancel</button>
+          <button className="ml-2 text-[#a0a898] underline" onClick={() => setSelection(null)}>cancel</button>
         </div>
       )}
 
@@ -268,12 +275,12 @@ export function LineupPreview({
               onDragEnd={isDraggable ? handleDragEnd : undefined}
               className={`flex items-center justify-between px-2 py-1.5 border transition-all ${
                 isDragging
-                  ? 'bg-[#5A7A52]/50 border-[#E8E8D8]/30 opacity-40'
+                  ? 'bg-[#1f2b21]/50 border-[#556B55]/30 opacity-40'
                   : isDropTarget
-                    ? 'bg-[#6A8A62] border-[#C4A853] border-2'
+                    ? 'bg-[#2b3a2e] border-[#C4A853] border-2'
                     : isRowReorderSelected || isRowBenchSubSelected
-                      ? 'bg-[#6A8A62] border-[#FFD700] border-2 ring-1 ring-[#FFD700]'
-                      : 'bg-[#5A7A52] border-[#E8E8D8]'
+                      ? 'bg-[#2b3a2e] border-[#F2C041] border-2 ring-1 ring-[#F2C041]'
+                      : 'bg-[#1f2b21] border-[#556B55]'
               } ${isDraggable ? 'cursor-grab active:cursor-grabbing' : ''}`}
             >
               <div className="flex items-center gap-2 flex-1 min-w-0">
@@ -284,20 +291,18 @@ export function LineupPreview({
                     onClick={() => handleBattingOrderTap(player)}
                     className={`text-[10px] font-bold w-6 h-6 flex items-center justify-center rounded transition-all shrink-0 ${
                       isRowReorderSelected
-                        ? 'bg-[#FFD700] text-[#3A5A32]'
+                        ? 'bg-[#F2C041] text-[#1f2b21]'
                         : isReorderTarget ? 'bg-[#C4A853]/30 text-[#C4A853]' : 'text-[#C4A853]'
                     }`}
-                    style={{ textShadow: isRowReorderSelected ? 'none' : '1px 1px 0px rgba(0,0,0,0.3)' }}
                   >
                     #{player.battingOrder}
                   </button>
                 ) : (
                   <>
-                    <span className="text-[10px] font-bold text-[#C4A853] w-4"
-                      style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>
+                    <span className="text-[10px] font-bold text-[#C4A853] w-4">
                       #{player.battingOrder}
                     </span>
-                    {isDraggable && <span className="text-[#E8E8D8]/30 text-[10px] select-none">⠿</span>}
+                    {isDraggable && <span className="text-[#a0a898]/50 text-[10px] select-none">⠿</span>}
                   </>
                 )}
 
@@ -306,16 +311,16 @@ export function LineupPreview({
                   <button
                     type="button"
                     onClick={() => handleLineupPlayerTapForSub(player)}
-                    className={`text-[10px] font-bold text-left truncate flex-1 min-w-0 ${
-                      isRowBenchSubSelected ? 'text-[#FFD700]' : 'text-[#E8E8D8]'
+                    className={`text-[11px] font-bold text-left truncate flex-1 min-w-0 ${
+                      isRowBenchSubSelected ? 'text-[#F2C041]' : 'text-[#E8E8D8]'
                     }`}
-                    style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}
+                    style={{ fontFamily: "'Tox Typewriter', monospace" }}
                   >
                     {player.name}
                   </button>
                 ) : (
-                  <span className="text-[10px] text-[#E8E8D8] font-bold truncate"
-                    style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>
+                  <span className="text-[11px] text-[#E8E8D8] font-bold truncate"
+                    style={{ fontFamily: "'Tox Typewriter', monospace" }}>
                     {player.name}
                   </span>
                 )}
@@ -329,7 +334,7 @@ export function LineupPreview({
                     onClick={() => handlePositionTap(player)}
                     className={`text-[8px] px-1.5 py-0.5 rounded transition-all ${
                       isRowPositionSelected
-                        ? 'bg-[#FFD700] text-[#3A5A32] font-bold'
+                        ? 'bg-[#F2C041] text-[#1f2b21] font-bold'
                         : isPositionTarget ? 'bg-[#C4A853]/30 text-[#E8E8D8]' : 'text-[#E8E8D8]/80'
                     }`}
                     style={{ textShadow: isRowPositionSelected ? 'none' : '1px 1px 0px rgba(0,0,0,0.3)' }}
@@ -346,7 +351,7 @@ export function LineupPreview({
                   <button
                     type="button"
                     onClick={(e) => { e.stopPropagation(); cycleMojo(player.playerId || player.name, player.mojo); }}
-                    className="text-[7px] px-1 py-0.5 rounded bg-[#3A5A32] border border-[#E8E8D8]/20 font-bold"
+                    className="text-[7px] px-1 py-0.5 rounded bg-[#283828] border border-[#556B55] font-bold"
                     style={{ color: MOJO_LABELS[player.mojo ?? 0].color, textShadow: '1px 1px 0px rgba(0,0,0,0.5)' }}
                     title={`Mojo: ${MOJO_LABELS[player.mojo ?? 0].label}`}
                   >
@@ -357,7 +362,7 @@ export function LineupPreview({
                   <button
                     type="button"
                     onClick={(e) => { e.stopPropagation(); cycleFitness(player.playerId || player.name, player.fitness); }}
-                    className="text-[7px] px-1 py-0.5 rounded bg-[#3A5A32] border border-[#E8E8D8]/20 font-bold"
+                    className="text-[7px] px-1 py-0.5 rounded bg-[#283828] border border-[#556B55] font-bold"
                     style={{ color: FITNESS_LABELS[player.fitness ?? 'FIT'].color, textShadow: '1px 1px 0px rgba(0,0,0,0.5)' }}
                     title={`Fitness: ${FITNESS_LABELS[player.fitness ?? 'FIT'].label}`}
                   >
@@ -381,12 +386,12 @@ export function LineupPreview({
             <button
               type="button"
               onClick={handleStartingPitcherTap}
-              className={`w-full flex items-center justify-between bg-[#5A7A52] px-2 py-1.5 border-2 transition-all ${
-                isPitcherSubMode ? 'border-[#FFD700] ring-1 ring-[#FFD700]' : 'border-[#C4A853]'
-              } active:bg-[#6A8A62]`}
+              className={`w-full flex items-center justify-between bg-[#2b3a2e] px-2 py-1.5 border-2 transition-all ${
+                isPitcherSubMode ? 'border-[#F2C041] ring-1 ring-[#F2C041]' : 'border-[#C4A853]'
+              } active:bg-[#3d4a42]`}
             >
-              <span className={`text-[10px] font-bold ${isPitcherSubMode ? 'text-[#FFD700]' : 'text-[#E8E8D8]'}`}
-                style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>
+              <span className={`text-[10px] font-bold ${isPitcherSubMode ? 'text-[#F2C041]' : 'text-[#E8E8D8]'}`}
+                style={{ fontFamily: "'Tox Typewriter', monospace" }}>
                 {startingPitcher.name}
               </span>
               <div className="flex items-center gap-1.5">
@@ -398,7 +403,7 @@ export function LineupPreview({
                   <button
                     type="button"
                     onClick={(e) => { e.stopPropagation(); cycleMojo(startingPitcher.playerId || startingPitcher.name, startingPitcher.mojo); }}
-                    className="text-[7px] px-1 py-0.5 rounded bg-[#3A5A32] border border-[#E8E8D8]/20 font-bold"
+                    className="text-[7px] px-1 py-0.5 rounded bg-[#283828] border border-[#556B55] font-bold"
                     style={{ color: MOJO_LABELS[startingPitcher.mojo ?? 0].color, textShadow: '1px 1px 0px rgba(0,0,0,0.5)' }}
                   >
                     {MOJO_LABELS[startingPitcher.mojo ?? 0].label}
@@ -408,7 +413,7 @@ export function LineupPreview({
                   <button
                     type="button"
                     onClick={(e) => { e.stopPropagation(); cycleFitness(startingPitcher.playerId || startingPitcher.name, startingPitcher.fitness); }}
-                    className="text-[7px] px-1 py-0.5 rounded bg-[#3A5A32] border border-[#E8E8D8]/20 font-bold"
+                    className="text-[7px] px-1 py-0.5 rounded bg-[#283828] border border-[#556B55] font-bold"
                     style={{ color: FITNESS_LABELS[startingPitcher.fitness ?? 'FIT'].color, textShadow: '1px 1px 0px rgba(0,0,0,0.5)' }}
                   >
                     {FITNESS_LABELS[startingPitcher.fitness ?? 'FIT'].label}
@@ -417,9 +422,9 @@ export function LineupPreview({
               </div>
             </button>
           ) : (
-            <div className="flex items-center justify-between bg-[#5A7A52] px-2 py-1.5 border-2 border-[#C4A853]">
+            <div className="flex items-center justify-between bg-[#2b3a2e] px-2 py-1.5 border-2 border-[#C4A853]">
               <span className="text-[10px] text-[#E8E8D8] font-bold"
-                style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>
+                style={{ fontFamily: "'Tox Typewriter', monospace" }}>
                 {startingPitcher.name}
               </span>
               <div className="flex items-center gap-1.5">
@@ -431,7 +436,7 @@ export function LineupPreview({
                   <button
                     type="button"
                     onClick={(e) => { e.stopPropagation(); cycleMojo(startingPitcher.playerId || startingPitcher.name, startingPitcher.mojo); }}
-                    className="text-[7px] px-1 py-0.5 rounded bg-[#3A5A32] border border-[#E8E8D8]/20 font-bold"
+                    className="text-[7px] px-1 py-0.5 rounded bg-[#283828] border border-[#556B55] font-bold"
                     style={{ color: MOJO_LABELS[startingPitcher.mojo ?? 0].color, textShadow: '1px 1px 0px rgba(0,0,0,0.5)' }}
                   >
                     {MOJO_LABELS[startingPitcher.mojo ?? 0].label}
@@ -441,7 +446,7 @@ export function LineupPreview({
                   <button
                     type="button"
                     onClick={(e) => { e.stopPropagation(); cycleFitness(startingPitcher.playerId || startingPitcher.name, startingPitcher.fitness); }}
-                    className="text-[7px] px-1 py-0.5 rounded bg-[#3A5A32] border border-[#E8E8D8]/20 font-bold"
+                    className="text-[7px] px-1 py-0.5 rounded bg-[#283828] border border-[#556B55] font-bold"
                     style={{ color: FITNESS_LABELS[startingPitcher.fitness ?? 'FIT'].color, textShadow: '1px 1px 0px rgba(0,0,0,0.5)' }}
                   >
                     {FITNESS_LABELS[startingPitcher.fitness ?? 'FIT'].label}
@@ -467,7 +472,7 @@ export function LineupPreview({
                   key={player.playerId || player.name}
                   type="button"
                   onClick={() => handleBenchPlayerTap(player)}
-                  className="w-full flex items-center justify-between px-2 py-1 bg-[#3A5A32] hover:bg-[#4A6A42] active:bg-[#5A7A52] border border-[#C4A853]/40 rounded transition-colors"
+                  className="w-full flex items-center justify-between px-2 py-1 bg-[#1f2b21] hover:bg-[#2b3a2e] active:bg-[#3d4a42] border border-[#C4A853]/40 rounded transition-colors"
                 >
                   <span className="text-[9px] text-[#E8E8D8] font-bold"
                     style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>
@@ -481,7 +486,7 @@ export function LineupPreview({
               ) : (
                 <div
                   key={player.playerId || player.name}
-                  className="flex items-center justify-between px-2 py-1 bg-[#3A5A32] border border-[#E8E8D8]/10 rounded"
+                  className="flex items-center justify-between px-2 py-1 bg-[#1f2b21] border border-[#556B55]/40 rounded"
                 >
                   <span className="text-[9px] text-[#E8E8D8]/60 font-bold"
                     style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>
@@ -512,7 +517,7 @@ export function LineupPreview({
                   key={pitcher.playerId || pitcher.name}
                   type="button"
                   onClick={() => handleBullpenPitcherTap(pitcher)}
-                  className="w-full flex items-center justify-between px-2 py-1 bg-[#3A5A32] hover:bg-[#4A6A42] active:bg-[#5A7A52] border border-[#C4A853]/40 rounded transition-colors"
+                  className="w-full flex items-center justify-between px-2 py-1 bg-[#1f2b21] hover:bg-[#2b3a2e] active:bg-[#3d4a42] border border-[#C4A853]/40 rounded transition-colors"
                 >
                   <span className="text-[9px] text-[#E8E8D8] font-bold"
                     style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>
@@ -526,7 +531,7 @@ export function LineupPreview({
               ) : (
                 <div
                   key={pitcher.playerId || pitcher.name}
-                  className="flex items-center justify-between px-2 py-1 bg-[#3A5A32] border border-[#E8E8D8]/10 rounded"
+                  className="flex items-center justify-between px-2 py-1 bg-[#1f2b21] border border-[#556B55]/40 rounded"
                 >
                   <span className="text-[9px] text-[#E8E8D8]/60 font-bold"
                     style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>
