@@ -12,13 +12,16 @@
  */
 
 import { generateHometown } from '../data/usCities';
+import type { EraFlavor, FameTier, PlayerArchetype } from '../types/reporter';
 import { trackFieldChanges, type EditHistoryEntry } from './editHistoryTracker';
 import { syncEngine } from './syncEngine';
 
 export type { EditHistoryEntry } from './editHistoryTracker';
+export type { EraFlavor, FameTier, PlayerArchetype } from '../types/reporter';
+export { FAME_TIER_LABEL } from '../types/reporter';
 
 const DB_NAME = 'kbl-league-builder';
-const DB_VERSION = 3;
+const DB_VERSION = 4;
 
 const STORES = {
   LEAGUE_TEMPLATES: 'leagueTemplates',
@@ -101,6 +104,10 @@ export interface Team {
   retiredNumbers?: number[];
   managerId?: string;
   managerName?: string;
+  backstory?: string;
+  era?: EraFlavor;
+  cityVibe?: string;
+  ballparkNickname?: string;
   createdDate: string;
   lastModified: string;
 }
@@ -117,6 +124,11 @@ export interface Player {
   firstName: string;
   lastName: string;
   nickname?: string;
+  backstory?: string;
+  nicknames?: string[];
+  archetype?: PlayerArchetype;
+  signatureMoment?: string;
+  baseFameTier?: FameTier;
   gender: 'M' | 'F';
   age: number;
   bats: 'L' | 'R' | 'S';
@@ -183,6 +195,7 @@ export interface LeaguePlayerOverrideRecord {
   leagueId: string;
   playerId: string;
   overrides: Partial<PlayerAttributes>;
+  fameTierOverride?: FameTier;
   lastModified: string;
 }
 
@@ -284,6 +297,8 @@ type LegacyPlayerRecord = Player & {
   rosterStatus?: LegacyRosterStatus;
 };
 
+type LegacyLeaguePlayerOverrideRecord = LeaguePlayerOverrideRecord;
+
 function requestToPromise<T>(request: IDBRequest<T>): Promise<T> {
   return new Promise((resolve, reject) => {
     request.onsuccess = () => resolve(request.result);
@@ -338,6 +353,7 @@ function buildLeagueAssignmentsFromLegacyPlayer(player: LegacyPlayerRecord): Lea
 function normalizePlayerRecord(player: LegacyPlayerRecord): Player {
   const normalized = {
     ...player,
+    baseFameTier: player.baseFameTier ?? 3,
     leagueAssignments: buildLeagueAssignmentsFromLegacyPlayer(player),
   };
 
@@ -345,6 +361,26 @@ function normalizePlayerRecord(player: LegacyPlayerRecord): Player {
   delete normalized.rosterStatus;
 
   return normalized;
+}
+
+function migratePlayerBaseFameTier(store: IDBObjectStore): void {
+  const cursorRequest = store.openCursor();
+  cursorRequest.onsuccess = () => {
+    const cursor = cursorRequest.result;
+    if (!cursor) return;
+
+    const player = normalizePlayerRecord(cursor.value as LegacyPlayerRecord);
+    if ((cursor.value as LegacyPlayerRecord).baseFameTier === undefined) {
+      cursor.update(player);
+    }
+    cursor.continue();
+  };
+}
+
+function normalizeLeaguePlayerOverrideRecord(
+  record: LegacyLeaguePlayerOverrideRecord,
+): LeaguePlayerOverrideRecord {
+  return { ...record };
 }
 
 async function resolveMigratedLeagueAssignments(db: IDBDatabase): Promise<void> {
@@ -471,16 +507,9 @@ export async function initLeagueBuilderDatabase(): Promise<IDBDatabase> {
         if (globalPlayersStore.indexNames.contains('currentTeamId')) {
           globalPlayersStore.deleteIndex('currentTeamId');
         }
-
-        const cursorRequest = globalPlayersStore.openCursor();
-        cursorRequest.onsuccess = () => {
-          const cursor = cursorRequest.result;
-          if (!cursor) return;
-
-          const player = normalizePlayerRecord(cursor.value as LegacyPlayerRecord);
-          cursor.update(player);
-          cursor.continue();
-        };
+        migratePlayerBaseFameTier(globalPlayersStore);
+      } else if (oldVersion < 4) {
+        migratePlayerBaseFameTier(globalPlayersStore);
       }
 
       // Rules Presets store
@@ -780,7 +809,9 @@ export async function getLeaguePlayerOverride(
     const store = tx.objectStore(STORES.LEAGUE_PLAYER_OVERRIDES);
     const request = store.get(createLeaguePlayerOverrideId(leagueId, playerId));
 
-    request.onsuccess = () => resolve(request.result || null);
+    request.onsuccess = () => resolve(
+      request.result ? normalizeLeaguePlayerOverrideRecord(request.result) : null,
+    );
     request.onerror = () => reject(request.error);
   });
 }
@@ -789,6 +820,7 @@ export async function setLeaguePlayerOverride(
   leagueId: string,
   playerId: string,
   overrides: Partial<PlayerAttributes>,
+  options?: { fameTierOverride?: FameTier },
 ): Promise<LeaguePlayerOverrideRecord> {
   const db = await initLeagueBuilderDatabase();
 
@@ -797,6 +829,7 @@ export async function setLeaguePlayerOverride(
     leagueId,
     playerId,
     overrides,
+    fameTierOverride: options?.fameTierOverride,
     lastModified: nowISO(),
   };
 
@@ -840,9 +873,16 @@ export async function getAllOverridesForLeague(leagueId: string): Promise<League
     const index = store.index('leagueId');
     const request = index.getAll(leagueId);
 
-    request.onsuccess = () => resolve(request.result || []);
+    request.onsuccess = () => resolve(
+      (request.result || []).map((record) => normalizeLeaguePlayerOverrideRecord(record)),
+    );
     request.onerror = () => reject(request.error);
   });
+}
+
+export function __resetLeagueBuilderDatabaseForTests(): void {
+  dbInstance?.close();
+  dbInstance = null;
 }
 
 function removePlayerIdFromRoster(roster: TeamRoster, playerId: string): TeamRoster {
