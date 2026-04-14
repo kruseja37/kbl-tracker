@@ -134,6 +134,11 @@ const TeamPage = lazy(() =>
     default: module.TeamPage,
   })),
 );
+const FamePipPreview = lazy(() =>
+  import("./src_figma/app/pages/FamePipPreview").then((module) => ({
+    default: module.FamePipPreview,
+  })),
+);
 
 /**
  * KBL Tracker - Main App
@@ -226,6 +231,9 @@ function App() {
           element={<PlayerInstanceCard />}
         />
         <Route path="/almanac/teams/:leagueId/:teamId" element={<TeamPage />} />
+
+        {/* Isolated component proof route */}
+        <Route path="/__preview/fame-pip" element={<FamePipPreview />} />
 
         {/* 404 */}
         <Route path="*" element={<NotFound />} />
