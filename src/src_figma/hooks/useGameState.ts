@@ -30,6 +30,7 @@ import {
 } from "../../utils/eventLog";
 import type { GameAggregationOptions } from "../../utils/seasonAggregator";
 import { processCompletedGame } from "../../utils/processCompletedGame";
+import { appendEliminationGameFameToRun } from "../../utils/eliminationRunFameStorage";
 import {
   archiveCompletedGame,
   saveCurrentGame,
@@ -9856,6 +9857,28 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
             );
           } catch (error) {
             console.error("[EndGame] archiveCompletedGame failed:", error);
+          }
+
+          const resolvedCompetitionType =
+            opts?.competitionType ?? competitionTypeRef.current;
+          const resolvedRunId =
+            opts?.competitionId ?? competitionIdRef.current;
+          if (
+            resolvedCompetitionType === "elimination" &&
+            resolvedRunId
+          ) {
+            try {
+              await appendEliminationGameFameToRun(
+                resolvedRunId,
+                persistedState.gameId,
+                persistedState.fameEvents,
+              );
+            } catch (error) {
+              console.error(
+                "[EndGame] appendEliminationGameFameToRun failed:",
+                error,
+              );
+            }
           }
         }
 

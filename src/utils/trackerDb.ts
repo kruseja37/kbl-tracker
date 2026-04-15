@@ -14,7 +14,7 @@
  */
 
 const DB_NAME = 'kbl-tracker';
-const DB_VERSION = 5; // Must be the highest version any consumer ever used
+const DB_VERSION = 6; // Must be the highest version any consumer ever used
 
 let dbInstance: IDBDatabase | null = null;
 
@@ -159,6 +159,18 @@ export async function getTrackerDb(): Promise<IDBDatabase> {
         });
         canonicalStore.createIndex('playerName', 'playerName', { unique: false });
       }
+
+      // ── v6: Elimination run Fame aggregates ─────────────────────
+      if (!db.objectStoreNames.contains('eliminationRunFameAggregates')) {
+        db.createObjectStore('eliminationRunFameAggregates', { keyPath: 'runId' });
+      }
     };
   });
+}
+
+export function resetTrackerDbForTests(): void {
+  if (dbInstance) {
+    dbInstance.close();
+    dbInstance = null;
+  }
 }

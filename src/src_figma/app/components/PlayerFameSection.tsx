@@ -1,4 +1,9 @@
+import { useEffect, useState } from "react";
 import type { CompletedGameRecord } from "../../../utils/gameStorage";
+import {
+  getPlayerRunFame as loadPlayerRunFame,
+  type PlayerRunFame,
+} from "../../../utils/eliminationRunFameStorage";
 import {
   FAME_VALUES,
   type FameEventType,
@@ -115,13 +120,7 @@ function formatEventStamp(
   return `${halfLabel} ${event.inning} · ${formatTimelineDate(event.timestamp)}`;
 }
 
-export function getPlayerRunFame(
-  _runId: string,
-  _playerId: string,
-): number {
-  // TODO(C1): Replace this stub with actual elimination run aggregation storage.
-  return 0;
-}
+export { getPlayerRunFame } from "../../../utils/eliminationRunFameStorage";
 
 export function PlayerFameSection({
   game,
@@ -129,6 +128,37 @@ export function PlayerFameSection({
   playerId,
   runId,
 }: PlayerFameSectionProps) {
+  const [runFame, setRunFame] = useState<PlayerRunFame>({
+    totalFame: 0,
+    events: [],
+    gamesPlayed: 0,
+  });
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    if (gameMode !== "elimination" || !runId) {
+      setRunFame({
+        totalFame: 0,
+        events: [],
+        gamesPlayed: 0,
+      });
+      return () => {
+        isCancelled = true;
+      };
+    }
+
+    void loadPlayerRunFame(runId, playerId).then((nextRunFame) => {
+      if (!isCancelled) {
+        setRunFame(nextRunFame);
+      }
+    });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [gameMode, playerId, runId]);
+
   if (gameMode === "franchise" || gameMode === "playoff") {
     return (
       <section className="border-[6px] border-[#5B4A24] bg-[#17120D] p-5 text-[#F5E8CF] shadow-[8px_8px_0px_0px_rgba(0,0,0,0.45)] sm:p-6">
@@ -145,7 +175,6 @@ export function PlayerFameSection({
   const tracker = buildArchivedGameFameTracker(game, gameMode);
   const gameFame = getPlayerGameFame(tracker, playerId);
   const events = getArchivedDisplayEvents(tracker, playerId);
-  const runFame = gameMode === "elimination" && runId ? getPlayerRunFame(runId, playerId) : null;
 
   return (
     <section className="border-[6px] border-[#5B4A24] bg-[#17120D] p-5 text-[#F5E8CF] shadow-[8px_8px_0px_0px_rgba(0,0,0,0.45)] sm:p-6">
@@ -173,9 +202,9 @@ export function PlayerFameSection({
             </div>
             <div
               className="mt-3 text-lg sm:text-xl"
-              style={{ color: getFameColor(runFame ?? 0) }}
+              style={{ color: getFameColor(runFame.totalFame) }}
             >
-              {formatFameValue(runFame ?? 0)}
+              {formatFameValue(runFame.totalFame)}
             </div>
           </div>
         ) : (

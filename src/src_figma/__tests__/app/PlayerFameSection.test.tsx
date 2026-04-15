@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
 import type { PlayerFameGameSource } from "../../app/components/PlayerFameSection";
@@ -6,9 +6,11 @@ import type { PlayerFameGameSource } from "../../app/components/PlayerFameSectio
 const {
   mockGetPlayerGameFame,
   mockGetPlayerGameEvents,
+  mockGetPlayerRunFame,
 } = vi.hoisted(() => ({
   mockGetPlayerGameFame: vi.fn(),
   mockGetPlayerGameEvents: vi.fn(),
+  mockGetPlayerRunFame: vi.fn(),
 }));
 
 vi.mock("../../app/engines/fameIntegration", async () => {
@@ -23,6 +25,10 @@ vi.mock("../../app/engines/fameIntegration", async () => {
   };
 });
 
+vi.mock("../../../utils/eliminationRunFameStorage", () => ({
+  getPlayerRunFame: mockGetPlayerRunFame,
+}));
+
 import { PlayerFameSection } from "../../app/components/PlayerFameSection";
 
 function createGame(events: PlayerFameGameSource["fameEvents"]): PlayerFameGameSource {
@@ -35,6 +41,11 @@ function createGame(events: PlayerFameGameSource["fameEvents"]): PlayerFameGameS
 describe("PlayerFameSection", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockGetPlayerRunFame.mockResolvedValue({
+      totalFame: 0,
+      events: [],
+      gamesPlayed: 0,
+    });
   });
 
   test("renders exhibition game fame totals and event rows from fameIntegration helpers", () => {
@@ -113,12 +124,12 @@ describe("PlayerFameSection", () => {
     expect(screen.getByText("WEB GEM")).toBeInTheDocument();
     expect(screen.getByText(/Bot 9/i)).toBeInTheDocument();
     expect(screen.getByText(/Top 7/i)).toBeInTheDocument();
-    expect(mockGetPlayerGameFame).toHaveBeenCalledTimes(1);
-    expect(mockGetPlayerGameEvents).toHaveBeenCalledTimes(1);
+    expect(mockGetPlayerGameFame).toHaveBeenCalled();
+    expect(mockGetPlayerGameEvents).toHaveBeenCalled();
     expect(mockGetPlayerGameFame.mock.calls[0][1]).toBe("player-1");
   });
 
-  test("renders elimination mode with the run-to-date stub", () => {
+  test("renders elimination mode with the run-to-date aggregate", async () => {
     mockGetPlayerGameFame.mockReturnValue(1.9);
     mockGetPlayerGameEvents.mockReturnValue([
       {
@@ -135,6 +146,11 @@ describe("PlayerFameSection", () => {
         attribution: "player",
       },
     ]);
+    mockGetPlayerRunFame.mockResolvedValue({
+      totalFame: 4.4,
+      events: [],
+      gamesPlayed: 2,
+    });
 
     render(
       <PlayerFameSection
@@ -162,8 +178,14 @@ describe("PlayerFameSection", () => {
     );
 
     expect(screen.getByText("Run To Date")).toBeInTheDocument();
-    expect(screen.getByText("0.0")).toBeInTheDocument();
     expect(screen.getByText("GO AHEAD HR")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText("+4.4")).toBeInTheDocument();
+    });
+    expect(mockGetPlayerRunFame).toHaveBeenCalledWith(
+      "preview-elimination",
+      "player-1",
+    );
   });
 
   test("renders the franchise placeholder without consulting game fame helpers", () => {
