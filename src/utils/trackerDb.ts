@@ -14,7 +14,7 @@
  */
 
 const DB_NAME = 'kbl-tracker';
-const DB_VERSION = 7; // Must be the highest version any consumer ever used
+const DB_VERSION = 8; // Must be the highest version any consumer ever used
 
 let dbInstance: IDBDatabase | null = null;
 
@@ -199,6 +199,21 @@ export async function getTrackerDb(): Promise<IDBDatabase> {
         jobStore.createIndex('status', 'status', { unique: false });
         jobStore.createIndex('entityKey', 'entityKey', { unique: false });
         jobStore.createIndex('queuedAt', 'queuedAt', { unique: false });
+      }
+
+      // ── v8: Reporter LLM usage + app preferences ───────────────
+      if (!db.objectStoreNames.contains('llmUsageLog')) {
+        const usageStore = db.createObjectStore('llmUsageLog', { keyPath: 'id' });
+        usageStore.createIndex('timestamp', 'timestamp', { unique: false });
+        usageStore.createIndex('gameId', 'gameId', { unique: false });
+        usageStore.createIndex('mode', 'mode', { unique: false });
+        usageStore.createIndex('intensity', 'intensity', { unique: false });
+        usageStore.createIndex('model', 'model', { unique: false });
+        usageStore.createIndex('purpose', 'purpose', { unique: false });
+      }
+
+      if (!db.objectStoreNames.contains('userPreferences')) {
+        db.createObjectStore('userPreferences', { keyPath: 'key' });
       }
     };
   });
