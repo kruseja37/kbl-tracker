@@ -22,6 +22,12 @@ import {
   type CompletedGameRecord,
   type PersistedGameState,
 } from "../../../../utils/gameStorage";
+import {
+  getPlayerLegacySummary,
+  getRecentPlayerAlmanac,
+  getRecentTeamAlmanac,
+  getTeamLegacySummary,
+} from "../../../../utils/reporterAlmanacCacheStorage";
 
 const MAX_RECENT_ALMANAC_ENTRIES = 5;
 const DEFAULT_LEGACY_SUMMARY = "";
@@ -147,10 +153,10 @@ const defaultReporterContextDataSources: ReporterContextDataSources = {
   getPlayer,
   getTeam,
   getLeaguePlayerOverride,
-  getPlayerLegacySummary: async () => null,
-  getTeamLegacySummary: async () => null,
-  getRecentPlayerAlmanac: async () => [],
-  getRecentTeamAlmanac: async () => [],
+  getPlayerLegacySummary,
+  getTeamLegacySummary,
+  getRecentPlayerAlmanac,
+  getRecentTeamAlmanac,
 };
 
 export interface BuildReporterContextOptions {

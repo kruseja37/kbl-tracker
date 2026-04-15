@@ -14,7 +14,7 @@
  */
 
 const DB_NAME = 'kbl-tracker';
-const DB_VERSION = 6; // Must be the highest version any consumer ever used
+const DB_VERSION = 7; // Must be the highest version any consumer ever used
 
 let dbInstance: IDBDatabase | null = null;
 
@@ -163,6 +163,42 @@ export async function getTrackerDb(): Promise<IDBDatabase> {
       // ── v6: Elimination run Fame aggregates ─────────────────────
       if (!db.objectStoreNames.contains('eliminationRunFameAggregates')) {
         db.createObjectStore('eliminationRunFameAggregates', { keyPath: 'runId' });
+      }
+
+      // ── v7: Reporter almanac cache substrate ───────────────────
+      if (!db.objectStoreNames.contains('reporterPlayerAlmanacCaches')) {
+        const playerCacheStore = db.createObjectStore('reporterPlayerAlmanacCaches', {
+          keyPath: 'cacheKey',
+        });
+        playerCacheStore.createIndex('playerId', 'playerId', { unique: false });
+        playerCacheStore.createIndex('instanceId', 'instanceId', { unique: false });
+      }
+
+      if (!db.objectStoreNames.contains('reporterTeamAlmanacCaches')) {
+        const teamCacheStore = db.createObjectStore('reporterTeamAlmanacCaches', {
+          keyPath: 'cacheKey',
+        });
+        teamCacheStore.createIndex('teamId', 'teamId', { unique: false });
+        teamCacheStore.createIndex('instanceId', 'instanceId', { unique: false });
+      }
+
+      if (!db.objectStoreNames.contains('reporterAlmanacEntries')) {
+        const entryStore = db.createObjectStore('reporterAlmanacEntries', {
+          keyPath: 'id',
+        });
+        entryStore.createIndex('entityKey', 'entityKey', { unique: false });
+        entryStore.createIndex('entityType', 'entityType', { unique: false });
+        entryStore.createIndex('entityId', 'entityId', { unique: false });
+        entryStore.createIndex('timestamp', 'timestamp', { unique: false });
+      }
+
+      if (!db.objectStoreNames.contains('reporterLegacySummaryJobs')) {
+        const jobStore = db.createObjectStore('reporterLegacySummaryJobs', {
+          keyPath: 'id',
+        });
+        jobStore.createIndex('status', 'status', { unique: false });
+        jobStore.createIndex('entityKey', 'entityKey', { unique: false });
+        jobStore.createIndex('queuedAt', 'queuedAt', { unique: false });
       }
     };
   });
