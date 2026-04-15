@@ -499,7 +499,10 @@ import {
 import { generateGameRecap } from "../engines/narrativeIntegration";
 // mWAR: Manager decision tracking
 import { useMWARCalculations } from "../hooks/useMWARCalculations";
-import type { GameStateForLI } from "../../../engines/leverageCalculator";
+import {
+  getLeverageIndex,
+  type GameStateForLI,
+} from "../../../engines/leverageCalculator";
 import {
   saveGameDecisions,
   aggregateManagerGameToSeason,
@@ -518,6 +521,23 @@ import {
 } from "../../../utils/seasonStorage";
 // T0-05: Schedule persistence — mark played games as COMPLETED
 import { completeGame as completeScheduleGame } from "../../../utils/scheduleStorage";
+import {
+  buildSaveAppearanceStartContextFromAtBat,
+  buildSaveAppearanceUpdateContextFromAtBat,
+  buildSaveAppearanceUpdateContextFromRunnerEvent,
+  createSaveAppearanceSnapshot,
+  detectBackToBackHREvents,
+  detectBlownSaveEvent,
+  detectTootblanEvent,
+  detectTriplePlayEvents,
+  detectWalkOffHREvent,
+  getRunsAllowedForSide,
+  getTeamWonFromFinalScore,
+  updateSaveAppearanceSnapshot,
+  type DefensivePlayerIdentity,
+  type DetectedFameEvent,
+  type SaveAppearanceSnapshot,
+} from "../engines/fameAutoDetections";
 // Fielding pipeline: extract fielding events from PlayData and log to IndexedDB
 import {
   extractFieldingEvents,
@@ -1178,6 +1198,7 @@ export function GameTracker() {
         ...prev.filter((entry) => entry.eventId !== eventId),
         nextEntry,
       ]);
+      await processCommittedAtBatAutoDetectionsRef.current(committedEvent);
     },
     [buildEnrichmentCacheSeed],
   );
@@ -1337,6 +1358,43 @@ export function GameTracker() {
     gameMode,
     isPlayoffs: isPlayoffGame,
   });
+  const recordedAutoFameKeysRef = useRef<Set<string>>(new Set());
+  const processedAutoFameAtBatIdsRef = useRef<Set<string>>(new Set());
+  const activeSaveAppearancesRef = useRef<
+    Partial<Record<"away" | "home", SaveAppearanceSnapshot>>
+  >({});
+  const completedSaveAppearancesRef = useRef<SaveAppearanceSnapshot[]>([]);
+  const processCommittedAtBatAutoDetectionsRef = useRef<
+    (event: AtBatEvent) => Promise<void>
+  >(async () => {});
+
+  const recordDetectedFameEvents = useCallback(
+    (events: DetectedFameEvent[]) => {
+      for (const event of events) {
+        if (recordedAutoFameKeysRef.current.has(event.detectionKey)) {
+          continue;
+        }
+
+        recordedAutoFameKeysRef.current.add(event.detectionKey);
+        fameTrackingHook.recordFameEvent(
+          event.eventType,
+          event.playerId,
+          event.playerName,
+          event.inning,
+          event.halfInning,
+          event.leverageIndex,
+        );
+      }
+    },
+    [fameTrackingHook],
+  );
+
+  useEffect(() => {
+    recordedAutoFameKeysRef.current.clear();
+    processedAutoFameAtBatIdsRef.current.clear();
+    activeSaveAppearancesRef.current = {};
+    completedSaveAppearancesRef.current = [];
+  }, [gameId]);
 
   const lastFameKeyRef = useRef<string>("");
   useEffect(() => {
@@ -1386,6 +1444,13 @@ export function GameTracker() {
     }),
     [gameState],
   );
+
+  const getCurrentLeverageIndex = useCallback(() => {
+    return getLeverageIndex(
+      buildGameStateForLI(),
+      hookTotalInningsRef.current || 9,
+    );
+  }, [buildGameStateForLI, hookTotalInningsRef]);
 
   // Track pending mWAR decisions for outcome resolution
   const [pendingMWARDecisions, setPendingMWARDecisions] = useState<
@@ -2882,6 +2947,16 @@ export function GameTracker() {
     };
   }, [atBatSequence, gameState.gameId]);
 
+  const commitPlateAppearanceAndAppend = useCallback(
+    async (action: PlateAppearanceAction) => {
+      const atBatIdentity = getPendingAtBatIdentity();
+      await commitPlateAppearance(action);
+      await appendCommittedAtBatEntry(atBatIdentity.atBatEventId);
+      return atBatIdentity;
+    },
+    [appendCommittedAtBatEntry, commitPlateAppearance, getPendingAtBatIdentity],
+  );
+
   const buildFieldingContext = useCallback(
     (atBatIdentity: {
       atBatEventId: string;
@@ -3319,6 +3394,78 @@ export function GameTracker() {
     },
     [],
   );
+
+  const processCommittedAtBatAutoDetections = useCallback(
+    async (committedEvent: AtBatEvent) => {
+      if (processedAutoFameAtBatIdsRef.current.has(committedEvent.eventId)) {
+        return;
+      }
+      processedAutoFameAtBatIdsRef.current.add(committedEvent.eventId);
+
+      const scheduledInnings = hookTotalInningsRef.current || 9;
+      const gameEvents = await getGameEvents(committedEvent.gameId);
+      const currentIndex = gameEvents.findIndex(
+        (event) => event.eventId === committedEvent.eventId,
+      );
+      const previousAtBat =
+        currentIndex > 0 ? gameEvents[currentIndex - 1] : null;
+      const linkedFieldingEvents = await getFieldingEventsForAtBat(
+        committedEvent.eventId,
+      );
+      const defendersByCode = await buildHistoricalDefensiveAlignment(
+        committedEvent,
+        linkedFieldingEvents,
+      );
+      const defendersByPosition = Object.entries(defendersByCode).reduce<
+        Record<number, DefensivePlayerIdentity>
+      >((acc, [position, defender]) => {
+        const positionNumber =
+          POSITION_NUMBER[position as keyof typeof POSITION_NUMBER];
+        if (positionNumber && defender) {
+          acc[positionNumber] = defender;
+        }
+        return acc;
+      }, {});
+
+      recordDetectedFameEvents([
+        ...detectTriplePlayEvents(committedEvent, defendersByPosition),
+        ...detectBackToBackHREvents(committedEvent, previousAtBat),
+        ...detectWalkOffHREvent(committedEvent, scheduledInnings),
+      ]);
+
+      const startContext = buildSaveAppearanceStartContextFromAtBat(
+        committedEvent,
+        scheduledInnings,
+      );
+      const updateContext = buildSaveAppearanceUpdateContextFromAtBat(
+        committedEvent,
+        scheduledInnings,
+      );
+      const activeAppearance =
+        activeSaveAppearancesRef.current[startContext.teamSide];
+
+      if (!activeAppearance || activeAppearance.pitcherId !== committedEvent.pitcherId) {
+        if (activeAppearance) {
+          completedSaveAppearancesRef.current.push(activeAppearance);
+        }
+        activeSaveAppearancesRef.current[startContext.teamSide] =
+          createSaveAppearanceSnapshot(
+            committedEvent.pitcherId,
+            committedEvent.pitcherName,
+            startContext,
+          );
+      }
+
+      activeSaveAppearancesRef.current[startContext.teamSide] =
+        updateSaveAppearanceSnapshot(
+          activeSaveAppearancesRef.current[startContext.teamSide]!,
+          updateContext,
+        );
+    },
+    [buildHistoricalDefensiveAlignment, hookTotalInningsRef, recordDetectedFameEvents],
+  );
+  processCommittedAtBatAutoDetectionsRef.current =
+    processCommittedAtBatAutoDetections;
 
   const buildFieldingSyncEventsForSequenceEdit = useCallback(
     async (
@@ -5999,7 +6146,7 @@ export function GameTracker() {
             return; // Deferred to handleDpPromptAnswer
           }
           // No runner out in defaults → standard GO, fall through
-          await commitPlateAppearance({
+          await commitPlateAppearanceAndAppend({
             type: "out",
             outType: "GO",
             runnerAdvancement: runnerAdv,
@@ -6031,19 +6178,19 @@ export function GameTracker() {
           );
 
           if (correction.action.type === "hit") {
-            await commitPlateAppearance({
+            await commitPlateAppearanceAndAppend({
               type: "hit",
               hitType: correction.action.hitType,
               rbi: immediateRbi,
               runnerAdvancement,
             });
           } else if (correction.action.type === "walk") {
-            await commitPlateAppearance({
+            await commitPlateAppearanceAndAppend({
               type: "walk",
               walkType: correction.action.walkType,
             });
           } else {
-            await commitPlateAppearance({
+            await commitPlateAppearanceAndAppend({
               type: "out",
               outType: correction.action.outType,
               runnerAdvancement,
@@ -6080,7 +6227,14 @@ export function GameTracker() {
         setProcessingOutcome(null);
       }
     },
-    [gameInitialized, gameState, undoSystem, logAction, playAudio],
+    [
+      commitPlateAppearanceAndAppend,
+      gameInitialized,
+      gameState,
+      logAction,
+      playAudio,
+      undoSystem,
+    ],
   );
 
   // ═══════════════════════════════════════════════════════════
@@ -7089,6 +7243,130 @@ export function GameTracker() {
     third: "home",
   };
 
+  const processRunnerEventAutoDetections = useCallback(
+    (input: {
+      eventType:
+        | "SB"
+        | "CS"
+        | "WP"
+        | "PB"
+        | "PICK"
+        | "PICK_SAFE"
+        | "PICK_E"
+        | "ADVANCE";
+      runnerId: string;
+      runnerName: string;
+      leverageIndex?: number;
+      outcome: "safe" | "out";
+      toBase: "first" | "second" | "third" | "home" | "out";
+    }) => {
+      const scheduledInnings = hookTotalInningsRef.current || 9;
+      const defenseSide = gameState.isTop ? "home" : "away";
+      const beforeScore = {
+        away: gameState.awayScore,
+        home: gameState.homeScore,
+      };
+      const battingTeamScored =
+        input.outcome === "safe" && input.toBase === "home" ? 1 : 0;
+      const afterScore = {
+        away: gameState.isTop ? gameState.awayScore + battingTeamScored : gameState.awayScore,
+        home: gameState.isTop ? gameState.homeScore : gameState.homeScore + battingTeamScored,
+      };
+      const outsDelta = input.outcome === "out" ? 1 : 0;
+      const activeAppearance = activeSaveAppearancesRef.current[defenseSide];
+      if (activeAppearance && activeAppearance.pitcherId === gameState.currentPitcherId) {
+        activeSaveAppearancesRef.current[defenseSide] =
+          updateSaveAppearanceSnapshot(
+            activeAppearance,
+            buildSaveAppearanceUpdateContextFromRunnerEvent({
+              inning: gameState.inning,
+              halfInning: gameState.isTop ? "TOP" : "BOTTOM",
+              scoreBefore: beforeScore,
+              scoreAfter: afterScore,
+              outsDelta,
+              runsAllowed: getRunsAllowedForSide(
+                defenseSide,
+                beforeScore,
+                afterScore,
+              ),
+              scheduledInnings,
+              leverageIndex: input.leverageIndex ?? getCurrentLeverageIndex(),
+            }),
+          );
+      } else {
+        activeSaveAppearancesRef.current[defenseSide] = createSaveAppearanceSnapshot(
+          gameState.currentPitcherId,
+          resolvedCurrentPitcherName,
+          {
+            inning: gameState.inning,
+            halfInning: gameState.isTop ? "TOP" : "BOTTOM",
+            outs: gameState.outs,
+            bases: {
+              first: gameState.bases.first,
+              second: gameState.bases.second,
+              third: gameState.bases.third,
+            },
+            score: beforeScore,
+            scheduledInnings,
+            teamSide: defenseSide,
+          },
+        );
+        activeSaveAppearancesRef.current[defenseSide] =
+          updateSaveAppearanceSnapshot(
+            activeSaveAppearancesRef.current[defenseSide]!,
+            buildSaveAppearanceUpdateContextFromRunnerEvent({
+              inning: gameState.inning,
+              halfInning: gameState.isTop ? "TOP" : "BOTTOM",
+              scoreBefore: beforeScore,
+              scoreAfter: afterScore,
+              outsDelta,
+              runsAllowed: getRunsAllowedForSide(
+                defenseSide,
+                beforeScore,
+                afterScore,
+              ),
+              scheduledInnings,
+              leverageIndex: input.leverageIndex ?? getCurrentLeverageIndex(),
+            }),
+          );
+      }
+
+      if (input.eventType === "PICK" && input.runnerId) {
+        recordDetectedFameEvents(
+          detectTootblanEvent({
+            runnerId: input.runnerId,
+            runnerName: input.runnerName,
+            inning: gameState.inning,
+            halfInning: gameState.isTop ? "TOP" : "BOTTOM",
+            leverageIndex: input.leverageIndex ?? getCurrentLeverageIndex(),
+            outsBefore: gameState.outs,
+            basesBefore: {
+              first: gameState.bases.first,
+              second: gameState.bases.second,
+              third: gameState.bases.third,
+            },
+            source: "pickoff",
+          }),
+        );
+      }
+    },
+    [
+      gameState.awayScore,
+      gameState.bases.first,
+      gameState.bases.second,
+      gameState.bases.third,
+      gameState.currentPitcherId,
+      gameState.homeScore,
+      gameState.inning,
+      gameState.isTop,
+      gameState.outs,
+      getCurrentLeverageIndex,
+      hookTotalInningsRef,
+      recordDetectedFameEvents,
+      resolvedCurrentPitcherName,
+    ],
+  );
+
   const recordRunnerActionFromPlayerCard = useCallback(
     async (
       eventType:
@@ -7135,6 +7413,13 @@ export function GameTracker() {
         catcherId: defensiveAlignmentByPosition.C?.playerId,
         catcherName: defensiveAlignmentByPosition.C?.playerName,
       });
+      processRunnerEventAutoDetections({
+        eventType,
+        runnerId,
+        runnerName,
+        outcome,
+        toBase,
+      });
 
       setSelectedPlayer(null);
       queuePlayLogRefresh();
@@ -7143,6 +7428,7 @@ export function GameTracker() {
       advanceRunner,
       defensiveAlignmentByPosition,
       gameState.currentPitcherId,
+      processRunnerEventAutoDetections,
       queuePlayLogRefresh,
       recordEvent,
       resolvedCurrentPitcherName,
@@ -7191,6 +7477,19 @@ export function GameTracker() {
             : undefined,
         },
       );
+      if (
+        pendingRunnerAttribution.runnerId &&
+        pendingRunnerAttribution.runnerName
+      ) {
+        processRunnerEventAutoDetections({
+          eventType: pendingRunnerAttribution.eventType,
+          runnerId: pendingRunnerAttribution.runnerId,
+          runnerName: pendingRunnerAttribution.runnerName,
+          leverageIndex: getCurrentLeverageIndex(),
+          outcome: pendingRunnerAttribution.outcome,
+          toBase: pendingRunnerAttribution.recordToBase,
+        });
+      }
 
       setPendingRunnerAttribution(null);
       queuePlayLogRefresh();
@@ -7206,6 +7505,7 @@ export function GameTracker() {
     advanceRunner,
     liveRunnerFielderById,
     pendingRunnerAttribution,
+    processRunnerEventAutoDetections,
     queuePlayLogRefresh,
     recordEvent,
     undoSystem,
@@ -7639,7 +7939,7 @@ export function GameTracker() {
       );
 
       if (pendingOutcome.type === "hit") {
-        await commitPlateAppearance({
+        await commitPlateAppearanceAndAppend({
           type: "hit",
           hitType: pendingOutcome.subType as HitType,
           rbi: pendingOutcome.rbi || 0,
@@ -7653,7 +7953,7 @@ export function GameTracker() {
         );
       } else if (pendingOutcome.type === "out") {
         // GAP-GT-6-A: Pass forceNoRuns when user has toggled the time play override
-        await commitPlateAppearance({
+        await commitPlateAppearanceAndAppend({
           type: "out",
           outType: pendingOutcome.subType as OutType,
           runnerAdvancement:
@@ -7679,7 +7979,7 @@ export function GameTracker() {
         );
         setTimePlayNoRun(false); // Reset time play toggle after recording
       } else if (pendingOutcome.type === "walk") {
-        await commitPlateAppearance({
+        await commitPlateAppearanceAndAppend({
           type: "walk",
           walkType: pendingOutcome.subType as WalkType,
         });
@@ -7696,7 +7996,7 @@ export function GameTracker() {
       console.error("Failed to record outcome:", error);
     }
   }, [
-    commitPlateAppearance,
+    commitPlateAppearanceAndAppend,
     gameState.bases,
     gameState.outs,
     logAction,
@@ -8904,6 +9204,29 @@ export function GameTracker() {
     try {
       // MAJ-09: End-of-game achievement detection (No-Hitter, Perfect Game, Maddux, CG, Shutout)
       try {
+        const finalScore = {
+          away: gameState.awayScore,
+          home: gameState.homeScore,
+        };
+        const resolvedBlownSaveEvents = [
+          ...completedSaveAppearancesRef.current,
+          ...Object.values(activeSaveAppearancesRef.current).filter(
+            (
+              appearance,
+            ): appearance is SaveAppearanceSnapshot => appearance != null,
+          ),
+        ]
+          .map((snapshot) =>
+            detectBlownSaveEvent(
+              snapshot,
+              getTeamWonFromFinalScore(snapshot.teamSide, finalScore),
+            ),
+          )
+          .filter(
+            (event): event is DetectedFameEvent => event !== null,
+          );
+        recordDetectedFameEvents(resolvedBlownSaveEvents);
+
         const totalGameOuts = gameState.inning * 3; // Approximate from current inning
         for (const [pitcherId, pStats] of pitcherStats.entries()) {
           if (!pStats.isStarter) continue; // Only starters can have CG/NH/PG
@@ -9275,6 +9598,7 @@ export function GameTracker() {
     gameState,
     pitcherStats,
     fameTrackingHook,
+    recordDetectedFameEvents,
     homeFanMorale,
     awayFanMorale,
     homeTeamName,
@@ -11075,7 +11399,7 @@ export function GameTracker() {
                                 onClick={async () => {
                                   // Record as SF directly (cleaner than mutating pendingOutcome)
                                   try {
-                                    await commitPlateAppearance({
+                                    await commitPlateAppearanceAndAppend({
                                       type: "out",
                                       outType: "SF",
                                     });
