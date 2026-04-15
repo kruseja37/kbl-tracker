@@ -1,4 +1,8 @@
 import { FameLeaderboardCard, type FameLeaderboardGameSource } from "../components/FameLeaderboardCard";
+import {
+  RunStandingsTable,
+  type RunStandingsEntry,
+} from "../components/RunStandingsTable";
 
 const exhibitionFixture: FameLeaderboardGameSource = {
   gameId: "preview-fame-exhibition",
@@ -150,6 +154,55 @@ const eliminationRunTotals = {
   "home-lena": -1.2,
 };
 
+const eliminationRunStandings: RunStandingsEntry[] = [
+  {
+    playerId: "home-ivy",
+    playerName: "Ivy Knox",
+    teamId: "sparks",
+    teamName: "Night Shift",
+    totalFame: 7.2,
+    gamesPlayed: 3,
+    isCurrentGamePlayer: true,
+    events: [
+      eliminationFixture.fameEvents[4]!,
+      eliminationFixture.fameEvents[7]!,
+    ],
+  },
+  {
+    playerId: "away-maya",
+    playerName: "Maya Vega",
+    teamId: "comets",
+    teamName: "Bracket Breakers",
+    totalFame: 6.4,
+    gamesPlayed: 3,
+    isCurrentGamePlayer: true,
+    events: [
+      eliminationFixture.fameEvents[0]!,
+      eliminationFixture.fameEvents[1]!,
+    ],
+  },
+  {
+    playerId: "away-jo",
+    playerName: "Jo Mercer",
+    teamId: "comets",
+    teamName: "Bracket Breakers",
+    totalFame: 4.1,
+    gamesPlayed: 2,
+    isCurrentGamePlayer: true,
+    events: [eliminationFixture.fameEvents[2]!],
+  },
+  {
+    playerId: "home-dani",
+    playerName: "Dani Cross",
+    teamId: "sparks",
+    teamName: "Night Shift",
+    totalFame: 1.3,
+    gamesPlayed: 2,
+    isCurrentGamePlayer: true,
+    events: [eliminationFixture.fameEvents[5]!],
+  },
+];
+
 export function FameLeaderboardPreview() {
   return (
     <main
@@ -243,6 +296,9 @@ export function FameLeaderboardPreview() {
               initialExpandedPlayerIds={["away-jo", "home-lena"]}
               runTotalsByPlayerId={eliminationRunTotals}
             />
+            <div style={{ marginTop: "18px" }}>
+              <RunStandingsTable standings={eliminationRunStandings} />
+            </div>
           </section>
         </div>
       </section>

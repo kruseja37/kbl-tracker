@@ -6,11 +6,19 @@ import {
   getCompletedGameById,
   type CompletedGameRecord,
 } from "../../utils/gameStorage";
+import {
+  getRunFameStandings,
+  type RunFameStanding,
+} from "../../../utils/eliminationRunFameStorage";
 import { getGameEvents, type AtBatEvent } from "../../../utils/eventLog";
 import { rankPlayersOfTheGame } from "../../../utils/playersOfTheGame";
 import chalkBgImg from '../../../assets/chalk-bg.png';
 import chalkBgFaintImg from '../../../assets/chalk-bg-faint.png';
 import { FameLeaderboardCard } from "../components/FameLeaderboardCard";
+import {
+  buildRunStandingsEntries,
+  RunStandingsTable,
+} from "../components/RunStandingsTable";
 
 // Helper to format innings pitched from outs recorded
 function formatIP(outsRecorded: number): string {
@@ -204,6 +212,8 @@ export function PostGameSummary({
   const [boxScoreExpanded, setBoxScoreExpanded] = useState(false);
   const [gameData, setGameData] = useState<CompletedGameRecord | null>(null);
   const [atBatEvents, setAtBatEvents] = useState<AtBatEvent[]>([]);
+  const [runStandings, setRunStandings] = useState<RunFameStanding[]>([]);
+  const [isRunStandingsLoading, setIsRunStandingsLoading] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -225,6 +235,11 @@ export function PostGameSummary({
     ...navigationState,
     franchiseId,
   };
+  const resolvedGameMode = gameMode ?? gameData?.competitionType ?? "exhibition";
+  const eliminationRunId =
+    navigationState?.competitionId ??
+    gameData?.competitionId ??
+    eliminationId;
 
   // Load game data from IndexedDB
   useEffect(() => {
@@ -281,6 +296,42 @@ export function PostGameSummary({
       cancelled = true;
     };
   }, [gameId]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadRunStandings() {
+      if (resolvedGameMode !== "elimination" || !eliminationRunId) {
+        setRunStandings([]);
+        setIsRunStandingsLoading(false);
+        return;
+      }
+
+      setIsRunStandingsLoading(true);
+
+      try {
+        const standings = await getRunFameStandings(eliminationRunId);
+        if (!cancelled) {
+          setRunStandings(standings);
+        }
+      } catch (runStandingsError) {
+        console.error("Failed to load elimination run standings:", runStandingsError);
+        if (!cancelled) {
+          setRunStandings([]);
+        }
+      } finally {
+        if (!cancelled) {
+          setIsRunStandingsLoading(false);
+        }
+      }
+    }
+
+    loadRunStandings();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [eliminationRunId, resolvedGameMode]);
 
   // Show loading state
   if (isLoading) {
@@ -450,10 +501,16 @@ export function PostGameSummary({
   // Determine winner
   const homeWon = gameData.finalScore.home > gameData.finalScore.away;
   const winnerName = homeWon ? homeTeamName : awayTeamName;
-  const winnerId = homeWon ? homeTeamId : awayTeamId;
 
   const topPerformers = rankPlayersOfTheGame(gameData, atBatEvents);
-  const resolvedGameMode = gameMode ?? gameData.competitionType ?? "exhibition";
+  const currentGamePlayerIds = new Set<string>([
+    ...Object.keys(gameData.playerStats ?? {}),
+    ...gameData.pitcherGameStats.map((pitcher) => pitcher.pitcherId),
+  ]);
+  const runStandingsEntries = buildRunStandingsEntries(runStandings, currentGamePlayerIds, {
+    [awayTeamId]: awayTeamName,
+    [homeTeamId]: homeTeamName,
+  });
 
   return (
     <div className="min-h-screen bg-[#2b3a2e] text-[#E8E8D8] p-6" style={{ fontFamily: "'Moms Typewriter', monospace" }}>
@@ -617,6 +674,13 @@ export function PostGameSummary({
                   game={gameData}
                   gameMode={resolvedGameMode}
                 />
+
+                {resolvedGameMode === "elimination" ? (
+                  <RunStandingsTable
+                    standings={runStandingsEntries}
+                    isLoading={isRunStandingsLoading}
+                  />
+                ) : null}
 
                 {/* Players of the game */}
                 {[0, 1, 2].map((rank) => {

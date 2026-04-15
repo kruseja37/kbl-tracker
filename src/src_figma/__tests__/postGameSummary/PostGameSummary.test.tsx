@@ -17,18 +17,22 @@ import type { CompletedGameRecord } from '../../utils/gameStorage';
 const {
   mockNavigate,
   mockGetGameEvents,
+  mockGetRunFameStandings,
+  mockLocationState,
 } = vi.hoisted(() => ({
   mockNavigate: vi.fn(),
   mockGetGameEvents: vi.fn(),
+  mockGetRunFameStandings: vi.fn(),
+  mockLocationState: {
+    gameMode: 'franchise',
+    franchiseId: '1',
+  } as Record<string, unknown>,
 }));
 
 vi.mock('react-router', () => ({
   useNavigate: () => mockNavigate,
   useLocation: () => ({
-    state: {
-      gameMode: 'franchise',
-      franchiseId: '1',
-    },
+    state: mockLocationState,
   }),
   useParams: () => ({ gameId: 'test-game-123' }),
 }));
@@ -43,6 +47,10 @@ vi.mock('@/config/teamColors', () => ({
 
 vi.mock('../../../utils/eventLog', () => ({
   getGameEvents: mockGetGameEvents,
+}));
+
+vi.mock('../../../utils/eliminationRunFameStorage', () => ({
+  getRunFameStandings: mockGetRunFameStandings,
 }));
 
 // Build a complete CompletedGameRecord for mocking
@@ -309,10 +317,15 @@ vi.mock('../../utils/gameStorage', () => ({
 describe('PostGameSummary Component', () => {
   beforeEach(async () => {
     vi.clearAllMocks();
+    mockLocationState.gameMode = 'franchise';
+    mockLocationState.franchiseId = '1';
+    delete mockLocationState.eliminationId;
+    delete mockLocationState.competitionId;
     // Re-mock to ensure fresh data each test
     const { getCompletedGameById } = await import('../../utils/gameStorage');
     vi.mocked(getCompletedGameById).mockResolvedValue(mockGameData);
     mockGetGameEvents.mockResolvedValue(mockAtBatEvents);
+    mockGetRunFameStandings.mockResolvedValue([]);
   });
 
   describe('Header', () => {
@@ -330,6 +343,65 @@ describe('PostGameSummary Component', () => {
       render(<PostGameSummary />);
       expect(await screen.findByText('SUPER MEGA')).toBeInTheDocument();
       expect(screen.getByText('BASEBALL')).toBeInTheDocument();
+    });
+  });
+
+  describe('Run standings table', () => {
+    test('renders elimination run standings when the summary is in elimination mode', async () => {
+      const eliminationGame = {
+        ...mockGameData,
+        competitionType: 'elimination' as const,
+        competitionId: 'elim-run-22',
+      };
+
+      mockLocationState.gameMode = 'elimination';
+      mockLocationState.eliminationId = 'elim-run-22';
+      mockLocationState.competitionId = 'elim-run-22';
+      const { getCompletedGameById } = await import('../../utils/gameStorage');
+      vi.mocked(getCompletedGameById).mockResolvedValue(eliminationGame);
+      mockGetRunFameStandings.mockResolvedValue([
+        {
+          playerId: 'home-j-martinez',
+          playerName: 'J Martinez',
+          totalFame: 6.2,
+          gamesPlayed: 3,
+          events: [
+            {
+              id: 'run-1',
+              gameId: 'test-game-123',
+              eventType: 'GRAND_SLAM',
+              playerId: 'home-j-martinez',
+              playerName: 'J Martinez',
+              playerTeam: 'sox',
+              fameValue: 6.2,
+              fameType: 'bonus',
+              inning: 8,
+              halfInning: 'BOTTOM',
+              timestamp: 1,
+              autoDetected: true,
+            },
+          ],
+        },
+      ]);
+
+      render(<PostGameSummary />);
+
+      const runStandingsTable = await screen.findByTestId('run-standings-table');
+      expect(runStandingsTable).toBeInTheDocument();
+      expect(within(runStandingsTable).getByText('RUN STANDINGS')).toBeInTheDocument();
+      expect(within(runStandingsTable).getByText('J Martinez')).toBeInTheDocument();
+      expect(within(runStandingsTable).getByText('+6.2')).toBeInTheDocument();
+      expect(mockGetRunFameStandings).toHaveBeenCalledWith('elim-run-22');
+    });
+
+    test('does not render elimination run standings for exhibition summaries', async () => {
+      mockLocationState.gameMode = 'exhibition';
+
+      render(<PostGameSummary />);
+
+      expect(await screen.findByText('POST-GAME REPORT')).toBeInTheDocument();
+      expect(screen.queryByTestId('run-standings-table')).not.toBeInTheDocument();
+      expect(mockGetRunFameStandings).not.toHaveBeenCalled();
     });
   });
 
