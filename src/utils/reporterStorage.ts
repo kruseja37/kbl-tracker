@@ -1,4 +1,5 @@
 import type { BeatReporter } from "../types/reporter";
+import type { MoodState } from "../engines/moodEngine";
 import { syncEngine } from "./syncEngine";
 import { getTrackerDb } from "./trackerDb";
 
@@ -7,8 +8,7 @@ const STORE = "reporters";
 
 type ReporterCreateInput = Omit<BeatReporter, "id" | "changed_at">;
 
-// TODO(G3): tighten to MoodState once the mood engine type lands.
-export type ReporterMoodPatch = Record<string, unknown>;
+export type ReporterMoodPatch = Partial<MoodState>;
 
 function requestToPromise<T>(request: IDBRequest<T>): Promise<T> {
   return new Promise((resolve, reject) => {
