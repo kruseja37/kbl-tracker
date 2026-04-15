@@ -246,7 +246,7 @@ describe("reporterAlmanacCacheStorage", () => {
     await expect(getPlayerAlmanacCache("legacy-player", "elim-legacy")).resolves.toBeNull();
 
     const db = await getTrackerDb();
-    expect(db.version).toBe(8);
+    expect(db.version).toBe(9);
     expect(Array.from(db.objectStoreNames)).toEqual(
       expect.arrayContaining([
         "reporterPlayerAlmanacCaches",

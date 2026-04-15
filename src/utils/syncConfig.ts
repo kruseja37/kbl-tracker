@@ -27,6 +27,10 @@ export const SYNC_REGISTRY: Record<string, Record<string, string | string[]>> = 
     reporterLegacySummaryJobs: 'id',
     llmUsageLog: 'id',
     userPreferences: 'key',
+    reporters: 'id',
+    gameStories: 'id',
+    narrativeContext: 'id',
+    rivalryScores: 'id',
   },
   'kbl-league-builder': {
     leagueTemplates: 'id',

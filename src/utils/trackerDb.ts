@@ -14,7 +14,7 @@
  */
 
 const DB_NAME = 'kbl-tracker';
-const DB_VERSION = 8; // Must be the highest version any consumer ever used
+const DB_VERSION = 9; // Must be the highest version any consumer ever used
 
 let dbInstance: IDBDatabase | null = null;
 
@@ -214,6 +214,44 @@ export async function getTrackerDb(): Promise<IDBDatabase> {
 
       if (!db.objectStoreNames.contains('userPreferences')) {
         db.createObjectStore('userPreferences', { keyPath: 'key' });
+      }
+
+      // ── v9: Reporter Voice stores ─────────────────────────────
+      if (!db.objectStoreNames.contains('reporters')) {
+        const reporterStore = db.createObjectStore('reporters', { keyPath: 'id' });
+        reporterStore.createIndex('teamId', 'teamId', { unique: false });
+        reporterStore.createIndex('leagueId', 'leagueId', { unique: false });
+        reporterStore.createIndex('changed_at', 'changed_at', { unique: false });
+      }
+
+      if (!db.objectStoreNames.contains('gameStories')) {
+        const storyStore = db.createObjectStore('gameStories', { keyPath: 'id' });
+        storyStore.createIndex('gameId', 'gameId', { unique: false });
+        storyStore.createIndex('reporterId', 'reporterId', { unique: false });
+        storyStore.createIndex('teamId', 'teamId', { unique: false });
+        storyStore.createIndex('leagueId', 'leagueId', { unique: false });
+        storyStore.createIndex('opponentTeamId', 'opponentTeamId', { unique: false });
+        storyStore.createIndex('gameMode', 'gameMode', { unique: false });
+        storyStore.createIndex('gameDate', 'gameDate', { unique: false });
+        storyStore.createIndex('changed_at', 'changed_at', { unique: false });
+      }
+
+      if (!db.objectStoreNames.contains('narrativeContext')) {
+        const contextStore = db.createObjectStore('narrativeContext', { keyPath: 'id' });
+        contextStore.createIndex('teamId', 'teamId', { unique: false });
+        contextStore.createIndex('leagueId', 'leagueId', { unique: false });
+        contextStore.createIndex('gameMode', 'gameMode', { unique: false });
+        contextStore.createIndex('teamId_gameMode', ['teamId', 'gameMode'], { unique: false });
+        contextStore.createIndex('changed_at', 'changed_at', { unique: false });
+      }
+
+      if (!db.objectStoreNames.contains('rivalryScores')) {
+        const rivalryStore = db.createObjectStore('rivalryScores', { keyPath: 'id' });
+        rivalryStore.createIndex('teamId', 'teamId', { unique: false });
+        rivalryStore.createIndex('leagueId', 'leagueId', { unique: false });
+        rivalryStore.createIndex('rivalTeamId', 'rivalTeamId', { unique: false });
+        rivalryStore.createIndex('teamId_rivalTeamId', ['teamId', 'rivalTeamId'], { unique: false });
+        rivalryStore.createIndex('changed_at', 'changed_at', { unique: false });
       }
     };
   });
