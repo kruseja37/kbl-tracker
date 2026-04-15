@@ -11,11 +11,16 @@ import {
 } from '../../../utils/almanacStorage';
 import type { CompletedGameRecord, PlayerRatingsSnapshot } from '../../../utils/gameStorage';
 import {
+  getLeaguePlayerOverride,
   getPlayer,
   type EditHistoryEntry,
+  type LeaguePlayerOverrideRecord,
   type Player,
 } from '../../../utils/leagueBuilderStorage';
+import { FAME_TIER_LABEL, type FameTier } from '../../../types/reporter';
+import { getEffectiveFame } from '../../../utils/effectiveValues';
 import { getEffectivePlayer } from '../../../utils/playerOverrides';
+import { FamePip } from '../components/FamePip';
 import {
   buildPlayerName,
   formatBattingAverage,
@@ -54,6 +59,8 @@ interface PlayerCardState {
   notFound: boolean;
   canonicalPlayer: CanonicalPlayer | null;
   instance: CanonicalPlayerInstance | null;
+  player: Player | null;
+  playerOverride: LeaguePlayerOverrideRecord | null;
   ratingState: RatingState | null;
   isPitcher: boolean;
   usedFallback: boolean;
@@ -69,6 +76,8 @@ const initialState: PlayerCardState = {
   notFound: false,
   canonicalPlayer: null,
   instance: null,
+  player: null,
+  playerOverride: null,
   ratingState: null,
   isPitcher: false,
   usedFallback: false,
@@ -445,6 +454,17 @@ function AttributeCell({
   );
 }
 
+export function getPlayerInstanceCardFameTier(
+  player: Player | null,
+  instance: CanonicalPlayerInstance | null,
+  playerOverride: LeaguePlayerOverrideRecord | null,
+): FameTier {
+  return getEffectiveFame(
+    player,
+    instance?.mode === 'elimination' ? playerOverride : undefined,
+  );
+}
+
 export function PlayerInstanceCard() {
   const { canonicalId, instanceId } = useParams();
   const [state, setState] = useState<PlayerCardState>(initialState);
@@ -485,8 +505,9 @@ export function PlayerInstanceCard() {
           return;
         }
 
-        const [player, exhibitionStats, playerContext] = await Promise.all([
+        const [player, playerOverride, exhibitionStats, playerContext] = await Promise.all([
           getPlayer(playerIdInInstance),
+          getLeaguePlayerOverride(instanceId, playerIdInInstance),
           getPlayerExhibitionStats(playerIdInInstance, instanceId),
           getExhibitionPlayerContext(playerIdInInstance, instanceId),
         ]);
@@ -558,6 +579,8 @@ export function PlayerInstanceCard() {
             notFound: false,
             canonicalPlayer,
             instance,
+            player,
+            playerOverride,
             ratingState,
             isPitcher: isPitcherPosition(ratingState?.primaryPosition ?? null),
             usedFallback: !playerContext.latestSnapshot && Boolean(ratingState),
@@ -628,6 +651,11 @@ export function PlayerInstanceCard() {
   const hometown = state.canonicalPlayer.hometown ?? ratingState?.hometown ?? null;
   const batterRows = buildBatterRows(state.batting, state.teams);
   const pitcherRows = buildPitcherRows(state.pitching, state.teams);
+  const fameTier = getPlayerInstanceCardFameTier(
+    state.player,
+    state.instance,
+    state.playerOverride,
+  );
 
   return (
     <div className="min-h-screen bg-black px-4 py-6 text-white font-['Press_Start_2P'] sm:px-6">
@@ -639,6 +667,18 @@ export function PlayerInstanceCard() {
           <h1 className="mt-4 text-sm leading-7 sm:text-lg">
             {state.canonicalPlayer.playerName.toUpperCase()}
           </h1>
+          <div
+            className="mt-4 flex flex-wrap items-center gap-3 text-[9px] text-[#8A6A1A] sm:text-[10px]"
+            data-testid="player-instance-card-fame-tier-row"
+          >
+            <span>FAME TIER</span>
+            <div className="inline-flex items-center gap-3 border-[3px] border-[#D3BF84] bg-[#FFF8DB] px-3 py-2 text-[#5C1F16] shadow-[4px_4px_0px_0px_rgba(92,74,25,0.18)]">
+              <FamePip size="md" tier={fameTier} />
+              <span className="text-[10px] leading-none sm:text-xs">
+                {FAME_TIER_LABEL[fameTier].toUpperCase()}
+              </span>
+            </div>
+          </div>
           <div className="mt-4 text-[10px] leading-5 text-[#5C4A19] sm:text-xs">
             Hometown: {formatHometown(hometown)}
           </div>
