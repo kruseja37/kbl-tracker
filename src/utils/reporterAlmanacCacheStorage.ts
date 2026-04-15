@@ -39,6 +39,9 @@ export interface ReporterAlmanacEntry {
   timestamp: number;
   headline: string;
   summary: string;
+  wpa?: number;
+  leverageIndex?: number;
+  dramaticWeight?: number;
 }
 
 export interface ReporterAlmanacEntryInput {
@@ -50,6 +53,9 @@ export interface ReporterAlmanacEntryInput {
   timestamp?: number;
   headline: string;
   summary: string;
+  wpa?: number;
+  leverageIndex?: number;
+  dramaticWeight?: number;
 }
 
 export interface ReporterLegacySummaryJob {
@@ -258,6 +264,31 @@ export async function getRecentReporterAlmanacEntries(
     .map((entry) => ({ ...entry }));
 }
 
+export async function getReporterAlmanacEntriesForEntity(
+  entityType: ReporterAlmanacEntityType,
+  entityId: string,
+  instanceId?: string,
+): Promise<ReporterAlmanacEntry[]> {
+  const db = await getTrackerDb();
+  const tx = db.transaction(ENTRY_STORE, "readonly");
+  const entries = await requestToPromise<ReporterAlmanacEntry[]>(
+    tx.objectStore(ENTRY_STORE).index("entityKey").getAll(createEntityKey(entityType, entityId, instanceId)),
+  );
+  await transactionToPromise(tx);
+
+  return entries
+    .sort((left, right) => left.timestamp - right.timestamp)
+    .map((entry) => ({ ...entry }));
+}
+
+export async function getReporterAlmanacEntryCount(
+  entityType: ReporterAlmanacEntityType,
+  entityId: string,
+  instanceId?: string,
+): Promise<number> {
+  return countEntries(entityType, entityId, instanceId);
+}
+
 export async function getRecentPlayerAlmanac(playerId: string, instanceId?: string): Promise<ReporterAlmanacEntry[]> {
   return getRecentReporterAlmanacEntries("player", playerId, instanceId);
 }
@@ -275,6 +306,14 @@ export async function getQueuedReporterLegacySummaryJobs(): Promise<ReporterLega
   await transactionToPromise(tx);
 
   return jobs.sort((left, right) => left.queuedAt - right.queuedAt);
+}
+
+export async function removeReporterLegacySummaryJob(jobId: string): Promise<void> {
+  const db = await getTrackerDb();
+  const tx = db.transaction(SUMMARY_JOB_STORE, "readwrite");
+
+  await requestToPromise(tx.objectStore(SUMMARY_JOB_STORE).delete(jobId));
+  await transactionToPromise(tx);
 }
 
 export async function queueReporterLegacySummaryJob(
