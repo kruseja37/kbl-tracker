@@ -21,6 +21,7 @@ import { FAME_TIER_LABEL, type FameTier } from '../../../types/reporter';
 import { getEffectiveFame } from '../../../utils/effectiveValues';
 import { getEffectivePlayer } from '../../../utils/playerOverrides';
 import { FamePip } from '../components/FamePip';
+import { PlayerFameSection, type PlayerFameGameSource } from '../components/PlayerFameSection';
 import {
   buildPlayerName,
   formatBattingAverage,
@@ -61,6 +62,7 @@ interface PlayerCardState {
   instance: CanonicalPlayerInstance | null;
   player: Player | null;
   playerOverride: LeaguePlayerOverrideRecord | null;
+  latestGame: PlayerFameGameSource | null;
   ratingState: RatingState | null;
   isPitcher: boolean;
   usedFallback: boolean;
@@ -75,6 +77,7 @@ export interface PlayerInstanceCardContentState {
   instance: CanonicalPlayerInstance;
   player: Player | null;
   playerOverride: LeaguePlayerOverrideRecord | null;
+  latestGame: PlayerFameGameSource | null;
   ratingState: RatingState | null;
   isPitcher: boolean;
   usedFallback: boolean;
@@ -92,6 +95,7 @@ const initialState: PlayerCardState = {
   instance: null,
   player: null,
   playerOverride: null,
+  latestGame: null,
   ratingState: null,
   isPitcher: false,
   usedFallback: false,
@@ -586,6 +590,13 @@ export function PlayerInstanceCardContent({
         </section>
       </div>
 
+      <PlayerFameSection
+        game={state.latestGame}
+        gameMode={state.instance.mode}
+        playerId={state.instance.playerIdInInstance}
+        runId={state.instance.mode === 'elimination' ? state.instance.instanceId : null}
+      />
+
       <section className="border-[6px] border-[#A57C1B] bg-[#F3E1A8] p-5 text-black shadow-[8px_8px_0px_0px_rgba(0,0,0,0.4)] sm:p-6">
         <SectionTitle>{state.isPitcher ? 'PITCHING LINE' : 'BATTING LINE'}</SectionTitle>
         <div className="mt-5">
@@ -723,6 +734,7 @@ export function PlayerInstanceCard() {
             instance,
             player,
             playerOverride,
+            latestGame: playerContext.latestGame,
             ratingState,
             isPitcher: isPitcherPosition(ratingState?.primaryPosition ?? null),
             usedFallback: !playerContext.latestSnapshot && Boolean(ratingState),
@@ -794,6 +806,7 @@ export function PlayerInstanceCard() {
     instance: state.instance,
     player: state.player,
     playerOverride: state.playerOverride,
+    latestGame: state.latestGame,
     ratingState: state.ratingState,
     isPitcher: state.isPitcher,
     usedFallback: state.usedFallback,

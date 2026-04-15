@@ -4,6 +4,7 @@ import type {
   Player,
 } from "../../../utils/leagueBuilderStorage";
 import type { FameTier } from "../../../types/reporter";
+import type { PlayerFameGameSource } from "../components/PlayerFameSection";
 import {
   PlayerInstanceCardContent,
   type PlayerInstanceCardContentState,
@@ -93,10 +94,12 @@ function createPreviewState({
   player,
   instance,
   playerOverride,
+  latestGame,
 }: {
   player: Player;
   instance: CanonicalPlayerInstance;
   playerOverride?: LeaguePlayerOverrideRecord | null;
+  latestGame?: PlayerFameGameSource | null;
 }): PlayerInstanceCardContentState {
   return {
     canonicalPlayer: {
@@ -108,6 +111,7 @@ function createPreviewState({
     instance,
     player,
     playerOverride: playerOverride ?? null,
+    latestGame: latestGame ?? null,
     ratingState: player,
     isPitcher: false,
     usedFallback: true,
@@ -118,6 +122,67 @@ function createPreviewState({
   };
 }
 
+function createGame(
+  gameId: string,
+  events: PlayerFameGameSource["fameEvents"],
+): PlayerFameGameSource {
+  return {
+    gameId,
+    fameEvents: events,
+  };
+}
+
+const exhibitionGame = createGame("preview-exhibition-game", [
+  {
+    id: "fame-exh-1",
+    gameId: "preview-exhibition-game",
+    eventType: "WALK_OFF",
+    playerId: "preview-player-1",
+    playerName: "Maya Vega",
+    playerTeam: "PRESS",
+    fameValue: 1.5,
+    fameType: "bonus",
+    inning: 9,
+    halfInning: "BOTTOM",
+    timestamp: Date.parse("2026-04-14T19:04:00.000Z"),
+    autoDetected: true,
+    description: "Delivered the winning swing in the ninth.",
+  },
+  {
+    id: "fame-exh-2",
+    gameId: "preview-exhibition-game",
+    eventType: "WEB_GEM",
+    playerId: "preview-player-1",
+    playerName: "Maya Vega",
+    playerTeam: "PRESS",
+    fameValue: 0.5,
+    fameType: "bonus",
+    inning: 7,
+    halfInning: "TOP",
+    timestamp: Date.parse("2026-04-14T18:42:00.000Z"),
+    autoDetected: true,
+    description: "Laid out in the hole to steal a hit.",
+  },
+]);
+
+const eliminationGame = createGame("preview-elimination-game", [
+  {
+    id: "fame-elim-1",
+    gameId: "preview-elimination-game",
+    eventType: "GO_AHEAD_HR",
+    playerId: "preview-player-1",
+    playerName: "Maya Vega",
+    playerTeam: "PRESS",
+    fameValue: 1.9,
+    fameType: "bonus",
+    inning: 8,
+    halfInning: "BOTTOM",
+    timestamp: Date.parse("2026-04-14T20:12:00.000Z"),
+    autoDetected: true,
+    description: "Turned the bracket game with a late homer.",
+  },
+]);
+
 const previewVariants: PreviewVariant[] = [
   {
     key: "unknown",
@@ -126,6 +191,7 @@ const previewVariants: PreviewVariant[] = [
     state: createPreviewState({
       player: createPlayer({ baseFameTier: 1 }),
       instance: createInstance({ instanceId: "preview-unknown" }),
+      latestGame: exhibitionGame,
     }),
   },
   {
@@ -135,6 +201,7 @@ const previewVariants: PreviewVariant[] = [
     state: createPreviewState({
       player: createPlayer({ baseFameTier: 3 }),
       instance: createInstance({ instanceId: "preview-veteran", instanceName: "Default Veteran" }),
+      latestGame: exhibitionGame,
     }),
   },
   {
@@ -144,6 +211,7 @@ const previewVariants: PreviewVariant[] = [
     state: createPreviewState({
       player: createPlayer({ baseFameTier: 5 }),
       instance: createInstance({ instanceId: "preview-superstar", instanceName: "Marquee Showcase" }),
+      latestGame: exhibitionGame,
     }),
   },
   {
@@ -158,6 +226,21 @@ const previewVariants: PreviewVariant[] = [
         instanceName: "Elimination Run",
       }),
       playerOverride: createOverride(4),
+      latestGame: eliminationGame,
+    }),
+  },
+  {
+    key: "franchise",
+    title: "Franchise Placeholder",
+    subtitle: "Deferred rollup state",
+    state: createPreviewState({
+      player: createPlayer({ baseFameTier: 4 }),
+      instance: createInstance({
+        mode: "franchise",
+        instanceId: "preview-franchise",
+        instanceName: "Franchise Archive",
+      }),
+      latestGame: exhibitionGame,
     }),
   },
 ];
