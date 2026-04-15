@@ -21,6 +21,12 @@ export const SYNC_REGISTRY: Record<string, Record<string, string | string[]>> = 
     careerMilestones: 'id',
     almanacCanonicalPlayers: 'canonicalId',
     eliminationRunFameAggregates: 'runId',
+    reporterPlayerAlmanacCaches: 'cacheKey',
+    reporterTeamAlmanacCaches: 'cacheKey',
+    reporterAlmanacEntries: 'id',
+    reporterLegacySummaryJobs: 'id',
+    llmUsageLog: 'id',
+    userPreferences: 'key',
   },
   'kbl-league-builder': {
     leagueTemplates: 'id',

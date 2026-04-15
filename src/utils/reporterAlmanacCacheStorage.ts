@@ -1,3 +1,4 @@
+import { syncEngine } from "./syncEngine";
 import { getTrackerDb } from "./trackerDb";
 
 const PLAYER_CACHE_STORE = "reporterPlayerAlmanacCaches";
@@ -179,6 +180,10 @@ async function persistCache<TCache extends ReporterPlayerAlmanacCache | Reporter
   await requestToPromise(tx.objectStore(storeName).put(cache));
   await transactionToPromise(tx);
 
+  if (!syncEngine.isSuppressed()) {
+    syncEngine.upsert("kbl-tracker", storeName, cache.cacheKey, cache);
+  }
+
   return cache;
 }
 
@@ -314,6 +319,10 @@ export async function removeReporterLegacySummaryJob(jobId: string): Promise<voi
 
   await requestToPromise(tx.objectStore(SUMMARY_JOB_STORE).delete(jobId));
   await transactionToPromise(tx);
+
+  if (!syncEngine.isSuppressed()) {
+    syncEngine.remove("kbl-tracker", SUMMARY_JOB_STORE, jobId);
+  }
 }
 
 export async function queueReporterLegacySummaryJob(
@@ -337,6 +346,10 @@ export async function queueReporterLegacySummaryJob(
 
   await requestToPromise(tx.objectStore(SUMMARY_JOB_STORE).put(job));
   await transactionToPromise(tx);
+
+  if (!syncEngine.isSuppressed()) {
+    syncEngine.upsert("kbl-tracker", SUMMARY_JOB_STORE, job.id, job);
+  }
 
   return job;
 }
@@ -393,6 +406,16 @@ export async function addReporterAlmanacEntry(
 
   await requestToPromise(cacheStore.put(updatedCache));
   await transactionToPromise(tx);
+
+  if (!syncEngine.isSuppressed()) {
+    syncEngine.upsert("kbl-tracker", ENTRY_STORE, entry.id, entry);
+    syncEngine.upsert(
+      "kbl-tracker",
+      cacheStoreName(entry.entityType),
+      updatedCache.cacheKey,
+      updatedCache,
+    );
+  }
 
   return {
     entry,

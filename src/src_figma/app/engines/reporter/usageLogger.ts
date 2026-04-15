@@ -1,4 +1,5 @@
 import type { CompetitionType } from "../../../../utils/gameStorage";
+import { syncEngine } from "../../../../utils/syncEngine";
 import { getTrackerDb } from "../../../../utils/trackerDb";
 import type { NarrativeIntensity } from "../../../../types/reporterPreferences";
 import { calculateLlmCostUsd, getReporterModelPricing } from "./pricing";
@@ -158,6 +159,10 @@ export async function logLlmCall(entry: LlmUsageLogInput): Promise<LlmUsageLogEn
 
   await requestToPromise(tx.objectStore(STORE).put(storedEntry));
   await transactionToPromise(tx);
+
+  if (!syncEngine.isSuppressed()) {
+    syncEngine.upsert("kbl-tracker", STORE, storedEntry.id, storedEntry);
+  }
 
   return storedEntry;
 }

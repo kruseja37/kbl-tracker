@@ -6,6 +6,7 @@ import {
   DEFAULT_NARRATIVE_INTENSITY,
   DEFAULT_SOFT_MONTHLY_BUDGET,
 } from "../types/reporterPreferences";
+import { syncEngine } from "./syncEngine";
 import { getTrackerDb } from "./trackerDb";
 
 const STORE = "userPreferences";
@@ -79,6 +80,10 @@ export async function saveUserPreferences(
   const tx = db.transaction(STORE, "readwrite");
   await requestToPromise(tx.objectStore(STORE).put(next));
   await transactionToPromise(tx);
+
+  if (!syncEngine.isSuppressed()) {
+    syncEngine.upsert("kbl-tracker", STORE, next.key, next);
+  }
 
   return next;
 }
