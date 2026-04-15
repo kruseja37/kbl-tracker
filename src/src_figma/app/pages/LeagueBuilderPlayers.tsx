@@ -43,6 +43,8 @@ import {
 } from "../../../utils/leagueBuilderStorage";
 import { mergePlayerOverrides } from "../../../utils/playerOverrides";
 import { generateHometown } from "../../../data/usCities";
+import { FamePip } from "../components/FamePip";
+import { FAME_TIER_LABEL, type FameTier } from "../../../types/reporter";
 
 // ============================================
 // CONSTANTS
@@ -136,6 +138,7 @@ interface PlayerFormData {
   hometownState: string;
   teamId: string;
   rosterStatus: RosterStatus;
+  baseFameTier: FameTier;
 }
 
 const DEFAULT_FORM_DATA: PlayerFormData = {
@@ -171,6 +174,7 @@ const DEFAULT_FORM_DATA: PlayerFormData = {
   chemistry: 'Competitive',
   teamId: "",
   rosterStatus: 'FREE_AGENT',
+  baseFameTier: 3,
 };
 
 // ============================================
@@ -203,6 +207,7 @@ export function LeagueBuilderPlayers() {
   // Override state for context tabs
   const [editorTab, setEditorTab] = useState<EditorTab>('base');
   const [currentOverrides, setCurrentOverrides] = useState<Partial<PlayerAttributes>>({});
+  const [fameTierOverride, setFameTierOverride] = useState<FameTier | undefined>(undefined);
   const [isLoadingOverrides, setIsLoadingOverrides] = useState(false);
 
   const [activeLeagueId, setActiveLeagueId] = useState<string>("");
@@ -279,6 +284,7 @@ export function LeagueBuilderPlayers() {
   const playerToFormData = useCallback((player: Player): PlayerFormData => ({
     firstName: player.firstName,
     lastName: player.lastName,
+    baseFameTier: (player.baseFameTier ?? 3) as FameTier,
     nickname: player.nickname || "",
     backstory: player.backstory || "",
     nicknames: player.nicknames ?? [],
@@ -338,6 +344,7 @@ export function LeagueBuilderPlayers() {
       const record = await getLeaguePlayerOverride(leagueId, editingPlayer.id);
       const overrides = record?.overrides ?? {};
       setCurrentOverrides(overrides);
+      setFameTierOverride(record?.fameTierOverride);
       // Show effective values (base + overrides merged)
       const effective = mergePlayerOverrides(editingPlayer, overrides);
       const effectiveForm = playerToFormData(effective);
@@ -349,6 +356,7 @@ export function LeagueBuilderPlayers() {
     } catch (err) {
       console.error("Failed to load overrides:", err);
       setCurrentOverrides({});
+      setFameTierOverride(undefined);
     } finally {
       setIsLoadingOverrides(false);
     }
@@ -360,6 +368,7 @@ export function LeagueBuilderPlayers() {
     setEditorTab(tab);
     if (tab === 'base') {
       setCurrentOverrides({});
+      setFameTierOverride(undefined);
       const baseForm = playerToFormData(editingPlayer);
       const assignment = getActiveAssignment(editingPlayer);
       baseForm.teamId = assignment?.teamId || "";
@@ -401,6 +410,7 @@ export function LeagueBuilderPlayers() {
     setFormData(DEFAULT_FORM_DATA);
     setEditorTab('base');
     setCurrentOverrides({});
+    setFameTierOverride(undefined);
     setIsModalOpen(true);
   };
 
@@ -408,6 +418,7 @@ export function LeagueBuilderPlayers() {
     setEditingPlayer(player);
     setEditorTab('base');
     setCurrentOverrides({});
+    setFameTierOverride(undefined);
     const base = playerToFormData(player);
     const assignment = getActiveAssignment(player);
     base.teamId = assignment?.teamId || "";
@@ -422,6 +433,7 @@ export function LeagueBuilderPlayers() {
     setFormData(DEFAULT_FORM_DATA);
     setEditorTab('base');
     setCurrentOverrides({});
+    setFameTierOverride(undefined);
   };
 
   /** Track which form fields changed on a league tab to build override delta */
@@ -481,9 +493,10 @@ export function LeagueBuilderPlayers() {
         // LEAGUE TAB: Save overrides + update league assignment
         const leagueId = editorTab;
 
-        // Save attribute overrides
-        if (Object.keys(currentOverrides).length > 0) {
-          await setLeaguePlayerOverride(leagueId, editingPlayer.id, currentOverrides);
+        // Save attribute overrides (+ fame tier override, which is a sibling field on the record)
+        const hasAnyOverride = Object.keys(currentOverrides).length > 0 || fameTierOverride !== undefined;
+        if (hasAnyOverride) {
+          await setLeaguePlayerOverride(leagueId, editingPlayer.id, currentOverrides, { fameTierOverride });
         } else {
           await removeLeaguePlayerOverride(leagueId, editingPlayer.id);
         }
@@ -570,6 +583,7 @@ export function LeagueBuilderPlayers() {
               : [];
             return [...existingOther, ...currentAssignment];
           })(),
+          baseFameTier: formData.baseFameTier,
           isCustom: true,
           sourceDatabase: 'League Builder',
         };
@@ -983,7 +997,7 @@ export function LeagueBuilderPlayers() {
             {/* Modal Content */}
             <div className="p-6 space-y-6">
               {/* Name Row — only editable on base tab or create */}
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-bold mb-2">First Name *</label>
                   <input
@@ -1004,15 +1018,6 @@ export function LeagueBuilderPlayers() {
                     className="w-full bg-[#4A6844] border-[4px] border-[#3F5A3A] p-3 text-[#E8E8D8] focus:border-[#E8E8D8] outline-none disabled:opacity-50"
                   />
                 </div>
-                <OverrideField field="nickname" label="Nickname">
-                  <input
-                    type="text"
-                    value={formData.nickname}
-                    onChange={(e) => handleFormChange('nickname', e.target.value)}
-                    className="w-full bg-[#4A6844] p-3 text-[#E8E8D8] focus:border-[#E8E8D8] outline-none"
-                    style={isFieldOverridden('nickname') ? { color: OVERRIDE_GOLD } : undefined}
-                  />
-                </OverrideField>
               </div>
 
               {!isLeagueTab ? (
@@ -1132,8 +1137,97 @@ export function LeagueBuilderPlayers() {
                       className="w-full bg-[#3F5A3A] border-[4px] border-[#2d3d2f] p-3 text-[#E8E8D8] placeholder-[#E8E8D8]/40 focus:border-[#E8E8D8] outline-none"
                     />
                   </div>
+
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="block text-sm font-bold">Baseline Fame Tier</label>
+                      <span className="text-[10px] uppercase tracking-[0.18em] text-[#E8E8D8]/60">
+                        {FAME_TIER_LABEL[formData.baseFameTier]} ({formData.baseFameTier}/5)
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-3 bg-[#3F5A3A] border-[4px] border-[#2d3d2f] p-3">
+                      {([1, 2, 3, 4, 5] as const).map((tier) => {
+                        const selected = formData.baseFameTier === tier;
+                        return (
+                          <button
+                            key={tier}
+                            type="button"
+                            onClick={() => setFormData(prev => ({ ...prev, baseFameTier: tier }))}
+                            aria-pressed={selected}
+                            aria-label={`Set baseline fame tier to ${FAME_TIER_LABEL[tier]} (${tier}/5)`}
+                            className="transition-opacity"
+                            style={{
+                              opacity: selected ? 1 : 0.35,
+                              filter: selected ? 'none' : 'saturate(0.6)',
+                              cursor: 'pointer',
+                              background: 'transparent',
+                              border: 'none',
+                              padding: 0,
+                            }}
+                          >
+                            <FamePip tier={tier} size="sm" />
+                          </button>
+                        );
+                      })}
+                      <p className="ml-auto text-xs text-[#E8E8D8]/55 max-w-[220px]">
+                        Default is 3 (Veteran). Reporters weight beats by this tier before live game fame is added.
+                      </p>
+                    </div>
+                  </div>
                 </section>
-              ) : null}
+              ) : (
+                <section className="bg-[#4A4430]/55 border-[4px] border-[#D4A020]/50 p-4 space-y-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <h3 className="text-sm font-bold tracking-[0.18em] uppercase text-[#E8D8A8]">
+                        Fame Tier Override
+                      </h3>
+                      <p className="mt-1 text-xs text-[#E8E8D8]/60">
+                        League-specific override. Base is {FAME_TIER_LABEL[(editingPlayer?.baseFameTier ?? 3) as FameTier]} ({editingPlayer?.baseFameTier ?? 3}/5).
+                      </p>
+                    </div>
+                    {fameTierOverride !== undefined ? (
+                      <button
+                        type="button"
+                        onClick={() => setFameTierOverride(undefined)}
+                        className="text-xs px-2 py-1 font-bold transition"
+                        style={{ color: OVERRIDE_GOLD, border: `1px solid ${OVERRIDE_GOLD}` }}
+                      >
+                        Revert to Base
+                      </button>
+                    ) : (
+                      <span className="text-[10px] uppercase tracking-[0.18em] text-[#E8E8D8]/45">
+                        Using Base
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-3 bg-[#3F5A3A] border-[4px] border-[#2d3d2f] p-3">
+                    {([1, 2, 3, 4, 5] as const).map((tier) => {
+                      const selected = fameTierOverride === tier;
+                      return (
+                        <button
+                          key={tier}
+                          type="button"
+                          onClick={() => setFameTierOverride(tier)}
+                          aria-pressed={selected}
+                          aria-label={`Override fame tier to ${FAME_TIER_LABEL[tier]} (${tier}/5)`}
+                          className="transition-opacity"
+                          style={{
+                            opacity: selected ? 1 : 0.35,
+                            filter: selected ? 'none' : 'saturate(0.6)',
+                            cursor: 'pointer',
+                            background: 'transparent',
+                            border: selected ? `2px solid ${OVERRIDE_GOLD}` : 'none',
+                            padding: selected ? '2px' : '4px',
+                          }}
+                        >
+                          <FamePip tier={tier} size="sm" />
+                        </button>
+                      );
+                    })}
+                  </div>
+                </section>
+              )}
 
               {/* Hometown Row */}
               <div className="flex items-end gap-4">
