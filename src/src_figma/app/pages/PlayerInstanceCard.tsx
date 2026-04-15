@@ -70,6 +70,20 @@ interface PlayerCardState {
   timeline: TimelineItem[];
 }
 
+export interface PlayerInstanceCardContentState {
+  canonicalPlayer: CanonicalPlayer;
+  instance: CanonicalPlayerInstance;
+  player: Player | null;
+  playerOverride: LeaguePlayerOverrideRecord | null;
+  ratingState: RatingState | null;
+  isPitcher: boolean;
+  usedFallback: boolean;
+  batting: BattingLine | null;
+  pitching: PitchingLine | null;
+  teams: TeamSummary[];
+  timeline: TimelineItem[];
+}
+
 const initialState: PlayerCardState = {
   isLoading: true,
   error: null,
@@ -465,6 +479,134 @@ export function getPlayerInstanceCardFameTier(
   );
 }
 
+export function PlayerInstanceCardContent({
+  state,
+}: {
+  state: PlayerInstanceCardContentState;
+}) {
+  const ratingState = state.ratingState;
+  const hometown = state.canonicalPlayer.hometown ?? ratingState?.hometown ?? null;
+  const batterRows = buildBatterRows(state.batting, state.teams);
+  const pitcherRows = buildPitcherRows(state.pitching, state.teams);
+  const fameTier = getPlayerInstanceCardFameTier(
+    state.player,
+    state.instance,
+    state.playerOverride,
+  );
+
+  return (
+    <>
+      <div className="border-[6px] border-[#A57C1B] bg-[linear-gradient(180deg,#F8EDC6_0%,#E8C767_100%)] p-6 text-black shadow-[10px_10px_0px_0px_rgba(176,18,18,0.55)] sm:p-8">
+        <div className="text-[10px] text-[#B01212] sm:text-xs">{state.instance.instanceName.toUpperCase()}</div>
+        <h1 className="mt-4 text-sm leading-7 sm:text-lg">
+          {state.canonicalPlayer.playerName.toUpperCase()}
+        </h1>
+        <div
+          className="mt-4 flex flex-wrap items-center gap-3 text-[9px] text-[#8A6A1A] sm:text-[10px]"
+          data-testid="player-instance-card-fame-tier-row"
+        >
+          <span>FAME TIER</span>
+          <div className="inline-flex items-center gap-3 border-[3px] border-[#D3BF84] bg-[#FFF8DB] px-3 py-2 text-[#5C1F16] shadow-[4px_4px_0px_0px_rgba(92,74,25,0.18)]">
+            <FamePip size="md" tier={fameTier} />
+            <span className="text-[10px] leading-none sm:text-xs">
+              {FAME_TIER_LABEL[fameTier].toUpperCase()}
+            </span>
+          </div>
+        </div>
+        <div className="mt-4 text-[10px] leading-5 text-[#5C4A19] sm:text-xs">
+          Hometown: {formatHometown(hometown)}
+        </div>
+      </div>
+
+      <div className="grid gap-6 xl:grid-cols-[1.2fr_1fr]">
+        <section className="border-[6px] border-[#A57C1B] bg-[#F3E1A8] p-5 text-black shadow-[8px_8px_0px_0px_rgba(0,0,0,0.4)] sm:p-6">
+          <SectionTitle>ATTRIBUTES / RATINGS</SectionTitle>
+
+          <div className="mt-4 text-[8px] leading-4 text-[#8A6A1A] sm:text-[9px]">
+            {state.usedFallback
+              ? 'League Builder current state fallback'
+              : 'Most recent completed exhibition snapshot'}
+          </div>
+
+          <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            <AttributeCell label="POSITION" value={ratingState?.primaryPosition ?? '--'} />
+            <AttributeCell label="AGE" value={ratingState?.age ?? '--'} />
+            <AttributeCell
+              label="BATS / THROWS"
+              value={`${ratingState?.bats ?? '--'} / ${ratingState?.throws ?? '--'}`}
+            />
+            <AttributeCell label="POW" value={ratingState?.power ?? '--'} />
+            <AttributeCell label="CON" value={ratingState?.contact ?? '--'} />
+            <AttributeCell label="SPD" value={ratingState?.speed ?? '--'} />
+            <AttributeCell label="FLD" value={ratingState?.fielding ?? '--'} />
+            <AttributeCell label="ARM" value={ratingState?.arm ?? '--'} />
+            <AttributeCell label="VEL" value={ratingState?.velocity ?? '--'} />
+            <AttributeCell label="JNK" value={ratingState?.junk ?? '--'} />
+            <AttributeCell label="ACC" value={ratingState?.accuracy ?? '--'} />
+            <AttributeCell
+              label="ARSENAL"
+              value={ratingState?.arsenal?.length ? ratingState.arsenal.join(', ') : '--'}
+            />
+            <AttributeCell
+              label="TRAITS"
+              value={[ratingState?.trait1, ratingState?.trait2].filter(Boolean).join(', ') || '--'}
+            />
+            <AttributeCell label="PERSONALITY" value={ratingState?.personality ?? '--'} />
+            <AttributeCell label="CHEMISTRY" value={ratingState?.chemistry ?? '--'} />
+            <AttributeCell label="GRADE" value={ratingState?.overallGrade ?? '--'} />
+            <AttributeCell label="SALARY" value={formatSalary(ratingState?.salary)} />
+          </div>
+        </section>
+
+        <section className="border-[6px] border-[#6D0D0D] bg-[#170B0B] p-5 shadow-[8px_8px_0px_0px_rgba(165,124,27,0.45)] sm:p-6">
+          <SectionTitle>EDIT HISTORY TIMELINE</SectionTitle>
+          <div className="mt-5 flex flex-col gap-3">
+            {state.timeline.length === 0 ? (
+              <div className="border-[4px] border-[#492121] bg-[#251010] px-4 py-5 text-[9px] text-[#F8D7A2] sm:text-[10px]">
+                No edit history or completed games found for this instance.
+              </div>
+            ) : (
+              state.timeline.map((item, index) => (
+                <div
+                  key={`${item.kind}-${item.timestamp}-${index}`}
+                  className="border-[4px] px-4 py-4 text-[9px] leading-5 sm:text-[10px] "
+                  style={{
+                    borderColor: item.kind === 'edit' ? '#A57C1B' : '#2F4E9D',
+                    backgroundColor: item.kind === 'edit' ? '#2A1808' : '#10192D',
+                  }}
+                >
+                  <div className={item.kind === 'edit' ? 'text-[#E8C767]' : 'text-[#7AA8FF]'}>
+                    {formatTimelineDate(item.timestamp)}
+                  </div>
+                  <div className="mt-2 text-[#F8EED0]">{item.description}</div>
+                </div>
+              ))
+            )}
+          </div>
+        </section>
+      </div>
+
+      <section className="border-[6px] border-[#A57C1B] bg-[#F3E1A8] p-5 text-black shadow-[8px_8px_0px_0px_rgba(0,0,0,0.4)] sm:p-6">
+        <SectionTitle>{state.isPitcher ? 'PITCHING LINE' : 'BATTING LINE'}</SectionTitle>
+        <div className="mt-5">
+          <StatTable
+            columns={state.isPitcher ? pitcherColumns : batterColumns}
+            rows={state.isPitcher ? pitcherRows : batterRows}
+            instanceId={state.instance.instanceId}
+          />
+        </div>
+      </section>
+
+      <section className="border-[6px] border-[#A57C1B] bg-[#FFF3CC] p-5 text-black shadow-[8px_8px_0px_0px_rgba(176,18,18,0.35)] sm:p-6">
+        <SectionTitle>CAREER SUMMARY (COMING SOON)</SectionTitle>
+        <div className="mt-5 min-h-[132px] border-[4px] border-dashed border-[#D3BF84] bg-[#FFF8DB] px-5 py-6 text-[9px] leading-5 text-[#6F5B25] sm:text-[10px]">
+          Reserved space for the V2 AI-generated baseball card back summary.
+        </div>
+      </section>
+    </>
+  );
+}
+
 export function PlayerInstanceCard() {
   const { canonicalId, instanceId } = useParams();
   const [state, setState] = useState<PlayerCardState>(initialState);
@@ -647,128 +789,25 @@ export function PlayerInstanceCard() {
     );
   }
 
-  const ratingState = state.ratingState;
-  const hometown = state.canonicalPlayer.hometown ?? ratingState?.hometown ?? null;
-  const batterRows = buildBatterRows(state.batting, state.teams);
-  const pitcherRows = buildPitcherRows(state.pitching, state.teams);
-  const fameTier = getPlayerInstanceCardFameTier(
-    state.player,
-    state.instance,
-    state.playerOverride,
-  );
+  const resolvedState: PlayerInstanceCardContentState = {
+    canonicalPlayer: state.canonicalPlayer,
+    instance: state.instance,
+    player: state.player,
+    playerOverride: state.playerOverride,
+    ratingState: state.ratingState,
+    isPitcher: state.isPitcher,
+    usedFallback: state.usedFallback,
+    batting: state.batting,
+    pitching: state.pitching,
+    teams: state.teams,
+    timeline: state.timeline,
+  };
 
   return (
     <div className="min-h-screen bg-black px-4 py-6 text-white font-['Press_Start_2P'] sm:px-6">
       <div className="mx-auto flex max-w-6xl flex-col gap-6">
         <BackLinks canonicalId={state.canonicalPlayer.canonicalId} />
-
-        <div className="border-[6px] border-[#A57C1B] bg-[linear-gradient(180deg,#F8EDC6_0%,#E8C767_100%)] p-6 text-black shadow-[10px_10px_0px_0px_rgba(176,18,18,0.55)] sm:p-8">
-          <div className="text-[10px] text-[#B01212] sm:text-xs">{state.instance.instanceName.toUpperCase()}</div>
-          <h1 className="mt-4 text-sm leading-7 sm:text-lg">
-            {state.canonicalPlayer.playerName.toUpperCase()}
-          </h1>
-          <div
-            className="mt-4 flex flex-wrap items-center gap-3 text-[9px] text-[#8A6A1A] sm:text-[10px]"
-            data-testid="player-instance-card-fame-tier-row"
-          >
-            <span>FAME TIER</span>
-            <div className="inline-flex items-center gap-3 border-[3px] border-[#D3BF84] bg-[#FFF8DB] px-3 py-2 text-[#5C1F16] shadow-[4px_4px_0px_0px_rgba(92,74,25,0.18)]">
-              <FamePip size="md" tier={fameTier} />
-              <span className="text-[10px] leading-none sm:text-xs">
-                {FAME_TIER_LABEL[fameTier].toUpperCase()}
-              </span>
-            </div>
-          </div>
-          <div className="mt-4 text-[10px] leading-5 text-[#5C4A19] sm:text-xs">
-            Hometown: {formatHometown(hometown)}
-          </div>
-        </div>
-
-        <div className="grid gap-6 xl:grid-cols-[1.2fr_1fr]">
-          <section className="border-[6px] border-[#A57C1B] bg-[#F3E1A8] p-5 text-black shadow-[8px_8px_0px_0px_rgba(0,0,0,0.4)] sm:p-6">
-            <SectionTitle>ATTRIBUTES / RATINGS</SectionTitle>
-
-            <div className="mt-4 text-[8px] leading-4 text-[#8A6A1A] sm:text-[9px]">
-              {state.usedFallback
-                ? 'League Builder current state fallback'
-                : 'Most recent completed exhibition snapshot'}
-            </div>
-
-            <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-              <AttributeCell label="POSITION" value={ratingState?.primaryPosition ?? '--'} />
-              <AttributeCell label="AGE" value={ratingState?.age ?? '--'} />
-              <AttributeCell
-                label="BATS / THROWS"
-                value={`${ratingState?.bats ?? '--'} / ${ratingState?.throws ?? '--'}`}
-              />
-              <AttributeCell label="POW" value={ratingState?.power ?? '--'} />
-              <AttributeCell label="CON" value={ratingState?.contact ?? '--'} />
-              <AttributeCell label="SPD" value={ratingState?.speed ?? '--'} />
-              <AttributeCell label="FLD" value={ratingState?.fielding ?? '--'} />
-              <AttributeCell label="ARM" value={ratingState?.arm ?? '--'} />
-              <AttributeCell label="VEL" value={ratingState?.velocity ?? '--'} />
-              <AttributeCell label="JNK" value={ratingState?.junk ?? '--'} />
-              <AttributeCell label="ACC" value={ratingState?.accuracy ?? '--'} />
-              <AttributeCell
-                label="ARSENAL"
-                value={ratingState?.arsenal?.length ? ratingState.arsenal.join(', ') : '--'}
-              />
-              <AttributeCell
-                label="TRAITS"
-                value={[ratingState?.trait1, ratingState?.trait2].filter(Boolean).join(', ') || '--'}
-              />
-              <AttributeCell label="PERSONALITY" value={ratingState?.personality ?? '--'} />
-              <AttributeCell label="CHEMISTRY" value={ratingState?.chemistry ?? '--'} />
-              <AttributeCell label="GRADE" value={ratingState?.overallGrade ?? '--'} />
-              <AttributeCell label="SALARY" value={formatSalary(ratingState?.salary)} />
-            </div>
-          </section>
-
-          <section className="border-[6px] border-[#6D0D0D] bg-[#170B0B] p-5 shadow-[8px_8px_0px_0px_rgba(165,124,27,0.45)] sm:p-6">
-            <SectionTitle>EDIT HISTORY TIMELINE</SectionTitle>
-            <div className="mt-5 flex flex-col gap-3">
-              {state.timeline.length === 0 ? (
-                <div className="border-[4px] border-[#492121] bg-[#251010] px-4 py-5 text-[9px] text-[#F8D7A2] sm:text-[10px]">
-                  No edit history or completed games found for this instance.
-                </div>
-              ) : (
-                state.timeline.map((item, index) => (
-                  <div
-                    key={`${item.kind}-${item.timestamp}-${index}`}
-                    className="border-[4px] px-4 py-4 text-[9px] leading-5 sm:text-[10px] "
-                    style={{
-                      borderColor: item.kind === 'edit' ? '#A57C1B' : '#2F4E9D',
-                      backgroundColor: item.kind === 'edit' ? '#2A1808' : '#10192D',
-                    }}
-                  >
-                    <div className={item.kind === 'edit' ? 'text-[#E8C767]' : 'text-[#7AA8FF]'}>
-                      {formatTimelineDate(item.timestamp)}
-                    </div>
-                    <div className="mt-2 text-[#F8EED0]">{item.description}</div>
-                  </div>
-                ))
-              )}
-            </div>
-          </section>
-        </div>
-
-        <section className="border-[6px] border-[#A57C1B] bg-[#F3E1A8] p-5 text-black shadow-[8px_8px_0px_0px_rgba(0,0,0,0.4)] sm:p-6">
-          <SectionTitle>{state.isPitcher ? 'PITCHING LINE' : 'BATTING LINE'}</SectionTitle>
-          <div className="mt-5">
-            <StatTable
-              columns={state.isPitcher ? pitcherColumns : batterColumns}
-              rows={state.isPitcher ? pitcherRows : batterRows}
-              instanceId={state.instance.instanceId}
-            />
-          </div>
-        </section>
-
-        <section className="border-[6px] border-[#A57C1B] bg-[#FFF3CC] p-5 text-black shadow-[8px_8px_0px_0px_rgba(176,18,18,0.35)] sm:p-6">
-          <SectionTitle>CAREER SUMMARY (COMING SOON)</SectionTitle>
-          <div className="mt-5 min-h-[132px] border-[4px] border-dashed border-[#D3BF84] bg-[#FFF8DB] px-5 py-6 text-[9px] leading-5 text-[#6F5B25] sm:text-[10px]">
-            Reserved space for the V2 AI-generated baseball card back summary.
-          </div>
-        </section>
+        <PlayerInstanceCardContent state={resolvedState} />
       </div>
     </div>
   );

@@ -139,6 +139,11 @@ const FamePipPreview = lazy(() =>
     default: module.FamePipPreview,
   })),
 );
+const PlayerInstanceCardPreview = lazy(() =>
+  import("./src_figma/app/pages/PlayerInstanceCardPreview").then((module) => ({
+    default: module.PlayerInstanceCardPreview,
+  })),
+);
 
 /**
  * KBL Tracker - Main App
@@ -234,6 +239,10 @@ function App() {
 
         {/* Isolated component proof route */}
         <Route path="/__preview/fame-pip" element={<FamePipPreview />} />
+        <Route
+          path="/__preview/player-instance-card"
+          element={<PlayerInstanceCardPreview />}
+        />
 
         {/* 404 */}
         <Route path="*" element={<NotFound />} />
