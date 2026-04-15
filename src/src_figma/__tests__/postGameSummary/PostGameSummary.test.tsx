@@ -6,7 +6,7 @@
  */
 
 import { describe, test, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, within } from '@testing-library/react';
+import { render, screen, fireEvent, within, waitFor } from '@testing-library/react';
 import { PostGameSummary } from '../../app/pages/PostGameSummary';
 import type { CompletedGameRecord } from '../../utils/gameStorage';
 
@@ -18,11 +18,17 @@ const {
   mockNavigate,
   mockGetGameEvents,
   mockGetRunFameStandings,
+  mockGetRunPromotionCandidates,
+  mockAcceptFamePromotion,
+  mockDismissFamePromotion,
   mockLocationState,
 } = vi.hoisted(() => ({
   mockNavigate: vi.fn(),
   mockGetGameEvents: vi.fn(),
   mockGetRunFameStandings: vi.fn(),
+  mockGetRunPromotionCandidates: vi.fn(),
+  mockAcceptFamePromotion: vi.fn(),
+  mockDismissFamePromotion: vi.fn(),
   mockLocationState: {
     gameMode: 'franchise',
     franchiseId: '1',
@@ -52,6 +58,16 @@ vi.mock('../../../utils/eventLog', () => ({
 vi.mock('../../../utils/eliminationRunFameStorage', () => ({
   getRunFameStandings: mockGetRunFameStandings,
 }));
+
+vi.mock('../../app/engines/famePromotion', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../app/engines/famePromotion')>();
+  return {
+    ...actual,
+    getRunPromotionCandidates: mockGetRunPromotionCandidates,
+    acceptFamePromotion: mockAcceptFamePromotion,
+    dismissFamePromotion: mockDismissFamePromotion,
+  };
+});
 
 // Build a complete CompletedGameRecord for mocking
 const mockGameData = {
@@ -326,6 +342,9 @@ describe('PostGameSummary Component', () => {
     vi.mocked(getCompletedGameById).mockResolvedValue(mockGameData);
     mockGetGameEvents.mockResolvedValue(mockAtBatEvents);
     mockGetRunFameStandings.mockResolvedValue([]);
+    mockGetRunPromotionCandidates.mockResolvedValue([]);
+    mockAcceptFamePromotion.mockResolvedValue({});
+    mockDismissFamePromotion.mockResolvedValue(undefined);
   });
 
   describe('Header', () => {
@@ -394,6 +413,81 @@ describe('PostGameSummary Component', () => {
       expect(mockGetRunFameStandings).toHaveBeenCalledWith('elim-run-22');
     });
 
+    test('renders promotion banner candidates and writes accepts in elimination summaries', async () => {
+      const eliminationGame = {
+        ...mockGameData,
+        competitionType: 'elimination' as const,
+        competitionId: 'elim-run-23',
+      };
+
+      mockLocationState.gameMode = 'elimination';
+      mockLocationState.eliminationId = 'elim-run-23';
+      mockLocationState.competitionId = 'elim-run-23';
+      const { getCompletedGameById } = await import('../../utils/gameStorage');
+      vi.mocked(getCompletedGameById).mockResolvedValue(eliminationGame);
+      mockGetRunFameStandings.mockResolvedValue([
+        {
+          playerId: 'home-j-martinez',
+          playerName: 'J Martinez',
+          totalFame: 82.4,
+          gamesPlayed: 4,
+          events: [
+            {
+              id: 'run-promo-1',
+              gameId: 'test-game-123',
+              eventType: 'GRAND_SLAM',
+              playerId: 'home-j-martinez',
+              playerName: 'J Martinez',
+              playerTeam: 'sox',
+              fameValue: 82.4,
+              fameType: 'bonus',
+              inning: 8,
+              halfInning: 'BOTTOM',
+              timestamp: 1,
+              autoDetected: true,
+            },
+          ],
+        },
+      ]);
+      mockGetRunPromotionCandidates.mockResolvedValue([
+        {
+          playerId: 'home-j-martinez',
+          playerName: 'J Martinez',
+          teamId: 'sox',
+          teamName: 'Sox',
+          currentTier: 3,
+          targetTier: 4,
+          runTotalFame: 82.4,
+          gamesPlayed: 4,
+        },
+      ]);
+
+      render(<PostGameSummary />);
+
+      const banner = await screen.findByTestId('fame-promotion-banner');
+      expect(within(banner).getByText('J Martinez')).toBeInTheDocument();
+      expect(within(banner).getByText('Veteran')).toBeInTheDocument();
+      expect(within(banner).getByText('Captain')).toBeInTheDocument();
+
+      fireEvent.click(within(banner).getByRole('button', { name: /accept/i }));
+
+      await waitFor(() => {
+        expect(mockAcceptFamePromotion).toHaveBeenCalledWith(
+          'elim-run-23',
+          'home-j-martinez',
+          4,
+        );
+      });
+      expect(mockGetRunPromotionCandidates).toHaveBeenCalledWith(
+        'elim-run-23',
+        expect.any(Array),
+        {
+          tigers: 'Tigers',
+          sox: 'Sox',
+        },
+      );
+    });
+
     test('does not render elimination run standings for exhibition summaries', async () => {
       mockLocationState.gameMode = 'exhibition';
 
@@ -401,6 +495,7 @@ describe('PostGameSummary Component', () => {
 
       expect(await screen.findByText('POST-GAME REPORT')).toBeInTheDocument();
       expect(screen.queryByTestId('run-standings-table')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('fame-promotion-banner')).not.toBeInTheDocument();
       expect(mockGetRunFameStandings).not.toHaveBeenCalled();
     });
   });

@@ -1,8 +1,10 @@
 import { FameLeaderboardCard, type FameLeaderboardGameSource } from "../components/FameLeaderboardCard";
+import { FamePromotionBanner } from "../components/FamePromotionBanner";
 import {
   RunStandingsTable,
   type RunStandingsEntry,
 } from "../components/RunStandingsTable";
+import type { FamePromotionCandidate } from "../engines/famePromotion";
 
 const exhibitionFixture: FameLeaderboardGameSource = {
   gameId: "preview-fame-exhibition",
@@ -203,6 +205,19 @@ const eliminationRunStandings: RunStandingsEntry[] = [
   },
 ];
 
+const promotionFixture: FamePromotionCandidate[] = [
+  {
+    playerId: "home-ivy",
+    playerName: "Ivy Knox",
+    teamId: "sparks",
+    teamName: "Night Shift",
+    currentTier: 3,
+    targetTier: 4,
+    runTotalFame: 82.4,
+    gamesPlayed: 4,
+  },
+];
+
 export function FameLeaderboardPreview() {
   return (
     <main
@@ -296,6 +311,13 @@ export function FameLeaderboardPreview() {
               initialExpandedPlayerIds={["away-jo", "home-lena"]}
               runTotalsByPlayerId={eliminationRunTotals}
             />
+            <div style={{ marginTop: "18px" }}>
+              <FamePromotionBanner
+                candidates={promotionFixture}
+                onAccept={() => undefined}
+                onDismiss={() => undefined}
+              />
+            </div>
             <div style={{ marginTop: "18px" }}>
               <RunStandingsTable standings={eliminationRunStandings} />
             </div>

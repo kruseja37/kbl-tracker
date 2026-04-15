@@ -1,4 +1,5 @@
 import type { PersistedGameState } from "./gameStorage";
+import type { FameTier } from "../types/reporter";
 import { syncEngine } from "./syncEngine";
 import { getTrackerDb } from "./trackerDb";
 
@@ -17,6 +18,12 @@ export interface RunFameStanding extends PlayerRunFame {
   playerName: string;
 }
 
+export interface RunPromotionDecision {
+  acceptedTier?: FameTier;
+  dismissedTier?: FameTier;
+  lastUpdatedAt: number;
+}
+
 interface StoredPlayerRunFame extends PlayerRunFame {
   playerName: string;
   gameIds: string[];
@@ -25,6 +32,7 @@ interface StoredPlayerRunFame extends PlayerRunFame {
 export interface EliminationRunFameAggregate {
   runId: string;
   playerFame: Record<string, StoredPlayerRunFame>;
+  promotionDecisions?: Record<string, RunPromotionDecision>;
   processedGameIds: string[];
   lastUpdatedAt: number;
 }
@@ -52,9 +60,51 @@ function createEmptyAggregate(runId: string): EliminationRunFameAggregate {
   return {
     runId,
     playerFame: {},
+    promotionDecisions: {},
     processedGameIds: [],
     lastUpdatedAt: Date.now(),
   };
+}
+
+async function getAggregate(
+  runId: string,
+  mode: IDBTransactionMode,
+): Promise<{
+  tx: IDBTransaction;
+  store: IDBObjectStore;
+  aggregate: EliminationRunFameAggregate;
+}> {
+  const db = await getTrackerDb();
+  const tx = db.transaction(STORE, mode);
+  const store = tx.objectStore(STORE);
+  const aggregate =
+    ((await requestToPromise(
+      store.get(runId),
+    )) as EliminationRunFameAggregate | undefined) ?? createEmptyAggregate(runId);
+
+  return {
+    tx,
+    store,
+    aggregate: {
+      ...aggregate,
+      promotionDecisions: { ...(aggregate.promotionDecisions ?? {}) },
+    },
+  };
+}
+
+async function persistAggregate(
+  tx: IDBTransaction,
+  store: IDBObjectStore,
+  aggregate: EliminationRunFameAggregate,
+): Promise<EliminationRunFameAggregate> {
+  await requestToPromise(store.put(aggregate));
+  await transactionToPromise(tx);
+
+  if (!syncEngine.isSuppressed()) {
+    syncEngine.upsert("kbl-tracker", STORE, aggregate.runId, aggregate);
+  }
+
+  return aggregate;
 }
 
 export async function appendEliminationGameFameToRun(
@@ -62,13 +112,7 @@ export async function appendEliminationGameFameToRun(
   gameId: string,
   fameEvents: FameEventRecord[],
 ): Promise<EliminationRunFameAggregate> {
-  const db = await getTrackerDb();
-  const tx = db.transaction(STORE, "readwrite");
-  const store = tx.objectStore(STORE);
-  const existing =
-    ((await requestToPromise(
-      store.get(runId),
-    )) as EliminationRunFameAggregate | undefined) ?? createEmptyAggregate(runId);
+  const { tx, store, aggregate: existing } = await getAggregate(runId, "readwrite");
 
   if (existing.processedGameIds.includes(gameId)) {
     await transactionToPromise(tx);
@@ -101,14 +145,7 @@ export async function appendEliminationGameFameToRun(
     };
   }
 
-  await requestToPromise(store.put(updated));
-  await transactionToPromise(tx);
-
-  if (!syncEngine.isSuppressed()) {
-    syncEngine.upsert("kbl-tracker", STORE, updated.runId, updated);
-  }
-
-  return updated;
+  return persistAggregate(tx, store, updated);
 }
 
 export async function getPlayerRunFame(
@@ -168,4 +205,38 @@ export async function getRunFameStandings(
         right.events.length - left.events.length ||
         left.playerName.localeCompare(right.playerName),
     );
+}
+
+export async function getRunPromotionDecision(
+  runId: string,
+  playerId: string,
+): Promise<RunPromotionDecision | null> {
+  const { tx, aggregate } = await getAggregate(runId, "readonly");
+  await transactionToPromise(tx);
+  return aggregate.promotionDecisions?.[playerId] ?? null;
+}
+
+export async function setRunPromotionDecision(
+  runId: string,
+  playerId: string,
+  decision: Partial<RunPromotionDecision>,
+): Promise<RunPromotionDecision> {
+  const { tx, store, aggregate } = await getAggregate(runId, "readwrite");
+  const nextDecision: RunPromotionDecision = {
+    ...(aggregate.promotionDecisions?.[playerId] ?? { lastUpdatedAt: 0 }),
+    ...decision,
+    lastUpdatedAt: Date.now(),
+  };
+
+  const updated: EliminationRunFameAggregate = {
+    ...aggregate,
+    promotionDecisions: {
+      ...(aggregate.promotionDecisions ?? {}),
+      [playerId]: nextDecision,
+    },
+    lastUpdatedAt: Date.now(),
+  };
+
+  await persistAggregate(tx, store, updated);
+  return nextDecision;
 }

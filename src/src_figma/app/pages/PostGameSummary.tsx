@@ -15,10 +15,17 @@ import { rankPlayersOfTheGame } from "../../../utils/playersOfTheGame";
 import chalkBgImg from '../../../assets/chalk-bg.png';
 import chalkBgFaintImg from '../../../assets/chalk-bg-faint.png';
 import { FameLeaderboardCard } from "../components/FameLeaderboardCard";
+import { FamePromotionBanner } from "../components/FamePromotionBanner";
 import {
   buildRunStandingsEntries,
   RunStandingsTable,
 } from "../components/RunStandingsTable";
+import {
+  acceptFamePromotion,
+  dismissFamePromotion,
+  getRunPromotionCandidates,
+  type FamePromotionCandidate,
+} from "../engines/famePromotion";
 
 // Helper to format innings pitched from outs recorded
 function formatIP(outsRecorded: number): string {
@@ -214,6 +221,8 @@ export function PostGameSummary({
   const [atBatEvents, setAtBatEvents] = useState<AtBatEvent[]>([]);
   const [runStandings, setRunStandings] = useState<RunFameStanding[]>([]);
   const [isRunStandingsLoading, setIsRunStandingsLoading] = useState(false);
+  const [promotionCandidates, setPromotionCandidates] = useState<FamePromotionCandidate[]>([]);
+  const [pendingPromotionPlayerId, setPendingPromotionPlayerId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -332,6 +341,104 @@ export function PostGameSummary({
       cancelled = true;
     };
   }, [eliminationRunId, resolvedGameMode]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadPromotionCandidates() {
+      if (
+        resolvedGameMode !== "elimination" ||
+        !eliminationRunId ||
+        runStandings.length === 0
+      ) {
+        setPromotionCandidates([]);
+        return;
+      }
+
+      try {
+        const teamNamesById = gameData
+          ? {
+              [gameData.awayTeamId]: gameData.awayTeamName,
+              [gameData.homeTeamId]: gameData.homeTeamName,
+            }
+          : {};
+        const candidates = await getRunPromotionCandidates(
+          eliminationRunId,
+          runStandings,
+          teamNamesById,
+        );
+
+        if (!cancelled) {
+          setPromotionCandidates(candidates);
+        }
+      } catch (promotionError) {
+        console.error("Failed to load fame promotion candidates:", promotionError);
+        if (!cancelled) {
+          setPromotionCandidates([]);
+        }
+      }
+    }
+
+    loadPromotionCandidates();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    eliminationRunId,
+    gameData?.awayTeamId,
+    gameData?.awayTeamName,
+    gameData?.homeTeamId,
+    gameData?.homeTeamName,
+    resolvedGameMode,
+    runStandings,
+  ]);
+
+  async function handleAcceptPromotion(candidate: FamePromotionCandidate) {
+    if (!eliminationRunId) {
+      return;
+    }
+
+    setPendingPromotionPlayerId(candidate.playerId);
+
+    try {
+      await acceptFamePromotion(eliminationRunId, candidate.playerId, candidate.targetTier);
+      setPromotionCandidates((currentCandidates) =>
+        currentCandidates.filter(
+          (currentCandidate) =>
+            currentCandidate.playerId !== candidate.playerId ||
+            currentCandidate.targetTier !== candidate.targetTier,
+        ),
+      );
+    } catch (promotionError) {
+      console.error("Failed to accept fame promotion:", promotionError);
+    } finally {
+      setPendingPromotionPlayerId(null);
+    }
+  }
+
+  async function handleDismissPromotion(candidate: FamePromotionCandidate) {
+    if (!eliminationRunId) {
+      return;
+    }
+
+    setPendingPromotionPlayerId(candidate.playerId);
+
+    try {
+      await dismissFamePromotion(eliminationRunId, candidate.playerId, candidate.targetTier);
+      setPromotionCandidates((currentCandidates) =>
+        currentCandidates.filter(
+          (currentCandidate) =>
+            currentCandidate.playerId !== candidate.playerId ||
+            currentCandidate.targetTier !== candidate.targetTier,
+        ),
+      );
+    } catch (promotionError) {
+      console.error("Failed to dismiss fame promotion:", promotionError);
+    } finally {
+      setPendingPromotionPlayerId(null);
+    }
+  }
 
   // Show loading state
   if (isLoading) {
@@ -674,6 +781,15 @@ export function PostGameSummary({
                   game={gameData}
                   gameMode={resolvedGameMode}
                 />
+
+                {resolvedGameMode === "elimination" ? (
+                  <FamePromotionBanner
+                    candidates={promotionCandidates}
+                    pendingPlayerId={pendingPromotionPlayerId}
+                    onAccept={handleAcceptPromotion}
+                    onDismiss={handleDismissPromotion}
+                  />
+                ) : null}
 
                 {resolvedGameMode === "elimination" ? (
                   <RunStandingsTable
