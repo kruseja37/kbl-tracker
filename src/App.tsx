@@ -149,6 +149,11 @@ const FameLeaderboardPreview = lazy(() =>
     default: module.FameLeaderboardPreview,
   })),
 );
+const MatchupDramaBarPreview = lazy(() =>
+  import("./src_figma/app/pages/MatchupDramaBarPreview").then((module) => ({
+    default: module.MatchupDramaBarPreview,
+  })),
+);
 
 /**
  * KBL Tracker - Main App
@@ -251,6 +256,10 @@ function App() {
         <Route
           path="/__preview/fame-leaderboard"
           element={<FameLeaderboardPreview />}
+        />
+        <Route
+          path="/__preview/matchup-drama-bar"
+          element={<MatchupDramaBarPreview />}
         />
 
         {/* 404 */}
