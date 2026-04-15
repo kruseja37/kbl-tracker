@@ -10,6 +10,7 @@ import { getGameEvents, type AtBatEvent } from "../../../utils/eventLog";
 import { rankPlayersOfTheGame } from "../../../utils/playersOfTheGame";
 import chalkBgImg from '../../../assets/chalk-bg.png';
 import chalkBgFaintImg from '../../../assets/chalk-bg-faint.png';
+import { FameLeaderboardCard } from "../components/FameLeaderboardCard";
 
 // Helper to format innings pitched from outs recorded
 function formatIP(outsRecorded: number): string {
@@ -452,6 +453,7 @@ export function PostGameSummary({
   const winnerId = homeWon ? homeTeamId : awayTeamId;
 
   const topPerformers = rankPlayersOfTheGame(gameData, atBatEvents);
+  const resolvedGameMode = gameMode ?? gameData.competitionType ?? "exhibition";
 
   return (
     <div className="min-h-screen bg-[#2b3a2e] text-[#E8E8D8] p-6" style={{ fontFamily: "'Moms Typewriter', monospace" }}>
@@ -610,6 +612,11 @@ export function PostGameSummary({
                     Fame events recorded: {fameCount}
                   </div>
                 </div>
+
+                <FameLeaderboardCard
+                  game={gameData}
+                  gameMode={resolvedGameMode}
+                />
 
                 {/* Players of the game */}
                 {[0, 1, 2].map((rank) => {

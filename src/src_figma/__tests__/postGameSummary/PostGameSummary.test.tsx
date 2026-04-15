@@ -415,8 +415,9 @@ describe('PostGameSummary Component', () => {
 
     test('renders POG stats for top performer', async () => {
       render(<PostGameSummary />);
-      const pogCard = await screen.findByText('J Martinez');
-      const card = pogCard.closest('div[class*="border-[5px]"]');
+      await screen.findByText('J Martinez');
+      const pogLabel = screen.getByText('POG ★★★');
+      const card = pogLabel.closest('div[class*="border-2"]');
       expect(card).toBeTruthy();
       const withinCard = within(card!);
       expect(withinCard.getByText('4 AB')).toBeInTheDocument();
