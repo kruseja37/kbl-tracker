@@ -39,6 +39,7 @@ import {
   setLeaguePlayerOverride,
   removeLeaguePlayerOverride,
   type PlayerAttributes,
+  type PlayerArchetype,
 } from "../../../utils/leagueBuilderStorage";
 import { mergePlayerOverrides } from "../../../utils/playerOverrides";
 import { generateHometown } from "../../../data/usCities";
@@ -52,6 +53,37 @@ const GRADES: Grade[] = ['S', 'A+', 'A', 'A-', 'B+', 'B', 'B-', 'C+', 'C', 'C-',
 const PERSONALITIES: Personality[] = ['Competitive', 'Spirited', 'Crafty', 'Scholarly', 'Disciplined', 'Tough', 'Relaxed', 'Egotistical', 'Jolly', 'Timid', 'Droopy'];
 const CHEMISTRIES: Chemistry[] = ['Competitive', 'Spirited', 'Crafty', 'Scholarly', 'Disciplined'];
 const PITCH_TYPES: PitchType[] = ['4F', '2F', 'CB', 'SL', 'CH', 'FK', 'CF', 'SB', 'SC', 'KN'];
+const PLAYER_ARCHETYPES: PlayerArchetype[] = [
+  'GRIZZLED_VET',
+  'HOT_ROOKIE',
+  'JOURNEYMAN',
+  'ACE',
+  'SLUGGER',
+  'SPEEDSTER',
+  'GLOVE_WIZARD',
+  'CLUBHOUSE_LEADER',
+  'HEAD_CASE',
+  'QUIET_PRO',
+  'SHOWBOAT',
+  'UTILITY_GUY',
+];
+
+const PLAYER_ARCHETYPE_LABELS: Record<PlayerArchetype, string> = {
+  GRIZZLED_VET: 'Grizzled Vet',
+  HOT_ROOKIE: 'Hot Rookie',
+  JOURNEYMAN: 'Journeyman',
+  ACE: 'Ace',
+  SLUGGER: 'Slugger',
+  SPEEDSTER: 'Speedster',
+  GLOVE_WIZARD: 'Glove Wizard',
+  CLUBHOUSE_LEADER: 'Clubhouse Leader',
+  HEAD_CASE: 'Head Case',
+  QUIET_PRO: 'Quiet Pro',
+  SHOWBOAT: 'Showboat',
+  UTILITY_GUY: 'Utility Guy',
+};
+
+const PLAYER_BACKSTORY_LIMIT = 300;
 
 /** The gold color for override indicators, per JK's design feedback */
 const OVERRIDE_GOLD = '#D4A020';
@@ -75,6 +107,11 @@ interface PlayerFormData {
   firstName: string;
   lastName: string;
   nickname: string;
+  backstory: string;
+  nicknames: string[];
+  nicknameDraft: string;
+  archetype: PlayerArchetype | '';
+  signatureMoment: string;
   gender: 'M' | 'F';
   age: string;
   bats: 'L' | 'R' | 'S';
@@ -105,6 +142,11 @@ const DEFAULT_FORM_DATA: PlayerFormData = {
   firstName: "",
   lastName: "",
   nickname: "",
+  backstory: "",
+  nicknames: [],
+  nicknameDraft: "",
+  archetype: "",
+  signatureMoment: "",
   hometownCity: "",
   hometownState: "",
   gender: 'M',
@@ -238,6 +280,11 @@ export function LeagueBuilderPlayers() {
     firstName: player.firstName,
     lastName: player.lastName,
     nickname: player.nickname || "",
+    backstory: player.backstory || "",
+    nicknames: player.nicknames ?? [],
+    nicknameDraft: "",
+    archetype: player.archetype || "",
+    signatureMoment: player.signatureMoment || "",
     hometownCity: player.hometown?.city || "",
     hometownState: player.hometown?.state || "",
     gender: player.gender,
@@ -480,6 +527,10 @@ export function LeagueBuilderPlayers() {
           firstName: formData.firstName.trim(),
           lastName: formData.lastName.trim(),
           nickname: formData.nickname.trim() || undefined,
+          backstory: formData.backstory.trim() || undefined,
+          nicknames: formData.nicknames.length > 0 ? formData.nicknames : undefined,
+          archetype: formData.archetype || undefined,
+          signatureMoment: formData.signatureMoment.trim() || undefined,
           hometown,
           gender: formData.gender,
           age: parseInt(formData.age, 10) || 25,
@@ -555,6 +606,27 @@ export function LeagueBuilderPlayers() {
       : [...formData.arsenal, pitch];
     handleFormChange('arsenal', newArsenal);
   };
+
+  const addEditorialNickname = useCallback(() => {
+    const nextNickname = formData.nicknameDraft.trim();
+    if (!nextNickname || formData.nicknames.includes(nextNickname)) {
+      setFormData(prev => ({ ...prev, nicknameDraft: "" }));
+      return;
+    }
+
+    setFormData(prev => ({
+      ...prev,
+      nicknames: [...prev.nicknames, nextNickname],
+      nicknameDraft: "",
+    }));
+  }, [formData.nicknameDraft, formData.nicknames]);
+
+  const removeEditorialNickname = useCallback((nickname: string) => {
+    setFormData(prev => ({
+      ...prev,
+      nicknames: prev.nicknames.filter((current) => current !== nickname),
+    }));
+  }, []);
 
   const getTeamName = (teamId: string | null | undefined) => {
     if (!teamId) return "Free Agent";
@@ -942,6 +1014,126 @@ export function LeagueBuilderPlayers() {
                   />
                 </OverrideField>
               </div>
+
+              {!isLeagueTab ? (
+                <section className="bg-[#4A6844]/55 border-[4px] border-[#3F5A3A] p-4 space-y-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <h3 className="text-sm font-bold tracking-[0.18em] uppercase text-[#E8E8D8]">
+                        Editorial Identity
+                      </h3>
+                      <p className="mt-1 text-xs text-[#E8E8D8]/60">
+                        Optional reporter-facing flavor. Identity only; relationships stay deferred.
+                      </p>
+                    </div>
+                    <span className="text-[10px] uppercase tracking-[0.18em] text-[#D4A020]">
+                      Base
+                    </span>
+                  </div>
+
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <label htmlFor="player-backstory" className="block text-sm font-bold">
+                        Backstory
+                      </label>
+                      <span className="text-[10px] text-[#E8E8D8]/60">
+                        {formData.backstory.length}/{PLAYER_BACKSTORY_LIMIT}
+                      </span>
+                    </div>
+                    <textarea
+                      id="player-backstory"
+                      value={formData.backstory}
+                      onChange={(e) => handleFormChange('backstory', e.target.value.slice(0, PLAYER_BACKSTORY_LIMIT))}
+                      maxLength={PLAYER_BACKSTORY_LIMIT}
+                      rows={4}
+                      placeholder="A short card-back note for reporters and recaps."
+                      className="w-full bg-[#3F5A3A] border-[4px] border-[#2d3d2f] p-3 text-[#E8E8D8] placeholder-[#E8E8D8]/40 focus:border-[#E8E8D8] outline-none resize-y"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-bold mb-2">Nicknames</label>
+                      <div className="bg-[#3F5A3A] border-[4px] border-[#2d3d2f] p-2">
+                        <div className="flex flex-wrap gap-2 mb-2">
+                          {formData.nicknames.map((nickname) => (
+                            <span
+                              key={nickname}
+                              className="inline-flex items-center gap-1 bg-[#556B55] border-2 border-[#D4A020] px-2 py-1 text-xs"
+                            >
+                              {nickname}
+                              <button
+                                type="button"
+                                onClick={() => removeEditorialNickname(nickname)}
+                                className="text-[#E8E8D8]/70 hover:text-[#E8E8D8]"
+                                aria-label={`Remove ${nickname}`}
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                            </span>
+                          ))}
+                          {formData.nicknames.length === 0 ? (
+                            <span className="text-xs text-[#E8E8D8]/45">No editorial nicknames yet</span>
+                          ) : null}
+                        </div>
+                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            value={formData.nicknameDraft}
+                            onChange={(e) => handleFormChange('nicknameDraft', e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' || e.key === ',') {
+                                e.preventDefault();
+                                addEditorialNickname();
+                              }
+                            }}
+                            placeholder="Add nickname"
+                            className="min-w-0 flex-1 bg-[#4A6844] border-2 border-[#2d3d2f] p-2 text-[#E8E8D8] placeholder-[#E8E8D8]/40 focus:border-[#E8E8D8] outline-none"
+                          />
+                          <button
+                            type="button"
+                            onClick={addEditorialNickname}
+                            className="bg-[#5A8352] hover:bg-[#6A9362] border-2 border-[#E8E8D8]/50 px-3 text-xs font-bold transition"
+                          >
+                            ADD
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label htmlFor="player-archetype" className="block text-sm font-bold mb-2">Archetype</label>
+                      <select
+                        id="player-archetype"
+                        value={formData.archetype}
+                        onChange={(e) => handleFormChange('archetype', e.target.value)}
+                        className="w-full bg-[#3F5A3A] border-[4px] border-[#2d3d2f] p-3 text-[#E8E8D8] focus:border-[#E8E8D8] outline-none"
+                      >
+                        <option value="">None</option>
+                        {PLAYER_ARCHETYPES.map((archetype) => (
+                          <option key={archetype} value={archetype}>
+                            {PLAYER_ARCHETYPE_LABELS[archetype]}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label htmlFor="player-signature-moment" className="block text-sm font-bold mb-2">
+                      Signature Moment
+                    </label>
+                    <input
+                      id="player-signature-moment"
+                      type="text"
+                      value={formData.signatureMoment}
+                      onChange={(e) => handleFormChange('signatureMoment', e.target.value)}
+                      placeholder="e.g., Hit a walk-off into the rain at Apple Field"
+                      className="w-full bg-[#3F5A3A] border-[4px] border-[#2d3d2f] p-3 text-[#E8E8D8] placeholder-[#E8E8D8]/40 focus:border-[#E8E8D8] outline-none"
+                    />
+                  </div>
+                </section>
+              ) : null}
 
               {/* Hometown Row */}
               <div className="flex items-end gap-4">

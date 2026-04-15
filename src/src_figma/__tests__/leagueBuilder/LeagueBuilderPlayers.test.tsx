@@ -34,6 +34,10 @@ vi.mock('../../hooks/useLeagueBuilderData', () => ({
         firstName: 'John',
         lastName: 'Smith',
         nickname: 'Smitty',
+        backstory: 'Local legend with a glove-first reputation.',
+        nicknames: ['The Locksmith'],
+        archetype: 'GLOVE_WIZARD',
+        signatureMoment: 'Turned a ninth-inning triple play.',
         gender: 'M',
         age: 28,
         bats: 'R',
@@ -293,6 +297,54 @@ describe('LeagueBuilderPlayers Component', () => {
       await waitFor(() => {
         expect(screen.getByText(/Primary Position/)).toBeInTheDocument();
       });
+    });
+
+    test('round-trips player editorial identity fields through updatePlayer', async () => {
+      render(<LeagueBuilderPlayers />);
+      fireEvent.click(screen.getAllByTitle('Edit player')[2]);
+
+      expect(await screen.findByText('Editorial Identity')).toBeInTheDocument();
+      expect(screen.getByDisplayValue('Local legend with a glove-first reputation.')).toBeInTheDocument();
+      expect(screen.getByText('The Locksmith')).toBeInTheDocument();
+
+      fireEvent.change(screen.getByLabelText('Backstory'), {
+        target: { value: 'A shortstop with a scrapbook full of impossible hops.' },
+      });
+      fireEvent.change(screen.getByPlaceholderText('Add nickname'), {
+        target: { value: 'Hop Wizard' },
+      });
+      fireEvent.keyDown(screen.getByPlaceholderText('Add nickname'), { key: 'Enter' });
+      fireEvent.change(screen.getByLabelText('Archetype'), {
+        target: { value: 'CLUBHOUSE_LEADER' },
+      });
+      fireEvent.change(screen.getByLabelText('Signature Moment'), {
+        target: { value: 'Kept the season alive with a diving stop.' },
+      });
+
+      fireEvent.click(screen.getByRole('button', { name: /Save Changes/i }));
+
+      await waitFor(() => {
+        expect(mockUpdatePlayer).toHaveBeenCalledWith(
+          expect.objectContaining({
+            id: 'player-1',
+            backstory: 'A shortstop with a scrapbook full of impossible hops.',
+            nicknames: ['The Locksmith', 'Hop Wizard'],
+            archetype: 'CLUBHOUSE_LEADER',
+            signatureMoment: 'Kept the season alive with a diving stop.',
+          }),
+        );
+      });
+    });
+
+    test('enforces the player backstory character cap with a live counter', async () => {
+      render(<LeagueBuilderPlayers />);
+      fireEvent.click(screen.getByRole('button', { name: /create|add|new/i }));
+
+      const backstory = await screen.findByLabelText('Backstory');
+      fireEvent.change(backstory, { target: { value: 'A'.repeat(320) } });
+
+      expect(backstory).toHaveValue('A'.repeat(300));
+      expect(screen.getByText('300/300')).toBeInTheDocument();
     });
   });
 
