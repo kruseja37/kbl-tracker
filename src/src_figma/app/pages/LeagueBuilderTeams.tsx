@@ -22,6 +22,17 @@ import {
   Building2,
 } from "lucide-react";
 import { useLeagueBuilderData, type Team } from "../../hooks/useLeagueBuilderData";
+import type { EraFlavor } from "../../../utils/leagueBuilderStorage";
+
+const ERA_FLAVORS: EraFlavor[] = ['GOLDEN_AGE', 'CLASSIC_TV', 'MODERN_LOCAL'];
+
+const ERA_FLAVOR_LABELS: Record<EraFlavor, string> = {
+  GOLDEN_AGE: 'Golden Age',
+  CLASSIC_TV: 'Classic TV',
+  MODERN_LOCAL: 'Modern Local',
+};
+
+const TEAM_BACKSTORY_LIMIT = 500;
 
 // ============================================
 // TYPES
@@ -39,6 +50,10 @@ interface TeamFormData {
   accentColor: string;
   foundedYear: string;
   championships: string;
+  backstory: string;
+  era: EraFlavor | '';
+  cityVibe: string;
+  ballparkNickname: string;
 }
 
 const DEFAULT_FORM_DATA: TeamFormData = {
@@ -53,6 +68,10 @@ const DEFAULT_FORM_DATA: TeamFormData = {
   accentColor: "",
   foundedYear: "",
   championships: "0",
+  backstory: "",
+  era: "",
+  cityVibe: "",
+  ballparkNickname: "",
 };
 
 // ============================================
@@ -119,6 +138,10 @@ export function LeagueBuilderTeams() {
       accentColor: team.colors.accent || "",
       foundedYear: team.foundedYear?.toString() || "",
       championships: team.championships?.toString() || "0",
+      backstory: team.backstory || "",
+      era: team.era || "",
+      cityVibe: team.cityVibe || "",
+      ballparkNickname: team.ballparkNickname || "",
     });
     setIsModalOpen(true);
   };
@@ -154,6 +177,10 @@ export function LeagueBuilderTeams() {
         championships: formData.championships
           ? parseInt(formData.championships, 10)
           : 0,
+        backstory: formData.backstory.trim() || undefined,
+        era: formData.era || undefined,
+        cityVibe: formData.cityVibe.trim() || undefined,
+        ballparkNickname: formData.ballparkNickname.trim() || undefined,
         leagueIds: editingTeam?.leagueIds || [],
         retiredNumbers: editingTeam?.retiredNumbers || [],
       };
@@ -459,6 +486,98 @@ export function LeagueBuilderTeams() {
                   />
                 </div>
               </div>
+
+              <section className="bg-[#4A6844]/55 border-[4px] border-[#3F5A3A] p-4 space-y-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <h3 className="text-sm font-bold tracking-[0.18em] uppercase text-[#E8E8D8]">
+                      Editorial Identity
+                    </h3>
+                    <p className="mt-1 text-xs text-[#E8E8D8]/60">
+                      Team flavor for reporter copy. No rivalries or affinity tabs in v1.
+                    </p>
+                  </div>
+                  <span className="text-[10px] uppercase tracking-[0.18em] text-[#D4A020]">
+                    Team
+                  </span>
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <label htmlFor="team-backstory" className="block text-sm font-bold">
+                      Backstory
+                    </label>
+                    <span className="text-[10px] text-[#E8E8D8]/60">
+                      {formData.backstory.length}/{TEAM_BACKSTORY_LIMIT}
+                    </span>
+                  </div>
+                  <textarea
+                    id="team-backstory"
+                    value={formData.backstory}
+                    onChange={(e) =>
+                      setFormData((prev) => ({
+                        ...prev,
+                        backstory: e.target.value.slice(0, TEAM_BACKSTORY_LIMIT),
+                      }))
+                    }
+                    maxLength={TEAM_BACKSTORY_LIMIT}
+                    rows={4}
+                    placeholder="A concise team-card origin note for reporters."
+                    className="w-full bg-[#3F5A3A] border-[4px] border-[#2d3d2f] p-3 text-[#E8E8D8] placeholder-[#E8E8D8]/40 focus:border-[#E8E8D8] outline-none resize-y"
+                  />
+                </div>
+
+                <div className="grid grid-cols-3 gap-4">
+                  <div>
+                    <label htmlFor="team-era" className="block text-sm font-bold mb-2">Era</label>
+                    <select
+                      id="team-era"
+                      value={formData.era}
+                      onChange={(e) =>
+                        setFormData((prev) => ({ ...prev, era: e.target.value as EraFlavor | '' }))
+                      }
+                      className="w-full bg-[#3F5A3A] border-[4px] border-[#2d3d2f] p-3 text-[#E8E8D8] focus:border-[#E8E8D8] outline-none"
+                    >
+                      <option value="">None</option>
+                      {ERA_FLAVORS.map((era) => (
+                        <option key={era} value={era}>
+                          {ERA_FLAVOR_LABELS[era]}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label htmlFor="team-city-vibe" className="block text-sm font-bold mb-2">
+                      City Vibe
+                    </label>
+                    <input
+                      id="team-city-vibe"
+                      type="text"
+                      value={formData.cityVibe}
+                      onChange={(e) =>
+                        setFormData((prev) => ({ ...prev, cityVibe: e.target.value }))
+                      }
+                      placeholder="e.g., Blue-collar river town"
+                      className="w-full bg-[#3F5A3A] border-[4px] border-[#2d3d2f] p-3 text-[#E8E8D8] placeholder-[#E8E8D8]/40 focus:border-[#E8E8D8] outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="team-ballpark-nickname" className="block text-sm font-bold mb-2">
+                      Ballpark Nickname
+                    </label>
+                    <input
+                      id="team-ballpark-nickname"
+                      type="text"
+                      value={formData.ballparkNickname}
+                      onChange={(e) =>
+                        setFormData((prev) => ({ ...prev, ballparkNickname: e.target.value }))
+                      }
+                      placeholder="e.g., The Cinderbox"
+                      className="w-full bg-[#3F5A3A] border-[4px] border-[#2d3d2f] p-3 text-[#E8E8D8] placeholder-[#E8E8D8]/40 focus:border-[#E8E8D8] outline-none"
+                    />
+                  </div>
+                </div>
+              </section>
 
               {/* Colors */}
               <div>

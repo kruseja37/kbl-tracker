@@ -37,6 +37,10 @@ vi.mock('../../hooks/useLeagueBuilderData', () => ({
         colors: { primary: '#FF0000', secondary: '#FFFFFF' },
         foundedYear: 1901,
         championships: 9,
+        backstory: 'A city club built around the old rail yards.',
+        era: 'CLASSIC_TV',
+        cityVibe: 'Tin-roof neighborhoods and late-night diners',
+        ballparkNickname: 'The Yard',
       },
       {
         id: 'team-2',
@@ -159,6 +163,43 @@ describe('LeagueBuilderTeams Component', () => {
         expect(screen.getByDisplayValue('Boston Sox')).toBeInTheDocument();
       });
     });
+
+    test('round-trips team editorial identity fields through updateTeam', async () => {
+      render(<LeagueBuilderTeams />);
+      fireEvent.click(screen.getAllByTitle('Edit team')[0]);
+
+      expect(await screen.findByText('Editorial Identity')).toBeInTheDocument();
+      expect(screen.getByDisplayValue('A city club built around the old rail yards.')).toBeInTheDocument();
+      expect(screen.getByDisplayValue('Tin-roof neighborhoods and late-night diners')).toBeInTheDocument();
+      expect(screen.getByDisplayValue('The Yard')).toBeInTheDocument();
+
+      fireEvent.change(screen.getByLabelText('Backstory'), {
+        target: { value: 'Born from a smoky depot league and still allergic to polish.' },
+      });
+      fireEvent.change(screen.getByLabelText('Era'), {
+        target: { value: 'GOLDEN_AGE' },
+      });
+      fireEvent.change(screen.getByLabelText('City Vibe'), {
+        target: { value: 'Wharf bells, brass bands, and stubborn optimism' },
+      });
+      fireEvent.change(screen.getByLabelText('Ballpark Nickname'), {
+        target: { value: 'The Kettle' },
+      });
+
+      fireEvent.click(screen.getByRole('button', { name: /Save Changes/i }));
+
+      await waitFor(() => {
+        expect(mockUpdateTeam).toHaveBeenCalledWith(
+          expect.objectContaining({
+            id: 'team-1',
+            backstory: 'Born from a smoky depot league and still allergic to polish.',
+            era: 'GOLDEN_AGE',
+            cityVibe: 'Wharf bells, brass bands, and stubborn optimism',
+            ballparkNickname: 'The Kettle',
+          }),
+        );
+      });
+    });
   });
 
   describe('Delete Team', () => {
@@ -213,6 +254,17 @@ describe('LeagueBuilderTeams Component', () => {
         expect(screen.getByText(/Team Name/)).toBeInTheDocument();
         expect(screen.getByText(/Abbreviation/)).toBeInTheDocument();
       });
+    });
+
+    test('enforces the team backstory character cap with a live counter', async () => {
+      render(<LeagueBuilderTeams />);
+      fireEvent.click(screen.getByText('CREATE NEW TEAM'));
+
+      const backstory = await screen.findByLabelText('Backstory');
+      fireEvent.change(backstory, { target: { value: 'B'.repeat(520) } });
+
+      expect(backstory).toHaveValue('B'.repeat(500));
+      expect(screen.getByText('500/500')).toBeInTheDocument();
     });
   });
 
