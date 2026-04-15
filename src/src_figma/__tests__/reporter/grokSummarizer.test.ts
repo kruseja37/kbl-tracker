@@ -3,8 +3,6 @@ import "fake-indexeddb/auto";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 import {
-  callGrokChatCompletion,
-  GrokApiError,
   type GrokChatCompletionRequest,
   type GrokChatCompletionResult,
 } from "../../app/engines/reporter/grokClient";
@@ -22,10 +20,7 @@ import {
   queueReporterLegacySummaryJob,
 } from "../../../utils/reporterAlmanacCacheStorage";
 import { resetTrackerDbForTests } from "../../../utils/trackerDb";
-import {
-  setGrokApiKey,
-  setNarrativeIntensity,
-} from "../../../utils/userPreferencesStorage";
+import { setNarrativeIntensity } from "../../../utils/userPreferencesStorage";
 import type { NarrativeIntensity } from "../../../types/reporterPreferences";
 
 const DB_NAME = "kbl-tracker";
@@ -123,7 +118,6 @@ describe("F3 Grok legacy summarizer", () => {
   });
 
   test("calls the mocked Grok client, logs usage, and writes the generated summary back to cache", async () => {
-    await setGrokApiKey("xai-test-key-123");
     await setNarrativeIntensity("medium");
     await seedPlayerEntries("player-success", 5);
     const grokClient = createMockGrokClient("Ivy Sparks keeps turning tense innings into personal folklore.");
@@ -145,8 +139,9 @@ describe("F3 Grok legacy summarizer", () => {
     });
     expect(grokClient).toHaveBeenCalledWith(
       expect.objectContaining({
-        apiKey: "xai-test-key-123",
         model: "grok-4",
+        intensity: "medium",
+        purpose: "legacy_summary",
       }),
     );
     await expect(getPlayerAlmanacCache("player-success", INSTANCE_ID)).resolves.toMatchObject({
@@ -176,7 +171,6 @@ describe("F3 Grok legacy summarizer", () => {
   ] satisfies Array<[NarrativeIntensity, number, number]>)(
     "skips %s intensity until its regen threshold is crossed",
     async (intensity, belowThresholdCount, threshold) => {
-      await setGrokApiKey("xai-test-key-123");
       await setNarrativeIntensity(intensity);
       await seedPlayerEntries(`player-${intensity}`, belowThresholdCount);
       const grokClient = createMockGrokClient();
@@ -206,26 +200,25 @@ describe("F3 Grok legacy summarizer", () => {
     },
   );
 
-  test("skips regeneration when the API key is missing", async () => {
+  test("does not require a client-side API key before calling the edge-backed Grok client", async () => {
     await setNarrativeIntensity("high");
-    await seedPlayerEntries("player-missing-key", 3);
+    await seedPlayerEntries("player-edge-secret", 3);
     const grokClient = createMockGrokClient();
 
     await expect(
-      regenerateLegacySummary("player", "player-missing-key", INSTANCE_ID, {
+      regenerateLegacySummary("player", "player-edge-secret", INSTANCE_ID, {
         dependencies: { grokClient, now: () => FIXED_NOW },
       }),
     ).resolves.toMatchObject({
-      status: "skipped_missing_api_key",
+      status: "generated",
       eventCount: 3,
       threshold: 3,
     });
-    expect(grokClient).not.toHaveBeenCalled();
-    await expect(getUsageMonthToDate(FIXED_NOW)).resolves.toMatchObject({ totalCalls: 0 });
+    expect(grokClient).toHaveBeenCalledTimes(1);
+    await expect(getUsageMonthToDate(FIXED_NOW)).resolves.toMatchObject({ totalCalls: 1 });
   });
 
   test("skips regeneration when the 500-per-day Grok safety rail is reached", async () => {
-    await setGrokApiKey("xai-test-key-123");
     await setNarrativeIntensity("high");
     await seedPlayerEntries("player-rate-limit", 3);
     const grokClient = createMockGrokClient();
@@ -249,7 +242,6 @@ describe("F3 Grok legacy summarizer", () => {
   });
 
   test("returns a failed result without cache write-back or usage logging when the mocked API fails", async () => {
-    await setGrokApiKey("xai-test-key-123");
     await setNarrativeIntensity("high");
     await seedPlayerEntries("player-api-failure", 3);
     const grokClient = vi.fn(async (): Promise<GrokChatCompletionResult> => {
@@ -273,7 +265,6 @@ describe("F3 Grok legacy summarizer", () => {
   });
 
   test("treats an up-to-date cache as a hit and regenerates after enough new entries create a miss", async () => {
-    await setGrokApiKey("xai-test-key-123");
     await setNarrativeIntensity("medium");
     await seedPlayerEntries("player-cache", 5);
     await putPlayerAlmanacCache({
@@ -313,7 +304,6 @@ describe("F3 Grok legacy summarizer", () => {
   });
 
   test("processes queued summary jobs by highest recent dramatic priority first", async () => {
-    await setGrokApiKey("xai-test-key-123");
     await setNarrativeIntensity("high");
     await seedPlayerEntries("player-low-drama", 3, { gameIdPrefix: "low" });
     await seedPlayerEntries("player-high-drama", 3, {
@@ -366,50 +356,4 @@ describe("F3 Grok legacy summarizer", () => {
     );
   });
 
-  test("parses a mocked Grok HTTP response and surfaces HTTP failures", async () => {
-    const fetchImpl = vi.fn(async () =>
-      new Response(
-        JSON.stringify({
-          choices: [{ message: { content: "HTTP summary" } }],
-          usage: { prompt_tokens: 12, completion_tokens: 7 },
-        }),
-        { status: 200 },
-      ),
-    );
-
-    await expect(
-      callGrokChatCompletion({
-        apiKey: "xai-test-key-123",
-        model: "grok-4",
-        messages: [{ role: "user", content: "Summarize this." }],
-        fetchImpl,
-      }),
-    ).resolves.toMatchObject({
-      text: "HTTP summary",
-      inputTokens: 12,
-      outputTokens: 7,
-    });
-    expect(fetchImpl).toHaveBeenCalledWith(
-      "https://api.x.ai/v1/chat/completions",
-      expect.objectContaining({
-        method: "POST",
-        headers: expect.objectContaining({
-          Authorization: "Bearer xai-test-key-123",
-        }),
-      }),
-    );
-
-    const failingFetch = vi.fn(async () => new Response("rate limited", { status: 429 }));
-    await expect(
-      callGrokChatCompletion({
-        apiKey: "xai-test-key-123",
-        model: "grok-4",
-        messages: [{ role: "user", content: "Summarize this." }],
-        fetchImpl: failingFetch,
-      }),
-    ).rejects.toMatchObject({
-      name: "GrokApiError",
-      status: 429,
-    } satisfies Partial<GrokApiError>);
-  });
 });

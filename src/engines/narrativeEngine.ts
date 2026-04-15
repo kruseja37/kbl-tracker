@@ -1074,20 +1074,7 @@ export async function generateNarrativeWithClaude(
   // Build prompt for Claude
   const prompt = buildClaudePrompt(context, reporter, voice);
 
-  // TODO: Make actual Claude API call
-  // const response = await fetch('https://api.anthropic.com/v1/messages', {
-  //   method: 'POST',
-  //   headers: {
-  //     'Content-Type': 'application/json',
-  //     'x-api-key': options.claudeAPIKey!,
-  //     'anthropic-version': '2023-06-01',
-  //   },
-  //   body: JSON.stringify({
-  //     model: 'claude-3-haiku-20240307',  // Fast & cheap for narratives
-  //     max_tokens: options.maxTokens || 300,
-  //     messages: [{ role: 'user', content: prompt }],
-  //   }),
-  // });
+  // TODO: Route any future Claude transport through the reporter Edge Function proxy.
   // const result = await response.json();
   // return parseClaudeResponse(result, reporter, effectivePersonality);
 

@@ -19,11 +19,9 @@ import {
   logLlmCall,
 } from "../../app/engines/reporter/usageLogger";
 import {
-  getGrokApiKey,
   getNarrativeIntensity,
   getSoftMonthlyBudget,
   getUserPreferences,
-  setGrokApiKey,
   setNarrativeIntensity,
   setSoftMonthlyBudget,
 } from "../../../utils/userPreferencesStorage";
@@ -256,19 +254,10 @@ describe("F1 LLM usage logging and preferences", () => {
     await expect(getNarrativeIntensity()).resolves.toBe("medium");
 
     await setNarrativeIntensity("high");
-    await setGrokApiKey("xai-test-key-123");
     await setSoftMonthlyBudget(12.5);
 
     await expect(getNarrativeIntensity()).resolves.toBe("high");
-    await expect(getGrokApiKey()).resolves.toBe("xai-test-key-123");
     await expect(getSoftMonthlyBudget()).resolves.toBe(12.5);
-  });
-
-  test("rejects invalid Grok API keys before persistence", async () => {
-    await expect(setGrokApiKey("bad key with spaces")).rejects.toThrow(
-      "Grok API key must be at least 8 characters",
-    );
-    await expect(getGrokApiKey()).resolves.toBeUndefined();
   });
 
   test("exposes Narrative Intensity threshold mapping from the spec", () => {

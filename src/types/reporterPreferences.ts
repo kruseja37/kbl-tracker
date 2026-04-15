@@ -3,7 +3,6 @@ export type NarrativeIntensity = "low" | "medium" | "high";
 export interface UserPreferences {
   key: "default";
   narrativeIntensity: NarrativeIntensity;
-  grokApiKey?: string;
   softMonthlyBudget: number;
   lastModified: number;
 }

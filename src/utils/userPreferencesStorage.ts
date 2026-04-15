@@ -42,12 +42,6 @@ function assertNarrativeIntensity(value: NarrativeIntensity): void {
   }
 }
 
-export function validateGrokApiKey(value: string | undefined): boolean {
-  if (!value) return true;
-  const trimmed = value.trim();
-  return trimmed.length >= 8 && !/\s/.test(trimmed);
-}
-
 export async function getUserPreferences(): Promise<UserPreferences> {
   const db = await getTrackerDb();
   const tx = db.transaction(STORE, "readonly");
@@ -72,10 +66,6 @@ export async function saveUserPreferences(
 
   assertNarrativeIntensity(next.narrativeIntensity);
 
-  if (!validateGrokApiKey(next.grokApiKey)) {
-    throw new Error("Grok API key must be at least 8 characters and contain no whitespace.");
-  }
-
   const db = await getTrackerDb();
   const tx = db.transaction(STORE, "readwrite");
   await requestToPromise(tx.objectStore(STORE).put(next));
@@ -96,14 +86,6 @@ export async function setNarrativeIntensity(
   narrativeIntensity: NarrativeIntensity,
 ): Promise<UserPreferences> {
   return saveUserPreferences({ narrativeIntensity });
-}
-
-export async function getGrokApiKey(): Promise<string | undefined> {
-  return (await getUserPreferences()).grokApiKey;
-}
-
-export async function setGrokApiKey(grokApiKey: string | undefined): Promise<UserPreferences> {
-  return saveUserPreferences({ grokApiKey: grokApiKey?.trim() || undefined });
 }
 
 export async function getSoftMonthlyBudget(): Promise<number> {

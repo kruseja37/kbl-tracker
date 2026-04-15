@@ -13,10 +13,7 @@ import {
   type ReporterPlayerAlmanacCache,
   type ReporterTeamAlmanacCache,
 } from "../../../../utils/reporterAlmanacCacheStorage";
-import {
-  getGrokApiKey,
-  getNarrativeIntensity,
-} from "../../../../utils/userPreferencesStorage";
+import { getNarrativeIntensity } from "../../../../utils/userPreferencesStorage";
 import type { NarrativeIntensity } from "../../../../types/reporterPreferences";
 import {
   callGrokChatCompletion,
@@ -39,12 +36,10 @@ type AlmanacCache = ReporterPlayerAlmanacCache | ReporterTeamAlmanacCache;
 export type LegacySummaryStatus =
   | "generated"
   | "skipped_cache_hit"
-  | "skipped_missing_api_key"
   | "skipped_rate_limited"
   | "failed";
 
 export interface LegacySummaryDependencies {
-  getApiKey?: () => Promise<string | undefined>;
   getIntensity?: () => Promise<NarrativeIntensity>;
   isWithinDailyCallLimit?: (now?: number) => Promise<boolean>;
   logUsage?: (entry: LlmUsageLogInput) => Promise<LlmUsageLogEntry>;
@@ -179,7 +174,6 @@ async function writeLegacySummaryCache(params: {
 
 function getDependencies(dependencies: LegacySummaryDependencies = {}): Required<LegacySummaryDependencies> {
   return {
-    getApiKey: dependencies.getApiKey ?? getGrokApiKey,
     getIntensity: dependencies.getIntensity ?? getNarrativeIntensity,
     isWithinDailyCallLimit: dependencies.isWithinDailyCallLimit ?? isWithinDailyCallLimit,
     logUsage: dependencies.logUsage ?? logLlmCall,
@@ -261,19 +255,6 @@ export async function regenerateLegacySummary(
     });
   }
 
-  const apiKey = await dependencies.getApiKey();
-  if (!apiKey) {
-    return resultBase({
-      status: "skipped_missing_api_key",
-      entityType,
-      entityId,
-      instanceId,
-      eventCount,
-      cacheEventCount: target.cacheEventCount,
-      threshold,
-    });
-  }
-
   const withinDailyLimit = await dependencies.isWithinDailyCallLimit(now);
   if (!withinDailyLimit) {
     console.warn("[reporter:summarizer] Grok daily call safety rail reached; skipping legacy summary regen.");
@@ -289,6 +270,7 @@ export async function regenerateLegacySummary(
   }
 
   const entriesSinceLastRegen = entries.slice(target.cacheEventCount);
+  const gameId = latestGameId(entriesSinceLastRegen);
   const messages = buildLegacySummaryPrompt({
     entityType,
     entityId: target.promptEntityId,
@@ -298,9 +280,12 @@ export async function regenerateLegacySummary(
 
   try {
     const summaryResponse = await dependencies.grokClient({
-      apiKey,
       model: GROK_LEGACY_SUMMARY_MODEL,
       messages,
+      intensity,
+      purpose: "legacy_summary",
+      gameId,
+      mode: options.mode,
       temperature: 0.2,
       maxTokens: 260,
     });
@@ -309,7 +294,7 @@ export async function regenerateLegacySummary(
       model: GROK_LEGACY_SUMMARY_MODEL,
       inputTokens: summaryResponse.inputTokens,
       outputTokens: summaryResponse.outputTokens,
-      gameId: latestGameId(entriesSinceLastRegen),
+      gameId,
       mode: options.mode,
       intensity,
       purpose: "legacy_summary",

@@ -1,4 +1,7 @@
-export const GROK_CHAT_COMPLETIONS_URL = "https://api.x.ai/v1/chat/completions";
+import { supabase } from "../../../../supabase";
+import type { NarrativeIntensity } from "../../../../types/reporterPreferences";
+import type { CompetitionType } from "../../../../utils/gameStorage";
+import type { LlmUsagePurpose } from "./usageLogger";
 
 export interface GrokChatMessage {
   role: "system" | "user" | "assistant";
@@ -6,13 +9,15 @@ export interface GrokChatMessage {
 }
 
 export interface GrokChatCompletionRequest {
-  apiKey: string;
   model: string;
   messages: GrokChatMessage[];
+  intensity: NarrativeIntensity;
+  purpose: LlmUsagePurpose;
   temperature?: number;
   maxTokens?: number;
-  endpoint?: string;
-  fetchImpl?: typeof fetch;
+  gameId?: string;
+  mode?: CompetitionType;
+  invokeImpl?: ReporterProxyInvoke;
 }
 
 export interface GrokChatCompletionResult {
@@ -22,17 +27,44 @@ export interface GrokChatCompletionResult {
   raw: unknown;
 }
 
-interface GrokChatCompletionResponse {
-  choices?: Array<{
-    message?: {
-      content?: string | null;
-    };
-  }>;
-  usage?: {
-    prompt_tokens?: number;
-    completion_tokens?: number;
+interface ReporterProxyRequestBody {
+  model: string;
+  messages: GrokChatMessage[];
+  intensity: NarrativeIntensity;
+  purpose: LlmUsagePurpose;
+  temperature?: number;
+  maxTokens?: number;
+  gameId?: string;
+  mode?: CompetitionType;
+}
+
+interface ReporterProxyResponse {
+  text?: string;
+  inputTokens?: number;
+  outputTokens?: number;
+  model?: string;
+}
+
+interface ReporterProxyError {
+  message: string;
+  status?: number;
+}
+
+interface ReporterProxyInvokeResult {
+  data: ReporterProxyResponse | null;
+  error: ReporterProxyError | null;
+}
+
+interface ReporterProxySupabaseClient {
+  functions: {
+    invoke: (functionName: string, options: { body: ReporterProxyRequestBody }) => Promise<ReporterProxyInvokeResult>;
   };
 }
+
+export type ReporterProxyInvoke = (
+  functionName: "grok-commentary",
+  options: { body: ReporterProxyRequestBody },
+) => Promise<ReporterProxyInvokeResult>;
 
 export class GrokApiError extends Error {
   status?: number;
@@ -44,46 +76,57 @@ export class GrokApiError extends Error {
   }
 }
 
-export async function callGrokChatCompletion({
-  apiKey,
-  model,
-  messages,
-  temperature = 0.2,
-  maxTokens = 260,
-  endpoint = GROK_CHAT_COMPLETIONS_URL,
-  fetchImpl = fetch,
-}: GrokChatCompletionRequest): Promise<GrokChatCompletionResult> {
-  const response = await fetchImpl(endpoint, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model,
-      messages,
-      temperature,
-      max_tokens: maxTokens,
-    }),
-  });
-
-  if (!response.ok) {
-    const body = await response.text().catch(() => "");
-    const detail = body ? ` ${body}` : "";
-    throw new GrokApiError(`Grok chat completion failed with HTTP ${response.status}.${detail}`, response.status);
+export function createGrokProxyInvoke(client: ReporterProxySupabaseClient | null): ReporterProxyInvoke {
+  if (!client) {
+    throw new GrokApiError(
+      "Supabase is not configured; Grok calls must go through the grok-commentary Edge Function.",
+    );
   }
 
-  const payload = (await response.json()) as GrokChatCompletionResponse;
-  const text = payload.choices?.[0]?.message?.content?.trim();
+  return ((functionName, options) =>
+    client.functions.invoke(functionName, options)) as ReporterProxyInvoke;
+}
 
-  if (!text) {
-    throw new GrokApiError("Grok chat completion response did not include summary text.");
+function getDefaultInvoke(): ReporterProxyInvoke {
+  return createGrokProxyInvoke(supabase);
+}
+
+export async function callGrokChatCompletion({
+  model,
+  messages,
+  intensity,
+  purpose,
+  temperature = 0.2,
+  maxTokens = 260,
+  gameId,
+  mode,
+  invokeImpl,
+}: GrokChatCompletionRequest): Promise<GrokChatCompletionResult> {
+  const invoke = invokeImpl ?? getDefaultInvoke();
+  const body: ReporterProxyRequestBody = {
+    model,
+    messages,
+    intensity,
+    purpose,
+    temperature,
+    maxTokens,
+    gameId,
+    mode,
+  };
+  const { data, error } = await invoke("grok-commentary", { body });
+
+  if (error) {
+    throw new GrokApiError(`Grok Edge Function failed: ${error.message}`, error.status);
+  }
+
+  if (!data?.text) {
+    throw new GrokApiError("Grok Edge Function response did not include summary text.");
   }
 
   return {
-    text,
-    inputTokens: payload.usage?.prompt_tokens ?? 0,
-    outputTokens: payload.usage?.completion_tokens ?? 0,
-    raw: payload,
+    text: data.text,
+    inputTokens: data.inputTokens ?? 0,
+    outputTokens: data.outputTokens ?? 0,
+    raw: data,
   };
 }
