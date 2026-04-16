@@ -60,6 +60,17 @@ function buildFeedItems(entries: CommentaryFeedEntry[]): CommentaryFeedItem[] {
   return items;
 }
 
+function formatTimestamp(timestamp: number): string {
+  if (timestamp <= 0) {
+    return "pregame";
+  }
+
+  return new Date(timestamp).toLocaleTimeString([], {
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
 export function CommentaryFeed({
   entries,
   soundsOn = false,
@@ -124,10 +135,7 @@ export function CommentaryFeed({
                 {item.entry.halfInningLabel}
               </span>
               <span className="text-[7px] text-[#6b7b6e]">
-                {new Date(item.entry.timestamp).toLocaleTimeString([], {
-                  hour: "numeric",
-                  minute: "2-digit",
-                })}
+                {formatTimestamp(item.entry.timestamp)}
               </span>
             </div>
             <div className="text-[9px] leading-[1.45] text-[#E8E8D8]">

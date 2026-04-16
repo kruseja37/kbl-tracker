@@ -224,6 +224,7 @@ async function generateWithDefaults(options: {
     temperature: options.temperature,
     gameId: "game-1",
     mode: options.mode ?? "exhibition",
+    reporter: createReporter(),
     invokeImpl: options.invokeImpl,
     logUsage: options.logUsage,
   });
@@ -242,6 +243,32 @@ async function generateWithDefaults(options: {
       batter: { AB: 4, H: 2, RBI: 2 },
       pitcher: { IP: "7.2", K: 9 },
     },
+  });
+
+  return { engine, result };
+}
+
+async function generatePreambleWithDefaults(options: {
+  invokeImpl?: ReporterProxyInvoke;
+  logUsage?: ReturnType<typeof createLogUsageSpy>;
+  temperature?: number;
+  mode?: CompetitionType;
+}) {
+  const engine = new GrokCommentaryEngine({
+    model: "grok-4",
+    intensity: "high",
+    temperature: options.temperature,
+    gameId: "game-1",
+    mode: options.mode ?? "exhibition",
+    reporter: createReporter(),
+    invokeImpl: options.invokeImpl,
+    logUsage: options.logUsage,
+  });
+
+  const result = await engine.generatePreamble(createContext(), {
+    ...INITIAL_MOOD_STATE,
+    moodScore: 4,
+    energyModifier: "electric",
   });
 
   return { engine, result };
@@ -450,5 +477,114 @@ describe("commentaryEngine", () => {
       temperature: 0.45,
     });
     expect(overrideInvoke.mock.calls[0][1].body.temperature).toBe(0.45);
+  });
+
+  test("uses a different preamble system prompt than play commentary", async () => {
+    const invokeImpl = createInvokeSuccess(
+      "Good evening everybody, this is Dutch Calloway and the Tank feels ready to shake tonight.",
+    );
+    const engine = new GrokCommentaryEngine({
+      model: "grok-4",
+      intensity: "medium",
+      gameId: "game-1",
+      mode: "exhibition",
+      reporter: createReporter(),
+      invokeImpl: invokeImpl as unknown as ReporterProxyInvoke,
+      logUsage: createLogUsageSpy(),
+    });
+
+    await engine.generatePreamble(createContext(), {
+      ...INITIAL_MOOD_STATE,
+      moodScore: 4,
+    });
+    await engine.generateCommentary({
+      play: createPlay(),
+      notability: createNotability({ reason: "HR" }),
+      reporter: createReporter(),
+      mood: {
+        ...INITIAL_MOOD_STATE,
+        moodScore: 4,
+      },
+      context: createContext(),
+    });
+
+    const preambleSystemMessage = invokeImpl.mock.calls[0][1].body.messages[0];
+    const commentarySystemMessage = invokeImpl.mock.calls[1][1].body.messages[0];
+    const preambleUserMessage = invokeImpl.mock.calls[0][1].body.messages[1];
+
+    expect(preambleSystemMessage.content).toContain(
+      "This is the top-of-broadcast preamble. No pitch-by-pitch action has happened yet.",
+    );
+    expect(preambleSystemMessage.content).toContain(
+      "Have the reporter introduce themselves by name, set the scene, and keep the focus on anticipation rather than play-by-play.",
+    );
+    expect(commentarySystemMessage.content).toContain("Notability cue:");
+    expect(preambleSystemMessage.content).not.toContain("Notability cue:");
+    expect(preambleUserMessage.content).toContain("Instruction: Write one paragraph of scene-setting pregame commentary.");
+  });
+
+  test("preamble returns commentary result with skipped=false on success", async () => {
+    const { result } = await generatePreambleWithDefaults({
+      invokeImpl: createInvokeSuccess(
+        "Good evening everybody, this is Dutch Calloway and the air around The Tank already feels electric.",
+      ) as unknown as ReporterProxyInvoke,
+      logUsage: createLogUsageSpy(),
+    });
+
+    expect(result).toMatchObject({
+      text: "Good evening everybody, this is Dutch Calloway and the air around The Tank already feels electric.",
+      skipped: false,
+      inputTokens: 123,
+      outputTokens: 29,
+    });
+  });
+
+  test("preamble errors fall back to skipped=true without throwing", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const invokeImpl = vi.fn(async () => {
+      throw new Error("timeout");
+    }) as unknown as ReporterProxyInvoke;
+
+    const { result } = await generatePreambleWithDefaults({
+      invokeImpl,
+      logUsage: createLogUsageSpy(),
+    });
+
+    expect(result).toMatchObject({
+      text: null,
+      skipped: true,
+      error: "timeout",
+      inputTokens: 0,
+      outputTokens: 0,
+    });
+    expect(warn).toHaveBeenCalledWith(
+      "[reporter:commentary] Game preamble generation failed; skipping preamble.",
+      "timeout",
+    );
+  });
+
+  test("logs usage for successful preamble generation with purpose commentary", async () => {
+    const logUsage = createLogUsageSpy();
+
+    await generatePreambleWithDefaults({
+      invokeImpl: createInvokeSuccess(
+        "Good evening everybody, this is Dutch Calloway and the lights feel hot tonight.",
+      ) as unknown as ReporterProxyInvoke,
+      logUsage,
+      mode: "playoff",
+    });
+
+    expect(logUsage).toHaveBeenCalledTimes(1);
+    expect(logUsage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        model: "grok-4",
+        inputTokens: 123,
+        outputTokens: 29,
+        purpose: "commentary",
+        intensity: "high",
+        gameId: "game-1",
+        mode: "playoff",
+      }),
+    );
   });
 });

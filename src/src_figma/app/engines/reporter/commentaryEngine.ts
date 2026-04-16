@@ -19,6 +19,8 @@ import type { ReporterContext } from "./reporterContext";
 import {
   buildCommentarySystemPrompt,
   buildCommentaryUserMessage,
+  buildPreambleSystemPrompt,
+  buildPreambleUserMessage,
 } from "./promptBuilder";
 
 const DEFAULT_TEMPERATURE = 0.7;
@@ -29,6 +31,7 @@ export interface CommentaryEngineConfig {
   temperature?: number;
   gameId?: string;
   mode?: CompetitionType;
+  reporter?: BeatReporter;
   invokeImpl?: ReporterProxyInvoke;
   logUsage?: typeof logLlmCall;
 }
@@ -52,6 +55,10 @@ export interface CommentaryResult {
 
 export interface CommentaryEngine {
   generateCommentary(input: CommentaryInput): Promise<CommentaryResult>;
+  generatePreamble(
+    reporterContext: ReporterContext,
+    mood: MoodState,
+  ): Promise<CommentaryResult>;
   getNarrativeSoFar(): string;
   resetNarrative(): void;
 }
@@ -120,6 +127,32 @@ export class GrokCommentaryEngine implements CommentaryEngine {
     this.gameNarrativeSoFar = "";
   }
 
+  async generatePreamble(
+    reporterContext: ReporterContext,
+    mood: MoodState,
+  ): Promise<CommentaryResult> {
+    const moodLabel = resolveMood(mood);
+    const messages: GrokChatMessage[] = [
+      {
+        role: "system",
+        content: buildPreambleSystemPrompt(
+          this.config.reporter,
+          moodLabel,
+          reporterContext,
+        ),
+      },
+      {
+        role: "user",
+        content: buildPreambleUserMessage(reporterContext),
+      },
+    ];
+
+    return this.executeChatCompletion(messages, {
+      failureLogPrefix:
+        "[reporter:commentary] Game preamble generation failed; skipping preamble.",
+    });
+  }
+
   async generateCommentary(input: CommentaryInput): Promise<CommentaryResult> {
     if (!input.notability.shouldComment) {
       return {
@@ -150,6 +183,25 @@ export class GrokCommentaryEngine implements CommentaryEngine {
       { role: "user", content: userPrompt },
     ];
 
+    const result = await this.executeChatCompletion(messages, {
+      failureLogPrefix:
+        "[reporter:commentary] Commentary generation failed; skipping play.",
+    });
+
+    if (!result.skipped && result.text) {
+      this.gameNarrativeSoFar = mergeNarrative(
+        this.gameNarrativeSoFar,
+        result.text,
+      );
+    }
+
+    return result;
+  }
+
+  private async executeChatCompletion(
+    messages: GrokChatMessage[],
+    options: { failureLogPrefix: string },
+  ): Promise<CommentaryResult> {
     try {
       const response = await callGrokChatCompletion({
         model: this.config.model,
@@ -177,11 +229,6 @@ export class GrokCommentaryEngine implements CommentaryEngine {
         );
       }
 
-      this.gameNarrativeSoFar = mergeNarrative(
-        this.gameNarrativeSoFar,
-        response.text,
-      );
-
       return {
         text: response.text,
         skipped: false,
@@ -190,10 +237,7 @@ export class GrokCommentaryEngine implements CommentaryEngine {
       };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      console.warn(
-        "[reporter:commentary] Commentary generation failed; skipping play.",
-        message,
-      );
+      console.warn(options.failureLogPrefix, message);
 
       return {
         text: null,

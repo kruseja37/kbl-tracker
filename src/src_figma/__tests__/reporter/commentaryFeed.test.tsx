@@ -33,6 +33,20 @@ function createEntries(): CommentaryFeedEntry[] {
   ];
 }
 
+function createEntriesWithPreamble(): CommentaryFeedEntry[] {
+  return [
+    ...createEntries(),
+    {
+      id: "entry-pre",
+      commentaryText:
+        "Good evening everybody, this is Dutch Calloway and the Tank is ready to rattle tonight.",
+      halfInningLabel: "PRE",
+      timestamp: 0,
+      reporterId: "reporter-1",
+    },
+  ];
+}
+
 describe("CommentaryFeed", () => {
   beforeEach(() => {
     vi.useFakeTimers();
@@ -92,6 +106,31 @@ describe("CommentaryFeed", () => {
     expect(screen.getByTestId("commentary-divider-T4")).toHaveTextContent(
       "─── T4 ───",
     );
+  });
+
+  test("renders a PRE entry at the bottom with its own divider", () => {
+    const { container } = render(
+      <CommentaryFeed
+        entries={createEntriesWithPreamble()}
+        soundsOn={false}
+      />,
+    );
+
+    expect(screen.getByTestId("commentary-divider-PRE")).toHaveTextContent(
+      "─── PRE ───",
+    );
+    expect(screen.getByTestId("commentary-entry-entry-pre")).toHaveTextContent(
+      "Good evening everybody, this is Dutch Calloway and the Tank is ready to rattle tonight.",
+    );
+    expect(screen.getByTestId("commentary-entry-entry-pre")).toHaveTextContent(
+      "pregame",
+    );
+
+    const renderedEntries = Array.from(
+      container.querySelectorAll('[data-testid^="commentary-entry-"]'),
+    ).map((node) => node.getAttribute("data-testid"));
+
+    expect(renderedEntries.at(-1)).toBe("commentary-entry-entry-pre");
   });
 
   test("typewriter animates only the most recent entry", () => {

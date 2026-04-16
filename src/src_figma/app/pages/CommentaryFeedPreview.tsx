@@ -26,6 +26,14 @@ const previewEntries: CommentaryFeedEntry[] = [
     timestamp: new Date("2026-04-15T19:18:00.000Z").getTime(),
     reporterId: "reporter-blowfish",
   },
+  {
+    id: "entry-pre-preamble",
+    commentaryText:
+      "Good evening everybody, this is Dutch Calloway at The Tank, where the Blowfish and Freebooters have brought a little bad blood and a full house with them tonight.",
+    halfInningLabel: "PRE",
+    timestamp: 0,
+    reporterId: "reporter-blowfish",
+  },
 ];
 
 export function CommentaryFeedPreview() {
@@ -60,7 +68,8 @@ export function CommentaryFeedPreview() {
           </h1>
           <p className="mt-3 max-w-3xl text-[0.95rem] leading-6 text-[#d7d8c8]">
             Fixture-driven NewsBoard render with a live typewriter line at the
-            top and a visible T4 to B4 inning break.
+            top, a visible T4 to B4 inning break, and a PRE divider anchored at
+            the bottom as the oldest entry.
           </p>
         </div>
 

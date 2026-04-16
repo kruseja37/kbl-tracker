@@ -137,27 +137,61 @@ function safeJson(value: Record<string, unknown> | undefined): string {
   }
 }
 
-export function buildCommentarySystemPrompt(
-  reporter: BeatReporter,
-  mood: MoodLabel,
-  narrativeSoFar: string,
+function formatReporterIdentity(
+  reporter: BeatReporter | undefined,
   context: ReporterContext,
-): string {
+): string[] {
+  if (!reporter) {
+    return [
+      "Name: Beat Reporter",
+      `Assigned team: ${context.battingTeam.name}`,
+      "Era flavor: Classic Tv",
+      "Personality: Balanced",
+      "Voice style: The Storyteller",
+      "Silhouette variant: headset",
+    ];
+  }
+
   const assignedTeam = resolveAssignedTeamName(reporter, context);
 
   return [
-    "1. Reporter Identity",
     `Name: ${reporter.name}`,
     `Assigned team: ${assignedTeam}`,
     `Era flavor: ${humanizeEnum(reporter.eraFlavor)}`,
     `Personality: ${humanizeEnum(reporter.personality)}`,
     `Voice style: ${humanizeEnum(reporter.voiceStyle)}`,
     `Silhouette variant: ${reporter.avatarEra}`,
-    "",
-    "2. Voice And Style Guide",
+  ];
+}
+
+function formatVoiceGuide(reporter: BeatReporter | undefined): string[] {
+  if (!reporter) {
+    return [
+      VOICE_STYLE_GUIDES.THE_STORYTELLER,
+      ERA_STYLE_GUIDES.CLASSIC_TV,
+      PERSONALITY_COLOR.BALANCED,
+    ];
+  }
+
+  return [
     VOICE_STYLE_GUIDES[reporter.voiceStyle],
     ERA_STYLE_GUIDES[reporter.eraFlavor],
     PERSONALITY_COLOR[reporter.personality],
+  ];
+}
+
+export function buildCommentarySystemPrompt(
+  reporter: BeatReporter,
+  mood: MoodLabel,
+  narrativeSoFar: string,
+  context: ReporterContext,
+): string {
+  return [
+    "1. Reporter Identity",
+    ...formatReporterIdentity(reporter, context),
+    "",
+    "2. Voice And Style Guide",
+    ...formatVoiceGuide(reporter),
     "Stay in character, write 1-2 sentences, avoid markdown, avoid invented stats, and sound like a live beat reporter reacting in the moment.",
     "",
     "3. Current Mood",
@@ -190,5 +224,44 @@ export function buildCommentaryUserMessage(
     "Box score snapshot:",
     safeJson(boxScore),
     "Instruction: Write 1-2 sentences of live commentary grounded only in the supplied facts.",
+  ].join("\n");
+}
+
+export function buildPreambleSystemPrompt(
+  reporter: BeatReporter | undefined,
+  mood: MoodLabel,
+  context: ReporterContext,
+): string {
+  return [
+    "1. Reporter Identity",
+    ...formatReporterIdentity(reporter, context),
+    "",
+    "2. Voice And Style Guide",
+    ...formatVoiceGuide(reporter),
+    "Write one short paragraph that sounds like the reporter opening a live broadcast before the first pitch.",
+    "Have the reporter introduce themselves by name, set the scene, and keep the focus on anticipation rather than play-by-play.",
+    "Avoid markdown, avoid invented stats, and stay grounded in the supplied matchup context.",
+    "",
+    "3. Current Mood",
+    `Mood label: ${mood}`,
+    MOOD_BEHAVIOR_NOTES[mood],
+    "",
+    "4. Opening Scene",
+    "This is the top-of-broadcast preamble. No pitch-by-pitch action has happened yet.",
+    "",
+    "5. Reporter Context Highlights",
+    formatContextHighlights(context),
+  ].join("\n");
+}
+
+export function buildPreambleUserMessage(context: ReporterContext): string {
+  return [
+    "6. Opening Assignment",
+    `Matchup: ${context.pitchingTeam.name} at ${context.battingTeam.name}`,
+    `Ballpark mood: ${context.battingTeam.ballparkNickname || "Home park"} with ${context.battingTeam.cityVibe || "a charged crowd"}.`,
+    `Starting score: away ${context.gameState.awayScore}, home ${context.gameState.homeScore}`,
+    `Leadoff duel: ${context.batter.name} vs ${context.pitcher.name}`,
+    `Recent team note: ${formatAlmanacHighlights(context.teamRecentAlmanac)}`,
+    "Instruction: Write one paragraph of scene-setting pregame commentary. Introduce yourself, frame the stakes, and do not call any specific play.",
   ].join("\n");
 }
