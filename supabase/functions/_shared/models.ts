@@ -4,12 +4,12 @@ export type LlmProvider = "grok" | "anthropic";
 
 export const DEFAULT_MODELS: Record<LlmProvider, string> = {
   grok: "grok-4",
-  anthropic: "claude-sonnet-4.6",
+  anthropic: "claude-sonnet-4-6",
 };
 
 export const ALLOWED_MODELS: Record<LlmProvider, readonly string[]> = {
   grok: ["grok-4"],
-  anthropic: ["claude-sonnet-4.6"],
+  anthropic: ["claude-sonnet-4-6"],
 };
 
 export function resolveAllowedModel(provider: LlmProvider, requestedModel?: string): string {

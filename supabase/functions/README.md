@@ -20,26 +20,30 @@ G4 moves reporter LLM API keys off device and into Supabase Edge Function secret
    supabase secrets set ANTHROPIC_API_KEY=<key>
    ```
 
-4. Deploy Grok commentary proxy with JWT verification enabled:
+4. Deploy Grok commentary proxy (JWT verification is enabled by default in CLI v2.x — do NOT pass `--no-verify-jwt`):
    ```sh
-   supabase functions deploy grok-commentary --no-verify-jwt false
+   supabase functions deploy grok-commentary
    ```
 
-5. Deploy Claude column proxy with JWT verification enabled:
+5. Deploy Claude column proxy (JWT verification enabled by default):
    ```sh
-   supabase functions deploy claude-column --no-verify-jwt false
+   supabase functions deploy claude-column
    ```
 
-6. Smoke test Grok with an authenticated local session token:
+6. Smoke test Grok by POSTing to the deployed edge with a real signed-in user's access token. The CLI in v2.x has no `functions invoke` subcommand, so use `curl`. `USER_JWT` must be a real user token (from `supabase.auth.getSession()` in the running app) — the anon key and publishable key will be rejected by `_shared/auth.ts`.
    ```sh
-   supabase functions invoke grok-commentary \
-     --body '{"model":"grok-4","intensity":"low","purpose":"commentary","messages":[{"role":"user","content":"Write one short baseball line."}]}'
+   curl -sS -X POST "https://<project-ref>.supabase.co/functions/v1/grok-commentary" \
+     -H "Authorization: Bearer $USER_JWT" \
+     -H "Content-Type: application/json" \
+     -d '{"model":"grok-4","intensity":"low","purpose":"commentary","messages":[{"role":"user","content":"Write one short baseball line."}]}'
    ```
 
-7. Smoke test Claude with an authenticated local session token:
+7. Smoke test Claude the same way:
    ```sh
-   supabase functions invoke claude-column \
-     --body '{"model":"claude-sonnet-4.6","intensity":"low","purpose":"post_game_column","messages":[{"role":"user","content":"Write one short post-game headline."}]}'
+   curl -sS -X POST "https://<project-ref>.supabase.co/functions/v1/claude-column" \
+     -H "Authorization: Bearer $USER_JWT" \
+     -H "Content-Type: application/json" \
+     -d '{"model":"claude-sonnet-4-6","intensity":"low","purpose":"post_game_column","messages":[{"role":"user","content":"Write one short post-game headline."}]}'
    ```
 
 8. Rollback, if needed:

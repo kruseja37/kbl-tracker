@@ -1,0 +1,17 @@
+# Per-function configuration for Supabase Edge Functions.
+#
+# verify_jwt=false disables the gateway's built-in JWT check. This is the
+# Supabase-recommended setting when the project uses JWT Signing Keys with
+# rotation (the gateway's legacy verification is incompatible with rotated
+# asymmetric/symmetric keys). JWT verification is still enforced inside the
+# function via `_shared/auth.ts`, which calls `supabase.auth.getUser(token)`
+# — the intended model per Supabase docs.
+#
+# Do not flip these back to true without confirming the platform gateway
+# can verify JWTs signed by the project's current signing key.
+
+[functions.grok-commentary]
+verify_jwt = false
+
+[functions.claude-column]
+verify_jwt = false
