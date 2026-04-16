@@ -7,7 +7,10 @@ import type {
 } from "../../../engines/notabilityScorer";
 import type { BeatReporter } from "../../../types/reporter";
 import type { CompetitionType } from "../../../utils/gameStorage";
-import { GrokCommentaryEngine } from "../../app/engines/reporter/commentaryEngine";
+import {
+  GrokCommentaryEngine,
+  type BetweenInningSummaryInput,
+} from "../../app/engines/reporter/commentaryEngine";
 import type { ReporterContext } from "../../app/engines/reporter/reporterContext";
 import type { ReporterProxyInvoke } from "../../app/engines/reporter/grokClient";
 
@@ -270,6 +273,63 @@ async function generatePreambleWithDefaults(options: {
     moodScore: 4,
     energyModifier: "electric",
   });
+
+  return { engine, result };
+}
+
+function createBetweenInningInput(
+  overrides: Partial<BetweenInningSummaryInput> = {},
+): BetweenInningSummaryInput {
+  return {
+    context: createContext(),
+    mood: {
+      ...INITIAL_MOOD_STATE,
+      moodScore: 2,
+      currentMood: "DRAMATIC",
+    },
+    halfInningJustEnded: {
+      inning: 4,
+      halfInning: "TOP",
+    },
+    halfInningEvents: [
+      {
+        batterName: "Ivy Sparks",
+        pitcherName: "Noelle Vale",
+        result: "1B",
+        runsScored: 0,
+      },
+      {
+        batterName: "Harry Backman",
+        pitcherName: "Noelle Vale",
+        result: "GIDP",
+        runsScored: 0,
+      },
+    ],
+    previousNarrativeSoFar:
+      "Through three innings, the Blowfish scratched out a slim lead behind clean pitching.",
+    ...overrides,
+  };
+}
+
+async function generateBetweenInningSummaryWithDefaults(options: {
+  invokeImpl?: ReporterProxyInvoke;
+  logUsage?: ReturnType<typeof createLogUsageSpy>;
+  mode?: CompetitionType;
+  input?: Partial<BetweenInningSummaryInput>;
+}) {
+  const engine = new GrokCommentaryEngine({
+    model: "grok-4",
+    intensity: "high",
+    gameId: "game-1",
+    mode: options.mode ?? "exhibition",
+    reporter: createReporter(),
+    invokeImpl: options.invokeImpl,
+    logUsage: options.logUsage,
+  });
+
+  const result = await engine.generateBetweenInningSummary(
+    createBetweenInningInput(options.input),
+  );
 
   return { engine, result };
 }
@@ -586,5 +646,235 @@ describe("commentaryEngine", () => {
         mode: "playoff",
       }),
     );
+  });
+
+  describe("generateBetweenInningSummary", () => {
+    test("happy path returns popup + updated narrative and replaces the narrative cache", async () => {
+      const invokeImpl = createInvokeSuccess(
+        '{"popup":"Freebooters stranded two in the top of the fourth.","narrative":"Through four, the Blowfish still carry a one-run edge after Vale escaped a noisy inning."}',
+      ) as unknown as ReporterProxyInvoke;
+
+      const { engine, result } = await generateBetweenInningSummaryWithDefaults({
+        invokeImpl,
+        logUsage: createLogUsageSpy(),
+      });
+
+      expect(result).toEqual({
+        popupText: "Freebooters stranded two in the top of the fourth.",
+        updatedNarrativeSoFar:
+          "Through four, the Blowfish still carry a one-run edge after Vale escaped a noisy inning.",
+        skipped: false,
+        inputTokens: 123,
+        outputTokens: 29,
+      });
+      expect(engine.getNarrativeSoFar()).toBe(
+        "Through four, the Blowfish still carry a one-run edge after Vale escaped a noisy inning.",
+      );
+    });
+
+    test("replaces prior gameNarrativeSoFar instead of appending after earlier commentary", async () => {
+      const invokeImpl = vi
+        .fn()
+        .mockResolvedValueOnce({
+          data: {
+            text: "Sparks opened the late rally with a laser double.",
+            inputTokens: 90,
+            outputTokens: 18,
+            model: "grok-4",
+          },
+          error: null,
+        })
+        .mockResolvedValueOnce({
+          data: {
+            text: '{"popup":"Freebooters came up empty.","narrative":"Through the middle frames, the Blowfish still hold a one-run margin."}',
+            inputTokens: 77,
+            outputTokens: 20,
+            model: "grok-4",
+          },
+          error: null,
+        }) as unknown as ReporterProxyInvoke;
+
+      const engine = new GrokCommentaryEngine({
+        model: "grok-4",
+        intensity: "medium",
+        gameId: "game-1",
+        mode: "exhibition",
+        reporter: createReporter(),
+        invokeImpl,
+        logUsage: createLogUsageSpy(),
+      });
+
+      await engine.generateCommentary({
+        play: createPlay(),
+        notability: createNotability(),
+        reporter: createReporter(),
+        mood: INITIAL_MOOD_STATE,
+        context: createContext(),
+      });
+      expect(engine.getNarrativeSoFar()).toContain(
+        "Sparks opened the late rally with a laser double.",
+      );
+
+      await engine.generateBetweenInningSummary(
+        createBetweenInningInput({
+          previousNarrativeSoFar: engine.getNarrativeSoFar(),
+        }),
+      );
+
+      expect(engine.getNarrativeSoFar()).toBe(
+        "Through the middle frames, the Blowfish still hold a one-run margin.",
+      );
+      expect(engine.getNarrativeSoFar()).not.toContain(
+        "Sparks opened the late rally with a laser double.",
+      );
+    });
+
+    test("malformed JSON falls back to raw popup text, preserves narrative, and warns", async () => {
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+      const { engine, result } = await generateBetweenInningSummaryWithDefaults({
+        invokeImpl: createInvokeSuccess("Freebooters stranded two.") as unknown as ReporterProxyInvoke,
+        logUsage: createLogUsageSpy(),
+        input: {
+          previousNarrativeSoFar: "Existing narrative stays put.",
+        },
+      });
+
+      expect(result).toEqual({
+        popupText: "Freebooters stranded two.",
+        updatedNarrativeSoFar: "",
+        skipped: false,
+        inputTokens: 123,
+        outputTokens: 29,
+      });
+      expect(engine.getNarrativeSoFar()).toBe("");
+      expect(warn).toHaveBeenCalledWith(
+        "[reporter:commentary] Between-inning summary did not return valid JSON; using raw popup text and preserving narrative.",
+        "Freebooters stranded two.",
+      );
+    });
+
+    test("empty response text skips and leaves narrative unchanged", async () => {
+      const invokeImpl = vi.fn(async () => ({
+        data: {
+          text: null,
+          inputTokens: 0,
+          outputTokens: 0,
+          model: "grok-4",
+        },
+        error: null,
+      })) as unknown as ReporterProxyInvoke;
+      const { engine, result } = await generateBetweenInningSummaryWithDefaults({
+        invokeImpl,
+        logUsage: createLogUsageSpy(),
+      });
+
+      expect(result.skipped).toBe(true);
+      expect(result.popupText).toBeNull();
+      expect(result.updatedNarrativeSoFar).toBe("");
+      expect(result.error).toBe(
+        "Grok Edge Function response did not include summary text.",
+      );
+      expect(engine.getNarrativeSoFar()).toBe("");
+    });
+
+    test("LLM throws and leaves narrative unchanged", async () => {
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+      const invokeImpl = vi.fn(async () => {
+        throw new Error("timeout");
+      }) as unknown as ReporterProxyInvoke;
+      const { engine, result } = await generateBetweenInningSummaryWithDefaults({
+        invokeImpl,
+        logUsage: createLogUsageSpy(),
+      });
+
+      expect(result).toMatchObject({
+        popupText: null,
+        updatedNarrativeSoFar: "",
+        skipped: true,
+        error: "timeout",
+        inputTokens: 0,
+        outputTokens: 0,
+      });
+      expect(engine.getNarrativeSoFar()).toBe("");
+      expect(warn).toHaveBeenCalledWith(
+        "[reporter:commentary] Between-inning summary generation failed; skipping summary.",
+        "timeout",
+      );
+    });
+
+    test("uses purpose between_inning_summary when logging usage", async () => {
+      const logUsage = createLogUsageSpy();
+
+      await generateBetweenInningSummaryWithDefaults({
+        invokeImpl: createInvokeSuccess(
+          '{"popup":"Freebooters stranded two.","narrative":"Through the top of the fourth, the Blowfish still cling to their one-run margin."}',
+        ) as unknown as ReporterProxyInvoke,
+        logUsage,
+        mode: "playoff",
+      });
+
+      expect(logUsage).toHaveBeenCalledTimes(1);
+      expect(logUsage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          model: "grok-4",
+          inputTokens: 123,
+          outputTokens: 29,
+          purpose: "between_inning_summary",
+          intensity: "high",
+          gameId: "game-1",
+          mode: "playoff",
+        }),
+      );
+    });
+
+    test("uses a different system prompt than play commentary", async () => {
+      const invokeImpl = vi
+        .fn()
+        .mockResolvedValueOnce({
+          data: {
+            text: '{"popup":"Freebooters stranded two.","narrative":"Through the top of the fourth, the Blowfish still cling to their one-run margin."}',
+            inputTokens: 77,
+            outputTokens: 20,
+            model: "grok-4",
+          },
+          error: null,
+        })
+        .mockResolvedValueOnce({
+          data: {
+            text: "Sparks smoked one into the gap.",
+            inputTokens: 99,
+            outputTokens: 22,
+            model: "grok-4",
+          },
+          error: null,
+        }) as unknown as ReporterProxyInvoke;
+      const engine = new GrokCommentaryEngine({
+        model: "grok-4",
+        intensity: "medium",
+        gameId: "game-1",
+        mode: "exhibition",
+        reporter: createReporter(),
+        invokeImpl,
+        logUsage: createLogUsageSpy(),
+      });
+
+      await engine.generateBetweenInningSummary(createBetweenInningInput());
+      await engine.generateCommentary({
+        play: createPlay(),
+        notability: createNotability(),
+        reporter: createReporter(),
+        mood: INITIAL_MOOD_STATE,
+        context: createContext(),
+      });
+
+      const betweenSystemMessage = invokeImpl.mock.calls[0][1].body.messages[0];
+      const commentarySystemMessage = invokeImpl.mock.calls[1][1].body.messages[0];
+
+      expect(betweenSystemMessage.content).toContain(
+        'Respond with JSON only, no markdown fences, shape: { "popup": string, "narrative": string }',
+      );
+      expect(commentarySystemMessage.content).toContain("Notability cue:");
+      expect(betweenSystemMessage.content).not.toBe(commentarySystemMessage.content);
+    });
   });
 });

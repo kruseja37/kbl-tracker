@@ -137,6 +137,14 @@ function safeJson(value: Record<string, unknown> | undefined): string {
   }
 }
 
+function safeJsonStringify(value: unknown): string {
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return "[]";
+  }
+}
+
 function formatReporterIdentity(
   reporter: BeatReporter | undefined,
   context: ReporterContext,
@@ -263,5 +271,61 @@ export function buildPreambleUserMessage(context: ReporterContext): string {
     `Leadoff duel: ${context.batter.name} vs ${context.pitcher.name}`,
     `Recent team note: ${formatAlmanacHighlights(context.teamRecentAlmanac)}`,
     "Instruction: Write one paragraph of scene-setting pregame commentary. Introduce yourself, frame the stakes, and do not call any specific play.",
+  ].join("\n");
+}
+
+export interface HalfInningEventSummary {
+  batterName: string;
+  pitcherName: string;
+  result: string;
+  runsScored: number;
+}
+
+export function buildBetweenInningSummarySystemPrompt(
+  reporter: BeatReporter | undefined,
+  mood: MoodLabel,
+  context: ReporterContext,
+  previousNarrativeSoFar: string,
+): string {
+  return [
+    "1. Reporter Identity",
+    ...formatReporterIdentity(reporter, context),
+    "",
+    "2. Voice And Style Guide",
+    ...formatVoiceGuide(reporter),
+    "Write a between-inning summary in the reporter's voice.",
+    "Ground every detail in the supplied context and half-inning event list. Do not invent stats, players, or outcomes.",
+    "",
+    "3. Current Mood",
+    `Mood label: ${mood}`,
+    MOOD_BEHAVIOR_NOTES[mood],
+    "",
+    "4. Existing Narrative Cache",
+    previousNarrativeSoFar || "No rolling narrative yet. Replace it with a fresh compact summary of the game so far.",
+    "",
+    "5. Reporter Context Highlights",
+    formatContextHighlights(context),
+    "",
+    "6. Between-Inning Summary Task",
+    "Return two things from a single response:",
+    '- "popup": a short 1-2 sentence between-inning summary suitable for a popup overlay.',
+    '- "narrative": a compact 2-3 sentence replacement for the rolling game narrative cache.',
+    'Include a look-ahead element in the popup or narrative when it fits naturally.',
+    'Respond with JSON only, no markdown fences, shape: { "popup": string, "narrative": string }',
+  ].join("\n");
+}
+
+export function buildBetweenInningSummaryUserMessage(
+  halfInningJustEnded: { inning: number; halfInning: "TOP" | "BOTTOM" },
+  halfInningEvents: HalfInningEventSummary[],
+  previousNarrativeSoFar: string,
+): string {
+  return [
+    "7. Half-Inning Summary Request",
+    `Half-inning just ended: ${halfInningJustEnded.halfInning} ${halfInningJustEnded.inning}`,
+    `Previous narrative cache: ${previousNarrativeSoFar || "None yet."}`,
+    "Half-inning events:",
+    safeJsonStringify(halfInningEvents),
+    'Instruction: Return JSON only with "popup" and "narrative". Keep popup to 1-2 sentences and narrative compact enough to replace the prior cache.',
   ].join("\n");
 }

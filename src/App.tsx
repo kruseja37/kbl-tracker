@@ -164,6 +164,11 @@ const CommentaryFeedPersistencePreview = lazy(() =>
     default: module.CommentaryFeedPersistencePreview,
   })),
 );
+const BetweenInningSummaryPreview = lazy(() =>
+  import("./src_figma/app/pages/BetweenInningSummaryPreview").then((module) => ({
+    default: module.BetweenInningSummaryPreview,
+  })),
+);
 
 /**
  * KBL Tracker - Main App
@@ -278,6 +283,10 @@ function App() {
         <Route
           path="/__preview/commentary-feed-persistence"
           element={<CommentaryFeedPersistencePreview />}
+        />
+        <Route
+          path="/__preview/between-inning-summary"
+          element={<BetweenInningSummaryPreview />}
         />
 
         {/* 404 */}

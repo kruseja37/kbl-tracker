@@ -19,6 +19,9 @@ import type { ReporterContext } from "./reporterContext";
 import {
   buildCommentarySystemPrompt,
   buildCommentaryUserMessage,
+  buildBetweenInningSummarySystemPrompt,
+  buildBetweenInningSummaryUserMessage,
+  type HalfInningEventSummary,
   buildPreambleSystemPrompt,
   buildPreambleUserMessage,
 } from "./promptBuilder";
@@ -53,12 +56,32 @@ export interface CommentaryResult {
   outputTokens: number;
 }
 
+export interface BetweenInningSummaryInput {
+  context: ReporterContext;
+  mood: MoodState;
+  halfInningJustEnded: { inning: number; halfInning: "TOP" | "BOTTOM" };
+  halfInningEvents: HalfInningEventSummary[];
+  previousNarrativeSoFar: string;
+}
+
+export interface BetweenInningSummaryResult {
+  popupText: string | null;
+  updatedNarrativeSoFar: string;
+  skipped: boolean;
+  error?: string;
+  inputTokens: number;
+  outputTokens: number;
+}
+
 export interface CommentaryEngine {
   generateCommentary(input: CommentaryInput): Promise<CommentaryResult>;
   generatePreamble(
     reporterContext: ReporterContext,
     mood: MoodState,
   ): Promise<CommentaryResult>;
+  generateBetweenInningSummary(
+    input: BetweenInningSummaryInput,
+  ): Promise<BetweenInningSummaryResult>;
   getNarrativeSoFar(): string;
   resetNarrative(): void;
 }
@@ -92,6 +115,7 @@ function toUsageLogInput(params: {
   config: CommentaryEngineConfig;
   inputTokens: number;
   outputTokens: number;
+  purpose?: LlmUsageLogInput["purpose"];
 }): LlmUsageLogInput {
   return {
     model: params.config.model,
@@ -100,7 +124,41 @@ function toUsageLogInput(params: {
     gameId: params.config.gameId,
     mode: params.config.mode,
     intensity: params.config.intensity,
-    purpose: "commentary",
+    purpose: params.purpose ?? "commentary",
+  };
+}
+
+function parseBetweenInningSummaryPayload(text: string): {
+  popupText: string | null;
+  narrativeText: string | null;
+  parseFailed: boolean;
+} {
+  try {
+    const parsed = JSON.parse(text) as {
+      popup?: unknown;
+      narrative?: unknown;
+    };
+
+    if (
+      typeof parsed.popup === "string" &&
+      parsed.popup.trim() &&
+      typeof parsed.narrative === "string" &&
+      parsed.narrative.trim()
+    ) {
+      return {
+        popupText: parsed.popup.trim(),
+        narrativeText: parsed.narrative.trim(),
+        parseFailed: false,
+      };
+    }
+  } catch {
+    // handled below
+  }
+
+  return {
+    popupText: text.trim() || null,
+    narrativeText: null,
+    parseFailed: true,
   };
 }
 
@@ -196,6 +254,114 @@ export class GrokCommentaryEngine implements CommentaryEngine {
     }
 
     return result;
+  }
+
+  async generateBetweenInningSummary(
+    input: BetweenInningSummaryInput,
+  ): Promise<BetweenInningSummaryResult> {
+    const previousNarrative = this.gameNarrativeSoFar;
+    const moodLabel = resolveMood(input.mood);
+    const messages: GrokChatMessage[] = [
+      {
+        role: "system",
+        content: buildBetweenInningSummarySystemPrompt(
+          this.config.reporter,
+          moodLabel,
+          input.context,
+          input.previousNarrativeSoFar,
+        ),
+      },
+      {
+        role: "user",
+        content: buildBetweenInningSummaryUserMessage(
+          input.halfInningJustEnded,
+          input.halfInningEvents,
+          input.previousNarrativeSoFar,
+        ),
+      },
+    ];
+
+    try {
+      const response = await callGrokChatCompletion({
+        model: this.config.model,
+        messages,
+        intensity: this.config.intensity,
+        purpose: "between_inning_summary",
+        temperature: 0.6,
+        gameId: this.config.gameId,
+        mode: this.config.mode,
+        invokeImpl: this.config.invokeImpl,
+      });
+
+      try {
+        await this.logUsageImpl(
+          toUsageLogInput({
+            config: this.config,
+            inputTokens: response.inputTokens,
+            outputTokens: response.outputTokens,
+            purpose: "between_inning_summary",
+          }),
+        );
+      } catch (error) {
+        console.warn(
+          "[reporter:commentary] Failed to log between-inning summary LLM usage.",
+          error,
+        );
+      }
+
+      if (!response.text) {
+        this.gameNarrativeSoFar = previousNarrative;
+        return {
+          popupText: null,
+          updatedNarrativeSoFar: this.gameNarrativeSoFar,
+          skipped: true,
+          error: "Grok response was empty.",
+          inputTokens: 0,
+          outputTokens: 0,
+        };
+      }
+
+      const parsed = parseBetweenInningSummaryPayload(response.text);
+      if (parsed.parseFailed || !parsed.narrativeText) {
+        console.warn(
+          "[reporter:commentary] Between-inning summary did not return valid JSON; using raw popup text and preserving narrative.",
+          response.text,
+        );
+        this.gameNarrativeSoFar = previousNarrative;
+        return {
+          popupText: parsed.popupText,
+          updatedNarrativeSoFar: this.gameNarrativeSoFar,
+          skipped: false,
+          inputTokens: response.inputTokens,
+          outputTokens: response.outputTokens,
+        };
+      }
+
+      this.gameNarrativeSoFar = parsed.narrativeText;
+      return {
+        popupText: parsed.popupText,
+        updatedNarrativeSoFar: this.gameNarrativeSoFar,
+        skipped: false,
+        inputTokens: response.inputTokens,
+        outputTokens: response.outputTokens,
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.warn(
+        "[reporter:commentary] Between-inning summary generation failed; skipping summary.",
+        message,
+      );
+      this.gameNarrativeSoFar = previousNarrative;
+
+      return {
+        popupText: null,
+        updatedNarrativeSoFar: this.gameNarrativeSoFar,
+        skipped: true,
+        error: message,
+        inputTokens: 0,
+        outputTokens: 0,
+      };
+    }
   }
 
   private async executeChatCompletion(
