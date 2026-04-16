@@ -2,11 +2,16 @@ import React from "react";
 
 import { INITIAL_MOOD_STATE } from "../../../engines/moodEngine";
 import type { BeatReporter } from "../../../types/reporter";
-import {
-  GrokCommentaryEngine,
-  type BetweenInningSummaryInput,
+import CommentaryFeed from "../components/CommentaryFeed";
+import BetweenInningPopup from "../components/BetweenInningPopup";
+import type {
+  BetweenInningSummaryInput,
+  CommentaryEngine,
+  CommentaryEngineConfig,
 } from "../engines/reporter/commentaryEngine";
+import { GrokCommentaryEngine } from "../engines/reporter/commentaryEngine";
 import type { ReporterContext } from "../engines/reporter/reporterContext";
+import { useCommentaryFeed } from "../hooks/useCommentaryFeed";
 
 function createReporter(): BeatReporter {
   const now = Date.now();
@@ -161,49 +166,133 @@ const summaryInput: BetweenInningSummaryInput = {
   previousNarrativeSoFar: previousNarrative,
 };
 
-export function BetweenInningSummaryPreview() {
-  const [popupText, setPopupText] = React.useState<string | null>(null);
-  const [beforeNarrative, setBeforeNarrative] = React.useState(previousNarrative);
-  const [afterNarrative, setAfterNarrative] = React.useState<string>("");
-  const [status, setStatus] = React.useState("Ready to run mocked between-inning summary.");
+function createPreviewEngineFactory(params: {
+  setBeforeNarrative: React.Dispatch<React.SetStateAction<string>>;
+  setAfterNarrative: React.Dispatch<React.SetStateAction<string>>;
+  setLastPopupText: React.Dispatch<React.SetStateAction<string | null>>;
+  setStatus: React.Dispatch<React.SetStateAction<string>>;
+}) {
+  return (config: CommentaryEngineConfig): CommentaryEngine => {
+    const engine = new GrokCommentaryEngine({
+      ...config,
+      reporter: createReporter(),
+      invokeImpl: async () => ({
+        data: {
+          text: '{"popup":"Freebooters stranded two.","narrative":"Through the top of the fourth, the Blowfish still cling to their one-run margin."}',
+          inputTokens: 80,
+          outputTokens: 22,
+          model: "grok-4",
+        },
+        error: null,
+      }),
+      logUsage: async (entry) => ({
+        id: "preview-usage",
+        timestamp: Date.now(),
+        provider: "grok",
+        costUsd: 0,
+        ...entry,
+      }),
+    });
 
-  const engine = React.useMemo(
+    return {
+      generatePreamble: engine.generatePreamble.bind(engine),
+      generateCommentary: engine.generateCommentary.bind(engine),
+      async generateBetweenInningSummary(input) {
+        params.setBeforeNarrative(input.previousNarrativeSoFar);
+        const result = await engine.generateBetweenInningSummary(input);
+        params.setLastPopupText(result.popupText);
+        params.setAfterNarrative(result.updatedNarrativeSoFar);
+        params.setStatus(
+          result.skipped
+            ? "Summary skipped."
+            : "Popup live. Let it auto-dismiss or tap it to send it into the feed.",
+        );
+        return result;
+      },
+      getNarrativeSoFar: engine.getNarrativeSoFar.bind(engine),
+      resetNarrative() {
+        engine.resetNarrative();
+        params.setAfterNarrative("");
+      },
+    };
+  };
+}
+
+export function BetweenInningSummaryPreview() {
+  const [beforeNarrative, setBeforeNarrative] = React.useState(previousNarrative);
+  const [afterNarrative, setAfterNarrative] = React.useState("");
+  const [lastPopupText, setLastPopupText] = React.useState<string | null>(null);
+  const [status, setStatus] = React.useState(
+    "Ready to run the mocked between-inning summary through the hook.",
+  );
+
+  const createEngine = React.useMemo(
     () =>
-      new GrokCommentaryEngine({
-        model: "grok-4",
-        intensity: "medium",
-        gameId: "preview-game",
-        mode: "exhibition",
-        reporter: createReporter(),
-        invokeImpl: async () => ({
-          data: {
-            text: '{"popup":"Freebooters stranded two.","narrative":"Through the top of the fourth, the Blowfish still cling to their one-run margin."}',
-            inputTokens: 80,
-            outputTokens: 22,
-            model: "grok-4",
-          },
-          error: null,
-        }),
-        logUsage: async (entry) => ({
-          id: "preview-usage",
-          timestamp: Date.now(),
-          provider: "grok",
-          costUsd: 0,
-          ...entry,
-        }),
+      createPreviewEngineFactory({
+        setBeforeNarrative,
+        setAfterNarrative,
+        setLastPopupText,
+        setStatus,
       }),
     [],
   );
 
-  const runSummary = React.useCallback(async () => {
-    setStatus("Running mocked Grok call...");
-    setBeforeNarrative(summaryInput.previousNarrativeSoFar);
+  const {
+    commentaryEntries,
+    pendingPopup,
+    fireBetweenInningSummary,
+    dismissBetweenInningPopup,
+  } = useCommentaryFeed({
+    gameId: "preview-game",
+    homeTeamId: "team-home",
+    leagueId: "league-preview",
+    getLivePreambleSeed: () => ({
+      gameId: "preview-game",
+      atBatId: "preview-ab-1",
+      inning: 4,
+      halfInning: "TOP",
+      outs: 3,
+      bases: { first: null, second: null, third: null },
+      awayScore: 2,
+      homeScore: 3,
+      battingTeamId: "team-away",
+      battingTeamName: "Freebooters",
+      pitchingTeamId: "team-home",
+      pitchingTeamName: "Blowfish",
+      batterId: "batter-1",
+      batterName: "Ivy Sparks",
+      pitcherId: "pitcher-1",
+      pitcherName: "Noelle Vale",
+      competitionType: "exhibition",
+      competitionId: "preview-comp",
+      leagueId: "league-preview",
+    }),
+    dependencies: {
+      getIntensity: async () => "medium",
+      getReporterForTeam: async () => createReporter(),
+      buildReporterContext: async () => createContext(),
+      buildLiveReporterContext: async () => createContext(),
+      isWithinDailyCallLimit: async () => true,
+      createEngine,
+    },
+  });
 
-    const result = await engine.generateBetweenInningSummary(summaryInput);
-    setPopupText(result.popupText);
-    setAfterNarrative(result.updatedNarrativeSoFar);
-    setStatus(result.skipped ? "Summary skipped." : "Summary completed with replacement narrative.");
-  }, [engine]);
+  React.useEffect(() => {
+    if (pendingPopup) {
+      setLastPopupText(pendingPopup.text);
+    }
+  }, [pendingPopup]);
+
+  const runSummary = React.useCallback(async () => {
+    setStatus("Running mocked Grok call through useCommentaryFeed...");
+    await fireBetweenInningSummary(
+      "preview-game",
+      summaryInput.halfInningJustEnded,
+      summaryInput.halfInningEvents,
+      "medium",
+      "exhibition",
+    );
+  }, [fireBetweenInningSummary]);
 
   return (
     <main
@@ -215,8 +304,22 @@ export function BetweenInningSummaryPreview() {
         fontFamily: "'Moms Typewriter', monospace",
       }}
     >
+      {pendingPopup ? (
+        <BetweenInningPopup
+          text={pendingPopup.text}
+          onDismiss={(reason) => {
+            dismissBetweenInningPopup(reason);
+            setStatus(
+              reason === "auto"
+                ? "Popup auto-dismissed and collapsed into the feed."
+                : "Popup dismissed early and collapsed into the feed.",
+            );
+          }}
+        />
+      ) : null}
+
       <section
-        className="mx-auto max-w-5xl"
+        className="mx-auto max-w-6xl"
         style={{
           border: "3px solid rgba(245, 232, 207, 0.42)",
           background:
@@ -232,17 +335,18 @@ export function BetweenInningSummaryPreview() {
             Between-Inning Summary Preview
           </div>
           <h1 className="m-0 text-[1.9rem] text-[#F2C041]">
-            Mocked engine-only replacement check
+            Mocked I1 to I2 popup-to-feed flow
           </h1>
-          <p className="mt-3 max-w-3xl text-[0.95rem] leading-6 text-[#d7d8c8]">
-            This route does not touch the live game loop. It runs the new engine
-            method with a mocked Grok response so we can confirm the popup text
-            and the narrative replacement behavior.
+          <p className="mt-3 max-w-4xl text-[0.95rem] leading-6 text-[#d7d8c8]">
+            This route stays out of the live game loop. It runs the mocked Grok
+            response through <code>useCommentaryFeed</code>, shows the popup,
+            then lets the dismissal path persist and re-render the summary as a
+            differentiated feed entry.
           </p>
         </div>
 
-        <div className="grid gap-0 md:grid-cols-[320px_1fr]">
-          <aside className="border-b-[3px] border-[#252b27] bg-[#20271d] p-5 md:border-b-0 md:border-r-[3px]">
+        <div className="grid gap-0 lg:grid-cols-[340px_1fr]">
+          <aside className="border-b-[3px] border-[#252b27] bg-[#20271d] p-5 lg:border-b-0 lg:border-r-[3px]">
             <div
               className="mb-3 text-[0.8rem] uppercase tracking-[0.16em] text-[#C4A853]"
               style={{ fontFamily: "'Tox Typewriter', monospace" }}
@@ -254,7 +358,10 @@ export function BetweenInningSummaryPreview() {
               className="w-full border border-[#6c7c60] bg-[#313f2f] px-3 py-2 text-left text-[0.8rem] text-[#F5E8CF] transition hover:bg-[#3b4c39]"
               onClick={() => {
                 void runSummary().catch((error) => {
-                  console.warn("[between-inning-preview] Failed to run mock summary.", error);
+                  console.warn(
+                    "[between-inning-preview] Failed to run hook-based mock summary.",
+                    error,
+                  );
                   setStatus("Preview run failed.");
                 });
               }}
@@ -262,49 +369,42 @@ export function BetweenInningSummaryPreview() {
               Run between-inning summary (mock LLM)
             </button>
 
-            <div className="mt-5 border-t border-[#405140] pt-4 text-[0.78rem] leading-5 text-[#b7bea8]">
-              <div>Game ID: preview-game</div>
-              <div>Half-inning: TOP 4</div>
-              <div className="mt-2 text-[#88AA88]">{status}</div>
+            <div className="mt-4 text-[0.78rem] leading-6 text-[#D7D8C8]">
+              {status}
+            </div>
+
+            <div className="mt-6 rounded border border-[#485645] bg-[#171d18] p-4">
+              <div
+                className="mb-3 text-[0.72rem] uppercase tracking-[0.18em] text-[#AFC6AF]"
+                style={{ fontFamily: "'Tox Typewriter', monospace" }}
+              >
+                Feed Snapshot
+              </div>
+              <CommentaryFeed entries={commentaryEntries} soundsOn={false} />
             </div>
           </aside>
 
-          <div className="grid gap-4 bg-[#243028] p-6 md:grid-cols-3">
-            <article className="border border-[#405140] bg-[#1d271f] p-4">
-              <div
-                className="mb-2 text-[0.72rem] uppercase tracking-[0.14em] text-[#C4A853]"
-                style={{ fontFamily: "'Tox Typewriter', monospace" }}
+          <div className="grid gap-4 px-6 py-5 md:grid-cols-3">
+            {[
+              { label: "Before Narrative", value: beforeNarrative },
+              { label: "Popup Text", value: pendingPopup?.text ?? lastPopupText ?? "Awaiting summary..." },
+              { label: "After Narrative", value: afterNarrative || "Awaiting summary..." },
+            ].map((panel) => (
+              <section
+                key={panel.label}
+                className="rounded border border-[#435443] bg-[#171d18] p-4"
               >
-                Before Narrative
-              </div>
-              <p className="m-0 text-sm leading-6 text-[#d7d8c8]">
-                {beforeNarrative || "None"}
-              </p>
-            </article>
-
-            <article className="border border-[#6b7a61] bg-[#2a352d] p-4">
-              <div
-                className="mb-2 text-[0.72rem] uppercase tracking-[0.14em] text-[#C4A853]"
-                style={{ fontFamily: "'Tox Typewriter', monospace" }}
-              >
-                Popup Text
-              </div>
-              <p className="m-0 text-sm italic leading-6 text-[#F5E8CF]">
-                {popupText ?? "Run the mock summary to populate this field."}
-              </p>
-            </article>
-
-            <article className="border border-[#405140] bg-[#1d271f] p-4">
-              <div
-                className="mb-2 text-[0.72rem] uppercase tracking-[0.14em] text-[#C4A853]"
-                style={{ fontFamily: "'Tox Typewriter', monospace" }}
-              >
-                After Narrative
-              </div>
-              <p className="m-0 text-sm leading-6 text-[#d7d8c8]">
-                {afterNarrative || "Run the mock summary to see the replacement narrative."}
-              </p>
-            </article>
+                <div
+                  className="mb-3 text-[0.74rem] uppercase tracking-[0.18em] text-[#C4A853]"
+                  style={{ fontFamily: "'Tox Typewriter', monospace" }}
+                >
+                  {panel.label}
+                </div>
+                <p className="m-0 text-[0.92rem] leading-7 text-[#E6E5D5]">
+                  {panel.value}
+                </p>
+              </section>
+            ))}
           </div>
         </div>
       </section>

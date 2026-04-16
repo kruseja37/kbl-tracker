@@ -8,6 +8,7 @@ export interface CommentaryFeedEntry {
   halfInningLabel: string;
   timestamp: number;
   reporterId?: string;
+  kind?: "play" | "preamble" | "between-inning";
 }
 
 export interface CommentaryFeedProps {
@@ -22,13 +23,33 @@ type CommentaryFeedItem =
   | {
       type: "divider";
       id: string;
-      halfInningLabel: string;
+      label: string;
+      testIdLabel: string;
+      accentColor?: string;
     }
   | {
       type: "entry";
       entry: CommentaryFeedEntry;
       isAnimating: boolean;
     };
+
+function resolveEntryKind(
+  entry: CommentaryFeedEntry,
+): CommentaryFeedEntry["kind"] | "play" {
+  return entry.kind ?? "play";
+}
+
+function toDividerLabel(entry: CommentaryFeedEntry): string {
+  if (resolveEntryKind(entry) === "between-inning") {
+    return `END ${entry.halfInningLabel}`;
+  }
+
+  return entry.halfInningLabel;
+}
+
+function toDividerTestIdLabel(label: string): string {
+  return label.replace(/\s+/g, "-");
+}
 
 function sortEntries(entries: CommentaryFeedEntry[]): CommentaryFeedEntry[] {
   return entries
@@ -38,16 +59,20 @@ function sortEntries(entries: CommentaryFeedEntry[]): CommentaryFeedEntry[] {
 
 function buildFeedItems(entries: CommentaryFeedEntry[]): CommentaryFeedItem[] {
   const items: CommentaryFeedItem[] = [];
-  let previousHalfInningLabel: string | null = null;
+  let previousDividerLabel: string | null = null;
 
   entries.forEach((entry, index) => {
-    if (entry.halfInningLabel !== previousHalfInningLabel) {
+    const dividerLabel = toDividerLabel(entry);
+    if (dividerLabel !== previousDividerLabel) {
       items.push({
         type: "divider",
-        id: `divider-${entry.halfInningLabel}-${entry.timestamp}`,
-        halfInningLabel: entry.halfInningLabel,
+        id: `divider-${dividerLabel}-${entry.timestamp}`,
+        label: dividerLabel,
+        testIdLabel: toDividerTestIdLabel(dividerLabel),
+        accentColor:
+          resolveEntryKind(entry) === "between-inning" ? "#88AA88" : "#C4A853",
       });
-      previousHalfInningLabel = entry.halfInningLabel;
+      previousDividerLabel = dividerLabel;
     }
 
     items.push({
@@ -113,32 +138,59 @@ export function CommentaryFeed({
             <div
               key={item.id}
               className="pt-1 text-center text-[8px] font-bold tracking-[0.18em] text-[#C4A853]"
-              data-testid={`commentary-divider-${item.halfInningLabel}`}
+              data-testid={`commentary-divider-${item.testIdLabel}`}
               style={{ fontFamily: "'Tox Typewriter', monospace" }}
             >
-              {`─── ${item.halfInningLabel} ───`}
+              <span style={{ color: item.accentColor }}>
+                {item.label.startsWith("END ")
+                  ? `··· ${item.label} ···`
+                  : `─── ${item.label} ───`}
+              </span>
             </div>
           );
         }
+
+        const entryKind = resolveEntryKind(item.entry);
+        const isBetweenInning = entryKind === "between-inning";
 
         return (
           <article
             key={item.entry.id}
             className="rounded-sm border border-[#2f3a31] bg-[#2a352d]/70 px-2 py-1.5 shadow-[inset_0_0_3px_rgba(0,0,0,0.2)]"
             data-testid={`commentary-entry-${item.entry.id}`}
+            style={
+              isBetweenInning
+                ? {
+                    borderColor: "#425546",
+                    background: "rgba(35, 49, 38, 0.88)",
+                  }
+                : undefined
+            }
           >
             <div className="mb-1 flex items-center justify-between gap-2">
               <span
                 className="text-[7px] uppercase tracking-[0.16em] text-[#88AA88]"
                 style={{ fontFamily: "'Tox Typewriter', monospace" }}
               >
-                {item.entry.halfInningLabel}
+                {isBetweenInning
+                  ? `END ${item.entry.halfInningLabel}`
+                  : item.entry.halfInningLabel}
               </span>
               <span className="text-[7px] text-[#6b7b6e]">
                 {formatTimestamp(item.entry.timestamp)}
               </span>
             </div>
-            <div className="text-[9px] leading-[1.45] text-[#E8E8D8]">
+            <div
+              className="text-[9px] leading-[1.45] text-[#E8E8D8]"
+              style={
+                isBetweenInning
+                  ? {
+                      color: "#C4D9C4",
+                      fontStyle: "italic",
+                    }
+                  : undefined
+              }
+            >
               <CommentaryTypewriter
                 text={item.entry.commentaryText}
                 active={item.isAnimating}

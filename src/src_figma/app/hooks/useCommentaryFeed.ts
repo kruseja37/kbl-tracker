@@ -18,6 +18,7 @@ import type { CompetitionType } from "../../../utils/gameStorage";
 import type { CommentaryFeedEntry } from "../components/CommentaryFeed";
 import {
   GrokCommentaryEngine,
+  type BetweenInningSummaryInput,
   type CommentaryEngine,
   type CommentaryEngineConfig,
 } from "../engines/reporter/commentaryEngine";
@@ -78,6 +79,11 @@ type DisabledState = {
   reporter: BeatReporter | null;
 };
 
+export interface PendingBetweenInningPopup {
+  text: string;
+  halfInningLabel: string;
+}
+
 function toShortHalfInningLabel(event: Pick<AtBatEvent, "halfInning" | "inning">): string {
   return `${event.halfInning === "TOP" ? "T" : "B"}${event.inning}`;
 }
@@ -125,6 +131,7 @@ function toCommentaryFeedEntry(
     id: record.id,
     commentaryText: record.commentaryText,
     halfInningLabel: record.halfInningLabel,
+    kind: record.kind,
     timestamp: record.timestamp,
     reporterId: record.reporterId,
   };
@@ -140,6 +147,8 @@ export function useCommentaryFeed({
   const [commentaryEntries, setCommentaryEntries] = React.useState<
     CommentaryFeedEntry[]
   >([]);
+  const [pendingPopup, setPendingPopup] =
+    React.useState<PendingBetweenInningPopup | null>(null);
   const [disabledState, setDisabledState] = React.useState<DisabledState>({
     reporterResolved: false,
     reporter: null,
@@ -150,6 +159,8 @@ export function useCommentaryFeed({
   const preambleFiredForGameIdRef = React.useRef<string | null>(null);
   const moodRef = React.useRef<MoodState>(INITIAL_MOOD_STATE);
   const intensityRef = React.useRef<NarrativeIntensity | null>(null);
+  const pendingPopupRef = React.useRef<PendingBetweenInningPopup | null>(null);
+  const pendingPopupReporterIdRef = React.useRef<string | null>(null);
 
   const getIntensityImpl = dependencies.getIntensity ?? getNarrativeIntensity;
   const getReporterForTeamImpl =
@@ -172,6 +183,9 @@ export function useCommentaryFeed({
 
   const resetForNewGame = React.useCallback((nextGameId: string) => {
     setCommentaryEntries([]);
+    setPendingPopup(null);
+    pendingPopupRef.current = null;
+    pendingPopupReporterIdRef.current = null;
     preambleFiredForGameIdRef.current = null;
     moodRef.current = INITIAL_MOOD_STATE;
     intensityRef.current = null;
@@ -313,6 +327,15 @@ export function useCommentaryFeed({
       });
     },
     [persistCommentaryFeedEntryImpl],
+  );
+
+  const setPendingBetweenInningPopup = React.useCallback(
+    (nextPopup: PendingBetweenInningPopup | null, reporterId?: string | null) => {
+      pendingPopupRef.current = nextPopup;
+      pendingPopupReporterIdRef.current = nextPopup ? reporterId ?? null : null;
+      setPendingPopup(nextPopup);
+    },
+    [],
   );
 
   const firePreamble = React.useCallback(
@@ -520,10 +543,138 @@ export function useCommentaryFeed({
     ],
   );
 
+  const fireBetweenInningSummary = React.useCallback(
+    async (
+      targetGameId: string,
+      halfInningJustEnded: BetweenInningSummaryInput["halfInningJustEnded"],
+      halfInningEvents: BetweenInningSummaryInput["halfInningEvents"],
+      intensity?: NarrativeIntensity,
+      mode?: CompetitionType,
+    ) => {
+      if (pendingPopupRef.current) {
+        console.warn(
+          "[reporter:commentary] Between-inning popup already pending; skipping new summary.",
+        );
+        return;
+      }
+
+      const prerequisites = await resolveCallPrerequisites();
+      if (prerequisites.status !== "ready") {
+        return;
+      }
+
+      const reporter = prerequisites.reporter;
+      const resolvedIntensity = intensity ?? prerequisites.intensity;
+      const engine = ensureEngine(reporter, resolvedIntensity, mode);
+      const liveSeed = getLivePreambleSeed();
+
+      if (!liveSeed) {
+        console.warn(
+          "[reporter:commentary] Missing live reporter seed; skipping between-inning summary.",
+        );
+        return;
+      }
+
+      let context: ReporterContext;
+      try {
+        context = await buildReporterContextImpl(targetGameId, liveSeed.atBatId);
+      } catch (error) {
+        try {
+          context = await buildLiveReporterContextImpl(liveSeed);
+        } catch (liveError) {
+          console.warn(
+            "[reporter:commentary] Failed to build between-inning summary context; skipping summary.",
+            liveError ?? error,
+          );
+          return;
+        }
+      }
+
+      let result;
+      try {
+        result = await engine.generateBetweenInningSummary({
+          context,
+          mood: moodRef.current,
+          halfInningJustEnded,
+          halfInningEvents,
+          previousNarrativeSoFar: engine.getNarrativeSoFar(),
+        });
+      } catch (error) {
+        console.warn(
+          "[reporter:commentary] Between-inning summary threw unexpectedly; skipping popup.",
+          error,
+        );
+        return;
+      }
+
+      if (result.skipped || !result.popupText) {
+        return;
+      }
+
+      setPendingBetweenInningPopup(
+        {
+          text: result.popupText,
+          halfInningLabel: toShortHalfInningLabel(halfInningJustEnded),
+        },
+        reporter.id,
+      );
+    },
+    [
+      buildLiveReporterContextImpl,
+      buildReporterContextImpl,
+      ensureEngine,
+      getLivePreambleSeed,
+      resolveCallPrerequisites,
+      setPendingBetweenInningPopup,
+    ],
+  );
+
+  const dismissBetweenInningPopup = React.useCallback(
+    (reason: "auto" | "tap" | "escape") => {
+      void reason;
+      const activePopup = pendingPopupRef.current;
+      if (!activePopup) {
+        return;
+      }
+
+      const reporterId = pendingPopupReporterIdRef.current;
+      const timestamp = nowImpl();
+      const entry: CommentaryFeedEntry = {
+        id: `commentary-inning-${gameId}-${activePopup.halfInningLabel}-${timestamp}`,
+        commentaryText: activePopup.text,
+        halfInningLabel: activePopup.halfInningLabel,
+        kind: "between-inning",
+        timestamp,
+        reporterId: reporterId ?? undefined,
+      };
+
+      setCommentaryEntries((current) => [...current, entry]);
+      if (reporterId) {
+        persistEntryRecord({
+          id: entry.id,
+          gameId,
+          leagueId,
+          reporterId,
+          commentaryText: entry.commentaryText,
+          halfInningLabel: entry.halfInningLabel,
+          kind: "between-inning",
+          timestamp,
+          createdAt: timestamp,
+          changed_at: timestamp,
+        });
+      }
+      setPendingBetweenInningPopup(null);
+    },
+    [gameId, leagueId, nowImpl, persistEntryRecord, setPendingBetweenInningPopup],
+  );
+
   return {
     commentaryEntries,
+    pendingPopup,
     firePreamble,
     firePlayCommentary,
+    fireBetweenInningSummary,
+    dismissBetweenInningPopup,
     resetForNewGame,
     disabled:
       disabledState.intensity === "low" ||

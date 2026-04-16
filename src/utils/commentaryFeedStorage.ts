@@ -34,9 +34,11 @@ function toStorageError(action: string, error: unknown): Error {
 export async function persistCommentaryFeedEntry(
   record: CommentaryFeedEntryRecord,
 ): Promise<void> {
+  const { kind, ...rest } = record;
   const persistedRecord: CommentaryFeedEntryRecord = {
-    ...record,
+    ...rest,
     changed_at: record.changed_at ?? Date.now(),
+    ...(kind ? { kind } : {}),
   };
 
   try {

@@ -1,10 +1,12 @@
-import { act, renderHook, waitFor } from "@testing-library/react";
+import { act, render, renderHook, screen, waitFor } from "@testing-library/react";
 import { describe, expect, test, vi } from "vitest";
 
 import type { BeatReporter, CommentaryFeedEntryRecord } from "../../../types/reporter";
 import type { AtBatEvent } from "../../../utils/eventLog";
+import CommentaryFeed from "../../app/components/CommentaryFeed";
 import { useCommentaryFeed } from "../../app/hooks/useCommentaryFeed";
 import type {
+  BetweenInningSummaryResult,
   CommentaryEngine,
   CommentaryEngineConfig,
   CommentaryResult,
@@ -166,8 +168,11 @@ function createAtBatEvent(overrides: Partial<AtBatEvent> = {}): AtBatEvent {
 function createEngine(overrides: {
   preambleResult?: CommentaryResult;
   commentaryResult?: CommentaryResult;
+  betweenInningSummaryResult?: BetweenInningSummaryResult;
   preambleError?: Error;
   commentaryError?: Error;
+  betweenInningSummaryError?: Error;
+  narrativeSoFar?: string;
 } = {}) {
   const generatePreamble = vi.fn(async () => {
     if (overrides.preambleError) {
@@ -197,14 +202,38 @@ function createEngine(overrides: {
       }
     );
   });
+  const generateBetweenInningSummary = vi.fn(async () => {
+    if (overrides.betweenInningSummaryError) {
+      throw overrides.betweenInningSummaryError;
+    }
+
+    return (
+      overrides.betweenInningSummaryResult ?? {
+        popupText: "Freebooters stranded two.",
+        updatedNarrativeSoFar:
+          "Through the top of the fourth, the Blowfish still cling to their one-run margin.",
+        skipped: false,
+        inputTokens: 12,
+        outputTokens: 14,
+      }
+    );
+  });
+  const getNarrativeSoFar = vi.fn(() => overrides.narrativeSoFar ?? "");
   const engine: CommentaryEngine = {
     generatePreamble,
     generateCommentary,
-    getNarrativeSoFar: vi.fn(() => ""),
+    generateBetweenInningSummary,
+    getNarrativeSoFar,
     resetNarrative: vi.fn(),
   };
 
-  return { engine, generatePreamble, generateCommentary };
+  return {
+    engine,
+    generatePreamble,
+    generateCommentary,
+    generateBetweenInningSummary,
+    getNarrativeSoFar,
+  };
 }
 
 function renderCommentaryFeedHook(options: {
@@ -425,6 +454,16 @@ describe("useCommentaryFeed", () => {
             await invokeImpl();
             return { text: "nope", skipped: false, inputTokens: 0, outputTokens: 0 };
           }
+          async generateBetweenInningSummary() {
+            await invokeImpl();
+            return {
+              popupText: "nope",
+              updatedNarrativeSoFar: "",
+              skipped: false,
+              inputTokens: 0,
+              outputTokens: 0,
+            };
+          }
           getNarrativeSoFar() {
             return "";
           }
@@ -444,6 +483,11 @@ describe("useCommentaryFeed", () => {
         "game-1",
         "game-1_1",
         createAtBatEvent(),
+      );
+      await result.current.fireBetweenInningSummary(
+        "game-1",
+        { inning: 4, halfInning: "TOP" },
+        [],
       );
     });
 
@@ -466,6 +510,11 @@ describe("useCommentaryFeed", () => {
         "game-1",
         "game-1_1",
         createAtBatEvent(),
+      );
+      await result.current.fireBetweenInningSummary(
+        "game-1",
+        { inning: 4, halfInning: "TOP" },
+        [],
       );
     });
 
@@ -497,7 +546,6 @@ describe("useCommentaryFeed", () => {
     ).resolves.toBeUndefined();
 
     expect(result.current.commentaryEntries).toHaveLength(0);
-    });
   });
 
   test("on mount with existing records, commentaryEntries seeds from IDB", async () => {
@@ -588,3 +636,178 @@ describe("useCommentaryFeed", () => {
       },
     ]);
   });
+
+  test("fireBetweenInningSummary success path sets pendingPopup and keeps feed unchanged until dismiss", async () => {
+    const { engine, generateBetweenInningSummary, getNarrativeSoFar } = createEngine();
+    const { result } = renderCommentaryFeedHook({
+      createEngine: () => engine,
+    });
+
+    await act(async () => {
+      await result.current.fireBetweenInningSummary(
+        "game-1",
+        { inning: 4, halfInning: "TOP" },
+        [
+          {
+            batterName: "Ivy Sparks",
+            pitcherName: "Noelle Vale",
+            result: "1B",
+            runsScored: 0,
+          },
+        ],
+      );
+    });
+
+    expect(generateBetweenInningSummary).toHaveBeenCalledTimes(1);
+    expect(getNarrativeSoFar).toHaveBeenCalledTimes(1);
+    expect(result.current.pendingPopup).toEqual({
+      text: "Freebooters stranded two.",
+      halfInningLabel: "T4",
+    });
+    expect(result.current.commentaryEntries).toEqual([]);
+  });
+
+  test("dismissBetweenInningPopup appends entry with kind between-inning and clears pendingPopup", async () => {
+    const { engine } = createEngine();
+    const persistSpy = vi.fn(async () => undefined);
+    const { result } = renderCommentaryFeedHook({
+      createEngine: () => engine,
+      persistCommentaryFeedEntry: persistSpy,
+    });
+
+    await act(async () => {
+      await result.current.fireBetweenInningSummary(
+        "game-1",
+        { inning: 4, halfInning: "TOP" },
+        [
+          {
+            batterName: "Ivy Sparks",
+            pitcherName: "Noelle Vale",
+            result: "1B",
+            runsScored: 0,
+          },
+        ],
+      );
+    });
+
+    await act(async () => {
+      result.current.dismissBetweenInningPopup("tap");
+    });
+
+    expect(result.current.pendingPopup).toBeNull();
+    expect(result.current.commentaryEntries).toEqual([
+      {
+        id: "commentary-inning-game-1-T4-2000",
+        commentaryText: "Freebooters stranded two.",
+        halfInningLabel: "T4",
+        kind: "between-inning",
+        timestamp: 2000,
+        reporterId: "reporter-1",
+      },
+    ]);
+    expect(persistSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: "commentary-inning-game-1-T4-2000",
+        gameId: "game-1",
+        leagueId: "league-1",
+        reporterId: "reporter-1",
+        commentaryText: "Freebooters stranded two.",
+        halfInningLabel: "T4",
+        kind: "between-inning",
+        timestamp: 2000,
+        createdAt: 2000,
+        changed_at: 2000,
+      }),
+    );
+  });
+
+  test("fireBetweenInningSummary when another popup is pending warns and skips the second call", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const { engine, generateBetweenInningSummary } = createEngine();
+    const { result } = renderCommentaryFeedHook({
+      createEngine: () => engine,
+    });
+
+    await act(async () => {
+      await result.current.fireBetweenInningSummary(
+        "game-1",
+        { inning: 4, halfInning: "TOP" },
+        [
+          {
+            batterName: "Ivy Sparks",
+            pitcherName: "Noelle Vale",
+            result: "1B",
+            runsScored: 0,
+          },
+        ],
+      );
+      await result.current.fireBetweenInningSummary(
+        "game-1",
+        { inning: 4, halfInning: "BOTTOM" },
+        [
+          {
+            batterName: "Harry Backman",
+            pitcherName: "Noelle Vale",
+            result: "BB",
+            runsScored: 0,
+          },
+        ],
+      );
+    });
+
+    expect(generateBetweenInningSummary).toHaveBeenCalledTimes(1);
+    expect(warn).toHaveBeenCalledWith(
+      "[reporter:commentary] Between-inning popup already pending; skipping new summary.",
+    );
+  });
+
+  test("persisted between-inning entries round-trip with kind and render with differentiated feed styling", async () => {
+    const persistedRecords: CommentaryFeedEntryRecord[] = [
+      {
+        id: "commentary-inning-game-1-T4-2000",
+        gameId: "game-1",
+        leagueId: "league-1",
+        reporterId: "reporter-1",
+        commentaryText: "Freebooters stranded two.",
+        halfInningLabel: "T4",
+        kind: "between-inning",
+        timestamp: 2000,
+        createdAt: 2000,
+        changed_at: 2000,
+      },
+    ];
+
+    const { result } = renderCommentaryFeedHook({
+      listCommentaryFeedEntriesForGame: async () => persistedRecords,
+    });
+
+    await waitFor(() => {
+      expect(result.current.commentaryEntries).toEqual([
+        {
+          id: "commentary-inning-game-1-T4-2000",
+          commentaryText: "Freebooters stranded two.",
+          halfInningLabel: "T4",
+          kind: "between-inning",
+          timestamp: 2000,
+          reporterId: "reporter-1",
+        },
+      ]);
+    });
+
+    const { container } = render(
+      <CommentaryFeed entries={result.current.commentaryEntries} soundsOn={false} />,
+    );
+
+    expect(screen.getByTestId("commentary-divider-END-T4")).toHaveTextContent(
+      "··· END T4 ···",
+    );
+    const body = container.querySelector(
+      '[data-testid="commentary-entry-commentary-inning-game-1-T4-2000"] > div:last-child',
+    );
+    expect(body).not.toBeNull();
+    expect(body).toHaveStyle({
+      fontStyle: "italic",
+      color: "rgb(196, 217, 196)",
+    });
+  });
+});

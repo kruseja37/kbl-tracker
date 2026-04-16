@@ -136,6 +136,7 @@ export interface CommentaryFeedEntryRecord {
   reporterId: string;
   commentaryText: string;
   halfInningLabel: string;
+  kind?: 'play' | 'preamble' | 'between-inning';
   timestamp: number;
   createdAt: number;
   changed_at: number;
