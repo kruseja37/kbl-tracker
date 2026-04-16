@@ -9963,6 +9963,11 @@ export function GameTracker() {
               currentPitcherName={currentPitcherDisplayName}
               currentPitcherLine={pitcherGameLine}
               matchupSummary={matchupLine}
+              commentaryEntries={[]}
+              soundsOn={beatReporterSoundsOn}
+              onPlayTypeSound={() => {
+                void audioManagerRef.current.playSound("beatReporterType");
+              }}
             />
 
             {/* Column 2: Batting Lineup (§5.2 — always the team at bat) */}

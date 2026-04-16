@@ -1,11 +1,19 @@
 import React from 'react';
 
+import {
+  CommentaryFeed,
+  type CommentaryFeedEntry,
+} from './CommentaryFeed';
+
 interface NewsBoardProps {
   currentBatterName: string;
   currentBatterLine: string; // e.g., "2-for-3, 1 HR, 2 RBI"
   currentPitcherName: string;
   currentPitcherLine: string; // e.g., "6.1 IP, 3 H, 1 ER, 7 K"
   matchupSummary?: string; // e.g., "vs Bender: 3-for-12, 1 HR, 5 K"
+  commentaryEntries?: CommentaryFeedEntry[];
+  soundsOn?: boolean;
+  onPlayTypeSound?: () => void;
 }
 
 /** §6: NewsBoard — pinned stats header + scrollable beat reporter feed. Display only, NO click handlers. */
@@ -15,6 +23,9 @@ export function NewsBoard({
   currentPitcherName,
   currentPitcherLine,
   matchupSummary,
+  commentaryEntries = [],
+  soundsOn = false,
+  onPlayTypeSound,
 }: NewsBoardProps) {
   return (
     <div className="bg-[#364038] flex flex-col h-full">
@@ -53,7 +64,11 @@ export function NewsBoard({
 
         {/* §6.3: Scrollable beat reporter feed */}
         <div className="flex-1 overflow-y-auto px-2 py-1.5">
-          <div className="text-[8px] text-[#6b7b6e] italic">Beat Reporter Feed</div>
+          <CommentaryFeed
+            entries={commentaryEntries}
+            soundsOn={soundsOn}
+            onPlayTypeSound={onPlayTypeSound}
+          />
         </div>
       </div>
     </div>

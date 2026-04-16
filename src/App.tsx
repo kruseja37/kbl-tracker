@@ -154,6 +154,11 @@ const MatchupDramaBarPreview = lazy(() =>
     default: module.MatchupDramaBarPreview,
   })),
 );
+const CommentaryFeedPreview = lazy(() =>
+  import("./src_figma/app/pages/CommentaryFeedPreview").then((module) => ({
+    default: module.CommentaryFeedPreview,
+  })),
+);
 
 /**
  * KBL Tracker - Main App
@@ -260,6 +265,10 @@ function App() {
         <Route
           path="/__preview/matchup-drama-bar"
           element={<MatchupDramaBarPreview />}
+        />
+        <Route
+          path="/__preview/commentary-feed"
+          element={<CommentaryFeedPreview />}
         />
 
         {/* 404 */}
