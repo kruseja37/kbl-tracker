@@ -124,7 +124,11 @@ import {
   getStateBadge,
   formatMultiplier,
 } from "@/app/hooks/usePlayerState";
-import { useCommentaryFeed } from "@/app/hooks/useCommentaryFeed";
+import {
+  extractAtBatIdFromCommentaryEntryId,
+  useCommentaryFeed,
+} from "@/app/hooks/useCommentaryFeed";
+import { listCommentaryFeedEntriesForGame } from "../../../utils/commentaryFeedStorage";
 
 const ordinalSuffix = (num: number) => {
   if (num % 100 >= 11 && num % 100 <= 13) return "th";
@@ -217,6 +221,15 @@ const FIELDING_POSITIONS = [
 const RUNNER_ERROR_TYPES = ["fielding", "throwing", "mental"] as const;
 
 const isRunnerOutcomeOut = (toBase: RunnerSubEntry["toBase"]) => toBase === "out";
+
+const toCommentaryEventIds = (entryIds: string[]) =>
+  entryIds.reduce<Set<string>>((eventIds, entryId) => {
+    const atBatId = extractAtBatIdFromCommentaryEntryId(entryId);
+    if (atBatId) {
+      eventIds.add(atBatId);
+    }
+    return eventIds;
+  }, new Set<string>());
 
 const crossesRunnerOutcomeBoundary = (
   previousToBase: RunnerSubEntry["toBase"],
@@ -1168,6 +1181,7 @@ export function GameTracker() {
       mode?: CompetitionType,
     ) => Promise<void>
   >(async () => {});
+  const firedCommentaryEventIdsRef = useRef<Set<string>>(new Set());
   const competitionTypeRef = useRef<CompetitionType>(competitionType);
   const preambleFiredGameIdRef = useRef<string | null>(null);
   competitionTypeRef.current = competitionType;
@@ -1212,13 +1226,16 @@ export function GameTracker() {
         ...prev.filter((entry) => entry.eventId !== eventId),
         nextEntry,
       ]);
-      void firePlayCommentaryRef.current(
-        committedEvent.gameId,
-        committedEvent.eventId,
-        committedEvent,
-        undefined,
-        competitionTypeRef.current,
-      );
+      if (!firedCommentaryEventIdsRef.current.has(eventId)) {
+        firedCommentaryEventIdsRef.current.add(eventId);
+        void firePlayCommentaryRef.current(
+          committedEvent.gameId,
+          committedEvent.eventId,
+          committedEvent,
+          undefined,
+          competitionTypeRef.current,
+        );
+      }
       await processCommittedAtBatAutoDetectionsRef.current(committedEvent);
     },
     [buildEnrichmentCacheSeed],
@@ -2718,13 +2735,21 @@ export function GameTracker() {
         "[BUG-04] Completed game header detected, keeping play log empty",
       );
       setPlayLogEntries([]);
+      firedCommentaryEventIdsRef.current.clear();
       return;
     }
 
     const eventStartTimestamp = header?.date ?? 0;
-    const [atBatEvents, betweenPlayEvents] = await Promise.all([
+    const [atBatEvents, betweenPlayEvents, commentaryRecords] = await Promise.all([
       getGameEvents(gameState.gameId),
       getBetweenPlayEvents(gameState.gameId),
+      listCommentaryFeedEntriesForGame(gameState.gameId).catch((error) => {
+        console.warn(
+          `[reporter:commentary] Failed to hydrate commentary dedup for ${gameState.gameId}.`,
+          error,
+        );
+        return [];
+      }),
     ]);
     setPlayLogEntries(
       buildPlayLogEntries(
@@ -2735,6 +2760,11 @@ export function GameTracker() {
         resolveRosterNameByGameId,
       ),
     );
+    for (const eventId of toCommentaryEventIds(
+      commentaryRecords.map((record) => record.id),
+    )) {
+      firedCommentaryEventIdsRef.current.add(eventId);
+    }
   }, [gameState.gameId, resolveRosterNameByGameId]);
 
   const queuePlayLogRefresh = useCallback(
@@ -3659,6 +3689,7 @@ export function GameTracker() {
       try {
         // BUG-04: Clear stale play log before loading/creating a game.
         setPlayLogEntries([]);
+        firedCommentaryEventIdsRef.current.clear();
 
         // Try to load existing game first (handles page refresh)
         // R2-7: When navigationState is present, user clicked START GAME from setup —
@@ -3886,6 +3917,7 @@ export function GameTracker() {
       cancelled = true;
       initInProgressRef.current = false;
       setPlayLogEntries([]);
+      firedCommentaryEventIdsRef.current.clear();
     };
   }, [
     competitionId,
@@ -10072,22 +10104,25 @@ export function GameTracker() {
                   selectedPlayLogEntry.eventType !== "at_bat")
                   ? "1fr 1fr 1fr 2.5fr"
                   : "1fr 1fr 1fr 2fr",
+              gridTemplateRows: "minmax(0, 1fr)",
               gap: "0px",
             }}
           >
             {/* Column 1: NewsBoard (§6 — display only, no click handlers) */}
-            <NewsBoard
-              currentBatterName={currentBatterDisplayName}
-              currentBatterLine={batterGameLine}
-              currentPitcherName={currentPitcherDisplayName}
-              currentPitcherLine={pitcherGameLine}
-              matchupSummary={matchupLine}
-              commentaryEntries={commentaryEntries}
-              soundsOn={beatReporterSoundsOn}
-              onPlayTypeSound={() => {
-                void audioManagerRef.current.playSound("beatReporterType");
-              }}
-            />
+            <div className="h-full min-h-0 overflow-hidden">
+              <NewsBoard
+                currentBatterName={currentBatterDisplayName}
+                currentBatterLine={batterGameLine}
+                currentPitcherName={currentPitcherDisplayName}
+                currentPitcherLine={pitcherGameLine}
+                matchupSummary={matchupLine}
+                commentaryEntries={commentaryEntries}
+                soundsOn={beatReporterSoundsOn}
+                onPlayTypeSound={() => {
+                  void audioManagerRef.current.playSound("beatReporterType");
+                }}
+              />
+            </div>
 
             {/* Column 2: Batting Lineup (§5.2 — always the team at bat) */}
             {/* Build live mojo/fitness data map from playerStateHook */}
@@ -10101,38 +10136,42 @@ export function GameTracker() {
               }
               return (
                 <>
-                  <BattingLineupColumn
-                    players={battingColumnPlayers}
-                    currentBatterIndex={currentBatterPosition}
-                    runners={battingLineupRunners}
-                    nextLeadoffIndex={battingNextLeadoff}
-                    teamName={gameState.isTop ? awayTeamName : homeTeamName}
-                    teamPrimaryColor={battingTeamColors.primary}
-                    teamSecondaryColor={battingTeamColors.secondary}
-                    playerStates={playerStatesMap}
-                    onPlayerTap={handleLineupPlayerTap}
-                    onMojoAdjust={handleLineupMojoAdjust}
-                  />
+                  <div className="h-full min-h-0 overflow-hidden">
+                    <BattingLineupColumn
+                      players={battingColumnPlayers}
+                      currentBatterIndex={currentBatterPosition}
+                      runners={battingLineupRunners}
+                      nextLeadoffIndex={battingNextLeadoff}
+                      teamName={gameState.isTop ? awayTeamName : homeTeamName}
+                      teamPrimaryColor={battingTeamColors.primary}
+                      teamSecondaryColor={battingTeamColors.secondary}
+                      playerStates={playerStatesMap}
+                      onPlayerTap={handleLineupPlayerTap}
+                      onMojoAdjust={handleLineupMojoAdjust}
+                    />
+                  </div>
 
                   {/* Column 3: Defensive Lineup (§5.3 — always the team in field) */}
-                  <DefensiveLineupColumn
-                    players={defensiveColumnPlayers}
-                    currentPitcherName={resolvedCurrentPitcherName}
-                    nextLeadoffIndex={defensiveNextLeadoff}
-                    teamName={gameState.isTop ? homeTeamName : awayTeamName}
-                    teamPrimaryColor={fieldingTeamColors.primary}
-                    teamSecondaryColor={fieldingTeamColors.secondary}
-                    playerStates={playerStatesMap}
-                    onPlayerTap={handleLineupPlayerTap}
-                    onMojoAdjust={handleLineupMojoAdjust}
-                    enrichmentMode={defensiveEnrichmentMode}
-                  />
+                  <div className="h-full min-h-0 overflow-hidden">
+                    <DefensiveLineupColumn
+                      players={defensiveColumnPlayers}
+                      currentPitcherName={resolvedCurrentPitcherName}
+                      nextLeadoffIndex={defensiveNextLeadoff}
+                      teamName={gameState.isTop ? homeTeamName : awayTeamName}
+                      teamPrimaryColor={fieldingTeamColors.primary}
+                      teamSecondaryColor={fieldingTeamColors.secondary}
+                      playerStates={playerStatesMap}
+                      onPlayerTap={handleLineupPlayerTap}
+                      onMojoAdjust={handleLineupMojoAdjust}
+                      enrichmentMode={defensiveEnrichmentMode}
+                    />
+                  </div>
                 </>
               );
             })()}
 
             {/* Column 4: Play Log + Enrichment Panel (§2.3 — 2/5 width) */}
-            <div className="relative z-20 isolate pointer-events-auto flex flex-col h-full overflow-hidden">
+            <div className="relative z-20 isolate pointer-events-auto flex h-full min-h-0 flex-col overflow-hidden">
               {/* Between-inning enrichment prompt (Ticket 5.7) */}
               {showEnrichmentPrompt && !pendingRunnerAttribution && (
                 <div className="bg-[#C4A853]/20 border-b border-[#C4A853] px-2 py-1 flex items-center gap-1 flex-shrink-0">

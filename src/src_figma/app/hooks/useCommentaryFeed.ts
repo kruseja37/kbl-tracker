@@ -88,7 +88,7 @@ function toProcessedPlayKey(targetGameId: string, atBatId: string): string {
   return `${targetGameId}:${atBatId}`;
 }
 
-function extractAtBatIdFromCommentaryEntryId(
+export function extractAtBatIdFromCommentaryEntryId(
   entryId: string,
 ): string | null {
   if (!entryId.startsWith("commentary-")) {
@@ -183,6 +183,7 @@ export function useCommentaryFeed({
   const pendingPopupRef = React.useRef<PendingBetweenInningPopup | null>(null);
   const pendingPopupReporterIdRef = React.useRef<string | null>(null);
   const processedPlayIdsRef = React.useRef<Set<string>>(new Set());
+  const lastHydratedGameIdRef = React.useRef<string | null>(null);
 
   const getIntensityImpl = dependencies.getIntensity ?? getNarrativeIntensity;
   const getReporterForTeamImpl =
@@ -204,11 +205,13 @@ export function useCommentaryFeed({
     dependencies.listCommentaryFeedEntriesForGame ?? listCommentaryFeedEntriesForGame;
 
   const resetForNewGame = React.useCallback((nextGameId: string) => {
+    console.log("[repdbg] resetForNewGame called for", nextGameId);
     setCommentaryEntries([]);
     setPendingPopup(null);
     pendingPopupRef.current = null;
     pendingPopupReporterIdRef.current = null;
     processedPlayIdsRef.current.clear();
+    lastHydratedGameIdRef.current = null;
     preambleFiredForGameIdRef.current = null;
     moodRef.current = INITIAL_MOOD_STATE;
     intensityRef.current = null;
@@ -231,6 +234,10 @@ export function useCommentaryFeed({
   }, [gameId, resetForNewGame]);
 
   React.useEffect(() => {
+    if (lastHydratedGameIdRef.current === gameId) {
+      return;
+    }
+
     let cancelled = false;
 
     void listCommentaryFeedEntriesForGameImpl(gameId)
@@ -239,6 +246,8 @@ export function useCommentaryFeed({
           return;
         }
 
+        console.log("[repdbg] mount-read effect FIRED for gameId", gameId, "records:", records.length);
+        lastHydratedGameIdRef.current = gameId;
         setCommentaryEntries(records.map(toCommentaryFeedEntry));
         processedPlayIdsRef.current = new Set(
           records
@@ -478,9 +487,18 @@ export function useCommentaryFeed({
       mode?: CompetitionType,
     ) => {
       const processedPlayKey = toProcessedPlayKey(targetGameId, atBatId);
+      console.log("[repdbg] firePlayCommentary ENTRY", {
+        targetGameId,
+        atBatId,
+        alreadyProcessed: processedPlayIdsRef.current.has(processedPlayKey),
+        processedSetSize: processedPlayIdsRef.current.size,
+      });
       if (processedPlayIdsRef.current.has(processedPlayKey)) {
         return;
       }
+      console.log("[repdbg] firePlayCommentary PASSED DEDUP, calling engine", {
+        atBatId,
+      });
 
       const prerequisites = await resolveCallPrerequisites();
       if (prerequisites.status !== "ready") {
@@ -557,6 +575,9 @@ export function useCommentaryFeed({
         entry,
       ]);
       processedPlayIdsRef.current.add(processedPlayKey);
+      console.log("[repdbg] firePlayCommentary APPENDED + marked processed", {
+        atBatId,
+      });
       persistEntryRecord({
         id: entry.id,
         gameId: targetGameId,

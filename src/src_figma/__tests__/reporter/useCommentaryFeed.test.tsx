@@ -562,6 +562,83 @@ describe("useCommentaryFeed", () => {
     expect(generateCommentary).toHaveBeenCalledTimes(2);
   });
 
+  test("same-game rerender with a new hydration dependency does not wipe processed plays", async () => {
+    const { engine, generateCommentary } = createEngine();
+    const firstListImpl = vi.fn(async () => []);
+    const secondListImpl = vi.fn(async () => []);
+
+    const hook = renderHook(
+      ({ listImpl }) =>
+        useCommentaryFeed({
+          gameId: "game-1",
+          homeTeamId: "team-home",
+          leagueId: "league-1",
+          getLivePreambleSeed: () =>
+            createLiveSeed({
+              gameId: "game-1",
+              atBatId: "game-1_1",
+            }),
+          dependencies: {
+            getIntensity: async () => "medium",
+            getReporterForTeam: async () => createReporter(),
+            buildReporterContext: async (targetGameId, atBatId) =>
+              createReporterContext({
+                gameId: targetGameId,
+                atBatId,
+              }),
+            buildLiveReporterContext: async (seed) =>
+              createReporterContext({
+                gameId: seed.gameId,
+                atBatId: seed.atBatId,
+              }),
+            isWithinDailyCallLimit: async () => true,
+            now: () => 2000,
+            createEngine: () => engine,
+            scoreNotability: () => ({
+              score: 0.4,
+              shouldComment: true,
+              reason: "HIGH_WPA",
+            }),
+            persistCommentaryFeedEntry: async () => undefined,
+            listCommentaryFeedEntriesForGame: listImpl,
+          },
+        }),
+      {
+        initialProps: {
+          listImpl: firstListImpl,
+        },
+      },
+    );
+
+    await waitFor(() => {
+      expect(firstListImpl).toHaveBeenCalledTimes(1);
+    });
+
+    await act(async () => {
+      await hook.result.current.firePlayCommentary(
+        "game-1",
+        "game-1_1",
+        createAtBatEvent(),
+      );
+    });
+
+    expect(generateCommentary).toHaveBeenCalledTimes(1);
+
+    hook.rerender({ listImpl: secondListImpl });
+
+    expect(secondListImpl).not.toHaveBeenCalled();
+
+    await act(async () => {
+      await hook.result.current.firePlayCommentary(
+        "game-1",
+        "game-1_1",
+        createAtBatEvent(),
+      );
+    });
+
+    expect(generateCommentary).toHaveBeenCalledTimes(1);
+  });
+
   test("play commentary with shouldComment=false does not append an entry", async () => {
     const { engine, generateCommentary } = createEngine();
     const { result } = renderCommentaryFeedHook({

@@ -63,7 +63,10 @@ export function NewsBoard({
         </div>
 
         {/* §6.3: Scrollable beat reporter feed */}
-        <div className="flex-1 min-h-0 overflow-y-auto px-2 py-1.5">
+        <div
+          className="flex-1 min-h-0 max-h-full overflow-y-auto px-2 py-1.5"
+          style={{ maxHeight: "100%" }}
+        >
           <CommentaryFeed
             entries={commentaryEntries}
             soundsOn={soundsOn}
