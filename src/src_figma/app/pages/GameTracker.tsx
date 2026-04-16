@@ -124,6 +124,7 @@ import {
   getStateBadge,
   formatMultiplier,
 } from "@/app/hooks/usePlayerState";
+import { useCommentaryFeed } from "@/app/hooks/useCommentaryFeed";
 
 const ordinalSuffix = (num: number) => {
   if (num % 100 >= 11 && num % 100 <= 13) return "th";
@@ -546,6 +547,7 @@ import {
 } from "../utils/fieldingEventExtractor";
 import {
   captureStartingLineups,
+  type CompetitionType,
   type LineupEntry,
 } from "../../../utils/gameStorage";
 import { POSITION_NUMBER } from "../utils/positionConstants";
@@ -1157,6 +1159,15 @@ export function GameTracker() {
 
   // §4.2 Structured Play Log — parallel to activityLog (which other systems still use)
   const [playLogEntries, setPlayLogEntries] = useState<PlayLogEntry[]>([]);
+  const firePlayCommentaryRef = useRef<
+    (
+      gameId: string,
+      atBatId: string,
+      play: AtBatEvent,
+      intensity?: undefined,
+      mode?: CompetitionType,
+    ) => Promise<void>
+  >(async () => {});
   const shortInningLabel = useCallback(() => {
     return `${gameState.isTop ? "T" : "B"}${Math.max(1, gameState.inning)}`;
   }, [gameState.isTop, gameState.inning]);
@@ -1198,9 +1209,16 @@ export function GameTracker() {
         ...prev.filter((entry) => entry.eventId !== eventId),
         nextEntry,
       ]);
+      void firePlayCommentaryRef.current(
+        committedEvent.gameId,
+        committedEvent.eventId,
+        committedEvent,
+        undefined,
+        competitionType,
+      );
       await processCommittedAtBatAutoDetectionsRef.current(committedEvent);
     },
-    [buildEnrichmentCacheSeed],
+    [buildEnrichmentCacheSeed, competitionType],
   );
   const playLogRefreshTimeoutRef = useRef<number | null>(null);
   const rebuildPlayLogFromEventLogRef = useRef<() => void | Promise<void>>(
@@ -4370,6 +4388,74 @@ export function GameTracker() {
   const currentPitcherDisplayName = formatDisplayName(
     resolvedCurrentPitcherName,
   );
+  const getLivePreambleSeed = useCallback(() => {
+    if (!gameState.currentBatterId || !gameState.currentPitcherId) {
+      return null;
+    }
+
+    return {
+      gameId: gameState.gameId,
+      atBatId: getPendingAtBatIdentity().atBatEventId,
+      inning: gameState.inning,
+      halfInning: (gameState.isTop ? "TOP" : "BOTTOM") as AtBatEvent["halfInning"],
+      outs: gameState.outs,
+      bases: {
+        first: runnerNames.first ?? null,
+        second: runnerNames.second ?? null,
+        third: runnerNames.third ?? null,
+      },
+      awayScore: gameState.awayScore,
+      homeScore: gameState.homeScore,
+      battingTeamId: gameState.isTop ? awayTeamId : homeTeamId,
+      battingTeamName: gameState.isTop ? awayTeamName : homeTeamName,
+      pitchingTeamId: gameState.isTop ? homeTeamId : awayTeamId,
+      pitchingTeamName: gameState.isTop ? homeTeamName : awayTeamName,
+      batterId: gameState.currentBatterId,
+      batterName: resolvedCurrentBatterName,
+      pitcherId: gameState.currentPitcherId,
+      pitcherName: resolvedCurrentPitcherName,
+      competitionType,
+      competitionId:
+        competitionType === "elimination"
+          ? navigationState?.eliminationId
+          : undefined,
+      leagueId,
+    };
+  }, [
+    awayTeamId,
+    awayTeamName,
+    competitionType,
+    gameState.awayScore,
+    gameState.currentBatterId,
+    gameState.currentPitcherId,
+    gameState.gameId,
+    gameState.homeScore,
+    gameState.inning,
+    gameState.isTop,
+    gameState.outs,
+    getPendingAtBatIdentity,
+    homeTeamId,
+    homeTeamName,
+    leagueId,
+    navigationState?.eliminationId,
+    resolvedCurrentBatterName,
+    resolvedCurrentPitcherName,
+    runnerNames.first,
+    runnerNames.second,
+    runnerNames.third,
+  ]);
+  const {
+    commentaryEntries,
+    firePreamble,
+    firePlayCommentary,
+    disabled: commentaryDisabled,
+  } = useCommentaryFeed({
+    gameId: gameState.gameId,
+    homeTeamId,
+    leagueId,
+    getLivePreambleSeed,
+  });
+  firePlayCommentaryRef.current = firePlayCommentary;
 
   // §5: Lineup column data — role-based: column 2 = batting team, column 3 = fielding team
   const battingColumnPlayers = useMemo(() => {
@@ -9157,8 +9243,21 @@ export function GameTracker() {
     setRosterVersion((v) => v + 1);
     playAudio("startGame");
     startGame();
+    if (!commentaryDisabled) {
+      void firePreamble(
+        gameState.gameId,
+        getPendingAtBatIdentity().atBatEventId,
+        undefined,
+        competitionType,
+      );
+    }
   }, [
+    commentaryDisabled,
+    competitionType,
+    firePreamble,
+    gameState.gameId,
     getLineupStateSnapshot,
+    getPendingAtBatIdentity,
     playAudio,
     startGame,
     syncDisplayedRostersToLineupSnapshot,
@@ -9963,7 +10062,7 @@ export function GameTracker() {
               currentPitcherName={currentPitcherDisplayName}
               currentPitcherLine={pitcherGameLine}
               matchupSummary={matchupLine}
-              commentaryEntries={[]}
+              commentaryEntries={commentaryEntries}
               soundsOn={beatReporterSoundsOn}
               onPlayTypeSound={() => {
                 void audioManagerRef.current.playSound("beatReporterType");

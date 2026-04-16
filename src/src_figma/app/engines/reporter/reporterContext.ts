@@ -163,6 +163,32 @@ export interface BuildReporterContextOptions {
   dataSources?: Partial<ReporterContextDataSources>;
 }
 
+export interface LiveReporterContextSeed {
+  gameId: string;
+  atBatId: string;
+  inning: number;
+  halfInning: AtBatEvent["halfInning"];
+  outs: number;
+  bases: {
+    first: string | null;
+    second: string | null;
+    third: string | null;
+  };
+  awayScore: number;
+  homeScore: number;
+  battingTeamId: string;
+  battingTeamName: string;
+  pitchingTeamId: string;
+  pitchingTeamName: string;
+  batterId: string;
+  batterName: string;
+  pitcherId: string;
+  pitcherName: string;
+  competitionType?: CompetitionType;
+  competitionId?: string;
+  leagueId?: string;
+}
+
 function mergeDataSources(
   overrides?: Partial<ReporterContextDataSources>,
 ): ReporterContextDataSources {
@@ -322,6 +348,132 @@ async function resolveAtBatEvent(
   if (byIndex) return byIndex;
 
   throw new Error(`Reporter context at-bat not found: ${gameId}/${atBatId}`);
+}
+
+export async function buildLiveReporterContext(
+  seed: LiveReporterContextSeed,
+  options: BuildReporterContextOptions = {},
+): Promise<ReporterContext> {
+  const dataSources = mergeDataSources(options.dataSources);
+  const currentGame = await dataSources.getCurrentGame();
+  const game =
+    currentGame?.gameId === seed.gameId
+      ? currentGame
+      : await dataSources.getCompletedGame(seed.gameId);
+  const instanceId =
+    seed.competitionId ?? game?.competitionId ?? seed.leagueId ?? game?.leagueId;
+
+  const [
+    batterPlayer,
+    pitcherPlayer,
+    battingTeam,
+    pitchingTeam,
+    batterOverride,
+    pitcherOverride,
+    batterLegacySummary,
+    pitcherLegacySummary,
+    battingTeamLegacySummary,
+    pitchingTeamLegacySummary,
+    batterRecentAlmanac,
+    pitcherRecentAlmanac,
+    battingTeamRecentAlmanac,
+  ] = await Promise.all([
+    dataSources.getPlayer(seed.batterId),
+    dataSources.getPlayer(seed.pitcherId),
+    dataSources.getTeam(seed.battingTeamId),
+    dataSources.getTeam(seed.pitchingTeamId),
+    seed.leagueId
+      ? dataSources.getLeaguePlayerOverride(seed.leagueId, seed.batterId)
+      : Promise.resolve(null),
+    seed.leagueId
+      ? dataSources.getLeaguePlayerOverride(seed.leagueId, seed.pitcherId)
+      : Promise.resolve(null),
+    dataSources.getPlayerLegacySummary(seed.batterId, instanceId),
+    dataSources.getPlayerLegacySummary(seed.pitcherId, instanceId),
+    dataSources.getTeamLegacySummary(seed.battingTeamId, instanceId),
+    dataSources.getTeamLegacySummary(seed.pitchingTeamId, instanceId),
+    dataSources.getRecentPlayerAlmanac(seed.batterId, instanceId),
+    dataSources.getRecentPlayerAlmanac(seed.pitcherId, instanceId),
+    dataSources.getRecentTeamAlmanac(seed.battingTeamId, instanceId),
+  ]);
+
+  const batter = buildPlayerSnapshot({
+    eventPlayerId: seed.batterId,
+    eventPlayerName: seed.batterName,
+    teamId: seed.battingTeamId,
+    player: batterPlayer,
+    override: batterOverride,
+  });
+  const pitcher = buildPlayerSnapshot({
+    eventPlayerId: seed.pitcherId,
+    eventPlayerName: seed.pitcherName,
+    teamId: seed.pitchingTeamId,
+    player: pitcherPlayer,
+    override: pitcherOverride,
+  });
+
+  const leverageIndex = calculateLeverageIndex({
+    inning: seed.inning,
+    halfInning: seed.halfInning,
+    outs: Math.min(Math.max(seed.outs, 0), 2) as 0 | 1 | 2,
+    runners: {
+      first: Boolean(seed.bases.first),
+      second: Boolean(seed.bases.second),
+      third: Boolean(seed.bases.third),
+    },
+    homeScore: seed.homeScore,
+    awayScore: seed.awayScore,
+  }).leverageIndex;
+
+  return {
+    batter,
+    pitcher,
+    battingTeam: buildTeamSnapshot(
+      seed.battingTeamId,
+      seed.battingTeamName,
+      battingTeam,
+    ),
+    pitchingTeam: buildTeamSnapshot(
+      seed.pitchingTeamId,
+      seed.pitchingTeamName,
+      pitchingTeam,
+    ),
+    batterLegacySummary: batterLegacySummary ?? DEFAULT_LEGACY_SUMMARY,
+    pitcherLegacySummary: pitcherLegacySummary ?? DEFAULT_LEGACY_SUMMARY,
+    battingTeamLegacySummary: battingTeamLegacySummary ?? DEFAULT_LEGACY_SUMMARY,
+    pitchingTeamLegacySummary:
+      pitchingTeamLegacySummary ?? DEFAULT_LEGACY_SUMMARY,
+    batterRecentAlmanac: capRecentAlmanac(batterRecentAlmanac),
+    pitcherRecentAlmanac: capRecentAlmanac(pitcherRecentAlmanac),
+    teamRecentAlmanac: capRecentAlmanac(battingTeamRecentAlmanac),
+    activeOpposingRelationships: [],
+    activeWithinTeamRelationships: [],
+    teamRivalryIntensity: 0,
+    dramaticWeight: Number(
+      (leverageIndex + (batter.effectiveFame + pitcher.effectiveFame - 2) * 0.1).toFixed(3),
+    ),
+    gameState: {
+      gameId: seed.gameId,
+      atBatId: seed.atBatId,
+      inning: seed.inning,
+      halfInning: seed.halfInning,
+      outs: seed.outs,
+      bases: {
+        first: seed.bases.first,
+        second: seed.bases.second,
+        third: seed.bases.third,
+      },
+      awayScore: seed.awayScore,
+      homeScore: seed.homeScore,
+      battingTeamId: seed.battingTeamId,
+      pitchingTeamId: seed.pitchingTeamId,
+      batterId: seed.batterId,
+      pitcherId: seed.pitcherId,
+      competitionType: seed.competitionType,
+      competitionId: seed.competitionId,
+      leagueId: seed.leagueId,
+    },
+  };
 }
 
 /**
