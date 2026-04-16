@@ -3680,6 +3680,12 @@ export function GameTracker() {
   // FIX: BUG-007 - Try loading existing game first, only create new if none found
   // This ensures each batter has a unique ID and stats are tracked separately
   const initInProgressRef = useRef(false);
+  const generatedExhibitionGameIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    return () => {
+      generatedExhibitionGameIdRef.current = null;
+    };
+  }, []);
   useEffect(() => {
     if (gameInitialized || initInProgressRef.current) return;
     initInProgressRef.current = true;
@@ -3832,10 +3838,13 @@ export function GameTracker() {
           homeBench: homeBench.map((p) => p.playerName),
         });
 
+        if (generatedExhibitionGameIdRef.current === null) {
+          generatedExhibitionGameIdRef.current = `game-${Date.now()}`;
+        }
         const nextGameId =
           competitionType === "exhibition"
-            ? `game-${Date.now()}`
-            : gameId || `game-${Date.now()}`;
+            ? generatedExhibitionGameIdRef.current
+            : gameId || generatedExhibitionGameIdRef.current;
 
         await initializeGame({
           gameId: nextGameId,
@@ -3916,8 +3925,6 @@ export function GameTracker() {
     return () => {
       cancelled = true;
       initInProgressRef.current = false;
-      setPlayLogEntries([]);
-      firedCommentaryEventIdsRef.current.clear();
     };
   }, [
     competitionId,
@@ -4494,6 +4501,7 @@ export function GameTracker() {
 
   useEffect(() => {
     if (
+      !gameInitialized ||
       gameState.gamePhase !== "LIVE" ||
       !gameState.currentBatterId ||
       !gameState.currentPitcherId ||
@@ -4515,6 +4523,7 @@ export function GameTracker() {
     commentaryDisabled,
     competitionType,
     firePreamble,
+    gameInitialized,
     gameState.currentBatterId,
     gameState.currentPitcherId,
     gameState.gameId,
@@ -10029,7 +10038,14 @@ export function GameTracker() {
         )}
 
         {/* ROW 2: 4-Column Content Area (§2.3 — 1fr 1fr 1fr 2fr) + §2.4 Expanded Scoreboard overlay */}
-        <div className="min-h-0 flex-1 overflow-hidden relative bg-[#CBB89C]">
+        {/* Overflow propagation chain:
+            9925 game-tracker-font-bump flex flex-col overflow-hidden (100dvh root)
+            10032 min-h-0 flex-1 flex flex-col overflow-hidden relative (bounded content row)
+            10099 min-h-0 flex-1 grid container
+            10115 grid cell wrapper min-h-0 overflow-hidden
+            NewsBoard.tsx root h-full min-h-0 overflow-hidden
+            Broken link was the old h-full grid container inside a plain block parent; it now receives height via flex-1. */}
+        <div className="min-h-0 flex flex-1 flex-col overflow-hidden relative bg-[#CBB89C]">
           {/* §2.4 Expanded Scoreboard overlay — drops down from ScoreBug, covers top ~25% of columns */}
           {isScoreboardExpanded && (
             <>
@@ -10094,7 +10110,7 @@ export function GameTracker() {
             </div>
           )}
           <div
-            className="h-full min-h-0 bg-[#CBB89C]"
+            className="min-h-0 flex-1 bg-[#CBB89C]"
             style={{
               display: "grid",
               gridTemplateColumns:

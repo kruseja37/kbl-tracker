@@ -107,7 +107,7 @@ export function BattingLineupColumn({
   })));
 
   return (
-    <div className="bg-[#3d4a42] flex flex-col h-full">
+    <div className="bg-[#3d4a42] flex h-full min-h-0 flex-col overflow-hidden">
       <style>{`
         @keyframes batting-lineup-row-highlight {
           0% {
@@ -124,7 +124,7 @@ export function BattingLineupColumn({
       <div className="text-[10px] text-white font-bold tracking-wider px-2 pt-1.5 pb-1 text-center" style={{ background: `linear-gradient(${teamPrimaryColor}40, ${teamPrimaryColor}40), #1a2420`, backgroundImage: `url(${chalkBgImg}), linear-gradient(${teamPrimaryColor}40, ${teamPrimaryColor}40)`, backgroundRepeat: 'repeat', backgroundColor: '#1a2420' }}>
         {teamName || 'BATTING'}
       </div>
-      <div className="flex flex-col flex-1 justify-evenly" style={{ borderRight: '2px solid rgba(242, 192, 65, 0.08)' }}>
+      <div className="flex min-h-0 flex-1 flex-col justify-evenly overflow-hidden" style={{ borderRight: '2px solid rgba(242, 192, 65, 0.08)' }}>
         {players.map((player) => {
           const isCurrent = player.battingOrder === currentBatterIndex;
           const isNextLeadoff = player.battingOrder === nextLeadoffIndex && !isCurrent;

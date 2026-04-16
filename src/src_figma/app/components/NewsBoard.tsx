@@ -28,7 +28,7 @@ export function NewsBoard({
   onPlayTypeSound,
 }: NewsBoardProps) {
   return (
-    <div className="bg-[#364038] flex flex-col h-full">
+    <div className="bg-[#364038] flex h-full min-h-0 flex-col overflow-hidden">
       {/* §6.1: Pinned header — batter line, pitcher line, matchup */}
       {/* Header row — matches lineup header height */}
       <div className="bg-[#243028] px-2 pt-1.5 pb-1 flex-shrink-0">
