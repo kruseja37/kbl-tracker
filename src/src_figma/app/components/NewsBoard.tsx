@@ -36,7 +36,7 @@ export function NewsBoard({
       </div>
 
       {/* Content area with recessed border */}
-      <div className="flex-1 flex flex-col overflow-hidden border-r-[3px] border-[#252b27]" style={{ boxShadow: 'inset 0 0 4px rgba(0,0,0,0.25)' }}>
+      <div className="flex-1 min-h-0 flex flex-col overflow-hidden border-r-[3px] border-[#252b27]" style={{ boxShadow: 'inset 0 0 4px rgba(0,0,0,0.25)' }}>
         {/* §6.1: Pinned stats — batter line, pitcher line, matchup */}
         <div className="bg-[#243028] border-b border-[#3d5240] px-2 pt-1 pb-1.5 flex-shrink-0">
           {/* Current batter game line */}
@@ -63,7 +63,7 @@ export function NewsBoard({
         </div>
 
         {/* §6.3: Scrollable beat reporter feed */}
-        <div className="flex-1 overflow-y-auto px-2 py-1.5">
+        <div className="flex-1 min-h-0 overflow-y-auto px-2 py-1.5">
           <CommentaryFeed
             entries={commentaryEntries}
             soundsOn={soundsOn}

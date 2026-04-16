@@ -84,6 +84,27 @@ export interface PendingBetweenInningPopup {
   halfInningLabel: string;
 }
 
+function toProcessedPlayKey(targetGameId: string, atBatId: string): string {
+  return `${targetGameId}:${atBatId}`;
+}
+
+function extractAtBatIdFromCommentaryEntryId(
+  entryId: string,
+): string | null {
+  if (!entryId.startsWith("commentary-")) {
+    return null;
+  }
+
+  if (
+    entryId.startsWith("commentary-pre-") ||
+    entryId.startsWith("commentary-inning-")
+  ) {
+    return null;
+  }
+
+  return entryId.slice("commentary-".length) || null;
+}
+
 function toShortHalfInningLabel(event: Pick<AtBatEvent, "halfInning" | "inning">): string {
   return `${event.halfInning === "TOP" ? "T" : "B"}${event.inning}`;
 }
@@ -161,6 +182,7 @@ export function useCommentaryFeed({
   const intensityRef = React.useRef<NarrativeIntensity | null>(null);
   const pendingPopupRef = React.useRef<PendingBetweenInningPopup | null>(null);
   const pendingPopupReporterIdRef = React.useRef<string | null>(null);
+  const processedPlayIdsRef = React.useRef<Set<string>>(new Set());
 
   const getIntensityImpl = dependencies.getIntensity ?? getNarrativeIntensity;
   const getReporterForTeamImpl =
@@ -186,6 +208,7 @@ export function useCommentaryFeed({
     setPendingPopup(null);
     pendingPopupRef.current = null;
     pendingPopupReporterIdRef.current = null;
+    processedPlayIdsRef.current.clear();
     preambleFiredForGameIdRef.current = null;
     moodRef.current = INITIAL_MOOD_STATE;
     intensityRef.current = null;
@@ -217,6 +240,14 @@ export function useCommentaryFeed({
         }
 
         setCommentaryEntries(records.map(toCommentaryFeedEntry));
+        processedPlayIdsRef.current = new Set(
+          records
+            .map((record) => {
+              const atBatId = extractAtBatIdFromCommentaryEntryId(record.id);
+              return atBatId ? toProcessedPlayKey(gameId, atBatId) : null;
+            })
+            .filter((key): key is string => Boolean(key)),
+        );
         preambleFiredForGameIdRef.current = records.some(
           (record) => record.halfInningLabel === "PRE",
         )
@@ -446,6 +477,11 @@ export function useCommentaryFeed({
       intensity?: NarrativeIntensity,
       mode?: CompetitionType,
     ) => {
+      const processedPlayKey = toProcessedPlayKey(targetGameId, atBatId);
+      if (processedPlayIdsRef.current.has(processedPlayKey)) {
+        return;
+      }
+
       const prerequisites = await resolveCallPrerequisites();
       if (prerequisites.status !== "ready") {
         return;
@@ -520,6 +556,7 @@ export function useCommentaryFeed({
         ...current,
         entry,
       ]);
+      processedPlayIdsRef.current.add(processedPlayKey);
       persistEntryRecord({
         id: entry.id,
         gameId: targetGameId,

@@ -1168,6 +1168,9 @@ export function GameTracker() {
       mode?: CompetitionType,
     ) => Promise<void>
   >(async () => {});
+  const competitionTypeRef = useRef<CompetitionType>(competitionType);
+  const preambleFiredGameIdRef = useRef<string | null>(null);
+  competitionTypeRef.current = competitionType;
   const shortInningLabel = useCallback(() => {
     return `${gameState.isTop ? "T" : "B"}${Math.max(1, gameState.inning)}`;
   }, [gameState.isTop, gameState.inning]);
@@ -1214,11 +1217,11 @@ export function GameTracker() {
         committedEvent.eventId,
         committedEvent,
         undefined,
-        competitionType,
+        competitionTypeRef.current,
       );
       await processCommittedAtBatAutoDetectionsRef.current(committedEvent);
     },
-    [buildEnrichmentCacheSeed, competitionType],
+    [buildEnrichmentCacheSeed],
   );
   const playLogRefreshTimeoutRef = useRef<number | null>(null);
   const rebuildPlayLogFromEventLogRef = useRef<() => void | Promise<void>>(
@@ -4456,6 +4459,36 @@ export function GameTracker() {
     getLivePreambleSeed,
   });
   firePlayCommentaryRef.current = firePlayCommentary;
+
+  useEffect(() => {
+    if (
+      gameState.gamePhase !== "LIVE" ||
+      !gameState.currentBatterId ||
+      !gameState.currentPitcherId ||
+      !gameState.gameId ||
+      commentaryDisabled ||
+      preambleFiredGameIdRef.current === gameState.gameId
+    ) {
+      return;
+    }
+
+    preambleFiredGameIdRef.current = gameState.gameId;
+    void firePreamble(
+      gameState.gameId,
+      getPendingAtBatIdentity().atBatEventId,
+      undefined,
+      competitionType,
+    );
+  }, [
+    commentaryDisabled,
+    competitionType,
+    firePreamble,
+    gameState.currentBatterId,
+    gameState.currentPitcherId,
+    gameState.gameId,
+    gameState.gamePhase,
+    getPendingAtBatIdentity,
+  ]);
 
   // §5: Lineup column data — role-based: column 2 = batting team, column 3 = fielding team
   const battingColumnPlayers = useMemo(() => {
@@ -9243,21 +9276,8 @@ export function GameTracker() {
     setRosterVersion((v) => v + 1);
     playAudio("startGame");
     startGame();
-    if (!commentaryDisabled) {
-      void firePreamble(
-        gameState.gameId,
-        getPendingAtBatIdentity().atBatEventId,
-        undefined,
-        competitionType,
-      );
-    }
   }, [
-    commentaryDisabled,
-    competitionType,
-    firePreamble,
-    gameState.gameId,
     getLineupStateSnapshot,
-    getPendingAtBatIdentity,
     playAudio,
     startGame,
     syncDisplayedRostersToLineupSnapshot,
@@ -10042,7 +10062,7 @@ export function GameTracker() {
             </div>
           )}
           <div
-            className="h-full bg-[#CBB89C]"
+            className="h-full min-h-0 bg-[#CBB89C]"
             style={{
               display: "grid",
               gridTemplateColumns:

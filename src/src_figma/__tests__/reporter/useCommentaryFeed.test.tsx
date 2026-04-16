@@ -38,7 +38,9 @@ function createReporter(): BeatReporter {
   };
 }
 
-function createReporterContext(): ReporterContext {
+function createReporterContext(
+  overrides: Partial<ReporterContext["gameState"]> = {},
+): ReporterContext {
   return {
     batter: {
       id: "batter-1",
@@ -90,11 +92,14 @@ function createReporterContext(): ReporterContext {
       pitcherId: "pitcher-1",
       competitionType: "exhibition",
       leagueId: "league-1",
+      ...overrides,
     },
   };
 }
 
-function createLiveSeed(): LiveReporterContextSeed {
+function createLiveSeed(
+  overrides: Partial<LiveReporterContextSeed> = {},
+): LiveReporterContextSeed {
   return {
     gameId: "game-1",
     atBatId: "game-1_1",
@@ -114,6 +119,7 @@ function createLiveSeed(): LiveReporterContextSeed {
     pitcherName: "Noelle Vale",
     competitionType: "exhibition",
     leagueId: "league-1",
+    ...overrides,
   };
 }
 
@@ -237,6 +243,7 @@ function createEngine(overrides: {
 }
 
 function renderCommentaryFeedHook(options: {
+  gameId?: string;
   intensity?: "low" | "medium" | "high";
   reporter?: BeatReporter | null;
   buildReporterContext?: (gameId: string, atBatId: string) => Promise<ReporterContext>;
@@ -252,31 +259,60 @@ function renderCommentaryFeedHook(options: {
   const listCommentaryFeedEntriesForGameImpl =
     options.listCommentaryFeedEntriesForGame ?? (async () => []);
 
-  return renderHook(() =>
-    useCommentaryFeed({
-      gameId: "game-1",
-      homeTeamId: "team-home",
-      leagueId: "league-1",
-      getLivePreambleSeed: () => createLiveSeed(),
-      dependencies: {
-        getIntensity: async () => options.intensity ?? "medium",
-        getReporterForTeam: async () =>
-          options.reporter === undefined ? createReporter() : options.reporter,
-        buildReporterContext:
-          options.buildReporterContext ??
-          (async () => createReporterContext()),
-        buildLiveReporterContext:
-          options.buildLiveReporterContext ??
-          (async () => createReporterContext()),
-        isWithinDailyCallLimit:
-          options.isWithinDailyCallLimit ?? (async () => true),
-        now: () => 2000,
-        createEngine: options.createEngine,
-        scoreNotability: options.scoreNotability,
-        persistCommentaryFeedEntry: persistCommentaryFeedEntryImpl,
-        listCommentaryFeedEntriesForGame: listCommentaryFeedEntriesForGameImpl,
+  return renderHook(
+    ({ gameId }) =>
+      useCommentaryFeed({
+        gameId,
+        homeTeamId: "team-home",
+        leagueId: "league-1",
+        getLivePreambleSeed: () =>
+          createLiveSeed({
+            gameId,
+            atBatId: `${gameId}_1`,
+          }),
+        dependencies: {
+          getIntensity: async () => options.intensity ?? "medium",
+          getReporterForTeam: async () =>
+            options.reporter === undefined ? createReporter() : options.reporter,
+          buildReporterContext:
+            options.buildReporterContext ??
+            (async (targetGameId, atBatId) =>
+              createReporterContext({
+                gameId: targetGameId,
+                atBatId,
+              })),
+          buildLiveReporterContext:
+            options.buildLiveReporterContext ??
+            (async (seed) =>
+              createReporterContext({
+                gameId: seed.gameId,
+                atBatId: seed.atBatId,
+                inning: seed.inning,
+                halfInning: seed.halfInning,
+                outs: seed.outs,
+                awayScore: seed.awayScore,
+                homeScore: seed.homeScore,
+                battingTeamId: seed.battingTeamId,
+                pitchingTeamId: seed.pitchingTeamId,
+                batterId: seed.batterId,
+                pitcherId: seed.pitcherId,
+                competitionType: seed.competitionType,
+                leagueId: seed.leagueId,
+              })),
+          isWithinDailyCallLimit:
+            options.isWithinDailyCallLimit ?? (async () => true),
+          now: () => 2000,
+          createEngine: options.createEngine,
+          scoreNotability: options.scoreNotability,
+          persistCommentaryFeedEntry: persistCommentaryFeedEntryImpl,
+          listCommentaryFeedEntriesForGame: listCommentaryFeedEntriesForGameImpl,
+        },
+      }),
+    {
+      initialProps: {
+        gameId: options.gameId ?? "game-1",
       },
-    }),
+    },
   );
 }
 
@@ -415,6 +451,115 @@ describe("useCommentaryFeed", () => {
         changed_at: 2000,
       }),
     );
+  });
+
+  test("calling firePlayCommentary twice for the same gameId and atBatId only hits the engine once", async () => {
+    const { engine, generateCommentary } = createEngine();
+    const { result } = renderCommentaryFeedHook({
+      createEngine: () => engine,
+      scoreNotability: () => ({
+        score: 0.4,
+        shouldComment: true,
+        reason: "HIGH_WPA",
+      }),
+    });
+
+    await act(async () => {
+      await result.current.firePlayCommentary(
+        "game-1",
+        "game-1_1",
+        createAtBatEvent(),
+      );
+      await result.current.firePlayCommentary(
+        "game-1",
+        "game-1_1",
+        createAtBatEvent(),
+      );
+    });
+
+    expect(generateCommentary).toHaveBeenCalledTimes(1);
+    expect(result.current.commentaryEntries).toHaveLength(1);
+  });
+
+  test("a persisted play entry seeds the processed set so the same atBatId is a no-op on mount", async () => {
+    const { engine, generateCommentary } = createEngine();
+    const { result } = renderCommentaryFeedHook({
+      createEngine: () => engine,
+      listCommentaryFeedEntriesForGame: async () => [
+        {
+          id: "commentary-abc",
+          gameId: "game-1",
+          leagueId: "league-1",
+          reporterId: "reporter-1",
+          commentaryText: "Already covered this swing.",
+          halfInningLabel: "T1",
+          timestamp: 1000,
+          createdAt: 1000,
+          changed_at: 1000,
+        },
+      ],
+      scoreNotability: () => ({
+        score: 0.4,
+        shouldComment: true,
+        reason: "HIGH_WPA",
+      }),
+    });
+
+    await waitFor(() => {
+      expect(result.current.commentaryEntries).toHaveLength(1);
+    });
+
+    await act(async () => {
+      await result.current.firePlayCommentary(
+        "game-1",
+        "abc",
+        createAtBatEvent({
+          eventId: "abc",
+          gameId: "game-1",
+        }),
+      );
+    });
+
+    expect(generateCommentary).not.toHaveBeenCalled();
+    expect(result.current.commentaryEntries).toHaveLength(1);
+  });
+
+  test("resetForNewGame clears processed play ids so the same atBatId string can fire in a new game", async () => {
+    const { engine, generateCommentary } = createEngine();
+    const hook = renderCommentaryFeedHook({
+      createEngine: () => engine,
+      scoreNotability: () => ({
+        score: 0.4,
+        shouldComment: true,
+        reason: "HIGH_WPA",
+      }),
+    });
+
+    await act(async () => {
+      await hook.result.current.firePlayCommentary(
+        "game-1",
+        "shared-at-bat",
+        createAtBatEvent({
+          eventId: "shared-at-bat",
+          gameId: "game-1",
+        }),
+      );
+    });
+
+    hook.rerender({ gameId: "game-2" });
+
+    await act(async () => {
+      await hook.result.current.firePlayCommentary(
+        "game-2",
+        "shared-at-bat",
+        createAtBatEvent({
+          eventId: "shared-at-bat",
+          gameId: "game-2",
+        }),
+      );
+    });
+
+    expect(generateCommentary).toHaveBeenCalledTimes(2);
   });
 
   test("play commentary with shouldComment=false does not append an entry", async () => {
