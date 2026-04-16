@@ -246,13 +246,14 @@ describe("reporterAlmanacCacheStorage", () => {
     await expect(getPlayerAlmanacCache("legacy-player", "elim-legacy")).resolves.toBeNull();
 
     const db = await getTrackerDb();
-    expect(db.version).toBe(9);
+    expect(db.version).toBe(10);
     expect(Array.from(db.objectStoreNames)).toEqual(
       expect.arrayContaining([
         "reporterPlayerAlmanacCaches",
         "reporterTeamAlmanacCaches",
         "reporterAlmanacEntries",
         "reporterLegacySummaryJobs",
+        "commentaryFeedEntries",
         "eliminationRunFameAggregates",
       ]),
     );

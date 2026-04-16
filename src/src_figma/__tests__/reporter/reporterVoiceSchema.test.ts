@@ -74,6 +74,83 @@ async function seedVersionEightTrackerDatabase(): Promise<void> {
   });
 }
 
+async function seedVersionNineTrackerDatabase(): Promise<void> {
+  resetTrackerDbForTests();
+  await deleteDatabase(DB_NAME).catch(() => undefined);
+
+  await new Promise<void>((resolve, reject) => {
+    const request = indexedDB.open(DB_NAME, 9);
+
+    request.onupgradeneeded = () => {
+      const db = request.result;
+      db.createObjectStore("completedGames", { keyPath: "gameId" });
+
+      const reporterStore = db.createObjectStore("reporters", { keyPath: "id" });
+      reporterStore.createIndex("teamId", "teamId", { unique: false });
+      reporterStore.createIndex("leagueId", "leagueId", { unique: false });
+      reporterStore.createIndex("changed_at", "changed_at", { unique: false });
+
+      const storyStore = db.createObjectStore("gameStories", { keyPath: "id" });
+      storyStore.createIndex("gameId", "gameId", { unique: false });
+      storyStore.createIndex("reporterId", "reporterId", { unique: false });
+      storyStore.createIndex("teamId", "teamId", { unique: false });
+      storyStore.createIndex("leagueId", "leagueId", { unique: false });
+      storyStore.createIndex("opponentTeamId", "opponentTeamId", { unique: false });
+      storyStore.createIndex("gameMode", "gameMode", { unique: false });
+      storyStore.createIndex("gameDate", "gameDate", { unique: false });
+      storyStore.createIndex("changed_at", "changed_at", { unique: false });
+
+      const contextStore = db.createObjectStore("narrativeContext", { keyPath: "id" });
+      contextStore.createIndex("teamId", "teamId", { unique: false });
+      contextStore.createIndex("leagueId", "leagueId", { unique: false });
+      contextStore.createIndex("gameMode", "gameMode", { unique: false });
+      contextStore.createIndex("teamId_gameMode", ["teamId", "gameMode"], { unique: false });
+      contextStore.createIndex("changed_at", "changed_at", { unique: false });
+
+      const rivalryStore = db.createObjectStore("rivalryScores", { keyPath: "id" });
+      rivalryStore.createIndex("teamId", "teamId", { unique: false });
+      rivalryStore.createIndex("leagueId", "leagueId", { unique: false });
+      rivalryStore.createIndex("rivalTeamId", "rivalTeamId", { unique: false });
+      rivalryStore.createIndex("teamId_rivalTeamId", ["teamId", "rivalTeamId"], { unique: false });
+      rivalryStore.createIndex("changed_at", "changed_at", { unique: false });
+    };
+
+    request.onsuccess = () => {
+      const db = request.result;
+      const tx = db.transaction(["completedGames", "gameStories"], "readwrite");
+
+      tx.objectStore("completedGames").put({
+        gameId: "legacy-game-v9",
+        competitionType: "exhibition",
+        date: 1713139200000,
+      });
+      tx.objectStore("gameStories").put({
+        id: "story-1",
+        gameId: "legacy-game-v9",
+        reporterId: "reporter-1",
+        teamId: "team-1",
+        leagueId: "league-1",
+        gameMode: "exhibition",
+        headline: "Legacy story stays put",
+        body: "Reporter voice data should survive the upgrade.",
+        playersMentioned: [],
+        gameDate: "2026-04-16",
+        createdAt: 1000,
+        changed_at: 1000,
+      });
+
+      tx.oncomplete = () => {
+        db.close();
+        resolve();
+      };
+      tx.onerror = () => reject(tx.error);
+      tx.onabort = () => reject(tx.error);
+    };
+
+    request.onerror = () => reject(request.error);
+  });
+}
+
 describe("reporter voice tracker schema", () => {
   beforeEach(async () => {
     resetTrackerDbForTests();
@@ -85,15 +162,16 @@ describe("reporter voice tracker schema", () => {
     await deleteDatabase(DB_NAME).catch(() => undefined);
   });
 
-  test("upgrades a v8 tracker database to v9 reporter voice stores without data loss", async () => {
+  test("upgrades a v8 tracker database to current reporter voice stores without data loss", async () => {
     await seedVersionEightTrackerDatabase();
 
     const db = await getTrackerDb();
-    expect(db.version).toBe(9);
+    expect(db.version).toBe(10);
     expect(Array.from(db.objectStoreNames)).toEqual(
       expect.arrayContaining([
         "reporters",
         "gameStories",
+        "commentaryFeedEntries",
         "narrativeContext",
         "rivalryScores",
         "completedGames",
@@ -154,6 +232,70 @@ describe("reporter voice tracker schema", () => {
         expect(preferencesRequest.result).toMatchObject({
           key: "narrativeIntensity",
           value: "medium",
+        });
+        resolve();
+      };
+      tx.onerror = () => reject(tx.error);
+      tx.onabort = () => reject(tx.error);
+    });
+  });
+
+  test("upgrades a v9 tracker database to v10 commentary feed store without repurposing gameStories", async () => {
+    await seedVersionNineTrackerDatabase();
+
+    const db = await getTrackerDb();
+    expect(db.version).toBe(10);
+    expect(Array.from(db.objectStoreNames)).toEqual(
+      expect.arrayContaining([
+        "commentaryFeedEntries",
+        "gameStories",
+        "completedGames",
+      ]),
+    );
+
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction(
+        ["commentaryFeedEntries", "gameStories", "completedGames"],
+        "readonly",
+      );
+
+      expect(tx.objectStore("commentaryFeedEntries").keyPath).toBe("id");
+      expect(Array.from(tx.objectStore("commentaryFeedEntries").indexNames)).toEqual(
+        expect.arrayContaining([
+          "gameId",
+          "reporterId",
+          "leagueId",
+          "timestamp",
+          "changed_at",
+          "gameId_timestamp",
+        ]),
+      );
+
+      expect(tx.objectStore("gameStories").keyPath).toBe("id");
+      expect(Array.from(tx.objectStore("gameStories").indexNames)).toEqual(
+        expect.arrayContaining([
+          "gameId",
+          "reporterId",
+          "teamId",
+          "leagueId",
+          "opponentTeamId",
+          "gameMode",
+          "gameDate",
+          "changed_at",
+        ]),
+      );
+
+      const gameRequest = tx.objectStore("completedGames").get("legacy-game-v9");
+      const storyRequest = tx.objectStore("gameStories").get("story-1");
+
+      tx.oncomplete = () => {
+        expect(gameRequest.result).toMatchObject({
+          gameId: "legacy-game-v9",
+          competitionType: "exhibition",
+        });
+        expect(storyRequest.result).toMatchObject({
+          id: "story-1",
+          headline: "Legacy story stays put",
         });
         resolve();
       };

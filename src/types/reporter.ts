@@ -128,3 +128,16 @@ export interface RivalryScore {
   changed_at: number;
   deleted?: boolean;
 }
+
+export interface CommentaryFeedEntryRecord {
+  id: string;
+  gameId: string;
+  leagueId?: string;
+  reporterId: string;
+  commentaryText: string;
+  halfInningLabel: string;
+  timestamp: number;
+  createdAt: number;
+  changed_at: number;
+  deleted?: boolean;
+}

@@ -5,8 +5,12 @@ import {
   scoreNotability,
   type NotabilityPlayContext,
 } from "../../../engines/notabilityScorer";
-import type { BeatReporter } from "../../../types/reporter";
+import type { BeatReporter, CommentaryFeedEntryRecord } from "../../../types/reporter";
 import type { NarrativeIntensity } from "../../../types/reporterPreferences";
+import {
+  listCommentaryFeedEntriesForGame,
+  persistCommentaryFeedEntry,
+} from "../../../utils/commentaryFeedStorage";
 import { getNarrativeIntensity } from "../../../utils/userPreferencesStorage";
 import { getReporterForTeam } from "../../../utils/reporterStorage";
 import type { AtBatEvent } from "../../../utils/eventLog";
@@ -44,6 +48,10 @@ export interface UseCommentaryFeedDependencies {
   now?: () => number;
   createEngine?: (config: CommentaryEngineConfig) => CommentaryEngine;
   scoreNotability?: typeof scoreNotability;
+  persistCommentaryFeedEntry?: (record: CommentaryFeedEntryRecord) => Promise<void>;
+  listCommentaryFeedEntriesForGame?: (
+    gameId: string,
+  ) => Promise<CommentaryFeedEntryRecord[]>;
 }
 
 export interface UseCommentaryFeedOptions {
@@ -110,6 +118,18 @@ function toNotabilityPlayContext(event: AtBatEvent): NotabilityPlayContext {
   };
 }
 
+function toCommentaryFeedEntry(
+  record: CommentaryFeedEntryRecord,
+): CommentaryFeedEntry {
+  return {
+    id: record.id,
+    commentaryText: record.commentaryText,
+    halfInningLabel: record.halfInningLabel,
+    timestamp: record.timestamp,
+    reporterId: record.reporterId,
+  };
+}
+
 export function useCommentaryFeed({
   gameId,
   homeTeamId,
@@ -145,6 +165,10 @@ export function useCommentaryFeed({
     dependencies.createEngine ??
     ((config: CommentaryEngineConfig) => new GrokCommentaryEngine(config));
   const scoreNotabilityImpl = dependencies.scoreNotability ?? scoreNotability;
+  const persistCommentaryFeedEntryImpl =
+    dependencies.persistCommentaryFeedEntry ?? persistCommentaryFeedEntry;
+  const listCommentaryFeedEntriesForGameImpl =
+    dependencies.listCommentaryFeedEntriesForGame ?? listCommentaryFeedEntriesForGame;
 
   const resetForNewGame = React.useCallback((nextGameId: string) => {
     setCommentaryEntries([]);
@@ -168,6 +192,36 @@ export function useCommentaryFeed({
   React.useEffect(() => {
     resetForNewGame(gameId);
   }, [gameId, resetForNewGame]);
+
+  React.useEffect(() => {
+    let cancelled = false;
+
+    void listCommentaryFeedEntriesForGameImpl(gameId)
+      .then((records) => {
+        if (cancelled) {
+          return;
+        }
+
+        setCommentaryEntries(records.map(toCommentaryFeedEntry));
+        preambleFiredForGameIdRef.current = records.some(
+          (record) => record.halfInningLabel === "PRE",
+        )
+          ? gameId
+          : null;
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          console.warn(
+            `[reporter:commentary] Failed to load commentary feed entries for ${gameId}.`,
+            error,
+          );
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [gameId, listCommentaryFeedEntriesForGameImpl]);
 
   const resolveIntensity = React.useCallback(async () => {
     if (intensityRef.current) {
@@ -249,6 +303,18 @@ export function useCommentaryFeed({
     resolveReporter,
   ]);
 
+  const persistEntryRecord = React.useCallback(
+    (record: CommentaryFeedEntryRecord) => {
+      void persistCommentaryFeedEntryImpl(record).catch((error) => {
+        console.warn(
+          `[reporter:commentary] Failed to persist commentary feed entry ${record.id}.`,
+          error,
+        );
+      });
+    },
+    [persistCommentaryFeedEntryImpl],
+  );
+
   const firePreamble = React.useCallback(
     async (
       targetGameId: string,
@@ -313,22 +379,38 @@ export function useCommentaryFeed({
       }
 
       preambleFiredForGameIdRef.current = targetGameId;
+      const entry: CommentaryFeedEntry = {
+        id: `commentary-pre-${targetGameId}`,
+        commentaryText: preambleText,
+        halfInningLabel: "PRE",
+        timestamp: 0,
+        reporterId: reporter.id,
+      };
+      const createdAt = nowImpl();
       setCommentaryEntries((current) => [
-        {
-          id: `commentary-pre-${targetGameId}`,
-          commentaryText: preambleText,
-          halfInningLabel: "PRE",
-          timestamp: 0,
-          reporterId: reporter.id,
-        },
-        ...current.filter((entry) => entry.id !== `commentary-pre-${targetGameId}`),
+        entry,
+        ...current.filter((currentEntry) => currentEntry.id !== entry.id),
       ]);
+      persistEntryRecord({
+        id: entry.id,
+        gameId: targetGameId,
+        leagueId,
+        reporterId: reporter.id,
+        commentaryText: entry.commentaryText,
+        halfInningLabel: entry.halfInningLabel,
+        timestamp: entry.timestamp,
+        createdAt,
+        changed_at: createdAt,
+      });
     },
     [
       buildLiveReporterContextImpl,
       buildReporterContextImpl,
       ensureEngine,
       getLivePreambleSeed,
+      leagueId,
+      nowImpl,
+      persistEntryRecord,
       resolveCallPrerequisites,
     ],
   );
@@ -403,21 +485,36 @@ export function useCommentaryFeed({
         return;
       }
 
+      const timestamp = nowImpl();
+      const entry: CommentaryFeedEntry = {
+        id: `commentary-${atBatId}`,
+        commentaryText,
+        halfInningLabel: toShortHalfInningLabel(play),
+        timestamp,
+        reporterId: reporter.id,
+      };
       setCommentaryEntries((current) => [
         ...current,
-        {
-          id: `commentary-${atBatId}`,
-          commentaryText,
-          halfInningLabel: toShortHalfInningLabel(play),
-          timestamp: nowImpl(),
-          reporterId: reporter.id,
-        },
+        entry,
       ]);
+      persistEntryRecord({
+        id: entry.id,
+        gameId: targetGameId,
+        leagueId,
+        reporterId: reporter.id,
+        commentaryText: entry.commentaryText,
+        halfInningLabel: entry.halfInningLabel,
+        timestamp: entry.timestamp,
+        createdAt: timestamp,
+        changed_at: timestamp,
+      });
     },
     [
       buildReporterContextImpl,
       ensureEngine,
+      leagueId,
       nowImpl,
+      persistEntryRecord,
       resolveCallPrerequisites,
       scoreNotabilityImpl,
     ],

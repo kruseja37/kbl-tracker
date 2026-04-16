@@ -14,7 +14,7 @@
  */
 
 const DB_NAME = 'kbl-tracker';
-const DB_VERSION = 9; // Must be the highest version any consumer ever used
+const DB_VERSION = 10; // Must be the highest version any consumer ever used
 
 let dbInstance: IDBDatabase | null = null;
 
@@ -253,9 +253,26 @@ export async function getTrackerDb(): Promise<IDBDatabase> {
         rivalryStore.createIndex('teamId_rivalTeamId', ['teamId', 'rivalTeamId'], { unique: false });
         rivalryStore.createIndex('changed_at', 'changed_at', { unique: false });
       }
+
+      // ── v10: In-game commentary feed persistence ─────────────
+      if (!db.objectStoreNames.contains('commentaryFeedEntries')) {
+        const commentaryStore = db.createObjectStore('commentaryFeedEntries', {
+          keyPath: 'id',
+        });
+        commentaryStore.createIndex('gameId', 'gameId', { unique: false });
+        commentaryStore.createIndex('reporterId', 'reporterId', { unique: false });
+        commentaryStore.createIndex('leagueId', 'leagueId', { unique: false });
+        commentaryStore.createIndex('timestamp', 'timestamp', { unique: false });
+        commentaryStore.createIndex('changed_at', 'changed_at', { unique: false });
+        commentaryStore.createIndex('gameId_timestamp', ['gameId', 'timestamp'], {
+          unique: false,
+        });
+      }
     };
   });
 }
+
+export const openTrackerDb = getTrackerDb;
 
 export function resetTrackerDbForTests(): void {
   if (dbInstance) {

@@ -159,6 +159,11 @@ const CommentaryFeedPreview = lazy(() =>
     default: module.CommentaryFeedPreview,
   })),
 );
+const CommentaryFeedPersistencePreview = lazy(() =>
+  import("./src_figma/app/pages/CommentaryFeedPersistencePreview").then((module) => ({
+    default: module.CommentaryFeedPersistencePreview,
+  })),
+);
 
 /**
  * KBL Tracker - Main App
@@ -269,6 +274,10 @@ function App() {
         <Route
           path="/__preview/commentary-feed"
           element={<CommentaryFeedPreview />}
+        />
+        <Route
+          path="/__preview/commentary-feed-persistence"
+          element={<CommentaryFeedPersistencePreview />}
         />
 
         {/* 404 */}

@@ -1,7 +1,7 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { describe, expect, test, vi } from "vitest";
 
-import type { BeatReporter } from "../../../types/reporter";
+import type { BeatReporter, CommentaryFeedEntryRecord } from "../../../types/reporter";
 import type { AtBatEvent } from "../../../utils/eventLog";
 import { useCommentaryFeed } from "../../app/hooks/useCommentaryFeed";
 import type {
@@ -215,7 +215,14 @@ function renderCommentaryFeedHook(options: {
   isWithinDailyCallLimit?: (now?: number) => Promise<boolean>;
   createEngine?: (config: CommentaryEngineConfig) => CommentaryEngine;
   scoreNotability?: typeof import("../../../engines/notabilityScorer").scoreNotability;
+  persistCommentaryFeedEntry?: (record: CommentaryFeedEntryRecord) => Promise<void>;
+  listCommentaryFeedEntriesForGame?: (gameId: string) => Promise<CommentaryFeedEntryRecord[]>;
 }) {
+  const persistCommentaryFeedEntryImpl =
+    options.persistCommentaryFeedEntry ?? (async () => undefined);
+  const listCommentaryFeedEntriesForGameImpl =
+    options.listCommentaryFeedEntriesForGame ?? (async () => []);
+
   return renderHook(() =>
     useCommentaryFeed({
       gameId: "game-1",
@@ -237,6 +244,8 @@ function renderCommentaryFeedHook(options: {
         now: () => 2000,
         createEngine: options.createEngine,
         scoreNotability: options.scoreNotability,
+        persistCommentaryFeedEntry: persistCommentaryFeedEntryImpl,
+        listCommentaryFeedEntriesForGame: listCommentaryFeedEntriesForGameImpl,
       },
     }),
   );
@@ -261,6 +270,37 @@ describe("useCommentaryFeed", () => {
       timestamp: 0,
     });
     expect(generatePreamble).toHaveBeenCalledTimes(1);
+  });
+
+  test("persistCommentaryFeedEntry called after preamble lands", async () => {
+    const { engine } = createEngine();
+    const persistSpy = vi.fn(async () => undefined);
+    const { result } = renderCommentaryFeedHook({
+      createEngine: () => engine,
+      persistCommentaryFeedEntry: persistSpy,
+      listCommentaryFeedEntriesForGame: async () => [],
+    });
+
+    await act(async () => {
+      await result.current.firePreamble("game-1", "game-1_1");
+    });
+
+    await waitFor(() => {
+      expect(persistSpy).toHaveBeenCalledTimes(1);
+    });
+    expect(persistSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: "commentary-pre-game-1",
+        gameId: "game-1",
+        leagueId: "league-1",
+        reporterId: "reporter-1",
+        commentaryText: "Good evening everybody, this is Dutch Calloway at The Tank.",
+        halfInningLabel: "PRE",
+        timestamp: 0,
+        createdAt: 2000,
+        changed_at: 2000,
+      }),
+    );
   });
 
   test("preamble re-fire is blocked by preambleFiredForGameId", async () => {
@@ -306,6 +346,46 @@ describe("useCommentaryFeed", () => {
       reporterId: "reporter-1",
     });
     expect(generateCommentary).toHaveBeenCalledTimes(1);
+  });
+
+  test("persistCommentaryFeedEntry called after play commentary lands", async () => {
+    const { engine } = createEngine();
+    const persistSpy = vi.fn(async () => undefined);
+    const { result } = renderCommentaryFeedHook({
+      createEngine: () => engine,
+      persistCommentaryFeedEntry: persistSpy,
+      listCommentaryFeedEntriesForGame: async () => [],
+      scoreNotability: () => ({
+        score: 0.4,
+        shouldComment: true,
+        reason: "HIGH_WPA",
+      }),
+    });
+
+    await act(async () => {
+      await result.current.firePlayCommentary(
+        "game-1",
+        "game-1_1",
+        createAtBatEvent(),
+      );
+    });
+
+    await waitFor(() => {
+      expect(persistSpy).toHaveBeenCalledTimes(1);
+    });
+    expect(persistSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: "commentary-game-1_1",
+        gameId: "game-1",
+        leagueId: "league-1",
+        reporterId: "reporter-1",
+        commentaryText: "Sparks launched one into the night.",
+        halfInningLabel: "T1",
+        timestamp: 2000,
+        createdAt: 2000,
+        changed_at: 2000,
+      }),
+    );
   });
 
   test("play commentary with shouldComment=false does not append an entry", async () => {
@@ -417,5 +497,94 @@ describe("useCommentaryFeed", () => {
     ).resolves.toBeUndefined();
 
     expect(result.current.commentaryEntries).toHaveLength(0);
+    });
   });
-});
+
+  test("on mount with existing records, commentaryEntries seeds from IDB", async () => {
+    const persistedRecords: CommentaryFeedEntryRecord[] = [
+      {
+        id: "commentary-pre-game-1",
+        gameId: "game-1",
+        leagueId: "league-1",
+        reporterId: "reporter-1",
+        commentaryText: "Pregame throat-clearing.",
+        halfInningLabel: "PRE",
+        timestamp: 0,
+        createdAt: 1000,
+        changed_at: 1000,
+      },
+      {
+        id: "commentary-game-1_2",
+        gameId: "game-1",
+        leagueId: "league-1",
+        reporterId: "reporter-1",
+        commentaryText: "A ringing double wakes up the crowd.",
+        halfInningLabel: "B2",
+        timestamp: 3000,
+        createdAt: 3000,
+        changed_at: 3000,
+      },
+    ];
+
+    const { result } = renderCommentaryFeedHook({
+      listCommentaryFeedEntriesForGame: async () => persistedRecords,
+    });
+
+    await waitFor(() => {
+      expect(result.current.commentaryEntries).toEqual([
+        {
+          id: "commentary-pre-game-1",
+          commentaryText: "Pregame throat-clearing.",
+          halfInningLabel: "PRE",
+          timestamp: 0,
+          reporterId: "reporter-1",
+        },
+        {
+          id: "commentary-game-1_2",
+          commentaryText: "A ringing double wakes up the crowd.",
+          halfInningLabel: "B2",
+          timestamp: 3000,
+          reporterId: "reporter-1",
+        },
+      ]);
+    });
+  });
+
+  test("on mount when a PRE record already exists, preambleFiredForGameIdRef prevents re-fire", async () => {
+    const { engine, generatePreamble } = createEngine();
+    const { result } = renderCommentaryFeedHook({
+      createEngine: () => engine,
+      listCommentaryFeedEntriesForGame: async () => [
+        {
+          id: "commentary-pre-game-1",
+          gameId: "game-1",
+          leagueId: "league-1",
+          reporterId: "reporter-1",
+          commentaryText: "Already had a preamble.",
+          halfInningLabel: "PRE",
+          timestamp: 0,
+          createdAt: 1000,
+          changed_at: 1000,
+        },
+      ],
+    });
+
+    await waitFor(() => {
+      expect(result.current.commentaryEntries).toHaveLength(1);
+    });
+
+    await act(async () => {
+      await result.current.firePreamble("game-1", "game-1_1");
+    });
+
+    expect(generatePreamble).not.toHaveBeenCalled();
+    expect(result.current.commentaryEntries).toEqual([
+      {
+        id: "commentary-pre-game-1",
+        commentaryText: "Already had a preamble.",
+        halfInningLabel: "PRE",
+        timestamp: 0,
+        reporterId: "reporter-1",
+      },
+    ]);
+  });

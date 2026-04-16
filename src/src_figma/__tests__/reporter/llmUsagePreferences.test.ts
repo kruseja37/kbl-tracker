@@ -287,11 +287,12 @@ describe("F1 LLM usage logging and preferences", () => {
     await expect(getNarrativeIntensity()).resolves.toBe("medium");
 
     const db = await getTrackerDb();
-    expect(db.version).toBe(9);
+    expect(db.version).toBe(10);
     expect(Array.from(db.objectStoreNames)).toEqual(
       expect.arrayContaining([
         "llmUsageLog",
         "userPreferences",
+        "commentaryFeedEntries",
         "completedGames",
         "reporterAlmanacEntries",
       ]),
