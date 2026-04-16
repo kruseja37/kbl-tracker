@@ -106,6 +106,7 @@ export interface GameState {
   stadiumName?: string | null;
   seasonNumber: number;
   gamePhase: GamePhase;
+  beatReporterEnabled: boolean;
 }
 
 export interface EndGameOptions {
@@ -214,6 +215,22 @@ export interface PitcherGameStats {
   save: boolean;
   hold: boolean;
   blownSave: boolean;
+}
+
+function consumePendingBeatReporterEnabled(): boolean | undefined {
+  if (typeof sessionStorage === "undefined") return undefined;
+
+  const key = "kbl-pending-beat-reporter-enabled";
+  const raw = sessionStorage.getItem(key);
+  sessionStorage.removeItem(key);
+
+  if (raw === null) return undefined;
+
+  try {
+    return JSON.parse(raw) === true;
+  } catch {
+    return raw === "true";
+  }
 }
 
 export interface RunnerAdvancement {
@@ -647,6 +664,7 @@ export interface GameInitConfig {
   // Layer 1B: Context snapshot identity fields
   franchiseId?: string;
   leagueId?: string;
+  beatReporterEnabled?: boolean;
   // Layer 1B: Team records for context snapshot
   awayRecord?: { w: number; l: number };
   homeRecord?: { w: number; l: number };
@@ -2200,6 +2218,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     stadiumName: null,
     seasonNumber: 1,
     gamePhase: "PRE_GAME",
+    beatReporterEnabled: true,
   });
   const gameStateRef = useRef(gameState);
 
@@ -3547,6 +3566,9 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         config.homeStartingPitcherName,
       );
 
+      const beatReporterEnabled =
+        config.beatReporterEnabled ?? consumePendingBeatReporterEnabled() ?? true;
+
       // Set initial game state
       const leadoffBatter = config.awayLineup[0];
       setGameState({
@@ -3575,6 +3597,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         stadiumName: config.stadiumName || null,
         seasonNumber: config.seasonNumber,
         gamePhase: "PRE_GAME",
+        beatReporterEnabled,
       });
 
       setAwayBatterIndex(0);
@@ -4053,6 +4076,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
             gamePhase:
               ((savedSnapshot as unknown as Record<string, unknown>)
                 .gamePhase as GamePhase) ?? "LIVE",
+            beatReporterEnabled: savedSnapshot.beatReporterEnabled ?? true,
           });
 
           latestPersistedRef.current = savedSnapshot;
@@ -4629,6 +4653,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
               1,
             ),
             gamePhase: "LIVE",
+            beatReporterEnabled: true,
           });
           setAtBatSequence(lastEvent?.eventIndex ?? events.length);
           seasonIdRef.current = inProgressGame.seasonId || "";
@@ -4908,6 +4933,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       competitionId: competitionIdRef.current,
       // R3-R7: Persist leagueId for almanac queries after refresh
       leagueId: leagueIdRef.current,
+      beatReporterEnabled: gameState.beatReporterEnabled,
       // R3: Persist game config that would be lost on refresh
       totalInnings: totalInningsRef.current,
       awayUsesDh: awayUsesDhRef.current,
@@ -9608,6 +9634,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
           competitionType: opts?.competitionType ?? competitionTypeRef.current,
           competitionId: opts?.competitionId ?? competitionIdRef.current,
           leagueId: resolvedArchiveLeagueId,
+          beatReporterEnabled: gameState.beatReporterEnabled,
           playerStats: playerStatsRecord,
           pitcherGameStats: pitcherGameStatsArray,
           fameEvents: buildPersistedFameEvents(
@@ -10431,6 +10458,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         competitionType: options?.competitionType ?? competitionTypeRef.current,
         competitionId: options?.competitionId ?? competitionIdRef.current,
         leagueId: resolvedArchiveLeagueId,
+        beatReporterEnabled: gameState.beatReporterEnabled,
         playerStats: playerStatsRecord,
         pitcherGameStats: pitcherGameStatsArray,
         fameEvents: buildPersistedFameEvents(

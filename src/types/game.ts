@@ -17,6 +17,11 @@ export type AtBatResult =
   // 'ITPHR' = Inside-the-Park Home Run (UX-049)
 
 export type GameEvent = 'SB' | 'CS' | 'WP' | 'PB' | 'PK' | 'PITCH_CHANGE' | 'PINCH_HIT' | 'PINCH_RUN' | 'DEF_SUB' | 'POS_SWITCH';
+
+export interface BeatReporterGameSettings {
+  beatReporterEnabled: boolean;
+}
+
 // Special play types for outs and hits
 // For outs: Routine, Diving, Wall Catch, Running, Leaping
 // For hits: Clean (no fielding attempt), Diving, Leaping, Robbery Attempt

@@ -5,6 +5,7 @@ import type { Player as RosterPlayer, Pitcher as RosterPitcher } from "@/app/com
 import type { MojoLevel } from "../../../engines/mojoEngine";
 import type { FitnessState } from "../../../engines/fitnessEngine";
 import { LineupPreview } from "@/app/components/LineupPreview";
+import { ReporterAssignmentPanel } from "@/app/components/ReporterAssignmentPanel";
 import { useLeagueBuilderData, type Player as LBPlayer } from "../../hooks/useLeagueBuilderData";
 import { loadTeamLineup } from "../../utils/lineupLoader";
 import { getEffectivePlayer } from "../../../utils/playerOverrides";
@@ -45,6 +46,7 @@ export function ExhibitionGame() {
   const [extraInningRunner, setExtraInningRunner] = useState(true);
   const [extraInningRunnerDelay, setExtraInningRunnerDelay] = useState<1 | 2>(2);
   const [selectedStadium, setSelectedStadium] = useState<string | null>(null);
+  const [beatReporterEnabled, setBeatReporterEnabled] = useState(true);
 
   const parkNames = useMemo(() => getParkNames(), []);
 
@@ -186,6 +188,13 @@ export function ExhibitionGame() {
   // Get selected team objects
   const awayTeam = teams.find(t => t.id === selectedAwayTeamId);
   const homeTeam = teams.find(t => t.id === selectedHomeTeamId);
+  const reporterTeams = useMemo(() => {
+    if (!awayTeam || !homeTeam) return [];
+    return [
+      { label: "Away team", team: awayTeam },
+      { label: "Home team", team: homeTeam },
+    ];
+  }, [awayTeam, homeTeam]);
 
   // Default stadium to home team's field when home team changes
   useEffect(() => {
@@ -379,6 +388,7 @@ export function ExhibitionGame() {
   };
 
   const handleStartGame = () => {
+    sessionStorage.setItem("kbl-pending-beat-reporter-enabled", JSON.stringify(beatReporterEnabled));
     // Pass the configured rosters and team info to the game tracker
     navigate("/game-tracker/exhibition-1", {
       state: {
@@ -663,6 +673,13 @@ export function ExhibitionGame() {
                 />
               </div>
             )}
+
+            <ReporterAssignmentPanel
+              leagueId={selectedLeagueId || leagues[0]?.id || 'sml'}
+              teams={reporterTeams}
+              enabled={beatReporterEnabled}
+              onEnabledChange={setBeatReporterEnabled}
+            />
 
             <div className="border-2 border-[#556B55] bg-[#3d4a42] p-4 space-y-4 shadow-[2px_2px_0px_0px_rgba(0,0,0,0.4)]">
               <div>

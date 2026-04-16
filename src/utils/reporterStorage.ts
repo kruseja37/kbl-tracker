@@ -9,6 +9,7 @@ const STORE = "reporters";
 type ReporterCreateInput = Omit<BeatReporter, "id" | "changed_at">;
 
 export type ReporterMoodPatch = Partial<MoodState>;
+export type ReporterPatch = Partial<Omit<BeatReporter, "id" | "changed_at">>;
 
 function requestToPromise<T>(request: IDBRequest<T>): Promise<T> {
   return new Promise((resolve, reject) => {
@@ -82,6 +83,13 @@ export async function updateReporterMood(
   id: string,
   moodPatch: ReporterMoodPatch,
 ): Promise<BeatReporter> {
+  return updateReporter(id, moodPatch);
+}
+
+export async function updateReporter(
+  id: string,
+  patch: ReporterPatch,
+): Promise<BeatReporter> {
   const existing = await getReporter(id);
 
   if (!existing) {
@@ -91,7 +99,7 @@ export async function updateReporterMood(
   const now = Date.now();
   const updated = {
     ...existing,
-    ...moodPatch,
+    ...patch,
     updatedAt: now,
     changed_at: now,
   } as BeatReporter;

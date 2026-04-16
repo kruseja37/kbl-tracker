@@ -28,6 +28,7 @@ import {
 import { computeEliminationAwards, type EliminationAward } from '../../../utils/eliminationAwards';
 import { getHomeFieldPattern } from '../../../engines/playoffEngine';
 import { EliminationTeamHub } from '../components/EliminationTeamHub';
+import { ReporterAssignmentPanel, type ReporterAssignmentPanelTeam } from '../components/ReporterAssignmentPanel';
 
 type EliminationTab = 'bracket' | 'teamhub' | 'leaders' | 'awards' | 'history';
 
@@ -111,6 +112,8 @@ export function EliminationHome() {
   const [seriesList, setSeriesList] = useState<PlayoffSeries[]>([]);
   const [historyEntries, setHistoryEntries] = useState<HistoryEntry[]>([]);
   const [selectedSeriesId, setSelectedSeriesId] = useState<string | null>(null);
+  const [beatReporterEnabled, setBeatReporterEnabled] = useState(true);
+  const [pregameReporterTeams, setPregameReporterTeams] = useState<ReporterAssignmentPanelTeam[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -179,6 +182,7 @@ export function EliminationHome() {
 
         setMetadata(loadedMetadata);
         setPlayoffConfig(loadedPlayoff);
+        setBeatReporterEnabled(loadedPlayoff.beatReporterEnabled ?? true);
         setSeriesList(loadedSeries.sort((a, b) => a.round - b.round || a.higherSeed.seed - b.higherSeed.seed));
         setHistoryEntries(
           completedEntries.sort((a, b) => (b.playoff.completedAt ?? 0) - (a.playoff.completedAt ?? 0))
@@ -245,6 +249,54 @@ export function EliminationHome() {
     () => seriesList.find((series) => series.id === selectedSeriesId) ?? null,
     [seriesList, selectedSeriesId]
   );
+  const selectedSeriesGame = useMemo(
+    () => (eliminationId && selectedSeries ? buildSeriesCardState(eliminationId, selectedSeries) : null),
+    [eliminationId, selectedSeries],
+  );
+
+  useEffect(() => {
+    if (!eliminationId || !selectedSeriesGame) {
+      setPregameReporterTeams([]);
+      return;
+    }
+
+    let cancelled = false;
+    const currentEliminationId = eliminationId;
+    const currentSeriesGame = selectedSeriesGame;
+    async function loadReporterTeams() {
+      const [awayTeamData, homeTeamData] = await Promise.all([
+        getEliminationTeam(currentEliminationId, currentSeriesGame.awayTeam.teamId),
+        getEliminationTeam(currentEliminationId, currentSeriesGame.homeTeam.teamId),
+      ]);
+      if (cancelled) return;
+      setPregameReporterTeams([
+        {
+          label: 'Away team',
+          team: {
+            id: currentSeriesGame.awayTeam.teamId,
+            name: currentSeriesGame.awayTeam.teamName,
+            era: awayTeamData?.era,
+            colors: awayTeamData?.colors,
+          },
+        },
+        {
+          label: 'Home team',
+          team: {
+            id: currentSeriesGame.homeTeam.teamId,
+            name: currentSeriesGame.homeTeam.teamName,
+            era: homeTeamData?.era,
+            colors: homeTeamData?.colors,
+          },
+        },
+      ]);
+    }
+    loadReporterTeams().catch((err) => {
+      if (!cancelled) console.error('[EliminationHome] Failed to load reporter teams:', err);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [eliminationId, selectedSeriesGame]);
 
   const handlePlayGame = async (series: PlayoffSeries) => {
     if (!eliminationId || !playoffConfig || !metadata) return;
@@ -259,6 +311,7 @@ export function EliminationHome() {
         getEliminationTeam(eliminationId, homeTeam.teamId),
       ]);
 
+      sessionStorage.setItem("kbl-pending-beat-reporter-enabled", JSON.stringify(beatReporterEnabled));
       navigate(`/game-tracker/${gameId}`, {
         state: {
           gameMode: 'elimination',
@@ -381,6 +434,16 @@ export function EliminationHome() {
             selectedSeries={selectedSeries}
             onSelectSeries={setSelectedSeriesId}
             onPlayGame={handlePlayGame}
+            reporterPanel={
+              pregameReporterTeams.length === 2 ? (
+                <ReporterAssignmentPanel
+                  leagueId={metadata.leagueId}
+                  teams={pregameReporterTeams}
+                  enabled={beatReporterEnabled}
+                  onEnabledChange={setBeatReporterEnabled}
+                />
+              ) : null
+            }
           />
         )}
 
@@ -413,6 +476,7 @@ function BracketTab({
   selectedSeries,
   onSelectSeries,
   onPlayGame,
+  reporterPanel,
 }: {
   eliminationId: string;
   playoffConfig: PlayoffConfig;
@@ -420,6 +484,7 @@ function BracketTab({
   selectedSeries: PlayoffSeries | null;
   onSelectSeries: (seriesId: string) => void;
   onPlayGame: (series: PlayoffSeries) => void;
+  reporterPanel?: ReactNode;
 }) {
   return (
     <div className="space-y-4">
@@ -507,7 +572,10 @@ function BracketTab({
       )}
 
       {selectedSeries && (
-        <SelectedSeriesPanel eliminationId={eliminationId} playoffConfig={playoffConfig} series={selectedSeries} onPlayGame={onPlayGame} />
+        <>
+          <SelectedSeriesPanel eliminationId={eliminationId} playoffConfig={playoffConfig} series={selectedSeries} onPlayGame={onPlayGame} />
+          {reporterPanel}
+        </>
       )}
     </div>
   );

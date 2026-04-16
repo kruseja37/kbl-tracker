@@ -47,6 +47,7 @@ export interface PlayoffConfig {
   gamesPerRound: number[];         // Best-of series for each round [5, 7, 7]
   inningsPerGame: number;
   useDH: boolean;
+  beatReporterEnabled?: boolean;
 
   // Structure
   leagues: ('Eastern' | 'Western')[];

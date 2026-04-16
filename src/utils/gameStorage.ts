@@ -222,6 +222,7 @@ export interface PersistedGameState {
   competitionId?: string;
   // R3-R7: Persist leagueId so almanac queries work after refresh
   leagueId?: string;
+  beatReporterEnabled?: boolean;
   // R3: Exhibition game config (lost on refresh without these)
   totalInnings?: number;
   awayUsesDh?: boolean;
