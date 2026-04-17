@@ -6,6 +6,7 @@ import type {
   NotabilityResult,
 } from "../../../engines/notabilityScorer";
 import type { BeatReporter } from "../../../types/reporter";
+import type { AtBatEvent } from "../../../utils/eventLog";
 import type { CompetitionType } from "../../../utils/gameStorage";
 import {
   GrokCommentaryEngine,
@@ -217,6 +218,54 @@ function createPlay(overrides: Partial<NotabilityPlayContext> = {}): NotabilityP
   };
 }
 
+function createInningEvent(overrides: Partial<AtBatEvent> = {}): AtBatEvent {
+  return {
+    eventId: "inning-event-1",
+    gameId: "game-1",
+    eventIndex: 1,
+    timestamp: 1000,
+    batterId: "batter-1",
+    batterName: "Ivy Sparks",
+    batterTeamId: "team-away",
+    pitcherId: "pitcher-1",
+    pitcherName: "Noelle Vale",
+    pitcherTeamId: "team-home",
+    result: "1B",
+    rbiCount: 0,
+    runsScored: 0,
+    inning: 4,
+    halfInning: "TOP",
+    outs: 0,
+    runners: { first: null, second: null, third: null },
+    awayScore: 2,
+    homeScore: 3,
+    outsAfter: 0,
+    runnersAfter: {
+      first: {
+        runnerId: "batter-1",
+        runnerName: "Ivy Sparks",
+        responsiblePitcherId: "pitcher-1",
+      },
+      second: null,
+      third: null,
+    },
+    awayScoreAfter: 2,
+    homeScoreAfter: 3,
+    leverageIndex: 1.2,
+    winProbabilityBefore: 0.48,
+    winProbabilityAfter: 0.46,
+    wpa: -0.02,
+    ballInPlay: null,
+    fameEvents: [],
+    isLeadoff: false,
+    isClutch: false,
+    isWalkOff: false,
+    competitionType: "exhibition",
+    leagueId: "league-1",
+    ...overrides,
+  };
+}
+
 function createNotability(
   overrides: Partial<NotabilityResult> = {},
 ): NotabilityResult {
@@ -306,10 +355,15 @@ async function generatePreambleWithDefaults(options: {
     logUsage: options.logUsage,
   });
 
-  const result = await engine.generatePreamble(createContext(), {
-    ...INITIAL_MOOD_STATE,
-    moodScore: 4,
-    energyModifier: "electric",
+  const result = await engine.generatePreamble({
+    context: createContext(),
+    mood: {
+      ...INITIAL_MOOD_STATE,
+      moodScore: 4,
+      energyModifier: "electric",
+    },
+    reporter: createReporter(),
+    reporterTeam: "home",
   });
 
   return { engine, result };
@@ -325,23 +379,32 @@ function createBetweenInningInput(
       moodScore: 2,
       currentMood: "DRAMATIC",
     },
-    halfInningJustEnded: {
-      inning: 4,
-      halfInning: "TOP",
-    },
-    halfInningEvents: [
-      {
-        batterName: "Ivy Sparks",
-        pitcherName: "Noelle Vale",
-        result: "1B",
-        runsScored: 0,
-      },
-      {
+    reporter: createReporter(),
+    reporterTeam: "home",
+    inning: 4,
+    inningEvents: [
+      createInningEvent({
+        eventId: "inning-event-1",
+        eventIndex: 1,
+        enrichment: {
+          exitType: "line_drive",
+          pitchType: "4F",
+          pitchesInAtBat: 3,
+        },
+      }),
+      createInningEvent({
+        eventId: "inning-event-2",
+        eventIndex: 2,
         batterName: "Harry Backman",
-        pitcherName: "Noelle Vale",
-        result: "GIDP",
-        runsScored: 0,
-      },
+        batterId: "batter-2",
+        batterTeamId: "team-home",
+        halfInning: "BOTTOM",
+        result: "DP",
+        enrichment: {
+          fieldingPlayType: "diving",
+          fieldingSequence: [5, 4, 3],
+        },
+      }),
     ],
     previousNarrativeSoFar:
       "Through three innings, the Blowfish scratched out a slim lead behind clean pitching.",
@@ -552,8 +615,9 @@ describe("commentaryEngine", () => {
     const userMessage = options.body.messages[1];
 
     expect(systemMessage.content).toContain("Name: Dutch Calloway");
-    expect(systemMessage.content).toContain("Mood label: euphoric");
-    expect(systemMessage.content).toContain("No rolling narrative yet");
+    expect(systemMessage.content).toContain("REPORTER IDENTITY");
+    expect(systemMessage.content).toContain("Current mood: Balanced (resolved label: euphoric)");
+    expect(systemMessage.content).toContain("(no prior narrative — treat this like a fresh beat inside the game broadcast)");
     expect(systemMessage.content).toContain("Notability cue: This play triggered commentary because the scorer flagged HR.");
     expect(userMessage.content).toContain("Result: DOUBLE");
     expect(userMessage.content).toContain("Notability reason: HR");
@@ -591,9 +655,14 @@ describe("commentaryEngine", () => {
       logUsage: createLogUsageSpy(),
     });
 
-    await engine.generatePreamble(createContext(), {
-      ...INITIAL_MOOD_STATE,
-      moodScore: 4,
+    await engine.generatePreamble({
+      context: createContext(),
+      mood: {
+        ...INITIAL_MOOD_STATE,
+        moodScore: 4,
+      },
+      reporter: createReporter(),
+      reporterTeam: "home",
     });
     await engine.generateCommentary({
       play: createPlay(),
@@ -611,14 +680,14 @@ describe("commentaryEngine", () => {
     const preambleUserMessage = invokeImpl.mock.calls[0][1].body.messages[1];
 
     expect(preambleSystemMessage.content).toContain(
-      "This is the top-of-broadcast preamble. No pitch-by-pitch action has happened yet.",
+      "Write a 4-6 sentence whole-game scene-setting preamble in YOUR voice.",
     );
     expect(preambleSystemMessage.content).toContain(
-      "Have the reporter introduce themselves by name, set the scene, and keep the focus on anticipation rather than play-by-play.",
+      "End with a natural sign-off that signals readiness for first pitch.",
     );
     expect(commentarySystemMessage.content).toContain("Notability cue:");
     expect(preambleSystemMessage.content).not.toContain("Notability cue:");
-    expect(preambleUserMessage.content).toContain("Instruction: Write one paragraph of scene-setting pregame commentary.");
+    expect(preambleUserMessage.content).toContain("PREGAME SCENE");
   });
 
   test("preamble returns commentary result with skipped=false on success", async () => {
@@ -909,7 +978,7 @@ describe("commentaryEngine", () => {
       const commentarySystemMessage = invokeImpl.mock.calls[1][1].body.messages[0];
 
       expect(betweenSystemMessage.content).toContain(
-        'Respond with JSON only, no markdown fences, shape: { "popup": string, "narrative": string }',
+        'Return JSON only (no markdown fences): { "popup": "<2-3 sentences for the in-game popup>", "narrative": "<updated running narrative for the whole game; 2-3 sentences; REPLACES previous narrative>" }',
       );
       expect(commentarySystemMessage.content).toContain("Notability cue:");
       expect(betweenSystemMessage.content).not.toBe(commentarySystemMessage.content);

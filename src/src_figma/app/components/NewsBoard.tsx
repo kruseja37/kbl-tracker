@@ -1,5 +1,6 @@
 import React from 'react';
 
+import type { BeatReporter } from '../../../types/reporter';
 import {
   CommentaryFeed,
   type CommentaryFeedEntry,
@@ -12,6 +13,8 @@ interface NewsBoardProps {
   currentPitcherLine: string; // e.g., "6.1 IP, 3 H, 1 ER, 7 K"
   matchupSummary?: string; // e.g., "vs Bender: 3-for-12, 1 HR, 5 K"
   commentaryEntries?: CommentaryFeedEntry[];
+  reporters?: Record<string, BeatReporter>;
+  reporterTeamColors?: Record<string, { primary: string; secondary: string }>;
   soundsOn?: boolean;
   onPlayTypeSound?: () => void;
 }
@@ -24,6 +27,8 @@ export function NewsBoard({
   currentPitcherLine,
   matchupSummary,
   commentaryEntries = [],
+  reporters = {},
+  reporterTeamColors = {},
   soundsOn = false,
   onPlayTypeSound,
 }: NewsBoardProps) {
@@ -69,6 +74,8 @@ export function NewsBoard({
         >
           <CommentaryFeed
             entries={commentaryEntries}
+            reporters={reporters}
+            reporterTeamColors={reporterTeamColors}
             soundsOn={soundsOn}
             onPlayTypeSound={onPlayTypeSound}
           />

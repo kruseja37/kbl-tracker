@@ -125,10 +125,10 @@ import {
   formatMultiplier,
 } from "@/app/hooks/usePlayerState";
 import {
-  extractAtBatIdFromCommentaryEntryId,
   useCommentaryFeed,
 } from "@/app/hooks/useCommentaryFeed";
-import { listCommentaryFeedEntriesForGame } from "../../../utils/commentaryFeedStorage";
+import type { BeatReporter } from "../../../types/reporter";
+import { getReporterForTeam } from "../../../utils/reporterStorage";
 
 const ordinalSuffix = (num: number) => {
   if (num % 100 >= 11 && num % 100 <= 13) return "th";
@@ -221,15 +221,6 @@ const FIELDING_POSITIONS = [
 const RUNNER_ERROR_TYPES = ["fielding", "throwing", "mental"] as const;
 
 const isRunnerOutcomeOut = (toBase: RunnerSubEntry["toBase"]) => toBase === "out";
-
-const toCommentaryEventIds = (entryIds: string[]) =>
-  entryIds.reduce<Set<string>>((eventIds, entryId) => {
-    const atBatId = extractAtBatIdFromCommentaryEntryId(entryId);
-    if (atBatId) {
-      eventIds.add(atBatId);
-    }
-    return eventIds;
-  }, new Set<string>());
 
 const crossesRunnerOutcomeBoundary = (
   previousToBase: RunnerSubEntry["toBase"],
@@ -1172,19 +1163,7 @@ export function GameTracker() {
 
   // §4.2 Structured Play Log — parallel to activityLog (which other systems still use)
   const [playLogEntries, setPlayLogEntries] = useState<PlayLogEntry[]>([]);
-  const firePlayCommentaryRef = useRef<
-    (
-      gameId: string,
-      atBatId: string,
-      play: AtBatEvent,
-      intensity?: undefined,
-      mode?: CompetitionType,
-    ) => Promise<void>
-  >(async () => {});
-  const firedCommentaryEventIdsRef = useRef<Set<string>>(new Set());
-  const competitionTypeRef = useRef<CompetitionType>(competitionType);
   const preambleFiredGameIdRef = useRef<string | null>(null);
-  competitionTypeRef.current = competitionType;
   const shortInningLabel = useCallback(() => {
     return `${gameState.isTop ? "T" : "B"}${Math.max(1, gameState.inning)}`;
   }, [gameState.isTop, gameState.inning]);
@@ -1226,16 +1205,6 @@ export function GameTracker() {
         ...prev.filter((entry) => entry.eventId !== eventId),
         nextEntry,
       ]);
-      if (!firedCommentaryEventIdsRef.current.has(eventId)) {
-        firedCommentaryEventIdsRef.current.add(eventId);
-        void firePlayCommentaryRef.current(
-          committedEvent.gameId,
-          committedEvent.eventId,
-          committedEvent,
-          undefined,
-          competitionTypeRef.current,
-        );
-      }
       await processCommittedAtBatAutoDetectionsRef.current(committedEvent);
     },
     [buildEnrichmentCacheSeed],
@@ -2735,21 +2704,13 @@ export function GameTracker() {
         "[BUG-04] Completed game header detected, keeping play log empty",
       );
       setPlayLogEntries([]);
-      firedCommentaryEventIdsRef.current.clear();
       return;
     }
 
     const eventStartTimestamp = header?.date ?? 0;
-    const [atBatEvents, betweenPlayEvents, commentaryRecords] = await Promise.all([
+    const [atBatEvents, betweenPlayEvents] = await Promise.all([
       getGameEvents(gameState.gameId),
       getBetweenPlayEvents(gameState.gameId),
-      listCommentaryFeedEntriesForGame(gameState.gameId).catch((error) => {
-        console.warn(
-          `[reporter:commentary] Failed to hydrate commentary dedup for ${gameState.gameId}.`,
-          error,
-        );
-        return [];
-      }),
     ]);
     setPlayLogEntries(
       buildPlayLogEntries(
@@ -2760,11 +2721,6 @@ export function GameTracker() {
         resolveRosterNameByGameId,
       ),
     );
-    for (const eventId of toCommentaryEventIds(
-      commentaryRecords.map((record) => record.id),
-    )) {
-      firedCommentaryEventIdsRef.current.add(eventId);
-    }
   }, [gameState.gameId, resolveRosterNameByGameId]);
 
   const queuePlayLogRefresh = useCallback(
@@ -3695,7 +3651,6 @@ export function GameTracker() {
       try {
         // BUG-04: Clear stale play log before loading/creating a game.
         setPlayLogEntries([]);
-        firedCommentaryEventIdsRef.current.clear();
 
         // Try to load existing game first (handles page refresh)
         // R2-7: When navigationState is present, user clicked START GAME from setup —
@@ -4489,15 +4444,79 @@ export function GameTracker() {
   const {
     commentaryEntries,
     firePreamble,
-    firePlayCommentary,
-    disabled: commentaryDisabled,
+    fireBetweenInningSummary,
+    homeDisabled: homeCommentaryDisabled,
   } = useCommentaryFeed({
     gameId: gameState.gameId,
     homeTeamId,
+    awayTeamId,
     leagueId,
     getLivePreambleSeed,
   });
-  firePlayCommentaryRef.current = firePlayCommentary;
+  const [reportersForFeed, setReportersForFeed] = useState<
+    Record<string, BeatReporter>
+  >({});
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const resolveFeedReporters = async () => {
+      const [homeReporter, awayReporter] = await Promise.all([
+        getReporterForTeam(homeTeamId, leagueId),
+        getReporterForTeam(awayTeamId, leagueId),
+      ]);
+
+      if (cancelled) {
+        return;
+      }
+
+      const nextReporters: Record<string, BeatReporter> = {};
+      if (homeReporter) {
+        nextReporters[homeReporter.id] = homeReporter;
+      }
+      if (awayReporter) {
+        nextReporters[awayReporter.id] = awayReporter;
+      }
+      setReportersForFeed(nextReporters);
+    };
+
+    void resolveFeedReporters();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [awayTeamId, homeTeamId, leagueId]);
+
+  const reporterTeamColorsForFeed = useMemo(() => {
+    const palettes: Record<string, { primary: string; secondary: string }> = {};
+
+    Object.values(reportersForFeed).forEach((reporter) => {
+      if (reporter.teamId === homeTeamId) {
+        palettes[reporter.id] = {
+          primary: homeTeamColor,
+          secondary: homeTeamBorderColor,
+        };
+        return;
+      }
+
+      if (reporter.teamId === awayTeamId) {
+        palettes[reporter.id] = {
+          primary: awayTeamColor,
+          secondary: awayTeamBorderColor,
+        };
+      }
+    });
+
+    return palettes;
+  }, [
+    awayTeamBorderColor,
+    awayTeamColor,
+    awayTeamId,
+    homeTeamBorderColor,
+    homeTeamColor,
+    homeTeamId,
+    reportersForFeed,
+  ]);
 
   useEffect(() => {
     const shouldFirePreamble =
@@ -4506,34 +4525,14 @@ export function GameTracker() {
       Boolean(gameState.currentBatterId) &&
       Boolean(gameState.currentPitcherId) &&
       Boolean(gameState.gameId) &&
-      !commentaryDisabled &&
+      !homeCommentaryDisabled &&
       preambleFiredGameIdRef.current !== gameState.gameId;
 
-    console.log("[repdbg] GameTracker preamble effect FIRED", {
-      gameId: gameState.gameId,
-      currentPreambleRefGameId: preambleFiredGameIdRef.current,
-      gameInitialized,
-      gamePhase: gameState.gamePhase,
-      hasCurrentBatterId: Boolean(gameState.currentBatterId),
-      hasCurrentPitcherId: Boolean(gameState.currentPitcherId),
-      commentaryDisabled,
-      shouldFirePreamble,
-    });
-
     if (!shouldFirePreamble) {
-      console.log("[repdbg] GameTracker preamble effect SHORT-CIRCUITED", {
-        gameId: gameState.gameId,
-        currentPreambleRefGameId: preambleFiredGameIdRef.current,
-      });
       return;
     }
 
     const pendingAtBatIdentity = getPendingAtBatIdentity();
-    console.log("[repdbg] GameTracker preamble effect CALLING firePreamble", {
-      gameId: gameState.gameId,
-      currentPreambleRefGameId: preambleFiredGameIdRef.current,
-      atBatEventId: pendingAtBatIdentity.atBatEventId,
-    });
     preambleFiredGameIdRef.current = gameState.gameId;
     void firePreamble(
       gameState.gameId,
@@ -4542,9 +4541,9 @@ export function GameTracker() {
       competitionType,
     );
   }, [
-    commentaryDisabled,
     competitionType,
     firePreamble,
+    homeCommentaryDisabled,
     gameInitialized,
     gameState.currentBatterId,
     gameState.currentPitcherId,
@@ -8195,6 +8194,10 @@ export function GameTracker() {
 
   // Handle end of inning
   const handleEndInning = useCallback(() => {
+    const currentInning = Math.max(1, gameState.inning);
+    const wasBottomHalf = !gameState.isTop;
+    const targetGameId = gameState.gameId;
+
     // Layer 5 (§4.4): Check for unenriched plays before transitioning
     const currentHalfPlays = playLogEntries.filter(
       (e) => e.inningLabel === shortInningLabel(),
@@ -8212,7 +8215,42 @@ export function GameTracker() {
     endInning();
     // Clear runner names when inning ends (bases are cleared)
     setRunnerNames({});
-  }, [endInning, playLogEntries, shortInningLabel]);
+
+    if (!wasBottomHalf || !targetGameId) {
+      return;
+    }
+
+    const reporterTeam = currentInning % 2 === 1 ? "home" : "away";
+    void (async () => {
+      try {
+        const inningEvents = (await getGameEvents(targetGameId)).filter(
+          (event) => !event.undoneAt && event.inning === currentInning,
+        );
+        await fireBetweenInningSummary(
+          targetGameId,
+          currentInning,
+          inningEvents,
+          reporterTeam,
+          undefined,
+          competitionType,
+        );
+      } catch (error) {
+        console.warn(
+          `[reporter:commentary] Failed to load inning ${currentInning} events for summary.`,
+          error,
+        );
+      }
+    })();
+  }, [
+    competitionType,
+    endInning,
+    fireBetweenInningSummary,
+    gameState.gameId,
+    gameState.inning,
+    gameState.isTop,
+    playLogEntries,
+    shortInningLabel,
+  ]);
 
   // ══════════════════════════════════════════════════════════════
   // LAYER 5: ENRICHMENT HANDLERS
@@ -10155,6 +10193,8 @@ export function GameTracker() {
                 currentPitcherLine={pitcherGameLine}
                 matchupSummary={matchupLine}
                 commentaryEntries={commentaryEntries}
+                reporters={reportersForFeed}
+                reporterTeamColors={reporterTeamColorsForFeed}
                 soundsOn={beatReporterSoundsOn}
                 onPlayTypeSound={() => {
                   void audioManagerRef.current.playSound("beatReporterType");

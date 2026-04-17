@@ -309,6 +309,8 @@ function buildReporterContext(
 ): ReporterContext;
 ```
 
+For alternating-inning prompts, the builder derives home/away reporter perspective from `gameState.halfInning` plus the distinct `battingTeamRecentAlmanac` and `pitchingTeamRecentAlmanac` arrays above. No extra fetch layer should be required at prompt-assembly time.
+
 ### Prompt size discipline
 
 Filtering happens *inside* `buildReporterContext`, not at prompt-assembly time:

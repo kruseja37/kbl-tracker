@@ -38,6 +38,15 @@ function createReporter(): BeatReporter {
   };
 }
 
+function createAwayReporter(): BeatReporter {
+  return {
+    ...createReporter(),
+    id: "reporter-2",
+    teamId: "team-away",
+    name: "Ashley Chen",
+  };
+}
+
 function createReporterContext(
   overrides: Partial<ReporterContext["gameState"]> = {},
 ): ReporterContext {
@@ -251,6 +260,7 @@ function renderCommentaryFeedHook(options: {
   gameId?: string;
   intensity?: "low" | "medium" | "high";
   reporter?: BeatReporter | null;
+  awayReporter?: BeatReporter | null;
   buildReporterContext?: (gameId: string, atBatId: string) => Promise<ReporterContext>;
   buildLiveReporterContext?: (seed: LiveReporterContextSeed) => Promise<ReporterContext>;
   isWithinDailyCallLimit?: (now?: number) => Promise<boolean>;
@@ -263,12 +273,21 @@ function renderCommentaryFeedHook(options: {
     options.persistCommentaryFeedEntry ?? (async () => undefined);
   const listCommentaryFeedEntriesForGameImpl =
     options.listCommentaryFeedEntriesForGame ?? (async () => []);
+  const resolvedHomeReporter =
+    options.reporter === undefined ? createReporter() : options.reporter;
+  const resolvedAwayReporter =
+    options.awayReporter !== undefined
+      ? options.awayReporter
+      : options.reporter === undefined
+        ? createAwayReporter()
+        : options.reporter;
 
   return renderHook(
     ({ gameId }) =>
       useCommentaryFeed({
         gameId,
         homeTeamId: "team-home",
+        awayTeamId: "team-away",
         leagueId: "league-1",
         getLivePreambleSeed: () =>
           createLiveSeed({
@@ -277,8 +296,8 @@ function renderCommentaryFeedHook(options: {
           }),
         dependencies: {
           getIntensity: async () => options.intensity ?? "medium",
-          getReporterForTeam: async () =>
-            options.reporter === undefined ? createReporter() : options.reporter,
+          getReporterForTeam: async (teamId) =>
+            teamId === "team-away" ? resolvedAwayReporter : resolvedHomeReporter,
           buildReporterContext:
             options.buildReporterContext ??
             (async (targetGameId, atBatId) =>
@@ -577,6 +596,7 @@ describe("useCommentaryFeed", () => {
         useCommentaryFeed({
           gameId: "game-1",
           homeTeamId: "team-home",
+          awayTeamId: "team-away",
           leagueId: "league-1",
           getLivePreambleSeed: () =>
             createLiveSeed({
@@ -585,7 +605,8 @@ describe("useCommentaryFeed", () => {
             }),
           dependencies: {
             getIntensity: async () => "medium",
-            getReporterForTeam: async () => createReporter(),
+            getReporterForTeam: async (teamId) =>
+              teamId === "team-away" ? createAwayReporter() : createReporter(),
             buildReporterContext: async (targetGameId, atBatId) =>
               createReporterContext({
                 gameId: targetGameId,
@@ -713,8 +734,9 @@ describe("useCommentaryFeed", () => {
       );
       await result.current.fireBetweenInningSummary(
         "game-1",
-        { inning: 4, halfInning: "TOP" },
+        4,
         [],
+        "home",
       );
     });
 
@@ -722,13 +744,15 @@ describe("useCommentaryFeed", () => {
     expect(result.current.commentaryEntries).toHaveLength(0);
   });
 
-  test("missing reporter disables everything", async () => {
+  test("missing home reporter disables the preamble path while keeping away routing available", async () => {
     const { result } = renderCommentaryFeedHook({
       reporter: null,
+      awayReporter: createAwayReporter(),
     });
 
     await waitFor(() => {
-      expect(result.current.disabled).toBe(true);
+      expect(result.current.homeDisabled).toBe(true);
+      expect(result.current.disabled).toBe(false);
     });
 
     await act(async () => {
@@ -740,8 +764,9 @@ describe("useCommentaryFeed", () => {
       );
       await result.current.fireBetweenInningSummary(
         "game-1",
-        { inning: 4, halfInning: "TOP" },
+        4,
         [],
+        "home",
       );
     });
 
@@ -864,7 +889,7 @@ describe("useCommentaryFeed", () => {
     ]);
   });
 
-  test("fireBetweenInningSummary success path sets pendingPopup and keeps feed unchanged until dismiss", async () => {
+  test("fireBetweenInningSummary success path appends a feed entry and sets pendingPopup", async () => {
     const { engine, generateBetweenInningSummary, getNarrativeSoFar } = createEngine();
     const { result } = renderCommentaryFeedHook({
       createEngine: () => engine,
@@ -873,15 +898,9 @@ describe("useCommentaryFeed", () => {
     await act(async () => {
       await result.current.fireBetweenInningSummary(
         "game-1",
-        { inning: 4, halfInning: "TOP" },
-        [
-          {
-            batterName: "Ivy Sparks",
-            pitcherName: "Noelle Vale",
-            result: "1B",
-            runsScored: 0,
-          },
-        ],
+        4,
+        [createAtBatEvent({ inning: 4, halfInning: "TOP" })],
+        "home",
       );
     });
 
@@ -889,12 +908,20 @@ describe("useCommentaryFeed", () => {
     expect(getNarrativeSoFar).toHaveBeenCalledTimes(1);
     expect(result.current.pendingPopup).toEqual({
       text: "Freebooters stranded two.",
-      halfInningLabel: "T4",
+      halfInningLabel: "INNING 4",
     });
-    expect(result.current.commentaryEntries).toEqual([]);
+    expect(result.current.commentaryEntries).toEqual([
+      expect.objectContaining({
+        id: "commentary-inning-game-1-home-4-2000",
+        commentaryText: "Freebooters stranded two.",
+        halfInningLabel: "INNING 4",
+        kind: "between-inning",
+        reporterId: "reporter-1",
+      }),
+    ]);
   });
 
-  test("dismissBetweenInningPopup appends entry with kind between-inning and clears pendingPopup", async () => {
+  test("dismissBetweenInningPopup clears the popup without duplicating the feed entry", async () => {
     const { engine } = createEngine();
     const persistSpy = vi.fn(async () => undefined);
     const { result } = renderCommentaryFeedHook({
@@ -905,17 +932,13 @@ describe("useCommentaryFeed", () => {
     await act(async () => {
       await result.current.fireBetweenInningSummary(
         "game-1",
-        { inning: 4, halfInning: "TOP" },
-        [
-          {
-            batterName: "Ivy Sparks",
-            pitcherName: "Noelle Vale",
-            result: "1B",
-            runsScored: 0,
-          },
-        ],
+        4,
+        [createAtBatEvent({ inning: 4, halfInning: "TOP" })],
+        "home",
       );
     });
+
+    expect(result.current.commentaryEntries).toHaveLength(1);
 
     await act(async () => {
       result.current.dismissBetweenInningPopup("tap");
@@ -924,9 +947,9 @@ describe("useCommentaryFeed", () => {
     expect(result.current.pendingPopup).toBeNull();
     expect(result.current.commentaryEntries).toEqual([
       {
-        id: "commentary-inning-game-1-T4-2000",
+        id: "commentary-inning-game-1-home-4-2000",
         commentaryText: "Freebooters stranded two.",
-        halfInningLabel: "T4",
+        halfInningLabel: "INNING 4",
         kind: "between-inning",
         timestamp: 2000,
         reporterId: "reporter-1",
@@ -934,16 +957,71 @@ describe("useCommentaryFeed", () => {
     ]);
     expect(persistSpy).toHaveBeenCalledWith(
       expect.objectContaining({
-        id: "commentary-inning-game-1-T4-2000",
+        id: "commentary-inning-game-1-home-4-2000",
         gameId: "game-1",
         leagueId: "league-1",
         reporterId: "reporter-1",
         commentaryText: "Freebooters stranded two.",
-        halfInningLabel: "T4",
+        halfInningLabel: "INNING 4",
         kind: "between-inning",
         timestamp: 2000,
         createdAt: 2000,
         changed_at: 2000,
+      }),
+    );
+  });
+
+  test("fireBetweenInningSummary routes home innings through the home reporter", async () => {
+    const { engine, generateBetweenInningSummary } = createEngine();
+    const { result } = renderCommentaryFeedHook({
+      createEngine: () => engine,
+    });
+
+    await act(async () => {
+      await result.current.fireBetweenInningSummary(
+        "game-1",
+        1,
+        [createAtBatEvent({ inning: 1, halfInning: "TOP" })],
+        "home",
+      );
+    });
+
+    expect(generateBetweenInningSummary).toHaveBeenCalledWith(
+      expect.objectContaining({
+        inning: 1,
+        reporterTeam: "home",
+        reporter: expect.objectContaining({
+          id: "reporter-1",
+          teamId: "team-home",
+        }),
+      }),
+    );
+  });
+
+  test("fireBetweenInningSummary routes away innings through the away reporter", async () => {
+    const { engine, generateBetweenInningSummary } = createEngine();
+    const { result } = renderCommentaryFeedHook({
+      createEngine: () => engine,
+      awayReporter: createAwayReporter(),
+    });
+
+    await act(async () => {
+      await result.current.fireBetweenInningSummary(
+        "game-1",
+        2,
+        [createAtBatEvent({ inning: 2, halfInning: "BOTTOM", batterTeamId: "team-home" })],
+        "away",
+      );
+    });
+
+    expect(generateBetweenInningSummary).toHaveBeenCalledWith(
+      expect.objectContaining({
+        inning: 2,
+        reporterTeam: "away",
+        reporter: expect.objectContaining({
+          id: "reporter-2",
+          teamId: "team-away",
+        }),
       }),
     );
   });
@@ -958,27 +1036,15 @@ describe("useCommentaryFeed", () => {
     await act(async () => {
       await result.current.fireBetweenInningSummary(
         "game-1",
-        { inning: 4, halfInning: "TOP" },
-        [
-          {
-            batterName: "Ivy Sparks",
-            pitcherName: "Noelle Vale",
-            result: "1B",
-            runsScored: 0,
-          },
-        ],
+        4,
+        [createAtBatEvent({ inning: 4, halfInning: "TOP" })],
+        "home",
       );
       await result.current.fireBetweenInningSummary(
         "game-1",
-        { inning: 4, halfInning: "BOTTOM" },
-        [
-          {
-            batterName: "Harry Backman",
-            pitcherName: "Noelle Vale",
-            result: "BB",
-            runsScored: 0,
-          },
-        ],
+        4,
+        [createAtBatEvent({ inning: 4, halfInning: "BOTTOM", batterName: "Harry Backman", result: "BB" })],
+        "home",
       );
     });
 

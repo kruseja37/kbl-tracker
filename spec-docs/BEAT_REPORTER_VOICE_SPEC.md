@@ -191,35 +191,33 @@ interface MoodState {
 
 ## 5. In-Game Commentary System
 
-### 5.1 Game Assignment
+### 5.1 Alternating-Inning Reporter Rotation (v1 revised)
 
-**Only the home team's beat reporter calls the game.** This provides:
-- A consistent single voice throughout
-- Both batting and pitching perspectives through one lens
-- More interesting commentary when facing rivals (HOMER reporter covering opponent's big play)
-- Commentary on BOTH teams' plays — the reporter covers the game, not just their team
+v1 revised no longer uses a single reporter voice for every beat of the live game.
 
-### 5.2 Notability Scoring (WPA-Based)
+- **Pregame preamble:** Home reporter only. Fires once, before the first pitch, as a whole-game scene-setter.
+- **Inning summaries:** Generated only after a **full inning** completes. Odd innings route to the home reporter; even innings route to the away reporter.
+- **Post-game columns:** Both reporters still write separate final columns.
 
-Each play receives a notability score based on Win Probability Added (WPA). The reporter comments when the score exceeds a threshold.
+**Why this revision:**
+- Inning boundaries provide fuller ground-truth than per-play calls.
+- Alternating booths makes the feed feel richer without doubling every LLM call.
+- The model gets a complete inning's event list plus updated narrative context before speaking.
 
-| WPA Range | Reporter Behavior |
-|---|---|
-| |WPA| < 0.05 | Silent (covered in inning summary) |
-| |WPA| 0.05 - 0.14 | Standard commentary in reporter's voice |
-| |WPA| 0.15 - 0.29 | Excited commentary — mood energy elevates |
-| |WPA| >= 0.30 | Big moment — full-voice, dramatic commentary regardless of personality |
+### 5.2 DEPRECATED — Per-Play Commentary Removed (v1 revised)
 
-**Always notable (bypass WPA):**
-- Home runs
-- Errors
-- Runs scoring
-- Pitching changes
-- Milestones (cycle watch, no-hitter, etc.)
-- Streaks (3+ consecutive Ks, hit streaks)
-- First at-bat of the game (preamble)
+Per-play live commentary has been removed from the live GameTracker flow in v1 revised.
+
+**Reason for removal:**
+- Too much temptation for the model to over-elaborate or hallucinate sparse play data.
+- More latency and more API volume during active scoring.
+- Inning summaries produce better grounded output because the model sees the whole inning at once.
+
+The underlying engine method is intentionally retained in code for possible future **walk-off / ultra-high-notability** reuse, but it is no longer wired into the live feed in this revision.
 
 ### 5.3 Lull Tidbits
+
+**DEFERRED TO v2.**
 
 When **3+ consecutive plays** fall below the notability threshold, the reporter fills the silence with a tidbit instead of play commentary. This mirrors real broadcasters filling air time with color.
 
@@ -238,20 +236,21 @@ Triggered when user clicks **"Start Game"**. The reporter introduces themselves 
 **Example (DRAMATIC + THE HOLY COW + CLASSIC_TV):**
 > "Good evening everybody! This is Dutch McAllister, and HOLY COW, do we have a game for you tonight! The Freebooters are in town and let me tell you, folks, these two teams do NOT like each other. Let's play ball!"
 
-### 5.5 Between-Inning Summaries
+### 5.5 Inning Summaries (Full-Inning, Alternating)
 
-Generated at the end of each half-inning via Grok API. Contains:
-- Current score
-- Key plays from the half-inning
-- Pitcher assessment
-- **Look-ahead element** ("Freebooters send the meat of the order up in the 4th...")
+Generated after a **full inning** completes, not after each half-inning. The trigger happens when the user ends the bottom half through the normal GameTracker flow (yellow End Half-Inning button / confirmation modal path).
 
-**The LLM also writes and caches a `gameNarrativeSoFar` summary** (~2-3 sentences) at each half-inning break. This cached narrative is passed as context to future LLM calls, keeping the reporter aware of the game's story arc without sending full play-by-play history.
+Routing:
+- Odd innings (1, 3, 5, 7, 9, 11...) → home reporter
+- Even innings (2, 4, 6, 8, 10...) → away reporter
 
-**Display behavior:**
-1. Popup overlay appears between innings
-2. Popup dismisses (auto or tap)
-3. Summary collapses into the feed as a permanent, visually distinct entry
+Each summary call receives the complete inning event list, enriched play details when available, current dramatic context, and the rolling `gameNarrativeSoFar`.
+
+The engine returns:
+- `popup`: 2-3 sentence in-game summary copy
+- `narrative`: 2-3 sentence replacement for `gameNarrativeSoFar`
+
+`gameNarrativeSoFar` is **replaced, not appended**, after each inning summary so later prompts inherit the current story arc without dragging full play-by-play history.
 
 ### 5.6 Pre-Game Toggle
 

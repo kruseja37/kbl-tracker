@@ -1,9 +1,10 @@
-import { resolveMood, type MoodState } from "../../../../engines/moodEngine";
+import type { MoodState } from "../../../../engines/moodEngine";
 import type {
   NotabilityPlayContext,
   NotabilityResult,
 } from "../../../../engines/notabilityScorer";
 import type { BeatReporter } from "../../../../types/reporter";
+import type { AtBatEvent } from "../../../../utils/eventLog";
 import type { NarrativeIntensity } from "../../../../types/reporterPreferences";
 import type { CompetitionType } from "../../../../utils/gameStorage";
 import {
@@ -21,7 +22,8 @@ import {
   buildCommentaryUserMessage,
   buildBetweenInningSummarySystemPrompt,
   buildBetweenInningSummaryUserMessage,
-  type HalfInningEventSummary,
+  buildPostGameColumnSystemPrompt,
+  buildPostGameColumnUserMessage,
   buildPreambleSystemPrompt,
   buildPreambleUserMessage,
 } from "./promptBuilder";
@@ -34,7 +36,6 @@ export interface CommentaryEngineConfig {
   temperature?: number;
   gameId?: string;
   mode?: CompetitionType;
-  reporter?: BeatReporter;
   invokeImpl?: ReporterProxyInvoke;
   logUsage?: typeof logLlmCall;
 }
@@ -48,6 +49,13 @@ export interface CommentaryInput {
   boxScore?: Record<string, unknown>;
 }
 
+export interface PreambleInput {
+  context: ReporterContext;
+  mood: MoodState;
+  reporter: BeatReporter;
+  reporterTeam: "home";
+}
+
 export interface CommentaryResult {
   text: string | null;
   error?: string;
@@ -59,8 +67,10 @@ export interface CommentaryResult {
 export interface BetweenInningSummaryInput {
   context: ReporterContext;
   mood: MoodState;
-  halfInningJustEnded: { inning: number; halfInning: "TOP" | "BOTTOM" };
-  halfInningEvents: HalfInningEventSummary[];
+  reporter: BeatReporter;
+  reporterTeam: "home" | "away";
+  inning: number;
+  inningEvents: AtBatEvent[];
   previousNarrativeSoFar: string;
 }
 
@@ -73,12 +83,18 @@ export interface BetweenInningSummaryResult {
   outputTokens: number;
 }
 
+export interface PostGameColumnInput {
+  context: ReporterContext;
+  reporter: BeatReporter;
+  reporterTeam: "home" | "away";
+  finalScore: { home: number; away: number };
+  allInningEvents: AtBatEvent[];
+  narrativeSoFar: string;
+}
+
 export interface CommentaryEngine {
   generateCommentary(input: CommentaryInput): Promise<CommentaryResult>;
-  generatePreamble(
-    reporterContext: ReporterContext,
-    mood: MoodState,
-  ): Promise<CommentaryResult>;
+  generatePreamble(input: PreambleInput): Promise<CommentaryResult>;
   generateBetweenInningSummary(
     input: BetweenInningSummaryInput,
   ): Promise<BetweenInningSummaryResult>;
@@ -185,23 +201,24 @@ export class GrokCommentaryEngine implements CommentaryEngine {
     this.gameNarrativeSoFar = "";
   }
 
-  async generatePreamble(
-    reporterContext: ReporterContext,
-    mood: MoodState,
-  ): Promise<CommentaryResult> {
-    const moodLabel = resolveMood(mood);
+  async generatePreamble(input: PreambleInput): Promise<CommentaryResult> {
     const messages: GrokChatMessage[] = [
       {
         role: "system",
         content: buildPreambleSystemPrompt(
-          this.config.reporter,
-          moodLabel,
-          reporterContext,
+          input.reporter,
+          input.reporterTeam,
+          input.mood,
+          input.context,
         ),
       },
       {
         role: "user",
-        content: buildPreambleUserMessage(reporterContext),
+        content: buildPreambleUserMessage(
+          input.reporter,
+          input.reporterTeam,
+          input.context,
+        ),
       },
     ];
 
@@ -221,11 +238,10 @@ export class GrokCommentaryEngine implements CommentaryEngine {
       };
     }
 
-    const moodLabel = resolveMood(input.mood);
     const systemPrompt = [
       buildCommentarySystemPrompt(
         input.reporter,
-        moodLabel,
+        input.mood,
         this.gameNarrativeSoFar,
         input.context,
       ),
@@ -260,22 +276,24 @@ export class GrokCommentaryEngine implements CommentaryEngine {
     input: BetweenInningSummaryInput,
   ): Promise<BetweenInningSummaryResult> {
     const previousNarrative = this.gameNarrativeSoFar;
-    const moodLabel = resolveMood(input.mood);
     const messages: GrokChatMessage[] = [
       {
         role: "system",
         content: buildBetweenInningSummarySystemPrompt(
-          this.config.reporter,
-          moodLabel,
+          input.reporter,
+          input.reporterTeam,
+          input.mood,
           input.context,
+          input.inning,
           input.previousNarrativeSoFar,
+          input.inningEvents,
         ),
       },
       {
         role: "user",
         content: buildBetweenInningSummaryUserMessage(
-          input.halfInningJustEnded,
-          input.halfInningEvents,
+          input.inning,
+          input.inningEvents,
           input.previousNarrativeSoFar,
         ),
       },
@@ -362,6 +380,30 @@ export class GrokCommentaryEngine implements CommentaryEngine {
         outputTokens: 0,
       };
     }
+  }
+
+  buildPostGameColumnPrompt(input: PostGameColumnInput): {
+    system: string;
+    user: string;
+  } {
+    return {
+      system: buildPostGameColumnSystemPrompt(
+        input.reporter,
+        input.reporterTeam,
+        input.context,
+        input.finalScore,
+        input.allInningEvents,
+        input.narrativeSoFar,
+      ),
+      user: buildPostGameColumnUserMessage(
+        input.reporter,
+        input.reporterTeam,
+        input.context,
+        input.finalScore,
+        input.allInningEvents,
+        input.narrativeSoFar,
+      ),
+    };
   }
 
   private async executeChatCompletion(

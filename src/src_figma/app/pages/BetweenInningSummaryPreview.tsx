@@ -2,6 +2,7 @@ import React from "react";
 
 import { INITIAL_MOOD_STATE } from "../../../engines/moodEngine";
 import type { BeatReporter } from "../../../types/reporter";
+import type { AtBatEvent } from "../../../utils/eventLog";
 import CommentaryFeed from "../components/CommentaryFeed";
 import BetweenInningPopup from "../components/BetweenInningPopup";
 import type {
@@ -13,13 +14,17 @@ import { GrokCommentaryEngine } from "../engines/reporter/commentaryEngine";
 import type { ReporterContext } from "../engines/reporter/reporterContext";
 import { useCommentaryFeed } from "../hooks/useCommentaryFeed";
 
-function createReporter(): BeatReporter {
+function createReporter(
+  teamId = "team-home",
+  id = "preview-reporter",
+  name = "Dutch Calloway",
+): BeatReporter {
   const now = Date.now();
   return {
-    id: "preview-reporter",
-    teamId: "team-home",
+    id,
+    teamId,
     leagueId: "league-preview",
-    name: "Dutch Calloway",
+    name,
     personality: "DRAMATIC",
     voiceStyle: "THE_HOLY_COW",
     eraFlavor: "CLASSIC_TV",
@@ -33,6 +38,56 @@ function createReporter(): BeatReporter {
     createdAt: now,
     updatedAt: now,
     changed_at: now,
+  };
+}
+
+function createInningEvent(
+  overrides: Partial<AtBatEvent>,
+): AtBatEvent {
+  return {
+    eventId: "preview-event-1",
+    gameId: "preview-game",
+    eventIndex: 1,
+    timestamp: Date.now(),
+    batterId: "batter-1",
+    batterName: "Ivy Sparks",
+    batterTeamId: "team-away",
+    pitcherId: "pitcher-1",
+    pitcherName: "Noelle Vale",
+    pitcherTeamId: "team-home",
+    result: "1B",
+    rbiCount: 0,
+    runsScored: 0,
+    inning: 4,
+    halfInning: "TOP",
+    outs: 0,
+    runners: { first: null, second: null, third: null },
+    awayScore: 2,
+    homeScore: 3,
+    outsAfter: 0,
+    runnersAfter: {
+      first: {
+        runnerId: "batter-1",
+        runnerName: "Ivy Sparks",
+        responsiblePitcherId: "pitcher-1",
+      },
+      second: null,
+      third: null,
+    },
+    awayScoreAfter: 2,
+    homeScoreAfter: 3,
+    leverageIndex: 1.2,
+    winProbabilityBefore: 0.48,
+    winProbabilityAfter: 0.46,
+    wpa: -0.02,
+    ballInPlay: null,
+    fameEvents: [],
+    isLeadoff: false,
+    isClutch: false,
+    isWalkOff: false,
+    competitionType: "exhibition",
+    leagueId: "league-preview",
+    ...overrides,
   };
 }
 
@@ -183,23 +238,37 @@ const summaryInput: BetweenInningSummaryInput = {
     moodScore: 3,
     currentMood: "DRAMATIC",
   },
-  halfInningJustEnded: {
-    inning: 4,
-    halfInning: "TOP",
-  },
-  halfInningEvents: [
-    {
+  reporter: createReporter(),
+  reporterTeam: "home",
+  inning: 4,
+  inningEvents: [
+    createInningEvent({
+      eventId: "preview-event-1",
+      eventIndex: 1,
+      halfInning: "TOP",
       batterName: "Ivy Sparks",
-      pitcherName: "Noelle Vale",
       result: "1B",
-      runsScored: 0,
-    },
-    {
+      enrichment: {
+        pitchType: "4F",
+        pitchesInAtBat: 3,
+        exitType: "line_drive",
+        fieldLocation: { x: 10, y: 20, zone: "right-center" },
+      },
+    }),
+    createInningEvent({
+      eventId: "preview-event-2",
+      eventIndex: 2,
+      halfInning: "BOTTOM",
       batterName: "Harry Backman",
-      pitcherName: "Noelle Vale",
-      result: "GIDP",
-      runsScored: 0,
-    },
+      batterId: "batter-2",
+      batterTeamId: "team-home",
+      result: "DP",
+      enrichment: {
+        fieldingSequence: [5, 4, 3],
+        fieldingPlayType: "diving",
+        fieldingDifficulty: "DIVING",
+      },
+    }),
   ],
   previousNarrativeSoFar: previousNarrative,
 };
@@ -213,7 +282,6 @@ function createPreviewEngineFactory(params: {
   return (config: CommentaryEngineConfig): CommentaryEngine => {
     const engine = new GrokCommentaryEngine({
       ...config,
-      reporter: createReporter(),
       invokeImpl: async () => ({
         data: {
           text: '{"popup":"Freebooters stranded two.","narrative":"Through the top of the fourth, the Blowfish still cling to their one-run margin."}',
@@ -283,6 +351,7 @@ export function BetweenInningSummaryPreview() {
   } = useCommentaryFeed({
     gameId: "preview-game",
     homeTeamId: "team-home",
+    awayTeamId: "team-away",
     leagueId: "league-preview",
     getLivePreambleSeed: () => ({
       gameId: "preview-game",
@@ -307,7 +376,10 @@ export function BetweenInningSummaryPreview() {
     }),
     dependencies: {
       getIntensity: async () => "medium",
-      getReporterForTeam: async () => createReporter(),
+      getReporterForTeam: async (teamId) =>
+        teamId === "team-away"
+          ? createReporter("team-away", "preview-away-reporter", "Ashley Chen")
+          : createReporter(),
       buildReporterContext: async () => createContext(),
       buildLiveReporterContext: async () => createContext(),
       isWithinDailyCallLimit: async () => true,
@@ -325,8 +397,9 @@ export function BetweenInningSummaryPreview() {
     setStatus("Running mocked Grok call through useCommentaryFeed...");
     await fireBetweenInningSummary(
       "preview-game",
-      summaryInput.halfInningJustEnded,
-      summaryInput.halfInningEvents,
+      summaryInput.inning,
+      summaryInput.inningEvents,
+      summaryInput.reporterTeam,
       "medium",
       "exhibition",
     );
@@ -349,8 +422,8 @@ export function BetweenInningSummaryPreview() {
             dismissBetweenInningPopup(reason);
             setStatus(
               reason === "auto"
-                ? "Popup auto-dismissed and collapsed into the feed."
-                : "Popup dismissed early and collapsed into the feed.",
+                ? "Popup auto-dismissed after the feed entry was written."
+                : "Popup dismissed early after the feed entry was written.",
             );
           }}
         />

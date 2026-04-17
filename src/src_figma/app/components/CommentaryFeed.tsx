@@ -1,5 +1,6 @@
 import React from "react";
 
+import type { BeatReporter } from "../../../types/reporter";
 import { CommentaryTypewriter } from "./CommentaryTypewriter";
 
 export interface CommentaryFeedEntry {
@@ -13,6 +14,8 @@ export interface CommentaryFeedEntry {
 
 export interface CommentaryFeedProps {
   entries: CommentaryFeedEntry[];
+  reporters?: Record<string, BeatReporter>;
+  reporterTeamColors?: Record<string, { primary: string; secondary: string }>;
   soundsOn?: boolean;
   onPlayTypeSound?: () => void;
   wordDelayMs?: number;
@@ -30,6 +33,7 @@ type CommentaryFeedItem =
   | {
       type: "entry";
       entry: CommentaryFeedEntry;
+      hasReporterShift: boolean;
       isAnimating: boolean;
     };
 
@@ -60,6 +64,7 @@ function sortEntries(entries: CommentaryFeedEntry[]): CommentaryFeedEntry[] {
 function buildFeedItems(entries: CommentaryFeedEntry[]): CommentaryFeedItem[] {
   const items: CommentaryFeedItem[] = [];
   let previousDividerLabel: string | null = null;
+  let previousReporterId: string | undefined;
 
   entries.forEach((entry, index) => {
     const dividerLabel = toDividerLabel(entry);
@@ -78,8 +83,13 @@ function buildFeedItems(entries: CommentaryFeedEntry[]): CommentaryFeedItem[] {
     items.push({
       type: "entry",
       entry,
+      hasReporterShift:
+        Boolean(previousReporterId) &&
+        Boolean(entry.reporterId) &&
+        previousReporterId !== entry.reporterId,
       isAnimating: index === 0,
     });
+    previousReporterId = entry.reporterId;
   });
 
   return items;
@@ -98,6 +108,8 @@ function formatTimestamp(timestamp: number): string {
 
 export function CommentaryFeed({
   entries,
+  reporters = {},
+  reporterTeamColors = {},
   soundsOn = false,
   onPlayTypeSound,
   wordDelayMs,
@@ -121,7 +133,7 @@ export function CommentaryFeed({
     <div
       className="flex flex-col gap-2"
       data-testid="commentary-feed"
-      style={{ fontFamily: "'Moms Typewriter', monospace" }}
+      style={{ fontFamily: "'Tox Typewriter', monospace" }}
     >
       <div className="flex items-center justify-between gap-2 border-b border-[#3d5240] pb-1">
         <span className="text-[8px] font-bold tracking-[0.18em] text-[#C4A853]">
@@ -152,30 +164,68 @@ export function CommentaryFeed({
 
         const entryKind = resolveEntryKind(item.entry);
         const isBetweenInning = entryKind === "between-inning";
+        const reporter = item.entry.reporterId
+          ? reporters[item.entry.reporterId]
+          : undefined;
+        const reporterPalette = item.entry.reporterId
+          ? reporterTeamColors[item.entry.reporterId]
+          : undefined;
+        const accentColor =
+          reporterPalette?.primary ??
+          (isBetweenInning ? "#88AA88" : "#C4A853");
+        const dividerColor = reporterPalette?.secondary ?? "#425546";
+        const byline =
+          reporter?.name ?? (item.entry.reporterId ? "Beat Reporter" : null);
 
         return (
           <article
             key={item.entry.id}
-            className="rounded-sm border border-[#2f3a31] bg-[#2a352d]/70 px-2 py-1.5 shadow-[inset_0_0_3px_rgba(0,0,0,0.2)]"
+            className="rounded-sm border bg-[#2a352d]/70 px-2 py-1.5 shadow-[inset_0_0_3px_rgba(0,0,0,0.2)]"
             data-testid={`commentary-entry-${item.entry.id}`}
-            style={
-              isBetweenInning
-                ? {
-                    borderColor: "#425546",
-                    background: "rgba(35, 49, 38, 0.88)",
-                  }
-                : undefined
-            }
+            style={{
+              borderColor: dividerColor,
+              borderLeftColor: accentColor,
+              borderLeftWidth: item.hasReporterShift ? 4 : 3,
+              borderTopWidth: item.hasReporterShift ? 2 : 1,
+              background: isBetweenInning
+                ? "rgba(35, 49, 38, 0.88)"
+                : "rgba(42, 53, 45, 0.70)",
+            }}
           >
             <div className="mb-1 flex items-center justify-between gap-2">
-              <span
-                className="text-[7px] uppercase tracking-[0.16em] text-[#88AA88]"
-                style={{ fontFamily: "'Tox Typewriter', monospace" }}
-              >
-                {isBetweenInning
-                  ? `END ${item.entry.halfInningLabel}`
-                  : item.entry.halfInningLabel}
-              </span>
+              <div className="flex min-w-0 items-center gap-2">
+                <span
+                  className="inline-flex h-4 min-w-4 items-center justify-center rounded-full border text-[7px] font-bold"
+                  style={{
+                    borderColor: dividerColor,
+                    color: accentColor,
+                    background: "rgba(18, 23, 19, 0.55)",
+                  }}
+                >
+                  {byline ? byline.charAt(0).toUpperCase() : "B"}
+                </span>
+                <div className="min-w-0">
+                  <div
+                    className="text-[7px] uppercase tracking-[0.16em]"
+                    style={{
+                      color: accentColor,
+                      fontFamily: "'Tox Typewriter', monospace",
+                    }}
+                  >
+                    {isBetweenInning
+                      ? `${item.entry.halfInningLabel}`
+                      : item.entry.halfInningLabel}
+                  </div>
+                  {byline ? (
+                    <div
+                      className="truncate text-[7px]"
+                      style={{ color: accentColor }}
+                    >
+                      — {byline}
+                    </div>
+                  ) : null}
+                </div>
+              </div>
               <span className="text-[7px] text-[#6b7b6e]">
                 {formatTimestamp(item.entry.timestamp)}
               </span>

@@ -58,6 +58,7 @@ export interface UseCommentaryFeedDependencies {
 export interface UseCommentaryFeedOptions {
   gameId: string;
   homeTeamId: string;
+  awayTeamId: string;
   leagueId?: string;
   getLivePreambleSeed: () => LiveReporterContextSeed | null;
   dependencies?: UseCommentaryFeedDependencies;
@@ -75,8 +76,10 @@ type ReporterRefState = {
 
 type DisabledState = {
   intensity?: NarrativeIntensity;
-  reporterResolved: boolean;
-  reporter: BeatReporter | null;
+  homeReporterResolved: boolean;
+  homeReporter: BeatReporter | null;
+  awayReporterResolved: boolean;
+  awayReporter: BeatReporter | null;
 };
 
 export interface PendingBetweenInningPopup {
@@ -161,6 +164,7 @@ function toCommentaryFeedEntry(
 export function useCommentaryFeed({
   gameId,
   homeTeamId,
+  awayTeamId,
   leagueId,
   getLivePreambleSeed,
   dependencies = {},
@@ -171,17 +175,19 @@ export function useCommentaryFeed({
   const [pendingPopup, setPendingPopup] =
     React.useState<PendingBetweenInningPopup | null>(null);
   const [disabledState, setDisabledState] = React.useState<DisabledState>({
-    reporterResolved: false,
-    reporter: null,
+    homeReporterResolved: false,
+    homeReporter: null,
+    awayReporterResolved: false,
+    awayReporter: null,
   });
 
   const engineRef = React.useRef<EngineRefState>(null);
-  const reporterRef = React.useRef<ReporterRefState>(null);
+  const homeReporterRef = React.useRef<ReporterRefState>(null);
+  const awayReporterRef = React.useRef<ReporterRefState>(null);
   const preambleFiredForGameIdRef = React.useRef<string | null>(null);
   const moodRef = React.useRef<MoodState>(INITIAL_MOOD_STATE);
   const intensityRef = React.useRef<NarrativeIntensity | null>(null);
   const pendingPopupRef = React.useRef<PendingBetweenInningPopup | null>(null);
-  const pendingPopupReporterIdRef = React.useRef<string | null>(null);
   const processedPlayIdsRef = React.useRef<Set<string>>(new Set());
   const lastHydratedGameIdRef = React.useRef<string | null>(null);
 
@@ -205,20 +211,21 @@ export function useCommentaryFeed({
     dependencies.listCommentaryFeedEntriesForGame ?? listCommentaryFeedEntriesForGame;
 
   const resetForNewGame = React.useCallback((nextGameId: string) => {
-    console.log("[repdbg] resetForNewGame called for", nextGameId);
     setCommentaryEntries([]);
     setPendingPopup(null);
     pendingPopupRef.current = null;
-    pendingPopupReporterIdRef.current = null;
     processedPlayIdsRef.current.clear();
     lastHydratedGameIdRef.current = null;
     preambleFiredForGameIdRef.current = null;
     moodRef.current = INITIAL_MOOD_STATE;
     intensityRef.current = null;
-    reporterRef.current = null;
+    homeReporterRef.current = null;
+    awayReporterRef.current = null;
     setDisabledState({
-      reporterResolved: false,
-      reporter: null,
+      homeReporterResolved: false,
+      homeReporter: null,
+      awayReporterResolved: false,
+      awayReporter: null,
     });
 
     if (engineRef.current?.gameId === nextGameId) {
@@ -246,7 +253,6 @@ export function useCommentaryFeed({
           return;
         }
 
-        console.log("[repdbg] mount-read effect FIRED for gameId", gameId, "records:", records.length);
         lastHydratedGameIdRef.current = gameId;
         setCommentaryEntries(records.map(toCommentaryFeedEntry));
         processedPlayIdsRef.current = new Set(
@@ -288,28 +294,44 @@ export function useCommentaryFeed({
     return intensity;
   }, [getIntensityImpl]);
 
-  const resolveReporter = React.useCallback(async () => {
-    if (reporterRef.current?.gameId === gameId) {
-      return reporterRef.current.reporter;
+  const resolveHomeReporter = React.useCallback(async () => {
+    if (homeReporterRef.current?.gameId === gameId) {
+      return homeReporterRef.current.reporter;
     }
 
     const reporter = await getReporterForTeamImpl(homeTeamId, leagueId);
-    reporterRef.current = { gameId, reporter };
+    homeReporterRef.current = { gameId, reporter };
     setDisabledState((current) => ({
       ...current,
-      reporterResolved: true,
-      reporter,
+      homeReporterResolved: true,
+      homeReporter: reporter,
     }));
     return reporter;
   }, [gameId, getReporterForTeamImpl, homeTeamId, leagueId]);
 
+  const resolveAwayReporter = React.useCallback(async () => {
+    if (awayReporterRef.current?.gameId === gameId) {
+      return awayReporterRef.current.reporter;
+    }
+
+    const reporter = await getReporterForTeamImpl(awayTeamId, leagueId);
+    awayReporterRef.current = { gameId, reporter };
+    setDisabledState((current) => ({
+      ...current,
+      awayReporterResolved: true,
+      awayReporter: reporter,
+    }));
+    return reporter;
+  }, [awayTeamId, gameId, getReporterForTeamImpl, leagueId]);
+
   React.useEffect(() => {
     void resolveIntensity();
-    void resolveReporter();
-  }, [resolveIntensity, resolveReporter]);
+    void resolveHomeReporter();
+    void resolveAwayReporter();
+  }, [resolveAwayReporter, resolveHomeReporter, resolveIntensity]);
 
   const ensureEngine = React.useCallback(
-    (reporter: BeatReporter, intensity: NarrativeIntensity, mode?: CompetitionType) => {
+    (intensity: NarrativeIntensity, mode?: CompetitionType) => {
       if (engineRef.current?.gameId === gameId) {
         return engineRef.current.engine;
       }
@@ -319,7 +341,6 @@ export function useCommentaryFeed({
         intensity,
         gameId,
         mode,
-        reporter,
       });
       engineRef.current = { gameId, engine };
       return engine;
@@ -327,7 +348,9 @@ export function useCommentaryFeed({
     [createEngineImpl, gameId],
   );
 
-  const resolveCallPrerequisites = React.useCallback(async () => {
+  const resolveCallPrerequisites = React.useCallback(async (which: "home" | "away") => {
+    const resolveReporter =
+      which === "home" ? resolveHomeReporter : resolveAwayReporter;
     const [intensity, reporter] = await Promise.all([
       resolveIntensity(),
       resolveReporter(),
@@ -353,8 +376,9 @@ export function useCommentaryFeed({
   }, [
     isWithinDailyCallLimitImpl,
     nowImpl,
+    resolveAwayReporter,
+    resolveHomeReporter,
     resolveIntensity,
-    resolveReporter,
   ]);
 
   const persistEntryRecord = React.useCallback(
@@ -370,9 +394,8 @@ export function useCommentaryFeed({
   );
 
   const setPendingBetweenInningPopup = React.useCallback(
-    (nextPopup: PendingBetweenInningPopup | null, reporterId?: string | null) => {
+    (nextPopup: PendingBetweenInningPopup | null) => {
       pendingPopupRef.current = nextPopup;
-      pendingPopupReporterIdRef.current = nextPopup ? reporterId ?? null : null;
       setPendingPopup(nextPopup);
     },
     [],
@@ -385,38 +408,23 @@ export function useCommentaryFeed({
       intensity?: NarrativeIntensity,
       mode?: CompetitionType,
     ) => {
-      console.log("[repdbg] firePreamble ENTRY", {
-        targetGameId,
-        atBatIdLike,
-        guardGameId: preambleFiredForGameIdRef.current,
-        alreadyFiredForTargetGame:
-          preambleFiredForGameIdRef.current === targetGameId,
-      });
       if (preambleFiredForGameIdRef.current === targetGameId) {
         return;
       }
 
-      const prerequisites = await resolveCallPrerequisites();
+      const prerequisites = await resolveCallPrerequisites("home");
       if (prerequisites.status !== "ready") {
         return;
       }
 
       const reporter = prerequisites.reporter;
       const resolvedIntensity = intensity ?? prerequisites.intensity;
-      const engine = ensureEngine(reporter, resolvedIntensity, mode);
+      const engine = ensureEngine(resolvedIntensity, mode);
 
       let context: ReporterContext;
-      let primaryContextBuildThrew = false;
-      let contextSource: "reporter-context" | "live-fallback" = "reporter-context";
       try {
         context = await buildReporterContextImpl(targetGameId, atBatIdLike);
       } catch (error) {
-        primaryContextBuildThrew = true;
-        contextSource = "live-fallback";
-        console.log("[repdbg] firePreamble CONTEXT primary-build THREW", {
-          targetGameId,
-          atBatIdLike,
-        });
         const liveSeed = getLivePreambleSeed();
         if (!liveSeed) {
           console.warn(
@@ -437,17 +445,14 @@ export function useCommentaryFeed({
         }
       }
 
-      console.log("[repdbg] firePreamble PASSED GUARD", {
-        targetGameId,
-        atBatIdLike,
-        guardGameId: preambleFiredForGameIdRef.current,
-        primaryContextBuildThrew,
-        contextSource,
-      });
-
       let result;
       try {
-        result = await engine.generatePreamble(context, moodRef.current);
+        result = await engine.generatePreamble({
+          context,
+          mood: moodRef.current,
+          reporter,
+          reporterTeam: "home",
+        });
       } catch (error) {
         console.warn(
           "[reporter:commentary] Preamble generation threw unexpectedly; skipping preamble.",
@@ -477,10 +482,6 @@ export function useCommentaryFeed({
         entry,
         ...current.filter((currentEntry) => currentEntry.id !== entry.id),
       ]);
-      console.log("[repdbg] firePreamble APPENDED", {
-        targetGameId,
-        entryId: entry.id,
-      });
       persistEntryRecord({
         id: entry.id,
         gameId: targetGameId,
@@ -514,27 +515,18 @@ export function useCommentaryFeed({
       mode?: CompetitionType,
     ) => {
       const processedPlayKey = toProcessedPlayKey(targetGameId, atBatId);
-      console.log("[repdbg] firePlayCommentary ENTRY", {
-        targetGameId,
-        atBatId,
-        alreadyProcessed: processedPlayIdsRef.current.has(processedPlayKey),
-        processedSetSize: processedPlayIdsRef.current.size,
-      });
       if (processedPlayIdsRef.current.has(processedPlayKey)) {
         return;
       }
-      console.log("[repdbg] firePlayCommentary PASSED DEDUP, calling engine", {
-        atBatId,
-      });
 
-      const prerequisites = await resolveCallPrerequisites();
+      const prerequisites = await resolveCallPrerequisites("home");
       if (prerequisites.status !== "ready") {
         return;
       }
 
       const reporter = prerequisites.reporter;
       const resolvedIntensity = intensity ?? prerequisites.intensity;
-      const engine = ensureEngine(reporter, resolvedIntensity, mode);
+      const engine = ensureEngine(resolvedIntensity, mode);
       const notabilityPlay = toNotabilityPlayContext(play);
       const notability = scoreNotabilityImpl(notabilityPlay, moodRef.current);
 
@@ -602,9 +594,6 @@ export function useCommentaryFeed({
         entry,
       ]);
       processedPlayIdsRef.current.add(processedPlayKey);
-      console.log("[repdbg] firePlayCommentary APPENDED + marked processed", {
-        atBatId,
-      });
       persistEntryRecord({
         id: entry.id,
         gameId: targetGameId,
@@ -631,8 +620,9 @@ export function useCommentaryFeed({
   const fireBetweenInningSummary = React.useCallback(
     async (
       targetGameId: string,
-      halfInningJustEnded: BetweenInningSummaryInput["halfInningJustEnded"],
-      halfInningEvents: BetweenInningSummaryInput["halfInningEvents"],
+      inning: number,
+      inningEvents: BetweenInningSummaryInput["inningEvents"],
+      reporterTeam: "home" | "away",
       intensity?: NarrativeIntensity,
       mode?: CompetitionType,
     ) => {
@@ -643,14 +633,14 @@ export function useCommentaryFeed({
         return;
       }
 
-      const prerequisites = await resolveCallPrerequisites();
+      const prerequisites = await resolveCallPrerequisites(reporterTeam);
       if (prerequisites.status !== "ready") {
         return;
       }
 
       const reporter = prerequisites.reporter;
       const resolvedIntensity = intensity ?? prerequisites.intensity;
-      const engine = ensureEngine(reporter, resolvedIntensity, mode);
+      const engine = ensureEngine(resolvedIntensity, mode);
       const liveSeed = getLivePreambleSeed();
 
       if (!liveSeed) {
@@ -680,8 +670,10 @@ export function useCommentaryFeed({
         result = await engine.generateBetweenInningSummary({
           context,
           mood: moodRef.current,
-          halfInningJustEnded,
-          halfInningEvents,
+          reporter,
+          reporterTeam,
+          inning,
+          inningEvents,
           previousNarrativeSoFar: engine.getNarrativeSoFar(),
         });
       } catch (error) {
@@ -696,12 +688,35 @@ export function useCommentaryFeed({
         return;
       }
 
+      const timestamp = nowImpl();
+      const inningLabel = `INNING ${inning}`;
+      const entry: CommentaryFeedEntry = {
+        id: `commentary-inning-${targetGameId}-${reporterTeam}-${inning}-${timestamp}`,
+        commentaryText: result.popupText,
+        halfInningLabel: inningLabel,
+        kind: "between-inning",
+        timestamp,
+        reporterId: reporter.id,
+      };
+
+      setCommentaryEntries((current) => [...current, entry]);
+      persistEntryRecord({
+        id: entry.id,
+        gameId: targetGameId,
+        leagueId,
+        reporterId: reporter.id,
+        commentaryText: entry.commentaryText,
+        halfInningLabel: entry.halfInningLabel,
+        kind: "between-inning",
+        timestamp,
+        createdAt: timestamp,
+        changed_at: timestamp,
+      });
       setPendingBetweenInningPopup(
         {
           text: result.popupText,
-          halfInningLabel: toShortHalfInningLabel(halfInningJustEnded),
+          halfInningLabel: inningLabel,
         },
-        reporter.id,
       );
     },
     [
@@ -721,37 +736,17 @@ export function useCommentaryFeed({
       if (!activePopup) {
         return;
       }
-
-      const reporterId = pendingPopupReporterIdRef.current;
-      const timestamp = nowImpl();
-      const entry: CommentaryFeedEntry = {
-        id: `commentary-inning-${gameId}-${activePopup.halfInningLabel}-${timestamp}`,
-        commentaryText: activePopup.text,
-        halfInningLabel: activePopup.halfInningLabel,
-        kind: "between-inning",
-        timestamp,
-        reporterId: reporterId ?? undefined,
-      };
-
-      setCommentaryEntries((current) => [...current, entry]);
-      if (reporterId) {
-        persistEntryRecord({
-          id: entry.id,
-          gameId,
-          leagueId,
-          reporterId,
-          commentaryText: entry.commentaryText,
-          halfInningLabel: entry.halfInningLabel,
-          kind: "between-inning",
-          timestamp,
-          createdAt: timestamp,
-          changed_at: timestamp,
-        });
-      }
       setPendingBetweenInningPopup(null);
     },
-    [gameId, leagueId, nowImpl, persistEntryRecord, setPendingBetweenInningPopup],
+    [setPendingBetweenInningPopup],
   );
+
+  const homeDisabled =
+    disabledState.intensity === "low" ||
+    (disabledState.homeReporterResolved && !disabledState.homeReporter);
+  const awayDisabled =
+    disabledState.intensity === "low" ||
+    (disabledState.awayReporterResolved && !disabledState.awayReporter);
 
   return {
     commentaryEntries,
@@ -761,9 +756,9 @@ export function useCommentaryFeed({
     fireBetweenInningSummary,
     dismissBetweenInningPopup,
     resetForNewGame,
-    disabled:
-      disabledState.intensity === "low" ||
-      (disabledState.reporterResolved && !disabledState.reporter),
+    homeDisabled,
+    awayDisabled,
+    disabled: homeDisabled && awayDisabled,
   };
 }
 
