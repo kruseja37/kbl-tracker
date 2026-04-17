@@ -247,4 +247,40 @@ describe("CommentaryTypewriter", () => {
     });
     expect(screen.getByText("Holy cow indeed", { selector: "span" })).toBeInTheDocument();
   });
+
+  test("changing the audio callback identity mid-animation does not restart the text", () => {
+    const firstSound = vi.fn();
+    const secondSound = vi.fn();
+    const { rerender } = render(
+      <CommentaryTypewriter
+        text="Good evening everybody"
+        active={true}
+        soundsOn={false}
+        onCharacterTyped={firstSound}
+        wordDelayMs={100}
+      />,
+    );
+
+    act(() => {
+      vi.advanceTimersByTime(100);
+    });
+    expect(screen.getByText("Good", { selector: "span" })).toBeInTheDocument();
+
+    rerender(
+      <CommentaryTypewriter
+        text="Good evening everybody"
+        active={true}
+        soundsOn={false}
+        onCharacterTyped={secondSound}
+        wordDelayMs={100}
+      />,
+    );
+
+    expect(screen.getByText("Good", { selector: "span" })).toBeInTheDocument();
+
+    act(() => {
+      vi.advanceTimersByTime(100);
+    });
+    expect(screen.getByText("Good evening", { selector: "span" })).toBeInTheDocument();
+  });
 });

@@ -4500,22 +4500,44 @@ export function GameTracker() {
   firePlayCommentaryRef.current = firePlayCommentary;
 
   useEffect(() => {
-    if (
-      !gameInitialized ||
-      gameState.gamePhase !== "LIVE" ||
-      !gameState.currentBatterId ||
-      !gameState.currentPitcherId ||
-      !gameState.gameId ||
-      commentaryDisabled ||
-      preambleFiredGameIdRef.current === gameState.gameId
-    ) {
+    const shouldFirePreamble =
+      gameInitialized &&
+      gameState.gamePhase === "LIVE" &&
+      Boolean(gameState.currentBatterId) &&
+      Boolean(gameState.currentPitcherId) &&
+      Boolean(gameState.gameId) &&
+      !commentaryDisabled &&
+      preambleFiredGameIdRef.current !== gameState.gameId;
+
+    console.log("[repdbg] GameTracker preamble effect FIRED", {
+      gameId: gameState.gameId,
+      currentPreambleRefGameId: preambleFiredGameIdRef.current,
+      gameInitialized,
+      gamePhase: gameState.gamePhase,
+      hasCurrentBatterId: Boolean(gameState.currentBatterId),
+      hasCurrentPitcherId: Boolean(gameState.currentPitcherId),
+      commentaryDisabled,
+      shouldFirePreamble,
+    });
+
+    if (!shouldFirePreamble) {
+      console.log("[repdbg] GameTracker preamble effect SHORT-CIRCUITED", {
+        gameId: gameState.gameId,
+        currentPreambleRefGameId: preambleFiredGameIdRef.current,
+      });
       return;
     }
 
+    const pendingAtBatIdentity = getPendingAtBatIdentity();
+    console.log("[repdbg] GameTracker preamble effect CALLING firePreamble", {
+      gameId: gameState.gameId,
+      currentPreambleRefGameId: preambleFiredGameIdRef.current,
+      atBatEventId: pendingAtBatIdentity.atBatEventId,
+    });
     preambleFiredGameIdRef.current = gameState.gameId;
     void firePreamble(
       gameState.gameId,
-      getPendingAtBatIdentity().atBatEventId,
+      pendingAtBatIdentity.atBatEventId,
       undefined,
       competitionType,
     );

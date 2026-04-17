@@ -385,6 +385,13 @@ export function useCommentaryFeed({
       intensity?: NarrativeIntensity,
       mode?: CompetitionType,
     ) => {
+      console.log("[repdbg] firePreamble ENTRY", {
+        targetGameId,
+        atBatIdLike,
+        guardGameId: preambleFiredForGameIdRef.current,
+        alreadyFiredForTargetGame:
+          preambleFiredForGameIdRef.current === targetGameId,
+      });
       if (preambleFiredForGameIdRef.current === targetGameId) {
         return;
       }
@@ -399,9 +406,17 @@ export function useCommentaryFeed({
       const engine = ensureEngine(reporter, resolvedIntensity, mode);
 
       let context: ReporterContext;
+      let primaryContextBuildThrew = false;
+      let contextSource: "reporter-context" | "live-fallback" = "reporter-context";
       try {
         context = await buildReporterContextImpl(targetGameId, atBatIdLike);
       } catch (error) {
+        primaryContextBuildThrew = true;
+        contextSource = "live-fallback";
+        console.log("[repdbg] firePreamble CONTEXT primary-build THREW", {
+          targetGameId,
+          atBatIdLike,
+        });
         const liveSeed = getLivePreambleSeed();
         if (!liveSeed) {
           console.warn(
@@ -421,6 +436,14 @@ export function useCommentaryFeed({
           return;
         }
       }
+
+      console.log("[repdbg] firePreamble PASSED GUARD", {
+        targetGameId,
+        atBatIdLike,
+        guardGameId: preambleFiredForGameIdRef.current,
+        primaryContextBuildThrew,
+        contextSource,
+      });
 
       let result;
       try {
@@ -454,6 +477,10 @@ export function useCommentaryFeed({
         entry,
         ...current.filter((currentEntry) => currentEntry.id !== entry.id),
       ]);
+      console.log("[repdbg] firePreamble APPENDED", {
+        targetGameId,
+        entryId: entry.id,
+      });
       persistEntryRecord({
         id: entry.id,
         gameId: targetGameId,

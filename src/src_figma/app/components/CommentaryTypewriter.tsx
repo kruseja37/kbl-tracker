@@ -31,6 +31,12 @@ export function CommentaryTypewriter({
     active ? 0 : words.length,
   );
   const soundTimeoutsRef = React.useRef<number[]>([]);
+  const shouldScheduleCharacterSounds = Boolean(onCharacterTyped);
+  const emitCharacterTyped = React.useEffectEvent(() => {
+    if (soundsOn) {
+      onCharacterTyped?.();
+    }
+  });
 
   const clearPendingSoundTimeouts = React.useCallback(() => {
     soundTimeoutsRef.current.forEach((timeoutId) => {
@@ -60,12 +66,12 @@ export function CommentaryTypewriter({
       const word = words[nextWordIndex];
       setVisibleWordCount(nextWordIndex + 1);
 
-      if (soundsOn && onCharacterTyped) {
+      if (shouldScheduleCharacterSounds) {
         Array.from(word.replace(/\s+/g, "")).forEach((character, characterIndex) => {
           if (!character.trim()) return;
           const timeoutId = window.setTimeout(() => {
             if (!cancelled) {
-              onCharacterTyped();
+              emitCharacterTyped();
             }
           }, characterIndex * charDelayMs);
           soundTimeoutsRef.current.push(timeoutId);
@@ -89,8 +95,7 @@ export function CommentaryTypewriter({
     active,
     charDelayMs,
     clearPendingSoundTimeouts,
-    onCharacterTyped,
-    soundsOn,
+    shouldScheduleCharacterSounds,
     wordDelayMs,
     words,
   ]);

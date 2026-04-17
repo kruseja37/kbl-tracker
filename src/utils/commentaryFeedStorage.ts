@@ -45,6 +45,22 @@ export async function persistCommentaryFeedEntry(
     const db = await openTrackerDb();
     const tx = db.transaction(STORE, "readwrite");
     const store = tx.objectStore(STORE);
+    const isPreambleRecord =
+      persistedRecord.halfInningLabel === "PRE" ||
+      persistedRecord.id.startsWith("commentary-pre-");
+    const existingRecord = isPreambleRecord
+      ? ((await requestToPromise(store.get(persistedRecord.id))) as
+          | CommentaryFeedEntryRecord
+          | undefined) ?? null
+      : null;
+
+    if (isPreambleRecord) {
+      console.log("[repdbg] persistCommentaryFeedEntry PRE", {
+        id: persistedRecord.id,
+        gameId: persistedRecord.gameId,
+        alreadyExisted: existingRecord !== null,
+      });
+    }
 
     await requestToPromise(store.put(persistedRecord));
     await transactionToPromise(tx);
