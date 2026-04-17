@@ -107,6 +107,26 @@ function createContext(): ReporterContext {
         summary: "Vale has punched out nine across the last four innings.",
       },
     ],
+    battingTeamRecentAlmanac: [
+      {
+        id: "team-note-1",
+        entityId: "team-home",
+        gameId: "game-1",
+        timestamp: 3,
+        headline: "Rivalry heat",
+        summary: "These clubs have split four nasty one-run games this month.",
+      },
+    ],
+    pitchingTeamRecentAlmanac: [
+      {
+        id: "team-note-2",
+        entityId: "team-away",
+        gameId: "game-1",
+        timestamp: 4,
+        headline: "Pirate pressure",
+        summary: "The Freebooters keep forcing late-count mistakes.",
+      },
+    ],
     teamRecentAlmanac: [
       {
         id: "team-note-1",
@@ -128,6 +148,24 @@ function createContext(): ReporterContext {
       },
     ],
     activeWithinTeamRelationships: [],
+    teamDnaFacts: [
+      "Mesa Vista lives for late-night noise.",
+      "The Blowfish treat every close game like a civic ritual.",
+    ],
+    homeTeamRivalries: [
+      {
+        opponentTeamId: "team-away",
+        intensity: 7,
+        origin: "Coastal pennant race",
+      },
+    ],
+    awayTeamRivalries: [
+      {
+        opponentTeamId: "team-home",
+        intensity: 6,
+        origin: "Too many one-run losses",
+      },
+    ],
     teamRivalryIntensity: 7,
     dramaticWeight: 0.86,
     gameState: {

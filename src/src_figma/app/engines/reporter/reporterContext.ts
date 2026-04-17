@@ -8,6 +8,7 @@ import {
   type LeaguePlayerOverrideRecord,
   type Player,
   type Team,
+  type TeamRivalry,
 } from "../../../../utils/leagueBuilderStorage";
 import {
   getAtBatEvent,
@@ -119,9 +120,15 @@ export interface ReporterContext {
   pitchingTeamLegacySummary: string;
   batterRecentAlmanac: AlmanacEntry[];
   pitcherRecentAlmanac: AlmanacEntry[];
+  battingTeamRecentAlmanac: AlmanacEntry[];
+  pitchingTeamRecentAlmanac: AlmanacEntry[];
+  // Temporary alias while prompt-builder changes are deferred to Commit 1.
   teamRecentAlmanac: AlmanacEntry[];
   activeOpposingRelationships: ReporterRelationship[];
   activeWithinTeamRelationships: ReporterRelationship[];
+  teamDnaFacts: string[];
+  homeTeamRivalries: TeamRivalry[];
+  awayTeamRivalries: TeamRivalry[];
   teamRivalryIntensity: number;
   dramaticWeight: number;
   gameState: GameStateSnapshot;
@@ -308,6 +315,34 @@ function buildTeamSnapshot(teamId: string, fallbackName: string, team: Team | nu
   };
 }
 
+function getHomeAwayTeamIds(params: {
+  halfInning: AtBatEvent["halfInning"];
+  battingTeamId: string;
+  pitchingTeamId: string;
+}) {
+  const { halfInning, battingTeamId, pitchingTeamId } = params;
+  const homeTeamId = halfInning === "TOP" ? pitchingTeamId : battingTeamId;
+  const awayTeamId = halfInning === "TOP" ? battingTeamId : pitchingTeamId;
+
+  return {
+    homeTeamId,
+    awayTeamId,
+  };
+}
+
+function normalizeTeamDnaFacts(team: Team | null): string[] {
+  return (team?.heritageFacts ?? []).filter(
+    (fact): fact is string => typeof fact === "string" && fact.trim().length > 0,
+  );
+}
+
+function normalizeTeamRivalries(team: Team | null): TeamRivalry[] {
+  return (team?.rivalries ?? []).filter(
+    (rivalry): rivalry is TeamRivalry =>
+      typeof rivalry?.opponentTeamId === "string" && rivalry.opponentTeamId.length > 0,
+  );
+}
+
 function computeReporterDramaticWeight(params: {
   event: AtBatEvent;
   batterFame: FameTier;
@@ -377,6 +412,7 @@ export async function buildLiveReporterContext(
     batterRecentAlmanac,
     pitcherRecentAlmanac,
     battingTeamRecentAlmanac,
+    pitchingTeamRecentAlmanac,
   ] = await Promise.all([
     dataSources.getPlayer(seed.batterId),
     dataSources.getPlayer(seed.pitcherId),
@@ -395,6 +431,7 @@ export async function buildLiveReporterContext(
     dataSources.getRecentPlayerAlmanac(seed.batterId, instanceId),
     dataSources.getRecentPlayerAlmanac(seed.pitcherId, instanceId),
     dataSources.getRecentTeamAlmanac(seed.battingTeamId, instanceId),
+    dataSources.getRecentTeamAlmanac(seed.pitchingTeamId, instanceId),
   ]);
 
   const batter = buildPlayerSnapshot({
@@ -424,6 +461,18 @@ export async function buildLiveReporterContext(
     homeScore: seed.homeScore,
     awayScore: seed.awayScore,
   }).leverageIndex;
+  const { homeTeamId, awayTeamId } = getHomeAwayTeamIds({
+    halfInning: seed.halfInning,
+    battingTeamId: seed.battingTeamId,
+    pitchingTeamId: seed.pitchingTeamId,
+  });
+  const homeTeam = homeTeamId === seed.battingTeamId ? battingTeam : pitchingTeam;
+  const awayTeam = awayTeamId === seed.battingTeamId ? battingTeam : pitchingTeam;
+  const teamDnaFacts = normalizeTeamDnaFacts(homeTeam);
+  const homeTeamRivalries = normalizeTeamRivalries(homeTeam);
+  const awayTeamRivalries = normalizeTeamRivalries(awayTeam);
+  const teamRivalryIntensity =
+    homeTeamRivalries.find((rivalry) => rivalry.opponentTeamId === awayTeamId)?.intensity ?? 0;
 
   return {
     batter,
@@ -445,10 +494,15 @@ export async function buildLiveReporterContext(
       pitchingTeamLegacySummary ?? DEFAULT_LEGACY_SUMMARY,
     batterRecentAlmanac: capRecentAlmanac(batterRecentAlmanac),
     pitcherRecentAlmanac: capRecentAlmanac(pitcherRecentAlmanac),
+    battingTeamRecentAlmanac: capRecentAlmanac(battingTeamRecentAlmanac),
+    pitchingTeamRecentAlmanac: capRecentAlmanac(pitchingTeamRecentAlmanac),
     teamRecentAlmanac: capRecentAlmanac(battingTeamRecentAlmanac),
     activeOpposingRelationships: [],
     activeWithinTeamRelationships: [],
-    teamRivalryIntensity: 0,
+    teamDnaFacts,
+    homeTeamRivalries,
+    awayTeamRivalries,
+    teamRivalryIntensity,
     dramaticWeight: Number(
       (leverageIndex + (batter.effectiveFame + pitcher.effectiveFame - 2) * 0.1).toFixed(3),
     ),
@@ -512,6 +566,7 @@ export async function buildReporterContext(
     batterRecentAlmanac,
     pitcherRecentAlmanac,
     battingTeamRecentAlmanac,
+    pitchingTeamRecentAlmanac,
   ] = await Promise.all([
     dataSources.getPlayer(event.batterId),
     dataSources.getPlayer(event.pitcherId),
@@ -526,6 +581,7 @@ export async function buildReporterContext(
     dataSources.getRecentPlayerAlmanac(event.batterId, instanceId),
     dataSources.getRecentPlayerAlmanac(event.pitcherId, instanceId),
     dataSources.getRecentTeamAlmanac(event.batterTeamId, instanceId),
+    dataSources.getRecentTeamAlmanac(event.pitcherTeamId, instanceId),
   ]);
 
   const batter = buildPlayerSnapshot({
@@ -542,6 +598,18 @@ export async function buildReporterContext(
     player: pitcherPlayer,
     override: pitcherOverride,
   });
+  const { homeTeamId, awayTeamId } = getHomeAwayTeamIds({
+    halfInning: event.halfInning,
+    battingTeamId: event.batterTeamId,
+    pitchingTeamId: event.pitcherTeamId,
+  });
+  const homeTeam = homeTeamId === event.batterTeamId ? battingTeam : pitchingTeam;
+  const awayTeam = awayTeamId === event.batterTeamId ? battingTeam : pitchingTeam;
+  const teamDnaFacts = normalizeTeamDnaFacts(homeTeam);
+  const homeTeamRivalries = normalizeTeamRivalries(homeTeam);
+  const awayTeamRivalries = normalizeTeamRivalries(awayTeam);
+  const teamRivalryIntensity =
+    homeTeamRivalries.find((rivalry) => rivalry.opponentTeamId === awayTeamId)?.intensity ?? 0;
 
   return {
     batter,
@@ -554,10 +622,15 @@ export async function buildReporterContext(
     pitchingTeamLegacySummary: pitchingTeamLegacySummary ?? DEFAULT_LEGACY_SUMMARY,
     batterRecentAlmanac: capRecentAlmanac(batterRecentAlmanac),
     pitcherRecentAlmanac: capRecentAlmanac(pitcherRecentAlmanac),
+    battingTeamRecentAlmanac: capRecentAlmanac(battingTeamRecentAlmanac),
+    pitchingTeamRecentAlmanac: capRecentAlmanac(pitchingTeamRecentAlmanac),
     teamRecentAlmanac: capRecentAlmanac(battingTeamRecentAlmanac),
     activeOpposingRelationships: [],
     activeWithinTeamRelationships: [],
-    teamRivalryIntensity: 0,
+    teamDnaFacts,
+    homeTeamRivalries,
+    awayTeamRivalries,
+    teamRivalryIntensity,
     dramaticWeight: computeReporterDramaticWeight({
       event,
       batterFame: batter.effectiveFame,

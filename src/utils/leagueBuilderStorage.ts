@@ -108,8 +108,16 @@ export interface Team {
   era?: EraFlavor;
   cityVibe?: string;
   ballparkNickname?: string;
+  heritageFacts?: string[];
+  rivalries?: TeamRivalry[];
   createdDate: string;
   lastModified: string;
+}
+
+export interface TeamRivalry {
+  opponentTeamId: string;
+  intensity: number;
+  origin?: string;
 }
 
 export interface LeagueAssignment {

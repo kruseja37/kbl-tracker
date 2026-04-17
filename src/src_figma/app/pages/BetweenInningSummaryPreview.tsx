@@ -90,6 +90,26 @@ function createContext(): ReporterContext {
       "The Freebooters keep surviving with crooked-number bursts.",
     batterRecentAlmanac: [],
     pitcherRecentAlmanac: [],
+    battingTeamRecentAlmanac: [
+      {
+        id: "team-note-1",
+        entityId: "team-home",
+        gameId: "preview-game",
+        timestamp: 3,
+        headline: "Rivalry heat",
+        summary: "These clubs have split four nasty one-run games this month.",
+      },
+    ],
+    pitchingTeamRecentAlmanac: [
+      {
+        id: "team-note-2",
+        entityId: "team-away",
+        gameId: "preview-game",
+        timestamp: 4,
+        headline: "Road tension",
+        summary: "The Freebooters have made a habit of silencing home crowds late.",
+      },
+    ],
     teamRecentAlmanac: [
       {
         id: "team-note-1",
@@ -102,6 +122,24 @@ function createContext(): ReporterContext {
     ],
     activeOpposingRelationships: [],
     activeWithinTeamRelationships: [],
+    teamDnaFacts: [
+      "Blowfish fans expect late-inning noise.",
+      "The Tank gets louder the tighter it gets.",
+    ],
+    homeTeamRivalries: [
+      {
+        opponentTeamId: "team-away",
+        intensity: 7,
+        origin: "Division rivals",
+      },
+    ],
+    awayTeamRivalries: [
+      {
+        opponentTeamId: "team-home",
+        intensity: 6,
+        origin: "Recent playoff split",
+      },
+    ],
     teamRivalryIntensity: 7,
     dramaticWeight: 0.86,
     gameState: {

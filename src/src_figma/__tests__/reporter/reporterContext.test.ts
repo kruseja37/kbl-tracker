@@ -110,6 +110,16 @@ function createAtBatEvent(overrides: Partial<AtBatEvent> = {}): AtBatEvent {
   };
 }
 
+function createRecentAlmanacEntries(entityId: string, label: string): AlmanacEntry[] {
+  return Array.from({ length: 7 }, (_, index) => ({
+    id: `${label}-${index}`,
+    entityId,
+    timestamp: 1000 + index,
+    headline: `${label} ${index}`,
+    summary: `Summary ${index}`,
+  }));
+}
+
 function createDataSources(overrides: Partial<ReporterContextDataSources> = {}): ReporterContextDataSources {
   const event = createAtBatEvent();
   const players = new Map<string, Player>([
@@ -170,13 +180,7 @@ function createDataSources(overrides: Partial<ReporterContextDataSources> = {}):
       }),
     ],
   ]);
-  const recent: AlmanacEntry[] = Array.from({ length: 7 }, (_, index) => ({
-    id: `entry-${index}`,
-    entityId: "batter-1",
-    timestamp: 1000 + index,
-    headline: `Entry ${index}`,
-    summary: `Summary ${index}`,
-  }));
+  const recent = createRecentAlmanacEntries("batter-1", "entry");
 
   return {
     getAtBatEvent: vi.fn(async () => event),
@@ -254,6 +258,8 @@ describe("buildReporterContext", () => {
       "entry-3",
       "entry-2",
     ]);
+    expect(context.battingTeamRecentAlmanac).toHaveLength(5);
+    expect(context.pitchingTeamRecentAlmanac).toHaveLength(5);
     expect(context.gameState).toMatchObject({
       gameId: "game-1",
       atBatId: "game-1_7",
@@ -285,7 +291,194 @@ describe("buildReporterContext", () => {
 
     expect(context.activeOpposingRelationships).toEqual([]);
     expect(context.activeWithinTeamRelationships).toEqual([]);
+    expect(context.homeTeamRivalries).toEqual([]);
+    expect(context.awayTeamRivalries).toEqual([]);
+    expect(context.teamDnaFacts).toEqual([]);
     expect(context.teamRivalryIntensity).toBe(0);
+  });
+
+  test("returns teamRivalryIntensity from the home team's perspective", async () => {
+    const teams = new Map<string, Team>([
+      [
+        "team-away",
+        createTeam({
+          id: "team-away",
+          name: "Away Comets",
+        }),
+      ],
+      [
+        "team-home",
+        createTeam({
+          id: "team-home",
+          name: "Home Meteors",
+          rivalries: [
+            {
+              opponentTeamId: "team-away",
+              intensity: 7,
+              origin: "Division rivals",
+            },
+          ],
+        }),
+      ],
+    ]);
+
+    const context = await buildReporterContext("game-1", "game-1_7", {
+      dataSources: createDataSources({
+        getTeam: vi.fn(async (teamId) => teams.get(teamId) ?? null),
+      }),
+    });
+
+    expect(context.teamRivalryIntensity).toBe(7);
+    expect(context.homeTeamRivalries).toEqual([
+      {
+        opponentTeamId: "team-away",
+        intensity: 7,
+        origin: "Division rivals",
+      },
+    ]);
+  });
+
+  test("returns teamRivalryIntensity as 0 when the home team has no rivalry entry for the matchup", async () => {
+    const teams = new Map<string, Team>([
+      [
+        "team-away",
+        createTeam({
+          id: "team-away",
+          rivalries: [
+            {
+              opponentTeamId: "team-home",
+              intensity: 9,
+              origin: "One-sided feud",
+            },
+          ],
+        }),
+      ],
+      [
+        "team-home",
+        createTeam({
+          id: "team-home",
+        }),
+      ],
+    ]);
+
+    const context = await buildReporterContext("game-1", "game-1_7", {
+      dataSources: createDataSources({
+        getTeam: vi.fn(async (teamId) => teams.get(teamId) ?? null),
+      }),
+    });
+
+    expect(context.teamRivalryIntensity).toBe(0);
+  });
+
+  test("returns teamDnaFacts from the home team's heritageFacts array", async () => {
+    const teams = new Map<string, Team>([
+      [
+        "team-away",
+        createTeam({
+          id: "team-away",
+        }),
+      ],
+      [
+        "team-home",
+        createTeam({
+          id: "team-home",
+          heritageFacts: [
+            "Owns the late innings.",
+            "Still hangs bunting from the 1948 title run.",
+          ],
+        }),
+      ],
+    ]);
+
+    const context = await buildReporterContext("game-1", "game-1_7", {
+      dataSources: createDataSources({
+        getTeam: vi.fn(async (teamId) => teams.get(teamId) ?? null),
+      }),
+    });
+
+    expect(context.teamDnaFacts).toEqual([
+      "Owns the late innings.",
+      "Still hangs bunting from the 1948 title run.",
+    ]);
+  });
+
+  test("returns empty arrays and zero when team metadata is absent", async () => {
+    const context = await buildReporterContext("game-1", "game-1_7", {
+      dataSources: createDataSources(),
+    });
+
+    expect(context.teamDnaFacts).toEqual([]);
+    expect(context.homeTeamRivalries).toEqual([]);
+    expect(context.awayTeamRivalries).toEqual([]);
+    expect(context.teamRivalryIntensity).toBe(0);
+  });
+
+  test("fetches distinct batting and pitching team almanac entries", async () => {
+    const battingTeamEntries = createRecentAlmanacEntries("team-away", "batting-team");
+    const pitchingTeamEntries = createRecentAlmanacEntries("team-home", "pitching-team");
+
+    const context = await buildReporterContext("game-1", "game-1_7", {
+      dataSources: createDataSources({
+        getRecentTeamAlmanac: vi.fn(async (teamId) =>
+          teamId === "team-away" ? battingTeamEntries : pitchingTeamEntries,
+        ),
+      }),
+    });
+
+    expect(context.battingTeamRecentAlmanac.map((entry) => entry.id)).toEqual([
+      "batting-team-6",
+      "batting-team-5",
+      "batting-team-4",
+      "batting-team-3",
+      "batting-team-2",
+    ]);
+    expect(context.pitchingTeamRecentAlmanac.map((entry) => entry.id)).toEqual([
+      "pitching-team-6",
+      "pitching-team-5",
+      "pitching-team-4",
+      "pitching-team-3",
+      "pitching-team-2",
+    ]);
+  });
+
+  test("keeps rivalry intensity at 0 for asymmetric away-only rivalry declarations", async () => {
+    const teams = new Map<string, Team>([
+      [
+        "team-away",
+        createTeam({
+          id: "team-away",
+          rivalries: [
+            {
+              opponentTeamId: "team-home",
+              intensity: 8,
+              origin: "Still mad about last October",
+            },
+          ],
+        }),
+      ],
+      [
+        "team-home",
+        createTeam({
+          id: "team-home",
+        }),
+      ],
+    ]);
+
+    const context = await buildReporterContext("game-1", "game-1_7", {
+      dataSources: createDataSources({
+        getTeam: vi.fn(async (teamId) => teams.get(teamId) ?? null),
+      }),
+    });
+
+    expect(context.teamRivalryIntensity).toBe(0);
+    expect(context.homeTeamRivalries).toEqual([]);
+    expect(context.awayTeamRivalries).toEqual([
+      {
+        opponentTeamId: "team-home",
+        intensity: 8,
+        origin: "Still mad about last October",
+      },
+    ]);
   });
 
   test("falls back to event snapshots when League Builder records are absent", async () => {

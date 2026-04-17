@@ -127,12 +127,13 @@ interface Team {
   era?: EraFlavor;                    // matches Voice Spec's 5 Era Flavors
   cityVibe?: string;                  // "Rust belt blue-collar"
   ballparkNickname?: string;
-  rivalries: TeamRivalry[];
+  heritageFacts?: string[];           // 2-5 short lines of authored team color
+  rivalries?: TeamRivalry[];          // asymmetric authored rivalry declarations
 }
 
 interface TeamRivalry {
   opponentTeamId: string;
-  intensity: number;                  // 0..100
+  intensity: number;                  // 0-10 scale
   origin?: string;                    // free-text ("1987 brawl")
 }
 ```
@@ -231,7 +232,7 @@ function computeDramaticWeight(ctx: AtBatContext): number {
   if (ctx.batterAffinityTowardPitchingTeam < -30) w += 0.3;
 
   // Team-vs-team rivalry
-  if (ctx.teamRivalryIntensity > 50) w += 0.25;
+  if (ctx.teamRivalryIntensity > 5) w += 0.25;
 
   return w;
 }
@@ -285,12 +286,16 @@ interface ReporterContext {
   // Raw recent detail
   batterRecentAlmanac: AlmanacEntry[];     // last 3-5 entries
   pitcherRecentAlmanac: AlmanacEntry[];
-  teamRecentAlmanac: AlmanacEntry[];
+  battingTeamRecentAlmanac: AlmanacEntry[];
+  pitchingTeamRecentAlmanac: AlmanacEntry[];
 
   // Drama
   activeOpposingRelationships: PlayerRelationship[];  // filtered to on-field
   activeWithinTeamRelationships: PlayerRelationship[]; // surfaced but unweighted
-  teamRivalryIntensity: number;
+  teamDnaFacts: string[];                  // home team heritageFacts, authored color
+  homeTeamRivalries: TeamRivalry[];        // full raw home-team rivalry list
+  awayTeamRivalries: TeamRivalry[];        // full raw away-team rivalry list
+  teamRivalryIntensity: number;            // home-team POV on this matchup, 0-10
   dramaticWeight: number;
 
   // Current moment

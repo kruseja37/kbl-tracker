@@ -6,7 +6,7 @@
  * that can be assigned to multiple leagues.
  */
 
-import { useState, useEffect } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import {
   ArrowLeft,
@@ -20,9 +20,11 @@ import {
   AlertTriangle,
   MapPin,
   Building2,
+  ChevronDown,
+  ChevronRight,
 } from "lucide-react";
 import { useLeagueBuilderData, type Team } from "../../hooks/useLeagueBuilderData";
-import type { EraFlavor } from "../../../utils/leagueBuilderStorage";
+import type { EraFlavor, TeamRivalry } from "../../../utils/leagueBuilderStorage";
 
 const ERA_FLAVORS: EraFlavor[] = ['GOLDEN_AGE', 'CLASSIC_TV', 'MODERN_LOCAL'];
 
@@ -33,6 +35,9 @@ const ERA_FLAVOR_LABELS: Record<EraFlavor, string> = {
 };
 
 const TEAM_BACKSTORY_LIMIT = 500;
+const HERITAGE_FACT_LIMIT = 5;
+const RIVALRY_INTENSITY_MIN = 0;
+const RIVALRY_INTENSITY_MAX = 10;
 
 // ============================================
 // TYPES
@@ -54,6 +59,8 @@ interface TeamFormData {
   era: EraFlavor | '';
   cityVibe: string;
   ballparkNickname: string;
+  heritageFacts: string[];
+  rivalries: TeamRivalry[];
 }
 
 const DEFAULT_FORM_DATA: TeamFormData = {
@@ -72,7 +79,45 @@ const DEFAULT_FORM_DATA: TeamFormData = {
   era: "",
   cityVibe: "",
   ballparkNickname: "",
+  heritageFacts: [],
+  rivalries: [],
 };
+
+function normalizeHeritageFacts(heritageFacts: string[]): string[] {
+  return heritageFacts
+    .map((fact) => fact.trim())
+    .filter(Boolean)
+    .slice(0, HERITAGE_FACT_LIMIT);
+}
+
+function normalizeRivalries(rivalries: TeamRivalry[]): TeamRivalry[] {
+  const seenOpponentIds = new Set<string>();
+
+  return rivalries.reduce<TeamRivalry[]>((acc, rivalry) => {
+    const opponentTeamId = rivalry.opponentTeamId?.trim();
+    if (!opponentTeamId || seenOpponentIds.has(opponentTeamId)) {
+      return acc;
+    }
+
+    seenOpponentIds.add(opponentTeamId);
+    acc.push({
+      opponentTeamId,
+      intensity: Math.max(
+        RIVALRY_INTENSITY_MIN,
+        Math.min(RIVALRY_INTENSITY_MAX, Math.round(rivalry.intensity ?? 0)),
+      ),
+      origin: rivalry.origin?.trim() || undefined,
+    });
+    return acc;
+  }, []);
+}
+
+function teamMetadataMatches(
+  left: { heritageFacts: string[]; rivalries: TeamRivalry[] },
+  right: { heritageFacts: string[]; rivalries: TeamRivalry[] },
+): boolean {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
 
 // ============================================
 // MAIN COMPONENT
@@ -96,6 +141,12 @@ export function LeagueBuilderTeams() {
   const [formData, setFormData] = useState<TeamFormData>(DEFAULT_FORM_DATA);
   const [isSaving, setIsSaving] = useState(false);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [isHeritageFactsOpen, setIsHeritageFactsOpen] = useState(true);
+  const [isRivalriesOpen, setIsRivalriesOpen] = useState(true);
+  const autosavedTeamMetadataRef = useRef<{
+    heritageFacts: string[];
+    rivalries: TeamRivalry[];
+  } | null>(null);
 
   // Auto-generate abbreviation from name
   useEffect(() => {
@@ -121,6 +172,9 @@ export function LeagueBuilderTeams() {
   const openCreateModal = () => {
     setEditingTeam(null);
     setFormData(DEFAULT_FORM_DATA);
+    setIsHeritageFactsOpen(true);
+    setIsRivalriesOpen(true);
+    autosavedTeamMetadataRef.current = null;
     setIsModalOpen(true);
   };
 
@@ -142,7 +196,15 @@ export function LeagueBuilderTeams() {
       era: team.era || "",
       cityVibe: team.cityVibe || "",
       ballparkNickname: team.ballparkNickname || "",
+      heritageFacts: team.heritageFacts || [],
+      rivalries: team.rivalries || [],
     });
+    autosavedTeamMetadataRef.current = {
+      heritageFacts: normalizeHeritageFacts(team.heritageFacts || []),
+      rivalries: normalizeRivalries(team.rivalries || []),
+    };
+    setIsHeritageFactsOpen(true);
+    setIsRivalriesOpen(true);
     setIsModalOpen(true);
   };
 
@@ -150,13 +212,65 @@ export function LeagueBuilderTeams() {
     setIsModalOpen(false);
     setEditingTeam(null);
     setFormData(DEFAULT_FORM_DATA);
+    autosavedTeamMetadataRef.current = null;
   };
+
+  useEffect(() => {
+    if (!editingTeam || !isModalOpen) return;
+
+    const nextMetadata = {
+      heritageFacts: normalizeHeritageFacts(formData.heritageFacts),
+      rivalries: normalizeRivalries(formData.rivalries),
+    };
+    const previousMetadata =
+      autosavedTeamMetadataRef.current ?? {
+        heritageFacts: normalizeHeritageFacts(editingTeam.heritageFacts || []),
+        rivalries: normalizeRivalries(editingTeam.rivalries || []),
+      };
+
+    if (teamMetadataMatches(previousMetadata, nextMetadata)) {
+      return;
+    }
+
+    const timeoutId = setTimeout(() => {
+      void updateTeam({
+        ...editingTeam,
+        heritageFacts: nextMetadata.heritageFacts.length
+          ? nextMetadata.heritageFacts
+          : undefined,
+        rivalries: nextMetadata.rivalries.length
+          ? nextMetadata.rivalries
+          : undefined,
+      })
+        .then((savedTeam) => {
+          autosavedTeamMetadataRef.current = nextMetadata;
+          if (savedTeam) {
+            setEditingTeam(savedTeam);
+          }
+        })
+        .catch((err) => {
+          console.error("Failed to auto-save team metadata:", err);
+        });
+    }, 400);
+
+    return () => {
+      clearTimeout(timeoutId);
+    };
+  }, [
+    editingTeam,
+    formData.heritageFacts,
+    formData.rivalries,
+    isModalOpen,
+    updateTeam,
+  ]);
 
   const handleSave = async () => {
     if (!formData.name.trim() || !formData.abbreviation.trim()) return;
 
     setIsSaving(true);
     try {
+      const normalizedHeritageFacts = normalizeHeritageFacts(formData.heritageFacts);
+      const normalizedRivalries = normalizeRivalries(formData.rivalries);
       const teamData = {
         name: formData.name.trim(),
         abbreviation: formData.abbreviation.trim().toUpperCase(),
@@ -181,6 +295,12 @@ export function LeagueBuilderTeams() {
         era: formData.era || undefined,
         cityVibe: formData.cityVibe.trim() || undefined,
         ballparkNickname: formData.ballparkNickname.trim() || undefined,
+        heritageFacts: normalizedHeritageFacts.length
+          ? normalizedHeritageFacts
+          : undefined,
+        rivalries: normalizedRivalries.length
+          ? normalizedRivalries
+          : undefined,
         leagueIds: editingTeam?.leagueIds || [],
         retiredNumbers: editingTeam?.retiredNumbers || [],
       };
@@ -212,6 +332,103 @@ export function LeagueBuilderTeams() {
 
   const getTeamLeagues = (teamId: string) => {
     return leagues.filter((league) => league.teamIds.includes(teamId));
+  };
+
+  const sameLeagueTeams = useMemo(() => {
+    if (!editingTeam) return [];
+
+    const relatedLeagueIds = new Set([
+      ...(editingTeam.leagueIds || []),
+      ...leagues
+        .filter((league) => league.teamIds.includes(editingTeam.id))
+        .map((league) => league.id),
+    ]);
+
+    return teams
+      .filter((team) => {
+        if (team.id === editingTeam.id) return false;
+
+        return (
+          (team.leagueIds ?? []).some((leagueId) => relatedLeagueIds.has(leagueId)) ||
+          leagues.some(
+            (league) =>
+              relatedLeagueIds.has(league.id) &&
+              league.teamIds.includes(team.id),
+          )
+        );
+      })
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [editingTeam, leagues, teams]);
+
+  const availableRivalryTeams = useMemo(() => {
+    const selectedOpponentIds = new Set(
+      formData.rivalries.map((rivalry) => rivalry.opponentTeamId).filter(Boolean),
+    );
+    return sameLeagueTeams.filter((team) => !selectedOpponentIds.has(team.id));
+  }, [formData.rivalries, sameLeagueTeams]);
+
+  const addHeritageFact = () => {
+    setFormData((prev) => {
+      if (prev.heritageFacts.length >= HERITAGE_FACT_LIMIT) return prev;
+      return {
+        ...prev,
+        heritageFacts: [...prev.heritageFacts, ""],
+      };
+    });
+  };
+
+  const updateHeritageFact = (index: number, value: string) => {
+    setFormData((prev) => {
+      const heritageFacts = [...prev.heritageFacts];
+      heritageFacts[index] = value;
+      return { ...prev, heritageFacts };
+    });
+  };
+
+  const removeHeritageFact = (index: number) => {
+    setFormData((prev) => ({
+      ...prev,
+      heritageFacts: prev.heritageFacts.filter((_, factIndex) => factIndex !== index),
+    }));
+  };
+
+  const addRivalry = () => {
+    const nextOpponent = availableRivalryTeams[0];
+    if (!nextOpponent) return;
+
+    setFormData((prev) => ({
+      ...prev,
+      rivalries: [
+        ...prev.rivalries,
+        {
+          opponentTeamId: nextOpponent.id,
+          intensity: 5,
+          origin: "",
+        },
+      ],
+    }));
+  };
+
+  const updateRivalry = (
+    index: number,
+    field: keyof TeamRivalry,
+    value: string | number,
+  ) => {
+    setFormData((prev) => {
+      const rivalries = [...prev.rivalries];
+      rivalries[index] = {
+        ...rivalries[index],
+        [field]: value,
+      };
+      return { ...prev, rivalries };
+    });
+  };
+
+  const removeRivalry = (index: number) => {
+    setFormData((prev) => ({
+      ...prev,
+      rivalries: prev.rivalries.filter((_, rivalryIndex) => rivalryIndex !== index),
+    }));
   };
 
   // ============================================
@@ -494,7 +711,7 @@ export function LeagueBuilderTeams() {
                       Editorial Identity
                     </h3>
                     <p className="mt-1 text-xs text-[#E8E8D8]/60">
-                      Team flavor for reporter copy. No rivalries or affinity tabs in v1.
+                      Team flavor for reporter copy, lore, and matchup color.
                     </p>
                   </div>
                   <span className="text-[10px] uppercase tracking-[0.18em] text-[#D4A020]">
@@ -576,6 +793,199 @@ export function LeagueBuilderTeams() {
                       className="w-full bg-[#3F5A3A] border-[4px] border-[#2d3d2f] p-3 text-[#E8E8D8] placeholder-[#E8E8D8]/40 focus:border-[#E8E8D8] outline-none"
                     />
                   </div>
+                </div>
+
+                <div className="border-[3px] border-[#2d3d2f] bg-[#3F5A3A]/70">
+                  <button
+                    type="button"
+                    onClick={() => setIsHeritageFactsOpen((prev) => !prev)}
+                    className="flex w-full items-center justify-between px-4 py-3 text-left hover:bg-[#4A6844]/70 transition"
+                  >
+                    <div>
+                      <h4 className="text-sm font-bold tracking-[0.16em] uppercase">
+                        Heritage Facts
+                      </h4>
+                      <p className="mt-1 text-xs text-[#E8E8D8]/60">
+                        Short lines describing the team&apos;s identity, tendencies, lore. 2-5 works best. Used by the beat reporter for color.
+                      </p>
+                    </div>
+                    {isHeritageFactsOpen ? (
+                      <ChevronDown className="w-4 h-4 text-[#D4A020]" />
+                    ) : (
+                      <ChevronRight className="w-4 h-4 text-[#D4A020]" />
+                    )}
+                  </button>
+
+                  {isHeritageFactsOpen && (
+                    <div className="space-y-3 border-t-[3px] border-[#2d3d2f] px-4 py-4">
+                      {formData.heritageFacts.length === 0 && (
+                        <p className="text-xs text-[#E8E8D8]/55">
+                          Add a few quick identity beats for the reporter to pull from.
+                        </p>
+                      )}
+
+                      {formData.heritageFacts.map((fact, index) => (
+                        <div
+                          key={`heritage-fact-${index}`}
+                          className="flex items-center gap-3"
+                        >
+                          <input
+                            type="text"
+                            value={fact}
+                            onChange={(e) => updateHeritageFact(index, e.target.value)}
+                            placeholder="e.g., Lives for late-inning chaos"
+                            className="w-full bg-[#2d3d2f] border-[3px] border-[#243124] p-3 text-[#E8E8D8] placeholder-[#E8E8D8]/40 focus:border-[#E8E8D8] outline-none"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => removeHeritageFact(index)}
+                            className="shrink-0 bg-red-900/70 hover:bg-red-800 border-[3px] border-red-400/50 p-2 transition"
+                            aria-label={`Remove heritage fact ${index + 1}`}
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                      ))}
+
+                      <button
+                        type="button"
+                        onClick={addHeritageFact}
+                        disabled={formData.heritageFacts.length >= HERITAGE_FACT_LIMIT}
+                        className="inline-flex items-center gap-2 bg-[#5A8352] hover:bg-[#4A6844] border-[3px] border-[#E8E8D8]/70 px-4 py-2 text-sm font-bold transition disabled:opacity-40 disabled:cursor-not-allowed"
+                      >
+                        <Plus className="w-4 h-4" />
+                        Add Fact
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                <div className="border-[3px] border-[#2d3d2f] bg-[#3F5A3A]/70">
+                  <button
+                    type="button"
+                    onClick={() => setIsRivalriesOpen((prev) => !prev)}
+                    className="flex w-full items-center justify-between px-4 py-3 text-left hover:bg-[#4A6844]/70 transition"
+                  >
+                    <div>
+                      <h4 className="text-sm font-bold tracking-[0.16em] uppercase">
+                        Rivalries
+                      </h4>
+                      <p className="mt-1 text-xs text-[#E8E8D8]/60">
+                        Teams this franchise considers rivals, and how intense. Asymmetric — other teams have their own list.
+                      </p>
+                    </div>
+                    {isRivalriesOpen ? (
+                      <ChevronDown className="w-4 h-4 text-[#D4A020]" />
+                    ) : (
+                      <ChevronRight className="w-4 h-4 text-[#D4A020]" />
+                    )}
+                  </button>
+
+                  {isRivalriesOpen && (
+                    <div className="space-y-3 border-t-[3px] border-[#2d3d2f] px-4 py-4">
+                      {formData.rivalries.length === 0 && (
+                        <p className="text-xs text-[#E8E8D8]/55">
+                          Rivalries are available once this team shares a league with other clubs.
+                        </p>
+                      )}
+
+                      {formData.rivalries.map((rivalry, index) => {
+                        const selectedByOtherRows = new Set(
+                          formData.rivalries
+                            .filter((_, rivalryIndex) => rivalryIndex !== index)
+                            .map((entry) => entry.opponentTeamId)
+                            .filter(Boolean),
+                        );
+                        const opponentOptions = sameLeagueTeams.filter(
+                          (team) =>
+                            team.id === rivalry.opponentTeamId ||
+                            !selectedByOtherRows.has(team.id),
+                        );
+
+                        return (
+                          <div
+                            key={`${rivalry.opponentTeamId || "rivalry"}-${index}`}
+                            className="grid gap-3 border-[3px] border-[#243124] bg-[#2d3d2f]/70 p-3 md:grid-cols-[1.5fr_1fr_1.5fr_auto]"
+                          >
+                            <div>
+                              <label className="mb-1 block text-[10px] font-bold uppercase tracking-[0.16em] text-[#E8E8D8]/65">
+                                Opponent
+                              </label>
+                              <select
+                                value={rivalry.opponentTeamId}
+                                onChange={(e) =>
+                                  updateRivalry(index, "opponentTeamId", e.target.value)
+                                }
+                                className="w-full bg-[#3F5A3A] border-[3px] border-[#2d3d2f] p-3 text-[#E8E8D8] focus:border-[#E8E8D8] outline-none"
+                              >
+                                {opponentOptions.map((team) => (
+                                  <option key={team.id} value={team.id}>
+                                    {team.name}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+
+                            <div>
+                              <label className="mb-1 block text-[10px] font-bold uppercase tracking-[0.16em] text-[#E8E8D8]/65">
+                                Intensity
+                              </label>
+                              <div className="flex items-center gap-3">
+                                <input
+                                  type="range"
+                                  min={RIVALRY_INTENSITY_MIN}
+                                  max={RIVALRY_INTENSITY_MAX}
+                                  step={1}
+                                  value={rivalry.intensity}
+                                  onChange={(e) =>
+                                    updateRivalry(index, "intensity", Number(e.target.value))
+                                  }
+                                  className="w-full accent-[#D4A020]"
+                                />
+                                <span className="w-8 text-right text-sm font-bold text-[#D4A020]">
+                                  {rivalry.intensity}
+                                </span>
+                              </div>
+                            </div>
+
+                            <div>
+                              <label className="mb-1 block text-[10px] font-bold uppercase tracking-[0.16em] text-[#E8E8D8]/65">
+                                Origin
+                              </label>
+                              <input
+                                type="text"
+                                value={rivalry.origin || ""}
+                                onChange={(e) => updateRivalry(index, "origin", e.target.value)}
+                                placeholder="e.g., 1987 brawl"
+                                className="w-full bg-[#3F5A3A] border-[3px] border-[#2d3d2f] p-3 text-[#E8E8D8] placeholder-[#E8E8D8]/40 focus:border-[#E8E8D8] outline-none"
+                              />
+                            </div>
+
+                            <div className="flex items-end">
+                              <button
+                                type="button"
+                                onClick={() => removeRivalry(index)}
+                                className="bg-red-900/70 hover:bg-red-800 border-[3px] border-red-400/50 p-2 transition"
+                                aria-label={`Remove rivalry ${index + 1}`}
+                              >
+                                <X className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+
+                      <button
+                        type="button"
+                        onClick={addRivalry}
+                        disabled={availableRivalryTeams.length === 0}
+                        className="inline-flex items-center gap-2 bg-[#5A8352] hover:bg-[#4A6844] border-[3px] border-[#E8E8D8]/70 px-4 py-2 text-sm font-bold transition disabled:opacity-40 disabled:cursor-not-allowed"
+                      >
+                        <Plus className="w-4 h-4" />
+                        Add Rivalry
+                      </button>
+                    </div>
+                  )}
                 </div>
               </section>
 
