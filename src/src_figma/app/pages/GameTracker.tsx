@@ -4525,6 +4525,7 @@ export function GameTracker() {
     const shouldFirePreamble =
       gameInitialized &&
       gameState.gamePhase === "LIVE" &&
+      gameState.beatReporterEnabled &&
       Boolean(gameState.currentBatterId) &&
       Boolean(gameState.currentPitcherId) &&
       Boolean(gameState.gameId) &&
@@ -4548,6 +4549,7 @@ export function GameTracker() {
     firePreamble,
     homeCommentaryDisabled,
     gameInitialized,
+    gameState.beatReporterEnabled,
     gameState.currentBatterId,
     gameState.currentPitcherId,
     gameState.gameId,
@@ -4567,6 +4569,9 @@ export function GameTracker() {
     lastSeenHalfInningRef.current = curr;
 
     if (!prev || !gameState.gameId) {
+      return;
+    }
+    if (!gameState.beatReporterEnabled) {
       return;
     }
 
@@ -4618,6 +4623,7 @@ export function GameTracker() {
     awayCommentaryDisabled,
     competitionType,
     fireBetweenInningSummary,
+    gameState.beatReporterEnabled,
     gameState.gameId,
     gameState.gamePhase,
     gameState.inning,
