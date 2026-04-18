@@ -5,12 +5,21 @@ import {
   scoreNotability,
   type NotabilityPlayContext,
 } from "../../../engines/notabilityScorer";
-import type { BeatReporter, CommentaryFeedEntryRecord } from "../../../types/reporter";
+import type {
+  BeatReporter,
+  CommentaryFeedEntryRecord,
+  GameStory,
+  ReporterGameMode,
+} from "../../../types/reporter";
 import type { NarrativeIntensity } from "../../../types/reporterPreferences";
 import {
   listCommentaryFeedEntriesForGame,
   persistCommentaryFeedEntry,
 } from "../../../utils/commentaryFeedStorage";
+import {
+  listGameStoriesForGame,
+  persistGameStory,
+} from "../../../utils/gameStoriesStorage";
 import { getNarrativeIntensity } from "../../../utils/userPreferencesStorage";
 import { getReporterForTeam } from "../../../utils/reporterStorage";
 import type { AtBatEvent } from "../../../utils/eventLog";
@@ -53,6 +62,8 @@ export interface UseCommentaryFeedDependencies {
   listCommentaryFeedEntriesForGame?: (
     gameId: string,
   ) => Promise<CommentaryFeedEntryRecord[]>;
+  persistGameStory?: (record: GameStory) => Promise<void>;
+  listGameStoriesForGame?: (gameId: string) => Promise<GameStory[]>;
 }
 
 export interface UseCommentaryFeedOptions {
@@ -190,6 +201,10 @@ export function useCommentaryFeed({
   const pendingPopupRef = React.useRef<PendingBetweenInningPopup | null>(null);
   const processedPlayIdsRef = React.useRef<Set<string>>(new Set());
   const lastHydratedGameIdRef = React.useRef<string | null>(null);
+  // Post-game columns fire exactly once per gameId per component lifetime.
+  // Seeded from existing gameStories records on mount so refresh / revisit
+  // doesn't re-generate columns that already live in IDB.
+  const firedPostGameForGameIdRef = React.useRef<Set<string>>(new Set());
 
   const getIntensityImpl = dependencies.getIntensity ?? getNarrativeIntensity;
   const getReporterForTeamImpl =
@@ -209,6 +224,10 @@ export function useCommentaryFeed({
     dependencies.persistCommentaryFeedEntry ?? persistCommentaryFeedEntry;
   const listCommentaryFeedEntriesForGameImpl =
     dependencies.listCommentaryFeedEntriesForGame ?? listCommentaryFeedEntriesForGame;
+  const persistGameStoryImpl =
+    dependencies.persistGameStory ?? persistGameStory;
+  const listGameStoriesForGameImpl =
+    dependencies.listGameStoriesForGame ?? listGameStoriesForGame;
 
   const resetForNewGame = React.useCallback((nextGameId: string) => {
     setCommentaryEntries([]);
@@ -217,6 +236,7 @@ export function useCommentaryFeed({
     processedPlayIdsRef.current.clear();
     lastHydratedGameIdRef.current = null;
     preambleFiredForGameIdRef.current = null;
+    firedPostGameForGameIdRef.current.clear();
     moodRef.current = INITIAL_MOOD_STATE;
     intensityRef.current = null;
     homeReporterRef.current = null;
@@ -282,6 +302,33 @@ export function useCommentaryFeed({
       cancelled = true;
     };
   }, [gameId, listCommentaryFeedEntriesForGameImpl]);
+
+  // Seed the post-game-fired set from existing gameStories on mount / gameId
+  // change. If columns already exist for this gameId (i.e. the user is
+  // revisiting a completed game or refreshed mid-post-game), we must not
+  // re-fire firePostGameColumns and double-bill.
+  React.useEffect(() => {
+    if (!gameId) return;
+    let cancelled = false;
+    void listGameStoriesForGameImpl(gameId)
+      .then((stories) => {
+        if (cancelled) return;
+        if (stories.length > 0) {
+          firedPostGameForGameIdRef.current.add(gameId);
+        }
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          console.warn(
+            `[reporter:post-game] Failed to hydrate game stories for ${gameId}.`,
+            error,
+          );
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [gameId, listGameStoriesForGameImpl]);
 
   const resolveIntensity = React.useCallback(async () => {
     if (intensityRef.current) {
@@ -739,6 +786,151 @@ export function useCommentaryFeed({
     [setPendingBetweenInningPopup],
   );
 
+  /**
+   * Fires BOTH reporters' post-game columns in parallel when a game ends.
+   * Gated at the caller level by `postGameColumnsEnabled`. Each reporter
+   * fails/succeeds independently — a missing away reporter does not block
+   * the home column, and vice versa.
+   *
+   * On success per reporter: persists a GameStory record to IDB (which syncs
+   * to Supabase via the normal sync engine path).
+   *
+   * Deduped via firedPostGameForGameIdRef — seeded on mount from existing
+   * gameStories records so refresh / revisit does not regenerate columns.
+   */
+  const firePostGameColumns = React.useCallback(
+    async (params: {
+      targetGameId: string;
+      allInningEvents: AtBatEvent[];
+      finalScore: { home: number; away: number };
+      gameMode: ReporterGameMode;
+      gameDate: string;
+      opponentByReporter?: { home?: string; away?: string };
+    }) => {
+      const {
+        targetGameId,
+        allInningEvents,
+        finalScore,
+        gameMode,
+        gameDate,
+        opponentByReporter,
+      } = params;
+
+      if (firedPostGameForGameIdRef.current.has(targetGameId)) {
+        return;
+      }
+      firedPostGameForGameIdRef.current.add(targetGameId);
+
+      // playersMentioned = union of every batter + pitcher who actually
+      // appeared this game. Not a column-body scrape (brittle); just
+      // everyone who took an at-bat or pitched. Almanac filtering is on
+      // substring match of name, so this is the honest answer.
+      const namesInGame = new Set<string>();
+      for (const event of allInningEvents) {
+        if (event.batterName) namesInGame.add(event.batterName);
+        if (event.pitcherName) namesInGame.add(event.pitcherName);
+      }
+      const playersMentioned = Array.from(namesInGame).sort();
+
+      const runForReporter = async (
+        reporterTeam: "home" | "away",
+      ): Promise<void> => {
+        const prerequisites = await resolveCallPrerequisites(reporterTeam);
+        if (prerequisites.status !== "ready") {
+          return;
+        }
+        const reporter = prerequisites.reporter;
+        const resolvedIntensity = prerequisites.intensity;
+        const engine = ensureEngine(resolvedIntensity, undefined);
+
+        // Context: the at-bat-id path is moot at game's end; use the live
+        // seed as a best-effort anchor and let buildReporterContext fall
+        // back to buildLiveReporterContext on failure.
+        let context: ReporterContext;
+        try {
+          const liveSeed = getLivePreambleSeed();
+          if (liveSeed) {
+            context = await buildLiveReporterContextImpl(liveSeed);
+          } else {
+            // No seed available; skip this reporter — we'd have no grounding
+            // without live game state and would just hallucinate.
+            console.warn(
+              `[reporter:post-game] No live seed for ${reporterTeam} reporter; skipping column.`,
+            );
+            return;
+          }
+        } catch (error) {
+          console.warn(
+            `[reporter:post-game] Failed to build context for ${reporterTeam} reporter.`,
+            error,
+          );
+          return;
+        }
+
+        const result = await engine.generatePostGameColumn({
+          context,
+          reporter,
+          reporterTeam,
+          finalScore,
+          allInningEvents,
+          narrativeSoFar: engine.getNarrativeSoFar(),
+        });
+
+        if (result.skipped || !result.headline || !result.body) {
+          // generatePostGameColumn already console.warned the reason.
+          return;
+        }
+
+        const now = nowImpl();
+        const opponentTeamId =
+          reporterTeam === "home"
+            ? opponentByReporter?.home ?? awayTeamId
+            : opponentByReporter?.away ?? homeTeamId;
+        const story: GameStory = {
+          id: `game-story-${targetGameId}-${reporterTeam}`,
+          gameId: targetGameId,
+          reporterId: reporter.id,
+          teamId: reporter.teamId,
+          leagueId,
+          gameMode,
+          headline: result.headline,
+          body: result.body,
+          playersMentioned,
+          gameDate,
+          opponentTeamId,
+          createdAt: now,
+          changed_at: now,
+        };
+
+        try {
+          await persistGameStoryImpl(story);
+        } catch (error) {
+          console.warn(
+            `[reporter:post-game] Failed to persist ${reporterTeam} column.`,
+            error,
+          );
+        }
+      };
+
+      // Fire both in parallel — one failing does not block the other.
+      await Promise.allSettled([
+        runForReporter("home"),
+        runForReporter("away"),
+      ]);
+    },
+    [
+      awayTeamId,
+      buildLiveReporterContextImpl,
+      ensureEngine,
+      getLivePreambleSeed,
+      homeTeamId,
+      leagueId,
+      nowImpl,
+      persistGameStoryImpl,
+      resolveCallPrerequisites,
+    ],
+  );
+
   const homeDisabled =
     disabledState.intensity === "low" ||
     (disabledState.homeReporterResolved && !disabledState.homeReporter);
@@ -752,6 +944,7 @@ export function useCommentaryFeed({
     firePreamble,
     firePlayCommentary,
     fireBetweenInningSummary,
+    firePostGameColumns,
     dismissBetweenInningPopup,
     resetForNewGame,
     homeDisabled,

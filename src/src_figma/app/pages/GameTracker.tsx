@@ -4447,6 +4447,7 @@ export function GameTracker() {
     commentaryEntries,
     firePreamble,
     fireBetweenInningSummary,
+    firePostGameColumns,
     homeDisabled: homeCommentaryDisabled,
     awayDisabled: awayCommentaryDisabled,
   } = useCommentaryFeed({
@@ -4525,7 +4526,7 @@ export function GameTracker() {
     const shouldFirePreamble =
       gameInitialized &&
       gameState.gamePhase === "LIVE" &&
-      gameState.beatReporterEnabled &&
+      gameState.liveBeatReporterEnabled &&
       Boolean(gameState.currentBatterId) &&
       Boolean(gameState.currentPitcherId) &&
       Boolean(gameState.gameId) &&
@@ -4549,7 +4550,7 @@ export function GameTracker() {
     firePreamble,
     homeCommentaryDisabled,
     gameInitialized,
-    gameState.beatReporterEnabled,
+    gameState.liveBeatReporterEnabled,
     gameState.currentBatterId,
     gameState.currentPitcherId,
     gameState.gameId,
@@ -4571,7 +4572,7 @@ export function GameTracker() {
     if (!prev || !gameState.gameId) {
       return;
     }
-    if (!gameState.beatReporterEnabled) {
+    if (!gameState.liveBeatReporterEnabled) {
       return;
     }
 
@@ -4623,12 +4624,68 @@ export function GameTracker() {
     awayCommentaryDisabled,
     competitionType,
     fireBetweenInningSummary,
-    gameState.beatReporterEnabled,
+    gameState.liveBeatReporterEnabled,
     gameState.gameId,
     gameState.gamePhase,
     gameState.inning,
     gameState.isTop,
     homeCommentaryDisabled,
+  ]);
+
+  // Post-game columns watcher. Fires ONCE per gameId when the game reaches
+  // POST_FINAL_OUT phase, gated by postGameColumnsEnabled. The hook itself
+  // dedups via its own ref (seeded from existing gameStories records), so this
+  // watcher can be called repeatedly without double-billing.
+  useEffect(() => {
+    if (gameState.gamePhase !== "POST_FINAL_OUT") return;
+    if (!gameState.gameId) return;
+    if (!gameState.postGameColumnsEnabled) return;
+    if (homeCommentaryDisabled && awayCommentaryDisabled) return;
+
+    const targetGameId = gameState.gameId;
+    const reporterGameMode: import("../../../types/reporter").ReporterGameMode =
+      competitionType === "playoff"
+        ? "elimination"
+        : (competitionType as import("../../../types/reporter").ReporterGameMode);
+
+    void (async () => {
+      try {
+        const allEvents = (await getGameEvents(targetGameId)).filter(
+          (e) => !e.undoneAt,
+        );
+        await firePostGameColumns({
+          targetGameId,
+          allInningEvents: allEvents,
+          finalScore: {
+            home: gameState.homeScore,
+            away: gameState.awayScore,
+          },
+          gameMode: reporterGameMode,
+          gameDate: new Date().toISOString().slice(0, 10),
+          opponentByReporter: {
+            home: awayTeamId,
+            away: homeTeamId,
+          },
+        });
+      } catch (error) {
+        console.warn(
+          "[reporter:post-game] Failed to generate post-game columns.",
+          error,
+        );
+      }
+    })();
+  }, [
+    awayCommentaryDisabled,
+    awayTeamId,
+    competitionType,
+    firePostGameColumns,
+    gameState.awayScore,
+    gameState.gameId,
+    gameState.gamePhase,
+    gameState.homeScore,
+    gameState.postGameColumnsEnabled,
+    homeCommentaryDisabled,
+    homeTeamId,
   ]);
 
   // §5: Lineup column data — role-based: column 2 = batting team, column 3 = fielding team

@@ -303,6 +303,7 @@ function createPreviewEngineFactory(params: {
     return {
       generatePreamble: engine.generatePreamble.bind(engine),
       generateCommentary: engine.generateCommentary.bind(engine),
+      generatePostGameColumn: engine.generatePostGameColumn.bind(engine),
       async generateBetweenInningSummary(input) {
         params.setBeforeNarrative(input.previousNarrativeSoFar);
         const result = await engine.generateBetweenInningSummary(input);

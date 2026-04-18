@@ -19,8 +19,10 @@ export interface ReporterAssignmentPanelTeam {
 interface ReporterAssignmentPanelProps {
   leagueId?: string;
   teams: ReporterAssignmentPanelTeam[];
-  enabled: boolean;
-  onEnabledChange: (enabled: boolean) => void;
+  liveEnabled: boolean;
+  onLiveEnabledChange: (enabled: boolean) => void;
+  postGameEnabled: boolean;
+  onPostGameEnabledChange: (enabled: boolean) => void;
 }
 
 function ReporterAvatar({ reporter }: { reporter: BeatReporter }) {
@@ -46,9 +48,13 @@ function ReporterAvatar({ reporter }: { reporter: BeatReporter }) {
 export function ReporterAssignmentPanel({
   leagueId,
   teams,
-  enabled,
-  onEnabledChange,
+  liveEnabled,
+  onLiveEnabledChange,
+  postGameEnabled,
+  onPostGameEnabledChange,
 }: ReporterAssignmentPanelProps) {
+  // Either toggle being on means we still want reporter assignments made.
+  const enabled = liveEnabled || postGameEnabled;
   const [assignedReporters, setAssignedReporters] = useState<Record<string, BeatReporter | null>>({});
   const [availableReporters, setAvailableReporters] = useState<BeatReporter[]>([]);
   const [busyTeamId, setBusyTeamId] = useState<string | null>(null);
@@ -113,34 +119,57 @@ export function ReporterAssignmentPanel({
 
   return (
     <section className="border-2 border-[#556B55] bg-[#3d4a42] p-4 space-y-4 shadow-[2px_2px_0px_0px_rgba(0,0,0,0.4)]">
-      <div className="flex items-center justify-between gap-4">
-        <div>
-          <div className="text-sm text-[#C4A853] font-bold tracking-[0.2em]" style={{ textShadow: "1px 1px 2px rgba(0,0,0,0.6)" }}>
-            BEAT REPORTERS
-          </div>
-          <div className="text-xs text-[#a0a898] mt-1">
-            Assign one team reporter before first pitch.
-          </div>
+      <div>
+        <div className="text-sm text-[#C4A853] font-bold tracking-[0.2em]" style={{ textShadow: "1px 1px 2px rgba(0,0,0,0.6)" }}>
+          BEAT REPORTERS
         </div>
-        <div className="flex gap-2">
-          {[
-            { label: "ON", value: true },
-            { label: "OFF", value: false },
-          ].map((option) => (
-            <button
-              key={option.label}
-              type="button"
-              onClick={() => onEnabledChange(option.value)}
-              className={`px-4 py-2 border-2 text-xs font-bold ${
-                enabled === option.value
-                  ? "border-[#C4A853] bg-[#C4A853]/20 text-[#C4A853]"
-                  : "border-[#556B55] bg-[#1f2b21] text-[#E8E8D8] hover:border-[#C4A853]"
-              }`}
-            >
-              {option.label}
-            </button>
-          ))}
+        <div className="text-xs text-[#a0a898] mt-1">
+          Assign a reporter to each team. Two independent toggles control live
+          commentary during the game and the post-game newspaper columns.
         </div>
+      </div>
+
+      <div className="space-y-2">
+        {[
+          {
+            key: "live",
+            label: "Live commentary (preamble + inning summaries)",
+            value: liveEnabled,
+            onChange: onLiveEnabledChange,
+          },
+          {
+            key: "post",
+            label: "Post-game columns",
+            value: postGameEnabled,
+            onChange: onPostGameEnabledChange,
+          },
+        ].map((row) => (
+          <div
+            key={row.key}
+            className="flex items-center justify-between gap-4 border border-[#2f3a31] bg-[#26332b] px-3 py-2"
+          >
+            <div className="text-xs text-[#E8E8D8]">{row.label}</div>
+            <div className="flex gap-2">
+              {[
+                { label: "ON", value: true },
+                { label: "OFF", value: false },
+              ].map((option) => (
+                <button
+                  key={option.label}
+                  type="button"
+                  onClick={() => row.onChange(option.value)}
+                  className={`px-3 py-1 border-2 text-[10px] font-bold ${
+                    row.value === option.value
+                      ? "border-[#C4A853] bg-[#C4A853]/20 text-[#C4A853]"
+                      : "border-[#556B55] bg-[#1f2b21] text-[#E8E8D8] hover:border-[#C4A853]"
+                  }`}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        ))}
       </div>
 
       <div className={`grid grid-cols-1 md:grid-cols-2 gap-3 ${enabled ? "" : "opacity-55"}`}>

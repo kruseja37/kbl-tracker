@@ -112,7 +112,9 @@ export function EliminationHome() {
   const [seriesList, setSeriesList] = useState<PlayoffSeries[]>([]);
   const [historyEntries, setHistoryEntries] = useState<HistoryEntry[]>([]);
   const [selectedSeriesId, setSelectedSeriesId] = useState<string | null>(null);
-  const [beatReporterEnabled, setBeatReporterEnabled] = useState(true);
+  // Phase 2a two-toggle model: live defaults OFF, post-game ON.
+  const [liveBeatReporterEnabled, setLiveBeatReporterEnabled] = useState(false);
+  const [postGameColumnsEnabled, setPostGameColumnsEnabled] = useState(true);
   const [pregameReporterTeams, setPregameReporterTeams] = useState<ReporterAssignmentPanelTeam[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -182,7 +184,11 @@ export function EliminationHome() {
 
         setMetadata(loadedMetadata);
         setPlayoffConfig(loadedPlayoff);
-        setBeatReporterEnabled(loadedPlayoff.beatReporterEnabled ?? true);
+        // Legacy elimination configs stored a single flag. Apply to both new
+        // toggles when loading so saved elimination rounds preserve prior UX;
+        // users can flip either toggle from pre-game going forward.
+        setLiveBeatReporterEnabled(loadedPlayoff.beatReporterEnabled ?? true);
+        setPostGameColumnsEnabled(loadedPlayoff.beatReporterEnabled ?? true);
         setSeriesList(loadedSeries.sort((a, b) => a.round - b.round || a.higherSeed.seed - b.higherSeed.seed));
         setHistoryEntries(
           completedEntries.sort((a, b) => (b.playoff.completedAt ?? 0) - (a.playoff.completedAt ?? 0))
@@ -311,7 +317,14 @@ export function EliminationHome() {
         getEliminationTeam(eliminationId, homeTeam.teamId),
       ]);
 
-      sessionStorage.setItem("kbl-pending-beat-reporter-enabled", JSON.stringify(beatReporterEnabled));
+      sessionStorage.setItem(
+        "kbl-pending-live-beat-reporter-enabled",
+        JSON.stringify(liveBeatReporterEnabled),
+      );
+      sessionStorage.setItem(
+        "kbl-pending-post-game-columns-enabled",
+        JSON.stringify(postGameColumnsEnabled),
+      );
       navigate(`/game-tracker/${gameId}`, {
         state: {
           gameMode: 'elimination',
@@ -439,8 +452,10 @@ export function EliminationHome() {
                 <ReporterAssignmentPanel
                   leagueId={metadata.leagueId}
                   teams={pregameReporterTeams}
-                  enabled={beatReporterEnabled}
-                  onEnabledChange={setBeatReporterEnabled}
+                  liveEnabled={liveBeatReporterEnabled}
+                  onLiveEnabledChange={setLiveBeatReporterEnabled}
+                  postGameEnabled={postGameColumnsEnabled}
+                  onPostGameEnabledChange={setPostGameColumnsEnabled}
                 />
               ) : null
             }

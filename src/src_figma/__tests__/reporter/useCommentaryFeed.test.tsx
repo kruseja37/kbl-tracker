@@ -189,9 +189,11 @@ function createEngine(overrides: {
   preambleResult?: CommentaryResult;
   commentaryResult?: CommentaryResult;
   betweenInningSummaryResult?: BetweenInningSummaryResult;
+  postGameColumnResult?: import("../../app/engines/reporter/commentaryEngine").PostGameColumnResult;
   preambleError?: Error;
   commentaryError?: Error;
   betweenInningSummaryError?: Error;
+  postGameColumnError?: Error;
   narrativeSoFar?: string;
 } = {}) {
   const generatePreamble = vi.fn(async () => {
@@ -238,11 +240,26 @@ function createEngine(overrides: {
       }
     );
   });
+  const generatePostGameColumn = vi.fn(async () => {
+    if (overrides.postGameColumnError) {
+      throw overrides.postGameColumnError;
+    }
+    return (
+      overrides.postGameColumnResult ?? {
+        headline: "BACKMAN'S BLAST",
+        body: "Three paragraphs of sparkling prose.",
+        skipped: false,
+        inputTokens: 40,
+        outputTokens: 120,
+      }
+    );
+  });
   const getNarrativeSoFar = vi.fn(() => overrides.narrativeSoFar ?? "");
   const engine: CommentaryEngine = {
     generatePreamble,
     generateCommentary,
     generateBetweenInningSummary,
+    generatePostGameColumn,
     getNarrativeSoFar,
     resetNarrative: vi.fn(),
   };
@@ -252,6 +269,7 @@ function createEngine(overrides: {
     generatePreamble,
     generateCommentary,
     generateBetweenInningSummary,
+    generatePostGameColumn,
     getNarrativeSoFar,
   };
 }
@@ -268,11 +286,19 @@ function renderCommentaryFeedHook(options: {
   scoreNotability?: typeof import("../../../engines/notabilityScorer").scoreNotability;
   persistCommentaryFeedEntry?: (record: CommentaryFeedEntryRecord) => Promise<void>;
   listCommentaryFeedEntriesForGame?: (gameId: string) => Promise<CommentaryFeedEntryRecord[]>;
+  persistGameStory?: (record: import("../../../types/reporter").GameStory) => Promise<void>;
+  listGameStoriesForGame?: (
+    gameId: string,
+  ) => Promise<import("../../../types/reporter").GameStory[]>;
 }) {
   const persistCommentaryFeedEntryImpl =
     options.persistCommentaryFeedEntry ?? (async () => undefined);
   const listCommentaryFeedEntriesForGameImpl =
     options.listCommentaryFeedEntriesForGame ?? (async () => []);
+  const persistGameStoryImpl =
+    options.persistGameStory ?? (async () => undefined);
+  const listGameStoriesForGameImpl =
+    options.listGameStoriesForGame ?? (async () => []);
   const resolvedHomeReporter =
     options.reporter === undefined ? createReporter() : options.reporter;
   const resolvedAwayReporter =
@@ -330,6 +356,8 @@ function renderCommentaryFeedHook(options: {
           scoreNotability: options.scoreNotability,
           persistCommentaryFeedEntry: persistCommentaryFeedEntryImpl,
           listCommentaryFeedEntriesForGame: listCommentaryFeedEntriesForGameImpl,
+          persistGameStory: persistGameStoryImpl,
+          listGameStoriesForGame: listGameStoriesForGameImpl,
         },
       }),
     {
@@ -1103,5 +1131,175 @@ describe("useCommentaryFeed", () => {
       fontStyle: "italic",
       color: "rgb(196, 217, 196)",
     });
+  });
+
+  // ═══════════════════════════════════════════════════════════════
+  // firePostGameColumns — dual-reporter post-game newspaper columns
+  // ═══════════════════════════════════════════════════════════════
+
+  test("firePostGameColumns generates BOTH home and away columns and persists both", async () => {
+    const { engine, generatePostGameColumn } = createEngine();
+    const persistSpy = vi.fn(async () => undefined);
+    const { result } = renderCommentaryFeedHook({
+      createEngine: () => engine,
+      persistGameStory: persistSpy,
+    });
+
+    await act(async () => {
+      await result.current.firePostGameColumns({
+        targetGameId: "game-1",
+        allInningEvents: [
+          createAtBatEvent({ inning: 1, batterName: "Harry Backman", pitcherName: "Winnie Noelle" }),
+          createAtBatEvent({ inning: 2, batterName: "Lester Bronco", pitcherName: "Manny Kays" }),
+        ],
+        finalScore: { home: 4, away: 2 },
+        gameMode: "exhibition",
+        gameDate: "2026-04-17",
+      });
+    });
+
+    expect(generatePostGameColumn).toHaveBeenCalledTimes(2);
+    const reporterTeams = generatePostGameColumn.mock.calls.map(
+      (args) => (args[0] as { reporterTeam: string }).reporterTeam,
+    );
+    expect(reporterTeams.sort()).toEqual(["away", "home"]);
+
+    expect(persistSpy).toHaveBeenCalledTimes(2);
+    const persistedIds = persistSpy.mock.calls.map(
+      (args) => (args[0] as { id: string }).id,
+    );
+    expect(persistedIds.sort()).toEqual([
+      "game-story-game-1-away",
+      "game-story-game-1-home",
+    ]);
+
+    // playersMentioned should be the union of all batters + pitchers across innings.
+    const firstPersisted = persistSpy.mock.calls[0][0] as {
+      playersMentioned: string[];
+    };
+    expect(firstPersisted.playersMentioned.sort()).toEqual([
+      "Harry Backman",
+      "Lester Bronco",
+      "Manny Kays",
+      "Winnie Noelle",
+    ]);
+  });
+
+  test("firePostGameColumns with one reporter missing still generates the other", async () => {
+    const { engine, generatePostGameColumn } = createEngine();
+    const persistSpy = vi.fn(async () => undefined);
+    const { result } = renderCommentaryFeedHook({
+      // Home reporter missing; away assigned
+      reporter: null,
+      awayReporter: createAwayReporter(),
+      createEngine: () => engine,
+      persistGameStory: persistSpy,
+    });
+
+    await act(async () => {
+      await result.current.firePostGameColumns({
+        targetGameId: "game-1",
+        allInningEvents: [createAtBatEvent({ inning: 1 })],
+        finalScore: { home: 0, away: 3 },
+        gameMode: "exhibition",
+        gameDate: "2026-04-17",
+      });
+    });
+
+    // Only the away reporter generates.
+    expect(generatePostGameColumn).toHaveBeenCalledTimes(1);
+    const call = generatePostGameColumn.mock.calls[0][0] as {
+      reporterTeam: string;
+    };
+    expect(call.reporterTeam).toBe("away");
+    expect(persistSpy).toHaveBeenCalledTimes(1);
+  });
+
+  test("firePostGameColumns with both reporters missing generates nothing and persists nothing", async () => {
+    const { engine, generatePostGameColumn } = createEngine();
+    const persistSpy = vi.fn(async () => undefined);
+    const { result } = renderCommentaryFeedHook({
+      reporter: null,
+      awayReporter: null,
+      createEngine: () => engine,
+      persistGameStory: persistSpy,
+    });
+
+    await act(async () => {
+      await result.current.firePostGameColumns({
+        targetGameId: "game-1",
+        allInningEvents: [createAtBatEvent({ inning: 1 })],
+        finalScore: { home: 0, away: 0 },
+        gameMode: "exhibition",
+        gameDate: "2026-04-17",
+      });
+    });
+
+    expect(generatePostGameColumn).not.toHaveBeenCalled();
+    expect(persistSpy).not.toHaveBeenCalled();
+  });
+
+  test("firePostGameColumns dedup prevents a second fire for the same gameId", async () => {
+    const { engine, generatePostGameColumn } = createEngine();
+    const persistSpy = vi.fn(async () => undefined);
+    const { result } = renderCommentaryFeedHook({
+      createEngine: () => engine,
+      persistGameStory: persistSpy,
+    });
+
+    await act(async () => {
+      await result.current.firePostGameColumns({
+        targetGameId: "game-1",
+        allInningEvents: [createAtBatEvent({ inning: 1 })],
+        finalScore: { home: 1, away: 0 },
+        gameMode: "exhibition",
+        gameDate: "2026-04-17",
+      });
+      await result.current.firePostGameColumns({
+        targetGameId: "game-1",
+        allInningEvents: [createAtBatEvent({ inning: 1 })],
+        finalScore: { home: 1, away: 0 },
+        gameMode: "exhibition",
+        gameDate: "2026-04-17",
+      });
+    });
+
+    // Engine was only invoked for the first call (2 per game — home + away).
+    expect(generatePostGameColumn).toHaveBeenCalledTimes(2);
+    expect(persistSpy).toHaveBeenCalledTimes(2);
+  });
+
+  test("firePostGameColumns persists a GameStory shape with the expected fields per column", async () => {
+    const { engine } = createEngine();
+    const persistSpy = vi.fn(async () => undefined);
+    const { result } = renderCommentaryFeedHook({
+      createEngine: () => engine,
+      persistGameStory: persistSpy,
+    });
+
+    await act(async () => {
+      await result.current.firePostGameColumns({
+        targetGameId: "game-1",
+        allInningEvents: [
+          createAtBatEvent({ inning: 1, batterName: "Harry Backman", pitcherName: "Winnie Noelle" }),
+        ],
+        finalScore: { home: 1, away: 0 },
+        gameMode: "exhibition",
+        gameDate: "2026-04-17",
+      });
+    });
+
+    expect(persistSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        gameId: "game-1",
+        gameMode: "exhibition",
+        gameDate: "2026-04-17",
+        headline: "BACKMAN'S BLAST",
+        body: "Three paragraphs of sparkling prose.",
+        createdAt: 2000,
+        changed_at: 2000,
+        playersMentioned: expect.arrayContaining(["Harry Backman", "Winnie Noelle"]),
+      }),
+    );
   });
 });

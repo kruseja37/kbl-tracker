@@ -133,10 +133,12 @@ function StepPlayoffSettings(props: {
   setInningsPerGame: (value: number) => void;
   useDH: boolean;
   setUseDH: (value: boolean) => void;
-  beatReporterEnabled: boolean;
-  setBeatReporterEnabled: (value: boolean) => void;
+  liveBeatReporterEnabled: boolean;
+  setLiveBeatReporterEnabled: (value: boolean) => void;
+  postGameColumnsEnabled: boolean;
+  setPostGameColumnsEnabled: (value: boolean) => void;
 }) {
-  const { leagueTeams, validTeamOptions, numTeams, setNumTeams, seriesLengths, onSeriesLengthChange, homeFieldPattern, setHomeFieldPattern, inningsPerGame, setInningsPerGame, useDH, setUseDH, beatReporterEnabled, setBeatReporterEnabled } = props;
+  const { leagueTeams, validTeamOptions, numTeams, setNumTeams, seriesLengths, onSeriesLengthChange, homeFieldPattern, setHomeFieldPattern, inningsPerGame, setInningsPerGame, useDH, setUseDH, liveBeatReporterEnabled, setLiveBeatReporterEnabled, postGameColumnsEnabled, setPostGameColumnsEnabled } = props;
   const rounds = getRoundCount(numTeams);
   return (
     <div>
@@ -198,19 +200,37 @@ function StepPlayoffSettings(props: {
             ))}
           </div>
         </div>
-        <div className="border-4 border-[#E8E8D8] bg-[#4A6A42] p-4 flex items-center justify-between gap-4">
+        <div className="border-4 border-[#E8E8D8] bg-[#4A6A42] p-4 space-y-3">
           <div>
             <div className="text-sm text-[#E8E8D8]">Beat reporter</div>
-            <div className="text-xs text-[#E8E8D8]/60 mt-1">Enable assigned team reporters for games in this bracket.</div>
+            <div className="text-xs text-[#E8E8D8]/60 mt-1">Two independent toggles control in-game vs post-game narrative.</div>
           </div>
-          <div className="flex gap-2">
-            {[
-              { label: 'ON', value: true },
-              { label: 'OFF', value: false },
-            ].map((option) => (
-              <button key={option.label} onClick={() => setBeatReporterEnabled(option.value)} className={`px-4 py-2 border-2 text-xs font-bold ${beatReporterEnabled === option.value ? 'border-[#C4A853] bg-[#C4A853] text-[#4A6A42]' : 'border-[#E8E8D8] text-[#E8E8D8]'}`}>{option.label}</button>
-            ))}
-          </div>
+          {[
+            {
+              key: 'live' as const,
+              label: 'Live commentary (preamble + inning summaries)',
+              value: liveBeatReporterEnabled,
+              onChange: setLiveBeatReporterEnabled,
+            },
+            {
+              key: 'post' as const,
+              label: 'Post-game columns',
+              value: postGameColumnsEnabled,
+              onChange: setPostGameColumnsEnabled,
+            },
+          ].map((row) => (
+            <div key={row.key} className="flex items-center justify-between gap-4 border-2 border-[#E8E8D8] bg-[#3d4a42] px-3 py-2">
+              <div className="text-xs text-[#E8E8D8]">{row.label}</div>
+              <div className="flex gap-2">
+                {[
+                  { label: 'ON', value: true },
+                  { label: 'OFF', value: false },
+                ].map((option) => (
+                  <button key={option.label} onClick={() => row.onChange(option.value)} className={`px-3 py-1 border-2 text-[10px] font-bold ${row.value === option.value ? 'border-[#C4A853] bg-[#C4A853] text-[#4A6A42]' : 'border-[#E8E8D8] text-[#E8E8D8]'}`}>{option.label}</button>
+                ))}
+              </div>
+            </div>
+          ))}
         </div>
       </div>
     </div>
@@ -312,11 +332,12 @@ function StepConfirm(props: {
   seriesLengths: number[];
   inningsPerGame: number;
   useDH: boolean;
-  beatReporterEnabled: boolean;
+  liveBeatReporterEnabled: boolean;
+  postGameColumnsEnabled: boolean;
   homeFieldPattern: HomeFieldPattern;
   controlledCount: number;
 }) {
-  const { selectedLeague, bracketName, setBracketName, numTeams, totalRounds, seriesLengths, inningsPerGame, useDH, beatReporterEnabled, homeFieldPattern, controlledCount } = props;
+  const { selectedLeague, bracketName, setBracketName, numTeams, totalRounds, seriesLengths, inningsPerGame, useDH, liveBeatReporterEnabled, postGameColumnsEnabled, homeFieldPattern, controlledCount } = props;
   return (
     <div>
       <StepTitle title="CONFIRM AND NAME" subtitle="Review the bracket details, set a name, then start playoffs." />
@@ -334,7 +355,8 @@ function StepConfirm(props: {
             <div>Series lengths: {seriesLengths.map((value) => `Best of ${value}`).join(' • ')}</div>
             <div>Innings per game: {inningsPerGame}</div>
             <div>DH rule: {useDH ? 'On' : 'Off'}</div>
-            <div>Beat reporter: {beatReporterEnabled ? 'On' : 'Off'}</div>
+            <div>Live commentary: {liveBeatReporterEnabled ? 'On' : 'Off'}</div>
+            <div>Post-game columns: {postGameColumnsEnabled ? 'On' : 'Off'}</div>
             <div>Home field: {homeFieldPattern}</div>
             <div>Human-controlled teams: {controlledCount}</div>
           </div>
@@ -362,7 +384,9 @@ export function EliminationSetup() {
   const [homeFieldPattern, setHomeFieldPattern] = useState<HomeFieldPattern>('2-3-2');
   const [inningsPerGame, setInningsPerGame] = useState(9);
   const [useDH, setUseDH] = useState(true);
-  const [beatReporterEnabled, setBeatReporterEnabled] = useState(true);
+  // Phase 2a two-toggle model: live OFF, post-game ON.
+  const [liveBeatReporterEnabled, setLiveBeatReporterEnabled] = useState(false);
+  const [postGameColumnsEnabled, setPostGameColumnsEnabled] = useState(true);
   const [controlledTeamIds, setControlledTeamIds] = useState<string[]>([]);
   const [seededTeamIds, setSeededTeamIds] = useState<string[]>([]);
   const [bracketName, setBracketName] = useState('');
@@ -453,7 +477,10 @@ export function EliminationSetup() {
         gamesPerRound,
         inningsPerGame,
         useDH,
-        beatReporterEnabled,
+        // Playoff schema still uses a single flag; mirror the OR of both
+        // toggles so loading the playoff later sets both new toggles to true
+        // if either was on (see EliminationHome load path).
+        beatReporterEnabled: liveBeatReporterEnabled || postGameColumnsEnabled,
         leagues: ['Eastern'],
         conferenceChampionship: false,
         teams: playoffTeams,
@@ -488,10 +515,10 @@ export function EliminationSetup() {
   };
   const renderStep = () => {
     if (currentStep === 1) return <StepLeagueSelection leagues={leagues} teams={teams} selectedLeagueId={selectedLeagueId} onSelectLeague={(league) => { setSelectedLeagueId(league.id); setInitError(null); }} />;
-    if (currentStep === 2) return <StepPlayoffSettings leagueTeams={leagueTeams} validTeamOptions={validTeamOptions} numTeams={numTeams} setNumTeams={setNumTeams} seriesLengths={seriesLengths} onSeriesLengthChange={(roundIndex, value) => setSeriesLengths((current) => current.map((item, index) => (index === roundIndex ? value : item)))} homeFieldPattern={homeFieldPattern} setHomeFieldPattern={setHomeFieldPattern} inningsPerGame={inningsPerGame} setInningsPerGame={setInningsPerGame} useDH={useDH} setUseDH={setUseDH} beatReporterEnabled={beatReporterEnabled} setBeatReporterEnabled={setBeatReporterEnabled} />;
+    if (currentStep === 2) return <StepPlayoffSettings leagueTeams={leagueTeams} validTeamOptions={validTeamOptions} numTeams={numTeams} setNumTeams={setNumTeams} seriesLengths={seriesLengths} onSeriesLengthChange={(roundIndex, value) => setSeriesLengths((current) => current.map((item, index) => (index === roundIndex ? value : item)))} homeFieldPattern={homeFieldPattern} setHomeFieldPattern={setHomeFieldPattern} inningsPerGame={inningsPerGame} setInningsPerGame={setInningsPerGame} useDH={useDH} setUseDH={setUseDH} liveBeatReporterEnabled={liveBeatReporterEnabled} setLiveBeatReporterEnabled={setLiveBeatReporterEnabled} postGameColumnsEnabled={postGameColumnsEnabled} setPostGameColumnsEnabled={setPostGameColumnsEnabled} />;
     if (currentStep === 3) return <StepTeamControl leagueTeams={leagueTeams} controlledTeamIds={controlledTeamIds} onToggleControlled={(teamId) => setControlledTeamIds((current) => current.includes(teamId) ? current.filter((id) => id !== teamId) : [...current, teamId])} />;
     if (currentStep === 4) return <StepSeeding seededTeams={seededTeams} onMoveSeed={handleMoveSeed} />;
-    return <StepConfirm selectedLeague={selectedLeague} bracketName={bracketName} setBracketName={setBracketName} numTeams={numTeams} totalRounds={totalRounds} seriesLengths={seriesLengths} inningsPerGame={inningsPerGame} useDH={useDH} beatReporterEnabled={beatReporterEnabled} homeFieldPattern={homeFieldPattern} controlledCount={controlledTeamIds.length} />;
+    return <StepConfirm selectedLeague={selectedLeague} bracketName={bracketName} setBracketName={setBracketName} numTeams={numTeams} totalRounds={totalRounds} seriesLengths={seriesLengths} inningsPerGame={inningsPerGame} useDH={useDH} liveBeatReporterEnabled={liveBeatReporterEnabled} postGameColumnsEnabled={postGameColumnsEnabled} homeFieldPattern={homeFieldPattern} controlledCount={controlledTeamIds.length} />;
   };
   return (
     <div className="min-h-screen bg-[#6B9462] text-[#E8E8D8] flex items-center justify-center p-6">

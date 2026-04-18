@@ -13,6 +13,10 @@ import {
   type ReporterProxyInvoke,
 } from "./grokClient";
 import {
+  callClaudeMessages,
+  type ClaudeProxyInvoke,
+} from "./claudeClient";
+import {
   logLlmCall,
   type LlmUsageLogInput,
 } from "./usageLogger";
@@ -37,6 +41,17 @@ export interface CommentaryEngineConfig {
   gameId?: string;
   mode?: CompetitionType;
   invokeImpl?: ReporterProxyInvoke;
+  /**
+   * Optional Claude edge-function invoker, used by generatePostGameColumn.
+   * Defaults to the real supabase.functions.invoke("claude-column", ...) path
+   * via claudeClient.ts. Tests pass a mock.
+   */
+  claudeInvokeImpl?: ClaudeProxyInvoke;
+  /**
+   * Claude Sonnet model id used for post-game columns. Defaults to
+   * "claude-sonnet-4-6" per G4 deploy fix.
+   */
+  claudeModel?: string;
   logUsage?: typeof logLlmCall;
 }
 
@@ -92,12 +107,24 @@ export interface PostGameColumnInput {
   narrativeSoFar: string;
 }
 
+export interface PostGameColumnResult {
+  headline: string | null;
+  body: string | null;
+  skipped: boolean;
+  error?: string;
+  inputTokens: number;
+  outputTokens: number;
+}
+
 export interface CommentaryEngine {
   generateCommentary(input: CommentaryInput): Promise<CommentaryResult>;
   generatePreamble(input: PreambleInput): Promise<CommentaryResult>;
   generateBetweenInningSummary(
     input: BetweenInningSummaryInput,
   ): Promise<BetweenInningSummaryResult>;
+  generatePostGameColumn(
+    input: PostGameColumnInput,
+  ): Promise<PostGameColumnResult>;
   getNarrativeSoFar(): string;
   resetNarrative(): void;
 }
@@ -201,6 +228,58 @@ function parseBetweenInningSummaryPayload(text: string): {
     popupText: text.trim() || null,
     narrativeText: null,
     parseFailed: true,
+  };
+}
+
+function parsePostGameColumnPayload(text: string): {
+  headline: string | null;
+  body: string | null;
+  parseFailed: boolean;
+} {
+  try {
+    const parsed = JSON.parse(text) as {
+      headline?: unknown;
+      body?: unknown;
+    };
+
+    if (
+      typeof parsed.headline === "string" &&
+      parsed.headline.trim() &&
+      typeof parsed.body === "string" &&
+      parsed.body.trim()
+    ) {
+      return {
+        headline: parsed.headline.trim(),
+        body: parsed.body.trim(),
+        parseFailed: false,
+      };
+    }
+  } catch {
+    // fall through to regex recovery path
+  }
+
+  // Recovery path for truncated JSON: try to salvage the headline and body
+  // fields via regex. If the body is missing/truncated, we treat it as a
+  // failed column so the caller does NOT persist a partial record — a
+  // headline without body is not a publishable column.
+  const headlineMatch = text.match(
+    /"headline"\s*:\s*"((?:\\.|[^"\\])*)"/,
+  );
+  const bodyMatch = text.match(
+    /"body"\s*:\s*"((?:\\.|[^"\\])*)"/,
+  );
+
+  const extractedHeadline = headlineMatch?.[1]
+    ? headlineMatch[1].replace(/\\"/g, '"').trim()
+    : null;
+  const extractedBody = bodyMatch?.[1]
+    ? bodyMatch[1].replace(/\\"/g, '"').trim()
+    : null;
+
+  return {
+    headline: extractedHeadline,
+    body: extractedBody,
+    parseFailed: !extractedHeadline || !extractedBody,
   };
 }
 
@@ -429,6 +508,97 @@ export class GrokCommentaryEngine implements CommentaryEngine {
         input.allInningEvents,
         input.narrativeSoFar,
       ),
+    };
+  }
+
+  async generatePostGameColumn(
+    input: PostGameColumnInput,
+  ): Promise<PostGameColumnResult> {
+    const prompt = this.buildPostGameColumnPrompt(input);
+    const messages: GrokChatMessage[] = [
+      { role: "system", content: prompt.system },
+      { role: "user", content: prompt.user },
+    ];
+
+    let response;
+    try {
+      response = await callClaudeMessages({
+        model: this.config.claudeModel ?? "claude-sonnet-4-6",
+        messages,
+        intensity: this.config.intensity,
+        purpose: "post_game_column",
+        temperature: 0.6,
+        maxTokens: 1200,
+        gameId: this.config.gameId,
+        mode: this.config.mode,
+        invokeImpl: this.config.claudeInvokeImpl,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.warn(
+        "[reporter:post-game] Column generation failed; skipping.",
+        message,
+      );
+      return {
+        headline: null,
+        body: null,
+        skipped: true,
+        error: message,
+        inputTokens: 0,
+        outputTokens: 0,
+      };
+    }
+
+    // Fire-and-forget usage logging; a log failure must not block the column.
+    try {
+      await this.logUsageImpl(
+        toUsageLogInput({
+          config: this.config,
+          inputTokens: response.inputTokens,
+          outputTokens: response.outputTokens,
+          purpose: "post_game_column",
+        }),
+      );
+    } catch (logError) {
+      console.warn(
+        "[reporter:post-game] Failed to log post-game column LLM usage.",
+        logError,
+      );
+    }
+
+    if (!response.text) {
+      return {
+        headline: null,
+        body: null,
+        skipped: true,
+        error: "Claude response was empty.",
+        inputTokens: response.inputTokens,
+        outputTokens: response.outputTokens,
+      };
+    }
+
+    const parsed = parsePostGameColumnPayload(response.text);
+    if (parsed.parseFailed || !parsed.headline || !parsed.body) {
+      console.warn(
+        "[reporter:post-game] Column JSON invalid/truncated; not persisting partial column.",
+        response.text,
+      );
+      return {
+        headline: parsed.headline,
+        body: parsed.body,
+        skipped: true,
+        error: "Column payload invalid or truncated.",
+        inputTokens: response.inputTokens,
+        outputTokens: response.outputTokens,
+      };
+    }
+
+    return {
+      headline: parsed.headline,
+      body: parsed.body,
+      skipped: false,
+      inputTokens: response.inputTokens,
+      outputTokens: response.outputTokens,
     };
   }
 

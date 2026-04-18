@@ -19,7 +19,10 @@ export type AtBatResult =
 export type GameEvent = 'SB' | 'CS' | 'WP' | 'PB' | 'PK' | 'PITCH_CHANGE' | 'PINCH_HIT' | 'PINCH_RUN' | 'DEF_SUB' | 'POS_SWITCH';
 
 export interface BeatReporterGameSettings {
-  beatReporterEnabled: boolean;
+  /** Master flag for in-game preamble + per-inning summaries (Grok). */
+  liveBeatReporterEnabled: boolean;
+  /** Master flag for post-game newspaper columns (Claude Sonnet). */
+  postGameColumnsEnabled: boolean;
 }
 
 // Special play types for outs and hits

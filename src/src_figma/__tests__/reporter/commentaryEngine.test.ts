@@ -11,9 +11,11 @@ import type { CompetitionType } from "../../../utils/gameStorage";
 import {
   GrokCommentaryEngine,
   type BetweenInningSummaryInput,
+  type PostGameColumnInput,
 } from "../../app/engines/reporter/commentaryEngine";
 import type { ReporterContext } from "../../app/engines/reporter/reporterContext";
 import type { ReporterProxyInvoke } from "../../app/engines/reporter/grokClient";
+import type { ClaudeProxyInvoke } from "../../app/engines/reporter/claudeClient";
 
 function createReporter(): BeatReporter {
   const now = new Date("2026-04-15T12:00:00.000Z").getTime();
@@ -982,6 +984,137 @@ describe("commentaryEngine", () => {
       );
       expect(commentarySystemMessage.content).toContain("Notability cue:");
       expect(betweenSystemMessage.content).not.toBe(commentarySystemMessage.content);
+    });
+  });
+
+  describe("generatePostGameColumn", () => {
+    function createPostGameInput(
+      overrides: Partial<PostGameColumnInput> = {},
+    ): PostGameColumnInput {
+      return {
+        context: createContext(),
+        reporter: createReporter(),
+        reporterTeam: "home",
+        finalScore: { home: 4, away: 2 },
+        allInningEvents: [
+          createInningEvent({
+            eventId: "p1",
+            eventIndex: 1,
+            batterName: "Harry Backman",
+            pitcherName: "Winnie Noelle",
+          }),
+        ],
+        narrativeSoFar:
+          "Through six, the Blowfish kept a steady two-run grip.",
+        ...overrides,
+      };
+    }
+
+    function makeClaudeInvoke(options: {
+      text?: string;
+      error?: { message: string; status?: number };
+      inputTokens?: number;
+      outputTokens?: number;
+    }): ClaudeProxyInvoke {
+      const invoke = vi.fn(async (_functionName, _opts) => {
+        if (options.error) {
+          return { data: null, error: options.error };
+        }
+        return {
+          data: {
+            text: options.text ?? "",
+            inputTokens: options.inputTokens ?? 100,
+            outputTokens: options.outputTokens ?? 400,
+            model: "claude-sonnet-4-6",
+          },
+          error: null,
+        };
+      });
+      return invoke as unknown as ClaudeProxyInvoke;
+    }
+
+    test("happy path returns parsed headline + body and skipped=false", async () => {
+      const engine = new GrokCommentaryEngine({
+        model: "grok-4",
+        intensity: "medium",
+        gameId: "game-1",
+        mode: "exhibition",
+        claudeInvokeImpl: makeClaudeInvoke({
+          text: JSON.stringify({
+            headline: "BACKMAN'S BLAST SINKS FREEBOOTERS",
+            body: "In the cathedral of Blowfish Stadium, Harry Backman did what Harry Backman does best.",
+          }),
+        }),
+      });
+
+      const result = await engine.generatePostGameColumn(createPostGameInput());
+
+      expect(result.skipped).toBe(false);
+      expect(result.headline).toBe("BACKMAN'S BLAST SINKS FREEBOOTERS");
+      expect(result.body).toContain("Harry Backman");
+    });
+
+    test("truncated JSON (headline only, body missing) returns skipped=true so no partial column persists", async () => {
+      const truncated = '{"headline": "BACKMAN HEROICS","body": "In the cathedral of Blow';
+      const engine = new GrokCommentaryEngine({
+        model: "grok-4",
+        intensity: "medium",
+        claudeInvokeImpl: makeClaudeInvoke({ text: truncated }),
+      });
+
+      const result = await engine.generatePostGameColumn(createPostGameInput());
+
+      // Recovery regex may pull the headline, but because body is broken we
+      // explicitly mark the column as skipped so the caller does not persist
+      // a half-written record.
+      expect(result.skipped).toBe(true);
+      expect(result.error).toContain("invalid or truncated");
+    });
+
+    test("logs usage with purpose='post_game_column'", async () => {
+      const logUsage = createLogUsageSpy();
+      const engine = new GrokCommentaryEngine({
+        model: "grok-4",
+        intensity: "medium",
+        gameId: "game-1",
+        mode: "exhibition",
+        claudeInvokeImpl: makeClaudeInvoke({
+          text: JSON.stringify({ headline: "H", body: "B" }),
+          inputTokens: 500,
+          outputTokens: 800,
+        }),
+        logUsage,
+      });
+
+      await engine.generatePostGameColumn(createPostGameInput());
+
+      expect(logUsage).toHaveBeenCalledTimes(1);
+      expect(logUsage.mock.calls[0][0]).toMatchObject({
+        purpose: "post_game_column",
+        inputTokens: 500,
+        outputTokens: 800,
+        gameId: "game-1",
+        mode: "exhibition",
+      });
+    });
+
+    test("Claude API error returns skipped=true without throwing", async () => {
+      const engine = new GrokCommentaryEngine({
+        model: "grok-4",
+        intensity: "medium",
+        claudeInvokeImpl: makeClaudeInvoke({
+          error: { message: "upstream 500", status: 500 },
+        }),
+      });
+
+      await expect(
+        engine.generatePostGameColumn(createPostGameInput()),
+      ).resolves.toMatchObject({
+        skipped: true,
+        headline: null,
+        body: null,
+        error: expect.stringContaining("Claude"),
+      });
     });
   });
 });

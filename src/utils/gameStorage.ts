@@ -222,7 +222,12 @@ export interface PersistedGameState {
   competitionId?: string;
   // R3-R7: Persist leagueId so almanac queries work after refresh
   leagueId?: string;
+  /** @deprecated Pre-Phase-2a single-toggle field. Kept for backward-compat read path. */
   beatReporterEnabled?: boolean;
+  /** Phase 2a: master flag for in-game preamble + per-inning summaries (Grok). */
+  liveBeatReporterEnabled?: boolean;
+  /** Phase 2a: master flag for post-game newspaper columns (Claude Sonnet). */
+  postGameColumnsEnabled?: boolean;
   // R3: Exhibition game config (lost on refresh without these)
   totalInnings?: number;
   awayUsesDh?: boolean;

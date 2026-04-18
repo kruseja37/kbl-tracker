@@ -106,7 +106,10 @@ export interface GameState {
   stadiumName?: string | null;
   seasonNumber: number;
   gamePhase: GamePhase;
-  beatReporterEnabled: boolean;
+  /** Master flag for in-game preamble + per-inning summaries (Grok). */
+  liveBeatReporterEnabled: boolean;
+  /** Master flag for post-game newspaper columns (Claude Sonnet). */
+  postGameColumnsEnabled: boolean;
 }
 
 export interface EndGameOptions {
@@ -217,10 +220,9 @@ export interface PitcherGameStats {
   blownSave: boolean;
 }
 
-function consumePendingBeatReporterEnabled(): boolean | undefined {
+function consumePendingSessionBoolean(key: string): boolean | undefined {
   if (typeof sessionStorage === "undefined") return undefined;
 
-  const key = "kbl-pending-beat-reporter-enabled";
   const raw = sessionStorage.getItem(key);
   sessionStorage.removeItem(key);
 
@@ -231,6 +233,22 @@ function consumePendingBeatReporterEnabled(): boolean | undefined {
   } catch {
     return raw === "true";
   }
+}
+
+function consumePendingLiveBeatReporterEnabled(): boolean | undefined {
+  // New key introduced in Phase 2a two-toggle refactor.
+  const fromNew = consumePendingSessionBoolean(
+    "kbl-pending-live-beat-reporter-enabled",
+  );
+  if (fromNew !== undefined) return fromNew;
+  // Backward-compat: the pre-refactor single-toggle key.
+  return consumePendingSessionBoolean("kbl-pending-beat-reporter-enabled");
+}
+
+function consumePendingPostGameColumnsEnabled(): boolean | undefined {
+  return consumePendingSessionBoolean(
+    "kbl-pending-post-game-columns-enabled",
+  );
 }
 
 export interface RunnerAdvancement {
@@ -664,7 +682,10 @@ export interface GameInitConfig {
   // Layer 1B: Context snapshot identity fields
   franchiseId?: string;
   leagueId?: string;
+  /** @deprecated Pre-Phase-2a single-toggle field. Kept for backward-compat read path. */
   beatReporterEnabled?: boolean;
+  liveBeatReporterEnabled?: boolean;
+  postGameColumnsEnabled?: boolean;
   // Layer 1B: Team records for context snapshot
   awayRecord?: { w: number; l: number };
   homeRecord?: { w: number; l: number };
@@ -2218,7 +2239,10 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     stadiumName: null,
     seasonNumber: 1,
     gamePhase: "PRE_GAME",
-    beatReporterEnabled: true,
+    // Two-toggle defaults (Phase 2a): live OFF, post-game ON. Existing saved
+    // games migrate to both-true via the snapshot load path for compat.
+    liveBeatReporterEnabled: false,
+    postGameColumnsEnabled: true,
   });
   const gameStateRef = useRef(gameState);
 
@@ -3566,8 +3590,21 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         config.homeStartingPitcherName,
       );
 
-      const beatReporterEnabled =
-        config.beatReporterEnabled ?? consumePendingBeatReporterEnabled() ?? true;
+      // Two-toggle resolution (Phase 2a):
+      //   - Prefer the new explicit config field.
+      //   - Fall back to the legacy single-flag `beatReporterEnabled` for existing saves.
+      //   - Fall back to the sessionStorage pending key (set by pre-game pages).
+      //   - Final defaults: live OFF, post-game ON.
+      const liveBeatReporterEnabled =
+        config.liveBeatReporterEnabled ??
+        config.beatReporterEnabled ??
+        consumePendingLiveBeatReporterEnabled() ??
+        false;
+      const postGameColumnsEnabled =
+        config.postGameColumnsEnabled ??
+        config.beatReporterEnabled ??
+        consumePendingPostGameColumnsEnabled() ??
+        true;
 
       // Set initial game state
       const leadoffBatter = config.awayLineup[0];
@@ -3597,7 +3634,8 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         stadiumName: config.stadiumName || null,
         seasonNumber: config.seasonNumber,
         gamePhase: "PRE_GAME",
-        beatReporterEnabled,
+        liveBeatReporterEnabled,
+        postGameColumnsEnabled,
       });
 
       setAwayBatterIndex(0);
@@ -4076,7 +4114,17 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
             gamePhase:
               ((savedSnapshot as unknown as Record<string, unknown>)
                 .gamePhase as GamePhase) ?? "LIVE",
-            beatReporterEnabled: savedSnapshot.beatReporterEnabled ?? true,
+            // Backward compat: legacy saves had a single `beatReporterEnabled`;
+            // map both new fields to it so the resumed game preserves prior
+            // behavior. New saves will have both fields explicitly.
+            liveBeatReporterEnabled:
+              savedSnapshot.liveBeatReporterEnabled ??
+              savedSnapshot.beatReporterEnabled ??
+              true,
+            postGameColumnsEnabled:
+              savedSnapshot.postGameColumnsEnabled ??
+              savedSnapshot.beatReporterEnabled ??
+              true,
           });
 
           latestPersistedRef.current = savedSnapshot;
@@ -4653,7 +4701,9 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
               1,
             ),
             gamePhase: "LIVE",
-            beatReporterEnabled: true,
+            // Legacy in-progress-game path: assume both on (prior behavior).
+            liveBeatReporterEnabled: true,
+            postGameColumnsEnabled: true,
           });
           setAtBatSequence(lastEvent?.eventIndex ?? events.length);
           seasonIdRef.current = inProgressGame.seasonId || "";
@@ -4933,7 +4983,11 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       competitionId: competitionIdRef.current,
       // R3-R7: Persist leagueId for almanac queries after refresh
       leagueId: leagueIdRef.current,
-      beatReporterEnabled: gameState.beatReporterEnabled,
+      liveBeatReporterEnabled: gameState.liveBeatReporterEnabled,
+      postGameColumnsEnabled: gameState.postGameColumnsEnabled,
+      // Mirror the legacy flag so old consumers still read something sensible.
+      beatReporterEnabled:
+        gameState.liveBeatReporterEnabled || gameState.postGameColumnsEnabled,
       // R3: Persist game config that would be lost on refresh
       totalInnings: totalInningsRef.current,
       awayUsesDh: awayUsesDhRef.current,
@@ -9634,7 +9688,11 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
           competitionType: opts?.competitionType ?? competitionTypeRef.current,
           competitionId: opts?.competitionId ?? competitionIdRef.current,
           leagueId: resolvedArchiveLeagueId,
-          beatReporterEnabled: gameState.beatReporterEnabled,
+          liveBeatReporterEnabled: gameState.liveBeatReporterEnabled,
+          postGameColumnsEnabled: gameState.postGameColumnsEnabled,
+          beatReporterEnabled:
+            gameState.liveBeatReporterEnabled ||
+            gameState.postGameColumnsEnabled,
           playerStats: playerStatsRecord,
           pitcherGameStats: pitcherGameStatsArray,
           fameEvents: buildPersistedFameEvents(
@@ -10458,7 +10516,11 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         competitionType: options?.competitionType ?? competitionTypeRef.current,
         competitionId: options?.competitionId ?? competitionIdRef.current,
         leagueId: resolvedArchiveLeagueId,
-        beatReporterEnabled: gameState.beatReporterEnabled,
+        liveBeatReporterEnabled: gameState.liveBeatReporterEnabled,
+        postGameColumnsEnabled: gameState.postGameColumnsEnabled,
+        beatReporterEnabled:
+          gameState.liveBeatReporterEnabled ||
+          gameState.postGameColumnsEnabled,
         playerStats: playerStatsRecord,
         pitcherGameStats: pitcherGameStatsArray,
         fameEvents: buildPersistedFameEvents(

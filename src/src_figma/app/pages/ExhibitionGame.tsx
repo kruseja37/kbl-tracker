@@ -46,7 +46,10 @@ export function ExhibitionGame() {
   const [extraInningRunner, setExtraInningRunner] = useState(true);
   const [extraInningRunnerDelay, setExtraInningRunnerDelay] = useState<1 | 2>(2);
   const [selectedStadium, setSelectedStadium] = useState<string | null>(null);
-  const [beatReporterEnabled, setBeatReporterEnabled] = useState(true);
+  // Phase 2a two-toggle model: live defaults OFF (between-inning summaries
+  // aren't worth the cost), post-game columns default ON (that's the payoff).
+  const [liveBeatReporterEnabled, setLiveBeatReporterEnabled] = useState(false);
+  const [postGameColumnsEnabled, setPostGameColumnsEnabled] = useState(true);
 
   const parkNames = useMemo(() => getParkNames(), []);
 
@@ -388,7 +391,14 @@ export function ExhibitionGame() {
   };
 
   const handleStartGame = () => {
-    sessionStorage.setItem("kbl-pending-beat-reporter-enabled", JSON.stringify(beatReporterEnabled));
+    sessionStorage.setItem(
+      "kbl-pending-live-beat-reporter-enabled",
+      JSON.stringify(liveBeatReporterEnabled),
+    );
+    sessionStorage.setItem(
+      "kbl-pending-post-game-columns-enabled",
+      JSON.stringify(postGameColumnsEnabled),
+    );
     // Pass the configured rosters and team info to the game tracker
     navigate("/game-tracker/exhibition-1", {
       state: {
@@ -677,8 +687,10 @@ export function ExhibitionGame() {
             <ReporterAssignmentPanel
               leagueId={selectedLeagueId || leagues[0]?.id || 'sml'}
               teams={reporterTeams}
-              enabled={beatReporterEnabled}
-              onEnabledChange={setBeatReporterEnabled}
+              liveEnabled={liveBeatReporterEnabled}
+              onLiveEnabledChange={setLiveBeatReporterEnabled}
+              postGameEnabled={postGameColumnsEnabled}
+              onPostGameEnabledChange={setPostGameColumnsEnabled}
             />
 
             <div className="border-2 border-[#556B55] bg-[#3d4a42] p-4 space-y-4 shadow-[2px_2px_0px_0px_rgba(0,0,0,0.4)]">
