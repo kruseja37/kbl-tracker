@@ -327,12 +327,29 @@ function formatExitTypeSuffix(exitType?: string): string | null {
   return null;
 }
 
+const FIELDING_POSITION_LABELS: Record<number, string> = {
+  1: "P",
+  2: "C",
+  3: "1B",
+  4: "2B",
+  5: "3B",
+  6: "SS",
+  7: "LF",
+  8: "CF",
+  9: "RF",
+};
+
 function formatFieldingSequence(sequence?: number[]): string | null {
   if (!sequence || sequence.length === 0) {
     return null;
   }
 
-  return sequence.join("-");
+  // Translate position numbers to readable labels so the LLM doesn't guess
+  // (e.g. "1" → "P" makes it obvious the pitcher fielded; raw "1" is ambiguous).
+  const labeled = sequence
+    .map((n) => FIELDING_POSITION_LABELS[n] ?? String(n))
+    .join("→");
+  return `fielded by ${labeled}`;
 }
 
 function formatEventLine(event: AtBatEvent): string {
@@ -418,7 +435,11 @@ export function formatHardRules(): string[] {
     "Use active voice and concrete baseball language.",
     "Use past tense for completed plays and inning summaries; use present/future-facing language only for the pregame preamble.",
     "No markdown, no bullet lists, no headings, and no meta commentary in the final answer.",
-    "Prefer 3-5 sentences unless the TASK section explicitly asks for a different length.",
+    // --- Anti-hallucination specifics (added after live test revealed gaps) ---
+    "NEVER invent a fielder or fielding location. If an event has no \"fielded by\" tag and no hit-location zone, describe the play without naming where the ball went or who caught it. Do NOT default to \"to center\" or similar — just say \"fielded\" or \"caught\" generically.",
+    "NEVER recap events from prior innings. Your summary covers ONLY the current inning listed in the EVENTS section. Use NARRATIVE SO FAR for continuity (acknowledge momentum, reference the running arc) but do NOT restate plays you already covered in an earlier summary.",
+    "Prefer sparse-but-accurate over rich-and-invented. A short, factual summary is always better than a long one that fills gaps with guesses.",
+    "STRICT length: 3-5 sentences MAXIMUM. Do not exceed 5 sentences. If you run long, you WILL be truncated mid-thought and the user will see broken JSON — keep it tight.",
   ];
 }
 
@@ -622,10 +643,11 @@ export function buildBetweenInningSummarySystemPrompt(
     ),
     formatSection("HARD RULES", formatHardRules()),
     formatSection("TASK", [
-      `Write a 3-5 sentence summary of inning ${inning} in YOUR voice.`,
-      "Stay grounded in EVENTS, DRAMATIC CONTEXT, and PLAYER CONTEXT.",
-      "Continue the arc from NARRATIVE SO FAR.",
-      'Return JSON only (no markdown fences): { "popup": "<2-3 sentences for the in-game popup>", "narrative": "<updated running narrative for the whole game; 2-3 sentences; REPLACES previous narrative>" }',
+      `Summarize ONLY inning ${inning}. Do NOT describe or recap plays from earlier innings — the NARRATIVE SO FAR already covers those.`,
+      `Your 'popup' field = 2-3 sentences covering the most interesting moments of inning ${inning} only, in YOUR voice.`,
+      "Your 'narrative' field = 1-2 sentences MAX that updates the running game-long arc. Be terse. This replaces the prior narrative, so include the most important through-line but trim details that are now redundant.",
+      "KEEP THE TOTAL OUTPUT SHORT. Long responses get truncated and produce broken JSON visible to the user.",
+      'Return JSON only, no markdown fences, exact shape: { "popup": "<2-3 sentences>", "narrative": "<1-2 sentences>" }',
     ]),
   ].join("\n\n");
 }

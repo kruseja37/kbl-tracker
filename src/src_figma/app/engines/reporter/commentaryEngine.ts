@@ -168,7 +168,33 @@ function parseBetweenInningSummaryPayload(text: string): {
       };
     }
   } catch {
-    // handled below
+    // fall through to regex recovery path
+  }
+
+  // Recovery path: strict JSON parse failed (commonly because the response was
+  // truncated mid-generation at max_tokens). Try to extract the popup field
+  // via regex so the user doesn't see raw `{"popup":"..."` text in the feed.
+  // Handles escaped quotes within the popup string.
+  const popupMatch = text.match(
+    /"popup"\s*:\s*"((?:\\.|[^"\\])*)"/,
+  );
+  const narrativeMatch = text.match(
+    /"narrative"\s*:\s*"((?:\\.|[^"\\])*)"/,
+  );
+
+  if (popupMatch && popupMatch[1]) {
+    const extractedPopup = popupMatch[1].replace(/\\"/g, '"').trim();
+    const extractedNarrative = narrativeMatch?.[1]
+      ? narrativeMatch[1].replace(/\\"/g, '"').trim()
+      : null;
+    return {
+      popupText: extractedPopup || null,
+      narrativeText: extractedNarrative,
+      // Mark parseFailed=true IF narrative is missing — the engine uses this
+      // signal to preserve the previous narrative cache rather than clobber
+      // it with a truncated fragment.
+      parseFailed: !extractedNarrative,
+    };
   }
 
   return {

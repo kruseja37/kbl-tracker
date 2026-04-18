@@ -978,7 +978,7 @@ describe("commentaryEngine", () => {
       const commentarySystemMessage = invokeImpl.mock.calls[1][1].body.messages[0];
 
       expect(betweenSystemMessage.content).toContain(
-        'Return JSON only (no markdown fences): { "popup": "<2-3 sentences for the in-game popup>", "narrative": "<updated running narrative for the whole game; 2-3 sentences; REPLACES previous narrative>" }',
+        'Return JSON only, no markdown fences, exact shape: { "popup": "<2-3 sentences>", "narrative": "<1-2 sentences>" }',
       );
       expect(commentarySystemMessage.content).toContain("Notability cue:");
       expect(betweenSystemMessage.content).not.toBe(commentarySystemMessage.content);
