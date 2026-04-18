@@ -626,13 +626,11 @@ export function useCommentaryFeed({
       intensity?: NarrativeIntensity,
       mode?: CompetitionType,
     ) => {
-      if (pendingPopupRef.current) {
-        console.warn(
-          "[reporter:commentary] Between-inning popup already pending; skipping new summary.",
-        );
-        return;
-      }
-
+      // Note: previously checked pendingPopupRef here to guard overlapping popups.
+      // In the alternating-inning model we don't render a popup from the live fire
+      // path, so the guard never triggered correctly and in fact blocked legitimate
+      // subsequent inning summaries. Dedup is handled at the GameTracker call site
+      // via firedInningSummariesRef.
       const prerequisites = await resolveCallPrerequisites(reporterTeam);
       if (prerequisites.status !== "ready") {
         return;
@@ -712,12 +710,13 @@ export function useCommentaryFeed({
         createdAt: timestamp,
         changed_at: timestamp,
       });
-      setPendingBetweenInningPopup(
-        {
-          text: result.popupText,
-          halfInningLabel: inningLabel,
-        },
-      );
+      // NOTE: do NOT set pendingBetweenInningPopup here. In the alternating-inning
+      // model the entry lands directly in the feed (above) and there is no popup
+      // overlay rendered in the live GameTracker. Setting a popup that is never
+      // dismissed would leave pendingPopupRef pinned forever, causing the stacking
+      // guard at the top of this function to block ALL subsequent inning summaries.
+      // The BetweenInningPopup component remains used by the preview harness, which
+      // drives pendingPopup state via its own dismiss flow.
     },
     [
       buildLiveReporterContextImpl,
@@ -725,7 +724,6 @@ export function useCommentaryFeed({
       ensureEngine,
       getLivePreambleSeed,
       resolveCallPrerequisites,
-      setPendingBetweenInningPopup,
     ],
   );
 

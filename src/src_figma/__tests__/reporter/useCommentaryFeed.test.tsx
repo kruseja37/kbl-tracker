@@ -889,7 +889,7 @@ describe("useCommentaryFeed", () => {
     ]);
   });
 
-  test("fireBetweenInningSummary success path appends a feed entry and sets pendingPopup", async () => {
+  test("fireBetweenInningSummary success path appends a feed entry directly (no popup in live path)", async () => {
     const { engine, generateBetweenInningSummary, getNarrativeSoFar } = createEngine();
     const { result } = renderCommentaryFeedHook({
       createEngine: () => engine,
@@ -906,10 +906,9 @@ describe("useCommentaryFeed", () => {
 
     expect(generateBetweenInningSummary).toHaveBeenCalledTimes(1);
     expect(getNarrativeSoFar).toHaveBeenCalledTimes(1);
-    expect(result.current.pendingPopup).toEqual({
-      text: "Freebooters stranded two.",
-      halfInningLabel: "INNING 4",
-    });
+    // Live fire path does NOT set pendingPopup — entry goes straight into the feed.
+    // The I2 popup overlay is only used by the preview harness.
+    expect(result.current.pendingPopup).toBeNull();
     expect(result.current.commentaryEntries).toEqual([
       expect.objectContaining({
         id: "commentary-inning-game-1-home-4-2000",
@@ -1026,8 +1025,12 @@ describe("useCommentaryFeed", () => {
     );
   });
 
-  test("fireBetweenInningSummary when another popup is pending warns and skips the second call", async () => {
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+  test("fireBetweenInningSummary can fire sequentially for consecutive innings without being blocked by a stale popup guard", async () => {
+    // Regression: the prior stacking guard keyed on pendingPopupRef would block
+    // inning 2's summary after inning 1 fired because the I2 popup state was
+    // pinned forever (the popup is never rendered live, so never dismissed).
+    // This test exercises back-to-back fires for different innings and asserts
+    // the engine is invoked for BOTH.
     const { engine, generateBetweenInningSummary } = createEngine();
     const { result } = renderCommentaryFeedHook({
       createEngine: () => engine,
@@ -1036,22 +1039,20 @@ describe("useCommentaryFeed", () => {
     await act(async () => {
       await result.current.fireBetweenInningSummary(
         "game-1",
-        4,
-        [createAtBatEvent({ inning: 4, halfInning: "TOP" })],
+        1,
+        [createAtBatEvent({ inning: 1, halfInning: "TOP" })],
         "home",
       );
       await result.current.fireBetweenInningSummary(
         "game-1",
-        4,
-        [createAtBatEvent({ inning: 4, halfInning: "BOTTOM", batterName: "Harry Backman", result: "BB" })],
-        "home",
+        2,
+        [createAtBatEvent({ inning: 2, halfInning: "TOP", batterName: "Harry Backman", result: "BB" })],
+        "away",
       );
     });
 
-    expect(generateBetweenInningSummary).toHaveBeenCalledTimes(1);
-    expect(warn).toHaveBeenCalledWith(
-      "[reporter:commentary] Between-inning popup already pending; skipping new summary.",
-    );
+    expect(generateBetweenInningSummary).toHaveBeenCalledTimes(2);
+    expect(result.current.commentaryEntries).toHaveLength(2);
   });
 
   test("persisted between-inning entries round-trip with kind and render with differentiated feed styling", async () => {
