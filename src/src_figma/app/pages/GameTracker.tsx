@@ -1164,6 +1164,8 @@ export function GameTracker() {
   // §4.2 Structured Play Log — parallel to activityLog (which other systems still use)
   const [playLogEntries, setPlayLogEntries] = useState<PlayLogEntry[]>([]);
   const preambleFiredGameIdRef = useRef<string | null>(null);
+  const firedInningSummariesRef = useRef<Set<string>>(new Set());
+  const lastSeenHalfInningRef = useRef<{ inning: number; isTop: boolean } | null>(null);
   const shortInningLabel = useCallback(() => {
     return `${gameState.isTop ? "T" : "B"}${Math.max(1, gameState.inning)}`;
   }, [gameState.isTop, gameState.inning]);
@@ -4446,6 +4448,7 @@ export function GameTracker() {
     firePreamble,
     fireBetweenInningSummary,
     homeDisabled: homeCommentaryDisabled,
+    awayDisabled: awayCommentaryDisabled,
   } = useCommentaryFeed({
     gameId: gameState.gameId,
     homeTeamId,
@@ -4550,6 +4553,76 @@ export function GameTracker() {
     gameState.gameId,
     gameState.gamePhase,
     getPendingAtBatIdentity,
+  ]);
+
+  // Inning-summary watcher: fires at end of bottom-of-N, regardless of which handler
+  // triggered the transition (modal YES, force-end button, or auto game-end). Reactive
+  // so we catch all paths without touching useGameState.
+  useEffect(() => {
+    if (gameState.gamePhase === "PRE_GAME") {
+      return;
+    }
+    const prev = lastSeenHalfInningRef.current;
+    const curr = { inning: gameState.inning, isTop: gameState.isTop };
+    lastSeenHalfInningRef.current = curr;
+
+    if (!prev || !gameState.gameId) {
+      return;
+    }
+
+    // Detect "we just finished the bottom of inning N". Two signatures:
+    //  (a) prev was bottom-of-N, now we're top-of-N+1 (normal transition)
+    //  (b) prev was bottom-of-N, now gamePhase is POST_FINAL_OUT (game ended on last inning)
+    const wasBottomOfN = !prev.isTop;
+    const nowAdvancedToNext = curr.isTop && curr.inning > prev.inning;
+    const gameJustEnded = gameState.gamePhase === "POST_FINAL_OUT";
+    if (!wasBottomOfN || (!nowAdvancedToNext && !gameJustEnded)) {
+      return;
+    }
+
+    const completedInning = prev.inning;
+    const dedupKey = `${gameState.gameId}:${completedInning}`;
+    if (firedInningSummariesRef.current.has(dedupKey)) {
+      return;
+    }
+
+    const reporterTeam: "home" | "away" =
+      completedInning % 2 === 1 ? "home" : "away";
+    if (reporterTeam === "home" && homeCommentaryDisabled) return;
+    if (reporterTeam === "away" && awayCommentaryDisabled) return;
+
+    firedInningSummariesRef.current.add(dedupKey);
+    const targetGameId = gameState.gameId;
+
+    void (async () => {
+      try {
+        const inningEvents = (await getGameEvents(targetGameId)).filter(
+          (event) => !event.undoneAt && event.inning === completedInning,
+        );
+        await fireBetweenInningSummary(
+          targetGameId,
+          completedInning,
+          inningEvents,
+          reporterTeam,
+          undefined,
+          competitionType,
+        );
+      } catch (error) {
+        console.warn(
+          `[reporter:commentary] Failed to fire summary for inning ${completedInning}.`,
+          error,
+        );
+      }
+    })();
+  }, [
+    awayCommentaryDisabled,
+    competitionType,
+    fireBetweenInningSummary,
+    gameState.gameId,
+    gameState.gamePhase,
+    gameState.inning,
+    gameState.isTop,
+    homeCommentaryDisabled,
   ]);
 
   // §5: Lineup column data — role-based: column 2 = batting team, column 3 = fielding team
@@ -8192,65 +8265,10 @@ export function GameTracker() {
     setTimePlayNoRun(false); // GAP-GT-6-A: Always reset on cancel
   }, []);
 
-  // Handle end of inning
-  const handleEndInning = useCallback(() => {
-    const currentInning = Math.max(1, gameState.inning);
-    const wasBottomHalf = !gameState.isTop;
-    const targetGameId = gameState.gameId;
-
-    // Layer 5 (§4.4): Check for unenriched plays before transitioning
-    const currentHalfPlays = playLogEntries.filter(
-      (e) => e.inningLabel === shortInningLabel(),
-    );
-    const unenriched = currentHalfPlays.filter(
-      (e) =>
-        e.isEnrichable &&
-        (!e.hasPitchType || !e.hasLocationData || !e.hasFieldingData),
-    );
-    if (unenriched.length > 0) {
-      setUnenrichedCount(unenriched.length);
-      setShowEnrichmentPrompt(true);
-    }
-
-    endInning();
-    // Clear runner names when inning ends (bases are cleared)
-    setRunnerNames({});
-
-    if (!wasBottomHalf || !targetGameId) {
-      return;
-    }
-
-    const reporterTeam = currentInning % 2 === 1 ? "home" : "away";
-    void (async () => {
-      try {
-        const inningEvents = (await getGameEvents(targetGameId)).filter(
-          (event) => !event.undoneAt && event.inning === currentInning,
-        );
-        await fireBetweenInningSummary(
-          targetGameId,
-          currentInning,
-          inningEvents,
-          reporterTeam,
-          undefined,
-          competitionType,
-        );
-      } catch (error) {
-        console.warn(
-          `[reporter:commentary] Failed to load inning ${currentInning} events for summary.`,
-          error,
-        );
-      }
-    })();
-  }, [
-    competitionType,
-    endInning,
-    fireBetweenInningSummary,
-    gameState.gameId,
-    gameState.inning,
-    gameState.isTop,
-    playLogEntries,
-    shortInningLabel,
-  ]);
+  // NOTE: Inning-summary firing moved to a reactive useEffect that watches
+  // gameState.inning / isTop / gamePhase transitions (see the effect near
+  // firePreamble). This catches all transition paths (modal YES, force-end,
+  // auto game-end) without requiring a single handler hook.
 
   // ══════════════════════════════════════════════════════════════
   // LAYER 5: ENRICHMENT HANDLERS
