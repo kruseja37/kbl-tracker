@@ -9855,6 +9855,52 @@ export function GameTracker() {
       undoSystem.clearHistory();
       console.debug("[END-GAME] Step 4: Post-hook cleanup completed");
 
+      // Fire post-game columns BEFORE navigation. The POST_FINAL_OUT useEffect
+      // below is a backup, but (a) gamePhase is only set to POST_FINAL_OUT in
+      // the auto-end flow, not in user-triggered endGame, and (b) navigate()
+      // unmounts GameTracker before React may have flushed the phase change.
+      // Firing directly here guarantees the call lands for every end-game path.
+      // Dedup via firedPostGameForGameIdRef in the hook prevents double-fire
+      // if the phase-watching effect also happens to run.
+      if (gameState.postGameColumnsEnabled && completedGameId) {
+        const reporterGameMode: import("../../../types/reporter").ReporterGameMode =
+          competitionType === "playoff"
+            ? "elimination"
+            : (competitionType as import("../../../types/reporter").ReporterGameMode);
+        const postGameGameId = completedGameId;
+        const snapshotHomeScore = gameState.homeScore;
+        const snapshotAwayScore = gameState.awayScore;
+        void (async () => {
+          try {
+            const allEvents = (
+              await getGameEvents(postGameGameId)
+            ).filter((e) => !e.undoneAt);
+            await firePostGameColumns({
+              targetGameId: postGameGameId,
+              allInningEvents: allEvents,
+              finalScore: {
+                home: snapshotHomeScore,
+                away: snapshotAwayScore,
+              },
+              gameMode: reporterGameMode,
+              gameDate: new Date().toISOString().slice(0, 10),
+              opponentByReporter: {
+                home: awayTeamId,
+                away: homeTeamId,
+              },
+            });
+            console.debug(
+              "[END-GAME] Post-game columns fire-and-forget dispatched.",
+            );
+          } catch (err) {
+            console.warn(
+              "[reporter:post-game] Failed to generate post-game columns.",
+              err,
+            );
+          }
+        })();
+      }
+
       // Navigate immediately — don't wait for aggregation to finish
       console.debug("[END-GAME] Step 5: Navigating to PostGameSummary");
       navigate(`/post-game/${completedGameId}`, {
@@ -9915,6 +9961,8 @@ export function GameTracker() {
     statsScopeId,
     selectedStadium,
     playAudio,
+    awayTeamId,
+    firePostGameColumns,
   ]);
 
   // T0-01: Auto-trigger endGame when regulation ends
