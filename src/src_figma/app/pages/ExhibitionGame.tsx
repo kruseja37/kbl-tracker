@@ -408,6 +408,8 @@ export function ExhibitionGame() {
         homePitchers,
         awayTeamName: awayTeam?.name || 'Away',
         homeTeamName: homeTeam?.name || 'Home',
+        awayTeamAbbreviation: awayTeam?.abbreviation,
+        homeTeamAbbreviation: homeTeam?.abbreviation,
         awayTeamId: awayTeam?.id,
         homeTeamId: homeTeam?.id,
         // Pass team colors from database

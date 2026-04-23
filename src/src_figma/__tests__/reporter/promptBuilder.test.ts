@@ -4,10 +4,12 @@ import { INITIAL_MOOD_STATE } from "../../../engines/moodEngine";
 import type { BeatReporter } from "../../../types/reporter";
 import type { AtBatEvent } from "../../../utils/eventLog";
 import {
+  buildPostGameColumnSystemPrompt,
   formatEnrichedEvents,
   formatGroundTruth,
   formatHardRules,
   formatReporterIdentity,
+  formatRosterAttribution,
 } from "../../app/engines/reporter/promptBuilder";
 import type { ReporterContext } from "../../app/engines/reporter/reporterContext";
 
@@ -202,6 +204,92 @@ describe("promptBuilder helpers", () => {
     expect(lines).toContain("Never invent facts");
     expect(lines).toContain("If a detail is missing, say less and stay generic");
     expect(lines).toContain("No markdown");
+  });
+
+  test("formatRosterAttribution labels each player by reporter-vs-opponent team", () => {
+    const reporter = createReporter();
+    const context = createContext();
+    const events = [
+      createAtBatEvent({
+        batterName: "Ivy Sparks",
+        batterTeamId: "team-away",
+        pitcherName: "Noelle Vale",
+        pitcherTeamId: "team-home",
+      }),
+      createAtBatEvent({
+        eventId: "game-1_2",
+        eventIndex: 2,
+        batterName: "Toro Blanco",
+        batterId: "batter-2",
+        batterTeamId: "team-home",
+        pitcherName: "Kay Trent",
+        pitcherId: "pitcher-2",
+        pitcherTeamId: "team-away",
+      }),
+    ];
+
+    const homeLines = formatRosterAttribution(events, reporter, context, "home").join("\n");
+    expect(homeLines).toContain("YOUR team — Blowfish");
+    expect(homeLines).toContain("Pitchers who threw for Blowfish: Noelle Vale");
+    expect(homeLines).toContain("Batters who hit for Blowfish: Toro Blanco");
+    expect(homeLines).toContain("OPPONENT — Freebooters");
+    expect(homeLines).toContain("Pitchers who threw for Freebooters: Kay Trent");
+    expect(homeLines).toContain("Batters who hit for Freebooters: Ivy Sparks");
+
+    const awayReporter = { ...reporter, teamId: "team-away" };
+    const awayLines = formatRosterAttribution(events, awayReporter, context, "away").join("\n");
+    expect(awayLines).toContain("YOUR team — Freebooters");
+    expect(awayLines).toContain("Pitchers who threw for Freebooters: Kay Trent");
+    expect(awayLines).toContain("OPPONENT — Blowfish");
+    expect(awayLines).toContain("Pitchers who threw for Blowfish: Noelle Vale");
+  });
+
+  test("buildPostGameColumnSystemPrompt includes ROSTER ATTRIBUTION section", () => {
+    const reporter = createReporter();
+    const context = createContext();
+    const events = [
+      createAtBatEvent({
+        batterName: "Ivy Sparks",
+        batterTeamId: "team-away",
+        pitcherName: "Noelle Vale",
+        pitcherTeamId: "team-home",
+      }),
+    ];
+
+    const prompt = buildPostGameColumnSystemPrompt(
+      reporter,
+      "home",
+      context,
+      { home: 4, away: 3 },
+      events,
+      "",
+    );
+
+    expect(prompt).toContain("ROSTER ATTRIBUTION (do NOT confuse these)");
+    expect(prompt).toContain("YOUR team — Blowfish");
+    expect(prompt).toContain("OPPONENT — Freebooters");
+    expect(prompt).toContain("Before naming any pitcher or batter, verify which team they played for using ROSTER ATTRIBUTION.");
+  });
+
+  test("buildPostGameColumnSystemPrompt makes the official final result override stale narrative", () => {
+    const reporter = createReporter();
+    const context = createContext();
+    const prompt = buildPostGameColumnSystemPrompt(
+      reporter,
+      "home",
+      context,
+      { home: 2, away: 1 },
+      [createAtBatEvent()],
+      "The clubs were deadlocked at one.",
+    );
+
+    expect(prompt).toContain("POSTGAME GROUND TRUTH");
+    expect(prompt).toContain("Official final score: Freebooters 1, Blowfish 2");
+    expect(prompt).toContain("Official result: Blowfish beat Freebooters, 2-1.");
+    expect(prompt).toContain("POSTGAME GROUND TRUTH and EVENTS override NARRATIVE SO FAR");
+    expect(prompt).toContain("If the official final score is not tied, NEVER call the game a tie");
+    expect(prompt).not.toContain("STRICT length: 3-5 sentences MAXIMUM");
+    expect(prompt).not.toContain("NEVER recap events from prior innings");
   });
 
   test("formatMoodState uses the current mood label and momentum fields", async () => {

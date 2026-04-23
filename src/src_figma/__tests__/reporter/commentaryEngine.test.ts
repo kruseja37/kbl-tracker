@@ -1071,6 +1071,20 @@ describe("commentaryEngine", () => {
       expect(result.error).toContain("invalid or truncated");
     });
 
+    test("regex recovery decodes escaped newlines in the recovered body", async () => {
+      const recovered = 'preface {"headline":"BACKMAN HEROICS","body":"Paragraph one.\\n\\nParagraph two."} trailing';
+      const engine = new GrokCommentaryEngine({
+        model: "grok-4",
+        intensity: "medium",
+        claudeInvokeImpl: makeClaudeInvoke({ text: recovered }),
+      });
+
+      const result = await engine.generatePostGameColumn(createPostGameInput());
+
+      expect(result.skipped).toBe(false);
+      expect(result.body).toBe("Paragraph one.\n\nParagraph two.");
+    });
+
     test("logs usage with purpose='post_game_column'", async () => {
       const logUsage = createLogUsageSpy();
       const engine = new GrokCommentaryEngine({

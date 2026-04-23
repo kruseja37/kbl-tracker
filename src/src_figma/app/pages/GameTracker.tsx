@@ -64,6 +64,7 @@ import {
   getBetweenPlayEvent,
   getBetweenPlayEvents,
   getFieldingEventsForAtBat,
+  getGameFieldingEvents,
   getGameEvents,
   getGameHeader,
   getMatchupEvents,
@@ -81,6 +82,7 @@ import {
   buildFallbackRuntimePlayerId,
   getRuntimeRosterEntityId,
 } from "../utils/runtimePlayerIdentity";
+import { getScorebugTeamLabel } from "../utils/scorebugLabel";
 import { resolveSelectedPlayerCardState } from "../utils/selectedPlayerState";
 import { normalizeSpecialEventType } from "../utils/gameTrackerEventDispatch";
 import {
@@ -129,6 +131,19 @@ import {
 } from "@/app/hooks/useCommentaryFeed";
 import type { BeatReporter } from "../../../types/reporter";
 import { getReporterForTeam } from "../../../utils/reporterStorage";
+import {
+  getAllPlayers as getAllLeagueBuilderPlayers,
+  getTeam as getLeagueBuilderTeam,
+} from "../../../utils/leagueBuilderStorage";
+import {
+  buildPlayerGemCounts,
+  formatPlayerLineupGameLine,
+} from "../utils/playerLineupGameLine";
+
+type LineupRosterMeta = {
+  jerseyNumber?: number;
+  hometown?: { city: string; state: string };
+};
 
 const ordinalSuffix = (num: number) => {
   if (num % 100 >= 11 && num % 100 <= 13) return "th";
@@ -236,6 +251,21 @@ function sameRosterEntity(
     return entity.playerId === other.playerId;
   }
   return entity.name === other.name;
+}
+
+function getLineupRosterMeta(
+  entry: { playerId?: string; name: string },
+  players: Player[],
+  pitchers: Pitcher[],
+) {
+  const source =
+    players.find((player) => sameRosterEntity(player, entry)) ||
+    pitchers.find((pitcher) => sameRosterEntity(pitcher, entry));
+
+  return {
+    jerseyNumber: source?.jerseyNumber,
+    hometown: source?.hometown,
+  };
 }
 
 function getPreferredActivePitcher<
@@ -393,12 +423,21 @@ export function buildDefensiveColumnPlayersForDisplay(args: {
   const snapshotLineup = lineupSnapshot?.lineup
     ?.filter((player) => player.battingOrder !== undefined)
     .sort((a, b) => a.battingOrder - b.battingOrder)
-    .map((player) => ({
-      playerId: player.playerId,
-      name: player.playerName,
-      position: player.position,
-      battingOrder: player.battingOrder,
-    }));
+    .map((player) => {
+      const meta = getLineupRosterMeta(
+        { playerId: player.playerId, name: player.playerName },
+        players,
+        pitchers,
+      );
+
+      return {
+        playerId: player.playerId,
+        name: player.playerName,
+        position: player.position,
+        battingOrder: player.battingOrder,
+        ...meta,
+      };
+    });
   const activeLineup =
     snapshotLineup && snapshotLineup.length > 0
       ? snapshotLineup
@@ -419,6 +458,8 @@ export function buildDefensiveColumnPlayersForDisplay(args: {
             name: player.name,
             position: player.position,
             battingOrder: player.battingOrder!,
+            jerseyNumber: player.jerseyNumber,
+            hometown: player.hometown,
           }));
 
   const defensivePlayers = activeLineup
@@ -445,6 +486,11 @@ export function buildDefensiveColumnPlayersForDisplay(args: {
         name: activePitcherName,
         position: "P",
         battingOrder: activePitcherBattingOrder,
+        ...getLineupRosterMeta(
+          { playerId: activePitcherId, name: activePitcherName },
+          players,
+          pitchers,
+        ),
       });
     }
   }
@@ -754,6 +800,8 @@ export function GameTracker() {
     homePitchers?: Pitcher[];
     awayTeamName?: string;
     homeTeamName?: string;
+    awayTeamAbbreviation?: string;
+    homeTeamAbbreviation?: string;
     awayTeamId?: string;
     homeTeamId?: string;
     // Team colors from database (passed from ExhibitionGame)
@@ -824,6 +872,37 @@ export function GameTracker() {
     (competitionType === "elimination" && navigationState?.eliminationId
       ? `elimination-${navigationState.eliminationId}`
       : navigationState?.seasonId);
+  const [leagueBuilderLineupMetaById, setLeagueBuilderLineupMetaById] =
+    useState<Record<string, LineupRosterMeta>>({});
+  const [lineupFieldingEvents, setLineupFieldingEvents] = useState<FieldingEvent[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    getAllLeagueBuilderPlayers()
+      .then((players) => {
+        if (cancelled) return;
+
+        const next: Record<string, LineupRosterMeta> = {};
+        for (const player of players) {
+          if (player.jerseyNumber === undefined && !player.hometown) {
+            continue;
+          }
+          next[player.id] = {
+            jerseyNumber: player.jerseyNumber,
+            hometown: player.hometown,
+          };
+        }
+        setLeagueBuilderLineupMetaById(next);
+      })
+      .catch((error) => {
+        console.warn("[GameTracker] Failed to load lineup player metadata.", error);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Team colors - navigation state first, persisted colors set via useEffect after hook loads
   const [persistedTeamColors, setPersistedTeamColors] = useState<{
@@ -956,12 +1035,86 @@ export function GameTracker() {
   // R3: On refresh, navigationState is null — fall back to gameState (restored from snapshot)
   const homeTeamName = homeTeamName_ !== "HOME" ? homeTeamName_ : (gameState.homeTeamName || "HOME");
   const awayTeamName = awayTeamName_ !== "AWAY" ? awayTeamName_ : (gameState.awayTeamName || "AWAY");
+  const [scorebugTeamLabels, setScorebugTeamLabels] = useState(() => ({
+    away: getScorebugTeamLabel(navigationState?.awayTeamAbbreviation, awayTeamName_),
+    home: getScorebugTeamLabel(navigationState?.homeTeamAbbreviation, homeTeamName_),
+  }));
   const [gameInitialized, setGameInitialized] = useState(false);
   // R3: Persisted DH flag — survives refresh (overrides navigationState?.useDH)
   const [persistedUseDh, setPersistedUseDh] = useState<boolean | undefined>(
     undefined,
   );
   const extraInningRunnerPlacementRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const awayFallbackLabel = getScorebugTeamLabel(
+      navigationState?.awayTeamAbbreviation,
+      awayTeamName,
+    );
+    const homeFallbackLabel = getScorebugTeamLabel(
+      navigationState?.homeTeamAbbreviation,
+      homeTeamName,
+    );
+    const effectiveAwayTeamId = navigationState?.awayTeamId || gameState.awayTeamId;
+    const effectiveHomeTeamId = navigationState?.homeTeamId || gameState.homeTeamId;
+
+    const loadScorebugLabels = async () => {
+      if (!effectiveAwayTeamId && !effectiveHomeTeamId) {
+        if (!cancelled) {
+          setScorebugTeamLabels({
+            away: awayFallbackLabel,
+            home: homeFallbackLabel,
+          });
+        }
+        return;
+      }
+
+      try {
+        const [awayTeamData, homeTeamData] = await Promise.all([
+          effectiveAwayTeamId ? getLeagueBuilderTeam(effectiveAwayTeamId) : Promise.resolve(null),
+          effectiveHomeTeamId ? getLeagueBuilderTeam(effectiveHomeTeamId) : Promise.resolve(null),
+        ]);
+
+        if (cancelled) return;
+
+        setScorebugTeamLabels({
+          away: getScorebugTeamLabel(
+            navigationState?.awayTeamAbbreviation || awayTeamData?.abbreviation,
+            awayTeamName,
+          ),
+          home: getScorebugTeamLabel(
+            navigationState?.homeTeamAbbreviation || homeTeamData?.abbreviation,
+            homeTeamName,
+          ),
+        });
+      } catch (error) {
+        console.warn("[GameTracker] Failed to load team abbreviations for scorebug.", error);
+        if (!cancelled) {
+          setScorebugTeamLabels({
+            away: awayFallbackLabel,
+            home: homeFallbackLabel,
+          });
+        }
+      }
+    };
+
+    void loadScorebugLabels();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    awayTeamName,
+    gameState.awayTeamId,
+    gameState.homeTeamId,
+    homeTeamName,
+    navigationState?.awayTeamAbbreviation,
+    navigationState?.awayTeamId,
+    navigationState?.homeTeamAbbreviation,
+    navigationState?.homeTeamId,
+  ]);
 
   // R3-T0: Detect fresh navigation (has real team data) vs refresh (navigationState empty/null)
   const isFreshNavigation = !!(navigationState?.homeTeamId || navigationState?.awayTeamId);
@@ -1254,6 +1407,32 @@ export function GameTracker() {
     useState(false);
   const [postGameUnenrichedCount, setPostGameUnenrichedCount] = useState(0);
   const loggedManagerMomentKeysRef = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (!gameState.gameId) {
+      setLineupFieldingEvents([]);
+      return;
+    }
+
+    let cancelled = false;
+
+    void getGameFieldingEvents(gameState.gameId)
+      .then((events) => {
+        if (!cancelled) {
+          setLineupFieldingEvents(events);
+        }
+      })
+      .catch((error) => {
+        console.warn(
+          "[GameTracker] Failed to load lineup fielding events.",
+          error,
+        );
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [gameState.gameId, atBatSequence, playLogEntries, substitutionLog.length]);
 
   useEffect(() => {
     setRunnerOutcomeCorrectionActive(enrichingRunnerSubEntry !== null);
@@ -4688,6 +4867,56 @@ export function GameTracker() {
     homeTeamId,
   ]);
 
+  const lineupGemCountsByPlayerId = useMemo(
+    () => buildPlayerGemCounts(lineupFieldingEvents),
+    [lineupFieldingEvents],
+  );
+
+  const lineupGameLineByPlayerId = useMemo(() => {
+    const next: Record<string, string> = {};
+
+    const assignPlayers = (
+      players: Player[],
+      team: "away" | "home",
+    ) => {
+      for (const player of players) {
+        const playerId = getRosterEntityId(player, team);
+        next[playerId] = formatPlayerLineupGameLine(
+          playerStats.get(playerId),
+          lineupGemCountsByPlayerId[playerId] ?? 0,
+        );
+      }
+    };
+
+    const assignPitchers = (
+      pitchers: Pitcher[],
+      team: "away" | "home",
+    ) => {
+      for (const pitcher of pitchers) {
+        const playerId = getRosterEntityId(pitcher, team);
+        next[playerId] = formatPlayerLineupGameLine(
+          playerStats.get(playerId),
+          lineupGemCountsByPlayerId[playerId] ?? 0,
+        );
+      }
+    };
+
+    assignPlayers(awayTeamPlayers, "away");
+    assignPlayers(homeTeamPlayers, "home");
+    assignPitchers(awayTeamPitchers, "away");
+    assignPitchers(homeTeamPitchers, "home");
+
+    return next;
+  }, [
+    awayTeamPitchers,
+    awayTeamPlayers,
+    getRosterEntityId,
+    homeTeamPitchers,
+    homeTeamPlayers,
+    lineupGemCountsByPlayerId,
+    playerStats,
+  ]);
+
   // §5: Lineup column data — role-based: column 2 = batting team, column 3 = fielding team
   const battingColumnPlayers = useMemo(() => {
     const players = gameState.isTop ? awayTeamPlayers : homeTeamPlayers;
@@ -4715,12 +4944,20 @@ export function GameTracker() {
           ),
       )
       .sort((a, b) => (a.battingOrder || 0) - (b.battingOrder || 0))
-      .map((p) => ({
-        playerId: getRosterEntityId(p, battingTeam),
-        name: p.name,
-        position: p.position,
-        battingOrder: p.battingOrder!,
-      }));
+      .map((p) => {
+        const playerId = getRosterEntityId(p, battingTeam);
+        const fallbackMeta = leagueBuilderLineupMetaById[playerId];
+
+        return {
+          playerId,
+          name: p.name,
+          position: p.position,
+          battingOrder: p.battingOrder!,
+          jerseyNumber: p.jerseyNumber ?? fallbackMeta?.jerseyNumber,
+          hometown: p.hometown ?? fallbackMeta?.hometown,
+          gameLine: lineupGameLineByPlayerId[playerId] ?? "0 for 0",
+        };
+      });
   }, [
     gameState.isTop,
     awayTeamPitchers,
@@ -4729,6 +4966,8 @@ export function GameTracker() {
     homeTeamPlayers,
     battingTeam,
     getRosterEntityId,
+    leagueBuilderLineupMetaById,
+    lineupGameLineByPlayerId,
     persistedUseDh,
     navigationState?.useDH,
   ]);
@@ -4751,6 +4990,14 @@ export function GameTracker() {
         fieldingTeam === "away"
           ? lineupSnapshot.awayUsesDh ?? persistedUseDh ?? navigationState?.useDH
           : lineupSnapshot.homeUsesDh ?? persistedUseDh ?? navigationState?.useDH,
+    }).map((player) => {
+      const fallbackMeta = leagueBuilderLineupMetaById[player.playerId];
+      return {
+        ...player,
+        jerseyNumber: player.jerseyNumber ?? fallbackMeta?.jerseyNumber,
+        hometown: player.hometown ?? fallbackMeta?.hometown,
+        gameLine: lineupGameLineByPlayerId[player.playerId] ?? "0 for 0",
+      };
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
@@ -4762,6 +5009,8 @@ export function GameTracker() {
     homeTeamPitchers,
     awayTeamPitchers,
     navigationState?.useDH,
+    leagueBuilderLineupMetaById,
+    lineupGameLineByPlayerId,
     persistedUseDh,
     pitcherStats,
     rosterVersion,
@@ -6337,17 +6586,26 @@ export function GameTracker() {
     async (outcome: string) => {
       if (!gameInitialized) return;
 
-      playAudio("quickBarTap");
-
-      // §4.3: Set processing feedback — button stays depressed until done
-      setProcessingOutcome(outcome);
-
       // 1. Snapshot current context
       const bases = { ...gameState.bases };
       const outs = gameState.outs;
 
       // UX-048: Ꝁ (called strikeout) routes same as Kc for stat/storage purposes
       const effectiveOutcome = outcome === "Ꝁ" ? "Kc" : outcome;
+      if (
+        effectiveOutcome === "FC" &&
+        !bases.first &&
+        !bases.second &&
+        !bases.third
+      ) {
+        return;
+      }
+
+      playAudio("quickBarTap");
+
+      // §4.3: Set processing feedback — button stays depressed until done
+      setProcessingOutcome(outcome);
+
       if (effectiveOutcome === "K" || effectiveOutcome === "Kc") {
         playAudio("strikeout");
       }
@@ -10143,9 +10401,9 @@ export function GameTracker() {
         {/* ROW 1: §3.1 ScoreBug (pinned top, single line) */}
         <div className="game-tracker-font-no-bump relative z-40">
           <ScoreBug
-            awayTeamName={awayTeamName}
+            awayTeamName={scorebugTeamLabels.away}
             awayScore={scoreboard.away.runs}
-            homeTeamName={homeTeamName}
+            homeTeamName={scorebugTeamLabels.home}
             homeScore={scoreboard.home.runs}
             stadiumName={resolvedStadiumName}
             inning={gameState.inning}

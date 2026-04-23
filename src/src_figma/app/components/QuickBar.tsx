@@ -47,6 +47,7 @@ function isContextDisabled(btn: string, situation?: GameSituationForQuickBar): b
     case 'SF':  return outs >= 2 || !bases.third;
     case 'DP':  return outs >= 2 || runnerCount === 0;
     case 'TP':  return runnerCount < 2;
+    case 'FC':  return runnerCount === 0;
     default:    return false;
   }
 }

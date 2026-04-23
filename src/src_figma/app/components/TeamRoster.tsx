@@ -61,6 +61,8 @@ export interface Player {
   personality?: string;
   chemistry?: string;
   age?: number;
+  jerseyNumber?: number;
+  hometown?: { city: string; state: string };
   throws?: 'L' | 'R';
   secondaryPosition?: string;
 }
@@ -88,6 +90,8 @@ export interface Pitcher {
   personality?: string;
   chemistry?: string;
   age?: number;
+  jerseyNumber?: number;
+  hometown?: { city: string; state: string };
   secondaryPosition?: string;
   // Batting ratings (for pitchers who bat)
   power?: number;

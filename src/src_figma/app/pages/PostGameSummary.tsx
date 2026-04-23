@@ -16,6 +16,7 @@ import chalkBgImg from '../../../assets/chalk-bg.png';
 import chalkBgFaintImg from '../../../assets/chalk-bg-faint.png';
 import { FameLeaderboardCard } from "../components/FameLeaderboardCard";
 import { FamePromotionBanner } from "../components/FamePromotionBanner";
+import { PostGameColumns } from "../components/PostGameColumns";
 import {
   buildRunStandingsEntries,
   RunStandingsTable,
@@ -776,6 +777,14 @@ export function PostGameSummary({
                     Fame events recorded: {fameCount}
                   </div>
                 </div>
+
+                <PostGameColumns
+                  gameId={gameData.gameId}
+                  homeTeamId={homeTeamId}
+                  awayTeamId={awayTeamId}
+                  homeTeamName={homeTeamName}
+                  awayTeamName={awayTeamName}
+                />
 
                 <FameLeaderboardCard
                   game={gameData}

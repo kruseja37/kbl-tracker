@@ -76,6 +76,26 @@ describe('gameTrackerRunnerCorrection', () => {
     expect(getBatterDestinationOptions(d3kCorrection.action)).toEqual(['first', 'out']);
   });
 
+  test('does not build an FC correction with empty bases', () => {
+    expect(buildRunnerCorrectionForQuickBarOutcome('FC', {
+      first: false,
+      second: false,
+      third: false,
+    }, 0)).toBeNull();
+  });
+
+  test('builds an FC correction when a runner is on base', () => {
+    const correction = buildRunnerCorrectionForQuickBarOutcome('FC', {
+      first: true,
+      second: false,
+      third: false,
+    }, 0);
+
+    expect(correction?.action).toEqual({ type: 'out', outType: 'FC' });
+    expect(correction?.defaults.batter.to).toBe('first');
+    expect(correction?.defaults.first?.to).toBe('out');
+  });
+
   test('converts bases-loaded home run defaults into all-runners-home advancement and 4 RBI', () => {
     const defaults = calculateRunnerDefaults(
       { type: 'hr', hitType: 'HR', fieldingSequence: [] } as PlayData,

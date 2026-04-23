@@ -210,9 +210,9 @@ function parseBetweenInningSummaryPayload(text: string): {
   );
 
   if (popupMatch && popupMatch[1]) {
-    const extractedPopup = popupMatch[1].replace(/\\"/g, '"').trim();
+    const extractedPopup = decodeRecoveredJsonString(popupMatch[1]).trim();
     const extractedNarrative = narrativeMatch?.[1]
-      ? narrativeMatch[1].replace(/\\"/g, '"').trim()
+      ? decodeRecoveredJsonString(narrativeMatch[1]).trim()
       : null;
     return {
       popupText: extractedPopup || null,
@@ -270,10 +270,10 @@ function parsePostGameColumnPayload(text: string): {
   );
 
   const extractedHeadline = headlineMatch?.[1]
-    ? headlineMatch[1].replace(/\\"/g, '"').trim()
+    ? decodeRecoveredJsonString(headlineMatch[1]).trim()
     : null;
   const extractedBody = bodyMatch?.[1]
-    ? bodyMatch[1].replace(/\\"/g, '"').trim()
+    ? decodeRecoveredJsonString(bodyMatch[1]).trim()
     : null;
 
   return {
@@ -281,6 +281,19 @@ function parsePostGameColumnPayload(text: string): {
     body: extractedBody,
     parseFailed: !extractedHeadline || !extractedBody,
   };
+}
+
+function decodeRecoveredJsonString(value: string): string {
+  try {
+    return JSON.parse(`"${value}"`) as string;
+  } catch {
+    return value
+      .replace(/\\"/g, '"')
+      .replace(/\\r\\n/g, "\n")
+      .replace(/\\n/g, "\n")
+      .replace(/\\t/g, "\t")
+      .replace(/\\\\/g, "\\");
+  }
 }
 
 export class GrokCommentaryEngine implements CommentaryEngine {

@@ -332,6 +332,45 @@ describe('AtBatButtons DP Availability', () => {
 });
 
 // ============================================
+// FC AVAILABILITY TESTS
+// ============================================
+
+describe('AtBatButtons FC Availability', () => {
+  const defaultProps = {
+    onResult: vi.fn(),
+    onEvent: vi.fn(),
+    disabled: false,
+    outs: 0,
+    bases: { first: null, second: null, third: null },
+  };
+
+  test('FC disabled with bases empty', () => {
+    render(<AtBatButtons {...defaultProps} />);
+    expect(screen.getByText('FC')).toBeDisabled();
+  });
+
+  test('FC enabled with runner on first', () => {
+    render(
+      <AtBatButtons
+        {...defaultProps}
+        bases={{ first: 'player1', second: null, third: null }}
+      />
+    );
+    expect(screen.getByText('FC')).not.toBeDisabled();
+  });
+
+  test('FC enabled with runner on third only', () => {
+    render(
+      <AtBatButtons
+        {...defaultProps}
+        bases={{ first: null, second: null, third: 'player3' }}
+      />
+    );
+    expect(screen.getByText('FC')).not.toBeDisabled();
+  });
+});
+
+// ============================================
 // RUNNER-DEPENDENT EVENT TESTS
 // ============================================
 

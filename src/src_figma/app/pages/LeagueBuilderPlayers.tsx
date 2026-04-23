@@ -50,7 +50,8 @@ import { FAME_TIER_LABEL, type FameTier } from "../../../types/reporter";
 // CONSTANTS
 // ============================================
 
-const POSITIONS: Position[] = ['C', '1B', '2B', 'SS', '3B', 'LF', 'CF', 'RF', 'DH', 'SP', 'RP', 'CP', 'SP/RP', 'TWO-WAY'];
+const PRIMARY_POSITIONS: Position[] = ['C', '1B', '2B', 'SS', '3B', 'LF', 'CF', 'RF', 'DH', 'SP', 'RP', 'CP', 'SP/RP', 'TWO-WAY'];
+const SECONDARY_POSITIONS: Position[] = ['C', '1B', '2B', 'SS', '3B', 'LF', 'CF', 'RF', 'DH', 'IF', 'OF', 'IF/OF', '1B/OF', 'P', 'SP', 'RP', 'CP', 'SP/RP', 'TWO-WAY'];
 const GRADES: Grade[] = ['S', 'A+', 'A', 'A-', 'B+', 'B', 'B-', 'C+', 'C', 'C-', 'D+', 'D', 'D-'];
 const PERSONALITIES: Personality[] = ['Competitive', 'Spirited', 'Crafty', 'Scholarly', 'Disciplined', 'Tough', 'Relaxed', 'Egotistical', 'Jolly', 'Timid', 'Droopy'];
 const CHEMISTRIES: Chemistry[] = ['Competitive', 'Spirited', 'Crafty', 'Scholarly', 'Disciplined'];
@@ -90,13 +91,21 @@ const PLAYER_BACKSTORY_LIMIT = 300;
 /** The gold color for override indicators, per JK's design feedback */
 const OVERRIDE_GOLD = '#D4A020';
 
+const parseOptionalJerseyNumber = (value: string): number | undefined => {
+  if (!value.trim()) return undefined;
+  const parsed = parseInt(value, 10);
+  return Number.isFinite(parsed) ? Math.max(0, Math.min(99, parsed)) : undefined;
+};
+
+const normalizeJerseyNumberInput = (value: string): string => value.replace(/\D/g, '').slice(0, 2);
+
 /** All PlayerAttributes keys that can be overridden per-league */
 const OVERRIDABLE_FIELDS: (keyof PlayerAttributes)[] = [
   'power', 'contact', 'speed', 'fielding', 'arm',
   'velocity', 'junk', 'accuracy', 'arsenal', 'overallGrade',
   'trait1', 'trait2', 'personality', 'chemistry',
   'primaryPosition', 'secondaryPosition',
-  'age', 'bats', 'throws', 'nickname', 'hometown',
+  'jerseyNumber', 'age', 'bats', 'throws', 'nickname', 'hometown',
 ];
 
 // ============================================
@@ -115,6 +124,7 @@ interface PlayerFormData {
   archetype: PlayerArchetype | '';
   signatureMoment: string;
   gender: 'M' | 'F';
+  jerseyNumber: string;
   age: string;
   bats: 'L' | 'R' | 'S';
   throws: 'L' | 'R';
@@ -153,6 +163,7 @@ const DEFAULT_FORM_DATA: PlayerFormData = {
   hometownCity: "",
   hometownState: "",
   gender: 'M',
+  jerseyNumber: "",
   age: "25",
   bats: 'R',
   throws: 'R',
@@ -294,6 +305,7 @@ export function LeagueBuilderPlayers() {
     hometownCity: player.hometown?.city || "",
     hometownState: player.hometown?.state || "",
     gender: player.gender,
+    jerseyNumber: player.jerseyNumber?.toString() ?? "",
     age: player.age.toString(),
     bats: player.bats,
     throws: player.throws,
@@ -438,7 +450,11 @@ export function LeagueBuilderPlayers() {
 
   /** Track which form fields changed on a league tab to build override delta */
   const handleFormChange = useCallback((field: string, value: string | PitchType[] | Position | '') => {
-    setFormData(prev => ({ ...prev, [field]: value }));
+    const normalizedValue = field === 'jerseyNumber' && typeof value === 'string'
+      ? normalizeJerseyNumberInput(value)
+      : value;
+
+    setFormData(prev => ({ ...prev, [field]: normalizedValue }));
 
     // On league tabs, track changes as overrides (delta from base)
     if (isLeagueTab && editingPlayer) {
@@ -462,13 +478,15 @@ export function LeagueBuilderPlayers() {
 
       if (OVERRIDABLE_FIELDS.includes(field as keyof PlayerAttributes)) {
         const baseVal = editingPlayer[field as keyof Player];
-        let parsedValue: unknown = value;
-        if (['power', 'contact', 'speed', 'fielding', 'arm', 'velocity', 'junk', 'accuracy', 'age'].includes(field)) {
-          parsedValue = parseInt(value as string, 10) || 0;
+        let parsedValue: unknown = normalizedValue;
+        if (field === 'jerseyNumber') {
+          parsedValue = parseOptionalJerseyNumber(normalizedValue as string);
+        } else if (['power', 'contact', 'speed', 'fielding', 'arm', 'velocity', 'junk', 'accuracy', 'age'].includes(field)) {
+          parsedValue = parseInt(normalizedValue as string, 10) || 0;
         }
         const baseStr = baseVal === undefined || baseVal === null ? '' : String(baseVal);
-        const newStr = String(parsedValue);
-        if (baseStr === newStr || (field === 'arsenal' && JSON.stringify(baseVal) === JSON.stringify(value))) {
+        const newStr = parsedValue === undefined || parsedValue === null ? '' : String(parsedValue);
+        if (baseStr === newStr || (field === 'arsenal' && JSON.stringify(baseVal) === JSON.stringify(normalizedValue))) {
           setCurrentOverrides(prev => {
             const next = { ...prev };
             delete next[field as keyof PlayerAttributes];
@@ -546,6 +564,7 @@ export function LeagueBuilderPlayers() {
           signatureMoment: formData.signatureMoment.trim() || undefined,
           hometown,
           gender: formData.gender,
+          jerseyNumber: parseOptionalJerseyNumber(formData.jerseyNumber),
           age: parseInt(formData.age, 10) || 25,
           bats: formData.bats,
           throws: formData.throws,
@@ -809,7 +828,7 @@ export function LeagueBuilderPlayers() {
               className="bg-[#4A6844] border-4 border-[#E8E8D8]/30 px-4 py-2 text-[#E8E8D8] focus:border-[#E8E8D8]/60 outline-none"
             >
               <option value="ALL">All Positions</option>
-              {POSITIONS.map(pos => (
+              {PRIMARY_POSITIONS.map(pos => (
                 <option key={pos} value={pos}>{pos}</option>
               ))}
             </select>
@@ -999,8 +1018,9 @@ export function LeagueBuilderPlayers() {
               {/* Name Row — only editable on base tab or create */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-bold mb-2">First Name *</label>
+                  <label htmlFor="player-first-name" className="block text-sm font-bold mb-2">First Name *</label>
                   <input
+                    id="player-first-name"
                     type="text"
                     value={formData.firstName}
                     onChange={(e) => handleFormChange('firstName', e.target.value)}
@@ -1009,8 +1029,9 @@ export function LeagueBuilderPlayers() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-bold mb-2">Last Name *</label>
+                  <label htmlFor="player-last-name" className="block text-sm font-bold mb-2">Last Name *</label>
                   <input
+                    id="player-last-name"
                     type="text"
                     value={formData.lastName}
                     onChange={(e) => handleFormChange('lastName', e.target.value)}
@@ -1277,7 +1298,7 @@ export function LeagueBuilderPlayers() {
               </div>
 
               {/* Demographics Row */}
-              <div className="grid grid-cols-5 gap-4">
+              <div className="grid grid-cols-6 gap-4">
                 <div>
                   <label className="block text-sm font-bold mb-2">Gender</label>
                   <select
@@ -1290,6 +1311,19 @@ export function LeagueBuilderPlayers() {
                     <option value="F">Female</option>
                   </select>
                 </div>
+                <OverrideField field="jerseyNumber" label="Jersey #">
+                  <input
+                    type="text"
+                    aria-label="Jersey Number"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    value={formData.jerseyNumber}
+                    onChange={(e) => handleFormChange('jerseyNumber', e.target.value)}
+                    maxLength={2}
+                    className="w-full bg-[#4A6844] p-3 text-[#E8E8D8] focus:border-[#E8E8D8] outline-none"
+                    style={isFieldOverridden('jerseyNumber') ? { color: OVERRIDE_GOLD } : undefined}
+                  />
+                </OverrideField>
                 <OverrideField field="age" label="Age">
                   <input
                     type="number"
@@ -1342,25 +1376,27 @@ export function LeagueBuilderPlayers() {
               <div className="grid grid-cols-2 gap-4">
                 <OverrideField field="primaryPosition" label="Primary Position">
                   <select
+                    aria-label="Primary Position"
                     value={formData.primaryPosition}
                     onChange={(e) => handleFormChange('primaryPosition', e.target.value)}
                     className="w-full bg-[#4A6844] p-3 text-[#E8E8D8] focus:border-[#E8E8D8] outline-none"
                     style={isFieldOverridden('primaryPosition') ? { color: OVERRIDE_GOLD } : undefined}
                   >
-                    {POSITIONS.map(pos => (
+                    {PRIMARY_POSITIONS.map(pos => (
                       <option key={pos} value={pos}>{pos}</option>
                     ))}
                   </select>
                 </OverrideField>
                 <OverrideField field="secondaryPosition" label="Secondary Position">
                   <select
+                    aria-label="Secondary Position"
                     value={formData.secondaryPosition}
                     onChange={(e) => handleFormChange('secondaryPosition', e.target.value)}
                     className="w-full bg-[#4A6844] p-3 text-[#E8E8D8] focus:border-[#E8E8D8] outline-none"
                     style={isFieldOverridden('secondaryPosition') ? { color: OVERRIDE_GOLD } : undefined}
                   >
                     <option value="">None</option>
-                    {POSITIONS.filter(p => p !== formData.primaryPosition).map(pos => (
+                    {SECONDARY_POSITIONS.filter(p => p !== formData.primaryPosition).map(pos => (
                       <option key={pos} value={pos}>{pos}</option>
                     ))}
                   </select>

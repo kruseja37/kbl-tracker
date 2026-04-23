@@ -13,6 +13,9 @@ const baseProps = {
       battingOrder: 1,
       isPitcher: true,
       pitchCount: 0,
+      jerseyNumber: 31,
+      hometown: { city: 'Boulder', state: 'CO' },
+      gameLine: '0 for 0; 2 BB',
     },
     {
       playerId: 'home-2',
@@ -20,6 +23,9 @@ const baseProps = {
       position: 'C',
       battingOrder: 2,
       isPitcher: false,
+      jerseyNumber: 12,
+      hometown: { city: 'Aurora', state: 'CO' },
+      gameLine: '1 for 4; HR; 2 RBI; CS; Gem',
     },
   ],
   currentPitcherName: 'Home Starter',
@@ -131,5 +137,42 @@ describe('DefensiveLineupColumn', () => {
     expect(screen.getByText('Home Starter')).toHaveStyle({
       color: getMojoColor(0),
     });
+  });
+
+  test('renders defensive metadata and a wrapped current-game line without adding row height', () => {
+    render(<DefensiveLineupColumn {...baseProps} />);
+
+    const battingOrder = screen.getByText('1.');
+    const starterMeta = screen.getByTestId('defensive-lineup-meta-home-1');
+    const catcherMeta = screen.getByTestId('defensive-lineup-meta-home-2');
+    const starterGameLine = screen.getByTestId('defensive-lineup-game-line-home-1');
+    const catcherGameLine = screen.getByTestId('defensive-lineup-game-line-home-2');
+
+    expect(battingOrder).toHaveStyle({
+      fontFamily: "'Moms Typewriter', monospace",
+      fontSize: '11px',
+      lineHeight: '13px',
+    });
+    expect(starterMeta).toHaveTextContent('PC: 0#31 Boulder, CO');
+    expect(starterMeta).toHaveClass('ml-[26px]', 'h-[9px]', 'max-h-[9px]', 'overflow-hidden');
+    expect(starterMeta.parentElement).toHaveStyle({
+      fontSize: '8px',
+      lineHeight: '9px',
+      fontFamily: "'Tox Typewriter', monospace",
+    });
+    expect(catcherMeta).toHaveTextContent('#12 Aurora, CO');
+    expect(catcherMeta).toHaveClass('ml-[26px]', 'h-[9px]', 'max-h-[9px]', 'overflow-hidden');
+    expect(screen.getByText('#31')).toHaveStyle({ fontSize: '9px', color: 'rgb(212, 184, 90)' });
+    expect(screen.getByText('Boulder, CO')).toHaveStyle({ fontSize: '8px' });
+    expect(starterGameLine).toHaveTextContent('0 for 0; 2 BB');
+    expect(catcherGameLine).toHaveTextContent('1 for 4; HR; 2 RBI; CS; Gem');
+    expect(starterGameLine).toHaveClass('ml-[34px]');
+    expect(catcherGameLine).toHaveClass('ml-[34px]');
+    expect(starterGameLine.style.fontFamily).toBe('"Tox Typewriter", monospace');
+    expect(starterGameLine.style.fontSize).toBe('8.5px');
+    expect(starterGameLine.style.lineHeight).toBe('9px');
+    expect(starterGameLine.style.display).toBe('-webkit-box');
+    expect(starterGameLine.style.webkitLineClamp).toBe('2');
+    expect(starterGameLine.style.whiteSpace).toBe('normal');
   });
 });

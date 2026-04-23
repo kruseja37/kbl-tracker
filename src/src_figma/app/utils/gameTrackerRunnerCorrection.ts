@@ -34,6 +34,8 @@ export function buildRunnerCorrectionForQuickBarOutcome(
   bases: GameBases,
   outs: number,
 ): PendingRunnerCorrectionAction | null {
+  const hasRunners = Boolean(bases.first || bases.second || bases.third);
+
   if (['BB', 'HBP', 'IBB'].includes(outcome)) {
     return {
       outcomeLabel: outcome,
@@ -80,6 +82,10 @@ export function buildRunnerCorrectionForQuickBarOutcome(
       action: { type: 'hit', hitType: outcome as HitType },
       defaults: calculateRunnerDefaults(playData, bases, outs),
     };
+  }
+
+  if (outcome === 'FC' && !hasRunners) {
+    return null;
   }
 
   if (['K', 'Kc', 'GO', 'FO', 'FLO', 'LO', 'PO', 'FC', 'SAC', 'SF', 'DP', 'TP'].includes(outcome)) {

@@ -3,12 +3,14 @@ import { getMojoColor, type MojoLevel } from '../../../engines/mojoEngine';
 import type { FitnessState } from '../../../engines/fitnessEngine';
 import { toFitnessLabel, toMojoLabel } from '../../../types/game';
 import chalkBgImg from '../../../assets/chalk-bg.png';
+import { getPlayerLineupMetaParts, type PlayerLineupMetaSource } from '../utils/playerLineupMeta';
 
-interface BattingLineupPlayer {
+interface BattingLineupPlayer extends PlayerLineupMetaSource {
   playerId: string;
   name: string;
   position?: string;
   battingOrder: number;
+  gameLine?: string;
 }
 
 interface PlayerMojoFitness {
@@ -124,7 +126,7 @@ export function BattingLineupColumn({
       <div className="text-[10px] text-white font-bold tracking-wider px-2 pt-1.5 pb-1 text-center" style={{ background: `linear-gradient(${teamPrimaryColor}40, ${teamPrimaryColor}40), #1a2420`, backgroundImage: `url(${chalkBgImg}), linear-gradient(${teamPrimaryColor}40, ${teamPrimaryColor}40)`, backgroundRepeat: 'repeat', backgroundColor: '#1a2420' }}>
         {teamName || 'BATTING'}
       </div>
-      <div className="flex min-h-0 flex-1 flex-col justify-evenly overflow-hidden" style={{ borderRight: '2px solid rgba(242, 192, 65, 0.08)' }}>
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden" style={{ borderRight: '2px solid rgba(242, 192, 65, 0.08)' }}>
         {players.map((player) => {
           const isCurrent = player.battingOrder === currentBatterIndex;
           const isNextLeadoff = player.battingOrder === nextLeadoffIndex && !isCurrent;
@@ -137,11 +139,12 @@ export function BattingLineupColumn({
           const mojoForControls = playerMojo ?? 0;
           const mojoStyle = getMojoNameStyle(playerMojo);
           const fitnessStyle = getFitnessNameStyle(playerFitness);
+          const playerMeta = getPlayerLineupMetaParts(player);
 
           return (
             <div
               key={player.playerId}
-              className="flex items-stretch gap-1 px-2 py-0.5"
+              className="flex min-h-0 flex-1 items-stretch gap-1 px-2 py-[1px]"
               style={{
                 animation: shouldHighlightRow ? 'batting-lineup-row-highlight 200ms ease-out' : undefined,
               }}
@@ -154,39 +157,110 @@ export function BattingLineupColumn({
               <button
                 type="button"
                 onClick={() => onPlayerTap(player.playerId, player.name)}
-                className="flex-1 text-left px-0 py-0 transition-colors hover:bg-[#1E3218]/50 active:bg-[#1E3218]"
+                className="h-full min-w-0 flex-1 overflow-hidden text-left px-0 py-0 transition-colors hover:bg-[#1E3218]/50 active:bg-[#1E3218]"
                 style={{
                   border: !isCurrent && isNextLeadoff
                     ? `2px dotted ${teamSecondaryColor}`
                     : '2px solid transparent',
-                  backgroundImage: isCurrent ? `url(${chalkBgImg})` : undefined,
-                  backgroundRepeat: isCurrent ? 'repeat' : undefined,
-                  backgroundColor: isCurrent ? 'rgba(242, 192, 65, 0.03)' : undefined,
                 }}
               >
-                <div className={`text-[11px] leading-tight tracking-wide ${onBase ? 'font-black text-white' : 'font-bold text-[#E8E8D8]'}`}>
-                  <span className="text-[#CBB89C] mr-2">{player.battingOrder}.</span>
-                  <span
+                <div className="flex h-full min-h-0 flex-col overflow-hidden">
+                  <div
+                    data-testid={`batting-lineup-name-row-${player.playerId}`}
+                    className={`flex h-[14px] shrink-0 items-center text-[11px] leading-[14px] tracking-wide ${onBase ? 'font-black text-white' : 'font-bold text-[#E8E8D8]'}`}
+                  >
+                    <span
+                      className="inline-flex w-[26px] shrink-0 items-center text-[#CBB89C]"
+                      style={{
+                        fontFamily: "'Moms Typewriter', monospace",
+                        fontSize: '11px',
+                        lineHeight: '13px',
+                      }}
+                    >
+                      {player.battingOrder}.
+                    </span>
+                    <span
+                      data-testid={`batting-lineup-name-highlight-${player.playerId}`}
+                      className="block min-w-0 flex-1 truncate"
+                      style={{
+                        backgroundImage: isCurrent ? `url(${chalkBgImg})` : undefined,
+                        backgroundRepeat: isCurrent ? 'repeat' : undefined,
+                        backgroundColor: isCurrent ? 'rgba(242, 192, 65, 0.03)' : undefined,
+                      }}
+                    >
+                      <span
+                        style={{
+                          ...mojoStyle,
+                          ...fitnessStyle,
+                          fontFamily: "'Tox Typewriter', monospace",
+                        }}
+                        title={[
+                          playerMojo !== 0 && playerMojo !== undefined
+                            ? `Mojo: ${toMojoLabel(playerMojo!)}`
+                            : null,
+                          playerFitness !== 'FIT' && playerFitness !== undefined
+                            ? `Fitness: ${toFitnessLabel(playerFitness!)}`
+                            : null,
+                        ].filter(Boolean).join(' | ') || undefined}
+                      >{player.name}</span>
+                      {player.position && (
+                        <span className="text-[#D4B85A] text-[7px] ml-1">{player.position}</span>
+                      )}
+                      {onBase !== undefined && (
+                        <sup className="text-[9px] text-[#F2BF16] ml-0.5">{onBase}</sup>
+                      )}
+                    </span>
+                  </div>
+                  <div
+                    data-testid={`batting-lineup-meta-${player.playerId}`}
+                    className="ml-[26px] flex h-[9px] max-h-[9px] shrink-0 min-w-0 items-center gap-[2px] overflow-hidden text-[#CBB89C]/65"
                     style={{
-                      ...mojoStyle,
-                      ...fitnessStyle,
+                      backgroundImage: isCurrent ? `url(${chalkBgImg})` : undefined,
+                      backgroundRepeat: isCurrent ? 'repeat' : undefined,
+                      backgroundColor: isCurrent ? 'rgba(242, 192, 65, 0.03)' : undefined,
                       fontFamily: "'Tox Typewriter', monospace",
+                      lineHeight: "9px",
+                      letterSpacing: "0px",
                     }}
-                    title={[
-                      playerMojo !== 0 && playerMojo !== undefined
-                        ? `Mojo: ${toMojoLabel(playerMojo!)}`
-                        : null,
-                      playerFitness !== 'FIT' && playerFitness !== undefined
-                        ? `Fitness: ${toFitnessLabel(playerFitness!)}`
-                        : null,
-                    ].filter(Boolean).join(' | ') || undefined}
-                  >{player.name}</span>
-                  {player.position && (
-                    <span className="text-[#D4B85A] text-[9px] ml-1">{player.position}</span>
-                  )}
-                  {onBase !== undefined && (
-                    <sup className="text-[9px] text-[#F2BF16] ml-0.5">{onBase}</sup>
-                  )}
+                  >
+                    {playerMeta.jersey && (
+                      <span
+                        className="shrink-0 font-bold"
+                        style={{ fontSize: "9px", lineHeight: "9px", color: "#D4B85A" }}
+                      >
+                        {playerMeta.jersey}
+                      </span>
+                    )}
+                    {playerMeta.jersey && playerMeta.hometown && (
+                      <span className="shrink-0" aria-hidden="true">
+                        {" "}
+                      </span>
+                    )}
+                    {playerMeta.hometown && (
+                      <span
+                        className="truncate font-bold"
+                        style={{ fontSize: "8px", lineHeight: "9px" }}
+                      >
+                        {playerMeta.hometown}
+                      </span>
+                    )}
+                  </div>
+                  <div
+                    data-testid={`batting-lineup-game-line-${player.playerId}`}
+                    className="ml-[34px] mt-[1px] h-[18px] min-w-0 overflow-hidden text-[#A9B9A2]"
+                    style={{
+                      fontFamily: "'Tox Typewriter', monospace",
+                      fontSize: "8.5px",
+                      lineHeight: "9px",
+                      letterSpacing: "0px",
+                      display: "-webkit-box",
+                      WebkitLineClamp: 2,
+                      WebkitBoxOrient: "vertical",
+                      whiteSpace: "normal",
+                    }}
+                  >
+                    {player.gameLine || "0 for 0"}
+                  </div>
                 </div>
               </button>
               {onMojoAdjust && (

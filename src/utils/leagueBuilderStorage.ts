@@ -38,7 +38,7 @@ const STORES = {
 
 // Position types
 export type Position = 'C' | '1B' | '2B' | 'SS' | '3B' | 'LF' | 'CF' | 'RF' | 'DH' |
-  'SP' | 'RP' | 'CP' | 'SP/RP' | 'TWO-WAY';
+  'SP' | 'RP' | 'CP' | 'SP/RP' | 'TWO-WAY' | 'P' | 'IF' | 'OF' | 'IF/OF' | '1B/OF';
 
 export type Grade = 'S' | 'A+' | 'A' | 'A-' | 'B+' | 'B' | 'B-' | 'C+' | 'C' | 'C-' | 'D+' | 'D' | 'D-';
 
@@ -138,6 +138,7 @@ export interface Player {
   signatureMoment?: string;
   baseFameTier?: FameTier;
   gender: 'M' | 'F';
+  jerseyNumber?: number;
   age: number;
   bats: 'L' | 'R' | 'S';
   throws: 'L' | 'R';
@@ -191,6 +192,7 @@ export type PlayerAttributes = Pick<
   | 'chemistry'
   | 'primaryPosition'
   | 'secondaryPosition'
+  | 'jerseyNumber'
   | 'age'
   | 'bats'
   | 'throws'

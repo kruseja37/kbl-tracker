@@ -299,6 +299,57 @@ describe('LeagueBuilderPlayers Component', () => {
       });
     });
 
+    test('creates players with utility secondary positions and jersey number', async () => {
+      render(<LeagueBuilderPlayers />);
+      fireEvent.click(screen.getByRole('button', { name: /create|add|new/i }));
+
+      await screen.findByRole('heading', { name: /Create New Player/ });
+
+      fireEvent.change(screen.getByLabelText(/First Name/i), {
+        target: { value: 'Casey' },
+      });
+      fireEvent.change(screen.getByLabelText(/Last Name/i), {
+        target: { value: 'Utility' },
+      });
+      fireEvent.change(screen.getByLabelText('Primary Position'), {
+        target: { value: '2B' },
+      });
+      fireEvent.change(screen.getByLabelText('Secondary Position'), {
+        target: { value: 'IF/OF' },
+      });
+      fireEvent.change(screen.getByLabelText('Jersey Number'), {
+        target: { value: '42' },
+      });
+
+      fireEvent.click(screen.getByRole('button', { name: 'Create Player' }));
+
+      await waitFor(() => {
+        expect(mockCreatePlayer).toHaveBeenCalledWith(
+          expect.objectContaining({
+            firstName: 'Casey',
+            lastName: 'Utility',
+            primaryPosition: '2B',
+            secondaryPosition: 'IF/OF',
+            jerseyNumber: 42,
+          }),
+        );
+      });
+    });
+
+    test('jersey number input avoids number-stepper drift and stores only digits', async () => {
+      render(<LeagueBuilderPlayers />);
+      fireEvent.click(screen.getByRole('button', { name: /create|add|new/i }));
+
+      await screen.findByRole('heading', { name: /Create New Player/ });
+
+      const jerseyInput = screen.getByLabelText('Jersey Number') as HTMLInputElement;
+      expect(jerseyInput.type).toBe('text');
+      expect(jerseyInput.inputMode).toBe('numeric');
+
+      fireEvent.change(jerseyInput, { target: { value: '4a2' } });
+      expect(jerseyInput.value).toBe('42');
+    });
+
     test('round-trips player editorial identity fields through updatePlayer', async () => {
       render(<LeagueBuilderPlayers />);
       fireEvent.click(screen.getAllByTitle('Edit player')[2]);

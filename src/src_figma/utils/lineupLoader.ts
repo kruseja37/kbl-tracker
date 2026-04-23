@@ -54,6 +54,8 @@ function convertToRosterPlayer(
     personality: player.personality,
     chemistry: player.chemistry,
     age: player.age,
+    jerseyNumber: player.jerseyNumber,
+    hometown: player.hometown,
     throws: player.throws,
     secondaryPosition: player.secondaryPosition,
   };
@@ -95,6 +97,8 @@ function convertToRosterPitcher(
     personality: player.personality,
     chemistry: player.chemistry,
     age: player.age,
+    jerseyNumber: player.jerseyNumber,
+    hometown: player.hometown,
     secondaryPosition: player.secondaryPosition,
     power: player.power,
     contact: player.contact,

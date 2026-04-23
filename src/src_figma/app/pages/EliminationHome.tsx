@@ -339,9 +339,11 @@ export function EliminationHome() {
           leagueId: metadata.leagueId,
           homeTeamId: homeTeam.teamId,
           homeTeamName: homeTeam.teamName,
+          homeTeamAbbreviation: homeTeamData?.abbreviation,
           homeSeed: homeTeam.seed,
           awayTeamId: awayTeam.teamId,
           awayTeamName: awayTeam.teamName,
+          awayTeamAbbreviation: awayTeamData?.abbreviation,
           awaySeed: awayTeam.seed,
           seriesScore: {
             home: higherSeedHome ? series.higherSeedWins : series.lowerSeedWins,

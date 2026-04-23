@@ -78,6 +78,9 @@ export default function AtBatButtons({ onResult, onEvent, disabled, outs, bases 
   // Also requires at least one runner on base
   const isDPAvailable = outs < 2 && (bases.first || bases.second || bases.third);
 
+  // FC requires a runner for the defense to choose instead of the batter
+  const isFCAvailable = hasRunners;
+
   // Check if a result button should be disabled based on game state
   const isResultDisabled = (result: AtBatResult): boolean => {
     if (disabled) return true;
@@ -85,6 +88,7 @@ export default function AtBatButtons({ onResult, onEvent, disabled, outs, bases 
     if (result === 'SAC' && !isSACAvailable) return true;
     if (result === 'SF' && !isSFAvailable) return true;
     if (result === 'DP' && !isDPAvailable) return true;
+    if (result === 'FC' && !isFCAvailable) return true;
     return false;
   };
 
@@ -103,6 +107,7 @@ export default function AtBatButtons({ onResult, onEvent, disabled, outs, bases 
       if (outs >= 2) return 'Cannot turn DP with 2 outs';
       if (!bases.first && !bases.second && !bases.third) return 'DP requires runner on base';
     }
+    if (result === 'FC' && !isFCAvailable) return 'FC requires a runner on base';
     return undefined;
   };
 

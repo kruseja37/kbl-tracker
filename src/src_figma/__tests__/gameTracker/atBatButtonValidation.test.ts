@@ -41,6 +41,11 @@ function isDPAvailable(bases: Bases, outs: number): boolean {
   return outs < 2 && !!(bases.first || bases.second || bases.third);
 }
 
+// FC requires a runner on base
+function isFCAvailable(bases: Bases): boolean {
+  return !!(bases.first || bases.second || bases.third);
+}
+
 // Runner-dependent events require runners on base
 function isRunnerEventAvailable(bases: Bases): boolean {
   return !!(bases.first || bases.second || bases.third);
@@ -248,6 +253,32 @@ describe('DP (Double Play) Validation', () => {
 });
 
 // ============================================
+// FC (FIELDER'S CHOICE) VALIDATION TESTS
+// ============================================
+
+describe("FC (Fielder's Choice) Validation", () => {
+  test('FC NOT available with bases empty', () => {
+    const bases: Bases = { first: null, second: null, third: null };
+    expect(isFCAvailable(bases)).toBe(false);
+  });
+
+  test('FC available with runner on first', () => {
+    const bases: Bases = { first: 'player1', second: null, third: null };
+    expect(isFCAvailable(bases)).toBe(true);
+  });
+
+  test('FC available with runner on second only', () => {
+    const bases: Bases = { first: null, second: 'player2', third: null };
+    expect(isFCAvailable(bases)).toBe(true);
+  });
+
+  test('FC available with runner on third only', () => {
+    const bases: Bases = { first: null, second: null, third: 'player3' };
+    expect(isFCAvailable(bases)).toBe(true);
+  });
+});
+
+// ============================================
 // RUNNER-DEPENDENT EVENTS VALIDATION TESTS
 // ============================================
 
@@ -322,6 +353,7 @@ describe('Complex Game Scenarios', () => {
       expect(isSACAvailable(bases, outs)).toBe(true);
       expect(isSFAvailable(bases, outs)).toBe(true);
       expect(isDPAvailable(bases, outs)).toBe(true);
+      expect(isFCAvailable(bases)).toBe(true);
       expect(isD3KAvailable(bases, outs)).toBe(true); // first empty
     });
 
@@ -332,6 +364,7 @@ describe('Complex Game Scenarios', () => {
       expect(isSACAvailable(bases, outs)).toBe(true);
       expect(isSFAvailable(bases, outs)).toBe(true);
       expect(isDPAvailable(bases, outs)).toBe(true);
+      expect(isFCAvailable(bases)).toBe(true);
       expect(isD3KAvailable(bases, outs)).toBe(false); // first occupied, not 2 outs
     });
   });
@@ -344,6 +377,7 @@ describe('Complex Game Scenarios', () => {
       expect(isSACAvailable(bases, outs)).toBe(false);
       expect(isSFAvailable(bases, outs)).toBe(false);
       expect(isDPAvailable(bases, outs)).toBe(false);
+      expect(isFCAvailable(bases)).toBe(true);
       expect(isD3KAvailable(bases, outs)).toBe(true); // 2 outs rule
       expect(isRunnerEventAvailable(bases)).toBe(true); // runners exist
     });
@@ -355,6 +389,7 @@ describe('Complex Game Scenarios', () => {
       expect(isSACAvailable(bases, outs)).toBe(false);
       expect(isSFAvailable(bases, outs)).toBe(false);
       expect(isDPAvailable(bases, outs)).toBe(false);
+      expect(isFCAvailable(bases)).toBe(false);
       expect(isD3KAvailable(bases, outs)).toBe(true);
       expect(isRunnerEventAvailable(bases)).toBe(false);
     });
@@ -368,6 +403,7 @@ describe('Complex Game Scenarios', () => {
       expect(isSACAvailable(bases, outs)).toBe(false);
       expect(isSFAvailable(bases, outs)).toBe(false);
       expect(isDPAvailable(bases, outs)).toBe(false);
+      expect(isFCAvailable(bases)).toBe(false);
       expect(isD3KAvailable(bases, outs)).toBe(true);
       expect(isRunnerEventAvailable(bases)).toBe(false);
     });
@@ -401,7 +437,7 @@ describe('Button Configuration Validation', () => {
     'SAC', 'HBP', 'E', 'FC', 'D3K',
   ];
 
-  const conditionalResults = ['D3K', 'SAC', 'SF', 'DP'];
+  const conditionalResults = ['D3K', 'SAC', 'SF', 'DP', 'FC'];
   const alwaysAvailableResults = allResults.filter(r => !conditionalResults.includes(r));
 
   test('all expected result types are defined', () => {
@@ -409,11 +445,11 @@ describe('Button Configuration Validation', () => {
   });
 
   test('conditional results are correctly identified', () => {
-    expect(conditionalResults).toEqual(['D3K', 'SAC', 'SF', 'DP']);
+    expect(conditionalResults).toEqual(['D3K', 'SAC', 'SF', 'DP', 'FC']);
   });
 
   test('always available results count is correct', () => {
-    expect(alwaysAvailableResults.length).toBe(15);
+    expect(alwaysAvailableResults.length).toBe(14);
   });
 
   describe('SMB4-specific exclusions', () => {

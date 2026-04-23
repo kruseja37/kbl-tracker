@@ -426,6 +426,90 @@ export function formatGroundTruth(
   ];
 }
 
+function formatPostGameGroundTruth(
+  context: ReporterContext,
+  reporterTeam: "home" | "away",
+  finalScore: { home: number; away: number },
+): string[] {
+  const teams = resolveTeamPerspective(context);
+  const side = getReporterSideContext(context, reporterTeam);
+  const isTie = finalScore.home === finalScore.away;
+  const winner = finalScore.home > finalScore.away ? teams.homeTeam.name : teams.awayTeam.name;
+  const loser = finalScore.home > finalScore.away ? teams.awayTeam.name : teams.homeTeam.name;
+
+  return [
+    `Home team: ${teams.homeTeam.name}`,
+    `Away team: ${teams.awayTeam.name}`,
+    `Stadium: ${teams.homeTeam.ballparkNickname || teams.homeTeam.name}${teams.homeTeam.location ? ` in ${teams.homeTeam.location}` : ""}`,
+    `Reporter team: ${side.reporterTeamSnapshot.name} (${reporterTeam} booth)`,
+    `Opponent team: ${side.opponentTeam.name}`,
+    `Official final score: ${teams.awayTeam.name} ${finalScore.away}, ${teams.homeTeam.name} ${finalScore.home}`,
+    isTie
+      ? `Official result: the game ended tied, ${finalScore.away}-${finalScore.home}.`
+      : `Official result: ${winner} beat ${loser}, ${Math.max(finalScore.home, finalScore.away)}-${Math.min(finalScore.home, finalScore.away)}.`,
+  ];
+}
+
+/**
+ * Explicit roster-to-team table. Prevents a known failure mode where a
+ * losing-team reporter flipped pitcher attribution (called the opponent's
+ * shutout ace "our guy who didn't get run support"). The model must not
+ * have to infer team membership from `BatterName vs PitcherName` lines.
+ */
+export function formatRosterAttribution(
+  events: AtBatEvent[],
+  reporter: BeatReporter,
+  context: ReporterContext,
+  reporterTeam: "home" | "away",
+): string[] {
+  const reporterTeamKey = normalizeRosterKey(reporter.teamId);
+  const side = getReporterSideContext(context, reporterTeam);
+  const reporterTeamName = side.reporterTeamSnapshot.name;
+  const opponentTeamName = side.opponentTeam.name;
+
+  const pitchersByTeam = new Map<string, Set<string>>();
+  const battersByTeam = new Map<string, Set<string>>();
+
+  for (const event of events) {
+    if (event.batterName && event.batterTeamId) {
+      const key = normalizeRosterKey(event.batterTeamId);
+      if (!battersByTeam.has(key)) battersByTeam.set(key, new Set());
+      battersByTeam.get(key)!.add(event.batterName);
+    }
+    if (event.pitcherName && event.pitcherTeamId) {
+      const key = normalizeRosterKey(event.pitcherTeamId);
+      if (!pitchersByTeam.has(key)) pitchersByTeam.set(key, new Set());
+      pitchersByTeam.get(key)!.add(event.pitcherName);
+    }
+  }
+
+  const collectOther = (
+    byTeam: Map<string, Set<string>>,
+  ): string[] =>
+    Array.from(byTeam.entries())
+      .filter(([teamKey]) => teamKey !== reporterTeamKey)
+      .flatMap(([, names]) => Array.from(names));
+
+  const reporterPitchers = Array.from(pitchersByTeam.get(reporterTeamKey) ?? []);
+  const reporterBatters = Array.from(battersByTeam.get(reporterTeamKey) ?? []);
+  const opponentPitchers = collectOther(pitchersByTeam);
+  const opponentBatters = collectOther(battersByTeam);
+
+  return [
+    `YOUR team — ${reporterTeamName} (the reporter's team, the club you cover):`,
+    `  Pitchers who threw for ${reporterTeamName}: ${reporterPitchers.join(", ") || "none recorded"}`,
+    `  Batters who hit for ${reporterTeamName}: ${reporterBatters.join(", ") || "none recorded"}`,
+    `OPPONENT — ${opponentTeamName}:`,
+    `  Pitchers who threw for ${opponentTeamName}: ${opponentPitchers.join(", ") || "none recorded"}`,
+    `  Batters who hit for ${opponentTeamName}: ${opponentBatters.join(", ") || "none recorded"}`,
+    `When you describe any pitcher's or batter's line, check this table first. Never credit "our guy" with work the opposing team's player actually did. Opposing pitchers shut out YOUR lineup; YOUR pitchers shut out the opponent's lineup. Do not flip them.`,
+  ];
+}
+
+function normalizeRosterKey(teamId: string | null | undefined): string {
+  return (teamId ?? "").trim().toLowerCase();
+}
+
 export function formatHardRules(): string[] {
   return [
     "Never invent facts, stats, player history, pitch details, weather, or quotes.",
@@ -440,6 +524,21 @@ export function formatHardRules(): string[] {
     "NEVER recap events from prior innings. Your summary covers ONLY the current inning listed in the EVENTS section. Use NARRATIVE SO FAR for continuity (acknowledge momentum, reference the running arc) but do NOT restate plays you already covered in an earlier summary.",
     "Prefer sparse-but-accurate over rich-and-invented. A short, factual summary is always better than a long one that fills gaps with guesses.",
     "STRICT length: 3-5 sentences MAXIMUM. Do not exceed 5 sentences. If you run long, you WILL be truncated mid-thought and the user will see broken JSON — keep it tight.",
+  ];
+}
+
+function formatPostGameHardRules(): string[] {
+  return [
+    "Never invent facts, stats, player history, pitch details, weather, or quotes.",
+    "If a detail is missing, say less and stay generic instead of filling the gap.",
+    "Only mention players, teams, and places explicitly supplied in the prompt.",
+    "Stay grounded in POSTGAME GROUND TRUTH, ROSTER ATTRIBUTION, EVENTS, and PLAYER CONTEXT.",
+    "Use active voice and concrete baseball language.",
+    "Use past tense throughout the column.",
+    "No markdown, no bullet lists, no headings, and no meta commentary in the final answer.",
+    "Do not call the game a tie, deadlock, or draw unless the official final score is actually tied.",
+    "Do not treat this like a single-inning recap. You may reference any inning or turning point listed in EVENTS.",
+    "Write a complete newspaper column with a punchy headline and 3-4 paragraphs.",
   ];
 }
 
@@ -682,7 +781,8 @@ export function buildPostGameColumnSystemPrompt(
   narrativeSoFar: string,
 ): string {
   return [
-    ...buildCommonSections(reporter, reporterTeam, {
+    formatSection("REPORTER IDENTITY", formatReporterIdentity(reporter)),
+    formatSection("MOOD STATE", formatMoodState({
       baseMood: reporter.personality,
       currentMood: reporter.currentMood,
       moodMomentum: reporter.moodMomentum,
@@ -691,19 +791,32 @@ export function buildPostGameColumnSystemPrompt(
       energyModifier: "normal",
       driftActive: false,
       driftExpiresAfterAtBats: 0,
-    }, context),
+    })),
+    formatSection(
+      "POSTGAME GROUND TRUTH",
+      formatPostGameGroundTruth(context, reporterTeam, finalScore),
+    ),
+    formatSection(
+      "ROSTER ATTRIBUTION (do NOT confuse these)",
+      formatRosterAttribution(allInningEvents, reporter, context, reporterTeam),
+    ),
     buildDramaticContextSection(context),
     buildTeamStorylinesSection(context, reporterTeam),
     buildPlayerContextSection(allInningEvents, context),
-    buildNarrativeSection(
-      narrativeSoFar,
-      "(no prior narrative supplied — build the column from the final game facts alone)",
-    ),
-    formatSection("HARD RULES", formatHardRules()),
+    formatSection("NARRATIVE SO FAR", [
+      "Treat this as optional texture only. It may lag behind the final result.",
+      narrativeSoFar || "(no prior narrative supplied — build the column from the final game facts alone)",
+    ]),
+    formatSection("HARD RULES", [
+      ...formatPostGameHardRules(),
+      "For post-game columns, POSTGAME GROUND TRUTH and EVENTS override NARRATIVE SO FAR.",
+      "If the official final score is not tied, NEVER call the game a tie, deadlock, or draw.",
+    ]),
     formatSection("TASK", [
       `Final score: away ${finalScore.away}, home ${finalScore.home}.`,
       "Write a full newspaper column in YOUR voice about this complete game.",
       "Structure: 1-sentence headline (capitalized, punchy), then 3-4 paragraphs.",
+      "Before naming any pitcher or batter, verify which team they played for using ROSTER ATTRIBUTION.",
       "Weave in key plays, your team's performance, the matchups that mattered, the narrative arc, and a closing line.",
       'Return JSON only: { "headline": "<headline>", "body": "<3-4 paragraph column>" }',
     ]),
@@ -721,11 +834,17 @@ export function buildPostGameColumnUserMessage(
   const innings = Array.from(
     new Set(allInningEvents.map((event) => event.inning)),
   ).sort((left, right) => left - right);
+  const teams = resolveTeamPerspective(context);
+  const isTie = finalScore.home === finalScore.away;
+  const officialResult = isTie
+    ? `Official result: tie game, ${finalScore.away}-${finalScore.home}.`
+    : `Official result: ${finalScore.home > finalScore.away ? teams.homeTeam.name : teams.awayTeam.name} won ${Math.max(finalScore.home, finalScore.away)}-${Math.min(finalScore.home, finalScore.away)}.`;
   return [
     "POSTGAME COLUMN REQUEST",
     `Reporter: ${reporter.name}`,
     `Reporter side: ${reporterTeam}`,
     `Final score: away ${finalScore.away}, home ${finalScore.home}`,
+    officialResult,
     `Current cached narrative: ${narrativeSoFar || "None supplied."}`,
     ...innings.map((inning) =>
       buildEventsSection(

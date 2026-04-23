@@ -157,7 +157,7 @@ export function ScoreBug({
         </div>
 
         {/* Inning indicator */}
-        <span className="text-[16px] font-black text-[#E8E8D8] tracking-wider min-w-[28px] text-center flex-shrink-0">
+        <span className="text-[13px] font-black text-[#E8E8D8] tracking-wider min-w-[24px] text-center flex-shrink-0">
           {halfIndicator}{inning}
         </span>
 

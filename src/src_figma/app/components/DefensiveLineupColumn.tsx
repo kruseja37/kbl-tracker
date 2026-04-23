@@ -3,15 +3,17 @@ import { getMojoColor, type MojoLevel } from '../../../engines/mojoEngine';
 import type { FitnessState } from '../../../engines/fitnessEngine';
 import { toFitnessLabel, toMojoLabel } from '../../../types/game';
 import chalkBgImg from '../../../assets/chalk-bg.png';
+import { getPlayerLineupMetaParts, type PlayerLineupMetaSource } from '../utils/playerLineupMeta';
 
 
-interface DefensiveLineupPlayer {
+interface DefensiveLineupPlayer extends PlayerLineupMetaSource {
   playerId: string;
   name: string;
   position?: string;
   battingOrder: number;
   isPitcher: boolean;
   pitchCount?: number;
+  gameLine?: string;
 }
 
 // UX-024: Position number lookup for enrichment mode
@@ -144,7 +146,7 @@ export function DefensiveLineupColumn({
         </div>
       )}
 
-      <div className="flex min-h-0 flex-1 flex-col justify-evenly overflow-hidden" style={{ borderLeft: '2px solid rgba(242, 192, 65, 0.08)' }}>
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden" style={{ borderLeft: '2px solid rgba(242, 192, 65, 0.08)' }}>
         {players.map((player) => {
           const isPitching = player.name === currentPitcherName;
           const isNextLeadoff = player.battingOrder === nextLeadoffIndex && !isPitching;
@@ -157,6 +159,7 @@ export function DefensiveLineupColumn({
           const mojoForControls = playerMojo ?? 0;
           const mojoStyle = getMojoNameStyle(playerMojo);
           const fitnessStyle = getFitnessNameStyle(playerFitness);
+          const playerMeta = getPlayerLineupMetaParts(player);
 
           const handleClick = () => {
             if (isEnriching && posNum > 0) {
@@ -169,14 +172,14 @@ export function DefensiveLineupColumn({
           return (
             <div
               key={player.playerId}
-              className="flex items-stretch gap-1 px-2 py-0.5"
+              className="flex min-h-0 flex-1 items-stretch gap-1 px-2 py-[1px]"
               style={{
               }}
             >
               <button
                 type="button"
                 onClick={handleClick}
-                className={`flex-1 text-left transition-colors ${
+                className={`h-full min-w-0 flex-1 overflow-hidden text-left transition-colors ${
                   isEnriching
                     ? 'hover:bg-[#D4B85A]/20 active:bg-[#D4B85A]/30'
                     : 'hover:bg-[#1E3218]/50 active:bg-[#1E3218]'
@@ -190,48 +193,107 @@ export function DefensiveLineupColumn({
                   border: '2px solid transparent',
                 }}
               >
-                {/* Top row: order + position + name */}
-                <div className={`text-[11px] leading-tight tracking-wide font-bold ${
-                  isEnriching && isInSequence ? 'text-[#D4B85A]' : 'text-[#E8E8D8]'
-                }`}>
-                  <span className="text-[#CBB89C] mr-2">{player.battingOrder}.</span>
-                  <span
-                    style={{
-                      ...(!isEnriching ? mojoStyle : undefined),
-                      ...(!isEnriching ? fitnessStyle : {}),
-                      fontFamily: "'Tox Typewriter', monospace",
-                    }}
-                    title={!isEnriching ? [
-                      playerMojo !== 0 && playerMojo !== undefined
-                        ? `Mojo: ${toMojoLabel(playerMojo!)}`
-                        : null,
-                      playerFitness !== 'FIT' && playerFitness !== undefined
-                        ? `Fitness: ${toFitnessLabel(playerFitness!)}`
-                        : null,
-                    ].filter(Boolean).join(' | ') || undefined : undefined}
-                  >{player.name}</span>
-                  {player.position && (
-                    <span className="ml-1 text-[#D4B85A] text-[9px]">
-                      {player.position}
+                <div className="flex h-full min-h-0 flex-col overflow-hidden">
+                  {/* Top row: order + position + name */}
+                  <div className={`flex h-[14px] shrink-0 items-center text-[11px] leading-[14px] tracking-wide font-bold ${
+                    isEnriching && isInSequence ? 'text-[#D4B85A]' : 'text-[#E8E8D8]'
+                  }`}>
+                    <span
+                      className="inline-flex w-[26px] shrink-0 items-center text-[#CBB89C]"
+                      style={{
+                        fontFamily: "'Moms Typewriter', monospace",
+                        fontSize: '11px',
+                        lineHeight: '13px',
+                      }}
+                    >
+                      {player.battingOrder}.
                     </span>
-                  )}
-                  {!isEnriching && isNextLeadoff && (
-                    <span className="text-[6px] ml-1 opacity-50" style={{ fontFamily: "'Chalk', monospace" }}>⚾</span>
-                  )}
-                </div>
-                {/* Bottom row: in enrichment mode show position number, else pitch count / dash */}
-                <div className="text-[9px] text-[#6b7b6e] leading-tight">
-                  {isEnriching
-                    ? posNum > 0
-                      ? <span className="text-[#D4B85A]/60">#{posNum}</span>
-                      : null
-                    : (
-                      <div className="min-h-[10px] flex items-center gap-1">
-                        {player.isPitcher && player.pitchCount !== undefined && (
-                          <span>{`PC: ${player.pitchCount}`}</span>
-                        )}
-                      </div>
+                    <span
+                      style={{
+                        ...(!isEnriching ? mojoStyle : undefined),
+                        ...(!isEnriching ? fitnessStyle : {}),
+                        fontFamily: "'Tox Typewriter', monospace",
+                      }}
+                      title={!isEnriching ? [
+                        playerMojo !== 0 && playerMojo !== undefined
+                          ? `Mojo: ${toMojoLabel(playerMojo!)}`
+                          : null,
+                        playerFitness !== 'FIT' && playerFitness !== undefined
+                          ? `Fitness: ${toFitnessLabel(playerFitness!)}`
+                          : null,
+                      ].filter(Boolean).join(' | ') || undefined : undefined}
+                    >{player.name}</span>
+                    {player.position && (
+                      <span className="ml-1 text-[#D4B85A] text-[7px]">
+                        {player.position}
+                      </span>
                     )}
+                    {!isEnriching && isNextLeadoff && (
+                      <span className="text-[6px] ml-1 opacity-50" style={{ fontFamily: "'Chalk', monospace" }}>⚾</span>
+                    )}
+                  </div>
+                  {/* Bottom row: in enrichment mode show position number, else pitch count / dash */}
+                  <div
+                    className="h-[9px] shrink-0 overflow-hidden text-[#6b7b6e]"
+                    style={{
+                      fontFamily: "'Tox Typewriter', monospace",
+                      fontSize: "8px",
+                      lineHeight: "9px",
+                      letterSpacing: "0px",
+                    }}
+                  >
+                    {isEnriching
+                      ? posNum > 0
+                        ? <span className="text-[#D4B85A]/60">#{posNum}</span>
+                        : null
+                      : (
+                        <div
+                          data-testid={`defensive-lineup-meta-${player.playerId}`}
+                          className="ml-[26px] flex h-[9px] max-h-[9px] min-w-0 items-center gap-[2px] overflow-hidden"
+                        >
+                          {player.isPitcher && player.pitchCount !== undefined && (
+                            <span className="shrink-0 font-bold">{`PC: ${player.pitchCount}`}</span>
+                          )}
+                          {playerMeta.jersey && (
+                            <span
+                              className="shrink-0 font-bold"
+                              style={{ fontSize: "9px", lineHeight: "9px", color: "#D4B85A" }}
+                            >
+                              {playerMeta.jersey}
+                            </span>
+                          )}
+                          {playerMeta.jersey && playerMeta.hometown && (
+                            <span className="shrink-0" aria-hidden="true">
+                              {" "}
+                            </span>
+                          )}
+                          {playerMeta.hometown && (
+                            <span
+                              className="truncate font-bold text-[#CBB89C]/65"
+                              style={{ fontSize: "8px", lineHeight: "9px" }}
+                            >
+                              {playerMeta.hometown}
+                            </span>
+                          )}
+                        </div>
+                      )}
+                  </div>
+                  <div
+                    data-testid={`defensive-lineup-game-line-${player.playerId}`}
+                    className="ml-[34px] mt-[1px] h-[18px] min-w-0 overflow-hidden text-[#A9B9A2]"
+                    style={{
+                      fontFamily: "'Tox Typewriter', monospace",
+                      fontSize: "8.5px",
+                      lineHeight: "9px",
+                      letterSpacing: "0px",
+                      display: "-webkit-box",
+                      WebkitLineClamp: 2,
+                      WebkitBoxOrient: "vertical",
+                      whiteSpace: "normal",
+                    }}
+                  >
+                    {player.gameLine || "0 for 0"}
+                  </div>
                 </div>
               </button>
               {onMojoAdjust && (

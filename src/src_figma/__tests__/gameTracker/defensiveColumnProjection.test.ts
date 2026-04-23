@@ -9,6 +9,7 @@ const player = (
   battingOrder: number,
   position: string,
   playerId: string,
+  options?: Partial<Player>,
 ): Player => ({
   name,
   playerId,
@@ -16,6 +17,7 @@ const player = (
   battingOrder,
   stats: { ab: 0, h: 0, r: 0, rbi: 0, bb: 0, k: 0 },
   battingHand: "R",
+  ...options,
 });
 
 const pitcher = (
@@ -216,6 +218,62 @@ describe("defensive column projection", () => {
       name: "Starting Pitcher",
       position: "P",
       isPitcher: true,
+    });
+  });
+
+  test("carries jersey number and hometown through snapshot-based defensive rows", () => {
+    const players: Player[] = [
+      player("Lead Off", 1, "CF", "p1", {
+        jerseyNumber: 7,
+        hometown: { city: "Denver", state: "CO" },
+      }),
+      player("Designated Hitter", 2, "DH", "p2", {
+        jerseyNumber: 20,
+        hometown: { city: "Lakewood", state: "CO" },
+      }),
+    ];
+    const pitchers = [
+      pitcher("Starting Pitcher", "p10", {
+        jerseyNumber: 31,
+        hometown: { city: "Boulder", state: "CO" },
+      }),
+    ];
+    const lineupSnapshot: TeamLineupSnapshot = {
+      lineup: [
+        { playerId: "p1", playerName: "Lead Off", position: "CF", battingOrder: 1, enteredInning: 1, isStarter: true },
+        { playerId: "p2", playerName: "Designated Hitter", position: "DH", battingOrder: 2, enteredInning: 1, isStarter: true },
+      ],
+      bench: [],
+      usedPlayers: [],
+      currentPitcher: {
+        playerId: "p10",
+        playerName: "Starting Pitcher",
+        position: "P",
+        battingOrder: 2,
+        enteredInning: 1,
+        isStarter: true,
+      },
+    };
+
+    const result = buildDefensiveColumnPlayersForDisplay({
+      players,
+      pitchers,
+      fieldingTeam: "home",
+      pitcherStats: new Map([["p10", { pitchCount: 12 }]]) as never,
+      getRosterEntityId: (entity) => entity.playerId || entity.name,
+      explicitUseDh: true,
+      lineupSnapshot,
+    });
+
+    expect(result.find((entry) => entry.playerId === "p1")).toMatchObject({
+      jerseyNumber: 7,
+      hometown: { city: "Denver", state: "CO" },
+    });
+    expect(result.find((entry) => entry.playerId === "p10")).toMatchObject({
+      jerseyNumber: 31,
+      hometown: { city: "Boulder", state: "CO" },
+      isPitcher: true,
+      pitchCount: 12,
     });
   });
 });

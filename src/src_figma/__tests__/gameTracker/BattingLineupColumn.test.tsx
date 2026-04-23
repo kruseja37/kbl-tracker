@@ -11,6 +11,9 @@ const baseProps = {
       name: 'Away Starter',
       position: 'SS',
       battingOrder: 1,
+      jerseyNumber: 42,
+      hometown: { city: 'Denver', state: 'CO' },
+      gameLine: '2 for 3; 2B; 3 RBI; SB',
     },
   ],
   currentBatterIndex: 1,
@@ -76,5 +79,42 @@ describe('BattingLineupColumn', () => {
     expect(screen.getByText('Away Starter')).toHaveStyle({
       color: getMojoColor(0),
     });
+  });
+
+  test('renders jersey number, hometown, and a wrapped game line without growing the row', () => {
+    render(<BattingLineupColumn {...baseProps} />);
+
+    const nameRow = screen.getByTestId('batting-lineup-name-row-away-1');
+    const nameHighlight = screen.getByTestId('batting-lineup-name-highlight-away-1');
+    const meta = screen.getByTestId('batting-lineup-meta-away-1');
+    const gameLine = screen.getByTestId('batting-lineup-game-line-away-1');
+    const battingOrder = screen.getByText('1.');
+
+    expect(nameRow.style.backgroundImage).toBe('');
+    expect(nameRow).toHaveClass('h-[14px]', 'leading-[14px]');
+    expect(nameHighlight.style.backgroundImage).not.toBe('');
+    expect(nameHighlight.style.backgroundColor).toBe('rgba(242, 192, 65, 0.03)');
+    expect(nameHighlight).toHaveClass('flex-1');
+    expect(battingOrder).toHaveStyle({
+      fontFamily: "'Moms Typewriter', monospace",
+      fontSize: '11px',
+      lineHeight: '13px',
+    });
+    expect(meta).toHaveTextContent('#42 Denver, CO');
+    expect(meta).toHaveClass('ml-[26px]', 'h-[9px]', 'max-h-[9px]', 'overflow-hidden');
+    expect(meta).toHaveStyle({ lineHeight: '9px', fontFamily: "'Tox Typewriter', monospace" });
+    expect(meta.style.backgroundImage).not.toBe('');
+    expect(meta.style.backgroundColor).toBe('rgba(242, 192, 65, 0.03)');
+    expect(gameLine.style.backgroundImage).toBe('');
+    expect(screen.getByText('#42')).toHaveStyle({ fontSize: '9px', color: 'rgb(212, 184, 90)' });
+    expect(screen.getByText('Denver, CO')).toHaveStyle({ fontSize: '8px' });
+    expect(gameLine).toHaveTextContent('2 for 3; 2B; 3 RBI; SB');
+    expect(gameLine).toHaveClass('ml-[34px]');
+    expect(gameLine.style.fontFamily).toBe('"Tox Typewriter", monospace');
+    expect(gameLine.style.fontSize).toBe('8.5px');
+    expect(gameLine.style.lineHeight).toBe('9px');
+    expect(gameLine.style.display).toBe('-webkit-box');
+    expect(gameLine.style.webkitLineClamp).toBe('2');
+    expect(gameLine.style.whiteSpace).toBe('normal');
   });
 });
