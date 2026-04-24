@@ -337,6 +337,8 @@ export function EliminationHome() {
           competitionType: 'elimination',
           competitionId: eliminationId,
           leagueId: metadata.leagueId,
+          liveBeatReporterEnabled,
+          postGameColumnsEnabled,
           homeTeamId: homeTeam.teamId,
           homeTeamName: homeTeam.teamName,
           homeTeamAbbreviation: homeTeamData?.abbreviation,

@@ -479,9 +479,6 @@ export function PostGameSummary({
   const homeTeamName = gameData.homeTeamName;
   const awayTeamName = gameData.awayTeamName;
   const stadiumLabel = gameData.stadiumName;
-  const activityLogEntries = gameData.activityLog ?? [];
-  const fameEvents = gameData.fameEvents ?? [];
-  const fameCount = fameEvents.length;
 
   // Build batter stats from playerStats
   const normalizedAwayTeamId = normalizeTeamId(awayTeamId);
@@ -755,26 +752,6 @@ export function PostGameSummary({
                     >
                       ★ {winnerName.toUpperCase()} WIN! ★
                     </div>
-                  </div>
-                </div>
-
-                <div className="bg-[#1f2b21] border-2 border-[#314437] rounded-md p-3 text-[#E8E8D8] text-xs flex flex-col gap-2 mb-4">
-                  <div className="text-[10px] tracking-[0.4em] font-bold text-[#C4A853] uppercase">
-                    Activity Log
-                  </div>
-                  {activityLogEntries.length > 0 ? (
-                    <ul className="space-y-1 list-disc list-inside text-[#E8E8D8]">
-                      {activityLogEntries.slice(0, 5).map((entry, idx) => (
-                        <li key={idx}>{entry}</li>
-                      ))}
-                    </ul>
-                  ) : (
-                    <div className="text-[#A8B8A2]">
-                      No notable actions recorded during this game.
-                    </div>
-                  )}
-                  <div className="text-[10px] text-[#A8B8A2] uppercase tracking-[0.3em] mt-2">
-                    Fame events recorded: {fameCount}
                   </div>
                 </div>
 

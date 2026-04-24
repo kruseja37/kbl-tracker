@@ -28,21 +28,21 @@ interface LineupPanelProps {
 
 // Mojo indicator colors per level
 const MOJO_COLORS: Record<MojoLevel, string> = {
-  [-2]: '#ef4444', // red - Rattled
-  [-1]: '#f97316', // orange - Tense
-  [0]: '#6b7280',  // gray - Normal
-  [1]: '#22c55e',  // green - Locked In
-  [2]: '#16a34a',  // green - On Fire
-  [3]: '#15803d',  // dark green - Jacked
+  [-2]: '#7a2f2f', // rattled
+  [-1]: '#7a3a63', // tense
+  [0]: '#FFFFFF',  // normal
+  [1]: '#3a6f8a',  // locked in
+  [2]: '#3f9a8c',  // on fire
+  [3]: '#56429a',  // jacked
 };
 
 const MOJO_BG_COLORS: Record<MojoLevel, string> = {
-  [-2]: 'rgba(239, 68, 68, 0.15)',
-  [-1]: 'rgba(249, 115, 22, 0.15)',
-  [0]: 'rgba(107, 114, 128, 0.15)',
-  [1]: 'rgba(34, 197, 94, 0.15)',
-  [2]: 'rgba(22, 163, 74, 0.15)',
-  [3]: 'rgba(21, 128, 61, 0.15)',
+  [-2]: 'rgba(122, 47, 47, 0.15)',
+  [-1]: 'rgba(122, 58, 99, 0.15)',
+  [0]: 'rgba(255, 255, 255, 0.12)',
+  [1]: 'rgba(58, 111, 138, 0.15)',
+  [2]: 'rgba(63, 154, 140, 0.15)',
+  [3]: 'rgba(86, 66, 154, 0.15)',
 };
 
 interface MojoBadgeProps {

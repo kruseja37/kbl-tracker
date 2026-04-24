@@ -1,0 +1,48 @@
+<svg width="980" height="460" viewBox="0 0 980 460" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="980" height="460" fill="#1C241F"/>
+  <rect x="24" y="24" width="932" height="412" rx="18" fill="#2F3C34" stroke="#516155" stroke-width="2"/>
+  <text x="44" y="68" fill="#F0E7D8" font-family="Georgia, serif" font-size="28" font-weight="700">Mojo Palette Reference</text>
+  <text x="44" y="96" fill="#B8C3B7" font-family="Menlo, Consolas, monospace" font-size="16">Exact requested hex values rendered as flat swatches</text>
+
+  <g transform="translate(44 126)">
+    <rect width="892" height="46" rx="12" fill="#38453D"/>
+    <rect x="18" y="11" width="110" height="24" rx="8" fill="#6a3a3a"/>
+    <text x="150" y="30" fill="#F3EBDD" font-family="Menlo, Consolas, monospace" font-size="18">Rattled</text>
+    <text x="360" y="30" fill="#D7DDD4" font-family="Menlo, Consolas, monospace" font-size="18">#6a3a3a</text>
+  </g>
+
+  <g transform="translate(44 182)">
+    <rect width="892" height="46" rx="12" fill="#38453D"/>
+    <rect x="18" y="11" width="110" height="24" rx="8" fill="#6b4960"/>
+    <text x="150" y="30" fill="#F3EBDD" font-family="Menlo, Consolas, monospace" font-size="18">Tense</text>
+    <text x="360" y="30" fill="#D7DDD4" font-family="Menlo, Consolas, monospace" font-size="18">#6b4960</text>
+  </g>
+
+  <g transform="translate(44 238)">
+    <rect width="892" height="46" rx="12" fill="#38453D"/>
+    <rect x="18" y="11" width="110" height="24" rx="8" fill="#FFFFFF"/>
+    <text x="150" y="30" fill="#F3EBDD" font-family="Menlo, Consolas, monospace" font-size="18">Normal</text>
+    <text x="360" y="30" fill="#D7DDD4" font-family="Menlo, Consolas, monospace" font-size="18">#FFFFFF</text>
+  </g>
+
+  <g transform="translate(44 294)">
+    <rect width="892" height="46" rx="12" fill="#38453D"/>
+    <rect x="18" y="11" width="110" height="24" rx="8" fill="#4b6f8a"/>
+    <text x="150" y="30" fill="#F3EBDD" font-family="Menlo, Consolas, monospace" font-size="18">Locked In</text>
+    <text x="360" y="30" fill="#D7DDD4" font-family="Menlo, Consolas, monospace" font-size="18">#4b6f8a</text>
+  </g>
+
+  <g transform="translate(44 350)">
+    <rect width="892" height="46" rx="12" fill="#38453D"/>
+    <rect x="18" y="11" width="110" height="24" rx="8" fill="#466273"/>
+    <text x="150" y="30" fill="#F3EBDD" font-family="Menlo, Consolas, monospace" font-size="18">On Fire</text>
+    <text x="360" y="30" fill="#D7DDD4" font-family="Menlo, Consolas, monospace" font-size="18">#466273</text>
+  </g>
+
+  <g transform="translate(494 350)">
+    <rect width="442" height="46" rx="12" fill="#38453D"/>
+    <rect x="18" y="11" width="110" height="24" rx="8" fill="#574b79"/>
+    <text x="150" y="30" fill="#F3EBDD" font-family="Menlo, Consolas, monospace" font-size="18">Jacked</text>
+    <text x="280" y="30" fill="#D7DDD4" font-family="Menlo, Consolas, monospace" font-size="18">#574b79</text>
+  </g>
+</svg>

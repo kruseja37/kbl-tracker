@@ -632,11 +632,10 @@ export function LeagueBuilderTeams() {
                     onChange={(e) =>
                       setFormData((prev) => ({
                         ...prev,
-                        abbreviation: e.target.value.toUpperCase().slice(0, 4),
+                        abbreviation: e.target.value.toUpperCase(),
                       }))
                     }
                     placeholder="SFG"
-                    maxLength={4}
                     className="w-full bg-[#4A6844] border-[4px] border-[#3F5A3A] p-3 text-[#E8E8D8] placeholder-[#E8E8D8]/40 focus:border-[#E8E8D8] outline-none uppercase"
                   />
                 </div>

@@ -829,6 +829,8 @@ export function GameTracker() {
     statsScopeId?: string;
     competitionType?: "exhibition" | "franchise" | "playoff" | "elimination";
     competitionId?: string;
+    liveBeatReporterEnabled?: boolean;
+    postGameColumnsEnabled?: boolean;
     // T0-05: Schedule persistence context
     scheduleGameId?: string;
     seasonNumber?: number;
@@ -1316,7 +1318,6 @@ export function GameTracker() {
 
   // §4.2 Structured Play Log — parallel to activityLog (which other systems still use)
   const [playLogEntries, setPlayLogEntries] = useState<PlayLogEntry[]>([]);
-  const preambleFiredGameIdRef = useRef<string | null>(null);
   const firedInningSummariesRef = useRef<Set<string>>(new Set());
   const lastSeenHalfInningRef = useRef<{ inning: number; isTop: boolean } | null>(null);
   const shortInningLabel = useCallback(() => {
@@ -4022,6 +4023,8 @@ export function GameTracker() {
           // Layer 1B: Context snapshot config
           franchiseId: navigationState?.franchiseId,
           leagueId: navigationState?.leagueId || "sml",
+          liveBeatReporterEnabled: navigationState?.liveBeatReporterEnabled,
+          postGameColumnsEnabled: navigationState?.postGameColumnsEnabled,
           awayRecord: (() => {
             const [w, l] = awayRecord.split("-").map(Number);
             return { w: w || 0, l: l || 0 };
@@ -4624,7 +4627,6 @@ export function GameTracker() {
   ]);
   const {
     commentaryEntries,
-    firePreamble,
     fireBetweenInningSummary,
     firePostGameColumns,
     homeDisabled: homeCommentaryDisabled,
@@ -4701,41 +4703,9 @@ export function GameTracker() {
     reportersForFeed,
   ]);
 
-  useEffect(() => {
-    const shouldFirePreamble =
-      gameInitialized &&
-      gameState.gamePhase === "LIVE" &&
-      gameState.liveBeatReporterEnabled &&
-      Boolean(gameState.currentBatterId) &&
-      Boolean(gameState.currentPitcherId) &&
-      Boolean(gameState.gameId) &&
-      !homeCommentaryDisabled &&
-      preambleFiredGameIdRef.current !== gameState.gameId;
-
-    if (!shouldFirePreamble) {
-      return;
-    }
-
-    const pendingAtBatIdentity = getPendingAtBatIdentity();
-    preambleFiredGameIdRef.current = gameState.gameId;
-    void firePreamble(
-      gameState.gameId,
-      pendingAtBatIdentity.atBatEventId,
-      undefined,
-      competitionType,
-    );
-  }, [
-    competitionType,
-    firePreamble,
-    homeCommentaryDisabled,
-    gameInitialized,
-    gameState.liveBeatReporterEnabled,
-    gameState.currentBatterId,
-    gameState.currentPitcherId,
-    gameState.gameId,
-    gameState.gamePhase,
-    getPendingAtBatIdentity,
-  ]);
+  // Live historical tidbits intentionally skip the old scene-setting preamble.
+  // We leave the hook-level preamble machinery in place for legacy tests and
+  // preview harnesses, but the live GameTracker no longer fires it.
 
   // Inning-summary watcher: fires at end of bottom-of-N, regardless of which handler
   // triggered the transition (modal YES, force-end button, or auto game-end). Reactive
@@ -10405,6 +10375,7 @@ export function GameTracker() {
             awayScore={scoreboard.away.runs}
             homeTeamName={scorebugTeamLabels.home}
             homeScore={scoreboard.home.runs}
+            homeTeamSecondaryColor={homeTeamBorderColor}
             stadiumName={resolvedStadiumName}
             inning={gameState.inning}
             isTop={gameState.isTop}
@@ -10565,8 +10536,8 @@ export function GameTracker() {
                 enrichingRunnerSubEntry !== null ||
                 (selectedPlayLogEntry !== null &&
                   selectedPlayLogEntry.eventType !== "at_bat")
-                  ? "1fr 1fr 1fr 2.5fr"
-                  : "1fr 1fr 1fr 2fr",
+                  ? "0.8fr 1fr 1fr 2.7fr"
+                  : "0.8fr 1fr 1fr 2.2fr",
               gridTemplateRows: "minmax(0, 1fr)",
               gap: "0px",
             }}

@@ -104,4 +104,51 @@ describe("grokClient edge proxy", () => {
       status: 413,
     } satisfies Partial<GrokApiError>);
   });
+
+  test("passes structured output schemas through to the edge function when provided", async () => {
+    const invokeImpl = vi.fn(async () => ({
+      data: {
+        text: '{"popup":"Tidy.","narrative":"Still tense.","historicalLeadIn":""}',
+        inputTokens: 9,
+        outputTokens: 11,
+        model: "grok-4",
+      },
+      error: null,
+    })) satisfies ReporterProxyInvoke;
+
+    await callGrokChatCompletion({
+      model: "grok-4",
+      messages: [{ role: "user", content: "Return JSON." }],
+      intensity: "medium",
+      purpose: "between_inning_summary",
+      responseFormat: {
+        type: "json_schema",
+        json_schema: {
+          name: "between_inning_summary",
+          strict: true,
+          schema: {
+            type: "object",
+            properties: {
+              popup: { type: "string" },
+              narrative: { type: "string" },
+              historicalLeadIn: { type: "string" },
+            },
+            required: ["popup", "narrative", "historicalLeadIn"],
+          },
+        },
+      },
+      invokeImpl,
+    });
+
+    expect(invokeImpl).toHaveBeenCalledWith(
+      "grok-commentary",
+      expect.objectContaining({
+        body: expect.objectContaining({
+          responseFormat: expect.objectContaining({
+            type: "json_schema",
+          }),
+        }),
+      }),
+    );
+  });
 });

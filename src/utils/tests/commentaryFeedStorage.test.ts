@@ -78,6 +78,29 @@ describe("commentaryFeedStorage", () => {
     ]);
   });
 
+  test("round-trips historical tidbits inside the stored commentary payload", async () => {
+    vi.spyOn(syncEngine, "upsert").mockImplementation(() => undefined);
+    vi.spyOn(syncEngine, "isSuppressed").mockReturnValue(false);
+
+    const record = createRecord({
+      id: "commentary-inning-game-1-home-4-2000",
+      kind: "between-inning",
+      historicalTidbit: {
+        factId: "mlb-johnny-vander-meer-back-to-back-no-hitters",
+        text: "Johnny Vander Meer's back-to-back no-hitters in June 1938 still stand as the only consecutive no-hitters in Major League history.",
+        sourceLabel: "MLB",
+        sourceUrl:
+          "https://www.mlb.com/news/75th-anniversary-of-vander-meers-back-to-back-no-hitters/c-50314542",
+      },
+    });
+
+    await persistCommentaryFeedEntry(record);
+
+    await expect(listCommentaryFeedEntriesForGame("game-1")).resolves.toEqual([
+      record,
+    ]);
+  });
+
   test("soft-delete hides record from list", async () => {
     vi.spyOn(syncEngine, "upsert").mockImplementation(() => undefined);
     vi.spyOn(syncEngine, "isSuppressed").mockReturnValue(false);

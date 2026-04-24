@@ -3,13 +3,17 @@ import type {
   NotabilityPlayContext,
   NotabilityResult,
 } from "../../../../engines/notabilityScorer";
-import type { BeatReporter } from "../../../../types/reporter";
+import type {
+  BeatReporter,
+  HistoricalFactRecord,
+} from "../../../../types/reporter";
 import type { AtBatEvent } from "../../../../utils/eventLog";
 import type { NarrativeIntensity } from "../../../../types/reporterPreferences";
 import type { CompetitionType } from "../../../../utils/gameStorage";
 import {
   callGrokChatCompletion,
   type GrokChatMessage,
+  type GrokJsonSchemaResponseFormat,
   type ReporterProxyInvoke,
 } from "./grokClient";
 import {
@@ -87,11 +91,13 @@ export interface BetweenInningSummaryInput {
   inning: number;
   inningEvents: AtBatEvent[];
   previousNarrativeSoFar: string;
+  historicalFact?: HistoricalFactRecord | null;
 }
 
 export interface BetweenInningSummaryResult {
   popupText: string | null;
   updatedNarrativeSoFar: string;
+  historicalLeadIn: string | null;
   skipped: boolean;
   error?: string;
   inputTokens: number;
@@ -174,12 +180,14 @@ function toUsageLogInput(params: {
 function parseBetweenInningSummaryPayload(text: string): {
   popupText: string | null;
   narrativeText: string | null;
+  historicalLeadIn: string | null;
   parseFailed: boolean;
 } {
   try {
     const parsed = JSON.parse(text) as {
       popup?: unknown;
       narrative?: unknown;
+      historicalLeadIn?: unknown;
     };
 
     if (
@@ -191,6 +199,11 @@ function parseBetweenInningSummaryPayload(text: string): {
       return {
         popupText: parsed.popup.trim(),
         narrativeText: parsed.narrative.trim(),
+        historicalLeadIn:
+          typeof parsed.historicalLeadIn === "string" &&
+          parsed.historicalLeadIn.trim()
+            ? parsed.historicalLeadIn.trim()
+            : null,
         parseFailed: false,
       };
     }
@@ -208,15 +221,22 @@ function parseBetweenInningSummaryPayload(text: string): {
   const narrativeMatch = text.match(
     /"narrative"\s*:\s*"((?:\\.|[^"\\])*)"/,
   );
+  const historicalLeadInMatch = text.match(
+    /"historicalLeadIn"\s*:\s*"((?:\\.|[^"\\])*)"/,
+  );
 
   if (popupMatch && popupMatch[1]) {
     const extractedPopup = decodeRecoveredJsonString(popupMatch[1]).trim();
     const extractedNarrative = narrativeMatch?.[1]
       ? decodeRecoveredJsonString(narrativeMatch[1]).trim()
       : null;
+    const extractedHistoricalLeadIn = historicalLeadInMatch?.[1]
+      ? decodeRecoveredJsonString(historicalLeadInMatch[1]).trim()
+      : null;
     return {
       popupText: extractedPopup || null,
       narrativeText: extractedNarrative,
+      historicalLeadIn: extractedHistoricalLeadIn || null,
       // Mark parseFailed=true IF narrative is missing — the engine uses this
       // signal to preserve the previous narrative cache rather than clobber
       // it with a truncated fragment.
@@ -227,9 +247,28 @@ function parseBetweenInningSummaryPayload(text: string): {
   return {
     popupText: text.trim() || null,
     narrativeText: null,
+    historicalLeadIn: null,
     parseFailed: true,
   };
 }
+
+const BETWEEN_INNING_RESPONSE_FORMAT: GrokJsonSchemaResponseFormat = {
+  type: "json_schema",
+  json_schema: {
+    name: "between_inning_summary",
+    strict: true,
+    schema: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        popup: { type: "string" },
+        narrative: { type: "string" },
+        historicalLeadIn: { type: "string" },
+      },
+      required: ["popup", "narrative", "historicalLeadIn"],
+    },
+  },
+};
 
 function parsePostGameColumnPayload(text: string): {
   headline: string | null;
@@ -405,6 +444,7 @@ export class GrokCommentaryEngine implements CommentaryEngine {
           input.inning,
           input.previousNarrativeSoFar,
           input.inningEvents,
+          input.historicalFact,
         ),
       },
       {
@@ -413,6 +453,7 @@ export class GrokCommentaryEngine implements CommentaryEngine {
           input.inning,
           input.inningEvents,
           input.previousNarrativeSoFar,
+          input.historicalFact,
         ),
       },
     ];
@@ -424,6 +465,7 @@ export class GrokCommentaryEngine implements CommentaryEngine {
         intensity: this.config.intensity,
         purpose: "between_inning_summary",
         temperature: 0.6,
+        responseFormat: BETWEEN_INNING_RESPONSE_FORMAT,
         gameId: this.config.gameId,
         mode: this.config.mode,
         invokeImpl: this.config.invokeImpl,
@@ -450,6 +492,7 @@ export class GrokCommentaryEngine implements CommentaryEngine {
         return {
           popupText: null,
           updatedNarrativeSoFar: this.gameNarrativeSoFar,
+          historicalLeadIn: null,
           skipped: true,
           error: "Grok response was empty.",
           inputTokens: 0,
@@ -467,6 +510,7 @@ export class GrokCommentaryEngine implements CommentaryEngine {
         return {
           popupText: parsed.popupText,
           updatedNarrativeSoFar: this.gameNarrativeSoFar,
+          historicalLeadIn: parsed.historicalLeadIn,
           skipped: false,
           inputTokens: response.inputTokens,
           outputTokens: response.outputTokens,
@@ -477,6 +521,7 @@ export class GrokCommentaryEngine implements CommentaryEngine {
       return {
         popupText: parsed.popupText,
         updatedNarrativeSoFar: this.gameNarrativeSoFar,
+        historicalLeadIn: parsed.historicalLeadIn,
         skipped: false,
         inputTokens: response.inputTokens,
         outputTokens: response.outputTokens,
@@ -492,6 +537,7 @@ export class GrokCommentaryEngine implements CommentaryEngine {
       return {
         popupText: null,
         updatedNarrativeSoFar: this.gameNarrativeSoFar,
+        historicalLeadIn: null,
         skipped: true,
         error: message,
         inputTokens: 0,

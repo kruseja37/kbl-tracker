@@ -16,14 +16,27 @@ import type { FitnessState } from '../../../engines/fitnessEngine';
 import chalkBgImg from '../../../assets/chalk-bg.png';
 
 const MOJO_LABELS: Record<MojoLevel, { label: string; color: string }> = {
-  [-2]: { label: 'RTL', color: '#FF4444' },
-  [-1]: { label: 'TNS', color: '#FF8844' },
+  [-2]: { label: 'RTL', color: '#7a2f2f' },
+  [-1]: { label: 'TNS', color: '#7a3a63' },
   [0]:  { label: 'NRM', color: '#E8E8D8' },
-  [1]:  { label: 'LKD', color: '#88DD44' },
-  [2]:  { label: 'FIR', color: '#FFD700' },
-  [3]:  { label: 'JKD', color: '#FF44FF' },
+  [1]:  { label: 'LKD', color: '#3a6f8a' },
+  [2]:  { label: 'FIR', color: '#3f9a8c' },
+  [3]:  { label: 'JKD', color: '#56429a' },
 };
 const MOJO_ORDER: MojoLevel[] = [-2, -1, 0, 1, 2, 3];
+
+function getMojoOuterOutlineColor(level: MojoLevel): string {
+  if (level === -2) {
+    return 'rgba(139,111,71,0.95)';
+  }
+  if (level === -1 || level === 1) {
+    return 'rgba(255,255,255,0)';
+  }
+  if (level === 2) {
+    return 'rgba(192,192,192,0.95)';
+  }
+  return 'rgba(255,255,255,0.9)';
+}
 
 const FITNESS_LABELS: Record<FitnessState, { label: string; color: string }> = {
   'JUICED':   { label: 'JCD', color: '#FF44FF' },
@@ -352,7 +365,13 @@ export function LineupPreview({
                     type="button"
                     onClick={(e) => { e.stopPropagation(); cycleMojo(player.playerId || player.name, player.mojo); }}
                     className="text-[7px] px-1 py-0.5 rounded bg-[#283828] border border-[#556B55] font-bold"
-                    style={{ color: MOJO_LABELS[player.mojo ?? 0].color, textShadow: '1px 1px 0px rgba(0,0,0,0.5)' }}
+                    style={{
+                      color: '#FFFFFF',
+                      textShadow:
+                        (player.mojo ?? 0) === 0
+                          ? 'none'
+                          : `-1px 0 0 ${MOJO_LABELS[player.mojo ?? 0].color}, 1px 0 0 ${MOJO_LABELS[player.mojo ?? 0].color}, 0 -1px 0 ${MOJO_LABELS[player.mojo ?? 0].color}, 0 1px 0 ${MOJO_LABELS[player.mojo ?? 0].color}, -1px -1px 0 ${MOJO_LABELS[player.mojo ?? 0].color}, 1px -1px 0 ${MOJO_LABELS[player.mojo ?? 0].color}, -1px 1px 0 ${MOJO_LABELS[player.mojo ?? 0].color}, 1px 1px 0 ${MOJO_LABELS[player.mojo ?? 0].color}, -1.35px 0 0 ${getMojoOuterOutlineColor(player.mojo ?? 0)}, 1.35px 0 0 ${getMojoOuterOutlineColor(player.mojo ?? 0)}, 0 -1.35px 0 ${getMojoOuterOutlineColor(player.mojo ?? 0)}, 0 1.35px 0 ${getMojoOuterOutlineColor(player.mojo ?? 0)}`,
+                    }}
                     title={`Mojo: ${MOJO_LABELS[player.mojo ?? 0].label}`}
                   >
                     {MOJO_LABELS[player.mojo ?? 0].label}
@@ -404,7 +423,13 @@ export function LineupPreview({
                     type="button"
                     onClick={(e) => { e.stopPropagation(); cycleMojo(startingPitcher.playerId || startingPitcher.name, startingPitcher.mojo); }}
                     className="text-[7px] px-1 py-0.5 rounded bg-[#283828] border border-[#556B55] font-bold"
-                    style={{ color: MOJO_LABELS[startingPitcher.mojo ?? 0].color, textShadow: '1px 1px 0px rgba(0,0,0,0.5)' }}
+                    style={{
+                      color: '#FFFFFF',
+                      textShadow:
+                        (startingPitcher.mojo ?? 0) === 0
+                          ? 'none'
+                          : `-1px 0 0 ${MOJO_LABELS[startingPitcher.mojo ?? 0].color}, 1px 0 0 ${MOJO_LABELS[startingPitcher.mojo ?? 0].color}, 0 -1px 0 ${MOJO_LABELS[startingPitcher.mojo ?? 0].color}, 0 1px 0 ${MOJO_LABELS[startingPitcher.mojo ?? 0].color}, -1px -1px 0 ${MOJO_LABELS[startingPitcher.mojo ?? 0].color}, 1px -1px 0 ${MOJO_LABELS[startingPitcher.mojo ?? 0].color}, -1px 1px 0 ${MOJO_LABELS[startingPitcher.mojo ?? 0].color}, 1px 1px 0 ${MOJO_LABELS[startingPitcher.mojo ?? 0].color}, -1.35px 0 0 ${getMojoOuterOutlineColor(startingPitcher.mojo ?? 0)}, 1.35px 0 0 ${getMojoOuterOutlineColor(startingPitcher.mojo ?? 0)}, 0 -1.35px 0 ${getMojoOuterOutlineColor(startingPitcher.mojo ?? 0)}, 0 1.35px 0 ${getMojoOuterOutlineColor(startingPitcher.mojo ?? 0)}`,
+                    }}
                   >
                     {MOJO_LABELS[startingPitcher.mojo ?? 0].label}
                   </button>
@@ -437,7 +462,13 @@ export function LineupPreview({
                     type="button"
                     onClick={(e) => { e.stopPropagation(); cycleMojo(startingPitcher.playerId || startingPitcher.name, startingPitcher.mojo); }}
                     className="text-[7px] px-1 py-0.5 rounded bg-[#283828] border border-[#556B55] font-bold"
-                    style={{ color: MOJO_LABELS[startingPitcher.mojo ?? 0].color, textShadow: '1px 1px 0px rgba(0,0,0,0.5)' }}
+                    style={{
+                      color: '#FFFFFF',
+                      textShadow:
+                        (startingPitcher.mojo ?? 0) === 0
+                          ? 'none'
+                          : `-1px 0 0 ${MOJO_LABELS[startingPitcher.mojo ?? 0].color}, 1px 0 0 ${MOJO_LABELS[startingPitcher.mojo ?? 0].color}, 0 -1px 0 ${MOJO_LABELS[startingPitcher.mojo ?? 0].color}, 0 1px 0 ${MOJO_LABELS[startingPitcher.mojo ?? 0].color}, -1px -1px 0 ${MOJO_LABELS[startingPitcher.mojo ?? 0].color}, 1px -1px 0 ${MOJO_LABELS[startingPitcher.mojo ?? 0].color}, -1px 1px 0 ${MOJO_LABELS[startingPitcher.mojo ?? 0].color}, 1px 1px 0 ${MOJO_LABELS[startingPitcher.mojo ?? 0].color}, -1.35px 0 0 ${getMojoOuterOutlineColor(startingPitcher.mojo ?? 0)}, 1.35px 0 0 ${getMojoOuterOutlineColor(startingPitcher.mojo ?? 0)}, 0 -1.35px 0 ${getMojoOuterOutlineColor(startingPitcher.mojo ?? 0)}, 0 1.35px 0 ${getMojoOuterOutlineColor(startingPitcher.mojo ?? 0)}`,
+                    }}
                   >
                     {MOJO_LABELS[startingPitcher.mojo ?? 0].label}
                   </button>

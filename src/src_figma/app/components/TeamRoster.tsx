@@ -552,7 +552,10 @@ function PlayerCardModal({ player, pitcher, onClose, teamColor, teamName, curren
                   >
                     <span
                       className="text-xs font-bold"
-                      style={{ color: getMojoColor(currentMojo), textShadow: '1px 1px 0px rgba(0,0,0,0.5)' }}
+                      style={{
+                        color: getMojoColor(currentMojo),
+                        textShadow: `0 0 1px ${getMojoColor(currentMojo)}, 0 0 4px ${getMojoColor(currentMojo)}55`,
+                      }}
                     >
                       {MOJO_STATES[currentMojo].emoji} {MOJO_STATES[currentMojo].displayName}
                     </span>

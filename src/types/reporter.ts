@@ -129,6 +129,34 @@ export interface RivalryScore {
   deleted?: boolean;
 }
 
+export type HistoricalFactSourceType = 'retrosheet' | 'sabr' | 'mlb' | 'hof';
+
+export type HistoricalFactSubjectType = 'general' | 'team' | 'player' | 'theme';
+
+export interface HistoricalTidbit {
+  factId: string;
+  text: string;
+  sourceLabel: string;
+  sourceUrl: string;
+}
+
+export interface HistoricalFactRecord {
+  id: string;
+  factText: string;
+  sourceLabel: string;
+  sourceUrl: string;
+  sourceType: HistoricalFactSourceType;
+  subjectType: HistoricalFactSubjectType;
+  subjectIds: string[];
+  teamTags: string[];
+  playerTags: string[];
+  themeTags: string[];
+  eraTags: string[];
+  verifiedAt: string;
+  priority: number;
+  active: boolean;
+}
+
 export interface CommentaryFeedEntryRecord {
   id: string;
   gameId: string;
@@ -137,6 +165,7 @@ export interface CommentaryFeedEntryRecord {
   commentaryText: string;
   halfInningLabel: string;
   kind?: 'play' | 'preamble' | 'between-inning';
+  historicalTidbit?: HistoricalTidbit;
   timestamp: number;
   createdAt: number;
   changed_at: number;

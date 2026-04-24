@@ -1,6 +1,9 @@
 import React from "react";
 
-import type { BeatReporter } from "../../../types/reporter";
+import type {
+  BeatReporter,
+  HistoricalTidbit,
+} from "../../../types/reporter";
 import { CommentaryTypewriter } from "./CommentaryTypewriter";
 
 export interface CommentaryFeedEntry {
@@ -10,6 +13,7 @@ export interface CommentaryFeedEntry {
   timestamp: number;
   reporterId?: string;
   kind?: "play" | "preamble" | "between-inning";
+  historicalTidbit?: HistoricalTidbit;
 }
 
 export interface CommentaryFeedProps {
@@ -170,12 +174,23 @@ export function CommentaryFeed({
         const reporterPalette = item.entry.reporterId
           ? reporterTeamColors[item.entry.reporterId]
           : undefined;
+        const isHistoryOnlyEntry =
+          isBetweenInning &&
+          !item.entry.commentaryText.trim() &&
+          Boolean(item.entry.historicalTidbit);
         const accentColor =
           reporterPalette?.primary ??
           (isBetweenInning ? "#88AA88" : "#C4A853");
         const dividerColor = reporterPalette?.secondary ?? "#425546";
         const byline =
-          reporter?.name ?? (item.entry.reporterId ? "Beat Reporter" : null);
+          isHistoryOnlyEntry
+            ? null
+            : reporter?.name ?? (item.entry.reporterId ? "Beat Reporter" : null);
+        const badgeLabel = isHistoryOnlyEntry
+          ? "H"
+          : byline
+            ? byline.charAt(0).toUpperCase()
+            : "B";
 
         return (
           <article
@@ -202,7 +217,7 @@ export function CommentaryFeed({
                     background: "rgba(18, 23, 19, 0.55)",
                   }}
                 >
-                  {byline ? byline.charAt(0).toUpperCase() : "B"}
+                  {badgeLabel}
                 </span>
                 <div className="min-w-0">
                   <div
@@ -241,15 +256,43 @@ export function CommentaryFeed({
                   : undefined
               }
             >
-              <CommentaryTypewriter
-                text={item.entry.commentaryText}
-                active={item.isAnimating}
-                soundsOn={soundsOn}
-                onCharacterTyped={onPlayTypeSound}
-                wordDelayMs={wordDelayMs}
-                charDelayMs={charDelayMs}
-              />
+              {item.entry.commentaryText.trim() ? (
+                <CommentaryTypewriter
+                  text={item.entry.commentaryText}
+                  active={item.isAnimating}
+                  soundsOn={soundsOn}
+                  onCharacterTyped={onPlayTypeSound}
+                  wordDelayMs={wordDelayMs}
+                  charDelayMs={charDelayMs}
+                />
+              ) : null}
             </div>
+            {item.entry.historicalTidbit ? (
+              <div
+                className="mt-2 border-t border-dashed pt-1.5"
+                style={{ borderColor: dividerColor }}
+              >
+                <div className="mb-1 flex items-center justify-between gap-2">
+                  <span className="text-[7px] uppercase tracking-[0.18em] text-[#C4A853]">
+                    History Note
+                  </span>
+                  <span
+                    className="rounded-full border px-1.5 py-0.5 text-[6px] font-bold uppercase tracking-[0.16em]"
+                    style={{
+                      borderColor: accentColor,
+                      color: accentColor,
+                      background: "rgba(18, 23, 19, 0.5)",
+                    }}
+                    title={item.entry.historicalTidbit.sourceUrl}
+                  >
+                    {item.entry.historicalTidbit.sourceLabel}
+                  </span>
+                </div>
+                <p className="m-0 text-[8px] leading-[1.45] text-[#E8E8D8]">
+                  {item.entry.historicalTidbit.text}
+                </p>
+              </div>
+            ) : null}
           </article>
         );
       })}

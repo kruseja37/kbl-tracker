@@ -200,6 +200,27 @@ describe('LeagueBuilderTeams Component', () => {
         );
       });
     });
+
+    test('allows team abbreviations longer than four characters in edit mode', async () => {
+      render(<LeagueBuilderTeams />);
+      fireEvent.click(screen.getAllByTitle('Edit team')[0]);
+
+      const abbreviationInput = await screen.findByDisplayValue('SOX');
+      fireEvent.change(abbreviationInput, { target: { value: 'LONGFORM' } });
+
+      expect(abbreviationInput).toHaveValue('LONGFORM');
+
+      fireEvent.click(screen.getByRole('button', { name: /Save Changes/i }));
+
+      await waitFor(() => {
+        expect(mockUpdateTeam).toHaveBeenCalledWith(
+          expect.objectContaining({
+            id: 'team-1',
+            abbreviation: 'LONGFORM',
+          }),
+        );
+      });
+    });
   });
 
   describe('Delete Team', () => {

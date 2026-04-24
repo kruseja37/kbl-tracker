@@ -7,6 +7,15 @@ export type LlmUsagePurpose =
   | "post_game_column"
   | "storyline_refinement";
 
+export interface LlmProxyResponseFormat {
+  type: "json_schema";
+  json_schema: {
+    name: string;
+    schema: Record<string, unknown>;
+    strict?: boolean;
+  };
+}
+
 export interface LlmProxyMessage {
   role: "system" | "user" | "assistant";
   content: string;
@@ -19,6 +28,7 @@ export interface LlmProxyRequest {
   purpose: LlmUsagePurpose;
   temperature?: number;
   maxTokens?: number;
+  responseFormat?: LlmProxyResponseFormat;
   gameId?: string;
   mode?: "exhibition" | "elimination" | "franchise" | "playoff";
 }
@@ -71,6 +81,19 @@ function isMessage(value: unknown): value is LlmProxyMessage {
   );
 }
 
+function isResponseFormat(value: unknown): value is LlmProxyResponseFormat {
+  return (
+    isObject(value) &&
+    value.type === "json_schema" &&
+    isObject(value.json_schema) &&
+    typeof value.json_schema.name === "string" &&
+    value.json_schema.name.trim().length > 0 &&
+    isObject(value.json_schema.schema) &&
+    (value.json_schema.strict === undefined ||
+      typeof value.json_schema.strict === "boolean")
+  );
+}
+
 export function parseLlmProxyRequest(value: unknown): LlmProxyRequest {
   if (!isObject(value)) {
     throw new LlmProxyHttpError(400, "invalid_body", "Request body must be a JSON object.");
@@ -100,6 +123,14 @@ export function parseLlmProxyRequest(value: unknown): LlmProxyRequest {
     throw new LlmProxyHttpError(400, "invalid_max_tokens", "maxTokens must be a finite number when provided.");
   }
 
+  if (value.responseFormat !== undefined && !isResponseFormat(value.responseFormat)) {
+    throw new LlmProxyHttpError(
+      400,
+      "invalid_response_format",
+      "responseFormat must be a json_schema object when provided.",
+    );
+  }
+
   return {
     model: value.model,
     messages: value.messages,
@@ -107,6 +138,7 @@ export function parseLlmProxyRequest(value: unknown): LlmProxyRequest {
     purpose: value.purpose as LlmUsagePurpose,
     temperature: value.temperature,
     maxTokens: value.maxTokens,
+    responseFormat: value.responseFormat as LlmProxyResponseFormat | undefined,
     gameId: typeof value.gameId === "string" ? value.gameId : undefined,
     mode:
       value.mode === "exhibition" ||

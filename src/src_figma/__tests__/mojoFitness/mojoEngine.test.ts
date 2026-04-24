@@ -904,17 +904,18 @@ describe('Auto-Inference', () => {
 
 describe('Display Helpers', () => {
   describe('getMojoColor', () => {
-    test('Rattled is dark crimson', () => {
-      expect(getMojoColor(-2)).toBe('#9F1239');
+    test('Rattled uses the brighter red', () => {
+      expect(getMojoColor(-2)).toBe('#7a2f2f');
     });
 
     test('Normal is white', () => {
       expect(getMojoColor(0)).toBe('#FFFFFF');
     });
 
-    test('On Fire is orange and Jacked is amber/gold', () => {
-      expect(getMojoColor(2)).toBe('#FF9800');
-      expect(getMojoColor(3)).toBe('#a855f7');
+    test('positive mojo states use the brighter blue-green palette', () => {
+      expect(getMojoColor(1)).toBe('#3a6f8a');
+      expect(getMojoColor(2)).toBe('#3f9a8c');
+      expect(getMojoColor(3)).toBe('#56429a');
     });
   });
 

@@ -203,12 +203,12 @@ function StepPlayoffSettings(props: {
         <div className="border-4 border-[#E8E8D8] bg-[#4A6A42] p-4 space-y-3">
           <div>
             <div className="text-sm text-[#E8E8D8]">Beat reporter</div>
-            <div className="text-xs text-[#E8E8D8]/60 mt-1">Two independent toggles control in-game vs post-game narrative.</div>
+            <div className="text-xs text-[#E8E8D8]/60 mt-1">Two independent toggles control historical in-game tidbits and post-game columns.</div>
           </div>
           {[
             {
               key: 'live' as const,
-              label: 'Live commentary (preamble + inning summaries)',
+              label: 'Historical In-Game Tidbits',
               value: liveBeatReporterEnabled,
               onChange: setLiveBeatReporterEnabled,
             },
@@ -355,7 +355,7 @@ function StepConfirm(props: {
             <div>Series lengths: {seriesLengths.map((value) => `Best of ${value}`).join(' • ')}</div>
             <div>Innings per game: {inningsPerGame}</div>
             <div>DH rule: {useDH ? 'On' : 'Off'}</div>
-            <div>Live commentary: {liveBeatReporterEnabled ? 'On' : 'Off'}</div>
+            <div>Historical in-game tidbits: {liveBeatReporterEnabled ? 'On' : 'Off'}</div>
             <div>Post-game columns: {postGameColumnsEnabled ? 'On' : 'Off'}</div>
             <div>Home field: {homeFieldPattern}</div>
             <div>Human-controlled teams: {controlledCount}</div>

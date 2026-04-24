@@ -64,8 +64,21 @@ function getMojoNameStyle(level: MojoLevel | undefined): React.CSSProperties | u
   }
 
   const color = getMojoColor(level);
+  const outerOutlineColor =
+    level === -2
+      ? 'rgba(139,111,71,0.95)'
+      : level === -1 || level === 1
+        ? 'rgba(255,255,255,0)'
+      : level === 2
+        ? 'rgba(192,192,192,0.95)'
+        : 'rgba(255,255,255,0.9)';
   return {
-    color,
+    color: '#FFFFFF',
+    opacity: 1,
+    textShadow:
+      level === 0
+        ? 'none'
+        : `-1px 0 0 ${color}, 1px 0 0 ${color}, 0 -1px 0 ${color}, 0 1px 0 ${color}, -1px -1px 0 ${color}, 1px -1px 0 ${color}, -1px 1px 0 ${color}, 1px 1px 0 ${color}, -1.35px 0 0 ${outerOutlineColor}, 1.35px 0 0 ${outerOutlineColor}, 0 -1.35px 0 ${outerOutlineColor}, 0 1.35px 0 ${outerOutlineColor}`,
   };
 }
 

@@ -234,6 +234,7 @@ function createEngine(overrides: {
         popupText: "Freebooters stranded two.",
         updatedNarrativeSoFar:
           "Through the top of the fourth, the Blowfish still cling to their one-run margin.",
+        historicalLeadIn: "History says this kind of pressure has company.",
         skipped: false,
         inputTokens: 12,
         outputTokens: 14,
@@ -279,6 +280,7 @@ function renderCommentaryFeedHook(options: {
   intensity?: "low" | "medium" | "high";
   reporter?: BeatReporter | null;
   awayReporter?: BeatReporter | null;
+  getLivePreambleSeed?: (gameId: string) => LiveReporterContextSeed | null;
   buildReporterContext?: (gameId: string, atBatId: string) => Promise<ReporterContext>;
   buildLiveReporterContext?: (seed: LiveReporterContextSeed) => Promise<ReporterContext>;
   isWithinDailyCallLimit?: (now?: number) => Promise<boolean>;
@@ -316,6 +318,7 @@ function renderCommentaryFeedHook(options: {
         awayTeamId: "team-away",
         leagueId: "league-1",
         getLivePreambleSeed: () =>
+          options.getLivePreambleSeed?.(gameId) ??
           createLiveSeed({
             gameId,
             atBatId: `${gameId}_1`,
@@ -917,7 +920,7 @@ describe("useCommentaryFeed", () => {
     ]);
   });
 
-  test("fireBetweenInningSummary success path appends a feed entry directly (no popup in live path)", async () => {
+  test("fireBetweenInningSummary appends a historical tidbit entry directly with no recap text", async () => {
     const { engine, generateBetweenInningSummary, getNarrativeSoFar } = createEngine();
     const { result } = renderCommentaryFeedHook({
       createEngine: () => engine,
@@ -932,20 +935,69 @@ describe("useCommentaryFeed", () => {
       );
     });
 
-    expect(generateBetweenInningSummary).toHaveBeenCalledTimes(1);
-    expect(getNarrativeSoFar).toHaveBeenCalledTimes(1);
+    expect(generateBetweenInningSummary).not.toHaveBeenCalled();
+    expect(getNarrativeSoFar).not.toHaveBeenCalled();
     // Live fire path does NOT set pendingPopup — entry goes straight into the feed.
     // The I2 popup overlay is only used by the preview harness.
     expect(result.current.pendingPopup).toBeNull();
     expect(result.current.commentaryEntries).toEqual([
       expect.objectContaining({
         id: "commentary-inning-game-1-home-4-2000",
-        commentaryText: "Freebooters stranded two.",
+        commentaryText: "",
         halfInningLabel: "INNING 4",
         kind: "between-inning",
         reporterId: "reporter-1",
+        historicalTidbit: expect.objectContaining({
+          factId: expect.any(String),
+          sourceLabel: expect.any(String),
+        }),
       }),
     ]);
+  });
+
+  test("fireBetweenInningSummary uses the completed inning event context when no live seed is available", async () => {
+    const { engine, generateBetweenInningSummary } = createEngine();
+    const buildReporterContext = vi.fn(async (targetGameId: string, atBatId: string) =>
+      createReporterContext({
+        gameId: targetGameId,
+        atBatId,
+        inning: 1,
+        halfInning: "BOTTOM",
+      }),
+    );
+    const buildLiveReporterContext = vi.fn(async (seed: LiveReporterContextSeed) =>
+      createReporterContext({
+        gameId: seed.gameId,
+        atBatId: seed.atBatId,
+      }),
+    );
+    const { result } = renderCommentaryFeedHook({
+      createEngine: () => engine,
+      getLivePreambleSeed: () => null,
+      buildReporterContext,
+      buildLiveReporterContext,
+    });
+
+    await act(async () => {
+      await result.current.fireBetweenInningSummary(
+        "game-1",
+        1,
+        [
+          createAtBatEvent({
+            eventId: "game-1_3",
+            eventIndex: 3,
+            inning: 1,
+            halfInning: "BOTTOM",
+          }),
+        ],
+        "home",
+      );
+    });
+
+    expect(buildReporterContext).toHaveBeenCalledWith("game-1", "game-1_3");
+    expect(buildLiveReporterContext).not.toHaveBeenCalled();
+    expect(generateBetweenInningSummary).not.toHaveBeenCalled();
+    expect(result.current.commentaryEntries).toHaveLength(1);
   });
 
   test("dismissBetweenInningPopup clears the popup without duplicating the feed entry", async () => {
@@ -973,14 +1025,18 @@ describe("useCommentaryFeed", () => {
 
     expect(result.current.pendingPopup).toBeNull();
     expect(result.current.commentaryEntries).toEqual([
-      {
+      expect.objectContaining({
         id: "commentary-inning-game-1-home-4-2000",
-        commentaryText: "Freebooters stranded two.",
+        commentaryText: "",
         halfInningLabel: "INNING 4",
         kind: "between-inning",
         timestamp: 2000,
         reporterId: "reporter-1",
-      },
+        historicalTidbit: expect.objectContaining({
+          factId: expect.any(String),
+          sourceLabel: expect.any(String),
+        }),
+      }),
     ]);
     expect(persistSpy).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -988,12 +1044,16 @@ describe("useCommentaryFeed", () => {
         gameId: "game-1",
         leagueId: "league-1",
         reporterId: "reporter-1",
-        commentaryText: "Freebooters stranded two.",
+        commentaryText: "",
         halfInningLabel: "INNING 4",
         kind: "between-inning",
         timestamp: 2000,
         createdAt: 2000,
         changed_at: 2000,
+        historicalTidbit: expect.objectContaining({
+          factId: expect.any(String),
+          sourceLabel: expect.any(String),
+        }),
       }),
     );
   });
@@ -1013,16 +1073,10 @@ describe("useCommentaryFeed", () => {
       );
     });
 
-    expect(generateBetweenInningSummary).toHaveBeenCalledWith(
-      expect.objectContaining({
-        inning: 1,
-        reporterTeam: "home",
-        reporter: expect.objectContaining({
-          id: "reporter-1",
-          teamId: "team-home",
-        }),
-      }),
-    );
+    expect(generateBetweenInningSummary).not.toHaveBeenCalled();
+    expect(result.current.commentaryEntries[0]).toMatchObject({
+      reporterId: "reporter-1",
+    });
   });
 
   test("fireBetweenInningSummary routes away innings through the away reporter", async () => {
@@ -1041,16 +1095,10 @@ describe("useCommentaryFeed", () => {
       );
     });
 
-    expect(generateBetweenInningSummary).toHaveBeenCalledWith(
-      expect.objectContaining({
-        inning: 2,
-        reporterTeam: "away",
-        reporter: expect.objectContaining({
-          id: "reporter-2",
-          teamId: "team-away",
-        }),
-      }),
-    );
+    expect(generateBetweenInningSummary).not.toHaveBeenCalled();
+    expect(result.current.commentaryEntries[0]).toMatchObject({
+      reporterId: "reporter-2",
+    });
   });
 
   test("fireBetweenInningSummary can fire sequentially for consecutive innings without being blocked by a stale popup guard", async () => {
@@ -1058,7 +1106,7 @@ describe("useCommentaryFeed", () => {
     // inning 2's summary after inning 1 fired because the I2 popup state was
     // pinned forever (the popup is never rendered live, so never dismissed).
     // This test exercises back-to-back fires for different innings and asserts
-    // the engine is invoked for BOTH.
+    // the history-only entries still append for both.
     const { engine, generateBetweenInningSummary } = createEngine();
     const { result } = renderCommentaryFeedHook({
       createEngine: () => engine,
@@ -1079,8 +1127,112 @@ describe("useCommentaryFeed", () => {
       );
     });
 
-    expect(generateBetweenInningSummary).toHaveBeenCalledTimes(2);
+    expect(generateBetweenInningSummary).not.toHaveBeenCalled();
     expect(result.current.commentaryEntries).toHaveLength(2);
+  });
+
+  test("hydrates prior historical tidbits and avoids reusing the same fact on the next inning", async () => {
+    const persistedRecords: CommentaryFeedEntryRecord[] = [
+      {
+        id: "commentary-inning-game-1-home-3-1000",
+        gameId: "game-1",
+        leagueId: "league-1",
+        reporterId: "reporter-1",
+        commentaryText: "Earlier summary.",
+        halfInningLabel: "INNING 3",
+        kind: "between-inning",
+        historicalTidbit: {
+          factId: "mlb-rickey-henderson-steals",
+          text: "Rickey Henderson finished with 1,406 career stolen bases and set the single-season record with 130 in 1982.",
+          sourceLabel: "MLB",
+          sourceUrl:
+            "https://www.mlb.com/news/remembering-mlb-stolen-base-king-rickey-henderson",
+        },
+        timestamp: 1000,
+        createdAt: 1000,
+        changed_at: 1000,
+      },
+    ];
+    const { engine, generateBetweenInningSummary } = createEngine();
+    const contextualHistoryReporterContext: ReporterContext = {
+      ...createReporterContext({
+        inning: 4,
+        halfInning: "TOP",
+      }),
+      battingTeam: {
+        id: "oakland-athletics",
+        name: "Athletics",
+        abbreviation: "ATH",
+        nickname: "Athletics",
+        location: "Oakland",
+        baselineBackstory: "Fast and loud.",
+      },
+    };
+    const { result } = renderCommentaryFeedHook({
+      createEngine: () => engine,
+      listCommentaryFeedEntriesForGame: async () => persistedRecords,
+      buildReporterContext: async () => contextualHistoryReporterContext,
+      buildLiveReporterContext: async () => contextualHistoryReporterContext,
+    });
+
+    await waitFor(() => {
+      expect(result.current.commentaryEntries).toHaveLength(1);
+    });
+
+    await act(async () => {
+      await result.current.fireBetweenInningSummary(
+        "game-1",
+        4,
+        [createAtBatEvent({ inning: 4, halfInning: "TOP", result: "HR" })],
+        "home",
+      );
+    });
+
+    expect(generateBetweenInningSummary).not.toHaveBeenCalled();
+    expect(result.current.commentaryEntries[1]).toMatchObject({
+      historicalTidbit: expect.objectContaining({
+        factId: expect.not.stringMatching(/^mlb-rickey-henderson-steals$/),
+      }),
+    });
+  });
+
+  test("persists a verified historical tidbit without invoking the inning summary model", async () => {
+    const { engine, generateBetweenInningSummary } = createEngine();
+    const persistSpy = vi.fn(async () => undefined);
+    const { result } = renderCommentaryFeedHook({
+      createEngine: () => engine,
+      persistCommentaryFeedEntry: persistSpy,
+    });
+
+    await act(async () => {
+      await result.current.fireBetweenInningSummary(
+        "game-1",
+        4,
+        [createAtBatEvent({ inning: 4, halfInning: "TOP", result: "HR" })],
+        "home",
+      );
+    });
+
+    await waitFor(() => {
+      expect(result.current.commentaryEntries).toHaveLength(1);
+    });
+    expect(result.current.commentaryEntries[0]).toMatchObject({
+      commentaryText: "",
+      kind: "between-inning",
+      historicalTidbit: expect.objectContaining({
+        factId: expect.any(String),
+        sourceLabel: expect.any(String),
+      }),
+    });
+    expect(persistSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        commentaryText: "",
+        historicalTidbit: expect.objectContaining({
+          factId: expect.any(String),
+        }),
+      }),
+    );
+    expect(generateBetweenInningSummary).not.toHaveBeenCalled();
   });
 
   test("persisted between-inning entries round-trip with kind and render with differentiated feed styling", async () => {
@@ -1093,6 +1245,13 @@ describe("useCommentaryFeed", () => {
         commentaryText: "Freebooters stranded two.",
         halfInningLabel: "T4",
         kind: "between-inning",
+        historicalTidbit: {
+          factId: "mlb-johnny-vander-meer-back-to-back-no-hitters",
+          text: "Johnny Vander Meer's back-to-back no-hitters in June 1938 still stand as the only consecutive no-hitters in Major League history.",
+          sourceLabel: "MLB",
+          sourceUrl:
+            "https://www.mlb.com/news/75th-anniversary-of-vander-meers-back-to-back-no-hitters/c-50314542",
+        },
         timestamp: 2000,
         createdAt: 2000,
         changed_at: 2000,
@@ -1110,6 +1269,7 @@ describe("useCommentaryFeed", () => {
           commentaryText: "Freebooters stranded two.",
           halfInningLabel: "T4",
           kind: "between-inning",
+          historicalTidbit: persistedRecords[0].historicalTidbit,
           timestamp: 2000,
           reporterId: "reporter-1",
         },
@@ -1124,13 +1284,15 @@ describe("useCommentaryFeed", () => {
       "··· END T4 ···",
     );
     const body = container.querySelector(
-      '[data-testid="commentary-entry-commentary-inning-game-1-T4-2000"] > div:last-child',
+      '[data-testid="commentary-entry-commentary-inning-game-1-T4-2000"] > div:nth-child(2)',
     );
     expect(body).not.toBeNull();
     expect(body).toHaveStyle({
       fontStyle: "italic",
       color: "rgb(196, 217, 196)",
     });
+    expect(screen.getByText("History Note")).toBeInTheDocument();
+    expect(screen.getByText("MLB")).toBeInTheDocument();
   });
 
   // ═══════════════════════════════════════════════════════════════

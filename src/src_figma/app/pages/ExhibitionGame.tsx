@@ -423,6 +423,8 @@ export function ExhibitionGame() {
         gameMode: 'exhibition' as const,
         leagueId: selectedLeagueId || leagues[0]?.id || 'sml',
         userTeamSide: 'home' as const, // Exhibition games default to user as home team
+        liveBeatReporterEnabled,
+        postGameColumnsEnabled,
         useDH,
         totalInnings,
         extraInningRunner,

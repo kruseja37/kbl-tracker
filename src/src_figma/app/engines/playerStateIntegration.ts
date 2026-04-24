@@ -241,7 +241,7 @@ import { getFitnessStatMultiplier, getFitnessColor, getFitnessEmoji } from '../.
 import { getClutchTier } from '../../../engines/clutchCalculator';
 
 function getMojoBadgeTextColor(level: MojoLevel): string {
-  return level < 0 ? '#ffffff' : '#000000';
+  return level === 0 ? '#1f2b21' : '#ffffff';
 }
 
 /**

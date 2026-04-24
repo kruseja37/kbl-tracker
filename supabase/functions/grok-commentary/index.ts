@@ -73,6 +73,9 @@ serve(async (request: Request): Promise<Response> => {
         messages: body.messages,
         temperature: body.temperature ?? 0.2,
         max_tokens: maxOutputTokens,
+        ...(body.responseFormat
+          ? { response_format: body.responseFormat }
+          : {}),
       }),
     });
 

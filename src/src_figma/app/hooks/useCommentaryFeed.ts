@@ -9,6 +9,7 @@ import type {
   BeatReporter,
   CommentaryFeedEntryRecord,
   GameStory,
+  HistoricalTidbit,
   ReporterGameMode,
 } from "../../../types/reporter";
 import type { NarrativeIntensity } from "../../../types/reporterPreferences";
@@ -37,6 +38,9 @@ import {
   type LiveReporterContextSeed,
   type ReporterContext,
 } from "../engines/reporter/reporterContext";
+import {
+  selectHistoricalFact,
+} from "../engines/reporter/historicalFactBank";
 import { isWithinDailyCallLimit } from "../engines/reporter/usageLogger";
 
 const GROK_COMMENTARY_MODEL = "grok-4";
@@ -169,6 +173,37 @@ function toCommentaryFeedEntry(
     kind: record.kind,
     timestamp: record.timestamp,
     reporterId: record.reporterId,
+    historicalTidbit: record.historicalTidbit,
+  };
+}
+
+function buildHistoricalFactFamilyKey(tidbit: HistoricalTidbit): string {
+  const [sourceType = tidbit.sourceLabel, subjectSeed = tidbit.factId] =
+    tidbit.factId.split("-", 2);
+
+  return `${sourceType}:${subjectSeed}`;
+}
+
+function collectUsedHistoricalTidbits(entries: CommentaryFeedEntry[]): {
+  factIds: string[];
+  previousFamilyKey: string | null;
+  previousSourceLabel: string | null;
+} {
+  const betweenInningTidbits = entries
+    .filter(
+      (entry) => entry.kind === "between-inning" && entry.historicalTidbit,
+    )
+    .sort((left, right) => right.timestamp - left.timestamp);
+
+  return {
+    factIds: betweenInningTidbits
+      .map((entry) => entry.historicalTidbit?.factId)
+      .filter((factId): factId is string => Boolean(factId)),
+    previousFamilyKey: betweenInningTidbits[0]?.historicalTidbit
+      ? buildHistoricalFactFamilyKey(betweenInningTidbits[0].historicalTidbit)
+      : null,
+    previousSourceLabel:
+      betweenInningTidbits[0]?.historicalTidbit?.sourceLabel ?? null,
   };
 }
 
@@ -216,9 +251,12 @@ export function useCommentaryFeed({
   const isWithinDailyCallLimitImpl =
     dependencies.isWithinDailyCallLimit ?? isWithinDailyCallLimit;
   const nowImpl = dependencies.now ?? Date.now;
-  const createEngineImpl =
-    dependencies.createEngine ??
-    ((config: CommentaryEngineConfig) => new GrokCommentaryEngine(config));
+  const createEngineImpl = React.useMemo(
+    () =>
+      dependencies.createEngine ??
+      ((config: CommentaryEngineConfig) => new GrokCommentaryEngine(config)),
+    [dependencies.createEngine],
+  );
   const scoreNotabilityImpl = dependencies.scoreNotability ?? scoreNotability;
   const persistCommentaryFeedEntryImpl =
     dependencies.persistCommentaryFeedEntry ?? persistCommentaryFeedEntry;
@@ -684,21 +722,36 @@ export function useCommentaryFeed({
       }
 
       const reporter = prerequisites.reporter;
-      const resolvedIntensity = intensity ?? prerequisites.intensity;
-      const engine = ensureEngine(resolvedIntensity, mode);
       const liveSeed = getLivePreambleSeed();
-
-      if (!liveSeed) {
-        console.warn(
-          "[reporter:commentary] Missing live reporter seed; skipping between-inning summary.",
-        );
-        return;
-      }
+      const completedInningEvent = inningEvents
+        .slice()
+        .sort((left, right) => left.eventIndex - right.eventIndex)
+        .at(-1);
 
       let context: ReporterContext;
       try {
-        context = await buildReporterContextImpl(targetGameId, liveSeed.atBatId);
+        if (completedInningEvent?.eventId) {
+          context = await buildReporterContextImpl(
+            targetGameId,
+            completedInningEvent.eventId,
+          );
+        } else if (liveSeed) {
+          context = await buildReporterContextImpl(targetGameId, liveSeed.atBatId);
+        } else {
+          console.warn(
+            "[reporter:commentary] Missing reporter context seed; skipping between-inning summary.",
+          );
+          return;
+        }
       } catch (error) {
+        if (!liveSeed) {
+          console.warn(
+            "[reporter:commentary] Failed to build between-inning summary context; skipping summary.",
+            error,
+          );
+          return;
+        }
+
         try {
           context = await buildLiveReporterContextImpl(liveSeed);
         } catch (liveError) {
@@ -710,26 +763,17 @@ export function useCommentaryFeed({
         }
       }
 
-      let result;
-      try {
-        result = await engine.generateBetweenInningSummary({
-          context,
-          mood: moodRef.current,
-          reporter,
-          reporterTeam,
-          inning,
-          inningEvents,
-          previousNarrativeSoFar: engine.getNarrativeSoFar(),
-        });
-      } catch (error) {
-        console.warn(
-          "[reporter:commentary] Between-inning summary threw unexpectedly; skipping popup.",
-          error,
-        );
-        return;
-      }
+      const historicalContext = collectUsedHistoricalTidbits(commentaryEntries);
+      const selectedHistoricalFact = selectHistoricalFact({
+        inning,
+        inningEvents,
+        context,
+        usedFactIds: historicalContext.factIds,
+        previousFamilyKey: historicalContext.previousFamilyKey,
+        previousSourceLabel: historicalContext.previousSourceLabel,
+      });
 
-      if (result.skipped || !result.popupText) {
+      if (!selectedHistoricalFact) {
         return;
       }
 
@@ -737,11 +781,12 @@ export function useCommentaryFeed({
       const inningLabel = `INNING ${inning}`;
       const entry: CommentaryFeedEntry = {
         id: `commentary-inning-${targetGameId}-${reporterTeam}-${inning}-${timestamp}`,
-        commentaryText: result.popupText,
+        commentaryText: "",
         halfInningLabel: inningLabel,
         kind: "between-inning",
         timestamp,
         reporterId: reporter.id,
+        historicalTidbit: selectedHistoricalFact.tidbit,
       };
 
       setCommentaryEntries((current) => [...current, entry]);
@@ -753,6 +798,7 @@ export function useCommentaryFeed({
         commentaryText: entry.commentaryText,
         halfInningLabel: entry.halfInningLabel,
         kind: "between-inning",
+        historicalTidbit: selectedHistoricalFact.tidbit,
         timestamp,
         createdAt: timestamp,
         changed_at: timestamp,
@@ -768,8 +814,11 @@ export function useCommentaryFeed({
     [
       buildLiveReporterContextImpl,
       buildReporterContextImpl,
-      ensureEngine,
+      commentaryEntries,
       getLivePreambleSeed,
+      leagueId,
+      nowImpl,
+      persistEntryRecord,
       resolveCallPrerequisites,
     ],
   );

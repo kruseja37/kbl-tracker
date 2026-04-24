@@ -124,8 +124,8 @@ export function ReporterAssignmentPanel({
           BEAT REPORTERS
         </div>
         <div className="text-xs text-[#a0a898] mt-1">
-          Assign a reporter to each team. Two independent toggles control live
-          commentary during the game and the post-game newspaper columns.
+          Assign a reporter to each team. Two independent toggles control
+          historical in-game tidbits and the post-game newspaper columns.
         </div>
       </div>
 
@@ -133,7 +133,7 @@ export function ReporterAssignmentPanel({
         {[
           {
             key: "live",
-            label: "Live commentary (preamble + inning summaries)",
+            label: "Historical In-Game Tidbits",
             value: liveEnabled,
             onChange: onLiveEnabledChange,
           },

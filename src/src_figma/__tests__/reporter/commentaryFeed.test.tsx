@@ -29,6 +29,13 @@ function createEntries(): CommentaryFeedEntry[] {
       halfInningLabel: "B4",
       timestamp: new Date("2026-04-15T19:24:00.000Z").getTime(),
       reporterId: "reporter-1",
+      historicalTidbit: {
+        factId: "mlb-hank-aaron-755",
+        text: "Hank Aaron hit 755 home runs and broke Babe Ruth's record with number 715 on April 8, 1974.",
+        sourceLabel: "MLB",
+        sourceUrl:
+          "https://www.mlb.com/press-release/press-release-brewers-mourn-the-passing-of-hall-of-famer-hank-aaron",
+      },
     },
   ];
 }
@@ -106,6 +113,23 @@ describe("CommentaryFeed", () => {
     expect(screen.getByTestId("commentary-divider-T4")).toHaveTextContent(
       "─── T4 ───",
     );
+  });
+
+  test("renders a compact source pill for historical tidbits", () => {
+    render(
+      <CommentaryFeed
+        entries={createEntries()}
+        soundsOn={false}
+      />,
+    );
+
+    expect(screen.getByText("History Note")).toBeInTheDocument();
+    expect(screen.getByText("MLB")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Hank Aaron hit 755 home runs and broke Babe Ruth's record with number 715 on April 8, 1974.",
+      ),
+    ).toBeInTheDocument();
   });
 
   test("renders a PRE entry at the bottom with its own divider", () => {

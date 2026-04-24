@@ -760,7 +760,7 @@ describe("commentaryEngine", () => {
   describe("generateBetweenInningSummary", () => {
     test("happy path returns popup + updated narrative and replaces the narrative cache", async () => {
       const invokeImpl = createInvokeSuccess(
-        '{"popup":"Freebooters stranded two in the top of the fourth.","narrative":"Through four, the Blowfish still carry a one-run edge after Vale escaped a noisy inning."}',
+        '{"popup":"Freebooters stranded two in the top of the fourth.","narrative":"Through four, the Blowfish still carry a one-run edge after Vale escaped a noisy inning.","historicalLeadIn":"Baseball history has seen this kind of escape before."}',
       ) as unknown as ReporterProxyInvoke;
 
       const { engine, result } = await generateBetweenInningSummaryWithDefaults({
@@ -772,6 +772,7 @@ describe("commentaryEngine", () => {
         popupText: "Freebooters stranded two in the top of the fourth.",
         updatedNarrativeSoFar:
           "Through four, the Blowfish still carry a one-run edge after Vale escaped a noisy inning.",
+        historicalLeadIn: "Baseball history has seen this kind of escape before.",
         skipped: false,
         inputTokens: 123,
         outputTokens: 29,
@@ -795,7 +796,7 @@ describe("commentaryEngine", () => {
         })
         .mockResolvedValueOnce({
           data: {
-            text: '{"popup":"Freebooters came up empty.","narrative":"Through the middle frames, the Blowfish still hold a one-run margin."}',
+            text: '{"popup":"Freebooters came up empty.","narrative":"Through the middle frames, the Blowfish still hold a one-run margin.","historicalLeadIn":"History likes a tense fourth inning too."}',
             inputTokens: 77,
             outputTokens: 20,
             model: "grok-4",
@@ -851,6 +852,7 @@ describe("commentaryEngine", () => {
       expect(result).toEqual({
         popupText: "Freebooters stranded two.",
         updatedNarrativeSoFar: "",
+        historicalLeadIn: null,
         skipped: false,
         inputTokens: 123,
         outputTokens: 29,
@@ -880,6 +882,7 @@ describe("commentaryEngine", () => {
       expect(result.skipped).toBe(true);
       expect(result.popupText).toBeNull();
       expect(result.updatedNarrativeSoFar).toBe("");
+      expect(result.historicalLeadIn).toBeNull();
       expect(result.error).toBe(
         "Grok Edge Function response did not include summary text.",
       );
@@ -899,6 +902,7 @@ describe("commentaryEngine", () => {
       expect(result).toMatchObject({
         popupText: null,
         updatedNarrativeSoFar: "",
+        historicalLeadIn: null,
         skipped: true,
         error: "timeout",
         inputTokens: 0,
@@ -916,7 +920,7 @@ describe("commentaryEngine", () => {
 
       await generateBetweenInningSummaryWithDefaults({
         invokeImpl: createInvokeSuccess(
-          '{"popup":"Freebooters stranded two.","narrative":"Through the top of the fourth, the Blowfish still cling to their one-run margin."}',
+          '{"popup":"Freebooters stranded two.","narrative":"Through the top of the fourth, the Blowfish still cling to their one-run margin.","historicalLeadIn":"History says hold your breath."}',
         ) as unknown as ReporterProxyInvoke,
         logUsage,
         mode: "playoff",
@@ -941,7 +945,7 @@ describe("commentaryEngine", () => {
         .fn()
         .mockResolvedValueOnce({
           data: {
-            text: '{"popup":"Freebooters stranded two.","narrative":"Through the top of the fourth, the Blowfish still cling to their one-run margin."}',
+            text: '{"popup":"Freebooters stranded two.","narrative":"Through the top of the fourth, the Blowfish still cling to their one-run margin.","historicalLeadIn":"History says hold your breath."}',
             inputTokens: 77,
             outputTokens: 20,
             model: "grok-4",
@@ -978,10 +982,15 @@ describe("commentaryEngine", () => {
 
       const betweenSystemMessage = invokeImpl.mock.calls[0][1].body.messages[0];
       const commentarySystemMessage = invokeImpl.mock.calls[1][1].body.messages[0];
+      const betweenBody = invokeImpl.mock.calls[0][1].body;
 
       expect(betweenSystemMessage.content).toContain(
-        'Return JSON only, no markdown fences, exact shape: { "popup": "<2-3 sentences>", "narrative": "<1-2 sentences>" }',
+        'Return JSON only, no markdown fences, exact shape: { "popup": "<2-3 sentences>", "narrative": "<1-2 sentences>", "historicalLeadIn": "<0-1 sentence>" }',
       );
+      expect(betweenBody.responseFormat).toMatchObject({
+        type: "json_schema",
+      });
+      expect(betweenSystemMessage.content).toContain("HISTORICAL FACT");
       expect(commentarySystemMessage.content).toContain("Notability cue:");
       expect(betweenSystemMessage.content).not.toBe(commentarySystemMessage.content);
     });
@@ -1016,7 +1025,7 @@ describe("commentaryEngine", () => {
       inputTokens?: number;
       outputTokens?: number;
     }): ClaudeProxyInvoke {
-      const invoke = vi.fn(async (_functionName, _opts) => {
+      const invoke = vi.fn(async () => {
         if (options.error) {
           return { data: null, error: options.error };
         }

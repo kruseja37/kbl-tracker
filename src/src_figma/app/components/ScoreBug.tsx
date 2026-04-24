@@ -1,10 +1,12 @@
 import React from 'react';
+import homePlateIcon from '../../../assets/homeplate.png';
 
 interface ScoreBugProps {
   awayTeamName: string;
   awayScore: number;
   homeTeamName: string;
   homeScore: number;
+  homeTeamSecondaryColor?: string;
   stadiumName?: string;
   inning: number;
   isTop: boolean;
@@ -66,6 +68,51 @@ function OutsIndicator({ outs }: { outs: number }) {
   );
 }
 
+function InningIndicator({
+  halfIndicator,
+  inning,
+  homeTeamSecondaryColor = '#CBB89C',
+}: {
+  halfIndicator: string;
+  inning: number;
+  homeTeamSecondaryColor?: string;
+}) {
+  return (
+    <div
+      className="min-w-[28px] flex-shrink-0 flex items-center justify-center"
+      data-testid="scorebug-inning-indicator"
+    >
+      <div
+        className="relative mt-[4px] h-[16px] w-[20px]"
+        data-testid="scorebug-home-plate-badge"
+      >
+        <div
+          data-testid="scorebug-home-plate"
+          className="absolute inset-0"
+          style={{
+            backgroundColor: homeTeamSecondaryColor,
+            WebkitMaskImage: `url(${homePlateIcon})`,
+            maskImage: `url(${homePlateIcon})`,
+            WebkitMaskRepeat: 'no-repeat',
+            maskRepeat: 'no-repeat',
+            WebkitMaskPosition: 'center',
+            maskPosition: 'center',
+            WebkitMaskSize: 'contain',
+            maskSize: 'contain',
+          }}
+        />
+        <span
+          className="absolute inset-0 flex items-center justify-center pb-[3px] text-[7px] font-black leading-none text-[#E8E8D8]"
+          data-testid="scorebug-inning-text"
+        >
+          {halfIndicator}
+          {inning}
+        </span>
+      </div>
+    </div>
+  );
+}
+
 /**
  * §3.1 Score Bug — Single horizontal line, pinned top of GameTracker.
  * Tappable to expand/collapse the retro Fenway scoreboard overlay (§2.4).
@@ -75,6 +122,7 @@ export function ScoreBug({
   awayScore,
   homeTeamName,
   homeScore,
+  homeTeamSecondaryColor,
   stadiumName,
   inning,
   isTop,
@@ -137,9 +185,6 @@ export function ScoreBug({
       <div className="flex min-w-0 flex-1 items-center justify-start gap-4">
         {/* Away team + score */}
         <div className="flex min-w-0 items-center gap-1.5">
-          <span className={`text-[15px] font-black tracking-wider ${isTop ? 'text-[#E8E8D8]' : 'text-[#88AA88]'}`}>
-            {isTop ? '▶' : '\u00A0\u00A0'}
-          </span>
           <span
             className="text-[16px] font-black text-[#E8E8D8] tracking-wide whitespace-nowrap"
           >
@@ -157,15 +202,14 @@ export function ScoreBug({
         </div>
 
         {/* Inning indicator */}
-        <span className="text-[13px] font-black text-[#E8E8D8] tracking-wider min-w-[24px] text-center flex-shrink-0">
-          {halfIndicator}{inning}
-        </span>
+        <InningIndicator
+          halfIndicator={halfIndicator}
+          inning={inning}
+          homeTeamSecondaryColor={homeTeamSecondaryColor}
+        />
 
         {/* Home team + score */}
         <div className="flex min-w-0 items-center justify-start gap-1.5">
-          <span className={`text-[15px] font-black tracking-wider ${!isTop ? 'text-[#E8E8D8]' : 'text-[#88AA88]'}`}>
-            {!isTop ? '▶' : '\u00A0\u00A0'}
-          </span>
           <span
             className="text-[16px] font-black text-[#E8E8D8] tracking-wide whitespace-nowrap"
           >

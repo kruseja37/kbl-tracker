@@ -7,6 +7,7 @@ import {
   FAME_TIER_LABEL,
   type BeatReporter,
   type EraFlavor,
+  type HistoricalFactRecord,
   type ReporterPersonality,
   type VoiceStyle,
 } from "../../../../types/reporter";
@@ -544,8 +545,10 @@ function formatPostGameHardRules(): string[] {
 
 export function formatEnrichedEvents(
   plays: AtBatEvent[],
-  _context: ReporterContext,
+  context: ReporterContext,
 ): string[] {
+  void context;
+
   if (plays.length === 0) {
     return ["- No at-bat events supplied."];
   }
@@ -619,6 +622,23 @@ function buildStateOfPlaySection(context: ReporterContext): string {
 
 function buildPlayerContextSection(plays: AtBatEvent[], context: ReporterContext): string {
   return formatSection("PLAYER CONTEXT", formatPlayerContext(plays, context));
+}
+
+function buildHistoricalFactSection(
+  historicalFact: HistoricalFactRecord | null | undefined,
+): string {
+  if (!historicalFact) {
+    return formatSection("HISTORICAL FACT", [
+      "No verified historical fact supplied for this inning. historicalLeadIn must be an empty string.",
+    ]);
+  }
+
+  return formatSection("HISTORICAL FACT", [
+    "This fact is verified and may be framed, but not altered or expanded.",
+    `Source: ${historicalFact.sourceLabel} — ${historicalFact.sourceUrl}`,
+    `Fact ID: ${historicalFact.id}`,
+    `Fact text: ${historicalFact.factText}`,
+  ]);
 }
 
 function buildEventsSection(inning: number, plays: AtBatEvent[], context: ReporterContext): string {
@@ -730,12 +750,14 @@ export function buildBetweenInningSummarySystemPrompt(
   inning: number,
   previousNarrativeSoFar: string,
   inningEvents: AtBatEvent[],
+  historicalFact?: HistoricalFactRecord | null,
 ): string {
   return [
     ...buildCommonSections(reporter, reporterTeam, mood, context),
     buildDramaticContextSection(context),
     buildTeamStorylinesSection(context, reporterTeam),
     buildPlayerContextSection(inningEvents, context),
+    buildHistoricalFactSection(historicalFact),
     buildNarrativeSection(
       previousNarrativeSoFar,
       "(no prior narrative — this is the first inning summary)",
@@ -745,8 +767,10 @@ export function buildBetweenInningSummarySystemPrompt(
       `Summarize ONLY inning ${inning}. Do NOT describe or recap plays from earlier innings — the NARRATIVE SO FAR already covers those.`,
       `Your 'popup' field = 2-3 sentences covering the most interesting moments of inning ${inning} only, in YOUR voice.`,
       "Your 'narrative' field = 1-2 sentences MAX that updates the running game-long arc. Be terse. This replaces the prior narrative, so include the most important through-line but trim details that are now redundant.",
+      "Your 'historicalLeadIn' field = one short sentence MAX that cleanly tees up the HISTORICAL FACT without repeating, altering, or adding to it. If no HISTORICAL FACT was supplied, return an empty string.",
+      "Do not add any historical claim beyond the exact fact text supplied in the HISTORICAL FACT section.",
       "KEEP THE TOTAL OUTPUT SHORT. Long responses get truncated and produce broken JSON visible to the user.",
-      'Return JSON only, no markdown fences, exact shape: { "popup": "<2-3 sentences>", "narrative": "<1-2 sentences>" }',
+      'Return JSON only, no markdown fences, exact shape: { "popup": "<2-3 sentences>", "narrative": "<1-2 sentences>", "historicalLeadIn": "<0-1 sentence>" }',
     ]),
   ].join("\n\n");
 }
@@ -755,6 +779,7 @@ export function buildBetweenInningSummaryUserMessage(
   inning: number,
   inningEvents: AtBatEvent[],
   previousNarrativeSoFar: string,
+  historicalFact?: HistoricalFactRecord | null,
 ): string {
   const sortedEvents = inningEvents
     .slice()
@@ -769,6 +794,7 @@ export function buildBetweenInningSummaryUserMessage(
     ...topEvents.map((event) => `- ${formatEventLine(event)}`),
     `Bottom of ${inning}:`,
     ...bottomEvents.map((event) => `- ${formatEventLine(event)}`),
+    `Historical fact supplied: ${historicalFact ? historicalFact.factText : "None."}`,
   ].join("\n");
 }
 

@@ -8,6 +8,15 @@ export interface GrokChatMessage {
   content: string;
 }
 
+export interface GrokJsonSchemaResponseFormat {
+  type: "json_schema";
+  json_schema: {
+    name: string;
+    schema: Record<string, unknown>;
+    strict?: boolean;
+  };
+}
+
 export interface GrokChatCompletionRequest {
   model: string;
   messages: GrokChatMessage[];
@@ -15,6 +24,7 @@ export interface GrokChatCompletionRequest {
   purpose: LlmUsagePurpose;
   temperature?: number;
   maxTokens?: number;
+  responseFormat?: GrokJsonSchemaResponseFormat;
   gameId?: string;
   mode?: CompetitionType;
   invokeImpl?: ReporterProxyInvoke;
@@ -34,6 +44,7 @@ interface ReporterProxyRequestBody {
   purpose: LlmUsagePurpose;
   temperature?: number;
   maxTokens?: number;
+  responseFormat?: GrokJsonSchemaResponseFormat;
   gameId?: string;
   mode?: CompetitionType;
 }
@@ -98,6 +109,7 @@ export async function callGrokChatCompletion({
   purpose,
   temperature = 0.2,
   maxTokens = 260,
+  responseFormat,
   gameId,
   mode,
   invokeImpl,
@@ -110,6 +122,7 @@ export async function callGrokChatCompletion({
     purpose,
     temperature,
     maxTokens,
+    responseFormat,
     gameId,
     mode,
   };

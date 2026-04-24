@@ -886,12 +886,12 @@ export function recalculateSplitRates(stats: MojoSplitStats): MojoSplitStats {
  */
 export function getMojoColor(mojo: MojoLevel): string {
   const colors: Record<MojoLevel, string> = {
-    [-2]: '#9F1239', // dark crimson (rattled)
-    [-1]: '#7DD3FC', // light blue (tense)
+    [-2]: '#7a2f2f', // rattled
+    [-1]: '#7a3a63', // tense
     [0]: '#FFFFFF',  // white (normal)
-    [1]: '#FFEB3B',  // yellow (locked in)
-    [2]: '#FF9800',  // orange (on fire)
-    [3]: '#a855f7',  // purple (jacked)
+    [1]: '#3a6f8a',  // locked in
+    [2]: '#3f9a8c',  // on fire
+    [3]: '#56429a',  // jacked
   };
   return colors[mojo];
 }
