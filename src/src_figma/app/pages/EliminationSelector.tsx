@@ -113,7 +113,7 @@ export function EliminationSelector() {
               {deletingId === elimination.eliminationId ? (
                 <div className="p-4 bg-red-900/30 border-l-4 border-red-500">
                   <p className="text-sm mb-3">
-                    Delete "{elimination.name}"? This cannot be undone.
+                    Remove "{elimination.name}" from active brackets? Almanac games, player history, all-time elimination stats, and promotion history stay archived.
                   </p>
                   <div className="flex gap-2">
                     <button

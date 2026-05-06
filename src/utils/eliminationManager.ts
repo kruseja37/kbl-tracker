@@ -4,8 +4,25 @@
 
 import { initMetaDatabase as openMetaDatabase } from './franchiseManager';
 import { deleteEliminationDatabase } from './eliminationPlayerStorage';
+import { deleteEliminationRosterSnapshots } from './eliminationRosterStorage';
 import type { EliminationAward } from './eliminationAwards';
+import { deleteMojoFitnessSnapshots } from './mojoFitnessStorage';
+import {
+  createPlayoff,
+  createSeries,
+  deletePlayoff,
+  getEliminationRoundName,
+  getPlayoffByElimination,
+  startPlayoff,
+  type PlayoffTeam,
+} from './playoffStorage';
 import { syncEngine } from './syncEngine';
+import { createRosterSnapshots } from './eliminationRosterStorage';
+import { deepCopyLeagueToBracket } from './eliminationPlayerStorage';
+import {
+  getAllOverridesForLeague,
+  removeLeaguePlayerOverride,
+} from './leagueBuilderStorage';
 
 const ELIMINATION_STORE = 'eliminationList';
 
@@ -49,10 +66,13 @@ export function generateEliminationId(): string {
  * Create and persist elimination bracket metadata in `kbl-app-meta` -> `eliminationList`.
  */
 export async function createElimination(params: {
+  eliminationId?: string;
   name: string;
   leagueId: string;
   leagueName: string;
   teamsCount: number;
+  status?: EliminationMetadata['status'];
+  currentRound?: number;
 }): Promise<EliminationMetadata> {
   const db = await openMetaDatabase();
   const tx = db.transaction(ELIMINATION_STORE, 'readwrite');
@@ -60,15 +80,15 @@ export async function createElimination(params: {
   const now = Date.now();
 
   const metadata: EliminationMetadata = {
-    eliminationId: generateEliminationId(),
+    eliminationId: params.eliminationId ?? generateEliminationId(),
     name: params.name,
     leagueId: params.leagueId,
     leagueName: params.leagueName,
-    status: 'SETUP',
+    status: params.status ?? 'IN_PROGRESS',
     createdAt: now,
     lastPlayedAt: now,
     teamsCount: params.teamsCount,
-    currentRound: 0,
+    currentRound: params.currentRound ?? 1,
   };
 
   await requestToPromise(store.put(metadata));
@@ -138,9 +158,128 @@ export async function deleteElimination(eliminationId: string): Promise<void> {
   const tx = db.transaction(ELIMINATION_STORE, 'readwrite');
   const store = tx.objectStore(ELIMINATION_STORE);
 
-  // TODO: Delete related bracket data from kbl-playoffs and stats from kbl-tracker separately.
   await requestToPromise(store.delete(eliminationId));
   await transactionToPromise(tx);
   if (!syncEngine.isSuppressed()) syncEngine.remove('kbl-app-meta', 'eliminationList', eliminationId);
-  await deleteEliminationDatabase(eliminationId);
+
+  const playoff = await getPlayoffByElimination(eliminationId);
+  const promotionOverrides = await getAllOverridesForLeague(eliminationId);
+
+  await Promise.all([
+    playoff ? deletePlayoff(playoff.id) : Promise.resolve(),
+    deleteEliminationRosterSnapshots(eliminationId),
+    deleteMojoFitnessSnapshots(eliminationId),
+    deleteEliminationDatabase(eliminationId),
+    ...promotionOverrides.map((override) =>
+      removeLeaguePlayerOverride(eliminationId, override.playerId),
+    ),
+  ]);
+}
+
+export async function createEliminationRun(params: {
+  name: string;
+  leagueId: string;
+  leagueName: string;
+  teamsCount: number;
+  seededTeams: Array<{ id: string; name: string }>;
+  seriesLengths: number[];
+  inningsPerGame: number;
+  useDH: boolean;
+  liveBeatReporterEnabled: boolean;
+  postGameColumnsEnabled: boolean;
+}): Promise<{ eliminationId: string; playoffId: string }> {
+  const eliminationId = generateEliminationId();
+  let playoffId: string | null = null;
+
+  try {
+    if (!params.name.trim()) {
+      throw new Error('Enter a bracket name before starting playoffs.');
+    }
+    if (params.seededTeams.length !== params.teamsCount) {
+      throw new Error(`Select exactly ${params.teamsCount} teams before starting playoffs.`);
+    }
+    if (!Number.isInteger(Math.log2(params.teamsCount))) {
+      throw new Error('Elimination brackets require 4, 8, or 16 teams.');
+    }
+    if (params.seriesLengths.length !== Math.log2(params.teamsCount)) {
+      throw new Error('Choose a series length for every bracket round.');
+    }
+
+    const teamIds = params.seededTeams.map((team) => team.id);
+    await deepCopyLeagueToBracket(eliminationId, params.leagueId);
+    await createRosterSnapshots(eliminationId, teamIds);
+
+    const playoffTeams: PlayoffTeam[] = params.seededTeams.map((team, index) => ({
+      teamId: team.id,
+      teamName: team.name,
+      seed: index + 1,
+      league: 'Eastern' as const,
+      regularSeasonRecord: { wins: 0, losses: 0 },
+      eliminated: false,
+    }));
+    const rounds = Math.log2(params.teamsCount);
+    const playoff = await createPlayoff({
+      seasonNumber: 1,
+      seasonId: `elimination-${eliminationId}`,
+      status: 'NOT_STARTED',
+      teamsQualifying: params.teamsCount,
+      rounds,
+      gamesPerRound: params.seriesLengths,
+      inningsPerGame: params.inningsPerGame,
+      useDH: params.useDH,
+      liveBeatReporterEnabled: params.liveBeatReporterEnabled,
+      postGameColumnsEnabled: params.postGameColumnsEnabled,
+      beatReporterEnabled:
+        params.liveBeatReporterEnabled || params.postGameColumnsEnabled,
+      leagues: ['Eastern'],
+      conferenceChampionship: false,
+      teams: playoffTeams,
+      currentRound: 0,
+      sourceType: 'elimination',
+      eliminationId,
+    });
+    playoffId = playoff.id;
+
+    for (let index = 0; index < params.teamsCount / 2; index += 1) {
+      const higher = playoffTeams[index];
+      const lower = playoffTeams[params.teamsCount - 1 - index];
+      await createSeries({
+        playoffId: playoff.id,
+        round: 1,
+        roundName: getEliminationRoundName(1, rounds),
+        higherSeed: { teamId: higher.teamId, teamName: higher.teamName, seed: higher.seed },
+        lowerSeed: { teamId: lower.teamId, teamName: lower.teamName, seed: lower.seed },
+        status: 'PENDING',
+        gamesRequired: Math.ceil(params.seriesLengths[0] / 2),
+        bestOf: params.seriesLengths[0],
+        higherSeedWins: 0,
+        lowerSeedWins: 0,
+        games: [],
+      });
+    }
+
+    await startPlayoff(playoff.id);
+    await createElimination({
+      eliminationId,
+      name: params.name.trim(),
+      leagueId: params.leagueId,
+      leagueName: params.leagueName,
+      teamsCount: params.teamsCount,
+      status: 'IN_PROGRESS',
+      currentRound: 1,
+    });
+    return { eliminationId, playoffId: playoff.id };
+  } catch (error) {
+    try {
+      await Promise.all([
+        playoffId ? deletePlayoff(playoffId) : Promise.resolve(),
+        deleteEliminationRosterSnapshots(eliminationId),
+        deleteMojoFitnessSnapshots(eliminationId),
+        deleteEliminationDatabase(eliminationId),
+      ]);
+    } catch (cleanupError) {
+      console.error('[Elimination] Failed to clean up partial bracket creation:', cleanupError);
+    }
+    throw error;
+  }
 }

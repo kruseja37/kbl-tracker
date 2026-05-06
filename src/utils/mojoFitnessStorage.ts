@@ -1,6 +1,7 @@
 import { getTrackerDb } from './trackerDb';
 import type { MojoLevel } from '../engines/mojoEngine';
 import type { FitnessState } from '../engines/fitnessEngine';
+import { syncEngine } from './syncEngine';
 
 const STORE = 'mojoFitnessSnapshots';
 
@@ -24,13 +25,17 @@ export async function saveMojoFitnessSnapshots(
     const updatedAt = Date.now();
 
     players.forEach((player) => {
-      store.put({
+      const snapshot = {
         eliminationId,
         playerId: player.playerId,
         mojoLevel: player.mojoLevel,
         fitnessState: player.fitnessState,
         updatedAt,
-      } satisfies MojoFitnessSnapshot);
+      } satisfies MojoFitnessSnapshot;
+      store.put(snapshot);
+      if (!syncEngine.isSuppressed()) {
+        syncEngine.upsert('kbl-tracker', STORE, [eliminationId, player.playerId], snapshot);
+      }
     });
 
     tx.oncomplete = () => resolve();
@@ -69,7 +74,11 @@ export async function deleteMojoFitnessSnapshots(
     request.onsuccess = () => {
       const cursor = request.result;
       if (cursor) {
+        const snapshot = cursor.value as MojoFitnessSnapshot;
         cursor.delete();
+        if (!syncEngine.isSuppressed()) {
+          syncEngine.remove('kbl-tracker', STORE, [snapshot.eliminationId, snapshot.playerId]);
+        }
         cursor.continue();
       }
     };

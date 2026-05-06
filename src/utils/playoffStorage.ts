@@ -47,7 +47,10 @@ export interface PlayoffConfig {
   gamesPerRound: number[];         // Best-of series for each round [5, 7, 7]
   inningsPerGame: number;
   useDH: boolean;
+  /** @deprecated Legacy single-toggle field kept for backward compatibility. */
   beatReporterEnabled?: boolean;
+  liveBeatReporterEnabled?: boolean;
+  postGameColumnsEnabled?: boolean;
 
   // Structure
   leagues: ('Eastern' | 'Western')[];
@@ -402,6 +405,11 @@ export async function initPlayoffDatabase(): Promise<IDBDatabase> {
 export async function createPlayoff(config: Omit<PlayoffConfig, 'id' | 'createdAt'>): Promise<PlayoffConfig> {
   const db = await initPlayoffDatabase();
   const newSourceType = config.sourceType || 'franchise';
+  const replacementEliminationId = newSourceType === 'elimination' ? config.eliminationId : undefined;
+
+  if (newSourceType === 'elimination' && !replacementEliminationId) {
+    throw new Error('Elimination playoffs must include an eliminationId');
+  }
 
   const playoff: PlayoffConfig = {
     ...config,
@@ -416,15 +424,23 @@ export async function createPlayoff(config: Omit<PlayoffConfig, 'id' | 'createdA
     const tx = db.transaction(STORES.PLAYOFFS, 'readwrite');
     const store = tx.objectStore(STORES.PLAYOFFS);
 
-    // First, delete any existing playoff for this season (same transaction = atomic)
-    const index = store.index('seasonNumber');
-    const cursorReq = index.openCursor(config.seasonNumber);
+    // Replacement rules differ by source:
+    // - franchise: one bracket per season
+    // - elimination: one bracket per elimination run
+    const cursorReq = store.openCursor();
     cursorReq.onsuccess = () => {
       const cursor = cursorReq.result;
       if (cursor) {
         const record = cursor.value as PlayoffConfig;
         const existingSourceType = record.sourceType || 'franchise';
-        if (existingSourceType === newSourceType) {
+        const shouldReplace =
+          newSourceType === 'elimination'
+            ? existingSourceType === 'elimination' &&
+              record.eliminationId === replacementEliminationId
+            : existingSourceType === newSourceType &&
+              record.seasonNumber === config.seasonNumber;
+
+        if (shouldReplace) {
           replacedPlayoffIds.push(record.id);
           if (!syncEngine.isSuppressed()) syncEngine.remove('kbl-playoffs', 'playoffs', record.id);
           cursor.delete();
@@ -501,16 +517,59 @@ export async function getPlayoffBySeason(
   });
 }
 
-export async function getCurrentPlayoff(): Promise<PlayoffConfig | null> {
+export async function getPlayoffByElimination(eliminationId: string): Promise<PlayoffConfig | null> {
+  const db = await initPlayoffDatabase();
+
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORES.PLAYOFFS, 'readonly');
+    const store = tx.objectStore(STORES.PLAYOFFS);
+    const request = store.openCursor();
+
+    request.onsuccess = () => {
+      const cursor = request.result;
+      if (!cursor) {
+        resolve(null);
+        return;
+      }
+
+      const playoff = cursor.value as PlayoffConfig;
+      if ((playoff.sourceType || 'franchise') === 'elimination' && playoff.eliminationId === eliminationId) {
+        resolve(playoff);
+        return;
+      }
+
+      cursor.continue();
+    };
+    request.onerror = () => reject(request.error);
+  });
+}
+
+export async function getCurrentPlayoff(
+  sourceType?: 'franchise' | 'elimination'
+): Promise<PlayoffConfig | null> {
   const db = await initPlayoffDatabase();
 
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORES.PLAYOFFS, 'readonly');
     const store = tx.objectStore(STORES.PLAYOFFS);
     const index = store.index('status');
-    const request = index.get('IN_PROGRESS');
+    const request = index.openCursor('IN_PROGRESS');
 
-    request.onsuccess = () => resolve(request.result || null);
+    request.onsuccess = () => {
+      const cursor = request.result;
+      if (!cursor) {
+        resolve(null);
+        return;
+      }
+
+      const playoff = cursor.value as PlayoffConfig;
+      if (!sourceType || (playoff.sourceType || 'franchise') === sourceType) {
+        resolve(playoff);
+        return;
+      }
+
+      cursor.continue();
+    };
     request.onerror = () => reject(request.error);
   });
 }
@@ -647,6 +706,10 @@ export async function recordSeriesGame(
     throw new Error(`Series ${seriesId} not found`);
   }
 
+  if (game.status === 'COMPLETED' && game.result?.homeScore === game.result?.awayScore) {
+    throw new Error('Tied playoff games cannot determine a series winner');
+  }
+
   // Update games array
   const games = [...series.games];
   const existingIdx = games.findIndex(g => g.gameNumber === game.gameNumber);
@@ -706,6 +769,20 @@ export function getRoundName(round: number, totalRounds: number): string {
   if (remaining === 3) return 'Division Series';
   if (remaining === 4) return 'Wild Card';
   return `Round ${round}`;
+}
+
+export function getEliminationRoundName(round: number, totalRounds: number): string {
+  const remaining = totalRounds - round + 1;
+  if (remaining === 1) return 'Championship';
+  if (remaining === 2) return 'Semi-Finals';
+  if (remaining === 3) return 'Quarter-Finals';
+  return `Round ${round}`;
+}
+
+function getPlayoffRoundName(playoff: PlayoffConfig, round: number): string {
+  return (playoff.sourceType || 'franchise') === 'elimination'
+    ? getEliminationRoundName(round, playoff.rounds)
+    : getRoundName(round, playoff.rounds);
 }
 
 export async function generateBracket(
@@ -806,6 +883,45 @@ export async function createNextRoundSeries(
   const bestOf = playoff.gamesPerRound[nextRound - 1] || 7;
   const gamesRequired = Math.ceil(bestOf / 2);
   const totalRounds = playoff.rounds;
+  const isSingleBracket =
+    !playoff.conferenceChampionship ||
+    playoff.leagues.length <= 1 ||
+    new Set(playoff.teams.map((team) => team.league)).size <= 1;
+
+  if (winners.length === 0) {
+    throw new Error(`No completed winners found for playoff ${playoffId} round ${completedRound}`);
+  }
+
+  if (isSingleBracket) {
+    const bracketWinners = winners.sort((a, b) => a.seed - b.seed);
+    if (bracketWinners.length % 2 !== 0) {
+      throw new Error(
+        `Single-bracket advancement requires an even number of winners, got ${bracketWinners.length}`,
+      );
+    }
+
+    const newSeries: PlayoffSeries[] = [];
+    for (let i = 0; i < bracketWinners.length / 2; i++) {
+      const higher = bracketWinners[i];
+      const lower = bracketWinners[bracketWinners.length - 1 - i];
+      const createdSeries = await createSeries({
+        playoffId,
+        round: nextRound,
+        roundName: getPlayoffRoundName(playoff, nextRound),
+        higherSeed: { teamId: higher.teamId, teamName: higher.teamName, seed: higher.seed },
+        lowerSeed: { teamId: lower.teamId, teamName: lower.teamName, seed: lower.seed },
+        status: 'IN_PROGRESS',
+        bestOf,
+        gamesRequired,
+        higherSeedWins: 0,
+        lowerSeedWins: 0,
+        games: [],
+      });
+      newSeries.push(createdSeries);
+    }
+
+    return newSeries;
+  }
 
   // Determine if this is the championship round (final round)
   const isChampionship = nextRound === playoff.rounds;
@@ -832,7 +948,7 @@ export async function createNextRoundSeries(
     const champSeries = await createSeries({
       playoffId,
       round: nextRound,
-      roundName: getRoundName(nextRound, totalRounds),
+      roundName: getPlayoffRoundName(playoff, nextRound),
       higherSeed: { teamId: higherSeed.teamId, teamName: higherSeed.teamName, seed: higherSeed.seed },
       lowerSeed: { teamId: lowerSeed.teamId, teamName: lowerSeed.teamName, seed: lowerSeed.seed },
       status: 'IN_PROGRESS',
@@ -864,7 +980,7 @@ export async function createNextRoundSeries(
         const s = await createSeries({
           playoffId,
           round: nextRound,
-          roundName: getRoundName(nextRound, totalRounds),
+          roundName: getPlayoffRoundName(playoff, nextRound),
           higherSeed: { teamId: higher.teamId, teamName: higher.teamName, seed: higher.seed },
           lowerSeed: { teamId: lower.teamId, teamName: lower.teamName, seed: lower.seed },
           status: 'IN_PROGRESS',
@@ -940,7 +1056,11 @@ export async function aggregateGameToPlayoffStats(
   playoffId: string,
   gameState: PersistedGameState
 ): Promise<void> {
-  const db = await initPlayoffDatabase();
+  const [db, playoff] = await Promise.all([
+    initPlayoffDatabase(),
+    getPlayoff(playoffId),
+  ]);
+  const sourceType = playoff?.sourceType;
 
   const battingByPlayer = new Map<string, {
     playerName: string;
@@ -1053,7 +1173,7 @@ export async function aggregateGameToPlayoffStats(
           playerId,
           playerName: batting?.playerName || pitching?.pitcherName || existing?.playerName || 'Unknown Player',
           teamId: batting?.teamId || pitching?.teamId || existing?.teamId || 'unknown',
-          sourceType: existing?.sourceType,
+          sourceType: existing?.sourceType ?? sourceType,
           games: (existing?.games || 0) + (batting?.games || 0),
           atBats: (existing?.atBats || 0) + (batting?.atBats || 0),
           hits: (existing?.hits || 0) + (batting?.hits || 0),
@@ -1143,15 +1263,15 @@ export async function getAllPlayoffs(): Promise<PlayoffConfig[]> {
  * Call this if the database was externally modified (e.g., cleared via devtools).
  */
 export function resetPlayoffDbConnection(): void {
+  dbInstance?.close();
   dbInstance = null;
 }
 
-/**
- * Delete all playoff data for a given season.
- * Useful for "starting fresh" with playoff creation.
- */
-export async function deletePlayoffBySeason(seasonNumber: number): Promise<void> {
-  const existing = await getPlayoffBySeason(seasonNumber);
+export async function deletePlayoffBySeason(
+  seasonNumber: number,
+  sourceType?: 'franchise' | 'elimination'
+): Promise<void> {
+  const existing = await getPlayoffBySeason(seasonNumber, sourceType);
   if (existing) {
     await deletePlayoff(existing.id);
   }

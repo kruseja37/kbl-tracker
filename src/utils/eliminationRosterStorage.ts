@@ -11,6 +11,7 @@ import {
   getEliminationPlayersByTeam,
   getEliminationTeam,
 } from './eliminationPlayerStorage';
+import { syncEngine } from './syncEngine';
 
 const SNAPSHOT_STORE = 'rosterSnapshots';
 const FIELD_POSITIONS_WITH_DH: Position[] = ['C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF', 'DH'];
@@ -230,6 +231,94 @@ function buildSnapshot(
   };
 }
 
+function buildFallbackLineup(
+  players: Player[],
+  useDH: boolean,
+): LineupSlot[] {
+  const fieldPositions = useDH ? FIELD_POSITIONS_WITH_DH : FIELD_POSITIONS_NO_DH;
+  const positionPlayers = players.filter((player) => !isPitcher(player));
+  const pitchers = players.filter(isPitcher);
+  const usedPositions = new Set<Position>();
+  const lineup: LineupSlot[] = [];
+
+  for (const player of positionPlayers) {
+    if (lineup.length >= fieldPositions.length) break;
+    const fieldingPosition = getBestPosition(
+      player,
+      usedPositions,
+      fieldPositions,
+      fieldPositions[lineup.length] ?? fieldPositions[fieldPositions.length - 1],
+    );
+    usedPositions.add(fieldingPosition);
+    lineup.push({
+      battingOrder: lineup.length + 1,
+      playerId: player.id,
+      fieldingPosition,
+    });
+  }
+
+  if (!useDH) {
+    const starter = pitchers.find((player) => player.primaryPosition === 'SP') ?? pitchers[0];
+    if (starter) {
+      lineup.push({
+        battingOrder: lineup.length + 1,
+        playerId: starter.id,
+        fieldingPosition: 'P',
+      });
+    }
+  }
+
+  return lineup;
+}
+
+function buildFallbackRoster(teamId: string, players: Player[]): TeamRoster {
+  const pitchers = players.filter(isPitcher);
+  const startingRotation = pitchers
+    .filter((player) => player.primaryPosition === 'SP')
+    .map((player) => player.id);
+  const closingPitcher = pitchers.find((player) => player.primaryPosition === 'CP')?.id ?? '';
+  const assignedPitchers = new Set([...startingRotation, closingPitcher].filter(Boolean));
+
+  const depthChart = {
+    C: [] as string[],
+    '1B': [] as string[],
+    '2B': [] as string[],
+    SS: [] as string[],
+    '3B': [] as string[],
+    LF: [] as string[],
+    CF: [] as string[],
+    RF: [] as string[],
+    DH: [] as string[],
+    SP: [] as string[],
+    RP: [] as string[],
+    CP: [] as string[],
+  };
+
+  for (const player of players) {
+    const primary = player.primaryPosition;
+    if (primary in depthChart) {
+      depthChart[primary as keyof typeof depthChart].push(player.id);
+    }
+  }
+
+  return {
+    teamId,
+    mlbRoster: players.map((player) => player.id),
+    farmRoster: [],
+    lineupWithDH: buildFallbackLineup(players, true),
+    lineupWithoutDH: buildFallbackLineup(players, false),
+    startingRotation: startingRotation.length > 0 ? startingRotation : pitchers.map((player) => player.id),
+    longRelievers: pitchers.filter((player) => player.primaryPosition === 'SP/RP').map((player) => player.id),
+    closingPitcher,
+    setupPitchers: pitchers.filter((player) => !assignedPitchers.has(player.id)).map((player) => player.id),
+    depthChart,
+    pinchHitOrder: [],
+    pinchRunOrder: [],
+    defensiveSubOrder: [],
+    lastModified: new Date().toISOString(),
+  };
+}
+
 /**
  * Create frozen roster snapshots for every team in an elimination bracket.
  */
@@ -245,13 +334,18 @@ export async function createRosterSnapshots(eliminationId: string, teamIds: stri
         throw new Error(`Elimination team not found for snapshot: ${teamId}`);
       }
 
-      if (!roster) {
-        throw new Error(`League Builder roster not found for snapshot: ${teamId}`);
+      const players = await getEliminationPlayersByTeam(eliminationId, teamId);
+      if (players.length === 0) {
+        throw new Error(`No copied elimination players found for snapshot: ${teamId}`);
       }
 
-      const players = await getEliminationPlayersByTeam(eliminationId, teamId);
-
-      return buildSnapshot(eliminationId, teamId, team.name, players, roster);
+      return buildSnapshot(
+        eliminationId,
+        teamId,
+        team.name,
+        players,
+        roster ?? buildFallbackRoster(teamId, players),
+      );
     })
   );
 
@@ -261,6 +355,9 @@ export async function createRosterSnapshots(eliminationId: string, teamIds: stri
 
   for (const snapshot of snapshots) {
     await requestToPromise(store.put(snapshot));
+    if (!syncEngine.isSuppressed()) {
+      syncEngine.upsert('kbl-tracker', SNAPSHOT_STORE, snapshot.key, snapshot);
+    }
   }
 
   await transactionToPromise(tx);
@@ -314,13 +411,17 @@ export async function updateEliminationRosterSnapshot(
   const tx = db.transaction(SNAPSHOT_STORE, 'readwrite');
   const store = tx.objectStore(SNAPSHOT_STORE);
 
-  await requestToPromise(
-    store.put({
-      ...existing,
-      ...updates,
-    })
-  );
+  const updated = {
+    ...existing,
+    ...updates,
+  };
+
+  await requestToPromise(store.put(updated));
   await transactionToPromise(tx);
+
+  if (!syncEngine.isSuppressed()) {
+    syncEngine.upsert('kbl-tracker', SNAPSHOT_STORE, updated.key, updated);
+  }
 }
 
 export async function buildEliminationGameTrackerRoster(
@@ -381,6 +482,9 @@ export async function deleteEliminationRosterSnapshots(eliminationId: string): P
 
   for (const key of keys as IDBValidKey[]) {
     await requestToPromise(store.delete(key));
+    if (!syncEngine.isSuppressed()) {
+      syncEngine.remove('kbl-tracker', SNAPSHOT_STORE, String(key));
+    }
   }
 
   await transactionToPromise(tx);

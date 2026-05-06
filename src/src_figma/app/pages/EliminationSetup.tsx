@@ -2,12 +2,9 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AlertCircle, ArrowLeft, Check, ChevronDown, ChevronUp, Loader2, Trophy } from 'lucide-react';
 import { useLeagueBuilderData, type LeagueTemplate, type Team } from '../../hooks/useLeagueBuilderData';
-import { createElimination, updateElimination } from '../../../utils/eliminationManager';
-import { createRosterSnapshots } from '../../../utils/eliminationRosterStorage';
-import { deepCopyLeagueToBracket } from '../../../utils/eliminationPlayerStorage';
-import { createPlayoff, createSeries, startPlayoff, type PlayoffTeam } from '../../../utils/playoffStorage';
-type HomeFieldPattern = '2-3-2' | '2-2-1-1-1' | 'Home throughout';
-const STEP_LABELS = ['League', 'Settings', 'Control', 'Seeding', 'Confirm'];
+import { createEliminationRun } from '../../../utils/eliminationManager';
+import { getEliminationRoundName } from '../../../utils/playoffStorage';
+const STEP_LABELS = ['League', 'Settings', 'Teams', 'Seeding', 'Confirm'];
 const TEAM_OPTIONS = [4, 8, 16];
 const SERIES_OPTIONS = [3, 5, 7];
 function getValidTeamOptions(teamCount: number): number[] {
@@ -15,15 +12,6 @@ function getValidTeamOptions(teamCount: number): number[] {
 }
 function getRoundCount(teamCount: number): number {
   return teamCount > 0 ? Math.log2(teamCount) : 0;
-}
-function getRoundName(round: number, totalRounds: number): string {
-  const names: Record<number, Record<number, string>> = {
-    1: { 2: 'Semi-Finals', 3: 'Quarter-Finals', 4: 'First Round' },
-    2: { 2: 'Championship', 3: 'Semi-Finals', 4: 'Quarter-Finals' },
-    3: { 3: 'Championship', 4: 'Semi-Finals' },
-    4: { 4: 'Championship' },
-  };
-  return names[round]?.[totalRounds] || `Round ${round}`;
 }
 function panelClasses(selected = false): string {
   return selected
@@ -127,8 +115,6 @@ function StepPlayoffSettings(props: {
   setNumTeams: (value: number) => void;
   seriesLengths: number[];
   onSeriesLengthChange: (roundIndex: number, value: number) => void;
-  homeFieldPattern: HomeFieldPattern;
-  setHomeFieldPattern: (value: HomeFieldPattern) => void;
   inningsPerGame: number;
   setInningsPerGame: (value: number) => void;
   useDH: boolean;
@@ -138,7 +124,7 @@ function StepPlayoffSettings(props: {
   postGameColumnsEnabled: boolean;
   setPostGameColumnsEnabled: (value: boolean) => void;
 }) {
-  const { leagueTeams, validTeamOptions, numTeams, setNumTeams, seriesLengths, onSeriesLengthChange, homeFieldPattern, setHomeFieldPattern, inningsPerGame, setInningsPerGame, useDH, setUseDH, liveBeatReporterEnabled, setLiveBeatReporterEnabled, postGameColumnsEnabled, setPostGameColumnsEnabled } = props;
+  const { leagueTeams, validTeamOptions, numTeams, setNumTeams, seriesLengths, onSeriesLengthChange, inningsPerGame, setInningsPerGame, useDH, setUseDH, liveBeatReporterEnabled, setLiveBeatReporterEnabled, postGameColumnsEnabled, setPostGameColumnsEnabled } = props;
   const rounds = getRoundCount(numTeams);
   return (
     <div>
@@ -162,7 +148,7 @@ function StepPlayoffSettings(props: {
           <div className="space-y-3">
             {Array.from({ length: rounds }, (_, index) => (
               <div key={index} className="flex items-center justify-between gap-4">
-                <div className="text-sm text-[#E8E8D8]">{getRoundName(index + 1, rounds)}</div>
+                <div className="text-sm text-[#E8E8D8]">{getEliminationRoundName(index + 1, rounds)}</div>
                 <div className="flex gap-2">
                   {SERIES_OPTIONS.map((option) => (
                     <button key={option} onClick={() => onSeriesLengthChange(index, option)} className={`px-3 py-1 border-2 text-xs font-bold transition-all ${seriesLengths[index] === option ? 'border-[#C4A853] bg-[#C4A853] text-[#4A6A42]' : 'border-[#E8E8D8] text-[#E8E8D8] hover:border-[#C4A853]'}`}>Best of {option}</button>
@@ -172,19 +158,9 @@ function StepPlayoffSettings(props: {
             ))}
           </div>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="border-4 border-[#E8E8D8] bg-[#4A6A42] p-4">
-            <label className="block text-xs text-[#E8E8D8]/70 mb-2">Home field pattern</label>
-            <select value={homeFieldPattern} onChange={(event) => setHomeFieldPattern(event.target.value as HomeFieldPattern)} className="w-full bg-[#5A7A52] border-2 border-[#E8E8D8] text-[#E8E8D8] px-3 py-2 text-sm">
-              <option>2-3-2</option>
-              <option>2-2-1-1-1</option>
-              <option>Home throughout</option>
-            </select>
-          </div>
-          <div className="border-4 border-[#E8E8D8] bg-[#4A6A42] p-4">
-            <label className="block text-xs text-[#E8E8D8]/70 mb-2">Innings per game</label>
-            <input type="number" min={3} max={9} value={inningsPerGame} onChange={(event) => setInningsPerGame(Math.max(3, Math.min(9, Number(event.target.value) || 9)))} className="w-full bg-[#5A7A52] border-2 border-[#E8E8D8] text-[#E8E8D8] px-3 py-2 text-sm" />
-          </div>
+        <div className="border-4 border-[#E8E8D8] bg-[#4A6A42] p-4">
+          <label className="block text-xs text-[#E8E8D8]/70 mb-2">Innings per game</label>
+          <input type="number" min={3} max={9} value={inningsPerGame} onChange={(event) => setInningsPerGame(Math.max(3, Math.min(9, Number(event.target.value) || 9)))} className="w-full bg-[#5A7A52] border-2 border-[#E8E8D8] text-[#E8E8D8] px-3 py-2 text-sm" />
         </div>
         <div className="border-4 border-[#E8E8D8] bg-[#4A6A42] p-4 flex items-center justify-between gap-4">
           <div>
@@ -236,36 +212,49 @@ function StepPlayoffSettings(props: {
     </div>
   );
 }
-function StepTeamControl({
+function StepTeamSelection({
   leagueTeams,
-  controlledTeamIds,
-  onToggleControlled,
+  numTeams,
+  selectedTeamIds,
+  onToggleTeam,
 }: {
   leagueTeams: Team[];
-  controlledTeamIds: string[];
-  onToggleControlled: (teamId: string) => void;
+  numTeams: number;
+  selectedTeamIds: string[];
+  onToggleTeam: (teamId: string) => void;
 }) {
+  const selectedSet = useMemo(() => new Set(selectedTeamIds), [selectedTeamIds]);
+
   return (
     <div>
-      <StepTitle title="TEAM CONTROL" subtitle="Choose which teams are Human versus Observe for narrative framing in v1." />
+      <StepTitle title="SELECT BRACKET TEAMS" subtitle="Choose exactly which teams from the league belong in this elimination bracket." />
+      <div className="border-4 border-[#E8E8D8] bg-[#4A6A42] p-4 mb-6">
+        <div className="text-sm text-[#E8E8D8]">Selected teams: {selectedTeamIds.length} / {numTeams}</div>
+        <div className="text-xs text-[#E8E8D8]/60 mt-2">Pick the exact clubs first, then set their seed order on the next screen.</div>
+      </div>
       <div className="space-y-3">
         {leagueTeams.map((team) => {
-          const isControlled = controlledTeamIds.includes(team.id);
+          const isSelected = selectedSet.has(team.id);
+          const canSelectMore = selectedTeamIds.length < numTeams;
+          const isDisabled = !isSelected && !canSelectMore;
           return (
-            <div key={team.id} className="border-4 border-[#E8E8D8] bg-[#4A6A42] p-4 flex items-center justify-between gap-4">
-              <div>
-                <div className="text-sm font-bold text-[#E8E8D8]">{team.name}</div>
-                <div className="text-xs text-[#E8E8D8]/60 mt-1">{team.abbreviation} • {team.stadium}</div>
+            <button
+              key={team.id}
+              onClick={() => onToggleTeam(team.id)}
+              disabled={isDisabled}
+              className={`w-full p-4 text-left transition-all disabled:opacity-50 disabled:cursor-not-allowed ${panelClasses(isSelected)}`}
+            >
+              <div className="flex items-start gap-3">
+                <div className={`w-6 h-6 rounded-full border-4 flex-shrink-0 mt-1 ${isSelected ? 'border-[#C4A853] bg-[#C4A853]' : 'border-[#E8E8D8] bg-transparent'}`}>
+                  {isSelected && <div className="w-full h-full rounded-full bg-[#4A6A42] scale-50" />}
+                </div>
+                <div className="flex-1">
+                  <h3 className="text-sm font-bold text-[#E8E8D8] mb-2" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>{team.name}</h3>
+                  <div className="h-[1px] bg-[#E8E8D8]/30 mb-2" />
+                  <p className="text-xs text-[#E8E8D8]/70">{team.location} • {team.abbreviation}</p>
+                </div>
               </div>
-              <div className="flex gap-2">
-                {[
-                  { label: 'Human', active: isControlled, nextState: true },
-                  { label: 'Observe', active: !isControlled, nextState: false },
-                ].map((option) => (
-                  <button key={option.label} onClick={() => option.nextState !== isControlled && onToggleControlled(team.id)} className={`px-4 py-2 border-2 text-xs font-bold ${option.active ? 'border-[#C4A853] bg-[#C4A853] text-[#4A6A42]' : 'border-[#E8E8D8] text-[#E8E8D8]'}`}>{option.label}</button>
-                ))}
-              </div>
-            </div>
+            </button>
           );
         })}
       </div>
@@ -334,10 +323,8 @@ function StepConfirm(props: {
   useDH: boolean;
   liveBeatReporterEnabled: boolean;
   postGameColumnsEnabled: boolean;
-  homeFieldPattern: HomeFieldPattern;
-  controlledCount: number;
 }) {
-  const { selectedLeague, bracketName, setBracketName, numTeams, totalRounds, seriesLengths, inningsPerGame, useDH, liveBeatReporterEnabled, postGameColumnsEnabled, homeFieldPattern, controlledCount } = props;
+  const { selectedLeague, bracketName, setBracketName, numTeams, totalRounds, seriesLengths, inningsPerGame, useDH, liveBeatReporterEnabled, postGameColumnsEnabled } = props;
   return (
     <div>
       <StepTitle title="CONFIRM AND NAME" subtitle="Review the bracket details, set a name, then start playoffs." />
@@ -357,17 +344,16 @@ function StepConfirm(props: {
             <div>DH rule: {useDH ? 'On' : 'Off'}</div>
             <div>Historical in-game tidbits: {liveBeatReporterEnabled ? 'On' : 'Off'}</div>
             <div>Post-game columns: {postGameColumnsEnabled ? 'On' : 'Off'}</div>
-            <div>Home field: {homeFieldPattern}</div>
-            <div>Human-controlled teams: {controlledCount}</div>
+            <div>Home team is chosen manually before each game launch.</div>
           </div>
         </div>
         <div className="border-4 border-[#C4A853] bg-[#C4A853]/10 p-4">
           <div className="text-sm font-bold text-[#E8E8D8] mb-2">What happens next</div>
           <div className="text-xs text-[#E8E8D8]/70 space-y-1">
-            <div>1. An elimination slot is created in app meta storage.</div>
-            <div>2. A playoff bracket is created in `kbl-playoffs`.</div>
+            <div>1. Frozen elimination rosters and snapshots are prepared.</div>
+            <div>2. A single-bracket playoff is created in `kbl-playoffs`.</div>
             <div>3. Round 1 series are generated from the current seeding.</div>
-            <div>4. The bracket opens in Elimination Home.</div>
+            <div>4. The active bracket slot is created and opened.</div>
           </div>
         </div>
       </div>
@@ -381,13 +367,12 @@ export function EliminationSetup() {
   const [selectedLeagueId, setSelectedLeagueId] = useState<string | null>(null);
   const [numTeams, setNumTeams] = useState(4);
   const [seriesLengths, setSeriesLengths] = useState<number[]>([7, 7]);
-  const [homeFieldPattern, setHomeFieldPattern] = useState<HomeFieldPattern>('2-3-2');
   const [inningsPerGame, setInningsPerGame] = useState(9);
   const [useDH, setUseDH] = useState(true);
   // Phase 2a two-toggle model: live OFF, post-game ON.
   const [liveBeatReporterEnabled, setLiveBeatReporterEnabled] = useState(false);
   const [postGameColumnsEnabled, setPostGameColumnsEnabled] = useState(true);
-  const [controlledTeamIds, setControlledTeamIds] = useState<string[]>([]);
+  const [selectedTeamIds, setSelectedTeamIds] = useState<string[]>([]);
   const [seededTeamIds, setSeededTeamIds] = useState<string[]>([]);
   const [bracketName, setBracketName] = useState('');
   const [isInitializing, setIsInitializing] = useState(false);
@@ -413,15 +398,40 @@ export function EliminationSetup() {
   }, [validTeamOptions]);
   useEffect(() => {
     if (!selectedLeague) {
-      setControlledTeamIds([]);
+      setSelectedTeamIds([]);
       setSeededTeamIds([]);
       setBracketName('');
       return;
     }
-    setControlledTeamIds(leagueTeams.map((team) => team.id));
-    setSeededTeamIds(leagueTeams.slice(0, numTeams).map((team) => team.id));
     setBracketName(`${selectedLeague.name} Playoffs`);
   }, [selectedLeague, leagueTeams, numTeams]);
+  useEffect(() => {
+    if (!selectedLeague) {
+      setSelectedTeamIds([]);
+      return;
+    }
+    const availableIds = new Set(leagueTeams.map((team) => team.id));
+    setSelectedTeamIds((current) => {
+      const filtered = current.filter((teamId) => availableIds.has(teamId));
+      if (filtered.length === numTeams) return filtered;
+      const filled = [...filtered];
+      for (const team of leagueTeams) {
+        if (filled.length >= numTeams) break;
+        if (!filled.includes(team.id)) {
+          filled.push(team.id);
+        }
+      }
+      return filled.slice(0, numTeams);
+    });
+  }, [selectedLeague, leagueTeams, numTeams]);
+  useEffect(() => {
+    setSeededTeamIds((current) => {
+      const selectedSet = new Set(selectedTeamIds);
+      const kept = current.filter((teamId) => selectedSet.has(teamId));
+      const appended = selectedTeamIds.filter((teamId) => !kept.includes(teamId));
+      return [...kept, ...appended];
+    });
+  }, [selectedTeamIds]);
   useEffect(() => {
     const rounds = getRoundCount(numTeams);
     setSeriesLengths(rounds === 0 ? [] : (current) => Array.from({ length: rounds }, (_, index) => current[index] ?? 7));
@@ -430,7 +440,31 @@ export function EliminationSetup() {
     () => seededTeamIds.map((teamId) => leagueTeams.find((team) => team.id === teamId)).filter((team): team is Team => Boolean(team)),
     [seededTeamIds, leagueTeams]
   );
-  const canProceed = currentStep === 1 ? selectedLeague !== null : currentStep === 5 ? bracketName.trim().length > 0 : true;
+  const selectedTeams = useMemo(
+    () => selectedTeamIds.map((teamId) => leagueTeams.find((team) => team.id === teamId)).filter((team): team is Team => Boolean(team)),
+    [selectedTeamIds, leagueTeams]
+  );
+  const canProceed =
+    currentStep === 1
+      ? selectedLeague !== null
+      : currentStep === 3
+        ? selectedTeamIds.length === numTeams
+      : currentStep === 4
+        ? seededTeams.length === numTeams
+      : currentStep === STEP_LABELS.length
+        ? bracketName.trim().length > 0
+        : true;
+  const handleToggleTeam = (teamId: string) => {
+    setSelectedTeamIds((current) => {
+      if (current.includes(teamId)) {
+        return current.filter((id) => id !== teamId);
+      }
+      if (current.length >= numTeams) {
+        return current;
+      }
+      return [...current, teamId];
+    });
+  };
   const handleMoveSeed = (index: number, direction: 'up' | 'down') => {
     setSeededTeamIds((current) => {
       const nextIndex = direction === 'up' ? index - 1 : index + 1;
@@ -448,65 +482,18 @@ export function EliminationSetup() {
     setIsInitializing(true);
     setInitError(null);
     try {
-      const elimination = await createElimination({
+      const { eliminationId } = await createEliminationRun({
         name: bracketName.trim(),
         leagueId: selectedLeague.id,
         leagueName: selectedLeague.name,
         teamsCount: numTeams,
-      });
-      const eliminationId = elimination.eliminationId;
-      const teamIds = seededTeams.map((team) => team.id);
-      await deepCopyLeagueToBracket(eliminationId, selectedLeague.id);
-      await createRosterSnapshots(eliminationId, teamIds);
-      const playoffTeams: PlayoffTeam[] = seededTeams.map((team, index) => ({
-        teamId: team.id,
-        teamName: team.name,
-        seed: index + 1,
-        league: 'Eastern' as const,
-        regularSeasonRecord: { wins: 0, losses: 0 },
-        eliminated: false,
-      }));
-      const rounds = Math.log2(numTeams);
-      const gamesPerRound = seriesLengths;
-      const playoff = await createPlayoff({
-        seasonNumber: 1,
-        seasonId: `elimination-${eliminationId}`,
-        status: 'NOT_STARTED',
-        teamsQualifying: numTeams,
-        rounds,
-        gamesPerRound,
+        seededTeams: seededTeams.map((team) => ({ id: team.id, name: team.name })),
+        seriesLengths,
         inningsPerGame,
         useDH,
-        // Playoff schema still uses a single flag; mirror the OR of both
-        // toggles so loading the playoff later sets both new toggles to true
-        // if either was on (see EliminationHome load path).
-        beatReporterEnabled: liveBeatReporterEnabled || postGameColumnsEnabled,
-        leagues: ['Eastern'],
-        conferenceChampionship: false,
-        teams: playoffTeams,
-        currentRound: 0,
-        sourceType: 'elimination',
-        eliminationId,
+        liveBeatReporterEnabled,
+        postGameColumnsEnabled,
       });
-      for (let index = 0; index < numTeams / 2; index += 1) {
-        const higher = playoffTeams[index];
-        const lower = playoffTeams[numTeams - 1 - index];
-        await createSeries({
-          playoffId: playoff.id,
-          round: 1,
-          roundName: getRoundName(1, rounds),
-          higherSeed: { teamId: higher.teamId, teamName: higher.teamName, seed: higher.seed },
-          lowerSeed: { teamId: lower.teamId, teamName: lower.teamName, seed: lower.seed },
-          status: 'PENDING',
-          gamesRequired: Math.ceil(gamesPerRound[0] / 2),
-          bestOf: gamesPerRound[0],
-          higherSeedWins: 0,
-          lowerSeedWins: 0,
-          games: [],
-        });
-      }
-      await startPlayoff(playoff.id);
-      await updateElimination(eliminationId, { status: 'IN_PROGRESS', currentRound: 1 });
       navigate(`/elimination/${eliminationId}`);
     } catch (err) {
       setInitError(err instanceof Error ? err.message : 'Failed to start playoffs');
@@ -515,10 +502,10 @@ export function EliminationSetup() {
   };
   const renderStep = () => {
     if (currentStep === 1) return <StepLeagueSelection leagues={leagues} teams={teams} selectedLeagueId={selectedLeagueId} onSelectLeague={(league) => { setSelectedLeagueId(league.id); setInitError(null); }} />;
-    if (currentStep === 2) return <StepPlayoffSettings leagueTeams={leagueTeams} validTeamOptions={validTeamOptions} numTeams={numTeams} setNumTeams={setNumTeams} seriesLengths={seriesLengths} onSeriesLengthChange={(roundIndex, value) => setSeriesLengths((current) => current.map((item, index) => (index === roundIndex ? value : item)))} homeFieldPattern={homeFieldPattern} setHomeFieldPattern={setHomeFieldPattern} inningsPerGame={inningsPerGame} setInningsPerGame={setInningsPerGame} useDH={useDH} setUseDH={setUseDH} liveBeatReporterEnabled={liveBeatReporterEnabled} setLiveBeatReporterEnabled={setLiveBeatReporterEnabled} postGameColumnsEnabled={postGameColumnsEnabled} setPostGameColumnsEnabled={setPostGameColumnsEnabled} />;
-    if (currentStep === 3) return <StepTeamControl leagueTeams={leagueTeams} controlledTeamIds={controlledTeamIds} onToggleControlled={(teamId) => setControlledTeamIds((current) => current.includes(teamId) ? current.filter((id) => id !== teamId) : [...current, teamId])} />;
+    if (currentStep === 2) return <StepPlayoffSettings leagueTeams={leagueTeams} validTeamOptions={validTeamOptions} numTeams={numTeams} setNumTeams={setNumTeams} seriesLengths={seriesLengths} onSeriesLengthChange={(roundIndex, value) => setSeriesLengths((current) => current.map((item, index) => (index === roundIndex ? value : item)))} inningsPerGame={inningsPerGame} setInningsPerGame={setInningsPerGame} useDH={useDH} setUseDH={setUseDH} liveBeatReporterEnabled={liveBeatReporterEnabled} setLiveBeatReporterEnabled={setLiveBeatReporterEnabled} postGameColumnsEnabled={postGameColumnsEnabled} setPostGameColumnsEnabled={setPostGameColumnsEnabled} />;
+    if (currentStep === 3) return <StepTeamSelection leagueTeams={leagueTeams} numTeams={numTeams} selectedTeamIds={selectedTeamIds} onToggleTeam={handleToggleTeam} />;
     if (currentStep === 4) return <StepSeeding seededTeams={seededTeams} onMoveSeed={handleMoveSeed} />;
-    return <StepConfirm selectedLeague={selectedLeague} bracketName={bracketName} setBracketName={setBracketName} numTeams={numTeams} totalRounds={totalRounds} seriesLengths={seriesLengths} inningsPerGame={inningsPerGame} useDH={useDH} liveBeatReporterEnabled={liveBeatReporterEnabled} postGameColumnsEnabled={postGameColumnsEnabled} homeFieldPattern={homeFieldPattern} controlledCount={controlledTeamIds.length} />;
+    return <StepConfirm selectedLeague={selectedLeague} bracketName={bracketName} setBracketName={setBracketName} numTeams={numTeams} totalRounds={totalRounds} seriesLengths={seriesLengths} inningsPerGame={inningsPerGame} useDH={useDH} liveBeatReporterEnabled={liveBeatReporterEnabled} postGameColumnsEnabled={postGameColumnsEnabled} />;
   };
   return (
     <div className="min-h-screen bg-[#6B9462] text-[#E8E8D8] flex items-center justify-center p-6">

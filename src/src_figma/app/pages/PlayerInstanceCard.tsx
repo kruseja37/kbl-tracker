@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { ArrowLeft, Loader2 } from 'lucide-react';
 import type { BattingLine, PitchingLine } from '../../../utils/almanacQueries';
-import { getPlayerExhibitionStats } from '../../../utils/almanacQueries';
 import {
   getCanonicalPlayer,
   findCanonicalByPlayerId,
@@ -20,6 +19,7 @@ import {
 import { FAME_TIER_LABEL, type FameTier } from '../../../types/reporter';
 import { getEffectiveFame } from '../../../utils/effectiveValues';
 import { getEffectivePlayer } from '../../../utils/playerOverrides';
+import { getRunPromotionDecision } from '../../../utils/eliminationRunFameStorage';
 import { FamePip } from '../components/FamePip';
 import { PlayerFameSection, type PlayerFameGameSource } from '../components/PlayerFameSection';
 import {
@@ -29,7 +29,8 @@ import {
   formatHometown,
   formatSalary,
   formatTimelineDate,
-  getExhibitionPlayerContext,
+  getPlayerDisplayStats,
+  getPlayerInstanceContext,
   isPitcherPosition,
 } from '../utils/almanacPlayerViews';
 
@@ -68,6 +69,8 @@ interface PlayerCardState {
   usedFallback: boolean;
   batting: BattingLine | null;
   pitching: PitchingLine | null;
+  allTimeEliminationBatting: BattingLine | null;
+  allTimeEliminationPitching: PitchingLine | null;
   teams: TeamSummary[];
   timeline: TimelineItem[];
 }
@@ -83,6 +86,8 @@ export interface PlayerInstanceCardContentState {
   usedFallback: boolean;
   batting: BattingLine | null;
   pitching: PitchingLine | null;
+  allTimeEliminationBatting: BattingLine | null;
+  allTimeEliminationPitching: PitchingLine | null;
   teams: TeamSummary[];
   timeline: TimelineItem[];
 }
@@ -101,6 +106,8 @@ const initialState: PlayerCardState = {
   usedFallback: false,
   batting: null,
   pitching: null,
+  allTimeEliminationBatting: null,
+  allTimeEliminationPitching: null,
   teams: [],
   timeline: [],
 };
@@ -322,57 +329,114 @@ function buildTimeline(
   });
 }
 
-function buildBatterRows(batting: BattingLine | null, teams: TeamSummary[]): TableRow[] {
-  if (!batting) {
+function buildBatterRows(
+  batting: BattingLine | null,
+  teams: TeamSummary[],
+  allTimeEliminationBatting: BattingLine | null,
+): TableRow[] {
+  if (!batting && !allTimeEliminationBatting) {
     return [];
   }
 
-  const totals = {
-    BA: formatBattingAverage(batting.BA),
-    G: batting.G,
-    AB: batting.AB,
-    H: batting.H,
-    R: batting.R,
-    '2B': batting['2B'],
-    '3B': batting['3B'],
-    HR: batting.HR,
-    RBI: batting.RBI,
-    SB: batting.SB,
-    BB: batting.BB,
-    SO: batting.SO,
-  };
-
-  return [
-    { label: 'INSTANCE', teams, values: totals },
-    { label: 'CAREER', teams, values: totals, highlight: true },
-  ];
+  const rows: TableRow[] = [];
+  if (batting) {
+    rows.push({
+      label: 'INSTANCE',
+      teams,
+      values: {
+        BA: formatBattingAverage(batting.BA),
+        G: batting.G,
+        AB: batting.AB,
+        H: batting.H,
+        R: batting.R,
+        '2B': batting['2B'],
+        '3B': batting['3B'],
+        HR: batting.HR,
+        RBI: batting.RBI,
+        SB: batting.SB,
+        BB: batting.BB,
+        SO: batting.SO,
+      },
+    });
+  }
+  if (allTimeEliminationBatting) {
+    rows.push({
+      label: 'ELIM ALL-TIME',
+      teams: [],
+      values: {
+        BA: formatBattingAverage(allTimeEliminationBatting.BA),
+        G: allTimeEliminationBatting.G,
+        AB: allTimeEliminationBatting.AB,
+        H: allTimeEliminationBatting.H,
+        R: allTimeEliminationBatting.R,
+        '2B': allTimeEliminationBatting['2B'],
+        '3B': allTimeEliminationBatting['3B'],
+        HR: allTimeEliminationBatting.HR,
+        RBI: allTimeEliminationBatting.RBI,
+        SB: allTimeEliminationBatting.SB,
+        BB: allTimeEliminationBatting.BB,
+        SO: allTimeEliminationBatting.SO,
+      },
+      highlight: true,
+    });
+  }
+  return rows;
 }
 
-function buildPitcherRows(pitching: PitchingLine | null, teams: TeamSummary[]): TableRow[] {
-  if (!pitching) {
+function buildPitcherRows(
+  pitching: PitchingLine | null,
+  teams: TeamSummary[],
+  allTimeEliminationPitching: PitchingLine | null,
+): TableRow[] {
+  if (!pitching && !allTimeEliminationPitching) {
     return [];
   }
 
-  const totals = {
-    ERA: formatEarnedRunAverage(pitching.ERA),
-    G: pitching.G,
-    IP: pitching.IP,
-    H: pitching.H,
-    R: pitching.R,
-    ER: pitching.ER,
-    BB: pitching.BB,
-    SO: pitching.SO,
-    CG: pitching.CG,
-    SHO: pitching.SHO,
-    SV: pitching.SV,
-    W: pitching.W,
-    L: pitching.L,
-  };
-
-  return [
-    { label: 'INSTANCE', teams, values: totals },
-    { label: 'CAREER', teams, values: totals, highlight: true },
-  ];
+  const rows: TableRow[] = [];
+  if (pitching) {
+    rows.push({
+      label: 'INSTANCE',
+      teams,
+      values: {
+        ERA: formatEarnedRunAverage(pitching.ERA),
+        G: pitching.G,
+        IP: pitching.IP,
+        H: pitching.H,
+        R: pitching.R,
+        ER: pitching.ER,
+        BB: pitching.BB,
+        SO: pitching.SO,
+        CG: pitching.CG,
+        SHO: pitching.SHO,
+        SV: pitching.SV,
+        W: pitching.W,
+        L: pitching.L,
+      },
+    });
+  }
+  if (allTimeEliminationPitching) {
+    rows.push({
+      label: 'ELIM ALL-TIME',
+      teams: [],
+      values: {
+        ERA: formatEarnedRunAverage(allTimeEliminationPitching.ERA),
+        G: allTimeEliminationPitching.G,
+        IP: allTimeEliminationPitching.IP,
+        H: allTimeEliminationPitching.H,
+        R: allTimeEliminationPitching.R,
+        ER: allTimeEliminationPitching.ER,
+        BB: allTimeEliminationPitching.BB,
+        SO: allTimeEliminationPitching.SO,
+        CG: allTimeEliminationPitching.CG,
+        SHO: allTimeEliminationPitching.SHO,
+        SV: allTimeEliminationPitching.SV,
+        W: allTimeEliminationPitching.W,
+        L: allTimeEliminationPitching.L,
+      },
+      highlight: true,
+    });
+  }
+  return rows;
 }
 
 function TeamLinks({
@@ -415,7 +479,7 @@ function StatTable({
   if (rows.length === 0) {
     return (
       <div className="border-[4px] border-[#D3BF84] bg-[#FFF8DB] px-4 py-6 text-[9px] text-[#6F5B25] sm:text-[10px]">
-        No completed exhibition stats found for this instance yet.
+        No completed stats found for this instance yet.
       </div>
     );
   }
@@ -490,8 +554,16 @@ export function PlayerInstanceCardContent({
 }) {
   const ratingState = state.ratingState;
   const hometown = state.canonicalPlayer.hometown ?? ratingState?.hometown ?? null;
-  const batterRows = buildBatterRows(state.batting, state.teams);
-  const pitcherRows = buildPitcherRows(state.pitching, state.teams);
+  const batterRows = buildBatterRows(
+    state.batting,
+    state.teams,
+    state.allTimeEliminationBatting,
+  );
+  const pitcherRows = buildPitcherRows(
+    state.pitching,
+    state.teams,
+    state.allTimeEliminationPitching,
+  );
   const fameTier = getPlayerInstanceCardFameTier(
     state.player,
     state.instance,
@@ -529,7 +601,7 @@ export function PlayerInstanceCardContent({
           <div className="mt-4 text-[8px] leading-4 text-[#8A6A1A] sm:text-[9px]">
             {state.usedFallback
               ? 'League Builder current state fallback'
-              : 'Most recent completed exhibition snapshot'}
+              : 'Most recent completed game snapshot'}
           </div>
 
           <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
@@ -645,25 +717,29 @@ export function PlayerInstanceCard() {
           canonicalPlayer?.instances.find((entry) => entry.instanceId === instanceId) ?? null;
         const playerIdInInstance = instance?.playerIdInInstance ?? canonicalId;
 
-        if (instance && instance.mode !== 'exhibition') {
-          if (!isCancelled) {
-            setState({
-              ...initialState,
-              isLoading: false,
-              error: 'Only exhibition player cards are supported in V1.',
-              canonicalPlayer,
-              instance,
-            });
-          }
-          return;
-        }
+        const resolvedMode = instance?.mode ?? 'exhibition';
 
-        const [player, playerOverride, exhibitionStats, playerContext] = await Promise.all([
+        const [player, leaguePlayerOverride, promotionDecision, displayStats, playerContext] = await Promise.all([
           getPlayer(playerIdInInstance),
           getLeaguePlayerOverride(instanceId, playerIdInInstance),
-          getPlayerExhibitionStats(playerIdInInstance, instanceId),
-          getExhibitionPlayerContext(playerIdInInstance, instanceId),
+          resolvedMode === 'elimination'
+            ? getRunPromotionDecision(instanceId, playerIdInInstance)
+            : Promise.resolve(null),
+          getPlayerDisplayStats(playerIdInInstance, resolvedMode, instanceId),
+          getPlayerInstanceContext(playerIdInInstance, resolvedMode, instanceId),
         ]);
+        const playerOverride =
+          leaguePlayerOverride ??
+          (promotionDecision?.acceptedTier
+            ? ({
+                id: `${instanceId}::${playerIdInInstance}`,
+                leagueId: instanceId,
+                playerId: playerIdInInstance,
+                overrides: {},
+                fameTierOverride: promotionDecision.acceptedTier,
+                lastModified: new Date(promotionDecision.lastUpdatedAt).toISOString(),
+              } satisfies LeaguePlayerOverrideRecord)
+            : null);
         const resolvedPlayerIds =
           playerContext.playerIds.length > 0
             ? playerContext.playerIds
@@ -699,7 +775,7 @@ export function PlayerInstanceCard() {
               },
             instances: [
               {
-                mode: 'exhibition',
+                mode: resolvedMode,
                 instanceId,
                 instanceName: instanceId,
                 playerIdInInstance,
@@ -709,9 +785,10 @@ export function PlayerInstanceCard() {
           instance = canonicalPlayer.instances[0];
         }
 
-        const effectivePlayer = playerContext.latestSnapshot
-          ? null
-          : await getEffectivePlayer(instance.playerIdInInstance, instance.instanceId);
+        const effectivePlayer =
+          playerContext.latestSnapshot || instance.mode !== 'exhibition'
+            ? null
+            : await getEffectivePlayer(instance.playerIdInInstance, instance.instanceId);
         const ratingState = playerContext.latestSnapshot ?? effectivePlayer ?? player;
         const teams = buildTeamSummaries(
           playerContext.games,
@@ -738,8 +815,10 @@ export function PlayerInstanceCard() {
             ratingState,
             isPitcher: isPitcherPosition(ratingState?.primaryPosition ?? null),
             usedFallback: !playerContext.latestSnapshot && Boolean(ratingState),
-            batting: exhibitionStats.batting,
-            pitching: exhibitionStats.pitching,
+            batting: displayStats.instanceBatting,
+            pitching: displayStats.instancePitching,
+            allTimeEliminationBatting: displayStats.allTimeEliminationBatting,
+            allTimeEliminationPitching: displayStats.allTimeEliminationPitching,
             teams,
             timeline,
           });
@@ -812,6 +891,8 @@ export function PlayerInstanceCard() {
     usedFallback: state.usedFallback,
     batting: state.batting,
     pitching: state.pitching,
+    allTimeEliminationBatting: state.allTimeEliminationBatting,
+    allTimeEliminationPitching: state.allTimeEliminationPitching,
     teams: state.teams,
     timeline: state.timeline,
   };

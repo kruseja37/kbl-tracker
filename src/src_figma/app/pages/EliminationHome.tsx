@@ -18,15 +18,17 @@ import { buildEliminationGameTrackerRoster } from '../../../utils/eliminationRos
 import { getEliminationTeam } from '../../../utils/eliminationPlayerStorage';
 import {
   getAllPlayoffs,
+  getPlayoffByElimination,
+  updatePlayoff,
   getSeriesByPlayoff,
   getPlayoffLeaders,
-  getRoundName,
+  getEliminationRoundName,
   type PlayoffConfig,
   type PlayoffSeries,
   type PlayoffPlayerStats,
 } from '../../../utils/playoffStorage';
 import { computeEliminationAwards, type EliminationAward } from '../../../utils/eliminationAwards';
-import { getHomeFieldPattern } from '../../../engines/playoffEngine';
+import { buildClutchContext, getHomeFieldPattern } from '../../../engines/playoffEngine';
 import { EliminationTeamHub } from '../components/EliminationTeamHub';
 import { ReporterAssignmentPanel, type ReporterAssignmentPanelTeam } from '../components/ReporterAssignmentPanel';
 
@@ -47,6 +49,12 @@ type SeriesCardState = {
   awayTeam: { teamId: string; teamName: string; seed: number };
 };
 
+type FamePlayoffRound =
+  | 'wild_card'
+  | 'division_series'
+  | 'championship_series'
+  | 'world_series';
+
 const tabs: Array<{ id: EliminationTab; label: string; icon: ReactNode }> = [
   { id: 'bracket', label: 'BRACKET', icon: <GitBranch className="w-4 h-4" /> },
   { id: 'teamhub', label: 'TEAM HUB', icon: <Users className="w-4 h-4" /> },
@@ -55,14 +63,20 @@ const tabs: Array<{ id: EliminationTab; label: string; icon: ReactNode }> = [
   { id: 'history', label: 'HISTORY', icon: <Trophy className="w-4 h-4" /> },
 ];
 
-function buildSeriesCardState(eliminationId: string, series: PlayoffSeries): SeriesCardState {
+function buildSeriesCardState(
+  eliminationId: string,
+  series: PlayoffSeries,
+  selectedHomeTeamId?: string | null,
+): SeriesCardState {
   const nextGameNumber = series.higherSeedWins + series.lowerSeedWins + 1;
-  const homeTeamId = getHomeFieldPattern(
-    nextGameNumber,
-    series.bestOf,
-    series.higherSeed.teamId,
-    series.lowerSeed.teamId
-  );
+  const homeTeamId =
+    selectedHomeTeamId ||
+    getHomeFieldPattern(
+      nextGameNumber,
+      series.bestOf,
+      series.higherSeed.teamId,
+      series.lowerSeed.teamId
+    );
   const higherSeedHome = homeTeamId === series.higherSeed.teamId;
   const homeTeam = higherSeedHome ? series.higherSeed : series.lowerSeed;
   const awayTeam = higherSeedHome ? series.lowerSeed : series.higherSeed;
@@ -103,6 +117,24 @@ function canPlaySeries(series: PlayoffSeries): boolean {
   return series.status === 'PENDING' || series.status === 'IN_PROGRESS';
 }
 
+function resolveReporterToggle(
+  explicitValue: boolean | undefined,
+  legacyValue: boolean | undefined,
+  fallback: boolean,
+): boolean {
+  return explicitValue ?? legacyValue ?? fallback;
+}
+
+function mapSeriesRoundToFameRound(
+  round: number,
+  totalRounds: number,
+): FamePlayoffRound {
+  if (round >= totalRounds) return 'world_series';
+  if (round === totalRounds - 1) return 'championship_series';
+  if (round === totalRounds - 2) return 'division_series';
+  return 'wild_card';
+}
+
 export function EliminationHome() {
   const navigate = useNavigate();
   const { eliminationId } = useParams<{ eliminationId: string }>();
@@ -112,6 +144,7 @@ export function EliminationHome() {
   const [seriesList, setSeriesList] = useState<PlayoffSeries[]>([]);
   const [historyEntries, setHistoryEntries] = useState<HistoryEntry[]>([]);
   const [selectedSeriesId, setSelectedSeriesId] = useState<string | null>(null);
+  const [selectedHomeTeamId, setSelectedHomeTeamId] = useState<string | null>(null);
   // Phase 2a two-toggle model: live defaults OFF, post-game ON.
   const [liveBeatReporterEnabled, setLiveBeatReporterEnabled] = useState(false);
   const [postGameColumnsEnabled, setPostGameColumnsEnabled] = useState(true);
@@ -140,12 +173,10 @@ export function EliminationHome() {
           throw new Error(`Elimination bracket not found: ${currentEliminationId}`);
         }
 
-        const allPlayoffs = await getAllPlayoffs();
-        const loadedPlayoff =
-          allPlayoffs.find(
-            (playoff) =>
-              playoff.sourceType === 'elimination' && playoff.eliminationId === currentEliminationId
-          ) ?? null;
+        const [loadedPlayoff, allPlayoffs] = await Promise.all([
+          getPlayoffByElimination(currentEliminationId),
+          getAllPlayoffs(),
+        ]);
 
         if (!loadedPlayoff) {
           throw new Error(`Playoff bracket not found for elimination: ${currentEliminationId}`);
@@ -184,11 +215,20 @@ export function EliminationHome() {
 
         setMetadata(loadedMetadata);
         setPlayoffConfig(loadedPlayoff);
-        // Legacy elimination configs stored a single flag. Apply to both new
-        // toggles when loading so saved elimination rounds preserve prior UX;
-        // users can flip either toggle from pre-game going forward.
-        setLiveBeatReporterEnabled(loadedPlayoff.beatReporterEnabled ?? true);
-        setPostGameColumnsEnabled(loadedPlayoff.beatReporterEnabled ?? true);
+        setLiveBeatReporterEnabled(
+          resolveReporterToggle(
+            loadedPlayoff.liveBeatReporterEnabled,
+            loadedPlayoff.beatReporterEnabled,
+            false,
+          ),
+        );
+        setPostGameColumnsEnabled(
+          resolveReporterToggle(
+            loadedPlayoff.postGameColumnsEnabled,
+            loadedPlayoff.beatReporterEnabled,
+            true,
+          ),
+        );
         setSeriesList(loadedSeries.sort((a, b) => a.round - b.round || a.higherSeed.seed - b.higherSeed.seed));
         setHistoryEntries(
           completedEntries.sort((a, b) => (b.playoff.completedAt ?? 0) - (a.playoff.completedAt ?? 0))
@@ -243,6 +283,38 @@ export function EliminationHome() {
     };
   }, [eliminationId, metadata, playoffConfig]);
 
+  useEffect(() => {
+    if (!playoffConfig) return;
+
+    const shouldPersist =
+      playoffConfig.liveBeatReporterEnabled !== liveBeatReporterEnabled ||
+      playoffConfig.postGameColumnsEnabled !== postGameColumnsEnabled ||
+      playoffConfig.beatReporterEnabled !== (liveBeatReporterEnabled || postGameColumnsEnabled);
+
+    if (!shouldPersist) return;
+
+    let cancelled = false;
+    void updatePlayoff(playoffConfig.id, {
+      liveBeatReporterEnabled,
+      postGameColumnsEnabled,
+      beatReporterEnabled: liveBeatReporterEnabled || postGameColumnsEnabled,
+    })
+      .then((updatedPlayoff) => {
+        if (!cancelled) {
+          setPlayoffConfig(updatedPlayoff);
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          console.error('[EliminationHome] Failed to persist reporter toggles:', err);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [liveBeatReporterEnabled, playoffConfig, postGameColumnsEnabled]);
+
   const seriesByRound = useMemo(() => {
     const grouped = new Map<number, PlayoffSeries[]>();
     for (const series of seriesList) {
@@ -256,9 +328,29 @@ export function EliminationHome() {
     [seriesList, selectedSeriesId]
   );
   const selectedSeriesGame = useMemo(
-    () => (eliminationId && selectedSeries ? buildSeriesCardState(eliminationId, selectedSeries) : null),
-    [eliminationId, selectedSeries],
+    () =>
+      eliminationId && selectedSeries
+        ? buildSeriesCardState(eliminationId, selectedSeries, selectedHomeTeamId)
+        : null,
+    [eliminationId, selectedHomeTeamId, selectedSeries],
   );
+
+  useEffect(() => {
+    if (!eliminationId || !selectedSeries) {
+      setSelectedHomeTeamId(null);
+      return;
+    }
+
+    setSelectedHomeTeamId((current) => {
+      if (
+        current === selectedSeries.higherSeed.teamId ||
+        current === selectedSeries.lowerSeed.teamId
+      ) {
+        return current;
+      }
+      return buildSeriesCardState(eliminationId, selectedSeries).homeTeam.teamId;
+    });
+  }, [eliminationId, selectedSeries]);
 
   useEffect(() => {
     if (!eliminationId || !selectedSeriesGame) {
@@ -304,12 +396,25 @@ export function EliminationHome() {
     };
   }, [eliminationId, selectedSeriesGame]);
 
-  const handlePlayGame = async (series: PlayoffSeries) => {
+  const handlePlayGame = async (
+    series: PlayoffSeries,
+    selectedHomeTeamIdForLaunch: string,
+  ) => {
     if (!eliminationId || !playoffConfig || !metadata) return;
 
     try {
-      const { gameId, nextGameNumber, homeTeam, awayTeam } = buildSeriesCardState(eliminationId, series);
+      const { gameId, nextGameNumber, homeTeam, awayTeam } = buildSeriesCardState(
+        eliminationId,
+        series,
+        selectedHomeTeamIdForLaunch,
+      );
       const higherSeedHome = homeTeam.teamId === series.higherSeed.teamId;
+      const clutchContext = buildClutchContext(
+        series.higherSeedWins,
+        series.lowerSeedWins,
+        series.bestOf,
+        series.round === playoffConfig.rounds,
+      );
       const [awayRoster, homeRoster, awayTeamData, homeTeamData] = await Promise.all([
         buildEliminationGameTrackerRoster(eliminationId, awayTeam.teamId, playoffConfig.useDH),
         buildEliminationGameTrackerRoster(eliminationId, homeTeam.teamId, playoffConfig.useDH),
@@ -336,6 +441,7 @@ export function EliminationHome() {
           statsScopeId: `elimination-${eliminationId}`,
           competitionType: 'elimination',
           competitionId: eliminationId,
+          competitionName: metadata.name,
           leagueId: metadata.leagueId,
           liveBeatReporterEnabled,
           postGameColumnsEnabled,
@@ -363,6 +469,9 @@ export function EliminationHome() {
           playoffSeriesId: series.id,
           playoffGameNumber: nextGameNumber,
           playoffId: playoffConfig.id,
+          playoffRound: mapSeriesRoundToFameRound(series.round, playoffConfig.rounds),
+          isEliminationGame: clutchContext.isEliminationGame,
+          isClinchGame: clutchContext.isClinchGame,
           totalInnings: playoffConfig.inningsPerGame,
           useDH: playoffConfig.useDH,
         },
@@ -450,6 +559,8 @@ export function EliminationHome() {
             seriesByRound={seriesByRound}
             selectedSeries={selectedSeries}
             onSelectSeries={setSelectedSeriesId}
+            selectedHomeTeamId={selectedHomeTeamId}
+            onSelectHomeTeam={setSelectedHomeTeamId}
             onPlayGame={handlePlayGame}
             reporterPanel={
               pregameReporterTeams.length === 2 ? (
@@ -470,6 +581,7 @@ export function EliminationHome() {
           <EliminationTeamHub
             eliminationId={eliminationId!}
             teams={playoffConfig.teams}
+            useDH={playoffConfig.useDH}
           />
         )}
 
@@ -494,6 +606,8 @@ function BracketTab({
   seriesByRound,
   selectedSeries,
   onSelectSeries,
+  selectedHomeTeamId,
+  onSelectHomeTeam,
   onPlayGame,
   reporterPanel,
 }: {
@@ -502,7 +616,9 @@ function BracketTab({
   seriesByRound: Array<[number, PlayoffSeries[]]>;
   selectedSeries: PlayoffSeries | null;
   onSelectSeries: (seriesId: string) => void;
-  onPlayGame: (series: PlayoffSeries) => void;
+  selectedHomeTeamId: string | null;
+  onSelectHomeTeam: (teamId: string | null) => void;
+  onPlayGame: (series: PlayoffSeries, homeTeamId: string) => void;
   reporterPanel?: ReactNode;
 }) {
   return (
@@ -522,7 +638,7 @@ function BracketTab({
       ) : (
         seriesByRound.map(([round, roundSeries]) => (
           <div key={round} className="bg-[#5A8352] border-[6px] border-[#4A6844] p-4">
-            <div className="text-sm mb-4">▶ {getRoundName(round, playoffConfig.rounds).toUpperCase()}</div>
+            <div className="text-sm mb-4">▶ {getEliminationRoundName(round, playoffConfig.rounds).toUpperCase()}</div>
             <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
               {roundSeries.map((series) => {
                 const isSelected = selectedSeries?.id === series.id;
@@ -570,15 +686,9 @@ function BracketTab({
                           NEXT GAME {nextGame.nextGameNumber} • HOME: {nextGame.homeTeam.teamName}
                         </div>
                         {playable && (
-                          <button
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              onPlayGame(series);
-                            }}
-                            className="px-4 py-2 bg-[#E91E63] border-4 border-[#E8E8D8] text-[#E8E8D8] text-[8px] hover:bg-[#C2185B] active:scale-95"
-                          >
-                            PLAY GAME
-                          </button>
+                          <div className="text-[8px] text-[#E8E8D8]/60">
+                            Host selected in the series panel before launch.
+                          </div>
                         )}
                       </div>
                     )}
@@ -592,7 +702,14 @@ function BracketTab({
 
       {selectedSeries && (
         <>
-          <SelectedSeriesPanel eliminationId={eliminationId} playoffConfig={playoffConfig} series={selectedSeries} onPlayGame={onPlayGame} />
+          <SelectedSeriesPanel
+            eliminationId={eliminationId}
+            playoffConfig={playoffConfig}
+            series={selectedSeries}
+            selectedHomeTeamId={selectedHomeTeamId}
+            onSelectHomeTeam={onSelectHomeTeam}
+            onPlayGame={onPlayGame}
+          />
           {reporterPanel}
         </>
       )}
@@ -604,14 +721,18 @@ function SelectedSeriesPanel({
   eliminationId,
   playoffConfig,
   series,
+  selectedHomeTeamId,
+  onSelectHomeTeam,
   onPlayGame,
 }: {
   eliminationId: string;
   playoffConfig: PlayoffConfig;
   series: PlayoffSeries;
-  onPlayGame: (series: PlayoffSeries) => void;
+  selectedHomeTeamId: string | null;
+  onSelectHomeTeam: (teamId: string | null) => void;
+  onPlayGame: (series: PlayoffSeries, homeTeamId: string) => void;
 }) {
-  const nextGame = buildSeriesCardState(eliminationId, series);
+  const nextGame = buildSeriesCardState(eliminationId, series, selectedHomeTeamId);
 
   return (
     <div className="bg-[#5A8352] border-[6px] border-[#4A6844] p-6">
@@ -632,11 +753,33 @@ function SelectedSeriesPanel({
       ) : (
         <div className="space-y-3">
           <div className="text-[8px] text-[#E8E8D8]/70">
-            GAME {nextGame.nextGameNumber}: {nextGame.awayTeam.teamName} at {nextGame.homeTeam.teamName}
+            GAME {nextGame.nextGameNumber}: choose the home team before launch.
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {[series.higherSeed, series.lowerSeed].map((team) => {
+              const isSelected = nextGame.homeTeam.teamId === team.teamId;
+              return (
+                <button
+                  key={team.teamId}
+                  onClick={() => onSelectHomeTeam(team.teamId)}
+                  className={`border-4 p-3 text-left transition ${
+                    isSelected
+                      ? 'border-[#C4A853] bg-[#C4A853]/15'
+                      : 'border-[#E8E8D8] bg-[#4A6844] hover:border-[#C4A853]'
+                  }`}
+                >
+                  <div className="text-[8px] text-[#E8E8D8]/60">HOME TEAM</div>
+                  <div className="text-xs mt-1">#{team.seed} {team.teamName}</div>
+                </button>
+              );
+            })}
+          </div>
+          <div className="text-[8px] text-[#E8E8D8]/70">
+            Matchup: {nextGame.awayTeam.teamName} at {nextGame.homeTeam.teamName}
           </div>
           {canPlaySeries(series) && (
             <button
-              onClick={() => onPlayGame(series)}
+              onClick={() => onPlayGame(series, nextGame.homeTeam.teamId)}
               className="px-4 py-2 bg-[#E91E63] border-4 border-[#E8E8D8] text-[#E8E8D8] text-[8px] hover:bg-[#C2185B] active:scale-95"
             >
               PLAY GAME

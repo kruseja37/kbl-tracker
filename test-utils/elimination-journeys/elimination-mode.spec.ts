@@ -26,7 +26,7 @@ async function handlePitchCountPrompt(page: Page) {
 
 async function goToEliminationSetup(page: Page) {
   await page.goto('/');
-  await page.getByText('PLAYOFFS').click();
+  await page.getByText('ELIMINATION').click();
   await expect(page).toHaveURL(/\/elimination\/select/);
   await page.getByRole('button', { name: /New Elimination Bracket/i }).click();
   await expect(page).toHaveURL(/\/elimination\/setup/);
@@ -61,6 +61,7 @@ async function createEliminationBracket(page: Page, bracketName: string) {
 async function startFirstSeriesGame(page: Page) {
   const playButtons = page.getByRole('button', { name: /^PLAY GAME$/i });
   await expect(playButtons.first()).toBeVisible({ timeout: 10000 });
+  await expect(page.getByText(/Matchup:/i)).toBeVisible({ timeout: 10000 });
   await playButtons.first().click();
   await expect(page).toHaveURL(/\/game-tracker\/elim-/);
 }
@@ -148,7 +149,6 @@ test.describe('Elimination Mode Journeys', () => {
 
     const firstLineupSelect = page.locator('select').nth(0);
     const secondLineupSelect = page.locator('select').nth(2);
-    const firstNameBefore = await firstLineupSelect.inputValue();
     const secondNameBefore = await secondLineupSelect.inputValue();
 
     await page.locator('button').filter({ has: page.locator('svg') }).nth(1).click();
@@ -158,9 +158,10 @@ test.describe('Elimination Mode Journeys', () => {
     await page.getByRole('button', { name: /^TEAM HUB$/i }).click();
     await expect(firstLineupSelect).toHaveValue(secondNameBefore);
 
-    const makeNextButton = page.getByRole('button', { name: /MAKE NEXT/i }).first();
+    const firstNextStarter = page.getByText('NEXT STARTER').first();
+    const firstStarterBefore = await firstNextStarter.textContent();
+    const makeNextButton = page.getByRole('button', { name: /MAKE NEXT/i }).nth(1);
     await makeNextButton.click();
-    await expect(page.getByText('NEXT STARTER')).toBeVisible();
-    await expect(firstLineupSelect).not.toHaveValue(firstNameBefore);
+    await expect(firstNextStarter).not.toHaveText(firstStarterBefore ?? '');
   });
 });

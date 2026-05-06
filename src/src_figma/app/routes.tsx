@@ -14,6 +14,8 @@ import { GameTracker } from "@/app/pages/GameTracker";
 import { PostGameSummary } from "@/app/pages/PostGameSummary";
 import { ExhibitionGame } from "@/app/pages/ExhibitionGame";
 import { EliminationHome } from "@/app/pages/EliminationHome";
+import { EliminationSelector } from "@/app/pages/EliminationSelector";
+import { EliminationSetup } from "@/app/pages/EliminationSetup";
 import { SeasonSummary } from "@/app/pages/SeasonSummary";
 
 export const router = createBrowserRouter([
@@ -76,6 +78,14 @@ export const router = createBrowserRouter([
   {
     path: "/exhibition",
     Component: ExhibitionGame,
+  },
+  {
+    path: "/elimination/select",
+    Component: EliminationSelector,
+  },
+  {
+    path: "/elimination/setup",
+    Component: EliminationSetup,
   },
   {
     path: "/elimination/:eliminationId",

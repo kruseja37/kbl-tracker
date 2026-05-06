@@ -115,6 +115,10 @@ export async function getEliminationPlayersByTeam(bracketId: string, teamId: str
   );
 }
 
+/**
+ * Reserved/internal API for creating immutable copied run-source records.
+ * User-facing elimination roster edits should go through roster snapshots.
+ */
 export async function saveEliminationPlayer(
   bracketId: string,
   player: Omit<Player, 'id' | 'createdDate' | 'lastModified'> & { id?: string },
@@ -155,6 +159,10 @@ export async function getAllEliminationTeams(bracketId: string): Promise<Team[]>
   return teams ?? [];
 }
 
+/**
+ * Reserved/internal API for creating immutable copied run-source records.
+ * User-facing elimination team edits should go through roster snapshots.
+ */
 export async function saveEliminationTeam(
   bracketId: string,
   team: Omit<Team, 'id' | 'createdDate' | 'lastModified'> & { id?: string },

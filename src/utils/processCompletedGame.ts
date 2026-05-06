@@ -26,6 +26,13 @@ export interface ProcessGameResult {
   aggregation: GameAggregationResult;
 }
 
+export interface CompletedGameArchiveOptions {
+  finalScore?: { away: number; home: number };
+  inningScores?: { away: number; home: number }[];
+  seasonId?: string;
+  context?: Parameters<typeof archiveCompletedGame>[4];
+}
+
 function buildPlayerRatingsSnapshot(
   playerId: string,
   player: NonNullable<Awaited<ReturnType<typeof getEffectivePlayer>>>
@@ -98,7 +105,8 @@ async function capturePlayerRatingsSnapshots(
 export async function processCompletedGame(
   gameState: PersistedGameState,
   options?: GameAggregationOptions,
-  leagueId?: string
+  leagueId?: string,
+  archiveOptions?: CompletedGameArchiveOptions,
 ): Promise<ProcessGameResult> {
   const resolvedLeagueId = leagueId ?? resolveExhibitionLeagueId(gameState);
 
@@ -112,13 +120,13 @@ export async function processCompletedGame(
   // Step 2: Archive to completedGames store
   await archiveCompletedGame(
     gameState,
-    {
+    archiveOptions?.finalScore ?? {
       away: gameState.awayScore,
       home: gameState.homeScore,
     },
-    [],
-    options?.seasonId,
-    {
+    archiveOptions?.inningScores ?? [],
+    archiveOptions?.seasonId ?? options?.seasonId,
+    archiveOptions?.context ?? {
       leagueId: resolvedLeagueId,
     }
   );

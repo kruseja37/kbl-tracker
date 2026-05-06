@@ -294,8 +294,8 @@ describe("R3 Round 5 bug fixes", () => {
       });
     });
 
-    expect(mockArchiveCompletedGame).toHaveBeenCalled();
-    expect(mockArchiveCompletedGame.mock.calls[0]?.[4]).toMatchObject({
+    expect(mockProcessCompletedGame).toHaveBeenCalled();
+    expect(mockProcessCompletedGame.mock.calls[0]?.[3]?.context).toMatchObject({
       totalInnings: 7,
       pogPlayerId: "home-c",
       playersOfTheGame: {
@@ -553,7 +553,7 @@ describe("R3 Round 5 bug fixes", () => {
       await result.current.endGame();
     });
 
-    const archivedState = mockArchiveCompletedGame.mock.calls.at(-1)?.[0];
+    const archivedState = mockProcessCompletedGame.mock.calls.at(-1)?.[0];
     expect(archivedState.playerStats["home-c"].fieldingErrors).toBe(1);
     expect(archivedState.playerStats["home-sp"].fieldingErrors).toBe(0);
   });

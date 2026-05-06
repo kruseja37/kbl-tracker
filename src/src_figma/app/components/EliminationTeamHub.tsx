@@ -1,21 +1,112 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ChevronDown, ChevronUp, Loader2, Star } from 'lucide-react';
+import type { MojoLevel } from '../../../engines/mojoEngine';
+import { MOJO_LEVELS, MOJO_STATES, getMojoColor } from '../../../engines/mojoEngine';
+import type { FitnessState } from '../../../engines/fitnessEngine';
+import { FITNESS_STATES } from '../../../engines/fitnessEngine';
 import {
   getEliminationRosterSnapshot,
   getAllEliminationRosterSnapshots,
   getNormalizedEliminationLineup,
+  getNormalizedEliminationRotation,
   updateEliminationRosterSnapshot,
   type EliminationRosterSnapshot,
 } from '../../../utils/eliminationRosterStorage';
 import type { Player, LineupSlot, Position } from '../../../utils/leagueBuilderStorage';
+import { loadMojoFitnessSnapshots, saveMojoFitnessSnapshots } from '../../../utils/mojoFitnessStorage';
 import type { PlayoffTeam } from '../../../utils/playoffStorage';
 
 interface EliminationTeamHubProps {
   eliminationId: string;
   teams: PlayoffTeam[];
+  useDH: boolean;
 }
 
-const FIELD_POSITIONS: Position[] = ['C', '1B', '2B', 'SS', '3B', 'LF', 'CF', 'RF', 'DH'];
+function PlayerConditionModal({
+  player,
+  mojo,
+  fitness,
+  onClose,
+  onMojoChange,
+  onFitnessChange,
+}: {
+  player: Player | null;
+  mojo: MojoLevel;
+  fitness: FitnessState;
+  onClose: () => void;
+  onMojoChange: (value: MojoLevel) => void;
+  onFitnessChange: (value: FitnessState) => void;
+}) {
+  if (!player) return null;
+
+  return (
+    <div className="fixed inset-0 z-[120] flex items-center justify-center px-4" onClick={onClose}>
+      <div className="absolute inset-0 bg-black/70" />
+      <div
+        className="relative w-full max-w-lg border-[6px] border-[#E8E8D8] bg-[#5A8352] p-5 shadow-[10px_10px_0px_0px_rgba(0,0,0,0.55)]"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="border-[4px] border-[#E8E8D8] bg-[#4A6844] p-4">
+          <div className="text-xs text-[#E8E8D8]/60">PLAYER CARD</div>
+          <div className="mt-2 text-sm text-[#E8E8D8]">{getPlayerName(player)}</div>
+          <div className="mt-2 text-[10px] text-[#E8E8D8]/70">
+            {formatPosition(player)} • {player.overallGrade} • {player.bats}/{player.throws}
+          </div>
+        </div>
+
+        <div className="mt-4 grid gap-4 md:grid-cols-2">
+          <div className="border-[4px] border-[#E8E8D8] bg-[#4A6844] p-4">
+            <div className="text-[10px] text-[#E8E8D8]/70 mb-3">MOJO</div>
+            <div className="text-sm font-bold mb-3" style={{ color: getMojoColor(mojo) }}>
+              {MOJO_STATES[mojo].emoji} {MOJO_STATES[mojo].displayName}
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              {MOJO_LEVELS.map((level) => (
+                <button
+                  key={level}
+                  onClick={() => onMojoChange(level)}
+                  className={`border-2 px-2 py-2 text-[9px] font-bold ${level === mojo ? 'border-[#C4A853] bg-[#C4A853]/20' : 'border-[#E8E8D8]/50 hover:border-[#E8E8D8]'}`}
+                  style={{ color: getMojoColor(level) }}
+                >
+                  {MOJO_STATES[level].emoji} {MOJO_STATES[level].displayName}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="border-[4px] border-[#E8E8D8] bg-[#4A6844] p-4">
+            <div className="text-[10px] text-[#E8E8D8]/70 mb-3">FITNESS</div>
+            <div className="text-sm font-bold mb-3" style={{ color: FITNESS_STATES[fitness].color }}>
+              {FITNESS_STATES[fitness].emoji} {FITNESS_STATES[fitness].displayName}
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              {(Object.keys(FITNESS_STATES) as FitnessState[]).map((state) => (
+                <button
+                  key={state}
+                  onClick={() => onFitnessChange(state)}
+                  className={`border-2 px-2 py-2 text-[9px] font-bold ${state === fitness ? 'border-[#C4A853] bg-[#C4A853]/20' : 'border-[#E8E8D8]/50 hover:border-[#E8E8D8]'}`}
+                  style={{ color: FITNESS_STATES[state].color }}
+                >
+                  {FITNESS_STATES[state].emoji} {FITNESS_STATES[state].displayName}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <button
+          onClick={onClose}
+          className="mt-4 w-full border-[4px] border-[#E8E8D8] bg-[#E8E8D8] px-4 py-2 text-sm font-bold text-[#4A6844] hover:bg-white"
+        >
+          CLOSE
+        </button>
+      </div>
+    </div>
+  );
+}
+
+const FIELD_POSITIONS_WITH_DH: Position[] = ['C', '1B', '2B', 'SS', '3B', 'LF', 'CF', 'RF', 'DH'];
+const FIELD_POSITIONS_NO_DH: Position[] = ['C', '1B', '2B', 'SS', '3B', 'LF', 'CF', 'RF', 'P'];
 const PITCHER_POSITIONS: Position[] = ['SP', 'RP', 'CP', 'SP/RP'];
 
 function getPlayerName(player: Player): string {
@@ -36,10 +127,12 @@ function formatPosition(player: Player): string {
     : player.primaryPosition;
 }
 
-export function EliminationTeamHub({ eliminationId, teams }: EliminationTeamHubProps) {
+export function EliminationTeamHub({ eliminationId, teams, useDH }: EliminationTeamHubProps) {
   const [selectedTeamId, setSelectedTeamId] = useState<string>(teams[0]?.teamId ?? '');
   const [snapshot, setSnapshot] = useState<EliminationRosterSnapshot | null>(null);
   const [availableSnapshotIds, setAvailableSnapshotIds] = useState<string[]>([]);
+  const [mojoFitnessByPlayerId, setMojoFitnessByPlayerId] = useState<Record<string, { mojo: MojoLevel; fitness: FitnessState }>>({});
+  const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -110,6 +203,34 @@ export function EliminationTeamHub({ eliminationId, teams }: EliminationTeamHubP
     };
   }, [eliminationId, selectedTeamId]);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadConditions() {
+      try {
+        const snapshots = await loadMojoFitnessSnapshots(eliminationId);
+        if (cancelled) return;
+        setMojoFitnessByPlayerId(
+          Object.fromEntries(
+            snapshots.map((entry) => [
+              entry.playerId,
+              { mojo: entry.mojoLevel, fitness: entry.fitnessState },
+            ]),
+          ),
+        );
+      } catch (err) {
+        if (!cancelled) {
+          console.error('[EliminationTeamHub] Failed to load mojo/fitness snapshots:', err);
+        }
+      }
+    }
+
+    void loadConditions();
+    return () => {
+      cancelled = true;
+    };
+  }, [eliminationId]);
+
   const positionPlayers = useMemo(
     () =>
       (snapshot?.players ?? [])
@@ -127,8 +248,12 @@ export function EliminationTeamHub({ eliminationId, teams }: EliminationTeamHubP
   );
 
   const lineup = useMemo(
-    () => (snapshot ? sortLineup(getNormalizedEliminationLineup(snapshot)) : []),
-    [snapshot]
+    () => (snapshot ? sortLineup(getNormalizedEliminationLineup(snapshot, useDH)) : []),
+    [snapshot, useDH]
+  );
+  const editablePositions = useMemo(
+    () => (useDH ? FIELD_POSITIONS_WITH_DH : FIELD_POSITIONS_NO_DH),
+    [useDH],
   );
   const lineupPlayerIds = useMemo(() => new Set(lineup.map((slot) => slot.playerId)), [lineup]);
 
@@ -140,14 +265,14 @@ export function EliminationTeamHub({ eliminationId, teams }: EliminationTeamHubP
 
   const rotationPlayers = useMemo(() => {
     const playerMap = new Map((snapshot?.players ?? []).map((player) => [player.id, player]));
-    return (snapshot?.startingRotation ?? [])
+    return (snapshot ? getNormalizedEliminationRotation(snapshot) : [])
       .map((playerId) => playerMap.get(playerId))
       .filter((player): player is Player => Boolean(player));
   }, [snapshot]);
 
   async function persistUpdates(
     teamId: string,
-    updates: Partial<Pick<EliminationRosterSnapshot, 'lineup' | 'startingRotation'>>
+    updates: Partial<Pick<EliminationRosterSnapshot, 'lineup' | 'lineupWithoutDH' | 'startingRotation'>>
   ) {
     setIsSaving(true);
     setError(null);
@@ -159,6 +284,9 @@ export function EliminationTeamHub({ eliminationId, teams }: EliminationTeamHubP
               ...current,
               ...updates,
               lineup: updates.lineup ? sortLineup(updates.lineup) : current.lineup,
+              lineupWithoutDH: updates.lineupWithoutDH
+                ? sortLineup(updates.lineupWithoutDH)
+                : current.lineupWithoutDH,
               startingRotation: updates.startingRotation ?? current.startingRotation,
             }
           : current
@@ -180,7 +308,7 @@ export function EliminationTeamHub({ eliminationId, teams }: EliminationTeamHubP
     [reordered[index], reordered[nextIndex]] = [reordered[nextIndex], reordered[index]];
     const nextLineup = reordered.map((slot, order) => ({ ...slot, battingOrder: order + 1 }));
 
-    await persistUpdates(snapshot.teamId, { lineup: nextLineup });
+    await persistUpdates(snapshot.teamId, useDH ? { lineup: nextLineup } : { lineupWithoutDH: nextLineup });
   }
 
   async function handlePositionChange(index: number, fieldingPosition: Position) {
@@ -190,7 +318,7 @@ export function EliminationTeamHub({ eliminationId, teams }: EliminationTeamHubP
       slotIndex === index ? { ...slot, fieldingPosition } : slot
     );
 
-    await persistUpdates(snapshot.teamId, { lineup: nextLineup });
+    await persistUpdates(snapshot.teamId, useDH ? { lineup: nextLineup } : { lineupWithoutDH: nextLineup });
   }
 
   async function handleLineupPlayerChange(index: number, playerId: string) {
@@ -209,31 +337,56 @@ export function EliminationTeamHub({ eliminationId, teams }: EliminationTeamHubP
       nextLineup[index] = { ...nextLineup[index], playerId };
     }
 
-    await persistUpdates(snapshot.teamId, { lineup: nextLineup });
+    await persistUpdates(snapshot.teamId, useDH ? { lineup: nextLineup } : { lineupWithoutDH: nextLineup });
   }
 
   async function handlePromoteStarter(playerId: string) {
     if (!snapshot) return;
 
+    const normalizedRotation = getNormalizedEliminationRotation(snapshot);
     const nextRotation = [
       playerId,
-      ...snapshot.startingRotation.filter((currentId) => currentId !== playerId),
+      ...normalizedRotation.filter((currentId) => currentId !== playerId),
     ];
 
     await persistUpdates(snapshot.teamId, { startingRotation: nextRotation });
   }
 
+  async function handleConditionChange(
+    playerId: string,
+    updates: Partial<{ mojo: MojoLevel; fitness: FitnessState }>,
+  ) {
+    const current = mojoFitnessByPlayerId[playerId] ?? { mojo: 0 as MojoLevel, fitness: 'FIT' as FitnessState };
+    const next = {
+      mojo: updates.mojo ?? current.mojo,
+      fitness: updates.fitness ?? current.fitness,
+    };
+    setMojoFitnessByPlayerId((prev) => ({
+      ...prev,
+      [playerId]: next,
+    }));
+    await saveMojoFitnessSnapshots(eliminationId, [
+      {
+        playerId,
+        mojoLevel: next.mojo,
+        fitnessState: next.fitness,
+      },
+    ]);
+  }
+
   function renderPlayerRow(player: Player) {
+    const condition = mojoFitnessByPlayerId[player.id] ?? { mojo: 0 as MojoLevel, fitness: 'FIT' as FitnessState };
     return (
-      <div
+      <button
         key={player.id}
-        className="bg-[#4A6844] border-4 border-[#6B9462] p-3 grid grid-cols-[1.8fr,0.9fr,0.6fr,0.7fr] gap-2 text-[8px]"
+        onClick={() => setSelectedPlayer(player)}
+        className="w-full bg-[#4A6844] border-4 border-[#6B9462] p-3 grid grid-cols-[1.8fr,0.9fr,0.8fr,0.8fr] gap-2 text-[8px] text-left hover:border-[#E8E8D8]"
       >
         <div className="text-[#E8E8D8]">{getPlayerName(player)}</div>
         <div className="text-[#E8E8D8]/80">{formatPosition(player)}</div>
-        <div className="text-[#E8E8D8]/80">{player.overallGrade}</div>
-        <div className="text-[#E8E8D8]/80">{player.bats}/{player.throws}</div>
-      </div>
+        <div className="text-[#E8E8D8]/80">{MOJO_STATES[condition.mojo].emoji} {MOJO_STATES[condition.mojo].displayName}</div>
+        <div className="text-[#E8E8D8]/80">{FITNESS_STATES[condition.fitness].emoji} {FITNESS_STATES[condition.fitness].displayName}</div>
+      </button>
     );
   }
 
@@ -298,10 +451,16 @@ export function EliminationTeamHub({ eliminationId, teams }: EliminationTeamHubP
                 <div className="space-y-2">
                   {lineup.map((slot, index) => {
                     const player = snapshot.players.find((item) => item.id === slot.playerId);
-                    const selectablePlayers = [
-                      ...(player ? [player] : []),
-                      ...benchPlayers,
-                    ];
+                    const selectablePlayers =
+                      slot.fieldingPosition === 'P'
+                        ? [
+                            ...(player ? [player] : []),
+                            ...pitchers.filter((candidate) => candidate.id !== player?.id),
+                          ]
+                        : [
+                            ...(player ? [player] : []),
+                            ...benchPlayers,
+                          ];
                     return (
                       <div
                         key={`${slot.playerId}-${slot.battingOrder}`}
@@ -330,7 +489,7 @@ export function EliminationTeamHub({ eliminationId, teams }: EliminationTeamHubP
                           onChange={(event) => void handlePositionChange(index, event.target.value as Position)}
                           className="bg-[#6B9462] border-2 border-[#E8E8D8] text-[#E8E8D8] text-[8px] px-2 py-1"
                         >
-                          {FIELD_POSITIONS.map((position) => (
+                          {editablePositions.map((position) => (
                             <option key={position} value={position}>
                               {position}
                             </option>
@@ -407,6 +566,21 @@ export function EliminationTeamHub({ eliminationId, teams }: EliminationTeamHubP
           </div>
         </>
       )}
+
+      <PlayerConditionModal
+        player={selectedPlayer}
+        mojo={(selectedPlayer && mojoFitnessByPlayerId[selectedPlayer.id]?.mojo) ?? 0}
+        fitness={(selectedPlayer && mojoFitnessByPlayerId[selectedPlayer.id]?.fitness) ?? 'FIT'}
+        onClose={() => setSelectedPlayer(null)}
+        onMojoChange={(value) => {
+          if (!selectedPlayer) return;
+          void handleConditionChange(selectedPlayer.id, { mojo: value });
+        }}
+        onFitnessChange={(value) => {
+          if (!selectedPlayer) return;
+          void handleConditionChange(selectedPlayer.id, { fitness: value });
+        }}
+      />
     </div>
   );
 }
