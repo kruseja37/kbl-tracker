@@ -12,20 +12,20 @@ const {
   mockUseParams,
   mockGetCanonicalPlayer,
   mockFindCanonicalByPlayerId,
-  mockGetPlayerExhibitionStats,
+  mockGetPlayerDisplayStats,
   mockGetPlayer,
   mockGetLeaguePlayerOverride,
   mockGetEffectivePlayer,
-  mockGetExhibitionPlayerContext,
+  mockGetPlayerInstanceContext,
 } = vi.hoisted(() => ({
   mockUseParams: vi.fn(),
   mockGetCanonicalPlayer: vi.fn(),
   mockFindCanonicalByPlayerId: vi.fn(),
-  mockGetPlayerExhibitionStats: vi.fn(),
+  mockGetPlayerDisplayStats: vi.fn(),
   mockGetPlayer: vi.fn(),
   mockGetLeaguePlayerOverride: vi.fn(),
   mockGetEffectivePlayer: vi.fn(),
-  mockGetExhibitionPlayerContext: vi.fn(),
+  mockGetPlayerInstanceContext: vi.fn(),
 }));
 
 vi.mock("react-router-dom", async () => {
@@ -45,7 +45,8 @@ vi.mock("../../../utils/almanacStorage", () => ({
 }));
 
 vi.mock("../../../utils/almanacQueries", () => ({
-  getPlayerExhibitionStats: mockGetPlayerExhibitionStats,
+  getPlayerInstanceStats: vi.fn(),
+  getPlayerEliminationAllTimeStats: vi.fn(),
 }));
 
 vi.mock("../../../utils/leagueBuilderStorage", () => ({
@@ -64,7 +65,8 @@ vi.mock("../../app/utils/almanacPlayerViews", async () => {
 
   return {
     ...actual,
-    getExhibitionPlayerContext: mockGetExhibitionPlayerContext,
+    getPlayerDisplayStats: mockGetPlayerDisplayStats,
+    getPlayerInstanceContext: mockGetPlayerInstanceContext,
   };
 });
 
@@ -158,11 +160,14 @@ describe("PlayerInstanceCard", () => {
     mockFindCanonicalByPlayerId.mockResolvedValue(null);
     mockGetPlayer.mockResolvedValue(player);
     mockGetLeaguePlayerOverride.mockResolvedValue(createOverride(5));
-    mockGetPlayerExhibitionStats.mockResolvedValue({
-      batting: null,
-      pitching: null,
+    mockGetPlayerDisplayStats.mockResolvedValue({
+      instanceBatting: null,
+      instancePitching: null,
+      allTimeEliminationBatting: null,
+      allTimeEliminationPitching: null,
     });
-    mockGetExhibitionPlayerContext.mockResolvedValue({
+    mockGetPlayerInstanceContext.mockResolvedValue({
+      mode: "exhibition",
       games: [],
       latestGame: null,
       latestSnapshot: null,

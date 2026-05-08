@@ -75,6 +75,7 @@ export interface UseCommentaryFeedOptions {
   homeTeamId: string;
   awayTeamId: string;
   leagueId?: string;
+  gameMode?: ReporterGameMode;
   getLivePreambleSeed: () => LiveReporterContextSeed | null;
   dependencies?: UseCommentaryFeedDependencies;
 }
@@ -212,6 +213,7 @@ export function useCommentaryFeed({
   homeTeamId,
   awayTeamId,
   leagueId,
+  gameMode,
   getLivePreambleSeed,
   dependencies = {},
 }: UseCommentaryFeedOptions) {
@@ -794,6 +796,7 @@ export function useCommentaryFeed({
         id: entry.id,
         gameId: targetGameId,
         leagueId,
+        gameMode,
         reporterId: reporter.id,
         commentaryText: entry.commentaryText,
         halfInningLabel: entry.halfInningLabel,
@@ -817,6 +820,7 @@ export function useCommentaryFeed({
       commentaryEntries,
       getLivePreambleSeed,
       leagueId,
+      gameMode,
       nowImpl,
       persistEntryRecord,
       resolveCallPrerequisites,

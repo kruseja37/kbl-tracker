@@ -1,4 +1,5 @@
 import type { AtBatEvent } from "./eventLog";
+import { aggregateKblWpaCredits, type KblWpaCredit } from "./kblWpaAttribution";
 
 type StoredPlayersOfTheGame = {
   first?: string;
@@ -19,10 +20,17 @@ interface PlayerStatLike {
   k: number;
 }
 
+interface PitcherStatLike {
+  pitcherId: string;
+  pitcherName: string;
+  teamId: string;
+}
+
 export interface PlayersOfTheGameSource {
   awayTeamId: string;
   homeTeamId: string;
   playerStats: Record<string, PlayerStatLike>;
+  pitcherGameStats?: PitcherStatLike[];
   playersOfTheGame?: StoredPlayersOfTheGame;
   pogPlayerId?: string;
 }
@@ -65,6 +73,7 @@ function getStoredRankedIds(source: PlayersOfTheGameSource): string[] {
 export function rankPlayersOfTheGame(
   source: PlayersOfTheGameSource,
   atBatEvents: AtBatEvent[],
+  kblWpaCredits: KblWpaCredit[] = [],
 ): PlayerOfTheGameEntry[] {
   const normalizedAwayTeamId = normalizeTeamId(source.awayTeamId);
   const normalizedHomeTeamId = normalizeTeamId(source.homeTeamId);
@@ -104,25 +113,74 @@ export function rankPlayersOfTheGame(
   const batterById = new Map(
     allBatters.map((batter) => [batter.playerId, batter]),
   );
+  const pitcherById = new Map(
+    (source.pitcherGameStats ?? []).map((pitcher) => [
+      pitcher.pitcherId,
+      {
+        playerId: pitcher.pitcherId,
+        name: pitcher.pitcherName,
+        teamId: pitcher.teamId,
+        isAway: normalizeTeamId(pitcher.teamId) === normalizedAwayTeamId,
+        pa: 0,
+        ab: 0,
+        h: 0,
+        hr: 0,
+        rbi: 0,
+        r: 0,
+        bb: 0,
+        so: 0,
+        hasOffensiveLine: false,
+      } satisfies RankedPlayerCandidate,
+    ]),
+  );
 
   const wpaByBatter = new Map<string, number>();
+  const kblTotalById = new Map<string, ReturnType<typeof aggregateKblWpaCredits>[number]>();
   let hasWpaData = false;
 
-  for (const event of atBatEvents) {
-    if (!Number.isFinite(event.wpa)) continue;
-    hasWpaData = true;
-    wpaByBatter.set(
-      event.batterId,
-      (wpaByBatter.get(event.batterId) ?? 0) + event.wpa,
-    );
+  if (kblWpaCredits.length > 0) {
+    for (const total of aggregateKblWpaCredits(kblWpaCredits)) {
+      hasWpaData = true;
+      wpaByBatter.set(total.playerId, total.totalWpa);
+      kblTotalById.set(total.playerId, total);
+    }
+  } else {
+    for (const event of atBatEvents) {
+      if (!Number.isFinite(event.wpa)) continue;
+      hasWpaData = true;
+      wpaByBatter.set(
+        event.batterId,
+        (wpaByBatter.get(event.batterId) ?? 0) + event.wpa,
+      );
+    }
   }
 
   const rankedCandidates: RankedPlayerCandidate[] = [];
   if (hasWpaData) {
     for (const [playerId, wpa] of wpaByBatter.entries()) {
-      const batter = batterById.get(playerId);
-      if (batter) {
-        rankedCandidates.push({ ...batter, wpa });
+      const knownPlayer = batterById.get(playerId) ?? pitcherById.get(playerId);
+      const total = kblTotalById.get(playerId);
+      const candidate =
+        knownPlayer ??
+        (total
+          ? {
+              playerId: total.playerId,
+              name: total.playerName,
+              teamId: total.teamId,
+              isAway: normalizeTeamId(total.teamId) === normalizedAwayTeamId,
+              pa: 0,
+              ab: 0,
+              h: 0,
+              hr: 0,
+              rbi: 0,
+              r: 0,
+              bb: 0,
+              so: 0,
+              hasOffensiveLine: false,
+            }
+          : undefined);
+      if (candidate) {
+        rankedCandidates.push({ ...candidate, wpa });
       }
     }
     rankedCandidates.sort((left, right) => {

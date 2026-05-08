@@ -104,6 +104,11 @@ const AlmanacHome = lazy(() =>
     default: module.AlmanacHome,
   })),
 );
+const AlmanacNarratives = lazy(() =>
+  import("./src_figma/app/pages/AlmanacNarratives").then((module) => ({
+    default: module.AlmanacNarratives,
+  })),
+);
 const ExhibitionLeaders = lazy(() =>
   import("./src_figma/app/pages/ExhibitionLeaders").then((module) => ({
     default: module.ExhibitionLeaders,
@@ -248,7 +253,9 @@ function App() {
 
         {/* Almanac - Figma Design */}
         <Route path="/almanac" element={<AlmanacHome />} />
+        <Route path="/almanac/narratives" element={<AlmanacNarratives />} />
         <Route path="/almanac/exhibition" element={<ExhibitionLeaders />} />
+        <Route path="/almanac/elimination" element={<GameBrowser />} />
         <Route path="/almanac/games" element={<GameBrowser />} />
         <Route path="/almanac/games/:gameId" element={<GameDetail />} />
         <Route path="/almanac/players" element={<PlayerDirectory />} />

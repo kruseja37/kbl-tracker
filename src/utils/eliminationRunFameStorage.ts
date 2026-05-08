@@ -240,3 +240,16 @@ export async function setRunPromotionDecision(
   await persistAggregate(tx, store, updated);
   return nextDecision;
 }
+
+export async function deleteRunFameAggregate(runId: string): Promise<void> {
+  const db = await getTrackerDb();
+  const tx = db.transaction(STORE, "readwrite");
+  const store = tx.objectStore(STORE);
+
+  await requestToPromise(store.delete(runId));
+  await transactionToPromise(tx);
+
+  if (!syncEngine.isSuppressed()) {
+    syncEngine.remove("kbl-tracker", STORE, runId);
+  }
+}

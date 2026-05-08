@@ -61,6 +61,7 @@ import { useGameState } from '../../hooks/useGameState';
 describe('useGameState reporter flags', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.useRealTimers();
     sessionStorage.clear();
   });
 
@@ -103,5 +104,102 @@ describe('useGameState reporter flags', () => {
 
     expect(result.current.gameState.liveBeatReporterEnabled).toBe(true);
     expect(result.current.gameState.postGameColumnsEnabled).toBe(false);
+  });
+
+  test('startGame immediately persists a LIVE current-game snapshot', async () => {
+    const { result } = renderHook(() => useGameState());
+
+    await act(async () => {
+      await result.current.initializeGame({
+        gameId: 'game-live-transition',
+        awayTeamId: 'away-team',
+        awayTeamName: 'Away Team',
+        homeTeamId: 'home-team',
+        homeTeamName: 'Home Team',
+        awayStartingPitcherId: 'away-sp',
+        awayStartingPitcherName: 'Away Starter',
+        homeStartingPitcherId: 'home-sp',
+        homeStartingPitcherName: 'Home Starter',
+        awayLineup: [
+          { playerId: 'away-batter-1', playerName: 'Away Batter 1', position: 'CF' },
+        ],
+        homeLineup: [
+          { playerId: 'home-batter-1', playerName: 'Home Batter 1', position: 'SS' },
+        ],
+        awayBench: [],
+        homeBench: [],
+        seasonNumber: 1,
+      });
+    });
+
+    mockImmediateSaveCurrentGame.mockClear();
+
+    act(() => {
+      result.current.startGame();
+    });
+
+    expect(result.current.gameState.gamePhase).toBe('LIVE');
+    expect(mockImmediateSaveCurrentGame).toHaveBeenCalledTimes(1);
+    expect(mockImmediateSaveCurrentGame).toHaveBeenCalledWith(
+      expect.objectContaining({
+        gameId: 'game-live-transition',
+        gamePhase: 'LIVE',
+        gameStartedAt: expect.any(Number),
+      }),
+    );
+    expect(sessionStorage.getItem('kbl-game-started:game-live-transition')).toBe('true');
+  });
+
+  test('startGame prevents a delayed PRE_GAME autosave from overwriting LIVE', async () => {
+    vi.useFakeTimers();
+    const { result } = renderHook(() => useGameState());
+
+    await act(async () => {
+      await result.current.initializeGame({
+        gameId: 'game-live-autosave-race',
+        awayTeamId: 'away-team',
+        awayTeamName: 'Away Team',
+        homeTeamId: 'home-team',
+        homeTeamName: 'Home Team',
+        awayStartingPitcherId: 'away-sp',
+        awayStartingPitcherName: 'Away Starter',
+        homeStartingPitcherId: 'home-sp',
+        homeStartingPitcherName: 'Home Starter',
+        awayLineup: [
+          { playerId: 'away-batter-1', playerName: 'Away Batter 1', position: 'CF' },
+        ],
+        homeLineup: [
+          { playerId: 'home-batter-1', playerName: 'Home Batter 1', position: 'SS' },
+        ],
+        awayBench: [],
+        homeBench: [],
+        seasonNumber: 1,
+      });
+    });
+
+    mockImmediateSaveCurrentGame.mockClear();
+    mockSaveCurrentGame.mockClear();
+
+    act(() => {
+      result.current.startGame();
+    });
+    await act(async () => {
+      vi.runOnlyPendingTimers();
+    });
+
+    expect(result.current.gameState.gamePhase).toBe('LIVE');
+    expect(mockImmediateSaveCurrentGame).toHaveBeenCalledWith(
+      expect.objectContaining({
+        gameId: 'game-live-autosave-race',
+        gamePhase: 'LIVE',
+        gameStartedAt: expect.any(Number),
+      }),
+    );
+    expect(mockSaveCurrentGame).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        gameId: 'game-live-autosave-race',
+        gamePhase: 'PRE_GAME',
+      }),
+    );
   });
 });

@@ -102,10 +102,6 @@ import {
 import { areRivals } from "../../../data/leagueStructure";
 import { getParkNames } from "../../../data/parkLookup";
 import {
-  compareScores,
-  reconcileScoreFromEvents,
-} from "../../../utils/scoreReconciliation";
-import {
   useGameState,
   type GameState,
   type GamePhase,
@@ -380,6 +376,42 @@ function normalizeRosterForDh(
   });
 }
 
+function sanitizeIncomingRosterPlayers(
+  players: Player[],
+  pitchers: Pitcher[],
+  explicitUseDh?: boolean,
+): Player[] {
+  const deduped: Player[] = [];
+  const seenIds = new Set<string>();
+
+  for (const player of players) {
+    const identity = player.playerId || `${player.name}::${player.position || "UT"}`;
+    if (seenIds.has(identity)) {
+      continue;
+    }
+    seenIds.add(identity);
+    deduped.push({ ...player });
+  }
+
+  const lineupPlayers = deduped
+    .filter((player) => player.battingOrder !== undefined)
+    .sort((left, right) => (left.battingOrder || 0) - (right.battingOrder || 0));
+  const lineupIds = new Set(lineupPlayers.slice(0, 9).map((player) => player.playerId || player.name));
+
+  const normalized = deduped.map((player) => {
+    const identity = player.playerId || player.name;
+    if (!lineupIds.has(identity)) {
+      return {
+        ...player,
+        battingOrder: undefined,
+      };
+    }
+    return player;
+  });
+
+  return normalizeRosterForDh(normalized, pitchers, explicitUseDh);
+}
+
 function shouldHidePitcherFromBattingDisplay(
   player: Player,
   activePitcher: Pitcher | undefined,
@@ -478,6 +510,66 @@ export function buildDefensiveColumnPlayersForDisplay(args: {
     players.find((player) => sameRosterEntity(player, activePitcherEntry))
       ?.battingOrder ??
     9;
+
+  if (!teamUsesDh && activePitcherId && activePitcherName) {
+    const pitcherAlreadyDisplayed = defensivePlayers.some(
+      (player) => player.playerId === activePitcherId || player.position === "P",
+    );
+    if (!pitcherAlreadyDisplayed) {
+      const positionCounts = defensivePlayers.reduce<Record<string, number>>(
+        (counts, player) => {
+          if (player.position) {
+            counts[player.position] = (counts[player.position] || 0) + 1;
+          }
+          return counts;
+        },
+        {},
+      );
+      let duplicatePositionIndex = -1;
+      for (let index = defensivePlayers.length - 1; index >= 0; index -= 1) {
+        const position = defensivePlayers[index].position;
+        if (position && (positionCounts[position] || 0) > 1) {
+          duplicatePositionIndex = index;
+          break;
+        }
+      }
+      let lastNonPitcherIndex = -1;
+      for (let index = defensivePlayers.length - 1; index >= 0; index -= 1) {
+        if (defensivePlayers[index].position !== "P") {
+          lastNonPitcherIndex = index;
+          break;
+        }
+      }
+      const replacementIndex =
+        duplicatePositionIndex >= 0
+          ? duplicatePositionIndex
+          : lastNonPitcherIndex;
+
+      const pitcherRow = {
+        playerId: activePitcherId,
+        name: activePitcherName,
+        position: "P",
+        battingOrder:
+          activePitcherBattingOrder > 0 && activePitcherBattingOrder <= 9
+            ? activePitcherBattingOrder
+            : 9,
+        ...getLineupRosterMeta(
+          { playerId: activePitcherId, name: activePitcherName },
+          players,
+          pitchers,
+        ),
+      };
+
+      if (replacementIndex >= 0 && defensivePlayers.length >= 9) {
+        defensivePlayers[replacementIndex] = {
+          ...pitcherRow,
+          battingOrder: defensivePlayers[replacementIndex].battingOrder,
+        };
+      } else {
+        defensivePlayers.push(pitcherRow);
+      }
+    }
+  }
 
   if (teamUsesDh && activePitcherId && activePitcherName) {
     if (!defensivePlayers.some((player) => player.playerId === activePitcherId)) {
@@ -630,6 +722,7 @@ import {
 } from "../utils/fenwayBoardContext";
 import {
   applyRunnerDefaultsToNames,
+  buildRunnerScoreCorrectionPrompt,
   buildRunnerCorrectionForQuickBarOutcome,
   countRbiFromDefaults,
   getBatterDestinationOptions,
@@ -823,12 +916,20 @@ export function GameTracker() {
     playoffSeriesId?: string;
     playoffGameNumber?: number;
     playoffId?: string;
+    playoffRound?:
+      | "wild_card"
+      | "division_series"
+      | "championship_series"
+      | "world_series";
+    isEliminationGame?: boolean;
+    isClinchGame?: boolean;
     franchiseId?: string;
     eliminationId?: string;
     seasonId?: string;
     statsScopeId?: string;
     competitionType?: "exhibition" | "franchise" | "playoff" | "elimination";
     competitionId?: string;
+    competitionName?: string;
     liveBeatReporterEnabled?: boolean;
     postGameColumnsEnabled?: boolean;
     // T0-05: Schedule persistence context
@@ -1029,7 +1130,54 @@ export function GameTracker() {
     playerMojoFitnessGetterRef: hookMojoFitnessGetterRef,
     gameStartTimestampRef: hookGameStartTimestampRef,
     restoredMojoFitness,
+    restoredCompetitionContext,
+    restoredPlayoffContext,
   } = useGameState(gameId);
+  const effectiveCompetitionType =
+    navigationState?.competitionType ||
+    restoredCompetitionContext.competitionType ||
+    competitionType;
+  const effectiveCompetitionId =
+    navigationState?.competitionId ??
+    (effectiveCompetitionType === "elimination"
+      ? navigationState?.eliminationId
+      : effectiveCompetitionType === "franchise" ||
+          effectiveCompetitionType === "playoff"
+        ? navigationState?.franchiseId
+        : undefined) ??
+    restoredCompetitionContext.competitionId ??
+    competitionId;
+  const effectiveEliminationId =
+    navigationState?.eliminationId ||
+    (effectiveCompetitionType === "elimination"
+      ? effectiveCompetitionId
+      : undefined);
+  const effectiveStatsScopeId =
+    navigationState?.statsScopeId ||
+    (effectiveCompetitionType === "elimination" && effectiveEliminationId
+      ? `elimination-${effectiveEliminationId}`
+      : statsScopeId);
+  const effectiveGameMode =
+    navigationState?.gameMode ||
+    (effectiveCompetitionType === "elimination"
+      ? "elimination"
+      : effectiveCompetitionType === "playoff"
+        ? "playoff"
+        : gameMode);
+  const effectivePlayoffSeriesId =
+    navigationState?.playoffSeriesId || restoredPlayoffContext.playoffSeriesId;
+  const effectivePlayoffGameNumber =
+    navigationState?.playoffGameNumber ??
+    restoredPlayoffContext.playoffGameNumber;
+  const effectivePlayoffId =
+    navigationState?.playoffId || restoredPlayoffContext.playoffId;
+  const effectivePlayoffRound =
+    navigationState?.playoffRound || restoredPlayoffContext.playoffRound;
+  const effectiveIsEliminationGame =
+    navigationState?.isEliminationGame ??
+    restoredPlayoffContext.isEliminationGame;
+  const effectiveIsClinchGame =
+    navigationState?.isClinchGame ?? restoredPlayoffContext.isClinchGame;
   const resolvedStadiumName = getDisplayedStadiumName(
     selectedStadium,
     gameState.stadiumName,
@@ -1176,8 +1324,9 @@ export function GameTracker() {
 
   // Set playoff context from navigation state (if this is a playoff game)
   const isPlayoffGame =
-    navigationState?.gameMode === "playoff" ||
-    navigationState?.gameMode === "elimination";
+    effectiveCompetitionType === "playoff" ||
+    effectiveCompetitionType === "elimination" ||
+    !!restoredPlayoffContext.playoffSeriesId;
   useEffect(() => {
     if (navigationState?.playoffSeriesId) {
       setPlayoffContext(
@@ -1544,8 +1693,11 @@ export function GameTracker() {
   // Fame tracking
   const fameTrackingHook = useFameTracking({
     gameId: gameId || "demo-game",
-    gameMode,
+    gameMode: effectiveGameMode,
     isPlayoffs: isPlayoffGame,
+    playoffRound: effectivePlayoffRound,
+    isEliminationGame: effectiveIsEliminationGame,
+    isClinchGame: effectiveIsClinchGame,
   });
   const recordedAutoFameKeysRef = useRef<Set<string>>(new Set());
   const processedAutoFameAtBatIdsRef = useRef<Set<string>>(new Set());
@@ -2298,7 +2450,7 @@ export function GameTracker() {
   // Roster data - use navigation state if available, otherwise use defaults with ZERO stats (new game)
   // Use useState so we can update the roster when substitutions are made
   const [awayTeamPlayers, setAwayTeamPlayers] = useState<Player[]>(() =>
-    normalizeRosterForDh(
+    sanitizeIncomingRosterPlayers(
       navigationState?.awayPlayers || [
         {
           name: "J. MARTINEZ",
@@ -2395,7 +2547,7 @@ export function GameTracker() {
   // Fallback roster data for Home Team (exhibition mode) — ZERO stats for new game
   // Use useState so we can update the roster when substitutions are made
   const [homeTeamPlayers, setHomeTeamPlayers] = useState<Player[]>(() =>
-    normalizeRosterForDh(
+    sanitizeIncomingRosterPlayers(
       navigationState?.homePlayers || [
         {
           name: "P. HERNANDEZ",
@@ -2958,7 +3110,7 @@ export function GameTracker() {
       navigationState?.useDH,
   );
 
-  const currentLineup = battingTeamPlayersRaw
+  const currentLineupBase = battingTeamPlayersRaw
     .filter(
       (player) =>
         player.battingOrder !== undefined &&
@@ -2971,10 +3123,54 @@ export function GameTracker() {
     )
     .sort((a, b) => (a.battingOrder || 0) - (b.battingOrder || 0))
     .map((p) => ({
+      playerId: getRosterEntityId(p, battingTeam),
       name: p.name,
       pos: p.position || "DH",
+      battingOrder: p.battingOrder!,
       batting: p.name === resolvedCurrentBatterName,
     }));
+  const currentLineup = (() => {
+    if (
+      battingTeamUsesDh ||
+      !battingActivePitcher ||
+      currentLineupBase.some((player) => player.pos === "P")
+    ) {
+      return currentLineupBase;
+    }
+
+    const pitcherId = getRosterEntityId(battingActivePitcher, battingTeam);
+    if (currentLineupBase.some((player) => player.playerId === pitcherId)) {
+      return currentLineupBase;
+    }
+
+    const positionCounts = currentLineupBase.reduce<Record<string, number>>(
+      (counts, player) => {
+        counts[player.pos] = (counts[player.pos] || 0) + 1;
+        return counts;
+      },
+      {},
+    );
+    let duplicatePositionIndex = -1;
+    for (let index = currentLineupBase.length - 1; index >= 0; index -= 1) {
+      if ((positionCounts[currentLineupBase[index].pos] || 0) > 1) {
+        duplicatePositionIndex = index;
+        break;
+      }
+    }
+    const replacementIndex =
+      duplicatePositionIndex >= 0
+        ? duplicatePositionIndex
+        : currentLineupBase.length - 1;
+    const nextLineup = [...currentLineupBase];
+    nextLineup[replacementIndex] = {
+      playerId: pitcherId,
+      name: battingActivePitcher.name,
+      pos: "P",
+      battingOrder: nextLineup[replacementIndex]?.battingOrder ?? 9,
+      batting: battingActivePitcher.name === resolvedCurrentBatterName,
+    };
+    return nextLineup;
+  })();
 
   // GAP-GT-7-B: Batting lineup should render as 9 hitters regardless of DH format.
   const lineupSizeOk = currentLineup.length === 9;
@@ -3006,7 +3202,7 @@ export function GameTracker() {
   // LineupCard data derived from current team data
   // EXH-036: Use consistent IDs that match playerStateHook registration
   const lineupCardData: LineupPlayer[] = currentLineup.map((player, idx) => ({
-    id: getRosterIdFromName(player.name, battingTeam),
+    id: player.playerId || getRosterIdFromName(player.name, battingTeam),
     name: player.name,
     position: player.pos,
     battingOrder: idx + 1,
@@ -3362,6 +3558,10 @@ export function GameTracker() {
                 : undefined;
       const common = {
         fieldingSequence: enrichment.fieldingSequence || [],
+        extraGemCreditPositions:
+          ((enrichment as Record<string, unknown>).extraGemCreditPositions as
+            | number[]
+            | undefined) || [],
         ballLocation,
         spraySector: enrichment.fieldLocation?.zone,
         exitType,
@@ -3979,25 +4179,26 @@ export function GameTracker() {
           generatedExhibitionGameIdRef.current = `game-${Date.now()}`;
         }
         const nextGameId =
-          competitionType === "exhibition"
+          effectiveCompetitionType === "exhibition"
             ? generatedExhibitionGameIdRef.current
             : gameId || generatedExhibitionGameIdRef.current;
 
         await initializeGame({
           gameId: nextGameId,
           seasonId:
-            competitionType === "elimination"
+            effectiveCompetitionType === "elimination"
               ? undefined
               : navigationState?.franchiseId
                 ? `${navigationState.franchiseId}-season-${navigationState?.seasonNumber || 1}`
                 : "season-1",
           statsScopeId:
-            statsScopeId ||
+            effectiveStatsScopeId ||
             (navigationState?.franchiseId
               ? `${navigationState.franchiseId}-season-${navigationState?.seasonNumber || 1}`
               : "season-1"),
-          competitionType,
-          competitionId,
+          competitionType: effectiveCompetitionType,
+          competitionId: effectiveCompetitionId,
+          competitionName: navigationState?.competitionName,
           awayTeamId: awayTeamId,
           awayTeamName: awayTeamName,
           homeTeamId: homeTeamId,
@@ -4033,6 +4234,12 @@ export function GameTracker() {
             const [w, l] = homeRecord.split("-").map(Number);
             return { w: w || 0, l: l || 0 };
           })(),
+          playoffSeriesId: effectivePlayoffSeriesId ?? undefined,
+          playoffGameNumber: effectivePlayoffGameNumber ?? undefined,
+          playoffId: effectivePlayoffId ?? undefined,
+          playoffRound: effectivePlayoffRound,
+          isEliminationGame: effectiveIsEliminationGame,
+          isClinchGame: effectiveIsClinchGame,
         });
 
         // Layer 1C: Snapshot starting lineups for GameRecord archive
@@ -4042,7 +4249,7 @@ export function GameTracker() {
         );
 
         // R3: Update URL to match runtime gameId so refresh can find the snapshot
-        if (competitionType === "exhibition" && nextGameId !== gameId) {
+        if (effectiveCompetitionType === "exhibition" && nextGameId !== gameId) {
           window.history.replaceState(null, "", `/game-tracker/${nextGameId}`);
         }
 
@@ -4066,8 +4273,15 @@ export function GameTracker() {
       initInProgressRef.current = false;
     };
   }, [
-    competitionId,
-    competitionType,
+    effectiveCompetitionId,
+    effectiveCompetitionType,
+    effectiveIsClinchGame,
+    effectiveIsEliminationGame,
+    effectivePlayoffGameNumber,
+    effectivePlayoffId,
+    effectivePlayoffRound,
+    effectivePlayoffSeriesId,
+    effectiveStatsScopeId,
     gameId,
     gameInitialized,
     getRosterEntityId,
@@ -4081,7 +4295,6 @@ export function GameTracker() {
     navigationState?.seasonNumber,
     navigationState?.totalInnings,
     selectedStadium,
-    statsScopeId,
     isFreshNavigation,
     syncDisplayedRostersToLineupSnapshot,
     getLineupStateSnapshot,
@@ -4103,15 +4316,12 @@ export function GameTracker() {
         string,
         { mojoLevel: MojoLevel; fitnessState: FitnessState }
       > | null = null;
-      if (
-        navigationState?.gameMode === "elimination" &&
-        navigationState?.eliminationId
-      ) {
+      if (effectiveGameMode === "elimination" && effectiveEliminationId) {
         try {
           const { loadMojoFitnessSnapshots } =
             await import("../../../utils/mojoFitnessStorage");
           const snapshots = await loadMojoFitnessSnapshots(
-            navigationState.eliminationId,
+            effectiveEliminationId,
           );
           if (cancelled) return;
           mojoFitnessMap = new Map(
@@ -4291,8 +4501,8 @@ export function GameTracker() {
     getRosterEntityId,
     homePitcher,
     homeTeamPlayers,
-    navigationState?.eliminationId,
-    navigationState?.gameMode,
+    effectiveEliminationId,
+    effectiveGameMode,
     playerStateHook,
     restoredMojoFitness,
   ]);
@@ -4595,17 +4805,15 @@ export function GameTracker() {
       batterName: resolvedCurrentBatterName,
       pitcherId: gameState.currentPitcherId,
       pitcherName: resolvedCurrentPitcherName,
-      competitionType,
-      competitionId:
-        competitionType === "elimination"
-          ? navigationState?.eliminationId
-          : undefined,
+      competitionType: effectiveCompetitionType,
+      competitionId: effectiveCompetitionId,
       leagueId,
     };
   }, [
     awayTeamId,
     awayTeamName,
-    competitionType,
+    effectiveCompetitionId,
+    effectiveCompetitionType,
     gameState.awayScore,
     gameState.currentBatterId,
     gameState.currentPitcherId,
@@ -4618,7 +4826,6 @@ export function GameTracker() {
     homeTeamId,
     homeTeamName,
     leagueId,
-    navigationState?.eliminationId,
     resolvedCurrentBatterName,
     resolvedCurrentPitcherName,
     runnerNames.first,
@@ -4636,6 +4843,10 @@ export function GameTracker() {
     homeTeamId,
     awayTeamId,
     leagueId,
+    gameMode:
+      effectiveCompetitionType === "playoff"
+        ? "elimination"
+        : (effectiveCompetitionType as import("../../../types/reporter").ReporterGameMode),
     getLivePreambleSeed,
   });
   const [reportersForFeed, setReportersForFeed] = useState<
@@ -4760,7 +4971,7 @@ export function GameTracker() {
           inningEvents,
           reporterTeam,
           undefined,
-          competitionType,
+          effectiveCompetitionType,
         );
       } catch (error) {
         console.warn(
@@ -4771,7 +4982,7 @@ export function GameTracker() {
     })();
   }, [
     awayCommentaryDisabled,
-    competitionType,
+    effectiveCompetitionType,
     fireBetweenInningSummary,
     gameState.liveBeatReporterEnabled,
     gameState.gameId,
@@ -4793,9 +5004,9 @@ export function GameTracker() {
 
     const targetGameId = gameState.gameId;
     const reporterGameMode: import("../../../types/reporter").ReporterGameMode =
-      competitionType === "playoff"
+      effectiveCompetitionType === "playoff"
         ? "elimination"
-        : (competitionType as import("../../../types/reporter").ReporterGameMode);
+        : (effectiveCompetitionType as import("../../../types/reporter").ReporterGameMode);
 
     void (async () => {
       try {
@@ -4826,7 +5037,7 @@ export function GameTracker() {
   }, [
     awayCommentaryDisabled,
     awayTeamId,
-    competitionType,
+    effectiveCompetitionType,
     firePostGameColumns,
     gameState.awayScore,
     gameState.gameId,
@@ -4902,7 +5113,7 @@ export function GameTracker() {
         inferSnapshotUsesDh(battingSnapshot) ??
         navigationState?.useDH,
     );
-    return players
+    const battingRows = players
       .filter(
         (player) =>
           player.battingOrder !== undefined &&
@@ -4928,6 +5139,51 @@ export function GameTracker() {
           gameLine: lineupGameLineByPlayerId[playerId] ?? "0 for 0",
         };
       });
+    if (
+      teamUsesDh ||
+      !activePitcher ||
+      battingRows.some((player) => player.position === "P")
+    ) {
+      return battingRows;
+    }
+
+    const pitcherId = getRosterEntityId(activePitcher, battingTeam);
+    if (battingRows.some((player) => player.playerId === pitcherId)) {
+      return battingRows;
+    }
+
+    const positionCounts = battingRows.reduce<Record<string, number>>(
+      (counts, player) => {
+        const position = player.position || "UT";
+        counts[position] = (counts[position] || 0) + 1;
+        return counts;
+      },
+      {},
+    );
+    let duplicatePositionIndex = -1;
+    for (let index = battingRows.length - 1; index >= 0; index -= 1) {
+      const position = battingRows[index].position || "UT";
+      if ((positionCounts[position] || 0) > 1) {
+        duplicatePositionIndex = index;
+        break;
+      }
+    }
+    const replacementIndex =
+      duplicatePositionIndex >= 0
+        ? duplicatePositionIndex
+        : battingRows.length - 1;
+    const pitcherMeta = leagueBuilderLineupMetaById[pitcherId];
+    const nextRows = [...battingRows];
+    nextRows[replacementIndex] = {
+      playerId: pitcherId,
+      name: activePitcher.name,
+      position: "P",
+      battingOrder: nextRows[replacementIndex]?.battingOrder ?? 9,
+      jerseyNumber: activePitcher.jerseyNumber ?? pitcherMeta?.jerseyNumber,
+      hometown: activePitcher.hometown ?? pitcherMeta?.hometown,
+      gameLine: lineupGameLineByPlayerId[pitcherId] ?? "0 for 0",
+    };
+    return nextRows;
   }, [
     gameState.isTop,
     awayTeamPitchers,
@@ -5653,6 +5909,9 @@ export function GameTracker() {
       } else if (sub.type === "player_sub" || sub.type === "double_switch") {
         // MAJ-06: Pass enriched options to makeSubstitution
         // MAJ-09: Check validation result before proceeding
+        const isPinchHitter =
+          sub.type !== "double_switch" &&
+          sub.outgoingPlayerId === gameState?.currentBatterId;
         const subResult = makeSubstitution(
           sub.incomingPlayerId,
           sub.outgoingPlayerId,
@@ -5660,8 +5919,14 @@ export function GameTracker() {
           sub.outgoingPlayerName,
           {
             subType:
-              sub.type === "double_switch" ? "double_switch" : "player_sub",
+              sub.type === "double_switch"
+                ? "double_switch"
+                : isPinchHitter
+                  ? "pinch_hit"
+                  : "player_sub",
             newPosition: sub.newPosition,
+            lineupSpot: sub.lineupSpot,
+            isPinchHitter,
           },
         );
         if (!subResult.success) {
@@ -5675,8 +5940,6 @@ export function GameTracker() {
         // mWAR: Infer decision type — pinch hitter if outgoing is current batter, otherwise defensive sub
         try {
           const gsLI = buildGameStateForLI();
-          const isPinchHitter =
-            sub.outgoingPlayerId === gameState?.currentBatterId;
           const decisionType = isPinchHitter ? "pinch_hitter" : "defensive_sub";
           const decisionId = mwarHook.recordDecision(
             decisionType as any,
@@ -5855,6 +6118,80 @@ export function GameTracker() {
       } catch (error) {
         console.error(
           "[Historical Runner Edit] Failed to update fielder attribution:",
+          error,
+        );
+      } finally {
+        setSelectedBetweenPlayEventSaving(false);
+      }
+    },
+    [queuePlayLogRefresh, selectedBetweenPlayEvent],
+  );
+
+  const handleRunnerEventTypeChange = useCallback(
+    async (eventType: "wild_pitch" | "passed_ball") => {
+      if (
+        !selectedBetweenPlayEvent?.runnerAction ||
+        (selectedBetweenPlayEvent.type !== "wild_pitch" &&
+          selectedBetweenPlayEvent.type !== "passed_ball")
+      ) {
+        return;
+      }
+      if (selectedBetweenPlayEvent.type === eventType) return;
+
+      const timestamp = Date.now();
+      const nextEvent: BetweenPlayEvent = {
+        ...selectedBetweenPlayEvent,
+        type: eventType,
+        version: (selectedBetweenPlayEvent.version ?? 1) + 1,
+        editHistory: [
+          ...(selectedBetweenPlayEvent.editHistory || []),
+          {
+            field: "type",
+            oldValue: selectedBetweenPlayEvent.type,
+            newValue: eventType,
+            timestamp,
+          },
+          {
+            field: "runnerAction.reason",
+            oldValue: selectedBetweenPlayEvent.runnerAction.reason,
+            newValue: eventType,
+            timestamp,
+          },
+        ],
+        runnerAction: {
+          ...selectedBetweenPlayEvent.runnerAction,
+          reason: eventType,
+        },
+        errorChargedTo: eventType === "wild_pitch" ? "pitcher" : "catcher",
+        wildPitchOrPassedBall: selectedBetweenPlayEvent.wildPitchOrPassedBall
+          ? {
+              ...selectedBetweenPlayEvent.wildPitchOrPassedBall,
+              wpOrPb: eventType,
+            }
+          : selectedBetweenPlayEvent.runnerAttribution?.pitcherId
+            ? {
+                wpOrPb: eventType,
+                pitcherId: selectedBetweenPlayEvent.runnerAttribution.pitcherId,
+                catcherId: selectedBetweenPlayEvent.runnerAttribution.catcherId,
+              }
+            : undefined,
+      };
+
+      setSelectedBetweenPlayEventSaving(true);
+      try {
+        await updateBetweenPlayEvent(selectedBetweenPlayEvent.eventId, {
+          type: nextEvent.type,
+          version: nextEvent.version,
+          editHistory: nextEvent.editHistory?.slice(-2),
+          runnerAction: nextEvent.runnerAction,
+          errorChargedTo: nextEvent.errorChargedTo,
+          wildPitchOrPassedBall: nextEvent.wildPitchOrPassedBall,
+        });
+        setSelectedBetweenPlayEvent(nextEvent);
+        queuePlayLogRefresh(0);
+      } catch (error) {
+        console.error(
+          "[Historical Runner Edit] Failed to update WP/PB event type:",
           error,
         );
       } finally {
@@ -8672,6 +9009,7 @@ export function GameTracker() {
             outsAfter: nextOutsAfter,
             outsRecorded: nextOutsRecorded,
             runnersAfter: nextRunnersAfter,
+            totalInnings: hookTotalInningsRef.current,
             version: (existingAtBat.version ?? 1) + 1,
             editHistory: [
               {
@@ -8756,7 +9094,9 @@ export function GameTracker() {
           field === "fieldingAttemptType" ||
           field === "fieldingAttemptOutcome" ||
           field === "playMechanic" ||
-          field === "basesSaved";
+          field === "basesSaved" ||
+          field === "extraGemCreditPositions" ||
+          field === "rescuedThrow";
         const isFieldingDataField =
           isFieldingSyncField || field === "fieldingDifficulty";
         if (isFieldingSyncField) {
@@ -9302,12 +9642,16 @@ export function GameTracker() {
           };
         }
 
-        const nextAwayScoreAfter =
+        const nextAwayScoreAfter = Math.max(
+          0,
           existingAtBat.awayScoreAfter +
-          (existingAtBat.halfInning === "TOP" ? scoreDelta : 0);
-        const nextHomeScoreAfter =
+            (existingAtBat.halfInning === "TOP" ? scoreDelta : 0),
+        );
+        const nextHomeScoreAfter = Math.max(
+          0,
           existingAtBat.homeScoreAfter +
-          (existingAtBat.halfInning === "BOTTOM" ? scoreDelta : 0);
+            (existingAtBat.halfInning === "BOTTOM" ? scoreDelta : 0),
+        );
         const rawNextOutsRecorded =
           (existingAtBat.outsRecorded ??
             existingAtBat.outsAfter - existingAtBat.outs) + outDelta;
@@ -9500,6 +9844,7 @@ export function GameTracker() {
             homeScoreAfter: nextHomeScoreAfter,
             isWalkOff: nextIsWalkOff,
             outsRecorded: nextOutsRecorded,
+            totalInnings: hookTotalInningsRef.current,
             result: nextRecordedResult,
             version: nextVersion,
             editHistory,
@@ -9561,25 +9906,20 @@ export function GameTracker() {
           existingAtBat.inning === gameState.inning &&
           existingAtBat.halfInning === (gameState.isTop ? "TOP" : "BOTTOM");
 
-        // Fix A: Score adjustment fires for ALL corrections — latest or historical
+        // Score adjustment is scoped to the edited at-bat's batting side.
         if (scoreDelta !== 0) {
-          const scoreComparison = compareScores(
-            {
+          const prompt = buildRunnerScoreCorrectionPrompt({
+            inning: existingAtBat.inning,
+            halfInning: existingAtBat.halfInning,
+            current: {
               away: gameState.awayScore,
               home: gameState.homeScore,
             },
-            await reconcileScoreFromEvents(gameState.gameId),
-          );
+            scoreDelta,
+          });
 
-          if (scoreComparison.needsCorrection) {
-            setScoreCorrectionPrompt({
-              inning: existingAtBat.inning,
-              halfInning: existingAtBat.halfInning,
-              current: scoreComparison.current,
-              reconciled: scoreComparison.reconciled,
-              awayDelta: scoreComparison.awayDelta,
-              homeDelta: scoreComparison.homeDelta,
-            });
+          if (prompt) {
+            setScoreCorrectionPrompt(prompt);
           }
         }
 
@@ -9979,14 +10319,14 @@ export function GameTracker() {
       }
 
       const computedSeasonId =
-        competitionType === "elimination"
+        effectiveCompetitionType === "elimination"
           ? undefined
           : (navigationState?.seasonId ??
             (navigationState?.franchiseId
               ? `${navigationState.franchiseId}-season-${navigationState?.seasonNumber ?? 1}`
               : `season-${navigationState?.seasonNumber ?? 1}`));
       const computedStatsScopeId =
-        statsScopeId ??
+        effectiveStatsScopeId ??
         computedSeasonId ??
         `season-${navigationState?.seasonNumber ?? 1}`;
       pushActivityLog(
@@ -9996,8 +10336,8 @@ export function GameTracker() {
         activityLog,
         seasonId: computedSeasonId,
         statsScopeId: computedStatsScopeId,
-        competitionType,
-        competitionId,
+        competitionType: effectiveCompetitionType,
+        competitionId: effectiveCompetitionId,
         franchiseId: navigationState?.franchiseId,
         currentSeason: navigationState?.seasonNumber ?? 1,
         stadiumName: resolvedStadiumName,
@@ -10026,16 +10366,13 @@ export function GameTracker() {
       setIsProcessingEndGame(true);
 
       // Save mojo/fitness snapshots for elimination inter-game persistence
-      if (
-        navigationState?.gameMode === "elimination" &&
-        navigationState?.eliminationId
-      ) {
+      if (effectiveGameMode === "elimination" && effectiveEliminationId) {
         try {
           const { saveMojoFitnessSnapshots } =
             await import("../../../utils/mojoFitnessStorage");
           const allPlayers = playerStateHook.getAllPlayers();
           await saveMojoFitnessSnapshots(
-            navigationState.eliminationId,
+            effectiveEliminationId,
             allPlayers.map((p) => ({
               playerId: p.playerId,
               mojoLevel: p.gameState.currentMojo,
@@ -10092,9 +10429,9 @@ export function GameTracker() {
       // if the phase-watching effect also happens to run.
       if (gameState.postGameColumnsEnabled && completedGameId) {
         const reporterGameMode: import("../../../types/reporter").ReporterGameMode =
-          competitionType === "playoff"
+          effectiveCompetitionType === "playoff"
             ? "elimination"
-            : (competitionType as import("../../../types/reporter").ReporterGameMode);
+            : (effectiveCompetitionType as import("../../../types/reporter").ReporterGameMode);
         const postGameGameId = completedGameId;
         const snapshotHomeScore = gameState.homeScore;
         const snapshotAwayScore = gameState.awayScore;
@@ -10133,16 +10470,16 @@ export function GameTracker() {
       console.debug("[END-GAME] Step 5: Navigating to PostGameSummary");
       navigate(`/post-game/${completedGameId}`, {
         state: {
-          gameMode: navigationState?.gameMode || gameMode || "exhibition",
+          gameMode: effectiveGameMode || "exhibition",
           franchiseId:
             navigationState?.franchiseId ||
             gameId?.replace("franchise-", "") ||
             "1",
-          eliminationId: navigationState?.eliminationId,
+          eliminationId: effectiveEliminationId,
           seasonId: computedSeasonId,
           statsScopeId: computedStatsScopeId,
-          competitionType,
-          competitionId,
+          competitionType: effectiveCompetitionType,
+          competitionId: effectiveCompetitionId,
           gameNarrative,
           awayNarrative,
         },
@@ -10163,13 +10500,15 @@ export function GameTracker() {
   }, [
     hookEndGame,
     navigate,
+    effectiveCompetitionId,
+    effectiveCompetitionType,
+    effectiveEliminationId,
+    effectiveGameMode,
+    effectiveStatsScopeId,
     gameId,
-    navigationState?.gameMode,
-    navigationState?.eliminationId,
     navigationState?.franchiseId,
     navigationState?.seasonId,
     navigationState?.seasonNumber,
-    gameMode,
     gameState,
     pitcherStats,
     fameTrackingHook,
@@ -10184,9 +10523,6 @@ export function GameTracker() {
     activityLog,
     pushActivityLog,
     playerStateHook,
-    competitionType,
-    competitionId,
-    statsScopeId,
     selectedStadium,
     playAudio,
     awayTeamId,
@@ -10659,6 +10995,7 @@ export function GameTracker() {
                   }
                   onReturnToLive={handleReturnToLiveAtBat}
                   onRunnerCaughtByChange={handleRunnerCaughtByChange}
+                  onRunnerEventTypeChange={handleRunnerEventTypeChange}
                   onRunnerPitcherChange={handleRunnerPitcherAttributionChange}
                   onRunnerCatcherChange={handleRunnerCatcherAttributionChange}
                   onRunnerFielderChange={handleRunnerFielderAttributionChange}
@@ -10831,6 +11168,18 @@ export function GameTracker() {
               selectedPlayer.playerId,
               resolveRosterPlayerState(selectedPlayer.playerId),
             );
+            const resolvedSelectedPlayerId =
+              selectedPlayerState.playerId || selectedPlayer.playerId;
+            const resolvedSelectedTeam =
+              resolveRosterTeamSide(
+                resolvedSelectedPlayerId,
+                selectedPlayer.name,
+              ) ||
+              resolveRosterTeamSide(
+                selectedPlayer.playerId,
+                selectedPlayer.name,
+              ) ||
+              "home";
             const lineupSnapshot = getLineupStateSnapshot();
             const selectedPlayerTeam =
               (selectedPlayer.type === "pitcher"
@@ -10917,19 +11266,18 @@ export function GameTracker() {
                 onClose={() => setSelectedPlayer(null)}
                 batterGameStats={bgs}
                 pitcherGameStats={pgs}
-                currentMojo={selectedPlayerState.currentMojo}
-                currentFitness={selectedPlayerState.currentFitness}
+                currentMojo={selectedPlayerState.currentMojo ?? 0}
+                currentFitness={selectedPlayerState.currentFitness ?? "FIT"}
                 onMojoChange={(newMojo) => {
-                  const team =
-                    resolveRosterTeamSide(
-                      selectedPlayer.playerId,
-                      selectedPlayer.name,
-                    ) || "home";
-                  setPlayerMojoByName(selectedPlayer.name, team, newMojo);
+                  setPlayerMojoByName(
+                    selectedPlayer.name,
+                    resolvedSelectedTeam,
+                    newMojo,
+                  );
                 }}
                 onFitnessChange={(newFitness) => {
                   handleFitnessChangeWithAutoInjury(
-                    selectedPlayerState.playerId,
+                    resolvedSelectedPlayerId,
                     selectedPlayer.name,
                     newFitness,
                   );
@@ -12960,7 +13308,7 @@ export function PlayerCardModal({
         )}
 
         {/* §5.5: Condition — current mojo/fitness display (read-only summary) */}
-        {(currentMojo !== undefined || currentFitness !== undefined) && (
+        {showMojoFitness && (currentMojo !== undefined || currentFitness !== undefined) && (
           <div className="bg-[#2a3530] border-[4px] border-[#2d3530] p-2 mb-2">
             <div
               className="text-[8px] text-[#88AA88] font-bold mb-1"

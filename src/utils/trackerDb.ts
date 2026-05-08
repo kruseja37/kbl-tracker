@@ -14,7 +14,7 @@
  */
 
 const DB_NAME = 'kbl-tracker';
-const DB_VERSION = 10; // Must be the highest version any consumer ever used
+const DB_VERSION = 11; // Must be the highest version any consumer ever used
 
 let dbInstance: IDBDatabase | null = null;
 
@@ -163,6 +163,11 @@ export async function getTrackerDb(): Promise<IDBDatabase> {
       // ── v6: Elimination run Fame aggregates ─────────────────────
       if (!db.objectStoreNames.contains('eliminationRunFameAggregates')) {
         db.createObjectStore('eliminationRunFameAggregates', { keyPath: 'runId' });
+      }
+
+      // ── v11: Elimination all-time stat aggregates ──────────────
+      if (!db.objectStoreNames.contains('eliminationAllTimePlayerStats')) {
+        db.createObjectStore('eliminationAllTimePlayerStats', { keyPath: 'playerId' });
       }
 
       // ── v7: Reporter almanac cache substrate ───────────────────

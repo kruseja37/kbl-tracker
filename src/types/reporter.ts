@@ -161,6 +161,7 @@ export interface CommentaryFeedEntryRecord {
   id: string;
   gameId: string;
   leagueId?: string;
+  gameMode?: ReporterGameMode;
   reporterId: string;
   commentaryText: string;
   halfInningLabel: string;

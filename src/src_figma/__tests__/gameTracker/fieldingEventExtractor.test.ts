@@ -172,6 +172,40 @@ describe('extractFieldingEvents', () => {
     expect(events[4].ballInPlay.fielderIds).toEqual(['home-lf-7', 'home-ss-6', 'home-c-2']);
   });
 
+  it('keeps automatic gem credit on the primary fielder while allowing explicit extra credit', () => {
+    const playData: PlayData = {
+      type: 'hit',
+      hitType: '1B',
+      fieldingSequence: [7, 2],
+      extraGemCreditPositions: [2],
+      fieldingPlayType: 'diving',
+      exitType: 'Line Drive',
+      spraySector: 'Left',
+    };
+    const context: FieldingExtractionContext = {
+      gameId: 'game-4c',
+      defensiveTeamId: 'TEAM-H',
+      atBatEventId: 'game-4c_17',
+      atBatEventIndex: 17,
+      defendersByPosition: {
+        LF: { playerId: 'home-lf-7', playerName: 'Lou Left' },
+        C: { playerId: 'home-c-2', playerName: 'Cal Catch' },
+      },
+    };
+
+    const events = extractSupplementalRunnerOutFieldingEvents(
+      playData,
+      [{ assistBy: ['LF'], putoutBy: 'C' }],
+      context,
+    );
+
+    expect(events).toHaveLength(2);
+    expect(events[0].playerId).toBe('home-lf-7');
+    expect(events[0].specialPlayType).toBe('Diving');
+    expect(events[1].playerId).toBe('home-c-2');
+    expect(events[1].specialPlayType).toBe('Diving');
+  });
+
   it('[M3-2-fix] emits a defensive base-save event for saved-bases hits', () => {
     const playData: PlayData = {
       type: 'hit',

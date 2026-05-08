@@ -1,4 +1,9 @@
-import { getPlayoffStats, type PlayoffPlayerStats } from './playoffStorage';
+import { getAllCompletedGames } from './gameStorage';
+import {
+  getPlayoffStats,
+  getSeriesByPlayoff,
+  type PlayoffPlayerStats,
+} from './playoffStorage';
 
 export interface EliminationAward {
   category: string;
@@ -31,7 +36,11 @@ function buildAward(
 }
 
 export async function computeEliminationAwards(playoffId: string): Promise<EliminationAward[]> {
-  const stats = await getPlayoffStats(playoffId);
+  const [stats, seriesList, completedGames] = await Promise.all([
+    getPlayoffStats(playoffId),
+    getSeriesByPlayoff(playoffId),
+    getAllCompletedGames(),
+  ]);
   const awards: EliminationAward[] = [];
 
   const qualifiedBatters = stats.filter((player) => player.atBats >= 5);
@@ -114,6 +123,121 @@ export async function computeEliminationAwards(playoffId: string): Promise<Elimi
       )
     );
   }
+
+  const seriesAwards = seriesList
+    .filter((series) => series.status === 'COMPLETED')
+    .map((series) => {
+      const seriesGames = completedGames.filter(
+        (game) => game.playoffSeriesId === series.id,
+      );
+      const byPlayer = new Map<
+        string,
+        {
+          playerName: string;
+          teamId: string;
+          hits: number;
+          homeRuns: number;
+          rbi: number;
+          runs: number;
+          atBats: number;
+          walks: number;
+          outsRecorded: number;
+          earnedRuns: number;
+          strikeouts: number;
+        }
+      >();
+
+      for (const game of seriesGames) {
+        for (const [playerId, batting] of Object.entries(game.playerStats)) {
+          const current =
+            byPlayer.get(playerId) ??
+            {
+              playerName: batting.playerName,
+              teamId: batting.teamId,
+              hits: 0,
+              homeRuns: 0,
+              rbi: 0,
+              runs: 0,
+              atBats: 0,
+              walks: 0,
+              outsRecorded: 0,
+              earnedRuns: 0,
+              strikeouts: 0,
+            };
+          current.playerName = batting.playerName;
+          current.teamId = batting.teamId;
+          current.hits += batting.h;
+          current.homeRuns += batting.hr;
+          current.rbi += batting.rbi;
+          current.runs += batting.r;
+          current.atBats += batting.ab;
+          current.walks += batting.bb;
+          byPlayer.set(playerId, current);
+        }
+
+        for (const pitcher of game.pitcherGameStats) {
+          const current =
+            byPlayer.get(pitcher.pitcherId) ??
+            {
+              playerName: pitcher.pitcherName,
+              teamId: pitcher.teamId,
+              hits: 0,
+              homeRuns: 0,
+              rbi: 0,
+              runs: 0,
+              atBats: 0,
+              walks: 0,
+              outsRecorded: 0,
+              earnedRuns: 0,
+              strikeouts: 0,
+            };
+          current.playerName = pitcher.pitcherName;
+          current.teamId = pitcher.teamId;
+          current.outsRecorded += pitcher.outsRecorded;
+          current.earnedRuns += pitcher.earnedRuns;
+          current.strikeouts += pitcher.strikeoutsThrown;
+          byPlayer.set(pitcher.pitcherId, current);
+        }
+      }
+
+      const winner = [...byPlayer.entries()]
+        .map(([playerId, player]) => {
+          const battingScore =
+            player.hits +
+            player.rbi +
+            player.runs +
+            player.homeRuns * 2 +
+            (player.atBats > 0 ? (player.hits + player.walks) / player.atBats : 0);
+          const pitchingScore =
+            player.outsRecorded / 3 + player.strikeouts * 0.35 - player.earnedRuns * 1.5;
+          const usePitchingLine = pitchingScore > battingScore;
+
+          return {
+            playerId,
+            ...player,
+            score: Math.max(battingScore, pitchingScore),
+            statLine: usePitchingLine
+              ? `${(player.outsRecorded / 3).toFixed(1)} IP, ${player.strikeouts} K, ${player.earnedRuns} ER`
+              : `${player.hits} H, ${player.homeRuns} HR, ${player.rbi} RBI`,
+          };
+        })
+        .sort((a, b) => b.score - a.score || b.rbi - a.rbi || a.playerName.localeCompare(b.playerName))[0];
+
+      if (!winner) {
+        return null;
+      }
+
+      return {
+        category: `Series MVP · ${series.roundName}`,
+        playerName: winner.playerName,
+        playerId: winner.playerId,
+        teamId: winner.teamId,
+        statLine: winner.statLine,
+      } satisfies EliminationAward;
+    })
+    .filter((award): award is EliminationAward => award !== null);
+
+  awards.push(...seriesAwards);
 
   return awards;
 }

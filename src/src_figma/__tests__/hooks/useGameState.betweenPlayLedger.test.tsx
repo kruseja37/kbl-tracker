@@ -313,6 +313,45 @@ describe('useGameState between-play ledger', () => {
     expect(result.current.playerStats.has('home-rp')).toBe(true);
   });
 
+  test('allows a batting-team pinch hitter to replace a virtual no-DH pitcher row', async () => {
+    const { result } = renderHook(() => useGameState());
+    await initializeGame(result);
+
+    act(() => {
+      result.current.startGame();
+    });
+
+    act(() => {
+      const subResult = result.current.makeSubstitution(
+        'away-bench-1',
+        'away-sp',
+        'Away Bench 1',
+        'Away Starter',
+        {
+          subType: 'pinch_hit',
+          newPosition: 'P',
+          lineupSpot: 2,
+        },
+      );
+      expect(subResult).toEqual({ success: true });
+    });
+
+    const lineupSnapshot = result.current.getLineupStateSnapshot();
+    expect(lineupSnapshot.away.lineup).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          playerId: 'away-bench-1',
+          playerName: 'Away Bench 1',
+          battingOrder: 2,
+          position: 'P',
+        }),
+      ]),
+    );
+    expect(lineupSnapshot.away.lineup.some((player) => player.playerId === 'away-sp')).toBe(false);
+    expect(lineupSnapshot.away.usedPlayers).toContain('away-sp');
+    expect(result.current.gameState.currentPitcherId).toBe('home-sp');
+  });
+
   test('tracks defensive position usage per out instead of per half-inning', async () => {
     const { result } = renderHook(() => useGameState());
     await initializeGame(result);

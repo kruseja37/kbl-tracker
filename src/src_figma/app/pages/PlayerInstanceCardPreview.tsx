@@ -117,6 +117,8 @@ function createPreviewState({
     usedFallback: true,
     batting: null,
     pitching: null,
+    allTimeEliminationBatting: null,
+    allTimeEliminationPitching: null,
     teams: [],
     timeline: [],
   };

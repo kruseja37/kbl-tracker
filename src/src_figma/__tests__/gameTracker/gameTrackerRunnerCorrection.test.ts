@@ -6,6 +6,7 @@ import { buildLiveBasesFromRunnerOutcomes } from '../../app/utils/liveBaseCorrec
 import {
   applyRunnerDefaultsToNames,
   buildRunnerCorrectionForQuickBarOutcome,
+  buildRunnerScoreCorrectionPrompt,
   countRbiFromDefaults,
   getBatterDestinationOptions,
   inferBatterSubEntryDestination,
@@ -84,6 +85,23 @@ describe('gameTrackerRunnerCorrection', () => {
     }, 0)).toBeNull();
   });
 
+  test('builds squeeze-style SAC defaults with a runner on third and less than two outs', () => {
+    const correction = buildRunnerCorrectionForQuickBarOutcome('SAC', {
+      first: true,
+      second: true,
+      third: true,
+    }, 1);
+
+    expect(correction?.defaults.third?.to).toBe('home');
+    expect(correction?.defaults.second?.to).toBe('third');
+    expect(correction?.defaults.first?.to).toBe('second');
+    expect(runnerDefaultsToAdvancement(correction!.defaults)).toEqual({
+      fromFirst: 'second',
+      fromSecond: 'third',
+      fromThird: 'home',
+    });
+  });
+
   test('builds an FC correction when a runner is on base', () => {
     const correction = buildRunnerCorrectionForQuickBarOutcome('FC', {
       first: true,
@@ -94,6 +112,36 @@ describe('gameTrackerRunnerCorrection', () => {
     expect(correction?.action).toEqual({ type: 'out', outType: 'FC' });
     expect(correction?.defaults.batter.to).toBe('first');
     expect(correction?.defaults.first?.to).toBe('out');
+  });
+
+  test('builds score correction prompts only for the batting team side', () => {
+    expect(buildRunnerScoreCorrectionPrompt({
+      inning: 1,
+      halfInning: 'BOTTOM',
+      current: { away: 0, home: 0 },
+      scoreDelta: 1,
+    })).toEqual({
+      inning: 1,
+      halfInning: 'BOTTOM',
+      current: { away: 0, home: 0 },
+      reconciled: { away: 0, home: 1 },
+      awayDelta: 0,
+      homeDelta: 1,
+    });
+
+    expect(buildRunnerScoreCorrectionPrompt({
+      inning: 2,
+      halfInning: 'TOP',
+      current: { away: 2, home: 1 },
+      scoreDelta: -1,
+    })).toEqual({
+      inning: 2,
+      halfInning: 'TOP',
+      current: { away: 2, home: 1 },
+      reconciled: { away: 1, home: 1 },
+      awayDelta: -1,
+      homeDelta: 0,
+    });
   });
 
   test('converts bases-loaded home run defaults into all-runners-home advancement and 4 RBI', () => {

@@ -575,6 +575,44 @@ describe('EnrichmentPanel', () => {
     consoleLogSpy.mockRestore();
   });
 
+  test('shows rescued throw control for force-at-first throw chains', () => {
+    const onUpdate = vi.fn();
+
+    render(
+      <EnrichmentPanel
+        entry={buildEntry('GO')}
+        currentEnrichment={{ fieldingSequence: [5, 3], fieldingPlayType: 'routine' }}
+        onUpdate={onUpdate}
+        onClose={() => {}}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '1B Rescued Throw' }));
+
+    expect(screen.getByText('Rescued Throw')).toBeInTheDocument();
+    expect(onUpdate).toHaveBeenCalledWith('rescuedThrow', true);
+  });
+
+  test('shows rescued throw and pivot gem controls for double-play throws to first', () => {
+    const onUpdate = vi.fn();
+
+    render(
+      <EnrichmentPanel
+        entry={buildEntry('DP')}
+        currentEnrichment={{ fieldingSequence: [6, 4, 3], fieldingPlayType: 'routine' }}
+        onUpdate={onUpdate}
+        onClose={() => {}}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '1B Rescued Throw' }));
+    fireEvent.click(screen.getByRole('button', { name: '2B' }));
+
+    expect(screen.getByText('Extra Gem Credit')).toBeInTheDocument();
+    expect(onUpdate).toHaveBeenCalledWith('rescuedThrow', true);
+    expect(onUpdate).toHaveBeenCalledWith('extraGemCreditPositions', [4]);
+  });
+
   test('routes modifier clicks through the at-bat modifier handler and gates KP/NUT off HR', () => {
     const onModifierRecord = vi.fn();
 

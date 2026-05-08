@@ -450,6 +450,7 @@ export function mapAtBatEventToPlayLogEntry(event: AtBatEvent): PlayLogEntry {
     fieldingAttemptOutcome?: string;
     playMechanic?: string;
     basesSaved?: 1 | 2;
+    rescuedThrow?: boolean;
   }) | undefined;
   const hasFieldingDefaults = !!(
     enrichmentAny?.fieldingDifficulty ||
@@ -457,12 +458,14 @@ export function mapAtBatEventToPlayLogEntry(event: AtBatEvent): PlayLogEntry {
     enrichmentAny?.fieldingAttemptType ||
     enrichmentAny?.fieldingAttemptOutcome ||
     enrichmentAny?.playMechanic ||
-    enrichmentAny?.basesSaved
+    enrichmentAny?.basesSaved ||
+    enrichmentAny?.rescuedThrow
   );
   const basesSavedSuffix = enrichmentAny?.basesSaved
     ? ` (saved ${enrichmentAny.basesSaved}B)`
     : '';
-  const fieldingDescription = `${fieldingSequence || ''}${basesSavedSuffix}`.trim() || undefined;
+  const rescuedThrowSuffix = enrichmentAny?.rescuedThrow ? ' rescued throw' : '';
+  const fieldingDescription = `${fieldingSequence || ''}${basesSavedSuffix}${rescuedThrowSuffix}`.trim() || undefined;
   const description = [fieldingDescription, event.enrichment?.chased ? 'chase' : undefined]
     .filter((value): value is string => !!value)
     .join(' ') || undefined;

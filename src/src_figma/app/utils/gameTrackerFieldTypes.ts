@@ -38,6 +38,7 @@ export interface PlayData {
   wasOverridden?: boolean;
   inferenceConfidence?: number;
   savedRun?: boolean;
+  extraGemCreditPositions?: number[];
   dpType?: string;
   leverageIndex?: number;
   leverageCategory?: 'LOW' | 'MEDIUM' | 'HIGH' | 'EXTREME';

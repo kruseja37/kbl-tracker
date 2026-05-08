@@ -4,12 +4,20 @@ import type { AtBatEvent } from './eventLog';
 import { getGameEvents } from './eventLog';
 import { getAllCanonicalPlayers } from './almanacStorage';
 import type { CanonicalPlayer } from './almanacStorage';
+import {
+  getEliminationAllTimePlayerStats,
+  type EliminationAllTimePlayerStats,
+} from './eliminationAllTimeStatsStorage';
 
 export interface ExhibitionGameFilters {
   teamId?: string;
   opponentId?: string;
   dateFrom?: string;
   dateTo?: string;
+}
+
+export interface EliminationGameFilters extends ExhibitionGameFilters {
+  runId?: string;
 }
 
 export type ExhibitionBattingLeaderStat =
@@ -52,6 +60,7 @@ export interface ExhibitionPlayerSearchEntry {
   teamId: string;
   teamName: string;
   games: number;
+  mode: AlmanacInstanceMode;
 }
 
 export interface BattingLine {
@@ -84,6 +93,8 @@ export interface PitchingLine {
   L: number;
   ERA: number;
 }
+
+export type AlmanacInstanceMode = 'exhibition' | 'franchise' | 'elimination';
 
 interface BattingAggregate {
   leagueId: string;
@@ -190,10 +201,6 @@ function buildCanonicalRegistry(
 
   for (const player of canonicalPlayers) {
     for (const instance of player.instances) {
-      if (instance.mode !== 'exhibition') {
-        continue;
-      }
-
       const leaguePlayerKey = `${instance.instanceId}::${instance.playerIdInInstance}`;
       const leagueCanonicalKey = `${instance.instanceId}::${player.canonicalId}`;
 
@@ -317,6 +324,95 @@ export function getExhibitionLeagueId(game: CompletedGameRecord): string | null 
 
 function isExhibitionGame(game: CompletedGameRecord): boolean {
   return game.competitionType === 'exhibition' || (!game.competitionType && Boolean(game.leagueId ?? game.competitionId));
+}
+
+function getGameInstanceDescriptor(
+  game: CompletedGameRecord,
+): { mode: AlmanacInstanceMode; instanceId: string } | null {
+  if (game.competitionType === 'elimination' && game.competitionId) {
+    return {
+      mode: 'elimination',
+      instanceId: game.competitionId,
+    };
+  }
+
+  if (
+    (game.competitionType === 'franchise' || game.competitionType === 'playoff') &&
+    game.competitionId
+  ) {
+    return {
+      mode: 'franchise',
+      instanceId: game.competitionId,
+    };
+  }
+
+  const exhibitionLeagueId = getExhibitionLeagueId(game);
+  if (exhibitionLeagueId) {
+    return {
+      mode: 'exhibition',
+      instanceId: exhibitionLeagueId,
+    };
+  }
+
+  return null;
+}
+
+function inferInstanceModeFromGames(
+  games: CompletedGameRecord[],
+  instanceId: string,
+): AlmanacInstanceMode | null {
+  const modes: AlmanacInstanceMode[] = ['elimination', 'franchise', 'exhibition'];
+
+  for (const mode of modes) {
+    if (games.some((game) => isGameInInstance(game, mode, instanceId))) {
+      return mode;
+    }
+  }
+
+  return null;
+}
+
+export function getArchiveInstanceIdForGame(
+  game: CompletedGameRecord,
+): string | null {
+  return getGameInstanceDescriptor(game)?.instanceId ?? null;
+}
+
+export async function getArchiveInstanceMode(
+  instanceId: string,
+): Promise<AlmanacInstanceMode | null> {
+  const allGames = await getAllCompletedGames();
+  return inferInstanceModeFromGames(allGames, instanceId);
+}
+
+function getInstanceGameId(
+  game: CompletedGameRecord,
+  mode: AlmanacInstanceMode,
+): string | null {
+  if (mode === 'exhibition') {
+    return getExhibitionLeagueId(game);
+  }
+
+  if (mode === 'elimination' && game.competitionType === 'elimination') {
+    return game.competitionId ?? null;
+  }
+
+  if (
+    mode === 'franchise' &&
+    (game.competitionType === 'franchise' || game.competitionType === 'playoff')
+  ) {
+    return game.competitionId ?? null;
+  }
+
+  return null;
+}
+
+function isGameInInstance(
+  game: CompletedGameRecord,
+  mode: AlmanacInstanceMode,
+  instanceId: string,
+): boolean {
+  return getInstanceGameId(game, mode) === instanceId;
 }
 
 async function getCanonicalIdLookup(): Promise<Map<string, string>> {
@@ -448,6 +544,240 @@ export async function getExhibitionGames(
   });
 
   return exhibitionGames;
+}
+
+export async function getEliminationGames(
+  filters: EliminationGameFilters = {},
+): Promise<CompletedGameRecord[]> {
+  const allGames = await getAllCompletedGames();
+  const fromTs = parseDateBoundary(filters.dateFrom);
+  const toTs = parseDateBoundary(filters.dateTo, true);
+
+  return allGames
+    .filter((game) => game.competitionType === 'elimination')
+    .filter((game) => {
+      if (filters.runId && game.competitionId !== filters.runId) {
+        return false;
+      }
+      if (fromTs !== null && game.date < fromTs) {
+        return false;
+      }
+      if (toTs !== null && game.date > toTs) {
+        return false;
+      }
+      if (
+        filters.teamId &&
+        game.awayTeamId !== filters.teamId &&
+        game.homeTeamId !== filters.teamId
+      ) {
+        return false;
+      }
+      if (!filters.opponentId) {
+        return true;
+      }
+      if (filters.teamId) {
+        const matchupIds = new Set([game.awayTeamId, game.homeTeamId]);
+        return matchupIds.has(filters.teamId) && matchupIds.has(filters.opponentId);
+      }
+      return (
+        game.awayTeamId === filters.opponentId ||
+        game.homeTeamId === filters.opponentId
+      );
+    })
+    .sort((left, right) => right.date - left.date);
+}
+
+export async function getInstanceGames(
+  mode: AlmanacInstanceMode,
+  instanceId: string,
+): Promise<CompletedGameRecord[]> {
+  if (mode === 'exhibition') {
+    return getExhibitionGames().then((games) =>
+      games.filter((game) => getExhibitionLeagueId(game) === instanceId),
+    );
+  }
+
+  const allGames = await getAllCompletedGames();
+  return allGames
+    .filter((game) => isGameInInstance(game, mode, instanceId))
+    .sort((a, b) => b.date - a.date);
+}
+
+export async function resolvePlayerIdsForInstance(
+  playerId: string,
+  mode: AlmanacInstanceMode,
+  instanceId: string,
+): Promise<string[]> {
+  const registry = await getCanonicalRegistry();
+  return Array.from(resolvePlayerAliasesForLeague(registry, instanceId, playerId));
+}
+
+export async function getPlayerInstanceStats(
+  playerId: string,
+  mode: AlmanacInstanceMode,
+  instanceId: string,
+): Promise<{ batting: BattingLine | null; pitching: PitchingLine | null }> {
+  if (mode === 'exhibition') {
+    return getPlayerExhibitionStats(playerId, instanceId);
+  }
+
+  const games = await getInstanceGames(mode, instanceId);
+  const canonicalRegistry = await getCanonicalRegistry();
+  const playerIds = resolvePlayerAliasesForLeague(
+    canonicalRegistry,
+    instanceId,
+    playerId,
+  );
+
+  const battingTotals = {
+    games: new Set<string>(),
+    ab: 0,
+    h: 0,
+    r: 0,
+    doubles: 0,
+    triples: 0,
+    hr: 0,
+    rbi: 0,
+    sb: 0,
+    bb: 0,
+    so: 0,
+  };
+  const pitchingTotals = {
+    games: new Set<string>(),
+    outsRecorded: 0,
+    hitsAllowed: 0,
+    runsAllowed: 0,
+    earnedRuns: 0,
+    walksAllowed: 0,
+    strikeouts: 0,
+    completeGames: 0,
+    shutouts: 0,
+    saves: 0,
+    wins: 0,
+    losses: 0,
+  };
+
+  for (const game of games) {
+    const battingEntry = getBattingEntryForAliases(game, playerIds);
+    if (battingEntry) {
+      const battingStats = battingEntry.stats;
+      battingTotals.games.add(game.gameId);
+      battingTotals.ab += battingStats.ab;
+      battingTotals.h += battingStats.h;
+      battingTotals.r += battingStats.r;
+      battingTotals.doubles += battingStats.doubles;
+      battingTotals.triples += battingStats.triples;
+      battingTotals.hr += battingStats.hr;
+      battingTotals.rbi += battingStats.rbi;
+      battingTotals.sb += battingStats.sb;
+      battingTotals.bb += battingStats.bb;
+      battingTotals.so += battingStats.k;
+    }
+
+    const pitchingStats = getPitchingEntryForAliases(game, playerIds);
+    if (pitchingStats) {
+      pitchingTotals.games.add(game.gameId);
+      pitchingTotals.outsRecorded += pitchingStats.outsRecorded;
+      pitchingTotals.hitsAllowed += pitchingStats.hitsAllowed;
+      pitchingTotals.runsAllowed += pitchingStats.runsAllowed;
+      pitchingTotals.earnedRuns += pitchingStats.earnedRuns;
+      pitchingTotals.walksAllowed += pitchingStats.walksAllowed;
+      pitchingTotals.strikeouts += pitchingStats.strikeoutsThrown;
+      pitchingTotals.completeGames += didPitchCompleteGame(game, pitchingStats) ? 1 : 0;
+      pitchingTotals.shutouts += didPitchShutout(game, pitchingStats) ? 1 : 0;
+      pitchingTotals.saves += pitchingStats.save ? 1 : 0;
+      pitchingTotals.wins += pitchingStats.decision === 'W' ? 1 : 0;
+      pitchingTotals.losses += pitchingStats.decision === 'L' ? 1 : 0;
+    }
+  }
+
+  return {
+    batting:
+      battingTotals.games.size > 0
+        ? {
+            G: battingTotals.games.size,
+            AB: battingTotals.ab,
+            H: battingTotals.h,
+            R: battingTotals.r,
+            '2B': battingTotals.doubles,
+            '3B': battingTotals.triples,
+            HR: battingTotals.hr,
+            RBI: battingTotals.rbi,
+            SB: battingTotals.sb,
+            BB: battingTotals.bb,
+            SO: battingTotals.so,
+            BA: battingAverage(battingTotals.h, battingTotals.ab),
+          }
+        : null,
+    pitching:
+      pitchingTotals.games.size > 0
+        ? {
+            G: pitchingTotals.games.size,
+            IP: outsToDisplay(pitchingTotals.outsRecorded),
+            H: pitchingTotals.hitsAllowed,
+            R: pitchingTotals.runsAllowed,
+            ER: pitchingTotals.earnedRuns,
+            BB: pitchingTotals.walksAllowed,
+            SO: pitchingTotals.strikeouts,
+            CG: pitchingTotals.completeGames,
+            SHO: pitchingTotals.shutouts,
+            SV: pitchingTotals.saves,
+            W: pitchingTotals.wins,
+            L: pitchingTotals.losses,
+            ERA: earnedRunAverage(
+              pitchingTotals.earnedRuns,
+              pitchingTotals.outsRecorded,
+            ),
+          }
+        : null,
+  };
+}
+
+export async function getPlayerEliminationAllTimeStats(
+  playerId: string,
+): Promise<{ batting: BattingLine | null; pitching: PitchingLine | null }> {
+  const totals = await getEliminationAllTimePlayerStats(playerId);
+  if (!totals) {
+    return { batting: null, pitching: null };
+  }
+
+  return {
+    batting:
+      totals.battingGames > 0
+        ? {
+            G: totals.battingGames,
+            AB: totals.atBats,
+            H: totals.hits,
+            R: totals.runs,
+            '2B': totals.doubles,
+            '3B': totals.triples,
+            HR: totals.homeRuns,
+            RBI: totals.rbi,
+            SB: totals.stolenBases,
+            BB: totals.walks,
+            SO: totals.strikeouts,
+            BA: battingAverage(totals.hits, totals.atBats),
+          }
+        : null,
+    pitching:
+      totals.pitchingGames > 0
+        ? {
+            G: totals.pitchingGames,
+            IP: outsToDisplay(totals.outsRecorded),
+            H: totals.hitsAllowed,
+            R: totals.runsAllowed,
+            ER: totals.earnedRuns,
+            BB: totals.walksAllowed,
+            SO: totals.pitchingStrikeouts,
+            CG: totals.completeGames,
+            SHO: totals.shutouts,
+            SV: totals.saves,
+            W: totals.wins,
+            L: totals.losses,
+            ERA: earnedRunAverage(totals.earnedRuns, totals.outsRecorded),
+          }
+        : null,
+  };
 }
 
 export async function getExhibitionBattingLeaders(
@@ -859,10 +1189,15 @@ export async function getPlayerExhibitionStats(
 }
 
 export async function getTeamRosterFromGames(
-  leagueId: string,
+  instanceId: string,
   teamId: string
 ): Promise<Array<{ playerId: string; playerName: string; canonicalId: string; instanceId: string; games: number }>> {
-  const games = await getExhibitionGames({ teamId });
+  const allGames = await getAllCompletedGames();
+  const mode = inferInstanceModeFromGames(allGames, instanceId) ?? 'exhibition';
+  const games = allGames
+    .filter((game) => isGameInInstance(game, mode, instanceId))
+    .filter((game) => game.awayTeamId === teamId || game.homeTeamId === teamId)
+    .sort((a, b) => b.date - a.date);
   const canonicalRegistry = await getCanonicalRegistry();
   const roster = new Map<
     string,
@@ -875,10 +1210,6 @@ export async function getTeamRosterFromGames(
   >();
 
   for (const game of games) {
-    if (getExhibitionLeagueId(game) !== leagueId) {
-      continue;
-    }
-
     for (const [playerId, stats] of Object.entries(game.playerStats)) {
       if (stats.teamId !== teamId) {
         continue;
@@ -886,7 +1217,7 @@ export async function getTeamRosterFromGames(
 
       const identity = resolveCanonicalAggregateIdentity(
         canonicalRegistry,
-        leagueId,
+        instanceId,
         playerId,
       );
       const entry = roster.get(identity.aggregateKey) ?? {
@@ -908,7 +1239,7 @@ export async function getTeamRosterFromGames(
 
       const identity = resolveCanonicalAggregateIdentity(
         canonicalRegistry,
-        leagueId,
+        instanceId,
         pitcher.pitcherId,
       );
       const entry = roster.get(identity.aggregateKey) ?? {
@@ -929,26 +1260,29 @@ export async function getTeamRosterFromGames(
       playerId: entry.playerId,
       playerName: entry.playerName,
       canonicalId: entry.canonicalId,
-      instanceId: leagueId,
+      instanceId,
       games: entry.games.size,
     }))
     .sort((a, b) => b.games - a.games || a.playerName.localeCompare(b.playerName));
 }
 
-export async function searchExhibitionPlayerInstances(
+export async function searchArchivedPlayerInstances(
   query: string,
+  modes: AlmanacInstanceMode[] = ['exhibition', 'elimination', 'franchise'],
 ): Promise<ExhibitionPlayerSearchEntry[]> {
   const normalizedQuery = query.trim().toLowerCase();
   if (!normalizedQuery) {
     return [];
   }
 
-  const games = await getExhibitionGames();
+  const games = await getAllCompletedGames();
+  const allowedModes = new Set(modes);
   const canonicalRegistry = await getCanonicalRegistry();
   const players = new Map<string, ExhibitionPlayerSearchEntry>();
 
   const upsertEntry = (
-    leagueId: string,
+    mode: AlmanacInstanceMode,
+    instanceId: string,
     playerId: string,
     playerName: string,
     teamId: string,
@@ -960,10 +1294,10 @@ export async function searchExhibitionPlayerInstances(
 
     const identity = resolveCanonicalAggregateIdentity(
       canonicalRegistry,
-      leagueId,
+      instanceId,
       playerId,
     );
-    const key = `${leagueId}::${identity.aggregateKey}`;
+    const key = `${mode}::${instanceId}::${identity.aggregateKey}`;
     const existing = players.get(key);
     if (existing) {
       existing.games += 1;
@@ -977,24 +1311,26 @@ export async function searchExhibitionPlayerInstances(
     players.set(key, {
       playerId: identity.preferredPlayerId,
       playerName,
-      leagueId,
-      instanceId: leagueId,
+      leagueId: instanceId,
+      instanceId,
       canonicalId: identity.canonicalId,
       teamId,
       teamName,
       games: 1,
+      mode,
     });
   };
 
   for (const game of games) {
-    const leagueId = getExhibitionLeagueId(game);
-    if (!leagueId) {
+    const descriptor = getGameInstanceDescriptor(game);
+    if (!descriptor || !allowedModes.has(descriptor.mode)) {
       continue;
     }
 
     for (const [playerId, stats] of Object.entries(game.playerStats)) {
       upsertEntry(
-        leagueId,
+        descriptor.mode,
+        descriptor.instanceId,
         playerId,
         stats.playerName,
         stats.teamId,
@@ -1004,7 +1340,8 @@ export async function searchExhibitionPlayerInstances(
 
     for (const pitcher of game.pitcherGameStats) {
       upsertEntry(
-        leagueId,
+        descriptor.mode,
+        descriptor.instanceId,
         pitcher.pitcherId,
         pitcher.pitcherName,
         pitcher.teamId,
@@ -1017,18 +1354,26 @@ export async function searchExhibitionPlayerInstances(
     (a, b) => b.games - a.games || a.playerName.localeCompare(b.playerName),
   );
 
-  console.log('[M4-1] searchExhibitionPlayerInstances', {
+  console.log('[M4-1] searchArchivedPlayerInstances', {
     query,
     normalizedQuery,
+    modes,
     results: results.map((result) => ({
       canonicalId: result.canonicalId,
       playerId: result.playerId,
-      leagueId: result.leagueId,
+      instanceId: result.instanceId,
+      mode: result.mode,
       games: result.games,
     })),
   });
 
   return results;
+}
+
+export async function searchExhibitionPlayerInstances(
+  query: string,
+): Promise<ExhibitionPlayerSearchEntry[]> {
+  return searchArchivedPlayerInstances(query, ['exhibition']);
 }
 
 export async function getGameAtBatEvents(gameId: string): Promise<AtBatEvent[]> {

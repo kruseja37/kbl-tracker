@@ -244,6 +244,17 @@ function calculateOutDefaults(
     };
   }
 
+  // Sacrifice bunt / squeeze — advance forced runners, and let R3 score with <2 outs.
+  if (outType === 'SAC') {
+    return {
+      batter: { from: 'batter', to: 'out', isDefault: true, reason: 'Sacrifice bunt' },
+      ...(bases.third && outs < 2 && { third: { from: 'third', to: 'home', isDefault: true, reason: 'Scores on squeeze bunt' } }),
+      ...(bases.third && outs >= 2 && { third: { from: 'third', to: 'third', isDefault: true, reason: 'Holds' } }),
+      ...(bases.second && { second: { from: 'second', to: 'third', isDefault: true, reason: 'Advances on sacrifice' } }),
+      ...(bases.first && { first: { from: 'first', to: 'second', isDefault: true, reason: 'Advances on sacrifice' } }),
+    };
+  }
+
   // Fly out / foul out / line out — tag-up enforcement: all runners hold by default (GAP-GT-6-E)
   // User taps runner → [Advance] if they tagged up in the actual game
   if (outType === 'FO' || outType === 'FLO' || outType === 'LO') {

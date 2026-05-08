@@ -3,7 +3,11 @@ import { Link, useParams } from "react-router";
 import { ArrowLeft } from "lucide-react";
 import { getTeam } from "../../../utils/leagueBuilderStorage";
 import type { Team } from "../../../utils/leagueBuilderStorage";
-import { getTeamRosterFromGames } from "../../../utils/almanacQueries";
+import {
+  getArchiveInstanceMode,
+  getTeamRosterFromGames,
+  type AlmanacInstanceMode,
+} from "../../../utils/almanacQueries";
 
 interface RosterEntry {
   playerId: string;
@@ -17,6 +21,7 @@ export function TeamPage() {
   const { leagueId, teamId } = useParams<{ leagueId: string; teamId: string }>();
   const [team, setTeam] = useState<Team | null>(null);
   const [roster, setRoster] = useState<RosterEntry[]>([]);
+  const [instanceMode, setInstanceMode] = useState<AlmanacInstanceMode>("exhibition");
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -25,14 +30,16 @@ export function TeamPage() {
     let cancelled = false;
 
     async function load() {
-      const [teamData, rosterData] = await Promise.all([
+      const [teamData, rosterData, resolvedMode] = await Promise.all([
         getTeam(teamId!),
         getTeamRosterFromGames(leagueId!, teamId!),
+        getArchiveInstanceMode(leagueId!),
       ]);
 
       if (!cancelled) {
         setTeam(teamData);
         setRoster(rosterData);
+        setInstanceMode(resolvedMode ?? "exhibition");
         setLoading(false);
       }
     }
@@ -55,6 +62,18 @@ export function TeamPage() {
   const stadium = team?.stadium ?? "Unknown Stadium";
   const primaryColor = team?.colors?.primary ?? "#3366FF";
   const secondaryColor = team?.colors?.secondary ?? "#DD0000";
+  const backLink =
+    instanceMode === "elimination"
+      ? "/almanac/elimination"
+      : instanceMode === "franchise"
+        ? "/almanac"
+        : "/almanac/exhibition";
+  const backLabel =
+    instanceMode === "elimination"
+      ? "ELIMINATION"
+      : instanceMode === "franchise"
+        ? "ALMANAC"
+        : "EXHIBITION";
 
   return (
     <div className="min-h-screen bg-black text-white font-['Press_Start_2P'] px-4 py-6 sm:px-6">
@@ -62,11 +81,11 @@ export function TeamPage() {
         {/* Header */}
         <div className="flex items-center justify-between gap-4">
           <Link
-            to="/almanac/exhibition"
+            to={backLink}
             className="inline-flex items-center gap-3 border-[5px] border-[#3366FF] bg-[#111111] px-4 py-3 text-[10px] text-white shadow-[6px_6px_0px_0px_rgba(221,0,0,0.85)] transition hover:bg-[#1a1a1a]"
           >
             <ArrowLeft className="h-4 w-4 shrink-0 text-white" />
-            EXHIBITION
+            {backLabel}
           </Link>
         </div>
 
