@@ -4,6 +4,13 @@ import type {
   BeatReporter,
   HistoricalTidbit,
 } from "../../../types/reporter";
+import type { ManagerDecisionRecord } from "../../../types/managerWpa";
+import type {
+  ManagerRecommendation,
+  ManagerRecommendationAction,
+  ManagerRecommendationNoChangeAction,
+  ManagerRecommendationPrimaryAction,
+} from "../../../utils/managerWpaRecommendations";
 import { CommentaryTypewriter } from "./CommentaryTypewriter";
 
 export interface CommentaryFeedEntry {
@@ -12,8 +19,19 @@ export interface CommentaryFeedEntry {
   halfInningLabel: string;
   timestamp: number;
   reporterId?: string;
-  kind?: "play" | "preamble" | "between-inning";
+  kind?:
+    | "play"
+    | "preamble"
+    | "between-inning"
+    | "manager-passive"
+    | "manager-user-action"
+    | "manager-recommendation-card"
+    | "manager-recommendation-note"
+    | "manager-recommendation-passive";
   historicalTidbit?: HistoricalTidbit;
+  managerDecision?: ManagerDecisionRecord;
+  managerRecommendation?: ManagerRecommendation;
+  canEditAttribution?: boolean;
 }
 
 export interface CommentaryFeedProps {
@@ -24,6 +42,11 @@ export interface CommentaryFeedProps {
   onPlayTypeSound?: () => void;
   wordDelayMs?: number;
   charDelayMs?: number;
+  onManagerDecisionEdit?: (decision: ManagerDecisionRecord) => void;
+  onManagerRecommendationAction?: (
+    recommendation: ManagerRecommendation,
+    action: ManagerRecommendationAction,
+  ) => void;
 }
 
 type CommentaryFeedItem =
@@ -47,12 +70,72 @@ function resolveEntryKind(
   return entry.kind ?? "play";
 }
 
+function isManagerEntry(entry: CommentaryFeedEntry): boolean {
+  const kind = resolveEntryKind(entry);
+  return (
+    kind === "manager-passive" ||
+    kind === "manager-user-action" ||
+    kind === "manager-recommendation-card" ||
+    kind === "manager-recommendation-note" ||
+    kind === "manager-recommendation-passive"
+  );
+}
+
 function toDividerLabel(entry: CommentaryFeedEntry): string {
   if (resolveEntryKind(entry) === "between-inning") {
     return `END ${entry.halfInningLabel}`;
   }
 
   return entry.halfInningLabel;
+}
+
+function formatManagerWpa(decision: ManagerDecisionRecord | undefined): string {
+  if (!decision || !decision.resolved || typeof decision.managerWpa !== "number") {
+    return "pending";
+  }
+
+  return `${decision.managerWpa >= 0 ? "+" : ""}${decision.managerWpa.toFixed(3)}`;
+}
+
+function isManagerRecommendationEntry(entry: CommentaryFeedEntry): boolean {
+  return Boolean(entry.managerRecommendation);
+}
+
+function formatRecommendationKind(entry: CommentaryFeedEntry): string {
+  switch (resolveEntryKind(entry)) {
+    case "manager-recommendation-card":
+      return "Recommendation";
+    case "manager-recommendation-note":
+      return "Quick Note";
+    default:
+      return "Passive Note";
+  }
+}
+
+function formatPrimaryActionLabel(
+  action: ManagerRecommendationPrimaryAction,
+): string {
+  switch (action) {
+    case "open_pitching_change":
+      return "Open Bullpen";
+    case "open_pinch_hit":
+      return "Open Bench";
+    case "open_defensive_sub":
+      return "Open Defense";
+  }
+}
+
+function formatNoChangeActionLabel(
+  action: ManagerRecommendationNoChangeAction,
+): string {
+  switch (action) {
+    case "keep_pitcher":
+      return "Keep Current";
+    case "let_batter_hit":
+      return "Let Hit";
+    case "decline_defensive_sub":
+      return "Keep Defense";
+  }
 }
 
 function toDividerTestIdLabel(label: string): string {
@@ -118,6 +201,8 @@ export function CommentaryFeed({
   onPlayTypeSound,
   wordDelayMs,
   charDelayMs,
+  onManagerDecisionEdit,
+  onManagerRecommendationAction,
 }: CommentaryFeedProps) {
   const sortedEntries = React.useMemo(() => sortEntries(entries), [entries]);
   const items = React.useMemo(() => buildFeedItems(sortedEntries), [sortedEntries]);
@@ -168,6 +253,8 @@ export function CommentaryFeed({
 
         const entryKind = resolveEntryKind(item.entry);
         const isBetweenInning = entryKind === "between-inning";
+        const isManagerRow = isManagerEntry(item.entry);
+        const isRecommendationRow = isManagerRecommendationEntry(item.entry);
         const reporter = item.entry.reporterId
           ? reporters[item.entry.reporterId]
           : undefined;
@@ -180,17 +267,36 @@ export function CommentaryFeed({
           Boolean(item.entry.historicalTidbit);
         const accentColor =
           reporterPalette?.primary ??
+          (item.entry.managerRecommendation?.confidence === "high"
+            ? "#C4A853"
+            : item.entry.managerRecommendation?.confidence === "medium"
+              ? "#88AA88"
+              : item.entry.managerRecommendation
+                ? "#6b7b6e"
+                : undefined) ??
+          (entryKind === "manager-user-action" ? "#C4A853" : undefined) ??
+          (isManagerRow ? "#88AA88" : undefined) ??
           (isBetweenInning ? "#88AA88" : "#C4A853");
         const dividerColor = reporterPalette?.secondary ?? "#425546";
-        const byline =
-          isHistoryOnlyEntry
+        const byline = isManagerRow
+          ? isRecommendationRow
+            ? "Manager Recommendation"
+            : "Manager Moment"
+          : isHistoryOnlyEntry
             ? null
             : reporter?.name ?? (item.entry.reporterId ? "Beat Reporter" : null);
         const badgeLabel = isHistoryOnlyEntry
           ? "H"
+          : isManagerRow
+            ? isRecommendationRow
+              ? "R"
+              : "M"
           : byline
             ? byline.charAt(0).toUpperCase()
             : "B";
+        const managerDecision = item.entry.managerDecision;
+        const managerRecommendation = item.entry.managerRecommendation;
+        const managerStatus = formatManagerWpa(managerDecision);
 
         return (
           <article
@@ -204,6 +310,8 @@ export function CommentaryFeed({
               borderTopWidth: item.hasReporterShift ? 2 : 1,
               background: isBetweenInning
                 ? "rgba(35, 49, 38, 0.88)"
+                : isManagerRow
+                  ? "rgba(47, 59, 33, 0.70)"
                 : "rgba(42, 53, 45, 0.70)",
             }}
           >
@@ -245,6 +353,48 @@ export function CommentaryFeed({
                 {formatTimestamp(item.entry.timestamp)}
               </span>
             </div>
+            {isManagerRow && managerDecision ? (
+              <div className="mb-1 flex items-center justify-between gap-2">
+                <span
+                  className="rounded-sm border px-1.5 py-0.5 text-[6px] font-bold uppercase tracking-[0.14em]"
+                  style={{
+                    borderColor: accentColor,
+                    color: accentColor,
+                    background: "rgba(18, 23, 19, 0.45)",
+                  }}
+                >
+                  {entryKind === "manager-user-action" ? "User Action" : "Passive"}
+                </span>
+                <span
+                  className={`text-[7px] font-bold uppercase tracking-[0.12em] ${
+                    managerStatus === "pending"
+                      ? "text-[#fbbf24]"
+                      : managerStatus.startsWith("+")
+                        ? "text-[#34d399]"
+                        : "text-[#f87171]"
+                  }`}
+                >
+                  {managerStatus === "pending" ? "Pending WPA" : `${managerStatus} WPA`}
+                </span>
+              </div>
+            ) : null}
+            {isRecommendationRow && managerRecommendation ? (
+              <div className="mb-1 flex items-center justify-between gap-2">
+                <span
+                  className="rounded-sm border px-1.5 py-0.5 text-[6px] font-bold uppercase tracking-[0.14em]"
+                  style={{
+                    borderColor: accentColor,
+                    color: accentColor,
+                    background: "rgba(18, 23, 19, 0.45)",
+                  }}
+                >
+                  {formatRecommendationKind(item.entry)}
+                </span>
+                <span className="text-[7px] font-bold uppercase tracking-[0.12em] text-[#C4D9C4]">
+                  {managerRecommendation.confidence} confidence
+                </span>
+              </div>
+            ) : null}
             <div
               className="text-[9px] leading-[1.45] text-[#E8E8D8]"
               style={
@@ -256,7 +406,9 @@ export function CommentaryFeed({
                   : undefined
               }
             >
-              {item.entry.commentaryText.trim() ? (
+              {isManagerRow ? (
+                item.entry.commentaryText.trim()
+              ) : item.entry.commentaryText.trim() ? (
                 <CommentaryTypewriter
                   text={item.entry.commentaryText}
                   active={item.isAnimating}
@@ -267,6 +419,66 @@ export function CommentaryFeed({
                 />
               ) : null}
             </div>
+            {isRecommendationRow && managerRecommendation ? (
+              <div className="mt-1 flex flex-wrap gap-1">
+                {managerRecommendation.surface !== "feed_passive" ? (
+                  <button
+                    type="button"
+                    className="rounded-sm border border-[#5a6b38] bg-[#2f3b21] px-1.5 py-0.5 text-[7px] font-bold text-[#C4A853] hover:bg-[#3d5240]"
+                    onClick={() =>
+                      onManagerRecommendationAction?.(
+                        managerRecommendation,
+                        managerRecommendation.primaryAction,
+                      )
+                    }
+                  >
+                    {formatPrimaryActionLabel(managerRecommendation.primaryAction)}
+                  </button>
+                ) : null}
+                {managerRecommendation.surface !== "feed_passive" &&
+                managerRecommendation.noChangeAction ? (
+                  <button
+                    type="button"
+                    className="rounded-sm border border-[#425546] bg-[#243028] px-1.5 py-0.5 text-[7px] font-bold text-[#88AA88] hover:bg-[#2f3b21]"
+                    onClick={() =>
+                      onManagerRecommendationAction?.(
+                        managerRecommendation,
+                        managerRecommendation.noChangeAction!,
+                      )
+                    }
+                  >
+                    {formatNoChangeActionLabel(
+                      managerRecommendation.noChangeAction,
+                    )}
+                  </button>
+                ) : null}
+                {managerRecommendation.surface !== "feed_passive" ? (
+                  <button
+                    type="button"
+                    className="rounded-sm border border-[#425546] bg-[#202820] px-1.5 py-0.5 text-[7px] font-bold text-[#8ca08f] hover:bg-[#2f3b21]"
+                    onClick={() =>
+                      onManagerRecommendationAction?.(
+                        managerRecommendation,
+                        "dismiss",
+                      )
+                    }
+                  >
+                    Dismiss
+                  </button>
+                ) : null}
+              </div>
+            ) : null}
+            {isManagerRow &&
+            item.entry.canEditAttribution &&
+            managerDecision ? (
+              <button
+                type="button"
+                className="mt-1 rounded-sm border border-[#5a6b38] bg-[#2f3b21] px-1.5 py-0.5 text-[7px] font-bold text-[#C4A853] hover:bg-[#3d5240]"
+                onClick={() => onManagerDecisionEdit?.(managerDecision)}
+              >
+                Edit Attribution
+              </button>
+            ) : null}
             {item.entry.historicalTidbit ? (
               <div
                 className="mt-2 border-t border-dashed pt-1.5"

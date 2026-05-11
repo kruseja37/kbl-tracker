@@ -305,6 +305,24 @@ describe("KBL WPA attribution", () => {
     expect(overlayCredits.some((credit) => credit.role === "managing" && credit.isOverlay)).toBe(true);
     expect(overlayCredits.find((credit) => credit.role === "managing")?.allocationMode).toBe("overlay");
     expect(aggregateKblWpaCredits(overlayCredits).some((entry) => entry.playerId.endsWith(":manager"))).toBe(false);
+    expect(
+      aggregateKblWpaCredits(overlayCredits, { includeManager: true }).some((entry) =>
+        entry.playerId.endsWith(":manager"),
+      ),
+    ).toBe(false);
+    expect(
+      aggregateKblWpaCredits(overlayCredits, { includeOverlays: true }).some((entry) =>
+        entry.playerId.endsWith(":manager"),
+      ),
+    ).toBe(false);
+
+    const managerInclusiveTotals = aggregateKblWpaCredits(overlayCredits, {
+      includeManager: true,
+      includeOverlays: true,
+    });
+    const managerTotal = managerInclusiveTotals.find((entry) => entry.playerId.endsWith(":manager"));
+    expect(managerTotal?.teamId).toBe("home");
+    expect(managerTotal?.managingWpa).toBeCloseTo(defensiveBudget, 5);
   });
 
   test("walk results ignore impossible fielding-error rows", () => {

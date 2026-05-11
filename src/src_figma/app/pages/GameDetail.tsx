@@ -22,6 +22,7 @@ import {
   type KblWpaCredit,
 } from "../../../utils/kblWpaAttribution";
 import { rankPlayersOfTheGame } from "../../../utils/playersOfTheGame";
+import { ManagerWpaOverlay } from "../components/ManagerWpaOverlay";
 import { WinProbChart } from "../components/WinProbChart";
 
 type CanonicalLookup = Record<string, string>;
@@ -729,6 +730,8 @@ export function GameDetail() {
             </div>
           )}
         </SectionFrame>
+
+        <ManagerWpaOverlay game={game} />
 
         <SectionFrame
           title="Pitcher Decisions"

@@ -25,6 +25,7 @@
 import { calculateLeverageIndex } from '../engines/leverageCalculator';
 import { calculateWPA } from '../engines/wpaCalculator';
 import type { AtBatResult, Position, HalfInning, SpecialPlayType, MojoLevelLabel, FitnessLevelLabel, FameLevel, SpecPitcherRole, HiddenModifiers } from '../types/game';
+import type { ManagerBuntIntent, ManagerDecisionSource, ManagerRunnerIntent } from '../types/managerWpa';
 import type { ParkFactors } from '../types/war';
 import type { CompetitionType } from './gameStorage';
 
@@ -336,6 +337,9 @@ export interface AtBatEvent {
     baseSaved?: '2B' | '3B' | 'HOME';
     isTootblan?: boolean;
     isOutAdvancing?: boolean;
+    managerIntent?: ManagerRunnerIntent;
+    managerDecisionSource?: ManagerDecisionSource;
+    managerDecisionNote?: string;
     errorType?: 'fielding' | 'throwing' | 'mental';
     errorChargedTo?: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
   }>;
@@ -381,6 +385,8 @@ export interface AtBatEvent {
     pitchType?: string;
     pitchesInAtBat?: number;
     modifiers?: string[];
+    managerBuntIntent?: ManagerBuntIntent;
+    managerDecisionSource?: ManagerDecisionSource;
   };
 
   // 1.17 (GAP-GT-2-K): Versioning
@@ -460,6 +466,9 @@ export interface BetweenPlayEvent {
     toBase: 1 | 2 | 3 | 4;
     outcome: 'safe' | 'out';
     reason: 'stolen_base' | 'caught_stealing' | 'pickoff' | 'wild_pitch' | 'passed_ball' | 'advance';
+    managerIntent?: ManagerRunnerIntent;
+    managerDecisionSource?: ManagerDecisionSource;
+    managerDecisionNote?: string;
   };
 
   pitcherChange?: {

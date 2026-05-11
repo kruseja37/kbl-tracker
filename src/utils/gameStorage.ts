@@ -13,6 +13,10 @@ import type {
   PitchType,
   Position,
 } from "./leagueBuilderStorage";
+import type {
+  ManagerDecisionRecord,
+  ManagerLineupDeltaRecord,
+} from "../types/managerWpa";
 import { getTrackerDb } from "./trackerDb";
 import { syncEngine } from "./syncEngine";
 
@@ -179,7 +183,11 @@ export interface PersistedGameState {
   }>;
 
   // --- NEW: ADVANCED TRACKING ARRAYS ---
-  managerDecisions?: Array<{
+  managerDecisions?: ManagerDecisionRecord[];
+  managerLineupDeltas?: ManagerLineupDeltaRecord[];
+
+  /** @deprecated Legacy fixed-value mWAR snapshots; keep only for compatibility. */
+  legacyManagerDecisions?: Array<{
     managerId: string;
     decisionType: string;
     mwarImpact: number;
@@ -568,6 +576,8 @@ export interface CompletedGameRecord {
   };
   // --- NEW: CATCH THE ADVANCED ARRAYS ---
   managerDecisions?: PersistedGameState["managerDecisions"];
+  managerLineupDeltas?: PersistedGameState["managerLineupDeltas"];
+  legacyManagerDecisions?: PersistedGameState["legacyManagerDecisions"];
   moraleShifts?: PersistedGameState["moraleShifts"];
   playerRatingsSnapshots?: PersistedGameState["playerRatingsSnapshots"];
 }
@@ -743,6 +753,8 @@ export async function archiveCompletedGame(
     playersOfTheGame: context?.playersOfTheGame,
     // --- NEW: ARCHIVE THE ADVANCED ARRAYS ---
     managerDecisions: gameState.managerDecisions || [],
+    managerLineupDeltas: gameState.managerLineupDeltas || [],
+    legacyManagerDecisions: gameState.legacyManagerDecisions || [],
     moraleShifts: gameState.moraleShifts || [],
     playerRatingsSnapshots: gameState.playerRatingsSnapshots,
   };

@@ -1614,6 +1614,13 @@ const POSITION_CHARGE_OPTIONS = [
   { value: 9, label: 'RF(9)' },
 ] as const;
 
+const MANAGER_INTENT_OPTIONS = [
+  { value: 'runner_choice', label: 'Runner Choice' },
+  { value: 'manager_send', label: 'Manager Send' },
+  { value: 'manager_hold', label: 'Manager Hold' },
+  { value: 'runner_responsibility', label: 'Runner Fault' },
+] as const;
+
 const isRunnerOutcomeOut = (toBase: RunnerSubEntry['toBase']) => toBase === 'out';
 
 interface RunnerEnrichmentPanelProps {
@@ -1621,7 +1628,7 @@ interface RunnerEnrichmentPanelProps {
   outfielderByPosition?: Partial<Record<OutfieldPosition, { playerId: string; playerName: string }>>;
   onUpdate: (
     subEntryId: string,
-    field: keyof Pick<RunnerSubEntry, 'fieldingSequence' | 'playMechanic' | 'fielderId' | 'fielderPosition' | 'heldByOf' | 'holdingFielder' | 'baseSaved' | 'isTootblan' | 'isOutAdvancing' | 'toBase' | 'errorType' | 'errorChargedTo'>,
+    field: keyof Pick<RunnerSubEntry, 'fieldingSequence' | 'playMechanic' | 'fielderId' | 'fielderPosition' | 'heldByOf' | 'holdingFielder' | 'baseSaved' | 'isTootblan' | 'isOutAdvancing' | 'managerIntent' | 'managerDecisionSource' | 'managerDecisionNote' | 'toBase' | 'errorType' | 'errorChargedTo'>,
     value: unknown,
   ) => void | Promise<void>;
   onClose: () => void;
@@ -1720,6 +1727,15 @@ export function RunnerEnrichmentPanel({
     await onUpdate(subEntry.id, 'errorType', nextValue);
   }, [onUpdate, subEntry.id]);
 
+  const handleManagerIntentChange = useCallback(async (
+    nextIntent: RunnerSubEntry['managerIntent'] | undefined,
+  ) => {
+    await onUpdate(subEntry.id, 'managerIntent', nextIntent);
+    if (nextIntent) {
+      await onUpdate(subEntry.id, 'managerDecisionSource', 'play_log_enhancement');
+    }
+  }, [onUpdate, subEntry.id]);
+
   return (
     <div className="bg-[#364038] border-l-2 border-[#C4A853] flex flex-col h-full" style={{ fontFamily: "'Moms Typewriter', monospace" }}>
       {/* Header */}
@@ -1788,6 +1804,33 @@ export function RunnerEnrichmentPanel({
           >
             {subEntry.isOutAdvancing ? 'Out Advancing (mgr fault)' : 'Mark Out Advancing'}
           </button>
+        </EnrichmentSection>
+
+        <EnrichmentSection label="Manager Attribution" filled={!!subEntry.managerIntent}>
+          <div className="grid grid-cols-2 gap-1.5">
+            {MANAGER_INTENT_OPTIONS.map((option) => {
+              const isSelected = subEntry.managerIntent === option.value;
+              return (
+                <button
+                  key={option.value}
+                  className={`text-[11px] min-h-[36px] px-3 py-2 rounded border transition-colors touch-manipulation
+                    ${isSelected
+                      ? 'bg-[#C4A853]/30 border-[#C4A853] text-[#C4A853]'
+                      : 'bg-[#2a3530]/60 border-[#4a6a4a] text-[#88AA88] hover:bg-[#4a6a4a]/40'}`}
+                  onClick={() => {
+                    void handleManagerIntentChange(
+                      isSelected ? undefined : option.value,
+                    );
+                  }}
+                >
+                  {option.label}
+                </button>
+              );
+            })}
+          </div>
+          <div className="mt-1 text-[10px] text-[#88AA88]">
+            Use only when the runner move was a recorded tactical call.
+          </div>
         </EnrichmentSection>
 
         {shouldShowErrorAttribution && (

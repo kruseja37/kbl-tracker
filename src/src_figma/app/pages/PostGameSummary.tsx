@@ -29,6 +29,7 @@ import chalkBgImg from '../../../assets/chalk-bg.png';
 import chalkBgFaintImg from '../../../assets/chalk-bg-faint.png';
 import { FameLeaderboardCard } from "../components/FameLeaderboardCard";
 import { FamePromotionBanner } from "../components/FamePromotionBanner";
+import { ManagerWpaOverlay } from "../components/ManagerWpaOverlay";
 import { PostGameColumns } from "../components/PostGameColumns";
 import {
   buildRunStandingsEntries,
@@ -878,6 +879,8 @@ export function PostGameSummary({
                     </div>
                   );
                 })}
+
+                <ManagerWpaOverlay game={gameData} />
 
                 {/* Box score preview */}
                 <div className="bg-[#1f2b21] border-2 border-[#314437] p-4 mb-4 rounded-sm">

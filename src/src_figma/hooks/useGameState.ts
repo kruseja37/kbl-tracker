@@ -30,6 +30,7 @@ import {
 } from "../../utils/eventLog";
 import type { GameAggregationOptions } from "../../utils/seasonAggregator";
 import { processCompletedGame } from "../../utils/processCompletedGame";
+import { deriveCommittedManagerDecisionState } from "../../utils/managerWpaGameState";
 import { appendEliminationGameFameToRun } from "../../utils/eliminationRunFameStorage";
 import { appendEliminationGameToAllTimeStats } from "../../utils/eliminationAllTimeStatsStorage";
 import {
@@ -124,6 +125,9 @@ export interface EndGameOptions {
   currentGame?: number;
   stadiumName?: string | null;
   awaitPitchCountConfirmation?: boolean;
+  awayManagerId?: string;
+  homeManagerId?: string;
+  managerByTeamId?: Record<string, string | undefined>;
 }
 
 export interface ScoreboardState {
@@ -10216,16 +10220,33 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
           playerNameLookup.set(b.playerId, b.playerName);
         }
 
-        const [fieldingEvents, betweenPlayEvents, atBatEvents] =
+        const [fieldingEvents, betweenPlayEvents, atBatEvents, gameHeader] =
           await Promise.all([
             getGameFieldingEvents(gameState.gameId),
             getBetweenPlayEvents(gameState.gameId),
             getGameEvents(gameState.gameId),
+            getGameHeader(gameState.gameId).catch(() => null),
           ]);
         const playerFieldingTally = buildPlayerFieldingTally(
           fieldingEvents,
           betweenPlayEvents,
         );
+        const committedManagerDecisionState =
+          deriveCommittedManagerDecisionState({
+            gameId: gameState.gameId,
+            atBatEvents,
+            betweenPlayEvents,
+            fieldingEvents,
+            startingLineups: gameHeader?.startingLineups,
+            startingPitchers: gameHeader?.startingPitchers,
+            awayTeamId: gameState.awayTeamId,
+            homeTeamId: gameState.homeTeamId,
+            awayManagerId: opts?.awayManagerId,
+            homeManagerId: opts?.homeManagerId,
+            managerByTeamId: opts?.managerByTeamId,
+            totalInnings: totalInningsRef.current,
+            gameEnded: true,
+          });
 
         const playerStatsRecord: Record<
           string,
@@ -10424,6 +10445,8 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
           maxDeficitAway: 0,
           maxDeficitHome: 0,
           activityLog: activityLog.slice(-20),
+          managerDecisions: committedManagerDecisionState.managerDecisions,
+          managerLineupDeltas: committedManagerDecisionState.managerLineupDeltas,
         };
         const rankedPlayersOfTheGame = rankPlayersOfTheGame(
           {
@@ -11094,6 +11117,9 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
           currentSeason: currentSeasonNumber,
           currentGame: options?.currentGame,
           stadiumName: options?.stadiumName,
+          awayManagerId: options?.awayManagerId,
+          homeManagerId: options?.homeManagerId,
+          managerByTeamId: options?.managerByTeamId,
         };
       const playerNameLookupForEndGame = new Map<string, string>();
       for (const p of awayLineupRef.current) {
@@ -11113,16 +11139,38 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         playerNameLookupForEndGame.set(b.playerId, b.playerName);
       }
 
-      const [endGameFieldingEvents, endGameBetweenPlayEvents, endGameAtBatEvents] =
+      const [
+        endGameFieldingEvents,
+        endGameBetweenPlayEvents,
+        endGameAtBatEvents,
+        endGameHeader,
+      ] =
         await Promise.all([
           getGameFieldingEvents(gameState.gameId),
           getBetweenPlayEvents(gameState.gameId),
           getGameEvents(gameState.gameId),
+          getGameHeader(gameState.gameId).catch(() => null),
         ]);
       const endGameFieldingTally = buildPlayerFieldingTally(
         endGameFieldingEvents,
         endGameBetweenPlayEvents,
       );
+      const committedManagerDecisionState =
+        deriveCommittedManagerDecisionState({
+          gameId: gameState.gameId,
+          atBatEvents: endGameAtBatEvents,
+          betweenPlayEvents: endGameBetweenPlayEvents,
+          fieldingEvents: endGameFieldingEvents,
+          startingLineups: endGameHeader?.startingLineups,
+          startingPitchers: endGameHeader?.startingPitchers,
+          awayTeamId: gameState.awayTeamId,
+          homeTeamId: gameState.homeTeamId,
+          awayManagerId: options?.awayManagerId,
+          homeManagerId: options?.homeManagerId,
+          managerByTeamId: options?.managerByTeamId,
+          totalInnings: totalInningsRef.current,
+          gameEnded: true,
+        });
 
       const playerStatsRecord: Record<
         string,
@@ -11286,6 +11334,8 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         maxDeficitAway: 0,
         maxDeficitHome: 0,
         activityLog: activityLog.slice(-20),
+        managerDecisions: committedManagerDecisionState.managerDecisions,
+        managerLineupDeltas: committedManagerDecisionState.managerLineupDeltas,
       };
       const rankedPlayersOfTheGame = rankPlayersOfTheGame(
         {

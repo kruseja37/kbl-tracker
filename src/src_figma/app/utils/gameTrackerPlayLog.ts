@@ -288,6 +288,9 @@ function buildRunnerSubEntries(event: AtBatEvent): RunnerSubEntry[] | undefined 
       baseSaved: ro.baseSaved,
       isTootblan: ro.isTootblan,
       isOutAdvancing: ro.isOutAdvancing,
+      managerIntent: ro.managerIntent,
+      managerDecisionSource: ro.managerDecisionSource,
+      managerDecisionNote: ro.managerDecisionNote,
       errorType: ro.errorType,
       errorChargedTo: ro.errorChargedTo,
       transitionLabel: formatRunnerTransitionLabel(

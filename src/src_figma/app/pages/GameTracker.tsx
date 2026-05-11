@@ -42,6 +42,7 @@ import {
   type DefensiveEnrichmentMode,
 } from "@/app/components/DefensiveLineupColumn";
 import { NewsBoard } from "@/app/components/NewsBoard";
+import type { CommentaryFeedEntry } from "@/app/components/CommentaryFeed";
 import {
   EnrichmentPanel,
   RunnerEnrichmentPanel,
@@ -77,6 +78,16 @@ import {
   type FieldingEvent,
   type GameHeader,
 } from "../../../utils/eventLog";
+import { refreshCurrentGameManagerDecisionState } from "../../../utils/managerWpaGameState";
+import {
+  generateManagerRecommendations,
+  type BenchDefenderRecommendationPlayer,
+  type DefenderRecommendationPlayer,
+  type HitterRecommendationPlayer,
+  type ManagerRecommendation,
+  type ManagerRecommendationAction,
+} from "../../../utils/managerWpaRecommendations";
+import type { ManagerDecisionRecord } from "../../../types/managerWpa";
 import { getTeamColors, getFielderBorderColors } from "@/config/teamColors";
 import {
   buildFallbackRuntimePlayerId,
@@ -159,6 +170,85 @@ const formatInningLabel = (isTop: boolean, inning: number) => {
   const half = isTop ? "Top" : "Bottom";
   return `${half} ${inning}${ordinalSuffix(inning)}`;
 };
+
+const MANAGER_USER_ACTION_DECISION_TYPES = new Set([
+  "intentional_walk",
+  "pitching_change",
+  "pinch_hitter",
+  "pinch_runner",
+  "defensive_sub",
+  "position_change",
+]);
+
+function formatManagerDecisionHalfInning(decision: ManagerDecisionRecord): string {
+  return `${decision.half === "top" ? "T" : "B"}${decision.inning}`;
+}
+
+function formatManagerDecisionWpa(decision: ManagerDecisionRecord): string {
+  if (!decision.resolved || typeof decision.managerWpa !== "number") {
+    return "WPA pending";
+  }
+
+  return `${decision.managerWpa >= 0 ? "+" : ""}${decision.managerWpa.toFixed(3)} WPA`;
+}
+
+function isUserActionManagerDecision(decision: ManagerDecisionRecord): boolean {
+  return (
+    decision.decisionSource === "user_action" ||
+    MANAGER_USER_ACTION_DECISION_TYPES.has(decision.decisionType)
+  );
+}
+
+function buildManagerDecisionFeedEntry(
+  decision: ManagerDecisionRecord,
+  timestamp: number,
+  canEditAttribution: boolean,
+): CommentaryFeedEntry {
+  const status = formatManagerDecisionWpa(decision);
+  const leverage =
+    typeof decision.leverageIndex === "number"
+      ? ` LI ${decision.leverageIndex.toFixed(1)}.`
+      : "";
+
+  return {
+    id: `manager-decision-${decision.decisionId}`,
+    kind: isUserActionManagerDecision(decision)
+      ? "manager-user-action"
+      : "manager-passive",
+    commentaryText: `${decision.displayTitle} for ${decision.teamId}. ${status}.${leverage}`,
+    halfInningLabel: formatManagerDecisionHalfInning(decision),
+    timestamp,
+    managerDecision: decision,
+    canEditAttribution,
+  };
+}
+
+function formatManagerRecommendationHalfInning(
+  recommendation: ManagerRecommendation,
+): string {
+  return `${recommendation.half === "top" ? "T" : "B"}${recommendation.inning}`;
+}
+
+function buildManagerRecommendationFeedEntry(
+  recommendation: ManagerRecommendation,
+  timestamp: number,
+): CommentaryFeedEntry {
+  const kind =
+    recommendation.surface === "recommendation_card"
+      ? "manager-recommendation-card"
+      : recommendation.surface === "feed_quick_action"
+        ? "manager-recommendation-note"
+        : "manager-recommendation-passive";
+
+  return {
+    id: `manager-recommendation-${recommendation.recommendationId}`,
+    kind,
+    commentaryText: `${recommendation.title}. ${recommendation.rationale}`,
+    halfInningLabel: formatManagerRecommendationHalfInning(recommendation),
+    timestamp,
+    managerRecommendation: recommendation,
+  };
+}
 
 const runnerBaseToTrackerBase = (
   base: RunnerBase | "first" | "second" | "third",
@@ -640,16 +730,10 @@ import {
 } from "../hooks/useFanMorale";
 // MAJ-04: Wire narrative engine
 import { generateGameRecap } from "../engines/narrativeIntegration";
-// mWAR: Manager decision tracking
-import { useMWARCalculations } from "../hooks/useMWARCalculations";
 import {
   getLeverageIndex,
   type GameStateForLI,
 } from "../../../engines/leverageCalculator";
-import {
-  saveGameDecisions,
-  aggregateManagerGameToSeason,
-} from "../../../utils/managerStorage";
 import {
   getCareerStats,
   type PlayerCareerBatting,
@@ -689,6 +773,7 @@ import {
 } from "../utils/fieldingEventExtractor";
 import {
   captureStartingLineups,
+  loadCurrentGame,
   type CompetitionType,
   type LineupEntry,
 } from "../../../utils/gameStorage";
@@ -1069,7 +1154,6 @@ export function GameTracker() {
     recordEvent,
     recordPlayerStateChange,
     reassignRunnerEventAttribution,
-    recordManagerMoment,
     placeGhostRunner,
     advanceRunner,
     advanceRunnersBatch,
@@ -1467,6 +1551,9 @@ export function GameTracker() {
 
   // §4.2 Structured Play Log — parallel to activityLog (which other systems still use)
   const [playLogEntries, setPlayLogEntries] = useState<PlayLogEntry[]>([]);
+  const [committedManagerDecisions, setCommittedManagerDecisions] = useState<
+    ManagerDecisionRecord[]
+  >([]);
   const firedInningSummariesRef = useRef<Set<string>>(new Set());
   const lastSeenHalfInningRef = useRef<{ inning: number; isTop: boolean } | null>(null);
   const shortInningLabel = useCallback(() => {
@@ -1556,8 +1643,6 @@ export function GameTracker() {
   const [showPostGameEnrichPrompt, setShowPostGameEnrichPrompt] =
     useState(false);
   const [postGameUnenrichedCount, setPostGameUnenrichedCount] = useState(0);
-  const loggedManagerMomentKeysRef = useRef<Set<string>>(new Set());
-
   useEffect(() => {
     if (!gameState.gameId) {
       setLineupFieldingEvents([]);
@@ -1757,19 +1842,7 @@ export function GameTracker() {
   const homeFanMorale = useFanMorale(homeTeamId);
   const awayFanMorale = useFanMorale(awayTeamId);
 
-  // mWAR: Manager decision tracking
-  const mwarHook = useMWARCalculations();
-
-  // Initialize mWAR tracking at game start
-  useEffect(() => {
-    if (gameId) {
-      mwarHook.initializeGame(gameId, homeManagerId);
-      mwarHook.initializeSeason("season-1", homeManagerId, homeTeamId);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [gameId]);
-
-  // Helper to build GameStateForLI from current game state for mWAR/LI calculations
+  // Helper to build GameStateForLI from current game state for LI calculations
   const buildGameStateForLI = useCallback(
     (): GameStateForLI => ({
       inning: gameState?.inning ?? 1,
@@ -1792,19 +1865,6 @@ export function GameTracker() {
       hookTotalInningsRef.current || 9,
     );
   }, [buildGameStateForLI, hookTotalInningsRef]);
-
-  // Track pending mWAR decisions for outcome resolution
-  const [pendingMWARDecisions, setPendingMWARDecisions] = useState<
-    Map<
-      string,
-      {
-        decisionId: string;
-        decisionType: string;
-        involvedPlayers: string[];
-        resolveAfterNextPlay: boolean;
-      }
-    >
-  >(new Map());
 
   // Track selected hit/out/walk details for the two-step record flow
   const [pendingOutcome, setPendingOutcome] = useState<{
@@ -1837,6 +1897,13 @@ export function GameTracker() {
     playerId: string;
     runnerBase?: RunnerBase;
   } | null>(null);
+  const [
+    suppressedManagerRecommendationKeys,
+    setSuppressedManagerRecommendationKeys,
+  ] = useState<Set<string>>(() => new Set());
+  useEffect(() => {
+    setSuppressedManagerRecommendationKeys(new Set());
+  }, [gameState.gameId]);
   const lastAppliedRestoredMojoFitnessRef = useRef<
     Record<string, { mojo: number; fitness: string }> | null
   >(null);
@@ -1988,7 +2055,6 @@ export function GameTracker() {
   // REMOVED: Touch play review panel eliminated — play log tap handles review.
   const [pendingManualSpecialPrompt, setPendingManualSpecialPrompt] =
     useState<PendingManualSpecialPrompt | null>(null);
-  const [showManagerMomentPanel, setShowManagerMomentPanel] = useState(false);
   const [fenwayContext, setFenwayContext] = useState<{
     matchupRecord?: string;
     matchupAvg?: string;
@@ -3075,6 +3141,70 @@ export function GameTracker() {
     queuePlayLogRefreshRef.current = queuePlayLogRefresh;
   }, [queuePlayLogRefresh, rebuildPlayLogFromEventLog]);
 
+  const recomputeCommittedManagerWpa = useCallback(
+    async (reason: string) => {
+      if (!gameState.gameId) return;
+
+      try {
+        const nextManagerDecisionState =
+          await refreshCurrentGameManagerDecisionState({
+            gameId: gameState.gameId,
+            awayTeamId,
+            homeTeamId,
+            awayManagerId,
+            homeManagerId,
+            managerByTeamId: {
+              [awayTeamId]: awayManagerId,
+              [homeTeamId]: homeManagerId,
+            },
+            totalInnings:
+              hookTotalInningsRef.current || navigationState?.totalInnings || 9,
+          });
+        setCommittedManagerDecisions(nextManagerDecisionState.managerDecisions);
+      } catch (error) {
+        console.error(
+          `[Manager WPA] Failed to recompute committed truth layer after ${reason}:`,
+          error,
+        );
+      }
+    },
+    [
+      awayManagerId,
+      awayTeamId,
+      gameState.gameId,
+      homeManagerId,
+      homeTeamId,
+      hookTotalInningsRef,
+      navigationState?.totalInnings,
+    ],
+  );
+
+  useEffect(() => {
+    if (!gameInitialized || !gameState.gameId) {
+      setCommittedManagerDecisions([]);
+      return;
+    }
+
+    let cancelled = false;
+    void loadCurrentGame()
+      .then((currentGame) => {
+        if (cancelled || currentGame?.gameId !== gameState.gameId) {
+          return;
+        }
+        setCommittedManagerDecisions(currentGame.managerDecisions ?? []);
+      })
+      .catch((error) => {
+        console.error(
+          "[Manager WPA] Failed to hydrate committed truth layer:",
+          error,
+        );
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [gameInitialized, gameState.gameId]);
+
   const resolvedCurrentBatterName =
     gameState.currentBatterName ||
     resolveRosterNameByGameId(gameState.currentBatterId) ||
@@ -3088,6 +3218,9 @@ export function GameTracker() {
   const battingTeamPlayersRaw = gameState.isTop
     ? awayTeamPlayers
     : homeTeamPlayers;
+  const fieldingTeamPlayersRaw = gameState.isTop
+    ? homeTeamPlayers
+    : awayTeamPlayers;
   const battingTeamPitchersRaw = gameState.isTop
     ? awayTeamPitchers
     : homeTeamPitchers;
@@ -3337,9 +3470,15 @@ export function GameTracker() {
       const atBatIdentity = getPendingAtBatIdentity();
       await commitPlateAppearance(action);
       await appendCommittedAtBatEntry(atBatIdentity.atBatEventId);
+      await recomputeCommittedManagerWpa("plate appearance commit");
       return atBatIdentity;
     },
-    [appendCommittedAtBatEntry, commitPlateAppearance, getPendingAtBatIdentity],
+    [
+      appendCommittedAtBatEntry,
+      commitPlateAppearance,
+      getPendingAtBatIdentity,
+      recomputeCommittedManagerWpa,
+    ],
   );
 
   const buildFieldingContext = useCallback(
@@ -5796,29 +5935,6 @@ export function GameTracker() {
         );
         syncDisplayedRostersToLineupSnapshot(getLineupStateSnapshot());
         setRosterVersion((v) => v + 1);
-        // mWAR: Record pitching change decision
-        try {
-          const gsLI = buildGameStateForLI();
-          const decisionId = mwarHook.recordDecision(
-            "pitching_change",
-            gsLI,
-            [sub.incomingPlayerId, sub.outgoingPlayerId],
-            `Replaced ${sub.outgoingPlayerName} with ${sub.incomingPlayerName}`,
-          );
-          setPendingMWARDecisions((prev) =>
-            new Map(prev).set(decisionId, {
-              decisionId,
-              decisionType: "pitching_change",
-              involvedPlayers: [sub.incomingPlayerId],
-              resolveAfterNextPlay: true,
-            }),
-          );
-          console.log(
-            `[mWAR] Recorded pitching_change decision: ${decisionId}`,
-          );
-        } catch (e) {
-          console.warn("[mWAR] Decision recording error (non-blocking):", e);
-        }
       } else if (sub.type === "position_swap") {
         const incomingContext = findTeamPlayer(
           sub.incomingPlayerId,
@@ -5937,34 +6053,9 @@ export function GameTracker() {
           return;
         }
 
-        // mWAR: Infer decision type — pinch hitter if outgoing is current batter, otherwise defensive sub
-        try {
-          const gsLI = buildGameStateForLI();
-          const decisionType = isPinchHitter ? "pinch_hitter" : "defensive_sub";
-          const decisionId = mwarHook.recordDecision(
-            decisionType as any,
-            gsLI,
-            [sub.incomingPlayerId, sub.outgoingPlayerId],
-            `${isPinchHitter ? "PH" : "Def sub"}: ${sub.incomingPlayerName} for ${sub.outgoingPlayerName}`,
-          );
-          if (isPinchHitter) {
-            // Resolve pinch hitter after next AB
-            setPendingMWARDecisions((prev) =>
-              new Map(prev).set(decisionId, {
-                decisionId,
-                decisionType: "pinch_hitter",
-                involvedPlayers: [sub.incomingPlayerId],
-                resolveAfterNextPlay: true,
-              }),
-            );
-            // GAP-GT-7-C: Mark PH as pending — they must bat before being removed
-            setPendingPH(sub.incomingPlayerId);
-          }
-          console.log(
-            `[mWAR] Recorded ${decisionType} decision: ${decisionId}`,
-          );
-        } catch (e) {
-          console.warn("[mWAR] Decision recording error (non-blocking):", e);
+        if (isPinchHitter) {
+          // GAP-GT-7-C: Mark PH as pending — they must bat before being removed.
+          setPendingPH(sub.incomingPlayerId);
         }
 
         // EXH-018 FIX: Also update local player arrays so UI reflects the substitution
@@ -6027,7 +6118,6 @@ export function GameTracker() {
     [
       awayTeamPitchers,
       awayTeamPlayers,
-      buildGameStateForLI,
       changePitcher,
       fieldingTeam,
       gameState?.currentBatterId,
@@ -6037,7 +6127,6 @@ export function GameTracker() {
       homeTeamPitchers,
       homeTeamPlayers,
       makeSubstitution,
-      mwarHook,
       persistedUseDh,
       navigationState?.useDH,
       pendingPH,
@@ -6336,6 +6425,7 @@ export function GameTracker() {
       setSelectedBetweenPlayEventSaving(true);
       try {
         await updateBetweenPlayEvent(nextEvent.eventId, updates);
+        await recomputeCommittedManagerWpa(errorLabel);
 
         const reloaded = await loadExistingGame({ preferSnapshot: false });
         if (!reloaded) {
@@ -6360,6 +6450,7 @@ export function GameTracker() {
     [
       loadExistingGame,
       queuePlayLogRefresh,
+      recomputeCommittedManagerWpa,
       syncDisplayedRostersToLineupSnapshot,
     ],
   );
@@ -6373,6 +6464,7 @@ export function GameTracker() {
       setSelectedBetweenPlayEventSaving(true);
       try {
         await updateBetweenPlayEvent(nextEvent.eventId, updates);
+        await recomputeCommittedManagerWpa(errorLabel);
         if (nextEvent.playerStateChange?.stateType === "mojo") {
           playerStateHook.setMojo(
             nextEvent.playerStateChange.playerId,
@@ -6395,7 +6487,7 @@ export function GameTracker() {
         setSelectedBetweenPlayEventSaving(false);
       }
     },
-    [playerStateHook, queuePlayLogRefresh],
+    [playerStateHook, queuePlayLogRefresh, recomputeCommittedManagerWpa],
   );
 
   const syncLinkedPlayerStateEvent = useCallback(
@@ -7924,27 +8016,6 @@ export function GameTracker() {
       }),
     );
 
-    // mWAR: Record pitching change decision
-    try {
-      const gsLI = buildGameStateForLI();
-      const decisionId = mwarHook.recordDecision(
-        "pitching_change",
-        gsLI,
-        [newPitcherId, exitingPitcherId],
-        `Replaced ${replacedName} with ${newPitcherName}`,
-      );
-      setPendingMWARDecisions((prev) =>
-        new Map(prev).set(decisionId, {
-          decisionId,
-          decisionType: "pitching_change",
-          involvedPlayers: [newPitcherId],
-          resolveAfterNextPlay: true,
-        }),
-      );
-      console.log(`[mWAR] Recorded pitching_change decision: ${decisionId}`);
-    } catch (e) {
-      console.warn("[mWAR] Decision recording error (non-blocking):", e);
-    }
   };
 
   // §9.1: Player card Sub Out handler — executes substitution from player card bench list
@@ -8295,6 +8366,7 @@ export function GameTracker() {
         catcherId: defensiveAlignmentByPosition.C?.playerId,
         catcherName: defensiveAlignmentByPosition.C?.playerName,
       });
+      await recomputeCommittedManagerWpa("runner event commit");
       processRunnerEventAutoDetections({
         eventType,
         runnerId,
@@ -8313,6 +8385,7 @@ export function GameTracker() {
       processRunnerEventAutoDetections,
       queuePlayLogRefresh,
       recordEvent,
+      recomputeCommittedManagerWpa,
       resolvedCurrentPitcherName,
       undoSystem,
     ],
@@ -8359,6 +8432,7 @@ export function GameTracker() {
             : undefined,
         },
       );
+      await recomputeCommittedManagerWpa("runner attribution commit");
       if (
         pendingRunnerAttribution.runnerId &&
         pendingRunnerAttribution.runnerName
@@ -8390,6 +8464,7 @@ export function GameTracker() {
     processRunnerEventAutoDetections,
     queuePlayLogRefresh,
     recordEvent,
+    recomputeCommittedManagerWpa,
     undoSystem,
   ]);
 
@@ -9020,6 +9095,7 @@ export function GameTracker() {
               },
             ],
           });
+          await recomputeCommittedManagerWpa("at-bat enrichment commit");
 
           setEnrichmentCache((prev) => ({
             ...prev,
@@ -9126,6 +9202,7 @@ export function GameTracker() {
             ...(shouldMarkQualityAtBat ? { isQualityAtBat: true } : {}),
           });
         }
+        await recomputeCommittedManagerWpa("at-bat enrichment commit");
 
         // Update local cache
         setEnrichmentCache((prev) => ({
@@ -9193,6 +9270,7 @@ export function GameTracker() {
       gameState.isTop,
       enrichingEntry,
       playLogEntries,
+      recomputeCommittedManagerWpa,
     ],
   );
 
@@ -9395,6 +9473,406 @@ export function GameTracker() {
     [enrichingRunnerSubEntry],
   );
 
+  const findPlayLogEntryForManagerDecision = useCallback(
+    (decision: ManagerDecisionRecord): PlayLogEntry | undefined => {
+      const eventIds = [
+        decision.decisionEventId,
+        ...decision.linkedEventIds,
+      ].filter((eventId): eventId is string => Boolean(eventId));
+
+      return playLogEntries.find(
+        (entry) => entry.eventId && eventIds.includes(entry.eventId),
+      );
+    },
+    [playLogEntries],
+  );
+
+  const findRunnerSubEntryForManagerDecision = useCallback(
+    (
+      decision: ManagerDecisionRecord,
+      entry: PlayLogEntry | undefined,
+    ): RunnerSubEntry | undefined => {
+      if (!entry?.runnerSubEntries?.length) {
+        return undefined;
+      }
+
+      return entry.runnerSubEntries.find((subEntry) =>
+        decision.involvedPlayerIds.includes(subEntry.runnerId),
+      );
+    },
+    [],
+  );
+
+  const canEditManagerDecisionAttribution = useCallback(
+    (decision: ManagerDecisionRecord): boolean => {
+      const entry = findPlayLogEntryForManagerDecision(decision);
+      if (!entry?.isSelectable) {
+        return false;
+      }
+
+      if (
+        decision.decisionType === "bunt_call" ||
+        decision.decisionType === "squeeze_call"
+      ) {
+        return entry.eventType === "at_bat" && entry.isEnrichable;
+      }
+
+      if (
+        decision.decisionType === "out_advancing_send" ||
+        decision.decisionType === "runner_hold"
+      ) {
+        return Boolean(findRunnerSubEntryForManagerDecision(decision, entry));
+      }
+
+      return (
+        entry.eventType === "substitution" ||
+        entry.eventType === "position_change" ||
+        entry.eventType === "pitcher_change"
+      );
+    },
+    [findPlayLogEntryForManagerDecision, findRunnerSubEntryForManagerDecision],
+  );
+
+  const handleManagerDecisionEdit = useCallback(
+    (decision: ManagerDecisionRecord) => {
+      const entry = findPlayLogEntryForManagerDecision(decision);
+      if (!entry || !canEditManagerDecisionAttribution(decision)) {
+        return;
+      }
+
+      const runnerSubEntry = findRunnerSubEntryForManagerDecision(
+        decision,
+        entry,
+      );
+      if (runnerSubEntry) {
+        handleRunnerSubEntryTap(runnerSubEntry, entry);
+        return;
+      }
+
+      handleEntryTap(entry);
+    },
+    [
+      canEditManagerDecisionAttribution,
+      findPlayLogEntryForManagerDecision,
+      findRunnerSubEntryForManagerDecision,
+      handleEntryTap,
+      handleRunnerSubEntryTap,
+    ],
+  );
+
+  const managerDecisionFeedEntries = useMemo(() => {
+    const timestampByEventId = new Map(
+      playLogEntries
+        .filter((entry) => entry.eventId)
+        .map((entry) => [entry.eventId!, entry.timestamp] as const),
+    );
+
+    return committedManagerDecisions.map((decision) => {
+      const eventIds = [
+        decision.decisionEventId,
+        ...decision.linkedEventIds,
+      ].filter((eventId): eventId is string => Boolean(eventId));
+      const timestamp =
+        eventIds
+          .map((eventId) => timestampByEventId.get(eventId))
+          .find((value): value is number => typeof value === "number") ?? 0;
+
+      return buildManagerDecisionFeedEntry(
+        decision,
+        timestamp,
+        canEditManagerDecisionAttribution(decision),
+      );
+    });
+  }, [
+    canEditManagerDecisionAttribution,
+    committedManagerDecisions,
+    playLogEntries,
+  ]);
+
+  const managerRecommendations = useMemo(() => {
+    if (gameState.gamePhase !== "LIVE") {
+      return [];
+    }
+
+    const leverageIndex = getCurrentLeverageIndex();
+    const currentPitcherStats = pitcherStats.get(currentPitcherData.id);
+    const currentLineupBatter =
+      currentLineup.find((player) => player.batting) ||
+      currentLineup.find(
+        (player) => player.playerId === gameState.currentBatterId,
+      );
+    const currentBatterRoster = battingTeamPlayersRaw.find(
+      (player) =>
+        getRosterEntityId(player, battingTeam) ===
+          (currentLineupBatter?.playerId || gameState.currentBatterId) ||
+        player.name === resolvedCurrentBatterName,
+    );
+    const currentBatter: HitterRecommendationPlayer | undefined =
+      currentLineupBatter || currentBatterRoster
+        ? {
+            playerId:
+              currentLineupBatter?.playerId ||
+              (currentBatterRoster
+                ? getRosterEntityId(currentBatterRoster, battingTeam)
+                : gameState.currentBatterId),
+            playerName:
+              currentLineupBatter?.name ||
+              currentBatterRoster?.name ||
+              resolvedCurrentBatterName,
+            battingOrder:
+              currentBatterRoster?.battingOrder ??
+              currentLineupBatter?.battingOrder,
+            contact: currentBatterRoster?.contact,
+            power: currentBatterRoster?.power,
+            battingHand: currentBatterRoster?.battingHand,
+          }
+        : undefined;
+    const benchHitters: HitterRecommendationPlayer[] = battingTeamPlayersRaw
+      .filter((player) => player.battingOrder === undefined)
+      .map((player) => ({
+        playerId: getRosterEntityId(player, battingTeam),
+        playerName: player.name,
+        contact: player.contact,
+        power: player.power,
+        battingHand: player.battingHand,
+        isAvailable: !player.isOutOfGame,
+      }));
+
+    const defenders: DefenderRecommendationPlayer[] = defensiveColumnPlayers
+      .filter((player) => !player.isPitcher)
+      .map((player) => {
+        const rosterPlayer = fieldingTeamPlayersRaw.find(
+          (candidate) =>
+            getRosterEntityId(candidate, fieldingTeam) === player.playerId ||
+            candidate.name === player.name,
+        );
+        return {
+          playerId: player.playerId,
+          playerName: player.name,
+          position: player.position,
+          fieldingErrors: playerStats.get(player.playerId)?.fieldingErrors ?? 0,
+          fieldingRating: rosterPlayer?.fieldingRating,
+          arm: rosterPlayer?.arm,
+        };
+      });
+    const fieldingSnapshot = getLineupStateSnapshot()[fieldingTeam];
+    const benchDefenders: BenchDefenderRecommendationPlayer[] =
+      fieldingSnapshot.bench
+        .map((benchPlayer) => {
+          const rosterPlayer = fieldingTeamPlayersRaw.find(
+            (candidate) =>
+              getRosterEntityId(candidate, fieldingTeam) ===
+                benchPlayer.playerId ||
+              candidate.name === benchPlayer.playerName,
+          );
+          const positions =
+            benchPlayer.positions.length > 0
+              ? benchPlayer.positions
+              : [
+                  rosterPlayer?.position,
+                  rosterPlayer?.secondaryPosition,
+                ].filter((position): position is string => Boolean(position));
+          return {
+            playerId: benchPlayer.playerId,
+            playerName: benchPlayer.playerName,
+            positions,
+            fieldingRating: rosterPlayer?.fieldingRating,
+            arm: rosterPlayer?.arm,
+            isAvailable: benchPlayer.isAvailable,
+          };
+        })
+        .filter(
+          (player) =>
+            player.positions.some((position) => position !== "P") &&
+            player.isAvailable !== false,
+        );
+
+    const scoreDifferentialForFieldingTeam =
+      fieldingTeam === "home"
+        ? gameState.homeScore - gameState.awayScore
+        : gameState.awayScore - gameState.homeScore;
+
+    return generateManagerRecommendations({
+      gameId: gameState.gameId,
+      inning: gameState.inning,
+      half: gameState.isTop ? "top" : "bottom",
+      outs: gameState.outs,
+      totalInnings: hookTotalInningsRef.current || navigationState?.totalInnings || 9,
+      leverageIndex,
+      battingTeamId,
+      fieldingTeamId,
+      offensiveManagerId: battingTeam === "away" ? awayManagerId : homeManagerId,
+      defensiveManagerId: fieldingTeam === "away" ? awayManagerId : homeManagerId,
+      scoreDifferentialForFieldingTeam,
+      currentPitcher: activePitcher
+        ? {
+            playerId: currentPitcherData.id,
+            playerName: currentPitcherData.name,
+            pitchCount: currentPitcherStats?.pitchCount,
+            isStarter: activePitcher.isStarter,
+          }
+        : undefined,
+      availablePitchers: fieldingTeamPitchersRaw
+        .filter((pitcher) => !pitcher.isActive && !pitcher.isOutOfGame)
+        .map((pitcher) => ({
+          playerId: getRosterEntityId(pitcher, fieldingTeam),
+          playerName: pitcher.name,
+        })),
+      currentBatter,
+      benchHitters,
+      defenders,
+      benchDefenders,
+      suppressedRecommendationKeys: suppressedManagerRecommendationKeys,
+    });
+  }, [
+    activePitcher,
+    awayManagerId,
+    battingTeam,
+    battingTeamId,
+    battingTeamPlayersRaw,
+    currentLineup,
+    currentPitcherData.id,
+    currentPitcherData.name,
+    defensiveColumnPlayers,
+    fieldingTeam,
+    fieldingTeamId,
+    fieldingTeamPitchersRaw,
+    fieldingTeamPlayersRaw,
+    gameState.awayScore,
+    gameState.currentBatterId,
+    gameState.gameId,
+    gameState.gamePhase,
+    gameState.homeScore,
+    gameState.inning,
+    gameState.isTop,
+    gameState.outs,
+    getCurrentLeverageIndex,
+    getLineupStateSnapshot,
+    getRosterEntityId,
+    homeManagerId,
+    hookTotalInningsRef,
+    navigationState?.totalInnings,
+    pitcherStats,
+    playerStats,
+    resolvedCurrentBatterName,
+    suppressedManagerRecommendationKeys,
+  ]);
+
+  const managerRecommendationFeedEntries = useMemo(() => {
+    const timestamp = Date.now();
+    return managerRecommendations.map((recommendation, index) =>
+      buildManagerRecommendationFeedEntry(recommendation, timestamp + index),
+    );
+  }, [managerRecommendations]);
+
+  const handleManagerRecommendationAction = useCallback(
+    (
+      recommendation: ManagerRecommendation,
+      action: ManagerRecommendationAction,
+    ) => {
+      setSuppressedManagerRecommendationKeys((previous) => {
+        const next = new Set(previous);
+        next.add(recommendation.suppressKey);
+        return next;
+      });
+
+      if (
+        action === "dismiss" ||
+        action === "keep_pitcher" ||
+        action === "let_batter_hit" ||
+        action === "decline_defensive_sub"
+      ) {
+        return;
+      }
+
+      if (action === "open_pitching_change") {
+        const pitcherId = recommendation.trackedPlayerIds[0] || currentPitcherData.id;
+        const pitcher =
+          fieldingTeamPitchersRaw.find(
+            (candidate) =>
+              getRosterEntityId(candidate, fieldingTeam) === pitcherId ||
+              candidate.name === currentPitcherData.name,
+          ) || activePitcher;
+        setSelectedPlayer({
+          name: pitcher?.name || currentPitcherData.name,
+          type: "pitcher",
+          playerId: pitcherId,
+        });
+        return;
+      }
+
+      if (action === "open_pinch_hit") {
+        const batterId = recommendation.trackedPlayerIds[0];
+        const batter =
+          battingTeamPlayersRaw.find(
+            (candidate) =>
+              getRosterEntityId(candidate, battingTeam) === batterId ||
+              candidate.name === resolvedCurrentBatterName,
+          ) || currentLineup.find((player) => player.playerId === batterId);
+        if (batter) {
+          const playerId =
+            "batting" in batter
+              ? batter.playerId
+              : getRosterEntityId(batter, battingTeam);
+          setSelectedPlayer({
+            name: batter.name,
+            type: "batter",
+            playerId,
+          });
+        }
+        return;
+      }
+
+      if (action === "open_defensive_sub") {
+        const defenderId = recommendation.trackedPlayerIds[0];
+        const defender =
+          defensiveColumnPlayers.find((player) => player.playerId === defenderId) ||
+          fieldingTeamPlayersRaw.find(
+            (candidate) =>
+              getRosterEntityId(candidate, fieldingTeam) === defenderId,
+          );
+        if (defender) {
+          const playerId =
+            "isPitcher" in defender
+              ? defender.playerId
+              : getRosterEntityId(defender, fieldingTeam);
+          setSelectedPlayer({
+            name: defender.name,
+            type: "batter",
+            playerId,
+          });
+        }
+      }
+    },
+    [
+      activePitcher,
+      battingTeam,
+      battingTeamPlayersRaw,
+      currentLineup,
+      currentPitcherData.id,
+      currentPitcherData.name,
+      defensiveColumnPlayers,
+      fieldingTeam,
+      fieldingTeamPitchersRaw,
+      fieldingTeamPlayersRaw,
+      getRosterEntityId,
+      resolvedCurrentBatterName,
+    ],
+  );
+
+  const newsBoardEntries = useMemo(
+    () => [
+      ...managerRecommendationFeedEntries,
+      ...commentaryEntries,
+      ...managerDecisionFeedEntries,
+    ],
+    [
+      commentaryEntries,
+      managerDecisionFeedEntries,
+      managerRecommendationFeedEntries,
+    ],
+  );
+
   // 5.9: Runner sub-entry enrichment update — persists to AtBatEvent.runnerOutcomes[] (UX-050)
   const handleRunnerEnrichmentUpdate = useCallback(
     async (
@@ -9409,6 +9887,9 @@ export function GameTracker() {
         | "baseSaved"
         | "isTootblan"
         | "isOutAdvancing"
+        | "managerIntent"
+        | "managerDecisionSource"
+        | "managerDecisionNote"
         | "errorType"
         | "errorChargedTo"
         | "toBase",
@@ -9455,6 +9936,10 @@ export function GameTracker() {
                 baseSaved: enrichingRunnerSubEntry.baseSaved,
                 isTootblan: enrichingRunnerSubEntry.isTootblan,
                 isOutAdvancing: enrichingRunnerSubEntry.isOutAdvancing,
+                managerIntent: enrichingRunnerSubEntry.managerIntent,
+                managerDecisionSource:
+                  enrichingRunnerSubEntry.managerDecisionSource,
+                managerDecisionNote: enrichingRunnerSubEntry.managerDecisionNote,
                 errorType: enrichingRunnerSubEntry.errorType,
                 errorChargedTo: enrichingRunnerSubEntry.errorChargedTo,
               };
@@ -9525,6 +10010,33 @@ export function GameTracker() {
         ) {
           nextOutcomeDraft.isTootblan = false;
           nextOutcomeDraft.isOutAdvancing = false;
+          if (nextOutcomeDraft.managerIntent === "manager_send") {
+            nextOutcomeDraft.managerIntent = "runner_choice";
+            nextOutcomeDraft.managerDecisionSource = "play_log_enhancement";
+          }
+        }
+        if (field === "isOutAdvancing") {
+          nextOutcomeDraft.managerIntent = value
+            ? "manager_send"
+            : "runner_choice";
+          nextOutcomeDraft.managerDecisionSource = "play_log_enhancement";
+        }
+        if (field === "managerIntent") {
+          if (
+            value === "manager_send" ||
+            value === "runner_choice" ||
+            value === "runner_responsibility" ||
+            value === "manager_hold"
+          ) {
+            nextOutcomeDraft.managerIntent = value;
+            nextOutcomeDraft.managerDecisionSource =
+              nextOutcomeDraft.managerDecisionSource ??
+              "play_log_enhancement";
+          } else {
+            nextOutcomeDraft.managerIntent = undefined;
+            nextOutcomeDraft.managerDecisionSource = undefined;
+            nextOutcomeDraft.managerDecisionNote = undefined;
+          }
         }
         if (
           field === "toBase" &&
@@ -9735,6 +10247,20 @@ export function GameTracker() {
           value,
           timestamp,
         );
+        pushEditHistoryEntry(
+          editHistory,
+          `runnerOutcomes[${runnerIdx}].managerIntent`,
+          previousOutcome.managerIntent ?? null,
+          nextOutcome.managerIntent ?? null,
+          timestamp,
+        );
+        pushEditHistoryEntry(
+          editHistory,
+          `runnerOutcomes[${runnerIdx}].managerDecisionSource`,
+          previousOutcome.managerDecisionSource ?? null,
+          nextOutcome.managerDecisionSource ?? null,
+          timestamp,
+        );
         if (correctedResult) {
           pushEditHistoryEntry(
             editHistory,
@@ -9851,6 +10377,7 @@ export function GameTracker() {
           },
           syncedFieldingEvents,
         );
+        await recomputeCommittedManagerWpa("runner enrichment commit");
 
         for (const adjustment of buildFieldingErrorAdjustments(
           previousRunnerChargedPlayerId,
@@ -9996,6 +10523,7 @@ export function GameTracker() {
       playLogEntries,
       queueAutoEndGame,
       queuePlayLogRefresh,
+      recomputeCommittedManagerWpa,
       resolveBatterOutcomeErrorPlayerId,
       resolveRunnerOutcomeErrorPlayerId,
       updateTrackedRunnerHowReached,
@@ -10276,48 +10804,6 @@ export function GameTracker() {
         );
       }
 
-      // mWAR: Persist decisions and aggregate to season
-      try {
-        if (mwarHook.gameStats && mwarHook.gameStats.decisions.length > 0) {
-          await saveGameDecisions(mwarHook.gameStats.decisions);
-          // Aggregate to season with default team stats (actual record comes from season data)
-          await aggregateManagerGameToSeason(
-            gameId || "demo-game",
-            "season-1",
-            homeManagerId,
-            homeTeamId,
-            {
-              wins: parseInt(homeRecord.split("-")[0]) || 0,
-              losses: parseInt(homeRecord.split("-")[1]) || 0,
-            }, // MAJ-15: Use actual team record from route state
-            0.5, // Default salary score
-            50, // Default season games
-          );
-          console.log(
-            `[mWAR] Persisted ${mwarHook.gameStats.decisions.length} decisions, mWAR: ${mwarHook.formatCurrentMWAR()}`,
-          );
-          // GAP-GT-5-D: Log best/worst decisions by clutchImpact for later aggregation verification
-          const resolvedDecisions = mwarHook.gameStats.decisions.filter(
-            (d) => d.resolved,
-          );
-          if (resolvedDecisions.length > 0) {
-            const sorted = [...resolvedDecisions].sort(
-              (a, b) => b.clutchImpact - a.clutchImpact,
-            );
-            const best = sorted[0];
-            const worst = sorted[sorted.length - 1];
-            console.log(
-              `[mWAR-WPA] Best decision: ${best.decisionType} (LI=${best.leverageIndex.toFixed(2)}, clutchImpact=${best.clutchImpact.toFixed(3)})`,
-            );
-            console.log(
-              `[mWAR-WPA] Worst decision: ${worst.decisionType} (LI=${worst.leverageIndex.toFixed(2)}, clutchImpact=${worst.clutchImpact.toFixed(3)})`,
-            );
-          }
-        }
-      } catch (mwarError) {
-        console.warn("[mWAR] Persistence error (non-blocking):", mwarError);
-      }
-
       const computedSeasonId =
         effectiveCompetitionType === "elimination"
           ? undefined
@@ -10342,6 +10828,12 @@ export function GameTracker() {
         currentSeason: navigationState?.seasonNumber ?? 1,
         stadiumName: resolvedStadiumName,
         awaitPitchCountConfirmation: true,
+        awayManagerId,
+        homeManagerId,
+        managerByTeamId: {
+          [awayTeamId]: awayManagerId,
+          [homeTeamId]: homeManagerId,
+        },
       };
       console.debug(
         "[END-GAME] Step 2: Calling hookEndGame and awaiting pitch-count resolution",
@@ -10517,7 +11009,7 @@ export function GameTracker() {
     awayFanMorale,
     homeTeamName,
     awayTeamName,
-    mwarHook,
+    awayManagerId,
     homeManagerId,
     homeTeamId,
     activityLog,
@@ -10539,47 +11031,6 @@ export function GameTracker() {
       setShowEndGameConfirmation(true);
     }
   }, [showAutoEndPrompt, dismissAutoEndPrompt]);
-
-  useEffect(() => {
-    if (!mwarHook.managerMoment.isTriggered || !gameState.gameId) {
-      return;
-    }
-
-    const momentKey = [
-      gameState.inning,
-      gameState.isTop ? "TOP" : "BOTTOM",
-      gameState.outs,
-      mwarHook.managerMoment.decisionType || "moment",
-      mwarHook.managerMoment.context || "",
-      mwarHook.managerMoment.leverageIndex.toFixed(2),
-    ].join("|");
-
-    if (loggedManagerMomentKeysRef.current.has(momentKey)) {
-      return;
-    }
-    loggedManagerMomentKeysRef.current.add(momentKey);
-
-    void recordManagerMoment(
-      mwarHook.managerMoment.leverageIndex,
-      mwarHook.managerMoment.decisionType || "manager_moment",
-      mwarHook.managerMoment.context,
-    )
-      .then(() => queuePlayLogRefresh(0))
-      .catch((error) => {
-        console.error("[GameTracker] Failed to persist manager moment:", error);
-      });
-  }, [
-    gameState.gameId,
-    gameState.inning,
-    gameState.isTop,
-    gameState.outs,
-    mwarHook.managerMoment.context,
-    mwarHook.managerMoment.decisionType,
-    mwarHook.managerMoment.isTriggered,
-    mwarHook.managerMoment.leverageIndex,
-    queuePlayLogRefresh,
-    recordManagerMoment,
-  ]);
 
   const rightPanelOwnsInteraction =
     // REMOVED per UX-022: pendingRunnerCorrection no longer exists
@@ -10640,9 +11091,6 @@ export function GameTracker() {
           </div>
         </div>
       )}
-
-      {/* D-17: Manager Moment — now a subtle indicator on QuickBar (see QuickBar managerMomentActive prop) */}
-      {/* The inline Call/Skip panel opens in ZONE 4 when user taps the lightning indicator */}
 
       {/* Player State Notifications - Shows Mojo/Fitness changes */}
       {playerStateHook.notifications.length > 0 && (
@@ -10717,7 +11165,6 @@ export function GameTracker() {
             isTop={gameState.isTop}
             outs={gameState.outs}
             bases={gameState.bases}
-            isManagerMoment={mwarHook.managerMoment.isTriggered}
             isSaving={isSaving ? undefined : false}
             gameSoundsOn={gameSoundsOn}
             beatReporterSoundsOn={beatReporterSoundsOn}
@@ -10726,12 +11173,6 @@ export function GameTracker() {
             onToggleBeatReporter={() =>
               setBeatReporterSoundsOn((value) => !value)
             }
-            onManagerMomentTap={() => setShowManagerMomentPanel((prev) => !prev)}
-            onStayTheCourse={() => {
-              mwarHook.dismissManagerMoment();
-              setShowManagerMomentPanel(false);
-              void queuePlayLogRefresh(0);
-            }}
           />
           {deferredPitchCounts.length > 0 && (
             <div className="absolute right-3 top-full mt-2 flex flex-col items-end gap-2">
@@ -10878,7 +11319,7 @@ export function GameTracker() {
               gap: "0px",
             }}
           >
-            {/* Column 1: NewsBoard (§6 — display only, no click handlers) */}
+            {/* Column 1: NewsBoard (§6 — beat reporter and manager feed) */}
             <div className="h-full min-h-0 overflow-hidden">
               <NewsBoard
                 currentBatterName={currentBatterDisplayName}
@@ -10886,13 +11327,15 @@ export function GameTracker() {
                 currentPitcherName={currentPitcherDisplayName}
                 currentPitcherLine={pitcherGameLine}
                 matchupSummary={matchupLine}
-                commentaryEntries={commentaryEntries}
+                commentaryEntries={newsBoardEntries}
                 reporters={reportersForFeed}
                 reporterTeamColors={reporterTeamColorsForFeed}
                 soundsOn={beatReporterSoundsOn}
                 onPlayTypeSound={() => {
                   void audioManagerRef.current.playSound("beatReporterType");
                 }}
+                onManagerDecisionEdit={handleManagerDecisionEdit}
+                onManagerRecommendationAction={handleManagerRecommendationAction}
               />
             </div>
 
@@ -11089,59 +11532,6 @@ export function GameTracker() {
                 pitch.
               </div>
             ) : null}
-            {/* D-17: Manager Moment inline Call/Skip panel — non-blocking */}
-            {showManagerMomentPanel && mwarHook.managerMoment.isTriggered && (
-              <div className="absolute bottom-full left-0 right-0 mb-1 bg-[#4A6A42] border-[3px] border-[#FFD700] p-2 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.6)] z-40">
-                <div className="text-[9px] text-[#FFD700] font-bold mb-1">
-                  MANAGER MOMENT (LI:{" "}
-                  {mwarHook.managerMoment.leverageIndex.toFixed(1)})
-                </div>
-                <div className="text-[10px] text-[#E8E8D8] mb-2">
-                  {mwarHook.managerMoment.context}
-                </div>
-                {mwarHook.managerMoment.decisionType && (
-                  <div className="flex gap-1.5">
-                    <button
-                      onClick={() => {
-                        const gsLI = buildGameStateForLI();
-                        const decisionId = mwarHook.recordDecision(
-                          mwarHook.managerMoment.decisionType!,
-                          gsLI,
-                          [],
-                          mwarHook.managerMoment.suggestedAction || "",
-                        );
-                        setPendingMWARDecisions((prev) =>
-                          new Map(prev).set(decisionId, {
-                            decisionId,
-                            decisionType: mwarHook.managerMoment.decisionType!,
-                            involvedPlayers: [],
-                            resolveAfterNextPlay: true,
-                          }),
-                        );
-                        mwarHook.dismissManagerMoment();
-                        setShowManagerMomentPanel(false);
-                        console.log(
-                          `[mWAR] User called ${mwarHook.managerMoment.decisionType}: ${decisionId}`,
-                        );
-                      }}
-                      className="flex-1 py-1.5 text-[10px] bg-[#FFD700] text-[#2A3A22] font-bold border-2 border-[#B8960A] hover:bg-[#E8C400] active:scale-95 transition-transform"
-                    >
-                      Call{" "}
-                      {mwarHook.managerMoment.decisionType?.replace(/_/g, " ")}
-                    </button>
-                    <button
-                      onClick={() => {
-                        mwarHook.dismissManagerMoment();
-                        setShowManagerMomentPanel(false);
-                      }}
-                      className="flex-1 py-1.5 text-[10px] bg-[#5A8352] text-[#E8E8D8] border-2 border-[#4A6844] hover:bg-[#4F7D4B] active:scale-95 transition-transform"
-                    >
-                      Skip
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
           </div>
           {/* REMOVED per UX-022/Cleanup: LINEUP, +FLD, +MOD, REVIEW buttons removed.
              LINEUP replaced by inline lineup columns (Step 1.C).
@@ -11234,6 +11624,24 @@ export function GameTracker() {
                   (candidate) => candidate.name === entry.name,
                 ) === index,
               );
+            const playerCardBullpenEntries =
+              selectedPlayer.type === "pitcher"
+                ? (selectedPlayerTeam === "away"
+                    ? awayTeamPitchers
+                    : homeTeamPitchers
+                  )
+                    .filter((pitcher) => !pitcher.isActive && !pitcher.isOutOfGame)
+                    .map((pitcher) => ({
+                      name: pitcher.name,
+                      hand: pitcher.throwingHand || pitcher.throws || "R",
+                    }))
+                    .filter(
+                      (entry, index, entries) =>
+                        entries.findIndex(
+                          (candidate) => candidate.name === entry.name,
+                        ) === index,
+                    )
+                : undefined;
             // Find real game stats from the hook's Maps
             const bgs =
               selectedPlayer.type === "batter"
@@ -11284,7 +11692,7 @@ export function GameTracker() {
                 }}
                 onSubOut={handlePlayerCardSubOut}
                 benchPlayers={playerCardBenchEntries}
-                bullpenPitchers={undefined}
+                bullpenPitchers={playerCardBullpenEntries}
                 onSwapPosition={(playerId, playerName) => {
                   console.log("[M1-3-fix] Entering player-card position swap mode", {
                     gamePhase: gameState.gamePhase,
@@ -13126,7 +13534,15 @@ export function PlayerCardModal({
     pFullInnings > 0 ? ((pBB + pHA) / pFullInnings).toFixed(2) : "0.00";
 
   // §9.1: Bench list for Sub Out flow
-  const availableBench = (benchPlayers || []).filter((p) => !p.isOutOfGame);
+  const availableBench =
+    player.type === "pitcher"
+      ? (bullpenPitchers || []).map((pitcher) => ({
+          name: pitcher.name,
+          pos: "P",
+          hand: pitcher.hand,
+          isOutOfGame: false,
+        }))
+      : (benchPlayers || []).filter((p) => !p.isOutOfGame);
 
   // §9.1: BENCH VIEW — replaces card content when Sub Out is tapped
   if (cardView === "bench") {
