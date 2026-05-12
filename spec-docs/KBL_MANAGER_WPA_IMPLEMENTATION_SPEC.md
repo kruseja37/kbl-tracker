@@ -815,6 +815,17 @@ Passive non-scored moments may appear in timeline only if the user toggles "Show
 
 Add a Manager section to the Almanac.
 
+### Almanac Source Of Truth
+
+Almanac manager views must consume committed completed-game manager data:
+
+```typescript
+CompletedGameRecord.managerDecisions
+CompletedGameRecord.managerLineupDeltas
+```
+
+Do not re-run GameTracker inference, recommendation logic, or event-log Manager WPA derivation inside Almanac screens. If a completed game has no committed manager records, Almanac should treat that game as having no manager WPA data rather than deriving it lazily. This keeps Almanac read-only, reproducible, and consistent with Game Detail/Postgame.
+
 ### Manager Card
 
 Manager cards should support:
@@ -1050,11 +1061,12 @@ Do not maintain mWAR as a separate truth source.
 
 ### Phase 8: Almanac
 
-1. Add Manager Almanac section.
-2. Add manager cards and team-tenure views.
-3. Add mode/instance scoped aggregations.
-4. Add manager leaderboards separate from player leaderboards.
-5. Add derived management style summaries.
+1. Add committed-data-only manager aggregation helpers over `CompletedGameRecord.managerDecisions` and `managerLineupDeltas`.
+2. Add Manager Almanac section.
+3. Add manager cards and team-tenure views.
+4. Add mode/instance scoped aggregations.
+5. Add manager leaderboards separate from player leaderboards.
+6. Add derived management style summaries from committed decisions only.
 
 ### Phase 9: Test And Cutover
 
