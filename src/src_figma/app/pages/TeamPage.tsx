@@ -5,8 +5,10 @@ import { getTeam } from "../../../utils/leagueBuilderStorage";
 import type { Team } from "../../../utils/leagueBuilderStorage";
 import {
   getArchiveInstanceMode,
+  getManagerTeamTenures,
   getTeamRosterFromGames,
   type AlmanacInstanceMode,
+  type ManagerTeamTenureAggregate,
 } from "../../../utils/almanacQueries";
 
 interface RosterEntry {
@@ -21,6 +23,7 @@ export function TeamPage() {
   const { leagueId, teamId } = useParams<{ leagueId: string; teamId: string }>();
   const [team, setTeam] = useState<Team | null>(null);
   const [roster, setRoster] = useState<RosterEntry[]>([]);
+  const [managerTenures, setManagerTenures] = useState<ManagerTeamTenureAggregate[]>([]);
   const [instanceMode, setInstanceMode] = useState<AlmanacInstanceMode>("exhibition");
   const [loading, setLoading] = useState(true);
 
@@ -35,11 +38,18 @@ export function TeamPage() {
         getTeamRosterFromGames(leagueId!, teamId!),
         getArchiveInstanceMode(leagueId!),
       ]);
+      const mode = resolvedMode ?? "exhibition";
+      const tenureData = await getManagerTeamTenures({
+        mode,
+        instanceId: leagueId!,
+        teamId: teamId!,
+      });
 
       if (!cancelled) {
         setTeam(teamData);
         setRoster(rosterData);
-        setInstanceMode(resolvedMode ?? "exhibition");
+        setManagerTenures(tenureData);
+        setInstanceMode(mode);
         setLoading(false);
       }
     }
@@ -62,6 +72,7 @@ export function TeamPage() {
   const stadium = team?.stadium ?? "Unknown Stadium";
   const primaryColor = team?.colors?.primary ?? "#3366FF";
   const secondaryColor = team?.colors?.secondary ?? "#DD0000";
+  const formatSigned = (value: number) => `${value >= 0 ? "+" : ""}${value.toFixed(3)}`;
   const backLink =
     instanceMode === "elimination"
       ? "/almanac/elimination"
@@ -101,6 +112,56 @@ export function TeamPage() {
 
           <h1 className="text-sm leading-6 text-white sm:text-base">{teamName.toUpperCase()}</h1>
           <p className="mt-3 text-[10px] text-[#8F96A3]">{stadium.toUpperCase()}</p>
+        </div>
+
+        <div className="border-[6px] border-[#2B2B2B] bg-[#101010] p-5 shadow-[8px_8px_0px_0px_rgba(51,102,255,0.35)] sm:p-8">
+          <h2 className="mb-5 text-xs text-[#2D7A46]">MANAGER TENURE</h2>
+
+          {managerTenures.length === 0 ? (
+            <p className="text-[10px] leading-5 text-[#8F96A3]">
+              NO COMMITTED MANAGER RECORDS FOR THIS TEAM YET.
+            </p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-[10px]">
+                <thead>
+                  <tr className="border-b-2 border-[#2D7A46] text-[9px] text-[#8F96A3]">
+                    <th className="pb-3 pr-6">MANAGER</th>
+                    <th className="pb-3 pr-6 text-right">W-L</th>
+                    <th className="pb-3 pr-6 text-right">DEC</th>
+                    <th className="pb-3 pr-6 text-right">TACTICAL</th>
+                    <th className="pb-3 pr-6 text-right">LINEUP</th>
+                    <th className="pb-3 pr-6 text-right">VALUE</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {managerTenures.map((entry) => (
+                    <tr
+                      key={`${entry.managerId}-${entry.mode}-${entry.instanceId}`}
+                      className="border-b border-[#2B2B2B]"
+                    >
+                      <td className="py-3 pr-6 text-white">{entry.managerName}</td>
+                      <td className="py-3 pr-6 text-right text-[#E8E8D8]">
+                        {entry.wins}-{entry.losses}
+                      </td>
+                      <td className="py-3 pr-6 text-right text-[#E8E8D8]">
+                        {entry.decisionCount}
+                      </td>
+                      <td className="py-3 pr-6 text-right text-[#E8E8D8]">
+                        {formatSigned(entry.tacticalManagerWpa)}
+                      </td>
+                      <td className="py-3 pr-6 text-right text-[#E8E8D8]">
+                        {formatSigned(entry.lineupDeltaWpa)}
+                      </td>
+                      <td className="py-3 pr-6 text-right text-white">
+                        {formatSigned(entry.managerValue)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
 
         {/* Roster */}

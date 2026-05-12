@@ -4,6 +4,12 @@ import type { AtBatEvent } from './eventLog';
 import { getGameEvents } from './eventLog';
 import { getAllCanonicalPlayers } from './almanacStorage';
 import type { CanonicalPlayer } from './almanacStorage';
+import type {
+  ManagerDecisionRecord,
+  ManagerDecisionType,
+  ManagerLineupDeltaRecord,
+  ManagerProfile,
+} from '../types/managerWpa';
 import {
   getEliminationAllTimePlayerStats,
   type EliminationAllTimePlayerStats,
@@ -96,6 +102,146 @@ export interface PitchingLine {
 
 export type AlmanacInstanceMode = 'exhibition' | 'franchise' | 'elimination';
 
+export type ManagerAlmanacModeFilter = AlmanacInstanceMode | 'all';
+
+export interface ManagerAlmanacFilters {
+  mode?: ManagerAlmanacModeFilter;
+  instanceId?: string;
+  teamId?: string;
+  managerId?: string;
+  seasonId?: string;
+  dateFrom?: string;
+  dateTo?: string;
+}
+
+export interface ManagerAlmanacDecisionSummary {
+  decisionId: string;
+  gameId: string;
+  date: number;
+  managerId: string;
+  managerName: string;
+  teamId: string;
+  teamName: string;
+  opponentTeamId?: string;
+  opponentTeamName?: string;
+  decisionType: ManagerDecisionType;
+  title: string;
+  summary: string;
+  value: number;
+  inning: number;
+  half: 'top' | 'bottom';
+  mode: AlmanacInstanceMode;
+  instanceId: string;
+}
+
+export interface ManagerDecisionTendencies {
+  decisionTypeCounts: Partial<Record<ManagerDecisionType, number>>;
+  tacticalDecisionCount: number;
+  lineupDecisionCount: number;
+  stealRate: number;
+  buntRate: number;
+  bullpenAggressiveness: number;
+  pinchHitRate: number;
+  pinchRunRate: number;
+  intentionalWalkRate: number;
+  defensiveSubRate: number;
+  lineupConstructionRate: number;
+}
+
+export interface ManagerTeamTenureAggregate {
+  managerId: string;
+  managerName: string;
+  teamId: string;
+  teamName: string;
+  mode: AlmanacInstanceMode;
+  instanceId: string;
+  instanceName: string;
+  gamesManaged: number;
+  wins: number;
+  losses: number;
+  tacticalManagerWpa: number;
+  lineupDeltaWpa: number;
+  managerValue: number;
+  decisionCount: number;
+  tacticalDecisionCount: number;
+  lineupDecisionCount: number;
+  resolvedDecisionCount: number;
+  pendingDecisionCount: number;
+  bestDecision?: ManagerAlmanacDecisionSummary;
+  worstDecision?: ManagerAlmanacDecisionSummary;
+  tendencies: ManagerDecisionTendencies;
+}
+
+export interface ManagerAlmanacAggregate {
+  managerId: string;
+  managerName: string;
+  teamIds: string[];
+  teamNames: string[];
+  modeInstances: Array<{
+    mode: AlmanacInstanceMode;
+    instanceId: string;
+    instanceName: string;
+  }>;
+  gamesManaged: number;
+  wins: number;
+  losses: number;
+  tacticalManagerWpa: number;
+  lineupDeltaWpa: number;
+  managerValue: number;
+  decisionCount: number;
+  tacticalDecisionCount: number;
+  lineupDecisionCount: number;
+  resolvedDecisionCount: number;
+  pendingDecisionCount: number;
+  bestDecision?: ManagerAlmanacDecisionSummary;
+  worstDecision?: ManagerAlmanacDecisionSummary;
+  tendencies: ManagerDecisionTendencies;
+  tenures: ManagerTeamTenureAggregate[];
+}
+
+export type ManagerLeaderboardCategory =
+  | 'managerValue'
+  | 'tacticalManagerWpa'
+  | 'lineupDeltaWpa'
+  | 'decisionCount'
+  | 'bestDecision'
+  | 'worstDecision'
+  | 'decisionTypeTendencies';
+
+export interface ManagerLeaderboardEntry {
+  managerId: string;
+  managerName: string;
+  teamNames: string[];
+  gamesManaged: number;
+  value: number;
+  tacticalManagerWpa: number;
+  lineupDeltaWpa: number;
+  managerValue: number;
+  decisionCount: number;
+  bestDecision?: ManagerAlmanacDecisionSummary;
+  worstDecision?: ManagerAlmanacDecisionSummary;
+  tendencies: ManagerDecisionTendencies;
+}
+
+export type ManagerAlmanacLeaderboards = Record<
+  ManagerLeaderboardCategory,
+  ManagerLeaderboardEntry[]
+>;
+
+export interface ManagerAlmanacFilterOptions {
+  modes: AlmanacInstanceMode[];
+  instances: Array<{
+    mode: AlmanacInstanceMode;
+    instanceId: string;
+    instanceName: string;
+    games: number;
+  }>;
+  teams: Array<{
+    teamId: string;
+    teamName: string;
+  }>;
+}
+
 interface BattingAggregate {
   leagueId: string;
   canonicalId: string;
@@ -136,6 +282,55 @@ interface PitchingAggregate {
   saves: number;
   completeGames: number;
   shutouts: number;
+}
+
+interface ManagerWorkingTenure {
+  managerId: string;
+  managerName: string;
+  teamId: string;
+  teamName: string;
+  mode: AlmanacInstanceMode;
+  instanceId: string;
+  instanceName: string;
+  gameKeys: Set<string>;
+  wins: number;
+  losses: number;
+  tacticalManagerWpa: number;
+  lineupDeltaWpa: number;
+  tacticalDecisionCount: number;
+  lineupDecisionCount: number;
+  resolvedDecisionCount: number;
+  pendingDecisionCount: number;
+  bestDecision?: ManagerAlmanacDecisionSummary;
+  worstDecision?: ManagerAlmanacDecisionSummary;
+  decisionTypeCounts: Partial<Record<ManagerDecisionType, number>>;
+}
+
+interface ManagerWorkingAggregate {
+  managerId: string;
+  managerName: string;
+  teamNamesById: Map<string, string>;
+  modeInstancesByKey: Map<
+    string,
+    {
+      mode: AlmanacInstanceMode;
+      instanceId: string;
+      instanceName: string;
+    }
+  >;
+  gameTeamKeys: Set<string>;
+  wins: number;
+  losses: number;
+  tacticalManagerWpa: number;
+  lineupDeltaWpa: number;
+  tacticalDecisionCount: number;
+  lineupDecisionCount: number;
+  resolvedDecisionCount: number;
+  pendingDecisionCount: number;
+  bestDecision?: ManagerAlmanacDecisionSummary;
+  worstDecision?: ManagerAlmanacDecisionSummary;
+  decisionTypeCounts: Partial<Record<ManagerDecisionType, number>>;
+  tenures: Map<string, ManagerWorkingTenure>;
 }
 
 function roundTo(value: number, digits: number): number {
@@ -465,6 +660,491 @@ function findTeamName(
   return matchingGame.awayTeamId === teamId ? matchingGame.awayTeamName : matchingGame.homeTeamName;
 }
 
+function titleCaseIdentifier(value: string): string {
+  return value
+    .replace(/[_-]+/g, ' ')
+    .split(' ')
+    .filter(Boolean)
+    .map((word) => word[0]?.toUpperCase() + word.slice(1))
+    .join(' ');
+}
+
+function buildManagerProfileLookup(
+  profiles: ManagerProfile[] | Map<string, ManagerProfile>,
+): Map<string, ManagerProfile> {
+  if (profiles instanceof Map) {
+    return profiles;
+  }
+
+  return new Map(profiles.map((profile) => [profile.managerId, profile]));
+}
+
+export function getDefaultManagerLabel(
+  managerId: string,
+  teamId: string,
+  teamName: string,
+  profile?: ManagerProfile,
+): string {
+  if (profile?.displayName?.trim()) {
+    return profile.displayName.trim();
+  }
+
+  if (managerId === `${teamId}-manager`) {
+    return `${teamName} Manager`;
+  }
+
+  return titleCaseIdentifier(managerId) || `${teamName} Manager`;
+}
+
+function getTeamNameForGame(game: CompletedGameRecord, teamId: string): string {
+  if (teamId === game.awayTeamId) {
+    return game.awayTeamName;
+  }
+
+  if (teamId === game.homeTeamId) {
+    return game.homeTeamName;
+  }
+
+  return teamId;
+}
+
+function getOpponentTeamIdForGame(
+  game: CompletedGameRecord,
+  teamId: string,
+): string | undefined {
+  if (teamId === game.awayTeamId) {
+    return game.homeTeamId;
+  }
+
+  if (teamId === game.homeTeamId) {
+    return game.awayTeamId;
+  }
+
+  return undefined;
+}
+
+function getInstanceNameForGame(
+  game: CompletedGameRecord,
+  descriptor: { mode: AlmanacInstanceMode; instanceId: string },
+): string {
+  if (descriptor.mode === 'exhibition') {
+    return game.competitionName ?? game.leagueId ?? descriptor.instanceId;
+  }
+
+  return game.competitionName ?? descriptor.instanceId;
+}
+
+function gameMatchesManagerFilters(
+  game: CompletedGameRecord,
+  descriptor: { mode: AlmanacInstanceMode; instanceId: string },
+  filters: ManagerAlmanacFilters,
+): boolean {
+  const fromTs = parseDateBoundary(filters.dateFrom);
+  const toTs = parseDateBoundary(filters.dateTo, true);
+
+  if (fromTs !== null && game.date < fromTs) {
+    return false;
+  }
+
+  if (toTs !== null && game.date > toTs) {
+    return false;
+  }
+
+  if (filters.seasonId && game.seasonId !== filters.seasonId) {
+    return false;
+  }
+
+  if (filters.mode && filters.mode !== 'all' && descriptor.mode !== filters.mode) {
+    return false;
+  }
+
+  if (filters.instanceId && descriptor.instanceId !== filters.instanceId) {
+    return false;
+  }
+
+  return true;
+}
+
+function managerRecordMatchesFilters(
+  managerId: string,
+  teamId: string,
+  filters: ManagerAlmanacFilters,
+): boolean {
+  if (filters.managerId && managerId !== filters.managerId) {
+    return false;
+  }
+
+  if (filters.teamId && teamId !== filters.teamId) {
+    return false;
+  }
+
+  return true;
+}
+
+function getTeamResultForGame(
+  game: CompletedGameRecord,
+  teamId: string,
+): 'win' | 'loss' | 'tie' | null {
+  const isAway = teamId === game.awayTeamId;
+  const isHome = teamId === game.homeTeamId;
+
+  if (!isAway && !isHome) {
+    return null;
+  }
+
+  const teamRuns = isAway ? game.finalScore.away : game.finalScore.home;
+  const opponentRuns = isAway ? game.finalScore.home : game.finalScore.away;
+
+  if (teamRuns > opponentRuns) {
+    return 'win';
+  }
+
+  if (teamRuns < opponentRuns) {
+    return 'loss';
+  }
+
+  return 'tie';
+}
+
+function addDecisionTypeCount(
+  counts: Partial<Record<ManagerDecisionType, number>>,
+  decisionType: ManagerDecisionType,
+): void {
+  counts[decisionType] = (counts[decisionType] ?? 0) + 1;
+}
+
+function buildManagerDecisionSummary(
+  game: CompletedGameRecord,
+  descriptor: { mode: AlmanacInstanceMode; instanceId: string },
+  decision: ManagerDecisionRecord,
+  managerName: string,
+): ManagerAlmanacDecisionSummary | null {
+  if (typeof decision.managerWpa !== 'number') {
+    return null;
+  }
+
+  const opponentTeamId =
+    decision.opponentTeamId || getOpponentTeamIdForGame(game, decision.teamId);
+
+  return {
+    decisionId: decision.decisionId,
+    gameId: decision.gameId,
+    date: game.date,
+    managerId: decision.managerId,
+    managerName,
+    teamId: decision.teamId,
+    teamName: getTeamNameForGame(game, decision.teamId),
+    opponentTeamId,
+    opponentTeamName: opponentTeamId
+      ? getTeamNameForGame(game, opponentTeamId)
+      : undefined,
+    decisionType: decision.decisionType,
+    title: decision.displayTitle,
+    summary: decision.displaySummary,
+    value: decision.managerWpa,
+    inning: decision.inning,
+    half: decision.half,
+    mode: descriptor.mode,
+    instanceId: descriptor.instanceId,
+  };
+}
+
+function compareBestDecision(
+  current: ManagerAlmanacDecisionSummary | undefined,
+  candidate: ManagerAlmanacDecisionSummary,
+): ManagerAlmanacDecisionSummary {
+  if (!current) {
+    return candidate;
+  }
+
+  if (candidate.value !== current.value) {
+    return candidate.value > current.value ? candidate : current;
+  }
+
+  return candidate.date > current.date ? candidate : current;
+}
+
+function compareWorstDecision(
+  current: ManagerAlmanacDecisionSummary | undefined,
+  candidate: ManagerAlmanacDecisionSummary,
+): ManagerAlmanacDecisionSummary {
+  if (!current) {
+    return candidate;
+  }
+
+  if (candidate.value !== current.value) {
+    return candidate.value < current.value ? candidate : current;
+  }
+
+  return candidate.date > current.date ? candidate : current;
+}
+
+function createEmptyTendencies(
+  decisionTypeCounts: Partial<Record<ManagerDecisionType, number>>,
+  tacticalDecisionCount: number,
+  lineupDecisionCount: number,
+): ManagerDecisionTendencies {
+  const tacticalDenominator = Math.max(tacticalDecisionCount, 0);
+  const totalDecisionCount = tacticalDecisionCount + lineupDecisionCount;
+  const count = (decisionType: ManagerDecisionType): number =>
+    decisionTypeCounts[decisionType] ?? 0;
+  const rate = (value: number, denominator: number): number =>
+    denominator > 0 ? roundTo(value / denominator, 3) : 0;
+
+  return {
+    decisionTypeCounts: { ...decisionTypeCounts },
+    tacticalDecisionCount,
+    lineupDecisionCount,
+    stealRate: rate(count('steal_send'), tacticalDenominator),
+    buntRate: rate(count('bunt_call') + count('squeeze_call'), tacticalDenominator),
+    bullpenAggressiveness: rate(
+      count('pitching_change') + count('leave_pitcher_in'),
+      tacticalDenominator,
+    ),
+    pinchHitRate: rate(
+      count('pinch_hitter') + count('let_batter_hit'),
+      tacticalDenominator,
+    ),
+    pinchRunRate: rate(count('pinch_runner'), tacticalDenominator),
+    intentionalWalkRate: rate(count('intentional_walk'), tacticalDenominator),
+    defensiveSubRate: rate(
+      count('defensive_sub') + count('position_change'),
+      tacticalDenominator,
+    ),
+    lineupConstructionRate: rate(lineupDecisionCount, totalDecisionCount),
+  };
+}
+
+function createManagerWorkingAggregate(
+  managerId: string,
+  managerName: string,
+): ManagerWorkingAggregate {
+  return {
+    managerId,
+    managerName,
+    teamNamesById: new Map(),
+    modeInstancesByKey: new Map(),
+    gameTeamKeys: new Set(),
+    wins: 0,
+    losses: 0,
+    tacticalManagerWpa: 0,
+    lineupDeltaWpa: 0,
+    tacticalDecisionCount: 0,
+    lineupDecisionCount: 0,
+    resolvedDecisionCount: 0,
+    pendingDecisionCount: 0,
+    decisionTypeCounts: {},
+    tenures: new Map(),
+  };
+}
+
+function getOrCreateManagerAggregate(
+  aggregates: Map<string, ManagerWorkingAggregate>,
+  managerId: string,
+  managerName: string,
+): ManagerWorkingAggregate {
+  const existing = aggregates.get(managerId);
+  if (existing) {
+    if (!existing.managerName && managerName) {
+      existing.managerName = managerName;
+    }
+    return existing;
+  }
+
+  const aggregate = createManagerWorkingAggregate(managerId, managerName);
+  aggregates.set(managerId, aggregate);
+  return aggregate;
+}
+
+function getOrCreateManagerTenure(
+  aggregate: ManagerWorkingAggregate,
+  params: {
+    managerId: string;
+    managerName: string;
+    teamId: string;
+    teamName: string;
+    mode: AlmanacInstanceMode;
+    instanceId: string;
+    instanceName: string;
+  },
+): ManagerWorkingTenure {
+  const key = `${params.teamId}::${params.mode}::${params.instanceId}`;
+  const existing = aggregate.tenures.get(key);
+  if (existing) {
+    return existing;
+  }
+
+  const tenure: ManagerWorkingTenure = {
+    ...params,
+    gameKeys: new Set(),
+    wins: 0,
+    losses: 0,
+    tacticalManagerWpa: 0,
+    lineupDeltaWpa: 0,
+    tacticalDecisionCount: 0,
+    lineupDecisionCount: 0,
+    resolvedDecisionCount: 0,
+    pendingDecisionCount: 0,
+    decisionTypeCounts: {},
+  };
+  aggregate.tenures.set(key, tenure);
+  return tenure;
+}
+
+function registerManagerTeamGame(
+  aggregate: ManagerWorkingAggregate,
+  tenure: ManagerWorkingTenure,
+  game: CompletedGameRecord,
+  teamId: string,
+): void {
+  const gameTeamKey = `${game.gameId}::${teamId}`;
+  if (!aggregate.gameTeamKeys.has(gameTeamKey)) {
+    aggregate.gameTeamKeys.add(gameTeamKey);
+    const result = getTeamResultForGame(game, teamId);
+    if (result === 'win') {
+      aggregate.wins += 1;
+    } else if (result === 'loss') {
+      aggregate.losses += 1;
+    }
+  }
+
+  if (!tenure.gameKeys.has(gameTeamKey)) {
+    tenure.gameKeys.add(gameTeamKey);
+    const result = getTeamResultForGame(game, teamId);
+    if (result === 'win') {
+      tenure.wins += 1;
+    } else if (result === 'loss') {
+      tenure.losses += 1;
+    }
+  }
+}
+
+function addManagerDecisionToAggregate(
+  aggregate: ManagerWorkingAggregate,
+  tenure: ManagerWorkingTenure,
+  decision: ManagerDecisionRecord,
+  summary: ManagerAlmanacDecisionSummary | null,
+): void {
+  aggregate.tacticalDecisionCount += 1;
+  tenure.tacticalDecisionCount += 1;
+  addDecisionTypeCount(aggregate.decisionTypeCounts, decision.decisionType);
+  addDecisionTypeCount(tenure.decisionTypeCounts, decision.decisionType);
+
+  if (decision.resolved && typeof decision.managerWpa === 'number') {
+    aggregate.resolvedDecisionCount += 1;
+    tenure.resolvedDecisionCount += 1;
+    aggregate.tacticalManagerWpa += decision.managerWpa;
+    tenure.tacticalManagerWpa += decision.managerWpa;
+  } else {
+    aggregate.pendingDecisionCount += 1;
+    tenure.pendingDecisionCount += 1;
+  }
+
+  if (summary) {
+    aggregate.bestDecision = compareBestDecision(aggregate.bestDecision, summary);
+    aggregate.worstDecision = compareWorstDecision(aggregate.worstDecision, summary);
+    tenure.bestDecision = compareBestDecision(tenure.bestDecision, summary);
+    tenure.worstDecision = compareWorstDecision(tenure.worstDecision, summary);
+  }
+}
+
+function addManagerLineupDeltaToAggregate(
+  aggregate: ManagerWorkingAggregate,
+  tenure: ManagerWorkingTenure,
+  delta: ManagerLineupDeltaRecord,
+): void {
+  aggregate.lineupDecisionCount += 1;
+  tenure.lineupDecisionCount += 1;
+  aggregate.lineupDeltaWpa += delta.managerWpa;
+  tenure.lineupDeltaWpa += delta.managerWpa;
+  addDecisionTypeCount(aggregate.decisionTypeCounts, delta.decisionType);
+  addDecisionTypeCount(tenure.decisionTypeCounts, delta.decisionType);
+}
+
+function finalizeManagerTenure(
+  tenure: ManagerWorkingTenure,
+): ManagerTeamTenureAggregate {
+  const decisionCount = tenure.tacticalDecisionCount + tenure.lineupDecisionCount;
+  const tacticalManagerWpa = roundTo(tenure.tacticalManagerWpa, 6);
+  const lineupDeltaWpa = roundTo(tenure.lineupDeltaWpa, 6);
+
+  return {
+    managerId: tenure.managerId,
+    managerName: tenure.managerName,
+    teamId: tenure.teamId,
+    teamName: tenure.teamName,
+    mode: tenure.mode,
+    instanceId: tenure.instanceId,
+    instanceName: tenure.instanceName,
+    gamesManaged: tenure.gameKeys.size,
+    wins: tenure.wins,
+    losses: tenure.losses,
+    tacticalManagerWpa,
+    lineupDeltaWpa,
+    managerValue: roundTo(tacticalManagerWpa + lineupDeltaWpa, 6),
+    decisionCount,
+    tacticalDecisionCount: tenure.tacticalDecisionCount,
+    lineupDecisionCount: tenure.lineupDecisionCount,
+    resolvedDecisionCount: tenure.resolvedDecisionCount,
+    pendingDecisionCount: tenure.pendingDecisionCount,
+    bestDecision: tenure.bestDecision,
+    worstDecision: tenure.worstDecision,
+    tendencies: createEmptyTendencies(
+      tenure.decisionTypeCounts,
+      tenure.tacticalDecisionCount,
+      tenure.lineupDecisionCount,
+    ),
+  };
+}
+
+function finalizeManagerAggregate(
+  aggregate: ManagerWorkingAggregate,
+): ManagerAlmanacAggregate {
+  const decisionCount =
+    aggregate.tacticalDecisionCount + aggregate.lineupDecisionCount;
+  const tacticalManagerWpa = roundTo(aggregate.tacticalManagerWpa, 6);
+  const lineupDeltaWpa = roundTo(aggregate.lineupDeltaWpa, 6);
+  const tenures = Array.from(aggregate.tenures.values())
+    .map(finalizeManagerTenure)
+    .sort(
+      (left, right) =>
+        right.managerValue - left.managerValue ||
+        right.gamesManaged - left.gamesManaged ||
+        left.teamName.localeCompare(right.teamName),
+    );
+
+  return {
+    managerId: aggregate.managerId,
+    managerName: aggregate.managerName,
+    teamIds: Array.from(aggregate.teamNamesById.keys()),
+    teamNames: Array.from(aggregate.teamNamesById.values()),
+    modeInstances: Array.from(aggregate.modeInstancesByKey.values()).sort(
+      (left, right) =>
+        left.mode.localeCompare(right.mode) ||
+        left.instanceName.localeCompare(right.instanceName),
+    ),
+    gamesManaged: aggregate.gameTeamKeys.size,
+    wins: aggregate.wins,
+    losses: aggregate.losses,
+    tacticalManagerWpa,
+    lineupDeltaWpa,
+    managerValue: roundTo(tacticalManagerWpa + lineupDeltaWpa, 6),
+    decisionCount,
+    tacticalDecisionCount: aggregate.tacticalDecisionCount,
+    lineupDecisionCount: aggregate.lineupDecisionCount,
+    resolvedDecisionCount: aggregate.resolvedDecisionCount,
+    pendingDecisionCount: aggregate.pendingDecisionCount,
+    bestDecision: aggregate.bestDecision,
+    worstDecision: aggregate.worstDecision,
+    tendencies: createEmptyTendencies(
+      aggregate.decisionTypeCounts,
+      aggregate.tacticalDecisionCount,
+      aggregate.lineupDecisionCount,
+    ),
+    tenures,
+  };
+}
+
 function didPitchCompleteGame(
   game: CompletedGameRecord,
   pitcher: CompletedGameRecord['pitcherGameStats'][number]
@@ -601,6 +1281,304 @@ export async function getInstanceGames(
   return allGames
     .filter((game) => isGameInInstance(game, mode, instanceId))
     .sort((a, b) => b.date - a.date);
+}
+
+export function aggregateCommittedManagerAlmanac(
+  games: CompletedGameRecord[],
+  filters: ManagerAlmanacFilters = {},
+  profiles: ManagerProfile[] | Map<string, ManagerProfile> = [],
+): ManagerAlmanacAggregate[] {
+  const profileByManagerId = buildManagerProfileLookup(profiles);
+  const aggregates = new Map<string, ManagerWorkingAggregate>();
+
+  for (const game of games) {
+    const descriptor = getGameInstanceDescriptor(game);
+    if (!descriptor || !gameMatchesManagerFilters(game, descriptor, filters)) {
+      continue;
+    }
+
+    const instanceName = getInstanceNameForGame(game, descriptor);
+    const committedDecisions = game.managerDecisions ?? [];
+    const committedLineupDeltas = game.managerLineupDeltas ?? [];
+
+    for (const decision of committedDecisions) {
+      if (!managerRecordMatchesFilters(decision.managerId, decision.teamId, filters)) {
+        continue;
+      }
+
+      const teamName = getTeamNameForGame(game, decision.teamId);
+      const managerName = getDefaultManagerLabel(
+        decision.managerId,
+        decision.teamId,
+        teamName,
+        profileByManagerId.get(decision.managerId),
+      );
+      const aggregate = getOrCreateManagerAggregate(
+        aggregates,
+        decision.managerId,
+        managerName,
+      );
+      const tenure = getOrCreateManagerTenure(aggregate, {
+        managerId: decision.managerId,
+        managerName,
+        teamId: decision.teamId,
+        teamName,
+        mode: descriptor.mode,
+        instanceId: descriptor.instanceId,
+        instanceName,
+      });
+      const instanceKey = `${descriptor.mode}::${descriptor.instanceId}`;
+
+      aggregate.teamNamesById.set(decision.teamId, teamName);
+      aggregate.modeInstancesByKey.set(instanceKey, {
+        mode: descriptor.mode,
+        instanceId: descriptor.instanceId,
+        instanceName,
+      });
+      registerManagerTeamGame(aggregate, tenure, game, decision.teamId);
+      addManagerDecisionToAggregate(
+        aggregate,
+        tenure,
+        decision,
+        buildManagerDecisionSummary(game, descriptor, decision, managerName),
+      );
+    }
+
+    for (const delta of committedLineupDeltas) {
+      if (!managerRecordMatchesFilters(delta.managerId, delta.teamId, filters)) {
+        continue;
+      }
+
+      const teamName = getTeamNameForGame(game, delta.teamId);
+      const managerName = getDefaultManagerLabel(
+        delta.managerId,
+        delta.teamId,
+        teamName,
+        profileByManagerId.get(delta.managerId),
+      );
+      const aggregate = getOrCreateManagerAggregate(
+        aggregates,
+        delta.managerId,
+        managerName,
+      );
+      const tenure = getOrCreateManagerTenure(aggregate, {
+        managerId: delta.managerId,
+        managerName,
+        teamId: delta.teamId,
+        teamName,
+        mode: descriptor.mode,
+        instanceId: descriptor.instanceId,
+        instanceName,
+      });
+      const instanceKey = `${descriptor.mode}::${descriptor.instanceId}`;
+
+      aggregate.teamNamesById.set(delta.teamId, teamName);
+      aggregate.modeInstancesByKey.set(instanceKey, {
+        mode: descriptor.mode,
+        instanceId: descriptor.instanceId,
+        instanceName,
+      });
+      registerManagerTeamGame(aggregate, tenure, game, delta.teamId);
+      addManagerLineupDeltaToAggregate(aggregate, tenure, delta);
+    }
+  }
+
+  return Array.from(aggregates.values())
+    .map(finalizeManagerAggregate)
+    .sort(
+      (left, right) =>
+        right.managerValue - left.managerValue ||
+        right.gamesManaged - left.gamesManaged ||
+        left.managerName.localeCompare(right.managerName),
+    );
+}
+
+function createManagerLeaderboardEntry(
+  aggregate: ManagerAlmanacAggregate,
+  value: number,
+): ManagerLeaderboardEntry {
+  return {
+    managerId: aggregate.managerId,
+    managerName: aggregate.managerName,
+    teamNames: aggregate.teamNames,
+    gamesManaged: aggregate.gamesManaged,
+    value,
+    tacticalManagerWpa: aggregate.tacticalManagerWpa,
+    lineupDeltaWpa: aggregate.lineupDeltaWpa,
+    managerValue: aggregate.managerValue,
+    decisionCount: aggregate.decisionCount,
+    bestDecision: aggregate.bestDecision,
+    worstDecision: aggregate.worstDecision,
+    tendencies: aggregate.tendencies,
+  };
+}
+
+function sortManagerLeaderboardEntries(
+  entries: ManagerLeaderboardEntry[],
+  direction: 'asc' | 'desc' = 'desc',
+): ManagerLeaderboardEntry[] {
+  return entries.sort((left, right) => {
+    if (left.value !== right.value) {
+      return direction === 'asc'
+        ? left.value - right.value
+        : right.value - left.value;
+    }
+
+    return left.managerName.localeCompare(right.managerName);
+  });
+}
+
+export function buildManagerAlmanacLeaderboards(
+  aggregates: ManagerAlmanacAggregate[],
+  limit: number = 10,
+): ManagerAlmanacLeaderboards {
+  const top = (
+    entries: ManagerLeaderboardEntry[],
+    direction: 'asc' | 'desc' = 'desc',
+  ) => sortManagerLeaderboardEntries(entries, direction).slice(0, limit);
+
+  return {
+    managerValue: top(
+      aggregates.map((aggregate) =>
+        createManagerLeaderboardEntry(aggregate, aggregate.managerValue),
+      ),
+    ),
+    tacticalManagerWpa: top(
+      aggregates.map((aggregate) =>
+        createManagerLeaderboardEntry(aggregate, aggregate.tacticalManagerWpa),
+      ),
+    ),
+    lineupDeltaWpa: top(
+      aggregates.map((aggregate) =>
+        createManagerLeaderboardEntry(aggregate, aggregate.lineupDeltaWpa),
+      ),
+    ),
+    decisionCount: top(
+      aggregates.map((aggregate) =>
+        createManagerLeaderboardEntry(aggregate, aggregate.decisionCount),
+      ),
+    ),
+    bestDecision: top(
+      aggregates
+        .filter((aggregate) => aggregate.bestDecision)
+        .map((aggregate) =>
+          createManagerLeaderboardEntry(
+            aggregate,
+            aggregate.bestDecision?.value ?? 0,
+          ),
+        ),
+    ),
+    worstDecision: top(
+      aggregates
+        .filter((aggregate) => aggregate.worstDecision)
+        .map((aggregate) =>
+          createManagerLeaderboardEntry(
+            aggregate,
+            aggregate.worstDecision?.value ?? 0,
+          ),
+        ),
+      'asc',
+    ),
+    decisionTypeTendencies: top(
+      aggregates.map((aggregate) =>
+        createManagerLeaderboardEntry(aggregate, aggregate.decisionCount),
+      ),
+    ),
+  };
+}
+
+export async function getManagerAlmanacAggregates(
+  filters: ManagerAlmanacFilters = {},
+): Promise<ManagerAlmanacAggregate[]> {
+  return aggregateCommittedManagerAlmanac(
+    await getAllCompletedGames(),
+    filters,
+  );
+}
+
+export async function getManagerAlmanacLeaderboards(
+  filters: ManagerAlmanacFilters = {},
+  limit: number = 10,
+): Promise<ManagerAlmanacLeaderboards> {
+  const aggregates = await getManagerAlmanacAggregates(filters);
+  return buildManagerAlmanacLeaderboards(aggregates, limit);
+}
+
+export async function getManagerTeamTenures(
+  filters: ManagerAlmanacFilters = {},
+): Promise<ManagerTeamTenureAggregate[]> {
+  const aggregates = await getManagerAlmanacAggregates(filters);
+  return aggregates
+    .flatMap((aggregate) => aggregate.tenures)
+    .sort(
+      (left, right) =>
+        right.managerValue - left.managerValue ||
+        right.gamesManaged - left.gamesManaged ||
+        left.teamName.localeCompare(right.teamName) ||
+        left.managerName.localeCompare(right.managerName),
+    );
+}
+
+export async function getManagerAlmanacFilterOptions(): Promise<ManagerAlmanacFilterOptions> {
+  const games = await getAllCompletedGames();
+  const modes = new Set<AlmanacInstanceMode>();
+  const instances = new Map<
+    string,
+    {
+      mode: AlmanacInstanceMode;
+      instanceId: string;
+      instanceName: string;
+      gameIds: Set<string>;
+    }
+  >();
+  const teams = new Map<string, string>();
+
+  for (const game of games) {
+    const descriptor = getGameInstanceDescriptor(game);
+    const managerTeamIds = new Set([
+      ...(game.managerDecisions ?? []).map((decision) => decision.teamId),
+      ...(game.managerLineupDeltas ?? []).map((delta) => delta.teamId),
+    ]);
+
+    if (!descriptor || managerTeamIds.size === 0) {
+      continue;
+    }
+
+    modes.add(descriptor.mode);
+    const instanceName = getInstanceNameForGame(game, descriptor);
+    const instanceKey = `${descriptor.mode}::${descriptor.instanceId}`;
+    const instance = instances.get(instanceKey) ?? {
+      mode: descriptor.mode,
+      instanceId: descriptor.instanceId,
+      instanceName,
+      gameIds: new Set<string>(),
+    };
+    instance.gameIds.add(game.gameId);
+    instances.set(instanceKey, instance);
+
+    for (const teamId of managerTeamIds) {
+      teams.set(teamId, getTeamNameForGame(game, teamId));
+    }
+  }
+
+  return {
+    modes: Array.from(modes).sort(),
+    instances: Array.from(instances.values())
+      .map((instance) => ({
+        mode: instance.mode,
+        instanceId: instance.instanceId,
+        instanceName: instance.instanceName,
+        games: instance.gameIds.size,
+      }))
+      .sort(
+        (left, right) =>
+          left.mode.localeCompare(right.mode) ||
+          left.instanceName.localeCompare(right.instanceName),
+      ),
+    teams: Array.from(teams.entries())
+      .map(([teamId, teamName]) => ({ teamId, teamName }))
+      .sort((left, right) => left.teamName.localeCompare(right.teamName)),
+  };
 }
 
 export async function resolvePlayerIdsForInstance(

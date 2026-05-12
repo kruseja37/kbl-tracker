@@ -247,7 +247,7 @@ export function AlmanacHome() {
           </form>
         </div>
 
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
           <Link
             to="/almanac/exhibition"
             className="border-[6px] border-[#113399] bg-[#1A44CC] p-5 text-white shadow-[8px_8px_0px_0px_rgba(0,0,0,0.8)] transition hover:bg-[#2652e0]"
@@ -267,6 +267,17 @@ export function AlmanacHome() {
             <div className="mt-3 text-sm leading-6">REPORTER ARCHIVE</div>
             <div className="mt-4 text-[9px] leading-5 text-white/80">
               HISTORICAL TIDBITS AND POST-GAME SUMMARIES ACROSS ALL MODES.
+            </div>
+          </Link>
+
+          <Link
+            to="/almanac/managers"
+            className="border-[6px] border-[#285C38] bg-[#2D7A46] p-5 text-white shadow-[8px_8px_0px_0px_rgba(0,0,0,0.8)] transition hover:bg-[#368d52]"
+          >
+            <div className="text-[10px] text-[#CFF6DA]">MODE 04</div>
+            <div className="mt-3 text-sm leading-6">MANAGERS</div>
+            <div className="mt-4 text-[9px] leading-5 text-white/80">
+              MANAGER VALUE, TACTICAL WPA, LINEUP DELTA, AND TENDENCIES.
             </div>
           </Link>
 
