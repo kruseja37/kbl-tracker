@@ -13,6 +13,14 @@ import { getTrackerDb } from "../../../utils/trackerDb";
 import { syncEngine } from "../../../utils/syncEngine";
 import { SYNC_REGISTRY, extractKey } from "../../../utils/syncConfig";
 import { getParkNames } from "../../../data/parkLookup";
+import type { ManagerProfile } from "../../../types/managerWpa";
+import {
+  ensureDefaultManagerProfiles,
+  LEAGUE_BUILDER_MANAGER_INSTANCE_ID,
+  listManagerProfiles,
+  resolveManagerForTeam,
+} from "../../../utils/managerIdentityStorage";
+import { withPregameManagerNavigationState } from "../utils/pregameNavigationState";
 import chalkBgImg from '../../../assets/chalk-bg.png';
 import chalkBgFaintImg from '../../../assets/chalk-bg-faint.png';
 
@@ -41,6 +49,8 @@ export function ExhibitionGame() {
   const [selectedLeagueId, setSelectedLeagueId] = useState<string | null>(null);
   const [selectedAwayTeamId, setSelectedAwayTeamId] = useState<string | null>(null);
   const [selectedHomeTeamId, setSelectedHomeTeamId] = useState<string | null>(null);
+  const [selectedAwayManagerId, setSelectedAwayManagerId] = useState<string | null>(null);
+  const [selectedHomeManagerId, setSelectedHomeManagerId] = useState<string | null>(null);
   const [useDH, setUseDH] = useState(false);
   const [totalInnings, setTotalInnings] = useState(9);
   const [extraInningRunner, setExtraInningRunner] = useState(true);
@@ -52,6 +62,15 @@ export function ExhibitionGame() {
   const [postGameColumnsEnabled, setPostGameColumnsEnabled] = useState(true);
 
   const parkNames = useMemo(() => getParkNames(), []);
+  const [managerProfiles, setManagerProfiles] = useState<ManagerProfile[]>([]);
+  const managerProfilesById = useMemo(
+    () => new Map(managerProfiles.map((profile) => [profile.managerId, profile])),
+    [managerProfiles],
+  );
+  const managerOptions = useMemo(
+    () => [...managerProfiles].sort((a, b) => a.displayName.localeCompare(b.displayName)),
+    [managerProfiles],
+  );
 
   // State for rosters (loaded from League Builder)
   const [awayPlayers, setAwayPlayers] = useState<RosterPlayer[]>([]);
@@ -191,6 +210,101 @@ export function ExhibitionGame() {
   // Get selected team objects
   const awayTeam = teams.find(t => t.id === selectedAwayTeamId);
   const homeTeam = teams.find(t => t.id === selectedHomeTeamId);
+
+  useEffect(() => {
+    if (teams.length === 0) {
+      setManagerProfiles([]);
+      return;
+    }
+
+    let cancelled = false;
+    async function loadManagers() {
+      await ensureDefaultManagerProfiles(teams);
+      const profiles = await listManagerProfiles();
+      if (!cancelled) setManagerProfiles(profiles);
+    }
+
+    loadManagers().catch((err) => {
+      if (!cancelled) {
+        console.error('[ExhibitionGame] Failed to load manager profiles:', err);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [teams]);
+
+  useEffect(() => {
+    if (!awayTeam) {
+      setSelectedAwayManagerId(null);
+      return;
+    }
+
+    let cancelled = false;
+    resolveManagerForTeam({
+      team: awayTeam,
+      mode: "exhibition",
+      instanceId: selectedLeagueId || "exhibition",
+      fallbackMode: "franchise",
+      fallbackInstanceId: LEAGUE_BUILDER_MANAGER_INSTANCE_ID,
+    })
+      .then((resolved) => {
+        if (cancelled) return;
+        setSelectedAwayManagerId(resolved.managerId);
+        setManagerProfiles((current) => {
+          if (current.some((profile) => profile.managerId === resolved.profile.managerId)) {
+            return current;
+          }
+          return [...current, resolved.profile].sort((a, b) =>
+            a.displayName.localeCompare(b.displayName),
+          );
+        });
+      })
+      .catch((err) => {
+        if (!cancelled) console.error('[ExhibitionGame] Failed to resolve away manager:', err);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [awayTeam, selectedLeagueId]);
+
+  useEffect(() => {
+    if (!homeTeam) {
+      setSelectedHomeManagerId(null);
+      return;
+    }
+
+    let cancelled = false;
+    resolveManagerForTeam({
+      team: homeTeam,
+      mode: "exhibition",
+      instanceId: selectedLeagueId || "exhibition",
+      fallbackMode: "franchise",
+      fallbackInstanceId: LEAGUE_BUILDER_MANAGER_INSTANCE_ID,
+    })
+      .then((resolved) => {
+        if (cancelled) return;
+        setSelectedHomeManagerId(resolved.managerId);
+        setManagerProfiles((current) => {
+          if (current.some((profile) => profile.managerId === resolved.profile.managerId)) {
+            return current;
+          }
+          return [...current, resolved.profile].sort((a, b) =>
+            a.displayName.localeCompare(b.displayName),
+          );
+        });
+      })
+      .catch((err) => {
+        if (!cancelled) console.error('[ExhibitionGame] Failed to resolve home manager:', err);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [homeTeam, selectedLeagueId]);
+
   const reporterTeams = useMemo(() => {
     if (!awayTeam || !homeTeam) return [];
     return [
@@ -391,6 +505,12 @@ export function ExhibitionGame() {
   };
 
   const handleStartGame = () => {
+    const awayManager = selectedAwayManagerId
+      ? managerProfilesById.get(selectedAwayManagerId)
+      : undefined;
+    const homeManager = selectedHomeManagerId
+      ? managerProfilesById.get(selectedHomeManagerId)
+      : undefined;
     sessionStorage.setItem(
       "kbl-pending-live-beat-reporter-enabled",
       JSON.stringify(liveBeatReporterEnabled),
@@ -401,7 +521,7 @@ export function ExhibitionGame() {
     );
     // Pass the configured rosters and team info to the game tracker
     navigate("/game-tracker/exhibition-1", {
-      state: {
+      state: withPregameManagerNavigationState({
         awayPlayers,
         awayPitchers,
         homePlayers,
@@ -429,7 +549,12 @@ export function ExhibitionGame() {
         totalInnings,
         extraInningRunner,
         extraInningRunnerDelay,
-      }
+      }, {
+        awayManagerId: selectedAwayManagerId,
+        awayManagerName: awayManager?.displayName,
+        homeManagerId: selectedHomeManagerId,
+        homeManagerName: homeManager?.displayName,
+      })
     });
   };
 
@@ -605,6 +730,46 @@ export function ExhibitionGame() {
                 ))}
               </select>
             </div>
+
+            {(awayTeam || homeTeam) && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="bg-[#3d4a42] border-2 border-[#556B55] p-5 shadow-[2px_2px_0px_0px_rgba(0,0,0,0.4)]">
+                  <div className="text-xs text-[#C4A853] mb-3 font-bold tracking-[0.25em]" style={{ textShadow: '1px 1px 2px rgba(0,0,0,0.6)' }}>AWAY MANAGER</div>
+                  <select
+                    aria-label="Away manager selector"
+                    value={selectedAwayManagerId || ""}
+                    onChange={(e) => setSelectedAwayManagerId(e.target.value || null)}
+                    disabled={!awayTeam}
+                    className="w-full bg-[#1f2b21] border-2 border-[#556B55] p-3 text-sm text-[#E8E8D8] font-bold tracking-wider disabled:opacity-50"
+                  >
+                    <option value="">SELECT AWAY MANAGER...</option>
+                    {managerOptions.map((manager) => (
+                      <option key={manager.managerId} value={manager.managerId}>
+                        {manager.displayName.toUpperCase()}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="bg-[#3d4a42] border-2 border-[#556B55] p-5 shadow-[2px_2px_0px_0px_rgba(0,0,0,0.4)]">
+                  <div className="text-xs text-[#C4A853] mb-3 font-bold tracking-[0.25em]" style={{ textShadow: '1px 1px 2px rgba(0,0,0,0.6)' }}>HOME MANAGER</div>
+                  <select
+                    aria-label="Home manager selector"
+                    value={selectedHomeManagerId || ""}
+                    onChange={(e) => setSelectedHomeManagerId(e.target.value || null)}
+                    disabled={!homeTeam}
+                    className="w-full bg-[#1f2b21] border-2 border-[#556B55] p-3 text-sm text-[#E8E8D8] font-bold tracking-wider disabled:opacity-50"
+                  >
+                    <option value="">SELECT HOME MANAGER...</option>
+                    {managerOptions.map((manager) => (
+                      <option key={manager.managerId} value={manager.managerId}>
+                        {manager.displayName.toUpperCase()}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            )}
 
             <div className="grid grid-cols-2 gap-2">
               <button

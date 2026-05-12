@@ -15,6 +15,11 @@ import {
 import type { Player, LineupSlot, Position } from '../../../utils/leagueBuilderStorage';
 import { loadMojoFitnessSnapshots, saveMojoFitnessSnapshots } from '../../../utils/mojoFitnessStorage';
 import type { PlayoffTeam } from '../../../utils/playoffStorage';
+import type { ManagerProfile } from '../../../types/managerWpa';
+import {
+  resolveManagerForTeam,
+  saveManagerProfile,
+} from '../../../utils/managerIdentityStorage';
 
 interface EliminationTeamHubProps {
   eliminationId: string;
@@ -133,8 +138,15 @@ export function EliminationTeamHub({ eliminationId, teams, useDH }: EliminationT
   const [availableSnapshotIds, setAvailableSnapshotIds] = useState<string[]>([]);
   const [mojoFitnessByPlayerId, setMojoFitnessByPlayerId] = useState<Record<string, { mojo: MojoLevel; fitness: FitnessState }>>({});
   const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
+  const [managerProfile, setManagerProfile] = useState<ManagerProfile | null>(null);
+  const [managerForm, setManagerForm] = useState({
+    displayName: '',
+    hometown: '',
+    styleLabel: '',
+  });
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [isManagerSaving, setIsManagerSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -256,6 +268,47 @@ export function EliminationTeamHub({ eliminationId, teams, useDH }: EliminationT
     [useDH],
   );
   const lineupPlayerIds = useMemo(() => new Set(lineup.map((slot) => slot.playerId)), [lineup]);
+  const selectedPlayoffTeam = useMemo(
+    () => teams.find((team) => team.teamId === selectedTeamId) ?? null,
+    [selectedTeamId, teams],
+  );
+
+  useEffect(() => {
+    if (!selectedPlayoffTeam) {
+      setManagerProfile(null);
+      setManagerForm({ displayName: '', hometown: '', styleLabel: '' });
+      return;
+    }
+
+    let cancelled = false;
+    resolveManagerForTeam({
+      team: {
+        id: selectedPlayoffTeam.teamId,
+        name: selectedPlayoffTeam.teamName,
+      },
+      mode: 'elimination',
+      instanceId: eliminationId,
+      persistAssignment: true,
+    })
+      .then((resolved) => {
+        if (cancelled) return;
+        setManagerProfile(resolved.profile);
+        setManagerForm({
+          displayName: resolved.profile.displayName,
+          hometown: resolved.profile.hometown || '',
+          styleLabel: resolved.profile.managementStyle?.label || '',
+        });
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          console.error('[EliminationTeamHub] Failed to load manager profile:', err);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [eliminationId, selectedPlayoffTeam]);
 
   const benchPlayers = useMemo(
     () =>
@@ -374,6 +427,32 @@ export function EliminationTeamHub({ eliminationId, teams, useDH }: EliminationT
     ]);
   }
 
+  async function handleManagerSave() {
+    if (!managerProfile || !managerForm.displayName.trim()) return;
+
+    setIsManagerSaving(true);
+    setError(null);
+    try {
+      const updated = await saveManagerProfile({
+        ...managerProfile,
+        displayName: managerForm.displayName.trim(),
+        hometown: managerForm.hometown.trim() || undefined,
+        createdByUser: true,
+        managementStyle: managerForm.styleLabel.trim()
+          ? {
+              ...(managerProfile.managementStyle ?? {}),
+              label: managerForm.styleLabel.trim(),
+            }
+          : managerProfile.managementStyle,
+      });
+      setManagerProfile(updated);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save manager.');
+    } finally {
+      setIsManagerSaving(false);
+    }
+  }
+
   function renderPlayerRow(player: Player) {
     const condition = mojoFitnessByPlayerId[player.id] ?? { mojo: 0 as MojoLevel, fitness: 'FIT' as FitnessState };
     return (
@@ -429,6 +508,55 @@ export function EliminationTeamHub({ eliminationId, teams, useDH }: EliminationT
         </div>
       ) : (
         <>
+          {managerProfile && (
+            <div className="bg-[#5A8352] border-[6px] border-[#4A6844] p-4">
+              <div className="flex items-center justify-between gap-3 mb-3">
+                <div>
+                  <div className="text-xs">MANAGER</div>
+                  <div className="text-[8px] text-[#E8E8D8]/60 mt-1">
+                    {managerProfile.gender || 'Unspecified'}{managerProfile.age ? ` • Age ${managerProfile.age}` : ''}
+                  </div>
+                </div>
+                {isManagerSaving && <div className="text-[8px] text-[#E8E8D8]/60">SAVING...</div>}
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-[1.2fr,1fr,1fr,auto] gap-3">
+                <input
+                  value={managerForm.displayName}
+                  onChange={(event) =>
+                    setManagerForm((prev) => ({ ...prev, displayName: event.target.value }))
+                  }
+                  className="bg-[#4A6844] border-4 border-[#6B9462] px-3 py-2 text-[8px] text-[#E8E8D8]"
+                  aria-label="Manager name"
+                />
+                <input
+                  value={managerForm.hometown}
+                  onChange={(event) =>
+                    setManagerForm((prev) => ({ ...prev, hometown: event.target.value }))
+                  }
+                  className="bg-[#4A6844] border-4 border-[#6B9462] px-3 py-2 text-[8px] text-[#E8E8D8]"
+                  placeholder="Hometown"
+                  aria-label="Manager hometown"
+                />
+                <input
+                  value={managerForm.styleLabel}
+                  onChange={(event) =>
+                    setManagerForm((prev) => ({ ...prev, styleLabel: event.target.value }))
+                  }
+                  className="bg-[#4A6844] border-4 border-[#6B9462] px-3 py-2 text-[8px] text-[#E8E8D8]"
+                  placeholder="Style"
+                  aria-label="Manager style"
+                />
+                <button
+                  onClick={() => void handleManagerSave()}
+                  disabled={isManagerSaving || !managerForm.displayName.trim()}
+                  className="border-4 border-[#E8E8D8] bg-[#4A6844] px-4 py-2 text-[8px] text-[#E8E8D8] disabled:opacity-40 hover:bg-[#6B9462]"
+                >
+                  SAVE
+                </button>
+              </div>
+            </div>
+          )}
+
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
             <div className="space-y-4">
               <div className="bg-[#5A8352] border-[6px] border-[#4A6844] p-4">

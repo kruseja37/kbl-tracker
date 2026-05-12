@@ -146,6 +146,7 @@ import {
   buildPlayerGemCounts,
   formatPlayerLineupGameLine,
 } from "../utils/playerLineupGameLine";
+import { resolveGameTrackerManagerIds } from "../utils/gameTrackerManagerIdentity";
 
 type LineupRosterMeta = {
   jerseyNumber?: number;
@@ -1040,10 +1041,12 @@ export function GameTracker() {
   const awayRecord = navigationState?.awayRecord || "0-0"; // MAJ-15: Reads actual record from route state; defaults 0-0 for exhibition
   const homeRecord = navigationState?.homeRecord || "0-0"; // MAJ-15: Reads actual record from route state; defaults 0-0 for exhibition
   const leagueId = navigationState?.leagueId || "sml";
-  const homeManagerId =
-    navigationState?.homeManagerId || `${homeTeamId}-manager`;
-  const awayManagerId =
-    navigationState?.awayManagerId || `${awayTeamId}-manager`;
+  const { awayManagerId, homeManagerId } = resolveGameTrackerManagerIds({
+    awayTeamId,
+    homeTeamId,
+    awayManagerId: navigationState?.awayManagerId,
+    homeManagerId: navigationState?.homeManagerId,
+  });
   const userTeamSide = navigationState?.userTeamSide || "home";
   const competitionType =
     navigationState?.competitionType ||

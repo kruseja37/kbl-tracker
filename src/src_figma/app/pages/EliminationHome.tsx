@@ -31,6 +31,8 @@ import { computeEliminationAwards, type EliminationAward } from '../../../utils/
 import { buildClutchContext, getHomeFieldPattern } from '../../../engines/playoffEngine';
 import { EliminationTeamHub } from '../components/EliminationTeamHub';
 import { ReporterAssignmentPanel, type ReporterAssignmentPanelTeam } from '../components/ReporterAssignmentPanel';
+import { resolveManagerForTeam } from '../../../utils/managerIdentityStorage';
+import { withPregameManagerNavigationState } from '../utils/pregameNavigationState';
 
 type EliminationTab = 'bracket' | 'teamhub' | 'leaders' | 'awards' | 'history';
 
@@ -421,6 +423,30 @@ export function EliminationHome() {
         getEliminationTeam(eliminationId, awayTeam.teamId),
         getEliminationTeam(eliminationId, homeTeam.teamId),
       ]);
+      const [awayManager, homeManager] = await Promise.all([
+        resolveManagerForTeam({
+          team: {
+            id: awayTeam.teamId,
+            name: awayTeam.teamName,
+            managerId: awayTeamData?.managerId,
+            managerName: awayTeamData?.managerName,
+          },
+          mode: 'elimination',
+          instanceId: eliminationId,
+          persistAssignment: true,
+        }),
+        resolveManagerForTeam({
+          team: {
+            id: homeTeam.teamId,
+            name: homeTeam.teamName,
+            managerId: homeTeamData?.managerId,
+            managerName: homeTeamData?.managerName,
+          },
+          mode: 'elimination',
+          instanceId: eliminationId,
+          persistAssignment: true,
+        }),
+      ]);
 
       sessionStorage.setItem(
         "kbl-pending-live-beat-reporter-enabled",
@@ -431,7 +457,7 @@ export function EliminationHome() {
         JSON.stringify(postGameColumnsEnabled),
       );
       navigate(`/game-tracker/${gameId}`, {
-        state: {
+        state: withPregameManagerNavigationState({
           gameMode: 'elimination',
           eliminationId: eliminationId,
           seriesId: series.id,
@@ -474,7 +500,12 @@ export function EliminationHome() {
           isClinchGame: clutchContext.isClinchGame,
           totalInnings: playoffConfig.inningsPerGame,
           useDH: playoffConfig.useDH,
-        },
+        }, {
+          awayManagerId: awayManager.managerId,
+          awayManagerName: awayManager.managerName,
+          homeManagerId: homeManager.managerId,
+          homeManagerName: homeManager.managerName,
+        }),
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load elimination rosters for game start.');

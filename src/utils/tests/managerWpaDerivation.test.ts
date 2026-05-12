@@ -4,6 +4,7 @@ import type { AtBatEvent, BetweenPlayEvent, FieldingEvent } from "../eventLog";
 import {
   deriveManagerDecisionRecords,
   getHalfInningManagerContext,
+  getManagerForTeam,
 } from "../managerWpaDerivation";
 
 const MANAGERS = {
@@ -127,6 +128,25 @@ function derive(
 }
 
 describe("manager WPA derivation", () => {
+  test("falls back to canonical default manager ID when no assignment is present", () => {
+    expect(getManagerForTeam("sirloins")).toBe("sirloins-manager");
+    expect(
+      getManagerForTeam("sirloins", {
+        managerAssignments: [
+          {
+            managerId: "inactive-manager",
+            teamId: "sirloins",
+            mode: "elimination",
+            instanceId: "elim-1",
+            endDate: "2026-05-12",
+          },
+        ],
+        mode: "elimination",
+        instanceId: "elim-1",
+      }),
+    ).toBe("sirloins-manager");
+  });
+
   test("resolves offensive and defensive managers symmetrically by half inning", () => {
     const top = getHalfInningManagerContext("TOP", {
       awayTeamId: "away",

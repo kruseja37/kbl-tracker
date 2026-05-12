@@ -487,7 +487,12 @@ export function EliminationSetup() {
         leagueId: selectedLeague.id,
         leagueName: selectedLeague.name,
         teamsCount: numTeams,
-        seededTeams: seededTeams.map((team) => ({ id: team.id, name: team.name })),
+        seededTeams: seededTeams.map((team) => ({
+          id: team.id,
+          name: team.name,
+          managerId: team.managerId,
+          managerName: team.managerName,
+        })),
         seriesLengths,
         inningsPerGame,
         useDH,
