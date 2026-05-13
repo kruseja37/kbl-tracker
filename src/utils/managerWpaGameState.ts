@@ -27,6 +27,7 @@ import {
   deriveKblWpaCredits,
   type KblWpaStartingLineups,
 } from "./kblWpaAttribution";
+import { WPA_MODEL_VERSION } from "../engines/wpaV2";
 
 type ManagerStartingLineups = NonNullable<GameHeader["startingLineups"]>;
 type ManagerStartingPitchers = NonNullable<GameHeader["startingPitchers"]>;
@@ -185,6 +186,7 @@ function deriveTeamLineupDeltas(input: {
     rawPerformanceDelta: row.rawPerformanceDelta,
     managerShare: LINEUP_DELTA_MANAGER_SHARE,
     managerWpa: roundWpa(row.playerCappedManagerWpa * teamScale),
+    wpaModelVersion: WPA_MODEL_VERSION,
   }));
 }
 

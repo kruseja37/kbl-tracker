@@ -1,4 +1,5 @@
 import { calculateWPA } from "../engines/wpaCalculator";
+import { WPA_MODEL_VERSION } from "../engines/wpaV2";
 import type {
   AtBatEvent,
   BetweenPlayEvent,
@@ -533,7 +534,7 @@ function buildAtBatDecision(params: {
 
 function deriveBetweenPlayManagerDecisions(
   event: BetweenPlayEvent,
-  input: ManagerAssignmentResolutionInput & { totalInnings?: number },
+  input: DeriveManagerDecisionRecordsInput,
   gameId: string,
 ): ManagerDecisionRecord[] {
   if (!event.gameState) return [];
@@ -615,7 +616,10 @@ function deriveBetweenPlayManagerDecisions(
   }
 
   if (event.type === "substitution" && event.substitution) {
-    const decisionType = substitutionDecisionType(event.substitution.subType);
+    const decisionType = inferSubstitutionDecisionType(event, input);
+    const wasInferredPinchHit =
+      decisionType === "pinch_hitter" &&
+      event.substitution.subType !== "pinch_hit";
     return [
       buildBetweenPlayDecision({
         event,
@@ -623,12 +627,18 @@ function deriveBetweenPlayManagerDecisions(
         gameId,
         decisionType,
         decisionSource: "user_action",
-        confidence: decisionType === "position_change" ? "low" : "high",
+        confidence: wasInferredPinchHit
+          ? "medium"
+          : decisionType === "position_change"
+            ? "low"
+            : "high",
         involvedPlayerIds: [
           event.substitution.outPlayerId,
           event.substitution.inPlayerId,
         ],
-        derivedFromFields: ["substitution.subType"],
+        derivedFromFields: wasInferredPinchHit
+          ? ["substitution.subType", "nextAtBat.batterId"]
+          : ["substitution.subType"],
         resolved: false,
       }),
     ];
@@ -1230,6 +1240,7 @@ function buildDecisionRecord(input: BuildDecisionInput): ManagerDecisionRecord {
     rawWindowWpa: input.window.rawWindowWpa,
     managerShare: share,
     managerWpa: input.window.managerWpa,
+    wpaModelVersion: WPA_MODEL_VERSION,
     resolved: input.resolved,
     resolvedAtEventId: input.resolvedAtEventId,
     resolutionWindow: input.resolutionWindow,
@@ -1277,7 +1288,9 @@ function buildDecisionWindow(input: {
 }
 
 function calculateAtBatWindow(event: AtBatEvent, totalInnings?: number) {
-  return calculateWPA(
+  const normalizedAfter = normalizeAtBatWindowAfterState(event);
+
+  const result = calculateWPA(
     {
       inning: event.inning,
       isTop: event.halfInning === "TOP",
@@ -1288,12 +1301,70 @@ function calculateAtBatWindow(event: AtBatEvent, totalInnings?: number) {
       totalInnings: event.totalInnings ?? totalInnings,
     },
     {
-      outs: event.outsAfter,
-      bases: runnerStateToBases(event.runnersAfter),
-      homeScore: event.homeScoreAfter,
-      awayScore: event.awayScoreAfter,
+      outs: normalizedAfter.outsAfter,
+      bases: normalizedAfter.basesAfter,
+      homeScore: normalizedAfter.homeScoreAfter,
+      awayScore: normalizedAfter.awayScoreAfter,
     },
   );
+
+  return result;
+}
+
+function normalizeAtBatWindowAfterState(event: AtBatEvent): {
+  outsAfter: number;
+  basesAfter: ReturnType<typeof runnerStateToBases>;
+  homeScoreAfter: number;
+  awayScoreAfter: number;
+} {
+  const basesAfter = runnerStateToBases(event.runnersAfter);
+
+  if (event.result !== "HR" && event.result !== "ITPHR") {
+    return {
+      outsAfter: event.outsAfter,
+      basesAfter,
+      homeScoreAfter: event.homeScoreAfter,
+      awayScoreAfter: event.awayScoreAfter,
+    };
+  }
+
+  const occupiedRunnerCount =
+    Number(Boolean(event.runners.first)) +
+    Number(Boolean(event.runners.second)) +
+    Number(Boolean(event.runners.third));
+  const scoreDelta = Math.max(
+    0,
+    event.halfInning === "TOP"
+      ? event.awayScoreAfter - event.awayScore
+      : event.homeScoreAfter - event.homeScore,
+  );
+  const storedRuns =
+    typeof event.runsScored === "number"
+      ? event.runsScored
+      : event.runsScored.length;
+  const expectedRuns = Math.max(
+    1 + occupiedRunnerCount,
+    scoreDelta,
+    storedRuns,
+    event.rbiCount ?? 0,
+  );
+
+  return {
+    outsAfter: event.outs,
+    basesAfter: {
+      first: false,
+      second: false,
+      third: false,
+    },
+    homeScoreAfter:
+      event.halfInning === "BOTTOM"
+        ? event.homeScore + expectedRuns
+        : event.homeScore,
+    awayScoreAfter:
+      event.halfInning === "TOP"
+        ? event.awayScore + expectedRuns
+        : event.awayScore,
+  };
 }
 
 function calculateBetweenPlayWindow(
@@ -1391,6 +1462,32 @@ function substitutionDecisionType(
   if (subType === "pinch_run") return "pinch_runner";
   if (subType === "defensive_replacement") return "defensive_sub";
   return "position_change";
+}
+
+function inferSubstitutionDecisionType(
+  event: BetweenPlayEvent,
+  input: DeriveManagerDecisionRecordsInput,
+): ManagerDecisionType {
+  const explicitType = substitutionDecisionType(event.substitution!.subType);
+  if (explicitType !== "defensive_sub" && explicitType !== "position_change") {
+    return explicitType;
+  }
+
+  const nextPlateAppearance = input.atBatEvents
+    .filter((candidate) => {
+      if (candidate.undoneAt) return false;
+      if (candidate.eventIndex <= event.eventIndex) return false;
+      if (candidate.inning !== event.gameState?.inning) return false;
+      if (candidate.halfInning !== event.gameState?.halfInning) return false;
+      return true;
+    })
+    .sort((left, right) => left.eventIndex - right.eventIndex)[0];
+
+  if (nextPlateAppearance?.batterId === event.substitution?.inPlayerId) {
+    return "pinch_hitter";
+  }
+
+  return explicitType;
 }
 
 function isDefensiveManagerDecision(decisionType: ManagerDecisionType): boolean {

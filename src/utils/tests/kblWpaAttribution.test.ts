@@ -36,6 +36,7 @@ function createAtBat(overrides: Partial<AtBatEvent> = {}): AtBatEvent {
     winProbabilityBefore: 0.5,
     winProbabilityAfter: 0.5,
     wpa: 0,
+    wpaModelVersion: "kbl-wpa-v2",
     ballInPlay: null,
     fameEvents: [],
     isLeadoff: true,
@@ -244,6 +245,59 @@ describe("KBL WPA attribution", () => {
     expect(totalFor(credits, "away-runner")).toBeGreaterThan(0);
     expect(totalFor(credits, "away-batter")).toBeGreaterThan(0);
     expect(sumCredits(credits, "away")).toBeCloseTo(battingBudget, 5);
+  });
+
+  test("batting and defensive budgets conserve to zero for player KBL WPA", () => {
+    const event = createAtBat({
+      result: "HR",
+      inning: 4,
+      outs: 0,
+      awayScore: 0,
+      homeScore: 9,
+      runners: {
+        first: { runnerId: "away-r1", runnerName: "Away Runner 1", responsiblePitcherId: "home-pitcher" },
+        second: { runnerId: "away-r2", runnerName: "Away Runner 2", responsiblePitcherId: "home-pitcher" },
+        third: null,
+      },
+      awayScoreAfter: 3,
+      homeScoreAfter: 9,
+      runnersAfter: { first: null, second: null, third: null },
+      rbiCount: 3,
+      runsScored: 3,
+    });
+
+    const credits = deriveKblWpaCredits({ atBatEvents: [event] });
+    const actual = deriveActualAtBatWpa(event);
+
+    expect(actual.wpaModelVersion).toBe("kbl-wpa-v2");
+    expect(actual.battingTeamDelta).toBeGreaterThan(0);
+    expect(sumCredits(credits, "away")).toBeCloseTo(actual.battingTeamDelta, 5);
+    expect(sumCredits(credits, "home")).toBeCloseTo(actual.fieldingTeamDelta, 5);
+    expect(sumCredits(credits, "away") + sumCredits(credits, "home")).toBeCloseTo(0, 5);
+  });
+
+  test("complete archived legacy events keep stored WPA unless recomputed", () => {
+    const legacyEvent = createAtBat({
+      result: "HR",
+      wpaModelVersion: undefined,
+      wpa: 0.1234,
+      winProbabilityBefore: 0.2,
+      winProbabilityAfter: 0.1,
+      awayScore: 0,
+      homeScore: 9,
+      awayScoreAfter: 3,
+      homeScoreAfter: 9,
+      runsScored: 3,
+      rbiCount: 3,
+    });
+
+    const actual = deriveActualAtBatWpa(legacyEvent);
+    const credits = deriveKblWpaCredits({ atBatEvents: [legacyEvent] });
+
+    expect(actual.wpaModelVersion).toBe("legacy-stored");
+    expect(actual.battingTeamDelta).toBe(0.1234);
+    expect(totalFor(credits, "away-batter")).toBe(0.1234);
+    expect(sumCredits(credits, "home")).toBe(0);
   });
 
   test("saved bases use counterfactual fielder credit instead of fixed raw units", () => {

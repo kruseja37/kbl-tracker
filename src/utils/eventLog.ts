@@ -208,6 +208,10 @@ export interface AtBatEvent {
   winProbabilityBefore: number;  // Home team win probability before
   winProbabilityAfter: number;   // Home team win probability after
   wpa: number;                   // Win probability added (from batter's team perspective)
+  wpaModelVersion?: string;      // Versioned WPA model used for committed WPA values
+  homeDelta?: number;            // Home-team WPA delta from the official model
+  battingTeamDelta?: number;     // Batting-team WPA delta from the official model
+  fieldingTeamDelta?: number;    // Fielding-team WPA delta from the official model
   totalInnings?: number;         // Regulation length used for win-probability recalculation
 
   // Ball in play data (for fielding)
@@ -872,6 +876,10 @@ function applyAtBatEventUpdates(
     | 'winProbabilityBefore'
     | 'winProbabilityAfter'
     | 'wpa'
+    | 'wpaModelVersion'
+    | 'homeDelta'
+    | 'battingTeamDelta'
+    | 'fieldingTeamDelta'
     | 'totalInnings'
     | 'outsRecorded'
     | 'isWalkOff'
@@ -899,6 +907,10 @@ function applyAtBatEventUpdates(
   if (updates.winProbabilityBefore !== undefined) next.winProbabilityBefore = updates.winProbabilityBefore;
   if (updates.winProbabilityAfter !== undefined) next.winProbabilityAfter = updates.winProbabilityAfter;
   if (updates.wpa !== undefined) next.wpa = updates.wpa;
+  if (updates.wpaModelVersion !== undefined) next.wpaModelVersion = updates.wpaModelVersion;
+  if (updates.homeDelta !== undefined) next.homeDelta = updates.homeDelta;
+  if (updates.battingTeamDelta !== undefined) next.battingTeamDelta = updates.battingTeamDelta;
+  if (updates.fieldingTeamDelta !== undefined) next.fieldingTeamDelta = updates.fieldingTeamDelta;
   if (updates.totalInnings !== undefined) next.totalInnings = updates.totalInnings;
   if (updates.outsRecorded !== undefined) next.outsRecorded = updates.outsRecorded;
   if (updates.isWalkOff !== undefined) next.isWalkOff = updates.isWalkOff;
@@ -1023,6 +1035,10 @@ export async function updateAtBatEvent(
     | 'winProbabilityBefore'
     | 'winProbabilityAfter'
     | 'wpa'
+    | 'wpaModelVersion'
+    | 'homeDelta'
+    | 'battingTeamDelta'
+    | 'fieldingTeamDelta'
     | 'totalInnings'
     | 'outsRecorded'
     | 'isWalkOff'
@@ -1074,6 +1090,10 @@ export async function updateAtBatEventWithFieldingSync(
       | 'winProbabilityBefore'
       | 'winProbabilityAfter'
       | 'wpa'
+      | 'wpaModelVersion'
+      | 'homeDelta'
+      | 'battingTeamDelta'
+      | 'fieldingTeamDelta'
       | 'totalInnings'
       | 'isWalkOff'
       | 'outsRecorded'

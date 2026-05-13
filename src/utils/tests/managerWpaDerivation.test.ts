@@ -290,6 +290,59 @@ describe("manager WPA derivation", () => {
     });
   });
 
+  test("infers a mislogged defensive replacement as a pinch hitter when the incoming player bats next", () => {
+    const misloggedPinchHit = createBetweenPlay({
+      eventId: "game-1_bp_4",
+      eventIndex: 4,
+      type: "substitution",
+      gameState: {
+        inning: 6,
+        halfInning: "BOTTOM",
+        outs: 0,
+        score: { away: 9, home: 0 },
+        runnersOn: {},
+      },
+      pitcherChange: undefined,
+      substitution: {
+        subType: "defensive_replacement",
+        outPlayerId: "home-shortstop",
+        outPlayerName: "Rafael Belliard",
+        outPosition: "SS",
+        inPlayerId: "home-jeff-blauser",
+        inPlayerName: "Jeff Blauser",
+        inPosition: "SS",
+      },
+    });
+    const nextPa = createAtBat({
+      eventId: "game-1_5",
+      eventIndex: 5,
+      inning: 6,
+      halfInning: "BOTTOM",
+      batterId: "home-jeff-blauser",
+      batterName: "Jeff Blauser",
+      result: "HR",
+      runsScored: 1,
+      awayScore: 9,
+      homeScore: 0,
+      awayScoreAfter: 9,
+      homeScoreAfter: 1,
+    });
+
+    const [decision] = derive([nextPa], [misloggedPinchHit]);
+
+    expect(decision).toMatchObject({
+      decisionType: "pinch_hitter",
+      managerId: MANAGERS.home,
+      teamId: "home",
+      confidence: "medium",
+      resolved: true,
+      resolvedAtEventId: "game-1_5",
+      derivation: {
+        derivedFromFields: ["substitution.subType", "nextAtBat.batterId"],
+      },
+    });
+  });
+
   test("keeps IBB pending until the next batter PA resolves the window", () => {
     const ibb = createAtBat({
       eventId: "game-1_1",
@@ -454,6 +507,75 @@ describe("manager WPA derivation", () => {
       resolved: true,
       resolvedAtEventId: "game-1_2",
     });
+  });
+
+  test("pinch-hit HR from down 9 to down 6 gives the offensive manager positive WPA", () => {
+    const pinchHit = createBetweenPlay({
+      eventId: "game-1_bp_hr",
+      eventIndex: 10,
+      type: "substitution",
+      gameState: {
+        inning: 2,
+        halfInning: "BOTTOM",
+        outs: 0,
+        score: { away: 9, home: 0 },
+        runnersOn: { first: "home-r1", second: "home-r2" },
+      },
+      pitcherChange: undefined,
+      substitution: {
+        subType: "pinch_hit",
+        outPlayerId: "atl-belliard",
+        outPlayerName: "Rafael Belliard",
+        outPosition: "SS",
+        inPlayerId: "atl-blauser",
+        inPlayerName: "Jeff Blauser",
+        inPosition: "SS",
+      },
+    });
+    const homer = createAtBat({
+      eventId: "game-1_11",
+      eventIndex: 11,
+      inning: 2,
+      halfInning: "BOTTOM",
+      outs: 0,
+      batterId: "atl-blauser",
+      batterName: "Jeff Blauser",
+      result: "HR",
+      runners: {
+        first: {
+          runnerId: "home-r1",
+          runnerName: "Home Runner 1",
+          responsiblePitcherId: "away-pitcher",
+        },
+        second: {
+          runnerId: "home-r2",
+          runnerName: "Home Runner 2",
+          responsiblePitcherId: "away-pitcher",
+        },
+        third: null,
+      },
+      awayScore: 9,
+      homeScore: 0,
+      rbiCount: 3,
+      runsScored: 3,
+      // Simulate a stale/bad snapshot that only counted the batter run.
+      awayScoreAfter: 9,
+      homeScoreAfter: 1,
+      runnersAfter: { first: null, second: null, third: null },
+    });
+
+    const [decision] = derive([homer], [pinchHit]);
+
+    expect(decision).toMatchObject({
+      decisionType: "pinch_hitter",
+      managerId: MANAGERS.home,
+      teamId: "home",
+      resolved: true,
+      resolvedAtEventId: "game-1_11",
+      wpaModelVersion: "kbl-wpa-v2",
+    });
+    expect(decision.rawWindowWpa).toBeGreaterThan(0);
+    expect(decision.managerWpa).toBeGreaterThan(0);
   });
 
   test("keeps pinch runners pending until a terminal runner event resolves", () => {

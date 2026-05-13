@@ -132,6 +132,7 @@ export interface ManagerDecisionRecord {
   managerWpa?: number;
   rawWindowWpa?: number;
   managerShare?: number;
+  wpaModelVersion?: string;
 
   resolved: boolean;
   resolvedAtEventId?: string;
@@ -163,6 +164,7 @@ export interface ManagerLineupDeltaRecord {
   rawPerformanceDelta: number;
   managerShare: number;
   managerWpa: number;
+  wpaModelVersion?: string;
 }
 
 export interface ManagerDecisionStandards {

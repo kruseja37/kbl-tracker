@@ -1,4 +1,5 @@
 import { calculateWPA, type WPAResult } from "../engines/wpaCalculator";
+import { WPA_MODEL_VERSION } from "../engines/wpaV2";
 import type { AtBatResult, Position } from "../types/game";
 import type { AtBatEvent, BetweenPlayEvent, FieldingEvent, RunnerState } from "./eventLog";
 
@@ -285,6 +286,10 @@ export function aggregateKblWpaCredits(
 }
 
 export function deriveActualAtBatWpa(event: AtBatEvent, totalInnings?: number): WPAResult {
+  if (isLegacyStoredAtBatWpa(event)) {
+    return storedAtBatWpaResult(event);
+  }
+
   return calculateWPA(
     {
       inning: event.inning,
@@ -309,9 +314,16 @@ function deriveAtBatCredits(
   fieldingEvents: FieldingEvent[],
   context: DerivationContext,
 ): KblWpaCredit[] {
+  if (isSparseArchivedAtBatEvent(event) || isLegacyStoredAtBatWpa(event)) {
+    const fallbackCredits = deriveArchivedAtBatFallbackCredits(event, context);
+    if (fallbackCredits.length > 0) {
+      return fallbackCredits;
+    }
+  }
+
   const actual = deriveActualAtBatWpa(event, context.totalInnings);
-  const battingWpa = actual.wpa;
-  const defensiveWpa = -battingWpa;
+  const battingWpa = actual.battingTeamDelta;
+  const defensiveWpa = actual.fieldingTeamDelta;
 
   return [
     ...normalizeCreditsToBudget(
@@ -323,6 +335,33 @@ function deriveAtBatCredits(
       defensiveWpa,
     ),
   ];
+}
+
+function isLegacyStoredAtBatWpa(event: AtBatEvent): boolean {
+  return (
+    event.wpaModelVersion !== WPA_MODEL_VERSION &&
+    Number.isFinite(event.wpa)
+  );
+}
+
+function storedAtBatWpaResult(event: AtBatEvent): WPAResult {
+  const winProbabilityBefore = Number.isFinite(event.winProbabilityBefore)
+    ? event.winProbabilityBefore
+    : 0.5;
+  const winProbabilityAfter = Number.isFinite(event.winProbabilityAfter)
+    ? event.winProbabilityAfter
+    : winProbabilityBefore;
+  const battingTeamDelta = roundWpa(event.wpa);
+
+  return {
+    winProbabilityBefore,
+    winProbabilityAfter,
+    wpa: battingTeamDelta,
+    wpaModelVersion: event.wpaModelVersion ?? "legacy-stored",
+    homeDelta: roundWpa(winProbabilityAfter - winProbabilityBefore),
+    battingTeamDelta,
+    fieldingTeamDelta: roundWpa(-battingTeamDelta),
+  };
 }
 
 function deriveOffensiveAtBatCredits(
@@ -693,7 +732,7 @@ function buildRobbedHrCredits(
       awayScore: event.halfInning === "TOP" ? event.awayScore + runsScored : event.awayScore,
     },
   );
-  const pitcherCounterfactual = -counterfactual.wpa;
+  const pitcherCounterfactual = counterfactual.fieldingTeamDelta;
   const fielderCredit = defensiveWpa - pitcherCounterfactual;
 
   return [
@@ -729,7 +768,7 @@ function buildSavedBaseCounterfactualCredits(
     },
     counterfactualAfter,
   );
-  const pitcherCounterfactual = -counterfactual.wpa;
+  const pitcherCounterfactual = counterfactual.fieldingTeamDelta;
   const fielderCredit = defensiveWpa - pitcherCounterfactual;
 
   return [
@@ -972,7 +1011,7 @@ function calculateRunnerDelta(
       totalInnings: event.totalInnings ?? totalInnings,
     },
     defaultAfter,
-  ).wpa;
+  ).battingTeamDelta;
 
   const impactedRunners = event.runnerOutcomes.filter((outcome) => {
     const expected = defaultDestinationForRunner(event, outcome.fromBase);
@@ -1202,7 +1241,7 @@ function deriveBetweenPlayCredits(
       homeScore: homeScoreAfter,
       awayScore: awayScoreAfter,
     },
-  ).wpa;
+  ).battingTeamDelta;
   const defensiveWpa = -battingWpa;
   const runner: PlayerRef = {
     playerId: event.runnerAction.runnerId,
