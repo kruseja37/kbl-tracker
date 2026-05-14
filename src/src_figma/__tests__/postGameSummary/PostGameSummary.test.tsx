@@ -650,7 +650,7 @@ describe('PostGameSummary Component', () => {
       expect(details).toHaveTextContent('Pinch runner: Home Speed');
       expect(details).toHaveTextContent('Opened: Event 8');
       expect(details).toHaveTextContent('Closed: Event 11 (Game End)');
-      expect(details).toHaveTextContent('Linked outcomes: 2 (ab-10, ab-11)');
+      expect(details).toHaveTextContent('Linked events: 2 (ab-10, ab-11)');
       expect(details).toHaveTextContent('Raw WPA: +0.400');
       expect(details).toHaveTextContent('Share: 20%');
       expect(details).toHaveTextContent('Cap: +/-0.125');

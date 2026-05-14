@@ -169,6 +169,7 @@ function derive(
   atBatEvents: AtBatEvent[] = [],
   betweenPlayEvents: BetweenPlayEvent[] = [],
   fieldingEvents: FieldingEvent[] = [],
+  options: { gameEnded?: boolean; totalInnings?: number } = {},
 ) {
   return deriveManagerDecisionRecords({
     gameId: "game-1",
@@ -179,6 +180,7 @@ function derive(
     homeTeamId: "home",
     awayManagerId: MANAGERS.away,
     homeManagerId: MANAGERS.home,
+    ...options,
   });
 }
 
@@ -398,7 +400,312 @@ describe("manager WPA derivation", () => {
     });
   });
 
-  test("keeps IBB pending until the next batter PA resolves the window", () => {
+  test("resolves IBB at inning end when the walked runner is stranded", () => {
+    const ibb = createAtBat({
+      eventId: "game-1_1",
+      eventIndex: 1,
+      inning: 4,
+      outs: 2,
+      result: "IBB",
+      runnersAfter: {
+        first: {
+          runnerId: "away-batter",
+          runnerName: "Away Batter",
+          responsiblePitcherId: "home-pitcher",
+        },
+        second: null,
+        third: null,
+      },
+      outsAfter: 2,
+    });
+    const nextPa = createAtBat({
+      eventId: "game-1_2",
+      eventIndex: 2,
+      inning: 4,
+      batterId: "away-next-batter",
+      batterName: "Away Next Batter",
+      runners: ibb.runnersAfter,
+      result: "GO",
+      runnersAfter: { first: null, second: null, third: null },
+      outs: 2,
+      outsAfter: 3,
+    });
+
+    const [decision] = derive([ibb, nextPa]);
+
+    expect(decision).toMatchObject({
+      decisionType: "intentional_walk",
+      resolved: true,
+      resolvedAtEventId: "game-1_2",
+      resolutionWindow: {
+        status: "resolved",
+        expectedEndpoint: "runner_consequence",
+        trackedRunnerIds: ["away-batter"],
+        maxEventIndex: 2,
+      },
+      explanationMetadata: {
+        intentionalWalk: {
+          ibbEventId: "game-1_1",
+          walkedRunnerId: "away-batter",
+          nextBatterEventId: "game-1_2",
+          nextBatterResult: "GO",
+          finalConsequenceEventId: "game-1_2",
+          finalConsequence: "stranded",
+          inningEnded: true,
+        },
+      },
+    });
+    expect(decision.linkedEventIds).toEqual(["game-1_1", "game-1_2"]);
+    expect(decision.managerWpa).toEqual(expect.any(Number));
+  });
+
+  test("resolves IBB at a walk-off endpoint when another runner scores and the walked runner remains live", () => {
+    const winningRunner = {
+      runnerId: "home-winning-run",
+      runnerName: "Home Winning Run",
+      responsiblePitcherId: "away-pitcher",
+    };
+    const walkedRunner = {
+      runnerId: "home-ibb-batter",
+      runnerName: "Home IBB Batter",
+      responsiblePitcherId: "away-pitcher",
+    };
+    const ibb = createAtBat({
+      eventId: "game-1_1",
+      eventIndex: 1,
+      inning: 9,
+      halfInning: "BOTTOM",
+      outs: 1,
+      batterId: "home-ibb-batter",
+      batterName: "Home IBB Batter",
+      result: "IBB",
+      runners: { first: null, second: null, third: winningRunner },
+      runnersAfter: { first: walkedRunner, second: null, third: winningRunner },
+      awayScore: 2,
+      homeScore: 2,
+      awayScoreAfter: 2,
+      homeScoreAfter: 2,
+      outsAfter: 1,
+      totalInnings: 9,
+    });
+    const walkOffSingle = createAtBat({
+      eventId: "game-1_2",
+      eventIndex: 2,
+      inning: 9,
+      halfInning: "BOTTOM",
+      outs: 1,
+      batterId: "home-next-batter",
+      batterName: "Home Next Batter",
+      runners: ibb.runnersAfter,
+      result: "1B",
+      runsScored: ["home-winning-run"],
+      runnersAfter: {
+        first: {
+          runnerId: "home-next-batter",
+          runnerName: "Home Next Batter",
+          responsiblePitcherId: "away-pitcher",
+        },
+        second: walkedRunner,
+        third: null,
+      },
+      awayScore: 2,
+      homeScore: 2,
+      awayScoreAfter: 2,
+      homeScoreAfter: 3,
+      outsAfter: 1,
+      isWalkOff: true,
+      totalInnings: 9,
+    });
+
+    const [decision] = derive([ibb, walkOffSingle], [], [], { totalInnings: 9 });
+
+    expect(decision).toMatchObject({
+      decisionType: "intentional_walk",
+      managerId: MANAGERS.away,
+      teamId: "away",
+      resolved: true,
+      resolvedAtEventId: "game-1_2",
+      resolutionWindow: {
+        status: "resolved",
+        expectedEndpoint: "runner_consequence",
+        trackedRunnerIds: ["home-ibb-batter"],
+        maxEventIndex: 2,
+      },
+      explanationMetadata: {
+        intentionalWalk: {
+          walkedRunnerId: "home-ibb-batter",
+          nextBatterEventId: "game-1_2",
+          finalConsequenceEventId: "game-1_2",
+          finalConsequence: "stranded",
+          inningEnded: true,
+        },
+      },
+    });
+    expect(decision.managerWpa).toBeCloseTo(decision.rawWindowWpa ?? 0, 4);
+    expect(decision.managerWpa).toBeLessThan(0);
+  });
+
+  test("resolves IBB at the final same-half endpoint when gameEnded is true without a third out", () => {
+    const winningRunner = {
+      runnerId: "home-winning-run",
+      runnerName: "Home Winning Run",
+      responsiblePitcherId: "away-pitcher",
+    };
+    const walkedRunner = {
+      runnerId: "home-ibb-batter",
+      runnerName: "Home IBB Batter",
+      responsiblePitcherId: "away-pitcher",
+    };
+    const ibb = createAtBat({
+      eventId: "game-1_1",
+      eventIndex: 1,
+      inning: 9,
+      halfInning: "BOTTOM",
+      outs: 1,
+      batterId: "home-ibb-batter",
+      batterName: "Home IBB Batter",
+      result: "IBB",
+      runners: { first: null, second: null, third: winningRunner },
+      runnersAfter: { first: walkedRunner, second: null, third: winningRunner },
+      awayScore: 2,
+      homeScore: 2,
+      awayScoreAfter: 2,
+      homeScoreAfter: 2,
+      outsAfter: 1,
+      totalInnings: 9,
+    });
+    const finalPa = createAtBat({
+      eventId: "game-1_2",
+      eventIndex: 2,
+      inning: 9,
+      halfInning: "BOTTOM",
+      outs: 1,
+      batterId: "home-next-batter",
+      batterName: "Home Next Batter",
+      runners: ibb.runnersAfter,
+      result: "1B",
+      runsScored: ["home-winning-run"],
+      runnersAfter: {
+        first: {
+          runnerId: "home-next-batter",
+          runnerName: "Home Next Batter",
+          responsiblePitcherId: "away-pitcher",
+        },
+        second: walkedRunner,
+        third: null,
+      },
+      awayScore: 2,
+      homeScore: 2,
+      awayScoreAfter: 2,
+      homeScoreAfter: 3,
+      outsAfter: 1,
+      totalInnings: 9,
+    });
+
+    const [decision] = derive([ibb, finalPa], [], [], {
+      gameEnded: true,
+      totalInnings: 9,
+    });
+
+    expect(decision).toMatchObject({
+      decisionType: "intentional_walk",
+      resolved: true,
+      resolvedAtEventId: "game-1_2",
+      explanationMetadata: {
+        intentionalWalk: {
+          finalConsequenceEventId: "game-1_2",
+          finalConsequence: "stranded",
+          inningEnded: true,
+        },
+      },
+    });
+    expect(decision.managerWpa).toBeLessThan(0);
+  });
+
+  test("resolves IBB on the same event when the intentional walk is game-ending", () => {
+    const walkedRunner = {
+      runnerId: "home-ibb-batter",
+      runnerName: "Home IBB Batter",
+      responsiblePitcherId: "away-pitcher",
+    };
+    const ibb = createAtBat({
+      eventId: "game-1_1",
+      eventIndex: 1,
+      inning: 9,
+      halfInning: "BOTTOM",
+      outs: 1,
+      batterId: "home-ibb-batter",
+      batterName: "Home IBB Batter",
+      result: "IBB",
+      runners: {
+        first: {
+          runnerId: "home-runner-first",
+          runnerName: "Home Runner First",
+          responsiblePitcherId: "away-pitcher",
+        },
+        second: {
+          runnerId: "home-runner-second",
+          runnerName: "Home Runner Second",
+          responsiblePitcherId: "away-pitcher",
+        },
+        third: {
+          runnerId: "home-winning-run",
+          runnerName: "Home Winning Run",
+          responsiblePitcherId: "away-pitcher",
+        },
+      },
+      runsScored: ["home-winning-run"],
+      runnersAfter: {
+        first: walkedRunner,
+        second: {
+          runnerId: "home-runner-first",
+          runnerName: "Home Runner First",
+          responsiblePitcherId: "away-pitcher",
+        },
+        third: {
+          runnerId: "home-runner-second",
+          runnerName: "Home Runner Second",
+          responsiblePitcherId: "away-pitcher",
+        },
+      },
+      awayScore: 2,
+      homeScore: 2,
+      awayScoreAfter: 2,
+      homeScoreAfter: 3,
+      outsAfter: 1,
+      isWalkOff: true,
+      totalInnings: 9,
+    });
+
+    const [decision] = derive([ibb], [], [], { totalInnings: 9 });
+
+    expect(decision).toMatchObject({
+      decisionType: "intentional_walk",
+      managerId: MANAGERS.away,
+      teamId: "away",
+      resolved: true,
+      resolvedAtEventId: "game-1_1",
+      linkedEventIds: ["game-1_1"],
+      resolutionWindow: {
+        status: "resolved",
+        expectedEndpoint: "runner_consequence",
+        trackedRunnerIds: ["home-ibb-batter"],
+        maxEventIndex: 1,
+      },
+      explanationMetadata: {
+        intentionalWalk: {
+          walkedRunnerId: "home-ibb-batter",
+          finalConsequenceEventId: "game-1_1",
+          finalConsequence: "stranded",
+          inningEnded: true,
+        },
+      },
+    });
+    expect(decision.managerWpa).toBeCloseTo(decision.rawWindowWpa ?? 0, 4);
+    expect(decision.managerWpa).toBeLessThan(0);
+  });
+
+  test("resolves IBB at the next batter HR when the walked runner scores", () => {
     const ibb = createAtBat({
       eventId: "game-1_1",
       eventIndex: 1,
@@ -415,6 +722,213 @@ describe("manager WPA derivation", () => {
       },
       outsAfter: 1,
     });
+    const homer = createAtBat({
+      eventId: "game-1_2",
+      eventIndex: 2,
+      inning: 4,
+      batterId: "away-next-batter",
+      batterName: "Away Next Batter",
+      runners: ibb.runnersAfter,
+      result: "HR",
+      runsScored: ["away-batter", "away-next-batter"],
+      runnersAfter: { first: null, second: null, third: null },
+      awayScoreAfter: 4,
+      outsAfter: 1,
+    });
+
+    const [decision] = derive([ibb, homer]);
+
+    expect(decision).toMatchObject({
+      decisionType: "intentional_walk",
+      resolved: true,
+      resolvedAtEventId: "game-1_2",
+      resolutionWindow: {
+        status: "resolved",
+        expectedEndpoint: "runner_consequence",
+        maxEventIndex: 2,
+      },
+      explanationMetadata: {
+        intentionalWalk: {
+          nextBatterEventId: "game-1_2",
+          nextBatterResult: "HR",
+          finalConsequenceEventId: "game-1_2",
+          finalConsequence: "scored",
+          inningEnded: false,
+        },
+      },
+    });
+    expect(decision.linkedEventIds).toEqual(["game-1_1", "game-1_2"]);
+    expect(decision.managerWpa).toBeCloseTo(decision.rawWindowWpa ?? 0, 4);
+  });
+
+  test("resolves IBB at a runner terminal event before the next PA", () => {
+    const ibb = createAtBat({
+      eventId: "game-1_1",
+      eventIndex: 1,
+      inning: 4,
+      outs: 1,
+      result: "IBB",
+      runnersAfter: {
+        first: {
+          runnerId: "away-batter",
+          runnerName: "Away Batter",
+          responsiblePitcherId: "home-pitcher",
+        },
+        second: null,
+        third: null,
+      },
+      outsAfter: 1,
+    });
+    const pickoff = createBetweenPlay({
+      eventId: "game-1_bp_pickoff",
+      eventIndex: 2,
+      type: "pickoff",
+      pitcherChange: undefined,
+      gameState: {
+        inning: 4,
+        halfInning: "TOP",
+        outs: 1,
+        score: { away: 2, home: 2 },
+        runnersOn: { first: "away-batter" },
+      },
+      runnerAction: {
+        runnerId: "away-batter",
+        runnerName: "Away Batter",
+        fromBase: 1,
+        toBase: 1,
+        outcome: "out",
+        reason: "pickoff",
+      },
+    });
+
+    const [decision] = derive([ibb], [pickoff]);
+
+    expect(decision).toMatchObject({
+      decisionType: "intentional_walk",
+      resolved: true,
+      resolvedAtEventId: "game-1_bp_pickoff",
+      resolutionWindow: {
+        status: "resolved",
+        expectedEndpoint: "runner_consequence",
+        maxEventIndex: 2,
+      },
+      explanationMetadata: {
+        intentionalWalk: {
+          finalConsequenceEventId: "game-1_bp_pickoff",
+          finalConsequence: "out",
+          inningEnded: false,
+        },
+      },
+    });
+    expect(decision.linkedEventIds).toEqual(["game-1_1", "game-1_bp_pickoff"]);
+  });
+
+  test("keeps IBB pending after the next batter out, then resolves when the walked runner later scores", () => {
+    const ibb = createAtBat({
+      eventId: "game-1_1",
+      eventIndex: 1,
+      inning: 4,
+      outs: 0,
+      result: "IBB",
+      runnersAfter: {
+        first: {
+          runnerId: "away-batter",
+          runnerName: "Away Batter",
+          responsiblePitcherId: "home-pitcher",
+        },
+        second: null,
+        third: null,
+      },
+      outsAfter: 0,
+    });
+    const nextPaOut = createAtBat({
+      eventId: "game-1_2",
+      eventIndex: 2,
+      inning: 4,
+      batterId: "away-next-batter",
+      batterName: "Away Next Batter",
+      runners: ibb.runnersAfter,
+      result: "FO",
+      runnersAfter: ibb.runnersAfter,
+      outs: 0,
+      outsAfter: 1,
+    });
+    const scoringPa = createAtBat({
+      eventId: "game-1_3",
+      eventIndex: 3,
+      inning: 4,
+      batterId: "away-third-batter",
+      batterName: "Away Third Batter",
+      runners: nextPaOut.runnersAfter,
+      result: "2B",
+      runsScored: ["away-batter"],
+      runnersAfter: {
+        first: null,
+        second: {
+          runnerId: "away-third-batter",
+          runnerName: "Away Third Batter",
+          responsiblePitcherId: "home-pitcher",
+        },
+        third: null,
+      },
+      awayScoreAfter: 3,
+      outs: 1,
+      outsAfter: 1,
+    });
+
+    const pending = derive([ibb, nextPaOut])[0];
+    expect(pending).toMatchObject({
+      decisionType: "intentional_walk",
+      resolved: false,
+      resolvedAtEventId: undefined,
+      managerWpa: undefined,
+      linkedEventIds: ["game-1_1", "game-1_2"],
+      explanationMetadata: {
+        intentionalWalk: {
+          nextBatterEventId: "game-1_2",
+          nextBatterResult: "FO",
+        },
+      },
+    });
+
+    const resolved = derive([ibb, nextPaOut, scoringPa])[0];
+    expect(resolved).toMatchObject({
+      decisionType: "intentional_walk",
+      resolved: true,
+      resolvedAtEventId: "game-1_3",
+      linkedEventIds: ["game-1_1", "game-1_2", "game-1_3"],
+      explanationMetadata: {
+        intentionalWalk: {
+          nextBatterEventId: "game-1_2",
+          nextBatterResult: "FO",
+          finalConsequenceEventId: "game-1_3",
+          finalConsequence: "scored",
+        },
+      },
+    });
+    expect(resolved.teamWinProbabilityAfter).not.toBe(
+      pending.teamWinProbabilityAfter,
+    );
+  });
+
+  test("keeps IBB pending when the walked runner remains live and the half-inning is open", () => {
+    const ibb = createAtBat({
+      eventId: "game-1_1",
+      eventIndex: 1,
+      inning: 4,
+      outs: 0,
+      result: "IBB",
+      runnersAfter: {
+        first: {
+          runnerId: "away-batter",
+          runnerName: "Away Batter",
+          responsiblePitcherId: "home-pitcher",
+        },
+        second: null,
+        third: null,
+      },
+      outsAfter: 0,
+    });
     const nextPa = createAtBat({
       eventId: "game-1_2",
       eventIndex: 2,
@@ -422,40 +936,100 @@ describe("manager WPA derivation", () => {
       batterId: "away-next-batter",
       batterName: "Away Next Batter",
       runners: ibb.runnersAfter,
+      result: "GO",
+      runnersAfter: ibb.runnersAfter,
+      outs: 0,
+      outsAfter: 1,
+    });
+
+    const [decision] = derive([ibb, nextPa]);
+
+    expect(decision).toMatchObject({
+      decisionType: "intentional_walk",
+      resolved: false,
+      resolvedAtEventId: undefined,
+      managerWpa: undefined,
+      resolutionWindow: {
+        status: "pending",
+        expectedEndpoint: "runner_consequence",
+        trackedRunnerIds: ["away-batter"],
+      },
+      linkedEventIds: ["game-1_1", "game-1_2"],
+      explanationMetadata: {
+        intentionalWalk: {
+          nextBatterEventId: "game-1_2",
+          nextBatterResult: "GO",
+          finalConsequenceEventId: undefined,
+        },
+      },
+    });
+  });
+
+  test("keeps IBB pending when an unrelated runner scores and the half-inning remains open", () => {
+    const scoringRunner = {
+      runnerId: "away-runner-third",
+      runnerName: "Away Runner Third",
+      responsiblePitcherId: "home-pitcher",
+    };
+    const walkedRunner = {
+      runnerId: "away-batter",
+      runnerName: "Away Batter",
+      responsiblePitcherId: "home-pitcher",
+    };
+    const ibb = createAtBat({
+      eventId: "game-1_1",
+      eventIndex: 1,
+      inning: 4,
+      outs: 1,
+      result: "IBB",
+      runners: { first: null, second: null, third: scoringRunner },
+      runnersAfter: { first: walkedRunner, second: null, third: scoringRunner },
+      outsAfter: 1,
+    });
+    const single = createAtBat({
+      eventId: "game-1_2",
+      eventIndex: 2,
+      inning: 4,
+      outs: 1,
+      batterId: "away-next-batter",
+      batterName: "Away Next Batter",
+      runners: ibb.runnersAfter,
       result: "1B",
-      runsScored: ["away-batter"],
-      runnersAfter: { first: null, second: null, third: null },
+      runsScored: ["away-runner-third"],
+      runnersAfter: {
+        first: {
+          runnerId: "away-next-batter",
+          runnerName: "Away Next Batter",
+          responsiblePitcherId: "home-pitcher",
+        },
+        second: walkedRunner,
+        third: null,
+      },
       awayScoreAfter: 3,
       outsAfter: 1,
     });
 
-    const pending = derive([ibb])[0];
-    expect(pending).toMatchObject({
+    const [decision] = derive([ibb, single]);
+
+    expect(decision).toMatchObject({
       decisionType: "intentional_walk",
       resolved: false,
       resolvedAtEventId: undefined,
+      managerWpa: undefined,
       resolutionWindow: {
         status: "pending",
-        expectedEndpoint: "next_pa",
+        expectedEndpoint: "runner_consequence",
+        trackedRunnerIds: ["away-batter"],
+      },
+      linkedEventIds: ["game-1_1", "game-1_2"],
+      explanationMetadata: {
+        intentionalWalk: {
+          nextBatterEventId: "game-1_2",
+          nextBatterResult: "1B",
+          finalConsequenceEventId: undefined,
+        },
       },
     });
-    expect(pending.managerWpa).toBeUndefined();
-
-    const resolved = derive([ibb, nextPa])[0];
-    expect(resolved).toMatchObject({
-      decisionType: "intentional_walk",
-      resolved: true,
-      resolvedAtEventId: "game-1_2",
-      resolutionWindow: {
-        status: "resolved",
-        expectedEndpoint: "next_pa",
-        maxEventIndex: 2,
-      },
-    });
-    expect(resolved.linkedEventIds).toEqual(
-      expect.arrayContaining(["game-1_1", "game-1_2"]),
-    );
-    expect(resolved.managerWpa).toEqual(expect.any(Number));
   });
 
   test("keeps pitching changes pending until the incoming pitcher's next completed PA", () => {
@@ -516,6 +1090,49 @@ describe("manager WPA derivation", () => {
     );
   });
 
+  test("keeps pitching changes pending when no PA is faced before the inning ends", () => {
+    const change = createBetweenPlay({
+      eventId: "game-1_bp_1",
+      eventIndex: 1,
+      type: "pitcher_change",
+      gameState: {
+        inning: 5,
+        halfInning: "TOP",
+        outs: 1,
+        score: { away: 2, home: 2 },
+        runnersOn: {},
+      },
+      pitcherChange: {
+        outgoingPitcherId: "home-pitcher",
+        incomingPitcherId: "home-reliever",
+        inheritedRunners: 0,
+      },
+    });
+    const inningEndingPa = createAtBat({
+      eventId: "game-1_2",
+      eventIndex: 2,
+      inning: 5,
+      pitcherId: "home-pitcher",
+      pitcherName: "Home Pitcher",
+      outs: 2,
+      outsAfter: 3,
+    });
+
+    const [decision] = derive([inningEndingPa], [change]);
+
+    expect(decision).toMatchObject({
+      decisionType: "pitching_change",
+      resolved: false,
+      resolvedAtEventId: undefined,
+      managerWpa: undefined,
+      resolutionWindow: {
+        status: "pending",
+        trackedPlayerIds: ["home-reliever"],
+      },
+    });
+    expect(decision.linkedEventIds).toEqual(["game-1_bp_1"]);
+  });
+
   test("keeps pinch hitters pending until the pinch hitter PA resolves", () => {
     const pinchHit = createBetweenPlay({
       eventId: "game-1_bp_1",
@@ -562,6 +1179,43 @@ describe("manager WPA derivation", () => {
       resolved: true,
       resolvedAtEventId: "game-1_2",
     });
+  });
+
+  test("keeps pinch hitters pending when the target PA never occurs", () => {
+    const pinchHit = createBetweenPlay({
+      eventId: "game-1_bp_1",
+      eventIndex: 1,
+      type: "substitution",
+      pitcherChange: undefined,
+      substitution: {
+        subType: "pinch_hit",
+        outPlayerId: "away-batter-8",
+        inPlayerId: "away-ph",
+      },
+    });
+    const inningEndingPa = createAtBat({
+      eventId: "game-1_2",
+      eventIndex: 2,
+      inning: 5,
+      batterId: "away-other",
+      batterName: "Away Other",
+      outs: 2,
+      outsAfter: 3,
+    });
+
+    const [decision] = derive([inningEndingPa], [pinchHit]);
+
+    expect(decision).toMatchObject({
+      decisionType: "pinch_hitter",
+      resolved: false,
+      resolvedAtEventId: undefined,
+      managerWpa: undefined,
+      resolutionWindow: {
+        status: "pending",
+        trackedPlayerIds: expect.arrayContaining(["away-ph"]),
+      },
+    });
+    expect(decision.linkedEventIds).toEqual(["game-1_bp_1"]);
   });
 
   test("derives prompted keep-pitcher decisions and keeps them pending until that pitcher faces a PA", () => {
@@ -623,6 +1277,58 @@ describe("manager WPA derivation", () => {
       expect.arrayContaining(["game-1_bp_keep_pitcher", "game-1_2"]),
     );
     expect(resolved.managerWpa).toBeCloseTo((resolved.rawWindowWpa ?? 0) * 0.2, 4);
+  });
+
+  test("keeps leave-pitcher-in decisions pending when the target PA never occurs", () => {
+    const prompt = createPromptedKeepCurrent({
+      eventId: "game-1_bp_keep_pitcher",
+      eventIndex: 1,
+      decisionType: "leave_pitcher_in",
+      trackedPlayerId: "home-pitcher",
+      provenanceKey: "keep-home-pitcher",
+      gameState: {
+        inning: 5,
+        halfInning: "TOP",
+        outs: 2,
+        score: { away: 2, home: 2 },
+        runnersOn: { first: "away-runner" },
+      },
+    });
+    const pickoff = createBetweenPlay({
+      eventId: "game-1_bp_pickoff",
+      eventIndex: 2,
+      type: "pickoff",
+      pitcherChange: undefined,
+      gameState: {
+        inning: 5,
+        halfInning: "TOP",
+        outs: 2,
+        score: { away: 2, home: 2 },
+        runnersOn: { first: "away-runner" },
+      },
+      runnerAction: {
+        runnerId: "away-runner",
+        runnerName: "Away Runner",
+        fromBase: 1,
+        toBase: 1,
+        outcome: "out",
+        reason: "pickoff",
+      },
+    });
+
+    const [decision] = derive([], [prompt, pickoff]);
+
+    expect(decision).toMatchObject({
+      decisionType: "leave_pitcher_in",
+      resolved: false,
+      resolvedAtEventId: undefined,
+      managerWpa: undefined,
+      resolutionWindow: {
+        status: "pending",
+        trackedPlayerIds: ["home-pitcher"],
+      },
+    });
+    expect(decision.linkedEventIds).toEqual(["game-1_bp_keep_pitcher"]);
   });
 
   test("derives prompted let-batter-hit decisions and waits for that batter's PA", () => {
@@ -693,6 +1399,49 @@ describe("manager WPA derivation", () => {
       resolvedAtEventId: "game-1_3",
     });
     expect(resolved.managerWpa).toBeCloseTo((resolved.rawWindowWpa ?? 0) * 0.2, 4);
+  });
+
+  test("keeps let-batter-hit decisions pending when the target PA never occurs", () => {
+    const prompt = createPromptedKeepCurrent({
+      eventId: "game-1_bp_let_batter_hit",
+      eventIndex: 1,
+      decisionType: "let_batter_hit",
+      trackedPlayerId: "away-hitter-8",
+      teamId: "away",
+      managerId: MANAGERS.away,
+      opponentTeamId: "home",
+      provenanceKey: "let-away-hitter-hit",
+      gameState: {
+        inning: 5,
+        halfInning: "TOP",
+        outs: 1,
+        score: { away: 2, home: 2 },
+        runnersOn: {},
+      },
+    });
+    const inningEndingPa = createAtBat({
+      eventId: "game-1_2",
+      eventIndex: 2,
+      inning: 5,
+      batterId: "away-other",
+      batterName: "Away Other",
+      outs: 2,
+      outsAfter: 3,
+    });
+
+    const [decision] = derive([inningEndingPa], [prompt]);
+
+    expect(decision).toMatchObject({
+      decisionType: "let_batter_hit",
+      resolved: false,
+      resolvedAtEventId: undefined,
+      managerWpa: undefined,
+      resolutionWindow: {
+        status: "pending",
+        trackedPlayerIds: ["away-hitter-8"],
+      },
+    });
+    expect(decision.linkedEventIds).toEqual(["game-1_bp_let_batter_hit"]);
   });
 
   test("dedupes repeated prompted keep-current records by recommendation provenance", () => {
@@ -965,7 +1714,7 @@ describe("manager WPA derivation", () => {
     });
   });
 
-  test("keeps defensive substitutions pending, then resolves on first fielding event or half-inning end", () => {
+  test("keeps defensive substitutions pending, then resolves on first fielding event or explicit compatibility fallback", () => {
     const defensiveSub = createBetweenPlay({
       eventId: "game-1_bp_1",
       eventIndex: 1,
@@ -1024,6 +1773,51 @@ describe("manager WPA derivation", () => {
       decisionType: "defensive_sub",
       resolved: true,
       resolvedAtEventId: "game-1_3",
+    });
+  });
+
+  test("preserves position-change half-inning fallback as an explicit first-fielding compatibility policy", () => {
+    const positionChange = createBetweenPlay({
+      eventId: "game-1_bp_position",
+      eventIndex: 1,
+      type: "position_change",
+      pitcherChange: undefined,
+      substitution: {
+        subType: "position_change",
+        outPlayerId: "home-fielder",
+        inPlayerId: "home-fielder",
+        previousPosition: "LF",
+        inPosition: "CF",
+      },
+    });
+    const flyOut = createAtBat({
+      eventId: "game-1_2",
+      eventIndex: 2,
+      inning: 5,
+      result: "FO",
+      outs: 1,
+      outsAfter: 2,
+    });
+    const halfEndingOut = createAtBat({
+      eventId: "game-1_3",
+      eventIndex: 3,
+      inning: 5,
+      result: "GO",
+      outs: 2,
+      outsAfter: 3,
+    });
+
+    const [decision] = derive([flyOut, halfEndingOut], [positionChange]);
+
+    expect(decision).toMatchObject({
+      decisionType: "position_change",
+      resolved: true,
+      resolvedAtEventId: "game-1_3",
+      resolutionWindow: {
+        status: "resolved",
+        expectedEndpoint: "first_fielding_event",
+        trackedPlayerIds: expect.arrayContaining(["home-fielder"]),
+      },
     });
   });
 

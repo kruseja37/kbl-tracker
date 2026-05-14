@@ -7,8 +7,11 @@ import type {
   RunnerState,
 } from "./eventLog";
 import type {
+  IntentionalWalkConsequenceStatus,
   ManagerAssignment,
   ManagerDecisionConfidence,
+  ManagerDecisionExplanationMetadata,
+  ManagerDecisionHorizon,
   ManagerDecisionRecord,
   ManagerDecisionResolutionEndpoint,
   ManagerDecisionResolutionWindow,
@@ -18,6 +21,7 @@ import type {
   ManagerInferenceMethod,
 } from "../types/managerWpa";
 import {
+  DECISION_HORIZON_BY_DECISION_TYPE,
   MANAGER_DECISION_LABELS,
   MANAGER_WPA_SHARE_BY_DECISION_TYPE,
   RESOLUTION_ENDPOINT_BY_DECISION_TYPE,
@@ -82,6 +86,7 @@ interface BuildDecisionInput {
   resolved: boolean;
   resolvedAtEventId?: string;
   resolutionWindow: ManagerDecisionResolutionWindow;
+  explanationMetadata?: ManagerDecisionExplanationMetadata;
   derivedFromFields: string[];
   decisionKeySuffix?: string;
   manuallyPinned?: boolean;
@@ -515,7 +520,15 @@ function buildAtBatDecision(params: {
       : undefined,
     decisionType,
   });
-  const trackedPlayerIds = uniqueStrings(params.involvedPlayerIds);
+  const involvedPlayerIds = uniqueStrings(params.involvedPlayerIds);
+  const trackedPlayerIds =
+    decisionType === "intentional_walk"
+      ? uniqueStrings([event.batterId])
+      : involvedPlayerIds;
+  const trackedRunnerIds =
+    decisionType === "intentional_walk"
+      ? uniqueStrings([event.batterId])
+      : trackedPlayerIds;
 
   return buildDecisionRecord({
     gameId: params.gameId,
@@ -539,7 +552,7 @@ function buildAtBatDecision(params: {
       awayScore: event.awayScore,
     }),
     leverageIndex: event.leverageIndex,
-    involvedPlayerIds: trackedPlayerIds,
+    involvedPlayerIds,
     window,
     resolved: resolvesSameEvent,
     resolvedAtEventId: resolvesSameEvent ? event.eventId : undefined,
@@ -550,9 +563,17 @@ function buildAtBatDecision(params: {
       startSnapshotSource: "pre_event",
       expectedEndpoint,
       trackedPlayerIds,
-      trackedRunnerIds: trackedPlayerIds,
+      trackedRunnerIds,
       maxEventIndex: resolvesSameEvent ? event.eventIndex : undefined,
     }),
+    explanationMetadata:
+      decisionType === "intentional_walk"
+        ? buildIntentionalWalkExplanationMetadata({
+            ibbEvent: event,
+            walkedRunnerId: event.batterId,
+            walkedRunnerName: event.batterName,
+          })
+        : undefined,
     derivedFromFields: params.derivedFromFields,
     decisionKeySuffix: params.decisionIdSuffix,
     manuallyPinned: event.enrichment?.managerDecisionSource === "manual_edit",
@@ -948,6 +969,7 @@ interface ResolutionEndpoint {
   eventIds: string[];
   eventIndex: number;
   homeWinProbabilityAfter: number;
+  explanationMetadata?: ManagerDecisionExplanationMetadata;
 }
 
 function resolveManagerDecisionWindows(
@@ -982,24 +1004,7 @@ function resolveManagerDecisionWindow(
     atBatById,
   );
   if (!endpoint) {
-    return {
-      ...decision,
-      teamWinProbabilityAfter: undefined,
-      rawWindowWpa: undefined,
-      managerWpa: undefined,
-      resolved: false,
-      resolvedAtEventId: undefined,
-      resolutionWindow: {
-        ...window,
-        status: "pending",
-        maxEventIndex: undefined,
-      },
-      linkedEventIds: uniqueStrings([decision.decisionEventId]),
-      derivation: {
-        ...decision.derivation,
-        derivedFromEventIds: uniqueStrings([decision.decisionEventId]),
-      },
-    };
+    return markDecisionPending(decision, context);
   }
 
   return resolveDecisionAtEndpoint(decision, context, endpoint);
@@ -1037,6 +1042,8 @@ function resolveDecisionAtEndpoint(
     managerWpa: roundWpa(rawWindowWpa * share),
     resolved: true,
     resolvedAtEventId: endpoint.eventId,
+    explanationMetadata:
+      endpoint.explanationMetadata ?? decision.explanationMetadata,
     resolutionWindow: decision.resolutionWindow
       ? {
           ...decision.resolutionWindow,
@@ -1051,7 +1058,92 @@ function resolveDecisionAtEndpoint(
   };
 }
 
+function markDecisionPending(
+  decision: ManagerDecisionRecord,
+  context: ResolveDecisionWindowsContext,
+): ManagerDecisionRecord {
+  const nextBatterPa =
+    decision.decisionType === "intentional_walk"
+      ? findNextPlateAppearanceAfterDecision(decision, context)
+      : undefined;
+  const linkedEventIds =
+    decision.decisionType === "intentional_walk"
+      ? uniqueStrings([decision.decisionEventId, nextBatterPa?.eventId])
+      : uniqueStrings([decision.decisionEventId]);
+  const explanationMetadata = nextBatterPa
+    ? buildIntentionalWalkExplanationMetadata({
+        decision,
+        nextBatterPa,
+      })
+    : decision.explanationMetadata;
+
+  return {
+    ...decision,
+    teamWinProbabilityAfter: undefined,
+    rawWindowWpa: undefined,
+    managerWpa: undefined,
+    resolved: false,
+    resolvedAtEventId: undefined,
+    explanationMetadata,
+    resolutionWindow: decision.resolutionWindow
+      ? {
+          ...decision.resolutionWindow,
+          status: "pending",
+          maxEventIndex: undefined,
+        }
+      : undefined,
+    linkedEventIds,
+    derivation: {
+      ...decision.derivation,
+      derivedFromEventIds: linkedEventIds,
+    },
+  };
+}
+
 function findResolutionEndpoint(
+  decision: ManagerDecisionRecord,
+  context: ResolveDecisionWindowsContext,
+  timeline: TimelineEntry[],
+  atBatById: Map<string, AtBatEvent>,
+): ResolutionEndpoint | null {
+  switch (getDecisionHorizon(decision.decisionType)) {
+    case "single_play":
+      return findSinglePlayResolutionEndpoint(decision, timeline);
+    case "matchup":
+      return findMatchupResolutionEndpoint(
+        decision,
+        context,
+        timeline,
+        atBatById,
+      );
+    case "inning_consequence":
+      return findInningConsequenceResolutionEndpoint(
+        decision,
+        context,
+        timeline,
+      );
+    case "personnel_stint":
+      return findPersonnelStintResolutionEndpoint(decision, timeline);
+    case "lineup_baseline":
+      return findGameEndEndpoint(decision, context, timeline);
+    default:
+      return null;
+  }
+}
+
+function findSinglePlayResolutionEndpoint(
+  decision: ManagerDecisionRecord,
+  timeline: TimelineEntry[],
+): ResolutionEndpoint | null {
+  switch (decision.resolutionWindow?.expectedEndpoint) {
+    case "runner_terminal":
+      return findRunnerTerminalEndpoint(decision, timeline);
+    default:
+      return null;
+  }
+}
+
+function findMatchupResolutionEndpoint(
   decision: ManagerDecisionRecord,
   context: ResolveDecisionWindowsContext,
   timeline: TimelineEntry[],
@@ -1060,17 +1152,7 @@ function findResolutionEndpoint(
   switch (decision.resolutionWindow?.expectedEndpoint) {
     case "next_pa":
     case "same_player_pa":
-      return (
-        findNextPlateAppearanceEndpoint(decision, context) ??
-        findHalfInningEndEndpoint(decision, timeline) ??
-        findGameEndEndpoint(decision, context, timeline)
-      );
-    case "runner_terminal":
-      return (
-        findRunnerTerminalEndpoint(decision, timeline) ??
-        findHalfInningEndEndpoint(decision, timeline) ??
-        findGameEndEndpoint(decision, context, timeline)
-      );
+      return findNextPlateAppearanceEndpoint(decision, context);
     case "first_fielding_event": {
       const fieldingEndpoint = findFirstFieldingEndpoint(
         decision,
@@ -1078,19 +1160,54 @@ function findResolutionEndpoint(
         atBatById,
       );
       if (fieldingEndpoint) return fieldingEndpoint;
-      if (decision.decisionType === "defensive_alignment") return null;
+
+      // Defensive substitutions and position changes historically close at
+      // half-inning/game end when no first fielding touch is logged. Keep that
+      // compatibility shim explicit while all other matchup horizons stay open.
+      if (!usesDefensiveDeploymentFallback(decision.decisionType)) {
+        return null;
+      }
+
       return (
         findHalfInningEndEndpoint(decision, timeline) ??
         findGameEndEndpoint(decision, context, timeline)
       );
     }
-    case "half_inning_end":
-      return (
-        findHalfInningEndEndpoint(decision, timeline) ??
-        findGameEndEndpoint(decision, context, timeline)
+    default:
+      return null;
+  }
+}
+
+function findInningConsequenceResolutionEndpoint(
+  decision: ManagerDecisionRecord,
+  context: ResolveDecisionWindowsContext,
+  timeline: TimelineEntry[],
+): ResolutionEndpoint | null {
+  if (decision.decisionType !== "intentional_walk") {
+    return null;
+  }
+
+  switch (decision.resolutionWindow?.expectedEndpoint) {
+    case "runner_consequence":
+    case "runner_terminal":
+    case "next_pa":
+      return findIntentionalWalkConsequenceEndpoint(
+        decision,
+        context,
+        timeline,
       );
-    case "game_end":
-      return findGameEndEndpoint(decision, context, timeline);
+    default:
+      return null;
+  }
+}
+
+function findPersonnelStintResolutionEndpoint(
+  decision: ManagerDecisionRecord,
+  timeline: TimelineEntry[],
+): ResolutionEndpoint | null {
+  switch (decision.resolutionWindow?.expectedEndpoint) {
+    case "runner_terminal":
+      return findRunnerTerminalEndpoint(decision, timeline);
     default:
       return null;
   }
@@ -1114,14 +1231,14 @@ function findNextPlateAppearanceEndpoint(
       decision.decisionType === "pitching_change" ||
       decision.decisionType === "leave_pitcher_in"
     ) {
-      return trackedPlayerIds.size === 0 || trackedPlayerIds.has(event.pitcherId);
+      return trackedPlayerIds.has(event.pitcherId);
     }
 
     if (
       decision.decisionType === "pinch_hitter" ||
       decision.decisionType === "let_batter_hit"
     ) {
-      return trackedPlayerIds.size === 0 || trackedPlayerIds.has(event.batterId);
+      return trackedPlayerIds.has(event.batterId);
     }
 
     return true;
@@ -1163,6 +1280,192 @@ function findRunnerTerminalEndpoint(
     ) {
       return endpointFromTimelineEntry(entry);
     }
+  }
+
+  return null;
+}
+
+function findIntentionalWalkConsequenceEndpoint(
+  decision: ManagerDecisionRecord,
+  context: ResolveDecisionWindowsContext,
+  timeline: TimelineEntry[],
+): ResolutionEndpoint | null {
+  const walkedRunnerId = getTrackedIntentionalWalkRunnerId(decision);
+  if (!walkedRunnerId) return null;
+
+  const startIndex = decision.resolutionWindow?.startEventIndex ?? -1;
+  const decisionEntry =
+    timeline.find(
+      (entry) =>
+        entry.eventId === decision.decisionEventId &&
+        entry.eventIndex === startIndex &&
+        isSameHalf(decision, entry.inning, entry.halfInning),
+    ) ?? null;
+  let lastSameHalfEntry: TimelineEntry | null = decisionEntry;
+
+  if (decisionEntry) {
+    const sameEventConsequence = intentionalWalkConsequenceFromEntry(
+      decisionEntry,
+      walkedRunnerId,
+    );
+    const sameEventInningEnded =
+      decisionEntry.outsAfter >= 3 || isWalkOffTimelineEntry(decisionEntry);
+
+    if (sameEventConsequence || sameEventInningEnded) {
+      return endpointFromIntentionalWalkEntry({
+        decision,
+        context,
+        entry: decisionEntry,
+        finalConsequence: sameEventConsequence ?? "stranded",
+        inningEnded: sameEventInningEnded,
+      });
+    }
+  }
+
+  for (const entry of timeline) {
+    if (entry.eventIndex <= startIndex) continue;
+
+    if (!isSameHalf(decision, entry.inning, entry.halfInning)) {
+      return lastSameHalfEntry
+        ? endpointFromIntentionalWalkEntry({
+            decision,
+            context,
+            entry: lastSameHalfEntry,
+            finalConsequence: "stranded",
+            inningEnded: true,
+          })
+        : null;
+    }
+
+    lastSameHalfEntry = entry;
+    const terminalConsequence = intentionalWalkConsequenceFromEntry(
+      entry,
+      walkedRunnerId,
+    );
+    const inningEnded = entry.outsAfter >= 3 || isWalkOffTimelineEntry(entry);
+
+    if (terminalConsequence || inningEnded) {
+      return endpointFromIntentionalWalkEntry({
+        decision,
+        context,
+        entry,
+        finalConsequence: terminalConsequence ?? "stranded",
+        inningEnded,
+      });
+    }
+  }
+
+  if (context.gameEnded && lastSameHalfEntry) {
+    return endpointFromIntentionalWalkEntry({
+      decision,
+      context,
+      entry: lastSameHalfEntry,
+      finalConsequence: "stranded",
+      inningEnded: true,
+    });
+  }
+
+  return null;
+}
+
+function endpointFromIntentionalWalkEntry(input: {
+  decision: ManagerDecisionRecord;
+  context: ResolveDecisionWindowsContext;
+  entry: TimelineEntry;
+  finalConsequence: IntentionalWalkConsequenceStatus;
+  inningEnded: boolean;
+}): ResolutionEndpoint {
+  const endpoint = endpointFromTimelineEntry(input.entry);
+  const nextBatterPa = findNextPlateAppearanceAfterDecision(
+    input.decision,
+    input.context,
+    endpoint.eventIndex,
+  );
+
+  return {
+    ...endpoint,
+    eventIds: uniqueStrings([nextBatterPa?.eventId, ...endpoint.eventIds]),
+    explanationMetadata: buildIntentionalWalkExplanationMetadata({
+      decision: input.decision,
+      nextBatterPa,
+      finalConsequenceEventId: endpoint.eventId,
+      finalConsequence: input.finalConsequence,
+      inningEnded: input.inningEnded,
+    }),
+  };
+}
+
+function intentionalWalkConsequenceFromEntry(
+  entry: TimelineEntry,
+  walkedRunnerId: string,
+): IntentionalWalkConsequenceStatus | null {
+  if (entry.atBat) {
+    return intentionalWalkConsequenceFromAtBat(
+      entry.atBat,
+      walkedRunnerId,
+    );
+  }
+
+  if (entry.betweenPlay) {
+    return intentionalWalkConsequenceFromBetweenPlay(
+      entry.betweenPlay,
+      walkedRunnerId,
+    );
+  }
+
+  return null;
+}
+
+function isWalkOffTimelineEntry(entry: TimelineEntry): boolean {
+  return entry.atBat?.isWalkOff === true;
+}
+
+function intentionalWalkConsequenceFromAtBat(
+  event: AtBatEvent,
+  walkedRunnerId: string,
+): IntentionalWalkConsequenceStatus | null {
+  const runnerOutcome = event.runnerOutcomes?.find(
+    (outcome) => outcome.runnerId === walkedRunnerId,
+  );
+
+  if (
+    runScoredByRunner(event, walkedRunnerId) ||
+    runnerOutcome?.toBase === "home" ||
+    (runnerStateContains(event.runners, walkedRunnerId) &&
+      (event.result === "HR" || event.result === "ITPHR"))
+  ) {
+    return "scored";
+  }
+
+  if (runnerOutcome?.toBase === "out") return "out";
+  if (runnerOutcome?.toBase === "end") return "removed";
+
+  if (
+    runnerStateContains(event.runners, walkedRunnerId) &&
+    !runnerStateContains(event.runnersAfter, walkedRunnerId) &&
+    event.outsAfter < 3
+  ) {
+    return "removed";
+  }
+
+  return null;
+}
+
+function intentionalWalkConsequenceFromBetweenPlay(
+  event: BetweenPlayEvent,
+  walkedRunnerId: string,
+): IntentionalWalkConsequenceStatus | null {
+  const action = event.runnerAction;
+  if (action?.runnerId === walkedRunnerId) {
+    if (action.outcome === "out") return "out";
+    if (action.toBase === 4) return "scored";
+  }
+
+  if (
+    event.substitution?.subType === "pinch_run" &&
+    event.substitution.outPlayerId === walkedRunnerId
+  ) {
+    return "removed";
   }
 
   return null;
@@ -1339,10 +1642,104 @@ function endpointFromTimelineEntry(entry: TimelineEntry): ResolutionEndpoint {
   };
 }
 
+function getTrackedIntentionalWalkRunnerId(
+  decision: ManagerDecisionRecord,
+): string | undefined {
+  return (
+    decision.resolutionWindow?.trackedRunnerIds[0] ??
+    decision.explanationMetadata?.intentionalWalk?.walkedRunnerId ??
+    decision.involvedPlayerIds[0]
+  );
+}
+
+function findNextPlateAppearanceAfterDecision(
+  decision: ManagerDecisionRecord,
+  context: ResolveDecisionWindowsContext,
+  maxEventIndex?: number,
+): AtBatEvent | undefined {
+  const startIndex = decision.resolutionWindow?.startEventIndex ?? -1;
+
+  return context.atBatEvents.find((event) => {
+    if (event.eventIndex <= startIndex) return false;
+    if (maxEventIndex !== undefined && event.eventIndex > maxEventIndex) {
+      return false;
+    }
+    if (!isCompleteAtBatWindowEvent(event)) return false;
+    return isSameHalf(decision, event.inning, event.halfInning);
+  });
+}
+
+function buildIntentionalWalkExplanationMetadata(input: {
+  ibbEvent?: AtBatEvent;
+  decision?: ManagerDecisionRecord;
+  walkedRunnerId?: string;
+  walkedRunnerName?: string;
+  nextBatterPa?: AtBatEvent;
+  finalConsequenceEventId?: string;
+  finalConsequence?: IntentionalWalkConsequenceStatus;
+  inningEnded?: boolean;
+}): ManagerDecisionExplanationMetadata | undefined {
+  const existing = input.decision?.explanationMetadata?.intentionalWalk;
+  const ibbEventId =
+    input.ibbEvent?.eventId ??
+    existing?.ibbEventId ??
+    input.decision?.decisionEventId ??
+    input.decision?.resolutionWindow?.startEventId;
+  const walkedRunnerId =
+    input.walkedRunnerId ??
+    existing?.walkedRunnerId ??
+    (input.decision
+      ? getTrackedIntentionalWalkRunnerId(input.decision)
+      : undefined);
+
+  if (!ibbEventId || !walkedRunnerId) {
+    return input.decision?.explanationMetadata;
+  }
+
+  return {
+    intentionalWalk: {
+      ibbEventId,
+      walkedRunnerId,
+      walkedRunnerName:
+        input.walkedRunnerName ??
+        existing?.walkedRunnerName ??
+        input.ibbEvent?.batterName,
+      walkedRunnerStartBase:
+        input.ibbEvent && input.walkedRunnerId
+          ? findRunnerBase(input.ibbEvent.runnersAfter, input.walkedRunnerId)
+          : existing?.walkedRunnerStartBase,
+      nextBatterEventId:
+        input.nextBatterPa?.eventId ?? existing?.nextBatterEventId,
+      nextBatterId: input.nextBatterPa?.batterId ?? existing?.nextBatterId,
+      nextBatterName:
+        input.nextBatterPa?.batterName ?? existing?.nextBatterName,
+      nextBatterResult:
+        input.nextBatterPa?.result ?? existing?.nextBatterResult,
+      finalConsequenceEventId:
+        input.finalConsequenceEventId ?? existing?.finalConsequenceEventId,
+      finalConsequence:
+        input.finalConsequence ?? existing?.finalConsequence,
+      inningEnded: input.inningEnded ?? existing?.inningEnded,
+    },
+  };
+}
+
 function getExpectedEndpoint(
   decisionType: ManagerDecisionType,
 ): ManagerDecisionResolutionEndpoint {
   return RESOLUTION_ENDPOINT_BY_DECISION_TYPE[decisionType] ?? "same_event";
+}
+
+function getDecisionHorizon(
+  decisionType: ManagerDecisionType,
+): ManagerDecisionHorizon {
+  return DECISION_HORIZON_BY_DECISION_TYPE[decisionType] ?? "single_play";
+}
+
+function usesDefensiveDeploymentFallback(
+  decisionType: ManagerDecisionType,
+): boolean {
+  return decisionType === "defensive_sub" || decisionType === "position_change";
 }
 
 function buildResolutionWindow(
@@ -1452,6 +1849,7 @@ function buildDecisionRecord(input: BuildDecisionInput): ManagerDecisionRecord {
     resolved: input.resolved,
     resolvedAtEventId: input.resolvedAtEventId,
     resolutionWindow: input.resolutionWindow,
+    explanationMetadata: input.explanationMetadata,
     displayTitle,
     displaySummary: `${displayTitle} for ${input.teamId}`,
     derivation: {
@@ -1676,6 +2074,30 @@ function runnerStateToBases(runners: RunnerState) {
     second: !!runners.second,
     third: !!runners.third,
   };
+}
+
+function runnerStateContains(runners: RunnerState, runnerId: string): boolean {
+  return (
+    runners.first?.runnerId === runnerId ||
+    runners.second?.runnerId === runnerId ||
+    runners.third?.runnerId === runnerId
+  );
+}
+
+function findRunnerBase(
+  runners: RunnerState,
+  runnerId: string,
+): "first" | "second" | "third" | undefined {
+  if (runners.first?.runnerId === runnerId) return "first";
+  if (runners.second?.runnerId === runnerId) return "second";
+  if (runners.third?.runnerId === runnerId) return "third";
+  return undefined;
+}
+
+function runScoredByRunner(event: AtBatEvent, runnerId: string): boolean {
+  return Array.isArray(event.runsScored)
+    ? event.runsScored.includes(runnerId)
+    : false;
 }
 
 function formatRunnerState(runners: RunnerState): string {

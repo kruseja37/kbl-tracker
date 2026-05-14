@@ -14,6 +14,8 @@ import {
   type PersistedGameState,
 } from "./gameStorage";
 import type {
+  ManagerDeploymentLinkedOutcome,
+  ManagerDeploymentLinkedOutcomeRole,
   ManagerDeploymentRole,
   ManagerDeploymentStintRecord,
   ManagerDecisionRecord,
@@ -49,6 +51,8 @@ export const MANAGER_DEPLOYMENT_SHARE_BY_ROLE: Record<
   pinch_runner: 0.2,
   defensive_position: 0.2,
   pitcher: 0.15,
+  kept_position_player_in: 0.15,
+  kept_pitcher_in: 0.15,
   kept_in: 0.15,
   manual_deployment: 0.1,
 };
@@ -60,6 +64,8 @@ export const MANAGER_DEPLOYMENT_CAP_BY_ROLE: Record<
   pinch_runner: 0.125,
   defensive_position: 0.15,
   pitcher: 0.2,
+  kept_position_player_in: 0.15,
+  kept_pitcher_in: 0.15,
   kept_in: 0.15,
   manual_deployment: 0.1,
 };
@@ -80,6 +86,42 @@ export function calculateManagerDeploymentWpa(
     cap,
     managerDeploymentWpa: clamp(roundWpa(rawLinkedWpa * managerShare), -cap, cap),
   };
+}
+
+export function getManagerDeploymentCreditWeight(
+  deploymentRole: ManagerDeploymentRole,
+  creditRole: ManagerDeploymentLinkedOutcomeRole,
+): number {
+  if (deploymentRole === "kept_position_player_in") {
+    if (creditRole === "batting" || creditRole === "baserunning") return 1;
+    if (creditRole === "fielding") return 0.75;
+    return 0;
+  }
+
+  if (deploymentRole === "kept_pitcher_in") {
+    return creditRole === "pitching" ? 1 : 0;
+  }
+
+  if (deploymentRole === "pitcher") {
+    return creditRole === "pitching" ? 1 : 0;
+  }
+
+  if (deploymentRole === "defensive_position") {
+    return creditRole === "fielding" ? 1 : 0;
+  }
+
+  if (
+    deploymentRole === "pinch_hitter_remaining" ||
+    deploymentRole === "pinch_runner"
+  ) {
+    return creditRole === "batting" ||
+      creditRole === "baserunning" ||
+      creditRole === "fielding"
+      ? 1
+      : 0;
+  }
+
+  return creditRole === "managing" ? 0 : 1;
 }
 
 export interface CommittedManagerDecisionState {
@@ -290,6 +332,9 @@ export function deriveManagerDeploymentStintRecords(
     const event = entry.betweenPlay;
     const substitution = event.substitution;
     const pitcherChange = event.pitcherChange;
+    const substitutionOpeningRole = substitution
+      ? deploymentRoleForSubstitution(substitution.subType)
+      : null;
 
     if (
       substitution?.subType === "position_change" &&
@@ -298,6 +343,16 @@ export function deriveManagerDeploymentStintRecords(
       closeMatching(substitution.inPlayerId, event, "role_change");
     } else if (substitution?.outPlayerId) {
       closeMatching(substitution.outPlayerId, event, "removed");
+    }
+    if (
+      substitutionOpeningRole === "defensive_position" &&
+      substitution?.inPlayerId &&
+      substitution.inPlayerId !== substitution.outPlayerId
+    ) {
+      closeMatching(substitution.inPlayerId, event, "role_change");
+    }
+    if (pitcherChange?.incomingPitcherId) {
+      closeMatching(pitcherChange.incomingPitcherId, event, "role_change");
     }
 
     const opening = buildDeploymentOpening(input, event);
@@ -349,17 +404,38 @@ export function deriveManagerDeploymentStintRecords(
       stint,
       input,
     );
-    const linkedCredits = credits.filter((credit) =>
-      isCreditLinkedToDeploymentStint({
-        credit,
-        stint,
-        eventIndexById,
-        tacticalExclusionEventIds,
-        fieldingEventsByAtBat,
-      }),
-    );
+    const linkedOutcomes = credits.flatMap((credit) => {
+      if (
+        !isCreditLinkedToDeploymentStint({
+          credit,
+          stint,
+          eventIndexById,
+          tacticalExclusionEventIds,
+          fieldingEventsByAtBat,
+        })
+      ) {
+        return [];
+      }
+
+      const weight = getManagerDeploymentCreditWeight(
+        stint.deploymentRole,
+        credit.role,
+      );
+      const outcome: ManagerDeploymentLinkedOutcome = {
+        eventId: credit.eventId,
+        source: credit.source,
+        role: credit.role,
+        rawWpa: roundWpa(credit.wpa),
+        weight,
+        weightedWpa: roundWpa(credit.wpa * weight),
+      };
+      return [outcome];
+    });
     const rawLinkedWpa = roundWpa(
-      linkedCredits.reduce((sum, credit) => sum + credit.wpa, 0),
+      linkedOutcomes.reduce(
+        (sum, outcome) => sum + outcome.rawWpa * outcome.weight,
+        0,
+      ),
     );
     const { managerShare, cap, managerDeploymentWpa } =
       calculateManagerDeploymentWpa(stint.deploymentRole, rawLinkedWpa);
@@ -367,7 +443,10 @@ export function deriveManagerDeploymentStintRecords(
     return {
       stint,
       tacticalExclusionEventIds,
-      linkedEventIds: uniqueStrings(linkedCredits.map((credit) => credit.eventId)),
+      linkedEventIds: uniqueStrings(
+        linkedOutcomes.map((outcome) => outcome.eventId),
+      ),
+      linkedOutcomes,
       rawLinkedWpa,
       managerShare,
       cap,
@@ -395,6 +474,7 @@ export function deriveManagerDeploymentStintRecords(
       tacticalExclusionEventIds: row.tacticalExclusionEventIds,
       closeReason: row.stint.closeReason ?? "game_end",
       linkedEventIds: row.linkedEventIds,
+      linkedOutcomes: row.linkedOutcomes,
       rawLinkedWpa: row.rawLinkedWpa,
       managerShare: row.managerShare,
       managerDeploymentWpa: roundWpa(row.managerDeploymentWpa * teamScale),
@@ -411,6 +491,7 @@ export function deriveManagerDeploymentStintRecords(
           ...stint,
           tacticalExclusionEventIds: findTacticalExclusionEventIds(stint, input),
           linkedEventIds: [],
+          linkedOutcomes: [],
           rawLinkedWpa: 0,
           managerShare: MANAGER_DEPLOYMENT_SHARE_BY_ROLE[stint.deploymentRole],
           managerDeploymentWpa: 0,
@@ -648,12 +729,16 @@ function groupPromptedKeepCurrentDeploymentOpenings(
     });
     if (!endpoint) continue;
 
+    const role: ManagerDeploymentRole =
+      prompted.decisionType === "leave_pitcher_in"
+        ? "kept_pitcher_in"
+        : "kept_position_player_in";
     const opening: OpenDeploymentStint = {
-      stintId: `${input.gameId}:${event.eventId}:deployment:kept_in:${trackedPlayerId}`,
+      stintId: `${input.gameId}:${event.eventId}:deployment:${role}:${trackedPlayerId}`,
       gameId: input.gameId,
       managerId: prompted.managerId,
       teamId: prompted.teamId,
-      deploymentRole: "kept_in",
+      deploymentRole: role,
       playerId: trackedPlayerId,
       playerName: prompted.playerName,
       sourceEventId: event.eventId,
@@ -1244,6 +1329,9 @@ function isCreditLinkedToDeploymentStint(input: {
   if (credit.playerId !== stint.playerId || credit.teamId !== stint.teamId) {
     return false;
   }
+  if (getManagerDeploymentCreditWeight(stint.deploymentRole, credit.role) <= 0) {
+    return false;
+  }
   if (tacticalExclusionEventIds.includes(credit.eventId)) {
     return false;
   }
@@ -1259,11 +1347,7 @@ function isCreditLinkedToDeploymentStint(input: {
     return false;
   }
 
-  if (stint.deploymentRole === "pitcher") {
-    return credit.role === "pitching";
-  }
   if (stint.deploymentRole === "defensive_position") {
-    if (credit.role !== "fielding") return false;
     return (fieldingEventsByAtBat.get(credit.eventId) ?? []).some(
       (fieldingEvent) =>
         fieldingEvent.playerId === stint.playerId &&
@@ -1271,18 +1355,8 @@ function isCreditLinkedToDeploymentStint(input: {
           fieldingEvent.position === stint.trackedPosition),
     );
   }
-  if (
-    stint.deploymentRole === "pinch_hitter_remaining" ||
-    stint.deploymentRole === "pinch_runner"
-  ) {
-    return (
-      credit.role === "batting" ||
-      credit.role === "baserunning" ||
-      credit.role === "fielding"
-    );
-  }
 
-  return credit.role !== "managing";
+  return true;
 }
 
 function uniqueStrings(values: Array<string | undefined>): string[] {

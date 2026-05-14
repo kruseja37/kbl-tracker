@@ -198,6 +198,10 @@ function formatDeploymentRole(role: ManagerDeploymentStintRecord["deploymentRole
       return "Defensive position";
     case "pitcher":
       return "Pitcher";
+    case "kept_position_player_in":
+      return "Kept position player in";
+    case "kept_pitcher_in":
+      return "Kept pitcher in";
     case "kept_in":
       return "Kept in";
     case "manual_deployment":
@@ -225,6 +229,36 @@ function formatDeploymentShare(value: number): string {
 
 function formatDeploymentCap(value: number): string {
   return `+/-${value.toFixed(3)}`;
+}
+
+function formatDeploymentOutcomeWeight(weight: number): string {
+  return `${Math.round(weight * 100)}%`;
+}
+
+function formatDeploymentLinkedOutcome(
+  outcome: NonNullable<ManagerDeploymentStintRecord["linkedOutcomes"]>[number],
+): string {
+  return `${outcome.eventId} ${outcome.role} ${formatDeploymentOutcomeWeight(outcome.weight)}`;
+}
+
+function buildDeploymentLinkedSummary(stint: ManagerDeploymentStintRecord): {
+  label: "Linked outcomes" | "Linked events";
+  count: number;
+  preview: string[];
+} {
+  if (Array.isArray(stint.linkedOutcomes)) {
+    return {
+      label: "Linked outcomes",
+      count: stint.linkedOutcomes.length,
+      preview: stint.linkedOutcomes.slice(0, 3).map(formatDeploymentLinkedOutcome),
+    };
+  }
+
+  return {
+    label: "Linked events",
+    count: stint.linkedEventIds.length,
+    preview: stint.linkedEventIds.slice(0, 3),
+  };
 }
 
 export function ManagerWpaOverlay({ game, managerProfiles }: ManagerWpaOverlayProps) {
@@ -321,6 +355,7 @@ export function ManagerWpaOverlay({ game, managerProfiles }: ManagerWpaOverlayPr
                     ) : (
                       row.deploymentStints.slice(0, 3).map((stint) => {
                         const active = !isResolvedDeploymentStint(stint);
+                        const linkedSummary = buildDeploymentLinkedSummary(stint);
                         return (
                           <div
                             key={stint.stintId}
@@ -333,9 +368,9 @@ export function ManagerWpaOverlay({ game, managerProfiles }: ManagerWpaOverlayPr
                             <div>Opened: Event {stint.openedAtEventIndex}</div>
                             <div>Closed: {formatDeploymentClosed(stint)}</div>
                             <div>
-                              Linked outcomes: {stint.linkedEventIds.length}
-                              {stint.linkedEventIds.length > 0
-                                ? ` (${stint.linkedEventIds.slice(0, 3).join(", ")})`
+                              {linkedSummary.label}: {linkedSummary.count}
+                              {linkedSummary.preview.length > 0
+                                ? ` (${linkedSummary.preview.join(", ")})`
                                 : ""}
                             </div>
                             <div>Raw WPA: {formatSignedManagerWpa(stint.rawLinkedWpa)}</div>

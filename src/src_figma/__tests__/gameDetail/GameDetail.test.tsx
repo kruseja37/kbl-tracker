@@ -293,7 +293,7 @@ describe("GameDetail Manager WPA overlay", () => {
             gameId: "game-detail-1",
             managerId: "away-manager",
             teamId: "away",
-            deploymentRole: "pinch_hitter_remaining",
+            deploymentRole: "kept_position_player_in",
             playerId: "bench-one",
             playerName: "Bench One",
             sourceEventId: "bp-1",
@@ -303,10 +303,28 @@ describe("GameDetail Manager WPA overlay", () => {
             closedAtEventIndex: 2,
             closeReason: "game_end",
             linkedEventIds: ["ab-2"],
+            linkedOutcomes: [
+              {
+                eventId: "ab-2",
+                source: "at_bat",
+                role: "batting",
+                rawWpa: 0.05,
+                weight: 1,
+                weightedWpa: 0.05,
+              },
+              {
+                eventId: "ab-2",
+                source: "at_bat",
+                role: "fielding",
+                rawWpa: 0.04,
+                weight: 0.75,
+                weightedWpa: 0.03,
+              },
+            ],
             rawLinkedWpa: 0.08,
             managerShare: 0.15,
             managerDeploymentWpa: 0.012,
-            cap: 0.1,
+            cap: 0.15,
             confidence: "medium",
           },
         ],
@@ -325,13 +343,15 @@ describe("GameDetail Manager WPA overlay", () => {
     expect(screen.getByTestId("manager-lineup-delta-details-away")).toHaveTextContent("Projected opportunity cost: -0.020");
     expect(screen.getByTestId("manager-lineup-delta-details-away")).toHaveTextContent("Actual vs optimal projection: +0.368");
     const deploymentDetails = screen.getByTestId("manager-deployment-stint-details-away");
-    expect(deploymentDetails).toHaveTextContent("Pinch hitter remaining: Bench One");
+    expect(deploymentDetails).toHaveTextContent("Kept position player in: Bench One");
     expect(deploymentDetails).toHaveTextContent("Opened: Event 1");
     expect(deploymentDetails).toHaveTextContent("Closed: Event 2 (Game End)");
-    expect(deploymentDetails).toHaveTextContent("Linked outcomes: 1 (ab-2)");
+    expect(deploymentDetails).toHaveTextContent(
+      "Linked outcomes: 2 (ab-2 batting 100%, ab-2 fielding 75%)",
+    );
     expect(deploymentDetails).toHaveTextContent("Raw WPA: +0.080");
     expect(deploymentDetails).toHaveTextContent("Share: 15%");
-    expect(deploymentDetails).toHaveTextContent("Cap: +/-0.100");
+    expect(deploymentDetails).toHaveTextContent("Cap: +/-0.150");
     expect(deploymentDetails).toHaveTextContent("Deployment WPA: +0.012");
   });
 
@@ -371,6 +391,7 @@ describe("GameDetail Manager WPA overlay", () => {
     const deploymentDetails = screen.getByTestId("manager-deployment-stint-details-away");
     expect(deploymentDetails).toHaveTextContent("Pitcher: Away Reliever");
     expect(deploymentDetails).toHaveTextContent("Closed: Active");
+    expect(deploymentDetails).toHaveTextContent("Linked events: 1 (ab-6)");
     expect(deploymentDetails).toHaveTextContent("Active, excluded from resolved total");
     expect(deploymentDetails).toHaveTextContent("Deployment WPA: +0.000");
   });

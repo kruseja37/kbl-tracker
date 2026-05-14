@@ -352,6 +352,34 @@ describe("Almanac Manager WPA aggregation", () => {
     expect(leaderboards.managerValue[0].value).toBe(0.19);
   });
 
+  test("ignores active or non-numeric deployment stints in manager aggregates", () => {
+    const [aggregate] = aggregateCommittedManagerAlmanac([
+      createGame({
+        managerDeploymentStints: [
+          createDeploymentStint({ managerDeploymentWpa: 0.03 }),
+          createDeploymentStint({
+            stintId: "game-1:away:active-deployment",
+            closeReason: undefined,
+            closedAtEventId: undefined,
+            closedAtEventIndex: undefined,
+            managerDeploymentWpa: 0.09,
+          }),
+          createDeploymentStint({
+            stintId: "game-1:away:bad-deployment",
+            managerDeploymentWpa: Number.NaN,
+          }),
+        ],
+      }),
+    ]);
+
+    expect(aggregate).toMatchObject({
+      deploymentWpa: 0.03,
+      managerValue: 0.03,
+      decisionCount: 1,
+      deploymentStintCount: 1,
+    });
+  });
+
   test("applies team, mode, and instance filters", () => {
     const games = [
       createGame({

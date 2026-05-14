@@ -1,4 +1,5 @@
 import type {
+  ManagerDecisionHorizon,
   ManagerDecisionResolutionEndpoint,
   ManagerDecisionType,
 } from "../types/managerWpa";
@@ -33,6 +34,7 @@ export interface ManagerDecisionRegistryEntry {
   actingTeam: ManagerDecisionActingTeam;
   captureMode: ManagerDecisionCaptureMode;
   layer: ManagerDecisionLayer;
+  horizon: ManagerDecisionHorizon;
   resolutionEndpoint: ManagerDecisionResolutionEndpoint;
   managerShare?: number;
   cap?: number;
@@ -72,6 +74,7 @@ export const MANAGER_DECISION_REGISTRY: Record<
     actingTeam: "pre_game",
     captureMode: "automatic",
     layer: "lineup_delta",
+    horizon: "lineup_baseline",
     resolutionEndpoint: "game_end",
     managerShare: 0.25,
     cap: 0.75,
@@ -86,6 +89,7 @@ export const MANAGER_DECISION_REGISTRY: Record<
     actingTeam: "defense",
     captureMode: "automatic",
     layer: "tactical_deployment",
+    horizon: "matchup",
     resolutionEndpoint: "next_pa",
     managerShare: 0.25,
     editable: true,
@@ -99,6 +103,7 @@ export const MANAGER_DECISION_REGISTRY: Record<
     actingTeam: "defense",
     captureMode: "prompted",
     layer: "tactical_deployment",
+    horizon: "matchup",
     resolutionEndpoint: "next_pa",
     managerShare: 0.2,
     editable: true,
@@ -112,6 +117,7 @@ export const MANAGER_DECISION_REGISTRY: Record<
     actingTeam: "offense",
     captureMode: "automatic",
     layer: "tactical_deployment",
+    horizon: "matchup",
     resolutionEndpoint: "next_pa",
     managerShare: 0.25,
     editable: true,
@@ -125,6 +131,7 @@ export const MANAGER_DECISION_REGISTRY: Record<
     actingTeam: "offense",
     captureMode: "prompted",
     layer: "tactical_deployment",
+    horizon: "matchup",
     resolutionEndpoint: "next_pa",
     managerShare: 0.2,
     editable: true,
@@ -138,6 +145,7 @@ export const MANAGER_DECISION_REGISTRY: Record<
     actingTeam: "offense",
     captureMode: "automatic",
     layer: "tactical_deployment",
+    horizon: "personnel_stint",
     resolutionEndpoint: "runner_terminal",
     managerShare: 0.25,
     editable: true,
@@ -151,6 +159,7 @@ export const MANAGER_DECISION_REGISTRY: Record<
     actingTeam: "defense",
     captureMode: "automatic",
     layer: "tactical_deployment",
+    horizon: "matchup",
     resolutionEndpoint: "first_fielding_event",
     managerShare: 0.2,
     editable: true,
@@ -164,6 +173,7 @@ export const MANAGER_DECISION_REGISTRY: Record<
     actingTeam: "defense",
     captureMode: "automatic",
     layer: "tactical_deployment",
+    horizon: "matchup",
     resolutionEndpoint: "first_fielding_event",
     managerShare: 0.1,
     editable: true,
@@ -177,7 +187,8 @@ export const MANAGER_DECISION_REGISTRY: Record<
     actingTeam: "defense",
     captureMode: "automatic",
     layer: "tactical",
-    resolutionEndpoint: "next_pa",
+    horizon: "inning_consequence",
+    resolutionEndpoint: "runner_consequence",
     managerShare: 1,
     editable: false,
     doubleCountingExclusions: ["player_kbl_wpa"],
@@ -190,6 +201,7 @@ export const MANAGER_DECISION_REGISTRY: Record<
     actingTeam: "offense",
     captureMode: "automatic",
     layer: "tactical",
+    horizon: "single_play",
     resolutionEndpoint: "same_event",
     managerShare: 0.35,
     editable: true,
@@ -203,6 +215,7 @@ export const MANAGER_DECISION_REGISTRY: Record<
     actingTeam: "offense",
     captureMode: "play_log_enhancement",
     layer: "tactical",
+    horizon: "single_play",
     resolutionEndpoint: "same_event",
     managerShare: 0.2,
     editable: true,
@@ -216,6 +229,7 @@ export const MANAGER_DECISION_REGISTRY: Record<
     actingTeam: "offense",
     captureMode: "play_log_enhancement",
     layer: "tactical",
+    horizon: "single_play",
     resolutionEndpoint: "same_event",
     managerShare: 0.35,
     editable: true,
@@ -229,6 +243,7 @@ export const MANAGER_DECISION_REGISTRY: Record<
     actingTeam: "offense",
     captureMode: "automatic",
     layer: "tactical",
+    horizon: "single_play",
     resolutionEndpoint: "same_event",
     managerShare: 0.35,
     editable: true,
@@ -242,6 +257,7 @@ export const MANAGER_DECISION_REGISTRY: Record<
     actingTeam: "offense",
     captureMode: "automatic",
     layer: "tactical",
+    horizon: "single_play",
     resolutionEndpoint: "same_event",
     managerShare: 0.5,
     editable: true,
@@ -255,6 +271,7 @@ export const MANAGER_DECISION_REGISTRY: Record<
     actingTeam: "offense",
     captureMode: "play_log_enhancement",
     layer: "tactical",
+    horizon: "single_play",
     resolutionEndpoint: "same_event",
     managerShare: 0.35,
     editable: true,
@@ -268,6 +285,7 @@ export const MANAGER_DECISION_REGISTRY: Record<
     actingTeam: "defense",
     captureMode: "manual",
     layer: "tactical",
+    horizon: "matchup",
     resolutionEndpoint: "first_fielding_event",
     managerShare: 0.1,
     editable: true,
@@ -281,6 +299,7 @@ export const MANAGER_DECISION_REGISTRY: Record<
     actingTeam: "manual",
     captureMode: "manual",
     layer: "manual",
+    horizon: "single_play",
     resolutionEndpoint: "same_event",
     editable: true,
     doubleCountingExclusions: ["automatic_derivation"],
@@ -316,3 +335,12 @@ export const RESOLUTION_ENDPOINT_BY_DECISION_TYPE: Partial<
     MANAGER_DECISION_REGISTRY[decisionType].resolutionEndpoint,
   ]),
 ) as Partial<Record<ManagerDecisionType, ManagerDecisionResolutionEndpoint>>;
+
+export const DECISION_HORIZON_BY_DECISION_TYPE: Partial<
+  Record<ManagerDecisionType, ManagerDecisionHorizon>
+> = Object.fromEntries(
+  ALL_MANAGER_DECISION_TYPES.map((decisionType) => [
+    decisionType,
+    MANAGER_DECISION_REGISTRY[decisionType].horizon,
+  ]),
+) as Partial<Record<ManagerDecisionType, ManagerDecisionHorizon>>;

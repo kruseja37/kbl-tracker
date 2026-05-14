@@ -19,6 +19,7 @@ describe("manager decision registry", () => {
         actingTeam: expect.any(String),
         captureMode: expect.any(String),
         layer: expect.any(String),
+        horizon: expect.any(String),
         resolutionEndpoint: expect.any(String),
         editable: expect.any(Boolean),
         doubleCountingExclusions: expect.any(Array),
@@ -52,7 +53,37 @@ describe("manager decision registry", () => {
       supported: true,
       captureMode: "manual",
       layer: "tactical",
+      horizon: "matchup",
       resolutionEndpoint: "first_fielding_event",
+    });
+  });
+
+  test("assigns an explicit decision horizon to every supported decision", () => {
+    expect(
+      Object.fromEntries(
+        SUPPORTED_MANAGER_DECISION_TYPES.map((decisionType) => [
+          decisionType,
+          MANAGER_DECISION_REGISTRY[decisionType].horizon,
+        ]),
+      ),
+    ).toEqual({
+      lineup_construction: "lineup_baseline",
+      pitching_change: "matchup",
+      leave_pitcher_in: "matchup",
+      pinch_hitter: "matchup",
+      let_batter_hit: "matchup",
+      pinch_runner: "personnel_stint",
+      defensive_sub: "matchup",
+      position_change: "matchup",
+      intentional_walk: "inning_consequence",
+      steal_send: "single_play",
+      runner_hold: "single_play",
+      out_advancing_send: "single_play",
+      bunt_call: "single_play",
+      squeeze_call: "single_play",
+      hit_and_run: "single_play",
+      defensive_alignment: "matchup",
+      manual_note: "single_play",
     });
   });
 
@@ -82,5 +113,15 @@ describe("manager decision registry", () => {
 
   test("keeps hit-and-run at the agreed tactical share", () => {
     expect(MANAGER_WPA_SHARE_BY_DECISION_TYPE.hit_and_run).toBe(0.35);
+  });
+
+  test("tracks intentional walks as inning-consequence runner decisions", () => {
+    expect(MANAGER_DECISION_REGISTRY.intentional_walk).toMatchObject({
+      actingTeam: "defense",
+      horizon: "inning_consequence",
+      resolutionEndpoint: "runner_consequence",
+      managerShare: 1,
+      doubleCountingExclusions: ["player_kbl_wpa"],
+    });
   });
 });

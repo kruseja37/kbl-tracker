@@ -1150,6 +1150,17 @@ function addManagerDeploymentStintToAggregate(
   tenure.deploymentWpa += stint.managerDeploymentWpa;
 }
 
+function isResolvedManagerDeploymentStint(
+  stint: ManagerDeploymentStintRecord,
+): boolean {
+  return (
+    Number.isFinite(stint.managerDeploymentWpa) &&
+    (Boolean(stint.closeReason) ||
+      Boolean(stint.closedAtEventId) ||
+      typeof stint.closedAtEventIndex === 'number')
+  );
+}
+
 function finalizeManagerTenure(
   tenure: ManagerWorkingTenure,
 ): ManagerTeamTenureAggregate {
@@ -1452,7 +1463,10 @@ export function aggregateCommittedManagerAlmanac(
     }
 
     for (const stint of committedDeploymentStints) {
-      if (!managerRecordMatchesFilters(stint.managerId, stint.teamId, filters)) {
+      if (
+        !isResolvedManagerDeploymentStint(stint) ||
+        !managerRecordMatchesFilters(stint.managerId, stint.teamId, filters)
+      ) {
         continue;
       }
 

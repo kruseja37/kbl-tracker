@@ -104,6 +104,13 @@ export type ManagerDecisionType =
   | "defensive_alignment"
   | "manual_note";
 
+export type ManagerDecisionHorizon =
+  | "single_play"
+  | "matchup"
+  | "inning_consequence"
+  | "personnel_stint"
+  | "lineup_baseline";
+
 export type ManagerInferenceMethod =
   | "automatic"
   | "prompted"
@@ -144,10 +151,35 @@ export type ManagerDecisionResolutionEndpoint =
   | "same_event"
   | "next_pa"
   | "same_player_pa"
+  | "runner_consequence"
   | "runner_terminal"
   | "first_fielding_event"
   | "half_inning_end"
   | "game_end";
+
+export type IntentionalWalkConsequenceStatus =
+  | "scored"
+  | "out"
+  | "removed"
+  | "stranded";
+
+export interface IntentionalWalkExplanationMetadata {
+  ibbEventId: string;
+  walkedRunnerId: string;
+  walkedRunnerName?: string;
+  walkedRunnerStartBase?: "first" | "second" | "third";
+  nextBatterEventId?: string;
+  nextBatterId?: string;
+  nextBatterName?: string;
+  nextBatterResult?: string;
+  finalConsequenceEventId?: string;
+  finalConsequence?: IntentionalWalkConsequenceStatus;
+  inningEnded?: boolean;
+}
+
+export interface ManagerDecisionExplanationMetadata {
+  intentionalWalk?: IntentionalWalkExplanationMetadata;
+}
 
 export interface ManagerDecisionResolutionWindow {
   status: "pending" | "resolved";
@@ -192,6 +224,7 @@ export interface ManagerDecisionRecord {
   resolved: boolean;
   resolvedAtEventId?: string;
   resolutionWindow?: ManagerDecisionResolutionWindow;
+  explanationMetadata?: ManagerDecisionExplanationMetadata;
   displayTitle: string;
   displaySummary: string;
   derivation: ManagerDecisionDerivation;
@@ -250,8 +283,27 @@ export type ManagerDeploymentRole =
   | "pinch_runner"
   | "defensive_position"
   | "pitcher"
+  | "kept_position_player_in"
+  | "kept_pitcher_in"
   | "kept_in"
   | "manual_deployment";
+
+export type ManagerDeploymentLinkedOutcomeRole =
+  | "batting"
+  | "pitching"
+  | "catching"
+  | "fielding"
+  | "baserunning"
+  | "managing";
+
+export interface ManagerDeploymentLinkedOutcome {
+  eventId: string;
+  source: "at_bat" | "between_play";
+  role: ManagerDeploymentLinkedOutcomeRole;
+  rawWpa: number;
+  weight: number;
+  weightedWpa: number;
+}
 
 export interface ManagerDeploymentStintRecord {
   stintId: string;
@@ -269,6 +321,7 @@ export interface ManagerDeploymentStintRecord {
   closedAtEventIndex?: number;
   closeReason?: "removed" | "role_change" | "runner_terminal" | "game_end";
   linkedEventIds: string[];
+  linkedOutcomes?: ManagerDeploymentLinkedOutcome[];
   rawLinkedWpa: number;
   managerShare: number;
   managerDeploymentWpa: number;
