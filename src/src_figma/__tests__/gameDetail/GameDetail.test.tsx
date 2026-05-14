@@ -21,6 +21,7 @@ const {
   mockGetGameEvents,
   mockGetGameFieldingEvents,
   mockGetGameHeader,
+  mockListManagerProfiles,
   mockRankPlayersOfTheGame,
 } = vi.hoisted(() => ({
   mockAggregateKblWpaCredits: vi.fn(),
@@ -33,6 +34,7 @@ const {
   mockGetGameEvents: vi.fn(),
   mockGetGameFieldingEvents: vi.fn(),
   mockGetGameHeader: vi.fn(),
+  mockListManagerProfiles: vi.fn(),
   mockRankPlayersOfTheGame: vi.fn(),
 }));
 
@@ -62,6 +64,10 @@ vi.mock("../../../utils/almanacQueries", () => ({
 
 vi.mock("../../../utils/almanacStorage", () => ({
   getAllCanonicalPlayers: mockGetAllCanonicalPlayers,
+}));
+
+vi.mock("../../../utils/managerIdentityStorage", () => ({
+  listManagerProfiles: mockListManagerProfiles,
 }));
 
 vi.mock("../../../utils/eventLog", () => ({
@@ -182,6 +188,10 @@ describe("GameDetail Manager WPA overlay", () => {
     mockGetGameEvents.mockResolvedValue([]);
     mockGetGameFieldingEvents.mockResolvedValue([]);
     mockGetGameHeader.mockResolvedValue(null);
+    mockListManagerProfiles.mockResolvedValue([
+      { managerId: "away-manager", displayName: "Casey Custom" },
+      { managerId: "home-manager", displayName: "Home Boss" },
+    ]);
     mockDeriveActualAtBatWpa.mockReturnValue({ wpa: 0 });
     mockDeriveKblWpaCredits.mockReturnValue([]);
     mockAggregateKblWpaCredits.mockReturnValue([
@@ -231,6 +241,7 @@ describe("GameDetail Manager WPA overlay", () => {
 
     const overlay = await screen.findByTestId("manager-wpa-overlay");
     expect(within(overlay).getByText("MANAGER WPA OVERLAY")).toBeInTheDocument();
+    expect(screen.getByText("Casey Custom")).toBeInTheDocument();
     expect(screen.getByTestId("manager-wpa-total-away")).toHaveTextContent("+0.184");
     expect(screen.getByTestId("manager-wpa-total-home")).toHaveTextContent("-0.052");
     expect(within(screen.getByTestId("manager-wpa-card-away")).getByText("2 (1 pending)")).toBeInTheDocument();

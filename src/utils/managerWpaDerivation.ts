@@ -525,7 +525,7 @@ function buildAtBatDecision(params: {
     teamId: attribution.teamId,
     opponentTeamId: attribution.opponentTeamId,
     decisionType,
-    inferenceMethod: "automatic",
+    inferenceMethod: params.decisionSource === "manual_edit" ? "manual" : "automatic",
     decisionSource: params.decisionSource,
     confidence: params.confidence,
     inning: event.inning,
@@ -574,6 +574,25 @@ function deriveBetweenPlayManagerDecisions(
       return [];
     }
     return [buildPromptedBetweenPlayDecision({ event, input, gameId })];
+  }
+
+  if (
+    event.type === "manager_moment" &&
+    event.managerMoment?.decisionType === "defensive_alignment"
+  ) {
+    return [
+      buildBetweenPlayDecision({
+        event,
+        input,
+        gameId,
+        decisionType: "defensive_alignment",
+        decisionSource: "manual_edit",
+        confidence: "low",
+        involvedPlayerIds: [],
+        derivedFromFields: ["managerMoment.decisionType", "managerMoment.context"],
+        resolved: false,
+      }),
+    ];
   }
 
   if (event.type === "stolen_base" || event.type === "caught_stealing") {
@@ -868,7 +887,7 @@ function buildBetweenPlayDecision(params: {
     teamId: attribution.teamId,
     opponentTeamId: attribution.opponentTeamId,
     decisionType,
-    inferenceMethod: "automatic",
+    inferenceMethod: params.decisionSource === "manual_edit" ? "manual" : "automatic",
     decisionSource: params.decisionSource,
     confidence: params.confidence,
     inning: event.gameState?.inning ?? 1,
@@ -881,6 +900,7 @@ function buildBetweenPlayDecision(params: {
       homeScore: event.gameState?.score.home ?? 0,
       awayScore: event.gameState?.score.away ?? 0,
     }),
+    leverageIndex: event.managerMoment?.leverageIndex,
     involvedPlayerIds,
     window,
     resolved: resolvesSameEvent,
@@ -897,7 +917,8 @@ function buildBetweenPlayDecision(params: {
     }),
     derivedFromFields: params.derivedFromFields,
     manuallyPinned:
-      event.runnerAction?.managerDecisionSource === "manual_edit",
+      event.runnerAction?.managerDecisionSource === "manual_edit" ||
+      event.managerMoment?.decisionType === decisionType,
   });
 }
 
@@ -1050,12 +1071,19 @@ function findResolutionEndpoint(
         findHalfInningEndEndpoint(decision, timeline) ??
         findGameEndEndpoint(decision, context, timeline)
       );
-    case "first_fielding_event":
+    case "first_fielding_event": {
+      const fieldingEndpoint = findFirstFieldingEndpoint(
+        decision,
+        context,
+        atBatById,
+      );
+      if (fieldingEndpoint) return fieldingEndpoint;
+      if (decision.decisionType === "defensive_alignment") return null;
       return (
-        findFirstFieldingEndpoint(decision, context, atBatById) ??
         findHalfInningEndEndpoint(decision, timeline) ??
         findGameEndEndpoint(decision, context, timeline)
       );
+    }
     case "half_inning_end":
       return (
         findHalfInningEndEndpoint(decision, timeline) ??
@@ -1148,7 +1176,12 @@ function findFirstFieldingEndpoint(
   const trackedPlayerIds = new Set(
     decision.resolutionWindow?.trackedPlayerIds ?? [],
   );
-  if (trackedPlayerIds.size === 0) return null;
+  if (
+    trackedPlayerIds.size === 0 &&
+    decision.decisionType !== "defensive_alignment"
+  ) {
+    return null;
+  }
 
   const startIndex = decision.resolutionWindow?.startEventIndex ?? -1;
   const candidates = context.fieldingEvents
@@ -1161,7 +1194,12 @@ function findFirstFieldingEndpoint(
       atBat: AtBatEvent;
     } => {
       if (!candidate) return false;
-      if (!trackedPlayerIds.has(candidate.fieldingEvent.playerId)) return false;
+      if (
+        trackedPlayerIds.size > 0 &&
+        !trackedPlayerIds.has(candidate.fieldingEvent.playerId)
+      ) {
+        return false;
+      }
       if (!isCompleteAtBatWindowEvent(candidate.atBat)) return false;
       if (candidate.atBat.eventIndex <= startIndex) return false;
       return isSameHalf(

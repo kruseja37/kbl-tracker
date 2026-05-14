@@ -4,6 +4,7 @@ import type {
   ManagerDeploymentStintRecord,
   ManagerDecisionRecord,
   ManagerLineupDeltaRecord,
+  ManagerProfile,
 } from "../../../types/managerWpa";
 import type { CompletedGameRecord } from "../../../utils/gameStorage";
 
@@ -18,6 +19,7 @@ interface ManagerWpaOverlayProps {
     | "managerDeploymentStints"
     | "managerLineupDeltas"
   >;
+  managerProfiles?: ManagerProfile[] | Map<string, ManagerProfile>;
 }
 
 export interface ManagerWpaOverlayRow {
@@ -54,7 +56,25 @@ function titleCase(value: string): string {
     .join(" ");
 }
 
-function formatManagerName(managerId: string, teamId: string, teamName: string): string {
+function buildManagerProfileMap(
+  profiles: ManagerWpaOverlayProps["managerProfiles"],
+): Map<string, ManagerProfile> {
+  if (!profiles) return new Map();
+  if (profiles instanceof Map) return profiles;
+  return new Map(profiles.map((profile) => [profile.managerId, profile]));
+}
+
+function formatManagerName(
+  managerId: string,
+  teamId: string,
+  teamName: string,
+  profileByManagerId: Map<string, ManagerProfile>,
+): string {
+  const profileName = profileByManagerId.get(managerId)?.displayName?.trim();
+  if (profileName) {
+    return profileName;
+  }
+
   if (managerId === `${teamId}-manager`) {
     return `${teamName} Manager`;
   }
@@ -89,10 +109,12 @@ function isResolvedDeploymentStint(stint: ManagerDeploymentStintRecord): boolean
 
 export function buildManagerWpaOverlayRows(
   game: ManagerWpaOverlayProps["game"],
+  managerProfiles?: ManagerWpaOverlayProps["managerProfiles"],
 ): ManagerWpaOverlayRow[] {
   const decisions = game.managerDecisions ?? [];
   const deploymentStints = game.managerDeploymentStints ?? [];
   const lineupDeltas = game.managerLineupDeltas ?? [];
+  const profileByManagerId = buildManagerProfileMap(managerProfiles);
   const teamSeeds = [
     { teamId: game.awayTeamId, teamName: game.awayTeamName },
     { teamId: game.homeTeamId, teamName: game.homeTeamName },
@@ -125,7 +147,7 @@ export function buildManagerWpaOverlayRows(
       teamId,
       teamName,
       managerId,
-      managerName: formatManagerName(managerId, teamId, teamName),
+      managerName: formatManagerName(managerId, teamId, teamName, profileByManagerId),
       tacticalManagerWpa,
       deploymentWpa,
       lineupDeltaWpa,
@@ -205,8 +227,8 @@ function formatDeploymentCap(value: number): string {
   return `+/-${value.toFixed(3)}`;
 }
 
-export function ManagerWpaOverlay({ game }: ManagerWpaOverlayProps) {
-  const rows = buildManagerWpaOverlayRows(game);
+export function ManagerWpaOverlay({ game, managerProfiles }: ManagerWpaOverlayProps) {
+  const rows = buildManagerWpaOverlayRows(game, managerProfiles);
 
   return (
     <section

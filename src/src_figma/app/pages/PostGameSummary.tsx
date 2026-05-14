@@ -24,6 +24,7 @@ import {
   deriveKblWpaCredits,
   type KblWpaCredit,
 } from "../../../utils/kblWpaAttribution";
+import { listManagerProfiles } from "../../../utils/managerIdentityStorage";
 import { rankPlayersOfTheGame } from "../../../utils/playersOfTheGame";
 import chalkBgImg from '../../../assets/chalk-bg.png';
 import chalkBgFaintImg from '../../../assets/chalk-bg-faint.png';
@@ -41,6 +42,7 @@ import {
   getRunPromotionCandidates,
   type FamePromotionCandidate,
 } from "../engines/famePromotion";
+import type { ManagerProfile } from "../../../types/managerWpa";
 
 // Helper to format innings pitched from outs recorded
 function formatIP(outsRecorded: number): string {
@@ -237,6 +239,7 @@ export function PostGameSummary({
   const [fieldingEvents, setFieldingEvents] = useState<FieldingEvent[]>([]);
   const [betweenPlayEvents, setBetweenPlayEvents] = useState<BetweenPlayEvent[]>([]);
   const [gameHeader, setGameHeader] = useState<GameHeader | null>(null);
+  const [managerProfiles, setManagerProfiles] = useState<ManagerProfile[]>([]);
   const [runStandings, setRunStandings] = useState<RunFameStanding[]>([]);
   const [isRunStandingsLoading, setIsRunStandingsLoading] = useState(false);
   const [promotionCandidates, setPromotionCandidates] = useState<FamePromotionCandidate[]>([]);
@@ -281,6 +284,7 @@ export function PostGameSummary({
       setFieldingEvents([]);
       setBetweenPlayEvents([]);
       setGameHeader(null);
+      setManagerProfiles([]);
       setError(null);
       setIsLoading(true);
       setBoxScoreExpanded(false);
@@ -294,7 +298,7 @@ export function PostGameSummary({
       }
 
       try {
-        const [data, events, fieldingRows, betweenPlayRows, header] = await Promise.all([
+        const [data, events, fieldingRows, betweenPlayRows, header, profiles] = await Promise.all([
           getCompletedGameById(gameId),
           Promise.resolve(getGameEvents(gameId)).catch((eventsError) => {
             console.warn(
@@ -306,6 +310,7 @@ export function PostGameSummary({
           getGameFieldingEvents(gameId).catch(() => []),
           getBetweenPlayEvents(gameId).catch(() => []),
           getGameHeader(gameId).catch(() => null),
+          listManagerProfiles().catch(() => []),
         ]);
         if (cancelled) return;
         if (data && data.gameId === gameId) {
@@ -314,6 +319,7 @@ export function PostGameSummary({
           setFieldingEvents(Array.isArray(fieldingRows) ? fieldingRows : []);
           setBetweenPlayEvents(Array.isArray(betweenPlayRows) ? betweenPlayRows : []);
           setGameHeader(header);
+          setManagerProfiles(Array.isArray(profiles) ? profiles : []);
         } else {
           setError("Game not found");
         }
@@ -880,7 +886,7 @@ export function PostGameSummary({
                   );
                 })}
 
-                <ManagerWpaOverlay game={gameData} />
+                <ManagerWpaOverlay game={gameData} managerProfiles={managerProfiles} />
 
                 {/* Box score preview */}
                 <div className="bg-[#1f2b21] border-2 border-[#314437] p-4 mb-4 rounded-sm">

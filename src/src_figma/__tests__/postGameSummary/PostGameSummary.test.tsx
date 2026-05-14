@@ -26,6 +26,7 @@ const {
   mockGetGameHeader,
   mockGetRunFameStandings,
   mockGetRunPromotionCandidates,
+  mockListManagerProfiles,
   mockAcceptFamePromotion,
   mockDismissFamePromotion,
   mockLocationState,
@@ -37,6 +38,7 @@ const {
   mockGetGameHeader: vi.fn(() => Promise.resolve(null)),
   mockGetRunFameStandings: vi.fn(),
   mockGetRunPromotionCandidates: vi.fn(),
+  mockListManagerProfiles: vi.fn(),
   mockAcceptFamePromotion: vi.fn(),
   mockDismissFamePromotion: vi.fn(),
   mockLocationState: {
@@ -66,6 +68,10 @@ vi.mock('../../../utils/eventLog', () => ({
   getGameEvents: mockGetGameEvents,
   getGameFieldingEvents: mockGetGameFieldingEvents,
   getGameHeader: mockGetGameHeader,
+}));
+
+vi.mock('../../../utils/managerIdentityStorage', () => ({
+  listManagerProfiles: mockListManagerProfiles,
 }));
 
 vi.mock('../../../utils/eliminationRunFameStorage', () => ({
@@ -398,6 +404,10 @@ describe('PostGameSummary Component', () => {
     mockGetGameFieldingEvents.mockResolvedValue([]);
     mockGetBetweenPlayEvents.mockResolvedValue([]);
     mockGetGameHeader.mockResolvedValue(null);
+    mockListManagerProfiles.mockResolvedValue([
+      { managerId: 'sox-manager', displayName: 'Sox Skipper' },
+      { managerId: 'tigers-manager', displayName: 'Tigers Skipper' },
+    ]);
     mockGetRunFameStandings.mockResolvedValue([]);
     mockGetRunPromotionCandidates.mockResolvedValue([]);
     mockAcceptFamePromotion.mockResolvedValue({});
@@ -597,6 +607,7 @@ describe('PostGameSummary Component', () => {
 
       const overlay = await screen.findByTestId('manager-wpa-overlay');
       expect(within(overlay).getByText('MANAGER WPA OVERLAY')).toBeInTheDocument();
+      expect(screen.getByText('Sox Skipper')).toBeInTheDocument();
       expect(screen.getByTestId('manager-wpa-total-sox')).toHaveTextContent('+0.184');
       expect(screen.getByTestId('manager-wpa-total-tigers')).toHaveTextContent('-0.052');
       expect(within(screen.getByTestId('manager-wpa-card-sox')).getByText('2 (1 pending)')).toBeInTheDocument();

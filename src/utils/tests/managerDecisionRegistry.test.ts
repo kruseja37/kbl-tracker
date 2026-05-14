@@ -28,7 +28,7 @@ describe("manager decision registry", () => {
     }
   });
 
-  test("keeps the SMB-supported universe closed and explicitly excludes defensive alignment", () => {
+  test("keeps the SMB-supported universe closed with manual defensive alignment support", () => {
     expect(SUPPORTED_MANAGER_DECISION_TYPES).toEqual([
       "lineup_construction",
       "pitching_change",
@@ -45,12 +45,14 @@ describe("manager decision registry", () => {
       "bunt_call",
       "squeeze_call",
       "hit_and_run",
+      "defensive_alignment",
       "manual_note",
     ]);
     expect(MANAGER_DECISION_REGISTRY.defensive_alignment).toMatchObject({
-      supported: false,
-      captureMode: "unsupported",
-      layer: "unsupported",
+      supported: true,
+      captureMode: "manual",
+      layer: "tactical",
+      resolutionEndpoint: "first_fielding_event",
     });
   });
 

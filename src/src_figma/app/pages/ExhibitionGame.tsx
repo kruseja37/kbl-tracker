@@ -354,6 +354,16 @@ export function ExhibitionGame() {
     stored: { vsRHP?: OptimalLineupSnapshot; vsLHP?: OptimalLineupSnapshot },
     opposingPitcher: RosterPitcher | undefined,
   ) => (getOpposingHand(opposingPitcher) === "L" ? stored.vsLHP : stored.vsRHP);
+  const awayOptimalBenchmarkHand = getOpposingHand(homeStartingPitcher);
+  const homeOptimalBenchmarkHand = getOpposingHand(awayStartingPitcher);
+  const awayOptimalBenchmark = selectStoredOptimalLineup(
+    awayStoredOptimalLineups,
+    homeStartingPitcher,
+  );
+  const homeOptimalBenchmark = selectStoredOptimalLineup(
+    homeStoredOptimalLineups,
+    awayStartingPitcher,
+  );
 
   // Reorder lineup via drag-and-drop or tap-swap — merges reordered starters back with bench
   const handleAwayReorder = (reordered: RosterPlayer[]) => {
@@ -842,6 +852,14 @@ export function ExhibitionGame() {
                 {awayHasStoredLineup || homeHasStoredLineup
                   ? "Lineups loaded from League Builder. Drag to reorder batting order."
                   : "Default lineups. Drag to reorder batting order."}
+              </div>
+              <div className="mt-3 grid gap-2 text-[9px] text-[#E8E8D8]/70 md:grid-cols-2">
+                <div>
+                  {awayTeam.name}: VS {awayOptimalBenchmarkHand}HP benchmark {awayOptimalBenchmark ? awayOptimalBenchmark.sourceConfidence.replace(/_/g, " ") : "not set"}
+                </div>
+                <div>
+                  {homeTeam.name}: VS {homeOptimalBenchmarkHand}HP benchmark {homeOptimalBenchmark ? homeOptimalBenchmark.sourceConfidence.replace(/_/g, " ") : "not set"}
+                </div>
               </div>
             </div>
 

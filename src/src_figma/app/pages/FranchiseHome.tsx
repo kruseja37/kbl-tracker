@@ -56,7 +56,11 @@ import {
   LEAGUE_BUILDER_MANAGER_INSTANCE_ID,
   resolveManagerForTeam,
 } from "../../../utils/managerIdentityStorage";
-import type { GameLockLineupSnapshots, OptimalLineupSnapshot } from "../../../types/managerWpa";
+import type {
+  GameLockLineupSnapshots,
+  OpposingPitcherHand,
+  OptimalLineupSnapshot,
+} from "../../../types/managerWpa";
 
 // Context for passing franchise data to child components
 const FranchiseDataContext = createContext<UseFranchiseDataReturn | null>(null);
@@ -98,6 +102,18 @@ interface PreGameData {
     vsLHP?: OptimalLineupSnapshot;
   };
   milestoneWatches?: MilestoneWatch[];
+}
+
+function getFranchiseStarterHand(
+  pitcher: TeamRosterPitcher | undefined,
+): OpposingPitcherHand {
+  return (pitcher?.throwingHand || "R") === "L" ? "L" : "R";
+}
+
+function formatFranchiseBenchmarkSource(
+  snapshot: OptimalLineupSnapshot | undefined,
+): string {
+  return snapshot ? snapshot.sourceConfidence.replace(/_/g, " ") : "not set";
 }
 
 export function resolveFranchiseGameUseDH(franchiseConfig: UseFranchiseDataReturn["franchiseConfig"]): boolean {
@@ -3518,6 +3534,14 @@ function GameDayContent({ scheduleData, currentSeason, onDataRefresh }: GameDayC
               </div>
               <div className="text-xs text-[#E8E8D8]/70">
                 Game {preGameData.gameNumber} &bull; {preGameData.awayTeamName} @ {preGameData.homeTeamName}
+              </div>
+              <div className="mt-3 grid gap-2 text-[9px] text-[#E8E8D8]/60 md:grid-cols-2">
+                <div>
+                  {preGameData.awayTeamName}: VS {getFranchiseStarterHand(preGameData.homePitchers[preGameData.selectedHomeStarterIdx])}HP benchmark {formatFranchiseBenchmarkSource(selectOptimalLineupForOpposingPitcher(preGameData.awayOptimalLineups, preGameData.homePitchers[preGameData.selectedHomeStarterIdx]))}
+                </div>
+                <div>
+                  {preGameData.homeTeamName}: VS {getFranchiseStarterHand(preGameData.awayPitchers[preGameData.selectedAwayStarterIdx])}HP benchmark {formatFranchiseBenchmarkSource(selectOptimalLineupForOpposingPitcher(preGameData.homeOptimalLineups, preGameData.awayPitchers[preGameData.selectedAwayStarterIdx]))}
+                </div>
               </div>
             </div>
 

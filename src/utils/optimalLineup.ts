@@ -10,7 +10,7 @@ import type {
 } from "../types/managerWpa";
 
 export const OPTIMAL_LINEUP_ALGORITHM_VERSION =
-  "kbl-optimal-lineup-v2-greedy-1";
+  "kbl-optimal-lineup-v2-greedy-traits-1";
 
 const FIELD_POSITIONS = ["C", "1B", "2B", "3B", "SS", "LF", "CF", "RF"] as const;
 const PREMIUM_POSITIONS = new Set(["C", "SS", "CF", "2B"]);
@@ -311,7 +311,14 @@ export function mapLineupSnapshotDeviations(input: {
         rankScore: deviationRankScore(chosenSlot, optimalSlot),
       })),
     )
-    .sort((left, right) => right.rankScore - left.rankScore);
+    .sort(
+      (left, right) =>
+        right.rankScore - left.rankScore ||
+        left.chosenSlot.battingOrderSlot - right.chosenSlot.battingOrderSlot ||
+        left.optimalSlot.battingOrderSlot - right.optimalSlot.battingOrderSlot ||
+        left.chosenSlot.playerId.localeCompare(right.chosenSlot.playerId) ||
+        left.optimalSlot.playerId.localeCompare(right.optimalSlot.playerId),
+    );
 
   for (const candidate of pairCandidates) {
     const chosenKey = slotIdentity(candidate.chosenSlot);
@@ -521,15 +528,7 @@ function deviationRankScore(
   chosenSlot: OptimalLineupSlot,
   optimalSlot: OptimalLineupSlot,
 ): number {
-  const opportunityCost = Math.abs(
-    chosenSlot.projectedSlotKblWpa - optimalSlot.projectedSlotKblWpa,
-  );
-  const samePlayerBonus = chosenSlot.playerId === optimalSlot.playerId ? 10 : 0;
-  const samePositionBonus =
-    chosenSlot.defensivePosition === optimalSlot.defensivePosition ? 4 : 0;
-  const sameOrderBonus =
-    chosenSlot.battingOrderSlot === optimalSlot.battingOrderSlot ? 2 : 0;
-  return opportunityCost * 1000 + samePlayerBonus + samePositionBonus + sameOrderBonus;
+  return optimalSlot.projectedSlotKblWpa - chosenSlot.projectedSlotKblWpa;
 }
 
 function slotsMatch(left: OptimalLineupSlot, right: OptimalLineupSlot): boolean {

@@ -135,7 +135,7 @@ describe("optimal lineup engine", () => {
       sourceConfidence: "engine_calculated",
     });
 
-    expect(snapshot.algorithmVersion).toBe("kbl-optimal-lineup-v2-greedy-1");
+    expect(snapshot.algorithmVersion).toBe("kbl-optimal-lineup-v2-greedy-traits-1");
     expect(snapshot.slots).toHaveLength(9);
     expect(snapshot.slots.some((slot) => slot.playerId === "pitcher")).toBe(false);
     expect(snapshot.slots.some((slot) => slot.playerId === "bench-cf")).toBe(true);
@@ -242,6 +242,64 @@ describe("optimal lineup engine", () => {
     expect(deviations.length).toBeGreaterThan(0);
     expect(chosenKeys.size).toBe(deviations.length);
     expect(optimalKeys.size).toBe(deviations.length);
+  });
+
+  test("pairs lineup deviations by largest projected opportunity cost first", () => {
+    const pairCandidates: OptimalLineupCandidate[] = [
+      { playerId: "chosen-low", playerName: "Chosen Low", primaryPosition: "SS" },
+      { playerId: "chosen-mid", playerName: "Chosen Mid", primaryPosition: "CF" },
+      { playerId: "optimal-high", playerName: "Optimal High", primaryPosition: "SS" },
+      { playerId: "optimal-near", playerName: "Optimal Near", primaryPosition: "CF" },
+    ];
+    const chosen = buildLineupSnapshotFromSlots({
+      teamId: "team-a",
+      mode: "exhibition",
+      opposingPitcherHand: "R",
+      candidates: pairCandidates,
+      dhEnabled: false,
+      generatedAt: 100,
+      slots: [
+        { playerId: "chosen-low", playerName: "Chosen Low", battingOrderSlot: 1, defensivePosition: "SS" },
+        { playerId: "chosen-mid", playerName: "Chosen Mid", battingOrderSlot: 2, defensivePosition: "CF" },
+      ],
+    });
+    const optimal = buildLineupSnapshotFromSlots({
+      teamId: "team-a",
+      mode: "exhibition",
+      opposingPitcherHand: "R",
+      candidates: pairCandidates,
+      dhEnabled: false,
+      generatedAt: 100,
+      slots: [
+        { playerId: "optimal-high", playerName: "Optimal High", battingOrderSlot: 1, defensivePosition: "SS" },
+        { playerId: "optimal-near", playerName: "Optimal Near", battingOrderSlot: 2, defensivePosition: "CF" },
+      ],
+    });
+    const chosenWithScores = {
+      ...chosen,
+      slots: chosen.slots.map((slot) => ({
+        ...slot,
+        projectedSlotKblWpa: slot.playerId === "chosen-low" ? 0 : 0.04,
+      })),
+    };
+    const optimalWithScores = {
+      ...optimal,
+      slots: optimal.slots.map((slot) => ({
+        ...slot,
+        projectedSlotKblWpa: slot.playerId === "optimal-high" ? 0.1 : 0.05,
+      })),
+    };
+
+    const deviations = mapLineupSnapshotDeviations({
+      chosen: chosenWithScores,
+      optimal: optimalWithScores,
+    });
+
+    expect(deviations[0]).toMatchObject({
+      chosenSlot: expect.objectContaining({ playerId: "chosen-low" }),
+      optimalSlot: expect.objectContaining({ playerId: "optimal-high" }),
+      projectedOpportunityCost: -0.1,
+    });
   });
 
   test("summarizes current-vs-optimal lineup comparisons for pregame preview", () => {

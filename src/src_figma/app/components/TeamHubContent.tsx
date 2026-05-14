@@ -1108,7 +1108,7 @@ export function TeamHubContent() {
             <User className="w-8 h-8 text-[#E8E8D8]/30 mx-auto mb-4" />
             <div className="text-[12px] text-[#E8E8D8]/50 mb-2">MANAGER</div>
             <div className="text-[10px] text-[#E8E8D8]/40">
-              Manager tracking is not yet available. mWAR, record, and job security will appear here once implemented.
+              Manager Value is tracked from committed game decisions and appears in Game Detail, postgame summaries, and the Almanac.
             </div>
           </div>
         </div>

@@ -5,6 +5,7 @@ import { getTeamColors } from "@/config/teamColors";
 import { getCompletedGameById, type CompletedGameRecord } from "../../utils/gameStorage";
 import { getAllCanonicalPlayers } from "../../../utils/almanacStorage";
 import { getArchiveInstanceIdForGame } from "../../../utils/almanacQueries";
+import { listManagerProfiles } from "../../../utils/managerIdentityStorage";
 import {
   getBetweenPlayEvents,
   getGameEvents,
@@ -24,6 +25,7 @@ import {
 import { rankPlayersOfTheGame } from "../../../utils/playersOfTheGame";
 import { ManagerWpaOverlay } from "../components/ManagerWpaOverlay";
 import { WinProbChart } from "../components/WinProbChart";
+import type { ManagerProfile } from "../../../types/managerWpa";
 
 type CanonicalLookup = Record<string, string>;
 
@@ -34,6 +36,7 @@ interface LoadedGameData {
   betweenPlayEvents: BetweenPlayEvent[];
   gameHeader: GameHeader | null;
   canonicalLookup: CanonicalLookup;
+  managerProfiles: ManagerProfile[];
 }
 
 function normalizeTeamId(teamId: string | undefined | null): string {
@@ -239,13 +242,14 @@ export function GameDetail() {
       }
 
       try {
-        const [game, atBatEvents, fieldingEvents, betweenPlayEvents, gameHeader, canonicalPlayers] = await Promise.all([
+        const [game, atBatEvents, fieldingEvents, betweenPlayEvents, gameHeader, canonicalPlayers, managerProfiles] = await Promise.all([
           getCompletedGameById(gameId),
           getGameEvents(gameId),
           getGameFieldingEvents(gameId).catch(() => []),
           getBetweenPlayEvents(gameId).catch(() => []),
           getGameHeader(gameId).catch(() => null),
           getAllCanonicalPlayers().catch(() => []),
+          listManagerProfiles().catch(() => []),
         ]);
 
         if (cancelled) {
@@ -264,6 +268,7 @@ export function GameDetail() {
           betweenPlayEvents,
           gameHeader,
           canonicalLookup: loadCanonicalLookup(canonicalPlayers),
+          managerProfiles,
         });
       } catch (loadError) {
         console.error("Failed to load game detail:", loadError);
@@ -731,7 +736,7 @@ export function GameDetail() {
           )}
         </SectionFrame>
 
-        <ManagerWpaOverlay game={game} />
+        <ManagerWpaOverlay game={game} managerProfiles={data.managerProfiles} />
 
         <SectionFrame
           title="Pitcher Decisions"
