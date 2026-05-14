@@ -17,6 +17,8 @@ import {
   OPTIMAL_LINEUP_SNAPSHOT_FIELDS,
   optimalLineupField,
   optimalLineupFieldsForDh,
+  summarizeLineupSnapshotComparison,
+  type LineupSnapshotComparison,
   type OptimalLineupCandidate,
   type OptimalLineupSnapshotField,
 } from "../../../utils/optimalLineup";
@@ -24,6 +26,7 @@ import type {
   OpposingPitcherHand,
   OptimalLineupSnapshot,
 } from "../../../types/managerWpa";
+import { OptimalLineupComparisonPanel } from "../components/OptimalLineupComparisonPanel";
 
 type TabType = "roster" | "lineup" | "rotation" | "depth";
 
@@ -43,6 +46,8 @@ function toOptimalCandidate(player: Player): OptimalLineupCandidate {
     fielding: player.fielding,
     arm: player.arm,
     mojo: player.mojo,
+    trait1: player.trait1,
+    trait2: player.trait2,
     unavailable: false,
   };
 }
@@ -649,7 +654,17 @@ interface LineupTabProps {
 
 function LineupTab({ roster, players, onUpdate }: LineupTabProps) {
   const [lineupMode, setLineupMode] = useState<"DH" | "NO_DH">("DH");
+  const [lineupComparison, setLineupComparison] = useState<{
+    hand: OpposingPitcherHand;
+    comparison: LineupSnapshotComparison;
+    sourceConfidence?: string;
+    generatedFallback: boolean;
+  } | null>(null);
   const isDH = lineupMode === "DH";
+
+  useEffect(() => {
+    setLineupComparison(null);
+  }, [roster.teamId, isDH]);
 
   const mlbPlayers = players.filter((p) => roster.mlbRoster.includes(p.id));
   const positionPlayers = mlbPlayers.filter(
@@ -694,6 +709,7 @@ function LineupTab({ roster, players, onUpdate }: LineupTabProps) {
   const availablePositions = isDH ? FIELDING_POSITIONS : noDhFieldPositions;
 
   const setLineup = (lineup: LineupSlot[]) => {
+    setLineupComparison(null);
     onUpdate(buildLineupUpdate(lineup));
   };
 
@@ -742,6 +758,30 @@ function LineupTab({ roster, players, onUpdate }: LineupTabProps) {
     });
   };
 
+  const buildCurrentLineupSnapshot = (hand: OpposingPitcherHand) => {
+    const playerMap = new Map(players.map((player) => [player.id, player]));
+    return buildLineupSnapshotFromSlots({
+      teamId: roster.teamId,
+      mode: "exhibition",
+      opposingPitcherHand: hand,
+      candidates: mlbPlayers.map(toOptimalCandidate),
+      dhEnabled: isDH,
+      generatedAt: Date.now(),
+      generatedFrom: "game_lock",
+      sourceConfidence: "engine_calculated",
+      rosterVersionId: roster.lastModified,
+      slots: userSlots.map((slot) => {
+        const player = playerMap.get(slot.playerId);
+        return {
+          playerId: slot.playerId,
+          playerName: player ? `${player.firstName} ${player.lastName}` : slot.playerId,
+          battingOrderSlot: slot.battingOrder,
+          defensivePosition: slot.fieldingPosition,
+        };
+      }),
+    });
+  };
+
   const saveOptimalSnapshot = (
     hand: OpposingPitcherHand,
     snapshot: OptimalLineupSnapshot,
@@ -750,12 +790,14 @@ function LineupTab({ roster, players, onUpdate }: LineupTabProps) {
   };
 
   const handleRecalculateOptimal = (hand: OpposingPitcherHand) => {
+    setLineupComparison(null);
     saveOptimalSnapshot(hand, buildOptimalSnapshot(hand));
   };
 
   const handleApplyOptimal = (hand: OpposingPitcherHand) => {
     const field = optimalLineupField(hand, isDH);
     const snapshot = roster[field] ?? buildOptimalSnapshot(hand);
+    setLineupComparison(null);
     onUpdate({
       [field]: snapshot,
       ...buildLineupUpdate(lineupSlotsFromOptimalSnapshot(snapshot)),
@@ -763,7 +805,20 @@ function LineupTab({ roster, players, onUpdate }: LineupTabProps) {
   };
 
   const handleSetCurrentAsOptimal = (hand: OpposingPitcherHand) => {
+    setLineupComparison(null);
     saveOptimalSnapshot(hand, buildCurrentAsOptimalSnapshot(hand));
+  };
+
+  const handleCompareOptimal = (hand: OpposingPitcherHand) => {
+    const field = optimalLineupField(hand, isDH);
+    const optimal = roster[field] ?? buildOptimalSnapshot(hand);
+    const chosen = buildCurrentLineupSnapshot(hand);
+    setLineupComparison({
+      hand,
+      comparison: summarizeLineupSnapshotComparison({ chosen, optimal }),
+      sourceConfidence: optimal.sourceConfidence,
+      generatedFallback: !roster[field],
+    });
   };
 
   const addToLineup = (playerId: string, position: Position) => {
@@ -850,7 +905,10 @@ function LineupTab({ roster, players, onUpdate }: LineupTabProps) {
       {/* DH Toggle */}
       <div className="flex gap-2">
         <button
-          onClick={() => setLineupMode("DH")}
+          onClick={() => {
+            setLineupMode("DH");
+            setLineupComparison(null);
+          }}
           className={`px-4 py-2 font-bold transition ${
             lineupMode === "DH"
               ? "bg-[#DD0000] border-4 border-[#E8E8D8]"
@@ -860,7 +918,10 @@ function LineupTab({ roster, players, onUpdate }: LineupTabProps) {
           DH
         </button>
         <button
-          onClick={() => setLineupMode("NO_DH")}
+          onClick={() => {
+            setLineupMode("NO_DH");
+            setLineupComparison(null);
+          }}
           className={`px-4 py-2 font-bold transition ${
             lineupMode === "NO_DH"
               ? "bg-[#DD0000] border-4 border-[#E8E8D8]"
@@ -889,7 +950,14 @@ function LineupTab({ roster, players, onUpdate }: LineupTabProps) {
                     {snapshot ? snapshot.sourceConfidence.replace(/_/g, " ") : "not set"}
                   </div>
                 </div>
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-4 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleCompareOptimal(hand)}
+                    className="px-2 py-2 bg-[#3A5A3A] border-2 border-[#E8E8D8]/30 text-[10px] font-bold hover:border-[#C4A853]"
+                  >
+                    COMPARE
+                  </button>
                   <button
                     type="button"
                     onClick={() => handleApplyOptimal(hand)}
@@ -916,6 +984,15 @@ function LineupTab({ roster, players, onUpdate }: LineupTabProps) {
             );
           })}
         </div>
+        {lineupComparison && (
+          <OptimalLineupComparisonPanel
+            hand={lineupComparison.hand}
+            comparison={lineupComparison.comparison}
+            sourceConfidence={lineupComparison.sourceConfidence}
+            generatedFallback={lineupComparison.generatedFallback}
+            onClose={() => setLineupComparison(null)}
+          />
+        )}
       </div>
 
       <div className="grid grid-cols-2 gap-4">

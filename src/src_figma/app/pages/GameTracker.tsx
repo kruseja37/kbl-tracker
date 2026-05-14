@@ -307,6 +307,8 @@ function rosterPlayersToOptimalCandidates(
     arm: player.arm,
     mojo: player.mojo,
     fitness: player.fitness,
+    trait1: player.trait1,
+    trait2: player.trait2,
     unavailable: player.isOutOfGame,
   }));
 }

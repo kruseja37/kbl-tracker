@@ -4,10 +4,12 @@ import {
   buildLineupSnapshotFromSlots,
   buildOptimalLineupSnapshot,
   cloneGameLockLineupSnapshots,
+  formatLineupSnapshotSlot,
   markOptimalLineupSnapshotsStaleForChange,
   mapLineupSnapshotDeviations,
   optimalLineupField,
   selectOptimalLineupForOpposingPitcher,
+  summarizeLineupSnapshotComparison,
 } from "../optimalLineup";
 import type { OptimalLineupCandidate } from "../optimalLineup";
 
@@ -139,6 +141,66 @@ describe("optimal lineup engine", () => {
     expect(snapshot.slots.some((slot) => slot.playerId === "bench-cf")).toBe(true);
   });
 
+  test("uses SMB trait context when selecting hand-specific optimal lineups", () => {
+    const fielders: OptimalLineupCandidate[] = ["C", "1B", "2B", "3B", "SS", "LF", "CF", "RF"].map((position) => ({
+      playerId: `fielder-${position}`,
+      playerName: `Fielder ${position}`,
+      bats: "S",
+      primaryPosition: position,
+      power: 70,
+      contact: 70,
+      speed: 60,
+      fielding: 72,
+      arm: 72,
+    }));
+    const traitCandidates: OptimalLineupCandidate[] = [
+      ...fielders,
+      {
+        playerId: "splits-hitter",
+        playerName: "Splits Hitter",
+        bats: "R",
+        primaryPosition: "DH",
+        power: 64,
+        contact: 64,
+        speed: 50,
+        trait1: "CON vs RHP",
+      },
+      {
+        playerId: "neutral-hitter",
+        playerName: "Neutral Hitter",
+        bats: "R",
+        primaryPosition: "DH",
+        power: 66,
+        contact: 66,
+        speed: 50,
+      },
+    ];
+
+    const vsRhp = buildOptimalLineupSnapshot({
+      teamId: "team-a",
+      mode: "exhibition",
+      opposingPitcherHand: "R",
+      candidates: traitCandidates,
+      dhEnabled: true,
+      generatedAt: 100,
+      generatedFrom: "league_builder",
+      sourceConfidence: "engine_calculated",
+    });
+    const vsLhp = buildOptimalLineupSnapshot({
+      teamId: "team-a",
+      mode: "exhibition",
+      opposingPitcherHand: "L",
+      candidates: traitCandidates,
+      dhEnabled: true,
+      generatedAt: 101,
+      generatedFrom: "league_builder",
+      sourceConfidence: "engine_calculated",
+    });
+
+    expect(vsRhp.slots.find((slot) => slot.defensivePosition === "DH")?.playerId).toBe("splits-hitter");
+    expect(vsLhp.slots.find((slot) => slot.defensivePosition === "DH")?.playerId).toBe("neutral-hitter");
+  });
+
   test("maps chosen lineup deviations without double-using chosen or optimal slots", () => {
     const optimal = buildOptimalLineupSnapshot({
       teamId: "team-a",
@@ -180,6 +242,45 @@ describe("optimal lineup engine", () => {
     expect(deviations.length).toBeGreaterThan(0);
     expect(chosenKeys.size).toBe(deviations.length);
     expect(optimalKeys.size).toBe(deviations.length);
+  });
+
+  test("summarizes current-vs-optimal lineup comparisons for pregame preview", () => {
+    const optimal = buildOptimalLineupSnapshot({
+      teamId: "team-a",
+      mode: "exhibition",
+      opposingPitcherHand: "R",
+      candidates,
+      dhEnabled: false,
+      generatedAt: 100,
+      generatedFrom: "league_builder",
+      sourceConfidence: "engine_calculated",
+    });
+    const chosen = buildLineupSnapshotFromSlots({
+      teamId: "team-a",
+      mode: "exhibition",
+      opposingPitcherHand: "R",
+      candidates,
+      dhEnabled: false,
+      generatedAt: 101,
+      slots: [
+        { playerId: "starter-cf", playerName: "Starter Center", battingOrderSlot: 1, defensivePosition: "CF" },
+        { playerId: "elite-ss", playerName: "Elite Shortstop", battingOrderSlot: 2, defensivePosition: "SS" },
+        { playerId: "catcher", playerName: "Catcher", battingOrderSlot: 3, defensivePosition: "C" },
+        { playerId: "first-base", playerName: "First Base", battingOrderSlot: 4, defensivePosition: "1B" },
+        { playerId: "second-base", playerName: "Second Base", battingOrderSlot: 5, defensivePosition: "2B" },
+        { playerId: "third-base", playerName: "Third Base", battingOrderSlot: 6, defensivePosition: "3B" },
+        { playerId: "left-field", playerName: "Left Field", battingOrderSlot: 7, defensivePosition: "LF" },
+        { playerId: "right-field", playerName: "Right Field", battingOrderSlot: 8, defensivePosition: "RF" },
+      ],
+    });
+
+    const comparison = summarizeLineupSnapshotComparison({ chosen, optimal });
+
+    expect(comparison.deviations.length).toBeGreaterThan(0);
+    expect(comparison.projectedOpportunityCostTotal).toBe(
+      chosen.projectedTeamLineupKblWpa - optimal.projectedTeamLineupKblWpa,
+    );
+    expect(formatLineupSnapshotSlot(comparison.deviations[0].chosenSlot)).toMatch(/^#\d+ /);
   });
 
   test("marks user-registered optimal snapshots stale instead of deleting them", () => {

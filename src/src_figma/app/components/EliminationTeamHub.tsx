@@ -27,6 +27,8 @@ import {
   OPTIMAL_LINEUP_SNAPSHOT_FIELDS,
   optimalLineupField,
   optimalLineupFieldsForDh,
+  summarizeLineupSnapshotComparison,
+  type LineupSnapshotComparison,
   type OptimalLineupCandidate,
   type OptimalLineupSnapshotField,
 } from '../../../utils/optimalLineup';
@@ -34,6 +36,7 @@ import {
   resolveManagerForTeam,
   saveManagerProfile,
 } from '../../../utils/managerIdentityStorage';
+import { OptimalLineupComparisonPanel } from './OptimalLineupComparisonPanel';
 
 interface EliminationTeamHubProps {
   eliminationId: string;
@@ -160,6 +163,8 @@ function toOptimalCandidate(player: Player): OptimalLineupCandidate {
     arm: player.arm,
     mojo: player.mojo,
     fitness: undefined,
+    trait1: player.trait1,
+    trait2: player.trait2,
   };
 }
 
@@ -177,7 +182,7 @@ function getFreshOptimalLineupFields(
   return OPTIMAL_LINEUP_SNAPSHOT_FIELDS.filter((field) => field in updates);
 }
 
-function staleFieldsForEliminationUpdate(
+export function staleFieldsForEliminationUpdate(
   updates: Partial<EliminationRosterSnapshot>,
 ): OptimalLineupSnapshotField[] {
   const fields = new Set<OptimalLineupSnapshotField>();
@@ -209,6 +214,12 @@ export function EliminationTeamHub({ eliminationId, teams, useDH }: EliminationT
   const [isSaving, setIsSaving] = useState(false);
   const [isManagerSaving, setIsManagerSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [lineupComparison, setLineupComparison] = useState<{
+    hand: OpposingPitcherHand;
+    comparison: LineupSnapshotComparison;
+    sourceConfidence?: string;
+    generatedFallback: boolean;
+  } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -335,6 +346,10 @@ export function EliminationTeamHub({ eliminationId, teams, useDH }: EliminationT
   );
 
   useEffect(() => {
+    setLineupComparison(null);
+  }, [selectedTeamId, useDH]);
+
+  useEffect(() => {
     if (!selectedPlayoffTeam) {
       setManagerProfile(null);
       setManagerForm({ displayName: '', hometown: '', styleLabel: '' });
@@ -397,6 +412,7 @@ export function EliminationTeamHub({ eliminationId, teams, useDH }: EliminationT
       | 'optimalLineupVsLHPWithoutDH'
     >>
   ) {
+    setLineupComparison(null);
     setIsSaving(true);
     setError(null);
     try {
@@ -497,6 +513,39 @@ export function EliminationTeamHub({ eliminationId, teams, useDH }: EliminationT
     });
   };
 
+  const buildCurrentLineupSnapshot = (hand: OpposingPitcherHand) => {
+    if (!snapshot) return null;
+    const playerMap = new Map(snapshot.players.map((player) => [player.id, player]));
+    return buildLineupSnapshotFromSlots({
+      teamId: snapshot.teamId,
+      mode: "elimination",
+      instanceId: eliminationId,
+      opposingPitcherHand: hand,
+      candidates: snapshot.players.map((player) => {
+        const condition = mojoFitnessByPlayerId[player.id];
+        return {
+          ...toOptimalCandidate(player),
+          mojo: condition?.mojo ?? player.mojo,
+          fitness: condition?.fitness,
+        };
+      }),
+      dhEnabled: useDH,
+      generatedAt: Date.now(),
+      generatedFrom: "game_lock",
+      sourceConfidence: "engine_calculated",
+      rosterVersionId: String(snapshot.snapshotAt),
+      slots: lineup.map((slot) => {
+        const player = playerMap.get(slot.playerId);
+        return {
+          playerId: slot.playerId,
+          playerName: player ? `${player.firstName} ${player.lastName}` : slot.playerId,
+          battingOrderSlot: slot.battingOrder,
+          defensivePosition: slot.fieldingPosition,
+        };
+      }),
+    });
+  };
+
   async function handleRecalculateOptimal(hand: OpposingPitcherHand) {
     if (!snapshot) return;
     const nextSnapshot = buildOptimalSnapshot(hand);
@@ -523,6 +572,20 @@ export function EliminationTeamHub({ eliminationId, teams, useDH }: EliminationT
     if (!nextSnapshot) return;
     await persistUpdates(snapshot.teamId, {
       [optimalLineupField(hand, useDH)]: nextSnapshot,
+    });
+  }
+
+  function handleCompareOptimal(hand: OpposingPitcherHand) {
+    if (!snapshot) return;
+    const field = optimalLineupField(hand, useDH);
+    const optimal = snapshot[field] ?? buildOptimalSnapshot(hand);
+    const chosen = buildCurrentLineupSnapshot(hand);
+    if (!optimal || !chosen) return;
+    setLineupComparison({
+      hand,
+      comparison: summarizeLineupSnapshotComparison({ chosen, optimal }),
+      sourceConfidence: optimal.sourceConfidence,
+      generatedFallback: !snapshot[field],
     });
   }
 
@@ -593,6 +656,7 @@ export function EliminationTeamHub({ eliminationId, teams, useDH }: EliminationT
       ...prev,
       [playerId]: next,
     }));
+    setLineupComparison(null);
     await saveMojoFitnessSnapshots(eliminationId, [
       {
         playerId,
@@ -666,7 +730,10 @@ export function EliminationTeamHub({ eliminationId, teams, useDH }: EliminationT
           {teams.map((team) => (
             <button
               key={team.teamId}
-              onClick={() => setSelectedTeamId(team.teamId)}
+              onClick={() => {
+                setSelectedTeamId(team.teamId);
+                setLineupComparison(null);
+              }}
               className={`px-3 py-2 border-4 text-[8px] transition active:scale-95 ${
                 selectedTeamId === team.teamId
                   ? 'bg-[#4A6844] border-[#E8E8D8] text-[#E8E8D8]'
@@ -777,7 +844,13 @@ export function EliminationTeamHub({ eliminationId, teams, useDH }: EliminationT
                             {optimalSnapshot ? optimalSnapshot.sourceConfidence.replace(/_/g, ' ') : 'not set'}
                           </span>
                         </div>
-                        <div className="grid grid-cols-3 gap-1">
+                        <div className="grid grid-cols-4 gap-1">
+                          <button
+                            onClick={() => handleCompareOptimal(hand)}
+                            className="border-2 border-[#E8E8D8]/30 bg-[#5A8352] px-1 py-1 text-[7px] hover:border-[#C4A853]"
+                          >
+                            COMPARE
+                          </button>
                           <button
                             onClick={() => void handleApplyOptimal(hand)}
                             className="border-2 border-[#E8E8D8]/30 bg-[#5A8352] px-1 py-1 text-[7px] hover:border-[#C4A853]"
@@ -801,6 +874,15 @@ export function EliminationTeamHub({ eliminationId, teams, useDH }: EliminationT
                     );
                   })}
                 </div>
+                {lineupComparison && (
+                  <OptimalLineupComparisonPanel
+                    hand={lineupComparison.hand}
+                    comparison={lineupComparison.comparison}
+                    sourceConfidence={lineupComparison.sourceConfidence}
+                    generatedFallback={lineupComparison.generatedFallback}
+                    onClose={() => setLineupComparison(null)}
+                  />
+                )}
                 <div className="space-y-2">
                   {lineup.map((slot, index) => {
                     const player = snapshot.players.find((item) => item.id === slot.playerId);

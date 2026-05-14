@@ -30,6 +30,9 @@ export interface OptimalLineupCandidate {
   arm?: number;
   mojo?: number | string;
   fitness?: string;
+  trait1?: string;
+  trait2?: string;
+  traits?: string[] | Record<string, string | undefined>;
   unavailable?: boolean;
 }
 
@@ -64,6 +67,13 @@ export interface LineupSnapshotDeviation {
   chosenSlot: OptimalLineupSlot;
   optimalSlot: OptimalLineupSlot;
   projectedOpportunityCost: number;
+}
+
+export interface LineupSnapshotComparison {
+  deviations: LineupSnapshotDeviation[];
+  projectedOpportunityCostTotal: number;
+  chosenProjectedTeamLineupKblWpa: number;
+  optimalProjectedTeamLineupKblWpa: number;
 }
 
 export type OptimalLineupSnapshotField =
@@ -323,6 +333,25 @@ export function mapLineupSnapshotDeviations(input: {
   );
 }
 
+export function summarizeLineupSnapshotComparison(input: {
+  chosen: OptimalLineupSnapshot;
+  optimal: OptimalLineupSnapshot;
+}): LineupSnapshotComparison {
+  const deviations = mapLineupSnapshotDeviations(input);
+  return {
+    deviations,
+    projectedOpportunityCostTotal: roundWpa(
+      input.chosen.projectedTeamLineupKblWpa - input.optimal.projectedTeamLineupKblWpa,
+    ),
+    chosenProjectedTeamLineupKblWpa: input.chosen.projectedTeamLineupKblWpa,
+    optimalProjectedTeamLineupKblWpa: input.optimal.projectedTeamLineupKblWpa,
+  };
+}
+
+export function formatLineupSnapshotSlot(slot: OptimalLineupSlot): string {
+  return `#${slot.battingOrderSlot} ${slot.defensivePosition} ${slot.playerName}`;
+}
+
 export function lineupSnapshotsMatch(
   chosen: OptimalLineupSnapshot,
   optimal: OptimalLineupSnapshot,
@@ -417,7 +446,13 @@ function battingOrderValue(
   const contact = rating(candidate.contact, 50);
   const power = rating(candidate.power, 50);
   const speed = rating(candidate.speed, 50);
-  return contact * 0.38 + power * 0.34 + speed * 0.18 + platoonBonus(candidate, opposingPitcherHand);
+  return (
+    contact * 0.38 +
+    power * 0.34 +
+    speed * 0.18 +
+    platoonBonus(candidate, opposingPitcherHand) +
+    battingOrderTraitBonus(candidate, opposingPitcherHand)
+  );
 }
 
 function projectedValueScore(
@@ -435,9 +470,10 @@ function projectedValueScore(
   const defense = defensiveWeight(position) * (fielding * 0.65 + arm * 0.35);
   const fitness = fitnessAdjustment(candidate.fitness);
   const mojo = mojoAdjustment(candidate.mojo);
+  const traits = traitAdjustment(candidate, opposingPitcherHand, position);
 
   return clamp(
-    offense + defense + platoonBonus(candidate, opposingPitcherHand) + fitness + mojo,
+    offense + defense + platoonBonus(candidate, opposingPitcherHand) + fitness + mojo + traits,
     0,
     100,
   );
@@ -458,6 +494,11 @@ function positionalFitScore(
     if (normalizePosition(candidate.primaryPosition) === "CF") return 0.62;
   }
   if (position === "CF" && normalizePosition(candidate.primaryPosition) === "OF") return 0.55;
+  if (hasTrait(candidate, "Utility")) {
+    if (["1B", "LF", "RF", "DH"].includes(position)) return 0.55;
+    if (["2B", "3B", "CF"].includes(position)) return 0.45;
+    return 0.38;
+  }
   if (["1B", "LF", "RF"].includes(position)) return 0.35;
   return 0.2;
 }
@@ -528,12 +569,89 @@ function platoonBonus(
   opposingPitcherHand: OpposingPitcherHand,
 ): number {
   const bats = (candidate.bats || "").toUpperCase();
+  if (hasTrait(candidate, "Reverse Splits")) {
+    if (bats === "S") return 2.2;
+    if (bats === "L" && opposingPitcherHand === "L") return 3.0;
+    if (bats === "R" && opposingPitcherHand === "R") return 2.6;
+    if (bats === "L" && opposingPitcherHand === "R") return -1.2;
+    if (bats === "R" && opposingPitcherHand === "L") return -1.0;
+    return 0;
+  }
   if (bats === "S") return 2.2;
   if (bats === "L" && opposingPitcherHand === "R") return 3.4;
   if (bats === "R" && opposingPitcherHand === "L") return 3.0;
   if (bats === "L" && opposingPitcherHand === "L") return -3.0;
   if (bats === "R" && opposingPitcherHand === "R") return -1.1;
   return 0;
+}
+
+function traitAdjustment(
+  candidate: OptimalLineupCandidate,
+  opposingPitcherHand: OpposingPitcherHand,
+  defensivePosition: string,
+): number {
+  const position = normalizePosition(defensivePosition);
+  let adjustment = 0;
+
+  for (const trait of candidateTraits(candidate)) {
+    if (trait === `con vs ${opposingPitcherHand.toLowerCase()}hp`) adjustment += 3.2;
+    if (trait === `pow vs ${opposingPitcherHand.toLowerCase()}hp`) adjustment += 3.2;
+
+    if (["clutch", "rbi hero", "tough out", "consistent", "bad ball hitter"].includes(trait)) adjustment += 1.4;
+    if (["first pitch slayer", "fastball hitter", "off-speed hitter", "low pitch", "high pitch", "inside pitch", "outside pitch"].includes(trait)) adjustment += 1.1;
+    if (["sprinter", "stealer", "base rounder", "easy jumps"].includes(trait)) adjustment += 1.0;
+    if (trait === "rally starter") adjustment += 1.2;
+    if (trait === "bunter") adjustment += 0.5;
+    if (trait === "utility" && position !== "DH") adjustment += 0.7;
+
+    if (trait === "magic hands" && ["C", "1B", "2B", "3B", "SS"].includes(position)) adjustment += 2.2;
+    if (trait === "dive wizard" && position !== "DH") adjustment += 1.6;
+    if (trait === "cannon arm" && ["C", "3B", "SS", "LF", "CF", "RF"].includes(position)) adjustment += 1.8;
+
+    if (trait === "choker") adjustment -= 1.8;
+    if (["whiffer", "rbi zero", "first pitch prayer"].includes(trait)) adjustment -= 1.5;
+    if (trait === "slow poke") adjustment -= 1.1;
+    if (trait === "base jogger" || trait === "bad jumps") adjustment -= 0.9;
+    if (trait === "noodle arm" && position !== "DH") adjustment -= 1.8;
+    if (["butter fingers", "wild thrower"].includes(trait) && position !== "DH") adjustment -= 2.0;
+    if (trait === "injury prone") adjustment -= 0.7;
+  }
+
+  return clamp(adjustment, -6, 6);
+}
+
+function battingOrderTraitBonus(
+  candidate: OptimalLineupCandidate,
+  opposingPitcherHand: OpposingPitcherHand,
+): number {
+  let adjustment = 0;
+  for (const trait of candidateTraits(candidate)) {
+    if (trait === "rally starter") adjustment += 3.0;
+    if (["sprinter", "stealer", "base rounder"].includes(trait)) adjustment += 1.4;
+    if (["tough out", "consistent", "bad ball hitter"].includes(trait)) adjustment += 1.2;
+    if (trait === `con vs ${opposingPitcherHand.toLowerCase()}hp`) adjustment += 1.4;
+    if (trait === `pow vs ${opposingPitcherHand.toLowerCase()}hp`) adjustment += 1.0;
+    if (trait === "whiffer") adjustment -= 2.0;
+    if (trait === "slow poke") adjustment -= 1.4;
+    if (trait === "base jogger") adjustment -= 1.0;
+  }
+  return adjustment;
+}
+
+function hasTrait(candidate: OptimalLineupCandidate, traitName: string): boolean {
+  const normalized = traitName.toLowerCase();
+  return candidateTraits(candidate).includes(normalized);
+}
+
+function candidateTraits(candidate: OptimalLineupCandidate): string[] {
+  const raw = [
+    candidate.trait1,
+    candidate.trait2,
+    ...(Array.isArray(candidate.traits) ? candidate.traits : Object.values(candidate.traits ?? {})),
+  ];
+  return raw
+    .filter((trait): trait is string => typeof trait === "string" && trait.trim().length > 0)
+    .map((trait) => trait.trim().toLowerCase());
 }
 
 function mojoAdjustment(mojo: OptimalLineupCandidate["mojo"]): number {

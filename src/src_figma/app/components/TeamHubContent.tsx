@@ -21,6 +21,8 @@ import {
   OPTIMAL_LINEUP_SNAPSHOT_FIELDS,
   optimalLineupField,
   optimalLineupFieldsForDh,
+  summarizeLineupSnapshotComparison,
+  type LineupSnapshotComparison,
   type OptimalLineupCandidate,
   type OptimalLineupSnapshotField,
 } from "../../../utils/optimalLineup";
@@ -28,6 +30,7 @@ import type {
   OpposingPitcherHand,
   OptimalLineupSnapshot,
 } from "../../../types/managerWpa";
+import { OptimalLineupComparisonPanel } from "./OptimalLineupComparisonPanel";
 
 type TeamHubTab = "team" | "fan-morale" | "roster" | "stats" | "stadium" | "manager";
 
@@ -158,6 +161,8 @@ function toOptimalCandidate(player: Player): OptimalLineupCandidate {
     fielding: player.fielding,
     arm: player.arm,
     mojo: player.mojo,
+    trait1: player.trait1,
+    trait2: player.trait2,
     unavailable: false,
   };
 }
@@ -210,7 +215,7 @@ function getFreshOptimalLineupFields(update: Partial<Team>): OptimalLineupSnapsh
   return OPTIMAL_LINEUP_SNAPSHOT_FIELDS.filter((field) => field in update);
 }
 
-function applyFranchiseTeamUpdateWithStaleOptimalSnapshots(
+export function applyFranchiseTeamUpdateWithStaleOptimalSnapshots(
   team: Team,
   update: Partial<Team>,
 ): Team {
@@ -284,6 +289,12 @@ export function TeamHubContent() {
   const [lineupMode, setLineupMode] = useState<"DH" | "NO_DH">("NO_DH");
   const [isOptimalSaving, setIsOptimalSaving] = useState(false);
   const [optimalError, setOptimalError] = useState<string | null>(null);
+  const [lineupComparison, setLineupComparison] = useState<{
+    hand: OpposingPitcherHand;
+    comparison: LineupSnapshotComparison;
+    sourceConfidence?: string;
+    generatedFallback: boolean;
+  } | null>(null);
 
   // Convert real data to local formats with mock fallback
   const teams = useMemo(() => {
@@ -317,6 +328,10 @@ export function TeamHubContent() {
       ? storedLineup
       : buildDefaultFranchiseLineupSlots(franchiseRosterPlayers, useDH);
   }, [franchiseRosterPlayers, franchiseTeam, useDH]);
+
+  useEffect(() => {
+    setLineupComparison(null);
+  }, [selectedTeam, useDH]);
 
   useEffect(() => {
     if (!franchiseId || !selectedTeamId) {
@@ -484,6 +499,7 @@ export function TeamHubContent() {
   const saveFranchiseOptimalUpdate = async (update: Partial<Team>) => {
     if (!franchiseId || !franchiseTeam) return;
 
+    setLineupComparison(null);
     setIsOptimalSaving(true);
     setOptimalError(null);
     try {
@@ -541,6 +557,33 @@ export function TeamHubContent() {
     });
   };
 
+  const buildCurrentFranchiseComparisonSnapshot = (hand: OpposingPitcherHand) => {
+    if (!franchiseTeam || !selectedTeamId) return null;
+    const playerById = new Map(franchiseRosterPlayers.map((player) => [player.id, player]));
+
+    return buildLineupSnapshotFromSlots({
+      teamId: selectedTeamId,
+      mode: "franchise",
+      instanceId: franchiseId,
+      opposingPitcherHand: hand,
+      candidates: franchiseRosterPlayers.map(toOptimalCandidate),
+      dhEnabled: useDH,
+      generatedAt: Date.now(),
+      generatedFrom: "game_lock",
+      sourceConfidence: "engine_calculated",
+      rosterVersionId: franchiseTeam.lastModified,
+      slots: currentFranchiseLineup.map((slot) => {
+        const player = playerById.get(slot.playerId);
+        return {
+          playerId: slot.playerId,
+          playerName: player ? getFranchisePlayerName(player) : slot.playerId,
+          battingOrderSlot: slot.battingOrder,
+          defensivePosition: slot.fieldingPosition,
+        };
+      }),
+    });
+  };
+
   const handleApplyFranchiseOptimal = async (hand: OpposingPitcherHand) => {
     if (!franchiseTeam) return;
     const field = optimalLineupField(hand, useDH);
@@ -565,6 +608,20 @@ export function TeamHubContent() {
     if (!snapshot) return;
     await saveFranchiseOptimalUpdate({
       [optimalLineupField(hand, useDH)]: snapshot,
+    });
+  };
+
+  const handleCompareFranchiseOptimal = (hand: OpposingPitcherHand) => {
+    if (!franchiseTeam) return;
+    const field = optimalLineupField(hand, useDH);
+    const optimal = franchiseTeam[field] ?? buildFranchiseOptimalSnapshot(hand);
+    const chosen = buildCurrentFranchiseComparisonSnapshot(hand);
+    if (!optimal || !chosen) return;
+    setLineupComparison({
+      hand,
+      comparison: summarizeLineupSnapshotComparison({ chosen, optimal }),
+      sourceConfidence: optimal.sourceConfidence,
+      generatedFallback: !franchiseTeam[field],
     });
   };
 
@@ -686,7 +743,10 @@ export function TeamHubContent() {
               <div className="flex gap-2">
                 <button
                   type="button"
-                  onClick={() => setLineupMode("DH")}
+                  onClick={() => {
+                    setLineupMode("DH");
+                    setLineupComparison(null);
+                  }}
                   className={`border-2 px-3 py-1 text-[8px] font-bold ${
                     lineupMode === "DH"
                       ? "border-[#E8E8D8] bg-[#4A6844] text-[#E8E8D8]"
@@ -697,7 +757,10 @@ export function TeamHubContent() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setLineupMode("NO_DH")}
+                  onClick={() => {
+                    setLineupMode("NO_DH");
+                    setLineupComparison(null);
+                  }}
                   className={`border-2 px-3 py-1 text-[8px] font-bold ${
                     lineupMode === "NO_DH"
                       ? "border-[#E8E8D8] bg-[#4A6844] text-[#E8E8D8]"
@@ -727,7 +790,15 @@ export function TeamHubContent() {
                         {snapshot ? snapshot.sourceConfidence.replace(/_/g, " ") : "not set"}
                       </span>
                     </div>
-                    <div className="grid grid-cols-3 gap-1">
+                    <div className="grid grid-cols-4 gap-1">
+                      <button
+                        type="button"
+                        disabled={!franchiseTeam || isOptimalSaving}
+                        onClick={() => handleCompareFranchiseOptimal(hand)}
+                        className="border-2 border-[#E8E8D8]/30 bg-[#5A8352] px-1 py-1 text-[7px] hover:border-[#C4A853] disabled:opacity-40"
+                      >
+                        COMPARE
+                      </button>
                       <button
                         type="button"
                         disabled={!franchiseTeam || isOptimalSaving}
@@ -757,6 +828,15 @@ export function TeamHubContent() {
                 );
               })}
             </div>
+            {lineupComparison && (
+              <OptimalLineupComparisonPanel
+                hand={lineupComparison.hand}
+                comparison={lineupComparison.comparison}
+                sourceConfidence={lineupComparison.sourceConfidence}
+                generatedFallback={lineupComparison.generatedFallback}
+                onClose={() => setLineupComparison(null)}
+              />
+            )}
           </div>
           
           <div className="overflow-x-auto">

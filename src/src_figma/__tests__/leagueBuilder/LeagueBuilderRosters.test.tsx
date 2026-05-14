@@ -8,6 +8,7 @@
 import { describe, test, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { LeagueBuilderRosters } from '../../app/pages/LeagueBuilderRosters';
+import { buildLineupSnapshotFromSlots } from '../../../utils/optimalLineup';
 
 // ============================================
 // MOCKS
@@ -222,6 +223,79 @@ describe('LeagueBuilderRosters Component', () => {
       await waitFor(() => {
         expect(screen.getByText('UNASSIGNED (2)')).toBeInTheDocument();
       });
+    });
+
+    test('marks saved optimal lineup snapshots stale when roster membership changes', async () => {
+      const savedOptimal = buildLineupSnapshotFromSlots({
+        teamId: 'team-1',
+        mode: 'exhibition',
+        opposingPitcherHand: 'R',
+        candidates: [
+          {
+            playerId: 'player-1',
+            playerName: 'John Smith',
+            primaryPosition: 'SS',
+          },
+        ],
+        dhEnabled: true,
+        generatedAt: 100,
+        generatedFrom: 'user_registered_smb4_optimal',
+        sourceConfidence: 'user_registered',
+        slots: [
+          {
+            playerId: 'player-1',
+            playerName: 'John Smith',
+            battingOrderSlot: 1,
+            defensivePosition: 'SS',
+          },
+        ],
+      });
+      mockGetRoster.mockResolvedValueOnce({
+        teamId: 'team-1',
+        mlbRoster: ['player-1', 'player-2'],
+        farmRoster: [],
+        lineupWithDH: [{ battingOrder: 1, playerId: 'player-1', fieldingPosition: 'SS' }],
+        lineupWithoutDH: [],
+        optimalLineupVsRHPWithDH: savedOptimal,
+        optimalLineupVsLHPWithDH: undefined,
+        optimalLineupVsRHPWithoutDH: undefined,
+        optimalLineupVsLHPWithoutDH: undefined,
+        startingRotation: ['player-2'],
+        longRelievers: [],
+        closingPitcher: '',
+        setupPitchers: [],
+        depthChart: {
+          C: [],
+          '1B': [],
+          '2B': [],
+          SS: ['player-1'],
+          '3B': [],
+          LF: [],
+          CF: [],
+          RF: [],
+          DH: [],
+          SP: ['player-2'],
+          RP: [],
+          CP: [],
+        },
+        pinchHitOrder: [],
+        pinchRunOrder: [],
+        defensiveSubOrder: [],
+        lastModified: 'roster-v1',
+      });
+
+      render(<LeagueBuilderRosters />);
+      fireEvent.click(screen.getByText('Boston Sox'));
+
+      await screen.findByText('MLB ROSTER (2)');
+      fireEvent.click(screen.getAllByRole('button', { name: /AAA/ })[0]);
+      fireEvent.click(screen.getByRole('button', { name: /SAVE/ }));
+
+      await waitFor(() => expect(mockUpdateRoster).toHaveBeenCalled());
+      const savedRoster = mockUpdateRoster.mock.calls.at(-1)?.[0];
+      expect(savedRoster.optimalLineupVsRHPWithDH.sourceConfidence).toBe('stale_roster');
+      expect(savedRoster.optimalLineupVsRHPWithDH.confidence).toBe('low');
+      expect(savedRoster.optimalLineupVsRHPWithDH.slots).toEqual(savedOptimal.slots);
     });
   });
 
