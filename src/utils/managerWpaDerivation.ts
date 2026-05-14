@@ -289,6 +289,10 @@ export function deriveManagerDecisionRecords(
       deriveBetweenPlayManagerDecisions(event, input, gameId),
     ),
   ];
+  if (decisions.length === 0) {
+    return [];
+  }
+
   const resolvedDecisions = resolveManagerDecisionWindows(decisions, {
     atBatEvents,
     betweenPlayEvents,
@@ -1075,6 +1079,7 @@ function findNextPlateAppearanceEndpoint(
 
   const endpoint = context.atBatEvents.find((event) => {
     if (event.eventIndex <= startIndex) return false;
+    if (!isCompleteAtBatWindowEvent(event)) return false;
     if (!isSameHalf(decision, event.inning, event.halfInning)) return false;
 
     if (
@@ -1157,6 +1162,7 @@ function findFirstFieldingEndpoint(
     } => {
       if (!candidate) return false;
       if (!trackedPlayerIds.has(candidate.fieldingEvent.playerId)) return false;
+      if (!isCompleteAtBatWindowEvent(candidate.atBat)) return false;
       if (candidate.atBat.eventIndex <= startIndex) return false;
       return isSameHalf(
         decision,
@@ -1224,19 +1230,21 @@ function findGameEndEndpoint(
 
 function buildTimeline(context: ResolveDecisionWindowsContext): TimelineEntry[] {
   return [
-    ...context.atBatEvents.map((event) => {
-      const wpa = calculateAtBatWindow(event, context.totalInnings);
-      return {
-        kind: "at_bat" as const,
-        eventId: event.eventId,
-        eventIndex: event.eventIndex,
-        inning: event.inning,
-        halfInning: event.halfInning,
-        outsAfter: event.outsAfter,
-        homeWinProbabilityAfter: wpa.winProbabilityAfter,
-        atBat: event,
-      };
-    }),
+    ...context.atBatEvents
+      .filter(isCompleteAtBatWindowEvent)
+      .map((event) => {
+        const wpa = calculateAtBatWindow(event, context.totalInnings);
+        return {
+          kind: "at_bat" as const,
+          eventId: event.eventId,
+          eventIndex: event.eventIndex,
+          inning: event.inning,
+          halfInning: event.halfInning,
+          outsAfter: event.outsAfter,
+          homeWinProbabilityAfter: wpa.winProbabilityAfter,
+          atBat: event,
+        };
+      }),
     ...context.betweenPlayEvents.map((event) => {
       const wpa = calculateBetweenPlayWindow(event, context.totalInnings);
       return {
@@ -1253,6 +1261,21 @@ function buildTimeline(context: ResolveDecisionWindowsContext): TimelineEntry[] 
   ].sort(
     (left, right) =>
       left.eventIndex - right.eventIndex || left.eventId.localeCompare(right.eventId),
+  );
+}
+
+function isCompleteAtBatWindowEvent(event: AtBatEvent): boolean {
+  return (
+    typeof event.inning === "number" &&
+    (event.halfInning === "TOP" || event.halfInning === "BOTTOM") &&
+    typeof event.outs === "number" &&
+    typeof event.outsAfter === "number" &&
+    typeof event.homeScore === "number" &&
+    typeof event.awayScore === "number" &&
+    typeof event.homeScoreAfter === "number" &&
+    typeof event.awayScoreAfter === "number" &&
+    Boolean(event.runners) &&
+    Boolean(event.runnersAfter)
   );
 }
 
@@ -1435,8 +1458,6 @@ function buildDecisionWindow(input: {
 }
 
 function calculateAtBatWindow(event: AtBatEvent, totalInnings?: number) {
-  const normalizedAfter = normalizeAtBatWindowAfterState(event);
-
   const result = calculateWPA(
     {
       inning: event.inning,
@@ -1448,70 +1469,14 @@ function calculateAtBatWindow(event: AtBatEvent, totalInnings?: number) {
       totalInnings: event.totalInnings ?? totalInnings,
     },
     {
-      outs: normalizedAfter.outsAfter,
-      bases: normalizedAfter.basesAfter,
-      homeScore: normalizedAfter.homeScoreAfter,
-      awayScore: normalizedAfter.awayScoreAfter,
+      outs: event.outsAfter,
+      bases: runnerStateToBases(event.runnersAfter),
+      homeScore: event.homeScoreAfter,
+      awayScore: event.awayScoreAfter,
     },
   );
 
   return result;
-}
-
-function normalizeAtBatWindowAfterState(event: AtBatEvent): {
-  outsAfter: number;
-  basesAfter: ReturnType<typeof runnerStateToBases>;
-  homeScoreAfter: number;
-  awayScoreAfter: number;
-} {
-  const basesAfter = runnerStateToBases(event.runnersAfter);
-
-  if (event.result !== "HR" && event.result !== "ITPHR") {
-    return {
-      outsAfter: event.outsAfter,
-      basesAfter,
-      homeScoreAfter: event.homeScoreAfter,
-      awayScoreAfter: event.awayScoreAfter,
-    };
-  }
-
-  const occupiedRunnerCount =
-    Number(Boolean(event.runners.first)) +
-    Number(Boolean(event.runners.second)) +
-    Number(Boolean(event.runners.third));
-  const scoreDelta = Math.max(
-    0,
-    event.halfInning === "TOP"
-      ? event.awayScoreAfter - event.awayScore
-      : event.homeScoreAfter - event.homeScore,
-  );
-  const storedRuns =
-    typeof event.runsScored === "number"
-      ? event.runsScored
-      : event.runsScored.length;
-  const expectedRuns = Math.max(
-    1 + occupiedRunnerCount,
-    scoreDelta,
-    storedRuns,
-    event.rbiCount ?? 0,
-  );
-
-  return {
-    outsAfter: event.outs,
-    basesAfter: {
-      first: false,
-      second: false,
-      third: false,
-    },
-    homeScoreAfter:
-      event.halfInning === "BOTTOM"
-        ? event.homeScore + expectedRuns
-        : event.homeScore,
-    awayScoreAfter:
-      event.halfInning === "TOP"
-        ? event.awayScore + expectedRuns
-        : event.awayScore,
-  };
 }
 
 function calculateBetweenPlayWindow(

@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
 
+import { calculateWPA } from "../../engines/wpaCalculator";
 import type { AtBatEvent, BetweenPlayEvent, FieldingEvent } from "../eventLog";
 import {
   deriveManagerDecisionRecords,
@@ -765,7 +766,7 @@ describe("manager WPA derivation", () => {
     expect(derive([], [partialPrompt])).toEqual([]);
   });
 
-  test("pinch-hit HR from down 9 to down 6 gives the offensive manager positive WPA", () => {
+  test("pinch-hit HR down big is positive through committed WPA v2 state", () => {
     const pinchHit = createBetweenPlay({
       eventId: "game-1_bp_hr",
       eventIndex: 10,
@@ -814,9 +815,8 @@ describe("manager WPA derivation", () => {
       homeScore: 0,
       rbiCount: 3,
       runsScored: 3,
-      // Simulate a stale/bad snapshot that only counted the batter run.
       awayScoreAfter: 9,
-      homeScoreAfter: 1,
+      homeScoreAfter: 3,
       runnersAfter: { first: null, second: null, third: null },
     });
 
@@ -832,6 +832,91 @@ describe("manager WPA derivation", () => {
     });
     expect(decision.rawWindowWpa).toBeGreaterThan(0);
     expect(decision.managerWpa).toBeGreaterThan(0);
+  });
+
+  test("manager HR window uses committed score, outs, and runners after-state", () => {
+    const pinchHit = createBetweenPlay({
+      eventId: "game-1_bp_hr_committed",
+      eventIndex: 10,
+      type: "substitution",
+      gameState: {
+        inning: 2,
+        halfInning: "BOTTOM",
+        outs: 0,
+        score: { away: 9, home: 0 },
+        runnersOn: { first: "home-r1", second: "home-r2" },
+      },
+      pitcherChange: undefined,
+      substitution: {
+        subType: "pinch_hit",
+        outPlayerId: "home-starter",
+        inPlayerId: "home-ph",
+      },
+    });
+    const committedHr = createAtBat({
+      eventId: "game-1_11_committed",
+      eventIndex: 11,
+      inning: 2,
+      halfInning: "BOTTOM",
+      outs: 0,
+      batterId: "home-ph",
+      batterName: "Home PH",
+      result: "HR",
+      runners: {
+        first: {
+          runnerId: "home-r1",
+          runnerName: "Home Runner 1",
+          responsiblePitcherId: "away-pitcher",
+        },
+        second: {
+          runnerId: "home-r2",
+          runnerName: "Home Runner 2",
+          responsiblePitcherId: "away-pitcher",
+        },
+        third: null,
+      },
+      awayScore: 9,
+      homeScore: 0,
+      rbiCount: 3,
+      runsScored: 3,
+      outsAfter: 1,
+      awayScoreAfter: 9,
+      homeScoreAfter: 1,
+      runnersAfter: {
+        first: {
+          runnerId: "home-ph",
+          runnerName: "Home PH",
+          responsiblePitcherId: "away-pitcher",
+        },
+        second: null,
+        third: null,
+      },
+    });
+    const expected = calculateWPA(
+      {
+        inning: committedHr.inning,
+        isTop: false,
+        outs: committedHr.outs,
+        bases: { first: true, second: true, third: false },
+        homeScore: committedHr.homeScore,
+        awayScore: committedHr.awayScore,
+      },
+      {
+        outs: committedHr.outsAfter,
+        bases: { first: true, second: false, third: false },
+        homeScore: committedHr.homeScoreAfter,
+        awayScore: committedHr.awayScoreAfter,
+      },
+    );
+
+    const [decision] = derive([committedHr], [pinchHit]);
+
+    expect(decision).toMatchObject({
+      decisionType: "pinch_hitter",
+      resolvedAtEventId: "game-1_11_committed",
+    });
+    expect(decision.rawWindowWpa).toBe(expected.homeDelta);
+    expect(decision.managerWpa).toBeCloseTo(expected.homeDelta * 0.25, 4);
   });
 
   test("keeps pinch runners pending until a terminal runner event resolves", () => {

@@ -148,16 +148,22 @@ function createPromptedKeepCurrent(
 function derive(
   atBatEvents: AtBatEvent[] = [],
   betweenPlayEvents: BetweenPlayEvent[] = [],
+  options: {
+    fieldingEvents?: FieldingEvent[];
+    gameEnded?: boolean;
+  } = {},
 ) {
   return deriveCommittedManagerDecisionState({
     gameId: "game-1",
     atBatEvents,
     betweenPlayEvents,
+    fieldingEvents: options.fieldingEvents,
     awayTeamId: "away",
     homeTeamId: "home",
     awayManagerId: "away-manager",
     homeManagerId: "home-manager",
     totalInnings: 9,
+    gameEnded: options.gameEnded,
   });
 }
 
@@ -235,6 +241,79 @@ function deriveLineupDeltas(atBatEvents: AtBatEvent[]) {
     betweenPlayEvents: [],
     fieldingEvents: [],
     startingLineups,
+    awayTeamId: "away",
+    homeTeamId: "home",
+    awayManagerId: "away-manager",
+    homeManagerId: "home-manager",
+    totalInnings: 9,
+    gameEnded: true,
+  });
+}
+
+function defaultLineupDeltaSnapshots(): {
+  optimalLineupSnapshots: { away: OptimalLineupSnapshot; home: OptimalLineupSnapshot };
+  chosenLineupSnapshots: { away: OptimalLineupSnapshot; home: OptimalLineupSnapshot };
+} {
+  return {
+    optimalLineupSnapshots: {
+      away: createLineupSnapshot({
+        teamId: "away",
+        snapshotId: "away-optimal-default",
+        slots: startingLineups.away.map((starter) => ({
+          playerId: `optimal-${starter.playerId}`,
+          playerName: `Optimal ${starter.playerName}`,
+          battingOrderSlot: starter.battingOrder,
+          defensivePosition: starter.position,
+          projectedSlotKblWpa: 0,
+        })),
+      }),
+      home: createLineupSnapshot({
+        teamId: "home",
+        snapshotId: "home-optimal-default",
+        slots: startingLineups.home.map((starter) => ({
+          playerId: `optimal-${starter.playerId}`,
+          playerName: `Optimal ${starter.playerName}`,
+          battingOrderSlot: starter.battingOrder,
+          defensivePosition: starter.position,
+          projectedSlotKblWpa: 0,
+        })),
+      }),
+    },
+    chosenLineupSnapshots: {
+      away: createLineupSnapshot({
+        teamId: "away",
+        snapshotId: "away-chosen-default",
+        slots: startingLineups.away.map((starter) => ({
+          playerId: starter.playerId,
+          playerName: starter.playerName,
+          battingOrderSlot: starter.battingOrder,
+          defensivePosition: starter.position,
+          projectedSlotKblWpa: 0,
+        })),
+      }),
+      home: createLineupSnapshot({
+        teamId: "home",
+        snapshotId: "home-chosen-default",
+        slots: startingLineups.home.map((starter) => ({
+          playerId: starter.playerId,
+          playerName: starter.playerName,
+          battingOrderSlot: starter.battingOrder,
+          defensivePosition: starter.position,
+          projectedSlotKblWpa: 0,
+        })),
+      }),
+    },
+  };
+}
+
+function deriveLineupDeltasWithSnapshots(atBatEvents: AtBatEvent[]) {
+  return deriveManagerLineupDeltaRecords({
+    gameId: "game-1",
+    atBatEvents,
+    betweenPlayEvents: [],
+    fieldingEvents: [],
+    startingLineups,
+    ...defaultLineupDeltaSnapshots(),
     awayTeamId: "away",
     homeTeamId: "home",
     awayManagerId: "away-manager",
@@ -492,7 +571,9 @@ describe("committed manager WPA game state", () => {
       wpa: 0.2,
     });
 
-    const stint = derive([tacticalPa, laterPa], [pinchHit]).managerDeploymentStints[0];
+    const stint = derive([tacticalPa, laterPa], [pinchHit], {
+      gameEnded: true,
+    }).managerDeploymentStints[0];
 
     expect(stint).toMatchObject({
       deploymentRole: "pinch_hitter_remaining",
@@ -541,7 +622,9 @@ describe("committed manager WPA game state", () => {
       wpa: -0.2,
     });
 
-    const stint = derive([tacticalPa, laterPa], [pitchingChange])
+    const stint = derive([tacticalPa, laterPa], [pitchingChange], {
+      gameEnded: true,
+    })
       .managerDeploymentStints[0];
 
     expect(stint).toMatchObject({
@@ -625,6 +708,7 @@ describe("committed manager WPA game state", () => {
       awayManagerId: "away-manager",
       homeManagerId: "home-manager",
       totalInnings: 9,
+      gameEnded: true,
     }).managerDeploymentStints[0];
 
     expect(stint).toMatchObject({
@@ -667,7 +751,9 @@ describe("committed manager WPA game state", () => {
       wpa: 0.2,
     });
 
-    const stint = derive([tacticalPa, laterPa], [keepBatter]).managerDeploymentStints[0];
+    const stint = derive([tacticalPa, laterPa], [keepBatter], {
+      gameEnded: true,
+    }).managerDeploymentStints[0];
 
     expect(stint).toMatchObject({
       deploymentRole: "kept_in",
@@ -753,6 +839,7 @@ describe("committed manager WPA game state", () => {
     const state = derive(
       [firstTacticalPa, secondTacticalPa, laterPa],
       [firstKeep, secondKeep],
+      { gameEnded: true },
     );
     const keptInStints = state.managerDeploymentStints.filter(
       (stint) => stint.deploymentRole === "kept_in",
@@ -764,6 +851,165 @@ describe("committed manager WPA game state", () => {
       linkedEventIds: ["game-1_5"],
       rawLinkedWpa: 0.2,
       managerDeploymentWpa: 0.03,
+    });
+  });
+
+  function createLiveDeploymentFixture() {
+    const pinchHit = createBetweenPlay({
+      eventId: "game-1_bp_ph",
+      eventIndex: 1,
+      substitution: {
+        subType: "pinch_hit",
+        outPlayerId: "away-starter",
+        inPlayerId: "away-bench",
+        inPlayerName: "Away Bench",
+      },
+    });
+    const phTacticalPa = createAtBat({
+      eventId: "game-1_2",
+      eventIndex: 2,
+      batterId: "away-bench",
+      batterName: "Away Bench",
+      batterTeamId: "away",
+      wpa: 0.1,
+    });
+    const phLaterPa = createAtBat({
+      eventId: "game-1_3",
+      eventIndex: 3,
+      batterId: "away-bench",
+      batterName: "Away Bench",
+      batterTeamId: "away",
+      wpa: 0.4,
+    });
+    const pitchingChange = createBetweenPlay({
+      eventId: "game-1_bp_pitcher",
+      eventIndex: 4,
+      type: "pitcher_change",
+      substitution: undefined,
+      pitcherChange: {
+        outgoingPitcherId: "home-starter",
+        incomingPitcherId: "home-rp",
+        incomingPitcherName: "Home RP",
+        inheritedRunners: 0,
+      },
+    });
+    const pitcherTacticalPa = createAtBat({
+      eventId: "game-1_5",
+      eventIndex: 5,
+      pitcherId: "home-rp",
+      pitcherName: "Home RP",
+      pitcherTeamId: "home",
+      outs: 0,
+      outsAfter: 1,
+      wpaModelVersion: WPA_MODEL_VERSION,
+    });
+    const pitcherLaterPa = createAtBat({
+      eventId: "game-1_6",
+      eventIndex: 6,
+      pitcherId: "home-rp",
+      pitcherName: "Home RP",
+      pitcherTeamId: "home",
+      outs: 1,
+      outsAfter: 2,
+      wpaModelVersion: WPA_MODEL_VERSION,
+    });
+    const pinchRun = createBetweenPlay({
+      eventId: "game-1_bp_pr",
+      eventIndex: 7,
+      substitution: {
+        subType: "pinch_run",
+        outPlayerId: "away-runner",
+        inPlayerId: "away-speed",
+        inPlayerName: "Away Speed",
+      },
+    });
+    const prTacticalTerminal = createAtBat({
+      eventId: "game-1_8",
+      eventIndex: 8,
+      result: "1B",
+      runnerOutcomes: [
+        {
+          runnerId: "away-speed",
+          runnerName: "Away Speed",
+          fromBase: "first",
+          toBase: "home",
+        },
+      ],
+      awayScoreAfter: 3,
+      runsScored: ["away-speed"],
+      wpa: 0.3,
+    });
+    const prLaterPa = createAtBat({
+      eventId: "game-1_9",
+      eventIndex: 9,
+      batterId: "away-speed",
+      batterName: "Away Speed",
+      batterTeamId: "away",
+      wpa: 0.2,
+    });
+
+    return {
+      atBatEvents: [
+        phTacticalPa,
+        phLaterPa,
+        pitcherTacticalPa,
+        pitcherLaterPa,
+        prTacticalTerminal,
+        prLaterPa,
+      ],
+      betweenPlayEvents: [pinchHit, pitchingChange, pinchRun],
+    };
+  }
+
+  test("mid-game PH, pitcher, and PR deployments remain active and unscored", () => {
+    const fixture = createLiveDeploymentFixture();
+    const state = derive(fixture.atBatEvents, fixture.betweenPlayEvents, {
+      gameEnded: false,
+    });
+
+    expect(state.managerDeploymentStints).toHaveLength(3);
+    expect(
+      state.managerDeploymentStints.map((stint) => stint.deploymentRole).sort(),
+    ).toEqual(["pinch_hitter_remaining", "pinch_runner", "pitcher"]);
+    expect(
+      state.managerDeploymentStints.every(
+        (stint) =>
+          stint.closedAtEventId === undefined &&
+          stint.closedAtEventIndex === undefined &&
+          stint.closeReason === undefined &&
+          stint.linkedEventIds.length === 0 &&
+          stint.rawLinkedWpa === 0 &&
+          stint.managerDeploymentWpa === 0,
+      ),
+    ).toBe(true);
+  });
+
+  test("same deployment fixture closes and scores when gameEnded is true", () => {
+    const fixture = createLiveDeploymentFixture();
+    const state = derive(fixture.atBatEvents, fixture.betweenPlayEvents, {
+      gameEnded: true,
+    });
+
+    const byRole = new Map(
+      state.managerDeploymentStints.map((stint) => [stint.deploymentRole, stint]),
+    );
+
+    expect(byRole.get("pinch_hitter_remaining")).toMatchObject({
+      closeReason: "game_end",
+      linkedEventIds: ["game-1_3"],
+      rawLinkedWpa: 0.4,
+      managerDeploymentWpa: 0.06,
+    });
+    expect(byRole.get("pitcher")).toMatchObject({
+      closeReason: "game_end",
+      linkedEventIds: ["game-1_6"],
+    });
+    expect(byRole.get("pitcher")?.managerDeploymentWpa).not.toBe(0);
+    expect(byRole.get("pinch_runner")).toMatchObject({
+      closeReason: "game_end",
+      linkedEventIds: ["game-1_9"],
+      rawLinkedWpa: 0.2,
+      managerDeploymentWpa: 0.04,
     });
   });
 
@@ -826,6 +1072,107 @@ describe("committed manager WPA game state", () => {
     });
   });
 
+  test("closes deployment stints on role change and scores the closed window", () => {
+    const defensiveSub = createBetweenPlay({
+      eventId: "game-1_bp_defense",
+      eventIndex: 1,
+      type: "substitution",
+      substitution: {
+        subType: "defensive_replacement",
+        outPlayerId: "home-left-old",
+        outPlayerName: "Home Left Old",
+        inPlayerId: "home-glove",
+        inPlayerName: "Home Glove",
+        inPosition: "LF",
+      },
+    });
+    const roleChange = createBetweenPlay({
+      eventId: "game-1_bp_role_change",
+      eventIndex: 4,
+      type: "position_change",
+      substitution: {
+        subType: "position_change",
+        outPlayerId: "home-glove",
+        outPlayerName: "Home Glove",
+        inPlayerId: "home-glove",
+        inPlayerName: "Home Glove",
+        previousPosition: "LF",
+        inPosition: "CF",
+      },
+    });
+    const tacticalFieldingPlay = createAtBat({
+      eventId: "game-1_2",
+      eventIndex: 2,
+      outs: 0,
+      outsAfter: 1,
+      wpaModelVersion: WPA_MODEL_VERSION,
+    });
+    const countedFieldingPlay = createAtBat({
+      eventId: "game-1_3",
+      eventIndex: 3,
+      outs: 1,
+      outsAfter: 2,
+      wpaModelVersion: WPA_MODEL_VERSION,
+    });
+    const fieldingEvents: FieldingEvent[] = [
+      {
+        fieldingEventId: "fielding-role-1",
+        gameId: "game-1",
+        atBatEventId: "game-1_2",
+        sequence: 1,
+        playerId: "home-glove",
+        playerName: "Home Glove",
+        position: "LF",
+        teamId: "home",
+        playType: "putout",
+        difficulty: "routine",
+        ballInPlay: { trajectory: "fly", zone: 7 },
+        success: true,
+        runsPreventedOrAllowed: 0,
+      },
+      {
+        fieldingEventId: "fielding-role-2",
+        gameId: "game-1",
+        atBatEventId: "game-1_3",
+        sequence: 1,
+        playerId: "home-glove",
+        playerName: "Home Glove",
+        position: "LF",
+        teamId: "home",
+        playType: "putout",
+        difficulty: "routine",
+        ballInPlay: { trajectory: "fly", zone: 7 },
+        success: true,
+        runsPreventedOrAllowed: 0,
+      },
+    ];
+
+    const state = deriveCommittedManagerDecisionState({
+      gameId: "game-1",
+      atBatEvents: [tacticalFieldingPlay, countedFieldingPlay],
+      betweenPlayEvents: [defensiveSub, roleChange],
+      fieldingEvents,
+      awayTeamId: "away",
+      homeTeamId: "home",
+      awayManagerId: "away-manager",
+      homeManagerId: "home-manager",
+      totalInnings: 9,
+      gameEnded: false,
+    });
+    const closed = state.managerDeploymentStints.find(
+      (stint) =>
+        stint.playerId === "home-glove" &&
+        stint.trackedPosition === "LF",
+    );
+
+    expect(closed).toMatchObject({
+      closeReason: "role_change",
+      closedAtEventId: "game-1_bp_role_change",
+      linkedEventIds: ["game-1_3"],
+    });
+    expect(closed?.managerDeploymentWpa).not.toBe(0);
+  });
+
   test("closes pinch-runner deployment at the terminal runner outcome", () => {
     const pinchRun = createBetweenPlay({
       eventId: "game-1_bp_1",
@@ -879,6 +1226,7 @@ describe("committed manager WPA game state", () => {
     const stint = derive(
       [firstRunnerWindowEvent, terminalRunnerWindowEvent, laterPlateAppearance],
       [pinchRun],
+      { gameEnded: true },
     ).managerDeploymentStints[0];
 
     expect(stint).toMatchObject({
@@ -933,6 +1281,7 @@ describe("committed manager WPA game state", () => {
     const stint = derive(
       [terminalRunnerWindowEvent, laterPlateAppearance],
       [pinchRun],
+      { gameEnded: true },
     ).managerDeploymentStints[0];
 
     expect(stint).toMatchObject({
@@ -1017,6 +1366,7 @@ describe("committed manager WPA game state", () => {
       awayManagerId: "away-manager",
       homeManagerId: "home-manager",
       totalInnings: 9,
+      gameEnded: true,
     });
 
     expect(state.managerDeploymentStints[0]).toMatchObject({
@@ -1224,9 +1574,9 @@ describe("committed manager WPA game state", () => {
         defensivePosition: "SS",
         starterRole: "position_player" as const,
         actualPlayerKblWpa: 0.4,
-        replacementExpectedKblWpa: 0,
-        replacementBaselineSource: "v1_zero_default" as const,
-        replacementBaselineConfidence: "low" as const,
+        replacementExpectedKblWpa: 0.3,
+        replacementBaselineSource: "optimal_lineup_v2" as const,
+        replacementBaselineConfidence: "medium" as const,
         rawPerformanceDelta: 0.4,
         managerShare: 0.25,
         managerWpa: 0.1,
@@ -1276,7 +1626,137 @@ describe("committed manager WPA game state", () => {
     expect(archived?.managerLineupDeltas).toEqual(lineupDeltas);
   });
 
-  test("derives starter lineup delta math with v1 zero replacement baseline", () => {
+  test("completed Franchise manager records use assigned manager IDs instead of team defaults", () => {
+    const optimal = createLineupSnapshot({
+      teamId: "away",
+      snapshotId: "away-optimal-assigned-manager",
+      slots: [
+        {
+          playerId: "away-optimal-cf",
+          playerName: "Away Optimal CF",
+          battingOrderSlot: 1,
+          defensivePosition: "CF",
+          projectedSlotKblWpa: 0.1,
+        },
+      ],
+    });
+    const chosen = createLineupSnapshot({
+      teamId: "away",
+      snapshotId: "away-chosen-assigned-manager",
+      slots: [
+        {
+          playerId: "away-starter-1",
+          playerName: "Away Starter 1",
+          battingOrderSlot: 1,
+          defensivePosition: "SS",
+          projectedSlotKblWpa: 0,
+        },
+      ],
+    });
+    const pinchHit = createBetweenPlay({
+      eventId: "game-1_bp_assigned",
+      eventIndex: 1,
+      substitution: {
+        subType: "pinch_hit",
+        outPlayerId: "away-starter-2",
+        inPlayerId: "away-bench",
+        inPlayerName: "Away Bench",
+      },
+    });
+    const pinchHitPa = createAtBat({
+      eventId: "game-1_2",
+      eventIndex: 2,
+      batterId: "away-bench",
+      batterName: "Away Bench",
+      batterTeamId: "away",
+      wpa: 0.1,
+    });
+    const intentionalWalk = createAtBat({
+      eventId: "game-1_3",
+      eventIndex: 3,
+      result: "IBB",
+      runnersAfter: {
+        first: {
+          runnerId: "away-batter",
+          runnerName: "Away Batter",
+          responsiblePitcherId: "home-pitcher",
+        },
+        second: null,
+        third: null,
+      },
+      outsAfter: 1,
+    });
+    const lineupEvent = createSparseKblWpaEvent({
+      eventId: "game-1_wpa_assigned",
+      playerId: "away-starter-1",
+      playerName: "Away Starter 1",
+      teamId: "away",
+      wpa: -0.2,
+    });
+
+    const state = deriveCommittedManagerDecisionState({
+      gameId: "game-1",
+      atBatEvents: [pinchHitPa, intentionalWalk, lineupEvent],
+      betweenPlayEvents: [pinchHit],
+      fieldingEvents: [],
+      startingLineups,
+      optimalLineupSnapshots: { away: optimal },
+      chosenLineupSnapshots: { away: chosen },
+      awayTeamId: "away",
+      homeTeamId: "home",
+      managerAssignments: [
+        {
+          managerId: "assigned-away-manager",
+          teamId: "away",
+          mode: "franchise",
+          instanceId: "franchise-1",
+        },
+        {
+          managerId: "assigned-home-manager",
+          teamId: "home",
+          mode: "franchise",
+          instanceId: "franchise-1",
+        },
+      ],
+      mode: "franchise",
+      instanceId: "franchise-1",
+      totalInnings: 9,
+      gameEnded: true,
+    });
+
+    expect(
+      state.managerDecisions.find(
+        (decision) => decision.decisionType === "pinch_hitter",
+      )?.managerId,
+    ).toBe("assigned-away-manager");
+    expect(
+      state.managerDecisions.find(
+        (decision) => decision.decisionType === "intentional_walk",
+      )?.managerId,
+    ).toBe("assigned-home-manager");
+    expect(state.managerDeploymentStints[0]?.managerId).toBe(
+      "assigned-away-manager",
+    );
+    expect(state.managerLineupDeltas[0]?.managerId).toBe(
+      "assigned-away-manager",
+    );
+    expect(
+      [
+        ...state.managerDecisions.map((record) => record.managerId),
+        ...state.managerDeploymentStints.map((record) => record.managerId),
+        ...state.managerLineupDeltas.map((record) => record.managerId),
+      ],
+    ).not.toContain("away-manager");
+    expect(
+      [
+        ...state.managerDecisions.map((record) => record.managerId),
+        ...state.managerDeploymentStints.map((record) => record.managerId),
+        ...state.managerLineupDeltas.map((record) => record.managerId),
+      ],
+    ).not.toContain("home-manager");
+  });
+
+  test("missing snapshots create no official Lineup Delta records", () => {
     const deltas = deriveLineupDeltas([
       createSparseKblWpaEvent({
         eventId: "game-1_wpa_1",
@@ -1287,22 +1767,10 @@ describe("committed manager WPA game state", () => {
       }),
     ]);
 
-    expect(deltas.find((delta) => delta.starterPlayerId === "away-starter-1")).toMatchObject({
-      managerId: "away-manager",
-      teamId: "away",
-      starterPlayerName: "Away Starter 1",
-      starterRole: "position_player",
-      actualPlayerKblWpa: 0.4,
-      replacementExpectedKblWpa: 0,
-      replacementBaselineSource: "v1_zero_default",
-      replacementBaselineConfidence: "low",
-      rawPerformanceDelta: 0.4,
-      managerShare: 0.25,
-      managerWpa: 0.1,
-    });
+    expect(deltas).toEqual([]);
   });
 
-  test("uses Optimal Lineup v2 snapshots when present and skips exact optimal lineups", () => {
+  test("uses Optimal Lineup v2 snapshots and skips exact optimal even when starters underperform", () => {
     const optimal = createLineupSnapshot({
       teamId: "away",
       snapshotId: "away-optimal",
@@ -1326,7 +1794,15 @@ describe("committed manager WPA game state", () => {
 
     const state = deriveCommittedManagerDecisionState({
       gameId: "game-1",
-      atBatEvents: [],
+      atBatEvents: [
+        createSparseKblWpaEvent({
+          eventId: "game-1_wpa_underperform",
+          playerId: "away-starter-1",
+          playerName: "Away Starter 1",
+          teamId: "away",
+          wpa: -0.5,
+        }),
+      ],
       betweenPlayEvents: [],
       fieldingEvents: [],
       startingLineups,
@@ -1340,6 +1816,69 @@ describe("committed manager WPA game state", () => {
     });
 
     expect(state.managerLineupDeltas.filter((delta) => delta.teamId === "away")).toEqual([]);
+  });
+
+  test("starting pitcher WPA never creates Lineup Delta records", () => {
+    const optimal = createLineupSnapshot({
+      teamId: "away",
+      snapshotId: "away-optimal-sp",
+      slots: [
+        {
+          playerId: "optimal-sp",
+          playerName: "Optimal Starter",
+          battingOrderSlot: 9,
+          defensivePosition: "P",
+          projectedSlotKblWpa: 0.2,
+        },
+      ],
+    });
+    const chosen = createLineupSnapshot({
+      teamId: "away",
+      snapshotId: "away-chosen-sp",
+      slots: [
+        {
+          playerId: "away-sp",
+          playerName: "Away Starter Pitcher",
+          battingOrderSlot: 9,
+          defensivePosition: "P",
+          projectedSlotKblWpa: -0.2,
+        },
+      ],
+    });
+    const deltas = deriveManagerLineupDeltaRecords({
+      gameId: "game-1",
+      atBatEvents: [
+        createSparseKblWpaEvent({
+          eventId: "game-1_wpa_sp",
+          playerId: "away-sp",
+          playerName: "Away Starter Pitcher",
+          teamId: "away",
+          wpa: -1,
+        }),
+      ],
+      betweenPlayEvents: [],
+      fieldingEvents: [],
+      startingLineups: {
+        away: [
+          {
+            playerId: "away-sp",
+            playerName: "Away Starter Pitcher",
+            position: "P",
+            battingOrder: 9,
+          },
+        ],
+        home: [],
+      },
+      optimalLineupSnapshots: { away: optimal },
+      chosenLineupSnapshots: { away: chosen },
+      awayTeamId: "away",
+      homeTeamId: "home",
+      awayManagerId: "away-manager",
+      homeManagerId: "home-manager",
+      gameEnded: true,
+    });
+
+    expect(deltas).toEqual([]);
   });
 
   test("scores lineup deviations against Optimal Lineup projection rather than chosen projection", () => {
@@ -1408,7 +1947,7 @@ describe("committed manager WPA game state", () => {
   });
 
   test("caps each starter lineup delta to +/-0.250", () => {
-    const deltas = deriveLineupDeltas([
+    const deltas = deriveLineupDeltasWithSnapshots([
       createSparseKblWpaEvent({
         eventId: "game-1_wpa_1",
         playerId: "away-starter-1",
@@ -1428,7 +1967,7 @@ describe("committed manager WPA game state", () => {
   });
 
   test("caps each team's lineup delta total to +/-0.750", () => {
-    const deltas = deriveLineupDeltas([
+    const deltas = deriveLineupDeltasWithSnapshots([
       ...[1, 2, 3, 4].map((slot) =>
         createSparseKblWpaEvent({
           eventId: `game-1_wpa_${slot}`,
@@ -1451,7 +1990,7 @@ describe("committed manager WPA game state", () => {
   });
 
   test("derives lineup deltas for both managers", () => {
-    const deltas = deriveLineupDeltas([
+    const deltas = deriveLineupDeltasWithSnapshots([
       createSparseKblWpaEvent({
         eventId: "game-1_wpa_1",
         playerId: "away-starter-1",
@@ -1497,7 +2036,7 @@ describe("committed manager WPA game state", () => {
         wpa: 0.4,
       }),
     ];
-    const deltas = deriveLineupDeltas(atBatEvents);
+    const deltas = deriveLineupDeltasWithSnapshots(atBatEvents);
     const credits = deriveKblWpaCredits({
       atBatEvents,
       startingLineups,
@@ -1538,7 +2077,9 @@ describe("committed manager WPA game state", () => {
       batterTeamId: "away",
       wpa: 0.4,
     });
-    const state = derive([tacticalPa, countedPa], [pinchHit]);
+    const state = derive([tacticalPa, countedPa], [pinchHit], {
+      gameEnded: true,
+    });
     const credits = deriveKblWpaCredits({
       atBatEvents: [tacticalPa, countedPa],
       betweenPlayEvents: [pinchHit],

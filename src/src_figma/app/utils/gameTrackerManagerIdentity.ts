@@ -1,3 +1,5 @@
+import { getDefaultManagerIdForTeam } from "../../../utils/managerWpaDerivation";
+
 export interface ManagerNavigationInput {
   awayTeamId: string;
   homeTeamId: string;
@@ -14,7 +16,9 @@ export function resolveGameTrackerManagerIds(
   input: ManagerNavigationInput,
 ): ResolvedGameTrackerManagerIds {
   return {
-    awayManagerId: input.awayManagerId || `${input.awayTeamId}-manager`,
-    homeManagerId: input.homeManagerId || `${input.homeTeamId}-manager`,
+    awayManagerId:
+      input.awayManagerId || getDefaultManagerIdForTeam(input.awayTeamId),
+    homeManagerId:
+      input.homeManagerId || getDefaultManagerIdForTeam(input.homeTeamId),
   };
 }

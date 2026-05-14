@@ -261,15 +261,13 @@ export function deriveManagerDeploymentStintRecords(
     const substitution = event.substitution;
     const pitcherChange = event.pitcherChange;
 
-    if (substitution?.outPlayerId) {
-      closeMatching(substitution.outPlayerId, event, "removed");
-    }
-
     if (
       substitution?.subType === "position_change" &&
       substitution.inPlayerId === substitution.outPlayerId
     ) {
       closeMatching(substitution.inPlayerId, event, "role_change");
+    } else if (substitution?.outPlayerId) {
+      closeMatching(substitution.outPlayerId, event, "removed");
     }
 
     const opening = buildDeploymentOpening(input, event);
@@ -290,14 +288,16 @@ export function deriveManagerDeploymentStintRecords(
     }
   }
 
-  const lastEvent = latestCommittedEvent(input);
-  for (const stint of open) {
-    closed.push({
-      ...stint,
-      closedAtEventId: lastEvent?.eventId,
-      closedAtEventIndex: lastEvent?.eventIndex,
-      closeReason: "game_end",
-    });
+  if (input.gameEnded === true) {
+    const lastEvent = latestCommittedEvent(input);
+    for (const stint of open) {
+      closed.push({
+        ...stint,
+        closedAtEventId: lastEvent?.eventId,
+        closedAtEventIndex: lastEvent?.eventIndex,
+        closeReason: "game_end",
+      });
+    }
   }
 
   const credits = deriveKblWpaCredits({
@@ -356,7 +356,7 @@ export function deriveManagerDeploymentStintRecords(
     );
   }
 
-  return uncapped.map((row) => {
+  const scoredClosedStints = uncapped.map((row) => {
     const teamTotal = teamTotals.get(row.stint.teamId) ?? 0;
     const teamScale =
       Math.abs(teamTotal) > DEPLOYMENT_TEAM_CAP
@@ -372,10 +372,27 @@ export function deriveManagerDeploymentStintRecords(
       managerShare: row.managerShare,
       managerDeploymentWpa: roundWpa(row.managerDeploymentWpa * teamScale),
       cap: DEPLOYMENT_STINT_CAP,
-      confidence: "medium",
+      confidence: "medium" as const,
       wpaModelVersion: WPA_MODEL_VERSION,
     };
   });
+
+  const activeStints =
+    input.gameEnded === true
+      ? []
+      : open.map((stint) => ({
+          ...stint,
+          tacticalExclusionEventIds: findTacticalExclusionEventIds(stint, input),
+          linkedEventIds: [],
+          rawLinkedWpa: 0,
+          managerShare: DEPLOYMENT_SHARE_BY_ROLE[stint.deploymentRole],
+          managerDeploymentWpa: 0,
+          cap: DEPLOYMENT_STINT_CAP,
+          confidence: "medium" as const,
+          wpaModelVersion: WPA_MODEL_VERSION,
+        }));
+
+  return [...scoredClosedStints, ...activeStints];
 }
 
 function buildDeploymentOpening(
@@ -691,59 +708,7 @@ function deriveTeamLineupDeltas(input: {
     });
   }
 
-  const uncapped = input.starters.map((starter) => {
-    const actualPlayerKblWpa =
-      input.totalsByPlayerId.get(starter.playerId)?.totalWpa ?? 0;
-    const replacementExpectedKblWpa = 0;
-    const rawPerformanceDelta = roundWpa(
-      actualPlayerKblWpa - replacementExpectedKblWpa,
-    );
-    const playerCappedManagerWpa = clamp(
-      roundWpa(rawPerformanceDelta * LINEUP_DELTA_MANAGER_SHARE),
-      -LINEUP_DELTA_PLAYER_CAP,
-      LINEUP_DELTA_PLAYER_CAP,
-    );
-
-    return {
-      starter,
-      actualPlayerKblWpa,
-      replacementExpectedKblWpa,
-      rawPerformanceDelta,
-      playerCappedManagerWpa,
-    };
-  });
-
-  const teamTotal = uncapped.reduce(
-    (sum, row) => sum + row.playerCappedManagerWpa,
-    0,
-  );
-  const teamScale =
-    Math.abs(teamTotal) > LINEUP_DELTA_TEAM_CAP
-      ? LINEUP_DELTA_TEAM_CAP / Math.abs(teamTotal)
-      : 1;
-
-  return uncapped.map((row) => ({
-    decisionId: `${input.gameId}:${input.teamId}:${row.starter.playerId}:lineup_delta`,
-    gameId: input.gameId,
-    managerId: input.managerId,
-    teamId: input.teamId,
-    decisionType: "lineup_construction",
-    inferenceMethod: "automatic",
-    confidence: "low",
-    starterPlayerId: row.starter.playerId,
-    starterPlayerName: row.starter.playerName,
-    battingOrderSlot: row.starter.battingOrder,
-    defensivePosition: row.starter.defensivePosition,
-    starterRole: row.starter.starterRole,
-    actualPlayerKblWpa: roundWpa(row.actualPlayerKblWpa),
-    replacementExpectedKblWpa: row.replacementExpectedKblWpa,
-    replacementBaselineSource: "v1_zero_default",
-    replacementBaselineConfidence: "low",
-    rawPerformanceDelta: row.rawPerformanceDelta,
-    managerShare: LINEUP_DELTA_MANAGER_SHARE,
-    managerWpa: roundWpa(row.playerCappedManagerWpa * teamScale),
-    wpaModelVersion: WPA_MODEL_VERSION,
-  }));
+  return [];
 }
 
 function deriveTeamLineupDeltasFromOptimalSnapshot(input: {
@@ -759,7 +724,11 @@ function deriveTeamLineupDeltasFromOptimalSnapshot(input: {
   const deviations = mapLineupSnapshotDeviations({
     chosen: input.chosenSnapshot,
     optimal: input.optimalSnapshot,
-  });
+  }).filter(
+    (deviation) =>
+      !isPitcherLineupSlot(deviation.chosenSlot.defensivePosition) &&
+      !isPitcherLineupSlot(deviation.optimalSlot.defensivePosition),
+  );
 
   if (deviations.length === 0) {
     return [];
@@ -903,10 +872,15 @@ function starterRoleForPosition(
 ): ManagerLineupDeltaRecord["starterRole"] {
   const normalized = position.trim().toUpperCase();
   if (normalized === "DH") return "designated_hitter";
-  if (normalized === "P" || normalized === "SP" || normalized === "RP") {
+  if (isPitcherLineupSlot(normalized)) {
     return "starting_pitcher";
   }
   return "position_player";
+}
+
+function isPitcherLineupSlot(position: string): boolean {
+  const normalized = position.trim().toUpperCase();
+  return normalized === "P" || normalized === "SP" || normalized === "RP";
 }
 
 function confidenceForLineupDelta(

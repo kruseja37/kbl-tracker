@@ -1,3 +1,5 @@
+import { getDefaultManagerIdForTeam } from "../../../utils/managerWpaDerivation";
+
 export interface PregameManagerNavigationInput {
   awayTeamId?: string;
   homeTeamId?: string;
@@ -24,11 +26,11 @@ export function withPregameManagerNavigationState<
     ...state,
     awayManagerId:
       managers.awayManagerId ||
-      (state.awayTeamId ? `${state.awayTeamId}-manager` : undefined),
+      (state.awayTeamId ? getDefaultManagerIdForTeam(state.awayTeamId) : undefined),
     awayManagerName: managers.awayManagerName || undefined,
     homeManagerId:
       managers.homeManagerId ||
-      (state.homeTeamId ? `${state.homeTeamId}-manager` : undefined),
+      (state.homeTeamId ? getDefaultManagerIdForTeam(state.homeTeamId) : undefined),
     homeManagerName: managers.homeManagerName || undefined,
   };
 }

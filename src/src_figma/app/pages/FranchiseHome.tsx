@@ -50,7 +50,12 @@ import { getApproachingMilestones, type MilestoneWatch } from "../../../utils/mi
 import { getAllCareerBatting, getAllCareerPitching } from "../../../utils/careerStorage";
 import { getSeasonBattingStats, getSeasonPitchingStats, getActiveSeason } from "../../../utils/seasonStorage";
 import { buildFranchiseGameTrackerRoster, collectFranchiseRosterPlayerIds } from "../utils/franchiseGameTrackerRoster";
+import { withPregameManagerNavigationState } from "../utils/pregameNavigationState";
 import { selectOptimalLineupForOpposingPitcher } from "../../../utils/optimalLineup";
+import {
+  LEAGUE_BUILDER_MANAGER_INSTANCE_ID,
+  resolveManagerForTeam,
+} from "../../../utils/managerIdentityStorage";
 import type { GameLockLineupSnapshots, OptimalLineupSnapshot } from "../../../types/managerWpa";
 
 // Context for passing franchise data to child components
@@ -699,6 +704,36 @@ export function FranchiseHome() {
       getTeam(awayTeamId),
       getTeam(homeTeamId),
     ]);
+    const managerInstanceId =
+      franchiseId || franchiseLeagueId || LEAGUE_BUILDER_MANAGER_INSTANCE_ID;
+    const [awayManager, homeManager] = await Promise.all([
+      resolveManagerForTeam({
+        team: {
+          id: awayTeamId,
+          name: awayTeamName,
+          managerId: awayTeamData?.managerId,
+          managerName: awayTeamData?.managerName,
+        },
+        mode: "franchise",
+        instanceId: managerInstanceId,
+        fallbackMode: "franchise",
+        fallbackInstanceId: LEAGUE_BUILDER_MANAGER_INSTANCE_ID,
+        persistAssignment: true,
+      }),
+      resolveManagerForTeam({
+        team: {
+          id: homeTeamId,
+          name: homeTeamName,
+          managerId: homeTeamData?.managerId,
+          managerName: homeTeamData?.managerName,
+        },
+        mode: "franchise",
+        instanceId: managerInstanceId,
+        fallbackMode: "franchise",
+        fallbackInstanceId: LEAGUE_BUILDER_MANAGER_INSTANCE_ID,
+        persistAssignment: true,
+      }),
+    ]);
     const awayStarter = awayRoster.pitchers.find((pitcher) => pitcher.isStarter);
     const homeStarter = homeRoster.pitchers.find((pitcher) => pitcher.isStarter);
     const optimalLineupSnapshots: GameLockLineupSnapshots = {
@@ -707,7 +742,7 @@ export function FranchiseHome() {
     };
 
     navigate(`/game-tracker/playoff-${series.id}-g${nextGameNumber}`, {
-      state: {
+      state: withPregameManagerNavigationState({
         gameMode: 'playoff' as const,
         playoffSeriesId: series.id,
         playoffGameNumber: nextGameNumber,
@@ -736,7 +771,12 @@ export function FranchiseHome() {
         seasonNumber: currentSeason,
         // T0-01: Pass total innings for auto game-end detection
         totalInnings: franchiseData?.franchiseConfig?.season?.inningsPerGame ?? 9,
-      },
+      }, {
+        awayManagerId: awayManager.managerId,
+        awayManagerName: awayManager.managerName,
+        homeManagerId: homeManager.managerId,
+        homeManagerName: homeManager.managerName,
+      }),
     });
   };
 
@@ -2826,6 +2866,36 @@ function GameDayContent({ scheduleData, currentSeason, onDataRefresh }: GameDayC
       getTeam(preGameData.awayTeamId),
       getTeam(preGameData.homeTeamId),
     ]);
+    const managerInstanceId =
+      franchiseId || franchiseLeagueId || LEAGUE_BUILDER_MANAGER_INSTANCE_ID;
+    const [awayManager, homeManager] = await Promise.all([
+      resolveManagerForTeam({
+        team: {
+          id: preGameData.awayTeamId,
+          name: preGameData.awayTeamName,
+          managerId: awayTeamData?.managerId,
+          managerName: awayTeamData?.managerName,
+        },
+        mode: "franchise",
+        instanceId: managerInstanceId,
+        fallbackMode: "franchise",
+        fallbackInstanceId: LEAGUE_BUILDER_MANAGER_INSTANCE_ID,
+        persistAssignment: true,
+      }),
+      resolveManagerForTeam({
+        team: {
+          id: preGameData.homeTeamId,
+          name: preGameData.homeTeamName,
+          managerId: homeTeamData?.managerId,
+          managerName: homeTeamData?.managerName,
+        },
+        mode: "franchise",
+        instanceId: managerInstanceId,
+        fallbackMode: "franchise",
+        fallbackInstanceId: LEAGUE_BUILDER_MANAGER_INSTANCE_ID,
+        persistAssignment: true,
+      }),
+    ]);
 
     // Apply selected starter: mark the chosen pitcher as isStarter/isActive
     const finalAwayPitchers = awayPitchers.map((p, i) => ({
@@ -2846,7 +2916,7 @@ function GameDayContent({ scheduleData, currentSeason, onDataRefresh }: GameDayC
     };
 
     navigate(`/game-tracker/franchise-g${preGameData.gameNumber}`, {
-      state: {
+      state: withPregameManagerNavigationState({
         gameMode: 'franchise' as const,
         awayTeamId: preGameData.awayTeamId,
         homeTeamId: preGameData.homeTeamId,
@@ -2872,7 +2942,12 @@ function GameDayContent({ scheduleData, currentSeason, onDataRefresh }: GameDayC
         scheduleGameId: preGameData.scheduleGameId,
         seasonNumber: currentSeason,
         totalInnings: franchiseData.franchiseConfig?.season?.inningsPerGame ?? 9,
-      },
+      }, {
+        awayManagerId: awayManager.managerId,
+        awayManagerName: awayManager.managerName,
+        homeManagerId: homeManager.managerId,
+        homeManagerName: homeManager.managerName,
+      }),
     });
     setPreGameData(null);
   };

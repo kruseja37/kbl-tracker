@@ -214,7 +214,7 @@ export interface ManagerLineupDeltaRecord {
 
   actualPlayerKblWpa: number;
   replacementExpectedKblWpa: number;
-  replacementBaselineSource?: "v1_zero_default" | "optimal_lineup_v2";
+  replacementBaselineSource?: "optimal_lineup_v2";
   replacementBaselineConfidence?: "low" | "medium" | "high";
   rawPerformanceDelta: number;
   managerShare: number;
@@ -267,7 +267,7 @@ export interface ManagerDeploymentStintRecord {
   tacticalExclusionEventIds: string[];
   closedAtEventId?: string;
   closedAtEventIndex?: number;
-  closeReason: "removed" | "role_change" | "runner_terminal" | "game_end";
+  closeReason?: "removed" | "role_change" | "runner_terminal" | "game_end";
   linkedEventIds: string[];
   rawLinkedWpa: number;
   managerShare: number;

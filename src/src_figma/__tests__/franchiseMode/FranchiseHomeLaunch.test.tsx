@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   mockBuildFranchiseGameTrackerRoster: vi.fn(),
   mockCollectFranchiseRosterPlayerIds: vi.fn(),
   mockGetTeam: vi.fn(),
+  mockResolveManagerForTeam: vi.fn(),
 }));
 
 vi.mock('react-router', () => ({
@@ -79,6 +80,11 @@ vi.mock('../../app/utils/franchiseGameTrackerRoster', () => ({
 
 vi.mock('../../../utils/leagueBuilderStorage', () => ({
   getTeam: mocks.mockGetTeam,
+}));
+
+vi.mock('../../../utils/managerIdentityStorage', () => ({
+  LEAGUE_BUILDER_MANAGER_INSTANCE_ID: 'league-builder',
+  resolveManagerForTeam: mocks.mockResolveManagerForTeam,
 }));
 
 vi.mock('../../../utils/careerStorage', () => ({
@@ -467,6 +473,20 @@ describe('FranchiseHome launch optimal lineup snapshots', () => {
         id: teamId,
         abbreviation: teamId.slice(0, 3).toUpperCase(),
         colors: { primary: '#112233', secondary: '#445566' },
+        managerId: `${teamId}-team-manager`,
+        managerName: `${teamId} Team Manager`,
+      }),
+    );
+    mocks.mockResolveManagerForTeam.mockImplementation(({ team }: { team: { id: string; name: string } }) =>
+      Promise.resolve({
+        managerId: `${team.id}-assigned-manager`,
+        managerName: `${team.name} Assigned Manager`,
+        profile: {
+          managerId: `${team.id}-assigned-manager`,
+          displayName: `${team.name} Assigned Manager`,
+          createdByUser: true,
+          defaultManager: false,
+        },
       }),
     );
     mocks.mockBuildFranchiseGameTrackerRoster.mockImplementation(
@@ -493,6 +513,50 @@ describe('FranchiseHome launch optimal lineup snapshots', () => {
     expect(state.useDH).toBe(true);
     expect(state.optimalLineupSnapshots.away).toBe(snapshotsByTeam['away-team'].dh.vsLHP);
     expect(state.optimalLineupSnapshots.home).toBe(snapshotsByTeam['home-team'].dh.vsRHP);
+  });
+
+  test('regular-season launch passes assigned Franchise manager IDs', async () => {
+    await startRegularSeasonGame();
+
+    await waitFor(() => expect(mocks.mockNavigate).toHaveBeenCalled());
+    const state = mocks.mockNavigate.mock.calls.at(-1)?.[1]?.state;
+
+    expect(mocks.mockResolveManagerForTeam).toHaveBeenCalledWith(
+      expect.objectContaining({
+        team: expect.objectContaining({
+          id: 'away-team',
+          managerId: 'away-team-team-manager',
+          managerName: 'away-team Team Manager',
+        }),
+        mode: 'franchise',
+        instanceId: 'franchise-1',
+        fallbackMode: 'franchise',
+        fallbackInstanceId: 'league-builder',
+        persistAssignment: true,
+      }),
+    );
+    expect(mocks.mockResolveManagerForTeam).toHaveBeenCalledWith(
+      expect.objectContaining({
+        team: expect.objectContaining({
+          id: 'home-team',
+          managerId: 'home-team-team-manager',
+          managerName: 'home-team Team Manager',
+        }),
+        mode: 'franchise',
+        instanceId: 'franchise-1',
+        fallbackMode: 'franchise',
+        fallbackInstanceId: 'league-builder',
+        persistAssignment: true,
+      }),
+    );
+    expect(state).toMatchObject({
+      awayManagerId: 'away-team-assigned-manager',
+      awayManagerName: 'AWAY TEAM Assigned Manager',
+      homeManagerId: 'home-team-assigned-manager',
+      homeManagerName: 'HOME TEAM Assigned Manager',
+    });
+    expect(state.awayManagerId).not.toBe('away-team-manager');
+    expect(state.homeManagerId).not.toBe('home-team-manager');
   });
 
   test('regular-season launch without an explicit DH setting keeps the no-DH snapshot set', async () => {
@@ -543,5 +607,11 @@ describe('FranchiseHome launch optimal lineup snapshots', () => {
     expect(state.useDH).toBe(true);
     expect(state.optimalLineupSnapshots.away).toBe(snapshotsByTeam['lower-seed'].dh.vsLHP);
     expect(state.optimalLineupSnapshots.home).toBe(snapshotsByTeam['higher-seed'].dh.vsRHP);
+    expect(state).toMatchObject({
+      awayManagerId: 'lower-seed-assigned-manager',
+      homeManagerId: 'higher-seed-assigned-manager',
+    });
+    expect(state.awayManagerId).not.toBe('lower-seed-manager');
+    expect(state.homeManagerId).not.toBe('higher-seed-manager');
   });
 });
