@@ -2,7 +2,10 @@ import "fake-indexeddb/auto";
 import { describe, expect, test } from "vitest";
 
 import type { AtBatEvent, BetweenPlayEvent, FieldingEvent } from "../eventLog";
-import type { OptimalLineupSnapshot } from "../../types/managerWpa";
+import type {
+  ManagerDeploymentRole,
+  OptimalLineupSnapshot,
+} from "../../types/managerWpa";
 import { WPA_MODEL_VERSION } from "../../engines/wpaV2";
 import {
   aggregateKblWpaCredits,
@@ -13,8 +16,11 @@ import {
   updateAtBatEvent,
 } from "../eventLog";
 import {
+  calculateManagerDeploymentWpa,
   deriveCommittedManagerDecisionState,
   deriveManagerLineupDeltaRecords,
+  MANAGER_DEPLOYMENT_CAP_BY_ROLE,
+  MANAGER_DEPLOYMENT_SHARE_BY_ROLE,
   refreshCurrentGameManagerDecisionState,
 } from "../managerWpaGameState";
 import {
@@ -542,6 +548,32 @@ describe("committed manager WPA game state", () => {
       teamId: "away",
     });
   });
+
+  test.each([
+    ["pinch_hitter_remaining", 0.15, 0.1],
+    ["pinch_runner", 0.2, 0.125],
+    ["pitcher", 0.15, 0.2],
+    ["defensive_position", 0.2, 0.15],
+    ["kept_in", 0.15, 0.15],
+    ["manual_deployment", 0.1, 0.1],
+  ] satisfies Array<[ManagerDeploymentRole, number, number]>)(
+    "uses the spec deployment share and cap for %s",
+    (role, expectedShare, expectedCap) => {
+      expect(MANAGER_DEPLOYMENT_SHARE_BY_ROLE[role]).toBe(expectedShare);
+      expect(MANAGER_DEPLOYMENT_CAP_BY_ROLE[role]).toBe(expectedCap);
+
+      expect(calculateManagerDeploymentWpa(role, 2)).toMatchObject({
+        managerShare: expectedShare,
+        cap: expectedCap,
+        managerDeploymentWpa: expectedCap,
+      });
+      expect(calculateManagerDeploymentWpa(role, -2)).toMatchObject({
+        managerShare: expectedShare,
+        cap: expectedCap,
+        managerDeploymentWpa: -expectedCap,
+      });
+    },
+  );
 
   test("opens a deployment stint for a pinch hitter and excludes the tactical PA", () => {
     const pinchHit = createBetweenPlay({

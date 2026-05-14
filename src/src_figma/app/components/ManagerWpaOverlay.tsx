@@ -31,6 +31,7 @@ export interface ManagerWpaOverlayRow {
   managerValue: number;
   decisionCount: number;
   pendingCount: number;
+  deploymentStints: ManagerDeploymentStintRecord[];
   lineupDeltas: ManagerLineupDeltaRecord[];
   bestDecision?: ManagerDecisionRecord;
   worstDecision?: ManagerDecisionRecord;
@@ -73,7 +74,17 @@ function sumLineupDeltas(deltas: ManagerLineupDeltaRecord[]): number {
 }
 
 function sumDeploymentStints(stints: ManagerDeploymentStintRecord[]): number {
-  return stints.reduce((sum, stint) => sum + stint.managerDeploymentWpa, 0);
+  return stints
+    .filter(isResolvedDeploymentStint)
+    .reduce((sum, stint) => sum + stint.managerDeploymentWpa, 0);
+}
+
+function isResolvedDeploymentStint(stint: ManagerDeploymentStintRecord): boolean {
+  return (
+    Boolean(stint.closeReason) ||
+    Boolean(stint.closedAtEventId) ||
+    typeof stint.closedAtEventIndex === "number"
+  );
 }
 
 export function buildManagerWpaOverlayRows(
@@ -121,6 +132,7 @@ export function buildManagerWpaOverlayRows(
       managerValue: tacticalManagerWpa + deploymentWpa + lineupDeltaWpa,
       decisionCount: teamDecisions.length,
       pendingCount: teamDecisions.length - resolvedDecisions.length,
+      deploymentStints: teamDeploymentStints,
       lineupDeltas: teamLineupDeltas,
       worstDecision: sortedResolved[0],
       bestDecision: sortedResolved[sortedResolved.length - 1],
@@ -152,6 +164,45 @@ function formatLineupSlot(
 
 function formatOptionalManagerWpa(value: number | undefined): string {
   return typeof value === "number" ? formatSignedManagerWpa(value) : "n/a";
+}
+
+function formatDeploymentRole(role: ManagerDeploymentStintRecord["deploymentRole"]): string {
+  switch (role) {
+    case "pinch_hitter_remaining":
+      return "Pinch hitter remaining";
+    case "pinch_runner":
+      return "Pinch runner";
+    case "defensive_position":
+      return "Defensive position";
+    case "pitcher":
+      return "Pitcher";
+    case "kept_in":
+      return "Kept in";
+    case "manual_deployment":
+      return "Manual deployment";
+  }
+}
+
+function formatDeploymentCloseReason(
+  reason: ManagerDeploymentStintRecord["closeReason"],
+): string {
+  if (!reason) return "Active";
+  return titleCase(reason);
+}
+
+function formatDeploymentClosed(stint: ManagerDeploymentStintRecord): string {
+  const reason = formatDeploymentCloseReason(stint.closeReason);
+  if (!isResolvedDeploymentStint(stint)) return reason;
+  if (typeof stint.closedAtEventIndex !== "number") return reason;
+  return `Event ${stint.closedAtEventIndex} (${reason})`;
+}
+
+function formatDeploymentShare(value: number): string {
+  return `${Math.round(value * 100)}%`;
+}
+
+function formatDeploymentCap(value: number): string {
+  return `+/-${value.toFixed(3)}`;
 }
 
 export function ManagerWpaOverlay({ game }: ManagerWpaOverlayProps) {
@@ -213,7 +264,7 @@ export function ManagerWpaOverlay({ game }: ManagerWpaOverlayProps) {
                 </div>
                 <div>
                   <div className="uppercase tracking-[0.16em] text-[#6b7b6e]">
-                    Tactical WPA
+                    Tactical Manager WPA
                   </div>
                   <div className="text-[#E8E8D8]">
                     {formatSignedManagerWpa(row.tacticalManagerWpa)}
@@ -232,6 +283,58 @@ export function ManagerWpaOverlay({ game }: ManagerWpaOverlayProps) {
                 </div>
                 <div className="col-span-2">
                   <div className="uppercase tracking-[0.16em] text-[#6b7b6e]">
+                    Deployment Stints
+                  </div>
+                  <div
+                    className="mt-1 space-y-2 text-[#E8E8D8]"
+                    data-testid={`manager-deployment-stint-details-${testId}`}
+                  >
+                    {row.deploymentStints.length === 0 ? (
+                      <div
+                        className="text-[#a0a898]"
+                        data-testid={`manager-deployment-stint-empty-${testId}`}
+                      >
+                        No deployment stints
+                      </div>
+                    ) : (
+                      row.deploymentStints.slice(0, 3).map((stint) => {
+                        const active = !isResolvedDeploymentStint(stint);
+                        return (
+                          <div
+                            key={stint.stintId}
+                            className="rounded-sm border border-[#4a6a4a] bg-[#1f2b21]/70 p-2"
+                            data-testid={`manager-deployment-stint-${testId}-${normalizeTestId(stint.stintId)}`}
+                          >
+                            <div>
+                              {formatDeploymentRole(stint.deploymentRole)}: {stint.playerName ?? stint.playerId}
+                            </div>
+                            <div>Opened: Event {stint.openedAtEventIndex}</div>
+                            <div>Closed: {formatDeploymentClosed(stint)}</div>
+                            <div>
+                              Linked outcomes: {stint.linkedEventIds.length}
+                              {stint.linkedEventIds.length > 0
+                                ? ` (${stint.linkedEventIds.slice(0, 3).join(", ")})`
+                                : ""}
+                            </div>
+                            <div>Raw WPA: {formatSignedManagerWpa(stint.rawLinkedWpa)}</div>
+                            <div>Share: {formatDeploymentShare(stint.managerShare)}</div>
+                            <div>Cap: {formatDeploymentCap(stint.cap)}</div>
+                            <div>
+                              Deployment WPA: {formatSignedManagerWpa(active ? 0 : stint.managerDeploymentWpa)}
+                            </div>
+                            {active ? (
+                              <div className="text-[#a0a898]">
+                                Active, excluded from resolved total
+                              </div>
+                            ) : null}
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+                <div className="col-span-2">
+                  <div className="uppercase tracking-[0.16em] text-[#6b7b6e]">
                     Lineup Delta
                   </div>
                   <div
@@ -243,7 +346,7 @@ export function ManagerWpaOverlay({ game }: ManagerWpaOverlayProps) {
                 </div>
                 <div className="col-span-2">
                   <div className="uppercase tracking-[0.16em] text-[#6b7b6e]">
-                    Manager Value Total
+                    Manager Value
                   </div>
                   <div
                     className="text-[#E8E8D8]"

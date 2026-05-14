@@ -41,16 +41,46 @@ type ManagerStartingPitchers = NonNullable<GameHeader["startingPitchers"]>;
 const LINEUP_DELTA_MANAGER_SHARE = 0.25;
 const LINEUP_DELTA_PLAYER_CAP = 0.25;
 const LINEUP_DELTA_TEAM_CAP = 0.75;
-const DEPLOYMENT_STINT_CAP = 0.15;
-const DEPLOYMENT_TEAM_CAP = 0.5;
-const DEPLOYMENT_SHARE_BY_ROLE: Record<ManagerDeploymentRole, number> = {
+export const MANAGER_DEPLOYMENT_SHARE_BY_ROLE: Record<
+  ManagerDeploymentRole,
+  number
+> = {
   pinch_hitter_remaining: 0.15,
   pinch_runner: 0.2,
   defensive_position: 0.2,
   pitcher: 0.15,
   kept_in: 0.15,
-  manual_deployment: 0.15,
+  manual_deployment: 0.1,
 };
+export const MANAGER_DEPLOYMENT_CAP_BY_ROLE: Record<
+  ManagerDeploymentRole,
+  number
+> = {
+  pinch_hitter_remaining: 0.1,
+  pinch_runner: 0.125,
+  defensive_position: 0.15,
+  pitcher: 0.2,
+  kept_in: 0.15,
+  manual_deployment: 0.1,
+};
+export const MANAGER_DEPLOYMENT_TEAM_CAP = 0.5;
+
+export function calculateManagerDeploymentWpa(
+  deploymentRole: ManagerDeploymentRole,
+  rawLinkedWpa: number,
+): {
+  managerShare: number;
+  cap: number;
+  managerDeploymentWpa: number;
+} {
+  const managerShare = MANAGER_DEPLOYMENT_SHARE_BY_ROLE[deploymentRole];
+  const cap = MANAGER_DEPLOYMENT_CAP_BY_ROLE[deploymentRole];
+  return {
+    managerShare,
+    cap,
+    managerDeploymentWpa: clamp(roundWpa(rawLinkedWpa * managerShare), -cap, cap),
+  };
+}
 
 export interface CommittedManagerDecisionState {
   managerDecisions: ManagerDecisionRecord[];
@@ -331,12 +361,8 @@ export function deriveManagerDeploymentStintRecords(
     const rawLinkedWpa = roundWpa(
       linkedCredits.reduce((sum, credit) => sum + credit.wpa, 0),
     );
-    const managerShare = DEPLOYMENT_SHARE_BY_ROLE[stint.deploymentRole];
-    const managerDeploymentWpa = clamp(
-      roundWpa(rawLinkedWpa * managerShare),
-      -DEPLOYMENT_STINT_CAP,
-      DEPLOYMENT_STINT_CAP,
-    );
+    const { managerShare, cap, managerDeploymentWpa } =
+      calculateManagerDeploymentWpa(stint.deploymentRole, rawLinkedWpa);
 
     return {
       stint,
@@ -344,6 +370,7 @@ export function deriveManagerDeploymentStintRecords(
       linkedEventIds: uniqueStrings(linkedCredits.map((credit) => credit.eventId)),
       rawLinkedWpa,
       managerShare,
+      cap,
       managerDeploymentWpa,
     };
   });
@@ -359,8 +386,8 @@ export function deriveManagerDeploymentStintRecords(
   const scoredClosedStints = uncapped.map((row) => {
     const teamTotal = teamTotals.get(row.stint.teamId) ?? 0;
     const teamScale =
-      Math.abs(teamTotal) > DEPLOYMENT_TEAM_CAP
-        ? DEPLOYMENT_TEAM_CAP / Math.abs(teamTotal)
+      Math.abs(teamTotal) > MANAGER_DEPLOYMENT_TEAM_CAP
+        ? MANAGER_DEPLOYMENT_TEAM_CAP / Math.abs(teamTotal)
         : 1;
 
     return {
@@ -371,7 +398,7 @@ export function deriveManagerDeploymentStintRecords(
       rawLinkedWpa: row.rawLinkedWpa,
       managerShare: row.managerShare,
       managerDeploymentWpa: roundWpa(row.managerDeploymentWpa * teamScale),
-      cap: DEPLOYMENT_STINT_CAP,
+      cap: row.cap,
       confidence: "medium" as const,
       wpaModelVersion: WPA_MODEL_VERSION,
     };
@@ -385,9 +412,9 @@ export function deriveManagerDeploymentStintRecords(
           tacticalExclusionEventIds: findTacticalExclusionEventIds(stint, input),
           linkedEventIds: [],
           rawLinkedWpa: 0,
-          managerShare: DEPLOYMENT_SHARE_BY_ROLE[stint.deploymentRole],
+          managerShare: MANAGER_DEPLOYMENT_SHARE_BY_ROLE[stint.deploymentRole],
           managerDeploymentWpa: 0,
-          cap: DEPLOYMENT_STINT_CAP,
+          cap: MANAGER_DEPLOYMENT_CAP_BY_ROLE[stint.deploymentRole],
           confidence: "medium" as const,
           wpaModelVersion: WPA_MODEL_VERSION,
         }));

@@ -284,15 +284,18 @@ describe("GameDetail Manager WPA overlay", () => {
             teamId: "away",
             deploymentRole: "pinch_hitter_remaining",
             playerId: "bench-one",
+            playerName: "Bench One",
             sourceEventId: "bp-1",
             openedAtEventIndex: 1,
             tacticalExclusionEventIds: ["ab-1"],
+            closedAtEventId: "ab-2",
+            closedAtEventIndex: 2,
             closeReason: "game_end",
             linkedEventIds: ["ab-2"],
             rawLinkedWpa: 0.08,
             managerShare: 0.15,
             managerDeploymentWpa: 0.012,
-            cap: 0.15,
+            cap: 0.1,
             confidence: "medium",
           },
         ],
@@ -310,6 +313,55 @@ describe("GameDetail Manager WPA overlay", () => {
     expect(screen.getByTestId("manager-lineup-delta-details-away")).toHaveTextContent("Optimal: #4 CF Bench One");
     expect(screen.getByTestId("manager-lineup-delta-details-away")).toHaveTextContent("Projected opportunity cost: -0.020");
     expect(screen.getByTestId("manager-lineup-delta-details-away")).toHaveTextContent("Actual vs optimal projection: +0.368");
+    const deploymentDetails = screen.getByTestId("manager-deployment-stint-details-away");
+    expect(deploymentDetails).toHaveTextContent("Pinch hitter remaining: Bench One");
+    expect(deploymentDetails).toHaveTextContent("Opened: Event 1");
+    expect(deploymentDetails).toHaveTextContent("Closed: Event 2 (Game End)");
+    expect(deploymentDetails).toHaveTextContent("Linked outcomes: 1 (ab-2)");
+    expect(deploymentDetails).toHaveTextContent("Raw WPA: +0.080");
+    expect(deploymentDetails).toHaveTextContent("Share: 15%");
+    expect(deploymentDetails).toHaveTextContent("Cap: +/-0.100");
+    expect(deploymentDetails).toHaveTextContent("Deployment WPA: +0.012");
+  });
+
+  test("keeps active deployment stints out of resolved overlay totals", async () => {
+    mockGetCompletedGameById.mockResolvedValue(
+      createCompletedGame(
+        [],
+        [],
+        [
+          {
+            stintId: "game-detail-1:away:active-deployment",
+            gameId: "game-detail-1",
+            managerId: "away-manager",
+            teamId: "away",
+            deploymentRole: "pitcher",
+            playerId: "away-reliever",
+            playerName: "Away Reliever",
+            sourceEventId: "bp-1",
+            openedAtEventIndex: 5,
+            tacticalExclusionEventIds: ["ab-5"],
+            linkedEventIds: ["ab-6"],
+            rawLinkedWpa: 0.6,
+            managerShare: 0.15,
+            managerDeploymentWpa: 0.09,
+            cap: 0.2,
+            confidence: "medium",
+          },
+        ],
+      ),
+    );
+
+    render(<GameDetail />);
+
+    await screen.findByTestId("manager-wpa-overlay");
+    expect(screen.getByTestId("manager-deployment-wpa-away")).toHaveTextContent("+0.000");
+    expect(screen.getByTestId("manager-wpa-total-away")).toHaveTextContent("+0.000");
+    const deploymentDetails = screen.getByTestId("manager-deployment-stint-details-away");
+    expect(deploymentDetails).toHaveTextContent("Pitcher: Away Reliever");
+    expect(deploymentDetails).toHaveTextContent("Closed: Active");
+    expect(deploymentDetails).toHaveTextContent("Active, excluded from resolved total");
+    expect(deploymentDetails).toHaveTextContent("Deployment WPA: +0.000");
   });
 
   test("keeps manager overlay values out of the player KBL WPA leaderboard", async () => {

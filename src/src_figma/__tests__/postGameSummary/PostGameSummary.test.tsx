@@ -9,7 +9,10 @@ import { describe, test, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, within, waitFor } from '@testing-library/react';
 import { PostGameSummary } from '../../app/pages/PostGameSummary';
 import type { CompletedGameRecord } from '../../utils/gameStorage';
-import type { ManagerDecisionRecord } from '../../../types/managerWpa';
+import type {
+  ManagerDecisionRecord,
+  ManagerDeploymentStintRecord,
+} from '../../../types/managerWpa';
 
 // ============================================
 // MOCKS
@@ -598,6 +601,49 @@ describe('PostGameSummary Component', () => {
       expect(screen.getByTestId('manager-wpa-total-tigers')).toHaveTextContent('-0.052');
       expect(within(screen.getByTestId('manager-wpa-card-sox')).getByText('2 (1 pending)')).toBeInTheDocument();
       expect(within(screen.getByTestId('manager-wpa-card-sox')).getAllByText('Pinch hitter, +0.184')).toHaveLength(2);
+    });
+
+    test('renders deployment stint recap details from committed manager records', async () => {
+      const { getCompletedGameById } = await import('../../utils/gameStorage');
+      const stint: ManagerDeploymentStintRecord = {
+        stintId: 'test-game-123:bp-1:deployment:pinch-runner',
+        gameId: 'test-game-123',
+        managerId: 'sox-manager',
+        teamId: 'sox',
+        deploymentRole: 'pinch_runner',
+        playerId: 'home-speed',
+        playerName: 'Home Speed',
+        sourceEventId: 'bp-1',
+        openedAtEventIndex: 8,
+        tacticalExclusionEventIds: ['ab-8'],
+        closedAtEventId: 'ab-11',
+        closedAtEventIndex: 11,
+        closeReason: 'game_end',
+        linkedEventIds: ['ab-10', 'ab-11'],
+        rawLinkedWpa: 0.4,
+        managerShare: 0.2,
+        managerDeploymentWpa: 0.08,
+        cap: 0.125,
+        confidence: 'medium',
+      };
+      vi.mocked(getCompletedGameById).mockResolvedValue({
+        ...mockGameData,
+        managerDeploymentStints: [stint],
+      });
+
+      render(<PostGameSummary />);
+
+      const details = await screen.findByTestId('manager-deployment-stint-details-sox');
+      expect(screen.getByTestId('manager-deployment-wpa-sox')).toHaveTextContent('+0.080');
+      expect(screen.getByTestId('manager-wpa-total-sox')).toHaveTextContent('+0.080');
+      expect(details).toHaveTextContent('Pinch runner: Home Speed');
+      expect(details).toHaveTextContent('Opened: Event 8');
+      expect(details).toHaveTextContent('Closed: Event 11 (Game End)');
+      expect(details).toHaveTextContent('Linked outcomes: 2 (ab-10, ab-11)');
+      expect(details).toHaveTextContent('Raw WPA: +0.400');
+      expect(details).toHaveTextContent('Share: 20%');
+      expect(details).toHaveTextContent('Cap: +/-0.125');
+      expect(details).toHaveTextContent('Deployment WPA: +0.080');
     });
 
     test('uses only committed managerDecisions and leaves player WPA display unchanged', async () => {
