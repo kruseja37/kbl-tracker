@@ -50,6 +50,8 @@ import { getApproachingMilestones, type MilestoneWatch } from "../../../utils/mi
 import { getAllCareerBatting, getAllCareerPitching } from "../../../utils/careerStorage";
 import { getSeasonBattingStats, getSeasonPitchingStats, getActiveSeason } from "../../../utils/seasonStorage";
 import { buildFranchiseGameTrackerRoster, collectFranchiseRosterPlayerIds } from "../utils/franchiseGameTrackerRoster";
+import { selectOptimalLineupForOpposingPitcher } from "../../../utils/optimalLineup";
+import type { GameLockLineupSnapshots, OptimalLineupSnapshot } from "../../../types/managerWpa";
 
 // Context for passing franchise data to child components
 const FranchiseDataContext = createContext<UseFranchiseDataReturn | null>(null);
@@ -79,9 +81,22 @@ interface PreGameData {
   homeTeamName: string;
   gameNumber: number;
   scheduleGameId?: string;
+  useDH: boolean;
   selectedAwayStarterIdx: number;
   selectedHomeStarterIdx: number;
+  awayOptimalLineups?: {
+    vsRHP?: OptimalLineupSnapshot;
+    vsLHP?: OptimalLineupSnapshot;
+  };
+  homeOptimalLineups?: {
+    vsRHP?: OptimalLineupSnapshot;
+    vsLHP?: OptimalLineupSnapshot;
+  };
   milestoneWatches?: MilestoneWatch[];
+}
+
+export function resolveFranchiseGameUseDH(franchiseConfig: UseFranchiseDataReturn["franchiseConfig"]): boolean {
+  return franchiseConfig?.season?.useDH ?? false;
 }
 
 export function FranchiseHome() {
@@ -675,14 +690,21 @@ export function FranchiseHome() {
     const awayTeamId = isHigherSeedHome ? series.lowerSeed.teamId : series.higherSeed.teamId;
     const awayTeamName = isHigherSeedHome ? series.lowerSeed.teamName : series.higherSeed.teamName;
     const homeTeamName = isHigherSeedHome ? series.higherSeed.teamName : series.lowerSeed.teamName;
+    const playoffUseDH = playoffData.playoff?.useDH ?? true;
 
     // T0-08: Load real rosters from IndexedDB for both teams
     const [awayRoster, homeRoster, awayTeamData, homeTeamData] = await Promise.all([
-      buildFranchiseGameTrackerRoster(awayTeamId, { franchiseId, leagueId: franchiseLeagueId }),
-      buildFranchiseGameTrackerRoster(homeTeamId, { franchiseId, leagueId: franchiseLeagueId }),
+      buildFranchiseGameTrackerRoster(awayTeamId, { franchiseId, leagueId: franchiseLeagueId, useDH: playoffUseDH }),
+      buildFranchiseGameTrackerRoster(homeTeamId, { franchiseId, leagueId: franchiseLeagueId, useDH: playoffUseDH }),
       getTeam(awayTeamId),
       getTeam(homeTeamId),
     ]);
+    const awayStarter = awayRoster.pitchers.find((pitcher) => pitcher.isStarter);
+    const homeStarter = homeRoster.pitchers.find((pitcher) => pitcher.isStarter);
+    const optimalLineupSnapshots: GameLockLineupSnapshots = {
+      away: selectOptimalLineupForOpposingPitcher(awayRoster.optimalLineups, homeStarter),
+      home: selectOptimalLineupForOpposingPitcher(homeRoster.optimalLineups, awayStarter),
+    };
 
     navigate(`/game-tracker/playoff-${series.id}-g${nextGameNumber}`, {
       state: {
@@ -707,6 +729,8 @@ export function FranchiseHome() {
         homeRecord: getTeamRecord(homeTeamId), // MAJ-15: Pass actual team records to GameTracker
         franchiseId,
         leagueId: franchiseLeagueId,
+        useDH: playoffUseDH,
+        optimalLineupSnapshots,
         stadiumName: franchiseData.stadiumMap?.[homeTeamId] ?? homeTeamName.toUpperCase(),
         // T0-05: Pass season number for playoff persistence
         seasonNumber: currentSeason,
@@ -2642,6 +2666,7 @@ function GameDayContent({ scheduleData, currentSeason, onDataRefresh }: GameDayC
   // Access franchise data for season config
   const franchiseData = useFranchiseDataContext();
   const franchiseLeagueId = franchiseData.franchiseConfig?.league || 'sml';
+  const franchiseUseDH = resolveFranchiseGameUseDH(franchiseData.franchiseConfig);
 
   // Lookup team record from standings (handles nested LeagueStandings shape)
   // MAJ-15: Needed by handlePlayGame and JSX display
@@ -2718,8 +2743,8 @@ function GameDayContent({ scheduleData, currentSeason, onDataRefresh }: GameDayC
 
     // Load real rosters from IndexedDB for both teams
     const [awayRoster, homeRoster] = await Promise.all([
-      buildFranchiseGameTrackerRoster(away, { franchiseId, leagueId: franchiseLeagueId }),
-      buildFranchiseGameTrackerRoster(home, { franchiseId, leagueId: franchiseLeagueId }),
+      buildFranchiseGameTrackerRoster(away, { franchiseId, leagueId: franchiseLeagueId, useDH: franchiseUseDH }),
+      buildFranchiseGameTrackerRoster(home, { franchiseId, leagueId: franchiseLeagueId, useDH: franchiseUseDH }),
     ]);
 
     // Find default starter indices (first SP)
@@ -2737,8 +2762,11 @@ function GameDayContent({ scheduleData, currentSeason, onDataRefresh }: GameDayC
       homeTeamName: homeName.toUpperCase(),
       gameNumber: gameNum,
       scheduleGameId: nextGame?.id,
+      useDH: franchiseUseDH,
       selectedAwayStarterIdx: awayStarterIdx >= 0 ? awayStarterIdx : 0,
       selectedHomeStarterIdx: homeStarterIdx >= 0 ? homeStarterIdx : 0,
+      awayOptimalLineups: awayRoster.optimalLineups,
+      homeOptimalLineups: homeRoster.optimalLineups,
     });
     setConfirmAction(null);
 
@@ -2810,6 +2838,12 @@ function GameDayContent({ scheduleData, currentSeason, onDataRefresh }: GameDayC
       isStarter: i === preGameData.selectedHomeStarterIdx,
       isActive: i === preGameData.selectedHomeStarterIdx,
     }));
+    const awayStarter = finalAwayPitchers.find((pitcher) => pitcher.isStarter);
+    const homeStarter = finalHomePitchers.find((pitcher) => pitcher.isStarter);
+    const optimalLineupSnapshots: GameLockLineupSnapshots = {
+      away: selectOptimalLineupForOpposingPitcher(preGameData.awayOptimalLineups, homeStarter),
+      home: selectOptimalLineupForOpposingPitcher(preGameData.homeOptimalLineups, awayStarter),
+    };
 
     navigate(`/game-tracker/franchise-g${preGameData.gameNumber}`, {
       state: {
@@ -2833,6 +2867,8 @@ function GameDayContent({ scheduleData, currentSeason, onDataRefresh }: GameDayC
         stadiumName: franchiseData.stadiumMap?.[preGameData.homeTeamId] ?? preGameData.homeTeamName,
         franchiseId,
         leagueId: franchiseLeagueId,
+        useDH: preGameData.useDH,
+        optimalLineupSnapshots,
         scheduleGameId: preGameData.scheduleGameId,
         seasonNumber: currentSeason,
         totalInnings: franchiseData.franchiseConfig?.season?.inningsPerGame ?? 9,

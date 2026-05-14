@@ -31,6 +31,7 @@ export interface ManagerWpaOverlayRow {
   managerValue: number;
   decisionCount: number;
   pendingCount: number;
+  lineupDeltas: ManagerLineupDeltaRecord[];
   bestDecision?: ManagerDecisionRecord;
   worstDecision?: ManagerDecisionRecord;
 }
@@ -120,6 +121,7 @@ export function buildManagerWpaOverlayRows(
       managerValue: tacticalManagerWpa + deploymentWpa + lineupDeltaWpa,
       decisionCount: teamDecisions.length,
       pendingCount: teamDecisions.length - resolvedDecisions.length,
+      lineupDeltas: teamLineupDeltas,
       worstDecision: sortedResolved[0],
       bestDecision: sortedResolved[sortedResolved.length - 1],
     };
@@ -136,6 +138,20 @@ function formatDecisionSummary(decision: ManagerDecisionRecord | undefined): str
   }
 
   return `${decision.displayTitle}, ${formatSignedManagerWpa(decision.managerWpa)}`;
+}
+
+function formatLineupSlot(
+  playerName: string | undefined,
+  battingOrderSlot: number | undefined,
+  defensivePosition: string | undefined,
+): string {
+  const order = battingOrderSlot ? `#${battingOrderSlot}` : "slot ?";
+  const position = defensivePosition || "POS";
+  return `${order} ${position} ${playerName || "Unknown player"}`;
+}
+
+function formatOptionalManagerWpa(value: number | undefined): string {
+  return typeof value === "number" ? formatSignedManagerWpa(value) : "n/a";
 }
 
 export function ManagerWpaOverlay({ game }: ManagerWpaOverlayProps) {
@@ -175,13 +191,13 @@ export function ManagerWpaOverlay({ game }: ManagerWpaOverlayProps) {
                 </div>
                 <div
                   className={`text-[13px] font-bold ${
-                    row.tacticalManagerWpa >= 0
+                    row.managerValue >= 0
                       ? "text-[#34d399]"
                       : "text-[#f87171]"
                   }`}
                   data-testid={`manager-wpa-total-${testId}`}
                 >
-                  {formatSignedManagerWpa(row.tacticalManagerWpa)}
+                  {formatSignedManagerWpa(row.managerValue)}
                 </div>
               </div>
 
@@ -227,13 +243,62 @@ export function ManagerWpaOverlay({ game }: ManagerWpaOverlayProps) {
                 </div>
                 <div className="col-span-2">
                   <div className="uppercase tracking-[0.16em] text-[#6b7b6e]">
-                    Manager Value
+                    Manager Value Total
                   </div>
                   <div
                     className="text-[#E8E8D8]"
                     data-testid={`manager-value-${testId}`}
                   >
                     {formatSignedManagerWpa(row.managerValue)}
+                  </div>
+                </div>
+                <div className="col-span-2">
+                  <div className="uppercase tracking-[0.16em] text-[#6b7b6e]">
+                    Lineup Delta Details
+                  </div>
+                  <div
+                    className="mt-1 space-y-2 text-[#E8E8D8]"
+                    data-testid={`manager-lineup-delta-details-${testId}`}
+                  >
+                    {row.lineupDeltas.length === 0 ? (
+                      <div
+                        className="text-[#a0a898]"
+                        data-testid={`manager-lineup-delta-empty-${testId}`}
+                      >
+                        No lineup deviations
+                      </div>
+                    ) : (
+                      row.lineupDeltas.slice(0, 3).map((delta) => (
+                        <div
+                          key={delta.decisionId}
+                          className="rounded-sm border border-[#4a6a4a] bg-[#1f2b21]/70 p-2"
+                        >
+                          <div>
+                            Chosen: {formatLineupSlot(
+                              delta.chosenPlayerName ?? delta.starterPlayerName,
+                              delta.chosenBattingOrderSlot ?? delta.battingOrderSlot,
+                              delta.chosenDefensivePosition ?? delta.defensivePosition,
+                            )}
+                          </div>
+                          <div>
+                            Optimal: {formatLineupSlot(
+                              delta.optimalPlayerName,
+                              delta.optimalBattingOrderSlot,
+                              delta.optimalDefensivePosition,
+                            )}
+                          </div>
+                          <div>
+                            Projected opportunity cost: {formatOptionalManagerWpa(delta.projectedOpportunityCost)}
+                          </div>
+                          <div>
+                            Actual vs optimal projection: {formatOptionalManagerWpa(delta.actualVsOptimalProjection)}
+                          </div>
+                          <div>
+                            Manager WPA: {formatSignedManagerWpa(delta.managerWpa)}
+                          </div>
+                        </div>
+                      ))
+                    )}
                   </div>
                 </div>
                 <div className="col-span-2">

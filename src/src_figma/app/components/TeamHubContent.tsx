@@ -3,6 +3,31 @@ import { Edit, Building2, User } from "lucide-react";
 import { useOffseasonData, type OffseasonTeam, type OffseasonPlayer } from "@/hooks/useOffseasonData";
 import { useSeasonStats, type BattingLeaderEntry, type PitchingLeaderEntry } from '../../../hooks/useSeasonStats';
 import { useFranchiseDataContext } from "@/app/pages/FranchiseHome";
+import {
+  getAllFranchisePlayers,
+  getFranchiseTeam,
+  saveFranchiseTeam,
+} from "../../../utils/franchisePlayerStorage";
+import type {
+  LineupSlot,
+  Player,
+  Position,
+  Team,
+} from "../../../utils/leagueBuilderStorage";
+import {
+  buildLineupSnapshotFromSlots,
+  buildOptimalLineupSnapshot,
+  markOptimalLineupSnapshotsStaleForChange,
+  OPTIMAL_LINEUP_SNAPSHOT_FIELDS,
+  optimalLineupField,
+  optimalLineupFieldsForDh,
+  type OptimalLineupCandidate,
+  type OptimalLineupSnapshotField,
+} from "../../../utils/optimalLineup";
+import type {
+  OpposingPitcherHand,
+  OptimalLineupSnapshot,
+} from "../../../types/managerWpa";
 
 type TeamHubTab = "team" | "fan-morale" | "roster" | "stats" | "stadium" | "manager";
 
@@ -13,6 +38,8 @@ const EMPTY_STADIUMS: string[] = [];
 const EMPTY_ROSTER_DATA: { name: string; position: string; grade: string; morale: string | number; contract: string; trueValue: string; netDiff: string; fitness: string | number }[] = [];
 
 const EMPTY_STATS_DATA: { name: string; pos: string; war: number; pwar: number; bwar: number; rwar: number; fwar: number; era?: number; ip?: number; k?: number; w?: number; l?: number; sv?: number; avg?: number; hr?: number; rbi?: number; sb?: number; ops?: number }[] = [];
+const FRANCHISE_FIELD_POSITIONS: Position[] = ['C', '1B', '2B', 'SS', '3B', 'LF', 'CF', 'RF'];
+const FRANCHISE_PITCHER_POSITIONS = new Set<Position>(['SP', 'RP', 'CP', 'SP/RP', 'P', 'TWO-WAY']);
 
 // Helper to convert OffseasonPlayer to roster format
 function convertToRosterItem(player: OffseasonPlayer) {
@@ -114,6 +141,101 @@ function convertToStatsItemFromSeason(
   return convertToStatsItem(player);
 }
 
+function getFranchisePlayerName(player: Player): string {
+  return `${player.firstName} ${player.lastName}`.trim();
+}
+
+function toOptimalCandidate(player: Player): OptimalLineupCandidate {
+  return {
+    playerId: player.id,
+    playerName: getFranchisePlayerName(player),
+    bats: player.bats,
+    primaryPosition: player.primaryPosition,
+    secondaryPosition: player.secondaryPosition,
+    power: player.power,
+    contact: player.contact,
+    speed: player.speed,
+    fielding: player.fielding,
+    arm: player.arm,
+    mojo: player.mojo,
+    unavailable: false,
+  };
+}
+
+function lineupSlotsFromOptimalSnapshot(snapshot: OptimalLineupSnapshot): LineupSlot[] {
+  return snapshot.slots
+    .slice()
+    .sort((left, right) => left.battingOrderSlot - right.battingOrderSlot)
+    .map((slot) => ({
+      battingOrder: slot.battingOrderSlot,
+      playerId: slot.playerId,
+      fieldingPosition: slot.defensivePosition as Position,
+    }));
+}
+
+function buildDefaultFranchiseLineupSlots(players: Player[], useDH: boolean): LineupSlot[] {
+  const positionPlayers = players.filter((player) => !FRANCHISE_PITCHER_POSITIONS.has(player.primaryPosition));
+  const assigned = new Set<string>();
+  const slots: LineupSlot[] = [];
+
+  for (const position of FRANCHISE_FIELD_POSITIONS) {
+    const player =
+      positionPlayers.find((candidate) => !assigned.has(candidate.id) && candidate.primaryPosition === position) ??
+      positionPlayers.find((candidate) => !assigned.has(candidate.id) && candidate.secondaryPosition === position) ??
+      positionPlayers.find((candidate) => !assigned.has(candidate.id));
+    if (!player) continue;
+    assigned.add(player.id);
+    slots.push({
+      battingOrder: slots.length + 1,
+      playerId: player.id,
+      fieldingPosition: position,
+    });
+  }
+
+  if (useDH) {
+    const dhPlayer = positionPlayers.find((candidate) => !assigned.has(candidate.id));
+    if (dhPlayer) {
+      slots.push({
+        battingOrder: slots.length + 1,
+        playerId: dhPlayer.id,
+        fieldingPosition: 'DH',
+      });
+    }
+  }
+
+  return slots;
+}
+
+function getFreshOptimalLineupFields(update: Partial<Team>): OptimalLineupSnapshotField[] {
+  return OPTIMAL_LINEUP_SNAPSHOT_FIELDS.filter((field) => field in update);
+}
+
+function applyFranchiseTeamUpdateWithStaleOptimalSnapshots(
+  team: Team,
+  update: Partial<Team>,
+): Team {
+  const staleFields = new Set<OptimalLineupSnapshotField>();
+  const preserveFields = getFreshOptimalLineupFields(update);
+
+  if ('lineupWithDH' in update) {
+    for (const field of optimalLineupFieldsForDh(true)) staleFields.add(field);
+  }
+
+  if ('lineupWithoutDH' in update) {
+    for (const field of optimalLineupFieldsForDh(false)) staleFields.add(field);
+  }
+
+  if ('startingRotation' in update) {
+    for (const field of optimalLineupFieldsForDh(false)) staleFields.add(field);
+  }
+
+  return markOptimalLineupSnapshotsStaleForChange(
+    { ...team, ...update },
+    Array.from(staleFields),
+    preserveFields,
+  );
+}
+
 export function TeamHubContent() {
   // Get real data from hook
   const { teams: realTeams, players: realPlayers, hasRealData, isLoading } = useOffseasonData();
@@ -157,6 +279,11 @@ export function TeamHubContent() {
   const [rosterSortDirection, setRosterSortDirection] = useState<"asc" | "desc">("asc");
   const [statsSortColumn, setStatsSortColumn] = useState<string>("war");
   const [statsSortDirection, setStatsSortDirection] = useState<"asc" | "desc">("desc");
+  const [franchiseTeam, setFranchiseTeam] = useState<Team | null>(null);
+  const [franchiseRosterPlayers, setFranchiseRosterPlayers] = useState<Player[]>([]);
+  const [lineupMode, setLineupMode] = useState<"DH" | "NO_DH">("NO_DH");
+  const [isOptimalSaving, setIsOptimalSaving] = useState(false);
+  const [optimalError, setOptimalError] = useState<string | null>(null);
 
   // Convert real data to local formats with mock fallback
   const teams = useMemo(() => {
@@ -172,6 +299,66 @@ export function TeamHubContent() {
     }
     return EMPTY_STADIUMS;
   }, [realTeams, hasRealData]);
+
+  const selectedTeamId = useMemo(() => {
+    const realTeam = realTeams.find((team) => team.name === selectedTeam);
+    if (realTeam?.id) return realTeam.id;
+    const mapped = Object.entries(franchiseData.teamNameMap ?? {}).find(
+      ([, teamName]) => teamName === selectedTeam,
+    );
+    return mapped?.[0] ?? "";
+  }, [franchiseData.teamNameMap, realTeams, selectedTeam]);
+
+  const franchiseLeagueId = franchiseData.franchiseConfig?.league ?? undefined;
+  const useDH = lineupMode === "DH";
+  const currentFranchiseLineup = useMemo(() => {
+    const storedLineup = useDH ? franchiseTeam?.lineupWithDH : franchiseTeam?.lineupWithoutDH;
+    return storedLineup && storedLineup.length > 0
+      ? storedLineup
+      : buildDefaultFranchiseLineupSlots(franchiseRosterPlayers, useDH);
+  }, [franchiseRosterPlayers, franchiseTeam, useDH]);
+
+  useEffect(() => {
+    if (!franchiseId || !selectedTeamId) {
+      setFranchiseTeam(null);
+      setFranchiseRosterPlayers([]);
+      return;
+    }
+
+    let cancelled = false;
+    const activeFranchiseId = franchiseId;
+
+    async function loadFranchiseOptimalState() {
+      try {
+        setOptimalError(null);
+        const [team, allPlayers] = await Promise.all([
+          getFranchiseTeam(activeFranchiseId, selectedTeamId),
+          getAllFranchisePlayers(activeFranchiseId),
+        ]);
+
+        if (cancelled) return;
+
+        setFranchiseTeam(team);
+        setFranchiseRosterPlayers(
+          allPlayers.filter((player) =>
+            player.leagueAssignments?.some((assignment) =>
+              assignment.teamId === selectedTeamId &&
+              (!franchiseLeagueId || assignment.leagueId === franchiseLeagueId),
+            ),
+          ),
+        );
+      } catch (err) {
+        if (!cancelled) {
+          setOptimalError(err instanceof Error ? err.message : "Failed to load franchise optimal lineup state.");
+        }
+      }
+    }
+
+    void loadFranchiseOptimalState();
+    return () => {
+      cancelled = true;
+    };
+  }, [franchiseId, franchiseLeagueId, selectedTeamId]);
 
   // Default to first team once data loads
   useEffect(() => {
@@ -294,6 +481,93 @@ export function TeamHubContent() {
     return sorted;
   };
 
+  const saveFranchiseOptimalUpdate = async (update: Partial<Team>) => {
+    if (!franchiseId || !franchiseTeam) return;
+
+    setIsOptimalSaving(true);
+    setOptimalError(null);
+    try {
+      const nextTeam = applyFranchiseTeamUpdateWithStaleOptimalSnapshots(franchiseTeam, update);
+      const savedTeam = await saveFranchiseTeam(franchiseId, nextTeam);
+      setFranchiseTeam(savedTeam);
+    } catch (err) {
+      setOptimalError(err instanceof Error ? err.message : "Failed to save franchise optimal lineup.");
+    } finally {
+      setIsOptimalSaving(false);
+    }
+  };
+
+  const buildFranchiseOptimalSnapshot = (hand: OpposingPitcherHand) => {
+    if (!franchiseTeam || !selectedTeamId) return null;
+
+    return buildOptimalLineupSnapshot({
+      teamId: selectedTeamId,
+      mode: "franchise",
+      instanceId: franchiseId,
+      opposingPitcherHand: hand,
+      candidates: franchiseRosterPlayers.map(toOptimalCandidate),
+      dhEnabled: useDH,
+      generatedAt: Date.now(),
+      generatedFrom: "team_hub",
+      sourceConfidence: "engine_calculated",
+      rosterVersionId: franchiseTeam.lastModified,
+    });
+  };
+
+  const buildCurrentFranchiseLineupSnapshot = (hand: OpposingPitcherHand) => {
+    if (!franchiseTeam || !selectedTeamId) return null;
+    const playerById = new Map(franchiseRosterPlayers.map((player) => [player.id, player]));
+
+    return buildLineupSnapshotFromSlots({
+      teamId: selectedTeamId,
+      mode: "franchise",
+      instanceId: franchiseId,
+      opposingPitcherHand: hand,
+      candidates: franchiseRosterPlayers.map(toOptimalCandidate),
+      dhEnabled: useDH,
+      generatedAt: Date.now(),
+      generatedFrom: "user_registered_smb4_optimal",
+      sourceConfidence: "user_registered",
+      rosterVersionId: franchiseTeam.lastModified,
+      slots: currentFranchiseLineup.map((slot) => {
+        const player = playerById.get(slot.playerId);
+        return {
+          playerId: slot.playerId,
+          playerName: player ? getFranchisePlayerName(player) : slot.playerId,
+          battingOrderSlot: slot.battingOrder,
+          defensivePosition: slot.fieldingPosition,
+        };
+      }),
+    });
+  };
+
+  const handleApplyFranchiseOptimal = async (hand: OpposingPitcherHand) => {
+    if (!franchiseTeam) return;
+    const field = optimalLineupField(hand, useDH);
+    const snapshot = franchiseTeam[field] ?? buildFranchiseOptimalSnapshot(hand);
+    if (!snapshot) return;
+    await saveFranchiseOptimalUpdate({
+      [field]: snapshot,
+      [useDH ? "lineupWithDH" : "lineupWithoutDH"]: lineupSlotsFromOptimalSnapshot(snapshot),
+    });
+  };
+
+  const handleRecalculateFranchiseOptimal = async (hand: OpposingPitcherHand) => {
+    const snapshot = buildFranchiseOptimalSnapshot(hand);
+    if (!snapshot) return;
+    await saveFranchiseOptimalUpdate({
+      [optimalLineupField(hand, useDH)]: snapshot,
+    });
+  };
+
+  const handleSetCurrentFranchiseOptimal = async (hand: OpposingPitcherHand) => {
+    const snapshot = buildCurrentFranchiseLineupSnapshot(hand);
+    if (!snapshot) return;
+    await saveFranchiseOptimalUpdate({
+      [optimalLineupField(hand, useDH)]: snapshot,
+    });
+  };
+
   // Loading state
   if (isLoading) {
     return (
@@ -399,6 +673,90 @@ export function TeamHubContent() {
             style={{ textShadow: '2px 2px 4px rgba(0,0,0,0.8)' }}
           >
             {selectedTeam.toUpperCase()} ROSTER
+          </div>
+
+          <div className="mb-4 border-[4px] border-[#4A6844] bg-[#5A8352] p-3">
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <div className="text-[10px] text-[#C4A853]">OPTIMAL LINEUP BENCHMARKS</div>
+                <div className="mt-1 text-[8px] text-[#E8E8D8]/60">
+                  {franchiseTeam ? "Franchise roster state" : "No franchise team record loaded"}
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setLineupMode("DH")}
+                  className={`border-2 px-3 py-1 text-[8px] font-bold ${
+                    lineupMode === "DH"
+                      ? "border-[#E8E8D8] bg-[#4A6844] text-[#E8E8D8]"
+                      : "border-[#4A6844] bg-[#6B9462] text-[#E8E8D8]/70"
+                  }`}
+                >
+                  DH
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setLineupMode("NO_DH")}
+                  className={`border-2 px-3 py-1 text-[8px] font-bold ${
+                    lineupMode === "NO_DH"
+                      ? "border-[#E8E8D8] bg-[#4A6844] text-[#E8E8D8]"
+                      : "border-[#4A6844] bg-[#6B9462] text-[#E8E8D8]/70"
+                  }`}
+                >
+                  No DH
+                </button>
+              </div>
+            </div>
+
+            {optimalError && (
+              <div className="mb-3 border-2 border-[#DD0000]/50 bg-[#4A6844] p-2 text-[8px] text-[#FFD6D6]">
+                {optimalError}
+              </div>
+            )}
+
+            <div className="grid gap-2 sm:grid-cols-2">
+              {(["R", "L"] as OpposingPitcherHand[]).map((hand) => {
+                const field = optimalLineupField(hand, useDH);
+                const snapshot = franchiseTeam?.[field];
+                return (
+                  <div key={hand} className="border-2 border-[#4A6844] bg-[#4A6844] p-2">
+                    <div className="mb-2 flex items-center justify-between gap-2">
+                      <span className="text-[8px] font-bold text-[#C4A853]">VS {hand}HP</span>
+                      <span className="text-[7px] text-[#E8E8D8]/60">
+                        {snapshot ? snapshot.sourceConfidence.replace(/_/g, " ") : "not set"}
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-3 gap-1">
+                      <button
+                        type="button"
+                        disabled={!franchiseTeam || isOptimalSaving}
+                        onClick={() => void handleApplyFranchiseOptimal(hand)}
+                        className="border-2 border-[#E8E8D8]/30 bg-[#5A8352] px-1 py-1 text-[7px] hover:border-[#C4A853] disabled:opacity-40"
+                      >
+                        APPLY
+                      </button>
+                      <button
+                        type="button"
+                        disabled={!franchiseTeam || isOptimalSaving}
+                        onClick={() => void handleRecalculateFranchiseOptimal(hand)}
+                        className="border-2 border-[#E8E8D8]/30 bg-[#5A8352] px-1 py-1 text-[7px] hover:border-[#C4A853] disabled:opacity-40"
+                      >
+                        RECALC
+                      </button>
+                      <button
+                        type="button"
+                        disabled={!franchiseTeam || isOptimalSaving}
+                        onClick={() => void handleSetCurrentFranchiseOptimal(hand)}
+                        className="border-2 border-[#E8E8D8]/30 bg-[#5A8352] px-1 py-1 text-[7px] hover:border-[#C4A853] disabled:opacity-40"
+                      >
+                        SET
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
           
           <div className="overflow-x-auto">

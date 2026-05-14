@@ -82,6 +82,7 @@ import { refreshCurrentGameManagerDecisionState } from "../../../utils/managerWp
 import {
   buildLineupSnapshotFromSlots,
   buildOptimalLineupSnapshot,
+  cloneOptimalLineupSnapshot,
   type LineupSlotInput,
   type OptimalLineupCandidate,
 } from "../../../utils/optimalLineup";
@@ -4484,7 +4485,7 @@ export function GameTracker() {
         );
         const optimalLineupSnapshots: GameLockLineupSnapshots = {
           away:
-            navigationState?.optimalLineupSnapshots?.away ??
+            cloneOptimalLineupSnapshot(navigationState?.optimalLineupSnapshots?.away) ??
             buildOptimalLineupSnapshot({
               teamId: awayTeamId,
               mode: modeContext,
@@ -4497,7 +4498,7 @@ export function GameTracker() {
               sourceConfidence: "engine_calculated",
             }),
           home:
-            navigationState?.optimalLineupSnapshots?.home ??
+            cloneOptimalLineupSnapshot(navigationState?.optimalLineupSnapshots?.home) ??
             buildOptimalLineupSnapshot({
               teamId: homeTeamId,
               mode: modeContext,

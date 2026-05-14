@@ -276,6 +276,33 @@ function ManagerCards({ aggregates }: { aggregates: ManagerAlmanacAggregate[] })
                 </div>
               </div>
             </div>
+
+            <div className="mt-5 border-t border-white/10 pt-4 text-[8px] leading-5 text-[#E8E8D8]">
+              <div className="text-[#8F96A3]">LINEUP DELTA DETAILS</div>
+              {manager.lineupDeltaDetails.length === 0 ? (
+                <div className="mt-1 text-white">No lineup deviations</div>
+              ) : (
+                <div className="mt-2 grid gap-2">
+                  {manager.lineupDeltaDetails.slice(0, 2).map((delta) => (
+                    <div key={delta.decisionId} className="border border-white/10 bg-black/20 p-2">
+                      <div className="text-white">Chosen: {delta.chosenLabel}</div>
+                      <div className="text-white">Optimal: {delta.optimalLabel}</div>
+                      <div>
+                        Projected opportunity cost: {delta.projectedOpportunityCost != null
+                          ? formatSigned(delta.projectedOpportunityCost)
+                          : "n/a"}
+                      </div>
+                      <div>
+                        Actual vs optimal projection: {delta.actualVsOptimalProjection != null
+                          ? formatSigned(delta.actualVsOptimalProjection)
+                          : "n/a"}
+                      </div>
+                      <div>Manager WPA: {formatSigned(delta.managerWpa)}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </article>
         ))}
       </div>

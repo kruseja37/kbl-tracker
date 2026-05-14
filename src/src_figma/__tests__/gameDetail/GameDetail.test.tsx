@@ -261,6 +261,19 @@ describe("GameDetail Manager WPA overlay", () => {
             rawPerformanceDelta: 0.4,
             managerShare: 0.25,
             managerWpa: 0.1,
+            chosenPlayerId: "player-one",
+            chosenPlayerName: "Player One",
+            chosenBattingOrderSlot: 1,
+            chosenDefensivePosition: "SS",
+            optimalPlayerId: "bench-one",
+            optimalPlayerName: "Bench One",
+            optimalBattingOrderSlot: 4,
+            optimalDefensivePosition: "CF",
+            chosenProjectedKblWpa: 0.012,
+            optimalProjectedKblWpa: 0.032,
+            projectedOpportunityCost: -0.02,
+            actualChosenKblWpa: 0.4,
+            actualVsOptimalProjection: 0.368,
           },
         ],
         [
@@ -289,10 +302,14 @@ describe("GameDetail Manager WPA overlay", () => {
     render(<GameDetail />);
 
     await screen.findByTestId("manager-wpa-overlay");
-    expect(screen.getByTestId("manager-wpa-total-away")).toHaveTextContent("+0.184");
+    expect(screen.getByTestId("manager-wpa-total-away")).toHaveTextContent("+0.296");
     expect(screen.getByTestId("manager-deployment-wpa-away")).toHaveTextContent("+0.012");
     expect(screen.getByTestId("manager-lineup-delta-away")).toHaveTextContent("+0.100");
     expect(screen.getByTestId("manager-value-away")).toHaveTextContent("+0.296");
+    expect(screen.getByTestId("manager-lineup-delta-details-away")).toHaveTextContent("Chosen: #1 SS Player One");
+    expect(screen.getByTestId("manager-lineup-delta-details-away")).toHaveTextContent("Optimal: #4 CF Bench One");
+    expect(screen.getByTestId("manager-lineup-delta-details-away")).toHaveTextContent("Projected opportunity cost: -0.020");
+    expect(screen.getByTestId("manager-lineup-delta-details-away")).toHaveTextContent("Actual vs optimal projection: +0.368");
   });
 
   test("keeps manager overlay values out of the player KBL WPA leaderboard", async () => {
@@ -329,5 +346,6 @@ describe("GameDetail Manager WPA overlay", () => {
     await screen.findByTestId("manager-wpa-overlay");
     expect(screen.getByTestId("manager-wpa-total-away")).toHaveTextContent("+0.000");
     expect(screen.getByTestId("manager-wpa-total-home")).toHaveTextContent("+0.000");
+    expect(screen.getByTestId("manager-lineup-delta-empty-away")).toHaveTextContent("No lineup deviations");
   });
 });

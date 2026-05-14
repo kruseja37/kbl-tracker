@@ -15,6 +15,10 @@ import { generateHometown } from '../data/usCities';
 import type { OptimalLineupSnapshot } from '../types/managerWpa';
 import type { EraFlavor, FameTier, PlayerArchetype } from '../types/reporter';
 import { trackFieldChanges, type EditHistoryEntry } from './editHistoryTracker';
+import {
+  markOptimalLineupSnapshotsStaleForChange,
+  OPTIMAL_LINEUP_SNAPSHOT_FIELDS,
+} from './optimalLineup';
 import { syncEngine } from './syncEngine';
 
 export type { EditHistoryEntry } from './editHistoryTracker';
@@ -111,6 +115,13 @@ export interface Team {
   ballparkNickname?: string;
   heritageFacts?: string[];
   rivalries?: TeamRivalry[];
+  lineupWithDH?: LineupSlot[];
+  lineupWithoutDH?: LineupSlot[];
+  startingRotation?: string[];
+  optimalLineupVsRHPWithDH?: OptimalLineupSnapshot;
+  optimalLineupVsLHPWithDH?: OptimalLineupSnapshot;
+  optimalLineupVsRHPWithoutDH?: OptimalLineupSnapshot;
+  optimalLineupVsLHPWithoutDH?: OptimalLineupSnapshot;
   createdDate: string;
   lastModified: string;
 }
@@ -335,6 +346,69 @@ export function getPlayerTeamIdForLeague(player: Player, leagueId: string): stri
 
 export function getPlayerRosterStatusForLeague(player: Player, leagueId: string): RosterStatus | null {
   return getLeagueAssignment(player, leagueId)?.rosterStatus ?? null;
+}
+
+const LINEUP_RELEVANT_PLAYER_FIELDS: Array<keyof Player> = [
+  'power',
+  'contact',
+  'speed',
+  'fielding',
+  'arm',
+  'primaryPosition',
+  'secondaryPosition',
+  'bats',
+  'mojo',
+  'overallGrade',
+  'leagueAssignments',
+];
+
+function serializeComparablePlayerField(value: unknown): string {
+  return JSON.stringify(value ?? null);
+}
+
+function getAssignedTeamIds(player: Player | null | undefined): string[] {
+  return Array.from(
+    new Set(
+      (player?.leagueAssignments ?? [])
+        .filter((assignment) => assignment.rosterStatus !== 'FREE_AGENT')
+        .map((assignment) => assignment.teamId)
+        .filter(Boolean),
+    ),
+  );
+}
+
+function hasLineupRelevantPlayerChange(previous: Player | null, next: Player): boolean {
+  if (!previous) {
+    return getAssignedTeamIds(next).length > 0;
+  }
+
+  return LINEUP_RELEVANT_PLAYER_FIELDS.some(
+    (field) =>
+      serializeComparablePlayerField(previous[field]) !==
+      serializeComparablePlayerField(next[field]),
+  );
+}
+
+async function markTeamRostersStaleForPlayerChange(
+  previous: Player | null,
+  next: Player,
+): Promise<void> {
+  if (!hasLineupRelevantPlayerChange(previous, next)) return;
+
+  const teamIds = Array.from(
+    new Set([...getAssignedTeamIds(previous), ...getAssignedTeamIds(next)]),
+  );
+
+  for (const teamId of teamIds) {
+    const roster = await getTeamRoster(teamId);
+    if (!roster) continue;
+    await saveTeamRoster(
+      markOptimalLineupSnapshotsStaleForChange(
+        roster,
+        OPTIMAL_LINEUP_SNAPSHOT_FIELDS,
+      ),
+    );
+  }
 }
 
 function buildLeagueAssignmentsFromLegacyPlayer(player: LegacyPlayerRecord): LeagueAssignment[] {
@@ -755,11 +829,12 @@ export async function savePlayer(
 ): Promise<Player> {
   const db = await initLeagueBuilderDatabase();
   const now = nowISO();
+  const existingPlayer = player.id ? await getPlayer(player.id) : null;
 
   // If tracking changes and this is an update (has id), compute edit history diff
   let editHistory = player.editHistory ?? [];
   if (options?.trackChanges && player.id) {
-    const existing = await getPlayer(player.id);
+    const existing = existingPlayer;
     if (existing) {
       const newEntries = trackFieldChanges(
         existing as unknown as Record<string, unknown>,
@@ -775,11 +850,11 @@ export async function savePlayer(
     leagueAssignments: player.leagueAssignments ?? [],
     editHistory,
     id: player.id || generateId('player'),
-    createdDate: player.id ? (await getPlayer(player.id))?.createdDate || now : now,
+    createdDate: player.id ? existingPlayer?.createdDate || now : now,
     lastModified: now,
   };
 
-  return new Promise((resolve, reject) => {
+  const savedPlayer = await new Promise<Player>((resolve, reject) => {
     const tx = db.transaction(STORES.GLOBAL_PLAYERS, 'readwrite');
     const store = tx.objectStore(STORES.GLOBAL_PLAYERS);
     const request = store.put(fullPlayer);
@@ -791,6 +866,9 @@ export async function savePlayer(
     };
     tx.onerror = () => reject(tx.error);
   });
+
+  await markTeamRostersStaleForPlayerChange(existingPlayer, savedPlayer);
+  return savedPlayer;
 }
 
 export async function deletePlayer(id: string): Promise<void> {
@@ -911,7 +989,7 @@ function removePlayerIdFromRoster(roster: TeamRoster, playerId: string): TeamRos
     return cleaned;
   };
 
-  return {
+  return markOptimalLineupSnapshotsStaleForChange({
     ...roster,
     mlbRoster: removeId(roster.mlbRoster),
     farmRoster: removeId(roster.farmRoster),
@@ -925,7 +1003,7 @@ function removePlayerIdFromRoster(roster: TeamRoster, playerId: string): TeamRos
     pinchHitOrder: removeId(roster.pinchHitOrder),
     pinchRunOrder: removeId(roster.pinchRunOrder),
     defensiveSubOrder: removeId(roster.defensiveSubOrder),
-  };
+  }, OPTIMAL_LINEUP_SNAPSHOT_FIELDS);
 }
 
 /**
@@ -1014,10 +1092,15 @@ export async function transferPlayer(playerId: string, newTeamId: string, league
 
   const newRoster = await getTeamRoster(newTeamId);
   if (newRoster && !newRoster.mlbRoster.includes(playerId)) {
-    await saveTeamRoster({
-      ...newRoster,
-      mlbRoster: [...newRoster.mlbRoster, playerId],
-    });
+    await saveTeamRoster(
+      markOptimalLineupSnapshotsStaleForChange(
+        {
+          ...newRoster,
+          mlbRoster: [...newRoster.mlbRoster, playerId],
+        },
+        OPTIMAL_LINEUP_SNAPSHOT_FIELDS,
+      ),
+    );
   }
 }
 

@@ -18,6 +18,7 @@ export interface FranchiseConfig {
     inningsPerGame: number;
     extraInningsRule: string;
     scheduleType: string;
+    useDH?: boolean;
     allStarGame: boolean;
     tradeDeadline: boolean;
     mercyRule: boolean;

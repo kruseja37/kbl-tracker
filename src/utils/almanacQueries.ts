@@ -135,6 +135,21 @@ export interface ManagerAlmanacDecisionSummary {
   instanceId: string;
 }
 
+export interface ManagerAlmanacLineupDeltaSummary {
+  decisionId: string;
+  gameId: string;
+  date: number;
+  managerId: string;
+  managerName: string;
+  teamId: string;
+  teamName: string;
+  chosenLabel: string;
+  optimalLabel: string;
+  projectedOpportunityCost?: number;
+  actualVsOptimalProjection?: number;
+  managerWpa: number;
+}
+
 export interface ManagerDecisionTendencies {
   decisionTypeCounts: Partial<Record<ManagerDecisionType, number>>;
   tacticalDecisionCount: number;
@@ -172,6 +187,7 @@ export interface ManagerTeamTenureAggregate {
   pendingDecisionCount: number;
   bestDecision?: ManagerAlmanacDecisionSummary;
   worstDecision?: ManagerAlmanacDecisionSummary;
+  lineupDeltaDetails: ManagerAlmanacLineupDeltaSummary[];
   tendencies: ManagerDecisionTendencies;
 }
 
@@ -200,6 +216,7 @@ export interface ManagerAlmanacAggregate {
   pendingDecisionCount: number;
   bestDecision?: ManagerAlmanacDecisionSummary;
   worstDecision?: ManagerAlmanacDecisionSummary;
+  lineupDeltaDetails: ManagerAlmanacLineupDeltaSummary[];
   tendencies: ManagerDecisionTendencies;
   tenures: ManagerTeamTenureAggregate[];
 }
@@ -312,6 +329,7 @@ interface ManagerWorkingTenure {
   pendingDecisionCount: number;
   bestDecision?: ManagerAlmanacDecisionSummary;
   worstDecision?: ManagerAlmanacDecisionSummary;
+  lineupDeltaDetails: ManagerAlmanacLineupDeltaSummary[];
   decisionTypeCounts: Partial<Record<ManagerDecisionType, number>>;
 }
 
@@ -340,6 +358,7 @@ interface ManagerWorkingAggregate {
   pendingDecisionCount: number;
   bestDecision?: ManagerAlmanacDecisionSummary;
   worstDecision?: ManagerAlmanacDecisionSummary;
+  lineupDeltaDetails: ManagerAlmanacLineupDeltaSummary[];
   decisionTypeCounts: Partial<Record<ManagerDecisionType, number>>;
   tenures: Map<string, ManagerWorkingTenure>;
 }
@@ -860,6 +879,45 @@ function buildManagerDecisionSummary(
   };
 }
 
+function formatLineupDeltaSummarySlot(
+  playerName: string | undefined,
+  battingOrderSlot: number | undefined,
+  defensivePosition: string | undefined,
+): string {
+  const order = battingOrderSlot ? `#${battingOrderSlot}` : 'slot ?';
+  const position = defensivePosition || 'POS';
+  return `${order} ${position} ${playerName || 'Unknown player'}`;
+}
+
+function buildManagerLineupDeltaSummary(
+  game: CompletedGameRecord,
+  delta: ManagerLineupDeltaRecord,
+  managerName: string,
+): ManagerAlmanacLineupDeltaSummary {
+  return {
+    decisionId: delta.decisionId,
+    gameId: delta.gameId,
+    date: game.date,
+    managerId: delta.managerId,
+    managerName,
+    teamId: delta.teamId,
+    teamName: getTeamNameForGame(game, delta.teamId),
+    chosenLabel: formatLineupDeltaSummarySlot(
+      delta.chosenPlayerName ?? delta.starterPlayerName,
+      delta.chosenBattingOrderSlot ?? delta.battingOrderSlot,
+      delta.chosenDefensivePosition ?? delta.defensivePosition,
+    ),
+    optimalLabel: formatLineupDeltaSummarySlot(
+      delta.optimalPlayerName,
+      delta.optimalBattingOrderSlot,
+      delta.optimalDefensivePosition,
+    ),
+    projectedOpportunityCost: delta.projectedOpportunityCost,
+    actualVsOptimalProjection: delta.actualVsOptimalProjection,
+    managerWpa: delta.managerWpa,
+  };
+}
+
 function compareBestDecision(
   current: ManagerAlmanacDecisionSummary | undefined,
   candidate: ManagerAlmanacDecisionSummary,
@@ -947,6 +1005,7 @@ function createManagerWorkingAggregate(
     resolvedDecisionCount: 0,
     pendingDecisionCount: 0,
     decisionTypeCounts: {},
+    lineupDeltaDetails: [],
     tenures: new Map(),
   };
 }
@@ -1001,6 +1060,7 @@ function getOrCreateManagerTenure(
     resolvedDecisionCount: 0,
     pendingDecisionCount: 0,
     decisionTypeCounts: {},
+    lineupDeltaDetails: [],
   };
   aggregate.tenures.set(key, tenure);
   return tenure;
@@ -1067,11 +1127,14 @@ function addManagerLineupDeltaToAggregate(
   aggregate: ManagerWorkingAggregate,
   tenure: ManagerWorkingTenure,
   delta: ManagerLineupDeltaRecord,
+  summary: ManagerAlmanacLineupDeltaSummary,
 ): void {
   aggregate.lineupDecisionCount += 1;
   tenure.lineupDecisionCount += 1;
   aggregate.lineupDeltaWpa += delta.managerWpa;
   tenure.lineupDeltaWpa += delta.managerWpa;
+  aggregate.lineupDeltaDetails.push(summary);
+  tenure.lineupDeltaDetails.push(summary);
   addDecisionTypeCount(aggregate.decisionTypeCounts, delta.decisionType);
   addDecisionTypeCount(tenure.decisionTypeCounts, delta.decisionType);
 }
@@ -1121,6 +1184,9 @@ function finalizeManagerTenure(
     pendingDecisionCount: tenure.pendingDecisionCount,
     bestDecision: tenure.bestDecision,
     worstDecision: tenure.worstDecision,
+    lineupDeltaDetails: [...tenure.lineupDeltaDetails]
+      .sort((left, right) => right.date - left.date)
+      .slice(0, 8),
     tendencies: createEmptyTendencies(
       tenure.decisionTypeCounts,
       tenure.tacticalDecisionCount,
@@ -1173,6 +1239,9 @@ function finalizeManagerAggregate(
     pendingDecisionCount: aggregate.pendingDecisionCount,
     bestDecision: aggregate.bestDecision,
     worstDecision: aggregate.worstDecision,
+    lineupDeltaDetails: [...aggregate.lineupDeltaDetails]
+      .sort((left, right) => right.date - left.date)
+      .slice(0, 8),
     tendencies: createEmptyTendencies(
       aggregate.decisionTypeCounts,
       aggregate.tacticalDecisionCount,
@@ -1455,7 +1524,12 @@ export function aggregateCommittedManagerAlmanac(
         instanceName,
       });
       registerManagerTeamGame(aggregate, tenure, game, delta.teamId);
-      addManagerLineupDeltaToAggregate(aggregate, tenure, delta);
+      addManagerLineupDeltaToAggregate(
+        aggregate,
+        tenure,
+        delta,
+        buildManagerLineupDeltaSummary(game, delta, managerName),
+      );
     }
   }
 

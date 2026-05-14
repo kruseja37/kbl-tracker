@@ -3,7 +3,11 @@ import { describe, expect, test } from "vitest";
 import {
   buildLineupSnapshotFromSlots,
   buildOptimalLineupSnapshot,
+  cloneGameLockLineupSnapshots,
+  markOptimalLineupSnapshotsStaleForChange,
   mapLineupSnapshotDeviations,
+  optimalLineupField,
+  selectOptimalLineupForOpposingPitcher,
 } from "../optimalLineup";
 import type { OptimalLineupCandidate } from "../optimalLineup";
 
@@ -176,5 +180,112 @@ describe("optimal lineup engine", () => {
     expect(deviations.length).toBeGreaterThan(0);
     expect(chosenKeys.size).toBe(deviations.length);
     expect(optimalKeys.size).toBe(deviations.length);
+  });
+
+  test("marks user-registered optimal snapshots stale instead of deleting them", () => {
+    const userRegistered = buildLineupSnapshotFromSlots({
+      teamId: "team-a",
+      mode: "exhibition",
+      opposingPitcherHand: "R",
+      candidates,
+      dhEnabled: true,
+      generatedAt: 200,
+      generatedFrom: "user_registered_smb4_optimal",
+      sourceConfidence: "user_registered",
+      slots: [
+        { playerId: "elite-ss", playerName: "Elite Shortstop", battingOrderSlot: 1, defensivePosition: "SS" },
+      ],
+    });
+
+    const next = markOptimalLineupSnapshotsStaleForChange(
+      { optimalLineupVsRHPWithDH: userRegistered },
+      ["optimalLineupVsRHPWithDH"],
+    );
+
+    expect(next.optimalLineupVsRHPWithDH?.snapshotId).toBe(userRegistered.snapshotId);
+    expect(next.optimalLineupVsRHPWithDH?.slots).toEqual(userRegistered.slots);
+    expect(next.optimalLineupVsRHPWithDH?.sourceConfidence).toBe("stale_roster");
+    expect(next.optimalLineupVsRHPWithDH?.confidence).toBe("low");
+  });
+
+  test("preserves a freshly recalculated field while staling affected lineup context", () => {
+    const oldRhp = buildOptimalLineupSnapshot({
+      teamId: "team-a",
+      mode: "exhibition",
+      opposingPitcherHand: "R",
+      candidates,
+      dhEnabled: true,
+      generatedAt: 100,
+      generatedFrom: "league_builder",
+      sourceConfidence: "engine_calculated",
+    });
+    const freshLhp = buildOptimalLineupSnapshot({
+      teamId: "team-a",
+      mode: "exhibition",
+      opposingPitcherHand: "L",
+      candidates,
+      dhEnabled: true,
+      generatedAt: 200,
+      generatedFrom: "league_builder",
+      sourceConfidence: "engine_calculated",
+    });
+
+    const next = markOptimalLineupSnapshotsStaleForChange(
+      {
+        optimalLineupVsRHPWithDH: oldRhp,
+        optimalLineupVsLHPWithDH: freshLhp,
+      },
+      ["optimalLineupVsRHPWithDH", "optimalLineupVsLHPWithDH"],
+      ["optimalLineupVsLHPWithDH"],
+    );
+
+    expect(next.optimalLineupVsRHPWithDH?.sourceConfidence).toBe("stale_roster");
+    expect(next.optimalLineupVsLHPWithDH).toBe(freshLhp);
+    expect(optimalLineupField("L", true)).toBe("optimalLineupVsLHPWithDH");
+  });
+
+  test("selects the game-lock benchmark based on opposing starter hand", () => {
+    const rhp = buildOptimalLineupSnapshot({
+      teamId: "team-a",
+      mode: "franchise",
+      opposingPitcherHand: "R",
+      candidates,
+      dhEnabled: true,
+      generatedAt: 100,
+      generatedFrom: "team_hub",
+      sourceConfidence: "engine_calculated",
+    });
+    const lhp = buildOptimalLineupSnapshot({
+      teamId: "team-a",
+      mode: "franchise",
+      opposingPitcherHand: "L",
+      candidates,
+      dhEnabled: true,
+      generatedAt: 200,
+      generatedFrom: "team_hub",
+      sourceConfidence: "engine_calculated",
+    });
+
+    expect(selectOptimalLineupForOpposingPitcher({ vsRHP: rhp, vsLHP: lhp }, { throwingHand: "L" })).toBe(lhp);
+    expect(selectOptimalLineupForOpposingPitcher({ vsRHP: rhp, vsLHP: lhp }, { throwingHand: "R" })).toBe(rhp);
+  });
+
+  test("clones game-lock snapshots so launch snapshots stay immutable", () => {
+    const snapshot = buildOptimalLineupSnapshot({
+      teamId: "team-a",
+      mode: "franchise",
+      opposingPitcherHand: "R",
+      candidates,
+      dhEnabled: true,
+      generatedAt: 300,
+      generatedFrom: "team_hub",
+      sourceConfidence: "engine_calculated",
+    });
+
+    const cloned = cloneGameLockLineupSnapshots({ away: snapshot });
+    snapshot.slots[0] = { ...snapshot.slots[0], playerName: "Mutated Later" };
+
+    expect(cloned.away).not.toBe(snapshot);
+    expect(cloned.away?.slots[0].playerName).not.toBe("Mutated Later");
   });
 });

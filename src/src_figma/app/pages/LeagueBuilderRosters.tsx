@@ -13,7 +13,12 @@ import {
 import {
   buildLineupSnapshotFromSlots,
   buildOptimalLineupSnapshot,
+  markOptimalLineupSnapshotsStaleForChange,
+  OPTIMAL_LINEUP_SNAPSHOT_FIELDS,
+  optimalLineupField,
+  optimalLineupFieldsForDh,
   type OptimalLineupCandidate,
+  type OptimalLineupSnapshotField,
 } from "../../../utils/optimalLineup";
 import type {
   OpposingPitcherHand,
@@ -42,20 +47,6 @@ function toOptimalCandidate(player: Player): OptimalLineupCandidate {
   };
 }
 
-function optimalLineupField(
-  hand: OpposingPitcherHand,
-  isDH: boolean,
-):
-  | 'optimalLineupVsRHPWithDH'
-  | 'optimalLineupVsLHPWithDH'
-  | 'optimalLineupVsRHPWithoutDH'
-  | 'optimalLineupVsLHPWithoutDH' {
-  if (hand === "L") {
-    return isDH ? "optimalLineupVsLHPWithDH" : "optimalLineupVsLHPWithoutDH";
-  }
-  return isDH ? "optimalLineupVsRHPWithDH" : "optimalLineupVsRHPWithoutDH";
-}
-
 function lineupSlotsFromOptimalSnapshot(snapshot: OptimalLineupSnapshot): LineupSlot[] {
   return snapshot.slots
     .slice()
@@ -65,6 +56,50 @@ function lineupSlotsFromOptimalSnapshot(snapshot: OptimalLineupSnapshot): Lineup
       playerId: slot.playerId,
       fieldingPosition: slot.defensivePosition as Position,
     }));
+}
+
+function getFreshOptimalLineupFields(update: Partial<TeamRoster>): OptimalLineupSnapshotField[] {
+  return OPTIMAL_LINEUP_SNAPSHOT_FIELDS.filter((field) => field in update);
+}
+
+function applyRosterUpdateWithStaleOptimalSnapshots(
+  roster: TeamRoster,
+  update: Partial<TeamRoster>,
+): TeamRoster {
+  const staleFields = new Set<OptimalLineupSnapshotField>();
+  const preserveFields = getFreshOptimalLineupFields(update);
+
+  if ("lineupWithDH" in update) {
+    for (const field of optimalLineupFieldsForDh(true)) staleFields.add(field);
+  }
+
+  if ("lineupWithoutDH" in update) {
+    for (const field of optimalLineupFieldsForDh(false)) staleFields.add(field);
+  }
+
+  if (
+    [
+      "mlbRoster",
+      "farmRoster",
+      "startingRotation",
+      "longRelievers",
+      "closingPitcher",
+      "setupPitchers",
+      "depthChart",
+      "pinchHitOrder",
+      "pinchRunOrder",
+      "defensiveSubOrder",
+    ].some((field) => field in update)
+  ) {
+    for (const field of OPTIMAL_LINEUP_SNAPSHOT_FIELDS) staleFields.add(field);
+  }
+
+  const merged = { ...roster, ...update };
+  return markOptimalLineupSnapshotsStaleForChange(
+    merged,
+    Array.from(staleFields),
+    preserveFields,
+  );
 }
 
 export function LeagueBuilderRosters() {
@@ -85,6 +120,13 @@ export function LeagueBuilderRosters() {
   const [hasChanges, setHasChanges] = useState(false);
   const [saving, setSaving] = useState(false);
   const [activeLeagueId, setActiveLeagueId] = useState<string>("");
+
+  const applyCurrentRosterUpdate = (update: Partial<TeamRoster>) => {
+    setCurrentRoster((current) =>
+      current ? applyRosterUpdateWithStaleOptimalSnapshots(current, update) : current,
+    );
+    setHasChanges(true);
+  };
 
   // Auto-select first league on load
   useEffect(() => {
@@ -434,40 +476,28 @@ export function LeagueBuilderRosters() {
                     <RosterTab
                       roster={currentRoster}
                       players={teamPlayers}
-                      onUpdate={(update) => {
-                        setCurrentRoster({ ...currentRoster, ...update });
-                        setHasChanges(true);
-                      }}
+                      onUpdate={applyCurrentRosterUpdate}
                     />
                   )}
                   {activeTab === "lineup" && (
                     <LineupTab
                       roster={currentRoster}
                       players={teamPlayers}
-                      onUpdate={(update) => {
-                        setCurrentRoster({ ...currentRoster, ...update });
-                        setHasChanges(true);
-                      }}
+                      onUpdate={applyCurrentRosterUpdate}
                     />
                   )}
                   {activeTab === "rotation" && (
                     <RotationTab
                       roster={currentRoster}
                       players={teamPlayers}
-                      onUpdate={(update) => {
-                        setCurrentRoster({ ...currentRoster, ...update });
-                        setHasChanges(true);
-                      }}
+                      onUpdate={applyCurrentRosterUpdate}
                     />
                   )}
                   {activeTab === "depth" && (
                     <DepthChartTab
                       roster={currentRoster}
                       players={teamPlayers}
-                      onUpdate={(update) => {
-                        setCurrentRoster({ ...currentRoster, ...update });
-                        setHasChanges(true);
-                      }}
+                      onUpdate={applyCurrentRosterUpdate}
                     />
                   )}
                 </div>

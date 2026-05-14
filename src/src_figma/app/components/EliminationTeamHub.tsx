@@ -23,7 +23,12 @@ import type {
 import {
   buildLineupSnapshotFromSlots,
   buildOptimalLineupSnapshot,
+  markOptimalLineupSnapshotsStaleForChange,
+  OPTIMAL_LINEUP_SNAPSHOT_FIELDS,
+  optimalLineupField,
+  optimalLineupFieldsForDh,
   type OptimalLineupCandidate,
+  type OptimalLineupSnapshotField,
 } from '../../../utils/optimalLineup';
 import {
   resolveManagerForTeam,
@@ -158,26 +163,34 @@ function toOptimalCandidate(player: Player): OptimalLineupCandidate {
   };
 }
 
-function optimalLineupField(
-  hand: OpposingPitcherHand,
-  useDH: boolean,
-):
-  | 'optimalLineupVsRHPWithDH'
-  | 'optimalLineupVsLHPWithDH'
-  | 'optimalLineupVsRHPWithoutDH'
-  | 'optimalLineupVsLHPWithoutDH' {
-  if (hand === 'L') {
-    return useDH ? 'optimalLineupVsLHPWithDH' : 'optimalLineupVsLHPWithoutDH';
-  }
-  return useDH ? 'optimalLineupVsRHPWithDH' : 'optimalLineupVsRHPWithoutDH';
-}
-
 function lineupSlotsFromOptimalSnapshot(snapshot: OptimalLineupSnapshot): LineupSlot[] {
   return snapshot.slots.map((slot) => ({
     battingOrder: slot.battingOrderSlot,
     playerId: slot.playerId,
     fieldingPosition: slot.defensivePosition as Position,
   }));
+}
+
+function getFreshOptimalLineupFields(
+  updates: Partial<EliminationRosterSnapshot>,
+): OptimalLineupSnapshotField[] {
+  return OPTIMAL_LINEUP_SNAPSHOT_FIELDS.filter((field) => field in updates);
+}
+
+function staleFieldsForEliminationUpdate(
+  updates: Partial<EliminationRosterSnapshot>,
+): OptimalLineupSnapshotField[] {
+  const fields = new Set<OptimalLineupSnapshotField>();
+
+  if ('lineup' in updates) {
+    for (const field of optimalLineupFieldsForDh(true)) fields.add(field);
+  }
+
+  if ('lineupWithoutDH' in updates || 'startingRotation' in updates) {
+    for (const field of optimalLineupFieldsForDh(false)) fields.add(field);
+  }
+
+  return Array.from(fields);
 }
 
 export function EliminationTeamHub({ eliminationId, teams, useDH }: EliminationTeamHubProps) {
@@ -387,17 +400,36 @@ export function EliminationTeamHub({ eliminationId, teams, useDH }: EliminationT
     setIsSaving(true);
     setError(null);
     try {
-      await updateEliminationRosterSnapshot(eliminationId, teamId, updates);
+      const nextSnapshot =
+        snapshot && snapshot.teamId === teamId
+          ? markOptimalLineupSnapshotsStaleForChange(
+              { ...snapshot, ...updates },
+              staleFieldsForEliminationUpdate(updates),
+              getFreshOptimalLineupFields(updates),
+            )
+          : null;
+      const persistedUpdates = nextSnapshot
+        ? {
+            ...updates,
+            ...Object.fromEntries(
+              OPTIMAL_LINEUP_SNAPSHOT_FIELDS
+                .filter((field) => !(field in updates) && nextSnapshot[field] !== snapshot?.[field])
+                .map((field) => [field, nextSnapshot[field]]),
+            ),
+          }
+        : updates;
+
+      await updateEliminationRosterSnapshot(eliminationId, teamId, persistedUpdates);
       setSnapshot((current) =>
         current
           ? {
               ...current,
-              ...updates,
-              lineup: updates.lineup ? sortLineup(updates.lineup) : current.lineup,
-              lineupWithoutDH: updates.lineupWithoutDH
-                ? sortLineup(updates.lineupWithoutDH)
+              ...persistedUpdates,
+              lineup: persistedUpdates.lineup ? sortLineup(persistedUpdates.lineup) : current.lineup,
+              lineupWithoutDH: persistedUpdates.lineupWithoutDH
+                ? sortLineup(persistedUpdates.lineupWithoutDH)
                 : current.lineupWithoutDH,
-              startingRotation: updates.startingRotation ?? current.startingRotation,
+              startingRotation: persistedUpdates.startingRotation ?? current.startingRotation,
             }
           : current
       );
@@ -568,6 +600,20 @@ export function EliminationTeamHub({ eliminationId, teams, useDH }: EliminationT
         fitnessState: next.fitness,
       },
     ]);
+
+    if (snapshot) {
+      const staleSnapshot = markOptimalLineupSnapshotsStaleForChange(
+        snapshot,
+        OPTIMAL_LINEUP_SNAPSHOT_FIELDS,
+      );
+      const staleUpdates = Object.fromEntries(
+        OPTIMAL_LINEUP_SNAPSHOT_FIELDS
+          .filter((field) => staleSnapshot[field] !== snapshot[field])
+          .map((field) => [field, staleSnapshot[field]]),
+      );
+      await updateEliminationRosterSnapshot(eliminationId, snapshot.teamId, staleUpdates);
+      setSnapshot((current) => (current ? { ...current, ...staleUpdates } : current));
+    }
   }
 
   async function handleManagerSave() {

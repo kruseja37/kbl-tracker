@@ -1,4 +1,5 @@
 import type {
+  GameLockLineupSnapshots,
   ManagerDecisionConfidence,
   OpposingPitcherHand,
   OptimalLineupGeneratedFrom,
@@ -63,6 +64,96 @@ export interface LineupSnapshotDeviation {
   chosenSlot: OptimalLineupSlot;
   optimalSlot: OptimalLineupSlot;
   projectedOpportunityCost: number;
+}
+
+export type OptimalLineupSnapshotField =
+  | "optimalLineupVsRHPWithDH"
+  | "optimalLineupVsLHPWithDH"
+  | "optimalLineupVsRHPWithoutDH"
+  | "optimalLineupVsLHPWithoutDH";
+
+export type OptimalLineupSnapshotCarrier = Partial<
+  Record<OptimalLineupSnapshotField, OptimalLineupSnapshot>
+>;
+
+export const OPTIMAL_LINEUP_SNAPSHOT_FIELDS: OptimalLineupSnapshotField[] = [
+  "optimalLineupVsRHPWithDH",
+  "optimalLineupVsLHPWithDH",
+  "optimalLineupVsRHPWithoutDH",
+  "optimalLineupVsLHPWithoutDH",
+];
+
+export function optimalLineupField(
+  opposingPitcherHand: OpposingPitcherHand,
+  dhEnabled: boolean,
+): OptimalLineupSnapshotField {
+  if (opposingPitcherHand === "L") {
+    return dhEnabled ? "optimalLineupVsLHPWithDH" : "optimalLineupVsLHPWithoutDH";
+  }
+  return dhEnabled ? "optimalLineupVsRHPWithDH" : "optimalLineupVsRHPWithoutDH";
+}
+
+export function optimalLineupFieldsForDh(dhEnabled: boolean): OptimalLineupSnapshotField[] {
+  return dhEnabled
+    ? ["optimalLineupVsRHPWithDH", "optimalLineupVsLHPWithDH"]
+    : ["optimalLineupVsRHPWithoutDH", "optimalLineupVsLHPWithoutDH"];
+}
+
+export function markOptimalLineupSnapshotStale(
+  snapshot: OptimalLineupSnapshot | undefined,
+): OptimalLineupSnapshot | undefined {
+  if (!snapshot || snapshot.sourceConfidence === "stale_roster") {
+    return snapshot;
+  }
+
+  return {
+    ...snapshot,
+    sourceConfidence: "stale_roster",
+    confidence: "low",
+  };
+}
+
+export function markOptimalLineupSnapshotsStaleForChange<T extends OptimalLineupSnapshotCarrier>(
+  carrier: T,
+  fields: OptimalLineupSnapshotField[],
+  preserveFreshFields: OptimalLineupSnapshotField[] = [],
+): T {
+  const preserve = new Set(preserveFreshFields);
+  const next: OptimalLineupSnapshotCarrier = { ...carrier };
+
+  for (const field of fields) {
+    if (preserve.has(field)) continue;
+    next[field] = markOptimalLineupSnapshotStale(next[field]);
+  }
+
+  return next as T;
+}
+
+export function selectOptimalLineupForOpposingPitcher(
+  snapshots: { vsRHP?: OptimalLineupSnapshot; vsLHP?: OptimalLineupSnapshot } | undefined,
+  opposingPitcher: { throwingHand?: string } | undefined,
+): OptimalLineupSnapshot | undefined {
+  const hand = opposingPitcher?.throwingHand?.toUpperCase() === "L" ? "L" : "R";
+  return hand === "L" ? snapshots?.vsLHP : snapshots?.vsRHP;
+}
+
+export function cloneOptimalLineupSnapshot(
+  snapshot: OptimalLineupSnapshot | undefined,
+): OptimalLineupSnapshot | undefined {
+  if (!snapshot) return undefined;
+  return {
+    ...snapshot,
+    slots: snapshot.slots.map((slot) => ({ ...slot })),
+  };
+}
+
+export function cloneGameLockLineupSnapshots(
+  snapshots: GameLockLineupSnapshots | undefined,
+): GameLockLineupSnapshots {
+  return {
+    away: cloneOptimalLineupSnapshot(snapshots?.away),
+    home: cloneOptimalLineupSnapshot(snapshots?.home),
+  };
 }
 
 export function buildOptimalLineupSnapshot(

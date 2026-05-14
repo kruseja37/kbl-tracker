@@ -5,6 +5,10 @@ import {
   type Player,
   type Team,
 } from './leagueBuilderStorage';
+import {
+  markOptimalLineupSnapshotsStaleForChange,
+  OPTIMAL_LINEUP_SNAPSHOT_FIELDS,
+} from './optimalLineup';
 import { getEffectivePlayer } from './playerOverrides';
 import { syncEngine } from './syncEngine';
 
@@ -45,6 +49,71 @@ function generateId(prefix: string): string {
 
 function nowISO(): string {
   return new Date().toISOString();
+}
+
+const LINEUP_RELEVANT_PLAYER_FIELDS: Array<keyof Player> = [
+  'power',
+  'contact',
+  'speed',
+  'fielding',
+  'arm',
+  'primaryPosition',
+  'secondaryPosition',
+  'bats',
+  'mojo',
+  'overallGrade',
+  'leagueAssignments',
+];
+
+function serializeComparablePlayerField(value: unknown): string {
+  return JSON.stringify(value ?? null);
+}
+
+function getAssignedTeamIds(player: Player | null | undefined): string[] {
+  return Array.from(
+    new Set(
+      (player?.leagueAssignments ?? [])
+        .filter((assignment) => assignment.rosterStatus !== 'FREE_AGENT')
+        .map((assignment) => assignment.teamId)
+        .filter(Boolean),
+    ),
+  );
+}
+
+function hasLineupRelevantPlayerChange(previous: Player | null, next: Player): boolean {
+  if (!previous) {
+    return getAssignedTeamIds(next).length > 0;
+  }
+
+  return LINEUP_RELEVANT_PLAYER_FIELDS.some(
+    (field) =>
+      serializeComparablePlayerField(previous[field]) !==
+      serializeComparablePlayerField(next[field]),
+  );
+}
+
+async function markFranchiseTeamSnapshotsStaleForPlayerChange(
+  franchiseId: string,
+  previous: Player | null,
+  next: Player,
+): Promise<void> {
+  if (!hasLineupRelevantPlayerChange(previous, next)) return;
+
+  const teamIds = Array.from(
+    new Set([...getAssignedTeamIds(previous), ...getAssignedTeamIds(next)]),
+  );
+
+  for (const teamId of teamIds) {
+    const team = await getFranchiseTeam(franchiseId, teamId);
+    if (!team) continue;
+    await saveFranchiseTeam(
+      franchiseId,
+      markOptimalLineupSnapshotsStaleForChange(
+        team,
+        OPTIMAL_LINEUP_SNAPSHOT_FIELDS,
+      ),
+    );
+  }
 }
 
 export async function initFranchiseDatabase(franchiseId: string): Promise<IDBDatabase> {
@@ -131,6 +200,8 @@ export async function saveFranchisePlayer(
   await transactionToPromise(tx);
 
   if (!syncEngine.isSuppressed()) syncEngine.upsert(`kbl-franchise-${franchiseId}`, 'players', fullPlayer.id, fullPlayer);
+
+  await markFranchiseTeamSnapshotsStaleForPlayerChange(franchiseId, existing, fullPlayer);
 
   return fullPlayer;
 }
