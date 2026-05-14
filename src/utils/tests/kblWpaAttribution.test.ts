@@ -518,4 +518,63 @@ describe("KBL WPA attribution", () => {
     expect(totalFor(credits, "away-pitcher")).toBeLessThan(0);
     expect(sumCredits(credits, "away") + sumCredits(credits, "home")).toBeCloseTo(0, 5);
   });
+
+  test("prompted keep-current manager decisions do not change player KBL WPA totals", () => {
+    const atBat = createAtBat({
+      eventId: "game-1_1",
+      eventIndex: 1,
+      result: "HR",
+      runsScored: ["away-batter"],
+      awayScoreAfter: 1,
+      homeScoreAfter: 0,
+      wpa: 0.2,
+    });
+    const prompt: BetweenPlayEvent = {
+      eventId: "game-1_bp_keep",
+      gameId: "game-1",
+      timestamp: 2,
+      eventIndex: 0.5,
+      type: "manager_moment",
+      gameState: {
+        inning: 1,
+        halfInning: "TOP",
+        outs: 0,
+        score: { away: 0, home: 0 },
+        runnersOn: {},
+      },
+      managerMoment: {
+        leverageIndex: 2.1,
+        decisionType: "leave_pitcher_in",
+      },
+      promptedManagerDecision: {
+        decisionType: "leave_pitcher_in",
+        action: "keep_pitcher",
+        source: "recommendation",
+        decisionSource: "situational_prompt",
+        managerId: "home-manager",
+        teamId: "home",
+        opponentTeamId: "away",
+        trackedPlayerIds: ["home-pitcher"],
+        involvedPlayerIds: ["home-pitcher"],
+        recommendationId: "rec-keep",
+        provenanceKey: "keep-home-pitcher",
+        resolution: {
+          status: "pending",
+          expectedEndpoint: "next_pa",
+        },
+      },
+    };
+
+    const withoutPrompt = aggregateKblWpaCredits(
+      deriveKblWpaCredits({ atBatEvents: [atBat] }),
+    );
+    const withPrompt = aggregateKblWpaCredits(
+      deriveKblWpaCredits({
+        atBatEvents: [atBat],
+        betweenPlayEvents: [prompt],
+      }),
+    );
+
+    expect(withPrompt).toEqual(withoutPrompt);
+  });
 });

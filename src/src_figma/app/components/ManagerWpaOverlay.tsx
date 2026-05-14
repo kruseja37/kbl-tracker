@@ -1,6 +1,7 @@
 import React from "react";
 
 import type {
+  ManagerDeploymentStintRecord,
   ManagerDecisionRecord,
   ManagerLineupDeltaRecord,
 } from "../../../types/managerWpa";
@@ -14,6 +15,7 @@ interface ManagerWpaOverlayProps {
     | "awayTeamName"
     | "homeTeamName"
     | "managerDecisions"
+    | "managerDeploymentStints"
     | "managerLineupDeltas"
   >;
 }
@@ -24,6 +26,7 @@ export interface ManagerWpaOverlayRow {
   managerId: string;
   managerName: string;
   tacticalManagerWpa: number;
+  deploymentWpa: number;
   lineupDeltaWpa: number;
   managerValue: number;
   decisionCount: number;
@@ -68,10 +71,15 @@ function sumLineupDeltas(deltas: ManagerLineupDeltaRecord[]): number {
   return deltas.reduce((sum, delta) => sum + delta.managerWpa, 0);
 }
 
+function sumDeploymentStints(stints: ManagerDeploymentStintRecord[]): number {
+  return stints.reduce((sum, stint) => sum + stint.managerDeploymentWpa, 0);
+}
+
 export function buildManagerWpaOverlayRows(
   game: ManagerWpaOverlayProps["game"],
 ): ManagerWpaOverlayRow[] {
   const decisions = game.managerDecisions ?? [];
+  const deploymentStints = game.managerDeploymentStints ?? [];
   const lineupDeltas = game.managerLineupDeltas ?? [];
   const teamSeeds = [
     { teamId: game.awayTeamId, teamName: game.awayTeamName },
@@ -80,9 +88,13 @@ export function buildManagerWpaOverlayRows(
 
   return teamSeeds.map(({ teamId, teamName }) => {
     const teamDecisions = decisions.filter((decision) => decision.teamId === teamId);
+    const teamDeploymentStints = deploymentStints.filter(
+      (stint) => stint.teamId === teamId,
+    );
     const teamLineupDeltas = lineupDeltas.filter((delta) => delta.teamId === teamId);
     const managerId =
       teamDecisions.find((decision) => decision.managerId)?.managerId ??
+      teamDeploymentStints.find((stint) => stint.managerId)?.managerId ??
       teamLineupDeltas.find((delta) => delta.managerId)?.managerId ??
       `${teamId}-manager`;
     const resolvedDecisions = teamDecisions.filter(
@@ -95,6 +107,7 @@ export function buildManagerWpaOverlayRows(
     const sortedResolved = [...resolvedDecisions].sort(compareManagerWpa);
 
     const lineupDeltaWpa = sumLineupDeltas(teamLineupDeltas);
+    const deploymentWpa = sumDeploymentStints(teamDeploymentStints);
 
     return {
       teamId,
@@ -102,8 +115,9 @@ export function buildManagerWpaOverlayRows(
       managerId,
       managerName: formatManagerName(managerId, teamId, teamName),
       tacticalManagerWpa,
+      deploymentWpa,
       lineupDeltaWpa,
-      managerValue: tacticalManagerWpa + lineupDeltaWpa,
+      managerValue: tacticalManagerWpa + deploymentWpa + lineupDeltaWpa,
       decisionCount: teamDecisions.length,
       pendingCount: teamDecisions.length - resolvedDecisions.length,
       worstDecision: sortedResolved[0],
@@ -187,6 +201,17 @@ export function ManagerWpaOverlay({ game }: ManagerWpaOverlayProps) {
                   </div>
                   <div className="text-[#E8E8D8]">
                     {formatSignedManagerWpa(row.tacticalManagerWpa)}
+                  </div>
+                </div>
+                <div className="col-span-2">
+                  <div className="uppercase tracking-[0.16em] text-[#6b7b6e]">
+                    Deployment WPA
+                  </div>
+                  <div
+                    className="text-[#E8E8D8]"
+                    data-testid={`manager-deployment-wpa-${testId}`}
+                  >
+                    {formatSignedManagerWpa(row.deploymentWpa)}
                   </div>
                 </div>
                 <div className="col-span-2">

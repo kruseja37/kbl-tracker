@@ -1,5 +1,58 @@
 export type ManagerMode = "exhibition" | "elimination" | "franchise";
 
+export type OpposingPitcherHand = "R" | "L";
+
+export type OptimalLineupModeContext =
+  | "exhibition"
+  | "elimination"
+  | "franchise";
+
+export type OptimalLineupSourceConfidence =
+  | "engine_calculated"
+  | "user_registered"
+  | "stale_roster"
+  | "fallback";
+
+export type OptimalLineupGeneratedFrom =
+  | "league_builder"
+  | "team_hub"
+  | "pregame_recalculate"
+  | "user_registered_smb4_optimal"
+  | "game_lock";
+
+export interface OptimalLineupSlot {
+  playerId: string;
+  playerName: string;
+  battingOrderSlot: number;
+  defensivePosition: string;
+  projectedSlotKblWpa: number;
+  projectedValueScore: number;
+  positionalFitScore: number;
+  confidence: ManagerDecisionConfidence;
+}
+
+export interface OptimalLineupSnapshot {
+  snapshotId: string;
+  teamId: string;
+  mode: OptimalLineupModeContext;
+  instanceId?: string;
+  opposingPitcherHand: OpposingPitcherHand;
+  rosterVersionId?: string;
+  algorithmVersion: string;
+  generatedAt: number;
+  generatedFrom: OptimalLineupGeneratedFrom;
+  sourceConfidence: OptimalLineupSourceConfidence;
+  dhEnabled?: boolean;
+  slots: OptimalLineupSlot[];
+  projectedTeamLineupKblWpa: number;
+  confidence: ManagerDecisionConfidence;
+}
+
+export interface GameLockLineupSnapshots {
+  away?: OptimalLineupSnapshot;
+  home?: OptimalLineupSnapshot;
+}
+
 export interface ManagerStyleSnapshot {
   stealRate?: number;
   buntRate?: number;
@@ -71,6 +124,8 @@ export type ManagerRunnerIntent =
   | "runner_choice"
   | "runner_responsibility"
   | "manager_hold";
+
+export type ManagerRunPlay = "hit_and_run";
 
 export type ManagerBuntIntent =
   | "bunt_call"
@@ -159,11 +214,66 @@ export interface ManagerLineupDeltaRecord {
 
   actualPlayerKblWpa: number;
   replacementExpectedKblWpa: number;
-  replacementBaselineSource?: "v1_zero_default";
-  replacementBaselineConfidence?: "low";
+  replacementBaselineSource?: "v1_zero_default" | "optimal_lineup_v2";
+  replacementBaselineConfidence?: "low" | "medium" | "high";
   rawPerformanceDelta: number;
   managerShare: number;
   managerWpa: number;
+  wpaModelVersion?: string;
+
+  optimalSnapshotId?: string;
+  opposingPitcherHand?: OpposingPitcherHand;
+  algorithmVersion?: string;
+
+  chosenPlayerId?: string;
+  chosenPlayerName?: string;
+  chosenBattingOrderSlot?: number;
+  chosenDefensivePosition?: string;
+
+  optimalPlayerId?: string;
+  optimalPlayerName?: string;
+  optimalBattingOrderSlot?: number;
+  optimalDefensivePosition?: string;
+
+  chosenProjectedKblWpa?: number;
+  optimalProjectedKblWpa?: number;
+  projectedOpportunityCost?: number;
+
+  actualChosenKblWpa?: number;
+  realizedVsChosenProjection?: number;
+  actualVsOptimalProjection?: number;
+  capApplied?: number;
+}
+
+export type ManagerDeploymentRole =
+  | "pinch_hitter_remaining"
+  | "pinch_runner"
+  | "defensive_position"
+  | "pitcher"
+  | "kept_in"
+  | "manual_deployment";
+
+export interface ManagerDeploymentStintRecord {
+  stintId: string;
+  gameId: string;
+  managerId: string;
+  teamId: string;
+  deploymentRole: ManagerDeploymentRole;
+  playerId: string;
+  playerName?: string;
+  trackedPosition?: string;
+  sourceEventId: string;
+  openedAtEventIndex: number;
+  tacticalExclusionEventIds: string[];
+  closedAtEventId?: string;
+  closedAtEventIndex?: number;
+  closeReason: "removed" | "role_change" | "runner_terminal" | "game_end";
+  linkedEventIds: string[];
+  rawLinkedWpa: number;
+  managerShare: number;
+  managerDeploymentWpa: number;
+  cap: number;
+  confidence: ManagerDecisionConfidence;
   wpaModelVersion?: string;
 }
 

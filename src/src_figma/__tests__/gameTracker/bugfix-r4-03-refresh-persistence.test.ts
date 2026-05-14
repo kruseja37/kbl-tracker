@@ -140,6 +140,129 @@ describe('bugfix R4-03: refresh resumes current in-progress game', () => {
     expect(mockClearCurrentGame).not.toHaveBeenCalled();
   });
 
+  test('rehydrates the saved current-game snapshot when the event-log header is missing', async () => {
+    mockGetGameHeader.mockResolvedValue(null);
+    mockLoadCurrentGame.mockResolvedValue({
+      id: 'current',
+      gameId: 'game-1730000000000',
+      savedAt: Date.now(),
+      inning: 6,
+      halfInning: 'TOP',
+      outs: 1,
+      homeScore: 4,
+      awayScore: 5,
+      bases: {
+        first: null,
+        second: { playerId: 'runner-2', playerName: 'Runner Two' },
+        third: null,
+      },
+      currentBatterIndex: 0,
+      atBatCount: 24,
+      awayTeamId: 'away-team',
+      homeTeamId: 'home-team',
+      awayTeamName: 'Away Team',
+      homeTeamName: 'Home Team',
+      seasonNumber: 1,
+      currentBatterId: 'away-batter-1',
+      currentBatterName: 'Away Batter 1',
+      currentPitcherId: 'home-sp',
+      currentPitcherName: 'Home Starter',
+      gamePhase: 'LIVE',
+      gameStartedAt: Date.now() - 60_000,
+      playerStats: {},
+      pitcherGameStats: [
+        {
+          pitcherId: 'home-sp',
+          pitcherName: 'Home Starter',
+          teamId: 'home-team',
+          isStarter: true,
+          entryInning: 1,
+          outsRecorded: 15,
+          hitsAllowed: 5,
+          runsAllowed: 5,
+          earnedRuns: 5,
+          walksAllowed: 1,
+          strikeoutsThrown: 4,
+          homeRunsAllowed: 1,
+          hitBatters: 0,
+          basesReachedViaError: 0,
+          wildPitches: 0,
+          pitchCount: 72,
+          battersFaced: 24,
+          consecutiveHRsAllowed: 0,
+          firstInningRuns: 0,
+          basesLoadedWalks: 0,
+          inningsComplete: 5,
+          decision: null,
+          save: false,
+          hold: false,
+          blownSave: false,
+        },
+      ],
+      fameEvents: [],
+      lastHRBatterId: null,
+      consecutiveHRCount: 0,
+      inningStrikeouts: 0,
+      maxDeficitAway: 0,
+      maxDeficitHome: 0,
+      activityLog: [],
+      scoreboard: {
+        innings: [
+          { away: 2, home: 0 },
+          { away: 0, home: 1 },
+          { away: 1, home: 2 },
+          { away: 0, home: 0 },
+          { away: 2, home: 1 },
+          { away: undefined, home: undefined },
+        ],
+        away: { runs: 5, hits: 8, errors: 0 },
+        home: { runs: 4, hits: 7, errors: 1 },
+      },
+      awayLineup: [
+        { playerId: 'away-batter-1', playerName: 'Away Batter 1', position: 'SS' },
+      ],
+      homeLineup: [
+        { playerId: 'home-batter-1', playerName: 'Home Batter 1', position: 'CF' },
+      ],
+      awayLineupState: { lineup: [], bench: [], usedPlayers: [], currentPitcher: null },
+      homeLineupState: {
+        lineup: [],
+        bench: [],
+        usedPlayers: [],
+        currentPitcher: {
+          playerId: 'home-sp',
+          playerName: 'Home Starter',
+          position: 'P',
+          battingOrder: 1,
+          enteredInning: 1,
+          isStarter: true,
+        },
+      },
+    });
+
+    const { result } = renderHook(() => useGameState('game-1730000000000'));
+
+    let loaded = false;
+    await act(async () => {
+      loaded = await result.current.loadExistingGame();
+    });
+
+    expect(loaded).toBe(true);
+    expect(result.current.gameState.gameId).toBe('game-1730000000000');
+    expect(result.current.gameState.inning).toBe(6);
+    expect(result.current.gameState.outs).toBe(1);
+    expect(result.current.gameState.awayScore).toBe(5);
+    expect(mockCreateGameHeader).toHaveBeenCalledWith(
+      expect.objectContaining({
+        gameId: 'game-1730000000000',
+        awayTeamId: 'away-team',
+        homeTeamId: 'home-team',
+        isComplete: false,
+      }),
+    );
+    expect(mockClearCurrentGame).not.toHaveBeenCalled();
+  });
+
   test('overlays durable mojo and fitness changes onto restored snapshot state', async () => {
     mockGetGameHeader.mockResolvedValue({
       gameId: 'game-1730000000000',

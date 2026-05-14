@@ -12,6 +12,7 @@
  */
 
 import { generateHometown } from '../data/usCities';
+import type { OptimalLineupSnapshot } from '../types/managerWpa';
 import type { EraFlavor, FameTier, PlayerArchetype } from '../types/reporter';
 import { trackFieldChanges, type EditHistoryEntry } from './editHistoryTracker';
 import { syncEngine } from './syncEngine';
@@ -237,6 +238,10 @@ export interface TeamRoster {
   farmRoster: string[];
   lineupWithDH: LineupSlot[];
   lineupWithoutDH: LineupSlot[];
+  optimalLineupVsRHPWithDH?: OptimalLineupSnapshot;
+  optimalLineupVsLHPWithDH?: OptimalLineupSnapshot;
+  optimalLineupVsRHPWithoutDH?: OptimalLineupSnapshot;
+  optimalLineupVsLHPWithoutDH?: OptimalLineupSnapshot;
   startingRotation: string[];
   longRelievers: string[];
   closingPitcher: string;

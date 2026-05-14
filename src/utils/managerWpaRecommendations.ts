@@ -1,4 +1,8 @@
 import { getManagerDecisionStandards } from "./managerWpaDerivation";
+import type {
+  PromptedManagerDecisionEvent,
+  PromptedManagerDecisionType,
+} from "./eventLog";
 
 export type ManagerRecommendationType =
   | "consider_pitching_change"
@@ -131,6 +135,47 @@ export function buildManagerRecommendationSuppressKey(
   half: "top" | "bottom",
 ): string {
   return `${type}:${playerId}:${inning}:${half}`;
+}
+
+export function getPromptedDecisionTypeForRecommendationAction(
+  action: ManagerRecommendationAction,
+): PromptedManagerDecisionType | null {
+  if (action === "keep_pitcher") return "leave_pitcher_in";
+  if (action === "let_batter_hit") return "let_batter_hit";
+  return null;
+}
+
+export function buildPromptedManagerDecisionFromRecommendation(input: {
+  recommendation: ManagerRecommendation;
+  action: ManagerRecommendationAction;
+  opponentTeamId: string;
+}): PromptedManagerDecisionEvent | null {
+  const decisionType = getPromptedDecisionTypeForRecommendationAction(input.action);
+  if (!decisionType) return null;
+
+  const primaryPlayerId = input.recommendation.trackedPlayerIds[0];
+  if (!primaryPlayerId) return null;
+
+  return {
+    decisionType,
+    action: input.action === "keep_pitcher" ? "keep_pitcher" : "let_batter_hit",
+    source: "recommendation",
+    decisionSource: "situational_prompt",
+    confidence: input.recommendation.confidence,
+    managerId: input.recommendation.managerId,
+    teamId: input.recommendation.teamId,
+    opponentTeamId: input.opponentTeamId,
+    trackedPlayerIds: [primaryPlayerId],
+    involvedPlayerIds: input.recommendation.trackedPlayerIds,
+    playerId: primaryPlayerId,
+    leverageIndex: input.recommendation.leverageIndex,
+    recommendationId: input.recommendation.recommendationId,
+    provenanceKey: input.recommendation.suppressKey,
+    resolution: {
+      status: "pending",
+      expectedEndpoint: "next_pa",
+    },
+  };
 }
 
 function createRecommendation(

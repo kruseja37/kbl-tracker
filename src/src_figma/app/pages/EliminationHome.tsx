@@ -447,6 +447,16 @@ export function EliminationHome() {
           persistAssignment: true,
         }),
       ]);
+      const awayOpposingHand =
+        (homeRoster.pitchers.find((pitcher) => pitcher.isActive)?.throwingHand ||
+          "R") === "L"
+          ? "vsLHP"
+          : "vsRHP";
+      const homeOpposingHand =
+        (awayRoster.pitchers.find((pitcher) => pitcher.isActive)?.throwingHand ||
+          "R") === "L"
+          ? "vsLHP"
+          : "vsRHP";
 
       sessionStorage.setItem(
         "kbl-pending-live-beat-reporter-enabled",
@@ -487,6 +497,10 @@ export function EliminationHome() {
           awayPitchers: awayRoster.pitchers,
           homePlayers: homeRoster.players,
           homePitchers: homeRoster.pitchers,
+          optimalLineupSnapshots: {
+            away: awayRoster.optimalLineups?.[awayOpposingHand],
+            home: homeRoster.optimalLineups?.[homeOpposingHand],
+          },
           awayTeamColor: awayTeamData?.colors.primary,
           awayTeamBorderColor: awayTeamData?.colors.secondary,
           homeTeamColor: homeTeamData?.colors.primary,

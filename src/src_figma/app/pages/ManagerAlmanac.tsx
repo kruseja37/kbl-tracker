@@ -25,6 +25,7 @@ const MODE_OPTIONS: Array<{ value: ManagerAlmanacModeFilter; label: string }> = 
 const emptyLeaderboards: ManagerAlmanacLeaderboards = {
   managerValue: [],
   tacticalManagerWpa: [],
+  deploymentWpa: [],
   lineupDeltaWpa: [],
   decisionCount: [],
   bestDecision: [],
@@ -234,7 +235,7 @@ function ManagerCards({ aggregates }: { aggregates: ManagerAlmanacAggregate[] })
               </div>
             </div>
 
-            <div className="mt-5 grid grid-cols-2 gap-3 text-[8px] text-[#E8E8D8] sm:grid-cols-4">
+            <div className="mt-5 grid grid-cols-2 gap-3 text-[8px] text-[#E8E8D8] sm:grid-cols-5">
               <div>
                 <div className="text-[#8F96A3]">W-L</div>
                 <div className="mt-2 text-white">{manager.wins}-{manager.losses}</div>
@@ -246,6 +247,10 @@ function ManagerCards({ aggregates }: { aggregates: ManagerAlmanacAggregate[] })
               <div>
                 <div className="text-[#8F96A3]">TACTICAL</div>
                 <div className="mt-2 text-white">{formatSigned(manager.tacticalManagerWpa)}</div>
+              </div>
+              <div>
+                <div className="text-[#8F96A3]">DEPLOY</div>
+                <div className="mt-2 text-white">{formatSigned(manager.deploymentWpa)}</div>
               </div>
               <div>
                 <div className="text-[#8F96A3]">LINEUP</div>
@@ -293,6 +298,7 @@ function TenureTable({ tenures }: { tenures: ManagerTeamTenureAggregate[] }) {
               <th className="pb-3 pr-4 font-normal">MODE</th>
               <th className="pb-3 pr-4 text-right font-normal">W-L</th>
               <th className="pb-3 pr-4 text-right font-normal">TACTICAL</th>
+              <th className="pb-3 pr-4 text-right font-normal">DEPLOY</th>
               <th className="pb-3 pr-4 text-right font-normal">LINEUP</th>
               <th className="pb-3 text-right font-normal">VALUE</th>
             </tr>
@@ -315,6 +321,7 @@ function TenureTable({ tenures }: { tenures: ManagerTeamTenureAggregate[] }) {
                 <td className="py-3 pr-4">{formatMode(tenure.mode)}</td>
                 <td className="py-3 pr-4 text-right">{tenure.wins}-{tenure.losses}</td>
                 <td className="py-3 pr-4 text-right">{formatSigned(tenure.tacticalManagerWpa)}</td>
+                <td className="py-3 pr-4 text-right">{formatSigned(tenure.deploymentWpa)}</td>
                 <td className="py-3 pr-4 text-right">{formatSigned(tenure.lineupDeltaWpa)}</td>
                 <td className="py-3 text-right text-white">{formatSigned(tenure.managerValue)}</td>
               </tr>
@@ -528,6 +535,12 @@ export function ManagerAlmanac() {
                   entries={leaderboards.tacticalManagerWpa}
                   valueLabel="TACTICAL"
                   renderValue={(entry) => formatSigned(entry.tacticalManagerWpa)}
+                />
+                <LeaderboardPanel
+                  title="DEPLOYMENT WPA"
+                  entries={leaderboards.deploymentWpa}
+                  valueLabel="DEPLOY"
+                  renderValue={(entry) => formatSigned(entry.deploymentWpa)}
                 />
                 <LeaderboardPanel
                   title="LINEUP DELTA"

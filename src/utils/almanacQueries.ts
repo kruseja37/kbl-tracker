@@ -5,6 +5,7 @@ import { getGameEvents } from './eventLog';
 import { getAllCanonicalPlayers } from './almanacStorage';
 import type { CanonicalPlayer } from './almanacStorage';
 import type {
+  ManagerDeploymentStintRecord,
   ManagerDecisionRecord,
   ManagerDecisionType,
   ManagerLineupDeltaRecord,
@@ -160,10 +161,12 @@ export interface ManagerTeamTenureAggregate {
   wins: number;
   losses: number;
   tacticalManagerWpa: number;
+  deploymentWpa: number;
   lineupDeltaWpa: number;
   managerValue: number;
   decisionCount: number;
   tacticalDecisionCount: number;
+  deploymentStintCount: number;
   lineupDecisionCount: number;
   resolvedDecisionCount: number;
   pendingDecisionCount: number;
@@ -186,10 +189,12 @@ export interface ManagerAlmanacAggregate {
   wins: number;
   losses: number;
   tacticalManagerWpa: number;
+  deploymentWpa: number;
   lineupDeltaWpa: number;
   managerValue: number;
   decisionCount: number;
   tacticalDecisionCount: number;
+  deploymentStintCount: number;
   lineupDecisionCount: number;
   resolvedDecisionCount: number;
   pendingDecisionCount: number;
@@ -202,6 +207,7 @@ export interface ManagerAlmanacAggregate {
 export type ManagerLeaderboardCategory =
   | 'managerValue'
   | 'tacticalManagerWpa'
+  | 'deploymentWpa'
   | 'lineupDeltaWpa'
   | 'decisionCount'
   | 'bestDecision'
@@ -215,6 +221,7 @@ export interface ManagerLeaderboardEntry {
   gamesManaged: number;
   value: number;
   tacticalManagerWpa: number;
+  deploymentWpa: number;
   lineupDeltaWpa: number;
   managerValue: number;
   decisionCount: number;
@@ -296,8 +303,10 @@ interface ManagerWorkingTenure {
   wins: number;
   losses: number;
   tacticalManagerWpa: number;
+  deploymentWpa: number;
   lineupDeltaWpa: number;
   tacticalDecisionCount: number;
+  deploymentStintCount: number;
   lineupDecisionCount: number;
   resolvedDecisionCount: number;
   pendingDecisionCount: number;
@@ -322,8 +331,10 @@ interface ManagerWorkingAggregate {
   wins: number;
   losses: number;
   tacticalManagerWpa: number;
+  deploymentWpa: number;
   lineupDeltaWpa: number;
   tacticalDecisionCount: number;
+  deploymentStintCount: number;
   lineupDecisionCount: number;
   resolvedDecisionCount: number;
   pendingDecisionCount: number;
@@ -928,8 +939,10 @@ function createManagerWorkingAggregate(
     wins: 0,
     losses: 0,
     tacticalManagerWpa: 0,
+    deploymentWpa: 0,
     lineupDeltaWpa: 0,
     tacticalDecisionCount: 0,
+    deploymentStintCount: 0,
     lineupDecisionCount: 0,
     resolvedDecisionCount: 0,
     pendingDecisionCount: 0,
@@ -980,8 +993,10 @@ function getOrCreateManagerTenure(
     wins: 0,
     losses: 0,
     tacticalManagerWpa: 0,
+    deploymentWpa: 0,
     lineupDeltaWpa: 0,
     tacticalDecisionCount: 0,
+    deploymentStintCount: 0,
     lineupDecisionCount: 0,
     resolvedDecisionCount: 0,
     pendingDecisionCount: 0,
@@ -1061,11 +1076,26 @@ function addManagerLineupDeltaToAggregate(
   addDecisionTypeCount(tenure.decisionTypeCounts, delta.decisionType);
 }
 
+function addManagerDeploymentStintToAggregate(
+  aggregate: ManagerWorkingAggregate,
+  tenure: ManagerWorkingTenure,
+  stint: ManagerDeploymentStintRecord,
+): void {
+  aggregate.deploymentStintCount += 1;
+  tenure.deploymentStintCount += 1;
+  aggregate.deploymentWpa += stint.managerDeploymentWpa;
+  tenure.deploymentWpa += stint.managerDeploymentWpa;
+}
+
 function finalizeManagerTenure(
   tenure: ManagerWorkingTenure,
 ): ManagerTeamTenureAggregate {
-  const decisionCount = tenure.tacticalDecisionCount + tenure.lineupDecisionCount;
+  const decisionCount =
+    tenure.tacticalDecisionCount +
+    tenure.deploymentStintCount +
+    tenure.lineupDecisionCount;
   const tacticalManagerWpa = roundTo(tenure.tacticalManagerWpa, 6);
+  const deploymentWpa = roundTo(tenure.deploymentWpa, 6);
   const lineupDeltaWpa = roundTo(tenure.lineupDeltaWpa, 6);
 
   return {
@@ -1080,10 +1110,12 @@ function finalizeManagerTenure(
     wins: tenure.wins,
     losses: tenure.losses,
     tacticalManagerWpa,
+    deploymentWpa,
     lineupDeltaWpa,
-    managerValue: roundTo(tacticalManagerWpa + lineupDeltaWpa, 6),
+    managerValue: roundTo(tacticalManagerWpa + deploymentWpa + lineupDeltaWpa, 6),
     decisionCount,
     tacticalDecisionCount: tenure.tacticalDecisionCount,
+    deploymentStintCount: tenure.deploymentStintCount,
     lineupDecisionCount: tenure.lineupDecisionCount,
     resolvedDecisionCount: tenure.resolvedDecisionCount,
     pendingDecisionCount: tenure.pendingDecisionCount,
@@ -1101,8 +1133,11 @@ function finalizeManagerAggregate(
   aggregate: ManagerWorkingAggregate,
 ): ManagerAlmanacAggregate {
   const decisionCount =
-    aggregate.tacticalDecisionCount + aggregate.lineupDecisionCount;
+    aggregate.tacticalDecisionCount +
+    aggregate.deploymentStintCount +
+    aggregate.lineupDecisionCount;
   const tacticalManagerWpa = roundTo(aggregate.tacticalManagerWpa, 6);
+  const deploymentWpa = roundTo(aggregate.deploymentWpa, 6);
   const lineupDeltaWpa = roundTo(aggregate.lineupDeltaWpa, 6);
   const tenures = Array.from(aggregate.tenures.values())
     .map(finalizeManagerTenure)
@@ -1127,10 +1162,12 @@ function finalizeManagerAggregate(
     wins: aggregate.wins,
     losses: aggregate.losses,
     tacticalManagerWpa,
+    deploymentWpa,
     lineupDeltaWpa,
-    managerValue: roundTo(tacticalManagerWpa + lineupDeltaWpa, 6),
+    managerValue: roundTo(tacticalManagerWpa + deploymentWpa + lineupDeltaWpa, 6),
     decisionCount,
     tacticalDecisionCount: aggregate.tacticalDecisionCount,
+    deploymentStintCount: aggregate.deploymentStintCount,
     lineupDecisionCount: aggregate.lineupDecisionCount,
     resolvedDecisionCount: aggregate.resolvedDecisionCount,
     pendingDecisionCount: aggregate.pendingDecisionCount,
@@ -1299,6 +1336,7 @@ export function aggregateCommittedManagerAlmanac(
 
     const instanceName = getInstanceNameForGame(game, descriptor);
     const committedDecisions = game.managerDecisions ?? [];
+    const committedDeploymentStints = game.managerDeploymentStints ?? [];
     const committedLineupDeltas = game.managerLineupDeltas ?? [];
 
     for (const decision of committedDecisions) {
@@ -1342,6 +1380,44 @@ export function aggregateCommittedManagerAlmanac(
         decision,
         buildManagerDecisionSummary(game, descriptor, decision, managerName),
       );
+    }
+
+    for (const stint of committedDeploymentStints) {
+      if (!managerRecordMatchesFilters(stint.managerId, stint.teamId, filters)) {
+        continue;
+      }
+
+      const teamName = getTeamNameForGame(game, stint.teamId);
+      const managerName = getDefaultManagerLabel(
+        stint.managerId,
+        stint.teamId,
+        teamName,
+        profileByManagerId.get(stint.managerId),
+      );
+      const aggregate = getOrCreateManagerAggregate(
+        aggregates,
+        stint.managerId,
+        managerName,
+      );
+      const tenure = getOrCreateManagerTenure(aggregate, {
+        managerId: stint.managerId,
+        managerName,
+        teamId: stint.teamId,
+        teamName,
+        mode: descriptor.mode,
+        instanceId: descriptor.instanceId,
+        instanceName,
+      });
+      const instanceKey = `${descriptor.mode}::${descriptor.instanceId}`;
+
+      aggregate.teamNamesById.set(stint.teamId, teamName);
+      aggregate.modeInstancesByKey.set(instanceKey, {
+        mode: descriptor.mode,
+        instanceId: descriptor.instanceId,
+        instanceName,
+      });
+      registerManagerTeamGame(aggregate, tenure, game, stint.teamId);
+      addManagerDeploymentStintToAggregate(aggregate, tenure, stint);
     }
 
     for (const delta of committedLineupDeltas) {
@@ -1404,6 +1480,7 @@ function createManagerLeaderboardEntry(
     gamesManaged: aggregate.gamesManaged,
     value,
     tacticalManagerWpa: aggregate.tacticalManagerWpa,
+    deploymentWpa: aggregate.deploymentWpa,
     lineupDeltaWpa: aggregate.lineupDeltaWpa,
     managerValue: aggregate.managerValue,
     decisionCount: aggregate.decisionCount,
@@ -1446,6 +1523,11 @@ export function buildManagerAlmanacLeaderboards(
     tacticalManagerWpa: top(
       aggregates.map((aggregate) =>
         createManagerLeaderboardEntry(aggregate, aggregate.tacticalManagerWpa),
+      ),
+    ),
+    deploymentWpa: top(
+      aggregates.map((aggregate) =>
+        createManagerLeaderboardEntry(aggregate, aggregate.deploymentWpa),
       ),
     ),
     lineupDeltaWpa: top(
@@ -1537,6 +1619,7 @@ export async function getManagerAlmanacFilterOptions(): Promise<ManagerAlmanacFi
     const descriptor = getGameInstanceDescriptor(game);
     const managerTeamIds = new Set([
       ...(game.managerDecisions ?? []).map((decision) => decision.teamId),
+      ...(game.managerDeploymentStints ?? []).map((stint) => stint.teamId),
       ...(game.managerLineupDeltas ?? []).map((delta) => delta.teamId),
     ]);
 

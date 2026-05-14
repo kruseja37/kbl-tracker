@@ -493,6 +493,66 @@ describe('useGameState between-play ledger', () => {
     }));
   });
 
+  test('logs prompted keep-current manager decisions as committed truth-layer rows', async () => {
+    const { result } = renderHook(() => useGameState());
+    await initializeGame(result);
+
+    mockLogBetweenPlayEvent.mockClear();
+
+    await act(async () => {
+      await result.current.recordPromptedManagerDecision({
+        decisionType: 'leave_pitcher_in',
+        action: 'keep_pitcher',
+        source: 'recommendation',
+        decisionSource: 'situational_prompt',
+        confidence: 'high',
+        managerId: 'home-manager',
+        teamId: 'home-team',
+        opponentTeamId: 'away-team',
+        trackedPlayerIds: ['home-sp'],
+        involvedPlayerIds: ['home-sp'],
+        playerId: 'home-sp',
+        leverageIndex: 2.4,
+        recommendationId: 'rec-keep-home-sp',
+        provenanceKey: 'consider_pitching_change:home-sp:1:top',
+        resolution: {
+          status: 'pending',
+          expectedEndpoint: 'next_pa',
+        },
+      });
+    });
+
+    expect(mockLogBetweenPlayEvent).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'manager_moment',
+      managerMoment: expect.objectContaining({
+        leverageIndex: 2.4,
+        decisionType: 'leave_pitcher_in',
+        context: 'rec-keep-home-sp',
+      }),
+      promptedManagerDecision: expect.objectContaining({
+        decisionType: 'leave_pitcher_in',
+        action: 'keep_pitcher',
+        source: 'recommendation',
+        decisionSource: 'situational_prompt',
+        managerId: 'home-manager',
+        teamId: 'home-team',
+        opponentTeamId: 'away-team',
+        trackedPlayerIds: ['home-sp'],
+        recommendationId: 'rec-keep-home-sp',
+        provenanceKey: 'consider_pitching_change:home-sp:1:top',
+        resolution: {
+          status: 'pending',
+          expectedEndpoint: 'next_pa',
+        },
+      }),
+      gameState: expect.objectContaining({
+        inning: 1,
+        halfInning: 'TOP',
+        score: { away: 0, home: 0 },
+      }),
+    }));
+  });
+
   test('reassigns wild pitch attribution without replaying game state', async () => {
     const { result } = renderHook(() => useGameState());
     await initializeGame(result);

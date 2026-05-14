@@ -80,14 +80,27 @@ import {
 } from "../../../utils/eventLog";
 import { refreshCurrentGameManagerDecisionState } from "../../../utils/managerWpaGameState";
 import {
+  buildLineupSnapshotFromSlots,
+  buildOptimalLineupSnapshot,
+  type LineupSlotInput,
+  type OptimalLineupCandidate,
+} from "../../../utils/optimalLineup";
+import {
+  buildPromptedManagerDecisionFromRecommendation,
   generateManagerRecommendations,
+  getPromptedDecisionTypeForRecommendationAction,
   type BenchDefenderRecommendationPlayer,
   type DefenderRecommendationPlayer,
   type HitterRecommendationPlayer,
   type ManagerRecommendation,
   type ManagerRecommendationAction,
 } from "../../../utils/managerWpaRecommendations";
-import type { ManagerDecisionRecord } from "../../../types/managerWpa";
+import type {
+  GameLockLineupSnapshots,
+  ManagerDecisionRecord,
+  OpposingPitcherHand,
+  OptimalLineupModeContext,
+} from "../../../types/managerWpa";
 import { getTeamColors, getFielderBorderColors } from "@/config/teamColors";
 import {
   buildFallbackRuntimePlayerId,
@@ -193,9 +206,127 @@ function formatManagerDecisionWpa(decision: ManagerDecisionRecord): string {
   return `${decision.managerWpa >= 0 ? "+" : ""}${decision.managerWpa.toFixed(3)} WPA`;
 }
 
+function titleCaseManagerIdentifier(value: string): string {
+  return value
+    .replace(/[_-]+/g, " ")
+    .split(" ")
+    .filter(Boolean)
+    .map((word) => word[0]?.toUpperCase() + word.slice(1))
+    .join(" ");
+}
+
+function formatManagerDisplayName(params: {
+  managerId: string;
+  teamId: string;
+  teamName: string;
+  managerName?: string | null;
+}): string {
+  if (params.managerName?.trim()) {
+    return params.managerName.trim();
+  }
+
+  if (params.managerId === `${params.teamId}-manager`) {
+    return `${params.teamName} Manager`;
+  }
+
+  return titleCaseManagerIdentifier(params.managerId) || `${params.teamName} Manager`;
+}
+
+function buildManagerDecisionDetail(
+  decision: ManagerDecisionRecord,
+  sourceEntry?: PlayLogEntry,
+): string {
+  const sourceDescription = sourceEntry?.description?.trim();
+  if (sourceDescription) {
+    return `${decision.displayTitle}: ${sourceDescription}.`;
+  }
+
+  return decision.displaySummary;
+}
+
+function buildManagerOutcomeDetail(
+  decision: ManagerDecisionRecord,
+  outcomeEntry?: PlayLogEntry,
+): string {
+  if (!decision.resolved) {
+    const endpoint =
+      decision.resolutionWindow?.expectedEndpoint?.replace(/_/g, " ") ||
+      "the outcome";
+    return `Waiting for ${endpoint}.`;
+  }
+
+  const outcomeDescription = outcomeEntry?.description?.trim();
+  const outcomeText = outcomeEntry
+    ? `${outcomeEntry.batterName} ${outcomeEntry.result}${
+        outcomeDescription ? `, ${outcomeDescription}` : ""
+      }`
+    : decision.resolvedAtEventId
+      ? `Resolved at ${decision.resolvedAtEventId}`
+      : "Resolved on the committed outcome window";
+
+  return `${outcomeText}. Manager value ${formatManagerDecisionWpa(decision)}.`;
+}
+
+function normalizePitcherHandForOptimalLineup(
+  pitcher: Pitcher | undefined,
+): OpposingPitcherHand {
+  return (pitcher?.throwingHand || pitcher?.throws || "R") === "L" ? "L" : "R";
+}
+
+function toOptimalLineupModeContext(
+  competitionType: string | undefined,
+): OptimalLineupModeContext {
+  if (competitionType === "elimination") return "elimination";
+  if (competitionType === "franchise") return "franchise";
+  return "exhibition";
+}
+
+function rosterPlayersToOptimalCandidates(
+  players: Player[],
+  team: "away" | "home",
+  getRosterEntityId: (
+    entity: { name: string; playerId?: string },
+    team: "away" | "home",
+  ) => string,
+  getCanonicalRosterName: (
+    entity: { name: string; fullName?: string } | undefined,
+  ) => string,
+): OptimalLineupCandidate[] {
+  return players.map((player) => ({
+    playerId: getRosterEntityId(player, team),
+    playerName: getCanonicalRosterName(player),
+    bats: player.battingHand,
+    primaryPosition: player.primaryPosition ?? player.position,
+    currentPosition: player.position,
+    secondaryPosition: player.secondaryPosition,
+    power: player.power,
+    contact: player.contact,
+    speed: player.speed,
+    fielding: player.fieldingRating,
+    arm: player.arm,
+    mojo: player.mojo,
+    fitness: player.fitness,
+    unavailable: player.isOutOfGame,
+  }));
+}
+
+function lineupToOptimalSlots(lineup: Array<{
+  playerId: string;
+  playerName: string;
+  position: string;
+}>): LineupSlotInput[] {
+  return lineup.map((player, index) => ({
+    playerId: player.playerId,
+    playerName: player.playerName,
+    battingOrderSlot: index + 1,
+    defensivePosition: player.position,
+  }));
+}
+
 function isUserActionManagerDecision(decision: ManagerDecisionRecord): boolean {
   return (
     decision.decisionSource === "user_action" ||
+    decision.decisionSource === "situational_prompt" ||
     MANAGER_USER_ACTION_DECISION_TYPES.has(decision.decisionType)
   );
 }
@@ -204,6 +335,11 @@ function buildManagerDecisionFeedEntry(
   decision: ManagerDecisionRecord,
   timestamp: number,
   canEditAttribution: boolean,
+  options: {
+    managerLabel: string;
+    decisionDetail?: string;
+    outcomeDetail?: string;
+  },
 ): CommentaryFeedEntry {
   const status = formatManagerDecisionWpa(decision);
   const leverage =
@@ -221,6 +357,9 @@ function buildManagerDecisionFeedEntry(
     timestamp,
     managerDecision: decision,
     canEditAttribution,
+    managerLabel: options.managerLabel,
+    managerDecisionDetail: options.decisionDetail,
+    managerDecisionOutcome: options.outcomeDetail,
   };
 }
 
@@ -1026,6 +1165,7 @@ export function GameTracker() {
     useDH?: boolean;
     extraInningRunner?: boolean;
     extraInningRunnerDelay?: 1 | 2;
+    optimalLineupSnapshots?: GameLockLineupSnapshots;
   } | null;
 
   // Team IDs - use navigation state or standalone defaults
@@ -1046,6 +1186,18 @@ export function GameTracker() {
     homeTeamId,
     awayManagerId: navigationState?.awayManagerId,
     homeManagerId: navigationState?.homeManagerId,
+  });
+  const awayManagerName = formatManagerDisplayName({
+    managerId: awayManagerId,
+    teamId: awayTeamId,
+    teamName: awayTeamName_,
+    managerName: navigationState?.awayManagerName,
+  });
+  const homeManagerName = formatManagerDisplayName({
+    managerId: homeManagerId,
+    teamId: homeTeamId,
+    teamName: homeTeamName_,
+    managerName: navigationState?.homeManagerName,
   });
   const userTeamSide = navigationState?.userTeamSide || "home";
   const competitionType =
@@ -1157,6 +1309,7 @@ export function GameTracker() {
     recordEvent,
     recordPlayerStateChange,
     reassignRunnerEventAttribution,
+    recordPromptedManagerDecision,
     placeGhostRunner,
     advanceRunner,
     advanceRunnersBatch,
@@ -1904,8 +2057,12 @@ export function GameTracker() {
     suppressedManagerRecommendationKeys,
     setSuppressedManagerRecommendationKeys,
   ] = useState<Set<string>>(() => new Set());
+  const committedPromptedManagerRecommendationKeysRef = useRef<Set<string>>(
+    new Set(),
+  );
   useEffect(() => {
     setSuppressedManagerRecommendationKeys(new Set());
+    committedPromptedManagerRecommendationKeysRef.current = new Set();
   }, [gameState.gameId]);
   const lastAppliedRestoredMojoFitnessRef = useRef<
     Record<string, { mojo: number; fitness: string }> | null
@@ -4310,6 +4467,72 @@ export function GameTracker() {
           return true;
         });
 
+        const lineupSnapshotGeneratedAt = Date.now();
+        const modeContext =
+          toOptimalLineupModeContext(effectiveCompetitionType);
+        const awayCandidates = rosterPlayersToOptimalCandidates(
+          awayTeamPlayers,
+          "away",
+          getRosterEntityId,
+          getCanonicalRosterName,
+        );
+        const homeCandidates = rosterPlayersToOptimalCandidates(
+          homeTeamPlayers,
+          "home",
+          getRosterEntityId,
+          getCanonicalRosterName,
+        );
+        const optimalLineupSnapshots: GameLockLineupSnapshots = {
+          away:
+            navigationState?.optimalLineupSnapshots?.away ??
+            buildOptimalLineupSnapshot({
+              teamId: awayTeamId,
+              mode: modeContext,
+              instanceId: effectiveCompetitionId,
+              opposingPitcherHand: normalizePitcherHandForOptimalLineup(homePitcher),
+              candidates: awayCandidates,
+              dhEnabled: awayUsesDh,
+              generatedAt: lineupSnapshotGeneratedAt,
+              generatedFrom: "game_lock",
+              sourceConfidence: "engine_calculated",
+            }),
+          home:
+            navigationState?.optimalLineupSnapshots?.home ??
+            buildOptimalLineupSnapshot({
+              teamId: homeTeamId,
+              mode: modeContext,
+              instanceId: effectiveCompetitionId,
+              opposingPitcherHand: normalizePitcherHandForOptimalLineup(awayPitcher),
+              candidates: homeCandidates,
+              dhEnabled: homeUsesDh,
+              generatedAt: lineupSnapshotGeneratedAt,
+              generatedFrom: "game_lock",
+              sourceConfidence: "engine_calculated",
+            }),
+        };
+        const chosenLineupSnapshots: GameLockLineupSnapshots = {
+          away: buildLineupSnapshotFromSlots({
+            teamId: awayTeamId,
+            mode: modeContext,
+            instanceId: effectiveCompetitionId,
+            opposingPitcherHand: normalizePitcherHandForOptimalLineup(homePitcher),
+            candidates: awayCandidates,
+            dhEnabled: awayUsesDh,
+            generatedAt: lineupSnapshotGeneratedAt,
+            slots: lineupToOptimalSlots(awayLineup),
+          }),
+          home: buildLineupSnapshotFromSlots({
+            teamId: homeTeamId,
+            mode: modeContext,
+            instanceId: effectiveCompetitionId,
+            opposingPitcherHand: normalizePitcherHandForOptimalLineup(awayPitcher),
+            candidates: homeCandidates,
+            dhEnabled: homeUsesDh,
+            generatedAt: lineupSnapshotGeneratedAt,
+            slots: lineupToOptimalSlots(homeLineup),
+          }),
+        };
+
         console.log("[GameTracker] Initializing game with lineups:", {
           away: awayLineup.map((p) => p.playerName),
           home: homeLineup.map((p) => p.playerName),
@@ -4349,6 +4572,8 @@ export function GameTracker() {
           homeLineup,
           awayBench,
           homeBench,
+          optimalLineupSnapshots,
+          chosenLineupSnapshots,
           awayStartingPitcherId: awayPitcher
             ? getRosterEntityId(awayPitcher, "away")
             : buildFallbackRuntimePlayerId("pitcher", "away"),
@@ -4426,6 +4651,7 @@ export function GameTracker() {
     effectiveStatsScopeId,
     gameId,
     gameInitialized,
+    getCanonicalRosterName,
     getRosterEntityId,
     homePitcher,
     homeTeamId,
@@ -4434,6 +4660,7 @@ export function GameTracker() {
     initializeGame,
     loadExistingGame,
     navigationState?.franchiseId,
+    navigationState?.optimalLineupSnapshots,
     navigationState?.seasonNumber,
     navigationState?.totalInnings,
     selectedStadium,
@@ -9564,10 +9791,10 @@ export function GameTracker() {
   );
 
   const managerDecisionFeedEntries = useMemo(() => {
-    const timestampByEventId = new Map(
+    const playLogEntryByEventId = new Map(
       playLogEntries
         .filter((entry) => entry.eventId)
-        .map((entry) => [entry.eventId!, entry.timestamp] as const),
+        .map((entry) => [entry.eventId!, entry] as const),
     );
 
     return committedManagerDecisions.map((decision) => {
@@ -9577,18 +9804,39 @@ export function GameTracker() {
       ].filter((eventId): eventId is string => Boolean(eventId));
       const timestamp =
         eventIds
-          .map((eventId) => timestampByEventId.get(eventId))
+          .map((eventId) => playLogEntryByEventId.get(eventId)?.timestamp)
           .find((value): value is number => typeof value === "number") ?? 0;
+      const sourceEntry = decision.decisionEventId
+        ? playLogEntryByEventId.get(decision.decisionEventId)
+        : undefined;
+      const outcomeEntry = decision.resolvedAtEventId
+        ? playLogEntryByEventId.get(decision.resolvedAtEventId)
+        : undefined;
+      const managerLabel =
+        decision.teamId === awayTeamId
+          ? awayManagerName
+          : decision.teamId === homeTeamId
+            ? homeManagerName
+            : decision.managerId;
 
       return buildManagerDecisionFeedEntry(
         decision,
         timestamp,
         canEditManagerDecisionAttribution(decision),
+        {
+          managerLabel,
+          decisionDetail: buildManagerDecisionDetail(decision, sourceEntry),
+          outcomeDetail: buildManagerOutcomeDetail(decision, outcomeEntry),
+        },
       );
     });
   }, [
+    awayManagerName,
+    awayTeamId,
     canEditManagerDecisionAttribution,
     committedManagerDecisions,
+    homeManagerName,
+    homeTeamId,
     playLogEntries,
   ]);
 
@@ -9769,7 +10017,7 @@ export function GameTracker() {
   }, [managerRecommendations]);
 
   const handleManagerRecommendationAction = useCallback(
-    (
+    async (
       recommendation: ManagerRecommendation,
       action: ManagerRecommendationAction,
     ) => {
@@ -9779,10 +10027,44 @@ export function GameTracker() {
         return next;
       });
 
+      const promptedDecisionType =
+        getPromptedDecisionTypeForRecommendationAction(action);
+      if (promptedDecisionType) {
+        const dedupeKey = `${recommendation.recommendationId}:${promptedDecisionType}:${recommendation.suppressKey}`;
+        if (committedPromptedManagerRecommendationKeysRef.current.has(dedupeKey)) {
+          return;
+        }
+
+        const promptedDecision =
+          buildPromptedManagerDecisionFromRecommendation({
+            recommendation,
+            action,
+            opponentTeamId:
+              recommendation.teamId === awayTeamId ? homeTeamId : awayTeamId,
+          });
+        if (!promptedDecision) {
+          return;
+        }
+
+        committedPromptedManagerRecommendationKeysRef.current.add(dedupeKey);
+        try {
+          await recordPromptedManagerDecision(promptedDecision);
+          queuePlayLogRefresh();
+          await recomputeCommittedManagerWpa(
+            `manager recommendation ${action}`,
+          );
+        } catch (error) {
+          committedPromptedManagerRecommendationKeysRef.current.delete(dedupeKey);
+          console.error(
+            "[Manager WPA] Failed to commit keep-current recommendation:",
+            error,
+          );
+        }
+        return;
+      }
+
       if (
         action === "dismiss" ||
-        action === "keep_pitcher" ||
-        action === "let_batter_hit" ||
         action === "decline_defensive_sub"
       ) {
         return;
@@ -9849,6 +10131,7 @@ export function GameTracker() {
     },
     [
       activePitcher,
+      awayTeamId,
       battingTeam,
       battingTeamPlayersRaw,
       currentLineup,
@@ -9859,6 +10142,10 @@ export function GameTracker() {
       fieldingTeamPitchersRaw,
       fieldingTeamPlayersRaw,
       getRosterEntityId,
+      homeTeamId,
+      queuePlayLogRefresh,
+      recomputeCommittedManagerWpa,
+      recordPromptedManagerDecision,
       resolvedCurrentBatterName,
     ],
   );
@@ -9891,6 +10178,7 @@ export function GameTracker() {
         | "isTootblan"
         | "isOutAdvancing"
         | "managerIntent"
+        | "managerRunPlay"
         | "managerDecisionSource"
         | "managerDecisionNote"
         | "errorType"
@@ -9940,6 +10228,7 @@ export function GameTracker() {
                 isTootblan: enrichingRunnerSubEntry.isTootblan,
                 isOutAdvancing: enrichingRunnerSubEntry.isOutAdvancing,
                 managerIntent: enrichingRunnerSubEntry.managerIntent,
+                managerRunPlay: enrichingRunnerSubEntry.managerRunPlay,
                 managerDecisionSource:
                   enrichingRunnerSubEntry.managerDecisionSource,
                 managerDecisionNote: enrichingRunnerSubEntry.managerDecisionNote,
@@ -10037,8 +10326,24 @@ export function GameTracker() {
               "play_log_enhancement";
           } else {
             nextOutcomeDraft.managerIntent = undefined;
-            nextOutcomeDraft.managerDecisionSource = undefined;
-            nextOutcomeDraft.managerDecisionNote = undefined;
+            if (!nextOutcomeDraft.managerRunPlay) {
+              nextOutcomeDraft.managerDecisionSource = undefined;
+              nextOutcomeDraft.managerDecisionNote = undefined;
+            }
+          }
+        }
+        if (field === "managerRunPlay") {
+          if (value === "hit_and_run") {
+            nextOutcomeDraft.managerRunPlay = value;
+            nextOutcomeDraft.managerDecisionSource =
+              nextOutcomeDraft.managerDecisionSource ??
+              "play_log_enhancement";
+          } else {
+            nextOutcomeDraft.managerRunPlay = undefined;
+            if (!nextOutcomeDraft.managerIntent) {
+              nextOutcomeDraft.managerDecisionSource = undefined;
+              nextOutcomeDraft.managerDecisionNote = undefined;
+            }
           }
         }
         if (
@@ -10255,6 +10560,13 @@ export function GameTracker() {
           `runnerOutcomes[${runnerIdx}].managerIntent`,
           previousOutcome.managerIntent ?? null,
           nextOutcome.managerIntent ?? null,
+          timestamp,
+        );
+        pushEditHistoryEntry(
+          editHistory,
+          `runnerOutcomes[${runnerIdx}].managerRunPlay`,
+          previousOutcome.managerRunPlay ?? null,
+          nextOutcome.managerRunPlay ?? null,
           timestamp,
         );
         pushEditHistoryEntry(

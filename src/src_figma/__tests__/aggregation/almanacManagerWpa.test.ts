@@ -33,6 +33,7 @@ vi.mock("../../../utils/eventLog", () => ({
 
 import type { CompletedGameRecord } from "../../../utils/gameStorage";
 import type {
+  ManagerDeploymentStintRecord,
   ManagerDecisionRecord,
   ManagerLineupDeltaRecord,
   ManagerProfile,
@@ -140,6 +141,31 @@ function createLineupDelta(
   };
 }
 
+function createDeploymentStint(
+  overrides: Partial<ManagerDeploymentStintRecord> = {},
+): ManagerDeploymentStintRecord {
+  return {
+    stintId: overrides.stintId ?? "game-1:away:deployment",
+    gameId: overrides.gameId ?? "game-1",
+    managerId: overrides.managerId ?? "away-manager",
+    teamId: overrides.teamId ?? "away",
+    deploymentRole: overrides.deploymentRole ?? "pinch_hitter_remaining",
+    playerId: "bench-1",
+    playerName: "Bench One",
+    sourceEventId: "bp-1",
+    openedAtEventIndex: 1,
+    tacticalExclusionEventIds: ["event-1"],
+    closeReason: "game_end",
+    linkedEventIds: ["event-2"],
+    rawLinkedWpa: 0.2,
+    managerShare: 0.15,
+    managerDeploymentWpa: 0.03,
+    cap: 0.15,
+    confidence: "medium",
+    ...overrides,
+  };
+}
+
 function createGame(
   overrides: Partial<CompletedGameRecord> = {},
 ): CompletedGameRecord {
@@ -165,6 +191,7 @@ function createGame(
     pitcherGameStats: overrides.pitcherGameStats ?? [],
     activityLog: overrides.activityLog,
     managerDecisions: overrides.managerDecisions,
+    managerDeploymentStints: overrides.managerDeploymentStints,
     managerLineupDeltas: overrides.managerLineupDeltas,
   } as CompletedGameRecord;
 }
@@ -207,6 +234,9 @@ describe("Almanac Manager WPA aggregation", () => {
               managerWpa: -0.12,
             }),
           ],
+          managerDeploymentStints: [
+            createDeploymentStint({ managerDeploymentWpa: 0.03 }),
+          ],
           managerLineupDeltas: [
             createLineupDelta({ managerWpa: 0.075 }),
             createLineupDelta({
@@ -229,10 +259,12 @@ describe("Almanac Manager WPA aggregation", () => {
       wins: 1,
       losses: 0,
       tacticalManagerWpa: 0.2,
+      deploymentWpa: 0.03,
       lineupDeltaWpa: 0.075,
-      managerValue: 0.275,
-      decisionCount: 3,
+      managerValue: 0.305,
+      decisionCount: 4,
       tacticalDecisionCount: 2,
+      deploymentStintCount: 1,
       lineupDecisionCount: 1,
       resolvedDecisionCount: 1,
       pendingDecisionCount: 1,
@@ -249,6 +281,7 @@ describe("Almanac Manager WPA aggregation", () => {
     expect(home).toMatchObject({
       managerName: "Home Club Manager",
       tacticalManagerWpa: -0.12,
+      deploymentWpa: 0,
       lineupDeltaWpa: -0.025,
       managerValue: -0.145,
     });
@@ -296,22 +329,27 @@ describe("Almanac Manager WPA aggregation", () => {
     ).toBe(false);
   });
 
-  test("keeps Tactical WPA, Lineup Delta, and Manager Value distinct", () => {
+  test("keeps Tactical WPA, Deployment WPA, Lineup Delta, and Manager Value distinct", () => {
     const [aggregate] = aggregateCommittedManagerAlmanac([
       createGame({
         managerDecisions: [createDecision({ managerWpa: 0.2 })],
+        managerDeploymentStints: [
+          createDeploymentStint({ managerDeploymentWpa: 0.04 }),
+        ],
         managerLineupDeltas: [createLineupDelta({ managerWpa: -0.05 })],
       }),
     ]);
 
     expect(aggregate.tacticalManagerWpa).toBe(0.2);
+    expect(aggregate.deploymentWpa).toBe(0.04);
     expect(aggregate.lineupDeltaWpa).toBe(-0.05);
-    expect(aggregate.managerValue).toBe(0.15);
+    expect(aggregate.managerValue).toBe(0.19);
 
     const leaderboards = buildManagerAlmanacLeaderboards([aggregate], 5);
     expect(leaderboards.tacticalManagerWpa[0].value).toBe(0.2);
+    expect(leaderboards.deploymentWpa[0].value).toBe(0.04);
     expect(leaderboards.lineupDeltaWpa[0].value).toBe(-0.05);
-    expect(leaderboards.managerValue[0].value).toBe(0.15);
+    expect(leaderboards.managerValue[0].value).toBe(0.19);
   });
 
   test("applies team, mode, and instance filters", () => {

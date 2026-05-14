@@ -17,6 +17,13 @@ import type {
   ManagerDecisionType,
   ManagerInferenceMethod,
 } from "../types/managerWpa";
+import {
+  MANAGER_DECISION_LABELS,
+  MANAGER_WPA_SHARE_BY_DECISION_TYPE,
+  RESOLUTION_ENDPOINT_BY_DECISION_TYPE,
+} from "./managerDecisionRegistry";
+
+export { MANAGER_WPA_SHARE_BY_DECISION_TYPE } from "./managerDecisionRegistry";
 
 export interface ManagerAssignmentResolutionInput {
   awayTeamId: string;
@@ -79,66 +86,6 @@ interface BuildDecisionInput {
   decisionKeySuffix?: string;
   manuallyPinned?: boolean;
 }
-
-const MANAGER_DECISION_LABELS: Record<ManagerDecisionType, string> = {
-  lineup_construction: "Lineup construction",
-  pitching_change: "Pitching change",
-  leave_pitcher_in: "Leave pitcher in",
-  pinch_hitter: "Pinch hitter",
-  let_batter_hit: "Let batter hit",
-  pinch_runner: "Pinch runner",
-  defensive_sub: "Defensive substitution",
-  position_change: "Position change",
-  intentional_walk: "Intentional walk",
-  steal_send: "Steal/send",
-  runner_hold: "Runner hold",
-  out_advancing_send: "Out-advancing send",
-  bunt_call: "Bunt call",
-  squeeze_call: "Squeeze call",
-  hit_and_run: "Hit and run",
-  defensive_alignment: "Defensive alignment",
-  manual_note: "Manual note",
-};
-
-const RESOLUTION_ENDPOINT_BY_DECISION_TYPE: Partial<
-  Record<ManagerDecisionType, ManagerDecisionResolutionEndpoint>
-> = {
-  intentional_walk: "next_pa",
-  pitching_change: "next_pa",
-  leave_pitcher_in: "next_pa",
-  pinch_hitter: "next_pa",
-  let_batter_hit: "next_pa",
-  pinch_runner: "runner_terminal",
-  defensive_sub: "first_fielding_event",
-  position_change: "first_fielding_event",
-  bunt_call: "same_event",
-  squeeze_call: "same_event",
-  steal_send: "same_event",
-  runner_hold: "same_event",
-  out_advancing_send: "same_event",
-  hit_and_run: "same_event",
-};
-
-export const MANAGER_WPA_SHARE_BY_DECISION_TYPE: Partial<
-  Record<ManagerDecisionType, number>
-> = {
-  intentional_walk: 1,
-  pinch_hitter: 0.25,
-  let_batter_hit: 0.2,
-  pinch_runner: 0.25,
-  pitching_change: 0.25,
-  leave_pitcher_in: 0.2,
-  defensive_sub: 0.2,
-  position_change: 0.1,
-  bunt_call: 0.35,
-  squeeze_call: 0.5,
-  steal_send: 0.35,
-  runner_hold: 0.2,
-  out_advancing_send: 0.35,
-  hit_and_run: 0.35,
-  defensive_alignment: 0.1,
-  lineup_construction: 0.25,
-};
 
 const STANDARD_TABLE: Record<
   5 | 6 | 7 | 9,
@@ -325,6 +272,8 @@ export function deriveManagerDecisionRecords(
   const betweenPlayEvents = [...(input.betweenPlayEvents ?? [])]
     .filter((event) => !event.undoneAt)
     .sort((left, right) => left.eventIndex - right.eventIndex);
+  const managerBetweenPlayEvents =
+    dedupePromptedManagerDecisionEvents(betweenPlayEvents);
   const fieldingEvents = [...(input.fieldingEvents ?? [])].sort(
     (left, right) =>
       left.atBatEventId.localeCompare(right.atBatEventId) ||
@@ -336,7 +285,7 @@ export function deriveManagerDecisionRecords(
     ...atBatEvents.flatMap((event) =>
       deriveAtBatManagerDecisions(event, input, gameId),
     ),
-    ...betweenPlayEvents.flatMap((event) =>
+    ...managerBetweenPlayEvents.flatMap((event) =>
       deriveBetweenPlayManagerDecisions(event, input, gameId),
     ),
   ];
@@ -359,6 +308,53 @@ export function deriveManagerDecisionRecords(
 
 export const deriveManagerDecisionsFromEventLog =
   deriveManagerDecisionRecords;
+
+function dedupePromptedManagerDecisionEvents(
+  events: BetweenPlayEvent[],
+): BetweenPlayEvent[] {
+  const seen = new Set<string>();
+  return events.filter((event) => {
+    const key = promptedManagerDecisionDedupeKey(event);
+    if (!key) return true;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function promptedManagerDecisionDedupeKey(
+  event: BetweenPlayEvent,
+): string | null {
+  const prompted = event.promptedManagerDecision;
+  const provenanceKey = prompted?.provenanceKey ?? prompted?.recommendationId;
+  if (!prompted || !provenanceKey) return null;
+
+  return [
+    prompted.decisionType,
+    prompted.managerId,
+    prompted.teamId,
+    provenanceKey,
+    promptedManagerDecisionSnapshotKey(event),
+  ].join(":");
+}
+
+function promptedManagerDecisionSnapshotKey(event: BetweenPlayEvent): string {
+  const state = event.gameState;
+  if (!state) return `event:${event.eventIndex}`;
+
+  const runners = state.runnersOn ?? {};
+  return [
+    "state",
+    state.inning,
+    state.halfInning,
+    state.outs,
+    state.score.away,
+    state.score.home,
+    runners.first ?? "",
+    runners.second ?? "",
+    runners.third ?? "",
+  ].join(":");
+}
 
 function deriveAtBatManagerDecisions(
   event: AtBatEvent,
@@ -416,6 +412,32 @@ function deriveAtBatManagerDecisions(
     );
   }
 
+  const hitAndRunEntries = (event.runnerOutcomes ?? [])
+    .map((outcome, index) => ({ outcome, index }))
+    .filter(({ outcome }) => outcome.managerRunPlay === "hit_and_run");
+  if (hitAndRunEntries.length > 0) {
+    decisions.push(
+      buildAtBatDecision({
+        event,
+        input,
+        gameId,
+        decisionType: "hit_and_run",
+        decisionSource:
+          hitAndRunEntries.find(({ outcome }) => outcome.managerDecisionSource)
+            ?.outcome.managerDecisionSource ?? "play_log_enhancement",
+        confidence: "medium",
+        involvedPlayerIds: [
+          event.batterId,
+          ...hitAndRunEntries.map(({ outcome }) => outcome.runnerId),
+        ],
+        derivedFromFields: hitAndRunEntries.map(
+          ({ index }) => `runnerOutcomes.${index}.managerRunPlay`,
+        ),
+        decisionIdSuffix: "hit-and-run",
+      }),
+    );
+  }
+
   for (const [index, outcome] of (event.runnerOutcomes ?? []).entries()) {
     if (outcome.managerIntent === "manager_hold") {
       decisions.push(
@@ -435,6 +457,7 @@ function deriveAtBatManagerDecisions(
 
     if (
       outcome.managerIntent === "manager_send" &&
+      outcome.managerRunPlay !== "hit_and_run" &&
       (outcome.isOutAdvancing || outcome.toBase === "out")
     ) {
       decisions.push(
@@ -538,6 +561,16 @@ function deriveBetweenPlayManagerDecisions(
   gameId: string,
 ): ManagerDecisionRecord[] {
   if (!event.gameState) return [];
+
+  if (event.promptedManagerDecision) {
+    if (!isSupportedPromptedManagerDecision(event.promptedManagerDecision.decisionType)) {
+      return [];
+    }
+    if (promptedTrackedPlayerIds(event.promptedManagerDecision).length === 0) {
+      return [];
+    }
+    return [buildPromptedBetweenPlayDecision({ event, input, gameId })];
+  }
 
   if (event.type === "stolen_base" || event.type === "caught_stealing") {
     return [
@@ -664,6 +697,120 @@ function deriveBetweenPlayManagerDecisions(
   }
 
   return [];
+}
+
+function isSupportedPromptedManagerDecision(
+  decisionType: string,
+): decisionType is "leave_pitcher_in" | "let_batter_hit" {
+  return decisionType === "leave_pitcher_in" || decisionType === "let_batter_hit";
+}
+
+function buildPromptedBetweenPlayDecision(params: {
+  event: BetweenPlayEvent;
+  input: DeriveManagerDecisionRecordsInput;
+  gameId: string;
+}): ManagerDecisionRecord {
+  const { event, input, gameId } = params;
+  const prompted = event.promptedManagerDecision!;
+  const halfInning = event.gameState?.halfInning ?? "TOP";
+  const fallbackAttribution = resolveManagerAttributionForDecision(
+    prompted.decisionType,
+    halfInning,
+    input,
+  );
+  const attribution = {
+    managerId: prompted.managerId || fallbackAttribution.managerId,
+    teamId: prompted.teamId || fallbackAttribution.teamId,
+    opponentTeamId:
+      prompted.opponentTeamId || fallbackAttribution.opponentTeamId,
+  };
+  const involvedPlayerIds = uniqueStrings(
+    prompted.involvedPlayerIds?.length
+      ? prompted.involvedPlayerIds
+      : promptedTrackedPlayerIds(prompted),
+  );
+  const trackedPlayerIds = uniqueStrings(
+    promptedTrackedPlayerIds(prompted).length
+      ? promptedTrackedPlayerIds(prompted)
+      : [prompted.playerId, ...involvedPlayerIds],
+  );
+  const expectedEndpoint =
+    prompted.resolution?.expectedEndpoint ?? getExpectedEndpoint(prompted.decisionType);
+  const wpa = calculateBetweenPlayWindow(event, input.totalInnings);
+  const window = buildDecisionWindow({
+    teamId: attribution.teamId,
+    homeTeamId: input.homeTeamId,
+    homeWinProbabilityBefore: wpa.winProbabilityBefore,
+    decisionType: prompted.decisionType,
+  });
+  const score = event.gameState?.score ?? { away: 0, home: 0 };
+
+  return buildDecisionRecord({
+    gameId,
+    decisionEventId: event.eventId,
+    linkedEventIds: [event.eventId],
+    managerId: attribution.managerId,
+    teamId: attribution.teamId,
+    opponentTeamId: attribution.opponentTeamId,
+    decisionType: prompted.decisionType,
+    inferenceMethod: prompted.source === "manual_manager_moment" ? "manual" : "prompted",
+    decisionSource:
+      prompted.decisionSource ??
+      (prompted.source === "manual_manager_moment"
+        ? "manual_edit"
+        : "situational_prompt"),
+    confidence: prompted.confidence ?? "medium",
+    inning: event.gameState?.inning ?? 1,
+    halfInning,
+    outs: event.gameState?.outs ?? 0,
+    baseState: formatBetweenPlayBaseState(event.gameState?.runnersOn),
+    scoreDifferentialForTeam: scoreDifferentialForTeam({
+      teamId: attribution.teamId,
+      homeTeamId: input.homeTeamId,
+      homeScore: score.home,
+      awayScore: score.away,
+    }),
+    leverageIndex: prompted.leverageIndex,
+    involvedPlayerIds: uniqueStrings([
+      ...involvedPlayerIds,
+      ...trackedPlayerIds,
+    ]),
+    window,
+    resolved: false,
+    resolutionWindow: buildResolutionWindow({
+      status: "pending",
+      startEventId: event.eventId,
+      startEventIndex: event.eventIndex,
+      startSnapshotSource: "event_state",
+      expectedEndpoint,
+      trackedPlayerIds,
+      trackedRunnerIds: [],
+    }),
+    derivedFromFields: uniqueStrings([
+      "promptedManagerDecision",
+      prompted.provenanceKey
+        ? "promptedManagerDecision.provenanceKey"
+        : undefined,
+      prompted.recommendationId
+        ? "promptedManagerDecision.recommendationId"
+        : undefined,
+    ]),
+    decisionKeySuffix:
+      prompted.provenanceKey || prompted.recommendationId
+        ? `prompt:${prompted.provenanceKey ?? prompted.recommendationId}`
+        : undefined,
+    manuallyPinned: prompted.source === "manual_manager_moment",
+  });
+}
+
+function promptedTrackedPlayerIds(
+  prompted: NonNullable<BetweenPlayEvent["promptedManagerDecision"]>,
+): string[] {
+  return uniqueStrings(
+    Array.isArray(prompted.trackedPlayerIds)
+      ? prompted.trackedPlayerIds
+      : [prompted.playerId],
+  );
 }
 
 function buildBetweenPlayDecision(params: {

@@ -5,6 +5,7 @@ import type { ReactNode } from "react";
 import { GameDetail } from "../../app/pages/GameDetail";
 import type { CompletedGameRecord } from "../../utils/gameStorage";
 import type {
+  ManagerDeploymentStintRecord,
   ManagerDecisionRecord,
   ManagerLineupDeltaRecord,
 } from "../../../types/managerWpa";
@@ -128,6 +129,7 @@ function createManagerDecision(
 function createCompletedGame(
   managerDecisions: ManagerDecisionRecord[] = [],
   managerLineupDeltas: ManagerLineupDeltaRecord[] = [],
+  managerDeploymentStints: ManagerDeploymentStintRecord[] = [],
 ): CompletedGameRecord {
   return {
     gameId: "game-detail-1",
@@ -166,6 +168,7 @@ function createCompletedGame(
     },
     pitcherGameStats: [],
     managerDecisions,
+    managerDeploymentStints,
     managerLineupDeltas,
   } as CompletedGameRecord;
 }
@@ -233,7 +236,7 @@ describe("GameDetail Manager WPA overlay", () => {
     expect(within(screen.getByTestId("manager-wpa-card-away")).getByText("2 (1 pending)")).toBeInTheDocument();
   });
 
-  test("shows committed lineup delta separately from tactical Manager WPA", async () => {
+  test("shows committed deployment and lineup values separately from tactical Manager WPA", async () => {
     mockGetCompletedGameById.mockResolvedValue(
       createCompletedGame(
         [createManagerDecision({ managerWpa: 0.184 })],
@@ -260,6 +263,26 @@ describe("GameDetail Manager WPA overlay", () => {
             managerWpa: 0.1,
           },
         ],
+        [
+          {
+            stintId: "game-detail-1:away:deployment",
+            gameId: "game-detail-1",
+            managerId: "away-manager",
+            teamId: "away",
+            deploymentRole: "pinch_hitter_remaining",
+            playerId: "bench-one",
+            sourceEventId: "bp-1",
+            openedAtEventIndex: 1,
+            tacticalExclusionEventIds: ["ab-1"],
+            closeReason: "game_end",
+            linkedEventIds: ["ab-2"],
+            rawLinkedWpa: 0.08,
+            managerShare: 0.15,
+            managerDeploymentWpa: 0.012,
+            cap: 0.15,
+            confidence: "medium",
+          },
+        ],
       ),
     );
 
@@ -267,8 +290,9 @@ describe("GameDetail Manager WPA overlay", () => {
 
     await screen.findByTestId("manager-wpa-overlay");
     expect(screen.getByTestId("manager-wpa-total-away")).toHaveTextContent("+0.184");
+    expect(screen.getByTestId("manager-deployment-wpa-away")).toHaveTextContent("+0.012");
     expect(screen.getByTestId("manager-lineup-delta-away")).toHaveTextContent("+0.100");
-    expect(screen.getByTestId("manager-value-away")).toHaveTextContent("+0.284");
+    expect(screen.getByTestId("manager-value-away")).toHaveTextContent("+0.296");
   });
 
   test("keeps manager overlay values out of the player KBL WPA leaderboard", async () => {

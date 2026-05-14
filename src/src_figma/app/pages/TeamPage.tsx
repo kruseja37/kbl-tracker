@@ -130,6 +130,7 @@ export function TeamPage() {
                     <th className="pb-3 pr-6 text-right">W-L</th>
                     <th className="pb-3 pr-6 text-right">DEC</th>
                     <th className="pb-3 pr-6 text-right">TACTICAL</th>
+                    <th className="pb-3 pr-6 text-right">DEPLOY</th>
                     <th className="pb-3 pr-6 text-right">LINEUP</th>
                     <th className="pb-3 pr-6 text-right">VALUE</th>
                   </tr>
@@ -149,6 +150,9 @@ export function TeamPage() {
                       </td>
                       <td className="py-3 pr-6 text-right text-[#E8E8D8]">
                         {formatSigned(entry.tacticalManagerWpa)}
+                      </td>
+                      <td className="py-3 pr-6 text-right text-[#E8E8D8]">
+                        {formatSigned(entry.deploymentWpa)}
                       </td>
                       <td className="py-3 pr-6 text-right text-[#E8E8D8]">
                         {formatSigned(entry.lineupDeltaWpa)}

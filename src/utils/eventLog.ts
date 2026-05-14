@@ -25,7 +25,16 @@
 import { calculateLeverageIndex } from '../engines/leverageCalculator';
 import { calculateWPA } from '../engines/wpaCalculator';
 import type { AtBatResult, Position, HalfInning, SpecialPlayType, MojoLevelLabel, FitnessLevelLabel, FameLevel, SpecPitcherRole, HiddenModifiers } from '../types/game';
-import type { ManagerBuntIntent, ManagerDecisionSource, ManagerRunnerIntent } from '../types/managerWpa';
+import type {
+  ManagerBuntIntent,
+  ManagerDecisionConfidence,
+  ManagerDecisionResolutionEndpoint,
+  ManagerDecisionSource,
+  ManagerDecisionType,
+  GameLockLineupSnapshots,
+  ManagerRunnerIntent,
+  ManagerRunPlay,
+} from '../types/managerWpa';
 import type { ParkFactors } from '../types/war';
 import type { CompetitionType } from './gameStorage';
 
@@ -152,6 +161,8 @@ export interface GameHeader {
     away: { playerId: string; playerName: string };
     home: { playerId: string; playerName: string };
   };
+  optimalLineupSnapshots?: GameLockLineupSnapshots;
+  chosenLineupSnapshots?: GameLockLineupSnapshots;
 
   // Final state
   finalScore: { away: number; home: number } | null;  // null if game in progress
@@ -342,6 +353,7 @@ export interface AtBatEvent {
     isTootblan?: boolean;
     isOutAdvancing?: boolean;
     managerIntent?: ManagerRunnerIntent;
+    managerRunPlay?: ManagerRunPlay;
     managerDecisionSource?: ManagerDecisionSource;
     managerDecisionNote?: string;
     errorType?: 'fielding' | 'throwing' | 'mental';
@@ -416,6 +428,35 @@ export type BetweenPlayEventType =
   | 'mojo_change' | 'fitness_change' | 'injury'
   | 'pitch_count_update' | 'manager_moment';
 
+export type PromptedManagerDecisionType = Extract<
+  ManagerDecisionType,
+  'leave_pitcher_in' | 'let_batter_hit'
+>;
+
+export type PromptedManagerDecisionAction = 'keep_pitcher' | 'let_batter_hit';
+
+export interface PromptedManagerDecisionEvent {
+  decisionType: PromptedManagerDecisionType;
+  action: PromptedManagerDecisionAction;
+  source: 'recommendation' | 'manual_manager_moment';
+  decisionSource?: ManagerDecisionSource;
+  confidence?: ManagerDecisionConfidence;
+  managerId: string;
+  teamId: string;
+  opponentTeamId: string;
+  trackedPlayerIds: string[];
+  involvedPlayerIds?: string[];
+  playerId?: string;
+  playerName?: string;
+  leverageIndex?: number;
+  recommendationId?: string;
+  provenanceKey?: string;
+  resolution?: {
+    status: 'pending';
+    expectedEndpoint: ManagerDecisionResolutionEndpoint;
+  };
+}
+
 /** Formal between-play event interface per spec §2.2 */
 export interface BetweenPlayEvent {
   eventId: string;
@@ -471,6 +512,7 @@ export interface BetweenPlayEvent {
     outcome: 'safe' | 'out';
     reason: 'stolen_base' | 'caught_stealing' | 'pickoff' | 'wild_pitch' | 'passed_ball' | 'advance';
     managerIntent?: ManagerRunnerIntent;
+    managerRunPlay?: ManagerRunPlay;
     managerDecisionSource?: ManagerDecisionSource;
     managerDecisionNote?: string;
   };
@@ -542,6 +584,8 @@ export interface BetweenPlayEvent {
     outcomeEventId?: string;
     outcomeWPA?: number;
   };
+
+  promptedManagerDecision?: PromptedManagerDecisionEvent;
 }
 
 /** Runner state for situational tracking */

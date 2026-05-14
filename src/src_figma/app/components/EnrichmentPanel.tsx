@@ -1617,18 +1617,26 @@ const POSITION_CHARGE_OPTIONS = [
 const MANAGER_INTENT_OPTIONS = [
   { value: 'runner_choice', label: 'Runner Choice' },
   { value: 'manager_send', label: 'Manager Send' },
-  { value: 'manager_hold', label: 'Manager Hold' },
+  { value: 'manager_hold', label: 'Hold Runner' },
   { value: 'runner_responsibility', label: 'Runner Fault' },
 ] as const;
 
+const MANAGER_RUN_PLAY_OPTIONS = [
+  { value: 'hit_and_run', label: 'Hit & Run' },
+] as const;
+
 const isRunnerOutcomeOut = (toBase: RunnerSubEntry['toBase']) => toBase === 'out';
+
+function isBattedBallRunnerPlay(result?: string): boolean {
+  return !!result && !['K', 'Kc', 'WP_K', 'PB_K', 'BB', 'IBB', 'HBP'].includes(result);
+}
 
 interface RunnerEnrichmentPanelProps {
   subEntry: RunnerSubEntry;
   outfielderByPosition?: Partial<Record<OutfieldPosition, { playerId: string; playerName: string }>>;
   onUpdate: (
     subEntryId: string,
-    field: keyof Pick<RunnerSubEntry, 'fieldingSequence' | 'playMechanic' | 'fielderId' | 'fielderPosition' | 'heldByOf' | 'holdingFielder' | 'baseSaved' | 'isTootblan' | 'isOutAdvancing' | 'managerIntent' | 'managerDecisionSource' | 'managerDecisionNote' | 'toBase' | 'errorType' | 'errorChargedTo'>,
+    field: keyof Pick<RunnerSubEntry, 'fieldingSequence' | 'playMechanic' | 'fielderId' | 'fielderPosition' | 'heldByOf' | 'holdingFielder' | 'baseSaved' | 'isTootblan' | 'isOutAdvancing' | 'managerIntent' | 'managerRunPlay' | 'managerDecisionSource' | 'managerDecisionNote' | 'toBase' | 'errorType' | 'errorChargedTo'>,
     value: unknown,
   ) => void | Promise<void>;
   onClose: () => void;
@@ -1667,6 +1675,8 @@ export function RunnerEnrichmentPanel({
     isRunnerOutcomeOut(initialToBase) !== isRunnerOutcomeOut(subEntry.toBase) ||
     !!subEntry.errorType ||
     typeof subEntry.errorChargedTo === 'number';
+  const shouldShowRunPlay =
+    subEntry.fromBase !== 'batter' && isBattedBallRunnerPlay(subEntry.parentResult);
   const subjectLabel = subEntry.fromBase === 'batter'
     ? `Batter: ${subEntry.runnerName}`
     : subEntry.runnerName;
@@ -1732,6 +1742,15 @@ export function RunnerEnrichmentPanel({
   ) => {
     await onUpdate(subEntry.id, 'managerIntent', nextIntent);
     if (nextIntent) {
+      await onUpdate(subEntry.id, 'managerDecisionSource', 'play_log_enhancement');
+    }
+  }, [onUpdate, subEntry.id]);
+
+  const handleManagerRunPlayChange = useCallback(async (
+    nextRunPlay: RunnerSubEntry['managerRunPlay'] | undefined,
+  ) => {
+    await onUpdate(subEntry.id, 'managerRunPlay', nextRunPlay);
+    if (nextRunPlay) {
       await onUpdate(subEntry.id, 'managerDecisionSource', 'play_log_enhancement');
     }
   }, [onUpdate, subEntry.id]);
@@ -1806,7 +1825,36 @@ export function RunnerEnrichmentPanel({
           </button>
         </EnrichmentSection>
 
-        <EnrichmentSection label="Manager Attribution" filled={!!subEntry.managerIntent}>
+        {shouldShowRunPlay && (
+          <EnrichmentSection label="Run Play" filled={!!subEntry.managerRunPlay}>
+            <div className="grid grid-cols-1 gap-1.5">
+              {MANAGER_RUN_PLAY_OPTIONS.map((option) => {
+                const isSelected = subEntry.managerRunPlay === option.value;
+                return (
+                  <button
+                    key={option.value}
+                    className={`text-[11px] min-h-[36px] px-3 py-2 rounded border transition-colors touch-manipulation
+                      ${isSelected
+                        ? 'bg-[#C4A853]/30 border-[#C4A853] text-[#C4A853]'
+                        : 'bg-[#2a3530]/60 border-[#4a6a4a] text-[#88AA88] hover:bg-[#4a6a4a]/40'}`}
+                    onClick={() => {
+                      void handleManagerRunPlayChange(
+                        isSelected ? undefined : option.value,
+                      );
+                    }}
+                  >
+                    {option.label}
+                  </button>
+                );
+              })}
+            </div>
+            <div className="mt-1 text-[10px] text-[#88AA88]">
+              Use when the runner broke with the pitch on a batted ball.
+            </div>
+          </EnrichmentSection>
+        )}
+
+        <EnrichmentSection label="Manager Runner Call" filled={!!subEntry.managerIntent}>
           <div className="grid grid-cols-2 gap-1.5">
             {MANAGER_INTENT_OPTIONS.map((option) => {
               const isSelected = subEntry.managerIntent === option.value;

@@ -10,11 +10,62 @@ import {
   type LineupSlot,
   type DepthChart,
 } from "../../hooks/useLeagueBuilderData";
+import {
+  buildLineupSnapshotFromSlots,
+  buildOptimalLineupSnapshot,
+  type OptimalLineupCandidate,
+} from "../../../utils/optimalLineup";
+import type {
+  OpposingPitcherHand,
+  OptimalLineupSnapshot,
+} from "../../../types/managerWpa";
 
 type TabType = "roster" | "lineup" | "rotation" | "depth";
 
 const FIELDING_POSITIONS: Position[] = ['C', '1B', '2B', 'SS', '3B', 'LF', 'CF', 'RF', 'DH'];
 const PITCHER_POSITIONS: Position[] = ['SP', 'RP', 'CP'];
+
+function toOptimalCandidate(player: Player): OptimalLineupCandidate {
+  return {
+    playerId: player.id,
+    playerName: `${player.firstName} ${player.lastName}`,
+    bats: player.bats,
+    primaryPosition: player.primaryPosition,
+    secondaryPosition: player.secondaryPosition,
+    power: player.power,
+    contact: player.contact,
+    speed: player.speed,
+    fielding: player.fielding,
+    arm: player.arm,
+    mojo: player.mojo,
+    unavailable: false,
+  };
+}
+
+function optimalLineupField(
+  hand: OpposingPitcherHand,
+  isDH: boolean,
+):
+  | 'optimalLineupVsRHPWithDH'
+  | 'optimalLineupVsLHPWithDH'
+  | 'optimalLineupVsRHPWithoutDH'
+  | 'optimalLineupVsLHPWithoutDH' {
+  if (hand === "L") {
+    return isDH ? "optimalLineupVsLHPWithDH" : "optimalLineupVsLHPWithoutDH";
+  }
+  return isDH ? "optimalLineupVsRHPWithDH" : "optimalLineupVsRHPWithoutDH";
+}
+
+function lineupSlotsFromOptimalSnapshot(snapshot: OptimalLineupSnapshot): LineupSlot[] {
+  return snapshot.slots
+    .slice()
+    .sort((a, b) => a.battingOrderSlot - b.battingOrderSlot)
+    .map((slot) => ({
+      battingOrder: slot.battingOrderSlot,
+      playerId: slot.playerId,
+      fieldingPosition: slot.defensivePosition as Position,
+    }));
+}
 
 export function LeagueBuilderRosters() {
   const navigate = useNavigate();
@@ -148,6 +199,10 @@ export function LeagueBuilderRosters() {
     farmRoster: [],
     lineupWithDH: [],
     lineupWithoutDH: [],
+    optimalLineupVsRHPWithDH: undefined,
+    optimalLineupVsLHPWithDH: undefined,
+    optimalLineupVsRHPWithoutDH: undefined,
+    optimalLineupVsLHPWithoutDH: undefined,
     startingRotation: [],
     longRelievers: [],
     closingPitcher: '',
@@ -609,13 +664,76 @@ function LineupTab({ roster, players, onUpdate }: LineupTabProps) {
   const availablePositions = isDH ? FIELDING_POSITIONS : noDhFieldPositions;
 
   const setLineup = (lineup: LineupSlot[]) => {
-    if (isDH) {
-      onUpdate({ lineupWithDH: lineup });
-    } else {
-      // Strip the auto-locked pitcher slot before saving
-      const withoutPitcher = lineup.filter((s) => s.fieldingPosition !== ('P' as unknown as Position));
-      onUpdate({ lineupWithoutDH: withoutPitcher });
-    }
+    onUpdate(buildLineupUpdate(lineup));
+  };
+
+  const buildLineupUpdate = (lineup: LineupSlot[]) => {
+    if (isDH) return { lineupWithDH: lineup };
+    // Strip the auto-locked pitcher slot before saving
+    return {
+      lineupWithoutDH: lineup.filter((s) => s.fieldingPosition !== ('P' as unknown as Position)),
+    };
+  };
+
+  const buildOptimalSnapshot = (hand: OpposingPitcherHand) =>
+    buildOptimalLineupSnapshot({
+      teamId: roster.teamId,
+      mode: "exhibition",
+      opposingPitcherHand: hand,
+      candidates: mlbPlayers.map(toOptimalCandidate),
+      dhEnabled: isDH,
+      generatedAt: Date.now(),
+      generatedFrom: "league_builder",
+      sourceConfidence: "engine_calculated",
+      rosterVersionId: roster.lastModified,
+    });
+
+  const buildCurrentAsOptimalSnapshot = (hand: OpposingPitcherHand) => {
+    const playerMap = new Map(players.map((player) => [player.id, player]));
+    return buildLineupSnapshotFromSlots({
+      teamId: roster.teamId,
+      mode: "exhibition",
+      opposingPitcherHand: hand,
+      candidates: mlbPlayers.map(toOptimalCandidate),
+      dhEnabled: isDH,
+      generatedAt: Date.now(),
+      generatedFrom: "user_registered_smb4_optimal",
+      sourceConfidence: "user_registered",
+      rosterVersionId: roster.lastModified,
+      slots: userSlots.map((slot) => {
+        const player = playerMap.get(slot.playerId);
+        return {
+          playerId: slot.playerId,
+          playerName: player ? `${player.firstName} ${player.lastName}` : slot.playerId,
+          battingOrderSlot: slot.battingOrder,
+          defensivePosition: slot.fieldingPosition,
+        };
+      }),
+    });
+  };
+
+  const saveOptimalSnapshot = (
+    hand: OpposingPitcherHand,
+    snapshot: OptimalLineupSnapshot,
+  ) => {
+    onUpdate({ [optimalLineupField(hand, isDH)]: snapshot });
+  };
+
+  const handleRecalculateOptimal = (hand: OpposingPitcherHand) => {
+    saveOptimalSnapshot(hand, buildOptimalSnapshot(hand));
+  };
+
+  const handleApplyOptimal = (hand: OpposingPitcherHand) => {
+    const field = optimalLineupField(hand, isDH);
+    const snapshot = roster[field] ?? buildOptimalSnapshot(hand);
+    onUpdate({
+      [field]: snapshot,
+      ...buildLineupUpdate(lineupSlotsFromOptimalSnapshot(snapshot)),
+    });
+  };
+
+  const handleSetCurrentAsOptimal = (hand: OpposingPitcherHand) => {
+    saveOptimalSnapshot(hand, buildCurrentAsOptimalSnapshot(hand));
   };
 
   const addToLineup = (playerId: string, position: Position) => {
@@ -721,6 +839,53 @@ function LineupTab({ roster, players, onUpdate }: LineupTabProps) {
         >
           No DH
         </button>
+      </div>
+
+      <div className="bg-[#4A6844] border-4 border-[#E8E8D8]/30 p-4">
+        <h4 className="font-bold mb-3 text-sm border-b border-[#E8E8D8]/20 pb-2">
+          OPTIMAL LINEUP BENCHMARKS
+        </h4>
+        <div className="grid grid-cols-2 gap-3">
+          {(["R", "L"] as OpposingPitcherHand[]).map((hand) => {
+            const field = optimalLineupField(hand, isDH);
+            const snapshot = roster[field];
+            return (
+              <div key={hand} className="bg-[#556B55] border-2 border-[#E8E8D8]/20 p-3">
+                <div className="flex items-center justify-between gap-2 mb-2">
+                  <div className="text-xs font-bold text-[#C4A853]">
+                    VS {hand}HP
+                  </div>
+                  <div className="text-[10px] text-[#E8E8D8]/60">
+                    {snapshot ? snapshot.sourceConfidence.replace(/_/g, " ") : "not set"}
+                  </div>
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleApplyOptimal(hand)}
+                    className="px-2 py-2 bg-[#3A5A3A] border-2 border-[#E8E8D8]/30 text-[10px] font-bold hover:border-[#C4A853]"
+                  >
+                    APPLY
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleRecalculateOptimal(hand)}
+                    className="px-2 py-2 bg-[#3A5A3A] border-2 border-[#E8E8D8]/30 text-[10px] font-bold hover:border-[#C4A853]"
+                  >
+                    RECALC
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleSetCurrentAsOptimal(hand)}
+                    className="px-2 py-2 bg-[#3A5A3A] border-2 border-[#E8E8D8]/30 text-[10px] font-bold hover:border-[#C4A853]"
+                  >
+                    SET
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
       </div>
 
       <div className="grid grid-cols-2 gap-4">

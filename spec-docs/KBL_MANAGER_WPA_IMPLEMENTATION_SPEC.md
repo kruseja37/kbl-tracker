@@ -53,16 +53,29 @@ A separate overlay ledger of manager decisions, scored from the acting manager t
 
 Manager WPA from in-game tactical decisions: pitching change, intentional walk, pinch hitter, pinch runner, defensive substitution, leave pitcher in, bunt/squeeze call, and similar events.
 
+### Deployment WPA
+
+Manager WPA from persistent personnel deployment choices after a player enters, changes role, changes defensive position, or is explicitly kept in the game. Deployment WPA remains open while the deployment remains active and captures later player outcomes linked to that role.
+
+Deployment WPA answers a different question from Tactical Manager WPA:
+
+```text
+Tactical Manager WPA: Was the immediate move/result good?
+Deployment WPA: Did the manager's ongoing use of this player/role help or hurt later?
+```
+
 ### Lineup Delta
 
-Game-end manager credit or blame for starting lineup choices, measured as the selected players' actual game performance against a standard replacement expectation.
+Lineup construction value for deviations from the relevant Optimal Lineup snapshot. It measures the opportunity cost and realized result of the manager's chosen starting lineup compared with the best available roster configuration for that game context.
+
+Lineup Delta is not a blanket score for all starters. If the manager uses the Optimal Lineup, Lineup Delta should be neutral even if players underperform. The manager is judged on meaningful lineup deviations, not normal player variance from obvious starts.
 
 ### Manager Value
 
 Display aggregate:
 
 ```text
-Manager Value = Tactical Manager WPA + Lineup Delta
+Manager Value = Tactical Manager WPA + Deployment WPA + Lineup Delta
 ```
 
 This is not player WAR. It can become the source for a future mWAR-like display scale, but the source of truth is the Manager WPA ledger.
@@ -182,9 +195,56 @@ interface ManagerDecisionRecord {
 }
 ```
 
-### 3.3 Lineup Delta Record
+### 3.3 Optimal Lineup And Lineup Delta Records
 
 ```typescript
+type OpposingPitcherHand = "R" | "L";
+
+type OptimalLineupModeContext =
+  | "exhibition"
+  | "elimination"
+  | "franchise";
+
+type OptimalLineupSourceConfidence =
+  | "engine_calculated"
+  | "user_registered"
+  | "stale_roster"
+  | "fallback";
+
+interface OptimalLineupSlot {
+  playerId: string;
+  playerName: string;
+  battingOrderSlot: number;
+  defensivePosition: string;
+  projectedSlotKblWpa: number;
+  projectedValueScore: number;
+  positionalFitScore: number;
+  confidence: "high" | "medium" | "low";
+}
+
+interface OptimalLineupSnapshot {
+  snapshotId: string;
+  teamId: string;
+  mode: OptimalLineupModeContext;
+  instanceId?: string;
+  opposingPitcherHand: OpposingPitcherHand;
+  rosterVersionId?: string;
+  algorithmVersion: string;
+  generatedAt: number;
+  generatedFrom:
+    | "league_builder"
+    | "team_hub"
+    | "pregame_recalculate"
+    | "user_registered_smb4_optimal"
+    | "game_lock";
+  sourceConfidence: OptimalLineupSourceConfidence;
+  dhEnabled?: boolean;
+
+  slots: OptimalLineupSlot[];
+  projectedTeamLineupKblWpa: number;
+  confidence: "high" | "medium" | "low";
+}
+
 interface ManagerLineupDeltaRecord {
   decisionId: string;
   gameId: string;
@@ -193,35 +253,238 @@ interface ManagerLineupDeltaRecord {
   decisionType: "lineup_construction";
   inferenceMethod: "automatic";
 
-  starterPlayerId: string;
-  battingOrderSlot: number;
-  defensivePosition: string;
-  starterRole: "position_player" | "starting_pitcher" | "designated_hitter";
+  optimalSnapshotId: string;
+  opposingPitcherHand: OpposingPitcherHand;
+  algorithmVersion: string;
 
-  actualPlayerKblWpa: number;
-  replacementExpectedKblWpa: number;
-  rawPerformanceDelta: number;
+  chosenPlayerId: string;
+  chosenPlayerName?: string;
+  chosenBattingOrderSlot: number;
+  chosenDefensivePosition: string;
+
+  optimalPlayerId: string;
+  optimalPlayerName?: string;
+  optimalBattingOrderSlot: number;
+  optimalDefensivePosition: string;
+
+  chosenProjectedKblWpa: number;
+  optimalProjectedKblWpa: number;
+  projectedOpportunityCost: number;
+
+  actualChosenKblWpa: number;
+  realizedVsChosenProjection: number;
+  actualVsOptimalProjection: number;
+
   managerShare: number;
   managerWpa: number;
+  capApplied?: number;
+  confidence: "high" | "medium" | "low";
+  wpaModelVersion?: string;
 }
 ```
 
-V1 replacement expectation:
+#### Optimal Lineup Lifecycle
 
-1. If calibrated mode/position/order-slot replacement baselines exist, use them.
-2. If no baseline exists, use `0.000` as the neutral replacement expectation and mark confidence `low`.
-3. Store `rawPerformanceDelta` separately from `managerWpa` so future calibration can re-score lineup decisions without losing source data.
+1. League Builder stores a default Optimal Lineup vs RHP and vs LHP for each team.
+2. Exhibition pregame loads the relevant Optimal Lineup automatically based on the opposing starting pitcher's throwing hand.
+3. Elimination and Franchise Team Hub expose the same Optimal Lineup calculator, but include current context such as mojo, fitness, availability, and recent performance.
+4. Pregame surfaces should allow `Apply Optimal`, `Compare Current`, `Recalculate`, and `Set Current as Optimal`.
+5. If the opposing starting pitcher changes handedness, pregame must offer to switch to the matching vs RHP/vs LHP Optimal Lineup, recalculate, or keep the current benchmark.
+6. Roster changes should invalidate or mark stale the stored Optimal Lineup snapshots until recalculated.
+7. At game lock, store the Optimal Lineup snapshot used for comparison and the manager's chosen lineup snapshot.
+
+#### Pregame Optimal Lineup Controls
+
+Pregame should include an Optimal Lineup control cluster:
+
+```text
+Optimal Lineup: vs RHP / vs LHP
+[Apply Optimal] [Compare Current] [Recalculate] [Set Current as Optimal]
+```
+
+If the opposing starter changes from right-handed to left-handed or left-handed to right-handed, show a non-blocking prompt:
+
+```text
+Opposing starter changed to LHP. Switch to vs LHP optimal?
+[Switch Optimal] [Recalculate] [Keep Current]
+```
+
+Control behavior:
+
+| Control | Behavior |
+| --- | --- |
+| Apply Optimal | Replaces the current starting lineup with the active Optimal Lineup snapshot. |
+| Compare Current | Shows projected gaps between the current lineup and active Optimal Lineup without changing the lineup. |
+| Recalculate | Runs the KBL optimal-lineup engine for the active roster, game rules, opposing pitcher hand, and mode context. |
+| Set Current as Optimal | Registers the current lineup/order/positions as the benchmark Optimal Lineup for the active hand and game rules. |
+
+`Set Current as Optimal` exists because SMB4 itself can generate optimized lineups, including pregame-only RHP/LHP optimization and DH/non-DH context. The user may allow SMB4 to optimize, enter that lineup in KBL Tracker, and register it as the official benchmark before making their own lineup changes.
+
+Rules:
+
+1. `Set Current as Optimal` is available only before lineup lock.
+2. After lineup lock, the Optimal Lineup snapshot is read-only for that game.
+3. User-registered SMB4 optimal snapshots must be tagged `generatedFrom: "user_registered_smb4_optimal"` and `sourceConfidence: "user_registered"`.
+4. User-registered snapshots are valid only for the current roster, opposing pitcher hand, and DH/non-DH rules.
+5. If roster/availability/game-rule context changes, mark the snapshot stale and require switch, recalculate, or re-register.
+
+#### Optimal Lineup Generator
+
+The generator considers all available roster position players, not only bench players.
+
+This matters because a bench player can displace a starter, and the displaced starter may become the best option at another position. The problem is full lineup construction, not isolated bench replacement.
+
+Required v1 behavior:
+
+1. Produce a legal lineup and defensive assignment for the game's rules.
+2. Generate separate optimal snapshots vs RHP and vs LHP.
+3. Exclude starting-pitcher choice from Lineup Delta in v1. Pitcher usage belongs to Tactical Manager WPA and Deployment WPA until a separate pitching-plan model exists.
+4. Use positional fit as a hard/primary constraint.
+5. Use projected value as the second-order ranking:
+   - Exhibition: ratings, handedness/platoon, and position-specific ratings.
+   - Elimination/Franchise: ratings plus mojo, fitness, availability, and recent performance when available.
+6. Prefer better defensive fit at premium positions (`C`, `SS`, `CF`, `2B`) when projected values are close.
+7. Use a deterministic `algorithmVersion` so old lineup comparisons are reproducible.
+
+Exact assignment or search is preferred because SMB rosters are small. If a simpler v1 implementation is needed, use deterministic greedy assignment, but apply it to the whole available roster rather than only bench players.
+
+Traits should influence optimal lineup construction, but they must be introduced carefully. Do not guess at trait value in a way that creates unfair manager penalties.
+
+Trait modeling phases:
+
+1. v1 engine-calculated snapshots: ratings, handedness/platoon, position fit, batting-order archetypes, and basic defensive priority.
+2. v1 user-registered snapshots: allow SMB4's own optimizer to stand in for trait-aware optimization via `Set Current as Optimal`.
+3. v1.5: add only well-understood trait modifiers with documented weights and tests.
+4. v2: full trait-aware optimizer with validated trait interactions.
+
+Until trait weights are reliable, user-registered SMB4 optimal snapshots should be considered a high-quality benchmark because SMB4 can account for internal game logic we may not fully model yet.
+
+#### Deviation Mapping
+
+Lineup Delta records are created for meaningful deviations from the relevant Optimal Lineup snapshot.
+
+Use greedy largest-gap mapping to explain and score deviations:
+
+1. Compare the chosen lineup to the optimal snapshot.
+2. Identify players/positions/order slots where the chosen lineup differs.
+3. Rank deviations by largest projected opportunity cost.
+4. Exhaust each chosen player and each optimal slot once.
+5. Store one `ManagerLineupDeltaRecord` per mapped deviation.
+
+This lets the analyzer handle cases where a benched starter could have replaced another starter at a different position without double-using the same player in the explanation.
+
+If the chosen lineup exactly matches the Optimal Lineup, no Lineup Delta records should be created and the team Lineup Delta is `0.000`.
+
+#### Scoring Philosophy
+
+A manager should not receive final positive credit merely because a suboptimal projected lineup performed less badly than projected. The official score is against the Optimal Lineup expectation because that is the counterfactual decision benchmark.
+
+At game lock, `projectedOpportunityCost` may be shown as pending expected lineup risk, but it should not be counted as final official Manager Value until the game-end actual result resolves.
+
+However, the system should store both pieces for narrative:
+
+```text
+projectedOpportunityCost = chosenProjectedKblWpa - optimalProjectedKblWpa
+realizedVsChosenProjection = actualChosenKblWpa - chosenProjectedKblWpa
+actualVsOptimalProjection = actualChosenKblWpa - optimalProjectedKblWpa
+```
+
+Official Lineup Delta uses:
+
+```text
+managerWpa = clamp(actualVsOptimalProjection * 0.25, per-deviation cap)
+```
+
+Example:
+
+```text
+Chosen lineup projected vs optimal: -0.100
+Actual chosen lineup result:        -0.050
+
+realizedVsChosenProjection = +0.050
+actualVsOptimalProjection  = -0.050
+```
+
+The manager beat the risk projection, which is useful narrative context, but still underperformed the Optimal Lineup benchmark by `-0.050`. The official Lineup Delta remains negative after manager share/caps.
+
+If the actual chosen result exceeds the Optimal Lineup expectation, the manager can earn positive Lineup Delta for a successful deviation.
 
 V1 lineup manager share:
 
 ```text
-rawPerformanceDelta = actualPlayerKblWpa - replacementExpectedKblWpa
-managerWpa = clamp(rawPerformanceDelta * 0.25, -0.250, +0.250)
+managerWpa = clamp(actualVsOptimalProjection * 0.25, -0.250, +0.250)
 ```
 
-Cap total team lineup delta to `[-0.750, +0.750]` per game. This keeps lineup choice meaningful without letting a manager fully absorb player performance.
+Cap total team lineup delta to `[-0.750, +0.750]` per game. This keeps lineup choice meaningful without letting a manager absorb normal player performance variance.
 
-### 3.4 Play-Log Intent Model
+### 3.4 Deployment Stint Record
+
+Deployment stints track manager personnel decisions whose consequences can persist beyond the immediate tactical window.
+
+```typescript
+type ManagerDeploymentRole =
+  | "pinch_hitter_remaining_in_game"
+  | "pinch_runner"
+  | "defensive_position"
+  | "pitcher"
+  | "catcher"
+  | "kept_in"
+  | "manual_deployment";
+
+interface ManagerDeploymentStintRecord {
+  stintId: string;
+  gameId: string;
+  managerId: string;
+  teamId: string;
+  playerId: string;
+  playerName: string;
+  deploymentRole: ManagerDeploymentRole;
+  position?: string;
+
+  openedByEventId: string;
+  openedAtEventIndex: number;
+  openedByDecisionId?: string;
+  openedByDecisionType?: ManagerDecisionType;
+  openSnapshot: {
+    inning: number;
+    half: "top" | "bottom";
+    outs: number;
+    scoreDifferentialForTeam: number;
+    teamWinProbability: number;
+  };
+
+  closedByEventId?: string;
+  closedAtEventIndex?: number;
+  closeReason?: "removed" | "position_changed" | "role_changed" | "inning_end" | "game_end" | "manual_close";
+
+  linkedOutcomeEventIds: string[];
+  rawLinkedPlayerWpa: number;
+  rawLinkedTeamWpa: number;
+  managerShare: number;
+  managerDeploymentWpa: number;
+  capApplied?: number;
+  confidence: "high" | "medium" | "low";
+  wpaModelVersion?: string;
+  displayTitle: string;
+  displaySummary: string;
+}
+```
+
+Deployment stints are separate from short tactical decision records. A single substitution can create both:
+
+1. A short Tactical Manager WPA record, resolved on the immediate configured window.
+2. A longer Deployment WPA stint, resolved from later linked outcomes while the player remains deployed.
+
+Example:
+
+```text
+Pinch runner enters -> Tactical PR window opens.
+Runner steals second -> Tactical PR/steal value resolves.
+Runner stays in game and moves to CF -> Defensive deployment stint opens.
+Later CF diving catch -> Deployment WPA receives a manager overlay share of the linked fielding WPA.
+```
+
+### 3.5 Play-Log Intent Model
 
 Do not ask the user to confirm manager intent when the GameTracker input already carries that intent.
 
@@ -242,7 +505,7 @@ Manager attribution should come from structured play-log semantics first, play-l
 
 This keeps the UI honest: structured inputs create structured manager decisions, while prompts exist only to fix ambiguous or missing data.
 
-### 3.5 Enrichment Recalculation Contract
+### 3.6 Enrichment Recalculation Contract
 
 Manager WPA must be recomputed from the current play log and enrichment state, the same way player KBL WPA is recomputed from current event/enrichment state.
 
@@ -317,17 +580,17 @@ For defensive-manager decisions, `teamWinProbability*` is from the fielding/pitc
 | Out advancing/send | 0.35 only when play-log marks `manager_send`; 0.00 when marked or inferred as runner choice. |
 | Hit-and-run | 0.35 if manually confirmed. |
 | Defensive alignment | 0.10 if manually confirmed and linked to a fielding outcome. |
-| Lineup construction | 0.25 of player-vs-replacement delta, capped. |
+| Lineup construction | 0.25 of mapped deviation actual-vs-optimal projection, capped. |
 
 These shares are Manager WPA overlay weights only. They do not affect player KBL WPA.
 
 ### 4.1 Game-Length Weighted Standards
 
-Manager Moment standards must scale with scheduled game length. Most SMB games are 7 or 9 innings, but 5- and 6-inning games must remain supported.
+Manager Moment standards must scale with scheduled game length. Any integer game length from 1 through 9 must remain supported; the table below provides presets for common formats.
 
 ```typescript
 interface ManagerDecisionStandards {
-  scheduledInnings: 5 | 6 | 7 | 9 | number;
+  scheduledInnings: number;
   lateInningStart: number;
   finalPhaseStart: number;
   criticalLeverageIndex: number;
@@ -418,7 +681,7 @@ Recommendation objects are not Manager WPA records. They become manager decision
 
 | Decision | V1 Behavior | Trigger | Acting Manager | UI Treatment | Scoring Window |
 | --- | --- | --- | --- | --- | --- |
-| Lineup construction | Count in v1 | Starting lineup locked | Own-team manager | Endgame recap card | End of game, each starter vs replacement expectation |
+| Lineup construction | Count in v1 | Starting lineup locked and chosen lineup deviates from Optimal Lineup | Own-team manager | Endgame recap card | End of game, mapped deviations vs optimal projection |
 | Intentional walk | Count in v1 | `IBB` result | Defensive manager | User-action card/edit chip | From before IBB through next batter PA, or immediate IBB if inning ends first |
 | Pitching change | Count in v1 | Pitcher changed | Defensive manager | User-action card/edit chip | From before change through next completed PA; optionally extend to half-inning for feed context |
 | Leave pitcher in | Count in v1 | High-leverage pitcher-stays opportunity | Defensive manager | Situational prompt | From prompt/decision point through next completed PA |
@@ -713,6 +976,109 @@ When committed events change:
 6. Recompute Manager WPA totals using resolved records only.
 7. Persist the refreshed manager decision ledger.
 
+### 8.4 Persistent Deployment WPA
+
+Short decision windows are intentionally narrow, but they do not capture every meaningful managerial effect. A manager's decision to put a player into the game, move a player to a position, or keep a player in a role can matter later, after the tactical window has closed.
+
+Deployment WPA solves that gap by replaying the committed game log as a role/stint ledger.
+
+#### Stint Lifecycle
+
+```text
+opened -> active -> closed -> scored
+```
+
+Open a deployment stint when:
+
+1. A substitute enters and remains in the game after the immediate tactical event.
+2. A pinch hitter completes the PA and remains in the field or batting order.
+3. A pinch runner remains in the game as a runner, batter, or fielder.
+4. A pitcher enters the game.
+5. A player changes defensive position.
+6. The user explicitly chooses to keep a player in after a recommendation/prompt.
+7. A manual deployment note is entered.
+
+Close a deployment stint when:
+
+1. The player is removed from the game.
+2. The player changes the tracked position or role.
+3. A pitcher is replaced.
+4. A pinch runner scores/is out and does not remain in the game.
+5. The half-inning ends for inning-scoped defensive alignments, unless the same player remains in the same defensive role next inning.
+6. The game ends.
+7. The user manually closes a manually created deployment.
+
+#### Linked Outcomes
+
+While active, a stint links only outcomes relevant to the deployed role:
+
+| Deployment Role | Linked Outcomes |
+| --- | --- |
+| Pinch hitter remaining in game | Later batting WPA, baserunning WPA, and defensive WPA only after the immediate PH PA window has resolved. |
+| Pinch runner | Baserunning WPA while on base; later batting/fielding WPA only if the player remains in the game after the runner terminal event. |
+| Defensive position | Fielding WPA at that position; optional throwing/cutoff outcomes if the event log can identify position responsibility. |
+| Pitcher | Pitching WPA for PAs faced while the pitcher remains in the game. |
+| Catcher | Catching WPA for caught stealing, passed ball/wild pitch responsibility if tracked, framing/blocking only if future inputs support it. |
+| Kept in | Only outcomes that occur after the explicit keep decision and before removal/role change/game end. |
+| Manual deployment | Only manually linked outcomes, or outcomes matching the manually selected role. |
+
+Do not link every future event by the player to the manager. The role has to match the manager's deployment decision.
+
+#### Scoring
+
+Deployment WPA uses already-derived player/team WPA outcomes as input, then applies a manager overlay share.
+
+```text
+rawLinkedPlayerWpa = sum(relevant player WPA while stint is active)
+rawLinkedTeamWpa = sum(relevant team WPA window values when player-level split is unavailable)
+managerDeploymentWpa = clamp((rawLinkedPlayerWpa or rawLinkedTeamWpa) * managerShare, stintCap)
+```
+
+Recommended v1 shares:
+
+| Deployment Role | Share | Suggested Cap |
+| --- | ---: | ---: |
+| Pinch hitter remaining in game | 15% | +/-0.100 |
+| Pinch runner | 20% | +/-0.125 |
+| Defensive position | 20% | +/-0.150 |
+| Pitcher | 15% | +/-0.200 |
+| Catcher | 15% | +/-0.125 |
+| Kept in | 15% | +/-0.150 |
+| Manual deployment | 10% | +/-0.100 |
+
+Caps are per stint. Team-level Deployment WPA should also have a per-game cap, recommended `[-0.500, +0.500]` in v1, so managers do not absorb too much player performance.
+
+#### Relationship To Other Manager Layers
+
+Deployment WPA must not double-score the same immediate tactical window.
+
+Rules:
+
+1. The immediate PH PA belongs to Tactical Manager WPA, not Deployment WPA.
+2. The immediate PR runner terminal event belongs to Tactical Manager WPA. If the player stays in the game afterward, a new role-specific deployment stint may open.
+3. The first PA after a pitching change belongs to Tactical Manager WPA. Pitcher deployment can begin after that configured tactical window resolves, or can include later PAs only.
+4. Defensive sub/position-change Tactical WPA may still resolve on the first linked fielding event or half-inning end in v1. Deployment WPA should begin after that first tactical endpoint if the player remains in that role.
+5. Lineup Delta covers starters as game-level lineup construction. Do not open default deployment stints for every starter unless the user later makes an explicit keep-in or position-change decision.
+6. Player KBL WPA remains unchanged. Deployment WPA is overlay-only.
+
+#### Example: Pinch Runner To Center Field
+
+```text
+B2: Manager inserts fast player as pinch runner.
+B2: Player steals second.
+    Tactical Manager WPA records the PR/steal outcome.
+B2 end: Player remains in the game and is moved to CF.
+    Defensive position deployment stint opens.
+T3: Player makes diving catch in a blowout.
+    Stint links tiny fielding WPA.
+B3: In a tied 3-inning game, player makes diving catch.
+    Stint links high-leverage fielding WPA.
+Game end/removal/position change:
+    Stint closes and Deployment WPA is scored.
+```
+
+This gives the user a 360-degree view: the feed can show the immediate tactical move, then later show that the same deployment decision continued to matter.
+
 ---
 
 ## 9. Integration With Current KBL WPA
@@ -759,12 +1125,14 @@ Store manager decisions independently from player KBL WPA credits:
 
 ```typescript
 interface PersistedGameState {
+  optimalLineupSnapshots?: OptimalLineupSnapshot[];
   managerDecisions?: ManagerDecisionRecord[];
+  managerDeploymentStints?: ManagerDeploymentStintRecord[];
   managerLineupDeltas?: ManagerLineupDeltaRecord[];
 }
 ```
 
-Completed game records in Exhibition, Elimination, and Franchise must preserve both managers' decision ledgers.
+Completed game records in Exhibition, Elimination, and Franchise must preserve the game-lock Optimal Lineup snapshots, both managers' decision ledgers, deployment stints, and lineup deltas.
 
 ---
 
@@ -777,7 +1145,8 @@ Game Detail should show Manager WPA as its own surface.
 1. Player KBL WPA leaderboard, unchanged and manager-free by default.
 2. Manager WPA Overlay panel.
 3. Manager decision timeline.
-4. Lineup Delta recap.
+4. Deployment WPA recap.
+5. Lineup Delta recap.
 
 ### Manager WPA Overlay Panel
 
@@ -788,8 +1157,9 @@ Show one card per team manager:
 | Manager | Vinnie Hart |
 | Team | Moose |
 | Tactical Manager WPA | `+0.184` |
+| Deployment WPA | `+0.046` |
 | Lineup Delta | `-0.062` |
-| Manager Value | `+0.122` |
+| Manager Value | `+0.168` |
 | Best Decision | "Pinch hitter in 7th, +0.081" |
 | Worst Decision | "Left pitcher in, -0.104" |
 
@@ -809,6 +1179,41 @@ Show one card per team manager:
 
 Passive non-scored moments may appear in timeline only if the user toggles "Show passive moments."
 
+### Lineup Delta Recap
+
+Lineup Delta should show the relevant Optimal Lineup snapshot and only the meaningful deviations from that snapshot.
+
+| Column | Description |
+| --- | --- |
+| Hand | RHP/LHP snapshot used |
+| Chosen | Player/position/order the manager started |
+| Optimal | Player/position/order from the Optimal Lineup |
+| Projected Gap | `chosenProjectedKblWpa - optimalProjectedKblWpa` |
+| Actual vs Chosen Projection | Did the choice beat or miss its own projection? |
+| Actual vs Optimal | Official raw lineup delta before manager share |
+| Manager Share | 25% |
+| Lineup Delta | Signed manager overlay |
+
+If the manager used the Optimal Lineup, show "No lineup deviations" and `0.000` Lineup Delta rather than assigning blame for normal player underperformance.
+
+### Deployment Recap
+
+Deployment WPA should be visually separate from the tactical timeline. It is a stint table, not a single-play feed.
+
+| Column | Description |
+| --- | --- |
+| Opened | Inning/half when the deployment began |
+| Closed | Inning/half or reason the deployment ended |
+| Manager | Manager name |
+| Player | Deployed player |
+| Role | PR, CF, P, kept in, etc. |
+| Linked Outcomes | Count and short labels of linked player/team WPA events |
+| Raw WPA | Sum of linked player/team WPA before manager share |
+| Share | Manager share |
+| Deployment WPA | Signed manager overlay |
+
+Clicking a deployment stint should open details showing the source decision, active window, linked outcome events, and why the stint closed.
+
 ---
 
 ## 11. Almanac Display
@@ -820,7 +1225,9 @@ Add a Manager section to the Almanac.
 Almanac manager views must consume committed completed-game manager data:
 
 ```typescript
+CompletedGameRecord.optimalLineupSnapshots
 CompletedGameRecord.managerDecisions
+CompletedGameRecord.managerDeploymentStints
 CompletedGameRecord.managerLineupDeltas
 ```
 
@@ -835,12 +1242,16 @@ Manager cards should support:
 3. Mode/instance scope selectors.
 4. Win/loss record.
 5. Tactical Manager WPA.
-6. Lineup Delta.
-7. Manager Value.
-8. Decisions by type.
-9. Best and worst decisions.
-10. Passive style indicators.
-11. Performance of players managed, shown as descriptive context rather than player value transferred to the manager.
+6. Deployment WPA.
+7. Lineup Delta.
+8. Manager Value.
+9. Decisions by type.
+10. Lineup deviations vs Optimal Lineup.
+11. Deployment stints by role/position.
+12. Best and worst decisions.
+13. Best and worst deployments.
+14. Passive style indicators.
+15. Performance of players managed, shown as descriptive context rather than player value transferred to the manager.
 
 ### Aggregation Scopes
 
@@ -858,10 +1269,13 @@ Create separate manager leaderboards:
 
 1. Manager Value.
 2. Tactical Manager WPA.
-3. Lineup Delta.
-4. Best single-game Manager WPA.
-5. Best/worst decision.
-6. Tendencies: steal rate, bunt rate, bullpen aggressiveness, PH rate, PR rate, IBB rate.
+3. Deployment WPA.
+4. Lineup Delta.
+5. Best single-game Manager WPA.
+6. Best/worst decision.
+7. Best/worst deployment.
+8. Best/worst lineup deviation.
+9. Tendencies: steal rate, bunt rate, bullpen aggressiveness, PH rate, PR rate, IBB rate, defensive-deployment value, optimal-lineup deviation rate.
 
 Do not put managers into player leaderboards.
 
@@ -878,7 +1292,7 @@ Use Manager WPA / Manager Value as the new manager system because it is:
 1. Grounded in actual game win-probability movement.
 2. Compatible with KBL WPA event attribution.
 3. Symmetric for home and away managers.
-4. Able to separate tactical decisions from lineup construction.
+4. Able to separate tactical decisions, persistent deployments, and lineup construction.
 5. Safer for leaderboards because it is overlay-only.
 
 ### Keep Temporarily Only For Compatibility
@@ -900,7 +1314,18 @@ Do not maintain mWAR as a separate truth source.
 | Risk | Mitigation |
 | --- | --- |
 | Manager gets credit for player execution | Manager WPA is overlay-only; use manager shares and caps. |
+| Deployment WPA turns into "manager gets all future player credit" | Link only role-relevant outcomes while the deployment stint is active; cap per stint and per team game. |
+| Double-counting tactical and deployment windows | Deployment stints begin after the immediate tactical endpoint for PH/PR/pitching-change/defensive-sub decisions. |
+| Starter performance double-counted as deployment | Starters are handled by Lineup Delta; do not create default deployment stints for starters without an explicit later keep-in/position-change decision. |
+| Long stints hide important moments | Store linked outcome event IDs and show expandable deployment details rather than one vague aggregate row. |
+| Position-change ambiguity | Require role/position matching before linking fielding WPA to a deployment stint; otherwise keep confidence low or manual-only. |
 | Lineup Delta overwhelms tactical decisions | Use 25% share and per-player/team caps. |
+| Optimal Lineup creates a default negative before the game starts | Store projected opportunity cost as pending/context only; official Lineup Delta resolves at game end against actual deviation result vs optimal projection. |
+| User chooses optimal lineup and players fail | Do not create Lineup Delta records when the chosen lineup matches the Optimal Lineup; player failure remains player WPA, not manager lineup blame. |
+| Same roster player appears as multiple replacement explanations | Use whole-roster Optimal Lineup snapshots and greedy largest-gap deviation mapping that exhausts each chosen player and optimal slot once. |
+| Trait model produces unfair optimal benchmarks | Use conservative trait modeling, document weights, and allow user-registered SMB4 optimal snapshots before full trait validation. |
+| User registers current lineup as optimal after making manager choices | `Set Current as Optimal` is available only before lineup lock; after lock, the benchmark snapshot is read-only. |
+| Opposing starter handedness changes after lineup is prepared | Pregame prompts to switch to the matching hand snapshot, recalculate, or keep current benchmark before lineup lock. |
 | False situational prompts | Keep threshold high in v1, allow dismiss/manual note, and mark confidence. |
 | Interaction fatigue | Use non-modal recommendation cards only when the user can still act; use passive feed rows for everything else. |
 | Confirmation fatigue on obvious events | SB/CS, bunt, and squeeze come from structured inputs and show edit chips, not yes/no prompts. |
@@ -914,7 +1339,8 @@ Do not maintain mWAR as a separate truth source.
 | Manual manager send on runner event after commit | Allow post-play edit to add/remove manager decision and recalculate manager overlay only. |
 | Bunt result without contact quality | Show an ambiguity prompt/edit chip before scoring Manager WPA. |
 | Enrichment edit creates stale manager value | Store decision provenance and recompute derived Manager WPA after every manager-relevant edit. |
-| Replacement baseline unavailable | Use `0.000`, low confidence, and retain raw data for future recalibration. |
+| Deployment stint stale after substitution edit | Rebuild the deployment ledger from the committed event log on every manager-relevant commit. |
+| Optimal projection confidence is low | Store confidence and algorithm version; keep caps conservative and preserve projection components for recalibration. |
 | Existing mWAR records | Preserve old records but label as legacy in migrations/displays. |
 
 ---
@@ -950,9 +1376,26 @@ Do not maintain mWAR as a separate truth source.
 25. Editing an outcome event inside a decision window recomputes the linked manager decision.
 26. Draft enrichment edits do not persist Manager WPA until the edit is committed.
 27. `Return to Live` / enrichment commit triggers Manager WPA recomputation from the committed event log.
-28. Lineup Delta calculates starter actual KBL WPA minus replacement expectation, applies 25% share, and caps values.
-29. Both managers' decisions persist to completed game records.
-30. Player KBL WPA totals are unchanged when Manager WPA is enabled.
+28. Optimal Lineup generator creates separate reproducible snapshots vs RHP and vs LHP.
+29. Pregame loads the relevant Optimal Lineup based on opposing starter hand.
+30. Pregame can switch the active benchmark when opposing starter hand changes before lineup lock.
+31. Pregame can recalculate the active Optimal Lineup from KBL engine inputs before lineup lock.
+32. Pregame can register the current lineup as SMB4 optimal before lineup lock.
+33. After lineup lock, the game-lock Optimal Lineup snapshot is read-only for that game.
+34. Lineup Delta creates records only for meaningful deviations from the relevant Optimal Lineup snapshot.
+35. If the chosen lineup matches the Optimal Lineup, Lineup Delta is `0.000` regardless of player underperformance.
+36. A deviation that beats its chosen projection but remains below the Optimal Lineup benchmark still scores negative official Lineup Delta while preserving positive narrative context.
+37. Lineup Delta applies 25% share and per-deviation/team caps.
+38. Both managers' decisions persist to completed game records.
+39. Player KBL WPA totals are unchanged when Manager WPA is enabled.
+40. Pinch-runner substitution opens an eligible deployment stint only if the player remains in the game after the immediate runner window.
+41. Position change opens a defensive-position deployment stint tied to the moved player's new position.
+42. Defensive-position deployment links only fielding WPA events at the tracked position.
+43. A deployment stint closes when the player is removed, changes tracked position/role, or the game ends.
+44. Deployment WPA excludes the immediate tactical endpoint for PH/PR/pitching-change/defensive-sub decisions.
+45. Deployment WPA applies configured share and per-stint cap after linked player/team WPA is summed.
+46. Starter performance does not create Deployment WPA unless a later explicit keep-in or position-change decision opens a stint.
+47. Player KBL WPA totals are unchanged when Deployment WPA is enabled.
 
 ### Integration Tests
 
@@ -970,10 +1413,17 @@ Do not maintain mWAR as a separate truth source.
 12. Record PH/PR/defensive-sub decisions and verify each waits for its configured endpoint.
 13. Edit the next PA after an IBB and verify IBB Manager WPA recomputes.
 14. Verify high-confidence recommendation cards open the relevant GameTracker action surface.
-15. Complete a game with lineup changes and verify end-game Lineup Delta summary.
+15. Complete a game with lineup deviations from the relevant Optimal Lineup and verify end-game Lineup Delta summary.
 16. Verify Game Detail player leaderboard is unchanged with manager overlay disabled.
 17. Verify Game Detail Manager WPA panel displays both managers.
 18. Verify Almanac manager card aggregates by manager, team tenure, mode, and instance.
+19. Complete a game where a pinch runner steals, stays in the game, moves to CF, and later records a high-WPA catch; verify Tactical WPA and Deployment WPA are separate.
+20. Verify a blowout defensive play linked to a deployment stint produces small Deployment WPA, while a later tied final-inning defensive play produces larger Deployment WPA.
+21. Verify removing the deployed player closes the stint and prevents later player events from linking to that manager decision.
+22. Verify editing a substitution or position change rebuilds deployment stints and updates Game Detail/Almanac committed values.
+23. In pregame, change the opposing starter hand and verify the UI can switch to the matching Optimal Lineup snapshot before lineup lock.
+24. In pregame, use `Set Current as Optimal` and verify the game-lock benchmark is tagged `user_registered_smb4_optimal`.
+25. Verify `Set Current as Optimal` is unavailable after lineup lock and cannot erase a manager deviation after the fact.
 
 ### Regression Tests
 
@@ -1043,11 +1493,28 @@ Do not maintain mWAR as a separate truth source.
 
 ### Phase 6: Lineup Delta
 
-1. Snapshot starting lineup at game lock.
-2. At game end, derive each starter's player KBL WPA.
-3. Compare against replacement expectation.
-4. Apply 25% manager share and caps.
-5. Persist `managerLineupDeltas`.
+1. Add `OptimalLineupSnapshot` contracts and storage.
+2. Add League Builder Optimal Lineup generation for each team vs RHP and vs LHP.
+3. Add Team Hub recalculation for Elimination and Franchise using mode context.
+4. Pregame loads the relevant Optimal Lineup by opposing starter hand and offers `Apply Optimal`, `Compare Current`, `Recalculate`, and `Set Current as Optimal`.
+5. At game lock, snapshot the chosen lineup and the relevant Optimal Lineup.
+6. At game end, derive actual KBL WPA only for mapped lineup deviations.
+7. Score deviations against the Optimal Lineup projected benchmark, while storing chosen-projection over/underperformance for narrative context.
+8. Apply 25% manager share and caps.
+9. Persist `optimalLineupSnapshots` and `managerLineupDeltas`.
+10. Add tests that `Set Current as Optimal` is pre-lock only and that handedness changes switch/recalculate the benchmark before game lock.
+
+### Phase 6B: Deployment WPA
+
+1. Add `ManagerDeploymentStintRecord` contracts and completed-game storage.
+2. Implement a pure deployment-ledger derivation pass that replays committed substitutions, position changes, pitcher changes, and explicit keep-in decisions.
+3. Open deployment stints for eligible non-starter role changes and explicit keep-in decisions.
+4. Close stints on removal, role/position change, runner terminal without staying in game, or game end.
+5. Link role-relevant player/team WPA outcomes while the stint is active.
+6. Exclude the immediate tactical endpoint from Deployment WPA to avoid double-counting Tactical Manager WPA.
+7. Apply role-specific manager shares and per-stint/team caps.
+8. Persist `managerDeploymentStints`.
+9. Add Game Detail, Postgame, and Almanac displays for Deployment WPA as a separate Manager Value component.
 
 ### Phase 7: Recommendation Engine
 
@@ -1061,7 +1528,7 @@ Do not maintain mWAR as a separate truth source.
 
 ### Phase 8: Almanac
 
-1. Add committed-data-only manager aggregation helpers over `CompletedGameRecord.managerDecisions` and `managerLineupDeltas`.
+1. Add committed-data-only manager aggregation helpers over `CompletedGameRecord.optimalLineupSnapshots`, `managerDecisions`, `managerDeploymentStints`, and `managerLineupDeltas`.
 2. Add Manager Almanac section.
 3. Add manager cards and team-tenure views.
 4. Add mode/instance scoped aggregations.
@@ -1089,9 +1556,18 @@ Do not maintain mWAR as a separate truth source.
 7. Do not use fixed mWAR decision values for new Manager WPA.
 8. Do not block game flow with required manager prompts.
 9. Do not lose prompt/feed records when a decision resolves to `0.000`.
-10. Do not require calibrated replacement baselines before Lineup Delta can ship.
+10. Do not require a fully calibrated projection model before Lineup Delta can ship; use versioned conservative Optimal Lineup projections and preserve inputs for recalibration.
 11. Do not ask for yes/no confirmation when SB/CS, bunt, or squeeze intent is already captured by structured play-log input.
 12. Do not let derived Manager WPA become stale after play-log enrichment changes.
 13. Do not show a recommendation card when the engine cannot identify a concrete action the user can still take.
 14. Do not persist Manager WPA from draft enrichment edits before `Return to Live` / commit.
 15. Do not put recommendation eligibility logic directly inside presentation components; render recommendation objects from a testable engine.
+16. Do not use short tactical windows as the only source of manager personnel value; persistent deployment decisions need their own stint ledger.
+17. Do not link every future player outcome to the manager; Deployment WPA must match the active role/position and close on removal or role change.
+18. Do not double-count the immediate tactical endpoint in both Tactical Manager WPA and Deployment WPA.
+19. Do not open default Deployment WPA stints for every starter; starters belong to Lineup Delta unless a later explicit manager decision changes their role.
+20. Do not assign Lineup Delta to an optimal lineup just because players underperform; Lineup Delta scores deviations from the Optimal Lineup.
+21. Do not compare a chosen starter only against bench players; the Optimal Lineup generator must consider all available roster position players.
+22. Do not include starting pitcher choice in Lineup Delta v1.
+23. Do not let the user register or replace the game-lock Optimal Lineup after lineup lock.
+24. Do not require KBL's trait model to be perfect before shipping; support user-registered SMB4 optimal benchmarks and add trait weights only when tested.

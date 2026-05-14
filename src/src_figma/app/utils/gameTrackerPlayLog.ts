@@ -289,6 +289,7 @@ function buildRunnerSubEntries(event: AtBatEvent): RunnerSubEntry[] | undefined 
       isTootblan: ro.isTootblan,
       isOutAdvancing: ro.isOutAdvancing,
       managerIntent: ro.managerIntent,
+      managerRunPlay: ro.managerRunPlay,
       managerDecisionSource: ro.managerDecisionSource,
       managerDecisionNote: ro.managerDecisionNote,
       errorType: ro.errorType,

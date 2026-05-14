@@ -83,6 +83,60 @@ function createBetweenPlay(
   };
 }
 
+function createPromptedKeepCurrent(
+  overrides: Partial<BetweenPlayEvent> & {
+    decisionType?: "leave_pitcher_in" | "let_batter_hit";
+    trackedPlayerId?: string;
+    teamId?: string;
+    managerId?: string;
+    opponentTeamId?: string;
+    provenanceKey?: string;
+  } = {},
+): BetweenPlayEvent {
+  const decisionType = overrides.decisionType ?? "leave_pitcher_in";
+  const trackedPlayerId =
+    overrides.trackedPlayerId ??
+    (decisionType === "leave_pitcher_in" ? "home-pitcher" : "away-batter");
+  const teamId = overrides.teamId ?? (decisionType === "leave_pitcher_in" ? "home" : "away");
+  const managerId =
+    overrides.managerId ?? (teamId === "home" ? MANAGERS.home : MANAGERS.away);
+  const opponentTeamId =
+    overrides.opponentTeamId ?? (teamId === "home" ? "away" : "home");
+  const action = decisionType === "leave_pitcher_in" ? "keep_pitcher" : "let_batter_hit";
+
+  return createBetweenPlay({
+    ...overrides,
+    type: "manager_moment",
+    pitcherChange: undefined,
+    substitution: undefined,
+    managerMoment: {
+      leverageIndex: 2.1,
+      decisionType,
+      context: overrides.provenanceKey ?? `${decisionType}-prompt`,
+    },
+    promptedManagerDecision: {
+      decisionType,
+      action,
+      source: "recommendation",
+      decisionSource: "situational_prompt",
+      confidence: "high",
+      managerId,
+      teamId,
+      opponentTeamId,
+      trackedPlayerIds: [trackedPlayerId],
+      involvedPlayerIds: [trackedPlayerId],
+      playerId: trackedPlayerId,
+      leverageIndex: 2.1,
+      recommendationId: `rec-${overrides.provenanceKey ?? decisionType}`,
+      provenanceKey: overrides.provenanceKey ?? `${decisionType}:key`,
+      resolution: {
+        status: "pending",
+        expectedEndpoint: "next_pa",
+      },
+    },
+  });
+}
+
 function createFieldingEvent(
   overrides: Partial<FieldingEvent> = {},
 ): FieldingEvent {
@@ -507,6 +561,208 @@ describe("manager WPA derivation", () => {
       resolved: true,
       resolvedAtEventId: "game-1_2",
     });
+  });
+
+  test("derives prompted keep-pitcher decisions and keeps them pending until that pitcher faces a PA", () => {
+    const prompt = createPromptedKeepCurrent({
+      eventId: "game-1_bp_keep_pitcher",
+      eventIndex: 1,
+      decisionType: "leave_pitcher_in",
+      trackedPlayerId: "home-pitcher",
+      provenanceKey: "keep-home-pitcher",
+      gameState: {
+        inning: 5,
+        halfInning: "TOP",
+        outs: 1,
+        score: { away: 2, home: 2 },
+        runnersOn: {},
+      },
+    });
+    const nextPa = createAtBat({
+      eventId: "game-1_2",
+      eventIndex: 2,
+      inning: 5,
+      halfInning: "TOP",
+      pitcherId: "home-pitcher",
+      pitcherName: "Home Pitcher",
+      result: "HR",
+      runsScored: ["away-batter"],
+      awayScore: 2,
+      homeScore: 2,
+      awayScoreAfter: 3,
+      homeScoreAfter: 2,
+      outsAfter: 1,
+    });
+
+    const pending = derive([], [prompt])[0];
+    expect(pending).toMatchObject({
+      decisionType: "leave_pitcher_in",
+      inferenceMethod: "prompted",
+      decisionSource: "situational_prompt",
+      managerId: MANAGERS.home,
+      teamId: "home",
+      involvedPlayerIds: ["home-pitcher"],
+      resolved: false,
+      managerWpa: undefined,
+      resolutionWindow: {
+        status: "pending",
+        expectedEndpoint: "next_pa",
+        trackedPlayerIds: ["home-pitcher"],
+      },
+    });
+
+    const resolved = derive([nextPa], [prompt])[0];
+    expect(resolved).toMatchObject({
+      decisionType: "leave_pitcher_in",
+      resolved: true,
+      resolvedAtEventId: "game-1_2",
+      resolutionWindow: { status: "resolved", maxEventIndex: 2 },
+    });
+    expect(resolved.linkedEventIds).toEqual(
+      expect.arrayContaining(["game-1_bp_keep_pitcher", "game-1_2"]),
+    );
+    expect(resolved.managerWpa).toBeCloseTo((resolved.rawWindowWpa ?? 0) * 0.2, 4);
+  });
+
+  test("derives prompted let-batter-hit decisions and waits for that batter's PA", () => {
+    const prompt = createPromptedKeepCurrent({
+      eventId: "game-1_bp_let_batter_hit",
+      eventIndex: 1,
+      decisionType: "let_batter_hit",
+      trackedPlayerId: "away-hitter-8",
+      teamId: "away",
+      managerId: MANAGERS.away,
+      opponentTeamId: "home",
+      provenanceKey: "let-away-hitter-hit",
+      gameState: {
+        inning: 5,
+        halfInning: "TOP",
+        outs: 1,
+        score: { away: 2, home: 2 },
+        runnersOn: {},
+      },
+    });
+    const unrelatedPa = createAtBat({
+      eventId: "game-1_2",
+      eventIndex: 2,
+      inning: 5,
+      batterId: "away-other",
+      batterName: "Away Other",
+      outsAfter: 2,
+    });
+    const targetPa = createAtBat({
+      eventId: "game-1_3",
+      eventIndex: 3,
+      inning: 5,
+      batterId: "away-hitter-8",
+      batterName: "Away Hitter 8",
+      result: "2B",
+      awayScore: 2,
+      homeScore: 2,
+      awayScoreAfter: 3,
+      homeScoreAfter: 2,
+      outsAfter: 2,
+      runnersAfter: {
+        first: null,
+        second: {
+          runnerId: "away-hitter-8",
+          runnerName: "Away Hitter 8",
+          responsiblePitcherId: "home-pitcher",
+        },
+        third: null,
+      },
+    });
+
+    expect(derive([unrelatedPa], [prompt])[0]).toMatchObject({
+      decisionType: "let_batter_hit",
+      resolved: false,
+      managerWpa: undefined,
+      resolutionWindow: {
+        status: "pending",
+        trackedPlayerIds: ["away-hitter-8"],
+      },
+    });
+
+    const resolved = derive([unrelatedPa, targetPa], [prompt])[0];
+    expect(resolved).toMatchObject({
+      decisionType: "let_batter_hit",
+      managerId: MANAGERS.away,
+      teamId: "away",
+      resolved: true,
+      resolvedAtEventId: "game-1_3",
+    });
+    expect(resolved.managerWpa).toBeCloseTo((resolved.rawWindowWpa ?? 0) * 0.2, 4);
+  });
+
+  test("dedupes repeated prompted keep-current records by recommendation provenance", () => {
+    const firstPrompt = createPromptedKeepCurrent({
+      eventId: "game-1_bp_keep_1",
+      eventIndex: 1,
+      provenanceKey: "keep-home-pitcher",
+    });
+    const repeatedPrompt = createPromptedKeepCurrent({
+      eventId: "game-1_bp_keep_2",
+      eventIndex: 1.001,
+      provenanceKey: "keep-home-pitcher",
+    });
+
+    const decisions = derive([], [firstPrompt, repeatedPrompt]).filter(
+      (decision) => decision.decisionType === "leave_pitcher_in",
+    );
+
+    expect(decisions).toHaveLength(1);
+    expect(decisions[0].decisionEventId).toBe("game-1_bp_keep_1");
+  });
+
+  test("keeps same-provenance prompted decisions from separate PA snapshots distinct", () => {
+    const firstPrompt = createPromptedKeepCurrent({
+      eventId: "game-1_bp_keep_1",
+      eventIndex: 1,
+      provenanceKey: "keep-home-pitcher",
+      gameState: {
+        inning: 5,
+        halfInning: "TOP",
+        outs: 0,
+        score: { away: 2, home: 2 },
+        runnersOn: {},
+      },
+    });
+    const secondPrompt = createPromptedKeepCurrent({
+      eventId: "game-1_bp_keep_2",
+      eventIndex: 3,
+      provenanceKey: "keep-home-pitcher",
+      gameState: {
+        inning: 5,
+        halfInning: "TOP",
+        outs: 1,
+        score: { away: 2, home: 2 },
+        runnersOn: {},
+      },
+    });
+
+    const decisions = derive([], [firstPrompt, secondPrompt]).filter(
+      (decision) => decision.decisionType === "leave_pitcher_in",
+    );
+
+    expect(decisions.map((decision) => decision.decisionEventId)).toEqual([
+      "game-1_bp_keep_1",
+      "game-1_bp_keep_2",
+    ]);
+  });
+
+  test("ignores partial legacy prompted manager moments without tracked players", () => {
+    const partialPrompt = createPromptedKeepCurrent({
+      eventId: "game-1_bp_partial",
+      eventIndex: 1,
+    });
+    partialPrompt.promptedManagerDecision = {
+      ...partialPrompt.promptedManagerDecision!,
+      trackedPlayerIds: undefined as never,
+      involvedPlayerIds: undefined,
+      playerId: undefined,
+    };
+
+    expect(derive([], [partialPrompt])).toEqual([]);
   });
 
   test("pinch-hit HR from down 9 to down 6 gives the offensive manager positive WPA", () => {

@@ -1,8 +1,10 @@
 import { describe, expect, test } from "vitest";
 
 import {
+  buildPromptedManagerDecisionFromRecommendation,
   buildManagerRecommendationSuppressKey,
   generateManagerRecommendations,
+  getPromptedDecisionTypeForRecommendationAction,
   type ManagerRecommendationInput,
 } from "../managerWpaRecommendations";
 
@@ -264,5 +266,109 @@ describe("generateManagerRecommendations", () => {
         recommendation.type === "consider_defensive_replacement",
     );
     expect(defensiveRecommendations).toHaveLength(1);
+  });
+
+  test("maps keep-pitcher recommendation action to a prompted leave-pitcher-in record", () => {
+    const [recommendation] = generateManagerRecommendations({
+      ...baseInput,
+      currentPitcher: {
+        playerId: "home-pitcher",
+        playerName: "Ace Starter",
+        pitchCount: 108,
+        isStarter: true,
+      },
+      availablePitchers: [{ playerId: "home-reliever", playerName: "Fresh Arm" }],
+    });
+
+    const prompted = buildPromptedManagerDecisionFromRecommendation({
+      recommendation,
+      action: "keep_pitcher",
+      opponentTeamId: "away",
+    });
+
+    expect(getPromptedDecisionTypeForRecommendationAction("keep_pitcher")).toBe(
+      "leave_pitcher_in",
+    );
+    expect(prompted).toMatchObject({
+      decisionType: "leave_pitcher_in",
+      action: "keep_pitcher",
+      source: "recommendation",
+      decisionSource: "situational_prompt",
+      managerId: "home-manager",
+      teamId: "home",
+      opponentTeamId: "away",
+      trackedPlayerIds: ["home-pitcher"],
+      recommendationId: recommendation.recommendationId,
+      provenanceKey: recommendation.suppressKey,
+      resolution: { status: "pending", expectedEndpoint: "next_pa" },
+    });
+  });
+
+  test("maps let-batter-hit recommendation action to a prompted let-batter-hit record", () => {
+    const [recommendation] = generateManagerRecommendations({
+      ...baseInput,
+      currentBatter: {
+        playerId: "away-hitter-8",
+        playerName: "Eight Hitter",
+        battingOrder: 8,
+        contact: 38,
+        power: 42,
+      },
+      benchHitters: [
+        {
+          playerId: "away-bench-bat",
+          playerName: "Bench Bat",
+          contact: 74,
+          power: 70,
+        },
+      ],
+    });
+
+    const prompted = buildPromptedManagerDecisionFromRecommendation({
+      recommendation,
+      action: "let_batter_hit",
+      opponentTeamId: "home",
+    });
+
+    expect(getPromptedDecisionTypeForRecommendationAction("let_batter_hit")).toBe(
+      "let_batter_hit",
+    );
+    expect(prompted).toMatchObject({
+      decisionType: "let_batter_hit",
+      action: "let_batter_hit",
+      source: "recommendation",
+      decisionSource: "situational_prompt",
+      managerId: "away-manager",
+      teamId: "away",
+      opponentTeamId: "home",
+      trackedPlayerIds: ["away-hitter-8"],
+      involvedPlayerIds: ["away-hitter-8", "away-bench-bat"],
+      recommendationId: recommendation.recommendationId,
+      provenanceKey: recommendation.suppressKey,
+      resolution: { status: "pending", expectedEndpoint: "next_pa" },
+    });
+  });
+
+  test("primary substitution actions and unsupported no-change actions do not create keep-current records", () => {
+    const [recommendation] = generateManagerRecommendations({
+      ...baseInput,
+      currentPitcher: {
+        playerId: "home-pitcher",
+        playerName: "Ace Starter",
+        pitchCount: 108,
+        isStarter: true,
+      },
+      availablePitchers: [{ playerId: "home-reliever", playerName: "Fresh Arm" }],
+    });
+
+    expect(
+      buildPromptedManagerDecisionFromRecommendation({
+        recommendation,
+        action: "open_pitching_change",
+        opponentTeamId: "away",
+      }),
+    ).toBeNull();
+    expect(getPromptedDecisionTypeForRecommendationAction("open_pinch_hit")).toBeNull();
+    expect(getPromptedDecisionTypeForRecommendationAction("decline_defensive_sub")).toBeNull();
   });
 });

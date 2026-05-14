@@ -14,6 +14,11 @@ import { syncEngine } from "../../../utils/syncEngine";
 import { SYNC_REGISTRY, extractKey } from "../../../utils/syncConfig";
 import { getParkNames } from "../../../data/parkLookup";
 import type { ManagerProfile } from "../../../types/managerWpa";
+import type {
+  GameLockLineupSnapshots,
+  OptimalLineupSnapshot,
+  OpposingPitcherHand,
+} from "../../../types/managerWpa";
 import {
   ensureDefaultManagerProfiles,
   LEAGUE_BUILDER_MANAGER_INSTANCE_ID,
@@ -81,6 +86,14 @@ export function ExhibitionGame() {
   // Track whether lineups came from storage
   const [awayHasStoredLineup, setAwayHasStoredLineup] = useState(false);
   const [homeHasStoredLineup, setHomeHasStoredLineup] = useState(false);
+  const [awayStoredOptimalLineups, setAwayStoredOptimalLineups] = useState<{
+    vsRHP?: OptimalLineupSnapshot;
+    vsLHP?: OptimalLineupSnapshot;
+  }>({});
+  const [homeStoredOptimalLineups, setHomeStoredOptimalLineups] = useState<{
+    vsRHP?: OptimalLineupSnapshot;
+    vsLHP?: OptimalLineupSnapshot;
+  }>({});
 
   // Clear exhibition data
   const [showClearConfirm, setShowClearConfirm] = useState(false);
@@ -151,6 +164,7 @@ export function ExhibitionGame() {
       setAwayPlayers([]);
       setAwayPitchers([]);
       setAwayHasStoredLineup(false);
+      setAwayStoredOptimalLineups({});
       return;
     }
 
@@ -164,6 +178,7 @@ export function ExhibitionGame() {
         setAwayPlayers(result.players);
         setAwayPitchers(result.pitchers);
         setAwayHasStoredLineup(result.hasStoredLineup);
+        setAwayStoredOptimalLineups(result.optimalLineups ?? {});
       })
       .finally(() => {
         if (!cancelled) {
@@ -182,6 +197,7 @@ export function ExhibitionGame() {
       setHomePlayers([]);
       setHomePitchers([]);
       setHomeHasStoredLineup(false);
+      setHomeStoredOptimalLineups({});
       return;
     }
 
@@ -195,6 +211,7 @@ export function ExhibitionGame() {
         setHomePlayers(result.players);
         setHomePitchers(result.pitchers);
         setHomeHasStoredLineup(result.hasStoredLineup);
+        setHomeStoredOptimalLineups(result.optimalLineups ?? {});
       })
       .finally(() => {
         if (!cancelled) {
@@ -330,6 +347,14 @@ export function ExhibitionGame() {
   const awayStartingPitcher = awayPitchers.find(p => p.isActive);
   const homeStartingPitcher = homePitchers.find(p => p.isActive);
 
+  const getOpposingHand = (pitcher: RosterPitcher | undefined): OpposingPitcherHand =>
+    (pitcher?.throwingHand || pitcher?.throws || "R") === "L" ? "L" : "R";
+
+  const selectStoredOptimalLineup = (
+    stored: { vsRHP?: OptimalLineupSnapshot; vsLHP?: OptimalLineupSnapshot },
+    opposingPitcher: RosterPitcher | undefined,
+  ) => (getOpposingHand(opposingPitcher) === "L" ? stored.vsLHP : stored.vsRHP);
+
   // Reorder lineup via drag-and-drop or tap-swap — merges reordered starters back with bench
   const handleAwayReorder = (reordered: RosterPlayer[]) => {
     setAwayPlayers([...reordered, ...awayBench]);
@@ -406,6 +431,7 @@ export function ExhibitionGame() {
             name: newPitcher.name,
             fullName: newPitcher.fullName,
             playerId: newPitcher.playerId,
+            primaryPosition: 'P',
             position: 'P',
             battingOrder: oldInLineup.battingOrder,
             battingHand: (newPitcher.throwingHand || 'R') as 'L' | 'R' | 'S',
@@ -454,6 +480,7 @@ export function ExhibitionGame() {
             name: newPitcher.name,
             fullName: newPitcher.fullName,
             playerId: newPitcher.playerId,
+            primaryPosition: 'P',
             position: 'P',
             battingOrder: oldInLineup.battingOrder,
             battingHand: (newPitcher.throwingHand || 'R') as 'L' | 'R' | 'S',
@@ -511,6 +538,16 @@ export function ExhibitionGame() {
     const homeManager = selectedHomeManagerId
       ? managerProfilesById.get(selectedHomeManagerId)
       : undefined;
+    const optimalLineupSnapshots: GameLockLineupSnapshots = {
+      away: selectStoredOptimalLineup(
+        awayStoredOptimalLineups,
+        homeStartingPitcher,
+      ),
+      home: selectStoredOptimalLineup(
+        homeStoredOptimalLineups,
+        awayStartingPitcher,
+      ),
+    };
     sessionStorage.setItem(
       "kbl-pending-live-beat-reporter-enabled",
       JSON.stringify(liveBeatReporterEnabled),
@@ -549,6 +586,7 @@ export function ExhibitionGame() {
         totalInnings,
         extraInningRunner,
         extraInningRunnerDelay,
+        optimalLineupSnapshots,
       }, {
         awayManagerId: selectedAwayManagerId,
         awayManagerName: awayManager?.displayName,

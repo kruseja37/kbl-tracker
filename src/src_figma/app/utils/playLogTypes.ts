@@ -1,5 +1,6 @@
 import type {
   ManagerDecisionSource,
+  ManagerRunPlay,
   ManagerRunnerIntent,
 } from "../../../types/managerWpa";
 
@@ -53,6 +54,7 @@ export interface RunnerSubEntry {
   isTootblan?: boolean;
   isOutAdvancing?: boolean;
   managerIntent?: ManagerRunnerIntent;
+  managerRunPlay?: ManagerRunPlay;
   managerDecisionSource?: ManagerDecisionSource;
   managerDecisionNote?: string;
   errorType?: 'fielding' | 'throwing' | 'mental';

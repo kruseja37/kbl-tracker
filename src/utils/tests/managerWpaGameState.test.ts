@@ -1,7 +1,9 @@
 import "fake-indexeddb/auto";
 import { describe, expect, test } from "vitest";
 
-import type { AtBatEvent, BetweenPlayEvent } from "../eventLog";
+import type { AtBatEvent, BetweenPlayEvent, FieldingEvent } from "../eventLog";
+import type { OptimalLineupSnapshot } from "../../types/managerWpa";
+import { WPA_MODEL_VERSION } from "../../engines/wpaV2";
 import {
   aggregateKblWpaCredits,
   deriveKblWpaCredits,
@@ -23,6 +25,7 @@ import {
   saveCurrentGame,
   type PersistedGameState,
 } from "../gameStorage";
+import { rankPlayersOfTheGame } from "../playersOfTheGame";
 
 function createAtBat(overrides: Partial<AtBatEvent> = {}): AtBatEvent {
   const halfInning = overrides.halfInning ?? "TOP";
@@ -90,6 +93,58 @@ function createBetweenPlay(
   };
 }
 
+function createPromptedKeepCurrent(
+  overrides: Partial<BetweenPlayEvent> & {
+    decisionType?: "leave_pitcher_in" | "let_batter_hit";
+    trackedPlayerId?: string;
+    teamId?: string;
+    managerId?: string;
+    opponentTeamId?: string;
+    provenanceKey?: string;
+  } = {},
+): BetweenPlayEvent {
+  const decisionType = overrides.decisionType ?? "let_batter_hit";
+  const trackedPlayerId =
+    overrides.trackedPlayerId ??
+    (decisionType === "leave_pitcher_in" ? "home-pitcher" : "away-batter");
+  const teamId = overrides.teamId ?? (decisionType === "leave_pitcher_in" ? "home" : "away");
+  const managerId =
+    overrides.managerId ?? (teamId === "home" ? "home-manager" : "away-manager");
+  const opponentTeamId =
+    overrides.opponentTeamId ?? (teamId === "home" ? "away" : "home");
+
+  return createBetweenPlay({
+    ...overrides,
+    type: "manager_moment",
+    substitution: undefined,
+    managerMoment: {
+      leverageIndex: 2.1,
+      decisionType,
+      context: overrides.provenanceKey ?? `${decisionType}:prompt`,
+    },
+    promptedManagerDecision: {
+      decisionType,
+      action: decisionType === "leave_pitcher_in" ? "keep_pitcher" : "let_batter_hit",
+      source: "recommendation",
+      decisionSource: "situational_prompt",
+      confidence: "high",
+      managerId,
+      teamId,
+      opponentTeamId,
+      trackedPlayerIds: [trackedPlayerId],
+      involvedPlayerIds: [trackedPlayerId],
+      playerId: trackedPlayerId,
+      leverageIndex: 2.1,
+      recommendationId: `rec-${overrides.provenanceKey ?? decisionType}`,
+      provenanceKey: overrides.provenanceKey ?? `${decisionType}:key`,
+      resolution: {
+        status: "pending",
+        expectedEndpoint: "next_pa",
+      },
+    },
+  });
+}
+
 function derive(
   atBatEvents: AtBatEvent[] = [],
   betweenPlayEvents: BetweenPlayEvent[] = [],
@@ -118,6 +173,41 @@ const startingLineups = {
     { playerId: "home-starter-2", playerName: "Home Starter 2", position: "RF", battingOrder: 2 },
   ],
 };
+
+function createLineupSnapshot(input: {
+  teamId: string;
+  snapshotId: string;
+  slots: Array<{
+    playerId: string;
+    playerName: string;
+    battingOrderSlot: number;
+    defensivePosition: string;
+    projectedSlotKblWpa: number;
+  }>;
+}): OptimalLineupSnapshot {
+  return {
+    snapshotId: input.snapshotId,
+    teamId: input.teamId,
+    mode: "exhibition",
+    opposingPitcherHand: "R",
+    algorithmVersion: "test-optimal-v2",
+    generatedAt: 1,
+    generatedFrom: "game_lock",
+    sourceConfidence: "engine_calculated",
+    dhEnabled: false,
+    slots: input.slots.map((slot) => ({
+      ...slot,
+      projectedValueScore: 60,
+      positionalFitScore: 1,
+      confidence: "medium" as const,
+    })),
+    projectedTeamLineupKblWpa: input.slots.reduce(
+      (sum, slot) => sum + slot.projectedSlotKblWpa,
+      0,
+    ),
+    confidence: "medium",
+  };
+}
 
 function createSparseKblWpaEvent(input: {
   eventId: string;
@@ -306,6 +396,641 @@ describe("committed manager WPA game state", () => {
     });
   });
 
+  test("derives one hit-and-run decision per plate appearance and suppresses duplicate manager-send", () => {
+    const hitAndRun = createAtBat({
+      result: "1B",
+      runnerOutcomes: [
+        {
+          runnerId: "away-r1",
+          runnerName: "Away R1",
+          fromBase: "first",
+          toBase: "third",
+          managerRunPlay: "hit_and_run",
+          managerIntent: "manager_send",
+          managerDecisionSource: "play_log_enhancement",
+        },
+        {
+          runnerId: "away-r2",
+          runnerName: "Away R2",
+          fromBase: "second",
+          toBase: "home",
+          managerRunPlay: "hit_and_run",
+          managerDecisionSource: "play_log_enhancement",
+        },
+      ],
+    });
+
+    const decisions = derive([hitAndRun]).managerDecisions;
+
+    expect(decisions).toHaveLength(1);
+    expect(decisions[0]).toMatchObject({
+      decisionType: "hit_and_run",
+      managerId: "away-manager",
+      teamId: "away",
+      managerShare: 0.35,
+      decisionSource: "play_log_enhancement",
+      resolved: true,
+    });
+    expect(decisions[0].involvedPlayerIds).toEqual([
+      "away-batter",
+      "away-r1",
+      "away-r2",
+    ]);
+  });
+
+  test.each([
+    ["second"],
+    ["third"],
+    ["home"],
+    ["out"],
+  ] as const)("scores hit-and-run enrichment when the runner ends at %s", (toBase) => {
+    const event = createAtBat({
+      result: "1B",
+      runnerOutcomes: [
+        {
+          runnerId: "away-r1",
+          runnerName: "Away R1",
+          fromBase: "first",
+          toBase,
+          managerRunPlay: "hit_and_run",
+          managerDecisionSource: "play_log_enhancement",
+        },
+      ],
+    });
+
+    expect(derive([event]).managerDecisions[0]).toMatchObject({
+      decisionType: "hit_and_run",
+      teamId: "away",
+    });
+  });
+
+  test("opens a deployment stint for a pinch hitter and excludes the tactical PA", () => {
+    const pinchHit = createBetweenPlay({
+      eventId: "game-1_bp_1",
+      eventIndex: 1,
+      substitution: {
+        subType: "pinch_hit",
+        outPlayerId: "away-starter",
+        inPlayerId: "away-bench",
+        inPlayerName: "Away Bench",
+      },
+    });
+    const tacticalPa = createAtBat({
+      eventId: "game-1_2",
+      eventIndex: 2,
+      batterId: "away-bench",
+      batterName: "Away Bench",
+      batterTeamId: "away",
+      wpa: 0.5,
+    });
+    const laterPa = createAtBat({
+      eventId: "game-1_3",
+      eventIndex: 3,
+      batterId: "away-bench",
+      batterName: "Away Bench",
+      batterTeamId: "away",
+      wpa: 0.2,
+    });
+
+    const stint = derive([tacticalPa, laterPa], [pinchHit]).managerDeploymentStints[0];
+
+    expect(stint).toMatchObject({
+      deploymentRole: "pinch_hitter_remaining",
+      playerId: "away-bench",
+      managerId: "away-manager",
+      teamId: "away",
+      sourceEventId: "game-1_bp_1",
+      openedAtEventIndex: 2,
+      tacticalExclusionEventIds: ["game-1_2"],
+      linkedEventIds: ["game-1_3"],
+      rawLinkedWpa: 0.2,
+      managerShare: 0.15,
+      managerDeploymentWpa: 0.03,
+    });
+  });
+
+  test("opens a pitching deployment stint only after the first PA faced", () => {
+    const pitchingChange = createBetweenPlay({
+      eventId: "game-1_bp_pitching",
+      eventIndex: 1,
+      type: "pitcher_change",
+      substitution: undefined,
+      pitcherChange: {
+        outgoingPitcherId: "home-starter",
+        incomingPitcherId: "home-rp",
+        incomingPitcherName: "Home RP",
+        inheritedRunners: 0,
+      },
+    });
+    const tacticalPa = createAtBat({
+      eventId: "game-1_2",
+      eventIndex: 2,
+      pitcherId: "home-rp",
+      pitcherName: "Home RP",
+      pitcherTeamId: "home",
+      wpaModelVersion: WPA_MODEL_VERSION,
+      wpa: 0.4,
+    });
+    const laterPa = createAtBat({
+      eventId: "game-1_3",
+      eventIndex: 3,
+      pitcherId: "home-rp",
+      pitcherName: "Home RP",
+      pitcherTeamId: "home",
+      wpaModelVersion: WPA_MODEL_VERSION,
+      wpa: -0.2,
+    });
+
+    const stint = derive([tacticalPa, laterPa], [pitchingChange])
+      .managerDeploymentStints[0];
+
+    expect(stint).toMatchObject({
+      deploymentRole: "pitcher",
+      playerId: "home-rp",
+      managerId: "home-manager",
+      teamId: "home",
+      sourceEventId: "game-1_bp_pitching",
+      openedAtEventIndex: 2,
+      tacticalExclusionEventIds: ["game-1_2"],
+      linkedEventIds: ["game-1_3"],
+    });
+  });
+
+  test("opens a defensive-sub deployment stint only after the first fielding endpoint", () => {
+    const defensiveSub = createBetweenPlay({
+      eventId: "game-1_bp_defense",
+      eventIndex: 1,
+      type: "substitution",
+      substitution: {
+        subType: "defensive_replacement",
+        outPlayerId: "home-left-old",
+        outPlayerName: "Home Left Old",
+        inPlayerId: "home-glove",
+        inPlayerName: "Home Glove",
+        inPosition: "LF",
+      },
+    });
+    const tacticalFieldingPlay = createAtBat({
+      eventId: "game-1_2",
+      eventIndex: 2,
+      wpaModelVersion: WPA_MODEL_VERSION,
+      wpa: -0.2,
+    });
+    const laterFieldingPlay = createAtBat({
+      eventId: "game-1_3",
+      eventIndex: 3,
+      wpaModelVersion: WPA_MODEL_VERSION,
+      wpa: -0.1,
+    });
+    const fieldingEvents: FieldingEvent[] = [
+      {
+        fieldingEventId: "fielding-defense-1",
+        gameId: "game-1",
+        atBatEventId: "game-1_2",
+        sequence: 1,
+        playerId: "home-glove",
+        playerName: "Home Glove",
+        position: "LF",
+        teamId: "home",
+        playType: "putout",
+        difficulty: "routine",
+        ballInPlay: { trajectory: "fly", zone: 7 },
+        success: true,
+        runsPreventedOrAllowed: 0,
+      },
+      {
+        fieldingEventId: "fielding-defense-2",
+        gameId: "game-1",
+        atBatEventId: "game-1_3",
+        sequence: 1,
+        playerId: "home-glove",
+        playerName: "Home Glove",
+        position: "LF",
+        teamId: "home",
+        playType: "putout",
+        difficulty: "routine",
+        ballInPlay: { trajectory: "fly", zone: 7 },
+        success: true,
+        runsPreventedOrAllowed: 0,
+      },
+    ];
+
+    const stint = deriveCommittedManagerDecisionState({
+      gameId: "game-1",
+      atBatEvents: [tacticalFieldingPlay, laterFieldingPlay],
+      betweenPlayEvents: [defensiveSub],
+      fieldingEvents,
+      awayTeamId: "away",
+      homeTeamId: "home",
+      awayManagerId: "away-manager",
+      homeManagerId: "home-manager",
+      totalInnings: 9,
+    }).managerDeploymentStints[0];
+
+    expect(stint).toMatchObject({
+      deploymentRole: "defensive_position",
+      playerId: "home-glove",
+      managerId: "home-manager",
+      teamId: "home",
+      sourceEventId: "game-1_bp_defense",
+      openedAtEventIndex: 2,
+      tacticalExclusionEventIds: ["game-1_2"],
+      linkedEventIds: ["game-1_3"],
+    });
+  });
+
+  test("opens explicit keep-current deployment only after the tactical PA and excludes that endpoint", () => {
+    const keepBatter = createPromptedKeepCurrent({
+      eventId: "game-1_bp_keep_batter",
+      eventIndex: 1,
+      decisionType: "let_batter_hit",
+      trackedPlayerId: "away-batter",
+      teamId: "away",
+      managerId: "away-manager",
+      opponentTeamId: "home",
+      provenanceKey: "let-away-batter-hit",
+    });
+    const tacticalPa = createAtBat({
+      eventId: "game-1_2",
+      eventIndex: 2,
+      batterId: "away-batter",
+      batterName: "Away Batter",
+      batterTeamId: "away",
+      wpa: 0.5,
+    });
+    const laterPa = createAtBat({
+      eventId: "game-1_3",
+      eventIndex: 3,
+      batterId: "away-batter",
+      batterName: "Away Batter",
+      batterTeamId: "away",
+      wpa: 0.2,
+    });
+
+    const stint = derive([tacticalPa, laterPa], [keepBatter]).managerDeploymentStints[0];
+
+    expect(stint).toMatchObject({
+      deploymentRole: "kept_in",
+      playerId: "away-batter",
+      managerId: "away-manager",
+      teamId: "away",
+      sourceEventId: "game-1_bp_keep_batter",
+      openedAtEventIndex: 2,
+      tacticalExclusionEventIds: ["game-1_2"],
+      linkedEventIds: ["game-1_3"],
+      rawLinkedWpa: 0.2,
+      managerShare: 0.15,
+      managerDeploymentWpa: 0.03,
+    });
+  });
+
+  test("does not stack overlapping kept-in stints or count later tactical endpoints as deployment value", () => {
+    const firstKeep = createPromptedKeepCurrent({
+      eventId: "game-1_bp_keep_1",
+      eventIndex: 1,
+      decisionType: "let_batter_hit",
+      trackedPlayerId: "away-batter",
+      teamId: "away",
+      managerId: "away-manager",
+      opponentTeamId: "home",
+      provenanceKey: "let-away-batter-hit",
+      gameState: {
+        inning: 6,
+        halfInning: "TOP",
+        outs: 0,
+        score: { away: 2, home: 2 },
+        runnersOn: {},
+      },
+    });
+    const firstTacticalPa = createAtBat({
+      eventId: "game-1_2",
+      eventIndex: 2,
+      batterId: "away-batter",
+      batterName: "Away Batter",
+      batterTeamId: "away",
+      outs: 0,
+      outsAfter: 1,
+      wpa: 0.5,
+    });
+    const secondKeep = createPromptedKeepCurrent({
+      eventId: "game-1_bp_keep_2",
+      eventIndex: 3,
+      decisionType: "let_batter_hit",
+      trackedPlayerId: "away-batter",
+      teamId: "away",
+      managerId: "away-manager",
+      opponentTeamId: "home",
+      provenanceKey: "let-away-batter-hit",
+      gameState: {
+        inning: 6,
+        halfInning: "TOP",
+        outs: 1,
+        score: { away: 2, home: 2 },
+        runnersOn: {},
+      },
+    });
+    const secondTacticalPa = createAtBat({
+      eventId: "game-1_4",
+      eventIndex: 4,
+      batterId: "away-batter",
+      batterName: "Away Batter",
+      batterTeamId: "away",
+      outs: 1,
+      outsAfter: 2,
+      wpa: 0.4,
+    });
+    const laterPa = createAtBat({
+      eventId: "game-1_5",
+      eventIndex: 5,
+      batterId: "away-batter",
+      batterName: "Away Batter",
+      batterTeamId: "away",
+      outs: 2,
+      outsAfter: 3,
+      wpa: 0.2,
+    });
+
+    const state = derive(
+      [firstTacticalPa, secondTacticalPa, laterPa],
+      [firstKeep, secondKeep],
+    );
+    const keptInStints = state.managerDeploymentStints.filter(
+      (stint) => stint.deploymentRole === "kept_in",
+    );
+
+    expect(keptInStints).toHaveLength(1);
+    expect(keptInStints[0]).toMatchObject({
+      tacticalExclusionEventIds: ["game-1_2", "game-1_4"],
+      linkedEventIds: ["game-1_5"],
+      rawLinkedWpa: 0.2,
+      managerDeploymentWpa: 0.03,
+    });
+  });
+
+  test("closes deployment stints on removal and does not link later player events", () => {
+    const pinchHit = createBetweenPlay({
+      eventId: "game-1_bp_1",
+      eventIndex: 1,
+      substitution: {
+        subType: "pinch_hit",
+        outPlayerId: "away-starter",
+        inPlayerId: "away-bench",
+        inPlayerName: "Away Bench",
+      },
+    });
+    const removal = createBetweenPlay({
+      eventId: "game-1_bp_4",
+      eventIndex: 4,
+      substitution: {
+        subType: "defensive_replacement",
+        outPlayerId: "away-bench",
+        inPlayerId: "away-glove",
+        inPlayerName: "Away Glove",
+      },
+    });
+    const tacticalPa = createAtBat({
+      eventId: "game-1_2",
+      eventIndex: 2,
+      batterId: "away-bench",
+      batterTeamId: "away",
+      wpa: 0.4,
+    });
+    const countedPa = createAtBat({
+      eventId: "game-1_3",
+      eventIndex: 3,
+      batterId: "away-bench",
+      batterTeamId: "away",
+      wpa: 0.1,
+    });
+    const afterRemoval = createAtBat({
+      eventId: "game-1_5",
+      eventIndex: 5,
+      batterId: "away-bench",
+      batterTeamId: "away",
+      wpa: 0.3,
+    });
+
+    const stint = derive(
+      [tacticalPa, countedPa, afterRemoval],
+      [pinchHit, removal],
+    ).managerDeploymentStints.find(
+      (row) => row.playerId === "away-bench",
+    );
+
+    expect(stint).toMatchObject({
+      closeReason: "removed",
+      closedAtEventId: "game-1_bp_4",
+      linkedEventIds: ["game-1_3"],
+      rawLinkedWpa: 0.1,
+      managerDeploymentWpa: 0.015,
+    });
+  });
+
+  test("closes pinch-runner deployment at the terminal runner outcome", () => {
+    const pinchRun = createBetweenPlay({
+      eventId: "game-1_bp_1",
+      eventIndex: 1,
+      substitution: {
+        subType: "pinch_run",
+        outPlayerId: "away-runner",
+        inPlayerId: "away-speed",
+        inPlayerName: "Away Speed",
+      },
+    });
+    const firstRunnerWindowEvent = createAtBat({
+      eventId: "game-1_2",
+      eventIndex: 2,
+      result: "1B",
+      runnerOutcomes: [
+        {
+          runnerId: "away-speed",
+          runnerName: "Away Speed",
+          fromBase: "first",
+          toBase: "second",
+        },
+      ],
+      wpa: 0.2,
+    });
+    const terminalRunnerWindowEvent = createAtBat({
+      eventId: "game-1_3",
+      eventIndex: 3,
+      result: "1B",
+      runnerOutcomes: [
+        {
+          runnerId: "away-speed",
+          runnerName: "Away Speed",
+          fromBase: "second",
+          toBase: "home",
+        },
+      ],
+      awayScoreAfter: 3,
+      runsScored: ["away-speed"],
+      wpa: 0.3,
+    });
+    const laterPlateAppearance = createAtBat({
+      eventId: "game-1_4",
+      eventIndex: 4,
+      batterId: "away-other",
+      batterName: "Away Other",
+      batterTeamId: "away",
+      wpa: 0.4,
+    });
+
+    const stint = derive(
+      [firstRunnerWindowEvent, terminalRunnerWindowEvent, laterPlateAppearance],
+      [pinchRun],
+    ).managerDeploymentStints[0];
+
+    expect(stint).toMatchObject({
+      deploymentRole: "pinch_runner",
+      playerId: "away-speed",
+      openedAtEventIndex: 3,
+      closeReason: "runner_terminal",
+      closedAtEventId: "game-1_3",
+      tacticalExclusionEventIds: ["game-1_2", "game-1_3"],
+      linkedEventIds: [],
+      rawLinkedWpa: 0,
+      managerDeploymentWpa: 0,
+    });
+  });
+
+  test("keeps a pinch-runner deployment stint open after scoring when the player remains active", () => {
+    const pinchRun = createBetweenPlay({
+      eventId: "game-1_bp_1",
+      eventIndex: 1,
+      substitution: {
+        subType: "pinch_run",
+        outPlayerId: "away-runner",
+        inPlayerId: "away-speed",
+        inPlayerName: "Away Speed",
+      },
+    });
+    const terminalRunnerWindowEvent = createAtBat({
+      eventId: "game-1_2",
+      eventIndex: 2,
+      result: "1B",
+      runnerOutcomes: [
+        {
+          runnerId: "away-speed",
+          runnerName: "Away Speed",
+          fromBase: "first",
+          toBase: "home",
+        },
+      ],
+      awayScoreAfter: 3,
+      runsScored: ["away-speed"],
+      wpa: 0.3,
+    });
+    const laterPlateAppearance = createAtBat({
+      eventId: "game-1_3",
+      eventIndex: 3,
+      batterId: "away-speed",
+      batterName: "Away Speed",
+      batterTeamId: "away",
+      wpa: 0.4,
+    });
+
+    const stint = derive(
+      [terminalRunnerWindowEvent, laterPlateAppearance],
+      [pinchRun],
+    ).managerDeploymentStints[0];
+
+    expect(stint).toMatchObject({
+      deploymentRole: "pinch_runner",
+      playerId: "away-speed",
+      openedAtEventIndex: 2,
+      closeReason: "game_end",
+      tacticalExclusionEventIds: ["game-1_2"],
+      linkedEventIds: ["game-1_3"],
+      rawLinkedWpa: 0.4,
+      managerDeploymentWpa: 0.08,
+    });
+  });
+
+  test("opens deployment stints for committed position-change events", () => {
+    const positionChange = createBetweenPlay({
+      eventId: "game-1_bp_1",
+      eventIndex: 1,
+      type: "position_change",
+      substitution: {
+        subType: "position_change",
+        outPlayerId: "home-fielder",
+        outPlayerName: "Home Fielder",
+        inPlayerId: "home-fielder",
+        inPlayerName: "Home Fielder",
+        inPosition: "LF",
+        previousPosition: "CF",
+      },
+    });
+    const tacticalFieldingPlay = createAtBat({
+      eventId: "game-1_2",
+      eventIndex: 2,
+      wpaModelVersion: WPA_MODEL_VERSION,
+      wpa: -0.2,
+    });
+    const laterFieldingPlay = createAtBat({
+      eventId: "game-1_3",
+      eventIndex: 3,
+      wpaModelVersion: WPA_MODEL_VERSION,
+      wpa: -0.1,
+    });
+    const fieldingEvents: FieldingEvent[] = [
+      {
+        fieldingEventId: "fielding-1",
+        gameId: "game-1",
+        atBatEventId: "game-1_2",
+        sequence: 1,
+        playerId: "home-fielder",
+        playerName: "Home Fielder",
+        position: "LF",
+        teamId: "home",
+        playType: "putout",
+        difficulty: "routine",
+        ballInPlay: { trajectory: "fly", zone: 7 },
+        success: true,
+        runsPreventedOrAllowed: 0,
+      },
+      {
+        fieldingEventId: "fielding-2",
+        gameId: "game-1",
+        atBatEventId: "game-1_3",
+        sequence: 1,
+        playerId: "home-fielder",
+        playerName: "Home Fielder",
+        position: "LF",
+        teamId: "home",
+        playType: "putout",
+        difficulty: "routine",
+        ballInPlay: { trajectory: "fly", zone: 7 },
+        success: true,
+        runsPreventedOrAllowed: 0,
+      },
+    ];
+
+    const state = deriveCommittedManagerDecisionState({
+      gameId: "game-1",
+      atBatEvents: [tacticalFieldingPlay, laterFieldingPlay],
+      betweenPlayEvents: [positionChange],
+      fieldingEvents,
+      awayTeamId: "away",
+      homeTeamId: "home",
+      awayManagerId: "away-manager",
+      homeManagerId: "home-manager",
+      totalInnings: 9,
+    });
+
+    expect(state.managerDeploymentStints[0]).toMatchObject({
+      deploymentRole: "defensive_position",
+      playerId: "home-fielder",
+      managerId: "home-manager",
+      teamId: "home",
+      sourceEventId: "game-1_bp_1",
+      openedAtEventIndex: 2,
+      tacticalExclusionEventIds: ["game-1_2"],
+      linkedEventIds: ["game-1_3"],
+    });
+  });
+
   test("recomputes substitution subtype changes from committed between-play events", () => {
     const pinchHit = createBetweenPlay({
       substitution: {
@@ -466,7 +1191,7 @@ describe("committed manager WPA game state", () => {
     expect(updatedDecision?.managerWpa).not.toBe(initialDecision?.managerWpa);
   });
 
-  test("completed-game archive stores manager decisions and lineup deltas separately", async () => {
+  test("completed-game archive stores manager decisions, deployment stints, and lineup deltas separately", async () => {
     const gameId = "game-manager-wpa-archive";
     const tacticalState = deriveCommittedManagerDecisionState({
       gameId,
@@ -507,11 +1232,37 @@ describe("committed manager WPA game state", () => {
         managerWpa: 0.1,
       },
     ];
+    const deploymentStints: NonNullable<
+      PersistedGameState["managerDeploymentStints"]
+    > = [
+      {
+        stintId: `${gameId}:bp-1:deployment:pitcher:home-rp`,
+        gameId,
+        managerId: "home-manager",
+        teamId: "home",
+        deploymentRole: "pitcher",
+        playerId: "home-rp",
+        playerName: "Home RP",
+        sourceEventId: "bp-1",
+        openedAtEventIndex: 1,
+        tacticalExclusionEventIds: ["pa-1"],
+        closedAtEventId: "pa-3",
+        closedAtEventIndex: 3,
+        closeReason: "game_end",
+        linkedEventIds: ["pa-2", "pa-3"],
+        rawLinkedWpa: 0.3,
+        managerShare: 0.15,
+        managerDeploymentWpa: 0.045,
+        cap: 0.15,
+        confidence: "medium",
+      },
+    ];
 
     await archiveCompletedGame(
       {
         ...createPersistedGameState(gameId),
         managerDecisions: tacticalState.managerDecisions,
+        managerDeploymentStints: deploymentStints,
         managerLineupDeltas: lineupDeltas,
       },
       { away: 3, home: 2 },
@@ -521,6 +1272,7 @@ describe("committed manager WPA game state", () => {
 
     const archived = await getCompletedGameById(gameId);
     expect(archived?.managerDecisions).toEqual(tacticalState.managerDecisions);
+    expect(archived?.managerDeploymentStints).toEqual(deploymentStints);
     expect(archived?.managerLineupDeltas).toEqual(lineupDeltas);
   });
 
@@ -547,6 +1299,111 @@ describe("committed manager WPA game state", () => {
       rawPerformanceDelta: 0.4,
       managerShare: 0.25,
       managerWpa: 0.1,
+    });
+  });
+
+  test("uses Optimal Lineup v2 snapshots when present and skips exact optimal lineups", () => {
+    const optimal = createLineupSnapshot({
+      teamId: "away",
+      snapshotId: "away-optimal",
+      slots: [
+        {
+          playerId: "away-starter-1",
+          playerName: "Away Starter 1",
+          battingOrderSlot: 1,
+          defensivePosition: "SS",
+          projectedSlotKblWpa: 0.04,
+        },
+        {
+          playerId: "away-starter-2",
+          playerName: "Away Starter 2",
+          battingOrderSlot: 2,
+          defensivePosition: "CF",
+          projectedSlotKblWpa: 0.02,
+        },
+      ],
+    });
+
+    const state = deriveCommittedManagerDecisionState({
+      gameId: "game-1",
+      atBatEvents: [],
+      betweenPlayEvents: [],
+      fieldingEvents: [],
+      startingLineups,
+      optimalLineupSnapshots: { away: optimal },
+      chosenLineupSnapshots: { away: optimal },
+      awayTeamId: "away",
+      homeTeamId: "home",
+      awayManagerId: "away-manager",
+      homeManagerId: "home-manager",
+      gameEnded: true,
+    });
+
+    expect(state.managerLineupDeltas.filter((delta) => delta.teamId === "away")).toEqual([]);
+  });
+
+  test("scores lineup deviations against Optimal Lineup projection rather than chosen projection", () => {
+    const optimal = createLineupSnapshot({
+      teamId: "away",
+      snapshotId: "away-optimal",
+      slots: [
+        {
+          playerId: "optimal-cf",
+          playerName: "Optimal CF",
+          battingOrderSlot: 1,
+          defensivePosition: "CF",
+          projectedSlotKblWpa: 0.05,
+        },
+      ],
+    });
+    const chosen = createLineupSnapshot({
+      teamId: "away",
+      snapshotId: "away-chosen",
+      slots: [
+        {
+          playerId: "away-starter-2",
+          playerName: "Away Starter 2",
+          battingOrderSlot: 1,
+          defensivePosition: "CF",
+          projectedSlotKblWpa: -0.05,
+        },
+      ],
+    });
+    const deltas = deriveManagerLineupDeltaRecords({
+      gameId: "game-1",
+      atBatEvents: [
+        createSparseKblWpaEvent({
+          eventId: "game-1_wpa_1",
+          playerId: "away-starter-2",
+          playerName: "Away Starter 2",
+          teamId: "away",
+          wpa: 0,
+        }),
+      ],
+      betweenPlayEvents: [],
+      fieldingEvents: [],
+      startingLineups,
+      optimalLineupSnapshots: { away: optimal },
+      chosenLineupSnapshots: { away: chosen },
+      awayTeamId: "away",
+      homeTeamId: "home",
+      awayManagerId: "away-manager",
+      homeManagerId: "home-manager",
+      gameEnded: true,
+    });
+
+    const awayDeltas = deltas.filter((delta) => delta.teamId === "away");
+
+    expect(awayDeltas).toHaveLength(1);
+    expect(awayDeltas[0]).toMatchObject({
+      replacementBaselineSource: "optimal_lineup_v2",
+      optimalSnapshotId: "away-optimal",
+      chosenPlayerId: "away-starter-2",
+      optimalPlayerId: "optimal-cf",
+      projectedOpportunityCost: -0.1,
+      realizedVsChosenProjection: 0.05,
+      actualVsOptimalProjection: -0.05,
+      managerWpa: -0.0125,
     });
   });
 
@@ -652,5 +1509,78 @@ describe("committed manager WPA game state", () => {
     expect(deltas.find((delta) => delta.starterPlayerId === "away-starter-1")?.managerWpa).toBe(0.1);
     expect(leaderboard.find((entry) => entry.playerId === "away-starter-1")?.totalWpa).toBe(0.4);
     expect(leaderboard.some((entry) => entry.playerId.includes("manager"))).toBe(false);
+  });
+
+  test("keeps deployment WPA separate from player KBL WPA leaderboards and Player of the Game", () => {
+    const pinchHit = createBetweenPlay({
+      eventId: "game-1_bp_1",
+      eventIndex: 1,
+      substitution: {
+        subType: "pinch_hit",
+        outPlayerId: "away-starter",
+        inPlayerId: "away-bench",
+        inPlayerName: "Away Bench",
+      },
+    });
+    const tacticalPa = createAtBat({
+      eventId: "game-1_2",
+      eventIndex: 2,
+      batterId: "away-bench",
+      batterName: "Away Bench",
+      batterTeamId: "away",
+      wpa: 0.1,
+    });
+    const countedPa = createAtBat({
+      eventId: "game-1_3",
+      eventIndex: 3,
+      batterId: "away-bench",
+      batterName: "Away Bench",
+      batterTeamId: "away",
+      wpa: 0.4,
+    });
+    const state = derive([tacticalPa, countedPa], [pinchHit]);
+    const credits = deriveKblWpaCredits({
+      atBatEvents: [tacticalPa, countedPa],
+      betweenPlayEvents: [pinchHit],
+      awayTeamId: "away",
+      homeTeamId: "home",
+      startingLineups,
+    });
+    const leaderboard = aggregateKblWpaCredits(credits);
+    const playerTotal = leaderboard.find(
+      (entry) => entry.playerId === "away-bench",
+    )?.totalWpa;
+    const playersOfTheGame = rankPlayersOfTheGame(
+      {
+        awayTeamId: "away",
+        homeTeamId: "home",
+        playerStats: {
+          "away-bench": {
+            playerName: "Away Bench",
+            teamId: "away",
+            pa: 2,
+            ab: 2,
+            h: 1,
+            hr: 0,
+            rbi: 0,
+            r: 0,
+            bb: 0,
+            k: 0,
+          },
+        },
+        pitcherGameStats: [],
+      },
+      [tacticalPa, countedPa],
+      credits,
+    );
+
+    expect(state.managerDeploymentStints[0].managerDeploymentWpa).toBe(0.06);
+    expect(playerTotal).toBeCloseTo(0.5, 5);
+    expect(playerTotal).not.toBeCloseTo(
+      0.5 + state.managerDeploymentStints[0].managerDeploymentWpa,
+      5,
+    );
+    expect(leaderboard.some((entry) => entry.playerId.includes("manager"))).toBe(false);
+    expect(playersOfTheGame[0]?.playerId).toBe("away-bench");
   });
 });

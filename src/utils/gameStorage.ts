@@ -14,7 +14,9 @@ import type {
   Position,
 } from "./leagueBuilderStorage";
 import type {
+  ManagerDeploymentStintRecord,
   ManagerDecisionRecord,
+  GameLockLineupSnapshots,
   ManagerLineupDeltaRecord,
 } from "../types/managerWpa";
 import { getTrackerDb } from "./trackerDb";
@@ -184,7 +186,10 @@ export interface PersistedGameState {
 
   // --- NEW: ADVANCED TRACKING ARRAYS ---
   managerDecisions?: ManagerDecisionRecord[];
+  managerDeploymentStints?: ManagerDeploymentStintRecord[];
   managerLineupDeltas?: ManagerLineupDeltaRecord[];
+  optimalLineupSnapshots?: GameLockLineupSnapshots;
+  chosenLineupSnapshots?: GameLockLineupSnapshots;
 
   /** @deprecated Legacy fixed-value mWAR snapshots; keep only for compatibility. */
   legacyManagerDecisions?: Array<{
@@ -576,7 +581,10 @@ export interface CompletedGameRecord {
   };
   // --- NEW: CATCH THE ADVANCED ARRAYS ---
   managerDecisions?: PersistedGameState["managerDecisions"];
+  managerDeploymentStints?: PersistedGameState["managerDeploymentStints"];
   managerLineupDeltas?: PersistedGameState["managerLineupDeltas"];
+  optimalLineupSnapshots?: PersistedGameState["optimalLineupSnapshots"];
+  chosenLineupSnapshots?: PersistedGameState["chosenLineupSnapshots"];
   legacyManagerDecisions?: PersistedGameState["legacyManagerDecisions"];
   moraleShifts?: PersistedGameState["moraleShifts"];
   playerRatingsSnapshots?: PersistedGameState["playerRatingsSnapshots"];
@@ -618,6 +626,9 @@ export interface GameRecord extends CompletedGameRecord {
     away: { playerId: string; playerName: string };
     home: { playerId: string; playerName: string };
   };
+
+  optimalLineupSnapshots?: GameLockLineupSnapshots;
+  chosenLineupSnapshots?: GameLockLineupSnapshots;
 
   // Game environment
   lighting?: "day" | "night" | "hazy";
@@ -753,7 +764,10 @@ export async function archiveCompletedGame(
     playersOfTheGame: context?.playersOfTheGame,
     // --- NEW: ARCHIVE THE ADVANCED ARRAYS ---
     managerDecisions: gameState.managerDecisions || [],
+    managerDeploymentStints: gameState.managerDeploymentStints || [],
     managerLineupDeltas: gameState.managerLineupDeltas || [],
+    optimalLineupSnapshots: gameState.optimalLineupSnapshots,
+    chosenLineupSnapshots: gameState.chosenLineupSnapshots,
     legacyManagerDecisions: gameState.legacyManagerDecisions || [],
     moraleShifts: gameState.moraleShifts || [],
     playerRatingsSnapshots: gameState.playerRatingsSnapshots,

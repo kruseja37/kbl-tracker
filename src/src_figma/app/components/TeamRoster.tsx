@@ -46,6 +46,7 @@ export interface Player {
   isOutOfGame?: boolean; // Track if player was substituted out
   // Step 0: League Builder passthrough fields for engine access
   playerId?: string;              // League Builder player ID (stable across sessions)
+  primaryPosition?: string;       // Original roster position, preserved through pregame edits
   power?: number;                 // Batting ratings (0-99)
   contact?: number;
   speed?: number;
