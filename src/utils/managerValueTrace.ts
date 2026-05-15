@@ -235,6 +235,7 @@ function describeDeploymentStint(
 
   switch (stint.deploymentRole) {
     case "kept_position_player_in":
+    case "kept_defender_in":
     case "kept_pitcher_in":
     case "kept_in":
       return `Kept ${player} in after the prompt; later ${weightedSummary || "linked"} outcomes carry deployment weights.`;
@@ -299,6 +300,8 @@ function formatDeploymentRole(role: ManagerDeploymentRole): string {
       return "Pitcher";
     case "kept_position_player_in":
       return "Kept position player in";
+    case "kept_defender_in":
+      return "Kept defender in";
     case "kept_pitcher_in":
       return "Kept pitcher in";
     case "kept_in":

@@ -4,6 +4,7 @@ import { calculateWPA } from "../../engines/wpaCalculator";
 import type { AtBatEvent, BetweenPlayEvent, FieldingEvent } from "../eventLog";
 import {
   deriveManagerDecisionRecords,
+  deriveManagerRecommendationWatchRecords,
   getHalfInningManagerContext,
   getManagerForTeam,
 } from "../managerWpaDerivation";
@@ -138,6 +139,73 @@ function createPromptedKeepCurrent(
   });
 }
 
+function createRecommendationWatch(
+  overrides: Partial<BetweenPlayEvent> & {
+    recommendationType?:
+      | "consider_pitching_change"
+      | "consider_pinch_hitter"
+      | "consider_defensive_replacement";
+    trackedPlayerIds?: string[];
+    teamId?: string;
+    managerId?: string;
+    opponentTeamId?: string;
+    suppressKey?: string;
+  } = {},
+): BetweenPlayEvent {
+  const recommendationType =
+    overrides.recommendationType ?? "consider_pitching_change";
+  const trackedPlayerIds =
+    overrides.trackedPlayerIds ??
+    (recommendationType === "consider_pitching_change"
+      ? ["home-pitcher"]
+      : recommendationType === "consider_pinch_hitter"
+        ? ["away-batter", "away-bench-bat"]
+        : ["home-defender", "home-glove"]);
+  const teamId =
+    overrides.teamId ??
+    (recommendationType === "consider_pinch_hitter" ? "away" : "home");
+  const managerId =
+    overrides.managerId ?? (teamId === "home" ? MANAGERS.home : MANAGERS.away);
+  const opponentTeamId =
+    overrides.opponentTeamId ?? (teamId === "home" ? "away" : "home");
+  const suppressKey =
+    overrides.suppressKey ??
+    `${recommendationType}:${trackedPlayerIds[0]}:5:top`;
+
+  return createBetweenPlay({
+    ...overrides,
+    type: "manager_recommendation",
+    pitcherChange: undefined,
+    substitution: undefined,
+    managerRecommendationWatch: {
+      recommendationId: `rec-${suppressKey}`,
+      type: recommendationType,
+      managerId,
+      teamId,
+      opponentTeamId,
+      confidence: "high",
+      surface: "recommendation_card",
+      trackedPlayerIds,
+      primaryAction:
+        recommendationType === "consider_pitching_change"
+          ? "open_pitching_change"
+          : recommendationType === "consider_pinch_hitter"
+            ? "open_pinch_hit"
+            : "open_defensive_sub",
+      noChangeAction:
+        recommendationType === "consider_pitching_change"
+          ? "keep_pitcher"
+          : recommendationType === "consider_pinch_hitter"
+            ? "let_batter_hit"
+            : "decline_defensive_sub",
+      suppressKey,
+      leverageIndex: 2.1,
+      title: "Test recommendation",
+      rationale: "Test rationale",
+    },
+  });
+}
+
 function createFieldingEvent(
   overrides: Partial<FieldingEvent> = {},
 ): FieldingEvent {
@@ -181,6 +249,23 @@ function derive(
     awayManagerId: MANAGERS.away,
     homeManagerId: MANAGERS.home,
     ...options,
+  });
+}
+
+function deriveWatches(
+  atBatEvents: AtBatEvent[] = [],
+  betweenPlayEvents: BetweenPlayEvent[] = [],
+  fieldingEvents: FieldingEvent[] = [],
+) {
+  return deriveManagerRecommendationWatchRecords({
+    gameId: "game-1",
+    atBatEvents,
+    betweenPlayEvents,
+    fieldingEvents,
+    awayTeamId: "away",
+    homeTeamId: "home",
+    awayManagerId: MANAGERS.away,
+    homeManagerId: MANAGERS.home,
   });
 }
 
@@ -1462,6 +1547,527 @@ describe("manager WPA derivation", () => {
 
     expect(decisions).toHaveLength(1);
     expect(decisions[0].decisionEventId).toBe("game-1_bp_keep_1");
+  });
+
+  test("infers leave-pitcher-in when a shown recommendation is ignored and the pitcher faces the next batter", () => {
+    const watch = createRecommendationWatch({
+      eventId: "game-1_bp_rec_pitcher",
+      eventIndex: 1,
+      recommendationType: "consider_pitching_change",
+      trackedPlayerIds: ["home-pitcher"],
+      suppressKey: "consider_pitching_change:home-pitcher:5:top",
+      gameState: {
+        inning: 5,
+        halfInning: "TOP",
+        outs: 1,
+        score: { away: 2, home: 2 },
+        runnersOn: {},
+      },
+    });
+    const nextPa = createAtBat({
+      eventId: "game-1_2",
+      eventIndex: 2,
+      inning: 5,
+      halfInning: "TOP",
+      pitcherId: "home-pitcher",
+      pitcherName: "Home Pitcher",
+      result: "2B",
+      awayScoreAfter: 3,
+      outsAfter: 1,
+    });
+
+    const [decision] = derive([nextPa], [watch]);
+
+    expect(decision).toMatchObject({
+      decisionType: "leave_pitcher_in",
+      inferenceMethod: "passive",
+      decisionSource: "situational_prompt",
+      decisionEventId: "game-1_bp_rec_pitcher",
+      resolved: true,
+      resolvedAtEventId: "game-1_2",
+      explanationMetadata: {
+        recommendation: {
+          response: "inferred_no_change",
+          recommendationType: "consider_pitching_change",
+          recommendedPlayerId: "home-pitcher",
+        },
+      },
+    });
+    expect(decision.managerWpa).toBeCloseTo((decision.rawWindowWpa ?? 0) * 0.2, 4);
+  });
+
+  test("resolves pitching recommendations to the first endpoint before later removals", () => {
+    const watch = createRecommendationWatch({
+      eventId: "game-1_bp_rec_pitcher",
+      eventIndex: 1,
+      recommendationType: "consider_pitching_change",
+      trackedPlayerIds: ["home-pitcher"],
+      suppressKey: "consider_pitching_change:home-pitcher:5:top",
+      gameState: {
+        inning: 5,
+        halfInning: "TOP",
+        outs: 1,
+        score: { away: 2, home: 2 },
+        runnersOn: {},
+      },
+    });
+    const nextPa = createAtBat({
+      eventId: "game-1_2",
+      eventIndex: 2,
+      inning: 5,
+      halfInning: "TOP",
+      pitcherId: "home-pitcher",
+      pitcherName: "Home Pitcher",
+      result: "1B",
+      runnersAfter: {
+        first: {
+          runnerId: "away-batter",
+          runnerName: "Away Batter",
+          responsiblePitcherId: "home-pitcher",
+        },
+        second: null,
+        third: null,
+      },
+      outsAfter: 1,
+    });
+    const laterRemoval = createBetweenPlay({
+      eventId: "game-1_bp_later_pitching_change",
+      eventIndex: 3,
+      type: "pitcher_change",
+      gameState: {
+        inning: 5,
+        halfInning: "TOP",
+        outs: 1,
+        score: { away: 2, home: 2 },
+        runnersOn: { first: "away-batter" },
+      },
+      pitcherChange: {
+        outgoingPitcherId: "home-pitcher",
+        incomingPitcherId: "home-reliever",
+        inheritedRunners: 1,
+      },
+    });
+
+    const decisions = derive([nextPa], [watch, laterRemoval]);
+    const keepDecision = decisions.find(
+      (decision) => decision.decisionType === "leave_pitcher_in",
+    );
+    const removalDecision = decisions.find(
+      (decision) => decision.decisionType === "pitching_change",
+    );
+    const [watchRecord] = deriveWatches([nextPa], [watch, laterRemoval]);
+
+    expect(keepDecision).toMatchObject({
+      decisionType: "leave_pitcher_in",
+      resolvedAtEventId: "game-1_2",
+      explanationMetadata: {
+        recommendation: {
+          response: "inferred_no_change",
+          recommendationType: "consider_pitching_change",
+        },
+      },
+    });
+    expect(removalDecision?.explanationMetadata?.recommendation).toBeUndefined();
+    expect(watchRecord).toMatchObject({
+      status: "inferred_no_change",
+      resolvedAtEventId: "game-1_2",
+      resolutionDecisionType: "leave_pitcher_in",
+    });
+  });
+
+  test("infers let-batter-hit when a shown recommendation is ignored and the batter hits", () => {
+    const watch = createRecommendationWatch({
+      eventId: "game-1_bp_rec_hitter",
+      eventIndex: 1,
+      recommendationType: "consider_pinch_hitter",
+      trackedPlayerIds: ["away-batter", "away-bench-bat"],
+      teamId: "away",
+      managerId: MANAGERS.away,
+      opponentTeamId: "home",
+      suppressKey: "consider_pinch_hitter:away-batter:5:top",
+      gameState: {
+        inning: 5,
+        halfInning: "TOP",
+        outs: 1,
+        score: { away: 2, home: 2 },
+        runnersOn: {},
+      },
+    });
+    const targetPa = createAtBat({
+      eventId: "game-1_2",
+      eventIndex: 2,
+      inning: 5,
+      halfInning: "TOP",
+      batterId: "away-batter",
+      batterName: "Away Batter",
+      result: "1B",
+      runnersAfter: {
+        first: {
+          runnerId: "away-batter",
+          runnerName: "Away Batter",
+          responsiblePitcherId: "home-pitcher",
+        },
+        second: null,
+        third: null,
+      },
+      outsAfter: 1,
+    });
+
+    const [decision] = derive([targetPa], [watch]);
+
+    expect(decision).toMatchObject({
+      decisionType: "let_batter_hit",
+      inferenceMethod: "passive",
+      managerId: MANAGERS.away,
+      teamId: "away",
+      resolved: true,
+      resolvedAtEventId: "game-1_2",
+      explanationMetadata: {
+        recommendation: {
+          response: "inferred_no_change",
+          recommendationType: "consider_pinch_hitter",
+          suggestedPlayerId: "away-bench-bat",
+        },
+      },
+    });
+    expect(decision.managerWpa).toBeCloseTo((decision.rawWindowWpa ?? 0) * 0.2, 4);
+  });
+
+  test("resolves pinch-hit recommendations to the batter PA before later substitutions", () => {
+    const watch = createRecommendationWatch({
+      eventId: "game-1_bp_rec_hitter",
+      eventIndex: 1,
+      recommendationType: "consider_pinch_hitter",
+      trackedPlayerIds: ["away-batter", "away-bench-bat"],
+      teamId: "away",
+      managerId: MANAGERS.away,
+      opponentTeamId: "home",
+      suppressKey: "consider_pinch_hitter:away-batter:5:top",
+      gameState: {
+        inning: 5,
+        halfInning: "TOP",
+        outs: 1,
+        score: { away: 2, home: 2 },
+        runnersOn: {},
+      },
+    });
+    const targetPa = createAtBat({
+      eventId: "game-1_2",
+      eventIndex: 2,
+      inning: 5,
+      halfInning: "TOP",
+      batterId: "away-batter",
+      batterName: "Away Batter",
+      result: "1B",
+      runnersAfter: {
+        first: {
+          runnerId: "away-batter",
+          runnerName: "Away Batter",
+          responsiblePitcherId: "home-pitcher",
+        },
+        second: null,
+        third: null,
+      },
+      outsAfter: 1,
+    });
+    const laterSub = createBetweenPlay({
+      eventId: "game-1_bp_later_hitter_sub",
+      eventIndex: 3,
+      type: "substitution",
+      pitcherChange: undefined,
+      gameState: {
+        inning: 5,
+        halfInning: "TOP",
+        outs: 1,
+        score: { away: 2, home: 2 },
+        runnersOn: { first: "away-batter" },
+      },
+      substitution: {
+        subType: "pinch_hit",
+        outPlayerId: "away-batter",
+        inPlayerId: "away-later-bat",
+      },
+    });
+    const replacementPa = createAtBat({
+      eventId: "game-1_4",
+      eventIndex: 4,
+      inning: 5,
+      halfInning: "TOP",
+      batterId: "away-later-bat",
+      batterName: "Away Later Bat",
+      result: "FO",
+      outsAfter: 2,
+    });
+
+    const decisions = derive([targetPa, replacementPa], [watch, laterSub]);
+    const letHitDecision = decisions.find(
+      (decision) => decision.decisionType === "let_batter_hit",
+    );
+    const laterSubDecision = decisions.find(
+      (decision) => decision.decisionEventId === "game-1_bp_later_hitter_sub",
+    );
+    const [watchRecord] = deriveWatches(
+      [targetPa, replacementPa],
+      [watch, laterSub],
+    );
+
+    expect(letHitDecision).toMatchObject({
+      decisionType: "let_batter_hit",
+      resolvedAtEventId: "game-1_2",
+      explanationMetadata: {
+        recommendation: {
+          response: "inferred_no_change",
+          recommendationType: "consider_pinch_hitter",
+        },
+      },
+    });
+    expect(laterSubDecision?.explanationMetadata?.recommendation).toBeUndefined();
+    expect(watchRecord).toMatchObject({
+      status: "inferred_no_change",
+      resolvedAtEventId: "game-1_2",
+      resolutionDecisionType: "let_batter_hit",
+    });
+  });
+
+  test("links substitution behavior to recommendation metadata without scoring accepted recommendation directly", () => {
+    const watch = createRecommendationWatch({
+      eventId: "game-1_bp_rec_hitter",
+      eventIndex: 1,
+      recommendationType: "consider_pinch_hitter",
+      trackedPlayerIds: ["away-batter", "away-bench-bat"],
+      teamId: "away",
+      managerId: MANAGERS.away,
+      opponentTeamId: "home",
+      suppressKey: "consider_pinch_hitter:away-batter:5:top",
+      gameState: {
+        inning: 5,
+        halfInning: "TOP",
+        outs: 1,
+        score: { away: 2, home: 2 },
+        runnersOn: {},
+      },
+    });
+    const pinchHit = createBetweenPlay({
+      eventId: "game-1_bp_sub",
+      eventIndex: 1.5,
+      type: "substitution",
+      pitcherChange: undefined,
+      gameState: watch.gameState,
+      substitution: {
+        subType: "pinch_hit",
+        outPlayerId: "away-batter",
+        inPlayerId: "away-bench-alt",
+      },
+    });
+    const pinchHitPa = createAtBat({
+      eventId: "game-1_2",
+      eventIndex: 2,
+      inning: 5,
+      batterId: "away-bench-alt",
+      batterName: "Away Bench Alt",
+      result: "HR",
+      awayScoreAfter: 3,
+      outsAfter: 1,
+    });
+
+    const decisions = derive([pinchHitPa], [watch, pinchHit]);
+    const [watchRecord] = deriveWatches([pinchHitPa], [watch, pinchHit]);
+
+    expect(decisions).toHaveLength(1);
+    expect(decisions[0]).toMatchObject({
+      decisionType: "pinch_hitter",
+      decisionEventId: "game-1_bp_sub",
+      resolved: true,
+      explanationMetadata: {
+        recommendation: {
+          response: "action_taken_alternative",
+          recommendationType: "consider_pinch_hitter",
+          recommendedPlayerId: "away-batter",
+          suggestedPlayerId: "away-bench-bat",
+          actualPlayerId: "away-bench-alt",
+          alternativePlayerId: "away-bench-alt",
+        },
+      },
+    });
+    expect(decisions[0].managerWpa).toBeCloseTo(
+      (decisions[0].rawWindowWpa ?? 0) * 0.25,
+      4,
+    );
+    expect(watchRecord).toMatchObject({
+      status: "action_taken_alternative",
+      resolvedAtEventId: "game-1_bp_sub",
+      resolutionDecisionType: "pinch_hitter",
+      actualPlayerId: "away-bench-alt",
+      alternativePlayerId: "away-bench-alt",
+    });
+  });
+
+  test("resolves defensive recommendations to the first fielding chance before later substitutions", () => {
+    const watch = createRecommendationWatch({
+      eventId: "game-1_bp_rec_defense",
+      eventIndex: 1,
+      recommendationType: "consider_defensive_replacement",
+      trackedPlayerIds: ["home-defender", "home-glove"],
+      teamId: "home",
+      managerId: MANAGERS.home,
+      opponentTeamId: "away",
+      suppressKey: "consider_defensive_replacement:home-defender:5:top",
+      gameState: {
+        inning: 5,
+        halfInning: "TOP",
+        outs: 1,
+        score: { away: 2, home: 2 },
+        runnersOn: {},
+      },
+    });
+    const fieldingPa = createAtBat({
+      eventId: "game-1_2",
+      eventIndex: 2,
+      inning: 5,
+      halfInning: "TOP",
+      batterId: "away-batter",
+      pitcherId: "home-pitcher",
+      result: "GO",
+      outsAfter: 2,
+    });
+    const keptDefenderFielding = createFieldingEvent({
+      fieldingEventId: "game-1_fld_kept_defender",
+      atBatEventId: "game-1_2",
+      playerId: "home-defender",
+      playerName: "Home Defender",
+      teamId: "home",
+      position: "SS",
+      success: true,
+    });
+    const laterSub = createBetweenPlay({
+      eventId: "game-1_bp_later_defensive_sub",
+      eventIndex: 3,
+      type: "substitution",
+      pitcherChange: undefined,
+      gameState: {
+        inning: 5,
+        halfInning: "TOP",
+        outs: 2,
+        score: { away: 2, home: 2 },
+        runnersOn: {},
+      },
+      substitution: {
+        subType: "defensive_replace",
+        outPlayerId: "home-defender",
+        inPlayerId: "home-glove",
+        position: "SS",
+      },
+    });
+    const laterPa = createAtBat({
+      eventId: "game-1_4",
+      eventIndex: 4,
+      inning: 5,
+      halfInning: "TOP",
+      batterId: "away-next-batter",
+      pitcherId: "home-pitcher",
+      result: "GO",
+      outs: 2,
+      outsAfter: 3,
+    });
+    const replacementFielding = createFieldingEvent({
+      fieldingEventId: "game-1_fld_replacement",
+      atBatEventId: "game-1_4",
+      playerId: "home-glove",
+      playerName: "Home Glove",
+      teamId: "home",
+      position: "SS",
+      success: true,
+    });
+
+    const decisions = derive(
+      [fieldingPa, laterPa],
+      [watch, laterSub],
+      [keptDefenderFielding, replacementFielding],
+    );
+    const keepDecision = decisions.find(
+      (decision) => decision.decisionType === "keep_defender_in",
+    );
+    const laterSubDecision = decisions.find(
+      (decision) => decision.decisionEventId === "game-1_bp_later_defensive_sub",
+    );
+    const [watchRecord] = deriveWatches(
+      [fieldingPa, laterPa],
+      [watch, laterSub],
+      [keptDefenderFielding, replacementFielding],
+    );
+
+    expect(keepDecision).toMatchObject({
+      decisionType: "keep_defender_in",
+      resolvedAtEventId: "game-1_fld_kept_defender",
+      explanationMetadata: {
+        recommendation: {
+          response: "inferred_no_change",
+          recommendationType: "consider_defensive_replacement",
+        },
+      },
+    });
+    expect(laterSubDecision?.explanationMetadata?.recommendation).toBeUndefined();
+    expect(watchRecord).toMatchObject({
+      status: "inferred_no_change",
+      resolvedAtEventId: "game-1_fld_kept_defender",
+      resolutionDecisionType: "keep_defender_in",
+    });
+  });
+
+  test("does not resolve a recommendation as accepted when an unrelated substitution happens", () => {
+    const watch = createRecommendationWatch({
+      eventId: "game-1_bp_rec_hitter",
+      eventIndex: 1,
+      recommendationType: "consider_pinch_hitter",
+      trackedPlayerIds: ["away-batter", "away-bench-bat"],
+      teamId: "away",
+      managerId: MANAGERS.away,
+      opponentTeamId: "home",
+      suppressKey: "consider_pinch_hitter:away-batter:5:top",
+    });
+    const unrelatedSub = createBetweenPlay({
+      eventId: "game-1_bp_unrelated_sub",
+      eventIndex: 1.5,
+      type: "substitution",
+      pitcherChange: undefined,
+      gameState: watch.gameState,
+      substitution: {
+        subType: "pinch_run",
+        outPlayerId: "away-runner",
+        inPlayerId: "away-fast-runner",
+      },
+    });
+    const targetPa = createAtBat({
+      eventId: "game-1_2",
+      eventIndex: 2,
+      inning: 5,
+      halfInning: "TOP",
+      batterId: "away-batter",
+      batterName: "Away Batter",
+      outsAfter: 2,
+    });
+
+    const decisions = derive([targetPa], [watch, unrelatedSub]);
+    const [watchRecord] = deriveWatches([targetPa], [watch, unrelatedSub]);
+
+    expect(
+      decisions.find(
+        (decision) => decision.decisionEventId === "game-1_bp_unrelated_sub",
+      )?.explanationMetadata?.recommendation,
+    ).toBeUndefined();
+    expect(
+      decisions.some(
+        (decision) =>
+          decision.decisionType === "let_batter_hit" &&
+          decision.explanationMetadata?.recommendation?.response ===
+            "inferred_no_change",
+      ),
+    ).toBe(true);
+    expect(watchRecord).toMatchObject({
+      status: "inferred_no_change",
+      resolvedAtEventId: "game-1_2",
+      resolutionDecisionType: "let_batter_hit",
+    });
   });
 
   test("keeps same-provenance prompted decisions from separate PA snapshots distinct", () => {

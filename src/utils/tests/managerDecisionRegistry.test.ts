@@ -36,6 +36,7 @@ describe("manager decision registry", () => {
       "leave_pitcher_in",
       "pinch_hitter",
       "let_batter_hit",
+      "keep_defender_in",
       "pinch_runner",
       "defensive_sub",
       "position_change",
@@ -73,6 +74,7 @@ describe("manager decision registry", () => {
       leave_pitcher_in: "matchup",
       pinch_hitter: "matchup",
       let_batter_hit: "matchup",
+      keep_defender_in: "matchup",
       pinch_runner: "personnel_stint",
       defensive_sub: "matchup",
       position_change: "matchup",
@@ -108,7 +110,7 @@ describe("manager decision registry", () => {
         (decisionType) =>
           MANAGER_DECISION_REGISTRY[decisionType].captureMode === "prompted",
       ),
-    ).toEqual(["leave_pitcher_in", "let_batter_hit"]);
+    ).toEqual(["leave_pitcher_in", "let_batter_hit", "keep_defender_in"]);
   });
 
   test("keeps hit-and-run at the agreed tactical share", () => {

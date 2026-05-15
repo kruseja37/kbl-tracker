@@ -32,7 +32,10 @@ import {
 import type { GameAggregationOptions } from "../../utils/seasonAggregator";
 import { processCompletedGame } from "../../utils/processCompletedGame";
 import { deriveCommittedManagerDecisionState } from "../../utils/managerWpaGameState";
-import type { GameLockLineupSnapshots } from "../../types/managerWpa";
+import type {
+  GameLockLineupSnapshots,
+  ManagerRecommendationWatchEvent,
+} from "../../types/managerWpa";
 import { appendEliminationGameFameToRun } from "../../utils/eliminationRunFameStorage";
 import { appendEliminationGameToAllTimeStats } from "../../utils/eliminationAllTimeStatsStorage";
 import {
@@ -467,6 +470,9 @@ export interface UseGameStateReturn {
   ) => Promise<void>;
   recordPromptedManagerDecision: (
     decision: PromptedManagerDecisionEvent,
+  ) => Promise<BetweenPlayEvent>;
+  recordManagerRecommendationWatch: (
+    watch: ManagerRecommendationWatchEvent,
   ) => Promise<BetweenPlayEvent>;
   placeGhostRunner: (base: "second", playerId: string) => void;
   advanceRunner: (
@@ -8579,6 +8585,15 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     [persistBetweenPlayEvent],
   );
 
+  const recordManagerRecommendationWatch = useCallback(
+    async (watch: ManagerRecommendationWatchEvent) =>
+      persistBetweenPlayEvent({
+        type: "manager_recommendation",
+        managerRecommendationWatch: watch,
+      }),
+    [persistBetweenPlayEvent],
+  );
+
   const advanceRunner = useCallback(
     (
       from: "first" | "second" | "third",
@@ -10675,6 +10690,8 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
           managerDeploymentStints:
             committedManagerDecisionState.managerDeploymentStints,
           managerLineupDeltas: committedManagerDecisionState.managerLineupDeltas,
+          managerRecommendationWatches:
+            committedManagerDecisionState.managerRecommendationWatches,
           optimalLineupSnapshots: gameHeader?.optimalLineupSnapshots,
           chosenLineupSnapshots: gameHeader?.chosenLineupSnapshots,
         };
@@ -11570,6 +11587,8 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         managerDeploymentStints:
           committedManagerDecisionState.managerDeploymentStints,
         managerLineupDeltas: committedManagerDecisionState.managerLineupDeltas,
+        managerRecommendationWatches:
+          committedManagerDecisionState.managerRecommendationWatches,
         optimalLineupSnapshots: endGameHeader?.optimalLineupSnapshots,
         chosenLineupSnapshots: endGameHeader?.chosenLineupSnapshots,
       };
@@ -11922,6 +11941,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     reassignRunnerEventAttribution,
     recordManagerMoment,
     recordPromptedManagerDecision,
+    recordManagerRecommendationWatch,
     placeGhostRunner,
     advanceRunner,
     advanceRunnersBatch,

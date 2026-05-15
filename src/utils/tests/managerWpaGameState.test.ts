@@ -153,6 +153,72 @@ function createPromptedKeepCurrent(
   });
 }
 
+function createRecommendationWatch(
+  overrides: Partial<BetweenPlayEvent> & {
+    recommendationType?:
+      | "consider_pitching_change"
+      | "consider_pinch_hitter"
+      | "consider_defensive_replacement";
+    trackedPlayerIds?: string[];
+    teamId?: string;
+    managerId?: string;
+    opponentTeamId?: string;
+    suppressKey?: string;
+  } = {},
+): BetweenPlayEvent {
+  const recommendationType =
+    overrides.recommendationType ?? "consider_defensive_replacement";
+  const trackedPlayerIds =
+    overrides.trackedPlayerIds ??
+    (recommendationType === "consider_pitching_change"
+      ? ["home-pitcher"]
+      : recommendationType === "consider_pinch_hitter"
+        ? ["away-batter", "away-bench-bat"]
+        : ["home-defender", "home-glove"]);
+  const teamId =
+    overrides.teamId ??
+    (recommendationType === "consider_pinch_hitter" ? "away" : "home");
+  const managerId =
+    overrides.managerId ?? (teamId === "home" ? "home-manager" : "away-manager");
+  const opponentTeamId =
+    overrides.opponentTeamId ?? (teamId === "home" ? "away" : "home");
+  const suppressKey =
+    overrides.suppressKey ??
+    `${recommendationType}:${trackedPlayerIds[0]}:6:top`;
+
+  return createBetweenPlay({
+    ...overrides,
+    type: "manager_recommendation",
+    substitution: undefined,
+    managerRecommendationWatch: {
+      recommendationId: `rec-${suppressKey}`,
+      type: recommendationType,
+      managerId,
+      teamId,
+      opponentTeamId,
+      confidence: "high",
+      surface: "recommendation_card",
+      trackedPlayerIds,
+      primaryAction:
+        recommendationType === "consider_pitching_change"
+          ? "open_pitching_change"
+          : recommendationType === "consider_pinch_hitter"
+            ? "open_pinch_hit"
+            : "open_defensive_sub",
+      noChangeAction:
+        recommendationType === "consider_pitching_change"
+          ? "keep_pitcher"
+          : recommendationType === "consider_pinch_hitter"
+            ? "let_batter_hit"
+            : "decline_defensive_sub",
+      suppressKey,
+      leverageIndex: 2.1,
+      title: "Test recommendation",
+      rationale: "Test rationale",
+    },
+  });
+}
+
 function derive(
   atBatEvents: AtBatEvent[] = [],
   betweenPlayEvents: BetweenPlayEvent[] = [],
@@ -559,6 +625,7 @@ describe("committed manager WPA game state", () => {
     ["pitcher", 0.15, 0.2],
     ["defensive_position", 0.2, 0.15],
     ["kept_position_player_in", 0.15, 0.15],
+    ["kept_defender_in", 0.15, 0.15],
     ["kept_pitcher_in", 0.15, 0.15],
     ["kept_in", 0.15, 0.15],
     ["manual_deployment", 0.1, 0.1],
@@ -1220,6 +1287,187 @@ describe("committed manager WPA game state", () => {
         .managerDeploymentWpa,
       5,
     );
+  });
+
+  test("ignored defensive replacement recommendation opens a kept-defender deployment for later fielding", () => {
+    const watch = createRecommendationWatch({
+      eventId: "game-1_bp_def_rec",
+      eventIndex: 1,
+      recommendationType: "consider_defensive_replacement",
+      trackedPlayerIds: ["home-defender", "home-glove"],
+      teamId: "home",
+      managerId: "home-manager",
+      opponentTeamId: "away",
+      suppressKey: "consider_defensive_replacement:home-defender:6:top",
+      gameState: {
+        inning: 6,
+        halfInning: "TOP",
+        outs: 0,
+        score: { away: 2, home: 2 },
+        runnersOn: {},
+      },
+    });
+    const tacticalFieldingPa = createAtBat({
+      eventId: "game-1_2",
+      eventIndex: 2,
+      inning: 6,
+      halfInning: "TOP",
+      batterId: "away-batter-2",
+      batterName: "Away Batter 2",
+      pitcherId: "home-pitcher",
+      pitcherTeamId: "home",
+      result: "FO",
+      outs: 0,
+      outsAfter: 1,
+      wpaModelVersion: WPA_MODEL_VERSION,
+    });
+    const laterFieldingPa = createAtBat({
+      eventId: "game-1_3",
+      eventIndex: 3,
+      inning: 6,
+      halfInning: "TOP",
+      batterId: "away-batter-3",
+      batterName: "Away Batter 3",
+      pitcherId: "home-pitcher",
+      pitcherTeamId: "home",
+      result: "FO",
+      outs: 1,
+      outsAfter: 2,
+      wpaModelVersion: WPA_MODEL_VERSION,
+    });
+    const fieldingEvents: FieldingEvent[] = [
+      {
+        fieldingEventId: "fielding-defender-tactical",
+        gameId: "game-1",
+        atBatEventId: "game-1_2",
+        sequence: 1,
+        playerId: "home-defender",
+        playerName: "Home Defender",
+        position: "SS",
+        teamId: "home",
+        playType: "putout",
+        difficulty: "routine",
+        ballInPlay: { trajectory: "fly", zone: 6 },
+        success: true,
+        runsPreventedOrAllowed: 0,
+      },
+      {
+        fieldingEventId: "fielding-defender-later",
+        gameId: "game-1",
+        atBatEventId: "game-1_3",
+        sequence: 1,
+        playerId: "home-defender",
+        playerName: "Home Defender",
+        position: "SS",
+        teamId: "home",
+        playType: "putout",
+        difficulty: "routine",
+        ballInPlay: { trajectory: "line", zone: 6 },
+        success: true,
+        runsPreventedOrAllowed: 0,
+      },
+    ];
+
+    const state = derive([tacticalFieldingPa, laterFieldingPa], [watch], {
+      fieldingEvents,
+      gameEnded: true,
+    });
+    const keepDecision = state.managerDecisions.find(
+      (decision) => decision.decisionType === "keep_defender_in",
+    );
+    const stint = state.managerDeploymentStints.find(
+      (row) => row.deploymentRole === "kept_defender_in",
+    );
+
+    expect(state.managerRecommendationWatches[0]).toMatchObject({
+      status: "inferred_no_change",
+      resolvedAtEventId: "fielding-defender-tactical",
+      resolutionDecisionType: "keep_defender_in",
+    });
+    expect(keepDecision).toMatchObject({
+      decisionType: "keep_defender_in",
+      inferenceMethod: "passive",
+      resolved: true,
+      resolvedAtEventId: "fielding-defender-tactical",
+      explanationMetadata: {
+        recommendation: {
+          response: "inferred_no_change",
+          recommendationType: "consider_defensive_replacement",
+        },
+      },
+    });
+    expect(stint).toMatchObject({
+      deploymentRole: "kept_defender_in",
+      playerId: "home-defender",
+      managerId: "home-manager",
+      teamId: "home",
+      sourceEventId: "game-1_bp_def_rec",
+      openedAtEventIndex: 2,
+      tacticalExclusionEventIds: ["game-1_2"],
+      linkedEventIds: ["game-1_3"],
+    });
+    expect(stint?.linkedOutcomes).toEqual([
+      expect.objectContaining({
+        eventId: "game-1_3",
+        role: "fielding",
+        weight: 1,
+      }),
+    ]);
+  });
+
+  test("explicit keep-current recommendation does not duplicate inferred no-change", () => {
+    const watch = createRecommendationWatch({
+      eventId: "game-1_bp_rec_pitcher",
+      eventIndex: 1,
+      recommendationType: "consider_pitching_change",
+      trackedPlayerIds: ["home-pitcher"],
+      suppressKey: "keep-home-pitcher",
+    });
+    const explicitKeep = createPromptedKeepCurrent({
+      eventId: "game-1_bp_keep_pitcher",
+      eventIndex: 1.5,
+      decisionType: "leave_pitcher_in",
+      trackedPlayerId: "home-pitcher",
+      teamId: "home",
+      managerId: "home-manager",
+      opponentTeamId: "away",
+      provenanceKey: "keep-home-pitcher",
+      gameState: watch.gameState,
+    });
+    const nextPa = createAtBat({
+      eventId: "game-1_2",
+      eventIndex: 2,
+      pitcherId: "home-pitcher",
+      pitcherName: "Home Pitcher",
+      pitcherTeamId: "home",
+      outsAfter: 2,
+      wpaModelVersion: WPA_MODEL_VERSION,
+    });
+
+    const state = derive([nextPa], [watch, explicitKeep], { gameEnded: true });
+    const keepDecisions = state.managerDecisions.filter(
+      (decision) => decision.decisionType === "leave_pitcher_in",
+    );
+
+    expect(keepDecisions).toHaveLength(1);
+    expect(keepDecisions[0]).toMatchObject({
+      inferenceMethod: "prompted",
+      decisionEventId: "game-1_bp_keep_pitcher",
+      explanationMetadata: {
+        recommendation: {
+          response: "explicit_no_change",
+        },
+      },
+    });
+    expect(state.managerRecommendationWatches[0]).toMatchObject({
+      status: "explicit_no_change",
+      resolvedDecisionId: keepDecisions[0].decisionId,
+    });
+    expect(
+      state.managerDeploymentStints.filter(
+        (stint) => stint.deploymentRole === "kept_pitcher_in",
+      ),
+    ).toHaveLength(1);
   });
 
   test("does not stack overlapping leave-pitcher-in typed stints", () => {
@@ -3105,5 +3353,72 @@ describe("committed manager WPA game state", () => {
     });
     expect(leaderboard.some((entry) => entry.playerId.includes("manager"))).toBe(false);
     expect(playersOfTheGame.some((entry) => entry.playerId.includes("manager"))).toBe(false);
+  });
+
+  test("keeps recommendation watch Manager Value separate from player KBL WPA and Player of the Game", () => {
+    const watch = createRecommendationWatch({
+      eventId: "game-1_bp_rec_pitcher",
+      eventIndex: 1,
+      recommendationType: "consider_pitching_change",
+      trackedPlayerIds: ["home-pitcher"],
+      teamId: "home",
+      managerId: "home-manager",
+      opponentTeamId: "away",
+    });
+    const homer = createAtBat({
+      eventId: "game-1_2",
+      eventIndex: 2,
+      batterId: "away-batter",
+      batterName: "Away Batter",
+      batterTeamId: "away",
+      pitcherId: "home-pitcher",
+      pitcherName: "Home Pitcher",
+      pitcherTeamId: "home",
+      result: "HR",
+      runsScored: ["away-batter"],
+      rbiCount: 1,
+      awayScoreAfter: 3,
+      outsAfter: 1,
+    });
+    const state = derive([homer], [watch]);
+    const inferredKeep = state.managerDecisions.find(
+      (decision) => decision.decisionType === "leave_pitcher_in",
+    );
+    const credits = deriveKblWpaCredits({
+      atBatEvents: [homer],
+      betweenPlayEvents: [watch],
+      awayTeamId: "away",
+      homeTeamId: "home",
+      startingLineups,
+    });
+    const leaderboard = aggregateKblWpaCredits(credits);
+    const playersOfTheGame = rankPlayersOfTheGame(
+      {
+        awayTeamId: "away",
+        homeTeamId: "home",
+        playerStats: {
+          "away-batter": {
+            playerName: "Away Batter",
+            teamId: "away",
+            pa: 1,
+            ab: 1,
+            h: 1,
+            hr: 1,
+            rbi: 1,
+            r: 1,
+            bb: 0,
+            k: 0,
+          },
+        },
+        pitcherGameStats: [],
+      },
+      [homer],
+      credits,
+    );
+
+    expect(inferredKeep?.managerWpa).toEqual(expect.any(Number));
+    expect(leaderboard.some((entry) => entry.playerId.includes("manager"))).toBe(false);
+    expect(playersOfTheGame.some((entry) => entry.playerId.includes("manager"))).toBe(false);
+    expect(playersOfTheGame[0]?.playerId).toBe("away-batter");
   });
 });

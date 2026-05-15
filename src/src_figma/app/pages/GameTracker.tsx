@@ -87,6 +87,7 @@ import {
   type OptimalLineupCandidate,
 } from "../../../utils/optimalLineup";
 import {
+  buildManagerRecommendationWatchEvent,
   buildPromptedManagerDecisionFromRecommendation,
   generateManagerRecommendations,
   getPromptedDecisionTypeForRecommendationAction,
@@ -1313,6 +1314,7 @@ export function GameTracker() {
     recordPlayerStateChange,
     reassignRunnerEventAttribution,
     recordPromptedManagerDecision,
+    recordManagerRecommendationWatch,
     placeGhostRunner,
     advanceRunner,
     advanceRunnersBatch,
@@ -2063,9 +2065,13 @@ export function GameTracker() {
   const committedPromptedManagerRecommendationKeysRef = useRef<Set<string>>(
     new Set(),
   );
+  const committedManagerRecommendationWatchKeysRef = useRef<Set<string>>(
+    new Set(),
+  );
   useEffect(() => {
     setSuppressedManagerRecommendationKeys(new Set());
     committedPromptedManagerRecommendationKeysRef.current = new Set();
+    committedManagerRecommendationWatchKeysRef.current = new Set();
   }, [gameState.gameId]);
   const lastAppliedRestoredMojoFitnessRef = useRef<
     Record<string, { mojo: number; fitness: string }> | null
@@ -10018,6 +10024,57 @@ export function GameTracker() {
       buildManagerRecommendationFeedEntry(recommendation, timestamp + index),
     );
   }, [managerRecommendations]);
+
+  useEffect(() => {
+    if (gameState.gamePhase !== "LIVE" || managerRecommendations.length === 0) {
+      return;
+    }
+
+    let cancelled = false;
+    const commitShownRecommendations = async () => {
+      let committedAny = false;
+      for (const recommendation of managerRecommendations) {
+        const dedupeKey = `${recommendation.recommendationId}:${recommendation.suppressKey}`;
+        if (committedManagerRecommendationWatchKeysRef.current.has(dedupeKey)) {
+          continue;
+        }
+
+        const watch = buildManagerRecommendationWatchEvent({
+          recommendation,
+          opponentTeamId:
+            recommendation.teamId === awayTeamId ? homeTeamId : awayTeamId,
+        });
+        committedManagerRecommendationWatchKeysRef.current.add(dedupeKey);
+        try {
+          await recordManagerRecommendationWatch(watch);
+          committedAny = true;
+        } catch (error) {
+          committedManagerRecommendationWatchKeysRef.current.delete(dedupeKey);
+          console.error(
+            "[Manager WPA] Failed to persist recommendation watch:",
+            error,
+          );
+        }
+      }
+
+      if (!cancelled && committedAny) {
+        await recomputeCommittedManagerWpa("manager recommendation shown");
+      }
+    };
+
+    void commitShownRecommendations();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    awayTeamId,
+    gameState.gamePhase,
+    homeTeamId,
+    managerRecommendations,
+    recomputeCommittedManagerWpa,
+    recordManagerRecommendationWatch,
+  ]);
 
   const handleManagerRecommendationAction = useCallback(
     async (

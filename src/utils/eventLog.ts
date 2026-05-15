@@ -34,6 +34,7 @@ import type {
   GameLockLineupSnapshots,
   ManagerRunnerIntent,
   ManagerRunPlay,
+  ManagerRecommendationWatchEvent,
 } from '../types/managerWpa';
 import type { ParkFactors } from '../types/war';
 import type { CompetitionType } from './gameStorage';
@@ -426,14 +427,18 @@ export type BetweenPlayEventType =
   | 'defensive_indifference' | 'runner_advance'
   | 'pitcher_change' | 'substitution' | 'position_change'
   | 'mojo_change' | 'fitness_change' | 'injury'
-  | 'pitch_count_update' | 'manager_moment';
+  | 'pitch_count_update' | 'manager_moment'
+  | 'manager_recommendation';
 
 export type PromptedManagerDecisionType = Extract<
   ManagerDecisionType,
-  'leave_pitcher_in' | 'let_batter_hit'
+  'leave_pitcher_in' | 'let_batter_hit' | 'keep_defender_in'
 >;
 
-export type PromptedManagerDecisionAction = 'keep_pitcher' | 'let_batter_hit';
+export type PromptedManagerDecisionAction =
+  | 'keep_pitcher'
+  | 'let_batter_hit'
+  | 'decline_defensive_sub';
 
 export interface PromptedManagerDecisionEvent {
   decisionType: PromptedManagerDecisionType;
@@ -586,6 +591,7 @@ export interface BetweenPlayEvent {
   };
 
   promptedManagerDecision?: PromptedManagerDecisionEvent;
+  managerRecommendationWatch?: ManagerRecommendationWatchEvent;
 }
 
 /** Runner state for situational tracking */
@@ -1483,6 +1489,9 @@ export async function undoMostRecentGameAction(gameId: string): Promise<UndoneGa
     getGameEvents(gameId),
     getBetweenPlayEvents(gameId),
   ]);
+  const undoableBetweenPlayEvents = betweenPlayEvents.filter(
+    event => event.type !== 'manager_recommendation'
+  );
 
   const candidates = [
     atBatEvents.length > 0
@@ -1493,12 +1502,12 @@ export async function undoMostRecentGameAction(gameId: string): Promise<UndoneGa
           timestamp: atBatEvents[atBatEvents.length - 1].timestamp,
         }
       : null,
-    betweenPlayEvents.length > 0
+    undoableBetweenPlayEvents.length > 0
       ? {
           kind: 'betweenPlay' as const,
-          eventId: betweenPlayEvents[betweenPlayEvents.length - 1].eventId,
-          eventIndex: betweenPlayEvents[betweenPlayEvents.length - 1].eventIndex,
-          timestamp: betweenPlayEvents[betweenPlayEvents.length - 1].timestamp,
+          eventId: undoableBetweenPlayEvents[undoableBetweenPlayEvents.length - 1].eventId,
+          eventIndex: undoableBetweenPlayEvents[undoableBetweenPlayEvents.length - 1].eventIndex,
+          timestamp: undoableBetweenPlayEvents[undoableBetweenPlayEvents.length - 1].timestamp,
         }
       : null,
   ].filter(Boolean) as Array<UndoneGameAction & { timestamp: number }>;

@@ -4,8 +4,10 @@ import { afterEach, describe, expect, test } from 'vitest';
 
 import {
   createGameHeader,
+  getBetweenPlayEvents,
   getBetweenPlayEvent,
   logBetweenPlayEvent,
+  undoMostRecentGameAction,
   updateBetweenPlayEvent,
   type BetweenPlayEvent,
 } from '../../../utils/eventLog';
@@ -164,5 +166,69 @@ describe('BetweenPlayEvent versioning', () => {
         timestamp: 3,
       },
     ]);
+  });
+
+  test('generic undo skips manager recommendation observations', async () => {
+    await createGameHeader({
+      gameId: 'game-undo-recommendation',
+      seasonId: 'season-1',
+      statsScopeId: 'season-1-regular',
+      competitionType: 'regular_season',
+      date: Date.now(),
+      awayTeamId: 'away-team',
+      awayTeamName: 'Away Team',
+      homeTeamId: 'home-team',
+      homeTeamName: 'Home Team',
+      finalScore: null,
+      finalInning: 1,
+      isComplete: false,
+    });
+
+    await logBetweenPlayEvent(createBetweenPlayEvent({
+      eventId: 'game-undo-recommendation_1_bp_stolen_base',
+      gameId: 'game-undo-recommendation',
+      eventIndex: 1,
+      timestamp: 1,
+    }));
+    await logBetweenPlayEvent(createBetweenPlayEvent({
+      eventId: 'game-undo-recommendation_2_bp_recommendation',
+      gameId: 'game-undo-recommendation',
+      eventIndex: 2,
+      timestamp: 2,
+      type: 'manager_recommendation',
+      runnerAction: undefined,
+      stolenBase: undefined,
+      managerRecommendationWatch: {
+        recommendationId: 'rec-keep-pitcher',
+        type: 'consider_pitching_change',
+        managerId: 'home-manager',
+        teamId: 'home-team',
+        opponentTeamId: 'away-team',
+        confidence: 'high',
+        surface: 'recommendation_card',
+        trackedPlayerIds: ['home-pitcher'],
+        primaryAction: 'open_pitching_change',
+        noChangeAction: 'keep_pitcher',
+        suppressKey: 'consider_pitching_change:home-pitcher:1:top',
+      },
+    }));
+
+    const undone = await undoMostRecentGameAction('game-undo-recommendation');
+    const events = await getBetweenPlayEvents('game-undo-recommendation', {
+      includeUndone: true,
+    });
+    const stolenBase = events.find(
+      (event) => event.eventId === 'game-undo-recommendation_1_bp_stolen_base',
+    );
+    const recommendation = events.find(
+      (event) => event.eventId === 'game-undo-recommendation_2_bp_recommendation',
+    );
+
+    expect(undone).toMatchObject({
+      kind: 'betweenPlay',
+      eventId: 'game-undo-recommendation_1_bp_stolen_base',
+    });
+    expect(stolenBase?.undoneAt).toEqual(expect.any(Number));
+    expect(recommendation?.undoneAt).toBeUndefined();
   });
 });

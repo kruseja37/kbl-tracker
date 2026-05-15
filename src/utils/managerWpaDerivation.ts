@@ -19,6 +19,11 @@ import type {
   ManagerDecisionStandards,
   ManagerDecisionType,
   ManagerInferenceMethod,
+  ManagerRecommendationProvenanceMetadata,
+  ManagerRecommendationWatchEvent,
+  ManagerRecommendationWatchRecord,
+  ManagerRecommendationWatchResolutionStatus,
+  ManagerRecommendationWatchType,
 } from "../types/managerWpa";
 import {
   DECISION_HORIZON_BY_DECISION_TYPE,
@@ -286,13 +291,25 @@ export function deriveManagerDecisionRecords(
       left.fieldingEventId.localeCompare(right.fieldingEventId),
   );
 
-  const decisions = [
+  const baseDecisions = [
     ...atBatEvents.flatMap((event) =>
       deriveAtBatManagerDecisions(event, input, gameId),
     ),
     ...managerBetweenPlayEvents.flatMap((event) =>
       deriveBetweenPlayManagerDecisions(event, input, gameId),
     ),
+  ];
+  const recommendationWatchResolution = resolveRecommendationWatches({
+    input,
+    gameId,
+    atBatEvents,
+    betweenPlayEvents,
+    fieldingEvents,
+    baseDecisions,
+  });
+  const decisions = [
+    ...recommendationWatchResolution.decisions,
+    ...recommendationWatchResolution.inferredNoChangeDecisions,
   ];
   if (decisions.length === 0) {
     return [];
@@ -317,6 +334,647 @@ export function deriveManagerDecisionRecords(
 
 export const deriveManagerDecisionsFromEventLog =
   deriveManagerDecisionRecords;
+
+export function deriveManagerRecommendationWatchRecords(
+  input: DeriveManagerDecisionRecordsInput,
+): ManagerRecommendationWatchRecord[] {
+  const gameId =
+    input.gameId ??
+    input.atBatEvents[0]?.gameId ??
+    input.betweenPlayEvents?.[0]?.gameId;
+  if (!gameId) return [];
+
+  const atBatEvents = [...input.atBatEvents]
+    .filter((event) => !event.undoneAt)
+    .sort((left, right) => left.eventIndex - right.eventIndex);
+  const betweenPlayEvents = [...(input.betweenPlayEvents ?? [])]
+    .filter((event) => !event.undoneAt)
+    .sort((left, right) => left.eventIndex - right.eventIndex);
+  const managerBetweenPlayEvents =
+    dedupePromptedManagerDecisionEvents(betweenPlayEvents);
+  const fieldingEvents = [...(input.fieldingEvents ?? [])].sort(
+    (left, right) =>
+      left.atBatEventId.localeCompare(right.atBatEventId) ||
+      left.sequence - right.sequence ||
+      left.fieldingEventId.localeCompare(right.fieldingEventId),
+  );
+  const baseDecisions = [
+    ...atBatEvents.flatMap((event) =>
+      deriveAtBatManagerDecisions(event, input, gameId),
+    ),
+    ...managerBetweenPlayEvents.flatMap((event) =>
+      deriveBetweenPlayManagerDecisions(event, input, gameId),
+    ),
+  ];
+
+  return resolveRecommendationWatches({
+    input,
+    gameId,
+    atBatEvents,
+    betweenPlayEvents,
+    fieldingEvents,
+    baseDecisions,
+  }).watches;
+}
+
+interface RecommendationWatchResolutionInput {
+  input: DeriveManagerDecisionRecordsInput;
+  gameId: string;
+  atBatEvents: AtBatEvent[];
+  betweenPlayEvents: BetweenPlayEvent[];
+  fieldingEvents: FieldingEvent[];
+  baseDecisions: ManagerDecisionRecord[];
+}
+
+interface RecommendationWatchResolutionResult {
+  watches: ManagerRecommendationWatchRecord[];
+  decisions: ManagerDecisionRecord[];
+  inferredNoChangeDecisions: ManagerDecisionRecord[];
+}
+
+interface WatchActionResolution {
+  status: Extract<
+    ManagerRecommendationWatchResolutionStatus,
+    "action_taken" | "action_taken_alternative"
+  >;
+  actualPlayerId?: string;
+  alternativePlayerId?: string;
+}
+
+interface WatchResolution {
+  status: Exclude<ManagerRecommendationWatchResolutionStatus, "pending">;
+  resolvedAtEventId: string;
+  resolutionDecisionType: ManagerDecisionType;
+  decision?: ManagerDecisionRecord;
+  actualPlayerId?: string;
+  alternativePlayerId?: string;
+}
+
+type RecommendationWatchTimelineEntry =
+  | {
+      kind: "between_play";
+      eventId: string;
+      eventIndex: number;
+      betweenPlay: BetweenPlayEvent;
+    }
+  | {
+      kind: "at_bat";
+      eventId: string;
+      eventIndex: number;
+      atBat: AtBatEvent;
+    };
+
+function resolveRecommendationWatches(
+  params: RecommendationWatchResolutionInput,
+): RecommendationWatchResolutionResult {
+  const watchEvents = getRecommendationWatchEvents(params.betweenPlayEvents);
+  if (watchEvents.length === 0) {
+    return {
+      watches: [],
+      decisions: params.baseDecisions,
+      inferredNoChangeDecisions: [],
+    };
+  }
+
+  const watchRecords = watchEvents.map(({ event, watch }) =>
+    createRecommendationWatchRecord(event, watch, params.gameId),
+  );
+  const eventById = new Map(
+    params.betweenPlayEvents.map((event) => [event.eventId, event] as const),
+  );
+  const decisionsByEventId = groupDecisionsByEventId(params.baseDecisions);
+  const fieldingEventsByAtBat = groupFieldingEventsByAtBat(params.fieldingEvents);
+  const timeline = buildRecommendationWatchTimeline(params);
+  const nextWatches = [...watchRecords];
+  const provenanceByDecisionId = new Map<
+    string,
+    {
+      watch: ManagerRecommendationWatchRecord;
+      resolution: WatchResolution;
+    }
+  >();
+  const inferredNoChangeDecisions: ManagerDecisionRecord[] = [];
+
+  for (const watch of nextWatches) {
+    const resolution = findEarliestWatchResolution({
+      watch,
+      decisionsByEventId,
+      fieldingEventsByAtBat,
+      timeline,
+    });
+    if (!resolution) continue;
+
+    let resolvedDecisionId = resolution.decision?.decisionId;
+    if (resolution.status === "inferred_no_change") {
+      const decisionType = noChangeDecisionTypeForRecommendation(watch.type);
+      const sourceEvent = eventById.get(watch.sourceEventId);
+      if (!decisionType || !sourceEvent) continue;
+
+      const inferredDecision = buildInferredNoChangeDecisionFromWatch({
+        input: params.input,
+        gameId: params.gameId,
+        watch,
+        sourceEvent,
+        decisionType,
+      });
+      inferredNoChangeDecisions.push(inferredDecision);
+      resolvedDecisionId = inferredDecision.decisionId;
+    } else if (
+      resolution.decision &&
+      !provenanceByDecisionId.has(resolution.decision.decisionId)
+    ) {
+      provenanceByDecisionId.set(resolution.decision.decisionId, {
+        watch,
+        resolution,
+      });
+    }
+
+    updateWatchResolution(nextWatches, watch.watchId, {
+      status: resolution.status,
+      resolvedAtEventId: resolution.resolvedAtEventId,
+      resolvedDecisionId,
+      resolutionDecisionType: resolution.resolutionDecisionType,
+      actualPlayerId: resolution.actualPlayerId,
+      alternativePlayerId: resolution.alternativePlayerId,
+    });
+  }
+
+  const decoratedDecisions = params.baseDecisions.map((decision) => {
+    const provenance = provenanceByDecisionId.get(decision.decisionId);
+    if (!provenance) return decision;
+
+    return attachRecommendationProvenance(
+      decision,
+      provenance.watch,
+      provenance.resolution.status,
+      {
+        actualPlayerId: provenance.resolution.actualPlayerId,
+        alternativePlayerId: provenance.resolution.alternativePlayerId,
+      },
+    );
+  });
+
+  return {
+    watches: nextWatches,
+    decisions: decoratedDecisions,
+    inferredNoChangeDecisions,
+  };
+}
+
+function getRecommendationWatchEvents(
+  betweenPlayEvents: BetweenPlayEvent[],
+): Array<{ event: BetweenPlayEvent; watch: ManagerRecommendationWatchEvent }> {
+  const seen = new Set<string>();
+  return betweenPlayEvents.flatMap((event) => {
+    const watch = event.managerRecommendationWatch;
+    if (event.type !== "manager_recommendation" || !watch || !event.gameState) {
+      return [];
+    }
+
+    const key = [
+      watch.recommendationId,
+      watch.suppressKey,
+      promptedManagerDecisionSnapshotKey(event),
+    ].join(":");
+    if (seen.has(key)) return [];
+    seen.add(key);
+    return [{ event, watch }];
+  });
+}
+
+function createRecommendationWatchRecord(
+  event: BetweenPlayEvent,
+  watch: ManagerRecommendationWatchEvent,
+  gameId: string,
+): ManagerRecommendationWatchRecord {
+  const gameState = event.gameState!;
+  const targetPlayerId = watch.trackedPlayerIds[0];
+  const suggestedPlayerId = watch.trackedPlayerIds[1];
+  return {
+    ...watch,
+    watchId: `${gameId}:${event.eventId}:watch:${watch.recommendationId}`,
+    gameId,
+    sourceEventId: event.eventId,
+    openedAtEventIndex: event.eventIndex,
+    inning: gameState.inning,
+    half: gameState.halfInning === "TOP" ? "top" : "bottom",
+    outs: gameState.outs,
+    targetPlayerId,
+    suggestedPlayerId,
+    status: "pending",
+    linkedEventIds: [event.eventId],
+  };
+}
+
+function groupDecisionsByEventId(
+  decisions: ManagerDecisionRecord[],
+): Map<string, ManagerDecisionRecord[]> {
+  const grouped = new Map<string, ManagerDecisionRecord[]>();
+  for (const decision of decisions) {
+    if (!decision.decisionEventId) continue;
+    const decisionsForEvent = grouped.get(decision.decisionEventId) ?? [];
+    decisionsForEvent.push(decision);
+    grouped.set(decision.decisionEventId, decisionsForEvent);
+  }
+  return grouped;
+}
+
+function groupFieldingEventsByAtBat(
+  fieldingEvents: FieldingEvent[],
+): Map<string, FieldingEvent[]> {
+  const grouped = new Map<string, FieldingEvent[]>();
+  for (const event of fieldingEvents) {
+    const eventsForAtBat = grouped.get(event.atBatEventId) ?? [];
+    eventsForAtBat.push(event);
+    grouped.set(event.atBatEventId, eventsForAtBat);
+  }
+
+  for (const events of grouped.values()) {
+    events.sort(
+      (left, right) =>
+        left.sequence - right.sequence ||
+        left.fieldingEventId.localeCompare(right.fieldingEventId),
+    );
+  }
+
+  return grouped;
+}
+
+function buildRecommendationWatchTimeline(
+  params: RecommendationWatchResolutionInput,
+): RecommendationWatchTimelineEntry[] {
+  return [
+    ...params.betweenPlayEvents.map((event) => ({
+      kind: "between_play" as const,
+      eventId: event.eventId,
+      eventIndex: event.eventIndex,
+      betweenPlay: event,
+    })),
+    ...params.atBatEvents.map((event) => ({
+      kind: "at_bat" as const,
+      eventId: event.eventId,
+      eventIndex: event.eventIndex,
+      atBat: event,
+    })),
+  ].sort(
+    (left, right) =>
+      left.eventIndex - right.eventIndex ||
+      (left.kind === right.kind ? 0 : left.kind === "between_play" ? -1 : 1) ||
+      left.eventId.localeCompare(right.eventId),
+  );
+}
+
+function findEarliestWatchResolution(input: {
+  watch: ManagerRecommendationWatchRecord;
+  decisionsByEventId: Map<string, ManagerDecisionRecord[]>;
+  fieldingEventsByAtBat: Map<string, FieldingEvent[]>;
+  timeline: RecommendationWatchTimelineEntry[];
+}): WatchResolution | null {
+  for (const entry of input.timeline) {
+    if (entry.eventIndex <= input.watch.openedAtEventIndex) continue;
+
+    if (entry.kind === "between_play") {
+      const event = entry.betweenPlay;
+      if (
+        event.gameState &&
+        !isSameHalf(input.watch, event.gameState.inning, event.gameState.halfInning)
+      ) {
+        return null;
+      }
+
+      const decisions = input.decisionsByEventId.get(event.eventId) ?? [];
+      const explicitNoChangeDecision = findExplicitNoChangeDecisionForWatch(
+        input.watch,
+        event,
+        decisions,
+      );
+      if (explicitNoChangeDecision) {
+        return {
+          status: "explicit_no_change",
+          resolvedAtEventId: event.eventId,
+          resolutionDecisionType: explicitNoChangeDecision.decisionType,
+          decision: explicitNoChangeDecision,
+        };
+      }
+
+      for (const decision of decisions) {
+        if (decision.teamId !== input.watch.teamId) continue;
+        const actionResolution = getWatchActionResolution(
+          input.watch,
+          decision,
+          event,
+        );
+        if (!actionResolution) continue;
+        return {
+          status: actionResolution.status,
+          resolvedAtEventId: event.eventId,
+          resolutionDecisionType: decision.decisionType,
+          decision,
+          actualPlayerId: actionResolution.actualPlayerId,
+          alternativePlayerId: actionResolution.alternativePlayerId,
+        };
+      }
+
+      continue;
+    }
+
+    const event = entry.atBat;
+    if (!isCompleteAtBatWindowEvent(event)) continue;
+    if (!isSameHalf(input.watch, event.inning, event.halfInning)) {
+      return null;
+    }
+
+    const noChangeResolution = getWatchNoChangeResolutionAtBat(
+      input.watch,
+      event,
+      input.fieldingEventsByAtBat,
+    );
+    if (noChangeResolution) return noChangeResolution;
+  }
+
+  return null;
+}
+
+function findExplicitNoChangeDecisionForWatch(
+  watch: ManagerRecommendationWatchRecord,
+  event: BetweenPlayEvent,
+  decisions: ManagerDecisionRecord[],
+): ManagerDecisionRecord | null {
+  const prompted = event.promptedManagerDecision;
+  const expectedDecisionType = noChangeDecisionTypeForRecommendation(watch.type);
+  if (!prompted || prompted.source !== "recommendation" || !expectedDecisionType) {
+    return null;
+  }
+  const matchesRecommendationId =
+    prompted.recommendationId === watch.recommendationId;
+  const matchesProvenanceKey = prompted.provenanceKey === watch.suppressKey;
+  if (!matchesRecommendationId && !matchesProvenanceKey) {
+    return null;
+  }
+  if (!isNoChangeDecisionForRecommendationType(expectedDecisionType)) return null;
+
+  return (
+    decisions.find(
+      (decision) =>
+        decision.teamId === watch.teamId &&
+        decision.decisionType === expectedDecisionType,
+    ) ?? null
+  );
+}
+
+function getWatchActionResolution(
+  watch: ManagerRecommendationWatchRecord,
+  decision: ManagerDecisionRecord,
+  event: BetweenPlayEvent,
+): WatchActionResolution | null {
+  const targetPlayerId = watch.targetPlayerId;
+  if (!targetPlayerId) return null;
+
+  let actualPlayerId: string | undefined;
+  if (
+    watch.type === "consider_pitching_change" &&
+    decision.decisionType === "pitching_change" &&
+    event.pitcherChange?.outgoingPitcherId === targetPlayerId
+  ) {
+    actualPlayerId = event.pitcherChange.incomingPitcherId;
+  } else if (
+    watch.type === "consider_pinch_hitter" &&
+    decision.decisionType === "pinch_hitter" &&
+    event.substitution?.outPlayerId === targetPlayerId
+  ) {
+    actualPlayerId = event.substitution.inPlayerId;
+  } else if (
+    watch.type === "consider_defensive_replacement" &&
+    (decision.decisionType === "defensive_sub" ||
+      decision.decisionType === "position_change") &&
+    (event.substitution?.outPlayerId === targetPlayerId ||
+      event.substitution?.inPlayerId === targetPlayerId)
+  ) {
+    actualPlayerId = event.substitution?.inPlayerId;
+  } else {
+    return null;
+  }
+
+  const isAlternative =
+    Boolean(watch.suggestedPlayerId) &&
+    Boolean(actualPlayerId) &&
+    actualPlayerId !== watch.suggestedPlayerId;
+
+  return {
+    status: isAlternative ? "action_taken_alternative" : "action_taken",
+    actualPlayerId,
+    alternativePlayerId: isAlternative ? actualPlayerId : undefined,
+  };
+}
+
+function noChangeDecisionTypeForRecommendation(
+  recommendationType: ManagerRecommendationWatchType,
+): ManagerDecisionType | null {
+  if (recommendationType === "consider_pitching_change") {
+    return "leave_pitcher_in";
+  }
+  if (recommendationType === "consider_pinch_hitter") {
+    return "let_batter_hit";
+  }
+  if (recommendationType === "consider_defensive_replacement") {
+    return "keep_defender_in";
+  }
+  return null;
+}
+
+function isNoChangeDecisionForRecommendationType(
+  decisionType: ManagerDecisionType,
+): boolean {
+  return (
+    decisionType === "leave_pitcher_in" ||
+    decisionType === "let_batter_hit" ||
+    decisionType === "keep_defender_in"
+  );
+}
+
+function getWatchNoChangeResolutionAtBat(
+  watch: ManagerRecommendationWatchRecord,
+  event: AtBatEvent,
+  fieldingEventsByAtBat: Map<string, FieldingEvent[]>,
+): WatchResolution | null {
+  const decisionType = noChangeDecisionTypeForRecommendation(watch.type);
+  const targetPlayerId = watch.targetPlayerId;
+  if (!decisionType || !targetPlayerId) return null;
+
+  if (
+    watch.type === "consider_pitching_change" &&
+    event.pitcherId === targetPlayerId
+  ) {
+    return {
+      status: "inferred_no_change",
+      resolvedAtEventId: event.eventId,
+      resolutionDecisionType: decisionType,
+    };
+  }
+
+  if (watch.type === "consider_pinch_hitter" && event.batterId === targetPlayerId) {
+    return {
+      status: "inferred_no_change",
+      resolvedAtEventId: event.eventId,
+      resolutionDecisionType: decisionType,
+    };
+  }
+
+  if (watch.type === "consider_defensive_replacement") {
+    const fieldingEvent = (fieldingEventsByAtBat.get(event.eventId) ?? []).find(
+      (candidate) => candidate.playerId === targetPlayerId,
+    );
+    if (!fieldingEvent) return null;
+    return {
+      status: "inferred_no_change",
+      resolvedAtEventId: fieldingEvent.fieldingEventId,
+      resolutionDecisionType: decisionType,
+    };
+  }
+
+  return null;
+}
+
+function buildInferredNoChangeDecisionFromWatch(input: {
+  input: DeriveManagerDecisionRecordsInput;
+  gameId: string;
+  watch: ManagerRecommendationWatchRecord;
+  sourceEvent: BetweenPlayEvent;
+  decisionType: ManagerDecisionType;
+}): ManagerDecisionRecord {
+  const { watch, sourceEvent, decisionType } = input;
+  const halfInning = sourceEvent.gameState?.halfInning ?? "TOP";
+  const score = sourceEvent.gameState?.score ?? { away: 0, home: 0 };
+  const wpa = calculateBetweenPlayWindow(sourceEvent, input.input.totalInnings);
+  const window = buildDecisionWindow({
+    teamId: watch.teamId,
+    homeTeamId: input.input.homeTeamId,
+    homeWinProbabilityBefore: wpa.winProbabilityBefore,
+    decisionType,
+  });
+  const trackedPlayerIds = uniqueStrings([watch.targetPlayerId]);
+
+  return buildDecisionRecord({
+    gameId: input.gameId,
+    decisionEventId: sourceEvent.eventId,
+    linkedEventIds: [sourceEvent.eventId],
+    managerId: watch.managerId,
+    teamId: watch.teamId,
+    opponentTeamId: watch.opponentTeamId,
+    decisionType,
+    inferenceMethod: "passive",
+    decisionSource: "situational_prompt",
+    confidence: watch.confidence,
+    inning: sourceEvent.gameState?.inning ?? watch.inning,
+    halfInning,
+    outs: sourceEvent.gameState?.outs ?? watch.outs,
+    baseState: formatBetweenPlayBaseState(sourceEvent.gameState?.runnersOn),
+    scoreDifferentialForTeam: scoreDifferentialForTeam({
+      teamId: watch.teamId,
+      homeTeamId: input.input.homeTeamId,
+      homeScore: score.home,
+      awayScore: score.away,
+    }),
+    leverageIndex: watch.leverageIndex,
+    involvedPlayerIds: uniqueStrings([
+      watch.targetPlayerId,
+      watch.suggestedPlayerId,
+    ]),
+    window,
+    resolved: false,
+    resolutionWindow: buildResolutionWindow({
+      status: "pending",
+      startEventId: sourceEvent.eventId,
+      startEventIndex: sourceEvent.eventIndex,
+      startSnapshotSource: "event_state",
+      expectedEndpoint: getExpectedEndpoint(decisionType),
+      trackedPlayerIds,
+      trackedRunnerIds: [],
+    }),
+    explanationMetadata: {
+      recommendation: buildRecommendationProvenance(
+        watch,
+        "inferred_no_change",
+      ),
+    },
+    derivedFromFields: [
+      "managerRecommendationWatch",
+      "managerRecommendationWatch.recommendationId",
+      "committedBehavior.noChange",
+    ],
+    decisionKeySuffix: `watch:${watch.recommendationId}`,
+  });
+}
+
+function attachRecommendationProvenance(
+  decision: ManagerDecisionRecord,
+  watch: ManagerRecommendationWatchRecord,
+  response: Exclude<ManagerRecommendationWatchResolutionStatus, "pending">,
+  action?: { actualPlayerId?: string; alternativePlayerId?: string },
+): ManagerDecisionRecord {
+  return {
+    ...decision,
+    explanationMetadata: {
+      ...decision.explanationMetadata,
+      recommendation: buildRecommendationProvenance(watch, response, action),
+    },
+    derivation: {
+      ...decision.derivation,
+      derivedFromFields: uniqueStrings([
+        ...decision.derivation.derivedFromFields,
+        "managerRecommendationWatch",
+      ]),
+    },
+  };
+}
+
+function buildRecommendationProvenance(
+  watch: ManagerRecommendationWatchRecord,
+  response: Exclude<ManagerRecommendationWatchResolutionStatus, "pending">,
+  action?: { actualPlayerId?: string; alternativePlayerId?: string },
+): ManagerRecommendationProvenanceMetadata {
+  return {
+    recommendationId: watch.recommendationId,
+    recommendationType: watch.type,
+    suppressKey: watch.suppressKey,
+    sourceEventId: watch.sourceEventId,
+    response,
+    confidence: watch.confidence,
+    surface: watch.surface,
+    recommendedPlayerId: watch.targetPlayerId,
+    suggestedPlayerId: watch.suggestedPlayerId,
+    actualPlayerId: action?.actualPlayerId,
+    alternativePlayerId: action?.alternativePlayerId,
+  };
+}
+
+function updateWatchResolution(
+  watches: ManagerRecommendationWatchRecord[],
+  watchId: string,
+  updates: Partial<
+    Pick<
+      ManagerRecommendationWatchRecord,
+      | "status"
+      | "resolvedAtEventId"
+      | "resolvedDecisionId"
+      | "resolutionDecisionType"
+      | "actualPlayerId"
+      | "alternativePlayerId"
+    >
+  >,
+): void {
+  const index = watches.findIndex((watch) => watch.watchId === watchId);
+  if (index < 0) return;
+  const current = watches[index];
+  watches[index] = {
+    ...current,
+    ...updates,
+    linkedEventIds: uniqueStrings([
+      ...current.linkedEventIds,
+      updates.resolvedAtEventId,
+    ]),
+  };
+}
 
 function dedupePromptedManagerDecisionEvents(
   events: BetweenPlayEvent[],
@@ -726,8 +1384,12 @@ function deriveBetweenPlayManagerDecisions(
 
 function isSupportedPromptedManagerDecision(
   decisionType: string,
-): decisionType is "leave_pitcher_in" | "let_batter_hit" {
-  return decisionType === "leave_pitcher_in" || decisionType === "let_batter_hit";
+): decisionType is "leave_pitcher_in" | "let_batter_hit" | "keep_defender_in" {
+  return (
+    decisionType === "leave_pitcher_in" ||
+    decisionType === "let_batter_hit" ||
+    decisionType === "keep_defender_in"
+  );
 }
 
 function buildPromptedBetweenPlayDecision(params: {
@@ -1738,6 +2400,10 @@ function getTrackedPlayerIdsForBetweenPlayDecision(
     return uniqueStrings([event.pitcherChange?.incomingPitcherId]);
   }
 
+  if (decisionType === "keep_defender_in") {
+    return fallbackIds;
+  }
+
   if (
     decisionType === "pinch_hitter" ||
     decisionType === "pinch_runner" ||
@@ -1776,7 +2442,7 @@ function getBetweenPlayOutsAfter(event: BetweenPlayEvent): number {
 }
 
 function isSameHalf(
-  decision: ManagerDecisionRecord,
+  decision: { inning: number; half: "top" | "bottom" },
   inning: number,
   halfInning: "TOP" | "BOTTOM",
 ): boolean {
@@ -2020,6 +2686,7 @@ function isDefensiveManagerDecision(decisionType: ManagerDecisionType): boolean 
   return (
     decisionType === "pitching_change" ||
     decisionType === "leave_pitcher_in" ||
+    decisionType === "keep_defender_in" ||
     decisionType === "defensive_sub" ||
     decisionType === "position_change" ||
     decisionType === "intentional_walk"

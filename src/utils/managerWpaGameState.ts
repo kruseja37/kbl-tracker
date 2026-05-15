@@ -21,9 +21,11 @@ import type {
   ManagerDecisionRecord,
   GameLockLineupSnapshots,
   ManagerLineupDeltaRecord,
+  ManagerRecommendationWatchRecord,
   OptimalLineupSnapshot,
 } from "../types/managerWpa";
 import {
+  deriveManagerRecommendationWatchRecords,
   deriveManagerDecisionRecords,
   getManagerForTeam,
   type ManagerAssignmentResolutionInput,
@@ -55,6 +57,7 @@ export const MANAGER_DEPLOYMENT_SHARE_BY_ROLE: Record<
   defensive_position: 0.2,
   pitcher: 0.15,
   kept_position_player_in: 0.15,
+  kept_defender_in: 0.15,
   kept_pitcher_in: 0.15,
   kept_in: 0.15,
   manual_deployment: 0.1,
@@ -68,6 +71,7 @@ export const MANAGER_DEPLOYMENT_CAP_BY_ROLE: Record<
   defensive_position: 0.15,
   pitcher: 0.2,
   kept_position_player_in: 0.15,
+  kept_defender_in: 0.15,
   kept_pitcher_in: 0.15,
   kept_in: 0.15,
   manual_deployment: 0.1,
@@ -101,6 +105,10 @@ export function getManagerDeploymentCreditWeight(
     return 0;
   }
 
+  if (deploymentRole === "kept_defender_in") {
+    return creditRole === "fielding" ? 1 : 0;
+  }
+
   if (deploymentRole === "kept_pitcher_in") {
     return creditRole === "pitching" ? 1 : 0;
   }
@@ -131,6 +139,7 @@ export interface CommittedManagerDecisionState {
   managerDecisions: ManagerDecisionRecord[];
   managerDeploymentStints: ManagerDeploymentStintRecord[];
   managerLineupDeltas: ManagerLineupDeltaRecord[];
+  managerRecommendationWatches: ManagerRecommendationWatchRecord[];
 }
 
 export interface DeriveCommittedManagerDecisionStateInput
@@ -167,6 +176,7 @@ export function deriveCommittedManagerDecisionState(
     managerLineupDeltas: input.gameEnded
       ? deriveManagerLineupDeltaRecords(input)
       : [],
+    managerRecommendationWatches: deriveManagerRecommendationWatchRecords(input),
   };
 }
 
@@ -689,6 +699,7 @@ function groupPromptedKeepCurrentDeploymentOpenings(
 ): Map<string, OpenDeploymentStint[]> {
   const grouped = new Map<string, OpenDeploymentStint[]>();
   const seen = new Set<string>();
+  const explicitPromptKeys = new Set<string>();
   const atBatEvents = [...input.atBatEvents]
     .filter((event) => !event.undoneAt)
     .sort((left, right) => left.eventIndex - right.eventIndex);
@@ -696,19 +707,37 @@ function groupPromptedKeepCurrentDeploymentOpenings(
   for (const event of events) {
     const prompted = event.promptedManagerDecision;
     if (!prompted || !event.gameState) continue;
-    if (
-      prompted.decisionType !== "leave_pitcher_in" &&
-      prompted.decisionType !== "let_batter_hit"
-    ) {
+    const provenanceKey = prompted.provenanceKey ?? prompted.recommendationId;
+    if (provenanceKey) {
+      explicitPromptKeys.add(provenanceKey);
+    }
+  }
+
+  for (const event of events) {
+    const prompted = event.promptedManagerDecision;
+    const recommendationWatch = event.managerRecommendationWatch;
+    if (!event.gameState) continue;
+
+    const decisionType =
+      prompted?.decisionType ??
+      noChangeDecisionTypeForRecommendationWatch(recommendationWatch?.type);
+    if (!decisionType) {
       continue;
     }
 
-    const provenanceKey = prompted.provenanceKey ?? prompted.recommendationId;
+    const provenanceKey =
+      prompted?.provenanceKey ??
+      prompted?.recommendationId ??
+      recommendationWatch?.suppressKey ??
+      recommendationWatch?.recommendationId;
+    if (!prompted && provenanceKey && explicitPromptKeys.has(provenanceKey)) {
+      continue;
+    }
     const dedupeKey = provenanceKey
       ? [
-          prompted.decisionType,
-          prompted.managerId,
-          prompted.teamId,
+          decisionType,
+          prompted?.managerId ?? recommendationWatch?.managerId,
+          prompted?.teamId ?? recommendationWatch?.teamId,
           provenanceKey,
           promptedManagerDecisionSnapshotKey(event),
         ].join(":")
@@ -718,32 +747,47 @@ function groupPromptedKeepCurrentDeploymentOpenings(
       seen.add(dedupeKey);
     }
 
-    const trackedPlayerId = promptedTrackedPlayerIds(prompted)[0];
+    const trackedPlayerId = prompted
+      ? promptedTrackedPlayerIds(prompted)[0]
+      : recommendationWatch?.trackedPlayerIds[0];
     if (!trackedPlayerId) continue;
 
     const endpoint = atBatEvents.find((candidate) => {
       if (candidate.eventIndex <= event.eventIndex) return false;
       if (candidate.inning !== event.gameState?.inning) return false;
       if (candidate.halfInning !== event.gameState?.halfInning) return false;
-      if (prompted.decisionType === "leave_pitcher_in") {
+      if (decisionType === "leave_pitcher_in") {
         return candidate.pitcherId === trackedPlayerId;
+      }
+      if (decisionType === "keep_defender_in") {
+        return (input.fieldingEvents ?? []).some(
+          (fieldingEvent) =>
+            fieldingEvent.atBatEventId === candidate.eventId &&
+            fieldingEvent.playerId === trackedPlayerId,
+        );
       }
       return candidate.batterId === trackedPlayerId;
     });
     if (!endpoint) continue;
 
     const role: ManagerDeploymentRole =
-      prompted.decisionType === "leave_pitcher_in"
+      decisionType === "leave_pitcher_in"
         ? "kept_pitcher_in"
-        : "kept_position_player_in";
+        : decisionType === "keep_defender_in"
+          ? "kept_defender_in"
+          : "kept_position_player_in";
+    const managerId = prompted?.managerId ?? recommendationWatch?.managerId;
+    const teamId = prompted?.teamId ?? recommendationWatch?.teamId;
+    if (!managerId || !teamId) continue;
+
     const opening: OpenDeploymentStint = {
       stintId: `${input.gameId}:${event.eventId}:deployment:${role}:${trackedPlayerId}`,
       gameId: input.gameId,
-      managerId: prompted.managerId,
-      teamId: prompted.teamId,
+      managerId,
+      teamId,
       deploymentRole: role,
       playerId: trackedPlayerId,
-      playerName: prompted.playerName,
+      playerName: prompted?.playerName,
       sourceEventId: event.eventId,
       openedAtEventIndex: endpoint.eventIndex,
       tacticalExclusionEventIds: [endpoint.eventId],
@@ -766,6 +810,23 @@ function hasOpenDeploymentForPlayer(
       stint.playerId === opening.playerId &&
       stint.deploymentRole === opening.deploymentRole,
   );
+}
+
+function noChangeDecisionTypeForRecommendationWatch(
+  recommendationType:
+    | NonNullable<BetweenPlayEvent["managerRecommendationWatch"]>["type"]
+    | undefined,
+): NonNullable<BetweenPlayEvent["promptedManagerDecision"]>["decisionType"] | null {
+  if (recommendationType === "consider_pitching_change") {
+    return "leave_pitcher_in";
+  }
+  if (recommendationType === "consider_pinch_hitter") {
+    return "let_batter_hit";
+  }
+  if (recommendationType === "consider_defensive_replacement") {
+    return "keep_defender_in";
+  }
+  return null;
 }
 
 function promptedTrackedPlayerIds(
@@ -1136,6 +1197,22 @@ function findTacticalExclusionEventIds(
     ]);
   }
 
+  if (stint.deploymentRole === "kept_defender_in") {
+    const firstFieldingAtBat = afterOpen.find((event) =>
+      (input.fieldingEvents ?? []).some(
+        (fieldingEvent) =>
+          fieldingEvent.atBatEventId === event.eventId &&
+          fieldingEvent.playerId === stint.playerId &&
+          (!stint.trackedPosition ||
+            fieldingEvent.position === stint.trackedPosition),
+      ),
+    );
+    return uniqueStrings([
+      ...firstEventId(firstFieldingAtBat),
+      ...promptedEndpointEventIds,
+    ]);
+  }
+
   return promptedEndpointEventIds;
 }
 
@@ -1352,7 +1429,10 @@ function isCreditLinkedToDeploymentStint(input: {
     return false;
   }
 
-  if (stint.deploymentRole === "defensive_position") {
+  if (
+    stint.deploymentRole === "defensive_position" ||
+    stint.deploymentRole === "kept_defender_in"
+  ) {
     return (fieldingEventsByAtBat.get(credit.eventId) ?? []).some(
       (fieldingEvent) =>
         fieldingEvent.playerId === stint.playerId &&
@@ -1457,6 +1537,7 @@ export async function refreshCurrentGameManagerDecisionState(
       managerDecisions: nextState.managerDecisions,
       managerDeploymentStints: nextState.managerDeploymentStints,
       managerLineupDeltas: nextState.managerLineupDeltas,
+      managerRecommendationWatches: nextState.managerRecommendationWatches,
     };
     await saveCurrentGame(updatedCurrentGame);
   }

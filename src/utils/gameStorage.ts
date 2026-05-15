@@ -18,6 +18,7 @@ import type {
   ManagerDecisionRecord,
   GameLockLineupSnapshots,
   ManagerLineupDeltaRecord,
+  ManagerRecommendationWatchRecord,
 } from "../types/managerWpa";
 import { getTrackerDb } from "./trackerDb";
 import { syncEngine } from "./syncEngine";
@@ -188,6 +189,7 @@ export interface PersistedGameState {
   managerDecisions?: ManagerDecisionRecord[];
   managerDeploymentStints?: ManagerDeploymentStintRecord[];
   managerLineupDeltas?: ManagerLineupDeltaRecord[];
+  managerRecommendationWatches?: ManagerRecommendationWatchRecord[];
   optimalLineupSnapshots?: GameLockLineupSnapshots;
   chosenLineupSnapshots?: GameLockLineupSnapshots;
 
@@ -583,6 +585,7 @@ export interface CompletedGameRecord {
   managerDecisions?: PersistedGameState["managerDecisions"];
   managerDeploymentStints?: PersistedGameState["managerDeploymentStints"];
   managerLineupDeltas?: PersistedGameState["managerLineupDeltas"];
+  managerRecommendationWatches?: PersistedGameState["managerRecommendationWatches"];
   optimalLineupSnapshots?: PersistedGameState["optimalLineupSnapshots"];
   chosenLineupSnapshots?: PersistedGameState["chosenLineupSnapshots"];
   legacyManagerDecisions?: PersistedGameState["legacyManagerDecisions"];
@@ -766,6 +769,7 @@ export async function archiveCompletedGame(
     managerDecisions: gameState.managerDecisions || [],
     managerDeploymentStints: gameState.managerDeploymentStints || [],
     managerLineupDeltas: gameState.managerLineupDeltas || [],
+    managerRecommendationWatches: gameState.managerRecommendationWatches || [],
     optimalLineupSnapshots: gameState.optimalLineupSnapshots,
     chosenLineupSnapshots: gameState.chosenLineupSnapshots,
     legacyManagerDecisions: gameState.legacyManagerDecisions || [],
