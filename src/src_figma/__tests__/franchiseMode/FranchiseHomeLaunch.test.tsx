@@ -73,10 +73,16 @@ vi.mock('@/config/teamColors', () => ({
   getTeamColors: vi.fn().mockReturnValue({ primary: '#123456', secondary: '#abcdef' }),
 }));
 
-vi.mock('../../app/utils/franchiseGameTrackerRoster', () => ({
-  buildFranchiseGameTrackerRoster: mocks.mockBuildFranchiseGameTrackerRoster,
-  collectFranchiseRosterPlayerIds: mocks.mockCollectFranchiseRosterPlayerIds,
-}));
+vi.mock('../../app/utils/franchiseGameTrackerRoster', async () => {
+  const actual = await vi.importActual<typeof import('../../app/utils/franchiseGameTrackerRoster')>(
+    '../../app/utils/franchiseGameTrackerRoster',
+  );
+  return {
+    ...actual,
+    buildFranchiseGameTrackerRoster: mocks.mockBuildFranchiseGameTrackerRoster,
+    collectFranchiseRosterPlayerIds: mocks.mockCollectFranchiseRosterPlayerIds,
+  };
+});
 
 vi.mock('../../../utils/leagueBuilderStorage', () => ({
   getTeam: mocks.mockGetTeam,
@@ -425,20 +431,27 @@ function makePlayoffData(useDH = true) {
 }
 
 function makeRoster(teamId: keyof typeof snapshotsByTeam, useDH: boolean) {
+  const positions = useDH
+    ? ['C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF', 'DH']
+    : ['C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF', 'P'];
+  const players = positions.map((position, index) => ({
+    playerId: position === 'P' ? `${teamId}-starter` : `${teamId}-batter-${index + 1}`,
+    name: position === 'P' ? `${teamId} Starter` : `${teamId} Batter ${index + 1}`,
+    battingOrder: index + 1,
+    fieldingPosition: position,
+    position,
+    primaryPosition: position === 'DH' ? '1B' : position,
+    stats: { ab: 0, h: 0, r: 0, rbi: 0, bb: 0, k: 0 },
+    battingHand: index % 2 === 0 ? 'R' : 'L',
+  }));
+
   return {
-    players: [
-      {
-        playerId: `${teamId}-batter-1`,
-        name: `${teamId} Batter`,
-        battingOrder: 1,
-        fieldingPosition: 'C',
-        position: 'C',
-      },
-    ],
+    players,
     pitchers: [
       {
         playerId: `${teamId}-starter`,
         name: `${teamId} Starter`,
+        stats: { ip: '0.0', h: 0, r: 0, er: 0, bb: 0, k: 0, pitches: 0 },
         throwingHand: starterHands[teamId],
         position: 'SP',
         isStarter: true,
@@ -555,6 +568,56 @@ describe('FranchiseHome launch optimal lineup snapshots', () => {
     expect(screen.getByText(/AWAY TEAM vs LHP \(DH\): not set/)).toBeTruthy();
     expect(screen.getByText(/HOME TEAM vs RHP \(DH\): needs confirmation\/recalculation/)).toBeTruthy();
     expect(screen.getByRole('button', { name: 'START GAME' })).toHaveAttribute('disabled');
+    expect(mocks.mockNavigate).not.toHaveBeenCalled();
+  });
+
+  test('regular-season pregame blocks benchmark registration when current lineups are incomplete', async () => {
+    mocks.mockBuildFranchiseGameTrackerRoster.mockImplementation(
+      (teamId: keyof typeof snapshotsByTeam, context?: { useDH?: boolean }) =>
+        Promise.resolve({
+          ...makeRoster(teamId, context?.useDH ?? false),
+          players: makeRoster(teamId, context?.useDH ?? false).players.slice(0, 1),
+          optimalLineups: {},
+        }),
+    );
+
+    render(<FranchiseHome />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'PLAY GAME' }));
+    fireEvent.click(screen.getByRole('button', { name: 'CONFIRM' }));
+
+    await screen.findByText('PRE-GAME LINEUP');
+
+    expect(screen.getByTestId('franchise-pregame-readiness')).toHaveTextContent(
+      'LINEUP READINESS REQUIRED',
+    );
+    expect(screen.getByText(/AWAY TEAM: needs 9 batting-order players for GameTracker start; found 1\./)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'REGISTER CURRENT LINEUPS' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'START GAME' })).toHaveAttribute('disabled');
+    expect(mocks.mockNavigate).not.toHaveBeenCalled();
+  });
+
+  test('regular-season pregame blocks launch with official benchmarks when current lineups are incomplete', async () => {
+    mocks.mockBuildFranchiseGameTrackerRoster.mockImplementation(
+      (teamId: keyof typeof snapshotsByTeam, context?: { useDH?: boolean }) =>
+        Promise.resolve({
+          ...makeRoster(teamId, context?.useDH ?? false),
+          players: makeRoster(teamId, context?.useDH ?? false).players.slice(0, 1),
+        }),
+    );
+
+    render(<FranchiseHome />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'PLAY GAME' }));
+    fireEvent.click(screen.getByRole('button', { name: 'CONFIRM' }));
+
+    await screen.findByText('PRE-GAME LINEUP');
+
+    const startButton = screen.getByRole('button', { name: 'START GAME' });
+    expect(startButton).toHaveAttribute('disabled');
+    fireEvent.click(startButton);
+
+    expect(screen.getByText(/HOME TEAM: needs 9 non-pitcher lineup slots for DH benchmark; found 1\./)).toBeTruthy();
     expect(mocks.mockNavigate).not.toHaveBeenCalled();
   });
 

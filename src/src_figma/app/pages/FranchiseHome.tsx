@@ -51,7 +51,11 @@ import { MilestoneWatchPanel } from "@/app/components/MilestoneWatchPanel";
 import { getApproachingMilestones, type MilestoneWatch } from "../../../utils/milestoneDetector";
 import { getAllCareerBatting, getAllCareerPitching } from "../../../utils/careerStorage";
 import { getSeasonBattingStats, getSeasonPitchingStats, getActiveSeason } from "../../../utils/seasonStorage";
-import { buildFranchiseGameTrackerRoster, collectFranchiseRosterPlayerIds } from "../utils/franchiseGameTrackerRoster";
+import {
+  buildFranchiseGameTrackerRoster,
+  buildFranchisePregameReadiness,
+  collectFranchiseRosterPlayerIds,
+} from "../utils/franchiseGameTrackerRoster";
 import { withPregameManagerNavigationState } from "../utils/pregameNavigationState";
 import {
   optimalLineupField,
@@ -2916,8 +2920,33 @@ function GameDayContent({ scheduleData, currentSeason, onDataRefresh }: GameDayC
     }
   };
 
+  const getPregameReadiness = (data: PreGameData) =>
+    buildFranchisePregameReadiness({
+      teams: [
+        {
+          teamName: data.awayTeamName,
+          players: data.awayPlayers,
+          pitchers: data.awayPitchers,
+          selectedStarterIdx: data.selectedAwayStarterIdx,
+          useDH: data.useDH,
+        },
+        {
+          teamName: data.homeTeamName,
+          players: data.homePlayers,
+          pitchers: data.homePitchers,
+          selectedStarterIdx: data.selectedHomeStarterIdx,
+          useDH: data.useDH,
+        },
+      ],
+    });
+
   const handleRegisterPregameBenchmarks = async () => {
     if (!preGameData) return;
+    const readiness = getPregameReadiness(preGameData);
+    if (!readiness.isReady) {
+      setToastMessage(`Lineup readiness required: ${readiness.issues.join(" | ")}`);
+      return;
+    }
     const awayStarter = preGameData.awayPitchers[preGameData.selectedAwayStarterIdx];
     const homeStarter = preGameData.homePitchers[preGameData.selectedHomeStarterIdx];
     const awaySnapshot = buildCurrentLineupOptimalBenchmark({
@@ -2958,6 +2987,11 @@ function GameDayContent({ scheduleData, currentSeason, onDataRefresh }: GameDayC
   // T3-01: Launch game with selected starters from pre-game screen
   const handleLaunchGame = async () => {
     if (!preGameData) return;
+    const readiness = getPregameReadiness(preGameData);
+    if (!readiness.isReady) {
+      setToastMessage(`Lineup readiness required: ${readiness.issues.join(" | ")}`);
+      return;
+    }
     const { awayPlayers, awayPitchers, homePlayers, homePitchers } = preGameData;
 
     const [awayTeamData, homeTeamData] = await Promise.all([
@@ -3345,6 +3379,10 @@ function GameDayContent({ scheduleData, currentSeason, onDataRefresh }: GameDayC
     : [];
   const pregameBenchmarkRows = buildPregameBenchmarkRows(pregameBenchmarkRequirements);
   const pregameBenchmarkIssues = buildPregameBenchmarkIssues(pregameBenchmarkRequirements);
+  const pregameReadiness = preGameData ? getPregameReadiness(preGameData) : undefined;
+  const pregameReadinessIssues = pregameReadiness?.issues ?? [];
+  const canRegisterPregameBenchmarks = pregameReadiness?.isReady ?? false;
+  const canLaunchPregame = canRegisterPregameBenchmarks && pregameBenchmarkIssues.length === 0;
 
   return (
     <div className="space-y-4">
@@ -3663,9 +3701,22 @@ function GameDayContent({ scheduleData, currentSeason, onDataRefresh }: GameDayC
               <div className="text-xs text-[#E8E8D8]/70">
                 Game {preGameData.gameNumber} &bull; {preGameData.awayTeamName} @ {preGameData.homeTeamName}
               </div>
+              {pregameReadinessIssues.length > 0 && (
+                <div
+                  className="mt-4 border-2 border-[#C4A853] bg-[#1f2b21] p-3 text-left text-[10px] text-[#E8E8D8]"
+                  data-testid="franchise-pregame-readiness"
+                >
+                  <div className="mb-2 font-bold tracking-[0.16em] text-[#C4A853]">
+                    LINEUP READINESS REQUIRED
+                  </div>
+                  <div className="text-[#E8E8D8]/75">
+                    {pregameReadinessIssues.join(" • ")}
+                  </div>
+                </div>
+              )}
               <PregameBenchmarkChecklist
                 rows={pregameBenchmarkRows}
-                onAction={handleRegisterPregameBenchmarks}
+                onAction={canRegisterPregameBenchmarks ? handleRegisterPregameBenchmarks : undefined}
               />
             </div>
 
@@ -3737,9 +3788,9 @@ function GameDayContent({ scheduleData, currentSeason, onDataRefresh }: GameDayC
               </button>
               <button
                 onClick={handleLaunchGame}
-                disabled={pregameBenchmarkIssues.length > 0}
+                disabled={!canLaunchPregame}
                 className={`flex-[2] border-[5px] py-3 text-sm font-bold transition-transform shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)] ${
-                  pregameBenchmarkIssues.length > 0
+                  !canLaunchPregame
                     ? "border-[#4A6844] bg-[#3F5A3A] text-[#E8E8D8]/50 cursor-not-allowed"
                     : "border-[#8B7635] bg-[#C4A853] text-[#1a3020] hover:bg-[#D4B863] active:scale-95"
                 }`}
