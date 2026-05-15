@@ -381,3 +381,45 @@ export function getRunnerDestinationOptions(fromBase: RunnerBase): RunnerDestina
       return ['out'];
   }
 }
+
+export interface RunnerScoreCorrectionPrompt {
+  inning: number;
+  halfInning: 'TOP' | 'BOTTOM';
+  current: { away: number; home: number };
+  reconciled: { away: number; home: number };
+  awayDelta: number;
+  homeDelta: number;
+}
+
+export function buildRunnerScoreCorrectionPrompt(args: {
+  inning: number;
+  halfInning: 'TOP' | 'BOTTOM';
+  current: { away: number; home: number };
+  scoreDelta: number;
+}): RunnerScoreCorrectionPrompt | null {
+  if (!args.scoreDelta) {
+    return null;
+  }
+
+  const rawAwayDelta = args.halfInning === 'TOP' ? args.scoreDelta : 0;
+  const rawHomeDelta = args.halfInning === 'BOTTOM' ? args.scoreDelta : 0;
+  const reconciled = {
+    away: Math.max(0, args.current.away + rawAwayDelta),
+    home: Math.max(0, args.current.home + rawHomeDelta),
+  };
+  const awayDelta = reconciled.away - args.current.away;
+  const homeDelta = reconciled.home - args.current.home;
+
+  if (awayDelta === 0 && homeDelta === 0) {
+    return null;
+  }
+
+  return {
+    inning: args.inning,
+    halfInning: args.halfInning,
+    current: args.current,
+    reconciled,
+    awayDelta,
+    homeDelta,
+  };
+}

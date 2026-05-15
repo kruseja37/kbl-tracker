@@ -98,8 +98,7 @@ export function reconcileTeamPlayersWithLineupSnapshot(
   const outgoingPitcherEntry = shouldInjectPitcherIntoLineup
     ? snapshot.lineup.find((player) =>
         player.playerId === currentPitcher.playerId ||
-        player.position === 'P' ||
-        player.battingOrder === currentPitcher.battingOrder
+        player.position === 'P'
       )
     : null;
   const oldPitcherId = outgoingPitcherEntry?.playerId ?? null;
@@ -176,7 +175,9 @@ export function reconcileTeamPlayersWithLineupSnapshot(
 
   if (
     currentPitcher &&
-    !seenPlayerIds.has(currentPitcher.playerId)
+    !seenPlayerIds.has(currentPitcher.playerId) &&
+    shouldInjectPitcherIntoLineup &&
+    (outgoingPitcherEntry || snapshot.lineup.length < 9)
   ) {
     const existingPitcherSlot = existingPlayers.find((player) => {
       const playerId = getRosterEntityId(player, team);

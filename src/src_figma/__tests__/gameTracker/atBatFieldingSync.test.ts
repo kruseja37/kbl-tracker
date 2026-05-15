@@ -8,6 +8,7 @@ import {
   getFieldingEventsForAtBat,
   logAtBatEvent,
   logFieldingEvent,
+  updateAtBatEvent,
   updateAtBatEventWithFieldingSync,
   type AtBatEvent,
   type FieldingEvent,
@@ -184,5 +185,86 @@ describe('updateAtBatEventWithFieldingSync', () => {
   expect(atBat?.editHistory).toHaveLength(1);
   expect(fieldingEvents.map((event) => event.position)).toEqual(['3B', '1B']);
   expect(fieldingEvents[0].ballInPlay.fielderIds).toEqual(['home-3b-5', 'home-1b-3']);
+  });
+
+  test('refreshes cached WPA fields when a state-changing edit is saved', async () => {
+    await createGameHeader({
+      gameId: 'game-sync',
+      seasonId: 'season-1',
+      date: Date.now(),
+      awayTeamId: 'away-team',
+      awayTeamName: 'Away Team',
+      homeTeamId: 'home-team',
+      homeTeamName: 'Home Team',
+      finalScore: null,
+      finalInning: 1,
+      isComplete: false,
+    });
+
+    await logAtBatEvent(createAtBatEvent({
+      result: '1B',
+      inning: 7,
+      halfInning: 'TOP',
+      outs: 2,
+      runners: {
+        first: {
+          runnerId: 'away-runner-1',
+          runnerName: 'Away Runner 1',
+          responsiblePitcherId: 'home-pitcher-1',
+        },
+        second: {
+          runnerId: 'away-runner-2',
+          runnerName: 'Away Runner 2',
+          responsiblePitcherId: 'home-pitcher-1',
+        },
+        third: {
+          runnerId: 'away-runner-3',
+          runnerName: 'Away Runner 3',
+          responsiblePitcherId: 'home-pitcher-1',
+        },
+      },
+      awayScore: 2,
+      homeScore: 2,
+      outsAfter: 0,
+      runnersAfter: {
+        first: {
+          runnerId: 'away-batter-1',
+          runnerName: 'Away Batter',
+          responsiblePitcherId: 'home-pitcher-1',
+        },
+        second: null,
+        third: null,
+      },
+      awayScoreAfter: 5,
+      homeScoreAfter: 2,
+      totalInnings: 7,
+      leverageIndex: 0.1,
+      winProbabilityBefore: 0.5,
+      winProbabilityAfter: 0.5,
+      wpa: 0,
+    }));
+
+    await updateAtBatEvent('game-sync_1', {
+      outsAfter: 3,
+      runnersAfter: { first: null, second: null, third: null },
+      awayScoreAfter: 2,
+      homeScoreAfter: 2,
+      version: 2,
+      editHistory: [{
+        field: 'outsAfter',
+        oldValue: 0,
+        newValue: 3,
+        timestamp: 20,
+      }],
+    });
+
+    const atBat = await getAtBatEvent('game-sync_1');
+
+    expect(atBat?.version).toBe(2);
+    expect(atBat?.winProbabilityBefore).not.toBe(0.5);
+    expect(atBat?.winProbabilityAfter).not.toBe(0.5);
+    expect(atBat?.wpa).toBeLessThan(0);
+    expect(atBat?.leverageIndex).toBeGreaterThan(1.5);
+    expect(atBat?.isClutch).toBe(true);
   });
 });

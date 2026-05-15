@@ -32,6 +32,8 @@ vi.mock('../../../utils/eventLog', () => ({
 import {
   getExhibitionBattingLeaders,
   getPlayerExhibitionStats,
+  getArchiveInstanceMode,
+  searchArchivedPlayerInstances,
   getTeamRosterFromGames,
 } from '../../../utils/almanacQueries';
 
@@ -205,6 +207,87 @@ describe('almanacQueries player exhibition stats', () => {
       expect.objectContaining({
         canonicalId: 'beefcake',
         instanceId: 'league-exh',
+        games: 1,
+      }),
+    ]);
+  });
+
+  test('includes elimination archived instances in search and team roster queries', async () => {
+    mockGetAllCanonicalPlayers.mockResolvedValue([
+      {
+        canonicalId: 'beefcake',
+        playerName: 'Beefcake McStevens',
+        hometown: { city: 'Denver', state: 'CO' },
+        instances: [
+          {
+            instanceId: 'elim-run-1',
+            instanceName: 'Elim Run 1',
+            mode: 'elimination',
+            playerIdInInstance: 'player-1',
+          },
+        ],
+      },
+    ]);
+    mockGetAllCompletedGames.mockResolvedValue([
+      {
+        gameId: 'elim-game-1',
+        date: Date.now(),
+        competitionType: 'elimination',
+        competitionId: 'elim-run-1',
+        competitionName: 'Elim Run 1',
+        awayTeamId: 'away-team',
+        awayTeamName: 'Away Team',
+        homeTeamId: 'home-team',
+        homeTeamName: 'Home Team',
+        finalScore: { away: 5, home: 2 },
+        innings: 9,
+        fameEvents: [],
+        playerStats: {
+          'player-1': {
+            playerName: 'Beefcake McStevens',
+            teamId: 'away-team',
+            pa: 4,
+            ab: 4,
+            h: 2,
+            singles: 1,
+            doubles: 1,
+            triples: 0,
+            hr: 0,
+            rbi: 3,
+            r: 1,
+            bb: 0,
+            hbp: 0,
+            k: 1,
+            sb: 0,
+            cs: 0,
+            sf: 0,
+            sh: 0,
+            gidp: 0,
+            putouts: 0,
+            assists: 0,
+            fieldingErrors: 0,
+          },
+        },
+        pitcherGameStats: [],
+      },
+    ]);
+
+    await expect(searchArchivedPlayerInstances('Beefcake')).resolves.toEqual([
+      expect.objectContaining({
+        canonicalId: 'beefcake',
+        instanceId: 'elim-run-1',
+        mode: 'elimination',
+        teamName: 'Away Team',
+        games: 1,
+      }),
+    ]);
+
+    await expect(getArchiveInstanceMode('elim-run-1')).resolves.toBe('elimination');
+
+    await expect(getTeamRosterFromGames('elim-run-1', 'away-team')).resolves.toEqual([
+      expect.objectContaining({
+        canonicalId: 'beefcake',
+        instanceId: 'elim-run-1',
         games: 1,
       }),
     ]);

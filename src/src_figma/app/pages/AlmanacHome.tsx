@@ -8,7 +8,7 @@ import { getAllTeams } from "../../../utils/leagueBuilderStorage";
 import type { Team } from "../../../utils/leagueBuilderStorage";
 import { backfillCanonicalPlayers } from "../../../utils/registerAlmanacPlayers";
 import {
-  searchExhibitionPlayerInstances,
+  searchArchivedPlayerInstances,
   type ExhibitionPlayerSearchEntry,
 } from "../../../utils/almanacQueries";
 
@@ -53,7 +53,7 @@ export function AlmanacHome() {
     async function search() {
       const [players, archivedPlayers, allTeams] = await Promise.all([
         searchCanonicalPlayers(trimmed),
-        searchExhibitionPlayerInstances(trimmed),
+        searchArchivedPlayerInstances(trimmed),
         getAllTeams(),
       ]);
 
@@ -206,7 +206,7 @@ export function AlmanacHome() {
                               >
                                 {p.playerName}
                                 <span className="ml-3 text-[8px] text-[#8F96A3]">
-                                  {p.teamName} • {p.games} G
+                                  {p.teamName} • {p.games} G • {p.mode.toUpperCase()}
                                 </span>
                               </Link>
                             ))}
@@ -247,7 +247,7 @@ export function AlmanacHome() {
           </form>
         </div>
 
-        <div className="grid gap-4 md:grid-cols-3">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
           <Link
             to="/almanac/exhibition"
             className="border-[6px] border-[#113399] bg-[#1A44CC] p-5 text-white shadow-[8px_8px_0px_0px_rgba(0,0,0,0.8)] transition hover:bg-[#2652e0]"
@@ -256,6 +256,28 @@ export function AlmanacHome() {
             <div className="mt-3 text-sm leading-6">EXHIBITION</div>
             <div className="mt-4 text-[9px] leading-5 text-white/80">
               ALL-TIME LEADERS, GAME ARCHIVE, AND PLAYER HUBS.
+            </div>
+          </Link>
+
+          <Link
+            to="/almanac/narratives"
+            className="border-[6px] border-[#8A1F1F] bg-[#B22B2B] p-5 text-white shadow-[8px_8px_0px_0px_rgba(0,0,0,0.8)] transition hover:bg-[#c53636]"
+          >
+            <div className="text-[10px] text-[#FFD2D2]">MODE 00</div>
+            <div className="mt-3 text-sm leading-6">REPORTER ARCHIVE</div>
+            <div className="mt-4 text-[9px] leading-5 text-white/80">
+              HISTORICAL TIDBITS AND POST-GAME SUMMARIES ACROSS ALL MODES.
+            </div>
+          </Link>
+
+          <Link
+            to="/almanac/managers"
+            className="border-[6px] border-[#285C38] bg-[#2D7A46] p-5 text-white shadow-[8px_8px_0px_0px_rgba(0,0,0,0.8)] transition hover:bg-[#368d52]"
+          >
+            <div className="text-[10px] text-[#CFF6DA]">MODE 04</div>
+            <div className="mt-3 text-sm leading-6">MANAGERS</div>
+            <div className="mt-4 text-[9px] leading-5 text-white/80">
+              MANAGER VALUE, TACTICAL WPA, LINEUP DELTA, AND TENDENCIES.
             </div>
           </Link>
 
@@ -270,16 +292,16 @@ export function AlmanacHome() {
             <div className="mt-4 text-[9px] leading-5 text-[#B0B0B0]">COMING SOON</div>
           </button>
 
-          <button
-            type="button"
-            disabled
-            title="Coming Soon"
-            className="cursor-not-allowed border-[6px] border-[#4B4B4B] bg-[#232323] p-5 text-left text-[#9A9A9A] shadow-[8px_8px_0px_0px_rgba(0,0,0,0.65)]"
+          <Link
+            to="/almanac/elimination"
+            className="border-[6px] border-[#8A6A1A] bg-[#B2871E] p-5 text-left text-white shadow-[8px_8px_0px_0px_rgba(0,0,0,0.8)] transition hover:bg-[#c99622]"
           >
             <div className="text-[10px] text-[#707070]">MODE 03</div>
             <div className="mt-3 text-sm leading-6">ELIMINATION</div>
-            <div className="mt-4 text-[9px] leading-5 text-[#B0B0B0]">COMING SOON</div>
-          </button>
+            <div className="mt-4 text-[9px] leading-5 text-white/80">
+              RUN ARCHIVES, HISTORICAL GAMES, AND ELIMINATION INSTANCES.
+            </div>
+          </Link>
         </div>
       </div>
     </div>

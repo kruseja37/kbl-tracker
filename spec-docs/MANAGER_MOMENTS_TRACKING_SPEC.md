@@ -1,5 +1,7 @@
 # Manager Moments Tracking Spec
 
+> **Superseded for new implementation:** Use `spec-docs/KBL_MANAGER_WPA_IMPLEMENTATION_SPEC.md` for KBL Manager WPA work. This older draft is retained as legacy mWAR/moment-tracking context only; do not implement new manager scoring from the fixed mWAR values below.
+
 **Date:** 2026-04-06
 **Status:** DRAFT — Awaiting JK approval before implementation
 **Dependencies:** MWAR_CALCULATION_SPEC.md, MODE_2_V1_FINAL.md §5.3/§11.5/§13.6

@@ -1,7 +1,8 @@
 import type { MojoLevel } from '../../../engines/mojoEngine';
 import type { FitnessState } from '../../../engines/fitnessEngine';
 import { getPlayersByTeam, getTeam } from '../../../utils/leagueBuilderStorage';
-import type { Player as StoredPlayer } from '../../../utils/leagueBuilderStorage';
+import type { LineupSlot, Player as StoredPlayer, Team } from '../../../utils/leagueBuilderStorage';
+import type { OptimalLineupSnapshot } from '../../../types/managerWpa';
 import { getAllFranchisePlayers, getFranchiseTeam } from '../../../utils/franchisePlayerStorage';
 import type { Player as TeamRosterPlayer, Pitcher as TeamRosterPitcher } from '@/app/components/TeamRoster';
 
@@ -16,6 +17,15 @@ function formatName(first: string, last: string) {
 
 function buildFullName(first: string, last: string) {
   return `${first ?? ''} ${last ?? ''}`.trim() || formatName(first, last);
+}
+
+export interface FranchiseGameTrackerRoster {
+  players: TeamRosterPlayer[];
+  pitchers: TeamRosterPitcher[];
+  optimalLineups?: {
+    vsRHP?: OptimalLineupSnapshot;
+    vsLHP?: OptimalLineupSnapshot;
+  };
 }
 
 export function collectFranchiseRosterPlayerIds(
@@ -46,12 +56,10 @@ export function collectFranchiseRosterPlayerIds(
 
 export async function buildFranchiseGameTrackerRoster(
   teamId: string,
-  context: { franchiseId?: string; leagueId?: string } = {},
-): Promise<{
-  players: TeamRosterPlayer[];
-  pitchers: TeamRosterPitcher[];
-}> {
+  context: { franchiseId?: string; leagueId?: string; useDH?: boolean } = {},
+): Promise<FranchiseGameTrackerRoster> {
   let dbPlayers: StoredPlayer[];
+  let storedTeam: Team | null = null;
   try {
     const { franchiseId } = context;
 
@@ -59,11 +67,13 @@ export async function buildFranchiseGameTrackerRoster(
       let leagueId = context.leagueId;
       if (!leagueId) {
         try {
-          const team = await getFranchiseTeam(franchiseId, teamId);
-          leagueId = team?.leagueIds?.[0];
+          storedTeam = await getFranchiseTeam(franchiseId, teamId);
+          leagueId = storedTeam?.leagueIds?.[0];
         } catch {
           leagueId = undefined;
         }
+      } else {
+        storedTeam = await getFranchiseTeam(franchiseId, teamId);
       }
 
       const franchisePlayers = await getAllFranchisePlayers(franchiseId);
@@ -76,11 +86,13 @@ export async function buildFranchiseGameTrackerRoster(
       let leagueId = context.leagueId;
       if (!leagueId) {
         try {
-          const team = await getTeam(teamId);
-          leagueId = team?.leagueIds?.[0];
+          storedTeam = await getTeam(teamId);
+          leagueId = storedTeam?.leagueIds?.[0];
         } catch {
           leagueId = undefined;
         }
+      } else {
+        storedTeam = await getTeam(teamId);
       }
       dbPlayers = await getPlayersByTeam(teamId, leagueId ?? '');
     }
@@ -97,115 +109,139 @@ export async function buildFranchiseGameTrackerRoster(
 
   const positionPlayers = dbPlayers.filter(p => !PITCHER_POS.has(p.primaryPosition));
   const pitcherPlayers = dbPlayers.filter(p => PITCHER_POS.has(p.primaryPosition));
+  const playerById = new Map(dbPlayers.map((player) => [player.id, player]));
+  const useDH = context.useDH ?? false;
+  const rotationStarter = storedTeam?.startingRotation
+    ?.map((playerId) => pitcherPlayers.find((player) => player.id === playerId))
+    .find((player): player is StoredPlayer => Boolean(player));
+  const starterPitcher =
+    rotationStarter ?? pitcherPlayers.find(p => p.primaryPosition === 'SP') ?? pitcherPlayers[0];
+  const storedLineup = useDH ? storedTeam?.lineupWithDH : storedTeam?.lineupWithoutDH;
+  const optimalLineups = storedTeam
+    ? {
+        vsRHP: useDH
+          ? storedTeam.optimalLineupVsRHPWithDH
+          : storedTeam.optimalLineupVsRHPWithoutDH,
+        vsLHP: useDH
+          ? storedTeam.optimalLineupVsLHPWithDH
+          : storedTeam.optimalLineupVsLHPWithoutDH,
+      }
+    : undefined;
+
+  const buildTeamRosterPlayer = (
+    p: StoredPlayer,
+    position: string,
+    battingOrder: number | undefined,
+  ): TeamRosterPlayer => {
+    const fullName = buildFullName(p.firstName, p.lastName);
+    return {
+      playerId: p.id,
+      name: formatName(p.firstName, p.lastName),
+      fullName,
+      position,
+      battingOrder,
+      stats: { ...emptyBatterStats },
+      battingHand: p.bats,
+      mojo: 0 as MojoLevel,
+      fitness: 'FIT' as FitnessState,
+      power: p.power,
+      contact: p.contact,
+      speed: p.speed,
+      fieldingRating: p.fielding,
+      arm: p.arm,
+      trait1: p.trait1,
+      trait2: p.trait2,
+      age: p.age,
+      secondaryPosition: p.secondaryPosition,
+      throws: p.throws,
+    };
+  };
 
   const assigned = new Set<typeof positionPlayers[number]>();
+  const assignedPlayerIds = new Set<string>();
   const filledPositions = new Map<string, typeof positionPlayers[number]>();
-
-  for (const pos of FIELD_POS) {
-    const candidate = positionPlayers.find(p => !assigned.has(p) && p.primaryPosition === pos);
-    if (candidate) {
-      filledPositions.set(pos, candidate);
-      assigned.add(candidate);
-    }
-  }
-
-  for (const pos of FIELD_POS) {
-    if (filledPositions.has(pos)) continue;
-    const candidate = positionPlayers.find(p => !assigned.has(p) && p.secondaryPosition === pos);
-    if (candidate) {
-      filledPositions.set(pos, candidate);
-      assigned.add(candidate);
-    }
-  }
-
-  for (const pos of FIELD_POS) {
-    if (filledPositions.has(pos)) continue;
-    const candidate = positionPlayers.find(p => !assigned.has(p));
-    if (candidate) {
-      filledPositions.set(pos, candidate);
-      assigned.add(candidate);
-    }
-  }
-
   const players: TeamRosterPlayer[] = [];
-  let order = 1;
-  for (const [pos, p] of filledPositions) {
-    const fullName = buildFullName(p.firstName, p.lastName);
-    players.push({
-      playerId: p.id,
-      name: formatName(p.firstName, p.lastName),
-      fullName,
-      position: pos,
-      battingOrder: order++,
-      stats: { ...emptyBatterStats },
-      battingHand: p.bats,
-      mojo: 0 as MojoLevel,
-      fitness: 'FIT' as FitnessState,
-      power: p.power,
-      contact: p.contact,
-      speed: p.speed,
-      fieldingRating: p.fielding,
-      arm: p.arm,
-      trait1: p.trait1,
-      trait2: p.trait2,
-      age: p.age,
-      secondaryPosition: p.secondaryPosition,
-      throws: p.throws,
-    });
+
+  if (storedLineup && storedLineup.length > 0) {
+    const sortedLineup = [...storedLineup].sort((left, right) => left.battingOrder - right.battingOrder);
+    for (const slot of sortedLineup) {
+      const storedPlayer = playerById.get(slot.playerId);
+      if (!storedPlayer) continue;
+      const isPitcherSlot =
+        slot.fieldingPosition === ('P' as LineupSlot['fieldingPosition']) ||
+        PITCHER_POS.has(storedPlayer.primaryPosition);
+
+      if (isPitcherSlot && useDH) continue;
+      if (!isPitcherSlot) {
+        assignedPlayerIds.add(storedPlayer.id);
+      }
+
+      players.push(
+        buildTeamRosterPlayer(
+          storedPlayer,
+          String(slot.fieldingPosition),
+          slot.battingOrder,
+        ),
+      );
+    }
+
+    if (!useDH && starterPitcher && !players.some((player) => player.playerId === starterPitcher.id)) {
+      players.push(buildTeamRosterPlayer(starterPitcher, 'P', players.length + 1));
+    }
   }
 
-  if (pitcherPlayers.length > 0) {
-    const starter = pitcherPlayers.find(p => p.primaryPosition === 'SP') || pitcherPlayers[0];
-    const fullName = buildFullName(starter.firstName, starter.lastName);
-    players.push({
-      playerId: starter.id,
-      name: formatName(starter.firstName, starter.lastName),
-      fullName,
-      position: 'P',
-      battingOrder: order++,
-      stats: { ...emptyBatterStats },
-      battingHand: starter.bats,
-      power: starter.power,
-      contact: starter.contact,
-      speed: starter.speed,
-      fieldingRating: starter.fielding,
-      arm: starter.arm,
-      trait1: starter.trait1,
-      trait2: starter.trait2,
-      age: starter.age,
-      throws: starter.throws,
-      secondaryPosition: starter.secondaryPosition,
-    });
+  if (players.length === 0) {
+    for (const pos of FIELD_POS) {
+      const candidate = positionPlayers.find(p => !assigned.has(p) && p.primaryPosition === pos);
+      if (candidate) {
+        filledPositions.set(pos, candidate);
+        assigned.add(candidate);
+        assignedPlayerIds.add(candidate.id);
+      }
+    }
+
+    for (const pos of FIELD_POS) {
+      if (filledPositions.has(pos)) continue;
+      const candidate = positionPlayers.find(p => !assigned.has(p) && p.secondaryPosition === pos);
+      if (candidate) {
+        filledPositions.set(pos, candidate);
+        assigned.add(candidate);
+        assignedPlayerIds.add(candidate.id);
+      }
+    }
+
+    for (const pos of FIELD_POS) {
+      if (filledPositions.has(pos)) continue;
+      const candidate = positionPlayers.find(p => !assigned.has(p));
+      if (candidate) {
+        filledPositions.set(pos, candidate);
+        assigned.add(candidate);
+        assignedPlayerIds.add(candidate.id);
+      }
+    }
+
+    let order = 1;
+    for (const [pos, p] of filledPositions) {
+      players.push(buildTeamRosterPlayer(p, pos, order++));
+    }
+
+    if (useDH) {
+      const dhPlayer = positionPlayers.find((p) => !assignedPlayerIds.has(p.id));
+      if (dhPlayer) {
+        assignedPlayerIds.add(dhPlayer.id);
+        players.push(buildTeamRosterPlayer(dhPlayer, 'DH', order++));
+      }
+    } else if (starterPitcher) {
+      players.push(buildTeamRosterPlayer(starterPitcher, 'P', order++));
+    }
   }
 
-  const benchPlayers = positionPlayers.filter(p => !assigned.has(p));
+  const benchPlayers = positionPlayers.filter(p => !assignedPlayerIds.has(p.id));
   for (const p of benchPlayers) {
-    const fullName = buildFullName(p.firstName, p.lastName);
-    players.push({
-      playerId: p.id,
-      name: formatName(p.firstName, p.lastName),
-      fullName,
-      position: p.primaryPosition,
-      battingOrder: undefined,
-      stats: { ...emptyBatterStats },
-      battingHand: p.bats,
-      mojo: 0 as MojoLevel,
-      fitness: 'FIT' as FitnessState,
-      power: p.power,
-      contact: p.contact,
-      speed: p.speed,
-      fieldingRating: p.fielding,
-      arm: p.arm,
-      trait1: p.trait1,
-      trait2: p.trait2,
-      age: p.age,
-      secondaryPosition: p.secondaryPosition,
-      throws: p.throws,
-    });
+    players.push(buildTeamRosterPlayer(p, p.primaryPosition, undefined));
   }
 
   const pitchers: TeamRosterPitcher[] = [];
-  const starterPitcher = pitcherPlayers.find(p => p.primaryPosition === 'SP') || pitcherPlayers[0];
   pitcherPlayers.forEach(p => {
     const isStarter = starterPitcher && p.id === starterPitcher.id;
     const fullName = buildFullName(p.firstName, p.lastName);
@@ -235,5 +271,5 @@ export async function buildFranchiseGameTrackerRoster(
     });
   });
 
-  return { players, pitchers };
+  return { players, pitchers, optimalLineups };
 }

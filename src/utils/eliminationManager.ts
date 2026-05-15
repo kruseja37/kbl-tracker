@@ -23,6 +23,11 @@ import {
   getAllOverridesForLeague,
   removeLeaguePlayerOverride,
 } from './leagueBuilderStorage';
+import {
+  deleteManagerAssignmentsForInstance,
+  LEAGUE_BUILDER_MANAGER_INSTANCE_ID,
+  seedManagerAssignmentsForTeams,
+} from './managerIdentityStorage';
 
 const ELIMINATION_STORE = 'eliminationList';
 
@@ -170,6 +175,7 @@ export async function deleteElimination(eliminationId: string): Promise<void> {
     deleteEliminationRosterSnapshots(eliminationId),
     deleteMojoFitnessSnapshots(eliminationId),
     deleteEliminationDatabase(eliminationId),
+    deleteManagerAssignmentsForInstance({ mode: 'elimination', instanceId: eliminationId }),
     ...promotionOverrides.map((override) =>
       removeLeaguePlayerOverride(eliminationId, override.playerId),
     ),
@@ -181,7 +187,7 @@ export async function createEliminationRun(params: {
   leagueId: string;
   leagueName: string;
   teamsCount: number;
-  seededTeams: Array<{ id: string; name: string }>;
+  seededTeams: Array<{ id: string; name: string; managerId?: string; managerName?: string }>;
   seriesLengths: number[];
   inningsPerGame: number;
   useDH: boolean;
@@ -208,6 +214,13 @@ export async function createEliminationRun(params: {
     const teamIds = params.seededTeams.map((team) => team.id);
     await deepCopyLeagueToBracket(eliminationId, params.leagueId);
     await createRosterSnapshots(eliminationId, teamIds);
+    await seedManagerAssignmentsForTeams({
+      teams: params.seededTeams,
+      mode: 'elimination',
+      instanceId: eliminationId,
+      fallbackMode: 'franchise',
+      fallbackInstanceId: LEAGUE_BUILDER_MANAGER_INSTANCE_ID,
+    });
 
     const playoffTeams: PlayoffTeam[] = params.seededTeams.map((team, index) => ({
       teamId: team.id,
@@ -276,6 +289,7 @@ export async function createEliminationRun(params: {
         deleteEliminationRosterSnapshots(eliminationId),
         deleteMojoFitnessSnapshots(eliminationId),
         deleteEliminationDatabase(eliminationId),
+        deleteManagerAssignmentsForInstance({ mode: 'elimination', instanceId: eliminationId }),
       ]);
     } catch (cleanupError) {
       console.error('[Elimination] Failed to clean up partial bracket creation:', cleanupError);

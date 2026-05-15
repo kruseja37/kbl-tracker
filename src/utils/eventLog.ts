@@ -22,7 +22,19 @@
  * (Configured via seasons.csv gamesPerTeam and league numTeams)
  */
 
+import { calculateLeverageIndex } from '../engines/leverageCalculator';
+import { calculateWPA } from '../engines/wpaCalculator';
 import type { AtBatResult, Position, HalfInning, SpecialPlayType, MojoLevelLabel, FitnessLevelLabel, FameLevel, SpecPitcherRole, HiddenModifiers } from '../types/game';
+import type {
+  ManagerBuntIntent,
+  ManagerDecisionConfidence,
+  ManagerDecisionResolutionEndpoint,
+  ManagerDecisionSource,
+  ManagerDecisionType,
+  GameLockLineupSnapshots,
+  ManagerRunnerIntent,
+  ManagerRunPlay,
+} from '../types/managerWpa';
 import type { ParkFactors } from '../types/war';
 import type { CompetitionType } from './gameStorage';
 
@@ -116,6 +128,19 @@ export interface GameHeader {
   statsScopeId?: string;
   competitionType?: CompetitionType;
   competitionId?: string;
+  competitionName?: string;
+  playoffSeriesId?: string;
+  playoffGameNumber?: number;
+  playoffId?: string;
+  playoffRound?:
+    | 'wild_card'
+    | 'division_series'
+    | 'championship_series'
+    | 'world_series';
+  isEliminationGame?: boolean;
+  isClinchGame?: boolean;
+  liveBeatReporterEnabled?: boolean;
+  postGameColumnsEnabled?: boolean;
   date: number;  // timestamp
 
   // Teams
@@ -136,6 +161,8 @@ export interface GameHeader {
     away: { playerId: string; playerName: string };
     home: { playerId: string; playerName: string };
   };
+  optimalLineupSnapshots?: GameLockLineupSnapshots;
+  chosenLineupSnapshots?: GameLockLineupSnapshots;
 
   // Final state
   finalScore: { away: number; home: number } | null;  // null if game in progress
@@ -192,6 +219,11 @@ export interface AtBatEvent {
   winProbabilityBefore: number;  // Home team win probability before
   winProbabilityAfter: number;   // Home team win probability after
   wpa: number;                   // Win probability added (from batter's team perspective)
+  wpaModelVersion?: string;      // Versioned WPA model used for committed WPA values
+  homeDelta?: number;            // Home-team WPA delta from the official model
+  battingTeamDelta?: number;     // Batting-team WPA delta from the official model
+  fieldingTeamDelta?: number;    // Fielding-team WPA delta from the official model
+  totalInnings?: number;         // Regulation length used for win-probability recalculation
 
   // Ball in play data (for fielding)
   ballInPlay: BallInPlayData | null;
@@ -290,6 +322,12 @@ export interface AtBatEvent {
     personality?: string;
     hiddenModifiers?: HiddenModifiers;
   };
+  catcherContext?: {
+    playerId: string;
+    playerName: string;
+    teamId: string;
+    position?: 'C';
+  };
 
   // 1.14 (GAP-GT-2-F): Matchup context
   matchupContext?: {
@@ -314,6 +352,10 @@ export interface AtBatEvent {
     baseSaved?: '2B' | '3B' | 'HOME';
     isTootblan?: boolean;
     isOutAdvancing?: boolean;
+    managerIntent?: ManagerRunnerIntent;
+    managerRunPlay?: ManagerRunPlay;
+    managerDecisionSource?: ManagerDecisionSource;
+    managerDecisionNote?: string;
     errorType?: 'fielding' | 'throwing' | 'mental';
     errorChargedTo?: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
   }>;
@@ -353,10 +395,14 @@ export interface AtBatEvent {
     batterOutAdvancing?: boolean;
     basesSaved?: 1 | 2;
     savedRun?: boolean;
+    extraGemCreditPositions?: number[];
+    rescuedThrow?: boolean;
     hrDistance?: number;
     pitchType?: string;
     pitchesInAtBat?: number;
     modifiers?: string[];
+    managerBuntIntent?: ManagerBuntIntent;
+    managerDecisionSource?: ManagerDecisionSource;
   };
 
   // 1.17 (GAP-GT-2-K): Versioning
@@ -381,6 +427,35 @@ export type BetweenPlayEventType =
   | 'pitcher_change' | 'substitution' | 'position_change'
   | 'mojo_change' | 'fitness_change' | 'injury'
   | 'pitch_count_update' | 'manager_moment';
+
+export type PromptedManagerDecisionType = Extract<
+  ManagerDecisionType,
+  'leave_pitcher_in' | 'let_batter_hit'
+>;
+
+export type PromptedManagerDecisionAction = 'keep_pitcher' | 'let_batter_hit';
+
+export interface PromptedManagerDecisionEvent {
+  decisionType: PromptedManagerDecisionType;
+  action: PromptedManagerDecisionAction;
+  source: 'recommendation' | 'manual_manager_moment';
+  decisionSource?: ManagerDecisionSource;
+  confidence?: ManagerDecisionConfidence;
+  managerId: string;
+  teamId: string;
+  opponentTeamId: string;
+  trackedPlayerIds: string[];
+  involvedPlayerIds?: string[];
+  playerId?: string;
+  playerName?: string;
+  leverageIndex?: number;
+  recommendationId?: string;
+  provenanceKey?: string;
+  resolution?: {
+    status: 'pending';
+    expectedEndpoint: ManagerDecisionResolutionEndpoint;
+  };
+}
 
 /** Formal between-play event interface per spec §2.2 */
 export interface BetweenPlayEvent {
@@ -436,6 +511,10 @@ export interface BetweenPlayEvent {
     toBase: 1 | 2 | 3 | 4;
     outcome: 'safe' | 'out';
     reason: 'stolen_base' | 'caught_stealing' | 'pickoff' | 'wild_pitch' | 'passed_ball' | 'advance';
+    managerIntent?: ManagerRunnerIntent;
+    managerRunPlay?: ManagerRunPlay;
+    managerDecisionSource?: ManagerDecisionSource;
+    managerDecisionNote?: string;
   };
 
   pitcherChange?: {
@@ -505,6 +584,8 @@ export interface BetweenPlayEvent {
     outcomeEventId?: string;
     outcomeWPA?: number;
   };
+
+  promptedManagerDecision?: PromptedManagerDecisionEvent;
 }
 
 /** Runner state for situational tracking */
@@ -644,6 +725,71 @@ export async function createGameHeader(header: Omit<GameHeader, 'aggregated' | '
   });
 }
 
+export async function deleteCompetitionEventLogData(
+  competitionType: CompetitionType,
+  competitionId: string,
+): Promise<void> {
+  const db = await initEventLogDB();
+
+  const gameIds = await new Promise<string[]>((resolve, reject) => {
+    const transaction = db.transaction(STORES.GAME_HEADERS, 'readonly');
+    const store = transaction.objectStore(STORES.GAME_HEADERS);
+    const request = store.getAll();
+
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => {
+      const matchingIds = (request.result as GameHeader[])
+        .filter((header) => header.competitionType === competitionType && header.competitionId === competitionId)
+        .map((header) => header.gameId);
+      resolve(matchingIds);
+    };
+  });
+
+  if (gameIds.length === 0) {
+    return;
+  }
+
+  await new Promise<void>((resolve, reject) => {
+    const transaction = db.transaction(
+      [
+        STORES.GAME_HEADERS,
+        STORES.AT_BAT_EVENTS,
+        STORES.PITCHING_APPEARANCES,
+        STORES.FIELDING_EVENTS,
+        STORES.BETWEEN_PLAY_EVENTS,
+      ],
+      'readwrite',
+    );
+
+    for (const gameId of gameIds) {
+      transaction.objectStore(STORES.GAME_HEADERS).delete(gameId);
+
+      for (const storeName of [
+        STORES.AT_BAT_EVENTS,
+        STORES.PITCHING_APPEARANCES,
+        STORES.FIELDING_EVENTS,
+        STORES.BETWEEN_PLAY_EVENTS,
+      ] as const) {
+        const store = transaction.objectStore(storeName);
+        const index = store.index('gameId');
+        const request = index.openCursor(gameId);
+        request.onsuccess = () => {
+          const cursor = request.result;
+          if (cursor) {
+            cursor.delete();
+            cursor.continue();
+          }
+        };
+        request.onerror = () => reject(request.error);
+      }
+    }
+
+    transaction.oncomplete = () => resolve();
+    transaction.onerror = () => reject(transaction.error);
+    transaction.onabort = () => reject(transaction.error);
+  });
+}
+
 /**
  * Log an at-bat event
  * Called IMMEDIATELY after each at-bat (not debounced)
@@ -770,6 +916,15 @@ function applyAtBatEventUpdates(
     | 'runnersAfter'
     | 'awayScoreAfter'
     | 'homeScoreAfter'
+    | 'leverageIndex'
+    | 'winProbabilityBefore'
+    | 'winProbabilityAfter'
+    | 'wpa'
+    | 'wpaModelVersion'
+    | 'homeDelta'
+    | 'battingTeamDelta'
+    | 'fieldingTeamDelta'
+    | 'totalInnings'
     | 'outsRecorded'
     | 'isWalkOff'
   >>,
@@ -792,6 +947,15 @@ function applyAtBatEventUpdates(
   if (updates.runnersAfter !== undefined) next.runnersAfter = updates.runnersAfter;
   if (updates.awayScoreAfter !== undefined) next.awayScoreAfter = updates.awayScoreAfter;
   if (updates.homeScoreAfter !== undefined) next.homeScoreAfter = updates.homeScoreAfter;
+  if (updates.leverageIndex !== undefined) next.leverageIndex = updates.leverageIndex;
+  if (updates.winProbabilityBefore !== undefined) next.winProbabilityBefore = updates.winProbabilityBefore;
+  if (updates.winProbabilityAfter !== undefined) next.winProbabilityAfter = updates.winProbabilityAfter;
+  if (updates.wpa !== undefined) next.wpa = updates.wpa;
+  if (updates.wpaModelVersion !== undefined) next.wpaModelVersion = updates.wpaModelVersion;
+  if (updates.homeDelta !== undefined) next.homeDelta = updates.homeDelta;
+  if (updates.battingTeamDelta !== undefined) next.battingTeamDelta = updates.battingTeamDelta;
+  if (updates.fieldingTeamDelta !== undefined) next.fieldingTeamDelta = updates.fieldingTeamDelta;
+  if (updates.totalInnings !== undefined) next.totalInnings = updates.totalInnings;
   if (updates.outsRecorded !== undefined) next.outsRecorded = updates.outsRecorded;
   if (updates.isWalkOff !== undefined) next.isWalkOff = updates.isWalkOff;
   if (updates.version !== undefined) next.version = updates.version;
@@ -799,7 +963,92 @@ function applyAtBatEventUpdates(
     next.editHistory = [...(next.editHistory || []), ...updates.editHistory];
   }
 
+  if (shouldRefreshStoredWpa(updates)) {
+    return refreshStoredWpa(next);
+  }
+
   return next;
+}
+
+function runnerStateToBaseBooleans(runners: RunnerState): { first: boolean; second: boolean; third: boolean } {
+  return {
+    first: !!runners.first,
+    second: !!runners.second,
+    third: !!runners.third,
+  };
+}
+
+function shouldRefreshStoredWpa(
+  updates: Partial<Pick<
+    AtBatEvent,
+    | 'result'
+    | 'runnerOutcomes'
+    | 'batterReachedOnError'
+    | 'batterErrorType'
+    | 'batterErrorChargedToPosition'
+    | 'rbiCount'
+    | 'runsScored'
+    | 'outsAfter'
+    | 'runnersAfter'
+    | 'awayScoreAfter'
+    | 'homeScoreAfter'
+    | 'totalInnings'
+    | 'outsRecorded'
+    | 'isWalkOff'
+  >>,
+): boolean {
+  return (
+    updates.result !== undefined ||
+    updates.runnerOutcomes !== undefined ||
+    updates.batterReachedOnError !== undefined ||
+    updates.batterErrorType !== undefined ||
+    updates.batterErrorChargedToPosition !== undefined ||
+    updates.rbiCount !== undefined ||
+    updates.runsScored !== undefined ||
+    updates.outsAfter !== undefined ||
+    updates.runnersAfter !== undefined ||
+    updates.awayScoreAfter !== undefined ||
+    updates.homeScoreAfter !== undefined ||
+    updates.totalInnings !== undefined ||
+    updates.outsRecorded !== undefined ||
+    updates.isWalkOff !== undefined
+  );
+}
+
+function refreshStoredWpa(event: AtBatEvent): AtBatEvent {
+  const wpaResult = calculateWPA(
+    {
+      inning: event.inning,
+      isTop: event.halfInning === 'TOP',
+      outs: event.outs,
+      bases: runnerStateToBaseBooleans(event.runners),
+      homeScore: event.homeScore,
+      awayScore: event.awayScore,
+      totalInnings: event.totalInnings,
+    },
+    {
+      outs: event.outsAfter,
+      bases: runnerStateToBaseBooleans(event.runnersAfter),
+      homeScore: event.homeScoreAfter,
+      awayScore: event.awayScoreAfter,
+    },
+  );
+  const leverageResult = calculateLeverageIndex({
+    inning: event.inning,
+    halfInning: event.halfInning,
+    outs: Math.min(event.outs, 2) as 0 | 1 | 2,
+    runners: runnerStateToBaseBooleans(event.runners),
+    homeScore: event.homeScore,
+    awayScore: event.awayScore,
+    totalInnings: event.totalInnings,
+  });
+
+  return {
+    ...event,
+    ...wpaResult,
+    leverageIndex: leverageResult.leverageIndex,
+    isClutch: leverageResult.leverageIndex >= 1.5,
+  };
 }
 
 /**
@@ -826,6 +1075,15 @@ export async function updateAtBatEvent(
     | 'runnersAfter'
     | 'awayScoreAfter'
     | 'homeScoreAfter'
+    | 'leverageIndex'
+    | 'winProbabilityBefore'
+    | 'winProbabilityAfter'
+    | 'wpa'
+    | 'wpaModelVersion'
+    | 'homeDelta'
+    | 'battingTeamDelta'
+    | 'fieldingTeamDelta'
+    | 'totalInnings'
     | 'outsRecorded'
     | 'isWalkOff'
   >>
@@ -872,6 +1130,15 @@ export async function updateAtBatEventWithFieldingSync(
       | 'runnersAfter'
       | 'awayScoreAfter'
       | 'homeScoreAfter'
+      | 'leverageIndex'
+      | 'winProbabilityBefore'
+      | 'winProbabilityAfter'
+      | 'wpa'
+      | 'wpaModelVersion'
+      | 'homeDelta'
+      | 'battingTeamDelta'
+      | 'fieldingTeamDelta'
+      | 'totalInnings'
       | 'isWalkOff'
       | 'outsRecorded'
       | 'version'

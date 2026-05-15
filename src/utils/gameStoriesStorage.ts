@@ -81,6 +81,24 @@ export async function listGameStoriesForGame(
   }
 }
 
+export async function listAllGameStories(): Promise<GameStory[]> {
+  try {
+    const db = await openTrackerDb();
+    const tx = db.transaction(STORE, "readonly");
+    const store = tx.objectStore(STORE);
+    const entries = (
+      (await requestToPromise(store.getAll())) as GameStory[]
+    )
+      .filter((entry) => entry.deleted !== true)
+      .sort((left, right) => right.createdAt - left.createdAt);
+
+    await transactionToPromise(tx);
+    return entries;
+  } catch (error) {
+    throw toStorageError("list all game stories", error);
+  }
+}
+
 /** All columns for a team, optionally filtered by game mode. Newest first. */
 export async function listGameStoriesForTeam(
   teamId: string,

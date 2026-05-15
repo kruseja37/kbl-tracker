@@ -1,0 +1,566 @@
+import { beforeEach, describe, expect, test, vi } from "vitest";
+import { fireEvent, render, screen, within } from "@testing-library/react";
+import type { ReactNode } from "react";
+
+import { GameDetail } from "../../app/pages/GameDetail";
+import type { CompletedGameRecord } from "../../utils/gameStorage";
+import type {
+  ManagerDeploymentStintRecord,
+  ManagerDecisionRecord,
+  ManagerLineupDeltaRecord,
+} from "../../../types/managerWpa";
+
+const {
+  mockAggregateKblWpaCredits,
+  mockDeriveActualAtBatWpa,
+  mockDeriveKblWpaCredits,
+  mockGetAllCanonicalPlayers,
+  mockGetArchiveInstanceIdForGame,
+  mockGetBetweenPlayEvents,
+  mockGetCompletedGameById,
+  mockGetGameEvents,
+  mockGetGameFieldingEvents,
+  mockGetGameHeader,
+  mockListManagerProfiles,
+  mockRankPlayersOfTheGame,
+} = vi.hoisted(() => ({
+  mockAggregateKblWpaCredits: vi.fn(),
+  mockDeriveActualAtBatWpa: vi.fn(),
+  mockDeriveKblWpaCredits: vi.fn(),
+  mockGetAllCanonicalPlayers: vi.fn(),
+  mockGetArchiveInstanceIdForGame: vi.fn(),
+  mockGetBetweenPlayEvents: vi.fn(),
+  mockGetCompletedGameById: vi.fn(),
+  mockGetGameEvents: vi.fn(),
+  mockGetGameFieldingEvents: vi.fn(),
+  mockGetGameHeader: vi.fn(),
+  mockListManagerProfiles: vi.fn(),
+  mockRankPlayersOfTheGame: vi.fn(),
+}));
+
+vi.mock("react-router", () => ({
+  Link: ({ children, className, to }: { children: ReactNode; className?: string; to: string }) => (
+    <a className={className} href={to}>
+      {children}
+    </a>
+  ),
+  useParams: () => ({ gameId: "game-detail-1" }),
+}));
+
+vi.mock("@/config/teamColors", () => ({
+  getTeamColors: (teamId: string) => ({
+    primary: teamId === "away" ? "#3355AA" : "#AA5533",
+    secondary: "#FFFFFF",
+  }),
+}));
+
+vi.mock("../../utils/gameStorage", () => ({
+  getCompletedGameById: mockGetCompletedGameById,
+}));
+
+vi.mock("../../../utils/almanacQueries", () => ({
+  getArchiveInstanceIdForGame: mockGetArchiveInstanceIdForGame,
+}));
+
+vi.mock("../../../utils/almanacStorage", () => ({
+  getAllCanonicalPlayers: mockGetAllCanonicalPlayers,
+}));
+
+vi.mock("../../../utils/managerIdentityStorage", () => ({
+  listManagerProfiles: mockListManagerProfiles,
+}));
+
+vi.mock("../../../utils/eventLog", () => ({
+  getBetweenPlayEvents: mockGetBetweenPlayEvents,
+  getGameEvents: mockGetGameEvents,
+  getGameFieldingEvents: mockGetGameFieldingEvents,
+  getGameHeader: mockGetGameHeader,
+}));
+
+vi.mock("../../../utils/kblWpaAttribution", () => ({
+  aggregateKblWpaCredits: mockAggregateKblWpaCredits,
+  deriveActualAtBatWpa: mockDeriveActualAtBatWpa,
+  deriveKblWpaCredits: mockDeriveKblWpaCredits,
+}));
+
+vi.mock("../../../utils/playersOfTheGame", () => ({
+  rankPlayersOfTheGame: mockRankPlayersOfTheGame,
+}));
+
+vi.mock("../../app/components/WinProbChart", () => ({
+  WinProbChart: () => <div data-testid="win-prob-chart" />,
+}));
+
+function createManagerDecision(
+  overrides: Partial<ManagerDecisionRecord> = {},
+): ManagerDecisionRecord {
+  return {
+    decisionId: "game-detail-1:bp-1:pinch_hitter",
+    gameId: "game-detail-1",
+    managerId: "away-manager",
+    teamId: "away",
+    opponentTeamId: "home",
+    decisionType: "pinch_hitter",
+    inferenceMethod: "automatic",
+    decisionSource: "user_action",
+    confidence: "high",
+    inning: 7,
+    half: "top",
+    outs: 1,
+    baseState: "---",
+    scoreDifferentialForTeam: 0,
+    leverageIndex: 2.4,
+    decisionEventId: "bp-1",
+    linkedEventIds: ["bp-1"],
+    involvedPlayerIds: ["bench-bat"],
+    teamWinProbabilityBefore: 0.5,
+    teamWinProbabilityAfter: 0.684,
+    managerWpa: 0.184,
+    rawWindowWpa: 0.184,
+    managerShare: 1,
+    resolved: true,
+    resolvedAtEventId: "ab-9",
+    displayTitle: "Pinch hitter",
+    displaySummary: "Pinch hitter for away",
+    derivation: {
+      derivedFromEventIds: ["bp-1"],
+      derivedFromFields: ["substitution.subType"],
+      manuallyPinned: false,
+      stale: false,
+    },
+    ...overrides,
+  };
+}
+
+function createCompletedGame(
+  managerDecisions: ManagerDecisionRecord[] = [],
+  managerLineupDeltas: ManagerLineupDeltaRecord[] = [],
+  managerDeploymentStints: ManagerDeploymentStintRecord[] = [],
+): CompletedGameRecord {
+  return {
+    gameId: "game-detail-1",
+    date: Date.UTC(2026, 4, 11),
+    stadiumName: "Detail Park",
+    awayTeamId: "away",
+    homeTeamId: "home",
+    awayTeamName: "Away Club",
+    homeTeamName: "Home Club",
+    finalScore: { away: 5, home: 4 },
+    innings: 9,
+    totalInnings: 9,
+    fameEvents: [],
+    playerStats: {
+      "player-one": {
+        playerName: "Player One",
+        teamId: "away",
+        pa: 1,
+        ab: 1,
+        h: 1,
+        singles: 1,
+        doubles: 0,
+        triples: 0,
+        hr: 0,
+        rbi: 1,
+        r: 0,
+        bb: 0,
+        hbp: 0,
+        k: 0,
+        sb: 0,
+        cs: 0,
+        putouts: 0,
+        assists: 0,
+        fieldingErrors: 0,
+      },
+    },
+    pitcherGameStats: [],
+    managerDecisions,
+    managerDeploymentStints,
+    managerLineupDeltas,
+  } as CompletedGameRecord;
+}
+
+describe("GameDetail Manager WPA overlay", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockGetAllCanonicalPlayers.mockResolvedValue([]);
+    mockGetArchiveInstanceIdForGame.mockReturnValue("league-1");
+    mockGetBetweenPlayEvents.mockResolvedValue([]);
+    mockGetGameEvents.mockResolvedValue([]);
+    mockGetGameFieldingEvents.mockResolvedValue([]);
+    mockGetGameHeader.mockResolvedValue(null);
+    mockListManagerProfiles.mockResolvedValue([
+      { managerId: "away-manager", displayName: "Casey Custom" },
+      { managerId: "home-manager", displayName: "Home Boss" },
+    ]);
+    mockDeriveActualAtBatWpa.mockReturnValue({ wpa: 0 });
+    mockDeriveKblWpaCredits.mockReturnValue([]);
+    mockAggregateKblWpaCredits.mockReturnValue([
+      {
+        playerId: "player-one",
+        playerName: "Player One",
+        teamId: "away",
+        totalWpa: 0.3,
+        battingWpa: 0.3,
+        pitchingWpa: 0,
+        catchingWpa: 0,
+        fieldingWpa: 0,
+        baserunningWpa: 0,
+      },
+    ]);
+    mockRankPlayersOfTheGame.mockReturnValue([]);
+  });
+
+  test("renders one manager summary card per team from committed decisions", async () => {
+    mockGetCompletedGameById.mockResolvedValue(
+      createCompletedGame([
+        createManagerDecision({ managerWpa: 0.184 }),
+        createManagerDecision({
+          decisionId: "game-detail-1:bp-2:pitching_change",
+          decisionType: "pitching_change",
+          displayTitle: "Pitching change",
+          managerWpa: undefined,
+          rawWindowWpa: undefined,
+          resolved: false,
+          teamWinProbabilityAfter: undefined,
+          resolvedAtEventId: undefined,
+          resolutionWindow: {
+            status: "pending",
+            startEventId: "bp-2",
+            startEventIndex: 2,
+            startSnapshotSource: "event_state",
+            expectedEndpoint: "next_pa",
+            trackedPlayerIds: ["home-pitcher"],
+            trackedRunnerIds: [],
+          },
+        }),
+        createManagerDecision({
+          decisionId: "game-detail-1:bp-3:runner_hold",
+          managerId: "home-manager",
+          teamId: "home",
+          opponentTeamId: "away",
+          decisionType: "runner_hold",
+          displayTitle: "Runner hold",
+          managerWpa: -0.052,
+          rawWindowWpa: -0.052,
+        }),
+      ]),
+    );
+
+    render(<GameDetail />);
+
+    const overlay = await screen.findByTestId("manager-wpa-overlay");
+    expect(within(overlay).getByText("MANAGER WPA OVERLAY")).toBeInTheDocument();
+    expect(screen.getByText("Casey Custom")).toBeInTheDocument();
+    expect(screen.getByTestId("manager-wpa-total-away")).toHaveTextContent("+0.184");
+    expect(screen.getByTestId("manager-wpa-total-home")).toHaveTextContent("-0.052");
+    expect(within(screen.getByTestId("manager-wpa-card-away")).getByText("2 (1 pending)")).toBeInTheDocument();
+    expect(screen.getByTestId("manager-tactical-trace-details-away")).toHaveTextContent(
+      "Pinch hitter decision judged on the next plate appearance.",
+    );
+    expect(screen.getByTestId("manager-tactical-trace-details-away")).toHaveTextContent(
+      "Pending Pitching change: waiting for the next plate appearance before Manager Value is scored.",
+    );
+
+    fireEvent.click(
+      within(screen.getByTestId("manager-tactical-trace-details-away")).getByRole(
+        "button",
+        { name: /open pinch hitter manager moment details for casey custom/i },
+      ),
+    );
+
+    let dialog = screen.getByRole("dialog", { name: /manager moment details/i });
+    expect(dialog).toHaveTextContent("Casey Custom / Away Club");
+    expect(dialog).toHaveTextContent("Layer");
+    expect(dialog).toHaveTextContent("Tactical");
+    expect(dialog).toHaveTextContent("Type / Role");
+    expect(dialog).toHaveTextContent("Pinch Hitter");
+    expect(dialog).toHaveTextContent("Raw WPA");
+    expect(dialog).toHaveTextContent("+0.184");
+    expect(dialog).toHaveTextContent("Share");
+    expect(dialog).toHaveTextContent("100%");
+    expect(dialog).toHaveTextContent("Cap");
+    expect(dialog).toHaveTextContent("n/a");
+    expect(dialog).toHaveTextContent("Final Manager Value");
+    expect(dialog).toHaveTextContent("+0.184");
+    fireEvent.click(within(dialog).getByRole("button", { name: /close/i }));
+
+    fireEvent.click(
+      within(screen.getByTestId("manager-tactical-trace-details-away")).getByRole(
+        "button",
+        { name: /open pitching change manager moment details for casey custom/i },
+      ),
+    );
+    dialog = screen.getByRole("dialog", { name: /manager moment details/i });
+    expect(dialog).toHaveTextContent("Pending, waiting for linked outcome");
+    expect(dialog).toHaveTextContent("Final Manager Value");
+    expect(dialog).toHaveTextContent("Pending");
+  });
+
+  test("shows committed deployment and lineup values separately from tactical Manager WPA", async () => {
+    mockGetCompletedGameById.mockResolvedValue(
+      createCompletedGame(
+        [createManagerDecision({ managerWpa: 0.184 })],
+        [
+          {
+            decisionId: "game-detail-1:away:player-one:lineup_delta",
+            gameId: "game-detail-1",
+            managerId: "away-manager",
+            teamId: "away",
+            decisionType: "lineup_construction",
+            inferenceMethod: "automatic",
+            confidence: "low",
+            starterPlayerId: "player-one",
+            starterPlayerName: "Player One",
+            battingOrderSlot: 1,
+            defensivePosition: "SS",
+            starterRole: "position_player",
+            actualPlayerKblWpa: 0.4,
+            replacementExpectedKblWpa: 0.032,
+            replacementBaselineSource: "optimal_lineup_v2",
+            replacementBaselineConfidence: "medium",
+            rawPerformanceDelta: 0.368,
+            managerShare: 0.25,
+            managerWpa: 0.1,
+            chosenPlayerId: "player-one",
+            chosenPlayerName: "Player One",
+            chosenBattingOrderSlot: 1,
+            chosenDefensivePosition: "SS",
+            optimalPlayerId: "bench-one",
+            optimalPlayerName: "Bench One",
+            optimalBattingOrderSlot: 4,
+            optimalDefensivePosition: "CF",
+            chosenProjectedKblWpa: 0.012,
+            optimalProjectedKblWpa: 0.032,
+            projectedOpportunityCost: -0.02,
+            actualChosenKblWpa: 0.4,
+            actualVsOptimalProjection: 0.368,
+          },
+        ],
+        [
+          {
+            stintId: "game-detail-1:away:deployment",
+            gameId: "game-detail-1",
+            managerId: "away-manager",
+            teamId: "away",
+            deploymentRole: "kept_position_player_in",
+            playerId: "bench-one",
+            playerName: "Bench One",
+            sourceEventId: "bp-1",
+            openedAtEventIndex: 1,
+            tacticalExclusionEventIds: ["ab-1"],
+            closedAtEventId: "ab-2",
+            closedAtEventIndex: 2,
+            closeReason: "game_end",
+            linkedEventIds: ["ab-2"],
+            linkedOutcomes: [
+              {
+                eventId: "ab-2",
+                source: "at_bat",
+                role: "batting",
+                rawWpa: 0.05,
+                weight: 1,
+                weightedWpa: 0.05,
+              },
+              {
+                eventId: "ab-2",
+                source: "at_bat",
+                role: "fielding",
+                rawWpa: 0.04,
+                weight: 0.75,
+                weightedWpa: 0.03,
+              },
+            ],
+            rawLinkedWpa: 0.08,
+            managerShare: 0.15,
+            managerDeploymentWpa: 0.012,
+            cap: 0.15,
+            confidence: "medium",
+          },
+        ],
+      ),
+    );
+
+    render(<GameDetail />);
+
+    await screen.findByTestId("manager-wpa-overlay");
+    expect(screen.getByTestId("manager-wpa-total-away")).toHaveTextContent("+0.296");
+    expect(screen.getByTestId("manager-deployment-wpa-away")).toHaveTextContent("+0.012");
+    expect(screen.getByTestId("manager-lineup-delta-away")).toHaveTextContent("+0.100");
+    expect(screen.getByTestId("manager-value-away")).toHaveTextContent("+0.296");
+    expect(screen.getByTestId("manager-lineup-delta-details-away")).toHaveTextContent(
+      "Lineup Delta: chose #1 SS Player One instead of optimal #4 CF Bench One; actual value was compared to the optimal projection.",
+    );
+    const deploymentDetails = screen.getByTestId("manager-deployment-stint-details-away");
+    expect(deploymentDetails).toHaveTextContent(
+      "Kept Bench One in after the prompt; later batting 100%, fielding 75% outcomes carry deployment weights.",
+    );
+    fireEvent.click(
+      within(deploymentDetails).getByRole("button", {
+        name: /open kept position player in manager moment details for casey custom/i,
+      }),
+    );
+    let dialog = screen.getByRole("dialog", { name: /manager moment details/i });
+    expect(dialog).toHaveTextContent("Deployment");
+    expect(dialog).toHaveTextContent("Kept Position Player In");
+    expect(dialog).toHaveTextContent("Raw WPA");
+    expect(dialog).toHaveTextContent("+0.080");
+    expect(dialog).toHaveTextContent("Share");
+    expect(dialog).toHaveTextContent("15%");
+    expect(dialog).toHaveTextContent("Cap");
+    expect(dialog).toHaveTextContent("+/-0.150");
+    expect(dialog).toHaveTextContent("Final Manager Value");
+    expect(dialog).toHaveTextContent("+0.012");
+    expect(dialog).toHaveTextContent("Linked Events");
+    expect(dialog).toHaveTextContent("ab-2");
+    expect(dialog).toHaveTextContent("ab-2 Batting 100% raw +0.050, weighted +0.050");
+    expect(dialog).toHaveTextContent("ab-2 Fielding 75% raw +0.040, weighted +0.030");
+    fireEvent.click(within(dialog).getByRole("button", { name: /close/i }));
+
+    fireEvent.click(
+      within(screen.getByTestId("manager-lineup-delta-details-away")).getByRole(
+        "button",
+        { name: /open lineup delta manager moment details for casey custom/i },
+      ),
+    );
+    dialog = screen.getByRole("dialog", { name: /manager moment details/i });
+    expect(dialog).toHaveTextContent(
+      "Lineup Delta: chose #1 SS Player One instead of optimal #4 CF Bench One; actual value was compared to the optimal projection.",
+    );
+    expect(dialog).toHaveTextContent("Lineup Delta");
+    expect(dialog).toHaveTextContent("Lineup Construction");
+    expect(dialog).toHaveTextContent("Raw WPA");
+    expect(dialog).toHaveTextContent("+0.368");
+    expect(dialog).toHaveTextContent("Share");
+    expect(dialog).toHaveTextContent("25%");
+    expect(dialog).toHaveTextContent("Final Manager Value");
+    expect(dialog).toHaveTextContent("+0.100");
+  });
+
+  test("keeps active deployment stints out of resolved overlay totals", async () => {
+    mockGetCompletedGameById.mockResolvedValue(
+      createCompletedGame(
+        [],
+        [],
+        [
+          {
+            stintId: "game-detail-1:away:active-deployment",
+            gameId: "game-detail-1",
+            managerId: "away-manager",
+            teamId: "away",
+            deploymentRole: "pitcher",
+            playerId: "away-reliever",
+            playerName: "Away Reliever",
+            sourceEventId: "bp-1",
+            openedAtEventIndex: 5,
+            tacticalExclusionEventIds: ["ab-5"],
+            linkedEventIds: ["ab-6"],
+            rawLinkedWpa: 0.6,
+            managerShare: 0.15,
+            managerDeploymentWpa: 0.09,
+            cap: 0.2,
+            confidence: "medium",
+          },
+        ],
+      ),
+    );
+
+    render(<GameDetail />);
+
+    await screen.findByTestId("manager-wpa-overlay");
+    expect(screen.getByTestId("manager-deployment-wpa-away")).toHaveTextContent("+0.000");
+    expect(screen.getByTestId("manager-wpa-total-away")).toHaveTextContent("+0.000");
+    const deploymentDetails = screen.getByTestId("manager-deployment-stint-details-away");
+    expect(deploymentDetails).toHaveTextContent("Active, excluded from resolved total");
+    fireEvent.click(
+      within(deploymentDetails).getByRole("button", {
+        name: /open pitcher manager moment details for casey custom/i,
+      }),
+    );
+    const dialog = screen.getByRole("dialog", { name: /manager moment details/i });
+    expect(dialog).toHaveTextContent("Active, excluded from resolved total");
+    expect(dialog).toHaveTextContent("Final Manager Value");
+    expect(dialog).toHaveTextContent("Active");
+    expect(dialog).toHaveTextContent("Linked Events");
+    expect(dialog).toHaveTextContent("ab-6");
+    expect(dialog).toHaveTextContent("No weighted outcomes linked.");
+  });
+
+  test("shows legacy defensive alignment records as non-scoring compatibility notes", async () => {
+    mockGetCompletedGameById.mockResolvedValue(
+      createCompletedGame([
+        createManagerDecision({
+          decisionId: "game-detail-1:bp-align:defensive_alignment",
+          decisionType: "defensive_alignment",
+          displayTitle: "Defensive alignment",
+          decisionEventId: "bp-align",
+          linkedEventIds: ["bp-align", "ab-field"],
+          managerWpa: 0.4,
+          rawWindowWpa: 0.4,
+          managerShare: 0.1,
+          resolved: true,
+          resolvedAtEventId: "ab-field",
+        }),
+      ]),
+    );
+
+    render(<GameDetail />);
+
+    await screen.findByTestId("manager-wpa-overlay");
+    expect(screen.getByTestId("manager-wpa-total-away")).toHaveTextContent("+0.000");
+    expect(screen.getByTestId("manager-value-away")).toHaveTextContent("+0.000");
+    expect(within(screen.getByTestId("manager-wpa-card-away")).getByText("0")).toBeInTheDocument();
+    const traceDetails = screen.getByTestId("manager-tactical-trace-details-away");
+    expect(traceDetails).toHaveTextContent(
+      "Legacy defensive alignment note only; no Manager Value scoring.",
+    );
+    expect(traceDetails).toHaveTextContent("Non-scoring compatibility row");
+    fireEvent.click(
+      within(traceDetails).getByRole("button", {
+        name: /open defensive alignment manager moment details for casey custom/i,
+      }),
+    );
+    const dialog = screen.getByRole("dialog", { name: /manager moment details/i });
+    expect(dialog).toHaveTextContent("Non-scoring compatibility row");
+    expect(dialog).toHaveTextContent("Final Manager Value");
+    expect(dialog).toHaveTextContent("Non-scoring");
+    expect(dialog).toHaveTextContent("Cap");
+    expect(dialog).toHaveTextContent("n/a");
+  });
+
+  test("keeps manager overlay values out of the player KBL WPA leaderboard", async () => {
+    mockGetCompletedGameById.mockResolvedValue(
+      createCompletedGame([
+        createManagerDecision({
+          managerWpa: 9.999,
+          rawWindowWpa: 9.999,
+        }),
+      ]),
+    );
+
+    render(<GameDetail />);
+
+    const leaderboardTitle = await screen.findByText("KBL WPA Leaderboard");
+    const leaderboardSection = leaderboardTitle.closest("section");
+    expect(leaderboardSection).not.toBeNull();
+    expect(within(leaderboardSection as HTMLElement).getByText("+0.300")).toBeInTheDocument();
+    expect(within(leaderboardSection as HTMLElement).queryByText("+9.999")).not.toBeInTheDocument();
+  });
+
+  test("does not derive overlay values from event-log data without committed managerDecisions", async () => {
+    mockGetCompletedGameById.mockResolvedValue(createCompletedGame([]));
+    mockGetBetweenPlayEvents.mockResolvedValue([
+      {
+        eventId: "ghost-manager-event",
+        type: "pitching_change",
+        timestamp: Date.UTC(2026, 4, 11),
+      },
+    ]);
+
+    render(<GameDetail />);
+
+    await screen.findByTestId("manager-wpa-overlay");
+    expect(screen.getByTestId("manager-wpa-total-away")).toHaveTextContent("+0.000");
+    expect(screen.getByTestId("manager-wpa-total-home")).toHaveTextContent("+0.000");
+    expect(screen.getByTestId("manager-lineup-delta-empty-away")).toHaveTextContent("No lineup deviations");
+  });
+});

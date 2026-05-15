@@ -125,11 +125,11 @@ export function usePlayoffData(seasonNumber: number = 1): UsePlayoffDataReturn {
       await initPlayoffDatabase();
 
       // Try to get playoff for this season
-      let playoffData = await getPlayoffBySeason(seasonNumber);
+      let playoffData = await getPlayoffBySeason(seasonNumber, 'franchise');
 
       // If no playoff, also check for any active playoff
       if (!playoffData) {
-        playoffData = await getCurrentPlayoff();
+        playoffData = await getCurrentPlayoff('franchise');
       }
 
       if (playoffData) {
@@ -345,7 +345,7 @@ export function usePlayoffData(seasonNumber: number = 1): UsePlayoffDataReturn {
       }
 
       // Delete any existing playoff for this season first (prevents ConstraintError on unique index)
-      await deletePlayoffBySeason(config.seasonNumber);
+      await deletePlayoffBySeason(config.seasonNumber, 'franchise');
 
       const newPlayoff = await createPlayoff({
         seasonNumber: config.seasonNumber,
@@ -441,7 +441,7 @@ export function usePlayoffData(seasonNumber: number = 1): UsePlayoffDataReturn {
           } else {
             // Generate next round matchups from winners
             const { createNextRoundSeries } = await import('../../utils/playoffStorage');
-            const latestPlayoff = await getPlayoffBySeason(playoff.seasonNumber);
+            const latestPlayoff = await getPlayoffBySeason(playoff.seasonNumber, 'franchise');
             if (latestPlayoff) {
               await createNextRoundSeries(playoff.id, updatedSeries.round, latestPlayoff);
               // Advance the currentRound pointer

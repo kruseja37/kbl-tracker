@@ -105,6 +105,8 @@ export interface EnrichmentUpdate {
   batterOutAdvancing?: boolean;
   basesSaved?: 1 | 2;
   savedRun?: boolean;
+  extraGemCreditPositions?: number[];
+  rescuedThrow?: boolean;
   hrDistance?: number;
   pitchType?: string;
   pitchesInAtBat?: number;
@@ -148,6 +150,8 @@ const NO_KP_NUT: AtBatModifierValue[] = ['SEVEN_PLUS_PITCH_AB', 'ROBBERY', 'BEAT
 const HR_FIELDING_PLAY_TYPES = new Set<FieldingPlayTypeValue>([
   'failed_robbery',
 ]);
+const RESCUED_THROW_RESULTS = new Set(['GO', 'FC', 'DP', 'TP', 'SAC']);
+const EXTRA_GEM_SEQUENCE_RESULTS = new Set(['GO', 'FO', 'FLO', 'LO', 'PO', 'DP', 'TP', 'FC', 'SF', 'SAC']);
 const SAVED_BASES_ATTEMPT_TYPES = new Set<FieldingAttemptType>([
   'diving',
   'sliding',
@@ -913,11 +917,29 @@ export function EnrichmentPanel({
     enrichmentAny?.playMechanic as PlayMechanic | undefined
   );
   const basesSaved = currentEnrichment?.basesSaved;
+  const extraGemCreditPositions =
+    ((currentEnrichment as Record<string, unknown> | undefined)
+      ?.extraGemCreditPositions as number[] | undefined) ?? [];
   const canTrackSavedBases = supportsSavedBases(attemptType);
   const isSavedBasesEnabled = typeof basesSaved === 'number';
+  const allowsExtraGemCredit = useMemo(
+    () =>
+      Boolean(
+        (persistedFieldingPlayType &&
+          ['diving', 'leaping', 'wall', 'robbed_hr', 'sliding'].includes(
+            persistedFieldingPlayType,
+          )) ||
+          (EXTRA_GEM_SEQUENCE_RESULTS.has(entry.result) && localFieldingSeq.length > 1),
+      ),
+    [entry.result, localFieldingSeq.length, persistedFieldingPlayType],
+  );
 
   const isK = entry.result === 'K' || entry.result === 'Kc';
   const supportsBatterOutAdvancing = ['1B', '2B', '3B', 'GRD'].includes(entry.result);
+  const canTrackRescuedThrow =
+    RESCUED_THROW_RESULTS.has(entry.result) &&
+    localFieldingSeq.length >= 2 &&
+    localFieldingSeq[localFieldingSeq.length - 1] === 3;
 
   const positionLabel = (num: number) => FIELDER_POSITIONS.find((fielder) => fielder.num === num)?.label || `${num}`;
   const putoutLabel = currentEnrichment?.putouts?.map(positionLabel).join(', ');
@@ -1313,6 +1335,55 @@ export function EnrichmentPanel({
               sequence={localFieldingSeq}
               onChange={handleFieldingSeqChange}
             />
+            {canTrackRescuedThrow && (
+              <div className="mt-2">
+                <EnrichmentSection label="Rescued Throw" filled={!!currentEnrichment?.rescuedThrow}>
+                  <button
+                    className={`text-xs min-h-[36px] px-3 py-2 rounded border transition-colors touch-manipulation
+                      ${currentEnrichment?.rescuedThrow
+                        ? 'bg-[#C4A853]/30 border-[#C4A853] text-[#C4A853]'
+                        : 'bg-[#2a3530]/60 border-[#4a6a4a] text-[#88AA88] hover:bg-[#4a6a4a]/40'}`}
+                    onClick={() => onUpdate('rescuedThrow', !currentEnrichment?.rescuedThrow)}
+                  >
+                    1B Rescued Throw
+                  </button>
+                </EnrichmentSection>
+              </div>
+            )}
+            {allowsExtraGemCredit && localFieldingSeq.length > 1 && (
+              <div className="mt-2">
+                <EnrichmentSection label="Extra Gem Credit" filled={extraGemCreditPositions.length > 0}>
+                  <div className="flex flex-wrap gap-1.5">
+                    {localFieldingSeq.slice(1).map((positionNumber) => {
+                      const isSelected = extraGemCreditPositions.includes(positionNumber);
+                      return (
+                        <button
+                          key={positionNumber}
+                          className={`text-xs min-h-[36px] px-3 py-2 rounded border transition-colors touch-manipulation ${
+                            isSelected
+                              ? 'bg-[#C4A853]/30 border-[#C4A853] text-[#C4A853]'
+                              : 'bg-[#2a3530]/60 border-[#4a6a4a] text-[#88AA88] hover:bg-[#4a6a4a]/40'
+                          }`}
+                          onClick={() =>
+                            onUpdate(
+                              'extraGemCreditPositions',
+                              isSelected
+                                ? extraGemCreditPositions.filter((entry) => entry !== positionNumber)
+                                : [...extraGemCreditPositions, positionNumber],
+                            )
+                          }
+                        >
+                          {positionLabel(positionNumber)}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <div className="mt-2 text-[10px] text-[#88AA88]">
+                    Use this only when a later fielder also made a gem-worthy dig, tag, or stretch.
+                  </div>
+                </EnrichmentSection>
+              </div>
+            )}
             {(putoutLabel || assistLabel || errorLabel) && (
               <div className="mt-2 bg-[#2a3530]/60 border border-[#4a6a4a] rounded px-2 py-2 space-y-1">
                 {putoutLabel && (
@@ -1543,14 +1614,29 @@ const POSITION_CHARGE_OPTIONS = [
   { value: 9, label: 'RF(9)' },
 ] as const;
 
+const MANAGER_INTENT_OPTIONS = [
+  { value: 'runner_choice', label: 'Runner Choice' },
+  { value: 'manager_send', label: 'Manager Send' },
+  { value: 'manager_hold', label: 'Hold Runner' },
+  { value: 'runner_responsibility', label: 'Runner Fault' },
+] as const;
+
+const MANAGER_RUN_PLAY_OPTIONS = [
+  { value: 'hit_and_run', label: 'Hit & Run' },
+] as const;
+
 const isRunnerOutcomeOut = (toBase: RunnerSubEntry['toBase']) => toBase === 'out';
+
+function isBattedBallRunnerPlay(result?: string): boolean {
+  return !!result && !['K', 'Kc', 'WP_K', 'PB_K', 'BB', 'IBB', 'HBP'].includes(result);
+}
 
 interface RunnerEnrichmentPanelProps {
   subEntry: RunnerSubEntry;
   outfielderByPosition?: Partial<Record<OutfieldPosition, { playerId: string; playerName: string }>>;
   onUpdate: (
     subEntryId: string,
-    field: keyof Pick<RunnerSubEntry, 'fieldingSequence' | 'playMechanic' | 'fielderId' | 'fielderPosition' | 'heldByOf' | 'holdingFielder' | 'baseSaved' | 'isTootblan' | 'isOutAdvancing' | 'toBase' | 'errorType' | 'errorChargedTo'>,
+    field: keyof Pick<RunnerSubEntry, 'fieldingSequence' | 'playMechanic' | 'fielderId' | 'fielderPosition' | 'heldByOf' | 'holdingFielder' | 'baseSaved' | 'isTootblan' | 'isOutAdvancing' | 'managerIntent' | 'managerRunPlay' | 'managerDecisionSource' | 'managerDecisionNote' | 'toBase' | 'errorType' | 'errorChargedTo'>,
     value: unknown,
   ) => void | Promise<void>;
   onClose: () => void;
@@ -1589,6 +1675,8 @@ export function RunnerEnrichmentPanel({
     isRunnerOutcomeOut(initialToBase) !== isRunnerOutcomeOut(subEntry.toBase) ||
     !!subEntry.errorType ||
     typeof subEntry.errorChargedTo === 'number';
+  const shouldShowRunPlay =
+    subEntry.fromBase !== 'batter' && isBattedBallRunnerPlay(subEntry.parentResult);
   const subjectLabel = subEntry.fromBase === 'batter'
     ? `Batter: ${subEntry.runnerName}`
     : subEntry.runnerName;
@@ -1647,6 +1735,24 @@ export function RunnerEnrichmentPanel({
     }
 
     await onUpdate(subEntry.id, 'errorType', nextValue);
+  }, [onUpdate, subEntry.id]);
+
+  const handleManagerIntentChange = useCallback(async (
+    nextIntent: RunnerSubEntry['managerIntent'] | undefined,
+  ) => {
+    await onUpdate(subEntry.id, 'managerIntent', nextIntent);
+    if (nextIntent) {
+      await onUpdate(subEntry.id, 'managerDecisionSource', 'play_log_enhancement');
+    }
+  }, [onUpdate, subEntry.id]);
+
+  const handleManagerRunPlayChange = useCallback(async (
+    nextRunPlay: RunnerSubEntry['managerRunPlay'] | undefined,
+  ) => {
+    await onUpdate(subEntry.id, 'managerRunPlay', nextRunPlay);
+    if (nextRunPlay) {
+      await onUpdate(subEntry.id, 'managerDecisionSource', 'play_log_enhancement');
+    }
   }, [onUpdate, subEntry.id]);
 
   return (
@@ -1717,6 +1823,62 @@ export function RunnerEnrichmentPanel({
           >
             {subEntry.isOutAdvancing ? 'Out Advancing (mgr fault)' : 'Mark Out Advancing'}
           </button>
+        </EnrichmentSection>
+
+        {shouldShowRunPlay && (
+          <EnrichmentSection label="Run Play" filled={!!subEntry.managerRunPlay}>
+            <div className="grid grid-cols-1 gap-1.5">
+              {MANAGER_RUN_PLAY_OPTIONS.map((option) => {
+                const isSelected = subEntry.managerRunPlay === option.value;
+                return (
+                  <button
+                    key={option.value}
+                    className={`text-[11px] min-h-[36px] px-3 py-2 rounded border transition-colors touch-manipulation
+                      ${isSelected
+                        ? 'bg-[#C4A853]/30 border-[#C4A853] text-[#C4A853]'
+                        : 'bg-[#2a3530]/60 border-[#4a6a4a] text-[#88AA88] hover:bg-[#4a6a4a]/40'}`}
+                    onClick={() => {
+                      void handleManagerRunPlayChange(
+                        isSelected ? undefined : option.value,
+                      );
+                    }}
+                  >
+                    {option.label}
+                  </button>
+                );
+              })}
+            </div>
+            <div className="mt-1 text-[10px] text-[#88AA88]">
+              Use when the runner broke with the pitch on a batted ball.
+            </div>
+          </EnrichmentSection>
+        )}
+
+        <EnrichmentSection label="Manager Runner Call" filled={!!subEntry.managerIntent}>
+          <div className="grid grid-cols-2 gap-1.5">
+            {MANAGER_INTENT_OPTIONS.map((option) => {
+              const isSelected = subEntry.managerIntent === option.value;
+              return (
+                <button
+                  key={option.value}
+                  className={`text-[11px] min-h-[36px] px-3 py-2 rounded border transition-colors touch-manipulation
+                    ${isSelected
+                      ? 'bg-[#C4A853]/30 border-[#C4A853] text-[#C4A853]'
+                      : 'bg-[#2a3530]/60 border-[#4a6a4a] text-[#88AA88] hover:bg-[#4a6a4a]/40'}`}
+                  onClick={() => {
+                    void handleManagerIntentChange(
+                      isSelected ? undefined : option.value,
+                    );
+                  }}
+                >
+                  {option.label}
+                </button>
+              );
+            })}
+          </div>
+          <div className="mt-1 text-[10px] text-[#88AA88]">
+            Use only when the runner move was a recorded tactical call.
+          </div>
         </EnrichmentSection>
 
         {shouldShowErrorAttribution && (

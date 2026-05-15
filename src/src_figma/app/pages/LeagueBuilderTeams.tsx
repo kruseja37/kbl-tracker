@@ -25,6 +25,17 @@ import {
 } from "lucide-react";
 import { useLeagueBuilderData, type Team } from "../../hooks/useLeagueBuilderData";
 import type { EraFlavor, TeamRivalry } from "../../../utils/leagueBuilderStorage";
+import type { ManagerAssignment, ManagerProfile } from "../../../types/managerWpa";
+import {
+  ensureDefaultManagerProfile,
+  ensureDefaultManagerProfiles,
+  LEAGUE_BUILDER_MANAGER_INSTANCE_ID,
+  listManagerAssignments,
+  listManagerProfiles,
+  saveManagerAssignment,
+  saveManagerProfile,
+} from "../../../utils/managerIdentityStorage";
+import { getDefaultManagerIdForTeam } from "../../../utils/managerWpaDerivation";
 
 const ERA_FLAVORS: EraFlavor[] = ['GOLDEN_AGE', 'CLASSIC_TV', 'MODERN_LOCAL'];
 
@@ -61,6 +72,12 @@ interface TeamFormData {
   ballparkNickname: string;
   heritageFacts: string[];
   rivalries: TeamRivalry[];
+  managerId: string;
+  managerDisplayName: string;
+  managerGender: string;
+  managerAge: string;
+  managerHometown: string;
+  managerStyleLabel: string;
 }
 
 const DEFAULT_FORM_DATA: TeamFormData = {
@@ -81,6 +98,12 @@ const DEFAULT_FORM_DATA: TeamFormData = {
   ballparkNickname: "",
   heritageFacts: [],
   rivalries: [],
+  managerId: "",
+  managerDisplayName: "",
+  managerGender: "Male",
+  managerAge: "",
+  managerHometown: "",
+  managerStyleLabel: "",
 };
 
 function normalizeHeritageFacts(heritageFacts: string[]): string[] {
@@ -143,10 +166,23 @@ export function LeagueBuilderTeams() {
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [isHeritageFactsOpen, setIsHeritageFactsOpen] = useState(true);
   const [isRivalriesOpen, setIsRivalriesOpen] = useState(true);
+  const [managerProfiles, setManagerProfiles] = useState<ManagerProfile[]>([]);
+  const [managerAssignments, setManagerAssignments] = useState<ManagerAssignment[]>([]);
   const autosavedTeamMetadataRef = useRef<{
     heritageFacts: string[];
     rivalries: TeamRivalry[];
   } | null>(null);
+  const managerProfilesById = useMemo(
+    () => new Map(managerProfiles.map((profile) => [profile.managerId, profile])),
+    [managerProfiles],
+  );
+  const managerAssignmentsByTeamId = useMemo(
+    () =>
+      new Map(
+        managerAssignments.map((assignment) => [assignment.teamId, assignment]),
+      ),
+    [managerAssignments],
+  );
 
   // Auto-generate abbreviation from name
   useEffect(() => {
@@ -165,6 +201,51 @@ export function LeagueBuilderTeams() {
     }
   }, [formData.name, formData.abbreviation, editingTeam]);
 
+  useEffect(() => {
+    if (teams.length === 0) {
+      setManagerProfiles([]);
+      setManagerAssignments([]);
+      return;
+    }
+
+    let cancelled = false;
+    async function loadManagers() {
+      await ensureDefaultManagerProfiles(teams);
+      const [profiles, assignments] = await Promise.all([
+        listManagerProfiles(),
+        listManagerAssignments({
+          mode: "franchise",
+          instanceId: LEAGUE_BUILDER_MANAGER_INSTANCE_ID,
+        }),
+      ]);
+      if (cancelled) return;
+      setManagerProfiles(profiles);
+      setManagerAssignments(assignments);
+    }
+
+    loadManagers().catch((err) => {
+      if (!cancelled) console.error("Failed to load managers:", err);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [teams]);
+
+  const getAssignedManagerId = (team: Team): string => (
+    managerAssignmentsByTeamId.get(team.id)?.managerId ||
+    team.managerId ||
+    getDefaultManagerIdForTeam(team.id)
+  );
+
+  const getAssignedManagerProfile = (team: Team): ManagerProfile | undefined =>
+    managerProfilesById.get(getAssignedManagerId(team));
+
+  const getAssignedManagerName = (team: Team): string =>
+    getAssignedManagerProfile(team)?.displayName ||
+    team.managerName ||
+    `${team.name} Manager`;
+
   // ============================================
   // HANDLERS
   // ============================================
@@ -179,6 +260,8 @@ export function LeagueBuilderTeams() {
   };
 
   const openEditModal = (team: Team) => {
+    const managerId = getAssignedManagerId(team);
+    const managerProfile = managerProfilesById.get(managerId);
     setEditingTeam(team);
     setFormData({
       name: team.name,
@@ -198,6 +281,12 @@ export function LeagueBuilderTeams() {
       ballparkNickname: team.ballparkNickname || "",
       heritageFacts: team.heritageFacts || [],
       rivalries: team.rivalries || [],
+      managerId,
+      managerDisplayName: managerProfile?.displayName || team.managerName || "",
+      managerGender: managerProfile?.gender || "",
+      managerAge: managerProfile?.age?.toString() || "",
+      managerHometown: managerProfile?.hometown || "",
+      managerStyleLabel: managerProfile?.managementStyle?.label || "",
     });
     autosavedTeamMetadataRef.current = {
       heritageFacts: normalizeHeritageFacts(team.heritageFacts || []),
@@ -264,6 +353,79 @@ export function LeagueBuilderTeams() {
     updateTeam,
   ]);
 
+  const handleManagerSelectionChange = (managerId: string) => {
+    const profile = managerProfilesById.get(managerId);
+    setFormData((prev) => ({
+      ...prev,
+      managerId,
+      managerDisplayName: profile?.displayName || "",
+      managerGender: profile?.gender || "Male",
+      managerAge: profile?.age?.toString() || "",
+      managerHometown: profile?.hometown || "",
+      managerStyleLabel: profile?.managementStyle?.label || "",
+    }));
+  };
+
+  const persistManagerForTeam = async (team: Team): Promise<Team> => {
+    const displayName = formData.managerDisplayName.trim();
+    const selectedProfile = formData.managerId
+      ? managerProfilesById.get(formData.managerId)
+      : undefined;
+    const managerAge = formData.managerAge
+      ? parseInt(formData.managerAge, 10)
+      : undefined;
+    const profile = displayName
+      ? await saveManagerProfile({
+          managerId: selectedProfile?.managerId || undefined,
+          displayName,
+          gender: formData.managerGender.trim() || undefined,
+          age:
+            typeof managerAge === "number" && Number.isFinite(managerAge)
+              ? managerAge
+              : undefined,
+          hometown: formData.managerHometown.trim() || undefined,
+          createdByUser: true,
+          defaultManager:
+            selectedProfile?.defaultManager ??
+            formData.managerId === getDefaultManagerIdForTeam(team.id),
+          managementStyle: formData.managerStyleLabel.trim()
+            ? { ...(selectedProfile?.managementStyle ?? {}), label: formData.managerStyleLabel.trim() }
+            : selectedProfile?.managementStyle,
+        })
+      : await ensureDefaultManagerProfile(team);
+
+    await saveManagerAssignment({
+      managerId: profile.managerId,
+      teamId: team.id,
+      mode: "franchise",
+      instanceId: LEAGUE_BUILDER_MANAGER_INSTANCE_ID,
+    });
+
+    setManagerProfiles((current) => {
+      const withoutProfile = current.filter(
+        (item) => item.managerId !== profile.managerId,
+      );
+      return [...withoutProfile, profile].sort((a, b) =>
+        a.displayName.localeCompare(b.displayName),
+      );
+    });
+    setManagerAssignments((current) => [
+      ...current.filter((assignment) => assignment.teamId !== team.id),
+      {
+        managerId: profile.managerId,
+        teamId: team.id,
+        mode: "franchise",
+        instanceId: LEAGUE_BUILDER_MANAGER_INSTANCE_ID,
+      },
+    ]);
+
+    return updateTeam({
+      ...team,
+      managerId: profile.managerId,
+      managerName: profile.displayName,
+    });
+  };
+
   const handleSave = async () => {
     if (!formData.name.trim() || !formData.abbreviation.trim()) return;
 
@@ -305,14 +467,16 @@ export function LeagueBuilderTeams() {
         retiredNumbers: editingTeam?.retiredNumbers || [],
       };
 
+      let savedTeam: Team;
       if (editingTeam) {
-        await updateTeam({
+        savedTeam = await updateTeam({
           ...editingTeam,
           ...teamData,
         });
       } else {
-        await createTeam(teamData);
+        savedTeam = await createTeam(teamData);
       }
+      await persistManagerForTeam(savedTeam);
       closeModal();
     } catch (err) {
       console.error("Failed to save team:", err);
@@ -523,6 +687,9 @@ export function LeagueBuilderTeams() {
                   <div className="text-xs text-[#E8E8D8]/60 text-center mb-2">
                     {team.abbreviation}
                   </div>
+                  <div className="text-[10px] text-[#D4A020] text-center mb-2">
+                    MGR {getAssignedManagerName(team)}
+                  </div>
 
                   {/* League badges */}
                   {teamLeagues.length > 0 && (
@@ -702,6 +869,142 @@ export function LeagueBuilderTeams() {
                   />
                 </div>
               </div>
+
+              <section className="bg-[#4A6844]/55 border-[4px] border-[#3F5A3A] p-4 space-y-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <h3 className="text-sm font-bold tracking-[0.18em] uppercase text-[#E8E8D8]">
+                      Manager
+                    </h3>
+                    <p className="mt-1 text-xs text-[#E8E8D8]/60">
+                      Create or assign the dugout identity used by pregame setup and Manager WPA.
+                    </p>
+                  </div>
+                  <span className="text-[10px] uppercase tracking-[0.18em] text-[#D4A020]">
+                    Identity
+                  </span>
+                </div>
+
+                <div>
+                  <label htmlFor="team-manager-select" className="block text-sm font-bold mb-2">
+                    Assign Manager
+                  </label>
+                  <select
+                    id="team-manager-select"
+                    value={formData.managerId}
+                    onChange={(e) => handleManagerSelectionChange(e.target.value)}
+                    className="w-full bg-[#3F5A3A] border-[4px] border-[#2d3d2f] p-3 text-[#E8E8D8] focus:border-[#E8E8D8] outline-none"
+                  >
+                    <option value="">Create new manager</option>
+                    {managerProfiles.map((manager) => (
+                      <option key={manager.managerId} value={manager.managerId}>
+                        {manager.displayName}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label htmlFor="manager-name" className="block text-sm font-bold mb-2">
+                      Name
+                    </label>
+                    <input
+                      id="manager-name"
+                      type="text"
+                      value={formData.managerDisplayName}
+                      onChange={(e) =>
+                        setFormData((prev) => ({
+                          ...prev,
+                          managerDisplayName: e.target.value,
+                        }))
+                      }
+                      placeholder="e.g., Marla Bench"
+                      className="w-full bg-[#3F5A3A] border-[4px] border-[#2d3d2f] p-3 text-[#E8E8D8] placeholder-[#E8E8D8]/40 focus:border-[#E8E8D8] outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="manager-style" className="block text-sm font-bold mb-2">
+                      Style Label
+                    </label>
+                    <input
+                      id="manager-style"
+                      type="text"
+                      value={formData.managerStyleLabel}
+                      onChange={(e) =>
+                        setFormData((prev) => ({
+                          ...prev,
+                          managerStyleLabel: e.target.value,
+                        }))
+                      }
+                      placeholder="Balanced"
+                      className="w-full bg-[#3F5A3A] border-[4px] border-[#2d3d2f] p-3 text-[#E8E8D8] placeholder-[#E8E8D8]/40 focus:border-[#E8E8D8] outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-3 gap-4">
+                  <div>
+                    <label htmlFor="manager-gender" className="block text-sm font-bold mb-2">
+                      Gender
+                    </label>
+                    <select
+                      id="manager-gender"
+                      value={formData.managerGender}
+                      onChange={(e) =>
+                        setFormData((prev) => ({
+                          ...prev,
+                          managerGender: e.target.value,
+                        }))
+                      }
+                      className="w-full bg-[#3F5A3A] border-[4px] border-[#2d3d2f] p-3 text-[#E8E8D8] focus:border-[#E8E8D8] outline-none"
+                    >
+                      <option value="">Unspecified</option>
+                      <option value="Male">Male</option>
+                      <option value="Female">Female</option>
+                      <option value="Nonbinary">Nonbinary</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label htmlFor="manager-age" className="block text-sm font-bold mb-2">
+                      Age
+                    </label>
+                    <input
+                      id="manager-age"
+                      type="number"
+                      min="18"
+                      max="99"
+                      value={formData.managerAge}
+                      onChange={(e) =>
+                        setFormData((prev) => ({
+                          ...prev,
+                          managerAge: e.target.value,
+                        }))
+                      }
+                      placeholder="52"
+                      className="w-full bg-[#3F5A3A] border-[4px] border-[#2d3d2f] p-3 text-[#E8E8D8] placeholder-[#E8E8D8]/40 focus:border-[#E8E8D8] outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="manager-hometown" className="block text-sm font-bold mb-2">
+                      Hometown
+                    </label>
+                    <input
+                      id="manager-hometown"
+                      type="text"
+                      value={formData.managerHometown}
+                      onChange={(e) =>
+                        setFormData((prev) => ({
+                          ...prev,
+                          managerHometown: e.target.value,
+                        }))
+                      }
+                      placeholder="Denver, CO"
+                      className="w-full bg-[#3F5A3A] border-[4px] border-[#2d3d2f] p-3 text-[#E8E8D8] placeholder-[#E8E8D8]/40 focus:border-[#E8E8D8] outline-none"
+                    />
+                  </div>
+                </div>
+              </section>
 
               <section className="bg-[#4A6844]/55 border-[4px] border-[#3F5A3A] p-4 space-y-4">
                 <div className="flex items-center justify-between gap-3">

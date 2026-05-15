@@ -111,6 +111,38 @@ describe("defensive column projection", () => {
     ]);
   });
 
+  test("replaces an extra non-pitcher with the active pitcher when no-DH restore lacks a P row", () => {
+    const players: Player[] = [
+      player("Lead Off", 1, "SS", "p1"),
+      player("Two Hole", 2, "LF", "p2"),
+      player("Three Hole", 3, "RF", "p3"),
+      player("Cleanup", 4, "1B", "p4"),
+      player("Five Spot", 5, "3B", "p5"),
+      player("Six Spot", 6, "CF", "p6"),
+      player("Seven Spot", 7, "C", "p7"),
+      player("Eight Spot", 8, "2B", "p8"),
+      player("Extra Right Fielder", 9, "RF", "p9"),
+    ];
+    const pitchers = [pitcher("Starting Pitcher", "p10")];
+
+    const result = buildDefensiveColumnPlayersForDisplay({
+      players,
+      pitchers,
+      fieldingTeam: "home",
+      pitcherStats: new Map() as never,
+      getRosterEntityId: (entity) => entity.playerId || entity.name,
+      explicitUseDh: false,
+    });
+
+    expect(result).toHaveLength(9);
+    expect(result.some((entry) => entry.playerId === "p9")).toBe(false);
+    expect(result.find((entry) => entry.playerId === "p10")).toMatchObject({
+      name: "Starting Pitcher",
+      position: "P",
+      isPitcher: true,
+    });
+  });
+
   test("prefers the lineup snapshot so DH defense still shows the catcher even if the display roster drifts", () => {
     const players: Player[] = [
       player("Lead Off", 1, "CF", "p1"),

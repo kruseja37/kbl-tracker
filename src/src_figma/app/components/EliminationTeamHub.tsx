@@ -15,6 +15,30 @@ import {
 import type { Player, LineupSlot, Position } from '../../../utils/leagueBuilderStorage';
 import { loadMojoFitnessSnapshots, saveMojoFitnessSnapshots } from '../../../utils/mojoFitnessStorage';
 import type { PlayoffTeam } from '../../../utils/playoffStorage';
+import type {
+  ManagerProfile,
+  OpposingPitcherHand,
+  OptimalLineupSnapshot,
+} from '../../../types/managerWpa';
+import {
+  buildLineupSnapshotFromSlots,
+  buildOptimalLineupSnapshot,
+  confirmEngineOptimalLineupSnapshot,
+  isOfficialOptimalLineupSnapshot,
+  markOptimalLineupSnapshotsStaleForChange,
+  OPTIMAL_LINEUP_SNAPSHOT_FIELDS,
+  optimalLineupField,
+  optimalLineupFieldsForDh,
+  summarizeLineupSnapshotComparison,
+  type LineupSnapshotComparison,
+  type OptimalLineupCandidate,
+  type OptimalLineupSnapshotField,
+} from '../../../utils/optimalLineup';
+import {
+  resolveManagerForTeam,
+  saveManagerProfile,
+} from '../../../utils/managerIdentityStorage';
+import { OptimalLineupComparisonPanel } from './OptimalLineupComparisonPanel';
 
 interface EliminationTeamHubProps {
   eliminationId: string;
@@ -127,15 +151,77 @@ function formatPosition(player: Player): string {
     : player.primaryPosition;
 }
 
+function toOptimalCandidate(player: Player): OptimalLineupCandidate {
+  return {
+    playerId: player.id,
+    playerName: `${player.firstName} ${player.lastName}`,
+    bats: player.bats,
+    primaryPosition: player.primaryPosition,
+    secondaryPosition: player.secondaryPosition,
+    power: player.power,
+    contact: player.contact,
+    speed: player.speed,
+    fielding: player.fielding,
+    arm: player.arm,
+    mojo: player.mojo,
+    fitness: undefined,
+    trait1: player.trait1,
+    trait2: player.trait2,
+  };
+}
+
+function lineupSlotsFromOptimalSnapshot(snapshot: OptimalLineupSnapshot): LineupSlot[] {
+  return snapshot.slots.map((slot) => ({
+    battingOrder: slot.battingOrderSlot,
+    playerId: slot.playerId,
+    fieldingPosition: slot.defensivePosition as Position,
+  }));
+}
+
+function getFreshOptimalLineupFields(
+  updates: Partial<EliminationRosterSnapshot>,
+): OptimalLineupSnapshotField[] {
+  return OPTIMAL_LINEUP_SNAPSHOT_FIELDS.filter((field) => field in updates);
+}
+
+export function staleFieldsForEliminationUpdate(
+  updates: Partial<EliminationRosterSnapshot>,
+): OptimalLineupSnapshotField[] {
+  const fields = new Set<OptimalLineupSnapshotField>();
+
+  if ('lineup' in updates) {
+    for (const field of optimalLineupFieldsForDh(true)) fields.add(field);
+  }
+
+  if ('lineupWithoutDH' in updates || 'startingRotation' in updates) {
+    for (const field of optimalLineupFieldsForDh(false)) fields.add(field);
+  }
+
+  return Array.from(fields);
+}
+
 export function EliminationTeamHub({ eliminationId, teams, useDH }: EliminationTeamHubProps) {
   const [selectedTeamId, setSelectedTeamId] = useState<string>(teams[0]?.teamId ?? '');
   const [snapshot, setSnapshot] = useState<EliminationRosterSnapshot | null>(null);
   const [availableSnapshotIds, setAvailableSnapshotIds] = useState<string[]>([]);
   const [mojoFitnessByPlayerId, setMojoFitnessByPlayerId] = useState<Record<string, { mojo: MojoLevel; fitness: FitnessState }>>({});
   const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
+  const [managerProfile, setManagerProfile] = useState<ManagerProfile | null>(null);
+  const [managerForm, setManagerForm] = useState({
+    displayName: '',
+    hometown: '',
+    styleLabel: '',
+  });
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [isManagerSaving, setIsManagerSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [lineupComparison, setLineupComparison] = useState<{
+    hand: OpposingPitcherHand;
+    comparison: LineupSnapshotComparison;
+    sourceConfidence?: string;
+    generatedFallback: boolean;
+  } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -256,6 +342,51 @@ export function EliminationTeamHub({ eliminationId, teams, useDH }: EliminationT
     [useDH],
   );
   const lineupPlayerIds = useMemo(() => new Set(lineup.map((slot) => slot.playerId)), [lineup]);
+  const selectedPlayoffTeam = useMemo(
+    () => teams.find((team) => team.teamId === selectedTeamId) ?? null,
+    [selectedTeamId, teams],
+  );
+
+  useEffect(() => {
+    setLineupComparison(null);
+  }, [selectedTeamId, useDH]);
+
+  useEffect(() => {
+    if (!selectedPlayoffTeam) {
+      setManagerProfile(null);
+      setManagerForm({ displayName: '', hometown: '', styleLabel: '' });
+      return;
+    }
+
+    let cancelled = false;
+    resolveManagerForTeam({
+      team: {
+        id: selectedPlayoffTeam.teamId,
+        name: selectedPlayoffTeam.teamName,
+      },
+      mode: 'elimination',
+      instanceId: eliminationId,
+      persistAssignment: true,
+    })
+      .then((resolved) => {
+        if (cancelled) return;
+        setManagerProfile(resolved.profile);
+        setManagerForm({
+          displayName: resolved.profile.displayName,
+          hometown: resolved.profile.hometown || '',
+          styleLabel: resolved.profile.managementStyle?.label || '',
+        });
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          console.error('[EliminationTeamHub] Failed to load manager profile:', err);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [eliminationId, selectedPlayoffTeam]);
 
   const benchPlayers = useMemo(
     () =>
@@ -272,22 +403,51 @@ export function EliminationTeamHub({ eliminationId, teams, useDH }: EliminationT
 
   async function persistUpdates(
     teamId: string,
-    updates: Partial<Pick<EliminationRosterSnapshot, 'lineup' | 'lineupWithoutDH' | 'startingRotation'>>
+    updates: Partial<Pick<
+      EliminationRosterSnapshot,
+      | 'lineup'
+      | 'lineupWithoutDH'
+      | 'startingRotation'
+      | 'optimalLineupVsRHPWithDH'
+      | 'optimalLineupVsLHPWithDH'
+      | 'optimalLineupVsRHPWithoutDH'
+      | 'optimalLineupVsLHPWithoutDH'
+    >>
   ) {
+    setLineupComparison(null);
     setIsSaving(true);
     setError(null);
     try {
-      await updateEliminationRosterSnapshot(eliminationId, teamId, updates);
+      const nextSnapshot =
+        snapshot && snapshot.teamId === teamId
+          ? markOptimalLineupSnapshotsStaleForChange(
+              { ...snapshot, ...updates },
+              staleFieldsForEliminationUpdate(updates),
+              getFreshOptimalLineupFields(updates),
+            )
+          : null;
+      const persistedUpdates = nextSnapshot
+        ? {
+            ...updates,
+            ...Object.fromEntries(
+              OPTIMAL_LINEUP_SNAPSHOT_FIELDS
+                .filter((field) => !(field in updates) && nextSnapshot[field] !== snapshot?.[field])
+                .map((field) => [field, nextSnapshot[field]]),
+            ),
+          }
+        : updates;
+
+      await updateEliminationRosterSnapshot(eliminationId, teamId, persistedUpdates);
       setSnapshot((current) =>
         current
           ? {
               ...current,
-              ...updates,
-              lineup: updates.lineup ? sortLineup(updates.lineup) : current.lineup,
-              lineupWithoutDH: updates.lineupWithoutDH
-                ? sortLineup(updates.lineupWithoutDH)
+              ...persistedUpdates,
+              lineup: persistedUpdates.lineup ? sortLineup(persistedUpdates.lineup) : current.lineup,
+              lineupWithoutDH: persistedUpdates.lineupWithoutDH
+                ? sortLineup(persistedUpdates.lineupWithoutDH)
                 : current.lineupWithoutDH,
-              startingRotation: updates.startingRotation ?? current.startingRotation,
+              startingRotation: persistedUpdates.startingRotation ?? current.startingRotation,
             }
           : current
       );
@@ -296,6 +456,145 @@ export function EliminationTeamHub({ eliminationId, teams, useDH }: EliminationT
     } finally {
       setIsSaving(false);
     }
+  }
+
+  const buildOptimalSnapshot = (hand: OpposingPitcherHand) => {
+    if (!snapshot) return null;
+    const candidates = snapshot.players.map((player) => {
+      const condition = mojoFitnessByPlayerId[player.id];
+      return {
+        ...toOptimalCandidate(player),
+        mojo: condition?.mojo ?? player.mojo,
+        fitness: condition?.fitness,
+      };
+    });
+    return buildOptimalLineupSnapshot({
+      teamId: snapshot.teamId,
+      mode: "elimination",
+      instanceId: eliminationId,
+      opposingPitcherHand: hand,
+      candidates,
+      dhEnabled: useDH,
+      generatedAt: Date.now(),
+      generatedFrom: "team_hub",
+      sourceConfidence: "engine_calculated",
+      rosterVersionId: String(snapshot.snapshotAt),
+    });
+  };
+
+  const buildCurrentAsOptimalSnapshot = (hand: OpposingPitcherHand) => {
+    if (!snapshot) return null;
+    const playerMap = new Map(snapshot.players.map((player) => [player.id, player]));
+    return buildLineupSnapshotFromSlots({
+      teamId: snapshot.teamId,
+      mode: "elimination",
+      instanceId: eliminationId,
+      opposingPitcherHand: hand,
+      candidates: snapshot.players.map((player) => {
+        const condition = mojoFitnessByPlayerId[player.id];
+        return {
+          ...toOptimalCandidate(player),
+          mojo: condition?.mojo ?? player.mojo,
+          fitness: condition?.fitness,
+        };
+      }),
+      dhEnabled: useDH,
+      generatedAt: Date.now(),
+      generatedFrom: "user_registered_smb4_optimal",
+      sourceConfidence: "user_registered",
+      rosterVersionId: String(snapshot.snapshotAt),
+      slots: lineup.map((slot) => {
+        const player = playerMap.get(slot.playerId);
+        return {
+          playerId: slot.playerId,
+          playerName: player ? `${player.firstName} ${player.lastName}` : slot.playerId,
+          battingOrderSlot: slot.battingOrder,
+          defensivePosition: slot.fieldingPosition,
+        };
+      }),
+    });
+  };
+
+  const buildCurrentLineupSnapshot = (hand: OpposingPitcherHand) => {
+    if (!snapshot) return null;
+    const playerMap = new Map(snapshot.players.map((player) => [player.id, player]));
+    return buildLineupSnapshotFromSlots({
+      teamId: snapshot.teamId,
+      mode: "elimination",
+      instanceId: eliminationId,
+      opposingPitcherHand: hand,
+      candidates: snapshot.players.map((player) => {
+        const condition = mojoFitnessByPlayerId[player.id];
+        return {
+          ...toOptimalCandidate(player),
+          mojo: condition?.mojo ?? player.mojo,
+          fitness: condition?.fitness,
+        };
+      }),
+      dhEnabled: useDH,
+      generatedAt: Date.now(),
+      generatedFrom: "game_lock",
+      sourceConfidence: "engine_calculated",
+      rosterVersionId: String(snapshot.snapshotAt),
+      slots: lineup.map((slot) => {
+        const player = playerMap.get(slot.playerId);
+        return {
+          playerId: slot.playerId,
+          playerName: player ? `${player.firstName} ${player.lastName}` : slot.playerId,
+          battingOrderSlot: slot.battingOrder,
+          defensivePosition: slot.fieldingPosition,
+        };
+      }),
+    });
+  };
+
+  async function handleRecalculateOptimal(hand: OpposingPitcherHand) {
+    if (!snapshot) return;
+    const nextSnapshot = buildOptimalSnapshot(hand);
+    if (!nextSnapshot) return;
+    await persistUpdates(snapshot.teamId, {
+      [optimalLineupField(hand, useDH)]: confirmEngineOptimalLineupSnapshot(nextSnapshot),
+    });
+  }
+
+  async function handleApplyOptimal(hand: OpposingPitcherHand) {
+    if (!snapshot) return;
+    const field = optimalLineupField(hand, useDH);
+    const storedSnapshot = snapshot[field];
+    const nextSnapshot = storedSnapshot?.sourceConfidence === "stale_roster"
+      ? buildOptimalSnapshot(hand)
+      : storedSnapshot ?? buildOptimalSnapshot(hand);
+    if (!nextSnapshot) return;
+    const officialSnapshot = isOfficialOptimalLineupSnapshot(nextSnapshot)
+      ? nextSnapshot
+      : confirmEngineOptimalLineupSnapshot(nextSnapshot);
+    await persistUpdates(snapshot.teamId, {
+      [field]: officialSnapshot,
+      [useDH ? 'lineup' : 'lineupWithoutDH']: lineupSlotsFromOptimalSnapshot(officialSnapshot),
+    });
+  }
+
+  async function handleSetCurrentAsOptimal(hand: OpposingPitcherHand) {
+    if (!snapshot) return;
+    const nextSnapshot = buildCurrentAsOptimalSnapshot(hand);
+    if (!nextSnapshot) return;
+    await persistUpdates(snapshot.teamId, {
+      [optimalLineupField(hand, useDH)]: nextSnapshot,
+    });
+  }
+
+  function handleCompareOptimal(hand: OpposingPitcherHand) {
+    if (!snapshot) return;
+    const field = optimalLineupField(hand, useDH);
+    const optimal = snapshot[field] ?? buildOptimalSnapshot(hand);
+    const chosen = buildCurrentLineupSnapshot(hand);
+    if (!optimal || !chosen) return;
+    setLineupComparison({
+      hand,
+      comparison: summarizeLineupSnapshotComparison({ chosen, optimal }),
+      sourceConfidence: optimal.sourceConfidence,
+      generatedFallback: !snapshot[field],
+    });
   }
 
   async function handleMoveLineup(index: number, direction: 'up' | 'down') {
@@ -365,6 +664,7 @@ export function EliminationTeamHub({ eliminationId, teams, useDH }: EliminationT
       ...prev,
       [playerId]: next,
     }));
+    setLineupComparison(null);
     await saveMojoFitnessSnapshots(eliminationId, [
       {
         playerId,
@@ -372,6 +672,46 @@ export function EliminationTeamHub({ eliminationId, teams, useDH }: EliminationT
         fitnessState: next.fitness,
       },
     ]);
+
+    if (snapshot) {
+      const staleSnapshot = markOptimalLineupSnapshotsStaleForChange(
+        snapshot,
+        OPTIMAL_LINEUP_SNAPSHOT_FIELDS,
+      );
+      const staleUpdates = Object.fromEntries(
+        OPTIMAL_LINEUP_SNAPSHOT_FIELDS
+          .filter((field) => staleSnapshot[field] !== snapshot[field])
+          .map((field) => [field, staleSnapshot[field]]),
+      );
+      await updateEliminationRosterSnapshot(eliminationId, snapshot.teamId, staleUpdates);
+      setSnapshot((current) => (current ? { ...current, ...staleUpdates } : current));
+    }
+  }
+
+  async function handleManagerSave() {
+    if (!managerProfile || !managerForm.displayName.trim()) return;
+
+    setIsManagerSaving(true);
+    setError(null);
+    try {
+      const updated = await saveManagerProfile({
+        ...managerProfile,
+        displayName: managerForm.displayName.trim(),
+        hometown: managerForm.hometown.trim() || undefined,
+        createdByUser: true,
+        managementStyle: managerForm.styleLabel.trim()
+          ? {
+              ...(managerProfile.managementStyle ?? {}),
+              label: managerForm.styleLabel.trim(),
+            }
+          : managerProfile.managementStyle,
+      });
+      setManagerProfile(updated);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save manager.');
+    } finally {
+      setIsManagerSaving(false);
+    }
   }
 
   function renderPlayerRow(player: Player) {
@@ -398,7 +738,10 @@ export function EliminationTeamHub({ eliminationId, teams, useDH }: EliminationT
           {teams.map((team) => (
             <button
               key={team.teamId}
-              onClick={() => setSelectedTeamId(team.teamId)}
+              onClick={() => {
+                setSelectedTeamId(team.teamId);
+                setLineupComparison(null);
+              }}
               className={`px-3 py-2 border-4 text-[8px] transition active:scale-95 ${
                 selectedTeamId === team.teamId
                   ? 'bg-[#4A6844] border-[#E8E8D8] text-[#E8E8D8]'
@@ -429,6 +772,55 @@ export function EliminationTeamHub({ eliminationId, teams, useDH }: EliminationT
         </div>
       ) : (
         <>
+          {managerProfile && (
+            <div className="bg-[#5A8352] border-[6px] border-[#4A6844] p-4">
+              <div className="flex items-center justify-between gap-3 mb-3">
+                <div>
+                  <div className="text-xs">MANAGER</div>
+                  <div className="text-[8px] text-[#E8E8D8]/60 mt-1">
+                    {managerProfile.gender || 'Unspecified'}{managerProfile.age ? ` • Age ${managerProfile.age}` : ''}
+                  </div>
+                </div>
+                {isManagerSaving && <div className="text-[8px] text-[#E8E8D8]/60">SAVING...</div>}
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-[1.2fr,1fr,1fr,auto] gap-3">
+                <input
+                  value={managerForm.displayName}
+                  onChange={(event) =>
+                    setManagerForm((prev) => ({ ...prev, displayName: event.target.value }))
+                  }
+                  className="bg-[#4A6844] border-4 border-[#6B9462] px-3 py-2 text-[8px] text-[#E8E8D8]"
+                  aria-label="Manager name"
+                />
+                <input
+                  value={managerForm.hometown}
+                  onChange={(event) =>
+                    setManagerForm((prev) => ({ ...prev, hometown: event.target.value }))
+                  }
+                  className="bg-[#4A6844] border-4 border-[#6B9462] px-3 py-2 text-[8px] text-[#E8E8D8]"
+                  placeholder="Hometown"
+                  aria-label="Manager hometown"
+                />
+                <input
+                  value={managerForm.styleLabel}
+                  onChange={(event) =>
+                    setManagerForm((prev) => ({ ...prev, styleLabel: event.target.value }))
+                  }
+                  className="bg-[#4A6844] border-4 border-[#6B9462] px-3 py-2 text-[8px] text-[#E8E8D8]"
+                  placeholder="Style"
+                  aria-label="Manager style"
+                />
+                <button
+                  onClick={() => void handleManagerSave()}
+                  disabled={isManagerSaving || !managerForm.displayName.trim()}
+                  className="border-4 border-[#E8E8D8] bg-[#4A6844] px-4 py-2 text-[8px] text-[#E8E8D8] disabled:opacity-40 hover:bg-[#6B9462]"
+                >
+                  SAVE
+                </button>
+              </div>
+            </div>
+          )}
+
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
             <div className="space-y-4">
               <div className="bg-[#5A8352] border-[6px] border-[#4A6844] p-4">
@@ -448,6 +840,57 @@ export function EliminationTeamHub({ eliminationId, teams, useDH }: EliminationT
                   <div className="text-xs">LINEUP</div>
                   {isSaving && <div className="text-[8px] text-[#E8E8D8]/60">SAVING...</div>}
                 </div>
+                <div className="grid grid-cols-2 gap-2 mb-3">
+                  {(['R', 'L'] as OpposingPitcherHand[]).map((hand) => {
+                    const field = optimalLineupField(hand, useDH);
+                    const optimalSnapshot = snapshot[field];
+                    return (
+                      <div key={hand} className="bg-[#4A6844] border-4 border-[#6B9462] p-2">
+                        <div className="flex justify-between gap-2 mb-2">
+                          <span className="text-[8px] text-[#C4A853]">VS {hand}HP</span>
+                          <span className="text-[7px] text-[#E8E8D8]/60">
+                            {optimalSnapshot ? optimalSnapshot.sourceConfidence.replace(/_/g, ' ') : 'not set'}
+                          </span>
+                        </div>
+                        <div className="grid grid-cols-4 gap-1">
+                          <button
+                            onClick={() => handleCompareOptimal(hand)}
+                            className="border-2 border-[#E8E8D8]/30 bg-[#5A8352] px-1 py-1 text-[7px] hover:border-[#C4A853]"
+                          >
+                            COMPARE
+                          </button>
+                          <button
+                            onClick={() => void handleApplyOptimal(hand)}
+                            className="border-2 border-[#E8E8D8]/30 bg-[#5A8352] px-1 py-1 text-[7px] hover:border-[#C4A853]"
+                          >
+                            APPLY
+                          </button>
+                          <button
+                            onClick={() => void handleRecalculateOptimal(hand)}
+                            className="border-2 border-[#E8E8D8]/30 bg-[#5A8352] px-1 py-1 text-[7px] hover:border-[#C4A853]"
+                          >
+                            RECALC
+                          </button>
+                          <button
+                            onClick={() => void handleSetCurrentAsOptimal(hand)}
+                            className="border-2 border-[#E8E8D8]/30 bg-[#5A8352] px-1 py-1 text-[7px] hover:border-[#C4A853]"
+                          >
+                            SET
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                {lineupComparison && (
+                  <OptimalLineupComparisonPanel
+                    hand={lineupComparison.hand}
+                    comparison={lineupComparison.comparison}
+                    sourceConfidence={lineupComparison.sourceConfidence}
+                    generatedFallback={lineupComparison.generatedFallback}
+                    onClose={() => setLineupComparison(null)}
+                  />
+                )}
                 <div className="space-y-2">
                   {lineup.map((slot, index) => {
                     const player = snapshot.players.find((item) => item.id === slot.playerId);

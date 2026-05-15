@@ -7,7 +7,7 @@ import {
 } from "../../../utils/almanacStorage";
 import type { CanonicalPlayer } from "../../../utils/almanacStorage";
 import {
-  searchExhibitionPlayerInstances,
+  searchArchivedPlayerInstances,
   type ExhibitionPlayerSearchEntry,
 } from "../../../utils/almanacQueries";
 
@@ -42,7 +42,7 @@ export function PlayerDirectory() {
       } else {
         const [results, archivedResults] = await Promise.all([
           searchCanonicalPlayers(queryParam),
-          searchExhibitionPlayerInstances(queryParam),
+          searchArchivedPlayerInstances(queryParam),
         ]);
         if (!cancelled) {
           const canonicalIds = new Set(results.map((result) => result.canonicalId));
@@ -204,7 +204,7 @@ export function PlayerDirectory() {
               >
                 <div className="text-[10px] text-white">{p.playerName}</div>
                 <div className="mt-2 text-[9px] text-[#8F96A3]">
-                  {p.teamName} &bull; {p.games} G &bull; ARCHIVED INSTANCE
+                  {p.teamName} &bull; {p.games} G &bull; {p.mode.toUpperCase()} ARCHIVED INSTANCE
                 </div>
               </Link>
             ))}

@@ -4,26 +4,39 @@ import { ArrowLeft, Loader2, Trophy, TrendingUp } from "lucide-react";
 import { getTeamColors } from "@/config/teamColors";
 import { getCompletedGameById, type CompletedGameRecord } from "../../utils/gameStorage";
 import { getAllCanonicalPlayers } from "../../../utils/almanacStorage";
-import { getGameEvents, type AtBatEvent } from "../../../utils/eventLog";
+import { getArchiveInstanceIdForGame } from "../../../utils/almanacQueries";
+import { listManagerProfiles } from "../../../utils/managerIdentityStorage";
+import {
+  getBetweenPlayEvents,
+  getGameEvents,
+  getGameFieldingEvents,
+  getGameHeader,
+  type AtBatEvent,
+  type BetweenPlayEvent,
+  type FieldingEvent,
+  type GameHeader,
+} from "../../../utils/eventLog";
+import {
+  aggregateKblWpaCredits,
+  deriveActualAtBatWpa,
+  deriveKblWpaCredits,
+  type KblWpaCredit,
+} from "../../../utils/kblWpaAttribution";
 import { rankPlayersOfTheGame } from "../../../utils/playersOfTheGame";
+import { ManagerWpaOverlay } from "../components/ManagerWpaOverlay";
 import { WinProbChart } from "../components/WinProbChart";
+import type { ManagerProfile } from "../../../types/managerWpa";
 
 type CanonicalLookup = Record<string, string>;
 
 interface LoadedGameData {
   game: CompletedGameRecord;
   atBatEvents: AtBatEvent[];
+  fieldingEvents: FieldingEvent[];
+  betweenPlayEvents: BetweenPlayEvent[];
+  gameHeader: GameHeader | null;
   canonicalLookup: CanonicalLookup;
-}
-
-interface PlayerReference {
-  playerId: string;
-  playerName: string;
-  teamId?: string;
-}
-
-interface WpaEntry extends PlayerReference {
-  wpa: number;
+  managerProfiles: ManagerProfile[];
 }
 
 function normalizeTeamId(teamId: string | undefined | null): string {
@@ -77,6 +90,27 @@ function humanizeToken(value: string | undefined | null): string {
   return value
     .replace(/_/g, " ")
     .replace(/\b\w/g, (character) => character.toUpperCase());
+}
+
+function formatAllocationMode(mode: KblWpaCredit["allocationMode"]): string {
+  switch (mode) {
+    case "raw_unit":
+      return "Raw Unit";
+    case "counterfactual":
+      return "Counterfactual";
+    case "overlay":
+      return "Overlay";
+    default:
+      return "Ratio";
+  }
+}
+
+function formatBaseNumber(base: number | undefined): string {
+  if (base === 1) return "1B";
+  if (base === 2) return "2B";
+  if (base === 3) return "3B";
+  if (base === 4) return "Home";
+  return "Base";
 }
 
 function buildBaseStateLabel(runners: AtBatEvent["runners"]): string {
@@ -208,10 +242,14 @@ export function GameDetail() {
       }
 
       try {
-        const [game, atBatEvents, canonicalPlayers] = await Promise.all([
+        const [game, atBatEvents, fieldingEvents, betweenPlayEvents, gameHeader, canonicalPlayers, managerProfiles] = await Promise.all([
           getCompletedGameById(gameId),
           getGameEvents(gameId),
+          getGameFieldingEvents(gameId).catch(() => []),
+          getBetweenPlayEvents(gameId).catch(() => []),
+          getGameHeader(gameId).catch(() => null),
           getAllCanonicalPlayers().catch(() => []),
+          listManagerProfiles().catch(() => []),
         ]);
 
         if (cancelled) {
@@ -226,7 +264,11 @@ export function GameDetail() {
         setData({
           game,
           atBatEvents,
+          fieldingEvents,
+          betweenPlayEvents,
+          gameHeader,
           canonicalLookup: loadCanonicalLookup(canonicalPlayers),
+          managerProfiles,
         });
       } catch (loadError) {
         console.error("Failed to load game detail:", loadError);
@@ -252,7 +294,7 @@ export function GameDetail() {
       return null;
     }
 
-    const { game, atBatEvents } = data;
+    const { game, atBatEvents, fieldingEvents, betweenPlayEvents, gameHeader } = data;
     const awayTeamId = normalizeTeamId(game.awayTeamId);
     const homeTeamId = normalizeTeamId(game.homeTeamId);
 
@@ -298,32 +340,130 @@ export function GameDetail() {
       }
     });
 
-    const wpaMap = new Map<string, WpaEntry>();
-
-    function addWpa(playerId: string, playerName: string, teamId: string | undefined, delta: number) {
-      const entry = wpaMap.get(playerId) ?? {
-        playerId,
-        playerName,
-        teamId,
-        wpa: 0,
-      };
-      entry.wpa += delta;
-      if (!entry.teamId && teamId) {
-        entry.teamId = teamId;
-      }
-      wpaMap.set(playerId, entry);
-    }
-
-    atBatEvents.forEach((event) => {
-      addWpa(event.batterId, event.batterName, event.batterTeamId, event.wpa);
-      addWpa(event.pitcherId, event.pitcherName, event.pitcherTeamId, -event.wpa);
+    const kblWpaCredits: KblWpaCredit[] = deriveKblWpaCredits({
+      atBatEvents,
+      fieldingEvents,
+      betweenPlayEvents,
+      totalInnings: game.totalInnings,
+      awayTeamId: game.awayTeamId,
+      homeTeamId: game.homeTeamId,
+      startingLineups: gameHeader?.startingLineups,
     });
+    const kblCreditsByEvent = new Map<string, KblWpaCredit[]>();
+    for (const credit of kblWpaCredits) {
+      const rows = kblCreditsByEvent.get(credit.eventId) ?? [];
+      rows.push(credit);
+      kblCreditsByEvent.set(credit.eventId, rows);
+    }
+    const teamNameFor = (teamId: string) => {
+      const normalized = normalizeTeamId(teamId);
+      if (normalized === awayTeamId) return game.awayTeamName;
+      if (normalized === homeTeamId) return game.homeTeamName;
+      return humanizeToken(teamId);
+    };
+    const decorateAuditCredits = (
+      credits: KblWpaCredit[],
+      battingTeamId: string,
+      defensiveTeamId: string,
+    ) =>
+      credits
+        .slice()
+        .sort((left, right) => Math.abs(right.wpa) - Math.abs(left.wpa) || left.playerName.localeCompare(right.playerName))
+        .map((credit) => {
+          const normalizedTeamId = normalizeTeamId(credit.teamId);
+          const side = credit.isOverlay
+            ? "Overlay"
+            : normalizedTeamId === normalizeTeamId(battingTeamId)
+              ? "Batting"
+              : normalizedTeamId === normalizeTeamId(defensiveTeamId)
+                ? "Defense"
+                : "Team";
+          return {
+            ...credit,
+            side,
+            teamName: teamNameFor(credit.teamId),
+          };
+        });
+    const kblWpaAuditRows = [
+      ...atBatEvents.map((event) => {
+        const credits = kblCreditsByEvent.get(event.eventId) ?? [];
+        const actual = deriveActualAtBatWpa(event, game.totalInnings);
+        const battingBudget = actual.wpa;
+        const defensiveBudget = -actual.wpa;
+        const nonOverlayCredits = credits.filter((credit) => !credit.isOverlay);
+        const battingTotal = nonOverlayCredits
+          .filter((credit) => normalizeTeamId(credit.teamId) === normalizeTeamId(event.batterTeamId))
+          .reduce((sum, credit) => sum + credit.wpa, 0);
+        const defensiveTotal = nonOverlayCredits
+          .filter((credit) => normalizeTeamId(credit.teamId) === normalizeTeamId(event.pitcherTeamId))
+          .reduce((sum, credit) => sum + credit.wpa, 0);
+        return {
+          eventId: event.eventId,
+          eventIndex: event.eventIndex,
+          timestamp: event.timestamp,
+          source: "At-Bat",
+          label: `${event.batterName} vs ${event.pitcherName}`,
+          result: humanizeToken(event.result),
+          situation: `${event.halfInning === "TOP" ? "T" : "B"}${event.inning} | ${event.outs} out${event.outs === 1 ? "" : "s"} | ${event.awayScore}-${event.homeScore}`,
+          battingBudget,
+          defensiveBudget,
+          battingTotal,
+          defensiveTotal,
+          allocationModes: Array.from(new Set(credits.map((credit) => credit.allocationMode))).map(formatAllocationMode).join(" / ") || "None",
+          credits: decorateAuditCredits(credits, event.batterTeamId, event.pitcherTeamId),
+        };
+      }),
+      ...betweenPlayEvents.map((event) => {
+        const credits = kblCreditsByEvent.get(event.eventId) ?? [];
+        const isTop = event.gameState?.halfInning === "TOP";
+        const battingTeamId = isTop ? game.awayTeamId : game.homeTeamId;
+        const defensiveTeamId = isTop ? game.homeTeamId : game.awayTeamId;
+        const nonOverlayCredits = credits.filter((credit) => !credit.isOverlay);
+        const battingTotal = nonOverlayCredits
+          .filter((credit) => normalizeTeamId(credit.teamId) === normalizeTeamId(battingTeamId))
+          .reduce((sum, credit) => sum + credit.wpa, 0);
+        const defensiveTotal = nonOverlayCredits
+          .filter((credit) => normalizeTeamId(credit.teamId) === normalizeTeamId(defensiveTeamId))
+          .reduce((sum, credit) => sum + credit.wpa, 0);
+        const runnerLabel = event.runnerAction
+          ? `${event.runnerAction.runnerName ?? event.runnerAction.runnerId} ${formatBaseNumber(event.runnerAction.fromBase)} to ${formatBaseNumber(event.runnerAction.toBase)}`
+          : humanizeToken(event.type);
+        return {
+          eventId: event.eventId,
+          eventIndex: event.eventIndex,
+          timestamp: event.timestamp,
+          source: "Between Play",
+          label: runnerLabel,
+          result: humanizeToken(event.type),
+          situation: event.gameState
+            ? `${event.gameState.halfInning === "TOP" ? "T" : "B"}${event.gameState.inning} | ${event.gameState.outs} out${event.gameState.outs === 1 ? "" : "s"} | ${event.gameState.score.away}-${event.gameState.score.home}`
+            : "No game state",
+          battingBudget: battingTotal,
+          defensiveBudget: defensiveTotal,
+          battingTotal,
+          defensiveTotal,
+          allocationModes: Array.from(new Set(credits.map((credit) => credit.allocationMode))).map(formatAllocationMode).join(" / ") || "None",
+          credits: decorateAuditCredits(credits, battingTeamId, defensiveTeamId),
+        };
+      }),
+    ]
+      .filter((row) => row.credits.length > 0)
+      .sort((left, right) => left.eventIndex - right.eventIndex || left.timestamp - right.timestamp);
+    const wpaLeaderboard = aggregateKblWpaCredits(kblWpaCredits).map((entry) => ({
+      playerId: entry.playerId,
+      playerName: entry.playerName,
+      teamId: entry.teamId,
+      wpa: entry.totalWpa,
+      roles: [
+        entry.battingWpa ? "BAT" : null,
+        entry.pitchingWpa ? "PIT" : null,
+        entry.catchingWpa ? "C" : null,
+        entry.fieldingWpa ? "FLD" : null,
+        entry.baserunningWpa ? "BSR" : null,
+      ].filter(Boolean).join(" / "),
+    }));
 
-    const wpaLeaderboard = Array.from(wpaMap.values()).sort(
-      (left, right) => right.wpa - left.wpa || left.playerName.localeCompare(right.playerName)
-    );
-
-    const playersOfGame = rankPlayersOfTheGame(game, atBatEvents);
+    const playersOfGame = rankPlayersOfTheGame(game, atBatEvents, kblWpaCredits);
 
     const battingLines = Object.entries(game.playerStats)
       .filter(([, stats]) => {
@@ -415,6 +555,7 @@ export function GameDetail() {
       wpaLeaderboard,
       battingLines,
       pitchingLines,
+      kblWpaAuditRows,
       playLog,
       clutchMoments,
       notableEvents,
@@ -460,13 +601,18 @@ export function GameDetail() {
     wpaLeaderboard,
     battingLines,
     pitchingLines,
+    kblWpaAuditRows,
     playLog,
     clutchMoments,
     notableEvents,
     pitcherDecisions,
   } = derived;
 
-  const leagueId = game.leagueId ?? game.competitionId ?? "exhibition";
+  const leagueId =
+    getArchiveInstanceIdForGame(game) ??
+    game.leagueId ??
+    game.competitionId ??
+    "exhibition";
   const awayColors = getTeamColors(game.awayTeamId);
   const homeColors = getTeamColors(game.homeTeamId);
 
@@ -589,6 +735,8 @@ export function GameDetail() {
             </div>
           )}
         </SectionFrame>
+
+        <ManagerWpaOverlay game={game} managerProfiles={data.managerProfiles} />
 
         <SectionFrame
           title="Pitcher Decisions"
@@ -739,7 +887,7 @@ export function GameDetail() {
           </div>
         </SectionFrame>
 
-        <SectionFrame title="WPA Leaderboard" subtitle="Cumulative game WPA. Batters receive event WPA; pitchers receive the inverse of the same event.">
+        <SectionFrame title="KBL WPA Leaderboard" subtitle="Derived batting, pitching, catching, fielding, and baserunning attribution from the current event log.">
           {wpaLeaderboard.length === 0 ? (
             <EmptyState label="No WPA events recorded." />
           ) : (
@@ -749,6 +897,7 @@ export function GameDetail() {
                   <tr>
                     <th className="pb-3 pr-3">Player</th>
                     <th className="pb-3 pr-3">Team</th>
+                    <th className="pb-3 pr-3">Roles</th>
                     <th className="pb-3">WPA</th>
                   </tr>
                 </thead>
@@ -769,6 +918,7 @@ export function GameDetail() {
                             ? game.homeTeamName
                             : humanizeToken(entry.teamId)}
                       </td>
+                      <td className="py-3 pr-3 text-[#9FA7B8]">{entry.roles || "KBL"}</td>
                       <td className={`py-3 ${entry.wpa >= 0 ? "text-[#7EF0A8]" : "text-[#FF9E9E]"}`}>
                         {formatSignedDecimal(entry.wpa)}
                       </td>
@@ -776,6 +926,93 @@ export function GameDetail() {
                   ))}
                 </tbody>
               </table>
+            </div>
+          )}
+        </SectionFrame>
+
+        <SectionFrame title="KBL WPA Play Audit" subtitle="Per-play budget math for reviewing attribution rules before awards and Almanac rollout.">
+          {kblWpaAuditRows.length === 0 ? (
+            <EmptyState label="No KBL WPA credits to audit." />
+          ) : (
+            <div className="max-h-[620px] overflow-y-auto border-[4px] border-[#32394B] bg-[#0B0E14] p-4">
+              <div className="space-y-4">
+                {kblWpaAuditRows.map((row) => (
+                  <div key={row.eventId} className="border-[3px] border-[#262C39] bg-[#111620] p-3">
+                    <div className="flex flex-col gap-2 xl:flex-row xl:items-start xl:justify-between">
+                      <div>
+                        <div className="text-[8px] uppercase tracking-[0.26em] text-[#D8A84A]">
+                          {row.source} | {row.result} | {row.allocationModes}
+                        </div>
+                        <div className="mt-2 text-[9px] leading-5 text-[#E7E9F1]">{row.label}</div>
+                        <div className="mt-1 text-[8px] leading-5 text-[#7F8798]">{row.situation}</div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2 text-[8px] xl:min-w-[360px]">
+                        <div className="border border-[#32394B] bg-black/30 p-2">
+                          <div className="text-[#8C94A6]">Batting Budget</div>
+                          <div className={row.battingBudget >= 0 ? "text-[#7EF0A8]" : "text-[#FF9E9E]"}>
+                            {formatSignedDecimal(row.battingBudget, 4)}
+                          </div>
+                        </div>
+                        <div className="border border-[#32394B] bg-black/30 p-2">
+                          <div className="text-[#8C94A6]">Defense Budget</div>
+                          <div className={row.defensiveBudget >= 0 ? "text-[#7EF0A8]" : "text-[#FF9E9E]"}>
+                            {formatSignedDecimal(row.defensiveBudget, 4)}
+                          </div>
+                        </div>
+                        <div className="border border-[#32394B] bg-black/30 p-2">
+                          <div className="text-[#8C94A6]">Batting Total</div>
+                          <div className={row.battingTotal >= 0 ? "text-[#7EF0A8]" : "text-[#FF9E9E]"}>
+                            {formatSignedDecimal(row.battingTotal, 4)}
+                          </div>
+                        </div>
+                        <div className="border border-[#32394B] bg-black/30 p-2">
+                          <div className="text-[#8C94A6]">Defense Total</div>
+                          <div className={row.defensiveTotal >= 0 ? "text-[#7EF0A8]" : "text-[#FF9E9E]"}>
+                            {formatSignedDecimal(row.defensiveTotal, 4)}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="mt-3 overflow-x-auto">
+                      <table className="min-w-full text-left text-[8px] text-[#E7E9F1]">
+                        <thead className="text-[#8C94A6]">
+                          <tr>
+                            <th className="pb-2 pr-3">Player</th>
+                            <th className="pb-2 pr-3">Side</th>
+                            <th className="pb-2 pr-3">Role</th>
+                            <th className="pb-2 pr-3">Mode</th>
+                            <th className="pb-2 pr-3">Confidence</th>
+                            <th className="pb-2 pr-3">WPA</th>
+                            <th className="pb-2">Basis</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {row.credits.map((credit) => (
+                            <tr key={`${row.eventId}-${credit.playerId}-${credit.role}-${credit.basis}`} className="border-t border-white/8 align-top">
+                              <td className="py-2 pr-3 leading-5">
+                                <PlayerNameLink
+                                  playerId={credit.playerId}
+                                  playerName={credit.playerName}
+                                  canonicalLookup={canonicalLookup}
+                                />
+                                <div className="mt-1 text-[#7F8798]">{credit.teamName}</div>
+                              </td>
+                              <td className="py-2 pr-3 text-[#B0B8CA]">{credit.side}</td>
+                              <td className="py-2 pr-3 text-[#B0B8CA]">{humanizeToken(credit.role)}</td>
+                              <td className="py-2 pr-3 text-[#B0B8CA]">{formatAllocationMode(credit.allocationMode)}</td>
+                              <td className="py-2 pr-3 text-[#B0B8CA]">{humanizeToken(credit.confidence)}</td>
+                              <td className={`py-2 pr-3 ${credit.wpa >= 0 ? "text-[#7EF0A8]" : "text-[#FF9E9E]"}`}>
+                                {formatSignedDecimal(credit.wpa, 4)}
+                              </td>
+                              <td className="py-2 leading-5 text-[#9FA7B8]">{credit.basis}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
         </SectionFrame>

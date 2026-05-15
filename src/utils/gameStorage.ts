@@ -13,6 +13,12 @@ import type {
   PitchType,
   Position,
 } from "./leagueBuilderStorage";
+import type {
+  ManagerDeploymentStintRecord,
+  ManagerDecisionRecord,
+  GameLockLineupSnapshots,
+  ManagerLineupDeltaRecord,
+} from "../types/managerWpa";
 import { getTrackerDb } from "./trackerDb";
 import { syncEngine } from "./syncEngine";
 
@@ -88,6 +94,8 @@ export interface PersistedGameState {
   homeTeamName: string;
   seasonNumber: number;
   stadiumName?: string | null;
+  gamePhase?: "PRE_GAME" | "LIVE" | "POST_FINAL_OUT" | "FINALIZED";
+  gameStartedAt?: number;
   currentBatterId?: string;
   currentBatterName?: string;
   currentPitcherId?: string;
@@ -177,7 +185,14 @@ export interface PersistedGameState {
   }>;
 
   // --- NEW: ADVANCED TRACKING ARRAYS ---
-  managerDecisions?: Array<{
+  managerDecisions?: ManagerDecisionRecord[];
+  managerDeploymentStints?: ManagerDeploymentStintRecord[];
+  managerLineupDeltas?: ManagerLineupDeltaRecord[];
+  optimalLineupSnapshots?: GameLockLineupSnapshots;
+  chosenLineupSnapshots?: GameLockLineupSnapshots;
+
+  /** @deprecated Legacy fixed-value mWAR snapshots; keep only for compatibility. */
+  legacyManagerDecisions?: Array<{
     managerId: string;
     decisionType: string;
     mwarImpact: number;
@@ -220,6 +235,17 @@ export interface PersistedGameState {
   statsScopeId?: string;
   competitionType?: CompetitionType;
   competitionId?: string;
+  competitionName?: string;
+  playoffSeriesId?: string;
+  playoffGameNumber?: number;
+  playoffId?: string;
+  playoffRound?:
+    | "wild_card"
+    | "division_series"
+    | "championship_series"
+    | "world_series";
+  isEliminationGame?: boolean;
+  isClinchGame?: boolean;
   // R3-R7: Persist leagueId so almanac queries work after refresh
   leagueId?: string;
   /** @deprecated Pre-Phase-2a single-toggle field. Kept for backward-compat read path. */
@@ -454,6 +480,57 @@ export async function clearCurrentGame(): Promise<void> {
   });
 }
 
+export async function deleteCompetitionGameData(
+  competitionType: CompetitionType,
+  competitionId: string,
+): Promise<void> {
+  const db = await initDatabase();
+
+  await new Promise<void>((resolve, reject) => {
+    const transaction = db.transaction(
+      [STORES.CURRENT_GAME, STORES.COMPLETED_GAMES],
+      "readwrite",
+    );
+
+    const currentStore = transaction.objectStore(STORES.CURRENT_GAME);
+    const completedStore = transaction.objectStore(STORES.COMPLETED_GAMES);
+
+    const currentRequest = currentStore.get("current");
+    currentRequest.onsuccess = () => {
+      const current = currentRequest.result as PersistedGameState | undefined;
+      if (
+        current &&
+        current.competitionType === competitionType &&
+        current.competitionId === competitionId
+      ) {
+        currentStore.delete("current");
+      }
+    };
+    currentRequest.onerror = () => reject(currentRequest.error);
+
+    const completedRequest = completedStore.getAll();
+    completedRequest.onsuccess = () => {
+      for (const record of completedRequest.result as CompletedGameRecord[]) {
+        if (
+          record.competitionType === competitionType &&
+          record.competitionId === competitionId
+        ) {
+          completedStore.delete(record.gameId);
+          if (!syncEngine.isSuppressed()) {
+            syncEngine.remove("kbl-tracker", "completedGames", record.gameId);
+          }
+        }
+      }
+    };
+    completedRequest.onerror = () => reject(completedRequest.error);
+
+    transaction.oncomplete = () => resolve();
+    transaction.onerror = () => reject(transaction.error);
+    transaction.onabort = () =>
+      reject(transaction.error ?? new Error("deleteCompetitionGameData aborted"));
+  });
+}
+
 export async function hasSavedGame(): Promise<boolean> {
   const saved = await loadCurrentGame();
   return !!saved;
@@ -470,6 +547,17 @@ export interface CompletedGameRecord {
   statsScopeId?: string;
   competitionType?: CompetitionType;
   competitionId?: string;
+  competitionName?: string;
+  playoffSeriesId?: string;
+  playoffGameNumber?: number;
+  playoffId?: string;
+  playoffRound?:
+    | "wild_card"
+    | "division_series"
+    | "championship_series"
+    | "world_series";
+  isEliminationGame?: boolean;
+  isClinchGame?: boolean;
   leagueId?: string;
   seasonNumber?: number;
   stadiumName?: string | null;
@@ -493,6 +581,11 @@ export interface CompletedGameRecord {
   };
   // --- NEW: CATCH THE ADVANCED ARRAYS ---
   managerDecisions?: PersistedGameState["managerDecisions"];
+  managerDeploymentStints?: PersistedGameState["managerDeploymentStints"];
+  managerLineupDeltas?: PersistedGameState["managerLineupDeltas"];
+  optimalLineupSnapshots?: PersistedGameState["optimalLineupSnapshots"];
+  chosenLineupSnapshots?: PersistedGameState["chosenLineupSnapshots"];
+  legacyManagerDecisions?: PersistedGameState["legacyManagerDecisions"];
   moraleShifts?: PersistedGameState["moraleShifts"];
   playerRatingsSnapshots?: PersistedGameState["playerRatingsSnapshots"];
 }
@@ -533,6 +626,9 @@ export interface GameRecord extends CompletedGameRecord {
     away: { playerId: string; playerName: string };
     home: { playerId: string; playerName: string };
   };
+
+  optimalLineupSnapshots?: GameLockLineupSnapshots;
+  chosenLineupSnapshots?: GameLockLineupSnapshots;
 
   // Game environment
   lighting?: "day" | "night" | "hazy";
@@ -602,6 +698,17 @@ export async function archiveCompletedGame(
     statsScopeId?: string;
     competitionType?: CompetitionType;
     competitionId?: string;
+    competitionName?: string;
+    playoffSeriesId?: string;
+    playoffGameNumber?: number;
+    playoffId?: string;
+    playoffRound?:
+      | "wild_card"
+      | "division_series"
+      | "championship_series"
+      | "world_series";
+    isEliminationGame?: boolean;
+    isClinchGame?: boolean;
     leagueId?: string;
     totalInnings?: number;
     pogPlayerId?: string;
@@ -628,6 +735,16 @@ export async function archiveCompletedGame(
     statsScopeId: context?.statsScopeId ?? gameState.statsScopeId ?? seasonId,
     competitionType: context?.competitionType ?? gameState.competitionType,
     competitionId: context?.competitionId ?? gameState.competitionId,
+    competitionName: context?.competitionName ?? gameState.competitionName,
+    playoffSeriesId:
+      context?.playoffSeriesId ?? gameState.playoffSeriesId ?? undefined,
+    playoffGameNumber:
+      context?.playoffGameNumber ?? gameState.playoffGameNumber ?? undefined,
+    playoffId: context?.playoffId ?? gameState.playoffId ?? undefined,
+    playoffRound: context?.playoffRound ?? gameState.playoffRound,
+    isEliminationGame:
+      context?.isEliminationGame ?? gameState.isEliminationGame,
+    isClinchGame: context?.isClinchGame ?? gameState.isClinchGame,
     leagueId: resolvedLeagueId,
     seasonNumber: gameState.seasonNumber,
     stadiumName: gameState.stadiumName ?? null,
@@ -647,6 +764,11 @@ export async function archiveCompletedGame(
     playersOfTheGame: context?.playersOfTheGame,
     // --- NEW: ARCHIVE THE ADVANCED ARRAYS ---
     managerDecisions: gameState.managerDecisions || [],
+    managerDeploymentStints: gameState.managerDeploymentStints || [],
+    managerLineupDeltas: gameState.managerLineupDeltas || [],
+    optimalLineupSnapshots: gameState.optimalLineupSnapshots,
+    chosenLineupSnapshots: gameState.chosenLineupSnapshots,
+    legacyManagerDecisions: gameState.legacyManagerDecisions || [],
     moraleShifts: gameState.moraleShifts || [],
     playerRatingsSnapshots: gameState.playerRatingsSnapshots,
   };

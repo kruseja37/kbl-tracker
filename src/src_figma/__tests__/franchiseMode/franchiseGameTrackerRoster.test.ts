@@ -1,13 +1,28 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 
-const { mockGetPlayersByTeam } = vi.hoisted(() => ({
+const {
+  mockGetPlayersByTeam,
+  mockGetTeam,
+  mockGetAllFranchisePlayers,
+  mockGetFranchiseTeam,
+} = vi.hoisted(() => ({
   mockGetPlayersByTeam: vi.fn(),
+  mockGetTeam: vi.fn(),
+  mockGetAllFranchisePlayers: vi.fn(),
+  mockGetFranchiseTeam: vi.fn(),
 }));
 
 vi.mock('../../../utils/leagueBuilderStorage', () => ({
   getPlayersByTeam: mockGetPlayersByTeam,
+  getTeam: mockGetTeam,
 }));
 
+vi.mock('../../../utils/franchisePlayerStorage', () => ({
+  getAllFranchisePlayers: mockGetAllFranchisePlayers,
+  getFranchiseTeam: mockGetFranchiseTeam,
+}));
+
+import { buildOptimalLineupSnapshot } from '../../../utils/optimalLineup';
 import {
   buildFranchiseGameTrackerRoster,
   collectFranchiseRosterPlayerIds,
@@ -16,6 +31,9 @@ import {
 describe('franchise GameTracker roster identity', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockGetTeam.mockResolvedValue(null);
+    mockGetFranchiseTeam.mockResolvedValue(null);
+    mockGetAllFranchisePlayers.mockResolvedValue([]);
   });
 
   test('preserves stable League Builder ids when building franchise launch rosters', async () => {
@@ -110,5 +128,147 @@ describe('franchise GameTracker roster identity', () => {
 
     expect(Array.from(ids)).toEqual(expect.arrayContaining(['lb-1', 'lb-sp', 'Legacy Name']));
     expect(ids.has('J. CATCHER')).toBe(false);
+  });
+
+  test('loads franchise saved lineup and RHP/LHP optimal benchmarks for game launch', async () => {
+    const franchisePlayers = [
+      {
+        id: 'c',
+        firstName: 'Casey',
+        lastName: 'Catcher',
+        primaryPosition: 'C',
+        secondaryPosition: '1B',
+        bats: 'R',
+        throws: 'R',
+        age: 28,
+        power: 70,
+        contact: 70,
+        speed: 40,
+        fielding: 80,
+        arm: 80,
+        velocity: 0,
+        junk: 0,
+        accuracy: 0,
+        leagueAssignments: [{ leagueId: 'league-1', teamId: 'team-1', rosterStatus: 'MLB' }],
+      },
+      {
+        id: 'ss',
+        firstName: 'Sam',
+        lastName: 'Short',
+        primaryPosition: 'SS',
+        secondaryPosition: '2B',
+        bats: 'L',
+        throws: 'R',
+        age: 25,
+        power: 80,
+        contact: 82,
+        speed: 75,
+        fielding: 88,
+        arm: 83,
+        velocity: 0,
+        junk: 0,
+        accuracy: 0,
+        leagueAssignments: [{ leagueId: 'league-1', teamId: 'team-1', rosterStatus: 'MLB' }],
+      },
+      {
+        id: 'dh',
+        firstName: 'Dana',
+        lastName: 'Hitter',
+        primaryPosition: '1B',
+        secondaryPosition: 'DH',
+        bats: 'S',
+        throws: 'R',
+        age: 31,
+        power: 90,
+        contact: 74,
+        speed: 35,
+        fielding: 45,
+        arm: 45,
+        velocity: 0,
+        junk: 0,
+        accuracy: 0,
+        leagueAssignments: [{ leagueId: 'league-1', teamId: 'team-1', rosterStatus: 'MLB' }],
+      },
+      {
+        id: 'sp-l',
+        firstName: 'Lia',
+        lastName: 'Lefty',
+        primaryPosition: 'SP',
+        secondaryPosition: 'P',
+        bats: 'L',
+        throws: 'L',
+        age: 30,
+        power: 10,
+        contact: 10,
+        speed: 20,
+        fielding: 55,
+        arm: 70,
+        velocity: 90,
+        junk: 82,
+        accuracy: 77,
+        leagueAssignments: [{ leagueId: 'league-1', teamId: 'team-1', rosterStatus: 'MLB' }],
+      },
+    ];
+    const candidates = franchisePlayers.map((player) => ({
+      playerId: player.id,
+      playerName: `${player.firstName} ${player.lastName}`,
+      bats: player.bats,
+      primaryPosition: player.primaryPosition,
+      secondaryPosition: player.secondaryPosition,
+      power: player.power,
+      contact: player.contact,
+      speed: player.speed,
+      fielding: player.fielding,
+      arm: player.arm,
+    }));
+    const rhpSnapshot = buildOptimalLineupSnapshot({
+      teamId: 'team-1',
+      mode: 'franchise',
+      opposingPitcherHand: 'R',
+      candidates,
+      dhEnabled: true,
+      generatedAt: 100,
+      generatedFrom: 'team_hub',
+      sourceConfidence: 'engine_calculated',
+    });
+    const lhpSnapshot = buildOptimalLineupSnapshot({
+      teamId: 'team-1',
+      mode: 'franchise',
+      opposingPitcherHand: 'L',
+      candidates,
+      dhEnabled: true,
+      generatedAt: 200,
+      generatedFrom: 'team_hub',
+      sourceConfidence: 'engine_calculated',
+    });
+
+    mockGetFranchiseTeam.mockResolvedValue({
+      id: 'team-1',
+      leagueIds: ['league-1'],
+      startingRotation: ['sp-l'],
+      lineupWithDH: [
+        { battingOrder: 1, playerId: 'ss', fieldingPosition: 'SS' },
+        { battingOrder: 2, playerId: 'c', fieldingPosition: 'C' },
+        { battingOrder: 3, playerId: 'dh', fieldingPosition: 'DH' },
+      ],
+      optimalLineupVsRHPWithDH: rhpSnapshot,
+      optimalLineupVsLHPWithDH: lhpSnapshot,
+    });
+    mockGetAllFranchisePlayers.mockResolvedValue(franchisePlayers);
+
+    const roster = await buildFranchiseGameTrackerRoster('team-1', {
+      franchiseId: 'franchise-1',
+      leagueId: 'league-1',
+      useDH: true,
+    });
+
+    expect(roster.players.slice(0, 3).map((player) => player.playerId)).toEqual(['ss', 'c', 'dh']);
+    expect(roster.pitchers).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ playerId: 'sp-l', isStarter: true, throwingHand: 'L' }),
+      ]),
+    );
+    expect(roster.optimalLineups?.vsRHP).toBe(rhpSnapshot);
+    expect(roster.optimalLineups?.vsLHP).toBe(lhpSnapshot);
   });
 });

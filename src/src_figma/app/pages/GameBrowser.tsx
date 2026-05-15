@@ -1,9 +1,10 @@
-import { useEffect, useState } from "react";
-import { Link } from "react-router";
+import { useEffect, useMemo, useState } from "react";
+import { Link, useLocation } from "react-router";
 import { format } from "date-fns";
 import { ArrowLeft } from "lucide-react";
 import {
   getExhibitionGames,
+  getEliminationGames,
   getGameAtBatEvents,
   type ExhibitionGameFilters,
 } from "../../../utils/almanacQueries";
@@ -13,6 +14,11 @@ import type { AtBatEvent } from "../../../utils/eventLog";
 interface TeamOption {
   teamId: string;
   teamName: string;
+}
+
+interface RunOption {
+  runId: string;
+  runName: string;
 }
 
 interface GameBrowserRow {
@@ -124,21 +130,53 @@ function buildTeamOptions(games: CompletedGameRecord[]): TeamOption[] {
 }
 
 export function GameBrowser() {
+  const location = useLocation();
+  const isEliminationMode = location.pathname.startsWith("/almanac/elimination");
   const [filters, setFilters] = useState<ExhibitionGameFilters>({});
   const [teamOptions, setTeamOptions] = useState<TeamOption[]>([]);
+  const [runOptions, setRunOptions] = useState<RunOption[]>([]);
+  const [selectedRunId, setSelectedRunId] = useState("");
   const [rows, setRows] = useState<GameBrowserRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const title = useMemo(
+    () => (isEliminationMode ? "ELIMINATION GAMES" : "EXHIBITION GAMES"),
+    [isEliminationMode],
+  );
+  const backLink = isEliminationMode ? "/almanac" : "/almanac/exhibition";
+  const emptyLabel = isEliminationMode
+    ? "No elimination games recorded yet."
+    : "No exhibition games recorded yet.";
 
   useEffect(() => {
     let cancelled = false;
 
     async function loadTeams() {
-      const games = await getExhibitionGames();
+      const games = isEliminationMode
+        ? await getEliminationGames()
+        : await getExhibitionGames();
       if (cancelled) {
         return;
       }
 
       setTeamOptions(buildTeamOptions(games));
+      if (isEliminationMode) {
+        const nextRunOptions = Array.from(
+          new Map(
+            games
+              .filter((game) => game.competitionId)
+              .map((game) => [
+                game.competitionId!,
+                {
+                  runId: game.competitionId!,
+                  runName: game.competitionName || game.competitionId!,
+                },
+              ]),
+          ).values(),
+        ).sort((left, right) => left.runName.localeCompare(right.runName));
+        setRunOptions(nextRunOptions);
+      } else {
+        setRunOptions([]);
+      }
     }
 
     loadTeams();
@@ -146,7 +184,7 @@ export function GameBrowser() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [isEliminationMode]);
 
   useEffect(() => {
     let cancelled = false;
@@ -155,7 +193,12 @@ export function GameBrowser() {
       setIsLoading(true);
 
       try {
-        const games = await getExhibitionGames(filters);
+        const games = isEliminationMode
+          ? await getEliminationGames({
+              ...filters,
+              runId: selectedRunId || undefined,
+            })
+          : await getExhibitionGames(filters);
         const eventLists = await Promise.all(games.map((game) => getGameAtBatEvents(game.gameId)));
 
         if (cancelled) {
@@ -183,14 +226,14 @@ export function GameBrowser() {
     return () => {
       cancelled = true;
     };
-  }, [filters]);
+  }, [filters, isEliminationMode, selectedRunId]);
 
   return (
     <div className="min-h-screen bg-black px-4 py-6 font-['Press_Start_2P'] text-white sm:px-6">
       <div className="mx-auto flex max-w-6xl flex-col gap-6">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <Link
-            to="/almanac/exhibition"
+            to={backLink}
             className="inline-flex items-center gap-3 self-start border-[5px] border-[#3366FF] bg-[#111111] px-4 py-3 text-[10px] text-white shadow-[6px_6px_0px_0px_rgba(221,0,0,0.85)] transition hover:bg-[#1a1a1a]"
           >
             <ArrowLeft className="h-4 w-4 shrink-0 text-white" />
@@ -198,14 +241,14 @@ export function GameBrowser() {
           </Link>
 
           <div className="border-[6px] border-[#3366FF] bg-white px-5 py-4 text-center text-black shadow-[8px_8px_0px_0px_#DD0000] sm:px-8">
-            <h1 className="text-xs leading-6 text-[#DD0000] sm:text-sm">EXHIBITION GAMES</h1>
+            <h1 className="text-xs leading-6 text-[#DD0000] sm:text-sm">{title}</h1>
           </div>
 
           <div className="hidden sm:block sm:w-[104px]" />
         </div>
 
         <div className="border-[6px] border-[#2B2B2B] bg-[#101010] p-5 shadow-[8px_8px_0px_0px_rgba(51,102,255,0.35)] sm:p-6">
-          <div className="grid gap-4 md:grid-cols-4">
+          <div className={`grid gap-4 ${isEliminationMode ? 'md:grid-cols-5' : 'md:grid-cols-4'}`}>
             <label className="flex flex-col gap-3 text-[9px] text-[#3366FF] sm:text-[10px]">
               FROM
               <input
@@ -277,6 +320,24 @@ export function GameBrowser() {
                 ))}
               </select>
             </label>
+
+            {isEliminationMode && (
+              <label className="flex flex-col gap-3 text-[9px] text-[#3366FF] sm:text-[10px]">
+                RUN
+                <select
+                  value={selectedRunId}
+                  onChange={(event) => setSelectedRunId(event.target.value)}
+                  className="h-12 border-[4px] border-[#3366FF] bg-[#161616] px-3 text-[9px] text-white outline-none focus:border-white"
+                >
+                  <option value="">All runs</option>
+                  {runOptions.map((run) => (
+                    <option key={run.runId} value={run.runId}>
+                      {run.runName}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
           </div>
         </div>
 
@@ -286,7 +347,7 @@ export function GameBrowser() {
           </div>
         ) : rows.length === 0 ? (
           <div className="border-[6px] border-[#2B2B2B] bg-[#101010] px-6 py-10 text-center text-xs text-[#E8E8D8]">
-            No exhibition games recorded yet.
+            {emptyLabel}
           </div>
         ) : (
           <div className="flex flex-col gap-4">
@@ -302,6 +363,11 @@ export function GameBrowser() {
                       <div className="text-[9px] text-[#3366FF] sm:text-[10px]">
                         {format(new Date(game.date), "MMM dd, yyyy")}
                       </div>
+                      {isEliminationMode && (
+                        <div className="text-[9px] text-[#C4A853] sm:text-[10px]">
+                          {game.competitionName || game.competitionId}
+                        </div>
+                      )}
                       <div className="text-sm leading-6 text-white sm:text-base">
                         {game.awayTeamName} @ {game.homeTeamName}
                       </div>

@@ -3,7 +3,10 @@ import { getMojoColor, type MojoLevel } from '../../../engines/mojoEngine';
 import type { FitnessState } from '../../../engines/fitnessEngine';
 import { toFitnessLabel, toMojoLabel } from '../../../types/game';
 import chalkBgImg from '../../../assets/chalk-bg.png';
+import batterIconImg from '../../../assets/baseball-player-icon.png';
 import { getPlayerLineupMetaParts, type PlayerLineupMetaSource } from '../utils/playerLineupMeta';
+
+const ASH_WOOD_COLOR = '#CBB89C';
 
 interface BattingLineupPlayer extends PlayerLineupMetaSource {
   playerId: string;
@@ -136,8 +139,23 @@ export function BattingLineupColumn({
           }
         }
       `}</style>
-      <div className="text-[10px] text-white font-bold tracking-wider px-2 pt-1.5 pb-1 text-center" style={{ background: `linear-gradient(${teamPrimaryColor}40, ${teamPrimaryColor}40), #1a2420`, backgroundImage: `url(${chalkBgImg}), linear-gradient(${teamPrimaryColor}40, ${teamPrimaryColor}40)`, backgroundRepeat: 'repeat', backgroundColor: '#1a2420' }}>
-        {teamName || 'BATTING'}
+      <div className="relative flex items-center justify-center px-7 pt-1.5 pb-1 text-[10px] text-white font-bold tracking-wider" style={{ background: `linear-gradient(${teamPrimaryColor}40, ${teamPrimaryColor}40), #1a2420`, backgroundImage: `url(${chalkBgImg}), linear-gradient(${teamPrimaryColor}40, ${teamPrimaryColor}40)`, backgroundRepeat: 'repeat', backgroundColor: '#1a2420' }}>
+        <span
+          aria-hidden="true"
+          className="absolute right-2 top-1/2 h-[15px] w-[15px] -translate-y-1/2"
+          style={{
+            backgroundColor: ASH_WOOD_COLOR,
+            WebkitMaskImage: `url(${batterIconImg})`,
+            maskImage: `url(${batterIconImg})`,
+            WebkitMaskRepeat: 'no-repeat',
+            maskRepeat: 'no-repeat',
+            WebkitMaskPosition: 'center',
+            maskPosition: 'center',
+            WebkitMaskSize: 'contain',
+            maskSize: 'contain',
+          }}
+        />
+        <span className="min-w-0 truncate">{teamName || 'BATTING'}</span>
       </div>
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden" style={{ borderRight: '2px solid rgba(242, 192, 65, 0.08)' }}>
         {players.map((player) => {

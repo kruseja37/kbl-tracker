@@ -17,8 +17,7 @@
  * Reference: https://www.fangraphs.com/library/misc/wpa/
  */
 
-import { type RunnersOnBase, encodeBaseState, type BaseState } from './leverageCalculator';
-import { getWinExpectancy, type WEGameState } from './winExpectancyTable';
+import { calculateWpaV2, WPA_MODEL_VERSION } from "./wpaV2";
 
 // ============================================
 // TYPES
@@ -57,6 +56,14 @@ export interface WPAResult {
   winProbabilityAfter: number;
   /** WPA from batting team's perspective (positive = good for batter) */
   wpa: number;
+  /** Versioned official WPA model used for reproducible storage. */
+  wpaModelVersion: string;
+  /** Explicit home-team delta before storage/display rounding. */
+  homeDelta: number;
+  /** Explicit batting-team delta before storage/display rounding. */
+  battingTeamDelta: number;
+  /** Explicit fielding-team delta before storage/display rounding. */
+  fieldingTeamDelta: number;
 }
 
 // ============================================
@@ -75,95 +82,27 @@ export function calculateWPA(
   after: WPAStateAfter
 ): WPAResult {
   const totalInnings = before.totalInnings ?? 9;
-  const isHomeBatting = !before.isTop;
-
-  // --- State BEFORE ---
-  const wpBefore = getWinExpectancy({
-    inning: before.inning,
-    isTop: before.isTop,
-    outs: Math.min(before.outs, 2) as 0 | 1 | 2,
-    baseState: encodeBaseState(before.bases),
-    homeScore: before.homeScore,
-    awayScore: before.awayScore,
-    totalInnings,
-  });
-
-  // --- State AFTER ---
-  // Check for game-ending scenarios first
-  let wpAfter: number;
-
-  // Walk-off: bottom of final inning or later, home takes the lead
-  if (isHomeBatting && before.inning >= totalInnings && after.homeScore > after.awayScore) {
-    wpAfter = 1.0;
-  }
-  // 3 outs: inning over, switch halves
-  else if (after.outs >= 3) {
-    // After 3 outs, we move to the next half-inning
-    if (before.isTop) {
-      // Top of inning over → bottom of same inning starts
-      // Check if game is over (bottom of 9+, home ahead)
-      if (before.inning >= totalInnings && after.homeScore > after.awayScore) {
-        // Home already ahead going to bottom, but home doesn't bat — game over, home wins
-        // Actually: if top of 9+ just ended and home leads, game IS over
-        wpAfter = 1.0;
-      } else {
-        wpAfter = getWinExpectancy({
-          inning: before.inning,
-          isTop: false, // Now bottom
-          outs: 0,
-          baseState: 0 as BaseState, // Empty
-          homeScore: after.homeScore,
-          awayScore: after.awayScore,
-          totalInnings,
-        });
-      }
-    } else {
-      // Bottom of inning over → top of next inning starts
-      // Check if game is over
-      if (before.inning >= totalInnings && after.awayScore > after.homeScore) {
-        // Away team leads after regulation → away wins
-        wpAfter = 0.0;
-      } else if (before.inning >= totalInnings && after.homeScore > after.awayScore) {
-        // Home leads after bottom of 9+ → home wins
-        wpAfter = 1.0;
-      } else {
-        // Game continues to next inning
-        wpAfter = getWinExpectancy({
-          inning: before.inning + 1,
-          isTop: true, // Next inning, top
-          outs: 0,
-          baseState: 0 as BaseState, // Empty
-          homeScore: after.homeScore,
-          awayScore: after.awayScore,
-          totalInnings,
-        });
-      }
-    }
-  }
-  // Normal mid-inning state
-  else {
-    wpAfter = getWinExpectancy({
+  const result = calculateWpaV2(
+    {
       inning: before.inning,
-      isTop: before.isTop,
-      outs: Math.min(after.outs, 2) as 0 | 1 | 2,
-      baseState: encodeBaseState(after.bases),
-      homeScore: after.homeScore,
-      awayScore: after.awayScore,
-      totalInnings,
-    });
-  }
-
-  // WPA from batting team's perspective
-  // If home is batting, WPA = wpAfter - wpBefore (positive change = good)
-  // If away is batting, WPA = wpBefore - wpAfter (home WP went down = good for away)
-  const wpa = isHomeBatting
-    ? wpAfter - wpBefore
-    : wpBefore - wpAfter;
+      halfInning: before.isTop ? "TOP" : "BOTTOM",
+      outs: Math.min(Math.max(before.outs, 0), 2) as 0 | 1 | 2,
+      bases: before.bases,
+      homeScore: before.homeScore,
+      awayScore: before.awayScore,
+      scheduledInnings: totalInnings,
+    },
+    after,
+  );
 
   return {
-    winProbabilityBefore: wpBefore,
-    winProbabilityAfter: wpAfter,
-    wpa: Math.round(wpa * 10000) / 10000, // Round to 4 decimal places
+    winProbabilityBefore: roundProbability(result.homeWinProbabilityBefore),
+    winProbabilityAfter: roundProbability(result.homeWinProbabilityAfter),
+    wpa: roundWpa(result.battingTeamDelta),
+    wpaModelVersion: WPA_MODEL_VERSION,
+    homeDelta: roundWpa(result.homeDelta),
+    battingTeamDelta: roundWpa(result.battingTeamDelta),
+    fieldingTeamDelta: roundWpa(result.fieldingTeamDelta),
   };
 }
 
@@ -278,4 +217,12 @@ export function getWPAColor(wpa: number): string {
  */
 export function formatWP(wp: number, precision: number = 1): string {
   return `${(wp * 100).toFixed(precision)}%`;
+}
+
+function roundWpa(value: number): number {
+  return Math.round(value * 10000) / 10000;
+}
+
+function roundProbability(value: number): number {
+  return Math.round(value * 10000) / 10000;
 }

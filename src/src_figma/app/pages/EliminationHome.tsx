@@ -31,6 +31,9 @@ import { computeEliminationAwards, type EliminationAward } from '../../../utils/
 import { buildClutchContext, getHomeFieldPattern } from '../../../engines/playoffEngine';
 import { EliminationTeamHub } from '../components/EliminationTeamHub';
 import { ReporterAssignmentPanel, type ReporterAssignmentPanelTeam } from '../components/ReporterAssignmentPanel';
+import { resolveManagerForTeam } from '../../../utils/managerIdentityStorage';
+import { withPregameManagerNavigationState } from '../utils/pregameNavigationState';
+import { buildPregameBenchmarkIssues } from '../utils/pregameLineupBenchmarks';
 
 type EliminationTab = 'bracket' | 'teamhub' | 'leaders' | 'awards' | 'history';
 
@@ -421,6 +424,62 @@ export function EliminationHome() {
         getEliminationTeam(eliminationId, awayTeam.teamId),
         getEliminationTeam(eliminationId, homeTeam.teamId),
       ]);
+      const [awayManager, homeManager] = await Promise.all([
+        resolveManagerForTeam({
+          team: {
+            id: awayTeam.teamId,
+            name: awayTeam.teamName,
+            managerId: awayTeamData?.managerId,
+            managerName: awayTeamData?.managerName,
+          },
+          mode: 'elimination',
+          instanceId: eliminationId,
+          persistAssignment: true,
+        }),
+        resolveManagerForTeam({
+          team: {
+            id: homeTeam.teamId,
+            name: homeTeam.teamName,
+            managerId: homeTeamData?.managerId,
+            managerName: homeTeamData?.managerName,
+          },
+          mode: 'elimination',
+          instanceId: eliminationId,
+          persistAssignment: true,
+        }),
+      ]);
+      const awayOpposingHand =
+        (homeRoster.pitchers.find((pitcher) => pitcher.isActive)?.throwingHand ||
+          "R") === "L"
+          ? "vsLHP"
+          : "vsRHP";
+      const homeOpposingHand =
+        (awayRoster.pitchers.find((pitcher) => pitcher.isActive)?.throwingHand ||
+          "R") === "L"
+          ? "vsLHP"
+          : "vsRHP";
+      const optimalLineupSnapshots = {
+        away: awayRoster.optimalLineups?.[awayOpposingHand],
+        home: homeRoster.optimalLineups?.[homeOpposingHand],
+      };
+      const lineupBenchmarkIssues = buildPregameBenchmarkIssues([
+        {
+          teamName: awayTeam.teamName,
+          opposingPitcherHand: awayOpposingHand === "vsLHP" ? "L" : "R",
+          snapshot: optimalLineupSnapshots.away,
+        },
+        {
+          teamName: homeTeam.teamName,
+          opposingPitcherHand: homeOpposingHand === "vsLHP" ? "L" : "R",
+          snapshot: optimalLineupSnapshots.home,
+        },
+      ]);
+      if (lineupBenchmarkIssues.length > 0) {
+        setError(
+          `Lineup Delta tracking needs official optimal benchmarks before first pitch. ${lineupBenchmarkIssues.join(" ")} Use Team Hub to recalculate/apply or set the current lineup as optimal.`,
+        );
+        return;
+      }
 
       sessionStorage.setItem(
         "kbl-pending-live-beat-reporter-enabled",
@@ -431,7 +490,7 @@ export function EliminationHome() {
         JSON.stringify(postGameColumnsEnabled),
       );
       navigate(`/game-tracker/${gameId}`, {
-        state: {
+        state: withPregameManagerNavigationState({
           gameMode: 'elimination',
           eliminationId: eliminationId,
           seriesId: series.id,
@@ -461,6 +520,7 @@ export function EliminationHome() {
           awayPitchers: awayRoster.pitchers,
           homePlayers: homeRoster.players,
           homePitchers: homeRoster.pitchers,
+          optimalLineupSnapshots,
           awayTeamColor: awayTeamData?.colors.primary,
           awayTeamBorderColor: awayTeamData?.colors.secondary,
           homeTeamColor: homeTeamData?.colors.primary,
@@ -474,7 +534,12 @@ export function EliminationHome() {
           isClinchGame: clutchContext.isClinchGame,
           totalInnings: playoffConfig.inningsPerGame,
           useDH: playoffConfig.useDH,
-        },
+        }, {
+          awayManagerId: awayManager.managerId,
+          awayManagerName: awayManager.managerName,
+          homeManagerId: homeManager.managerId,
+          homeManagerName: homeManager.managerName,
+        }),
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load elimination rosters for game start.');

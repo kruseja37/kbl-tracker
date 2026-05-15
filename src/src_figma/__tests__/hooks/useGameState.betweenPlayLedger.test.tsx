@@ -313,6 +313,45 @@ describe('useGameState between-play ledger', () => {
     expect(result.current.playerStats.has('home-rp')).toBe(true);
   });
 
+  test('allows a batting-team pinch hitter to replace a virtual no-DH pitcher row', async () => {
+    const { result } = renderHook(() => useGameState());
+    await initializeGame(result);
+
+    act(() => {
+      result.current.startGame();
+    });
+
+    act(() => {
+      const subResult = result.current.makeSubstitution(
+        'away-bench-1',
+        'away-sp',
+        'Away Bench 1',
+        'Away Starter',
+        {
+          subType: 'pinch_hit',
+          newPosition: 'P',
+          lineupSpot: 2,
+        },
+      );
+      expect(subResult).toEqual({ success: true });
+    });
+
+    const lineupSnapshot = result.current.getLineupStateSnapshot();
+    expect(lineupSnapshot.away.lineup).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          playerId: 'away-bench-1',
+          playerName: 'Away Bench 1',
+          battingOrder: 2,
+          position: 'P',
+        }),
+      ]),
+    );
+    expect(lineupSnapshot.away.lineup.some((player) => player.playerId === 'away-sp')).toBe(false);
+    expect(lineupSnapshot.away.usedPlayers).toContain('away-sp');
+    expect(result.current.gameState.currentPitcherId).toBe('home-sp');
+  });
+
   test('tracks defensive position usage per out instead of per half-inning', async () => {
     const { result } = renderHook(() => useGameState());
     await initializeGame(result);
@@ -450,6 +489,66 @@ describe('useGameState between-play ledger', () => {
         leverageIndex: 2.4,
         decisionType: 'pitching_change',
         context: 'High leverage spot',
+      }),
+    }));
+  });
+
+  test('logs prompted keep-current manager decisions as committed truth-layer rows', async () => {
+    const { result } = renderHook(() => useGameState());
+    await initializeGame(result);
+
+    mockLogBetweenPlayEvent.mockClear();
+
+    await act(async () => {
+      await result.current.recordPromptedManagerDecision({
+        decisionType: 'leave_pitcher_in',
+        action: 'keep_pitcher',
+        source: 'recommendation',
+        decisionSource: 'situational_prompt',
+        confidence: 'high',
+        managerId: 'home-manager',
+        teamId: 'home-team',
+        opponentTeamId: 'away-team',
+        trackedPlayerIds: ['home-sp'],
+        involvedPlayerIds: ['home-sp'],
+        playerId: 'home-sp',
+        leverageIndex: 2.4,
+        recommendationId: 'rec-keep-home-sp',
+        provenanceKey: 'consider_pitching_change:home-sp:1:top',
+        resolution: {
+          status: 'pending',
+          expectedEndpoint: 'next_pa',
+        },
+      });
+    });
+
+    expect(mockLogBetweenPlayEvent).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'manager_moment',
+      managerMoment: expect.objectContaining({
+        leverageIndex: 2.4,
+        decisionType: 'leave_pitcher_in',
+        context: 'rec-keep-home-sp',
+      }),
+      promptedManagerDecision: expect.objectContaining({
+        decisionType: 'leave_pitcher_in',
+        action: 'keep_pitcher',
+        source: 'recommendation',
+        decisionSource: 'situational_prompt',
+        managerId: 'home-manager',
+        teamId: 'home-team',
+        opponentTeamId: 'away-team',
+        trackedPlayerIds: ['home-sp'],
+        recommendationId: 'rec-keep-home-sp',
+        provenanceKey: 'consider_pitching_change:home-sp:1:top',
+        resolution: {
+          status: 'pending',
+          expectedEndpoint: 'next_pa',
+        },
+      }),
+      gameState: expect.objectContaining({
+        inning: 1,
+        halfInning: 'TOP',
+        score: { away: 0, home: 0 },
       }),
     }));
   });

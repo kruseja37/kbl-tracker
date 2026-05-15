@@ -1,7 +1,14 @@
 import {
+  getInstanceGames,
+  getPlayerEliminationAllTimeStats,
+  getPlayerInstanceStats,
   getExhibitionGames,
   getExhibitionLeagueId,
+  resolvePlayerIdsForInstance,
   resolveExhibitionPlayerIds,
+  type AlmanacInstanceMode,
+  type BattingLine,
+  type PitchingLine,
 } from '../../../utils/almanacQueries';
 import type { CompletedGameRecord, PlayerRatingsSnapshot } from '../../../utils/gameStorage';
 import type { Player } from '../../../utils/leagueBuilderStorage';
@@ -103,5 +110,83 @@ export async function getExhibitionPlayerContext(
     latestSnapshot,
     playerIds,
     teamNames,
+  };
+}
+
+export interface PlayerInstanceContext extends ExhibitionPlayerContext {
+  mode: AlmanacInstanceMode;
+}
+
+export async function getPlayerInstanceContext(
+  playerId: string,
+  mode: AlmanacInstanceMode,
+  instanceId: string,
+): Promise<PlayerInstanceContext> {
+  if (mode === 'exhibition') {
+    const context = await getExhibitionPlayerContext(playerId, instanceId);
+    return {
+      ...context,
+      mode,
+    };
+  }
+
+  const games = await getInstanceGames(mode, instanceId);
+  const playerIds = await resolvePlayerIdsForInstance(playerId, mode, instanceId);
+  const playerIdSet = new Set(playerIds);
+  const teamNames = new Map<string, string>();
+
+  const appearanceGames = games.filter((game) => {
+    teamNames.set(game.awayTeamId, game.awayTeamName);
+    teamNames.set(game.homeTeamId, game.homeTeamName);
+
+    return Boolean(playerIds.find((candidateId) => game.playerStats[candidateId])) ||
+      game.pitcherGameStats.some((pitcher) => playerIdSet.has(pitcher.pitcherId));
+  });
+
+  const latestGame = appearanceGames[0] ?? null;
+  const snapshotSource = appearanceGames.find((game) =>
+    playerIds.some((candidateId) => Boolean(game.playerRatingsSnapshots?.[candidateId])),
+  ) ?? null;
+  const latestSnapshot =
+    playerIds
+      .map((candidateId) => snapshotSource?.playerRatingsSnapshots?.[candidateId] ?? null)
+      .find((snapshot): snapshot is PlayerRatingsSnapshot => snapshot !== null) ?? null;
+
+  return {
+    mode,
+    games: appearanceGames,
+    latestGame,
+    latestSnapshot,
+    playerIds,
+    teamNames,
+  };
+}
+
+export async function getPlayerDisplayStats(
+  playerId: string,
+  mode: AlmanacInstanceMode,
+  instanceId: string,
+): Promise<{
+  instanceBatting: BattingLine | null;
+  instancePitching: PitchingLine | null;
+  allTimeEliminationBatting: BattingLine | null;
+  allTimeEliminationPitching: PitchingLine | null;
+}> {
+  const instanceStats = await getPlayerInstanceStats(playerId, mode, instanceId);
+  if (mode !== 'elimination') {
+    return {
+      instanceBatting: instanceStats.batting,
+      instancePitching: instanceStats.pitching,
+      allTimeEliminationBatting: null,
+      allTimeEliminationPitching: null,
+    };
+  }
+
+  const allTimeStats = await getPlayerEliminationAllTimeStats(playerId);
+  return {
+    instanceBatting: instanceStats.batting,
+    instancePitching: instanceStats.pitching,
+    allTimeEliminationBatting: allTimeStats.batting,
+    allTimeEliminationPitching: allTimeStats.pitching,
   };
 }

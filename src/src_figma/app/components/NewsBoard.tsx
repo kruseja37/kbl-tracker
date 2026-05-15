@@ -1,6 +1,11 @@
 import React from 'react';
 
 import type { BeatReporter } from '../../../types/reporter';
+import type { ManagerDecisionRecord } from '../../../types/managerWpa';
+import type {
+  ManagerRecommendation,
+  ManagerRecommendationAction,
+} from '../../../utils/managerWpaRecommendations';
 import {
   CommentaryFeed,
   type CommentaryFeedEntry,
@@ -17,9 +22,14 @@ interface NewsBoardProps {
   reporterTeamColors?: Record<string, { primary: string; secondary: string }>;
   soundsOn?: boolean;
   onPlayTypeSound?: () => void;
+  onManagerDecisionEdit?: (decision: ManagerDecisionRecord) => void;
+  onManagerRecommendationAction?: (
+    recommendation: ManagerRecommendation,
+    action: ManagerRecommendationAction,
+  ) => void;
 }
 
-/** §6: NewsBoard — pinned stats header + scrollable beat reporter feed. Display only, NO click handlers. */
+/** §6: NewsBoard — pinned stats header + scrollable beat reporter / manager feed. */
 export function NewsBoard({
   currentBatterName,
   currentBatterLine,
@@ -31,6 +41,8 @@ export function NewsBoard({
   reporterTeamColors = {},
   soundsOn = false,
   onPlayTypeSound,
+  onManagerDecisionEdit,
+  onManagerRecommendationAction,
 }: NewsBoardProps) {
   return (
     <div className="bg-[#364038] flex h-full min-h-0 flex-col overflow-hidden">
@@ -78,6 +90,8 @@ export function NewsBoard({
             reporterTeamColors={reporterTeamColors}
             soundsOn={soundsOn}
             onPlayTypeSound={onPlayTypeSound}
+            onManagerDecisionEdit={onManagerDecisionEdit}
+            onManagerRecommendationAction={onManagerRecommendationAction}
           />
         </div>
       </div>

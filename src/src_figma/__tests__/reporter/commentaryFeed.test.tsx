@@ -1,4 +1,4 @@
-import { act, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 import {
@@ -6,6 +6,7 @@ import {
   type CommentaryFeedEntry,
 } from "../../app/components/CommentaryFeed";
 import { CommentaryTypewriter } from "../../app/components/CommentaryTypewriter";
+import type { ManagerDecisionRecord } from "../../../types/managerWpa";
 
 function createEntries(): CommentaryFeedEntry[] {
   return [
@@ -52,6 +53,54 @@ function createEntriesWithPreamble(): CommentaryFeedEntry[] {
       reporterId: "reporter-1",
     },
   ];
+}
+
+function createManagerDecision(): ManagerDecisionRecord {
+  return {
+    decisionId: "game-1:sub-1:pinch_hitter",
+    gameId: "game-1",
+    managerId: "braves-manager",
+    teamId: "braves",
+    opponentTeamId: "athletics",
+    decisionType: "pinch_hitter",
+    inferenceMethod: "automatic",
+    decisionSource: "user_action",
+    confidence: "high",
+    inning: 2,
+    half: "bottom",
+    outs: 0,
+    baseState: "000",
+    scoreDifferentialForTeam: -9,
+    leverageIndex: 1.2,
+    decisionEventId: "sub-1",
+    linkedEventIds: ["sub-1", "pa-2"],
+    involvedPlayerIds: ["rafael-belliard", "jeff-blauser"],
+    teamWinProbabilityBefore: 0.1,
+    teamWinProbabilityAfter: 0.128,
+    managerWpa: 0.007,
+    rawWindowWpa: 0.028,
+    managerShare: 0.25,
+    resolved: true,
+    resolvedAtEventId: "pa-2",
+    resolutionWindow: {
+      status: "resolved",
+      startEventId: "sub-1",
+      startEventIndex: 12,
+      startSnapshotSource: "event_state",
+      expectedEndpoint: "next_pa",
+      trackedPlayerIds: ["jeff-blauser"],
+      trackedRunnerIds: [],
+      maxEventIndex: 13,
+    },
+    displayTitle: "Pinch hitter",
+    displaySummary: "Pinch hitter for braves",
+    derivation: {
+      derivedFromEventIds: ["sub-1", "pa-2"],
+      derivedFromFields: ["substitution.subType"],
+      manuallyPinned: false,
+      stale: false,
+    },
+  };
 }
 
 describe("CommentaryFeed", () => {
@@ -229,6 +278,48 @@ describe("CommentaryFeed", () => {
     });
 
     expect(onPlayTypeSound).toHaveBeenCalledTimes(expectedCharacterCount);
+  });
+
+  test("renders compact Manager Moment rows with expandable detail", () => {
+    render(
+      <CommentaryFeed
+        entries={[
+          {
+            id: "manager-pinch-hit",
+            commentaryText: "Pinch hitter for braves. +0.007 WPA.",
+            halfInningLabel: "B2",
+            timestamp: new Date("2026-04-15T19:24:00.000Z").getTime(),
+            kind: "manager-user-action",
+            managerDecision: createManagerDecision(),
+            managerLabel: "Atlanta Manager",
+            managerDecisionDetail: "Pinch hitter: Jeff Blauser for Rafael Belliard.",
+            managerDecisionOutcome: "Jeff Blauser HR. Manager value +0.007 WPA.",
+            canEditAttribution: true,
+          },
+        ]}
+        soundsOn={false}
+      />,
+    );
+
+    const row = screen.getByTestId("commentary-entry-manager-pinch-hit");
+    expect(row).toHaveTextContent("B2");
+    expect(row).toHaveTextContent("Atlanta Manager");
+    expect(row).toHaveTextContent("+0.007 WPA");
+    expect(row).not.toHaveTextContent("Jeff Blauser for Rafael Belliard");
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: /open manager moment details for atlanta manager/i,
+      }),
+    );
+
+    expect(screen.getByRole("dialog", { name: /manager moment details/i }))
+      .toBeInTheDocument();
+    expect(screen.getByText("Pinch hitter")).toBeInTheDocument();
+    expect(screen.getByText("Pinch hitter: Jeff Blauser for Rafael Belliard."))
+      .toBeInTheDocument();
+    expect(screen.getByText("Jeff Blauser HR. Manager value +0.007 WPA."))
+      .toBeInTheDocument();
   });
 });
 

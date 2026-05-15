@@ -12,6 +12,7 @@ import {
   getEliminationTeam,
 } from './eliminationPlayerStorage';
 import { syncEngine } from './syncEngine';
+import type { OptimalLineupSnapshot } from '../types/managerWpa';
 
 const SNAPSHOT_STORE = 'rosterSnapshots';
 const FIELD_POSITIONS_WITH_DH: Position[] = ['C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF', 'DH'];
@@ -26,6 +27,10 @@ export interface EliminationRosterSnapshot {
   players: Player[];
   lineup: LineupSlot[];
   lineupWithoutDH?: LineupSlot[];
+  optimalLineupVsRHPWithDH?: OptimalLineupSnapshot;
+  optimalLineupVsLHPWithDH?: OptimalLineupSnapshot;
+  optimalLineupVsRHPWithoutDH?: OptimalLineupSnapshot;
+  optimalLineupVsLHPWithoutDH?: OptimalLineupSnapshot;
   startingRotation: string[];
   snapshotAt: number;
 }
@@ -141,6 +146,7 @@ function convertToGameTrackerPlayer(
     stats: { ab: 0, h: 0, r: 0, rbi: 0, bb: 0, k: 0 },
     battingHand: player.bats === 'S' ? 'S' : player.bats,
     playerId: player.id,
+    primaryPosition: player.primaryPosition,
     power: player.power,
     contact: player.contact,
     speed: player.speed,
@@ -226,6 +232,10 @@ function buildSnapshot(
     players,
     lineup: roster.lineupWithDH,
     lineupWithoutDH: roster.lineupWithoutDH,
+    optimalLineupVsRHPWithDH: roster.optimalLineupVsRHPWithDH,
+    optimalLineupVsLHPWithDH: roster.optimalLineupVsLHPWithDH,
+    optimalLineupVsRHPWithoutDH: roster.optimalLineupVsRHPWithoutDH,
+    optimalLineupVsLHPWithoutDH: roster.optimalLineupVsLHPWithoutDH,
     startingRotation: roster.startingRotation,
     snapshotAt: Date.now(),
   };
@@ -399,7 +409,16 @@ export async function getAllEliminationRosterSnapshots(
 export async function updateEliminationRosterSnapshot(
   eliminationId: string,
   teamId: string,
-  updates: Partial<Pick<EliminationRosterSnapshot, 'lineup' | 'lineupWithoutDH' | 'startingRotation'>>
+  updates: Partial<Pick<
+    EliminationRosterSnapshot,
+    | 'lineup'
+    | 'lineupWithoutDH'
+    | 'startingRotation'
+    | 'optimalLineupVsRHPWithDH'
+    | 'optimalLineupVsLHPWithDH'
+    | 'optimalLineupVsRHPWithoutDH'
+    | 'optimalLineupVsLHPWithoutDH'
+  >>
 ): Promise<void> {
   const existing = await getEliminationRosterSnapshot(eliminationId, teamId);
 
@@ -431,6 +450,10 @@ export async function buildEliminationGameTrackerRoster(
 ): Promise<{
   players: GameTrackerPlayer[];
   pitchers: GameTrackerPitcher[];
+  optimalLineups?: {
+    vsRHP?: OptimalLineupSnapshot;
+    vsLHP?: OptimalLineupSnapshot;
+  };
 }> {
   const snapshot = await getEliminationRosterSnapshot(eliminationId, teamId);
   if (!snapshot) {
@@ -467,6 +490,15 @@ export async function buildEliminationGameTrackerRoster(
   return {
     players: [...players, ...benchPlayers],
     pitchers,
+    optimalLineups: useDH
+      ? {
+          vsRHP: snapshot.optimalLineupVsRHPWithDH,
+          vsLHP: snapshot.optimalLineupVsLHPWithDH,
+        }
+      : {
+          vsRHP: snapshot.optimalLineupVsRHPWithoutDH,
+          vsLHP: snapshot.optimalLineupVsLHPWithoutDH,
+        },
   };
 }
 

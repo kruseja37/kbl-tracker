@@ -76,6 +76,23 @@ export async function listCommentaryFeedEntriesForGame(
   }
 }
 
+export async function listAllCommentaryFeedEntries(): Promise<CommentaryFeedEntryRecord[]> {
+  try {
+    const db = await openTrackerDb();
+    const tx = db.transaction(STORE, "readonly");
+    const store = tx.objectStore(STORE);
+    const entries =
+      ((await requestToPromise(store.getAll())) as CommentaryFeedEntryRecord[])
+        .filter((entry) => entry.deleted !== true)
+        .sort((left, right) => right.timestamp - left.timestamp);
+
+    await transactionToPromise(tx);
+    return entries;
+  } catch (error) {
+    throw toStorageError("list all commentary feed entries", error);
+  }
+}
+
 export async function deleteCommentaryFeedEntry(id: string): Promise<void> {
   try {
     const db = await openTrackerDb();

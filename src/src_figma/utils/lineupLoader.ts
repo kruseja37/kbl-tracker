@@ -7,11 +7,29 @@
 
 import type { Player as RosterPlayer, Pitcher as RosterPitcher } from '../app/components/TeamRoster';
 import type { Player as LBPlayer, TeamRoster, LineupSlot } from '../../utils/leagueBuilderStorage';
+import type { OptimalLineupSnapshot } from '../../types/managerWpa';
 
 export interface LoadedLineup {
   players: RosterPlayer[];      // 9 lineup + bench players
   pitchers: RosterPitcher[];    // Starting pitcher active, rest inactive
   hasStoredLineup: boolean;     // Whether lineup came from League Builder
+  optimalLineups?: {
+    vsRHP?: OptimalLineupSnapshot;
+    vsLHP?: OptimalLineupSnapshot;
+  };
+}
+
+function getRosterOptimalLineups(roster: TeamRoster | null, useDH: boolean): LoadedLineup['optimalLineups'] {
+  if (!roster) return {};
+  return useDH
+    ? {
+        vsRHP: roster.optimalLineupVsRHPWithDH,
+        vsLHP: roster.optimalLineupVsLHPWithDH,
+      }
+    : {
+        vsRHP: roster.optimalLineupVsRHPWithoutDH,
+        vsLHP: roster.optimalLineupVsLHPWithoutDH,
+      };
 }
 
 /**
@@ -39,6 +57,7 @@ function convertToRosterPlayer(
     battingHand: player.bats === 'S' ? 'S' : (player.bats as 'L' | 'R'),
     // Step 0: Pass through League Builder fields for engine access
     playerId: player.id,
+    primaryPosition: player.primaryPosition,
     power: player.power,
     contact: player.contact,
     speed: player.speed,
@@ -193,7 +212,10 @@ function buildPositionValidLineup(batters: LBPlayer[]): { starters: Array<{ play
  * Fills each defensive position exactly once, then adds pitcher batting 9th.
  * SMB4 doesn't have DH, so pitcher always bats.
  */
-function autoGenerateLineup(teamPlayers: LBPlayer[]): LoadedLineup {
+function autoGenerateLineup(
+  teamPlayers: LBPlayer[],
+  optimalLineups: LoadedLineup['optimalLineups'] = {},
+): LoadedLineup {
   // Split into batters and pitchers
   const batters = teamPlayers.filter(
     p => !['SP', 'RP', 'CP', 'SP/RP'].includes(p.primaryPosition)
@@ -239,6 +261,7 @@ function autoGenerateLineup(teamPlayers: LBPlayer[]): LoadedLineup {
     players: [...lineupPlayers, ...benchPlayers],
     pitchers: rosterPitchers,
     hasStoredLineup: false,
+    optimalLineups,
   };
 }
 
@@ -258,10 +281,17 @@ export async function loadTeamLineup(
 ): Promise<LoadedLineup> {
   // Try to fetch stored roster
   const roster = await getRoster(teamId);
+  const useDH = overrideUseDH !== undefined ? overrideUseDH : true;
 
   // If no roster or no lineup configured, auto-generate
-  if (!roster || !roster.lineupWithDH || roster.lineupWithDH.length < 9) {
+  if (!roster) {
     return autoGenerateLineup(teamPlayers);
+  }
+
+  const hasDhLineup = Boolean(roster.lineupWithDH && roster.lineupWithDH.length >= 9);
+  const hasNoDhLineup = Boolean(roster.lineupWithoutDH && roster.lineupWithoutDH.length >= 8);
+  if ((useDH && !hasDhLineup) || (!useDH && !hasNoDhLineup && !hasDhLineup)) {
+    return autoGenerateLineup(teamPlayers, getRosterOptimalLineups(roster, useDH));
   }
 
   // Create player lookup map
@@ -270,10 +300,9 @@ export async function loadTeamLineup(
 
   // Select the correct stored lineup variant based on DH preference.
   // Fall back to DH lineup if No-DH lineup isn't configured.
-  const useDH = overrideUseDH !== undefined ? overrideUseDH : true;
-  const lineup = (!useDH && roster.lineupWithoutDH && roster.lineupWithoutDH.length >= 8)
-    ? roster.lineupWithoutDH
-    : roster.lineupWithDH;
+  const lineup = (!useDH && hasNoDhLineup)
+    ? roster.lineupWithoutDH!
+    : roster.lineupWithDH!;
   const lineupPlayerIds = new Set(lineup.map(slot => slot.playerId));
 
   // Find starting pitcher
@@ -364,5 +393,6 @@ export async function loadTeamLineup(
     players: [...lineupPlayers, ...benchPlayers],
     pitchers: rosterPitchers,
     hasStoredLineup: true,
+    optimalLineups: getRosterOptimalLineups(roster, useDH),
   };
 }

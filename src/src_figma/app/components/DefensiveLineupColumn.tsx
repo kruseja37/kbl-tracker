@@ -3,8 +3,10 @@ import { getMojoColor, type MojoLevel } from '../../../engines/mojoEngine';
 import type { FitnessState } from '../../../engines/fitnessEngine';
 import { toFitnessLabel, toMojoLabel } from '../../../types/game';
 import chalkBgImg from '../../../assets/chalk-bg.png';
+import pitcherIconImg from '../../../assets/baseball-pitcher-icon.png';
 import { getPlayerLineupMetaParts, type PlayerLineupMetaSource } from '../utils/playerLineupMeta';
 
+const ASH_WOOD_COLOR = '#CBB89C';
 
 interface DefensiveLineupPlayer extends PlayerLineupMetaSource {
   playerId: string;
@@ -102,7 +104,6 @@ export function DefensiveLineupColumn({
   nextLeadoffIndex,
   teamName,
   teamPrimaryColor,
-  teamSecondaryColor,
   playerStates,
   getMojoForPlayer,
   getFitnessForPlayer,
@@ -116,11 +117,28 @@ export function DefensiveLineupColumn({
   return (
     <div className="bg-[#3d4a42] flex h-full min-h-0 flex-col overflow-hidden">
       {/* Header — switches between FIELDING and FIELDING SEQUENCE */}
-      <div className={`px-2 pt-1.5 pb-1 flex items-center justify-center gap-2 ${
+      <div className={`relative px-7 pt-1.5 pb-1 flex items-center justify-center gap-2 ${
         isEnriching ? 'text-white' : 'text-white'
       }`} style={isEnriching ? { backgroundColor: '#1a2420' } : { backgroundImage: `url(${chalkBgImg}), linear-gradient(${teamPrimaryColor}40, ${teamPrimaryColor}40)`, backgroundRepeat: 'repeat', backgroundColor: '#1a2420' }}>
-        <div className="text-[10px] font-bold tracking-wider">
-          {isEnriching ? 'FIELDING SEQUENCE' : teamName || 'FIELDING'}
+        {!isEnriching && (
+          <span
+            aria-hidden="true"
+            className="absolute right-2 top-1/2 h-[15px] w-[15px] -translate-y-1/2"
+            style={{
+              backgroundColor: ASH_WOOD_COLOR,
+              WebkitMaskImage: `url(${pitcherIconImg})`,
+              maskImage: `url(${pitcherIconImg})`,
+              WebkitMaskRepeat: 'no-repeat',
+              maskRepeat: 'no-repeat',
+              WebkitMaskPosition: 'center',
+              maskPosition: 'center',
+              WebkitMaskSize: 'contain',
+              maskSize: 'contain',
+            }}
+          />
+        )}
+        <div className="flex min-w-0 items-center justify-center text-[10px] font-bold tracking-wider">
+          <span className="min-w-0 truncate">{isEnriching ? 'FIELDING SEQUENCE' : teamName || 'FIELDING'}</span>
         </div>
         {!isEnriching && headerAction && (
           <button

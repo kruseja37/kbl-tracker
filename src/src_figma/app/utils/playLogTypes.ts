@@ -1,3 +1,9 @@
+import type {
+  ManagerDecisionSource,
+  ManagerRunPlay,
+  ManagerRunnerIntent,
+} from "../../../types/managerWpa";
+
 export type PlayLogResultCategory = 'hit' | 'out' | 'walk' | 'error' | 'special';
 
 export type PlayLogEventType =
@@ -47,6 +53,10 @@ export interface RunnerSubEntry {
   baseSaved?: RunnerHoldBaseSaved;
   isTootblan?: boolean;
   isOutAdvancing?: boolean;
+  managerIntent?: ManagerRunnerIntent;
+  managerRunPlay?: ManagerRunPlay;
+  managerDecisionSource?: ManagerDecisionSource;
+  managerDecisionNote?: string;
   errorType?: 'fielding' | 'throwing' | 'mental';
   errorChargedTo?: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
   transitionLabel?: string;

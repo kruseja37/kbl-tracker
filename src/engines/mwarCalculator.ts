@@ -1,5 +1,10 @@
 /**
  * Manager WAR (mWAR) Calculator
+ *
+ * @deprecated Legacy compatibility/context engine. New manager-value work should
+ * use the Manager WPA truth-layer records in utils/managerWpaDerivation instead
+ * of fixed decision values.
+ *
  * Per MWAR_CALCULATION_SPEC.md
  *
  * Quantifies manager value through:

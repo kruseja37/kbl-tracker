@@ -10,12 +10,27 @@ import {
   getRunFameStandings,
   type RunFameStanding,
 } from "../../../utils/eliminationRunFameStorage";
-import { getGameEvents, type AtBatEvent } from "../../../utils/eventLog";
+import {
+  getBetweenPlayEvents,
+  getGameEvents,
+  getGameFieldingEvents,
+  getGameHeader,
+  type AtBatEvent,
+  type BetweenPlayEvent,
+  type FieldingEvent,
+  type GameHeader,
+} from "../../../utils/eventLog";
+import {
+  deriveKblWpaCredits,
+  type KblWpaCredit,
+} from "../../../utils/kblWpaAttribution";
+import { listManagerProfiles } from "../../../utils/managerIdentityStorage";
 import { rankPlayersOfTheGame } from "../../../utils/playersOfTheGame";
 import chalkBgImg from '../../../assets/chalk-bg.png';
 import chalkBgFaintImg from '../../../assets/chalk-bg-faint.png';
 import { FameLeaderboardCard } from "../components/FameLeaderboardCard";
 import { FamePromotionBanner } from "../components/FamePromotionBanner";
+import { ManagerWpaOverlay } from "../components/ManagerWpaOverlay";
 import { PostGameColumns } from "../components/PostGameColumns";
 import {
   buildRunStandingsEntries,
@@ -27,6 +42,7 @@ import {
   getRunPromotionCandidates,
   type FamePromotionCandidate,
 } from "../engines/famePromotion";
+import type { ManagerProfile } from "../../../types/managerWpa";
 
 // Helper to format innings pitched from outs recorded
 function formatIP(outsRecorded: number): string {
@@ -220,6 +236,10 @@ export function PostGameSummary({
   const [boxScoreExpanded, setBoxScoreExpanded] = useState(false);
   const [gameData, setGameData] = useState<CompletedGameRecord | null>(null);
   const [atBatEvents, setAtBatEvents] = useState<AtBatEvent[]>([]);
+  const [fieldingEvents, setFieldingEvents] = useState<FieldingEvent[]>([]);
+  const [betweenPlayEvents, setBetweenPlayEvents] = useState<BetweenPlayEvent[]>([]);
+  const [gameHeader, setGameHeader] = useState<GameHeader | null>(null);
+  const [managerProfiles, setManagerProfiles] = useState<ManagerProfile[]>([]);
   const [runStandings, setRunStandings] = useState<RunFameStanding[]>([]);
   const [isRunStandingsLoading, setIsRunStandingsLoading] = useState(false);
   const [promotionCandidates, setPromotionCandidates] = useState<FamePromotionCandidate[]>([]);
@@ -241,15 +261,17 @@ export function PostGameSummary({
   const gameMode = navigationState?.gameMode;
   const franchiseId = navigationState?.franchiseId || "1";
   const eliminationId = navigationState?.eliminationId;
+  const resolvedCompetitionId =
+    navigationState?.competitionId ?? gameData?.competitionId;
+  const eliminationRunId =
+    resolvedCompetitionId ?? eliminationId;
   const baseNavigationState = {
     ...navigationState,
     franchiseId,
+    eliminationId: eliminationRunId,
+    competitionId: resolvedCompetitionId,
   };
   const resolvedGameMode = gameMode ?? gameData?.competitionType ?? "exhibition";
-  const eliminationRunId =
-    navigationState?.competitionId ??
-    gameData?.competitionId ??
-    eliminationId;
 
   // Load game data from IndexedDB
   useEffect(() => {
@@ -259,6 +281,10 @@ export function PostGameSummary({
       // Hard reset prior game state before loading next summary.
       setGameData(null);
       setAtBatEvents([]);
+      setFieldingEvents([]);
+      setBetweenPlayEvents([]);
+      setGameHeader(null);
+      setManagerProfiles([]);
       setError(null);
       setIsLoading(true);
       setBoxScoreExpanded(false);
@@ -272,7 +298,7 @@ export function PostGameSummary({
       }
 
       try {
-        const [data, events] = await Promise.all([
+        const [data, events, fieldingRows, betweenPlayRows, header, profiles] = await Promise.all([
           getCompletedGameById(gameId),
           Promise.resolve(getGameEvents(gameId)).catch((eventsError) => {
             console.warn(
@@ -281,11 +307,19 @@ export function PostGameSummary({
             );
             return [];
           }),
+          getGameFieldingEvents(gameId).catch(() => []),
+          getBetweenPlayEvents(gameId).catch(() => []),
+          getGameHeader(gameId).catch(() => null),
+          listManagerProfiles().catch(() => []),
         ]);
         if (cancelled) return;
         if (data && data.gameId === gameId) {
           setGameData(data);
           setAtBatEvents(Array.isArray(events) ? events : []);
+          setFieldingEvents(Array.isArray(fieldingRows) ? fieldingRows : []);
+          setBetweenPlayEvents(Array.isArray(betweenPlayRows) ? betweenPlayRows : []);
+          setGameHeader(header);
+          setManagerProfiles(Array.isArray(profiles) ? profiles : []);
         } else {
           setError("Game not found");
         }
@@ -607,7 +641,16 @@ export function PostGameSummary({
   const homeWon = gameData.finalScore.home > gameData.finalScore.away;
   const winnerName = homeWon ? homeTeamName : awayTeamName;
 
-  const topPerformers = rankPlayersOfTheGame(gameData, atBatEvents);
+  const kblWpaCredits: KblWpaCredit[] = deriveKblWpaCredits({
+    atBatEvents,
+    fieldingEvents,
+    betweenPlayEvents,
+    totalInnings: gameData.totalInnings,
+    awayTeamId,
+    homeTeamId,
+    startingLineups: gameHeader?.startingLineups,
+  });
+  const topPerformers = rankPlayersOfTheGame(gameData, atBatEvents, kblWpaCredits);
   const currentGamePlayerIds = new Set<string>([
     ...Object.keys(gameData.playerStats ?? {}),
     ...gameData.pitcherGameStats.map((pitcher) => pitcher.pitcherId),
@@ -789,7 +832,10 @@ export function PostGameSummary({
                   const player = topPerformers[rank];
                   if (
                     !player ||
-                    (player.ab === 0 && player.r === 0 && player.rbi === 0)
+                    (player.ab === 0 &&
+                      player.r === 0 &&
+                      player.rbi === 0 &&
+                      typeof player.wpa !== "number")
                   )
                     return null;
                   const borderColor =
@@ -839,6 +885,8 @@ export function PostGameSummary({
                     </div>
                   );
                 })}
+
+                <ManagerWpaOverlay game={gameData} managerProfiles={managerProfiles} />
 
                 {/* Box score preview */}
                 <div className="bg-[#1f2b21] border-2 border-[#314437] p-4 mb-4 rounded-sm">
@@ -1044,12 +1092,12 @@ export function PostGameSummary({
                   <button
                     onClick={() => {
                       // Route based on game mode
-                      if (gameMode === "exhibition") {
+                      if (resolvedGameMode === "exhibition") {
                         navigate("/exhibition");
-                      } else if (gameMode === "elimination" && eliminationId) {
+                      } else if (resolvedGameMode === "elimination" && eliminationRunId) {
                         // Return to elimination bracket home
-                        navigate(`/elimination/${eliminationId}`);
-                      } else if (gameMode === "playoff") {
+                        navigate(`/elimination/${eliminationRunId}`);
+                      } else if (resolvedGameMode === "playoff") {
                         // Return to franchise home (bracket tab)
                         navigate(`/franchise/${franchiseId}`, {
                           state: {
@@ -1058,7 +1106,7 @@ export function PostGameSummary({
                             refreshToken: Date.now(),
                           },
                         });
-                      } else if (gameMode === "franchise") {
+                      } else if (resolvedGameMode === "franchise") {
                         navigate(`/franchise/${franchiseId}`, {
                           state: {
                             ...baseNavigationState,

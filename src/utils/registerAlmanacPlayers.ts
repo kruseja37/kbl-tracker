@@ -5,6 +5,7 @@ import type {
   PlayerRatingsSnapshot,
 } from './gameStorage';
 import { getAllCompletedGames } from './gameStorage';
+import { getElimination } from './eliminationManager';
 import { getLeagueTemplate, getPlayer } from './leagueBuilderStorage';
 import type { CanonicalPlayer, CanonicalPlayerInstance } from './almanacStorage';
 import {
@@ -168,7 +169,23 @@ export async function registerAlmanacPlayers(
   leagueId: string
 ): Promise<void> {
   const leagueTemplate = await getLeagueTemplate(leagueId);
-  const instanceName = leagueTemplate?.name ?? leagueId;
+  const mode = normalizeRegistrationMode(gameState.competitionType);
+  const instanceId =
+    mode === 'exhibition'
+      ? leagueId
+      : gameState.competitionId || leagueId;
+  const eliminationMetadata =
+    mode === 'elimination' && gameState.competitionId
+      ? await getElimination(gameState.competitionId)
+      : null;
+  const instanceName =
+    mode === 'elimination'
+      ? eliminationMetadata?.name ||
+        gameState.competitionName ||
+        `${leagueTemplate?.name ?? leagueId} Elimination`
+      : mode === 'franchise'
+        ? `${leagueTemplate?.name ?? leagueId} Franchise`
+        : leagueTemplate?.name ?? leagueId;
 
   const instanceIds = new Set<string>([
     ...Object.keys(gameState.playerStats),
@@ -181,8 +198,8 @@ export async function registerAlmanacPlayers(
     const existingByInstance = await findCanonicalByPlayerId(playerId);
     const targetCanonicalId = existingByInstance?.canonicalId ?? canonicalId;
     const exhibitionInstance: CanonicalPlayerInstance = {
-      mode: 'exhibition',
-      instanceId: leagueId,
+      mode,
+      instanceId,
       instanceName,
       playerIdInInstance: playerId,
     };
@@ -257,8 +274,8 @@ export async function backfillCanonicalPlayers(): Promise<number> {
   let registered = 0;
 
   for (const game of completedGames) {
-    const leagueId = resolveExhibitionLeagueId(game);
-    if (!leagueId) {
+    const resolvedLeagueId = resolveExhibitionLeagueId(game);
+    if (!resolvedLeagueId) {
       console.log('[M4-1] backfillCanonicalPlayers skipped game without leagueId', {
         gameId: game.gameId,
         competitionType: game.competitionType ?? null,
@@ -272,16 +289,31 @@ export async function backfillCanonicalPlayers(): Promise<number> {
       ...(game.pitcherGameStats || []).map((s) => s.pitcherId),
     ]);
 
-    const leagueTemplate = await getLeagueTemplate(leagueId);
-    const instanceName = leagueTemplate?.name ?? leagueId;
     const mode = normalizeRegistrationMode(game.competitionType);
+    const instanceId =
+      mode === 'exhibition'
+        ? resolvedLeagueId
+        : game.competitionId || resolvedLeagueId;
+    const leagueTemplate = await getLeagueTemplate(resolvedLeagueId);
+    const eliminationMetadata =
+      mode === 'elimination' && game.competitionId
+        ? await getElimination(game.competitionId)
+        : null;
+    const instanceName =
+      mode === 'elimination'
+        ? eliminationMetadata?.name ||
+          game.competitionName ||
+          `${leagueTemplate?.name ?? resolvedLeagueId} Elimination`
+        : mode === 'franchise'
+          ? `${leagueTemplate?.name ?? resolvedLeagueId} Franchise`
+          : leagueTemplate?.name ?? resolvedLeagueId;
 
     for (const playerId of playerIds) {
       const { canonicalId, playerName, hometown } =
         await resolveRegistrationIdentity(game, playerId);
       const instance: CanonicalPlayerInstance = {
         mode,
-        instanceId: leagueId,
+        instanceId,
         instanceName,
         playerIdInInstance: playerId,
       };
@@ -294,7 +326,7 @@ export async function backfillCanonicalPlayers(): Promise<number> {
         if (existingCanonicalId && existingCanonicalId !== canonicalId) {
           console.log('[M4-1] backfillCanonicalPlayers reused existing canonicalId for player alias', {
             playerId,
-            leagueId,
+            leagueId: resolvedLeagueId,
             candidateCanonicalId: canonicalId,
             existingCanonicalId,
           });

@@ -575,6 +575,44 @@ describe('EnrichmentPanel', () => {
     consoleLogSpy.mockRestore();
   });
 
+  test('shows rescued throw control for force-at-first throw chains', () => {
+    const onUpdate = vi.fn();
+
+    render(
+      <EnrichmentPanel
+        entry={buildEntry('GO')}
+        currentEnrichment={{ fieldingSequence: [5, 3], fieldingPlayType: 'routine' }}
+        onUpdate={onUpdate}
+        onClose={() => {}}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '1B Rescued Throw' }));
+
+    expect(screen.getByText('Rescued Throw')).toBeInTheDocument();
+    expect(onUpdate).toHaveBeenCalledWith('rescuedThrow', true);
+  });
+
+  test('shows rescued throw and pivot gem controls for double-play throws to first', () => {
+    const onUpdate = vi.fn();
+
+    render(
+      <EnrichmentPanel
+        entry={buildEntry('DP')}
+        currentEnrichment={{ fieldingSequence: [6, 4, 3], fieldingPlayType: 'routine' }}
+        onUpdate={onUpdate}
+        onClose={() => {}}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '1B Rescued Throw' }));
+    fireEvent.click(screen.getByRole('button', { name: '2B' }));
+
+    expect(screen.getByText('Extra Gem Credit')).toBeInTheDocument();
+    expect(onUpdate).toHaveBeenCalledWith('rescuedThrow', true);
+    expect(onUpdate).toHaveBeenCalledWith('extraGemCreditPositions', [4]);
+  });
+
   test('routes modifier clicks through the at-bat modifier handler and gates KP/NUT off HR', () => {
     const onModifierRecord = vi.fn();
 
@@ -948,6 +986,111 @@ describe('EnrichmentPanel', () => {
 
     expect(screen.getByText('BAT→2B')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Mark Held by OF' })).toBeInTheDocument();
+  });
+
+  test('runner enrichment distinguishes manager runner calls from OF holds', () => {
+    const onUpdate = vi.fn();
+    const subEntry: RunnerSubEntry = {
+      id: 'evt-4-runner-manager-hold',
+      parentEventId: 'evt-4',
+      runnerId: 'runner-hold',
+      runnerName: 'Freeze',
+      fromBase: 'first',
+      toBase: 'first',
+      parentResult: '1B',
+      isEnrichable: true,
+    };
+
+    render(
+      <RunnerEnrichmentPanel
+        subEntry={subEntry}
+        onUpdate={onUpdate}
+        onClose={() => {}}
+      />
+    );
+
+    expect(screen.getByText('Manager Runner Call')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Hold Runner' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Manager Hold' })).not.toBeInTheDocument();
+  });
+
+  test('runner enrichment offers hit-and-run on non-batter batted-ball runners and records play-log source', async () => {
+    const onUpdate = vi.fn().mockResolvedValue(undefined);
+    const subEntry: RunnerSubEntry = {
+      id: 'evt-4-runner-hit-run',
+      parentEventId: 'evt-4',
+      runnerId: 'runner-hr',
+      runnerName: 'Break Early',
+      fromBase: 'first',
+      toBase: 'second',
+      parentResult: '1B',
+      isEnrichable: true,
+    };
+
+    render(
+      <RunnerEnrichmentPanel
+        subEntry={subEntry}
+        onUpdate={onUpdate}
+        onClose={() => {}}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Hit & Run' }));
+
+    await waitFor(() => {
+      expect(onUpdate).toHaveBeenCalledWith(
+        'evt-4-runner-hit-run',
+        'managerRunPlay',
+        'hit_and_run',
+      );
+      expect(onUpdate).toHaveBeenCalledWith(
+        'evt-4-runner-hit-run',
+        'managerDecisionSource',
+        'play_log_enhancement',
+      );
+    });
+  });
+
+  test('runner enrichment does not offer hit-and-run for batter or non-batted-ball entries', () => {
+    const onUpdate = vi.fn();
+
+    const { rerender } = render(
+      <RunnerEnrichmentPanel
+        subEntry={{
+          id: 'evt-4-runner-batter-hit-run',
+          parentEventId: 'evt-4',
+          runnerId: 'batter',
+          runnerName: 'Batter',
+          fromBase: 'batter',
+          toBase: 'first',
+          parentResult: '1B',
+          isEnrichable: true,
+        }}
+        onUpdate={onUpdate}
+        onClose={() => {}}
+      />
+    );
+
+    expect(screen.queryByRole('button', { name: 'Hit & Run' })).not.toBeInTheDocument();
+
+    rerender(
+      <RunnerEnrichmentPanel
+        subEntry={{
+          id: 'evt-4-runner-walk-hit-run',
+          parentEventId: 'evt-4',
+          runnerId: 'runner-walk',
+          runnerName: 'Runner Walk',
+          fromBase: 'first',
+          toBase: 'second',
+          parentResult: 'BB',
+          isEnrichable: true,
+        }}
+        onUpdate={onUpdate}
+        onClose={() => {}}
+      />
+    );
+
+    expect(screen.queryByRole('button', { name: 'Hit & Run' })).not.toBeInTheDocument();
   });
 
   test('hit enrichment exposes a batter out-advancing toggle', () => {

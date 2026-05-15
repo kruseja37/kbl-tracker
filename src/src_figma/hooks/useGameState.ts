@@ -27,9 +27,12 @@ import {
   type RunnerState,
   type GameHeader,
   type FameEventRecord,
+  type PromptedManagerDecisionEvent,
 } from "../../utils/eventLog";
 import type { GameAggregationOptions } from "../../utils/seasonAggregator";
 import { processCompletedGame } from "../../utils/processCompletedGame";
+import { deriveCommittedManagerDecisionState } from "../../utils/managerWpaGameState";
+import type { GameLockLineupSnapshots } from "../../types/managerWpa";
 import { appendEliminationGameFameToRun } from "../../utils/eliminationRunFameStorage";
 import { appendEliminationGameToAllTimeStats } from "../../utils/eliminationAllTimeStatsStorage";
 import {
@@ -76,6 +79,7 @@ import {
   reconcileRunnerTrackerBases,
   reconcileRunnerTrackerFromRunnersAfter,
 } from "../app/utils/liveBaseCorrection";
+import { normalizeLiveSubstitutionType } from "../app/utils/gameTrackerSubstitutionIntent";
 
 // ============================================
 // TYPES
@@ -124,6 +128,9 @@ export interface EndGameOptions {
   currentGame?: number;
   stadiumName?: string | null;
   awaitPitchCountConfirmation?: boolean;
+  awayManagerId?: string;
+  homeManagerId?: string;
+  managerByTeamId?: Record<string, string | undefined>;
 }
 
 export interface ScoreboardState {
@@ -458,6 +465,9 @@ export interface UseGameStateReturn {
     decisionType: string,
     context?: string,
   ) => Promise<void>;
+  recordPromptedManagerDecision: (
+    decision: PromptedManagerDecisionEvent,
+  ) => Promise<BetweenPlayEvent>;
   placeGhostRunner: (base: "second", playerId: string) => void;
   advanceRunner: (
     from: "first" | "second" | "third",
@@ -486,6 +496,7 @@ export interface UseGameStateReturn {
         | "position_switch"
         | "double_switch";
       newPosition?: string;
+      lineupSpot?: number;
       base?: "1B" | "2B" | "3B";
       isPinchHitter?: boolean;
     },
@@ -675,6 +686,8 @@ export interface GameInitConfig {
   // MAJ-09: Optional bench rosters for substitution validation
   awayBench?: { playerId: string; playerName: string; positions: string[] }[];
   homeBench?: { playerId: string; playerName: string; positions: string[] }[];
+  optimalLineupSnapshots?: GameLockLineupSnapshots;
+  chosenLineupSnapshots?: GameLockLineupSnapshots;
   // Playoff context (optional — set when launching from playoff bracket)
   playoffSeriesId?: string;
   playoffGameNumber?: number;
@@ -742,6 +755,139 @@ function wasGameStartedForRefresh(gameId: string): boolean {
   } catch {
     return false;
   }
+}
+
+function canResumeSnapshotForRoute(
+  snapshot: PersistedGameState,
+  targetGameId: string,
+): boolean {
+  return (
+    snapshot.gameId === targetGameId ||
+    targetGameId.startsWith("exhibition-")
+  );
+}
+
+function hasUsableSnapshotPayload(snapshot: PersistedGameState | null): boolean {
+  return !!(
+    snapshot &&
+    snapshot.gamePhase !== "FINALIZED" &&
+    (snapshot.scoreboard ||
+      snapshot.runnerTrackerSnapshot ||
+      snapshot.currentPitcherId ||
+      snapshot.currentBatterId)
+  );
+}
+
+function buildGameHeaderDraftFromSnapshot(
+  snapshot: PersistedGameState,
+): Omit<
+  GameHeader,
+  "aggregated" | "aggregatedAt" | "aggregationError" | "eventCount" | "checksum"
+> {
+  const persistedPitcherStats = snapshot.pitcherGameStats ?? [];
+  const toLineupEntries = (
+    lineup:
+      | PersistedGameState["awayLineup"]
+      | PersistedGameState["homeLineup"]
+      | undefined,
+    state:
+      | PersistedGameState["awayLineupState"]
+      | PersistedGameState["homeLineupState"]
+      | undefined,
+  ) => {
+    const source =
+      state?.lineup?.length
+        ? state.lineup
+        : lineup?.map((player, idx) => ({
+            ...player,
+            battingOrder: idx + 1,
+          })) ?? [];
+
+    return source.map((player, idx) => ({
+      playerId: player.playerId,
+      playerName: player.playerName,
+      position: player.position,
+      battingOrder: player.battingOrder || idx + 1,
+    }));
+  };
+
+  const toBenchEntries = (
+    state:
+      | PersistedGameState["awayLineupState"]
+      | PersistedGameState["homeLineupState"]
+      | undefined,
+  ) =>
+    (state?.bench ?? []).map((player) => ({
+      playerId: player.playerId,
+      playerName: player.playerName,
+      positions: player.positions,
+    }));
+
+  return {
+    gameId: snapshot.gameId,
+    seasonId: snapshot.seasonId,
+    statsScopeId: snapshot.statsScopeId,
+    competitionType: snapshot.competitionType,
+    competitionId: snapshot.competitionId,
+    competitionName: snapshot.competitionName,
+    playoffSeriesId: snapshot.playoffSeriesId,
+    playoffGameNumber: snapshot.playoffGameNumber,
+    playoffId: snapshot.playoffId,
+    playoffRound: snapshot.playoffRound,
+    isEliminationGame: snapshot.isEliminationGame,
+    isClinchGame: snapshot.isClinchGame,
+    liveBeatReporterEnabled: snapshot.liveBeatReporterEnabled,
+    postGameColumnsEnabled: snapshot.postGameColumnsEnabled,
+    date: snapshot.savedAt ?? Date.now(),
+    awayTeamId: snapshot.awayTeamId,
+    awayTeamName: snapshot.awayTeamName,
+    homeTeamId: snapshot.homeTeamId,
+    homeTeamName: snapshot.homeTeamName,
+    stadiumName: snapshot.stadiumName ?? null,
+    startingLineups: {
+      away: toLineupEntries(snapshot.awayLineup, snapshot.awayLineupState),
+      home: toLineupEntries(snapshot.homeLineup, snapshot.homeLineupState),
+    },
+    benchRosters: {
+      away: toBenchEntries(snapshot.awayLineupState),
+      home: toBenchEntries(snapshot.homeLineupState),
+    },
+    startingPitchers: {
+      away: {
+        playerId:
+          snapshot.awayLineupState?.currentPitcher?.playerId ||
+          persistedPitcherStats.find(
+            (pitcher) => pitcher.teamId === snapshot.awayTeamId && pitcher.isStarter,
+          )?.pitcherId ||
+          "",
+        playerName:
+          snapshot.awayLineupState?.currentPitcher?.playerName ||
+          persistedPitcherStats.find(
+            (pitcher) => pitcher.teamId === snapshot.awayTeamId && pitcher.isStarter,
+          )?.pitcherName ||
+          "",
+      },
+      home: {
+        playerId:
+          snapshot.homeLineupState?.currentPitcher?.playerId ||
+          persistedPitcherStats.find(
+            (pitcher) => pitcher.teamId === snapshot.homeTeamId && pitcher.isStarter,
+          )?.pitcherId ||
+          "",
+        playerName:
+          snapshot.homeLineupState?.currentPitcher?.playerName ||
+          persistedPitcherStats.find(
+            (pitcher) => pitcher.teamId === snapshot.homeTeamId && pitcher.isStarter,
+          )?.pitcherName ||
+          "",
+      },
+    },
+    optimalLineupSnapshots: snapshot.optimalLineupSnapshots,
+    chosenLineupSnapshots: snapshot.chosenLineupSnapshots,
+    finalScore: null,
+    finalInning: snapshot.totalInnings ?? 9,
+    isComplete: false,
+  };
 }
 
 export interface TeamLineupSnapshot {
@@ -1208,6 +1354,7 @@ export function getDefaultRunnerOutcome(
 
   // SACRIFICE BUNT (SAC): Runners typically advance one base
   if (result === "SAC") {
+    if (base === "third" && outs < 2) return "SCORED";
     if (base === "first") return "TO_2B";
     if (base === "second") return "TO_3B";
     return "HELD";
@@ -1747,6 +1894,33 @@ function processTrackerScoredEvents(
   return { earnedRuns, totalRuns };
 }
 
+function creditPlayerRunsForScoredEvents(
+  scoredEvents: RunnerScoredEvent[],
+  setPlayerStats: React.Dispatch<
+    React.SetStateAction<Map<string, PlayerGameStats>>
+  >,
+  createEmpty: () => PlayerGameStats,
+): void {
+  if (scoredEvents.length === 0) return;
+
+  setPlayerStats((prev) => {
+    const next = new Map(prev);
+
+    for (const event of scoredEvents) {
+      const runnerId = event.runner.runnerId;
+      if (!runnerId) continue;
+
+      const stats = {
+        ...(next.get(runnerId) || createEmpty()),
+      };
+      stats.r += 1;
+      next.set(runnerId, stats);
+    }
+
+    return next;
+  });
+}
+
 function isEarnedRunForHowReached(howReached: HowReached): boolean {
   return howReached !== "error" && howReached !== "ghost_runner";
 }
@@ -2202,6 +2376,12 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
   const homeLineupRef = useRef<
     { playerId: string; playerName: string; position: string }[]
   >([]);
+  const optimalLineupSnapshotsRef = useRef<GameLockLineupSnapshots | undefined>(
+    undefined,
+  );
+  const chosenLineupSnapshotsRef = useRef<GameLockLineupSnapshots | undefined>(
+    undefined,
+  );
   const teamSideByPlayerIdRef = useRef<Map<string, TeamSide>>(new Map());
   const playerNameByIdRef = useRef<Map<string, string>>(new Map());
   const seasonIdRef = useRef<string>("");
@@ -2758,6 +2938,8 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       const homeStarters = header.startingLineups?.home || [];
       const awayBench = header.benchRosters?.away || [];
       const homeBench = header.benchRosters?.home || [];
+      optimalLineupSnapshotsRef.current = header.optimalLineupSnapshots;
+      chosenLineupSnapshotsRef.current = header.chosenLineupSnapshots;
 
       awayLineupRef.current = awayStarters
         .slice()
@@ -3327,6 +3509,8 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         homeUsesDh: homeUsesDhRef.current,
         awayLineup: awayLineupRef.current,
         homeLineup: homeLineupRef.current,
+        optimalLineupSnapshots: optimalLineupSnapshotsRef.current,
+        chosenLineupSnapshots: chosenLineupSnapshotsRef.current,
         awayLineupState:
           awayLineupStateRef.current as PersistedGameState["awayLineupState"],
         homeLineupState:
@@ -3588,6 +3772,13 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         ? homeLineupStateRef.current
         : awayLineupStateRef.current;
       const pitcherInLineup = pitcherLineupState.currentPitcher;
+      const catcherInLineup = pitcherLineupState.lineup.find(
+        (p) => p.position === "C",
+      );
+      const catcherId =
+        gameState.currentCatcherId || catcherInLineup?.playerId || "";
+      const catcherName =
+        gameState.currentCatcherName || catcherInLineup?.playerName || "";
 
       // Batter game stats
       const bStats = playerStats.get(gameState.currentBatterId);
@@ -3647,6 +3838,10 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
               ...pendingEnrichment,
             }
           : undefined;
+      const sanitizedEnrichment =
+        result === "BB" || result === "IBB" || result === "HBP"
+          ? undefined
+          : mergedEnrichment;
 
       return {
         // 1.9: Identity
@@ -3657,6 +3852,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         competitionId: competitionIdRef.current,
         franchiseId: franchiseIdRef.current,
         leagueId: leagueIdRef.current,
+        totalInnings: totalInningsRef.current,
 
         // 1.10: Park context
         parkContext: gameState.stadiumName
@@ -3714,6 +3910,14 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
             : undefined,
           inheritedRunners: pStats?.inheritedRunners,
         },
+        catcherContext: catcherId
+          ? {
+              playerId: catcherId,
+              playerName: catcherName || catcherId,
+              teamId: fieldingTeamId,
+              position: "C",
+            }
+          : undefined,
 
         // 1.14: Matchup context — leave platoonAdvantage/isRivalry empty (no handedness/rivalry data in hook)
         // previousMatchupsThisGame left empty — requires querying event log
@@ -3726,7 +3930,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
           undefined, // undefined if we can't determine
 
         // 1.16: Enrichment — consume pending enrichment data if set
-        enrichment: mergedEnrichment,
+        enrichment: sanitizedEnrichment,
 
         // 1.17: Versioning
         version: 1,
@@ -3786,6 +3990,8 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       // Store lineup refs
       awayLineupRef.current = config.awayLineup;
       homeLineupRef.current = config.homeLineup;
+      optimalLineupSnapshotsRef.current = config.optimalLineupSnapshots;
+      chosenLineupSnapshotsRef.current = config.chosenLineupSnapshots;
       seasonIdRef.current = config.seasonId || "";
       statsScopeIdRef.current = config.statsScopeId || config.seasonId || "";
       competitionTypeRef.current = config.competitionType;
@@ -3943,6 +4149,8 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
             playerName: config.homeStartingPitcherName,
           },
         },
+        optimalLineupSnapshots: config.optimalLineupSnapshots,
+        chosenLineupSnapshots: config.chosenLineupSnapshots,
         finalScore: null,
         finalInning: 9,
         isComplete: false,
@@ -4078,13 +4286,59 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
             savedSnapshot &&
             savedSnapshot.gameId !== targetGameId &&
             !inProgressGame &&
-            initialGameId?.startsWith("exhibition-")
+            canResumeSnapshotForRoute(savedSnapshot, targetGameId)
           ) {
             const snapshotHeader = await getGameHeader(savedSnapshot.gameId);
             if (snapshotHeader && !snapshotHeader.isComplete) {
               resolvedGameId = savedSnapshot.gameId;
               inProgressGame = snapshotHeader;
+            } else if (!snapshotHeader && hasUsableSnapshotPayload(savedSnapshot)) {
+              const repairedHeaderDraft =
+                buildGameHeaderDraftFromSnapshot(savedSnapshot);
+              try {
+                await createGameHeader(repairedHeaderDraft);
+              } catch (err) {
+                console.warn(
+                  "[useGameState] Failed to repair missing game header from snapshot:",
+                  err,
+                );
+              }
+              resolvedGameId = savedSnapshot.gameId;
+              inProgressGame = {
+                ...repairedHeaderDraft,
+                aggregated: false,
+                aggregatedAt: null,
+                aggregationError: null,
+                eventCount: savedSnapshot.atBatCount ?? 0,
+                checksum: "",
+              };
             }
+          }
+          if (
+            savedSnapshot &&
+            savedSnapshot.gameId === resolvedGameId &&
+            !header &&
+            !inProgressGame &&
+            hasUsableSnapshotPayload(savedSnapshot)
+          ) {
+            const repairedHeaderDraft =
+              buildGameHeaderDraftFromSnapshot(savedSnapshot);
+            try {
+              await createGameHeader(repairedHeaderDraft);
+            } catch (err) {
+              console.warn(
+                "[useGameState] Failed to repair missing game header from snapshot:",
+                err,
+              );
+            }
+            inProgressGame = {
+              ...repairedHeaderDraft,
+              aggregated: false,
+              aggregatedAt: null,
+              aggregationError: null,
+              eventCount: savedSnapshot.atBatCount ?? 0,
+              checksum: "",
+            };
           }
           if (
             savedSnapshot &&
@@ -4143,12 +4397,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
             );
           }
         }
-        const hasUsableLiveSnapshot = !!(
-          savedSnapshot?.scoreboard ||
-          savedSnapshot?.runnerTrackerSnapshot ||
-          savedSnapshot?.currentPitcherId ||
-          savedSnapshot?.currentBatterId
-        );
+        const hasUsableLiveSnapshot = hasUsableSnapshotPayload(savedSnapshot);
         if (
           savedSnapshot &&
           savedSnapshot.gameId === resolvedGameId &&
@@ -4198,6 +4447,9 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
             homeLineupStateRef.current =
               savedSnapshot.homeLineupState as LineupState;
           }
+          optimalLineupSnapshotsRef.current =
+            savedSnapshot.optimalLineupSnapshots;
+          chosenLineupSnapshotsRef.current = savedSnapshot.chosenLineupSnapshots;
           teamSideByPlayerIdRef.current.clear();
           playerNameByIdRef.current.clear();
           seasonIdRef.current = savedSnapshot.seasonId || "";
@@ -5506,6 +5758,8 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       homeUsesDh: homeUsesDhRef.current,
       awayLineup: awayLineupRef.current,
       homeLineup: homeLineupRef.current,
+      optimalLineupSnapshots: optimalLineupSnapshotsRef.current,
+      chosenLineupSnapshots: chosenLineupSnapshotsRef.current,
       awayLineupState:
         awayLineupStateRef.current as PersistedGameState["awayLineupState"],
       homeLineupState:
@@ -5989,7 +6243,6 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
           batterStats.grandSlams++;
         }
         batterStats.rbi += calculatedRbi;
-        if (isHomeRunHit) batterStats.r++; // Batter scores on home run
         newStats.set(gameState.currentBatterId, batterStats);
         return newStats;
       });
@@ -6020,6 +6273,11 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       });
       // Then: attribute runs/ER to the RESPONSIBLE pitcher via tracker events
       if (scoredEvents.length > 0) {
+        creditPlayerRunsForScoredEvents(
+          scoredEvents,
+          setPlayerStats,
+          createEmptyPlayerStats,
+        );
         processTrackerScoredEvents(
           scoredEvents,
           setPitcherStats,
@@ -6054,7 +6312,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
 
         // Place batter on base based on hit type (unless HR)
         if (hitType === "1B") newBases.first = true;
-        if (hitType === "2B") newBases.second = true;
+        if (hitType === "2B" || hitType === "GRD") newBases.second = true;
         if (hitType === "3B") newBases.third = true;
         // HR: batter scores, bases cleared above
 
@@ -6520,6 +6778,11 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       creditFieldingOutsToPositions(outsOnPlay);
       // Attribute runs/ER to responsible pitcher via tracker
       if (!runsInvalidated && outScoredEvents.length > 0) {
+        creditPlayerRunsForScoredEvents(
+          outScoredEvents,
+          setPlayerStats,
+          createEmptyPlayerStats,
+        );
         processTrackerScoredEvents(
           outScoredEvents,
           setPitcherStats,
@@ -6868,6 +7131,11 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       });
       // Attribute runs/ER to responsible pitcher via tracker
       if (walkScoredEvents.length > 0) {
+        creditPlayerRunsForScoredEvents(
+          walkScoredEvents,
+          setPlayerStats,
+          createEmptyPlayerStats,
+        );
         processTrackerScoredEvents(
           walkScoredEvents,
           setPitcherStats,
@@ -7225,6 +7493,11 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       }
 
       if (runsScored > 0) {
+        creditPlayerRunsForScoredEvents(
+          d3kScoredEvents,
+          setPlayerStats,
+          createEmptyPlayerStats,
+        );
         processTrackerScoredEvents(
           d3kScoredEvents,
           setPitcherStats,
@@ -7565,6 +7838,11 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       // Attribute runs/ER to responsible pitcher via tracker
       // The tracker correctly marks error-reached runners as unearned runs
       if (errorScoredEvents.length > 0) {
+        creditPlayerRunsForScoredEvents(
+          errorScoredEvents,
+          setPlayerStats,
+          createEmptyPlayerStats,
+        );
         processTrackerScoredEvents(
           errorScoredEvents,
           setPitcherStats,
@@ -8284,6 +8562,23 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     [persistBetweenPlayEvent],
   );
 
+  const recordPromptedManagerDecision = useCallback(
+    async (decision: PromptedManagerDecisionEvent) =>
+      persistBetweenPlayEvent({
+        type: "manager_moment",
+        managerMoment: {
+          leverageIndex: decision.leverageIndex ?? 0,
+          decisionType: decision.decisionType,
+          context:
+            decision.recommendationId ||
+            decision.provenanceKey ||
+            decision.source,
+        },
+        promptedManagerDecision: decision,
+      }),
+    [persistBetweenPlayEvent],
+  );
+
   const advanceRunner = useCallback(
     (
       from: "first" | "second" | "third",
@@ -8313,6 +8608,11 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
           advTracker = result.state;
           // Attribute scored run to responsible pitcher
           if (result.scoredEvent) {
+            creditPlayerRunsForScoredEvents(
+              [result.scoredEvent],
+              setPlayerStats,
+              createEmptyPlayerStats,
+            );
             processTrackerScoredEvents(
               [result.scoredEvent],
               setPitcherStats,
@@ -8476,6 +8776,11 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
 
       // Attribute runs/ER to responsible pitchers
       if (batchScoredEvents.length > 0) {
+        creditPlayerRunsForScoredEvents(
+          batchScoredEvents,
+          setPlayerStats,
+          createEmptyPlayerStats,
+        );
         processTrackerScoredEvents(
           batchScoredEvents,
           setPitcherStats,
@@ -8671,21 +8976,132 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
           | "position_switch"
           | "double_switch";
         newPosition?: string; // Override position instead of inheriting
+        lineupSpot?: number; // For displayed pitcher rows synthesized into no-DH batting orders
         base?: "1B" | "2B" | "3B"; // For pinch runners: which base
         isPinchHitter?: boolean; // For pinch hitters: replace mid-at-bat
       },
     ): { success: boolean; error?: string } => {
-      const subType = options?.subType || "player_sub";
+      const subType = normalizeLiveSubstitutionType({
+        requestedSubType: options?.subType,
+        lineupPlayerId,
+        currentBatterId: gameState.currentBatterId,
+        gamePhase: gameState.gamePhase,
+        isPinchHitter: options?.isPinchHitter,
+      });
 
       // MAJ-09: Determine which team this substitution is for
-      const awayIndex = awayLineupRef.current.findIndex(
-        (p) => p.playerId === lineupPlayerId,
+      const matchesOutgoingPlayer = (player: {
+        playerId: string;
+        playerName?: string;
+      }) =>
+        player.playerId === lineupPlayerId ||
+        (!!lineupPlayerName && player.playerName === lineupPlayerName);
+      const matchesIncomingBench = (player: {
+        playerId: string;
+        playerName?: string;
+      }) =>
+        player.playerId === benchPlayerId ||
+        (!!benchPlayerName && player.playerName === benchPlayerName);
+      const matchesCurrentPitcher = (lineupState: LineupState) => {
+        const currentPitcher = lineupState.currentPitcher;
+        return !!currentPitcher && matchesOutgoingPlayer(currentPitcher);
+      };
+
+      const awayIndex = awayLineupRef.current.findIndex(matchesOutgoingPlayer);
+      const homeIndex = homeLineupRef.current.findIndex(matchesOutgoingPlayer);
+      const awayStateIndex =
+        awayLineupStateRef.current.lineup.findIndex(matchesOutgoingPlayer);
+      const homeStateIndex =
+        homeLineupStateRef.current.lineup.findIndex(matchesOutgoingPlayer);
+      const incomingAwayBench =
+        awayLineupStateRef.current.bench.some(matchesIncomingBench);
+      const incomingHomeBench =
+        homeLineupStateRef.current.bench.some(matchesIncomingBench);
+      const outgoingAwayPitcher = matchesCurrentPitcher(
+        awayLineupStateRef.current,
       );
-      const isAwayTeam = awayIndex >= 0;
-      const teamSide: TeamSide = isAwayTeam ? "away" : "home";
+      const outgoingHomePitcher = matchesCurrentPitcher(
+        homeLineupStateRef.current,
+      );
+      const teamSide: TeamSide | null =
+        awayIndex >= 0 || awayStateIndex >= 0
+          ? "away"
+          : homeIndex >= 0 || homeStateIndex >= 0
+            ? "home"
+            : outgoingAwayPitcher
+              ? "away"
+              : outgoingHomePitcher
+                ? "home"
+                : incomingAwayBench && !incomingHomeBench
+                  ? "away"
+                  : incomingHomeBench && !incomingAwayBench
+                    ? "home"
+                    : null;
+
+      if (!teamSide) {
+        return { success: false, error: "Lineup player not found" };
+      }
+
+      const isAwayTeam = teamSide === "away";
       const lineupStateRef = isAwayTeam
         ? awayLineupStateRef
         : homeLineupStateRef;
+      const directLineupIndex = isAwayTeam
+        ? awayStateIndex >= 0
+          ? awayStateIndex
+          : awayIndex
+        : homeStateIndex >= 0
+          ? homeStateIndex
+          : homeIndex;
+      const currentState = lineupStateRef.current;
+      const isVirtualPitcherSub =
+        directLineupIndex < 0 && matchesCurrentPitcher(currentState);
+      const virtualPitcherSlotIndex = (() => {
+        if (!isVirtualPitcherSub) {
+          return -1;
+        }
+
+        const currentPitcher = currentState.currentPitcher;
+        const byRequestedSpot =
+          options?.lineupSpot !== undefined
+            ? currentState.lineup.findIndex(
+                (player) => player.battingOrder === options.lineupSpot,
+              )
+            : -1;
+        const byPitcherOrder =
+          currentPitcher?.battingOrder !== undefined
+            ? currentState.lineup.findIndex(
+                (player) => player.battingOrder === currentPitcher.battingOrder,
+              )
+            : -1;
+        const byPitcherPosition = currentState.lineup.findIndex(
+          (player) => player.position === "P",
+        );
+
+        return byRequestedSpot >= 0
+          ? byRequestedSpot
+          : byPitcherOrder >= 0
+            ? byPitcherOrder
+            : byPitcherPosition;
+      })();
+      const lineupIdxForReplacement =
+        directLineupIndex >= 0 ? directLineupIndex : virtualPitcherSlotIndex;
+      const lineupSlot =
+        lineupIdxForReplacement >= 0
+          ? currentState.lineup[lineupIdxForReplacement]
+          : undefined;
+      const outgoingLineupPlayer =
+        isVirtualPitcherSub && currentState.currentPitcher
+          ? {
+              ...currentState.currentPitcher,
+              battingOrder:
+                lineupSlot?.battingOrder ??
+                currentState.currentPitcher.battingOrder,
+            }
+          : lineupSlot;
+      if (!outgoingLineupPlayer || lineupIdxForReplacement < 0) {
+        return { success: false, error: "Lineup player not found" };
+      }
 
       // MAJ-09: Validate substitution if LineupState is initialized (bench data present)
       // If bench was never provided (legacy callers), skip validation gracefully
@@ -8693,8 +9109,19 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         lineupStateRef.current.bench.length > 0 ||
         lineupStateRef.current.usedPlayers.length > 0
       ) {
+        const validationState =
+          isVirtualPitcherSub && currentState.currentPitcher
+            ? {
+                ...currentState,
+                lineup: currentState.lineup.map((player, index) =>
+                  index === lineupIdxForReplacement
+                    ? outgoingLineupPlayer
+                    : player,
+                ),
+              }
+            : currentState;
         const validation = validateSubstitution(
-          lineupStateRef.current,
+          validationState,
           benchPlayerId,
           lineupPlayerId,
         );
@@ -8706,26 +9133,15 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         }
       }
 
-      const homeIndex = homeLineupRef.current.findIndex(
-        (p) => p.playerId === lineupPlayerId,
-      );
-      const outgoingPosition =
-        isAwayTeam && awayIndex >= 0
-          ? awayLineupRef.current[awayIndex]?.position
-          : homeIndex >= 0
-            ? homeLineupRef.current[homeIndex]?.position
-            : "";
+      const outgoingPosition = outgoingLineupPlayer.position || "";
 
       if (gameState.gamePhase === "PRE_GAME") {
-        const currentState = lineupStateRef.current;
-        const lineupIdx = currentState.lineup.findIndex(
-          (p) => p.playerId === lineupPlayerId,
-        );
+        const lineupIdx = lineupIdxForReplacement;
         if (lineupIdx < 0) {
           return { success: false, error: "Lineup player not found" };
         }
 
-        const removedPlayer = currentState.lineup[lineupIdx];
+        const removedPlayer = outgoingLineupPlayer;
         const newPosition = (options?.newPosition ||
           removedPlayer.position) as Position;
         const newLineup = [...currentState.lineup];
@@ -8761,13 +9177,13 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         };
 
         if (isAwayTeam) {
-          awayLineupRef.current[awayIndex] = {
+          awayLineupRef.current[lineupIdx] = {
             playerId: benchPlayerId,
             playerName: benchPlayerName || benchPlayerId,
             position: newPosition,
           };
-        } else if (homeIndex >= 0) {
-          homeLineupRef.current[homeIndex] = {
+        } else {
+          homeLineupRef.current[lineupIdx] = {
             playerId: benchPlayerId,
             playerName: benchPlayerName || benchPlayerId,
             position: newPosition,
@@ -8872,10 +9288,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
                 : "defensive_replacement",
           outPlayerId: lineupPlayerId,
           outPlayerName: lineupPlayerName || lineupPlayerId,
-          outPosition: isAwayTeam
-            ? awayLineupRef.current[awayIndex]?.position
-            : homeLineupRef.current.find((p) => p.playerId === lineupPlayerId)
-                ?.position,
+          outPosition: outgoingPosition,
           inPlayerId: benchPlayerId,
           inPlayerName: benchPlayerName || benchPlayerId,
           inPosition: options?.newPosition,
@@ -8891,16 +9304,20 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       if (isAwayTeam) {
         // MAJ-06: Use newPosition if provided, otherwise preserve outgoing position
         const position =
-          options?.newPosition || awayLineupRef.current[awayIndex].position;
-        awayLineupRef.current[awayIndex] = {
+          options?.newPosition ||
+          awayLineupRef.current[lineupIdxForReplacement]?.position ||
+          outgoingPosition;
+        awayLineupRef.current[lineupIdxForReplacement] = {
           playerId: benchPlayerId,
           playerName: benchPlayerName || benchPlayerId,
           position,
         };
-      } else if (homeIndex >= 0) {
+      } else {
         const position =
-          options?.newPosition || homeLineupRef.current[homeIndex].position;
-        homeLineupRef.current[homeIndex] = {
+          options?.newPosition ||
+          homeLineupRef.current[lineupIdxForReplacement]?.position ||
+          outgoingPosition;
+        homeLineupRef.current[lineupIdxForReplacement] = {
           playerId: benchPlayerId,
           playerName: benchPlayerName || benchPlayerId,
           position,
@@ -8919,12 +9336,9 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       );
 
       // MAJ-09: Update LineupState to reflect the substitution
-      const currentState = lineupStateRef.current;
-      const lineupIdx = currentState.lineup.findIndex(
-        (p) => p.playerId === lineupPlayerId,
-      );
+      const lineupIdx = lineupIdxForReplacement;
       if (lineupIdx >= 0) {
-        const removedPlayer = currentState.lineup[lineupIdx];
+        const removedPlayer = outgoingLineupPlayer;
         const newPosition = (options?.newPosition ||
           removedPlayer.position) as Position;
 
@@ -8934,7 +9348,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
           playerId: benchPlayerId,
           playerName: benchPlayerName || benchPlayerId,
           position: newPosition,
-          battingOrder: removedPlayer.battingOrder,
+          battingOrder: lineupSlot?.battingOrder ?? removedPlayer.battingOrder,
           enteredInning: gameState.inning,
           enteredFor: removedPlayer.playerName,
           isStarter: false,
@@ -8946,7 +9360,11 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         );
 
         // Track used player (outgoing can't re-enter)
-        const newUsedPlayers = [...currentState.usedPlayers, lineupPlayerId];
+        const newUsedPlayers = currentState.usedPlayers.includes(
+          lineupPlayerId,
+        )
+          ? currentState.usedPlayers
+          : [...currentState.usedPlayers, lineupPlayerId];
 
         // Update currentPitcher if pitcher was replaced
         let newCurrentPitcher = currentState.currentPitcher;
@@ -10026,16 +10444,35 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
           playerNameLookup.set(b.playerId, b.playerName);
         }
 
-        const [fieldingEvents, betweenPlayEvents, atBatEvents] =
+        const [fieldingEvents, betweenPlayEvents, atBatEvents, gameHeader] =
           await Promise.all([
             getGameFieldingEvents(gameState.gameId),
             getBetweenPlayEvents(gameState.gameId),
             getGameEvents(gameState.gameId),
+            getGameHeader(gameState.gameId).catch(() => null),
           ]);
         const playerFieldingTally = buildPlayerFieldingTally(
           fieldingEvents,
           betweenPlayEvents,
         );
+        const committedManagerDecisionState =
+          deriveCommittedManagerDecisionState({
+            gameId: gameState.gameId,
+            atBatEvents,
+            betweenPlayEvents,
+            fieldingEvents,
+            startingLineups: gameHeader?.startingLineups,
+            startingPitchers: gameHeader?.startingPitchers,
+            optimalLineupSnapshots: gameHeader?.optimalLineupSnapshots,
+            chosenLineupSnapshots: gameHeader?.chosenLineupSnapshots,
+            awayTeamId: gameState.awayTeamId,
+            homeTeamId: gameState.homeTeamId,
+            awayManagerId: opts?.awayManagerId,
+            homeManagerId: opts?.homeManagerId,
+            managerByTeamId: opts?.managerByTeamId,
+            totalInnings: totalInningsRef.current,
+            gameEnded: true,
+          });
 
         const playerStatsRecord: Record<
           string,
@@ -10234,6 +10671,12 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
           maxDeficitAway: 0,
           maxDeficitHome: 0,
           activityLog: activityLog.slice(-20),
+          managerDecisions: committedManagerDecisionState.managerDecisions,
+          managerDeploymentStints:
+            committedManagerDecisionState.managerDeploymentStints,
+          managerLineupDeltas: committedManagerDecisionState.managerLineupDeltas,
+          optimalLineupSnapshots: gameHeader?.optimalLineupSnapshots,
+          chosenLineupSnapshots: gameHeader?.chosenLineupSnapshots,
         };
         const rankedPlayersOfTheGame = rankPlayersOfTheGame(
           {
@@ -10904,6 +11347,9 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
           currentSeason: currentSeasonNumber,
           currentGame: options?.currentGame,
           stadiumName: options?.stadiumName,
+          awayManagerId: options?.awayManagerId,
+          homeManagerId: options?.homeManagerId,
+          managerByTeamId: options?.managerByTeamId,
         };
       const playerNameLookupForEndGame = new Map<string, string>();
       for (const p of awayLineupRef.current) {
@@ -10923,16 +11369,40 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         playerNameLookupForEndGame.set(b.playerId, b.playerName);
       }
 
-      const [endGameFieldingEvents, endGameBetweenPlayEvents, endGameAtBatEvents] =
+      const [
+        endGameFieldingEvents,
+        endGameBetweenPlayEvents,
+        endGameAtBatEvents,
+        endGameHeader,
+      ] =
         await Promise.all([
           getGameFieldingEvents(gameState.gameId),
           getBetweenPlayEvents(gameState.gameId),
           getGameEvents(gameState.gameId),
+          getGameHeader(gameState.gameId).catch(() => null),
         ]);
       const endGameFieldingTally = buildPlayerFieldingTally(
         endGameFieldingEvents,
         endGameBetweenPlayEvents,
       );
+      const committedManagerDecisionState =
+        deriveCommittedManagerDecisionState({
+          gameId: gameState.gameId,
+          atBatEvents: endGameAtBatEvents,
+          betweenPlayEvents: endGameBetweenPlayEvents,
+          fieldingEvents: endGameFieldingEvents,
+          startingLineups: endGameHeader?.startingLineups,
+          startingPitchers: endGameHeader?.startingPitchers,
+          optimalLineupSnapshots: endGameHeader?.optimalLineupSnapshots,
+          chosenLineupSnapshots: endGameHeader?.chosenLineupSnapshots,
+          awayTeamId: gameState.awayTeamId,
+          homeTeamId: gameState.homeTeamId,
+          awayManagerId: options?.awayManagerId,
+          homeManagerId: options?.homeManagerId,
+          managerByTeamId: options?.managerByTeamId,
+          totalInnings: totalInningsRef.current,
+          gameEnded: true,
+        });
 
       const playerStatsRecord: Record<
         string,
@@ -11096,6 +11566,12 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         maxDeficitAway: 0,
         maxDeficitHome: 0,
         activityLog: activityLog.slice(-20),
+        managerDecisions: committedManagerDecisionState.managerDecisions,
+        managerDeploymentStints:
+          committedManagerDecisionState.managerDeploymentStints,
+        managerLineupDeltas: committedManagerDecisionState.managerLineupDeltas,
+        optimalLineupSnapshots: endGameHeader?.optimalLineupSnapshots,
+        chosenLineupSnapshots: endGameHeader?.chosenLineupSnapshots,
       };
       const rankedPlayersOfTheGame = rankPlayersOfTheGame(
         {
@@ -11445,6 +11921,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     recordPlayerStateChange,
     reassignRunnerEventAttribution,
     recordManagerMoment,
+    recordPromptedManagerDecision,
     placeGhostRunner,
     advanceRunner,
     advanceRunnersBatch,

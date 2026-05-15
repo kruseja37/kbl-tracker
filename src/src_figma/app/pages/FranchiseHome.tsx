@@ -41,6 +41,7 @@ import {
 } from "../../../engines/seasonTransitionEngine";
 import { updateFranchiseMetadata } from "../../../utils/franchiseManager";
 import { getTeam } from "../../../utils/leagueBuilderStorage";
+import { getFranchiseTeam, saveFranchiseTeam } from "../../../utils/franchisePlayerStorage";
 import { getRecentGames } from "../../utils/gameStorage";
 import { generateGameRecap } from "../engines/narrativeIntegration";
 import type { Player as TeamRosterPlayer, Pitcher as TeamRosterPitcher } from "@/app/components/TeamRoster";
@@ -50,6 +51,26 @@ import { getApproachingMilestones, type MilestoneWatch } from "../../../utils/mi
 import { getAllCareerBatting, getAllCareerPitching } from "../../../utils/careerStorage";
 import { getSeasonBattingStats, getSeasonPitchingStats, getActiveSeason } from "../../../utils/seasonStorage";
 import { buildFranchiseGameTrackerRoster, collectFranchiseRosterPlayerIds } from "../utils/franchiseGameTrackerRoster";
+import { withPregameManagerNavigationState } from "../utils/pregameNavigationState";
+import {
+  optimalLineupField,
+  selectOptimalLineupForOpposingPitcher,
+} from "../../../utils/optimalLineup";
+import {
+  buildCurrentLineupOptimalBenchmark,
+  buildPregameBenchmarkIssues,
+  formatPregameBenchmarkSource,
+  upsertPregameBenchmark,
+} from "../utils/pregameLineupBenchmarks";
+import {
+  LEAGUE_BUILDER_MANAGER_INSTANCE_ID,
+  resolveManagerForTeam,
+} from "../../../utils/managerIdentityStorage";
+import type {
+  GameLockLineupSnapshots,
+  OpposingPitcherHand,
+  OptimalLineupSnapshot,
+} from "../../../types/managerWpa";
 
 // Context for passing franchise data to child components
 const FranchiseDataContext = createContext<UseFranchiseDataReturn | null>(null);
@@ -79,9 +100,34 @@ interface PreGameData {
   homeTeamName: string;
   gameNumber: number;
   scheduleGameId?: string;
+  useDH: boolean;
   selectedAwayStarterIdx: number;
   selectedHomeStarterIdx: number;
+  awayOptimalLineups?: {
+    vsRHP?: OptimalLineupSnapshot;
+    vsLHP?: OptimalLineupSnapshot;
+  };
+  homeOptimalLineups?: {
+    vsRHP?: OptimalLineupSnapshot;
+    vsLHP?: OptimalLineupSnapshot;
+  };
   milestoneWatches?: MilestoneWatch[];
+}
+
+function getFranchiseStarterHand(
+  pitcher: TeamRosterPitcher | undefined,
+): OpposingPitcherHand {
+  return (pitcher?.throwingHand || "R") === "L" ? "L" : "R";
+}
+
+function formatFranchiseBenchmarkSource(
+  snapshot: OptimalLineupSnapshot | undefined,
+): string {
+  return formatPregameBenchmarkSource(snapshot);
+}
+
+export function resolveFranchiseGameUseDH(franchiseConfig: UseFranchiseDataReturn["franchiseConfig"]): boolean {
+  return franchiseConfig?.season?.useDH ?? false;
 }
 
 export function FranchiseHome() {
@@ -675,17 +721,72 @@ export function FranchiseHome() {
     const awayTeamId = isHigherSeedHome ? series.lowerSeed.teamId : series.higherSeed.teamId;
     const awayTeamName = isHigherSeedHome ? series.lowerSeed.teamName : series.higherSeed.teamName;
     const homeTeamName = isHigherSeedHome ? series.higherSeed.teamName : series.lowerSeed.teamName;
+    const playoffUseDH = playoffData.playoff?.useDH ?? true;
 
     // T0-08: Load real rosters from IndexedDB for both teams
     const [awayRoster, homeRoster, awayTeamData, homeTeamData] = await Promise.all([
-      buildFranchiseGameTrackerRoster(awayTeamId, { franchiseId, leagueId: franchiseLeagueId }),
-      buildFranchiseGameTrackerRoster(homeTeamId, { franchiseId, leagueId: franchiseLeagueId }),
+      buildFranchiseGameTrackerRoster(awayTeamId, { franchiseId, leagueId: franchiseLeagueId, useDH: playoffUseDH }),
+      buildFranchiseGameTrackerRoster(homeTeamId, { franchiseId, leagueId: franchiseLeagueId, useDH: playoffUseDH }),
       getTeam(awayTeamId),
       getTeam(homeTeamId),
     ]);
+    const managerInstanceId =
+      franchiseId || franchiseLeagueId || LEAGUE_BUILDER_MANAGER_INSTANCE_ID;
+    const [awayManager, homeManager] = await Promise.all([
+      resolveManagerForTeam({
+        team: {
+          id: awayTeamId,
+          name: awayTeamName,
+          managerId: awayTeamData?.managerId,
+          managerName: awayTeamData?.managerName,
+        },
+        mode: "franchise",
+        instanceId: managerInstanceId,
+        fallbackMode: "franchise",
+        fallbackInstanceId: LEAGUE_BUILDER_MANAGER_INSTANCE_ID,
+        persistAssignment: true,
+      }),
+      resolveManagerForTeam({
+        team: {
+          id: homeTeamId,
+          name: homeTeamName,
+          managerId: homeTeamData?.managerId,
+          managerName: homeTeamData?.managerName,
+        },
+        mode: "franchise",
+        instanceId: managerInstanceId,
+        fallbackMode: "franchise",
+        fallbackInstanceId: LEAGUE_BUILDER_MANAGER_INSTANCE_ID,
+        persistAssignment: true,
+      }),
+    ]);
+    const awayStarter = awayRoster.pitchers.find((pitcher) => pitcher.isStarter);
+    const homeStarter = homeRoster.pitchers.find((pitcher) => pitcher.isStarter);
+    const optimalLineupSnapshots: GameLockLineupSnapshots = {
+      away: selectOptimalLineupForOpposingPitcher(awayRoster.optimalLineups, homeStarter),
+      home: selectOptimalLineupForOpposingPitcher(homeRoster.optimalLineups, awayStarter),
+    };
+    const lineupBenchmarkIssues = buildPregameBenchmarkIssues([
+      {
+        teamName: awayTeamName.toUpperCase(),
+        opposingPitcherHand: getFranchiseStarterHand(homeStarter),
+        snapshot: optimalLineupSnapshots.away,
+      },
+      {
+        teamName: homeTeamName.toUpperCase(),
+        opposingPitcherHand: getFranchiseStarterHand(awayStarter),
+        snapshot: optimalLineupSnapshots.home,
+      },
+    ]);
+    if (lineupBenchmarkIssues.length > 0) {
+      window.alert(
+        `Lineup Delta tracking needs official optimal benchmarks before first pitch. ${lineupBenchmarkIssues.join(" ")} Use Team Hub to recalculate/apply or set the current lineup as optimal.`,
+      );
+      return;
+    }
 
     navigate(`/game-tracker/playoff-${series.id}-g${nextGameNumber}`, {
-      state: {
+      state: withPregameManagerNavigationState({
         gameMode: 'playoff' as const,
         playoffSeriesId: series.id,
         playoffGameNumber: nextGameNumber,
@@ -707,12 +808,19 @@ export function FranchiseHome() {
         homeRecord: getTeamRecord(homeTeamId), // MAJ-15: Pass actual team records to GameTracker
         franchiseId,
         leagueId: franchiseLeagueId,
+        useDH: playoffUseDH,
+        optimalLineupSnapshots,
         stadiumName: franchiseData.stadiumMap?.[homeTeamId] ?? homeTeamName.toUpperCase(),
         // T0-05: Pass season number for playoff persistence
         seasonNumber: currentSeason,
         // T0-01: Pass total innings for auto game-end detection
         totalInnings: franchiseData?.franchiseConfig?.season?.inningsPerGame ?? 9,
-      },
+      }, {
+        awayManagerId: awayManager.managerId,
+        awayManagerName: awayManager.managerName,
+        homeManagerId: homeManager.managerId,
+        homeManagerName: homeManager.managerName,
+      }),
     });
   };
 
@@ -2642,6 +2750,7 @@ function GameDayContent({ scheduleData, currentSeason, onDataRefresh }: GameDayC
   // Access franchise data for season config
   const franchiseData = useFranchiseDataContext();
   const franchiseLeagueId = franchiseData.franchiseConfig?.league || 'sml';
+  const franchiseUseDH = resolveFranchiseGameUseDH(franchiseData.franchiseConfig);
 
   // Lookup team record from standings (handles nested LeagueStandings shape)
   // MAJ-15: Needed by handlePlayGame and JSX display
@@ -2718,8 +2827,8 @@ function GameDayContent({ scheduleData, currentSeason, onDataRefresh }: GameDayC
 
     // Load real rosters from IndexedDB for both teams
     const [awayRoster, homeRoster] = await Promise.all([
-      buildFranchiseGameTrackerRoster(away, { franchiseId, leagueId: franchiseLeagueId }),
-      buildFranchiseGameTrackerRoster(home, { franchiseId, leagueId: franchiseLeagueId }),
+      buildFranchiseGameTrackerRoster(away, { franchiseId, leagueId: franchiseLeagueId, useDH: franchiseUseDH }),
+      buildFranchiseGameTrackerRoster(home, { franchiseId, leagueId: franchiseLeagueId, useDH: franchiseUseDH }),
     ]);
 
     // Find default starter indices (first SP)
@@ -2737,8 +2846,11 @@ function GameDayContent({ scheduleData, currentSeason, onDataRefresh }: GameDayC
       homeTeamName: homeName.toUpperCase(),
       gameNumber: gameNum,
       scheduleGameId: nextGame?.id,
+      useDH: franchiseUseDH,
       selectedAwayStarterIdx: awayStarterIdx >= 0 ? awayStarterIdx : 0,
       selectedHomeStarterIdx: homeStarterIdx >= 0 ? homeStarterIdx : 0,
+      awayOptimalLineups: awayRoster.optimalLineups,
+      homeOptimalLineups: homeRoster.optimalLineups,
     });
     setConfirmAction(null);
 
@@ -2789,6 +2901,63 @@ function GameDayContent({ scheduleData, currentSeason, onDataRefresh }: GameDayC
     })();
   };
 
+  const persistPregameBenchmark = async (
+    teamId: string,
+    snapshot: OptimalLineupSnapshot,
+    useDH: boolean,
+  ) => {
+    if (!franchiseId || typeof indexedDB === "undefined") return;
+    try {
+      const team = await getFranchiseTeam(franchiseId, teamId);
+      if (!team) return;
+      await saveFranchiseTeam(franchiseId, {
+        ...team,
+        [optimalLineupField(snapshot.opposingPitcherHand, useDH)]: snapshot,
+      });
+    } catch (err) {
+      console.warn("[FranchiseHome] Failed to persist pregame optimal benchmark:", err);
+    }
+  };
+
+  const handleRegisterPregameBenchmarks = async () => {
+    if (!preGameData) return;
+    const awayStarter = preGameData.awayPitchers[preGameData.selectedAwayStarterIdx];
+    const homeStarter = preGameData.homePitchers[preGameData.selectedHomeStarterIdx];
+    const awaySnapshot = buildCurrentLineupOptimalBenchmark({
+      teamId: preGameData.awayTeamId,
+      mode: "franchise",
+      instanceId: franchiseId,
+      opposingPitcherHand: getFranchiseStarterHand(homeStarter),
+      players: preGameData.awayPlayers,
+      pitchers: preGameData.awayPitchers,
+      dhEnabled: preGameData.useDH,
+    });
+    const homeSnapshot = buildCurrentLineupOptimalBenchmark({
+      teamId: preGameData.homeTeamId,
+      mode: "franchise",
+      instanceId: franchiseId,
+      opposingPitcherHand: getFranchiseStarterHand(awayStarter),
+      players: preGameData.homePlayers,
+      pitchers: preGameData.homePitchers,
+      dhEnabled: preGameData.useDH,
+    });
+
+    setPreGameData((current) =>
+      current
+        ? {
+            ...current,
+            awayOptimalLineups: upsertPregameBenchmark(current.awayOptimalLineups, awaySnapshot),
+            homeOptimalLineups: upsertPregameBenchmark(current.homeOptimalLineups, homeSnapshot),
+          }
+        : current,
+    );
+    await Promise.all([
+      persistPregameBenchmark(preGameData.awayTeamId, awaySnapshot, preGameData.useDH),
+      persistPregameBenchmark(preGameData.homeTeamId, homeSnapshot, preGameData.useDH),
+    ]);
+    setToastMessage("Current lineups registered as Lineup Delta benchmarks.");
+  };
+
   // T3-01: Launch game with selected starters from pre-game screen
   const handleLaunchGame = async () => {
     if (!preGameData) return;
@@ -2797,6 +2966,36 @@ function GameDayContent({ scheduleData, currentSeason, onDataRefresh }: GameDayC
     const [awayTeamData, homeTeamData] = await Promise.all([
       getTeam(preGameData.awayTeamId),
       getTeam(preGameData.homeTeamId),
+    ]);
+    const managerInstanceId =
+      franchiseId || franchiseLeagueId || LEAGUE_BUILDER_MANAGER_INSTANCE_ID;
+    const [awayManager, homeManager] = await Promise.all([
+      resolveManagerForTeam({
+        team: {
+          id: preGameData.awayTeamId,
+          name: preGameData.awayTeamName,
+          managerId: awayTeamData?.managerId,
+          managerName: awayTeamData?.managerName,
+        },
+        mode: "franchise",
+        instanceId: managerInstanceId,
+        fallbackMode: "franchise",
+        fallbackInstanceId: LEAGUE_BUILDER_MANAGER_INSTANCE_ID,
+        persistAssignment: true,
+      }),
+      resolveManagerForTeam({
+        team: {
+          id: preGameData.homeTeamId,
+          name: preGameData.homeTeamName,
+          managerId: homeTeamData?.managerId,
+          managerName: homeTeamData?.managerName,
+        },
+        mode: "franchise",
+        instanceId: managerInstanceId,
+        fallbackMode: "franchise",
+        fallbackInstanceId: LEAGUE_BUILDER_MANAGER_INSTANCE_ID,
+        persistAssignment: true,
+      }),
     ]);
 
     // Apply selected starter: mark the chosen pitcher as isStarter/isActive
@@ -2810,9 +3009,33 @@ function GameDayContent({ scheduleData, currentSeason, onDataRefresh }: GameDayC
       isStarter: i === preGameData.selectedHomeStarterIdx,
       isActive: i === preGameData.selectedHomeStarterIdx,
     }));
+    const awayStarter = finalAwayPitchers.find((pitcher) => pitcher.isStarter);
+    const homeStarter = finalHomePitchers.find((pitcher) => pitcher.isStarter);
+    const optimalLineupSnapshots: GameLockLineupSnapshots = {
+      away: selectOptimalLineupForOpposingPitcher(preGameData.awayOptimalLineups, homeStarter),
+      home: selectOptimalLineupForOpposingPitcher(preGameData.homeOptimalLineups, awayStarter),
+    };
+    const lineupBenchmarkIssues = buildPregameBenchmarkIssues([
+      {
+        teamName: preGameData.awayTeamName,
+        opposingPitcherHand: getFranchiseStarterHand(homeStarter),
+        snapshot: optimalLineupSnapshots.away,
+      },
+      {
+        teamName: preGameData.homeTeamName,
+        opposingPitcherHand: getFranchiseStarterHand(awayStarter),
+        snapshot: optimalLineupSnapshots.home,
+      },
+    ]);
+    if (lineupBenchmarkIssues.length > 0) {
+      setToastMessage(
+        `Lineup Delta benchmark required: ${lineupBenchmarkIssues.join(" | ")}`,
+      );
+      return;
+    }
 
     navigate(`/game-tracker/franchise-g${preGameData.gameNumber}`, {
-      state: {
+      state: withPregameManagerNavigationState({
         gameMode: 'franchise' as const,
         awayTeamId: preGameData.awayTeamId,
         homeTeamId: preGameData.homeTeamId,
@@ -2833,10 +3056,17 @@ function GameDayContent({ scheduleData, currentSeason, onDataRefresh }: GameDayC
         stadiumName: franchiseData.stadiumMap?.[preGameData.homeTeamId] ?? preGameData.homeTeamName,
         franchiseId,
         leagueId: franchiseLeagueId,
+        useDH: preGameData.useDH,
+        optimalLineupSnapshots,
         scheduleGameId: preGameData.scheduleGameId,
         seasonNumber: currentSeason,
         totalInnings: franchiseData.franchiseConfig?.season?.inningsPerGame ?? 9,
-      },
+      }, {
+        awayManagerId: awayManager.managerId,
+        awayManagerName: awayManager.managerName,
+        homeManagerId: homeManager.managerId,
+        homeManagerName: homeManager.managerName,
+      }),
     });
     setPreGameData(null);
   };
@@ -3090,6 +3320,28 @@ function GameDayContent({ scheduleData, currentSeason, onDataRefresh }: GameDayC
   const resolvedCount = completedCount + skippedCount;
   const totalScheduled = allGames.length;
   const gamesPerTeam = franchiseData.franchiseConfig?.season?.gamesPerTeam ?? totalScheduled;
+  const pregameAwayStarter = preGameData?.awayPitchers[preGameData.selectedAwayStarterIdx];
+  const pregameHomeStarter = preGameData?.homePitchers[preGameData.selectedHomeStarterIdx];
+  const pregameAwayBenchmark = preGameData
+    ? selectOptimalLineupForOpposingPitcher(preGameData.awayOptimalLineups, pregameHomeStarter)
+    : undefined;
+  const pregameHomeBenchmark = preGameData
+    ? selectOptimalLineupForOpposingPitcher(preGameData.homeOptimalLineups, pregameAwayStarter)
+    : undefined;
+  const pregameBenchmarkIssues = preGameData
+    ? buildPregameBenchmarkIssues([
+        {
+          teamName: preGameData.awayTeamName,
+          opposingPitcherHand: getFranchiseStarterHand(pregameHomeStarter),
+          snapshot: pregameAwayBenchmark,
+        },
+        {
+          teamName: preGameData.homeTeamName,
+          opposingPitcherHand: getFranchiseStarterHand(pregameAwayStarter),
+          snapshot: pregameHomeBenchmark,
+        },
+      ])
+    : [];
 
   return (
     <div className="space-y-4">
@@ -3408,6 +3660,31 @@ function GameDayContent({ scheduleData, currentSeason, onDataRefresh }: GameDayC
               <div className="text-xs text-[#E8E8D8]/70">
                 Game {preGameData.gameNumber} &bull; {preGameData.awayTeamName} @ {preGameData.homeTeamName}
               </div>
+              <div className="mt-3 grid gap-2 text-[9px] text-[#E8E8D8]/60 md:grid-cols-2">
+                <div>
+                  {preGameData.awayTeamName}: VS {getFranchiseStarterHand(pregameHomeStarter)}HP benchmark {formatFranchiseBenchmarkSource(pregameAwayBenchmark)}
+                </div>
+                <div>
+                  {preGameData.homeTeamName}: VS {getFranchiseStarterHand(pregameAwayStarter)}HP benchmark {formatFranchiseBenchmarkSource(pregameHomeBenchmark)}
+                </div>
+              </div>
+              {pregameBenchmarkIssues.length > 0 && (
+                <div className="mt-4 border-[4px] border-[#C4A853] bg-[#4A6844] p-3 text-left text-[10px] text-[#E8E8D8]">
+                  <div className="mb-2 font-bold tracking-[0.16em] text-[#F0DFC2]">
+                    LINEUP DELTA BENCHMARK REQUIRED
+                  </div>
+                  <div className="mb-3 text-[#E8E8D8]/80">
+                    {pregameBenchmarkIssues.join(" • ")}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleRegisterPregameBenchmarks}
+                    className="border-[3px] border-[#8B7635] bg-[#C4A853] px-3 py-2 text-[9px] font-bold tracking-[0.14em] text-[#1a3020] hover:bg-[#D4B863]"
+                  >
+                    REGISTER CURRENT LINEUPS
+                  </button>
+                </div>
+              )}
             </div>
 
             {/* Starter Selection */}
@@ -3478,7 +3755,12 @@ function GameDayContent({ scheduleData, currentSeason, onDataRefresh }: GameDayC
               </button>
               <button
                 onClick={handleLaunchGame}
-                className="flex-[2] bg-[#C4A853] border-[5px] border-[#8B7635] py-3 text-sm text-[#1a3020] font-bold hover:bg-[#D4B863] active:scale-95 transition-transform shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)]"
+                disabled={pregameBenchmarkIssues.length > 0}
+                className={`flex-[2] border-[5px] py-3 text-sm font-bold transition-transform shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)] ${
+                  pregameBenchmarkIssues.length > 0
+                    ? "border-[#4A6844] bg-[#3F5A3A] text-[#E8E8D8]/50 cursor-not-allowed"
+                    : "border-[#8B7635] bg-[#C4A853] text-[#1a3020] hover:bg-[#D4B863] active:scale-95"
+                }`}
               >
                 START GAME
               </button>

@@ -13,6 +13,7 @@ interface HistoricalEventEditorProps {
   isWithinUndoDepth?: boolean;
   onReturnToLive: () => void;
   onRunnerCaughtByChange?: (caughtBy: number | null) => void;
+  onRunnerEventTypeChange?: (eventType: 'wild_pitch' | 'passed_ball') => void;
   onRunnerPitcherChange?: (pitcherId: string) => void;
   onRunnerCatcherChange?: (catcherId: string) => void;
   onRunnerFielderChange?: (fielderId: string) => void;
@@ -61,6 +62,7 @@ export function HistoricalEventEditor({
   isWithinUndoDepth,
   onReturnToLive,
   onRunnerCaughtByChange,
+  onRunnerEventTypeChange,
   onRunnerPitcherChange,
   onRunnerCatcherChange,
   onRunnerFielderChange,
@@ -88,6 +90,7 @@ export function HistoricalEventEditor({
   const runnerAction = event?.runnerAction;
   const canEditCaughtBy = !!event?.stolenBase && (event.type === 'stolen_base' || event.type === 'caught_stealing');
   const canEditRunnerAttribution = !!event?.runnerAction;
+  const canEditWpPbType = event?.type === 'wild_pitch' || event?.type === 'passed_ball';
   const isLinkedKilledPitcherFitness = event?.type === 'fitness_change'
     && event.playerStateChange?.sourceEventType === 'KILLED_PITCHER'
     && !!event.linkedEventId;
@@ -159,6 +162,20 @@ export function HistoricalEventEditor({
                 ) : null}
                 {canEditRunnerAttribution && (
                   <div className="space-y-2">
+                    {canEditWpPbType && (
+                      <label className="text-[8px] text-[#88AA88] font-bold uppercase tracking-wide">
+                        Event Type
+                        <select
+                          value={event.type}
+                          onChange={(e) => onRunnerEventTypeChange?.(e.target.value as 'wild_pitch' | 'passed_ball')}
+                          disabled={saving}
+                          className="mt-1 w-full bg-[#1f2937]/60 border border-[#4a6a4a] rounded px-2 py-1 text-[9px] text-[#E8E8D8]"
+                        >
+                          <option value="wild_pitch">Wild Pitch</option>
+                          <option value="passed_ball">Passed Ball</option>
+                        </select>
+                      </label>
+                    )}
                     <label className="text-[8px] text-[#88AA88] font-bold uppercase tracking-wide">
                       Charged Pitcher
                       <select

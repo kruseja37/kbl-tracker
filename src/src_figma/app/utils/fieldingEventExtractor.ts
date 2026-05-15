@@ -14,7 +14,7 @@
 import type { FieldingEvent, BallInPlayData } from '../../../utils/eventLog';
 import type { Position } from '../../../types/game';
 import type { PlayData } from './gameTrackerFieldTypes';
-import { POSITION_MAP } from './positionConstants';
+import { POSITION_MAP, POSITION_NUMBER } from './positionConstants';
 import {
   mapFieldingPlayTypeToPersistedDifficulty,
   mapFieldingPlayTypeToSpecialPlayType,
@@ -99,6 +99,10 @@ function positionFromNumber(posNum: number): Position {
   return (POSITION_MAP[posNum] as Position) || 'SS';
 }
 
+function getDefensivePositionNumber(position: Position): number | undefined {
+  return (POSITION_NUMBER as Partial<Record<Position, number>>)[position];
+}
+
 function applySavedRunCredit(events: FieldingEvent[], savedRun?: boolean): FieldingEvent[] {
   if (!savedRun || events.length === 0) {
     return events;
@@ -125,6 +129,29 @@ function normalizeSavedBasesSpecialPlayType(
     default:
       return specialPlayType;
   }
+}
+
+function resolveSpecialPlayCredit(
+  playData: PlayData,
+  specialPlayType: FieldingEvent['specialPlayType'] | null | undefined,
+  positionNum?: number,
+  options?: { isPrimarySequenceEvent?: boolean },
+): FieldingEvent['specialPlayType'] | null | undefined {
+  if (!specialPlayType || !positionNum) {
+    return null;
+  }
+
+  const primaryPosition = playData.fieldingSequence[0];
+  const extraCredits = new Set(playData.extraGemCreditPositions || []);
+  const isPrimarySequenceEvent = options?.isPrimarySequenceEvent === true;
+
+  return (
+    positionNum === primaryPosition ||
+    extraCredits.has(positionNum) ||
+    (isPrimarySequenceEvent && primaryPosition !== undefined)
+  )
+    ? specialPlayType
+    : null;
 }
 
 function appendRunnerOutcomeErrors(
@@ -168,7 +195,7 @@ function appendRunnerOutcomeErrors(
       teamId: context.defensiveTeamId,
       playType: 'error' as const,
       difficulty: shared.difficulty,
-      specialPlayType: shared.specialPlayType,
+      specialPlayType: null,
       ballInPlay: {
         trajectory: shared.trajectory,
         zone: shared.zone,
@@ -235,7 +262,7 @@ function appendBatterErrors(
       teamId: context.defensiveTeamId,
       playType: 'error',
       difficulty: shared.difficulty,
-      specialPlayType: shared.specialPlayType,
+      specialPlayType: null,
       ballInPlay: {
         trajectory: shared.trajectory,
         zone: shared.zone,
@@ -397,7 +424,11 @@ export function extractFieldingEvents(
       teamId: context.defensiveTeamId,
       playType,
       difficulty: overrideDifficulty || difficulty,
-      specialPlayType: overrideSpecialPlayType ?? specialPlayType,
+      specialPlayType:
+        overrideSpecialPlayType ??
+        resolveSpecialPlayCredit(playData, specialPlayType, positionNum, {
+          isPrimarySequenceEvent: sequenceIdx === 0,
+        }),
       ballInPlay,
       success: playType !== 'error',
       runsPreventedOrAllowed: 0, // Would need LI integration for real values
@@ -608,7 +639,7 @@ export function extractSupplementalAdvanceErrorEvents(
         primaryFielderId: defender.playerId,
       },
       success: false,
-      specialPlayType,
+      specialPlayType: null,
       runsPreventedOrAllowed: 0,
     };
   });
@@ -671,7 +702,12 @@ export function extractSupplementalRunnerOutFieldingEvents(
           primaryFielderId: defender.playerId,
         },
         success: true,
-        specialPlayType,
+        specialPlayType: resolveSpecialPlayCredit(
+          playData,
+          specialPlayType,
+          getDefensivePositionNumber(defender.position),
+          { isPrimarySequenceEvent: assistIndex === 0 },
+        ),
         runsPreventedOrAllowed: 0,
       });
       sequence += 1;
@@ -693,7 +729,12 @@ export function extractSupplementalRunnerOutFieldingEvents(
         primaryFielderId: putoutDefender.playerId,
       },
       success: true,
-      specialPlayType,
+      specialPlayType: resolveSpecialPlayCredit(
+        playData,
+        specialPlayType,
+        getDefensivePositionNumber(putoutDefender.position),
+        { isPrimarySequenceEvent: assistPositions.length === 0 },
+      ),
       runsPreventedOrAllowed: 0,
     });
     sequence += 1;

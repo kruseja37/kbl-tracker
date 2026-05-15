@@ -9,6 +9,10 @@ import { describe, test, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, within, waitFor } from '@testing-library/react';
 import { PostGameSummary } from '../../app/pages/PostGameSummary';
 import type { CompletedGameRecord } from '../../utils/gameStorage';
+import type {
+  ManagerDecisionRecord,
+  ManagerDeploymentStintRecord,
+} from '../../../types/managerWpa';
 
 // ============================================
 // MOCKS
@@ -16,17 +20,25 @@ import type { CompletedGameRecord } from '../../utils/gameStorage';
 
 const {
   mockNavigate,
+  mockGetBetweenPlayEvents,
   mockGetGameEvents,
+  mockGetGameFieldingEvents,
+  mockGetGameHeader,
   mockGetRunFameStandings,
   mockGetRunPromotionCandidates,
+  mockListManagerProfiles,
   mockAcceptFamePromotion,
   mockDismissFamePromotion,
   mockLocationState,
 } = vi.hoisted(() => ({
   mockNavigate: vi.fn(),
-  mockGetGameEvents: vi.fn(),
+  mockGetBetweenPlayEvents: vi.fn(() => Promise.resolve([])),
+  mockGetGameEvents: vi.fn(() => Promise.resolve([])),
+  mockGetGameFieldingEvents: vi.fn(() => Promise.resolve([])),
+  mockGetGameHeader: vi.fn(() => Promise.resolve(null)),
   mockGetRunFameStandings: vi.fn(),
   mockGetRunPromotionCandidates: vi.fn(),
+  mockListManagerProfiles: vi.fn(),
   mockAcceptFamePromotion: vi.fn(),
   mockDismissFamePromotion: vi.fn(),
   mockLocationState: {
@@ -52,7 +64,14 @@ vi.mock('@/config/teamColors', () => ({
 }));
 
 vi.mock('../../../utils/eventLog', () => ({
+  getBetweenPlayEvents: mockGetBetweenPlayEvents,
   getGameEvents: mockGetGameEvents,
+  getGameFieldingEvents: mockGetGameFieldingEvents,
+  getGameHeader: mockGetGameHeader,
+}));
+
+vi.mock('../../../utils/managerIdentityStorage', () => ({
+  listManagerProfiles: mockListManagerProfiles,
 }));
 
 vi.mock('../../../utils/eliminationRunFameStorage', () => ({
@@ -219,6 +238,47 @@ const mockAtBatEvents = [
   { batterId: 'home-t-williams', wpa: 0.180 },
 ] as const;
 
+function createManagerDecision(
+  overrides: Partial<ManagerDecisionRecord> = {},
+): ManagerDecisionRecord {
+  return {
+    decisionId: overrides.decisionId ?? 'test-game-123:bp-1:pinch_hitter',
+    gameId: 'test-game-123',
+    managerId: 'sox-manager',
+    teamId: 'sox',
+    opponentTeamId: 'tigers',
+    decisionType: 'pinch_hitter',
+    inferenceMethod: 'automatic',
+    decisionSource: 'user_action',
+    confidence: 'high',
+    inning: 7,
+    half: 'bottom',
+    outs: 1,
+    baseState: '---',
+    scoreDifferentialForTeam: 0,
+    leverageIndex: 2.1,
+    decisionEventId: 'bp-1',
+    linkedEventIds: ['bp-1'],
+    involvedPlayerIds: ['home-b-anderson'],
+    teamWinProbabilityBefore: 0.5,
+    teamWinProbabilityAfter: 0.684,
+    managerWpa: 0.184,
+    rawWindowWpa: 0.184,
+    managerShare: 1,
+    resolved: true,
+    resolvedAtEventId: 'ab-9',
+    displayTitle: 'Pinch hitter',
+    displaySummary: 'Pinch hitter for sox',
+    derivation: {
+      derivedFromEventIds: ['bp-1'],
+      derivedFromFields: ['substitution.subType'],
+      manuallyPinned: false,
+      stale: false,
+    },
+    ...overrides,
+  };
+}
+
 const oneInningGame: CompletedGameRecord = {
   gameId: 'one-inning-game',
   date: Date.now(),
@@ -341,6 +401,13 @@ describe('PostGameSummary Component', () => {
     const { getCompletedGameById } = await import('../../utils/gameStorage');
     vi.mocked(getCompletedGameById).mockResolvedValue(mockGameData);
     mockGetGameEvents.mockResolvedValue(mockAtBatEvents);
+    mockGetGameFieldingEvents.mockResolvedValue([]);
+    mockGetBetweenPlayEvents.mockResolvedValue([]);
+    mockGetGameHeader.mockResolvedValue(null);
+    mockListManagerProfiles.mockResolvedValue([
+      { managerId: 'sox-manager', displayName: 'Sox Skipper' },
+      { managerId: 'tigers-manager', displayName: 'Tigers Skipper' },
+    ]);
     mockGetRunFameStandings.mockResolvedValue([]);
     mockGetRunPromotionCandidates.mockResolvedValue([]);
     mockAcceptFamePromotion.mockResolvedValue({});
@@ -497,6 +564,156 @@ describe('PostGameSummary Component', () => {
       expect(screen.queryByTestId('run-standings-table')).not.toBeInTheDocument();
       expect(screen.queryByTestId('fame-promotion-banner')).not.toBeInTheDocument();
       expect(mockGetRunFameStandings).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('Manager WPA overlay', () => {
+    test('renders one committed manager overlay card per team with resolved totals and pending counts', async () => {
+      const { getCompletedGameById } = await import('../../utils/gameStorage');
+      vi.mocked(getCompletedGameById).mockResolvedValue({
+        ...mockGameData,
+        managerDecisions: [
+          createManagerDecision({
+            managerWpa: 0.184,
+            displayTitle: 'Pinch hitter',
+            resolved: true,
+          }),
+          createManagerDecision({
+            decisionId: 'test-game-123:bp-2:pitching_change',
+            decisionType: 'pitching_change',
+            displayTitle: 'Pitching change',
+            managerWpa: undefined,
+            rawWindowWpa: undefined,
+            teamWinProbabilityAfter: undefined,
+            resolved: false,
+            resolvedAtEventId: undefined,
+          }),
+          createManagerDecision({
+            decisionId: 'test-game-123:bp-3:steal_send',
+            managerId: 'tigers-manager',
+            teamId: 'tigers',
+            opponentTeamId: 'sox',
+            decisionType: 'steal_send',
+            decisionSource: 'event_semantics',
+            displayTitle: 'Steal/send',
+            managerWpa: -0.052,
+            rawWindowWpa: -0.149,
+            resolved: true,
+          }),
+        ],
+      });
+
+      render(<PostGameSummary />);
+
+      const overlay = await screen.findByTestId('manager-wpa-overlay');
+      expect(within(overlay).getByText('MANAGER WPA OVERLAY')).toBeInTheDocument();
+      expect(screen.getByText('Sox Skipper')).toBeInTheDocument();
+      expect(screen.getByTestId('manager-wpa-total-sox')).toHaveTextContent('+0.184');
+      expect(screen.getByTestId('manager-wpa-total-tigers')).toHaveTextContent('-0.052');
+      expect(within(screen.getByTestId('manager-wpa-card-sox')).getByText('2 (1 pending)')).toBeInTheDocument();
+      fireEvent.click(
+        within(screen.getByTestId('manager-tactical-trace-details-sox')).getByRole(
+          'button',
+          { name: /open pinch hitter manager moment details for sox skipper/i },
+        ),
+      );
+      const dialog = screen.getByRole('dialog', { name: /manager moment details/i });
+      expect(dialog).toHaveTextContent('Sox Skipper / Sox');
+      expect(dialog).toHaveTextContent('Tactical');
+      expect(dialog).toHaveTextContent('Pinch Hitter');
+      expect(dialog).toHaveTextContent('Raw WPA');
+      expect(dialog).toHaveTextContent('+0.184');
+      expect(dialog).toHaveTextContent('Final Manager Value');
+      expect(dialog).toHaveTextContent('+0.184');
+    });
+
+    test('renders deployment stint recap details from committed manager records', async () => {
+      const { getCompletedGameById } = await import('../../utils/gameStorage');
+      const stint: ManagerDeploymentStintRecord = {
+        stintId: 'test-game-123:bp-1:deployment:pinch-runner',
+        gameId: 'test-game-123',
+        managerId: 'sox-manager',
+        teamId: 'sox',
+        deploymentRole: 'pinch_runner',
+        playerId: 'home-speed',
+        playerName: 'Home Speed',
+        sourceEventId: 'bp-1',
+        openedAtEventIndex: 8,
+        tacticalExclusionEventIds: ['ab-8'],
+        closedAtEventId: 'ab-11',
+        closedAtEventIndex: 11,
+        closeReason: 'game_end',
+        linkedEventIds: ['ab-10', 'ab-11'],
+        rawLinkedWpa: 0.4,
+        managerShare: 0.2,
+        managerDeploymentWpa: 0.08,
+        cap: 0.125,
+        confidence: 'medium',
+      };
+      vi.mocked(getCompletedGameById).mockResolvedValue({
+        ...mockGameData,
+        managerDeploymentStints: [stint],
+      });
+
+      render(<PostGameSummary />);
+
+      const details = await screen.findByTestId('manager-deployment-stint-details-sox');
+      expect(screen.getByTestId('manager-deployment-wpa-sox')).toHaveTextContent('+0.080');
+      expect(screen.getByTestId('manager-wpa-total-sox')).toHaveTextContent('+0.080');
+      expect(details).toHaveTextContent(
+        "Pinch runner Home Speed's remaining baserunning and fielding outcomes stay with the deployment choice.",
+      );
+      fireEvent.click(
+        within(details).getByRole('button', {
+          name: /open pinch runner manager moment details for sox skipper/i,
+        }),
+      );
+      const dialog = screen.getByRole('dialog', { name: /manager moment details/i });
+      expect(dialog).toHaveTextContent('Deployment');
+      expect(dialog).toHaveTextContent('Pinch Runner');
+      expect(dialog).toHaveTextContent('Linked Events');
+      expect(dialog).toHaveTextContent('ab-10, ab-11');
+      expect(dialog).toHaveTextContent('Raw WPA');
+      expect(dialog).toHaveTextContent('+0.400');
+      expect(dialog).toHaveTextContent('Share');
+      expect(dialog).toHaveTextContent('20%');
+      expect(dialog).toHaveTextContent('Cap');
+      expect(dialog).toHaveTextContent('+/-0.125');
+      expect(dialog).toHaveTextContent('Final Manager Value');
+      expect(dialog).toHaveTextContent('+0.080');
+    });
+
+    test('uses only committed managerDecisions and leaves player WPA display unchanged', async () => {
+      const { getCompletedGameById } = await import('../../utils/gameStorage');
+      vi.mocked(getCompletedGameById).mockResolvedValue({
+        ...mockGameData,
+        managerDecisions: [
+          createManagerDecision({
+            managerWpa: 9.999,
+            rawWindowWpa: 9.999,
+            displayTitle: 'Pinch hitter',
+          }),
+        ],
+      });
+
+      render(<PostGameSummary />);
+
+      expect(await screen.findByText('+0.300 WPA')).toBeInTheDocument();
+      expect(screen.getByTestId('manager-wpa-total-sox')).toHaveTextContent('+9.999');
+    });
+
+    test('does not derive manager overlay rows from event-log data when completed game has no committed managerDecisions', async () => {
+      const { getCompletedGameById } = await import('../../utils/gameStorage');
+      vi.mocked(getCompletedGameById).mockResolvedValue({
+        ...mockGameData,
+        managerDecisions: [],
+      });
+
+      render(<PostGameSummary />);
+
+      const overlay = await screen.findByTestId('manager-wpa-overlay');
+      expect(screen.getByTestId('manager-wpa-total-sox')).toHaveTextContent('+0.000');
+      expect(within(overlay).getAllByText('0')).toHaveLength(2);
     });
   });
 
