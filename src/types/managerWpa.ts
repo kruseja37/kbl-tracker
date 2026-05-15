@@ -10,6 +10,7 @@ export type OptimalLineupModeContext =
 export type OptimalLineupSourceConfidence =
   | "engine_calculated"
   | "user_registered"
+  | "user_confirmed_engine"
   | "stale_roster"
   | "fallback";
 

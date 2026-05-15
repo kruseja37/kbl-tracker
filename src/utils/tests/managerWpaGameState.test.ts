@@ -4,7 +4,9 @@ import { describe, expect, test } from "vitest";
 import type { AtBatEvent, BetweenPlayEvent, FieldingEvent } from "../eventLog";
 import type {
   ManagerDeploymentRole,
+  OptimalLineupGeneratedFrom,
   OptimalLineupSnapshot,
+  OptimalLineupSourceConfidence,
 } from "../../types/managerWpa";
 import { WPA_MODEL_VERSION } from "../../engines/wpaV2";
 import {
@@ -189,6 +191,8 @@ const startingLineups = {
 function createLineupSnapshot(input: {
   teamId: string;
   snapshotId: string;
+  generatedFrom?: OptimalLineupGeneratedFrom;
+  sourceConfidence?: OptimalLineupSourceConfidence;
   slots: Array<{
     playerId: string;
     playerName: string;
@@ -204,8 +208,8 @@ function createLineupSnapshot(input: {
     opposingPitcherHand: "R",
     algorithmVersion: "test-optimal-v2",
     generatedAt: 1,
-    generatedFrom: "game_lock",
-    sourceConfidence: "engine_calculated",
+    generatedFrom: input.generatedFrom ?? "user_registered_smb4_optimal",
+    sourceConfidence: input.sourceConfidence ?? "user_registered",
     dhEnabled: false,
     slots: input.slots.map((slot) => ({
       ...slot,
@@ -2395,6 +2399,191 @@ describe("committed manager WPA game state", () => {
     expect(deltas).toEqual([]);
   });
 
+  test("engine fallback game-lock snapshots create no official Lineup Delta records", () => {
+    const optimal = createLineupSnapshot({
+      teamId: "away",
+      snapshotId: "away-fallback",
+      generatedFrom: "game_lock",
+      sourceConfidence: "fallback",
+      slots: [
+        {
+          playerId: "optimal-cf",
+          playerName: "Optimal CF",
+          battingOrderSlot: 1,
+          defensivePosition: "CF",
+          projectedSlotKblWpa: 0.05,
+        },
+      ],
+    });
+    const chosen = createLineupSnapshot({
+      teamId: "away",
+      snapshotId: "away-chosen",
+      slots: [
+        {
+          playerId: "away-starter-2",
+          playerName: "Away Starter 2",
+          battingOrderSlot: 1,
+          defensivePosition: "CF",
+          projectedSlotKblWpa: -0.05,
+        },
+      ],
+    });
+
+    const deltas = deriveManagerLineupDeltaRecords({
+      gameId: "game-1",
+      atBatEvents: [
+        createSparseKblWpaEvent({
+          eventId: "game-1_wpa_fallback",
+          playerId: "away-starter-2",
+          playerName: "Away Starter 2",
+          teamId: "away",
+          wpa: 0,
+        }),
+      ],
+      betweenPlayEvents: [],
+      fieldingEvents: [],
+      startingLineups,
+      optimalLineupSnapshots: { away: optimal },
+      chosenLineupSnapshots: { away: chosen },
+      awayTeamId: "away",
+      homeTeamId: "home",
+      awayManagerId: "away-manager",
+      homeManagerId: "home-manager",
+      gameEnded: true,
+    });
+
+    expect(deltas).toEqual([]);
+  });
+
+  test("stale optimal snapshots create no official Lineup Delta records", () => {
+    const optimal = createLineupSnapshot({
+      teamId: "away",
+      snapshotId: "away-stale",
+      sourceConfidence: "stale_roster",
+      slots: [
+        {
+          playerId: "optimal-cf",
+          playerName: "Optimal CF",
+          battingOrderSlot: 1,
+          defensivePosition: "CF",
+          projectedSlotKblWpa: 0.05,
+        },
+      ],
+    });
+    const chosen = createLineupSnapshot({
+      teamId: "away",
+      snapshotId: "away-chosen-stale-test",
+      slots: [
+        {
+          playerId: "away-starter-2",
+          playerName: "Away Starter 2",
+          battingOrderSlot: 1,
+          defensivePosition: "CF",
+          projectedSlotKblWpa: -0.05,
+        },
+      ],
+    });
+
+    const deltas = deriveManagerLineupDeltaRecords({
+      gameId: "game-1",
+      atBatEvents: [
+        createSparseKblWpaEvent({
+          eventId: "game-1_wpa_stale",
+          playerId: "away-starter-2",
+          playerName: "Away Starter 2",
+          teamId: "away",
+          wpa: 0,
+        }),
+      ],
+      betweenPlayEvents: [],
+      fieldingEvents: [],
+      startingLineups,
+      optimalLineupSnapshots: { away: optimal },
+      chosenLineupSnapshots: { away: chosen },
+      awayTeamId: "away",
+      homeTeamId: "home",
+      awayManagerId: "away-manager",
+      homeManagerId: "home-manager",
+      gameEnded: true,
+    });
+
+    expect(deltas).toEqual([]);
+  });
+
+  test("user-registered and user-confirmed engine snapshots create official Lineup Delta records", () => {
+    const chosen = createLineupSnapshot({
+      teamId: "away",
+      snapshotId: "away-chosen-officiality",
+      slots: [
+        {
+          playerId: "away-starter-2",
+          playerName: "Away Starter 2",
+          battingOrderSlot: 1,
+          defensivePosition: "CF",
+          projectedSlotKblWpa: -0.05,
+        },
+      ],
+    });
+    const events = [
+      createSparseKblWpaEvent({
+        eventId: "game-1_wpa_official",
+        playerId: "away-starter-2",
+        playerName: "Away Starter 2",
+        teamId: "away",
+        wpa: 0,
+      }),
+    ];
+    const deriveWithOptimal = (optimal: OptimalLineupSnapshot) =>
+      deriveManagerLineupDeltaRecords({
+        gameId: "game-1",
+        atBatEvents: events,
+        betweenPlayEvents: [],
+        fieldingEvents: [],
+        startingLineups,
+        optimalLineupSnapshots: { away: optimal },
+        chosenLineupSnapshots: { away: chosen },
+        awayTeamId: "away",
+        homeTeamId: "home",
+        awayManagerId: "away-manager",
+        homeManagerId: "home-manager",
+        gameEnded: true,
+      });
+
+    const userRegistered = createLineupSnapshot({
+      teamId: "away",
+      snapshotId: "away-user-registered",
+      generatedFrom: "user_registered_smb4_optimal",
+      sourceConfidence: "user_registered",
+      slots: [
+        {
+          playerId: "optimal-cf",
+          playerName: "Optimal CF",
+          battingOrderSlot: 1,
+          defensivePosition: "CF",
+          projectedSlotKblWpa: 0.05,
+        },
+      ],
+    });
+    const userConfirmedEngine = createLineupSnapshot({
+      teamId: "away",
+      snapshotId: "away-user-confirmed-engine",
+      generatedFrom: "team_hub",
+      sourceConfidence: "user_confirmed_engine",
+      slots: [
+        {
+          playerId: "optimal-cf",
+          playerName: "Optimal CF",
+          battingOrderSlot: 1,
+          defensivePosition: "CF",
+          projectedSlotKblWpa: 0.05,
+        },
+      ],
+    });
+
+    expect(deriveWithOptimal(userRegistered)).toHaveLength(1);
+    expect(deriveWithOptimal(userConfirmedEngine)).toHaveLength(1);
+  });
+
   test("uses Optimal Lineup v2 snapshots and skips exact optimal even when starters underperform", () => {
     const optimal = createLineupSnapshot({
       teamId: "away",
@@ -2569,6 +2758,88 @@ describe("committed manager WPA game state", () => {
       actualVsOptimalProjection: -0.05,
       managerWpa: -0.0125,
     });
+  });
+
+  test("same players and positions in a different batting order produce official Lineup Delta records", () => {
+    const optimal = createLineupSnapshot({
+      teamId: "away",
+      snapshotId: "away-optimal-order",
+      slots: [
+        {
+          playerId: "away-starter-1",
+          playerName: "Away Starter 1",
+          battingOrderSlot: 1,
+          defensivePosition: "SS",
+          projectedSlotKblWpa: 0.04,
+        },
+        {
+          playerId: "away-starter-2",
+          playerName: "Away Starter 2",
+          battingOrderSlot: 2,
+          defensivePosition: "CF",
+          projectedSlotKblWpa: 0.02,
+        },
+      ],
+    });
+    const chosen = createLineupSnapshot({
+      teamId: "away",
+      snapshotId: "away-chosen-order",
+      slots: [
+        {
+          playerId: "away-starter-2",
+          playerName: "Away Starter 2",
+          battingOrderSlot: 1,
+          defensivePosition: "CF",
+          projectedSlotKblWpa: 0.025,
+        },
+        {
+          playerId: "away-starter-1",
+          playerName: "Away Starter 1",
+          battingOrderSlot: 2,
+          defensivePosition: "SS",
+          projectedSlotKblWpa: 0.035,
+        },
+      ],
+    });
+
+    const deltas = deriveManagerLineupDeltaRecords({
+      gameId: "game-1",
+      atBatEvents: [
+        createSparseKblWpaEvent({
+          eventId: "game-1_wpa_order_1",
+          playerId: "away-starter-1",
+          playerName: "Away Starter 1",
+          teamId: "away",
+          wpa: 0.1,
+        }),
+        createSparseKblWpaEvent({
+          eventId: "game-1_wpa_order_2",
+          playerId: "away-starter-2",
+          playerName: "Away Starter 2",
+          teamId: "away",
+          wpa: 0.1,
+        }),
+      ],
+      betweenPlayEvents: [],
+      fieldingEvents: [],
+      startingLineups,
+      optimalLineupSnapshots: { away: optimal },
+      chosenLineupSnapshots: { away: chosen },
+      awayTeamId: "away",
+      homeTeamId: "home",
+      awayManagerId: "away-manager",
+      homeManagerId: "home-manager",
+      gameEnded: true,
+    });
+
+    expect(deltas.length).toBeGreaterThan(0);
+    expect(new Set(deltas.map((delta) => delta.chosenPlayerId))).toEqual(
+      new Set(["away-starter-1", "away-starter-2"]),
+    );
+    expect(new Set(deltas.map((delta) => delta.optimalPlayerId))).toEqual(
+      new Set(["away-starter-1", "away-starter-2"]),
+    );
+    expect(deltas.map((delta) => delta.defensivePosition).sort()).toEqual(["CF", "SS"]);
   });
 
   test("caps each starter lineup delta to +/-0.250", () => {

@@ -15,6 +15,10 @@ import {
   getEliminationAllTimePlayerStats,
   type EliminationAllTimePlayerStats,
 } from './eliminationAllTimeStatsStorage';
+import {
+  isActiveScoringManagerDecision,
+  isCompatibilityOnlyManagerDecision,
+} from './managerValueTrace';
 
 export interface ExhibitionGameFilters {
   teamId?: string;
@@ -849,7 +853,7 @@ function buildManagerDecisionSummary(
   decision: ManagerDecisionRecord,
   managerName: string,
 ): ManagerAlmanacDecisionSummary | null {
-  if (typeof decision.managerWpa !== 'number') {
+  if (!isActiveScoringManagerDecision(decision)) {
     return null;
   }
 
@@ -1100,12 +1104,16 @@ function addManagerDecisionToAggregate(
   decision: ManagerDecisionRecord,
   summary: ManagerAlmanacDecisionSummary | null,
 ): void {
+  if (isCompatibilityOnlyManagerDecision(decision)) {
+    return;
+  }
+
   aggregate.tacticalDecisionCount += 1;
   tenure.tacticalDecisionCount += 1;
   addDecisionTypeCount(aggregate.decisionTypeCounts, decision.decisionType);
   addDecisionTypeCount(tenure.decisionTypeCounts, decision.decisionType);
 
-  if (decision.resolved && typeof decision.managerWpa === 'number') {
+  if (isActiveScoringManagerDecision(decision)) {
     aggregate.resolvedDecisionCount += 1;
     tenure.resolvedDecisionCount += 1;
     aggregate.tacticalManagerWpa += decision.managerWpa;
@@ -1420,6 +1428,10 @@ export function aggregateCommittedManagerAlmanac(
     const committedLineupDeltas = game.managerLineupDeltas ?? [];
 
     for (const decision of committedDecisions) {
+      if (isCompatibilityOnlyManagerDecision(decision)) {
+        continue;
+      }
+
       if (!managerRecordMatchesFilters(decision.managerId, decision.teamId, filters)) {
         continue;
       }

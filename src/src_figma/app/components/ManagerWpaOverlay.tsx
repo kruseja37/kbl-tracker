@@ -7,6 +7,12 @@ import type {
   ManagerProfile,
 } from "../../../types/managerWpa";
 import type { CompletedGameRecord } from "../../../utils/gameStorage";
+import {
+  buildManagerValueTraceRows,
+  isActiveScoringManagerDecision,
+  isCompatibilityOnlyManagerDecision,
+  type ManagerValueTraceRow,
+} from "../../../utils/managerValueTrace";
 
 interface ManagerWpaOverlayProps {
   game: Pick<
@@ -35,6 +41,7 @@ export interface ManagerWpaOverlayRow {
   pendingCount: number;
   deploymentStints: ManagerDeploymentStintRecord[];
   lineupDeltas: ManagerLineupDeltaRecord[];
+  traceRows: ManagerValueTraceRow[];
   bestDecision?: ManagerDecisionRecord;
   worstDecision?: ManagerDecisionRecord;
 }
@@ -114,6 +121,11 @@ export function buildManagerWpaOverlayRows(
   const decisions = game.managerDecisions ?? [];
   const deploymentStints = game.managerDeploymentStints ?? [];
   const lineupDeltas = game.managerLineupDeltas ?? [];
+  const traceRows = buildManagerValueTraceRows({
+    managerDecisions: decisions,
+    managerDeploymentStints: deploymentStints,
+    managerLineupDeltas: lineupDeltas,
+  });
   const profileByManagerId = buildManagerProfileMap(managerProfiles);
   const teamSeeds = [
     { teamId: game.awayTeamId, teamName: game.awayTeamName },
@@ -122,18 +134,21 @@ export function buildManagerWpaOverlayRows(
 
   return teamSeeds.map(({ teamId, teamName }) => {
     const teamDecisions = decisions.filter((decision) => decision.teamId === teamId);
+    const activeTeamDecisions = teamDecisions.filter(
+      (decision) => !isCompatibilityOnlyManagerDecision(decision),
+    );
     const teamDeploymentStints = deploymentStints.filter(
       (stint) => stint.teamId === teamId,
     );
     const teamLineupDeltas = lineupDeltas.filter((delta) => delta.teamId === teamId);
+    const teamTraceRows = traceRows.filter((trace) => trace.teamId === teamId);
     const managerId =
-      teamDecisions.find((decision) => decision.managerId)?.managerId ??
+      activeTeamDecisions.find((decision) => decision.managerId)?.managerId ??
       teamDeploymentStints.find((stint) => stint.managerId)?.managerId ??
       teamLineupDeltas.find((delta) => delta.managerId)?.managerId ??
+      teamDecisions.find((decision) => decision.managerId)?.managerId ??
       `${teamId}-manager`;
-    const resolvedDecisions = teamDecisions.filter(
-      (decision) => decision.resolved && typeof decision.managerWpa === "number",
-    );
+    const resolvedDecisions = activeTeamDecisions.filter(isActiveScoringManagerDecision);
     const tacticalManagerWpa = resolvedDecisions.reduce(
       (sum, decision) => sum + (decision.managerWpa ?? 0),
       0,
@@ -152,10 +167,11 @@ export function buildManagerWpaOverlayRows(
       deploymentWpa,
       lineupDeltaWpa,
       managerValue: tacticalManagerWpa + deploymentWpa + lineupDeltaWpa,
-      decisionCount: teamDecisions.length,
-      pendingCount: teamDecisions.length - resolvedDecisions.length,
+      decisionCount: activeTeamDecisions.length,
+      pendingCount: activeTeamDecisions.length - resolvedDecisions.length,
       deploymentStints: teamDeploymentStints,
       lineupDeltas: teamLineupDeltas,
+      traceRows: teamTraceRows,
       worstDecision: sortedResolved[0],
       bestDecision: sortedResolved[sortedResolved.length - 1],
     };
@@ -261,6 +277,54 @@ function buildDeploymentLinkedSummary(stint: ManagerDeploymentStintRecord): {
   };
 }
 
+function formatTraceOptionalValue(value: number | undefined): string {
+  return typeof value === "number" ? formatSignedManagerWpa(value) : "n/a";
+}
+
+function formatTraceShare(value: number | undefined): string {
+  return typeof value === "number" ? `${Math.round(value * 100)}%` : "n/a";
+}
+
+function formatTraceFinalValue(trace: ManagerValueTraceRow): string {
+  if (trace.compatibilityOnly) return "Non-scoring";
+  if (trace.pending) return "Pending";
+  return formatTraceOptionalValue(trace.finalValue);
+}
+
+function formatTraceEndpoint(trace: ManagerValueTraceRow): string {
+  if (trace.endpointEventId) return trace.endpointEventId;
+  if (trace.pending) return "Pending";
+  return "n/a";
+}
+
+function formatTraceLinkedOutcome(
+  outcome: ManagerValueTraceRow["linkedOutcomes"][number],
+): string {
+  return `${outcome.eventId} ${outcome.role} ${formatDeploymentOutcomeWeight(
+    outcome.weight,
+  )} (${formatSignedManagerWpa(outcome.weightedWpa)})`;
+}
+
+function formatTraceLinkedSummary(trace: ManagerValueTraceRow): string {
+  if (trace.linkedOutcomes.length > 0) {
+    const preview = trace.linkedOutcomes.slice(0, 3).map(formatTraceLinkedOutcome);
+    return `Linked outcomes: ${trace.linkedOutcomes.length}${
+      preview.length > 0 ? ` (${preview.join(", ")})` : ""
+    }`;
+  }
+
+  const preview = trace.linkedEventIds.slice(0, 3);
+  return `Linked events: ${trace.linkedEventIds.length}${
+    preview.length > 0 ? ` (${preview.join(", ")})` : ""
+  }`;
+}
+
+function mapTraceRowsByRecordId(
+  traceRows: ManagerValueTraceRow[],
+): Map<string, ManagerValueTraceRow> {
+  return new Map(traceRows.map((trace) => [trace.recordId, trace]));
+}
+
 export function ManagerWpaOverlay({ game, managerProfiles }: ManagerWpaOverlayProps) {
   const rows = buildManagerWpaOverlayRows(game, managerProfiles);
 
@@ -281,6 +345,10 @@ export function ManagerWpaOverlay({ game, managerProfiles }: ManagerWpaOverlayPr
       <div className="grid gap-3 md:grid-cols-2">
         {rows.map((row) => {
           const testId = normalizeTestId(row.teamId);
+          const traceRowsByRecordId = mapTraceRowsByRecordId(row.traceRows);
+          const tacticalTraceRows = row.traceRows.filter(
+            (trace) => trace.layer === "tactical",
+          );
           return (
             <article
               key={row.teamId}
@@ -328,6 +396,42 @@ export function ManagerWpaOverlay({ game, managerProfiles }: ManagerWpaOverlayPr
                 </div>
                 <div className="col-span-2">
                   <div className="uppercase tracking-[0.16em] text-[#6b7b6e]">
+                    Tactical Details
+                  </div>
+                  <div
+                    className="mt-1 space-y-2 text-[#E8E8D8]"
+                    data-testid={`manager-tactical-trace-details-${testId}`}
+                  >
+                    {tacticalTraceRows.length === 0 ? (
+                      <div
+                        className="text-[#a0a898]"
+                        data-testid={`manager-tactical-trace-empty-${testId}`}
+                      >
+                        No tactical decisions
+                      </div>
+                    ) : (
+                      tacticalTraceRows.slice(0, 4).map((trace) => (
+                        <div
+                          key={trace.recordId}
+                          className="rounded-sm border border-[#4a6a4a] bg-[#1f2b21]/70 p-2"
+                          data-testid={`manager-trace-row-${testId}-${normalizeTestId(trace.recordId)}`}
+                        >
+                          <div>{trace.label}</div>
+                          <div className="text-[#d5dccd]">{trace.description}</div>
+                          <div>
+                            Source: {trace.sourceEventId ?? "n/a"} | Endpoint: {formatTraceEndpoint(trace)}
+                          </div>
+                          <div>{formatTraceLinkedSummary(trace)}</div>
+                          <div>
+                            Raw WPA: {formatTraceOptionalValue(trace.rawWpa)} | Share: {formatTraceShare(trace.share)} | Cap: {formatTraceOptionalValue(trace.cap)} | Final: {formatTraceFinalValue(trace)}
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+                <div className="col-span-2">
+                  <div className="uppercase tracking-[0.16em] text-[#6b7b6e]">
                     Deployment WPA
                   </div>
                   <div
@@ -356,6 +460,7 @@ export function ManagerWpaOverlay({ game, managerProfiles }: ManagerWpaOverlayPr
                       row.deploymentStints.slice(0, 3).map((stint) => {
                         const active = !isResolvedDeploymentStint(stint);
                         const linkedSummary = buildDeploymentLinkedSummary(stint);
+                        const trace = traceRowsByRecordId.get(stint.stintId);
                         return (
                           <div
                             key={stint.stintId}
@@ -365,6 +470,9 @@ export function ManagerWpaOverlay({ game, managerProfiles }: ManagerWpaOverlayPr
                             <div>
                               {formatDeploymentRole(stint.deploymentRole)}: {stint.playerName ?? stint.playerId}
                             </div>
+                            {trace ? (
+                              <div className="text-[#d5dccd]">{trace.description}</div>
+                            ) : null}
                             <div>Opened: Event {stint.openedAtEventIndex}</div>
                             <div>Closed: {formatDeploymentClosed(stint)}</div>
                             <div>
@@ -433,6 +541,11 @@ export function ManagerWpaOverlay({ game, managerProfiles }: ManagerWpaOverlayPr
                           key={delta.decisionId}
                           className="rounded-sm border border-[#4a6a4a] bg-[#1f2b21]/70 p-2"
                         >
+                          {traceRowsByRecordId.get(delta.decisionId) ? (
+                            <div className="text-[#d5dccd]">
+                              {traceRowsByRecordId.get(delta.decisionId)?.description}
+                            </div>
+                          ) : null}
                           <div>
                             Chosen: {formatLineupSlot(
                               delta.chosenPlayerName ?? delta.starterPlayerName,

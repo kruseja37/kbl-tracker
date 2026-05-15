@@ -23,6 +23,8 @@ import type {
 import {
   buildLineupSnapshotFromSlots,
   buildOptimalLineupSnapshot,
+  confirmEngineOptimalLineupSnapshot,
+  isOfficialOptimalLineupSnapshot,
   markOptimalLineupSnapshotsStaleForChange,
   OPTIMAL_LINEUP_SNAPSHOT_FIELDS,
   optimalLineupField,
@@ -551,18 +553,24 @@ export function EliminationTeamHub({ eliminationId, teams, useDH }: EliminationT
     const nextSnapshot = buildOptimalSnapshot(hand);
     if (!nextSnapshot) return;
     await persistUpdates(snapshot.teamId, {
-      [optimalLineupField(hand, useDH)]: nextSnapshot,
+      [optimalLineupField(hand, useDH)]: confirmEngineOptimalLineupSnapshot(nextSnapshot),
     });
   }
 
   async function handleApplyOptimal(hand: OpposingPitcherHand) {
     if (!snapshot) return;
     const field = optimalLineupField(hand, useDH);
-    const nextSnapshot = snapshot[field] ?? buildOptimalSnapshot(hand);
+    const storedSnapshot = snapshot[field];
+    const nextSnapshot = storedSnapshot?.sourceConfidence === "stale_roster"
+      ? buildOptimalSnapshot(hand)
+      : storedSnapshot ?? buildOptimalSnapshot(hand);
     if (!nextSnapshot) return;
+    const officialSnapshot = isOfficialOptimalLineupSnapshot(nextSnapshot)
+      ? nextSnapshot
+      : confirmEngineOptimalLineupSnapshot(nextSnapshot);
     await persistUpdates(snapshot.teamId, {
-      [field]: nextSnapshot,
-      [useDH ? 'lineup' : 'lineupWithoutDH']: lineupSlotsFromOptimalSnapshot(nextSnapshot),
+      [field]: officialSnapshot,
+      [useDH ? 'lineup' : 'lineupWithoutDH']: lineupSlotsFromOptimalSnapshot(officialSnapshot),
     });
   }
 

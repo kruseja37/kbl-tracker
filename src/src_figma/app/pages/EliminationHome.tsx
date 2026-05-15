@@ -33,6 +33,7 @@ import { EliminationTeamHub } from '../components/EliminationTeamHub';
 import { ReporterAssignmentPanel, type ReporterAssignmentPanelTeam } from '../components/ReporterAssignmentPanel';
 import { resolveManagerForTeam } from '../../../utils/managerIdentityStorage';
 import { withPregameManagerNavigationState } from '../utils/pregameNavigationState';
+import { buildPregameBenchmarkIssues } from '../utils/pregameLineupBenchmarks';
 
 type EliminationTab = 'bracket' | 'teamhub' | 'leaders' | 'awards' | 'history';
 
@@ -457,6 +458,28 @@ export function EliminationHome() {
           "R") === "L"
           ? "vsLHP"
           : "vsRHP";
+      const optimalLineupSnapshots = {
+        away: awayRoster.optimalLineups?.[awayOpposingHand],
+        home: homeRoster.optimalLineups?.[homeOpposingHand],
+      };
+      const lineupBenchmarkIssues = buildPregameBenchmarkIssues([
+        {
+          teamName: awayTeam.teamName,
+          opposingPitcherHand: awayOpposingHand === "vsLHP" ? "L" : "R",
+          snapshot: optimalLineupSnapshots.away,
+        },
+        {
+          teamName: homeTeam.teamName,
+          opposingPitcherHand: homeOpposingHand === "vsLHP" ? "L" : "R",
+          snapshot: optimalLineupSnapshots.home,
+        },
+      ]);
+      if (lineupBenchmarkIssues.length > 0) {
+        setError(
+          `Lineup Delta tracking needs official optimal benchmarks before first pitch. ${lineupBenchmarkIssues.join(" ")} Use Team Hub to recalculate/apply or set the current lineup as optimal.`,
+        );
+        return;
+      }
 
       sessionStorage.setItem(
         "kbl-pending-live-beat-reporter-enabled",
@@ -497,10 +520,7 @@ export function EliminationHome() {
           awayPitchers: awayRoster.pitchers,
           homePlayers: homeRoster.players,
           homePitchers: homeRoster.pitchers,
-          optimalLineupSnapshots: {
-            away: awayRoster.optimalLineups?.[awayOpposingHand],
-            home: homeRoster.optimalLineups?.[homeOpposingHand],
-          },
+          optimalLineupSnapshots,
           awayTeamColor: awayTeamData?.colors.primary,
           awayTeamBorderColor: awayTeamData?.colors.secondary,
           homeTeamColor: homeTeamData?.colors.primary,

@@ -1821,7 +1821,7 @@ describe("manager WPA derivation", () => {
     });
   });
 
-  test("derives manual defensive alignment moments and resolves only on first defensive BIP", () => {
+  test("does not derive defensive alignment moments as scoring Manager WPA records", () => {
     const alignment = createBetweenPlay({
       eventId: "game-1_bp_align",
       eventIndex: 1,
@@ -1855,39 +1855,9 @@ describe("manager WPA derivation", () => {
       outsAfter: 3,
     });
 
-    const pending = derive([], [alignment])[0];
-    expect(pending).toMatchObject({
-      decisionType: "defensive_alignment",
-      inferenceMethod: "manual",
-      decisionSource: "manual_edit",
-      confidence: "low",
-      resolved: false,
-      managerId: MANAGERS.home,
-      resolutionWindow: {
-        status: "pending",
-        expectedEndpoint: "first_fielding_event",
-      },
-    });
-
-    const noFielding = derive([flyOut, halfEndingOut], [alignment])[0];
-    expect(noFielding).toMatchObject({
-      decisionType: "defensive_alignment",
-      resolved: false,
-      resolutionWindow: {
-        status: "pending",
-        expectedEndpoint: "first_fielding_event",
-      },
-    });
-
-    const resolved = derive([flyOut], [alignment], [fielding])[0];
-    expect(resolved).toMatchObject({
-      decisionType: "defensive_alignment",
-      resolved: true,
-      resolvedAtEventId: "game-1_fld_align",
-    });
-    expect(resolved.linkedEventIds).toEqual(
-      expect.arrayContaining(["game-1_bp_align", "game-1_fld_align", "game-1_2"]),
-    );
+    expect(derive([], [alignment])).toEqual([]);
+    expect(derive([flyOut, halfEndingOut], [alignment])).toEqual([]);
+    expect(derive([flyOut], [alignment], [fielding])).toEqual([]);
   });
 
   test("continues resolving same-event decisions immediately", () => {

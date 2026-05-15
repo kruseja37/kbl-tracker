@@ -4,7 +4,12 @@ import {
   buildLineupSnapshotFromSlots,
   buildOptimalLineupSnapshot,
   cloneGameLockLineupSnapshots,
+  confirmEngineOptimalLineupSnapshot,
   formatLineupSnapshotSlot,
+  formatOptimalLineupBenchmarkStatus,
+  getOptimalLineupBenchmarkStatus,
+  isOfficialOptimalLineupSnapshot,
+  markOptimalLineupSnapshotStale,
   markOptimalLineupSnapshotsStaleForChange,
   mapLineupSnapshotDeviations,
   optimalLineupField,
@@ -365,6 +370,120 @@ describe("optimal lineup engine", () => {
     expect(next.optimalLineupVsRHPWithDH?.slots).toEqual(userRegistered.slots);
     expect(next.optimalLineupVsRHPWithDH?.sourceConfidence).toBe("stale_roster");
     expect(next.optimalLineupVsRHPWithDH?.confidence).toBe("low");
+  });
+
+  test("classifies official, display-only, and stale optimal benchmarks", () => {
+    const engineFallback = buildOptimalLineupSnapshot({
+      teamId: "team-a",
+      mode: "exhibition",
+      opposingPitcherHand: "R",
+      candidates,
+      dhEnabled: true,
+      generatedAt: 210,
+      generatedFrom: "game_lock",
+      sourceConfidence: "fallback",
+    });
+    const confirmedEngine = confirmEngineOptimalLineupSnapshot(
+      buildOptimalLineupSnapshot({
+        teamId: "team-a",
+        mode: "exhibition",
+        opposingPitcherHand: "R",
+        candidates,
+        dhEnabled: true,
+        generatedAt: 211,
+        generatedFrom: "league_builder",
+        sourceConfidence: "engine_calculated",
+      }),
+    );
+    const stale = markOptimalLineupSnapshotStale(confirmedEngine);
+
+    expect(isOfficialOptimalLineupSnapshot(engineFallback)).toBe(false);
+    expect(getOptimalLineupBenchmarkStatus(engineFallback)).toBe("display_only");
+    expect(isOfficialOptimalLineupSnapshot(confirmedEngine)).toBe(true);
+    expect(formatOptimalLineupBenchmarkStatus(confirmedEngine)).toBe("confirmed engine optimal");
+    expect(getOptimalLineupBenchmarkStatus(stale)).toBe("stale");
+    expect(formatOptimalLineupBenchmarkStatus(stale)).toBe("needs confirmation/recalculation");
+  });
+
+  test("does not confirm game-lock snapshots as official optimal benchmarks", () => {
+    const gameLock = buildOptimalLineupSnapshot({
+      teamId: "team-a",
+      mode: "exhibition",
+      opposingPitcherHand: "R",
+      candidates,
+      dhEnabled: true,
+      generatedAt: 212,
+      generatedFrom: "game_lock",
+      sourceConfidence: "engine_calculated",
+    });
+
+    const confirmed = confirmEngineOptimalLineupSnapshot(gameLock);
+
+    expect(confirmed).toBe(gameLock);
+    expect(confirmed.generatedFrom).toBe("game_lock");
+    expect(confirmed.sourceConfidence).not.toBe("user_confirmed_engine");
+    expect(isOfficialOptimalLineupSnapshot(confirmed)).toBe(false);
+  });
+
+  test("does not confirm fallback snapshots as official optimal benchmarks", () => {
+    const fallback = buildOptimalLineupSnapshot({
+      teamId: "team-a",
+      mode: "exhibition",
+      opposingPitcherHand: "R",
+      candidates,
+      dhEnabled: true,
+      generatedAt: 213,
+      generatedFrom: "team_hub",
+      sourceConfidence: "fallback",
+    });
+
+    const confirmed = confirmEngineOptimalLineupSnapshot(fallback);
+
+    expect(confirmed).toBe(fallback);
+    expect(confirmed.sourceConfidence).toBe("fallback");
+    expect(isOfficialOptimalLineupSnapshot(confirmed)).toBe(false);
+  });
+
+  test("does not confirm stale snapshots without recalculation", () => {
+    const stale = markOptimalLineupSnapshotStale(
+      buildOptimalLineupSnapshot({
+        teamId: "team-a",
+        mode: "exhibition",
+        opposingPitcherHand: "R",
+        candidates,
+        dhEnabled: true,
+        generatedAt: 214,
+        generatedFrom: "team_hub",
+        sourceConfidence: "engine_calculated",
+      }),
+    );
+
+    expect(stale).toBeDefined();
+    const confirmed = confirmEngineOptimalLineupSnapshot(stale!);
+
+    expect(confirmed).toBe(stale);
+    expect(confirmed.sourceConfidence).toBe("stale_roster");
+    expect(isOfficialOptimalLineupSnapshot(confirmed)).toBe(false);
+  });
+
+  test("confirms valid pregame recalculated engine snapshots as official benchmarks", () => {
+    const recalculated = buildOptimalLineupSnapshot({
+      teamId: "team-a",
+      mode: "exhibition",
+      opposingPitcherHand: "R",
+      candidates,
+      dhEnabled: true,
+      generatedAt: 215,
+      generatedFrom: "pregame_recalculate",
+      sourceConfidence: "engine_calculated",
+    });
+
+    const confirmed = confirmEngineOptimalLineupSnapshot(recalculated);
+
+    expect(confirmed).not.toBe(recalculated);
+    expect(confirmed.generatedFrom).toBe("pregame_recalculate");
+    expect(confirmed.sourceConfidence).toBe("user_confirmed_engine");
+    expect(isOfficialOptimalLineupSnapshot(confirmed)).toBe(true);
   });
 
   test("preserves a freshly recalculated field while staling affected lineup context", () => {

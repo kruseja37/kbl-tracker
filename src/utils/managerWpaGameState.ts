@@ -28,7 +28,10 @@ import {
   getManagerForTeam,
   type ManagerAssignmentResolutionInput,
 } from "./managerWpaDerivation";
-import { mapLineupSnapshotDeviations } from "./optimalLineup";
+import {
+  isOfficialOptimalLineupSnapshot,
+  mapLineupSnapshotDeviations,
+} from "./optimalLineup";
 import {
   aggregateKblWpaCredits,
   deriveKblWpaCredits,
@@ -812,7 +815,7 @@ function deriveTeamLineupDeltas(input: {
   totalsByPlayerId: Map<string, ReturnType<typeof aggregateKblWpaCredits>[number]>;
 }): ManagerLineupDeltaRecord[] {
   const { optimalSnapshot, chosenSnapshot } = input;
-  if (optimalSnapshot && chosenSnapshot) {
+  if (isOfficialOptimalLineupSnapshot(optimalSnapshot) && chosenSnapshot) {
     return deriveTeamLineupDeltasFromOptimalSnapshot({
       ...input,
       optimalSnapshot,
@@ -916,7 +919,8 @@ function deriveTeamLineupDeltasFromOptimalSnapshot(input: {
       replacementExpectedKblWpa: row.optimal.projectedSlotKblWpa,
       replacementBaselineSource: "optimal_lineup_v2",
       replacementBaselineConfidence:
-        input.optimalSnapshot.sourceConfidence === "user_registered"
+        input.optimalSnapshot.sourceConfidence === "user_registered" ||
+        input.optimalSnapshot.sourceConfidence === "user_confirmed_engine"
           ? "high"
           : "medium",
       rawPerformanceDelta: row.actualVsOptimalProjection,
@@ -1000,7 +1004,8 @@ function confidenceForLineupDelta(
   chosenSnapshot: OptimalLineupSnapshot,
 ): NonNullable<ManagerLineupDeltaRecord["confidence"]> {
   if (
-    optimalSnapshot.sourceConfidence === "user_registered" &&
+    (optimalSnapshot.sourceConfidence === "user_registered" ||
+      optimalSnapshot.sourceConfidence === "user_confirmed_engine") &&
     chosenSnapshot.confidence !== "low"
   ) {
     return "high";

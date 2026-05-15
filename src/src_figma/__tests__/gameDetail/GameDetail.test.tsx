@@ -223,6 +223,15 @@ describe("GameDetail Manager WPA overlay", () => {
           resolved: false,
           teamWinProbabilityAfter: undefined,
           resolvedAtEventId: undefined,
+          resolutionWindow: {
+            status: "pending",
+            startEventId: "bp-2",
+            startEventIndex: 2,
+            startSnapshotSource: "event_state",
+            expectedEndpoint: "next_pa",
+            trackedPlayerIds: ["home-pitcher"],
+            trackedRunnerIds: [],
+          },
         }),
         createManagerDecision({
           decisionId: "game-detail-1:bp-3:runner_hold",
@@ -245,6 +254,15 @@ describe("GameDetail Manager WPA overlay", () => {
     expect(screen.getByTestId("manager-wpa-total-away")).toHaveTextContent("+0.184");
     expect(screen.getByTestId("manager-wpa-total-home")).toHaveTextContent("-0.052");
     expect(within(screen.getByTestId("manager-wpa-card-away")).getByText("2 (1 pending)")).toBeInTheDocument();
+    expect(screen.getByTestId("manager-tactical-trace-details-away")).toHaveTextContent(
+      "Pinch hitter decision judged on the next plate appearance.",
+    );
+    expect(screen.getByTestId("manager-tactical-trace-details-away")).toHaveTextContent(
+      "Pending Pitching change: waiting for the next plate appearance before Manager Value is scored.",
+    );
+    expect(screen.getByTestId("manager-tactical-trace-details-away")).toHaveTextContent(
+      "Cap: n/a",
+    );
   });
 
   test("shows committed deployment and lineup values separately from tactical Manager WPA", async () => {
@@ -339,11 +357,17 @@ describe("GameDetail Manager WPA overlay", () => {
     expect(screen.getByTestId("manager-lineup-delta-away")).toHaveTextContent("+0.100");
     expect(screen.getByTestId("manager-value-away")).toHaveTextContent("+0.296");
     expect(screen.getByTestId("manager-lineup-delta-details-away")).toHaveTextContent("Chosen: #1 SS Player One");
+    expect(screen.getByTestId("manager-lineup-delta-details-away")).toHaveTextContent(
+      "Lineup Delta: chose #1 SS Player One instead of optimal #4 CF Bench One; actual value was compared to the optimal projection.",
+    );
     expect(screen.getByTestId("manager-lineup-delta-details-away")).toHaveTextContent("Optimal: #4 CF Bench One");
     expect(screen.getByTestId("manager-lineup-delta-details-away")).toHaveTextContent("Projected opportunity cost: -0.020");
     expect(screen.getByTestId("manager-lineup-delta-details-away")).toHaveTextContent("Actual vs optimal projection: +0.368");
     const deploymentDetails = screen.getByTestId("manager-deployment-stint-details-away");
     expect(deploymentDetails).toHaveTextContent("Kept position player in: Bench One");
+    expect(deploymentDetails).toHaveTextContent(
+      "Kept Bench One in after the prompt; later batting 100%, fielding 75% outcomes carry deployment weights.",
+    );
     expect(deploymentDetails).toHaveTextContent("Opened: Event 1");
     expect(deploymentDetails).toHaveTextContent("Closed: Event 2 (Game End)");
     expect(deploymentDetails).toHaveTextContent(
@@ -394,6 +418,38 @@ describe("GameDetail Manager WPA overlay", () => {
     expect(deploymentDetails).toHaveTextContent("Linked events: 1 (ab-6)");
     expect(deploymentDetails).toHaveTextContent("Active, excluded from resolved total");
     expect(deploymentDetails).toHaveTextContent("Deployment WPA: +0.000");
+  });
+
+  test("shows legacy defensive alignment records as non-scoring compatibility notes", async () => {
+    mockGetCompletedGameById.mockResolvedValue(
+      createCompletedGame([
+        createManagerDecision({
+          decisionId: "game-detail-1:bp-align:defensive_alignment",
+          decisionType: "defensive_alignment",
+          displayTitle: "Defensive alignment",
+          decisionEventId: "bp-align",
+          linkedEventIds: ["bp-align", "ab-field"],
+          managerWpa: 0.4,
+          rawWindowWpa: 0.4,
+          managerShare: 0.1,
+          resolved: true,
+          resolvedAtEventId: "ab-field",
+        }),
+      ]),
+    );
+
+    render(<GameDetail />);
+
+    await screen.findByTestId("manager-wpa-overlay");
+    expect(screen.getByTestId("manager-wpa-total-away")).toHaveTextContent("+0.000");
+    expect(screen.getByTestId("manager-value-away")).toHaveTextContent("+0.000");
+    expect(within(screen.getByTestId("manager-wpa-card-away")).getByText("0")).toBeInTheDocument();
+    const traceDetails = screen.getByTestId("manager-tactical-trace-details-away");
+    expect(traceDetails).toHaveTextContent(
+      "Legacy defensive alignment note only; no Manager Value scoring.",
+    );
+    expect(traceDetails).toHaveTextContent("Cap: n/a");
+    expect(traceDetails).toHaveTextContent("Final: Non-scoring");
   });
 
   test("keeps manager overlay values out of the player KBL WPA leaderboard", async () => {

@@ -4497,7 +4497,7 @@ export function GameTracker() {
               dhEnabled: awayUsesDh,
               generatedAt: lineupSnapshotGeneratedAt,
               generatedFrom: "game_lock",
-              sourceConfidence: "engine_calculated",
+              sourceConfidence: "fallback",
             }),
           home:
             cloneOptimalLineupSnapshot(navigationState?.optimalLineupSnapshots?.home) ??
@@ -4510,7 +4510,7 @@ export function GameTracker() {
               dhEnabled: homeUsesDh,
               generatedAt: lineupSnapshotGeneratedAt,
               generatedFrom: "game_lock",
-              sourceConfidence: "engine_calculated",
+              sourceConfidence: "fallback",
             }),
         };
         const chosenLineupSnapshots: GameLockLineupSnapshots = {

@@ -13,6 +13,8 @@ import {
 import {
   buildLineupSnapshotFromSlots,
   buildOptimalLineupSnapshot,
+  confirmEngineOptimalLineupSnapshot,
+  isOfficialOptimalLineupSnapshot,
   markOptimalLineupSnapshotsStaleForChange,
   OPTIMAL_LINEUP_SNAPSHOT_FIELDS,
   optimalLineupField,
@@ -791,16 +793,22 @@ function LineupTab({ roster, players, onUpdate }: LineupTabProps) {
 
   const handleRecalculateOptimal = (hand: OpposingPitcherHand) => {
     setLineupComparison(null);
-    saveOptimalSnapshot(hand, buildOptimalSnapshot(hand));
+    saveOptimalSnapshot(hand, confirmEngineOptimalLineupSnapshot(buildOptimalSnapshot(hand)));
   };
 
   const handleApplyOptimal = (hand: OpposingPitcherHand) => {
     const field = optimalLineupField(hand, isDH);
-    const snapshot = roster[field] ?? buildOptimalSnapshot(hand);
+    const storedSnapshot = roster[field];
+    const snapshot = storedSnapshot?.sourceConfidence === "stale_roster"
+      ? buildOptimalSnapshot(hand)
+      : storedSnapshot ?? buildOptimalSnapshot(hand);
+    const officialSnapshot = isOfficialOptimalLineupSnapshot(snapshot)
+      ? snapshot
+      : confirmEngineOptimalLineupSnapshot(snapshot);
     setLineupComparison(null);
     onUpdate({
-      [field]: snapshot,
-      ...buildLineupUpdate(lineupSlotsFromOptimalSnapshot(snapshot)),
+      [field]: officialSnapshot,
+      ...buildLineupUpdate(lineupSlotsFromOptimalSnapshot(officialSnapshot)),
     });
   };
 

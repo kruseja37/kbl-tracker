@@ -17,6 +17,8 @@ import type {
 import {
   buildLineupSnapshotFromSlots,
   buildOptimalLineupSnapshot,
+  confirmEngineOptimalLineupSnapshot,
+  isOfficialOptimalLineupSnapshot,
   markOptimalLineupSnapshotsStaleForChange,
   OPTIMAL_LINEUP_SNAPSHOT_FIELDS,
   optimalLineupField,
@@ -587,11 +589,17 @@ export function TeamHubContent() {
   const handleApplyFranchiseOptimal = async (hand: OpposingPitcherHand) => {
     if (!franchiseTeam) return;
     const field = optimalLineupField(hand, useDH);
-    const snapshot = franchiseTeam[field] ?? buildFranchiseOptimalSnapshot(hand);
+    const storedSnapshot = franchiseTeam[field];
+    const snapshot = storedSnapshot?.sourceConfidence === "stale_roster"
+      ? buildFranchiseOptimalSnapshot(hand)
+      : storedSnapshot ?? buildFranchiseOptimalSnapshot(hand);
     if (!snapshot) return;
+    const officialSnapshot = isOfficialOptimalLineupSnapshot(snapshot)
+      ? snapshot
+      : confirmEngineOptimalLineupSnapshot(snapshot);
     await saveFranchiseOptimalUpdate({
-      [field]: snapshot,
-      [useDH ? "lineupWithDH" : "lineupWithoutDH"]: lineupSlotsFromOptimalSnapshot(snapshot),
+      [field]: officialSnapshot,
+      [useDH ? "lineupWithDH" : "lineupWithoutDH"]: lineupSlotsFromOptimalSnapshot(officialSnapshot),
     });
   };
 
@@ -599,7 +607,7 @@ export function TeamHubContent() {
     const snapshot = buildFranchiseOptimalSnapshot(hand);
     if (!snapshot) return;
     await saveFranchiseOptimalUpdate({
-      [optimalLineupField(hand, useDH)]: snapshot,
+      [optimalLineupField(hand, useDH)]: confirmEngineOptimalLineupSnapshot(snapshot),
     });
   };
 

@@ -210,7 +210,7 @@ const snapshot = (
   algorithmVersion: 'test',
   generatedAt: 1,
   generatedFrom: 'team_hub',
-  sourceConfidence: 'engine_calculated',
+  sourceConfidence: 'user_confirmed_engine',
   dhEnabled,
   slots: [],
   projectedTeamLineupKblWpa: 0,
@@ -513,6 +513,84 @@ describe('FranchiseHome launch optimal lineup snapshots', () => {
     expect(state.useDH).toBe(true);
     expect(state.optimalLineupSnapshots.away).toBe(snapshotsByTeam['away-team'].dh.vsLHP);
     expect(state.optimalLineupSnapshots.home).toBe(snapshotsByTeam['home-team'].dh.vsRHP);
+  });
+
+  test('regular-season pregame blocks start when a required benchmark is missing or stale', async () => {
+    mocks.mockBuildFranchiseGameTrackerRoster.mockImplementation(
+      (teamId: keyof typeof snapshotsByTeam, context?: { useDH?: boolean }) => {
+        const roster = makeRoster(teamId, context?.useDH ?? false);
+        if (teamId === 'away-team') {
+          return Promise.resolve({
+            ...roster,
+            optimalLineups: {
+              ...roster.optimalLineups,
+              vsLHP: undefined,
+            },
+          });
+        }
+        if (teamId === 'home-team') {
+          return Promise.resolve({
+            ...roster,
+            optimalLineups: {
+              ...roster.optimalLineups,
+              vsRHP: {
+                ...roster.optimalLineups.vsRHP,
+                sourceConfidence: 'stale_roster',
+              },
+            },
+          });
+        }
+        return Promise.resolve(roster);
+      },
+    );
+
+    render(<FranchiseHome />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'PLAY GAME' }));
+    fireEvent.click(screen.getByRole('button', { name: 'CONFIRM' }));
+
+    await screen.findByText('PRE-GAME LINEUP');
+
+    expect(screen.getByText('LINEUP DELTA BENCHMARK REQUIRED')).toBeTruthy();
+    expect(screen.getByText(/AWAY TEAM vs LHP benchmark is not set/)).toBeTruthy();
+    expect(screen.getByText(/HOME TEAM vs RHP benchmark is needs confirmation\/recalculation/)).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'START GAME' })).toHaveAttribute('disabled');
+    expect(mocks.mockNavigate).not.toHaveBeenCalled();
+  });
+
+  test('regular-season pregame can register current lineups as required benchmarks', async () => {
+    mocks.mockBuildFranchiseGameTrackerRoster.mockImplementation(
+      (teamId: keyof typeof snapshotsByTeam, context?: { useDH?: boolean }) =>
+        Promise.resolve({
+          ...makeRoster(teamId, context?.useDH ?? false),
+          optimalLineups: {},
+        }),
+    );
+
+    render(<FranchiseHome />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'PLAY GAME' }));
+    fireEvent.click(screen.getByRole('button', { name: 'CONFIRM' }));
+
+    await screen.findByText('PRE-GAME LINEUP');
+    fireEvent.click(screen.getByRole('button', { name: 'REGISTER CURRENT LINEUPS' }));
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'START GAME' })).not.toHaveAttribute('disabled'),
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'START GAME' }));
+
+    await waitFor(() => expect(mocks.mockNavigate).toHaveBeenCalled());
+    const state = mocks.mockNavigate.mock.calls.at(-1)?.[1]?.state;
+
+    expect(state.optimalLineupSnapshots.away).toMatchObject({
+      sourceConfidence: 'user_registered',
+      opposingPitcherHand: 'L',
+    });
+    expect(state.optimalLineupSnapshots.home).toMatchObject({
+      sourceConfidence: 'user_registered',
+      opposingPitcherHand: 'R',
+    });
   });
 
   test('regular-season launch passes assigned Franchise manager IDs', async () => {

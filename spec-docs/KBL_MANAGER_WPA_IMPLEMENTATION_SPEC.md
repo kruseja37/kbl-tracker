@@ -208,6 +208,7 @@ type OptimalLineupModeContext =
 type OptimalLineupSourceConfidence =
   | "engine_calculated"
   | "user_registered"
+  | "user_confirmed_engine"
   | "stale_roster"
   | "fallback";
 
@@ -292,6 +293,7 @@ interface ManagerLineupDeltaRecord {
 5. If the opposing starting pitcher changes handedness, pregame must offer to switch to the matching vs RHP/vs LHP Optimal Lineup, recalculate, or keep the current benchmark.
 6. Roster changes should invalidate or mark stale the stored Optimal Lineup snapshots until recalculated.
 7. At game lock, store the Optimal Lineup snapshot used for comparison and the manager's chosen lineup snapshot.
+8. If GameTracker must generate a game-lock fallback Optimal Lineup snapshot for display/compare continuity, tag it as display-only. Game-lock fallback snapshots cannot become official Lineup Delta benchmarks.
 
 #### Pregame Optimal Lineup Controls
 
@@ -325,8 +327,10 @@ Rules:
 1. `Set Current as Optimal` is available only before lineup lock.
 2. After lineup lock, the Optimal Lineup snapshot is read-only for that game.
 3. User-registered SMB4 optimal snapshots must be tagged `generatedFrom: "user_registered_smb4_optimal"` and `sourceConfidence: "user_registered"`.
-4. User-registered snapshots are valid only for the current roster, opposing pitcher hand, and DH/non-DH rules.
-5. If roster/availability/game-rule context changes, mark the snapshot stale and require switch, recalculate, or re-register.
+4. User-confirmed engine snapshots from explicit League Builder, Team Hub, or pregame recalculation/apply actions must be tagged `sourceConfidence: "user_confirmed_engine"`.
+5. Official Lineup Delta benchmarks must be non-stale `user_registered` or `user_confirmed_engine` snapshots for the current roster, opposing pitcher hand, and DH/non-DH rules.
+6. Missing snapshots, stale snapshots, fallback snapshots, and snapshots generated from `game_lock` are display-only. They may support compare/preview UI, but they cannot produce official `ManagerLineupDeltaRecord` entries.
+7. If roster/availability/game-rule context changes, mark the snapshot stale and require switch, recalculate, or re-register.
 
 #### Optimal Lineup Generator
 
@@ -389,7 +393,9 @@ realizedVsChosenProjection = actualChosenKblWpa - chosenProjectedKblWpa
 actualVsOptimalProjection = actualChosenKblWpa - optimalProjectedKblWpa
 ```
 
-Official Lineup Delta uses:
+Official Lineup Delta uses only non-stale `user_registered` or `user_confirmed_engine` benchmarks. Game-lock fallback snapshots are display-only and cannot produce official Lineup Delta.
+
+Official Lineup Delta scoring uses:
 
 ```text
 managerWpa = clamp(actualVsOptimalProjection * 0.25, per-deviation cap)
@@ -579,10 +585,11 @@ For defensive-manager decisions, `teamWinProbability*` is from the fielding/pitc
 | Runner hold | 0.20 when directly entered as a hold. |
 | Out advancing/send | 0.35 only when play-log marks `manager_send`; 0.00 when marked or inferred as runner choice. |
 | Hit-and-run | 0.35 if manually confirmed. |
-| Defensive alignment | 0.10 if manually confirmed and linked to a fielding outcome. |
 | Lineup construction | 0.25 of mapped deviation actual-vs-optimal projection, capped. |
 
 These shares are Manager WPA overlay weights only. They do not affect player KBL WPA.
+
+Defensive alignment is out of active Manager Value scope. Legacy defensive-alignment records are compatibility notes only, are labeled non-scoring, and must not contribute Tactical Manager WPA, Deployment WPA, Lineup Delta, or Manager Value.
 
 ### 4.1 Game-Length Weighted Standards
 
@@ -1382,7 +1389,7 @@ Do not maintain mWAR as a separate truth source.
 31. Pregame can recalculate the active Optimal Lineup from KBL engine inputs before lineup lock.
 32. Pregame can register the current lineup as SMB4 optimal before lineup lock.
 33. After lineup lock, the game-lock Optimal Lineup snapshot is read-only for that game.
-34. Lineup Delta creates records only for meaningful deviations from the relevant Optimal Lineup snapshot.
+34. Lineup Delta creates records only for meaningful deviations from the relevant official Optimal Lineup snapshot.
 35. If the chosen lineup matches the Optimal Lineup, Lineup Delta is `0.000` regardless of player underperformance.
 36. A deviation that beats its chosen projection but remains below the Optimal Lineup benchmark still scores negative official Lineup Delta while preserving positive narrative context.
 37. Lineup Delta applies 25% share and per-deviation/team caps.

@@ -380,6 +380,47 @@ describe("Almanac Manager WPA aggregation", () => {
     });
   });
 
+  test("ignores legacy defensive alignment records in manager aggregates", () => {
+    expect(
+      aggregateCommittedManagerAlmanac([
+        createGame({
+          managerDecisions: [
+            createDecision({
+              decisionId: "game-1:away:defensive-alignment",
+              decisionType: "defensive_alignment",
+              displayTitle: "Defensive alignment",
+              managerWpa: 0.4,
+              rawWindowWpa: 0.4,
+            }),
+          ],
+        }),
+      ]),
+    ).toEqual([]);
+
+    const [aggregate] = aggregateCommittedManagerAlmanac([
+      createGame({
+        managerDecisions: [
+          createDecision({ managerWpa: 0.2 }),
+          createDecision({
+            decisionId: "game-1:away:defensive-alignment",
+            decisionType: "defensive_alignment",
+            displayTitle: "Defensive alignment",
+            managerWpa: 0.4,
+            rawWindowWpa: 0.4,
+          }),
+        ],
+      }),
+    ]);
+
+    expect(aggregate).toMatchObject({
+      tacticalManagerWpa: 0.2,
+      managerValue: 0.2,
+      decisionCount: 1,
+      tacticalDecisionCount: 1,
+      resolvedDecisionCount: 1,
+    });
+  });
+
   test("applies team, mode, and instance filters", () => {
     const games = [
       createGame({

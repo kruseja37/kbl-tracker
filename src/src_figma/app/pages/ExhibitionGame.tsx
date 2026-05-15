@@ -13,6 +13,7 @@ import { getTrackerDb } from "../../../utils/trackerDb";
 import { syncEngine } from "../../../utils/syncEngine";
 import { SYNC_REGISTRY, extractKey } from "../../../utils/syncConfig";
 import { getParkNames } from "../../../data/parkLookup";
+import { optimalLineupField } from "../../../utils/optimalLineup";
 import type { ManagerProfile } from "../../../types/managerWpa";
 import type {
   GameLockLineupSnapshots,
@@ -25,6 +26,12 @@ import {
   listManagerProfiles,
   resolveManagerForTeam,
 } from "../../../utils/managerIdentityStorage";
+import {
+  buildCurrentLineupOptimalBenchmark,
+  buildPregameBenchmarkIssues,
+  formatPregameBenchmarkSource,
+  upsertPregameBenchmark,
+} from "../utils/pregameLineupBenchmarks";
 import { withPregameManagerNavigationState } from "../utils/pregameNavigationState";
 import chalkBgImg from '../../../assets/chalk-bg.png';
 import chalkBgFaintImg from '../../../assets/chalk-bg-faint.png';
@@ -47,7 +54,7 @@ async function getEffectiveTeamPlayers(
 
 export function ExhibitionGame() {
   const navigate = useNavigate();
-  const { leagues, teams, players, isLoading, error, getRoster } = useLeagueBuilderData();
+  const { leagues, teams, players, isLoading, error, getRoster, updateRoster } = useLeagueBuilderData();
   const [step, setStep] = useState<"league" | "select" | "lineups">("league");
 
   // League and team selection state
@@ -94,6 +101,8 @@ export function ExhibitionGame() {
     vsRHP?: OptimalLineupSnapshot;
     vsLHP?: OptimalLineupSnapshot;
   }>({});
+  const [benchmarkRegistrationMessage, setBenchmarkRegistrationMessage] = useState<string | null>(null);
+  const [isRegisteringBenchmarks, setIsRegisteringBenchmarks] = useState(false);
 
   // Clear exhibition data
   const [showClearConfirm, setShowClearConfirm] = useState(false);
@@ -364,6 +373,19 @@ export function ExhibitionGame() {
     homeStoredOptimalLineups,
     awayStartingPitcher,
   );
+  const benchmarkIssues = buildPregameBenchmarkIssues([
+    {
+      teamName: awayTeam?.name ?? "Away",
+      opposingPitcherHand: awayOptimalBenchmarkHand,
+      snapshot: awayOptimalBenchmark,
+    },
+    {
+      teamName: homeTeam?.name ?? "Home",
+      opposingPitcherHand: homeOptimalBenchmarkHand,
+      snapshot: homeOptimalBenchmark,
+    },
+  ]);
+  const canStartWithLineupDeltaBenchmarks = benchmarkIssues.length === 0;
 
   // Reorder lineup via drag-and-drop or tap-swap — merges reordered starters back with bench
   const handleAwayReorder = (reordered: RosterPlayer[]) => {
@@ -541,7 +563,67 @@ export function ExhibitionGame() {
     ));
   };
 
+  const persistRegisteredBenchmark = async (
+    teamId: string | null,
+    snapshot: OptimalLineupSnapshot,
+  ) => {
+    if (!teamId) return;
+    const roster = await getRoster(teamId);
+    if (!roster) return;
+    await updateRoster({
+      ...roster,
+      [optimalLineupField(snapshot.opposingPitcherHand, useDH)]: snapshot,
+    });
+  };
+
+  const handleRegisterCurrentBenchmarks = async () => {
+    if (!selectedAwayTeamId || !selectedHomeTeamId) return;
+    setIsRegisteringBenchmarks(true);
+    setBenchmarkRegistrationMessage(null);
+    try {
+      const awaySnapshot = buildCurrentLineupOptimalBenchmark({
+        teamId: selectedAwayTeamId,
+        mode: "exhibition",
+        instanceId: selectedLeagueId ?? "exhibition",
+        opposingPitcherHand: awayOptimalBenchmarkHand,
+        players: awayPlayers,
+        pitchers: awayPitchers,
+        dhEnabled: useDH,
+      });
+      const homeSnapshot = buildCurrentLineupOptimalBenchmark({
+        teamId: selectedHomeTeamId,
+        mode: "exhibition",
+        instanceId: selectedLeagueId ?? "exhibition",
+        opposingPitcherHand: homeOptimalBenchmarkHand,
+        players: homePlayers,
+        pitchers: homePitchers,
+        dhEnabled: useDH,
+      });
+
+      setAwayStoredOptimalLineups((current) => upsertPregameBenchmark(current, awaySnapshot));
+      setHomeStoredOptimalLineups((current) => upsertPregameBenchmark(current, homeSnapshot));
+      await Promise.all([
+        persistRegisteredBenchmark(selectedAwayTeamId, awaySnapshot),
+        persistRegisteredBenchmark(selectedHomeTeamId, homeSnapshot),
+      ]);
+      setBenchmarkRegistrationMessage("Current lineups registered as the Lineup Delta benchmarks for this matchup.");
+    } catch (err) {
+      setBenchmarkRegistrationMessage(
+        err instanceof Error ? err.message : "Failed to register current lineup benchmarks.",
+      );
+    } finally {
+      setIsRegisteringBenchmarks(false);
+    }
+  };
+
   const handleStartGame = () => {
+    if (!canStartWithLineupDeltaBenchmarks) {
+      setBenchmarkRegistrationMessage(
+        `Lineup Delta needs official benchmarks before first pitch: ${benchmarkIssues.join(" | ")}.`,
+      );
+      return;
+    }
+
     const awayManager = selectedAwayManagerId
       ? managerProfilesById.get(selectedAwayManagerId)
       : undefined;
@@ -855,12 +937,35 @@ export function ExhibitionGame() {
               </div>
               <div className="mt-3 grid gap-2 text-[9px] text-[#E8E8D8]/70 md:grid-cols-2">
                 <div>
-                  {awayTeam.name}: VS {awayOptimalBenchmarkHand}HP benchmark {awayOptimalBenchmark ? awayOptimalBenchmark.sourceConfidence.replace(/_/g, " ") : "not set"}
+                  {awayTeam.name}: VS {awayOptimalBenchmarkHand}HP benchmark {formatPregameBenchmarkSource(awayOptimalBenchmark)}
                 </div>
                 <div>
-                  {homeTeam.name}: VS {homeOptimalBenchmarkHand}HP benchmark {homeOptimalBenchmark ? homeOptimalBenchmark.sourceConfidence.replace(/_/g, " ") : "not set"}
+                  {homeTeam.name}: VS {homeOptimalBenchmarkHand}HP benchmark {formatPregameBenchmarkSource(homeOptimalBenchmark)}
                 </div>
               </div>
+              {!canStartWithLineupDeltaBenchmarks && (
+                <div className="mt-4 border-2 border-[#C4A853]/70 bg-[#1f2b21] p-3 text-[10px] text-[#E8E8D8]">
+                  <div className="mb-2 font-bold text-[#C4A853] tracking-[0.16em]">
+                    LINEUP DELTA BENCHMARK REQUIRED
+                  </div>
+                  <div className="mb-3 text-[#E8E8D8]/75">
+                    {benchmarkIssues.join(" • ")}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleRegisterCurrentBenchmarks}
+                    disabled={isRegisteringBenchmarks}
+                    className="border-2 border-[#C4A853] bg-[#3d4a42] px-3 py-2 text-[9px] font-bold tracking-[0.16em] text-[#C4A853] hover:bg-[#4a5a50] disabled:opacity-60"
+                  >
+                    {isRegisteringBenchmarks ? "REGISTERING..." : "REGISTER CURRENT LINEUPS"}
+                  </button>
+                </div>
+              )}
+              {benchmarkRegistrationMessage && (
+                <div className="mt-3 border-2 border-[#556B55] bg-[#1f2b21] p-2 text-[10px] text-[#E8E8D8]/80">
+                  {benchmarkRegistrationMessage}
+                </div>
+              )}
             </div>
 
             {/* Loading lineups */}
@@ -1051,13 +1156,21 @@ export function ExhibitionGame() {
               </button>
               <button
                 onClick={handleStartGame}
-                disabled={awayPlayers.length === 0 || homePlayers.length === 0 || isLoadingLineups}
+                disabled={
+                  awayPlayers.length === 0 ||
+                  homePlayers.length === 0 ||
+                  isLoadingLineups ||
+                  !canStartWithLineupDeltaBenchmarks
+                }
                 className={`border-2 py-4 text-sm font-bold tracking-[0.2em] transition-transform shadow-[2px_2px_0px_0px_rgba(0,0,0,0.4)] ${
-                  awayPlayers.length > 0 && homePlayers.length > 0 && !isLoadingLineups
+                  awayPlayers.length > 0 &&
+                  homePlayers.length > 0 &&
+                  !isLoadingLineups &&
+                  canStartWithLineupDeltaBenchmarks
                     ? "border-[#C4A853] bg-[#3d4a42] text-[#C4A853] hover:bg-[#4a5a50] active:scale-95"
                     : "border-[#556B55] bg-[#1f2b21] text-[#8A9A82] cursor-not-allowed"
                 }`}
-                style={{ textShadow: '1px 1px 2px rgba(0,0,0,0.6)', backgroundImage: awayPlayers.length > 0 && homePlayers.length > 0 && !isLoadingLineups ? `url(${chalkBgFaintImg})` : undefined, backgroundRepeat: 'repeat' }}
+                style={{ textShadow: '1px 1px 2px rgba(0,0,0,0.6)', backgroundImage: awayPlayers.length > 0 && homePlayers.length > 0 && !isLoadingLineups && canStartWithLineupDeltaBenchmarks ? `url(${chalkBgFaintImg})` : undefined, backgroundRepeat: 'repeat' }}
               >
                 START GAME ▶
               </button>

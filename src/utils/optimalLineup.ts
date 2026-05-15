@@ -166,6 +166,66 @@ export function cloneGameLockLineupSnapshots(
   };
 }
 
+export type OptimalLineupBenchmarkStatus =
+  | "official"
+  | "missing"
+  | "stale"
+  | "display_only";
+
+const OFFICIAL_OPTIMAL_LINEUP_SOURCE_CONFIDENCES: ReadonlySet<OptimalLineupSourceConfidence> =
+  new Set(["user_registered", "user_confirmed_engine"]);
+
+const CONFIRMABLE_ENGINE_OPTIMAL_LINEUP_GENERATED_FROM: ReadonlySet<OptimalLineupGeneratedFrom> =
+  new Set(["league_builder", "team_hub", "pregame_recalculate"]);
+
+export function isOfficialOptimalLineupSnapshot(
+  snapshot: OptimalLineupSnapshot | undefined,
+): snapshot is OptimalLineupSnapshot {
+  return Boolean(
+    snapshot &&
+      OFFICIAL_OPTIMAL_LINEUP_SOURCE_CONFIDENCES.has(snapshot.sourceConfidence) &&
+      snapshot.sourceConfidence !== "stale_roster" &&
+      snapshot.generatedFrom !== "game_lock",
+  );
+}
+
+export function getOptimalLineupBenchmarkStatus(
+  snapshot: OptimalLineupSnapshot | undefined,
+): OptimalLineupBenchmarkStatus {
+  if (!snapshot) return "missing";
+  if (snapshot.sourceConfidence === "stale_roster") return "stale";
+  return isOfficialOptimalLineupSnapshot(snapshot) ? "official" : "display_only";
+}
+
+export function formatOptimalLineupBenchmarkStatus(
+  snapshot: OptimalLineupSnapshot | undefined,
+): string {
+  const status = getOptimalLineupBenchmarkStatus(snapshot);
+  if (status === "missing") return "not set";
+  if (status === "stale") return "needs confirmation/recalculation";
+  if (status === "display_only") return "display only";
+  if (!snapshot) return "not set";
+  return snapshot.sourceConfidence === "user_registered"
+    ? "registered SMB4 optimal"
+    : "confirmed engine optimal";
+}
+
+export function confirmEngineOptimalLineupSnapshot(
+  snapshot: OptimalLineupSnapshot,
+): OptimalLineupSnapshot {
+  if (
+    snapshot.sourceConfidence !== "engine_calculated" ||
+    !CONFIRMABLE_ENGINE_OPTIMAL_LINEUP_GENERATED_FROM.has(snapshot.generatedFrom)
+  ) {
+    return snapshot;
+  }
+
+  return {
+    ...snapshot,
+    sourceConfidence: "user_confirmed_engine",
+  };
+}
+
 export function buildOptimalLineupSnapshot(
   input: BuildOptimalLineupSnapshotInput,
 ): OptimalLineupSnapshot {

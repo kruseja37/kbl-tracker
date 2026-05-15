@@ -597,25 +597,6 @@ function deriveBetweenPlayManagerDecisions(
     return [buildPromptedBetweenPlayDecision({ event, input, gameId })];
   }
 
-  if (
-    event.type === "manager_moment" &&
-    event.managerMoment?.decisionType === "defensive_alignment"
-  ) {
-    return [
-      buildBetweenPlayDecision({
-        event,
-        input,
-        gameId,
-        decisionType: "defensive_alignment",
-        decisionSource: "manual_edit",
-        confidence: "low",
-        involvedPlayerIds: [],
-        derivedFromFields: ["managerMoment.decisionType", "managerMoment.context"],
-        resolved: false,
-      }),
-    ];
-  }
-
   if (event.type === "stolen_base" || event.type === "caught_stealing") {
     return [
       buildBetweenPlayDecision({
@@ -1479,10 +1460,7 @@ function findFirstFieldingEndpoint(
   const trackedPlayerIds = new Set(
     decision.resolutionWindow?.trackedPlayerIds ?? [],
   );
-  if (
-    trackedPlayerIds.size === 0 &&
-    decision.decisionType !== "defensive_alignment"
-  ) {
+  if (trackedPlayerIds.size === 0) {
     return null;
   }
 
@@ -2044,8 +2022,7 @@ function isDefensiveManagerDecision(decisionType: ManagerDecisionType): boolean 
     decisionType === "leave_pitcher_in" ||
     decisionType === "defensive_sub" ||
     decisionType === "position_change" ||
-    decisionType === "intentional_walk" ||
-    decisionType === "defensive_alignment"
+    decisionType === "intentional_walk"
   );
 }
 

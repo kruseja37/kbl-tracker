@@ -29,7 +29,7 @@ describe("manager decision registry", () => {
     }
   });
 
-  test("keeps the SMB-supported universe closed with manual defensive alignment support", () => {
+  test("keeps the SMB-supported universe closed without defensive alignment scoring", () => {
     expect(SUPPORTED_MANAGER_DECISION_TYPES).toEqual([
       "lineup_construction",
       "pitching_change",
@@ -46,16 +46,17 @@ describe("manager decision registry", () => {
       "bunt_call",
       "squeeze_call",
       "hit_and_run",
-      "defensive_alignment",
       "manual_note",
     ]);
     expect(MANAGER_DECISION_REGISTRY.defensive_alignment).toMatchObject({
-      supported: true,
-      captureMode: "manual",
-      layer: "tactical",
-      horizon: "matchup",
-      resolutionEndpoint: "first_fielding_event",
+      supported: false,
+      captureMode: "unsupported",
+      layer: "manual",
+      horizon: "single_play",
+      resolutionEndpoint: "same_event",
+      doubleCountingExclusions: ["active_manager_value"],
     });
+    expect(MANAGER_WPA_SHARE_BY_DECISION_TYPE.defensive_alignment).toBeUndefined();
   });
 
   test("assigns an explicit decision horizon to every supported decision", () => {
@@ -82,7 +83,6 @@ describe("manager decision registry", () => {
       bunt_call: "single_play",
       squeeze_call: "single_play",
       hit_and_run: "single_play",
-      defensive_alignment: "matchup",
       manual_note: "single_play",
     });
   });
