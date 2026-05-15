@@ -117,4 +117,44 @@ describe('BattingLineupColumn', () => {
     expect(gameLine.style.webkitLineClamp).toBe('2');
     expect(gameLine.style.whiteSpace).toBe('normal');
   });
+
+  test('keeps the runner base marker visible before a truncated lineup name', () => {
+    render(
+      <BattingLineupColumn
+        {...baseProps}
+        players={[
+          {
+            ...baseProps.players[0],
+            name: 'Extremely Long Away Starter Name',
+          },
+        ]}
+        runners={{ first: { playerId: 'away-1', name: 'Extremely Long Away Starter Name' } }}
+      />,
+    );
+
+    const nameHighlight = screen.getByTestId('batting-lineup-name-highlight-away-1');
+    const baseMarker = screen.getByTestId('batting-lineup-runner-base-away-1');
+    const nameMarker = screen.getByText('Extremely Long Away Starter Name');
+    const positionMarker = screen.getByText('SS');
+
+    expect(nameHighlight).toHaveClass('flex');
+    expect(nameHighlight).not.toHaveClass('overflow-hidden');
+    expect(nameMarker).toHaveClass('truncate');
+    expect(baseMarker).toHaveTextContent('1');
+    expect(baseMarker.tagName).toBe('SPAN');
+    expect(baseMarker).toHaveClass('inline-flex', 'shrink-0', 'self-start', 'font-black');
+    const children = Array.from(nameHighlight.children);
+    expect(children.indexOf(baseMarker)).toBeLessThan(children.indexOf(nameMarker));
+    expect(children.indexOf(nameMarker)).toBeLessThan(children.indexOf(positionMarker));
+    expect(baseMarker).not.toHaveClass('border', 'bg-[#0c1f2b]');
+    expect(baseMarker.style.color).toBe('rgb(68, 85, 102)');
+    expect(baseMarker.style.fontFamily).toBe('"Moms Typewriter", monospace');
+    expect(baseMarker.style.fontSize).toBe('8px');
+    expect(baseMarker.style.letterSpacing).toBe('0');
+    expect(baseMarker.style.lineHeight).toBe('8px');
+    expect(baseMarker.style.textShadow).toBe('0 1px 1px rgba(0,0,0,0.9)');
+    expect(baseMarker.style.transform).toBe('');
+    expect(baseMarker).toHaveAccessibleName('1B runner');
+    expect(baseMarker).toHaveAttribute('title', 'Extremely Long Away Starter Name on 1B');
+  });
 });

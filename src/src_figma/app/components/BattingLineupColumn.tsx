@@ -212,14 +212,33 @@ export function BattingLineupColumn({
                     </span>
                     <span
                       data-testid={`batting-lineup-name-highlight-${player.playerId}`}
-                      className="block min-w-0 flex-1 truncate"
+                      className="flex min-w-0 flex-1 items-center"
                       style={{
                         backgroundImage: isCurrent ? `url(${chalkBgImg})` : undefined,
                         backgroundRepeat: isCurrent ? 'repeat' : undefined,
                         backgroundColor: isCurrent ? 'rgba(242, 192, 65, 0.03)' : undefined,
                       }}
                     >
+                      {onBase !== undefined && (
+                        <span
+                          data-testid={`batting-lineup-runner-base-${player.playerId}`}
+                          aria-label={`${onBase}B runner`}
+                          className="mr-[2px] inline-flex shrink-0 self-start font-black"
+                          style={{
+                            color: teamSecondaryColor,
+                            fontFamily: "'Moms Typewriter', monospace",
+                            fontSize: '8px',
+                            letterSpacing: '0',
+                            lineHeight: '8px',
+                            textShadow: '0 1px 1px rgba(0,0,0,0.9)',
+                          }}
+                          title={`${player.name} on ${onBase}B`}
+                        >
+                          {onBase}
+                        </span>
+                      )}
                       <span
+                        className="min-w-0 truncate"
                         style={{
                           ...mojoStyle,
                           ...fitnessStyle,
@@ -235,10 +254,7 @@ export function BattingLineupColumn({
                         ].filter(Boolean).join(' | ') || undefined}
                       >{player.name}</span>
                       {player.position && (
-                        <span className="text-[#D4B85A] text-[7px] ml-1">{player.position}</span>
-                      )}
-                      {onBase !== undefined && (
-                        <sup className="text-[9px] text-[#F2BF16] ml-0.5">{onBase}</sup>
+                        <span className="ml-1 shrink-0 text-[#D4B85A] text-[7px]">{player.position}</span>
                       )}
                     </span>
                   </div>
