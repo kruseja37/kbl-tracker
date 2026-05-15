@@ -13,6 +13,15 @@ import {
   isCompatibilityOnlyManagerDecision,
   type ManagerValueTraceRow,
 } from "../../../utils/managerValueTrace";
+import {
+  formatManagerMomentFinalValue,
+  formatManagerMomentLayer,
+  formatManagerMomentRole,
+  formatManagerMomentStatus,
+  formatSignedManagerMomentValue,
+  ManagerMomentDetailDialog,
+  type ManagerMomentDetailContext,
+} from "./ManagerMomentDetail";
 
 interface ManagerWpaOverlayProps {
   game: Pick<
@@ -51,7 +60,7 @@ function normalizeTestId(value: string): string {
 }
 
 export function formatSignedManagerWpa(value: number): string {
-  return `${value >= 0 ? "+" : ""}${value.toFixed(3)}`;
+  return formatSignedManagerMomentValue(value);
 }
 
 function titleCase(value: string): string {
@@ -190,143 +199,65 @@ function formatDecisionSummary(decision: ManagerDecisionRecord | undefined): str
   return `${decision.displayTitle}, ${formatSignedManagerWpa(decision.managerWpa)}`;
 }
 
-function formatLineupSlot(
-  playerName: string | undefined,
-  battingOrderSlot: number | undefined,
-  defensivePosition: string | undefined,
-): string {
-  const order = battingOrderSlot ? `#${battingOrderSlot}` : "slot ?";
-  const position = defensivePosition || "POS";
-  return `${order} ${position} ${playerName || "Unknown player"}`;
+function traceValueClass(trace: ManagerValueTraceRow): string {
+  if (trace.compatibilityOnly) return "text-[#a0a898]";
+  if (trace.pending) return "text-[#fbbf24]";
+  return (trace.finalValue ?? 0) >= 0 ? "text-[#34d399]" : "text-[#f87171]";
 }
 
-function formatOptionalManagerWpa(value: number | undefined): string {
-  return typeof value === "number" ? formatSignedManagerWpa(value) : "n/a";
-}
-
-function formatDeploymentRole(role: ManagerDeploymentStintRecord["deploymentRole"]): string {
-  switch (role) {
-    case "pinch_hitter_remaining":
-      return "Pinch hitter remaining";
-    case "pinch_runner":
-      return "Pinch runner";
-    case "defensive_position":
-      return "Defensive position";
-    case "pitcher":
-      return "Pitcher";
-    case "kept_position_player_in":
-      return "Kept position player in";
-    case "kept_pitcher_in":
-      return "Kept pitcher in";
-    case "kept_in":
-      return "Kept in";
-    case "manual_deployment":
-      return "Manual deployment";
-  }
-}
-
-function formatDeploymentCloseReason(
-  reason: ManagerDeploymentStintRecord["closeReason"],
-): string {
-  if (!reason) return "Active";
-  return titleCase(reason);
-}
-
-function formatDeploymentClosed(stint: ManagerDeploymentStintRecord): string {
-  const reason = formatDeploymentCloseReason(stint.closeReason);
-  if (!isResolvedDeploymentStint(stint)) return reason;
-  if (typeof stint.closedAtEventIndex !== "number") return reason;
-  return `Event ${stint.closedAtEventIndex} (${reason})`;
-}
-
-function formatDeploymentShare(value: number): string {
-  return `${Math.round(value * 100)}%`;
-}
-
-function formatDeploymentCap(value: number): string {
-  return `+/-${value.toFixed(3)}`;
-}
-
-function formatDeploymentOutcomeWeight(weight: number): string {
-  return `${Math.round(weight * 100)}%`;
-}
-
-function formatDeploymentLinkedOutcome(
-  outcome: NonNullable<ManagerDeploymentStintRecord["linkedOutcomes"]>[number],
-): string {
-  return `${outcome.eventId} ${outcome.role} ${formatDeploymentOutcomeWeight(outcome.weight)}`;
-}
-
-function buildDeploymentLinkedSummary(stint: ManagerDeploymentStintRecord): {
-  label: "Linked outcomes" | "Linked events";
-  count: number;
-  preview: string[];
-} {
-  if (Array.isArray(stint.linkedOutcomes)) {
-    return {
-      label: "Linked outcomes",
-      count: stint.linkedOutcomes.length,
-      preview: stint.linkedOutcomes.slice(0, 3).map(formatDeploymentLinkedOutcome),
-    };
-  }
-
-  return {
-    label: "Linked events",
-    count: stint.linkedEventIds.length,
-    preview: stint.linkedEventIds.slice(0, 3),
-  };
-}
-
-function formatTraceOptionalValue(value: number | undefined): string {
-  return typeof value === "number" ? formatSignedManagerWpa(value) : "n/a";
-}
-
-function formatTraceShare(value: number | undefined): string {
-  return typeof value === "number" ? `${Math.round(value * 100)}%` : "n/a";
-}
-
-function formatTraceFinalValue(trace: ManagerValueTraceRow): string {
-  if (trace.compatibilityOnly) return "Non-scoring";
-  if (trace.pending) return "Pending";
-  return formatTraceOptionalValue(trace.finalValue);
-}
-
-function formatTraceEndpoint(trace: ManagerValueTraceRow): string {
-  if (trace.endpointEventId) return trace.endpointEventId;
-  if (trace.pending) return "Pending";
-  return "n/a";
-}
-
-function formatTraceLinkedOutcome(
-  outcome: ManagerValueTraceRow["linkedOutcomes"][number],
-): string {
-  return `${outcome.eventId} ${outcome.role} ${formatDeploymentOutcomeWeight(
-    outcome.weight,
-  )} (${formatSignedManagerWpa(outcome.weightedWpa)})`;
-}
-
-function formatTraceLinkedSummary(trace: ManagerValueTraceRow): string {
-  if (trace.linkedOutcomes.length > 0) {
-    const preview = trace.linkedOutcomes.slice(0, 3).map(formatTraceLinkedOutcome);
-    return `Linked outcomes: ${trace.linkedOutcomes.length}${
-      preview.length > 0 ? ` (${preview.join(", ")})` : ""
-    }`;
-  }
-
-  const preview = trace.linkedEventIds.slice(0, 3);
-  return `Linked events: ${trace.linkedEventIds.length}${
-    preview.length > 0 ? ` (${preview.join(", ")})` : ""
-  }`;
-}
-
-function mapTraceRowsByRecordId(
-  traceRows: ManagerValueTraceRow[],
-): Map<string, ManagerValueTraceRow> {
-  return new Map(traceRows.map((trace) => [trace.recordId, trace]));
+function ManagerMomentTraceButton({
+  managerName,
+  teamName,
+  testId,
+  trace,
+  onOpen,
+}: {
+  managerName: string;
+  teamName: string;
+  testId: string;
+  trace: ManagerValueTraceRow;
+  onOpen: (moment: ManagerMomentDetailContext) => void;
+}) {
+  return (
+    <button
+      type="button"
+      className="w-full border-t border-[#3d5240] py-2 text-left first:border-t-0 hover:bg-[#314437]/45 focus:outline-none focus:ring-1 focus:ring-[#C4A853]"
+      data-testid={`manager-moment-button-${testId}-${normalizeTestId(trace.recordId)}`}
+      aria-label={`Open ${trace.label} Manager Moment details for ${managerName}`}
+      onClick={() => onOpen({ trace, managerName, teamName })}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="break-words text-[9px] font-bold text-[#E8E8D8]">
+            {trace.label}
+          </div>
+          <div className="mt-0.5 break-words text-[8px] leading-[1.35] text-[#cfd8c9]">
+            {trace.description}
+          </div>
+          <div className="mt-1 text-[7px] uppercase tracking-[0.14em] text-[#88AA88]">
+            {formatManagerMomentLayer(trace.layer)} / {formatManagerMomentRole(trace)}
+          </div>
+        </div>
+        <div className="shrink-0 text-right">
+          <div className={`text-[9px] font-bold ${traceValueClass(trace)}`}>
+            {formatManagerMomentFinalValue(trace)}
+          </div>
+          <div className="mt-1 text-[7px] uppercase tracking-[0.12em] text-[#6b7b6e]">
+            Details
+          </div>
+        </div>
+      </div>
+      <div className="mt-1 text-[7px] text-[#a0a898]">
+        {formatManagerMomentStatus(trace)}
+      </div>
+    </button>
+  );
 }
 
 export function ManagerWpaOverlay({ game, managerProfiles }: ManagerWpaOverlayProps) {
   const rows = buildManagerWpaOverlayRows(game, managerProfiles);
+  const [selectedMoment, setSelectedMoment] =
+    React.useState<ManagerMomentDetailContext | null>(null);
 
   return (
     <section
@@ -345,9 +276,14 @@ export function ManagerWpaOverlay({ game, managerProfiles }: ManagerWpaOverlayPr
       <div className="grid gap-3 md:grid-cols-2">
         {rows.map((row) => {
           const testId = normalizeTestId(row.teamId);
-          const traceRowsByRecordId = mapTraceRowsByRecordId(row.traceRows);
           const tacticalTraceRows = row.traceRows.filter(
             (trace) => trace.layer === "tactical",
+          );
+          const deploymentTraceRows = row.traceRows.filter(
+            (trace) => trace.layer === "deployment",
+          );
+          const lineupTraceRows = row.traceRows.filter(
+            (trace) => trace.layer === "lineup",
           );
           return (
             <article
@@ -399,7 +335,7 @@ export function ManagerWpaOverlay({ game, managerProfiles }: ManagerWpaOverlayPr
                     Tactical Details
                   </div>
                   <div
-                    className="mt-1 space-y-2 text-[#E8E8D8]"
+                    className="mt-1 text-[#E8E8D8]"
                     data-testid={`manager-tactical-trace-details-${testId}`}
                   >
                     {tacticalTraceRows.length === 0 ? (
@@ -411,21 +347,14 @@ export function ManagerWpaOverlay({ game, managerProfiles }: ManagerWpaOverlayPr
                       </div>
                     ) : (
                       tacticalTraceRows.slice(0, 4).map((trace) => (
-                        <div
+                        <ManagerMomentTraceButton
                           key={trace.recordId}
-                          className="rounded-sm border border-[#4a6a4a] bg-[#1f2b21]/70 p-2"
-                          data-testid={`manager-trace-row-${testId}-${normalizeTestId(trace.recordId)}`}
-                        >
-                          <div>{trace.label}</div>
-                          <div className="text-[#d5dccd]">{trace.description}</div>
-                          <div>
-                            Source: {trace.sourceEventId ?? "n/a"} | Endpoint: {formatTraceEndpoint(trace)}
-                          </div>
-                          <div>{formatTraceLinkedSummary(trace)}</div>
-                          <div>
-                            Raw WPA: {formatTraceOptionalValue(trace.rawWpa)} | Share: {formatTraceShare(trace.share)} | Cap: {formatTraceOptionalValue(trace.cap)} | Final: {formatTraceFinalValue(trace)}
-                          </div>
-                        </div>
+                          managerName={row.managerName}
+                          teamName={row.teamName}
+                          testId={testId}
+                          trace={trace}
+                          onOpen={setSelectedMoment}
+                        />
                       ))
                     )}
                   </div>
@@ -446,10 +375,10 @@ export function ManagerWpaOverlay({ game, managerProfiles }: ManagerWpaOverlayPr
                     Deployment Stints
                   </div>
                   <div
-                    className="mt-1 space-y-2 text-[#E8E8D8]"
+                    className="mt-1 text-[#E8E8D8]"
                     data-testid={`manager-deployment-stint-details-${testId}`}
                   >
-                    {row.deploymentStints.length === 0 ? (
+                    {deploymentTraceRows.length === 0 ? (
                       <div
                         className="text-[#a0a898]"
                         data-testid={`manager-deployment-stint-empty-${testId}`}
@@ -457,44 +386,16 @@ export function ManagerWpaOverlay({ game, managerProfiles }: ManagerWpaOverlayPr
                         No deployment stints
                       </div>
                     ) : (
-                      row.deploymentStints.slice(0, 3).map((stint) => {
-                        const active = !isResolvedDeploymentStint(stint);
-                        const linkedSummary = buildDeploymentLinkedSummary(stint);
-                        const trace = traceRowsByRecordId.get(stint.stintId);
-                        return (
-                          <div
-                            key={stint.stintId}
-                            className="rounded-sm border border-[#4a6a4a] bg-[#1f2b21]/70 p-2"
-                            data-testid={`manager-deployment-stint-${testId}-${normalizeTestId(stint.stintId)}`}
-                          >
-                            <div>
-                              {formatDeploymentRole(stint.deploymentRole)}: {stint.playerName ?? stint.playerId}
-                            </div>
-                            {trace ? (
-                              <div className="text-[#d5dccd]">{trace.description}</div>
-                            ) : null}
-                            <div>Opened: Event {stint.openedAtEventIndex}</div>
-                            <div>Closed: {formatDeploymentClosed(stint)}</div>
-                            <div>
-                              {linkedSummary.label}: {linkedSummary.count}
-                              {linkedSummary.preview.length > 0
-                                ? ` (${linkedSummary.preview.join(", ")})`
-                                : ""}
-                            </div>
-                            <div>Raw WPA: {formatSignedManagerWpa(stint.rawLinkedWpa)}</div>
-                            <div>Share: {formatDeploymentShare(stint.managerShare)}</div>
-                            <div>Cap: {formatDeploymentCap(stint.cap)}</div>
-                            <div>
-                              Deployment WPA: {formatSignedManagerWpa(active ? 0 : stint.managerDeploymentWpa)}
-                            </div>
-                            {active ? (
-                              <div className="text-[#a0a898]">
-                                Active, excluded from resolved total
-                              </div>
-                            ) : null}
-                          </div>
-                        );
-                      })
+                      deploymentTraceRows.slice(0, 3).map((trace) => (
+                        <ManagerMomentTraceButton
+                          key={trace.recordId}
+                          managerName={row.managerName}
+                          teamName={row.teamName}
+                          testId={testId}
+                          trace={trace}
+                          onOpen={setSelectedMoment}
+                        />
+                      ))
                     )}
                   </div>
                 </div>
@@ -525,10 +426,10 @@ export function ManagerWpaOverlay({ game, managerProfiles }: ManagerWpaOverlayPr
                     Lineup Delta Details
                   </div>
                   <div
-                    className="mt-1 space-y-2 text-[#E8E8D8]"
+                    className="mt-1 text-[#E8E8D8]"
                     data-testid={`manager-lineup-delta-details-${testId}`}
                   >
-                    {row.lineupDeltas.length === 0 ? (
+                    {lineupTraceRows.length === 0 ? (
                       <div
                         className="text-[#a0a898]"
                         data-testid={`manager-lineup-delta-empty-${testId}`}
@@ -536,40 +437,15 @@ export function ManagerWpaOverlay({ game, managerProfiles }: ManagerWpaOverlayPr
                         No lineup deviations
                       </div>
                     ) : (
-                      row.lineupDeltas.slice(0, 3).map((delta) => (
-                        <div
-                          key={delta.decisionId}
-                          className="rounded-sm border border-[#4a6a4a] bg-[#1f2b21]/70 p-2"
-                        >
-                          {traceRowsByRecordId.get(delta.decisionId) ? (
-                            <div className="text-[#d5dccd]">
-                              {traceRowsByRecordId.get(delta.decisionId)?.description}
-                            </div>
-                          ) : null}
-                          <div>
-                            Chosen: {formatLineupSlot(
-                              delta.chosenPlayerName ?? delta.starterPlayerName,
-                              delta.chosenBattingOrderSlot ?? delta.battingOrderSlot,
-                              delta.chosenDefensivePosition ?? delta.defensivePosition,
-                            )}
-                          </div>
-                          <div>
-                            Optimal: {formatLineupSlot(
-                              delta.optimalPlayerName,
-                              delta.optimalBattingOrderSlot,
-                              delta.optimalDefensivePosition,
-                            )}
-                          </div>
-                          <div>
-                            Projected opportunity cost: {formatOptionalManagerWpa(delta.projectedOpportunityCost)}
-                          </div>
-                          <div>
-                            Actual vs optimal projection: {formatOptionalManagerWpa(delta.actualVsOptimalProjection)}
-                          </div>
-                          <div>
-                            Manager WPA: {formatSignedManagerWpa(delta.managerWpa)}
-                          </div>
-                        </div>
+                      lineupTraceRows.slice(0, 3).map((trace) => (
+                        <ManagerMomentTraceButton
+                          key={trace.recordId}
+                          managerName={row.managerName}
+                          teamName={row.teamName}
+                          testId={testId}
+                          trace={trace}
+                          onOpen={setSelectedMoment}
+                        />
                       ))
                     )}
                   </div>
@@ -595,6 +471,10 @@ export function ManagerWpaOverlay({ game, managerProfiles }: ManagerWpaOverlayPr
           );
         })}
       </div>
+      <ManagerMomentDetailDialog
+        moment={selectedMoment}
+        onClose={() => setSelectedMoment(null)}
+      />
     </section>
   );
 }

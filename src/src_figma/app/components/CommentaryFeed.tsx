@@ -5,6 +5,7 @@ import type {
   HistoricalTidbit,
 } from "../../../types/reporter";
 import type { ManagerDecisionRecord } from "../../../types/managerWpa";
+import { buildManagerValueTraceRows } from "../../../utils/managerValueTrace";
 import type {
   ManagerRecommendation,
   ManagerRecommendationAction,
@@ -12,6 +13,10 @@ import type {
   ManagerRecommendationPrimaryAction,
 } from "../../../utils/managerWpaRecommendations";
 import { CommentaryTypewriter } from "./CommentaryTypewriter";
+import {
+  ManagerMomentDetailDialog,
+  type ManagerMomentDetailContext,
+} from "./ManagerMomentDetail";
 
 export interface CommentaryFeedEntry {
   id: string;
@@ -103,10 +108,6 @@ function formatManagerWpa(decision: ManagerDecisionRecord | undefined): string {
 function managerWpaColorClass(status: string): string {
   if (status === "pending") return "text-[#fbbf24]";
   return status.startsWith("+") ? "text-[#34d399]" : "text-[#f87171]";
-}
-
-function formatDecisionSource(decision: ManagerDecisionRecord): string {
-  return decision.decisionSource.replace(/_/g, " ");
 }
 
 function isManagerRecommendationEntry(entry: CommentaryFeedEntry): boolean {
@@ -221,6 +222,24 @@ export function CommentaryFeed({
   const [selectedManagerEntry, setSelectedManagerEntry] =
     React.useState<CommentaryFeedEntry | null>(null);
   const selectedManagerDecision = selectedManagerEntry?.managerDecision;
+  const selectedManagerMoment =
+    React.useMemo<ManagerMomentDetailContext | null>(() => {
+      if (!selectedManagerDecision) return null;
+      const trace = buildManagerValueTraceRows({
+        managerDecisions: [selectedManagerDecision],
+      })[0];
+      if (!trace) return null;
+
+      return {
+        trace,
+        managerName:
+          selectedManagerEntry?.managerLabel ||
+          selectedManagerDecision.managerId,
+        teamName: selectedManagerDecision.teamId,
+        supplementalDetail: selectedManagerEntry?.managerDecisionDetail,
+        supplementalOutcome: selectedManagerEntry?.managerDecisionOutcome,
+      };
+    }, [selectedManagerDecision, selectedManagerEntry]);
 
   if (sortedEntries.length === 0) {
     return (
@@ -563,114 +582,23 @@ export function CommentaryFeed({
           </article>
         );
       })}
-      {selectedManagerDecision ? (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 px-4"
-          role="dialog"
-          aria-modal="true"
-          aria-label="Manager moment details"
-          onClick={() => setSelectedManagerEntry(null)}
-        >
-          <div
-            className="w-full max-w-md border-4 border-[#5a6b38] bg-[#243028] p-4 text-[#E8E8D8] shadow-[6px_6px_0_rgba(0,0,0,0.35)]"
-            onClick={(event) => event.stopPropagation()}
+      <ManagerMomentDetailDialog
+        moment={selectedManagerMoment}
+        onClose={() => setSelectedManagerEntry(null)}
+      >
+        {selectedManagerEntry?.canEditAttribution && selectedManagerDecision ? (
+          <button
+            type="button"
+            className="border border-[#5a6b38] bg-[#2f3b21] px-2 py-1 text-[8px] font-bold text-[#C4A853] hover:bg-[#3d5240]"
+            onClick={() => {
+              onManagerDecisionEdit?.(selectedManagerDecision);
+              setSelectedManagerEntry(null);
+            }}
           >
-            <div className="mb-3 flex items-start justify-between gap-3">
-              <div>
-                <div className="text-[8px] uppercase tracking-[0.18em] text-[#C4A853]">
-                  {selectedManagerEntry?.halfInningLabel} Manager Moment
-                </div>
-                <h3 className="m-0 mt-1 text-sm text-[#E8E8D8]">
-                  {selectedManagerDecision.displayTitle}
-                </h3>
-              </div>
-              <button
-                type="button"
-                className="border border-[#425546] bg-[#182118] px-2 py-1 text-[8px] text-[#C4A853] hover:bg-[#2f3b21]"
-                onClick={() => setSelectedManagerEntry(null)}
-              >
-                Close
-              </button>
-            </div>
-
-            <div className="space-y-2 text-[9px] leading-[1.45]">
-              <div className="flex items-center justify-between gap-3 border-b border-[#425546] pb-2">
-                <span className="text-[#88AA88]">
-                  {selectedManagerEntry?.managerLabel ||
-                    selectedManagerDecision.managerId}
-                </span>
-                <span
-                  className={`font-bold ${managerWpaColorClass(
-                    formatManagerWpa(selectedManagerDecision),
-                  )}`}
-                >
-                  {formatManagerWpa(selectedManagerDecision) === "pending"
-                    ? "Pending WPA"
-                    : `${formatManagerWpa(selectedManagerDecision)} WPA`}
-                </span>
-              </div>
-
-              <div>
-                <div className="text-[7px] uppercase tracking-[0.16em] text-[#C4A853]">
-                  Decision
-                </div>
-                <p className="m-0">
-                  {selectedManagerEntry?.managerDecisionDetail ||
-                    selectedManagerDecision.displaySummary}
-                </p>
-              </div>
-
-              <div>
-                <div className="text-[7px] uppercase tracking-[0.16em] text-[#C4A853]">
-                  Outcome Window
-                </div>
-                <p className="m-0">
-                  {selectedManagerEntry?.managerDecisionOutcome ||
-                    (selectedManagerDecision.resolved
-                      ? `Resolved at ${selectedManagerDecision.resolvedAtEventId || "the next committed event"}.`
-                      : `Waiting for ${selectedManagerDecision.resolutionWindow?.expectedEndpoint?.replace(/_/g, " ") || "the outcome"}.`)}
-                </p>
-              </div>
-
-              <div className="grid grid-cols-2 gap-2 border-t border-[#425546] pt-2 text-[8px] text-[#88AA88]">
-                <div>
-                  <span className="block text-[#C4A853]">Source</span>
-                  {formatDecisionSource(selectedManagerDecision)}
-                </div>
-                <div>
-                  <span className="block text-[#C4A853]">Confidence</span>
-                  {selectedManagerDecision.confidence}
-                </div>
-                <div>
-                  <span className="block text-[#C4A853]">Players</span>
-                  {selectedManagerDecision.involvedPlayerIds.length > 0
-                    ? selectedManagerDecision.involvedPlayerIds.join(", ")
-                    : "None tracked"}
-                </div>
-                <div>
-                  <span className="block text-[#C4A853]">Share</span>
-                  {typeof selectedManagerDecision.managerShare === "number"
-                    ? `${Math.round(selectedManagerDecision.managerShare * 100)}%`
-                    : "n/a"}
-                </div>
-              </div>
-
-              {selectedManagerEntry?.canEditAttribution ? (
-                <button
-                  type="button"
-                  className="mt-1 border border-[#5a6b38] bg-[#2f3b21] px-2 py-1 text-[8px] font-bold text-[#C4A853] hover:bg-[#3d5240]"
-                  onClick={() => {
-                    onManagerDecisionEdit?.(selectedManagerDecision);
-                    setSelectedManagerEntry(null);
-                  }}
-                >
-                  Edit Attribution
-                </button>
-              ) : null}
-            </div>
-          </div>
-        </div>
-      ) : null}
+            Edit Attribution
+          </button>
+        ) : null}
+      </ManagerMomentDetailDialog>
     </div>
   );
 }

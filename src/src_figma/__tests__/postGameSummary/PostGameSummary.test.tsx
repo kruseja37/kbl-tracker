@@ -611,7 +611,20 @@ describe('PostGameSummary Component', () => {
       expect(screen.getByTestId('manager-wpa-total-sox')).toHaveTextContent('+0.184');
       expect(screen.getByTestId('manager-wpa-total-tigers')).toHaveTextContent('-0.052');
       expect(within(screen.getByTestId('manager-wpa-card-sox')).getByText('2 (1 pending)')).toBeInTheDocument();
-      expect(within(screen.getByTestId('manager-wpa-card-sox')).getAllByText('Pinch hitter, +0.184')).toHaveLength(2);
+      fireEvent.click(
+        within(screen.getByTestId('manager-tactical-trace-details-sox')).getByRole(
+          'button',
+          { name: /open pinch hitter manager moment details for sox skipper/i },
+        ),
+      );
+      const dialog = screen.getByRole('dialog', { name: /manager moment details/i });
+      expect(dialog).toHaveTextContent('Sox Skipper / Sox');
+      expect(dialog).toHaveTextContent('Tactical');
+      expect(dialog).toHaveTextContent('Pinch Hitter');
+      expect(dialog).toHaveTextContent('Raw WPA');
+      expect(dialog).toHaveTextContent('+0.184');
+      expect(dialog).toHaveTextContent('Final Manager Value');
+      expect(dialog).toHaveTextContent('+0.184');
     });
 
     test('renders deployment stint recap details from committed manager records', async () => {
@@ -647,14 +660,27 @@ describe('PostGameSummary Component', () => {
       const details = await screen.findByTestId('manager-deployment-stint-details-sox');
       expect(screen.getByTestId('manager-deployment-wpa-sox')).toHaveTextContent('+0.080');
       expect(screen.getByTestId('manager-wpa-total-sox')).toHaveTextContent('+0.080');
-      expect(details).toHaveTextContent('Pinch runner: Home Speed');
-      expect(details).toHaveTextContent('Opened: Event 8');
-      expect(details).toHaveTextContent('Closed: Event 11 (Game End)');
-      expect(details).toHaveTextContent('Linked events: 2 (ab-10, ab-11)');
-      expect(details).toHaveTextContent('Raw WPA: +0.400');
-      expect(details).toHaveTextContent('Share: 20%');
-      expect(details).toHaveTextContent('Cap: +/-0.125');
-      expect(details).toHaveTextContent('Deployment WPA: +0.080');
+      expect(details).toHaveTextContent(
+        "Pinch runner Home Speed's remaining baserunning and fielding outcomes stay with the deployment choice.",
+      );
+      fireEvent.click(
+        within(details).getByRole('button', {
+          name: /open pinch runner manager moment details for sox skipper/i,
+        }),
+      );
+      const dialog = screen.getByRole('dialog', { name: /manager moment details/i });
+      expect(dialog).toHaveTextContent('Deployment');
+      expect(dialog).toHaveTextContent('Pinch Runner');
+      expect(dialog).toHaveTextContent('Linked Events');
+      expect(dialog).toHaveTextContent('ab-10, ab-11');
+      expect(dialog).toHaveTextContent('Raw WPA');
+      expect(dialog).toHaveTextContent('+0.400');
+      expect(dialog).toHaveTextContent('Share');
+      expect(dialog).toHaveTextContent('20%');
+      expect(dialog).toHaveTextContent('Cap');
+      expect(dialog).toHaveTextContent('+/-0.125');
+      expect(dialog).toHaveTextContent('Final Manager Value');
+      expect(dialog).toHaveTextContent('+0.080');
     });
 
     test('uses only committed managerDecisions and leaves player WPA display unchanged', async () => {

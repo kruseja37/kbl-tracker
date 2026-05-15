@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, test, vi } from "vitest";
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import type { ReactNode } from "react";
 
 import { GameDetail } from "../../app/pages/GameDetail";
@@ -260,9 +260,40 @@ describe("GameDetail Manager WPA overlay", () => {
     expect(screen.getByTestId("manager-tactical-trace-details-away")).toHaveTextContent(
       "Pending Pitching change: waiting for the next plate appearance before Manager Value is scored.",
     );
-    expect(screen.getByTestId("manager-tactical-trace-details-away")).toHaveTextContent(
-      "Cap: n/a",
+
+    fireEvent.click(
+      within(screen.getByTestId("manager-tactical-trace-details-away")).getByRole(
+        "button",
+        { name: /open pinch hitter manager moment details for casey custom/i },
+      ),
     );
+
+    let dialog = screen.getByRole("dialog", { name: /manager moment details/i });
+    expect(dialog).toHaveTextContent("Casey Custom / Away Club");
+    expect(dialog).toHaveTextContent("Layer");
+    expect(dialog).toHaveTextContent("Tactical");
+    expect(dialog).toHaveTextContent("Type / Role");
+    expect(dialog).toHaveTextContent("Pinch Hitter");
+    expect(dialog).toHaveTextContent("Raw WPA");
+    expect(dialog).toHaveTextContent("+0.184");
+    expect(dialog).toHaveTextContent("Share");
+    expect(dialog).toHaveTextContent("100%");
+    expect(dialog).toHaveTextContent("Cap");
+    expect(dialog).toHaveTextContent("n/a");
+    expect(dialog).toHaveTextContent("Final Manager Value");
+    expect(dialog).toHaveTextContent("+0.184");
+    fireEvent.click(within(dialog).getByRole("button", { name: /close/i }));
+
+    fireEvent.click(
+      within(screen.getByTestId("manager-tactical-trace-details-away")).getByRole(
+        "button",
+        { name: /open pitching change manager moment details for casey custom/i },
+      ),
+    );
+    dialog = screen.getByRole("dialog", { name: /manager moment details/i });
+    expect(dialog).toHaveTextContent("Pending, waiting for linked outcome");
+    expect(dialog).toHaveTextContent("Final Manager Value");
+    expect(dialog).toHaveTextContent("Pending");
   });
 
   test("shows committed deployment and lineup values separately from tactical Manager WPA", async () => {
@@ -356,27 +387,53 @@ describe("GameDetail Manager WPA overlay", () => {
     expect(screen.getByTestId("manager-deployment-wpa-away")).toHaveTextContent("+0.012");
     expect(screen.getByTestId("manager-lineup-delta-away")).toHaveTextContent("+0.100");
     expect(screen.getByTestId("manager-value-away")).toHaveTextContent("+0.296");
-    expect(screen.getByTestId("manager-lineup-delta-details-away")).toHaveTextContent("Chosen: #1 SS Player One");
     expect(screen.getByTestId("manager-lineup-delta-details-away")).toHaveTextContent(
       "Lineup Delta: chose #1 SS Player One instead of optimal #4 CF Bench One; actual value was compared to the optimal projection.",
     );
-    expect(screen.getByTestId("manager-lineup-delta-details-away")).toHaveTextContent("Optimal: #4 CF Bench One");
-    expect(screen.getByTestId("manager-lineup-delta-details-away")).toHaveTextContent("Projected opportunity cost: -0.020");
-    expect(screen.getByTestId("manager-lineup-delta-details-away")).toHaveTextContent("Actual vs optimal projection: +0.368");
     const deploymentDetails = screen.getByTestId("manager-deployment-stint-details-away");
-    expect(deploymentDetails).toHaveTextContent("Kept position player in: Bench One");
     expect(deploymentDetails).toHaveTextContent(
       "Kept Bench One in after the prompt; later batting 100%, fielding 75% outcomes carry deployment weights.",
     );
-    expect(deploymentDetails).toHaveTextContent("Opened: Event 1");
-    expect(deploymentDetails).toHaveTextContent("Closed: Event 2 (Game End)");
-    expect(deploymentDetails).toHaveTextContent(
-      "Linked outcomes: 2 (ab-2 batting 100%, ab-2 fielding 75%)",
+    fireEvent.click(
+      within(deploymentDetails).getByRole("button", {
+        name: /open kept position player in manager moment details for casey custom/i,
+      }),
     );
-    expect(deploymentDetails).toHaveTextContent("Raw WPA: +0.080");
-    expect(deploymentDetails).toHaveTextContent("Share: 15%");
-    expect(deploymentDetails).toHaveTextContent("Cap: +/-0.150");
-    expect(deploymentDetails).toHaveTextContent("Deployment WPA: +0.012");
+    let dialog = screen.getByRole("dialog", { name: /manager moment details/i });
+    expect(dialog).toHaveTextContent("Deployment");
+    expect(dialog).toHaveTextContent("Kept Position Player In");
+    expect(dialog).toHaveTextContent("Raw WPA");
+    expect(dialog).toHaveTextContent("+0.080");
+    expect(dialog).toHaveTextContent("Share");
+    expect(dialog).toHaveTextContent("15%");
+    expect(dialog).toHaveTextContent("Cap");
+    expect(dialog).toHaveTextContent("+/-0.150");
+    expect(dialog).toHaveTextContent("Final Manager Value");
+    expect(dialog).toHaveTextContent("+0.012");
+    expect(dialog).toHaveTextContent("Linked Events");
+    expect(dialog).toHaveTextContent("ab-2");
+    expect(dialog).toHaveTextContent("ab-2 Batting 100% raw +0.050, weighted +0.050");
+    expect(dialog).toHaveTextContent("ab-2 Fielding 75% raw +0.040, weighted +0.030");
+    fireEvent.click(within(dialog).getByRole("button", { name: /close/i }));
+
+    fireEvent.click(
+      within(screen.getByTestId("manager-lineup-delta-details-away")).getByRole(
+        "button",
+        { name: /open lineup delta manager moment details for casey custom/i },
+      ),
+    );
+    dialog = screen.getByRole("dialog", { name: /manager moment details/i });
+    expect(dialog).toHaveTextContent(
+      "Lineup Delta: chose #1 SS Player One instead of optimal #4 CF Bench One; actual value was compared to the optimal projection.",
+    );
+    expect(dialog).toHaveTextContent("Lineup Delta");
+    expect(dialog).toHaveTextContent("Lineup Construction");
+    expect(dialog).toHaveTextContent("Raw WPA");
+    expect(dialog).toHaveTextContent("+0.368");
+    expect(dialog).toHaveTextContent("Share");
+    expect(dialog).toHaveTextContent("25%");
+    expect(dialog).toHaveTextContent("Final Manager Value");
+    expect(dialog).toHaveTextContent("+0.100");
   });
 
   test("keeps active deployment stints out of resolved overlay totals", async () => {
@@ -413,11 +470,19 @@ describe("GameDetail Manager WPA overlay", () => {
     expect(screen.getByTestId("manager-deployment-wpa-away")).toHaveTextContent("+0.000");
     expect(screen.getByTestId("manager-wpa-total-away")).toHaveTextContent("+0.000");
     const deploymentDetails = screen.getByTestId("manager-deployment-stint-details-away");
-    expect(deploymentDetails).toHaveTextContent("Pitcher: Away Reliever");
-    expect(deploymentDetails).toHaveTextContent("Closed: Active");
-    expect(deploymentDetails).toHaveTextContent("Linked events: 1 (ab-6)");
     expect(deploymentDetails).toHaveTextContent("Active, excluded from resolved total");
-    expect(deploymentDetails).toHaveTextContent("Deployment WPA: +0.000");
+    fireEvent.click(
+      within(deploymentDetails).getByRole("button", {
+        name: /open pitcher manager moment details for casey custom/i,
+      }),
+    );
+    const dialog = screen.getByRole("dialog", { name: /manager moment details/i });
+    expect(dialog).toHaveTextContent("Active, excluded from resolved total");
+    expect(dialog).toHaveTextContent("Final Manager Value");
+    expect(dialog).toHaveTextContent("Active");
+    expect(dialog).toHaveTextContent("Linked Events");
+    expect(dialog).toHaveTextContent("ab-6");
+    expect(dialog).toHaveTextContent("No weighted outcomes linked.");
   });
 
   test("shows legacy defensive alignment records as non-scoring compatibility notes", async () => {
@@ -448,8 +513,18 @@ describe("GameDetail Manager WPA overlay", () => {
     expect(traceDetails).toHaveTextContent(
       "Legacy defensive alignment note only; no Manager Value scoring.",
     );
-    expect(traceDetails).toHaveTextContent("Cap: n/a");
-    expect(traceDetails).toHaveTextContent("Final: Non-scoring");
+    expect(traceDetails).toHaveTextContent("Non-scoring compatibility row");
+    fireEvent.click(
+      within(traceDetails).getByRole("button", {
+        name: /open defensive alignment manager moment details for casey custom/i,
+      }),
+    );
+    const dialog = screen.getByRole("dialog", { name: /manager moment details/i });
+    expect(dialog).toHaveTextContent("Non-scoring compatibility row");
+    expect(dialog).toHaveTextContent("Final Manager Value");
+    expect(dialog).toHaveTextContent("Non-scoring");
+    expect(dialog).toHaveTextContent("Cap");
+    expect(dialog).toHaveTextContent("n/a");
   });
 
   test("keeps manager overlay values out of the player KBL WPA leaderboard", async () => {
