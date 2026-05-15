@@ -5,6 +5,7 @@ import type { Player as RosterPlayer, Pitcher as RosterPitcher } from "@/app/com
 import type { MojoLevel } from "../../../engines/mojoEngine";
 import type { FitnessState } from "../../../engines/fitnessEngine";
 import { LineupPreview } from "@/app/components/LineupPreview";
+import { PregameBenchmarkChecklist } from "@/app/components/PregameBenchmarkChecklist";
 import { ReporterAssignmentPanel } from "@/app/components/ReporterAssignmentPanel";
 import { useLeagueBuilderData, type Player as LBPlayer } from "../../hooks/useLeagueBuilderData";
 import { loadTeamLineup } from "../../utils/lineupLoader";
@@ -29,7 +30,7 @@ import {
 import {
   buildCurrentLineupOptimalBenchmark,
   buildPregameBenchmarkIssues,
-  formatPregameBenchmarkSource,
+  buildPregameBenchmarkRows,
   upsertPregameBenchmark,
 } from "../utils/pregameLineupBenchmarks";
 import { withPregameManagerNavigationState } from "../utils/pregameNavigationState";
@@ -373,18 +374,22 @@ export function ExhibitionGame() {
     homeStoredOptimalLineups,
     awayStartingPitcher,
   );
-  const benchmarkIssues = buildPregameBenchmarkIssues([
+  const benchmarkRequirements = [
     {
       teamName: awayTeam?.name ?? "Away",
       opposingPitcherHand: awayOptimalBenchmarkHand,
+      dhEnabled: useDH,
       snapshot: awayOptimalBenchmark,
     },
     {
       teamName: homeTeam?.name ?? "Home",
       opposingPitcherHand: homeOptimalBenchmarkHand,
+      dhEnabled: useDH,
       snapshot: homeOptimalBenchmark,
     },
-  ]);
+  ];
+  const benchmarkRows = buildPregameBenchmarkRows(benchmarkRequirements);
+  const benchmarkIssues = buildPregameBenchmarkIssues(benchmarkRequirements);
   const canStartWithLineupDeltaBenchmarks = benchmarkIssues.length === 0;
 
   // Reorder lineup via drag-and-drop or tap-swap — merges reordered starters back with bench
@@ -619,7 +624,7 @@ export function ExhibitionGame() {
   const handleStartGame = () => {
     if (!canStartWithLineupDeltaBenchmarks) {
       setBenchmarkRegistrationMessage(
-        `Lineup Delta needs official benchmarks before first pitch: ${benchmarkIssues.join(" | ")}.`,
+        `Lineup Delta benchmarks need attention before first pitch: ${benchmarkIssues.join(" | ")}.`,
       );
       return;
     }
@@ -935,37 +940,12 @@ export function ExhibitionGame() {
                   ? "Lineups loaded from League Builder. Drag to reorder batting order."
                   : "Default lineups. Drag to reorder batting order."}
               </div>
-              <div className="mt-3 grid gap-2 text-[9px] text-[#E8E8D8]/70 md:grid-cols-2">
-                <div>
-                  {awayTeam.name}: VS {awayOptimalBenchmarkHand}HP benchmark {formatPregameBenchmarkSource(awayOptimalBenchmark)}
-                </div>
-                <div>
-                  {homeTeam.name}: VS {homeOptimalBenchmarkHand}HP benchmark {formatPregameBenchmarkSource(homeOptimalBenchmark)}
-                </div>
-              </div>
-              {!canStartWithLineupDeltaBenchmarks && (
-                <div className="mt-4 border-2 border-[#C4A853]/70 bg-[#1f2b21] p-3 text-[10px] text-[#E8E8D8]">
-                  <div className="mb-2 font-bold text-[#C4A853] tracking-[0.16em]">
-                    LINEUP DELTA BENCHMARK REQUIRED
-                  </div>
-                  <div className="mb-3 text-[#E8E8D8]/75">
-                    {benchmarkIssues.join(" • ")}
-                  </div>
-                  <button
-                    type="button"
-                    onClick={handleRegisterCurrentBenchmarks}
-                    disabled={isRegisteringBenchmarks}
-                    className="border-2 border-[#C4A853] bg-[#3d4a42] px-3 py-2 text-[9px] font-bold tracking-[0.16em] text-[#C4A853] hover:bg-[#4a5a50] disabled:opacity-60"
-                  >
-                    {isRegisteringBenchmarks ? "REGISTERING..." : "REGISTER CURRENT LINEUPS"}
-                  </button>
-                </div>
-              )}
-              {benchmarkRegistrationMessage && (
-                <div className="mt-3 border-2 border-[#556B55] bg-[#1f2b21] p-2 text-[10px] text-[#E8E8D8]/80">
-                  {benchmarkRegistrationMessage}
-                </div>
-              )}
+              <PregameBenchmarkChecklist
+                rows={benchmarkRows}
+                isActionPending={isRegisteringBenchmarks}
+                message={benchmarkRegistrationMessage}
+                onAction={handleRegisterCurrentBenchmarks}
+              />
             </div>
 
             {/* Loading lineups */}

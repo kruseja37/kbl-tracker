@@ -25,6 +25,7 @@ vi.mock('../../../utils/franchisePlayerStorage', () => ({
 import { buildOptimalLineupSnapshot } from '../../../utils/optimalLineup';
 import {
   buildFranchiseGameTrackerRoster,
+  buildFranchisePregameReadiness,
   collectFranchiseRosterPlayerIds,
 } from '../../app/utils/franchiseGameTrackerRoster';
 
@@ -128,6 +129,78 @@ describe('franchise GameTracker roster identity', () => {
 
     expect(Array.from(ids)).toEqual(expect.arrayContaining(['lb-1', 'lb-sp', 'Legacy Name']));
     expect(ids.has('J. CATCHER')).toBe(false);
+  });
+
+  test('validates Franchise pregame readiness before benchmark registration', () => {
+    const batterStats = { ab: 0, h: 0, r: 0, rbi: 0, bb: 0, k: 0 };
+    const pitcherStats = { ip: '0.0', h: 0, r: 0, er: 0, bb: 0, k: 0, pitches: 0 };
+    const pitcher = {
+      playerId: 'sp-1',
+      name: 'S. STARTER',
+      stats: pitcherStats,
+      throwingHand: 'R' as const,
+    };
+    const player = (battingOrder: number, position: string) => ({
+      playerId: `p-${battingOrder}-${position}`,
+      name: `Player ${battingOrder}`,
+      battingOrder,
+      position,
+      stats: batterStats,
+      battingHand: 'R' as const,
+    });
+
+    const incomplete = buildFranchisePregameReadiness({
+      teams: [
+        {
+          teamName: 'Away Team',
+          players: [player(1, 'C')],
+          pitchers: [pitcher],
+          selectedStarterIdx: 0,
+          useDH: true,
+        },
+      ],
+    });
+
+    expect(incomplete.isReady).toBe(false);
+    expect(incomplete.issues).toEqual(
+      expect.arrayContaining([
+        'Away Team: needs 9 batting-order players for GameTracker start; found 1.',
+        'Away Team: needs 9 non-pitcher lineup slots for DH benchmark; found 1.',
+      ]),
+    );
+
+    const dhReady = buildFranchisePregameReadiness({
+      teams: [
+        {
+          teamName: 'DH Team',
+          players: ['C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF', 'DH'].map((position, index) =>
+            player(index + 1, position),
+          ),
+          pitchers: [pitcher],
+          selectedStarterIdx: 0,
+          useDH: true,
+        },
+      ],
+    });
+    expect(dhReady.isReady).toBe(true);
+
+    const noDhReady = buildFranchisePregameReadiness({
+      teams: [
+        {
+          teamName: 'No DH Team',
+          players: [
+            ...['C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF'].map((position, index) =>
+              player(index + 1, position),
+            ),
+            { ...player(9, 'P'), playerId: 'sp-1', name: 'S. STARTER' },
+          ],
+          pitchers: [pitcher],
+          selectedStarterIdx: 0,
+          useDH: false,
+        },
+      ],
+    });
+    expect(noDhReady.isReady).toBe(true);
   });
 
   test('loads franchise saved lineup and RHP/LHP optimal benchmarks for game launch', async () => {

@@ -28,6 +28,110 @@ export interface FranchiseGameTrackerRoster {
   };
 }
 
+export interface FranchisePregameReadinessTeamInput {
+  teamName: string;
+  players: TeamRosterPlayer[];
+  pitchers: TeamRosterPitcher[];
+  selectedStarterIdx: number;
+  useDH: boolean;
+}
+
+export interface FranchisePregameReadinessInput {
+  teams: FranchisePregameReadinessTeamInput[];
+}
+
+export interface FranchisePregameReadinessTeam {
+  teamName: string;
+  isReady: boolean;
+  issues: string[];
+}
+
+export interface FranchisePregameReadiness {
+  isReady: boolean;
+  issues: string[];
+  teams: FranchisePregameReadinessTeam[];
+}
+
+const GAME_TRACKER_BATTING_ORDERS = [1, 2, 3, 4, 5, 6, 7, 8, 9] as const;
+
+function isPitcherLineupPlayer(player: TeamRosterPlayer): boolean {
+  return [player.position, player.primaryPosition].some((position) =>
+    PITCHER_POS.has(String(position ?? '').trim().toUpperCase()),
+  );
+}
+
+function formatOrders(orders: number[]): string {
+  return orders.map((order) => `#${order}`).join(', ');
+}
+
+export function buildFranchisePregameReadiness(
+  input: FranchisePregameReadinessInput,
+): FranchisePregameReadiness {
+  const teams = input.teams.map((team): FranchisePregameReadinessTeam => {
+    const issues: string[] = [];
+    const selectedStarter = team.pitchers[team.selectedStarterIdx];
+    if (!selectedStarter) {
+      issues.push(`${team.teamName}: select a starting pitcher.`);
+    }
+
+    const lineupPlayers = team.players.filter((player) => player.battingOrder != null);
+    if (lineupPlayers.length < 9) {
+      issues.push(
+        `${team.teamName}: needs 9 batting-order players for GameTracker start; found ${lineupPlayers.length}.`,
+      );
+    }
+
+    const orderCounts = new Map<number, number>();
+    const invalidOrders: number[] = [];
+    for (const player of lineupPlayers) {
+      const order = player.battingOrder ?? 0;
+      if (!Number.isInteger(order) || order < 1 || order > 9) {
+        invalidOrders.push(order);
+      }
+      orderCounts.set(order, (orderCounts.get(order) ?? 0) + 1);
+    }
+
+    const duplicateOrders = Array.from(orderCounts.entries())
+      .filter(([, count]) => count > 1)
+      .map(([order]) => order)
+      .sort((left, right) => left - right);
+    if (duplicateOrders.length > 0) {
+      issues.push(`${team.teamName}: batting orders must be unique; duplicate ${formatOrders(duplicateOrders)}.`);
+    }
+
+    const missingOrders = GAME_TRACKER_BATTING_ORDERS.filter((order) => !orderCounts.has(order));
+    if (missingOrders.length > 0) {
+      issues.push(`${team.teamName}: batting orders must cover #1-#9; missing ${formatOrders(missingOrders)}.`);
+    }
+
+    if (invalidOrders.length > 0) {
+      const uniqueInvalidOrders = Array.from(new Set(invalidOrders)).sort((left, right) => left - right);
+      issues.push(`${team.teamName}: batting orders must stay between #1 and #9; found ${formatOrders(uniqueInvalidOrders)}.`);
+    }
+
+    const benchmarkSlotCount = lineupPlayers.filter((player) => !isPitcherLineupPlayer(player)).length;
+    const requiredBenchmarkSlots = team.useDH ? 9 : 8;
+    if (benchmarkSlotCount !== requiredBenchmarkSlots) {
+      issues.push(
+        `${team.teamName}: needs ${requiredBenchmarkSlots} non-pitcher lineup slots for ${team.useDH ? 'DH' : 'no-DH'} benchmark; found ${benchmarkSlotCount}.`,
+      );
+    }
+
+    return {
+      teamName: team.teamName,
+      isReady: issues.length === 0,
+      issues,
+    };
+  });
+  const issues = teams.flatMap((team) => team.issues);
+
+  return {
+    isReady: issues.length === 0,
+    issues,
+    teams,
+  };
+}
+
 export function collectFranchiseRosterPlayerIds(
   rosters: Array<{ players: TeamRosterPlayer[]; pitchers: TeamRosterPitcher[] }>
 ): Set<string> {
