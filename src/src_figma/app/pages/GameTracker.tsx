@@ -836,14 +836,6 @@ export function buildDefensiveColumnPlayersForDisplay(args: {
     });
 }
 
-function getBatterDestinationBase(
-  result: AtBatEvent["result"],
-): "first" | "second" | "third" | null {
-  if (result === "1B") return "first";
-  if (result === "2B" || result === "GRD") return "second";
-  if (result === "3B") return "third";
-  return null;
-}
 // EXH-036: Import Mojo/Fitness types for PlayerCardModal editing
 import type { MojoLevel } from "../../../engines/mojoEngine";
 import { clampMojo } from "../../../engines/mojoEngine";
@@ -941,6 +933,10 @@ import {
   buildLiveBasesFromRunnersAfter,
 } from "../utils/liveBaseCorrection";
 import {
+  completeRunnerOutcomesForDerivation,
+  deriveEnrichedAtBatState,
+} from "../utils/enrichedAtBatStateDerivation";
+import {
   mapFieldingPlayTypeToPlayDifficulty,
   type FieldingPlayTypeValue,
 } from "../utils/fieldingPlayType";
@@ -960,7 +956,6 @@ import {
   isCorrectableBatterResult,
   resolveBatterOutcomeResult,
   runnerOutcomeCountsAsOut,
-  runnerOutcomeCountsAsRun,
   runnerDefaultsToAdvancement,
   type PendingRunnerCorrectionAction,
 } from "../utils/gameTrackerRunnerCorrection";
@@ -9276,53 +9271,71 @@ export function GameTracker() {
         }
 
         if (field === "batterOutAdvancing") {
-          const batterBase = getBatterDestinationBase(existingAtBat.result);
-          if (!batterBase) {
+          const nextBatterOutAdvancing = Boolean(value);
+          const runnerOutcomesForCompletion = nextBatterOutAdvancing
+            ? existingAtBat.runnerOutcomes || []
+            : (existingAtBat.runnerOutcomes || []).filter(
+                (runnerOutcome) => runnerOutcome.fromBase !== "batter",
+              );
+          const completedOutcomes =
+            completeRunnerOutcomesForDerivation(
+              existingAtBat,
+              runnerOutcomesForCompletion,
+            ).runnerOutcomes;
+          const nextRunnerOutcomes = [...completedOutcomes];
+          const batterOutcomeIndex = nextRunnerOutcomes.findIndex(
+            (runnerOutcome) => runnerOutcome.fromBase === "batter",
+          );
+          if (batterOutcomeIndex < 0) {
             return;
           }
+          const currentBatterOutcome = nextRunnerOutcomes[batterOutcomeIndex];
+          nextRunnerOutcomes[batterOutcomeIndex] = {
+            ...currentBatterOutcome,
+            runnerId: existingAtBat.batterId,
+            runnerName: existingAtBat.batterName,
+            fromBase: "batter",
+            toBase: nextBatterOutAdvancing
+              ? "out"
+              : currentBatterOutcome.toBase,
+            isOutAdvancing: nextBatterOutAdvancing ? true : undefined,
+            errorType: nextBatterOutAdvancing
+              ? undefined
+              : currentBatterOutcome.errorType,
+            errorChargedTo: nextBatterOutAdvancing
+              ? undefined
+              : currentBatterOutcome.errorChargedTo,
+          };
 
-          const nextBatterOutAdvancing = Boolean(value);
-          const previousBatterOutAdvancing =
-            !!existingAtBat.enrichment?.batterOutAdvancing;
-          const outDelta =
-            Number(nextBatterOutAdvancing) - Number(previousBatterOutAdvancing);
-          const nextOutsAfter = Math.max(
-            existingAtBat.outs,
-            Math.min(3, existingAtBat.outsAfter + outDelta),
-          );
-          const nextOutsRecorded = Math.max(
-            0,
-            (existingAtBat.outsRecorded ??
-              existingAtBat.outsAfter - existingAtBat.outs) + outDelta,
-          );
-
-          let nextRunnersAfter: AtBatEvent["runnersAfter"];
-          if (nextOutsAfter >= 3) {
-            nextRunnersAfter = { first: null, second: null, third: null };
-          } else {
-            nextRunnersAfter = { ...existingAtBat.runnersAfter };
-            if (nextBatterOutAdvancing) {
-              if (
-                nextRunnersAfter[batterBase]?.runnerId ===
-                existingAtBat.batterId
-              ) {
-                nextRunnersAfter[batterBase] = null;
-              }
-            } else {
-              nextRunnersAfter[batterBase] = {
-                runnerId: existingAtBat.batterId,
-                runnerName: existingAtBat.batterName,
-                responsiblePitcherId: existingAtBat.pitcherId,
-              };
-            }
-          }
+          const derivedAtBatState = deriveEnrichedAtBatState({
+            existingAtBat,
+            runnerOutcomes: nextRunnerOutcomes,
+            result: existingAtBat.result,
+            totalInnings: hookTotalInningsRef.current,
+          });
+          const nextRunnersAfter = derivedAtBatState.runnersAfter;
+          const nextOutsAfter = derivedAtBatState.outsAfter;
+          const outsAfterDelta = nextOutsAfter - existingAtBat.outsAfter;
 
           const timestamp = Date.now();
           await updateAtBatEvent(enrichingEntry.eventId, {
             enrichment: update as NonNullable<AtBatEvent["enrichment"]>,
+            runnerOutcomes: derivedAtBatState.runnerOutcomes,
+            result: derivedAtBatState.result,
+            batterReachedOnError: derivedAtBatState.batterReachedOnError,
+            batterErrorType: derivedAtBatState.batterErrorType,
+            batterErrorChargedToPosition:
+              derivedAtBatState.batterErrorChargedToPosition,
+            batterCorrectionOriginalResult:
+              derivedAtBatState.batterCorrectionOriginalResult,
+            rbiCount: derivedAtBatState.rbiCount,
+            runsScored: derivedAtBatState.runsScored,
             outsAfter: nextOutsAfter,
-            outsRecorded: nextOutsRecorded,
+            outsRecorded: derivedAtBatState.outsRecorded,
             runnersAfter: nextRunnersAfter,
+            awayScoreAfter: derivedAtBatState.awayScoreAfter,
+            homeScoreAfter: derivedAtBatState.homeScoreAfter,
+            isWalkOff: derivedAtBatState.isWalkOff,
             totalInnings: hookTotalInningsRef.current,
             version: (existingAtBat.version ?? 1) + 1,
             editHistory: [
@@ -9360,9 +9373,10 @@ export function GameTracker() {
                 inning: existingAtBat.inning,
                 halfInning: existingAtBat.halfInning,
               },
+              derivedAtBatState.batterReachedOnError ? "error" : undefined,
             );
-            if (targetsCurrentLiveHalf && outDelta !== 0) {
-              applyOutsAdjustment(outDelta);
+            if (targetsCurrentLiveHalf && outsAfterDelta !== 0) {
+              applyOutsAdjustment(outsAfterDelta);
             }
           }
 
@@ -9414,19 +9428,76 @@ export function GameTracker() {
           field === "rescuedThrow";
         const isFieldingDataField =
           isFieldingSyncField || field === "fieldingDifficulty";
+        let fieldingDerivedAtBatState: ReturnType<
+          typeof deriveEnrichedAtBatState
+        > | null = null;
         if (isFieldingSyncField) {
+          const hasExplicitRunnerOutcomes =
+            Array.isArray(existingAtBat.runnerOutcomes) &&
+            existingAtBat.runnerOutcomes.length > 0;
+          if (hasExplicitRunnerOutcomes) {
+            const completedOutcomesForDerivation =
+              completeRunnerOutcomesForDerivation(
+                existingAtBat,
+                existingAtBat.runnerOutcomes || [],
+              ).runnerOutcomes;
+            fieldingDerivedAtBatState = deriveEnrichedAtBatState({
+              existingAtBat,
+              runnerOutcomes: completedOutcomesForDerivation,
+              result: existingAtBat.result,
+              totalInnings: hookTotalInningsRef.current,
+            });
+          }
+
           const syncedFieldingEvents =
             await buildFieldingSyncEventsForSequenceEdit(
               existingAtBat,
               {
                 enrichment:
                   update as Partial<NonNullable<AtBatEvent["enrichment"]>>,
+                ...(fieldingDerivedAtBatState
+                  ? {
+                      result: fieldingDerivedAtBatState.result,
+                      runnerOutcomes:
+                        fieldingDerivedAtBatState.runnerOutcomes,
+                      batterReachedOnError:
+                        fieldingDerivedAtBatState.batterReachedOnError,
+                      batterErrorType:
+                        fieldingDerivedAtBatState.batterErrorType,
+                      batterErrorChargedToPosition:
+                        fieldingDerivedAtBatState.batterErrorChargedToPosition,
+                    }
+                  : {}),
               },
             );
           await updateAtBatEventWithFieldingSync(
             enrichingEntry.eventId,
             {
               enrichment: update as NonNullable<AtBatEvent["enrichment"]>,
+              ...(fieldingDerivedAtBatState
+                ? {
+                    runnerOutcomes:
+                      fieldingDerivedAtBatState.runnerOutcomes,
+                    result: fieldingDerivedAtBatState.result,
+                    batterReachedOnError:
+                      fieldingDerivedAtBatState.batterReachedOnError,
+                    batterErrorType:
+                      fieldingDerivedAtBatState.batterErrorType,
+                    batterErrorChargedToPosition:
+                      fieldingDerivedAtBatState.batterErrorChargedToPosition,
+                    batterCorrectionOriginalResult:
+                      fieldingDerivedAtBatState.batterCorrectionOriginalResult,
+                    rbiCount: fieldingDerivedAtBatState.rbiCount,
+                    runsScored: fieldingDerivedAtBatState.runsScored,
+                    outsAfter: fieldingDerivedAtBatState.outsAfter,
+                    outsRecorded: fieldingDerivedAtBatState.outsRecorded,
+                    runnersAfter: fieldingDerivedAtBatState.runnersAfter,
+                    awayScoreAfter: fieldingDerivedAtBatState.awayScoreAfter,
+                    homeScoreAfter: fieldingDerivedAtBatState.homeScoreAfter,
+                    isWalkOff: fieldingDerivedAtBatState.isWalkOff,
+                    totalInnings: hookTotalInningsRef.current,
+                  }
+                : {}),
               version: nextVersion,
               editHistory,
               ...(shouldMarkQualityAtBat ? { isQualityAtBat: true } : {}),
@@ -9452,12 +9523,89 @@ export function GameTracker() {
           },
         }));
 
+        if (fieldingDerivedAtBatState) {
+          const nextRunnersAfter = fieldingDerivedAtBatState.runnersAfter;
+          const scoreDelta =
+            existingAtBat.halfInning === "TOP"
+              ? fieldingDerivedAtBatState.awayScoreAfter -
+                existingAtBat.awayScoreAfter
+              : fieldingDerivedAtBatState.homeScoreAfter -
+                existingAtBat.homeScoreAfter;
+          const outsAfterDelta =
+            fieldingDerivedAtBatState.outsAfter - existingAtBat.outsAfter;
+          const latestAtBatEntry = [...playLogEntries]
+            .reverse()
+            .find((entry) => entry.eventType === "at_bat" && entry.eventId);
+          const isLatestAtBat =
+            latestAtBatEntry?.eventId === existingAtBat.eventId;
+          const targetsCurrentLiveHalf =
+            existingAtBat.inning === gameState.inning &&
+            existingAtBat.halfInning === (gameState.isTop ? "TOP" : "BOTTOM");
+
+          if (scoreDelta !== 0) {
+            const prompt = buildRunnerScoreCorrectionPrompt({
+              inning: existingAtBat.inning,
+              halfInning: existingAtBat.halfInning,
+              current: {
+                away: gameState.awayScore,
+                home: gameState.homeScore,
+              },
+              scoreDelta,
+            });
+
+            if (prompt) {
+              setScoreCorrectionPrompt(prompt);
+            }
+          }
+
+          if (isLatestAtBat) {
+            applyBasesCorrection(
+              buildLiveBasesFromRunnersAfter(nextRunnersAfter),
+              nextRunnersAfter,
+              {
+                inning: existingAtBat.inning,
+                halfInning: existingAtBat.halfInning,
+              },
+              fieldingDerivedAtBatState.batterReachedOnError
+                ? "error"
+                : undefined,
+            );
+          }
+
+          if (isLatestAtBat && targetsCurrentLiveHalf && outsAfterDelta !== 0) {
+            applyOutsAdjustment(outsAfterDelta);
+          }
+        }
+
         // Update PlayLogEntry flags
         setPlayLogEntries((prev) =>
           prev.map((e) => {
             if (e.id !== enrichingEntry.id) return e;
             const nextAtBat: AtBatEvent = {
               ...existingAtBat,
+              ...(fieldingDerivedAtBatState
+                ? {
+                    runnerOutcomes:
+                      fieldingDerivedAtBatState.runnerOutcomes,
+                    result: fieldingDerivedAtBatState.result,
+                    batterReachedOnError:
+                      fieldingDerivedAtBatState.batterReachedOnError,
+                    batterErrorType:
+                      fieldingDerivedAtBatState.batterErrorType,
+                    batterErrorChargedToPosition:
+                      fieldingDerivedAtBatState.batterErrorChargedToPosition,
+                    batterCorrectionOriginalResult:
+                      fieldingDerivedAtBatState.batterCorrectionOriginalResult,
+                    rbiCount: fieldingDerivedAtBatState.rbiCount,
+                    runsScored: fieldingDerivedAtBatState.runsScored,
+                    outsAfter: fieldingDerivedAtBatState.outsAfter,
+                    outsRecorded: fieldingDerivedAtBatState.outsRecorded,
+                    runnersAfter: fieldingDerivedAtBatState.runnersAfter,
+                    awayScoreAfter: fieldingDerivedAtBatState.awayScoreAfter,
+                    homeScoreAfter: fieldingDerivedAtBatState.homeScoreAfter,
+                    isWalkOff: fieldingDerivedAtBatState.isWalkOff,
+                  }
+                : {}),
               enrichment: {
                 ...(existingAtBat.enrichment || {}),
                 ...update,
@@ -9505,6 +9653,8 @@ export function GameTracker() {
       applyBasesCorrection,
       applyOutsAdjustment,
       buildFieldingSyncEventsForSequenceEdit,
+      gameState.awayScore,
+      gameState.homeScore,
       gameState.inning,
       gameState.isTop,
       enrichingEntry,
@@ -10437,9 +10587,10 @@ export function GameTracker() {
         }
         updatedOutcomes[runnerIdx] = nextOutcomeDraft;
         const nextOutcome = updatedOutcomes[runnerIdx];
+        const completedOutcomesForDerivation =
+          completeRunnerOutcomesForDerivation(existingAtBat, updatedOutcomes)
+            .runnerOutcomes;
 
-        const previousRunCounted = runnerOutcomeCountsAsRun(previousOutcome);
-        const nextRunCounted = runnerOutcomeCountsAsRun(nextOutcome);
         const previousOutCounted = runnerOutcomeCountsAsOut(previousOutcome);
         const nextOutCounted = runnerOutcomeCountsAsOut(nextOutcome);
         const hadPriorOutToSafeCorrection = (existingAtBat.editHistory || []).some(
@@ -10452,89 +10603,9 @@ export function GameTracker() {
           !nextOutCounted &&
           !!nextOutcome.errorType &&
           (previousOutCounted || hadPriorOutToSafeCorrection);
-        const scoreDelta = Number(nextRunCounted) - Number(previousRunCounted);
-        const outDelta = Number(nextOutCounted) - Number(previousOutCounted);
-
-        const nextRunsScored = Array.isArray(existingAtBat.runsScored)
-          ? (() => {
-              const scoredIds = existingAtBat.runsScored.filter(
-                (runnerId) => runnerId !== previousOutcome.runnerId,
-              );
-              if (nextRunCounted) {
-                scoredIds.push(previousOutcome.runnerId);
-              }
-              return scoredIds;
-            })()
-          : Math.max(0, existingAtBat.runsScored + scoreDelta);
-
-        const nextRunnersAfter = {
-          ...existingAtBat.runnersAfter,
-          first:
-            existingAtBat.runnersAfter.first?.runnerId ===
-            previousOutcome.runnerId
-              ? null
-              : existingAtBat.runnersAfter.first,
-          second:
-            existingAtBat.runnersAfter.second?.runnerId ===
-            previousOutcome.runnerId
-              ? null
-              : existingAtBat.runnersAfter.second,
-          third:
-            existingAtBat.runnersAfter.third?.runnerId ===
-            previousOutcome.runnerId
-              ? null
-              : existingAtBat.runnersAfter.third,
-        };
-        const previousRunnerInfo =
-          existingAtBat.runners.first?.runnerId === previousOutcome.runnerId
-            ? existingAtBat.runners.first
-            : existingAtBat.runners.second?.runnerId ===
-                previousOutcome.runnerId
-              ? existingAtBat.runners.second
-              : existingAtBat.runners.third?.runnerId ===
-                  previousOutcome.runnerId
-                ? existingAtBat.runners.third
-                : existingAtBat.runnersAfter.first?.runnerId ===
-                    previousOutcome.runnerId
-                  ? existingAtBat.runnersAfter.first
-                  : existingAtBat.runnersAfter.second?.runnerId ===
-                      previousOutcome.runnerId
-                    ? existingAtBat.runnersAfter.second
-                    : existingAtBat.runnersAfter.third?.runnerId ===
-                        previousOutcome.runnerId
-                      ? existingAtBat.runnersAfter.third
-                      : null;
-
-        if (
-          ["first", "second", "third"].includes(nextOutcome.toBase) &&
-          !nextOutCounted
-        ) {
-          const destinationKey = nextOutcome.toBase as
-            | "first"
-            | "second"
-            | "third";
-          nextRunnersAfter[destinationKey] = {
-            runnerId: previousOutcome.runnerId,
-            runnerName: previousOutcome.runnerName,
-            responsiblePitcherId:
-              previousRunnerInfo?.responsiblePitcherId ??
-              existingAtBat.pitcherId,
-          };
-        }
-
-        const nextAwayScoreAfter = Math.max(
-          0,
-          existingAtBat.awayScoreAfter +
-            (existingAtBat.halfInning === "TOP" ? scoreDelta : 0),
-        );
-        const nextHomeScoreAfter = Math.max(
-          0,
-          existingAtBat.homeScoreAfter +
-            (existingAtBat.halfInning === "BOTTOM" ? scoreDelta : 0),
-        );
-        const rawNextOutsRecorded =
-          (existingAtBat.outsRecorded ??
-            existingAtBat.outsAfter - existingAtBat.outs) + outDelta;
+        const derivedOutsRecorded = completedOutcomesForDerivation.filter(
+          runnerOutcomeCountsAsOut,
+        ).length;
         const storedOriginalBatterResult =
           existingAtBat.batterCorrectionOriginalResult;
         const baseBatterResult =
@@ -10544,33 +10615,59 @@ export function GameTracker() {
           isCorrectableBatterResult(baseBatterResult);
         let correctedResult: typeof existingAtBat.result | null = null;
         if (isCorrectableBatterOutcome) {
-          const resolvedBatterResult = resolveBatterOutcomeResult({
-            currentResult: existingAtBat.result,
-            originalResult: storedOriginalBatterResult,
-            nextOutcome,
-            nextOutsRecorded: rawNextOutsRecorded,
-          });
-          if (resolvedBatterResult !== existingAtBat.result) {
-            correctedResult = resolvedBatterResult;
+          const shouldPreserveZeroOutFc =
+            existingAtBat.result === "FC" &&
+            nextOutcome.toBase === "first" &&
+            !nextOutcome.errorType &&
+            !nextOutCounted &&
+            derivedOutsRecorded === 0;
+          if (!shouldPreserveZeroOutFc) {
+            const resolvedBatterResult = resolveBatterOutcomeResult({
+              currentResult: existingAtBat.result,
+              originalResult: storedOriginalBatterResult,
+              nextOutcome,
+              nextOutsRecorded: derivedOutsRecorded,
+            });
+            if (resolvedBatterResult !== existingAtBat.result) {
+              correctedResult = resolvedBatterResult;
+            }
           }
-        } else if (existingAtBat.result === "GO" && outDelta > 0) {
-          if (rawNextOutsRecorded >= 2) {
+        } else if (existingAtBat.result === "GO") {
+          if (derivedOutsRecorded >= 2) {
             correctedResult = "DP";
           }
-        } else if (existingAtBat.result === "DP" && outDelta < 0) {
-          if (rawNextOutsRecorded < 2) {
+        } else if (existingAtBat.result === "DP") {
+          if (derivedOutsRecorded < 2) {
             correctedResult = "GO";
           }
         }
-        const nextRecordedResult = correctedResult ?? existingAtBat.result;
-        const minimumResultOuts = calculateMinimumResultOuts(
-          nextRecordedResult,
-        );
-        const nextOutsRecorded = Math.max(minimumResultOuts, rawNextOutsRecorded);
-        const nextOutsAfter = Math.max(
-          existingAtBat.outs,
-          existingAtBat.outs + nextOutsRecorded,
-        );
+        const derivedAtBatState = deriveEnrichedAtBatState({
+          existingAtBat,
+          runnerOutcomes: completedOutcomesForDerivation,
+          result: correctedResult ?? existingAtBat.result,
+          totalInnings: hookTotalInningsRef.current,
+        });
+        const nextRecordedResult = derivedAtBatState.result;
+        const nextRunsScored = derivedAtBatState.runsScored;
+        const nextRunnersAfter = derivedAtBatState.runnersAfter;
+        const nextAwayScoreAfter = derivedAtBatState.awayScoreAfter;
+        const nextHomeScoreAfter = derivedAtBatState.homeScoreAfter;
+        const nextOutsRecorded = derivedAtBatState.outsRecorded;
+        const nextOutsAfter = derivedAtBatState.outsAfter;
+        const nextIsWalkOff = derivedAtBatState.isWalkOff;
+        const nextBatterReachedOnError =
+          derivedAtBatState.batterReachedOnError;
+        const nextBatterErrorType = derivedAtBatState.batterErrorType;
+        const nextBatterErrorChargedToPosition =
+          derivedAtBatState.batterErrorChargedToPosition;
+        const nextBatterCorrectionOriginalResult =
+          derivedAtBatState.batterCorrectionOriginalResult;
+        const scoreDelta =
+          existingAtBat.halfInning === "TOP"
+            ? nextAwayScoreAfter - existingAtBat.awayScoreAfter
+            : nextHomeScoreAfter - existingAtBat.homeScoreAfter;
+        const outsAfterDelta = nextOutsAfter - existingAtBat.outsAfter;
+        const resultChanged = nextRecordedResult !== existingAtBat.result;
         const nextEndGameEvaluation = evaluateEndGameTrigger({
           inning: existingAtBat.inning,
           isTop: existingAtBat.halfInning === "TOP",
@@ -10580,31 +10677,11 @@ export function GameTracker() {
           awayScoreAfter: nextAwayScoreAfter,
           context: "live_play",
         });
-        const nextIsWalkOff = nextEndGameEvaluation.isWalkOff;
         const nextVersionBase = existingAtBat.version ?? 1;
-        const normalizedRunnersAfter =
-          nextOutsAfter >= 3
-            ? { first: null, second: null, third: null }
-            : nextRunnersAfter;
-        const nextBatterReachedOnError =
-          isCorrectableBatterOutcome &&
-          nextOutcome.toBase === "first" &&
-          !!nextOutcome.errorType;
-        const nextBatterErrorType =
-          nextBatterReachedOnError ? nextOutcome.errorType : undefined;
-        const nextBatterErrorChargedToPosition =
-          nextBatterReachedOnError &&
-          typeof nextOutcome.errorChargedTo === "number"
-            ? nextOutcome.errorChargedTo
-            : undefined;
-        const nextBatterCorrectionOriginalResult =
-          isCorrectableBatterOutcome && !nextOutCounted
-            ? storedOriginalBatterResult ?? existingAtBat.result
-            : undefined;
 
         const timestamp = Date.now();
         const nextVersion =
-          nextVersionBase + (correctedResult ? 2 : 1);
+          nextVersionBase + (resultChanged ? 2 : 1);
         const editHistory: NonNullable<AtBatEvent["editHistory"]> = [];
         pushEditHistoryEntry(
           editHistory,
@@ -10636,7 +10713,7 @@ export function GameTracker() {
           nextOutcome.managerDecisionSource ?? null,
           timestamp,
         );
-        if (correctedResult) {
+        if (resultChanged) {
           pushEditHistoryEntry(
             editHistory,
             "result",
@@ -10678,23 +10755,15 @@ export function GameTracker() {
 
         const nextAtBatEvent: AtBatEvent = {
           ...existingAtBat,
-          runnerOutcomes: updatedOutcomes,
-          batterReachedOnError: isCorrectableBatterOutcome
-            ? nextBatterReachedOnError
-            : existingAtBat.batterReachedOnError,
-          batterErrorType: isCorrectableBatterOutcome
-            ? nextBatterErrorType
-            : existingAtBat.batterErrorType,
-          batterErrorChargedToPosition: isCorrectableBatterOutcome
-            ? nextBatterErrorChargedToPosition
-            : existingAtBat.batterErrorChargedToPosition,
-          batterCorrectionOriginalResult: isCorrectableBatterOutcome
-            ? nextBatterCorrectionOriginalResult
-            : existingAtBat.batterCorrectionOriginalResult,
-          rbiCount: Math.max(0, (existingAtBat.rbiCount ?? 0) + scoreDelta),
+          runnerOutcomes: derivedAtBatState.runnerOutcomes,
+          batterReachedOnError: nextBatterReachedOnError,
+          batterErrorType: nextBatterErrorType,
+          batterErrorChargedToPosition: nextBatterErrorChargedToPosition,
+          batterCorrectionOriginalResult: nextBatterCorrectionOriginalResult,
+          rbiCount: derivedAtBatState.rbiCount,
           runsScored: nextRunsScored,
           outsAfter: nextOutsAfter,
-          runnersAfter: normalizedRunnersAfter,
+          runnersAfter: nextRunnersAfter,
           awayScoreAfter: nextAwayScoreAfter,
           homeScoreAfter: nextHomeScoreAfter,
           isWalkOff: nextIsWalkOff,
@@ -10707,7 +10776,7 @@ export function GameTracker() {
         const syncedFieldingEvents =
           await buildFieldingSyncEventsForSequenceEdit(existingAtBat, {
             result: nextRecordedResult,
-            runnerOutcomes: updatedOutcomes,
+            runnerOutcomes: derivedAtBatState.runnerOutcomes,
             batterReachedOnError: nextAtBatEvent.batterReachedOnError,
             batterErrorType: nextAtBatEvent.batterErrorType,
             batterErrorChargedToPosition:
@@ -10730,7 +10799,7 @@ export function GameTracker() {
         await updateAtBatEventWithFieldingSync(
           enrichingRunnerParentEntry.eventId,
           {
-            runnerOutcomes: updatedOutcomes,
+            runnerOutcomes: derivedAtBatState.runnerOutcomes,
             batterReachedOnError: nextAtBatEvent.batterReachedOnError,
             batterErrorType: nextAtBatEvent.batterErrorType,
             batterErrorChargedToPosition:
@@ -10740,7 +10809,7 @@ export function GameTracker() {
             rbiCount: nextAtBatEvent.rbiCount,
             runsScored: nextRunsScored,
             outsAfter: nextOutsAfter,
-            runnersAfter: normalizedRunnersAfter,
+            runnersAfter: nextRunnersAfter,
             awayScoreAfter: nextAwayScoreAfter,
             homeScoreAfter: nextHomeScoreAfter,
             isWalkOff: nextIsWalkOff,
@@ -10828,8 +10897,8 @@ export function GameTracker() {
         // Fix B: Update live base state for latest at-bat corrections
         if (isLatestAtBat) {
           applyBasesCorrection(
-            buildLiveBasesFromRunnersAfter(normalizedRunnersAfter),
-            normalizedRunnersAfter,
+            buildLiveBasesFromRunnersAfter(nextRunnersAfter),
+            nextRunnersAfter,
             {
               inning: existingAtBat.inning,
               halfInning: existingAtBat.halfInning,
@@ -10849,8 +10918,8 @@ export function GameTracker() {
         }
 
         // Fix C: Update live outs count for latest at-bat corrections
-        if (isLatestAtBat && targetsCurrentLiveHalf && outDelta !== 0) {
-          applyOutsAdjustment(outDelta);
+        if (isLatestAtBat && targetsCurrentLiveHalf && outsAfterDelta !== 0) {
+          applyOutsAdjustment(outsAfterDelta);
         }
 
         if (
