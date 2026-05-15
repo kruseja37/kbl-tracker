@@ -551,9 +551,9 @@ describe('FranchiseHome launch optimal lineup snapshots', () => {
 
     await screen.findByText('PRE-GAME LINEUP');
 
-    expect(screen.getByText('LINEUP DELTA BENCHMARK REQUIRED')).toBeTruthy();
-    expect(screen.getByText(/AWAY TEAM vs LHP benchmark is not set/)).toBeTruthy();
-    expect(screen.getByText(/HOME TEAM vs RHP benchmark is needs confirmation\/recalculation/)).toBeTruthy();
+    expect(screen.getByText('LINEUP DELTA BENCHMARKS')).toBeTruthy();
+    expect(screen.getByText(/AWAY TEAM vs LHP \(DH\): not set/)).toBeTruthy();
+    expect(screen.getByText(/HOME TEAM vs RHP \(DH\): needs confirmation\/recalculation/)).toBeTruthy();
     expect(screen.getByRole('button', { name: 'START GAME' })).toHaveAttribute('disabled');
     expect(mocks.mockNavigate).not.toHaveBeenCalled();
   });

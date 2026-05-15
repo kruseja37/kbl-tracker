@@ -11,30 +11,85 @@ import {
   buildLineupSnapshotFromSlots,
   formatOptimalLineupBenchmarkStatus,
   getOptimalLineupBenchmarkStatus,
+  type OptimalLineupBenchmarkStatus,
   type OptimalLineupCandidate,
 } from "../../../utils/optimalLineup";
 
 export interface PregameBenchmarkRequirement {
   teamName: string;
   opposingPitcherHand: OpposingPitcherHand;
+  dhEnabled?: boolean;
   snapshot?: OptimalLineupSnapshot;
+}
+
+export interface PregameBenchmarkRow extends PregameBenchmarkRequirement {
+  status: OptimalLineupBenchmarkStatus;
+  statusLabel: string;
+  contextLabel: string;
+  sourceLabel: string;
+  issueText?: string;
 }
 
 export function buildPregameBenchmarkIssues(
   requirements: PregameBenchmarkRequirement[],
 ): string[] {
-  return requirements
-    .filter((requirement) => getOptimalLineupBenchmarkStatus(requirement.snapshot) !== "official")
-    .map(
-      (requirement) =>
-        `${requirement.teamName} vs ${requirement.opposingPitcherHand}HP benchmark is ${formatOptimalLineupBenchmarkStatus(requirement.snapshot)}`,
+  return buildPregameBenchmarkRows(requirements)
+    .map((row) => row.issueText)
+    .filter((issue): issue is string => Boolean(issue));
+}
+
+export function buildPregameBenchmarkRows(
+  requirements: PregameBenchmarkRequirement[],
+): PregameBenchmarkRow[] {
+  return requirements.map((requirement) => {
+    const status = getOptimalLineupBenchmarkStatus(requirement.snapshot);
+    const sourceLabel = formatOptimalLineupBenchmarkStatus(requirement.snapshot);
+    const contextLabel = formatPregameBenchmarkContext(
+      requirement.opposingPitcherHand,
+      requirement.dhEnabled,
     );
+    return {
+      ...requirement,
+      status,
+      statusLabel: formatPregameBenchmarkStatusLabel(status),
+      contextLabel,
+      sourceLabel,
+      issueText:
+        status === "official"
+          ? undefined
+          : `${requirement.teamName} ${contextLabel}: ${sourceLabel}`,
+    };
+  });
 }
 
 export function formatPregameBenchmarkSource(
   snapshot: OptimalLineupSnapshot | undefined,
 ): string {
   return formatOptimalLineupBenchmarkStatus(snapshot);
+}
+
+export function formatPregameBenchmarkContext(
+  opposingPitcherHand: OpposingPitcherHand,
+  dhEnabled?: boolean,
+): string {
+  const handLabel = opposingPitcherHand === "L" ? "vs LHP" : "vs RHP";
+  if (dhEnabled === undefined) return handLabel;
+  return `${handLabel} (${dhEnabled ? "DH" : "no DH"})`;
+}
+
+export function formatPregameBenchmarkStatusLabel(
+  status: OptimalLineupBenchmarkStatus,
+): string {
+  switch (status) {
+    case "official":
+      return "Ready";
+    case "missing":
+      return "Missing";
+    case "stale":
+      return "Needs update";
+    case "display_only":
+      return "Display only";
+  }
 }
 
 export function upsertPregameBenchmark(

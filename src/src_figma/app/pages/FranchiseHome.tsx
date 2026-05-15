@@ -46,6 +46,7 @@ import { getRecentGames } from "../../utils/gameStorage";
 import { generateGameRecap } from "../engines/narrativeIntegration";
 import type { Player as TeamRosterPlayer, Pitcher as TeamRosterPitcher } from "@/app/components/TeamRoster";
 import { LineupPreview } from "@/app/components/LineupPreview";
+import { PregameBenchmarkChecklist } from "@/app/components/PregameBenchmarkChecklist";
 import { MilestoneWatchPanel } from "@/app/components/MilestoneWatchPanel";
 import { getApproachingMilestones, type MilestoneWatch } from "../../../utils/milestoneDetector";
 import { getAllCareerBatting, getAllCareerPitching } from "../../../utils/careerStorage";
@@ -59,7 +60,7 @@ import {
 import {
   buildCurrentLineupOptimalBenchmark,
   buildPregameBenchmarkIssues,
-  formatPregameBenchmarkSource,
+  buildPregameBenchmarkRows,
   upsertPregameBenchmark,
 } from "../utils/pregameLineupBenchmarks";
 import {
@@ -118,12 +119,6 @@ function getFranchiseStarterHand(
   pitcher: TeamRosterPitcher | undefined,
 ): OpposingPitcherHand {
   return (pitcher?.throwingHand || "R") === "L" ? "L" : "R";
-}
-
-function formatFranchiseBenchmarkSource(
-  snapshot: OptimalLineupSnapshot | undefined,
-): string {
-  return formatPregameBenchmarkSource(snapshot);
 }
 
 export function resolveFranchiseGameUseDH(franchiseConfig: UseFranchiseDataReturn["franchiseConfig"]): boolean {
@@ -770,17 +765,19 @@ export function FranchiseHome() {
       {
         teamName: awayTeamName.toUpperCase(),
         opposingPitcherHand: getFranchiseStarterHand(homeStarter),
+        dhEnabled: playoffUseDH,
         snapshot: optimalLineupSnapshots.away,
       },
       {
         teamName: homeTeamName.toUpperCase(),
         opposingPitcherHand: getFranchiseStarterHand(awayStarter),
+        dhEnabled: playoffUseDH,
         snapshot: optimalLineupSnapshots.home,
       },
     ]);
     if (lineupBenchmarkIssues.length > 0) {
       window.alert(
-        `Lineup Delta tracking needs official optimal benchmarks before first pitch. ${lineupBenchmarkIssues.join(" ")} Use Team Hub to recalculate/apply or set the current lineup as optimal.`,
+        `Lineup Delta benchmarks need attention before first pitch: ${lineupBenchmarkIssues.join(" • ")} Use Team Hub to recalculate/apply or set the current lineup as optimal.`,
       );
       return;
     }
@@ -3019,17 +3016,19 @@ function GameDayContent({ scheduleData, currentSeason, onDataRefresh }: GameDayC
       {
         teamName: preGameData.awayTeamName,
         opposingPitcherHand: getFranchiseStarterHand(homeStarter),
+        dhEnabled: preGameData.useDH,
         snapshot: optimalLineupSnapshots.away,
       },
       {
         teamName: preGameData.homeTeamName,
         opposingPitcherHand: getFranchiseStarterHand(awayStarter),
+        dhEnabled: preGameData.useDH,
         snapshot: optimalLineupSnapshots.home,
       },
     ]);
     if (lineupBenchmarkIssues.length > 0) {
       setToastMessage(
-        `Lineup Delta benchmark required: ${lineupBenchmarkIssues.join(" | ")}`,
+        `Lineup Delta benchmarks need attention: ${lineupBenchmarkIssues.join(" | ")}`,
       );
       return;
     }
@@ -3328,20 +3327,24 @@ function GameDayContent({ scheduleData, currentSeason, onDataRefresh }: GameDayC
   const pregameHomeBenchmark = preGameData
     ? selectOptimalLineupForOpposingPitcher(preGameData.homeOptimalLineups, pregameAwayStarter)
     : undefined;
-  const pregameBenchmarkIssues = preGameData
-    ? buildPregameBenchmarkIssues([
+  const pregameBenchmarkRequirements = preGameData
+    ? [
         {
           teamName: preGameData.awayTeamName,
           opposingPitcherHand: getFranchiseStarterHand(pregameHomeStarter),
+          dhEnabled: preGameData.useDH,
           snapshot: pregameAwayBenchmark,
         },
         {
           teamName: preGameData.homeTeamName,
           opposingPitcherHand: getFranchiseStarterHand(pregameAwayStarter),
+          dhEnabled: preGameData.useDH,
           snapshot: pregameHomeBenchmark,
         },
-      ])
+      ]
     : [];
+  const pregameBenchmarkRows = buildPregameBenchmarkRows(pregameBenchmarkRequirements);
+  const pregameBenchmarkIssues = buildPregameBenchmarkIssues(pregameBenchmarkRequirements);
 
   return (
     <div className="space-y-4">
@@ -3660,31 +3663,10 @@ function GameDayContent({ scheduleData, currentSeason, onDataRefresh }: GameDayC
               <div className="text-xs text-[#E8E8D8]/70">
                 Game {preGameData.gameNumber} &bull; {preGameData.awayTeamName} @ {preGameData.homeTeamName}
               </div>
-              <div className="mt-3 grid gap-2 text-[9px] text-[#E8E8D8]/60 md:grid-cols-2">
-                <div>
-                  {preGameData.awayTeamName}: VS {getFranchiseStarterHand(pregameHomeStarter)}HP benchmark {formatFranchiseBenchmarkSource(pregameAwayBenchmark)}
-                </div>
-                <div>
-                  {preGameData.homeTeamName}: VS {getFranchiseStarterHand(pregameAwayStarter)}HP benchmark {formatFranchiseBenchmarkSource(pregameHomeBenchmark)}
-                </div>
-              </div>
-              {pregameBenchmarkIssues.length > 0 && (
-                <div className="mt-4 border-[4px] border-[#C4A853] bg-[#4A6844] p-3 text-left text-[10px] text-[#E8E8D8]">
-                  <div className="mb-2 font-bold tracking-[0.16em] text-[#F0DFC2]">
-                    LINEUP DELTA BENCHMARK REQUIRED
-                  </div>
-                  <div className="mb-3 text-[#E8E8D8]/80">
-                    {pregameBenchmarkIssues.join(" • ")}
-                  </div>
-                  <button
-                    type="button"
-                    onClick={handleRegisterPregameBenchmarks}
-                    className="border-[3px] border-[#8B7635] bg-[#C4A853] px-3 py-2 text-[9px] font-bold tracking-[0.14em] text-[#1a3020] hover:bg-[#D4B863]"
-                  >
-                    REGISTER CURRENT LINEUPS
-                  </button>
-                </div>
-              )}
+              <PregameBenchmarkChecklist
+                rows={pregameBenchmarkRows}
+                onAction={handleRegisterPregameBenchmarks}
+              />
             </div>
 
             {/* Starter Selection */}

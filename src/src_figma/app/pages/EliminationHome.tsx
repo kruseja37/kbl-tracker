@@ -466,17 +466,19 @@ export function EliminationHome() {
         {
           teamName: awayTeam.teamName,
           opposingPitcherHand: awayOpposingHand === "vsLHP" ? "L" : "R",
+          dhEnabled: playoffConfig.useDH,
           snapshot: optimalLineupSnapshots.away,
         },
         {
           teamName: homeTeam.teamName,
           opposingPitcherHand: homeOpposingHand === "vsLHP" ? "L" : "R",
+          dhEnabled: playoffConfig.useDH,
           snapshot: optimalLineupSnapshots.home,
         },
       ]);
       if (lineupBenchmarkIssues.length > 0) {
         setError(
-          `Lineup Delta tracking needs official optimal benchmarks before first pitch. ${lineupBenchmarkIssues.join(" ")} Use Team Hub to recalculate/apply or set the current lineup as optimal.`,
+          `Lineup Delta benchmarks need attention before first pitch: ${lineupBenchmarkIssues.join(" • ")} Use Team Hub to recalculate/apply or set the current lineup as optimal.`,
         );
         return;
       }
