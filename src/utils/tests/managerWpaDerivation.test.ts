@@ -252,6 +252,27 @@ function derive(
   });
 }
 
+function requireIbbComponents(decision: ReturnType<typeof derive>[number]) {
+  const components = decision.explanationMetadata?.intentionalWalk?.wpaComponents;
+  expect(components).toBeDefined();
+  return components!;
+}
+
+function expectIbbOfficialNetUnchanged(
+  decision: ReturnType<typeof derive>[number],
+) {
+  const components = requireIbbComponents(decision);
+  expect(components.netRawWpa).toBeCloseTo(decision.rawWindowWpa ?? 0, 4);
+  expect(components.beforeIbbTeamWinProbability).toBe(
+    decision.teamWinProbabilityBefore,
+  );
+  expect(components.finalTeamWinProbability).toBe(
+    decision.teamWinProbabilityAfter,
+  );
+  expect(decision.managerWpa).toBeCloseTo(decision.rawWindowWpa ?? 0, 4);
+  return components;
+}
+
 function deriveWatches(
   atBatEvents: AtBatEvent[] = [],
   betweenPlayEvents: BetweenPlayEvent[] = [],
@@ -542,6 +563,96 @@ describe("manager WPA derivation", () => {
     });
     expect(decision.linkedEventIds).toEqual(["game-1_1", "game-1_2"]);
     expect(decision.managerWpa).toEqual(expect.any(Number));
+    const components = expectIbbOfficialNetUnchanged(decision);
+    expect(components.immediateRawWpa).toBeLessThan(0);
+    expect(components.consequenceRawWpa).toBeGreaterThan(0);
+  });
+
+  test("stores bases-loaded IBB walked-in-run cost even when final net is positive", () => {
+    const runnerFirst = {
+      runnerId: "away-r1",
+      runnerName: "Away Runner First",
+      responsiblePitcherId: "home-pitcher",
+    };
+    const runnerSecond = {
+      runnerId: "away-r2",
+      runnerName: "Away Runner Second",
+      responsiblePitcherId: "home-pitcher",
+    };
+    const runnerThird = {
+      runnerId: "away-r3",
+      runnerName: "Away Runner Third",
+      responsiblePitcherId: "home-pitcher",
+    };
+    const walkedRunner = {
+      runnerId: "away-ibb-batter",
+      runnerName: "Away IBB Batter",
+      responsiblePitcherId: "home-pitcher",
+    };
+    const ibb = createAtBat({
+      eventId: "game-1_ibb_loaded",
+      eventIndex: 1,
+      inning: 7,
+      outs: 1,
+      result: "IBB",
+      batterId: "away-ibb-batter",
+      batterName: "Away IBB Batter",
+      runners: {
+        first: runnerFirst,
+        second: runnerSecond,
+        third: runnerThird,
+      },
+      runsScored: ["away-r3"],
+      runnersAfter: {
+        first: walkedRunner,
+        second: runnerFirst,
+        third: runnerSecond,
+      },
+      awayScore: 2,
+      homeScore: 5,
+      awayScoreAfter: 3,
+      homeScoreAfter: 5,
+      outsAfter: 1,
+      totalInnings: 9,
+    });
+    const inningEndingDp = createAtBat({
+      eventId: "game-1_loaded_dp",
+      eventIndex: 2,
+      inning: 7,
+      outs: 1,
+      batterId: "away-next-batter",
+      batterName: "Away Next Batter",
+      runners: ibb.runnersAfter,
+      result: "GIDP",
+      runnersAfter: { first: null, second: null, third: null },
+      awayScore: 3,
+      homeScore: 5,
+      awayScoreAfter: 3,
+      homeScoreAfter: 5,
+      outsAfter: 3,
+      totalInnings: 9,
+    });
+
+    const [decision] = derive([ibb, inningEndingDp], [], [], {
+      totalInnings: 9,
+    });
+
+    expect(decision).toMatchObject({
+      decisionType: "intentional_walk",
+      resolved: true,
+      resolvedAtEventId: "game-1_loaded_dp",
+      explanationMetadata: {
+        intentionalWalk: {
+          nextBatterEventId: "game-1_loaded_dp",
+          nextBatterResult: "GIDP",
+          finalConsequence: "stranded",
+        },
+      },
+    });
+    const components = expectIbbOfficialNetUnchanged(decision);
+    expect(components.immediateRawWpa).toBeLessThan(0);
+    expect(components.consequenceRawWpa).toBeGreaterThan(0);
+    expect(components.netRawWpa).toBeGreaterThan(0);
   });
 
   test("resolves IBB at a walk-off endpoint when another runner scores and the walked runner remains live", () => {
@@ -628,6 +739,7 @@ describe("manager WPA derivation", () => {
     });
     expect(decision.managerWpa).toBeCloseTo(decision.rawWindowWpa ?? 0, 4);
     expect(decision.managerWpa).toBeLessThan(0);
+    expectIbbOfficialNetUnchanged(decision);
   });
 
   test("resolves IBB at the final same-half endpoint when gameEnded is true without a third out", () => {
@@ -705,6 +817,7 @@ describe("manager WPA derivation", () => {
       },
     });
     expect(decision.managerWpa).toBeLessThan(0);
+    expectIbbOfficialNetUnchanged(decision);
   });
 
   test("resolves IBB on the same event when the intentional walk is game-ending", () => {
@@ -788,6 +901,7 @@ describe("manager WPA derivation", () => {
     });
     expect(decision.managerWpa).toBeCloseTo(decision.rawWindowWpa ?? 0, 4);
     expect(decision.managerWpa).toBeLessThan(0);
+    expectIbbOfficialNetUnchanged(decision);
   });
 
   test("resolves IBB at the next batter HR when the walked runner scores", () => {
@@ -844,6 +958,8 @@ describe("manager WPA derivation", () => {
     });
     expect(decision.linkedEventIds).toEqual(["game-1_1", "game-1_2"]);
     expect(decision.managerWpa).toBeCloseTo(decision.rawWindowWpa ?? 0, 4);
+    const components = expectIbbOfficialNetUnchanged(decision);
+    expect(components.consequenceRawWpa).toBeLessThan(0);
   });
 
   test("resolves IBB at a runner terminal event before the next PA", () => {
@@ -906,6 +1022,131 @@ describe("manager WPA derivation", () => {
       },
     });
     expect(decision.linkedEventIds).toEqual(["game-1_1", "game-1_bp_pickoff"]);
+    const components = expectIbbOfficialNetUnchanged(decision);
+    expect(components.consequenceRawWpa).toBeGreaterThan(0);
+  });
+
+  test("resolves IBB as removed when the walked runner is replaced", () => {
+    const walkedRunner = {
+      runnerId: "away-batter",
+      runnerName: "Away Batter",
+      responsiblePitcherId: "home-pitcher",
+    };
+    const ibb = createAtBat({
+      eventId: "game-1_ibb_removed",
+      eventIndex: 1,
+      inning: 4,
+      outs: 1,
+      result: "IBB",
+      batterId: "away-batter",
+      batterName: "Away Batter",
+      runnersAfter: {
+        first: walkedRunner,
+        second: null,
+        third: null,
+      },
+      outsAfter: 1,
+    });
+    const pinchRun = createBetweenPlay({
+      eventId: "game-1_bp_pr_for_ibb",
+      eventIndex: 2,
+      type: "substitution",
+      pitcherChange: undefined,
+      gameState: {
+        inning: 4,
+        halfInning: "TOP",
+        outs: 1,
+        score: { away: 2, home: 2 },
+        runnersOn: { first: "away-batter" },
+      },
+      substitution: {
+        subType: "pinch_run",
+        outPlayerId: "away-batter",
+        outPlayerName: "Away Batter",
+        inPlayerId: "away-pr",
+        inPlayerName: "Away PR",
+      },
+    });
+
+    const [decision] = derive([ibb], [pinchRun]);
+
+    expect(decision).toMatchObject({
+      decisionType: "intentional_walk",
+      resolved: true,
+      resolvedAtEventId: "game-1_bp_pr_for_ibb",
+      explanationMetadata: {
+        intentionalWalk: {
+          finalConsequence: "removed",
+          finalConsequenceEventId: "game-1_bp_pr_for_ibb",
+        },
+      },
+    });
+    expectIbbOfficialNetUnchanged(decision);
+  });
+
+  test("distinguishes following-batter DP out from stranded when runner outcomes identify the walked runner", () => {
+    const walkedRunner = {
+      runnerId: "away-ibb-batter",
+      runnerName: "Away IBB Batter",
+      responsiblePitcherId: "home-pitcher",
+    };
+    const ibb = createAtBat({
+      eventId: "game-1_ibb_dp",
+      eventIndex: 1,
+      inning: 4,
+      outs: 1,
+      result: "IBB",
+      batterId: "away-ibb-batter",
+      batterName: "Away IBB Batter",
+      runnersAfter: {
+        first: walkedRunner,
+        second: null,
+        third: null,
+      },
+      outsAfter: 1,
+    });
+    const dpWithRunnerOutcome = createAtBat({
+      eventId: "game-1_dp_runner_out",
+      eventIndex: 2,
+      inning: 4,
+      outs: 1,
+      batterId: "away-next-batter",
+      batterName: "Away Next Batter",
+      runners: ibb.runnersAfter,
+      result: "GIDP",
+      runnerOutcomes: [
+        {
+          runnerId: "away-ibb-batter",
+          runnerName: "Away IBB Batter",
+          fromBase: "first",
+          toBase: "out",
+        },
+      ],
+      runnersAfter: { first: null, second: null, third: null },
+      outsAfter: 3,
+    });
+    const dpWithoutRunnerOutcome = {
+      ...dpWithRunnerOutcome,
+      eventId: "game-1_dp_runner_stranded",
+      runnerOutcomes: [],
+    };
+
+    expect(derive([ibb, dpWithRunnerOutcome])[0]).toMatchObject({
+      explanationMetadata: {
+        intentionalWalk: {
+          finalConsequence: "out",
+          nextBatterResult: "GIDP",
+        },
+      },
+    });
+    expect(derive([ibb, dpWithoutRunnerOutcome])[0]).toMatchObject({
+      explanationMetadata: {
+        intentionalWalk: {
+          finalConsequence: "stranded",
+          nextBatterResult: "GIDP",
+        },
+      },
+    });
   });
 
   test("keeps IBB pending after the next batter out, then resolves when the walked runner later scores", () => {

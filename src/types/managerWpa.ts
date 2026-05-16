@@ -201,6 +201,15 @@ export type IntentionalWalkConsequenceStatus =
   | "removed"
   | "stranded";
 
+export interface IntentionalWalkWpaComponentMetadata {
+  beforeIbbTeamWinProbability: number;
+  afterIbbTeamWinProbability: number;
+  finalTeamWinProbability?: number;
+  immediateRawWpa: number;
+  consequenceRawWpa?: number;
+  netRawWpa?: number;
+}
+
 export interface IntentionalWalkExplanationMetadata {
   ibbEventId: string;
   walkedRunnerId: string;
@@ -213,6 +222,7 @@ export interface IntentionalWalkExplanationMetadata {
   finalConsequenceEventId?: string;
   finalConsequence?: IntentionalWalkConsequenceStatus;
   inningEnded?: boolean;
+  wpaComponents?: IntentionalWalkWpaComponentMetadata;
 }
 
 export interface ManagerDecisionExplanationMetadata {

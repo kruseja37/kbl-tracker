@@ -1230,6 +1230,9 @@ function buildAtBatDecision(params: {
             ibbEvent: event,
             walkedRunnerId: event.batterId,
             walkedRunnerName: event.batterName,
+            teamId: attribution.teamId,
+            homeTeamId: input.homeTeamId,
+            totalInnings: input.totalInnings,
           })
         : undefined,
     derivedFromFields: params.derivedFromFields,
@@ -2030,8 +2033,10 @@ function endpointFromIntentionalWalkEntry(input: {
     eventIds: uniqueStrings([nextBatterPa?.eventId, ...endpoint.eventIds]),
     explanationMetadata: buildIntentionalWalkExplanationMetadata({
       decision: input.decision,
+      homeTeamId: input.context.homeTeamId,
       nextBatterPa,
       finalConsequenceEventId: endpoint.eventId,
+      finalHomeWinProbabilityAfter: endpoint.homeWinProbabilityAfter,
       finalConsequence: input.finalConsequence,
       inningEnded: input.inningEnded,
     }),
@@ -2314,8 +2319,12 @@ function buildIntentionalWalkExplanationMetadata(input: {
   decision?: ManagerDecisionRecord;
   walkedRunnerId?: string;
   walkedRunnerName?: string;
+  teamId?: string;
+  homeTeamId?: string;
+  totalInnings?: number;
   nextBatterPa?: AtBatEvent;
   finalConsequenceEventId?: string;
+  finalHomeWinProbabilityAfter?: number;
   finalConsequence?: IntentionalWalkConsequenceStatus;
   inningEnded?: boolean;
 }): ManagerDecisionExplanationMetadata | undefined {
@@ -2360,8 +2369,116 @@ function buildIntentionalWalkExplanationMetadata(input: {
       finalConsequence:
         input.finalConsequence ?? existing?.finalConsequence,
       inningEnded: input.inningEnded ?? existing?.inningEnded,
+      wpaComponents: buildIntentionalWalkWpaComponents({
+        existing,
+        ibbEvent: input.ibbEvent,
+        decision: input.decision,
+        teamId: input.teamId,
+        homeTeamId: input.homeTeamId,
+        totalInnings: input.totalInnings,
+        finalHomeWinProbabilityAfter: input.finalHomeWinProbabilityAfter,
+      }),
     },
   };
+}
+
+function buildIntentionalWalkWpaComponents(input: {
+  existing?: NonNullable<
+    ManagerDecisionExplanationMetadata["intentionalWalk"]
+  >;
+  ibbEvent?: AtBatEvent;
+  decision?: ManagerDecisionRecord;
+  teamId?: string;
+  homeTeamId?: string;
+  totalInnings?: number;
+  finalHomeWinProbabilityAfter?: number;
+}): NonNullable<
+  NonNullable<
+    ManagerDecisionExplanationMetadata["intentionalWalk"]
+  >["wpaComponents"]
+> | undefined {
+  const existingComponents = input.existing?.wpaComponents;
+  const teamId = input.teamId ?? input.decision?.teamId;
+  const beforeIbbTeamWinProbability =
+    existingComponents?.beforeIbbTeamWinProbability ??
+    input.decision?.teamWinProbabilityBefore ??
+    teamWinProbabilityFromAtBatWindow({
+      event: input.ibbEvent,
+      teamId,
+      homeTeamId: input.homeTeamId,
+      totalInnings: input.totalInnings,
+      field: "winProbabilityBefore",
+    });
+  const afterIbbTeamWinProbability =
+    existingComponents?.afterIbbTeamWinProbability ??
+    teamWinProbabilityFromAtBatWindow({
+      event: input.ibbEvent,
+      teamId,
+      homeTeamId: input.homeTeamId,
+      totalInnings: input.totalInnings,
+      field: "winProbabilityAfter",
+    });
+
+  if (
+    beforeIbbTeamWinProbability === undefined ||
+    afterIbbTeamWinProbability === undefined
+  ) {
+    return existingComponents;
+  }
+
+  const finalTeamWinProbability =
+    input.finalHomeWinProbabilityAfter !== undefined &&
+    teamId &&
+    input.homeTeamId
+      ? roundProbability(
+          teamWinProbability(
+            input.finalHomeWinProbabilityAfter,
+            teamId,
+            input.homeTeamId,
+          ),
+        )
+      : existingComponents?.finalTeamWinProbability;
+  const immediateRawWpa = roundWpa(
+    afterIbbTeamWinProbability - beforeIbbTeamWinProbability,
+  );
+
+  if (finalTeamWinProbability === undefined) {
+    return {
+      beforeIbbTeamWinProbability,
+      afterIbbTeamWinProbability,
+      immediateRawWpa,
+    };
+  }
+
+  return {
+    beforeIbbTeamWinProbability,
+    afterIbbTeamWinProbability,
+    finalTeamWinProbability,
+    immediateRawWpa,
+    consequenceRawWpa: roundWpa(
+      finalTeamWinProbability - afterIbbTeamWinProbability,
+    ),
+    netRawWpa: roundWpa(
+      finalTeamWinProbability - beforeIbbTeamWinProbability,
+    ),
+  };
+}
+
+function teamWinProbabilityFromAtBatWindow(input: {
+  event?: AtBatEvent;
+  teamId?: string;
+  homeTeamId?: string;
+  totalInnings?: number;
+  field: "winProbabilityBefore" | "winProbabilityAfter";
+}): number | undefined {
+  if (!input.event || !input.teamId || !input.homeTeamId) {
+    return undefined;
+  }
+
+  const wpa = calculateAtBatWindow(input.event, input.totalInnings);
+  return roundProbability(
+    teamWinProbability(wpa[input.field], input.teamId, input.homeTeamId),
+  );
 }
 
 function getExpectedEndpoint(
