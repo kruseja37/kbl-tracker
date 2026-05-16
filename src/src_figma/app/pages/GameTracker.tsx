@@ -416,7 +416,6 @@ const calculateMinimumResultOuts = (result: AtBatEvent["result"]): number => {
     case "FLO":
     case "LO":
     case "PO":
-    case "FC":
     case "SF":
     case "SAC":
     case "D3K":

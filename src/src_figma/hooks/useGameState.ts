@@ -1153,7 +1153,6 @@ function calculateOutsFromResult(result: AtBatResult): number {
     case "FLO":
     case "LO":
     case "PO":
-    case "FC":
     case "SF":
     case "SAC":
     case "D3K":
@@ -6456,8 +6455,8 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
           if (effectiveRunnerData.fromSecond === "out") outsOnPlay++;
           if (effectiveRunnerData.fromThird === "out") outsOnPlay++;
         }
-        // Default to 1 out if no runner data specified (most common FC scenario)
-        if (outsOnPlay === 0) outsOnPlay = 1;
+        // Default to 1 out only when no explicit FC runner outcome was provided.
+        if (outsOnPlay === 0 && !effectiveRunnerData) outsOnPlay = 1;
         console.log(
           `[recordOut] FC: ${outsOnPlay} runner out(s), batter safe at first`,
         );
@@ -6725,6 +6724,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         isClutch,
         isWalkOff: endGameEvaluation.isWalkOff,
         ...buildContextSnapshot(effectiveResult, pitchCount),
+        outsRecorded: outsOnPlay,
       };
 
       if (endGameEvaluation.shouldEndGame) {
