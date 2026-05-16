@@ -1,7 +1,12 @@
 import { describe, expect, test } from "vitest";
 
 import { calculateWPA } from "../../engines/wpaCalculator";
+import { WPA_MODEL_VERSION } from "../../engines/wpaV2";
 import type { AtBatEvent, BetweenPlayEvent, FieldingEvent } from "../eventLog";
+import {
+  aggregateKblWpaCredits,
+  deriveKblWpaCredits,
+} from "../kblWpaAttribution";
 import {
   deriveManagerDecisionRecords,
   deriveManagerRecommendationWatchRecords,
@@ -271,6 +276,46 @@ function expectIbbOfficialNetUnchanged(
   );
   expect(decision.managerWpa).toBeCloseTo(decision.rawWindowWpa ?? 0, 4);
   return components;
+}
+
+function requireOutAdvancingSendMetadata(
+  decision: ReturnType<typeof derive>[number],
+) {
+  const metadata = decision.explanationMetadata?.outAdvancingSend;
+  expect(metadata).toBeDefined();
+  return metadata!;
+}
+
+function teamWpaDeltaForEvent(event: AtBatEvent, teamId: "away" | "home") {
+  const wpa = calculateWPA(
+    {
+      inning: event.inning,
+      isTop: event.halfInning === "TOP",
+      outs: event.outs,
+      bases: {
+        first: Boolean(event.runners.first),
+        second: Boolean(event.runners.second),
+        third: Boolean(event.runners.third),
+      },
+      homeScore: event.homeScore,
+      awayScore: event.awayScore,
+      totalInnings: event.totalInnings,
+    },
+    {
+      outs: event.outsAfter,
+      bases: {
+        first: Boolean(event.runnersAfter.first),
+        second: Boolean(event.runnersAfter.second),
+        third: Boolean(event.runnersAfter.third),
+      },
+      homeScore: event.homeScoreAfter,
+      awayScore: event.awayScoreAfter,
+    },
+  );
+
+  return teamId === "home"
+    ? wpa.winProbabilityAfter - wpa.winProbabilityBefore
+    : wpa.winProbabilityBefore - wpa.winProbabilityAfter;
 }
 
 function deriveWatches(
@@ -1356,6 +1401,409 @@ describe("manager WPA derivation", () => {
         },
       },
     });
+  });
+
+  test("scores batter out-advancing send against a counterfactual double, not the positive RBI PA", () => {
+    const runner = {
+      runnerId: "away-runner-second",
+      runnerName: "Away Runner Second",
+      responsiblePitcherId: "home-pitcher",
+    };
+    const event = createAtBat({
+      eventId: "game-1_out_advancing_batter",
+      eventIndex: 20,
+      inning: 8,
+      outs: 1,
+      result: "2B",
+      wpaModelVersion: WPA_MODEL_VERSION,
+      runners: { first: null, second: runner, third: null },
+      runsScored: ["away-runner-second"],
+      rbiCount: 1,
+      awayScore: 3,
+      homeScore: 3,
+      awayScoreAfter: 4,
+      homeScoreAfter: 3,
+      runnersAfter: { first: null, second: null, third: null },
+      outsAfter: 2,
+      runnerOutcomes: [
+        {
+          runnerId: "away-runner-second",
+          runnerName: "Away Runner Second",
+          fromBase: "second",
+          toBase: "home",
+        },
+        {
+          runnerId: "away-batter",
+          runnerName: "Away Batter",
+          fromBase: "batter",
+          toBase: "out",
+          isOutAdvancing: true,
+          managerIntent: "manager_send",
+          managerDecisionSource: "play_log_enhancement",
+        },
+      ],
+    });
+
+    const [decision] = derive([event]);
+    const metadata = requireOutAdvancingSendMetadata(decision);
+    const credits = deriveKblWpaCredits({ atBatEvents: [event] });
+    const batterTotal = aggregateKblWpaCredits(credits).find(
+      (entry) => entry.playerId === "away-batter",
+    );
+
+    expect(teamWpaDeltaForEvent(event, "away")).toBeGreaterThan(0);
+    expect(decision).toMatchObject({
+      decisionType: "out_advancing_send",
+      resolved: true,
+      teamWinProbabilityBefore: metadata.counterfactualTeamWinProbability,
+      teamWinProbabilityAfter: metadata.actualTeamWinProbability,
+    });
+    expect(decision.rawWindowWpa).toBeLessThan(0);
+    expect(decision.managerWpa).toBeCloseTo((decision.rawWindowWpa ?? 0) * 0.35, 4);
+    expect(metadata).toMatchObject({
+      inferredHoldBase: "second",
+      holdBaseSource: "batter_safe_at_second",
+      actualState: {
+        outs: 2,
+        awayScore: 4,
+        bases: { first: false, second: false, third: false },
+      },
+      counterfactualState: {
+        outs: 1,
+        awayScore: 4,
+        bases: { first: false, second: true, third: false },
+      },
+      rawCounterfactualWpa: decision.rawWindowWpa,
+    });
+    expect(batterTotal?.battingWpa ?? 0).toBeGreaterThan(0);
+  });
+
+  test("scores runner from second thrown out at home against a hold-at-third counterfactual", () => {
+    const runner = {
+      runnerId: "away-runner-second",
+      runnerName: "Away Runner Second",
+      responsiblePitcherId: "home-pitcher",
+    };
+    const event = createAtBat({
+      eventId: "game-1_out_home",
+      eventIndex: 21,
+      inning: 8,
+      outs: 1,
+      result: "1B",
+      runners: { first: null, second: runner, third: null },
+      runnersAfter: {
+        first: {
+          runnerId: "away-batter",
+          runnerName: "Away Batter",
+          responsiblePitcherId: "home-pitcher",
+        },
+        second: null,
+        third: null,
+      },
+      outsAfter: 2,
+      runnerOutcomes: [
+        {
+          runnerId: "away-runner-second",
+          runnerName: "Away Runner Second",
+          fromBase: "second",
+          toBase: "out",
+          isOutAdvancing: true,
+          managerIntent: "manager_send",
+          managerDecisionSource: "play_log_enhancement",
+        },
+      ],
+    });
+
+    const [decision] = derive([event]);
+    const metadata = requireOutAdvancingSendMetadata(decision);
+
+    expect(decision).toMatchObject({
+      decisionType: "out_advancing_send",
+      resolved: true,
+    });
+    expect(decision.rawWindowWpa).toBeLessThan(0);
+    expect(metadata).toMatchObject({
+      inferredHoldBase: "third",
+      holdBaseSource: "runner_from_second_safe_stop_third",
+      actualState: {
+        outs: 2,
+        bases: { first: true, second: false, third: false },
+      },
+      counterfactualState: {
+        outs: 1,
+        bases: { first: true, second: false, third: true },
+      },
+    });
+  });
+
+  test("scores bottom-half home send from second using home-team counterfactual WPA perspective", () => {
+    const runner = {
+      runnerId: "home-runner-second",
+      runnerName: "Home Runner Second",
+      responsiblePitcherId: "away-pitcher",
+    };
+    const event = createAtBat({
+      eventId: "game-1_home_out_home",
+      eventIndex: 22,
+      inning: 8,
+      halfInning: "BOTTOM",
+      outs: 1,
+      result: "1B",
+      runners: { first: null, second: runner, third: null },
+      runnersAfter: {
+        first: {
+          runnerId: "home-batter",
+          runnerName: "Home Batter",
+          responsiblePitcherId: "away-pitcher",
+        },
+        second: null,
+        third: null,
+      },
+      outsAfter: 2,
+      runnerOutcomes: [
+        {
+          runnerId: "home-runner-second",
+          runnerName: "Home Runner Second",
+          fromBase: "second",
+          toBase: "out",
+          isOutAdvancing: true,
+          managerIntent: "manager_send",
+          managerDecisionSource: "play_log_enhancement",
+        },
+      ],
+    });
+
+    const [decision] = derive([event]);
+    const metadata = requireOutAdvancingSendMetadata(decision);
+    const wholeEventHomeWpa = teamWpaDeltaForEvent(event, "home");
+
+    expect(decision).toMatchObject({
+      decisionType: "out_advancing_send",
+      teamId: "home",
+      resolved: true,
+    });
+    expect(decision.rawWindowWpa).toBeLessThan(0);
+    expect(decision.managerWpa).toBeLessThan(0);
+    expect(decision.teamWinProbabilityBefore).toBe(
+      metadata.counterfactualTeamWinProbability,
+    );
+    expect(decision.teamWinProbabilityAfter).toBe(
+      metadata.actualTeamWinProbability,
+    );
+    expect(metadata.actualTeamWinProbability).toBeLessThan(
+      metadata.counterfactualTeamWinProbability ?? 0,
+    );
+    expect(decision.rawWindowWpa).not.toBeCloseTo(wholeEventHomeWpa, 4);
+    expect(metadata).toMatchObject({
+      inferredHoldBase: "third",
+      holdBaseSource: "runner_from_second_safe_stop_third",
+      actualState: {
+        outs: 2,
+        homeScore: 2,
+        bases: { first: true, second: false, third: false },
+      },
+      counterfactualState: {
+        outs: 1,
+        homeScore: 2,
+        bases: { first: true, second: false, third: true },
+      },
+      rawCounterfactualWpa: decision.rawWindowWpa,
+    });
+  });
+
+  test("scores runner from first thrown out at third against a hold-at-second counterfactual", () => {
+    const runner = {
+      runnerId: "away-runner-first",
+      runnerName: "Away Runner First",
+      responsiblePitcherId: "home-pitcher",
+    };
+    const event = createAtBat({
+      eventId: "game-1_out_third",
+      eventIndex: 22,
+      inning: 8,
+      outs: 1,
+      result: "1B",
+      runners: { first: runner, second: null, third: null },
+      runnersAfter: {
+        first: {
+          runnerId: "away-batter",
+          runnerName: "Away Batter",
+          responsiblePitcherId: "home-pitcher",
+        },
+        second: null,
+        third: null,
+      },
+      outsAfter: 2,
+      runnerOutcomes: [
+        {
+          runnerId: "away-runner-first",
+          runnerName: "Away Runner First",
+          fromBase: "first",
+          toBase: "out",
+          isOutAdvancing: true,
+          managerIntent: "manager_send",
+          managerDecisionSource: "play_log_enhancement",
+        },
+      ],
+    });
+
+    const [decision] = derive([event]);
+    const metadata = requireOutAdvancingSendMetadata(decision);
+
+    expect(decision).toMatchObject({
+      decisionType: "out_advancing_send",
+      resolved: true,
+    });
+    expect(decision.rawWindowWpa).toBeLessThan(0);
+    expect(metadata).toMatchObject({
+      inferredHoldBase: "second",
+      holdBaseSource: "runner_from_first_out_at_third_safe_stop_second",
+      actualState: {
+        outs: 2,
+        bases: { first: true, second: false, third: false },
+      },
+      counterfactualState: {
+        outs: 1,
+        bases: { first: true, second: true, third: false },
+      },
+    });
+  });
+
+  test("leaves unprovable out-advancing sends unscored instead of using whole-event WPA", () => {
+    const runner = {
+      runnerId: "away-runner-first",
+      runnerName: "Away Runner First",
+      responsiblePitcherId: "home-pitcher",
+    };
+    const event = createAtBat({
+      eventId: "game-1_out_unprovable",
+      eventIndex: 23,
+      inning: 8,
+      outs: 1,
+      result: "GO",
+      runners: { first: runner, second: null, third: null },
+      runnersAfter: { first: null, second: null, third: null },
+      outsAfter: 2,
+      runnerOutcomes: [
+        {
+          runnerId: "away-runner-first",
+          runnerName: "Away Runner First",
+          fromBase: "first",
+          toBase: "out",
+          isOutAdvancing: true,
+          managerIntent: "manager_send",
+          managerDecisionSource: "play_log_enhancement",
+        },
+      ],
+    });
+
+    const [decision] = derive([event]);
+    const metadata = requireOutAdvancingSendMetadata(decision);
+
+    expect(teamWpaDeltaForEvent(event, "away")).toBeLessThan(0);
+    expect(decision).toMatchObject({
+      decisionType: "out_advancing_send",
+      resolved: false,
+      teamWinProbabilityAfter: undefined,
+      rawWindowWpa: undefined,
+      managerWpa: undefined,
+      resolutionWindow: {
+        status: "pending",
+      },
+    });
+    expect(metadata).toMatchObject({
+      runnerId: "away-runner-first",
+      unscoredReason: "missing_hit_context",
+    });
+  });
+
+  test("keeps hit-and-run duplicate-send suppression when the runner is out advancing", () => {
+    const runner = {
+      runnerId: "away-runner-first",
+      runnerName: "Away Runner First",
+      responsiblePitcherId: "home-pitcher",
+    };
+    const event = createAtBat({
+      eventId: "game-1_hit_run_out",
+      eventIndex: 24,
+      result: "1B",
+      runners: { first: runner, second: null, third: null },
+      runnersAfter: {
+        first: {
+          runnerId: "away-batter",
+          runnerName: "Away Batter",
+          responsiblePitcherId: "home-pitcher",
+        },
+        second: null,
+        third: null,
+      },
+      outsAfter: 2,
+      runnerOutcomes: [
+        {
+          runnerId: "away-runner-first",
+          runnerName: "Away Runner First",
+          fromBase: "first",
+          toBase: "out",
+          isOutAdvancing: true,
+          managerRunPlay: "hit_and_run",
+          managerIntent: "manager_send",
+          managerDecisionSource: "play_log_enhancement",
+        },
+      ],
+    });
+
+    const decisions = derive([event]);
+
+    expect(decisions.map((decision) => decision.decisionType)).toEqual([
+      "hit_and_run",
+    ]);
+  });
+
+  test("keeps runner hold scoring on the existing whole-event window", () => {
+    const runner = {
+      runnerId: "away-runner-second",
+      runnerName: "Away Runner Second",
+      responsiblePitcherId: "home-pitcher",
+    };
+    const event = createAtBat({
+      eventId: "game-1_runner_hold",
+      eventIndex: 25,
+      inning: 8,
+      outs: 1,
+      result: "1B",
+      runners: { first: null, second: runner, third: null },
+      runnersAfter: {
+        first: {
+          runnerId: "away-batter",
+          runnerName: "Away Batter",
+          responsiblePitcherId: "home-pitcher",
+        },
+        second: null,
+        third: runner,
+      },
+      outsAfter: 1,
+      runnerOutcomes: [
+        {
+          runnerId: "away-runner-second",
+          runnerName: "Away Runner Second",
+          fromBase: "second",
+          toBase: "third",
+          managerIntent: "manager_hold",
+          managerDecisionSource: "play_log_enhancement",
+        },
+      ],
+    });
+
+    const [decision] = derive([event]);
+    const paTeamWpa = teamWpaDeltaForEvent(event, "away");
+
+    expect(decision).toMatchObject({
+      decisionType: "runner_hold",
+      resolved: true,
+      explanationMetadata: undefined,
+    });
+    expect(decision.rawWindowWpa).toBeCloseTo(paTeamWpa, 4);
+    expect(decision.managerWpa).toBeCloseTo(paTeamWpa * 0.2, 4);
   });
 
   test("keeps pitching changes pending until the incoming pitcher's next completed PA", () => {

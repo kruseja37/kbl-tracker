@@ -24,6 +24,8 @@ import type {
   ManagerRecommendationWatchRecord,
   ManagerRecommendationWatchResolutionStatus,
   ManagerRecommendationWatchType,
+  ManagerOutAdvancingSendExplanationMetadata,
+  ManagerOutAdvancingSendUnscoredReason,
 } from "../types/managerWpa";
 import {
   DECISION_HORIZON_BY_DECISION_TYPE,
@@ -1141,6 +1143,7 @@ function deriveAtBatManagerDecisions(
             `runnerOutcomes.${index}.isOutAdvancing`,
           ],
           decisionIdSuffix: `runner-${index}`,
+          runnerOutcomeIndex: index,
         }),
       );
     }
@@ -1159,6 +1162,7 @@ function buildAtBatDecision(params: {
   involvedPlayerIds: string[];
   derivedFromFields: string[];
   decisionIdSuffix?: string;
+  runnerOutcomeIndex?: number;
 }): ManagerDecisionRecord {
   const { event, input, decisionType } = params;
   const attribution = resolveManagerAttributionForDecision(
@@ -1167,17 +1171,33 @@ function buildAtBatDecision(params: {
     input,
   );
   const expectedEndpoint = getExpectedEndpoint(decisionType);
-  const resolvesSameEvent = expectedEndpoint === "same_event";
+  const outAdvancingWindow =
+    decisionType === "out_advancing_send"
+      ? buildOutAdvancingSendCounterfactualWindow({
+          event,
+          runnerOutcomeIndex: params.runnerOutcomeIndex,
+          teamId: attribution.teamId,
+          homeTeamId: input.homeTeamId,
+          totalInnings: input.totalInnings,
+        })
+      : undefined;
+  const resolvesSameEvent =
+    expectedEndpoint === "same_event" &&
+    (decisionType !== "out_advancing_send" ||
+      outAdvancingWindow?.scored === true);
   const wpa = calculateAtBatWindow(event, input.totalInnings);
-  const window = buildDecisionWindow({
-    teamId: attribution.teamId,
-    homeTeamId: input.homeTeamId,
-    homeWinProbabilityBefore: wpa.winProbabilityBefore,
-    homeWinProbabilityAfter: resolvesSameEvent
-      ? wpa.winProbabilityAfter
-      : undefined,
-    decisionType,
-  });
+  const window =
+    decisionType === "out_advancing_send" && outAdvancingWindow?.scored
+      ? outAdvancingWindow.window
+      : buildDecisionWindow({
+          teamId: attribution.teamId,
+          homeTeamId: input.homeTeamId,
+          homeWinProbabilityBefore: wpa.winProbabilityBefore,
+          homeWinProbabilityAfter: resolvesSameEvent
+            ? wpa.winProbabilityAfter
+            : undefined,
+          decisionType,
+        });
   const involvedPlayerIds = uniqueStrings(params.involvedPlayerIds);
   const trackedPlayerIds =
     decisionType === "intentional_walk"
@@ -1234,6 +1254,8 @@ function buildAtBatDecision(params: {
             homeTeamId: input.homeTeamId,
             totalInnings: input.totalInnings,
           })
+        : decisionType === "out_advancing_send"
+          ? { outAdvancingSend: outAdvancingWindow?.metadata }
         : undefined,
     derivedFromFields: params.derivedFromFields,
     decisionKeySuffix: params.decisionIdSuffix,
@@ -1523,7 +1545,9 @@ function buildBetweenPlayDecision(params: {
   );
   const expectedEndpoint = getExpectedEndpoint(decisionType);
   const resolvesSameEvent =
-    params.resolved || expectedEndpoint === "same_event";
+    decisionType === "out_advancing_send"
+      ? false
+      : params.resolved || expectedEndpoint === "same_event";
   const involvedPlayerIds = uniqueStrings(params.involvedPlayerIds);
   const trackedPlayerIds = getTrackedPlayerIdsForBetweenPlayDecision(
     decisionType,
@@ -1582,6 +1606,16 @@ function buildBetweenPlayDecision(params: {
       trackedRunnerIds,
       maxEventIndex: resolvesSameEvent ? event.eventIndex : undefined,
     }),
+    explanationMetadata:
+      decisionType === "out_advancing_send"
+        ? {
+            outAdvancingSend: {
+              runnerId: event.runnerAction?.runnerId,
+              runnerName: event.runnerAction?.runnerName,
+              unscoredReason: "unsupported_between_play_counterfactual",
+            },
+          }
+        : undefined,
     derivedFromFields: params.derivedFromFields,
     manuallyPinned:
       event.runnerAction?.managerDecisionSource === "manual_edit" ||
@@ -2651,6 +2685,381 @@ function buildDecisionWindow(input: {
     teamWinProbabilityAfter: after,
     rawWindowWpa,
     managerWpa: roundWpa(rawWindowWpa * share),
+  };
+}
+
+type AtBatRunnerOutcome = NonNullable<AtBatEvent["runnerOutcomes"]>[number];
+type CounterfactualBase = "first" | "second" | "third";
+type CounterfactualBaseOccupancy = Record<CounterfactualBase, string | undefined>;
+
+type OutAdvancingCounterfactualWindowResult =
+  | {
+      scored: true;
+      window: DecisionWindow;
+      metadata: ManagerOutAdvancingSendExplanationMetadata;
+    }
+  | {
+      scored: false;
+      metadata: ManagerOutAdvancingSendExplanationMetadata;
+    };
+
+function buildOutAdvancingSendCounterfactualWindow(input: {
+  event: AtBatEvent;
+  runnerOutcomeIndex?: number;
+  teamId: string;
+  homeTeamId: string;
+  totalInnings?: number;
+}): OutAdvancingCounterfactualWindowResult {
+  const { event } = input;
+  const outcome =
+    input.runnerOutcomeIndex === undefined
+      ? undefined
+      : event.runnerOutcomes?.[input.runnerOutcomeIndex];
+  if (!outcome) {
+    return buildUnscoredOutAdvancingMetadata(
+      "missing_runner_outcome",
+      undefined,
+    );
+  }
+
+  const holdBase = inferOutAdvancingHoldBase(event, outcome);
+  if (!holdBase) {
+    return buildUnscoredOutAdvancingMetadata(
+      inferMissingHoldBaseReason(event, outcome),
+      outcome,
+    );
+  }
+
+  const counterfactualState = buildCounterfactualOutAdvancingState(
+    event,
+    outcome,
+    holdBase.base,
+  );
+  if (!counterfactualState.scored) {
+    return {
+      scored: false,
+      metadata: {
+        ...baseOutAdvancingMetadata(outcome),
+        inferredHoldBase: holdBase.base,
+        holdBaseSource: holdBase.source,
+        actualState: stateMetadataFromAtBatActual(event),
+        unscoredReason: counterfactualState.reason,
+      },
+    };
+  }
+
+  const original = {
+    inning: event.inning,
+    isTop: event.halfInning === "TOP",
+    outs: event.outs,
+    bases: runnerStateToBases(event.runners),
+    homeScore: event.homeScore,
+    awayScore: event.awayScore,
+    totalInnings: event.totalInnings ?? input.totalInnings,
+  };
+  const actualWpa = calculateAtBatWindow(event, input.totalInnings);
+  const counterfactualWpa = calculateWPA(original, {
+    outs: counterfactualState.state.outs,
+    bases: counterfactualState.state.bases,
+    homeScore: counterfactualState.state.homeScore,
+    awayScore: counterfactualState.state.awayScore,
+  });
+  const actualTeamWinProbability = roundProbability(
+    teamWinProbability(
+      actualWpa.winProbabilityAfter,
+      input.teamId,
+      input.homeTeamId,
+    ),
+  );
+  const counterfactualTeamWinProbability = roundProbability(
+    teamWinProbability(
+      counterfactualWpa.winProbabilityAfter,
+      input.teamId,
+      input.homeTeamId,
+    ),
+  );
+  const rawWindowWpa = roundWpa(
+    actualTeamWinProbability - counterfactualTeamWinProbability,
+  );
+  const share = MANAGER_WPA_SHARE_BY_DECISION_TYPE.out_advancing_send ?? 0;
+  const metadata: ManagerOutAdvancingSendExplanationMetadata = {
+    ...baseOutAdvancingMetadata(outcome),
+    inferredHoldBase: holdBase.base,
+    holdBaseSource: holdBase.source,
+    actualState: stateMetadataFromAtBatActual(event),
+    counterfactualState: counterfactualState.metadata,
+    actualTeamWinProbability,
+    counterfactualTeamWinProbability,
+    originalPlateAppearanceTeamWinProbabilityBefore: roundProbability(
+      teamWinProbability(
+        actualWpa.winProbabilityBefore,
+        input.teamId,
+        input.homeTeamId,
+      ),
+    ),
+    rawCounterfactualWpa: rawWindowWpa,
+  };
+
+  return {
+    scored: true,
+    window: {
+      teamWinProbabilityBefore: counterfactualTeamWinProbability,
+      teamWinProbabilityAfter: actualTeamWinProbability,
+      rawWindowWpa,
+      managerWpa: roundWpa(rawWindowWpa * share),
+    },
+    metadata,
+  };
+}
+
+function inferOutAdvancingHoldBase(
+  event: AtBatEvent,
+  outcome: AtBatRunnerOutcome,
+): { base: CounterfactualBase; source: string } | null {
+  const batterBase = hitBaseForResult(event.result);
+
+  if (outcome.fromBase === "batter") {
+    return batterBase
+      ? { base: batterBase, source: `batter_safe_at_${batterBase}` }
+      : null;
+  }
+
+  if (!batterBase) return null;
+
+  if (outcome.fromBase === "second") {
+    return {
+      base: "third",
+      source: "runner_from_second_safe_stop_third",
+    };
+  }
+
+  if (outcome.fromBase === "first") {
+    if (outcome.toBase === "third") {
+      return {
+        base: "second",
+        source: "runner_from_first_safe_stop_second",
+      };
+    }
+    if (outcome.toBase === "home") {
+      return batterBase === "second" || batterBase === "third"
+        ? {
+            base: "third",
+            source: "runner_from_first_safe_stop_third",
+          }
+        : null;
+    }
+    if (outcome.toBase === "out") {
+      if (batterBase === "first") {
+        return {
+          base: "second",
+          source: "runner_from_first_out_at_third_safe_stop_second",
+        };
+      }
+      if (batterBase === "second" || batterBase === "third") {
+        return {
+          base: "third",
+          source: "runner_from_first_out_at_home_safe_stop_third",
+        };
+      }
+    }
+  }
+
+  return null;
+}
+
+function inferMissingHoldBaseReason(
+  event: AtBatEvent,
+  outcome: AtBatRunnerOutcome,
+): ManagerOutAdvancingSendUnscoredReason {
+  if (!hitBaseForResult(event.result)) return "missing_hit_context";
+  if (outcome.fromBase === "third") return "missing_hold_base";
+  return "missing_hold_base";
+}
+
+function buildCounterfactualOutAdvancingState(
+  event: AtBatEvent,
+  outcome: AtBatRunnerOutcome,
+  holdBase: CounterfactualBase,
+):
+  | {
+      scored: true;
+      state: {
+        outs: number;
+        bases: { first: boolean; second: boolean; third: boolean };
+        homeScore: number;
+        awayScore: number;
+      };
+      metadata: ManagerOutAdvancingSendExplanationMetadata["counterfactualState"];
+    }
+  | {
+      scored: false;
+      reason: ManagerOutAdvancingSendUnscoredReason;
+    } {
+  const removedOut = outcome.toBase === "out" ? 1 : 0;
+  const outs = event.outsAfter - removedOut;
+  if (outs < event.outs || outs < 0) {
+    return { scored: false, reason: "invalid_out_count" };
+  }
+
+  const occupancyResult = buildCounterfactualBaseOccupancy(
+    event,
+    outcome,
+    holdBase,
+  );
+  if (!occupancyResult.scored) return occupancyResult;
+
+  let awayScore = event.awayScoreAfter;
+  let homeScore = event.homeScoreAfter;
+  if (runScoredByRunner(event, outcome.runnerId) || outcome.toBase === "home") {
+    if (event.halfInning === "TOP") awayScore -= 1;
+    else homeScore -= 1;
+  }
+  if (awayScore < 0 || homeScore < 0) {
+    return { scored: false, reason: "missing_hold_base" };
+  }
+
+  const bases =
+    outs >= 3
+      ? { first: false, second: false, third: false }
+      : basesFromOccupancy(occupancyResult.occupancy);
+  const metadata = {
+    outs,
+    awayScore,
+    homeScore,
+    bases,
+  };
+
+  return {
+    scored: true,
+    state: {
+      outs,
+      bases,
+      homeScore,
+      awayScore,
+    },
+    metadata,
+  };
+}
+
+function buildCounterfactualBaseOccupancy(
+  event: AtBatEvent,
+  targetOutcome: AtBatRunnerOutcome,
+  holdBase: CounterfactualBase,
+):
+  | { scored: true; occupancy: CounterfactualBaseOccupancy }
+  | { scored: false; reason: ManagerOutAdvancingSendUnscoredReason } {
+  const occupancy: CounterfactualBaseOccupancy = {
+    first: undefined,
+    second: undefined,
+    third: undefined,
+  };
+  const addRunner = (
+    base: CounterfactualBase,
+    runnerId: string,
+  ): ManagerOutAdvancingSendUnscoredReason | null => {
+    const current = occupancy[base];
+    if (current && current !== runnerId) return "base_conflict";
+    occupancy[base] = runnerId;
+    return null;
+  };
+
+  for (const [base, runner] of Object.entries(event.runnersAfter) as Array<
+    [CounterfactualBase, RunnerState[CounterfactualBase]]
+  >) {
+    if (!runner || runner.runnerId === targetOutcome.runnerId) continue;
+    const conflict = addRunner(base, runner.runnerId);
+    if (conflict) return { scored: false, reason: conflict };
+  }
+
+  for (const outcome of event.runnerOutcomes ?? []) {
+    if (outcome.runnerId === targetOutcome.runnerId) continue;
+    const base = outcomeToCounterfactualBase(outcome.toBase);
+    if (!base) continue;
+    const conflict = addRunner(base, outcome.runnerId);
+    if (conflict) return { scored: false, reason: conflict };
+  }
+
+  const batterBase = hitBaseForResult(event.result);
+  const batterHasOutcome = (event.runnerOutcomes ?? []).some(
+    (outcome) => outcome.runnerId === event.batterId,
+  );
+  const batterAlreadyOnBase = Object.values(occupancy).includes(event.batterId);
+  if (
+    targetOutcome.runnerId !== event.batterId &&
+    !batterHasOutcome &&
+    !batterAlreadyOnBase &&
+    batterBase
+  ) {
+    const conflict = addRunner(batterBase, event.batterId);
+    if (conflict) return { scored: false, reason: conflict };
+  }
+
+  const conflict = addRunner(holdBase, targetOutcome.runnerId);
+  if (conflict) return { scored: false, reason: conflict };
+
+  return { scored: true, occupancy };
+}
+
+function outcomeToCounterfactualBase(
+  toBase: AtBatRunnerOutcome["toBase"],
+): CounterfactualBase | null {
+  if (toBase === "first" || toBase === "second" || toBase === "third") {
+    return toBase;
+  }
+  return null;
+}
+
+function hitBaseForResult(result: AtBatEvent["result"]): CounterfactualBase | null {
+  if (result === "1B") return "first";
+  if (result === "2B" || result === "GRD") return "second";
+  if (result === "3B") return "third";
+  return null;
+}
+
+function basesFromOccupancy(occupancy: CounterfactualBaseOccupancy): {
+  first: boolean;
+  second: boolean;
+  third: boolean;
+} {
+  return {
+    first: Boolean(occupancy.first),
+    second: Boolean(occupancy.second),
+    third: Boolean(occupancy.third),
+  };
+}
+
+function stateMetadataFromAtBatActual(
+  event: AtBatEvent,
+): ManagerOutAdvancingSendExplanationMetadata["actualState"] {
+  return {
+    outs: event.outsAfter,
+    awayScore: event.awayScoreAfter,
+    homeScore: event.homeScoreAfter,
+    bases: runnerStateToBases(event.runnersAfter),
+  };
+}
+
+function buildUnscoredOutAdvancingMetadata(
+  reason: ManagerOutAdvancingSendUnscoredReason,
+  outcome: AtBatRunnerOutcome | undefined,
+): OutAdvancingCounterfactualWindowResult {
+  return {
+    scored: false,
+    metadata: {
+      ...baseOutAdvancingMetadata(outcome),
+      unscoredReason: reason,
+    },
+  };
+}
+
+function baseOutAdvancingMetadata(
+  outcome: AtBatRunnerOutcome | undefined,
+): ManagerOutAdvancingSendExplanationMetadata {
+  return {
+    runnerId: outcome?.runnerId,
+    runnerName: outcome?.runnerName,
+    fromBase: outcome?.fromBase,
+    actualToBase: outcome?.toBase,
   };
 }
 

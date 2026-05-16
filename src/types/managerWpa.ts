@@ -225,8 +225,44 @@ export interface IntentionalWalkExplanationMetadata {
   wpaComponents?: IntentionalWalkWpaComponentMetadata;
 }
 
+export type ManagerOutAdvancingSendUnscoredReason =
+  | "missing_runner_outcome"
+  | "unsupported_between_play_counterfactual"
+  | "missing_hit_context"
+  | "missing_hold_base"
+  | "base_conflict"
+  | "invalid_out_count";
+
+export interface ManagerOutAdvancingSendStateMetadata {
+  outs: number;
+  awayScore: number;
+  homeScore: number;
+  bases: {
+    first: boolean;
+    second: boolean;
+    third: boolean;
+  };
+}
+
+export interface ManagerOutAdvancingSendExplanationMetadata {
+  runnerId?: string;
+  runnerName?: string;
+  fromBase?: "batter" | "first" | "second" | "third";
+  actualToBase?: "first" | "second" | "third" | "home" | "out" | "end";
+  inferredHoldBase?: "first" | "second" | "third";
+  holdBaseSource?: string;
+  actualState?: ManagerOutAdvancingSendStateMetadata;
+  counterfactualState?: ManagerOutAdvancingSendStateMetadata;
+  actualTeamWinProbability?: number;
+  counterfactualTeamWinProbability?: number;
+  originalPlateAppearanceTeamWinProbabilityBefore?: number;
+  rawCounterfactualWpa?: number;
+  unscoredReason?: ManagerOutAdvancingSendUnscoredReason;
+}
+
 export interface ManagerDecisionExplanationMetadata {
   intentionalWalk?: IntentionalWalkExplanationMetadata;
+  outAdvancingSend?: ManagerOutAdvancingSendExplanationMetadata;
   recommendation?: ManagerRecommendationProvenanceMetadata;
 }
 
