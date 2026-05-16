@@ -1,6 +1,9 @@
 import React from "react";
 
-import type { ManagerValueTraceRow } from "../../../utils/managerValueTrace";
+import type {
+  ManagerValueTraceComponent,
+  ManagerValueTraceRow,
+} from "../../../utils/managerValueTrace";
 
 export interface ManagerMomentDetailContext {
   trace: ManagerValueTraceRow;
@@ -84,6 +87,16 @@ function formatCap(value: number | undefined): string {
 
 function formatWeight(value: number): string {
   return `${Math.round(value * 100)}%`;
+}
+
+function formatComponentValue(
+  component: ManagerValueTraceComponent,
+): string | undefined {
+  if (component.valueLabel) return component.valueLabel;
+  if (typeof component.value === "number" && Number.isFinite(component.value)) {
+    return formatSignedManagerMomentValue(component.value);
+  }
+  return undefined;
 }
 
 function titleCase(value: string): string {
@@ -185,6 +198,39 @@ export function ManagerMomentDetailDialog({
                   <p className="m-0 break-words">{supplementalOutcome}</p>
                 </div>
               ) : null}
+            </div>
+          ) : null}
+
+          {trace.components.length > 0 ? (
+            <div className="border-t border-[#425546] pt-2">
+              <div className="mb-1 text-[7px] font-bold uppercase tracking-[0.16em] text-[#C4A853]">
+                Scoped Components
+              </div>
+              <ul className="m-0 space-y-1.5 p-0">
+                {trace.components.map((component) => {
+                  const value = formatComponentValue(component);
+                  return (
+                    <li
+                      key={component.key}
+                      className="list-none border-t border-[#314437] pt-1.5 first:border-t-0 first:pt-0"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <span className="min-w-0 break-words font-bold text-[#E8E8D8]">
+                          {component.label}
+                        </span>
+                        {value ? (
+                          <span className="shrink-0 text-[#C4A853]">{value}</span>
+                        ) : null}
+                      </div>
+                      {component.description ? (
+                        <div className="mt-0.5 break-words text-[8px] text-[#a0a898]">
+                          {component.description}
+                        </div>
+                      ) : null}
+                    </li>
+                  );
+                })}
+              </ul>
             </div>
           ) : null}
 

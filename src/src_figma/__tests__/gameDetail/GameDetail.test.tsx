@@ -296,6 +296,168 @@ describe("GameDetail Manager WPA overlay", () => {
     expect(dialog).toHaveTextContent("Pending");
   });
 
+  test("renders IBB component detail in the manager moment popup", async () => {
+    mockGetCompletedGameById.mockResolvedValue(
+      createCompletedGame([
+        createManagerDecision({
+          decisionId: "game-detail-1:ab-7:intentional_walk",
+          decisionType: "intentional_walk",
+          displayTitle: "Intentional walk",
+          decisionEventId: "ab-7",
+          linkedEventIds: ["ab-7", "ab-8", "ab-9"],
+          teamWinProbabilityBefore: 0.55,
+          teamWinProbabilityAfter: 0.43,
+          rawWindowWpa: -0.12,
+          managerShare: 1,
+          managerWpa: -0.12,
+          resolvedAtEventId: "ab-9",
+          explanationMetadata: {
+            intentionalWalk: {
+              ibbEventId: "ab-7",
+              walkedRunnerId: "walked-star",
+              walkedRunnerName: "Walked Star",
+              nextBatterEventId: "ab-8",
+              nextBatterId: "next-batter",
+              nextBatterName: "Next Batter",
+              nextBatterResult: "GIDP",
+              finalConsequenceEventId: "ab-9",
+              finalConsequence: "stranded",
+              inningEnded: true,
+              wpaComponents: {
+                beforeIbbTeamWinProbability: 0.55,
+                afterIbbTeamWinProbability: 0.49,
+                finalTeamWinProbability: 0.43,
+                immediateRawWpa: -0.06,
+                consequenceRawWpa: -0.06,
+                netRawWpa: -0.12,
+              },
+            },
+          },
+        }),
+      ]),
+    );
+
+    render(<GameDetail />);
+
+    await screen.findByTestId("manager-wpa-overlay");
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: /open intentional walk manager moment details for casey custom/i,
+      }),
+    );
+
+    const dialog = screen.getByRole("dialog", { name: /manager moment details/i });
+    expect(dialog).toHaveTextContent("Scoped Components");
+    expect(dialog).toHaveTextContent("Immediate IBB cost");
+    expect(dialog).toHaveTextContent("-0.060");
+    expect(dialog).toHaveTextContent("Before IBB 55.0% WP -> after IBB 49.0% WP.");
+    expect(dialog).toHaveTextContent("Consequence payoff");
+    expect(dialog).toHaveTextContent("Next batter: GIDP");
+    expect(dialog).toHaveTextContent("the walked runner was stranded");
+    expect(dialog).toHaveTextContent("Official net");
+  });
+
+  test("renders runner-send counterfactual and unscored detail in the manager moment popup", async () => {
+    mockGetCompletedGameById.mockResolvedValue(
+      createCompletedGame([
+        createManagerDecision({
+          decisionId: "game-detail-1:ab-8:out_advancing_send",
+          decisionType: "out_advancing_send",
+          displayTitle: "Out-advancing send",
+          decisionEventId: "ab-8",
+          linkedEventIds: ["ab-8"],
+          teamWinProbabilityBefore: 0.62,
+          teamWinProbabilityAfter: 0.55,
+          rawWindowWpa: -0.07,
+          managerShare: 0.35,
+          managerWpa: -0.0245,
+          resolvedAtEventId: "ab-8",
+          explanationMetadata: {
+            outAdvancingSend: {
+              runnerId: "runner-second",
+              runnerName: "Runner Second",
+              fromBase: "second",
+              actualToBase: "out",
+              inferredHoldBase: "third",
+              holdBaseSource: "runner_from_second_safe_stop_third",
+              actualTeamWinProbability: 0.55,
+              counterfactualTeamWinProbability: 0.62,
+              rawCounterfactualWpa: -0.07,
+              actualState: {
+                outs: 2,
+                awayScore: 4,
+                homeScore: 4,
+                bases: { first: true, second: false, third: false },
+              },
+              counterfactualState: {
+                outs: 1,
+                awayScore: 4,
+                homeScore: 4,
+                bases: { first: true, second: false, third: true },
+              },
+            },
+          },
+        }),
+        createManagerDecision({
+          decisionId: "game-detail-1:ab-9:out_advancing_send_unscored",
+          decisionType: "out_advancing_send",
+          displayTitle: "Out-advancing send unavailable",
+          decisionEventId: "ab-9",
+          linkedEventIds: ["ab-9"],
+          teamWinProbabilityBefore: 0.52,
+          teamWinProbabilityAfter: undefined,
+          rawWindowWpa: undefined,
+          managerWpa: undefined,
+          managerShare: 0.35,
+          resolved: false,
+          resolvedAtEventId: undefined,
+          explanationMetadata: {
+            outAdvancingSend: {
+              runnerId: "runner-first",
+              runnerName: "Runner First",
+              fromBase: "first",
+              actualToBase: "out",
+              unscoredReason: "missing_hit_context",
+            },
+          },
+        }),
+      ]),
+    );
+
+    render(<GameDetail />);
+
+    await screen.findByTestId("manager-wpa-overlay");
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: /open out-advancing send manager moment details for casey custom/i,
+      }),
+    );
+
+    let dialog = screen.getByRole("dialog", { name: /manager moment details/i });
+    expect(dialog).toHaveTextContent("Compared with holding at 3B");
+    expect(dialog).toHaveTextContent("Actual after-state");
+    expect(dialog).toHaveTextContent("55.0% WP");
+    expect(dialog).toHaveTextContent("Counterfactual hold/stop state");
+    expect(dialog).toHaveTextContent("62.0% WP");
+    expect(dialog).toHaveTextContent("Raw counterfactual WPA");
+    expect(dialog).toHaveTextContent("-0.070");
+    expect(dialog).toHaveTextContent("Inferred hold base");
+    fireEvent.click(within(dialog).getByRole("button", { name: /close/i }));
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: /open out-advancing send unavailable manager moment details for casey custom/i,
+      }),
+    );
+    dialog = screen.getByRole("dialog", { name: /manager moment details/i });
+    expect(dialog).toHaveTextContent("Runner send not scored");
+    expect(dialog).toHaveTextContent("Unscored runner-send reason");
+    expect(dialog).toHaveTextContent(
+      "Counterfactual unavailable: the hit context was not enough to infer a safe hold base.",
+    );
+    expect(dialog).toHaveTextContent("Pending");
+  });
+
   test("shows committed deployment and lineup values separately from tactical Manager WPA", async () => {
     mockGetCompletedGameById.mockResolvedValue(
       createCompletedGame(

@@ -188,6 +188,14 @@ describe("manager value trace", () => {
               finalConsequenceEventId: "ab-9",
               finalConsequence: "scored",
               inningEnded: false,
+              wpaComponents: {
+                beforeIbbTeamWinProbability: 0.55,
+                afterIbbTeamWinProbability: 0.49,
+                finalTeamWinProbability: 0.43,
+                immediateRawWpa: -0.06,
+                consequenceRawWpa: -0.06,
+                netRawWpa: -0.12,
+              },
             },
           },
         }),
@@ -206,6 +214,179 @@ describe("manager value trace", () => {
       description:
         "IBB put Walked Star on base to face Next Batter, who ended with 2B; the walked runner scored.",
     });
+    expect(trace.components).toEqual([
+      {
+        key: "ibb_immediate_cost",
+        label: "Immediate IBB cost",
+        value: -0.06,
+        description: "Before IBB 55.0% WP -> after IBB 49.0% WP.",
+      },
+      {
+        key: "ibb_consequence_payoff",
+        label: "Consequence payoff",
+        value: -0.06,
+        description:
+          "After IBB 49.0% WP -> final 43.0% WP. Next batter: 2B. the walked runner scored",
+      },
+      {
+        key: "ibb_official_net",
+        label: "Official net",
+        value: -0.12,
+        description: "Before IBB 55.0% WP -> final 43.0% WP. the walked runner scored",
+      },
+    ]);
+  });
+
+  test("includes runner-send counterfactual labels and values", () => {
+    const [trace] = buildManagerValueTraceRows({
+      managerDecisions: [
+        createDecision({
+          decisionId: "game-1:ab-8:out_advancing_send",
+          decisionType: "out_advancing_send",
+          displayTitle: "Out-advancing send",
+          decisionEventId: "ab-8",
+          linkedEventIds: ["ab-8"],
+          teamWinProbabilityBefore: 0.62,
+          teamWinProbabilityAfter: 0.55,
+          rawWindowWpa: -0.07,
+          managerShare: 0.35,
+          managerWpa: -0.0245,
+          explanationMetadata: {
+            outAdvancingSend: {
+              runnerId: "runner-second",
+              runnerName: "Runner Second",
+              fromBase: "second",
+              actualToBase: "out",
+              inferredHoldBase: "third",
+              holdBaseSource: "runner_from_second_safe_stop_third",
+              actualTeamWinProbability: 0.55,
+              counterfactualTeamWinProbability: 0.62,
+              rawCounterfactualWpa: -0.07,
+              actualState: {
+                outs: 2,
+                awayScore: 4,
+                homeScore: 4,
+                bases: { first: true, second: false, third: false },
+              },
+              counterfactualState: {
+                outs: 1,
+                awayScore: 4,
+                homeScore: 4,
+                bases: { first: true, second: false, third: true },
+              },
+            },
+          },
+        }),
+      ],
+    });
+
+    expect(trace).toMatchObject({
+      decisionType: "out_advancing_send",
+      rawWpa: -0.07,
+      share: 0.35,
+      finalValue: -0.0245,
+      description:
+        "Runner send compared the actual out with holding at 3B.",
+    });
+    expect(trace.components).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          key: "runner_send_actual_state",
+          label: "Actual after-state",
+          valueLabel: "55.0% WP",
+          description: "2 outs, 1B occupied, score 4-4.",
+        }),
+        expect.objectContaining({
+          key: "runner_send_counterfactual_state",
+          label: "Counterfactual hold/stop state",
+          valueLabel: "62.0% WP",
+          description:
+            "Compared with holding at 3B. 1 out, 1B/3B occupied, score 4-4.",
+        }),
+        expect.objectContaining({
+          key: "runner_send_raw_counterfactual_wpa",
+          label: "Raw counterfactual WPA",
+          value: -0.07,
+          description: "Hold inference: runner from second safe stop third.",
+        }),
+        expect.objectContaining({
+          key: "runner_send_hold_base",
+          label: "Inferred hold base",
+          valueLabel: "3B",
+        }),
+      ]),
+    );
+  });
+
+  test("includes unscored runner-send reason and avoids zero-value scoring", () => {
+    const [trace] = buildManagerValueTraceRows({
+      managerDecisions: [
+        createDecision({
+          decisionId: "game-1:ab-9:out_advancing_send",
+          decisionType: "out_advancing_send",
+          displayTitle: "Out-advancing send",
+          decisionEventId: "ab-9",
+          linkedEventIds: ["ab-9"],
+          teamWinProbabilityBefore: 0.52,
+          teamWinProbabilityAfter: undefined,
+          rawWindowWpa: undefined,
+          managerWpa: undefined,
+          resolved: false,
+          resolvedAtEventId: undefined,
+          explanationMetadata: {
+            outAdvancingSend: {
+              runnerId: "runner-first",
+              runnerName: "Runner First",
+              fromBase: "first",
+              actualToBase: "out",
+              unscoredReason: "missing_hit_context",
+            },
+          },
+        }),
+      ],
+    });
+
+    expect(trace).toMatchObject({
+      decisionType: "out_advancing_send",
+      scoring: false,
+      pending: true,
+      rawWpa: undefined,
+      finalValue: undefined,
+      description:
+        "Runner send not scored: the hit context was not enough to infer a safe hold base.",
+    });
+    expect(trace.components).toEqual([
+      {
+        key: "runner_send_unscored_reason",
+        label: "Unscored runner-send reason",
+        description:
+          "Counterfactual unavailable: the hit context was not enough to infer a safe hold base.",
+      },
+    ]);
+  });
+
+  test("falls back gracefully for legacy runner-send records without scoped metadata", () => {
+    const [trace] = buildManagerValueTraceRows({
+      managerDecisions: [
+        createDecision({
+          decisionId: "game-1:ab-10:out_advancing_send",
+          decisionType: "out_advancing_send",
+          displayTitle: "Out-advancing send",
+          rawWindowWpa: -0.04,
+          managerShare: 0.35,
+          managerWpa: -0.014,
+        }),
+      ],
+    });
+
+    expect(trace).toMatchObject({
+      decisionType: "out_advancing_send",
+      rawWpa: -0.04,
+      finalValue: -0.014,
+      scoring: true,
+      description: "Runner send credited from the isolated send decision.",
+    });
+    expect(trace.components).toEqual([]);
   });
 
   test("includes typed kept-in deployment linked outcomes and weights", () => {
