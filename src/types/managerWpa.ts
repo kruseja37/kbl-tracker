@@ -113,6 +113,42 @@ export type ManagerDecisionHorizon =
   | "personnel_stint"
   | "lineup_baseline";
 
+export type ManagerDecisionScope =
+  | "whole_event"
+  | "sub_event"
+  | "inning_consequence"
+  | "stint"
+  | "lineup_baseline"
+  | "non_scoring_note";
+
+export type ManagerDecisionScoringModel =
+  | "whole_event_window"
+  | "sub_event_counterfactual"
+  | "inning_consequence_components"
+  | "deployment_stint"
+  | "lineup_delta"
+  | "non_scoring";
+
+export type ManagerDecisionCounterfactualReadiness =
+  | "not_required"
+  | "not_available"
+  | "partial"
+  | "available";
+
+export type ManagerDecisionTraceComponent =
+  | "official_net"
+  | "raw_window_wpa"
+  | "manager_share"
+  | "cap"
+  | "final_value"
+  | "immediate_cost"
+  | "consequence_payoff"
+  | "counterfactual_state"
+  | "excluded_batter_value"
+  | "deployment_exclusion"
+  | "lineup_baseline"
+  | "non_scoring_note";
+
 export type ManagerInferenceMethod =
   | "automatic"
   | "prompted"

@@ -1,6 +1,10 @@
 import type {
+  ManagerDecisionCounterfactualReadiness,
   ManagerDecisionHorizon,
   ManagerDecisionResolutionEndpoint,
+  ManagerDecisionScope,
+  ManagerDecisionScoringModel,
+  ManagerDecisionTraceComponent,
   ManagerDecisionType,
 } from "../types/managerWpa";
 
@@ -36,11 +40,59 @@ export interface ManagerDecisionRegistryEntry {
   layer: ManagerDecisionLayer;
   horizon: ManagerDecisionHorizon;
   resolutionEndpoint: ManagerDecisionResolutionEndpoint;
+  decisionScope: ManagerDecisionScope;
+  scoringModel?: ManagerDecisionScoringModel;
+  requiresCounterfactual?: boolean;
+  counterfactualReadiness?: ManagerDecisionCounterfactualReadiness;
+  traceComponents?: ManagerDecisionTraceComponent[];
   managerShare?: number;
   cap?: number;
   editable: boolean;
   doubleCountingExclusions: string[];
 }
+
+const WHOLE_EVENT_TRACE_COMPONENTS: ManagerDecisionTraceComponent[] = [
+  "official_net",
+  "raw_window_wpa",
+  "manager_share",
+  "final_value",
+];
+
+const STINT_TRACE_COMPONENTS: ManagerDecisionTraceComponent[] = [
+  "official_net",
+  "raw_window_wpa",
+  "manager_share",
+  "final_value",
+  "deployment_exclusion",
+];
+
+const LINEUP_TRACE_COMPONENTS: ManagerDecisionTraceComponent[] = [
+  "lineup_baseline",
+  "raw_window_wpa",
+  "manager_share",
+  "cap",
+  "final_value",
+];
+
+const INNING_CONSEQUENCE_TRACE_COMPONENTS: ManagerDecisionTraceComponent[] = [
+  "official_net",
+  "immediate_cost",
+  "consequence_payoff",
+  "manager_share",
+  "final_value",
+];
+
+const SUB_EVENT_TRACE_COMPONENTS: ManagerDecisionTraceComponent[] = [
+  "counterfactual_state",
+  "excluded_batter_value",
+  "raw_window_wpa",
+  "manager_share",
+  "final_value",
+];
+
+const NON_SCORING_TRACE_COMPONENTS: ManagerDecisionTraceComponent[] = [
+  "non_scoring_note",
+];
 
 export const ALL_MANAGER_DECISION_TYPES: ManagerDecisionType[] = [
   "lineup_construction",
@@ -77,6 +129,11 @@ export const MANAGER_DECISION_REGISTRY: Record<
     layer: "lineup_delta",
     horizon: "lineup_baseline",
     resolutionEndpoint: "game_end",
+    decisionScope: "lineup_baseline",
+    scoringModel: "lineup_delta",
+    requiresCounterfactual: false,
+    counterfactualReadiness: "not_required",
+    traceComponents: LINEUP_TRACE_COMPONENTS,
     managerShare: 0.25,
     cap: 0.75,
     editable: false,
@@ -92,6 +149,11 @@ export const MANAGER_DECISION_REGISTRY: Record<
     layer: "tactical_deployment",
     horizon: "matchup",
     resolutionEndpoint: "next_pa",
+    decisionScope: "whole_event",
+    scoringModel: "whole_event_window",
+    requiresCounterfactual: false,
+    counterfactualReadiness: "not_required",
+    traceComponents: STINT_TRACE_COMPONENTS,
     managerShare: 0.25,
     editable: true,
     doubleCountingExclusions: ["deployment_initial_pa"],
@@ -106,6 +168,11 @@ export const MANAGER_DECISION_REGISTRY: Record<
     layer: "tactical_deployment",
     horizon: "matchup",
     resolutionEndpoint: "next_pa",
+    decisionScope: "stint",
+    scoringModel: "deployment_stint",
+    requiresCounterfactual: false,
+    counterfactualReadiness: "not_required",
+    traceComponents: STINT_TRACE_COMPONENTS,
     managerShare: 0.2,
     editable: true,
     doubleCountingExclusions: ["unprompted_non_action"],
@@ -120,6 +187,11 @@ export const MANAGER_DECISION_REGISTRY: Record<
     layer: "tactical_deployment",
     horizon: "matchup",
     resolutionEndpoint: "next_pa",
+    decisionScope: "whole_event",
+    scoringModel: "whole_event_window",
+    requiresCounterfactual: false,
+    counterfactualReadiness: "not_required",
+    traceComponents: STINT_TRACE_COMPONENTS,
     managerShare: 0.25,
     editable: true,
     doubleCountingExclusions: ["deployment_initial_pa"],
@@ -134,6 +206,11 @@ export const MANAGER_DECISION_REGISTRY: Record<
     layer: "tactical_deployment",
     horizon: "matchup",
     resolutionEndpoint: "next_pa",
+    decisionScope: "stint",
+    scoringModel: "deployment_stint",
+    requiresCounterfactual: false,
+    counterfactualReadiness: "not_required",
+    traceComponents: STINT_TRACE_COMPONENTS,
     managerShare: 0.2,
     editable: true,
     doubleCountingExclusions: ["unprompted_non_action"],
@@ -148,6 +225,11 @@ export const MANAGER_DECISION_REGISTRY: Record<
     layer: "tactical_deployment",
     horizon: "matchup",
     resolutionEndpoint: "first_fielding_event",
+    decisionScope: "stint",
+    scoringModel: "deployment_stint",
+    requiresCounterfactual: false,
+    counterfactualReadiness: "not_required",
+    traceComponents: STINT_TRACE_COMPONENTS,
     managerShare: 0.15,
     editable: true,
     doubleCountingExclusions: ["unprompted_non_action"],
@@ -162,6 +244,11 @@ export const MANAGER_DECISION_REGISTRY: Record<
     layer: "tactical_deployment",
     horizon: "personnel_stint",
     resolutionEndpoint: "runner_terminal",
+    decisionScope: "whole_event",
+    scoringModel: "whole_event_window",
+    requiresCounterfactual: false,
+    counterfactualReadiness: "partial",
+    traceComponents: STINT_TRACE_COMPONENTS,
     managerShare: 0.25,
     editable: true,
     doubleCountingExclusions: ["deployment_initial_runner_window"],
@@ -176,6 +263,11 @@ export const MANAGER_DECISION_REGISTRY: Record<
     layer: "tactical_deployment",
     horizon: "matchup",
     resolutionEndpoint: "first_fielding_event",
+    decisionScope: "stint",
+    scoringModel: "deployment_stint",
+    requiresCounterfactual: false,
+    counterfactualReadiness: "not_required",
+    traceComponents: STINT_TRACE_COMPONENTS,
     managerShare: 0.2,
     editable: true,
     doubleCountingExclusions: ["deployment_initial_fielding_window"],
@@ -190,6 +282,11 @@ export const MANAGER_DECISION_REGISTRY: Record<
     layer: "tactical_deployment",
     horizon: "matchup",
     resolutionEndpoint: "first_fielding_event",
+    decisionScope: "stint",
+    scoringModel: "deployment_stint",
+    requiresCounterfactual: false,
+    counterfactualReadiness: "not_required",
+    traceComponents: STINT_TRACE_COMPONENTS,
     managerShare: 0.1,
     editable: true,
     doubleCountingExclusions: ["deployment_initial_fielding_window"],
@@ -204,6 +301,11 @@ export const MANAGER_DECISION_REGISTRY: Record<
     layer: "tactical",
     horizon: "inning_consequence",
     resolutionEndpoint: "runner_consequence",
+    decisionScope: "inning_consequence",
+    scoringModel: "inning_consequence_components",
+    requiresCounterfactual: false,
+    counterfactualReadiness: "not_required",
+    traceComponents: INNING_CONSEQUENCE_TRACE_COMPONENTS,
     managerShare: 1,
     editable: false,
     doubleCountingExclusions: ["player_kbl_wpa"],
@@ -218,6 +320,11 @@ export const MANAGER_DECISION_REGISTRY: Record<
     layer: "tactical",
     horizon: "single_play",
     resolutionEndpoint: "same_event",
+    decisionScope: "whole_event",
+    scoringModel: "whole_event_window",
+    requiresCounterfactual: false,
+    counterfactualReadiness: "not_required",
+    traceComponents: WHOLE_EVENT_TRACE_COMPONENTS,
     managerShare: 0.35,
     editable: true,
     doubleCountingExclusions: ["runner_choice_tootblan"],
@@ -232,6 +339,11 @@ export const MANAGER_DECISION_REGISTRY: Record<
     layer: "tactical",
     horizon: "single_play",
     resolutionEndpoint: "same_event",
+    decisionScope: "whole_event",
+    scoringModel: "whole_event_window",
+    requiresCounterfactual: false,
+    counterfactualReadiness: "not_available",
+    traceComponents: WHOLE_EVENT_TRACE_COMPONENTS,
     managerShare: 0.2,
     editable: true,
     doubleCountingExclusions: ["defensive_of_hold_credit"],
@@ -246,6 +358,11 @@ export const MANAGER_DECISION_REGISTRY: Record<
     layer: "tactical",
     horizon: "single_play",
     resolutionEndpoint: "same_event",
+    decisionScope: "sub_event",
+    scoringModel: "sub_event_counterfactual",
+    requiresCounterfactual: true,
+    counterfactualReadiness: "partial",
+    traceComponents: SUB_EVENT_TRACE_COMPONENTS,
     managerShare: 0.35,
     editable: true,
     doubleCountingExclusions: ["runner_choice_tootblan", "hit_and_run"],
@@ -260,6 +377,11 @@ export const MANAGER_DECISION_REGISTRY: Record<
     layer: "tactical",
     horizon: "single_play",
     resolutionEndpoint: "same_event",
+    decisionScope: "whole_event",
+    scoringModel: "whole_event_window",
+    requiresCounterfactual: false,
+    counterfactualReadiness: "not_required",
+    traceComponents: WHOLE_EVENT_TRACE_COMPONENTS,
     managerShare: 0.35,
     editable: true,
     doubleCountingExclusions: ["squeeze_call"],
@@ -274,6 +396,11 @@ export const MANAGER_DECISION_REGISTRY: Record<
     layer: "tactical",
     horizon: "single_play",
     resolutionEndpoint: "same_event",
+    decisionScope: "whole_event",
+    scoringModel: "whole_event_window",
+    requiresCounterfactual: false,
+    counterfactualReadiness: "not_required",
+    traceComponents: WHOLE_EVENT_TRACE_COMPONENTS,
     managerShare: 0.5,
     editable: true,
     doubleCountingExclusions: ["bunt_call"],
@@ -288,6 +415,11 @@ export const MANAGER_DECISION_REGISTRY: Record<
     layer: "tactical",
     horizon: "single_play",
     resolutionEndpoint: "same_event",
+    decisionScope: "whole_event",
+    scoringModel: "whole_event_window",
+    requiresCounterfactual: false,
+    counterfactualReadiness: "not_available",
+    traceComponents: WHOLE_EVENT_TRACE_COMPONENTS,
     managerShare: 0.35,
     editable: true,
     doubleCountingExclusions: ["out_advancing_send", "deployment_stints"],
@@ -302,6 +434,11 @@ export const MANAGER_DECISION_REGISTRY: Record<
     layer: "manual",
     horizon: "single_play",
     resolutionEndpoint: "same_event",
+    decisionScope: "non_scoring_note",
+    scoringModel: "non_scoring",
+    requiresCounterfactual: false,
+    counterfactualReadiness: "not_available",
+    traceComponents: NON_SCORING_TRACE_COMPONENTS,
     editable: false,
     doubleCountingExclusions: ["active_manager_value"],
   },
@@ -315,6 +452,11 @@ export const MANAGER_DECISION_REGISTRY: Record<
     layer: "manual",
     horizon: "single_play",
     resolutionEndpoint: "same_event",
+    decisionScope: "non_scoring_note",
+    scoringModel: "non_scoring",
+    requiresCounterfactual: false,
+    counterfactualReadiness: "not_available",
+    traceComponents: NON_SCORING_TRACE_COMPONENTS,
     editable: true,
     doubleCountingExclusions: ["automatic_derivation"],
   },
@@ -358,3 +500,12 @@ export const DECISION_HORIZON_BY_DECISION_TYPE: Partial<
     MANAGER_DECISION_REGISTRY[decisionType].horizon,
   ]),
 ) as Partial<Record<ManagerDecisionType, ManagerDecisionHorizon>>;
+
+export const DECISION_SCOPE_BY_DECISION_TYPE: Partial<
+  Record<ManagerDecisionType, ManagerDecisionScope>
+> = Object.fromEntries(
+  ALL_MANAGER_DECISION_TYPES.map((decisionType) => [
+    decisionType,
+    MANAGER_DECISION_REGISTRY[decisionType].decisionScope,
+  ]),
+) as Partial<Record<ManagerDecisionType, ManagerDecisionScope>>;
