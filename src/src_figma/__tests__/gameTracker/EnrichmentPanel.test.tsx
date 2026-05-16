@@ -10,7 +10,10 @@ import {
   getSprayRegionsForResult,
   resolveSprayRegionForPoint,
 } from '../../app/components/EnrichmentPanel';
-import { inferAssistChain } from '../../app/utils/gameTrackerFieldTypes';
+import {
+  inferAssistChain,
+  inferPrimaryFielderPositionFromSpray,
+} from '../../app/utils/gameTrackerFieldTypes';
 import type { PlayLogEntry, RunnerSubEntry } from '../../app/utils/playLogTypes';
 import { PLAY_MECHANIC_OPTIONS } from '../../app/utils/fieldingPlayType';
 import {
@@ -153,6 +156,33 @@ describe('EnrichmentPanel', () => {
     expect(inferAssistChain('FC', 5, { first: false, second: true, third: false })).toEqual([5, 5]);
     expect(inferAssistChain('DP', 6, { first: true, second: false, third: false })).toEqual([6, 4, 3]);
     expect(inferAssistChain('DP', 1, { first: true, second: false, third: false })).toEqual([1, 6, 3]);
+  });
+
+  test('infers spray-chart fielders for hit depth without changing HRs into fielding plays', () => {
+    expect(
+      inferPrimaryFielderPositionFromSpray({
+        result: '1B',
+        direction: 'Left',
+        depthIndex: 0,
+        depthCount: 7,
+      }),
+    ).toBe(5);
+    expect(
+      inferPrimaryFielderPositionFromSpray({
+        result: '2B',
+        direction: 'Left',
+        depthIndex: 6,
+        depthCount: 7,
+      }),
+    ).toBe(7);
+    expect(
+      inferPrimaryFielderPositionFromSpray({
+        result: 'HR',
+        direction: 'Center',
+        depthIndex: 2,
+        depthCount: 3,
+      }),
+    ).toBeNull();
   });
 
   test('shows contact type controls for hit outcomes and saves value as exitType', () => {
@@ -431,6 +461,90 @@ describe('EnrichmentPanel', () => {
     consoleLogSpy.mockRestore();
   });
 
+  test('selecting a hit spray zone infers fielding attribution from the selected depth band', () => {
+    const onUpdate = vi.fn();
+    const consoleLogSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+    const { container } = render(
+      <EnrichmentPanel
+        entry={buildEntry('2B')}
+        currentEnrichment={{}}
+        onUpdate={onUpdate}
+        onClose={() => {}}
+      />
+    );
+
+    clickSvgAtRegion(container, '2B', 'd0r6');
+
+    expect(onUpdate).toHaveBeenCalledWith(
+      'fieldLocation',
+      expect.objectContaining({ zone: 'Left' })
+    );
+    expect(onUpdate).toHaveBeenCalledWith('fieldingSequence', [7]);
+    expect(screen.getByRole('combobox', { name: 'Primary Fielder' })).toHaveValue('7');
+    expect(consoleLogSpy).toHaveBeenCalledWith('[M2-3-fix] Inferred fielder: LF');
+
+    consoleLogSpy.mockRestore();
+  });
+
+  test('spray location edits preserve rehydrated fielding attribution', () => {
+    const onUpdate = vi.fn();
+
+    const { container } = render(
+      <EnrichmentPanel
+        entry={buildEntry('GO')}
+        currentEnrichment={{ fieldingSequence: [6, 3] }}
+        onUpdate={onUpdate}
+        onClose={() => {}}
+      />
+    );
+
+    clickSvgAtRegion(container, 'GO', 'd0r0');
+
+    expect(onUpdate).toHaveBeenCalledWith(
+      'fieldLocation',
+      expect.objectContaining({ zone: 'Left' })
+    );
+    expect(
+      onUpdate.mock.calls.some(([field]) => field === 'fieldingSequence')
+    ).toBe(false);
+    expect(screen.getByRole('combobox', { name: 'Primary Fielder' })).toHaveValue('6');
+  });
+
+  test('spray corrections can update auto-inferred fielding after parent syncs the sequence', () => {
+    const onUpdate = vi.fn();
+    const consoleLogSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const entry = buildEntry('GO');
+
+    const { container, rerender } = render(
+      <EnrichmentPanel
+        entry={entry}
+        currentEnrichment={{}}
+        onUpdate={onUpdate}
+        onClose={() => {}}
+      />
+    );
+
+    clickSvgAtRegion(container, 'GO', 'd0r0');
+    expect(onUpdate).toHaveBeenCalledWith('fieldingSequence', [5, 3]);
+
+    rerender(
+      <EnrichmentPanel
+        entry={entry}
+        currentEnrichment={{ fieldingSequence: [5, 3] }}
+        onUpdate={onUpdate}
+        onClose={() => {}}
+      />
+    );
+
+    clickSvgAtRegion(container, 'GO', 'd4r0');
+
+    expect(onUpdate).toHaveBeenCalledWith('fieldingSequence', [3]);
+    expect(screen.getByRole('combobox', { name: 'Primary Fielder' })).toHaveValue('3');
+
+    consoleLogSpy.mockRestore();
+  });
+
   test('maps expanded foul-zone taps back to the existing broad persistence buckets', () => {
     const onUpdate = vi.fn();
 
@@ -570,6 +684,37 @@ describe('EnrichmentPanel', () => {
     });
 
     expect(onUpdate).toHaveBeenLastCalledWith('fieldingSequence', [6, 3]);
+    expect(screen.getByRole('combobox', { name: 'Primary Fielder' })).toHaveValue('6');
+
+    consoleLogSpy.mockRestore();
+  });
+
+  test('spray location edits preserve manually selected primary fielder attribution', () => {
+    const onUpdate = vi.fn();
+    const consoleLogSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+    const { container } = render(
+      <EnrichmentPanel
+        entry={buildEntry('GO')}
+        currentEnrichment={{}}
+        onUpdate={onUpdate}
+        onClose={() => {}}
+      />
+    );
+
+    clickSvgAtRegion(container, 'GO', 'd0r0');
+    fireEvent.change(screen.getByRole('combobox', { name: 'Primary Fielder' }), {
+      target: { value: '6' },
+    });
+    const fieldingSequenceCallCount = onUpdate.mock.calls.filter(
+      ([field]) => field === 'fieldingSequence'
+    ).length;
+
+    clickSvgAtRegion(container, 'GO', 'd0r0');
+
+    expect(
+      onUpdate.mock.calls.filter(([field]) => field === 'fieldingSequence')
+    ).toHaveLength(fieldingSequenceCallCount);
     expect(screen.getByRole('combobox', { name: 'Primary Fielder' })).toHaveValue('6');
 
     consoleLogSpy.mockRestore();

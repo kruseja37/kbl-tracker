@@ -122,6 +122,10 @@ export function createManagerProfileId(displayName: string): string {
   return `manager-${slug || "profile"}-${suffix}`;
 }
 
+export function normalizeManagerDisplayName(displayName: string): string {
+  return displayName.trim().replace(/\s+/g, " ").toLowerCase();
+}
+
 export function formatManagerHometown(
   hometown: { city: string; state: string } | string | undefined,
 ): string | undefined {
@@ -175,6 +179,21 @@ export async function saveManagerProfile(
   return profile;
 }
 
+export async function saveUnassignedManagerProfile(
+  input: Omit<ManagerProfileInput, "defaultManager">,
+): Promise<ManagerProfile> {
+  if (!input.managerId) {
+    const existing = await findManagerProfileByDisplayName(input.displayName);
+    if (existing) return existing;
+  }
+
+  return saveManagerProfile({
+    ...input,
+    createdByUser: input.createdByUser ?? true,
+    defaultManager: false,
+  });
+}
+
 export async function getManagerProfile(
   managerId: string,
 ): Promise<ManagerProfile | null> {
@@ -194,6 +213,19 @@ export async function listManagerProfiles(): Promise<ManagerProfile[]> {
   await transactionToPromise(tx);
   return ((result as ManagerProfile[] | undefined) ?? []).sort((a, b) =>
     a.displayName.localeCompare(b.displayName),
+  );
+}
+
+export async function findManagerProfileByDisplayName(
+  displayName: string,
+): Promise<ManagerProfile | null> {
+  const normalizedName = normalizeManagerDisplayName(displayName);
+  if (!normalizedName) return null;
+  const profiles = await listManagerProfiles();
+  return (
+    profiles.find(
+      (profile) => normalizeManagerDisplayName(profile.displayName) === normalizedName,
+    ) ?? null
   );
 }
 
@@ -274,6 +306,12 @@ export async function listManagerAssignments(filter: {
   await transactionToPromise(tx);
 
   return ((result as ManagerAssignment[] | undefined) ?? []).filter((assignment) => {
+    if (filter.mode !== undefined && assignment.mode !== filter.mode) {
+      return false;
+    }
+    if (filter.instanceId !== undefined && assignment.instanceId !== filter.instanceId) {
+      return false;
+    }
     if (filter.teamId !== undefined && assignment.teamId !== filter.teamId) {
       return false;
     }

@@ -6,10 +6,12 @@ import {
   LEAGUE_BUILDER_MANAGER_INSTANCE_ID,
   getManagerAssignment,
   getManagerProfile,
+  listManagerAssignments,
   resetManagerIdentityDatabaseForTests,
   resolveManagerForTeam,
   saveManagerAssignment,
   saveManagerProfile,
+  saveUnassignedManagerProfile,
   seedManagerAssignmentsForTeams,
 } from "../managerIdentityStorage";
 
@@ -113,5 +115,56 @@ describe("manager identity storage", () => {
       defaultManager: true,
       createdByUser: false,
     });
+  });
+
+  test("saves user manager profiles without binding them to a team assignment", async () => {
+    const profile = await saveUnassignedManagerProfile({
+      managerId: "manager-casey-neutral",
+      displayName: "Casey Neutral",
+    });
+
+    await expect(getManagerProfile(profile.managerId)).resolves.toMatchObject({
+      managerId: "manager-casey-neutral",
+      displayName: "Casey Neutral",
+      createdByUser: true,
+      defaultManager: false,
+    });
+    await expect(listManagerAssignments()).resolves.toEqual([]);
+    await expect(
+      saveUnassignedManagerProfile({
+        displayName: " casey   neutral ",
+      }),
+    ).resolves.toMatchObject({
+      managerId: profile.managerId,
+      displayName: "Casey Neutral",
+    });
+
+    await saveManagerAssignment({
+      managerId: profile.managerId,
+      teamId: "sirloins",
+      mode: "exhibition",
+      instanceId: "exh-user-a",
+    });
+    await saveManagerAssignment({
+      managerId: profile.managerId,
+      teamId: "beewolves",
+      mode: "exhibition",
+      instanceId: "exh-user-b",
+    });
+
+    await expect(listManagerAssignments({ mode: "exhibition" })).resolves.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          managerId: profile.managerId,
+          teamId: "sirloins",
+          instanceId: "exh-user-a",
+        }),
+        expect.objectContaining({
+          managerId: profile.managerId,
+          teamId: "beewolves",
+          instanceId: "exh-user-b",
+        }),
+      ]),
+    );
   });
 });

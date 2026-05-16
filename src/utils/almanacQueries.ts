@@ -19,6 +19,7 @@ import {
   isActiveScoringManagerDecision,
   isCompatibilityOnlyManagerDecision,
 } from './managerValueTrace';
+import { listManagerProfiles } from './managerIdentityStorage';
 
 export interface ExhibitionGameFilters {
   teamId?: string;
@@ -711,6 +712,15 @@ function buildManagerProfileLookup(
   }
 
   return new Map(profiles.map((profile) => [profile.managerId, profile]));
+}
+
+async function loadManagerProfilesForAlmanac(): Promise<ManagerProfile[]> {
+  try {
+    return await listManagerProfiles();
+  } catch (error) {
+    console.warn('[almanacQueries] Manager profile lookup failed', error);
+    return [];
+  }
 }
 
 export function getDefaultManagerLabel(
@@ -1672,9 +1682,15 @@ export function buildManagerAlmanacLeaderboards(
 export async function getManagerAlmanacAggregates(
   filters: ManagerAlmanacFilters = {},
 ): Promise<ManagerAlmanacAggregate[]> {
+  const [games, profiles] = await Promise.all([
+    getAllCompletedGames(),
+    loadManagerProfilesForAlmanac(),
+  ]);
+
   return aggregateCommittedManagerAlmanac(
-    await getAllCompletedGames(),
+    games,
     filters,
+    profiles,
   );
 }
 

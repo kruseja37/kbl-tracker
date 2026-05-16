@@ -26,6 +26,7 @@ import {
   LEAGUE_BUILDER_MANAGER_INSTANCE_ID,
   listManagerProfiles,
   resolveManagerForTeam,
+  saveUnassignedManagerProfile,
 } from "../../../utils/managerIdentityStorage";
 import {
   buildCurrentLineupOptimalBenchmark,
@@ -34,6 +35,11 @@ import {
   upsertPregameBenchmark,
 } from "../utils/pregameLineupBenchmarks";
 import { withPregameManagerNavigationState } from "../utils/pregameNavigationState";
+import {
+  buildManagerOptionLabels,
+  findExistingManagerProfileByDisplayName,
+  formatManagerOptionLabel,
+} from "../utils/exhibitionManagerOptions";
 import chalkBgImg from '../../../assets/chalk-bg.png';
 import chalkBgFaintImg from '../../../assets/chalk-bg-faint.png';
 
@@ -84,6 +90,13 @@ export function ExhibitionGame() {
     () => [...managerProfiles].sort((a, b) => a.displayName.localeCompare(b.displayName)),
     [managerProfiles],
   );
+  const managerOptionLabels = useMemo(
+    () => buildManagerOptionLabels(managerOptions),
+    [managerOptions],
+  );
+  const [newManagerDisplayName, setNewManagerDisplayName] = useState("");
+  const [isCreatingManagerProfile, setIsCreatingManagerProfile] = useState(false);
+  const [managerProfileMessage, setManagerProfileMessage] = useState<string | null>(null);
 
   // State for rosters (loaded from League Builder)
   const [awayPlayers, setAwayPlayers] = useState<RosterPlayer[]>([]);
@@ -621,6 +634,45 @@ export function ExhibitionGame() {
     }
   };
 
+  const handleCreateUnassignedManagerProfile = async () => {
+    const displayName = newManagerDisplayName.trim();
+    if (!displayName) {
+      setManagerProfileMessage("Enter a manager name.");
+      return;
+    }
+    const existingProfile = findExistingManagerProfileByDisplayName(
+      managerProfiles,
+      displayName,
+    );
+    if (existingProfile) {
+      setManagerProfileMessage(`${existingProfile.displayName} is already in the manager pool.`);
+      return;
+    }
+
+    setIsCreatingManagerProfile(true);
+    setManagerProfileMessage(null);
+    try {
+      const profile = await saveUnassignedManagerProfile({
+        displayName,
+        managementStyle: { label: "Balanced" },
+      });
+      setManagerProfiles((current) => {
+        const withoutProfile = current.filter((item) => item.managerId !== profile.managerId);
+        return [...withoutProfile, profile].sort((a, b) =>
+          a.displayName.localeCompare(b.displayName),
+        );
+      });
+      setNewManagerDisplayName("");
+      setManagerProfileMessage(`${profile.displayName} added to manager pool.`);
+    } catch (err) {
+      setManagerProfileMessage(
+        err instanceof Error ? err.message : "Failed to create manager profile.",
+      );
+    } finally {
+      setIsCreatingManagerProfile(false);
+    }
+  };
+
   const handleStartGame = () => {
     if (!canStartWithLineupDeltaBenchmarks) {
       setBenchmarkRegistrationMessage(
@@ -880,7 +932,7 @@ export function ExhibitionGame() {
                     <option value="">SELECT AWAY MANAGER...</option>
                     {managerOptions.map((manager) => (
                       <option key={manager.managerId} value={manager.managerId}>
-                        {manager.displayName.toUpperCase()}
+                        {formatManagerOptionLabel(manager, managerOptionLabels)}
                       </option>
                     ))}
                   </select>
@@ -898,10 +950,40 @@ export function ExhibitionGame() {
                     <option value="">SELECT HOME MANAGER...</option>
                     {managerOptions.map((manager) => (
                       <option key={manager.managerId} value={manager.managerId}>
-                        {manager.displayName.toUpperCase()}
+                        {formatManagerOptionLabel(manager, managerOptionLabels)}
                       </option>
                     ))}
                   </select>
+                </div>
+
+                <div className="bg-[#3d4a42] border-2 border-[#556B55] p-5 shadow-[2px_2px_0px_0px_rgba(0,0,0,0.4)] md:col-span-2">
+                  <div className="text-xs text-[#C4A853] mb-3 font-bold tracking-[0.25em]" style={{ textShadow: '1px 1px 2px rgba(0,0,0,0.6)' }}>MANAGER POOL</div>
+                  <div className="flex flex-col gap-2 sm:flex-row">
+                    <input
+                      aria-label="New exhibition manager name"
+                      type="text"
+                      value={newManagerDisplayName}
+                      onChange={(e) => setNewManagerDisplayName(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          void handleCreateUnassignedManagerProfile();
+                        }
+                      }}
+                      placeholder="NEW MANAGER NAME"
+                      className="min-h-[44px] flex-1 bg-[#1f2b21] border-2 border-[#556B55] p-3 text-sm text-[#E8E8D8] placeholder-[#E8E8D8]/40 font-bold tracking-wider"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => void handleCreateUnassignedManagerProfile()}
+                      disabled={isCreatingManagerProfile || !newManagerDisplayName.trim()}
+                      className="min-h-[44px] bg-[#5dade2] border-2 border-[#d6efff] px-5 py-2 text-sm font-bold tracking-[0.2em] text-[#082032] hover:bg-[#7ac4f5] active:scale-95 transition-transform disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {isCreatingManagerProfile ? "ADDING..." : "ADD"}
+                    </button>
+                  </div>
+                  {managerProfileMessage && (
+                    <div className="mt-2 text-xs text-[#C4A853]">{managerProfileMessage}</div>
+                  )}
                 </div>
               </div>
             )}
