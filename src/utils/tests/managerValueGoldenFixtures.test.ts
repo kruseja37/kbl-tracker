@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest";
 
 import { WPA_MODEL_VERSION } from "../../engines/wpaV2";
 import type {
+  ManagerDecisionRecord,
   ManagerLineupDeltaRecord,
   OptimalLineupGeneratedFrom,
   OptimalLineupSnapshot,
@@ -24,6 +25,7 @@ import {
   deriveCommittedManagerDecisionState,
   type CommittedManagerDecisionState,
 } from "../managerWpaGameState";
+import { MANAGER_DECISION_REGISTRY } from "../managerDecisionRegistry";
 import { buildManagerValueTraceRows } from "../managerValueTrace";
 import { rankPlayersOfTheGame } from "../playersOfTheGame";
 
@@ -402,6 +404,31 @@ function requireDecision(
   return record!;
 }
 
+function requireIbbComponents(decision: ManagerDecisionRecord) {
+  const components = decision.explanationMetadata?.intentionalWalk?.wpaComponents;
+  expect(components).toBeDefined();
+  return components!;
+}
+
+function requireOutAdvancingSendMetadata(decision: ManagerDecisionRecord) {
+  const metadata = decision.explanationMetadata?.outAdvancingSend;
+  expect(metadata).toBeDefined();
+  return metadata!;
+}
+
+function traceForDecision(
+  state: CommittedManagerDecisionState,
+  decision: ManagerDecisionRecord,
+) {
+  const trace = buildManagerValueTraceRows({
+    managerDecisions: state.managerDecisions,
+    managerDeploymentStints: state.managerDeploymentStints,
+    managerLineupDeltas: state.managerLineupDeltas,
+  }).find((row) => row.recordId === decision.decisionId);
+  expect(trace).toBeDefined();
+  return trace!;
+}
+
 function requireStint(
   state: CommittedManagerDecisionState,
   predicate: (stint: CommittedManagerDecisionState["managerDeploymentStints"][number]) => boolean,
@@ -685,6 +712,696 @@ describe("Manager Value golden fixtures", () => {
       );
     },
   );
+
+  test("bases-loaded IBB stores walked-in-run cost, DP payoff, and official net", () => {
+    const forcedRunner = runner("away-forced-third", "Away Forced Third");
+    const runnerFirst = runner("away-runner-first", "Away Runner First");
+    const runnerSecond = runner("away-runner-second", "Away Runner Second");
+    const walkedRunner = runner("away-slugger", "Away Slugger");
+    const ibb = atBat({
+      eventId: `${GAME_ID}_loaded_ibb`,
+      eventIndex: 13,
+      result: "IBB",
+      batterId: "away-slugger",
+      batterName: "Away Slugger",
+      pitcherId: "home-pitcher",
+      pitcherName: "Home Pitcher",
+      outs: 1,
+      outsAfter: 1,
+      runners: runnerState({
+        first: runnerFirst,
+        second: runnerSecond,
+        third: forcedRunner,
+      }),
+      runnersAfter: runnerState({
+        first: walkedRunner,
+        second: runnerFirst,
+        third: runnerSecond,
+      }),
+      runsScored: ["away-forced-third"],
+      rbiCount: 1,
+      awayScoreAfter: 4,
+      wpaModelVersion: WPA_MODEL_VERSION,
+    });
+    const doublePlay = atBat({
+      eventId: `${GAME_ID}_loaded_ibb_dp`,
+      eventIndex: 14,
+      result: "GIDP",
+      batterId: "away-next",
+      batterName: "Away Next",
+      outs: 1,
+      outsAfter: 3,
+      awayScore: 4,
+      homeScore: 3,
+      awayScoreAfter: 4,
+      homeScoreAfter: 3,
+      runners: ibb.runnersAfter,
+      runnersAfter: emptyRunners(),
+      runnerOutcomes: [
+        {
+          runnerId: "away-slugger",
+          runnerName: "Away Slugger",
+          fromBase: "first",
+          toBase: "out",
+        },
+      ],
+      wpaModelVersion: WPA_MODEL_VERSION,
+    });
+
+    const state = deriveState({
+      atBatEvents: [ibb, doublePlay],
+      gameEnded: true,
+    });
+    const decision = requireDecision(state, "intentional_walk", ibb.eventId);
+    const components = requireIbbComponents(decision);
+    const trace = traceForDecision(state, decision);
+
+    expect(decision.explanationMetadata?.intentionalWalk).toMatchObject({
+      walkedRunnerId: "away-slugger",
+      finalConsequenceEventId: doublePlay.eventId,
+      finalConsequence: "out",
+      nextBatterResult: "GIDP",
+    });
+    expect(components.immediateRawWpa).toBeLessThan(0);
+    expect(components.consequenceRawWpa).toBeGreaterThan(0);
+    expect(components.netRawWpa).toBeCloseTo(decision.rawWindowWpa ?? 0, 4);
+    expect(decision.managerWpa).toBeCloseTo(
+      (components.netRawWpa ?? 0) * (decision.managerShare ?? 0),
+      4,
+    );
+    expect(trace.components).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          label: "Immediate IBB cost",
+          value: components.immediateRawWpa,
+        }),
+        expect.objectContaining({
+          label: "Consequence payoff",
+          value: components.consequenceRawWpa,
+        }),
+        expect.objectContaining({
+          label: "Official net",
+          value: components.netRawWpa,
+        }),
+      ]),
+    );
+  });
+
+  test("IBB where the walked runner scores exposes scored consequence and aligned components", () => {
+    const walkedRunner = runner("away-slugger", "Away Slugger");
+    const ibb = atBat({
+      eventId: `${GAME_ID}_scoring_ibb`,
+      eventIndex: 15,
+      result: "IBB",
+      batterId: "away-slugger",
+      batterName: "Away Slugger",
+      outs: 0,
+      outsAfter: 0,
+      runnersAfter: runnerState({ first: walkedRunner }),
+      wpaModelVersion: WPA_MODEL_VERSION,
+    });
+    const homer = atBat({
+      eventId: `${GAME_ID}_scoring_ibb_hr`,
+      eventIndex: 16,
+      result: "HR",
+      batterId: "away-next",
+      batterName: "Away Next",
+      outs: 0,
+      outsAfter: 0,
+      runners: ibb.runnersAfter,
+      runnersAfter: emptyRunners(),
+      runnerOutcomes: [
+        {
+          runnerId: "away-slugger",
+          runnerName: "Away Slugger",
+          fromBase: "first",
+          toBase: "home",
+        },
+      ],
+      runsScored: ["away-slugger", "away-next"],
+      rbiCount: 2,
+      awayScoreAfter: 5,
+      wpaModelVersion: WPA_MODEL_VERSION,
+    });
+
+    const state = deriveState({ atBatEvents: [ibb, homer] });
+    const decision = requireDecision(state, "intentional_walk", ibb.eventId);
+    const components = requireIbbComponents(decision);
+
+    expect(decision.explanationMetadata?.intentionalWalk).toMatchObject({
+      walkedRunnerId: "away-slugger",
+      walkedRunnerName: "Away Slugger",
+      finalConsequenceEventId: homer.eventId,
+      finalConsequence: "scored",
+    });
+    expect(components.netRawWpa).toBeCloseTo(decision.rawWindowWpa ?? 0, 4);
+    expect(components.finalTeamWinProbability).toBe(
+      decision.teamWinProbabilityAfter,
+    );
+    expect(decision.managerWpa).toBeCloseTo(
+      (decision.rawWindowWpa ?? 0) * (decision.managerShare ?? 0),
+      4,
+    );
+  });
+
+  test("IBB runner-out and runner-stranded consequences stay distinct", () => {
+    const walkedRunner = runner("away-slugger", "Away Slugger");
+    const ibb = atBat({
+      eventId: `${GAME_ID}_out_or_stranded_ibb`,
+      eventIndex: 17,
+      result: "IBB",
+      batterId: "away-slugger",
+      batterName: "Away Slugger",
+      outs: 1,
+      outsAfter: 1,
+      runnersAfter: runnerState({ first: walkedRunner }),
+      wpaModelVersion: WPA_MODEL_VERSION,
+    });
+    const runnerIdentifiedDp = atBat({
+      eventId: `${GAME_ID}_out_or_stranded_dp_out`,
+      eventIndex: 18,
+      result: "GIDP",
+      batterId: "away-next",
+      batterName: "Away Next",
+      outs: 1,
+      outsAfter: 3,
+      runners: ibb.runnersAfter,
+      runnersAfter: emptyRunners(),
+      runnerOutcomes: [
+        {
+          runnerId: "away-slugger",
+          runnerName: "Away Slugger",
+          fromBase: "first",
+          toBase: "out",
+        },
+      ],
+      wpaModelVersion: WPA_MODEL_VERSION,
+    });
+    const unidentifiedDp = {
+      ...runnerIdentifiedDp,
+      eventId: `${GAME_ID}_out_or_stranded_dp_stranded`,
+      runnerOutcomes: [],
+    };
+
+    const outDecision = requireDecision(
+      deriveState({
+        atBatEvents: [ibb, runnerIdentifiedDp],
+        gameEnded: true,
+      }),
+      "intentional_walk",
+      ibb.eventId,
+    );
+    const strandedDecision = requireDecision(
+      deriveState({
+        atBatEvents: [ibb, unidentifiedDp],
+        gameEnded: true,
+      }),
+      "intentional_walk",
+      ibb.eventId,
+    );
+
+    expect(outDecision.explanationMetadata?.intentionalWalk?.finalConsequence).toBe(
+      "out",
+    );
+    expect(
+      strandedDecision.explanationMetadata?.intentionalWalk?.finalConsequence,
+    ).toBe("stranded");
+    expect(
+      strandedDecision.explanationMetadata?.intentionalWalk?.finalConsequence,
+    ).not.toBe("out");
+    expect(
+      strandedDecision.explanationMetadata?.intentionalWalk?.finalConsequence,
+    ).not.toBe("scored");
+  });
+
+  test("RBI double plus batter out advancing gives hitter value but negative manager send", () => {
+    const scoringRunner = runner("away-runner-second", "Away Runner Second");
+    const event = atBat({
+      eventId: `${GAME_ID}_rbi_double_batter_out`,
+      eventIndex: 30,
+      inning: 8,
+      outs: 1,
+      result: "2B",
+      batterId: "away-batter",
+      batterName: "Away Batter",
+      runners: runnerState({ second: scoringRunner }),
+      runsScored: ["away-runner-second"],
+      rbiCount: 1,
+      awayScoreAfter: 4,
+      runnersAfter: emptyRunners(),
+      outsAfter: 2,
+      runnerOutcomes: [
+        {
+          runnerId: "away-runner-second",
+          runnerName: "Away Runner Second",
+          fromBase: "second",
+          toBase: "home",
+        },
+        {
+          runnerId: "away-batter",
+          runnerName: "Away Batter",
+          fromBase: "batter",
+          toBase: "out",
+          isOutAdvancing: true,
+          managerIntent: "manager_send",
+          managerDecisionSource: "play_log_enhancement",
+        },
+      ],
+      wpaModelVersion: WPA_MODEL_VERSION,
+    });
+    const state = deriveState({ atBatEvents: [event] });
+    const decision = requireDecision(
+      state,
+      "out_advancing_send",
+      event.eventId,
+    );
+    const metadata = requireOutAdvancingSendMetadata(decision);
+    const batterTotal = aggregateKblWpaCredits(
+      deriveKblWpaCredits({
+        atBatEvents: [event],
+        awayTeamId: TEAMS.away.teamId,
+        homeTeamId: TEAMS.home.teamId,
+        totalInnings: TOTAL_INNINGS,
+      }),
+    ).find((entry) => entry.playerId === "away-batter");
+
+    expect(batterTotal?.battingWpa ?? 0).toBeGreaterThan(0);
+    expect(decision.rawWindowWpa).toBeLessThan(0);
+    expect(decision.managerWpa).toBeLessThan(0);
+    expect(metadata).toMatchObject({
+      inferredHoldBase: "second",
+      holdBaseSource: "batter_safe_at_second",
+      actualState: {
+        outs: 2,
+        awayScore: 4,
+      },
+      counterfactualState: {
+        outs: 1,
+        awayScore: 4,
+        bases: { first: false, second: true, third: false },
+      },
+      rawCounterfactualWpa: decision.rawWindowWpa,
+    });
+    expect(metadata.actualState?.awayScore).toBe(
+      metadata.counterfactualState?.awayScore,
+    );
+    expect(traceForDecision(state, decision).components).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ label: "Actual after-state" }),
+        expect.objectContaining({ label: "Counterfactual hold/stop state" }),
+        expect.objectContaining({ label: "Raw counterfactual WPA" }),
+      ]),
+    );
+  });
+
+  test("runner from second out at home compares actual out against hold at third", () => {
+    const event = atBat({
+      eventId: `${GAME_ID}_send_2b_out_home`,
+      eventIndex: 31,
+      inning: 8,
+      outs: 1,
+      result: "1B",
+      batterId: "away-batter",
+      batterName: "Away Batter",
+      runners: runnerState({
+        second: runner("away-runner-second", "Away Runner Second"),
+      }),
+      runnersAfter: runnerState({
+        first: runner("away-batter", "Away Batter"),
+      }),
+      outsAfter: 2,
+      runnerOutcomes: [
+        {
+          runnerId: "away-runner-second",
+          runnerName: "Away Runner Second",
+          fromBase: "second",
+          toBase: "out",
+          isOutAdvancing: true,
+          managerIntent: "manager_send",
+          managerDecisionSource: "play_log_enhancement",
+        },
+      ],
+      wpaModelVersion: WPA_MODEL_VERSION,
+    });
+
+    const state = deriveState({ atBatEvents: [event] });
+    const decision = requireDecision(state, "out_advancing_send", event.eventId);
+    const metadata = requireOutAdvancingSendMetadata(decision);
+
+    expect(decision.rawWindowWpa).toBeLessThan(0);
+    expect(decision.managerWpa).toBeLessThan(0);
+    expect(metadata).toMatchObject({
+      inferredHoldBase: "third",
+      holdBaseSource: "runner_from_second_safe_stop_third",
+      counterfactualState: {
+        outs: 1,
+        bases: { first: true, second: false, third: true },
+      },
+    });
+  });
+
+  test("runner from first out at third compares actual out against hold at second", () => {
+    const event = atBat({
+      eventId: `${GAME_ID}_send_1b_out_third`,
+      eventIndex: 32,
+      inning: 8,
+      outs: 1,
+      result: "1B",
+      batterId: "away-batter",
+      batterName: "Away Batter",
+      runners: runnerState({
+        first: runner("away-runner-first", "Away Runner First"),
+      }),
+      runnersAfter: runnerState({
+        first: runner("away-batter", "Away Batter"),
+      }),
+      outsAfter: 2,
+      runnerOutcomes: [
+        {
+          runnerId: "away-runner-first",
+          runnerName: "Away Runner First",
+          fromBase: "first",
+          toBase: "out",
+          isOutAdvancing: true,
+          managerIntent: "manager_send",
+          managerDecisionSource: "play_log_enhancement",
+        },
+      ],
+      wpaModelVersion: WPA_MODEL_VERSION,
+    });
+
+    const state = deriveState({ atBatEvents: [event] });
+    const decision = requireDecision(state, "out_advancing_send", event.eventId);
+    const metadata = requireOutAdvancingSendMetadata(decision);
+
+    expect(decision.rawWindowWpa).toBeLessThan(0);
+    expect(decision.managerWpa).toBeLessThan(0);
+    expect(metadata).toMatchObject({
+      inferredHoldBase: "second",
+      holdBaseSource: "runner_from_first_out_at_third_safe_stop_second",
+      counterfactualState: {
+        outs: 1,
+        bases: { first: true, second: true, third: false },
+      },
+    });
+  });
+
+  test("unprovable runner-send remains unscored with no whole-event fallback", () => {
+    const event = atBat({
+      eventId: `${GAME_ID}_send_unprovable`,
+      eventIndex: 33,
+      inning: 8,
+      outs: 1,
+      result: "GO",
+      runners: runnerState({
+        first: runner("away-runner-first", "Away Runner First"),
+      }),
+      runnersAfter: emptyRunners(),
+      outsAfter: 2,
+      runnerOutcomes: [
+        {
+          runnerId: "away-runner-first",
+          runnerName: "Away Runner First",
+          fromBase: "first",
+          toBase: "out",
+          isOutAdvancing: true,
+          managerIntent: "manager_send",
+          managerDecisionSource: "play_log_enhancement",
+        },
+      ],
+      wpaModelVersion: WPA_MODEL_VERSION,
+    });
+
+    const state = deriveState({ atBatEvents: [event] });
+    const decision = requireDecision(state, "out_advancing_send", event.eventId);
+    const metadata = requireOutAdvancingSendMetadata(decision);
+    const trace = traceForDecision(state, decision);
+
+    expect(decision).toMatchObject({
+      resolved: false,
+      teamWinProbabilityAfter: undefined,
+      rawWindowWpa: undefined,
+      managerWpa: undefined,
+    });
+    expect(metadata.unscoredReason).toBe("missing_hit_context");
+    expect(trace).toMatchObject({
+      scoring: false,
+      pending: true,
+      rawWpa: undefined,
+      finalValue: undefined,
+    });
+    expect(trace.components).toEqual([
+      expect.objectContaining({
+        label: "Unscored runner-send reason",
+      }),
+    ]);
+  });
+
+  test("hit-and-run marked out advancing does not duplicate a generic runner-send decision", () => {
+    const event = atBat({
+      eventId: `${GAME_ID}_hit_and_run_send_guard`,
+      eventIndex: 34,
+      result: "1B",
+      runners: runnerState({
+        first: runner("away-runner-first", "Away Runner First"),
+      }),
+      runnersAfter: runnerState({
+        first: runner("away-batter", "Away Batter"),
+      }),
+      outsAfter: 1,
+      runnerOutcomes: [
+        {
+          runnerId: "away-runner-first",
+          runnerName: "Away Runner First",
+          fromBase: "first",
+          toBase: "out",
+          isOutAdvancing: true,
+          managerRunPlay: "hit_and_run",
+          managerIntent: "manager_send",
+          managerDecisionSource: "play_log_enhancement",
+        },
+      ],
+      wpaModelVersion: WPA_MODEL_VERSION,
+    });
+    const state = deriveState({ atBatEvents: [event] });
+    const decisionTypes = state.managerDecisions.map(
+      (decision) => decision.decisionType,
+    );
+
+    expect(decisionTypes).toContain("hit_and_run");
+    expect(decisionTypes).not.toContain("out_advancing_send");
+  });
+
+  test("runner hold remains conservative whole-event behavior with no counterfactual metadata", () => {
+    const event = atBat({
+      eventId: `${GAME_ID}_runner_hold_conservative`,
+      eventIndex: 35,
+      result: "1B",
+      runners: runnerState({
+        second: runner("away-runner-second", "Away Runner Second"),
+      }),
+      runnersAfter: runnerState({
+        first: runner("away-batter", "Away Batter"),
+        third: runner("away-runner-second", "Away Runner Second"),
+      }),
+      outsAfter: 0,
+      runnerOutcomes: [
+        {
+          runnerId: "away-runner-second",
+          runnerName: "Away Runner Second",
+          fromBase: "second",
+          toBase: "third",
+          managerIntent: "manager_hold",
+          managerDecisionSource: "play_log_enhancement",
+        },
+      ],
+      wpaModelVersion: WPA_MODEL_VERSION,
+    });
+    const state = deriveState({ atBatEvents: [event] });
+    const decision = requireDecision(state, "runner_hold", event.eventId);
+    const trace = traceForDecision(state, decision);
+
+    expect(MANAGER_DECISION_REGISTRY.runner_hold).toMatchObject({
+      decisionScope: "whole_event",
+      counterfactualReadiness: "not_available",
+    });
+    expect(decision.resolved).toBe(true);
+    expect(decision.rawWindowWpa).toEqual(expect.any(Number));
+    expect(decision.managerWpa).toBeCloseTo(
+      (decision.rawWindowWpa ?? 0) * (decision.managerShare ?? 0),
+      4,
+    );
+    expect(decision.explanationMetadata?.outAdvancingSend).toBeUndefined();
+    expect(trace.components).toEqual([]);
+  });
+
+  test("runner-send Manager Value stays out of player totals, leaderboard, and POTG", () => {
+    const event = atBat({
+      eventId: `${GAME_ID}_runner_send_player_guardrail`,
+      eventIndex: 36,
+      inning: 8,
+      outs: 1,
+      result: "2B",
+      batterId: "away-batter",
+      batterName: "Away Batter",
+      runners: runnerState({
+        second: runner("away-runner-second", "Away Runner Second"),
+      }),
+      runsScored: ["away-runner-second"],
+      rbiCount: 1,
+      awayScoreAfter: 4,
+      runnersAfter: emptyRunners(),
+      outsAfter: 2,
+      runnerOutcomes: [
+        {
+          runnerId: "away-runner-second",
+          runnerName: "Away Runner Second",
+          fromBase: "second",
+          toBase: "home",
+        },
+        {
+          runnerId: "away-batter",
+          runnerName: "Away Batter",
+          fromBase: "batter",
+          toBase: "out",
+          isOutAdvancing: true,
+          managerIntent: "manager_send",
+          managerDecisionSource: "play_log_enhancement",
+        },
+      ],
+      wpaModelVersion: WPA_MODEL_VERSION,
+    });
+    const state = deriveState({ atBatEvents: [event] });
+    const decision = requireDecision(state, "out_advancing_send", event.eventId);
+    const { baseCredits, overlayCredits } = expectPlayerKblWpaGuardrails({
+      atBatEvents: [event],
+    });
+    const baseLeaderboard = aggregateKblWpaCredits(baseCredits);
+    const overlayLeaderboard = aggregateKblWpaCredits(overlayCredits);
+    const playersOfTheGame = rankPlayersOfTheGame(
+      {
+        awayTeamId: TEAMS.away.teamId,
+        homeTeamId: TEAMS.home.teamId,
+        playerStats: {
+          "away-batter": {
+            playerName: "Away Batter",
+            teamId: TEAMS.away.teamId,
+            pa: 1,
+            ab: 1,
+            h: 1,
+            doubles: 1,
+            rbi: 1,
+            r: 0,
+            bb: 0,
+            k: 0,
+          },
+          "away-runner-second": {
+            playerName: "Away Runner Second",
+            teamId: TEAMS.away.teamId,
+            pa: 0,
+            ab: 0,
+            h: 0,
+            rbi: 0,
+            r: 1,
+            bb: 0,
+            k: 0,
+          },
+        },
+        pitcherGameStats: [],
+      },
+      [event],
+      overlayCredits,
+    );
+
+    expect(decision.managerWpa).toBeLessThan(0);
+    expect(overlayLeaderboard).toEqual(baseLeaderboard);
+    expect(
+      overlayLeaderboard.every((entry) => !entry.playerId.includes("manager")),
+    ).toBe(true);
+    expect(
+      playersOfTheGame.every((entry) => !entry.playerId.includes("manager")),
+    ).toBe(true);
+    expect(playerTotalMap(overlayCredits)["away-batter"]).toBe(
+      playerTotalMap(baseCredits)["away-batter"],
+    );
+  });
+
+  test("legacy records without scoped metadata trace safely while scoped metadata emits components", () => {
+    const walkedRunner = runner("away-slugger", "Away Slugger");
+    const ibb = atBat({
+      eventId: `${GAME_ID}_legacy_trace_ibb`,
+      eventIndex: 37,
+      result: "IBB",
+      batterId: "away-slugger",
+      batterName: "Away Slugger",
+      outs: 1,
+      outsAfter: 1,
+      runnersAfter: runnerState({ first: walkedRunner }),
+      wpaModelVersion: WPA_MODEL_VERSION,
+    });
+    const stranded = atBat({
+      eventId: `${GAME_ID}_legacy_trace_stranded`,
+      eventIndex: 38,
+      result: "FO",
+      batterId: "away-next",
+      batterName: "Away Next",
+      outs: 1,
+      outsAfter: 3,
+      runners: ibb.runnersAfter,
+      runnersAfter: emptyRunners(),
+      wpaModelVersion: WPA_MODEL_VERSION,
+    });
+    const send = atBat({
+      eventId: `${GAME_ID}_legacy_trace_send`,
+      eventIndex: 39,
+      inning: 8,
+      outs: 1,
+      result: "1B",
+      runners: runnerState({
+        second: runner("away-runner-second", "Away Runner Second"),
+      }),
+      runnersAfter: runnerState({
+        first: runner("away-batter", "Away Batter"),
+      }),
+      outsAfter: 2,
+      runnerOutcomes: [
+        {
+          runnerId: "away-runner-second",
+          runnerName: "Away Runner Second",
+          fromBase: "second",
+          toBase: "out",
+          isOutAdvancing: true,
+          managerIntent: "manager_send",
+          managerDecisionSource: "play_log_enhancement",
+        },
+      ],
+      wpaModelVersion: WPA_MODEL_VERSION,
+    });
+    const state = deriveState({
+      atBatEvents: [ibb, stranded, send],
+      gameEnded: true,
+    });
+    const scopedIbb = requireDecision(state, "intentional_walk", ibb.eventId);
+    const scopedSend = requireDecision(
+      state,
+      "out_advancing_send",
+      send.eventId,
+    );
+
+    expect(traceForDecision(state, scopedIbb).components.length).toBeGreaterThan(0);
+    expect(traceForDecision(state, scopedSend).components.length).toBeGreaterThan(0);
+
+    const legacyRows = buildManagerValueTraceRows({
+      managerDecisions: [
+        { ...scopedIbb, explanationMetadata: undefined },
+        { ...scopedSend, explanationMetadata: undefined },
+      ],
+    });
+
+    expect(legacyRows).toHaveLength(2);
+    expect(legacyRows.every((row) => row.components.length === 0)).toBe(true);
+    expect(legacyRows.every((row) => row.description.length > 0)).toBe(true);
+  });
 
   test("leave-pitcher-in resolves the immediate PA and scores only later kept-pitcher deployment", () => {
     const prompt = promptedKeepCurrent({
