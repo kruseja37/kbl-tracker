@@ -20,6 +20,8 @@ import {
   SYNC_REGISTRY,
   DYNAMIC_DB_PREFIX,
   DYNAMIC_DB_STORES,
+  DYNAMIC_ELIMINATION_DB_PREFIX,
+  DYNAMIC_ELIMINATION_DB_STORES,
   SYNCED_LOCAL_STORAGE_KEYS,
   serializeKey,
 } from './syncConfig';
@@ -257,8 +259,9 @@ class SyncEngine {
     this.emitStatusChange();
 
     try {
-      // Collect franchise IDs BEFORE clearing meta stores (which contain franchiseList)
+      // Collect dynamic DB IDs BEFORE clearing meta stores.
       const franchiseIds = await this.getFranchiseIds();
+      const eliminationIds = await this.getEliminationIds();
 
       // Clear all synced IndexedDB stores
       for (const [dbName, stores] of Object.entries(SYNC_REGISTRY)) {
@@ -268,6 +271,16 @@ class SyncEngine {
       // Clear dynamic franchise DBs
       for (const fId of franchiseIds) {
         const dbName = `${DYNAMIC_DB_PREFIX}${fId}`;
+        try {
+          await this.deleteDatabase(dbName);
+        } catch {
+          // DB may not exist
+        }
+      }
+
+      // Clear dynamic elimination copied DBs
+      for (const eliminationId of eliminationIds) {
+        const dbName = `${DYNAMIC_ELIMINATION_DB_PREFIX}${eliminationId}`;
         try {
           await this.deleteDatabase(dbName);
         } catch {
@@ -339,6 +352,15 @@ class SyncEngine {
       for (const fId of franchiseIds) {
         const dbName = `${DYNAMIC_DB_PREFIX}${fId}`;
         for (const [storeName, keyPath] of Object.entries(DYNAMIC_DB_STORES)) {
+          await this.uploadStore(dbName, storeName, keyPath, userId, onProgress);
+        }
+      }
+
+      // Upload dynamic elimination copied DBs
+      const eliminationIds = await this.getEliminationIds();
+      for (const eliminationId of eliminationIds) {
+        const dbName = `${DYNAMIC_ELIMINATION_DB_PREFIX}${eliminationId}`;
+        for (const [storeName, keyPath] of Object.entries(DYNAMIC_ELIMINATION_DB_STORES)) {
           await this.uploadStore(dbName, storeName, keyPath, userId, onProgress);
         }
       }
@@ -575,34 +597,38 @@ class SyncEngine {
           continue;
         }
 
-        for (const [storeName, storeRecords] of byStore) {
-          if (!db.objectStoreNames.contains(storeName)) {
-            console.warn(`[syncEngine] Store ${storeName} not found in ${dbName}, skipping`);
-            continue;
-          }
-
-          try {
-            const tx = db.transaction(storeName, 'readwrite');
-            const store = tx.objectStore(storeName);
-
-            for (const record of storeRecords) {
-              if (record.deleted) {
-                const idbKey = JSON.parse(record.record_key);
-                store.delete(idbKey);
-              } else {
-                store.put(record.data);
-              }
+        try {
+          for (const [storeName, storeRecords] of byStore) {
+            if (!db.objectStoreNames.contains(storeName)) {
+              console.warn(`[syncEngine] Store ${storeName} not found in ${dbName}, skipping`);
+              continue;
             }
 
-            await new Promise<void>((resolve, reject) => {
-              tx.oncomplete = () => resolve();
-              tx.onerror = () => reject(tx.error);
-              tx.onabort = () => reject(tx.error);
-            });
-          } catch (err) {
-            console.error(`[syncEngine] Failed to apply records to ${dbName}.${storeName}:`, err);
-            throw err; // Propagate so cursor is not advanced
+            try {
+              const tx = db.transaction(storeName, 'readwrite');
+              const store = tx.objectStore(storeName);
+
+              for (const record of storeRecords) {
+                if (record.deleted) {
+                  const idbKey = JSON.parse(record.record_key);
+                  store.delete(idbKey);
+                } else {
+                  store.put(record.data);
+                }
+              }
+
+              await new Promise<void>((resolve, reject) => {
+                tx.oncomplete = () => resolve();
+                tx.onerror = () => reject(tx.error);
+                tx.onabort = () => reject(tx.error);
+              });
+            } catch (err) {
+              console.error(`[syncEngine] Failed to apply records to ${dbName}.${storeName}:`, err);
+              throw err; // Propagate so cursor is not advanced
+            }
           }
+        } finally {
+          db.close();
         }
       }
     } finally {
@@ -651,18 +677,22 @@ class SyncEngine {
       return; // DB doesn't exist
     }
 
-    for (const storeName of storeNames) {
-      if (!db.objectStoreNames.contains(storeName)) continue;
-      try {
-        const tx = db.transaction(storeName, 'readwrite');
-        tx.objectStore(storeName).clear();
-        await new Promise<void>((resolve, reject) => {
-          tx.oncomplete = () => resolve();
-          tx.onerror = () => reject(tx.error);
-        });
-      } catch (err) {
-        console.warn(`[syncEngine] Failed to clear ${dbName}.${storeName}:`, err);
+    try {
+      for (const storeName of storeNames) {
+        if (!db.objectStoreNames.contains(storeName)) continue;
+        try {
+          const tx = db.transaction(storeName, 'readwrite');
+          tx.objectStore(storeName).clear();
+          await new Promise<void>((resolve, reject) => {
+            tx.oncomplete = () => resolve();
+            tx.onerror = () => reject(tx.error);
+          });
+        } catch (err) {
+          console.warn(`[syncEngine] Failed to clear ${dbName}.${storeName}:`, err);
+        }
       }
+    } finally {
+      db.close();
     }
   }
 
@@ -682,43 +712,47 @@ class SyncEngine {
       return; // DB doesn't exist
     }
 
-    if (!db.objectStoreNames.contains(storeName)) return;
+    try {
+      if (!db.objectStoreNames.contains(storeName)) return;
 
-    const records: unknown[] = await new Promise((resolve, reject) => {
-      const tx = db.transaction(storeName, 'readonly');
-      const store = tx.objectStore(storeName);
-      const req = store.getAll();
-      req.onsuccess = () => resolve(req.result);
-      req.onerror = () => reject(req.error);
-    });
-
-    if (records.length === 0) return;
-
-    const now = Date.now();
-    for (let i = 0; i < records.length; i += UPLOAD_BATCH_SIZE) {
-      const batch = records.slice(i, i + UPLOAD_BATCH_SIZE);
-      const rows = batch.map(record => {
-        const rec = record as Record<string, unknown>;
-        const key = Array.isArray(keyPath)
-          ? keyPath.map(k => rec[k])
-          : rec[keyPath];
-
-        return {
-          user_id: userId,
-          db_name: dbName,
-          store_name: storeName,
-          record_key: serializeKey(key),
-          data: record,
-          changed_at: now,
-          deleted: false,
-        };
+      const records: unknown[] = await new Promise((resolve, reject) => {
+        const tx = db.transaction(storeName, 'readonly');
+        const store = tx.objectStore(storeName);
+        const req = store.getAll();
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
       });
 
-      await supabase
-        .from('kbl_stores')
-        .upsert(rows, { onConflict: 'user_id,db_name,store_name,record_key' });
+      if (records.length === 0) return;
 
-      onProgress?.(dbName, storeName, Math.min(i + UPLOAD_BATCH_SIZE, records.length), records.length);
+      const now = Date.now();
+      for (let i = 0; i < records.length; i += UPLOAD_BATCH_SIZE) {
+        const batch = records.slice(i, i + UPLOAD_BATCH_SIZE);
+        const rows = batch.map(record => {
+          const rec = record as Record<string, unknown>;
+          const key = Array.isArray(keyPath)
+            ? keyPath.map(k => rec[k])
+            : rec[keyPath];
+
+          return {
+            user_id: userId,
+            db_name: dbName,
+            store_name: storeName,
+            record_key: serializeKey(key),
+            data: record,
+            changed_at: now,
+            deleted: false,
+          };
+        });
+
+        await supabase
+          .from('kbl_stores')
+          .upsert(rows, { onConflict: 'user_id,db_name,store_name,record_key' });
+
+        onProgress?.(dbName, storeName, Math.min(i + UPLOAD_BATCH_SIZE, records.length), records.length);
+      }
+    } finally {
+      db.close();
     }
   }
 
@@ -833,17 +867,44 @@ class SyncEngine {
   private async getFranchiseIds(): Promise<string[]> {
     try {
       const db = await this.openDatabase('kbl-app-meta');
-      if (!db.objectStoreNames.contains('franchiseList')) return [];
+      try {
+        if (!db.objectStoreNames.contains('franchiseList')) return [];
 
-      const records: Array<{ franchiseId: string }> = await new Promise((resolve, reject) => {
-        const tx = db.transaction('franchiseList', 'readonly');
-        const store = tx.objectStore('franchiseList');
-        const req = store.getAll();
-        req.onsuccess = () => resolve(req.result);
-        req.onerror = () => reject(req.error);
-      });
+        const records: Array<{ franchiseId: string }> = await new Promise((resolve, reject) => {
+          const tx = db.transaction('franchiseList', 'readonly');
+          const store = tx.objectStore('franchiseList');
+          const req = store.getAll();
+          req.onsuccess = () => resolve(req.result);
+          req.onerror = () => reject(req.error);
+        });
 
-      return records.map(r => r.franchiseId);
+        return records.map(r => r.franchiseId);
+      } finally {
+        db.close();
+      }
+    } catch {
+      return [];
+    }
+  }
+
+  private async getEliminationIds(): Promise<string[]> {
+    try {
+      const db = await this.openDatabase('kbl-app-meta');
+      try {
+        if (!db.objectStoreNames.contains('eliminationList')) return [];
+
+        const records: Array<{ eliminationId: string }> = await new Promise((resolve, reject) => {
+          const tx = db.transaction('eliminationList', 'readonly');
+          const store = tx.objectStore('eliminationList');
+          const req = store.getAll();
+          req.onsuccess = () => resolve(req.result);
+          req.onerror = () => reject(req.error);
+        });
+
+        return records.map(r => r.eliminationId);
+      } finally {
+        db.close();
+      }
     } catch {
       return [];
     }
@@ -851,10 +912,34 @@ class SyncEngine {
 
   private openDatabase(dbName: string): Promise<IDBDatabase> {
     return new Promise((resolve, reject) => {
-      const request = indexedDB.open(dbName);
+      const dynamicStores = this.getDynamicStoresForDb(dbName);
+      const request = dynamicStores
+        ? indexedDB.open(dbName, 1)
+        : indexedDB.open(dbName);
+
+      request.onupgradeneeded = () => {
+        if (!dynamicStores) return;
+        const db = request.result;
+        for (const [storeName, keyPath] of Object.entries(dynamicStores)) {
+          if (!db.objectStoreNames.contains(storeName)) {
+            db.createObjectStore(storeName, { keyPath });
+          }
+        }
+      };
+
       request.onsuccess = () => resolve(request.result);
       request.onerror = () => reject(request.error);
     });
+  }
+
+  private getDynamicStoresForDb(dbName: string): Record<string, string> | null {
+    if (dbName.startsWith(DYNAMIC_DB_PREFIX)) {
+      return DYNAMIC_DB_STORES;
+    }
+    if (dbName.startsWith(DYNAMIC_ELIMINATION_DB_PREFIX)) {
+      return DYNAMIC_ELIMINATION_DB_STORES;
+    }
+    return null;
   }
 
   private deleteDatabase(dbName: string): Promise<void> {

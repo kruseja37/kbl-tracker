@@ -69,6 +69,13 @@ export const DYNAMIC_DB_STORES: Record<string, string> = {
   teams: 'id',
 };
 
+// Dynamic per-elimination copied DBs — discovered via kbl-app-meta.eliminationList
+export const DYNAMIC_ELIMINATION_DB_PREFIX = 'kbl-elimination-';
+export const DYNAMIC_ELIMINATION_DB_STORES: Record<string, string> = {
+  players: 'id',
+  teams: 'id',
+};
+
 // localStorage keys to sync (via kbl_local_storage table)
 export const SYNCED_LOCAL_STORAGE_KEYS = [
   'kbl-leagues',           // LeagueConfig[] from leagueStorage.ts
