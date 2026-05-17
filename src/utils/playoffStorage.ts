@@ -19,7 +19,7 @@ import type { FieldingEvent as PersistedFieldingEvent, GameScopeQuery } from './
 import type { PersistedGameState } from './gameStorage';
 
 const DB_NAME = 'kbl-playoffs';
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 
 const STORES = {
   PLAYOFFS: 'playoffs',           // Playoff instances (one per season)
@@ -327,6 +327,37 @@ export function attachFieldingMetricsToPlayoffStats(
 // ============================================
 
 let dbInstance: IDBDatabase | null = null;
+let playoffIdCounter = 0;
+
+function createNonUniqueSeasonNumberIndex(playoffsStore: IDBObjectStore): void {
+  playoffsStore.createIndex('seasonNumber', 'seasonNumber', { unique: false });
+}
+
+function hasLegacyUniqueSeasonNumberIndex(playoffsStore: IDBObjectStore): boolean {
+  if (!playoffsStore.indexNames.contains('seasonNumber')) return false;
+
+  const existingIndex = playoffsStore.index('seasonNumber');
+  return existingIndex.unique;
+}
+
+function rebuildPlayoffsStoreWithNonUniqueSeasonNumberIndex(
+  db: IDBDatabase,
+  playoffsStore: IDBObjectStore,
+): void {
+  const existingRecordsRequest = playoffsStore.getAll();
+  existingRecordsRequest.onsuccess = () => {
+    const existingRecords = existingRecordsRequest.result as PlayoffConfig[];
+
+    db.deleteObjectStore(STORES.PLAYOFFS);
+    const rebuiltStore = db.createObjectStore(STORES.PLAYOFFS, { keyPath: 'id' });
+    createNonUniqueSeasonNumberIndex(rebuiltStore);
+    rebuiltStore.createIndex('status', 'status', { unique: false });
+
+    existingRecords.forEach((record) => {
+      rebuiltStore.put(record);
+    });
+  };
+}
 
 export async function initPlayoffDatabase(): Promise<IDBDatabase> {
   if (dbInstance) return dbInstance;
@@ -356,7 +387,7 @@ export async function initPlayoffDatabase(): Promise<IDBDatabase> {
       // Playoffs store
       if (!db.objectStoreNames.contains(STORES.PLAYOFFS)) {
         const playoffsStore = db.createObjectStore(STORES.PLAYOFFS, { keyPath: 'id' });
-        playoffsStore.createIndex('seasonNumber', 'seasonNumber', { unique: true });
+        createNonUniqueSeasonNumberIndex(playoffsStore);
         playoffsStore.createIndex('status', 'status', { unique: false });
       }
 
@@ -383,16 +414,17 @@ export async function initPlayoffDatabase(): Promise<IDBDatabase> {
         statsStore.createIndex('teamId', 'teamId', { unique: false });
       }
 
-      // ── v2 migration: Drop unique constraint on seasonNumber ──
-      // Elimination brackets and franchise playoffs must coexist with
-      // the same seasonNumber values. The unique index prevents this.
-      if (event.oldVersion < 2) {
+      // ── v3 migration: Drop legacy unique constraint on seasonNumber ──
+      // Elimination brackets and franchise playoffs may share seasonNumber.
+      // Recreating the same index name during this upgrade can leave stale
+      // unique constraints in some IndexedDB implementations, so migrated DBs
+      // simply remove the legacy index. Fresh DBs create it as non-unique above.
+      if (event.oldVersion < 3) {
         const tx = (event.target as IDBOpenDBRequest).transaction!;
         const playoffsStore = tx.objectStore(STORES.PLAYOFFS);
-        if (playoffsStore.indexNames.contains('seasonNumber')) {
-          playoffsStore.deleteIndex('seasonNumber');
+        if (hasLegacyUniqueSeasonNumberIndex(playoffsStore)) {
+          rebuildPlayoffsStoreWithNonUniqueSeasonNumberIndex(db, playoffsStore);
         }
-        playoffsStore.createIndex('seasonNumber', 'seasonNumber', { unique: false });
       }
     };
   });
@@ -413,7 +445,7 @@ export async function createPlayoff(config: Omit<PlayoffConfig, 'id' | 'createdA
 
   const playoff: PlayoffConfig = {
     ...config,
-    id: `playoff-${config.seasonNumber}-${Date.now()}`,
+    id: `playoff-${config.seasonNumber}-${Date.now()}-${playoffIdCounter++}`,
     createdAt: Date.now(),
   };
 
@@ -489,8 +521,7 @@ export async function getPlayoffBySeason(
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORES.PLAYOFFS, 'readonly');
     const store = tx.objectStore(STORES.PLAYOFFS);
-    const index = store.index('seasonNumber');
-    const request = index.openCursor(seasonNumber);
+    const request = store.openCursor();
 
     request.onsuccess = () => {
       const cursor = request.result;
@@ -500,6 +531,11 @@ export async function getPlayoffBySeason(
       }
 
       const playoff = cursor.value as PlayoffConfig;
+      if (playoff.seasonNumber !== seasonNumber) {
+        cursor.continue();
+        return;
+      }
+
       if (!sourceType) {
         resolve(playoff);
         return;

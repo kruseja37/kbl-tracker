@@ -9,8 +9,10 @@ import {
   getEliminationRoundName,
   getAllPlayoffs,
   getPlayoffByElimination,
+  initPlayoffDatabase,
   recordSeriesGame,
   resetPlayoffDbConnection,
+  type PlayoffConfig,
   type PlayoffTeam,
 } from "../playoffStorage";
 import { syncEngine } from "../syncEngine";
@@ -34,6 +36,75 @@ function buildTeam(seed: number): PlayoffTeam {
     league: "Eastern",
     regularSeasonRecord: { wins: 10 - seed, losses: seed },
     eliminated: false,
+  };
+}
+
+function createLegacyV1Database(records: PlayoffConfig[] = []): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(DB_NAME, 1);
+    request.onupgradeneeded = () => {
+      const db = request.result;
+      const playoffsStore = db.createObjectStore("playoffs", { keyPath: "id" });
+      playoffsStore.createIndex("seasonNumber", "seasonNumber", { unique: true });
+      playoffsStore.createIndex("status", "status", { unique: false });
+      records.forEach((record) => playoffsStore.put(record));
+    };
+    request.onsuccess = () => {
+      request.result.close();
+      resolve();
+    };
+    request.onerror = () => reject(request.error);
+  });
+}
+
+function buildLegacyFranchisePlayoff(): PlayoffConfig {
+  const teams = [buildTeam(1), buildTeam(2), buildTeam(3), buildTeam(4)];
+
+  return {
+    id: "legacy-franchise-playoff",
+    seasonNumber: 1,
+    seasonId: "season-1",
+    status: "NOT_STARTED",
+    teamsQualifying: 4,
+    rounds: 2,
+    gamesPerRound: [3, 5],
+    inningsPerGame: 9,
+    useDH: true,
+    leagues: ["Eastern"],
+    conferenceChampionship: false,
+    teams,
+    currentRound: 0,
+    sourceType: "franchise",
+    liveBeatReporterEnabled: false,
+    postGameColumnsEnabled: true,
+    beatReporterEnabled: true,
+    createdAt: 1,
+  };
+}
+
+function buildEliminationPlayoffConfig(
+  eliminationId: string,
+): Omit<PlayoffConfig, "id" | "createdAt"> {
+  const teams = [buildTeam(1), buildTeam(2), buildTeam(3), buildTeam(4)];
+
+  return {
+    seasonNumber: 1,
+    seasonId: `elimination-${eliminationId}`,
+    status: "NOT_STARTED",
+    teamsQualifying: 4,
+    rounds: 2,
+    gamesPerRound: [3, 5],
+    inningsPerGame: 9,
+    useDH: true,
+    leagues: ["Eastern"],
+    conferenceChampionship: false,
+    teams,
+    currentRound: 0,
+    sourceType: "elimination",
+    eliminationId,
+    liveBeatReporterEnabled: false,
+    postGameColumnsEnabled: true,
+    beatReporterEnabled: true,
   };
 }
 
@@ -61,6 +132,7 @@ describe("playoffStorage elimination wiring", () => {
 
   test("elimination brackets coexist across runs with the same season number", async () => {
     const teams = [buildTeam(1), buildTeam(2), buildTeam(3), buildTeam(4)];
+    vi.spyOn(Date, "now").mockReturnValue(1700000000000);
 
     const first = await createPlayoff({
       seasonNumber: 1,
@@ -115,6 +187,34 @@ describe("playoffStorage elimination wiring", () => {
       id: second.id,
       eliminationId: "elim-b",
     });
+  });
+
+  test("migrates legacy unique seasonNumber indexes for elimination coexistence", async () => {
+    await createLegacyV1Database([buildLegacyFranchisePlayoff()]);
+    resetPlayoffDbConnection();
+
+    const db = await initPlayoffDatabase();
+    const playoffsStore = db.transaction("playoffs", "readonly").objectStore("playoffs");
+    expect(
+      playoffsStore.indexNames.contains("seasonNumber")
+        ? playoffsStore.index("seasonNumber").unique
+        : false,
+    ).toBe(false);
+
+    const first = await createPlayoff(buildEliminationPlayoffConfig("elim-legacy-a"));
+    const second = await createPlayoff(buildEliminationPlayoffConfig("elim-legacy-b"));
+
+    const allPlayoffs = await getAllPlayoffs();
+    expect(allPlayoffs).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: "legacy-franchise-playoff" }),
+      ]),
+    );
+    expect(
+      allPlayoffs.filter((playoff) => playoff.sourceType === "elimination"),
+    ).toHaveLength(2);
+    expect(first.eliminationId).toBe("elim-legacy-a");
+    expect(second.eliminationId).toBe("elim-legacy-b");
   });
 
   test("single-bracket elimination advances to a seeded final without conference assumptions", async () => {
