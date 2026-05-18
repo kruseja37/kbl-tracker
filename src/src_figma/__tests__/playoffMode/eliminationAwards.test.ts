@@ -3,12 +3,19 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { computeEliminationAwards } from '../../../utils/eliminationAwards';
 import type { PlayoffPlayerStats } from '../../../utils/playoffStorage';
 
-const { mockGetPlayoffStats } = vi.hoisted(() => ({
+const { mockGetAllCompletedGames, mockGetPlayoffStats, mockGetSeriesByPlayoff } = vi.hoisted(() => ({
+  mockGetAllCompletedGames: vi.fn(),
   mockGetPlayoffStats: vi.fn(),
+  mockGetSeriesByPlayoff: vi.fn(),
 }));
 
 vi.mock('../../../utils/playoffStorage', () => ({
   getPlayoffStats: mockGetPlayoffStats,
+  getSeriesByPlayoff: mockGetSeriesByPlayoff,
+}));
+
+vi.mock('../../../utils/gameStorage', () => ({
+  getAllCompletedGames: mockGetAllCompletedGames,
 }));
 
 function createPlayoffPlayerStats(overrides: Partial<PlayoffPlayerStats>): PlayoffPlayerStats {
@@ -40,7 +47,12 @@ function createPlayoffPlayerStats(overrides: Partial<PlayoffPlayerStats>): Playo
 
 describe('computeEliminationAwards', () => {
   beforeEach(() => {
+    mockGetAllCompletedGames.mockReset();
     mockGetPlayoffStats.mockReset();
+    mockGetSeriesByPlayoff.mockReset();
+
+    mockGetAllCompletedGames.mockResolvedValue([]);
+    mockGetSeriesByPlayoff.mockResolvedValue([]);
   });
 
   it('adds a Best Fielder award from bracket-local fielding metrics', async () => {
