@@ -1,4 +1,4 @@
-import { listEliminations, deleteElimination } from "./eliminationManager";
+import { listEliminations, purgeElimination } from "./eliminationManager";
 import { deleteCompetitionEventLogData } from "./eventLog";
 import { deleteCompetitionGameData } from "./gameStorage";
 import { deleteRunFameAggregate } from "./eliminationRunFameStorage";
@@ -65,7 +65,7 @@ async function deleteDatabase(name: string): Promise<void> {
 export async function resetDerivedCompetitionData(): Promise<void> {
   const eliminations = await listEliminations();
   for (const elimination of eliminations) {
-    await deleteElimination(elimination.eliminationId);
+    await purgeElimination(elimination.eliminationId);
     await Promise.all([
       deleteRunFameAggregate(elimination.eliminationId),
       deleteCompetitionGameData("elimination", elimination.eliminationId),
