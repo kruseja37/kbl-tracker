@@ -873,13 +873,17 @@ function PlayoffLeadersContent({ playoffId }: { playoffId: string }) {
 
         const battingStats = {
           AVG: 'avg',
+          OBP: 'obp',
+          H: 'hits',
           HR: 'homeRuns',
           RBI: 'rbi',
+          R: 'runs',
           SB: 'stolenBases',
           OPS: 'ops',
         } as const;
         const pitchingStats = {
           ERA: 'era',
+          IP: 'inningsPitched',
           W: 'wins',
           K: 'pitchingStrikeouts',
           WHIP: 'whip',
@@ -1022,14 +1026,18 @@ function LeaderPanel({
           <div key={label} className="bg-[#4A6844] border-4 border-[#6B9462] p-3">
             <div className="text-[8px] mb-2">{label}</div>
             {stats.length === 0 ? (
-              <div className="text-[8px] text-[#E8E8D8]/50">No data</div>
+              <div className="text-[8px] text-[#E8E8D8]/50">No qualifying data yet</div>
             ) : (
               stats.map((stat, index) => (
-                <div key={`${label}-${stat.playerId}-${index}`} className="flex justify-between text-[8px] py-1 border-b border-[#6B9462] last:border-0">
+                <div key={`${label}-${stat.playerId}-${index}`} className="flex items-start justify-between gap-3 text-[8px] py-1 border-b border-[#6B9462] last:border-0">
                   <div>
-                    {index + 1}. {stat.playerName}
+                    <div>{index + 1}. {stat.playerName}</div>
+                    <div className="text-[7px] text-[#E8E8D8]/50">{stat.teamId}</div>
                   </div>
-                  <div>{formatLeaderValue(label, stat)}</div>
+                  <div className="text-right">
+                    <div>{formatLeaderValue(label, stat)}</div>
+                    <div className="text-[7px] text-[#E8E8D8]/50">{formatLeaderContext(label, stat)}</div>
+                  </div>
                 </div>
               ))
             )}
@@ -1044,6 +1052,8 @@ function formatLeaderValue(label: string, stat: PlayoffPlayerStats): string {
   switch (label) {
     case 'AVG':
       return stat.avg.toFixed(3);
+    case 'OBP':
+      return stat.obp.toFixed(3);
     case 'OPS':
       return stat.ops.toFixed(3);
     case 'FWAR':
@@ -1056,10 +1066,16 @@ function formatLeaderValue(label: string, stat: PlayoffPlayerStats): string {
       return (stat.era ?? 0).toFixed(2);
     case 'WHIP':
       return (stat.whip ?? 0).toFixed(2);
+    case 'IP':
+      return formatInningsPitched(stat.inningsPitched ?? 0);
+    case 'H':
+      return String(stat.hits);
     case 'HR':
       return String(stat.homeRuns);
     case 'RBI':
       return String(stat.rbi);
+    case 'R':
+      return String(stat.runs);
     case 'SB':
       return String(stat.stolenBases);
     case 'W':
@@ -1071,6 +1087,46 @@ function formatLeaderValue(label: string, stat: PlayoffPlayerStats): string {
     default:
       return '0';
   }
+}
+
+function formatLeaderContext(label: string, stat: PlayoffPlayerStats): string {
+  switch (label) {
+    case 'AVG':
+      return `${stat.atBats} AB`;
+    case 'OBP':
+    case 'OPS':
+      return `${getPlayoffPlateAppearances(stat)} PA`;
+    case 'H':
+    case 'HR':
+    case 'RBI':
+    case 'R':
+    case 'SB':
+      return `${stat.games} G`;
+    case 'ERA':
+    case 'WHIP':
+    case 'IP':
+    case 'W':
+    case 'K':
+    case 'SV':
+      return `${formatInningsPitched(stat.inningsPitched ?? 0)} IP`;
+    case 'FWAR':
+    case 'RS':
+    case 'PLAYS':
+      return `${stat.fieldingPlays ?? 0} plays`;
+    default:
+      return `${stat.games} G`;
+  }
+}
+
+function formatInningsPitched(value: number): string {
+  const outs = Math.round(value * 3);
+  const innings = Math.floor(outs / 3);
+  const partialOuts = outs % 3;
+  return partialOuts === 0 ? String(innings) : `${innings}.${partialOuts}`;
+}
+
+function getPlayoffPlateAppearances(stat: PlayoffPlayerStats): number {
+  return stat.atBats + stat.walks + (stat.hitByPitch ?? 0) + (stat.sacrificeFlies ?? 0);
 }
 
 function HistoryTab({ entries }: { entries: HistoryEntry[] }) {

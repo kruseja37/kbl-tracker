@@ -6,8 +6,10 @@ import {
   createNextRoundSeries,
   createPlayoff,
   createSeries,
+  aggregateGameToPlayoffStats,
   getEliminationRoundName,
   getAllPlayoffs,
+  getPlayoffLeaders,
   getPlayoffByElimination,
   initPlayoffDatabase,
   recordSeriesGame,
@@ -16,6 +18,7 @@ import {
   type PlayoffTeam,
 } from "../playoffStorage";
 import { syncEngine } from "../syncEngine";
+import type { PersistedGameState } from "../gameStorage";
 
 const DB_NAME = "kbl-playoffs";
 
@@ -105,6 +108,107 @@ function buildEliminationPlayoffConfig(
     liveBeatReporterEnabled: false,
     postGameColumnsEnabled: true,
     beatReporterEnabled: true,
+  };
+}
+
+function buildBattingStats(
+  playerName: string,
+  teamId: string,
+  overrides: Partial<PersistedGameState["playerStats"][string]> = {},
+): PersistedGameState["playerStats"][string] {
+  return {
+    playerName,
+    teamId,
+    pa: 0,
+    ab: 0,
+    h: 0,
+    singles: 0,
+    doubles: 0,
+    triples: 0,
+    hr: 0,
+    rbi: 0,
+    r: 0,
+    bb: 0,
+    hbp: 0,
+    k: 0,
+    sb: 0,
+    cs: 0,
+    sf: 0,
+    sh: 0,
+    gidp: 0,
+    putouts: 0,
+    assists: 0,
+    fieldingErrors: 0,
+    ...overrides,
+  };
+}
+
+function buildPitcherStats(
+  pitcherId: string,
+  pitcherName: string,
+  teamId: string,
+  overrides: Partial<PersistedGameState["pitcherGameStats"][number]> = {},
+): PersistedGameState["pitcherGameStats"][number] {
+  return {
+    pitcherId,
+    pitcherName,
+    teamId,
+    isStarter: true,
+    entryInning: 1,
+    outsRecorded: 0,
+    hitsAllowed: 0,
+    runsAllowed: 0,
+    earnedRuns: 0,
+    walksAllowed: 0,
+    strikeoutsThrown: 0,
+    homeRunsAllowed: 0,
+    hitBatters: 0,
+    basesReachedViaError: 0,
+    wildPitches: 0,
+    pitchCount: 0,
+    battersFaced: 0,
+    consecutiveHRsAllowed: 0,
+    firstInningRuns: 0,
+    basesLoadedWalks: 0,
+    inningsComplete: 0,
+    decision: null,
+    save: false,
+    hold: false,
+    blownSave: false,
+    ...overrides,
+  };
+}
+
+function buildPersistedGameState(
+  overrides: Partial<PersistedGameState>,
+): PersistedGameState {
+  return {
+    id: "current",
+    gameId: "game-1",
+    savedAt: 1700000000000,
+    inning: 9,
+    halfInning: "BOTTOM",
+    outs: 3,
+    homeScore: 5,
+    awayScore: 3,
+    bases: { first: null, second: null, third: null },
+    currentBatterIndex: 0,
+    atBatCount: 0,
+    awayTeamId: "team-2",
+    homeTeamId: "team-1",
+    awayTeamName: "Team 2",
+    homeTeamName: "Team 1",
+    seasonNumber: 1,
+    playerStats: {},
+    pitcherGameStats: [],
+    fameEvents: [],
+    lastHRBatterId: null,
+    consecutiveHRCount: 0,
+    inningStrikeouts: 0,
+    maxDeficitAway: 0,
+    maxDeficitHome: 0,
+    activityLog: [],
+    ...overrides,
   };
 }
 
@@ -427,5 +531,77 @@ describe("playoffStorage elimination wiring", () => {
         },
       }),
     ).rejects.toThrow(/Tied playoff games/);
+  });
+
+  test("elimination leaders require real opportunities for the requested stat", async () => {
+    const playoff = await createPlayoff(buildEliminationPlayoffConfig("elim-leaders"));
+
+    await aggregateGameToPlayoffStats(
+      playoff.id,
+      buildPersistedGameState({
+        playerStats: {
+          "slugger-1": buildBattingStats("Slugger One", "team-1", {
+            pa: 4,
+            ab: 4,
+            h: 2,
+            singles: 1,
+            hr: 1,
+            rbi: 3,
+            r: 1,
+          }),
+          "bench-1": buildBattingStats("Bench One", "team-1"),
+        },
+        pitcherGameStats: [
+          buildPitcherStats("pitcher-1", "Pitcher One", "team-1", {
+            outsRecorded: 9,
+            hitsAllowed: 2,
+            earnedRuns: 1,
+            runsAllowed: 1,
+            walksAllowed: 1,
+            strikeoutsThrown: 4,
+            decision: "W",
+          }),
+        ],
+      }),
+    );
+
+    await expect(getPlayoffLeaders(playoff.id, "era", 5)).resolves.toEqual([
+      expect.objectContaining({ playerId: "pitcher-1", pitchingGames: 1 }),
+    ]);
+    await expect(getPlayoffLeaders(playoff.id, "avg", 5)).resolves.toEqual([
+      expect.objectContaining({ playerId: "slugger-1", atBats: 4 }),
+    ]);
+    await expect(getPlayoffLeaders(playoff.id, "homeRuns", 5)).resolves.toEqual([
+      expect.objectContaining({ playerId: "slugger-1", homeRuns: 1 }),
+    ]);
+  });
+
+  test("rate-stat elimination leaders use sample size as a tie-breaker", async () => {
+    const playoff = await createPlayoff(buildEliminationPlayoffConfig("elim-rate-tie"));
+
+    await aggregateGameToPlayoffStats(
+      playoff.id,
+      buildPersistedGameState({
+        playerStats: {
+          "two-at-bats": buildBattingStats("Two Atbats", "team-1", {
+            pa: 2,
+            ab: 2,
+            h: 1,
+            singles: 1,
+          }),
+          "six-at-bats": buildBattingStats("Six Atbats", "team-2", {
+            pa: 6,
+            ab: 6,
+            h: 3,
+            singles: 3,
+          }),
+        },
+      }),
+    );
+
+    await expect(getPlayoffLeaders(playoff.id, "avg", 5)).resolves.toEqual([
+      expect.objectContaining({ playerId: "six-at-bats", atBats: 6 }),
+      expect.objectContaining({ playerId: "two-at-bats", atBats: 2 }),
+    ]);
   });
 });

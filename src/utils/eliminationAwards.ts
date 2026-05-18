@@ -21,6 +21,17 @@ function formatSignedRate(value: number): string {
   return `${value >= 0 ? '+' : ''}${value.toFixed(2)}`;
 }
 
+function formatEra(value: number): string {
+  return value.toFixed(2);
+}
+
+function formatInningsPitched(value: number): string {
+  const outs = Math.round(value * 3);
+  const innings = Math.floor(outs / 3);
+  const partialOuts = outs % 3;
+  return partialOuts === 0 ? String(innings) : `${innings}.${partialOuts}`;
+}
+
 function buildAward(
   category: string,
   player: PlayoffPlayerStats,
@@ -76,7 +87,7 @@ export async function computeEliminationAwards(playoffId: string): Promise<Elimi
       buildAward(
         'Best Pitcher',
         bestPitcher,
-        `${formatRate(bestPitcher.era || 0)} ERA, ${bestPitcher.pitchingGames || 0} G, ${bestPitcher.inningsPitched || 0} IP`
+        `${formatEra(bestPitcher.era || 0)} ERA, ${bestPitcher.pitchingGames || 0} G, ${formatInningsPitched(bestPitcher.inningsPitched || 0)} IP`
       )
     );
   }
@@ -217,7 +228,7 @@ export async function computeEliminationAwards(playoffId: string): Promise<Elimi
             ...player,
             score: Math.max(battingScore, pitchingScore),
             statLine: usePitchingLine
-              ? `${(player.outsRecorded / 3).toFixed(1)} IP, ${player.strikeouts} K, ${player.earnedRuns} ER`
+              ? `${formatInningsPitched(player.outsRecorded / 3)} IP, ${player.strikeouts} K, ${player.earnedRuns} ER`
               : `${player.hits} H, ${player.homeRuns} HR, ${player.rbi} RBI`,
           };
         })

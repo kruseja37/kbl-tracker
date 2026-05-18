@@ -1074,18 +1074,115 @@ export async function getPlayoffLeaders(
 ): Promise<PlayoffPlayerStats[]> {
   const allStats = await getPlayoffStats(playoffId);
 
-  // Sort by the requested stat
   return allStats
-    .sort((a, b) => {
-      const aVal = a[stat] as number || 0;
-      const bVal = b[stat] as number || 0;
-      // For ERA and WHIP, lower is better
-      if (stat === 'era' || stat === 'whip') {
-        return aVal - bVal;
-      }
-      return bVal - aVal;
-    })
+    .filter((playerStats) => isEligibleForPlayoffLeader(playerStats, stat))
+    .slice()
+    .sort((a, b) => comparePlayoffLeaders(a, b, stat))
     .slice(0, limit);
+}
+
+function toNumericStatValue(
+  playerStats: PlayoffPlayerStats,
+  stat: keyof PlayoffPlayerStats,
+): number {
+  const value = playerStats[stat];
+  return typeof value === 'number' && Number.isFinite(value) ? value : 0;
+}
+
+function playoffPlateAppearances(playerStats: PlayoffPlayerStats): number {
+  return (
+    playerStats.atBats +
+    playerStats.walks +
+    (playerStats.hitByPitch || 0) +
+    (playerStats.sacrificeFlies || 0)
+  );
+}
+
+function isEligibleForPlayoffLeader(
+  playerStats: PlayoffPlayerStats,
+  stat: keyof PlayoffPlayerStats,
+): boolean {
+  switch (stat) {
+    case 'avg':
+    case 'slg':
+      return playerStats.atBats > 0;
+    case 'obp':
+    case 'ops':
+      return playoffPlateAppearances(playerStats) > 0;
+    case 'hits':
+    case 'doubles':
+    case 'triples':
+    case 'homeRuns':
+    case 'rbi':
+    case 'runs':
+    case 'walks':
+    case 'strikeouts':
+    case 'stolenBases':
+    case 'caughtStealing':
+      return toNumericStatValue(playerStats, stat) > 0;
+    case 'era':
+    case 'whip':
+    case 'inningsPitched':
+      return (playerStats.inningsPitched || 0) > 0;
+    case 'wins':
+    case 'losses':
+    case 'saves':
+    case 'pitchingStrikeouts':
+    case 'pitchingWalks':
+    case 'hitsAllowed':
+    case 'earnedRuns':
+      return (playerStats.pitchingGames || 0) > 0 && toNumericStatValue(playerStats, stat) > 0;
+    case 'fieldingWAR':
+    case 'fieldingRunsSaved':
+    case 'fieldingPlays':
+    case 'fieldingErrors':
+      return (playerStats.fieldingPlays || 0) > 0;
+    default:
+      return toNumericStatValue(playerStats, stat) > 0;
+  }
+}
+
+function comparePlayoffLeaders(
+  left: PlayoffPlayerStats,
+  right: PlayoffPlayerStats,
+  stat: keyof PlayoffPlayerStats,
+): number {
+  const leftValue = toNumericStatValue(left, stat);
+  const rightValue = toNumericStatValue(right, stat);
+
+  if (stat === 'era' || stat === 'whip') {
+    if (leftValue !== rightValue) return leftValue - rightValue;
+    if ((right.inningsPitched || 0) !== (left.inningsPitched || 0)) {
+      return (right.inningsPitched || 0) - (left.inningsPitched || 0);
+    }
+    if ((right.pitchingStrikeouts || 0) !== (left.pitchingStrikeouts || 0)) {
+      return (right.pitchingStrikeouts || 0) - (left.pitchingStrikeouts || 0);
+    }
+  } else {
+    if (rightValue !== leftValue) return rightValue - leftValue;
+
+    if (stat === 'avg' || stat === 'slg') {
+      if (right.atBats !== left.atBats) return right.atBats - left.atBats;
+      if (right.hits !== left.hits) return right.hits - left.hits;
+    }
+
+    if (stat === 'obp' || stat === 'ops') {
+      const rightPa = playoffPlateAppearances(right);
+      const leftPa = playoffPlateAppearances(left);
+      if (rightPa !== leftPa) return rightPa - leftPa;
+      if (right.hits !== left.hits) return right.hits - left.hits;
+    }
+
+    if (stat === 'fieldingWAR' || stat === 'fieldingRunsSaved' || stat === 'fieldingPlays') {
+      if ((right.fieldingPlays || 0) !== (left.fieldingPlays || 0)) {
+        return (right.fieldingPlays || 0) - (left.fieldingPlays || 0);
+      }
+    }
+  }
+
+  if (right.games !== left.games) return right.games - left.games;
+  if (right.rbi !== left.rbi) return right.rbi - left.rbi;
+  return left.playerName.localeCompare(right.playerName);
 }
 
 export async function aggregateGameToPlayoffStats(
