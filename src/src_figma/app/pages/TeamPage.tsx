@@ -1,8 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router";
 import { ArrowLeft } from "lucide-react";
-import { getTeam } from "../../../utils/leagueBuilderStorage";
-import type { Team } from "../../../utils/leagueBuilderStorage";
 import {
   getArchiveInstanceMode,
   getManagerTeamTenures,
@@ -10,6 +8,11 @@ import {
   type AlmanacInstanceMode,
   type ManagerTeamTenureAggregate,
 } from "../../../utils/almanacQueries";
+import {
+  resolveEliminationTeamIdentity,
+  resolveLiveTeamIdentity,
+  type AlmanacTeamIdentity,
+} from "../../../utils/almanacTeamIdentity";
 
 interface RosterEntry {
   playerId: string;
@@ -20,30 +23,41 @@ interface RosterEntry {
 }
 
 export function TeamPage() {
-  const { leagueId, teamId } = useParams<{ leagueId: string; teamId: string }>();
-  const [team, setTeam] = useState<Team | null>(null);
+  const { leagueId, runId, teamId } = useParams<{
+    leagueId?: string;
+    runId?: string;
+    teamId?: string;
+  }>();
+  const instanceId = runId ?? leagueId;
+  const [team, setTeam] = useState<AlmanacTeamIdentity | null>(null);
   const [roster, setRoster] = useState<RosterEntry[]>([]);
   const [managerTenures, setManagerTenures] = useState<ManagerTeamTenureAggregate[]>([]);
   const [instanceMode, setInstanceMode] = useState<AlmanacInstanceMode>("exhibition");
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!leagueId || !teamId) return;
+    if (!instanceId || !teamId) return;
 
     let cancelled = false;
 
     async function load() {
-      const [teamData, rosterData, resolvedMode] = await Promise.all([
-        getTeam(teamId!),
-        getTeamRosterFromGames(leagueId!, teamId!),
-        getArchiveInstanceMode(leagueId!),
+      const [rosterData, resolvedMode] = await Promise.all([
+        getTeamRosterFromGames(instanceId!, teamId!),
+        getArchiveInstanceMode(instanceId!),
       ]);
-      const mode = resolvedMode ?? "exhibition";
-      const tenureData = await getManagerTeamTenures({
-        mode,
-        instanceId: leagueId!,
-        teamId: teamId!,
-      });
+      const routeIndicatesElimination =
+        Boolean(runId) || (!resolvedMode && /^elim(?:ination)?[-_]/i.test(instanceId!));
+      const mode = resolvedMode ?? (routeIndicatesElimination ? "elimination" : "exhibition");
+      const [teamData, tenureData] = await Promise.all([
+        mode === "elimination"
+          ? resolveEliminationTeamIdentity(instanceId!, teamId!)
+          : resolveLiveTeamIdentity(teamId!),
+        getManagerTeamTenures({
+          mode,
+          instanceId: instanceId!,
+          teamId: teamId!,
+        }),
+      ]);
 
       if (!cancelled) {
         setTeam(teamData);
@@ -56,7 +70,7 @@ export function TeamPage() {
 
     load();
     return () => { cancelled = true; };
-  }, [leagueId, teamId]);
+  }, [instanceId, runId, teamId]);
 
   if (loading) {
     return (
@@ -68,7 +82,7 @@ export function TeamPage() {
     );
   }
 
-  const teamName = team ? `${team.location} ${team.nickname}` : teamId ?? "Unknown Team";
+  const teamName = team?.name ?? teamId ?? "Unknown Team";
   const stadium = team?.stadium ?? "Unknown Stadium";
   const primaryColor = team?.colors?.primary ?? "#3366FF";
   const secondaryColor = team?.colors?.secondary ?? "#DD0000";
@@ -104,14 +118,31 @@ export function TeamPage() {
         <div className="border-[6px] border-[#2B2B2B] bg-[#101010] p-5 shadow-[8px_8px_0px_0px_rgba(51,102,255,0.35)] sm:p-8">
           {/* Color accent bar */}
           <div
+            data-testid="team-color-accent"
             className="mb-5 h-3 w-full"
             style={{
               background: `linear-gradient(90deg, ${primaryColor} 50%, ${secondaryColor} 50%)`,
             }}
           />
 
-          <h1 className="text-sm leading-6 text-white sm:text-base">{teamName.toUpperCase()}</h1>
-          <p className="mt-3 text-[10px] text-[#8F96A3]">{stadium.toUpperCase()}</p>
+          <div className="flex items-center gap-5">
+            {team?.logoUrl ? (
+              <img
+                src={team.logoUrl}
+                alt={`${teamName} logo`}
+                className="h-16 w-16 shrink-0 object-contain"
+              />
+            ) : null}
+            <div>
+              <h1 className="text-sm leading-6 text-white sm:text-base">
+                {teamName.toUpperCase()}
+              </h1>
+              <div className="mt-3 flex flex-wrap gap-x-4 gap-y-2 text-[10px] text-[#8F96A3]">
+                {team?.abbreviation ? <span>{team.abbreviation.toUpperCase()}</span> : null}
+                <span>{stadium.toUpperCase()}</span>
+              </div>
+            </div>
+          </div>
         </div>
 
         <div className="border-[6px] border-[#2B2B2B] bg-[#101010] p-5 shadow-[8px_8px_0px_0px_rgba(51,102,255,0.35)] sm:p-8">
