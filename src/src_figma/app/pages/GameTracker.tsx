@@ -168,6 +168,16 @@ type LineupRosterMeta = {
   hometown?: { city: string; state: string };
 };
 
+type GameTrackerLaunchRosterState = {
+  awayPlayers?: Player[];
+  awayPitchers?: Pitcher[];
+  homePlayers?: Player[];
+  homePitchers?: Pitcher[];
+};
+
+export const MISSING_GAME_TRACKER_LAUNCH_STATE_TITLE =
+  "GameTracker launch data required";
+
 const ordinalSuffix = (num: number) => {
   if (num % 100 >= 11 && num % 100 <= 13) return "th";
   switch (num % 10) {
@@ -510,6 +520,49 @@ function getPreferredActivePitcher<
     pitchers.find((pitcher) => pitcher.isStarter) ||
     pitchers[0]
   );
+}
+
+function hasRequiredLaunchPlayers(players: Player[] | undefined): boolean {
+  return Boolean(
+    Array.isArray(players) &&
+      players.length > 0 &&
+      players.some((player) => player.battingOrder !== undefined),
+  );
+}
+
+function hasRequiredLaunchPitcher(pitchers: Pitcher[] | undefined): boolean {
+  return Boolean(
+    Array.isArray(pitchers) &&
+      pitchers.length > 0 &&
+      getPreferredActivePitcher(pitchers),
+  );
+}
+
+export function getMissingGameTrackerLaunchStateMessage(
+  state: GameTrackerLaunchRosterState | null | undefined,
+): string | null {
+  const missing: string[] = [];
+
+  if (!hasRequiredLaunchPlayers(state?.awayPlayers)) {
+    missing.push("away batting roster");
+  }
+  if (!hasRequiredLaunchPitcher(state?.awayPitchers)) {
+    missing.push("away starting pitcher");
+  }
+  if (!hasRequiredLaunchPlayers(state?.homePlayers)) {
+    missing.push("home batting roster");
+  }
+  if (!hasRequiredLaunchPitcher(state?.homePitchers)) {
+    missing.push("home starting pitcher");
+  }
+
+  if (missing.length === 0) {
+    return null;
+  }
+
+  return `GameTracker needs real launch rosters before it can create a new game. Missing: ${missing.join(
+    ", ",
+  )}. Start the game from Exhibition, Franchise, or Elimination setup, or reload a persisted in-progress game.`;
 }
 
 function inferTeamUsesDh(
@@ -1108,12 +1161,8 @@ export function GameTracker() {
   const { gameId } = useParams();
   const location = useLocation();
 
-  // Get rosters and team info from navigation state or use defaults
-  const navigationState = location.state as {
-    awayPlayers?: Player[];
-    awayPitchers?: Pitcher[];
-    homePlayers?: Player[];
-    homePitchers?: Pitcher[];
+  // Get rosters and team info from navigation state; persisted games hydrate separately.
+  const navigationState = location.state as (GameTrackerLaunchRosterState & {
     awayTeamName?: string;
     homeTeamName?: string;
     awayTeamAbbreviation?: string;
@@ -1164,7 +1213,7 @@ export function GameTracker() {
     extraInningRunner?: boolean;
     extraInningRunnerDelay?: 1 | 2;
     optimalLineupSnapshots?: GameLockLineupSnapshots;
-  } | null;
+  }) | null;
 
   // Team IDs - use navigation state or standalone defaults
   const homeTeamId = navigationState?.homeTeamId || "home";
@@ -1429,6 +1478,8 @@ export function GameTracker() {
     home: getScorebugTeamLabel(navigationState?.homeTeamAbbreviation, homeTeamName_),
   }));
   const [gameInitialized, setGameInitialized] = useState(false);
+  const [missingLaunchStateMessage, setMissingLaunchStateMessage] =
+    useState<string | null>(null);
   // R3: Persisted DH flag — survives refresh (overrides navigationState?.useDH)
   const [persistedUseDh, setPersistedUseDh] = useState<boolean | undefined>(
     undefined,
@@ -2626,144 +2677,15 @@ export function GameTracker() {
   const battingTeam: "home" | "away" = gameState.isTop ? "away" : "home";
   const fieldingTeam: "home" | "away" = gameState.isTop ? "home" : "away";
 
-  const initialAwayTeamPitchers = navigationState?.awayPitchers || [
-    {
-      name: "R. LOPEZ",
-      stats: { ip: "0.0", h: 0, r: 0, er: 0, bb: 0, k: 0, pitches: 0 },
-      throwingHand: "R" as const,
-      isStarter: true,
-      isActive: true,
-    },
-    {
-      name: "T. JOHNSON",
-      stats: { ip: "0.0", h: 0, r: 0, er: 0, bb: 0, k: 0, pitches: 0 },
-      throwingHand: "R" as const,
-    },
-    {
-      name: "M. WILLIAMS",
-      stats: { ip: "0.0", h: 0, r: 0, er: 0, bb: 0, k: 0, pitches: 0 },
-      throwingHand: "L" as const,
-    },
-    {
-      name: "K. DAVIS",
-      stats: { ip: "0.0", h: 0, r: 0, er: 0, bb: 0, k: 0, pitches: 0 },
-      throwingHand: "R" as const,
-    },
-  ];
+  const initialAwayTeamPitchers = navigationState?.awayPitchers ?? [];
 
-  const initialHomeTeamPitchers = navigationState?.homePitchers || [
-    {
-      name: "S. WHITE",
-      stats: { ip: "0.0", h: 0, r: 0, er: 0, bb: 0, k: 0, pitches: 0 },
-      throwingHand: "R" as const,
-      isStarter: true,
-      isActive: true,
-    },
-    {
-      name: "U. PARKER",
-      stats: { ip: "0.0", h: 0, r: 0, er: 0, bb: 0, k: 0, pitches: 0 },
-      throwingHand: "L" as const,
-    },
-    {
-      name: "V. TURNER",
-      stats: { ip: "0.0", h: 0, r: 0, er: 0, bb: 0, k: 0, pitches: 0 },
-      throwingHand: "R" as const,
-    },
-    {
-      name: "W. COLLINS",
-      stats: { ip: "0.0", h: 0, r: 0, er: 0, bb: 0, k: 0, pitches: 0 },
-      throwingHand: "R" as const,
-    },
-  ];
+  const initialHomeTeamPitchers = navigationState?.homePitchers ?? [];
 
-  // Roster data - use navigation state if available, otherwise use defaults with ZERO stats (new game)
+  // Roster data - use explicit launch state for new games, or hydrate from a persisted game on resume.
   // Use useState so we can update the roster when substitutions are made
   const [awayTeamPlayers, setAwayTeamPlayers] = useState<Player[]>(() =>
     sanitizeIncomingRosterPlayers(
-      navigationState?.awayPlayers || [
-        {
-          name: "J. MARTINEZ",
-          position: "SS",
-          battingOrder: 1,
-          stats: { ab: 0, h: 0, r: 0, rbi: 0, bb: 0, k: 0 },
-          battingHand: "R" as const,
-        },
-        {
-          name: "A. SMITH",
-          position: "CF",
-          battingOrder: 2,
-          stats: { ab: 0, h: 0, r: 0, rbi: 0, bb: 0, k: 0 },
-          battingHand: "L" as const,
-        },
-        {
-          name: "D. JONES",
-          position: "LF",
-          battingOrder: 3,
-          stats: { ab: 0, h: 0, r: 0, rbi: 0, bb: 0, k: 0 },
-          battingHand: "R" as const,
-        },
-        {
-          name: "B. DAVIS",
-          position: "RF",
-          battingOrder: 4,
-          stats: { ab: 0, h: 0, r: 0, rbi: 0, bb: 0, k: 0 },
-          battingHand: "R" as const,
-        },
-        {
-          name: "T. BROWN",
-          position: "1B",
-          battingOrder: 5,
-          stats: { ab: 0, h: 0, r: 0, rbi: 0, bb: 0, k: 0 },
-          battingHand: "L" as const,
-        },
-        {
-          name: "C. WILSON",
-          position: "2B",
-          battingOrder: 6,
-          stats: { ab: 0, h: 0, r: 0, rbi: 0, bb: 0, k: 0 },
-          battingHand: "R" as const,
-        },
-        {
-          name: "M. GARCIA",
-          position: "3B",
-          battingOrder: 7,
-          stats: { ab: 0, h: 0, r: 0, rbi: 0, bb: 0, k: 0 },
-          battingHand: "S" as const,
-        },
-        {
-          name: "J. MARTIN",
-          position: "C",
-          battingOrder: 8,
-          stats: { ab: 0, h: 0, r: 0, rbi: 0, bb: 0, k: 0 },
-          battingHand: "R" as const,
-        },
-        {
-          name: "R. LOPEZ",
-          position: "P",
-          battingOrder: 9,
-          stats: { ab: 0, h: 0, r: 0, rbi: 0, bb: 0, k: 0 },
-          battingHand: "R" as const,
-        },
-        // Bench players
-        {
-          name: "A. TAYLOR",
-          position: "C",
-          stats: { ab: 0, h: 0, r: 0, rbi: 0, bb: 0, k: 0 },
-          battingHand: "R" as const,
-        },
-        {
-          name: "B. ANDERSON",
-          position: "IF",
-          stats: { ab: 0, h: 0, r: 0, rbi: 0, bb: 0, k: 0 },
-          battingHand: "L" as const,
-        },
-        {
-          name: "C. THOMAS",
-          position: "OF",
-          stats: { ab: 0, h: 0, r: 0, rbi: 0, bb: 0, k: 0 },
-          battingHand: "R" as const,
-        },
-      ],
+      navigationState?.awayPlayers ?? [],
       initialAwayTeamPitchers,
       navigationState?.useDH,
     ),
@@ -2773,94 +2695,11 @@ export function GameTracker() {
     initialAwayTeamPitchers,
   );
 
-  // Fallback roster data for Home Team (exhibition mode) — ZERO stats for new game
+  // Home roster data - explicit launch state for new games, persisted game state on resume.
   // Use useState so we can update the roster when substitutions are made
   const [homeTeamPlayers, setHomeTeamPlayers] = useState<Player[]>(() =>
     sanitizeIncomingRosterPlayers(
-      navigationState?.homePlayers || [
-        {
-          name: "P. HERNANDEZ",
-          position: "CF",
-          battingOrder: 1,
-          stats: { ab: 0, h: 0, r: 0, rbi: 0, bb: 0, k: 0 },
-          battingHand: "L" as const,
-        },
-        {
-          name: "K. WASHINGTON",
-          position: "SS",
-          battingOrder: 2,
-          stats: { ab: 0, h: 0, r: 0, rbi: 0, bb: 0, k: 0 },
-          battingHand: "R" as const,
-        },
-        {
-          name: "L. RODRIGUEZ",
-          position: "LF",
-          battingOrder: 3,
-          stats: { ab: 0, h: 0, r: 0, rbi: 0, bb: 0, k: 0 },
-          battingHand: "L" as const,
-        },
-        {
-          name: "M. JACKSON",
-          position: "RF",
-          battingOrder: 4,
-          stats: { ab: 0, h: 0, r: 0, rbi: 0, bb: 0, k: 0 },
-          battingHand: "R" as const,
-        },
-        {
-          name: "N. MARTINEZ",
-          position: "1B",
-          battingOrder: 5,
-          stats: { ab: 0, h: 0, r: 0, rbi: 0, bb: 0, k: 0 },
-          battingHand: "R" as const,
-        },
-        {
-          name: "O. THOMPSON",
-          position: "3B",
-          battingOrder: 6,
-          stats: { ab: 0, h: 0, r: 0, rbi: 0, bb: 0, k: 0 },
-          battingHand: "S" as const,
-        },
-        {
-          name: "Q. GONZALEZ",
-          position: "2B",
-          battingOrder: 7,
-          stats: { ab: 0, h: 0, r: 0, rbi: 0, bb: 0, k: 0 },
-          battingHand: "R" as const,
-        },
-        {
-          name: "R. ADAMS",
-          position: "C",
-          battingOrder: 8,
-          stats: { ab: 0, h: 0, r: 0, rbi: 0, bb: 0, k: 0 },
-          battingHand: "R" as const,
-        },
-        {
-          name: "S. WHITE",
-          position: "P",
-          battingOrder: 9,
-          stats: { ab: 0, h: 0, r: 0, rbi: 0, bb: 0, k: 0 },
-          battingHand: "R" as const,
-        },
-        // Bench players
-        {
-          name: "E. CLARK",
-          position: "OF",
-          stats: { ab: 0, h: 0, r: 0, rbi: 0, bb: 0, k: 0 },
-          battingHand: "L" as const,
-        },
-        {
-          name: "F. MILLER",
-          position: "IF",
-          stats: { ab: 0, h: 0, r: 0, rbi: 0, bb: 0, k: 0 },
-          battingHand: "R" as const,
-        },
-        {
-          name: "G. EVANS",
-          position: "C",
-          stats: { ab: 0, h: 0, r: 0, rbi: 0, bb: 0, k: 0 },
-          battingHand: "R" as const,
-        },
-      ],
+      navigationState?.homePlayers ?? [],
       initialHomeTeamPitchers,
       navigationState?.useDH,
     ),
@@ -4327,7 +4166,7 @@ export function GameTracker() {
     };
   }, []);
   useEffect(() => {
-    if (gameInitialized || initInProgressRef.current) return;
+    if (gameInitialized || initInProgressRef.current || missingLaunchStateMessage) return;
     initInProgressRef.current = true;
     let cancelled = false;
 
@@ -4335,6 +4174,7 @@ export function GameTracker() {
       try {
         // BUG-04: Clear stale play log before loading/creating a game.
         setPlayLogEntries([]);
+        setMissingLaunchStateMessage(null);
 
         // Try to load existing game first (handles page refresh)
         // R2-7: When navigationState is present, user clicked START GAME from setup —
@@ -4362,6 +4202,20 @@ export function GameTracker() {
             setGameInitialized(true);
             return;
           }
+        }
+
+        const missingLaunchState = getMissingGameTrackerLaunchStateMessage(
+          navigationState,
+        );
+        if (missingLaunchState) {
+          console.error(
+            "[GameTracker] Missing launch roster state; blocking new game initialization.",
+            { missingLaunchState },
+          );
+          if (!cancelled) {
+            setMissingLaunchStateMessage(missingLaunchState);
+          }
+          return;
         }
 
         // No existing game found - create new one
@@ -4662,12 +4516,14 @@ export function GameTracker() {
     homeTeamPlayers,
     initializeGame,
     loadExistingGame,
+    navigationState,
     navigationState?.franchiseId,
     navigationState?.optimalLineupSnapshots,
     navigationState?.seasonNumber,
     navigationState?.totalInnings,
     selectedStadium,
     isFreshNavigation,
+    missingLaunchStateMessage,
     syncDisplayedRostersToLineupSnapshot,
     getLineupStateSnapshot,
     awayPitcher,
@@ -5134,7 +4990,7 @@ export function GameTracker() {
   const currentPitcherStats = pitcherStats.get(gameState.currentPitcherId);
   const pitcherPitchCount = currentPitcherStats?.pitchCount ?? 0;
 
-  // Format display name: "J. MARTINEZ" -> show as is, or "John Martinez" -> "J. MARTINEZ"
+  // Format display name: already-initialed names stay as-is; full names become initial + last name.
   const formatDisplayName = (name: string | undefined): string => {
     if (!name) return "UNKNOWN";
     // If already in "F. LAST" format, return as-is
@@ -11484,6 +11340,31 @@ export function GameTracker() {
     typeof window !== "undefined" &&
     window.matchMedia("(pointer: coarse)").matches;
   // touchReviewEntries removed — play log tap handles review.
+
+  if (missingLaunchStateMessage) {
+    return (
+      <div className="min-h-screen bg-[#CBB89C] flex items-center justify-center p-6" style={{ fontFamily: "'Moms Typewriter', monospace" }}>
+        <div
+          role="alert"
+          className="max-w-xl bg-[#1a3020] border-4 border-[#C4A853] px-6 py-5 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.4)]"
+        >
+          <div className="text-[#C4A853] text-sm font-bold tracking-[0.18em] mb-3">
+            {MISSING_GAME_TRACKER_LAUNCH_STATE_TITLE}
+          </div>
+          <p className="text-[#E8E8D8] text-sm leading-6 mb-5">
+            {missingLaunchStateMessage}
+          </p>
+          <button
+            type="button"
+            onClick={() => navigate(-1)}
+            className="bg-[#3d4a42] border-2 border-[#C4A853] text-[#E8E8D8] px-4 py-2 text-xs font-bold tracking-[0.16em] hover:bg-[#4a5a50] active:scale-95 transition-transform"
+          >
+            BACK TO SETUP
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   if (isLoading || !gameInitialized) {
     return (
