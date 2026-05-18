@@ -4,12 +4,14 @@ import { beforeEach, describe, expect, test, vi } from "vitest";
 
 import type { CompletedGameRecord } from "../../../utils/gameStorage";
 import type { Team } from "../../../utils/leagueBuilderStorage";
+import type { TeamImpactSummary } from "../../../utils/teamImpact";
 
 const {
   mockGetAllCompletedGames,
   mockGetArchiveInstanceMode,
   mockGetEliminationTeam,
   mockGetManagerTeamTenures,
+  mockGetTeamImpactSummary,
   mockGetTeam,
   mockGetTeamRosterFromGames,
 } = vi.hoisted(() => ({
@@ -17,6 +19,7 @@ const {
   mockGetArchiveInstanceMode: vi.fn(),
   mockGetEliminationTeam: vi.fn(),
   mockGetManagerTeamTenures: vi.fn(),
+  mockGetTeamImpactSummary: vi.fn(),
   mockGetTeam: vi.fn(),
   mockGetTeamRosterFromGames: vi.fn(),
 }));
@@ -37,6 +40,10 @@ vi.mock("../../../utils/gameStorage", () => ({
 
 vi.mock("../../../utils/leagueBuilderStorage", () => ({
   getTeam: mockGetTeam,
+}));
+
+vi.mock("../../../utils/teamImpact", () => ({
+  getTeamImpactSummary: mockGetTeamImpactSummary,
 }));
 
 import { TeamPage } from "../../app/pages/TeamPage";
@@ -94,6 +101,206 @@ function renderTeamPage(runId = "elim-run-1", teamId = "team-a") {
   );
 }
 
+function createImpactSummary(overrides: Partial<TeamImpactSummary> = {}): TeamImpactSummary {
+  return {
+    mode: "exhibition",
+    instanceId: "league-1",
+    teamId: "team-a",
+    teamName: "Frozen City Owls",
+    games: 2,
+    playerWpa: {
+      total: 0.35,
+      batting: 0.2,
+      pitching: 0.1,
+      fielding: 0.03,
+      baserunning: 0.01,
+      catching: 0.01,
+    },
+    managerWpa: {
+      tacticalManagerWpa: 0.02,
+      deploymentWpa: 0.01,
+      lineupDeltaWpa: 0.02,
+      managerValue: 0.05,
+    },
+    pog: {
+      points: 6,
+      rank: 2,
+      teamCount: 4,
+      overallWins: 1,
+      bestHitter: 1,
+      bestPitcher: 1,
+      bestBaserunner: 0,
+      bestFielder: 1,
+      bestManager: 1,
+      bestManagerWins: 1,
+      mostDecoratedPlayer: {
+        playerId: "alpha-star",
+        playerName: "Dana Dunn",
+        points: 4,
+      },
+    },
+    benchmarks: {
+      totalPlayerWpaRank: 2,
+      teamCount: 4,
+      instanceAverageTotalPlayerWpa: 0.1,
+      perGameTotalPlayerWpa: 0.175,
+      identityLabel: "Lineup carried them",
+    },
+    playerLeaders: [
+      {
+        playerId: "alpha-star",
+        playerName: "Dana Dunn",
+        teamId: "team-a",
+        games: 2,
+        wpa: {
+          total: 0.28,
+          batting: 0.18,
+          pitching: 0,
+          fielding: 0.06,
+          baserunning: 0.02,
+          catching: 0.02,
+        },
+        pogPoints: 4,
+        perGameWpa: 0.14,
+        awards: {
+          overall: 1,
+          bestHitter: 1,
+          bestPitcher: 0,
+          bestBaserunner: 0,
+          bestFielder: 1,
+        },
+        biggestPositivePlay: {
+          gameId: "game-1",
+          eventId: "event-1",
+          value: 0.18,
+          label: "Dana Dunn HR vs Riley Ray",
+          inningLabel: "Bot 8",
+          leverageIndex: 2.1,
+        },
+        biggestNegativePlay: {
+          gameId: "game-2",
+          eventId: "event-2",
+          value: -0.05,
+          label: "Dana Dunn K vs Riley Ray",
+          inningLabel: "Top 5",
+          leverageIndex: 1.4,
+        },
+        highLeverageWpa: 0.11,
+      },
+      {
+        playerId: "quiet",
+        playerName: "Quiet Contributor",
+        teamId: "team-a",
+        games: 1,
+        wpa: {
+          total: 0.07,
+          batting: 0.02,
+          pitching: 0.05,
+          fielding: 0,
+          baserunning: 0,
+          catching: 0,
+        },
+        pogPoints: 1,
+        perGameWpa: 0.07,
+        awards: {
+          overall: 0,
+          bestHitter: 0,
+          bestPitcher: 1,
+          bestBaserunner: 0,
+          bestFielder: 0,
+        },
+      },
+    ],
+    dataQuality: {
+      fullKblWpaGames: 2,
+      legacyAtBatWpaGames: 0,
+      storedPogGames: 0,
+      managerValueOnlyGames: 0,
+      unavailableGames: 0,
+      eventLogFailedGames: 0,
+      warnings: [],
+    },
+    ...overrides,
+  };
+}
+
+function createStoredOnlySummary(): TeamImpactSummary {
+  return createImpactSummary({
+    playerWpa: {
+      total: 0,
+      batting: 0,
+      pitching: 0,
+      fielding: 0,
+      baserunning: 0,
+      catching: 0,
+    },
+    managerWpa: {
+      tacticalManagerWpa: 0,
+      deploymentWpa: 0,
+      lineupDeltaWpa: 0,
+      managerValue: 0,
+    },
+    pog: {
+      points: 3,
+      rank: 1,
+      teamCount: 2,
+      overallWins: 1,
+      bestHitter: 0,
+      bestPitcher: 0,
+      bestBaserunner: 0,
+      bestFielder: 0,
+      bestManager: 0,
+      bestManagerWins: 0,
+      mostDecoratedPlayer: {
+        playerId: "legacy-hero",
+        playerName: "Legacy Hero",
+        points: 3,
+      },
+    },
+    benchmarks: {
+      totalPlayerWpaRank: 0,
+      teamCount: 2,
+      instanceAverageTotalPlayerWpa: 0,
+      perGameTotalPlayerWpa: 0,
+      identityLabel: "Impact detail unavailable",
+    },
+    playerLeaders: [
+      {
+        playerId: "legacy-hero",
+        playerName: "Legacy Hero",
+        teamId: "team-a",
+        games: 1,
+        wpa: {
+          total: 0,
+          batting: 0,
+          pitching: 0,
+          fielding: 0,
+          baserunning: 0,
+          catching: 0,
+        },
+        pogPoints: 3,
+        perGameWpa: 0,
+        awards: {
+          overall: 1,
+          bestHitter: 0,
+          bestPitcher: 0,
+          bestBaserunner: 0,
+          bestFielder: 0,
+        },
+      },
+    ],
+    dataQuality: {
+      fullKblWpaGames: 0,
+      legacyAtBatWpaGames: 0,
+      storedPogGames: 1,
+      managerValueOnlyGames: 0,
+      unavailableGames: 0,
+      eventLogFailedGames: 0,
+      warnings: ["1 game(s) use stored legacy POG only."],
+    },
+  });
+}
+
 describe("TeamPage almanac identity", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -101,6 +308,7 @@ describe("TeamPage almanac identity", () => {
     mockGetArchiveInstanceMode.mockResolvedValue("exhibition");
     mockGetEliminationTeam.mockResolvedValue(null);
     mockGetManagerTeamTenures.mockResolvedValue([]);
+    mockGetTeamImpactSummary.mockResolvedValue(null);
     mockGetTeam.mockResolvedValue(createTeam());
     mockGetTeamRosterFromGames.mockResolvedValue([]);
   });
@@ -214,5 +422,153 @@ describe("TeamPage almanac identity", () => {
       "rgb(204, 51, 0)",
     );
     expect(mockGetEliminationTeam).not.toHaveBeenCalled();
+  });
+
+  test("exhibition TeamPage renders Team Impact from the shared helper", async () => {
+    mockGetArchiveInstanceMode.mockResolvedValue("exhibition");
+    mockGetTeamImpactSummary.mockResolvedValue(createImpactSummary());
+
+    renderTeamPage("league-1", "team-a");
+
+    expect(await screen.findByRole("heading", { name: "TEAM IMPACT" })).toBeInTheDocument();
+    expect(await screen.findByText("LINEUP CARRIED THEM")).toBeInTheDocument();
+    expect(mockGetTeamImpactSummary).toHaveBeenCalledWith("exhibition", "league-1", "team-a");
+    expect(screen.getByText("TEAM WPA")).toBeInTheDocument();
+    expect(screen.getByText("+0.350")).toBeInTheDocument();
+    expect(screen.getAllByText(/2ND OF 4/)).toHaveLength(2);
+    expect(screen.getByText(/INSTANCE AVG \+0\.100/)).toBeInTheDocument();
+    expect(screen.getByText("POG POINTS")).toBeInTheDocument();
+    expect(screen.getByText("6 PTS")).toBeInTheDocument();
+    expect(screen.getByText(/MOST DECORATED: DANA DUNN, 4 PTS/)).toBeInTheDocument();
+    expect(screen.getByText("Dana Dunn")).toBeInTheDocument();
+    expect(screen.getByText(/TOTAL \+0\.280/)).toBeInTheDocument();
+    expect(screen.getByText(/BEST PLAY: \+0\.180/)).toBeInTheDocument();
+    expect(screen.getByText(/HIGH LEVERAGE WPA \+0\.110/)).toBeInTheDocument();
+  });
+
+  test("archived elimination TeamPage renders Team Impact from the shared helper", async () => {
+    mockGetArchiveInstanceMode.mockResolvedValue("elimination");
+    mockGetEliminationTeam.mockResolvedValue(createTeam());
+    mockGetTeamImpactSummary.mockResolvedValue(
+      createImpactSummary({
+        mode: "elimination",
+        instanceId: "elim-run-1",
+      }),
+    );
+
+    renderTeamPage("elim-run-1", "team-a");
+
+    expect(await screen.findByRole("heading", { name: "TEAM IMPACT" })).toBeInTheDocument();
+    expect(await screen.findByText("+0.350")).toBeInTheDocument();
+    expect(mockGetTeamImpactSummary).toHaveBeenCalledWith("elimination", "elim-run-1", "team-a");
+  });
+
+  test("empty Team Impact state is honest when no summary exists", async () => {
+    mockGetArchiveInstanceMode.mockResolvedValue("exhibition");
+    mockGetTeamImpactSummary.mockResolvedValue(null);
+
+    renderTeamPage("league-1", "team-a");
+
+    expect(
+      await screen.findByText("NO TEAM IMPACT SUMMARY AVAILABLE FOR THIS INSTANCE YET."),
+    ).toBeInTheDocument();
+  });
+
+  test("partial Team Impact warnings render without full role detail", async () => {
+    mockGetArchiveInstanceMode.mockResolvedValue("exhibition");
+    mockGetTeamImpactSummary.mockResolvedValue(createStoredOnlySummary());
+
+    renderTeamPage("league-1", "team-a");
+
+    expect(
+      await screen.findByText("1 game(s) use stored legacy POG only."),
+    ).toBeInTheDocument();
+    expect(screen.getByText("PLAYER WPA DETAIL IS UNAVAILABLE FOR THIS TEAM.")).toBeInTheDocument();
+    expect(screen.getByText("Legacy Hero")).toBeInTheDocument();
+    expect(screen.queryByText("BATTING WPA")).not.toBeInTheDocument();
+  });
+
+  test("player leaders render play context only when present", async () => {
+    mockGetArchiveInstanceMode.mockResolvedValue("exhibition");
+    mockGetTeamImpactSummary.mockResolvedValue(createImpactSummary());
+
+    renderTeamPage("league-1", "team-a");
+
+    expect(await screen.findByText("Dana Dunn")).toBeInTheDocument();
+    expect(screen.getByText(/BEST PLAY: \+0\.180/)).toBeInTheDocument();
+    expect(screen.getByText(/COSTLIEST: -0\.050/)).toBeInTheDocument();
+    expect(screen.getByText("Quiet Contributor")).toBeInTheDocument();
+    expect(screen.getAllByText(/BEST PLAY:/)).toHaveLength(1);
+    expect(screen.getAllByText(/HIGH LEVERAGE WPA/)).toHaveLength(1);
+  });
+
+  test("franchise TeamPage does not call unsupported Team Impact aggregation", async () => {
+    mockGetArchiveInstanceMode.mockResolvedValue("franchise");
+
+    renderTeamPage("franchise-1", "team-a");
+
+    expect(
+      await screen.findByText("TEAM IMPACT IS NOT AVAILABLE FOR FRANCHISE TEAM PAGES YET."),
+    ).toBeInTheDocument();
+    expect(mockGetTeamImpactSummary).not.toHaveBeenCalled();
+  });
+
+  test("keeps manager tenure and roster sections intact", async () => {
+    mockGetArchiveInstanceMode.mockResolvedValue("exhibition");
+    mockGetManagerTeamTenures.mockResolvedValue([
+      {
+        managerId: "manager-1",
+        managerName: "Casey Skipper",
+        teamId: "team-a",
+        teamName: "Frozen City Owls",
+        mode: "exhibition",
+        instanceId: "league-1",
+        instanceName: "League One",
+        gamesManaged: 2,
+        wins: 2,
+        losses: 0,
+        tacticalManagerWpa: 0.12,
+        deploymentWpa: 0.03,
+        lineupDeltaWpa: 0.04,
+        managerValue: 0.19,
+        decisionCount: 3,
+        tacticalDecisionCount: 2,
+        deploymentStintCount: 1,
+        lineupDecisionCount: 1,
+        resolvedDecisionCount: 3,
+        pendingDecisionCount: 0,
+        lineupDeltaDetails: [],
+        tendencies: {
+          decisionTypeCounts: {},
+          tacticalDecisionCount: 2,
+          lineupDecisionCount: 1,
+          stealRate: 0,
+          buntRate: 0,
+          bullpenAggressiveness: 0,
+          pinchHitRate: 0,
+          pinchRunRate: 0,
+          intentionalWalkRate: 0,
+          defensiveSubRate: 0,
+          lineupConstructionRate: 0,
+        },
+      },
+    ]);
+    mockGetTeamRosterFromGames.mockResolvedValue([
+      {
+        playerId: "player-1",
+        playerName: "Maya Vega",
+        canonicalId: "canon-1",
+        instanceId: "league-1",
+        games: 2,
+      },
+    ]);
+
+    renderTeamPage("league-1", "team-a");
+
+    expect(await screen.findByText("Casey Skipper")).toBeInTheDocument();
+    expect(screen.getByText("2-0")).toBeInTheDocument();
+    expect(screen.getByText("+0.190")).toBeInTheDocument();
+    expect(screen.getByText("Maya Vega")).toBeInTheDocument();
+    expect(screen.getByText("ROSTER")).toBeInTheDocument();
   });
 });

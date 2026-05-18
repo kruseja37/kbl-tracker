@@ -32,6 +32,11 @@ import {
 import type { GameAggregationOptions } from "../../utils/seasonAggregator";
 import { processCompletedGame } from "../../utils/processCompletedGame";
 import { deriveCommittedManagerDecisionState } from "../../utils/managerWpaGameState";
+import { deriveKblWpaCredits } from "../../utils/kblWpaAttribution";
+import {
+  getGamePogAwardSet,
+  type PogAwardSet,
+} from "../../utils/pogAwards";
 import type {
   GameLockLineupSnapshots,
   ManagerRecommendationWatchEvent,
@@ -49,6 +54,8 @@ import {
 import {
   buildStoredPlayersOfTheGame,
   rankPlayersOfTheGame,
+  type PlayerOfTheGameEntry,
+  type StoredPlayersOfTheGame,
 } from "../../utils/playersOfTheGame";
 import type {
   AtBatResult,
@@ -87,6 +94,38 @@ import { normalizeLiveSubstitutionType } from "../app/utils/gameTrackerSubstitut
 // ============================================
 // TYPES
 // ============================================
+
+function buildArchivePlayersOfTheGame(
+  awardSet: PogAwardSet,
+  rankedPlayers: PlayerOfTheGameEntry[],
+): StoredPlayersOfTheGame | undefined {
+  if (awardSet.dataQuality.source !== "kbl_wpa") {
+    return buildStoredPlayersOfTheGame(rankedPlayers);
+  }
+
+  if (!awardSet.overall?.playerId) {
+    return undefined;
+  }
+
+  const orderedPlayerIds = [
+    awardSet.overall.playerId,
+    ...awardSet.playerRoleAwards.flatMap((award) =>
+      award.playerId ? [award.playerId] : [],
+    ),
+    ...rankedPlayers.map((player) => player.playerId),
+  ];
+  const uniquePlayerIds = Array.from(new Set(orderedPlayerIds)).slice(0, 3);
+
+  if (uniquePlayerIds.length === 0) {
+    return undefined;
+  }
+
+  return {
+    first: uniquePlayerIds[0],
+    second: uniquePlayerIds[1],
+    third: uniquePlayerIds[2],
+  };
+}
 
 export type GamePhase = "PRE_GAME" | "LIVE" | "POST_FINAL_OUT";
 
@@ -10695,15 +10734,40 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
           optimalLineupSnapshots: gameHeader?.optimalLineupSnapshots,
           chosenLineupSnapshots: gameHeader?.chosenLineupSnapshots,
         };
+        const kblWpaCredits = deriveKblWpaCredits({
+          atBatEvents,
+          fieldingEvents,
+          betweenPlayEvents,
+          totalInnings: totalInningsRef.current,
+          awayTeamId: gameState.awayTeamId,
+          homeTeamId: gameState.homeTeamId,
+          startingLineups: gameHeader?.startingLineups,
+        });
+        const pogAwardSet = getGamePogAwardSet({
+          kblWpaCredits,
+          playerStats: playerStatsRecord,
+          pitcherGameStats: pitcherGameStatsArray,
+          managerDecisions: committedManagerDecisionState.managerDecisions,
+          managerDeploymentStints:
+            committedManagerDecisionState.managerDeploymentStints,
+          managerLineupDeltas: committedManagerDecisionState.managerLineupDeltas,
+          eventLogAvailable:
+            atBatEvents.length > 0 ||
+            fieldingEvents.length > 0 ||
+            betweenPlayEvents.length > 0,
+        });
         const rankedPlayersOfTheGame = rankPlayersOfTheGame(
           {
             awayTeamId: gameState.awayTeamId,
             homeTeamId: gameState.homeTeamId,
             playerStats: playerStatsRecord,
+            pitcherGameStats: pitcherGameStatsArray,
           },
           atBatEvents,
+          kblWpaCredits,
         );
-        const storedPlayersOfTheGame = buildStoredPlayersOfTheGame(
+        const storedPlayersOfTheGame = buildArchivePlayersOfTheGame(
+          pogAwardSet,
           rankedPlayersOfTheGame,
         );
         console.log("[R3-R5] Archived players of the game from final event log", {
@@ -11592,15 +11656,40 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         optimalLineupSnapshots: endGameHeader?.optimalLineupSnapshots,
         chosenLineupSnapshots: endGameHeader?.chosenLineupSnapshots,
       };
+      const kblWpaCredits = deriveKblWpaCredits({
+        atBatEvents: endGameAtBatEvents,
+        fieldingEvents: endGameFieldingEvents,
+        betweenPlayEvents: endGameBetweenPlayEvents,
+        totalInnings: totalInningsRef.current,
+        awayTeamId: gameState.awayTeamId,
+        homeTeamId: gameState.homeTeamId,
+        startingLineups: endGameHeader?.startingLineups,
+      });
+      const pogAwardSet = getGamePogAwardSet({
+        kblWpaCredits,
+        playerStats: playerStatsRecord,
+        pitcherGameStats: pitcherGameStatsArray,
+        managerDecisions: committedManagerDecisionState.managerDecisions,
+        managerDeploymentStints:
+          committedManagerDecisionState.managerDeploymentStints,
+        managerLineupDeltas: committedManagerDecisionState.managerLineupDeltas,
+        eventLogAvailable:
+          endGameAtBatEvents.length > 0 ||
+          endGameFieldingEvents.length > 0 ||
+          endGameBetweenPlayEvents.length > 0,
+      });
       const rankedPlayersOfTheGame = rankPlayersOfTheGame(
         {
           awayTeamId: gameState.awayTeamId,
           homeTeamId: gameState.homeTeamId,
           playerStats: playerStatsRecord,
+          pitcherGameStats: pitcherGameStatsArray,
         },
         endGameAtBatEvents,
+        kblWpaCredits,
       );
-      const storedPlayersOfTheGame = buildStoredPlayersOfTheGame(
+      const storedPlayersOfTheGame = buildArchivePlayersOfTheGame(
+        pogAwardSet,
         rankedPlayersOfTheGame,
       );
       console.log("[R3-R5] Prepared post-game archive context", {

@@ -22,7 +22,6 @@ const {
   mockGetGameFieldingEvents,
   mockGetGameHeader,
   mockListManagerProfiles,
-  mockRankPlayersOfTheGame,
 } = vi.hoisted(() => ({
   mockAggregateKblWpaCredits: vi.fn(),
   mockDeriveActualAtBatWpa: vi.fn(),
@@ -35,7 +34,6 @@ const {
   mockGetGameFieldingEvents: vi.fn(),
   mockGetGameHeader: vi.fn(),
   mockListManagerProfiles: vi.fn(),
-  mockRankPlayersOfTheGame: vi.fn(),
 }));
 
 vi.mock("react-router", () => ({
@@ -81,10 +79,6 @@ vi.mock("../../../utils/kblWpaAttribution", () => ({
   aggregateKblWpaCredits: mockAggregateKblWpaCredits,
   deriveActualAtBatWpa: mockDeriveActualAtBatWpa,
   deriveKblWpaCredits: mockDeriveKblWpaCredits,
-}));
-
-vi.mock("../../../utils/playersOfTheGame", () => ({
-  rankPlayersOfTheGame: mockRankPlayersOfTheGame,
 }));
 
 vi.mock("../../app/components/WinProbChart", () => ({
@@ -193,7 +187,20 @@ describe("GameDetail Manager WPA overlay", () => {
       { managerId: "home-manager", displayName: "Home Boss" },
     ]);
     mockDeriveActualAtBatWpa.mockReturnValue({ wpa: 0 });
-    mockDeriveKblWpaCredits.mockReturnValue([]);
+    mockDeriveKblWpaCredits.mockReturnValue([
+      {
+        eventId: "ab-1",
+        source: "at_bat",
+        playerId: "player-one",
+        playerName: "Player One",
+        teamId: "away",
+        role: "batting",
+        wpa: 0.3,
+        confidence: "high",
+        basis: "Batting WPA",
+        allocationMode: "ratio",
+      },
+    ]);
     mockAggregateKblWpaCredits.mockReturnValue([
       {
         playerId: "player-one",
@@ -207,7 +214,70 @@ describe("GameDetail Manager WPA overlay", () => {
         baserunningWpa: 0,
       },
     ]);
-    mockRankPlayersOfTheGame.mockReturnValue([]);
+  });
+
+  test("renders POG awards from canonical KBL WPA totals", async () => {
+    mockGetCompletedGameById.mockResolvedValue(createCompletedGame());
+
+    render(<GameDetail />);
+
+    const awardsTitle = await screen.findByText("POG Awards");
+    const awardsSection = awardsTitle.closest("section");
+    expect(awardsSection).not.toBeNull();
+    expect(within(awardsSection as HTMLElement).getByText("Overall POG")).toBeInTheDocument();
+    expect(within(awardsSection as HTMLElement).getByText("3 pts")).toBeInTheDocument();
+    expect(within(awardsSection as HTMLElement).getByText("Player One")).toBeInTheDocument();
+    expect(within(awardsSection as HTMLElement).getByText("+0.300 KBL WPA")).toBeInTheDocument();
+  });
+
+  test("renders Team Standouts as display-only recognition", async () => {
+    mockGetCompletedGameById.mockResolvedValue(createCompletedGame());
+
+    render(<GameDetail />);
+
+    const standoutsTitle = await screen.findByText("Team Standouts");
+    const standoutsSection = standoutsTitle.closest("section");
+    expect(standoutsSection).not.toBeNull();
+    expect(within(standoutsSection as HTMLElement).getByText("Team Standout")).toBeInTheDocument();
+    expect(within(standoutsSection as HTMLElement).getByText("Display only")).toBeInTheDocument();
+    expect(within(standoutsSection as HTMLElement).getByText("Player One")).toBeInTheDocument();
+    expect(within(standoutsSection as HTMLElement).getByText(/Recognition only/)).toBeInTheDocument();
+  });
+
+  test("stored POG ids do not override KBL WPA-derived GameDetail awards", async () => {
+    mockGetCompletedGameById.mockResolvedValue({
+      ...createCompletedGame(),
+      playersOfTheGame: {
+        first: "stored-player",
+      },
+    });
+
+    render(<GameDetail />);
+
+    const awardsTitle = await screen.findByText("POG Awards");
+    const awardsSection = awardsTitle.closest("section");
+    expect(awardsSection).not.toBeNull();
+    expect(within(awardsSection as HTMLElement).getByText("Player One")).toBeInTheDocument();
+    expect(within(awardsSection as HTMLElement).queryByText("stored-player")).not.toBeInTheDocument();
+  });
+
+  test("renders stored-only legacy Overall POG when KBL WPA is unavailable", async () => {
+    mockDeriveKblWpaCredits.mockReturnValue([]);
+    mockGetCompletedGameById.mockResolvedValue({
+      ...createCompletedGame(),
+      playersOfTheGame: {
+        first: "player-one",
+      },
+    });
+
+    render(<GameDetail />);
+
+    const awardsTitle = await screen.findByText("POG Awards");
+    const awardsSection = awardsTitle.closest("section");
+    expect(awardsSection).not.toBeNull();
+    expect(within(awardsSection as HTMLElement).getByText("Overall POG")).toBeInTheDocument();
+    expect(within(awardsSection as HTMLElement).getByText("Stored legacy POG")).toBeInTheDocument();
+    expect(within(awardsSection as HTMLElement).queryByText("Best Hitter")).not.toBeInTheDocument();
   });
 
   test("renders one manager summary card per team from committed decisions", async () => {
@@ -250,7 +320,7 @@ describe("GameDetail Manager WPA overlay", () => {
 
     const overlay = await screen.findByTestId("manager-wpa-overlay");
     expect(within(overlay).getByText("MANAGER WPA OVERLAY")).toBeInTheDocument();
-    expect(screen.getByText("Casey Custom")).toBeInTheDocument();
+    expect(within(overlay).getByText("Casey Custom")).toBeInTheDocument();
     expect(screen.getByTestId("manager-wpa-total-away")).toHaveTextContent("+0.184");
     expect(screen.getByTestId("manager-wpa-total-home")).toHaveTextContent("-0.052");
     expect(within(screen.getByTestId("manager-wpa-card-away")).getByText("2 (1 pending)")).toBeInTheDocument();

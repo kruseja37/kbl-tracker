@@ -30,8 +30,13 @@ import {
 import { computeEliminationAwards, type EliminationAward } from '../../../utils/eliminationAwards';
 import { buildClutchContext, getHomeFieldPattern } from '../../../engines/playoffEngine';
 import { EliminationTeamHub } from '../components/EliminationTeamHub';
+import { TeamImpactLeaderboardsPanel } from '../components/TeamImpactLeaderboardsPanel';
 import { ReporterAssignmentPanel, type ReporterAssignmentPanelTeam } from '../components/ReporterAssignmentPanel';
 import { resolveManagerForTeam } from '../../../utils/managerIdentityStorage';
+import {
+  getInstanceTeamImpactLeaderboards,
+  type TeamImpactLeaderboards,
+} from '../../../utils/teamImpact';
 import { withPregameManagerNavigationState } from '../utils/pregameNavigationState';
 import { buildPregameBenchmarkIssues } from '../utils/pregameLineupBenchmarks';
 
@@ -652,7 +657,12 @@ export function EliminationHome() {
           />
         )}
 
-        {activeTab === 'leaders' && <PlayoffLeadersContent playoffId={playoffConfig.id} />}
+        {activeTab === 'leaders' && (
+          <PlayoffLeadersContent
+            eliminationId={eliminationId!}
+            playoffId={playoffConfig.id}
+          />
+        )}
 
         {activeTab === 'awards' && (
           <EliminationAwardsContent
@@ -858,11 +868,20 @@ function SelectedSeriesPanel({
   );
 }
 
-function PlayoffLeadersContent({ playoffId }: { playoffId: string }) {
+function PlayoffLeadersContent({
+  eliminationId,
+  playoffId,
+}: {
+  eliminationId: string;
+  playoffId: string;
+}) {
   const [isLoading, setIsLoading] = useState(true);
+  const [leaderError, setLeaderError] = useState<string | null>(null);
   const [batting, setBatting] = useState<Record<string, PlayoffPlayerStats[]>>({});
   const [pitching, setPitching] = useState<Record<string, PlayoffPlayerStats[]>>({});
   const [fielding, setFielding] = useState<Record<string, PlayoffPlayerStats[]>>({});
+  const [impactLeaderboards, setImpactLeaderboards] = useState<TeamImpactLeaderboards | null>(null);
+  const [impactError, setImpactError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -870,6 +889,9 @@ function PlayoffLeadersContent({ playoffId }: { playoffId: string }) {
     async function loadLeaders() {
       try {
         setIsLoading(true);
+        setLeaderError(null);
+        setImpactError(null);
+        setImpactLeaderboards(null);
 
         const battingStats = {
           AVG: 'avg',
@@ -895,7 +917,14 @@ function PlayoffLeadersContent({ playoffId }: { playoffId: string }) {
           PLAYS: 'fieldingPlays',
         } as const;
 
-        const [battingEntries, pitchingEntries, fieldingEntries] = await Promise.all([
+        const impactLeadersResult = getInstanceTeamImpactLeaderboards('elimination', eliminationId, 5)
+          .then((leaderboards) => ({ leaderboards, error: null as string | null }))
+          .catch((error) => ({
+            leaderboards: null,
+            error: error instanceof Error ? error.message : 'Failed to load Team Impact leaders.',
+          }));
+
+        const [battingEntries, pitchingEntries, fieldingEntries, impactResult] = await Promise.all([
           Promise.all(
             Object.entries(battingStats).map(async ([label, stat]) => [label, await getPlayoffLeaders(playoffId, stat, 5)] as const)
           ),
@@ -905,15 +934,19 @@ function PlayoffLeadersContent({ playoffId }: { playoffId: string }) {
           Promise.all(
             Object.entries(fieldingStats).map(async ([label, stat]) => [label, await getPlayoffLeaders(playoffId, stat, 5)] as const)
           ),
+          impactLeadersResult,
         ]);
 
         if (cancelled) return;
         setBatting(Object.fromEntries(battingEntries));
         setPitching(Object.fromEntries(pitchingEntries));
         setFielding(Object.fromEntries(fieldingEntries));
+        setImpactLeaderboards(impactResult.leaderboards);
+        setImpactError(impactResult.error);
       } catch (err) {
         if (!cancelled) {
           console.error('[EliminationHome] Failed to load leaders:', err);
+          setLeaderError(err instanceof Error ? err.message : 'Failed to load leaders.');
         }
       } finally {
         if (!cancelled) setIsLoading(false);
@@ -924,9 +957,9 @@ function PlayoffLeadersContent({ playoffId }: { playoffId: string }) {
     return () => {
       cancelled = true;
     };
-  }, [playoffId]);
+  }, [eliminationId, playoffId]);
 
-  const hasData =
+  const hasPlayoffLeaderData =
     Object.values(batting).some((items) => items.length > 0) ||
     Object.values(pitching).some((items) => items.length > 0) ||
     Object.values(fielding).some((items) => items.length > 0);
@@ -940,20 +973,28 @@ function PlayoffLeadersContent({ playoffId }: { playoffId: string }) {
     );
   }
 
-  if (!hasData) {
+  if (!hasPlayoffLeaderData) {
     return (
-      <div className="bg-[#5A8352] border-[6px] border-[#4A6844] p-8 text-center">
-        <BarChart3 className="w-10 h-10 text-[#E8E8D8]/30 mx-auto mb-3" />
-        <div className="text-xs text-[#E8E8D8]/60">No playoff stats yet for this bracket.</div>
-      </div>
+      <TeamImpactLeaderboardsPanel
+        leaderboards={impactLeaderboards}
+        error={impactError ?? leaderError}
+        theme="elimination"
+      />
     );
   }
 
   return (
-    <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
-      <LeaderPanel title="BATTING LEADERS" entries={batting} />
-      <LeaderPanel title="PITCHING LEADERS" entries={pitching} />
-      <LeaderPanel title="FIELDING LEADERS" entries={fielding} />
+    <div className="space-y-4">
+      <TeamImpactLeaderboardsPanel
+        leaderboards={impactLeaderboards}
+        error={impactError}
+        theme="elimination"
+      />
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
+        <LeaderPanel title="BATTING LEADERS" entries={batting} />
+        <LeaderPanel title="PITCHING LEADERS" entries={pitching} />
+        <LeaderPanel title="FIELDING LEADERS" entries={fielding} />
+      </div>
     </div>
   );
 }

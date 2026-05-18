@@ -38,6 +38,12 @@ import {
   resolveManagerForTeam,
   saveManagerProfile,
 } from '../../../utils/managerIdentityStorage';
+import {
+  getInstanceTeamImpactSummaries,
+  type PlayerImpactSummary,
+  type RoleWpaBreakdown,
+  type TeamImpactSummary,
+} from '../../../utils/teamImpact';
 import { OptimalLineupComparisonPanel } from './OptimalLineupComparisonPanel';
 
 interface EliminationTeamHubProps {
@@ -200,6 +206,257 @@ export function staleFieldsForEliminationUpdate(
   return Array.from(fields);
 }
 
+const IMPACT_ROLE_KEYS: Array<Exclude<keyof RoleWpaBreakdown, 'total'>> = [
+  'batting',
+  'pitching',
+  'fielding',
+  'baserunning',
+  'catching',
+];
+
+function formatWpa(value: number): string {
+  if (!Number.isFinite(value)) return 'n/a';
+  const rounded = value.toFixed(3);
+  return value > 0 ? `+${rounded}` : rounded;
+}
+
+function formatPoints(value: number): string {
+  return `${value} ${value === 1 ? 'pt' : 'pts'}`;
+}
+
+function ordinal(value: number): string {
+  const mod100 = value % 100;
+  if (mod100 >= 11 && mod100 <= 13) return `${value}th`;
+  const mod10 = value % 10;
+  if (mod10 === 1) return `${value}st`;
+  if (mod10 === 2) return `${value}nd`;
+  if (mod10 === 3) return `${value}rd`;
+  return `${value}th`;
+}
+
+function formatRank(rank: number, teamCount: number): string {
+  if (rank <= 0 || teamCount <= 0) return 'Unranked';
+  return `${ordinal(rank)} of ${teamCount}`;
+}
+
+function formatRoleLabel(role: Exclude<keyof RoleWpaBreakdown, 'total'>): string {
+  if (role === 'baserunning') return 'Baserunning';
+  return `${role.charAt(0).toUpperCase()}${role.slice(1)}`;
+}
+
+function formatRoleShare(value: number, roles: RoleWpaBreakdown): string {
+  const positiveTotal = IMPACT_ROLE_KEYS.reduce(
+    (sum, role) => sum + Math.max(0, roles[role]),
+    0,
+  );
+  if (positiveTotal <= 0 || value <= 0) return 'No positive share';
+  return `${Math.round((value / positiveTotal) * 100)}% of positive role value`;
+}
+
+function hasPlayerWpaDetail(summary: TeamImpactSummary): boolean {
+  return (
+    summary.dataQuality.fullKblWpaGames > 0 ||
+    summary.dataQuality.legacyAtBatWpaGames > 0
+  );
+}
+
+function hasFullPlayerWpaDetail(summary: TeamImpactSummary): boolean {
+  return summary.dataQuality.fullKblWpaGames > 0;
+}
+
+function renderPlayContext(label: string, play: PlayerImpactSummary['biggestPositivePlay']) {
+  if (!play) return null;
+  return (
+    <div className="text-[7px] text-[#E8E8D8]/70">
+      <span className="text-[#C4A853]">{label} {formatWpa(play.value)}</span>
+      {' '}• {play.label}
+      {play.inningLabel ? ` • ${play.inningLabel}` : ''}
+    </div>
+  );
+}
+
+function TeamImpactPanel({
+  summary,
+  selectedTeamName,
+  isLoading,
+  error,
+}: {
+  summary: TeamImpactSummary | null;
+  selectedTeamName: string;
+  isLoading: boolean;
+  error: string | null;
+}) {
+  const hasAnyWpa = summary ? hasPlayerWpaDetail(summary) : false;
+  const hasFullWpa = summary ? hasFullPlayerWpaDetail(summary) : false;
+  const leaders = summary?.playerLeaders.slice(0, 5) ?? [];
+
+  return (
+    <div
+      className="bg-[#5A8352] border-[6px] border-[#4A6844] p-4"
+      data-testid="team-impact-panel"
+    >
+      <div className="flex items-start justify-between gap-3 mb-3">
+        <div>
+          <div className="text-xs">TEAM IMPACT</div>
+          <div className="mt-1 text-[8px] text-[#E8E8D8]/60">
+            {selectedTeamName || 'Selected team'} • elimination run
+          </div>
+        </div>
+        {summary && (
+          <div className="text-right text-[8px] text-[#E8E8D8]/70">
+            {summary.games} completed {summary.games === 1 ? 'game' : 'games'}
+          </div>
+        )}
+      </div>
+
+      {isLoading ? (
+        <div className="border-4 border-[#6B9462] bg-[#4A6844] p-5 text-center">
+          <Loader2 className="w-6 h-6 animate-spin text-[#E8E8D8] mx-auto mb-2" />
+          <div className="text-[8px] text-[#E8E8D8]/70">LOADING TEAM IMPACT...</div>
+        </div>
+      ) : error ? (
+        <div className="border-4 border-[#6B9462] bg-[#4A6844] p-4 text-[8px] text-[#FFD6D6]">
+          Team impact could not load. {error}
+        </div>
+      ) : !summary ? (
+        <div className="border-4 border-[#6B9462] bg-[#4A6844] p-4 text-[8px] text-[#E8E8D8]/70">
+          No completed games yet for this team. Impact will appear after archived games have usable WPA or POG data.
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {summary.dataQuality.warnings.length > 0 && (
+            <div className="border-4 border-[#C4A853] bg-[#4A6844] p-3 text-[8px] text-[#F6E7A6]">
+              <div className="mb-1 text-[#C4A853]">DATA QUALITY</div>
+              <div className="space-y-1">
+                {summary.dataQuality.warnings.map((warning) => (
+                  <div key={warning}>{warning}</div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 lg:grid-cols-[1.2fr,1fr] gap-3">
+            <div className="border-4 border-[#6B9462] bg-[#4A6844] p-3">
+              <div className="text-[8px] text-[#E8E8D8]/60 mb-1">
+                {hasAnyWpa ? (hasFullWpa ? 'TEAM WPA' : 'LIMITED WPA') : 'TEAM WPA'}
+              </div>
+              {hasAnyWpa ? (
+                <>
+                  <div className="text-2xl text-[#E8E8D8]">{formatWpa(summary.playerWpa.total)}</div>
+                  <div className="mt-1 text-[8px] text-[#E8E8D8]/70">
+                    {formatRank(summary.benchmarks.totalPlayerWpaRank, summary.benchmarks.teamCount)}
+                    {' '}• bracket avg {formatWpa(summary.benchmarks.instanceAverageTotalPlayerWpa)}
+                    {' '}• {formatWpa(summary.benchmarks.perGameTotalPlayerWpa)} per game
+                  </div>
+                  <div className="mt-2 text-[8px] text-[#C4A853]">
+                    {summary.benchmarks.identityLabel}
+                  </div>
+                </>
+              ) : (
+                <div className="text-[8px] text-[#E8E8D8]/70">
+                  Player WPA detail is unavailable for this team.
+                </div>
+              )}
+            </div>
+
+            <div className="border-4 border-[#6B9462] bg-[#4A6844] p-3">
+              <div className="text-[8px] text-[#E8E8D8]/60 mb-1">MANAGER VALUE</div>
+              <div className="text-xl text-[#E8E8D8]">{formatWpa(summary.managerWpa.managerValue)}</div>
+              <div className="mt-2 grid grid-cols-3 gap-2 text-[7px] text-[#E8E8D8]/70">
+                <div>Tactical {formatWpa(summary.managerWpa.tacticalManagerWpa)}</div>
+                <div>Deploy {formatWpa(summary.managerWpa.deploymentWpa)}</div>
+                <div>Lineup {formatWpa(summary.managerWpa.lineupDeltaWpa)}</div>
+              </div>
+            </div>
+          </div>
+
+          {hasFullWpa ? (
+            <div className="grid grid-cols-2 lg:grid-cols-5 gap-2">
+              {IMPACT_ROLE_KEYS.map((role) => (
+                <div key={role} className="border-4 border-[#6B9462] bg-[#4A6844] p-2">
+                  <div className="text-[7px] text-[#E8E8D8]/60">{formatRoleLabel(role)} WPA</div>
+                  <div className="text-sm text-[#E8E8D8]">{formatWpa(summary.playerWpa[role])}</div>
+                  <div className="text-[7px] text-[#E8E8D8]/60">
+                    {formatRoleShare(summary.playerWpa[role], summary.playerWpa)}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : summary.dataQuality.legacyAtBatWpaGames > 0 ? (
+            <div className="border-4 border-[#6B9462] bg-[#4A6844] p-3 text-[8px] text-[#E8E8D8]/70">
+              Legacy batting WPA {formatWpa(summary.playerWpa.batting)} is available, but full role buckets and role awards are limited.
+            </div>
+          ) : null}
+
+          <div className="grid grid-cols-1 lg:grid-cols-[0.9fr,1.1fr] gap-3">
+            <div className="border-4 border-[#6B9462] bg-[#4A6844] p-3">
+              <div className="text-[8px] text-[#E8E8D8]/60 mb-1">POG POINTS</div>
+              <div className="text-2xl text-[#E8E8D8]">{formatPoints(summary.pog.points)}</div>
+              <div className="mt-1 text-[8px] text-[#E8E8D8]/70">
+                {formatRank(summary.pog.rank, summary.pog.teamCount)}
+                {' '}• Overall POG {summary.pog.overallWins}
+              </div>
+              <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-[7px] text-[#E8E8D8]/70">
+                <div>Best Hitter {summary.pog.bestHitter}</div>
+                <div>Best Pitcher {summary.pog.bestPitcher}</div>
+                <div>Best Baserunner {summary.pog.bestBaserunner}</div>
+                <div>Best Fielder {summary.pog.bestFielder}</div>
+                <div>Best Manager {summary.pog.bestManagerWins}</div>
+              </div>
+              {summary.pog.mostDecoratedPlayer && (
+                <div className="mt-2 text-[8px] text-[#C4A853]">
+                  Most decorated: {summary.pog.mostDecoratedPlayer.playerName}, {formatPoints(summary.pog.mostDecoratedPlayer.points)}
+                </div>
+              )}
+            </div>
+
+            <div className="border-4 border-[#6B9462] bg-[#4A6844] p-3">
+              <div className="text-[8px] text-[#E8E8D8]/60 mb-2">PLAYER IMPACT LEADERS</div>
+              {leaders.length === 0 ? (
+                <div className="text-[8px] text-[#E8E8D8]/70">
+                  No player impact leaders available for this team yet.
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {leaders.map((leader) => (
+                    <div
+                      key={leader.playerId}
+                      data-testid={`team-impact-player-${leader.playerId}`}
+                      className="border-2 border-[#6B9462] bg-[#5A8352] p-2"
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="text-[8px] text-[#E8E8D8]">{leader.playerName}</div>
+                        <div className="text-[8px] text-[#C4A853]">{formatPoints(leader.pogPoints)}</div>
+                      </div>
+                      {hasAnyWpa && (
+                        <div className="mt-1 text-[7px] text-[#E8E8D8]/70">
+                          Total {formatWpa(leader.wpa.total)}
+                          {' '}• Bat {formatWpa(leader.wpa.batting)}
+                          {' '}• Pit {formatWpa(leader.wpa.pitching)}
+                          {' '}• Field {formatWpa(leader.wpa.fielding + leader.wpa.catching)}
+                          {' '}• Run {formatWpa(leader.wpa.baserunning)}
+                          {' '}• {formatWpa(leader.perGameWpa)} per game
+                        </div>
+                      )}
+                      {renderPlayContext('Best play', leader.biggestPositivePlay)}
+                      {renderPlayContext('Costliest', leader.biggestNegativePlay)}
+                      {typeof leader.highLeverageWpa === 'number' && (
+                        <div className="text-[7px] text-[#E8E8D8]/70">
+                          High leverage WPA {formatWpa(leader.highLeverageWpa)}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function EliminationTeamHub({ eliminationId, teams, useDH }: EliminationTeamHubProps) {
   const [selectedTeamId, setSelectedTeamId] = useState<string>(teams[0]?.teamId ?? '');
   const [snapshot, setSnapshot] = useState<EliminationRosterSnapshot | null>(null);
@@ -216,6 +473,9 @@ export function EliminationTeamHub({ eliminationId, teams, useDH }: EliminationT
   const [isSaving, setIsSaving] = useState(false);
   const [isManagerSaving, setIsManagerSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [teamImpactSummaries, setTeamImpactSummaries] = useState<TeamImpactSummary[] | null>(null);
+  const [isImpactLoading, setIsImpactLoading] = useState(true);
+  const [impactError, setImpactError] = useState<string | null>(null);
   const [lineupComparison, setLineupComparison] = useState<{
     hand: OpposingPitcherHand;
     comparison: LineupSnapshotComparison;
@@ -251,6 +511,33 @@ export function EliminationTeamHub({ eliminationId, teams, useDH }: EliminationT
       cancelled = true;
     };
   }, [eliminationId, selectedTeamId, teams]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadTeamImpact() {
+      try {
+        setIsImpactLoading(true);
+        setImpactError(null);
+        const summaries = await getInstanceTeamImpactSummaries('elimination', eliminationId);
+        if (!cancelled) {
+          setTeamImpactSummaries(summaries);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setTeamImpactSummaries([]);
+          setImpactError(err instanceof Error ? err.message : 'Failed to load Team Impact.');
+        }
+      } finally {
+        if (!cancelled) setIsImpactLoading(false);
+      }
+    }
+
+    void loadTeamImpact();
+    return () => {
+      cancelled = true;
+    };
+  }, [eliminationId]);
 
   useEffect(() => {
     if (!selectedTeamId) return;
@@ -346,6 +633,11 @@ export function EliminationTeamHub({ eliminationId, teams, useDH }: EliminationT
     () => teams.find((team) => team.teamId === selectedTeamId) ?? null,
     [selectedTeamId, teams],
   );
+  const selectedTeamImpact = useMemo(
+    () => teamImpactSummaries?.find((summary) => summary.teamId === selectedTeamId) ?? null,
+    [selectedTeamId, teamImpactSummaries],
+  );
+  const selectedTeamName = selectedTeamImpact?.teamName ?? selectedPlayoffTeam?.teamName ?? snapshot?.teamName ?? '';
 
   useEffect(() => {
     setLineupComparison(null);
@@ -760,6 +1052,13 @@ export function EliminationTeamHub({ eliminationId, teams, useDH }: EliminationT
           {error}
         </div>
       )}
+
+      <TeamImpactPanel
+        summary={selectedTeamImpact}
+        selectedTeamName={selectedTeamName}
+        isLoading={isImpactLoading}
+        error={impactError}
+      />
 
       {isLoading ? (
         <div className="bg-[#5A8352] border-[6px] border-[#4A6844] p-8 text-center">

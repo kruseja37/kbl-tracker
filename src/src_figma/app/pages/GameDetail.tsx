@@ -22,7 +22,13 @@ import {
   deriveKblWpaCredits,
   type KblWpaCredit,
 } from "../../../utils/kblWpaAttribution";
-import { rankPlayersOfTheGame } from "../../../utils/playersOfTheGame";
+import {
+  getGamePogAwardSet,
+  getPogAwardDisplayLabel,
+  getPogAwardPointsLabel,
+  type PogAward,
+  type PogAwardSet,
+} from "../../../utils/pogAwards";
 import { ManagerWpaOverlay } from "../components/ManagerWpaOverlay";
 import { WinProbChart } from "../components/WinProbChart";
 import type { ManagerProfile } from "../../../types/managerWpa";
@@ -111,6 +117,14 @@ function formatBaseNumber(base: number | undefined): string {
   if (base === 3) return "3B";
   if (base === 4) return "Home";
   return "Base";
+}
+
+function getVisiblePogAwards(awardSet: PogAwardSet): PogAward[] {
+  return [
+    ...((awardSet.overall ? [awardSet.overall] : []) as PogAward[]),
+    ...awardSet.playerRoleAwards,
+    ...((awardSet.managerAward ? [awardSet.managerAward] : []) as PogAward[]),
+  ];
 }
 
 function buildBaseStateLabel(runners: AtBatEvent["runners"]): string {
@@ -463,7 +477,23 @@ export function GameDetail() {
       ].filter(Boolean).join(" / "),
     }));
 
-    const playersOfGame = rankPlayersOfTheGame(game, atBatEvents, kblWpaCredits);
+    const pogAwardSet = getGamePogAwardSet({
+      kblWpaCredits,
+      playersOfTheGame: game.playersOfTheGame,
+      pogPlayerId: game.pogPlayerId,
+      playerStats: game.playerStats,
+      pitcherGameStats: game.pitcherGameStats,
+      managerProfiles: data.managerProfiles,
+      managerDecisions: game.managerDecisions,
+      managerDeploymentStints: game.managerDeploymentStints,
+      managerLineupDeltas: game.managerLineupDeltas,
+      eventLogAvailable:
+        atBatEvents.length > 0 ||
+        fieldingEvents.length > 0 ||
+        betweenPlayEvents.length > 0,
+    });
+    const pogAwards = getVisiblePogAwards(pogAwardSet);
+    const teamStandouts = pogAwardSet.teamStandouts;
 
     const battingLines = Object.entries(game.playerStats)
       .filter(([, stats]) => {
@@ -551,7 +581,8 @@ export function GameDetail() {
     };
 
     return {
-      playersOfGame,
+      pogAwards,
+      teamStandouts,
       wpaLeaderboard,
       battingLines,
       pitchingLines,
@@ -597,7 +628,8 @@ export function GameDetail() {
 
   const { game, atBatEvents, canonicalLookup } = data;
   const {
-    playersOfGame,
+    pogAwards,
+    teamStandouts,
     wpaLeaderboard,
     battingLines,
     pitchingLines,
@@ -697,44 +729,114 @@ export function GameDetail() {
         </section>
 
         <SectionFrame
-          title="Players Of The Game"
-          subtitle="Archived rankings are preferred when present, with the saved game file breaking ties against live WPA recalculation."
+          title="POG Awards"
+          subtitle="Canonical per-game awards derived from KBL WPA first, with legacy stored POG used only when WPA awards are unavailable."
         >
-          {playersOfGame.length === 0 ? (
-            <EmptyState label="No players of the game available." />
+          {pogAwards.length === 0 ? (
+            <EmptyState label="No POG awards available." />
           ) : (
             <div className="grid gap-4 md:grid-cols-3">
-              {playersOfGame.map((player, index) => (
-                <div
-                  key={player.playerId}
-                  className="border-[4px] border-[#32394B] bg-[#0B0E14] p-4 shadow-[6px_6px_0px_0px_rgba(0,0,0,0.45)]"
-                >
-                  <div className="flex items-center gap-3 text-[#D8A84A]">
-                    <Trophy className="h-5 w-5" />
-                    <span className="text-[9px] uppercase tracking-[0.25em]">{index + 1}{index === 0 ? "st" : index === 1 ? "nd" : "rd"}</span>
+              {pogAwards.map((award) => {
+                const displayName =
+                  award.playerName ??
+                  award.managerName ??
+                  award.playerId ??
+                  award.managerId ??
+                  "Unknown";
+                return (
+                  <div
+                    key={`${award.awardType}-${award.playerId ?? award.managerId}`}
+                    className="border-[4px] border-[#32394B] bg-[#0B0E14] p-4 shadow-[6px_6px_0px_0px_rgba(0,0,0,0.45)]"
+                  >
+                    <div className="flex items-center gap-3 text-[#D8A84A]">
+                      <Trophy className="h-5 w-5" />
+                      <span className="text-[9px] uppercase tracking-[0.25em]">
+                        {getPogAwardDisplayLabel(award.awardType)}
+                      </span>
+                    </div>
+                    <div className="mt-3 text-[8px] uppercase tracking-[0.24em] text-[#98A1B3]">
+                      {getPogAwardPointsLabel(award)}
+                    </div>
+                    <div className="mt-4 text-[10px] leading-6 text-white">
+                      {award.playerId ? (
+                        <PlayerNameLink
+                          playerId={award.playerId}
+                          playerName={displayName}
+                          canonicalLookup={canonicalLookup}
+                        />
+                      ) : (
+                        displayName
+                      )}
+                    </div>
+                    <div className="mt-3 text-[8px] uppercase tracking-[0.24em] text-[#98A1B3]">
+                      {award.teamId
+                        ? normalizeTeamId(award.teamId) === normalizeTeamId(game.awayTeamId)
+                          ? game.awayTeamName
+                          : game.homeTeamName
+                        : "Archived Award"}
+                    </div>
+                    <div className="mt-4 text-[12px] text-[#E7E9F1]">
+                      {award.valueLabel}
+                    </div>
                   </div>
-                  <div className="mt-4 text-[10px] leading-6 text-white">
-                    <PlayerNameLink
-                      playerId={player.playerId}
-                      playerName={player.name}
-                      canonicalLookup={canonicalLookup}
-                    />
-                  </div>
-                  <div className="mt-3 text-[8px] uppercase tracking-[0.24em] text-[#98A1B3]">
-                    {player.teamId
-                      ? normalizeTeamId(player.teamId) === normalizeTeamId(game.awayTeamId)
-                        ? game.awayTeamName
-                        : game.homeTeamName
-                      : "Archived Player"}
-                  </div>
-                  <div className="mt-4 text-[12px] text-[#E7E9F1]">
-                    {"wpa" in player && typeof player.wpa === "number" ? formatSignedDecimal(player.wpa) : "Stored POG"}
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </SectionFrame>
+
+        {teamStandouts.length > 0 ? (
+          <SectionFrame
+            title="Team Standouts"
+            subtitle="Display-only recognition for each team's top positive player WPA; these do not add POG points."
+          >
+            <div className="grid gap-4 md:grid-cols-2">
+              {teamStandouts.map((award) => {
+                const displayName =
+                  award.playerName ??
+                  award.playerId ??
+                  "Unknown";
+                return (
+                  <div
+                    key={`${award.awardType}-${award.teamId}-${award.playerId}`}
+                    className="border-[4px] border-[#32394B] bg-[#0B0E14] p-4 shadow-[6px_6px_0px_0px_rgba(0,0,0,0.45)]"
+                  >
+                    <div className="flex items-center gap-3 text-[#D8A84A]">
+                      <Trophy className="h-5 w-5" />
+                      <span className="text-[9px] uppercase tracking-[0.25em]">
+                        {getPogAwardDisplayLabel(award.awardType)}
+                      </span>
+                    </div>
+                    <div className="mt-3 text-[8px] uppercase tracking-[0.24em] text-[#98A1B3]">
+                      {getPogAwardPointsLabel(award)}
+                    </div>
+                    <div className="mt-4 text-[10px] leading-6 text-white">
+                      {award.playerId ? (
+                        <PlayerNameLink
+                          playerId={award.playerId}
+                          playerName={displayName}
+                          canonicalLookup={canonicalLookup}
+                        />
+                      ) : (
+                        displayName
+                      )}
+                    </div>
+                    <div className="mt-3 text-[8px] uppercase tracking-[0.24em] text-[#98A1B3]">
+                      {award.teamId
+                        ? normalizeTeamId(award.teamId) === normalizeTeamId(game.awayTeamId)
+                          ? game.awayTeamName
+                          : game.homeTeamName
+                        : "Archived Recognition"}
+                    </div>
+                    <div className="mt-4 text-[12px] text-[#E7E9F1]">
+                      {award.valueLabel} · Recognition only
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </SectionFrame>
+        ) : null}
 
         <ManagerWpaOverlay game={game} managerProfiles={data.managerProfiles} />
 

@@ -70,6 +70,7 @@ async function createEliminationBracket(page: Page, bracketName: string) {
 
 async function openTeamHub(page: Page) {
   await page.getByRole('button', { name: /^TEAM HUB$/i }).click();
+  await expect(page.getByText('TEAM IMPACT', { exact: true })).toBeVisible({ timeout: 10000 });
   await expect(page.getByText('POSITION PLAYERS', { exact: true })).toBeVisible({ timeout: 10000 });
   await expect(page.getByText('STARTING ROTATION', { exact: true })).toBeVisible({ timeout: 10000 });
 }

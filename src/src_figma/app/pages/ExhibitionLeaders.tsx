@@ -8,6 +8,8 @@ import {
   type ExhibitionLeaderEntry,
   type ExhibitionPitchingLeaderStat,
 } from "../../../utils/almanacQueries";
+import { getAllExhibitionTeamImpactLeaderboards, type TeamImpactLeaderboards } from "../../../utils/teamImpact";
+import { TeamImpactLeaderboardsPanel } from "../components/TeamImpactLeaderboardsPanel";
 
 const battingCategories: Array<{ stat: ExhibitionBattingLeaderStat; label: string }> = [
   { stat: "ba", label: "BA" },
@@ -131,6 +133,8 @@ export function ExhibitionLeaders() {
   const [pitchingLeaders, setPitchingLeaders] = useState<
     Partial<Record<ExhibitionPitchingLeaderStat, ExhibitionLeaderEntry[]>>
   >({});
+  const [impactLeaderboards, setImpactLeaderboards] = useState<TeamImpactLeaderboards | null>(null);
+  const [impactError, setImpactError] = useState<string | null>(null);
   const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
@@ -138,15 +142,20 @@ export function ExhibitionLeaders() {
 
     async function loadLeaders() {
       setIsLoading(true);
+      setImpactError(null);
 
       try {
-        const [battingResults, pitchingResults] = await Promise.all([
+        const [battingResults, pitchingResults, impactResults] = await Promise.all([
           Promise.all(
             battingCategories.map(async ({ stat }) => [stat, await getExhibitionBattingLeaders(stat, qualified, 20)] as const)
           ),
           Promise.all(
             pitchingCategories.map(async ({ stat }) => [stat, await getExhibitionPitchingLeaders(stat, qualified, 20)] as const)
           ),
+          getAllExhibitionTeamImpactLeaderboards(5).catch((error) => {
+            setImpactError(error instanceof Error ? error.message : "Failed to load Team Impact leaders.");
+            return null;
+          }),
         ]);
 
         if (cancelled) {
@@ -155,6 +164,7 @@ export function ExhibitionLeaders() {
 
         setBattingLeaders(Object.fromEntries(battingResults));
         setPitchingLeaders(Object.fromEntries(pitchingResults));
+        setImpactLeaderboards(impactResults);
       } finally {
         if (!cancelled) {
           setIsLoading(false);
@@ -172,7 +182,7 @@ export function ExhibitionLeaders() {
   const hasAnyLeaders = [
     ...Object.values(battingLeaders),
     ...Object.values(pitchingLeaders),
-  ].some((entries) => (entries?.length ?? 0) > 0);
+  ].some((entries) => (entries?.length ?? 0) > 0) || impactLeaderboards !== null || impactError !== null;
 
   return (
     <div className="min-h-screen bg-black px-4 py-6 font-['Press_Start_2P'] text-white sm:px-6">
@@ -242,6 +252,12 @@ export function ExhibitionLeaders() {
           </div>
         ) : (
           <>
+            <TeamImpactLeaderboardsPanel
+              leaderboards={impactLeaderboards}
+              error={impactError}
+              theme="almanac"
+            />
+
             <section className="flex flex-col gap-4">
               <div className="border-l-[6px] border-[#DD0000] bg-[#111111] px-4 py-3 text-xs text-white">
                 BATTING
